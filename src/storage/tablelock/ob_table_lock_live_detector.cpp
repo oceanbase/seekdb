@@ -37,7 +37,6 @@ int ObTableLockDetectFuncList::detect_session_alive(const uint32_t session_id, b
       ::oceanbase::share::server_service<::oceanbase::transaction::tablelock::ObTableLockService>();
   if (OB_ISNULL(lock_service)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("table lock service is not installed", K(ret));
   } else {
     ret = query::is_session_alive(
         lock_service->get_deadlock_session_service(),
@@ -63,7 +62,6 @@ int ObTableLockDetectFuncList::do_session_alive_detect(common::ObISQLClient &sql
       owner_id = *owner_ids.at(i);
       if (!owner_id.is_valid()) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("owner_id is invalid", K(ret), K(owner_id));
       } else if (OB_FAIL(owner_id.convert_to_sessid(session_id))) {
       } else if (OB_FAIL(detect_session_alive(session_id, session_alive))) {
       } else if (!session_alive) {
@@ -103,13 +101,11 @@ int ObTableLockDetectFuncList::get_owner_id_list_from_table_(common::ObISQLClien
       if (OB_ITER_END == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("read from inner table __all_detect_lock_info_v2 failed", K(ret));
       }
     } else {
       for (int64_t i = 0; i < tmp_owner_ids.count() && OB_SUCC(ret); i++) {
         if (OB_ISNULL(ptr = allocator.alloc(sizeof(ObTableLockOwnerID)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("allocate memory for ObTableLockOwnerID failed", K(ret), K(owner_ids.at(i)));
         } else if (FALSE_IT(new_owner_id = new (ptr) ObTableLockOwnerID(static_cast<unsigned char>(tmp_owner_ids.at(i).element<0>()), tmp_owner_ids.at(i).element<1>()))) {
         } else if (OB_FAIL(owner_ids.push_back(new_owner_id))) {
         }
@@ -141,13 +137,11 @@ int ObTableLockDetector::record_detect_info_to_inner_table(share::ObILockMetadat
   need_record_to_lock_table = true;
   if (!(LOCK_OBJECT == task_type || LOCK_TABLE == task_type)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("do not support detect task type", K(ret), K(task_type));
   } else if (OB_UNLIKELY(!session_io.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("session inner SQL is invalid", K(ret), K(session_io.server_session_id()));
   } else if (for_dbms_lock
              && OB_FAIL(check_lock_exist_in_inner_table(session_io, task_type, lock_req, is_existed))) {
-    LOG_WARN("check dbms_lock record exist failed", K(ret), K(task_type), K(lock_req));
   }
 
   if (OB_FAIL(ret)) {
@@ -323,7 +317,6 @@ int ObTableLockDetector::check_lock_exist_in_inner_table(share::ObILockMetadataS
     ret = OB_INVALID_ARGUMENT;
   } else if (LOCK_OBJECT != task_type) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the task_type for DBMS_LOCK should be LOCK_OBJECT", K(ret), K(task_type), K(lock_req));
   } else {
     const ObLockObjsRequest &arg = static_cast<const ObLockObjsRequest &>(lock_req);
     if (arg.objs_.count() > 1) {
@@ -392,7 +385,6 @@ int ObTableLockDetector::get_unlock_request_list(share::ObILockMetadataSession &
       if (OB_FAIL(session_io.execute_read(sql, res))) {
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to get result", KR(ret));
       } else if (OB_FAIL(get_unlock_request_list_(result, allocator, arg_list))) {
       } else if (OB_FAIL(fill_owner_id_for_unlock_request_(owner_id, arg_list))) {
       }
@@ -442,13 +434,11 @@ int ObTableLockDetector::check_lock_exist_in_table_(share::ObILockMetadataSessio
     } else if (OB_FAIL(session_io.execute_read(sql, res))) {
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get result", KR(ret));
     } else if (OB_FAIL(result->next())) {
       if (OB_ITER_END == ret) {
         ret = OB_SUCCESS;
         exist = false;
       } else {
-        LOG_WARN("fail to get next", KR(ret));
       }
     } else {
       exist = true;
@@ -513,7 +503,6 @@ int ObTableLockDetector::generate_insert_dml_(const ObTableLockTaskType &task_ty
   uint64_t cnt = 1;
   if (!(LOCK_OBJECT == task_type || LOCK_TABLE == task_type)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("do not support detect task type", K(ret), K(task_type));
   } else if (OB_FAIL(add_pk_column_to_dml_(task_type, lock_req, dml))) {
   } else if (OB_FAIL(dml.add_column("cnt", cnt))) {
   } else {
@@ -522,7 +511,6 @@ int ObTableLockDetector::generate_insert_dml_(const ObTableLockTaskType &task_ty
       const ObLockObjsRequest &arg = static_cast<const ObLockObjsRequest &>(lock_req);
       if (OB_FAIL(dml.add_column("detect_func_no", static_cast<uint64_t>(arg.detect_func_no_)))
           || OB_FAIL(dml.add_column("detect_func_param", ObHexEscapeSqlStr(arg.detect_param_)))) {
-        LOG_WARN("add column for insert dml failed", K(ret));
       }
       break;
     }
@@ -530,7 +518,6 @@ int ObTableLockDetector::generate_insert_dml_(const ObTableLockTaskType &task_ty
       const ObLockTableRequest &arg = static_cast<const ObLockTableRequest&>(lock_req);
       if (OB_FAIL(dml.add_column("detect_func_no", static_cast<uint64_t>(arg.detect_func_no_)))
           || OB_FAIL(dml.add_column("detect_func_param", ObHexEscapeSqlStr(arg.detect_param_)))) {
-        LOG_WARN("add column for insert dml failed", K(ret));
       }
       break;
     }
@@ -589,7 +576,6 @@ int ObTableLockDetector::add_pk_column_to_dml_(const ObTableLockTaskType &task_t
              || OB_FAIL(dml.add_pk_column("obj_id", obj_id))
              || OB_FAIL(dml.add_pk_column("lock_mode", static_cast<uint64_t>(lock_req.lock_mode_)))
              || OB_FAIL(dml.add_pk_column("owner_id", raw_owner_id))) {
-    LOG_WARN("add pk column to dml failed", K(ret), K(lock_req));
   } else {
     if (OB_FAIL(dml.add_pk_column("owner_type", lock_req.owner_id_.type()))) {
     }
@@ -629,7 +615,6 @@ int ObTableLockDetector::delete_record_(const char *table_name,
   if (OB_FAIL(dml.splice_delete_sql(table_name, sql))) {
   } else if (OB_FAIL(session_io.execute_write(sql, affected_rows))) {
   } else if (affected_rows != 1) {
-    LOG_WARN("do not delete the record", KR(ret), K(sql), K(affected_rows));
   }
   return ret;
 }
@@ -693,7 +678,6 @@ int ObTableLockDetector::get_lock_cnt_in_table_(share::ObILockMetadataSession &s
     } else if (OB_FAIL(session_io.execute_read(sql, res))) {
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get result", KR(ret), K(sql));
     } else if (OB_FAIL(result->next())) {
       if (OB_ITER_END == ret) {
         ret = OB_SUCCESS;
@@ -772,7 +756,6 @@ int ObTableLockDetector::get_unlock_request_list_(common::sqlclient::ObMySQLResu
     if (OB_FAIL(parse_unlock_request_(*res, allocator, unlock_arg))) {
     } else if (OB_ISNULL(unlock_arg)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("parse unlock request failed", K(ret));
     } else if (OB_FAIL(arg_list.push_back(unlock_arg))) {
     }
     if (OB_FAIL(ret) && OB_NOT_NULL(unlock_arg)) {
@@ -836,7 +819,6 @@ int ObTableLockDetector::parse_unlock_request_(common::sqlclient::ObMySQLResult 
         ObUnLockTableRequest *unlock_arg = NULL;
         if (OB_ISNULL(ptr = allocator.alloc(sizeof(ObUnLockTableRequest)))) {
           ret = OB_EAGAIN;
-          LOG_WARN("get unlock request failed", K(ret));
         } else if (FALSE_IT(unlock_arg = new (ptr) ObUnLockTableRequest())) {
         } else {
           unlock_arg->table_id_ = obj_id;
@@ -855,10 +837,8 @@ int ObTableLockDetector::parse_unlock_request_(common::sqlclient::ObMySQLResult 
             && !(static_cast<int64_t>(ObLockOBJType::OBJ_TYPE_MYSQL_LOCK_FUNC) == obj_type
                  && static_cast<int64_t>(EXCLUSIVE) == lock_mode)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid object type and lock mode", K(ret), K(obj_type), K(lock_mode));
         } else if (OB_ISNULL(ptr = allocator.alloc(sizeof(ObUnLockObjsRequest)))) {
           ret = OB_EAGAIN;
-          LOG_WARN("get unlock request failed", K(ret));
         } else if (FALSE_IT(unlock_arg = new (ptr) ObUnLockObjsRequest())) {
         } else if (OB_FAIL(lock_id.set(static_cast<ObLockOBJType>(obj_type), obj_id))) {
         } else if (OB_FAIL(unlock_arg->objs_.push_back(lock_id))) {
@@ -873,7 +853,6 @@ int ObTableLockDetector::parse_unlock_request_(common::sqlclient::ObMySQLResult 
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("not supported lock task type", K(ret), K(task_type));
       }
     }
     if (OB_SUCC(ret)) {

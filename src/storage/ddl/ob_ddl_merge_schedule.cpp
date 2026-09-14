@@ -51,7 +51,6 @@ int ObDDLMergeScheduler::check_need_merge_for_idempotent(ObTablet &tablet, ObArr
   ObTabletDDLCompleteMdsUserData user_data;
   if (ddl_kv_type != ObDDLKVType::DDL_KV_INVALID || need_schedule_merge) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument, return param should be invalid", K(ret), K(ddl_kv_type), K(need_schedule_merge));
   } else if ((tablet.get_major_table_count() > 0) || 
               tablet.get_tablet_meta().table_store_flag_.with_major_sstable()) {
     LOG_INFO("tablet already exist, not need to merge", K(ret), K(tablet.get_tablet_id()));
@@ -61,7 +60,6 @@ int ObDDLMergeScheduler::check_need_merge_for_idempotent(ObTablet &tablet, ObArr
       if (OB_EMPTY_RESULT == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("failed to get ddl complete", K(ret));  
       }
     } else if (user_data.has_complete_ && is_full_direct_load(user_data.direct_load_type_)) {
       need_schedule_merge = true;
@@ -127,7 +125,6 @@ int ObDDLMergeScheduler::check_tablet_need_merge(ObTablet &tablet, ObDDLKvMgrHan
   if (OB_FAIL(ret)) {
   } else if (!full_major_exist && !need_schedule_merge &&
              OB_FAIL(check_need_merge_for_idempotent(tablet, ddl_kv_handles, need_schedule_merge, ddl_kv_type))) {
-    LOG_WARN("failed to check need merge for idem sn", K(ret));
   }
   return ret;
 }
@@ -143,7 +140,6 @@ int ObDDLMergeScheduler::schedule_ddl_merge(ObLS *ls,
   ObDDLKVType ddl_kv_type = ObDDLKVType::DDL_KV_INVALID; /* used for decided using which direct load type*/
   if (OB_UNLIKELY(!tablet_handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(tablet_handle));
   } else if (OB_FAIL(tablet_handle.get_obj()->get_ddl_kv_mgr(ddl_kv_mgr_handle))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       LOG_TRACE("kv mgr not exist", K(ret), K(tablet_handle.get_obj()->get_tablet_id()));
@@ -172,7 +168,6 @@ int ObDDLMergeScheduler::schedule_ddl_merge(ObLS *ls,
         break;
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected ddl kv type", K(ret), K(ddl_kv_type));
         break;
     }
   }
@@ -191,7 +186,6 @@ int ObDDLMergeScheduler::schedule_tablet_ddl_major_merge(
   bool is_major_sstable_exist = false;
   if (OB_UNLIKELY(OB_ISNULL(ls) || !tablet_handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(ls), K(tablet_handle));
   }
 
   if (OB_FAIL(ret)) {
@@ -209,7 +203,6 @@ int ObDDLMergeScheduler::schedule_tablet_ddl_major_merge(
       if (OB_EMPTY_RESULT == ret) {
         ret = OB_SUCCESS;
       }
-      LOG_WARN("failed to get ddl complete", K(ret), K(tablet_handle.get_obj()->get_tablet_meta().ddl_data_format_version_), K(has_freezed_ddl_kv));
     } 
     
     if (OB_FAIL(ret)) {

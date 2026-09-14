@@ -55,18 +55,14 @@ int ObProgressiveMergeMgr::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObProgressiveMergeMgr is inited before", KR(ret), KPC(this));
   } else if (OB_UNLIKELY(!base_meta.is_valid() || !schema.is_valid() || 0 == data_version)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(base_meta), K(schema), K(data_version));
   } else {
     const int64_t meta_progressive_merge_round = base_meta.progressive_merge_round_;
     const int64_t schema_progressive_merge_round = schema.get_progressive_merge_round();
 
     if (OB_UNLIKELY(meta_progressive_merge_round > schema_progressive_merge_round)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("progressive round on schema is less than meta", KR(ret), K(meta_progressive_merge_round),
-        K(schema_progressive_merge_round));
     } else if (INIT_PROGRESSIVE_MERGE_ROUND == schema_progressive_merge_round) { // no progressive
       progressive_merge_num_ = 0;
       progressive_merge_step_ = 0;
@@ -139,10 +135,8 @@ int ObProgressiveMergeHelper::init(
   const ObStaticMergeParam &static_param = merge_param.static_param_;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObProgressiveMergeHelper init twice", K(ret));
   } else if (OB_UNLIKELY(NULL != mgr && !mgr->is_inited())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("input progressive mgr is invalid", KR(ret), KPC(mgr));
   } else if (FALSE_IT(reset())) {
   } else if (static_param.for_unittest_) {
   } else if (static_param.is_full_merge_) {
@@ -199,7 +193,6 @@ int ObProgressiveMergeHelper::collect_macro_info(
   while (OB_SUCC(ret)) {
     if (OB_FAIL(sec_meta_iter->get_next(macro_meta))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("Failed to get next macro block", K(ret));
       } else {
         ret = OB_SUCCESS;
         break;
@@ -237,7 +230,6 @@ int ObProgressiveMergeHelper::open_macro_iter(
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(index_read_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("index read info is unexpected null", KR(ret), KP(index_read_info), K(sstable), K(merge_param));
   } else if (OB_FAIL(sstable.scan_secondary_meta(
           allocator,
           merge_range,
@@ -256,10 +248,8 @@ int ObProgressiveMergeHelper::check_macro_block_op(const ObMacroBlockDesc &macro
   block_op.reset();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObProgressiveMergeHelper not init", K(ret));
   } else if (!macro_desc.is_valid_with_macro_meta()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid macro desc", K(ret), K(macro_desc));
   } else if (full_merge_) {
     block_op.set_rewrite();
   } else {

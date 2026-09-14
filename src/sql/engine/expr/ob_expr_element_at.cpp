@@ -55,10 +55,8 @@ int ObExprElementAt::calc_result_type2(ObExprResType &type,
 
   if (OB_ISNULL(session = const_cast<ObSQLSessionInfo *>(type_ctx.get_session()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObSQLSessionInfo is null", K(ret));
   } else if (OB_ISNULL(exec_ctx = session->get_cur_exec_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObExecContext is null", K(ret));
   } else if (type1.is_null()) {
     type.set_null();
   } else if (!ob_is_collection_sql_type(type1.get_type())) {
@@ -67,7 +65,6 @@ int ObExprElementAt::calc_result_type2(ObExprResType &type,
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type))) {
   } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid collection type", K(ret), K(coll_type->type_id_));
   } else if (OB_FAIL(exec_ctx->get_sqludt_meta_by_subschema_id(type1.get_subschema_id(), arr_meta))) {
   } else if (type2.is_null()) {
     type.set_null();
@@ -90,7 +87,6 @@ int ObExprElementAt::calc_result_type2(ObExprResType &type,
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected ObNestedType type", K(ret), K(arr_type->element_type_->type_id_));
     }
   }
   return ret;
@@ -134,7 +130,6 @@ int ObExprElementAt::eval_element_at(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
     } else {
       res.from_obj(elem_obj);
       if (elem_obj.is_string_type() && OB_FAIL(res.deep_copy(res, res_alloc))) {
-        LOG_WARN("fail to deep copy for res datum", K(ret), K(elem_obj), K(res));
       }
     }
   }
@@ -178,7 +173,6 @@ int ObExprElementAt::eval_element_at_batch(const ObExpr &expr, ObEvalCtx &ctx,
         ObString child_arr_str;
         if (OB_NOT_NULL(child_arr) && OB_FALSE_IT(child_arr->clear())) {
         } else if (OB_ISNULL(child_arr) && OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator,ctx, child_subschema_id, child_arr, false))) {
-          LOG_WARN("construct child array obj failed", K(ret));
         } else if (OB_FAIL(src_arr->at(static_cast<uint32_t>(idx), *child_arr))) {
         } else {
           int32_t res_size = child_arr->get_raw_binary_len();
@@ -189,7 +183,6 @@ int ObExprElementAt::eval_element_at_batch(const ObExpr &expr, ObEvalCtx &ctx,
           } else if (OB_FAIL(output_result.get_reserved_buffer(res_buf, res_buf_len))) {
           } else if (res_buf_len < res_size) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get invalid res buf len", K(ret), K(res_buf_len), K(res_size));
           } else if (OB_FAIL(child_arr->get_raw_binary(res_buf, res_buf_len))) {
           } else if (OB_FAIL(output_result.lseek(res_size, 0))) {
           } else {
@@ -202,7 +195,6 @@ int ObExprElementAt::eval_element_at_batch(const ObExpr &expr, ObEvalCtx &ctx,
         } else {
           res_datum.at(j)->from_obj(elem_obj);
           if (elem_obj.is_string_type() && OB_FAIL(res_datum.at(j)->deep_copy(*res_datum.at(j), res_alloc))) {
-            LOG_WARN("fail to deep copy for res datum", K(ret), K(elem_obj), KPC(res_datum.at(j)));
           }
         }
       }

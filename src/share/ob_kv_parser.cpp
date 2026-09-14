@@ -41,7 +41,6 @@ int ObKVParser::emit(int sym)
   int ret = OB_SUCCESS;
   if (sym != token_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(sym), K_(token), K(ret));
   } else {
     if (sym == SYM_VALUE && NULL != cb_) {
       if (OB_FAIL(cb_->match(key_buf_, value_buf_))) {
@@ -85,7 +84,6 @@ int ObKVParser::get_token()
       }
       if (cur_ - start >= MAX_TOKEN_SIZE) {
         ret = OB_SIZE_OVERFLOW;
-        LOG_WARN("token size is too large", "actual", cur_ - start, K(ret));
       } else {
         if (SYM_KV_SEP == token_) {
           // value part
@@ -102,7 +100,6 @@ int ObKVParser::get_token()
     } else {
       // Unknown character
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("unexpected char", "c", *cur_, K(ret));
     }
   }
   return ret;
@@ -121,10 +118,8 @@ int ObKVParser::parse(const char *data, int64_t data_length)
   const int64_t length = data_length + 1;
   if (OB_ISNULL(data) || data_length <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null data ptr", K(ret));
   } else if (OB_ISNULL(data_ = static_cast<char*>(allocator_.alloc(length)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret), K(length));
   } else {
     MEMSET(data_, '\0', length);
     STRNCPY(data_, data, data_length);
@@ -148,13 +143,11 @@ int ObKVParser::parse(const char *data, int64_t data_length)
       }
     } else {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("failed to parse", K(ret), K(token_));
     }
   }
   if (OB_SUCC(ret) && NULL != cb_) {
       if (false == cb_->check()) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("fail check parsed data", K(ret));
       }
   }
   return ret;

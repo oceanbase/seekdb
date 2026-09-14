@@ -57,7 +57,6 @@ int ObLSTabletIterator::get_next_tablet(ObTabletHandle &handle)
   handle.reset();
   if (OB_ISNULL(ls_tablet_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls tablet service is nullptr", K(ret), KP(ls_tablet_service_));
   } else {
     do {
       if (OB_UNLIKELY(tablet_ids_.count() == idx_)) {
@@ -66,7 +65,6 @@ int ObLSTabletIterator::get_next_tablet(ObTabletHandle &handle)
         const common::ObTabletID &tablet_id = tablet_ids_.at(idx_);
         if (OB_FAIL(ls_tablet_service_->get_tablet(tablet_id, handle, ObTabletCommon::DEFAULT_GET_TABLET_DURATION_10_S, mode_))
             && OB_TABLET_NOT_EXIST != ret) {
-          LOG_WARN("fail to get tablet", K(ret), K(idx_), K(tablet_id), K_(mode));
         } else {
           handle.set_wash_priority(WashTabletPriority::WTP_LOW);
           ++idx_;
@@ -83,7 +81,6 @@ int ObLSTabletIterator::get_next_ddl_kv_mgr(ObDDLKvMgrHandle &ddl_kv_mgr_handle)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ls_tablet_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls tablet service is nullptr", K(ret), KP(ls_tablet_service_));
   } else {
     ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
     do {
@@ -95,7 +92,6 @@ int ObLSTabletIterator::get_next_ddl_kv_mgr(ObDDLKvMgrHandle &ddl_kv_mgr_handle)
 
         if (OB_FAIL(t3m->get_tablet_ddl_kv_mgr(key, ddl_kv_mgr_handle))
             && OB_ENTRY_NOT_EXIST != ret) {
-          LOG_WARN("fail to get tablet ddl kv mgr", K(ret), K(idx_), K(key));
         } else {
           ++idx_;
         }
@@ -158,7 +154,6 @@ int ObLSTabletAddrIterator::get_next_tablet_addr(ObTabletMapKey &key, ObMetaDisk
 
   if (OB_ISNULL(ls_tablet_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls tablet service is nullptr", K(ret), KP(ls_tablet_service_));
   } else {
     do {
       if (OB_UNLIKELY(tablet_ids_.count() == idx_)) {
@@ -168,7 +163,6 @@ int ObLSTabletAddrIterator::get_next_tablet_addr(ObTabletMapKey &key, ObMetaDisk
 
         if (OB_FAIL(ls_tablet_service_->get_tablet_addr(key, addr))
             && OB_ENTRY_NOT_EXIST != ret) {
-          LOG_WARN("fail to get tablet address", K(ret), K(idx_), K(key));
         } else {
           ++idx_;
         }

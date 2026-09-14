@@ -247,7 +247,6 @@ int ObShowCreateTable::fill_row_cells_inner(const uint64_t show_table_id,
           // In such situation, we use charset and collation from session.
           if (CHARSET_INVALID == cs_client_type &&
               OB_FAIL(session_->get_character_set_client(cs_client_type))) {
-            LOG_WARN("fail to get character_set_client", K(ret));
           } else {
             cur_row_.cells_[cell_idx].set_varchar(ObCharset::charset_name(cs_client_type));
             cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -259,7 +258,6 @@ int ObShowCreateTable::fill_row_cells_inner(const uint64_t show_table_id,
                           table_schema.get_view_schema().get_collation_connection();
           if (CS_TYPE_INVALID == coll_connection_type &&
               OB_FAIL(session_->get_collation_connection(coll_connection_type))) {
-            LOG_WARN("fail to get coll_connection_type", K(ret));
           } else {
             cur_row_.cells_[cell_idx].set_varchar(ObCharset::collation_name(coll_connection_type));
             cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));

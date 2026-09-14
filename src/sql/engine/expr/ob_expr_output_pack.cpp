@@ -50,7 +50,6 @@ int ObExprOutputPack::calc_result_typeN(ObExprResType &type,
   UNUSED(param_num);
   if (OB_UNLIKELY(param_num <= 1)) {
     ret = OB_INVALID_ARGUMENT_NUM;
-    LOG_WARN("invalid argument number", K(ret), K(param_num));
   } else {
     type.set_varbinary();
     type.set_collation_level(CS_LEVEL_IMPLICIT);
@@ -82,7 +81,6 @@ int ObOutputPackInfo::deep_copy(ObIAllocator &allocator,
   if (OB_FAIL(ObExprExtraInfoFactory::alloc(allocator, type, copied_info))) {
   } else if (OB_ISNULL(output_pack_info = dynamic_cast<ObOutputPackInfo *>(copied_info))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret));
   }
   else if (OB_FAIL(output_pack_info->param_fields_.prepare_allocate(param_fields_.count()))) {
   } else {
@@ -108,10 +106,8 @@ int ObOutputPackInfo::init_output_pack_info(uint64_t extra,
   if (OB_ISNULL(allocator)
       || OB_ISNULL(fields = reinterpret_cast<common::ObIArray<common::ObField> *> (extra))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cg ctx is is invalid", K(ret));
   } else if (OB_ISNULL(buf = allocator->alloc(sizeof(ObOutputPackInfo)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret));
   } else {
     output_pack_info = new(buf) ObOutputPackInfo(*allocator, type);
     output_pack_info->param_fields_.set_allocator(allocator);
@@ -123,7 +119,6 @@ int ObOutputPackInfo::init_output_pack_info(uint64_t extra,
       ObField tmp_field;
       if (OB_UNLIKELY(i >= fields->count())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected array pos", K(i), K(fields->count()), K(ret));
       } else if (OB_FAIL(tmp_field.full_deep_copy(fields->at(i), allocator))) {
       } else if (OB_FAIL(output_pack_info->param_fields_.push_back(tmp_field))) {
       }
@@ -150,7 +145,6 @@ int ObExprOutputPack::eval_output_pack(const ObExpr &expr, ObEvalCtx &ctx, ObDat
       || OB_ISNULL(sql_ctx = ctx.exec_ctx_.get_sql_ctx())
       || OB_ISNULL(schema_guard = sql_ctx->schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ctx is not init", K(session), K(sql_ctx), K(schema_guard));
   } else if (OB_FAIL(expr.eval_param_value(ctx))) {
   } else if (OB_FAIL(process_oneline(expr, ctx, session, alloc,
                                      extra_info, schema_guard, expr_datum))) {
@@ -175,7 +169,6 @@ int ObExprOutputPack::eval_output_pack_batch(const ObExpr &expr, ObEvalCtx &ctx,
       || OB_ISNULL(sql_ctx = ctx.exec_ctx_.get_sql_ctx())
       || OB_ISNULL(schema_guard = sql_ctx->schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ctx is not init", K(session), K(sql_ctx), K(schema_guard));
   } else if (OB_FAIL(expr.eval_batch_param_value(ctx, skip, batch_size))) {
   } else {
     ObEvalCtx::BatchInfoScopeGuard guard(ctx);
@@ -229,10 +222,8 @@ int ObExprOutputPack::convert_text_value_charset(common::ObObj& value,
 
     if (OB_ISNULL(from_charset_info) || OB_ISNULL(to_charset_info)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("charsetinfo is null", K(ret), K(from_collation_type), K(to_collation_type));
     } else if (CS_TYPE_INVALID == from_collation_type || CS_TYPE_INVALID == to_collation_type) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid collation", K(from_collation_type), K(to_collation_type), K(ret));
     } else if (CS_TYPE_BINARY != from_collation_type && CS_TYPE_BINARY != to_collation_type
         && strcmp(from_charset_info->csname, to_charset_info->csname) != 0) {
       // get full data, buffer size is full byte length * 4
@@ -332,11 +323,9 @@ int ObExprOutputPack::convert_string_charset(const common::ObString &in_str,
     }
     if (str_offset < in_str.length()) {
       ret = OB_SIZE_OVERFLOW;
-      LOG_WARN("sizeoverflow", K(ret), K(in_str), KPHEX(in_str.ptr(), in_str.length()));
     } else {
       result_len = buf_offset;
       ret = OB_SUCCESS;
-      LOG_WARN("charset convert failed", K(ret), K(in_cs_type), K(out_cs_type));
     }
   }
   return ret;
@@ -377,17 +366,14 @@ int ObExprOutputPack::build_row_values(
           OZ(convert_string_value_charset(obj, alloc, *session));
         } else if (ob_is_text_tc(obj.get_type())
                   && OB_FAIL(convert_text_value_charset(obj, expr.obj_meta_.has_lob_header(), alloc, *session, ctx.exec_ctx_))) {
-          LOG_WARN("convert text obj charset failed", K(ret));
         }
         if (OB_FAIL(ret)) {
         } else if ((obj.is_lob() || obj.is_json() || obj.is_geometry())
                    && OB_FAIL(process_lob_locator_results(obj, alloc, *session, ctx.exec_ctx_))) {
-          LOG_WARN("convert lob locator to longtext failed", K(ret));
         } else if ((obj.is_collection_sql_type() || obj.is_geometry())
                    && OB_FAIL(ObSqlUdtUtils::convert_result_for_client(obj, &alloc, session,
                                                                        &ctx.exec_ctx_,
                                                                        session->is_ps_protocol()))) {
-          LOG_WARN("convert udt to client format failed", K(ret), K(obj.get_udt_subschema_id()));
         }
       }
     }
@@ -423,7 +409,6 @@ int ObExprOutputPack::process_oneline(const ObExpr &expr, ObEvalCtx &ctx, ObSQLS
   expr.cur_str_resvered_buf(ctx, buffer, len);
   if (OB_ISNULL(buffer) || len <= 0 || cell_count <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid packed MySQL Row output", K(ret), K(len), K(cell_count));
   } else if (OB_FAIL(values.reserve(cell_count))) {
   } else if (OB_FAIL(views.reserve(cell_count))) {
   } else if (OB_FAIL(build_row_values(expr, ctx, session, alloc, extra_info,
@@ -447,12 +432,8 @@ int ObExprOutputPack::process_oneline(const ObExpr &expr, ObEvalCtx &ctx, ObSQLS
         if (NIO_FRAME_NEED_MORE == frame_ret) {
           if (blob_len <= 0 || blob_len >= MAX_PACK_LEN) {
             ret = OB_SIZE_OVERFLOW;
-            LOG_WARN("packed MySQL Row blob size overflow", K(ret),
-                     K(blob_len));
           } else if (OB_ISNULL(buffer = expr.get_str_res_mem(ctx, blob_len))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("failed to resize packed MySQL Row blob", K(ret),
-                     K(blob_len));
           } else {
             len = blob_len;
             frame_ret = nio_encode_mysql_packed_row_blob(buffer, len, &row_view,
@@ -461,8 +442,6 @@ int ObExprOutputPack::process_oneline(const ObExpr &expr, ObEvalCtx &ctx, ObSQLS
         }
         if (OB_SUCC(ret) && NIO_FRAME_OK != frame_ret) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Rust packed MySQL Row blob encoding failed", K(ret),
-                   K(frame_ret), K(blob_len), K(len));
         }
       }
     }

@@ -284,7 +284,6 @@ int ObDBMSSchedTableOperator::check_job_can_running(int64_t alive_job_count, boo
         if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
         } else if (OB_ISNULL(result.get_result())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get result failed", K(ret), K(sql));
         } else {
           if (OB_SUCCESS == (ret = result.get_result()->next())) {
             int64_t int_value = 0;
@@ -293,7 +292,6 @@ int ObDBMSSchedTableOperator::check_job_can_running(int64_t alive_job_count, boo
               job_running_cnt = static_cast<uint64_t>(int_value);
             }
           } else {
-            LOG_WARN("failed to calc all running job, no row return", K(ret));
           }
         }
       }
@@ -451,7 +449,6 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_info(
       if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
       } else if (OB_ISNULL(result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to get result", K(ret), K(job_id));
       } else {
         if (OB_SUCCESS == (ret = result.get_result()->next())) {
           OZ (extract_info(*(result.get_result()), allocator, job_info));
@@ -469,9 +466,7 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_info(
             }
           }
         } else if (OB_ITER_END == ret) {
-          LOG_WARN("job not exists, may delete alreay!", K(ret), K(job_id));
         } else {
-          LOG_WARN("failed to get next", K(ret), K(job_id));
         }
       }
     }
@@ -498,7 +493,6 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_infos_in_runtime(
       if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
       } else if (OB_ISNULL(result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get result failed", K(ret), K(sql));
       } else {
         do {
           if (OB_FAIL(result.get_result()->next())) {
@@ -556,7 +550,6 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_class_info(
       if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
       } else if (OB_ISNULL(result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get result failed", K(ret), K(sql), K(job_class_name));
       } else {
         if (OB_SUCCESS == (ret = result.get_result()->next())) {
           OZ (extract_job_class_info(*(result.get_result()), allocator, job_class_info));
@@ -574,7 +567,6 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_class_info(
           LOG_INFO("job_class_name not exists, may delete alreay!", K(ret), K(job_class_name));
           ret = OB_SUCCESS; // job not exist, do nothing ...
         } else {
-          LOG_WARN("failed to get next", K(ret), K(job_class_name));
         }
       }
     }
@@ -598,7 +590,6 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_class_infos_in_runtime(
       if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
       } else if (OB_ISNULL(result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get result failed", K(ret), K(sql));
       } else {
         do {
           if (OB_FAIL(result.get_result()->next())) {

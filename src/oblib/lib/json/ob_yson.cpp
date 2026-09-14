@@ -205,7 +205,6 @@ int databuff_print_elements(char *buf, const int64_t buf_len, int64_t &pos,
         break;
       default:
         ret = OB_INVALID_DATA;
-        LOG_WARN("invalid YSON element type", K(ret), K(yson_type), K(yson_pos));
         break;
     }  // end switch
     if (OB_FAIL(ret)) {

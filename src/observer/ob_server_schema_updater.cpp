@@ -118,7 +118,6 @@ int ObServerSchemaUpdater::init(const common::ObAddr &host, ObMultiVersionSchema
   int ret = OB_SUCCESS;
   if (NULL == schema_mgr) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("schema_mgr must not null");
   } else if (OB_FAIL(task_queue_.init(this,
                                       SSU_MAX_THREAD_NUM,
                                       SSU_TASK_QUEUE_SIZE,
@@ -174,13 +173,10 @@ int ObServerSchemaUpdater::batch_process_tasks(
   ObArray<ObServerSchemaTask> tasks;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ob_server_schema_updeter is not inited.", KR(ret));
   } else if (stopped) {
     ret = OB_CANCELED;
-    LOG_WARN("ob_server_schema_updeter is stopped.", KR(ret));
   } else if (batch_tasks.count() <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("batch_tasks cnt is 0", KR(ret));
   } else if (OB_FAIL(tasks.assign(batch_tasks))) {
   } else {
     DEBUG_SYNC(BEFORE_SET_NEW_SCHEMA_VERSION);
@@ -188,8 +184,6 @@ int ObServerSchemaUpdater::batch_process_tasks(
     ObServerSchemaTask::TYPE type = tasks.at(0).type_;
     if (ObServerSchemaTask::RELEASE == type && 1 != tasks.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("release schema task should process alone",
-               KR(ret), "task_cnt", tasks.count());
     } else if (ObServerSchemaTask::RELEASE == type) {
       if (OB_FAIL(process_release_task())) {
       }
@@ -198,7 +192,6 @@ int ObServerSchemaUpdater::batch_process_tasks(
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid type", KR(ret), K(type));
     }
   }
   ObCurTraceId::reset();
@@ -212,7 +205,6 @@ int ObServerSchemaUpdater::process_release_task()
   THIS_WORKER.set_timeout_ts(INT64_MAX);
   if (OB_ISNULL(schema_mgr_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_mgr_ is NULL", KR(ret));
   } else if (OB_FAIL(schema_mgr_->try_eliminate_schema_mgr())) {
   }
   LOG_INFO("try to release schema", KR(ret));
@@ -227,7 +219,6 @@ int ObServerSchemaUpdater::process_async_refresh_tasks(
   THIS_WORKER.set_timeout_ts(INT64_MAX);
   if (OB_ISNULL(schema_mgr_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_mgr_ is NULL", KR(ret));
   } else {
     // Only the async refresh task with the maximum schema version needs execution.
     bool need_refresh = false;
@@ -235,14 +226,11 @@ int ObServerSchemaUpdater::process_async_refresh_tasks(
       const ObServerSchemaTask &cur_task = tasks.at(i);
       if (ObServerSchemaTask::ASYNC_REFRESH != cur_task.type_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("cur task type should be ASYNC_REFRESH", KR(ret), K(cur_task));
       } else if (i > 0) {
         const ObServerSchemaTask &last_task = tasks.at(i - 1);
         if (true
                 && last_task.get_schema_version() < cur_task.get_schema_version()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("cur task should be less than last task",
-                   KR(ret), K(last_task), K(cur_task));
         }
       }
       if (OB_SUCC(ret)) {
@@ -277,10 +265,8 @@ int ObServerSchemaUpdater::try_release_schema()
   ObServerSchemaTask release_task(ObServerSchemaTask::RELEASE);
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ob_server_schema_updeter is not inited.", KR(ret));
   } else if (OB_FAIL(task_queue_.add(release_task))) {
     if (OB_EAGAIN != ret) {
-      LOG_WARN("schedule release schema task failed", KR(ret));
     }
   } else {
     LOG_INFO("schedule release schema task", KR(ret));
@@ -295,11 +281,8 @@ int ObServerSchemaUpdater::async_refresh_schema(const int64_t schema_version)
   ObServerSchemaTask refresh_task(ObServerSchemaTask::ASYNC_REFRESH, schema_version);
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ob_server_schema_updeter is not inited.", KR(ret));
   } else if (OB_FAIL(task_queue_.add(refresh_task))) {
     if (OB_EAGAIN != ret) {
-      LOG_WARN("schedule async refresh schema task failed",
-               KR(ret), K(schema_version));
     }
   } else {
     LOG_INFO("schedule async refresh schema task",

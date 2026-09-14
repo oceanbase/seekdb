@@ -53,12 +53,10 @@ int ObTabletSliceRowIterator::init(const ObTabletID &tablet_id,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_UNLIKELY(
         !tablet_id.is_valid()
         || slice_idx < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(slice_idx));
   } else {
     tablet_id_ = tablet_id;
     slice_idx_ = slice_idx;
@@ -79,7 +77,6 @@ int ObTabletSliceRowIterator::get_next_row(const blocksstable::ObDatumRow *&row)
   // get next row
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   }
 
   // convert sql row to storage row

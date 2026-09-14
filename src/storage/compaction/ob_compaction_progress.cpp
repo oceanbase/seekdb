@@ -125,11 +125,9 @@ int ObCompactionProgressMgr::loop_major_sstable_(
           ret = OB_SUCCESS;
           break;
         } else {
-          LOG_WARN("failed to get tablet", K(ret), K(tablet_handle));
         }
       } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid tablet handle", K(ret), K(tablet_handle));
       } else if (tablet_handle.get_obj()->get_tablet_meta().tablet_id_.is_special_merge_tablet()) {
         // do nothing
       } else if (0 == tablet_handle.get_obj()->get_last_major_snapshot_version()
@@ -157,13 +155,11 @@ int ObCompactionProgressMgr::init_progress(const int64_t major_snapshot_version)
 
   if (OB_UNLIKELY(major_snapshot_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(major_snapshot_version));
   } else {
     SpinWLockGuard guard(lock_);
     if (OB_SUCC(get_pos_(major_snapshot_version, pos))) {
       // do nothing
     } else if (OB_ENTRY_NOT_EXIST != ret) {
-      LOG_WARN("pos is invalid", K(ret), K(pos), K(major_snapshot_version));
     } else {
       for (int64_t i = 0; i < size(); ++i) {
         (void)finish_progress_(array_[i]);
@@ -186,12 +182,10 @@ int ObCompactionProgressMgr::init_progress(const int64_t major_snapshot_version)
   int64_t total_tablet_cnt = 0;
   int64_t occupy_size = 0;
   if (FAILEDx(loop_major_sstable_(major_snapshot_version, total_tablet_cnt, occupy_size))) {
-    LOG_WARN("failed to get sstable info", K(ret));
   } else {
     SpinWLockGuard guard(lock_);
     if (OB_UNLIKELY(array_[pos].merge_version_ != major_snapshot_version)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected progress", K(ret), K(major_snapshot_version), K(pos), K(array_[pos]));
     } else if (share::ObIDag::DAG_STATUS_FINISH != array_[pos].status_) {
       array_[pos].is_inited_ = true;
       array_[pos].total_tablet_cnt_ = total_tablet_cnt;
@@ -253,7 +247,6 @@ int ObCompactionProgressMgr::get_pos_(const int64_t major_snapshot_version, int6
   if (OB_SUCC(ret) && pos >= 0 && pos < SERVER_PROGRESS_MAX_CNT
       && array_[pos].merge_version_ != major_snapshot_version) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("major version is error", K(ret), K(pos), K(major_snapshot_version));
   }
   return ret;
 }
@@ -269,7 +262,6 @@ int ObCompactionProgressMgr::update_progress(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(major_snapshot_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(major_snapshot_version), K(scanned_data_size_delta));
   } else {
     int64_t pos = -1;
     SpinWLockGuard guard(lock_);
@@ -278,7 +270,6 @@ int ObCompactionProgressMgr::update_progress(
       if (finish_flag) {
         if (array_[pos].is_inited_ && OB_UNLIKELY(0 == array_[pos].unfinished_tablet_cnt_)) {
           if (REACH_TIME_INTERVAL(1000 * 1000)) {
-            LOG_WARN("unfinished partition count is invalid", K(ret), K(array_[pos].unfinished_tablet_cnt_));
           }
         } else {
           array_[pos].unfinished_tablet_cnt_--;
@@ -297,11 +288,9 @@ int ObCompactionProgressMgr::update_progress(
 
       if (array_[pos].is_inited_) {
         if (OB_UNLIKELY(array_[pos].data_size_ < 0)) {
-          LOG_WARN("data size is invalid", K(ret), K(array_[pos].data_size_));
           array_[pos].data_size_ = 0;
         }
         if (OB_UNLIKELY(array_[pos].unfinished_data_size_ < 0)) {
-          LOG_WARN("unfinished data size is invalid", K(ret), K(array_[pos].unfinished_data_size_));
           array_[pos].unfinished_data_size_ = 0;
         }
       }
@@ -337,7 +326,6 @@ int ObCompactionProgressMgr::update_unfinish_tablet(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(major_snapshot_version < 0 || reduce_tablet_cnt < 0 || reduce_data_size < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(major_snapshot_version), K(reduce_tablet_cnt), K(reduce_data_size));
   } else if (reduce_tablet_cnt > 0) {
     int64_t pos = -1;
     SpinWLockGuard guard(lock_);
@@ -346,7 +334,6 @@ int ObCompactionProgressMgr::update_unfinish_tablet(
             || array_[pos].unfinished_tablet_cnt_ < reduce_tablet_cnt
             || array_[pos].unfinished_data_size_ < reduce_data_size)) { // wait for calling finish merge progress
       if (REACH_TIME_INTERVAL(1000 * 1000)) {
-        LOG_WARN("unfinished partition count is invalid", K(ret), K(pos), K(array_[pos].unfinished_tablet_cnt_));
       }
     } else {
       array_[pos].unfinished_tablet_cnt_ -= reduce_tablet_cnt;
@@ -364,7 +351,6 @@ int ObCompactionProgressMgr::update_compression_ratio(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(major_snapshot_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(major_snapshot_version));
   } else {
     int64_t pos = -1;
     SpinWLockGuard guard(lock_);
@@ -386,7 +372,6 @@ int ObCompactionProgressIterator::open()
   int ret = OB_SUCCESS;
   if (is_opened_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("The ObTabletCompactionProgressIterator has been opened", K(ret));
   } else if (!share::g_server_modules_ready) {
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "server modules are not ready", K(ret));
@@ -410,7 +395,6 @@ int ObCompactionProgressIterator::get_next_info(ObCompactionProgress &info)
   int ret = OB_SUCCESS;
   if (!is_opened_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (cur_idx_ >= progress_array_.count()) {
     ret = OB_ITER_END;
   } else {
@@ -429,7 +413,6 @@ int ObTabletCompactionProgressIterator::open()
   int ret = OB_SUCCESS;
   if (is_opened_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("The ObTabletCompactionProgressIterator has been opened", K(ret));
   } else if (!share::g_server_modules_ready) {
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "server modules are not ready", K(ret));
@@ -454,12 +437,10 @@ int ObTabletCompactionProgressIterator::get_next_info(ObTabletCompactionProgress
   int ret = OB_SUCCESS;
   if (!is_opened_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (cur_idx_ >= progress_array_.count()) {
     ret = OB_ITER_END;
   } else if (OB_ISNULL(progress_array_.at(cur_idx_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("progress is null", K(ret), K(cur_idx_));
   } else {
     info = *progress_array_.at(cur_idx_);
     ++cur_idx_;

@@ -44,18 +44,14 @@ int ObIMicroBlockReader::read_column_values(
     ret = OB_INVALID_ARGUMENT;
   } else if (value_count > 0
              && OB_FAIL(row.init(allocator, read_info_->get_request_count()))) {
-    LOG_WARN("failed to initialize column value row buffer", K(ret), K(value_count));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < value_count; ++i) {
     const int64_t row_id = nullptr == row_ids ? dense_begin + i : row_ids[i];
     if (OB_UNLIKELY(row_id < 0 || row_id >= row_count_)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid aggregate value row id", K(ret), K(row_id), K_(row_count));
     } else if (OB_FAIL(get_row(row_id, row))) {
     } else if (OB_UNLIKELY(col_offset >= row.get_column_count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("aggregate value column is outside decoded row", K(ret), K(col_offset),
-               K(row.get_column_count()));
     } else if (OB_FAIL(datums[i].deep_copy(row.storage_datums_[col_offset], allocator))) {
     }
   }
@@ -78,11 +74,9 @@ int ObIMicroBlockReader::locate_range(
   int64_t end_key_end_idx = row_count_;
   if (OB_UNLIKELY(0 > row_count_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected row count", K(ret), K_(row_count));
   } else if (0 == row_count_) {
   } else if (OB_ISNULL(datum_utils_)){
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("datum utils is null", K(ret), KP_(datum_utils));
   } else {
     if (!is_left_border || range.get_start_key().is_min_rowkey()) {
       begin_idx = 0;
@@ -102,7 +96,6 @@ int ObIMicroBlockReader::locate_range(
         end_idx = row_count_ - 1;
       } else if (OB_UNLIKELY(end_key_begin_idx > end_key_end_idx)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected state", K(ret), K(end_key_begin_idx), K(end_key_end_idx), K(range));
       } else  {
         const bool is_percise_rowkey = datum_utils_->get_rowkey_count() == range.get_end_key().get_datum_cnt();
         // we should use upper_bound if the range include endkey
@@ -140,10 +133,8 @@ int ObIMicroBlockReader::locate_border_row_id(
   if (OB_UNLIKELY(0 >= row_count_ || begin_idx >= end_idx ||
                   0 > begin_idx || row_count_ < end_idx)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K_(row_count), K(begin_idx), K(end_idx));
   } else if (OB_ISNULL(datum_utils_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("datum utils is null", K(ret), KP_(datum_utils));
   } else if (rowkey.is_min_rowkey()) {
     border_row_idx = begin_idx;
   } else if (rowkey.is_max_rowkey()) {
@@ -164,17 +155,13 @@ int ObIMicroBlockReader::validate_filter_info(
   int64_t col_count = filter.get_col_count();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(header) || OB_ISNULL(read_info_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid micro block reader", K(ret), KP(read_info_));
   } else if (OB_UNLIKELY(0 > col_count || col_capacity < col_count)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected filter col count", K(ret), K(col_count), K(col_capacity));
   } else if (0 == col_count) {
   } else if (OB_ISNULL(col_buf) && 0 < col_capacity) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null col buf", K(ret), K(col_capacity));
   }
   return ret;
 }

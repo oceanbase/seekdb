@@ -39,8 +39,6 @@ int ObIColumnDecoder::get_is_null_bitmap_from_fixed_column(
           || OB_UNLIKELY(!col_ctx.is_fix_length()
               && !col_ctx.is_bit_packing())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument for getting isnull bitmap from fixed column",
-        K(ret), K(pd_filter_info), K(result_bitmap.size()));
   } else {
     if (col_ctx.has_extend_value()) {
       int64_t row_count = pd_filter_info.count_;
@@ -82,8 +80,6 @@ int ObIColumnDecoder::get_is_null_bitmap_from_var_column(
           || OB_UNLIKELY(col_ctx.is_fix_length()
               || col_ctx.is_bit_packing())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument for getting isnull bitmap from var column",
-        K(ret), K(pd_filter_info), K(result_bitmap.size()));
   } else {
     if (col_ctx.has_extend_value()) {
       uint64_t value;

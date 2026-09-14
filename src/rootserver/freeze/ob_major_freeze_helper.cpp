@@ -39,15 +39,12 @@ int ObMajorFreezeHelper::major_freeze(const ObMajorFreezeParam &param)
   bool write_enabled = true;
   if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(param), KR(ret));
   } else if (OB_FAIL(check_runtime_ready(is_restore))) {
   } else if (is_restore) {
     ret = OB_MAJOR_FREEZE_NOT_ALLOW;
-    LOG_WARN("major freeze is not allowed while restoring", KR(ret));
   } else if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
   } else if (!write_enabled) {
     ret = OB_MAJOR_FREEZE_NOT_ALLOW;
-    LOG_WARN("major freeze is not allowed on a standby server", KR(ret));
   } else if (OB_FAIL(do_local_major_freeze(param.freeze_reason_))) {
   }
   return ret;
@@ -58,10 +55,8 @@ int ObMajorFreezeHelper::tablet_major_freeze(const ObTabletMajorFreezeParam &par
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(param));
   } else if (!GCONF.enable_major_freeze) {
     ret = OB_MAJOR_FREEZE_NOT_ALLOW;
-    LOG_WARN("enable_major_freeze is off, refuse to to major_freeze", K(param), KR(ret));
   } else {
     LOG_INFO("tablet major freeze", K(ret), K(param));
     const int64_t start_time = ObTimeUtility::fast_current_time();
@@ -88,12 +83,10 @@ int ObMajorFreezeHelper::check_runtime_ready(bool &is_restore)
   const share::schema::ObSimpleServerRuntimeSchema *runtime_schema = nullptr;
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("schema service is not initialized", KR(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_server_runtime_info(runtime_schema))) {
   } else if (OB_ISNULL(runtime_schema) || !runtime_schema->is_normal()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("database runtime is not normal", KR(ret), KPC(runtime_schema));
   } else {
     is_restore = share::is_restore_role(GCTX.server_role_);
   }
@@ -111,7 +104,6 @@ int ObMajorFreezeHelper::do_local_major_freeze(const ObMajorFreezeReason freeze_
     bool is_primary_service = true;
     if (OB_ISNULL(primary_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObPrimaryMajorFreezeService>())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("primary major freeze service is null", KR(ret));
     } else if (OB_ISNULL(restore_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObRestoreMajorFreezeService>())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("restore major freeze service is null", KR(ret));
@@ -119,10 +111,8 @@ int ObMajorFreezeHelper::do_local_major_freeze(const ObMajorFreezeReason freeze_
         primary_service, restore_service, major_freeze_service, is_primary_service))) {
     } else if (OB_ISNULL(major_freeze_service)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("major freeze service is null", KR(ret));
     } else if (!is_primary_service) {
       ret = OB_MAJOR_FREEZE_NOT_ALLOW;
-      LOG_WARN("major freeze is forbidden while restoring", KR(ret));
     } else if (OB_FAIL(major_freeze_service->launch_major_freeze(freeze_reason))) {
     }
   }
@@ -156,7 +146,6 @@ int ObMajorFreezeHelper::do_admin_merge(const AdminMergeType admin_type)
     bool is_primary_service = true;
     if (OB_ISNULL(primary_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObPrimaryMajorFreezeService>())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("major_freeze_service is nullptr", K(ret));
     } else if (OB_ISNULL(restore_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObRestoreMajorFreezeService>())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("restore_major_freeze_service is nullptr", KR(ret));
@@ -164,7 +153,6 @@ int ObMajorFreezeHelper::do_admin_merge(const AdminMergeType admin_type)
         restore_service, major_freeze_service, is_primary_service))) {
     } else if (OB_ISNULL(major_freeze_service)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("major_freeze_service is null", KR(ret));
     } else {
       switch (admin_type) {
         case AdminMergeType::SUSPEND:
@@ -181,7 +169,6 @@ int ObMajorFreezeHelper::do_admin_merge(const AdminMergeType admin_type)
           break;
         default:
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid merge admin type", KR(ret), K(admin_type));
           break;
       }
       if (OB_SUCC(ret)) {
@@ -209,10 +196,8 @@ int ObMajorFreezeHelper::get_frozen_status(
   ObFreezeInfoProxy freeze_info_proxy;
   if (OB_ISNULL(proxy)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("SQL proxy is null", KR(ret));
   } else if (OB_FAIL(freeze_info_proxy.get_freeze_info(*proxy, frozen_scn, frozen_status))) {
     if (OB_ITER_END != ret && OB_TABLE_NOT_EXIST != ret) {
-      LOG_WARN("get freeze info failed", KR(ret), K(frozen_scn));
     }
   }
   return ret;
@@ -235,7 +220,6 @@ int ObMajorFreezeHelper::get_frozen_scn(SCN &frozen_scn)
   ObFreezeInfo frozen_status;
   if (OB_FAIL(get_frozen_status(SCN::min_scn(), frozen_status))) {
     if (OB_ITER_END != ret && OB_TABLE_NOT_EXIST != ret) {
-      LOG_WARN("get latest freeze info failed", KR(ret));
     }
   } else {
     frozen_scn = frozen_status.frozen_scn_;

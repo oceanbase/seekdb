@@ -32,7 +32,6 @@ int ObDtlAsynSender::calc_batch_buffer_cnt(int64_t &max_batch_size, int64_t &max
   int ret = OB_SUCCESS;
   if (channels_.empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cannot batch an empty local channel set", K(ret));
   } else {
     const int64_t queue_size =
         common::ObServerConfig::get_instance().server_task_queue_size;
@@ -52,7 +51,6 @@ int ObDtlAsynSender::syn_send()
   for (int64_t slice_idx = 0; (OB_SUCCESS == ret) && slice_idx < channels_.count(); ++slice_idx) {
     if (NULL == (ch = channels_.at(slice_idx))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected NULL ptr", K(ret));
     } else if (OB_FAIL(action(ch))) {
     } else if (OB_FAIL(ch->wait_response())) {
     }
@@ -85,14 +83,12 @@ int ObDtlAsynSender::asyn_send()
            ++batch_idx) {
         if (NULL == (ch = channels_.at(loop + batch_idx))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected NULL ptr", K(ret));
         } else {
           wait_channels.at(nth_ch++) = ch;
           ++send_eof_cnt;
           if (OB_FAIL(action(ch))) {
             tmp_ret = ret;
             ret = OB_SUCCESS;
-            LOG_WARN("failed to send", K(ret));
           }
         }
       }
@@ -102,16 +98,12 @@ int ObDtlAsynSender::asyn_send()
           if (OB_NOT_NULL(ch) && OB_FAIL(ch->flush())) {
             tmp_ret = ret;
             ret = OB_SUCCESS;
-            LOG_WARN("failed to wait", K(ret), K(loop), K(max_loop_times), K(max_batch_size),
-              K(channels_.count()));
           }
         }
       }
     }
     if (OB_SUCC(ret) && send_eof_cnt != channels_.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected status: send eof failed", K(ret),
-        K(send_eof_cnt), K(channels_.count()), K(max_batch_size), K(max_loop_times));
     }
     if (OB_SUCC(ret) && OB_SUCCESS != tmp_ret) {
       ret = tmp_ret;

@@ -111,7 +111,6 @@ int ObStorageTableGuard::refresh_and_protect_memtable_for_write(ObRelativeTable 
   const common::ObTabletID &tablet_id = tablet_->get_tablet_meta().tablet_id_;
   if (OB_ISNULL(store_ctx_.ls_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls is null", K(ret));
   }
 
   while (OB_SUCC(ret) && need_to_refresh_table(*iter.table_iter())) {
@@ -158,13 +157,11 @@ int ObStorageTableGuard::refresh_and_protect_memtable_for_replay()
       if (OB_ENTRY_NOT_EXIST == ret) {
         ret = create_data_memtable_for_replay_(tablet_id, need_retry);
       } else {  // OB_ENTRY_NOT_EXIST != ret
-        LOG_WARN("fail to get boundary memtable", K(ret), K(tablet_id));
       }
     } else if (OB_FAIL(handle.get_tablet_memtable(tablet_memtable))) {
     } else if (OB_FAIL(check_freeze_to_inc_write_ref(static_cast<ObMemtable*>(tablet_memtable), need_retry))) {
       if (OB_EAGAIN == ret) {
       } else if (OB_MINOR_FREEZE_NOT_ALLOW != ret) {
-        LOG_WARN("fail to check_freeze", K(ret), K(tablet_id), K(need_retry), KPC(tablet_memtable));
       }
     }
 
@@ -408,7 +405,6 @@ bool ObStorageTableGuard::need_to_refresh_table(ObTableStoreIterator &iter)
     const ObTabletID &tablet_id = memtable->get_tablet_id();
     if (OB_UNLIKELY(!tablet_id.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to get memtable tablet_id", K(ret), KPC(table));
     } else if (tablet_id != tablet_->get_tablet_meta().tablet_id_) {
       need_create_memtable = true;
     }
@@ -432,7 +428,6 @@ bool ObStorageTableGuard::need_to_refresh_table(ObTableStoreIterator &iter)
     bool_ret = true;
     exit_flag = 2;
     if (OB_MINOR_FREEZE_NOT_ALLOW != ret) {
-      LOG_WARN("fail to inc write ref", K(ret));
     }
   } else {
     exit_flag = 3;
@@ -460,15 +455,12 @@ bool ObStorageTableGuard::need_to_refresh_table(ObTableStoreIterator &iter)
                         ", with exit_flag=", exit_flag);
       }
       if (0 == exit_flag) {
-        LOG_WARN("table is null or not memtable", K(ret), K(tablet_id), KP(table));
       } else if (1 == exit_flag) {
         LOG_WARN("iterator store is expired", K(ret), K(tablet_id), K(iter.check_store_expire()), K(iter.count()), K(iter));
       } else if (2 == exit_flag) {
-        LOG_WARN("failed to check_freeze_to_inc_write_ref", K(ret), K(tablet_id), KPC(table));
       } else if (3 == exit_flag) {
         LOG_WARN_RET(OB_ERR_TOO_MUCH_TIME, "check_freeze_to_inc_write_ref costs too much time", K(ret), K(tablet_id), KPC(table));
       } else {
-        LOG_WARN("unexpect exit_flag", K(exit_flag), K(ret), K(tablet_id));
       }
     }
   }

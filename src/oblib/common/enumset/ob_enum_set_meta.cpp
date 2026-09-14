@@ -79,10 +79,8 @@ int ObEnumSetMeta::deep_copy(ObIAllocator &allocator, ObEnumSetMeta *&dst) const
   ObFixedArray<ObString, ObIAllocator> *str_values = NULL;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("src meta is invalid", K(ret), KPC(this));
   } else if (OB_ISNULL(mem = allocator.alloc(mem_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc udt meta", K(ret), K(mem_size));
   } else {
     meta = new(mem)ObEnumSetMeta();
     void *array_ptr = static_cast<char*>(mem) + sizeof(ObEnumSetMeta);
@@ -94,7 +92,6 @@ int ObEnumSetMeta::deep_copy(ObIAllocator &allocator, ObEnumSetMeta *&dst) const
         ObString dst_str;
         if (OB_FAIL(ob_write_string(allocator, str_values_->at(i), dst_str))) {
         } else if (OB_FAIL(str_values->push_back(dst_str))) {
-          LOG_WARN("push_back failed", K(ret));
           // free memory avoid memory leak
           for (int64_t j = 0; j < str_values->count(); ++j) {
             allocator.free(str_values->at(j).ptr());
@@ -123,7 +120,6 @@ OB_DEF_SERIALIZE(ObEnumSetMeta)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("src meta is invalid", K(ret), KPC(this));
   } else {
     OB_UNIS_ENCODE(obj_meta_);
     OB_UNIS_ENCODE_ARRAY(str_values_->get_data(), str_values_->count());
@@ -142,13 +138,10 @@ OB_DEF_DESERIALIZE(ObEnumSetMeta)
   void *mem = NULL;
   if (OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("allocator is need for deserialize", K(ret), K(lbt()));
   } else if (OB_UNLIKELY(0 == count)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("string values count is zero", K(ret));
   } else if (OB_ISNULL(mem = allocator_->alloc(strings_size + array_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate mem", K(ret), K(strings_size), K(array_size));
   } else if (FALSE_IT(MEMSET(mem, 0, strings_size + array_size))) {
   } else {
     ObArrayHelper<ObString> *array_helper = new(mem)(ObArrayHelper<ObString>);

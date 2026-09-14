@@ -43,7 +43,6 @@ int ObExprInsert::calc_result_typeN(ObExprResType &type,
   ObObjMeta coll0, coll3; // insert's first and fourth parameters need to participate in the calculation of charset
   if (4 != param_num) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("insert should have four arguments",K(ret));
   } else {
     type.set_varchar();
     type.set_length(types_array[0].get_length() + types_array[3].get_length());
@@ -99,13 +98,11 @@ int ObExprInsert::calc(ObObj &result,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr_ctx.calc_buf_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("varchar buffer not init", K(ret));
   } else if (text.is_null() || start_pos.is_null() || length.is_null() || replace_text.is_null()) {
     result.set_null();
   } else  if (!is_type_valid(text.get_type()) || !is_type_valid(start_pos.get_type())
               || !is_type_valid(length.get_type()) || !is_type_valid(replace_text.get_type())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the param is not castable", K(text), K(start_pos), K(length), K(ret));
   } else {
     TYPE_CHECK(start_pos, ObIntType);
     TYPE_CHECK(replace_text, ObVarcharType);
@@ -215,14 +212,12 @@ int ObExprInsert::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 4) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("insert expr should have 4 params", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_)
              || OB_ISNULL(rt_expr.args_[0])
              || OB_ISNULL(rt_expr.args_[1])
              || OB_ISNULL(rt_expr.args_[2])
              || OB_ISNULL(rt_expr.args_[3])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of insert expr is null", K(ret), K(rt_expr.args_));
   } else {
     CK(ObVarcharType == rt_expr.args_[0]->datum_meta_.type_);
     CK(ObIntType == rt_expr.args_[1]->datum_meta_.type_);

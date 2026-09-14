@@ -31,16 +31,12 @@ int ObMPSetOption::deserialize()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(req_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid packet", K(ret), K_(req));
   } else if (OB_UNLIKELY(req_->get_type() != ObRequest::OB_MYSQL)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid packet", K(ret), K_(req), K(req_->get_type()));
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     if (OB_UNLIKELY(ObMySQLCommandLayout::U16 != pkt.get_command_layout())) {
       ret = OB_INVALID_DATA;
-      LOG_WARN("unexpected set-option command layout", K(ret),
-               K(pkt.get_command_layout()));
     } else {
       set_opt_ = static_cast<uint16_t>(pkt.get_command_scalar0());
     }
@@ -58,10 +54,8 @@ int ObMPSetOption::process()
   if (OB_FAIL(get_session(session))) {
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null pointer");
   } else if (OB_ISNULL(conn = get_conn())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get connection fail", K(conn), K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -103,7 +97,6 @@ int ObMPSetOption::process()
   if (OB_FAIL(ret)) {
     if (need_disconnect && is_conn_valid()) {
       force_disconnect();
-      LOG_WARN("disconnect connection when process query", K(ret));
     } else  if (OB_FAIL(send_error_packet(ret, NULL))) {
     }
   }

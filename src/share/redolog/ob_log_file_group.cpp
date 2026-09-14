@@ -49,9 +49,7 @@ int ObLogFileGroup::init(const char *log_dir)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("already inited", K(ret));
   } else if (OB_ISNULL(log_dir) || OB_UNLIKELY(0 == STRLEN(log_dir))) {
-    LOG_WARN("invalid args", K(ret), K(log_dir));
   } else {
 #ifdef _WIN32
     ULARGE_INTEGER free_bytes_available, total_bytes, total_free_bytes;
@@ -65,7 +63,6 @@ int ObLogFileGroup::init(const char *log_dir)
     struct statfs buf;
     if (0 != ::statfs(log_dir, &buf)) {
       ret = OB_IO_ERROR;
-      LOG_WARN("failed to statfs", K(ret), K(log_dir), K(errno), KERRMSG);
     } else {
       total_disk_size_ = (int64_t)buf.f_bsize * (int64_t)buf.f_blocks;
     }
@@ -95,7 +92,6 @@ int ObLogFileGroup::get_file_id_range(int64_t &min_file_id, int64_t &max_file_id
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else {
     bool need_scan_dir = false;
     min_file_id = ATOMIC_LOAD(&min_file_id_);
@@ -155,7 +151,6 @@ int ObLogFileGroup::get_total_disk_space(int64_t &total_space) const
   total_space = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else {
     total_space = total_disk_size_;
   }
@@ -170,7 +165,6 @@ int ObLogFileGroup::get_total_used_size(int64_t &total_size) const
   total_size = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else {
     ObGetFileSizeFunctor functor(log_dir_);
     if (OB_FAIL(LOCAL_DEVICE_INSTANCE.scan_dir(log_dir_, functor))) {
@@ -218,7 +212,6 @@ int ObLogFileGroup::check_file_existence(const char *dir, const int64_t file_id,
       || OB_UNLIKELY(0 == STRLEN(dir))
       || OB_UNLIKELY(!ObLogFileHandler::is_valid_file_id(file_id))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(dir), K(file_id));
   } else if (OB_FAIL(ObLogFileHandler::format_file_path(
       full_path, sizeof(full_path), dir, file_id))) {
   } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.exist(full_path, b_exist))) {

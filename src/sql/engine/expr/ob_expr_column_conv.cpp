@@ -50,7 +50,6 @@ int ObFastColumnConvExpr::assign(const ObFastExprOperator &other)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(other.get_op_type() != T_FUN_COLUMN_CONV)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(other.get_op_type()));
   } else {
     const ObFastColumnConvExpr &other_conv = static_cast<const ObFastColumnConvExpr&>(other);
     column_type_ = other_conv.column_type_;
@@ -66,7 +65,6 @@ int ObFastColumnConvExpr::calc(ObExprCtx &expr_ctx, const ObNewRow &row, ObObj &
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(OB_ISNULL(expr_ctx.my_session_))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("expr context is invalid", K(ret), K(expr_ctx.my_session_), K(expr_ctx.phy_plan_ctx_));
   } else {
     bool is_strict = is_strict_mode(expr_ctx.my_session_->get_sql_mode());
     const ObObj *value = NULL;
@@ -117,12 +115,10 @@ int ObExprColumnConv::assign(const ObExprOperator &other)
   const ObExprColumnConv *tmp_other = dynamic_cast<const ObExprColumnConv *>(&other);
   if (OB_UNLIKELY(NULL == tmp_other)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObFuncExprOperator::assign(other))) {
     } else if (tmp_other->str_values_.count() > 0 &&
                OB_FAIL(deep_copy_str_values(tmp_other->str_values_))) {
-      LOG_WARN("copy str_values failed", K(ret));
     }
   }
   return ret;
@@ -141,7 +137,6 @@ int ObExprColumnConv::convert_with_null_check(ObObj &result,
                                                         cast_ctx, type_infos))) {
   } else if (is_not_null && (result.is_null())) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("Column should not be null", K(ret));
   }
   return ret;
 }
@@ -175,7 +170,6 @@ int ObExprColumnConv::convert_skip_null_check(ObObj &result,
     }
   } else if (OB_FAIL(ObObjCaster::to_type(type, cast_ctx, obj, result, res_obj)) || OB_ISNULL(res_obj)) {
     ret = COVER_SUCC(OB_ERR_UNEXPECTED);
-    LOG_WARN("failed to cast object", K(ret), K(obj), "type", type);
   } else {
   }
   if (OB_SUCC(ret)) {
@@ -215,7 +209,6 @@ int ObExprColumnConv::calc_result_typeN(ObExprResType &type,
   ObCollationType coll_type = CS_TYPE_INVALID;
   if (OB_ISNULL(type_ctx.get_session()) || OB_ISNULL(type_ctx.get_raw_expr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL or raw expr is NULL", K(ret));
   } else if (OB_UNLIKELY(((PARAMS_COUNT_WITHOUT_COLUMN_INFO != param_num)
                         && (PARAMS_COUNT_WITH_COLUMN_INFO != param_num))
                         || OB_ISNULL(types))) {
@@ -238,7 +231,6 @@ int ObExprColumnConv::calc_result_typeN(ObExprResType &type,
       ObExecContext *exec_ctx = OB_ISNULL(session) ? NULL : session->get_cur_exec_ctx();
       if (OB_ISNULL(exec_ctx)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("need context to search subschema mapping", K(ret), K(udt_id));
       } else if (OB_FAIL(exec_ctx->get_subschema_id_by_udt_id(udt_id, subschema_id))) {
       }
       if (OB_SUCC(ret)) {
@@ -258,13 +250,11 @@ int ObExprColumnConv::calc_result_typeN(ObExprResType &type,
     bool wrap_to_str = false;
     if (OB_SUCC(ret) && OB_FAIL(calc_enum_set_result_type(type, types, coll_type, type_ctx,
                                                           wrap_to_str))) {
-      LOG_WARN("fail to calc enum set result type", K(ret));
     }
 
     if (OB_SUCC(ret) &&
         OB_FAIL(ObCharset::check_valid_implicit_convert(types[4].get_collation_type(),
                                                         types[1].get_collation_type()))) {
-      LOG_WARN("failed to check valid implicit convert", K(ret));
     }
 
     if (OB_SUCC(ret) && !wrap_to_str) {
@@ -323,7 +313,6 @@ int ObExprColumnConv::calc_enum_set_result_type(ObExprResType &type,
       const ObRawExpr *enumset_expr = NULL;
       if (OB_ISNULL(conv_expr) || OB_ISNULL(enumset_expr = conv_expr->get_param_expr(4))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("raw expr or child expr is null", K(ret), KP(conv_expr));
       } else {
         // set wrap to str to false, it will be checked in `ObRawExprWrapEnumSet`
         wrap_to_str = type.get_subschema_id() != enumset_expr->get_subschema_id();
@@ -351,7 +340,6 @@ int ObExprColumnConv::cg_expr(ObExprCGCtx &op_cg_ctx,
     || (PARAMS_COUNT_WITH_COLUMN_INFO == rt_expr.arg_cnt_));
   if (OB_ISNULL(op_cg_ctx.session_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   } else if (OB_FAIL(ObEnumSetInfo::init_enum_set_info(op_cg_ctx.allocator_, rt_expr, type_,
       raw_expr.get_cast_mode(), str_values_))) {
   } else {
@@ -407,16 +395,13 @@ int enum_set_valid_check(const uint64_t val, const int64_t str_values_count, con
   int ret = common::OB_SUCCESS;
   if (OB_UNLIKELY(str_values_count <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected str values count", K(ret), K(str_values_count), K(is_enum));
   } else if (is_enum && (val > str_values_count)) {
     // ENUM type, its value should not exceed str_values_count
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected enum value", K(ret), K(val), K(str_values_count));
   } else if (!is_enum && (str_values_count < OB_MAX_SET_ELEMENT_NUM) &&
       (val >= (1UL << str_values_count))) {
     // SET type, its value should not be greater than or equal to 2^(str_values_count)
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected set value", K(ret), K(val), K(str_values_count));
   }
   return ret;
 }
@@ -428,7 +413,6 @@ int ObExprColumnConv::column_convert(const ObExpr &expr,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr.extra_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("extra_info_ is unexpected", K(ret), KP(expr.extra_info_));
   } else {
     const ObEnumSetInfo *enumset_info = static_cast<ObEnumSetInfo *>(expr.extra_info_);
     const uint64_t cast_mode = enumset_info->cast_mode_;
@@ -466,7 +450,6 @@ int ObExprColumnConv::column_convert(const ObExpr &expr,
         }
         if (OB_SUCC(ret)
             && OB_FAIL(column_convert_datum_accuracy_check(expr, ctx, false, datum, cast_mode, *val))) {
-          LOG_WARN("fail do datum_accuracy_check for lob res", K(ret), K(expr), K(*val));
         }
         if (OB_SUCC(ret)) {
         }
@@ -481,7 +464,6 @@ int ObExprColumnConv::column_convert(const ObExpr &expr,
         if (is_delta) { // delta lob
           if (!(ob_is_text_tc(in_type) || ob_is_json(in_type))) {
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("delta lob can not convert to non-text type", K(ret), K(out_type));
           } else {
             datum.set_string(raw_str);
           }
@@ -500,7 +482,6 @@ int ObExprColumnConv::column_convert(const ObExpr &expr,
           } else if (ob_is_geometry(out_type)) {
             ObGeoType geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
             if (OB_FAIL(ObGeoTypeUtil::check_geo_type(geo_type, str))) {
-              LOG_WARN("fail to check geo type", K(ret), K(str), K(geo_type), K(expr));
               ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
               LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
             }
@@ -587,19 +568,16 @@ int ObExprColumnConv::column_convert_batch(const ObExpr &expr,
                                                                              is_strict, max_accuracy_len, cast_mode,
                                                                              eval_flags, vals, results,
                                                                              batch_info_guard))) {
-        LOG_WARN("failed to convert batch", K(ret));
       } else if (is_int_tc
                  && OB_SUCCESS != (ret = inner_loop_for_convert_batch<PARAM_TC::INT_TC>(expr, ctx, skip, batch_size,
                                                                                  is_strict, max_accuracy_len, cast_mode,
                                                                                  eval_flags, vals, results,
                                                                                  batch_info_guard))) {
-        LOG_WARN("failed to convert batch", K(ret));
       } else if (is_decimal_int_tc
                  && OB_SUCCESS != (ret = inner_loop_for_convert_batch<PARAM_TC::DECIMAL_INT_TC>(expr, ctx, skip, batch_size,
                                                                                          is_strict, max_accuracy_len, cast_mode,
                                                                                          eval_flags, vals, results,
                                                                                          batch_info_guard))) {
-        LOG_WARN("failed to convert batch", K(ret));
       } else if (OB_SUCCESS != (ret = inner_loop_for_convert_batch<PARAM_TC::OTHER_TC>(expr, ctx, skip, batch_size,
                                                                    is_strict, max_accuracy_len, cast_mode,
                                                                    eval_flags, vals, results,
@@ -630,7 +608,6 @@ int ObExprColumnConv::column_convert_batch(const ObExpr &expr,
           if (is_delta) { // delta lob
             if (!(ob_is_text_tc(in_type) || ob_is_json(in_type))) {
               ret = OB_INVALID_ARGUMENT;
-              LOG_WARN("delta lob can not convert to non-text type", K(ret), K(out_type));
             } else {
               results[i].set_string(raw_str);
             }
@@ -654,7 +631,6 @@ int ObExprColumnConv::column_convert_batch(const ObExpr &expr,
               } else if (ob_is_geometry(out_type)) {
                 ObGeoType geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
                 if (OB_FAIL(ObGeoTypeUtil::check_geo_type(geo_type, str))) {
-                  LOG_WARN("fail to check geo type", K(ret), K(str), K(geo_type), K(expr));
                   ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
                   LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
                 }
@@ -664,7 +640,6 @@ int ObExprColumnConv::column_convert_batch(const ObExpr &expr,
            if (OB_FAIL(ret)) {
            }  else if (!storage::is_ascii_str(str.ptr(), str.length())
                         && OB_FAIL(string_collation_check(is_strict, out_cs_type, out_type, str))) {
-              LOG_WARN("fail to check collation", K(ret), K(str), K(is_strict), K(expr));
             }
             if (OB_SUCC(ret)) {
               has_lob_header_for_check = false; // datum_for_check must have no lob header
@@ -793,7 +768,6 @@ int ObExprColumnConv::ObExprColumnConvCtx::setup_eval_expr(ObIAllocator &allocat
   const int64_t mem_size = sizeof(ObExpr*) * expr.arg_cnt_;
   if (OB_ISNULL(args_ = static_cast<ObExpr**>(allocator.alloc(mem_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc args", K(ret), K(mem_size));
   } else {
     expr_ = expr;
     expr_.args_ = args_;
@@ -843,7 +817,6 @@ int ObExprColumnConv::inner_loop_for_convert_batch(const ObExpr &expr,
         ObString str = vals[i].get_string();
         if (!storage::is_ascii_str(str.ptr(), str.length())
             && OB_FAIL(string_collation_check(is_strict, out_cs_type, out_type, str))) {
-          LOG_WARN("fail to check collation", K(ret), K(str), K(is_strict), K(expr));
         } else {
           vals[i].set_string(str);
         }
@@ -859,17 +832,14 @@ int ObExprColumnConv::inner_loop_for_convert_batch(const ObExpr &expr,
           str.assign_ptr(origin_ptr, origin_len);
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("should not reach here", K(ret), K(str));
         }
         if (OB_FAIL(ret)) {
         }  else if (!storage::is_ascii_str(str.ptr(), str.length())
                       && OB_FAIL(string_collation_check(is_strict, out_cs_type, out_type, str))) {
-            LOG_WARN("fail to check collation", K(ret), K(str), K(is_strict), K(expr));
         } else if (origin_len != str.length()) {
           if (has_lob_header) {
             if (origin_ptr != str.ptr()) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("data memroy is changed", K(ret), K(i), KP(origin_ptr), K(origin_len), KP(str.ptr()), K(str.length()));
             } else {
               vals[i].set_string(vals[i].ptr_, sizeof(ObLobCommon) + str.length());
             }
@@ -914,7 +884,6 @@ int ObBaseExprColumnConv::shallow_copy_str_values(const common::ObIArray<common:
   str_values_.reset();
   if (OB_UNLIKELY(str_values.count() < 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid str_values", K(str_values), K(ret));
   } else if (OB_FAIL(str_values_.assign(str_values))) {
   } else {/*do nothing*/}
   return ret;
@@ -926,7 +895,6 @@ int ObBaseExprColumnConv::deep_copy_str_values(const ObIArray<ObString> &str_val
   str_values_.reset();
   if (OB_UNLIKELY(str_values.count() < 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid str_values", K(str_values), K(ret));
   } else if (OB_FAIL(str_values_.reserve(str_values.count()))) {
   } else {/*do nothing*/}
 
@@ -938,7 +906,6 @@ int ObBaseExprColumnConv::deep_copy_str_values(const ObIArray<ObString> &str_val
       //just keep str_tmp empty
     } else if (OB_UNLIKELY(NULL == (buf = static_cast<char *>(alloc_.alloc(str.length()))))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory", K(i), K(str), K(ret));
     } else {
       MEMCPY(buf, str.ptr(), str.length());
       str_tmp.assign_ptr(buf, str.length());

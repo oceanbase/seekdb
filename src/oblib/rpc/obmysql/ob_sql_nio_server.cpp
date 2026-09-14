@@ -148,8 +148,6 @@ int ObSqlNioServer::start(int port, rpc::frame::ObReqDeliver* deliver,
       // start_err makes an ABI drift distinguishable from a busy port; ETLS
       // means the wallet cert/key/ca failed to load — startup fails rather
       // than serving cleartext on a port configured for TLS.
-      LOG_WARN("nio_start failed", K(ret), K(port), K(start_err),
-               K(disable_tcp), K(use_tls));
     } else {
       const uint32_t bound_tcp_port = nio_get_bound_tcp_port(reactor_);
       n_thread_ = (n_thread <= 0 ? 1 : n_thread);
@@ -176,8 +174,6 @@ int ObSqlNioServer::set_thread_count(const int thread_num)
   int ret = OB_SUCCESS;
   if (thread_num != n_thread_) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("changing Rust SQL-NIO thread count requires observer restart",
-             K(ret), K(thread_num), K(n_thread_));
   }
   return ret;
 }

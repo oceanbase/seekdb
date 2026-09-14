@@ -34,7 +34,6 @@ int ObBatchFreezeTabletsDag::inner_init()
   const ObBatchFreezeTabletsParam &param = get_param();
   if (!param.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid param", K(ret), K(param));
   } else {
     (void) set_max_concurrent_task_cnt(MAX_CONCURRENT_FREEZE_TASK_CNT);
   }
@@ -160,7 +159,6 @@ int ObBatchFreezeTabletsTask::inner_process()
     }
 
     if (FAILEDx(share::dag_yield())) {
-      LOG_WARN("failed to dag yield", K(ret));
     }
     if (REACH_THREAD_TIME_INTERVAL(5_s)) {
       weak_read_ts = ls->get_ls_wrs_handler()->get_ls_weak_read_ts().get_val_for_tx();

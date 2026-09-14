@@ -44,7 +44,6 @@ int ObExprRegexp::assign(const ObExprOperator &other)
   const ObExprRegexp *tmp_other = dynamic_cast<const ObExprRegexp *>(&other);
   if (OB_UNLIKELY(NULL == tmp_other)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObFuncExprOperator::assign(other))) {
     } else {
@@ -72,7 +71,6 @@ int ObExprRegexp::calc_result_type2(ObExprResType &type,
     type.set_scale(DEFAULT_SCALE_FOR_INTEGER);
   } else if (OB_UNLIKELY(!is_type_valid_regexp(type1.get_type()) || !is_type_valid_regexp(type2.get_type()))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the param is not castable", K(ret), K(type1), K(type2));
   } else if ((ObExprRegexContext::is_binary_string(type1) || ObExprRegexContext::is_binary_string(type2))
               && (!ObExprRegexContext::is_binary_compatible(type1) || !ObExprRegexContext::is_binary_compatible(type2))) {
     const char *coll_name1 = ObCharset::collation_name(type1.get_collation_type());
@@ -81,7 +79,6 @@ int ObExprRegexp::calc_result_type2(ObExprResType &type,
     ObString collation2 = ObString::make_string(coll_name2);
     ret = OB_ERR_MYSQL_CHARACTER_SET_MISMATCH;
     LOG_USER_ERROR(OB_ERR_MYSQL_CHARACTER_SET_MISMATCH, collation1.length(), collation1.ptr(), collation2.length(), collation2.ptr());
-    LOG_WARN("If one of the params is binary string, all of the params should be implicitly castable to binary charset.", K(ret), K(type1), K(type2));
   } else if (OB_FAIL(ObCharset::aggregate_collation_new(type1.get_collation_level(),
                                               type1.get_collation_type(),
                                               type2.get_collation_level(),
@@ -157,7 +154,6 @@ int ObExprRegexp::regexp_match(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
       const char *tmp_char = NULL;
       LOG_USER_WARN(OB_ERR_INVALID_CHARACTER_STRING, static_cast<int>(charset_name_len), charset_name, 0, tmp_char);
     } else {
-      LOG_WARN("evaluate parameters failed", K(ret));
     }
   } else if (text->is_null() || pattern->is_null()) {
     expr_datum.set_null();
@@ -165,10 +161,8 @@ int ObExprRegexp::regexp_match(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
                          !RegExpCtx::is_regexp_calc_collation(expr.args_[0]->datum_meta_.cs_type_) ||
                          !RegExpCtx::is_regexp_calc_collation(expr.args_[1]->datum_meta_.cs_type_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(expr));
   } else if (0 == pattern->len_) {
     ret = OB_ERR_REGEXP_ERROR;
-    LOG_WARN("empty regex expression", K(ret));
     expr_datum.set_null();
   } else {
     const bool reusable = (0 != expr.extra_)
@@ -181,7 +175,6 @@ int ObExprRegexp::regexp_match(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
         if (OB_FAIL(ctx.exec_ctx_.create_expr_op_ctx(expr.expr_ctx_id_, regex_ctx))) {
         } else if (OB_ISNULL(regex_ctx)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("NULL context returned", K(ret));
         }
       }
     }

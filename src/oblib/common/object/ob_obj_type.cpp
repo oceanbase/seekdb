@@ -464,7 +464,6 @@ int ob_geometry_sub_type_str(char *buff, int64_t buff_length, int64_t &pos, cons
 
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("undefined geometry type", K(ret), K(geo_type));
       break;
     }
   }
@@ -476,7 +475,6 @@ int ob_collection_str(const ObObjType &type, const common::ObIArray<ObString> &t
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!ob_is_collection_sql_type(type)) || type_info.count() < 1) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected column type", K(ret), K(type), K(type_info.count()));
   } else {
     ObString cur_str = type_info.at(0);
     if (OB_FAIL(databuff_printf(buff, buff_length, pos, "%.*s", cur_str.length(), cur_str.ptr()))) {
@@ -491,7 +489,6 @@ int ob_enum_or_set_str(const ObObjMeta &obj_meta, const common::ObIArray<ObStrin
   ObArenaAllocator tmp_alloc;
   if (OB_UNLIKELY(!obj_meta.is_enum_or_set())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected column type", K(ret), K(obj_meta));
   } else if (ObEnumType == obj_meta.get_type()) {
     if (OB_FAIL(databuff_printf(buff, buff_length, pos, "enum("))) {
     }
@@ -740,7 +737,6 @@ int ob_sql_type_str(char *buff,
   static_assert(sizeof(sql_type_name) / sizeof(obSqlTypeStrWithoutAccuracyFunc) == ObMaxType + 1, "Not enough initializer");
   if (OB_UNLIKELY(type > ObMaxType)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected type", K(type), K(ObMaxType), K(ret));
   } else if (ob_is_geometry_tc(type) && geo_type != common::ObGeoType::GEOMETRY) {
     int64_t pos = 0;
     if (OB_FAIL(ob_geometry_sub_type_str(buff, buff_length, pos, geo_type))) {
@@ -755,7 +751,6 @@ int ob_sql_type_str(char *buff,
     }
   } else if (OB_ISNULL(sql_type_name[type])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("function pointer is NULL", K(type), K(ret));
   } else if (OB_FAIL(sql_type_name[type](buff, buff_length, coll_type))) {
   }
 
@@ -918,7 +913,6 @@ int find_type(const ObIArray<common::ObString> &type_infos,
   pos = OB_INVALID_INDEX;
   if (OB_UNLIKELY(start_pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(start_pos));
   } else {
     for(int32_t i = start_pos; i < type_infos.count() && OB_INVALID_INDEX == pos; ++i) {
       const ObString &cur_val = type_infos.at(i);

@@ -79,7 +79,6 @@ int ObSchemaCacheKey::deep_copy(char *buf,
   ObSchemaCacheKey *pkey = NULL;
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len < size())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(buf_len), K(size()));
   } else {
     pkey = new (buf) ObSchemaCacheKey();
     *pkey = *this;
@@ -126,10 +125,8 @@ int ObSchemaCacheValue::deep_copy(char *buf,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(schema_)) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret), K(schema_));
   } else if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len < size())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(buf_len), K(size()));
   } else {
     ObSchemaCacheValue *pvalue = NULL;
     switch (schema_type_) {
@@ -179,7 +176,6 @@ int ObSchemaCacheValue::deep_copy(char *buf,
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("should not reach here", K(ret), K(schema_type_));
       break;
     }
     }
@@ -218,7 +214,6 @@ int ObSchemaHistoryCacheValue::deep_copy(
   ObSchemaHistoryCacheValue *schema_history_value = NULL;
   if (OB_ISNULL(buf) || buf_len < size()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invaild arg", KR(ret), KP(buf), K(buf_len));
   } else {
     schema_history_value = new (buf) ObSchemaHistoryCacheValue(schema_version_);
     value = schema_history_value;
@@ -286,12 +281,10 @@ int ObTabletCacheKey::deep_copy(char *buf,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len < size())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(buf_len), K(size()));
   } else {
     ObTabletCacheKey *new_key = new (buf) ObTabletCacheKey();
     if (OB_ISNULL(new_key)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("new key ptr is null", KR(ret), KPC(this));
     } else if (OB_FAIL(new_key->init(tablet_id_, schema_version_))) {
     } else {
       key = new_key;
@@ -329,12 +322,10 @@ int ObTabletCacheValue::deep_copy(char *buf,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len < size())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(buf_len), K(size()));
   } else {
     ObTabletCacheValue *new_value = new (buf) ObTabletCacheValue();
     if (OB_ISNULL(new_value)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("new value ptr is null", KR(ret), KPC(this));
     } else if (OB_FAIL(new_value->init(table_id_))) {
     } else {
       value = new_value;
@@ -395,7 +386,6 @@ bool ObSchemaCache::check_inner_stat() const
 
   if (!is_inited_) {
     ret = false;
-    LOG_WARN("inner stat error", K(is_inited_));
   }
 
   return ret;
@@ -424,17 +414,13 @@ int ObSchemaCache::get_schema(
 
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else if (!is_valid_key(schema_type, schema_id, schema_version)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(schema_type),
-             K(schema_id), K(schema_version));
   } else {
     ObSchemaCacheKey cache_key(schema_type, schema_id, schema_version);
     const ObSchemaCacheValue *cache_value = NULL;
     if (OB_FAIL(cache_.get(cache_key, cache_value, handle))) {
       if (OB_ENTRY_NOT_EXIST != ret) {
-        LOG_WARN("get value from cache failed", K(cache_key), K(ret));
       }
       EVENT_INC(ObStatEventIds::SCHEMA_CACHE_MISS);
     } else {
@@ -444,7 +430,6 @@ int ObSchemaCache::get_schema(
     if (OB_SUCC(ret)) {
       if (OB_ISNULL(cache_value)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("cache_value is NULL", KP(cache_value), K(ret));
       } else {
         schema = cache_value->schema_;
       }
@@ -464,11 +449,8 @@ int ObSchemaCache::put_schema(
 
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
   } else if (!is_valid_key(schema_type, schema_id, schema_version)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(schema_type),
-             K(schema_id), K(schema_version));
   } else {
     ObSchemaCacheKey cache_key(schema_type, schema_id, schema_version);
     ObSchemaCacheValue cache_value(schema_type, &schema);
@@ -491,18 +473,14 @@ int ObSchemaCache::put_and_fetch_schema(
   ObSchemaCacheKey cache_key(schema_type, schema_id, schema_version);
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
   } else if (!is_valid_key(schema_type, schema_id, schema_version)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(schema_type),
-             K(schema_id), K(schema_version));
   } else {
     ObSchemaCacheValue cache_value(schema_type, &schema);
     const ObSchemaCacheValue *new_cache_value = NULL;
     if (OB_FAIL(cache_.put_and_fetch(cache_key, cache_value, new_cache_value, handle))) {
     } else if (OB_ISNULL(new_cache_value)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("new cache value is null", KR(ret), K(cache_key));
     } else {
       new_schema = new_cache_value->schema_;
     }
@@ -520,17 +498,13 @@ int ObSchemaCache::get_tablet_cache(
   table_id = OB_INVALID_ID;
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
   } else if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid cache key", KR(ret), K(key));
   } else if (OB_FAIL(tablet_cache_.get(key, value, handle))) {
     if (OB_ENTRY_NOT_EXIST != ret) {
-      LOG_WARN("fail to get tablet-table pair from cache", KR(ret), K(key));
     }
   } else if (OB_ISNULL(value)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("value is null", KR(ret), K(key));
   } else {
     table_id = value->get_table_id();
   }
@@ -545,10 +519,8 @@ int ObSchemaCache::put_tablet_cache(
   ObTabletCacheValue value;
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
   } else if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid cache key", KR(ret), K(key));
   } else if (OB_FAIL(value.init(table_id))) {
   } else if (OB_FAIL(tablet_cache_.put(key, value))) {
   }
@@ -565,22 +537,18 @@ int ObSchemaCache::get_schema_history_cache(
   precise_schema_version = OB_INVALID_VERSION;
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
   } else if (OB_UNLIKELY(!is_valid_key(schema_type, schema_id, schema_version))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(schema_type), K(schema_id), K(schema_version));
   } else {
     ObSchemaCacheKey cache_key(schema_type, schema_id, schema_version);
     const ObSchemaHistoryCacheValue *cache_value = NULL;
     ObKVCacheHandle handle;
     if (OB_FAIL(history_cache_.get(cache_key, cache_value, handle))) {
       if (OB_ENTRY_NOT_EXIST != ret) {
-        LOG_WARN("fail to get schema history value", KR(ret), K(cache_key));
       }
       EVENT_INC(SCHEMA_HISTORY_CACHE_MISS);
     } else if (OB_ISNULL(cache_value)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("cache_value is null", KR(ret), KP(cache_value));
     } else {
       precise_schema_version = cache_value->schema_version_;
       EVENT_INC(SCHEMA_HISTORY_CACHE_HIT);
@@ -598,13 +566,10 @@ int ObSchemaCache::put_schema_history_cache(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!check_inner_stat())) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
   } else if (OB_UNLIKELY(
              !is_valid_key(schema_type, schema_id, schema_version)
              || precise_schema_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(schema_type), K(schema_id),
-             K(schema_version), K(precise_schema_version));
   } else {
     ObSchemaCacheKey cache_key(schema_type, schema_id, schema_version);
     ObSchemaHistoryCacheValue cache_value(precise_schema_version);
@@ -630,8 +595,6 @@ int ObSchemaFetcher::init(ObSchemaService *schema_service,
   if (OB_ISNULL(schema_service) ||
       OB_ISNULL(sql_client)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(schema_service),
-             K(sql_client));
   } else {
     schema_service_ = schema_service;
     sql_client_ = sql_client;
@@ -647,8 +610,6 @@ bool ObSchemaFetcher::check_inner_stat() const
       NULL == schema_service_ ||
       NULL == sql_client_) {
     ret = false;
-    LOG_WARN("inner stat error", K(is_inited_), K(schema_service_),
-             K(sql_client_));
   }
   return ret;
 }
@@ -668,13 +629,11 @@ int ObSchemaFetcher::fetch_schema(ObSchemaType schema_type,
   int64_t retry_times = 0;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else {
     do {
       if (INT64_MAX == schema_version) {
         // skip inspection while fetch latest schema
       } else if (OB_FAIL(schema_service_->can_read_schema_version(schema_status, schema_version))) {
-        LOG_WARN("incremant schema is not readable now, waiting and retry", K(ret), K(retry_times), K(schema_version));
         if (OB_SCHEMA_EAGAIN == ret) {
           retry = (retry_times++ < RETRY_TIMES_MAX);
           if (retry) {
@@ -805,7 +764,6 @@ int ObSchemaFetcher::fetch_schema(ObSchemaType schema_type,
         }
       default: {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unknown schema type, should not reach here", K(ret), K(schema_type));
           break;
         }
       }
@@ -827,10 +785,8 @@ int ObSchemaFetcher::fetch_runtime_schema(int64_t schema_version,
 
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else if (schema_version < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(schema_version));
   } else {
     ObServerRuntimeSchema *tmp_runtime_schema = NULL;
     ObArray<ObServerRuntimeSchema> runtime_schema_array;
@@ -839,14 +795,11 @@ int ObSchemaFetcher::fetch_runtime_schema(int64_t schema_version,
                                                    runtime_schema_array))) {
     } else if (1 != runtime_schema_array.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected schema count", K(runtime_schema_array.count()),
-               K(schema_version), K(ret));
     } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator,
                                                    runtime_schema_array.at(0),
                                                    tmp_runtime_schema))) {
     } else if (OB_ISNULL(tmp_runtime_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL ptr", K(tmp_runtime_schema), K(schema_version), K(ret));
     } else {
       runtime_schema = tmp_runtime_schema;
       LOG_TRACE("fetch runtime schema succeeded", K(schema_version),
@@ -871,10 +824,8 @@ int ObSchemaFetcher::fetch_sys_variable_schema(
 
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else if (schema_version < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(schema_version));
   } else if (OB_FAIL(schema_service_->get_sys_variable_schema(
                      *sql_client_,
                      schema_status,
@@ -885,7 +836,6 @@ int ObSchemaFetcher::fetch_sys_variable_schema(
                                                  sys_variable_schema))) {
   } else if (OB_ISNULL(sys_variable_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sys_variable_schema is null", K(ret), K(schema_version), K(schema_status));
   } else {
   }
 
@@ -903,10 +853,8 @@ int ObSchemaFetcher::fetch_database_schema(const ObRefreshSchemaStatus &schema_s
 
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else if (OB_INVALID_ID == database_id || schema_version < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(database_id), K(schema_version));
   } else {
     ObDatabaseSchema *tmp_db_schema = NULL;
     ObArray<uint64_t> db_ids;
@@ -919,14 +867,11 @@ int ObSchemaFetcher::fetch_database_schema(const ObRefreshSchemaStatus &schema_s
                                                             db_schema_array))) {
     } else if (1 != db_schema_array.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected schema count", K(db_schema_array.count()),
-               K(database_id), K(schema_version), K(ret));
     } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator,
                                                    db_schema_array.at(0),
                                                    tmp_db_schema))) {
     } else if (OB_ISNULL(tmp_db_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL ptr", K(tmp_db_schema), K(database_id), K(schema_version), K(ret));
     } else {
       database_schema = tmp_db_schema;
       LOG_TRACE("fetch database schema succeed", K(database_id), K(schema_version),
@@ -950,10 +895,8 @@ int ObSchemaFetcher::fetch_table_schema(const ObRefreshSchemaStatus &schema_stat
   // TODO, use old interface? get_batch_table_schema...
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", K(ret));
   } else if (OB_INVALID_ID == table_id || schema_version < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(table_id), K(schema_version));
   } else {
     if (OB_FAIL(schema_service_->get_table_schema(schema_status,
                                                   table_id,
@@ -966,7 +909,6 @@ int ObSchemaFetcher::fetch_table_schema(const ObRefreshSchemaStatus &schema_stat
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(tmp_table_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL ptr", K(tmp_table_schema), K(table_id), K(schema_version), K(ret));
     } else {
       table_schema = tmp_table_schema;
       LOG_TRACE("fetch table schema succeed", K(table_id), K(schema_version),
@@ -993,10 +935,8 @@ int ObSchemaFetcher::fetch_table_schema(const ObRefreshSchemaStatus &schema_stat
   ObArray<ObSimpleTableSchemaV2 *> schema_array;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("inner stat error", KR(ret));
   } else if (OB_INVALID_ID == table_id || schema_version < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(table_id), K(schema_version));
   } else if (OB_FAIL(schema_keys.push_back(table_schema_key))) {
   } else {
     if (OB_FAIL(schema_service_->get_batch_tables(schema_status,
@@ -1010,7 +950,6 @@ int ObSchemaFetcher::fetch_table_schema(const ObRefreshSchemaStatus &schema_stat
   if (OB_SUCC(ret)) {
     if (OB_UNLIKELY(1 != schema_array.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected schema count", KR(ret), K(table_id), K(schema_version));
     } else {
       table_schema = schema_array.at(0);
     }

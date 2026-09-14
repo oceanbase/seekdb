@@ -33,7 +33,6 @@ int ObTableCreator::init(const bool need_tablet_cnt_check)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObTableCreator init twice", KR(ret));
   } else if (OB_FAIL(tablet_creator_.init(need_tablet_cnt_check))) {
   } else {
     inited_ = true;
@@ -50,7 +49,6 @@ int ObTableCreator::init_with_fork_table_info(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObTableCreator init twice", KR(ret));
   } else if (OB_FAIL(tablet_creator_.init(need_tablet_cnt_check))) {
   } else if (OB_FAIL(fork_table_info_builder_.init_with_fork_table_info(
               main_fork_table_info, dest_table_ids, schema_guard))) {
@@ -81,26 +79,20 @@ int ObTableCreator::add_create_tablets_of_local_aux_tables_arg(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(data_table_schema)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("data_table_schema must be null, when table_schema is not local index", KR(ret));
   } else if (!data_table_schema->has_tablet() ||
       data_table_schema->is_index_table() ||
       data_table_schema->is_aux_lob_table()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("data_table_schema must be data table", KR(ret), KPC(data_table_schema));
   } else if (OB_UNLIKELY(data_format_version <= 0 || need_create_empty_majors.count() != schemas.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(data_format_version), "count_need_create_empty_majors", need_create_empty_majors.count(),
-      "count_schemas", schemas.count());
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < schemas.count(); ++i) {
     const share::schema::ObTableSchema *aux_schema = schemas.at(i);
     if (OB_ISNULL(aux_schema)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("ptr is null", KR(ret), K(schemas));
     } else if (!aux_schema->is_index_local_storage()
         && !aux_schema->is_aux_lob_table()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("aux_schema must be local aux table", KR(ret), K(schemas), KPC(aux_schema));
     }
   }
   if (OB_FAIL(ret)) {
@@ -123,9 +115,7 @@ int ObTableCreator::add_create_bind_tablets_of_hidden_table_arg(
       || hidden_table_schema.is_index_table()
       || !hidden_table_schema.is_user_hidden_table())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("both orig and hidden table must be data table", K(ret), K(orig_table_schema), K(hidden_table_schema));
   } else if (OB_FAIL(schemas.push_back(&hidden_table_schema)) || OB_FAIL(need_create_empty_majors.push_back(false))) {
-    LOG_WARN("failed to push back hidden table schema", K(ret));
   } else if (OB_FAIL(add_create_tablets_of_tables_arg_(
           schemas, &orig_table_schema, data_format_version, need_create_empty_majors))) {
   }
@@ -143,10 +133,8 @@ int ObTableCreator::add_create_tablets_of_table_arg(
   ObSEArray<bool, 1> need_create_empty_majors;
   if (!table_schema.has_tablet() || table_schema.is_index_local_storage() || table_schema.is_aux_lob_table()
     || data_format_version <= 0) {
-    LOG_WARN("table_schema must be data table or global indexes", KR(ret), K(table_schema), K(data_format_version));
   } else if (OB_FAIL(schemas.push_back(&table_schema))
     || OB_FAIL(need_create_empty_majors.push_back(need_create_empty_major_sstable))) {
-    LOG_WARN("failed to push_back", KR(ret), K(table_schema), K(need_create_empty_major_sstable));
   } else if (OB_FAIL(add_create_tablets_of_tables_arg_(
           schemas, NULL, data_format_version, need_create_empty_majors, schema_guard))) {
   }
@@ -163,26 +151,21 @@ int ObTableCreator::add_create_tablets_of_tables_arg(
   if (OB_UNLIKELY(data_format_version <= 0
     || schemas.count() != need_create_empty_majors.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(data_format_version), "count_schemas", schemas.count(),
-      "count_need_create_empty_majors", need_create_empty_majors.count());
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < schemas.count(); ++i) {
     const share::schema::ObTableSchema *table_schema = schemas.at(i);
     if (OB_ISNULL(table_schema)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("ptr is null", KR(ret), K(schemas));
     } else if (0 == i) {
       if (!table_schema->has_tablet()
           || table_schema->is_index_table()
           || table_schema->is_aux_lob_table()) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("data_table_schema must be data table", KR(ret), KPC(table_schema));
       }
     } else {
       if (!table_schema->is_index_local_storage()
           && !table_schema->is_aux_lob_table()) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("table_schema must be local index", KR(ret), K(schemas), KPC(table_schema));
       }
     }
   }
@@ -208,11 +191,8 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
   if (OB_UNLIKELY(schema_cnt < 1 || data_format_version <= 0
     || schema_cnt != need_create_empty_majors.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("schemas count is less 1", KR(ret), K(schema_cnt), K(data_format_version),
-      "create_major_flag_cnt", need_create_empty_majors.count());
   } else if (OB_ISNULL(schemas.at(0))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("NULL ptr", KR(ret), K(schemas));
   } else {
     const share::schema::ObTableSchema &table_schema = *schemas.at(0);
     int64_t all_part_num = table_schema.get_all_part_num();
@@ -222,7 +202,6 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
         || table_schema.is_aux_lob_table()) {
       if (OB_ISNULL(data_table_schema)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("data_table_schema is NULL when create local_index", KR(ret));
       }
     } else if (table_schema.is_user_hidden_table()) {
       if (nullptr == data_table_schema) {
@@ -231,7 +210,6 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
       } else {
         if (OB_UNLIKELY(schemas.count() != 1)) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("unexpected schemas", K(ret), K(schemas.count()));
         } else {
           is_create_bind_hidden_tablets = true;
         }
@@ -239,26 +217,21 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
     } else {
       if (OB_NOT_NULL(data_table_schema)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("data_table_schema must be null, when table_schema is not local index and not hidden table",
-                 KR(ret), K(data_table_schema), K(table_schema));
       } else {
         data_table_schema = &table_schema;
       }
     }
 
     if (FAILEDx(pairs.reserve(all_part_num * schema_cnt))) {
-      LOG_WARN("fail to reserve array", KR(ret), K(all_part_num), K(schema_cnt));
     } else {
       for (int64_t i = 1; OB_SUCC(ret) && i < schema_cnt; ++i) {
         if (OB_ISNULL(schemas.at(i))) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("ptr is null", KR(ret), K(schemas), K(table_schema));
         } else if (schemas.at(i)->get_part_option().get_part_func_type()
                     != table_schema.get_part_option().get_part_func_type()
                    || schemas.at(i)->get_sub_part_option().get_sub_part_func_type()
                     != table_schema.get_sub_part_option().get_sub_part_func_type()) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("part type of local index is equal to its datatable", KR(ret), K(i));
         }
       }
     }
@@ -267,7 +240,6 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
       ObPartitionLevel part_level = table_schema.get_part_level();
       if (part_level >= PARTITION_LEVEL_MAX) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("part level is unexpected", K(table_schema), KR(ret));
       } else if (PARTITION_LEVEL_ZERO == part_level) {
         if (OB_FAIL(generate_create_tablet_arg_(
                     schemas,
@@ -285,12 +257,10 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
         int64_t part_num = table_schema.get_partition_num();
         if (OB_ISNULL(part_array)) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("part array is null", K(table_schema), KR(ret));
         } else {
           for (int64_t i = 0; i < part_num && OB_SUCC(ret); ++i) {
             if (OB_ISNULL(part_array[i])) {
               ret = OB_INVALID_ARGUMENT;
-              LOG_WARN("NULL ptr", K(i), K(table_schema), KR(ret));
             } else if (PARTITION_LEVEL_ONE == part_level) {
               if (OB_FAIL(generate_create_tablet_arg_(
                           schemas,
@@ -308,12 +278,10 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
               int64_t sub_part_num = part_array[i]->get_subpartition_num();
               if (OB_ISNULL(subpart_array)) {
                 ret = OB_INVALID_ARGUMENT;
-                LOG_WARN("part array is null", K(table_schema), KR(ret));
               } else {
                 for (int64_t j = 0; j < sub_part_num && OB_SUCC(ret); j++) {
                   if (OB_ISNULL(subpart_array[j])) {
                     ret = OB_INVALID_ARGUMENT;
-                    LOG_WARN("NULL ptr", K(i), K(j), K(table_schema), KR(ret));
                   } else {
                     if (OB_FAIL(generate_create_tablet_arg_(
                                 schemas,
@@ -331,7 +299,6 @@ int ObTableCreator::add_create_tablets_of_tables_arg_(
               }
             } else {
               ret = OB_INVALID_ARGUMENT;
-              LOG_WARN("4.0 not support part type", K(table_schema), KR(ret));
             }
           }
         }
@@ -376,7 +343,6 @@ int ObTableCreator::generate_create_tablet_arg_(
   } else if (OB_FAIL(data_table_schema.get_part_by_idx(part_idx, subpart_idx, data_part))) {
   } else if (OB_ISNULL(data_part)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("NULL ptr", K(data_table_schema), KR(ret), K(part_idx), K(subpart_idx));
   } else {
     data_tablet_id = data_part->get_tablet_id();
   }
@@ -385,17 +351,14 @@ int ObTableCreator::generate_create_tablet_arg_(
     uint64_t table_id = OB_INVALID_ID;
     if (OB_ISNULL(table_schema_ptr)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("NULL ptr", K(r), K(schemas), KR(ret));
     } else if (FALSE_IT(table_id = table_schema_ptr->get_table_id())) {
     } else if (PARTITION_LEVEL_ZERO == table_schema_ptr->get_part_level()) {
       tablet_id = table_schema_ptr->get_tablet_id();
     } else if (OB_FAIL(table_schema_ptr->get_part_by_idx(part_idx, subpart_idx, part))) {
     } else if (OB_ISNULL(data_part) || OB_ISNULL(part)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("NULL ptr", K(data_table_schema), KPC(table_schema_ptr), KR(ret), K(part_idx), K(subpart_idx));
     } else if (OB_UNLIKELY(!data_part->same_base_partition(*part))) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("parts in table and index table is not equal", KR(ret), KPC(data_part), KPC(part));
     } else {
       tablet_id = part->get_tablet_id();
     }
@@ -414,7 +377,6 @@ int ObTableCreator::generate_create_tablet_arg_(
   } else if (fork_table_info_builder_.has_fork_table()) {
     if (OB_ISNULL(schema_guard)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema guard is null", KR(ret));
     } else {
       if (OB_FAIL(fork_table_info_builder_.build_fork_tablet_infos(
               schemas, part_idx, subpart_idx, *schema_guard, fork_tablet_infos))) {

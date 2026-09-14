@@ -99,7 +99,6 @@ int ObJoinOp::get_next_left_row()
   int ret = common::OB_SUCCESS;
   left_row_joined_ = false;
   if (OB_FAIL(left_->get_next_row()) && OB_ITER_END != ret) {
-    LOG_WARN("fail to get next left row", K(ret));
   }
   return ret;
 }
@@ -108,7 +107,6 @@ int ObJoinOp::get_next_right_row()
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(right_->get_next_row()) && OB_ITER_END != ret) {
-    LOG_WARN("fail to get next right row", K(ret));
   }
 
   return ret;

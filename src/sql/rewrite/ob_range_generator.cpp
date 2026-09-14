@@ -146,7 +146,6 @@ int ObTmpRange::intersect(ObTmpRange &other, bool &not_consistent)
   if (OB_ISNULL(other.start_) || OB_ISNULL(other.end_) ||
       OB_ISNULL(start_) || OB_ISNULL(end_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(other.start_), K(other.end_), K(start_), K(end_));
   } else if (other.always_false_) {
     set_always_false();
   } else if (other.always_true_ || always_false_) {
@@ -268,7 +267,6 @@ int ObTmpRange::refine_final_range()
   bool skip_end = false;
   if (OB_ISNULL(start_) || OB_ISNULL(end_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(start_), K(end_));
   } else if (min_offset_ != 0) {
     always_true_ = true;
     include_start_ = false;
@@ -373,7 +371,6 @@ int ObRangeGenerator::generate_ranges()
   if (OB_ISNULL(pre_range_graph_) || OB_ISNULL(phy_ctx) ||
       OB_ISNULL(pre_range_graph_->get_range_head())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null range graph", KPC(pre_range_graph_), K(phy_ctx));
   } else if (pre_range_graph_->has_exec_param() && !phy_ctx->is_exec_param_readable()) {
     // pre range graph has exec param and not exec stage, generate (min; max)
     if (OB_FAIL(generate_contain_exec_param_range())) {
@@ -413,7 +410,6 @@ OB_INLINE int ObRangeGenerator::generate_precise_get_range(const ObRangeNode &no
       bool is_valid = true;
       if (OB_ISNULL(meta)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null column meta");
       } else if (OB_UNLIKELY(start_idx != end_idx ||
                              !is_const_expr_or_null(start_idx) ||
                              !is_const_expr_or_null(end_idx))) {
@@ -614,7 +610,6 @@ int ObRangeGenerator::formalize_complex_range(const ObRangeNode *node)
       if (OB_FAIL(generate_tmp_not_in_param(*cur_node, tmp_in_param))) {
       } else if (OB_ISNULL(tmp_in_param)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(tmp_in_param));
       } else if (tmp_in_param->always_false_) {
         if (OB_FAIL(generate_one_range(*always_false_tmp_range_))) {
         }
@@ -643,7 +638,6 @@ int ObRangeGenerator::formalize_complex_range(const ObRangeNode *node)
       if (OB_FAIL(generate_tmp_geo_param(*cur_node, tmp_geo_param))) {
       } else if (OB_ISNULL(tmp_geo_param)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (tmp_geo_param->always_true_) {
         if (cur_node->and_next_ == nullptr) {
           if (OB_FAIL(generate_one_complex_range())) {
@@ -702,7 +696,6 @@ int ObRangeGenerator::formalize_complex_range(const ObRangeNode *node)
       if (OB_FAIL(generate_tmp_json_array_param(*cur_node, tmp_in_param))) {
       } else if (OB_ISNULL(tmp_in_param)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(tmp_in_param));
       } else if (tmp_in_param->always_false_) {
         if (OB_FAIL(generate_one_range(*always_false_tmp_range_))) {
         }
@@ -753,7 +746,6 @@ int ObRangeGenerator::generate_one_complex_range()
       bool not_consistent = false;
       if (OB_ISNULL(cur_range)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null range node");
       } else if (OB_FAIL(range->intersect(*cur_range, not_consistent))) {
       } else if (not_consistent) {
         and_next = false;
@@ -971,7 +963,6 @@ int ObRangeGenerator::calc_result_value(ObIAllocator &allocator,
   is_valid = true;
   if (OB_ISNULL(phy_ctx = exec_ctx.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null");
   } else if (OB_UNLIKELY(val_idx < 0 || val_idx >= range_map.expr_final_infos_.count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid param idx", K(val_idx));
@@ -997,7 +988,6 @@ int ObRangeGenerator::calc_result_value(ObIAllocator &allocator,
       ObObj *const_obj = expr_info.const_val_;
       if (OB_ISNULL(const_obj)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null const obj");
       } else if (OB_FALSE_IT(value = *const_obj)) {
       } else if (OB_UNLIKELY(value.is_nop_value())) {
         ret = OB_ERR_UNEXPECTED;
@@ -1013,7 +1003,6 @@ int ObRangeGenerator::calc_result_value(ObIAllocator &allocator,
       ObObj result;
       if (OB_ISNULL(temp_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null temp expr", K(expr_info));
       } else if (OB_FAIL(temp_expr->eval(exec_ctx, tmp_row, result))) {
       } else if (OB_UNLIKELY(result.is_nop_value())) {
         ret = OB_ERR_UNEXPECTED;
@@ -1044,7 +1033,6 @@ int ObRangeGenerator::cast_value_type(ObTmpRange &range)
     const ObRangeColumnMeta *meta = pre_range_graph_->get_column_meta(i);
     if (OB_ISNULL(meta)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null column meta");
     } else if (OB_FAIL(try_cast_value(*meta, range.start_[i], start_cmp, CO_GE))) {
     } else {
       range.start_[i].set_collation_type(meta->column_type_.get_collation_type());
@@ -1083,7 +1071,6 @@ int ObRangeGenerator::cast_value_type(ObTmpRange &range)
     const ObRangeColumnMeta *meta = pre_range_graph_->get_column_meta(i);
     if (OB_ISNULL(meta)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null column meta");
     } else if (OB_FAIL(try_cast_value(*meta, range.end_[i], end_cmp, CO_LE))) {
     } else {
       range.end_[i].set_collation_type(meta->column_type_.get_collation_type());
@@ -1196,7 +1183,6 @@ int ObRangeGenerator::try_cast_value(ObIAllocator &allocator,
     if (OB_SUCC(ret)) {
       if (OB_ISNULL(dest_val)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null value");
       } else if (ob_is_double_tc(expect_type.get_type()) || ob_is_enumset_tc(expect_type.get_type())) {
         const_cast<ObObj *>(dest_val)->set_scale(meta.column_type_.get_accuracy().get_scale());
         const_cast<ObObj *>(dest_val)->set_subschema_id(meta.column_type_.get_subschema_id());
@@ -1273,7 +1259,6 @@ int ObRangeGenerator::merge_and_remove_ranges()
   } else if (0 == ranges_.count()) {
     if (OB_ISNULL(always_false_range_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null always false range");
     } else if (OB_FAIL(ranges_.push_back(always_false_range_))) {
     } else {
       all_single_value_ranges_ = false;
@@ -1307,13 +1292,11 @@ int ObRangeGenerator::merge_and_remove_ranges()
     ObNewRange *l_range = ranges_.at(0);
     if (OB_ISNULL(l_range)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null range");
     }
     for (int64_t i = 1; OB_SUCC(ret) && i < ranges_.count(); ++i) {
       ObNewRange *r_range = ranges_.at(i);
       if (OB_ISNULL(r_range)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null range");
       } else {
         int cmp = l_range->compare_endkey_with_startkey(*r_range);
         if (cmp < 0) {
@@ -1410,7 +1393,6 @@ int ObRangeGenerator::generate_tmp_not_in_param(const ObRangeNode &node,
     LOG_WARN("get unexpected range", K(node));
   } else if (OB_ISNULL(meta = pre_range_graph_->get_column_meta(node.min_offset_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexecpted null", K(meta));
   } else if (OB_ISNULL(in_param = range_map_.in_params_.at(-node.start_keys_[node.min_offset_] - 1))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected in param", K(node.node_id_));
@@ -1481,10 +1463,8 @@ int ObRangeGenerator::final_not_in_range_node(const ObRangeNode &node,
     range->always_false_ = false;
     if (OB_ISNULL(range)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (OB_ISNULL(tmp_in_param)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(tmp_in_param));
     } else {
       for (int64_t i = 0; i < node.min_offset_; ++i) {
         range->start_[i].set_nop_value();
@@ -1582,12 +1562,10 @@ int ObRangeGenerator::generate_tmp_geo_param(const ObRangeNode &node,
   } else if ((op_type == ObDomainOpType::T_GEO_DWITHIN ||
               op_type == ObDomainOpType::T_GEO_RELATE) &&
              OB_FAIL(get_result_value(node.end_keys_[node.min_offset_], objs_ptr[1], is_valid, exec_ctx_))) {
-    LOG_WARN("failed to get result value", K(ret));
   } else if (!is_valid) {
     tmp_geo_param->always_true_ = true;
   } else if (op_type == ObDomainOpType::T_GEO_RELATE &&
              OB_FAIL(get_spatial_relationship_by_mask(objs_ptr[1], op_type))) {
-    LOG_WARN("failed to get spatial relationship by mask", K(ret));
   } else if (!is_geo_type(op_type)) {
     tmp_geo_param->always_true_ = true;
   } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
@@ -1595,7 +1573,6 @@ int ObRangeGenerator::generate_tmp_geo_param(const ObRangeNode &node,
   } else if (OB_FAIL(ObGeoTypeUtil::get_srid_from_wkb(wkb_str, input_srid))) {
   } else if (OB_ISNULL(exec_ctx_.get_srs_provider())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("SRS provider is not configured", K(ret));
   } else if (OB_FAIL(ObSqlGeoUtils::check_srid(
                  *exec_ctx_.get_srs_provider(),
                  node.domain_extra_.srid_,
@@ -1620,7 +1597,6 @@ int ObRangeGenerator::generate_tmp_geo_param(const ObRangeNode &node,
         break;
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Not support op_type", K(ret), K(op_type));
         break;
     }
     if (OB_SUCC(ret)) {
@@ -1651,19 +1627,14 @@ int ObRangeGenerator::get_intersects_tmp_geo_param(uint32_t input_srid,
 
   if (OB_ISNULL(srs_provider)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("SRS provider is not configured", K(ret));
   } else if ((input_srid != 0) &&
              OB_FAIL(srs_provider->get_tenant_srs_guard(srs_guard))) {
-    LOG_WARN("get runtime SRS guard failed", K(input_srid), K(ret));
   } else if ((input_srid != 0) && OB_FAIL(srs_guard.get_srs_item(input_srid, srs_item))) {
-    LOG_WARN("get runtime SRS failed", K(input_srid), K(ret));
   } else if (((input_srid == 0) || !(srs_item->is_geographical_srs())) &&
              OB_FAIL(srs_provider->get_srs_bounds(input_srid, srs_item, srs_bound))) {
-    LOG_WARN("failed to get srs item", K(ret));
   } else if (op_type == ObDomainOpType::T_GEO_DWITHIN) {
     if (std::isnan(distance)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid distance para", K(ret));
     } else if (input_srid != 0 && srs_item->is_geographical_srs()) {
       double sphere_radius = (srs_item->semi_major_axis() * 2 + srs_item->semi_minor_axis()) /  3;
       const double SPHERIOD_ERR_FRACTION = 0.005;
@@ -1671,11 +1642,9 @@ int ObRangeGenerator::get_intersects_tmp_geo_param(uint32_t input_srid,
       s2object = OB_NEWx(ObS2Adapter, (&tmp_alloc), (&tmp_alloc), true, radius);
       if (OB_ISNULL(s2object)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to alloc s2 object", K(ret));
       }
     } else {
       if (OB_FAIL(ObGeoTypeUtil::get_buffered_geo(&tmp_alloc, wkb_str, distance, srs_item, buffer_geo))) {
-        LOG_WARN("failed to get buffer geo", K(ret));
         if (ret == OB_INVALID_ARGUMENT) {
           LOG_USER_ERROR(OB_INVALID_ARGUMENT, N_ST_BUFFER);
         } else if (ret == OB_ERR_GIS_INVALID_DATA) {
@@ -1689,7 +1658,6 @@ int ObRangeGenerator::get_intersects_tmp_geo_param(uint32_t input_srid,
     s2object = OB_NEWx(ObS2Adapter, (&tmp_alloc), (&tmp_alloc), (input_srid != 0 ? srs_item->is_geographical_srs() : false), true);
     if (OB_ISNULL(s2object)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc s2 object", K(ret));
     }
   }
 
@@ -1707,7 +1675,6 @@ int ObRangeGenerator::get_intersects_tmp_geo_param(uint32_t input_srid,
         geo_param->always_true_ = true;
       } else {
         ret = OB_ERR_GIS_INVALID_DATA;
-        LOG_WARN("invalid geometry", K(ret), K(wkb_str));
       }
     } else {
       int64_t range_count = cells_with_ancestors.size();
@@ -1768,21 +1735,16 @@ int ObRangeGenerator::get_coveredby_tmp_geo_param(uint32_t input_srid,
 
   if (OB_ISNULL(srs_provider)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("SRS provider is not configured", K(ret));
   } else if ((input_srid != 0) &&
              OB_FAIL(srs_provider->get_tenant_srs_guard(srs_guard))) {
-    LOG_WARN("get runtime SRS guard failed", K(input_srid), K(ret));
   } else if ((input_srid != 0) && OB_FAIL(srs_guard.get_srs_item(input_srid, srs_item))) {
-    LOG_WARN("get runtime SRS failed", K(input_srid), K(ret));
   } else if (((input_srid == 0) || !(srs_item->is_geographical_srs())) &&
              OB_FAIL(srs_provider->get_srs_bounds(input_srid, srs_item, srs_bound))) {
-    LOG_WARN("failed to get srs item", K(ret));
   }
   if (s2object == NULL && OB_SUCC(ret)) {
     s2object = OB_NEWx(ObS2Adapter, (&tmp_alloc), (&tmp_alloc), (input_srid != 0 ? srs_item->is_geographical_srs() : false));
     if (OB_ISNULL(s2object)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc s2 object", K(ret));
     }
   }
 
@@ -1799,14 +1761,12 @@ int ObRangeGenerator::get_coveredby_tmp_geo_param(uint32_t input_srid,
         geo_param->always_true_ = true;
       } else {
         ret = OB_ERR_GIS_INVALID_DATA;
-        LOG_WARN("invalid geometry", K(ret), K(wkb_str));
       }
     } else {
       hash::ObHashSet<uint64_t> cellid_set;
       if (OB_FAIL(cellid_set.create(128, "CoveredByKeyPart", "HashNode"))) {
       } else if (!cellid_set.created()) {
         ret = OB_NOT_INIT;
-        LOG_WARN("fail to init cellid set", K(ret));
       }
       for (uint64_t i = 0; OB_SUCC(ret) && i < cells.size(); i++) {
         int hash_ret = cellid_set.exist_refactored(cells[i]);
@@ -1826,12 +1786,10 @@ int ObRangeGenerator::get_coveredby_tmp_geo_param(uint32_t input_srid,
               }
             } else if (OB_HASH_EXIST != hash_ret) {
               ret = hash_ret;
-              LOG_WARN("fail to check if key exist", K(ret), K(ancestors[i]), K(i));
             }
           }
         } else if (OB_HASH_EXIST != hash_ret) {
           ret = hash_ret;
-          LOG_WARN("fail to check if key exist", K(ret), K(cells[i]), K(i));
         }
       }
       if (OB_SUCC(ret)) {
@@ -1850,7 +1808,6 @@ int ObRangeGenerator::get_coveredby_tmp_geo_param(uint32_t input_srid,
       if (cellid_set.created()) {
         int tmp_ret = cellid_set.destroy();
         if (OB_SUCC(ret) && OB_FAIL(tmp_ret)) {
-          LOG_WARN("failed to destory param set", K(ret));
         }
       }
     }
@@ -1890,7 +1847,6 @@ int ObRangeGenerator::check_need_merge_range_nodes(const ObRangeNode *node,
   need_merge = true;
   if (OB_ISNULL(node)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (node->is_domain_node_ && OB_ISNULL(node->or_next_)) {
     need_merge = false;
   }
@@ -1977,7 +1933,6 @@ int ObRangeGenerator::check_can_final_fast_nlj_range(const ObPreRangeGraph &pre_
     const ObObj* src_obj = nullptr;
     if (OB_ISNULL(meta)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null column meta");
     } else if (start_idx == OB_RANGE_MIN_VALUE &&
                end_idx == OB_RANGE_MAX_VALUE) {
       // do nothing
@@ -1995,7 +1950,6 @@ int ObRangeGenerator::check_can_final_fast_nlj_range(const ObPreRangeGraph &pre_
       src_obj = range_map.expr_final_infos_.at(start_idx).const_val_;
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected range node in fast nlj range", K(ret));
     }
 
     if (OB_FAIL(ret)) {
@@ -2066,7 +2020,6 @@ int ObRangeGenerator::get_spatial_relationship_by_mask(const ObObj& extra, ObDom
     if (OB_FAIL(ob_simple_low_to_up(temp_allocator, mask_str, upper_str))) {
     }  else if (NULL == (ptr = temp_allocator.alloc(upper_str.length() + 1))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret), K(upper_str.length()));
     } else {
       cmp_str = static_cast<char*>(ptr);
       cmp_str[upper_str.length()] = '\0';
@@ -2115,7 +2068,6 @@ int ObRangeGenerator::final_json_member_of_range_node(const ObRangeNode *node,
     LOG_WARN("get unexpected range", K(node));
   } else if (OB_ISNULL(meta = pre_range_graph_->get_column_meta(node->min_offset_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected column meta", K(ret));
   } else if (OB_FAIL(generate_tmp_range(range, pre_range_graph_->get_column_cnt()))) {
   } else if (OB_FAIL(get_result_value(node->start_keys_[node->min_offset_], obj, is_valid, exec_ctx_))) {
   } else if (!is_valid) {
@@ -2159,7 +2111,6 @@ int ObRangeGenerator::fill_domain_range_node(const ObRangeNode &node,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(range)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     range->always_false_ = false;
     range->always_true_ = false;
@@ -2185,7 +2136,6 @@ int ObRangeGenerator::fill_domain_range_node(const ObRangeNode &node,
           range->start_[i].set_nop_value();
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected range node", K(ret), K(node));
         }
         if (OB_FAIL(ret)) {
         } else if (end == OB_RANGE_MIN_VALUE) {
@@ -2198,7 +2148,6 @@ int ObRangeGenerator::fill_domain_range_node(const ObRangeNode &node,
           range->end_[i].set_nop_value();
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected range node", K(ret), K(node));
         }
       }
     }
@@ -2229,7 +2178,6 @@ int ObRangeGenerator::generate_tmp_json_array_param(const ObRangeNode &node,
     LOG_WARN("get unexpected range", K(node));
   } else if (OB_ISNULL(meta = pre_range_graph_->get_column_meta(node.min_offset_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexecpted null", K(meta));
   } else if (OB_ISNULL(tmp_in_param = (ObTmpInParam*)allocator_.alloc(sizeof(ObTmpInParam)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memeory failed", K(tmp_in_param));
@@ -2241,7 +2189,6 @@ int ObRangeGenerator::generate_tmp_json_array_param(const ObRangeNode &node,
                  const_param, exec_ctx_, false, &allocator_, j_base))) {
   } else if (OB_ISNULL(j_base)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get json base", K(ret));
   } else if (j_base->is_json_scalar(j_base->json_type())) {
     ObObj cast_obj = const_param;
     int64_t cmp = 0;
@@ -2278,7 +2225,6 @@ int ObRangeGenerator::generate_tmp_json_array_param(const ObRangeNode &node,
         if (OB_FAIL(j_base->get_array_element(i, tmp_j_base))) {
         } else if (OB_ISNULL(tmp_j_base)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get json array element result is null", K(i), K(ret));
         } else if (OB_FAIL(ObJsonUtil::cast_json_scalar_to_sql_obj(&allocator_,
                                                                    &exec_ctx_,
                                                                    tmp_j_base,
@@ -2316,7 +2262,6 @@ int ObRangeGenerator::final_domain_range_node(const ObRangeNode &node,
         OB_UNLIKELY(in_idx >= in_param->in_param_.count()) ||
         OB_ISNULL(in_param->in_param_.at(in_idx))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected in idx", K(ret), K(in_idx), KPC(in_param));
     } else if (OB_FAIL(fill_domain_range_node(node,
                                               *in_param->in_param_.at(in_idx),
                                               *in_param->in_param_.at(in_idx),
@@ -2333,7 +2278,6 @@ int ObRangeGenerator::check_range_type(const ObNewRange *range, bool &is_always_
   is_always_true = false;
   if (OB_ISNULL(range)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (range->is_whole_range()) {
     is_always_true = true;
   } else if (OB_FAIL(false_range(*range, is_false))) {
@@ -2369,7 +2313,6 @@ int ObRangeGenerator::fill_general_nlj_range(ObFastFinalNLJRangeCtx &ctx,
     ObNewRange *range = out_ranges.at(i);
     if (OB_ISNULL(range)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else {
       range->table_id_ = pre_range_graph.get_table_id();
       for (int64_t j = 0; OB_SUCC(ret) && j < pos_arr.count(); ++j) {
@@ -2411,7 +2354,6 @@ int ObRangeGenerator::check_can_fast_extract_nlj_range(ObIAllocator &allocator,
     int64_t cmp = 0;
     if (OB_ISNULL(meta)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), K(meta));
     } else if (OB_FAIL(calc_result_value(allocator,
                                          pre_range_graph.get_range_map(),
                                          pos_arr.at(i).index_,
@@ -2451,11 +2393,9 @@ int ObRangeGenerator::calc_copy_ranges_buffer_size(const ObIArray<ObNewRange*> &
     const ObNewRange *range = ranges.at(i);
     if (OB_ISNULL(range)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (OB_UNLIKELY(range->get_start_key().get_obj_cnt() != column_cnt ||
                            range->get_end_key().get_obj_cnt() != column_cnt)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected range", K(ret), K(column_cnt), KPC(range));
     } else {
       for (int64_t j = 0; j < column_cnt; ++j) {
         extra_buffer_size += range->get_start_key().get_obj_ptr()[j].get_deep_copy_size();
@@ -2506,7 +2446,6 @@ int ObRangeGenerator::copy_ranges(const ObIArray<ObNewRange*> &ranges,
       }
     }
     if (OB_SUCC(ret) && out_ranges.push_back(dst_range)) {
-      LOG_WARN("failed to push back ranges", K(ret));
     }
   }
   return ret;
@@ -2521,7 +2460,6 @@ int ObFastFinalNLJRangeCtx::init_first_ranges(int64_t column_cnt,
   if (OB_UNLIKELY(max_group_size_ < 0) ||
       OB_UNLIKELY(range_buffer_idx >= max_group_size_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected max group size", K(ret), K(max_group_size_), K(range_buffer_idx));
   } else if (OB_FAIL(ObRangeGenerator::calc_copy_ranges_buffer_size(ranges,
                                                                     column_cnt,
                                                                     one_range_size_,
@@ -2558,7 +2496,6 @@ int ObFastFinalNLJRangeCtx::get_cached_ranges(int range_buffer_idx,
   int64_t cache_start_idx = range_buffer_idx * first_ranges_.count();
   if (OB_UNLIKELY(range_buffer_idx >= max_group_size_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected max group size", K(ret), K(max_group_size_), K(range_buffer_idx));
   } else if (OB_FAIL(ranges.reserve(first_ranges_.count()))) {
   } else if (OB_NOT_NULL(cache_ranges_.at(cache_start_idx))) {
     for (int64_t i = 0; OB_SUCC(ret) && i < first_ranges_.count(); ++i) {

@@ -97,7 +97,6 @@ ObDtlLinkedBuffer *ObDtlChannelMemManager::alloc(int64_t chid, int64_t size)
         LOG_TRACE("queue has no element", K(ret), K(seqno_), K(free_queue_.size()));
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("failed to pop back buffer", K(ret), K(seqno_), K(free_queue_.size()));
       }
     }
   }
@@ -108,7 +107,6 @@ ObDtlLinkedBuffer *ObDtlChannelMemManager::alloc(int64_t chid, int64_t size)
     char *buf = reinterpret_cast<char*>(allocator_.alloc(alloc_size));
     if (nullptr == buf) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc memory failed", K(ret));
     } else {
       allocated_buf = new (buf) ObDtlLinkedBuffer(
           buf + sizeof (ObDtlLinkedBuffer),

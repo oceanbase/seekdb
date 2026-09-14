@@ -68,7 +68,6 @@ int ObExprJsonPretty::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta
 
   if (OB_ISNULL(allocator)) { // check allocator
     ret = OB_NOT_INIT;
-    LOG_WARN("allcator is null", K(ret));
   } else if (data.is_null() || type == ObNullType) {
     is_null = true;
   } else if (type != ObJsonType && !ob_is_string_type(type)) {
@@ -83,7 +82,6 @@ int ObExprJsonPretty::calc(ObEvalCtx &ctx, const ObDatum &data, ObDatumMeta meta
     if (ret == OB_ERR_INVALID_JSON_TEXT) {
       ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
     }
-    LOG_WARN("fail to get json base", K(ret), K(type), K(j_str), K(j_in_type));
   } else if (OB_FAIL(j_base->print(j_buf, true, j_str.length(), true, 0))) {
   }
 
@@ -105,7 +103,6 @@ int ObExprJsonPretty::eval_json_pretty(const ObExpr &expr, ObEvalCtx &ctx, ObDat
 
   if (OB_FAIL(tmp_allocator.eval_arg(arg, ctx, j_datum))) {
     ret = OB_ERR_INVALID_DATATYPE;
-    LOG_WARN("error, eval json args datum failed", K(ret));
   } else if (OB_FAIL(calc(ctx, *j_datum, arg->datum_meta_, arg->obj_meta_.has_lob_header(), &tmp_allocator, j_buf, is_null))) {
   } else if (is_null) {
     res.set_null();

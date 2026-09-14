@@ -54,7 +54,6 @@ int ObHashPartInfrastructureGroup<HashCol, HashRowStore>::init_one_hp_infras(
     return slice_cnt > initial_hp_size_ ? slice_cnt : initial_hp_size_;
   };
   if (OB_FAIL(try_get_hp_infras_from_free_list(hp_infras))) {
-    SQL_ENG_LOG(WARN, "failed to try get hash partition infrastructure", K(ret));
   } else if (nullptr == hp_infras || hp_infras->is_destroyed()) {
     if (nullptr == hp_infras && OB_FAIL(alloc_hp_infras(hp_infras))) {
       SQL_ENG_LOG(WARN, "failed to alloc hash partition infrastructure", K(ret));
@@ -63,21 +62,15 @@ int ObHashPartInfrastructureGroup<HashCol, HashRowStore>::init_one_hp_infras(
       hp_infras->set_hp_infras_group_func(total_mem_used_func, slice_cnt_func);
       if (OB_FAIL(hp_infras->init(enable_sql_dumped, unique, true,
         ways, sql_mem_processor, need_rewind))) {
-        SQL_ENG_LOG(WARN, "failed to init hash partition infrastructure", K(ret));
       } else if (OB_FAIL(init_hash_table(hp_infras, est_rows, width))) {
-        SQL_ENG_LOG(WARN, "failed to init hash table", K(ret));
       } else if (batch_size > 0) {
         if (OB_FAIL(hp_infras->init_my_skip(batch_size))) {
-          SQL_ENG_LOG(WARN, "failed to init hp skip", K(ret));
         } else if (OB_FAIL(hp_infras->init_items(batch_size))) {
-          SQL_ENG_LOG(WARN, "failed to init items", K(ret));
         } else if (OB_FAIL(hp_infras->init_distinct_map(batch_size))) {
-          SQL_ENG_LOG(WARN, "failed to init distinct map", K(ret));
         }
       }
     }
   } else if (OB_FAIL(hp_infras->set_need_rewind(need_rewind))) {
-    SQL_ENG_LOG(WARN, "failed to set need rewind", K(ret));
   } else {
     hp_infras->set_hp_infras_group_func(total_mem_used_func, slice_cnt_func);
   }
@@ -102,10 +95,8 @@ int ObHashPartInfrastructureGroup<HashCol, HashRowStore>::init_hash_table(
   } else if (FALSE_IT(est_bucket_num_ = hp_infras->est_bucket_count(est_rows, width,
       HashPartInfrasMgr::MIN_BUCKET_COUNT, HashPartInfrasMgr::MAX_BUCKET_COUNT))) {
   } else if (OB_FAIL(hp_infras->start_round())) {
-    SQL_ENG_LOG(WARN, "failed to start round", K(ret));
   } else if (OB_FAIL(hp_infras->init_hash_table(est_bucket_num_,
       HashPartInfrasMgr::MIN_BUCKET_COUNT, HashPartInfrasMgr::MAX_BUCKET_COUNT))) {
-    SQL_ENG_LOG(WARN, "failed to init hash table", K(ret));
   } else {
   }
   return ret;
@@ -199,7 +190,6 @@ int ObHashPartInfrastructureMgr<HashCol, HashRowStore>::free_one_hp_infras(HashP
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(hp_infras_group_.free_one_hp_infras(hp_infras))) {
-    SQL_ENG_LOG(WARN, "failed to free one hp infras", K(ret));
   }
   return ret;
 }
@@ -221,7 +211,6 @@ int ObHashPartInfrastructureMgr<HashCol, HashRowStore>::init_one_hp_infras(
     SQL_ENG_LOG(WARN, "unexpected status: func is null", K(ret));
   } else if (OB_FAIL(hp_infras_group_.init_one_hp_infras(hp_infras, enable_sql_dumped_,
     unique_, ways_, eval_ctx_->max_batch_size_, est_rows_, width_, sql_mem_processor_, need_rewind))) {
-    SQL_ENG_LOG(WARN, "failed to create one hash partition infrastructure", K(ret));
   } else if (FALSE_IT(hp_infras->set_io_event_observer(io_event_observer_))) {
   } else if (OB_FAIL(hp_infras->set_funcs(hash_funcs, sort_collations, sort_cmp_funcs, eval_ctx_))) {
   }

@@ -78,7 +78,6 @@ int LogRuntimeFilterDependencyInfo::describe_dependency(DfoInfo *root_dfo)
     const ObLogicalOperator *use_op = create_op->get_paired_join_filter();
     if (OB_ISNULL(use_op)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("use_op is null");
     } else {
       const ObLogicalOperator *ancestor_op = nullptr;
       DfoInfo *op_dfo = nullptr;;
@@ -118,7 +117,6 @@ int DfoInfo::get_child(int64_t idx, DfoInfo *&child)
   int ret = OB_SUCCESS;
   if (idx < 0 || idx >= child_dfos_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child idx unexpected", K(idx), "cnt", child_dfos_.count(), K(ret));
   } else if (OB_FAIL(child_dfos_.at(idx, child))) {
   }
   return ret;
@@ -212,7 +210,6 @@ int ObPxResourceAnalyzer::convert_log_plan_to_nested_px_tree(ObLogicalOperator &
   if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("stack overflow, maybe too deep recursive", K(ret));
   } else if (log_op_def::LOG_EXCHANGE == root_op.get_type() &&
       static_cast<const ObLogExchange *>(&root_op)->is_px_consumer()) {
     // The current exchange is a QC, abstract all the sub-plans below into a dfo tree
@@ -223,7 +220,6 @@ int ObPxResourceAnalyzer::convert_log_plan_to_nested_px_tree(ObLogicalOperator &
     for (int64_t child_idx = 0; OB_SUCC(ret) && child_idx < num; ++child_idx) {
       if (nullptr == root_op.get_child(child_idx)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null ptr", K(child_idx), K(num), K(ret));
       } else if (OB_FAIL(SMART_CALL(convert_log_plan_to_nested_px_tree(
                   *root_op.get_child(child_idx))))) {
       }
@@ -245,7 +241,6 @@ int ObPxResourceAnalyzer::create_dfo_tree(ObLogExchange &root_op)
   void *mem_ptr = allocator_.alloc(sizeof(PxInfo));
   if (OB_ISNULL(mem_ptr)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail allocate memory", K(ret));
   } else {
     px_info = new(mem_ptr) PxInfo();
     px_info->root_op_ = &root_op;
@@ -254,12 +249,9 @@ int ObPxResourceAnalyzer::create_dfo_tree(ObLogExchange &root_op)
   } else if (OB_FAIL(px_trees_.push_back(px_info))) {
   } else if (OB_ISNULL(child)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exchange out op should always has a child",
-             "type", root_op.get_type(), KP(child), K(ret));
   } else if (log_op_def::LOG_EXCHANGE != child->get_type() ||
              static_cast<const ObLogExchange *>(child)->is_px_consumer()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expect a px producer below qc op", "type", root_op.get_type(), K(ret));
   } else if (OB_FAIL(do_split(*px_info, *child, NULL /*root_dfo*/))) {
   } else {
     (static_cast<ObLogExchange &>(root_op)).set_px_info(px_info);
@@ -287,7 +279,6 @@ int ObPxResourceAnalyzer::do_split(
   if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("stack overflow, maybe too deep recursive", K(ret));
   } else if (log_op_def::LOG_EXCHANGE == root_op.get_type() &&
       static_cast<const ObLogExchange&>(root_op).is_px_consumer() &&
       static_cast<const ObLogExchange&>(root_op).is_rescanable()) {
@@ -302,7 +293,6 @@ int ObPxResourceAnalyzer::do_split(
       ObLogJoinFilter &log_join_filter = static_cast<ObLogJoinFilter &>(root_op);
       if (log_join_filter.is_create_filter()
           && OB_FAIL(px_info.rf_dpd_info_.rf_create_ops_.push_back(&root_op))) {
-        LOG_WARN("failed to push_back log join filter create", K(ret));
       }
     } else if (log_op_def::LOG_EXCHANGE == root_op.get_type()
                && static_cast<const ObLogExchange &>(root_op).is_px_producer()) {
@@ -324,7 +314,6 @@ int ObPxResourceAnalyzer::do_split(
       for (int64_t child_idx = 0; OB_SUCC(ret) && child_idx < num; ++child_idx) {
         if (OB_ISNULL(root_op.get_child(child_idx))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null ptr", K(child_idx), K(num), K(ret));
         } else if (OB_FAIL(SMART_CALL(do_split(
                     px_info,
                     *root_op.get_child(child_idx),
@@ -343,10 +332,8 @@ int ObPxResourceAnalyzer::create_dfo(DfoInfo *&dfo, ObLogicalOperator &root_op)
   void *mem_ptr = allocator_.alloc(sizeof(DfoInfo));
   if (OB_ISNULL(mem_ptr)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail allocate memory", K(ret));
   } else if (nullptr == (dfo = new(mem_ptr) DfoInfo())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Null ptr unexpected", KP(mem_ptr), K(ret));
   } else {
     dfo->set_root_op(&root_op);
     dfo->set_dop(dop);
@@ -388,7 +375,6 @@ int ObPxResourceAnalyzer::recursive_walk_through_px_tree(PxInfo &px_tree)
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(px_tree.root_op_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("QC op not set in px_info struct", K(ret));
     } else {
       // Set the current px's expected thread count to the QC operator
       px_tree.root_op_->set_expected_worker_count(px_tree.threads_cnt_);
@@ -420,7 +406,6 @@ int ObPxResourceAnalyzer::walk_through_dfo_tree(
 
   if (OB_ISNULL(px_root.root_dfo_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL ptr", K(ret));
   } else if (OB_FAIL(DfoTreeNormalizer<DfoInfo>::normalize(*px_root.root_dfo_))) {
   } else if (OB_FAIL(sched_order_gen.generate(*px_root.root_dfo_, edges))) {
   }
@@ -439,13 +424,11 @@ int ObPxResourceAnalyzer::walk_through_dfo_tree(
     // schedule child if not scheduled.
     if (OB_FAIL(schedule_dfo(child, threads, groups))) {
     } else if (child.has_parent() && OB_FAIL(schedule_dfo(*child.parent_, threads, groups))) {
-      LOG_WARN("schedule parent dfo failed", K(ret));
     } else if (child.has_sibling() && child.depend_sibling_->not_scheduled()) {
       DfoInfo *sibling = child.depend_sibling_;
       while (NULL != sibling && OB_SUCC(ret)) {
         if (OB_UNLIKELY(!sibling->is_leaf_node())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("sibling must be leaf node", K(ret));
         } else if (OB_FAIL(schedule_dfo(*sibling, threads, groups))) {
         } else {
           max_threads = max(threads, max_threads);
@@ -495,7 +478,6 @@ int ObPxResourceAnalyzer::schedule_dfo(
           || !static_cast<const ObLogExchange *>(root_op)->is_px_producer()
           || OB_ISNULL(child = root_op->get_child(0))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected root op", K(ret), K(root_op));
       // calculate px usage of nested px coord.
       } else if (OB_FAIL(walk_through_logical_plan(*child, dfo.nested_px_thread_cnt_,
                                                    dfo.nested_px_group_cnt_))) {

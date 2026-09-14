@@ -32,7 +32,6 @@ int ObDASScanIter::inner_init(ObDASIterParam &param)
   int ret = OB_SUCCESS;
   if (param.type_ != ObDASIterType::DAS_ITER_SCAN) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("inner init das iter with bad param type", K(param), K(ret));
   } else {
     const ObDASScanCtDef *scan_ctdef = (static_cast<ObDASScanIterParam&>(param)).scan_ctdef_;
     output_ = &scan_ctdef->result_output_;
@@ -41,7 +40,6 @@ int ObDASScanIter::inner_init(ObDASIterParam &param)
                        : share::server_service<common::ObITabletScan>();
     if (OB_ISNULL(tsc_service_)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("tablet scan service is not bound", K(ret), K(scan_ctdef->ref_table_id_));
     }
   }
 
@@ -54,7 +52,6 @@ int ObDASScanIter::inner_reuse()
   // NOTE: need_switch_param_ should have been set before call reuse().
   if (OB_ISNULL(scan_param_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr scan param", K(ret));
   } else if (OB_FAIL(tsc_service_->reuse_scan_iter(scan_param_->need_switch_param_, result_))) {
   } else {
     scan_param_->key_ranges_.reuse();
@@ -79,15 +76,12 @@ int ObDASScanIter::do_table_scan()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(scan_param_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr scan param", K(ret));
   } else if (OB_UNLIKELY(nullptr != result_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected not null result iter ptr before do table scan", K(ret), KP_(result));
   } else if (OB_FAIL(tsc_service_->table_scan(*scan_param_, result_))) {
     if (OB_SNAPSHOT_DISCARDED == ret && scan_param_->fb_snapshot_.is_valid()) {
       ret = OB_INVALID_QUERY_TIMESTAMP;
     } else if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-      LOG_WARN("fail to scan table", KPC_(scan_param), K(ret));
     }
   }
 
@@ -99,12 +93,10 @@ int ObDASScanIter::rescan()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(scan_param_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr scan param", K(ret));
   } else if (OB_FAIL(tsc_service_->table_rescan(*scan_param_, result_))) {
       if (OB_SNAPSHOT_DISCARDED == ret && scan_param_->fb_snapshot_.is_valid()) {
         ret = OB_INVALID_QUERY_TIMESTAMP;
       }
-    LOG_WARN("failed to rescan tablet", K(scan_param_->tablet_id_), K(ret));
   } else {
     // reset need_switch_param_ after real rescan.
     scan_param_->need_switch_param_ = false;
@@ -118,7 +110,6 @@ int ObDASScanIter::advance_scan()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(scan_param_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr scan param", K(ret));
   } else if (OB_FAIL(tsc_service_->table_advance_scan(*scan_param_, result_))) {
   }
   return ret;
@@ -130,10 +121,8 @@ int ObDASScanIter::inner_get_next_row()
 
   if (OB_ISNULL(result_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr scan iter", K(ret));
   } else if (OB_FAIL(result_->get_next_row())) {
     if (ret != OB_ITER_END) {
-      LOG_WARN("failed to get next row", K(ret));
     }
   }
   return ret;
@@ -145,10 +134,8 @@ int ObDASScanIter::inner_get_next_rows(int64_t &count, int64_t capacity)
 
   if (OB_ISNULL(result_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr scan iter", K(ret));
   } else if (OB_FAIL(result_->get_next_rows(count, capacity))) {
     if (ret != OB_ITER_END) {
-      LOG_WARN("failed to get next row", K(ret));
     }
   }
   const ObBitVector *skip = nullptr;
@@ -174,15 +161,12 @@ int ObDASScanIter::set_scan_rowkey(ObEvalCtx *eval_ctx,
   ObNewRange range;
   if (OB_ISNULL(eval_ctx) || OB_UNLIKELY(rowkey_exprs.empty()) || OB_ISNULL(lookup_ctdef) || OB_ISNULL(alloc)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid eval ctx, rowkey exprs, lookup ctdef, or allocator",
-             K(eval_ctx), K(rowkey_exprs), K(lookup_ctdef), K(alloc), K(ret));
   } else {
     ObObj *obj_ptr = nullptr;
     void *buf = nullptr;
     int64_t rowkey_cnt = rowkey_exprs.count();
     if (OB_ISNULL(buf = alloc->alloc(sizeof(ObObj) * rowkey_cnt))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate enough memory", K(rowkey_cnt), K(ret));
     } else {
       obj_ptr = new (buf) ObObj(rowkey_cnt);
     }

@@ -50,13 +50,11 @@ int ObTextAvgDocLenEstimator::estimate_avg_doc_len(
     const ObDatumRowkey *endkey = nullptr;
     if (OB_FAIL(stat_iter.get_next(agg_row, endkey))) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("failed to get next agg row", K(ret));
       }
     } else if (OB_ISNULL(agg_row)
         || OB_UNLIKELY(agg_row->get_column_count() != 1)
         || OB_UNLIKELY(agg_row->storage_datums_[0].is_null())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected agg row", K(ret), KPC(agg_row));
     } else {
       const ObStorageDatum &datum = agg_row->storage_datums_[0];
       number::ObNumber left_num(tmp_result.get_number());
@@ -85,7 +83,6 @@ int ObTextAvgDocLenEstimator::estimate_avg_doc_len(
     } else if (OB_FAIL(doc_len_num.div_v3(doc_cnt_num, result_num, tmp_alloc))) {
     } else if (OB_UNLIKELY(avg_doc_token_cnt_expr.datum_meta_.get_type() != ObDoubleType)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected avg doc token cnt expr type", K(ret), K(avg_doc_token_cnt_expr.datum_meta_));
     } else if (OB_FAIL(cast_number_to_double(result_num, avg_doc_token_cnt))) {
     }
     
@@ -138,7 +135,6 @@ int ObBM25ParamEstCtx::assign(const ObBM25ParamEstCtx &other)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!other.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid input", K(ret), K(other));
   } else {
     estimated_total_doc_cnt_ = other.estimated_total_doc_cnt_;
     total_doc_cnt_iter_ = other.total_doc_cnt_iter_;
@@ -195,14 +191,11 @@ int ObBM25ParamEstimator::init(const ObBM25ParamEstCtx &est_ctx)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_UNLIKELY(!est_ctx.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid est ctx", K(ret), K(est_ctx));
   } else if (OB_UNLIKELY(est_ctx.need_est_avg_doc_token_cnt_
       && est_ctx.avg_doc_token_cnt_expr_->type_ != T_PSEUDO_COLUMN)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected avg doc token cnt expr type", K(ret), K(est_ctx), K(est_ctx.avg_doc_token_cnt_expr_->type_));
   } else if (OB_FAIL(est_ctx_.assign(est_ctx))) {
   } else {
     is_inited_ = true;
@@ -217,16 +210,13 @@ int ObBM25ParamEstimator::do_estimation(sql::ObEvalCtx &eval_ctx)
   guard.set_batch_idx(0);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!estimated_) {
     // skip repeated estimation
     if (est_ctx_.estimated_total_doc_cnt_ <= 0) {
       if (OB_ISNULL(est_ctx_.total_doc_cnt_iter_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null total doc cnt expr", K(ret));
       } else if (OB_FAIL(query::das_scan_next_row(est_ctx_.total_doc_cnt_iter_))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("failed to get next row from total doc cnt iter", K(ret));
         } else {
           total_doc_cnt_ = 0;
         }
@@ -235,7 +225,6 @@ int ObBM25ParamEstimator::do_estimation(sql::ObEvalCtx &eval_ctx)
       }
     } else if (OB_ISNULL(est_ctx_.total_doc_cnt_expr_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null total doc cnt expr", K(ret));
     } else {
       ObDatum &total_doc_cnt = est_ctx_.total_doc_cnt_expr_->locate_datum_for_write(eval_ctx);
       total_doc_cnt.set_int(est_ctx_.estimated_total_doc_cnt_);

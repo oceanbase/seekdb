@@ -55,7 +55,6 @@ int ObDDLLock::lock_for_add_drop_index_in_trans(
   ObISQLConnection *iconn = nullptr;
   if (data_table_schema.is_user_hidden_table()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lock for rebuild hidden table index", K(ret));
   } else if (!need_lock(data_table_schema)) {
     LOG_INFO("skip ddl lock", K(data_table_id));
   } else if (OB_FAIL(data_table_schema.get_tablet_ids(data_tablet_ids))) {
@@ -90,7 +89,6 @@ int ObDDLLock::lock_for_add_drop_index(
   ObISQLConnection *iconn = nullptr;
   if (OB_UNLIKELY(data_table_schema.is_user_hidden_table() || data_table_id != index_schema.get_data_table_id())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lock for rebuild hidden table index", K(ret), K(data_table_id), K(index_table_id), K(index_schema.get_data_table_id()));
   } else if (!need_lock(data_table_schema)) {
     LOG_INFO("skip ddl lock", K(data_table_id));
   } else {
@@ -160,7 +158,6 @@ int ObDDLLock::lock_for_rebuild_index(
   ObISQLConnection *iconn = nullptr;
   if (data_table_schema.is_user_hidden_table()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lock for rebuild hidden table index", K(ret));
   } else if (!need_lock(data_table_schema)) {
     LOG_INFO("skip ddl lock", K(data_table_id));
   } else if (OB_FAIL(data_table_schema.get_tablet_ids(data_tablet_ids))) {
@@ -320,7 +317,6 @@ int ObDDLLock::lock_for_add_partition_in_trans(
   const int64_t timeout_us = DEFAULT_TIMEOUT;
   if (table_schema.is_global_index_table()) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not support to add partition to global index", K(ret));
   } else if (need_lock(table_schema)) {
     if (OB_FAIL(lock_table_lock_in_trans(table_id, no_tablet_ids, ROW_EXCLUSIVE, timeout_us, trans))) {
     } else if (OB_FAIL(ObOnlineDDLLock::lock_table_in_trans(table_id, SHARE, timeout_us, trans))) {
@@ -356,7 +352,6 @@ int ObDDLLock::lock_table_and_global_indexes_for_fork(
       const share::schema::ObSimpleTableSchemaV2 *index_schema = index_schemas.at(i);
       if (OB_ISNULL(index_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("index schema is null", K(ret), K(i));
       } else if (index_schema->is_global_index_table()) {
         const uint64_t index_table_id = index_schema->get_table_id();
         ObSEArray<ObTabletID, 1> index_tablet_ids;
@@ -398,7 +393,6 @@ int ObDDLLock::unlock_table_and_global_indexes_for_fork(
       const share::schema::ObSimpleTableSchemaV2 *index_schema = index_schemas.at(i);
       if (OB_ISNULL(index_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("index schema is null", K(ret), K(i));
       } else if (index_schema->is_global_index_table()) {
         const uint64_t index_table_id = index_schema->get_table_id();
         ObSEArray<ObTabletID, 1> index_tablet_ids;
@@ -428,7 +422,6 @@ int ObDDLLock::lock_dst_table_and_global_indexes_for_fork(
 
   if (dst_table_schemas.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("dst_table_schemas is empty", K(ret));
   } else {
     // First element is the data table
     const share::schema::ObTableSchema &data_table_schema = dst_table_schemas.at(0);
@@ -437,7 +430,6 @@ int ObDDLLock::lock_dst_table_and_global_indexes_for_fork(
 
     if (OB_INVALID_ID == data_table_id) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid data_table_id", K(ret), K(data_table_id));
     } else if (!need_lock(data_table_schema)) {
       LOG_INFO("skip ddl lock", K(data_table_id));
     } else if (OB_FAIL(data_table_schema.get_tablet_ids(data_tablet_ids))) {
@@ -472,7 +464,6 @@ int ObDDLLock::lock_dst_table_and_global_indexes_for_fork(
             ObISQLConnection *iconn = nullptr;
             if (OB_ISNULL(iconn = trans.get_connection())) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("invalid conn", K(ret));
             } else if (OB_FAIL(append(arg.tablet_ids_, all_tablet_ids))) {
             } else if (OB_FAIL(ObInnerConnectionLockUtil::lock_tablet(arg, iconn))) {
             }
@@ -519,11 +510,9 @@ int ObDDLLock::check_has_dependent_task(const int64_t current_task_id,
     ObISQLConnection *iconn = trans.get_connection();
     if (OB_ISNULL(iconn)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid connection", K(ret));
     } else if (OB_FAIL(ObInnerConnectionLockUtil::execute_read_sql(iconn, sql_string, res))) {
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to get sql result", K(ret), KP(result));
     } else if (OB_FAIL(result->next())) {
     } else {
       EXTRACT_BOOL_FIELD_MYSQL(*result, "has", has_dependent_task);
@@ -548,7 +537,6 @@ int ObDDLLock::unlock_for_fork_table(
 
   if (task_id <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid task id", K(ret), K(task_id));
   } else {
     // Check and unlock src table and src global indexes
     bool has_src_dependent_task = false;
@@ -671,7 +659,6 @@ int ObDDLLock::lock_table_in_trans(
     LOG_INFO("skip ddl lock for non-user table", K(table_id));
   } else if (OB_ISNULL(iconn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid conn", K(ret));
   } else if (OB_FAIL(ObInnerConnectionLockUtil::lock_table(table_id, lock_mode, timeout_us, iconn))) {
   }
   return ret;
@@ -688,7 +675,6 @@ int ObDDLLock::lock_table_lock_in_trans(const uint64_t table_id,
   ObISQLConnection *iconn = nullptr;
   if (OB_ISNULL(iconn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid conn", K(ret));
   } else if (tablet_ids.empty()) {
     if (OB_FAIL(ObInnerConnectionLockUtil::lock_table(table_id, lock_mode, timeout_us, iconn))) {
     }
@@ -712,7 +698,6 @@ int ObDDLLock::do_table_lock(const uint64_t table_id,
   ObISQLConnection *iconn = nullptr;
   if (OB_ISNULL(iconn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid conn", K(ret));
   } else {
     if (is_lock) {
       ObLockTableRequest arg;
@@ -735,7 +720,6 @@ int ObDDLLock::do_table_lock(const uint64_t table_id,
           ret = OB_SUCCESS;
           LOG_INFO("table lock already unlocked", K(ret), K(arg));
         } else {
-          LOG_WARN("failed to unlock table", K(ret));
         }
       }
     }
@@ -756,11 +740,9 @@ int ObDDLLock::do_table_lock(const uint64_t table_id,
   ObISQLConnection *iconn = nullptr;
   if (OB_ISNULL(iconn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid conn", K(ret));
   } else if (OB_UNLIKELY(tablet_ids.empty()
       || (lock_mode != ROW_SHARE && lock_mode != ROW_EXCLUSIVE && lock_mode != SHARE && lock_mode != EXCLUSIVE))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(table_id), K(tablet_ids.count()), K(lock_mode));
   }
 
   if (OB_SUCC(ret) && OB_INVALID_ID != table_id) {
@@ -779,13 +761,11 @@ int ObDDLLock::do_table_lock(const uint64_t table_id,
     arg.timeout_us_ = timeout_us;
     if (OB_FAIL(append(arg.tablet_ids_, tablet_ids))) {
     } else if (is_lock && OB_FAIL(ObInnerConnectionLockUtil::lock_tablet(lock_arg, iconn))) {
-      LOG_WARN("failed to lock tablet", K(ret), K(lock_arg));
     } else if (!is_lock && OB_FAIL(ObInnerConnectionLockUtil::unlock_tablet(unlock_arg, iconn))) {
       if (OB_OBJ_LOCK_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
         LOG_INFO("table lock already unlocked", K(ret), K(unlock_arg));
       } else {
-        LOG_WARN("failed to unlock tablet", K(ret));
       }
     }
   }
@@ -808,10 +788,8 @@ int ObDDLLock::replace_tablet_lock(const uint64_t table_id,
   ObUnLockAloneTabletRequest unlock_arg;
   if (OB_ISNULL(iconn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid conn", K(ret));
   } else if (OB_UNLIKELY(OB_INVALID_ID == table_id || tablet_ids.count() < 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(table_id), K(tablet_ids.count()));
   } else if (OB_FAIL(get_unlock_alone_tablet_request_arg(old_lock_mode, old_lock_owner, timeout_us, tablet_ids, unlock_arg))) {
   } else {
     ObReplaceLockRequest replace_req;
@@ -835,7 +813,6 @@ int ObDDLLock::get_unlock_alone_tablet_request_arg(const transaction::tablelock:
   const ObTableLockOpType op_type = ObTableLockOpType::OUT_TRANS_UNLOCK;
   if (OB_UNLIKELY(tablet_ids.count() < 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(tablet_ids.count()));
   } else {
     unlock_arg.owner_id_ = lock_owner;
     unlock_arg.lock_mode_ = lock_mode;
@@ -867,7 +844,6 @@ int ObOnlineDDLLock::lock_table_in_trans(
   arg.owner_id_.set_default();
   if (OB_ISNULL(iconn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid conn", K(ret));
   } else if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(arg, iconn))) {
   }
   return ret;
@@ -883,7 +859,6 @@ int ObOnlineDDLLock::lock_tablets_in_trans(const ObIArray<ObTabletID> &tablet_id
   ObISQLConnection *iconn = nullptr;
   if (OB_ISNULL(iconn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid conn", K(ret));
   } else {
     ObLockObjsRequest arg;
     ObLockID lock_id;
@@ -897,7 +872,6 @@ int ObOnlineDDLLock::lock_tablets_in_trans(const ObIArray<ObTabletID> &tablet_id
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(ObInnerConnectionLockUtil::lock_obj(arg, iconn))) {
-      LOG_WARN("failed to lock online ddl tablets in trans", K(ret), K(arg));
     }
   }
   return ret;
@@ -921,7 +895,6 @@ int ObOnlineDDLLock::lock_table(
   arg.owner_id_ = lock_owner;
   if (OB_ISNULL(iconn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid conn", K(ret));
   } else if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(arg, iconn))) {
   }
   return ret;
@@ -939,7 +912,6 @@ int ObOnlineDDLLock::lock_tablets(
   ObISQLConnection *iconn = nullptr;
   if (OB_ISNULL(iconn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid conn", K(ret));
   } else {
     ObLockObjsRequest arg;
     ObLockID lock_id;
@@ -953,7 +925,6 @@ int ObOnlineDDLLock::lock_tablets(
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(ObInnerConnectionLockUtil::lock_obj(arg, iconn))) {
-      LOG_WARN("failed to lock online ddl tablets", K(ret), K(arg));
     }
   }
   return ret;
@@ -978,14 +949,12 @@ int ObOnlineDDLLock::unlock_table(
   arg.owner_id_ = lock_owner;
   if (OB_ISNULL(iconn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid conn", K(ret));
   } else if (OB_FAIL(ObInnerConnectionLockUtil::unlock_obj(arg, iconn))) {
     if (OB_OBJ_LOCK_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
       some_lock_not_exist = true;
       LOG_INFO("online ddl table already unlocked", K(ret), K(arg));
     } else {
-      LOG_WARN("failed to lock online ddl table", K(ret), K(arg));
     }
   }
   return ret;
@@ -1003,7 +972,6 @@ int ObOnlineDDLLock::unlock_tablets(const ObIArray<ObTabletID> &tablet_ids,
   ObISQLConnection *iconn = nullptr;
   if (OB_ISNULL(iconn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid conn", K(ret));
   } else {
     ObUnLockObjsRequest arg;
     ObLockID lock_id;
@@ -1018,13 +986,10 @@ int ObOnlineDDLLock::unlock_tablets(const ObIArray<ObTabletID> &tablet_ids,
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(ObInnerConnectionLockUtil::unlock_obj(arg, iconn))) {
-      LOG_WARN("meet fail during unlock online ddl tablets", K(ret), K(arg));
       if (OB_OBJ_LOCK_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
         some_lock_not_exist = true;
-        LOG_WARN("online ddl tablet already unlocked", K(ret));
       } else {
-        LOG_WARN("failed to unlock online ddl tablet", K(ret));
       }
     }
   }

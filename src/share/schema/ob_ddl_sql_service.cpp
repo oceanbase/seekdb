@@ -38,14 +38,12 @@ int ObDDLSqlService::log_operation(
   int64_t affected_rows = 0;
   if (OB_ISNULL(sql_string)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", KR(ret), KP(sql_string));
   } else if (FALSE_IT(sql_string->reuse())) {
   } else if (OB_FAIL(log_operation_dml(schema_operation, ddl_operation_dml))) {
   } else if (OB_FAIL(ddl_operation_dml.splice_insert_sql(OB_ALL_DDL_OPERATION_TNAME, *sql_string))) {
   } else if (OB_FAIL(sql_client.write(sql_string->ptr(), affected_rows))) {
   } else if (affected_rows != 1) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("affected_rows expect to 1, ", KR(ret), K(affected_rows));
   }
   return ret;
 }
@@ -58,10 +56,8 @@ int ObDDLSqlService::log_operation_dml(
   auto *tsi_oper = GET_TSI(TSILastOper);
   if (OB_UNLIKELY(!schema_operation.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("schema_operation is invalid", K(schema_operation), K(ret));
   } else if (OB_ISNULL(tsi_oper)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Failed to get TSILatOper", KR(ret), K(schema_operation)); 
   } else {
     tsi_oper->last_operation_schema_version_ = schema_operation.schema_version_;
   }
@@ -78,7 +74,6 @@ int ObDDLSqlService::gen_ddl_operation_dml(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!schema_operation.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("schema_operation is invalid", K(schema_operation), K(ret));
   } else if (OB_FAIL(ddl_operation_dml.add_column("schema_version", schema_operation.schema_version_))) {
   } else if (OB_FAIL(ddl_operation_dml.add_column("user_id",
           fill_schema_id(schema_operation.user_id_)))) {
@@ -113,14 +108,12 @@ int ObDDLSqlService::log_nop_operation(const ObSchemaOperation &schema_operation
 
   if (OB_INVALID_VERSION == new_schema_version) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get schema version", K(ret), K(new_schema_version), K(ddl_schema_op));
   } else {
     ddl_schema_op.schema_version_ = new_schema_version;
   }
   if (OB_FAIL(ret)) {
   } else if (OB_INVALID_VERSION == ddl_schema_op.schema_version_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid schema version", K(ret), K(ddl_schema_op));
   } else if (OB_FAIL(log_operation(ddl_schema_op, sql_client))) {
   }
   return ret;

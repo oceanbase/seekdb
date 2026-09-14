@@ -65,7 +65,6 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
   if (OB_FAIL(ret)) {
   } else if (NULL == my_session) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get my session", K(ret), K(ctx));
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
@@ -119,7 +118,6 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
         // if not exist ignore err code
       } else {
         ret = OB_ERR_ADD_INDEX;
-        LOG_WARN("index table id is invalid", KR(ret));
       }
     } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(
         res.task_id_, res.ddl_need_retry_at_executor_, my_session,
@@ -155,7 +153,6 @@ int ObCreateIndexExecutor::set_drop_index_stmt_str(
 
   if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(buf_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate memory", K(ret), K(OB_MAX_SQL_LENGTH));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                         "ALTER TABLE `%.*s`.`%.*s` DROP INDEX `%.*s`",
                         drop_index_arg.database_name_.length(),
@@ -224,7 +221,6 @@ int ObCreateIndexExecutor::sync_check_index_status(sql::ObSQLSessionInfo &my_ses
         break;
       } else {
         ret = OB_ERR_ADD_INDEX;
-        LOG_WARN("index table id is invalid", KR(ret), K(index_table_id));
       }
     }
     // First handle session timeout or kill exception scenarios
@@ -232,11 +228,9 @@ int ObCreateIndexExecutor::sync_check_index_status(sql::ObSQLSessionInfo &my_ses
     } else if (OB_FAIL(handle_session_exception(my_session))) {
       if (is_query_killed_return(ret)
           || OB_SESSION_KILLED == ret) {
-        LOG_WARN("handle_session_exception", K(ret));
       }
       if (!is_update_global_indexes
           && (OB_ERR_QUERY_INTERRUPTED == ret || OB_SESSION_KILLED == ret)) {
-        LOG_WARN("handle_session_exception", KR(ret));
         int tmp_ret = OB_SUCCESS;
         ObDropIndexRes drop_index_res;
         if (OB_SUCCESS != (tmp_ret = set_drop_index_stmt_str(drop_index_arg, allocator))) {
@@ -244,7 +238,6 @@ int ObCreateIndexExecutor::sync_check_index_status(sql::ObSQLSessionInfo &my_ses
             [&]{ return root_commands.drop_index(drop_index_arg, drop_index_res); }))) {
         }
       } else {
-        LOG_WARN("failed to handle_session_exception", KR(ret));
       }
     }
     // Handle the scenario of leader-follower switch, if a switch occurs during activation, directly return user session_killed;
@@ -282,7 +275,6 @@ int ObDropIndexExecutor::wait_drop_index_finish(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(task_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(task_id));
   } else {
     THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + OB_MAX_USER_SPECIFIED_TIMEOUT);
     ObAddr unused_addr;
@@ -304,7 +296,6 @@ int ObDropIndexExecutor::wait_drop_index_finish(
          } else if (!write_enabled) {
           ret = OB_STANDBY_DATABASE_READ_ONLY;
           FORWARD_USER_ERROR(ret, "DDL not finish, need check");
-          LOG_WARN("server is read-only now, stop wait", K(ret));
         }
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(session.check_session_status())) {
@@ -335,7 +326,6 @@ int ObDropIndexExecutor::execute(ObExecContext &ctx, ObDropIndexStmt &stmt)
   if (OB_FAIL(ret)) {
   } else if (NULL == my_session) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get my session", K(ret), K(ctx));
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");

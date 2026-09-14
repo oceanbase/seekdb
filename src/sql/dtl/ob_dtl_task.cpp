@@ -37,7 +37,6 @@ int ObDtlChSet::add_channel_info(const ObDtlChannelInfo &info)
   int ret = OB_SUCCESS;
   if (ch_info_set_.count() >= MAX_CHANS) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("chan set full", "count", ch_info_set_.count(), K(ret));
   } else if (OB_FAIL(ch_info_set_.push_back(info))) {
   }
   return ret;

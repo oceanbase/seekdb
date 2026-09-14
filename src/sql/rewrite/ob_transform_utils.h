@@ -2162,12 +2162,10 @@ int ObTransformUtils::get_expr_idx(const ObIArray<T *> &source,
   idx = -1;
   if (OB_ISNULL(target)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("dest expr is null", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && idx == -1 && i < source.count(); ++i) {
     if (OB_ISNULL(source.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("expr in source is null", K(ret));
     } else if (source.at(i) == target) {
       idx = i;
     }

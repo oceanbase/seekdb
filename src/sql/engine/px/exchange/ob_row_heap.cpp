@@ -39,11 +39,8 @@ int ObDatumRowCompare::init(
   int ret = OB_SUCCESS;
   if (nullptr == sort_collations || nullptr == sort_cmp_funs) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(sort_collations), KP(sort_cmp_funs));
   } else if (sort_cmp_funs->count() != sort_cmp_funs->count()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("column count miss match", K(ret),
-      K(sort_cmp_funs->count()), K(sort_cmp_funs->count()));
   } else {
     sort_collations_ = sort_collations;
     sort_cmp_funs_ = sort_cmp_funs;
@@ -65,7 +62,6 @@ bool ObDatumRowCompare::operator()(
     // already fail
   } else if (!is_inited() || OB_ISNULL(l) || OB_ISNULL(r)) {
     ret = !is_inited() ? OB_NOT_INIT : OB_INVALID_ARGUMENT;
-    LOG_WARN("not init or invalid argument", K(ret), KP(l), KP(r));
   } else {
     const ObDatum *lcells = l->cells();
     const ObDatum *rcells = r->cells();
@@ -100,11 +96,8 @@ int ObMaxDatumRowCompare::init(
   int ret = OB_SUCCESS;
   if (nullptr == sort_collations || nullptr == sort_cmp_funs) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(sort_collations), KP(sort_cmp_funs));
   } else if (sort_cmp_funs->count() != sort_cmp_funs->count()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("column count miss match", K(ret),
-      K(sort_cmp_funs->count()), K(sort_cmp_funs->count()));
   } else {
     sort_collations_ = sort_collations;
     sort_cmp_funs_ = sort_cmp_funs;
@@ -126,7 +119,6 @@ bool ObMaxDatumRowCompare::operator()(
     // already fail
   } else if (!is_inited() || OB_ISNULL(l) || OB_ISNULL(r)) {
     ret = !is_inited() ? OB_NOT_INIT : OB_INVALID_ARGUMENT;
-    LOG_WARN("not init or invalid argument", K(ret), KP(l), KP(r));
   } else {
     const ObDatum *lcells = l->cells();
     const ObDatum *rcells = r->cells();

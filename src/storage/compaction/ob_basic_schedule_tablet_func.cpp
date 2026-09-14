@@ -48,12 +48,10 @@ int ObBasicScheduleTabletFunc::init(ObLS *ls)
   int ret = OB_SUCCESS;
   if (OB_FAIL(ls_status_.init_for_major(merge_version_, ls))) {
     if (OB_LS_NOT_EXIST != ret) {
-      LOG_WARN("failed to init ls status", KR(ret), K_(merge_version));
     }
   } else if (OB_UNLIKELY(merge_version_ > ObBasicMergeScheduler::INIT_COMPACTION_SCN
       && !ls_status_.can_merge())) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("could not to merge now", K(ret), K(ls_status_));
   } else {
     freeze_param_.compaction_scn_ = merge_version_;
   }
@@ -108,7 +106,6 @@ int ObBasicScheduleTabletFunc::diagnose_init(
   int ret = OB_SUCCESS;
   if (OB_FAIL(ls_status_.init_for_major(merge_version_, ls))) {
     if (OB_LS_NOT_EXIST != ret) {
-      LOG_WARN("failed to init ls status", KR(ret), K_(merge_version), KP(ls));
     }
   } else {
     update_runtime_cached_status();
@@ -190,7 +187,6 @@ int ObBasicScheduleTabletFunc::check_need_force_freeze(
       need_force_freeze = true;
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("failed to get last frozen memtable", K(ret), K(tablet));
     }
   } else if (OB_FAIL(memtable_handle.get_tablet_memtable(last_frozen_memtable))) {
   } else {

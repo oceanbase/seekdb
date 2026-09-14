@@ -485,7 +485,6 @@ int ObOptEstCost::estimate_width_for_table(const OptTableMetas &table_metas,
   if (OB_ISNULL(ctx.get_opt_stat_manager()) ||
       OB_ISNULL(ctx.get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     for (int i = 0; OB_SUCC(ret) && i < columns.count(); ++i) {
       const ColumnItem &column_item = columns.at(i);
@@ -494,7 +493,6 @@ int ObOptEstCost::estimate_width_for_table(const OptTableMetas &table_metas,
                                          table_meta->get_column_meta(column_expr->get_column_id());
       if (OB_ISNULL(column_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (column_item.get_column_type() == NULL ||
                  column_item.table_id_ != table_id ||
                  !column_expr->is_explicited_reference() ||
@@ -521,13 +519,11 @@ int ObOptEstCost::estimate_width_for_exprs(const OptTableMetas &table_metas,
   if (OB_ISNULL(ctx.get_opt_stat_manager()) ||
       OB_ISNULL(ctx.get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
       const ObRawExpr *expr = exprs.at(i);
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid expr", K(ret));
       } else if (expr->is_column_ref_expr() &&
                  OB_INVALID_ID != static_cast<const ObColumnRefRawExpr*>(expr)->get_table_id()) {
         // column expr
@@ -590,7 +586,6 @@ int ObOptEstCost::calculate_filter_selectivity(AccessPath &path)
   if (OB_ISNULL(est_cost_info.table_metas_) || OB_ISNULL(est_cost_info.sel_ctx_) ||
       OB_ISNULL(est_cost_info.table_meta_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null point error", K(est_cost_info.table_metas_), K(est_cost_info.sel_ctx_), K(ret));
   } else if (FALSE_IT(est_cost_info.sel_ctx_->init_op_ctx(NULL, est_cost_info.table_meta_info_->table_row_count_))) {
   } else if (OB_FAIL(est_cost_info.sel_ctx_->init_deduce_infos(&path))) {
   } else if (OB_FAIL(ObOptSelectivity::calculate_conditional_selectivity(*est_cost_info.table_metas_,
@@ -639,10 +634,8 @@ int ObOptEstCost::stat_estimate_single_range_rc(const ObCostTableScanInfo &est_c
   if (OB_ISNULL(est_cost_info.table_metas_) || OB_ISNULL(est_cost_info.sel_ctx_) ||
       OB_ISNULL(table_meta_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null point error", K(est_cost_info.table_metas_), K(est_cost_info.sel_ctx_), K(ret));
   } else if (0 == index_meta_info.index_part_count_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("partition count is 0", K(index_meta_info.index_part_count_), K(ret));
   } else if (OB_FAIL(ObOptSelectivity::get_single_newrange_selectivity(*est_cost_info.table_metas_,
                                                                        *est_cost_info.sel_ctx_,
                                                                        est_cost_info.range_columns_,

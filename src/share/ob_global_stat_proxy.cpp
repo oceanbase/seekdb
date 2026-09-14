@@ -41,9 +41,6 @@ int ObGlobalStatProxy::set_init_value(
   if (!is_valid() || core_schema_version <= 0 || sys_schema_version <= 0 || baseline_schema_version < -1
       || !snapshot_gc_scn.is_valid() || gc_schema_version < 0 || ddl_epoch < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), "self valid", is_valid(),
-             K(core_schema_version), K(sys_schema_version), K(baseline_schema_version), K(snapshot_gc_scn),
-             K(gc_schema_version), K(ddl_epoch));
   } else {
     ObGlobalStatItem::ItemList list;
     ObGlobalStatItem core_schema_version_item(list, "core_schema_version", core_schema_version);
@@ -76,7 +73,6 @@ int ObGlobalStatProxy::set_core_schema_version(const int64_t core_schema_version
   int ret = OB_SUCCESS;
   if (!is_valid() || core_schema_version <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), "self valid", is_valid(), K(core_schema_version));
   } else {
     bool is_incremental = true;
     SET_ITEM("core_schema_version", core_schema_version, is_incremental);
@@ -89,7 +85,6 @@ int ObGlobalStatProxy::set_sys_schema_version(const int64_t sys_schema_version)
   int ret = OB_SUCCESS;
   if (!is_valid() || sys_schema_version <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), "self valid", is_valid(), K(sys_schema_version));
   } else {
     bool is_incremental = true;
     SET_ITEM("sys_schema_version", sys_schema_version, is_incremental);
@@ -102,7 +97,6 @@ int ObGlobalStatProxy::set_normal_schema_version(const int64_t normal_schema_ver
   int ret = OB_SUCCESS;
   if (!is_valid() || normal_schema_version <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), "self valid", is_valid(), K(normal_schema_version));
   } else {
     bool is_incremental = true;
     SET_ITEM("normal_schema_version", normal_schema_version, is_incremental);
@@ -115,7 +109,6 @@ int ObGlobalStatProxy::set_baseline_schema_version(const int64_t baseline_schema
   int ret = OB_SUCCESS;
   if (!is_valid() || baseline_schema_version < -1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), "self valid", is_valid(), K(baseline_schema_version));
   } else {
     bool is_incremental = true;
     SET_ITEM("baseline_schema_version", baseline_schema_version, is_incremental);
@@ -132,7 +125,6 @@ int ObGlobalStatProxy::get_snapshot_gc_scn(SCN &snapshot_gc_scn)
   ObGlobalStatItem snapshot_gc_scn_item(list, "snapshot_gc_scn", snapshot_gc_scn_val);
   if (!is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), "self valid", is_valid());
   } else if (OB_FAIL(get(list))) {
   } else {
     snapshot_gc_scn_val = (uint64_t)(snapshot_gc_scn_item.value_);
@@ -147,7 +139,6 @@ int ObGlobalStatProxy::set_ddl_epoch(const int64_t ddl_epoch, bool is_incrementa
   int ret = OB_SUCCESS;
   if (ddl_epoch < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ddl_epoch));
   } else {
     SET_ITEM("ddl_epoch", ddl_epoch, is_incremental);
   }
@@ -164,7 +155,6 @@ int ObGlobalStatProxy::get_snapshot_info(int64_t &snapshot_gc_scn,
   ObGlobalStatItem gc_schema_version_item(list, "gc_schema_version", gc_schema_version);
   if (!is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), "self valid", is_valid());
   } else if (OB_FAIL(get(list))) {
   } else {
     snapshot_gc_scn = snapshot_gc_scn_item.value_;
@@ -181,7 +171,6 @@ int ObGlobalStatProxy::get_core_schema_version(int64_t &core_schema_version)
   ObGlobalStatItem core_schema_version_item(list, "core_schema_version", core_schema_version);
   if (!is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), "self valid", is_valid());
   } else if (OB_FAIL(get(list))) {
   } else {
     core_schema_version = core_schema_version_item.value_;
@@ -202,7 +191,6 @@ int ObGlobalStatProxy::get_normal_schema_version(int64_t &normal_schema_version)
   ObGlobalStatItem normal_schema_version_item(list, "normal_schema_version", normal_schema_version);
   if (!is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), "self valid", is_valid());
   } else if (OB_FAIL(get(list))) {
   } else {
     normal_schema_version = normal_schema_version_item.value_;
@@ -232,7 +220,6 @@ int ObGlobalStatProxy::get_baseline_schema_version(int64_t &baseline_schema_vers
   ObGlobalStatItem baseline_schema_version_item(list, "baseline_schema_version", baseline_schema_version);
   if (!is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), "self valid", is_valid());
   } else if (OB_FAIL(get(list))) {
   } else {
     baseline_schema_version = baseline_schema_version_item.value_;
@@ -277,7 +264,6 @@ int ObGlobalStatProxy::inner_get_snapshot_gc_scn_(
     } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
     } else if (NULL == (result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get sql result", K(ret));
     } else if (OB_FAIL(result->next())) {
     } else {
       ObString snapshot_gc_scn_str;
@@ -290,10 +276,8 @@ int ObGlobalStatProxy::inner_get_snapshot_gc_scn_(
         const int64_t buf_len = sizeof(buf);
         if ((str_len <= 0) || snapshot_gc_scn_str.empty()) {
           ret = OB_INVALID_DATA;
-          LOG_WARN("get invalid gc timestamp str", KR(ret), K(str_len), K(snapshot_gc_scn_str));
         } else if (str_len >= buf_len) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("buf is not enough to hold snapshot_gc_scn_str", KR(ret), K(str_len), K(buf_len));
         } else {
           MEMCPY(buf, snapshot_gc_scn_str.ptr(), str_len);
           buf[str_len] = '\0';
@@ -355,7 +339,6 @@ int ObGlobalStatProxy::select_ddl_epoch_for_update(
     } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
     } else if (NULL == (result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get sql result", K(ret));
     } else if (OB_FAIL(result->next())) {
     } else {
       ObString ddl_epoch_str;
@@ -368,17 +351,14 @@ int ObGlobalStatProxy::select_ddl_epoch_for_update(
         const int64_t buf_len = sizeof(buf);
         if ((str_len <= 0) || ddl_epoch_str.empty()) {
           ret = OB_INVALID_DATA;
-          LOG_WARN("get invalid gc timestamp str", KR(ret), K(str_len), K(ddl_epoch_str));
         } else if (str_len >= buf_len) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("buf is not enough to hold ddl_epoch_str", KR(ret), K(str_len), K(buf_len));
         } else {
           MEMCPY(buf, ddl_epoch_str.ptr(), str_len);
           buf[str_len] = '\0';
           ddl_epoch = strtoll(buf, &endptr, 0);
           if ('\0' != *endptr) {
             ret = OB_INVALID_DATA;
-            LOG_WARN("invalid data, is not int value", KR(ret), K(ddl_epoch_str));
           }
         }
       }
@@ -410,7 +390,6 @@ int ObGlobalStatProxy::advance_change_stream_refresh_scn(
   affected_rows = 0;
   if (!refresh_scn.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(refresh_scn));
   } else {
     ObSqlString sql;
     const uint64_t scn_val = refresh_scn.get_val_for_inner_table_field();
@@ -444,7 +423,6 @@ int ObGlobalStatProxy::get_change_stream_refresh_scn(
       } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", KR(ret));
       } else if (OB_FAIL(result->next())) {
       } else {
         ObString column_value_str;
@@ -458,14 +436,12 @@ int ObGlobalStatProxy::get_change_stream_refresh_scn(
             refresh_scn = SCN::min_scn();
           } else if (str_len >= buf_len) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("buf not enough for column_value", KR(ret), K(str_len));
           } else {
             MEMCPY(buf, column_value_str.ptr(), str_len);
             buf[str_len] = '\0';
             const uint64_t scn_val = strtoull(buf, &endptr, 0);
             if ('\0' != *endptr) {
               ret = OB_INVALID_DATA;
-              LOG_WARN("invalid column_value for change_stream_refresh_scn", KR(ret), K(column_value_str));
             } else if (OB_FAIL(refresh_scn.convert_for_inner_table_field(scn_val))) {
             }
           }
@@ -489,7 +465,6 @@ int ObGlobalStatProxy::advance_change_stream_min_dep_lsn(
   affected_rows = 0;
   if (min_dep_lsn < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(min_dep_lsn));
   } else {
     ObSqlString sql;
     if (OB_FAIL(sql.assign_fmt(
@@ -522,7 +497,6 @@ int ObGlobalStatProxy::get_change_stream_min_dep_lsn(
       } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result is null", KR(ret));
       } else if (OB_FAIL(result->next())) {
       } else {
         ObString column_value_str;
@@ -536,14 +510,12 @@ int ObGlobalStatProxy::get_change_stream_min_dep_lsn(
             min_dep_lsn = 0;
           } else if (str_len >= buf_len) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("buf not enough for column_value", KR(ret), K(str_len));
           } else {
             MEMCPY(buf, column_value_str.ptr(), str_len);
             buf[str_len] = '\0';
             const int64_t val = strtoll(buf, &endptr, 0);
             if ('\0' != *endptr) {
               ret = OB_INVALID_DATA;
-              LOG_WARN("invalid column_value for change_stream_min_dep_lsn", KR(ret), K(column_value_str));
             } else {
               min_dep_lsn = val;
             }
@@ -565,15 +537,12 @@ int ObGlobalStatProxy::update(const ObGlobalStatItem::ItemList &list,
   ObTimeoutCtx ctx;
   if (!is_valid() || list.is_empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), "self valid", is_valid(),
-        "list size", list.get_size());
   } else if (OB_FAIL(ObShareUtil::get_rs_default_timeout_ctx(ctx))) {
   } else if (OB_FAIL(core_table_.load_for_update())) {
   } else {
     const ObGlobalStatItem *it = list.get_first();
     if (NULL == it) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL iterator", K(ret));
     }
     while (OB_SUCCESS == ret && it != list.get_header()) {
       if (OB_FAIL(dml.add_column(it->name_, it->value_))) {
@@ -581,7 +550,6 @@ int ObGlobalStatProxy::update(const ObGlobalStatItem::ItemList &list,
         it = it->get_next();
         if (NULL == it) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("NULL iterator", K(ret));
         }
       }
     }
@@ -589,16 +557,11 @@ int ObGlobalStatProxy::update(const ObGlobalStatItem::ItemList &list,
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(dml.splice_core_cells(core_table_, cells))) {
   } else if (!is_incremental && OB_FAIL(core_table_.replace_row(cells, affected_rows))) {
-    LOG_WARN("replace_row failed", K(ret));
   } else if (is_incremental && OB_FAIL(core_table_.incremental_replace_row(cells, affected_rows))) {
-    LOG_WARN("replace_row failed", K(ret));
   } else if (!is_incremental && !is_single_row(affected_rows)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("affected_rows expected to be one", K(ret), K(affected_rows),
-        K_(core_table));
   } else if (is_incremental && affected_rows >= 2) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("affected row should less than 2", K(ret), K(affected_rows));
   }
   return ret;
 }
@@ -611,26 +574,19 @@ int ObGlobalStatProxy::get(
   ObTimeoutCtx ctx;
   if (!is_valid() || list.is_empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), "self valid", is_valid(),
-        "list size", list.get_size());
   } else if (OB_FAIL(ObShareUtil::get_rs_default_timeout_ctx(ctx))) {
   } else if (!for_update && OB_FAIL(core_table_.load())) {
-    LOG_WARN("core_table load failed", KR(ret));
   } else if (for_update && OB_FAIL(core_table_.load_for_update())) {
-    LOG_WARN("core_table load failed", KR(ret));
   } else {
     if (OB_FAIL(core_table_.next())) {
       if (OB_ITER_END == ret) {
         ret = OB_EMPTY_RESULT;
-        LOG_WARN("no row exist", KR(ret));
       } else {
-        LOG_WARN("next failed", KR(ret));
       }
     } else {
       ObGlobalStatItem *it = list.get_first();
       if (NULL == it) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL iterator", KR(ret));
       }
       while (OB_SUCCESS == ret && it != list.get_header()) {
         if (OB_FAIL(core_table_.get_int(it->name_, it->value_))) {
@@ -638,7 +594,6 @@ int ObGlobalStatProxy::get(
           it = it->get_next();
           if (NULL == it) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("NULL iterator", KR(ret));
           }
         }
       }
@@ -648,9 +603,7 @@ int ObGlobalStatProxy::get(
           ret = OB_SUCCESS;
         } else if (OB_SUCC(ret)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("__all_global_stat table more than one row", KR(ret));
         } else {
-          LOG_WARN("next failed", KR(ret));
         }
       }
     }

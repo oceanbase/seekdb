@@ -53,7 +53,6 @@ int ObAllVirtualSchemaMemory::inner_get_next_row(common::ObNewRow *&row)
 
   if (OB_FAIL(get_next_mem_info(schema_mem))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("fail to get next schema memory info", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -96,7 +95,6 @@ int ObAllVirtualSchemaMemory::inner_get_next_row(common::ObNewRow *&row)
         }
         default : {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid col_id", KR(ret), K(col_id));
         }
       }
     }

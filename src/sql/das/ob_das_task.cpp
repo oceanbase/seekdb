@@ -50,7 +50,6 @@ int ObIDASTaskOp::start_das_task()
   } else {
     task_started_ = true;
     if (OB_FAIL(open_op())) {
-      LOG_WARN("open das task op failed", K(ret));
       if (OB_ERR_DEFENSIVE_CHECK == ret) {
         //dump das task data to help analysis defensive bug
         dump_data();
@@ -163,10 +162,8 @@ int ObDASSnapshotOptInfo::init(transaction::ObTxIsolationLevel isolation_level)
   int64_t mem_size = sizeof(transaction::ObTxReadSnapshot);
   if (OB_ISNULL(buf = alloc_.alloc(mem_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory for ObTxReadSnapshot", K(ret), K(mem_size));
   } else if (OB_ISNULL(buf2 = alloc_.alloc(mem_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory for ObTxReadSnapshot", K(ret), K(mem_size));
   } else {
     use_specify_snapshot_ = true;
     isolation_level_ = isolation_level;
@@ -189,7 +186,6 @@ int ObIDASTaskOp::state_advance()
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid task state",KR(ret), K_(task_status));
   }
   return ret;
 }
@@ -201,7 +197,6 @@ int DASOpResultIter::get_next_row()
     ObDASScanOp *scan_op = DAS_SCAN_OP(*task_iter_);
     if (OB_ISNULL(scan_op)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected das task op type", K(ret), KPC(*task_iter_));
     } else {
       ret = scan_op->get_output_result_iter()->get_next_row();
     }

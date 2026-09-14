@@ -316,7 +316,6 @@ ObLogicalOperator *ObLogOperatorFactory::allocate(ObLogPlan &plan, ObLogOpType t
     ret_op->set_type(type);
     int ret = OB_SUCCESS;
     if (OB_FAIL(op_store_.store_obj(ret_op))) {
-      LOG_WARN("store operator failed", K(ret));
       ret_op->~ObLogicalOperator();
       ret_op = NULL;
     }

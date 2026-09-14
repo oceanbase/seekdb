@@ -146,7 +146,6 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
         ObSMConnection *conn = SQL_REQ_OP.get_sql_session(&req);
         if (OB_ISNULL(conn)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(conn), K(ret));
         } else {
           char *buf = (&co_ep_callp_buf)->obmp_query_buffer_;
           ObMPProcessInfo *p = new (buf) ObMPProcessInfo(gctx_);
@@ -163,7 +162,6 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
         ObSMConnection *conn = SQL_REQ_OP.get_sql_session(&req);
         if (OB_ISNULL(conn)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(conn), K(ret));
         } else {
           char *buf = (&co_ep_callp_buf)->obmp_query_buffer_;
           ObMPProcessKill *p = new (buf) ObMPProcessKill(gctx_);
@@ -214,7 +212,6 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
             ObSMConnection *conn = SQL_REQ_OP.get_sql_session(&req);
             if (OB_ISNULL(conn)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("get unexpected null", K(conn), K(ret));
             } else {
               NEW_MYSQL_PROCESSOR(ObMPQuery, gctx_);
             }
@@ -227,7 +224,6 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
         if (OB_SUCC(ret) && pkt.get_cmd() == obmysql::COM_FIELD_LIST) {
           if (OB_ISNULL(static_cast<ObMPQuery *>(processor))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected null", K(static_cast<ObMPQuery *>(processor)));
           } else {
             static_cast<ObMPQuery *>(processor)->set_is_com_filed_list();
           }
@@ -237,7 +233,6 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
         ObSMConnection *conn = SQL_REQ_OP.get_sql_session(&req);
         if (OB_ISNULL(conn) || OB_ISNULL(dynamic_cast<ObMPBase *>(processor))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(dynamic_cast<ObMPBase *>(processor)));
         }
       }
     }

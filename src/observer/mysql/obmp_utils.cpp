@@ -71,7 +71,6 @@ int ObMPUtils::add_changed_session_info(OMPKOK &ok_pkt, sql::ObSQLSessionInfo &s
         } else if (OB_FAIL(session.get_sys_variable(change_var.id_, sys_var_ptr))){
         } else if (OB_ISNULL(sys_var_ptr)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("sys var ptr is null", K(ret), K(change_var));
         } else if (OB_FAIL(sys_var_ptr->to_show_str(allocator, session, str_kv.value_))) {
         } else if (OB_FAIL(ok_pkt.add_system_var(str_kv))) {
         } else {
@@ -105,7 +104,6 @@ int ObMPUtils::get_user_sql_literal(ObIAllocator &allocator, const ObObj &obj, O
   if (OB_FAIL(get_literal_print_length(obj, is_plain, user_sql_print_length, print_param))) {
   } else if (OB_UNLIKELY(user_sql_print_length <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Invalid buffer length", K(ret), K(obj), K(user_sql_print_length));
   } else if (NULL == (data = static_cast<char *>(allocator.alloc(user_sql_print_length)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("fail to alloc mem", K(user_sql_print_length), K(ret));

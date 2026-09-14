@@ -70,8 +70,6 @@ int ObBlockStatScanParam::init(
   force_scan_whole_range_ = force_scan_whole_range;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(stat_cols), K(stat_projectors), K(scan_param),
-        K(scan_single_major_only), K(scan_max_sstable_block_granule));
   }
   return ret;
 }
@@ -83,10 +81,8 @@ int ObBlockStatIterator::SSTableIter::next()
     ret = OB_ITER_END;
   } else if (OB_ISNULL(idx_scanner_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("idx scanner is null", K(ret));
   } else if (OB_FAIL(idx_scanner_->get_next(idx_row_))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("failed to get next row from idx scanner", K(ret));
     } else {
       iter_end_ = true;
       idx_row_ = nullptr;
@@ -101,13 +97,10 @@ int ObBlockStatIterator::MemTableIter::next()
   int ret = OB_SUCCESS;
   if (iter_end_) {
     ret = OB_ITER_END;
-    LOG_WARN("memtable already iter end", K(ret));
   } else if (OB_ISNULL(memtable_scanner_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("memtable scanner is null", K(ret));
   } else if (OB_FAIL(memtable_scanner_->get_next_row(row_))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("failed to get next row from memtable scanner", K(ret));
     } else {
       iter_end_ = true;
       row_ = nullptr;
@@ -122,10 +115,8 @@ int ObBlockStatIterator::ObBlockStatKeyCmp::init(const blocksstable::ObStorageDa
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_UNLIKELY(!datum_utils.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(datum_utils));
   } else {
     datum_utils_ = &datum_utils;
     cmp_cnt_ = cmp_cnt;
@@ -141,14 +132,10 @@ int ObBlockStatIterator::ObBlockStatKeyCmp::cmp(const ObBlockStatIterator::ObBlo
   cmp_ret = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(nullptr == datum_utils_ || cmp_cnt_ <= 0 || nullptr == l.endkey_ || nullptr == r.endkey_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(datum_utils_), KP(l.endkey_), KP(r.endkey_));
   } else if (OB_UNLIKELY(l.endkey_->get_datum_cnt() < cmp_cnt_ || r.endkey_->get_datum_cnt() < cmp_cnt_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("endkey datum count less than cmp_cnt", K(ret),
-             K(l.endkey_->get_datum_cnt()), K(r.endkey_->get_datum_cnt()), K(cmp_cnt_));
   } else {
     ObDatumRowkey l_key;
     ObDatumRowkey r_key;
@@ -230,10 +217,8 @@ int ObBlockStatIterator::init(const ObTabletHandle &tablet_handle, ObBlockStatSc
       : ObSSTableIndexScanParam::ScanLevel::LEAF;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("double initialization", K(ret));
   } else if (OB_UNLIKELY(!scan_param.is_valid() || !tablet_handle.is_valid() || !store_ctx.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(scan_param), K(tablet_handle), K(store_ctx));
   } else if (FALSE_IT(scan_param_ = &scan_param)) {
   } else if (OB_FAIL(init_scan_range(tablet_handle, scan_param))) {
   } else if (OB_FAIL(get_table_param_.tablet_iter_.set_tablet_handle(tablet_handle))) {
@@ -248,11 +233,9 @@ int ObBlockStatIterator::init(const ObTabletHandle &tablet_handle, ObBlockStatSc
       *scan_param.get_stat_projectors(),
       table_scan_param->table_param_->get_read_info().get_columns_desc(),
       *iter_allocator_))) {
-    LOG_WARN("failed to init stat collector", K(ret));
   } else if (OB_FAIL(prepare_scan_tables())) {
   } else if (OB_FAIL(construct_iters())) {
   } else if (use_merged_range() && OB_FAIL(build_merge_heap(&tablet_handle.get_obj()->get_rowkey_read_info()))) {
-    LOG_WARN("failed to build merge heap", K(ret));
   } else {
     rowkey_read_info_ = &tablet_handle.get_obj()->get_rowkey_read_info();
     iter_end_ = false;
@@ -268,7 +251,6 @@ int ObBlockStatIterator::get_next(const ObDatumRow *&agg_row, const ObDatumRowke
   bool beyond_range = false;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("block stat iterator is not initialized", K(ret));
   } else if (iter_end_) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(refresh_scan_table_on_demand())) {
@@ -294,7 +276,6 @@ int ObBlockStatIterator::advance_to(const ObDatumRowkey &advance_key, const bool
   int cmp_ret = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("block stat iterator is not initialized", K(ret));
   } else if (iter_end_) {
     // skip
   } else if (OB_FAIL(refresh_scan_table_on_demand())) {
@@ -318,7 +299,6 @@ int ObBlockStatIterator::init_scan_range(const ObTabletHandle &tablet_handle, Ob
   } else if (OB_FAIL(scan_range_.init(*scan_param.get_scan_param()))) {
   } else if (OB_UNLIKELY(scan_range_.get_ranges().empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected empty scan range", K(ret), K_(scan_range), K(scan_param));
   } else {
     curr_scan_range_ = scan_range_.get_ranges().at(0);
   }
@@ -352,7 +332,6 @@ int ObBlockStatIterator::refresh_scan_table_on_demand()
   if (OB_UNLIKELY(need_refresh)) {
     scan_tables_.reuse();
     if (nullptr != curr_endkey_ && OB_FAIL(shrink_scan_range(*curr_endkey_))) {
-      LOG_WARN("failed to shrink scan range", K(ret));
     } else if (FALSE_IT(reset_iters())) {
     } else if (OB_FAIL(refresh_tablet_iter())) {
     } else if (OB_FAIL(prepare_scan_tables())) {
@@ -373,7 +352,6 @@ int ObBlockStatIterator::refresh_tablet_iter()
 
   if (OB_UNLIKELY(!get_table_param_.tablet_iter_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet iter is invalid", K(ret), K(get_table_param_.tablet_iter_));
   } else {
     ObLS *tenant_ls = nullptr;
     rowkey_read_info_ = nullptr;
@@ -383,7 +361,6 @@ int ObBlockStatIterator::refresh_tablet_iter()
     const int64_t snapshot_version = main_table_ctx_.store_ctx_->mvcc_acc_ctx_.get_snapshot_version().get_val_for_tx();
     if (OB_UNLIKELY(remain_timeout <= 0)) {
       ret = OB_TIMEOUT;
-      LOG_WARN("timeout", K(ret), K(tablet_id), K(remain_timeout));
     } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
     } else if (OB_FAIL(tenant_ls->get_tablet_svr()->get_read_tables(
         tablet_id,
@@ -407,8 +384,6 @@ int ObBlockStatIterator::prepare_scan_tables()
   ObTableStoreIterator *table_store_iter = get_table_param_.tablet_iter_.table_iter();
   if (OB_UNLIKELY(0 != scan_tables_.count() || !main_table_param_.is_valid() || !main_table_ctx_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status before prepare  scan tables", K(ret), K(scan_tables_.count()),
-        K_(main_table_param), K_(main_table_ctx));
   } else {
     const bool query_with_frozen_version = get_table_param_.frozen_version_ != -1;
     const int64_t query_version = query_with_frozen_version
@@ -426,14 +401,11 @@ int ObBlockStatIterator::prepare_scan_tables()
     ObITable *table_ptr = nullptr;
     if (OB_FAIL(table_store_iter->get_next(table_ptr))) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("failed to get next table", K(ret));
       }
     } else if (OB_ISNULL(table_ptr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table must not be null", K(ret), K(table_store_iter));
     } else if (OB_UNLIKELY(table_ptr->is_major_sstable() && table_ptr->get_snapshot_version() <= 0)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected major sstable", K(ret), KPC(table_ptr));
     } else if (OB_UNLIKELY(0 == scan_tables_.count() && !table_ptr->is_major_sstable())){
       ret = OB_NOT_SUPPORTED;
       LOG_INFO("block stat iterator not supported for tablet without major sstable", K(ret), KPC(table_ptr));
@@ -450,8 +422,6 @@ int ObBlockStatIterator::prepare_scan_tables()
   if (OB_SUCC(ret)) {
     if (OB_UNLIKELY(scan_tables_.count() > common::MAX_TABLE_CNT_IN_STORAGE)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected table cnt for scan", K(ret), K(scan_tables_.count()),
-        K(table_store_iter), K(scan_tables_));
     }
   }
 
@@ -465,15 +435,12 @@ int ObBlockStatIterator::construct_iters()
 
   if (OB_UNLIKELY(0 != memtable_iters_.count() || 0 != sstable_iters_.count() || nullptr == iter_allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status before construct iters", K(ret),
-        K(memtable_iters_.count()), K(sstable_iters_.count()), KP_(iter_allocator));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < scan_tables_.count(); ++i) {
     ObITable *table = scan_tables_.at(i);
     if (OB_ISNULL(table)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table must not be null", K(ret), K(i), K(scan_tables_));
     } else if (table->is_memtable()) {
       ObStoreRowIterator *iter = nullptr;
       if (OB_FAIL(table->scan(main_table_param_.iter_param_, main_table_ctx_, curr_scan_range_, iter))) {
@@ -487,15 +454,12 @@ int ObBlockStatIterator::construct_iters()
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected table type", K(ret), KPC(table));
     }
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(scan_tables_.count() != memtable_iters_.count() + sstable_iters_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected iter count", K(ret), K(scan_tables_.count()),
-        K(memtable_iters_.count()), K(sstable_iters_.count()));
   } else {
     // iter startup
     for (int64_t i = 0; OB_SUCC(ret) && i < memtable_iters_.count(); ++i) {
@@ -544,20 +508,15 @@ int ObBlockStatIterator::build_merge_heap(const ObITableReadInfo *rowkey_read_in
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr != merge_heap_ || nullptr == iter_allocator_ || nullptr == rowkey_read_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected status before build merge heap", K(ret), KP_(merge_heap), KP_(iter_allocator), KP(rowkey_read_info));
   } else if (OB_UNLIKELY(sstable_iters_.count() < MIN_SSTABLE_CNT_USE_MERGED_RANGE)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("merge heap not supported for single sstable", K(ret), K(sstable_iters_.count()));
   } else if (!key_cmp_.is_valid() && OB_FAIL(key_cmp_.init(rowkey_read_info->get_datum_utils(), rowkey_read_info->get_schema_column_count()))) {
-    LOG_WARN("failed to init key cmp", K(ret));
   } else if (sstable_iters_.count() <= ObBSSimpleMerger::USE_SIMPLE_MERGER_MAX_TABLE_CNT) {
     if (OB_ISNULL(merge_heap_ = OB_NEWx(ObBSSimpleMerger, iter_allocator_, key_cmp_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate simple merger", K(ret));
     }
   } else if (OB_ISNULL(merge_heap_ = OB_NEWx(ObBSLoserTree, iter_allocator_, key_cmp_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate loser tree", K(ret));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(merge_heap_->init(sstable_iters_.count(), sstable_iters_.count(), *iter_allocator_))) {
@@ -568,7 +527,6 @@ int ObBlockStatIterator::build_merge_heap(const ObITableReadInfo *rowkey_read_in
       if (iter.is_iter_end()) {
       } else if (OB_UNLIKELY(nullptr == iter.get_curr_index_row() || nullptr == iter.get_curr_index_row()->endkey_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected nullptr to sstable iter row", K(ret), K(i), K(iter));
       } else if (OB_FAIL(merge_heap_->push(ObBlockStatKeyItem(i, iter.get_curr_index_row()->endkey_)))) {
       } else {
         LOG_TRACE("build merge heap, push endkey to merge heap", K(ret), K(i), K(iter), KP(this), KPC(iter.get_curr_index_row()->endkey_));
@@ -590,7 +548,6 @@ int ObBlockStatIterator::fill_merge_heap()
     SSTableIter *iter = nullptr;
     if (OB_UNLIKELY(iter_idx < 0 || iter_idx >= sstable_iters_.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected iter idx", K(ret), K(iter_idx), K(sstable_iters_.count()));
     } else {
       iter = &sstable_iters_.at(iter_idx);
     }
@@ -598,7 +555,6 @@ int ObBlockStatIterator::fill_merge_heap()
     } else if (iter->is_iter_end()) {
     } else if (OB_UNLIKELY(nullptr == iter->get_curr_index_row() || nullptr == iter->get_curr_index_row()->endkey_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected nullptr to sstable iter row", K(ret), K(iter_idx), K(iter));
     } else if (OB_FAIL(merge_heap_->push(ObBlockStatKeyItem(iter_idx, iter->get_curr_index_row()->endkey_)))) {
     } else {
       LOG_TRACE("fill merge heap", K(ret), K(iter_idx), K(iter), KP(this), K(iter_idxs_), KPC(iter->get_curr_index_row()->endkey_));
@@ -631,7 +587,6 @@ int ObBlockStatIterator::next_baseline_range(bool &beyond_range)
   beyond_range = false;
   if (OB_FAIL(iter.next())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("failed to get next row from baseline block iter", K(ret), K_(sstable_iters));
     } else {
       ret = OB_SUCCESS;
     }
@@ -656,14 +611,12 @@ int ObBlockStatIterator::next_merged_range(bool &beyond_range)
   is_baseline_merged_endkey_ = false;
   if (OB_UNLIKELY(nullptr == merge_heap_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("merge heap is not initialized", K(ret));
   } else if (OB_FAIL(fill_merge_heap())) {
   } else if (merge_heap_->empty() && is_all_sstable_iters_end()) {
     curr_endkey_ = &curr_scan_range_.get_end_key();
     beyond_range = true;
   } else if (OB_UNLIKELY(merge_heap_->empty() && !is_all_sstable_iters_end())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("merge heap is empty but not all sstable iters end", K(ret));
   } else {
     const ObBlockStatKeyItem *item = nullptr;
     bool has_same_endkey = false;
@@ -677,7 +630,6 @@ int ObBlockStatIterator::next_merged_range(bool &beyond_range)
       } else if (OB_UNLIKELY(nullptr == item || nullptr == item->endkey_
           || item->iter_idx_ < 0 || item->iter_idx_ >= sstable_iters_.count())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected iter idx", K(ret), KPC(item), K(sstable_iters_.count()));
       } else if (!exceeds_current_token) {
         int cmp_ret = 0;
         const ObStorageDatum &endkey_token = item->endkey_->get_datum(0);
@@ -685,7 +637,6 @@ int ObBlockStatIterator::next_merged_range(bool &beyond_range)
         if (OB_UNLIKELY(nullptr == scan_param_ || nullptr == scan_param_->get_scan_param() ||
                         scan_param_->get_scan_param()->key_ranges_.empty())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected scan param or empty key ranges", K(ret), KPC(scan_param_));
         } else if (OB_FAIL(current_token.from_obj(scan_param_->get_scan_param()->key_ranges_.at(0).end_key_.get_obj_ptr()[0]))) {
         } else if (OB_FAIL(rowkey_read_info_->get_datum_utils().get_cmp_funcs().at(0).compare(endkey_token, current_token, cmp_ret))) {
         } else {
@@ -701,8 +652,6 @@ int ObBlockStatIterator::next_merged_range(bool &beyond_range)
         const ObSSTableIndexRow *idx_row = iter.get_curr_index_row();
         if (OB_UNLIKELY(nullptr == idx_row || idx_row->endkey_ != item->endkey_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null idx row or endkey", K(ret), K(item->iter_idx_), KPC(idx_row),
-              KP(curr_endkey_));
         } else if (OB_FAIL(stat_collector_.collect_agg_row(idx_row->skip_index_row_))) {
         } else if (OB_FAIL(iter_idxs_.push_back(item->iter_idx_))) {
         } else if (OB_FAIL(merge_heap_->pop())) {
@@ -728,9 +677,7 @@ int ObBlockStatIterator::collect_sstable_idx_rows(const bool drain_all_iters)
       const ObSSTableIndexRow *idx_row = iter.get_curr_index_row();
       if (OB_ISNULL(idx_row)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected nullptr to sstable iter row", K(ret));
       } else if (!drain_all_iters && OB_FAIL(check_rowkey_in_range(*idx_row->endkey_, rowkey_in_range))) {
-        LOG_WARN("failed to check rowkey in range", K(ret), K(i), K(iter));
       } else if (!rowkey_in_range) {
         // skip
       } else if (OB_FAIL(stat_collector_.collect_agg_row(idx_row->skip_index_row_))) {
@@ -759,9 +706,7 @@ int ObBlockStatIterator::collect_memtable_scan_rows(const bool drain_all_iters)
       const ObDatumRow *row = iter.get_curr_row();
       if (OB_ISNULL(row)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected nullptr to memtable iter row", K(ret));
       } else if (!drain_all_iters && OB_FAIL(check_rowkey_in_range(*row, rowkey_in_range))) {
-        LOG_WARN("failed to check rowkey in range", K(ret), K(i), K(iter));
       } else if (!rowkey_in_range) {
         // skip
       } else if (OB_FAIL(stat_collector_.collect_data_row(*row))) {
@@ -799,7 +744,6 @@ int ObBlockStatIterator::advance_sstable_iters(const ObDatumRowkey &advance_key,
     } else if (OB_FAIL(iter.advance_to(advance_key, inclusive))) {
     } else if (FALSE_IT(iter_advanced = true)) {
     } else if ((0 != i || use_merged_range()) && OB_FAIL(iter.next())) {
-      LOG_WARN("failed move forward iter for non-baseline sstable", K(ret), K(i), K(iter));
     }
   }
   if (OB_SUCC(ret) && iter_advanced && use_merged_range()) {
@@ -809,7 +753,6 @@ int ObBlockStatIterator::advance_sstable_iters(const ObDatumRowkey &advance_key,
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < sstable_iters_.count(); ++i) {
       if (!sstable_iters_.at(i).is_iter_end() && OB_FAIL(iter_idxs_.push_back(i))) {
-        LOG_WARN("failed to push iter idx to array", K(ret), K(iter_idxs_));
       }
     }
     if (OB_FAIL(ret)) {
@@ -830,7 +773,6 @@ int ObBlockStatIterator::advance_memtable_iters(const ObDatumRowkey &advance_key
       int cmp_ret = 0;
       if (OB_ISNULL(row)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected nullptr to memtable iter row", K(ret));
       } else {
         ObDatumRowkey curr_rowkey(row->storage_datums_, rowkey_read_info_->get_rowkey_count());
         if (OB_FAIL(curr_rowkey.compare(advance_key, rowkey_read_info_->get_datum_utils(), cmp_ret, false))) {
@@ -858,7 +800,6 @@ int ObBlockStatIterator::check_rowkey_in_range(const ObDatumRowkey &rowkey, bool
   int cmp_ret = 0;
   if (OB_ISNULL(curr_endkey_) || OB_ISNULL(rowkey_read_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptrs", K(ret), KP_(curr_endkey), KP_(rowkey_read_info));
   } else if (OB_FAIL(rowkey.compare(*curr_endkey_, rowkey_read_info_->get_datum_utils(), cmp_ret, false))) {
   } else {
     rowkey_in_range = (cmp_ret <= 0);

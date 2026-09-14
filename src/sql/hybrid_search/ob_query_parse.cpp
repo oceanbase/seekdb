@@ -62,7 +62,6 @@ int ObESQueryParser::parse(const common::ObString &req_str, ObQueryReqFromJson *
       if (ret == OB_SEARCH_NOT_FOUND) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fail to get type field", K(ret));
       }
     } else if (es_mode_node->json_type() == ObJsonNodeType::J_BOOLEAN) {
       enable_es_mode_ = es_mode_node->get_boolean();
@@ -74,11 +73,9 @@ int ObESQueryParser::parse(const common::ObString &req_str, ObQueryReqFromJson *
         enable_es_mode_ = false;
       } else {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("es_mode field must be boolean type or string 'true' or 'false'", K(ret));
       }
     } else {
       ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-      LOG_WARN("es_mode field must be boolean type or string 'true' or 'false'", K(ret), K(es_mode_node->json_type()));
     }
     for (uint64_t i = 0; OB_SUCC(ret) && i < count; i++) {
       ObString key;
@@ -105,7 +102,6 @@ int ObESQueryParser::parse(const common::ObString &req_str, ObQueryReqFromJson *
         // do nothing
       } else {
         ret = OB_ERR_PARSER_SYNTAX;
-        LOG_WARN("invalid query param", K(ret), K(key));
       }
     }
     if (OB_SUCC(ret)) {
@@ -118,19 +114,16 @@ int ObESQueryParser::parse(const common::ObString &req_str, ObQueryReqFromJson *
       } else {
         query_req = (query == NULL ? knn : query);
         if (OB_ISNULL(query_req) && OB_FAIL(construct_all_query(query_req))) {
-          LOG_WARN("fail to construct all query", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (default_size_ == NULL && from_expr != NULL) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not supported sytnax in query, 'size' must be set when 'from' is specified", K(ret));
       } else {
         query_req->set_offset(from_expr);
         if (query_req->get_limit() == NULL) {
           query_req->set_limit(default_size_);
         } else if (default_size_ != NULL && OB_FAIL(choose_limit(query_req, default_size_))) {
-          LOG_WARN("fail to choose limit expr", K(ret));
         }
       }
 
@@ -144,7 +137,6 @@ int ObESQueryParser::parse(const common::ObString &req_str, ObQueryReqFromJson *
       if (OB_SUCC(ret) && !out_cols_->empty()) {
         if (OB_FAIL(set_output_columns(*query_req, is_hybrid))) {
         } else if (need_json_wrap_ && OB_FAIL(wrap_json_result(query_req))) {
-          LOG_WARN("fail to wrap json result", K(ret));
         }
       }
     }
@@ -159,12 +151,10 @@ int ObESQueryParser::add_pk_to_sort(ObQueryReqFromJson *query_req, const ObEsQue
   const ObString rowkey = ROWKEY_NAME;
   if (OB_ISNULL(query_req)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null pointer", K(ret));
   } else if (QUERY_ITEM_QUERY != query_item &&
              QUERY_ITEM_KNN != query_item &&
              QUERY_ITEM_HYBRID != query_item) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid query item", K(ret), K(query_item));
   } else if (QUERY_ITEM_QUERY == query_item) {
     // when is full text search, add hit
     ObQueryReqFromJson *base_table_req = NULL;
@@ -209,7 +199,6 @@ int ObESQueryParser::choose_limit(ObQueryReqFromJson *query_req, ObReqConstExpr 
   if (!query_req->get_limit()->expr_name.is_numeric() ||
       !size_expr->expr_name.is_numeric()) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("unexpectd value type", K(ret), K(query_req->get_limit()->expr_name), K(size_expr->expr_name));
   } else if (OB_FAIL(convert_const_numeric(query_req->get_limit()->expr_name, limit_val))) {
   } else if (OB_FAIL(convert_const_numeric(size_expr->expr_name, size_val))) {
   } else if (size_val < limit_val) {
@@ -257,10 +246,8 @@ int ObESQueryParser::init_default_params(ObIJsonBase &req_node)
     if (OB_SEARCH_NOT_FOUND == ret) {
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("fail to get rank node", K(ret));
     }
   } else if (fusion_node != NULL && OB_FAIL(parse_rank(*fusion_node))) {
-    LOG_WARN("fail to parse rank node", K(ret));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(req_node.get_object_value(size_key, size_node))) {
@@ -270,10 +257,8 @@ int ObESQueryParser::init_default_params(ObIJsonBase &req_node)
       if (OB_FAIL(ObReqConstExpr::construct_const_expr(default_size_, alloc_, SIZE_DEFAULT, ObIntType))) {
       }
     } else {
-      LOG_WARN("fail to get rank node", K(ret));
     }
   } else if (size_node != NULL && OB_FAIL(parse_const(*size_node, default_size_, true))) {
-    LOG_WARN("fail to parse rank node", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -294,23 +279,19 @@ int ObESQueryParser::init_default_params(ObIJsonBase &req_node)
           LOG_USER_WARN(OB_WARN_OPTION_BELOW_LIMIT, "rank_window_size", "size");
         } else if (window_size < 1) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid window size value", K(ret), K(window_size));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (window_size < 1) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid window size value", K(ret), K(window_size));
       } else if (fusion_config_.rank_const == NULL && // use default rank const
                  OB_FAIL(ObReqConstExpr::construct_const_expr(fusion_config_.rank_const, alloc_, RANK_CONST_DEFAULT, ObIntType))) {
-        LOG_WARN("fail to create const expr", K(ret));
       } else {
         // verify validilty
         int64_t rank_const = 0;
         if (OB_FAIL(convert_const_numeric(fusion_config_.rank_const->expr_name, rank_const))) {
         } else if (rank_const < 1) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid rank const value", K(ret), K(rank_const));
         }
       }
     }
@@ -324,10 +305,8 @@ int ObESQueryParser::parse_rank(ObIJsonBase &req_node)
   ObString key;
   if (req_node.json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("unexpectd json type", K(ret), K(req_node.json_type()));
   } else if (req_node.element_count() != 1) {
     ret = OB_ERR_PARSER_SYNTAX;
-    LOG_WARN("unexpected param count", K(ret));
   } else if (OB_FAIL(req_node.get_key(0, key))) {
   } else if (key.case_compare("rrf") == 0) {
     ObIJsonBase *sub_node = NULL;
@@ -338,7 +317,6 @@ int ObESQueryParser::parse_rank(ObIJsonBase &req_node)
     }
   } else {
     ret = OB_ERR_PARSER_SYNTAX;
-    LOG_WARN("invalid query param", K(ret), K(key));
   }
 
   return ret;
@@ -350,7 +328,6 @@ int ObESQueryParser::parse_rrf(ObIJsonBase &req_node)
   uint64_t count = req_node.element_count();
   if (req_node.json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("unexpectd json type", K(ret), K(req_node.json_type()));
   }
   for (uint64_t i = 0; OB_SUCC(ret) && i < count; i++) {
     ObString key;
@@ -365,7 +342,6 @@ int ObESQueryParser::parse_rrf(ObIJsonBase &req_node)
       }
     } else {
       ret = OB_ERR_PARSER_SYNTAX;
-      LOG_WARN("not supported sytnax in query", K(ret), K(key));
     }
   }
   return ret;
@@ -381,10 +357,8 @@ int ObESQueryParser::knn_fusion(const ObIArray<ObQueryReqFromJson*> &knn_queries
   const ObString rowkey_hint = HIDDEN_COLUMN_VISIBLE_HINT;
   if (OB_ISNULL(multi_set_table = OB_NEWx(ObMultiSetTable, &alloc_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create query request", K(ret));
   } else if (OB_ISNULL(res = OB_NEWx(ObQueryReqFromJson, &alloc_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create query request", K(ret));
   } else if (OB_FAIL(ObReqColumnExpr::construct_column_expr(rowkey_expr, alloc_, rowkey))) {
   }
   for (uint64_t i = 0; OB_SUCC(ret) && i < knn_queries.count(); i++) {
@@ -441,11 +415,9 @@ int ObESQueryParser::convert_const_numeric(const ObString &cont_val, int64_t &va
   if (err == 0) {
     if (val > UINT_MAX32) {
       ret = OB_ERR_INVALID_PARAM_ENCOUNTERED;
-      LOG_WARN("input value out of range", K(ret), K(val));
     }
   } else {
     ret = OB_ERR_INVALID_PARAM_ENCOUNTERED;
-    LOG_WARN("input value out of range", K(ret));
   }
   return ret;
 }
@@ -458,11 +430,9 @@ int ObESQueryParser::convert_signed_const_numeric(const ObString &cont_val, int6
   if (err == 0) {
     if (val > INT_MAX32 || val < INT_MIN32) {
       ret = OB_ERR_INVALID_PARAM_ENCOUNTERED;
-      LOG_WARN("input value out of 32-bit range", K(ret), K(val));
     }
   } else {
     ret = OB_ERR_INVALID_PARAM_ENCOUNTERED;
-    LOG_WARN("input value must be a integer", K(ret));
   }
   return ret;
 }
@@ -491,12 +461,10 @@ int ObESQueryParser::wrap_json_result(ObQueryReqFromJson *&query_req)
             found = true;
           }
           if (found && OB_FAIL(j_obj_expr->params.push_back(col_expr))) {
-            LOG_WARN("fail to append select item", K(ret));
           }
         }
         if (OB_SUCC(ret) && !found) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("fail to find output expr", K(ret), K(col_name->expr_name));
         }
       }
     }
@@ -506,7 +474,6 @@ int ObESQueryParser::wrap_json_result(ObQueryReqFromJson *&query_req)
       ObReqColumnExpr *col = NULL;
       if (score->alias_name.empty()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to get score item alias", K(ret));
       } else if (OB_FAIL(ObReqConstExpr::construct_const_expr(col_name, alloc_, score->alias_name, ObVarcharType))) {
       } else if (OB_FAIL(j_obj_expr->params.push_back(col_name))) {
       } else if (OB_FAIL(ObReqColumnExpr::construct_column_expr(col, alloc_, score->alias_name))) {
@@ -562,14 +529,12 @@ int ObESQueryParser::parse_source(ObIJsonBase &req_node)
   int ret = OB_SUCCESS;
   if (req_node.json_type() != ObJsonNodeType::J_ARRAY) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("unexpectd json type", K(ret), K(req_node.json_type()));
   }
   for (uint64_t i = 0; OB_SUCC(ret) && i < req_node.element_count(); i++) {
     ObIJsonBase *val_node = NULL;
     if (OB_FAIL(req_node.get_array_element(i, val_node))) {
     } else if (val_node->json_type() != ObJsonNodeType::J_STRING) {
       ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-      LOG_WARN("unexpectd json type", K(ret), K(val_node->json_type()));
     } else {
       ObString field_name(val_node->get_data_length(), val_node->get_data());
       if (OB_FAIL(source_cols_.push_back(field_name))) {
@@ -622,9 +587,7 @@ int ObESQueryParser::add_partition_keys_to_select(ObQueryReqFromJson *fts_base, 
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < part_cols_.count(); i++) {
       if (OB_NOT_NULL(fts_base) && OB_FAIL(fts_base->select_items_.push_back(part_cols_.at(i)))) {
-        LOG_WARN("failed to add partition expr to fts select items", K(ret));
       } else if (OB_NOT_NULL(knn_base) && OB_FAIL(knn_base->select_items_.push_back(part_cols_.at(i)))) {
-        LOG_WARN("failed to add partition expr to knn select items", K(ret));
       }
     }
   }
@@ -638,7 +601,6 @@ int ObESQueryParser::set_default_score(ObQueryReqFromJson *query_req, double def
   // negative score is invalid
   if (default_score < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid default score", K(ret), K(default_score));
   } else if (OB_FAIL(ObReqConstExpr::construct_const_numeric_expr(score_expr, alloc_, default_score, ObIntType))) {
   } else if (OB_FAIL(query_req->add_score_item(alloc_, score_expr))) {
   }
@@ -686,7 +648,6 @@ int ObESQueryParser::construct_hybrid_query(ObQueryReqFromJson *fts, ObQueryReqF
   } else if (OB_FAIL(get_base_table_query(knn, base_table_knn_req, &knn_table_type))) {
   } else if (OB_ISNULL(hybrid = OB_NEWx(ObQueryReqFromJson, &alloc_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create query request", K(ret));
   } else if (OB_FAIL(ObReqColumnExpr::construct_column_expr(fts_rowkey, alloc_, rowkey))) {
   } else if (OB_FAIL(ObReqColumnExpr::construct_column_expr(knn_rowkey, alloc_, rowkey))) {
   } else if (OB_FAIL(ObReqColumnExpr::construct_column_expr(fts_col, alloc_, FTS_SCORE_NAME))) {
@@ -695,7 +656,6 @@ int ObESQueryParser::construct_hybrid_query(ObQueryReqFromJson *fts, ObQueryReqF
   } else if (FALSE_IT(knn_score = knn_col)) {
   } else if (OB_ISNULL(join_table = OB_NEWx(ObReqJoinedTable, &alloc_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create query request", K(ret));
   } else if (OB_FAIL(base_table_fts_req->add_req_hint(rowkey_hint))) {
   } else if (OB_FAIL(knn_table_type != MULTI_SET && base_table_knn_req->add_req_hint(rowkey_hint))) {
   } else if (OB_FAIL(base_table_fts_req->select_items_.push_back(fts_rowkey))) {
@@ -725,23 +685,18 @@ int ObESQueryParser::construct_hybrid_query(ObQueryReqFromJson *fts, ObQueryReqF
     } else {
       // only for unitest
       if (!knn->is_score_item_exist() && OB_FAIL(add_score_col("", *knn))) {
-        LOG_WARN("fail to add score col", K(ret));
       }
     }
     // add partition key column references to outer queries if there are any sub queries
     for (int64_t i = 0; OB_SUCC(ret) && i < part_aliases_.count(); i++) {
       if (base_table_fts_req != fts && OB_FAIL(fts->select_items_.push_back(part_aliases_.at(i)))) {
-        LOG_WARN("fail to add partition key to fts outer query select items", K(ret), K(i));
       } else if (base_table_knn_req != knn && !knn->output_all_columns_ &&
                  OB_FAIL(knn->select_items_.push_back(part_aliases_.at(i)))) {
-        LOG_WARN("fail to add partition key to knn outer query select items", K(ret), K(i));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (base_table_fts_req != fts && OB_FAIL(fts->select_items_.push_back(fts_rowkey))) {
-      LOG_WARN("fail to create query request", K(ret));
     } else if (base_table_knn_req != knn && !knn->output_all_columns_ && OB_FAIL(knn->select_items_.push_back(knn_rowkey))) {
-      LOG_WARN("fail to create query request", K(ret));
     }
   }
 
@@ -811,7 +766,6 @@ int ObESQueryParser::parse_basic_table(const ObString &table_name, ObQueryReqFro
   ObReqTable *table = NULL;
   if (OB_ISNULL(table = OB_NEWx(ObReqTable, &alloc_, BASE_TABLE, table_name, database_name_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create query request", K(ret));
   } else if (OB_FAIL(query_req->from_items_.push_back(table))) {
   }
   return ret;
@@ -825,7 +779,6 @@ int ObESQueryParser::parse_query(ObIJsonBase &req_node, ObQueryReqFromJson *&que
   ObReqExpr *condition_expr = nullptr;
   if (OB_ISNULL(query_req = OB_NEWx(ObQueryReqFromJson, &alloc_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create query request", K(ret));
   } else if (OB_FAIL(ObEsQueryInfo::init_query_info(query_info, alloc_, query_req, nullptr, QUERY_ITEM_QUERY, true))) {
   } else if (OB_FAIL(get_query_depth(req_node, query_info->total_depth_))) {
   } else if (OB_FAIL(parse_single_term(req_node, *query_info))) {
@@ -836,10 +789,8 @@ int ObESQueryParser::parse_query(ObIJsonBase &req_node, ObQueryReqFromJson *&que
 
   if (OB_FAIL(ret)) {
   } else if (OB_NOT_NULL(condition_expr) && OB_FAIL(query_req->condition_items_.push_back(condition_expr))) {
-    LOG_WARN("failed add term to query request", K(ret));
   } else if (!query_info->need_construct_sub_query_with_minimum_should_match() &&
              OB_NOT_NULL(score_expr) && OB_FAIL(query_req->add_score_item(alloc_, score_expr))) {
-    LOG_WARN("failed add term to score items", K(ret));
   } else if (OB_FAIL(parse_basic_table(table_name_, query_req))) {
   } else if (OB_FAIL(construct_sub_query_with_minimum_should_match(query_req, *query_info, "_fts_sub"))) {
   } else if (query_req->score_items_.empty()) {
@@ -866,7 +817,6 @@ int ObESQueryParser::construct_expr_with_boost(ObReqExpr *base_expr, ObReqConstE
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(boost_expr) && boost_expr->get_numeric_value() < 0.0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("boost value must not be negative", K(ret));
   } else if (OB_ISNULL(boost_expr) || boost_expr->get_numeric_value() == 1.0) {
     result = base_expr;
   } else {
@@ -884,7 +834,6 @@ int ObESQueryParser::construct_es_expr_field(ObReqColumnExpr *raw_field, ObReqEx
   int ret = OB_SUCCESS;
   if (OB_ISNULL(raw_field)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("raw_field is null", K(ret));
   } else {
     ObReqColumnExpr *col_field = nullptr;
     double weight = (raw_field->weight_ == -1.0) ? 1.0 : raw_field->weight_;
@@ -907,13 +856,11 @@ int ObESQueryParser::construct_es_expr_options(ObEsQueryInfo &query_info)
   ObString options_str;
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate memory for match params buffer", K(ret));
   } else if (OB_FAIL(databuff_printf(buf, MATCH_PARAMS_BUF_SIZE, pos, "operator=or"))) {
   } else if (OB_FAIL(databuff_printf(buf, MATCH_PARAMS_BUF_SIZE, pos, ";boost=%.15g",
                      OB_NOT_NULL(query_info.boost_expr_) ? query_info.boost_expr_->get_numeric_value() : 1.0))) {
   } else if (msm_val > 0 &&
              OB_FAIL(databuff_printf(buf, MATCH_PARAMS_BUF_SIZE, pos, ";minimum_should_match=%ld", msm_val))) {
-    LOG_WARN("fail to write minimum_should_match", K(ret));
   } else if (OB_FAIL(databuff_printf(buf, MATCH_PARAMS_BUF_SIZE, pos, ";type=%s", score_type_str))) {
   } else if (OB_FALSE_IT(options_str.assign_ptr(buf, pos))) {
   } else if (OB_FAIL(ObReqConstExpr::construct_const_expr(query_info.esql_options_expr_, alloc_, options_str, ObVarcharType))) {
@@ -926,7 +873,6 @@ int ObESQueryParser::construct_es_expr(ObEsQueryInfo &query_info)
   int ret = OB_SUCCESS;
   if (!query_info.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid query info for esql", K(ret));
   } else {
     // construct fields
     common::ObSEArray<ObReqExpr *, 4, common::ModulePageAllocator, true> params;
@@ -945,7 +891,6 @@ int ObESQueryParser::construct_es_expr(ObEsQueryInfo &query_info)
       ObString keywords_str;
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to allocate memory for keyword param buffer", K(ret));
       } else if (OB_FAIL(databuff_printf(buf, OB_MAX_SQL_LENGTH, pos, "%.*s", query_info.query_text_.length(), query_info.query_text_.ptr()))) {
       } else if (OB_FALSE_IT(keywords_str = ObString(pos, buf))) {
       } else if (OB_FAIL(ObReqConstExpr::construct_const_expr(keywords, alloc_, keywords_str, ObVarcharType))) {
@@ -976,7 +921,6 @@ int ObESQueryParser::parse_bool(ObIJsonBase &req_node, ObEsQueryInfo &query_info
   query_info.query_item_ = QUERY_ITEM_BOOL;
   if (req_node.json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("unexpectd json type", K(ret), K(req_node.json_type()));
   } else if (OB_FALSE_IT(count = req_node.element_count())) {
   // Affects the default value of minimum_should_match.
   // IF exists must or filter, the default value of minimum_should_match will be 0.
@@ -1009,7 +953,6 @@ int ObESQueryParser::parse_bool(ObIJsonBase &req_node, ObEsQueryInfo &query_info
         ObReqConstExpr *zero_expr = nullptr;
         if (query_info.msm_info_.term_cnt_ != 0) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("term count must be 0 when no should clause", K(ret));
         } else if (OB_FAIL(ObReqConstExpr::construct_const_numeric_expr(zero_expr, alloc_, 0.0, ObIntType))) {
         } else {
           condition_item = zero_expr;
@@ -1017,10 +960,8 @@ int ObESQueryParser::parse_bool(ObIJsonBase &req_node, ObEsQueryInfo &query_info
       }
     } else {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not supported sytnax in query", K(ret), K(key));
     }
     if (OB_SUCC(ret) && OB_NOT_NULL(condition_item) && OB_FAIL(condition_items.push_back(condition_item))) {
-      LOG_WARN("failed add term to bool expr array", K(ret), K(i));
     }
   }
 
@@ -1070,14 +1011,11 @@ int ObESQueryParser::parse_must_clauses(ObIJsonBase &req_node, ObEsQueryInfo &qu
   if (req_node.json_type() != ObJsonNodeType::J_OBJECT &&
       req_node.json_type() != ObJsonNodeType::J_ARRAY) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("unexpectd json type", K(ret), K(req_node.json_type()));
   } else if (OB_FALSE_IT(count = req_node.element_count())) {
   } else if (count == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("must clause must not be empty", K(ret));
   } else if (req_node.json_type() == ObJsonNodeType::J_OBJECT && count > 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("must clause must only has one key", K(ret));
   } else {
     query_info.must_cnt_ = count;
   }
@@ -1093,10 +1031,8 @@ int ObESQueryParser::parse_must_clauses(ObIJsonBase &req_node, ObEsQueryInfo &qu
     } else if (OB_FAIL(parse_single_term(*clause_val, *sub_query_info))) {
     } else if (OB_NOT_NULL(sub_query_info->score_expr_) &&
                OB_FAIL(score_items.push_back(sub_query_info->score_expr_))) {
-      LOG_WARN("failed add term to score items", K(ret), K(i));
     } else if (OB_NOT_NULL(sub_query_info->condition_expr_) &&
                OB_FAIL(condition_items.push_back(sub_query_info->condition_expr_))) {
-      LOG_WARN("failed add term to condition items", K(ret), K(i));
     } else if (OB_FAIL(handle_msm_for_sub_score(query_info, *sub_query_info, sub_query_info->score_expr_))) {
     }
   }
@@ -1120,14 +1056,11 @@ int ObESQueryParser::parse_must_not_clauses(ObIJsonBase &req_node, ObEsQueryInfo
   if (req_node.json_type() != ObJsonNodeType::J_OBJECT &&
       req_node.json_type() != ObJsonNodeType::J_ARRAY) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("unexpectd json type", K(ret), K(req_node.json_type()));
   } else if (OB_FALSE_IT(count = req_node.element_count())) {
   } else if (count == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("must not clause must not be empty", K(ret));
   } else if (req_node.json_type() == ObJsonNodeType::J_OBJECT && count > 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("must not clause must only has one key", K(ret));
   } else {
     query_info.must_not_cnt_ = count;
   }
@@ -1143,13 +1076,11 @@ int ObESQueryParser::parse_must_not_clauses(ObIJsonBase &req_node, ObEsQueryInfo
     } else if (OB_FAIL(parse_single_term(*clause_val, *sub_query_info))) {
     } else if (OB_NOT_NULL(sub_query_info->condition_expr_)) {
       if (sub_query_info->msm_info_.apply_type_ != MSM_APPLY_WITH_SUB && OB_FAIL(condition_items.push_back(sub_query_info->condition_expr_))) {
-        LOG_WARN("failed add term to condition items", K(ret), K(i));
       }
     } else if (OB_ISNULL(one_expr)) {
       if (OB_FAIL(ObReqConstExpr::construct_const_numeric_expr(one_expr, alloc_, 1.0, ObIntType))) {
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("sub query filter expr is null", K(ret));
       }
     }
   }
@@ -1183,14 +1114,11 @@ int ObESQueryParser::parse_should_clauses(ObIJsonBase &req_node, ObEsQueryInfo &
   if (req_node.json_type() != ObJsonNodeType::J_OBJECT &&
       req_node.json_type() != ObJsonNodeType::J_ARRAY) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("unexpectd json type", K(ret), K(req_node.json_type()));
   } else if (OB_FALSE_IT(count = req_node.element_count())) {
   } else if (count == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("should clause must not be empty", K(ret));
   } else if (req_node.json_type() == ObJsonNodeType::J_OBJECT && count > 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("should clause must only has one key", K(ret));
   } else {
     query_info.should_cnt_ = count;
   }
@@ -1205,9 +1133,7 @@ int ObESQueryParser::parse_should_clauses(ObIJsonBase &req_node, ObEsQueryInfo &
     } else if (OB_FAIL(query_info.sub_query_infos_.push_back(sub_query_info))) {
     } else if (OB_FAIL(parse_single_term(*clause_val, *sub_query_info))) {
     } else if (OB_NOT_NULL(sub_query_info->score_expr_) && OB_FAIL(score_items.push_back(sub_query_info->score_expr_))) {
-      LOG_WARN("fail to add score expr to score items", K(ret), K(i));
     } else if (OB_NOT_NULL(sub_query_info->condition_expr_) && OB_FAIL(condition_items.push_back(sub_query_info->condition_expr_))) {
-      LOG_WARN("fail to add condition expr to should exprs", K(ret), K(i));
     } else if (OB_FAIL(handle_msm_for_sub_score(query_info, *sub_query_info, sub_query_info->score_expr_))) {
     }
   }
@@ -1238,14 +1164,11 @@ int ObESQueryParser::parse_filter_clauses(ObIJsonBase &req_node, ObEsQueryInfo &
   if (req_node.json_type() != ObJsonNodeType::J_OBJECT &&
       req_node.json_type() != ObJsonNodeType::J_ARRAY) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("unexpectd json type", K(ret), K(req_node.json_type()));
   } else if (OB_FALSE_IT(count = req_node.element_count())) {
   } else if (count == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("filter clause must not be empty", K(ret));
   } else if (req_node.json_type() == ObJsonNodeType::J_OBJECT && count > 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("filter clause must only has one key", K(ret));
   } else {
     query_info.filter_cnt_ = count;
   }
@@ -1260,7 +1183,6 @@ int ObESQueryParser::parse_filter_clauses(ObIJsonBase &req_node, ObEsQueryInfo &
     } else if (OB_FAIL(query_info.sub_query_infos_.push_back(sub_query_info))) {
     } else if (OB_FAIL(parse_single_term(*clause_val, *sub_query_info))) {
     } else if (OB_NOT_NULL(sub_query_info->condition_expr_) && OB_FAIL(condition_items.push_back(sub_query_info->condition_expr_))) {
-      LOG_WARN("failed add term to condition items", K(ret), K(i));
     }
   }
   if (OB_SUCC(ret)) {
@@ -1278,10 +1200,8 @@ int ObESQueryParser::parse_single_term(ObIJsonBase &req_node, ObEsQueryInfo &que
   int ret = OB_SUCCESS;
   if (req_node.json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("unexpectd json type", K(ret), K(req_node.json_type()));
   } else if (req_node.element_count() != 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("single term must only contain one term", K(ret));
   }
   ObString key;
   ObIJsonBase *sub_node = nullptr;
@@ -1314,7 +1234,6 @@ int ObESQueryParser::parse_single_term(ObIJsonBase &req_node, ObEsQueryInfo &que
     }
   } else {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not supported sytnax in query", K(ret), K(key));
   }
 
   if (OB_SUCC(ret) && enable_es_mode_ && query_info.support_es_mode()) {
@@ -1336,7 +1255,6 @@ int ObESQueryParser::construct_weighted_expr(ObReqExpr *base_expr, double weight
   int ret = OB_SUCCESS;
   if (OB_ISNULL(base_expr)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("base_expr is null", K(ret));
   } else if (weight == 1.0 || weight == -1.0) {
     weighted_expr = base_expr;
   } else {
@@ -1365,16 +1283,13 @@ int ObESQueryParser::parse_range(ObIJsonBase &req_node, ObEsQueryInfo &query_inf
   query_info.query_item_ = QUERY_ITEM_RANGE;
   if (req_node.json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("unexpectd json type", K(ret), K(req_node.json_type()));
   } else if (req_node.element_count() != 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("range must only contain one term", K(ret));
   } else if (OB_FAIL(req_node.get_key(0, col_name))) {
   } else if (OB_FAIL(req_node.get_object_value(0, sub_node))) {
   } else if (FALSE_IT(count = sub_node->element_count())) {
   } else if (count == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("unexpectd range condition", K(ret));
   } else if (OB_FAIL(create_column_or_base_expr(col_name, key_expr))) {
   }
   for (uint64_t i = 0; OB_SUCC(ret) && i < count; i++) {
@@ -1401,7 +1316,6 @@ int ObESQueryParser::parse_range(ObIJsonBase &req_node, ObEsQueryInfo &query_inf
     } else if (key.case_compare("boost") == 0) {
       if (var->get_numeric_value() < 0.0) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("boost value must not be negative", K(ret));
         break;
       } else {
         query_info.boost_expr_ = var;
@@ -1409,12 +1323,10 @@ int ObESQueryParser::parse_range(ObIJsonBase &req_node, ObEsQueryInfo &query_inf
       }
     } else {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not supported sytnax in query", K(ret), K(key));
     }
 
     if (OB_FAIL(ret)) {
     } else if (type != T_INVALID && OB_FAIL(ObReqOpExpr::construct_binary_op_expr(cmp_expr, alloc_, type, key_expr, var))) {
-      LOG_WARN("fail to construct cmp expr", K(ret));
     } else if (OB_FAIL(condition_exprs.push_back(cmp_expr))) {
     }
   }
@@ -1437,7 +1349,6 @@ int ObESQueryParser::parse_rank_feature(ObIJsonBase &req_node, ObEsQueryInfo &qu
   query_info.query_item_ = QUERY_ITEM_RANK_FEATURE;
   if (req_node.json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("unexpectd json type", K(ret), K(req_node.json_type()), K(req_node.element_count()));
   }
   ObRankFeatDef rank_feat_def;
   bool has_field = false;
@@ -1493,13 +1404,11 @@ int ObESQueryParser::parse_rank_feature(ObIJsonBase &req_node, ObEsQueryInfo &qu
       }
     } else {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("unexpectd rank feature param", K(ret), K(key));
     }
   }
   if (OB_FAIL(ret)) {
   } else if (!has_field || algorithm_count == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("rank feature must has field and one algorithm", K(ret));
   } else if (!query_info.need_cal_score_) {
   } else if (OB_FAIL(construct_rank_feat_expr(rank_feat_def, query_info.score_expr_))) {
   }
@@ -1520,7 +1429,6 @@ int ObESQueryParser::check_rank_feat_param(ObIJsonBase *sub_node, uint64_t &algo
       if (ret == OB_SEARCH_NOT_FOUND) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fail to get positive_score_impact value", K(ret));
       }
     } else {
       --count;
@@ -1529,23 +1437,18 @@ int ObESQueryParser::check_rank_feat_param(ObIJsonBase *sub_node, uint64_t &algo
     } else if (FALSE_IT(algorithm_count++)) {
     } else if (algorithm_count > 1) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("unexpectd rank feature param, only one algorithm is supported", K(ret), K(key));
     } else if (key.case_compare("saturation") == 0 &&
                count != 1) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("unexpectd rank feature param, saturation must has one param", K(ret), K(key));
     } else if (key.case_compare("sigmoid") == 0 &&
                count != 2) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("unexpectd rank feature param, sigmoid must has two params", K(ret), K(key));
     } else if (key.case_compare("linear") == 0 &&
                count != 0) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("unexpectd rank feature param, linear must has no param", K(ret), K(key));
     } else if (key.case_compare("log") == 0 &&
                count != 1) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("unexpectd rank feature param, log must has one param", K(ret), K(key));
     }
   }
   return ret;
@@ -1561,21 +1464,16 @@ int ObESQueryParser::parse_rank_feat_param(ObIJsonBase &req_node, const ObString
   ObIJsonBase *pos_val = NULL;
   positive = true;
   if (!para1.empty() && OB_FAIL(req_node.get_object_value(para1, val1))) {
-    LOG_WARN("fail to get pivot value", K(ret));
   } else if (!para2.empty() && OB_FAIL(req_node.get_object_value(para2, val2))) {
-    LOG_WARN("fail to get pivot value", K(ret));
   } else if (OB_FAIL(req_node.get_object_value(positive_str, pos_val))) {
     if (ret == OB_SEARCH_NOT_FOUND) {
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("fail to get positive_score_impact value", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
   } else if (val1 != NULL && OB_FAIL(parse_const(*val1, const_para1, true))) {
-    LOG_WARN("fail to parse const value", K(ret));
   } else if (val2 != NULL && OB_FAIL(parse_const(*val2, const_para2, true))) {
-    LOG_WARN("fail to parse const value", K(ret));
   } else if (pos_val != NULL) {
     positive = pos_val->get_boolean();
   }
@@ -1591,12 +1489,9 @@ int ObESQueryParser::construct_rank_feat_expr(const ObRankFeatDef &rank_feat_def
       ObReqOpExpr *add_expr = NULL;
       if (OB_ISNULL(rank_feat_def.number_field) || OB_ISNULL(rank_feat_def.pivot)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpectd null ptr", K(ret));
       } else if (OB_FAIL(ObReqOpExpr::construct_binary_op_expr(add_expr, alloc_, T_OP_ADD, rank_feat_def.number_field, rank_feat_def.pivot))) {
       } else if (rank_feat_def.positive_impact && OB_FAIL(ObReqOpExpr::construct_binary_op_expr(div_expr, alloc_, T_OP_DIV, rank_feat_def.number_field, add_expr))) {
-        LOG_WARN("fail to create div expr", K(ret));
       } else if (!rank_feat_def.positive_impact && OB_FAIL(ObReqOpExpr::construct_binary_op_expr(div_expr, alloc_, T_OP_DIV, rank_feat_def.pivot, add_expr))) {
-        LOG_WARN("fail to create div expr", K(ret));
       } else {
         rank_feat_expr = div_expr;
       }
@@ -1622,7 +1517,6 @@ int ObESQueryParser::construct_rank_feat_expr(const ObRankFeatDef &rank_feat_def
       ObReqOpExpr *add_expr = NULL;
       if (OB_ISNULL(rank_feat_def.number_field) || OB_ISNULL(rank_feat_def.scaling_factor)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpectd null ptr", K(ret));
       } else if (OB_FAIL(ObReqOpExpr::construct_binary_op_expr(add_expr, alloc_, T_OP_ADD, rank_feat_def.number_field, rank_feat_def.scaling_factor))) {
       } else if (OB_FAIL(ObReqExpr::construct_expr(ln_expr, alloc_, N_LN, add_expr))) {
       } else {
@@ -1637,14 +1531,11 @@ int ObESQueryParser::construct_rank_feat_expr(const ObRankFeatDef &rank_feat_def
       ObReqOpExpr *div_expr = NULL;
       if (OB_ISNULL(rank_feat_def.number_field) || OB_ISNULL(rank_feat_def.pivot) || OB_ISNULL(rank_feat_def.exponent)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpectd null ptr", K(ret));
       } else if (OB_FAIL(ObReqExpr::construct_expr(field_pow_expr, alloc_, N_POW, rank_feat_def.number_field, rank_feat_def.exponent))) {
       } else if (OB_FAIL(ObReqExpr::construct_expr(piv_pow_expr, alloc_, N_POW, rank_feat_def.pivot, rank_feat_def.exponent))) {
       } else if (OB_FAIL(ObReqOpExpr::construct_binary_op_expr(add_expr, alloc_, T_OP_ADD, field_pow_expr, piv_pow_expr))) {
       } else if (rank_feat_def.positive_impact && OB_FAIL(ObReqOpExpr::construct_binary_op_expr(div_expr, alloc_, T_OP_DIV, field_pow_expr, add_expr))) {
-        LOG_WARN("fail to create div expr", K(ret));
       } else if (!rank_feat_def.positive_impact && OB_FAIL(ObReqOpExpr::construct_binary_op_expr(div_expr, alloc_, T_OP_DIV, piv_pow_expr, add_expr))) {
-        LOG_WARN("fail to create div expr", K(ret));
       } else {
         rank_feat_expr = div_expr;
       }
@@ -1652,7 +1543,6 @@ int ObESQueryParser::construct_rank_feat_expr(const ObRankFeatDef &rank_feat_def
     }
     default: {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("unexpect rank feature expr type", K(ret), K(rank_feat_def.type));
     }
   }
   return ret;
@@ -1672,15 +1562,12 @@ int ObESQueryParser::parse_match(ObIJsonBase &req_node, ObEsQueryInfo &query_inf
   query_info.query_item_ = QUERY_ITEM_MATCH;
   if (req_node.json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("match expr should be object", K(ret));
   } else if (req_node.element_count() != 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("match expr should have exactly one element", K(ret));
   } else if (OB_FAIL(req_node.get_object_value(0, col_name, col_para))) {
   } else if (OB_FAIL(ObReqColumnExpr::construct_column_expr(col_expr, alloc_, col_name))) {
   } else if (col_para->json_type() == ObJsonNodeType::J_ARRAY) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("match field should have exactly one element", K(ret));
   } else if (col_para->json_type() != ObJsonNodeType::J_OBJECT) {
     query_text = ObString(col_para->get_data_length(), col_para->get_data()).trim();
     if (OB_FAIL(ObReqConstExpr::construct_const_expr(query_expr, alloc_, query_text, ObVarcharType))) {
@@ -1706,13 +1593,11 @@ int ObESQueryParser::parse_match(ObIJsonBase &req_node, ObEsQueryInfo &query_inf
         }
       } else {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("It's not supported to use this key in match expr", K(ret), K(key));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (!found_query) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("match expr should have query", K(ret));
     } else if (!query_info.need_cal_score_) {
     } else if (OB_FAIL(construct_expr_with_boost(match_expr, query_info.boost_expr_, score_expr))) {
     }
@@ -1721,7 +1606,6 @@ int ObESQueryParser::parse_match(ObIJsonBase &req_node, ObEsQueryInfo &query_inf
   // index hint
   ObQueryReqFromJson *query_req = query_info.query_req_;
   if (OB_SUCC(ret) && OB_FAIL(get_match_idx_name(col_name, idx_name))) {
-    LOG_WARN("fail to get match index name", K(ret));
   } else if (!idx_name.empty()) {
     if (query_req->match_idxs_.count() == 0) {
       // add table name first, for generate union merge hint
@@ -1757,15 +1641,12 @@ int ObESQueryParser::parse_term(ObIJsonBase &req_node, ObEsQueryInfo &query_info
   query_info.query_item_ = QUERY_ITEM_TERM;
   if (req_node.json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("term expr should be object", K(ret));
   } else if (req_node.element_count() != 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("term expr should have exactly one element", K(ret));
   } else if (OB_FAIL(req_node.get_object_value(0, col_name, col_para))) {
   } else if (OB_FAIL(create_column_or_base_expr(col_name, key_expr))) {
   } else if (col_para->json_type() == ObJsonNodeType::J_ARRAY) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("term field should have exactly one element", K(ret));
   } else if (col_para->json_type() != ObJsonNodeType::J_OBJECT) {
     if (OB_FAIL(parse_const(*col_para, value_expr))) {
     } else if (OB_FAIL(ObReqOpExpr::construct_binary_op_expr(eq_expr, alloc_, T_OP_EQ, key_expr, value_expr))) {
@@ -1787,12 +1668,10 @@ int ObESQueryParser::parse_term(ObIJsonBase &req_node, ObEsQueryInfo &query_info
         }
       } else {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("unsupported key in term expr", K(ret), K(key));
       }
     }
     if (OB_SUCC(ret) && OB_ISNULL(eq_expr)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("term expr should have value", K(ret));
     }
   }
 
@@ -1816,11 +1695,9 @@ int ObESQueryParser::parse_terms(ObIJsonBase &req_node, ObEsQueryInfo &query_inf
   query_info.query_item_ = QUERY_ITEM_TERMS;
   if (req_node.json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("terms expr should be object", K(ret));
   } else if (FALSE_IT(count = req_node.element_count())) {
   } else if (count == 0 || count > 2) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("terms expr only supports field and boost", K(ret));
   }
 
   for (uint64_t i = 0; OB_SUCC(ret) && i < count; i++) {
@@ -1833,16 +1710,12 @@ int ObESQueryParser::parse_terms(ObIJsonBase &req_node, ObEsQueryInfo &query_inf
     } else {
       if (has_field) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("terms expr only supports one field", K(ret));
       } else if (value_node->json_type() == ObJsonNodeType::J_OBJECT) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("It's not supported to use object as field value", K(ret), K(key));
       } else if (value_node->json_type() != ObJsonNodeType::J_ARRAY) {
         ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-        LOG_WARN("unexpectd value type, should be array", K(ret), K(value_node->json_type()));
       } else if (key.empty()) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("field should not be empty string", K(ret));
       } else if (FALSE_IT(has_field = true)) {
       } else if (OB_FAIL(create_column_or_base_expr(key, key_expr))) {
       } else if (OB_FAIL(parse_keyword_array(*value_node, value_exprs))) {
@@ -1854,7 +1727,6 @@ int ObESQueryParser::parse_terms(ObIJsonBase &req_node, ObEsQueryInfo &query_inf
   if (OB_FAIL(ret)) {
   } else if (!has_field) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("terms expr should have field", K(ret));
   } else if (FALSE_IT(query_info.condition_expr_ = in_expr)) {
   } else if (!query_info.need_cal_score_) {
   } else if (OB_FAIL(construct_expr_with_boost(in_expr, query_info.boost_expr_, query_info.score_expr_))) {
@@ -1870,11 +1742,9 @@ int ObESQueryParser::parse_query_string_type(ObIJsonBase &req_node, ObEsQueryInf
   if (OB_FAIL(req_node.get_object_value(type_key, type_node))) {
     if (ret == OB_SEARCH_NOT_FOUND) {
     } else {
-      LOG_WARN("fail to get type field", K(ret));
     }
   } else if (OB_ISNULL(type_node) || type_node->json_type() == ObJsonNodeType::J_NULL) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("type field is null", K(ret));
   } else if (type_node->json_type() == ObJsonNodeType::J_STRING) {
     ObString type_str(type_node->get_data_length(), type_node->get_data());
     if (type_str.case_compare("best_fields") == 0) {
@@ -1891,7 +1761,6 @@ int ObESQueryParser::parse_query_string_type(ObIJsonBase &req_node, ObEsQueryInf
     }
   } else {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("type field should be string", K(ret), K(type_node->json_type()));
   }
   return ret;
 }
@@ -1904,11 +1773,9 @@ int ObESQueryParser::parse_query_string_fields(ObIJsonBase &req_node, ObEsQueryI
   if (OB_FAIL(req_node.get_object_value(fields_key, fields_node))) {
   } else if (OB_ISNULL(fields_node) || fields_node->json_type() == ObJsonNodeType::J_NULL) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("fields field is null", K(ret));
   } else if (fields_node->json_type() == ObJsonNodeType::J_ARRAY) {
     if (fields_node->element_count() == 0) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("fields should not be empty", K(ret));
     }
     for (uint64_t i = 0; OB_SUCC(ret) && i < fields_node->element_count(); i++) {
       ObIJsonBase *field_node = nullptr;
@@ -1925,7 +1792,6 @@ int ObESQueryParser::parse_query_string_fields(ObIJsonBase &req_node, ObEsQueryI
     }
   } else {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("fields should be string or array", K(ret), K(fields_node->json_type()));
   }
   return ret;
 }
@@ -1938,11 +1804,9 @@ int ObESQueryParser::parse_query_string_operator(ObIJsonBase &req_node, ObEsQuer
   if (OB_FAIL(req_node.get_object_value(operator_key, operator_node))) {
     if (ret == OB_SEARCH_NOT_FOUND) {
     } else {
-      LOG_WARN("fail to get default_operator field", K(ret));
     }
   } else if (OB_ISNULL(operator_node) || operator_node->json_type() == ObJsonNodeType::J_NULL) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("default_operator field is null", K(ret));
   } else if (operator_node->json_type() == ObJsonNodeType::J_STRING) {
     ObString operator_str(operator_node->get_data_length(), operator_node->get_data());
     if (operator_str.case_compare("AND") == 0) {
@@ -1955,7 +1819,6 @@ int ObESQueryParser::parse_query_string_operator(ObIJsonBase &req_node, ObEsQuer
     }
   } else {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("default_operator field should be string", K(ret), K(operator_node->json_type()));
   }
   return ret;
 }
@@ -1969,14 +1832,11 @@ int ObESQueryParser::parse_query_string_query(ObIJsonBase &req_node, ObEsQueryIn
   if (OB_FAIL(req_node.get_object_value(query_key, query_node))) {
   } else if (OB_ISNULL(query_node) || query_node->json_type() == ObJsonNodeType::J_NULL) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("query field is null", K(ret));
   } else if (query_node->json_type() != ObJsonNodeType::J_STRING) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("query should be string", K(ret), K(query_node->json_type()));
   } else if (OB_FALSE_IT(query_text.assign_ptr(query_node->get_data(), query_node->get_data_length()))) {
   } else if (query_text.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("query should not be empty", K(ret));
   } else if (OB_FAIL(parse_keyword(query_text, query_info))) {
   }
   return ret;
@@ -1990,15 +1850,12 @@ int ObESQueryParser::parse_query_string_boost(ObIJsonBase &req_node, ObEsQueryIn
   if (OB_FAIL(req_node.get_object_value(boost_key, boost_node))) {
     if (ret == OB_SEARCH_NOT_FOUND) {
     } else {
-      LOG_WARN("fail to get boost field", K(ret));
     }
   } else if (OB_ISNULL(boost_node) || boost_node->json_type() == ObJsonNodeType::J_NULL) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("boost field is null", K(ret));
   } else if (!boost_node->is_json_number(boost_node->json_type()) &&
              boost_node->json_type() != ObJsonNodeType::J_STRING) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("boost field should be number or string", K(ret), K(boost_node->json_type()));
   } else if (OB_FAIL(parse_boost(*boost_node, query_info.boost_expr_))) {
   }
   return ret;
@@ -2019,11 +1876,9 @@ int ObESQueryParser::parse_query_string(ObIJsonBase &req_node, ObEsQueryInfo &qu
   }
   if (req_node.json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("unexpectd json type", K(ret), K(req_node.json_type()));
   } else if (OB_FALSE_IT(count = req_node.element_count())) {
   } else if (count == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("query_string should have at least one element", K(ret));
   } else {
     uint32_t parsed_keys = 0;
     if (OB_SUCC(parse_query_string_type(req_node, query_info))) {
@@ -2031,7 +1886,6 @@ int ObESQueryParser::parse_query_string(ObIJsonBase &req_node, ObEsQueryInfo &qu
     } else if (ret == OB_SEARCH_NOT_FOUND) {
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("fail to parse query_string type", K(ret));
     }
 
     if (OB_SUCC(ret)) {
@@ -2040,7 +1894,6 @@ int ObESQueryParser::parse_query_string(ObIJsonBase &req_node, ObEsQueryInfo &qu
       } else if (ret == OB_SEARCH_NOT_FOUND) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fail to parse query_string operator", K(ret));
       }
     }
 
@@ -2048,7 +1901,6 @@ int ObESQueryParser::parse_query_string(ObIJsonBase &req_node, ObEsQueryInfo &qu
       if (OB_SUCC(parse_query_string_fields(req_node, query_info))) {
         parsed_keys++;
       } else {
-        LOG_WARN("fail to parse query_string fields", K(ret));
       }
     }
 
@@ -2056,7 +1908,6 @@ int ObESQueryParser::parse_query_string(ObIJsonBase &req_node, ObEsQueryInfo &qu
       if (OB_SUCC(parse_query_string_query(req_node, query_info))) {
         parsed_keys++;
       } else {
-        LOG_WARN("fail to parse query_string query", K(ret));
       }
     }
 
@@ -2066,7 +1917,6 @@ int ObESQueryParser::parse_query_string(ObIJsonBase &req_node, ObEsQueryInfo &qu
       } else if (ret == OB_SEARCH_NOT_FOUND) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fail to parse minimum_should_match", K(ret));
       }
     }
 
@@ -2076,12 +1926,10 @@ int ObESQueryParser::parse_query_string(ObIJsonBase &req_node, ObEsQueryInfo &qu
       } else if (ret == OB_SEARCH_NOT_FOUND) {
         ret = OB_SUCCESS;
       } else {
-      LOG_WARN("fail to parse query_string boost", K(ret));
       }
     }
 
     if (OB_SUCC(ret) && OB_FAIL(parse_query_string_by_type(query_info))) {
-      LOG_WARN("fail to parse query_string by type", K(ret));
     }
 
     if (OB_SUCC(ret) && parsed_keys != count) {
@@ -2095,7 +1943,6 @@ int ObESQueryParser::parse_query_string(ObIJsonBase &req_node, ObEsQueryInfo &qu
                    key.case_compare("minimum_should_match") != 0 &&
                    key.case_compare("boost") != 0) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("unsupported key in query_string", K(ret), K(key));
         }
       }
     }
@@ -2109,16 +1956,13 @@ int ObESQueryParser::parse_field(ObIJsonBase &val_node, ObReqColumnExpr *&field)
   ObString field_str;
   if (val_node.json_type() != ObJsonNodeType::J_STRING) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("unexpectd json type", K(ret), K(val_node.json_type()));
   } else if (OB_FALSE_IT(field_str = ObString(val_node.get_data_length(), val_node.get_data()))) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("field name is null", K(ret));
   } else {
     char *pure_field_str = static_cast<char *>(alloc_.alloc(field_str.length() + 1));
     int64_t str_len = 0;
     if (OB_ISNULL(pure_field_str)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to create field(s) expr", K(ret));
     } else {
       for (int64_t i = 0; i < field_str.length(); i++) {
         if (field_str.ptr()[i] != ' ') {
@@ -2147,7 +1991,6 @@ int ObESQueryParser::parse_field(ObIJsonBase &val_node, ObReqColumnExpr *&field)
         expr_name = ObString(str_len, pure_field_str);
       }
       if (OB_SUCC(ret) && OB_FAIL(ObReqColumnExpr::construct_column_expr(field, alloc_, expr_name, weight))) {
-        LOG_WARN("fail to create field(s) expr", K(ret));
       }
     }
   }
@@ -2162,7 +2005,6 @@ int ObESQueryParser::parse_keyword(const ObString &query_text, ObEsQueryInfo &qu
   char *query_str = static_cast<char *>(alloc_.alloc(query_text.length() + 1));
   if (OB_ISNULL(query_str)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate memory for query copy", K(ret));
   } else {
     MEMCPY(query_str, query_text.ptr(), query_text.length());
     query_str[query_text.length()] = '\0';
@@ -2180,13 +2022,11 @@ int ObESQueryParser::parse_keyword(const ObString &query_text, ObEsQueryInfo &qu
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("unsupported item type", K(ret), K(query_info.query_item_));
   }
 
   if (OB_FAIL(ret)) {
   } else if (raw_keywords.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("query text is empty", K(ret));
   } else {
     query_info.msm_info_.term_cnt_ = query_info.keyword_exprs_.count();
     query_info.query_text_ = query_text;
@@ -2242,7 +2082,6 @@ int ObESQueryParser::parse_keyword_query_string(ObEsQueryInfo &query_info,
     }
     if (*current == '^') {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid keyword in query", K(ret));
       break;
     }
     const char *keyword_start = current;
@@ -2277,7 +2116,6 @@ int ObESQueryParser::parse_keyword_query_string(ObEsQueryInfo &query_info,
           }
         }
         if (OB_SUCC(ret) && OB_FAIL(raw_keywords.push_back(keyword))) {
-          LOG_WARN("fail to add raw keyword", K(ret));
         }
       }
     }
@@ -2295,7 +2133,6 @@ int ObESQueryParser::parse_keyword_query_string(ObEsQueryInfo &query_info,
         }
       } else if (OB_FAIL(current_phrase_keywords.push_back(current_keyword))) {
       } else if (i == raw_keywords.count() - 1 && OB_FAIL(process_phrase_keywords(current_phrase_keywords, query_info))) {
-        LOG_WARN("fail to process phrase keywords", K(ret));
       }
     }
   } else {
@@ -2313,11 +2150,9 @@ int ObESQueryParser::parse_keyword_array(ObIJsonBase &val_node, common::ObIArray
   uint64_t count = 0;
   if (val_node.json_type() != ObJsonNodeType::J_ARRAY) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("unexpectd json type", K(ret), K(val_node.json_type()));
   } else if (FALSE_IT(count = val_node.element_count())) {
   } else if (count == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("keyword array should have at least one element", K(ret));
   } else {
     for (uint64_t i = 0; OB_SUCC(ret) && i < count; i++) {
       ObIJsonBase *value_node = NULL;
@@ -2338,7 +2173,6 @@ int ObESQueryParser::parse_boost(ObIJsonBase &req_node, ObReqConstExpr *&boost_e
   if (OB_FAIL(parse_const(req_node, tmp_boost_expr, true))) {
   } else if (tmp_boost_expr->get_numeric_value() < 0.0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("boost value must be greater than 0", K(ret));
   } else {
     boost_expr = tmp_boost_expr;
   }
@@ -2353,7 +2187,6 @@ int ObESQueryParser::parse_const(ObIJsonBase &val_node, ObReqConstExpr *&var, co
   if (!cover_value_to_str &&
     (val_node.json_type() == ObJsonNodeType::J_ARRAY || val_node.json_type() == ObJsonNodeType::J_OBJECT)) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("unexpectd json type", K(ret), K(val_node.json_type()));
   } else if (OB_FAIL(val_node.print(j_buffer, false))) {
   } else {
     ObString expr_name;
@@ -2367,7 +2200,6 @@ int ObESQueryParser::parse_const(ObIJsonBase &val_node, ObReqConstExpr *&var, co
       char *temp_str = static_cast<char *>(alloc_.alloc(str_len + 1));
       if (OB_ISNULL(temp_str)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to allocate memory for temp string", K(ret));
       } else {
         MEMCPY(temp_str, expr_name.ptr(), str_len);
         temp_str[str_len] = '\0';
@@ -2390,7 +2222,6 @@ int ObESQueryParser::construct_order_by_item(ObReqExpr *order_expr, bool ascent,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(order_info = OB_NEWx(OrderInfo, &alloc_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create order info", K(ret));
   } else {
     order_info->order_item = order_expr;
     order_info->ascent = ascent;
@@ -2419,10 +2250,8 @@ int ObESQueryParser::parse_knn(ObIJsonBase &req_node, ObQueryReqFromJson *&query
   const char *params_name[] = {"field", "k", "query_vector"};
   if (req_node.json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("unexpectd json type", K(ret), K(req_node.json_type()));
   } else if (OB_ISNULL(query_req = OB_NEWx(ObQueryReqFromJson, &alloc_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create query request", K(ret));
   } else if (OB_FAIL(construct_required_params(params_name, 3, required_params))) {
   }
   ObReqColumnExpr *vec_field = NULL;
@@ -2468,7 +2297,6 @@ int ObESQueryParser::parse_knn(ObIJsonBase &req_node, ObQueryReqFromJson *&query
       }
     } else {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not supported sytnax in query", K(ret), K(key));
     }
   }
   // construct normalize expr
@@ -2485,9 +2313,7 @@ int ObESQueryParser::parse_knn(ObIJsonBase &req_node, ObQueryReqFromJson *&query
   } else if (!required_params.empty()) {
     ret = OB_ERR_PARSER_SYNTAX;
     ObString param_name = required_params.begin()->first;
-    LOG_WARN("query required params is missed", K(ret), K(param_name));
   } else if (filter_expr != NULL && OB_FAIL(query_req->condition_items_.push_back(filter_expr))) {
-    LOG_WARN("fail to push query item", K(ret));
   } else if (OB_FAIL(parse_basic_table(table_name_, query_req))) {
   } else if (OB_FAIL(get_distance_algor_type(*vec_field, alg_type))) {
   } else if (alg_type == ObVectorIndexDistAlgorithm::VIDA_IP) {
@@ -2524,7 +2350,6 @@ int ObESQueryParser::parse_knn(ObIJsonBase &req_node, ObQueryReqFromJson *&query
 
   if (OB_SUCC(ret) && OB_NOT_NULL(query_info) &&
       OB_FAIL(construct_sub_query_with_minimum_should_match(query_req, *query_info, "_vs_sub"))) {
-    LOG_WARN("fail to construct sub query with minimum should match", K(ret));
   }
 
   return ret;
@@ -2570,15 +2395,12 @@ int ObESQueryParser::set_fts_limit_expr(ObQueryReqFromJson *query, const ObReqCo
     }
   } else if (OB_ISNULL(size_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null ptr", K(ret));
   } else if (OB_FAIL(convert_const_numeric(size_expr->expr_name, size_val))) {
   }
   if (OB_FAIL(ret)) {
   } else if (from_expr != NULL && OB_FAIL(convert_const_numeric(from_expr->expr_name, from_val))) {
-    LOG_WARN("fail to convert from expr", K(ret));
   } else if (OB_ISNULL(buf = reinterpret_cast<char*>(alloc_.alloc(ObFastFormatInt::MAX_DIGITS10_STR_SIZE)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate memory", K(ret));
   } else {
     int64_t limit_val = (size_val + from_val) * FTS_LIMIT_FACTOR;
     ObReqConstExpr *fts_limit_expr = nullptr;
@@ -2597,13 +2419,11 @@ int ObESQueryParser::get_distance_algor_type(const ObReqColumnExpr &vec_field, O
   if (!index_name_map_.created()) {
     // do nothing
   } else if (OB_FAIL(index_name_map_.get_refactored(vec_field.expr_name, index_info))) {
-    LOG_WARN("fail to get vector index info", K(ret), K(vec_field.expr_name));
     if (ret == OB_HASH_NOT_EXIST) {
       ret = OB_SUCCESS;
     }
   } else if (OB_ISNULL(index_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpectd null ptr", K(ret), K(vec_field.expr_name));
   } else {
     alg_type = index_info->dist_algorithm_;
   }
@@ -2617,13 +2437,11 @@ int ObESQueryParser::get_match_idx_name(const ObString &match_field, ObString &i
   if (!index_name_map_.created()) {
     // do nothing
   } else if (OB_FAIL(index_name_map_.get_refactored(match_field, index_info))) {
-    LOG_WARN("fail to get vector index info", K(ret), K(match_field));
     if (ret == OB_HASH_NOT_EXIST) {
       ret = OB_SUCCESS;
     }
   } else if (OB_ISNULL(index_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpectd null ptr", K(ret), K(match_field));
   } else {
     idx_name = index_info->index_name_;
   }
@@ -2664,7 +2482,6 @@ int ObESQueryParser::set_distance_score_expr(const ObVectorIndexDistAlgorithm al
     }
     default : {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpectd dist algorithm type", K(ret), K(alg_type));
     }
   }
   return ret;
@@ -2689,7 +2506,6 @@ int ObESQueryParser::construct_sub_query_table(const ObString &sub_query_name, O
   int ret = OB_SUCCESS;
   if (OB_ISNULL(sub_query = OB_NEWx(ObReqTable, &alloc_, SUB_QUERY, sub_query_name, database_name_, query_req))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create query request", K(ret));
   } else {
     sub_query->alias_name_ = sub_query_name;
   }
@@ -2703,7 +2519,6 @@ int ObESQueryParser::wrap_sub_query(const ObString &sub_query_name, ObQueryReqFr
   ObReqTable *sub_query = NULL;
   if (OB_ISNULL(wrap_query = OB_NEWx(ObQueryReqFromJson, &alloc_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create query request", K(ret));
   } else if (OB_FAIL(construct_sub_query_table(sub_query_name, query_req, sub_query))) {
   } else if (OB_FAIL(wrap_query->from_items_.push_back(sub_query))) {
   } else {
@@ -2748,7 +2563,6 @@ int ObESQueryParser::construct_sub_query_with_minimum_should_match(ObQueryReqFro
     // otherwise, query_req is already a sub query
     if (OB_FAIL(ret)) {
     } else if (query_req == base_query_req && OB_FAIL(wrap_sub_query(sub_query_name, query_req))) {
-      LOG_WARN("fail to wrap sub query", K(ret));
     } else if (OB_FALSE_IT(query_info.query_req_ = query_req)) {
     } else if (OB_FAIL(ObReqOpExpr::construct_op_expr(condition_expr, alloc_, T_OP_AND, base_query_req->outer_condition_items_))) {
     } else if (OB_FAIL(query_req->condition_items_.push_back(condition_expr))) {
@@ -2767,7 +2581,6 @@ int ObESQueryParser::construct_minimum_should_match_info(ObIJsonBase &req_node, 
   int ret = OB_SUCCESS;
   if (req_node.json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("unexpectd json type", K(ret), K(req_node.json_type()));
   } else {
     for (uint64_t i = 0; OB_SUCC(ret) && i < req_node.element_count(); i++) {
       ObString key;
@@ -2788,20 +2601,17 @@ int ObESQueryParser::construct_minimum_should_match_info(ObIJsonBase &req_node, 
           query_info.msm_info_.term_cnt_ = 1;
         } else {
           ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-          LOG_WARN("should should be array or object", K(ret), K(sub_node->json_type()));
         }
       } else if (key.case_compare("boost") == 0) {
         if (OB_FAIL(parse_boost(*sub_node, query_info.boost_expr_))) {
         }
       } else if (key.case_compare("minimum_should_match") != 0) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("unsupported key in bool query", K(ret), K(key));
       }
     }
   }
 
   if (OB_SUCC(ret) && OB_FAIL(parse_minimum_should_match(req_node, query_info))) {
-    LOG_WARN("fail to parse minimum should match", K(ret));
   }
   return ret;
 }
@@ -2821,7 +2631,6 @@ int ObESQueryParser::parse_minimum_should_match_by_value(const common::ObString 
 
   if (!num_part.is_numeric()) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("string value is empty or not numeric", K(ret), K(num_part));
   } else if (OB_FAIL(convert_signed_const_numeric(num_part, val))) {
   } else if (is_percentage) {
     val = (term_cnt * val) / 100;
@@ -2844,7 +2653,6 @@ int ObESQueryParser::parse_minimum_should_match(ObIJsonBase &req_node, ObEsQuery
   MinimumShouldMatchInfo &msm_info = query_info.msm_info_;
   if (req_node.json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    LOG_WARN("minimum_should_match should be object", K(ret), K(req_node.json_type()));
   } else if (query_info.opr_ == T_OP_AND) {
   } else if (OB_FAIL(req_node.get_object_value(MSM_KEY, msm_node))) {
     if (ret == OB_SEARCH_NOT_FOUND) {
@@ -2853,7 +2661,6 @@ int ObESQueryParser::parse_minimum_should_match(ObIJsonBase &req_node, ObEsQuery
         ret = OB_SUCCESS;
       }
     } else {
-      LOG_WARN("fail to get minimum should match node", K(ret));
     }
   } else if (OB_FAIL(parse_const(*msm_node, raw_msm_expr))) {
   } else if (OB_FAIL(parse_minimum_should_match_by_value(raw_msm_expr->expr_name, msm_info.term_cnt_, raw_msm_val))) {
@@ -2920,7 +2727,6 @@ int ObESQueryParser::construct_condition_best_fields(ObEsQueryInfo &query_info)
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(handle_msm_for_sub_condition(query_info))) {
-    LOG_WARN("fail to handle sub condition with msm", K(ret));
   }
   return ret;
 }
@@ -2929,7 +2735,6 @@ int ObESQueryParser::construct_condition_cross_fields(ObEsQueryInfo &query_info)
 {
   int ret = OB_SUCCESS;
   if (query_info.opr_ == T_OP_OR && OB_FAIL(construct_condition_best_fields(query_info))) {
-      LOG_WARN("fail to construct condition for cross_fields + OR", K(ret));
   } else if (query_info.opr_ == T_OP_AND) {
     for (int64_t i = 0; OB_SUCC(ret) && i < query_info.keyword_exprs_.count(); i++) {
       common::ObSEArray<ObReqExpr *, 4, common::ModulePageAllocator, true> field_conditions;
@@ -2973,7 +2778,6 @@ int ObESQueryParser::construct_match_exprs_matrix(ObEsQueryInfo &query_info)
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(query_info.match_exprs_matrix_.push_back(field_exprs))) {
-      LOG_WARN("fail to add field exprs to matrix", K(ret));
     }
   }
   return ret;
@@ -3032,7 +2836,6 @@ int ObESQueryParser::construct_query_string_score(ObEsQueryInfo &query_info)
     if (OB_FAIL(query_info.query_req_->outer_score_items_.push_back(query_info.score_alias_expr_))) {
     }
   } else if (query_info.need_cal_score_ && OB_FAIL(query_info.parent_query_info_->score_alias_items_.push_back(query_info.score_alias_expr_))) {
-    LOG_WARN("fail to add score alias expr to score alias items", K(ret));
   }
   return ret;
 }
@@ -3042,7 +2845,6 @@ int ObESQueryParser::construct_query_string_condition(ObEsQueryInfo &query_info)
   int ret = OB_SUCCESS;
   if (query_info.opr_ != T_OP_AND && query_info.opr_ != T_OP_OR) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("operator between conditions must be AND or OR", K(ret), K(query_info.opr_));
   } else {
     switch (query_info.score_type_) {
       case SCORE_TYPE_BEST_FIELDS: {
@@ -3067,7 +2869,6 @@ int ObESQueryParser::construct_query_string_condition(ObEsQueryInfo &query_info)
       }
       default: {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("unsupported score type", K(ret), K(query_info.score_type_));
         break;
       }
     }
@@ -3093,7 +2894,6 @@ int ObESQueryParser::construct_should_group_expr(ObEsQueryInfo &query_info)
   MinimumShouldMatchInfo &msm_info = query_info.msm_info_;
   if (OB_ISNULL(msm_info.msm_expr_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("msm expr is null", K(ret));
   } else if (msm_info.get_msm_val() > query_info.keyword_exprs_.count()) {
     // to improve performance, avoid creating unnecessary conditions in the WHERE clause.
     ObReqConstExpr *zero_expr = nullptr;
@@ -3144,7 +2944,6 @@ int ObESQueryParser::get_base_table_query(ObQueryReqFromJson *query_req, ObQuery
   int ret = OB_SUCCESS;
   if (OB_ISNULL(query_req)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(query_req));
   } else if (OB_NOT_NULL(base_table_req)) {
   } else {
     // for sub_query and multi_set, suppose all the sub queries have the same base table
@@ -3153,7 +2952,6 @@ int ObESQueryParser::get_base_table_query(ObQueryReqFromJson *query_req, ObQuery
       if (OB_NOT_NULL(table_type) && *table_type == UNKNOWN_TABLE) {
         if (table->table_type_ == UNKNOWN_TABLE) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid argument", K(ret), K(table->table_type_));
         } else {
           *table_type = table->table_type_;
         }
@@ -3165,7 +2963,6 @@ int ObESQueryParser::get_base_table_query(ObQueryReqFromJson *query_req, ObQuery
         ObQueryReqFromJson *query = NULL;
         if (OB_ISNULL(query = dynamic_cast<ObQueryReqFromJson *>(table->ref_query_))) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid argument", K(ret), K(table->ref_query_));
         } else if (OB_FAIL(get_base_table_query(query, base_table_req, table_type))) {
         } else if (OB_NOT_NULL(base_table_req)) {
           break;
@@ -3175,22 +2972,18 @@ int ObESQueryParser::get_base_table_query(ObQueryReqFromJson *query_req, ObQuery
         ObQueryReqFromJson *query = nullptr;
         if (OB_ISNULL(multi_set = dynamic_cast<ObMultiSetTable *>(table)) || multi_set->sub_queries_.empty()) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid argument", K(ret), K(table));
         } else if (OB_ISNULL(query = dynamic_cast<ObQueryReqFromJson *>(multi_set->sub_queries_.at(0)->ref_query_))) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid argument", K(ret), K(multi_set->sub_queries_.at(0)));
         } else if (OB_FAIL(get_base_table_query(query, base_table_req, table_type))) {
         } else if (OB_NOT_NULL(base_table_req)) {
           break;
         }
       } else {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid argument", K(ret), K(table->table_type_));
       }
     }
     if (OB_SUCC(ret) && OB_ISNULL(base_table_req)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("base table not found", K(ret));
     }
   }
   return ret;
@@ -3201,7 +2994,6 @@ int ObESQueryParser::parse_query_string_by_type(ObEsQueryInfo &query_info)
   int ret = OB_SUCCESS;
   if (query_info.field_exprs_.empty() || query_info.keyword_exprs_.empty() || query_info.tkn_cnt_ == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(query_info.field_exprs_.count()), K(query_info.keyword_exprs_.count()), K(query_info.tkn_cnt_));
   } else if (OB_FAIL(construct_match_exprs_matrix(query_info))) {
   } else if (OB_FAIL(construct_query_string_score(query_info))) {
   } else if (OB_FAIL(construct_query_string_condition(query_info))) {
@@ -3218,7 +3010,6 @@ int ObESQueryParser::build_should_condition_combine(uint64_t start, uint64_t k, 
   expr_array = OB_NOT_NULL(work_array) ? work_array : &temp_expr_array;
   if (k == 0 || items.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (k > items.count()) {
     ObReqConstExpr *tmp_or_expr = nullptr;
     if (OB_FAIL(ObReqConstExpr::construct_const_numeric_expr(tmp_or_expr, alloc_, 0.0, ObIntType))) {
@@ -3263,7 +3054,6 @@ int ObESQueryParser::build_should_condition_compare(ObReqConstExpr *msm_expr, co
   uint64_t msm_val = msm_expr->get_numeric_value();
   if (msm_val == 0 || items.count() == 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", K(ret), K(msm_val), K(items.count()));
   } else if (msm_val > items.count()) {
     ObReqConstExpr *tmp_ge_expr = nullptr;
     if (OB_FAIL(ObReqConstExpr::construct_const_numeric_expr(tmp_ge_expr, alloc_, 0.0, ObIntType))) {
@@ -3316,10 +3106,8 @@ int ObESQueryParser::handle_msm_for_sub_score(ObEsQueryInfo &query_info, ObEsQue
              (inner_query_info.query_item_ == QUERY_ITEM_MULTI_MATCH || inner_query_info.query_item_ == QUERY_ITEM_QUERY_STRING)) {
   } else if (OB_ISNULL(score_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("score expr is null", K(ret));
   } else if (OB_ISNULL(buf = static_cast<char *>(alloc_.alloc(OB_MAX_COLUMN_NAME_LENGTH)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate memory for alias", K(ret));
   } else if (OB_FAIL(databuff_printf(buf, OB_MAX_COLUMN_NAME_LENGTH, pos, "%.*s%ld",
                      FTS_SUB_SCORE_PREFIX.length(), FTS_SUB_SCORE_PREFIX.ptr(), query_req->sub_score_item_seq_++))) {
   } else if (OB_FALSE_IT(sub_score_alias.assign_ptr(buf, pos))) {
@@ -3328,9 +3116,7 @@ int ObESQueryParser::handle_msm_for_sub_score(ObEsQueryInfo &query_info, ObEsQue
   } else if (OB_FAIL(ObReqColumnExpr::construct_column_expr(sub_score_col, alloc_, sub_score_alias))) {
   } else if ((query_info.get_upward_depth() == 1 || inner_query_info.outer_query_item_ != QUERY_ITEM_MUST) &&
              OB_FAIL(query_info.msm_info_.msm_items_.push_back(sub_score_col))) {
-    LOG_WARN("fail to push back sub score column expr to score alias items", K(ret));
   } else if (query_info.need_cal_score_ && OB_FAIL(query_info.score_alias_items_.push_back(sub_score_col))) {
-    LOG_WARN("fail to push back sub score column expr", K(ret));
   }
   return ret;
 }
@@ -3346,7 +3132,6 @@ int ObESQueryParser::handle_msm_for_sub_condition(ObEsQueryInfo &query_info)
         query_info.parent_query_info_->msm_info_.apply_type_ == MSM_APPLY_WITH_SUB)) {
   } else if (msm_info.msm_items_.empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("msm items is empty", K(ret));
   } else {
     ObReqConstExpr *zero_expr = nullptr;
     ObReqOpExpr *add_expr = nullptr;
@@ -3385,7 +3170,6 @@ int ObESQueryParser::construct_all_query(ObQueryReqFromJson *&query_req)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(query_req = OB_NEWx(ObQueryReqFromJson, &alloc_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create query request", K(ret));
   } else if (OB_FAIL(parse_basic_table(table_name_, query_req))) {
   } else if (OB_FAIL(set_default_score(query_req, 1.0))) {
   }
@@ -3467,7 +3251,6 @@ int ObESQueryParser::concat_const_exprs(const common::ObIArray<ObReqConstExpr *>
     char *buf = static_cast<char *>(alloc_.alloc(total_len + 1));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate memory for concat result", K(ret));
     } else {
       int64_t pos = 0;
       for (int64_t i = 0; i < array.count(); i++) {
@@ -3498,7 +3281,6 @@ int ObESQueryParser::construct_partition_cols(const ObIArray<ObString> &column_n
     ObString alias_str;
     if (OB_ISNULL(alias_buf = static_cast<char *>(alloc_.alloc(alias_buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory for partition expr alias", K(ret));
     } else if (OB_FAIL(databuff_printf(alias_buf, alias_buf_len, alias_pos, "%.*s%ld",
                                        PART_COL_ALIAS_PREFIX.length(), PART_COL_ALIAS_PREFIX.ptr(), i))) {
     } else if (OB_FALSE_IT(alias_str.assign_ptr(alias_buf, alias_pos))) {
@@ -3593,7 +3375,6 @@ int ObEsQueryInfo::init_query_info(ObEsQueryInfo *&query_info, ObIAllocator &all
   int ret = OB_SUCCESS;
   if (OB_ISNULL(query_info = OB_NEWx(ObEsQueryInfo, &alloc, query_req, parent_query_info, outer_query_item, need_cal_score))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to create query info", K(ret));
   }
   return ret;
 }

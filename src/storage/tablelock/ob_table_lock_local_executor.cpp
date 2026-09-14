@@ -58,7 +58,6 @@ int check_exist(const ObLockTaskBatchRequest<T> &arg,
       // tablet is creating
       ret = OB_TABLET_NOT_EXIST;
     } else {
-      LOG_WARN("failed to get latest tablet status", KR(ret), K(tablet_id));
     }
   } else if (FALSE_IT(tablet_status = data.get_tablet_status())) {
   } else if (ObTabletStatus::NORMAL == tablet_status) {
@@ -131,7 +130,6 @@ int handle_batch_lock_task(const ObLockTaskBatchRequest<ObLockParam> &arg,
 
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(arg));
   } else {
     ObTransService *tx_srv = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
     switch (arg.task_type_) {
@@ -193,7 +191,6 @@ int handle_batch_replace_lock_task(const ObLockTaskBatchRequest<ObReplaceLockPar
 
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(arg));
   } else {
     ObTransService *tx_srv = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
     switch (arg.task_type_) {
@@ -239,7 +236,6 @@ static int process_for_replace_lock_table_(const ObLockTaskBatchRequest<ObReplac
   ObLS *tenant_ls = nullptr;
   common::ObTabletID tablet_id;
   if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
-    LOG_WARN("check ls failed", K(ret), K(arg));
     if (OB_LS_NOT_EXIST == ret) {
       result.can_retry_ = true;
     }
@@ -248,7 +244,6 @@ static int process_for_replace_lock_table_(const ObLockTaskBatchRequest<ObReplac
       if (arg.params_[i].lock_id_.is_tablet_lock()) {
         if (OB_FAIL(arg.params_[i].lock_id_.convert_to(tablet_id))) {
         } else if (OB_FAIL(check_exist(arg, tablet_id, tenant_ls))) {
-          LOG_WARN("check tablet failed", K(ret), K(tablet_id), K(arg.params_[i].expired_time_), K(tenant_ls));
           if (OB_TABLET_NOT_EXIST == ret) {
             result.can_retry_ = true;
           }
@@ -304,7 +299,6 @@ int handle_high_priority_batch_lock_task(const ObLockTaskBatchRequest<ObLockPara
 
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(arg));
   } else {
     ObTransService *tx_srv = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
     switch (arg.task_type_) {

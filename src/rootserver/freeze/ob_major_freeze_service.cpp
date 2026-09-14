@@ -31,7 +31,6 @@ int ObMajorFreezeService::init()
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret));
   } else {
     is_inited_ = true;
   }
@@ -56,7 +55,6 @@ int ObMajorFreezeService::activate()
     SpinRLockGuard r_guard(rw_lock_);
     if (OB_ISNULL(local_major_freeze_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("local major freeze is null after activate", KR(ret));
     } else if (OB_FAIL(local_major_freeze_->on_become_primary())) {
     }
   }
@@ -119,19 +117,15 @@ int ObMajorFreezeService::alloc_local_major_freeze(const bool append_mode)
   if ((service_type <= ObMajorFreezeServiceType::SERVICE_TYPE_INVALID)
       || (service_type >= ObMajorFreezeServiceType::SERVICE_TYPE_MAX)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected major freeze service type", KR(ret), K(service_type));
   } else {
     is_primary_service = (ObMajorFreezeServiceType::SERVICE_TYPE_PRIMARY == service_type) ? true : false;
   }
 
   if (FAILEDx(check_inner_stat())) {
-    LOG_WARN("fail to check_inner_stat", KR(ret));
   } else if (OB_NOT_NULL(local_major_freeze_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("local_major_freeze is not null", KR(ret), KP_(local_major_freeze));
   } else if (nullptr == (buf = common::ob_malloc(len, ObMemAttr("LocalMajFreeze")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", KR(ret), K(len));
   } else if (FALSE_IT(local_major_freeze_ = new(buf) ObLocalMajorFreeze{})) {
     // impossible
   } else if (OB_FAIL(local_major_freeze_->init(is_primary_service, *GCTX.sql_proxy_,
@@ -184,17 +178,14 @@ int ObMajorFreezeService::launch_major_freeze(const ObMajorFreezeReason freeze_r
   if (!can_launch) {
     // 'sync operation' of launch_major_freeze not finish
     ret = OB_MAJOR_FREEZE_NOT_FINISHED;
-    LOG_WARN("previous major freeze not finish, please wait", KR(ret), K_(is_launched));
   } else {
     ObRecursiveMutexGuard guard(lock_);
     SpinRLockGuard r_guard(rw_lock_);
     if (OB_ISNULL(local_major_freeze_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("local_major_freeze is null", KR(ret), KP_(local_major_freeze));
     } else if (OB_FAIL(local_major_freeze_->launch_major_freeze(freeze_reason))) {
       // 'async operation' of launch_major_freeze not finish
       if ((OB_MAJOR_FREEZE_NOT_FINISHED != ret) && (OB_FROZEN_INFO_ALREADY_EXIST != ret)) {
-        LOG_WARN("fail to launch_major_freeze", KR(ret));
       }
     }
     ATOMIC_STORE(&is_launched_, false); // set is as false no matter its previous value.
@@ -210,7 +201,6 @@ int ObMajorFreezeService::suspend_merge()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(local_major_freeze_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("local_major_freeze is null", KR(ret), KP_(local_major_freeze));
   } else if (OB_FAIL(local_major_freeze_->suspend_merge())) {
   }
   return ret;
@@ -223,7 +213,6 @@ int ObMajorFreezeService::resume_merge()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(local_major_freeze_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("local_major_freeze is null", KR(ret), KP_(local_major_freeze));
   } else if (OB_FAIL(local_major_freeze_->resume_merge())) {
   }
   return ret;
@@ -236,7 +225,6 @@ int ObMajorFreezeService::clear_merge_error()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(local_major_freeze_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("local_major_freeze is null", KR(ret));
   } else if (OB_FAIL(local_major_freeze_->clear_merge_error())) {
   }
   return ret;
@@ -247,7 +235,6 @@ int ObMajorFreezeService::check_inner_stat()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   }
   return ret;
 }
@@ -309,11 +296,9 @@ int ObMajorFreezeService::get_uncompacted_tablets(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else {
     if (OB_ISNULL(local_major_freeze_)) {
       ret = OB_LEADER_NOT_EXIST;
-      LOG_WARN("local_major_freeze is null", KR(ret));
     } else if (OB_FAIL(local_major_freeze_->get_uncompacted_tablets(uncompacted_tablets, uncompacted_table_ids))) {
     }
   }

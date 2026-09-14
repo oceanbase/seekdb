@@ -95,15 +95,12 @@ int ObPartitionMergeProgress::init(ObBasicTabletMergeCtx *ctx,
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObPartitionMergeProgress inited twice", K(ret));
   } else if (OB_UNLIKELY(NULL == ctx
       || NULL == merge_dag
       || 0 == (concurrent_cnt = ctx->get_concurrent_cnt()))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid arguments", K(ret), KPC(ctx), K(merge_dag), K(concurrent_cnt));
   } else if (OB_ISNULL(buf = static_cast<int64_t *>(allocator_.alloc(sizeof(int64_t) * concurrent_cnt)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Failed to alloc memory for unit_cnt_arr_", K(ret), K(concurrent_cnt));
   } else {
     // for parallel merge, [0, concurrent_cnt) stores row count
     MEMSET(buf, 0, sizeof(int64_t) * concurrent_cnt);
@@ -132,7 +129,6 @@ int ObPartitionMergeProgress::estimate_memtables(
 
     if (OB_UNLIKELY(nullptr == table || !table->is_data_memtable())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null table", K(ret), K(i), K(tables.at(i)));
     } else {
       memtable = static_cast<const memtable::ObMemtable *>(table);
       const ObMtStat &mt_stat = memtable->get_mt_stat();
@@ -155,7 +151,6 @@ int ObPartitionMergeProgress::estimate_sstables(
 
     if (OB_UNLIKELY(NULL == table || !table->is_sstable())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null table", K(ret), K(i), KPC(table), K(tables));
     } else if (table->is_empty()) {
       // do nothing
     } else if (FALSE_IT(sstable = static_cast<const ObSSTable *>(table))) {
@@ -193,13 +188,10 @@ int ObPartitionMergeProgress::inner_init_estimated_vals()
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObPartitionMergeProgress has inited", K(ret), KPC(this));
   } else if (OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ctx is unexpected null", K(ret), KP_(ctx));
   } else if (OB_UNLIKELY(ctx_->get_tables_handle().empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected empty tables handle", K(ret), KPC(ctx_));
   } else if (OB_FAIL(ctx_->get_tables_handle().get_tables(tables))) {
   } else if (is_mini_merge(ctx_->get_merge_type())) {
     if (OB_FAIL(estimate_memtables(tables))) {
@@ -226,10 +218,8 @@ int ObPartitionMergeProgress::update_merge_progress(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObPartitionMergeProgress not inited", K(ret));
   } else if (OB_UNLIKELY(idx < 0 || idx >= concurrent_cnt_ || scanned_row_cnt < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid arguments", K(ret), K(idx), K(concurrent_cnt_), K(scanned_row_cnt));
   } else if (is_empty_merge_) {
     // do nothing
   } else if (scanned_row_cnt <= scanned_row_cnt_arr_[idx]) {
@@ -376,10 +366,8 @@ int ObPartitionMajorMergeProgress::finish_merge_progress()
   ObTabletMergeCtx *ctx = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObPartitionMajorMergeProgress not inited", K(ret));
   } else if (OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ctx has unexpected type", K(ret), KPC_(ctx));
   } else if (FALSE_IT(ctx = static_cast<ObTabletMergeCtx *>(ctx_))) {
   } else if (OB_FAIL(finish_progress(ctx->get_merge_version(),
                                      &ctx->info_collector_.time_guard_))) {

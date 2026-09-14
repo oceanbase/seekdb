@@ -47,14 +47,12 @@ int ObStringDiffEncoder::init(
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnEncoder::init(ctx, column_index, rows))) {
   } else {
     const ObObjTypeStoreClass sc = get_store_class_map()[
         ob_obj_type_class(column_type_.get_type())];
     if (OB_UNLIKELY(!is_string_encoding_valid(sc))) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not supported type for string diff", K(ret), K(sc), K_(column_index));
     }
     column_header_.type_ = type_;
   }
@@ -82,7 +80,6 @@ int ObStringDiffEncoder::traverse(bool &suitable)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     suitable = true;
     char *data = NULL;
@@ -95,8 +92,6 @@ int ObStringDiffEncoder::traverse(bool &suitable)
         nope_cnt_++;
       } else if (datum.is_ext()) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not supported extend object type",
-            K(ret), K(datum), K_(column_type), K_(column_index));
       } else if (OB_FAIL(traverse_cell(data, diff, suitable, datum, i))) {
       }
     }
@@ -182,18 +177,15 @@ int ObStringDiffEncoder::traverse_cell(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     if (string_size_ <= 0) {
       if (datum.len_ <= 0 || datum.len_ >= UINT16_MAX) {
         suitable = false;
       } else if (OB_ISNULL(data = static_cast<char *>(allocator_.alloc(datum.len_)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc memory failed", K(ret), "size", datum.len_);
       } else if (OB_ISNULL(diff = static_cast<bool *>(
           allocator_.alloc(sizeof(bool) * datum.len_)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc memory failed", K(ret), "size", sizeof(bool) * datum.len_);
       } else {
         string_size_ = datum.len_;
         first_string_ = datum.ptr_;
@@ -241,7 +233,6 @@ int ObStringDiffEncoder::store_meta(ObBufferWriter &buf_writer)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     const bool hex_packing = string_size_ - common_size_ != row_store_size_;
     char *data = buf_writer.current();
@@ -305,10 +296,8 @@ int ObStringDiffEncoder::store_data(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (row_id < 0 || row_id >= rows_->count() || len < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(row_id));
   } else {
     const ObDatum &datum = rows_->at(row_id).get_datum(column_index_);
     const ObStoredExtValue ext_val = get_stored_ext_value(datum);
@@ -330,14 +319,10 @@ int ObStringDiffEncoder::set_data_pos(const int64_t offset, const int64_t length
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(header_)) {
     ret = OB_INNER_STAT_ERROR;
-    LOG_WARN("call set data pos before store meta", K(ret));
   } else if (OB_UNLIKELY(offset < 0 || length < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid data position",
-        K(ret), K(offset), K(length), K(desc_), K_(column_header));
   } else {
     header_->offset_ = static_cast<uint32_t>(offset);
     header_->length_ = static_cast<uint32_t>(length);
@@ -350,10 +335,8 @@ int ObStringDiffEncoder::get_var_length(const int64_t row_id, int64_t &length)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(row_id < 0 || row_id >= rows_->count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(row_id));
   } else {
     const ObDatum &datum = rows_->at(row_id).get_datum(column_index_);
     if (datum.is_null() || datum.is_nop()) {
@@ -387,13 +370,10 @@ int ObStringDiffEncoder::store_fix_data(ObBufferWriter &buf_writer)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!is_valid_fix_encoder())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K_(desc));
   } else if (OB_UNLIKELY(0 >= desc_.fix_data_length_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fix_data_length should be larger than 0", K(ret), K_(desc));
   } else {
     if (desc_.fix_data_length_ > 0) {
       header_->length_ = static_cast<uint32_t>(desc_.fix_data_length_);

@@ -129,7 +129,6 @@ int ObExprJsonOverlaps::json_overlaps_object(ObIJsonBase *json_a,
         if (ret == OB_SEARCH_NOT_FOUND) {
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("fail to get object_value from wrapper", K(ret));
         }
       } else if (OB_FAIL(iter_b.get_value(b_tmp))) {
       } else {
@@ -173,7 +172,6 @@ int ObExprJsonOverlaps::json_overlaps_array(ObIJsonBase *json_a,
 
   ObSortedVector<ObIJsonBase *> vec_a;
   if (OB_SUCC(ret) && OB_FAIL(ObJsonBaseUtil::sort_array_pointer(json_a, vec_a))) {
-    LOG_WARN("sort_array_pointer failed.", K(ret));
   } else {
     uint64_t b_len = json_b->element_count();
     for (uint64_t i = 0; i < b_len; i++) {

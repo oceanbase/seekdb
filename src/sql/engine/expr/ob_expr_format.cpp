@@ -55,11 +55,9 @@ int ObExprFormat::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(NULL == type_array || (params_count != 2 && params_count != 3))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument.", K(ret), K(type_array), K(params_count));
   } else if (params_count == 3) {
     //to do, format function support a optional locale parameter
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("format function not support an optional locale parameter", K(ret));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "optional locale parameter of format");
   } else if (OB_FAIL(calc_result_type(type, type_array))) {
   } else {
@@ -79,7 +77,6 @@ int ObExprFormat::get_origin_param_type(ObExprResType &ori_type) const
   ObRawExpr *expr = NULL;
   if (OB_ISNULL(expr = get_raw_expr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get_raw_expr", K(ret));
   } else if (expr->get_param_count() >= 1 && OB_NOT_NULL(expr = expr->get_param_expr(0))
              && expr->get_expr_type() == T_FUN_SYS_CAST
              && CM_IS_IMPLICIT_CAST(expr->get_cast_mode())) {
@@ -87,7 +84,6 @@ int ObExprFormat::get_origin_param_type(ObExprResType &ori_type) const
       if (expr->get_param_count() >= 1
           && OB_ISNULL(expr = expr->get_param_expr(0))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to get_param_expr", K(ret));
       }
     } while (OB_SUCC(ret) && T_FUN_SYS_CAST == expr->get_expr_type()
              && CM_IS_IMPLICIT_CAST(expr->get_cast_mode()));
@@ -185,7 +181,6 @@ int ObExprFormat::calc_result_type(ObExprResType &type, ObExprResType *type_arra
         }
         default: {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("input type not supported", K(ret), K(obj_type));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "The input type of the FORMAT function");
           break;
         }
@@ -256,7 +251,6 @@ int ObExprFormat::build_format_str(char *buf,
   } else if (decimal_length && locale.decimal_point_ != '.') {
     if (decimal_length > str_length) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid str.", K(ret), K(scale), K(num_str));
     } else {
       num_str.ptr()[str_length - decimal_length] = locale.decimal_point_;
     }
@@ -312,7 +306,6 @@ int ObExprFormat::calc_format_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   ObDatum *d_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, x_datum)) ||
       OB_FAIL(expr.args_[1]->eval(ctx, d_datum))) {
-    LOG_WARN("eval arg failed", K(ret), K(expr));
   } else if ((OB_NOT_NULL(x_datum) && x_datum->is_null())
             || (OB_NOT_NULL(d_datum) && d_datum->is_null())) {
     res_datum.set_null();
@@ -365,7 +358,6 @@ int ObExprFormat::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   UNUSED(raw_expr);
   if (OB_UNLIKELY(rt_expr.arg_cnt_ != 2)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid arg cnt of expr", K(ret), K(rt_expr));
   } else {
     rt_expr.eval_func_ = calc_format_expr;
   }

@@ -102,7 +102,6 @@ int ObSqlTransControl::explicit_start_trans(ObExecContext &ctx, const bool read_
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx);
   if (OB_ISNULL(plan_ctx)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ctx), K(read_only), K(hint));
   } else {
     ret = explicit_start_trans(ctx.get_my_session(),
                                plan_ctx->get_trans_param(),
@@ -301,7 +300,6 @@ int ObSqlTransControl::end_trans_before_cmd_execute(ObSQLSessionInfo &session,
                                             !keep_trans_variable))) {
   } else if (session.need_recheck_txn_readonly() && session.get_tx_read_only()) {
     ret = OB_ERR_CANT_EXECUTE_IN_READ_ONLY_TRANSACTION;
-    LOG_WARN("cmd can not execute because txn is read only", K(ret));
   }
   return ret;
 }
@@ -742,7 +740,6 @@ int ObSqlTransControl::can_do_plain_insert(ObSQLSessionInfo *session,
   int last_query_retry_err = session->get_retry_info().get_last_query_retry_err();
   if (OB_ISNULL(session) || OB_ISNULL(plan)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null ptr", K(ret), KPC(session), KPC(plan));
   } else if (plan->get_need_serial_exec()
       || ObSQLUtils::is_nested_sql(&exec_ctx)
       || last_query_retry_err == OB_TRANSACTION_SET_VIOLATION

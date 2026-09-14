@@ -62,13 +62,11 @@ int ObExprDocID::cg_expr(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ObVarcharType != rt_expr.datum_meta_.type_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, expr type isn't varchar", K(ret), K(rt_expr.datum_meta_.type_));
   } else if (OB_UNLIKELY(rt_expr.arg_cnt_ != 1 && rt_expr.arg_cnt_ != 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected param count", K(rt_expr.arg_cnt_), K(rt_expr.args_), K(rt_expr.type_));
   } else if (OB_UNLIKELY(rt_expr.arg_cnt_ == 1) && OB_ISNULL(rt_expr.args_) ) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, rt_expr.args_ is nullptr", K(rt_expr.arg_cnt_), K(rt_expr.args_), K(rt_expr.type_));
   } else {
     rt_expr.eval_func_ = generate_doc_id;
   }
@@ -88,7 +86,6 @@ int ObExprDocID::cg_expr(
     LOG_TRACE("succeed to genearte empty document id", KP(&raw_ctx), K(raw_ctx), K(expr_datum), K(eval_ctx), K(lbt()));
   } else if (OB_UNLIKELY(1 != raw_ctx.arg_cnt_) || OB_ISNULL(raw_ctx.args_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(raw_ctx), KP(raw_ctx.args_));
   } else if (OB_FAIL(ObExprCalcPartitionBase::calc_part_and_tablet_id(raw_ctx.args_[0], eval_ctx, partition_id, tablet_id))) {
   } else {
     uint64_t seq_id = 0;
@@ -96,7 +93,6 @@ int ObExprDocID::cg_expr(
     uint64_t *buf = reinterpret_cast<uint64_t *>(raw_ctx.get_str_res_mem(eval_ctx, buf_len));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate memory", K(ret), KP(buf));
     } else {
       if (eval_ctx.exec_ctx_.is_ddl_idempotent_autoinc()) {
         seq_id = share::ObDDLUtil::generate_idempotent_value(eval_ctx.exec_ctx_.get_slice_count(), // tablet slice count
@@ -108,7 +104,6 @@ int ObExprDocID::cg_expr(
             ::oceanbase::share::server_service<::oceanbase::share::ObITabletAutoincrementService>();
         if (OB_ISNULL(auto_inc)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("tablet autoincrement service is unavailable", K(ret));
         } else if (OB_FAIL(auto_inc->next_value(tablet_id, seq_id))) {
         }
       }

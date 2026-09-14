@@ -55,7 +55,6 @@ int ObSNTmpFileManager::start_sub_module_()
   int ret = OB_SUCCESS;
   if (OB_FAIL(page_cache_controller_.start())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to start page cache controller background threads", KR(ret));
   } else {
     is_running_ = true;
     LOG_INFO("ObSNTmpFileManager start successful", KP(this));
@@ -96,10 +95,8 @@ int ObSNTmpFileManager::alloc_dir(int64_t &dir_id)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObSNTmpFileManager has not been inited", KR(ret));
   } else if (OB_UNLIKELY(!is_running())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObSNTmpFileManager is not running", KR(ret), K(is_running_));
   } else {
     dir_id = ATOMIC_AAF(&current_dir_id_, 1);
   }
@@ -117,15 +114,11 @@ int ObSNTmpFileManager::open(int64_t &fd, const int64_t &dir_id, const char* con
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObSNTmpFileManager has not been inited", KR(ret));
   } else if (OB_UNLIKELY(!is_running())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObSNTmpFileManager is not running", KR(ret), K(is_running_));
   } else if (OB_ISNULL(buf = tmp_file_allocator_.alloc(sizeof(ObSharedNothingTmpFile),
                                                        lib::ObMemAttr("SNTmpFile")))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate memory for tmp file",
-             KR(ret), K(sizeof(ObSharedNothingTmpFile)));
   } else if (FALSE_IT(tmp_file = new (buf) ObSharedNothingTmpFile())) {
   } else if (FALSE_IT(fd = ATOMIC_AAF(&current_fd_, 1))) {
   } else if (OB_FAIL(tmp_file->init(fd, dir_id,
@@ -152,15 +145,11 @@ int ObSNTmpFileManager::get_tmp_file(const int64_t fd, ObSNTmpFileHandle &file_h
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObSNTmpFileManager has not been inited", KR(ret));
   } else if (OB_UNLIKELY(!is_running())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObSNTmpFileManager is not running", KR(ret), K(is_running_));
   } else if (OB_FAIL(files_.get(ObTmpFileKey(fd), file_handle))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
-      LOG_WARN("tmp file does not exist", KR(ret), K(fd));
     } else {
-      LOG_WARN("fail to get tmp file", KR(ret), K(fd));
     }
   } else if (OB_ISNULL(file_handle.get())) {
     ret = OB_ERR_UNEXPECTED;
@@ -175,7 +164,6 @@ int ObSNTmpFileManager::get_macro_block_list(common::ObIArray<blocksstable::Macr
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObSNTmpFileManager has not been inited", KR(ret));
 // This function remains available after the service stops and before destruction.
 //  } else if (OB_UNLIKELY(!is_running())) {
 //    ret = OB_ERR_UNEXPECTED;
@@ -197,7 +185,6 @@ int ObSNTmpFileManager::get_tmp_file_disk_usage(int64_t &disk_data_size, int64_t
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObSNTmpFileManager has not been inited", KR(ret));
 // This function remains available after the service stops and before destruction.
 //  } else if (OB_UNLIKELY(!is_running())) {
 //    ret = OB_ERR_UNEXPECTED;

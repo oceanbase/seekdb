@@ -193,7 +193,6 @@ int ObGITaskReBalancer::wait_new_task(ObGranuleIteratorOp *gi_op)
       int64_t finished_workers = ATOMIC_SAF(&finished_workers_, 1);
       if (OB_FAIL(gi_op->get_next_granule_task())) {
         if (ret != OB_ITER_END) {
-          LOG_WARN("fail to get next granule task", K(ret));
         } else {
           // no task, maybe stolen by other workers, continue wait
           ret = OB_SUCCESS;
@@ -251,7 +250,6 @@ int ObGIOpInput::add_table_location_keys(common::ObIArray<const ObTableScanSpec*
   for (int i = 0; i < tscs.count() && OB_SUCC(ret); ++i) {
     if (OB_ISNULL(tscs.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tsc is null", K(ret));
     } else if (OB_FAIL(table_location_keys_.push_back(tscs.at(i)->get_table_loc_id()))) {
     }
   }
@@ -405,15 +403,12 @@ int ObGranuleIteratorOp::parameters_init()
   ObGIOpInput *input = static_cast<ObGIOpInput*>(input_);
   if (nullptr != pump_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("the context has been inited", K(ret));
   } else if (nullptr == input->pump_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the pump can not be null", K(ret));
   } else if (FALSE_IT(pump_ = input->pump_)){
   } else if (OB_FAIL(table_location_keys_.assign(input->table_location_keys_))) {
   } else if (OB_ISNULL(pump_arg_ = pump_->get_granule_pump_arg(spec_.id_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get granule pump arg failed", K(ret), K(spec_.id_));
   } else {
     parallelism_ = input->parallelism_;
     worker_id_ = input->worker_id_;
@@ -431,7 +426,6 @@ int ObGranuleIteratorOp::try_pruning_repart_partition(
   uint64_t tablet_id = OB_INVALID_ID;
   if (OB_INVALID_ID == ctx_.get_gi_pruning_info().get_part_id()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pruning id is not set", K(ret));
   } else if (OB_FAIL(taskset.get_task_tablet_id_at_pos(pos, tablet_id))) {
   } else {
     partition_pruned = tablet_id != ctx_.get_gi_pruning_info().get_part_id();
@@ -454,10 +448,8 @@ int ObGranuleIteratorOp::try_fetch_task(ObGranuleTaskInfo &info, bool round_robi
   //init
   if (is_not_init()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the gi ctx is not init", K(ret));
   } else if (nullptr == (gi_task_pump = pump_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the pump can not be null", K(ret));
   } else {
     if (is_rescan_) {
       ret = get_next_task_pos(pos, taskset);
@@ -478,14 +470,11 @@ int ObGranuleIteratorOp::try_fetch_task(ObGranuleTaskInfo &info, bool round_robi
                                                    from_share_pool ? 0: worker_id_,
                                                    tsc_op_id_, fetched_task_cnt, splitter_type_))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("failed to fetch next granule task", K(ret),
-                   K(gi_task_pump), K(worker_id_), K(MY_SPEC.affinitize_), K(spec_.id_));
         } else {
           all_task_fetched_ = true;
         }
       } else if (NULL == taskset) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL taskset returned", K(ret));
       } else if (FALSE_IT(info.task_id_ = worker_id_)) {
       } else if (OB_FAIL(rescan_tasks_info_.insert_rescan_task(pos, info))) {
       } else {
@@ -495,7 +484,6 @@ int ObGranuleIteratorOp::try_fetch_task(ObGranuleTaskInfo &info, bool round_robi
           rescan_taskset_ = taskset;
         } else if (rescan_taskset_ != taskset) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("taskset changed", K(ret), K(rescan_taskset_), K(taskset), K(tsc_op_id_));
         }
       }
     }
@@ -515,7 +503,6 @@ int ObGranuleIteratorOp::get_next_task_pos(int64_t &pos, const ObGITaskSet *&tas
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_ITER_END;
       } else {
-        LOG_WARN("get tablet task pos failed", K(ret));
       }
     } else {
       rescan_task_idx_++;
@@ -531,7 +518,6 @@ int ObGranuleIteratorOp::get_next_task_pos(int64_t &pos, const ObGITaskSet *&tas
         pos = rescan_tasks_info_.rescan_tasks_pos_.at(rescan_task_idx_++);
         if (ObGranuleUtil::enable_partition_pruning(MY_SPEC.gi_attri_flag_)
             && OB_FAIL(try_pruning_repart_partition(*taskset, pos, partition_pruned))) {
-          LOG_WARN("fail try prune partition", K(ret));
         } else if (partition_pruned) {
           // next task
         }
@@ -554,7 +540,6 @@ int ObGranuleIteratorOp::pw_get_next_task_pos(const common::ObIArray<int64_t> &o
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_ITER_END;
       } else {
-        LOG_WARN("get tablet task pos failed", K(ret), K(ctx_.get_gi_pruning_info().get_part_id()));
       }
     }
   } else {
@@ -562,7 +547,6 @@ int ObGranuleIteratorOp::pw_get_next_task_pos(const common::ObIArray<int64_t> &o
     int64_t repart_idx = MY_SPEC.repart_pruning_tsc_idx_;
     if (OB_UNLIKELY(repart_idx < 0 || repart_idx >= op_ids.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected repart pruning tsc index", K(ret), K(repart_idx));
     }
     do {
       if (rescan_task_idx_ >= pwj_rescan_task_infos_.count()) {
@@ -571,8 +555,6 @@ int ObGranuleIteratorOp::pw_get_next_task_pos(const common::ObIArray<int64_t> &o
         all_task_fetched_ = true;
       } else if (OB_UNLIKELY(rescan_task_idx_ + repart_idx >= pwj_rescan_task_infos_.count())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected pwj_rescan_task_infos_ count", K(ret), K(rescan_task_idx_),
-                K(repart_idx), K(pwj_rescan_task_infos_.count()), K(op_ids));
       } else {
         partition_pruned = repart_partition_pruned(pwj_rescan_task_infos_.at(rescan_task_idx_ + repart_idx));
         if (partition_pruned) {
@@ -609,7 +591,6 @@ int ObGranuleIteratorOp::rescan()
     pruning_tablet_ids_.reset();
     while (OB_SUCC(get_next_granule_task(false /* prepare */, true /* round_robin */))) {}
     if (ret != OB_ITER_END) {
-      LOG_WARN("failed to get all granule task", K(ret));
     } else {
       ret = OB_SUCCESS;
     }
@@ -633,7 +614,6 @@ int ObGranuleIteratorOp::rescan()
       // At the open-stage we get a granule task, and now, we fetch all the granule task.
       while (OB_SUCC(get_next_granule_task(false /* prepare */, true /* round_robin */))) {}
       if (ret != OB_ITER_END) {
-        LOG_WARN("failed to get all granule task", K(ret));
       } else {
         ret = OB_SUCCESS;
       }
@@ -641,7 +621,6 @@ int ObGranuleIteratorOp::rescan()
       if (!all_task_fetched_) {
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "rescan before all task in gi");
-        LOG_WARN("rescan before all task fetched", K(ret), K(state_));
       }
     }
     if (OB_SUCC(ret)) {
@@ -701,7 +680,6 @@ int ObGranuleIteratorOp::inner_open()
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(child_)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("child_op is null", K(ret));
     } else if (MY_SPEC.bf_info_.is_inited_) {
       // prepare_table_scan can get a gi task during open stage,
       // but during open stage, partition runtime filter may not ready, we cannot sure wthether
@@ -716,14 +694,12 @@ int ObGranuleIteratorOp::inner_open()
       state_ = GI_PREPARED;
       skip_prepare_table_scan = true;
     } else if (!skip_prepare_table_scan && OB_FAIL(prepare_table_scan())) {
-      LOG_WARN("prepare table scan failed", K(ret));
     }
   }
 
   if (OB_SUCC(ret) && enable_adaptive_task_splitting()) {
     if (OB_ISNULL(MY_INPUT.task_balancer_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null ptr");
     } else if (OB_FAIL(scan_resume_point_.init(
                    MY_INPUT.task_balancer_->get_worker_paused_flag(worker_id_)))) {
     } else {
@@ -791,7 +767,6 @@ int ObGranuleIteratorOp::wait_task_rebalance(bool wait_new_task/* = true */) {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(MY_INPUT.task_balancer_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null task balancer");
   } else if (OB_FAIL(MY_INPUT.task_balancer_->wait_for_rebalance(this, wait_new_task))) {
     if (ret != OB_ITER_END) {
       LOG_WARN("failed to wait for rebalance");
@@ -826,7 +801,6 @@ int ObGranuleIteratorOp::gi_task_pause_process()
     if (OB_FAIL(ctx_.get_gi_task_map(gi_prepare_map))) {
     } else if (OB_ISNULL(old_gi_task_info = gi_prepare_map->get(tsc_op_id_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null old_gi_task_info");
     } else if (OB_UNLIKELY(ranges.count() > old_gi_task_info->ranges_.count())) {
       // remain range is the the left thing of gi task, range count should less than the old one.
       ret = OB_ERR_UNEXPECTED;
@@ -860,7 +834,6 @@ int ObGranuleIteratorOp::gi_task_pause_process()
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(gi_prepare_map->erase_refactored(tsc_op_id_))) {
         if (OB_HASH_NOT_EXIST != ret) {
-          LOG_WARN("failed to erase task", K(ret));
         } else {
           ret = OB_SUCCESS;
         }
@@ -894,7 +867,6 @@ int ObGranuleIteratorOp::try_get_rows(const int64_t max_row_cnt)
     case GI_GET_NEXT_GRANULE_TASK : {
       if (OB_FAIL(get_next_granule_task())) {
         if (ret != OB_ITER_END) {
-          LOG_WARN("fail to get next granule task", K(ret));
         } else {
           if (enable_adaptive_task_splitting()) {
             // overwrite error code OB_ITER_END to OB_SUCCESS by design
@@ -921,7 +893,6 @@ int ObGranuleIteratorOp::try_get_rows(const int64_t max_row_cnt)
       if (!is_vectorized()) {
         if (OB_FAIL(child_->get_next_row())) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("try fetch task failed", K(ret));
           } else {
             ret = OB_SUCCESS;
             state_ = GI_GET_NEXT_GRANULE_TASK;
@@ -998,7 +969,6 @@ int ObGranuleIteratorOp::try_get_rows(const int64_t max_row_cnt)
     }
     default : {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected state", K(ret), K(state_));
     }
     }
   } while(!(got_next_row || OB_FAIL(ret)));
@@ -1013,7 +983,6 @@ int ObGranuleIteratorOp::get_next_granule_task(bool prepare /* =false */, bool r
   while (OB_SUCC(ret) && partition_pruning) {
     if (OB_FAIL(do_get_next_granule_task(partition_pruning, round_robin))) {
       if (ret != OB_ITER_END) {
-        LOG_WARN("failed to get all granule task", K(ret));
       }
     }
   }
@@ -1023,7 +992,6 @@ int ObGranuleIteratorOp::get_next_granule_task(bool prepare /* =false */, bool r
        * In inner open stage, the prepare is true.
        * Tsc will do scan in his inner open, so we should skip rescan action.
        */
-      LOG_WARN("fail to rescan gi' child", K(ret));
     } else {
       state_ = GI_TABLE_SCAN;
     }
@@ -1067,14 +1035,12 @@ int ObGranuleIteratorOp::do_get_next_granule_task(bool &partition_pruning, bool 
     } else if (enable_parallel_runtime_filter_pruning()
                && OB_FAIL(do_parallel_runtime_filter_pruning())) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("fail to do parallel runtime filter pruning", K(ret));
       } else {
         state_ = GI_END;
         all_task_fetched_ = true;
       }
     } else if (OB_FAIL(try_fetch_task(gi_task_info, round_robin))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("try fetch task failed", K(ret));
       } else {
         state_ = GI_END;
         all_task_fetched_ = true;
@@ -1084,7 +1050,6 @@ int ObGranuleIteratorOp::do_get_next_granule_task(bool &partition_pruning, bool 
         // GI needs to try cleaning up the tasks inserted last time when inserting tasks into the Map
         if (OB_FAIL(gi_prepare_map->erase_refactored(tsc_op_id_))) {
           if (OB_HASH_NOT_EXIST != ret) {
-            LOG_WARN("failed to erase task", K(ret));
           } else {
             ret = OB_SUCCESS;
           }
@@ -1096,9 +1061,7 @@ int ObGranuleIteratorOp::do_get_next_granule_task(bool &partition_pruning, bool 
     if (OB_SUCC(ret)) {
       if (enable_single_runtime_filter_pruning() &&
           OB_FAIL(do_single_runtime_filter_pruning(gi_task_info, partition_pruning))) {
-          LOG_WARN("fail to do join filter partition pruning", K(ret));
       } else if (!partition_pruning && OB_FAIL(do_dynamic_partition_pruning(gi_task_info, partition_pruning))) {
-        LOG_WARN("fail to do dynamic partition pruning", K(ret));
       } else if (!partition_pruning) {
         if (enable_single_runtime_filter_extract_query_range()
             && OB_FAIL(do_single_runtime_filter_extract_query_range(gi_task_info))) {
@@ -1114,17 +1077,14 @@ int ObGranuleIteratorOp::do_get_next_granule_task(bool &partition_pruning, bool 
     if (OB_FAIL(ret)) {
     } else if (OB_UNLIKELY(MY_SPEC.pw_dml_tsc_ids_.empty())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("array is empty", K(ret));
     } else {
       if (is_rescan_) {
         if (OB_FAIL(fetch_rescan_pw_task_infos(MY_SPEC.pw_dml_tsc_ids_, gi_prepare_map, gi_task_infos))) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("fail to fetch rescan pw task infos", K(ret));
           }
         }
       } else if (OB_FAIL(fetch_normal_pw_task_infos(MY_SPEC.pw_dml_tsc_ids_, gi_prepare_map, gi_task_infos))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("fail to fetch normal pw task infos", K(ret));
         }
       }
     }
@@ -1152,7 +1112,6 @@ int ObGranuleIteratorOp::wait_partition_runtime_filter_ready(bool &partition_pru
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fail to get px bloom filter", K(ret), K(rf_key_));
       }
     }
     if (OB_SUCC(ret)) {
@@ -1194,7 +1153,6 @@ int ObGranuleIteratorOp::wait_runtime_filter_ready(ObP2PDhKey &rf_key,
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fail to get px bloom filter", K(ret), K(rf_key));
       }
     }
     if (OB_SUCC(ret)) {
@@ -1230,7 +1188,6 @@ int ObGranuleIteratorOp::do_join_filter_partition_pruning(
       if (OB_FAIL(try_build_tablet2part_id_map())) {
       } else if (OB_FAIL(tablet2part_id_map_.get_refactored(tablet_id, part_id))) {
         ret = OB_HASH_NOT_EXIST == ret ? OB_SCHEMA_ERROR : ret;
-        LOG_WARN("fail to get refactored part id", K(ret), K(tablet_id), K(part_id));
       } else {
         tablet_id = part_id;
       }
@@ -1266,13 +1223,10 @@ int ObGranuleIteratorOp::fetch_full_pw_tasks(
   //init
   if (is_not_init()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the gi ctx is not init", K(ret));
   } else if (nullptr == (gi_task_pump = pump_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the pump can not be null", K(ret));
   } else if (OB_FAIL(gi_task_pump->try_fetch_pwj_tasks(infos, op_ids, worker_id_, splitter_type_))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("failed to fetch next granule task", K(ret), K(gi_task_pump));
     }
   } else if (op_ids.count() != infos.count()) {
     ret = OB_ERR_UNEXPECTED;
@@ -1293,11 +1247,9 @@ int ObGranuleIteratorOp::prepare_table_scan()
   int ret = OB_SUCCESS;
   if (!is_not_init()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected gi state", K(ret), K(state_));
   } else if (FALSE_IT(state_ = GI_GET_NEXT_GRANULE_TASK)) {
   } else if (OB_FAIL(get_next_granule_task(true /* prepare */))) {
     if (ret != OB_ITER_END) {
-      LOG_WARN("fail to get next granule task", K(ret));
     } else {
       // we can not return OB_ITER_END, because in open-stage,
       // OB_ITER_END is regard as error.
@@ -1351,7 +1303,6 @@ int ObGranuleIteratorOp::get_gi_task_consumer_node(ObOperator *cur,
     for (int64_t i = 0; i < child_cnt && OB_SUCC(ret) && OB_ISNULL(consumer); ++i) {
       if (OB_ISNULL(child = cur->get_child(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("child is null", K(ret));
       } else if (OB_FAIL(get_gi_task_consumer_node(child, consumer))) {
       }
     }
@@ -1360,7 +1311,6 @@ int ObGranuleIteratorOp::get_gi_task_consumer_node(ObOperator *cur,
   // cur == this means only check the output stack
   if (OB_SUCC(ret) && OB_ISNULL(consumer) && cur == this) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("can't find the tsc phy op", K(ret));
   }
   return ret;
 }
@@ -1371,14 +1321,12 @@ int ObGranuleIteratorOp::do_dynamic_partition_pruning(const ObGranuleTaskInfo &g
   partition_pruning = false;
   if (OB_ISNULL(pump_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pump is null", K(ret));
   } else if (pump_->need_partition_pruning()) {
     int64_t tablet_id =  gi_task_info.tablet_loc_->tablet_id_.id();
     if (pruning_tablet_ids_.empty()) {
       uint64_t table_location_key = OB_INVALID_ID;
       if (pump_->get_pruning_table_location()->empty()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected table location key", K(ret));
       } else {
         common::ObIArray<ObTableLocation> *locations = pump_->get_pruning_table_location();
         for (int i = 0; i < table_location_keys_.count() && OB_SUCC(ret) && !partition_pruning; ++i) {
@@ -1411,7 +1359,6 @@ int ObGranuleIteratorOp::do_dynamic_partition_pruning(const common::ObIArray<ObG
   partition_pruning = false;
   if (OB_ISNULL(pump_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pump is null", K(ret));
   } else if (pump_->need_partition_pruning()) {
     int64_t tablet_id = OB_INVALID_ID;
     uint64_t table_location_key = OB_INVALID_ID;
@@ -1436,7 +1383,6 @@ int ObGranuleIteratorOp::do_dynamic_partition_pruning(const common::ObIArray<ObG
         single_table_partition_pruning = false;
         if (pump_->get_pruning_table_location()->empty()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected table location key", K(ret));
         } else {
           table_location_key = table_location_keys_.at(i);
           common::ObIArray<ObTableLocation> *locations = pump_->get_pruning_table_location();
@@ -1468,7 +1414,6 @@ int ObGranuleIteratorOp::fetch_rescan_pw_task_infos(const common::ObIArray<int64
   int ret = OB_SUCCESS;
   if (op_ids.empty() || !gi_task_infos.empty() || OB_ISNULL(gi_prepare_map)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret), K(op_ids.count()), K(gi_task_infos.count()));
   } else if (rescan_task_idx_ >= pwj_rescan_task_infos_.count()) {
     ret = OB_ITER_END;
     state_ = GI_END;
@@ -1477,7 +1422,6 @@ int ObGranuleIteratorOp::fetch_rescan_pw_task_infos(const common::ObIArray<int64
     if (ObGranuleUtil::enable_partition_pruning(MY_SPEC.gi_attri_flag_)) {
       if (OB_FAIL(pw_get_next_task_pos(op_ids))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("pw get next task pos failed", K(ret));
         }
       }
     }
@@ -1513,10 +1457,8 @@ int ObGranuleIteratorOp::fetch_normal_pw_task_infos(const common::ObIArray<int64
   int ret = OB_SUCCESS;
   if (op_ids.empty() || !gi_task_infos.empty() || OB_ISNULL(gi_prepare_map)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret), K(get_spec().id_), K(op_ids.count()), K(gi_task_infos.count()));
   } else if (OB_FAIL(fetch_full_pw_tasks(gi_task_infos, op_ids))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("try fetch task failed", K(ret));
     } else {
       state_ = GI_END;
       all_task_fetched_ = true;
@@ -1560,22 +1502,18 @@ int ObGranuleIteratorOp::try_build_tablet2part_id_map()
   int ret = OB_SUCCESS;
   if (OB_INVALID_ID == MY_SPEC.index_table_id_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("loc is unexpected", K(ret));
   } else if (tablet2part_id_map_.created()) {
     /*do nothing*/
   } else if (OB_ISNULL(ctx_.get_sql_ctx()->schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(ctx_));
   } else {
     const ObTableSchema *table_schema = NULL;
     int64_t index_table_id = MY_SPEC.index_table_id_;
     if (OB_FAIL(ctx_.get_sql_ctx()->schema_guard_->get_table_schema( index_table_id, table_schema))) {
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_SCHEMA_ERROR;
-      LOG_WARN("null table schema", K(index_table_id));
     } else if (PARTITION_LEVEL_TWO != table_schema->get_part_level()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected part level", K(ret));
     } else if (OB_FAIL(tablet2part_id_map_.create(max(1, table_schema->get_all_part_num()),
                                                   "GITabletMap",
                                                   ObModIds::OB_HASH_NODE))) {
@@ -1585,14 +1523,12 @@ int ObGranuleIteratorOp::try_build_tablet2part_id_map()
       while (OB_SUCC(ret)) {
         if (OB_FAIL(iter.next_partition_info(info))) {
           if (OB_ITER_END != ret) {
-          LOG_WARN("fail get next partition item from iterator", K(ret));
           } else {
             ret = OB_SUCCESS;
             break;
           }
         } else if (OB_ISNULL(info.part_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected part", K(ret));
         } else if (OB_FAIL(tablet2part_id_map_.set_refactored(info.tablet_id_.id(),
             info.part_->get_object_id()))) {
         }
@@ -1632,7 +1568,6 @@ int ObGranuleIteratorOp::do_single_runtime_filter_pruning(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(gi_task_info.tablet_loc_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected tablet loc", K(ret));
   } else {
     int64_t tablet_id = gi_task_info.tablet_loc_->tablet_id_.id();
     if (OB_FAIL(do_join_filter_partition_pruning(tablet_id, partition_pruning))) {
@@ -1647,10 +1582,8 @@ int ObGranuleIteratorOp::do_parallel_runtime_filter_pruning()
   ObGranulePumpArgs *args = NULL;
   if (OB_ISNULL(pump_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pump is unexpected", K(pump_), K(ret));
   } else if (OB_ISNULL(args = pump_arg_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pump is unexpected", K(ret), K(pump_->get_pump_args()), K(get_spec().id_));
   } else {
     int64_t cur_tablet_idx = -1;
     int64_t finish_tablet_idx = -1;
@@ -1741,7 +1674,6 @@ int ObGranuleIteratorOp::do_single_runtime_filter_extract_query_range(
   ObIArray<ObNewRange> &ranges = gi_task_info.ranges_;
   if (gi_task_info.ranges_.empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ranges_ is empty ", K(ret));
   } else {
     for (int64_t i = 0; i < query_range_rf_keys_.count() && OB_SUCC(ret) && !has_extrct; ++i) {
       ObP2PDatahubMsgBase *&rf_msg = query_range_rf_msgs_.at(i);
@@ -1765,7 +1697,6 @@ int ObGranuleIteratorOp::do_parallel_runtime_filter_extract_query_range(
   ObGranulePumpArgs *args = NULL;
   if (OB_ISNULL(pump_) || OB_ISNULL(args = pump_arg_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pump is unexpected", K(pump_), K(ret));
   } else {
     ObIArray<ObNewRange> &ranges = args->query_range_by_runtime_filter_;
 
@@ -1825,7 +1756,6 @@ int ObGranuleIteratorOp::init_rescan_tasks_info()
   if (!rescan_tasks_info_.use_opt_) {
   } else if (OB_ISNULL(pump_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null pump_", K(ret), K(spec_.id_));
   } else if (OB_UNLIKELY(parallelism_ <= 0 || pump_->get_pump_args().count() < 1
                          || pump_->get_pump_args().at(0).tablet_arrays_.count() < 1)) {
     ret = OB_INVALID_ARGUMENT;

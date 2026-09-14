@@ -491,7 +491,6 @@ static int exec_assign(ObPLExecCtx *ctx, const ObPLAssignStmt *s)
         // Composite (record / collection) write targets are not reachable in MySQL-only parsing;
         // leave them unsupported rather than ship an untested deep-copy path.
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("[pl-interp] composite obj-access assignment not supported yet", K(ret), K(i));
       } else if (OB_UNLIKELY(!into_addr.is_ext() || 0 == into_addr.get_ext())) {
         // The for-write obj-access evaluates to an extend objparam whose value is an
         // ObPlCompiteWrite*; is_ext() (not the stricter is_pl_extend()) is the right guard
@@ -499,7 +498,6 @@ static int exec_assign(ObPLExecCtx *ctx, const ObPLAssignStmt *s)
         // extend_type no longer satisfies is_pl_extend(), but the value is still the address
         // (mirrors ObSPIService::check_exist_in_into_exprs: CK(into.is_ext()) + get_ext()).
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("[pl-interp] obj-access write target has no address", K(ret));
       } else {
         ObPlCompiteWrite *cw = reinterpret_cast<ObPlCompiteWrite *>(into_addr.get_ext());
         ObObj *dest = OB_NOT_NULL(cw) ? reinterpret_cast<ObObj *>(cw->value_addr_) : NULL;
@@ -508,13 +506,11 @@ static int exec_assign(ObPLExecCtx *ctx, const ObPLAssignStmt *s)
         CK (OB_NOT_NULL(cw), OB_NOT_NULL(dest), OB_NOT_NULL(dest_type));
         if (OB_SUCC(ret) && final_type.get_not_null() && rhs.is_null()) {
           ret = OB_ERR_NUMERIC_OR_VALUE_ERROR;
-          LOG_WARN("[pl-interp] NOT NULL obj-access target assigned NULL", K(ret));
         }
         OZ (ObSPIService::spi_copy_datum(ctx, alloc, &rhs, dest, dest_type));
       }
     } else {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("[pl-interp] assignment target is not a simple variable yet", K(ret), K(i));
     }
   }
   return ret;
@@ -760,7 +756,6 @@ static int exec_call(ObPLExecCtx *ctx, const ObPLCallStmt *s)
     storage = static_cast<ObObjParam *>(tmp_alloc.alloc(sizeof(ObObjParam) * argc));
     if (OB_ISNULL(argv) || OB_ISNULL(storage)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("[pl-interp] failed to allocate call argv", K(ret), K(argc));
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < argc; ++i) {
@@ -1004,15 +999,12 @@ static int exec_signal(ObPLExecCtx *ctx, const ObPLSignalStmt *s)
       // sqlstate from the warning buffer too (see effective_raised_condition).
       ret = OB_ERR_SIGNAL_EXCEPTION;  // a non-warning SIGNAL raises
     }
-    LOG_WARN("[pl-interp] SIGNAL processed", K(ret), K(error_code),
-             "sql_state", ObString(s->get_sql_state()));
   } else if (OB_SUCC(ret)) {
     // Error-code SIGNAL: raise the resolved OB error code directly.
     ret = s->get_ob_error_code();
     if (OB_SUCCESS == ret) {
       ret = OB_ERROR;  // a SIGNAL must raise something the handler search can see
     }
-    LOG_WARN("[pl-interp] SIGNAL raised", K(ret), "sql_state", ObString(s->get_sql_state()));
   }
   return ret;
 }
@@ -1040,7 +1032,6 @@ static int exec_execute(ObPLExecCtx *ctx, const ObPLExecuteStmt *s)
     storage = static_cast<ObObjParam *>(tmp_alloc.alloc(sizeof(ObObjParam) * param_count));
     if (OB_ISNULL(params) || OB_ISNULL(storage)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("[pl-interp] failed to allocate USING params", K(ret), K(param_count));
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < param_count; ++i) {
@@ -1166,8 +1157,6 @@ static int exec_stmt(ObPLExecCtx *ctx, const ObPLStmt *stmt, CtrlState &ctrl)
         break;
       default:
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("[pl-interp] statement type not implemented yet",
-                 K(ret), "stmt_type", static_cast<int64_t>(stmt->get_type()));
         break;
     }
   }
@@ -1182,7 +1171,6 @@ int ObPLInterpreter::execute()
   ObPLFunctionAST *ast = func.get_ast();
   if (OB_ISNULL(ast)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("[pl-interp] no retained AST on function", K(ret), K(func.get_routine_id()));
   } else {
     CtrlState ctrl;
     OZ (exec_block(&ctx, ast->get_body(), ctrl));
@@ -1199,8 +1187,6 @@ int ObPLInterpreter::execute()
       // without RETURN" (the %s in the *user* message is not substituted in the
       // reference), so leaving the default error message is what mysqltest wants.
       ret = OB_ER_SP_NORETURNEND;
-      LOG_WARN("[pl-interp] function ended without RETURN", K(ret),
-               K(func.get_function_name()));
     }
   }
   return ret;

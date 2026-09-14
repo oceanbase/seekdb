@@ -71,7 +71,6 @@ int ObDSActionArray::add_action(const ObDebugSyncAction &action)
   int ret = OB_SUCCESS;
   if (!action.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid action", K(ret), K(action));
   } else {
     if (!is_const_) {
       if (OB_ISNULL(action_ptrs_[action.sync_point_])) {
@@ -108,7 +107,6 @@ int ObDSActionArray::fetch_action(const ObDebugSyncPoint sync_point,
   int ret = OB_ENTRY_NOT_EXIST;
   if (sync_point <= INVALID_DEBUG_SYNC_POINT || sync_point >= MAX_DEBUG_SYNC_POINT) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(sync_point));
   } else {
     if (NULL != action_ptrs_[sync_point]) {
       action = *action_ptrs_[sync_point];
@@ -136,7 +134,6 @@ int ObDSActionArray::copy_action(const ObDebugSyncPoint sync_point,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_active(sync_point))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(sync_point));
   } else {
     action = *action_ptrs_[sync_point];
   }
@@ -148,8 +145,6 @@ OB_DEF_SERIALIZE(ObDSActionArray)
   int ret = OB_SUCCESS;
   if (active_cnt_ > MAX_DEBUG_SYNC_POINT) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected action count", K(ret),
-        K_(active_cnt), LITERAL_K(MAX_DEBUG_SYNC_POINT));
   } else {
     OB_UNIS_ENCODE(active_cnt_);
     if (active_cnt_ > 0) {
@@ -173,7 +168,6 @@ OB_DEF_DESERIALIZE(ObDSActionArray)
   OB_UNIS_DECODE(cnt);
   if (cnt > MAX_DEBUG_SYNC_POINT) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected action count", K(ret), K(cnt), LITERAL_K(MAX_DEBUG_SYNC_POINT));
   }
   ObDebugSyncAction action;
   for (int64_t i = 0; OB_SUCC(ret) && i < cnt; ++i) {
@@ -193,8 +187,6 @@ OB_DEF_SERIALIZE_SIZE(ObDSActionArray)
   int ret = OB_SUCCESS;
   if (active_cnt_ > MAX_DEBUG_SYNC_POINT) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected action count", K(ret),
-        K_(active_cnt), LITERAL_K(MAX_DEBUG_SYNC_POINT));
   } else {
     OB_UNIS_ADD_LEN(active_cnt_);
     if (active_cnt_ > 0) {
@@ -220,10 +212,8 @@ int ObDSSessionActions::init(const int64_t page_size, common::ObIAllocator &allo
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (page_size < static_cast<int64_t>(sizeof(void *) + sizeof(ObDSActionNode))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument: too small page size", K(ret), K(page_size));
   } else {
     allocator_ = &allocator;
     page_size_ = page_size;
@@ -238,7 +228,6 @@ ObDSActionNode *ObDSSessionActions::alloc_node()
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     if (free_list_.is_empty()) {
       void **block = static_cast<void **>(allocator_->alloc(page_size_));
@@ -305,9 +294,7 @@ int ObDSSessionActions::add_action(const ObDebugSyncAction &action)
   ObDSActionNode *n = NULL;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!action.is_valid()) {
-    LOG_WARN("invalid action", K(ret), K(action));
   } else {
     DLIST_FOREACH_NORET(it, actions_) {
       if (action.sync_point_ == it->action_.sync_point_) {
@@ -340,14 +327,12 @@ void ObDSSessionActions::clear_all()
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     ObDSActionNode *n = NULL;
     while (OB_SUCC(ret) && !actions_.is_empty()) {
       n = actions_.remove_first();
       if (OB_ISNULL(n)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL item", K(ret), KP(n));
       } else {
         n->~ObDSActionNode();
       }
@@ -356,7 +341,6 @@ void ObDSSessionActions::clear_all()
       n = free_list_.remove_first();
       if (OB_ISNULL(n)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL item", K(ret), KP(n));
       } else {
         n->~ObDSActionNode();
       }
@@ -375,11 +359,9 @@ void ObDSSessionActions::clear(const ObDebugSyncPoint sync_point)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(sync_point <= INVALID_DEBUG_SYNC_POINT)
       || OB_UNLIKELY(sync_point >= MAX_DEBUG_SYNC_POINT)) {
     ret = OB_INVALID_ARGUMENT;;
-    LOG_WARN("invalid argument", K(ret), K(sync_point));
   } else {
     ObDSActionNode *n = NULL;
     DLIST_FOREACH_NORET(it, actions_) {
@@ -493,7 +475,6 @@ int ObDSEventControl::find(const ObSyncEventName &name, Event *&e)
   int ret = OB_SUCCESS;
   if (name.is_empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(name));
   } else {
     ret = OB_ENTRY_NOT_EXIST;
     e = NULL;
@@ -514,16 +495,13 @@ int ObDSEventControl::locate(const ObSyncEventName &name, Event *&e)
   e = NULL;
   if (name.is_empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(name));
   } else if (OB_FAIL(find(name, e))) {
     if (OB_ENTRY_NOT_EXIST != ret) {
-      LOG_WARN("find event failed", K(ret), K(name));
     } else {
       ret = OB_SUCCESS;
       e = alloc_event();
       if (OB_ISNULL(e)) {
         ret = OB_SIZE_OVERFLOW;
-        LOG_WARN("exceed max event cnt, alloc failed", K(ret));
       } else {
         e->name_ = name;
         if (!used_.add_first(e)) {
@@ -534,7 +512,6 @@ int ObDSEventControl::locate(const ObSyncEventName &name, Event *&e)
     }
   } else if (OB_ISNULL(e)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL event", K(ret));
   }
   return ret;
 }
@@ -546,14 +523,11 @@ int ObDSEventControl::signal(const ObSyncEventName &name)
   ObThreadCondGuard guard(cond_);
   if (name.is_empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid event name", K(ret), K(name));
   } else if (stop_) {
     ret = OB_CANCELED;
-    LOG_WARN("is stopping", K(ret), K(name));
   } else if (OB_FAIL(locate(name, e))) {
   } else if (OB_ISNULL(e)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL event", K(ret));
   } else {
     e->signal_cnt_++;
     if (e->waiter_cnt_ > 0) {
@@ -573,7 +547,6 @@ int ObDSEventControl::broadcast(const ObSyncEventName &name)
 
   if (name.is_empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid event name", K(ret), K(name));
   } else {
     ObThreadCondGuard guard(cond_);
 
@@ -603,14 +576,12 @@ int ObDSEventControl::wait(const ObSyncEventName &name,
   ObThreadCondGuard guard(cond_);
   if (name.is_empty() || timeout_us <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid event name", K(ret), K(name), K(timeout_us));
   } else if (stop_) {
     ret = OB_CANCELED;
     LOG_INFO("is stopping", K(ret), K(name));
   } else if (OB_FAIL(locate(name, e))) {
   } else if (OB_ISNULL(e)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL event", K(ret));
   } else {
     e->waiter_cnt_++;
     LOG_INFO("start wait", KP(e), K(name), "signal_cnt", e->signal_cnt_);
@@ -715,12 +686,10 @@ int ObDebugSync::parse_action(const ObString &str_origin,
 
   if (str_origin.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(str_origin));
   } else {
     token = get_token(str);
     if (token.empty()) {
       ret = OB_PARSE_DEBUG_SYNC_ERROR;
-      LOG_WARN("empty debug sync string", K(ret), K(str_origin));
     }
   }
   // parse RESET
@@ -738,12 +707,10 @@ int ObDebugSync::parse_action(const ObString &str_origin,
     if (action.sync_point_ <= INVALID_DEBUG_SYNC_POINT
         || action.sync_point_ >= MAX_DEBUG_SYNC_POINT) {
       ret = OB_UNKNOWN_DEBUG_SYNC_POINT;
-      LOG_WARN("invalid sync point", K(ret), K(token), K(str_origin));
     } else {
       token = get_token(str);
       if (token.empty()) {
         ret = OB_PARSE_DEBUG_SYNC_ERROR;
-        LOG_WARN("no action after sync point", K(ret), K(str_origin));
       }
     }
   }
@@ -769,7 +736,6 @@ int ObDebugSync::parse_action(const ObString &str_origin,
       token = get_token(str);
       if (token.empty()) {
         ret = OB_PARSE_DEBUG_SYNC_ERROR;
-        LOG_WARN("no event name", K(ret), K(str_origin));
       } else {
         // TODO baihua: to lower case?
         if (OB_FAIL(name->assign(token))) {
@@ -779,7 +745,6 @@ int ObDebugSync::parse_action(const ObString &str_origin,
       }
     } else {
       ret = OB_PARSE_DEBUG_SYNC_ERROR;
-      LOG_WARN("not supported action", K(ret), K(token), K(str_origin));
     }
   }
 
@@ -788,7 +753,6 @@ int ObDebugSync::parse_action(const ObString &str_origin,
       token = get_token(str);
       if (token.empty()) {
         ret = OB_PARSE_DEBUG_SYNC_ERROR;
-        LOG_WARN("no event name", K(ret), K(str_origin));
       } else if (OB_FAIL(action.wait_.assign(token))) {
       } else {
         token = get_token(str);
@@ -802,13 +766,11 @@ int ObDebugSync::parse_action(const ObString &str_origin,
       token = get_token(str);
       if (token.empty()) {
         ret = OB_PARSE_DEBUG_SYNC_ERROR;
-        LOG_WARN("integer expected after TIMEOUT", K(ret), K(str_origin));
       } else {
         ObCStringHelper helper;
         const char *token_str = helper.convert(token);
         if (OB_ISNULL(token_str)) {
           ret = OB_ERR_NULL_VALUE;
-          LOG_WARN("fail to convert token", K(ret), K(token));
         } else {
           action.timeout_ = atoll(token_str);
           token = get_token(str);
@@ -829,18 +791,15 @@ int ObDebugSync::parse_action(const ObString &str_origin,
       token = get_token(str);
       if (token.empty()) {
         ret = OB_PARSE_DEBUG_SYNC_ERROR;
-        LOG_WARN("integer expected after EXECUTE", K(ret), K(str_origin));
       } else {
         ObCStringHelper helper;
         const char *token_str = helper.convert(token);
         if (OB_ISNULL(token_str)) {
           ret = OB_ERR_NULL_VALUE;
-          LOG_WARN("fail to convert token", K(ret), K(token));
         } else {
           action.execute_ = atoll(token_str);
           if (action.execute_ <= 0) {
             ret = OB_PARSE_DEBUG_SYNC_ERROR;
-            LOG_WARN("invalid execute count", K(ret), K(token), K(str_origin));
           } else {
             token = get_token(str);
           }
@@ -852,7 +811,6 @@ int ObDebugSync::parse_action(const ObString &str_origin,
   if (OB_SUCC(ret)) {
     if (!token.empty() || !str.empty()) {
       ret = OB_PARSE_DEBUG_SYNC_ERROR;
-      LOG_WARN("unexpected parameters found", K(ret), K(token), K(str), K(str_origin));
     }
   }
   LOG_INFO("finish get debug sync action", K(ret), K(str_origin), K(action), K(clear), K(reset));
@@ -872,10 +830,8 @@ int ObDebugSync::add_debug_sync(
   bool reset = false;
   if (stop_) {
     ret = OB_CANCELED;
-    LOG_WARN("is stopping", K(ret));
   } else if (str.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(str));
   } else if (OB_ISNULL(local_actions)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("get thread local actions failed", K(ret), K(str));
@@ -883,7 +839,6 @@ int ObDebugSync::add_debug_sync(
   } else if (is_global) {
     if (OB_ISNULL(broadcaster)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("debug sync broadcaster is not composed", K(ret));
     } else if (OB_FAIL(broadcaster->broadcast_debug_sync_action(
         reset, clear, action))) {
     }
@@ -897,7 +852,6 @@ int ObDebugSync::add_debug_sync(
       event_control_.clear_event();
     } else if (!action.is_valid()) {
       ret = OB_PARSE_DEBUG_SYNC_ERROR;
-      LOG_WARN("invalid action", K(ret), K(str), K(action));
     } else if (OB_FAIL(local_actions->add_action(action))) {
     } else if (OB_FAIL(session_actions.add_action(action))) {
     }
@@ -918,7 +872,6 @@ int ObDebugSync::execute(const ObDebugSyncPoint sync_point)
   if (OB_UNLIKELY(sync_point <= INVALID_DEBUG_SYNC_POINT)
       || OB_UNLIKELY(sync_point >= MAX_DEBUG_SYNC_POINT)) {
     ret = OB_INVALID_ARGUMENT;;
-    LOG_WARN("invalid argument", K(ret), K(sync_point));
   } else if (!GCONF.is_debug_sync_enabled()
       || ((OB_ISNULL(local_actions) || local_actions->is_empty())
           && global_actions_.is_empty())) {
@@ -933,7 +886,6 @@ int ObDebugSync::execute(const ObDebugSyncPoint sync_point)
       } else if (OB_ENTRY_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fetch action failed", K(ret), K(sync_point));
       }
     }
     if (OB_SUCC(ret)) {
@@ -945,7 +897,6 @@ int ObDebugSync::execute(const ObDebugSyncPoint sync_point)
         } else if (OB_ENTRY_NOT_EXIST == ret) {
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("fetch action failed", K(ret), K(sync_point));
         }
       }
     }
@@ -1026,7 +977,6 @@ int ObDebugSync::set_global_action(const bool reset, const bool clear,
   const bool is_debug_sync_enabled = GCONF.is_debug_sync_enabled();
   if (!reset && !clear && !action.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(reset), K(clear), K(action));
   } else {
     if (is_debug_sync_enabled) {
       ObSpinLockGuard guard(lock_);

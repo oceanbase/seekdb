@@ -38,7 +38,6 @@ int ObLogJoinFilter::est_cost()
   ObLogicalOperator *first_child = get_child(ObLogicalOperator::first_child);
   if (OB_ISNULL(first_child)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("first_child is null", K(ret));
   } else {
     // refine this
     set_op_cost(0.0);
@@ -52,7 +51,6 @@ int ObLogJoinFilter::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
 {
   int ret = OB_SUCCESS;
   if (NULL != calc_tablet_id_expr_ && OB_FAIL(all_exprs.push_back(calc_tablet_id_expr_))) {
-    LOG_WARN("failed to push back expr", K(ret));
   } else if (OB_FAIL(append(all_exprs, join_exprs_))) {
   } else if (OB_FAIL(append(all_exprs, all_join_key_left_exprs_))) {
   } else if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
@@ -74,14 +72,10 @@ int ObLogJoinFilter::inner_replace_op_exprs(ObRawExprReplacer &replacer)
   if (OB_FAIL(replace_exprs_action(replacer, join_exprs_))) {
   } else if (OB_NOT_NULL(calc_tablet_id_expr_)
       && OB_FAIL(replace_expr_action(replacer, calc_tablet_id_expr_))) {
-    LOG_WARN("failed to replace calc_tablet_id_expr_", K(ret));
   } else if (is_create_ && OB_FAIL(replace_exprs_action(replacer, all_join_key_left_exprs_))) {
-    LOG_WARN("failed to replace all_join_key_left_exprs_", K(ret));
   } else if (!is_create_ && OB_FAIL(replace_exprs_action(replacer, join_filter_exprs_))) {
-    LOG_WARN("failed to replace join_filter_exprs_", K(ret));
   } else if (!is_create_ && (&replacer != &get_plan()->gen_col_replacer())
              && OB_FAIL(replace_exprs_action(get_plan()->gen_col_replacer(), join_filter_exprs_))) {
-    LOG_WARN("failed to replace join_filter_exprs_", K(ret));
   }
   return ret;
 }
@@ -112,10 +106,8 @@ int ObLogJoinFilter::get_plan_item_info(PlanText &plan_text,
       idx = (int64_t)(join_filter_types_.at(i)) - 1;
       if (idx >= arr_len || idx < 0) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected type", K(ret));
       } else if (FALSE_IT(type_name = join_filter_type_name[idx])) {
       } else if (is_first && OB_FAIL(BUF_PRINTF(", "))) {
-        LOG_WARN("BUF_PRINTF fails", K(ret));
       } else if (OB_FAIL(BUF_PRINTF("%.*s",
                                     (int)strlen(type_name),
                                     type_name))) {
@@ -136,7 +128,6 @@ int ObLogJoinFilter::get_plan_item_info(PlanText &plan_text,
             for (int i = 0; i < cnt && OB_SUCC(ret); ++i) {
               if (OB_FAIL(join_exprs_.at(i)->get_name(buf, buf_len, pos, type))) {
               } else if (i != cnt - 1 && OB_FAIL(BUF_PRINTF(", "))) {
-                LOG_WARN("fail to print buf", K(ret));
               }
             }
           } else {

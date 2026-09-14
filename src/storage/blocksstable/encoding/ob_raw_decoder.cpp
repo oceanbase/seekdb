@@ -254,10 +254,8 @@ int ObRawDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDatum &datum, 
   const unsigned char *col_data = reinterpret_cast<const unsigned char *>(meta_data_);
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (NULL == data || len < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(data), K(len));
   } else {
     // read extend value bit
     if (ctx.has_extend_value()) {
@@ -325,10 +323,8 @@ int ObRawDecoder::update_pointer(const char *old_block, const char *cur_block)
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(old_block) || OB_ISNULL(cur_block)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(old_block), KP(cur_block));
   } else {
     ObIColumnDecoder::update_pointer(meta_data_, old_block, cur_block);
   }
@@ -352,7 +348,6 @@ int ObRawDecoder::batch_decode(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Raw decoder not inited", K(ret));
   } else if (fast_decode_valid(ctx)) {
     if (OB_FAIL(batch_decode_fast(ctx, row_index, row_ids, row_cap, datums))) {
     }
@@ -530,15 +525,12 @@ int ObRawDecoder::pushdown_operator(
   const unsigned char *col_data = reinterpret_cast<const unsigned char *>(meta_data_);
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Raw Decoder not inited", K(ret), K(filter));
   } else if (OB_UNLIKELY(NULL == meta_data || NULL == row_index)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Null pointer for data at pushdown operator", K(ret), K(meta_data));
   } else if (OB_FAIL(get_is_null_bitmap(col_ctx, col_data,
       row_index, pd_filter_info, result_bitmap))) {
   } else if (OB_UNLIKELY(op_type >= sql::WHITE_OP_MAX)){
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid op type for pushed down white filter", K(ret), K(op_type));
   }
 
   // Matching filter to operators
@@ -589,7 +581,6 @@ int ObRawDecoder::pushdown_operator(
     }
     default: {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("Not supported operation type", K(ret), K(op_type));
     }
     } // end of switch
   }
@@ -666,7 +657,6 @@ int ObRawDecoder::get_null_count(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Raw decoder is not inited", K(ret));
   } else if OB_FAIL(ObIColumnDecoder::get_null_count_from_extend_value(
       ctx,
       row_index,
@@ -690,8 +680,6 @@ int ObRawDecoder::get_is_null_bitmap(
                          || NULL == col_data
                          || NULL == row_index)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Filter Pushdown Operator: invalid argument",
-        K(ret), K(pd_filter_info), K(result_bitmap.size()));
   } else if (col_ctx.is_fix_length() || col_ctx.is_bit_packing()) {
     if (OB_FAIL(get_is_null_bitmap_from_fixed_column(col_ctx, col_data,
         pd_filter_info, result_bitmap))) {
@@ -719,8 +707,6 @@ int ObRawDecoder::comparison_operator(
                   || NULL == row_index
                   || filter.get_datums().count() != 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Filter pushdown operator: Invalid argument",
-        K(ret), K(col_ctx), K(pd_filter_info), K(result_bitmap.size()), K(filter), K(row_index));
   } else {
     ObDatumCmpFuncType type_cmp_func = filter.cmp_func_;
     ObGetFilterCmpRetFunc get_cmp_ret = get_filter_cmp_ret_func(filter.get_op_type());
@@ -749,8 +735,6 @@ int ObRawDecoder::fast_binary_comparison_operator(
                          || filter.get_datums().count() != 1
                          || fix_len_tag > 3)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Filter pushdown operator: Invalid argument",
-        K(ret), K(col_ctx), K(fix_len_tag), K(pd_filter_info), K(result_bitmap.size()));
   } else if (OB_FAIL(filter.get_filter_node().get_filter_val_meta(filter_val_meta))) {
   } else {
     const int64_t type_store_size = filter_val_meta.is_decimal_int() ?
@@ -801,8 +785,6 @@ int ObRawDecoder::fast_binary_comparison_operator(
                                           op_type);
       if (OB_ISNULL(cmp_funtion)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected nullptr compare function", K(ret), K(is_signed_data), K(type_store_size),
-                  K_(col_ctx.col_header_->length), K(fix_len_tag), K(op_type));
       } else {
         cmp_funtion(col_data, node_value, result_bitmap.get_data(), pd_filter_info.start_,
                      pd_filter_info.start_ + pd_filter_info.count_);
@@ -824,8 +806,6 @@ int ObRawDecoder::fast_datum_comparison_operator(
   if (OB_UNLIKELY(pd_filter_info.count_ != result_bitmap.size()
       || filter.get_datums().count() != 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Filter pushdown operator: Invalid argument",
-        K(ret), K(col_ctx), K(pd_filter_info), K(result_bitmap.size()));
   } else if (OB_FAIL(pd_filter_info.get_col_datum(datums))) {
   } else {
     ObGetFilterCmpRetFunc get_cmp_ret = get_filter_cmp_ret_func(filter.get_op_type());
@@ -849,7 +829,6 @@ int ObRawDecoder::fast_datum_comparison_operator(
               *col_ctx.allocator_,
               curr_batch_size,
               datums))) {
-        LOG_WARN("Failed to pad fixed char on demand", K(ret), K(col_ctx), K(curr_batch_size));
       } else {
         int cmp_res = 0;
         for (int64_t i = 0; OB_SUCC(ret) && i < curr_batch_size; ++i) {
@@ -884,8 +863,6 @@ int ObRawDecoder::bt_operator(
                          || NULL == row_index
                          || filter.get_datums().count() != 2)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Filter pushdown operator: Invalid arguments",
-        K(ret), K(pd_filter_info), K(result_bitmap.size()), K(filter));
   } else {
     ObDatumCmpFuncType type_cmp_func = filter.cmp_func_;
     ObRawDecoderFilterBetweenFunc eval(type_cmp_func);
@@ -909,8 +886,6 @@ int ObRawDecoder::in_operator(
              || result_bitmap.size() != pd_filter_info.count_
              || NULL == row_index)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Pushdown in operator: Invalid arguments",
-        K(ret), K(pd_filter_info), K(result_bitmap.size()), K(filter));
   } else {
     ObRawDecoderFilterInFunc eval;
     if (OB_FAIL(traverse_all_data(parent, col_ctx, row_index, filter, pd_filter_info, result_bitmap, eval))) {

@@ -45,7 +45,6 @@ int ObTruncateTabletArg::deserialize(
   int ret = OB_SUCCESS;
   LST_DO_CODE(OB_UNIS_DECODE, info_, index_tablet_id_);
   if (FAILEDx(truncate_info_.deserialize(allocator, buf, data_len, pos))) {
-    LOG_WARN("failed to deserialize truncate arg", KR(ret));
   }
   return ret;
 }

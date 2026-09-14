@@ -296,7 +296,6 @@ int ObPhysicalPlan::set_param_fields(const common::ParamsFieldArray &params)
   int64_t N = params.count();
   WITH_CONTEXT(mem_context_) {
     if(N > 0 && OB_FAIL(param_columns_.reserve(N))) {
-      LOG_WARN("failed to reserved param field", K(ret));
     }
     ObField tmp_field;
     for (int i = 0; OB_SUCC(ret) && i < N; ++i) {
@@ -706,10 +705,8 @@ int ObPhysicalPlan::set_location_constraints(const ObIArray<LocationConstraint> 
       for (int64_t i = 0; OB_SUCC(ret) && i < strict_constraints.count(); ++i) {
         if (OB_ISNULL(cur_cons = strict_constraints.at(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret), K(i));
         } else if (cur_cons->count() <= 0) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected empty array", K(ret));
         } else {
           strict_constrinats_.at(i).reset();
           strict_constrinats_.at(i).set_allocator(&allocator_);
@@ -734,10 +731,8 @@ int ObPhysicalPlan::set_location_constraints(const ObIArray<LocationConstraint> 
       for (int64_t i = 0; OB_SUCC(ret) && i < non_strict_constraints.count(); ++i) {
         if (OB_ISNULL(cur_cons = non_strict_constraints.at(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret), K(i));
         } else if (cur_cons->count() <= 0) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected empty array", K(ret));
         } else {
           non_strict_constrinats_.at(i).reset();
           non_strict_constrinats_.at(i).set_allocator(&allocator_);
@@ -810,12 +805,10 @@ int ObPhysicalPlan::alloc_op_spec(const ObPhyOperatorType type,
   UNUSED(op_id);
   if (type >= PHY_END || child_cnt < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(type), K(child_cnt));
   } else if (OB_FAIL(ObOperatorFactory::alloc_op_spec(
               allocator_, type, child_cnt, op))) {
   } else if (OB_ISNULL(op)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL operator spec returned", K(ret));
   } else {
     // Here is directly assigning log operator id to spec
     uint32_t tmp_op_id = UINT32_MAX;
@@ -1015,8 +1008,6 @@ int ObPhysicalPlan::update_cache_obj_stat(ObILibCacheCtx &ctx)
             ret = OB_SUCCESS;
             break;
           } else {
-            LOG_WARN("failed to write plan tmp tbl name info",
-                     K(pc_ctx.tmp_table_names_.at(i)), K(i), K(ret));
           }
         }
       }
@@ -1041,7 +1032,6 @@ int ObPhysicalPlan::set_logical_plan(ObLogicalPlanRawData &logical_plan)
   char *buf = NULL;
   if (OB_ISNULL(buf = (char*)allocator_.alloc(logical_plan.logical_plan_len_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc memory", K(ret));
   } else {
     if (NULL != logical_plan_.logical_plan_) {
       allocator_.free(logical_plan_.logical_plan_);
@@ -1115,7 +1105,6 @@ int ObPhysicalPlan::check_pdml_affected_rows(ObExecContext &ctx)
       const ObOpSpec *op = all_ops.at(i);
       if (OB_ISNULL(op)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null ptr", K(ret));
       } else if (op->id_ != feedback_node.op_id_) {
         // do nothing
       } else if (op->is_pdml_operator()) {
@@ -1152,7 +1141,6 @@ int ObPhysicalPlan::set_feedback_info(ObExecContext &ctx)
   if (OB_FAIL(logical_plan_.uncompress_logical_plan(ctx.get_allocator(), plan_items))) {
   } else if (feedback_nodes.count() != plan_items.count()) {
     //ignore error code
-    LOG_WARN("unexpect feedback node count", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < plan_items.count(); ++i) {
       const ObExecFeedbackNode &feedback_node = feedback_nodes.at(i);
@@ -1162,10 +1150,8 @@ int ObPhysicalPlan::set_feedback_info(ObExecContext &ctx)
       }
       if (OB_ISNULL(plan_item)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null plan item", K(ret));
       } else if (feedback_node.op_id_ != plan_item->id_) {
         ret = OB_SUCCESS;
-        LOG_WARN("unexpect feedback node info", K(ret));
       } else {
         int64_t real_cost = 0;
         if (0 != feedback_node.output_row_count_ &&
@@ -1199,7 +1185,6 @@ int ObPhysicalPlan::set_all_local_session_vars(ObIArray<ObLocalSessionVar> *all_
   }
   if (OB_ISNULL(all_local_session_vars)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(all_local_session_vars));
   } else if (OB_FAIL(all_local_session_vars_.reserve(all_local_session_vars->count()))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < all_local_session_vars->count(); ++i) {

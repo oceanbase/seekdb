@@ -40,14 +40,9 @@ int ObCreateUserResolver::resolve(const ParseNode &parse_tree)
   if (OB_UNLIKELY(4 != parse_tree.num_child_)
       || OB_UNLIKELY(T_CREATE_USER != parse_tree.type_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("expect 4 children in create user parse tree",
-             "actual_num", parse_tree.num_child_,
-             "type", parse_tree.type_,
-             K(ret));
   } else if (OB_ISNULL(params_.session_info_)
              || OB_ISNULL(schema_checker_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Session info or schema checker should not be NULL", K(ret));
 	} else if (OB_ISNULL(create_user_stmt = create_stmt<ObCreateUserStmt>())) {
 		ret = OB_ALLOCATE_MEMORY_FAILED;
 		LOG_ERROR("Failed to create ObCreateUserStmt", K(ret));
@@ -64,7 +59,6 @@ int ObCreateUserResolver::resolve(const ParseNode &parse_tree)
       if (NULL != if_not_exist) {
         if (T_IF_NOT_EXISTS != if_not_exist->type_) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid argument", K(if_not_exist->type_), K(ret));
         } else {
           create_user_stmt->set_if_not_exists(true);
         }
@@ -75,7 +69,6 @@ int ObCreateUserResolver::resolve(const ParseNode &parse_tree)
       // bypass
     } else if (OB_ISNULL(users) || OB_UNLIKELY(T_USERS != users->type_) || OB_UNLIKELY(users->num_child_ <= 0)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Create user ParseNode error", K(ret));
     } else {
       // replace password to *** in query_string for audit
       ObString masked_sql;
@@ -90,10 +83,8 @@ int ObCreateUserResolver::resolve(const ParseNode &parse_tree)
         ParseNode *user_pass = users->children_[i];
         if (OB_ISNULL(user_pass)) {
           ret = OB_ERR_PARSE_SQL;
-          LOG_WARN("The child of parseNode should not be NULL", K(ret), K(i));
         } else if (OB_UNLIKELY(5 != user_pass->num_child_ )) {
           ret = OB_ERR_PARSE_SQL;
-          LOG_WARN("sql_parser parse user_identification error", K(ret));
         } else {
           ObString user_name;
           ObString host_name;
@@ -107,7 +98,6 @@ int ObCreateUserResolver::resolve(const ParseNode &parse_tree)
           if (OB_SUCC(ret)) {
             if (user_name.empty()) {
               ret = OB_CANNOT_USER;
-              LOG_WARN("user name is empty", K(ret));
               ObString create_user = ObString::make_string("CREATE USER");
               LOG_USER_ERROR(OB_CANNOT_USER, create_user.length(), create_user.ptr(), host_name.length(), host_name.ptr());
             } else if (OB_ISNULL(user_pass->children_[1])) {
@@ -115,7 +105,6 @@ int ObCreateUserResolver::resolve(const ParseNode &parse_tree)
               //no enc
             } else if (OB_ISNULL(user_pass->children_[2])) {
               ret = OB_ERR_PARSE_SQL;
-              LOG_WARN("Child 2 of user_pass should not be NULL here", K(ret));
             } else {
               password.assign_ptr(user_pass->children_[1]->str_value_,
                                   static_cast<int32_t>(user_pass->children_[1]->str_len_));
@@ -160,10 +149,8 @@ int ObCreateUserResolver::resolve(const ParseNode &parse_tree)
                || OB_UNLIKELY(require_info->num_child_ != 1)
                || OB_ISNULL(ssl_infos = require_info->children_[0])) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Create user ParseNode error", K(ret), K(require_info->type_), K(require_info->num_child_), KP(ssl_infos));
     } else if (OB_UNLIKELY(ssl_infos->type_ < T_TLS_NONE && ssl_infos->type_ > T_TLS_SPECIFIED)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Create user ParseNode error", K(ret), K(ssl_infos->type_));
     } else {
       ssl_type = static_cast<ObSSLType>(static_cast<int32_t>(ObSSLType::SSL_TYPE_NONE) + (ssl_infos->type_ - T_TLS_NONE));
 
@@ -172,20 +159,16 @@ int ObCreateUserResolver::resolve(const ParseNode &parse_tree)
         if (OB_UNLIKELY(ssl_infos->num_child_ != 1)
             || OB_ISNULL(specified_ssl_infos = ssl_infos->children_[0])) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("Create user ParseNode error", K(ret), K(ssl_infos->num_child_), KP(specified_ssl_infos));
         } else {
           bool check_repeat[static_cast<int32_t>(ObSSLSpecifiedType::SSL_SPEC_TYPE_MAX)] = {};
           for (int i = 0; i < specified_ssl_infos->num_child_ && OB_SUCC(ret); ++i) {
             ParseNode *ssl_info = specified_ssl_infos->children_[i];
             if (OB_ISNULL(ssl_info)) {
               ret = OB_ERR_PARSE_SQL;
-              LOG_WARN("The child of parseNode should not be NULL", K(ret), K(i));
             } else if (OB_UNLIKELY(ssl_info->num_child_ != 1)) {
               ret = OB_ERR_PARSE_SQL;
-              LOG_WARN("The num_child_is error", K(ret), K(i), K(ssl_info->num_child_));
             } else if (OB_UNLIKELY(check_repeat[ssl_info->type_ - T_TLS_CIPHER])) {
               ret = OB_ERR_DUP_ARGUMENT;
-              LOG_WARN("Option used twice in statement", K(ret), K(ssl_info->type_));
               LOG_USER_ERROR(OB_ERR_DUP_ARGUMENT, get_ssl_spec_type_str(static_cast<ObSSLSpecifiedType>(ssl_info->type_ - T_TLS_CIPHER)));
             } else {
               check_repeat[ssl_info->type_ - T_TLS_CIPHER] = true;
@@ -206,14 +189,11 @@ int ObCreateUserResolver::resolve(const ParseNode &parse_tree)
       if (T_USER_RESOURCE_OPTIONS != resource_options->type_
                 || OB_ISNULL(resource_options->children_)) {
         ret = common::OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid resource options argument", K(ret), K(resource_options->type_),
-                  K(resource_options->children_));
       } else {
         for (int64_t i = 0; i < resource_options->num_child_; i++) {
           ParseNode *res_option = resource_options->children_[i];
           if (OB_ISNULL(res_option)) {
             ret = common::OB_INVALID_ARGUMENT;
-            LOG_WARN("null res option", K(ret), K(i));
           } else if (T_MAX_CONNECTIONS_PER_HOUR == res_option->type_) {
             uint64_t max_connections_per_hour = static_cast<uint64_t>(res_option->value_);
             max_connections_per_hour = max_connections_per_hour > MAX_CONNECTIONS ? MAX_CONNECTIONS

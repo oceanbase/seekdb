@@ -227,7 +227,6 @@ int ObMultipleScanMerge::locate_blockscan_border()
   blocksstable::ObDatumRowkey border_key;
   if (OB_ISNULL(block_row_store_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null block row store", K(ret));
   } else if (1 == consumer_cnt_) {
     if (access_ctx_->query_flag_.is_reverse_scan()) {
       border_key.set_min_rowkey();
@@ -246,16 +245,13 @@ int ObMultipleScanMerge::locate_blockscan_border()
       ObStoreRowIterator *iter = iters_.at(iter_idx);
       if (OB_ISNULL(iter)) {
         ret = common::OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected null iter", K(ret), K(iter));
       } else if (OB_FAIL(iter->get_next_row(item.row_))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("Failed to get next row from iterator", K(ret), "index", iter_idx, "iterator", *iter);
         } else {
           ret = OB_SUCCESS;
         }
       } else if (OB_ISNULL(item.row_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Get next row return NULL row", K(ret), "iter_index", iter_idx);
       } else {
         item.iter_idx_ = iter_idx;
         if (OB_FAIL(rows_merger_->push(item))) {
@@ -277,7 +273,6 @@ int ObMultipleScanMerge::locate_blockscan_border()
       } else if (OB_FAIL(rows_merger_->top(top_item))) {
       } else if (nullptr == top_item || nullptr == top_item->row_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("item or row is null", K(ret), KP(top_item));
       } else {
         const int64_t rowkey_cnt = access_param_->iter_param_.get_schema_rowkey_count();
         if (OB_FAIL(border_key.assign(top_item->row_->storage_datums_, rowkey_cnt))) {
@@ -290,7 +285,6 @@ int ObMultipleScanMerge::locate_blockscan_border()
     bool can_batch;
     if (OB_ISNULL(iter)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected null iter", K(ret), K(consumers_[0]));
     } else if (OB_FAIL(iter->refresh_blockscan_checker(border_key))) {
     } else if (OB_FAIL(can_batch_scan(can_batch))) {
     } else if (can_batch) {
@@ -360,7 +354,6 @@ int ObMultipleScanMerge::advance_scan(const blocksstable::ObDatumRange &range)
       } else if (OB_FAIL(rows_merger_->top(top_item))) {
       } else if (nullptr == top_item || nullptr == top_item->row_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("item or row is null", K(ret), KP(top_item));
       } else if (OB_FAIL(top_key.assign(top_item->row_->storage_datums_, rowkey_cnt))) {
       } else if (OB_FAIL(top_key.compare(range.start_key_, datum_utils, cmp_ret))) {
       } else if (cmp_ret > 0 || (0 == cmp_ret && range.is_left_closed())) {
@@ -373,7 +366,6 @@ int ObMultipleScanMerge::advance_scan(const blocksstable::ObDatumRange &range)
         if (OB_ITER_END == ret) {
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("failed to get next row from iterator", K(ret), K(pop_iter_idx), KP(iter));
         }
       } else if (OB_ISNULL(item.row_)) {
         ret = OB_ERR_UNEXPECTED;
@@ -384,7 +376,6 @@ int ObMultipleScanMerge::advance_scan(const blocksstable::ObDatumRange &range)
       }
     }
     if (FAILEDx(rows_merger_->rebuild())) {
-      LOG_WARN("failed to rebuild rows merger", K(ret), KPC(rows_merger_));
     } else if (OB_NOT_NULL(block_row_store_)) {
       block_row_store_->enable();
     }
@@ -713,14 +704,12 @@ int ObMultipleScanMerge::pause(bool& do_pause)
         int cmp_ret = 0;
         if (OB_UNLIKELY(consumer_cnt_ != 1)) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("Invalid argument", K(ret), K_(consumer_cnt));
         } else if (tables_.count() > 1) {
           // disable pause for batch scan with inc data
           // TODO @cuiyuntian.cyt fix this
           do_pause = false;
         } else if (OB_ISNULL(iter = iters_.at(consumers_[0]))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Unexpected null iter", K(ret), K(consumers_[0]));
         } else if (OB_FAIL(iter->get_next_rowkey(true,
                                                  curr_scan_index_,
                                                  next_rowkey,
@@ -780,7 +769,6 @@ int ObMultipleScanMerge::get_current_range(ObDatumRange& current_range) const
   INIT_SUCC(ret);
   if (OB_ISNULL(range_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("range_ is null!");
   } else {
     current_range = *range_;
   }

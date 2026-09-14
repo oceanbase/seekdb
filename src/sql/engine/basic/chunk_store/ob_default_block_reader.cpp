@@ -30,12 +30,10 @@ int ObDefaultBlockReader::get_row(const ObChunkDatumStore::StoredRow *&sr)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cur_blk_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cur block is null", K(ret));
   } else if (!blk_has_next_row()) {
     ret = OB_ITER_END;
   } else if (cur_pos_in_blk_ > cur_blk_->raw_size_ - sizeof(ObTempBlockStore::Block)) {
     ret = OB_INDEX_OUT_OF_RANGE;
-    LOG_WARN("get unexpected index", K(ret));
   } else {
     const ObChunkDatumStore::StoredRow *row = reinterpret_cast<const ObChunkDatumStore::StoredRow *>(&cur_blk_->payload_[cur_pos_in_blk_]);
     sr = row;
@@ -51,7 +49,6 @@ int ObDefaultBlockReader::prepare_blk_for_read(ObTempBlockStore::Block *blk)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(blk)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to block is null", K(ret));
   } else {
     int64_t cur_row = 0;
     int64_t cur_pos = 0;

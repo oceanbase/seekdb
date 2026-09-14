@@ -63,7 +63,6 @@ int ObTabletDDLInfo::update(const int64_t schema_version,
   ObByteLockGuard guard(rwlock_);
   if (schema_version <= 0 || !scn.is_valid_and_not_min()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(schema_version), K(scn));
   } else if (ddl_schema_version_ < schema_version) {
     ddl_schema_refreshed_ts_ = common::max(ObTimeUtility::current_time(), ddl_schema_refreshed_ts_);
     schema_version_change_scn_ = scn;

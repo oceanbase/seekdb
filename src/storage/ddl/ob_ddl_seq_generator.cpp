@@ -37,10 +37,8 @@ int ObDDLSeqGenerator::init(const int64_t start, const int64_t interval, const i
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), K(*this));
   } else if (OB_UNLIKELY(start < 0 || interval <= 0 || step <= 0 || step < interval)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(start), K(interval), K(step));
   } else {
     start_ = start;
     interval_ = interval;
@@ -67,7 +65,6 @@ int ObDDLSeqGenerator::get_next(int64_t &seq_val, bool &is_step_over)
   seq_val = -1;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(*this));
   } else if (OB_FAIL(preview_next(current_, seq_val))) {
   } else {
     current_ = seq_val;
@@ -84,7 +81,6 @@ int ObDDLSeqGenerator::get_next_interval(int64_t &start, int64_t &end)
   int64_t seq_val = -1;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     int64_t next_round_idx = current_ < 0 ? start_ / step_ : current_ / step_ + 1;
     start = next_round_idx * step_ + start_ % step_;
@@ -100,7 +96,6 @@ int ObDDLSeqGenerator::preview_next(const int64_t current, int64_t &next_val) co
   next_val = -1;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(*this));
   } else {
     if (current < 0) {
       next_val = start_;

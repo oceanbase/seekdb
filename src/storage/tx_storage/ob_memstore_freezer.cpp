@@ -98,10 +98,8 @@ int ObMemstoreFreezer::init()
 	int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("[MemstoreFreezer] memstore freezer init twice.", KR(ret));
   } else if (OB_UNLIKELY(!GCONF.self_addr_.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("[MemstoreFreezer] invalid argument", KR(ret), K(GCONF.self_addr_));
   } else if (OB_FAIL(freeze_trigger_timer_.init("MemstoreFreezer", ObMemAttr("MemstoreFreezer")))) {
   } else {
     is_freezing_tx_data_ = false;
@@ -126,7 +124,6 @@ int ObMemstoreFreezer::start()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[MemstoreFreezer] memstore freezer not inited", KR(ret));
   } else if (OB_FAIL(freeze_trigger_timer_.schedule(freeze_trigger_timer_task_,
                                                    FREEZE_TRIGGER_INTERVAL, true/*repeat*/, false/*immediate*/))) {
   } else {
@@ -140,7 +137,6 @@ int ObMemstoreFreezer::stop()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[MemstoreFreezer] memstore freezer not inited", KR(ret));
   } else {
     freeze_trigger_timer_.stop();
     LOG_INFO("[MemstoreFreezer] ObMemstoreFreezer stoped done", K_(memstore_info));
@@ -162,10 +158,8 @@ bool ObMemstoreFreezer::exist_ls_freezing()
   ObLSService *ls_srv = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[MemstoreFreezer] memstore freezer not inited", KR(ret));
   } else if (OB_ISNULL(ls_srv)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("[MemstoreFreezer] ls service is null", KR(ret));
   } else if (OB_FAIL(ls_srv->get_ls(ls))) {
   } else if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;
@@ -191,10 +185,8 @@ bool ObMemstoreFreezer::exist_ls_throttle_is_skipping()
     ObLS *ls = nullptr;
     if (IS_NOT_INIT) {
       ret = OB_NOT_INIT;
-      LOG_WARN("[MemstoreFreezer] memstore freezer not inited", KR(ret));
     } else if (OB_ISNULL(ls_srv)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("[MemstoreFreezer] ls service is null", KR(ret));
     } else if (OB_FAIL(ls_srv->get_ls(ls))) {
     } else if (OB_ISNULL(ls)) {
       ret = OB_ERR_UNEXPECTED;
@@ -329,7 +321,6 @@ int ObMemstoreFreezer::freeze_all_data_()
   ObMemstoreFreezeGuard freeze_guard(ret, memstore_info_);
   if (OB_ISNULL(ls_srv)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("[MemstoreFreezer] ls service is null", KR(ret));
   } else if (OB_FAIL(ls_srv->get_ls(ls))) {
   } else if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;
@@ -353,12 +344,10 @@ int ObMemstoreFreezer::freeze_all(const ObFreezeSourceFlag source)
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[MemstoreFreezer] memstore freezer not inited", KR(ret));
   } else if (OB_FAIL(ObShareUtil::get_abs_timeout(MAX_FREEZE_TIMEOUT_US /* default timeout */,
                                                   abs_timeout_ts))) {
   } else if (OB_ISNULL(ls_srv)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("[MemstoreFreezer] ls service is null", KR(ret));
   } else if (OB_FAIL(ls_srv->get_ls(ls))) {
   } else if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;
@@ -399,14 +388,11 @@ int ObMemstoreFreezer::tablet_freeze(const common::ObTabletID &tablet_id,
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[MemstoreFreezer] memstore freezer not inited", KR(ret));
   } else if (OB_ISNULL(ls_srv)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("[MemstoreFreezer] ls service is null", KR(ret));
   } else if (OB_FAIL(ls_srv->get_ls(ls))) {
   } else if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("[MemstoreFreezer] local ls is null", KR(ret));
   } else if (OB_FAIL(ls->tablet_freeze(tablet_id,
                                        is_sync,
                                        abs_timeout_ts,
@@ -508,10 +494,8 @@ int ObMemstoreFreezer::get_tx_data_info_for_freeze_(int64_t &tx_data_frozen_mem_
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[MemstoreFreezer] memstore freezer not inited", KR(ret));
   } else if (OB_ISNULL(ls_srv)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("[MemstoreFreezer] ls service is null", KR(ret));
   } else if (OB_FAIL(ls_srv->get_ls(ls))) {
   } else if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;
@@ -539,12 +523,10 @@ int ObMemstoreFreezer::get_ls_tx_data_memory_info_(ObLS *ls,
   ObTxDataMemtable *memtable = nullptr;
   if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("[MemstoreFreezer] get ls tx data mem used failed.", KR(ret));
   } else if (OB_FAIL(ls->get_tablet_svr()->get_tx_data_memtable_mgr(mgr_handle))) {
   } else if (OB_ISNULL(memtable_mgr
                        = static_cast<ObTxDataMemtableMgr *>(mgr_handle.get_memtable_mgr()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("[MemstoreFreezer] tx data memtable mgr is unexpected nullptr.", KR(ret));
   } else if (OB_FAIL(memtable_mgr->get_all_memtables(memtable_handles))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < memtable_handles.count(); i++) {
@@ -702,7 +684,6 @@ int ObMemstoreFreezer::check_and_do_freeze()
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[MemstoreFreezer] runtime controller not init", KR(ret));
   } else if (!memstore_info_.is_loaded_) {
     // do nothing
   } else if (FALSE_IT(memstore_info_.get_freeze_ctx(ctx))) {
@@ -747,7 +728,6 @@ int ObMemstoreFreezer::set_freezing_()
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[MemstoreFreezer] runtime controller not init", KR(ret));
   } else {
     ATOMIC_AAF(&memstore_info_.freeze_cnt_, 1);
   }
@@ -759,7 +739,6 @@ int ObMemstoreFreezer::unset_freezing_(const bool rollback_freeze_cnt)
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[MemstoreFreezer] runtime controller not init", KR(ret));
   } else {
     if (rollback_freeze_cnt) {
       if (ATOMIC_AAF(&memstore_info_.freeze_cnt_, -1) < 0) {
@@ -777,7 +756,6 @@ int ObMemstoreFreezer::set_slow_freeze(
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[MemstoreFreezer] runtime controller not init", KR(ret));
   } else {
     memstore_info_.set_slow_freeze(tablet_id, retire_clock, FREEZE_TRIGGER_INTERVAL);
   }
@@ -789,7 +767,6 @@ int ObMemstoreFreezer::unset_slow_freeze(const common::ObTabletID &tablet_id)
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[MemstoreFreezer] runtime controller not init", KR(ret));
   } else {
     memstore_info_.unset_slow_freeze(tablet_id);
   }
@@ -806,7 +783,6 @@ bool ObMemstoreFreezer::is_memory_limit_changed(const int64_t curr_lower_limit,
 
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[MemstoreFreezer] runtime controller not init", KR(ret));
   } else if (false == memstore_info_.is_loaded_) {
     is_changed = true;
   } else {
@@ -832,11 +808,9 @@ int ObMemstoreFreezer::set_memory_limit(const int64_t lower_limit,
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[MemstoreFreezer] runtime controller not init", KR(ret));
   } else if (OB_UNLIKELY(lower_limit < 0)
              || OB_UNLIKELY(upper_limit < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("[MemstoreFreezer] invalid argument", KR(ret), K(lower_limit), K(upper_limit));
   } else {
     const int64_t freeze_trigger_percentage = get_freeze_trigger_percentage_();
     const int64_t memstore_limit = GMEMCONF.get_memstore_memory_limit();
@@ -844,11 +818,6 @@ int ObMemstoreFreezer::set_memory_limit(const int64_t lower_limit,
         freeze_trigger_percentage > 100 ||
         freeze_trigger_percentage <= 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("[MemstoreFreezer] memory config is invalid",
-               K(memstore_limit),
-               "minor freeze trigger percent",
-               freeze_trigger_percentage,
-               KR(ret));
     } else {
 
       ObMemstoreFreezeCtx ctx;
@@ -883,7 +852,6 @@ int ObMemstoreFreezer::get_server_mem_limit(
   upper_limit = 0;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[MemstoreFreezer] runtime controller not init", KR(ret));
   } else {
 
     if (false == memstore_info_.is_loaded_) {
@@ -904,7 +872,6 @@ bool ObMemstoreFreezer::is_replay_pending_log_too_large(const int64_t pending_si
   int64_t unused = 0;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[MemstoreFreezer] runtime controller not init", KR(ret));
   } else if (OB_FAIL(get_memstore_condition(unused,
                                               memstore_quota_used,
                                               unused,
@@ -932,7 +899,6 @@ int ObMemstoreFreezer::get_memstore_condition(int64_t &active_memstore_used,
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[MemstoreFreezer] runtime controller not init", KR(ret));
   } else if (OB_FAIL(get_memstore_condition_(active_memstore_used,
                                                total_memstore_used,
                                                memstore_freeze_trigger,
@@ -1007,7 +973,6 @@ int ObMemstoreFreezer::get_memstore_limit(int64_t &mem_limit)
   mem_limit = INT64_MAX;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[MemstoreFreezer] runtime controller not init", KR(ret));
   } else {
 
     if (false == memstore_info_.is_loaded_) {
@@ -1100,7 +1065,6 @@ int ObMemstoreFreezer::check_memstore_full_(bool &last_result,
   int64_t current_time = ObClockGenerator::getClock();
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[MemstoreFreezer] runtime controller not init", KR(ret));
   } else {
 
     if (!last_result &&
@@ -1161,7 +1125,6 @@ bool ObMemstoreFreezer::need_major_freeze()
   ObMemstoreFreezeCtx ctx;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("runtime controller not init", K(ret));
   } else {
     if (!memstore_info_.is_loaded_) {
       // do nothing
@@ -1216,7 +1179,6 @@ int ObMemstoreFreezer::post_freeze_request_(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[MemstoreFreezer] runtime controller not init", KR(ret));
   } else {
     ObMemstoreFreezeArg arg;
     arg.freeze_type_ = freeze_type;
@@ -1234,7 +1196,6 @@ int ObMemstoreFreezer::post_tx_data_freeze_request_()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("runtime controller not init", KR(ret));
   } else {
     ObMemstoreFreezeArg arg;
     arg.freeze_type_ = ObFreezeType::TX_DATA_TABLE_FREEZE;
@@ -1249,7 +1210,6 @@ int ObMemstoreFreezer::post_mds_table_freeze_request_()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("runtime controller not init", KR(ret));
   } else {
     ObMemstoreFreezeArg arg;
     arg.freeze_type_ = ObFreezeType::MDS_TABLE_FREEZE;
@@ -1266,16 +1226,10 @@ int ObMemstoreFreezer::reload_config()
   const int64_t memstore_limit = GMEMCONF.get_memstore_memory_limit();
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[MemstoreFreezer] runtime controller not init", KR(ret));
   } else if (memstore_limit <= 0
              || freeze_trigger_percentage > 100
              || freeze_trigger_percentage <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("[MemstoreFreezer] memory config is invalid",
-             K(memstore_limit),
-             "minor freeze trigger percent",
-             freeze_trigger_percentage,
-             KR(ret));
   } else if (true == memstore_info_.is_loaded_ &&
              memstore_info_.is_memstore_limit_changed(memstore_limit)) {
     memstore_info_.update_memstore_limit(memstore_limit);
@@ -1297,7 +1251,6 @@ int ObMemstoreFreezer::print_memory_usage(
 
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[MemstoreFreezer] runtime controller not init", KR(ret));
   } else if (OB_FAIL(get_memory_stat_(stat))) {
   } else {
     ret = databuff_printf(print_buf, buf_len, pos,
@@ -1337,7 +1290,6 @@ int ObMemstoreFreezer::get_global_frozen_scn_(int64_t &frozen_scn)
       ::oceanbase::share::server_service<::oceanbase::data_plane::ObIMajorFreezeCoordinator>();
   if (OB_ISNULL(major_freeze_coordinator)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("major freeze coordinator is not configured", KR(ret));
   } else if (OB_FAIL(major_freeze_coordinator->get_frozen_scn(tmp_frozen_scn))) {
   } else {
     frozen_scn = tmp_frozen_scn.get_val_for_tx();
@@ -1438,7 +1390,6 @@ int ObMemstoreFreezer::do_major_if_need_(const bool need_freeze)
     // do nothing
   } else if (OB_FAIL(get_global_frozen_scn_(frozen_scn))) {
   } else if (0 != frozen_scn && OB_FAIL(memstore_info_.update_frozen_scn(frozen_scn))) {
-    LOG_WARN("fail to update frozen version", K(ret), K(frozen_scn), K_(memstore_info));
   } else {
     need_major = (need_freeze &&
                   !major_triggered &&

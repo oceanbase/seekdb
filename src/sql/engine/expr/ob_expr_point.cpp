@@ -80,7 +80,6 @@ int ObExprPoint::calc_result2(common::ObObj &result,
 
   if (OB_ISNULL(allocator)) { // check allocator
     ret = OB_NOT_INIT;
-    LOG_WARN("buffer not init", K(ret));
   } else {
     ObObjType type_x = obj1.get_type();
     ObObjType type_y = obj2.get_type();
@@ -109,7 +108,6 @@ int ObExprPoint::calc_result2(common::ObObj &result,
       char *buf = reinterpret_cast<char *>(allocator->alloc(res_wkb_buf.length()));
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc memory for result buf", K(ret), K(res_wkb_buf.length()));
       } else {
         MEMMOVE(buf, res_wkb_buf.ptr(), res_wkb_buf.length());
         result.set_collation_type(result_type_.get_collation_type());

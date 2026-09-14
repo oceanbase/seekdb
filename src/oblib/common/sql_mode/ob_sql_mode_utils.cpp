@@ -141,7 +141,6 @@ int ob_str_to_sql_mode(const ObString &str, ObSQLMode &mode)
   char *buf = NULL;
   if (OB_UNLIKELY(str.length() >= MAX_MODE_STR_BUF_LEN)) {
     ret = OB_BUF_NOT_ENOUGH;
-    LOG_WARN("sql mode string is too long", K(str), K(ret));
   } else {
     // alloca is supported on both Linux and macOS, stack allocation is automatically freed on function return
     if (OB_ISNULL(buf = (char *)alloca(str.length() + 1))) {
@@ -175,7 +174,6 @@ int ob_str_to_sql_mode(const ObString &str, ObSQLMode &mode)
         }
         if (OB_ISNULL(STR_TO_SQL_MODE_MAP[i].str_val) && OB_SUCC(ret)) {
           ret = OB_ERR_WRONG_VALUE_FOR_VAR;
-          LOG_WARN("failed to set sql_mode", KCSTRING(value), K(ret));
         }
       } // for
       if (OB_SUCC(ret)) {
@@ -218,7 +216,6 @@ int ob_sql_mode_to_str(const ObObj &int_val, ObObj &str_val, ObIAllocator *alloc
             LOG_WARN("invalid sql_mode, not supported", K(SQL_MODE_MAP[i].int_val));
           } else if (OB_UNLIKELY(end_ptr - buf >= MAX_MODE_STR_BUF_LEN)) {
             ret = OB_BUF_NOT_ENOUGH;
-            LOG_WARN("sql mode string is too long", K(ret));
           } else {
             snprintf(end_ptr, buf + MAX_MODE_STR_BUF_LEN - end_ptr, "%s%c", SQL_MODE_MAP[i].str_val, ',');
             end_ptr += strlen(SQL_MODE_MAP[i].str_val) + 1;
@@ -228,10 +225,8 @@ int ob_sql_mode_to_str(const ObObj &int_val, ObObj &str_val, ObIAllocator *alloc
       if (OB_FAIL(ret)) {
       } else if (OB_UNLIKELY(0 != remaining_mode)) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("invalid sql_mode contains unknown bits", K(ret), K(uint64_val), K(remaining_mode));
       } else if (OB_UNLIKELY(end_ptr - buf > MAX_MODE_STR_BUF_LEN)) {
         ret = OB_BUF_NOT_ENOUGH;
-        LOG_WARN("sql mode string is too long", K(ret));
       } else if (end_ptr == buf) {
         str_val.set_varchar(ObString(""));
       } else {

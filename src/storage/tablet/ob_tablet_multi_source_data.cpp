@@ -58,10 +58,8 @@ int ObTabletTxMultiSourceDataUnit::deep_copy(const ObIMultiSourceDataUnit *src, 
   int ret = OB_SUCCESS;
   if (OB_ISNULL(src)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KP(src));
   } else if (OB_UNLIKELY(MultiSourceDataUnitType::TABLET_TX_DATA != src->type())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected type", K(ret), KPC(src));
   } else {
     const ObTabletTxMultiSourceDataUnit *data = static_cast<const ObTabletTxMultiSourceDataUnit*>(src);
     version_ = data->version_;
@@ -124,7 +122,6 @@ int ObTabletTxMultiSourceDataUnit::serialize(
       || OB_UNLIKELY(len <= 0)
       || OB_UNLIKELY(pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(buf), K(len), K(pos));
   } else if (FALSE_IT(length_ = get_serialize_size())) {
   } else if (OB_FAIL(serialization::encode_i32(buf, len, new_pos, version_))) {
   } else if (OB_FAIL(serialization::encode_i32(buf, len, new_pos, length_))) {
@@ -133,7 +130,6 @@ int ObTabletTxMultiSourceDataUnit::serialize(
   } else if (OB_FAIL(tablet_status_.serialize(buf, len, new_pos))) {
   } else if (OB_UNLIKELY(pos + length_ != new_pos)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("serialize length does not match member length", K(ret), K(pos), K_(length), K(new_pos));
   } else {
     pos = new_pos;
   }
@@ -153,22 +149,18 @@ int ObTabletTxMultiSourceDataUnit::deserialize(
       || OB_UNLIKELY(len <= 0)
       || OB_UNLIKELY(pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(buf), K(len), K(pos));
   } else if (OB_FAIL(serialization::decode_i32(buf, len, new_pos, &version_))) {
   } else if (OB_FAIL(serialization::decode_i32(buf, len, new_pos, &length_))) {
   } else if (TX_DATA_VERSION == version_) {
     if (OB_FAIL(new_pos - pos < length_ && tx_id_.deserialize(buf, len, new_pos))) {
     } else if (new_pos - pos < length_ && OB_FAIL(tx_scn_.fixed_deserialize(buf, len, new_pos))) {
-      LOG_WARN("failed to deserialize tx scn", K(ret), K(len), K(new_pos));
     } else if (new_pos - pos < length_ && OB_FAIL(tablet_status_.deserialize(buf, len, new_pos))) {
-      LOG_WARN("failed to deserialize tablet status", K(ret), K(len), K(new_pos));
     }
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(pos + length_ != new_pos)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, deserialize size does not match length", K(ret), K(pos), K_(length), K(new_pos));
   } else {
     pos = new_pos;
   }

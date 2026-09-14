@@ -196,7 +196,6 @@ int ObPxFifoCoordOp::fetch_rows(const int64_t row_cnt)
       if (OB_DTL_WAIT_EAGAIN == ret) {
         ret = OB_SUCCESS;
       } else if (OB_ITER_END != ret) {
-        LOG_WARN("fail process message", K(ret));
       }
     } else {
       ObDtlMsgType msg_type = msg_loop_.get_last_msg_type();
@@ -229,7 +228,6 @@ int ObPxFifoCoordOp::fetch_rows(const int64_t row_cnt)
     iter_end_ = true;
   } else if (OB_UNLIKELY(OB_SUCCESS != ret)) {
     int ret_terminate = terminate_running_dfos(coord_info_.dfo_mgr_);
-    LOG_WARN("QC get error code", K(ret), K(ret_terminate));
     if ((OB_ERR_SIGNALED_IN_PARALLEL_QUERY_SERVER == ret
         || OB_GOT_SIGNAL_ABORTING == ret)
         && OB_SUCCESS != ret_terminate) {

@@ -42,7 +42,6 @@ int ObExprPrivSTIsCollection::calc_result_type1(
   if (!ob_is_string_type(obj_type1) && !ob_is_geometry(obj_type1) && !ob_is_null(obj_type1)) {
     ret = OB_ERR_GIS_INVALID_DATA;
     LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_ISCOLLECTION);
-    LOG_WARN("invalid type", K(ret), K(obj_type1));
   } else {
     ObCastMode cast_mode = type_ctx.get_cast_mode();
     cast_mode &= ~CM_WARN_ON_FAIL;      // make cast return error when fail
@@ -89,7 +88,6 @@ int ObExprPrivSTIsCollection::eval_priv_st_iscollection(
                    GEO_ALLOW_3D_DEFAULT | GEO_NOT_COPY_WKB))) {
     } else if ((geo->type() <= ObGeoType::GEOMETRY) || (geo->type() >= ObGeoType::GEOTYPEMAX)) {
       ret = OB_ERR_INVALID_GEOMETRY_TYPE;
-      LOG_WARN("unknown geometry type", K(ret), K(geo->type()));
     } else if (geo->type() <= ObGeoType::POLYGON) {
       bres = false;
     }

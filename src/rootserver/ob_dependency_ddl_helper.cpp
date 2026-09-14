@@ -67,7 +67,6 @@ int ObDependencyDDLHelper::modify_all_obj_status(const ObIArray<std::pair<uint64
   const bool update_object_status_ignore_version = false;
   if (OB_ISNULL(schema_service.get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get schema service", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < objs.count(); ++i) {
     if (OB_INVALID_ID == objs.at(i).first) {
@@ -83,7 +82,6 @@ int ObDependencyDDLHelper::modify_all_obj_status(const ObIArray<std::pair<uint64
           if (OB_FAIL(schema_service.get_schema_service()->get_table_schema_from_inner_table(schema_status, objs.at(i).first, trans, view_schema))) {
           } else if (!view_schema.is_view_table()) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get wrong schema", K(ret), K(view_schema));
           } else if (new_status == view_schema.get_object_status()) {
           } else if (OB_FAIL(schema_service.gen_new_schema_version(refresh_schema_version))) {
           } else if (OB_FAIL(ddl_operator.update_table_status(view_schema, refresh_schema_version,
@@ -136,15 +134,12 @@ int ObDependencyDDLHelper::batch_execute_insert_or_update_obj_dependency(
       if (!dep_obj_key.is_valid()
           || OB_INVALID_SCHEMA_VERSION == dep_obj_item.max_ref_obj_schema_version_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("illegal schema version or dependency obj key", K(ret), K(dep_obj_key),
-        K(dep_obj_item.max_ref_obj_schema_version_));
       } else if (OB_FAIL(ObDependencyInfo::collect_dep_infos(
                   dep_obj_item.get_ref_obj_versions(),
                   dep_infos,
                   dep_obj_key.dep_obj_type_,
                   0, dummy, dummy, false/* is_pl */))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to collect dependency infos", K(ret));
       } else if (OB_FAIL(batch_fill_kv_pairs(dep_obj_key,
                  new_schema_version, dep_infos, dml))) {
       } else if (OB_FAIL(update_max_dependency_version(dep_obj_key.dep_obj_id_, dep_obj_item.max_ref_obj_schema_version_,
@@ -173,7 +168,6 @@ int ObDependencyDDLHelper::update_max_dependency_version(
   if (OB_FAIL(schema_guard.get_table_schema(dep_obj_id, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table schema should not be null", KR(ret));
   } else if (OB_FAIL(new_table_schema.assign(*table_schema))) {
   } else {
     new_table_schema.set_max_dependency_version(max_dependency_version);

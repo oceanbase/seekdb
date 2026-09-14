@@ -62,7 +62,6 @@ int ObExprRandomBytes::calc_result1(ObObj &result, const ObObj &len,
       char *buf = (char *)expr_ctx.calc_buf_->alloc(length);
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret), K(length));
       } else {
         RAND_bytes((unsigned char*)buf, length);
         ObString rand_str(length, length, buf);
@@ -70,13 +69,9 @@ int ObExprRandomBytes::calc_result1(ObObj &result, const ObObj &len,
       }
     } else {
       ret = OB_ERR_ARGUMENT_OUT_OF_RANGE;
-      LOG_WARN("length value is out of range in random_bytes", 
-                K(ret), K(length));
     }
   } else {
     ret = OB_OBJ_TYPE_ERROR;
-    LOG_WARN("invalid argument type for random_bytes", 
-             K(ret));
   }
   return ret;
 }
@@ -96,7 +91,6 @@ int ObExprRandomBytes::generate_random_bytes(const ObExpr &expr, ObEvalCtx &ctx,
         char *buf = (char *)expr.get_str_res_mem(ctx, length);
         if (OB_ISNULL(buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("allocate memory failed", K(ret), K(length));
         } else {
           RAND_bytes((unsigned char*)buf, length);
           ObString rand_str(length, length, buf);
@@ -104,14 +98,10 @@ int ObExprRandomBytes::generate_random_bytes(const ObExpr &expr, ObEvalCtx &ctx,
         }
       } else { 
         ret = OB_ERR_ARGUMENT_OUT_OF_RANGE;
-        LOG_WARN("length value is out of range in random_bytes", 
-                  K(ret), K(length));
       }
     }
   } else {
     ret  = OB_OBJ_TYPE_ERROR;
-    LOG_WARN("invalid argument type for random_bytes", 
-                K(ret));
   }
   
   return ret;
@@ -125,11 +115,8 @@ int ObExprRandomBytes::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_ex
   UNUSED(raw_expr);
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Incorrect parameter count in the call to native function random_bytes", 
-              K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of random_bytes expr is null", K(ret), K(rt_expr.args_));
   } else {
     rt_expr.eval_func_ = ObExprRandomBytes::generate_random_bytes;
   }

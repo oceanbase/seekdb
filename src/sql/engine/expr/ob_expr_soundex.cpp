@@ -47,10 +47,8 @@ int ObExprSoundex::calc_result_type1(
   ObRawExpr *raw_expr = NULL;
   if (OB_ISNULL(session = type_ctx.get_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else if (OB_ISNULL(raw_expr = get_raw_expr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("raw expr is null", K(ret));
   } else {
     if (type1.is_string_type() || type1.is_enum_or_set()) {
       if (ObCharset::is_cs_nonascii(type1.get_collation_type())) {
@@ -77,7 +75,6 @@ int ObExprSoundex::calc_result_type1(
         raw_expr->set_res_cs_type(static_cast<uint64_t>(res_cs_type));
       } else if (OB_UNLIKELY(raw_expr->get_res_cs_type() >= static_cast<uint64_t>(CS_TYPE_MAX))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected collationt type", K(ret), K(raw_expr->get_res_cs_type()));
       } else {
         // If collation_type of param is nonascii, implicit cast will be added above it to cast to utf8.
         // To avoid set res_cs_type to utf8, which is different from the last one and makes calc_result_type unstable,
@@ -97,8 +94,6 @@ int ObExprSoundex::calc_result_type1(
     if (OB_UNLIKELY(ObMaxType == param_calc_type || CS_TYPE_INVALID == param_calc_cs_type
                   || ObMaxType == res_type || CS_TYPE_INVALID == res_cs_type || res_length <= 0)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("some value not set", K(ret), K(type1), K(param_calc_type), K(param_calc_cs_type),
-               K(res_type), K(res_cs_type), K(res_length));
     } else {
       type1.set_calc_type(param_calc_type);
       type1.set_calc_collation_type(param_calc_cs_type);
@@ -155,7 +150,6 @@ int ObExprSoundex::convert_str_to_soundex(const ObString &input,
   int8_t pre_code = last_soundex_code;
   if (OB_UNLIKELY(len < MIN_RESULT_LENGTH)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("buf is not enough", K(ret), K(len));
   }
   struct Functor {
     Functor(const ObString &input, char* buf, int64_t& pos, bool& is_first, int8_t& pre_code,
@@ -186,7 +180,6 @@ int ObExprSoundex::convert_str_to_soundex(const ObString &input,
             buf[pos++] = wchar;
           } else {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected character", K(ret), K(wchar), K(soundex_code));
           }
           pre_code = soundex_code;
           is_first = false;
@@ -199,7 +192,6 @@ int ObExprSoundex::convert_str_to_soundex(const ObString &input,
           if (pre_code != soundex_code) {
             if (OB_UNLIKELY(pos >= len)) {
               ret = OB_INVALID_ARGUMENT;
-              LOG_WARN("buf is not enough", K(ret), K(len), K(pos), K(input));
             } else {
               buf[pos++] = soundex_code + '0';
               pre_code = soundex_code;
@@ -252,7 +244,6 @@ int ObExprSoundex::calc(const ObString &input, const ObCollationType intput_cs_t
   int8_t last_soundex_code = 0;
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret), K(buf_len));
   } else if (OB_FAIL(convert_str_to_soundex(input, intput_cs_type, true,
                                             false, buf, buf_len, pos,
                                             is_first, last_soundex_code))) {
@@ -296,7 +287,6 @@ int ObExprSoundex::calc_text(const ObDatum &input_datum,
   } else if (OB_FAIL(out_result.get_reserved_buffer(buf, buf_size))) {
   } else if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret), K(buf_size));
   } else {
     bool is_first = true;
     int8_t last_soundex_code = 0;

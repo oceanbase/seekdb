@@ -36,7 +36,6 @@ int OMPKError::set_message(const ObString &message)
 {
   int ret = OB_SUCCESS;
   if (NULL == message.ptr() || 0 > message.length()) {
-    LOG_WARN("invalid argument message", K(message));
     ret = OB_INVALID_ARGUMENT;
   } else {
     message_.assign(const_cast<char *>(message.ptr()), message.length());

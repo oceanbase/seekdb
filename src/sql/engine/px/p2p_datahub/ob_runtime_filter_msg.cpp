@@ -154,7 +154,6 @@ OB_DEF_DESERIALIZE(ObRFInFilterMsg)
       array_ptr = nullptr;
       if (OB_ISNULL(array_ptr = allocator_.alloc(sizeof(ObFixedArray<ObDatum, ObIAllocator>)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc memory", K(ret));
       } else {
         new_row = new(array_ptr) ObFixedArray<ObDatum, ObIAllocator>(allocator_);
         if (OB_FAIL(new_row->deserialize(buf, data_len, pos))) {
@@ -400,7 +399,6 @@ int ObRFBloomFilterMsg::insert_by_row_batch(
     } else if (OB_NOT_NULL(calc_tablet_id_expr)) {
       if (OB_ISNULL(calc_tablet_id_expr) || hash_funcs.count() != 1) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected part id expr", K(ret));
       } else if (OB_FAIL(calc_tablet_id_expr->eval_batch(eval_ctx,
         *(child_brs->skip_), child_brs->size_))) {
       } else {
@@ -486,7 +484,6 @@ int ObRFBloomFilterMsg::calc_hash_value(
     int64_t partition_id = 0;
     if (hash_funcs.count() != 1) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected part id expr", K(ret));
     } else if (OB_FAIL(calc_tablet_id_expr->eval(eval_ctx, datum))) {
     } else if (ObExprCalcPartitionId::NONE_PARTITION_ID == (partition_id = datum->get_int())) {
       ignore = true;
@@ -682,11 +679,9 @@ int ObRFRangeFilterMsg::prepare_query_range()
     if (OB_ISNULL(start = static_cast<ObObj *>(
                       query_range_allocator_.alloc(sizeof(ObObj) * range_column_cnt)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc memory for start_obj failed", K(ret));
     } else if (OB_ISNULL(end = static_cast<ObObj *>(
                              query_range_allocator_.alloc(sizeof(ObObj) * range_column_cnt)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc memory for end_obj failed", K(ret));
     } else {
       new(start) ObObj();
       new(end) ObObj();
@@ -1091,7 +1086,6 @@ int ObRFInFilterMsg::insert_by_row_batch(
   UNUSED(calc_tablet_id_expr);
   if (child_brs->size_ > 0 && is_active_
       && OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx_))) {
-    LOG_WARN("failed to get datum access context", K(ret));
   } else if (child_brs->size_ > 0 && is_active_) {
     ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx);
     batch_info_guard.set_batch_size(child_brs->size_);
@@ -1139,7 +1133,6 @@ int ObRFInFilterMsg::insert_node()
     } else if (OB_HASH_EXIST == ret) {
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("fail to check node", K(ret));
     }
   }
   return ret;
@@ -1154,7 +1147,6 @@ int ObRFInFilterMsg::insert_by_row(
   int ret = OB_SUCCESS;
   ObDatum *datum = nullptr;
   if (is_active_ && OB_FAIL(eval_ctx.get_datum_access_ctx(datum_access_ctx_))) {
-    LOG_WARN("failed to get datum access context", K(ret));
   } else if (is_active_) {
     bool ignore_null_row = false;
     for (int64_t idx = 0; OB_SUCC(ret) && idx < expr_array.count() ; ++idx) {
@@ -1183,7 +1175,6 @@ int ObRFInFilterMsg::append_row()
   void *array_ptr = nullptr;
   if (OB_ISNULL(array_ptr = allocator_.alloc(sizeof(ObFixedArray<ObDatum, ObIAllocator>)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret));
   } else {
     new_row = new(array_ptr) ObFixedArray<ObDatum, ObIAllocator>(allocator_);
     if (OB_FAIL(new_row->init(cur_row_.count()))) {
@@ -1314,7 +1305,6 @@ int ObRFInFilterMsg::might_contain(const ObExpr &expr,
           is_match = true;
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("fail to check node", K(ret));
         }
       }
     }
@@ -1388,7 +1378,6 @@ int ObRFInFilterMsg::do_might_contain_batch(const ObExpr &expr,
         res_datums[batch_i].set_int(1);
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fail to check node", K(ret));
       }
     }
   }
@@ -1550,7 +1539,6 @@ int ObRFInFilterMsg::process_query_ranges_with_deduplicate()
   for (int64_t row_idx = 0; row_idx < serial_rows_.count() && OB_SUCC(ret); ++row_idx) {
     if (OB_ISNULL(serial_rows_.at(row_idx))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("this row is null", K(ret));
     } else {
       ObTMArray<ObDatum> &tmp_row = tmp_rows.at(row_idx);
       if (OB_FAIL(tmp_row.prepare_allocate(prefix_col_idxs.count()))) {
@@ -1625,7 +1613,6 @@ int ObRFInFilterMsg::process_query_ranges_without_deduplicate()
     for (int64_t row_idx = 0; row_idx < serial_rows_.count() && OB_SUCC(ret); ++row_idx) {
       if (OB_ISNULL(serial_rows_.at(row_idx))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("this row is null", K(ret));
       } else {
         OZ(generate_one_range(row_idx));
       }
@@ -1655,11 +1642,9 @@ int ObRFInFilterMsg::generate_one_range(int row_idx)
   if (OB_ISNULL(start = static_cast<ObObj *>(
                     query_range_allocator_.alloc(sizeof(ObObj) * range_column_cnt)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc memory for start_obj failed", K(ret));
   } else if (OB_ISNULL(end = static_cast<ObObj *>(
                            query_range_allocator_.alloc(sizeof(ObObj) * range_column_cnt)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc memory for end_obj failed", K(ret));
   }
   for (int64_t j = 0; j < prefix_col_idxs.count() && OB_SUCC(ret); ++j) {
     int64_t col_idx = prefix_col_idxs.at(j);

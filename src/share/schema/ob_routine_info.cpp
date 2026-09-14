@@ -172,7 +172,6 @@ OB_DEF_SERIALIZE(ObRoutineParam)
               type_name_,
               type_subname_);
   if (OB_SUCC(ret) && OB_FAIL(serialize_string_array(buf, buf_len, pos, extended_type_info_))) {
-    LOG_WARN("serialize_string_array failed", K(ret));
   }
   return ret;
 }
@@ -195,7 +194,6 @@ OB_DEF_DESERIALIZE(ObRoutineParam)
               type_name_,
               type_subname_);
   if (OB_SUCC(ret) && OB_FAIL(deserialize_string_array(buf, data_len, pos, extended_type_info_, get_allocator()))) {
-    LOG_WARN("deserialize_string_array failed", K(ret));
   }
   return ret;
 }
@@ -270,7 +268,6 @@ ObRoutineInfo &ObRoutineInfo::operator =(const ObRoutineInfo &src_schema)
     for (int64_t i = 0; OB_SUCC(ret) && i < src_schema.routine_params_.count(); ++i) {
       if (OB_ISNULL(src_schema.routine_params_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("routine param is null", K(i));
       } else if (OB_FAIL(add_routine_param(*src_schema.routine_params_.at(i)))) {
       }
     }
@@ -365,10 +362,8 @@ int ObRoutineInfo::add_routine_param(const ObRoutineParam &routine_param)
   void *ptr = NULL;
   if (!is_user_field_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("routine basic info invalid", K(ret));
   } else if (OB_ISNULL(ptr = alloc(sizeof(ObRoutineParam)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocated routine param memory failed", K(ret));
   } else {
     ObRoutineParam *local_param = NULL;
     local_param = new (ptr) ObRoutineParam(get_allocator());
@@ -400,7 +395,6 @@ int ObRoutineInfo::get_routine_param(int64_t idx, ObIRoutineParam*& param) const
   }
   if (OB_ISNULL(param)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("idx is invalid", K(ret), K(idx), KPC(this));
   }
   return ret;
 }
@@ -442,7 +436,6 @@ int ObRoutineInfo::find_param_by_name(const ObString &name, int64_t &position) c
   position = -1;
   if (name.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalue param name", K(ret), K(name));
   } else {
     for (int64_t i = 0; i < get_routine_params().count(); ++i) {
       if (get_routine_params().at(i)->is_ret_param()) {
@@ -454,7 +447,6 @@ int ObRoutineInfo::find_param_by_name(const ObString &name, int64_t &position) c
     if (-1 == position) {
       ret = OB_ERR_SP_UNDECLARED_VAR;
       LOG_USER_ERROR(OB_ERR_SP_UNDECLARED_VAR, name.length(), name.ptr());
-      LOG_WARN("param name is not found in param list", K(ret), K(name), KPC(this), K(position));
     }
   }
   return ret;
@@ -486,7 +478,6 @@ OB_DEF_SERIALIZE(ObRoutineInfo)
   for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
     if (OB_ISNULL(routine_params_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("routine_param is null", K(i));
     } else if (OB_FAIL(routine_params_.at(i)->serialize(buf, buf_len, pos))) {
     }
   }

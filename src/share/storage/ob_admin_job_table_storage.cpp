@@ -42,7 +42,6 @@ int ObAdminJobTableStorage::init(ObSQLiteConnectionPool *pool)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pool_ = pool)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid pool", K(ret));
   } else if (OB_FAIL(create_table_if_not_exists_())) {
   }
   if (OB_FAIL(ret)) {
@@ -56,12 +55,10 @@ int ObAdminJobTableStorage::create_table_if_not_exists_()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pool_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("pool not set", K(ret));
   } else {
     ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_ROOTSERVICE_JOB, nullptr))) {
     }
   }
@@ -73,7 +70,6 @@ int ObAdminJobTableStorage::create_job(const ObAdminJobEntry &entry)
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     const char *insert_sql =
       "INSERT INTO __all_rootservice_job "
@@ -96,7 +92,6 @@ int ObAdminJobTableStorage::create_job(const ObAdminJobEntry &entry)
       ObSQLiteConnectionGuard guard(pool_);
       if (!guard) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to acquire connection", K(ret));
       } else if (OB_FAIL(guard->execute(insert_sql, binder))) {
       }
     }
@@ -113,10 +108,8 @@ int ObAdminJobTableStorage::complete_job(
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (job_id <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid job id", K(ret), K(job_id));
   } else {
     const char *update_sql =
       "UPDATE __all_rootservice_job "
@@ -133,7 +126,6 @@ int ObAdminJobTableStorage::complete_job(
     ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(update_sql, binder))) {
     }
   }
@@ -147,7 +139,6 @@ int ObAdminJobTableStorage::get_max_job_id(int64_t &max_job_id)
   max_job_id = -1;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else {
     const char *select_sql =
       "SELECT max(job_id) as max_job_id FROM __all_rootservice_job";
@@ -158,13 +149,11 @@ int ObAdminJobTableStorage::get_max_job_id(int64_t &max_job_id)
     ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->query(select_sql, nullptr, row_processor))) {
       if (OB_ENTRY_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
         max_job_id = 0;
       } else {
-        LOG_WARN("failed to query inprogress job", K(ret));
       }
     }
   }
@@ -177,10 +166,8 @@ int ObAdminJobTableStorage::get_job_count(const common::ObString &job_type, int6
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(job_type.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
   } else {
     const char *select_sql =
       "SELECT count(*) as job_count FROM __all_rootservice_job "
@@ -196,7 +183,6 @@ int ObAdminJobTableStorage::get_job_count(const common::ObString &job_type, int6
     ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->query(select_sql, binder, row_processor))) {
     }
   }
@@ -210,10 +196,8 @@ int ObAdminJobTableStorage::find_job(const common::ObString &job_type, int64_t &
   job_id = -1;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(job_type.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret));
   } else {
     const char *select_sql =
       "SELECT job_id FROM __all_rootservice_job "
@@ -229,11 +213,9 @@ int ObAdminJobTableStorage::find_job(const common::ObString &job_type, int64_t &
     ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->query(select_sql, binder, row_processor))) {
     } else if (OB_UNLIKELY(job_id < 1)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("find an invalid job", KR(ret), K(job_id));
     }
   }
   LOG_INFO("finish find job", KR(ret), K(job_id), K(job_type));

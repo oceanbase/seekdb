@@ -55,7 +55,6 @@ int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &
 
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("dict hub not init", K(ret));
   } else {
     ObBucketHashWLockGuard guard(rw_dict_lock_, key.hash());
 
@@ -65,12 +64,10 @@ int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &
         // dict not exist, make new one, by caller
         ret = OB_ENTRY_NOT_EXIST;
       } else {
-        LOG_WARN("Failed to get dict info", K(ret));
       }
     } else if (OB_FAIL(ObFTRangeDict::try_load_cache(desc, info.range_count_, container))) {
       if (OB_ENTRY_NOT_EXIST == ret) {
       } else {
-        LOG_WARN("Failed to load cache", K(ret));
       }
     }
 
@@ -94,7 +91,6 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
   ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("dict hub not init", K(ret));
   } else {
     {
       ObBucketHashRLockGuard guard(rw_dict_lock_, key.hash());
@@ -103,7 +99,6 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
           // dict not exist, make new one, by caller
           ret = OB_ENTRY_NOT_EXIST;
         } else {
-          LOG_WARN("Failed to get dict info", K(ret));
         }
       }
     }
@@ -112,7 +107,6 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
       if (OB_ENTRY_NOT_EXIST == ret) {
         // dict not exist, make new one, by caller
       } else {
-        LOG_WARN("Failed to load cache", K(ret));
       }
     }
   }
@@ -127,7 +121,6 @@ int ObFTDictHub::get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info)
 
   if (OB_FAIL(dict_map_.get_refactored(key, info))) {
     if (OB_HASH_NOT_EXIST != ret) {
-      LOG_WARN("get dict info failed", K(ret));
     }
   }
 

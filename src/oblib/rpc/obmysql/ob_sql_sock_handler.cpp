@@ -43,7 +43,6 @@ static int get_client_addr_for_sql_sock_session(int fd, ObAddr& client_addr)
   socklen_t addr_len = sizeof(addr);
   if (getpeername(fd, (struct sockaddr *)&addr, &addr_len) < 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql nio getpeername failed", K(errno), K(ret));
   } else {
     client_addr.from_sockaddr(&addr);
   }
@@ -62,7 +61,6 @@ int ObSqlSockHandler::on_connect(void* udata, int fd, bool is_unix_socket)
   } else if (OB_FAIL(get_client_addr_for_sql_sock_session(fd, sess->client_addr_))) {
   }
   if (OB_SUCC(ret) && OB_FAIL(sess->init())) {
-    LOG_WARN("sess init failed", K(ret));
   }
   return ret;
 }

@@ -57,32 +57,24 @@ int ObExprMapComponents::calc_map_components_result_type(ObExprResType &type,
 
   if (OB_ISNULL(session = const_cast<ObSQLSessionInfo *>(type_ctx.get_session()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObSQLSessionInfo is null", K(ret));
   } else if (OB_ISNULL(exec_ctx = session->get_cur_exec_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObExecContext is null", K(ret));
   } else if (ob_is_null(type1.get_type())) {
     type.set_null();
   } else if (!ob_is_collection_sql_type(type1.get_type())) {
     // not collection type
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid input type", K(ret));
   } else if (OB_FAIL(exec_ctx->get_sqludt_meta_by_subschema_id(type1.get_subschema_id(), map_meta))) {
   } else if (map_meta.type_ != ObSubSchemaType::OB_SUBSCHEMA_COLLECTION_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid subschema type", K(ret), K(map_meta.type_));
   } else if (OB_ISNULL(coll_info = static_cast<const ObSqlCollectionInfo *>(map_meta.value_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("coll info is null", K(ret));
   } else if (coll_info->collection_meta_->type_id_ != ObNestedType::OB_MAP_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid collection type", K(ret), K(coll_info->collection_meta_->type_id_));
   } else {
     ObString attr_def;
     if (is_key && OB_FAIL(coll_info->get_map_attr_def_string(tmp_allocator, attr_def))) {
-      LOG_WARN("failed to get map key define", K(ret), K(*coll_info));
     } else if (!is_key && OB_FAIL(coll_info->get_map_attr_def_string(tmp_allocator, attr_def, true))) {
-      LOG_WARN("failed to get map value define", K(ret), K(*coll_info));
     } else if (OB_FAIL(exec_ctx->get_subschema_id_by_type_string(attr_def, component_subid))) {
     } else {
       type.set_collection(component_subid);
@@ -137,16 +129,12 @@ int ObExprMapComponents::get_map_components_arr(ObIAllocator &tmp_allocator,
   if (OB_FAIL(ctx.exec_ctx_.get_sqludt_meta_by_subschema_id(subschema_id, value))) {
   } else if (value.type_ >= OB_SUBSCHEMA_MAX_TYPE) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid subschema type", K(ret), K(value));
   } else if (OB_ISNULL(coll_info = reinterpret_cast<const ObSqlCollectionInfo *>(value.value_))) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("collect info is null", K(ret), K(subschema_id));
   } else if (coll_info->collection_meta_->type_id_ != ObNestedType::OB_MAP_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid collection type", K(ret), K(coll_info->collection_meta_->type_id_));
   }else if (OB_ISNULL(map_type = dynamic_cast<ObCollectionMapType *>(coll_info->collection_meta_))) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("map type is null", K(ret), K(subschema_id));
   } else if (OB_FAIL(ObArrayTypeObjFactory::construct(tmp_allocator, *map_type, map_obj, true))) {
   } else {
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(ctx.exec_ctx_, &tmp_allocator,

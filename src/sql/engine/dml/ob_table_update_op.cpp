@@ -53,7 +53,6 @@ OB_DEF_SERIALIZE(ObTableUpdateSpec)
       ObUpdCtDef *upd_ctdef = upd_ctdefs_.at(i).at(j);
       if (OB_ISNULL(upd_ctdef)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("upd_ctdef is nullptr", K(ret));
       }
       OB_UNIS_ENCODE(*upd_ctdef);
     }
@@ -79,7 +78,6 @@ OB_DEF_DESERIALIZE(ObTableUpdateSpec)
       ObUpdCtDef *upd_ctdef = ctdef_allocator.alloc();
       if (OB_ISNULL(upd_ctdef)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc upd_ctdef failed", K(ret));
       }
       OB_UNIS_DECODE(*upd_ctdef);
       upd_ctdefs_.at(i).at(j) = upd_ctdef;
@@ -140,7 +138,6 @@ int ObTableUpdateOp::inner_open()
   if (OB_FAIL(ObTableModifyOp::inner_open())) {
   } else if (OB_UNLIKELY(MY_SPEC.upd_ctdefs_.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("del ctdef is invalid", K(ret), KP(this));
   } else if (OB_UNLIKELY(iter_end_)) {
     //do nothing
   } else if (OB_FAIL(inner_open_with_das())) {
@@ -163,7 +160,6 @@ int ObTableUpdateOp::inner_rescan()
   int ret = OB_SUCCESS;
   if (!MY_SPEC.gi_above_) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("table update rescan not supported", K(ret));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "table update rescan");
   } else if (OB_FAIL(ObTableModifyOp::inner_rescan())) {
   } else if (OB_UNLIKELY(iter_end_)) {
@@ -245,7 +241,6 @@ OB_INLINE int ObTableUpdateOp::close_table_for_each()
           primary_upd_rtdef.dupd_rtdef_.table_loc_->is_writing_ = false;
         }
         if (!primary_upd_rtdef.has_table_cycle_ && primary_upd_ctdef.need_check_table_cycle_ && OB_FAIL(ObDMLService::delete_table_id_from_parent_table_set(dml_rtctx_, primary_upd_ctdef))) {
-          LOG_WARN("delete from parent table set failed", K(ret), K(primary_upd_ctdef.das_base_ctdef_.index_tid_));
         }
       }
     }
@@ -272,8 +267,6 @@ OB_INLINE int ObTableUpdateOp::calc_multi_tablet_id(const ObUpdCtDef &upd_ctdef,
                              && !has_exist_in_array(
                                upd_ctdef.multi_ctdef_->hint_part_ids_, partition_id))) {
     ret = OB_PARTITION_NOT_MATCH;
-    LOG_WARN("Partition not match",
-             K(ret), K(partition_id), K(upd_ctdef.multi_ctdef_->hint_part_ids_));
   }
   return ret;
 }
@@ -339,7 +332,6 @@ OB_INLINE int ObTableUpdateOp::update_row_to_das()
       } else if (OB_FAIL(ObDMLService::update_row(upd_ctdef, upd_rtdef, old_tablet_loc, new_tablet_loc, dml_rtctx_,
                                                  modify_row.old_row_, modify_row.new_row_, modify_row.full_row_))) {
       } else if (need_after_row_process(upd_ctdef) && OB_FAIL(dml_modify_rows_.push_back(modify_row))) {
-        LOG_WARN("failed to push dml modify row to modified row list", K(ret));
       } else {
         ++upd_rtdef.found_rows_;
       }

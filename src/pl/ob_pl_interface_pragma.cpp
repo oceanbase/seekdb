@@ -91,7 +91,6 @@ int ObPLInterfaceService::init()
   if (!interface_map_.created() &&
              OB_FAIL(interface_map_.create(hash::cal_next_prime(32),
                                            ObModIds::OB_HASH_BUCKET, ObModIds::OB_HASH_NODE))) {
-    LOG_WARN("create interface map failed", K(ret));
   } else {
     for (int64_t i = INTERFACE_START; OB_SUCC(ret) && i < INTERFACE_END; ++i) {
       ObPLInterfaceType type = static_cast<ObPLInterfaceType>(i);

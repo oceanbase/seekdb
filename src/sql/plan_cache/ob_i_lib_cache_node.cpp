@@ -78,7 +78,6 @@ int ObILibCacheNode::remove_all_plan_stat()
         // do nothing
       } else if (obj->added_lc()
         && OB_FAIL(lib_cache_->remove_cache_obj_stat_entry(obj->get_object_id()))) {
-        LOG_WARN("failed to remove plan stat", K(obj->get_object_id()), K(ret));
       }
     }
   }
@@ -92,7 +91,6 @@ int ObILibCacheNode::get_cache_obj(ObILibCacheCtx &ctx,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(key)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(key));
   } else if (OB_FAIL(inner_get_cache_obj(ctx, key, obj))) {
   } else {
     obj->inc_ref_count();
@@ -107,10 +105,8 @@ int ObILibCacheNode::add_cache_obj(ObILibCacheCtx &ctx,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(lib_cache_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lib cache is invalid", K(ret));
   } else if (OB_ISNULL(key) || OB_ISNULL(obj)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(key), K(obj));
   } else if (OB_FAIL(inner_add_cache_obj(ctx, key, obj))) {
   } else {
     {

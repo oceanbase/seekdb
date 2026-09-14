@@ -126,7 +126,6 @@ int TokenizeContext::step_next()
   } else if (cursor_ < fulltext_len_ && 0 == next_char_len_) {
     // should not happen
     ret = OB_UNEXPECT_INTERNAL_ERROR;
-    LOG_WARN("Unexpected error", K(ret));
   } else {
     cursor_ += next_char_len_;
     handle_size_++;

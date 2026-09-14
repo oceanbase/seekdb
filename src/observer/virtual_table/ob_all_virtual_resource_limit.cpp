@@ -49,10 +49,8 @@ int ObResourceLimitTable::get_next_resource_info_(ObResourceInfo &info)
   int ret = OB_SUCCESS;
   if (!iter_.is_ready()
       && OB_FAIL(iter_.set_ready(*::oceanbase::share::server_service<::oceanbase::share::ObResourceLimitCalculator>()))) {
-    LOG_WARN("iterator is not ready", K(ret));
   } else if (OB_FAIL(iter_.get_next(info))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("get next resource info failed", K(ret));
     }
   }
   return ret;
@@ -64,11 +62,9 @@ int ObResourceLimitTable::inner_get_next_row(ObNewRow *&row)
   ObResourceInfo info;
   if (NULL == allocator_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("allocator_ shouldn't be NULL", K(allocator_), K(ret));
   } else if (FALSE_IT(start_to_read_ = true)) {
   } else if (OB_FAIL(get_next_resource_info_(info))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("get_next_resource_info failed", K(ret));
     }
   } else {
     const int64_t col_count = output_column_ids_.count();
@@ -99,7 +95,6 @@ int ObResourceLimitTable::inner_get_next_row(ObNewRow *&row)
           break;
         default:
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid col_id", K(ret), K(col_id));
           break;
       }
     }

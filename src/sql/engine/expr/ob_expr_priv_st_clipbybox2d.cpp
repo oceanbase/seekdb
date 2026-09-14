@@ -43,12 +43,10 @@ int ObExprPrivSTClipByBox2D::calc_result_type2(ObExprResType &type, ObExprResTyp
   if (!ob_is_string_type(obj_type1) && !ob_is_geometry(obj_type1) && !ob_is_null(obj_type1)) {
     ret = OB_ERR_GIS_INVALID_DATA;
     LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_CLIPBYBOX2D);
-    LOG_WARN("invalid type", K(ret), K(obj_type1));
   } else if (!ob_is_string_type(obj_type2) && !ob_is_geometry(obj_type2)
              && !ob_is_null(obj_type2)) {
     ret = OB_ERR_GIS_INVALID_DATA;
     LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_CLIPBYBOX2D);
-    LOG_WARN("invalid type", K(ret), K(obj_type2));
   } else {
     ObCastMode cast_mode = type_ctx.get_cast_mode();
     cast_mode &= ~CM_WARN_ON_FAIL;      // make cast return error when fail
@@ -75,7 +73,6 @@ int ObExprPrivSTClipByBox2D::process_input_geometry(common::ObSrsCacheGuard &srs
   if (ob_is_null(type1) || ob_is_null(type2)) {
     is_null_res = true;
   } else if (OB_FAIL(allocator.eval_arg(arg1, ctx, datum1)) || OB_FAIL(allocator.eval_arg(arg2, ctx, datum2))) {
-    LOG_WARN("fail to eval args", K(ret));
   } else if (datum1->is_null() || datum2->is_null()) {
     is_null_res = true;
   } else {
@@ -101,12 +98,10 @@ int ObExprPrivSTClipByBox2D::process_input_geometry(common::ObSrsCacheGuard &srs
       ret = OB_ERR_NOT_IMPLEMENTED_FOR_GEOGRAPHIC_SRS;
       LOG_USER_ERROR(OB_ERR_NOT_IMPLEMENTED_FOR_GEOGRAPHIC_SRS, N_PRIV_ST_ASMVTGEOM,
                   ObGeoTypeUtil::get_geo_name_by_type(geo1->type()));
-      LOG_WARN("Geometry in geographical srs can not be input", K(ret), K(srs1));
     } else if (OB_NOT_NULL(srs2) && srs2->is_geographical_srs()) {
       ret = OB_ERR_NOT_IMPLEMENTED_FOR_GEOGRAPHIC_SRS;
       LOG_USER_ERROR(OB_ERR_NOT_IMPLEMENTED_FOR_GEOGRAPHIC_SRS, N_PRIV_ST_ASMVTGEOM,
                   ObGeoTypeUtil::get_geo_name_by_type(geo2->type()));
-      LOG_WARN("Geometry in geographical srs can not be input", K(ret), K(srs2));
     }
   }
   return ret;
@@ -137,7 +132,6 @@ int ObExprPrivSTClipByBox2D::eval_priv_st_clipbybox2d(
   if (OB_FAIL(ret) || is_null_res) {
   } else if (OB_FAIL(ObGeoExprUtils::check_empty(geo1, is_geo1_empty))
              || OB_FAIL(ObGeoExprUtils::check_empty(geo2, is_geo2_empty))) {
-    LOG_WARN("check geo empty failed", K(ret));
   } else if (is_geo2_empty) {
     is_null_res = true;
   } else if (is_geo1_empty) {
@@ -146,7 +140,6 @@ int ObExprPrivSTClipByBox2D::eval_priv_st_clipbybox2d(
   } else if (OB_FAIL(guard.init())) {
   } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("fail to get mem ctx", K(ret));
   } else {
     ObGeoEvalCtx box_ctx(*mem_ctx);
     box_ctx.set_is_called_in_pg_expr(true);

@@ -42,7 +42,6 @@ int ObConfigManager::init(share::ObSQLiteConnectionPool *pool)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pool)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid storage", K(ret));
   } else if (OB_FAIL(storage_.init(pool))) {
   } else {
     inited_ = true;
@@ -108,7 +107,6 @@ int ObConfigManager::update_local()
   if (OB_SUCC(ret)) {
     server_config_.print();
   } else {
-    LOG_WARN("Read system config error", K(ret));
   }
   return ret;
 }
@@ -118,7 +116,6 @@ int ObConfigManager::got_version()
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("config manager not inited", K(ret));
   } else {
     if (OB_FAIL(update_local())) {
     } else {
@@ -135,17 +132,14 @@ int ObConfigManager::save_config(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(config_name) || OB_ISNULL(value)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(config_name), KP(value));
   } else {
     // Get config item from server_config_ container
     ObConfigItem *const *ci_ptr = server_config_.get_container().get(
                                      ObConfigStringKey(config_name));
     if (OB_ISNULL(ci_ptr)) {
       ret = OB_ERR_SYS_CONFIG_UNKNOWN;
-      LOG_WARN("can't found config item", K(ret), K(config_name));
     } else if (OB_ISNULL(*ci_ptr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("config item is null", K(ret), K(config_name));
     } else {
       const ObConfigItem *config_item = *ci_ptr;
       if (OB_FAIL(storage_.upsert_config(

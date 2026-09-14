@@ -35,9 +35,7 @@ int ObTabletDeleteMdsHelper::register_process(
   int ret = OB_SUCCESS;
 
   if (CLICK_FAIL(delete_tablets(arg, ctx))) {
-    LOG_WARN("failed to delete tablets", K(ret), K(arg));
   } else if (CLICK_FAIL(ObTabletCreateDeleteMdsUserData::set_tablet_empty_shell_trigger())) {
-    LOG_WARN("failed to set_tablet_empty_shell_trigger", K(ret), K(arg));
   } else {
     LOG_INFO("delete tablet register", KR(ret), K(arg));
   }
@@ -58,11 +56,8 @@ int ObTabletDeleteMdsHelper::on_register(
 
   if (OB_ISNULL(buf) || OB_UNLIKELY(len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KP(buf), K(len));
   } else if (CLICK_FAIL(arg.deserialize(buf, len, pos))) {
-    LOG_WARN("failed to deserialize", K(ret));
   } else if (CLICK_FAIL(register_process(arg, ctx))) {
-    LOG_WARN("failed to register_process", K(ret), K(arg));
   }
 
   return ret;
@@ -77,9 +72,7 @@ int ObTabletDeleteMdsHelper::replay_process(
   int ret = OB_SUCCESS;
 
   if (CLICK_FAIL(replay_delete_tablets(arg, scn, ctx))) {
-    LOG_WARN("failed to delete tablets", K(ret), K(arg), K(scn));
   } else if (CLICK_FAIL(ObTabletCreateDeleteMdsUserData::set_tablet_empty_shell_trigger())) {
-    LOG_WARN("failed to set_tablet_empty_shell_trigger", K(ret), K(arg));
   } else {
     LOG_INFO("delete tablet replay", KR(ret), K(scn), K(arg));
   }
@@ -101,9 +94,7 @@ int ObTabletDeleteMdsHelper::on_replay(
 
   if (OB_ISNULL(buf) || OB_UNLIKELY(len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KP(buf), K(len));
   } else if (CLICK_FAIL(arg.deserialize(buf, len, pos))) {
-    LOG_WARN("failed to deserialize", K(ret));
   } else if (CLICK_FAIL(replay_process(arg, scn, ctx))) {
     LOG_WARN("failed to replay_process", K(ret), K(arg));
   }
@@ -124,7 +115,6 @@ int ObTabletDeleteMdsHelper::delete_tablets(
 
   ObLS *tenant_ls = nullptr;
   if (CLICK_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
-      LOG_WARN("failed to get ls", K(ret));
   } else {
     CLICK();
     for (int64_t i = 0; OB_SUCC(ret) && i < arg.tablet_ids_.count(); ++i) {
@@ -137,7 +127,6 @@ int ObTabletDeleteMdsHelper::delete_tablets(
           exist = false;
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("failed to get tablet", K(ret), K(key));
         }
       } else {
         exist = true;
@@ -146,7 +135,6 @@ int ObTabletDeleteMdsHelper::delete_tablets(
       if (CLICK_FAIL(ret)) {
       } else if (!exist) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("tablet does not exist", K(ret), K(key));
       } else if (CLICK_FAIL(set_tablet_deleted_status(
               tenant_ls->get_tablet_svr(), tablet_handle, ctx))) {
         LOG_ERROR("failed to set tablet deleted status", K(ret), K(key));
@@ -208,14 +196,11 @@ int ObTabletDeleteMdsHelper::set_tablet_deleted_status(
   const int64_t timeout = THIS_WORKER.get_timeout_remain();
   if (OB_ISNULL(tablet)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet is null", K(ret), K(tablet_handle));
   } else if (CLICK_FAIL(tablet->ObITabletMdsInterface::get_tablet_status(share::SCN::max_scn(), data, timeout))) {
-    LOG_WARN("failed to get tablet status", K(ret), K(timeout));
   } else {
     data.tablet_status_ = ObTabletStatus::DELETED;
     data.data_type_ = ObTabletMdsUserDataType::REMOVE_TABLET;
     if (CLICK_FAIL(ls_tablet_service->set_tablet_status(tablet->get_tablet_meta().tablet_id_, data, user_ctx))) {
-      LOG_WARN("failed to set mds data", K(ret));
     }
   }
 

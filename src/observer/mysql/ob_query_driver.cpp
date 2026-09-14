@@ -42,7 +42,6 @@ int ObQueryDriver::response_query_header(ObResultSet &result,
   int ret = OB_SUCCESS;
   if (NULL == result.get_field_columns()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("response field is null. ", K(ret));
   } else if (OB_FAIL(response_query_header(*result.get_field_columns(),
                                            has_more_result,
                                            need_set_ps_out_flag,
@@ -66,9 +65,7 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
   // result == null means ps cursor in execute or fetch .
   if (NULL != result && (&fields != result->get_field_columns())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("filed is not from result in non ps cursor mode. ", K(ret));
   } else if (fields.count() <= 0) {
-    LOG_WARN("column cnt is null ", K(fields.count()));
     ret = OB_ERR_BAD_FIELD_ERROR;
   } else if (OB_FAIL(session_.get_autocommit(ac))) {
   } else if (OB_FAIL(mysql_fields.reserve(fields.count()))) {
@@ -86,7 +83,6 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
           OB_FAIL(is_com_filed_list_match_wildcard_str(
               *result, static_cast<ObCollationType>(ob_field.charsetnr_),
               ob_field.org_cname_, is_not_match))) {
-        LOG_WARN("failed to is com filed list match wildcard str", K(ret));
       } else if (is_not_match) {
         /*do nothing*/
       } else {
@@ -150,7 +146,6 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
     limit_count = fetch_limit;
   } else {
     if (!result.get_has_top_limit() && OB_FAIL(session_.get_sql_select_limit(limit_count))) {
-      LOG_WARN("failed to get sytem variable sql_select_limit", K(ret));
     }
   }
 
@@ -159,7 +154,6 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
     fields = result.get_field_columns();
     if (OB_ISNULL(fields)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("fields is null", K(ret), KP(fields));
     }
   }
   
@@ -208,15 +202,12 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
           OZ(convert_string_value_charset(value, result, charset_type));
         } else if (ob_is_text_tc(value.get_type())
                     && OB_FAIL(convert_text_value_charset(value, result, charset_type))) {
-          LOG_WARN("convert text value charset failed", K(ret));
         }
         if (OB_FAIL(ret)){
         } else if ((value.is_lob() || value.is_json() || value.is_geometry())
                   && OB_FAIL(process_lob_locator_results(value, result))) {
-          LOG_WARN("convert lob locator to longtext failed", K(ret));
         } else if ((value.is_collection_sql_type() || value.is_geometry()) &&
                    OB_FAIL(ObSqlUdtUtils::convert_result_for_client(value, result))) {
-          LOG_WARN("convert udt to client format failed", K(ret), K(value.get_udt_subschema_id()));
         }
       }
     }
@@ -246,7 +237,6 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
   if (OB_ITER_END == ret) {
     ret = OB_SUCCESS;
   } else {
-    LOG_WARN("fail to iterate and response", K(ret), K(row_num), K(can_retry));
   }
   if (OB_SUCC(ret) && 0 == row_num) {
     // If there is no data at all, we still need to reply to the client with field information, and no more retries will be attempted
@@ -302,15 +292,12 @@ int ObQueryDriver::convert_string_value_charset(ObObj& value, ObResultSet &resul
     const ObCharsetInfo *charset_info = ObCharset::get_charset(from_collation_type);
     if (OB_ISNULL(charset_info)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("charsetinfo is null", K(ret), K(from_collation_type), K(to_collation_type), K(value));
     } else if (CS_TYPE_INVALID == from_collation_type) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid collation", K(ret), K(from_collation_type), K(to_collation_type), K(value));
     }
   } else if (OB_FAIL(result.get_exec_context().get_convert_charset_allocator(allocator))) {
   } else if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lob fake allocator is null.", K(ret), K(value));
   } else {
     OZ (value.convert_string_value_charset(charset_type, *allocator));
   }
@@ -328,7 +315,6 @@ int ObQueryDriver::convert_text_value_charset(common::ObObj& value, sql::ObResul
   if (OB_FAIL(result.get_exec_context().get_convert_charset_allocator(allocator))) {
   } else if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("text fake allocator is null.", K(ret), K(value));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(convert_text_value_charset(value, charset_type, *allocator, &my_session, &result.get_exec_context()))) {
@@ -345,12 +331,9 @@ int ObQueryDriver::like_match(const char* str, int64_t length_str, int64_t i,
   if (OB_ISNULL(str) || OB_ISNULL(pattern) ||
       OB_UNLIKELY(length_str < 0 || i < 0 || length_pat < 0 || j < 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(str), K(length_str), K(i),
-                                     K(pattern), K(length_pat), K(j));
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(ret));
   } else if (i == length_str && j == length_pat) {
     is_match = true;
   } else if (i != length_str && j >= length_pat) {
@@ -396,7 +379,6 @@ int ObQueryDriver::process_lob_locator_results(ObObj& value, sql::ObResultSet &r
   if (OB_FAIL(result.get_exec_context().get_convert_charset_allocator(allocator))) {
   } else if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lob fake allocator is null.", K(ret), K(value));
   } else if (OB_FAIL(process_lob_locator_results(value, 
                                                  allocator,
                                                  &result.get_session(),
@@ -420,7 +402,6 @@ int ObQueryDriver::process_lob_locator_results(ObObj& value,
     // do nothing
   } else if (OB_ISNULL(exec_ctx)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("exec context is null for LOB result", K(ret), K(value));
   } else {
     // Should remove locator header and read full lob data
     ObString data;
@@ -473,11 +454,9 @@ int ObQueryDriver::convert_string_charset(const ObString &in_str, const ObCollat
     }
     if (str_offset < in_str.length()) {
       ret = OB_SIZE_OVERFLOW;
-      LOG_WARN("sizeoverflow", K(ret), K(in_str), KPHEX(in_str.ptr(), in_str.length()));
     } else {
       result_len = buf_offset;
       ret = OB_SUCCESS;
-      LOG_WARN("charset convert failed", K(ret), K(in_cs_type), K(out_cs_type));
     }
   }
   return ret;
@@ -497,7 +476,6 @@ int ObQueryDriver::convert_text_value_charset(ObObj& value,
     if (!value.has_lob_header() || !value.is_lob_storage()) {
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Lob: get  empty or null lob obj with header", K(ret), K(value));
     }
   } else if (ObCharset::is_valid_charset(charset_type) && CHARSET_BINARY != charset_type) {
     ObCollationType to_collation_type = ObCharset::get_default_collation(charset_type);
@@ -508,10 +486,8 @@ int ObQueryDriver::convert_text_value_charset(ObObj& value,
 
     if (OB_ISNULL(from_charset_info) || OB_ISNULL(to_charset_info)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Lob: charsetinfo is null", K(ret), K(from_collation_type), K(to_collation_type));
     } else if (CS_TYPE_INVALID == from_collation_type || CS_TYPE_INVALID == to_collation_type) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Lob: invalid collation", K(from_collation_type), K(to_collation_type), K(ret));
     } else if (CS_TYPE_BINARY != from_collation_type && CS_TYPE_BINARY != to_collation_type
         && strcmp(from_charset_info->csname, to_charset_info->csname) != 0) {
       {
@@ -527,8 +503,6 @@ int ObQueryDriver::convert_text_value_charset(ObObj& value,
           // because the final result will be allocated by allocator when convert charset
           if (OB_ISNULL(exec_ctx)) {
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("exec context is null for LOB charset conversion",
-                     K(ret), K(value));
           } else if (OB_FAIL(ObTextStringHelper::build_text_iter(
                          str_iter,
                          *exec_ctx,

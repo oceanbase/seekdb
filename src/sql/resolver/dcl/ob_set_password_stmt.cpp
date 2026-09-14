@@ -46,7 +46,6 @@ int ObSetPasswordStmt::set_user_password(const common::ObString &user_name,
   int ret = OB_SUCCESS;
   if (0 != user_pwd_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("should be only set once", K(ret));
   } else if (OB_FAIL(user_pwd_.add_string(user_name))) {
   } else if (OB_FAIL(user_pwd_.add_string(host_name))) {
   } else if (OB_FAIL(user_pwd_.add_string(password))) {

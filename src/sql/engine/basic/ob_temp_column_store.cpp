@@ -39,7 +39,6 @@ int ObTempColumnStore::ColumnBlock::calc_vector_size(const ObIVector *vec,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == vec)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KP(vec));
   } else {
     const VectorFormat format = vec->get_format();
     switch (format) {
@@ -60,7 +59,6 @@ int ObTempColumnStore::ColumnBlock::calc_vector_size(const ObIVector *vec,
       break;
     default:
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected vector format", K(ret), K(format));
       break;
     }
   }
@@ -77,7 +75,6 @@ int ObTempColumnStore::ColumnBlock::vector_to_buf(const ObIVector *vec,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == vec || nullptr == head)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KP(vec), KP(head));
   } else {
     const VectorFormat format = vec->get_format();
     switch (format) {
@@ -98,7 +95,6 @@ int ObTempColumnStore::ColumnBlock::vector_to_buf(const ObIVector *vec,
       break;        
     default:
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected vector format", KR(ret), K(format));
       break;
     }
   }
@@ -113,7 +109,6 @@ int ObTempColumnStore::ColumnBlock::vector_from_buf(char *buf,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == buf || nullptr == vec)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KP(buf), KP(vec));
   } else {
     const VectorFormat format = vec->get_format();
     switch (format) {
@@ -128,7 +123,6 @@ int ObTempColumnStore::ColumnBlock::vector_from_buf(char *buf,
       break;
     default:
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected vector format", KR(ret), K(format));
       break;
     }
   }
@@ -161,7 +155,6 @@ int ObTempColumnStore::ColumnBlock::add_batch(ShrinkBuffer &buf,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(batch_mem_size > buf.remain())) {
     ret = OB_BUF_NOT_ENOUGH;
-    LOG_WARN("block is not enough", K(ret), K(batch_mem_size), K(buf));
   } else {
     char *head = buf.head();
     *reinterpret_cast<int32_t *>(head) = static_cast<int32_t>(size); // row_count
@@ -178,7 +171,6 @@ int ObTempColumnStore::ColumnBlock::add_batch(ShrinkBuffer &buf,
     if (OB_FAIL(ret)) {
     } else if (OB_UNLIKELY(pos != batch_mem_size)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected memory size", K(ret), K(pos), K(batch_mem_size));
     } else {
       cnt_ += size;
     }
@@ -223,7 +215,6 @@ int ObTempColumnStore::Iterator::get_next_batch(const IVectorPtrs &vectors,
   if (OB_UNLIKELY(NULL == cur_blk_ || !cur_blk_->contain(cur_blk_id_))) {
     if (OB_FAIL(next_block())) {
       if (ret != OB_ITER_END) {
-        LOG_WARN("fail to get next block", K(ret));
       }
     }
   }
@@ -330,7 +321,6 @@ int ObTempColumnStore::init_vectors(const ObIArray<query::ObSpillColumnDesc> &co
   vectors.reset();
   if (OB_UNLIKELY(col_array.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(col_array));
   } else if (OB_FAIL(vectors.prepare_allocate(col_array.count()))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < col_array.count(); ++i) {
@@ -373,7 +363,6 @@ int ObTempColumnStore::init_vectors(const ObIArray<query::ObSpillColumnDesc> &co
         #undef FIXED_VECTOR_INIT_SWITCH
           default:
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid fixed vector value type class", K(ret), K(i), K(value_tc));
             break;
         }
       } else { // continuous format
@@ -400,14 +389,12 @@ int ObTempColumnStore::init_vectors(const ObIArray<query::ObSpillColumnDesc> &co
         #undef CONTINUOUS_VECTOR_INIT_SWITCH
           default:
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid continuous vector value type class", K(ret), K(i), K(value_tc));
             break;
         }
       }
       if (OB_FAIL(ret)) {
       } else if (OB_ISNULL(vector)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc vector", KR(ret));
       } else {
         vectors.at(i) = vector;
       }
@@ -426,10 +413,8 @@ int ObTempColumnStore::init_batch_ctx(const IVectorPtrs &vectors)
     char *mem = static_cast<char *>(allocator_->alloc(size, mem_attr_));
     if (OB_UNLIKELY(max_batch_size <= 0)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("max batch size is not positive when init batch ctx", K(ret), K(max_batch_size));
     } else if (NULL == mem) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret), K(size), K(col_cnt_), K(max_batch_size));
     } else {
       char *begin = mem;
       batch_ctx_ = new (mem) BatchCtx();
@@ -442,8 +427,6 @@ int ObTempColumnStore::init_batch_ctx(const IVectorPtrs &vectors)
         mem += sizeof(*batch_ctx_->selector_) * max_batch_size;
         if (mem - begin != size) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("size mismatch", K(ret), K(mem - begin), K(size), K(col_cnt_),
-                                    K(max_batch_size));
         }
         for (int64_t i = 0; OB_SUCC(ret) && i < vectors.count(); ++i) {
           ObIVector *vector = vectors.at(i);
@@ -457,7 +440,6 @@ int ObTempColumnStore::init_batch_ctx(const IVectorPtrs &vectors)
               break;
             default:
               ret = OB_ERR_UNDEFINED;
-              LOG_WARN("unexpected vector format", KR(ret), K(i), K(format));
               break;
           }
         }
@@ -480,7 +462,6 @@ int ObTempColumnStore::add_batch(const IVectorPtrs &vectors,
     LOG_WARN("column count mismatch", K(ret), K(vectors.count()), K(get_col_cnt()));
   } else if (OB_ISNULL(batch_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected batch ctx not init", K(ret));
   } else if (brs.all_rows_active_ || (0 == brs.skip_->accumulate_bit_cnt(brs.size_))) {
     // all skipped, set selector point to null
     size = brs.size_;

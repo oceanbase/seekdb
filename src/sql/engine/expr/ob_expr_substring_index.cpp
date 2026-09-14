@@ -95,16 +95,11 @@ int ObExprSubstringIndex::cg_expr(ObExprCGCtx &, const ObRawExpr &raw_expr, ObEx
                OB_ISNULL(pattern_expr = raw_expr.get_param_expr(1)) ||
                OB_ISNULL(nth_appearance_expr = raw_expr.get_param_expr(2))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null pointer", K(text_expr), K(pattern_expr), K(nth_appearance_expr));
   } else if (rt_expr.arg_cnt_ != 3 || OB_ISNULL(rt_expr.args_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("substring_index expr should have 3 arguments", K(ret),
-                                                             K(rt_expr.arg_cnt_), K(rt_expr.args_));
   } else if (OB_ISNULL(rt_expr.args_[0]) || OB_ISNULL(rt_expr.args_[1]) ||
                OB_ISNULL(rt_expr.args_[2])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child is null", K(ret), K(rt_expr.args_[0]), K(rt_expr.args_[1]),
-                              K(rt_expr.args_[2]));
   } else {
     rt_expr.eval_func_ = eval_substring_index;
     rt_expr.eval_batch_func_ = ObExprSubstringIndex::eval_substring_index_batch;

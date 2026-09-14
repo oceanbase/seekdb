@@ -30,10 +30,8 @@ int ObDDLService::force_drop_lonely_lob_aux_table(const obcall::ObForceDropLonel
   int ret = OB_SUCCESS;
   if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid drop lob arg", KR(ret), K(arg));
   } else if (OB_ISNULL(schema_service_) || OB_ISNULL(sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_service_ or sql_proxy_ is null", KR(ret), KP(schema_service_), KP(sql_proxy_));
   } else {
     ObSchemaGetterGuard schema_guard;
     ObDDLSQLTransaction trans(schema_service_);
@@ -47,44 +45,28 @@ int ObDDLService::force_drop_lonely_lob_aux_table(const obcall::ObForceDropLonel
 
     HEAP_VAR(ObTableSchema, tmp_lob_table_schema) {
       if (OB_FAIL(get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
-        LOG_WARN("fail to get schema guard with version in inner table", KR(ret));
       } else if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
-        LOG_WARN("fail to get runtime schema version", KR(ret));
       } else if (OB_FAIL(trans.start(sql_proxy_, refreshed_schema_version))) {
-        LOG_WARN("fail to start trans", KR(ret), K(refreshed_schema_version));
-
-      // 1. check data table exist. if exist, it's not allowed to drop
       } else if (OB_FAIL(schema_guard.check_table_exist(data_table_id, exist))) {
-        LOG_WARN("fail to check table exist", KR(ret), K(arg));
       } else if (exist) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("data table exist, so cannot drop lob table", KR(ret), K(arg));
 
       // 2. get and check lob meta table
       } else if (OB_FAIL(check_and_get_aux_table_schema(schema_guard, arg.get_aux_lob_meta_table_id(),
           data_table_id, ObTableType::AUX_LOB_META, lob_meta_table_schema_ptr))) {
-        LOG_WARN("fail to get lob meta table schema", KR(ret), K(arg));
-      // 3. get and check lob piece table
       } else if (OB_FAIL(check_and_get_aux_table_schema(schema_guard, arg.get_aux_lob_piece_table_id(),
           data_table_id, ObTableType::AUX_LOB_PIECE, lob_piece_table_schema_ptr))) {
-        LOG_WARN("fail to get lob piece table schema", KR(ret), K(arg));
-
-      // 4. drop lob meta table
       } else if (OB_FAIL(tmp_lob_table_schema.assign(*lob_meta_table_schema_ptr))) {
-        LOG_WARN("fail to assign lob meta table schema", KR(ret));
       } else if (OB_FAIL(ddl_operator.drop_table(tmp_lob_table_schema, trans, nullptr/*ddl_stmt_str*/, false/*is_truncate_table*/,
           nullptr/*drop_table_set*/, false/*is_drop_db*/, true/*delete_priv*/, true/*is_force_drop_lonely_lob_aux_table*/))) {
-        LOG_ERROR("fail to drop lob meta table", KR(ret), K(tmp_lob_table_schema));
       }
     
       // 5. drop lob piece table
       if (OB_FAIL(ret)) {
       } else if (FALSE_IT(tmp_lob_table_schema.reset())) {
       } else if (OB_FAIL(tmp_lob_table_schema.assign(*lob_piece_table_schema_ptr))) {
-        LOG_WARN("fail to assign lob piece table schema", KR(ret));
       } else if (OB_FAIL(ddl_operator.drop_table(tmp_lob_table_schema, trans, nullptr/*ddl_stmt_str*/, false/*is_truncate_table*/,
           nullptr/*drop_table_set*/, false/*is_drop_db*/, true/*delete_priv*/, true/*is_force_drop_lonely_lob_aux_table*/))) {
-        LOG_WARN("fail to drop lob piece table", KR(ret), K(tmp_lob_table_schema));
       }
     }
 
@@ -98,7 +80,6 @@ int ObDDLService::force_drop_lonely_lob_aux_table(const obcall::ObForceDropLonel
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(publish_schema())) {
-      LOG_WARN("publish_schema failed", KR(ret));
     }
   }
   LOG_ERROR("NOTICE: there are force_drop_lonely_lob_aux_table", KR(ret), K(arg));
@@ -110,18 +91,14 @@ int ObDDLService::check_and_get_aux_table_schema(ObSchemaGetterGuard &schema_gua
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(schema_guard.get_table_schema( aux_table_id, table_schema))) {
-    LOG_WARN("failed get_table_schema", KR(ret), K(aux_table_id), K(data_table_id), K(table_type));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("aux table schema is null", KR(ret), K(aux_table_id), K(data_table_id), K(table_type));
   } else if (table_schema->get_data_table_id() != data_table_id) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("data table id is not match", KR(ret), K(data_table_id), K(table_type),
         K(table_schema->get_data_table_id()), KPC(table_schema));
   } else if (table_schema->get_table_type() != table_type) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("table is not expected", KR(ret), K(aux_table_id), K(data_table_id), K(table_type),
-        K(table_schema->get_table_type()), KPC(table_schema));
   }
   return ret;
 }

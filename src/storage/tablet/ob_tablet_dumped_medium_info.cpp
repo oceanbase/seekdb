@@ -62,7 +62,6 @@ int ObTabletDumpedMediumInfo::init_for_first_creation(common::ObIAllocator &allo
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), K_(is_inited));
   } else {
     allocator_ = &allocator;
     medium_info_list_.set_attr(lib::ObMemAttr("mds_medium_info"));
@@ -82,14 +81,12 @@ int ObTabletDumpedMediumInfo::init_for_evict_medium_info(
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), K_(is_inited));
   } else {
     allocator_ = &allocator;
     for (int64_t i = 0; OB_SUCC(ret) && i < array.count(); ++i) {
       const compaction::ObMediumCompactionInfo *src_info = array.at(i);
       if (OB_ISNULL(src_info)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, medium info is null", K(ret), K(i), KP(src_info));
       } else if (src_info->medium_snapshot_ <= finish_medium_scn) {
         // medium snapshot no bigger than finish medium scn(which is from last major sstable),
         // no need to copy it
@@ -120,7 +117,6 @@ int ObTabletDumpedMediumInfo::init_for_mds_table_dump(
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), K_(is_inited));
   } else {
     allocator_ = &allocator;
     common::ObSEArray<compaction::ObMediumCompactionInfo*, 1> array1;
@@ -144,7 +140,6 @@ int ObTabletDumpedMediumInfo::init_for_mds_table_dump(
 
         if (OB_ISNULL(info1) || OB_ISNULL(info2)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("medium info is null", K(ret), K(i), K(j), KP(info1), KP(info2));
         } else if (info1->medium_snapshot_ < info2->medium_snapshot_) {
           chosen_info = info1;
           ++i;
@@ -212,7 +207,6 @@ int ObTabletDumpedMediumInfo::assign(common::ObIAllocator &allocator, const ObTa
       const compaction::ObMediumCompactionInfo *src_medium_info = other.medium_info_list_.at(i);
       if (OB_ISNULL(src_medium_info)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("src medium info is null", K(ret), KP(src_medium_info), K(i));
       } else if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, medium_info))) {
       } else if (OB_FAIL(medium_info->assign(allocator, *src_medium_info))) {
       } else if (OB_FAIL(medium_info_list_.push_back(medium_info))) {
@@ -247,7 +241,6 @@ int ObTabletDumpedMediumInfo::append(
 
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret), K_(is_inited));
   } else {
     const common::ObString &user_data = node.user_data_;
     int64_t pos = 0;
@@ -276,7 +269,6 @@ int ObTabletDumpedMediumInfo::append(const compaction::ObMediumCompactionInfo &m
 
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret), K_(is_inited));
   } else if (OB_FAIL(do_append(medium_info))) {
   }
 
@@ -339,7 +331,6 @@ int ObTabletDumpedMediumInfo::is_contain(const compaction::ObMediumCompactionInf
     const compaction::ObMediumCompactionInfo *medium_info = medium_info_list_.at(i);
     if (OB_ISNULL(medium_info)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("medium info should no be null", K(ret), K(i), KP(medium_info));
     } else if (info.medium_snapshot_ == medium_info->medium_snapshot_) {
       contain = true;
     }
@@ -356,14 +347,12 @@ int ObTabletDumpedMediumInfo::serialize(char *buf, const int64_t buf_len, int64_
 
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0) || OB_UNLIKELY(pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(serialization::encode(buf, buf_len, new_pos, count))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
       const compaction::ObMediumCompactionInfo *medium_info = medium_info_list_.at(i);
       if (OB_ISNULL(medium_info)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("medium info is null", K(ret), KP(medium_info), K(i));
       } else if (OB_FAIL(medium_info->serialize(buf, buf_len, new_pos))) {
       }
     }
@@ -384,10 +373,8 @@ int ObTabletDumpedMediumInfo::deserialize(common::ObIAllocator &allocator, const
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), K_(is_inited));
   } else if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0) || OB_UNLIKELY(pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(serialization::decode(buf, buf_len, new_pos, count))) {
   } else if (OB_FAIL(medium_info_list_.reserve(count))) {
   } else {
@@ -396,7 +383,6 @@ int ObTabletDumpedMediumInfo::deserialize(common::ObIAllocator &allocator, const
       void *buffer = allocator.alloc(sizeof(compaction::ObMediumCompactionInfo));
       if (OB_ISNULL(buffer)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate memory", K(ret));
       } else if (FALSE_IT(medium_info = new (buffer) compaction::ObMediumCompactionInfo())) {
       } else if (OB_FAIL(medium_info->deserialize(allocator, buf, buf_len, new_pos))) {
       } else if (OB_FAIL(medium_info_list_.push_back(medium_info))) {
@@ -553,7 +539,6 @@ int ObTabletDumpedMediumInfoIterator::init(
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), K_(is_inited));
   } else {
     if (nullptr == dumped_medium_info) {
       // no need to copy medium info
@@ -565,7 +550,6 @@ int ObTabletDumpedMediumInfoIterator::init(
         compaction::ObMediumCompactionInfo *src_medium_info = array.at(i);
         if (OB_ISNULL(src_medium_info)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected error, src medium info is null", K(ret), K(i), KP(src_medium_info));
         } else if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, info))) {
         } else if (OB_FAIL(info->assign(allocator, *src_medium_info))) {
         } else if (OB_FAIL(medium_info_list_.push_back(info))) {
@@ -620,7 +604,6 @@ int ObTabletDumpedMediumInfoIterator::get_next_key(compaction::ObMediumCompactio
 
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret), K_(is_inited));
   } else if (idx_ == medium_info_list_.count()) {
     ret = OB_ITER_END;
   } else {

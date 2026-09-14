@@ -136,7 +136,6 @@ int ObSchemaPrinter::print_table_definition_columns(const ObTableSchema &table_s
   while (OB_SUCC(ret) && OB_SUCC(iter.next(col))) {
     if (OB_ISNULL(col)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("The column is null", K(ret));
     } else {
       if (col->is_shadow_column()) {
         // do nothing
@@ -328,7 +327,6 @@ int ObSchemaPrinter::print_table_definition_columns(const ObTableSchema &table_s
     }
   }
   if (ret != OB_ITER_END) {
-    LOG_WARN("Failed to iterate all table columns. iter quit. ", K(ret));
   } else {
     ret = OB_SUCCESS;
   }
@@ -471,7 +469,6 @@ int ObSchemaPrinter::print_single_index_definition(const ObTableSchema *index_sc
             if (OB_FAIL(ret)) {
             } else if (NULL == table_schema.get_column_schema(col->get_column_id())) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("get column schema from data table failed", K(ret));
             } else if (OB_FAIL(last_col.assign(*table_schema.get_column_schema(col->get_column_id())))) {
             } else {
               is_valid_col = true;
@@ -530,7 +527,6 @@ int ObSchemaPrinter::print_single_index_definition(const ObTableSchema *index_sc
         }
         if (OB_FAIL(ret)) {
         } else if (!index_schema->is_index_visible() && OB_FAIL(databuff_printf(buf, buf_len, pos, " /*!80000 INVISIBLE */"))) {
-          LOG_WARN("failed to print invisible info", K(ret));
         }
       }
     }
@@ -763,7 +759,6 @@ int ObSchemaPrinter::print_spatial_index_column(const ObTableSchema &table_schem
     ObString new_col_name;
     if (OB_ISNULL(geo_col)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("The geo column schema is null, ", K(ret), K(geo_col_id));
     } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
         allocator, geo_col->get_column_name_str(), new_col_name))) {
     } else if (OB_FAIL(print_identifier(buf, buf_len, pos, new_col_name))) {
@@ -802,15 +797,12 @@ int ObSchemaPrinter::print_prefix_index_column(const ObColumnSchemaV2 &column,
                                                               NULL))) {
     } else if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("expr is null");
     } else if (3 != expr->get_param_count()) {
       // Prefix index expression, with three columns
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("It's wrong expr string", K(ret), K(expr->get_param_count()));
     } else if (1 != columns.count()) {
       // Expression column based on a certain column
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("It's wrong expr string", K(ret), K(columns.count()));
     } else {
       column_name = columns.at(0).col_name_;
       ObString new_col_name;
@@ -819,10 +811,8 @@ int ObSchemaPrinter::print_prefix_index_column(const ObColumnSchemaV2 &column,
       sql::ObRawExpr *t_expr2 = expr->get_param_expr(2);
       if (OB_ISNULL(t_expr0) || OB_ISNULL(t_expr1) || OB_ISNULL(t_expr2)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expr is null", K(ret));
       } else if (T_INT != t_expr2->get_expr_type()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expr type is not int", K(ret));
       } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                   allocator,
                   column_name,
@@ -1135,7 +1125,6 @@ int ObSchemaPrinter::print_table_definition_foreign_keys(const ObTableSchema &ta
           if (OB_ISNULL(update_action_str = foreign_key_info->get_update_action_str()) ||
                      OB_ISNULL(delete_action_str = foreign_key_info->get_delete_action_str())) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("reference action is invalid", K(ret), K(foreign_key_info->update_action_), K(foreign_key_info->delete_action_));
           } else {
             if (OB_FAIL(databuff_printf(buf, buf_len, pos, "ON UPDATE %s ", update_action_str))) {
             } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "ON DELETE %s ", delete_action_str))) {
@@ -1963,7 +1952,6 @@ int ObSchemaPrinter::print_view_definiton(const uint64_t table_id,
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("buf is bull", K(ret));
   }
   return ret;
 }
@@ -2265,7 +2253,6 @@ int ObSchemaPrinter::print_database_definiton(const uint64_t database_id,
 
   if (OB_ISNULL(buf) ||  buf_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(buf), K(buf_len));
   }
 
   if (OB_SUCC(ret)) {
@@ -2387,7 +2374,6 @@ int ObSchemaPrinter::print_routine_param_type(const ObRoutineParam *param,
       if (OB_SUCC(ret))  {
         if (OB_ISNULL(database_schema)) {
           ret = OB_ERR_BAD_DATABASE;
-          LOG_WARN("database not exists", K(ret), KPC(param));
         } else if (param->get_type_subname().empty()) {
           OZ (databuff_printf(buf, buf_len, pos, " \"%.*s\".\"%.*s\"",
                               database_schema->get_database_name_str().length(),
@@ -2827,7 +2813,6 @@ int ObSchemaPrinter::print_foreign_key_definition(const ObForeignKeyInfo &foreig
       if (OB_FAIL(schema_guard_.get_mock_fk_parent_table_schema_with_id(foreign_key_info.parent_table_id_, mock_fk_parent_table_schema))) {
       } else if (OB_ISNULL(mock_fk_parent_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
-        LOG_WARN("mock_fk_parent_table_schema is not exist or is null", K(ret), K(mock_fk_parent_table_schema), K(foreign_key_info.parent_table_id_));
       }
     } else {
       OZ (schema_guard_.get_table_schema( foreign_key_info.parent_table_id_, parent_table_schema));
@@ -2965,7 +2950,6 @@ int ObSchemaPrinter::print_constraint_definition(const ObDatabaseSchema &db_sche
   ObString cst_name;
   if (OB_ISNULL(cst)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("constraint not found in table schema", K(ret), K(constraint_id));
   } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                      allocator,
                      cst->get_constraint_name_str(),
@@ -2975,7 +2959,6 @@ int ObSchemaPrinter::print_constraint_definition(const ObDatabaseSchema &db_sche
     // Add not null constraint with "alter table modify c1".
     // Definition of constraint is only printed in dbms_metadata.get_ddl, so it is not supported in MySQL mode.
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("print not null constraint in mysql mode not supported", K(ret));
   } else {
     const ObString &cst_expr = cst->get_check_expr_str();
     OX (BUF_PRINTF("ALTER TABLE "));
@@ -3408,7 +3391,6 @@ int ObSchemaPrinter::print_heap_table_pk_info(const ObTableSchema &table_schema,
     if (OB_FAIL(schema_guard_.get_table_schema( simple_index_infos.at(i).table_id_, index_schema))) {
     } else if (OB_ISNULL(index_schema)) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("index table not exist", K(ret), "table_id", simple_index_infos.at(i).table_id_);
     } else if (ObIndexType::INDEX_TYPE_HEAP_ORGANIZED_TABLE_PRIMARY == index_schema->get_index_type()) {
       has_pk = true;
       break;
@@ -3426,10 +3408,8 @@ int ObSchemaPrinter::print_heap_table_pk_info(const ObTableSchema &table_schema,
       ObString new_col_name;
       if (OB_ISNULL(rowkey_column = rowkey_info.get_column(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("error unexpected, rowkey column must not be nullptr", K(ret));
       } else if (OB_ISNULL(column = index_schema->get_column_schema(rowkey_column->column_id_))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("col is nullptr", K(ret), K(rowkey_column->column_id_), K(*index_schema));
       } else if (column->get_column_id() == OB_HIDDEN_SESSION_ID_COLUMN_ID) {
         // do nothing
       } else if (column->is_heap_table_primary_key_column()) {

@@ -154,7 +154,6 @@ int ObVectorRefreshIndexExecutor::generate_vector_aux_index_name(
   } else if (OB_ISNULL(name_buf = static_cast<char *>(
                     allocator->alloc(OB_MAX_TABLE_NAME_LENGTH)))) {
     ret = common::OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc mem", K(ret));
   } else {
     int64_t pos = 0;
     ObString suffix_index_name;
@@ -202,7 +201,6 @@ int ObVectorRefreshIndexExecutor::resolve_and_check_table_valid(
   ObCollationType cs_type = CS_TYPE_INVALID;
   if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session info is null", KR(ret));
   } else if (OB_FAIL(query::ObSessionAccess::get_name_case_mode(
                  session_info_, case_mode))) {
   } else if (OB_FAIL(query::ObSessionAccess::get_connection_collation(
@@ -217,16 +215,12 @@ int ObVectorRefreshIndexExecutor::resolve_and_check_table_valid(
     if (OB_FAIL(ObVectorRefreshIndexExecutor::resolve_table_name(
             cs_type, case_mode, arg_base_name,
             base_db_name, base_name))) {
-      LOG_WARN("fail to resolve table name", KR(ret), K(cs_type), K(case_mode),
-              K(arg_base_name));
       LOG_USER_ERROR(OB_WRONG_TABLE_NAME,
                     static_cast<int>(arg_base_name.length()),
                     arg_base_name.ptr());
     } else if (OB_FAIL(ObVectorRefreshIndexExecutor::resolve_table_name(
                   cs_type, case_mode, arg_idx_name,
                   index_db_name, index_name))) {
-      LOG_WARN("fail to resolve table name", KR(ret), K(cs_type), K(case_mode),
-              K(arg_idx_name));
       LOG_USER_ERROR(OB_WRONG_TABLE_NAME, static_cast<int>(arg_idx_name.length()),
                     arg_idx_name.ptr());
     } else if (base_db_name.empty() &&
@@ -237,19 +231,15 @@ int ObVectorRefreshIndexExecutor::resolve_and_check_table_valid(
                   query::ObSessionAccess::get_database_name(session_info_))) {
     } else if (OB_UNLIKELY(base_db_name.empty() || index_db_name.empty())) {
       ret = OB_ERR_NO_DB_SELECTED;
-      LOG_WARN("No database selected", KR(ret));
     } else if (OB_UNLIKELY(base_db_name != index_db_name)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("different db name is not supported.");
     } else if (OB_FAIL(schema_checker_.get_table_schema(
                   base_db_name, base_name, false /*is_index_table*/, base_table_schema))) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("fail to get table schema", KR(ret), K(base_db_name), K(base_name));
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "base table name");
     } else if (OB_ISNULL(base_table_schema)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("base table not exist", KR(ret), K(base_db_name), K(base_name),
-              KP(base_table_schema));
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "base table name");
     } else if (FALSE_IT(base_table_id = base_table_schema->get_table_id())) {
     } else if (OB_FAIL(generate_vector_aux_index_name(
@@ -258,16 +248,12 @@ int ObVectorRefreshIndexExecutor::resolve_and_check_table_valid(
     } else if (OB_FAIL(schema_checker_.get_table_schema( index_db_name, domain_index_table_name, true,
                   domain_table_schema))) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("fail to get table schema", KR(ret), K(index_db_name),
-              K(domain_index_table_name));
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "index name");
     } else if (OB_ISNULL(domain_table_schema)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("domain index table is not exist", KR(ret), K(domain_index_table_name));
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "index name");
     } else if (!domain_table_schema->is_vec_index()) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("rebuild or refresh not vector index is not support ", K(ret), K(domain_index_table_name));
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "rebuild or refresh not vector index is");
     }
     // get 
@@ -283,8 +269,6 @@ int ObVectorRefreshIndexExecutor::resolve_and_check_table_valid(
                                                           true /*is_built_in_index*/))) {
       } else if (OB_ISNULL(index_id_table_schema)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("index_id_table is not exist", 
-          KR(ret), K(arg_idx_name), KP(index_id_table_schema));
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "index name");
       }
     }
@@ -294,12 +278,9 @@ int ObVectorRefreshIndexExecutor::resolve_and_check_table_valid(
               OB_FAIL(get_vector_index_column_name(
                   base_table_schema, domain_table_schema,
                   base_vector_index_col_name))) {
-      LOG_WARN("fail to get vector index column name", KR(ret));
     } else if (!idx_col_name.empty() &&
               0 != idx_col_name.case_compare(base_vector_index_col_name)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("vector index column name is not match", KR(ret), K(idx_col_name),
-              K(base_vector_index_col_name));
     }
   }
   return ret;
@@ -322,7 +303,6 @@ int ObVectorRefreshIndexExecutor::resolve_table_id_and_check_table_valid(
   in_recycle_bin = false;
   if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session info is null", KR(ret));
   } else if (OB_FAIL(query::ObSessionAccess::get_name_case_mode(
                  session_info_, case_mode))) {
   } else if (OB_FAIL(query::ObSessionAccess::get_connection_collation(
@@ -330,20 +310,16 @@ int ObVectorRefreshIndexExecutor::resolve_table_id_and_check_table_valid(
   } else if (OB_FAIL(schema_checker_.get_table_schema( idx_table_id, domain_table_schema))) {
   } else if (OB_ISNULL(domain_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table_schema is null", K(ret), KP(domain_table_schema));
   } else if (OB_UNLIKELY(domain_table_schema->is_in_recyclebin())) {
     in_recycle_bin = true;
   } else if (OB_UNLIKELY(!domain_table_schema->is_vec_domain_index())) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("invalid index table type", KR(ret), K(domain_table_schema->is_vec_domain_index()));
   } else if (OB_FAIL(schema_checker_.get_table_schema( domain_table_schema->get_data_table_id(), base_table_schema))) {
   } else if (OB_ISNULL(base_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table_schema is null", K(ret), KP(base_table_schema));
   } else if (OB_FAIL(schema_checker_.get_database_schema( domain_table_schema->get_database_id(), database_schema))) {
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("database_schema is null", K(ret), KP(database_schema));
   }  
   // get index id table schema if need 
   if (OB_FAIL(ret)) {
@@ -359,10 +335,8 @@ int ObVectorRefreshIndexExecutor::resolve_table_id_and_check_table_valid(
                                                       true /*is_built_in_index*/))) {
   } else if (OB_ISNULL(index_id_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table_schema is null", K(ret), KP(index_id_table_schema));
   } else if (OB_UNLIKELY(!index_id_table_schema->is_vec_index_id_type())) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("invalid index table type", KR(ret), K(index_id_table_schema->is_vec_index_id_type()));
   }
   return ret;
 }
@@ -378,8 +352,6 @@ int ObVectorRefreshIndexExecutor::to_refresh_method(
     method = share::schema::ObVectorRefreshMethod::REFRESH_DELTA;
   } else {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Vector index refresh method is not supported.", KR(ret),
-             K(arg_refresh_method));
   }
   return ret;
 }
@@ -395,8 +367,6 @@ int ObVectorRefreshIndexExecutor::to_vector_index_organization(
     idx_organization = ObVectorIndexOrganization::NEIGHBOR_PARTITION;
   } else {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Vector index organization is not supported.", KR(ret),
-             K(idx_organization_str));
   }
   return ret;
 }
@@ -420,8 +390,6 @@ int ObVectorRefreshIndexExecutor::to_vector_index_distance_metric(
     idx_distance_metric = ObVetcorIndexDistanceMetric::HAMMING;
   } else {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Vector index distance metrics is not supported.", KR(ret),
-             K(idx_distance_metric_str));
   }
   return ret;
 }
@@ -437,7 +405,6 @@ int ObVectorRefreshIndexExecutor::get_vector_index_column_name(
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(!domain_index_schema->is_vec_domain_index())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table is not a domain index table", KR(ret), K(domain_index_schema));
   } else if (OB_FAIL(data_plane::resolve_vector_index_column_name(
                  *base_table_schema, *domain_index_schema, col_name))) {
   }
@@ -466,18 +433,14 @@ int ObVectorRefreshIndexExecutor::resolve_refresh_arg(
   } else if (OB_ISNULL(base_table_schema) ||
              OB_ISNULL(domain_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table_schemas are null", K(ret), KP(base_table_schema), KP(domain_table_schema));
   } else if (domain_table_schema->is_vec_ivf_index()) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("refresh ivf index is not support", K(ret), K(domain_table_schema));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "refresh ivf index is");
   } else if (domain_table_schema->is_vec_spiv_index()) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("refresh sparse vector index is not support", K(ret), K(domain_table_schema));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "refresh sparse vector index is");
   } else if (domain_table_schema->is_vec_hnsw_index() && OB_ISNULL(index_id_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table_schemas are null", K(ret), KP(index_id_table_schema));
   } else {
     base_tb_id_ = base_table_schema->get_table_id();
     domain_tb_id_ = domain_table_schema->get_table_id();
@@ -507,10 +470,8 @@ int ObVectorRefreshIndexExecutor::resolve_refresh_inner_arg(const ObVectorRefres
   } else if (OB_ISNULL(base_table_schema) ||
              OB_ISNULL(domain_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table_schemas are null", K(ret), KP(base_table_schema), KP(domain_table_schema));
   } else if (domain_table_schema->is_vec_hnsw_index() && OB_ISNULL(index_id_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table_schemas are null", K(ret), KP(index_id_table_schema));
   } else {
     base_tb_id_ = base_table_schema->get_table_id();
     domain_tb_id_ = domain_table_schema->get_table_id();
@@ -540,14 +501,11 @@ int ObVectorRefreshIndexExecutor::resolve_rebuild_arg(
   {
   } else if (OB_ISNULL(base_table_schema) || OB_ISNULL(domain_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table_schemas are null", K(ret), KP(base_table_schema), KP(domain_table_schema));
   } else if (domain_table_schema->is_vec_spiv_index()) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("rebuild sparse vector index is not support", K(ret), K(domain_table_schema));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "rebuild sparse vector index is");
   } else if (domain_table_schema->is_vec_hnsw_index() && OB_ISNULL(index_id_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table_schemas are null", K(ret), KP(index_id_table_schema));
   } else {
     base_tb_id_ = base_table_schema->get_table_id();
     domain_tb_id_ = domain_table_schema->get_table_id();
@@ -590,10 +548,8 @@ int ObVectorRefreshIndexExecutor::resolve_rebuild_inner_arg(const ObVectorRebuil
   } else if (OB_ISNULL(base_table_schema) ||
              OB_ISNULL(domain_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table_schema is null", K(ret), KP(base_table_schema), KP(domain_table_schema));
   } else if (domain_table_schema->is_vec_hnsw_index() && OB_ISNULL(index_id_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table_schema is null", K(ret), KP(index_id_table_schema));
   } else {
     base_tb_id_ = base_table_schema->get_table_id();
     domain_tb_id_ = domain_table_schema->get_table_id();

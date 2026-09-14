@@ -189,7 +189,6 @@ int ObSQLSessionInfo::init(uint32_t sessid,
   } else if (!is_acquire_from_pool() &&
              OB_FAIL(package_state_map_.create(hash::cal_next_prime(4),
                                                ObMemAttr("PackStateMap")))) {
-    LOG_WARN("create package state map failed", K(ret));
   } else {
     sess_create_time_ = ObTimeUtility::current_time();
     is_inited_ = true;
@@ -550,7 +549,6 @@ int ObSQLSessionInfo::close_ps_stmt(
   if (OB_FAIL(get_ps_session_info(client_stmt_id, ps_sess_info))) {
   } else if (OB_ISNULL(ps_sess_info)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("ps session info is null", K(client_stmt_id), "session_id", get_server_sid(), K(ret));
   } else {
     ObPsStmtId inner_stmt_id = ps_sess_info->get_inner_stmt_id();
     ps_sess_info->dec_ref_count();
@@ -561,8 +559,6 @@ int ObSQLSessionInfo::close_ps_stmt(
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = remove_ps_session_info(client_stmt_id))) {
         ret = tmp_ret;
-        LOG_WARN("remove ps session info failed", K(client_stmt_id),
-                  "session_id", get_server_sid(), K(ret));
       }
       LOG_TRACE("close ps stmt", K(ret), K(client_stmt_id), K(inner_stmt_id), K(lbt()));
     }
@@ -762,11 +758,9 @@ int ObSQLSessionInfo::remove_prepare(const ObString &ps_name)
   ObPsStmtId ps_id = OB_INVALID_ID;
   if (OB_UNLIKELY(!ps_name_id_map_.created())) {
     ret = OB_HASH_NOT_EXIST;
-    LOG_WARN("map not created before insert any element", K(ret));
   } else if (OB_FAIL(ps_name_id_map_.erase_refactored(ps_name, &ps_id))) {
   } else if (OB_INVALID_ID == ps_id) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_info is null", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -780,7 +774,6 @@ int ObSQLSessionInfo::get_prepare_id(const ObString &ps_name, ObPsStmtId &ps_id)
   } else if (OB_FAIL(ps_name_id_map_.get_refactored(ps_name, ps_id))) {
   } else if (OB_INVALID_ID == ps_id) {
     ret = OB_HASH_NOT_EXIST;
-    LOG_WARN("ps info is null", K(ret), K(ps_name));
   } else { /*do nothing*/ }
 
   if (ret == OB_HASH_NOT_EXIST) {
@@ -801,7 +794,6 @@ int ObSQLSessionInfo::add_prepare(const ObString &ps_name, ObPsStmtId ps_id)
       if (OB_FAIL(ps_name_id_map_.set_refactored(stored_name, ps_id))) {
       }
     } else {
-      LOG_WARN("fail to search ps name hash id map", K(stored_name), K(ret));
     }
   } else if (ps_id != exist_ps_id) {
     if (OB_FAIL(remove_prepare(stored_name))) {
@@ -819,7 +811,6 @@ int ObSQLSessionInfo::get_ps_session_info(const ObPsStmtId stmt_id,
   ps_session_info = NULL;
   if (OB_UNLIKELY(!ps_session_info_map_.created())) {
     ret = OB_HASH_NOT_EXIST;
-    LOG_WARN("map not created before insert any element", K(ret));
   } else if (OB_FAIL(ps_session_info_map_.get_refactored(stmt_id, ps_session_info))) {
     LOG_WARN("get ps session info failed", K(stmt_id), K(get_server_sid()));
     if (ret == OB_HASH_NOT_EXIST) {
@@ -827,7 +818,6 @@ int ObSQLSessionInfo::get_ps_session_info(const ObPsStmtId stmt_id,
     }
   } else if (OB_ISNULL(ps_session_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ps session info is null", K(ret), K(stmt_id));
   }
   return ret;
 }
@@ -839,11 +829,9 @@ int ObSQLSessionInfo::remove_ps_session_info(const ObPsStmtId stmt_id)
   LOG_TRACE("remove ps session info", K(ret), K(stmt_id), K(get_server_sid()), K(lbt()));
   if (OB_UNLIKELY(!ps_session_info_map_.created())) {
     ret = OB_HASH_NOT_EXIST;
-    LOG_WARN("map not created before insert any element", K(ret));
   } else if (OB_FAIL(ps_session_info_map_.erase_refactored(stmt_id, &session_info))) {
   } else if (OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_info is null", K(ret));
   } else {
     LOG_TRACE("remove ps session info", K(ret), K(stmt_id), K(get_server_sid()));
     session_info->~ObPsSessionInfo();
@@ -858,7 +846,6 @@ int ObSQLSessionInfo::check_ps_stmt_id_in_use(const ObPsStmtId stmt_id, bool & i
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!in_use_ps_stmt_id_set_.created())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("map not created before insert any element", K(ret));
   } else if (!in_use_ps_stmt_id_set_.empty() && OB_HASH_EXIST == in_use_ps_stmt_id_set_.exist_refactored(stmt_id)) {
     is_in_use = true;
   } else {
@@ -871,7 +858,6 @@ int ObSQLSessionInfo::add_ps_stmt_id_in_use(const ObPsStmtId stmt_id) {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!in_use_ps_stmt_id_set_.created())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("set not created before insert any element", K(ret));
   } else if (OB_FAIL(in_use_ps_stmt_id_set_.set_refactored(stmt_id))) {
   }
   return ret;
@@ -881,7 +867,6 @@ int ObSQLSessionInfo::earse_ps_stmt_id_in_use(const ObPsStmtId stmt_id) {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!in_use_ps_stmt_id_set_.created())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("set not created before insert any element", K(ret));
   } else if (OB_FAIL(in_use_ps_stmt_id_set_.erase_refactored(stmt_id))) {
   }
   return ret;
@@ -913,7 +898,6 @@ int ObSQLSessionInfo::prepare_ps_stmt(const ObPsStmtId inner_stmt_id,
     if (OB_SUCC(ret)) {
       if (OB_ISNULL(session_info)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("session_info is NULL", K(ret), K(inner_stmt_id), K(client_stmt_id));
       } else {
         already_exists = true;
         session_info->inc_ref_count();
@@ -923,10 +907,8 @@ int ObSQLSessionInfo::prepare_ps_stmt(const ObPsStmtId inner_stmt_id,
       char *buf = static_cast<char*>(ps_session_info_allocator_.alloc(sizeof(ObPsSessionInfo)));
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret));
       } else if (OB_ISNULL(stmt_info)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("stmt info is null", K(ret), K(stmt_info));
       } else {
         session_info = new (buf) ObPsSessionInfo(stmt_info->get_num_of_param());
         session_info->set_stmt_id(client_stmt_id);
@@ -958,7 +940,6 @@ int ObSQLSessionInfo::prepare_ps_stmt(const ObPsStmtId inner_stmt_id,
         buf = NULL;
       }
     } else {
-      LOG_WARN("get ps session failed", K(ret), K(client_stmt_id), K(inner_stmt_id));
     }
   }
   return ret;
@@ -970,11 +951,9 @@ int ObSQLSessionInfo::get_inner_ps_stmt_id(ObPsStmtId cli_stmt_id, ObPsStmtId &i
   ObPsSessionInfo *ps_session_info = NULL;
   if (OB_UNLIKELY(!ps_session_info_map_.created())) {
     ret = OB_HASH_NOT_EXIST;
-    LOG_WARN("map not created before insert any element", K(ret));
   } else if (OB_FAIL(ps_session_info_map_.get_refactored(cli_stmt_id, ps_session_info))) {
   } else if (OB_ISNULL(ps_session_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ps session info is null", K(cli_stmt_id), "session_id", get_server_sid(), K(ret));
   } else {
     inner_stmt_id = ps_session_info->get_inner_stmt_id();
   }
@@ -1002,8 +981,6 @@ int ObSQLSessionInfo::add_cursor(pl::ObPLCursorInfo *cursor)
     if (NEED_CHECK_SESS_OPEN_CURSORS_LIMIT(open_cursors_limit)
         && open_cursors_limit <= pl_cursor_cache_.pl_cursor_map_.size()) {
       ret = OB_ERR_OPEN_CURSORS_EXCEEDED;
-      LOG_WARN("maximum open cursors exceeded",
-                K(ret), K(open_cursors_limit), K(pl_cursor_cache_.pl_cursor_map_.size()));
     }
   }
   if (OB_SUCC(ret)) {
@@ -1064,7 +1041,6 @@ int ObSQLSessionInfo::close_cursor(int64_t cursor_id)
   if (OB_FAIL(pl_cursor_cache_.pl_cursor_map_.erase_refactored(cursor_id, &cursor))) {
   } else if (OB_ISNULL(cursor)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_info is null", K(ret));
   } else {
     LOG_DEBUG("close cursor", K(ret), K(cursor_id), K(get_server_sid()));
     OZ (cursor->close(*this));
@@ -1647,7 +1623,6 @@ static int write_str_reuse_buf(AllocatorT &allocator, const ObString &src, ObStr
                 (ptr = static_cast<char *>(allocator.alloc(src_len)))) {
       dst.assign(NULL, 0);
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret), "size", src_len);
     } else {
       MEMCPY(ptr, src.ptr(), src_len);
       dst.assign_buffer(ptr, src_len);
@@ -1685,8 +1660,6 @@ int ObSQLSessionInfo::on_user_connect(share::schema::ObSessionPrivInfo &priv_inf
     // do nothing
   } else if (OB_ISNULL(conn_res_mgr_) || OB_ISNULL(user_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN(
-        "connect resource mgr or user info is null", K(ret), KP(conn_res_mgr_));
   } else {
     const ObPrivSet &priv = priv_info.user_priv_set_;
     const ObString &user_name = priv_info.user_name_;
@@ -1710,7 +1683,6 @@ int ObSQLSessionInfo::on_user_connect(share::schema::ObSessionPrivInfo &priv_inf
                 max_connections_per_hour,
                 max_user_connections,
                 max_server_connections, *this))) {
-      LOG_WARN("create user connection failed", K(ret));
     }
   }
   return ret;
@@ -1721,7 +1693,6 @@ int ObSQLSessionInfo::on_user_disconnect()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(conn_res_mgr_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("connect resource mgr is null", K(ret));
   } else if (OB_FAIL(conn_res_mgr_->on_user_disconnect(*this))) {
   }
   return ret;

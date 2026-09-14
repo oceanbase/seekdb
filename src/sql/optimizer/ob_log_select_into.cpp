@@ -30,10 +30,8 @@ int ObLogSelectInto::est_cost()
   if (OB_ISNULL(get_plan()) ||
       OB_ISNULL(child = get_child(first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(child), K(ret));
   } else if (OB_UNLIKELY((parallel = get_parallel()) < 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected parallel degree", K(parallel), K(ret)); 
   } else {
     ObOptimizerContext &opt_ctx = get_plan()->get_optimizer_context();
     set_op_cost(ObOptEstCost::cost_get_rows(child->get_card() / parallel, 
@@ -50,7 +48,6 @@ int ObLogSelectInto::compute_plan_type()
   ObLogicalOperator *child = NULL;
   if (OB_ISNULL(child = get_child(first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(child), K(ret));
   } else if (OB_FAIL(ObLogicalOperator::compute_plan_type())) {
   } else if (LOG_EXCHANGE == child->get_type()) {
     location_type_ = ObPhyPlanType::OB_PHY_PLAN_UNCERTAIN;

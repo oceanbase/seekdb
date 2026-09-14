@@ -34,7 +34,6 @@ int ObTabletObjLoadHelper::read_from_addr(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!meta_addr.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(meta_addr));
   } else if (OB_UNLIKELY(!meta_addr.is_block())) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("the meta disk address type is not supported", K(ret), K(meta_addr));

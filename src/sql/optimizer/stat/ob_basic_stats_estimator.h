@@ -138,7 +138,6 @@ public:
       // do nothing
     } else if (OB_ISNULL(cpy = copy_stat_item(allocator_, item))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to copy stat item", K(ret));
     } else if (OB_FAIL(stat_items_.push_back(cpy))) {
     }
     return ret;

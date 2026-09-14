@@ -40,7 +40,6 @@ int ObExprIsBase::calc_result_type2(ObExprResType &type,
   ObOpRawExpr *op_expr = static_cast<ObOpRawExpr *>(raw_expr);
   if (OB_ISNULL(op_expr) || OB_UNLIKELY(op_expr->get_param_count() != 2)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("op raw expr is null", K(ret), K(op_expr));
   } else {
     // always allow NULL value
     type.set_result_flag(NOT_NULL_FLAG);
@@ -51,7 +50,6 @@ int ObExprIsBase::calc_result_type2(ObExprResType &type,
     ObConstRawExpr *const_param2 = static_cast<ObConstRawExpr *>(param2);
     if (OB_ISNULL(const_param2)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("second child of is expr is null", K(ret), K(const_param2));
     } else if (ObDoubleType == const_param2->get_value().get_type()) {
         type1.set_calc_type(ObDoubleType);
         type1.set_calc_accuracy(type1.get_accuracy());
@@ -122,15 +120,12 @@ int ObExprIsBase::cg_expr_internal(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_
   const ObRawExpr *child = NULL;
   if (rt_expr.arg_cnt_ != 2) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("isnot expr should have 2 params", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])
             || OB_ISNULL(rt_expr.args_[1])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of isnot expr is null", K(ret), K(rt_expr.args_));
   } else if (OB_ISNULL(child = op_raw_expr->get_param_expr(1))
              || OB_UNLIKELY(!child->is_const_raw_expr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child is null", K(ret), KPC(child));
   } else {
     const_param2 = static_cast<const ObConstRawExpr *>(child);
   }
@@ -186,7 +181,6 @@ int ObExprIsBase::cg_result_type_class(ObObjType type, ObExpr::EvalFunc &eval_fu
     }
     case ObMaxType: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("is expr got unexpected type param", K(ret), K(type));
         break;
     }
     default: {
@@ -206,7 +200,6 @@ int ObExprIs::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObExpr 
   if (OB_FAIL(cg_expr_internal(op_cg_ctx, raw_expr, rt_expr, param2))) {
   } else if (OB_ISNULL(param2)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("const raw expr param is null", K(param2));
   } else if(FALSE_IT(param1_type = rt_expr.args_[0]->datum_meta_.type_)) {
   } else if (param2->get_value().is_null()) {  // c1 is null
     rt_expr.eval_func_ = ObExprIs::calc_is_null;
@@ -224,8 +217,6 @@ int ObExprIs::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObExpr 
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("second param of is expr is not null, true, false or infinite or nan",
-              K(ret), K(param2->get_value()));
   }
   return ret;
 }
@@ -239,7 +230,6 @@ int ObExprIsNot::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObEx
   if (OB_FAIL(cg_expr_internal(op_cg_ctx, raw_expr, rt_expr, param2))) {
   } else if (OB_ISNULL(param2)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("const raw expr param is null", K(param2));
   } else if(FALSE_IT(param1_type = rt_expr.args_[0]->datum_meta_.type_)) {
   } else if (param2->get_value().is_null()) {  // c1 is null
     rt_expr.eval_func_ = ObExprIsNot::calc_is_not_null;
@@ -258,8 +248,6 @@ int ObExprIsNot::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObEx
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("second param of is expr is not null, true, false or infinite or nan",
-                K(ret), K(param2->get_value()));
   }
   return ret;
 }
@@ -390,7 +378,6 @@ int ObExprInnerIsTrue::calc_result_type2(ObExprResType &type,
   ObRawExpr *raw_expr = get_raw_expr();
   if (OB_ISNULL(raw_expr) || OB_UNLIKELY(raw_expr->get_param_count() != 2)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("op raw expr is null", K(ret), K(raw_expr));
   } else if (OB_UNLIKELY(type1.is_ext())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected type", K(type1));
@@ -424,13 +411,10 @@ int ObExprInnerIsTrue::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr
   ObObjType param1_type = ObMaxType;
   if (rt_expr.arg_cnt_ != 2) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("inner is true expr should have 2 params", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0]) || OB_ISNULL(rt_expr.args_[1])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of inner is true expr is null", K(ret), K(rt_expr.args_));
   } else if (OB_ISNULL(param2 = static_cast<const ObConstRawExpr *>(raw_expr.get_param_expr(1)))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("const raw expr param is null", K(param2));
   } else if (OB_UNLIKELY(!param2->get_value().is_int())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("const value is not int type", KPC(param2));
@@ -477,7 +461,6 @@ int ObExprInnerIsTrue::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr
       }
       case ObMaxType: {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("is expr got unexpected type param", K(ret), K(param1_type));
           break;
       }
       default: {

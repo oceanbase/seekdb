@@ -57,7 +57,6 @@ int ObIDDLMergeHelper::get_merge_helper(ObIAllocator &allocator,
       break;
     default:
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not supported direct load type", K(ret), K(direct_load_type));
       break;
   }
   #undef BUILD_MERGE_HELPER
@@ -75,7 +74,6 @@ int ObIDDLMergeHelper::freeze_ddl_kv(ObDDLTabletMergeDagParamV2 &param)
 
   if (!param.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(param));
   } else if (OB_FAIL(param.get_tablet_param(target_tablet_id, tablet_param))) {
   } else if (OB_FAIL(ObDDLMergeTaskUtils::freeze_ddl_kv(target_tablet_id,
                                                         param.direct_load_type_,
@@ -99,22 +97,18 @@ int ObSNDDLMergeHelperV2::set_ddl_complete(ObIDag *dag, ObTablet &tablet, ObDDLT
   /* ddl kv has already been freeze in prepare task */
   if (OB_ISNULL(dag) || !ddl_merge_param.is_valid() || OB_ISNULL(tablet_context)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid param", K(ret), KP(dag), K(ddl_merge_param), KP(tablet_context));
   } else if (OB_FAIL(tablet.get_ddl_kv_mgr(ddl_kv_mgr_handle, false /* not for repaly*/))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_TASK_EXPIRED;
       LOG_INFO("ddl kv mgr not exist", K(ret), K(ddl_merge_param));
     } else {
-      LOG_WARN("get ddl kv mgr failed", K(ret), K(ddl_merge_param));
     }
   } else if (OB_FAIL(ddl_merge_param.get_tablet_param(target_tablet_id, tablet_param))) {
   } else if (OB_ISNULL(tablet_param)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get tablet param", K(ret), K(ddl_merge_param));
   } else if (FALSE_IT(storage_schema = tablet_param ->storage_schema_)) {
   } else if (OB_ISNULL(storage_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("storage schema should not be null", K(ret), K(ddl_merge_param));
   } else {
     complete_arg.has_complete_          = true;
     complete_arg.tablet_id_             = target_tablet_id;
@@ -157,14 +151,12 @@ int ObSNDDLMergeHelperV2::process_prepare_task(ObIDag *dag,
   ObDDLKVQueryParam ddl_kv_query_param;
   if (!ddl_merge_param.is_valid() || nullptr == dag) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ddl_merge_param), KPC(dag));
   } else if (OB_FAIL(ddl_merge_param.get_tablet_param(target_tablet_id, tablet_param))) {
   } else if (FALSE_IT(for_major = ddl_merge_param.for_major_)) {
   } else if (OB_FAIL(slice_idxes.create(DDL_SLICE_BUCKET_NUM, ObMemAttr("slice_idx_set")))) {
   } else if (OB_FAIL(ddl_merge_param.get_merge_ctx(merge_ctx))) {
   } else if (OB_ISNULL(merge_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("merge ctx should not be null", K(ret), K(ddl_merge_param));
   }
 
   /* check major sstable exist */
@@ -190,10 +182,8 @@ int ObSNDDLMergeHelperV2::process_prepare_task(ObIDag *dag,
         /* for ddl execute node, should wait take effect */
         ret = ddl_merge_param.for_replay_ ? OB_EAGAIN : OB_DAG_TASK_IS_SUSPENDED;
       }
-      LOG_WARN("failed to get ddl complete mds user data", K(ret));
     } else if (!user_data.has_complete_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ddl complete not take effect", K(ret), K(user_data));
     }
   }
   
@@ -204,12 +194,9 @@ int ObSNDDLMergeHelperV2::process_prepare_task(ObIDag *dag,
       ret = OB_TASK_EXPIRED;
       LOG_INFO("ddl kv mgr not exist", K(ret), K(ddl_merge_param));
     } else {
-      LOG_WARN("get ddl kv mgr failed", K(ret), K(ddl_merge_param));
     }
   } else if (ddl_merge_param.start_scn_ < tablet_handle.get_obj()->get_tablet_meta().ddl_start_scn_) {
     ret = OB_TASK_EXPIRED;
-    LOG_WARN("ddl task expired, skip it", K(ret), K(ddl_merge_param), 
-            "new_start_scn", tablet_handle.get_obj()->get_tablet_meta().ddl_start_scn_);
   } else if (OB_FALSE_IT(ddl_kv_query_param.ddl_kv_type_ = ObDDLKVType::DDL_KV_FULL)) {
   } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->get_ddl_kvs(
       true/*frozen_only*/, frozen_ddl_kvs, ddl_kv_query_param))) {
@@ -277,7 +264,6 @@ int calc_scn_range(const ObIArray<ObDDLKVHandle> &ddl_kvs,
   /* calc from dump sstalbe */
   if (ddl_kvs.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ddl_kvs));
   } else {
     ObDDLKVHandle first_kv_handle = ddl_kvs.at(0);
     ObDDLKVHandle last_kv_handle = ddl_kvs.at(ddl_kvs.count() - 1);
@@ -292,7 +278,6 @@ int calc_scn_range(const ObIArray<ObDDLKVHandle> &ddl_kvs,
     for (int64_t i = 0; OB_SUCC(ret) && i < ddl_sstables.count(); ++i) {
       if (OB_ISNULL(ddl_sstables.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ddl sstable is null", K(ret), K(i));
       } else if (ObITable::is_ddl_dump_sstable(ddl_sstables.at(i)->get_key().table_type_)) {
         start_scn = share::SCN::min(start_scn, ddl_sstables.at(i)->get_key().scn_range_.start_scn_);
       }
@@ -324,19 +309,16 @@ int ObSNDDLMergeHelperV2::merge_slice(ObIDag *dag,
 
   if (OB_ISNULL(dag) || start_slice_idx < 0 || end_slice_idx < start_slice_idx) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid param", K(ret), K(dag), K(start_slice_idx), K(end_slice_idx));
   } else if (OB_FAIL(merge_param.get_tablet_param(tablet_id, tablet_param))) {
     LOG_WARN("failed to get tablet param", K(ret), K(merge_param));
   } else  if (OB_FAIL(ObDDLDirectLoadUtil::get_tablet_handle(tablet_id, tablet_handle))) {
     LOG_WARN("failed to get tablet handle", K(ret), K(merge_param));
   } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected err", K(ret), K(merge_param));
   } else if (OB_FAIL(prepare_ddl_param(merge_param, start_slice_idx, end_slice_idx, ddl_param))) {
   } else if (OB_FAIL(merge_param.get_merge_ctx(merge_ctx))) {
   } else if (OB_ISNULL(merge_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("merge_ctx should not be null", K(ret));
   }
 
   int64_t ddl_dump_table_cnt = 0;
@@ -364,20 +346,16 @@ int ObSNDDLMergeHelperV2::merge_slice(ObIDag *dag,
           /* may read mds failed when tablet is deleted*/
           ret = OB_TASK_EXPIRED;
         }
-        LOG_WARN("failed to get ddl complete", K(ret), K(ddl_data));
       } else if (!ddl_data.is_valid() || !ddl_data.has_complete_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ddl complete has not been set", K(ret), K(ddl_data));
       } else if (ddl_data.write_stat_.row_count_ != write_stat.row_count_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ddl row count not match", K(ret), K(ddl_data), K(write_stat));
       }
     }
 
     if (OB_FAIL(ret)) {
     } else if (!merge_param.for_major_ && OB_FAIL(calc_scn_range(merge_ctx->ddl_kv_handles_, ddl_sstables, ddl_param.table_key_.scn_range_.start_scn_,
                                       ddl_param.table_key_.scn_range_.end_scn_, ddl_param.snapshot_version_))) {
-      LOG_WARN("failed to calc scn range", K(ret));
     }
   } // ddl_sstable_iter
 
@@ -411,11 +389,9 @@ int ObIDDLMergeHelper::prepare_ddl_param(const ObDDLTabletMergeDagParamV2 &merge
   ObWriteTabletParam *tablet_param = nullptr;  
   if (!merge_param.is_valid() || !is_supported_direct_load_type(merge_param.direct_load_type_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(merge_param));
   } else if (OB_FAIL(merge_param.get_tablet_param(tablet_id, tablet_param))) {
   } else if (OB_ISNULL(tablet_param) || OB_ISNULL(tablet_param->storage_schema_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet param and storage schema should not be null", K(ret), KPC(tablet_param));
   } else {
     ddl_param.direct_load_type_    = merge_param.direct_load_type_;
     ddl_param.table_key_           = merge_param.table_key_;
@@ -436,7 +412,6 @@ int ObIDDLMergeHelper::prepare_ddl_param(const ObDDLTabletMergeDagParamV2 &merge
   if (!merge_param.is_valid() ||
       !is_supported_direct_load_type(merge_param.direct_load_type_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(merge_param), K(merge_param.is_valid()));
   } else if (OB_FAIL(prepare_ddl_param(merge_param, ddl_param))) {
   } else if (merge_param.need_merge_all_slice() && !merge_param.for_major_) {
     //let is_merge_slice()=true, currently only used for inc-major direct load
@@ -462,7 +437,6 @@ int ObIDDLMergeHelper::get_rec_scn_from_ddl_kvs(ObDDLTabletMergeDagParamV2 &merg
 
   if (!merge_param.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(merge_param));
   } else if (OB_FAIL(merge_param.get_tablet_param(target_tablet_id, tablet_param))) {
     LOG_WARN("failed to get tablet param", K(ret));
   } else if (OB_FAIL(ObDDLDirectLoadUtil::get_tablet_handle(target_tablet_id, tablet_handle))) {
@@ -470,7 +444,6 @@ int ObIDDLMergeHelper::get_rec_scn_from_ddl_kvs(ObDDLTabletMergeDagParamV2 &merg
   } else if (OB_FAIL(merge_param.get_merge_ctx(merge_ctx))) {
   } else if (OB_ISNULL(merge_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("merge_ctx should not be null", K(ret));
   } else {
     int64_t ddl_kv_count = merge_ctx->ddl_kv_handles_.count();
     int64_t ddl_dump_count = 0;
@@ -478,7 +451,6 @@ int ObIDDLMergeHelper::get_rec_scn_from_ddl_kvs(ObDDLTabletMergeDagParamV2 &merg
     for (int64_t i = 0; OB_SUCC(ret) && i < merge_ctx->ddl_kv_handles_.count(); ++i) {
       if (!merge_ctx->ddl_kv_handles_.at(i).is_valid()) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid ddl kv handle", K(ret), K(i));
       } else {
         rec_scn = share::SCN::max(rec_scn, merge_ctx->ddl_kv_handles_.at(i).get_obj()->get_end_scn());
       }
@@ -491,14 +463,12 @@ int ObIDDLMergeHelper::get_rec_scn_from_ddl_kvs(ObDDLTabletMergeDagParamV2 &merg
         ObITable *table = nullptr;
         if (OB_FAIL(ddl_sstable_iter.get_next(table))) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("get next table failed", K(ret));
           } else {
             ret = OB_SUCCESS;
             break;
           }
         } else if (nullptr == table || OB_UNLIKELY(!table->is_sstable())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected error, table is nullptr", K(ret), KPC(table));
         } else {
           rec_scn = share::SCN::max(rec_scn, table->get_key().scn_range_.end_scn_);
           ddl_dump_count++;
@@ -521,10 +491,8 @@ int ObIDDLMergeHelper::remove_tablet_from_log_handler(const ObTabletID &tablet_i
   ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
   if (!tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id));
   } else if (nullptr == ls_service) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ls service should not be null", K(ret));
   } else if (OB_FAIL(tablet_ids.push_back(tablet_id))) {
   } else if (OB_FAIL(ls_service->get_ls(ls))) {
   } else if (OB_FAIL(ls->get_ddl_log_handler()->del_tablets(tablet_ids))) {
@@ -553,7 +521,6 @@ int ObSNDDLMergeHelperV2::assemble_sstable(ObDDLTabletMergeDagParamV2 &merge_par
   
   if (!merge_param.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(merge_param));
   } else if (OB_FAIL(merge_param.get_tablet_param(target_tablet_id, tablet_param))) {
   }
 
@@ -595,7 +562,6 @@ int ObSNDDLMergeHelperV2::assemble_sstable(ObDDLTabletMergeDagParamV2 &merge_par
       ret = OB_TASK_EXPIRED;
       LOG_INFO("ddl kv mgr not exist", K(ret), K(merge_param));
     } else {
-      LOG_WARN("get ddl kv mgr failed", K(ret), K(merge_param));
     }
   } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->release_ddl_kvs(ObDDLKVType::DDL_KV_FULL, merge_param.for_major_ ? share::SCN::max_scn() : merge_param.rec_scn_))) {
   }

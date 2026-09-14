@@ -227,7 +227,6 @@ int ObRowGetter::init_dml_access_param(ObRelativeTable &relative_table,
   if (OB_SUCC(ret)) {
     const ObTabletMeta &tablet_meta = tablet_->get_tablet_meta();
     if (OB_UNLIKELY(!tablet_meta.is_valid())) {
-      LOG_WARN("tablet meta is invalid", K(ret), K(tablet_meta));
     } else {
       access_param_.iter_param_.tablet_id_ = tablet_meta.tablet_id_;
     }

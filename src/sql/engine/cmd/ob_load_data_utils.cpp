@@ -140,10 +140,8 @@ int ObLoadDataUtils::check_session_status(ObSQLSessionInfo &session, int64_t res
   if (OB_FAIL(session.is_timeout(is_timeout))) {
   } else if (OB_UNLIKELY(worker_query_timeout < current_time + reserved_us)) {
     ret = OB_TIMEOUT;
-    LOG_WARN("query is timeout", K(ret));
   } else if (OB_UNLIKELY(is_timeout)) {
     ret = OB_TIMEOUT;
-    LOG_WARN("session is timeout", K(ret));
   } else if (OB_FAIL(session.check_session_status())) {
   }
   if (OB_FAIL(ret)) {
@@ -163,7 +161,6 @@ int ObLoadDataUtils::check_need_opt_stat_gather(ObExecContext &ctx,
   need_opt_stat_gather = false;
   if (OB_ISNULL(session = ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", KR(ret));
   } else if (OB_FAIL(session->get_sys_variable(share::SYS_VAR__OPTIMIZER_GATHER_STATS_ON_LOAD, obj))) {
   } else if (OB_FAIL(hint.get_value(ObLoadDataHint::GATHER_OPTIMIZER_STATISTICS, gather_optimizer_statistics))) {
   } else if (gather_optimizer_statistics != 0 && obj.get_bool()) {
@@ -202,7 +199,6 @@ int ObGetAllJobStatusOp::operator()(common::hash::HashMapPair<ObLoadDataGID, ObL
   entry.second->aquire();
   if (OB_FAIL(job_status_array_.push_back(entry.second))) {
     entry.second->release();
-    LOG_WARN("push_back ObLoadDataStat failed", K(ret));
   }
   return ret;
 }
@@ -228,7 +224,6 @@ int ObGlobalLoadDataStatMap::init()
                                  attr,
                                  attr))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("create hash table failed", K(ret));
   } else {
     is_inited_ = true;
   }

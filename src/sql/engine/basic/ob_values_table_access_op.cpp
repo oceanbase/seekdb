@@ -48,10 +48,8 @@ int ObValuesTableAccessOp::inner_open()
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
   if (OB_ISNULL(plan_ctx) || OB_ISNULL(ctx_.get_sql_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected NULL ptr", K(ret), KP(plan_ctx), KP(ctx_.get_sql_ctx()));
   } else if (OB_UNLIKELY(MY_SPEC.column_exprs_.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("should have one column at least", K(ret));
   } else if (OB_FAIL(datum_caster_.init(eval_ctx_.exec_ctx_))) {
   } else if (OB_FAIL(ObSQLUtils::get_default_cast_mode(false, 0, GET_MY_SESSION(ctx_), cm_))) {
   } else {
@@ -62,7 +60,6 @@ int ObValuesTableAccessOp::inner_open()
                         MY_SPEC.start_param_idx_ > MY_SPEC.end_param_idx_ ||
                         MY_SPEC.end_param_idx_ >= plan_ctx->get_param_store().count())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected param", K(ret));
         } else {
           const ObObj &first_column_node = plan_ctx->get_param_store().at(MY_SPEC.start_param_idx_);
           if (OB_FAIL(first_column_node.get_real_param_count(row_cnt_))) {
@@ -112,7 +109,6 @@ int ObValuesTableAccessOp::inner_get_next_row()
       clear_evaluated_flag();
       if (OB_FAIL(calc_next_row())) {
         if(OB_ITER_END != ret) {
-          LOG_WARN("get next row from row store failed", K(ret));
         }
       } else {
         LOG_DEBUG("output row", "row", ROWEXPR2STR(eval_ctx_, MY_SPEC.output_));
@@ -145,17 +141,13 @@ int ObValuesTableAccessOp::get_real_src_obj_type(const int64_t row_idx,
     const ObSqlArrayObj *array_obj = NULL;
     if (OB_UNLIKELY(param_idx < 0 || param_idx >= plan_ctx->get_param_store().count())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid param idx", K(ret), K(param_idx));
     } else if (plan_ctx->get_param_store().at(param_idx).is_ext_sql_array()) {
       // If the parameter is is_ext_sql_array
       if (OB_ISNULL(array_obj = reinterpret_cast<const ObSqlArrayObj*>(
                                             plan_ctx->get_param_store().at(param_idx).get_ext()))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected nullptr", K(ret), K(param_idx), K(plan_ctx->get_param_store()));
       } else if (array_obj->count_ <= row_idx) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected row_idx", K(ret), K(array_obj->count_), K(row_idx), K(param_idx),
-                 K(plan_ctx->get_param_store()));
       } else {
         src_obj_meta = array_obj->data_[row_idx].meta_;
         const ObAccuracy &src_obj_acc = array_obj->data_[row_idx].get_accuracy();
@@ -280,7 +272,6 @@ OB_INLINE int ObValuesTableAccessOp::calc_next_row()
              OB_FAIL(plan_ctx->replace_batch_param_datum(row_idx_,
                                           MY_SPEC.start_param_idx_,
                                           MY_SPEC.end_param_idx_ - MY_SPEC.start_param_idx_ + 1))) {
-    LOG_WARN("replace batch param datum failed", K(ret), K(row_idx_));
   } else {
     while (OB_SUCC(ret) && col_idx < col_num) {
       ObExpr *col_expr = MY_SPEC.column_exprs_.at(col_idx);

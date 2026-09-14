@@ -33,16 +33,13 @@ int ObPCVSet::init(ObILibCacheCtx &ctx, const ObILibCacheObject *obj)
   const ObPlanCacheObject *cache_obj = static_cast<const ObPlanCacheObject*>(obj);
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_ISNULL(lib_cache_) || OB_ISNULL(cache_obj)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (NULL == (sess = pc_ctx.sql_ctx_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_PC_LOG(WARN, "session info is null", K(ret));
   } else if (NULL == (pc_alloc_ = lib_cache_->get_pc_allocator())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid plan cache allocator", K_(pc_alloc), K(ret));
   } else {
     if (OB_FAIL(pc_key_.deep_copy(allocator_, pc_ctx.fp_result_.pc_key_))) {
     } else if (OB_FAIL(deep_copy_sql(pc_ctx.raw_sql_))) {
@@ -128,8 +125,6 @@ int ObPCVSet::inner_get_cache_obj(ObILibCacheCtx &ctx,
   } else if (OB_ISNULL(pc_ctx.sql_ctx_.schema_guard_) ||
              OB_ISNULL(pc_ctx.sql_ctx_.session_info_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("unexpected null schema guard",
-             K(ret), K(pc_ctx.sql_ctx_.schema_guard_), K(pc_ctx.sql_ctx_.session_info_));
   } else {
     ObSEArray<PCVSchemaObj, 4> schema_array;
     // Plan-cache matching for temporary tables always uses the user-created session.
@@ -147,7 +142,6 @@ int ObPCVSet::inner_get_cache_obj(ObILibCacheCtx &ctx,
                                           schema_array))) {
         if (OB_OLD_SCHEMA_VERSION == ret) {
         } else {
-          LOG_WARN("failed to get all table schema", K(ret));
         }
       } else if (OB_FAIL(pcv->match(pc_ctx, schema_array, is_same))) {
       } else if (false == is_same) {
@@ -196,9 +190,6 @@ int ObPCVSet::inner_add_cache_obj(ObILibCacheCtx &ctx,
       OB_ISNULL(pc_ctx.sql_ctx_.schema_guard_) ||
       OB_ISNULL(pc_ctx.sql_ctx_.session_info_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(plan),
-             K(pc_ctx.sql_ctx_.schema_guard_),
-             K(pc_ctx.sql_ctx_.session_info_));
   } else if (get_plan_num() >= MAX_PCV_SET_PLAN_NUM) {
     static const int64_t PRINT_PLAN_EXCEEDS_LOG_INTERVAL = 20 * 1000 * 1000; // 20s
     ret = OB_REACH_MEMORY_LIMIT;
@@ -219,7 +210,6 @@ int ObPCVSet::inner_add_cache_obj(ObILibCacheCtx &ctx,
           if (OB_SQL_PC_PLAN_DUPLICATE == ret
               || is_not_supported_err(ret)) {
           } else {
-            LOG_WARN("fail to add plan to pcv", K(ret));
           }
         }
         break;
@@ -233,13 +223,11 @@ int ObPCVSet::inner_add_cache_obj(ObILibCacheCtx &ctx,
                                         schema_array,
                                         pcv))) {
       if (!is_not_supported_err(ret)) {
-        LOG_WARN("fail to create and add pcv", K(ret));
       }
     } else if (NULL == pcv) {
       ret = OB_ERR_UNEXPECTED;
     } else if (!pcv_list_.add_last(pcv)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to add pcv to pcv_list", K(ret));
       free_pcv(pcv);
       pcv = NULL;
     } else {
@@ -274,7 +262,6 @@ int ObPCVSet::create_pcv_and_add_plan(ObPlanCacheObject *cache_obj,
   } else if (OB_FAIL(create_new_pcv(new_pcv))) {
   } else if (OB_UNLIKELY(nullptr == new_pcv)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null for new_pcv", K(new_pcv));
   } else if (OB_FAIL(new_pcv->init(this, cache_obj, pc_ctx))) {
   } else if (OB_FAIL(ob_write_string(allocator_, sql_id_org, sql_id))) {
   } else if (OB_FAIL(push_sql_id(sql_id))) {
@@ -316,10 +303,8 @@ int ObPCVSet::create_new_pcv(ObPlanCacheValue *&new_pcv)
 
   if (nullptr == (buff = allocator_.alloc(sizeof(ObPlanCacheValue)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory for ObPlanCacheValue", K(ret));
   } else if (nullptr == (new_pcv = new(buff)ObPlanCacheValue())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to construct ObPlanCacheValue", K(ret));
   } else {
     // do nothing
   }
@@ -340,7 +325,6 @@ void ObPCVSet::free_pcv(ObPlanCacheValue *pcv)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pcv)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(pcv), K(ret));
   } else {
     pcv->~ObPlanCacheValue();
     allocator_.free(pcv);
@@ -360,7 +344,6 @@ int ObPCVSet::set_raw_param_info_if_needed(ObPlanCacheObject *cache_obj)
     // do nothing
   } else if (OB_ISNULL(cache_obj)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(cache_obj));
   } else if (OB_ISNULL(plan = dynamic_cast<ObPhysicalPlan *>(cache_obj))) {
     // do nothing
   } else if (!plan->contain_paramed_column_field()) {
@@ -371,7 +354,6 @@ int ObPCVSet::set_raw_param_info_if_needed(ObPlanCacheObject *cache_obj)
       const ObField &cur_field = plan->get_field_columns().at(i);
       if (!cur_field.is_paramed_select_item_ || OB_ISNULL(cur_field.paramed_ctx_)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("Invalid argument", K(ret), K(cur_field.is_paramed_select_item_), K(cur_field.paramed_ctx_));
       } else if (visited_idx.has_member(i) || !cur_field.paramed_ctx_->need_check_dup_name_) {
         // do nothing
       } else {
@@ -386,7 +368,6 @@ int ObPCVSet::set_raw_param_info_if_needed(ObPlanCacheObject *cache_obj)
           const ObField &next_field = plan->get_field_columns().at(j);
           if (!next_field.is_paramed_select_item_ || OB_ISNULL(next_field.paramed_ctx_)) {
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("Invalid argument", K(ret), K(next_field.is_paramed_select_item_), K(next_field.paramed_ctx_));
           } else if (visited_idx.has_member(j) || !next_field.paramed_ctx_->need_check_dup_name_) {
             // do nothing
           } else if (ObCharset::case_insensitive_equal(cur_field.paramed_ctx_->paramed_cname_,
@@ -437,7 +418,6 @@ int ObPCVSet::check_raw_param_for_dup_col(ObPlanCacheCtx &pc_ctx, bool &contain_
               OB_ISNULL(raw_params.at(l_idx)->node_) ||
               OB_ISNULL(raw_params.at(r_idx)->node_)) {
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("invalid argument", K(ret));
           } else {
             ObString l_tmp_str(raw_params.at(l_idx)->node_->text_len_,
                                raw_params.at(l_idx)->node_->raw_text_);
@@ -461,7 +441,6 @@ int ObPCVSet::check_contains_table(uint64_t db_id, common::ObString tab_name, bo
   DLIST_FOREACH(pcv, pcv_list_) {
     if (OB_ISNULL(pcv)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(pcv), K(ret)); 
     } else if (OB_FAIL(pcv->check_contains_table(db_id, tab_name, contains))) {
     } else if (!contains) {
       // continue find

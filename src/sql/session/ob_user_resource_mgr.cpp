@@ -64,7 +64,6 @@ int ObConnectResourceMgr::init(ObMultiVersionSchemaService &schema_service, comm
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(user_res_map_.init("UserResCtrl"))) {
   } else {
     schema_service_ = &schema_service;
@@ -91,8 +90,6 @@ int ObConnectResourceMgr::apply_for_server_conn_resource(const ObPrivSet &priv,
     server_res_.cur_connections_++;
   } else {
     ret = OB_ERR_CON_COUNT_ERROR;
-    LOG_WARN("too many connections", K(ret), K(server_res_.cur_connections_),
-      K(max_connections));
   }
   return ret;
 }
@@ -103,7 +100,6 @@ void ObConnectResourceMgr::release_server_conn_resource()
   ObLatchWGuard wr_guard(server_res_.rwlock_, ObLatchIds::DEFAULT_MUTEX);
   if (OB_UNLIKELY(!server_res_inited_)) {
     ret = OB_ENTRY_NOT_EXIST;
-    LOG_WARN("release server connection resource before any apply", K(ret));
   } else if (OB_UNLIKELY(0 == server_res_.cur_connections_)) {
     LOG_ERROR("server current connections is zero when releasing resource");
   } else {
@@ -127,7 +123,6 @@ int ObConnectResourceMgr::get_or_insert_user_resource(const uint64_t user_id,
       ObMemAttr attr(MEMORY_LABEL);
       if (OB_ISNULL(user_res = OB_NEW(ObConnectResource, attr))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate user resource failed", K(ret));
       } else {
         user_res->cur_connections_ = 0;
         user_res->history_connections_ = 0;
@@ -136,7 +131,6 @@ int ObConnectResourceMgr::get_or_insert_user_resource(const uint64_t user_id,
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(user_res_map_.insert_and_get(user_key, user_res))) {
-        LOG_WARN("insert and get failed", K(ret));
         OB_DELETE(ObConnectResource, MEMORY_LABEL, user_res);
         user_res = NULL;
         // 1. user resouce already exist because of concurrent insert, just get it.
@@ -144,11 +138,9 @@ int ObConnectResourceMgr::get_or_insert_user_resource(const uint64_t user_id,
         if (OB_ENTRY_EXIST == ret && OB_FAIL(user_res_map_.get(user_key, user_res))) {
           // may happen with very very little probability: insert failed and then user is dropped
           // and value in the map is deleted by periodly task.
-          LOG_WARN("user not exists", K(ret));
         }
       }
     } else {
-      LOG_WARN("get user resource failed", K(ret));
     }
   }
   return ret;
@@ -164,7 +156,6 @@ int ObConnectResourceMgr::increase_user_connections_count(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(user_res)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("user resource is null", K(ret));
   } else {
     const static int64_t usec_per_hour = static_cast<int64_t>(1000000) * 3600;
     // check and update cur_connections and connections in one hour.
@@ -176,7 +167,6 @@ int ObConnectResourceMgr::increase_user_connections_count(
         user_res->history_connections_ = 0;
       } else if (user_res->history_connections_ >= max_connections_per_hour) {
         ret = OB_ERR_USER_EXCEED_RESOURCE;
-        LOG_WARN("user exceed max connections per hour", K(ret), KPC(user_res));
         LOG_USER_ERROR(OB_ERR_USER_EXCEED_RESOURCE, user_name.length(), user_name.ptr(),
                 "max_connections_per_hour", user_res->history_connections_);
       }
@@ -184,7 +174,6 @@ int ObConnectResourceMgr::increase_user_connections_count(
     if (OB_SUCC(ret) && 0 != max_user_connections) {
       if (user_res->cur_connections_ >= max_user_connections) {
         ret = OB_ERR_USER_EXCEED_RESOURCE;
-        LOG_WARN("user exceed max user connections", K(ret), KPC(user_res));
         LOG_USER_ERROR(OB_ERR_USER_EXCEED_RESOURCE, user_name.length(), user_name.ptr(),
                 "max_user_connections", user_res->cur_connections_);
       }
@@ -298,7 +287,6 @@ bool ObConnectResourceMgr::CleanUpConnResourceFunc::operator() (
   int ret = OB_SUCCESS;
   if (OB_ISNULL(conn_res)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("user res is NULL", K(ret), K(conn_res));
   } else {
     const ObUserInfo *user_info = NULL;
     if (OB_FAIL(schema_guard_.get_user_info(key.user_id_, user_info))) {

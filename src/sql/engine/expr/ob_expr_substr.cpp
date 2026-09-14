@@ -52,7 +52,6 @@ int ObExprSubstr::calc_result_length(ObExprResType *types_array,
   res_len = result_len;
   if (OB_UNLIKELY(2 != param_num && 3 != param_num)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("substr should have two or three arguments", K(param_num), K(ret));
   } else {
     const ObObj &start_obj = types_array[1].get_param();
     if (!start_obj.is_null()) {
@@ -213,7 +212,6 @@ int ObExprSubstr::calc_result3_for_mysql(ObObj &result,
   ObObj trunced_length;
   ObCollationType cs_type = result_type_.get_collation_type();
   if (OB_ISNULL(expr_ctx.calc_buf_)) {
-    LOG_WARN("varchar buffer not init");
     ret = OB_NOT_INIT;
   } else if (text.is_null() || start_pos.is_null() || length.is_null()) {
     result.set_null();
@@ -405,7 +403,6 @@ static int eval_substr_text(const ObCollationType &cs_type,
         } else if (state != TEXTSTRING_ITER_NEXT && state != TEXTSTRING_ITER_END) {
           ret = (input_iter.get_inner_ret() != OB_SUCCESS) ? 
                   input_iter.get_inner_ret() : OB_INVALID_DATA;
-          LOG_WARN("iter state invalid", K(ret), K(state), K(input_iter)); 
         } else {
           output_result.set_result();
         }
@@ -485,7 +482,6 @@ int ObExprSubstr::eval_substr_batch(const ObExpr &expr, ObEvalCtx &ctx,
 
   if (OB_ISNULL(results)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr results frame is not init", K(ret));
   } else {
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     const bool has_len_param = expr.arg_cnt_ > 2 ? true : false;
@@ -513,7 +509,6 @@ int ObExprSubstr::eval_substr_batch(const ObExpr &expr, ObEvalCtx &ctx,
       } else if (pos_datum->is_null()) {
         is_result_all_null = true;
       } else if (has_len_param && OB_FAIL(expr.args_[2]->eval(ctx, len_datum))) {
-        LOG_WARN("eval len_datum failed", K(ret));
       } else if (has_len_param && len_datum->is_null()) {
         is_result_all_null = true;
       }

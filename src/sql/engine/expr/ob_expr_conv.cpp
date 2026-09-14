@@ -93,7 +93,6 @@ int ObExprConv::eval_conv(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum
   if (OB_FAIL(expr.args_[0]->eval(ctx, param_0))
       || OB_FAIL(expr.args_[1]->eval(ctx, param_1))
       || OB_FAIL(expr.args_[2]->eval(ctx, param_2))) {
-    LOG_WARN("fail to eval conv", K(ret), K(expr));
   } else if (param_0->is_null() || param_1->is_null() || param_2->is_null()) {
     res_datum.set_null();
   } else {

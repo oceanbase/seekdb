@@ -53,7 +53,6 @@ int ObExprStringToArray::calc_result_typeN(ObExprResType &type,
 
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   }
   for (int i = 0; OB_SUCC(ret) && i < param_num; i++) {
     if (ob_is_null(types[i].get_type())) {
@@ -126,7 +125,6 @@ int ObExprStringToArray::eval_string_to_array(const ObExpr &expr, ObEvalCtx &ctx
     if (OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator, ctx, subschema_id, arr_obj, false))) {
     } else if (OB_ISNULL(binary_array = static_cast<ObArrayBinary *>(arr_obj))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("binary array is null", K(ret), K(subschema_id));
     } else if (OB_FAIL(string_to_array(binary_array, arr_str, delimiter, null_str, cs_type, has_arr_str, has_delimiter, has_null_str))) {
     } else if (!has_arr_str) {
       res.set_null();
@@ -194,11 +192,9 @@ int ObExprStringToArray::eval_string_to_array_batch(const ObExpr &expr, ObEvalCt
         null_str.assign(null_str_array.at(j)->get_string().ptr(), null_str_array.at(j)->get_string().length());
       }
       if (OB_ISNULL(arr_obj) && OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator, ctx, subschema_id, arr_obj, false))) {
-        LOG_WARN("construct array obj failed", K(ret), K(subschema_id));
       } else if (OB_FALSE_IT(arr_obj->clear())) {
       } else if (OB_ISNULL(binary_array = static_cast<ObArrayBinary *>(arr_obj))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("binary array is null", K(ret), K(subschema_id));
       } else if (OB_FAIL(string_to_array(binary_array, arr_str, delimiter, null_str, cs_type, has_arr_str, has_delimiter, has_null_str))) {
       } else if (!has_arr_str) {
         res_datum.at(j)->set_null();
@@ -211,7 +207,6 @@ int ObExprStringToArray::eval_string_to_array_batch(const ObExpr &expr, ObEvalCt
         } else if (OB_FAIL(output_result.get_reserved_buffer(res_buf, res_buf_len))) {
         } else if (res_buf_len < res_size) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get invalid res buf len", K(ret), K(res_buf_len), K(res_size));
         } else if (OB_FAIL(binary_array->get_raw_binary(res_buf, res_buf_len))) {
         } else if (OB_FAIL(output_result.lseek(res_size, 0))) {
         } else {
@@ -278,7 +273,6 @@ int ObExprStringToArray::add_value_str_to_array(ObArrayBinary *binary_array, std
   } else {
     if (value_str.length() > OB_MAX_VARCHAR_LENGTH / 4) {
       ret = OB_ERR_DATA_TOO_LONG;
-      LOG_WARN("value string length is too long", K(ret), K(value_str.length()));
     } else if (OB_FAIL(binary_array->push_back(ObString(value_str.length(), value_str.data())))) {
     }
   }

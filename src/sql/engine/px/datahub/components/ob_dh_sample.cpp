@@ -94,7 +94,6 @@ OB_DEF_DESERIALIZE(ObDynamicSamplePieceMsg)
         void *tmp_buf = arena_.alloc(sizeof(ObChunkDatumStore));
         if (OB_ISNULL(tmp_buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("allocate memory failed", K(ret));
         } else {
           ObChunkDatumStore *tmp_store = new (tmp_buf) ObChunkDatumStore("DYN_SAMPLE_CTX");
           if (OB_FAIL(tmp_store->deserialize(buf, data_len, pos))) {
@@ -150,7 +149,6 @@ int ObDynamicSamplePieceMsg::merge_piece_msg(int64_t task_count,
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected sample type", K(ret));
   }
   if (OB_SUCC(ret)) {
     if (task_count == ATOMIC_AAF(&piece_count_, 1)) {
@@ -233,11 +231,8 @@ int ObDynamicSamplePieceMsgCtx::alloc_piece_msg_ctx(const ObDynamicSamplePieceMs
   ObOperatorKit *op_kit = ctx.get_operator_kit(pkt.op_id_);
   if (OB_ISNULL(ctx.get_my_session()) || OB_ISNULL(ctx.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", K(ret),
-        KP(ctx.get_my_session()), K(ctx.get_physical_plan_ctx()));
   } else if (NULL == op_kit || NULL == op_kit->spec_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("spec is NULL", K(ret), K(pkt.op_id_));
   } else {
     if (PHY_PX_DIST_TRANSMIT == op_kit->spec_->type_) {
       const ObPxDistTransmitSpec *spec = static_cast<const ObPxDistTransmitSpec *>(op_kit->spec_);
@@ -251,7 +246,6 @@ int ObDynamicSamplePieceMsgCtx::alloc_piece_msg_ctx(const ObDynamicSamplePieceMs
       sort_def.cmp_funs_ = &spec->sort_cmp_funs_;
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected spec type", K(ret), K(pkt.op_id_), K(op_kit->spec_->type_));
     }
   }
 
@@ -259,7 +253,6 @@ int ObDynamicSamplePieceMsgCtx::alloc_piece_msg_ctx(const ObDynamicSamplePieceMs
     void *buf = ctx.get_allocator().alloc(sizeof(ObDynamicSamplePieceMsgCtx));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc memory failed", K(ret));
     } else {
       msg_ctx = new (buf) ObDynamicSamplePieceMsgCtx(
           pkt.op_id_,
@@ -278,10 +271,8 @@ int ObDynamicSamplePieceMsgCtx::init(const ObIArray<uint64_t> &tablet_ids)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(tablet_ids.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_ids));
   } else if (OB_FAIL(tablet_ids_.assign(tablet_ids))) {
   } else if (OB_FAIL(sort_impl_.init(
           sort_def_.collations_,
@@ -295,7 +286,6 @@ int ObDynamicSamplePieceMsgCtx::init(const ObIArray<uint64_t> &tablet_ids)
     char *buf = (char *)exec_ctx_.get_allocator().alloc(tablet_ids.count() * sizeof(ObChunkDatumStore));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret), K(tablet_ids.count()));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
       ObChunkDatumStore *sample_store = new (buf + i * sizeof(ObChunkDatumStore)) ObChunkDatumStore("DYN_SAMPLE_CTX");
@@ -349,17 +339,13 @@ int ObDynamicSamplePieceMsgCtx::process_piece(const ObDynamicSamplePieceMsg &pie
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(is_inited_));
   } else if (piece.tablet_ids_.count() != tablet_ids_.count()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(piece), K(tablet_ids_.count()));
   } else {
     expect_range_count_ = piece.expect_range_count_;
     for (int64_t i = 0; OB_SUCC(ret) && i < piece.tablet_ids_.count(); ++i) {
       if (OB_UNLIKELY(piece.tablet_ids_.at(i) != tablet_ids_.at(i))) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("partition id not equal", K(ret), K(i),
-            "piece_tablet_id", piece.tablet_ids_.at(i), "ctx_tablet_id", tablet_ids_.at(i));
       } else if (piece.is_row_sample()) {
         const ObChunkDatumStore *cur_sample_store = piece.row_stores_.at(i);
         if (nullptr == cur_sample_store) {
@@ -371,7 +357,6 @@ int ObDynamicSamplePieceMsgCtx::process_piece(const ObDynamicSamplePieceMsg &pie
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected way", K(ret));
       }
     }
   }
@@ -423,19 +408,14 @@ int ObDynamicSamplePieceMsgCtx::build_whole_msg(ObDynamicSampleWholeMsg &whole_m
   int64_t ddl_task_id = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(is_inited_));
   } else if (task_cnt_ != received_) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("piece not full", K(ret));
   } else if (task_cnt_ != succ_count_) {
     ret = OB_PARTIAL_FAILED;
-    LOG_WARN("partial failed", K(ret));
   } else if (OB_ISNULL(plan_ctx = GET_PHY_PLAN_CTX(exec_ctx_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("phy plan ctx is null", K(ret));
   } else if (OB_ISNULL(phy_plan = plan_ctx->get_phy_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("error unexpected, phy plan must not be nullptr", K(ret));
   } else if (FALSE_IT(ddl_task_id = phy_plan->get_ddl_task_id())) {
   } else {
     ObPxTabletRange partition_range;
@@ -455,7 +435,6 @@ int ObDynamicSamplePieceMsgCtx::build_whole_msg(ObDynamicSampleWholeMsg &whole_m
       ObIDdlSliceStore *slice_store = ddl_slice_store();
       if (OB_ISNULL(slice_store)) {
         ret = OB_NOT_INIT;
-        LOG_WARN("DDL slice store is not available", K(ret), K(ddl_task_id));
       } else if (OB_FAIL(slice_store->get_or_insert_schedule_info(
                      ddl_task_id,
                      exec_ctx_.get_allocator(),
@@ -464,7 +443,6 @@ int ObDynamicSamplePieceMsgCtx::build_whole_msg(ObDynamicSampleWholeMsg &whole_m
       } else if (is_idempotent_mode) {
         if (OB_UNLIKELY(0 == whole_msg.part_ranges_.count())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid ddl slice info", K(ret), K(ddl_task_id));
         }
       }
     }
@@ -497,7 +475,6 @@ int ObDynamicSamplePieceMsgCtx::split_range(
     while (OB_SUCC(ret) && !sort_iter_end && tmp_key_count < expect_range_count) {
       if (OB_FAIL(sort_impl_.get_next_row(*sort_def_.exprs_))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("sort instance get next row failed", K(ret));
         } else {
           sort_iter_end = true;
           ret = OB_SUCCESS;
@@ -510,7 +487,6 @@ int ObDynamicSamplePieceMsgCtx::split_range(
             if (OB_FAIL(sort_def_.exprs_->at(i)->eval(coord_.get_eval_ctx(), cur_datum))) {
             } else if (OB_ISNULL(cur_datum)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("current datum is null", K(ret), K(i));
             } else if (OB_FAIL(copied_key.at(i).deep_copy(*cur_datum, exec_ctx_.get_allocator()))) {
             }
           }
@@ -532,7 +508,6 @@ int ObDynamicSamplePieceMsgCtx::sort_row_store(ObChunkDatumStore &row_store)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(is_inited_));
   } else {
     sort_impl_.reuse();
     // sort row store
@@ -563,7 +538,6 @@ int ObDynamicSamplePieceMsgCtx::on_message(
   lib::ObMutexGuard guard(mutex_);
   if (OB_UNLIKELY(!piece.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(piece));
   } else if (received_ >= task_cnt_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("should not receive any more pkt. already get all pkt expected", K(piece), K(*this));
@@ -571,7 +545,6 @@ int ObDynamicSamplePieceMsgCtx::on_message(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected piece msg", K(piece));
   } else if (OB_UNLIKELY(!is_inited_) && OB_FAIL(init(piece.tablet_ids_))) {
-    LOG_WARN("init dynamic sample context failed", K(ret));
   } else if (OB_FAIL(process_piece(piece))) {
   }
   received_ += piece.piece_count_;
@@ -595,14 +568,12 @@ int ObDynamicSamplePieceMsgCtx::send_whole_msg(common::ObIArray<ObPxSqcMeta> &sq
       dtl::ObDtlChannel *ch = sqcs.at(idx).get_qc_channel();
       if (OB_ISNULL(ch)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("null expected", K(ret));
       } else if (OB_FAIL(ch->send(whole, timeout_ts_))) {
       } else if (OB_FAIL(ch->flush(true, false))) {
       } else {
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(ObPxChannelUtil::sqcs_channles_asyn_wait(sqcs))) {
-      LOG_WARN("failed to wait response", K(ret));
     }
   }
   return ret;
@@ -621,7 +592,6 @@ int ObDynamicSamplePieceMsgListener::on_message(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!piece.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(piece));
   } else if (piece.op_id_ != ctx.op_id_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected piece msg", K(piece), K(ctx));

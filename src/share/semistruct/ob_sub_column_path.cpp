@@ -187,7 +187,6 @@ int ObSubColumnPath::decode(const char *buf, const int64_t data_len, int64_t &po
   int64_t count = 0;
   OB_UNIS_DECODE(count);
   if (OB_SUCC(ret) && OB_FAIL(items_.prepare_allocate(count))) {
-    LOG_WARN("fail to allocate space", K(ret), K(count));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
     if (OB_FAIL(items_.at(i).decode(buf, data_len, pos))) {
@@ -232,7 +231,6 @@ int ObSubColumnPath::deep_copy(ObIAllocator& allocator, const ObSubColumnPath &o
       const ObSubColumnPathItem& item = other.items_.at(i);
       if (OB_FAIL(items_.push_back(item))) {
       } else if (item.type_ == ObSubColumnPathItem::OBJECT && OB_FAIL(ob_write_string(allocator, item.key_, items_.at(i).key_))) {
-        LOG_WARN("ob_write_string fail", K(ret), K(i), K(item));
       }
     }
   }

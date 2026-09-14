@@ -90,7 +90,6 @@ int ObExprConcatWs::concat_ws(const ObString obj1,//separator
   int32_t len2 = obj2.length();
   if (buf_pos + len1 > buf_len) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("extend length limit.", K(ret), K(buf_pos), K(len1));
   } else {
     MEMCPY(*buf + buf_pos, obj1.ptr(), len1);//separator
     buf_pos += len1;
@@ -99,7 +98,6 @@ int ObExprConcatWs::concat_ws(const ObString obj1,//separator
   if (OB_SUCC(ret)) {
     if (buf_pos + len2 > buf_len) {
       ret = OB_SIZE_OVERFLOW;
-      LOG_WARN("extend length limit.", K(ret), K(buf_pos), K(len2));
     } else {
       MEMCPY(*buf + buf_pos, obj2.ptr(), len2);//next string to connect
       buf_pos +=  len2;
@@ -120,7 +118,6 @@ int ObExprConcatWs::calc(const ObString &sep_str, const ObIArray<ObString> &word
   int64_t alloc_len = 0;
   if (OB_UNLIKELY(0 >= words.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid num of words", K(ret), K(words.count()));
   }
   // calc total len of all words
   for (int64_t i = 0; OB_SUCC(ret) && i < words.count(); ++i) {
@@ -128,7 +125,6 @@ int ObExprConcatWs::calc(const ObString &sep_str, const ObIArray<ObString> &word
     tmp_alloc_len = alloc_len + word.length();
     if (ObExprAdd::is_int_int_out_of_range(alloc_len, word.length(), tmp_alloc_len)) {
       ret = OB_OPERATE_OVERFLOW;
-      LOG_WARN("add is overflow.", K(ret), K(word.length()), K(alloc_len));
     } else {
       alloc_len = tmp_alloc_len;
     }
@@ -138,13 +134,11 @@ int ObExprConcatWs::calc(const ObString &sep_str, const ObIArray<ObString> &word
     // calc total len with sep_str
     if (is_multi_overflow64(words.count()-1, sep_str.length())) {
       ret = OB_OPERATE_OVERFLOW;
-      LOG_WARN("string is too long for concat ws", K(ret), K(sep_str.length()), K(words.count()-1));
     } else {
       int64_t all_sep_str_len = (words.count()-1) * sep_str.length();
       tmp_alloc_len += all_sep_str_len;
       if (ObExprAdd::is_int_int_out_of_range(alloc_len, all_sep_str_len, tmp_alloc_len)) {
       ret = OB_OPERATE_OVERFLOW;
-      LOG_WARN("string is too long for concat ws", K(ret), K(alloc_len), K(all_sep_str_len));
       } else {
         alloc_len = tmp_alloc_len;
       }
@@ -153,12 +147,10 @@ int ObExprConcatWs::calc(const ObString &sep_str, const ObIArray<ObString> &word
     if (OB_FAIL(ret)) {
     } else if (alloc_len > OB_MAX_VARCHAR_LENGTH) {
       ret = OB_SIZE_OVERFLOW;
-      LOG_WARN("extend len limit", K(ret), K(alloc_len));
     } else if (0 == alloc_len) {
       res_str.reset();
     } else if (alloc_len < 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("alloc_len is less than zero", K(ret), K(alloc_len));
     } else if (1 == words.count()) {
       res_str = words.at(0);
     } else if (1 < words.count()) {
@@ -166,10 +158,8 @@ int ObExprConcatWs::calc(const ObString &sep_str, const ObIArray<ObString> &word
       const ObString &word = words.at(0);
       if (OB_ISNULL(res_buf = reinterpret_cast<char*>(alloc.alloc(alloc_len)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc mem failed", K(ret), K(alloc_len));
       } else if (word.length() > alloc_len) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected alloc_len", K(ret), K(word), K(alloc_len));
       } else {
         MEMCPY(res_buf, word.ptr(), word.length());
         int64_t buf_pos = word.length();
@@ -181,7 +171,6 @@ int ObExprConcatWs::calc(const ObString &sep_str, const ObIArray<ObString> &word
         if (OB_SUCC(ret)) {
           if (buf_pos > OB_MAX_VARCHAR_LENGTH) {
             ret = OB_SIZE_OVERFLOW;
-            LOG_WARN("extend len limit", K(ret), K(alloc_len));
           } else {
             res_str.assign_ptr(res_buf, buf_pos);
           }
@@ -208,7 +197,6 @@ int ObExprConcatWs::calc_text(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
   for (int64_t i = 1; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
     const ObDatum &dat = expr.locate_param_datum(ctx, i);
     if (!dat.is_null() && OB_FAIL(words.push_back(expr.args_[i]))) {
-      LOG_WARN("push back string failed", K(ret), K(i));
     }
   }
 
@@ -254,7 +242,6 @@ int ObExprConcatWs::calc_text(
   if (OB_FAIL(ret)) {
   } else if (res_len < 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("res_len is less than zero", K(ret), K(res_len));
   } else if (OB_FAIL(output_result.init(res_len))) {
   } else {
     int64_t append_data_len = 0;
@@ -282,7 +269,6 @@ int ObExprConcatWs::calc_text(
       } else if (state != TEXTSTRING_ITER_NEXT && state != TEXTSTRING_ITER_END) {
         ret = (input_iter.get_inner_ret() != OB_SUCCESS) ? 
               input_iter.get_inner_ret() : OB_INVALID_DATA;
-        LOG_WARN("iter state invalid", K(ret), K(state), K(input_iter)); 
       }
 
       // append sep word if need
@@ -298,7 +284,6 @@ int ObExprConcatWs::calc_text(
     if (OB_FAIL(ret)) {
     } else if (append_data_len != res_len) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("append data length is not equal res_len", K(ret), K(append_data_len), K(res_len));
     } else {
       output_result.set_result();
     }
@@ -314,7 +299,6 @@ int ObExprConcatWs::calc_concat_ws_expr(const ObExpr &expr, ObEvalCtx &ctx,
   ObObjType res_type = expr.datum_meta_.type_;
   if (OB_UNLIKELY(1 >= expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid arg cnt", K(ret), K(expr.arg_cnt_));
   } else if (OB_FAIL(expr.eval_param_value(ctx, sep))) {
   } else if (sep->is_null()) {
     res.set_null();
@@ -326,7 +310,6 @@ int ObExprConcatWs::calc_concat_ws_expr(const ObExpr &expr, ObEvalCtx &ctx,
     for (int64_t i = 1; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
       const ObDatum &dat = expr.locate_param_datum(ctx, i);
       if (!dat.is_null() && OB_FAIL(words.push_back(dat.get_string()))) {
-        LOG_WARN("push back string failed", K(ret), K(i));
       }
     }
     if (OB_SUCC(ret)) {
