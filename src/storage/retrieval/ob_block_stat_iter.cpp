@@ -869,7 +869,13 @@ int ObBlockStatIterator::check_rowkey_in_range(const ObDatumRowkey &rowkey, bool
 int ObBlockStatIterator::shrink_scan_range(const ObDatumRowkey &start_key)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(start_key.deep_copy(curr_scan_start_key_, allocator_))) {
+  // Memtable iterators consume schema rowkeys.  The current block boundary may
+  // contain the extra multi-version columns carried by an SSTable rowkey, so
+  // do not pass those physical-only columns into ObMemtableKey::encode().
+  ObDatumRowkey schema_start_key = start_key;
+  schema_start_key.datum_cnt_ = MIN(schema_start_key.datum_cnt_,
+                                    rowkey_read_info_->get_schema_rowkey_count());
+  if (OB_FAIL(schema_start_key.deep_copy(curr_scan_start_key_, allocator_))) {
   } else if (OB_FAIL(curr_scan_start_key_.prepare_memtable_readable(rowkey_read_info_->get_columns_desc(), allocator_))) {
   } else {
     curr_scan_range_.start_key_ = curr_scan_start_key_;
