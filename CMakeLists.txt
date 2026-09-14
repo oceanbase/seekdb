@@ -209,9 +209,8 @@ elseif(UNIX)
   set(STDC_SHARED_LIB_SYMLINK "${DEVTOOLS_DIR}/lib64/libstdc++.so")
 endif()
 
-if((CMAKE_SYSTEM_NAME STREQUAL "Linux" OR APPLE) AND NOT OB_USE_ASAN)
-  include(deps/external/cmake/Jemalloc.cmake)
-
+add_subdirectory(deps/external)
+if(TARGET seekdb_jemalloc)
   set(OB_HAVE_BUNDLED_JEMALLOC TRUE)
 endif()
 
