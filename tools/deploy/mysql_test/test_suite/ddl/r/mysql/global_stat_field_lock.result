@@ -20,6 +20,11 @@ create table seek541_cross_field(c1 int);
 rollback;
 drop table seek541_cross_field;
 T3: two writers of normal_schema_version remain serialized
+select cast(column_value as signed) into @normal_before
+from __all_core_table
+where table_name = '__all_global_stat'
+   and row_id = 1
+and column_name = 'normal_schema_version';
 start transaction;
 select count(*) as locked_normal_rows
 from __all_core_table
@@ -30,7 +35,16 @@ and column_name = 'normal_schema_version'
 locked_normal_rows
 1
 create table seek541_same_field(c1 int);
+ddl_pending_before_release
+1
 rollback;
+select cast(column_value as signed) > @normal_before as normal_schema_version_advanced
+from __all_core_table
+where table_name = '__all_global_stat'
+   and row_id = 1
+and column_name = 'normal_schema_version';
+normal_schema_version_advanced
+1
 drop table seek541_same_field;
 T4: an existing logical row with a missing normal field is restored at row_id 1
 select column_value into @baseline_before

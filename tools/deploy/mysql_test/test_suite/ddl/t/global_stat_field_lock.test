@@ -41,6 +41,12 @@ connection default;
 drop table seek541_cross_field;
 
 --echo T3: two writers of normal_schema_version remain serialized
+connection probe_sys;
+select cast(column_value as signed) into @normal_before
+  from __all_core_table
+ where table_name = '__all_global_stat'
+   and row_id = 1
+   and column_name = 'normal_schema_version';
 connection lock_sys;
 start transaction;
 select count(*) as locked_normal_rows
@@ -50,13 +56,25 @@ select count(*) as locked_normal_rows
    and column_name = 'normal_schema_version'
  for update;
 connection default;
+let $ddl_session_id=query_get_value(select connection_id() as id, id, 1);
 send create table seek541_same_field(c1 int);
 connection probe_sys;
 --sleep 1
+let $ddl_pending=query_get_value(select count(*) as pending from oceanbase.__all_virtual_processlist where id = $ddl_session_id and info like '%seek541_same_field%', pending, 1);
+--disable_query_log
+eval select $ddl_pending as ddl_pending_before_release;
+--enable_query_log
 connection lock_sys;
 rollback;
 connection default;
 reap;
+connection probe_sys;
+select cast(column_value as signed) > @normal_before as normal_schema_version_advanced
+  from __all_core_table
+ where table_name = '__all_global_stat'
+   and row_id = 1
+   and column_name = 'normal_schema_version';
+connection default;
 drop table seek541_same_field;
 
 --echo T4: an existing logical row with a missing normal field is restored at row_id 1
