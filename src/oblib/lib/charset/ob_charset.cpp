@@ -260,6 +260,7 @@ const ObCollationWrapper ObCharset::collation_wrap_arr_[ObCharset::VALID_COLLATI
 {
   {CS_TYPE_UTF8MB4_GENERAL_CI, CHARSET_UTF8MB4, CS_TYPE_UTF8MB4_GENERAL_CI, true, true, 1},
   {CS_TYPE_UTF8MB4_BIN, CHARSET_UTF8MB4, CS_TYPE_UTF8MB4_BIN, false, true, 1},
+  {CS_TYPE_UTF8MB4_UNICODE_CI, CHARSET_UTF8MB4, CS_TYPE_UTF8MB4_UNICODE_CI, false, true, 8},
   {CS_TYPE_BINARY, CHARSET_BINARY, CS_TYPE_BINARY, true, true, 1},
 };
 
@@ -1383,7 +1384,8 @@ bool ObCharset::is_valid_collation(int64_t collation_type_int)
   ObCollationType collation_type = static_cast<ObCollationType>(collation_type_int);
   return CS_TYPE_BINARY == collation_type
       || CS_TYPE_UTF8MB4_GENERAL_CI == collation_type
-      || CS_TYPE_UTF8MB4_BIN == collation_type;
+      || CS_TYPE_UTF8MB4_BIN == collation_type
+      || CS_TYPE_UTF8MB4_UNICODE_CI == collation_type;
 }
 
 ObCharsetType ObCharset::charset_type_by_coll(ObCollationType collation_type)
@@ -1391,7 +1393,8 @@ ObCharsetType ObCharset::charset_type_by_coll(ObCollationType collation_type)
   ObCharsetType charset_type = CHARSET_INVALID;
   switch(collation_type) {
     case CS_TYPE_UTF8MB4_GENERAL_CI:
-    case CS_TYPE_UTF8MB4_BIN: {
+    case CS_TYPE_UTF8MB4_BIN:
+    case CS_TYPE_UTF8MB4_UNICODE_CI: {
       charset_type = CHARSET_UTF8MB4;
       break;
     }
@@ -2161,6 +2164,10 @@ const ObCharsetInfo *ObCharset::get_charset_uninit(const ObCollationType collati
       }
       case CS_TYPE_UTF8MB4_BIN: {
         ret = &ob_charset_utf8mb4_bin;
+        break;
+      }
+      case CS_TYPE_UTF8MB4_UNICODE_CI: {
+        ret = &ob_charset_utf8mb4_unicode_ci;
         break;
       }
       case CS_TYPE_BINARY: {
