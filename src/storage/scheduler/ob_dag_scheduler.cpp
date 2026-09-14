@@ -2023,6 +2023,9 @@ int ObDagPrioScheduler::init(
     scheduler_ = &scheduler;
     priority_ = priority;
     running_task_cnts_ = 0;
+    last_high_compaction_type_ = ObDagType::DAG_TYPE_MAX;
+    prefer_large_mini_ = true;
+    high_prio_dispatch_turn_ = 0;
     limits_ = OB_DAG_PRIOS[priority].score_;
   }
   return ret;
@@ -2166,6 +2169,22 @@ void ObDagPrioScheduler::add_schedule_info_(const ObDagType::ObDagTypeEnum dag_t
   ++running_task_cnts_;
 }
 
+// Called under prio_lock_ only after dispatching a newly selected ready task.
+void ObDagPrioScheduler::record_ready_task_dispatch_(const ObDagType::ObDagTypeEnum dag_type)
+{
+  if (ObDagPrio::DAG_PRIO_COMPACTION_HIGH == priority_) {
+    const bool fifo_turn = 3 == high_prio_dispatch_turn_;
+    high_prio_dispatch_turn_ = (high_prio_dispatch_turn_ + 1) % 4;
+    if (ObDagType::DAG_TYPE_MINI_MERGE == dag_type
+        || ObDagType::DAG_TYPE_MDS_MINI_MERGE == dag_type) {
+      last_high_compaction_type_ = dag_type;
+      if (ObDagType::DAG_TYPE_MINI_MERGE == dag_type && !fifo_turn) {
+        prefer_large_mini_ = !prefer_large_mini_;
+      }
+    }
+  }
+}
+
 void ObDagPrioScheduler::add_added_info_(const ObDagType::ObDagTypeEnum dag_type)
 {
   scheduler_->add_cur_dag_cnt();
@@ -2207,6 +2226,7 @@ int ObDagPrioScheduler::schedule_one_()
     add_schedule_info_(worker->get_task()->get_dag()->get_type(), worker->get_task()->get_dag()->get_data_size());
     running_workers_.add_last(worker);
     if (task != NULL) {
+      record_ready_task_dispatch_(task->get_dag()->get_type());
       COMMON_LOG(INFO, "schedule one task", KPC(task),
         "priority", OB_DAG_PRIOS[priority_].dag_prio_str_,
         "total_running_task_cnt", scheduler_->get_total_running_task_cnt(),
@@ -2285,46 +2305,107 @@ int ObDagPrioScheduler::pop_task_from_ready_list_(ObITask *&task)
     ObITask *ready_task = nullptr;
     ObIDag::ObDagStatus dag_status = ObIDag::DAG_STATUS_MAX;
 
-    while (NULL != cur && head != cur && OB_SUCC(ret)) {
-      bool move_dag_to_waiting_list = false;
-      dag_status = cur->get_dag_status();
-      if (!cur->check_with_lock()) {
-        // TODO(@jingshui) cancel dag
-      } else if (cur->get_indegree() > 0) {
-        move_dag_to_waiting_list = true;
-      } else if (ObIDag::DAG_STATUS_READY == dag_status
-          || ObIDag::DAG_STATUS_RETRY == dag_status) { // first schedule this dag
-        if (OB_FAIL(schedule_dag_(*cur, move_dag_to_waiting_list))) {
-        }
-      } else if ((ObIDag::DAG_STATUS_NODE_FAILED == dag_status || cur->has_set_stop())
-          && 0 == cur->get_running_task_count()) { // no task running failed dag, need free
-        tmp_dag = cur;
-        cur = cur->get_next();
-        if (OB_FAIL(finish_dag_(ObIDag::DAG_STATUS_ABORT, tmp_dag, true/*try_move_child*/))) { // will report result
-          COMMON_LOG(WARN, "failed to deal with failed dag", K(ret), KPC(tmp_dag));
-          ob_abort();
-        }
-        continue;
+    // MINI and MDS_MINI share the high-priority queue. Keep both making
+    // progress when a batch of one type sits ahead of the other type.
+    ObDagType::ObDagTypeEnum preferred_type = ObDagType::DAG_TYPE_MAX;
+    // Every fourth selection remains FIFO across all high-priority types,
+    // including transaction-table merges. Diagnostics do not reset this turn.
+    const bool allow_preference = ObDagPrio::DAG_PRIO_COMPACTION_HIGH == priority_
+        && 3 != high_prio_dispatch_turn_;
+    if (allow_preference) {
+      const bool mini_idle = scheduler_->get_running_dag_cnts(ObDagType::DAG_TYPE_MINI_MERGE) == 0;
+      const bool mds_idle = scheduler_->get_running_dag_cnts(ObDagType::DAG_TYPE_MDS_MINI_MERGE) == 0;
+      const bool has_mini = scheduler_->get_type_dag_cnt(ObDagType::DAG_TYPE_MINI_MERGE) > 0;
+      const bool has_mds = scheduler_->get_type_dag_cnt(ObDagType::DAG_TYPE_MDS_MINI_MERGE) > 0;
+      if (mini_idle && mds_idle && has_mini && has_mds) {
+        // Also alternate progress when the priority has only one worker.
+        preferred_type = last_high_compaction_type_ == ObDagType::DAG_TYPE_MINI_MERGE
+            ? ObDagType::DAG_TYPE_MDS_MINI_MERGE : ObDagType::DAG_TYPE_MINI_MERGE;
+      } else if (mini_idle && has_mini) {
+        preferred_type = ObDagType::DAG_TYPE_MINI_MERGE;
+      } else if (mds_idle && has_mds) {
+        preferred_type = ObDagType::DAG_TYPE_MDS_MINI_MERGE;
       }
-
-      if (move_dag_to_waiting_list) {
-        tmp_dag = cur;
-        cur = cur->get_next();
-        if (OB_FAIL(move_dag_to_list_(*tmp_dag, READY_DAG_LIST, WAITING_DAG_LIST))) {
-        } else {
+    }
+    // Alternate size preference with the original queue order. Starting a
+    // large frozen Memtable promptly can release pressure; FIFO turns keep
+    // small tasks progressing when large Memtables continue to arrive.
+    // The size is the immutable allocation snapshot captured at MINI enqueue,
+    // not a promise that the same number of physical bytes will be reclaimed.
+    ObIDag *large_mini = nullptr;
+    if (allow_preference
+        && preferred_type != ObDagType::DAG_TYPE_MDS_MINI_MERGE
+        && scheduler_->get_type_dag_cnt(ObDagType::DAG_TYPE_MINI_MERGE) > 0
+        && prefer_large_mini_) {
+      int64_t largest_size = 0;
+      for (ObIDag *candidate = head->get_next(); candidate != head; candidate = candidate->get_next()) {
+        if (ObDagType::DAG_TYPE_MINI_MERGE == candidate->get_type()
+            && !candidate->has_set_stop()
+            && ObIDag::DAG_STATUS_NODE_FAILED != candidate->get_dag_status()
+            && 0 == candidate->get_indegree()
+            && 0 == candidate->get_running_task_count()
+            && candidate->get_data_size() > largest_size) {
+          large_mini = candidate;
+          largest_size = candidate->get_data_size();
         }
-      } else if (OB_TMP_FAIL(cur->get_next_ready_task(ready_task))) {
-        if (OB_ITER_END == tmp_ret) {
+      }
+    }
+    const bool prefer_type = preferred_type != ObDagType::DAG_TYPE_MAX;
+    const bool prefer_large = nullptr != large_mini;
+    const int64_t passes = 1 + (prefer_type ? 1 : 0) + (prefer_large ? 1 : 0);
+    for (int64_t pass = 0; pass < passes && OB_SUCC(ret) && OB_ISNULL(task); ++pass) {
+      cur = head->get_next();
+      while (NULL != cur && head != cur && OB_SUCC(ret)) {
+        // Preferences never bypass dependencies or emergency work. Fall back
+        // to the preferred type, then FIFO if the candidate has no ready task.
+        const bool large_pass = prefer_large && 0 == pass;
+        const bool type_pass = prefer_type && pass == (prefer_large ? 1 : 0);
+        if (!cur->get_emergency()
+            && ((large_pass && cur != large_mini)
+                || (type_pass && cur->get_type() != preferred_type))) {
           cur = cur->get_next();
-        } else {
-          ret = tmp_ret;
-          COMMON_LOG(WARN, "failed to get next ready task", K(ret), KPC(cur));
+          continue;
         }
-      } else {
-        task = ready_task;
-        break;
-      }
-    } // end of while
+        bool move_dag_to_waiting_list = false;
+        dag_status = cur->get_dag_status();
+        if (!cur->check_with_lock()) {
+          // TODO(@jingshui) cancel dag
+        } else if (cur->get_indegree() > 0) {
+          move_dag_to_waiting_list = true;
+        } else if (ObIDag::DAG_STATUS_READY == dag_status
+            || ObIDag::DAG_STATUS_RETRY == dag_status) { // first schedule this dag
+          if (OB_FAIL(schedule_dag_(*cur, move_dag_to_waiting_list))) {
+          }
+        } else if ((ObIDag::DAG_STATUS_NODE_FAILED == dag_status || cur->has_set_stop())
+            && 0 == cur->get_running_task_count()) { // no task running failed dag, need free
+          tmp_dag = cur;
+          cur = cur->get_next();
+          if (OB_FAIL(finish_dag_(ObIDag::DAG_STATUS_ABORT, tmp_dag, true/*try_move_child*/))) { // will report result
+            COMMON_LOG(WARN, "failed to deal with failed dag", K(ret), KPC(tmp_dag));
+            ob_abort();
+          }
+          continue;
+        }
+
+        if (move_dag_to_waiting_list) {
+          tmp_dag = cur;
+          cur = cur->get_next();
+          if (OB_FAIL(move_dag_to_list_(*tmp_dag, READY_DAG_LIST, WAITING_DAG_LIST))) {
+          } else {
+          }
+        } else if (OB_TMP_FAIL(cur->get_next_ready_task(ready_task))) {
+          if (OB_ITER_END == tmp_ret) {
+            cur = cur->get_next();
+          } else {
+            ret = tmp_ret;
+            COMMON_LOG(WARN, "failed to get next ready task", K(ret), KPC(cur));
+          }
+        } else {
+          task = ready_task;
+          break;
+        }
+      } // end of while
+    } // end of preference passes
   }
   if (OB_SUCC(ret) && OB_ISNULL(task)) {
     ret = OB_ENTRY_NOT_EXIST;
