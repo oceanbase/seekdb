@@ -116,6 +116,7 @@ runtime_configs:
       - delete.deleteV2
       - delete.delete_from_mysql
       - delete.delete_range
+      - ddl.global_stat_field_lock
       - executor.basic
       - executor.full_join
       - executor.trx
