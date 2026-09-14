@@ -1,0 +1,58 @@
+# owner: storage
+# owner group: storage
+# description: issue #1382: fulltext block-stat scans survive memtable refresh
+
+--disable_warnings
+drop database if exists fts_issue_1382;
+create database fts_issue_1382;
+--enable_warnings
+use fts_issue_1382;
+
+create table issue_1382_docs(
+  id int primary key,
+  content varchar(4096),
+  fulltext index ft_content(content));
+
+# Keep the workload single-connection, matching the original report.  The
+# storage layer may still flush/merge memtables asynchronously while these
+# statements run.
+--disable_query_log
+let $batch=0;
+while ($batch < 24)
+{
+  let $row=0;
+  let $stmt=INSERT INTO issue_1382_docs VALUES($batch*1024, "Incidence rates of cervical cancer have decreased.");
+  let $row=1;
+  while ($row < 1024)
+  {
+    let $value=,($batch*1024+$row, "Incidence rates of cervical cancer have decreased.");
+    let $stmt=$stmt$value;
+    inc $row;
+  }
+  eval $stmt;
+  inc $batch;
+}
+--enable_query_log
+
+--echo # Repeat the first fulltext pass shape after fresh ingestion.
+--disable_query_log
+--disable_result_log
+let $repeat=0;
+while ($repeat < 64)
+{
+  SELECT id,
+         MATCH(content) AGAINST ("Incidence rates of cervical cancer have decreased." IN NATURAL LANGUAGE MODE) AS score
+    FROM issue_1382_docs
+   WHERE MATCH(content) AGAINST ("Incidence rates of cervical cancer have decreased." IN NATURAL LANGUAGE MODE)
+   ORDER BY score DESC, id
+   LIMIT 10;
+  inc $repeat;
+}
+--enable_result_log
+--enable_query_log
+
+select count(*) from issue_1382_docs;
+
+--disable_warnings
+drop database fts_issue_1382;
+--enable_warnings

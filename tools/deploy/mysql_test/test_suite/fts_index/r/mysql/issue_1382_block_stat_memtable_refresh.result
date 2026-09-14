@@ -1,0 +1,4 @@
+# Repeat the first fulltext pass shape after fresh ingestion.
+select count(*) from issue_1382_docs;
+count(*)
+24576
