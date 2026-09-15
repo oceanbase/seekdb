@@ -2356,16 +2356,54 @@ int ObRangeGenerator::false_range(const ObNewRange &range, bool &is_false)
 int ObRangeGenerator::fill_general_nlj_range(ObFastFinalNLJRangeCtx &ctx,
                                              const ObPreRangeGraph &pre_range_graph,
                                              ObIArray<ObObj> &params,
+                                             ObIAllocator &allocator,
+                                             ObExecContext &exec_ctx,
+                                             const common::ObDataTypeCastParams &dtc_params,
                                              int64_t range_buffer_idx,
                                              bool &always_false,
                                              ObIArray<ObNewRange*> &out_ranges)
 {
   int ret = OB_SUCCESS;
   const ObIArray<ObFastFinalPos> &pos_arr = pre_range_graph.get_general_nlj_range_extraction();
+  ObSEArray<ObObj, 4> values;
+  int64_t cur_datetime = 0;
   always_false = false;
+  if (OB_NOT_NULL(exec_ctx.get_physical_plan_ctx())) {
+    cur_datetime = exec_ctx.get_physical_plan_ctx()->get_cur_time().get_datetime();
+  }
   if (OB_UNLIKELY(params.count() != pos_arr.count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected params count", K(ret), K(params.count()), K(pos_arr.count()));
+  } else if (OB_FAIL(values.prepare_allocate(pos_arr.count()))) {
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && !always_false && i < pos_arr.count(); ++i) {
+    bool is_valid = false;
+    int64_t cmp = 0;
+    const ObRangeColumnMeta *meta = pre_range_graph.get_column_meta(pos_arr.at(i).offset_);
+    if (OB_ISNULL(meta)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected null", K(ret), K(meta));
+    } else if (OB_FAIL(calc_result_value(allocator,
+                                         pre_range_graph.get_range_map(),
+                                         pos_arr.at(i).index_,
+                                         values.at(i),
+                                         is_valid,
+                                         exec_ctx))) {
+    } else if (!is_valid) {
+      always_false = true;
+    } else if (OB_FAIL(try_cast_value(allocator,
+                                      exec_ctx,
+                                      dtc_params,
+                                      *meta,
+                                      cur_datetime,
+                                      values.at(i),
+                                      cmp,
+                                      pos_arr.at(i).is_upper_bound_ ? CO_GE : CO_LE))) {
+    } else if (cmp != 0) {
+      always_false = true;
+    }
+  }
+  if (OB_FAIL(ret) || always_false) {
   } else if (OB_FAIL(ctx.get_cached_ranges(range_buffer_idx, out_ranges))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < out_ranges.count() && !always_false; ++i) {
@@ -2378,9 +2416,9 @@ int ObRangeGenerator::fill_general_nlj_range(ObFastFinalNLJRangeCtx &ctx,
       for (int64_t j = 0; OB_SUCC(ret) && j < pos_arr.count(); ++j) {
         int64_t offset = pos_arr.at(j).offset_;
         if (pos_arr.at(j).is_upper_bound_) {
-          range->start_key_.get_obj_ptr()[offset] = params.at(j);
+          range->start_key_.get_obj_ptr()[offset] = values.at(j);
         } else {
-          range->end_key_.get_obj_ptr()[offset] = params.at(j);
+          range->end_key_.get_obj_ptr()[offset] = values.at(j);
         }
       }
       if (OB_SUCC(ret) && i == 0) {
@@ -2439,9 +2477,6 @@ int ObRangeGenerator::check_can_fast_extract_nlj_range(ObIAllocator &allocator,
     if (OB_FAIL(ret)) {
     } else if (cmp != 0) {
       can_fast_extract = false;
-    } else if (is_valid) {
-      // Reuse the successful cast when filling the range; rejected casts stay speculative.
-      objs.at(i) = cast_obj;
     }
   }
   return ret;

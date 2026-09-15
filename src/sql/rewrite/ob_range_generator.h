@@ -183,6 +183,9 @@ public:
   static int fill_general_nlj_range(ObFastFinalNLJRangeCtx &ctx,
                                     const ObPreRangeGraph &pre_range_graph,
                                     ObIArray<ObObj> &params,
+                                    common::ObIAllocator &allocator,
+                                    ObExecContext &exec_ctx,
+                                    const common::ObDataTypeCastParams &dtc_params,
                                     int64_t range_buffer_idx,
                                     bool &always_false,
                                     ObIArray<ObNewRange*> &out_ranges);

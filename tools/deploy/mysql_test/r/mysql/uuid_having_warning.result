@@ -40,4 +40,39 @@ Warning	1292	Truncated incorrect DECIMAL value: '12:50:00 AM 00:50:00 00 0 12 50
 Warning	1292	Truncated incorrect DECIMAL value: '-12:40:00 AM 00:40:00 00 0 12 40 00 000000'
 Warning	1292	Truncated incorrect DECIMAL value: '12:00:00 AM 00:00:00 00 0 12 00 00 000000'
 Warning	1292	Truncated incorrect DECIMAL value: '12:35:00 AM 00:35:00 00 0 12 35 00 000000'
+create table t_any(c1 int primary key auto_increment, c2 varchar(100), c3 varchar(100));
+insert into t_any(c2,c3) values(hex(uuid_to_bin('661be1c9-3f0b-11ed-8ff3-7cd30abc95d8')),hex(uuid_to_bin('658517a8-3f0b-11ed-9291-b8599f1d613a')));
+insert into t_any(c2,c3) values(hex(uuid_to_bin('7945c0ae-3f0b-11ed-8ff3-7cd30abc95d8')),hex(uuid_to_bin('7e915fff-3f0b-11ed-9291-b8599f1d613a')));
+insert into t_any(c2,c3) values(hex(uuid_to_bin('84cb3d42-3f0b-11ed-8ff3-7cd30abc95d8')),hex(uuid_to_bin('867c697c-3f0b-11ed-9291-b8599f1d613a')));
+insert into t_any(c2,c3) values(hex(uuid_to_bin('854dc29c-3f0b-11ed-8ff3-7cd30abc95d8')),hex(uuid_to_bin('86d336c9-3f0b-11ed-9291-b8599f1d613a')));
+select * from t_any where c2 > any(select c1 from t_any
+where c2=hex(uuid_to_bin('854dc29c-3f0b-11ed-8ff3-7cd30abc95d8'))
+and c3=hex(uuid_to_bin('86d336c9-3f0b-11ed-9291-b8599f1d613a'))) order by c1;
+c1	c2	c3
+1	661BE1C93F0B11ED8FF37CD30ABC95D8	658517A83F0B11ED9291B8599F1D613A
+2	7945C0AE3F0B11ED8FF37CD30ABC95D8	7E915FFF3F0B11ED9291B8599F1D613A
+3	84CB3D423F0B11ED8FF37CD30ABC95D8	867C697C3F0B11ED9291B8599F1D613A
+4	854DC29C3F0B11ED8FF37CD30ABC95D8	86D336C93F0B11ED9291B8599F1D613A
+Warnings:
+Warning	1292	Truncated incorrect DECIMAL value: '661BE1C93F0B11ED8FF37CD30ABC95D8'
+Warning	1292	Truncated incorrect DECIMAL value: '661BE1C93F0B11ED8FF37CD30ABC95D8'
+Warning	1292	Truncated incorrect DECIMAL value: '7945C0AE3F0B11ED8FF37CD30ABC95D8'
+Warning	1292	Truncated incorrect DECIMAL value: '7945C0AE3F0B11ED8FF37CD30ABC95D8'
+Warning	1292	Truncated incorrect DECIMAL value: '84CB3D423F0B11ED8FF37CD30ABC95D8'
+Warning	1292	Truncated incorrect DECIMAL value: '84CB3D423F0B11ED8FF37CD30ABC95D8'
+Warning	1292	Truncated incorrect DECIMAL value: '854DC29C3F0B11ED8FF37CD30ABC95D8'
+Warning	1292	Truncated incorrect DECIMAL value: '854DC29C3F0B11ED8FF37CD30ABC95D8'
+select * from t_any where c2 < any(select c1 from t_any
+where c2=hex(uuid_to_bin('854dc29c-3f0b-11ed-8ff3-7cd30abc95d8'))
+and c3=hex(uuid_to_bin('86d336c9-3f0b-11ed-9291-b8599f1d613a'))) order by c1;
+c1	c2	c3
+Warnings:
+Warning	1292	Truncated incorrect DECIMAL value: '661BE1C93F0B11ED8FF37CD30ABC95D8'
+Warning	1292	Truncated incorrect DECIMAL value: '661BE1C93F0B11ED8FF37CD30ABC95D8'
+Warning	1292	Truncated incorrect DECIMAL value: '7945C0AE3F0B11ED8FF37CD30ABC95D8'
+Warning	1292	Truncated incorrect DECIMAL value: '7945C0AE3F0B11ED8FF37CD30ABC95D8'
+Warning	1292	Truncated incorrect DECIMAL value: '84CB3D423F0B11ED8FF37CD30ABC95D8'
+Warning	1292	Truncated incorrect DECIMAL value: '84CB3D423F0B11ED8FF37CD30ABC95D8'
+Warning	1292	Truncated incorrect DECIMAL value: '854DC29C3F0B11ED8FF37CD30ABC95D8'
+Warning	1292	Truncated incorrect DECIMAL value: '854DC29C3F0B11ED8FF37CD30ABC95D8'
 drop database uuid_having_warning;
