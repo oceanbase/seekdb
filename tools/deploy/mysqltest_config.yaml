@@ -78,6 +78,7 @@ runtime_configs:
       - special_stmt
       - sq_from
       - sq_from_2
+      - sqlancer_optimizer_regressions
       - substring_index
       - table_column_related_views
       - topk

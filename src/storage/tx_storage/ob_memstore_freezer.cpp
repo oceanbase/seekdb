@@ -1806,7 +1806,6 @@ void ObSharedMemAllocMgr::update_throttle_config()
     const int64_t share_mem_limit = get_tx_share_memory_limit();
     const int64_t tx_data_limit = ObTxDataAllocator::get_memory_limit();
     const int64_t mds_limit = ObMdsAllocator::get_memory_limit();
-    const int64_t vector_limit = GMEMCONF.get_vector_memory_limit();
 
     bool share_config_changed = false;
     (void)share_resource_throttle_tool_.update_throttle_config<FakeAllocatorForTxShare>(
@@ -1824,12 +1823,7 @@ void ObSharedMemAllocMgr::update_throttle_config()
     (void)share_resource_throttle_tool_.update_throttle_config<ObMdsAllocator>(
         mds_limit, trigger_percentage, max_duration, mds_config_changed);
 
-    bool vector_config_changed = false;
-    (void)share_resource_throttle_tool_.update_throttle_config<ObVectorAllocator>(
-        vector_limit, trigger_percentage, max_duration, vector_config_changed);
-
-    if (share_config_changed || memstore_config_changed || tx_data_config_changed || mds_config_changed ||
-        vector_config_changed) {
+    if (share_config_changed || memstore_config_changed || tx_data_config_changed || mds_config_changed) {
       SHARE_LOG(INFO,
                 "[Throttle] Update Config",
                 K(memory_budget),
@@ -1838,8 +1832,7 @@ void ObSharedMemAllocMgr::update_throttle_config()
                 K(tx_data_limit),
                 K(mds_limit),
                 K(trigger_percentage),
-                K(max_duration),
-                K(vector_limit));
+                K(max_duration));
 
     }
   }

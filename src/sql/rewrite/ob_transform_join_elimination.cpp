@@ -2309,7 +2309,9 @@ int ObTransformJoinElimination::check_semi_join_condition(ObDMLStmt *stmt,
         /* do nothing */
       } else if (!expr->get_relation_ids().has_member(left_idx)) {
         target_tables_have_filter = true;
-        if (T_OP_OR == expr->get_expr_type()) { // complex right table filter
+        if (expr->get_relation_ids().num_members() > 1) {
+          is_simple_join_condition = false;
+        } else if (T_OP_OR == expr->get_expr_type()) { // complex right table filter
           is_simple_filter = false;
         } else { /*do nothing*/ }
       } else if (T_OP_EQ != expr->get_expr_type()) {
@@ -2410,7 +2412,9 @@ int ObTransformJoinElimination::check_semi_join_condition(ObDMLStmt *stmt,
         /* do nothing */
       } else if (!expr->get_relation_ids().has_member(left_idx)) {
         target_tables_have_filter = true;
-        if (T_OP_OR == expr->get_expr_type()) { // complex right table filter
+        if (expr->get_relation_ids().num_members() > 1) {
+          is_simple_join_condition = false;
+        } else if (T_OP_OR == expr->get_expr_type()) { // complex right table filter
           is_simple_filter = false;
         } else { /*do nothing*/ }
       } else if (T_OP_EQ != expr->get_expr_type()) {

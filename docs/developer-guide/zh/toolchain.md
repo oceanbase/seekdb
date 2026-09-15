@@ -40,6 +40,7 @@ index = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"
 ```text
 x86_64-unknown-linux-gnu
 x86_64-pc-windows-gnu
+aarch64-linux-android
 ```
 
 CMake 编译 `sql-nio` 库时会从 Rust 工作区调用 Cargo，rustup 随后会自动读取 `rust/rust-toolchain.toml`，并安装固定版本的工具链、组件和目标。首次构建还可能下载 Cargo 的锁定依赖；如果主机无法访问默认 registry，请配置 crates.io 镜像。

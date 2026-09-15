@@ -324,7 +324,6 @@ int ObVecIndexBuildTask::deep_copy_index_arg(
 int ObVecIndexBuildTask::check_health()
 {
   int ret = OB_SUCCESS;
-  const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
@@ -334,12 +333,17 @@ int ObVecIndexBuildTask::check_health()
     need_retry_ = false;
   } else if (OB_FAIL(refresh_status())) {
   } else if (OB_FAIL(refresh_schema_version())) {
-  } else if (status == ObDDLTaskStatus::FAIL) {
+  } else if (static_cast<ObDDLTaskStatus>(task_status_) == ObDDLTaskStatus::FAIL) {
     /*already failed, and have submitted drop index task, do nothing*/
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
   } else {
+    const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
+    const bool is_waiting_for_aux_table =
+        status == ObDDLTaskStatus::WAIT_ROWKEY_VID_TABLE_COMPLEMENT
+        || status == ObDDLTaskStatus::WAIT_VEC_AUX_TABLE_COMPLEMENT
+        || status == ObDDLTaskStatus::WAIT_VID_ROWKEY_TABLE_COMPLEMENT;
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *index_schema = nullptr;
     bool is_data_table_exist = false;
@@ -347,11 +351,19 @@ int ObVecIndexBuildTask::check_health()
     if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.check_table_exist(object_id_,
                                                       is_data_table_exist))) {
-    } else if (OB_FAIL(check_aux_table_schemas_exist(is_all_indexes_exist))) {
-    } else if (status != ObDDLTaskStatus::FAIL && (!is_data_table_exist || !is_all_indexes_exist)) {
+    } else if (!is_data_table_exist) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("data table or index table not exist", K(ret), K(is_data_table_exist),
-          K(is_all_indexes_exist));
+      LOG_WARN("data table not exist", K(ret), K(is_data_table_exist));
+    } else if (is_waiting_for_aux_table) {
+      // An aux-table child DDL owns both its build result and failure cleanup.
+      // While waiting for that child, its schema can legitimately transition
+      // to INDEX_ERROR or disappear before the result callback reaches this
+      // parent. Let wait_aux_table_complement() consume the child's original
+      // error instead of replacing it with a secondary schema error.
+    } else if (OB_FAIL(check_aux_table_schemas_exist(is_all_indexes_exist))) {
+    } else if (!is_all_indexes_exist) {
+      ret = OB_TABLE_NOT_EXIST;
+      LOG_WARN("index table not exist", K(ret), K(is_all_indexes_exist));
     } else if (OB_FAIL(schema_guard.get_table_schema(
                                                      index_table_id_,
                                                      index_schema))) {

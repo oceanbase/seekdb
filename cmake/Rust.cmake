@@ -48,6 +48,19 @@ else()
   set(_cargo_out_subdir "release")
 endif()
 
+# Cargo otherwise builds for the macOS host during an Android CMake cross-build.
+# Keep the Rust static library on the same target and API level as the C++ code.
+set(_cargo_target_args)
+set(_cargo_target_subdir)
+if(ANDROID)
+  if(NOT CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
+    message(FATAL_ERROR "[rust] unsupported Android ABI: ${CMAKE_ANDROID_ARCH_ABI}")
+  endif()
+  set(_rust_target_triple "aarch64-linux-android")
+  list(APPEND _cargo_target_args "--target" "${_rust_target_triple}")
+  set(_cargo_target_subdir "${_rust_target_triple}/")
+endif()
+
 # Keep all cargo output inside the CMake build tree (isolated per build dir).
 set(RUST_TARGET_DIR "${CMAKE_BINARY_DIR}/rust-target")
 # Cargo's staticlib artifact name is platform-specific: libsql_nio.a on
@@ -55,7 +68,7 @@ set(RUST_TARGET_DIR "${CMAKE_BINARY_DIR}/rust-target")
 if(WIN32)
   set(RUST_STATICLIB "${RUST_TARGET_DIR}/${_cargo_out_subdir}/sql_nio.lib")
 else()
-  set(RUST_STATICLIB "${RUST_TARGET_DIR}/${_cargo_out_subdir}/libsql_nio.a")
+  set(RUST_STATICLIB "${RUST_TARGET_DIR}/${_cargo_target_subdir}${_cargo_out_subdir}/libsql_nio.a")
 endif()
 
 # Sources whose change should retrigger a rebuild of the staticlib.
@@ -71,6 +84,19 @@ list(APPEND _rust_sources
 # discovers on PATH.
 set(_rust_build_env "CARGO_TARGET_DIR=${RUST_TARGET_DIR}"
                     "CC=${CMAKE_C_COMPILER}" "AR=${CMAKE_AR}")
+if(ANDROID)
+  string(REGEX REPLACE "^android-" "" _android_api "${ANDROID_PLATFORM}")
+  get_filename_component(_ndk_toolchain_bin "${CMAKE_C_COMPILER}" DIRECTORY)
+  set(_android_clang "${_ndk_toolchain_bin}/aarch64-linux-android${_android_api}-clang")
+  set(_android_ar "${_ndk_toolchain_bin}/llvm-ar")
+  if(NOT EXISTS "${_android_clang}")
+    message(FATAL_ERROR "[rust] Android clang wrapper not found: ${_android_clang}")
+  endif()
+  list(APPEND _rust_build_env
+       "CC_aarch64_linux_android=${_android_clang}"
+       "AR_aarch64_linux_android=${_android_ar}"
+       "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=${_android_clang}")
+endif()
 if(WIN32)
   # rustup treats an exact-version override and the stable alias as distinct
   # installed toolchains, even when stable currently is that exact version.
@@ -121,7 +147,7 @@ endif()
 add_custom_command(
   OUTPUT "${RUST_STATICLIB}"
   COMMAND "${CMAKE_COMMAND}" -E env ${_rust_build_env}
-          "${CARGO}" build ${_cargo_profile_flag}
+          "${CARGO}" build ${_cargo_profile_flag} ${_cargo_target_args}
           --manifest-path "${RUST_WORKSPACE_DIR}/Cargo.toml"
           --package sql-nio
   WORKING_DIRECTORY "${RUST_WORKSPACE_DIR}"
@@ -141,7 +167,7 @@ if(WIN32)
 else()
   find_package(Threads REQUIRED)
   set(_rust_syslibs Threads::Threads ${CMAKE_DL_LIBS} m)
-  if(NOT APPLE)
+  if(NOT APPLE AND NOT ANDROID)
     list(APPEND _rust_syslibs rt)
   endif()
 endif()

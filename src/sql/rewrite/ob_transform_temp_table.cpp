@@ -640,11 +640,17 @@ int ObTransformTempTable::check_stmt_can_extract_temp_table(ObSelectStmt *first,
                                                             bool &is_valid)
 {
   int ret = OB_SUCCESS;
+  bool has_const_minmax_like = false;
   is_valid = false;
   if (OB_ISNULL(first) || OB_ISNULL(second)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stmt is null", K(ret));
   } else if (first->is_scala_group_by() ^ second->is_scala_group_by()) {
+    is_valid = false;
+  } else if (OB_FAIL(check_like_expr_with_const_minmax(*first, has_const_minmax_like))) {
+  } else if (!has_const_minmax_like &&
+             OB_FAIL(check_like_expr_with_const_minmax(*second, has_const_minmax_like))) {
+  } else if (has_const_minmax_like) {
     is_valid = false;
   } else if (second->is_set_stmt()) {
     is_valid = QueryRelation::QUERY_EQUAL == relation && map_info.is_order_equal_;
@@ -663,6 +669,101 @@ int ObTransformTempTable::check_stmt_can_extract_temp_table(ObSelectStmt *first,
     } else if (!is_valid) {
       // do nothing
     } else if (OB_FAIL(check_index_condition_match(*first, *second, map_info, is_valid))) {
+    }
+  }
+  return ret;
+}
+
+int ObTransformTempTable::check_like_expr_with_const_minmax(const ObSelectStmt &stmt,
+                                                            bool &has_const_minmax)
+{
+  int ret = OB_SUCCESS;
+  has_const_minmax = false;
+  const ObIArray<ObRawExpr*> &conditions = stmt.get_condition_exprs();
+  const ObIArray<ObRawExpr*> &having_exprs = stmt.get_having_exprs();
+  for (int64_t i = 0; OB_SUCC(ret) && !has_const_minmax && i < conditions.count(); ++i) {
+    if (OB_FAIL(SMART_CALL(check_like_expr_with_const_minmax(conditions.at(i),
+                                                            has_const_minmax)))) {
+    }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && !has_const_minmax && i < having_exprs.count(); ++i) {
+    if (OB_FAIL(SMART_CALL(check_like_expr_with_const_minmax(having_exprs.at(i),
+                                                            has_const_minmax)))) {
+    }
+  }
+  return ret;
+}
+
+int ObTransformTempTable::check_like_expr_with_const_minmax(const ObRawExpr *expr,
+                                                            bool &has_const_minmax)
+{
+  int ret = OB_SUCCESS;
+  has_const_minmax = false;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null expr", K(ret));
+  } else if (T_OP_LIKE == expr->get_expr_type() ||
+             T_OP_NOT_LIKE == expr->get_expr_type()) {
+    for (int64_t i = 0; OB_SUCC(ret) && !has_const_minmax && i < expr->get_param_count(); ++i) {
+      if (OB_FAIL(SMART_CALL(check_expr_has_const_minmax(expr->get_param_expr(i),
+                                                        has_const_minmax)))) {
+      }
+    }
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && !has_const_minmax && i < expr->get_param_count(); ++i) {
+      if (OB_FAIL(SMART_CALL(check_like_expr_with_const_minmax(expr->get_param_expr(i),
+                                                              has_const_minmax)))) {
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTransformTempTable::check_expr_has_const_minmax(const ObRawExpr *expr,
+                                                      bool &has_const_minmax)
+{
+  int ret = OB_SUCCESS;
+  has_const_minmax = false;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null expr", K(ret));
+  } else if (expr->is_aggr_expr()) {
+    if (OB_FAIL(check_const_minmax(static_cast<const ObAggFunRawExpr*>(expr),
+                                  has_const_minmax))) {
+    }
+  } else if (expr->has_flag(CNT_AGG)) {
+    for (int64_t i = 0; OB_SUCC(ret) && !has_const_minmax && i < expr->get_param_count(); ++i) {
+      if (OB_FAIL(SMART_CALL(check_expr_has_const_minmax(expr->get_param_expr(i),
+                                                        has_const_minmax)))) {
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTransformTempTable::check_const_minmax(const ObAggFunRawExpr *aggr,
+                                             bool &has_const_minmax)
+{
+  int ret = OB_SUCCESS;
+  has_const_minmax = false;
+  if (OB_ISNULL(aggr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected null aggregate expr", K(ret));
+  } else if (T_FUN_MIN != aggr->get_expr_type() &&
+             T_FUN_MAX != aggr->get_expr_type()) {
+    // do nothing
+  } else if (aggr->get_real_param_count() <= 0) {
+    // do nothing
+  } else {
+    has_const_minmax = true;
+    for (int64_t i = 0; OB_SUCC(ret) && has_const_minmax && i < aggr->get_real_param_count(); ++i) {
+      const ObRawExpr *param = aggr->get_real_param_exprs().at(i);
+      if (OB_ISNULL(param)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected null aggregate param", K(ret));
+      } else {
+        has_const_minmax = param->is_const_expr();
+      }
     }
   }
   return ret;

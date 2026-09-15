@@ -115,7 +115,7 @@ A output of the example code above:
 
 ```text
 [2023-12-11 18:00:55.711877] INFO  [SQL.EXE] start_stmt (ob_sql_trans_control.cpp:619)
-[99178][T1004_TeRec][T1003][YD9F97F000001-00060C36119D4757-0-0] [lt=15]
+[99178][TeRec][T1003][YD9F97F000001-00060C36119D4757-0-0] [lt=15]
 start stmt(ret=0, auto_commit=true, session_id=1,
 snapshot={this:0x7f3184fca0e8, valid:true, source:2,
 core:{version:{val:1702288855549635029, v:0}, tx_id:{txid:167035},
@@ -156,7 +156,7 @@ A log mainly contains the following parts:
 | module       | [SQL.EXE] | The module printing the log |
 | function name    | start_stmt | The function printing the log  |
 | code location   | (ob_sql_trans_control.cpp:619)       | The location of code, including file name and line |
-| thread identifier     | [99178][T1004_TeRec]  | The thread ID and name |
+| thread identifier     | [99178][TeRec]  | The thread ID and name |
 | tenant id     | [T1003] | The tenant ID                                |
 | Trace ID | [YD9F97F000001-00060C36119D4757-0-0] | The global ID of a specific request. You can usually get all logs related one request according the trace ID |
 | The cost of printing log   | [lt=15] | The cost in microsecond of printing last log |
@@ -272,9 +272,7 @@ Since converting a timestamp into a string is a time-consuming task, seekdb cach
 Currently, two information related to thread will be recorded:
 
 - Thread ID: the information returned by the system call `__NR_gettid` (the system call is relatively inefficient, and this value will be cached);
-- Thread name: The thread name field may contain the tenant ID, thread pool type, and thread pool index. The thread name of seekdb is set through the `set_thread_name` function and will also be displayed in the `top` command.
-
-> NOTE：The thread name is determined by the created thread. Since the tenant of the created thread may be different from the tenant of subsequent runs of this thread, the tenant in the thread name may be incorrect.
+- Thread name: The thread name field contains the thread pool type and may include its index. seekdb sets the thread name through `set_thread_name`; it is also displayed in the `top` command.
 
 ### Log Rate Limit
 

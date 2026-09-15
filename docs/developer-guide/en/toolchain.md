@@ -18,6 +18,7 @@ The repository pins Rust `1.97.1`, includes the `clippy` component, and uses the
 ```text
 x86_64-unknown-linux-gnu
 x86_64-pc-windows-gnu
+aarch64-linux-android
 ```
 
 The CMake build invokes Cargo from the Rust workspace when compiling the `sql-nio` library. Rustup then reads `rust/rust-toolchain.toml` and installs the pinned toolchain, components, and targets automatically. The first build may also download the locked Cargo dependencies; configure a crates.io mirror if the host cannot reach the default registry.

@@ -912,12 +912,24 @@ int ObTransformSimplifyExpr::adjust_dummy_expr(const ObIArray<int64_t> &true_exp
   } else {
     ObRawExpr *op_expr = NULL;
     ObSEArray<ObRawExpr*, 4> op_params;
+    bool is_error_free = true;
+    bool cur_error_free = true;
     const PreCalcExprExpectResult expect_result = ((is_and_op && !false_exprs.empty())
                                                    || (!is_and_op && true_exprs.empty()))
         ? PreCalcExprExpectResult::PRE_CALC_RESULT_FALSE
         : PreCalcExprExpectResult::PRE_CALC_RESULT_TRUE;
     if (OB_FAIL(ObTransformUtils::extract_target_exprs_by_idx(adjust_exprs, true_exprs, op_params))) {
     } else if (OB_FAIL(ObTransformUtils::extract_target_exprs_by_idx(adjust_exprs, false_exprs, op_params))) {
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && is_error_free && i < op_params.count(); ++i) {
+        if (OB_FAIL(ObTransformUtils::check_error_free_expr(op_params.at(i), cur_error_free))) {
+        } else {
+          is_error_free = cur_error_free;
+        }
+      }
+    }
+    if (OB_FAIL(ret) || !is_error_free) {
+      // Keep the original predicate when a removed branch may raise warnings/errors at runtime.
     } else if (remove_all) {
       //to keep the or/and expr contains at least 2 params.
       const bool b_value = is_and_op ? false : true;
@@ -943,7 +955,7 @@ int ObTransformSimplifyExpr::adjust_dummy_expr(const ObIArray<int64_t> &true_exp
       }
     }
 
-    if (OB_FAIL(ret)) {
+    if (OB_FAIL(ret) || !is_error_free) {
     } else if (is_and_op && OB_FAIL(ObRawExprUtils::build_and_expr(*ctx_->expr_factory_,
                                                                    op_params, op_expr))) {
       LOG_WARN("failed to build and expr", K(ret));
@@ -1184,7 +1196,45 @@ int ObTransformSimplifyExpr::inner_remove_dummy_nvl(ObDMLStmt *stmt,
   if (OB_SUCC(ret)
       && (T_FUN_SYS_NVL == expr->get_expr_type() 
       || T_FUN_SYS_IFNULL == expr->get_expr_type())) {
-    if (ObOptimizerUtil::find_item(ignore_exprs, expr)) {
+    ObOpRawExpr *op_expr = static_cast<ObOpRawExpr *>(expr);
+    ObRawExpr *child_0 = NULL;
+    ObRawExpr *cur = NULL;
+    int64_t not_cnt = 0;
+    if (op_expr->get_param_count() != 2 || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_) ||
+        OB_ISNULL(ctx_->session_info_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected nvl expr", K(ret), KPC(expr), K(ctx_));
+    } else if (OB_ISNULL(child_0 = op_expr->get_param_expr(0))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null child expr", K(ret), KPC(expr));
+    } else {
+      cur = child_0;
+      while (OB_SUCC(ret) && T_OP_NOT == cur->get_expr_type()) {
+        ++not_cnt;
+        if (OB_UNLIKELY(1 != cur->get_param_count()) ||
+            OB_ISNULL(cur = cur->get_param_expr(0))) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected not expr", K(ret), KPC(child_0));
+        }
+      }
+      if (OB_SUCC(ret) && not_cnt > 1 && 0 == not_cnt % 2) {
+        ObRawExpr *new_child = NULL;
+        if (OB_FAIL(ObRawExprUtils::try_create_bool_expr(cur, new_child, *ctx_->expr_factory_))) {
+        } else if (OB_ISNULL(new_child)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected null bool expr", K(ret));
+        } else if (OB_FAIL(new_child->formalize(ctx_->session_info_))) {
+        } else {
+          op_expr->get_param_expr(0) = new_child;
+          if (OB_FAIL(expr->formalize(ctx_->session_info_))) {
+          } else {
+            trans_happened = true;
+          }
+        }
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (ObOptimizerUtil::find_item(ignore_exprs, expr)) {
       // nvl expr is rollup expr, do nothing
     } else if (OB_FAIL(do_remove_dummy_nvl(stmt,
                                     expr,
@@ -1220,6 +1270,7 @@ int ObTransformSimplifyExpr::do_remove_dummy_nvl(ObDMLStmt *stmt,
         LOG_WARN("get unexpecte null", K(child_0), K(child_1), K(ret));
       } else {
         bool not_null = false;
+        bool is_error_free = false;
         ObRawExpr *new_expr = NULL;
         ObArray<ObRawExpr *> not_null_constraints;
         if (OB_FAIL(ObTransformUtils::is_expr_not_null(not_null_ctx,
@@ -1228,7 +1279,12 @@ int ObTransformSimplifyExpr::do_remove_dummy_nvl(ObDMLStmt *stmt,
                                                        &not_null_constraints))) {
         } else if (not_null){
           // NVL(child_0, child_1) -> child_0  IF child_0 is not null
-          if (OB_FAIL(ObTransformUtils::add_param_not_null_constraint(*ctx_, not_null_constraints))) {
+          if (child_0->has_flag(CNT_NOT)) {
+            // NOT chains can be simplified later; keep IFNULL/NVL to avoid unsafe not-null constraints.
+          } else if (OB_FAIL(ObTransformUtils::check_error_free_expr(child_0, is_error_free))) {
+          } else if (!is_error_free) {
+            // Keep IFNULL/NVL if the input may raise conversion/runtime errors.
+          } else if (OB_FAIL(ObTransformUtils::add_param_not_null_constraint(*ctx_, not_null_constraints))) {
           } else {
             new_expr = child_0;
           }
