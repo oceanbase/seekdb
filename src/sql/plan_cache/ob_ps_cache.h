@@ -122,6 +122,7 @@ public:
 
   int mem_total(int64_t &mem_total) const;
   int64_t get_managed_used() const { return ATOMIC_LOAD(&managed_used_); }
+  void get_memory_info(int64_t &hold, int64_t &used, int64_t &mem_limit) const;
   void release_managed_memory(const int64_t size);
 
   inline int64_t get_stmt_id_map_size() { return stmt_id_map_.size(); }

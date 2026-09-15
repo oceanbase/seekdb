@@ -926,6 +926,15 @@ int ObPsCache::mem_total(int64_t &mem_total) const
   return ret;
 }
 
+void ObPsCache::get_memory_info(int64_t &hold,
+                                int64_t &used,
+                                int64_t &mem_limit) const
+{
+  hold = get_managed_used();
+  used = hold;
+  mem_limit = get_mem_limit();
+}
+
 int ObPsCache::check_schema_version(ObSchemaGetterGuard &schema_guard,
                                     ObPsStmtInfo &stmt_info,
                                     bool &is_expired)
