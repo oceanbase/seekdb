@@ -123,7 +123,13 @@ def seekdb_jemalloc(name, external_src, lockfile, manifest, rust_toolchain):
         lockfile = lockfile,
         manifest = manifest,
         rust_toolchain = rust_toolchain,
-        target_compatible_with = ["@platforms//os:linux"],
+        # Windows and other platforms will be enabled when their Cargo/native
+        # toolchain integration is supported here.
+        target_compatible_with = select({
+            "@platforms//os:linux": [],
+            "@platforms//os:macos": [],
+            "//conditions:default": ["@platforms//:incompatible"],
+        }),
     )
 
     native.filegroup(
