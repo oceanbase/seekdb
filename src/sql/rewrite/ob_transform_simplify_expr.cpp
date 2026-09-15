@@ -928,10 +928,7 @@ int ObTransformSimplifyExpr::inner_remove_dummy_expr(ObRawExpr *&expr,
         bool has_warning = false;
         bool is_true = false;
         bool is_false = false;
-        if (!op_expr->is_static_scalar_const_expr()) {
-          // Avoid recursively probing non-static boolean trees while preserving
-          // the normal short-circuit fold.
-        } else if (OB_FAIL(ObTransformUtils::check_static_expr_has_warning(ctx_, op_expr, has_warning))) {
+        if (OB_FAIL(ObTransformUtils::check_static_expr_has_warning(ctx_, op_expr, has_warning))) {
         } else if (has_warning
                    && OB_FAIL(ObTransformUtils::extract_const_bool_expr_result(ctx_,
                                                                                op_expr,
