@@ -18,6 +18,8 @@
 #include "ob_table_sql_service.h"
 #include "lib/literals/ob_literals.h"
 #include "share/ob_global_stat_proxy.h"
+#include "share/plugin/plugin_sql_type.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/schema/ob_constraint.h"
 #include "share/schema/ob_partition_sql_helper.h"
 #include "share/ob_timezone_mgr.h"
@@ -29,6 +31,80 @@ namespace share
 {
 namespace schema
 {
+
+namespace
+{
+
+int mutate_plugin_column_dependency(common::ObISQLClient &sql_client,
+                                    const ObColumnSchemaV2 &column,
+                                    const uint64_t table_id,
+                                    const bool add)
+{
+  int ret = OB_SUCCESS;
+  const common::ObIArray<common::ObString> &type_info =
+      column.get_extended_type_info();
+  if (plugin::is_plugin_sql_type(type_info)) {
+    seekdb_plugin_sql_binding_v1_t binding = {};
+    if (nullptr == g_mp) {
+      ret = OB_NOT_INIT;
+    } else if (!plugin::decode_plugin_sql_type(type_info, binding)) {
+      ret = OB_INVALID_DATA;
+    } else if (OB_FAIL(g_mp->mutate_plugin_type_dependency(
+                   sql_client, binding, table_id, column.get_column_id(),
+                   add))) {
+      LOG_WARN("failed to update plugin type dependency", K(ret), K(add),
+               K(table_id), "column_id", column.get_column_id());
+    }
+  }
+  return ret;
+}
+
+int mutate_plugin_table_dependencies(common::ObISQLClient &sql_client,
+                                     const ObTableSchema &table,
+                                     const bool add)
+{
+  int ret = OB_SUCCESS;
+  for (ObTableSchema::const_column_iterator iter = table.column_begin();
+       OB_SUCC(ret) && iter != table.column_end(); ++iter) {
+    if (nullptr == *iter) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(mutate_plugin_column_dependency(
+                   sql_client, **iter, table.get_table_id(), add))) {
+    }
+  }
+  return ret;
+}
+
+int mutate_plugin_table_dependencies(
+    common::ObISQLClient &sql_client,
+    const common::ObIArray<ObTableSchema> &tables,
+    const bool add)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); ++i) {
+    if (OB_FAIL(mutate_plugin_table_dependencies(sql_client, tables.at(i),
+                                                 add))) {
+    }
+  }
+  return ret;
+}
+
+bool same_plugin_sql_type(const ObColumnSchemaV2 &left,
+                          const ObColumnSchemaV2 &right)
+{
+  const common::ObIArray<common::ObString> &left_info =
+      left.get_extended_type_info();
+  const common::ObIArray<common::ObString> &right_info =
+      right.get_extended_type_info();
+  bool same = plugin::is_plugin_sql_type(left_info) &&
+              plugin::is_plugin_sql_type(right_info);
+  for (int64_t i = 0; same && i < left_info.count(); ++i) {
+    same = left_info.at(i) == right_info.at(i);
+  }
+  return same;
+}
+
+} // namespace
 
 int ObTableSqlService::exec_update(
     ObISQLClient &sql_client,
@@ -719,6 +795,8 @@ int ObTableSqlService::drop_table(const ObTableSchema &table_schema,
                        sql_client, table_id,
                        table_schema.get_column_count(),
                        true))) {
+    } else if (OB_FAIL(mutate_plugin_table_dependencies(
+                           sql_client, table_schema, false))) {
     }
   }
 
@@ -917,6 +995,9 @@ int ObTableSqlService::insert_single_column(
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_ddl_allowed(new_table_schema))) {
   } else if (OB_FAIL(add_single_column(sql_client, new_column_schema))) {
+  } else if (OB_FAIL(mutate_plugin_column_dependency(
+                         sql_client, new_column_schema,
+                         new_table_schema.get_table_id(), true))) {
   }
   if (OB_SUCC(ret)) {
     if (new_column_schema.is_autoincrement()) {
@@ -1001,6 +1082,29 @@ int ObTableSqlService::update_single_column(
   // for drop column online, delete column stat.
   if (OB_SUCC(ret) && need_del_stats) {
     if (OB_FAIL(delete_column_stat(sql_client, table_id, new_column_schema.get_column_id()))) {
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    const ObColumnSchemaV2 *origin_column =
+        origin_table_schema.get_column_schema(new_column_schema.get_column_id());
+    const bool new_is_plugin_type = plugin::is_plugin_sql_type(
+        new_column_schema.get_extended_type_info());
+    const bool old_is_plugin_type =
+        nullptr != origin_column &&
+        plugin::is_plugin_sql_type(origin_column->get_extended_type_info());
+    if ((old_is_plugin_type || new_is_plugin_type) &&
+        nullptr == origin_column) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if ((old_is_plugin_type || new_is_plugin_type) &&
+               !same_plugin_sql_type(*origin_column, new_column_schema)) {
+      if (old_is_plugin_type &&
+          OB_FAIL(mutate_plugin_column_dependency(
+              sql_client, *origin_column, table_id, false))) {
+      } else if (new_is_plugin_type &&
+                 OB_FAIL(mutate_plugin_column_dependency(
+                     sql_client, new_column_schema, table_id, true))) {
+      }
     }
   }
 
@@ -2086,6 +2190,8 @@ int ObTableSqlService::delete_single_column(
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(delete_column_stat(sql_client, table_id, column_id))) {
+    } else if (OB_FAIL(mutate_plugin_column_dependency(
+                           sql_client, orig_column_schema, table_id, false))) {
     }
   }
 
@@ -2238,6 +2344,8 @@ int ObTableSqlService::batch_create_table(ObIArray<ObTableSchema> &tables,
     } else if (FALSE_IT(time_guard.click("insert_all_table"))) {
     } else if (OB_FAIL(batch_add_columns_for_create_table(sql_client, tables))) {
     } else if (FALSE_IT(time_guard.click("insert_all_column"))) {
+    } else if (OB_FAIL(mutate_plugin_table_dependencies(sql_client, tables,
+                                                        true))) {
     } else if (OB_FAIL(batch_add_constraints_for_create_table(sql_client, tables))) {
     } else if (FALSE_IT(time_guard.click("insert_all_cst"))) {
     } else if (OB_FAIL(batch_add_table_part_info(sql_client, tables))) {
@@ -3301,7 +3409,9 @@ int ObTableSqlService::gen_column_dml_without_check(
       cur_default_value.reset();
     }
     ObString bin_extended_type_info;
-    if (OB_SUCC(ret) && (column.is_enum_or_set() || column.is_collection())) {
+    if (OB_SUCC(ret) &&
+        (column.is_enum_or_set() || column.is_collection() ||
+         plugin::is_plugin_sql_type(column.get_extended_type_info()))) {
       int64_t pos = 0;
       extended_type_info_buf = static_cast<char *>(allocator.alloc(OB_MAX_VARBINARY_LENGTH));
       if (OB_ISNULL(extended_type_info_buf)) {

@@ -1,0 +1,18 @@
+manifest_schema_version = 1
+plugin_id = "org.seekdb.gis"
+package_version = "1.0.0"
+build_id = "gis-execution-spi-v1"
+abi_major = 1
+abi_minor = 0
+catalog_schema_version = 1
+data_format_version = 1
+entrypoint = "seekdb_gis.so"
+capabilities = ["extension.catalog.v1"]
+
+[[provides]]
+service_id = "org.seekdb.gis.function"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.gis.extensions"
+version = "1.0.0"

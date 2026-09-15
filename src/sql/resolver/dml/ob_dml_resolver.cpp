@@ -15,6 +15,8 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
+#include <cstring>
+
 #include "ob_dml_resolver.h"
 #include "sql/resolver/dml/ob_view_table_resolver.h"
 #include "sql/optimizer/ob_optimizer_util.h"
@@ -28,6 +30,7 @@
 #include "sql/engine/expr/ob_expr_autoinc_nextval.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
 #include "sql/engine/expr/ob_expr_version.h"
+#include "sql/engine/expr/plugin_function_expr.h"
 #include "sql/resolver/dml/ob_insert_resolver.h"
 #include "sql/resolver/dml/ob_inlist_resolver.h"
 #include "sql/session/ob_local_session_var.h"
@@ -8029,6 +8032,58 @@ int ObDMLResolver::resolve_function_table_column_item_sys_func(const TableItem &
   } else if (!ObResolverUtils::is_expr_can_be_used_in_table_function(*table_expr)) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "access rows from a non-nested table item");
+  } else if (T_FUN_SYS_PLUGIN_TABLE_FUNCTION == table_expr->get_expr_type()) {
+    seekdb_plugin_sql_binding_v1_t binding = {};
+    if (OB_ISNULL(share::g_mp) || OB_ISNULL(params_.allocator_)) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(PluginTableFunctionExpr::resolve_binding(
+                   *table_expr, binding))) {
+      LOG_WARN("failed to resolve plugin table-function SQL object", K(ret));
+    } else {
+      for (uint32_t i = 0; OB_SUCC(ret) && i < binding.column_count; ++i) {
+        seekdb_plugin_sql_column_v1_t column = {};
+        ObString column_name;
+        ObObjMeta meta = table_expr->get_result_meta();
+        ObAccuracy accuracy = table_expr->get_accuracy();
+        if (OB_FAIL(share::g_mp->describe_plugin_sql_column(
+                &binding, i, &column))) {
+          LOG_WARN("failed to describe plugin table-function column", K(ret), K(i));
+        } else if (OB_FAIL(ob_write_string(
+                       *params_.allocator_,
+                       ObString::make_string(column.sql_name), column_name))) {
+          LOG_WARN("failed to copy plugin table-function column name", K(ret));
+        } else {
+          const char *suffix = std::strrchr(column.type_id, '.');
+          suffix = nullptr == suffix ? column.type_id : suffix + 1;
+          if (0 == std::strcmp(suffix, "float64")) {
+            meta.set_double();
+          } else if (0 == std::strcmp(suffix, "geometry")) {
+            meta.set_geometry();
+          } else if (0 == std::strcmp(suffix, "int32") ||
+                     0 == std::strcmp(suffix, "uint32") ||
+                     0 == std::strcmp(suffix, "int64") ||
+                     0 == std::strcmp(suffix, "uint64") ||
+                     0 == std::strcmp(suffix, "bool")) {
+            meta.set_int();
+          } else {
+            meta.set_varchar();
+            meta.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+          }
+          col_item = stmt->get_column_item(table_item.table_id_, column_name);
+          if (nullptr == col_item &&
+              OB_FAIL(resolve_function_table_column_item(
+                  table_item, meta, accuracy, column_name,
+                  OB_APP_MIN_COLUMN_ID + i, col_item))) {
+            LOG_WARN("failed to create plugin table-function column", K(ret));
+          } else if (OB_ISNULL(col_item)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_FAIL(col_items.push_back(*col_item))) {
+            LOG_WARN("failed to store plugin table-function column", K(ret));
+          }
+        }
+      }
+    }
+    return ret;
   } else if (NULL != (col_item = stmt->get_column_item(table_item.table_id_, ObString("COLUMN_VALUE")))) {
     //exist, ignore resolve...
   } else {

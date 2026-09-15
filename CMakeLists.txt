@@ -12,6 +12,28 @@ project("OceanBase"
   HOMEPAGE_URL "https://www.oceanbase.ai"
   LANGUAGES CXX C ASM)
 
+include(cmake/Plugin.cmake)
+
+# The plugin runtime is the default execution path for optional extensions.
+# Phase 1 intentionally uses the local trusted verifier/loader without
+# signature trust; the runtime remains independently switchable for minimal
+# embedders that do not load any plugins.
+option(SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS
+  "Build the in-process plugin runtime" ON)
+
+# GIS algorithms and codecs live in plugins/gis by default.  Enabling this
+# option is a compatibility profile for deployments that still need the old
+# in-core implementation; it must not be used by the lightweight default.
+option(SEEKDB_ENABLE_CORE_GIS
+  "Build the legacy GIS algorithms and codecs inside the core" OFF)
+
+if(WIN32)
+  find_program(LLVM_LIB_PROGRAM llvm-lib)
+  if(LLVM_LIB_PROGRAM)
+    set(CMAKE_AR "${LLVM_LIB_PROGRAM}" CACHE FILEPATH "Archiver" FORCE)
+  endif()
+endif()
+
 option(OB_ENABLE_STANDBY "Build physical standby support" ON)
 option(ENABLE_SANITY "Build with seekdb memory Sanity instrumentation" OFF)
 
@@ -295,8 +317,8 @@ endif()
 # selected CMake build directory and expose its C ABI header to the migrated
 # src/oblib and Observer sources.
 include(cmake/Rust.cmake)
-include_directories("${CMAKE_SOURCE_DIR}/rust/sql-nio/include")
 
+add_subdirectory(plugins EXCLUDE_FROM_ALL)
 add_subdirectory(src)
 
 # Farm compile and pretest still publish and consume liboberror.so.  Keep the
@@ -331,4 +353,15 @@ elseif(SEEKDB_CMAKE_PACKAGE_FORMAT STREQUAL "TGZ")
   include(cmake/TGZ.cmake)
 elseif(SEEKDB_CMAKE_PACKAGE_FORMAT STREQUAL "WIX")
   include(cmake/WIX.cmake)
+endif()
+
+# Keep the plugin dependency boundary available independently of the legacy
+# module-layer checker, which is no longer part of the compatibility build.
+add_custom_target(plugin_boundary_check
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/cmake/plugin_boundary_check.py
+          ${CMAKE_SOURCE_DIR}
+  COMMENT "Checking seekdb core/SPI/plugin dependency boundary"
+  VERBATIM)
+if(TARGET seekdb)
+  add_dependencies(seekdb plugin_boundary_check)
 endif()

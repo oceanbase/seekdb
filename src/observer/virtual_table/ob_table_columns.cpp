@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 #include "observer/virtual_table/ob_table_columns.h"
 #include "observer/ob_server_runtime_access.h"
+#include "share/plugin/plugin_sql_type.h"
 #include "sql/resolver/ddl/ob_create_view_resolver.h"
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -307,9 +308,17 @@ int ObTableColumns::get_type_str(
   const uint64_t sub_type = static_cast<uint64_t>(column_schema.get_geo_type());
   int64_t pos = 0;
 
-  if (OB_FAIL(ob_sql_type_str(obj_meta, acc, type_info, default_length_semantics,
-                              column_type_str_, column_type_str_len_, pos, sub_type,
-                              column_schema.is_string_lob()))) {
+  if (plugin::is_plugin_sql_type(type_info)) {
+    const ObString &plugin_type_name = plugin::plugin_sql_type_name(type_info);
+    if (OB_FAIL(databuff_printf(column_type_str_, column_type_str_len_, pos,
+                                "%.*s", plugin_type_name.length(),
+                                plugin_type_name.ptr()))) {
+      SERVER_LOG(WARN, "failed to format plugin SQL type", K(ret));
+    }
+  } else if (OB_FAIL(ob_sql_type_str(obj_meta, acc, type_info,
+                                     default_length_semantics,
+                                     column_type_str_, column_type_str_len_, pos,
+                                     sub_type, column_schema.is_string_lob()))) {
     if (OB_MAX_SYS_PARAM_NAME_LENGTH == column_type_str_len_ && OB_SIZE_OVERFLOW == ret) {
       if (OB_UNLIKELY(NULL == (column_type_str_ = static_cast<char *>(allocator_->alloc(
                                OB_MAX_EXTENDED_TYPE_INFO_LENGTH))))) {

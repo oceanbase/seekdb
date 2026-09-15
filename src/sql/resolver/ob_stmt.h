@@ -157,7 +157,8 @@ public:
   {
     return (stmt_type >= stmt::T_SHOW_TABLES && stmt_type <= stmt::T_SHOW_GRANTS)
            || stmt_type == stmt::T_SHOW_TRIGGERS
-           || stmt_type == stmt::T_SHOW_CREATE_USER;
+           || stmt_type == stmt::T_SHOW_CREATE_USER
+           || stmt_type == stmt::T_SHOW_PLUGINS;
   }
 
   static inline bool is_dml_write_stmt(stmt::StmtType stmt_type)

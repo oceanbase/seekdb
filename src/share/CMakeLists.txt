@@ -9,5 +9,23 @@ ob_add_new_object_target(ob_share_extra ob_share_extra)
 target_link_libraries(ob_share PUBLIC ob_base)
 target_link_libraries(ob_share_extra PUBLIC ob_base_without_pass)
 
+if (SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS)
+  target_sources(ob_share PRIVATE
+    plugin/ob_plugin_catalog.cpp
+    plugin/ob_plugin_loader.cpp
+    plugin/ob_plugin_registry.cpp
+    plugin/ob_plugin_sql_catalog.cpp)
+  target_compile_definitions(ob_share PRIVATE
+    SEEKDB_ENABLE_CORE_GIS=$<BOOL:${SEEKDB_ENABLE_CORE_GIS}>)
+  target_link_libraries(ob_share PUBLIC seekdb_plugin_sdk)
+endif()
+
+if (NOT SEEKDB_ENABLE_CORE_GIS)
+  # The inventory-pruned core still needs the narrow ABI shims used by SQL
+  # expression adapters.  Geometry parsing and SRS/codec work is delegated to
+  # plugins; these definitions intentionally return OB_NOT_SUPPORTED.
+  target_sources(ob_share PRIVATE geo/ob_geo_plugin_stubs.cpp)
+endif()
+
 add_library(ob_share_static STATIC EXCLUDE_FROM_ALL)
 target_link_libraries(ob_share_static PUBLIC ob_share ob_share_extra)

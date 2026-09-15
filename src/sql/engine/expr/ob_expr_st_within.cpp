@@ -16,10 +16,14 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "share/geo/ob_geo_func_register.h"
 #include "ob_expr_st_within.h"
+#if SEEKDB_ENABLE_CORE_GIS
+#include "share/geo/ob_geo_func_register.h"
 #include "share/geo/ob_geo_cache.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -63,6 +67,9 @@ int ObExprSTWithin::calc_result_type2(ObExprResType &type,
 
 int ObExprSTWithin::eval_st_within(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  return execute_plugin_geometry_relation("st_within", expr, ctx, res);
+#else
   int ret = OB_SUCCESS;
   ObDatum *gis_datum1 = NULL;
   ObDatum *gis_datum2 = NULL;
@@ -191,6 +198,7 @@ int ObExprSTWithin::eval_st_within(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     }
   }
   return ret;
+#endif
 }
 
 int ObExprSTWithin::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,

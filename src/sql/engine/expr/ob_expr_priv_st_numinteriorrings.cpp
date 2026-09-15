@@ -16,7 +16,11 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_priv_st_numinteriorrings.h"
+#if SEEKDB_ENABLE_CORE_GIS
 #include "sql/engine/expr/ob_geo_expr_utils.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -56,6 +60,12 @@ int ObExprPrivSTNumInteriorRings::calc_result_type1(
 int ObExprPrivSTNumInteriorRings::eval_priv_st_numinteriorrings(
     const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  PluginInt32ResultSink sink{&res};
+  return execute_plugin_geometry_scalar("st_numinteriorrings", expr, ctx, res,
+                                       emit_plugin_int32_result,
+                                       reinterpret_cast<seekdb_plugin_host_handle_t *>(&sink));
+#else
   int ret = OB_SUCCESS;
   bool is_null_res = false;
   ObDatum *datum1 = nullptr;
@@ -104,6 +114,7 @@ int ObExprPrivSTNumInteriorRings::eval_priv_st_numinteriorrings(
   }
 
   return ret;
+#endif
 }
 
 int ObExprPrivSTNumInteriorRings::cg_expr(

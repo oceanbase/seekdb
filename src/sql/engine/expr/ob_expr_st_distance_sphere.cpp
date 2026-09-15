@@ -16,8 +16,12 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_st_distance_sphere.h"
+#if SEEKDB_ENABLE_CORE_GIS
 #include "share/geo/ob_geo_func_register.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
+#else
+#include "sql/engine/expr/ob_plugin_expr_utils.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -83,6 +87,9 @@ int ObExprSTDistanceSphere::eval_st_distance_sphere(const ObExpr &expr,
                                                     ObEvalCtx &ctx,
                                                     ObDatum &res)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  return execute_plugin_geometry_double("st_distance_sphere", expr, ctx, res);
+#else
   int ret = OB_SUCCESS;
   uint32_t arg_num = expr.arg_cnt_;
   bool is_null_result = false;
@@ -201,6 +208,7 @@ int ObExprSTDistanceSphere::eval_st_distance_sphere(const ObExpr &expr,
     }
   }
   return ret;
+#endif
 }
 
 int ObExprSTDistanceSphere::cg_expr(ObExprCGCtx &expr_cg_ctx,
