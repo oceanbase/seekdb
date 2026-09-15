@@ -1,0 +1,28 @@
+drop table if exists pd_decimal_small, pd_decimal_large, pd_binary, pd_text, pd_ci, pd_bin;
+create table pd_decimal_small(c decimal(10));
+create table pd_decimal_large(c decimal(20));
+insert into pd_decimal_small values (10),(20),(50),(NULL);
+insert into pd_decimal_large values (10),(20),(40),(NULL);
+explain select a.c,b.c from pd_decimal_small a, pd_decimal_large b where a.c=b.c and b.c in (10,20,40);
+select a.c,b.c from pd_decimal_small a, pd_decimal_large b where a.c=b.c and b.c in (10,20,40) order by a.c;
+c	c
+10	10
+20	20
+create table pd_binary(c varbinary(20));
+create table pd_text(c varchar(20));
+insert into pd_binary values ('a'),('b'),('A'),(NULL);
+insert into pd_text values ('a'),('b'),('A'),(NULL);
+explain select a.c,b.c from pd_binary a, pd_text b where a.c=b.c and a.c in ('a','b','c');
+select a.c,b.c from pd_binary a, pd_text b where a.c=b.c and a.c in ('a','b','c') order by a.c,b.c;
+c	c
+a	a
+b	b
+create table pd_ci(c varchar(32) collate utf8mb4_general_ci);
+create table pd_bin(c varchar(36) collate utf8mb4_bin);
+insert into pd_ci values ('a'),('A'),('b'),(NULL);
+insert into pd_bin values ('a'),('b'),('c'),(NULL);
+explain select /*+no_rewrite*/ count(*) from (select a.c from pd_ci a join pd_bin b on a.c=b.c where b.c in ('a','b')) v;
+select /*+no_rewrite*/ count(*) from (select a.c from pd_ci a join pd_bin b on a.c=b.c where b.c in ('a','b')) v;
+count(*)
+2
+drop table pd_decimal_small, pd_decimal_large, pd_binary, pd_text, pd_ci, pd_bin;
