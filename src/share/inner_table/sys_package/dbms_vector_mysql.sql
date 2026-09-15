@@ -46,4 +46,10 @@ CREATE OR REPLACE PACKAGE dbms_vector AUTHID CURRENT_USER
     IN     idx_parameters    LONGTEXT DEFAULT NULL)
   RETURN VARCHAR(65535);
 
+  PROCEDURE batch_knn(
+    IN     index_table    VARCHAR(65535),
+    IN     probe_table    VARCHAR(65535),
+    IN     topk           INT,
+    IN     out_table      VARCHAR(65535));
+
 END dbms_vector;

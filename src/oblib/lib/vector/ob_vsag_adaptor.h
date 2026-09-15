@@ -159,6 +159,31 @@ int get_extra_info_by_ids(VectorIndexPtr& index_handler,
                           char *extra_infos);
 int immutable_optimize(VectorIndexPtr& index_handler);
 
+// [hipVS/cuVS] GPU CAGRA kNN backend (see docs/gpu-vector-index-hipvs-cuvs).
+int cuvs_cagra_knn(const float *base, long n, long dim,
+                   const float *query, long nq, long topk, unsigned int *out_ids);
+
+
+// [hipVS/cuVS] BATCH ANN entry: nq probe vectors -> ONE GPU call over an
+// add_index-buffered index. out_ids/out_dist are caller-allocated [nq*topk].
+// Returns #queries served (nq) or 0 to fall back to CPU. Seam for a batched
+// vector operator (similarity JOIN / bulk ANN); single-query SQL gets no GPU win.
+long cuvs_knn_search_batch(void *key, const float *queries, long nq, long topk,
+                           int64_t *out_ids, float *out_dist);
+
+
+// [hipVS/cuVS] One-shot RAW batch ANN (build CAGRA + batch-search + free) for
+// dbms_vector.batch_knn. out_ids/out_dist caller-allocated [nq*topk]; out_ids =
+// cuVS row offsets. Returns nq on success, 0 when the GPU backend does not serve.
+long cuvs_batch_knn(const float *base, long n, long dim,
+                    const float *query, long nq, long topk,
+                    unsigned int *out_ids, float *out_dist);
+
+// [hipVS/cuVS] Per-index opt-in: plugin marks/unmarks a handle when the vector
+// index was declared WITH (lib=cuvs). Marked handles use the GPU path.
+void mark_cuvs_index(void *key);
+void unmark_cuvs_index(void *key);
+
 } // namesapce obvsag
 } // namespace common
 } // namespace oceanbase
