@@ -360,6 +360,13 @@ int ObServer::wait_until_refreshed(
   return share::ObChangeStreamMgr::wait_refresh_scn(
       mysql_proxy, timeout_us);
 }
+
+int ObServer::get_min_dep_lsn(palf::LSN &min_dep_lsn)
+{
+  return OB_ISNULL(mods_change_stream_mgr_)
+      ? common::OB_NOT_INIT
+      : mods_change_stream_mgr_->get_min_dep_lsn(min_dep_lsn);
+}
 } // namespace observer
 } // namespace oceanbase
 using namespace oceanbase::share::schema;

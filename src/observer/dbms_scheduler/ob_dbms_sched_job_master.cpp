@@ -21,6 +21,7 @@
 #include "share/ob_ex_rpc.h"
 #include "share/ob_share_util.h"
 #include "sql/session/ob_basic_session_info.h"
+#include "sql/optimizer/stat/ob_dbms_stats_maintenance_window.h"
 #define TO_TS(second) (1000000L * second)
 namespace oceanbase
 {
@@ -34,6 +35,14 @@ using namespace obcall;
 
 namespace dbms_scheduler
 {
+
+static bool is_timer_driven_job(const ObDBMSSchedJobInfo &job_info)
+{
+  // The name check protects upgraded processes until the idempotent flag
+  // migration has completed.
+  return job_info.is_timer_driven()
+      || ObDbmsStatsMaintenanceWindow::is_async_gather_stats_job(job_info.job_name_);
+}
 
 int ObDBMSSchedJobMaster::init(common::ObMySQLProxy *sql_proxy,
                           ObMultiVersionSchemaService *schema_service)
@@ -242,6 +251,10 @@ int ObDBMSSchedJobMaster::scheduler_job(ObDBMSSchedJobKey *job_key)
       free_job_key(job_key);
       job_key = NULL;
       LOG_INFO("free invalid job", K(job_info));
+    } else if (is_timer_driven_job(job_info)) {
+      free_job_key(job_key);
+      job_key = NULL;
+      LOG_INFO("free timer-driven job from generic scheduler", K(job_info));
     } else if (job_info.is_running()) {
       if (now > job_info.get_this_date() + TO_TS(job_info.get_max_run_duration())) {
         if (OB_FAIL(table_operator_.update_for_timeout(job_info))) {
@@ -390,7 +403,20 @@ int ObDBMSSchedJobMaster::register_new_jobs(ObIArray<ObDBMSSchedJobInfo> &job_in
   ObDBMSSchedJobInfo job_info;
   for (int64_t i = 0; OB_SUCC(ret) && i < job_infos.count(); i++) {
     job_info = job_infos.at(i);
-    if (job_info.valid() && !job_info.is_disabled() && !job_info.is_broken()) {
+    if (is_timer_driven_job(job_info)) {
+      int tmp = alive_jobs_.exist_refactored(job_info.get_job_id());
+      if (OB_HASH_EXIST == tmp) {
+        common::ObSortedVector<ObDBMSSchedJobKey *>::iterator iter;
+        for (iter = wait_vector_.begin(); iter != wait_vector_.end(); ++iter) {
+          ObDBMSSchedJobKey *exist_key = *iter;
+          if (exist_key->get_job_id() == job_info.get_job_id()) {
+            wait_vector_.remove(iter);
+            free_job_key(exist_key);
+            break;
+          }
+        }
+      }
+    } else if (job_info.valid() && !job_info.is_disabled() && !job_info.is_broken()) {
       int tmp = alive_jobs_.exist_refactored(job_info.get_job_id());
       if (OB_HASH_EXIST == tmp) {
         // Job exists in memory, but its NEXT_DATE may have changed (e.g. via set_attribute).

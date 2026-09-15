@@ -53,7 +53,7 @@ int ObGlobalStatProxy::set_init_value(
     ObGlobalStatItem snapshot_gc_scn_item(list, "snapshot_gc_scn", snapshot_gc_scn.get_val_for_inner_table_field());
     ObGlobalStatItem gc_schema_version_item(list, "gc_schema_version", gc_schema_version);
     ObGlobalStatItem ddl_epoch_item(list, "ddl_epoch", ddl_epoch);
-    ObGlobalStatItem change_stream_refresh_scn_item(list, "change_stream_refresh_scn", 0);
+    ObGlobalStatItem change_stream_applied_scn_item(list, "change_stream_applied_scn", 0);
     ObGlobalStatItem change_stream_min_dep_lsn_item(list, "change_stream_min_dep_lsn", 0);
 
     if (OB_FAIL(update(list))) {
@@ -398,40 +398,40 @@ int ObGlobalStatProxy::select_ddl_epoch_for_update(
 }
 
 // ---------------------------------------------------------------------------
-// Change Stream: advance change_stream_refresh_scn in __all_global_stat.
+// Change Stream: advance change_stream_applied_scn in __all_global_stat.
 // Only advances (UPDATE … WHERE column_value < new_val) to guarantee monotonic progress.
 // ---------------------------------------------------------------------------
-int ObGlobalStatProxy::advance_change_stream_refresh_scn(
+int ObGlobalStatProxy::advance_change_stream_applied_scn(
     common::ObISQLClient &sql_client,
-    const SCN &refresh_scn,
+    const SCN &applied_scn,
     int64_t &affected_rows)
 {
   int ret = OB_SUCCESS;
   affected_rows = 0;
-  if (!refresh_scn.is_valid()) {
+  if (!applied_scn.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(refresh_scn));
+    LOG_WARN("invalid argument", KR(ret), K(applied_scn));
   } else {
     ObSqlString sql;
-    const uint64_t scn_val = refresh_scn.get_val_for_inner_table_field();
+    const uint64_t scn_val = applied_scn.get_val_for_inner_table_field();
     if (OB_FAIL(sql.assign_fmt(
         "UPDATE %s SET column_value = %lu WHERE table_name = '%s' AND "
         "column_name = '%s' AND column_value < %lu",
         OB_ALL_CORE_TABLE_TNAME, scn_val,
-        "__all_global_stat", "change_stream_refresh_scn", scn_val))) {
+        "__all_global_stat", "change_stream_applied_scn", scn_val))) {
     } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
     }
   }
   return ret;
 }
 
-int ObGlobalStatProxy::get_change_stream_refresh_scn(
+int ObGlobalStatProxy::get_change_stream_applied_scn(
     common::ObISQLClient &sql_client,
     const bool for_update,
-    SCN &refresh_scn)
+    SCN &applied_scn)
 {
   int ret = OB_SUCCESS;
-  refresh_scn.reset();
+  applied_scn.reset();
   {
     ObSqlString sql;
     const char *for_update_str = for_update ? "FOR UPDATE" : "";
@@ -440,7 +440,7 @@ int ObGlobalStatProxy::get_change_stream_refresh_scn(
       if (OB_FAIL(sql.assign_fmt(
           "SELECT column_value FROM %s WHERE table_name = '%s' AND column_name = '%s' %s",
           OB_ALL_CORE_TABLE_TNAME,
-          "__all_global_stat", "change_stream_refresh_scn", for_update_str))) {
+          "__all_global_stat", "change_stream_applied_scn", for_update_str))) {
       } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
@@ -455,7 +455,7 @@ int ObGlobalStatProxy::get_change_stream_refresh_scn(
           const int64_t str_len = column_value_str.length();
           const int64_t buf_len = sizeof(buf);
           if (str_len <= 0 || column_value_str.empty()) {
-            refresh_scn = SCN::min_scn();
+            applied_scn = SCN::min_scn();
           } else if (str_len >= buf_len) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("buf not enough for column_value", KR(ret), K(str_len));
@@ -465,8 +465,8 @@ int ObGlobalStatProxy::get_change_stream_refresh_scn(
             const uint64_t scn_val = strtoull(buf, &endptr, 0);
             if ('\0' != *endptr) {
               ret = OB_INVALID_DATA;
-              LOG_WARN("invalid column_value for change_stream_refresh_scn", KR(ret), K(column_value_str));
-            } else if (OB_FAIL(refresh_scn.convert_for_inner_table_field(scn_val))) {
+              LOG_WARN("invalid column_value for change_stream_applied_scn", KR(ret), K(column_value_str));
+            } else if (OB_FAIL(applied_scn.convert_for_inner_table_field(scn_val))) {
             }
           }
         }

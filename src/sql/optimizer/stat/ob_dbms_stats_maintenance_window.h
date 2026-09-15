@@ -22,6 +22,7 @@
 #include "share/schema/ob_schema_struct.h"
 #include "share/ob_dml_sql_splicer.h"
 #include "sql/session/ob_sql_session_info.h"
+#include "sql/optimizer/stat/ob_stat_define.h"
 
 #define DAY_OF_WEEK 7
 #define HOUR_OF_DAY  24
@@ -37,7 +38,6 @@
 #define DEFAULT_NON_WORKING_DAY_DURATION_USEC (20 * 60 * 60 * 1000000LL)
 #define DEFAULT_HISTORY_MANAGER_DURATION_SEC (12 * 60 * 60)
 #define DEFAULT_ASYNC_GATHER_STATS_DURATION_SEC (10 * 60)
-#define DEFAULT_ASYNC_GATHER_STATS_INTERVAL_USEC (15 * 60 * 1000000LL)
 
 namespace oceanbase {
 
@@ -67,6 +67,13 @@ public:
   static int check_job_exists(common::ObMySQLProxy *sql_proxy,
                               const char* job_name,
                               bool &is_join_exists);
+
+  static int check_async_gather_stats_job_available(common::ObMySQLProxy *sql_proxy,
+                                                     bool &is_available);
+
+  static int ensure_async_gather_stats_job_timer_driven(common::ObMySQLProxy *sql_proxy);
+
+  static bool is_async_gather_stats_job(const ObString &job_name);
                                             
   static int get_time_zone_offset(const share::schema::ObSysVariableSchema &sys_variable,
                                   int32_t &offset_sec);

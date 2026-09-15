@@ -1329,6 +1329,7 @@ int ObServer::obs_construct_modules()
     BIND_SERVICE(global_iterator_pool, storage::ObGlobalIteratorPool);
     BIND_SERVICE(diagnose_tablet_mgr, compaction::ObDiagnoseTabletMgr);
     BIND_SERVICE(change_stream_mgr, share::ObChangeStreamMgr);
+    BIND_SERVICE(change_stream_service, query::ObIChangeStreamService);
     BIND_SERVICE(vector_index_service, query::ObIVectorIndexService);
     BIND_SERVICE(data_access_service, sql::ObDataAccessService);
     BIND_SERVICE(dag_warning_history_manager, share::ObDagWarningHistoryManager);
@@ -1779,6 +1780,7 @@ void ObServer::obs_destroy_modules()
   UNBIND_SERVICE(storage::ObGlobalIteratorPool);
   UNBIND_SERVICE(compaction::ObDiagnoseTabletMgr);
   UNBIND_SERVICE(share::ObChangeStreamMgr);
+  UNBIND_SERVICE(query::ObIChangeStreamService);
   UNBIND_SERVICE(query::ObIVectorIndexService);
   UNBIND_SERVICE(sql::ObDataAccessService);
   UNBIND_SERVICE(share::ObDagWarningHistoryManager);

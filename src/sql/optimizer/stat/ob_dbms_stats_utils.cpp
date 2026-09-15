@@ -229,6 +229,45 @@ int ObDbmsStatsUtils::check_is_stat_table(share::schema::ObSchemaGetterGuard &sc
   return ret;
 }
 
+bool ObDbmsStatsUtils::is_automatic_stat_monitoring_table(const int64_t table_id)
+{
+  const uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(table_id);
+  return !share::schema::ObSysTableChecker::is_sys_table_index_tid(pure_table_id)
+      && !is_sys_lob_table(pure_table_id)
+      && pure_table_id != share::OB_ALL_CORE_TABLE_TID
+      && pure_table_id != share::OB_ALL_TABLE_STAT_TID
+      && pure_table_id != share::OB_ALL_COLUMN_STAT_TID
+      && pure_table_id != share::OB_ALL_HISTOGRAM_STAT_TID
+      && pure_table_id != share::OB_ALL_TABLE_STAT_HISTORY_TID
+      && pure_table_id != share::OB_ALL_COLUMN_STAT_HISTORY_TID
+      && pure_table_id != share::OB_ALL_HISTOGRAM_STAT_HISTORY_TID
+      && pure_table_id != share::OB_ALL_AUX_STAT_TID
+      && pure_table_id != share::OB_ALL_SYS_STAT_TID
+      && pure_table_id != share::OB_ALL_OPTSTAT_GLOBAL_PREFS_TID
+      && pure_table_id != share::OB_ALL_OPTSTAT_USER_PREFS_TID
+      && pure_table_id != share::OB_ALL_COLUMN_USAGE_TID
+      && pure_table_id != share::OB_ALL_MONITOR_MODIFIED_TID
+      && pure_table_id != share::OB_ALL_SYS_VARIABLE_TID
+      && pure_table_id != share::OB_ALL_SYS_VARIABLE_HISTORY_TID
+      && pure_table_id != share::OB_ALL_SCHEDULER_JOB_TID
+      && pure_table_id != share::OB_ALL_SCHEDULER_PROGRAM_TID
+      && pure_table_id != share::OB_ALL_SCHEDULER_PROGRAM_ARGUMENT_TID
+      && pure_table_id != share::OB_ALL_SCHEDULER_JOB_CLASS_TID
+      // Executing a stored PL action refreshes its dependency rows.  Monitoring
+      // those writes makes the asynchronous statistics job schedule itself
+      // again even when no application table has changed.
+      && pure_table_id != share::OB_ALL_DEPENDENCY_TID;
+}
+
+bool ObDbmsStatsUtils::is_automatic_column_usage_table(const int64_t table_id)
+{
+  const uint64_t pure_table_id = share::schema::ObSchemaUtils::get_extract_schema_id(table_id);
+  // Column usage guides user-table statistics collection.  Recording predicates
+  // from internal background SQL creates periodic writes even on an idle server.
+  return !is_inner_table(pure_table_id)
+      && is_automatic_stat_monitoring_table(table_id);
+}
+
 int ObDbmsStatsUtils::check_is_sys_table(share::schema::ObSchemaGetterGuard &schema_guard,
                                          const int64_t table_id,
                                          bool &is_valid)
@@ -248,6 +287,7 @@ int ObDbmsStatsUtils::check_is_sys_table(share::schema::ObSchemaGetterGuard &sch
       table_id == share::OB_ALL_HISTOGRAM_STAT_HISTORY_TID ||
       table_id == share::OB_ALL_OPTSTAT_GLOBAL_PREFS_TID ||//circular dependency
       table_id == share::OB_ALL_OPTSTAT_USER_PREFS_TID ||
+      table_id == share::OB_ALL_COLUMN_USAGE_TID ||
 //bug:
       table_id == share::OB_ALL_SYS_VARIABLE_TID ||//circular dependency
       table_id == share::OB_ALL_SYS_VARIABLE_HISTORY_TID ||//circular dependency
