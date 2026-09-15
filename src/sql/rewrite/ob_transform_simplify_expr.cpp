@@ -23,6 +23,23 @@
 
 using namespace oceanbase::sql;
 
+namespace
+{
+bool is_row_cmp_expr(const ObRawExpr *expr)
+{
+  bool bret = false;
+  if (OB_NOT_NULL(expr)
+      && IS_COMMON_COMPARISON_OP(expr->get_expr_type())
+      && 2 == expr->get_param_count()
+      && OB_NOT_NULL(expr->get_param_expr(0))
+      && OB_NOT_NULL(expr->get_param_expr(1))) {
+    bret = T_OP_ROW == expr->get_param_expr(0)->get_expr_type()
+        || T_OP_ROW == expr->get_param_expr(1)->get_expr_type();
+  }
+  return bret;
+}
+}
+
 int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt> &parent_stmts,
                                                 ObDMLStmt *&stmt,
                                                 bool &trans_happened)
@@ -1480,10 +1497,13 @@ int ObTransformSimplifyExpr::do_convert_nvl_predicate(ObDMLStmt *stmt,
         // IF exp2 ~ exp3 ≡ FALSE, NVL(exp1, exp2) ~ exp3 -> exp1 is not null and exp1 ~ exp3
         // IF exp2 ~ exp3 ≡ TRUE,  NVL(exp1, exp2) ~ exp3 -> exp1 is null or exp1 ~ exp3
         ObRawExpr *exp1_cmp_exp3 = NULL;
-        if (OB_FAIL(ObTransformUtils::add_cast_for_replace_if_need(*ctx_->expr_factory_,
-                                                                   nvl_expr,
-                                                                   exp1,
-                                                                   ctx_->session_info_))) {
+        if (is_row_cmp_expr(exp1)) {
+          // Keep row comparisons intact; splitting them out of NVL can move multi-column predicates
+          // across joins before their operands are available.
+        } else if (OB_FAIL(ObTransformUtils::add_cast_for_replace_if_need(*ctx_->expr_factory_,
+                                                                          nvl_expr,
+                                                                          exp1,
+                                                                          ctx_->session_info_))) {
         } else if (OB_FAIL(ObRawExprUtils::create_double_op_expr(*(ctx_->expr_factory_),
                                                           ctx_->session_info_,
                                                           parent_expr->get_expr_type(),
