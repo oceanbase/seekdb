@@ -899,6 +899,9 @@ int ObTransformSimplifyExpr::inner_remove_dummy_expr(ObRawExpr *&expr,
         if (OB_ISNULL(temp)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("null expr", K(ret));
+        } else if (!temp->is_static_scalar_const_expr()) {
+          // Only static predicates are candidates for optimizer-side warning
+          // probing here. Non-static branches stay on the execution path.
         } else if (OB_FAIL(ObTransformUtils::check_error_free_expr(temp, is_error_free))) {
         } else if (!is_error_free && OB_FAIL(has_scalar_in_predicate(temp, has_in))) {
         } else if (!is_error_free && has_in) {
@@ -925,7 +928,10 @@ int ObTransformSimplifyExpr::inner_remove_dummy_expr(ObRawExpr *&expr,
         bool has_warning = false;
         bool is_true = false;
         bool is_false = false;
-        if (OB_FAIL(ObTransformUtils::check_static_expr_has_warning(ctx_, op_expr, has_warning))) {
+        if (!op_expr->is_static_scalar_const_expr()) {
+          // Avoid recursively probing non-static boolean trees while preserving
+          // the normal short-circuit fold.
+        } else if (OB_FAIL(ObTransformUtils::check_static_expr_has_warning(ctx_, op_expr, has_warning))) {
         } else if (has_warning
                    && OB_FAIL(ObTransformUtils::extract_const_bool_expr_result(ctx_,
                                                                                op_expr,
@@ -1023,7 +1029,16 @@ int ObTransformSimplifyExpr::adjust_dummy_expr(const ObIArray<int64_t> &true_exp
         bool cur_cache_safe = true;
         bool has_in = false;
         const bool checked_expr_was_evaluated = ObOptimizerUtil::find_item(op_params, check_exprs.at(i));
-        if (OB_FAIL(ObTransformUtils::check_error_free_expr(check_exprs.at(i), cur_cache_safe))) {
+        if (OB_ISNULL(check_exprs.at(i))) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("null expr", K(ret));
+        } else if (!check_exprs.at(i)->is_static_scalar_const_expr()) {
+          if (remove_all) {
+            // Folding the whole AND/OR would drop this non-static branch. Keep
+            // the original predicate instead of recursively proving it safe.
+            is_error_free = false;
+          }
+        } else if (OB_FAIL(ObTransformUtils::check_error_free_expr(check_exprs.at(i), cur_cache_safe))) {
         } else if (!cur_cache_safe && OB_FAIL(has_scalar_in_predicate(check_exprs.at(i), has_in))) {
         } else if (!cur_cache_safe && has_in) {
           has_uncacheable_in_expr = true;
