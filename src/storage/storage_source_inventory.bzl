@@ -731,6 +731,7 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/tablelock/ob_lock_table.cpp",
             "src/storage/tablelock/ob_lock_utils.cpp",
             "src/storage/tablelock/ob_mem_ctx_table_lock.cpp",
+            "src/storage/tablelock/ob_named_lock_manager.cpp",
             "src/storage/tablelock/ob_obj_lock.cpp",
             "src/storage/tablelock/ob_table_lock_callback.cpp",
             "src/storage/tablelock/ob_table_lock_common.cpp",

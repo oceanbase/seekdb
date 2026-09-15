@@ -17,6 +17,9 @@
 #ifndef OB_ALL_VIRTUAL_OB_OBJ_LOCK_H_
 #define OB_ALL_VIRTUAL_OB_OBJ_LOCK_H_
 
+#include <vector>
+
+#include "storage/tablelock/ob_named_lock_manager.h"
 #include "storage/tablelock/ob_obj_lock.h"
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 
@@ -46,6 +49,10 @@ private:
   int get_next_lock_op_iter_from_tx_ctx();
   int get_next_lock_op_iter_from_lock_memtable();
   int prepare_start_to_read();
+  int prepare_named_lock_snapshot();
+  int get_next_named_lock_op(transaction::tablelock::ObTableLockOp &lock_op,
+                             transaction::tablelock::ObTableLockPriority &priority,
+                             const transaction::tablelock::NamedLockManager::LockSnapshot *&snapshot);
 
 private:
   enum
@@ -65,7 +72,8 @@ private:
     OBJ_ID,
     OWNER_TYPE,
     PRIORITY,
-    WAIT_SEQ
+    WAIT_SEQ,
+    OBJ_NAME
   };
 private:
   storage::ObLS *ls_;
@@ -80,6 +88,9 @@ private:
   ObPrioOpIterator prio_op_iter_;
   // whether iterate tx or not now.
   bool is_iter_tx_;
+  bool is_iter_named_lock_;
+  std::vector<transaction::tablelock::NamedLockManager::LockSnapshot> named_lock_snapshot_;
+  int64_t named_lock_snapshot_idx_;
   bool is_iter_priority_list_;
   char lock_id_buf_[common::MAX_LOCK_ID_BUF_LENGTH];
   char lock_mode_buf_[common::MAX_LOCK_MODE_BUF_LENGTH];
