@@ -60,8 +60,7 @@ public:
 
   virtual void reset() {}
 
-  virtual int submit_log(const char *buf,
-                         const int64_t size,
+  virtual int submit_log(palf::PalfLogBuffer &buffer,
                          const share::SCN &base_ts,
                          ObTxBaseLogCb *cb,
                          const bool need_nonblock,
@@ -79,12 +78,11 @@ public:
   void reset();
 
   int init(ObITxLogParam *param, ObTxTable *tx_table);
-  int submit_log(const char *buf,
-                 const int64_t size,
+  int submit_log(palf::PalfLogBuffer &buffer,
                  const share::SCN &base_ts,
                  ObTxBaseLogCb *cb,
                  const bool need_nonblock,
-                 const int64_t retry_timeout_us = 1000);
+                 const int64_t retry_timeout_us = 1000) override;
   int get_max_decided_scn(share::SCN &scn);
 
   int get_append_mode_initial_scn(share::SCN &ref_scn);

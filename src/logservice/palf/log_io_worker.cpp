@@ -18,6 +18,7 @@
 
 #include "log_io_worker.h"
 #include "palf_env_impl.h"                    // PalfEnvImpl
+#include "palf_handle_impl_guard.h"            // IPalfHandleImplGuard
 
 namespace oceanbase
 {
@@ -32,6 +33,7 @@ LogIOWorker::LogIOWorker()
       do_task_count_(0),
       print_log_interval_(OB_INVALID_TIMESTAMP),
       last_working_time_(OB_INVALID_TIMESTAMP),
+      last_dio_aligned_buf_check_ts_(OB_INVALID_TIMESTAMP),
       throttle_(NULL),
       log_io_worker_queue_size_stat_("[PALF STAT LOG IO WORKER QUEUE SIZE]", PALF_STAT_PRINT_INTERVAL_US),
       purge_throttling_task_submitted_seq_(0),
@@ -77,6 +79,7 @@ int LogIOWorker::init(const LogIOWorkerConfig &config,
     purge_throttling_task_submitted_seq_ = 0;
     purge_throttling_task_handled_seq_ = 0;
     need_ignoring_throttling_ = need_igore_throttle;
+    last_dio_aligned_buf_check_ts_ = ObTimeUtility::fast_current_time();
     need_purging_throttling_func_ = [this](){
       return has_purge_throttling_tasks_() > 0;
     };
@@ -104,6 +107,7 @@ void LogIOWorker::destroy()
   purge_throttling_task_handled_seq_ = 0;
   purge_throttling_task_submitted_seq_ = 0;
   last_working_time_ = OB_INVALID_TIMESTAMP;
+  last_dio_aligned_buf_check_ts_ = OB_INVALID_TIMESTAMP;
   throttle_ = NULL;
   cb_thread_pool_ = NULL;
   palf_env_impl_ = NULL;
@@ -223,11 +227,19 @@ int LogIOWorker::run_loop_()
   while (false == has_set_stop()
       && false == (OB_NOT_NULL(&lib::Thread::current()) ? lib::Thread::current().has_set_stop() : false)) {
     ObLink *task = NULL;
-    if (OB_SUCC(queue_.pop(task, QUEUE_WAIT_TIME))) {
+    const int pop_ret = queue_.pop(task, QUEUE_WAIT_TIME);
+    if (OB_SUCCESS == pop_ret) {
       ATOMIC_STORE(&last_working_time_, common::ObTimeUtility::fast_current_time());
       update_throttling_options_();
       ret = reduce_io_task_(task);
       ATOMIC_STORE(&last_working_time_, OB_INVALID_TIMESTAMP);
+    }
+    const int64_t now = ObTimeUtility::fast_current_time();
+    if (last_dio_aligned_buf_check_ts_ == OB_INVALID_TIMESTAMP
+        || now - last_dio_aligned_buf_check_ts_
+               >= LOG_DIO_ALIGNED_BUF_RELEASE_CHECK_INTERVAL_US) {
+      last_dio_aligned_buf_check_ts_ = now;
+      try_release_dio_aligned_buf_(now);
     }
     if (queue_.size() > 0) {
       log_io_worker_queue_size_stat_.stat(queue_.size());
@@ -248,6 +260,21 @@ int LogIOWorker::run_loop_()
     CLOG_LOG(INFO, "after LogIOWorker destory", KPC(this), KPC(allocator));
   }
   return ret;
+}
+
+void LogIOWorker::try_release_dio_aligned_buf_(const int64_t now)
+{
+  int tmp_ret = OB_SUCCESS;
+  IPalfHandleImplGuard guard;
+  if (OB_ISNULL(palf_env_impl_)) {
+  } else if (OB_SUCCESS != (tmp_ret = palf_env_impl_->get_palf_handle_impl(guard))) {
+    if (OB_ENTRY_NOT_EXIST != tmp_ret) {
+      PALF_LOG_RET(WARN, tmp_ret, "get palf handle for releasing idle DIO buffer failed", K(tmp_ret));
+    }
+  } else {
+    guard.get_palf_handle_impl()->release_dio_aligned_buf_if_idle(
+        now, LOG_DIO_ALIGNED_BUF_IDLE_TIMEOUT_US);
+  }
 }
 
 bool LogIOWorker::need_reduce_(LogIOTask *io_task)

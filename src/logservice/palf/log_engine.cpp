@@ -172,6 +172,15 @@ void LogEngine::destroy()
   }
 }
 
+void LogEngine::release_dio_aligned_buf_if_idle(const int64_t now,
+                                                 const int64_t idle_timeout_us)
+{
+  if (IS_INIT) {
+    log_storage_.release_dio_aligned_buf_if_idle(now, idle_timeout_us);
+    log_meta_storage_.release_dio_aligned_buf_if_idle(now, idle_timeout_us);
+  }
+}
+
 int LogEngine::load(const char *base_dir,
                     common::ObILogAllocator *alloc_mgr,
                     ILogBlockPool *log_block_pool,
@@ -309,6 +318,32 @@ int LogEngine::submit_flush_log_task(const FlushLogCbCtx &flush_log_cb_ctx,
   } else if (OB_FAIL(generate_flush_log_task_(flush_log_cb_ctx, write_buf, flush_log_task))) {
   } else if (OB_FAIL(log_io_worker_->submit_io_task(flush_log_task))) {
   } else {
+  }
+  if (OB_FAIL(ret) && OB_NOT_NULL(flush_log_task)) {
+    alloc_mgr_->free_log_io_flush_log_task(flush_log_task);
+    flush_log_task = NULL;
+  }
+  return ret;
+}
+
+int LogEngine::submit_flush_log_task(const FlushLogCbCtx &flush_log_cb_ctx,
+                                     LogGroupWriteBuf &group_write_buf)
+{
+  int ret = OB_SUCCESS;
+  LogIOFlushLogTask *flush_log_task = NULL;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (false == flush_log_cb_ctx.is_valid() || !group_write_buf.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(generate_flush_log_task_(flush_log_cb_ctx, group_write_buf,
+                                              flush_log_task))) {
+    PALF_LOG(ERROR, "generate owned flush log task failed", K(ret), K(flush_log_cb_ctx));
+  } else if (OB_FAIL(log_io_worker_->submit_io_task(flush_log_task))) {
+    PALF_LOG(WARN, "submit owned io task failed", K(ret));
+    int tmp_ret = flush_log_task->move_group_write_buf_to(group_write_buf);
+    if (OB_SUCCESS != tmp_ret) {
+      PALF_LOG(ERROR, "restore owned group after enqueue failure failed", K(tmp_ret));
+    }
   }
   if (OB_FAIL(ret) && OB_NOT_NULL(flush_log_task)) {
     alloc_mgr_->free_log_io_flush_log_task(flush_log_task);
@@ -878,6 +913,32 @@ int LogEngine::generate_flush_log_task_(const FlushLogCbCtx &flush_log_cb_ctx,
     PALF_LOG(ERROR, "alloc_log_io_flush_log_task failed", K(ret));
   } else if (OB_FAIL(flush_log_task->init(flush_log_cb_ctx, write_buf))) {
   } else {/*do nothing*/}
+  if (OB_FAIL(ret) && NULL != flush_log_task) {
+    alloc_mgr_->free_log_io_flush_log_task(flush_log_task);
+    flush_log_task = NULL;
+  }
+  return ret;
+}
+
+int LogEngine::generate_flush_log_task_(const FlushLogCbCtx &flush_log_cb_ctx,
+                                        LogGroupWriteBuf &group_write_buf,
+                                        LogIOFlushLogTask *&flush_log_task)
+{
+  int ret = OB_SUCCESS;
+  flush_log_task = NULL;
+  if (false == flush_log_cb_ctx.is_valid() || !group_write_buf.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (NULL == (flush_log_task = alloc_mgr_->alloc_log_io_flush_log_task(palf_epoch_))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(flush_log_task->init(flush_log_cb_ctx, group_write_buf))) {
+    PALF_LOG(ERROR, "init owned LogIOFlushLogTask failed", K(ret));
+    if (!group_write_buf.is_valid()) {
+      int tmp_ret = flush_log_task->move_group_write_buf_to(group_write_buf);
+      if (OB_SUCCESS != tmp_ret) {
+        PALF_LOG(ERROR, "restore group after task init failure failed", K(tmp_ret));
+      }
+    }
+  }
   if (OB_FAIL(ret) && NULL != flush_log_task) {
     alloc_mgr_->free_log_io_flush_log_task(flush_log_task);
     flush_log_task = NULL;

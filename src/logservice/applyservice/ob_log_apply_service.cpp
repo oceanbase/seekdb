@@ -15,6 +15,7 @@
  */
 
 #include "ob_log_apply_service.h"
+#include "lib/ob_abort.h"
 #include "logservice/ob_append_callback.h"
 #include "logservice/ob_i_log_storage.h"
 #include "logservice/palf/palf_env.h"
@@ -26,6 +27,16 @@ using namespace storage;
 using namespace share;
 namespace logservice
 {
+namespace
+{
+void revoke_task_lease_until_idle(ObApplyServiceTask &task)
+{
+  while (!task.revoke_lease()) {
+    PAUSE();
+  }
+}
+} // namespace
+
 //---------------ObApplyFsCb---------------//
 ObApplyFsCb::ObApplyFsCb()
   : apply_status_(NULL)
@@ -389,8 +400,16 @@ int ObApplyStatus::push_append_cb(AppendCb *cb)
       palf_committed_end_lsn.val_ = ATOMIC_LOAD(&palf_committed_end_lsn_.val_);
       if (cb_lsn < palf_committed_end_lsn) {
         // The cb that needs to call on_success should actively trigger the push into the thread pool when entering the queue
-        if (OB_FAIL(submit_task_to_apply_service_(cb_queues_[thread_index]))) {
-        } else {
+        int tmp_ret = OB_SUCCESS;
+        if (OB_SUCCESS != (tmp_ret = submit_task_to_apply_service_(cb_queues_[thread_index]))) {
+          // The callback is already owned by cb_queues_.  A scheduling failure
+          // must not be returned as an append failure, otherwise the caller may
+          // release the queued callback or retry a log buffer already consumed
+          // by PALF. submit_task_to_apply_service_() only gives up after the
+          // apply service stops, whose shutdown path drains this queue through
+          // handle_drop_cb().
+          CLOG_LOG(ERROR, "callback queue task scheduling failed after enqueue",
+              K(tmp_ret), K(thread_index), K(cb_lsn), K(cb_sign), KPC(this));
         }
       }
     }
@@ -739,11 +758,25 @@ int ObApplyStatus::submit_task_to_apply_service_(ObApplyServiceTask &task)
   int ret = OB_SUCCESS;
   if (task.acquire_lease()) {
     inc_ref(); //Add the reference count first, if the task push failed, dec_ref() is required
+    // Queue-full (OB_EAGAIN) retries are handled inside push_task(), so any
+    // error returned here is terminal for this enqueue attempt.
     if (OB_FAIL(ap_sv_->push_task(&task))) {
-      CLOG_LOG(ERROR, "failed to submit task to apply service", KPC(this),
-               K(task), K(ret));
-      dec_ref();
-    } else {
+      if (OB_IN_STOP_STATE == ret || OB_NOT_INIT == ret) {
+        // No task was queued. Drain READY notifications which may have raced
+        // with shutdown and restore IDLE before releasing the task reference.
+        CLOG_LOG(INFO, "apply service stopped while submitting task", K(ret),
+            K(task), KPC(this));
+        revoke_task_lease_until_idle(task);
+        dec_ref();
+      } else {
+        // The task is an internal, non-null object, so push_task() can only
+        // return an error other than EAGAIN or a stop error if an invariant in
+        // the thread pool or queue has been broken. Returning here could leave
+        // an owned callback without a runnable task.
+        CLOG_LOG(ERROR, "FATAL: unexpected error while submitting apply service task",
+            K(ret), K(task), KPC(this), K(lbt()));
+        ob_abort();
+      }
     }
   } else {
   }
@@ -1148,9 +1181,11 @@ int ObLogApplyService::push_task(ObApplyServiceTask *task)
     CLOG_LOG(ERROR, "task is NULL", K(ret));
   } else {
     while (OB_FAIL(common::ObLinkQueueThreadPool::push(task)) && OB_EAGAIN == ret) {
-      //Expected not to fail
       ob_throttle_usleep(1000, ret); //1ms
-      CLOG_LOG(ERROR, "failed to push", K(ret));
+      if (REACH_TIME_INTERVAL(5 * 1000 * 1000)) {
+        CLOG_LOG(WARN, "apply service task queue is full, retrying", K(ret),
+            KPC(task));
+      }
     }
   }
   return ret;
@@ -1230,8 +1265,18 @@ void ObLogApplyService::handle(common::LinkTask *task)
   if ((OB_FAIL(ret) || need_push_back) && (NULL != task_to_handle)) {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = push_task(task_to_handle))) {
-      CLOG_LOG(ERROR, "push task back after handle failed", K(tmp_ret), KPC(task_to_handle), KPC(apply_status), K(ret));
-      revert_apply_status(apply_status);
+      if (OB_IN_STOP_STATE == tmp_ret || OB_NOT_INIT == tmp_ret) {
+        // The task was not requeued. Restore IDLE even if concurrent
+        // notifications changed HANDLING to READY, then release its status ref.
+        CLOG_LOG(INFO, "apply service stopped while pushing task back",
+            K(tmp_ret), KPC(task_to_handle), KPC(apply_status), K(ret));
+        revoke_task_lease_until_idle(*task_to_handle);
+        revert_apply_status(apply_status);
+      } else {
+        CLOG_LOG(ERROR, "FATAL: unexpected error while pushing apply service task back",
+            K(tmp_ret), KPC(task_to_handle), KPC(apply_status), K(ret), K(lbt()));
+        ob_abort();
+      }
     } else {
       //do nothing
     }
@@ -1243,22 +1288,23 @@ void ObLogApplyService::handle_drop(common::LinkTask *task)
   int ret = OB_SUCCESS;
   ObApplyServiceTask *task_to_handle = static_cast<ObApplyServiceTask *>(task);
   ObApplyStatus *apply_status = NULL;
-  bool need_push_back = false;
-  if (OB_UNLIKELY(IS_NOT_INIT)) {
-    ret = OB_NOT_INIT;
-    revert_apply_status(apply_status);
-    task_to_handle = NULL;
-    if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
-      CLOG_LOG(ERROR, "apply service is not inited", K(ret));
-    }
-  } else if (OB_ISNULL(task_to_handle)) {
+  if (OB_ISNULL(task_to_handle)) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(ERROR, "task is null", K(ret));
   } else if (OB_ISNULL(apply_status = task_to_handle->get_apply_status())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(ERROR, "apply status is NULL", K(ret), K(task_to_handle));
   } else {
+    // A dropped task is no longer owned by a worker or the global queue.
+    // Restore its lease before releasing the reference acquired at submission.
+    if (OB_UNLIKELY(IS_NOT_INIT)) {
+      ret = OB_NOT_INIT;
+    }
+    revoke_task_lease_until_idle(*task_to_handle);
     revert_apply_status(apply_status);
+    if (OB_NOT_INIT == ret && REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
+      CLOG_LOG(ERROR, "apply service is not inited while dropping task", K(ret));
+    }
   }
 }
 
