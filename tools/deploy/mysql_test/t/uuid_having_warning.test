@@ -1,6 +1,6 @@
 #owner: minan
 #owner group: sql
-#description: Warning-capable constant HAVING predicates are not folded early.
+#description: Warning-producing rewrites preserve diagnostic counts.
 
 --disable_warnings
 drop database if exists uuid_having_warning;
@@ -21,6 +21,18 @@ having bin_to_uuid(uuid_to_bin('11d29c12-493f-11ed-9307-7cd30abc95d8'), 34) orde
 
 select * from v1 group by bin_to_uuid(uuid_to_bin('11d29c12-493f-11ed-9307-7cd30abc95d8'))
 having bin_to_uuid(uuid_to_bin('11d29c12-493f-11ed-9307-7cd30abc95d8'), 34) order by c1;
+
+create table t_sum(id int primary key, s varchar(20));
+insert into t_sum values (1,'1x'),(2,'-2x'),(3,NULL);
+select id, sum(s) from t_sum group by id, s having sum(s) > 0 order by id;
+
+create table t_timeformat(id int, sal int, key idx_sal(sal));
+insert into t_timeformat values (1,5000),(2,-4000),(3,0),(4,NULL),(5,6000),(6,8000),(7,3500);
+select id, sum(sal) from t_timeformat
+where time_format(sal, '%r %T %H %k %I %i %s %f') > 0
+group by id
+having sum(sal) > 5000
+order by id;
 
 --disable_warnings
 drop database uuid_having_warning;

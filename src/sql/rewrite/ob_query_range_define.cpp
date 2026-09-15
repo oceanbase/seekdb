@@ -755,9 +755,6 @@ int ObPreRangeGraph::get_fast_nlj_tablet_ranges(ObFastFinalNLJRangeCtx &fast_nlj
     } else if (OB_FAIL(ObRangeGenerator::fill_general_nlj_range(fast_nlj_range_ctx,
                                                                 *this,
                                                                 objs,
-                                                                allocator,
-                                                                exec_ctx,
-                                                                dtc_params,
                                                                 range_buffer_idx,
                                                                 always_false,
                                                                 ranges))) {

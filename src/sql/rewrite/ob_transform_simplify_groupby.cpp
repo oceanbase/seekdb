@@ -687,8 +687,13 @@ int ObTransformSimplifyGroupby::check_can_remove_redundant_aggr(
       if (aggr_expr.is_param_distinct()) {
         can_remove = true;
       } else {
+        bool can_replace_sum = false;
         ObSEArray<ObRawExpr *, 4> group_exprs;
-        if (OB_FAIL(group_exprs.assign(select_stmt.get_group_exprs()))) {
+        if (OB_FAIL(check_sum_param_can_be_replaced(param_expr, can_replace_sum))) {
+          LOG_WARN("failed to check sum param can be replaced", K(ret));
+        } else if (!can_replace_sum) {
+          can_remove = false;
+        } else if (OB_FAIL(group_exprs.assign(select_stmt.get_group_exprs()))) {
           LOG_WARN("failed to assign group exprs", K(ret));
         } else if (OB_FAIL(ObTransformUtils::check_stmt_unique(&select_stmt,
                                                                ctx_->session_info_,
@@ -720,6 +725,34 @@ int ObTransformSimplifyGroupby::check_can_remove_redundant_aggr(
                                                                  true,  // need_check_contain
                                                                  true,  // used_in_compare
                                                                  can_remove))) {
+    }
+  }
+  return ret;
+}
+
+int ObTransformSimplifyGroupby::check_sum_param_can_be_replaced(const ObRawExpr *expr, bool &can_replace)
+{
+  int ret = OB_SUCCESS;
+  can_replace = true;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null expr", K(ret));
+  } else if (T_FUN_SYS_CAST == expr->get_expr_type() && expr->get_param_count() > 0) {
+    const ObRawExpr *from_expr = expr->get_param_expr(0);
+    if (OB_ISNULL(from_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("get unexpected null cast param", K(ret));
+    } else if (expr->get_result_type().is_numeric_type() &&
+               !from_expr->get_result_type().is_numeric_type() &&
+               from_expr->is_column_ref_expr()) {
+      // A plain SUM(non_numeric_column) has one aggregate conversion site.
+      // Replacing it injects the implicit cast into each SELECT/HAVING use.
+      can_replace = false;
+    }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && can_replace && i < expr->get_param_count(); ++i) {
+    if (OB_FAIL(SMART_CALL(check_sum_param_can_be_replaced(expr->get_param_expr(i), can_replace)))) {
+      LOG_WARN("failed to check child sum param", K(ret));
     }
   }
   return ret;

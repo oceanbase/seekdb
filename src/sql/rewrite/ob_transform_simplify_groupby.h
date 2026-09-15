@@ -75,6 +75,7 @@ private:
   int check_can_remove_redundant_aggr(ObSelectStmt &select_stmt, 
                                       ObAggFunRawExpr &aggr_expr,
                                       bool &can_remove);
+  int check_sum_param_can_be_replaced(const ObRawExpr *expr, bool &can_replace);
   int simplify_redundant_aggr(ObSelectStmt &select_stmt,
                               ObAggFunRawExpr &aggr_expr,
                               ObRawExpr *&new_expr);

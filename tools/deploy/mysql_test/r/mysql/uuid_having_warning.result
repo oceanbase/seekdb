@@ -19,4 +19,25 @@ c1	c2	c8
 1	5fd29c12-493f-11ed-9307-7cd30abc95d8	11d29c12-493f-11ed-9307-7cd30abc95d8
 Warnings:
 Warning	1292	Truncated incorrect DOUBLE value: '493f11ed-9c12-11d2-9307-7cd30abc95d8'
+create table t_sum(id int primary key, s varchar(20));
+insert into t_sum values (1,'1x'),(2,'-2x'),(3,NULL);
+select id, sum(s) from t_sum group by id, s having sum(s) > 0 order by id;
+id	sum(s)
+1	1
+Warnings:
+Warning	1292	Truncated incorrect DOUBLE value: '1x'
+Warning	1292	Truncated incorrect DOUBLE value: '-2x'
+create table t_timeformat(id int, sal int, key idx_sal(sal));
+insert into t_timeformat values (1,5000),(2,-4000),(3,0),(4,NULL),(5,6000),(6,8000),(7,3500);
+select id, sum(sal) from t_timeformat
+where time_format(sal, '%r %T %H %k %I %i %s %f') > 0
+group by id
+having sum(sal) > 5000
+order by id;
+id	sum(sal)
+Warnings:
+Warning	1292	Truncated incorrect DECIMAL value: '12:50:00 AM 00:50:00 00 0 12 50 00 000000'
+Warning	1292	Truncated incorrect DECIMAL value: '-12:40:00 AM 00:40:00 00 0 12 40 00 000000'
+Warning	1292	Truncated incorrect DECIMAL value: '12:00:00 AM 00:00:00 00 0 12 00 00 000000'
+Warning	1292	Truncated incorrect DECIMAL value: '12:35:00 AM 00:35:00 00 0 12 35 00 000000'
 drop database uuid_having_warning;
