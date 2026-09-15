@@ -26,9 +26,15 @@ namespace common
 class ObISQLClient;
 class ObTimeZoneInfo;
 }
+namespace unittest
+{
+class GlobalStatProxyTest;
+}
 
 namespace share
 {
+
+class ObGlobalStatProxy;
 
 struct ObCoreTableCell
 {
@@ -99,6 +105,8 @@ public:
 //
 class ObCoreTableProxy : public ObCoreTableStoreCell
 {
+  friend class ObGlobalStatProxy;
+  friend class ::oceanbase::unittest::GlobalStatProxyTest;
 public:
   using Cell = ObCoreTableCell;
 
@@ -238,6 +246,12 @@ private:
                          int64_t &affected_rows);
   int execute_incremental_update_sql(const Row &row, const common::ObIArray<UpdateCell> &cells,
                                      int64_t &affected_rows);
+
+  // Atomically inserts or advances monotonic cells in one logical row without
+  // loading and locking the other rows of the logical table.
+  int atomic_incremental_upsert_row(const int64_t row_id,
+                                    const common::ObIArray<UpdateCell> &cells,
+                                    int64_t &affected_rows);
 
   int execute_delete_sql(const int64_t row_id);
 
