@@ -24,7 +24,9 @@
 #include "sql/rewrite/ob_transform_pre_process.h"
 #include "sql/rewrite/ob_expand_aggregate_utils.h"
 #include "sql/ob_sql_utils.h"
+#include "sql/ob_sql_context.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
+#include "lib/oblog/ob_warning_buffer.h"
 
 
 namespace oceanbase {
@@ -10575,10 +10577,38 @@ int ObTransformUtils::extract_joined_table_condition(TableItem *table_item,
   return ret;
 }
 
+namespace
+{
+int erase_calculable_expr_result(ObTransformerCtx *ctx, const ObRawExpr *expr)
+{
+  int ret = OB_SUCCESS;
+  ObQueryCtx *query_ctx = NULL;
+  uint64_t key = 0;
+  if (OB_ISNULL(ctx) || OB_ISNULL(expr) || OB_ISNULL(ctx->exec_ctx_)
+      || OB_ISNULL(ctx->exec_ctx_->get_stmt_factory())
+      || OB_ISNULL(query_ctx = ctx->exec_ctx_->get_stmt_factory()->get_query_ctx())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret), K(ctx), K(expr));
+  } else if (!query_ctx->calculable_expr_results_.created()) {
+    /* do nothing */
+  } else {
+    key = reinterpret_cast<uint64_t>(expr);
+    ret = query_ctx->calculable_expr_results_.erase_refactored(key);
+    if (OB_HASH_NOT_EXIST == ret) {
+      ret = OB_SUCCESS;
+    } else if (OB_FAIL(ret)) {
+      LOG_WARN("failed to erase calculable expr result", K(ret), KPC(expr));
+    }
+  }
+  return ret;
+}
+}
+
 int ObTransformUtils::extract_const_bool_expr_info(ObTransformerCtx *ctx,
                                                    const common::ObIArray<ObRawExpr*> &exprs,
                                                    common::ObIArray<int64_t> &true_exprs,
-                                                   common::ObIArray<int64_t> &false_exprs)
+                                                   common::ObIArray<int64_t> &false_exprs,
+                                                   bool skip_warning_expr)
 {
   int ret = OB_SUCCESS;
   bool is_true = false;
@@ -10592,7 +10622,7 @@ int ObTransformUtils::extract_const_bool_expr_info(ObTransformerCtx *ctx,
       if (OB_ISNULL(temp = exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("null expr", K(ret));
-      } else if (OB_FAIL(extract_const_bool_expr_result(ctx, temp, is_true, is_false))) {
+      } else if (OB_FAIL(extract_const_bool_expr_result(ctx, temp, is_true, is_false, skip_warning_expr))) {
       } else if (is_true && OB_FAIL(true_exprs.push_back(i))) {
         LOG_WARN("failed to push back into array", K(ret));
       } else if (is_false && OB_FAIL(false_exprs.push_back(i))) {
@@ -10607,14 +10637,27 @@ int ObTransformUtils::extract_const_bool_expr_info(ObTransformerCtx *ctx,
 int ObTransformUtils::extract_const_bool_expr_result(ObTransformerCtx *ctx,
                                                    ObRawExpr *expr,
                                                    bool &is_true,
-                                                   bool &is_false)
+                                                   bool &is_false,
+                                                   bool skip_warning_expr)
 {
   int ret = OB_SUCCESS;
   ObObj result;
   bool is_valid = false;
+  bool has_warning = false;
   is_true = false;
   is_false = false;
-  if (OB_FAIL(calc_const_expr_result(expr, ctx, result, is_valid))) {
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("null expr", K(ret));
+  } else if (OB_FAIL(calc_const_expr_result(expr,
+                                            ctx,
+                                            result,
+                                            is_valid,
+                                            skip_warning_expr ? &has_warning : NULL))) {
+  } else if (has_warning) {
+    // Warning-capable predicates must not be folded speculatively. The warning
+    // was captured in a private buffer, so the execution path can still report
+    // it exactly if the expression really runs.
   } else if (!is_valid) {
     /* do nothing */
   } else if (OB_FAIL(ObObjEvaluator::is_true(result, is_true))) {
@@ -10624,13 +10667,60 @@ int ObTransformUtils::extract_const_bool_expr_result(ObTransformerCtx *ctx,
   return ret;
 }
 
+int ObTransformUtils::check_static_expr_has_warning(ObTransformerCtx *ctx,
+                                                    ObRawExpr *expr,
+                                                    bool &has_warning)
+{
+  int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
+  ObObj result;
+  const ParamStore *param_store = NULL;
+  ObWarningBuffer *old_warning_buf = NULL;
+  ObWarningBuffer probe_warning_buf;
+  has_warning = false;
+  if (OB_ISNULL(ctx) || OB_ISNULL(expr) || OB_ISNULL(ctx->session_info_)
+      || OB_ISNULL(ctx->allocator_) || OB_ISNULL(ctx->exec_ctx_)
+      || OB_ISNULL(ctx->exec_ctx_->get_physical_plan_ctx())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret), K(ctx), K(expr));
+  } else if (!expr->is_static_scalar_const_expr()) {
+    // do nothing
+  } else {
+    param_store = &ctx->exec_ctx_->get_physical_plan_ctx()->get_param_store();
+    old_warning_buf = ob_get_tsi_warning_buffer();
+    probe_warning_buf.reset();
+    ob_setup_tsi_warning_buffer(&probe_warning_buf);
+    tmp_ret = ObSQLUtils::calc_simple_expr_without_row(ctx->session_info_,
+                                                       expr,
+                                                       result,
+                                                       param_store,
+                                                       *ctx->allocator_);
+    ob_setup_tsi_warning_buffer(old_warning_buf);
+    if (OB_SUCCESS != tmp_ret) {
+      if (IS_SPATIAL_EXPR(expr->get_expr_type())) {
+        ret = tmp_ret;
+        LOG_WARN("failed to probe static expr warning", K(ret), K(*expr));
+      } else {
+        has_warning = true;
+      }
+    } else {
+      has_warning = probe_warning_buf.get_total_warning_count() > 0;
+    }
+  }
+  return ret;
+}
+
 int ObTransformUtils::calc_const_expr_result(ObRawExpr * expr,
                                              ObTransformerCtx *ctx,
                                              ObObj &result,
-                                             bool &calc_happend)
+                                             bool &calc_happend,
+                                             bool *has_warning)
 {
   int ret = OB_SUCCESS;
   calc_happend = false;
+  if (OB_NOT_NULL(has_warning)) {
+    *has_warning = false;
+  }
   ObSQLSessionInfo *session = NULL;
   if (OB_ISNULL(ctx) || OB_ISNULL(session = ctx->session_info_) || OB_ISNULL(ctx->allocator_)
       || OB_ISNULL(ctx->exec_ctx_) || OB_ISNULL(ctx->exec_ctx_->get_physical_plan_ctx())) {
@@ -10638,11 +10728,28 @@ int ObTransformUtils::calc_const_expr_result(ObRawExpr * expr,
     LOG_WARN("get unexpected null", K(ret));
   } else if (!expr->is_static_scalar_const_expr()) {
     // do nothing		    bool dummy_bool = false;
-  } else if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx->exec_ctx_,
-                                      expr,
-                                      result,
-                                      calc_happend,
-                                      *ctx->allocator_))) {
+  } else {
+    ObWarningBuffer *old_warning_buf = NULL;
+    ObWarningBuffer probe_warning_buf;
+    if (OB_NOT_NULL(has_warning)) {
+      old_warning_buf = ob_get_tsi_warning_buffer();
+      probe_warning_buf.reset();
+      ob_setup_tsi_warning_buffer(&probe_warning_buf);
+    }
+    ret = ObSQLUtils::calc_const_or_calculable_expr(ctx->exec_ctx_,
+                                                    expr,
+                                                    result,
+                                                    calc_happend,
+                                                    *ctx->allocator_);
+    if (OB_NOT_NULL(has_warning)) {
+      ob_setup_tsi_warning_buffer(old_warning_buf);
+      if (OB_SUCC(ret)) {
+        *has_warning = probe_warning_buf.get_total_warning_count() > 0;
+      }
+      if (OB_SUCC(ret) && *has_warning && OB_FAIL(erase_calculable_expr_result(ctx, expr))) {
+        LOG_WARN("failed to erase warning expr result cache", K(ret), KPC(expr));
+      }
+    }
   }
   return ret;
 }

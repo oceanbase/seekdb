@@ -8007,8 +8007,12 @@ int ObOptimizerUtil::check_is_static_false_expr(ObOptimizerContext &opt_ctx, ObR
   ObObj const_value;
   bool got_result = false;
   bool is_result_true = false;
+  bool is_error_free = false;
   if (!expr.is_static_const_expr()) {
     // do nothing
+  } else if (OB_FAIL(ObTransformUtils::check_error_free_expr(&expr, is_error_free))) {
+  } else if (!is_error_free) {
+    // Keep warning/error-capable startup filters for execution-time evaluation.
   } else if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(opt_ctx.get_exec_ctx(),
                                                                &expr,
                                                                const_value,

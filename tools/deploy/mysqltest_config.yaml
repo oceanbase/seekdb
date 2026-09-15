@@ -94,6 +94,7 @@ runtime_configs:
       - update_column_use_other
       - update_delete_limit_unique_key
       - update_range
+      - uuid_having_warning
       - view
       - view_2
       # test_suite cases selected by the current core-test psmall set.
