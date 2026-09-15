@@ -68,6 +68,7 @@ runtime_configs:
       - outer_join_where_is_null
       - parallel_insert
       - pk_num_boundary
+      - predicate_deduce_in_cast
       - range
       - rename_table2
       - safe_null_test

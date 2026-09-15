@@ -2046,6 +2046,7 @@ int ObTransformUtils::is_const_expr_not_null(ObNotNullContext &ctx,
   int ret = OB_SUCCESS;
   ObObj result;
   bool got_result = false;
+  bool is_error_free = false;
   is_not_null = false;
   is_null = false;
   if (OB_ISNULL(expr) || !expr->is_static_scalar_const_expr()) {
@@ -2058,6 +2059,10 @@ int ObTransformUtils::is_const_expr_not_null(ObNotNullContext &ctx,
     got_result = true;
   } else if (NULL == ctx.exec_ctx_ || NULL == ctx.allocator_) {
     got_result = false;
+  } else if (OB_FAIL(check_error_free_expr(const_cast<ObRawExpr *>(expr), is_error_free))) {
+  } else if (!is_error_free) {
+    // Nullability inference must not evaluate warning/error-capable expressions.
+    // Leave both properties unknown and preserve evaluation at execution time.
   } else if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(
                        ctx.exec_ctx_,
                        expr,
