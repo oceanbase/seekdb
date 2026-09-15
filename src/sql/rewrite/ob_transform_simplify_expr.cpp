@@ -132,6 +132,13 @@ int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt
       OPT_TRACE("canonicalize condition:", is_happened);
     }
   }
+  if (OB_SUCC(ret)) {
+    if (OB_FAIL(remove_dummy_exprs(stmt, is_happened))) {
+    } else {
+      trans_happened |= is_happened;
+      OPT_TRACE("post canonicalize remove dummy exprs:", is_happened);
+    }
+  }
   if (OB_SUCC(ret) && trans_happened) {
     if (OB_FAIL(add_transform_hint(*stmt))) {
     }
