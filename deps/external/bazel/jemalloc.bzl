@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Build jemalloc from the Cargo-locked registry source package."""
+"""Build and expose the native artifacts from seekdb-jemalloc-sys."""
 
 load(
     "@rules_cc//cc:find_cc_toolchain.bzl",
@@ -32,6 +32,7 @@ def _seekdb_jemalloc_build_impl(ctx):
     ctx.actions.run_shell(
         inputs = depset(
             direct = [
+                ctx.file.external_src,
                 ctx.file.lockfile,
                 ctx.file.manifest,
                 ctx.file.rust_toolchain,
@@ -64,67 +65,30 @@ cc="$(absolute_path "$3")"
 ar="$(absolute_path "$4")"
 archive="$(absolute_path "$5")"
 public_header="$(absolute_path "$6")"
+output_root="$(dirname "$(dirname "$archive")")"
+cargo_target="$(mktemp -d "${TMPDIR:-/tmp}/seekdb-bazel-cargo.XXXXXX")"
+trap 'rm -rf "$cargo_target"' EXIT
 
-rust_toolchain="$({
-  sed -n 's/^[[:space:]]*channel[[:space:]]*=[[:space:]]*"\([0-9][0-9.]*\)".*/\1/p' \
-    "$rust_toolchain_file"
-} | head -1)"
-if [[ -z "$rust_toolchain" ]]; then
-  echo "Cannot read pinned Rust toolchain from $rust_toolchain_file" >&2
-  exit 1
-fi
+# Running under this directory lets rustup select rust/rust-toolchain.toml.
+cd "$(dirname "$rust_toolchain_file")"
+CC="$cc" \
+AR="$ar" \
+CFLAGS="-O2 -fPIC" \
+CARGO_TARGET_DIR="$cargo_target" \
+MAKEFLAGS="" \
+JEMALLOC_SYS_CONFIGURE_ARGS="--with-jemalloc-prefix=je_" \
+JEMALLOC_SYS_OUTPUT_DIR="$output_root" \
+cargo build --locked --release --jobs 4 --manifest-path "$manifest"
 
-jemalloc_source="$({
-  RUSTUP_TOOLCHAIN="$rust_toolchain" \
-    cargo metadata --locked --format-version 1 --manifest-path "$manifest"
-} | python3 -c '
-import json
-import os
-import sys
-
-for package in json.load(sys.stdin)["packages"]:
-    if package["name"] == "seekdb-jemalloc-sys":
-        if not (package.get("source") or "").startswith("registry+"):
-            raise SystemExit("seekdb-jemalloc-sys must come from a registry")
-        print(os.path.join(os.path.dirname(package["manifest_path"]), "vendor", "jemalloc"))
-        break
-else:
-    raise SystemExit("seekdb-jemalloc-sys is absent from Cargo metadata")
-')"
-if [[ ! -f "$jemalloc_source/configure" ]]; then
-  echo "Cargo package does not contain jemalloc configure: $jemalloc_source" >&2
-  exit 1
-fi
-
-build_dir="$(mktemp -d "${TMPDIR:-/tmp}/seekdb-bazel-jemalloc.XXXXXX")"
-trap 'rm -rf "$build_dir"' EXIT
-cd "$build_dir"
-CC="$cc" AR="$ar" CFLAGS="-O2 -fPIC" \
-  sh "$jemalloc_source/configure" \
-    --with-version=VERSION \
-    --with-jemalloc-prefix=je_ \
-    --enable-static \
-    --disable-shared \
-    --disable-cxx \
-    --disable-doc \
-    --enable-stats
-
-make_command=make
-if command -v gmake >/dev/null 2>&1; then
-  make_command=gmake
-fi
-"$make_command" -j4 build_lib_static
-
-mkdir -p "$(dirname "$archive")" "$(dirname "$public_header")"
-cp lib/libjemalloc_pic.a "$archive"
-cp include/jemalloc/jemalloc.h "$public_header"
+test -f "$archive"
+test -f "$public_header"
 """,
         execution_requirements = {
             "no-remote": "1",
             "no-sandbox": "1",
         },
         mnemonic = "SeekdbJemallocBuild",
-        progress_message = "Building Cargo-sourced jemalloc",
+        progress_message = "Building seekdb-jemalloc-sys",
         use_default_shell_env = True,
     )
 
@@ -139,6 +103,7 @@ cp include/jemalloc/jemalloc.h "$public_header"
 _seekdb_jemalloc_build = rule(
     implementation = _seekdb_jemalloc_build_impl,
     attrs = {
+        "external_src": attr.label(allow_single_file = True, mandatory = True),
         "lockfile": attr.label(allow_single_file = True, mandatory = True),
         "manifest": attr.label(allow_single_file = True, mandatory = True),
         "rust_toolchain": attr.label(allow_single_file = True, mandatory = True),
@@ -147,13 +112,14 @@ _seekdb_jemalloc_build = rule(
     toolchains = use_cc_toolchain(),
 )
 
-def seekdb_jemalloc(name, lockfile, manifest, rust_toolchain):
-    """Declares the jemalloc build and its C++ archive/header targets."""
+def seekdb_jemalloc(name, external_src, lockfile, manifest, rust_toolchain):
+    """Declares the jemalloc Cargo build and its C++ archive/header targets."""
     build_target = "_%s_build" % name
     public_header_target = "%s_public_header" % name
 
     _seekdb_jemalloc_build(
         name = build_target,
+        external_src = external_src,
         lockfile = lockfile,
         manifest = manifest,
         rust_toolchain = rust_toolchain,

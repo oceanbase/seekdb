@@ -3,14 +3,14 @@
 version = 4
 
 [[package]]
-name = "seekdb-jemalloc-sys"
-version = "0.1.0+5.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec31565cd6a86a2d9bb158d953e79183fdcb45606b963c35594156e0520554de"
-
-[[package]]
 name = "seekdb-external-sources"
 version = "0.0.0"
 dependencies = [
  "seekdb-jemalloc-sys",
 ]
+
+[[package]]
+name = "seekdb-jemalloc-sys"
+version = "0.2.0+5.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df96517805f1b5c36f23b3e57df5d52cbf1d2786d8a597efce5ef8c2a5d64fd0"

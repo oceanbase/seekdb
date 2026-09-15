@@ -12,5 +12,5 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Cargo manifest anchor for external source downloads. This crate is not built.
+// Cargo manifest anchor for external native dependencies.
 #![no_std]
