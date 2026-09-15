@@ -1599,7 +1599,8 @@ public:
   static int calc_const_expr_result(ObRawExpr * expr,
                                     ObTransformerCtx *ctx,
                                     ObObj &result,
-                                    bool &calc_happend);
+                                    bool &calc_happend,
+                                    bool *has_warning = NULL);
   static int check_static_expr_has_warning(ObTransformerCtx *ctx,
                                            ObRawExpr *expr,
                                            bool &has_warning);

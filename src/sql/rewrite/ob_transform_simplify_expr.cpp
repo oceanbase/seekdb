@@ -21,7 +21,6 @@
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/expr/ob_shared_expr_resolver.h"
 #include "sql/engine/ob_physical_plan.h"
-#include "lib/oblog/ob_warning_buffer.h"
 
 using namespace oceanbase::sql;
 
@@ -479,8 +478,8 @@ int ObTransformSimplifyExpr::extract_null_expr(ObRawExpr *expr,
 {
   int ret = OB_SUCCESS;
   bool is_stack_overflow = false;
-  if (OB_ISNULL(expr) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->allocator_)
-      || OB_ISNULL(ctx_->session_info_)) {
+  UNUSED(param_store);
+  if (OB_ISNULL(expr) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->allocator_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null param", K(expr), K_(ctx), K(ret));
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
@@ -490,24 +489,11 @@ int ObTransformSimplifyExpr::extract_null_expr(ObRawExpr *expr,
   } else if (expr->is_static_scalar_const_expr()) {
     ObObj result;
     bool got_result = false;
-    int tmp_ret = OB_SUCCESS;
-    common::ObWarningBufferIgnoreScope ignore_warnings;
-    if (OB_SUCCESS != (tmp_ret = ObSQLUtils::calc_simple_expr_without_row(ctx_->session_info_,
-                                                                          expr,
-                                                                          result,
-                                                                          &param_store,
-                                                                          *ctx_->allocator_))) {
-      // Preserve the speculative behavior of calc_const_or_calculable_expr():
-      // failed non-spatial probes are ignored and simply do not produce a
-      // removable-NULL expression.
-      if (IS_SPATIAL_EXPR(expr->get_expr_type())) {
-        ret = tmp_ret;
-        LOG_WARN("failed to calc static const expr", K(ret), K(*expr));
-      }
-    } else {
-      got_result = true;
-    }
-    if (OB_FAIL(ret)) {
+    if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx_->exec_ctx_,
+                                                          expr,
+                                                          result,
+                                                          got_result,
+                                                          *ctx_->allocator_))) {
     } else if (got_result && !result.is_ext() && (result.is_null()))  {
       if (OB_FAIL(null_expr_lists.push_back(expr))) {
       }
@@ -805,7 +791,8 @@ int ObTransformSimplifyExpr::remove_dummy_filter_exprs(common::ObIArray<ObRawExp
     if (OB_FAIL(ObTransformUtils::extract_const_bool_expr_info(ctx_,
                                                                exprs,
                                                                true_exprs,
-                                                               false_exprs))) {
+                                                               false_exprs,
+                                                               true))) {
     } else if (true_exprs.empty() && false_exprs.empty()) {
       /* do nothing */
     } else if (1 == exprs.count() && 1 == false_exprs.count()
@@ -899,9 +886,6 @@ int ObTransformSimplifyExpr::inner_remove_dummy_expr(ObRawExpr *&expr,
         if (OB_ISNULL(temp)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("null expr", K(ret));
-        } else if (!temp->is_static_scalar_const_expr()) {
-          // Only static predicates are candidates for optimizer-side warning
-          // probing here. Non-static branches stay on the execution path.
         } else if (OB_FAIL(ObTransformUtils::check_error_free_expr(temp, is_error_free))) {
         } else if (!is_error_free && OB_FAIL(has_scalar_in_predicate(temp, has_in))) {
         } else if (!is_error_free && has_in) {
@@ -933,7 +917,8 @@ int ObTransformSimplifyExpr::inner_remove_dummy_expr(ObRawExpr *&expr,
                    && OB_FAIL(ObTransformUtils::extract_const_bool_expr_result(ctx_,
                                                                                op_expr,
                                                                                is_true,
-                                                                               is_false))) {
+                                                                               is_false,
+                                                                               true))) {
         } else if (OB_FAIL(ObRawExprUtils::build_const_bool_expr(ctx_->expr_factory_,
                                                                  transed_expr,
                                                                  short_circuit_value))) {
@@ -944,7 +929,8 @@ int ObTransformSimplifyExpr::inner_remove_dummy_expr(ObRawExpr *&expr,
       } else if (OB_FAIL(ObTransformUtils::extract_const_bool_expr_info(ctx_,
                                                                         op_expr->get_param_exprs(),
                                                                         true_exprs,
-                                                                        false_exprs))) {
+                                                                        false_exprs,
+                                                                        true))) {
       } else if (true_exprs.empty() && false_exprs.empty()) {
         /*do nothing*/
       } else if (OB_FAIL(adjust_dummy_expr(true_exprs, false_exprs,
@@ -1029,12 +1015,6 @@ int ObTransformSimplifyExpr::adjust_dummy_expr(const ObIArray<int64_t> &true_exp
         if (OB_ISNULL(check_exprs.at(i))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("null expr", K(ret));
-        } else if (!check_exprs.at(i)->is_static_scalar_const_expr()) {
-          if (remove_all) {
-            // Folding the whole AND/OR would drop this non-static branch. Keep
-            // the original predicate instead of recursively proving it safe.
-            is_error_free = false;
-          }
         } else if (OB_FAIL(ObTransformUtils::check_error_free_expr(check_exprs.at(i), cur_cache_safe))) {
         } else if (!cur_cache_safe && OB_FAIL(has_scalar_in_predicate(check_exprs.at(i), has_in))) {
         } else if (!cur_cache_safe && has_in) {
