@@ -46,3 +46,40 @@ function(seekdb_external_c_compiler_command output_variable)
   endif()
   set(${output_variable} "${_compiler}" PARENT_SCOPE)
 endfunction()
+
+function(seekdb_external_add_cargo_artifacts)
+  set(_one_value_args NAME MANIFEST OUTPUT_ROOT COMMENT)
+  set(_multi_value_args OUTPUTS ENV DEPENDS)
+  cmake_parse_arguments(ARG "" "${_one_value_args}" "${_multi_value_args}" ${ARGN})
+  if(NOT ARG_NAME OR NOT ARG_MANIFEST OR NOT ARG_OUTPUT_ROOT OR NOT ARG_OUTPUTS)
+    message(FATAL_ERROR
+      "seekdb_external_add_cargo_artifacts requires NAME, MANIFEST, OUTPUT_ROOT and OUTPUTS")
+  endif()
+
+  seekdb_external_cargo_toolchain(_cargo _rust_toolchain)
+  set(_cargo_target "${ARG_OUTPUT_ROOT}/cargo-target")
+  set(_lockfile "${ARG_MANIFEST}")
+  cmake_path(REPLACE_FILENAME _lockfile "Cargo.lock")
+  set(_toolchain_manifest "${CMAKE_SOURCE_DIR}/rust/rust-toolchain.toml")
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+    "${ARG_MANIFEST}" "${_lockfile}")
+
+  add_custom_command(
+    OUTPUT ${ARG_OUTPUTS}
+    COMMAND "${CMAKE_COMMAND}" -E rm -rf "${_cargo_target}"
+    COMMAND "${CMAKE_COMMAND}" -E env
+      "RUSTUP_TOOLCHAIN=${_rust_toolchain}"
+      "CARGO_TARGET_DIR=${_cargo_target}"
+      "MAKEFLAGS="
+      ${ARG_ENV}
+      "${_cargo}" build --locked --release --jobs 4
+        --manifest-path "${ARG_MANIFEST}"
+    DEPENDS
+      "${ARG_MANIFEST}"
+      "${_lockfile}"
+      "${_toolchain_manifest}"
+      ${ARG_DEPENDS}
+    COMMENT "${ARG_COMMENT}"
+    VERBATIM)
+  add_custom_target(${ARG_NAME}_build DEPENDS ${ARG_OUTPUTS})
+endfunction()

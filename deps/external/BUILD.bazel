@@ -21,5 +21,4 @@ seekdb_jemalloc(
     external_src = "src/lib.rs",
     lockfile = "Cargo.lock",
     manifest = "Cargo.toml",
-    rust_toolchain = "//rust:rust-toolchain.toml",
 )

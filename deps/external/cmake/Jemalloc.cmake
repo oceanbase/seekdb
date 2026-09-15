@@ -1,12 +1,8 @@
-# Build the Cargo-locked jemalloc package and export its native artifacts.
-seekdb_external_cargo_toolchain(_jemalloc_cargo _jemalloc_rust_toolchain)
+# Build the Cargo-locked jemalloc package and export its C/C++ artifacts.
 seekdb_external_c_compiler_command(_jemalloc_cc)
 
 set(_jemalloc_manifest "${CMAKE_CURRENT_LIST_DIR}/../Cargo.toml")
-set(_jemalloc_lockfile "${CMAKE_CURRENT_LIST_DIR}/../Cargo.lock")
-set(_jemalloc_toolchain_manifest "${CMAKE_SOURCE_DIR}/rust/rust-toolchain.toml")
 set(_jemalloc_root "${CMAKE_BINARY_DIR}/third-party/jemalloc")
-set(_jemalloc_cargo_target "${_jemalloc_root}/cargo-target")
 set(JEMALLOC_STATIC_LIBRARY "${_jemalloc_root}/lib/libjemalloc_pic.a")
 set(JEMALLOC_INCLUDE_DIR "${_jemalloc_root}/include")
 set(JEMALLOC_PUBLIC_HEADER "${JEMALLOC_INCLUDE_DIR}/jemalloc/jemalloc.h")
@@ -34,13 +30,7 @@ if(APPLE)
     list(APPEND _jemalloc_platform_env "SDKROOT=${CMAKE_OSX_SYSROOT}")
   endif()
 endif()
-if(CMAKE_CROSSCOMPILING)
-  message(FATAL_ERROR "Cargo jemalloc build currently requires a native Linux/macOS toolchain")
-endif()
 set(_jemalloc_env
-  "RUSTUP_TOOLCHAIN=${_jemalloc_rust_toolchain}"
-  "CARGO_TARGET_DIR=${_jemalloc_cargo_target}"
-  "MAKEFLAGS="
   "CC=${_jemalloc_cc}"
   "AR=${CMAKE_AR}"
   "CFLAGS=${_jemalloc_cflags}"
@@ -48,23 +38,14 @@ set(_jemalloc_env
   "JEMALLOC_SYS_OUTPUT_DIR=${_jemalloc_root}"
   ${_jemalloc_platform_env})
 
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-  "${_jemalloc_manifest}" "${_jemalloc_lockfile}")
-add_custom_command(
-  OUTPUT "${JEMALLOC_STATIC_LIBRARY}" "${JEMALLOC_PUBLIC_HEADER}"
-  COMMAND "${CMAKE_COMMAND}" -E rm -rf "${_jemalloc_cargo_target}"
-  COMMAND "${CMAKE_COMMAND}" -E env ${_jemalloc_env}
-    "${_jemalloc_cargo}" build --locked --release --jobs 4
-      --manifest-path "${_jemalloc_manifest}"
-  DEPENDS
-    "${CMAKE_CURRENT_LIST_FILE}"
-    "${_jemalloc_manifest}"
-    "${_jemalloc_lockfile}"
-    "${_jemalloc_toolchain_manifest}"
-  COMMENT "Building jemalloc with Cargo"
-  VERBATIM)
-add_custom_target(seekdb_jemalloc_build
-  DEPENDS "${JEMALLOC_STATIC_LIBRARY}" "${JEMALLOC_PUBLIC_HEADER}")
+seekdb_external_add_cargo_artifacts(
+  NAME seekdb_jemalloc
+  MANIFEST "${_jemalloc_manifest}"
+  OUTPUT_ROOT "${_jemalloc_root}"
+  OUTPUTS "${JEMALLOC_STATIC_LIBRARY}" "${JEMALLOC_PUBLIC_HEADER}"
+  ENV ${_jemalloc_env}
+  DEPENDS "${CMAKE_CURRENT_LIST_FILE}"
+  COMMENT "Building jemalloc with Cargo")
 
 add_library(seekdb_jemalloc STATIC IMPORTED GLOBAL)
 file(MAKE_DIRECTORY "${JEMALLOC_INCLUDE_DIR}")

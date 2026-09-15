@@ -7,4 +7,4 @@ publish = false
 [workspace]
 
 [dependencies]
-seekdb-jemalloc-sys = { version = "=0.2.0", features = ["stats"] }
+seekdb-jemalloc-sys = { version = "=0.2.2", features = ["stats"] }
