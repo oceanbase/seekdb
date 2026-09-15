@@ -1007,7 +1007,11 @@ int ObTransformSimplifyExpr::adjust_dummy_expr(const ObIArray<int64_t> &true_exp
     } else if (OB_FAIL(ObTransformUtils::extract_target_exprs_by_idx(adjust_exprs, false_exprs, op_params))) {
     } else {
       const ObIArray<ObRawExpr*> &check_exprs = remove_all ? adjust_exprs : op_params;
-      for (int64_t i = 0; OB_SUCC(ret) && is_error_free && i < check_exprs.count(); ++i) {
+      int64_t check_expr_count = check_exprs.count();
+      if (remove_all) {
+        check_expr_count = (is_and_op ? false_exprs.at(0) : true_exprs.at(0)) + 1;
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && is_error_free && i < check_expr_count; ++i) {
         bool has_warning = false;
         bool cur_cache_safe = true;
         bool has_in = false;
