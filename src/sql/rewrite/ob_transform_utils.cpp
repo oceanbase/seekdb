@@ -10654,10 +10654,6 @@ int ObTransformUtils::extract_const_bool_expr_result(ObTransformerCtx *ctx,
                                             result,
                                             is_valid,
                                             skip_warning_expr ? &has_warning : NULL))) {
-  } else if (has_warning) {
-    // Warning-capable predicates must not be folded speculatively. The warning
-    // was captured in a private buffer, so the execution path can still report
-    // it exactly if the expression really runs.
   } else if (!is_valid) {
     /* do nothing */
   } else if (OB_FAIL(ObObjEvaluator::is_true(result, is_true))) {
