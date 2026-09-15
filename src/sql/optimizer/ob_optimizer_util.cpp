@@ -8007,7 +8007,7 @@ int ObOptimizerUtil::check_is_static_false_expr(ObOptimizerContext &opt_ctx, ObR
   ObObj const_value;
   bool got_result = false;
   bool is_result_true = false;
-  if (!expr.is_static_const_expr()) {
+  if (!expr.is_static_const_expr() || expr.has_flag(CNT_PL_UDF)) {
     // do nothing
   } else if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(opt_ctx.get_exec_ctx(),
                                                                &expr,
