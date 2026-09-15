@@ -684,7 +684,22 @@ int ObTransformSimplifyGroupby::check_can_remove_redundant_aggr(
       break;
     }
     case T_FUN_SUM: {
-      can_remove = aggr_expr.is_param_distinct();
+      if (aggr_expr.is_param_distinct()) {
+        can_remove = true;
+      } else {
+        ObSEArray<ObRawExpr *, 4> group_exprs;
+        if (OB_FAIL(group_exprs.assign(select_stmt.get_group_exprs()))) {
+          LOG_WARN("failed to assign group exprs", K(ret));
+        } else if (OB_FAIL(ObTransformUtils::check_stmt_unique(&select_stmt,
+                                                               ctx_->session_info_,
+                                                               ctx_->schema_checker_,
+                                                               group_exprs,
+                                                               false,
+                                                               can_remove,
+                                                               FLAGS_IGNORE_DISTINCT | FLAGS_IGNORE_GROUP))) {
+          LOG_WARN("failed to check group by uniqueness", K(ret));
+        }
+      }
       break;
     }
     case T_FUN_GROUP_CONCAT:

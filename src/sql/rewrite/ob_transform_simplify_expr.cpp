@@ -20,8 +20,38 @@
 #include "sql/rewrite/ob_stmt_comparer.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/expr/ob_shared_expr_resolver.h"
+#include "sql/engine/ob_physical_plan.h"
+#include "lib/oblog/ob_warning_buffer.h"
 
 using namespace oceanbase::sql;
+
+namespace
+{
+int has_scalar_in_predicate(ObRawExpr *expr, bool &has_in)
+{
+  int ret = OB_SUCCESS;
+  has_in = false;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("null expr", K(ret));
+  } else if (T_OP_IN == expr->get_expr_type() || T_OP_NOT_IN == expr->get_expr_type()) {
+    ObRawExpr *left_expr = NULL;
+    if (OB_UNLIKELY(expr->get_param_count() < 1)
+        || OB_ISNULL(left_expr = expr->get_param_expr(0))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected in expr", K(ret), K(expr->get_param_count()), K(left_expr));
+    } else {
+      has_in = T_OP_ROW != left_expr->get_expr_type();
+    }
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && !has_in && i < expr->get_param_count(); ++i) {
+      if (OB_FAIL(has_scalar_in_predicate(expr->get_param_expr(i), has_in))) {
+      }
+    }
+  }
+  return ret;
+}
+}
 
 int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt> &parent_stmts,
                                                 ObDMLStmt *&stmt,
@@ -449,8 +479,8 @@ int ObTransformSimplifyExpr::extract_null_expr(ObRawExpr *expr,
 {
   int ret = OB_SUCCESS;
   bool is_stack_overflow = false;
-  UNUSED(param_store);
-  if (OB_ISNULL(expr) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->allocator_)) {
+  if (OB_ISNULL(expr) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->allocator_)
+      || OB_ISNULL(ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null param", K(expr), K_(ctx), K(ret));
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
@@ -460,11 +490,24 @@ int ObTransformSimplifyExpr::extract_null_expr(ObRawExpr *expr,
   } else if (expr->is_static_scalar_const_expr()) {
     ObObj result;
     bool got_result = false;
-    if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx_->exec_ctx_,
-                                                          expr,
-                                                          result,
-                                                          got_result,
-                                                          *ctx_->allocator_))) {
+    int tmp_ret = OB_SUCCESS;
+    common::ObWarningBufferIgnoreScope ignore_warnings;
+    if (OB_SUCCESS != (tmp_ret = ObSQLUtils::calc_simple_expr_without_row(ctx_->session_info_,
+                                                                          expr,
+                                                                          result,
+                                                                          &param_store,
+                                                                          *ctx_->allocator_))) {
+      // Preserve the speculative behavior of calc_const_or_calculable_expr():
+      // failed non-spatial probes are ignored and simply do not produce a
+      // removable-NULL expression.
+      if (IS_SPATIAL_EXPR(expr->get_expr_type())) {
+        ret = tmp_ret;
+        LOG_WARN("failed to calc static const expr", K(ret), K(*expr));
+      }
+    } else {
+      got_result = true;
+    }
+    if (OB_FAIL(ret)) {
     } else if (got_result && !result.is_ext() && (result.is_null()))  {
       if (OB_FAIL(null_expr_lists.push_back(expr))) {
       }
@@ -592,7 +635,8 @@ int ObTransformSimplifyExpr::do_check_like_condition(ObRawExpr *&expr,
                                                      ObIArray<ObRawExpr *> &new_exprs,
                                                      ObIArray<ObExprConstraint> &constraints) {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(expr) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_)) {
+  if (OB_ISNULL(expr) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_)
+      || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), K(expr), K(ctx_), K(ctx_->session_info_));
   } else if (T_OP_LIKE == expr->get_expr_type()) {
@@ -844,10 +888,60 @@ int ObTransformSimplifyExpr::inner_remove_dummy_expr(ObRawExpr *&expr,
       ObSEArray<int64_t, 2> true_exprs;
       ObSEArray<int64_t, 2> false_exprs;
       ObRawExpr *bool_expr = NULL;
-      if (OB_FAIL(ObTransformUtils::extract_const_bool_expr_info(ctx_,
-                                                                 op_expr->get_param_exprs(),
-                                                                 true_exprs,
-                                                                 false_exprs))) {
+      bool has_short_circuit_const = false;
+      bool short_circuit_value = false;
+      bool has_uncacheable_in_expr = false;
+      for (int64_t i = 0; OB_SUCC(ret) && i < op_expr->get_param_count(); ++i) {
+        ObRawExpr *temp = op_expr->get_param_expr(i);
+        bool is_true = false;
+        bool is_error_free = true;
+        bool has_in = false;
+        if (OB_ISNULL(temp)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("null expr", K(ret));
+        } else if (OB_FAIL(ObTransformUtils::check_error_free_expr(temp, is_error_free))) {
+        } else if (!is_error_free && OB_FAIL(has_scalar_in_predicate(temp, has_in))) {
+        } else if (!is_error_free && has_in) {
+          has_uncacheable_in_expr = true;
+        }
+        if (OB_FAIL(ret)) {
+        } else if (OB_ISNULL(temp)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("null expr", K(ret));
+        } else if (has_short_circuit_const) {
+          /* do nothing */
+        } else if (!temp->is_const_raw_expr()) {
+          /* do nothing */
+        } else if (OB_FAIL(ObObjEvaluator::is_true(
+                   static_cast<ObConstRawExpr*>(temp)->get_value(), is_true))) {
+        } else if ((T_OP_AND == expr->get_expr_type() && !is_true)
+                   || (T_OP_OR == expr->get_expr_type() && is_true)) {
+          has_short_circuit_const = true;
+          short_circuit_value = is_true;
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (has_short_circuit_const) {
+        bool has_warning = false;
+        bool is_true = false;
+        bool is_false = false;
+        if (OB_FAIL(ObTransformUtils::check_static_expr_has_warning(ctx_, op_expr, has_warning))) {
+        } else if (has_warning
+                   && OB_FAIL(ObTransformUtils::extract_const_bool_expr_result(ctx_,
+                                                                               op_expr,
+                                                                               is_true,
+                                                                               is_false))) {
+        } else if (OB_FAIL(ObRawExprUtils::build_const_bool_expr(ctx_->expr_factory_,
+                                                                 transed_expr,
+                                                                 short_circuit_value))) {
+          LOG_WARN("create const bool expr failed", K(ret));
+        } else if (!has_warning && has_uncacheable_in_expr && OB_NOT_NULL(ctx_->phy_plan_)) {
+          ctx_->phy_plan_->get_phy_plan_hint().plan_cache_policy_ = OB_USE_PLAN_CACHE_NONE;
+        }
+      } else if (OB_FAIL(ObTransformUtils::extract_const_bool_expr_info(ctx_,
+                                                                        op_expr->get_param_exprs(),
+                                                                        true_exprs,
+                                                                        false_exprs))) {
       } else if (true_exprs.empty() && false_exprs.empty()) {
         /*do nothing*/
       } else if (OB_FAIL(adjust_dummy_expr(true_exprs, false_exprs,
@@ -855,7 +949,8 @@ int ObTransformSimplifyExpr::inner_remove_dummy_expr(ObRawExpr *&expr,
                                            op_expr->get_param_exprs(),
                                            transed_expr,
                                            constraints))) {
-      } else if (transed_expr != NULL) {
+      }
+      if (OB_SUCC(ret) && transed_expr != NULL) {
         expr = transed_expr;
       }
     }
@@ -914,6 +1009,7 @@ int ObTransformSimplifyExpr::adjust_dummy_expr(const ObIArray<int64_t> &true_exp
     ObSEArray<ObRawExpr*, 4> op_params;
     bool is_error_free = true;
     bool cur_error_free = true;
+    bool has_uncacheable_in_expr = false;
     const PreCalcExprExpectResult expect_result = ((is_and_op && !false_exprs.empty())
                                                    || (!is_and_op && true_exprs.empty()))
         ? PreCalcExprExpectResult::PRE_CALC_RESULT_FALSE
@@ -921,8 +1017,27 @@ int ObTransformSimplifyExpr::adjust_dummy_expr(const ObIArray<int64_t> &true_exp
     if (OB_FAIL(ObTransformUtils::extract_target_exprs_by_idx(adjust_exprs, true_exprs, op_params))) {
     } else if (OB_FAIL(ObTransformUtils::extract_target_exprs_by_idx(adjust_exprs, false_exprs, op_params))) {
     } else {
-      for (int64_t i = 0; OB_SUCC(ret) && is_error_free && i < op_params.count(); ++i) {
-        if (OB_FAIL(ObTransformUtils::check_error_free_expr(op_params.at(i), cur_error_free))) {
+      const ObIArray<ObRawExpr*> &check_exprs = remove_all ? adjust_exprs : op_params;
+      for (int64_t i = 0; OB_SUCC(ret) && is_error_free && i < check_exprs.count(); ++i) {
+        bool has_warning = false;
+        bool cur_cache_safe = true;
+        bool has_in = false;
+        const bool checked_expr_was_evaluated = ObOptimizerUtil::find_item(op_params, check_exprs.at(i));
+        if (OB_FAIL(ObTransformUtils::check_error_free_expr(check_exprs.at(i), cur_cache_safe))) {
+        } else if (!cur_cache_safe && OB_FAIL(has_scalar_in_predicate(check_exprs.at(i), has_in))) {
+        } else if (!cur_cache_safe && has_in) {
+          has_uncacheable_in_expr = true;
+        }
+        if (OB_FAIL(ret)) {
+        } else if (checked_expr_was_evaluated && check_exprs.at(i)->is_static_scalar_const_expr()) {
+          // The caller has already evaluated this static predicate and emitted
+          // its warnings once, so it is safe to remove with its constraint.
+        } else if (OB_FAIL(ObTransformUtils::check_static_expr_has_warning(ctx_,
+                                                                           check_exprs.at(i),
+                                                                           has_warning))) {
+        } else if (has_warning) {
+          is_error_free = false;
+        } else if (OB_FAIL(ObTransformUtils::check_error_free_expr(check_exprs.at(i), cur_error_free))) {
         } else {
           is_error_free = cur_error_free;
         }
@@ -956,6 +1071,10 @@ int ObTransformSimplifyExpr::adjust_dummy_expr(const ObIArray<int64_t> &true_exp
     }
 
     if (OB_FAIL(ret) || !is_error_free) {
+    } else if (has_uncacheable_in_expr && OB_NOT_NULL(ctx_->phy_plan_)) {
+      // These transformations depend on concrete literal values and warning
+      // behavior; do not share the folded plan with another literal set.
+      ctx_->phy_plan_->get_phy_plan_hint().plan_cache_policy_ = OB_USE_PLAN_CACHE_NONE;
     } else if (is_and_op && OB_FAIL(ObRawExprUtils::build_and_expr(*ctx_->expr_factory_,
                                                                    op_params, op_expr))) {
       LOG_WARN("failed to build and expr", K(ret));

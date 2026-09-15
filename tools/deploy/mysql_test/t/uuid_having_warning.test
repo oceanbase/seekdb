@@ -1,0 +1,27 @@
+#owner: minan
+#owner group: sql
+#description: Warning-capable constant HAVING predicates are not folded early.
+
+--disable_warnings
+drop database if exists uuid_having_warning;
+--enable_warnings
+
+create database uuid_having_warning character set utf8mb4;
+use uuid_having_warning;
+
+create table t1(c1 int primary key, c2 varchar(100), c8 varchar(100));
+insert into t1 values (
+  1,
+  bin_to_uuid(uuid_to_bin('5fd29c12-493f-11ed-9307-7cd30abc95d8')),
+  bin_to_uuid(uuid_to_bin('11d29c12-493f-11ed-9307-7cd30abc95d8')));
+create view v1 as select * from t1;
+
+select * from t1 group by bin_to_uuid(uuid_to_bin('11d29c12-493f-11ed-9307-7cd30abc95d8'))
+having bin_to_uuid(uuid_to_bin('11d29c12-493f-11ed-9307-7cd30abc95d8'), 34) order by c1;
+
+select * from v1 group by bin_to_uuid(uuid_to_bin('11d29c12-493f-11ed-9307-7cd30abc95d8'))
+having bin_to_uuid(uuid_to_bin('11d29c12-493f-11ed-9307-7cd30abc95d8'), 34) order by c1;
+
+--disable_warnings
+drop database uuid_having_warning;
+--enable_warnings

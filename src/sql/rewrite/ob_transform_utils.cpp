@@ -25,6 +25,7 @@
 #include "sql/rewrite/ob_expand_aggregate_utils.h"
 #include "sql/ob_sql_utils.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
+#include "lib/oblog/ob_warning_buffer.h"
 
 
 namespace oceanbase {
@@ -10578,7 +10579,8 @@ int ObTransformUtils::extract_joined_table_condition(TableItem *table_item,
 int ObTransformUtils::extract_const_bool_expr_info(ObTransformerCtx *ctx,
                                                    const common::ObIArray<ObRawExpr*> &exprs,
                                                    common::ObIArray<int64_t> &true_exprs,
-                                                   common::ObIArray<int64_t> &false_exprs)
+                                                   common::ObIArray<int64_t> &false_exprs,
+                                                   bool skip_warning_expr)
 {
   int ret = OB_SUCCESS;
   bool is_true = false;
@@ -10592,7 +10594,7 @@ int ObTransformUtils::extract_const_bool_expr_info(ObTransformerCtx *ctx,
       if (OB_ISNULL(temp = exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("null expr", K(ret));
-      } else if (OB_FAIL(extract_const_bool_expr_result(ctx, temp, is_true, is_false))) {
+      } else if (OB_FAIL(extract_const_bool_expr_result(ctx, temp, is_true, is_false, skip_warning_expr))) {
       } else if (is_true && OB_FAIL(true_exprs.push_back(i))) {
         LOG_WARN("failed to push back into array", K(ret));
       } else if (is_false && OB_FAIL(false_exprs.push_back(i))) {
@@ -10607,19 +10609,72 @@ int ObTransformUtils::extract_const_bool_expr_info(ObTransformerCtx *ctx,
 int ObTransformUtils::extract_const_bool_expr_result(ObTransformerCtx *ctx,
                                                    ObRawExpr *expr,
                                                    bool &is_true,
-                                                   bool &is_false)
+                                                   bool &is_false,
+                                                   bool skip_warning_expr)
 {
   int ret = OB_SUCCESS;
   ObObj result;
   bool is_valid = false;
+  bool has_warning = false;
   is_true = false;
   is_false = false;
-  if (OB_FAIL(calc_const_expr_result(expr, ctx, result, is_valid))) {
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("null expr", K(ret));
+  } else if (skip_warning_expr && OB_FAIL(check_static_expr_has_warning(ctx, expr, has_warning))) {
+  } else if (has_warning) {
+    // Warning-capable predicates must not be evaluated speculatively when the
+    // simplifier may leave them for execution or when AND/OR short-circuiting
+    // would hide warning-capable siblings.
+  } else if (OB_FAIL(calc_const_expr_result(expr, ctx, result, is_valid))) {
   } else if (!is_valid) {
     /* do nothing */
   } else if (OB_FAIL(ObObjEvaluator::is_true(result, is_true))) {
   } else if (!is_true) {
     is_false = true;
+  }
+  return ret;
+}
+
+int ObTransformUtils::check_static_expr_has_warning(ObTransformerCtx *ctx,
+                                                    ObRawExpr *expr,
+                                                    bool &has_warning)
+{
+  int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
+  ObObj result;
+  const ParamStore *param_store = NULL;
+  ObWarningBuffer *old_warning_buf = NULL;
+  ObWarningBuffer probe_warning_buf;
+  has_warning = false;
+  if (OB_ISNULL(ctx) || OB_ISNULL(expr) || OB_ISNULL(ctx->session_info_)
+      || OB_ISNULL(ctx->allocator_) || OB_ISNULL(ctx->exec_ctx_)
+      || OB_ISNULL(ctx->exec_ctx_->get_physical_plan_ctx())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret), K(ctx), K(expr));
+  } else if (!expr->is_static_scalar_const_expr()) {
+    // do nothing
+  } else {
+    param_store = &ctx->exec_ctx_->get_physical_plan_ctx()->get_param_store();
+    old_warning_buf = ob_get_tsi_warning_buffer();
+    probe_warning_buf.reset();
+    ob_setup_tsi_warning_buffer(&probe_warning_buf);
+    tmp_ret = ObSQLUtils::calc_simple_expr_without_row(ctx->session_info_,
+                                                       expr,
+                                                       result,
+                                                       param_store,
+                                                       *ctx->allocator_);
+    ob_setup_tsi_warning_buffer(old_warning_buf);
+    if (OB_SUCCESS != tmp_ret) {
+      if (IS_SPATIAL_EXPR(expr->get_expr_type())) {
+        ret = tmp_ret;
+        LOG_WARN("failed to probe static expr warning", K(ret), K(*expr));
+      } else {
+        has_warning = true;
+      }
+    } else {
+      has_warning = probe_warning_buf.get_total_warning_count() > 0;
+    }
   }
   return ret;
 }

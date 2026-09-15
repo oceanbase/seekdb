@@ -2857,7 +2857,11 @@ int ObSql::code_generate(
 
   // set phy table location in task_exec_ctx, query_timeout in exec_context
   if (OB_SUCC(ret)) {
+    const ObPlanCachePolicy plan_cache_policy = phy_plan->get_phy_plan_hint().plan_cache_policy_;
     ObPhyPlanHint phy_hint(logical_plan->get_optimizer_context().get_global_hint());
+    if (OB_USE_PLAN_CACHE_NONE == plan_cache_policy) {
+      phy_hint.plan_cache_policy_ = OB_USE_PLAN_CACHE_NONE;
+    }
     // set larger query_time for IS
     if (stmt->get_query_ctx()->has_is_table_) {
       int tmp_ret = OB_SUCCESS;
