@@ -98,7 +98,7 @@ pip install -U pyseekdb   # pyseekdb 是 seekdb 的 Python SDK
 
 ### 🔥 流式写入 + 并发搜索，P99 零毛刺
 
-Agent 工作负载的核心特征是持续写入 + 毫秒级读取。seekdb 的**异步索引流水线（Change Stream）**将 DML 与索引构建解耦，**两级 HNSW**（增量 + 快照）让新写入的向量立即可搜索。
+Agent 工作负载的核心特征是持续写入 + 毫秒级读取。seekdb 的**异步索引流水线（Change Stream）** 将 DML 与索引构建解耦，**两级 HNSW**（增量 + 快照）让新写入的向量立即可搜索。
 
 <div align="center">
   <img src="images/architecture.svg" alt="seekdb 异步索引流水线架构" width="720" />

@@ -29,6 +29,7 @@ namespace oceanbase
 namespace common
 {
 class ObKVCacheIterator;
+class ObKVCacheInstMap;
 class HazptrHolder;
 class ObKVCacheMap
 {
@@ -42,7 +43,7 @@ class ObKVCacheMap
 public:
   ObKVCacheMap();
   virtual ~ObKVCacheMap();
-  int init(const int64_t bucket_num, ObKVCacheStore *store);
+  int init(const int64_t bucket_num, ObKVCacheStore *store, ObKVCacheInstMap *inst_map);
   void destroy();
   int erase_all();
   int erase_all(const int64_t cache_id);
@@ -132,6 +133,7 @@ private:
   Bucket *buckets_;
   ObBucketLock bucket_lock_;
   ObKVCacheStore *store_;
+  ObKVCacheInstMap *inst_map_;
   ObKVCacheHazardStation global_hazard_station_;
 };
 
