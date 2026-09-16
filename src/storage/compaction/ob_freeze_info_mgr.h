@@ -172,6 +172,9 @@ private:
     bool inited_;
     bool check_runtime_status_;
     ObFreezeInfoMgr &mgr_;
+    uint64_t core_table_change_seq_;
+    uint64_t freeze_info_change_seq_;
+    uint64_t acquired_snapshot_change_seq_;
   };
 
   class UpdateLSResvSnapshotTask : public common::ObTimerTask
