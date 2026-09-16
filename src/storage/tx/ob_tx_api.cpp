@@ -297,43 +297,123 @@ int ObTransService::start_tx(ObTxDesc &tx, const ObTxParam &tx_param)
   return ret;
 }
 
-int ObTransService::rollback_tx(ObTxDesc &tx)
+int ObTransService::wait_write_ctx_decided_(const ObTransID &tx_id,
+                                            const int64_t expire_ts)
+{
+  int ret = OB_SUCCESS;
+  ObTxCtx *ctx = NULL;
+  const int64_t start_ts = ObTimeUtility::current_time();
+  const int64_t WAIT_INTERVAL_US = 100;
+
+  if (OB_FAIL(get_tx_ctx_(tx_id, ctx))) {
+    if (OB_TRANS_CTX_NOT_EXIST == ret) {
+      TRANS_LOG(INFO, "write ctx does not exist while waiting rollback decision",
+                K(ret), K(tx_id), K(expire_ts));
+      ret = OB_SUCCESS;
+    } else {
+      TRANS_LOG(WARN, "get transaction context failed while waiting rollback decision",
+                KR(ret), K(tx_id), K(expire_ts));
+    }
+  } else {
+    while (OB_SUCC(ret) && !ctx->is_decided()) {
+      const int64_t now = ObTimeUtility::current_time();
+      if (expire_ts > 0 && now >= expire_ts) {
+        ret = OB_TIMEOUT;
+        TRANS_LOG(WARN, "wait rollback decision timeout",
+                  KR(ret), K(tx_id), K(expire_ts), KPC(ctx));
+      } else {
+        const int64_t sleep_us = expire_ts > 0
+            ? MIN(WAIT_INTERVAL_US, MAX(expire_ts - now, 1))
+            : WAIT_INTERVAL_US;
+        ob_usleep(sleep_us);
+        if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
+          TRANS_LOG(WARN, "waiting rollback decision",
+                    K(tx_id), K(expire_ts), KPC(ctx));
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      TRANS_LOG(INFO, "rollback decision is visible",
+                K(tx_id), "wait_us", ObTimeUtility::current_time() - start_ts, KPC(ctx));
+    }
+  }
+  if (OB_NOT_NULL(ctx)) {
+    revert_tx_ctx_(ctx);
+  }
+  return ret;
+}
+
+int ObTransService::rollback_tx(ObTxDesc &tx, const int64_t expire_ts)
 {
   TXN_API_SANITY_CHECK_FOR_TXN_FREE_ROUTE(true)
   int ret = OB_SUCCESS;
-  ObSpinLockGuard guard(tx.lock_);
-  tx.inc_op_sn();
-  switch(tx.state_) {
-  case ObTxDesc::State::ABORTED:
-    tx.state_ = ObTxDesc::State::ROLLED_BACK;
-    break;
-  case ObTxDesc::State::ROLLED_BACK:
-    ret = OB_TRANS_ROLLBACKED;
-    TRANS_LOG(WARN, "tx rollbacked", K(ret), K(tx));
-    break;
-  case ObTxDesc::State::COMMITTED:
-    ret = OB_TRANS_COMMITED;
-    TRANS_LOG(WARN, "tx committed", K(ret), K(tx));
-    break;
-  case ObTxDesc::State::IN_TERMINATE:
-  case ObTxDesc::State::COMMIT_TIMEOUT:
-  case ObTxDesc::State::COMMIT_UNKNOWN:
-    ret = OB_TRANS_HAS_DECIDED;
-    TRANS_LOG(WARN, "tx in terminating", K(ret), K(tx));
-    break;
-  case ObTxDesc::State::ACTIVE:
-  case ObTxDesc::State::IMPLICIT_ACTIVE:
-    tx.state_ = ObTxDesc::State::IN_TERMINATE;
-    tx.abort_cause_ = OB_TRANS_ROLLBACKED;
-    abort_write_state_(tx);
-  case ObTxDesc::State::IDLE:
-    tx.state_ = ObTxDesc::State::ROLLED_BACK;
-    tx.finish_ts_ = ObClockGenerator::getClock();
-    tx_post_terminate_(tx);
-    break;
-  default:
-    ret = OB_TRANS_INVALID_STATE;
-    TRANS_LOG(WARN, "invalid state", K(ret), K_(tx.state), K(tx));
+  bool need_finish_rollback = false;
+  bool need_wait_write_ctx = false;
+  int64_t wait_expire_ts = expire_ts;
+  {
+    ObSpinLockGuard guard(tx.lock_);
+    tx.inc_op_sn();
+    switch(tx.state_) {
+    case ObTxDesc::State::ABORTED:
+      tx.state_ = ObTxDesc::State::ROLLED_BACK;
+      break;
+    case ObTxDesc::State::ROLLED_BACK:
+      ret = OB_TRANS_ROLLBACKED;
+      TRANS_LOG(WARN, "tx rollbacked", K(ret), K(tx));
+      break;
+    case ObTxDesc::State::COMMITTED:
+      ret = OB_TRANS_COMMITED;
+      TRANS_LOG(WARN, "tx committed", K(ret), K(tx));
+      break;
+    case ObTxDesc::State::IN_TERMINATE:
+    case ObTxDesc::State::COMMIT_TIMEOUT:
+    case ObTxDesc::State::COMMIT_UNKNOWN:
+      ret = OB_TRANS_HAS_DECIDED;
+      TRANS_LOG(WARN, "tx in terminating", K(ret), K(tx));
+      break;
+    case ObTxDesc::State::ACTIVE:
+    case ObTxDesc::State::IMPLICIT_ACTIVE:
+      tx.state_ = ObTxDesc::State::IN_TERMINATE;
+      tx.abort_cause_ = OB_TRANS_ROLLBACKED;
+      need_finish_rollback = true;
+      need_wait_write_ctx = tx.has_write_state();
+      if (wait_expire_ts <= 0 || wait_expire_ts > tx.get_expire_ts()) {
+        wait_expire_ts = tx.get_expire_ts();
+      }
+      if (OB_FAIL(abort_write_state_(tx))) {
+        TRANS_LOG(WARN, "abort write state failed during rollback", KR(ret), K(tx));
+      }
+      break;
+    case ObTxDesc::State::IDLE:
+      tx.state_ = ObTxDesc::State::ROLLED_BACK;
+      tx.finish_ts_ = ObClockGenerator::getClock();
+      tx_post_terminate_(tx);
+      break;
+    default:
+      ret = OB_TRANS_INVALID_STATE;
+      TRANS_LOG(WARN, "invalid state", K(ret), K_(tx.state), K(tx));
+    }
+  }
+
+  if (OB_SUCC(ret) && need_wait_write_ctx) {
+    if (OB_FAIL(wait_write_ctx_decided_(tx.tx_id_, wait_expire_ts))) {
+      TRANS_LOG(WARN, "wait write ctx decided failed during rollback",
+                KR(ret), K(tx), K(wait_expire_ts));
+    }
+  }
+
+  if (OB_SUCC(ret) && need_finish_rollback) {
+    ObSpinLockGuard guard(tx.lock_);
+    if (ObTxDesc::State::IN_TERMINATE == tx.state_) {
+      tx.state_ = ObTxDesc::State::ROLLED_BACK;
+      tx.finish_ts_ = ObClockGenerator::getClock();
+      tx_post_terminate_(tx);
+    } else if (ObTxDesc::State::ROLLED_BACK == tx.state_) {
+      // already finished by another rollback path
+    } else {
+      ret = OB_TRANS_INVALID_STATE;
+      TRANS_LOG(WARN, "unexpected state after rollback decision", K(ret), K(tx));
+    }
   }
   TRANS_LOG(INFO, "rollback tx", K(ret), K(*this), K(tx));
   ObTransTraceLog &tlog = tx.get_tlog();

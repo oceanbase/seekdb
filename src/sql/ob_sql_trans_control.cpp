@@ -439,7 +439,7 @@ int ObSqlTransControl::do_end_trans_(ObSQLSessionInfo *session,
     
     if (OB_FAIL(get_tx_service(session, txs))) {
     } else if (is_rollback) {
-      ret = txs->rollback_tx(*tx_ptr);
+      ret = txs->rollback_tx(*tx_ptr, expire_ts);
     } else if (callback) {
       if (OB_FAIL(inc_session_ref(session))) {
       } else {
