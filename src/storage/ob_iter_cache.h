@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_STORAGE_OB_ITER_CACHE_H_
-#define OCEANBASE_STORAGE_OB_ITER_CACHE_H_
+#pragma once
 
 #include <stdint.h>
 #include "share/ob_define.h"
@@ -64,5 +63,3 @@ void iter_free(ObIterCacheType type, void *ptr);
 
 } // namespace storage
 } // namespace oceanbase
-
-#endif // OCEANBASE_STORAGE_OB_ITER_CACHE_H_

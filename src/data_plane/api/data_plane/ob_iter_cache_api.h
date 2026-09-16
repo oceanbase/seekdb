@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_DATA_PLANE_API_OB_ITER_CACHE_API_H_
-#define OCEANBASE_DATA_PLANE_API_OB_ITER_CACHE_API_H_
+#pragma once
 
 namespace oceanbase
 {
@@ -31,5 +30,3 @@ void destroy_iter_cache(common::ObIAllocator &allocator, void *&cache);
 
 } // namespace data_plane
 } // namespace oceanbase
-
-#endif // OCEANBASE_DATA_PLANE_API_OB_ITER_CACHE_API_H_
