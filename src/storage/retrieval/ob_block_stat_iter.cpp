@@ -185,8 +185,6 @@ ObBlockStatIterator::ObBlockStatIterator()
     curr_merged_endkey_(),
     curr_scan_range_(),
     curr_scan_start_key_(),
-    curr_memtable_scan_range_(),
-    curr_memtable_start_key_(),
     iter_allocator_(nullptr),
     is_baseline_merged_endkey_(false),
     iter_end_(false),
@@ -200,9 +198,7 @@ void ObBlockStatIterator::reset()
   iter_end_ = false;
   is_baseline_merged_endkey_ = false;
   curr_scan_start_key_.reset();
-  curr_memtable_start_key_.reset();
   curr_scan_range_.reset();
-  curr_memtable_scan_range_.reset();
   curr_endkey_ = nullptr;
   curr_merged_endkey_.reset();
   rowkey_read_info_ = nullptr;
@@ -325,9 +321,6 @@ int ObBlockStatIterator::init_scan_range(const ObTabletHandle &tablet_handle, Ob
     LOG_WARN("unexpected empty scan range", K(ret), K_(scan_range), K(scan_param));
   } else {
     curr_scan_range_ = scan_range_.get_ranges().at(0);
-  }
-  if (OB_SUCC(ret)) {
-    curr_memtable_scan_range_ = curr_scan_range_;
   }
   return ret;
 }
@@ -483,7 +476,7 @@ int ObBlockStatIterator::construct_iters()
       LOG_WARN("table must not be null", K(ret), K(i), K(scan_tables_));
     } else if (table->is_memtable()) {
       ObStoreRowIterator *iter = nullptr;
-      if (OB_FAIL(table->scan(main_table_param_.iter_param_, main_table_ctx_, curr_memtable_scan_range_, iter))) {
+      if (OB_FAIL(table->scan(main_table_param_.iter_param_, main_table_ctx_, curr_scan_range_, iter))) {
       } else if (OB_FAIL(memtable_iters_.push_back(MemTableIter(iter)))) {
       }
     } else if (table->is_sstable()) {
@@ -878,25 +871,19 @@ int ObBlockStatIterator::shrink_scan_range(const ObDatumRowkey &start_key)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(rowkey_read_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("rowkey read info must not be null when shrinking scan range", K(ret));
-  } else if (OB_FAIL(start_key.deep_copy(curr_scan_start_key_, allocator_))) {
+    LOG_WARN("unexpected nullptr to rowkey read info", K(ret), KP_(rowkey_read_info));
   } else {
-    // SSTable iterators need the complete physical boundary so they resume
-    // after the last consumed block, including multi-version rowkey columns.
-    curr_scan_range_.start_key_ = curr_scan_start_key_;
-
-    // Memtable iterators only accept the schema rowkey.  Passing the physical
-    // multi-version columns through ObMemtableKey::encode() causes a type
-    // mismatch between the rowkey and the memtable output descriptors.
-    ObDatumRowkey schema_start_key = curr_scan_start_key_;
-    schema_start_key.datum_cnt_ = MIN(schema_start_key.datum_cnt_,
-                                      rowkey_read_info_->get_schema_rowkey_count());
-    if (OB_FAIL(schema_start_key.deep_copy(curr_memtable_start_key_, allocator_))) {
-    } else if (OB_FAIL(curr_memtable_start_key_.prepare_memtable_readable(
+    // Strip multi-version extra rowkey columns
+    int64_t schema_rowkey_cnt = rowkey_read_info_->get_schema_rowkey_count();
+    ObDatumRowkey new_start_key = start_key;
+    new_start_key.datum_cnt_ = MIN(schema_rowkey_cnt, start_key.get_datum_cnt());
+    if (OB_FAIL(new_start_key.deep_copy(curr_scan_start_key_, allocator_))) {
+      LOG_WARN("failed to deep copy start key", K(ret), K(start_key));
+    } else if (OB_FAIL(curr_scan_start_key_.prepare_memtable_readable(
         rowkey_read_info_->get_columns_desc(), allocator_))) {
+      LOG_WARN("failed to prepare memtable readable", K(ret), K(curr_scan_start_key_));
     } else {
-      curr_memtable_scan_range_ = curr_scan_range_;
-      curr_memtable_scan_range_.start_key_ = curr_memtable_start_key_;
+      curr_scan_range_.start_key_ = curr_scan_start_key_;
     }
   }
   return ret;

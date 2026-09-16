@@ -213,8 +213,6 @@ private:
   ObDatumRowkey curr_merged_endkey_;
   ObDatumRange curr_scan_range_;
   ObDatumRowkey curr_scan_start_key_;
-  ObDatumRange curr_memtable_scan_range_;
-  ObDatumRowkey curr_memtable_start_key_;
   ObIAllocator *iter_allocator_;
   bool is_baseline_merged_endkey_;
   bool iter_end_;
