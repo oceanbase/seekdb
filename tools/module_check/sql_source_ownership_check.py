@@ -90,7 +90,7 @@ def check(repo: Path) -> List[str]:
         errors.append(f"stale/non-production SQL inventory sources: {stale}")
 
     expected_counts = {
-        "SQL_UNITY_GROUPS": 1111,
+        "SQL_UNITY_GROUPS": 1112,
         "SQL_SIMD_UNITY_GROUPS": 3,
         "SQL_STANDALONE_SOURCES": 5,
         "SQL_EXTRA_SOURCES": 21,
@@ -113,7 +113,7 @@ def main() -> int:
         for error in errors:
             print(error, file=sys.stderr)
         return 1
-    print("sql source ownership: 1151 production + 7 separate = 1158 workspace")
+    print("sql source ownership: 1152 production + 7 separate = 1159 workspace")
     return 0
 
 

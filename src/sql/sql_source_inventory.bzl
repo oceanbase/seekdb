@@ -178,6 +178,7 @@ SQL_UNITY_GROUPS = [
         name = "ob_sql_engine_1",
         language = "c++",
         srcs = [
+            "src/sql/engine/graph/graph_expand.cpp",
             "src/sql/engine/window_function/ob_window_function_op.cpp",
             "src/sql/engine/opt_statistics/ob_optimizer_stats_gathering_op.cpp",
             "src/sql/engine/ob_subschema_ctx.cpp",
