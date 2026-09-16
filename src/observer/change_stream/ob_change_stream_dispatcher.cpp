@@ -400,6 +400,12 @@ void ObCSDispatcher::run1()
                  K(dispatch_sn_), K(tx_ring_.begin_sn()), K(tx_ring_.end_sn()),
                  K(get_next_commit_sn()), K(ATOMIC_LOAD(&active_batch_count_)));
       }
+    } else if (ATOMIC_LOAD(&active_batch_count_) > 0) {
+      // Keep the recovery/commit boundary single-threaded.  Dispatching the
+      // next batch while an earlier batch is still processing lets a failure
+      // in the earlier batch invalidate all later contexts, which can cause
+      // an epoch/retry storm and starve refresh_scn_ progress.
+      usleep(1000);
     } else if (OB_FAIL(do_dispatch_())) {
       LOG_WARN("do dispatch failed", KR(ret));
       usleep(100 * 1000);  // Deliberate backoff on error.
