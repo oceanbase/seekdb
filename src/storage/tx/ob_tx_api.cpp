@@ -402,7 +402,8 @@ int ObTransService::rollback_tx(ObTxDesc &tx, const int64_t expire_ts)
     }
   }
 
-  if (OB_SUCC(ret) && need_finish_rollback) {
+  if (need_finish_rollback) {
+    int finish_ret = OB_SUCCESS;
     ObSpinLockGuard guard(tx.lock_);
     if (ObTxDesc::State::IN_TERMINATE == tx.state_) {
       tx.state_ = ObTxDesc::State::ROLLED_BACK;
@@ -411,8 +412,11 @@ int ObTransService::rollback_tx(ObTxDesc &tx, const int64_t expire_ts)
     } else if (ObTxDesc::State::ROLLED_BACK == tx.state_) {
       // already finished by another rollback path
     } else {
-      ret = OB_TRANS_INVALID_STATE;
-      TRANS_LOG(WARN, "unexpected state after rollback decision", K(ret), K(tx));
+      finish_ret = OB_TRANS_INVALID_STATE;
+      TRANS_LOG(WARN, "unexpected state after rollback decision", K(finish_ret), K(tx));
+    }
+    if (OB_FAIL(finish_ret) && OB_SUCC(ret)) {
+      ret = finish_ret;
     }
   }
   TRANS_LOG(INFO, "rollback tx", K(ret), K(*this), K(tx));

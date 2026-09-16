@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX TRANS
 
 #include "ob_tx_ctx.h"
+#include "share/ob_debug_sync.h"
 #include "share/rc/ob_server_runtime.h"
 #include "ob_tx_redo_submitter.h"
 #include "storage/tx/ob_trans_service.h"
@@ -1586,6 +1587,9 @@ int ObTxCtx::on_success(ObTxLogCb *log_cb)
         } else {
           invoke_on_succ_cnt++;
           const int64_t before_invoke_ts = ObTimeUtility::fast_current_time();
+          if (ObTxLogType::TX_ABORT_LOG == cur_cb->get_last_log_type()) {
+            DEBUG_SYNC(BEFORE_TX_ABORT_DECISION);
+          }
           if (OB_FAIL(on_success_ops_(cur_cb))) {
             TRANS_LOG(ERROR, "invoke on_success_ops failed", K(ret), K(*this), K(*cur_cb));
             if (OB_SUCCESS == save_ret) {
