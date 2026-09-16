@@ -19,6 +19,7 @@
 #include "share/ob_core_table_proxy.h"
 
 #include "lib/container/ob_array_iterator.h"
+#include "lib/utility/utility.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
 #include "inner_table/ob_inner_table_schema.h"
 #include "share/ob_debug_sync.h"
@@ -992,6 +993,79 @@ int ObCoreTableProxy::execute_incremental_update_sql(const Row &row, const ObIAr
         affected_rows = affected_rows_bak + 1;
       }
     }
+  }
+  return ret;
+}
+
+int ObCoreTableProxy::atomic_incremental_upsert_row(
+    const int64_t row_id,
+    const ObIArray<UpdateCell> &cells,
+    int64_t &affected_rows)
+{
+  int ret = OB_SUCCESS;
+  affected_rows = 0;
+  ObArray<const UpdateCell *> sorted_cells;
+  if (!is_valid() || 1 != row_id || cells.count() <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), KPC(this), K(row_id), K(cells.count()));
+  }
+  FOREACH_CNT_X(uc, cells, OB_SUCC(ret)) {
+    if (NULL == uc || !uc->is_valid() || uc->is_filter_cell_ || NULL == uc->cell_.value_.ptr()) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid incremental upsert cell", K(ret), KPC(uc));
+    } else if (OB_FAIL(sorted_cells.push_back(uc))) {
+      LOG_WARN("failed to save incremental upsert cell", K(ret));
+    }
+  }
+  if (OB_SUCC(ret)) {
+    lib::ob_sort(sorted_cells.begin(), sorted_cells.end(),
+        [](const UpdateCell *lhs, const UpdateCell *rhs) {
+          return lhs->cell_.name_ < rhs->cell_.name_;
+        });
+    for (int64_t i = 1; OB_SUCC(ret) && i < sorted_cells.count(); ++i) {
+      if (sorted_cells.at(i - 1)->cell_.name_ == sorted_cells.at(i)->cell_.name_) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("duplicate incremental upsert cell", K(ret),
+                 "name", sorted_cells.at(i)->cell_.name_);
+      }
+    }
+  }
+
+  ObSqlString values_sql;
+  for (int64_t i = 0; OB_SUCC(ret) && i < sorted_cells.count(); ++i) {
+    const Cell &cell = sorted_cells.at(i)->cell_;
+    if (OB_FAIL(values_sql.append(i > 0 ? ",(" : "("))) {
+    } else if (OB_FAIL(sql_append_hex_escape_str(
+                   ObString::make_string(table_name_), values_sql))) {
+    } else if (OB_FAIL(values_sql.append_fmt(", %ld, ", row_id))) {
+    } else if (OB_FAIL(sql_append_hex_escape_str(cell.name_, values_sql))) {
+    } else if (OB_FAIL(values_sql.append(", "))) {
+    } else {
+      if (cell.is_hex_value_) {
+        if (OB_FAIL(values_sql.append(cell.value_.ptr(), cell.value_.length()))) {
+        }
+      } else if (OB_FAIL(sql_append_hex_escape_str(cell.value_, values_sql))) {
+      }
+      if (OB_SUCC(ret) && OB_FAIL(values_sql.append(")"))) {
+      }
+    }
+  }
+
+  DEBUG_SYNC(BEFORE_UPDATE_CORE_TABLE);
+  ObSqlString sql;
+  int64_t physical_affected_rows = 0;
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(sql.assign_fmt(
+      "INSERT INTO %s (table_name, row_id, column_name, column_value) VALUES %s "
+      "ON DUPLICATE KEY UPDATE column_value = if ((cast(column_value as signed) > values(column_value)) "
+      "and (values(column_value) != %ld), column_value, values(column_value))",
+      OB_ALL_CORE_TABLE_TNAME, values_sql.ptr(), OB_INVALID_SCHEMA_VERSION))) {
+  } else if (OB_FAIL(sql_client_->write(sql.ptr(), physical_affected_rows))) {
+    LOG_WARN("failed to atomically upsert core table row", K(ret), K(sql));
+  } else {
+    // ObISQLClient reports physical ODKU counts (0, 1 or 2 per value), while
+    // callers of ObCoreTableProxy reason about one logical global-stat row.
+    affected_rows = 1;
   }
   return ret;
 }
