@@ -100,6 +100,7 @@ int ObNetUtil::get_local_addr_ipv6(const char *dev_name, char *ipv6, int len,
           if (cur_level > level) {
             if (nullptr == inet_ntop(AF_INET6, &in6->sin6_addr, ipv6, len)) {
               ret = OB_ERR_SYS;
+              LOG_WARN("call inet_ntop fail", K(errno), K(ret));
             } else {
               level = cur_level;
               ret = OB_SUCCESS;
@@ -169,6 +170,7 @@ int ObNetUtil::get_local_addr_ipv6(const char *dev_name, char *ipv6, int len,
     ret = OB_BUF_NOT_ENOUGH;
   } else if (-1 == getifaddrs(&ifa)) {
     ret = OB_ERR_SYS;
+    LOG_WARN("call getifaddrs fail", K(errno), K(ret));
   } else {
     ifa_tmp = ifa;
     while (ifa_tmp) {
@@ -193,6 +195,7 @@ int ObNetUtil::get_local_addr_ipv6(const char *dev_name, char *ipv6, int len,
         if (cur_level > level) {
           if (nullptr == inet_ntop(AF_INET6, &in6->sin6_addr, ipv6, len)) {
             ret = OB_ERR_SYS;
+            LOG_WARN("call inet_ntop fail", K(errno), K(ret));
           } else {
             level = cur_level;
             ret = OB_SUCCESS;
@@ -229,6 +232,7 @@ int ObNetUtil::get_local_addr_ipv4(const char *dev_name, uint32_t &addr)
     ret = OB_INVALID_ARGUMENT;
   } else if (-1 == getifaddrs(&ifa)) {
     ret = OB_ERR_SYS;
+    LOG_WARN("call getifaddrs fail", K(errno), K(ret));
   } else {
     ifa_tmp = ifa;
     bool has_found = false;

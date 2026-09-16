@@ -271,6 +271,7 @@ int Thread::try_wait()
     } else {
       if (0 != (pret = pthread_join(pth_, nullptr))) {
         ret = OB_EAGAIN;
+        LOG_WARN("pthread_join failed", K(pret), K(errno), K(ret), K(oceanbase::lib::Thread::tid_));
       } else {
         destroy_stack();
       }
@@ -282,6 +283,7 @@ int Thread::try_wait()
       if (wait_ret == WAIT_OBJECT_0) {
         if (0 != (pret = pthread_join(pth_, nullptr))) {
           ret = OB_EAGAIN;
+          LOG_WARN("pthread_join failed", K(pret), K(errno), K(ret), K(oceanbase::lib::Thread::tid_));
         } else {
           destroy_stack();
         }
@@ -292,6 +294,9 @@ int Thread::try_wait()
 #elif defined(__linux__)
     if (0 != (pret = pthread_tryjoin_np(pth_, nullptr))) {
       ret = OB_EAGAIN;
+      if (EBUSY != pret) {
+        LOG_WARN("pthread_tryjoin_np failed", K(pret), K(errno), K(ret), K(oceanbase::lib::Thread::tid_));
+      }
     } else {
       destroy_stack();
     }

@@ -1024,6 +1024,7 @@ int ObAsyncIOChannel::on_full_retry(ObIORequest &req)
   static const int64_t MAX_RETRY_COUNT = 10;
   if (++req.retry_count_ > MAX_RETRY_COUNT) {
     ret = OB_IO_ERROR;
+    LOG_WARN("retry too many times", K(ret), K(req));
   } else if (OB_ISNULL(req.io_result_)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (FALSE_IT(req.io_result_->complete_size_ = 0)) {
@@ -1746,6 +1747,7 @@ void ObIOFaultDetector::handle(void *task)
               ++ fs_error_times;
               ret = OB_SUCCESS;
             } else {
+              LOG_WARN("ObIOManager::retry read request failed", K(ret), K(retry_task->io_info_));
             }
           } else {
             is_retry_succ = true;
@@ -1755,6 +1757,7 @@ void ObIOFaultDetector::handle(void *task)
           const int64_t current_ts = ObTimeUtility::fast_current_time();
           if (current_ts >= warn_ts || (sys_io_errno != 0 && fs_error_times >= MAX_DETECT_READ_WARN_TIMES)) {
             set_device_warning();
+            LOG_WARN("ObIOManager::detect IO retry reach limit, device warning", K(ret), K(sys_io_errno), K(current_ts), K(current_ts), K(fs_error_times), K(retry_task->io_info_));
           }
         }
       }

@@ -68,6 +68,7 @@ int ObMacroBlockCommonHeader::check_integrity() const
       || version_ != MACRO_BLOCK_COMMON_HEADER_VERSION
       || magic_ != MACRO_BLOCK_COMMON_HEADER_MAGIC) {
     ret = OB_INVALID_DATA;
+    LOG_WARN("invalid common header", K(ret), K(*this));
   }
   return ret;
 }

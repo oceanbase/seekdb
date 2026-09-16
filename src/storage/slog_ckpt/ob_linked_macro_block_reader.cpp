@@ -386,6 +386,7 @@ int ObLinkedMacroBlockItemReader::parse_item(
       reinterpret_cast<ObLinkedMacroBlockItemHeader *>(buf_ + buf_pos_);
   if (OB_UNLIKELY(!item_header->is_valid())) {
     ret = OB_ERR_SYS;
+    LOG_WARN("item header is invalid", K(ret));
   } else {
     const int64_t size = item_header->payload_size_ + sizeof(ObLinkedMacroBlockItemHeader);
     int64_t offset = 0;
@@ -441,6 +442,7 @@ int ObLinkedMacroBlockItemReader::read_item(const ObIArray<MacroBlockId> &block_
         item_buf_len = addr.size() - sizeof(ObLinkedMacroBlockItemHeader);
         if (OB_UNLIKELY(!item_header->is_valid())) {
           ret = OB_ERR_SYS;
+          LOG_WARN("item header is invalid", K(ret), KPC(item_header));
         } else if (OB_FAIL(check_item_crc(item_header->payload_crc_,
                      item_buf_with_head + sizeof(ObLinkedMacroBlockItemHeader), item_buf_len))) {
         } else {

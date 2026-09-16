@@ -297,6 +297,7 @@ int ObLogFileHandler::normal_retry_write(void *buf, int64_t size, int64_t offset
       if (OB_FAIL(ret)) {
         retry_cnt ++;
         if (REACH_TIME_INTERVAL(LOG_INTERVAL_US)) {
+          LOG_WARN("fail to aio_write", K(ret), K(io_info), K(retry_cnt));
         } else {
           ob_usleep<ObWaitEventIds::SLOG_NORMAL_RETRY_SLEEP>(SLEEP_TIME_US);
         }
@@ -318,6 +319,7 @@ int ObLogFileHandler::open(const char *file_path, const int flags, const mode_t 
     const int64_t start_time = ObTimeUtility::fast_current_time();
     while (OB_SUCC(ret)) {
       if (OB_FAIL(LOCAL_DEVICE_INSTANCE.open(file_path, flags, mode, io_fd))) {
+        LOG_WARN("failed to open file", K(ret), K(file_path), K(errno), KERRMSG);
         if (OB_TIMEOUT == ret || OB_EAGAIN == ret || OB_SERVER_OUTOF_DISK_SPACE == ret) {
           ret = OB_SUCCESS;
           ob_usleep<ObWaitEventIds::SLOG_NORMAL_RETRY_SLEEP>(ObLogDefinition::RETRY_SLEEP_TIME_IN_US);

@@ -182,6 +182,7 @@ int ObMicroBlockHeader::check_and_get_record(
     ret = OB_INVALID_ARGUMENT;
   } else if (magic != magic_) {
     ret = OB_INVALID_DATA;
+    LOG_WARN("record header magic is not match", K(ret), K(magic), K(magic_));
   } else if (OB_FAIL(check_header_checksum())) {
   } else {
     const int64_t header_size = header_size_;
@@ -281,6 +282,7 @@ int ObMicroBlockHeader::deserialize(const char *buf, int64_t buf_len, int64_t &p
                 || !header->is_valid()
                 || buf_len < pos + header->header_size_)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid header to deserialize", K(ret), K(buf_len), K(pos), KPC(header));
     } else {
       *this = *header;
       new_pos += COLUMN_CHECKSUM_PTR_OFFSET ;

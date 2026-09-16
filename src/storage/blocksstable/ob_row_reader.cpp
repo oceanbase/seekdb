@@ -434,6 +434,7 @@ OB_INLINE int ObRowReader::analyze_row_header()
   row_header_ = reinterpret_cast<const ObRowHeader*>(buf_); // get NewRowHeader
   if (OB_UNLIKELY(!row_header_->is_valid())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("row header is invalid", K(ret), K(row_len_), KPC(row_header_));
   } else if (OB_FAIL(analyze_cluster_info())) {
   }
 

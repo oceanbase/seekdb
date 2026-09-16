@@ -886,8 +886,11 @@ int ObLocalDevice::pwrite(
     } else if (OB_FAIL(ObIODeviceLocalFileOp::pwrite_impl(block_fd_, buf, size, 0, write_size))) {
         SHARE_LOG(ERROR, "Fail to write main superblock, try backup", K(ret), K(write_size), K(offset), K(size), KP(buf));
         if (OB_FAIL(ObIODeviceLocalFileOp::pwrite_impl(block_fd_, buf, size, block_size_, write_size))) {
+          SHARE_LOG(WARN, "Neither main nor backup superblock write success!!!", K(ret), K(write_size), K(offset), K(size), KP(buf));
         }
     } else if (OB_UNLIKELY(OB_SUCCESS != ObIODeviceLocalFileOp::pwrite_impl(block_fd_, buf, size, 1 * block_size_ + offset, write_size))) {
+      // main superblock success, allow backup failure
+      SHARE_LOG(WARN, "Fail to write backup superblock", K(write_size), K(offset), K(size), KP(buf));
     }
   } else {
     if (fd.is_block_file()) {

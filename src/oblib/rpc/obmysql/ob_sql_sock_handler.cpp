@@ -43,6 +43,7 @@ static int get_client_addr_for_sql_sock_session(int fd, ObAddr& client_addr)
   socklen_t addr_len = sizeof(addr);
   if (getpeername(fd, (struct sockaddr *)&addr, &addr_len) < 0) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sql nio getpeername failed", K(errno), K(ret));
   } else {
     client_addr.from_sockaddr(&addr);
   }

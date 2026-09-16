@@ -63,6 +63,7 @@ int ObLogFileGroup::init(const char *log_dir)
     struct statfs buf;
     if (0 != ::statfs(log_dir, &buf)) {
       ret = OB_IO_ERROR;
+      LOG_WARN("failed to statfs", K(ret), K(log_dir), K(errno), KERRMSG);
     } else {
       total_disk_size_ = (int64_t)buf.f_bsize * (int64_t)buf.f_blocks;
     }

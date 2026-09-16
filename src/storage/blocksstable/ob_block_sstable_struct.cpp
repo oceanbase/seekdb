@@ -333,6 +333,7 @@ int ObRecordHeaderV3::check_and_get_record(const char *ptr, const int64_t size, 
     ret = OB_INVALID_ARGUMENT;
   } else if (magic != magic_) {
     ret = OB_INVALID_DATA;
+    LOG_WARN("record header magic is not match", K(ret), K(magic), K(magic_));
   } else if (OB_FAIL(check_header_checksum())) {
   } else {
     const int64_t header_size = get_serialize_size();

@@ -494,6 +494,7 @@ int ObLogCompressor::compress_single_file_(const char *file_name, char *src_buf,
       LOG_ERROR("failed to get compressed file name", K(ret), K(file_name));
     } else if (NULL == (input_file = fopen(file_name, "r"))) {
       ret = OB_FILE_NOT_EXIST;
+      LOG_WARN("failed to open file", K(ret), K(errno), K(file_name));
     } else if (NULL == (output_file = fopen(compressed_file_name, "w"))) {
       ret = OB_ERR_SYS;
       fclose(input_file);
@@ -506,6 +507,7 @@ int ObLogCompressor::compress_single_file_(const char *file_name, char *src_buf,
           if (OB_FAIL(compress_single_block_(dest_buf, dest_size, src_buf, read_size, write_size))) {
           } else if (write_size != fwrite(dest_buf, 1, write_size, output_file)) {
             ret = OB_FILE_NOT_EXIST;
+            LOG_WARN("failed to write file", K(ret), K(errno), K(compressed_file_name));
           }
         }
         ob_usleep(sleep_us);
