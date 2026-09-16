@@ -37,6 +37,7 @@ Before you start developing a big feature, it's recommended to read these docume
 1. [Logging System](logging.md) - How logging works in OceanBase seekdb
 2. [Memory Management](memory.md) - Memory management strategies and best practices
 3. [Basic Data Structures](container.md) - Core data structures used in the codebase
+4. [Bounded graph WALK queries](graph-walk.md) - Supported path syntax, result shapes, and GraphRAG composition
 
 ### 4. Contribute to OceanBase seekdb
 

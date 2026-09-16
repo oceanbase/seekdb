@@ -42,6 +42,7 @@
 1. [内存管理](memory.md) - seekdb的内存管理机制和多租户内存隔离
 2. [日志系统](logging.md) - 日志的使用方法和实现细节
 3. [基础数据结构](container.md) - seekdb提供的容器类（替代STL）
+4. [有界图 WALK 查询](graph-walk.md) - 路径语法、结果形态与 GraphRAG 组合方式
 
 ### 第五部分：贡献代码
 
