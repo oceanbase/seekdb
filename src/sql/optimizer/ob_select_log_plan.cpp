@@ -3023,6 +3023,10 @@ int ObSelectLogPlan::allocate_recursive_union_all_as_top(ObLogicalOperator *left
     set_op->set_algo_type(MERGE_SET);
     set_op->set_distributed_algo(dist_set_method);
     set_op->set_recursive_union(true);
+    set_op->set_graph_feedback_loop(select_stmt->is_graph_feedback_loop(),
+                                    select_stmt->get_graph_path_lower_bound(),
+                                    select_stmt->get_graph_path_upper_bound(),
+                                    select_stmt->is_graph_path_reverse());
     if (OB_FAIL(set_op->compute_property())) {
     } else {
       top = set_op;

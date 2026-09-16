@@ -501,6 +501,15 @@ int ObSelectResolver::set_stmt_set_type(ObSelectStmt *select_stmt,
       select_stmt->assign_set_op(ObSelectStmt::UNION);
       select_stmt->assign_set_all();
       break;
+    case T_GRAPH_FEEDBACK_LOOP:
+      select_stmt->assign_set_op(ObSelectStmt::UNION);
+      select_stmt->assign_set_all();
+      select_stmt->set_graph_feedback_loop(
+          true,
+          set_node->int16_values_[0],
+          set_node->int16_values_[1],
+          set_node->int16_values_[2] != 0);
+      break;
     case T_SET_INTERSECT:
       select_stmt->assign_set_op(ObSelectStmt::INTERSECT);
       break;

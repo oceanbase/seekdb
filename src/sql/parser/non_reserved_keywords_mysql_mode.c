@@ -34,6 +34,9 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"label", LABEL},
   {"destination", DESTINATION},
   {"graph_table", GRAPH_TABLE},
+  {"step", STEP},
+  {"trail", TRAIL},
+  {"acyclic", ACYCLIC},
 
   {"access", ACCESS},
   {"accessible", ACCESSIBLE},

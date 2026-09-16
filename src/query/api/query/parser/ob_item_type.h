@@ -2285,6 +2285,12 @@ typedef enum ObItemType
   T_GRAPH_PATTERN = 4928,
   T_GRAPH_NODE_PATTERN = 4929,
   T_GRAPH_EDGE_PATTERN = 4930,
+  T_GRAPH_QUANTIFIER = 4931,
+  T_GRAPH_TABLE_SHAPE = 4932,
+  T_GRAPH_PATH_MODE = 4933,
+  // Internal-only parse node emitted by the GRAPH_TABLE resolver. It keeps
+  // bounded WALK feedback loops distinguishable from user recursive CTEs.
+  T_GRAPH_FEEDBACK_LOOP = 4934,
   T_MAX //Attention: add a new type before T_MAX
 } ObItemType;
 

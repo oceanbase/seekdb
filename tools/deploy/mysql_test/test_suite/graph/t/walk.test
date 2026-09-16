@@ -1,0 +1,314 @@
+--disable_query_log
+DROP PROPERTY GRAPH IF EXISTS graph_social;
+DROP PROPERTY GRAPH IF EXISTS graph_composite;
+--disable_warnings
+DROP TABLE IF EXISTS graph_works,graph_knows,graph_company,graph_person;
+DROP TABLE IF EXISTS gp_binding,gp_works,gp_company,gp_edge,gp_vertex;
+--enable_warnings
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+--enable_query_log
+
+--echo bounded_quantifiers_and_plan_cache_literals
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS knows]->{0}(b IS person)
+  COLUMNS(a.id AS source,b.id AS destination,COUNT(e.id) AS hops)) g;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person)
+  COLUMNS(a.id AS source,b.id AS destination,COUNT(e.id) AS hops)) g
+  ORDER BY hops,destination;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS knows]->{1,2}(b IS person)
+  COLUMNS(a.id AS source,b.id AS destination,COUNT(e.id) AS hops)) g
+  ORDER BY hops,destination;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS knows]->{,2}(b IS person WHERE b.id=3)
+  COLUMNS(a.id AS source,b.id AS destination,COUNT(e.id) AS hops,
+          JSON_ARRAYAGG(e.id) AS edge_ids)) g ORDER BY hops,edge_ids;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS knows]->{2}(b IS person)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edge_ids)) g
+  ORDER BY edge_ids;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS knows]->{0,1}(b IS person)
+  COLUMNS(b.id AS destination,COUNT(EDGE_ID(e)) AS hops)) g
+  ORDER BY hops,destination;
+SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=5)-[e IS knows]->{0,16}(b IS person)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+
+--echo per_hop_edge_filter_and_terminal_only_filter
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS knows WHERE e.since>=2021]->{1,2}
+  (b IS person WHERE b.id=3)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edge_ids)) g;
+
+--echo reverse_walk_and_repeated_elements
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=3)<-[e IS knows]-{1,2}(b IS person)
+  COLUMNS(a.id AS source,b.id AS destination,COUNT(e.id) AS hops,
+          JSON_ARRAYAGG(e.id) AS edge_ids)) g ORDER BY hops,destination,edge_ids;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=3)-[e IS knows]->{3}(b IS person)
+  COLUMNS(b.id AS destination,JSON_ARRAYAGG(e.id) AS edge_ids)) g
+  ORDER BY edge_ids;
+
+--echo heterogeneous_endpoints_exclude_zero_hop_without_type_leakage
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS works]->{0,1}(b IS company WHERE b.name='Acme')
+  COLUMNS(a.name AS person_name,b.name AS company_name,
+          COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edge_ids)) g;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS company WHERE a.id=1)<-[e IS works]-{0,1}(b IS person)
+  COLUMNS(a.name AS company_name,b.name AS person_name,COUNT(e.id) AS hops)) g;
+
+--echo identity_and_zero_hop_empty_aggregate
+SELECT JSON_VALUE(a,'$.GRAPH_OWNER') AS graph_owner,
+       JSON_VALUE(a,'$.GRAPH_NAME') AS graph_name,
+       JSON_VALUE(a,'$.ELEM_TABLE') AS elem_table,
+       JSON_VALUE(a,'$.KEY_VALUE.id') AS key_value,
+       e AS edges
+FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS knows]->{0}(b IS person)
+  COLUMNS(VERTEX_ID(a) AS a,JSON_ARRAYAGG(EDGE_ID(e)) AS e)) g;
+
+--echo one_row_per_step
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person)
+  ONE ROW PER STEP (v1,step_e,v2)
+  COLUMNS(MATCHNUM() AS match_no,ELEMENT_NUMBER(v1) AS from_no,
+          ELEMENT_NUMBER(step_e) AS step_no,ELEMENT_NUMBER(v2) AS to_no,
+          v1.id AS from_id,step_e.id AS edge_id,v2.id AS to_id,
+          COUNT(EDGE_ID(e)) AS path_hops,JSON_ARRAYAGG(e.id) AS path_edges)) g
+  ORDER BY match_no,step_no;
+
+--echo outer_relational_operators_preserve_bag_until_distinct
+SELECT hops,COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person)
+  COLUMNS(COUNT(e.id) AS hops)) g GROUP BY hops ORDER BY hops;
+SELECT DISTINCT destination FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person)
+  COLUMNS(b.id AS destination)) g ORDER BY destination LIMIT 2;
+
+--echo lateral_seed_binding_and_duplicate_seeds
+WITH seeds AS (SELECT 1 AS seed_id,0.9 AS score UNION ALL SELECT 1,0.8)
+SELECT s.seed_id,s.score,x.destination,x.hops
+FROM seeds s, LATERAL (
+  SELECT * FROM GRAPH_TABLE(graph_social MATCH
+    (a IS person WHERE a.id=s.seed_id)-[e IS knows]->{1,2}(b IS person)
+    COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g
+) x ORDER BY s.score DESC,x.hops,x.destination;
+
+--echo adjacency_index_does_not_change_results
+PREPARE walk_cached FROM
+  'SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person) COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g';
+EXECUTE walk_cached;
+--source mysql_test/include/create_plan_table.inc
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='walk_full_scan'
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+EXPLAIN INTO plan_table SET statement_id='walk_serial'
+SELECT /*+ PARALLEL(4) */ * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+--enable_result_log
+SELECT COUNT(*)=1 AS has_feedback_full_scan
+FROM plan_table
+WHERE statement_id='walk_full_scan'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%direction=OUT, hops={0,2}, access=full-scan%';
+SELECT COUNT(*)=1 AS has_edge_full_scan
+FROM plan_table
+WHERE statement_id='walk_full_scan'
+  AND operator='TABLE FULL SCAN'
+  AND object_alias='__g_step_edge';
+SELECT COUNT(*)=0 AS graph_walk_has_no_px
+FROM plan_table
+WHERE statement_id='walk_serial'
+  AND (operator LIKE 'PX %' OR operator LIKE 'EXCHANGE %');
+CREATE INDEX graph_knows_out ON graph_knows(src,id);
+CREATE INDEX graph_knows_in ON graph_knows(dst,id);
+EXECUTE walk_cached;
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='walk_out_index'
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+EXPLAIN INTO plan_table SET statement_id='walk_in_index'
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=3)<-[e IS knows]-{1,2}(b IS person)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+--enable_result_log
+SELECT COUNT(*)=1 AS has_feedback_out_index
+FROM plan_table
+WHERE statement_id='walk_out_index'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%direction=OUT, hops={0,2}, access=index-scan%';
+SELECT COUNT(*)=1 AS has_out_adjacency_range
+FROM plan_table
+WHERE statement_id='walk_out_index'
+  AND operator='TABLE RANGE SCAN'
+  AND object_alias='__g_step_edge(graph_knows_out)';
+SELECT COUNT(*)=1 AS has_feedback_in_index
+FROM plan_table
+WHERE statement_id='walk_in_index'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%direction=IN, hops={1,2}, access=index-scan%';
+SELECT COUNT(*)=1 AS has_in_adjacency_range
+FROM plan_table
+WHERE statement_id='walk_in_index'
+  AND operator='TABLE RANGE SCAN'
+  AND object_alias='__g_step_edge(graph_knows_in)';
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edge_ids)) g
+  ORDER BY hops,destination,edge_ids;
+DROP INDEX graph_knows_out ON graph_knows;
+DROP INDEX graph_knows_in ON graph_knows;
+EXECUTE walk_cached;
+DEALLOCATE PREPARE walk_cached;
+DROP TABLE plan_table;
+
+--echo composite_identity_declaration_order
+--source mysql_test/test_suite/graph/fixture.sql
+CREATE PROPERTY GRAPH graph_composite
+  VERTEX TABLES (
+    gp_vertex KEY (tenant,id) LABEL person PROPERTIES (tenant,id,name)
+  )
+  EDGE TABLES (
+    gp_edge KEY (tenant,id)
+      SOURCE KEY (src_tenant,src) REFERENCES gp_vertex (tenant,id)
+      DESTINATION KEY (dst_tenant,dst) REFERENCES gp_vertex (tenant,id)
+      LABEL knows PROPERTIES (tenant,id,weight)
+  );
+SELECT JSON_VALUE(a,'$.KEY_VALUE.tenant') AS source_tenant,
+       JSON_VALUE(a,'$.KEY_VALUE.id') AS source_id,
+       JSON_VALUE(b,'$.KEY_VALUE.tenant') AS target_tenant,
+       JSON_VALUE(b,'$.KEY_VALUE.id') AS target_id,
+       hops,edge_ids
+FROM GRAPH_TABLE(graph_composite MATCH
+  (a IS person WHERE a.tenant=1 AND a.id=1)-[e IS knows]->{0,2}(b IS person)
+  COLUMNS(VERTEX_ID(a) AS a,VERTEX_ID(b) AS b,
+          COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edge_ids)) g
+ORDER BY hops,target_tenant,target_id,edge_ids;
+
+--echo transaction_reads_own_writes_and_orphans_are_excluded
+START TRANSACTION;
+INSERT INTO graph_person VALUES (6,'Txn',20);
+INSERT INTO graph_knows VALUES (18,5,6,2026);
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=5)-[e IS knows]->{1}(b IS person)
+  COLUMNS(JSON_ARRAYAGG(e.id) AS edge_ids,b.id AS destination)) g;
+ROLLBACK;
+SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS knows]->{1}(b IS person)
+  COLUMNS(b.id AS destination)) g;
+
+--echo repeatable_read_uses_one_transaction_snapshot
+connect (walk_writer,$OBMYSQL_MS0,$OBMYSQL_USR,$OBMYSQL_PWD,test,$OBMYSQL_PORT);
+connection default;
+SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ;
+START TRANSACTION;
+SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=5)-[e IS knows]->{1}(b IS person)
+  COLUMNS(b.id AS destination)) g;
+connection walk_writer;
+INSERT INTO graph_person VALUES (6,'Committed',20);
+INSERT INTO graph_knows VALUES (18,5,6,2026);
+connection default;
+SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=5)-[e IS knows]->{1}(b IS person)
+  COLUMNS(b.id AS destination)) g;
+COMMIT;
+SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=5)-[e IS knows]->{1}(b IS person)
+  COLUMNS(b.id AS destination)) g;
+connection walk_writer;
+DELETE FROM graph_knows WHERE id=18;
+DELETE FROM graph_person WHERE id=6;
+disconnect walk_writer;
+connection default;
+
+--echo fixed_chain_regression
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS knows]->(b IS person)
+  COLUMNS(e.id AS edge_id,b.id AS destination)) g ORDER BY edge_id;
+
+--echo unsupported_path_forms
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person)-[e IS knows]->*(b IS person) COLUMNS(COUNT(e.id) AS hops)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person)-[e IS knows]->+(b IS person) COLUMNS(COUNT(e.id) AS hops)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person)-[e IS knows]->{1,}(b IS person) COLUMNS(COUNT(e.id) AS hops)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person)-[e IS knows]->{17}(b IS person) COLUMNS(COUNT(e.id) AS hops)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person)-[e IS knows]->{2,1}(b IS person) COLUMNS(COUNT(e.id) AS hops)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person)-[e IS knows]-{1}(b IS person) COLUMNS(COUNT(e.id) AS hops)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+  (a IS person)-[e IS knows]->{1}(b IS person) COLUMNS(COUNT(e.id) AS hops)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH SIMPLE
+  (a IS person)-[e IS knows]->{1}(b IS person) COLUMNS(COUNT(e.id) AS hops)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH ACYCLIC
+  (a IS person)-[e IS knows]->{1}(b IS person) COLUMNS(COUNT(e.id) AS hops)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person)-[e IS knows]->{1}(b IS person)-[f IS knows]->{1}(c IS person)
+  COLUMNS(COUNT(e.id) AS hops)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person)-[e IS knows]->{1}(b IS person)-[f IS knows]->(c IS person)
+  COLUMNS(COUNT(e.id) AS hops)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person)-[e IS knows]->{1}(b IS person)
+  ONE ROW PER VERTEX (v) COLUMNS(v.id AS id)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person)-[e IS knows]->{1}(b IS person) COLUMNS(e.id AS edge_id)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person)-[e IS knows]->{1}(b IS person) COLUMNS(COUNT(b.id) AS hops)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person)-[e IS knows]->{1}(b IS person) COLUMNS(b.missing AS value)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person)-[e IS knows]->{1}(b IS person) COLUMNS(COUNT(e.missing) AS hops)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person)-[e IS knows]->{1}(b IS person)
+  COLUMNS(ELEMENT_NUMBER(a) AS element_no)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person)-[e IS knows]->{1}(b IS person)
+  ONE ROW PER STEP (v1,e,v2) COLUMNS(e.id AS edge_id)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE e.since>2020)-[e IS knows]->{1}(b IS person)
+  COLUMNS(b.id AS id)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person)-[e IS knows WHERE b.id>1]->{1}(b IS person)
+  COLUMNS(b.id AS id)) g;
+--error ER_NOT_SUPPORTED_YET
+SELECT * FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person)-[e IS knows]->{1}(b IS person WHERE a.id>1)
+  COLUMNS(b.id AS id)) g;
+
+DROP PROPERTY GRAPH graph_composite;
+DROP TABLE gp_binding,gp_works,gp_company,gp_edge,gp_vertex;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;

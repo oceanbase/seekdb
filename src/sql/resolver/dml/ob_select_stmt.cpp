@@ -198,6 +198,10 @@ int ObSelectStmt::assign(const ObSelectStmt &other)
   } else {
     set_op_ = other.set_op_;
     is_recursive_cte_ = other.is_recursive_cte_;
+    is_graph_feedback_loop_ = other.is_graph_feedback_loop_;
+    graph_path_lower_bound_ = other.graph_path_lower_bound_;
+    graph_path_upper_bound_ = other.graph_path_upper_bound_;
+    graph_path_reverse_ = other.graph_path_reverse_;
     is_distinct_ = other.is_distinct_;
     is_view_stmt_ = other.is_view_stmt_;
     view_ref_id_ = other.view_ref_id_;
@@ -241,6 +245,10 @@ int ObSelectStmt::deep_copy_stmt_struct(ObIAllocator &allocator,
   } else {
     set_op_ = other.set_op_;
     is_recursive_cte_ = other.is_recursive_cte_;
+    is_graph_feedback_loop_ = other.is_graph_feedback_loop_;
+    graph_path_lower_bound_ = other.graph_path_lower_bound_;
+    graph_path_upper_bound_ = other.graph_path_upper_bound_;
+    graph_path_reverse_ = other.graph_path_reverse_;
     is_distinct_ = other.is_distinct_;
     is_view_stmt_ = other.is_view_stmt_;
     view_ref_id_ = other.view_ref_id_;
@@ -370,6 +378,10 @@ ObSelectStmt::ObSelectStmt()
   is_set_distinct_ = false;
   set_op_ = NONE;
   is_recursive_cte_ = false;
+  is_graph_feedback_loop_ = false;
+  graph_path_lower_bound_ = 0;
+  graph_path_upper_bound_ = 0;
+  graph_path_reverse_ = false;
   is_view_stmt_ = false;
   view_ref_id_ = OB_INVALID_ID;
   select_type_ = AFFECT_FOUND_ROWS;

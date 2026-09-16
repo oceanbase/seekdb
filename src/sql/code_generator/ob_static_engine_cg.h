@@ -43,6 +43,7 @@ class ObMergeUnionSpec;
 class ObMergeIntersectSpec;
 class ObMergeExceptSpec;
 class ObRecursiveUnionAllSpec;
+class GraphFeedbackLoopSpec;
 class ObHashSetSpec;
 class ObHashUnionSpec;
 class ObHashIntersectSpec;
@@ -269,6 +270,7 @@ private:
   int generate_spec(ObLogSet &op, ObMergeIntersectSpec &spec, const bool in_root_job);
   int generate_spec(ObLogSet &op, ObMergeExceptSpec &spec, const bool in_root_job);
   int generate_spec(ObLogSet &op, ObRecursiveUnionAllSpec &spec, const bool in_root_job);
+  int generate_spec(ObLogSet &op, GraphFeedbackLoopSpec &spec, const bool in_root_job);
   int generate_merge_set_spec(ObLogSet &op, ObMergeSetSpec &spec);
   int generate_recursive_union_all_spec(ObLogSet &op, ObRecursiveUnionAllSpec &spec);
 
