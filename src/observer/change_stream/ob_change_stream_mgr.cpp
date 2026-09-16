@@ -144,11 +144,7 @@ int ObChangeStreamMgr::wait_refresh_scn(
       SCN current_refresh_scn;
       const int64_t now = ObTimeUtility::current_time();
       ObCSDispatcher *dispatcher = (OB_NOT_NULL(mgr) ? &mgr->dispatcher_ : nullptr);
-      if (now >= abs_timeout_us) {
-        ret = OB_TIMEOUT;
-        LOG_WARN("wait change stream refresh scn timeout", KR(ret),
-                 K(safe_visible_scn), K(current_refresh_scn));
-      } else if (OB_ISNULL(mgr) || !mgr->is_inited()) {
+      if (OB_ISNULL(mgr) || !mgr->is_inited()) {
         ret = OB_NOT_INIT;
         LOG_WARN("change stream mgr is not inited", KR(ret), KP(mgr));
       } else if (OB_FAIL(current_refresh_scn.convert_for_tx(
@@ -161,6 +157,11 @@ int ObChangeStreamMgr::wait_refresh_scn(
         LOG_INFO("waiting for change stream refresh scn",
                  K(safe_visible_scn), K(current_refresh_scn));
         ob_usleep(SLEEP_INTERVAL_US);
+      }
+      if (OB_SUCC(ret) && !is_satisfied && now >= abs_timeout_us) {
+        ret = OB_TIMEOUT;
+        LOG_WARN("wait change stream refresh scn timeout", KR(ret),
+                 K(safe_visible_scn), K(current_refresh_scn));
       }
     }
   }
