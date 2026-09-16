@@ -17,7 +17,6 @@
 #include <new>
 #include "data_plane/ob_iter_cache_api.h"
 #include "storage/ob_iter_cache.h"
-#include "lib/allocator/ob_malloc.h"
 #include "lib/worker.h"
 #include "query/session/ob_session_access.h"
 
@@ -32,7 +31,7 @@ void ObIterCache::destroy()
     FreeNode *cur = freelists_[i];
     while (cur != nullptr) {
       FreeNode *next = cur->next_;
-      ob_free(cur);
+      ::operator delete(cur);
       cur = next;
     }
     freelists_[i] = nullptr;
@@ -65,7 +64,7 @@ void *ObIterCache::alloc(ObIterCacheType type, int64_t size)
     }
   }
   if (OB_ISNULL(ptr)) {
-    ptr = ob_malloc(size, ObMemAttr("IterCache"));
+    ptr = size > 0 ? ::operator new(size, std::nothrow) : nullptr;
   }
   return ptr;
 }
@@ -84,7 +83,7 @@ void ObIterCache::free(ObIterCacheType type, void *ptr)
       return;
     }
   }
-  ob_free(ptr);
+  ::operator delete(ptr);
 }
 
 void *iter_alloc(ObIterCacheType type, int64_t size)
@@ -99,7 +98,7 @@ void *iter_alloc(ObIterCacheType type, int64_t size)
     }
   }
   if (OB_ISNULL(ptr)) {
-    ptr = ob_malloc(size, ObMemAttr("Iter"));
+    ptr = size > 0 ? ::operator new(size, std::nothrow) : nullptr;
   }
   return ptr;
 }
@@ -118,7 +117,7 @@ void iter_free(ObIterCacheType type, void *ptr)
       return;
     }
   }
-  ob_free(ptr);
+  ::operator delete(ptr);
 }
 
 } // namespace storage
