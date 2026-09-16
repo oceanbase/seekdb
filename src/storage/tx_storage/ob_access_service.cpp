@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include <new>
 #include "ob_access_service.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
 #include "share/rc/ob_server_runtime.h"
@@ -23,6 +24,7 @@
 #include "share/io/ob_io_manager.h"
 #include "storage/ob_tablet_stat_mgr.h"
 #include "storage/ob_query_iterator_factory.h"
+#include "storage/ob_iter_cache.h"
 #include "storage/access/ob_table_scan_iterator.h"
 #include "storage/access/ob_dml_table_plan_access.h"
 #include "storage/retrieval/ob_block_stat_iter.h"
@@ -38,6 +40,21 @@ namespace storage
 
 namespace
 {
+ObTableScanIterator *alloc_table_scan_iterator()
+{
+  void *buffer = iter_alloc(
+      ObIterCacheType::TABLE_SCAN_ITER, sizeof(ObTableScanIterator));
+  return OB_ISNULL(buffer) ? nullptr : new (buffer) ObTableScanIterator();
+}
+
+void free_table_scan_iterator(ObTableScanIterator *iter)
+{
+  if (OB_NOT_NULL(iter)) {
+    iter->~ObTableScanIterator();
+    iter_free(ObIterCacheType::TABLE_SCAN_ITER, iter);
+  }
+}
+
 class ObStorageDmlExecutionState final : public data_plane::ObIDmlExecutionState
 {
 public:
@@ -361,7 +378,7 @@ int ObAccessService::table_scan(
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("The result_ is already pointed to an valid object",
         K(ret), K(vparam), KPC(result), K(lbt()));
-  } else if (OB_ISNULL(iter = share::borrow_server_object<ObTableScanIterator>())) {
+  } else if (OB_ISNULL(iter = alloc_table_scan_iterator())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("alloc table scan iterator fail", K(ret));
   } else if (FALSE_IT(result = iter)) {
@@ -1466,7 +1483,7 @@ int ObAccessService::revert_scan_iter(ObNewRowIterator *iter)
   } else if (iter->get_type() == ObNewRowIterator::ObTableScanIterator) {
     ObTableScanIterator *table_scan_iter = nullptr;
     table_scan_iter = static_cast<ObTableScanIterator *>(iter);
-    share::return_server_object(table_scan_iter);
+    free_table_scan_iterator(table_scan_iter);
   } else {
     iter->~ObNewRowIterator();
   }
@@ -1546,7 +1563,7 @@ int ObAccessService::do_table_scan_(
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("The result_ is already pointed to an valid object",
         K(ret), K(data_tablet_id), KPC(result), K(lbt()));
-  } else if (OB_ISNULL(iter = share::borrow_server_object<ObTableScanIterator>())) {
+  } else if (OB_ISNULL(iter = alloc_table_scan_iterator())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("alloc table scan iterator fail", K(ret));
   } else if (FALSE_IT(result = iter)) {

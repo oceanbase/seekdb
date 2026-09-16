@@ -15,7 +15,7 @@
  */
 
 #include "storage/memtable/mvcc/ob_query_engine.h"
-#include "storage/memtable/mvcc/ob_btree_iter_cache.h"
+#include "storage/ob_iter_cache.h"
 #include "lib/allocator/ob_malloc.h"
 #include "common/ob_store_range.h"
 #include "storage/blocksstable/ob_row_reader.h"
@@ -220,7 +220,9 @@ int ObQueryEngine::scan(const ObMemtableKey *start_key,
     TRANS_LOG(WARN, "not init", "this", this);
     ret = OB_NOT_INIT;
   } else {
-    void *buf = btree_iter_alloc(sizeof(Iterator<BtreeIterator>));
+    void *buf = storage::iter_alloc(
+        storage::ObIterCacheType::BTREE_ITER,
+        sizeof(Iterator<BtreeIterator>));
     if (OB_ISNULL(buf)) {
       TRANS_LOG(WARN, "alloc iter fail");
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -258,7 +260,7 @@ void ObQueryEngine::revert_iter(ObIQueryEngineIterator *iter)
   if (OB_NOT_NULL(iter)) {
     auto *typed = static_cast<Iterator<BtreeIterator> *>(iter);
     typed->~Iterator();
-    btree_iter_free(typed);
+    storage::iter_free(storage::ObIterCacheType::BTREE_ITER, typed);
   }
 }
 
