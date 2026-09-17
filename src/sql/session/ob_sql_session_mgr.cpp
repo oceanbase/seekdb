@@ -172,8 +172,8 @@ ObSQLSessionMgr::~ObSQLSessionMgr()
 ObSQLSessionInfo *ObSQLSessionMgr::ValueAlloc::alloc_value()
 {
   int ret = OB_SUCCESS;
-  ObSQLSessionInfo *session = op_instance_alloc_args(&session_allocator_,
-                                                     ObSQLSessionInfo);
+  ObSQLSessionInfo *session = OB_NEW(ObSQLSessionInfo,
+                                     lib::ObMemAttr("SQLSessionInfo"));
   int64_t alloc_total_count = 0;
   if (OB_ISNULL(session)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -193,7 +193,7 @@ void ObSQLSessionMgr::ValueAlloc::free_value(ObSQLSessionInfo *session)
 {
   if (OB_NOT_NULL(session)) {
     int64_t free_total_count = 0;
-    op_free(session);
+    OB_DELETE(ObSQLSessionInfo, lib::ObMemAttr("SQLSessionInfo"), session);
     ATOMIC_FAA(&active_count_, -1);
     free_total_count = ATOMIC_FAA(&free_total_count_, 1);
     if (free_total_count > 0 && free_total_count % 10000 == 0) {
