@@ -415,7 +415,7 @@ int ObTransService::rollback_tx(ObTxDesc &tx, const int64_t expire_ts)
       finish_ret = OB_TRANS_INVALID_STATE;
       TRANS_LOG(WARN, "unexpected state after rollback decision", K(finish_ret), K(tx));
     }
-    if (OB_FAIL(finish_ret) && OB_SUCC(ret)) {
+    if (OB_SUCCESS != finish_ret && OB_SUCC(ret)) {
       ret = finish_ret;
     }
   }
