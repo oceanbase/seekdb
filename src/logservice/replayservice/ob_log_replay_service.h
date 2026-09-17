@@ -67,6 +67,9 @@ public:
   virtual int enable_local_replay(const palf::LSN &begin_lsn,
                                   const share::SCN &base_scn) = 0;
   virtual int disable_local_replay() = 0;
+  // The caller must hold the target LS lifecycle write lock.
+  virtual int try_release_submit_iterator(SubmitIteratorReleaseState &state,
+                                          int64_t &iterator_generation) = 0;
 };
 /*
 TODO(yaoying.yyy): memory management of replayservice needs to be documented
@@ -97,6 +100,8 @@ public:
   int block_submit_log();
   int unblock_submit_log();
   int disable_local_replay();
+  int try_release_submit_iterator(SubmitIteratorReleaseState &state,
+                                  int64_t &iterator_generation);
   int enable_local_replay(const palf::LSN &begin_lsn,
                           const share::SCN &base_scn);
   int is_replay_done(const palf::LSN &end_lsn,

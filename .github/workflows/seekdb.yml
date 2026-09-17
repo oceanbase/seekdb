@@ -177,6 +177,14 @@ jobs:
           export PATH="$GITHUB_WORKSPACE/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
           .github/script/seekdb/compile.sh
 
+      - name: Replay submit iterator Bazel Sanity tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./bazel.py test --sanity \
+            //unittest/logservice:logservice_tests \
+            --test_output=errors
+
       - name: Publish master build caches
         if: >-
           ${{ always() &&
