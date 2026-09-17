@@ -257,14 +257,20 @@ int ObSqlTransControl::end_trans(ObSQLSessionInfo *session,
                               expire_ts,
                               callback))) {
     }
+    const bool rollback_tx_ended =
+        is_rollback && data_plane::tx_desc_is_ended(session->get_tx_desc());
     ObSQLUtils::check_if_need_disconnect_after_end_trans(ret,
                                                          is_rollback,
                                                          is_explicit,
                                                          need_disconnect);
+    if (rollback_tx_ended) {
+      need_disconnect = false;
+    }
     if (is_rollback || OB_FAIL(ret) || !callback) {
       bool reuse_tx = OB_SUCCESS == ret
         || OB_TRANS_COMMITED == ret
-        || OB_TRANS_ROLLBACKED == ret;
+        || OB_TRANS_ROLLBACKED == ret
+        || rollback_tx_ended;
       reset_session_tx_state(session, reuse_tx, reset_trans_variable);
     }
   }
