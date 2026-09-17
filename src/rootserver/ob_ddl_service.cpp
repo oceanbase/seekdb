@@ -16816,7 +16816,8 @@ int ObDDLService::rebuild_table_schema_with_new_id(const ObTableSchema &orig_tab
                                                    ObIArray<ObTableSchema> &new_schemas,
                                                    ObArenaAllocator &allocator,
                                                    const uint64_t define_user_id,
-                                                   const bool delete_unused_columns)
+                                                   const bool delete_unused_columns,
+                                                   const bool preserve_constraint_names)
 {
   int ret = OB_SUCCESS;
   uint64_t orig_tid = orig_table_schema.get_table_id();
@@ -16841,27 +16842,28 @@ int ObDDLService::rebuild_table_schema_with_new_id(const ObTableSchema &orig_tab
     new_table_schema.reset_foreign_key_infos();
     new_table_schema.reset_trigger_list();
     if (new_table_schema.has_constraint()) {
-      // reset check constraint name in mysql mode
       ObTableSchema::const_constraint_iterator iter = new_table_schema.constraint_begin();
       ObTableSchema::const_constraint_iterator iter_last = iter;
       ObString new_constraint_name;
       bool is_constraint_name_exist = false;
       for (; OB_SUCC(ret) && iter != new_table_schema.constraint_end();++iter) {
         (*iter)->set_table_id(new_table_id);
-        (void)0;
-        do {
-          if (OB_FAIL(ObTableSchema::create_cons_name_automatically(
-                      new_constraint_name, new_table_name, allocator,
-                      (*iter)->get_constraint_type()))) {
-          } else if (OB_UNLIKELY(0 == new_constraint_name.case_compare((*iter_last)->get_constraint_name_str()))) {
-            is_constraint_name_exist = true;
-          } else if (OB_FAIL(check_constraint_name_is_exist(
-                             schema_guard, new_table_schema, new_constraint_name, false, is_constraint_name_exist))) {
+        if (!preserve_constraint_names) {
+          // FORK TABLE can target the source database, where names would collide.
+          do {
+            if (OB_FAIL(ObTableSchema::create_cons_name_automatically(
+                        new_constraint_name, new_table_name, allocator,
+                        (*iter)->get_constraint_type()))) {
+            } else if (OB_UNLIKELY(0 == new_constraint_name.case_compare((*iter_last)->get_constraint_name_str()))) {
+              is_constraint_name_exist = true;
+            } else if (OB_FAIL(check_constraint_name_is_exist(
+                               schema_guard, new_table_schema, new_constraint_name, false, is_constraint_name_exist))) {
+            }
+          } while (OB_SUCC(ret) && is_constraint_name_exist);
+          if (OB_SUCC(ret)) {
+            (*iter)->set_constraint_name(new_constraint_name);
+            (*iter)->set_name_generated_type(GENERATED_TYPE_SYSTEM);
           }
-        } while (OB_SUCC(ret) && is_constraint_name_exist);
-        if (OB_SUCC(ret)) {
-          (*iter)->set_constraint_name(new_constraint_name);
-          (*iter)->set_name_generated_type(GENERATED_TYPE_SYSTEM);
         }
         iter_last = iter;
       }

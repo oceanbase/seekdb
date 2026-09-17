@@ -310,7 +310,8 @@ int ObDDLService::fork_database(
                 empty_ddl_stmt_str, schema_guard, trans, allocator,
                 task_record,
                 need_fk_rebuild ? &table_id_map : nullptr,
-                need_fk_rebuild ? &dst_table_schemas_for_table : nullptr))) {
+                need_fk_rebuild ? &dst_table_schemas_for_table : nullptr,
+                true /* preserve_constraint_names */))) {
         } else if (OB_FAIL(task_records.push_back(task_record))) {
         } else if (need_fk_rebuild && OB_FAIL(all_dst_table_schemas.push_back(dst_table_schemas_for_table))) {
         }

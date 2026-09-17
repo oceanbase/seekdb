@@ -1013,7 +1013,8 @@ int check_will_be_having_domain_index_operation(
               common::ObIAllocator &allocator,
               ObDDLTaskRecord &task_record,
               common::hash::ObHashMap<uint64_t, uint64_t> *table_id_map = nullptr,
-              common::ObSArray<share::schema::ObTableSchema> *out_table_schemas = nullptr);
+              common::ObSArray<share::schema::ObTableSchema> *out_table_schemas = nullptr,
+              const bool preserve_constraint_names = false);
   int rebuild_fk_in_trans_(const common::ObIArray<const share::schema::ObTableSchema *> &user_table_schemas,
               const common::ObIArray<share::schema::ObForeignKeyInfo> &intra_db_fk_infos,
               common::hash::ObHashMap<uint64_t, uint64_t> &table_id_map,
@@ -1799,7 +1800,8 @@ private:
                                        common::ObIArray<share::schema::ObTableSchema> &new_scheams,
                                        common::ObArenaAllocator &allocator,
                                        const uint64_t define_user_id,
-                                       const bool delete_unused_columns);
+                                       const bool delete_unused_columns,
+                                       const bool preserve_constraint_names = false);
   int check_enable_sys_table_ddl(const share::schema::ObTableSchema &table_schema,
                                  const share::schema::ObSchemaOperationType operation_type);
   int log_drop_warn_or_err_msg(const obcall::ObTableItem table_item,
