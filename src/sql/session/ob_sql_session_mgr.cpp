@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SQL
 
+#include <new>
+
 #include "ob_sql_session_mgr.h"
 #include "rpc/ob_sql_request_operator.h"
 #include "data_plane/transaction/ob_tx_desc_access.h"
@@ -171,13 +173,9 @@ ObSQLSessionMgr::~ObSQLSessionMgr()
 
 ObSQLSessionInfo *ObSQLSessionMgr::ValueAlloc::alloc_value()
 {
-  int ret = OB_SUCCESS;
-  ObSQLSessionInfo *session = OB_NEW(ObSQLSessionInfo,
-                                     lib::ObMemAttr("SQLSessionInfo"));
+  ObSQLSessionInfo *session = new (std::nothrow) ObSQLSessionInfo();
   int64_t alloc_total_count = 0;
-  if (OB_ISNULL(session)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else {
+  if (OB_NOT_NULL(session)) {
     ATOMIC_FAA(&active_count_, 1);
     session->set_valid(true);
     session->set_shadow(true);
@@ -193,7 +191,7 @@ void ObSQLSessionMgr::ValueAlloc::free_value(ObSQLSessionInfo *session)
 {
   if (OB_NOT_NULL(session)) {
     int64_t free_total_count = 0;
-    OB_DELETE(ObSQLSessionInfo, lib::ObMemAttr("SQLSessionInfo"), session);
+    delete session;
     ATOMIC_FAA(&active_count_, -1);
     free_total_count = ATOMIC_FAA(&free_total_count_, 1);
     if (free_total_count > 0 && free_total_count % 10000 == 0) {
