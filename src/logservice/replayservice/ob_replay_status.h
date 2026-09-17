@@ -60,6 +60,16 @@ enum class ObReplayServiceTaskType
   SUBMIT_LOG_TASK = 1,
   REPLAY_LOG_TASK = 2,
 };
+
+enum class SubmitIteratorReleaseState
+{
+  RELEASED = 0,
+  RWLOCK_BUSY,
+  TASK_BUSY,
+  LOCAL_REPLAY_ENABLED,
+};
+
+const char *submit_iterator_release_state_str(const SubmitIteratorReleaseState state);
 //Virtual table statistics
 struct LSReplayStat
 {
@@ -252,13 +262,20 @@ protected:
 // need be protected by lock
 class ObReplayServiceSubmitTask : public ObReplayServiceTask
 {
+#ifdef ENABLE_SANITY
+  friend class ReplaySubmitIteratorTestPeer;
+#endif
 public:
   ObReplayServiceSubmitTask(): ObReplayServiceTask(),
     next_to_submit_lsn_(),
     next_to_submit_scn_(),
     base_lsn_(),
     base_scn_(),
-    iterator_()
+    iterator_(),
+    iterator_generation_(0)
+#ifdef ENABLE_SANITY
+    , iterator_opener_for_test_()
+#endif
   {
     type_ = ObReplayServiceTaskType::SUBMIT_LOG_TASK;
   }
@@ -289,14 +306,19 @@ public:
   // Reset the iterator with the current endpoint as the new starting point
   int reset_iterator(const palf::LSN &begin_lsn,
                      const share::SCN &base_scn);
+  void release_iterator();
+  int64_t get_iterator_generation() const { return ATOMIC_LOAD(&iterator_generation_); }
 
   INHERIT_TO_STRING_KV("ObReplayServiceSubmitTask", ObReplayServiceTask,
                        K(next_to_submit_lsn_),
                        K(next_to_submit_scn_),
                        K(base_lsn_),
                        K(base_scn_),
+                       K(iterator_generation_),
                        K(iterator_));
 private:
+  int prepare_iterator_(const palf::LSN &begin_lsn, const bool ignore_next_error);
+  int open_iterator_(const palf::LSN &begin_lsn);
   int update_next_to_submit_lsn_(const palf::LSN &lsn);
   int update_next_to_submit_scn_(const share::SCN &scn);
   void set_next_to_submit_log_info_(const palf::LSN &lsn, const share::SCN &scn);
@@ -313,7 +335,11 @@ private:
   //initial log scn when enable replay, logs which scn small than this value should skip replay
   share::SCN base_scn_;
   //for unittest, should be a member not pointer
-  palf::PalfBufferIterator iterator_; 
+  palf::PalfBufferIterator iterator_;
+  int64_t iterator_generation_;
+#ifdef ENABLE_SANITY
+  common::ObFunction<int(const palf::LSN &, palf::PalfBufferIterator &)> iterator_opener_for_test_;
+#endif
 };
 
 class ObReplayServiceReplayTask : public ObReplayServiceTask
@@ -392,6 +418,9 @@ private:
 class ObReplayStatus
 {
   friend class ObReplayServiceSubmitTask;
+#ifdef ENABLE_SANITY
+  friend class ReplaySubmitIteratorTestPeer;
+#endif
 public:
   typedef common::RWLock RWLock;
   typedef RWLock::RLockGuard RLockGuard;
@@ -463,6 +492,8 @@ public:
   void disable_local_replay();
   int enable_local_replay(const palf::LSN &begin_lsn,
                           const share::SCN &base_scn);
+  int try_release_submit_iterator(SubmitIteratorReleaseState &state,
+                                  int64_t &iterator_generation);
   // check whether all logs has finished replaying
   //
   // Before enabling local append, there must be no remaining log to replay.
