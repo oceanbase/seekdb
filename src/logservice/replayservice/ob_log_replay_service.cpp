@@ -18,7 +18,7 @@
 #include "logservice/ob_i_log_storage.h"
 #include "share/config/ob_server_config.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
-#ifdef ENABLE_SANITY
+#if defined(ENABLE_SANITY) || defined(ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK)
 #include "share/ob_debug_sync.h"
 #endif
 
@@ -1236,7 +1236,7 @@ int ObLogReplayService::handle_submit_task_(ObReplayServiceSubmitTask *submit_ta
     };
     if (OB_SUCCESS !=(tmp_ret = replay_status->batch_push_all_task_queue())) {
     }
-#ifdef ENABLE_SANITY
+#if defined(ENABLE_SANITY) || defined(ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK)
     DEBUG_SYNC(REPLAY_SUBMIT_TASK_BEFORE_UNLOCK);
 #endif
     replay_status->unlock();
