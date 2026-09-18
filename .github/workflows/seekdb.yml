@@ -196,8 +196,10 @@ jobs:
           BAZEL_PATH="$BAZEL_DIR/bazel"
           BAZEL_URL="https://releases.bazel.build/${BAZEL_VERSION}/release/bazel-${BAZEL_VERSION}-linux-x86_64"
           mkdir -p "$BAZEL_DIR"
-          CURL_ARGS=(--fail --location --retry 3 --retry-delay 2 --output "$BAZEL_PATH")
-          if curl "${CURL_ARGS[@]}" "$BAZEL_URL" \
+          CURL_ARGS=(--fail --location --retry 3 --retry-delay 2 \
+            --connect-timeout 15 --speed-limit 10240 --speed-time 30 \
+            --output "$BAZEL_PATH")
+          if curl --max-time 180 "${CURL_ARGS[@]}" "$BAZEL_URL" \
               && echo "$BAZEL_LINUX_X86_64_SHA256  $BAZEL_PATH" | sha256sum --check --strict; then
             echo "downloaded Bazel through the runner's configured network path"
           else
@@ -205,7 +207,7 @@ jobs:
             rm -f "$BAZEL_PATH"
             env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY \
               -u http_proxy -u https_proxy -u all_proxy \
-              curl "${CURL_ARGS[@]}" "$BAZEL_URL"
+              curl --max-time 600 "${CURL_ARGS[@]}" "$BAZEL_URL"
             echo "$BAZEL_LINUX_X86_64_SHA256  $BAZEL_PATH" | sha256sum --check --strict
           fi
           chmod 0755 "$BAZEL_PATH"
