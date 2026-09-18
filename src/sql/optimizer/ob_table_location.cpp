@@ -2374,10 +2374,17 @@ int ObTableLocation::get_location_calc_node(const ObPartitionLevel part_level,
       bool cnt_func_expr = false;
       bool always_true = false;
       ObPartLocCalcNode *calc_node = NULL;
-      if (OB_FAIL(analyze_filter(partition_columns, partition_expr, column_id, filter_exprs.at(idx),
+      ObRawExpr *filter_expr = filter_exprs.at(idx);
+      if (OB_ISNULL(filter_expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get null expr", K(ret));
+      } else if (filter_expr->has_flag(CNT_PL_UDF)) {
+        // PL UDFs may contain DML side effects even when declared deterministic.
+        // Do not evaluate them while deriving partition locations.
+      } else if (OB_FAIL(analyze_filter(partition_columns, partition_expr, column_id, filter_expr,
                                  always_true, calc_node, cnt_func_expr, dtc_params, exec_ctx))) {
       } else if (!cnt_func_expr || NULL == calc_node) {
-        if (OB_FAIL(normal_filters.push_back(filter_exprs.at(idx)))) {
+        if (OB_FAIL(normal_filters.push_back(filter_expr))) {
         }
       } else if (OB_FAIL(add_and_node(calc_node, func_node))) {
       } else {
@@ -4993,7 +5000,8 @@ int ObTableLocation::get_list_value_node(const ObPartitionLevel part_level,
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(expr->has_exec_param(has_exec))) {
-      } else if (has_exec || expr->cnt_not_calculable_expr_ignore_column() || !expr->is_op_expr()) {
+      } else if (has_exec || expr->has_flag(CNT_PL_UDF) ||
+                 expr->cnt_not_calculable_expr_ignore_column() || !expr->is_op_expr()) {
         // do nothing
       } else if (OB_FAIL(ObRawExprUtils::extract_column_exprs(expr, expr_columns))) {
       } else if (expr_columns.empty()) {

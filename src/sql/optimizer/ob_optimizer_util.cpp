@@ -7704,6 +7704,10 @@ bool ObOptimizerUtil::find_superset(const ObRelIds &rel_ids,
 
 int ObOptimizerUtil::check_is_static_false_expr(ObOptimizerContext &opt_ctx, ObRawExpr &expr, bool &is_static_false)
 {
+  if (expr.has_flag(CNT_PL_UDF)) {
+    // Planning must not execute PL UDFs with possible side effects.
+    return OB_SUCCESS;
+  }
   int ret = OB_SUCCESS;
   ObObj const_value;
   bool got_result = false;
