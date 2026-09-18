@@ -519,6 +519,7 @@ SHARE_UNITY_GROUPS = [
             "src/share/log/palf/log_define.cpp",
             "src/share/log/palf/lsn.cpp",
             "src/share/log/palf/palf_base_info.cpp",
+            "src/share/log/palf/palf_log_buffer.cpp",
             "src/share/log/palf/palf_options.cpp",
         ],
         generated_srcs = [],

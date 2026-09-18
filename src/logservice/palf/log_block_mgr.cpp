@@ -15,7 +15,7 @@
  */
 
 #include "log_block_mgr.h"
-#include "log_writer_utils.h"                           // LogWriteBuf
+#include "log_write_buf.h"                             // LogWriteBuf
 #include "log_io_utils.h"                               // openat_with_retry
 #include "log_io_adapter.h"                             // LogIOAdapter
 #ifdef _WIN32
@@ -126,6 +126,14 @@ void LogBlockMgr::destroy()
   max_block_id_ = LOG_INVALID_BLOCK_ID;
   io_adapter_ = NULL;
   MEMSET(log_dir_, '\0', OB_MAX_FILE_NAME_LENGTH);
+}
+
+void LogBlockMgr::release_dio_aligned_buf_if_idle(const int64_t now,
+                                                   const int64_t idle_timeout_us)
+{
+  if (IS_INIT) {
+    curr_writable_handler_.release_dio_aligned_buf_if_idle(now, idle_timeout_us);
+  }
 }
 
 int LogBlockMgr::switch_next_block(const block_id_t next_block_id)
