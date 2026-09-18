@@ -89,7 +89,6 @@ runtime_configs:
       - trx_6
       - trx_timeout
       - trx_timeout_bug
-      - rollback_aborted_decision
       - two_order_by
       - update_behavior
       - update_column_use_other
