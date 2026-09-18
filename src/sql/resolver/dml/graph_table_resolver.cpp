@@ -39,9 +39,9 @@ ObString graph_node_name(const ParseNode &node)
 
 struct GraphBinding
 {
-  const GraphElement *element_;
-  const ObTableSchema *table_;
-  ParseNode *variable_;
+  const GraphElement *element_ = nullptr;
+  const ObTableSchema *table_ = nullptr;
+  ParseNode *variable_ = nullptr;
   TO_STRING_KV(KP_(element), KP_(table), KP_(variable));
 };
 
@@ -337,7 +337,7 @@ int find_adjacency_index(const GraphBinding &edge,
 
 struct GraphExpressionNode
 {
-  const ParseNode *node_;
+  const ParseNode *node_ = nullptr;
   TO_STRING_KV(KP_(node));
 };
 
@@ -422,7 +422,7 @@ struct GraphRuntimeGroup
 
 struct GraphExprBinding
 {
-  ObString name_;
+  ObString name_{};
   GraphExprBindingKind kind_ = GraphExprBindingKind::SCALAR;
   const GraphBinding *binding_ = nullptr;
   const ObIArray<GraphBinding> *group_ = nullptr;

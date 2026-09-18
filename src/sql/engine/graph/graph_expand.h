@@ -18,7 +18,7 @@
 
 #include "lib/allocator/ob_allocator.h"
 #include "lib/allocator/page_arena.h"
-#include "lib/container/ob_se_array.h"
+#include "lib/container/ob_array.h"
 #include "sql/engine/graph/graph_path_spec.h"
 
 namespace oceanbase
@@ -52,6 +52,9 @@ public:
 // Stateful single-hop attach controller. It shares adjacency reads for equal
 // source identities, always validates target existence, then restores every
 // (binding_id,path_state_id) association without deduplicating output rows.
+// It neither owns binding payload/path-state storage nor allocates their IDs:
+// the frontier owner supplies input handles and creates a child state for each
+// returned edge/target extension.
 // Buffers are allocated from the caller's query/work-area allocator and never
 // spill. Any read, cancellation, timeout or protocol error releases all state.
 class GraphExpand final
@@ -101,12 +104,12 @@ private:
   int64_t memory_limit_;
   int64_t fixed_memory_bytes_;
   GraphPathDirection direction_;
-  common::ObSEArray<GraphExpandInput, 16> inputs_;
-  common::ObSEArray<GraphElementIdentity, 16> source_identities_;
-  common::ObSEArray<GraphElementIdentity, 16> existing_sources_;
-  common::ObSEArray<GraphExpandEdge, 64> edge_page_;
-  common::ObSEArray<GraphElementIdentity, 64> target_identities_;
-  common::ObSEArray<GraphElementIdentity, 64> existing_targets_;
+  common::ObArray<GraphExpandInput> inputs_;
+  common::ObArray<GraphElementIdentity> source_identities_;
+  common::ObArray<GraphElementIdentity> existing_sources_;
+  common::ObArray<GraphExpandEdge> edge_page_;
+  common::ObArray<GraphElementIdentity> target_identities_;
+  common::ObArray<GraphElementIdentity> existing_targets_;
   GraphElementIdentity after_edge_;
   int64_t edge_index_;
   int64_t input_index_;
