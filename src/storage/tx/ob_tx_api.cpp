@@ -355,6 +355,9 @@ int ObTransService::rollback_tx(ObTxDesc &tx, const int64_t expire_ts)
     tx.inc_op_sn();
     switch(tx.state_) {
     case ObTxDesc::State::ABORTED:
+      // The descriptor may be aborted before the write context's asynchronous
+      // abort finishes. Explicit rollback must still wait for its decision.
+      need_wait_write_ctx = tx.has_write_state();
       tx.state_ = ObTxDesc::State::ROLLED_BACK;
       break;
     case ObTxDesc::State::ROLLED_BACK:
@@ -377,9 +380,6 @@ int ObTransService::rollback_tx(ObTxDesc &tx, const int64_t expire_ts)
       tx.abort_cause_ = OB_TRANS_ROLLBACKED;
       need_finish_rollback = true;
       need_wait_write_ctx = tx.has_write_state();
-      if (wait_expire_ts <= 0 || wait_expire_ts > tx.get_expire_ts()) {
-        wait_expire_ts = tx.get_expire_ts();
-      }
       if (OB_FAIL(abort_write_state_(tx))) {
         TRANS_LOG(WARN, "abort write state failed during rollback", KR(ret), K(tx));
       }
@@ -392,6 +392,10 @@ int ObTransService::rollback_tx(ObTxDesc &tx, const int64_t expire_ts)
     default:
       ret = OB_TRANS_INVALID_STATE;
       TRANS_LOG(WARN, "invalid state", K(ret), K_(tx.state), K(tx));
+    }
+    if (need_wait_write_ctx
+        && (wait_expire_ts <= 0 || wait_expire_ts > tx.get_expire_ts())) {
+      wait_expire_ts = tx.get_expire_ts();
     }
   }
 
