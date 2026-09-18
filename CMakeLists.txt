@@ -14,6 +14,8 @@ project("OceanBase"
 
 option(OB_ENABLE_STANDBY "Build physical standby support" ON)
 option(ENABLE_SANITY "Build with seekdb memory Sanity instrumentation" OFF)
+option(ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK
+  "Build the replay submit iterator integration-test hook" OFF)
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(SEEKDB_GENERATED_ROOT "${CMAKE_BINARY_DIR}/generated")
@@ -150,6 +152,10 @@ if(OB_ERRSIM OR WITH_COVERAGE OR OB_BUILD_CCLS)
 endif()
 if(ENABLE_SANITY AND SEEKDB_CMAKE_PACKAGE_BUILD)
   message(FATAL_ERROR "Sanity instrumentation cannot be combined with packaging")
+endif()
+if(ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK AND SEEKDB_CMAKE_PACKAGE_BUILD)
+  message(FATAL_ERROR
+    "The replay submit iterator test hook cannot be combined with packaging")
 endif()
 if((ENABLE_AUTO_FDO OR ENABLE_THIN_LTO OR ENABLE_HOTFUNC OR
     OB_STATIC_LINK_LGPL_DEPS) AND NOT SEEKDB_CMAKE_PACKAGE_BUILD)

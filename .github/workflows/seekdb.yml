@@ -185,6 +185,23 @@ jobs:
             //unittest/logservice:logservice_tests \
             --test_output=errors
 
+      - name: Build replay submit iterator integration server
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./build.sh replaytest \
+            -DOB_USE_CCACHE=ON \
+            -DNEED_PARSER_CACHE=OFF \
+            --make -j32
+
+      - name: Replay submit iterator handler contention test
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x .github/script/seekdb/replay_submit_iterator_integration.sh
+          .github/script/seekdb/replay_submit_iterator_integration.sh \
+            build_replaytest/src/observer/seekdb
+
       - name: Publish master build caches
         if: >-
           ${{ always() &&

@@ -34,6 +34,8 @@ Usage:
   ./build.sh release [--init] [--android] [-DName=Value ...] --make [MakeOptions]
   ./build.sh sanity [--init] [-DName=Value ...]
   ./build.sh sanity [--init] [-DName=Value ...] --make [MakeOptions]
+  ./build.sh replaytest [--init] [-DName=Value ...]
+  ./build.sh replaytest [--init] [-DName=Value ...] --make [MakeOptions]
   ./build.sh {rpm|deb|tgz} [--init] [-DName=Value ...]
   ./build.sh {rpm|deb|tgz} [--init] [-DName=Value ...] --make [MakeOptions]
 
@@ -43,6 +45,8 @@ Supported compatibility build:
   RPM and DEB packaging require Linux; TGZ supports Linux and macOS.
   Sanity is a Linux-only CMake RelWithDebInfo Unity build with memory
   instrumentation enabled.
+  Replaytest is a non-package Release-compatible build that enables only the
+  replay submit iterator integration-test hook.
   Host platforms: Linux and macOS. Android cross-compilation: arm64-v8a.
   Windows x64 uses build.ps1.
 
@@ -53,6 +57,7 @@ Examples:
   ./build.sh sanity --init
   cd build_sanity && make -j32 seekdb
   ./build.sh sanity --make -j32
+  ./build.sh replaytest --make -j32
   ./build.sh rpm --init
   cd build_rpm && make -j80
   ./build.sh rpm --make -j80 rpm
@@ -148,7 +153,7 @@ function remove_managed_build_dir
   local build_dir=$1
 
   case "${build_dir}" in
-    "${TOPDIR}/build_debug"|"${TOPDIR}/build_release"|"${TOPDIR}/build_sanity"|"${TOPDIR}/build_android_release"|"${TOPDIR}/build_rpm"|"${TOPDIR}/build_deb"|"${TOPDIR}/build_tgz")
+    "${TOPDIR}/build_debug"|"${TOPDIR}/build_release"|"${TOPDIR}/build_sanity"|"${TOPDIR}/build_replaytest"|"${TOPDIR}/build_android_release"|"${TOPDIR}/build_rpm"|"${TOPDIR}/build_deb"|"${TOPDIR}/build_tgz")
       ;;
     *)
       fail "refusing to clean unexpected path: ${build_dir}"
@@ -337,6 +342,68 @@ function do_sanity
   fi
 }
 
+function do_replaytest
+{
+  local need_init=false
+  local need_make=false
+  local collecting_make_args=false
+  local build_dir="${TOPDIR}/build_replaytest"
+  local -a cmake_args=()
+  local -a make_args=()
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --init)
+        need_init=true
+        ;;
+      --make)
+        if [[ "${need_make}" == true ]]; then
+          fail "--make may only be specified once"
+        fi
+        need_make=true
+        collecting_make_args=true
+        ;;
+      --android|--coverage|--ob-make)
+        fail "$1 is outside the CMake replaytest build boundary"
+        ;;
+      -D*)
+        if [[ "${collecting_make_args}" == true ]]; then
+          fail "CMake options must appear before --make: $1"
+        fi
+        cmake_args+=("$1")
+        ;;
+      *)
+        if [[ "${collecting_make_args}" == true ]]; then
+          make_args+=("$1")
+        else
+          fail "unexpected replaytest argument: $1"
+        fi
+        ;;
+    esac
+    shift
+  done
+
+  require_host
+  [[ "$(uname -s)" == "Linux" ]] || fail "Replaytest builds are supported only on Linux"
+  if [[ "${need_init}" == true ]]; then
+    do_init false || exit $?
+  fi
+
+  configure_cmake replaytest false "${build_dir}" \
+    "${cmake_args[@]}" -DENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK=ON || exit $?
+
+  if [[ "${need_make}" == true ]]; then
+    if (( ${#make_args[@]} == 0 )); then
+      make_args=(-j"$(cpu_count)")
+    fi
+    if command -v ob-make >/dev/null 2>&1; then
+      ob-make -C "${build_dir}" "${make_args[@]}" seekdb
+    else
+      make -C "${build_dir}" "${make_args[@]}" seekdb
+    fi
+  fi
+}
+
 function do_package
 {
   local package_type=$1
@@ -457,6 +524,7 @@ function do_clean
       "${TOPDIR}/build_debug" \
       "${TOPDIR}/build_release" \
       "${TOPDIR}/build_sanity" \
+      "${TOPDIR}/build_replaytest" \
       "${TOPDIR}/build_android_release" \
       "${TOPDIR}/build_rpm" \
       "${TOPDIR}/build_deb" \
@@ -509,6 +577,9 @@ function main
     sanity)
       do_sanity "${@:2}"
       ;;
+    replaytest)
+      do_replaytest "${@:2}"
+      ;;
     rpm|deb|tgz)
       do_package "$1" "${@:2}"
       ;;
@@ -517,7 +588,7 @@ function main
       exit 2
       ;;
     *)
-      fail "unsupported build type or command: $1 (maintained modes: release, sanity, rpm, deb, tgz)"
+      fail "unsupported build type or command: $1 (maintained modes: release, sanity, replaytest, rpm, deb, tgz)"
       ;;
   esac
 }

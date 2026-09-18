@@ -6,5 +6,9 @@ seekdb_module_cc_test(
     test_hdrs = [],
     module_interface = "//src/logservice:logservice_unit_test_interface",
     shard_count = 1,
+    target_compatible_with = select({
+        "//bazel:sanity_enabled": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
     visibility = ["//visibility:public"],
 )
