@@ -25,6 +25,13 @@ using namespace common;
 namespace sql
 {
 
+static constexpr int64_t GRAPH_EXPAND_MAX_INPUT_STATE_COUNT = 4096;
+static constexpr int64_t GRAPH_EXPAND_MAX_EDGE_PAGE_SIZE = 4096;
+// Conservative fixed-memory reserves for container bookkeeping and identity
+// buffers; variable-length ObObj payloads are accounted by identity_allocator_.
+static constexpr int64_t GRAPH_EXPAND_INPUT_MEMORY_RESERVE_BYTES = 128;
+static constexpr int64_t GRAPH_EXPAND_EDGE_MEMORY_RESERVE_BYTES = 256;
+
 GraphExpand::GraphExpand(ObIAllocator &allocator,
                          IGraphExpandAccess &access,
                          int64_t page_size,
@@ -171,9 +178,10 @@ int GraphExpand::validate_and_account(const ObIArray<GraphExpandInput> &inputs)
 {
   int ret = OB_SUCCESS;
   int64_t bytes = 0;
-  if (page_size_ <= 0 || page_size_ > 4096 || memory_limit_ <= 0) {
+  if (page_size_ <= 0 || page_size_ > GRAPH_EXPAND_MAX_EDGE_PAGE_SIZE
+      || memory_limit_ <= 0) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (inputs.count() > 4096) {
+  } else if (inputs.count() > GRAPH_EXPAND_MAX_INPUT_STATE_COUNT) {
     ret = OB_SIZE_OVERFLOW;
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < inputs.count(); ++i) {
@@ -189,8 +197,10 @@ int GraphExpand::validate_and_account(const ObIArray<GraphExpandInput> &inputs)
     }
   }
   if (OB_SUCC(ret)) {
-    const int64_t per_input = sizeof(GraphExpandInput) + sizeof(GraphElementIdentity) + 128;
-    const int64_t per_edge = sizeof(GraphExpandEdge) + 2 * sizeof(GraphElementIdentity) + 256;
+    const int64_t per_input = sizeof(GraphExpandInput) + sizeof(GraphElementIdentity)
+        + GRAPH_EXPAND_INPUT_MEMORY_RESERVE_BYTES;
+    const int64_t per_edge = sizeof(GraphExpandEdge) + 2 * sizeof(GraphElementIdentity)
+        + GRAPH_EXPAND_EDGE_MEMORY_RESERVE_BYTES;
     if (inputs.count() > INT64_MAX / per_input
         || page_size_ > (INT64_MAX - inputs.count() * per_input) / per_edge) {
       ret = OB_SIZE_OVERFLOW;
