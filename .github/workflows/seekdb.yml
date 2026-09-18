@@ -65,27 +65,20 @@ jobs:
           git -C "$GITHUB_WORKSPACE" remote remove origin 2>/dev/null || true
           git -C "$GITHUB_WORKSPACE" remote add origin "$REMOTE_URL"
           checkout_succeeded=false
-          for attempt in 1 2 3; do
-            if git -C "$GITHUB_WORKSPACE" fetch --no-tags --depth=1 origin "$GITHUB_SHA"; then
-              checkout_succeeded=true
-              break
-            fi
-
-            if [[ "$REMOTE_URL" == https://* ]]; then
-              echo "configured checkout path failed; retrying without proxy variables" >&2
-              if env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY \
-                  -u http_proxy -u https_proxy -u all_proxy \
+          GIT_FETCH_TIMEOUT_SEC=120
+          if timeout "${GIT_FETCH_TIMEOUT_SEC}s" \
+              git -C "$GITHUB_WORKSPACE" fetch --no-tags --depth=1 origin "$GITHUB_SHA"; then
+            checkout_succeeded=true
+          elif [[ "$REMOTE_URL" == https://* ]]; then
+            echo "configured checkout path failed; retrying without proxy variables" >&2
+            if env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY \
+                -u http_proxy -u https_proxy -u all_proxy \
+                timeout "${GIT_FETCH_TIMEOUT_SEC}s" \
                   git -C "$GITHUB_WORKSPACE" -c http.proxy= \
                     fetch --no-tags --depth=1 origin "$GITHUB_SHA"; then
-                checkout_succeeded=true
-                break
-              fi
+              checkout_succeeded=true
             fi
-
-            delay=$((attempt * 5))
-            echo "checkout fetch attempt $attempt failed on every configured path; retrying in ${delay}s" >&2
-            sleep "$delay"
-          done
+          fi
           if [[ "$checkout_succeeded" != true ]]; then
             SOURCE_ARCHIVE="${RUNNER_TEMP}/seekdb-source-${GITHUB_SHA}.tar.gz"
             SOURCE_ARCHIVE_URL="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/tarball/${GITHUB_SHA}"
