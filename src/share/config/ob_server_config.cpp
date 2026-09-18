@@ -224,11 +224,12 @@ int64_t ObServerMemoryConfig::resolve_memstore_memory_limit(
 
 int64_t ObServerMemoryConfig::resolve_vector_memory_limit(
     const int64_t configured_limit,
-    const int64_t effective_memory)
+    const int64_t memory_budget)
 {
-  return configured_limit > 0
+  const int64_t requested_limit = configured_limit > 0
       ? configured_limit
-      : lib::get_memory_by_percentage(effective_memory, VECTOR_MEMORY_PERCENTAGE);
+      : lib::get_memory_by_percentage(memory_budget, VECTOR_MEMORY_PERCENTAGE);
+  return MIN(requested_limit, memory_budget);
 }
 
 int ObServerMemoryConfig::reload_config(const ObServerConfig& server_config)
@@ -254,7 +255,7 @@ int ObServerMemoryConfig::reload_config(const ObServerConfig& server_config)
   const int64_t configured_vector_memory_limit =
       server_config.vector_memory_limit;
   const char *const vector_memory_limit_source =
-      configured_vector_memory_limit > 0 ? "configured" : "effective_memory";
+      configured_vector_memory_limit > 0 ? "configured_capped_to_memory_budget" : "memory_budget";
   const int64_t resolved_kvcache_memory_limit = resolve_kvcache_memory_limit(
       configured_kvcache_memory_limit, memory_budget);
   int64_t kvcache_memory_capacity = get_kvcache_memory_capacity();
@@ -268,7 +269,7 @@ int ObServerMemoryConfig::reload_config(const ObServerConfig& server_config)
   const int64_t memstore_memory_limit = resolve_memstore_memory_limit(
       configured_memstore_memory_limit, memory_budget);
   const int64_t vector_memory_limit = resolve_vector_memory_limit(
-      configured_vector_memory_limit, effective_memory);
+      configured_vector_memory_limit, memory_budget);
   lib::set_memory_budget(memory_budget);
   kvcache_memory_limit_.store(kvcache_memory_limit, std::memory_order_release);
   memstore_memory_limit_.store(memstore_memory_limit, std::memory_order_release);

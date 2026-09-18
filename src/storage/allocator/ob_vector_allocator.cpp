@@ -41,7 +41,14 @@ int64_t ObVectorAllocator::get_rb_mem_used()
 
 int64_t ObVectorAllocator::used()
 {
-  return ATOMIC_LOAD(&all_used_mem_) + get_rb_mem_used();
+  // all_used_mem_ only tracks allocations made through the VSAG/IVF
+  // adapters.  The root context also owns Vector metadata and bitmap
+  // allocations, and is the only complete source of usage for allocator
+  // backends that do not expose obmalloc module statistics.
+  const int64_t context_used = memory_context_.ref_context() != nullptr
+      ? memory_context_->used()
+      : 0;
+  return context_used + get_rb_mem_used();
 }
 
 void *ObVectorAllocator::alloc(const int64_t size, const ObMemAttr &attr)

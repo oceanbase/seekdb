@@ -172,9 +172,21 @@ ObIStreamBuf::int_type ObIStreamBuf::underflow()
 int ObIStreamBuf::do_callback()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(cb_(data_, capacity_, capacity_, cb_param_))) {
+  char *read_data = data_;
+  int64_t read_size = 0;
+  // The input callback may return a LOB block directly instead of filling
+  // data_.  The returned size is therefore the only valid readable range.
+  if (OB_FAIL(cb_(read_data, capacity_, read_size, cb_param_))) {
+  } else if (read_size < 0 || (read_size > 0 && OB_ISNULL(read_data))) {
+    ret = OB_INVALID_DATA;
+    LOG_WARN("invalid read buffer returned by callback", K(ret), K(read_data), K(read_size));
   } else {
-    setg(data_, data_, data_ + capacity_); // fill the read buffer
+    data_ = read_data;
+    if (read_size > 0) {
+      setg(data_, data_, data_ + read_size); // fill only the returned read range
+    } else {
+      setg(data_, data_, data_);
+    }
   }
   return ret;
 }
