@@ -2011,7 +2011,8 @@ int ObLogPlan::inner_remove_redundancy_pred(ObIArray<ObRawExpr*> &join_pred,
 }
 
 int ObLogPlan::generate_subplan_for_query_ref(ObQueryRefRawExpr *query_ref,
-                                              SubPlanInfo *&subplan_info)
+                                              SubPlanInfo *&subplan_info,
+                                              bool force_serial)
 {
   int ret = OB_SUCCESS;
   // check if sub plan has been generated
@@ -2022,6 +2023,9 @@ int ObLogPlan::generate_subplan_for_query_ref(ObQueryRefRawExpr *query_ref,
   bool has_ref_assign_user_var = false;
   SubPlanInfo *info = NULL;
   bool is_initplan = false;
+  PXParallelRule saved_parallel_rule = PXParallelRule::MAX_OPTION;
+  int64_t saved_parallel = ObGlobalHint::UNSET_PARALLEL;
+  bool need_restore_parallel = false;
   OPT_TRACE_TITLE("start generate subplan for subquery expr");
   OPT_TRACE_BEGIN_SECTION;
   if (OB_ISNULL(subquery = query_ref->get_ref_stmt())) {
@@ -2038,7 +2042,24 @@ int ObLogPlan::generate_subplan_for_query_ref(ObQueryRefRawExpr *query_ref,
   } else if (OB_FAIL(logical_plan->add_exec_params_meta(query_ref->get_exec_params(),
                                                         get_basic_table_metas(),
                                                         get_selectivity_ctx()))) {
-  } else if (OB_FAIL(SMART_CALL(static_cast<ObSelectLogPlan *>(logical_plan)->generate_raw_plan()))) {
+  }
+  if (OB_SUCC(ret)) {
+    if (force_serial) {
+      saved_parallel_rule = opt_ctx.get_parallel_rule();
+      saved_parallel = opt_ctx.get_parallel();
+      opt_ctx.set_parallel_rule(PXParallelRule::PL_UDF_DAS_FORCE_SERIALIZE);
+      opt_ctx.set_parallel(ObGlobalHint::DEFAULT_PARALLEL);
+      need_restore_parallel = true;
+    }
+    if (OB_FAIL(SMART_CALL(static_cast<ObSelectLogPlan *>(logical_plan)->generate_raw_plan()))) {
+      LOG_WARN("failed to generate subquery raw plan", K(ret), K(force_serial));
+    }
+    if (need_restore_parallel) {
+      opt_ctx.set_parallel_rule(saved_parallel_rule);
+      opt_ctx.set_parallel(saved_parallel);
+    }
+  }
+  if (OB_FAIL(ret)) {
   } else if (OB_FAIL(add_query_ref_meta(query_ref,
                                         logical_plan->get_update_table_metas(),
                                         logical_plan->get_selectivity_ctx()))) {
@@ -7298,12 +7319,14 @@ int ObLogPlan::generate_subplan_filter_info(const ObIArray<ObRawExpr *> &subquer
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < candi_query_refs.count(); ++i) {
     SubPlanInfo *info = NULL;
+    // Forced PX DOP is unsafe for SPF init-plan subqueries: the parent may observe partial results.
+    bool force_serial_subplan = get_optimizer_context().get_global_hint().has_parallel_hint();
     if (OB_FAIL(get_subplan(candi_query_refs.at(i), info))) {
     } else if (NULL != info && !for_on_condition && info->allocated_) {
       // do nothing
     } else if (OB_FAIL(append(exec_params, candi_query_refs.at(i)->get_exec_params()))) {
     } else if (NULL == info &&
-               OB_FAIL(generate_subplan_for_query_ref(candi_query_refs.at(i), info))) {
+               OB_FAIL(generate_subplan_for_query_ref(candi_query_refs.at(i), info, force_serial_subplan))) {
     } else if (OB_FAIL(subplans.push_back(info->subplan_))) {
     } else if (OB_FAIL(query_refs.push_back(candi_query_refs.at(i)))) {
     } else {
