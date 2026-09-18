@@ -1,0 +1,38 @@
+#owner: minan
+#owner group: sql
+#description: Cached short-circuit filters preserve conversion diagnostics.
+
+--disable_warnings
+drop table if exists short_circuit_warning_cache;
+--enable_warnings
+create table short_circuit_warning_cache(id int primary key);
+insert into short_circuit_warning_cache values (1), (2);
+
+# Repeat identical statements so the second and third executions use the cache.
+select id from short_circuit_warning_cache where cast('seek618abc' as signed) or true order by id;
+select id from short_circuit_warning_cache where cast('seek618abc' as signed) or true order by id;
+select id from short_circuit_warning_cache where cast('seek618abc' as signed) or true order by id;
+select id from short_circuit_warning_cache where cast('seek618abc' as signed) = 0 or true order by id;
+select id from short_circuit_warning_cache where cast('seek618abc' as signed) = 0 or true order by id;
+select id from short_circuit_warning_cache where cast('seek618abc' as signed) = 0 or true order by id;
+
+# Disabling the plan cache is not sufficient to pass this regression.
+select count(*) = 2 and min(hit_count) >= 2 as both_plans_reused
+from oceanbase.v$ob_plan_cache_plan_stat
+where query_sql like 'select id from short_circuit_warning_cache where%';
+
+# Compare the diagnostic behavior against execution without rewrite/cache.
+select /*+ no_rewrite use_plan_cache(none) */ id from short_circuit_warning_cache where cast('seek618abc' as signed) or true order by id;
+select /*+ no_rewrite use_plan_cache(none) */ id from short_circuit_warning_cache where cast('seek618abc' as signed) = 0 or true order by id;
+
+# A different parameter that converts cleanly must not inherit old warnings.
+select id from short_circuit_warning_cache where cast('42' as signed) or true order by id;
+select id from short_circuit_warning_cache where cast('42' as signed) or true order by id;
+
+# Eliminated false filters must not leak speculative warnings from rewrite.
+select /*+ no_rewrite use_plan_cache(none) */ id from short_circuit_warning_cache where cast('seek618abc' as signed) and false order by id;
+select id from short_circuit_warning_cache where cast('seek618abc' as signed) and false order by id;
+select id from short_circuit_warning_cache where cast('seek618abc' as signed) and false order by id;
+select id from short_circuit_warning_cache where cast('seek618abc' as signed) and false order by id;
+
+drop table short_circuit_warning_cache;

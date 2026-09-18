@@ -10129,15 +10129,22 @@ int ObTransformUtils::calc_const_expr_result(ObRawExpr * expr,
     ObWarningBuffer *old_warning_buf = NULL;
     ObWarningBuffer probe_warning_buf;
     if (OB_NOT_NULL(has_warning)) {
+      // Cached constant results do not retain diagnostics. A warning-sensitive
+      // probe must evaluate the expression even if an earlier rule cached it.
+      if (OB_FAIL(erase_calculable_expr_result(ctx, expr))) {
+        LOG_WARN("failed to erase expr result before warning probe", K(ret), KPC(expr));
+      }
       old_warning_buf = ob_get_tsi_warning_buffer();
       probe_warning_buf.reset();
       ob_setup_tsi_warning_buffer(&probe_warning_buf);
     }
-    ret = ObSQLUtils::calc_const_or_calculable_expr(ctx->exec_ctx_,
+    if (OB_SUCC(ret)) {
+      ret = ObSQLUtils::calc_const_or_calculable_expr(ctx->exec_ctx_,
                                                     expr,
                                                     result,
                                                     calc_happend,
                                                     *ctx->allocator_);
+    }
     if (OB_NOT_NULL(has_warning)) {
       ob_setup_tsi_warning_buffer(old_warning_buf);
       if (OB_SUCC(ret)) {

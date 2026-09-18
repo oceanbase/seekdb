@@ -51,52 +51,6 @@ int has_scalar_in_predicate(ObRawExpr *expr, bool &has_in)
   return ret;
 }
 
-bool is_implicit_cast_from_bool_expr(const ObRawExpr *expr)
-{
-  const ObRawExpr *child = NULL;
-  return NULL != expr
-      && T_FUN_SYS_CAST == expr->get_expr_type()
-      && expr->has_flag(IS_OP_OPERAND_IMPLICIT_CAST)
-      && expr->get_param_count() > 0
-      && NULL != (child = expr->get_param_expr(0))
-      && child->is_bool_expr();
-}
-
-bool is_implicit_cast_from_string_expr(const ObRawExpr *expr)
-{
-  const ObRawExpr *child = NULL;
-  return NULL != expr
-      && T_FUN_SYS_CAST == expr->get_expr_type()
-      && expr->has_flag(IS_OP_OPERAND_IMPLICIT_CAST)
-      && expr->get_param_count() > 0
-      && NULL != (child = expr->get_param_expr(0))
-      && child->get_result_type().is_string_type();
-}
-
-int has_implicit_bool_string_cmp(const ObRawExpr *expr, bool &has_cmp)
-{
-  int ret = OB_SUCCESS;
-  const ObRawExpr *left = NULL;
-  const ObRawExpr *right = NULL;
-  has_cmp = false;
-  if (OB_ISNULL(expr)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null expr", K(ret));
-  } else if (T_OP_GT == expr->get_expr_type()
-             && 2 == expr->get_param_count()
-             && OB_NOT_NULL(left = expr->get_param_expr(0))
-             && OB_NOT_NULL(right = expr->get_param_expr(1))
-             && ((is_implicit_cast_from_bool_expr(left) && is_implicit_cast_from_string_expr(right))
-                 || (is_implicit_cast_from_string_expr(left) && is_implicit_cast_from_bool_expr(right)))) {
-    has_cmp = true;
-  } else {
-    for (int64_t i = 0; OB_SUCC(ret) && !has_cmp && i < expr->get_param_count(); ++i) {
-      if (OB_FAIL(has_implicit_bool_string_cmp(expr->get_param_expr(i), has_cmp))) {
-      }
-    }
-  }
-  return ret;
-}
 }
 
 int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt> &parent_stmts,
@@ -513,26 +467,16 @@ int ObTransformSimplifyExpr::extract_null_expr(ObRawExpr *expr,
   } else if (expr->is_static_scalar_const_expr()) {
     ObObj result;
     bool got_result = false;
-    bool use_private_warning_probe = false;
-    if (OB_FAIL(has_implicit_bool_string_cmp(expr, use_private_warning_probe))) {
-    } else if (use_private_warning_probe) {
-      bool has_warning = false;
-      if (OB_FAIL(ObTransformUtils::calc_const_expr_result(expr,
-                                                           ctx_,
-                                                           result,
-                                                           got_result,
-                                                           &has_warning))) {
-      } else if (has_warning) {
-        // Keep warning-capable expressions for execution-time evaluation.
-        got_result = false;
-      }
-    } else {
-      if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx_->exec_ctx_,
-                                                            expr,
-                                                            result,
-                                                            got_result,
-                                                            *ctx_->allocator_))) {
-      }
+    bool has_warning = false;
+    if (OB_FAIL(ObTransformUtils::calc_const_expr_result(expr,
+                                                         ctx_,
+                                                         result,
+                                                         got_result,
+                                                         &has_warning))) {
+    } else if (has_warning) {
+      // Null inference is speculative. Leave diagnostics to execution and do
+      // not let a cached probe hide them from later simplification rules.
+      got_result = false;
     }
     if (OB_FAIL(ret)) {
     } else if (got_result && !result.is_ext() && (result.is_null()))  {
@@ -930,20 +874,16 @@ int ObTransformSimplifyExpr::inner_remove_dummy_expr(ObRawExpr *&expr,
       if (OB_FAIL(ret)) {
       } else if (has_short_circuit_const) {
         bool has_warning = false;
-        bool is_true = false;
-        bool is_false = false;
         if (OB_FAIL(ObTransformUtils::check_static_expr_has_warning(ctx_, op_expr, has_warning))) {
-        } else if (has_warning
-                   && OB_FAIL(ObTransformUtils::extract_const_bool_expr_result(ctx_,
-                                                                               op_expr,
-                                                                               is_true,
-                                                                               is_false,
-                                                                               true))) {
+        } else if (has_warning) {
+          // Keep the expression so each execution, including plan-cache hits,
+          // evaluates the operands that produce diagnostics. The short-circuit
+          // result alone is not sufficient to replace it with a literal.
         } else if (OB_FAIL(ObRawExprUtils::build_const_bool_expr(ctx_->expr_factory_,
                                                                  transed_expr,
                                                                  short_circuit_value))) {
           LOG_WARN("create const bool expr failed", K(ret));
-        } else if (!has_warning && has_uncacheable_in_expr && OB_NOT_NULL(ctx_->phy_plan_)) {
+        } else if (has_uncacheable_in_expr && OB_NOT_NULL(ctx_->phy_plan_)) {
           ctx_->phy_plan_->get_phy_plan_hint().plan_cache_policy_ = OB_USE_PLAN_CACHE_NONE;
         }
       } else if (OB_FAIL(ObTransformUtils::extract_const_bool_expr_info(ctx_,

@@ -1,0 +1,73 @@
+drop table if exists short_circuit_warning_cache;
+create table short_circuit_warning_cache(id int primary key);
+insert into short_circuit_warning_cache values (1), (2);
+select id from short_circuit_warning_cache where cast('seek618abc' as signed) or true order by id;
+id
+1
+2
+Warnings:
+Warning	1292	Truncated incorrect INTEGER value: 'seek618abc'
+select id from short_circuit_warning_cache where cast('seek618abc' as signed) or true order by id;
+id
+1
+2
+Warnings:
+Warning	1292	Truncated incorrect INTEGER value: 'seek618abc'
+select id from short_circuit_warning_cache where cast('seek618abc' as signed) or true order by id;
+id
+1
+2
+Warnings:
+Warning	1292	Truncated incorrect INTEGER value: 'seek618abc'
+select id from short_circuit_warning_cache where cast('seek618abc' as signed) = 0 or true order by id;
+id
+1
+2
+Warnings:
+Warning	1292	Truncated incorrect INTEGER value: 'seek618abc'
+select id from short_circuit_warning_cache where cast('seek618abc' as signed) = 0 or true order by id;
+id
+1
+2
+Warnings:
+Warning	1292	Truncated incorrect INTEGER value: 'seek618abc'
+select id from short_circuit_warning_cache where cast('seek618abc' as signed) = 0 or true order by id;
+id
+1
+2
+Warnings:
+Warning	1292	Truncated incorrect INTEGER value: 'seek618abc'
+select count(*) = 2 and min(hit_count) >= 2 as both_plans_reused
+from oceanbase.v$ob_plan_cache_plan_stat
+where query_sql like 'select id from short_circuit_warning_cache where%';
+both_plans_reused
+1
+select /*+ no_rewrite use_plan_cache(none) */ id from short_circuit_warning_cache where cast('seek618abc' as signed) or true order by id;
+id
+1
+2
+Warnings:
+Warning	1292	Truncated incorrect INTEGER value: 'seek618abc'
+select /*+ no_rewrite use_plan_cache(none) */ id from short_circuit_warning_cache where cast('seek618abc' as signed) = 0 or true order by id;
+id
+1
+2
+Warnings:
+Warning	1292	Truncated incorrect INTEGER value: 'seek618abc'
+select id from short_circuit_warning_cache where cast('42' as signed) or true order by id;
+id
+1
+2
+select id from short_circuit_warning_cache where cast('42' as signed) or true order by id;
+id
+1
+2
+select /*+ no_rewrite use_plan_cache(none) */ id from short_circuit_warning_cache where cast('seek618abc' as signed) and false order by id;
+id
+select id from short_circuit_warning_cache where cast('seek618abc' as signed) and false order by id;
+id
+select id from short_circuit_warning_cache where cast('seek618abc' as signed) and false order by id;
+id
+select id from short_circuit_warning_cache where cast('seek618abc' as signed) and false order by id;
+id
+drop table short_circuit_warning_cache;
