@@ -249,8 +249,6 @@ int ObPhysicalPlanCtx::merge_implicit_cursor_info(const ObImplicitCursorInfo &im
   if (OB_UNLIKELY(implicit_cursor.stmt_id_ < 0)
       || OB_UNLIKELY(implicit_cursor.stmt_id_ >= implicit_cursor_infos_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("implicit cursor is invalid", K(ret),
-             K(implicit_cursor), K(implicit_cursor_infos_.count()));
   } else if (OB_FAIL(implicit_cursor_infos_.at(implicit_cursor.stmt_id_).
                      merge_cursor(implicit_cursor))) {
   }
@@ -264,8 +262,6 @@ int ObPhysicalPlanCtx::replace_implicit_cursor_info(const ObImplicitCursorInfo &
   if (OB_UNLIKELY(implicit_cursor.stmt_id_ < 0)
       || OB_UNLIKELY(implicit_cursor.stmt_id_ >= implicit_cursor_infos_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("implicit cursor is invalid", K(ret),
-             K(implicit_cursor), K(implicit_cursor_infos_.count()));
   } else if (OB_FAIL(implicit_cursor_infos_.at(implicit_cursor.stmt_id_).
       replace_cursor(implicit_cursor))) {
   }
@@ -279,13 +275,11 @@ int ObPhysicalPlanCtx::switch_implicit_cursor()
   int ret = OB_SUCCESS;
   if (cur_stmt_id_ < 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cur stmt id is invalid", K(ret), K_(cur_stmt_id));
   } else if (cur_stmt_id_ >= implicit_cursor_infos_.count()) {
     ret = OB_ITER_END;
   } else if (implicit_cursor_infos_.at(cur_stmt_id_).stmt_id_ != cur_stmt_id_
       && implicit_cursor_infos_.at(cur_stmt_id_).stmt_id_ >= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid implicit cursor", K(ret), K(cur_stmt_id_), K(implicit_cursor_infos_));
   } else {
     const ObImplicitCursorInfo &cursor_info = implicit_cursor_infos_.at(cur_stmt_id_);
     set_affected_rows(cursor_info.affected_rows_);
@@ -319,8 +313,6 @@ int ObPhysicalPlanCtx::reserve_param_frame(const int64_t input_capacity)
     if (param_frame_capacity_ < original_param_cnt_) {
       if (param_frame_capacity_ > 0) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("original_param_cnt_ changes after init_datum_param_store",
-                 K(ret), K(param_frame_capacity_), K(input_capacity));
       } else {
         int64_t total = original_param_cnt_;
         while (total > 0 && OB_SUCC(ret)) {
@@ -390,7 +382,6 @@ int ObPhysicalPlanCtx::extend_param_frame(const int64_t old_size)
   int ret = OB_SUCCESS;
   if (old_size < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(old_size));
   } else if (OB_FAIL(reserve_param_frame(datum_param_store_.count()))) {
   } else {
     for (int64_t i = old_size; i < datum_param_store_.count(); i++) {
@@ -430,7 +421,6 @@ int ObPhysicalPlanCtx::replace_batch_param_datum(const int64_t cur_group_id,
   const int64_t datum_cnt = datum_param_store_.count();
   if (OB_UNLIKELY(start_param < 0 || start_param + param_cnt > datum_cnt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected params", K(ret), K(start_param), K(param_cnt), K(datum_cnt));
   } else {
     for (int64_t i = start_param; OB_SUCC(ret) && i < start_param + param_cnt; i++) {
       if (datum_param_store_.at(i).meta_.is_ext_sql_array()) {
@@ -441,7 +431,6 @@ int ObPhysicalPlanCtx::replace_batch_param_datum(const int64_t cur_group_id,
         const ObSqlDatumArray *datum_array = datum_param_store_.at(i).get_sql_datum_array();;
         if (OB_UNLIKELY(cur_group_id < 0) || OB_UNLIKELY(cur_group_id >= datum_array->count_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid group id", K(ret), K(cur_group_id), K(datum_array->count_));
         } else {
           //assign datum ptr to the real param datum
           *datum = datum_array->data_[cur_group_id];
@@ -594,7 +583,6 @@ OB_DEF_SERIALIZE(ObPhysicalPlanCtx)
   for (int64_t i = 0; OB_SUCC(ret) && i < all_local_session_vars_.count(); ++i) {
     if (OB_ISNULL(all_local_session_vars_.at(i).get_local_vars())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret));
     } else {
       OB_UNIS_ENCODE(*all_local_session_vars_.at(i).get_local_vars());
     }
@@ -789,7 +777,6 @@ OB_DEF_DESERIALIZE(ObPhysicalPlanCtx)
     ObLocalSessionVar *local_vars = OB_NEWx(ObLocalSessionVar, &allocator_);
     if (NULL == local_vars) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("alloc local var failed", K(ret));
     } else if (OB_FAIL(all_local_session_vars_.push_back(ObSolidifiedVarsContext(local_vars, &allocator_)))) {
     } else {
       local_vars->set_allocator(&allocator_);
@@ -832,28 +819,22 @@ int ObPhysicalPlanCtx::get_sqludt_meta_by_subschema_id(uint16_t subschema_id, Ob
   ObSubSchemaValue value;
   if (subschema_id == ObMaxSystemUDTSqlType || subschema_id >= UINT_MAX16) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid subschema id", K(ret), K(subschema_id));
   } else if (OB_NOT_NULL(phy_plan_)) { // physical plan exist, use subschema ctx on phy plan
     if (!phy_plan_->get_subschema_ctx().is_inited()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("plan with empty subschema mapping", K(ret), K(phy_plan_->get_subschema_ctx()));
     } else if (OB_FAIL(phy_plan_->get_subschema_ctx().get_subschema(subschema_id, value))) {
       if (OB_HASH_NOT_EXIST != ret) {
-        LOG_WARN("failed to get subschema by subschema id", K(ret), K(subschema_id));
       } else {
-        LOG_WARN("subschema not exist in subschema mapping", K(ret), K(subschema_id));
       }                                                                   
     } else {
       udt_meta = *(reinterpret_cast<ObSqlUDTMeta *>(value.value_));
     }
   } else if (!subschema_ctx_.is_inited()) { // no phy plan
     ret = OB_ISNULL(phy_plan_) ? OB_NOT_INIT : OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid subschema id", K(ret), K(subschema_id), K(lbt()));
   } else {
     if (OB_FAIL(subschema_ctx_.get_subschema(subschema_id, value))) {
     } else if (value.type_ >= OB_SUBSCHEMA_MAX_TYPE) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid subschema type", K(ret), K(value));
     } else { // Notice: shallow copy
       udt_meta = *(reinterpret_cast<ObSqlUDTMeta *>(value.value_));
     }
@@ -867,16 +848,13 @@ int ObPhysicalPlanCtx::get_sqludt_meta_by_subschema_id(uint16_t subschema_id, Ob
   bool is_subschema_inited_in_plan = true;
   if (subschema_id == ObMaxSystemUDTSqlType || subschema_id >= UINT_MAX16) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid subschema id", K(ret), K(subschema_id));
   } else if (OB_NOT_NULL(phy_plan_)) { // physical plan exist, use subschema ctx on phy plan
     if (!phy_plan_->get_subschema_ctx().is_inited()) {
       LOG_INFO("plan with empty subschema mapping", K(lbt()), K(phy_plan_->get_subschema_ctx()));
       is_subschema_inited_in_plan = false;
     } else if (OB_FAIL(phy_plan_->get_subschema_ctx().get_subschema(subschema_id, sub_meta))) {
       if (OB_HASH_NOT_EXIST != ret) {
-        LOG_WARN("failed to get subschema by subschema id", K(ret), K(subschema_id));
       } else {
-        LOG_WARN("subschema not exist in subschema mapping", K(ret), K(subschema_id));
       }                                                                   
     }
   } 
@@ -884,12 +862,10 @@ int ObPhysicalPlanCtx::get_sqludt_meta_by_subschema_id(uint16_t subschema_id, Ob
       && (OB_ISNULL(phy_plan_) || !is_subschema_inited_in_plan)) {
     if (!subschema_ctx_.is_inited()) { // no phy plan
       ret = OB_ISNULL(phy_plan_) ? OB_NOT_INIT : OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid subschema id", K(ret), K(subschema_id), K(lbt()));
     } else {
       if (OB_FAIL(subschema_ctx_.get_subschema(subschema_id, sub_meta))) {
       } else if (sub_meta.type_ >= OB_SUBSCHEMA_MAX_TYPE) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid subschema type", K(ret), K(sub_meta));
       }
     }
   }
@@ -904,26 +880,21 @@ int ObPhysicalPlanCtx::get_enumset_meta_by_subschema_id(uint16_t subschema_id,
   ObSubSchemaValue value;
   if (subschema_id == ObMaxSystemUDTSqlType || subschema_id >= UINT_MAX16) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid subschema id", K(ret), K(subschema_id));
   } else if (!is_in_pl && OB_NOT_NULL(phy_plan_) && phy_plan_->get_subschema_ctx().is_inited()) {
     // physical plan exist, use subschema ctx on phy plan
     if (OB_FAIL(phy_plan_->get_subschema_ctx().get_subschema(subschema_id, value))) {
       if (OB_HASH_NOT_EXIST != ret) {
-        LOG_WARN("failed to get subschema by subschema id", K(ret), K(subschema_id));
       } else {
-        LOG_WARN("subschema not exist in subschema mapping", K(ret), K(subschema_id));
       }
     } else {
       meta = reinterpret_cast<const ObEnumSetMeta *>(value.value_);
     }
   } else if (!subschema_ctx_.is_inited()) { // no phy plan
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid subschema id", K(ret), K(subschema_id), K(lbt()));
   } else {
     if (OB_FAIL(subschema_ctx_.get_subschema(subschema_id, value))) {
     } else if (value.type_ >= OB_SUBSCHEMA_MAX_TYPE) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid subschema type", K(ret), K(value));
     } else { // Notice: shallow copy
       meta = reinterpret_cast<const ObEnumSetMeta *>(value.value_);
     }
@@ -940,30 +911,24 @@ int ObPhysicalPlanCtx::get_subschema_id_by_udt_id(uint64_t udt_type_id,
   bool found = false;
   if (!ObObjUDTUtil::ob_is_supported_sql_udt(udt_type_id)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("find udt id in query ctx failed", K(ret), K(udt_type_id));
   } else if (OB_NOT_NULL(phy_plan_)) { // physical plan exist, use subschema ctx on phy plan
     if (!phy_plan_->get_subschema_ctx().is_inited()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("plan with empty subschema mapping", K(ret), K(phy_plan_->get_subschema_ctx()));
     } else if (OB_FAIL(phy_plan_->get_subschema_ctx().get_subschema_id(udt_type_id,
                                                                        OB_SUBSCHEMA_UDT_TYPE,
                                                                        temp_subschema_id))) {
       if (OB_HASH_NOT_EXIST != ret) {
-        LOG_WARN("failed to get subschema id by udt_id", K(ret), K(udt_type_id));
       } else {
-        LOG_WARN("udt_id not exist in subschema mapping", K(ret), K(udt_type_id));
       }                                                                    
     } else {
       subschema_id = temp_subschema_id;
     }
   // no phy plan
   } else if (!subschema_ctx_.is_inited() && OB_FAIL(subschema_ctx_.init())) {
-    LOG_WARN("subschema ctx init failed", K(ret), K(udt_type_id));
   } else if (OB_FAIL(subschema_ctx_.get_subschema_id(udt_type_id,
                                                      OB_SUBSCHEMA_UDT_TYPE,
                                                      temp_subschema_id))) {
     if (OB_HASH_NOT_EXIST != ret) {
-      LOG_WARN("failed to get subschema id by udt_id", K(ret), K(udt_type_id));
     } else { // build new meta
       ret = OB_SUCCESS;
       uint16 new_subschema_id = ObMaxSystemUDTSqlType;
@@ -971,11 +936,9 @@ int ObPhysicalPlanCtx::get_subschema_id_by_udt_id(uint64_t udt_type_id,
       ObSubSchemaValue value;
       if (OB_ISNULL(schema_guard)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("No schema gurad to generate udt_meta", K(ret), K(udt_type_id));
       } else if (FALSE_IT(udt_meta = reinterpret_cast<ObSqlUDTMeta *>(allocator_.alloc(sizeof(ObSqlUDTMeta))))) {
       } else if (OB_ISNULL(udt_meta)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to alloc udt meta", K(ret), K(udt_type_id), K(sizeof(ObSqlUDTMeta)));
       } else if (FALSE_IT(MEMSET(udt_meta, 0, sizeof(ObSqlUDTMeta)))) {
       } else if (OB_FAIL(ObSqlUdtMetaUtils::generate_udt_meta_from_schema(schema_guard,
                                                                           &subschema_ctx_,
@@ -985,7 +948,6 @@ int ObPhysicalPlanCtx::get_subschema_id_by_udt_id(uint64_t udt_type_id,
       } else if (OB_FAIL(subschema_ctx_.get_subschema_id_from_fields(udt_type_id, new_subschema_id))) {
       } else if (new_subschema_id == ObInvalidSqlType // not get from fields, generate new
                  && OB_FAIL(subschema_ctx_.get_new_subschema_id(new_subschema_id))) {
-        LOG_WARN("failed to get new subschema id", K(ret), K(1UL), K(udt_type_id));
       } else {
         value.type_ = OB_SUBSCHEMA_UDT_TYPE;
         value.signature_ = udt_type_id;
@@ -1020,7 +982,6 @@ int ObPhysicalPlanCtx::get_subschema_id_by_collection_elem_type(ObNestedType col
   }
   if (OB_SUCC(ret) && (OB_ISNULL(phy_plan_) || !is_subschema_inited_in_plan)) {
     if (!subschema_ctx_.is_inited() && OB_FAIL(subschema_ctx_.init())) {
-      LOG_WARN("subschema ctx init failed", K(ret));
     } else if (OB_FAIL(subschema_ctx_.get_subschema_id_by_typedef(coll_type, elem_type, subschema_id))) {
     }
   }
@@ -1042,7 +1003,6 @@ int ObPhysicalPlanCtx::get_subschema_id_by_type_string(const ObString &type_stri
   if (OB_SUCC(ret)
       && (OB_ISNULL(phy_plan_) || !is_subschema_inited_in_plan)) {
     if (!subschema_ctx_.is_inited() && OB_FAIL(subschema_ctx_.init())) {
-      LOG_WARN("subschema ctx init failed", K(ret));
     } else if (OB_FAIL(subschema_ctx_.get_subschema_id_by_typedef(type_string, subschema_id))) {
     }
   }
@@ -1056,10 +1016,8 @@ int ObPhysicalPlanCtx::get_subschema_id_by_type_info(const ObObjMeta &obj_meta,
 {
   int ret = OB_SUCCESS;
   if (!subschema_ctx_.is_inited() && OB_FAIL(subschema_ctx_.init())) {
-    LOG_WARN("subschema ctx init failed", K(ret));
   } else if (OB_FAIL(inner_get_subschema_id_by_type_info(obj_meta, type_info, subschema_id))) {
     if (OB_HASH_NOT_EXIST != ret) {
-      LOG_WARN("failed to get subschema id by udt_id", K(ret), K(type_info));
     } else {
       ObEnumSetMeta src_meta(obj_meta, &type_info);
       uint16 new_subschema_id = ObMaxSystemUDTSqlType;
@@ -1091,12 +1049,10 @@ int ObPhysicalPlanCtx::inner_get_subschema_id_by_type_info(const ObObjMeta &obj_
   ObEnumSetMeta src_meta(obj_meta, &type_info);
   if (!subschema_ctx_.is_inited()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("subschema ctx is not inited", K(ret));
   } else if (OB_FAIL(subschema_ctx_.get_subschema_id(OB_SUBSCHEMA_ENUM_SET_TYPE,
                                                      src_meta,
                                                      temp_subschema_id))) {
     if (OB_HASH_NOT_EXIST != ret) {
-      LOG_WARN("failed to get subschema id by udt_id", K(ret), K(type_info));
     }
   } else { // success
     subschema_id = temp_subschema_id;
@@ -1131,9 +1087,7 @@ int ObPhysicalPlanCtx::build_subschema_by_fields(const ColumnsFieldIArray *field
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(phy_plan_) || subschema_ctx_.get_subschema_count() > 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("physical plan exists, should not rebuild subschema", K(ret), K(*fields), K(subschema_ctx_));
   } else if (!subschema_ctx_.is_inited() && OB_FAIL(subschema_ctx_.init())) {
-    LOG_WARN("subschema ctx init failed", K(ret));
   } else {
     subschema_ctx_.set_fields(fields);
 
@@ -1156,8 +1110,6 @@ int ObPhysicalPlanCtx::build_subschema_ctx_by_param_store(share::schema::ObSchem
   ParamStore *param_store = &get_param_store_for_update();
   if (OB_NOT_NULL(phy_plan_) || subschema_ctx_.get_subschema_count() > 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("physical plan exists, should not build subschema ctx in plan ctx",
-             K(ret), K(subschema_ctx_));
   }
 
   for (uint32_t i = 0; OB_SUCC(ret) && i < param_store->count(); i++) {
@@ -1166,10 +1118,8 @@ int ObPhysicalPlanCtx::build_subschema_ctx_by_param_store(share::schema::ObSchem
       uint64_t udt_id = param.get_accuracy().get_accuracy();
       uint16_t subschema_id = 0;
       if (!subschema_ctx_.is_inited() && OB_FAIL(subschema_ctx_.init())) {
-        LOG_WARN("subschema ctx init failed", K(ret));
       } else if(OB_FAIL(get_subschema_id_by_udt_id(udt_id, subschema_id, schema_guard))) {
       } else if (subschema_id == ObMaxSystemUDTSqlType) {
-        LOG_WARN("failed to get subschema id", K(ret), K(param), K(udt_id));
       } else {
         param.set_subschema_id(subschema_id);
       }
@@ -1186,7 +1136,6 @@ int ObPhysicalPlanCtx::get_local_session_vars(int64_t local_var_array_id, const 
     //do nothing
   } else if (local_var_array_id + 1 > all_local_session_vars_.count() || local_var_array_id < 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("index out of array range", K(ret), K(local_var_array_id), K(all_local_session_vars_.count()));
   } else {
     local_vars = &all_local_session_vars_.at(local_var_array_id);
   }

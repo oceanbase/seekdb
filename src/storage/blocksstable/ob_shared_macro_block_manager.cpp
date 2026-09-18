@@ -102,7 +102,6 @@ int ObSharedMacroBlockMgr::module_init(ObSharedMacroBlockMgr* &shared_block_mgr)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == shared_block_mgr)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("shared_block_mgr is null", K(ret));
   } else if (OB_FAIL(shared_block_mgr->init())) {
   }
   return ret;
@@ -116,12 +115,10 @@ int ObSharedMacroBlockMgr::init()
   header_size_ = upper_align(common_header.get_serialize_size(), DIO_READ_ALIGN_SIZE);
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("shared macro block handle has been inited", K(ret));
   } else if (OB_FAIL(common_header.set_attr(ObMacroBlockCommonHeader::MacroBlockType::SharedSSTableData))) {
   } else if (OB_ISNULL(common_header_buf_ = reinterpret_cast<char*>(ob_malloc(header_size_,
       ObMemAttr(ObModIds::OB_MACRO_FILE))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory for buffer that holds common header", K(ret), K(common_header));
   } else if (FALSE_IT(MEMSET(common_header_buf_, 9, header_size_))) {
   } else if (OB_FAIL(common_header.build_serialized_header(common_header_buf_, common_header.get_serialize_size()))) {
   } else if (OB_FAIL(block_used_size_.init("ShareBlksMap"))) {
@@ -142,7 +139,6 @@ int ObSharedMacroBlockMgr::start()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObSharedMacroBlockMgr hasn't been inited", K(ret));
   } else if (OB_FAIL(defragment_timer_.schedule(defragmentation_task_, DEFRAGMENT_DELAY_US, true/*repeat*/))) {
   }
   return ret;
@@ -171,13 +167,10 @@ int ObSharedMacroBlockMgr::write_block(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Shared Macro Block Handle hasn't been inited.", K(ret));
   } else if (OB_ISNULL(buf) || OB_UNLIKELY(size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(buf), K(size));
   } else if (OB_UNLIKELY(0 != size % DIO_READ_ALIGN_SIZE)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("write size is not aligned", K(ret), K(size));
   } else {
     ObMacroBlockWriteInfo write_info;
     write_info.buffer_ = buf;
@@ -188,7 +181,6 @@ int ObSharedMacroBlockMgr::write_block(
 
     if (size >= SMALL_SSTABLE_STHRESHOLD_SIZE) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("small sstable's size shouldn't be larger than 1 MB", K(ret), K(write_info.size_));
     } else if (offset_ + size > OB_DEFAULT_MACRO_BLOCK_SIZE) {
       if (OB_FAIL(try_switch_macro_block())) {
       }
@@ -288,7 +280,6 @@ int ObSharedMacroBlockMgr::try_switch_macro_block()
   ObMacroBlockHandle new_macro_handle;
   // we add_block_size extraly to avoid defragmenting the previous block if some sstables haven't been inited
   if (block_id.is_valid() && OB_FAIL(add_block(block_id, used_size))) {
-    LOG_WARN("fail to add cur block to map", K(ret), K(block_id));
   } else if (FALSE_IT(macro_handle_.reset())) {
   } else if (FALSE_IT(offset_ = OB_DEFAULT_MACRO_BLOCK_SIZE /* invalid offset */)) {
   } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.alloc_block(new_macro_handle))) {
@@ -332,13 +323,11 @@ int ObSharedMacroBlockMgr::add_block(const MacroBlockId &block_id, const int64_t
   int32_t curr_size = 0;
   if (OB_UNLIKELY(!block_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid block id", K(ret), K(block_id), K(block_size));
   } else {
     // block_size may execeeds default 2M
     // since we need get_and_set used_size of blocks, we need mutex to protect array
     lib::ObMutexGuard guard(blocks_mutex_);
     if (OB_FAIL(block_used_size_.get(block_id, curr_size)) && OB_ENTRY_NOT_EXIST != ret) {
-      LOG_WARN("fail to get block id from map", K(ret), K(block_id));
     } else if (FALSE_IT(curr_size += block_size)) {
     } else if (OB_FAIL(block_used_size_.insert_or_update(block_id, curr_size))) {
     } else if (is_recyclable(block_id, curr_size)) {
@@ -354,12 +343,10 @@ int ObSharedMacroBlockMgr::free_block(const MacroBlockId &block_id, const int64_
   int32_t curr_size = 0;
   if (OB_UNLIKELY(!block_id.is_valid() || block_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid block size or id", K(ret), K(block_id), K(block_size));
   } else {
     // since we need get_and_set used_size of blocks, we need mutex to protect array
     lib::ObMutexGuard guard(blocks_mutex_);
     if (OB_FAIL(block_used_size_.get(block_id, curr_size)) && OB_ENTRY_NOT_EXIST != ret) {
-      LOG_WARN("fail to get block id from map", K(ret), K(block_id));
     } else if ((curr_size -= block_size) == 0) {
       if (OB_FAIL(block_used_size_.erase(block_id))) {
       }
@@ -386,7 +373,6 @@ int ObSharedMacroBlockMgr::get_recyclable_blocks(ObIAllocator &allocator, ObIArr
         ret = OB_SUCCESS;
         FLOG_INFO("number of recyclable blocks reaches 1000", K(ret));
       } else {
-        LOG_WARN("fail to get recyclable blocks", K(ret), K(block_ids), K(recycled_block_ids));
       }
     }
 
@@ -419,7 +405,6 @@ int ObSharedMacroBlockMgr::defragment()
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObSharedMacroBlockMgr hasn't been initiated", K(ret));
   } else if (!(ATOMIC_LOAD(&need_defragment_))) { // skip
     LOG_INFO("skip defragment task", K(ret), K_(need_defragment));
   } else if (OB_FAIL(macro_ids.init(MAX_RECYCLABLE_BLOCK_CNT))) {
@@ -434,11 +419,9 @@ int ObSharedMacroBlockMgr::defragment()
       iter_allocator.reuse();
       if (OB_FAIL(tablet_iter.get_next_tablet(tablet_handle))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("fail to get tablet", K(ret), K(tablet_handle));
         }
       } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid tablet handle", K(ret), K(tablet_handle));
       } else if (tablet_handle.get_obj()->is_ls_inner_tablet()) {
         // skip update
       } else if (OB_FAIL(update_tablet(
@@ -516,12 +499,10 @@ int ObSharedMacroBlockMgr::update_tablet(
         ret = OB_SUCCESS;
         break;
       } else {
-        LOG_WARN("fail to get next table from iter", K(ret), K(table_store_iter));
       }
     } else if (FALSE_IT(sstable = static_cast<ObSSTable *>(table))) {
     } else if (OB_ISNULL(sstable) || !sstable->is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("the sstable is null or invalid", K(ret));
     } else if (OB_FAIL(sstable->get_meta(meta_handle))) {
     } else if (sstable->is_small_sstable()) {
       const int64_t data_block_count = meta_handle.get_sstable_meta().get_data_macro_block_count();
@@ -537,7 +518,6 @@ int ObSharedMacroBlockMgr::update_tablet(
         ret = OB_EAGAIN;
       } else if (OB_UNLIKELY(1 != data_block_count)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("this sstable is not small", K(ret), K(data_block_count));
       } else if (OB_FAIL(meta_handle.get_sstable_meta().get_macro_info().get_data_block_iter(id_iterator))) {
       } else if (OB_FAIL(id_iterator.get_next_macro_id(macro_id))) {
       } else if (is_contain(macro_ids, macro_id)) {
@@ -549,7 +529,6 @@ int ObSharedMacroBlockMgr::update_tablet(
             ret = OB_EAGAIN;
             // tablet has been deleted, skip the defragmentation
           } else {
-            LOG_WARN("fail to get tablet", K(ret), K(key));
           }
         } else if (OB_FAIL(updated_tablet_handle.get_obj()->get_meta_disk_addr(cur_addr))) {
         } else if (OB_UNLIKELY(!tablet_handle.get_obj()->get_tablet_addr().is_equal_for_persistence(cur_addr))) {
@@ -557,7 +536,6 @@ int ObSharedMacroBlockMgr::update_tablet(
           // tablet has been changed, skip the defragmentation
         } else if (OB_ISNULL(buf = allocator.alloc(sizeof(ObSSTable)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to acquire sstable object", K(ret));
         } else if (FALSE_IT(new_sstable = new (buf) ObSSTable())) {
         } else if (OB_FAIL(rebuild_sstable(
             allocator,
@@ -570,7 +548,6 @@ int ObSharedMacroBlockMgr::update_tablet(
         } else if (OB_FAIL(new_sstables.push_back(new_sstable))) {
           new_sstable->~ObSSTable();
           allocator.free(new_sstable);
-          LOG_WARN("fail to push table handle to array", K(ret), KPC(sstable));
         }
       }
     }
@@ -653,7 +630,6 @@ int ObSharedMacroBlockMgr::rebuild_sstable(
       || OB_FAIL(ObSSTableMetaChecker::check_sstable_meta_strict_equality(
           old_meta_handle.get_sstable_meta(), new_meta_handle.get_sstable_meta()))) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("new sstable is not equal to old sstable", K(ret), K(new_sstable), K(old_sstable));
   } else {
     FLOG_INFO("successfully rebuild one sstable", K(ret), K(block_info), K(new_sstable.get_key()));
   }
@@ -675,7 +651,6 @@ int ObSharedMacroBlockMgr::create_new_sstable(
                                                   meta_handle.get_sstable_meta(), block_info))) {
   } else if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(param));
   } else if (OB_FAIL(new_sstable.init(param, &allocator))) {
   }
 
@@ -697,10 +672,8 @@ int ObSharedMacroBlockMgr::prepare_data_desc(
     const ObStorageSchema *storage_schema = ObMdsSchemaHelper::get_instance().get_storage_schema();
     if (OB_ISNULL(storage_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("storage schema is null", K(ret), KP(storage_schema));
     } else if (OB_UNLIKELY(!storage_schema->is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("mds storage schema is invalid", K(ret), KP(storage_schema), KPC(storage_schema));
     } else if (OB_FAIL(data_desc.init(
           false/*is_ddl*/,
           *storage_schema,
@@ -756,7 +729,6 @@ int ObSharedMacroBlockMgr::parse_merge_type(const ObSSTable &sstable, ObMergeTyp
     merge_type = ObMergeType::MDS_MINOR_MERGE;
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sstable type is unexpected", K(ret), K(sstable));
   }
   return ret;
 }
@@ -770,13 +742,10 @@ int ObSharedMacroBlockMgr::alloc_for_tools(
   void *buf = nullptr;
   if (OB_ISNULL(buf = allocator.alloc(sizeof(ObSSTableIndexBuilder)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate memory for sstable index builder", K(ret));
   } else if (FALSE_IT(sstable_index_builder = new (buf) ObSSTableIndexBuilder(false /* not use writer buffer*/))) {
   } else if (OB_ISNULL(buf = allocator.alloc(sizeof(ObIndexBlockRebuilder)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret));
   } else if (FALSE_IT(index_block_rebuilder = new (buf) ObIndexBlockRebuilder)) {
-    LOG_WARN("fail to allocate memory for index rebuilder", K(ret));
   }
   return ret;
 }
@@ -811,7 +780,6 @@ int ObSharedMacroBlockMgr::read_sstable_block(
       } else if (OB_UNLIKELY(!block_handle.is_valid()
             || sstable.get_macro_read_size() != block_handle.get_data_size())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("block handle is invalid", K(ret), K(block_handle));
       }
     }
   }
@@ -825,7 +793,6 @@ void ObSharedMacroBlockMgr::ObBlockDefragmentationTask::runTimerTask()
 {
   int ret = OB_SUCCESS;
   if (SERVER_STORAGE_META_SERVICE.is_started() && OB_FAIL(shared_mgr_.defragment())) {
-    LOG_WARN("fail to defragment small sstables", K(ret));
   }
 }
 

@@ -41,18 +41,15 @@ int ObDBMSSchedJobMaster::init(common::ObMySQLProxy *sql_proxy,
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("dbms sched job master already inited", K(ret), K(inited_));
   } else if (OB_ISNULL(sql_proxy)
           || OB_ISNULL(schema_service)
           ) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null ptr", K(ret), K(sql_proxy), K(schema_service));
   } else if (OB_FAIL(table_operator_.init(sql_proxy))) {
   } else if (OB_FAIL(alive_jobs_.create(1024, ObMemAttr("DbmsSched_Job")))) {
   } else if (OB_FAIL(thread_cond_.init(ObWaitEventIds::REENTRANT_THREAD_COND_WAIT))) {
   } else if (OB_ISNULL(ObCurTraceId::get())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("trace id is null", K(ret));
   } else {
     schema_service_ = schema_service;
     inited_ = true;
@@ -66,7 +63,6 @@ int ObDBMSSchedJobMaster::start()
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init yet!", K(ret), K(inited_));
   } else {
     stoped_ = false;
   }
@@ -98,7 +94,6 @@ int64_t ObDBMSSchedJobMaster::calc_next_date(ObDBMSSchedJobInfo &job_info)
   int64_t next_date = 0;
   if (OB_FAIL(ObDBMSSchedJobUtils::calc_dbms_sched_repeat_expr(job_info, next_date))) {
     next_date = ObDBMSSchedJobInfo::DEFAULT_MAX_END_DATE;
-    LOG_WARN("failed to calc next date", KR(ret), K(job_info));
   }
   return next_date;
 }
@@ -130,7 +125,6 @@ int ObDBMSSchedJobMaster::scheduler()
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not init yet", K(ret));
   } else {
     bool first_iter = true;
     while (OB_SUCC(ret) && !stoped_) {
@@ -324,14 +318,11 @@ int ObDBMSSchedJobMaster::alloc_job_key(
   job_key = NULL;
   if (OB_ISNULL(ptr = allocator_.alloc(sizeof(ObDBMSSchedJobKey)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret), K(ptr));
   } else if (OB_ISNULL(job_key =
     new(ptr)ObDBMSSchedJobKey(job_id, job_name))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to init scheduler job id", K(ret));
   } else {
     if (OB_FAIL(alive_jobs_.set_refactored(job_id))) {
-      LOG_WARN("faile to add job to alive_jobs", K(ret), K(job_id));
       allocator_.free(job_key);
       job_key = NULL;
     }
@@ -344,7 +335,6 @@ void ObDBMSSchedJobMaster::free_job_key(ObDBMSSchedJobKey *&job_key)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(job_key)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("job_key is null", K(ret));
   } else {
     OZ (alive_jobs_.erase_refactored(job_key->get_job_id()));
     allocator_.free(job_key);
@@ -357,7 +347,6 @@ int ObDBMSSchedJobMaster::check_runtime_jobs()
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("dbms sched job not init yet", K(ret), K(inited_));
   } else {
     bool write_enabled = true;
     if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
@@ -402,7 +391,6 @@ int ObDBMSSchedJobMaster::register_new_jobs(ObIArray<ObDBMSSchedJobInfo> &job_in
           if (exist_key->get_job_id() == job_info.get_job_id()) {
             wait_vector_.remove(iter);
             if (OB_FAIL(register_job(exist_key, new_next_date))) {
-              LOG_WARN("failed to update existing job next_date", K(ret), K(job_info));
               free_job_key(exist_key);
             }
             break;
@@ -415,7 +403,6 @@ int ObDBMSSchedJobMaster::register_new_jobs(ObIArray<ObDBMSSchedJobInfo> &job_in
           job_info.get_job_id(),
           job_info.get_job_name()))) {
         } else if (OB_FAIL(register_job(job_key, ObTimeUtility::current_time()))) {
-          LOG_WARN("failed to register job", K(ret), K(job_info));
           free_job_key(job_key);
           job_key = NULL;
         }
@@ -433,10 +420,8 @@ int ObDBMSSchedJobMaster::register_job(ObDBMSSchedJobKey *job_key, int64_t next_
   int ret = OB_SUCCESS;
   if (OB_ISNULL(job_key)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("job key is null", K(ret));
   } else if (next_date == 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("next date should not be 0", K(ret), KPC(job_key), K(next_date));
   } else {
     job_key->set_execute_at(next_date);
     common::ObSortedVector<ObDBMSSchedJobKey *>::iterator iter;

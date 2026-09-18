@@ -81,10 +81,8 @@ int ObTrivalSampleFilterExecutor::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("The ObTrivalSampleFilter has been inited", K(ret));
   } else if (OB_UNLIKELY(!sample_info.is_trival_sample() || sample_info.percent_ < 0.000001 || sample_info.percent_ >= 100.0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid sample info", K(ret), K(sample_info));
   } else {
     row_num_ = 0;
     percent_ = sample_info.percent_;
@@ -105,7 +103,6 @@ int ObTrivalSampleFilterExecutor::check_filtered_after_fuse(bool &filtered)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("The ObTrivalSampleFilter has not been inited", K(ret));
   } else {
     filtered = check_single_row_filtered(row_num_++);
   }
@@ -119,7 +116,6 @@ int ObTrivalSampleFilterExecutor::apply_sample_filter(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("The ObTrivalSampleFilter has not been inited", K(ret));
   } else if (OB_FAIL(set_sample_bitmap(filter_info.count_, result_bitmap))) {
   }
   return ret;
@@ -221,10 +217,8 @@ int ObHybridSampleFilterExecutor::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("The ObHybridSampleFilter has been inited", K(ret));
   } else if (OB_UNLIKELY(!sample_info.is_hybrid_sample() || nullptr == allocator)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to init ObHybridSampleFilter", K(ret), K(sample_info), KP(allocator));
   } else if (OB_FAIL(init_sample_segment_length(sample_info.percent_))) {
   } else {
     row_num_ = 0;
@@ -254,7 +248,6 @@ int ObHybridSampleFilterExecutor::init_sample_segment_length(const double percen
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(percent < 0.000001 || percent >= 100.0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected sample percent", K(ret), K_(percent));
   } else {
     int64_t interval_length = 1;
     while(static_cast<double>(interval_length) * percent / 100.0 < 1.0) {
@@ -278,10 +271,8 @@ int ObHybridSampleFilterExecutor::build_row_id_handle(
   int64_t data_handle_max_cnt = ObIndexTreeMultiPassPrefetcher<>::MAX_DATA_PREFETCH_DEPTH;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("The ObHybridSampleFilter has not been inited", K(ret));
   } else if (OB_UNLIKELY(height <= 0 || index_handle_cnt <= 0 || data_handle_cnt <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("The argument to build row id handle is not valid", K(ret), K(height), K(index_handle_cnt), K(data_handle_cnt));
   } else if (nullptr != index_row_id_handle_) {
     MEMSET(static_cast<void *>(index_row_id_handle_), 0, sizeof(ObIndexRowIdHandle) * index_handle_max_cnt);
     MEMSET(static_cast<void *>(data_row_id_handle_), 0, sizeof(int64_t) * data_handle_max_cnt);
@@ -290,7 +281,6 @@ int ObHybridSampleFilterExecutor::build_row_id_handle(
     data_prefetch_depth_ = data_handle_cnt;
   } else if (OB_ISNULL(buf = allocator_->alloc(sizeof(ObIndexRowIdHandle) * index_handle_max_cnt + sizeof(int64_t) * data_handle_max_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Failed to alloc memory for index_row_id_handle and data_row_id_handle", K(ret), K(index_handle_max_cnt), K(data_handle_max_cnt));
   } else {
     index_row_id_handle_ = static_cast<ObIndexRowIdHandle *>(buf);
     data_row_id_handle_ = reinterpret_cast<int64_t *>(index_row_id_handle_ + index_handle_max_cnt);
@@ -310,10 +300,8 @@ int ObHybridSampleFilterExecutor::increase_row_num(const int64_t count)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("The ObHybridSampleFilter has not been inited", K(ret));
   } else if (OB_UNLIKELY(count < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("The row_num increased should be positive", K(ret), K(count));
   } else {
     row_num_ += count;
   }
@@ -334,7 +322,6 @@ int ObHybridSampleFilterExecutor::update_pd_row_range(const int64_t start, const
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid(start) || start > end)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("The prefetch filtered range is invalid", K(ret), K(start), K(end));
   } else {
     if (!is_valid(pd_row_range_.begin())) {
         pd_row_range_.set_begin(start);
@@ -348,7 +335,6 @@ int ObHybridSampleFilterExecutor::check_single_row_filtered(const int64_t row_nu
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(row_num < 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Invalid row num to check whether filtered", K(ret), K(row_num));
   } else if (row_num > boundary_point_) {
     ObSampleIntervalParser interval_parser(percent_, seed_);
     // [left, right] is the row num range to be sampled.
@@ -370,7 +356,6 @@ int ObHybridSampleFilterExecutor::check_single_row_filtered(const int64_t row_nu
     filtered = filter_state_;
   }
   if (OB_SUCC(ret) && OB_FAIL(increase_row_num(1))) {
-    LOG_WARN("Failed to increase row num", K(ret));
   }
   return ret;
 }
@@ -379,7 +364,6 @@ int ObHybridSampleFilterExecutor::check_filtered_after_fuse(bool &filtered)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("The ObHybridSampleFilter has not been inited", K(ret));
   } else if (OB_FAIL(update_row_num_after_blockscan())) {
   } else if (OB_FAIL(check_single_row_filtered(row_num_, filtered))) {
   }
@@ -392,7 +376,6 @@ int ObHybridSampleFilterExecutor::parse_interval_info(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(row_num < 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Failed to parse interval info", K(ret), K(row_num));
   } else {
     int idx = row_num >= interval_infos_[EXPAND_INTERVAL_INDEX].start_ ? EXPAND_INTERVAL_INDEX : EXPAND_INTERVAL_INDEX - 1;
     interval_parser.parse(row_num, interval_infos_[idx]);
@@ -411,10 +394,8 @@ int ObHybridSampleFilterExecutor::check_sample_block(
   int64_t end_row_num = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("The ObHybridSampleFilter has not been inited", K(ret));
   } else if (OB_UNLIKELY(level < 0 || level > index_tree_height_ || parent_fetch_idx < 0 || child_prefetch_idx < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to check sample block", K(ret), K(level), K(parent_fetch_idx), K(child_prefetch_idx));
   } else if (OB_FAIL(update_row_id_handle(level, parent_fetch_idx, child_prefetch_idx, index_info.get_row_count()))) {
   } else if (!index_info.can_blockscan() || !pd_row_range_.is_valid()) {
   } else {
@@ -425,7 +406,6 @@ int ObHybridSampleFilterExecutor::check_sample_block(
     } 
     if (OB_UNLIKELY(start_row_id < pd_row_range_.begin())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("The first row id is invalid when apply sample filter", K(ret), K_(pd_row_range), K(start_row_id));
     } else {
       start_row_num = row_num_ + start_row_id - pd_row_range_.begin();
       end_row_num = start_row_num + index_info.get_row_count() - 1;
@@ -451,7 +431,6 @@ int64_t ObHybridSampleFilterExecutor::get_range_sample_count(
   int64_t start_iid = 0;
   if (OB_UNLIKELY(start_row_num < 0 || end_row_num < start_row_num)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected range", K(ret), K(start_row_num), K(end_row_num));
   } else if (OB_FAIL(parse_interval_info(start_row_num, interval_parser))) {
   } else {
     // If start_row_num is greater the right point of leftmost sample interval, subtract total row num of the leftmost sample interval.
@@ -463,7 +442,6 @@ int64_t ObHybridSampleFilterExecutor::get_range_sample_count(
 
   if (OB_SUCC(ret)) {
     if (interval_parser.right_ < end_row_num && OB_FAIL(parse_interval_info(end_row_num, interval_parser))) {
-      LOG_WARN("Failed to parse interval info", K(ret), K(end_row_num), K(interval_parser));
     } else {
       // The logic on the right side is similar to the left.
       count2 = interval_parser.left_ > end_row_num ? interval_parser.count_ : MAX(interval_parser.right_ - end_row_num, 0);
@@ -480,7 +458,6 @@ int ObHybridSampleFilterExecutor::check_range_filtered(
   int64_t end_row_num = start_row_num + index_info.get_row_count() - 1;
   if (OB_UNLIKELY(start_row_num < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument when check range filtered", K(ret), K(start_row_num));
   } else if (start_row_num < interval_infos_[EXPAND_INTERVAL_INDEX].start_ && interval_infos_[EXPAND_INTERVAL_INDEX].start_ <= end_row_num) {
     // expand point in current range, not filtered.
   } else {
@@ -489,7 +466,6 @@ int ObHybridSampleFilterExecutor::check_range_filtered(
     } else {
       if (range_sample_row_count < 0) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected row count to sample in this range", K(ret), K(range_sample_row_count), K(start_row_num), K(end_row_num));
       } else if (range_sample_row_count == 0) {
         index_info.set_filter_constant_type(sql::ObBoolMaskType::ALWAYS_FALSE);
       } else {
@@ -507,7 +483,6 @@ int ObHybridSampleFilterExecutor::set_sample_bitmap(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(start_row_num < 0 || row_count < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to set sample bitmap", K(ret), K(start_row_num), K(row_count));
   } else {
     ObSampleIntervalParser interval_parser(percent_, seed_);
     int64_t row_index = 0;
@@ -543,15 +518,12 @@ int ObHybridSampleFilterExecutor::apply_sample_filter(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("The ObHybridSampleFilter has not been inited", K(ret));
   } else if (is_major) {
     if (OB_UNLIKELY(!block_row_range_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("The sample range is not valid", K(ret), K_(block_row_range));
     } else if (OB_FAIL(update_pd_row_range(block_row_range_.begin(), block_row_range_.end()))) {
     } else if (OB_UNLIKELY(!pd_row_range_.is_valid() || block_row_range_.begin() < pd_row_range_.begin())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("The first row id is invalid when apply sample filter", K(ret), K_(pd_row_range), K_(block_row_range));
     } else if (OB_FAIL(set_sample_bitmap(row_num_ + (block_row_range_.begin() - pd_row_range_.begin()), filter_info.count_, result_bitmap))) {
     }
   } else if (OB_FAIL(set_sample_bitmap(row_num_, filter_info.count_, result_bitmap))) {
@@ -569,13 +541,10 @@ int ObHybridSampleFilterExecutor::update_row_id_handle(
   int64_t parent_offset = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("The ObHybridSampleFilter has not been inited", K(ret));
   } else if (OB_UNLIKELY(level <= 0 || level > index_tree_height_ 
                           || parent_fetch_idx < 0 || child_prefetch_idx < 0 
                           || row_count < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to update row id hanle", K(ret), K(level), K(parent_fetch_idx), 
-                                                        K(child_prefetch_idx), K_(index_tree_height), K(row_count));
   } else {
     parent_fetch_idx %= index_prefetch_depth_;
     parent_start = index_row_id_handle_[(level - 1) * index_prefetch_depth_ + parent_fetch_idx].start_;
@@ -636,10 +605,8 @@ int ObRowSampleFilter::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("The ObRowSampleFilter has been inited", K(ret));
   } else if (OB_UNLIKELY(!sample_info.is_row_sample() || nullptr == allocator)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to init ObRowSampleFilter", K(ret), K(sample_info), KP(allocator));
   } else {
     sql::ObPushdownFilterFactory filter_factory(allocator);
     if (OB_FAIL(filter_factory.alloc(sql::PushdownFilterType::SAMPLE_FILTER, 0, sample_node_))) {
@@ -664,15 +631,12 @@ int ObRowSampleFilter::combine_to_filter_tree(sql::ObPushdownFilterExecutor *&ro
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("The ObRowSampleFilter has not been inited", K(ret));
   } else if (nullptr == root_filter) {
     root_filter = sample_filter_;
   } else {
     sql::ObPushdownFilterFactory filter_factory(allocator_);
     if (nullptr == filter_node_ && OB_FAIL(filter_factory.alloc(sql::PushdownFilterType::AND_FILTER, 2, filter_node_))) {
-      LOG_WARN("Failed to alloc pushdown and filter node", K(ret));
     } else if (nullptr == filter_ && OB_FAIL(filter_factory.alloc(sql::PushdownExecutorType::AND_FILTER_EXECUTOR, 2, *filter_node_, filter_, root_filter->get_op()))) {
-      LOG_WARN("Failed to alloc pushdown and filter executor", K(ret));
     } else {
       filter_->set_child(0, sample_filter_);
       filter_->set_child(1, root_filter);
@@ -695,10 +659,8 @@ int ObRowSampleFilterFactory::build_sample_filter(
     ObRowSampleFilter *tmp_sample_filter = nullptr;
     if (OB_UNLIKELY(!sample_info.is_row_sample() || nullptr == allocator)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Invalid argument to build sample filter", K(ret), K(sample_info), K(allocator));
     } else if (OB_ISNULL(tmp_sample_filter = OB_NEWx(ObRowSampleFilter, allocator))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Fail to new ObRowSampleFilter", K(ret));
     } else if (OB_FAIL(tmp_sample_filter->init(sample_info, op, is_reverse_scan, allocator))) {
     }
     if (OB_SUCC(ret)) {

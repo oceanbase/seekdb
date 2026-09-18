@@ -56,7 +56,6 @@ int ObDropPrimaryKeyTask::process()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDropPrimaryKeyTask has not been inited", K(ret));
   } else if (OB_FAIL(check_health())) {
   } else {
     switch(task_status_) {

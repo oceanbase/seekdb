@@ -93,38 +93,31 @@ int ObExprPrivSTDWithin::eval_st_dwithin_common(ObEvalCtx &ctx,
   if (distance_tolerance < 0.0) {
     ret = OB_ERR_GIS_INVALID_DATA;
     LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_DWITHIN);
-    LOG_WARN("Tolerance cannot be less than zero", K(ret), K(distance_tolerance));
   } else if (OB_FAIL(ObGeoTypeUtil::get_type_srid_from_wkb(wkb1, type1, srid1))) {
-    LOG_WARN("get type and srid from wkb failed", K(wkb1), K(ret));      
     if (ret == OB_ERR_GIS_INVALID_DATA) {
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_DWITHIN);
     }
   } else if (OB_FAIL(ObGeoTypeUtil::get_type_srid_from_wkb(wkb2, type2, srid2))) {
-    LOG_WARN("get type and srid from wkb failed", K(wkb2), K(ret));
     if (ret == OB_ERR_GIS_INVALID_DATA) {
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_DWITHIN);
     }
   } else if (srid1 != srid2) {
     ret = OB_ERR_GIS_DIFFERENT_SRIDS;
-    LOG_WARN("srid not the same", K(srid1), K(srid2), K(ret));
   } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb1, srs))) {
   } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb1, geo1, srs, N_PRIV_ST_TRANSFORM, 
                                                     ObGeoBuildFlag::GEO_ALLOW_3D | GEO_NOT_COPY_WKB))) {
-    LOG_WARN("get first geo by wkb failed", K(ret));
     if (ret != OB_ERR_SRS_NOT_FOUND && ret != OB_ERR_INVALID_GEOMETRY_TYPE) {
       ret = OB_ERR_GIS_INVALID_DATA;  
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_DWITHIN);        
     }           
   } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb2, geo2, srs, N_PRIV_ST_TRANSFORM, 
                                                     ObGeoBuildFlag::GEO_ALLOW_3D | GEO_NOT_COPY_WKB))) {
-    LOG_WARN("get second geo by wkb failed", K(ret));
     if (ret != OB_ERR_SRS_NOT_FOUND && ret != OB_ERR_INVALID_GEOMETRY_TYPE) {
       ret = OB_ERR_GIS_INVALID_DATA;  
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_DWITHIN);        
     }           
   } else if (OB_FAIL(ObGeoExprUtils::check_empty(geo1, is_geo1_empty))
       || OB_FAIL(ObGeoExprUtils::check_empty(geo2, is_geo2_empty))) {
-    LOG_WARN("check geo empty failed", K(ret));
   } else if (is_geo1_empty || is_geo2_empty) {
     res.set_null();
   } else if (ob_is_string_type(input_type1)
@@ -136,16 +129,13 @@ int ObExprPrivSTDWithin::eval_st_dwithin_common(ObEvalCtx &ctx,
   } else if (OB_FAIL(guard.init())) {
   } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("fail to get mem ctx", K(ret));
   } else {
     ObGeoEvalCtx gis_context(*mem_ctx, srs);
     double result = 0.0;
     if (OB_FAIL(ObGeoExprUtils::normalize_wkb(srs, wkb1, temp_allocator, geo1))) {
     } else if (OB_FAIL(ObGeoExprUtils::normalize_wkb(srs, wkb2, temp_allocator, geo2))) {
     } else if (OB_FAIL(gis_context.append_geo_arg(geo1)) || OB_FAIL(gis_context.append_geo_arg(geo2))) {
-      LOG_WARN("build gis context failed", K(ret), K(gis_context.get_geo_count()));
     } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Distance>::geo_func::eval(gis_context, result))) {
-      LOG_WARN("eval st intersection failed", K(ret));
       ObGeoExprUtils::geo_func_error_handle(ret, N_PRIV_ST_DWITHIN);
     } else {
       res.set_bool(result <= distance_tolerance);
@@ -174,7 +164,6 @@ int ObExprPrivSTDWithin::eval_st_dwithin(const ObExpr &expr, ObEvalCtx &ctx, ObD
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   if (OB_FAIL(temp_allocator.eval_arg(gis_arg1, ctx, gis_datum1)) || OB_FAIL(temp_allocator.eval_arg(gis_arg2, ctx, gis_datum2))
       || OB_FAIL(temp_allocator.eval_arg(gis_arg3, ctx, gis_datum3))) {
-    LOG_WARN("eval geo args failed", K(ret), KP(gis_datum1),KP(gis_datum2),KP(gis_datum3));
   } else if (gis_datum1->is_null() || gis_datum2->is_null() || gis_datum3->is_null()) {
     res.set_null();
   } else if (FALSE_IT(wkb1 = gis_datum1->get_string())) {

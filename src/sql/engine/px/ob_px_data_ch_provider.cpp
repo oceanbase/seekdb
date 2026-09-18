@@ -60,7 +60,6 @@ int ObPxTransmitChProvider::get_data_ch(const int64_t sqc_id,
   if (OB_SUCC(ret)) {
     if (!msg_set_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("channel set is empty. expect at lease one data channel for transmit op", K(ret));
     } else if (OB_FAIL(ObPxChProviderUtil::inner_get_data_ch(
         msg_.get_ch_sets(), msg_.get_ch_total_info(), sqc_id, task_id, ch_set, true))) {
     } else if (OB_NOT_NULL(ch_info)) {
@@ -134,7 +133,6 @@ int ObPxTransmitChProvider::inner_get_part_ch_map(ObPxPartChInfo &map)
       int64_t sqc_id = part_ch_item.second_;
       if (OB_UNLIKELY(0 != sqc_id)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("local PX requires SQC id zero", K(ret), K(sqc_id));
       } else {
         for (int64_t task_idx = 0;
              task_idx < msg_.get_ch_total_info().receive_task_layout_.total_task_cnt_ && OB_SUCC(ret);
@@ -176,7 +174,6 @@ int ObPxTransmitChProvider::wait_msg(int64_t timeout_ts)
         // overwrite ret
         ObInterruptCode code = GET_INTERRUPT_CODE();
         ret = code.code_;
-        LOG_WARN("transmit channel provider wait msg loop is interrupted", K(code), K(ret));
         break;
       } else if (!msg_set_) { // wake up by leader, retry
         ret = OB_DTL_WAIT_EAGAIN;
@@ -241,7 +238,6 @@ int ObPxReceiveChProvider::get_data_ch_nonblock(
 
   if (child_dfo_id < 0 || child_dfo_id >= ObDfo::MAX_DFO_ID) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid msg", K(child_dfo_id), K(ret));
   } else if (OB_FAIL(ObPxChProviderUtil::check_status(timeout_ts))) {
   } else {
     ObLockGuard<ObSpinLock> lock_guard(lock_);
@@ -277,7 +273,6 @@ int ObPxReceiveChProvider::get_data_ch(
 
   if (child_dfo_id < 0 || child_dfo_id >= ObDfo::MAX_DFO_ID) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid msg", K(child_dfo_id), K(ret));
   } else {
     ret = wait_msg(child_dfo_id, timeout_ts);
     if (OB_SUCC(ret)) {
@@ -297,7 +292,6 @@ int ObPxReceiveChProvider::get_data_ch(
     }
     if (OB_SUCC(ret) && !found) {
       ret = OB_ENTRY_NOT_EXIST;
-      LOG_WARN("no receive ch found for dfo", K(child_dfo_id), K(msg_set_), K(msgs_), K(ret));
     }
   }
   return ret;
@@ -309,14 +303,12 @@ int ObPxReceiveChProvider::add_msg(const ObPxReceiveDataChannelMsg &msg)
   int64_t child_dfo_id = msg.get_child_dfo_id();
   if (child_dfo_id < 0 || child_dfo_id >= ObDfo::MAX_DFO_ID) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid msg", K(msg), K(ret));
   }
   if (OB_SUCC(ret)) {
     ObLockGuard<ObSpinLock> lock_guard(lock_);
     if (OB_FAIL(msgs_.push_back(msg))) {
     } else if (child_dfo_id >= msg_set_.count() &&
           OB_FAIL(reserve_msg_set_array_size(child_dfo_id * 2 + 1))) {
-      LOG_WARN("fail to reserve msg set array size", K(ret));
     } else {
       msg_set_[child_dfo_id] = true;
     }
@@ -356,8 +348,6 @@ int ObPxReceiveChProvider::wait_msg(int64_t child_dfo_id, int64_t timeout_ts)
           // overwrite ret
           ObInterruptCode code = GET_INTERRUPT_CODE();
           ret = code.code_;
-          LOG_WARN("receive channel provider wait msg loop is interrupted",
-                K(child_dfo_id), K(wait_count), K(code), K(msg_set_[child_dfo_id]), K(ret));
           break;
         } else {
           ret = OB_DTL_WAIT_EAGAIN;
@@ -383,7 +373,6 @@ int ObPxChProviderUtil::check_status(int64_t timeout_ts)
     // overwrite ret
     ObInterruptCode code = GET_INTERRUPT_CODE();
     ret = code.code_;
-    LOG_WARN("received a interrupt", K(code), K(ret));
   } else if (timeout_ts <= ObTimeUtility::current_time()) {
     ret = OB_TIMEOUT;
     LOG_WARN("timeout and abort", K(timeout_ts), K(ret));

@@ -176,8 +176,6 @@ int ObSqlNioServer::set_thread_count(const int thread_num)
   int ret = OB_SUCCESS;
   if (thread_num != n_thread_) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("changing Rust SQL-NIO thread count requires observer restart",
-             K(ret), K(thread_num), K(n_thread_));
   }
   return ret;
 }

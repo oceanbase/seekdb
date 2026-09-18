@@ -88,7 +88,6 @@ int ObMdsScanParamHelper::build_scan_param(
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table schema is null", K(ret), KP(table_schema));
   } else {
     share::schema::ObTableParam *table_param = nullptr;
     if (OB_FAIL(build_table_param(
@@ -111,13 +110,11 @@ int ObMdsScanParamHelper::build_scan_param(
         mds_unit_id,
         udf_key,
         key_range))) {
-      LOG_WARN("fail to build key range", K(ret));
     } else if (!is_get && OB_FAIL(build_key_range(
         allocator,
         table_id,
         mds_unit_id,
         key_range))) {
-      LOG_WARN("fail to build key range", K(ret));
     } else if (OB_FAIL(scan_param.key_ranges_.push_back(key_range))) {
     }
   }
@@ -136,7 +133,6 @@ int ObMdsScanParamHelper::build_key_range(
   void *buf = allocator.alloc(sizeof(ObObj) * MDS_SSTABLE_ROWKEY_CNT);
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret));
   } else {
     ObObj *obj = new (buf) ObObj[MDS_SSTABLE_ROWKEY_CNT]();
     obj[0].set_tinyint(mds_unit_id);
@@ -167,7 +163,6 @@ int ObMdsScanParamHelper::build_key_range(
   char *buf = static_cast<char *>(allocator.alloc(sizeof(ObObj) * MDS_SSTABLE_ROWKEY_CNT  * 2));
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret));
   } else {
     ObObj *start_obj = new (buf) ObObj[MDS_SSTABLE_ROWKEY_CNT]();
     ObObj *end_obj = new (buf + sizeof(ObObj) * MDS_SSTABLE_ROWKEY_CNT) ObObj();
@@ -199,7 +194,6 @@ int ObMdsScanParamHelper::build_table_param(
 
   if (OB_ISNULL(buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret), "size", sizeof(share::schema::ObTableParam));
   } else {
     table_param = new (buf) ObTableParam(allocator);
     if (OB_FAIL(table_param->convert(table_schema, column_ids, pd_pushdown_flag))) {

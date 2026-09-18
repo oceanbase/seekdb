@@ -43,13 +43,11 @@ int ObAllVirtualIOStatusIterator::init_addr(const common::ObAddr &addr)
   int ret = OB_SUCCESS;
   if (!addr.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(addr));
   } else {
     addr_ = addr;
     MEMSET(ip_buf_, 0, sizeof(ip_buf_));
     if (!addr_.ip_to_string(ip_buf_, sizeof(ip_buf_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ip to string failed", K(ret), K(addr_));
     }
   }
   return ret;
@@ -103,7 +101,6 @@ int ObAllVirtualIOCalibrationStatus::inner_get_next_row(common::ObNewRow *&row)
   ObObj *cells = cur_row_.cells_;
   if (OB_UNLIKELY(!is_inited_ || nullptr == cells)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), KP(cur_row_.cells_), K(is_inited_));
   } else if (is_end_) {
     row = nullptr;
     ret = OB_ITER_END;
@@ -149,7 +146,6 @@ int ObAllVirtualIOCalibrationStatus::inner_get_next_row(common::ObNewRow *&row)
         }
         default: {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid column id", K(ret), K(column_id), K(i), K(output_column_ids_));
           break;
         }
       } // end switch
@@ -201,7 +197,6 @@ int ObAllVirtualIOBenchmark::inner_get_next_row(common::ObNewRow *&row)
   ObObj *cells = cur_row_.cells_;
   if (OB_UNLIKELY(!is_inited_ || nullptr == cells)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), KP(cur_row_.cells_), K(is_inited_));
   } else if (!io_ability_.is_valid()) {
     row = nullptr;
     ret = OB_ITER_END;
@@ -255,7 +250,6 @@ int ObAllVirtualIOBenchmark::inner_get_next_row(common::ObNewRow *&row)
         }
         default: {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid column id", K(ret), K(column_id), K(i), K(output_column_ids_));
           break;
         }
       } // end switch
@@ -308,10 +302,8 @@ int ObAllVirtualIOQuota::init(const common::ObAddr &addr)
       ObRefHolder<ObIOService> service_holder;
       if (OB_FAIL(OB_IO_MANAGER.get_io_service(service_holder))) {
         if (OB_HASH_NOT_EXIST != ret) {
-          LOG_WARN("get io service failed", K(ret));
         } else {
           ret = OB_ENTRY_NOT_EXIST;
-          LOG_WARN("io service does not exist", K(ret));
         }
       } else if (OB_FAIL(record_user_group( service_holder.get_ptr()->get_io_usage(), service_holder.get_ptr()->get_io_config()))) {
       } else if (OB_FAIL(record_sys_group( service_holder.get_ptr()->get_sys_io_usage()))) {
@@ -428,7 +420,6 @@ int ObAllVirtualIOQuota::inner_get_next_row(common::ObNewRow *&row)
   ObObj *cells = cur_row_.cells_;
   if (OB_UNLIKELY(!is_inited_ || nullptr == cells)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), KP(cur_row_.cells_), K(is_inited_));
   } else if (quota_pos_ >= quota_infos_.count()) {
     row = nullptr;
     ret = OB_ITER_END;
@@ -497,7 +488,6 @@ int ObAllVirtualIOQuota::inner_get_next_row(common::ObNewRow *&row)
         }
         default: {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid column id", K(ret), K(column_id), K(i), K(output_column_ids_));
           break;
         }
       } // end switch
@@ -536,10 +526,8 @@ int ObAllVirtualGroupIOStat::init(const common::ObAddr &addr)
       {
         if (OB_FAIL(OB_IO_MANAGER.get_io_service(service_holder))) {
           if (OB_HASH_NOT_EXIST != ret) {
-            LOG_WARN("get io service failed", K(ret));
           } else {
             ret = OB_ENTRY_NOT_EXIST;
-            LOG_WARN("io service does not exist", K(ret));
           }
         } else if (OB_FAIL(record_user_group_io_status(service_holder.get_ptr()))) {
         } else if (OB_FAIL(record_sys_group_io_status(service_holder.get_ptr()))) {
@@ -560,7 +548,6 @@ int ObAllVirtualGroupIOStat::record_user_group_io_status(ObIOService *io_manager
 
   if (OB_ISNULL(io_manager)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("io manager is null", K(ret));
   } else {
     ObIOUsage io_usage;
     if (OB_FAIL(io_usage.init(2))) {
@@ -573,7 +560,6 @@ int ObAllVirtualGroupIOStat::record_user_group_io_status(ObIOService *io_manager
       uint64_t group_config_index = 0;
 
       if (info.count() % GROUP_MODE_CNT != 0 ) {
-        LOG_WARN("unexpected group count", K(ret), K(info.count()));
       } else {
         for (int64_t left = 0; left < info.count() && OB_SUCC(ret); left += GROUP_MODE_CNT) {
           const int64_t local_read_index = left + static_cast<int64_t>(ObIOGroupMode::LOCALREAD);
@@ -584,7 +570,6 @@ int ObAllVirtualGroupIOStat::record_user_group_io_status(ObIOService *io_manager
           if (OB_TMP_FAIL(oceanbase::common::transform_usage_index_to_group_config_index(
                   local_read_index, group_config_index))) {
           } else if (group_config_index >= io_config.group_configs_.count()) {
-            LOG_WARN("unexpected group config index", K(ret), K(group_config_index), K(io_config.group_configs_.count()));
           } else if (io_config.group_configs_.at(group_config_index).cleared_ ||
                      io_config.group_configs_.at(group_config_index).deleted_) {
             // do nothing
@@ -639,7 +624,6 @@ int ObAllVirtualGroupIOStat::record_sys_group_io_status(ObIOService *io_manager)
 
   if (OB_ISNULL(io_manager)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("io manager is null", K(ret));
   } else {
     const int64_t GROUP_MODE_CNT = static_cast<int64_t>(ObIOGroupMode::MODECNT);
     ObIOUsage sys_io_usage;
@@ -650,7 +634,6 @@ int ObAllVirtualGroupIOStat::record_sys_group_io_status(ObIOService *io_manager)
       const ObIOUsageInfoArray &info = sys_io_usage.get_io_usage();
 
       if (info.count() % GROUP_MODE_CNT != 0 ) {
-        LOG_WARN("unexpected group count", K(ret), K(info.count()));
       } else {
         for (int64_t left = 0; left < info.count() && OB_SUCC(ret); left += GROUP_MODE_CNT) {
           const int64_t local_read_index = left + static_cast<int64_t>(ObIOGroupMode::LOCALREAD);
@@ -696,7 +679,6 @@ int ObAllVirtualGroupIOStat::inner_get_next_row(common::ObNewRow *&row)
   ObObj *cells = cur_row_.cells_;
   if (OB_UNLIKELY(!is_inited_ || nullptr == cells)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), KP(cur_row_.cells_), K(is_inited_));
   } else if (group_io_stats_pos_ >= group_io_stats_.count()) {
     row = nullptr;
     ret = OB_ITER_END;

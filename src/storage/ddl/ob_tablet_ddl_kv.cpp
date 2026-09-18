@@ -54,10 +54,8 @@ int ObBlockMetaTree::init(const ObTablet &tablet,
   const ObMemAttr mem_attr("BlockMetaTree");
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_UNLIKELY(!table_key.is_valid() || data_format_version <= 0 || OB_ISNULL(storage_schema))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(table_key), K(data_format_version), KP(storage_schema));
   } else if (FALSE_IT(arena_.set_attr(mem_attr))) {
   } else if (OB_FAIL(block_tree_.init())) {
   } else if (OB_FAIL(ObTabletDDLUtil::prepare_index_data_desc(tablet,
@@ -84,7 +82,6 @@ int ObDDLMemtable::init_sstable_param(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!table_key.is_valid() || !ddl_start_scn.is_valid_and_not_min())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(table_key), K(ddl_start_scn));
   } else {
     int64_t column_count = 0;
     const int64_t root_block_size = sizeof(ObBlockMetaTree);
@@ -126,7 +123,6 @@ void ObBlockMetaTree::destroy_tree_value()
       ObBlockMetaTreeValue *tree_value  = nullptr;
       if (OB_FAIL(tmp_iter.get_next(rowkey_wrapper, tree_value))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next failed", K(ret));
         } else {
           ret = OB_SUCCESS;
           break;
@@ -150,14 +146,11 @@ int ObBlockMetaTree::insert_macro_block(const ObDDLMacroHandle &macro_handle,
   ObBlockMetaTreeValue *tree_value = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!macro_handle.is_valid() || nullptr == rowkey || nullptr == meta)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(macro_handle), K(rowkey), KP(meta));
   } else if (OB_FAIL(macro_blocks_.push_back(macro_handle))) {
   } else if (OB_ISNULL(buf = arena_.alloc(sizeof(ObBlockMetaTreeValue)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret), K(sizeof(ObBlockMetaTreeValue)));
   } else {
     tree_value = new (buf) ObBlockMetaTreeValue(insert_meta, rowkey);
 
@@ -184,7 +177,6 @@ int ObBlockMetaTree::insert_macro_block(const ObDDLMacroHandle &macro_handle,
     if (OB_FAIL(tree_value->header_.set_macro_id(insert_meta->val_.macro_id_))) {
     } else if (OB_UNLIKELY(!tree_value->header_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Built an invalid index block row", K(ret), K(tree_value->header_), KPC(insert_meta));
     } else if (OB_FAIL(block_tree_.insert(ObDatumRowkeyWrapper(tree_value->rowkey_, datum_utils_), tree_value))) {
     }
   }
@@ -198,7 +190,6 @@ int ObBlockMetaTree::get_sorted_meta_array(ObIArray<ObDDLBlockMeta> &meta_array)
 
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(block_tree_.set_key_range(tmp_iter,
                                                ObDatumRowkeyWrapper(&ObDatumRowkey::MIN_ROWKEY, datum_utils_),
                                                false,
@@ -210,14 +201,12 @@ int ObBlockMetaTree::get_sorted_meta_array(ObIArray<ObDDLBlockMeta> &meta_array)
       ObBlockMetaTreeValue *tree_value  = nullptr;
       if (OB_FAIL(tmp_iter.get_next(rowkey_wrapper, tree_value))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next failed", K(ret));
         } else {
           ret = OB_SUCCESS;
           break;
         }
       } else if (OB_ISNULL(tree_value)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("tree_value is null", K(ret), KP(tree_value));
       } else if (((uint64_t)(tree_value) & 7ULL) != 0) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("invalid btree value", K(ret), K(tree_value));
@@ -238,7 +227,6 @@ int ObBlockMetaTree::get_macro_id_array(ObIArray<blocksstable::MacroBlockId> &ma
   macro_id_array.reset();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(macro_id_array.reserve(macro_blocks_.count()))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < macro_blocks_.count(); ++i) {
@@ -257,13 +245,10 @@ int ObBlockMetaTree::exist(const blocksstable::ObDatumRowkey *rowkey, bool &is_e
   ObBlockMetaTreeValue *tree_value  = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(rowkey)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(rowkey));
   } else if (OB_FAIL(block_tree_.get(ObDatumRowkeyWrapper(rowkey, datum_utils_), tree_value))) {
     if (OB_ENTRY_NOT_EXIST != ret) {
-      LOG_WARN("get value from block meta tree failed", K(ret), KPC(rowkey));
     } else {
       is_exist = false;
       ret = OB_SUCCESS;
@@ -286,7 +271,6 @@ int ObBlockMetaTree::lower_bound(const blocksstable::ObDatumRowkey *target_rowke
   blocksstable::DDLBtreeIterator tmp_iter;
   if (OB_ISNULL(target_rowkey)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("target rowkey is null", K(ret));
   } else if (OB_FAIL(block_tree_.set_key_range(tmp_iter,
                                                ObDatumRowkeyWrapper(target_rowkey, &datum_utils),
                                                false,
@@ -300,7 +284,6 @@ int ObBlockMetaTree::lower_bound(const blocksstable::ObDatumRowkey *target_rowke
         break;
       } else if (OB_FAIL(tmp_iter.get_next(rowkey_wrapper, tmp_tree_value))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next failed", K(ret));
         } else if (!find) {
           ret = OB_BEYOND_THE_RANGE;
         }
@@ -332,7 +315,6 @@ int ObBlockMetaTree::upper_bound(const blocksstable::ObDatumRowkey *target_rowke
   blocksstable::DDLBtreeIterator tmp_iter;
   if (OB_ISNULL(target_rowkey)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("target rowkey is null", K(ret));
   } else if (OB_FAIL(block_tree_.set_key_range(tmp_iter,
                                            ObDatumRowkeyWrapper(target_rowkey, &datum_utils),
                                            true,
@@ -346,7 +328,6 @@ int ObBlockMetaTree::upper_bound(const blocksstable::ObDatumRowkey *target_rowke
         break;
       } else if (OB_FAIL(tmp_iter.get_next(rowkey_wrapper, tmp_tree_value))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next failed", K(ret));
         } else if (!find) {
           ret = OB_BEYOND_THE_RANGE;
         }
@@ -375,7 +356,6 @@ int ObBlockMetaTree::locate_key(const blocksstable::ObDatumRange &range,
   cur_tree_value = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     ObDatumRowkey *rowkey = nullptr;
     ObBlockMetaTreeValue *tree_value = nullptr;
@@ -409,7 +389,6 @@ int ObBlockMetaTree::locate_range(const blocksstable::ObDatumRange &range,
   cur_tree_value = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     //pre check range
     ObDatumRowkey *start_rowkey = nullptr;
@@ -439,7 +418,6 @@ int ObBlockMetaTree::locate_range(const blocksstable::ObDatumRange &range,
             right_border_beyond_range = true;
             end_rowkey = &ObDatumRowkey::MAX_ROWKEY;
           } else {
-            LOG_WARN("lower bound failed", K(ret), K(range.get_end_key()));
           }
         }
       }
@@ -459,10 +437,8 @@ int ObBlockMetaTree::locate_range(const blocksstable::ObDatumRange &range,
                                                 false))) {
           } else if (OB_FAIL(iter.get_next(rowkey_wrapper_left, tree_value_left))) {
             if (OB_ITER_END != ret) {
-              LOG_WARN("get next failed", K(ret));
             } else {
               ret = OB_BEYOND_THE_RANGE;
-              LOG_WARN("beyond range", K(ret), K(range));
             }
           } else {
             cur_tree_value = tree_value_left;
@@ -493,10 +469,8 @@ int ObBlockMetaTree::locate_range(const blocksstable::ObDatumRange &range,
                                                 false))) {
           } else if (OB_FAIL(iter.get_next(rowkey_wrapper_right, tree_value_right))) {
             if (OB_ITER_END != ret) {
-              LOG_WARN("get next failed", K(ret));
             } else {
               ret = OB_BEYOND_THE_RANGE;
-              LOG_WARN("beyond range", K(ret), K(range));
             }
           } else {
             cur_tree_value = tree_value_right;
@@ -531,7 +505,6 @@ int ObBlockMetaTree::skip_to_next_valid_position(const blocksstable::ObDatumRowk
   tree_value = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     int cmp_ret = 0;
     while (OB_SUCC(ret)) {
@@ -539,14 +512,12 @@ int ObBlockMetaTree::skip_to_next_valid_position(const blocksstable::ObDatumRowk
       ObBlockMetaTreeValue *tmp_tree_value  = nullptr;
       if (OB_FAIL(iter.get_next(rowkey_wrapper, tmp_tree_value))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next failed", K(ret));
         }
         // just return ITER_END
       } else if (OB_FAIL(rowkey_wrapper.rowkey_->compare(rowkey, datum_utils, cmp_ret, false/*need_compare_datum_cnt*/))) {
       } else if(cmp_ret >= 0) { //lower bound
         if (OB_ISNULL(tmp_tree_value)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("tree_value is null", K(ret), KP(tmp_tree_value));
         } else {
           tree_value = tmp_tree_value;
         }
@@ -565,17 +536,14 @@ int ObBlockMetaTree::get_next_tree_value(blocksstable::DDLBtreeIterator &iter,
   tree_value = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(step <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(step));
   } else {
     ObBlockMetaTreeValue *tmp_tree_value  = nullptr;
     for (int64_t i = 0; OB_SUCC(ret) && i < step; ++i) {
       ObDatumRowkeyWrapper rowkey_wrapper;
       if (OB_FAIL(iter.get_next(rowkey_wrapper, tmp_tree_value))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next failed", K(ret));
         }
         // just return ITER_END
       }
@@ -584,7 +552,6 @@ int ObBlockMetaTree::get_next_tree_value(blocksstable::DDLBtreeIterator &iter,
       // do nothing
     } else if (OB_ISNULL(tmp_tree_value)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tree_value is null", K(ret), KP(tmp_tree_value));
     } else if (((uint64_t)(tmp_tree_value) & 7ULL) != 0) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("invalid btree value", K(ret), KP(tmp_tree_value));
@@ -602,7 +569,6 @@ int ObBlockMetaTree::get_last_rowkey(const ObDatumRowkey *&last_rowkey)
   blocksstable::DDLBtreeIterator tmp_iter;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
     //always forward
   } else if (OB_FAIL(block_tree_.set_key_range(tmp_iter,
                                                ObDatumRowkeyWrapper(&ObDatumRowkey::MIN_ROWKEY, datum_utils_),
@@ -616,7 +582,6 @@ int ObBlockMetaTree::get_last_rowkey(const ObDatumRowkey *&last_rowkey)
     while (OB_SUCC(ret)) {
       if (OB_FAIL(tmp_iter.get_next(rowkey_wrapper, tree_value))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next failed", K(ret));
         } else {
           ret = OB_SUCCESS;
           find = true;
@@ -664,14 +629,11 @@ int ObDDLMemtable::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), KP(this));
   } else if (OB_UNLIKELY(!table_key.is_valid()
         || !ddl_start_scn.is_valid_and_not_min()
         || data_format_version <= 0
         || OB_ISNULL(storage_schema))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(table_key),
-                                 K(ddl_start_scn), K(data_format_version), KP(storage_schema));
   } else {
     HEAP_VARS_2((ObTabletCreateSSTableParam, sstable_param),
                 (ObTableStoreIterator, ddl_table_iter)) {
@@ -679,7 +641,6 @@ int ObDDLMemtable::init(
       if (OB_FAIL(tablet.get_ddl_sstables(ddl_table_iter))) {
       } else if ((ddl_table_iter.count() > 0)
           && OB_FAIL(ddl_table_iter.get_boundary_table(false/*is_last*/, first_ddl_sstable))) {
-        LOG_WARN("failed to get boundary table", K(ret));
       } else if (OB_FAIL(block_meta_tree_.init(tablet, table_key, ddl_start_scn, data_format_version, storage_schema, static_cast<ObSSTable *>(first_ddl_sstable)))) {
       } else if (OB_FAIL(init_sstable_param(*storage_schema, table_key, ddl_start_scn, sstable_param))) {
       } else if (OB_FAIL(ObSSTable::init(sstable_param, &allocator))) {
@@ -714,7 +675,6 @@ int ObDDLMemtable::init_ddl_index_iterator(const blocksstable::ObStorageDatumUti
   int ret = OB_SUCCESS;
   if (OB_ISNULL(datum_utils) || OB_UNLIKELY(!datum_utils->is_valid()) || OB_ISNULL(ddl_kv_index_iter)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguement", K(ret), KP(ddl_kv_index_iter), KPC(datum_utils));
   } else if (OB_FAIL(ddl_kv_index_iter->set_iter_param(datum_utils, is_reverse_scan, &block_meta_tree_))) {
   }
   return ret;
@@ -749,21 +709,18 @@ int ObDDLKV::init(const ObTabletID &tablet_id,
   const lib::ObMemAttr attr("DDLKVMemAlloc");
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), KP(this));
   } else if (OB_UNLIKELY(!tablet_id.is_valid()
         || !ddl_start_scn.is_valid_and_not_min()
         || snapshot_version <= 0
         || !last_freezed_scn.is_valid_and_not_min()
         || data_format_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(tablet_id), K(ddl_start_scn), K(snapshot_version), K(last_freezed_scn), K(data_format_version));
   } else if ((max_end_scn_ != SCN::min_scn() && last_freezed_scn >= max_end_scn_)
              || last_freezed_scn >= rec_scn_) {
     ret = OB_SCN_OUT_OF_BOUND;
     TRANS_LOG(ERROR, "cannot set start ts now", K(ret), KPC(this));
   } else if (OB_UNLIKELY(!(storage::is_full_ddl_kv(ddl_kv_type)))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("only support full ddl kv", KR(ret), K(ddl_kv_type));
   } else if (OB_FAIL(ddl_memtable_allocator_.init(OB_MALLOC_NORMAL_BLOCK_SIZE, attr, 1/*cache count*/))) {
   }
 
@@ -834,17 +791,13 @@ int ObDDLKV::create_ddl_memtable(ObTablet &tablet, const ObITable::TableKey &tab
   ObArenaAllocator *allocator_for_ddl_memtable = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!table_key.is_valid() || table_key.tablet_id_ != tablet_id_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(table_key), K(tablet_id_));
   } else if (OB_ISNULL(buf = ddl_memtable_allocator_.alloc(sizeof(ObDDLMemtable)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret), K(sizeof(ObDDLMemtable)));
   } else if (OB_FALSE_IT(ddl_memtable = tmp_ddl_memtable = new (buf) ObDDLMemtable())) {
   } else if (OB_ISNULL(arena_allocator_buf = ddl_memtable_allocator_.alloc(sizeof(ObArenaAllocator)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret));
   } else if (OB_FALSE_IT(allocator_for_ddl_memtable = new (arena_allocator_buf) ObArenaAllocator("AllocForDdlMem", OB_MALLOC_NORMAL_BLOCK_SIZE))) {
   } else {
     bool need_free_storage_schema = false;
@@ -858,13 +811,11 @@ int ObDDLKV::create_ddl_memtable(ObTablet &tablet, const ObITable::TableKey &tab
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(storage_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("storage schema is nullptr", KR(ret));
     } else if (OB_FAIL(tmp_ddl_memtable->init(*allocator_for_ddl_memtable, tablet, table_key, ddl_start_scn_, data_format_version_,
                                           storage_schema, ddl_kv_type_))) {
     } else if (OB_FAIL(ddl_memtables_.push_back(tmp_ddl_memtable))) {
     } else if (OB_FALSE_IT(tmp_ddl_memtable = nullptr)) {
     } else if (OB_FAIL(ddl_memtable_arena_allocators_.push_back(allocator_for_ddl_memtable))) {
-      LOG_WARN("push back allocator failed", K(ret));
       ObDDLMemtable *last_memtable = ddl_memtables_.at(ddl_memtables_.count() - 1);
       ddl_memtables_.pop_back();
       last_memtable->~ObDDLMemtable();
@@ -897,16 +848,13 @@ int ObDDLKV::get_ddl_memtable(const int64_t slice_idx, ObDDLMemtable *&ddl_memta
   bool have_found = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(slice_idx < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(slice_idx));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && !have_found && i < ddl_memtables_.count(); ++i) {
       ObDDLMemtable *cur_ddl_memtable = ddl_memtables_.at(i);
       if (OB_ISNULL(cur_ddl_memtable)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("current ddl memtable is null", K(ret), K(i), K(cur_ddl_memtable));
       } else if (cur_ddl_memtable->get_key().get_slice_idx() == slice_idx) {
         ddl_memtable = cur_ddl_memtable;
         have_found = true;
@@ -940,10 +888,8 @@ int ObDDLKV::set_macro_block(
 #endif
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ddl kv is not init", K(ret));
   } else if (OB_UNLIKELY(!macro_block.is_valid() || data_format_version <= 0 || snapshot_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(macro_block), K(data_format_version), K(snapshot_version));
   } else if (can_freeze) {
     
     int64_t log_disk_size = 0;
@@ -951,7 +897,6 @@ int ObDDLKV::set_macro_block(
     ObIServerRuntime *runtime = ::oceanbase::share::server_service<::oceanbase::storage::ObIServerRuntime>();
     if (OB_ISNULL(runtime)) {
       tmp_ret = OB_NOT_INIT;
-      LOG_WARN("server runtime is not initialized", K(tmp_ret));
     } else if (OB_TMP_FAIL(runtime->get_server_log_disk_size(log_disk_size))) {
     } else {
       const int64_t log_allowed_block_count =
@@ -999,14 +944,12 @@ int ObDDLKV::set_macro_block(
       LOG_INFO("this ddl kv is freezed, retry other ddl kv", K(ret), K(tablet_id_), K(macro_block), K(freeze_scn_));
     } else if (OB_UNLIKELY(snapshot_version != ddl_snapshot_version_ || data_format_version != data_format_version_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error", K(ret), K(macro_block), K(snapshot_version), K(data_format_version), KPC(this));
     } else {
       ObDDLMemtable *ddl_memtable = nullptr;
       ObITable::TableKey ddl_memtable_key = macro_block.table_key_;
       // 1. try find the ddl memtable
       if (OB_FAIL(get_ddl_memtable(ddl_memtable_key.get_slice_idx(), ddl_memtable))) {
         if (OB_ENTRY_NOT_EXIST != ret) {
-          LOG_WARN("get ddl memtable failed", K(ret));
         } else {
           ret = OB_SUCCESS;
         }
@@ -1021,14 +964,11 @@ int ObDDLKV::set_macro_block(
       if (OB_FAIL(ret)) {
       } else if (OB_ISNULL(ddl_memtable)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("ddl memtable is null", K(ret));
       } else if (OB_FAIL(macro_block.data_macro_meta_->deep_copy(data_macro_meta, arena_allocator_))) {
       } else if (OB_ISNULL(data_macro_meta)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("data_macro_meta should not be null", K(ret));
       } else if (data_macro_meta->end_key_.get_datum_cnt() <= 0) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid end key of data macro block meta", K(ret), K(data_macro_meta->end_key_));
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ddl_memtable->insert_block_meta_tree(macro_block.block_handle_, data_macro_meta))) {
@@ -1068,7 +1008,6 @@ int ObDDLKV::freeze(const SCN &freeze_scn)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ddl kv is not init", K(ret));
   } else {
     TCWLockGuard guard(lock_);
     ret = full_load_freeze_(freeze_scn);
@@ -1112,15 +1051,12 @@ int ObDDLKV::prepare_sstable(const bool need_check/*=true*/)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ddl kv is not init", K(ret));
   } else if (!is_freezed()) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("ddl kv not freezed", K(ret), K(*this));
   } else if (ddl_memtables_.empty()) {
     // do nothing
   } else if (need_check && OB_FAIL(wait_pending())) {
     if (OB_EAGAIN != ret) {
-      LOG_WARN("wait pending failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -1130,7 +1066,6 @@ int ObDDLKV::prepare_sstable(const bool need_check/*=true*/)
       ObDDLMemtable *ddl_memtable = ddl_memtables_.at(i);
       if (OB_ISNULL(ddl_memtable)) {
         ret = OB_INVALID_ERROR;
-        LOG_WARN("ddl memtable is null", K(ret));
       } else {
         ddl_memtable->set_scn_range(start_scn, freeze_scn_);
       }
@@ -1144,7 +1079,6 @@ int ObDDLKV::close()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ddl kv is not init", K(ret));
   } else if (is_closed_) {
     // do nothing
     LOG_INFO("ddl kv already closed", K(*this));
@@ -1173,15 +1107,12 @@ int ObDDLKV::wait_pending()
   ObLS *ls = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(is_inited_));
   } else if (OB_UNLIKELY(!is_freezed())) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("ddl kv not freezed", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls))) {
   } else {
     SCN max_decided_scn;
     if (OB_FAIL(ls->get_max_decided_scn(max_decided_scn))) {
-      LOG_WARN("get max decided log ts failed", K(ret));
       if (OB_STATE_NOT_MATCH == ret) {
         ret = OB_NEED_RETRY;
       }
@@ -1276,7 +1207,6 @@ int ObDDLKV::get_schema_info(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else {
     TCRLockGuard guard(lock_);
     if (column_count_ >= input_column_cnt) {
@@ -1350,7 +1280,6 @@ int64_t ObDDLKV::get_occupied_size() const
   int64_t occupied_size = 0;
   if (OB_UNLIKELY(IS_NOT_INIT)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else {
     TCRLockGuard guard(lock_);
     ObSSTableMetaHandle sst_meta_hdl;
@@ -1368,7 +1297,6 @@ int64_t ObDDLKV::get_row_count() const
   int64_t row_count = 0;
   if (OB_UNLIKELY(IS_NOT_INIT)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else {
     TCRLockGuard guard(lock_);
     ObSSTableMetaHandle sst_meta_hdl;
@@ -1391,7 +1319,6 @@ int ObDDLKV::get_block_count_and_row_count(
   row_count = 0;
   if (OB_UNLIKELY(IS_NOT_INIT)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else {
     TCRLockGuard guard(lock_);
     ObSSTableMetaHandle sst_meta_hdl;

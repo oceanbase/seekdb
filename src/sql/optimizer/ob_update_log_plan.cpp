@@ -64,7 +64,6 @@ int ObUpdateLogPlan::generate_normal_raw_plan()
   ObSQLSessionInfo *session = optimizer_context_.get_session_info();
   if (OB_ISNULL(update_stmt) || OB_ISNULL(session) || OB_ISNULL(optimizer_context_.get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     bool need_limit = true;
     ObSEArray<OrderItem, 4> order_items;
@@ -117,7 +116,6 @@ int ObUpdateLogPlan::generate_normal_raw_plan()
       ObSEArray<ObRawExpr*, 8> assign_exprs;
       if (OB_ISNULL(update_stmt)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(ret), K(update_stmt));
       } else if (OB_FAIL(update_stmt->get_assignments_exprs(assign_exprs))) {
       } else if (OB_FAIL(candi_allocate_subplan_filter_for_assignments(assign_exprs))) {
       }
@@ -158,7 +156,6 @@ int ObUpdateLogPlan::generate_normal_raw_plan()
       if (OB_FAIL(candi_allocate_root_exchange())) {
       } else if (!update_stmt->has_limit() &&
                  OB_FAIL(check_fullfill_safe_update_mode(get_plan_root()))) {
-        LOG_WARN("failed to check fullfill safe update mode", K(ret));
       } else { /*do nothing*/ }
     }
   }
@@ -214,14 +211,12 @@ int ObUpdateLogPlan::create_update_plans(ObIArray<CandidatePlan> &candi_plans,
   bool is_result_local = false;
   if (OB_ISNULL(get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < candi_plans.count(); i++) {
     candi_plan = candi_plans.at(i);
     is_multi_part_dml = force_multi_part;
     if (OB_ISNULL(candi_plan.plan_tree_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (!force_multi_part &&
                OB_FAIL(check_need_multi_partition_dml(*get_stmt(),
                                                       *candi_plan.plan_tree_,
@@ -229,12 +224,10 @@ int ObUpdateLogPlan::create_update_plans(ObIArray<CandidatePlan> &candi_plans,
                                                       use_parallel_das_dml_,
                                                       is_multi_part_dml,
                                                       is_result_local))) {
-      LOG_WARN("failed to check need multi-partition dml", K(ret));
     } else if (is_multi_part_dml && force_no_multi_part) {
       /*do nothing*/
     } else if (candi_plan.plan_tree_->is_sharding() && (is_multi_part_dml || is_result_local) &&
                OB_FAIL(allocate_exchange_as_top(candi_plan.plan_tree_, exch_info))) {
-      LOG_WARN("failed to allocate exchange as top", K(ret));
     } else if (OB_FAIL(allocate_update_as_top(candi_plan.plan_tree_,
                                               lock_row_flag_expr,
                                               is_multi_part_dml))) {
@@ -253,11 +246,9 @@ int ObUpdateLogPlan::allocate_update_as_top(ObLogicalOperator *&top,
   const ObUpdateStmt *update_stmt = NULL;
   if (OB_ISNULL(top) || OB_ISNULL(update_stmt = get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(top), K(update_stmt));
   } else if (OB_ISNULL(update_op = static_cast<ObLogUpdate*>(
                          get_log_op_factory().allocate(*this, LOG_UPDATE)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate update operator", K(ret));
   } else if (OB_FAIL(update_op->assign_dml_infos(index_dml_infos_))) {
   } else {
     update_op->set_child(ObLogicalOperator::first_child, top);
@@ -284,14 +275,12 @@ int ObUpdateLogPlan::candi_allocate_pdml_update()
   if (OB_ISNULL(update_stmt = get_stmt()) ||
       OB_UNLIKELY(1 != update_stmt->get_update_table_info().count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(get_stmt()), K(ret));
   } else {
     int64_t gidx_cnt = index_dml_infos_.count();
     for (int64_t i = 0; OB_SUCC(ret) && i < gidx_cnt; i++) {
       IndexDMLInfo *index_dml_info = index_dml_infos_.at(i);
       if (OB_ISNULL(index_dml_info)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("index dml info is null", K(ret));
       } else if (index_dml_info->is_update_part_key_ ||
                  index_dml_info->is_update_unique_key_ ||
                  index_dml_info->is_update_primary_key_) {
@@ -348,14 +337,12 @@ int ObUpdateLogPlan::perform_vector_assign_expr_replacement(ObDelUpdStmt *stmt)
   ObSQLSessionInfo* session_info = optimizer_context_.get_session_info();
   if (OB_ISNULL(stmt) || OB_ISNULL(table_info = static_cast<ObUpdateStmt*>(stmt)->get_update_table_info().at(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is null", K(ret), K(stmt), K(table_info));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < table_info->assignments_.count(); ++i) {
       ObRawExpr *value = table_info->assignments_.at(i).expr_;
       bool replace_happened = false;
       if (OB_FAIL(replace_alias_ref_expr(value, replace_happened))) {
       } else if (replace_happened && OB_FAIL(value->formalize(session_info))) {
-        LOG_WARN("failed to formalize expr", K(ret));
       }
     }
   }
@@ -368,7 +355,6 @@ int ObUpdateLogPlan::prepare_dml_infos()
   const ObUpdateStmt *update_stmt = get_stmt();
   if (OB_ISNULL(update_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     const ObIArray<ObUpdateTableInfo*>& table_infos = update_stmt->get_update_table_info();
     for (int64_t i = 0; OB_SUCC(ret) && i < table_infos.count(); ++i) {
@@ -377,7 +363,6 @@ int ObUpdateLogPlan::prepare_dml_infos()
       ObSEArray<IndexDMLInfo*, 8> index_dml_infos;
       if (OB_ISNULL(table_info)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(i));
       } else if (OB_FAIL(prepare_table_dml_info_basic(*table_info,
                                                       table_dml_info,
                                                       index_dml_infos))) {
@@ -404,14 +389,12 @@ int ObUpdateLogPlan::prepare_table_dml_info_special(const ObDmlTableInfo& table_
   const ObUpdateTableInfo& update_info = static_cast<const ObUpdateTableInfo&>(table_info);
   if (OB_ISNULL(schema_guard) || OB_ISNULL(session_info) || OB_ISNULL(update_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null",K(ret), K(schema_guard), K(session_info), K(update_stmt));
   } else if (OB_FAIL(table_dml_info->init_assignment_info(update_info.assignments_,
                                                           optimizer_context_.get_expr_factory()))) {
   } else if (OB_FAIL(schema_guard->get_table_schema(
                                                     table_info.ref_table_id_, index_schema))) {
   } else if (OB_ISNULL(index_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get table schema", K(table_info), K(ret));
   } else if (OB_FAIL(check_update_primary_key(*schema_guard, index_schema, table_dml_info))) {
   } else if (OB_FAIL(check_update_part_key(index_schema, table_dml_info))) {
   } else {
@@ -437,13 +420,11 @@ int ObUpdateLogPlan::prepare_table_dml_info_special(const ObDmlTableInfo& table_
       bool index_update = false;
       if (OB_ISNULL(index_dml_info)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(i), K(ret));
       } else if (OB_FAIL(schema_guard->get_table_schema(
                                                         index_dml_info->ref_table_id_,
                                                         index_schema))) {
       } else if (OB_ISNULL(index_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to get table schema", KPC(index_dml_info), K(ret));
       } else if (OB_FAIL(check_index_update(update_info.assignments_, *index_schema, 
                                             update_info.table_id_ != update_info.loc_table_id_,
                                             index_update))) {
@@ -467,7 +448,6 @@ int ObUpdateLogPlan::prepare_table_dml_info_special(const ObDmlTableInfo& table_
                                                               table_dml_info,
                                                               index_dml_infos,
                                                               all_index_dml_infos))) {
-    LOG_WARN("failed to prepare table dml info special", K(ret));
   }
   return ret;
 }

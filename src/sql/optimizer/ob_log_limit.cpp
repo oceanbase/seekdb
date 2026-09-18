@@ -30,13 +30,9 @@ int ObLogLimit::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
                                                        order_items_,
                                                        all_exprs,
                                                        order_directions))) {
-    LOG_WARN("failed to split expr and direction", K(ret));
   } else if (NULL != limit_expr_ && OB_FAIL(all_exprs.push_back(limit_expr_))) {
-    LOG_WARN("failed to push back expr", K(ret));
   } else if (NULL != offset_expr_ && OB_FAIL(all_exprs.push_back(offset_expr_))) {
-    LOG_WARN("failed to push back expr", K(ret));
   } else if (NULL != percent_expr_ && OB_FAIL(all_exprs.push_back(percent_expr_))) {
-    LOG_WARN("failed to push back expr", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
   } else {/*do nothing*/ }
   return ret;
@@ -69,11 +65,9 @@ int ObLogLimit::do_re_est_cost(EstimateCostInfo &param, double &card, double &op
   const int64_t parallel = param.need_parallel_;
   if (OB_ISNULL(get_plan()) || OB_ISNULL(child = get_child(first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(get_plan()), K(child), K(ret));
   } else if (OB_UNLIKELY((parallel > 1 && (NULL != percent_expr_ || NULL != offset_expr_))
                          || parallel < 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected parallel degree", K(ret), K(param), K(percent_expr_), K(offset_expr_));
   } else if (OB_FAIL(get_limit_offset_value(percent_expr_, limit_expr_, offset_expr_,
                                             limit_percent, limit_count, offset_count))) {
   } else {
@@ -153,16 +147,12 @@ int ObLogLimit::inner_replace_op_exprs(ObRawExprReplacer &replacer)
 {
   int ret = OB_SUCCESS;
   if (NULL != limit_expr_ && OB_FAIL(replace_expr_action(replacer, limit_expr_))) {
-    LOG_WARN("failed to replace limit expr", K(ret));
   } else if (NULL != offset_expr_ && OB_FAIL(replace_expr_action(replacer, offset_expr_))) {
-    LOG_WARN("failed to replace offset expr", K(ret));
   } else if (NULL != percent_expr_ && OB_FAIL(replace_expr_action(replacer, percent_expr_))) {
-    LOG_WARN("failed to replace percent expr", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < order_items_.count(); ++i) {
     if (OB_ISNULL(order_items_.at(i).expr_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null ", K(ret));
     } else if (OB_FAIL(replace_expr_action(replacer, order_items_.at(i).expr_))) {
     }
   }

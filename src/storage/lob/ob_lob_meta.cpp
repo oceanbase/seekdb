@@ -51,10 +51,8 @@ int ObLobMetaScanIter::get_next_row(ObLobMetaInfo &row)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(meta_iter_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("meta_iter is null.", K(ret));
   } else if (cur_byte_pos_ > byte_size_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("scan get lob meta byte len is bigger than byte size", K(ret), K(*this), K(byte_size_));
   } else if (cur_byte_pos_ == byte_size_) {
     ret = OB_ITER_END;
   } else {
@@ -68,14 +66,12 @@ int ObLobMetaScanIter::get_next_row(ObLobMetaInfo &row)
           row.char_len_ = 0;
           row.seq_id_ = ObString();
         } else {
-          LOG_WARN("failed to get next row.", K(ret));
         }
       } else {
         cur_info_ = row;
         if (is_char && row.char_len_ == UINT32_MAX) {
           if (row.byte_len_ != byte_size_) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected situation", K(ret), K(byte_size_), KPC(this), K(row));
           } else if (not_calc_char_len()) {
           } else {
             // char len has not been calc, just calc char len here
@@ -117,7 +113,6 @@ int ObLobMetaScanIter::get_next_row(ObLobMetaScanResult &result)
     uint32_t cur_len = is_char ? result.info_.char_len_ : result.info_.byte_len_;
     if (cur_len > cur_pos_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to cal cur pos.", K(ret), K(cur_pos_), K(cur_len));
     } else {
       uint64_t cur_pos = cur_pos_ - cur_len;
       result.st_ = 0;
@@ -128,7 +123,6 @@ int ObLobMetaScanIter::get_next_row(ObLobMetaScanResult &result)
         if (cur_pos < offset_) { // exceed left boundary,
           if (cur_pos + cur_len < offset_) {
             ret = OB_ERR_INTERVAL_INVALID;
-            LOG_WARN("Invalid query result at left edge.", K(ret), K(cur_pos), K(cur_len), K(offset_), K(len_));
           } else {
             if (!scan_backward_) {
               result.st_ = offset_ - cur_pos;
@@ -142,7 +136,6 @@ int ObLobMetaScanIter::get_next_row(ObLobMetaScanResult &result)
           if (cur_pos + cur_len > offset_ + len_) { // exceed right boundary
             if (cur_pos > offset_ + len_) {
               ret = OB_ERR_INTERVAL_INVALID;
-              LOG_WARN("Invalid query result at right edge.", K(ret), K(cur_pos), K(cur_len), K(offset_), K(len_));
             } else {
               if (!scan_backward_) {
                 result.len_ = offset_ + len_ - cur_pos - result.st_;
@@ -168,7 +161,6 @@ int ObLobMetaScanIter::get_next_row(ObString &data)
   if (OB_FAIL(get_next_row(result))) {
     if (ret == OB_ITER_END) {
     } else {
-      LOG_WARN("failed to get lob meta next row.", K(ret));
     }
   } else if (not_calc_char_len() || result.len_ == result.info_.char_len_) {
     // fast path
@@ -178,10 +170,8 @@ int ObLobMetaScanIter::get_next_row(ObString &data)
     int64_t res_byte_len = ObCharset::charpos(coll_type_, result.info_.lob_data_.ptr() + start_byte_offset, result.info_.lob_data_.length() - start_byte_offset, result.len_);
     if (start_byte_offset < 0 || start_byte_offset >= result.info_.lob_data_.length()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("start offset invalid", K(ret), K(coll_type_), K(start_byte_offset), K(res_byte_len), K(result));
     } else if (res_byte_len <= 0 || res_byte_len > result.info_.lob_data_.length()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("end offset invalid", K(ret), K(coll_type_), K(start_byte_offset), K(res_byte_len), K(result));
     } else {
       data.assign_ptr(result.info_.lob_data_.ptr() + start_byte_offset, res_byte_len);
     }
@@ -195,7 +185,6 @@ int ObLobMetaUtil::transform_lob_id(const blocksstable::ObDatumRow* row, ObLobMe
   ObString buf = row->storage_datums_[ObLobMetaUtil::LOB_ID_COL_ID].get_string();
   if (buf.length() != sizeof(ObLobId)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to transform lob id.", K(ret), KPC(row));
   } else {
     info.lob_id_ = *reinterpret_cast<ObLobId*>(buf.ptr());
   }
@@ -231,7 +220,6 @@ int ObLobMetaUtil::transform_piece_id(const blocksstable::ObDatumRow *row, ObLob
   int ret = OB_SUCCESS;
   if (OB_ISNULL(row)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("row is nullptr", K(ret));
   } else {
     int idx = (with_extra_rowkey) ?
       ObLobMetaUtil::PIECE_ID_COL_ID + SKIP_INVALID_COLUMN : 
@@ -248,7 +236,6 @@ int ObLobMetaUtil::transform_lob_data(const blocksstable::ObDatumRow *row, ObLob
   buf.reset();
   if (OB_ISNULL(row)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("row is nullptr", K(ret));
   } else {
     info.lob_data_.reset();
     int idx = (with_extra_rowkey) ?
@@ -267,13 +254,10 @@ int ObLobMetaUtil::transform_from_row_to_info(const blocksstable::ObDatumRow *ro
                         LOB_META_COLUMN_CNT;
   if (OB_ISNULL(row)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("row is null", K(ret));
   } else if (!row->is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid lob meta row.", K(ret), KPC(row));
   } else if (row->get_column_count() != expcect_row_cnt) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid lob meta row.", K(ret), KPC(row), K(expcect_row_cnt));
   } else if (OB_FAIL(transform_lob_id(row, info))) {
   } else if (OB_FAIL(transform_seq_id(row, info))) {
   } else if (OB_FAIL(transform_byte_len(row, info, with_extra_rowkey))) {
@@ -289,7 +273,6 @@ int ObLobMetaUtil::transform_lob_id(ObLobMetaInfo &info, blocksstable::ObDatumRo
   int ret = OB_SUCCESS;
   if (OB_ISNULL(row)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("row is NULL", K(ret));
   } else {
     row->storage_datums_[ObLobMetaUtil::LOB_ID_COL_ID].set_string(reinterpret_cast<char*>(&info.lob_id_), sizeof(ObLobId));
   }
@@ -301,7 +284,6 @@ int ObLobMetaUtil::transform_seq_id(ObLobMetaInfo &info, blocksstable::ObDatumRo
   int ret = OB_SUCCESS;
   if (OB_ISNULL(row)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("row is NULL", K(ret));
   } else {
     row->storage_datums_[ObLobMetaUtil::SEQ_ID_COL_ID].set_string(info.seq_id_);
   }
@@ -313,7 +295,6 @@ int ObLobMetaUtil::transform_byte_len(ObLobMetaInfo &info, blocksstable::ObDatum
   int ret = OB_SUCCESS;
   if (OB_ISNULL(row)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("row is NULL", K(ret));
   } else {
     int idx = (with_extra_rowkey) ?
               ObLobMetaUtil::BYTE_LEN_COL_ID + SKIP_INVALID_COLUMN : 
@@ -328,7 +309,6 @@ int ObLobMetaUtil::transform_char_len(ObLobMetaInfo &info, blocksstable::ObDatum
   int ret = OB_SUCCESS;
   if (OB_ISNULL(row)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("row is NULL", K(ret));
   } else {
     int idx = (with_extra_rowkey) ?
               ObLobMetaUtil::CHAR_LEN_COL_ID + SKIP_INVALID_COLUMN : 
@@ -343,7 +323,6 @@ int ObLobMetaUtil::transform_piece_id(ObLobMetaInfo &info, blocksstable::ObDatum
   int ret = OB_SUCCESS;
   if (OB_ISNULL(row)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("row is NULL", K(ret));
   } else {
     int idx = (with_extra_rowkey) ?
               ObLobMetaUtil::PIECE_ID_COL_ID + SKIP_INVALID_COLUMN : 
@@ -358,7 +337,6 @@ int ObLobMetaUtil::transform_lob_data(ObLobMetaInfo &info, blocksstable::ObDatum
   int ret = OB_SUCCESS;
   if (OB_ISNULL(row)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("row is NULL", K(ret));
   } else {
     int idx = (with_extra_rowkey) ?
               ObLobMetaUtil::LOB_DATA_COL_ID + SKIP_INVALID_COLUMN : 
@@ -376,10 +354,8 @@ int ObLobMetaUtil::transform_from_info_to_row(ObLobMetaInfo &info, blocksstable:
                         LOB_META_COLUMN_CNT;
   if (OB_ISNULL(row)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("row is null.", K(ret));
   } else if (row->get_column_count() != expcect_row_cnt) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid lob meta row.", K(ret), K(info), K(with_extra_rowkey));
   } else if (OB_FAIL(transform_lob_id(info, row))) {
   } else if (OB_FAIL(transform_seq_id(info, row))) {
   } else if (OB_FAIL(transform_byte_len(info, row, with_extra_rowkey))) {
@@ -506,10 +482,8 @@ int ObLobMetaWriteIter::get_last_meta_info(ObLobAccessParam &param, ObLobMetaMan
     ObLobMetaScanResult scan_res;
     if (OB_FAIL(scan_iter_.get_next_row(scan_res))) {
       if (ret == OB_ITER_END) {
-        LOG_WARN("no found lob_meta_info", K(ret), K(param), K(scan_iter_));
         ret = OB_ENTRY_NOT_EXIST;
       } else {
-        LOG_WARN("failed to get next row.", K(ret), K(param), K(scan_iter_));
       }
     } else {
       last_info_ = scan_res.info_;
@@ -571,7 +545,6 @@ int ObLobMetaWriteIter::open(ObLobAccessParam &param,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(iter)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null query iter", K(ret));
   } else {
     coll_type_ = param.coll_type_;
     lob_id_ = param.lob_data_->id_;
@@ -591,7 +564,6 @@ int ObLobMetaWriteIter::open(ObLobAccessParam &param,
     char *buf = nullptr;
     if (read_buf.size() < 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("read buffer is not enough", K(ret), K(piece_block_size_), K(read_buf.length()), K(read_buf.size()));
     } else if (OB_FAIL(get_last_meta_info(param, meta_manager))) {
     } else if (OB_ISNULL(buf = reinterpret_cast<char*>(allocator_->alloc(piece_block_size_)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -631,7 +603,6 @@ int ObLobMetaWriteIter::open(ObLobAccessParam &param,
   lob_common_ = param.lob_common_;
   if (OB_ISNULL(iter) || OB_ISNULL(read_param) || OB_ISNULL(lob_common_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(iter), KP(read_param), KP(lob_common_));
   } else if (OB_FAIL(open(param, iter, read_buf, 0/*padding_size*/, post_data, remain_buf, seq_id_st, seq_id_end, nullptr))) {
   }
   return ret;
@@ -655,7 +626,6 @@ int ObLobMetaWriteIter::try_fill_data(ObLobWriteBuffer &write_buffer, ObLobQuery
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(iter->get_next_row(data))) {
     if (ret != OB_ITER_END) {
-      LOG_WARN("fail to get next read buff", K(ret));
     } else {
       ret = OB_SUCCESS;
     }
@@ -669,7 +639,6 @@ int ObLobMetaWriteIter::try_fill_data(ObLobWriteBuffer &write_buffer, ObLobQuery
     // use buffer because need concat data
     if (inner_buffer_.length() != piece_block_size_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("inner_buffer_ length not equal piece_block_size", K(ret), K(piece_block_size_), "inner_buffer_length", inner_buffer_.length());
     } else if (OB_FAIL(write_buffer.set_buffer(inner_buffer_.ptr(), piece_block_size_))) {
     }
   }
@@ -707,7 +676,6 @@ int ObLobMetaWriteIter::try_fill_data(
     // use buffer
     if (inner_buffer_.length() != piece_block_size_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("inner_buffer_ length not equal piece_block_size", K(ret), K(piece_block_size_), "inner_buffer_length", inner_buffer_.length());
     } else if (OB_FAIL(write_buffer.set_buffer(inner_buffer_.ptr(), piece_block_size_))) {
     }
   }
@@ -740,12 +708,10 @@ int ObLobMetaWriteIter::try_update_last_info(
       int64_t by_len = 0;
       if (inner_buffer_.length() != piece_block_size_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("inner_buffer_ length not equal piece_block_size", K(ret), K(piece_block_size_), "inner_buffer_length", inner_buffer_.length());
       } else if (OB_FAIL(write_buffer.set_buffer(inner_buffer_.ptr(), piece_block_size_))) {
       } else if (OB_FAIL(write_buffer.append(last_info_.lob_data_.ptr(), last_info_.lob_data_.length(), by_len))) {
       } else if (by_len != last_info_.lob_data_.length()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("should write all data", K(ret), K(by_len), K(last_info_), K(write_buffer));
       } else {
         row.is_update_ = true;
         row.info_ = last_info_;
@@ -831,7 +797,6 @@ int ObLobMetaWriteIter::get_next_row(ObLobMetaWriteResult &row)
           || row.info_.lob_data_.length() > piece_block_size_ 
           || row.info_.lob_data_.length() != row.info_.byte_len_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("result data over piece_block_size", K(ret), K(piece_block_size_), K(row.info_), K(row.is_update_));
       } else {
         row.data_ = row.info_.lob_data_;
       }
@@ -892,7 +857,6 @@ int ObLobMetaWriteIter::update_disk_lob_locator(ObLobMetaWriteResult &result)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(lob_common_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lob_common is null", K(ret), KPC(this), K(result));
   } else {
     ObLobData *lob_data = reinterpret_cast<ObLobData*>(lob_common_->buffer_);
     ObLobDataOutRowCtx *lob_outrow_ctx = reinterpret_cast<ObLobDataOutRowCtx*>(lob_data->buffer_);
@@ -905,7 +869,6 @@ int ObLobMetaWriteIter::update_disk_lob_locator(ObLobMetaWriteResult &result)
       *char_len_ptr = *char_len_ptr + result.info_.char_len_;
     } else if (*char_len_ptr != UINT64_MAX) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("char len is incorrect", K(ret), K(*char_len_ptr), KPC(this), KPC(lob_common_), KPC(lob_outrow_ctx), KPC(lob_data), K(result));
     }
 
     if (OB_FAIL(ret)) {
@@ -926,16 +889,13 @@ int ObLobMetaWriteIter::check_write_length()
   if (is_end_) {  //means inrow , so skip
   } else if (OB_ISNULL(lob_common_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lob_common is null", K(ret));
   } else if (OB_ISNULL(read_param_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("read_param is null", K(ret));
   } else {
     ObLobData *lob_data = reinterpret_cast<ObLobData*>(lob_common_->buffer_);
     ObLobDataOutRowCtx *lob_outrow_ctx = reinterpret_cast<ObLobDataOutRowCtx*>(lob_data->buffer_);
     if (read_param_->byte_size_ != lob_data->byte_size_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("write size not match", K(ret), "write_size", lob_data->byte_size_, "data_size", read_param_->byte_size_, KPC(read_param_));
     }
   }
   return ret;
@@ -973,13 +933,11 @@ int ObInRowLobDataSpliter::get_next_row(ObLobMetaInfo &info)
     ret = OB_ITER_END;
   } else if (byte_pos_ > inrow_data_.length()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("byte_pos is larger than data length", K(ret), K(byte_pos_), "data_length", inrow_data_.length());
   } else {
     int64_t max_bytes = OB_MIN(inrow_data_.length() - byte_pos_, chunk_size_);
     byte_len = ObCharset::max_bytes_charpos(cs_type_, inrow_data_.ptr() + byte_pos_, inrow_data_.length() - byte_pos_, max_bytes, char_len);
     if (byte_len <= 0 || char_len <= 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("no data can be return when has remain data", K(ret), K(byte_pos_), "data_length", inrow_data_.length());
     } else {
       info.byte_len_ = byte_len;
       info.char_len_ = char_len;

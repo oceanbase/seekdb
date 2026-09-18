@@ -43,7 +43,6 @@ int enum_to_str(const uint64_t enum_val,
     // ObString empty_string;
   } else if (OB_UNLIKELY(element_idx > element_num - 1)) {
     ret = OB_ERR_DATA_TRUNCATED;
-    LOG_WARN("enum value out of range", K(element_idx), K(element_num), K(ret));
   } else {
     element_str = str_values.at(element_idx);
   }
@@ -67,7 +66,6 @@ int set_to_str(const ObCollationType cs_type,
   int64_t element_num = str_values.count();
   if (OB_UNLIKELY(element_num < 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid element num", K(element_num), K(ret));
   } else if (OB_UNLIKELY(element_num < EFFECTIVE_COUNT && set_val >= (1ULL << element_num))) {
     ret = OB_ERR_DATA_TRUNCATED;
     LOG_WARN("set value out of range", K(set_val), K(element_num));

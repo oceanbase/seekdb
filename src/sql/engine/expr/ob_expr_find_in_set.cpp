@@ -159,7 +159,6 @@ int add_to_hashmap(ObExprFindIntCachedValue &cached_value, ObString &sort_key, i
     ret = OB_SUCCESS;
     OZ (cached_value.get_hashmap().set_refactored(sort_key, elem_idx));
   } else {
-    LOG_WARN("unexpected error", K(ret));
   }
   return ret;
 }
@@ -273,14 +272,12 @@ int search_with_const_set(const ObExpr &expr,
         if (OB_ERR_INCORRECT_STRING_VALUE == ret) {
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("fail to get sort key", K(ret));
         }
       } else if (OB_FAIL(cached_value->get_hashmap().get_refactored(sort_key, res_pos))) {
         if (OB_HASH_NOT_EXIST == ret) {
           ret = OB_SUCCESS;
           res_pos = 0;
         } else {
-          LOG_WARN("fail to get from hash map", K(ret));
         }
       }
     }
@@ -298,7 +295,6 @@ int ObExprFindInSet::calc_find_in_set_expr(const ObExpr &expr, ObEvalCtx &ctx,
   ObDatum *strlist = NULL;
   if (OB_UNLIKELY(2 != expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected arg cnt", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, str, strlist))) {
   } else if (str->is_null() || strlist->is_null()) {
     res_datum.set_null();
@@ -308,7 +304,6 @@ int ObExprFindInSet::calc_find_in_set_expr(const ObExpr &expr, ObEvalCtx &ctx,
     if (OB_UNLIKELY(expr.args_[0]->datum_meta_.cs_type_ != expr.args_[1]->datum_meta_.cs_type_ ||
                     !ObCharset::is_valid_collation(static_cast<int64_t>(cs_type)))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid cs_type", K(ret), K(cs_type));
     } else {
       if (expr.args_[1]->is_static_const_) {
         ret = search_with_const_set(expr, ctx, str->get_string(), strlist->get_string(), cs_type, res_pos);

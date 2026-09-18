@@ -56,7 +56,6 @@ int ObAiModelDDLOperator::drop_ai_model(const ObAiModelSchema &ai_model_schema,
   
   if (OB_UNLIKELY(!ai_model_schema.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ai_model_schema));
   } else if (OB_ISNULL(schema_service_impl)) {
     ret = OB_ERR_SYS;
     LOG_ERROR("schema_service_impl must not null", K(ret));

@@ -47,7 +47,6 @@ int ObMdsTableMergeTask::init()
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(dag_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("dag must not be null", K(ret));
   } else if (OB_UNLIKELY(ObDagType::ObDagTypeEnum::DAG_TYPE_MDS_MINI_MERGE != dag_->get_type())) {
     ret = OB_ERR_SYS;
     LOG_ERROR("dag type not match", K(ret), KPC_(dag));
@@ -56,7 +55,6 @@ int ObMdsTableMergeTask::init()
     const ObTabletMergeDagParam &merge_dag_param = mds_merge_dag->get_param();
     if (OB_UNLIKELY(!merge_dag_param.is_valid())) {
       ret = OB_ERR_SYS;
-      LOG_WARN("param is not valid", K(ret), "param", mds_merge_dag->get_param());
     } else {
       mds_merge_dag_ = mds_merge_dag;
       is_inited_ = true;
@@ -84,14 +82,11 @@ int ObMdsTableMergeTask::process()
 
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret), K_(is_inited), KPC(mds_merge_dag_));
   } else if (OB_ISNULL(mds_merge_dag_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null dag", K(ret), KPC(mds_merge_dag_));
   } else if (OB_FAIL(mds_merge_dag_->alloc_merge_ctx())) {
   } else if (OB_ISNULL(ctx_ptr = static_cast<ObTabletMergeCtx *>(mds_merge_dag_->get_ctx()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ctx is unexpected null", KR(ret), KPC_(mds_merge_dag), KPC(mds_merge_dag_));
   } else {
     ObLS *ls = nullptr;
     ObTablet *tablet = nullptr;
@@ -116,23 +111,19 @@ int ObMdsTableMergeTask::process()
     if (OB_FAIL(ctx.get_ls_and_tablet())) {
     } else if (OB_ISNULL(ls = ctx.get_ls())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ls is null", K(ret), "tenant_ls", ctx.static_param_.ls_, KPC(mds_merge_dag_));
     } else if (ls->is_offline()) {
       ret = OB_CANCELED;
       LOG_INFO("ls offline, skip merge", K(ret), K(ctx), KPC(mds_merge_dag_));
     } else if (OB_FAIL(ctx.init_tablet_merge_info())) {
     } else if (OB_ISNULL(tablet = ctx.get_tablet())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("tablet is null", K(ret), K(tablet_id));
     } else if (CLICK_FAIL(tablet->get_mds_table_for_dump(mds_table))) {
       if (OB_EMPTY_RESULT != ret) {
-        LOG_WARN("fail to get mds table", K(ret), K(tablet_id));
       } else {
         ret = OB_NO_NEED_MERGE;
       }
     } else if (OB_UNLIKELY(!mds_table.get_mds_table_ptr()->is_construct_sequence_matched(mds_construct_sequence))) {
       ret = OB_NO_NEED_MERGE;
-      LOG_WARN("construct sequence does not match current mds table, no need to merge", K(ret), K(tablet_id), K(mds_construct_sequence));
     } else if (tablet->get_mds_checkpoint_scn() >= flush_scn) {
       need_schedule_mds_minor = false;
       FLOG_INFO("flush scn smaller than mds ckpt scn, only flush nodes of mds table and do not generate mds mini",
@@ -154,7 +145,6 @@ int ObMdsTableMergeTask::process()
         ret = OB_SUCCESS;
         if (OB_FAIL(check_tablet_status_for_empty_mds_table_(*tablet))) {
           if (OB_NO_NEED_MERGE != ret) {
-            LOG_WARN("fail to check tablet status", K(ret), K(tablet_id), KPC(mds_merge_dag_));
           } else  {
             FLOG_INFO("skip uncommitted creation tablet", K(tablet_id));
           }
@@ -203,7 +193,6 @@ void ObMdsTableMergeTask::try_schedule_compaction_after_mds_mini(compaction::ObT
   bool during_restore = false;
   if (OB_UNLIKELY(!tablet_id.is_valid() || !tablet_handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(tablet_id), K(tablet_handle), KPC(mds_merge_dag_));
   // when restoring, some log stream may be not ready,
   // thus the inner sql in ObFreezeInfoMgr::try_update_info may timeout
   } else if (OB_SUCCESS == ObBasicMergeScheduler::get_merge_scheduler()->during_restore(during_restore) && !during_restore) {
@@ -226,7 +215,6 @@ int ObMdsTableMergeTask::check_tablet_status_for_empty_mds_table_(const ObTablet
   ObTabletCreateDeleteMdsUserData user_data;
   if (OB_FAIL(tablet.get_latest_committed(user_data))) {
     if (OB_EMPTY_RESULT != ret) {
-      LOG_WARN("failed to get tx data", K(ret), K(tablet));
     } else {
       // rewrite ret to skip mds table on_flush
       ret = OB_NO_NEED_MERGE;

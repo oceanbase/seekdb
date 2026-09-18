@@ -32,7 +32,6 @@ static int get_not_exist_row(
   const int64_t rowkey_cnt = rowkey.get_datum_cnt();
   if (rowkey_cnt > not_exist_row.get_column_count()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid rowkey cnt", K(ret), K(rowkey_cnt), K(not_exist_row));
   } else {
     for (int64_t i = 0; i < rowkey_cnt; i++) {
       not_exist_row.storage_datums_[i] = rowkey.datums_[i];
@@ -83,7 +82,6 @@ int ObSSTableMultiVersionRowGetter::inner_open(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(query_range) || OB_ISNULL(table)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(query_range), KP(table));
   } else {
     base_rowkey_ = static_cast<const ObDatumRowkey *>(query_range);
     if (OB_FAIL(base_rowkey_->to_multi_version_range(*access_ctx.get_range_allocator(), multi_version_range_))) {
@@ -103,10 +101,8 @@ int ObSSTableMultiVersionRowGetter::inner_get_next_row(const ObDatumRow *&row)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(base_rowkey_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), KP(base_rowkey_));
   } else if (OB_FAIL(ObSSTableRowScanner::inner_get_next_row(row))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("failed to get next row", K(ret));
     } else if (0 == range_idx_) {
       if (OB_FAIL(get_not_exist_row(
                   *base_rowkey_,
@@ -152,7 +148,6 @@ int ObSSTableMultiVersionRowScanner::inner_open(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(query_range) || OB_ISNULL(table)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(query_range), KP(table));
   } else {
     ObSSTable *sstable = static_cast<ObSSTable *>(table);
     base_range_ = static_cast<const ObDatumRange *>(query_range);
@@ -203,7 +198,6 @@ int ObSSTableMultiVersionRowMultiGetter::inner_open(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(query_range) || OB_ISNULL(table)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(query_range), KP(table));
   } else {
     base_rowkeys_ = reinterpret_cast<const ObIArray<ObDatumRowkey> *> (query_range);
 
@@ -235,13 +229,11 @@ int ObSSTableMultiVersionRowMultiGetter::inner_get_next_row(const ObDatumRow *&r
   row = nullptr;
   if (OB_ISNULL(base_rowkeys_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), KP(base_rowkeys_));
   } else {
     bool has_empty_range = false;
     if (NULL == pending_row_) {
       if (OB_FAIL(ObSSTableRowMultiScanner::inner_get_next_row(pending_row_))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("failed to get next row", K(ret));
         } else {
           has_empty_range = (range_idx_ < base_rowkeys_->count());
           if (has_empty_range) {
@@ -273,8 +265,6 @@ int ObSSTableMultiVersionRowMultiGetter::inner_get_next_row(const ObDatumRow *&r
     if (OB_SUCC(ret)) {
       if (OB_ISNULL(row)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("row is empty", K(ret), K(range_idx_),
-                 K(base_rowkeys_->at(range_idx_)));
       } else {
         (const_cast<ObDatumRow*> (row))->scan_index_ = range_idx_;
         ++range_idx_;
@@ -306,13 +296,11 @@ int ObSSTableMultiVersionRowMultiScanner::inner_open(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(query_range) || OB_ISNULL(table)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(query_range), KP(table));
   } else {
     const ObIArray<ObDatumRange> *base_ranges = static_cast<const ObIArray<ObDatumRange> *>(query_range);
     int64_t out_cols_cnt = iter_param.get_out_col_cnt();
     if (OB_UNLIKELY(0 == out_cols_cnt)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected empty out_cols", K(ret), K(iter_param));
     } else if (OB_FAIL(multi_version_ranges_.reserve(base_ranges->count()))) {
     } else {
       ObDatumRange tmp_multi_version_range;

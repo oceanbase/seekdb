@@ -75,7 +75,6 @@ public:
     int ret = OB_SUCCESS;
     if (!is_built_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("rtree isn't built", K(ret));
     } else if (relation == QueryRelation::INTERSECTS) {
       try {
         rtree_index_.query(bgi::intersects(box), std::back_inserter(res));
@@ -84,7 +83,6 @@ public:
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("query type isn't supported", K(ret), K(relation));
     }
     return ret;
   }

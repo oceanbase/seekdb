@@ -50,7 +50,6 @@ int ObFTNgramImpl::init(const ObCharsetInfo *const cs,
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(cs) || OB_ISNULL(fulltext) || OB_UNLIKELY(fulltext_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(cs), KP(fulltext), K(fulltext_len));
   } else {
     cs_ = cs;
     fulltext_start_ = fulltext;
@@ -82,7 +81,6 @@ int ObFTNgramImpl::get_next_token(const char *&word,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObFTNgramImpl is not inited", K(ret));
   } else {
     bool found = false;
 

@@ -53,7 +53,6 @@ int ObExprFuncRound::calc_result_typeN(ObExprResType &type,
   const ObSQLSessionInfo *session = type_ctx.get_session();
   if (OB_UNLIKELY(NULL == params || param_num <= 0 || param_num > 2) || OB_ISNULL(session)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument.", K(ret), K(params), K(param_num), K(type_ctx.get_session()));
   } else {
     OZ(se_deduce_type(type, params, param_num, type_ctx));
   }
@@ -88,7 +87,6 @@ int ObExprFuncRound::set_res_and_calc_type(ObExprResType *params, int64_t param_
     params[1].set_calc_type(ObIntType);
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected param_num", K(ret), K(param_num));
   }
   return ret;
 }
@@ -104,7 +102,6 @@ int ObExprFuncRound::set_res_scale_prec(ObExprTypeCtx &type_ctx, ObExprResType *
 
   if (OB_UNLIKELY(1 != param_num && 2 != param_num)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected param_num", K(ret), K(param_num));
   } else {
     if (1 == param_num) {
       res_scale = DEFAULT_SCALE_FOR_INTEGER;
@@ -191,8 +188,6 @@ int ObExprFuncRound::do_round_decimalint(
     } else if ((round_scale < out_scale)
                && OB_FAIL(wide::common_scale_decimalint(scaled_down_val.get_decimal_int(),
                    int_bytes, round_scale, out_scale, scaled_up_val))) {
-      LOG_WARN("scale decimal int failed", K(ret), K(int_bytes), K(in_scale),
-               K(out_scale), K(round_scale));
     } else if (OB_FAIL(ObDatumCast::align_decint_precision_unsafe(
       round_scale < out_scale ? scaled_up_val.get_decimal_int() : scaled_down_val.get_decimal_int(),
       round_scale < out_scale ? scaled_up_val.get_int_bytes() : scaled_down_val.get_int_bytes(),
@@ -278,7 +273,6 @@ static int do_round_by_type(
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected arg type", K(ret), K(x_type));
       break;
     }
   }
@@ -336,10 +330,8 @@ static int do_round_by_type_batch_with_check(const int64_t scale, const ObExpr &
           number::ObNumber res_nmb;
           ObNumStackOnceAlloc tmp_alloc;
           if (OB_FAIL(res_nmb.from(x_nmb, tmp_alloc))) {
-            LOG_WARN("get num from x failed", K(ret), K(x_nmb));
             break;
           } else if (OB_FAIL(res_nmb.round(GET_SCALE_FOR_CALC(scale)))) {
-            LOG_WARN("eval round of res_nmb failed", K(ret), K(scale), K(res_nmb));
             break;
           } else {
             results[i].set_number(res_nmb);
@@ -437,7 +429,6 @@ static int do_round_by_type_batch_with_check(const int64_t scale, const ObExpr &
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected arg type", K(ret), K(x_type));
       break;
     }
   }
@@ -513,7 +504,6 @@ static int do_round_by_type_batch_without_check(const int64_t scale, const ObExp
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected arg type", K(ret), K(x_type));
       break;
     }
   }
@@ -550,12 +540,10 @@ int ObExprFuncRound::calc_round_expr_numeric1_batch(const ObExpr &expr,
     if (is_batch_need_cal_all(x_datums, skip, eval_flags, batch_size)) {
       if (OB_FAIL(do_round_by_type_batch_without_check(0, expr, ctx, batch_size))) {
         const ObObjType x_type = expr.args_[0]->datum_meta_.type_;
-        LOG_WARN("calc round by type failed", K(ret), K(x_type), K(expr));
       }
     } else {
       if (OB_FAIL(do_round_by_type_batch_with_check(0, expr, ctx, skip, batch_size))) {
         const ObObjType x_type = expr.args_[0]->datum_meta_.type_;
-        LOG_WARN("calc round by type failed", K(ret), K(x_type), K(expr));
       }
     }
   }
@@ -570,7 +558,6 @@ int calc_round_expr_numeric2(const sql::ObExpr &expr, sql::ObEvalCtx &ctx,
   ObDatum *fmt_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, x_datum)) ||
       OB_FAIL(expr.args_[1]->eval(ctx, fmt_datum))) {
-    LOG_WARN("eval arg failed", K(ret), K(expr));
   } else if (x_datum->is_null() || fmt_datum->is_null()) {
     res_datum.set_null();
   } else {
@@ -585,7 +572,6 @@ int calc_round_expr_numeric2(const sql::ObExpr &expr, sql::ObEvalCtx &ctx,
       scale = fmt_datum->get_int();
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected fmt type", K(ret), K(fmt_type), K(expr));
     }
     if (OB_SUCC(ret)) {
       if (ob_is_number_tc(expr.args_[0]->datum_meta_.get_type())
@@ -616,7 +602,6 @@ int ObExprFuncRound::calc_round_expr_numeric2_batch(const ObExpr &expr,
   ObDatum *fmt_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size)) ||
       OB_FAIL(expr.args_[1]->eval(ctx, fmt_datum))) {
-    LOG_WARN("eval arg failed", K(ret), K(expr));
   } else {
     int64_t scale = 0;
     // get scale
@@ -631,7 +616,6 @@ int ObExprFuncRound::calc_round_expr_numeric2_batch(const ObExpr &expr,
       scale = fmt_datum->get_int();
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected fmt type", K(ret), K(fmt_type), K(expr));
     }
     if (OB_SUCC(ret)) {
       if (fmt_datum->is_null()) {
@@ -658,12 +642,10 @@ int ObExprFuncRound::calc_round_expr_numeric2_batch(const ObExpr &expr,
         if (is_batch_need_cal_all(x_datums, skip, eval_flags, batch_size)) {
           if (OB_FAIL(do_round_by_type_batch_without_check(scale, expr, ctx, batch_size))) {
             const ObObjType x_type = expr.args_[0]->datum_meta_.type_;
-            LOG_WARN("calc round by type failed", K(ret), K(x_type), K(expr));
           }
         } else {
           if (OB_FAIL(do_round_by_type_batch_with_check(scale, expr, ctx, skip, batch_size))) {
             const ObObjType x_type = expr.args_[0]->datum_meta_.type_;
-            LOG_WARN("calc round by type failed", K(ret), K(x_type), K(expr));
           }
         }
       }
@@ -681,13 +663,11 @@ int ObExprFuncRound::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr
   // round(x, fmt)
   if (OB_UNLIKELY(1 != rt_expr.arg_cnt_ && 2 != rt_expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid arg cnt of expr", K(ret), K(rt_expr));
   } else {
     const ObObjType &x_type = rt_expr.args_[0]->datum_meta_.type_;
     const ObObjType &res_type = rt_expr.datum_meta_.type_;
     if (OB_UNLIKELY(x_type != res_type)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid arg type or res type", K(ret), K(x_type), K(res_type));
     } else if (2 == rt_expr.arg_cnt_) {
       rt_expr.eval_func_ = calc_round_expr_numeric2;
       // Only implement vectorization when parameter 0 is batch and parameter 1 is constant

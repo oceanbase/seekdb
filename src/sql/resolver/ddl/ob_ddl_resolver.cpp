@@ -104,7 +104,6 @@ int ObDDLResolver::append_fts_args(const share::schema::ObTableSchema &data_sche
   ObDocIDType doc_id_type = ObDocIDType::INVALID;
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("allocator is null", K(ret));
   } else if (OB_FAIL(ObFtsIndexBuilderUtil::determine_docid_type(data_schema, doc_id_type))) {
   } else if ((doc_id_type == ObDocIDType::TABLET_SEQUENCE) && !fts_common_aux_table_exist) {
     const int64_t num_fts_args = 4;
@@ -165,7 +164,6 @@ int ObDDLResolver::append_multivalue_args(
   int64_t num_mulvalue_args = 3;
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("allocator is null", K(ret));
   } else if (OB_FAIL(ObFtsIndexBuilderUtil::determine_docid_type(data_schema, doc_id_type))) {
   } else if ((doc_id_type == ObDocIDType::TABLET_SEQUENCE) && !common_aux_table_exist) {
     if (OB_FAIL(ObFtsIndexBuilderUtil::append_fts_rowkey_doc_arg(index_arg,
@@ -261,7 +259,6 @@ int update_datetime_default_value(ObObjParam &default_value, ParseNode &def_val,
     default_value.set_scale(scale);
   } else if (OB_ISNULL(def_val.children_) || OB_UNLIKELY(1 != def_val.num_child_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(def_val.children_), K(def_val.num_child_));
   } else {
     if (NULL != def_val.children_[0]) {
       scale = static_cast<int16_t>(def_val.children_[0]->value_);
@@ -854,7 +851,6 @@ int ObDDLResolver::resolve_table_options(ParseNode *node, bool is_index_option)
       } else if (OB_FAIL(schema_checker_->get_database_schema(database_id, database_schema))) {
       } else if (OB_ISNULL(database_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error. db schema is null", K(ret), K(database_schema));
       } else {
         charset_type_ = database_schema->get_charset_type();
         collation_type_ = database_schema->get_collation_type();
@@ -999,7 +995,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
           }
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("index option should not specify tablet size", K(ret));
         }
         break;
       }
@@ -1109,7 +1104,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
           }
         } else {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("index option should not specify compress method", K(ret));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify compress method in index option");
         }
         break;
@@ -1133,7 +1127,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
           }
         } else {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("index option should not specify store format", K(ret));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify store format in index option");
         }
         break;
@@ -1170,7 +1163,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
           }
         } else {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("index option should not specify progressive merge num", K(ret));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify progressive merge num in index option");
         }
         break;
@@ -1253,7 +1245,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
       case T_VEC_INDEX_PARAMS: {
         if (index_keyname_ != VEC_KEY) {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("index params was set in not vector index is not supported", K(ret));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "set index params in not vector index is");
         } else {
           const ObTableSchema *tbl_schema = nullptr;
@@ -1264,11 +1255,9 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
             if (OB_FAIL(schema_checker_->get_table_schema(database_name_, table_name_, false, tbl_schema))) {
             } else if (OB_ISNULL(tbl_schema)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("tab schema is null", KP(tbl_schema), K(ret));
             }
           } else {
             ret = OB_NOT_SUPPORTED;
-            LOG_WARN("without create table with index or create index is not supported", K(ret));
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "without create table with index or create index is");
           }
           if (OB_FAIL(ret)) {
@@ -1281,7 +1270,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
       case T_PARSER_NAME: {
         if (OB_ISNULL(option_node->children_[0])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("option_node child is null");
         } else {
           int32_t str_len = static_cast<int32_t>(option_node->children_[0]->str_len_);
           parser_name_.assign_ptr(option_node->children_[0]->str_value_, str_len);
@@ -1365,7 +1353,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
             if (OB_FAIL(get_table_schema_for_check(tbl_schema))) {
             } else if (OB_ISNULL(tbl_schema)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("table schema is NULL", K(ret));
             } else { // Temporarily not supporting changing PK_MODE when altering table
               // Set Table current PK_MODE, assemble final TableMode
               table_mode_.pk_mode_ = tbl_schema->get_table_mode_struct().pk_mode_;
@@ -1425,7 +1412,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
           }
         } else {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("index option should not specify collation", K(ret));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify collation in index option");
         }
         break;
@@ -1449,7 +1435,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
           }
         } else {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("index option should not specify read only", K(ret));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify read only in index option");
         }
         break;
@@ -1490,7 +1475,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
           }
         } else {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("index option should not specify autoincrement id", K(ret));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify autoincrement id in index option");
         }
         break;
@@ -1516,7 +1500,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
           if (OB_FAIL(get_table_schema_for_check(tbl_schema))) {
           } else if (OB_ISNULL(tbl_schema)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("table schema is NULL", K(ret));
           } else if (auto_increment_cache_size_ ==
                      tbl_schema->get_auto_increment_cache_size()) {
             // The cache size is unchanged, so there is nothing to alter.
@@ -1557,7 +1540,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
           }
         } else {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("index option should not rename table", K(ret));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify table rename in index option");
         }
         break;
@@ -1657,7 +1639,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
       case T_MICRO_INDEX_CLUSTERED: {
         if (is_index_option) {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("specified micro_index_clustered configuration for index table is not supported", K(ret));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "specified micro_index_clustered configuration for index table is");
         } else if (OB_ISNULL(option_node->children_)) {
           ret = OB_ERR_UNEXPECTED;
@@ -1672,7 +1653,6 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
       case T_ORGANIZATION: {
         if (stmt_->get_stmt_type() == stmt::T_ALTER_TABLE) {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("organization is not supported in the alter table statement", K(ret));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "organization in the alter table statement");
         } else {
           // do nothing
@@ -1703,10 +1683,8 @@ int ObDDLResolver::resolve_column_definition_ref(ObColumnSchemaV2 &column,
   ObString name;
   if (OB_ISNULL(node)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parser tree!", K(ret), K(node));
   } else if (T_COLUMN_REF != node->type_ || 3 != node->num_child_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parser tree!", K(ret), K(node->type_), K(node->num_child_));
   } else {
     ParseNode *db_name_node = node->children_[0];
     ParseNode *table_name_node = node->children_[1];
@@ -1714,7 +1692,6 @@ int ObDDLResolver::resolve_column_definition_ref(ObColumnSchemaV2 &column,
       ObString dbname(db_name_node->str_len_, db_name_node->str_value_);
       if (0 != dbname.compare(database_name_)) {
         ret = OB_WRONG_DB_NAME;
-        LOG_WARN("invalid database name", K(ret));
         LOG_USER_ERROR(OB_WRONG_DB_NAME, dbname.length(), dbname.ptr());
       }
     }
@@ -1723,7 +1700,6 @@ int ObDDLResolver::resolve_column_definition_ref(ObColumnSchemaV2 &column,
       ObString table_name(table_name_node->str_len_, table_name_node->str_value_);
       if (0 != table_name.compare(table_name_)) {
         ret = OB_WRONG_TABLE_NAME;
-        LOG_WARN("invalid table name", K(ret));
         LOG_USER_ERROR(OB_WRONG_TABLE_NAME, table_name.length(), table_name.ptr());
       }
     }
@@ -1744,7 +1720,6 @@ int ObDDLResolver::resolve_column_name(common::ObString &col_name, ParseNode *no
   int ret = OB_SUCCESS;
   if (OB_ISNULL(node) || T_IDENT != node->type_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parser tree", K(ret));
   } else {
     col_name.assign_ptr(node->str_value_, node->str_len_);
     int32_t name_length = col_name.length();
@@ -1824,7 +1799,6 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
     type_node = node->children_[1];
     if (OB_ISNULL(type_node)) {
       ret = OB_ERR_INVALID_DATATYPE;
-      LOG_WARN("type_node is invalid", K(ret));
     } else if (OB_UNLIKELY(!ob_is_valid_obj_type(static_cast<ObObjType>(type_node->type_)))) {
       ret = OB_ERR_INVALID_DATATYPE;
       SQL_RESV_LOG(WARN, "type_node or stmt_ or datatype is invalid", K(ret), K(type_node->type_));
@@ -1904,7 +1878,6 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
     ParseNode *expr_node = NULL;
     if (OB_ISNULL(expr_node = node->children_[3])) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("expr_node is null");
     } else {
       ObString expr_str(expr_node->str_len_, expr_node->str_value_);
       ObObj default_value;
@@ -1915,7 +1888,6 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
       IS_NO_BACKSLASH_ESCAPES(session_info_->get_sql_mode(), is_no_backslash_escapes);
       if (is_no_backslash_escapes &&
           OB_FAIL(ObSQLUtils::convert_escape_char(*allocator_, expr_str, expr_str))) {
-        LOG_WARN("convert escape char fail", K(ret));
       } else if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(*allocator_,
                                                     session_info_->get_dtc_params(), expr_str))) {
       } else {
@@ -1973,21 +1945,15 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
             const ObTableSchema *table_schema = NULL;
             if (OB_ISNULL(schema_checker_)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("schema checker ptr is null", K(ret));
             } else if (OB_ISNULL(session_info_)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("session_info_ is null", K(ret));
             } else if (is_modify_column
                        && OB_FAIL(schema_checker_->get_table_schema(column.get_table_id(),
                             table_schema))) {
-              LOG_WARN("get_table_schema failed", K(ret), K(column.get_table_id()));
             } else if (is_modify_column && is_sys_database_id(table_schema->get_database_id())) {
               // The visibility of a column from a table owned by a SYS user cannot be modified to
               // invisible, but can be modified to visible
               ret = OB_ERR_MODIFY_COL_VISIBILITY_BY_SYS_USER;
-              LOG_WARN(
-                "The visibility of a column from a table owned by a SYS user cannot be changed.",
-                K(ret));
             } else {
               column.add_column_flag(INVISIBLE_COLUMN_FLAG);
             }
@@ -2040,7 +2006,6 @@ int ObDDLResolver::resolve_normal_column_attribute_constr_default(ObColumnSchema
     // default value expression is not literal
     if (OB_ISNULL(session_info_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("session info is NULL", KR(ret));
     } else {
       ObString expr_str(attr_node->str_len_, attr_node->str_value_);
       if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
@@ -2114,7 +2079,6 @@ int ObDDLResolver::resolve_normal_column_attribute(ObColumnSchemaV2 &column,
 
     if (OB_ISNULL(attrs_node)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("attrs_node is invalid", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < attrs_node->num_child_; ++i) {
       ParseNode *attr_node = attrs_node->children_[i];
@@ -2183,7 +2147,6 @@ int ObDDLResolver::resolve_normal_column_attribute(ObColumnSchemaV2 &column,
       case T_CONSTR_DEFAULT: {
         if (!allow_has_default) {
           ret = OB_ERR_DEFAULT_NOT_ALLOWED;
-          LOG_WARN("Virtual column cannot have a default value", K(ret), K(column));
         } else if (OB_FAIL(resolve_normal_column_attribute_constr_default(column, attr_node, resolve_stat,
                                                                    default_value, is_set_cur_default))) {
         }
@@ -2234,7 +2197,6 @@ int ObDDLResolver::resolve_normal_column_attribute(ObColumnSchemaV2 &column,
             int16_t scale = 0;
             if (OB_UNLIKELY(NULL == attr_node->children_[0] || 1 != attr_node->children_[0]->num_child_)) {
               ret = OB_INVALID_ON_UPDATE;
-              LOG_WARN("invalid argument", K(ret), K(attr_node->children_[0]));
             } else {
               if (NULL != attr_node->children_[0]->children_[0]) {
                 scale = static_cast<int16_t>(attr_node->children_[0]->children_[0]->value_);
@@ -2268,7 +2230,6 @@ int ObDDLResolver::resolve_normal_column_attribute(ObColumnSchemaV2 &column,
           }
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("stmt_type is unexpected", K(ret), K(stmt_->get_stmt_type()));
         }
         break;
       }
@@ -2730,7 +2691,6 @@ int ObDDLResolver::resolve_lob_inrow_threshold(const ParseNode *option_node, con
     SQL_RESV_LOG(WARN, "session_info_ is null", K(ret));
   } else if (is_index_option) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("index option should not specify lob inrow threshold", K(ret));
   } else if (OB_ISNULL(option_node)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "option_node is null", K(ret));
@@ -2837,7 +2797,6 @@ int ObDDLResolver::cast_default_value(ObSQLSessionInfo *session_info,
             const ObScale scale = column_schema.get_data_scale();
             if (OB_ISNULL(cast_ctx.allocator_v2_)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("allocator is null", K(ret));
             } else if (OB_FAIL(wide::from_number(nmb, *cast_ctx.allocator_v2_, scale, decint, int_bytes))) {
             } else {
               default_value.set_decimal_int(int_bytes, scale, decint);
@@ -2952,7 +2911,6 @@ int ObDDLResolver::build_partition_key_info(ObTableSchema &table_schema,
   } else if (OB_UNLIKELY(qualified_names.count() <= 0)) {
     //no primary key, error now
     ret = OB_ERR_FIELD_NOT_FOUND_PART;
-    LOG_WARN("Field in list of fields for partition function not found in table", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < qualified_names.count(); ++i) {
       ObQualifiedName &q_name = qualified_names.at(i);
@@ -3065,7 +3023,6 @@ int ObDDLResolver::check_string_column_length(const ObColumnSchemaV2 &column, co
     const int64_t data_len = column.get_data_length();
     if (data_len < 0 || data_len > max_char_length) {
       ret = OB_ERR_TOO_LONG_COLUMN_LENGTH;
-      LOG_WARN("column data length is invalid", K(ret), K(max_char_length), "real_data_length", column.get_data_length());
       LOG_USER_ERROR(OB_ERR_TOO_LONG_COLUMN_LENGTH, column.get_column_name(), static_cast<int>(max_char_length));
     }
   } else if (ObVarcharType == column.get_data_type()) {
@@ -3082,14 +3039,12 @@ int ObDDLResolver::check_string_column_length(const ObColumnSchemaV2 &column, co
           data_len * mbmaxlen > OB_MAX_VARCHAR_LENGTH) {
         ret = OB_ERR_TOO_LONG_COLUMN_LENGTH;
         const uint64_t real_data_length = static_cast<uint64_t>(data_len);
-        LOG_WARN("column data length is invalid", K(ret), K(data_len), K(real_data_length), K(mbmaxlen));
         LOG_USER_ERROR(OB_ERR_TOO_LONG_COLUMN_LENGTH, column.get_column_name(),
             static_cast<int>(OB_MAX_VARCHAR_LENGTH/mbmaxlen));
       }
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("check_string_column_length failed", K(ret), K(column));
   }
   return ret;
 }
@@ -3165,8 +3120,6 @@ int ObDDLResolver::rewrite_text_length_mysql(ObObjType &type, int32_t &length)
   int32_t max_length = ObAccuracy::MAX_ACCURACY[type].get_length();
   if (length < 0 || length > max_length) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("length can not be less than 0 or larger than max_length",
-        K(ret), K(type), K(length), K(max_length));
   } else if (ob_is_text_tc(type) && max_length == length) {
     length = length - 1;
   }
@@ -3257,7 +3210,6 @@ int ObDDLResolver::is_gen_col_with_udf(const ObTableSchema &table_schema,
     LOG_WARN("unexpected column ref expr", KPC(static_cast<const ObColumnRefRawExpr *>(col_expr)));
   } else if(OB_ISNULL(col_schema = table_schema.get_column_schema(col_id))){
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("got null column schema", KPC(static_cast<const ObColumnRefRawExpr *>(col_expr)));
   } else {
     res = col_schema->is_generated_column_using_udf();
   }
@@ -3278,21 +3230,17 @@ int ObDDLResolver::resolve_part_func(ObResolverParams &params,
 
   if (OB_ISNULL(node)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL ptr", K(ret));
   } else if (T_EXPR_LIST == node->type_) {
     if (node->num_child_ < 1) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Partition fun node should not less than 1", K(ret));
     } else if (node->num_child_ > OB_MAX_PART_COLUMNS) {
       ret = OB_ERR_TOO_MANY_PARTITION_FUNC_FIELDS;
-      LOG_WARN("Too may partition func fields", K(ret));
     } else {
       ObRawExpr *func_expr = NULL;
       for (int64_t i = 0; OB_SUCC(ret) && i < node->num_child_; i++) {
         func_expr = NULL;
         if (OB_ISNULL(node->children_[i])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("node is null", K(ret));
         } else if (OB_UNLIKELY(T_EXPR_LIST == node->children_[i]->type_)) {
           ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
           LOG_WARN("row expr as partition function is not allowed for hash/range/list partition");
@@ -3327,7 +3275,6 @@ int ObDDLResolver::resolve_part_func(ObResolverParams &params,
     } else if (OB_FAIL(part_func_exprs.push_back(func_expr))) {
     } else if (partition_keys.count() > OB_MAX_PART_COLUMNS) {
       ret = OB_ERR_TOO_MANY_PARTITION_FUNC_FIELDS;
-      LOG_WARN("too may partition func fields", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -3363,7 +3310,6 @@ int ObDDLResolver::check_partition_name_duplicate(ParseNode *node)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(node)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node is null", K(ret));
   } else {
     ObPartitionNameSet *partition_name_set = nullptr;
     void *buf = nullptr;
@@ -3373,25 +3319,21 @@ int ObDDLResolver::check_partition_name_duplicate(ParseNode *node)
     if (OB_ISNULL(buf = allocator_->alloc(sizeof(
               ObPartitionNameSet)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to allocate memory", KR(ret));
     } else {
       partition_name_set = new(buf)ObPartitionNameSet();
     }
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(partition_name_set)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("partition name hash set is null", KR(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < partition_num; i++) {
       element_node = partition_expr_list->children_[i];
       if (OB_ISNULL(element_node)
           || OB_ISNULL(element_node->children_[PARTITION_ELEMENT_NODE])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("partition expr list node is null", K(ret), K(element_node));
       } else if (OB_ISNULL(element_node->children_[PARTITION_NAME_NODE])
             || OB_ISNULL(element_node->children_[PARTITION_NAME_NODE]->children_[NAMENODE])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("partition expr list node is null", K(ret), K(element_node));
       } else {
         ObString partition_name;
         if (OB_NOT_NULL(element_node->children_[PARTITION_NAME_NODE])) {
@@ -3422,7 +3364,6 @@ int ObDDLResolver::resolve_collection_column(const ParseNode *type_node, ObColum
       || OB_ISNULL(allocator_)
       || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("type node is NULL", K(ret), K(type_node), K(session_info_));
   } else if (OB_FAIL(ObResolverUtils::resolve_collection_type_info(*type_node, buf, depth))) {
   } else if (OB_FAIL(type_info_array.push_back(buf.string()))) {
   } else if (OB_FAIL(column.set_extended_type_info(type_info_array))) {
@@ -3462,10 +3403,8 @@ int ObDDLResolver::resolve_enum_or_set_column(const ParseNode *type_node, ObColu
       || OB_ISNULL(allocator_)
       || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("type node is NULL", K(ret), K(type_node), K(session_info_));
   } else if (OB_ISNULL(type_node->children_[3])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child is NULL", K(ret));
   } else if (OB_FAIL(fill_extended_type_info(*(type_node->children_[3]), column))) {
   } else if (stmt::T_ALTER_TABLE == stmt_->get_stmt_type()) {
     //The following operations may depend on the charset of the table, therefore alter table should be completed in RS.
@@ -3485,7 +3424,6 @@ int ObDDLResolver::calc_enum_or_set_data_length(const ObIArray<common::ObString>
   int32_t cur_len = 0;
   if (OB_UNLIKELY(ObEnumType != type && ObSetType != type)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected column type", K(ret));
   } else if (ObEnumType == type) {
     for (int64_t i = 0; OB_SUCC(ret) && i < type_info.count(); ++i) {
       const ObString &type_str = type_info.at(i);
@@ -3540,11 +3478,9 @@ int ObDDLResolver::check_type_info_incremental_change(const ObColumnSchemaV2 &or
   const ObIArray<common::ObString> &new_type_info = new_schema.get_extended_type_info();
   if (OB_UNLIKELY(ori_schema.get_charset_type() != new_schema.get_charset_type())) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not support", K(ret), K(ori_schema), K(new_schema));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "change column charset");
   } else if (OB_UNLIKELY(ori_schema.get_collation_type() != new_schema.get_collation_type())) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not support", K(ret), K(ori_schema), K(new_schema));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "change column collation");
   } else if (new_type_info.count() < ori_type_info.count()) {
     is_incremental = false;
@@ -3566,12 +3502,10 @@ int ObDDLResolver::cast_enum_or_set_default_value(const ObColumnSchemaV2 &column
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!def_val.is_string_type())) {
     ret = OB_INVALID_DEFAULT;
-    LOG_WARN("invalid default value type", K(def_val), K(ret));
     LOG_USER_ERROR(OB_INVALID_DEFAULT, column.get_column_name_str().length(),
                    column.get_column_name_str().ptr());
   } else if (OB_UNLIKELY(!ob_is_enumset_tc(column.get_data_type()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected column type", K(column), K(ret));
   } else {
     ObExpectType expect_type;
     expect_type.set_type(column.get_data_type());
@@ -3579,7 +3513,6 @@ int ObDDLResolver::cast_enum_or_set_default_value(const ObColumnSchemaV2 &column
     expect_type.set_type_infos(&column.get_extended_type_info());
     if (OB_FAIL(ObObjCaster::to_type(expect_type, cast_ctx, def_val, def_val))) {
       ret = OB_INVALID_DEFAULT;
-      LOG_WARN("fail to cast to enum or set", K(def_val), K(expect_type), K(ret));
       LOG_USER_ERROR(OB_INVALID_DEFAULT, column.get_column_name_str().length(),
                      column.get_column_name_str().ptr());
     }
@@ -3594,7 +3527,6 @@ int ObDDLResolver::print_expr_to_default_value(ObRawExpr &expr,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(schema_checker)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   }
   HEAP_VAR(char[OB_MAX_DEFAULT_VALUE_LENGTH], expr_str_buf) {
     MEMSET(expr_str_buf, 0, sizeof(expr_str_buf));
@@ -3633,7 +3565,6 @@ int ObDDLResolver::init_empty_session(const common::ObTimeZoneInfoWrap &tz_info_
   const ObDatabaseSchema *db_schema = NULL;
   if (OB_ISNULL(schema_checker)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null schema checker", K(ret));
   } else if (OB_FAIL(empty_session.test_init(0, 0, &allocator))) {
   } else if (OB_FAIL(schema_checker->get_schema_guard()->get_server_runtime_info(runtime_schema))) {
   } else if (OB_FAIL(empty_session.init_runtime(runtime_schema->get_runtime_name_str()))) {
@@ -3643,7 +3574,6 @@ int ObDDLResolver::init_empty_session(const common::ObTimeZoneInfoWrap &tz_info_
   } else if (OB_FAIL(schema_checker->get_database_schema(table_schema.get_database_id(), db_schema))) {
   } else if (OB_ISNULL(db_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("database info is null", K(ret));
   } else {
     ObSessionDDLInfo ddl_info;
     ddl_info.set_ddl_check_default_value(true);
@@ -3785,7 +3715,6 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
   const ObObj input_default_value = default_value;
   if (OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else if (column.is_generated_column()) {
     ObString expr_str;
     ObRawExpr *expr = NULL;
@@ -3862,7 +3791,6 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(tmp_res_obj)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("cast obj failed, ", "src type", tmp_default_value.get_type(), "dest type", data_type, K(tmp_default_value), K(ret));
     } else if (OB_FAIL(obj_collation_check(cast_ctx, is_strict, collation_type,
                                            *const_cast<ObObj*>(tmp_res_obj)))) {
     } else if (OB_FAIL(obj_accuracy_check(cast_ctx, accuracy, collation_type, *tmp_res_obj, tmp_dest_obj, tmp_res_obj))) {
@@ -3951,7 +3879,6 @@ int ObDDLResolver::calc_default_value(share::schema::ObColumnSchemaV2 &column,
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("UnKnown type!", "default value type", column.get_data_type(), K(ret));
         break;
       }
     }
@@ -3977,10 +3904,8 @@ int ObDDLResolver::calc_default_value(share::schema::ObColumnSchemaV2 &column,
       if (OB_FAIL(empty_session.test_init(0, 0, &allocator))) {
       } else if (false) {
         ret = OB_NOT_INIT;
-        LOG_WARN("module provider is not installed", K(ret));
       } else if (OB_ISNULL(lob_read_service = ::oceanbase::share::server_service<::oceanbase::common::ObILobReadService>())) {
         ret = OB_NOT_INIT;
-        LOG_WARN("LOB read service is not installed", K(ret));
       } else if (FALSE_IT(exec_ctx.set_my_session(&empty_session))) {
       } else if (FALSE_IT(exec_ctx.set_lob_read_service(lob_read_service))) {
       } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(guard))) {
@@ -3991,7 +3916,6 @@ int ObDDLResolver::calc_default_value(share::schema::ObColumnSchemaV2 &column,
       } else if (OB_FAIL(empty_session.set_tz_info_wrap(tz_info_wrap))) {
       } else if (FALSE_IT(empty_session.set_sql_mode(DEFAULT_MYSQL_MODE))) {
       } else if (FALSE_IT(empty_session.set_ddl_info(ddl_info))) {
-        LOG_WARN("fail to set ddl_info", K(ret));
       } else if (OB_FAIL(default_value.get_string(expr_str))) {
       } else if (OB_FAIL(ObResolverUtils::resolve_default_expr_v2_column_expr(params, expr_str,
                                             column, expr))) {
@@ -4034,7 +3958,6 @@ int ObDDLResolver::calc_default_value(share::schema::ObColumnSchemaV2 &column,
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("it should not arrive here", K(ret), K(default_value), K(column), K(lbt()));
   }
   return ret;
 
@@ -4081,9 +4004,6 @@ int ObDDLResolver::ob_add_ddl_dependency(const uint64_t schema_id,
           // same schema do nothing
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("error default dependency item with different schema",
-                  K(ret), K(schema_id), K(schema_type), K(schema_version),
-                  K(info.schema_version_));
         }
       }
     }
@@ -4120,7 +4040,6 @@ int ObDDLResolver::add_default_expr_dependency(ObRawExpr *expr,
   if (OB_ISNULL(expr)) {
   } else if (OB_ISNULL(schema_checker) || OB_ISNULL(schema_checker->get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("need schema checker to validate default expression dependency", K(ret));
   } else {
     bool need_dependency = false;
     ObSchemaObjVersion obj_version;
@@ -4143,18 +4062,13 @@ int ObDDLResolver::add_default_expr_dependency(ObRawExpr *expr,
       if (schema_type != PACKAGE_SCHEMA
           && schema_type != ROUTINE_SCHEMA) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("error default dependency item", K(ret), K(object_id), K(schema_type), K(schema_version));
       } else if (OB_FAIL(schema_checker->get_schema_version(object_id,
                                                             schema_type,
                                                             schema_check_version))) {
       } else if (OB_INVALID_VERSION == schema_check_version) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to get_schema_version, schema may not exist",
-                 K(ret), K(object_id), K(schema_type));
       } else if (schema_version != schema_check_version) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("schema_version validation failed", K(ret),
-        K(object_id), K(schema_type), K(schema_version), K(schema_check_version));
       } else if (OB_FAIL(ob_add_ddl_dependency(object_id,
                                                schema_type,
                                                schema_version,
@@ -4188,19 +4102,14 @@ int ObDDLResolver::get_udt_column_default_values(const ObObj &default_value,
   const ObObj input_default_value = default_value;
   if (OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else if (!(column.is_extend())) {
     // do nothing
   } else if (column.is_generated_column()) {
     ret = OB_ERR_INVALID_VIRTUAL_COLUMN_TYPE;
-    LOG_WARN("udt columns cannot be generated columns",
-             K(ret), K(column), K(default_value));
   } else if (default_value.is_null()) {
     // do nothing
   } else if (!column.is_default_expr_v2_column()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("udt columns is not default expr v2 column",
-             K(ret), K(column), K(default_value));
   } else {
     extend_result.set_null();
     ObString expr_str;
@@ -4245,7 +4154,6 @@ int ObDDLResolver::get_udt_column_default_values(const ObObj &default_value,
     } else if(OB_FAIL(ObObjCaster::to_type(data_type, cast_ctx, tmp_default_value, tmp_dest_obj, tmp_res_obj))) {
     } else if (OB_ISNULL(tmp_res_obj)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("cast obj failed, ", "src type", tmp_default_value.get_type(), "dest type", data_type, K(tmp_default_value), K(ret));
     } else if (OB_FAIL(obj_collation_check(cast_ctx, is_strict, collation_type,
                                            *const_cast<ObObj*>(tmp_res_obj)))) {
     } else if (OB_FAIL(obj_accuracy_check(cast_ctx, accuracy, collation_type, *tmp_res_obj, tmp_dest_obj, tmp_res_obj))) {
@@ -4304,7 +4212,6 @@ int ObDDLResolver::fill_column_with_subschema(const ObRawExpr &expr,
                                                       enum_set_meta))) {
     } else if (OB_ISNULL(enum_set_meta)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(column.set_extended_type_info(*enum_set_meta->get_str_values()))) {
     } else {
       column.set_meta_type(enum_set_meta->get_obj_meta());
@@ -4318,7 +4225,6 @@ int ObDDLResolver::fill_column_with_subschema(const ObRawExpr &expr,
     if (OB_FAIL(session_info.get_cur_exec_ctx()->get_sqludt_meta_by_subschema_id(subschema_id, value))) {
     } else if (OB_ISNULL(coll_info = reinterpret_cast<const ObSqlCollectionInfo *>(value.value_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(column.add_type_info(coll_info->get_def_string()))) {
     }
   }
@@ -4336,10 +4242,8 @@ int ObDDLResolver::resolve_range_partition_elements(ParseNode *node,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(node) || OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node is null or stmt is null", K(ret), K(node), KP(stmt_));
   } else if (expr_num <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("expr num is invalid", K(ret), K(expr_num));
   } else {
     int64_t partition_num = node->num_child_;
     ParseNode *partition_expr_list = node;
@@ -4353,7 +4257,6 @@ int ObDDLResolver::resolve_range_partition_elements(ParseNode *node,
       if (OB_ISNULL(element_node)
           || OB_ISNULL(element_node->children_[PARTITION_ELEMENT_NODE])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("partition expr list node is null", K(ret), K(element_node));
       } else {
         ObString partition_name;
         ObBasePartition *target_partition = is_subpartition ?
@@ -4367,7 +4270,6 @@ int ObDDLResolver::resolve_range_partition_elements(ParseNode *node,
         ParseNode *expr_list_node = element_node->children_[PARTITION_ELEMENT_NODE];
         if (T_EXPR_LIST != expr_list_node->type_) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("expr_list_node->type_ is not T_EXPR_LIST", K(ret));
         } else if (expr_num != expr_list_node->num_child_) {
           ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
           LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret), K(expr_num), "num_child", expr_list_node->num_child_);
@@ -4407,12 +4309,10 @@ int ObDDLResolver::resolve_range_value_exprs(ParseNode *expr_list_node,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr_list_node)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node is null or stmt is null", K(ret), K(expr_list_node));
   } else {
     for (int64_t j = 0; OB_SUCC(ret) && j < expr_list_node->num_child_; j++) {
       if (OB_ISNULL(expr_list_node->children_[j])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("node is null", K(ret));
       } else if (T_MAXVALUE == expr_list_node->children_[j]->type_) {
         ObRawExpr *maxvalue_expr = NULL;
         ObConstRawExpr *c_expr = NULL;
@@ -4428,7 +4328,6 @@ int ObDDLResolver::resolve_range_value_exprs(ParseNode *expr_list_node,
         }
       } else if (T_NULL == expr_list_node->children_[j]->type_) {
         ret = OB_EER_NULL_IN_VALUES_LESS_THAN;
-        LOG_WARN("null value is not allowed in less than", K(ret));
       } else if (T_EXPR_LIST != expr_list_node->children_[j]->type_) {
         ObRawExpr *part_value_expr = NULL;
         if (OB_FAIL(ObResolverUtils::resolve_partition_range_value_expr(
@@ -4441,7 +4340,6 @@ int ObDDLResolver::resolve_range_value_exprs(ParseNode *expr_list_node,
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expr_node type is error", K(ret));
       }
     }
   }
@@ -4462,7 +4360,6 @@ int ObDDLResolver::resolve_spatial_index_constraint(
   const ObColumnSchemaV2 *column_schema = NULL;
   if (OB_ISNULL(session_info_) || OB_ISNULL(allocator_) || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(session_info_), K(allocator_));
   } else if (is_func_index) {
     ObRawExprFactory expr_factory(*allocator_);
     ObRawExpr *expr = NULL;
@@ -4477,13 +4374,10 @@ int ObDDLResolver::resolve_spatial_index_constraint(
                                                             resolved_cols))) {
     } else if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to build generated column expr", K(ret));
     } else if (expr->is_column_ref_expr()) {
       ret = OB_ERR_FUNCTIONAL_INDEX_ON_FIELD;
-      LOG_WARN("Functional index on a column is not supported.", K(ret), K(column_name));
     } else if (index_keyname_value == static_cast<int64_t>(INDEX_KEYNAME::SPATIAL_KEY)) {
       ret = OB_ERR_SPATIAL_FUNCTIONAL_INDEX;
-      LOG_WARN("Spatial functional index is not supported.", K(ret), K(column_name));
     } else {
       //do nothing, check result type of expr on rootserver later
     }
@@ -4496,7 +4390,6 @@ int ObDDLResolver::resolve_spatial_index_constraint(
         ObColumnSchemaV2* tmp_col_schema = resolved_cols->at(i);
         if (OB_ISNULL(tmp_col_schema)) {
           ret = OB_BAD_NULL_ERROR;
-          LOG_WARN("should not be null.", K(i), K(resolved_cols->count()), K(ret));
         } else {
           ObSchemaNameComparator column_name_cmp;
           if (0 == column_name_cmp.compare(column_name, tmp_col_schema->get_column_name_str())) {
@@ -4557,7 +4450,6 @@ int ObDDLResolver::resolve_spatial_index_constraint(
     } else {
       ret = OB_ERR_SPATIAL_MUST_HAVE_GEOM_COL;
       LOG_USER_ERROR(OB_ERR_SPATIAL_MUST_HAVE_GEOM_COL);
-      LOG_WARN("spatial index can only be built on spatial column", K(ret), K(column_schema));
     }
   } else {
     if (is_spatial_index) { // has 'SPATIAL' keyword
@@ -4566,7 +4458,6 @@ int ObDDLResolver::resolve_spatial_index_constraint(
       } else {
         ret = OB_ERR_SPATIAL_MUST_HAVE_GEOM_COL;
         LOG_USER_ERROR(OB_ERR_SPATIAL_MUST_HAVE_GEOM_COL);
-        LOG_WARN("spatial index can only be built on spatial column", K(ret), K(column_schema));
       }
     } else if (is_default_index) {
       if (is_geo_column) {
@@ -4578,8 +4469,6 @@ int ObDDLResolver::resolve_spatial_index_constraint(
       if (is_geo_column) {
         ret = OB_ERR_SPATIAL_UNIQUE_INDEX;
         LOG_USER_ERROR(OB_ERR_SPATIAL_UNIQUE_INDEX);
-        LOG_WARN("spatial column can only be indexed spatial index, can't build other index.",
-            K(ret), K(column_schema));
       } else {
         // do nothing
       }
@@ -4592,7 +4481,6 @@ int ObDDLResolver::resolve_spatial_index_constraint(
       LOG_USER_ERROR(OB_ERR_TOO_MANY_ROWKEY_COLUMNS, OB_USER_MAX_ROWKEY_COLUMN_NUMBER);
     } else if (is_prefix_index) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("Spatial index doesn't support unique prefix keys.", K(ret));
     } else if (column_schema.is_virtual_generated_column()) {
       ret = OB_ERR_UNSUPPORTED_ACTION_ON_GENERATED_COLUMN;
       LOG_USER_ERROR(OB_ERR_UNSUPPORTED_ACTION_ON_GENERATED_COLUMN, column_schema.get_column_name());
@@ -4602,7 +4490,6 @@ int ObDDLResolver::resolve_spatial_index_constraint(
     } else if (column_schema.is_nullable()) {
       ret = OB_ERR_SPATIAL_CANT_HAVE_NULL;
       LOG_USER_ERROR(OB_ERR_SPATIAL_CANT_HAVE_NULL);
-      LOG_WARN("column of a spatial index must be NOT NULL.", K(ret), K(column_schema));
     }
   }
 
@@ -4621,10 +4508,8 @@ int ObDDLResolver::resolve_vec_index_constraint(
     // do nothing
   } else if (!column_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argumnet", K(ret), K(column_schema));
   } else if (column_schema.is_generated_column()) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("vector index column is generate column is not supported", K(ret), K(column_schema));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "Using generate column as vector index column is");
   } else {
     bool is_sparse_vec_col = false;
@@ -4639,17 +4524,14 @@ int ObDDLResolver::resolve_vec_index_constraint(
           column_schema.get_column_name_str().ptr());
       LOG_WARN("vector index can only be built on vector column", K(ret), K(column_schema), K(ob_obj_type_class(column_schema.get_data_type())));
     } else if (!is_text_column && OB_FAIL(ObVectorIndexUtil::is_sparse_vec_col(column_schema.get_extended_type_info(), is_sparse_vec_col))) {
-      LOG_WARN("fail to check is sparse vec col", K(ret));
     }
 
     if (OB_SUCC(ret)) {
       int64_t dim = 0;
 
       if (!is_text_column && !is_sparse_vec_col && OB_FAIL(ObVectorIndexUtil::get_vector_dim_from_extend_type_info(column_schema.get_extended_type_info(), dim))) {
-        LOG_WARN("fail to get vector dim", K(ret), K(column_schema));
       } else if (!is_text_column && !is_sparse_vec_col && dim > MAX_DIM_LIMITED) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("vector index dim larger than 4096 is not supported", K(ret));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "vec index dim larger than 4096 is");
       } else {
         index_keyname_ = VEC_KEY;
@@ -4695,10 +4577,8 @@ int ObDDLResolver::resolve_fts_index_constraint(
   const ObColumnSchemaV2 *column_schema = NULL;
   if (!table_schema.is_valid() || column_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argumnet", K(ret), K(table_schema), K(column_name));
   } else if (OB_ISNULL(session_info_) || OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(session_info_), K(allocator_));
   } else if (OB_ISNULL(column_schema = table_schema.get_column_schema(column_name))) {
     ret = OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
     LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS,
@@ -4723,10 +4603,8 @@ int ObDDLResolver::resolve_vec_index_constraint(
   ObIndexType index_type = INDEX_TYPE_MAX;
   if (!table_schema.is_valid() || column_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argumnet", K(ret), K(table_schema), K(column_name));
   } else if (OB_ISNULL(session_info_) || OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(session_info_), K(allocator_));
   } else if (OB_ISNULL(column_schema = table_schema.get_column_schema(column_name))) {
     ret = OB_ERR_KEY_COLUMN_DOES_NOT_EXITS;
     LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS,
@@ -4739,7 +4617,6 @@ int ObDDLResolver::resolve_vec_index_constraint(
                                                                       index_type))) {
   } else if (is_column_has_vector_index) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("create vector index on column has vector index is not supported", K(ret), K(column_name));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "create vector index on column has vector index is");
   } else if (OB_FAIL(resolve_vec_index_constraint(*column_schema,
                                                   index_keyname_value,
@@ -4760,7 +4637,6 @@ int ObDDLResolver::resolve_fts_index_constraint(
   int ret = OB_SUCCESS;
   if (!column_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argumnet", K(ret), K(column_schema));
   } else {
     bool is_fts_index =
          (index_keyname_value == static_cast<int64_t>(INDEX_KEYNAME::FTS_KEY));
@@ -4771,7 +4647,6 @@ int ObDDLResolver::resolve_fts_index_constraint(
     } else if (!is_text_column) {
       ret = OB_ERR_FTS_MUST_HAVE_TEXT_COL;
       LOG_USER_ERROR(OB_ERR_FTS_MUST_HAVE_TEXT_COL);
-      LOG_WARN("fts index can only be built on text column", K(ret), K(column_schema));
     } else {
       index_keyname_ = FTS_KEY;
     }
@@ -4792,7 +4667,6 @@ int ObDDLResolver::resolve_multivalue_index_constraint(
   int ret = OB_SUCCESS;
   if (!column_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argumnet", K(ret), K(column_schema));
   } else {
     bool is_multival_index = (index_keyname_value == static_cast<int64_t>(INDEX_KEYNAME::MULTI_KEY)
                          || index_keyname_value == static_cast<int64_t>(INDEX_KEYNAME::MULTI_UNIQUE_KEY));
@@ -4871,7 +4745,6 @@ int ObDDLResolver::check_column_in_check_constraint(
           SQL_RESV_LOG(WARN, "check/not null cst don't have column info", KR(ret), K(**iter));
         } else if (OB_ISNULL(cst_column_schema = table_schema.get_column_schema(*cst_col_iter))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("can not find column", KR(ret), "col_id", *cst_col_iter, K(table_schema));
         } else if (OB_FAIL(cst_columns_name.push_back(cst_column_schema->get_column_name_str()))) {
         }
       }
@@ -4900,7 +4773,6 @@ int ObDDLResolver::check_column_in_check_constraint(
               } else if (OB_HASH_EXIST == ret) {
                 ret = OB_SUCCESS;
               } else {
-                LOG_WARN("exist refactored failed", KR(ret), K(cst_columns_name.at(i)));
               }
             }
           }
@@ -4978,7 +4850,6 @@ int ObDDLResolver::check_index_columns_equal_foreign_key(
       const uint64_t data_table_id = index_table_schema.get_data_table_id();
       if (0 == child_column_num) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expected foreign key columns num", K(ret), K(child_column_num));
       }
       if (OB_SUCC(ret)) {
         if (data_table_id == foreign_key_info.child_table_id_) {
@@ -5018,7 +4889,6 @@ int ObDDLResolver::check_indexes_on_same_cols(const ObTableSchema &table_schema,
     if (OB_FAIL(schema_checker.get_table_schema(simple_index_infos.at(i).table_id_, index_table_schema))) {
     } else if (OB_ISNULL(index_table_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table schema should not be null", K(ret));
     } else {
       ObSEArray<ObString, 8> index_columns_name;
       if (OB_FAIL(ObResolverUtils::get_columns_name_from_index_table_schema(*index_table_schema, index_columns_name))) {
@@ -5041,12 +4911,10 @@ int ObDDLResolver::check_indexes_on_same_cols(const ObTableSchema &table_schema,
       table_schema.get_column_name_by_column_id(pk_column_ids.at(i), column_name, is_column_exist);
       if (!is_column_exist) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("column is not exist", K(ret), K(table_schema), K(pk_column_ids.at(i)));
       } else if (OB_FAIL(pk_columns_names.push_back(column_name))) {
       }
     }
     if (FAILEDx(ObResolverUtils::check_match_columns(input_index_columns_name, pk_columns_names, has_other_indexes_on_same_cols))) {
-      LOG_WARN("Failed to check_match_columns", K(ret));
     }
   }
   return ret;
@@ -5065,18 +4933,15 @@ int ObDDLResolver::resolve_index_partition_node(
   if (OB_UNLIKELY(NULL == index_partition_node)
       || OB_UNLIKELY(NULL == crt_idx_stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(index_partition_node), KP(crt_idx_stmt));
   } else {
     ObTableSchema &index_schema = crt_idx_stmt->get_create_index_arg().index_schema_;
     if (NULL == index_partition_node) {
       // No partitioning method specified
     } else if (!global_) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("partitioned local index is not supported", K(ret));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "local index with partition option");
     } else if (!index_schema.is_global_index_table()) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("non global index with partition option not supported", K(ret), "index_type", index_schema.get_index_type());
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "non global index with partition option");
     } else if (OB_FAIL(resolve_partition_node(crt_idx_stmt, index_partition_node, index_schema))) {
     } else if (PARTITION_LEVEL_ZERO == index_schema.get_part_level()
@@ -5085,7 +4950,6 @@ int ObDDLResolver::resolve_index_partition_node(
     } else if (PARTITION_LEVEL_TWO == index_schema.get_part_level()) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "index with sub-partitions");
-      LOG_WARN("index table with two level partitions not support", K(ret));
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(check_key_cover_partition_column(crt_idx_stmt, index_schema))) {
@@ -5107,22 +4971,18 @@ int ObDDLResolver::check_key_cover_partition_keys(
     if (OB_FAIL(part_key_info.get_column_id(i, column_id))) {
     } else if (NULL == (column_schema = index_schema.get_column_schema(column_id))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("column schema is null", K(ret));
     } else if (column_schema->get_index_position() > 0) {
       if (is_range_part) {
         if (column_schema->get_index_position() != i + 1) {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("partition columns not prefix of index columns not support", K(ret));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "partition columns not prefix of index columns");
         }
       }
     } else if (!column_schema->is_generated_column()) {
       ret = OB_EER_UNIQUE_KEY_NEED_ALL_FIELDS_IN_PF;
-      LOG_WARN("global index should cover all partition column of global index", K(ret));
       LOG_USER_ERROR(OB_EER_UNIQUE_KEY_NEED_ALL_FIELDS_IN_PF, "GLOBAL INDEX");
     } else if (is_range_part) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("range partition on generated column in global index not support", K(ret));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "range partition on generated column in global index");
     } else if (OB_FAIL(column_schema->get_cascaded_column_ids(cascaded_columns))) {
     } else {
@@ -5131,12 +4991,10 @@ int ObDDLResolver::check_key_cover_partition_keys(
         const ObColumnSchemaV2 *cascaded_column = NULL;
         if (NULL == (cascaded_column = index_schema.get_column_schema(cascaded_column_id))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("column schema is null", K(ret));
         } else if (column_schema->get_index_position() > 0) {
           // good, caccaded column is part the index column
         } else {
           ret = OB_EER_UNIQUE_KEY_NEED_ALL_FIELDS_IN_PF;
-          LOG_WARN("global index should cover all partition column of global index", K(ret));
           LOG_USER_ERROR(OB_EER_UNIQUE_KEY_NEED_ALL_FIELDS_IN_PF, "GLOBAL INDEX");
         }
       }
@@ -5155,7 +5013,6 @@ int ObDDLResolver::check_key_cover_partition_column(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(NULL == crt_idx_stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (global_) {
     if (INDEX_TYPE_NORMAL_GLOBAL == crt_idx_stmt->get_create_index_arg().index_type_
         || INDEX_TYPE_UNIQUE_GLOBAL == crt_idx_stmt->get_create_index_arg().index_type_
@@ -5188,13 +5045,10 @@ int ObDDLResolver::generate_global_index_schema(
   ObTableSchema &index_schema = crt_idx_stmt->get_create_index_arg().index_schema_;
   if (OB_UNLIKELY(NULL == crt_idx_stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (!global_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("should not build global schema on a local index", K(ret));
   } else if (OB_UNLIKELY(NULL == schema_checker_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema checker ptr is null", K(ret));
   } else if (OB_FAIL(schema_checker_->get_table_schema(
           crt_idx_stmt->get_create_index_arg().database_name_,
           crt_idx_stmt->get_create_index_arg().table_name_,
@@ -5208,7 +5062,6 @@ int ObDDLResolver::generate_global_index_schema(
                "database_name", crt_idx_stmt->get_create_index_arg().database_name_,
                "table_name", crt_idx_stmt->get_create_index_arg().table_name_);
     } else {
-      LOG_WARN("fail to get table schema", K(ret));
     }
   } else if (OB_UNLIKELY(NULL == table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
@@ -5239,12 +5092,10 @@ int ObDDLResolver::generate_global_index_schema(
               my_create_index_arg, new_table_schema, *allocator_, gen_columns))) {
       } else if (share::schema::is_fts_index(my_create_index_arg.index_type_) &&
                  OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_parser_name_and_property(*table_schema, my_create_index_arg, allocator_))) {
-        LOG_WARN("failed to genearte fts parser name", K(ret));
       } else if (share::schema::is_vec_index(my_create_index_arg.index_type_) &&
                  OB_FAIL((ObVecIndexBuilderUtil::generate_vec_index_name(allocator_, my_create_index_arg.index_type_,
                                                                         my_create_index_arg.index_name_,
                                                                         my_create_index_arg.index_name_)))) {
-        LOG_WARN("failed to genearte vec parser name", K(ret));
       } else if (OB_FAIL(do_generate_global_index_schema(
               my_create_index_arg, new_table_schema))) {
       } else if (OB_FAIL(index_schema.assign(my_create_index_arg.index_schema_))){
@@ -5311,7 +5162,6 @@ int ObDDLResolver::resolve_check_constraint_node(
         if (OB_FAIL(ret)) {
         } else if (cst_name.length() > OB_MAX_CONSTRAINT_NAME_LENGTH_MYSQL) {
           ret = OB_ERR_TOO_LONG_IDENT;
-          LOG_WARN("constraint_name length overflow", K(ret), K(cst_name.length()));
         }
         //check if cst name is duplicate
         for (int64_t i = 0; OB_SUCC(ret) && i < csts.count() && !need_reset_generated_name; ++i) {
@@ -5321,7 +5171,6 @@ int ObDDLResolver::resolve_check_constraint_node(
             } else {
               ret = OB_ERR_CONSTRAINT_NAME_DUPLICATE;
               LOG_USER_ERROR(OB_ERR_CONSTRAINT_NAME_DUPLICATE, cst_name.length(), cst_name.ptr());
-              LOG_WARN("duplicate check constraint name", K(ret), K(cst_name));
             }
           }
         }
@@ -5333,7 +5182,6 @@ int ObDDLResolver::resolve_check_constraint_node(
         if (OB_FAIL(get_table_schema_for_check(tbl_schema))) {
         } else if (OB_ISNULL(tbl_schema)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("table schema is NULL", K(ret));
         } else {
           if (OB_FAIL(check_is_json_contraint(*tbl_schema, csts, cst_check_expr_node))) {
           } else if (OB_FAIL(cst.set_constraint_name(cst_name))) {
@@ -5372,7 +5220,6 @@ int ObDDLResolver::check_is_json_contraint(const ObTableSchema &t_table_schema,
     ObString col_str(cur_node->str_len_, cur_node->str_value_);
     if (OB_ISNULL(column_schema = t_table_schema.get_column_schema(col_str))) {
       // ignore ret
-      LOG_WARN("get column schema fail", K(ret));
     } else {
       col_id = column_schema->get_column_id();
       const ParseNode *node = NULL;
@@ -5387,7 +5234,6 @@ int ObDDLResolver::check_is_json_contraint(const ObTableSchema &t_table_schema,
             } else {
               if (node->type_ == T_FUN_SYS_IS_JSON) {
                 ret = OB_ERR_ADDITIONAL_IS_JSON;
-                LOG_WARN("cannot add additional is json check constraint", K(ret));
               }
             }
           }
@@ -5405,7 +5251,6 @@ int ObDDLResolver::check_is_json_contraint(const ObTableSchema &t_table_schema,
             } else {
               if (node->type_ == T_FUN_SYS_IS_JSON) {
                 ret = OB_ERR_ADDITIONAL_IS_JSON;
-                LOG_WARN("cannot add additional is json check constraint", K(ret));
               }
             }
           }
@@ -5483,7 +5328,6 @@ int ObDDLResolver::resolve_pk_constraint_node(const ParseNode &pk_cst_node,
     ObConstraint cst;
     if (cst_name.length() > OB_MAX_EXTENDED_CONSTRAINT_NAME_LENGTH) {
       ret = OB_ERR_TOO_LONG_IDENT;
-      LOG_WARN("constraint_name length overflow", K(ret), K(cst_name.length()));
     } else {
       //ObTableSchema tmp_table_schema;
       if (csts.end() != std::find_if(csts.begin(), csts.end(),
@@ -5491,7 +5335,6 @@ int ObDDLResolver::resolve_pk_constraint_node(const ParseNode &pk_cst_node,
                      return cst_name == cst.get_constraint_name_str();
                    })) {
         ret = OB_ERR_CONSTRAINT_NAME_DUPLICATE;
-        LOG_WARN("duplicate constraint name", K(ret), K(cst_name));
       } else if (OB_FAIL(cst.set_constraint_name(cst_name))) {
       } else {
         cst.set_name_generated_type(is_sys_generated_cst_name ? GENERATED_TYPE_SYSTEM : GENERATED_TYPE_USER);
@@ -5516,7 +5359,6 @@ int ObDDLResolver::resolve_check_constraint_expr(
   check_expr = NULL;
   if (OB_ISNULL(node)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("NULL ptr", K(node));
   } else {
     if (OB_FAIL(ObResolverUtils::resolve_check_constraint_expr(params, node,
                                                                table_schema,
@@ -5525,7 +5367,6 @@ int ObDDLResolver::resolve_check_constraint_expr(
                                                                column_schema))) {
         } else if (OB_ISNULL(check_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("check_expr is null", K(ret));
     }
   }
   return ret;
@@ -5658,13 +5499,11 @@ int ObDDLResolver::resolve_foreign_key_node(const ParseNode *node,
         // self-reference, do nothing
     } else if (OB_ISNULL(schema_checker_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema checker ptr is null", K(ret));
     } else {
       const ObTableSchema *tbl_schema = NULL;
       if (OB_FAIL(schema_checker_->get_table_schema(arg.parent_database_, arg.parent_table_, false, tbl_schema))) {
       } else if (OB_ISNULL(tbl_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("table schema is null", K(ret), K(arg.parent_database_), K(arg.parent_table_));
       }
     }
   }
@@ -5883,7 +5722,6 @@ int ObDDLResolver::check_foreign_key_reference(
                                                     child_table_schema))) {
       } else if (OB_ISNULL(child_table_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("parent table schema is null", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -5904,7 +5742,6 @@ int ObDDLResolver::check_foreign_key_reference(
             if (0 != database_name.case_compare(database_name_)) {
               ret = OB_NOT_SUPPORTED;
               LOG_USER_ERROR(OB_NOT_SUPPORTED, "parent table and child table in foreign key belong to different databases");
-              LOG_WARN("create mock fk parent table which has child tables in different database not supported", K(ret), K(database_name), K(database_name_));
             } else {
               ret = OB_SUCCESS;
               arg.is_parent_table_mock_ = true;
@@ -5913,19 +5750,15 @@ int ObDDLResolver::check_foreign_key_reference(
                        K(database_name), K(parent_table_name));
             }
           } else {
-            LOG_WARN("table is not exist", K(ret), K(database_name), K(parent_table_name));
           }
         }
       } else if (OB_ISNULL(parent_table_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("parent table schema is null", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (!child_table_schema->is_user_table()) {
         ret = OB_ERR_CANNOT_ADD_FOREIGN;
-        LOG_WARN("foreign key cannot be based on non-user table",
-                 K(ret), K(child_table_schema->is_user_table()));
       } else if (arg.is_parent_table_mock_) {
         // skip checking parent table
         uint64_t database_id = session_info_->get_database_id();
@@ -5933,7 +5766,6 @@ int ObDDLResolver::check_foreign_key_reference(
         if (!arg.database_name_.empty()
             && OB_FAIL(schema_checker_->get_database_id(
                arg.database_name_, database_id))) {
-          LOG_WARN("failed to get_database_id", K(ret), K(arg.database_name_), K(database_id));
         } else if (OB_FAIL(schema_checker_->get_mock_fk_parent_table_with_name(
                            database_id, arg.foreign_key_name_, mock_fk_parent_table_schema))) {
         } else if (OB_NOT_NULL(mock_fk_parent_table_schema)) {
@@ -5943,24 +5775,16 @@ int ObDDLResolver::check_foreign_key_reference(
                      mock_fk_parent_table_schema->get_mock_fk_parent_table_id(),
                      MOCK_FK_PARENT_TABLE_SCHEMA,
                      mock_fk_parent_table_schema->get_schema_version())))) {
-            LOG_WARN("failed to add based_schema_object_info to arg",
-                         K(ret), K(mock_fk_parent_table_schema->get_mock_fk_parent_table_id()),
-                         K(mock_fk_parent_table_schema->get_schema_version()));
           } else if (!is_alter_table
                      && OB_FAIL(create_table_stmt->get_create_table_arg().based_schema_object_infos_.push_back(
                      ObBasedSchemaObjectInfo(
                          mock_fk_parent_table_schema->get_mock_fk_parent_table_id(),
                          MOCK_FK_PARENT_TABLE_SCHEMA,
                          mock_fk_parent_table_schema->get_schema_version())))) {
-            LOG_WARN("failed to add based_schema_object_info to arg",
-                         K(ret), K(mock_fk_parent_table_schema->get_mock_fk_parent_table_id()),
-                         K(mock_fk_parent_table_schema->get_schema_version()));
           }
         }
       } else if (!parent_table_schema->is_user_table()) {
         ret = OB_ERR_CANNOT_ADD_FOREIGN;
-        LOG_WARN("foreign key cannot be based on non-user table",
-                 K(ret), K(parent_table_schema->is_user_table()));
       } else {
         ObSEArray<ObString, 8> &child_columns = arg.child_columns_;
         ObSEArray<ObString, 8> &parent_columns = arg.parent_columns_;
@@ -5985,7 +5809,6 @@ int ObDDLResolver::check_foreign_key_reference(
               arg.fk_ref_type_, arg.ref_cst_id_, is_matched))) {
           } else if (!is_matched) {
             ret = OB_ERR_CANNOT_ADD_FOREIGN;
-            LOG_WARN("reference columns aren't reference to the index in parent table", K(ret));
           } else { } // do-nothing
         }
         if (OB_SUCC(ret) && !is_self_reference) {
@@ -5995,13 +5818,11 @@ int ObDDLResolver::check_foreign_key_reference(
                  ObBasedSchemaObjectInfo(parent_table_schema->get_table_id(),
                                          TABLE_SCHEMA,
                                          parent_table_schema->get_schema_version())))) {
-            LOG_WARN("push back to based_schema_object_infos_ failed", K(ret));
           } else if (!is_alter_table
                      && OB_FAIL(create_table_stmt->get_create_table_arg().based_schema_object_infos_.push_back(
                      ObBasedSchemaObjectInfo(parent_table_schema->get_table_id(),
                                              TABLE_SCHEMA,
                                              parent_table_schema->get_schema_version())))) {
-            LOG_WARN("push back to based_schema_object_infos_ failed", K(ret));
           }
         }
       }
@@ -6100,11 +5921,9 @@ int ObDDLResolver::drop_not_null_constraint(const ObColumnSchemaV2 &column)
     const ObTableSchema *table_schema = NULL;
     if (OB_ISNULL(session_info_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("session_info_ is null", K(ret));
     } else if (OB_FAIL(schema_checker_->get_table_schema(column.get_table_id(), table_schema))) {
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table schema is null", K(ret));
     } else {
       ObConstraint cst;
       ObTableSchema::const_constraint_iterator iter = table_schema->constraint_begin();
@@ -6112,7 +5931,6 @@ int ObDDLResolver::drop_not_null_constraint(const ObColumnSchemaV2 &column)
         if (CONSTRAINT_TYPE_NOT_NULL == (*iter)->get_constraint_type()) {
           if ((*iter)->cst_col_begin() + 1 != (*iter)->cst_col_end()) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("not null constraint should contain only one column", K(ret), KPC(*iter));
           } else if(*((*iter)->cst_col_begin()) == column.get_column_id()) {
             if (OB_FAIL(cst.assign(**iter))) {
             }
@@ -6123,7 +5941,6 @@ int ObDDLResolver::drop_not_null_constraint(const ObColumnSchemaV2 &column)
       if (OB_FAIL(ret)) {
       } else if (table_schema->constraint_end() == iter) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("not null constraint not found", K(ret), KPC(table_schema), K(column));
       } else {
         ObAlterTableStmt *alter_table_stmt = static_cast<ObAlterTableStmt*>(stmt_);
         AlterTableSchema &alter_table_schema = alter_table_stmt->
@@ -6175,7 +5992,6 @@ int ObDDLResolver::resolve_not_null_constraint_node(
     if (OB_SUCC(ret)) {
       if (column.has_not_null_constraint()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected not null constraint for not null column", K(ret), K(column));
       } else if (OB_FAIL(add_not_null_constraint(column, cst_name, is_sys_generate_name, cst, *allocator_, stmt_))) {
       } else {
         column.add_not_null_cst(cst.get_rely_flag(), cst.get_enable_flag(),
@@ -6209,16 +6025,13 @@ int ObDDLResolver::add_not_null_constraint(ObColumnSchemaV2 &column,
     // column id is unknown only if executing "alter table add column", column id will be added by RS.
     if (OB_UNLIKELY(! is_alter_add_column)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid column id", K(ret));
     } else if (column.get_meta_type().is_collection_sql_type()) {
       ret = OB_ER_INVALID_USE_OF_NULL;
-      LOG_WARN("alter table add collection sql column can not has not null constraint", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(cst_name.empty() || cst_name.length() > OB_MAX_EXTENDED_CONSTRAINT_NAME_LENGTH)) {
     ret = OB_ERR_TOO_LONG_IDENT;
-    LOG_WARN("constraint_name length overflow", K(ret), K(cst_name.length()));
   } else if (OB_FAIL(cst.assign_not_null_cst_column_id(column.get_column_id()))) {
   } else if (OB_FAIL(cst.set_constraint_name(cst_name))) {
   } else {
@@ -6241,11 +6054,9 @@ int ObDDLResolver::add_not_null_constraint(ObColumnSchemaV2 &column,
     for (uint64_t i = 0; OB_SUCC(ret) && i < csts.count(); ++i) {
       if (csts.at(i).get_constraint_name_str() == cst_name) {
         ret = OB_ERR_CONSTRAINT_NAME_DUPLICATE;
-        LOG_WARN("duplicate check constraint name", K(ret), K(cst_name));
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(csts.push_back(cst))) {
-      LOG_WARN("push back cst failed", K(ret));
     }
   } else if (stmt::T_ALTER_TABLE == stmt->get_stmt_type()) {
     ObAlterTableStmt *alter_table_stmt = static_cast<ObAlterTableStmt*>(stmt);
@@ -6255,7 +6066,6 @@ int ObDDLResolver::add_not_null_constraint(ObColumnSchemaV2 &column,
           OB_SUCC(ret) && iter != alter_table_schema.constraint_end(); iter ++) {
       if ((*iter)->get_constraint_name_str() == cst_name) {
         ret = OB_ERR_CONSTRAINT_NAME_DUPLICATE;
-        LOG_WARN("duplicate check constraint name", K(ret), K(cst_name));
       }
     }
     if (OB_FAIL(ret)) {
@@ -6310,7 +6120,6 @@ int ObDDLResolver::get_row_store_type(const ObStoreFormatType store_format,
   if (OB_UNLIKELY((row_store_type = ObStoreFormat::get_row_store_type(store_format))
       >= ObRowStoreType::MAX_ROW_STORE)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected row_store_type", K(ret), K(store_format));
   }
   return ret;
 }
@@ -6322,7 +6131,6 @@ int ObDDLResolver::resolve_partition_name(ParseNode *partition_name_node,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(partition_name_node) || OB_ISNULL(partition_name_node->children_[NAMENODE])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("partition expr list node is null", K(ret));
   } else {
     ParseNode *name_node = partition_name_node->children_[NAMENODE];
     partition_name.assign_ptr(name_node->str_value_, static_cast<int32_t>(name_node->str_len_));
@@ -6332,16 +6140,12 @@ int ObDDLResolver::resolve_partition_name(ParseNode *partition_name_node,
                                              OB_MAX_PARTITION_NAME_LENGTH))) {
       if (OB_ERR_WRONG_IDENT_NAME == ret) {
         ret = OB_WRONG_PARTITION_NAME;
-        LOG_WARN("get wrong partition name", K(partition_name), K(ret));
         LOG_USER_ERROR(OB_WRONG_PARTITION_NAME, partition_name.length(), partition_name.ptr());
       } else if (OB_ERR_TOO_LONG_IDENT == ret) {
-        LOG_WARN("partition name is too long", K(partition_name.length()), K(ret));
       } else {
-        LOG_WARN("fail to check ident name", K(partition_name), K(ret));
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(partition.set_part_name(partition_name))) {
-      LOG_WARN("failed to set part name", K(ret));
     }
   }
   return ret;
@@ -6364,8 +6168,6 @@ int ObDDLResolver::resolve_hash_or_key_partition_basic_infos(ParseNode *node,
       OB_ISNULL(partition_fun_node = node->children_[HASH_FUN_EXPR_NODE]) ||
       OB_ISNULL(schema_checker_) || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(node), K(partition_fun_node),
-                                    K(schema_checker_), K(session_info_));
   } else {
     part_func_type = T_HASH_PARTITION == node->type_
           ? share::schema::PARTITION_FUNC_TYPE_HASH
@@ -6421,7 +6223,6 @@ int ObDDLResolver::resolve_range_partition_basic_infos(ParseNode *node,
   ObSEArray<ObString, 4> partition_keys;
   if (OB_ISNULL(node) || OB_ISNULL(partition_fun_node = node->children_[RANGE_FUN_EXPR_NODE])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(node), K(partition_fun_node));
   } else if (T_RANGE_COLUMNS_PARTITION == node->type_) {
     part_func_type = PARTITION_FUNC_TYPE_RANGE_COLUMNS;
   }
@@ -6456,7 +6257,6 @@ int ObDDLResolver::resolve_list_partition_basic_infos(ParseNode *node,
   ObSEArray<ObString, 4> partition_keys;
   if (OB_ISNULL(node) || OB_ISNULL(partition_fun_node = node->children_[LIST_FUN_EXPR_NODE])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(node), K(partition_fun_node));
   } else if (T_LIST_COLUMNS_PARTITION == node->type_) {
     part_func_type = PARTITION_FUNC_TYPE_LIST_COLUMNS;
   }
@@ -6504,7 +6304,6 @@ int ObDDLResolver::resolve_partition_node(ObPartitionedStmt *stmt,
   if (OB_SUCC(ret)) {
     if (PARTITION_LEVEL_ZERO == table_schema.get_part_level()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("non-partitioned table should not have partition clause", KR(ret));
     } else if (OB_FAIL(check_and_set_partition_names(stmt, table_schema))) {
     }
   }
@@ -6594,7 +6393,6 @@ int ObDDLResolver::resolve_individual_subpartition(ObPartitionedStmt *stmt,
       for (int64_t i = 0; OB_SUCC(ret) && !has_def_subpart && i < partition_list_node->num_child_; ++i) {
         if (OB_ISNULL(partition_list_node->children_[i])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret));
         } else if (NULL != partition_list_node->children_[i]->children_[ELEMENT_SUBPARTITION_NODE]) {
           has_def_subpart = true;
         }
@@ -6639,7 +6437,6 @@ int ObDDLResolver::resolve_subpartition_elements(ObPartitionedStmt *stmt,
   ObPartitionFuncType subpart_type = table_schema.get_sub_part_option().get_part_func_type();
   if (OB_ISNULL(partition)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_ISNULL(node)) {
     if (is_range_part(subpart_type)) {
       ObDDLStmt::array_t range_value_exprs;
@@ -6658,7 +6455,6 @@ int ObDDLResolver::resolve_subpartition_elements(ObPartitionedStmt *stmt,
     } else {
       if (hash_subpart_num_ < 1) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("default subpart num not specified", K(ret), K(hash_subpart_num_));
       } else if (OB_FAIL(generate_default_hash_subpart(stmt,
                                                        hash_subpart_num_,
                                                        table_schema,
@@ -6669,7 +6465,6 @@ int ObDDLResolver::resolve_subpartition_elements(ObPartitionedStmt *stmt,
              (is_range_part(subpart_type) && node->type_ != T_RANGE_SUBPARTITION_LIST) ||
              (is_list_part(subpart_type) && node->type_ != T_LIST_SUBPARTITION_LIST)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("subpartition define is not match declare", K(ret), K(subpart_type), K(node->type_));
   } else if (T_HASH_SUBPARTITION_LIST == node->type_) {
     if (OB_FAIL(resolve_hash_subpartition_elements(stmt, node, table_schema, partition))) {
     }
@@ -6705,10 +6500,8 @@ int ObDDLResolver::resolve_partition_hash_or_key(
 
   if (OB_ISNULL(node) || OB_ISNULL(node->children_) || !is_hash_type_partition(node->type_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected node", K(ret), K(node));
   } else if (is_subpartition && NULL != node->children_[HASH_SUBPARTITIOPPN_NODE]) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("subpartition cannot has another subpartition", K(ret));
   } else if (is_subpartition) {
     partition_option = &(table_schema.get_sub_part_option());
     table_schema.set_part_level(share::schema::PARTITION_LEVEL_TWO);
@@ -6862,7 +6655,6 @@ int ObDDLResolver::resolve_partition_range(ObPartitionedStmt *stmt,
     SQL_RESV_LOG(WARN, "get invalid num_child", KR(ret), K(is_subpartition), K(node->num_child_));
   } else if (nullptr == node->children_[RANGE_ELEMENTS_NODE]) {
     ret = OB_ERR_PARSE_PARTITION_RANGE;
-    LOG_WARN("range partition without partition definition", KR(ret));
   } else {
     if (is_subpartition) {
       partition_option = &(table_schema.get_sub_part_option());
@@ -7076,7 +6868,6 @@ int ObDDLResolver::resolve_hash_partition_elements(ObPartitionedStmt *stmt,
   ParseNode *element_node = NULL;
   if (OB_ISNULL(node) || OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(node), K(stmt));
   } else {
     int64_t partition_num = node->num_child_;
     ObPartition partition;
@@ -7086,7 +6877,6 @@ int ObDDLResolver::resolve_hash_partition_elements(ObPartitionedStmt *stmt,
       // 1. check partition name
       if (OB_ISNULL(element_node = node->children_[i])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(element_node));
       } else if (OB_FAIL(resolve_partition_name(element_node->children_[PARTITION_NAME_NODE],
                                                 partition_name, partition))) {
       }
@@ -7097,13 +6887,11 @@ int ObDDLResolver::resolve_hash_partition_elements(ObPartitionedStmt *stmt,
         } else if (stmt->use_def_sub_part() &&
                    OB_NOT_NULL(element_node->children_[ELEMENT_SUBPARTITION_NODE])) {
           ret = OB_INVALID_SUB_PARTITION_TYPE;
-          LOG_WARN("individual subpartition with sub part template", K(ret));
         } else if (!stmt->use_def_sub_part()) {
           // resolve non template
           ObPartition *cur_partition = table_schema.get_part_array()[i];
           if (OB_ISNULL(cur_partition)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected null", K(ret));
           } else if (OB_FAIL(resolve_subpartition_elements(
               stmt,
               element_node->children_[ELEMENT_SUBPARTITION_NODE],
@@ -7130,11 +6918,9 @@ int ObDDLResolver::resolve_hash_subpartition_elements(ObPartitionedStmt *stmt,
   bool is_template = false;
   if (OB_ISNULL(node) || OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(node), K(stmt));
   } else if (FALSE_IT(is_template = stmt->use_def_sub_part())) {
   } else if (!is_template && OB_ISNULL(partition)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("partition is null while not sub part template", K(ret));
   } else {
     int64_t partition_num = node->num_child_;
     ObSubPartition subpartition;
@@ -7145,7 +6931,6 @@ int ObDDLResolver::resolve_hash_subpartition_elements(ObPartitionedStmt *stmt,
       // 1. check partition name
       if (OB_ISNULL(element_node = node->children_[i])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(resolve_partition_name(element_node->children_[PARTITION_NAME_NODE],
                                                 partition_name, subpartition))) {
       }
@@ -7182,7 +6967,6 @@ int ObDDLResolver::resolve_range_partition_elements(ObPartitionedStmt *stmt,
   ParseNode *expr_list_node = NULL;
   if (OB_ISNULL(node) || OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node is null or stmt is null", K(ret), K(node), K(stmt));
   } else {
     int64_t partition_num = node->num_child_;
     ObPartition partition;
@@ -7191,7 +6975,6 @@ int ObDDLResolver::resolve_range_partition_elements(ObPartitionedStmt *stmt,
       ObString partition_name;
       if (OB_ISNULL(element_node = node->children_[i])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected node", K(ret), K(element_node));
       } else if (element_node->type_ != T_PARTITION_RANGE_ELEMENT) {
         ret = OB_ERR_PARSER_SYNTAX;
         LOG_WARN("not a valid range partition define", K(element_node->type_));
@@ -7215,13 +6998,11 @@ int ObDDLResolver::resolve_range_partition_elements(ObPartitionedStmt *stmt,
         } else if (stmt->use_def_sub_part() &&
                    OB_NOT_NULL(element_node->children_[ELEMENT_SUBPARTITION_NODE])) {
           ret = OB_ERR_PARSE_SQL;
-          LOG_WARN("individual subpartition with sub part template", K(ret));
         } else if (!stmt->use_def_sub_part()) {
           // resolve non template
           ObPartition *cur_partition = table_schema.get_part_array()[i];
           if (OB_ISNULL(cur_partition)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected null", K(ret));
           } else if (OB_FAIL(resolve_subpartition_elements(
               stmt,
               element_node->children_[ELEMENT_SUBPARTITION_NODE],
@@ -7252,11 +7033,9 @@ int ObDDLResolver::resolve_range_subpartition_elements(ObPartitionedStmt *stmt,
   bool is_template = false;
   if (OB_ISNULL(node) || OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node is null or stmt is null", K(ret), K(node), K(stmt));
   } else if (FALSE_IT(is_template = stmt->use_def_sub_part())) {
   } else if (!is_template && OB_ISNULL(partition)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("partition is null while not sub part template", K(ret));
   } else {
     int64_t partition_num = node->num_child_;
     ObSubPartition subpartition;
@@ -7267,7 +7046,6 @@ int ObDDLResolver::resolve_range_subpartition_elements(ObPartitionedStmt *stmt,
           OB_ISNULL(expr_list_node = element_node->children_[PARTITION_ELEMENT_NODE]) ||
           OB_UNLIKELY(T_EXPR_LIST != expr_list_node->type_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected node", K(ret), K(element_node), K(expr_list_node));
       } else if (part_func_exprs.count() != expr_list_node->num_child_) {
         ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
         LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret));
@@ -7310,7 +7088,6 @@ int ObDDLResolver::resolve_list_partition_elements(ObPartitionedStmt *stmt,
   ParseNode *expr_list_node = NULL;
   if (OB_ISNULL(node) || OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(node), K(stmt));
   } else {
     int64_t partition_num = node->num_child_;
     ObPartition partition;
@@ -7319,16 +7096,13 @@ int ObDDLResolver::resolve_list_partition_elements(ObPartitionedStmt *stmt,
       ObString partition_name;
       if (OB_ISNULL(element_node = node->children_[i])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpect node", K(ret), K(element_node));
       } else if (element_node->type_ != T_PARTITION_LIST_ELEMENT) {
         ret = OB_ERR_PARSER_SYNTAX;
         LOG_WARN("not a valid range partition define", K(element_node->type_));
       } else if (OB_ISNULL(expr_list_node = element_node->children_[PARTITION_ELEMENT_NODE])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpect node", K(ret), K(expr_list_node));
       } else if (T_EXPR_LIST != expr_list_node->type_ && T_DEFAULT != expr_list_node->type_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected node type", K(ret), K(expr_list_node->type_));
       } else if (OB_FAIL(resolve_partition_name(element_node->children_[PARTITION_NAME_NODE],
                                                 partition_name, partition))) {
       } else if (OB_FAIL(resolve_list_partition_value_node(*expr_list_node, partition_name,
@@ -7342,13 +7116,11 @@ int ObDDLResolver::resolve_list_partition_elements(ObPartitionedStmt *stmt,
         } else if (stmt->use_def_sub_part() &&
                    OB_NOT_NULL(element_node->children_[ELEMENT_SUBPARTITION_NODE])) {
           ret = OB_ERR_PARSE_SQL;
-          LOG_WARN("individual subpartition with sub part template", K(ret));
         } else if (!stmt->use_def_sub_part()) {
           // resolve non template
           ObPartition *cur_partition = table_schema.get_part_array()[i];
           if (OB_ISNULL(cur_partition)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected null", K(ret));
           } else if (OB_FAIL(resolve_subpartition_elements(
               stmt,
               element_node->children_[ELEMENT_SUBPARTITION_NODE],
@@ -7379,7 +7151,6 @@ int ObDDLResolver::resolve_list_subpartition_elements(ObPartitionedStmt *stmt,
   bool is_template = false;
   if (OB_ISNULL(node) || OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node is null or stmt is null", K(ret), K(node), K(stmt_));
   } else if (FALSE_IT(is_template = stmt->use_def_sub_part())) {
   } else {
     int64_t partition_num = node->num_child_;
@@ -7390,10 +7161,8 @@ int ObDDLResolver::resolve_list_subpartition_elements(ObPartitionedStmt *stmt,
       if (OB_ISNULL(element_node = node->children_[i]) ||
           OB_ISNULL(expr_list_node = element_node->children_[PARTITION_ELEMENT_NODE])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpect node", K(ret), K(element_node), K(expr_list_node));
       } else if (T_EXPR_LIST != expr_list_node->type_ && T_DEFAULT != expr_list_node->type_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected node type", K(ret), K(expr_list_node->type_));
       } else if (OB_FAIL(resolve_partition_name(element_node->children_[PARTITION_NAME_NODE],
                                                 partition_name, subpartition))) {
       } else if (OB_FAIL(resolve_list_partition_value_node(*expr_list_node, partition_name,
@@ -7431,17 +7200,14 @@ int ObDDLResolver::resolve_range_partition_value_node(ParseNode &expr_list_node,
   for (int64_t i = 0; OB_SUCC(ret) && i < expr_list_node.num_child_; ++i) {
     if (OB_ISNULL(expr_list_node.children_[i])) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null node", K(ret));
     } else if (T_NULL == expr_list_node.children_[i]->type_) {
       ret = OB_EER_NULL_IN_VALUES_LESS_THAN;
-      LOG_WARN("null value is not allowed in less than", K(ret));
     } else if (T_MAXVALUE == expr_list_node.children_[i]->type_) {
       ObRawExpr *maxvalue_expr = NULL;
       ObConstRawExpr *c_expr = NULL;
       c_expr = (ObConstRawExpr *)allocator_->alloc(sizeof(ObConstRawExpr));
       if (OB_ISNULL(c_expr)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate memory", K(ret));
       } else {
         c_expr = new (c_expr) ObConstRawExpr();
         maxvalue_expr = c_expr;
@@ -7455,7 +7221,6 @@ int ObDDLResolver::resolve_range_partition_value_node(ParseNode &expr_list_node,
       if (OB_FAIL(part_func_exprs.at(i, part_func_expr))) {
       } else if (OB_ISNULL(part_func_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("part_func_expr is invalid", K(ret));
       } else if (OB_FAIL(ObResolverUtils::resolve_partition_range_value_expr(params_,
                                                                              *(expr_list_node.children_[i]),
                                                                              partition_name,
@@ -7466,7 +7231,6 @@ int ObDDLResolver::resolve_range_partition_value_node(ParseNode &expr_list_node,
       }
     } else {
       ret = OB_ERR_PARSER_SYNTAX;
-      LOG_WARN("syntax error, expect single expr while expr list got", K(ret));
     }
   }
   return ret;
@@ -7482,11 +7246,9 @@ int ObDDLResolver::resolve_list_partition_value_node(ParseNode &expr_list_node,
   ObOpRawExpr *row_expr = NULL;
   if (OB_ISNULL(params_.expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(params_.expr_factory_->create_raw_expr(T_OP_ROW, row_expr))) {
   } else if (OB_ISNULL(row_expr)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allcoate memory", K(ret));
   } else if (T_DEFAULT == expr_list_node.type_) {
     // Here use max to replace default value
     ObRawExpr *maxvalue_expr = NULL;
@@ -7494,7 +7256,6 @@ int ObDDLResolver::resolve_list_partition_value_node(ParseNode &expr_list_node,
     c_expr = (ObConstRawExpr *) allocator_->alloc(sizeof(ObConstRawExpr));
     if (OB_ISNULL(c_expr)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allcoate memory", K(ret));
     } else {
       c_expr = new(c_expr) ObConstRawExpr();
       maxvalue_expr = c_expr;
@@ -7535,7 +7296,6 @@ int ObDDLResolver::resolve_list_partition_value_node(ParseNode &expr_list_node,
           LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret));
         } else if (OB_ISNULL(expr_list_node.children_[i])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("node is null", K(ret));
         } else if (OB_FAIL(ObResolverUtils::resolve_partition_list_value_expr(params_,
                                                                               *(expr_list_node.children_[i]),
                                                                               partition_name,
@@ -7607,11 +7367,9 @@ int ObDDLResolver::generate_default_hash_subpart(
   bool is_template = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is null", KR(ret), KP(stmt));
   } else if (FALSE_IT(is_template = stmt->use_def_sub_part())) {
   } else if (!is_template && OB_ISNULL(partition)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table is not subpart template by partition is null", K(ret));
   } else if (is_template) {
     table_schema.get_sub_part_option().set_part_num(partition_num);
   } else {
@@ -7630,7 +7388,6 @@ int ObDDLResolver::generate_default_hash_subpart(
                                                   name_buf,
                                                   common::OB_MAX_PARTITION_NAME_LENGTH,
                                                   NULL))) {
-        LOG_WARN("faield to gen hash part name", K(ret));
       } else if (!is_template &&
                  OB_FAIL(ObPartitionSchema::gen_hash_part_name(subpartition.get_sub_part_idx(),
                                                          ObHashNameType::INDIVIDUAL_SUB_PART,
@@ -7639,7 +7396,6 @@ int ObDDLResolver::generate_default_hash_subpart(
                                                          common::OB_MAX_PARTITION_NAME_LENGTH,
                                                          NULL,
                                                          partition))) {
-        LOG_WARN("faield to gen hash part name", K(ret));
       } else if (FALSE_IT(subpart_name = ObString(strlen(name_buf), name_buf))) {
       } else if (OB_FAIL(subpartition.set_part_name(subpart_name))) {
       } else if (is_template) {
@@ -7671,11 +7427,9 @@ int ObDDLResolver::generate_default_range_subpart(
 
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is null", KR(ret), KP(stmt));
   } else if (FALSE_IT(is_template = stmt->use_def_sub_part())) {
   } else if (!is_template && OB_ISNULL(partition)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table is not subpart template by partition is null", K(ret));
   } else if (is_template) {
     table_schema.get_sub_part_option().set_part_num(partition_num);
   } else {
@@ -7691,7 +7445,6 @@ int ObDDLResolver::generate_default_range_subpart(
         c_expr = (ObConstRawExpr *)allocator_->alloc(sizeof(ObConstRawExpr));
         if (OB_ISNULL(c_expr)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to allocate memory", K(ret));
         } else {
           c_expr = new (c_expr) ObConstRawExpr();
           maxvalue_expr = c_expr;
@@ -7729,11 +7482,9 @@ int ObDDLResolver::generate_default_list_subpart(
 
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is null", KR(ret), KP(stmt));
   } else if (FALSE_IT(is_template = stmt->use_def_sub_part())) {
   } else if (!is_template && OB_ISNULL(partition)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table is not subpart template by partition is null", K(ret));
   } else if (is_template) {
     table_schema.get_sub_part_option().set_part_num(partition_num);
   } else {
@@ -7754,7 +7505,6 @@ int ObDDLResolver::generate_default_list_subpart(
         c_expr = (ObConstRawExpr *) allocator_->alloc(sizeof(ObConstRawExpr));
         if (OB_ISNULL(c_expr)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to allcoate memory", K(ret));
         } else {
           c_expr = new(c_expr) ObConstRawExpr();
           maxvalue_expr = c_expr;
@@ -7781,7 +7531,6 @@ int ObDDLResolver::check_and_set_partition_names(ObPartitionedStmt *stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is null", KR(ret), KP(stmt));
   } else if (OB_FAIL(check_and_set_partition_names(stmt, table_schema, false))) {
   } else if (PARTITION_LEVEL_TWO == table_schema.get_part_level()) {
     if (stmt->use_def_sub_part()) {
@@ -7808,19 +7557,15 @@ int ObDDLResolver::check_and_set_partition_names(ObPartitionedStmt *stmt,
   ObSEArray<int64_t, 128> empty_part_idx;
   if (is_subpart && OB_ISNULL(subpartition_array)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null subpartition array", K(ret));
   } else if (!is_subpart && OB_ISNULL(partition_array)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null partition array", K(ret));
   } else if (OB_ISNULL(buf = allocator_->alloc(sizeof(
       ObPartitionNameSet)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate memory", KR(ret));
   } else {
     partition_name_set = new(buf)ObPartitionNameSet();
     if (OB_ISNULL(partition_name_set)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("partition name hash set is null", KR(ret));
     }
   }
 
@@ -7832,7 +7577,6 @@ int ObDDLResolver::check_and_set_partition_names(ObPartitionedStmt *stmt,
     }
     if (OB_ISNULL(partition)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (partition->is_empty_partition_name()) {
       if (OB_FAIL(empty_part_idx.push_back(i))) {
       }
@@ -7899,19 +7643,15 @@ int ObDDLResolver::check_and_set_individual_subpartition_names(ObPartitionedStmt
   ObSEArray<int64_t, 128> empty_subpart_idx;
   if (OB_ISNULL(stmt) || OB_UNLIKELY(stmt->use_def_sub_part())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected subpartition", K(ret), KP(stmt));
   } else if (OB_ISNULL(partition_array = table_schema.get_part_array())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_ISNULL(buf = allocator_->alloc(sizeof(
       ObPartitionNameSet)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate memory", KR(ret));
   } else {
     partition_name_set = new(buf)ObPartitionNameSet();
     if (OB_ISNULL(partition_name_set)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("partition name hash set is null", KR(ret));
     }
   }
 
@@ -7919,7 +7659,6 @@ int ObDDLResolver::check_and_set_individual_subpartition_names(ObPartitionedStmt
     if (OB_ISNULL(partition = partition_array[i]) ||
         OB_ISNULL(subpartition_array = partition->get_subpart_array())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), K(partition), K(subpartition_array));
     }
     /* part name and subpart name share one namespace .
        So, add partition name to hash table */
@@ -7932,7 +7671,6 @@ int ObDDLResolver::check_and_set_individual_subpartition_names(ObPartitionedStmt
     for (int64_t j = 0; OB_SUCC(ret) && j < partition->get_sub_part_num(); ++j) {
       if (OB_ISNULL(subpartition = subpartition_array[j])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (subpartition->is_empty_partition_name()) {
         if (OB_FAIL(empty_part_idx.push_back(i))) {
         } else if (OB_FAIL(empty_subpart_idx.push_back(j))) {
@@ -7961,12 +7699,10 @@ int ObDDLResolver::check_and_set_individual_subpartition_names(ObPartitionedStmt
       int64_t max_part_idx = OB_INVALID_ID;
       if (OB_ISNULL(schema_checker_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("schema checker ptr is null", K(ret));
       } else if (OB_FAIL(schema_checker_->get_table_schema(
         table_schema.get_table_id(), orig_table_schema))) {
       } else if (OB_ISNULL(orig_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
-        LOG_WARN("table is not exist", KR(ret), K(table_schema.get_table_id()));
       } else if (OB_FAIL(orig_table_schema->get_max_part_idx(max_part_idx))) {
       } else {
         max_part_id += max_part_idx;
@@ -8006,11 +7742,9 @@ int ObDDLResolver::set_partition_name_in_hashset(const ObPartitionNameHashWrappe
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(partition_name_set.set_refactored(partition_name_key))) {
-    LOG_WARN("add partition name to map failed", KR(ret));
     // for better error message
     if (OB_HASH_FULL == ret) {
       ret = OB_TOO_MANY_PARTITIONS_ERROR;
-      LOG_WARN("too many partitions", KR(ret), "partition_num", partition_name_set.count());
     }
   }
   return ret;
@@ -8059,7 +7793,6 @@ int ObDDLResolver::resolve_hints(const ParseNode *node, ObDDLStmt &stmt, const O
             LOG_WARN("Unused parallel hint");
           } else if (OB_ISNULL(parallel_node = hint_node->children_[0])) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("error unexpected, child of stmt parallel degree node should not be null", K(ret));
           } else if (parallel_node->value_ < 1) {
             hint_parallel = 1;  // ignore invalid hint
           } else {
@@ -8086,7 +7819,6 @@ int ObDDLResolver::deep_copy_string_in_part_expr(ObPartitionedStmt* stmt)
   ObSEArray<ObRawExpr*, 8> exprs;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null stmt");
   } else if (OB_FAIL(append(exprs, stmt->get_part_fun_exprs()))) {
   } else if (OB_FAIL(append(exprs, stmt->get_subpart_fun_exprs()))) {
   } else if (exprs.count() > 0 && OB_FAIL(deep_copy_column_expr_name(*allocator_, exprs))) {
@@ -8125,7 +7857,6 @@ int ObDDLResolver::resolve_column_skip_index(
   ObSkipIndexColumnAttr skip_index_column_attr;
   if (OB_UNLIKELY(1 != skip_index_node.num_child_ || T_COL_SKIP_INDEX != skip_index_node.type_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid skip index node", K(ret), K(skip_index_node.num_child_), K(skip_index_node.type_));
   } else {
     if (OB_ISNULL(type_list_node = skip_index_node.children_[0])) {
       // empty specified type list, e.g:
@@ -8133,23 +7864,18 @@ int ObDDLResolver::resolve_column_skip_index(
       skip_index_column_attr.reset();
     } else if (OB_UNLIKELY(0 == type_list_node->num_child_ || T_COL_SKIP_INDEX_LIST != type_list_node->type_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected invalid type list node", K(ret),
-          K(type_list_node->num_child_), K(type_list_node->type_));
     } else if (blocksstable::is_skip_index_black_list_type(column_schema.get_data_type())) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "build skip index on invalid type");
-      LOG_WARN("not supported skip index on column with invalid column type", K(ret), K(column_schema));
     } else if (column_schema.get_skip_index_attr().has_sum() &&
                !blocksstable::can_agg_sum(column_schema.get_data_type())) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "build skip index on invalid type");
-      LOG_WARN("not supported skip index on column with invalid column type", K(ret), K(column_schema));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < type_list_node->num_child_; ++i) {
         const ParseNode *type_node = type_list_node->children_[i];
         if (OB_ISNULL(type_node)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null skip index type node", K(ret), KP(type_node));
         } else {
           switch (type_node->type_) {
           case T_COL_SKIP_INDEX_MIN_MAX: {
@@ -8162,7 +7888,6 @@ int ObDDLResolver::resolve_column_skip_index(
           }
           default: {
             ret = OB_NOT_SUPPORTED;
-            LOG_WARN("invalid skip index type", K(ret), K(i), K(type_node->type_));
             LOG_USER_ERROR(OB_NOT_SUPPORTED, "skip index type");
             break;
           }
@@ -8194,7 +7919,6 @@ int ObDDLResolver::resolve_semistruct_encoding_type(const ParseNode *option_node
     SQL_RESV_LOG(WARN, "session_info_ is null", K(ret));
   } else if (is_index_option) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("index option should not specify semistruct encoding", K(ret));
   } else if (OB_ISNULL(option_node)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "option_node is null", K(ret));
@@ -8246,7 +7970,6 @@ int ObDDLResolver::get_partition_keys_by_part_func_expr(
   ObString ident_buf;
   if (OB_ISNULL(buf = static_cast<char*>(allocator.alloc(len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate", K(ret), K(len));
   } else {
     ident_buf.assign_buffer(buf, len);
   }
@@ -8275,7 +7998,6 @@ int ObDDLResolver::get_partition_keys_by_part_func_expr(
     if (OB_FAIL(ret)) {
     } else if (OB_UNLIKELY(pos >= len)) {
       ret = OB_ERR_PARSE_SQL;
-      LOG_WARN("empty ident", K(ret), K(part_func_expr_str), K(pos));
     } else {
       const char *ident_start = ident_buf.ptr() + ident_buf.length();
       int64_t ident_len = 0;
@@ -8290,7 +8012,6 @@ int ObDDLResolver::get_partition_keys_by_part_func_expr(
               if (OB_FAIL(scanner.next_character(wc, wc_value))) {
               } else if (OB_UNLIKELY(wc_value != QUOTE)) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("not a quote", K(ret), K(wc), K(wc_value));
               }
             } else {
               ret = OB_ITER_END;
@@ -8302,10 +8023,8 @@ int ObDDLResolver::get_partition_keys_by_part_func_expr(
         if (OB_FAIL(ret)) {
         } else if (OB_UNLIKELY(!quoted && 0 == ident_len && wc_value == DELIMITER)) {
           ret = OB_ERR_PARSE_SQL;
-          LOG_WARN("invalid beginning char for unquoted identifier", K(ret), K(wc_value), K(part_func_expr_str), K(pos));
         } else if (OB_UNLIKELY(wc.length() != ident_buf.write(wc.ptr(), wc.length()))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("buffer full", K(ret), K(ident_buf), K(wc));
         } else {
           ident_len += wc.length();
           pos += wc.length();
@@ -8318,7 +8037,6 @@ int ObDDLResolver::get_partition_keys_by_part_func_expr(
       if (OB_FAIL(ret)) {
       } else if (OB_UNLIKELY(0 == ident_len)) {
         ret = OB_ERR_PARSE_SQL;
-        LOG_WARN("empty ident", K(ret), K(ident_buf), K(part_func_expr_str));
       } else {
         ObString ident(ident_len, ident_start);
         const ObColumnSchemaV2 *column = nullptr;
@@ -8331,13 +8049,11 @@ int ObDDLResolver::get_partition_keys_by_part_func_expr(
     if (OB_SUCC(ret) && quoted) {
       if (OB_UNLIKELY(pos >= len)) {
         ret = OB_ERR_PARSE_SQL;
-        LOG_WARN("quote not closed", K(ret), K(part_func_expr_str), K(pos));
       } else {
         ObStringScanner scanner(ObString(len - pos, part_func_expr_str.ptr() + pos), CS_TYPE_UTF8MB4_GENERAL_CI);
         if (OB_FAIL(scanner.next_character(wc, wc_value))) {
         } else if (OB_UNLIKELY(wc_value != QUOTE)) {
           ret = OB_ERR_PARSE_SQL;
-          LOG_WARN("quote not closed", K(ret), K(part_func_expr_str), K(pos));
         } else {
           pos += wc.length();
         }
@@ -8358,7 +8074,6 @@ int ObDDLResolver::get_partition_keys_by_part_func_expr(
       if (OB_FAIL(scanner.next_character(wc, wc_value))) {
       } else if (OB_UNLIKELY(wc_value != DELIMITER)) {
         ret = OB_ERR_PARSE_SQL;
-        LOG_WARN("expect delimiter", K(ret), K(part_func_expr_str), K(pos), K(wc_value));
       } else {
         pos += wc.length();
       }

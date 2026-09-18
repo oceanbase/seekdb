@@ -55,7 +55,6 @@ int ObExprDateDiff::eval_date_diff(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   int32_t date_right = 0;
   if (OB_FAIL(expr.args_[0]->eval(ctx, left))
       || OB_FAIL(expr.args_[1]->eval(ctx, right))) {
-    LOG_WARN("fail to eval conv", K(ret), K(expr));
   } else if (left->is_null() || right->is_null()) {
     res_datum.set_null();
   } else {

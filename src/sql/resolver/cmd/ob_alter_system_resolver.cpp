@@ -40,7 +40,6 @@ int ObAlterSystemResolverUtil::sanity_check(const ParseNode *parse_tree, ObItemT
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(NULL == parse_tree)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parse tree should not be null");
   } else if (OB_UNLIKELY(item_type != parse_tree->type_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid type",
@@ -51,7 +50,6 @@ int ObAlterSystemResolverUtil::sanity_check(const ParseNode *parse_tree, ObItemT
     LOG_WARN("invalid num_child", "num_child", parse_tree->num_child_);
   } else if (OB_UNLIKELY(NULL == parse_tree->children_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children should not be null");
   }
 
   return ret;
@@ -63,7 +61,6 @@ int ObAlterSystemResolverUtil::resolve_tablet_id(const ParseNode *opt_tablet_id,
 
   if (NULL == opt_tablet_id) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("opt_tablet_id should not be null");
   } else if (OB_FAIL(sanity_check(opt_tablet_id, T_TABLET_ID))) {
   } else {
     tablet_id = opt_tablet_id->children_[0]->value_;
@@ -78,7 +75,6 @@ int ObAlterSystemResolverUtil::resolve_string(const ParseNode *node, ObString &s
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(NULL == node)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node should not be null");
   } else if (OB_UNLIKELY(T_VARCHAR != node->type_ && T_CHAR != node->type_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("node type is not T_VARCHAR/T_CHAR", "type", get_type_name(node->type_));
@@ -96,7 +92,6 @@ int ObAlterSystemResolverUtil::resolve_relation_name(const ParseNode *node, ObSt
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(NULL == node)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node should not be null");
   } else if (OB_UNLIKELY(T_IDENT != node->type_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("node type is not T_IDENT", "type", get_type_name(node->type_));
@@ -120,7 +115,6 @@ int ObFreezeResolver::resolve(const ParseNode &parse_tree)
              K(parse_tree.num_child_));
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("session info should not be null", K(ret));
   } else if (NULL == (freeze_stmt = create_stmt<ObFreezeStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("create ObFreezeStmt failed");
@@ -136,14 +130,12 @@ int ObFreezeResolver::resolve(const ParseNode &parse_tree)
       freeze_stmt->set_major_freeze(true);
       if (OB_NOT_NULL(parse_tree.children_[1])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("major freeze has an unexpected target", KR(ret));
       } else if (OB_FAIL(resolve_target_(freeze_stmt, parse_tree.children_[2]))) {
       }
     } else if (2 == parse_tree.children_[0]->value_) {  // MINOR FREEZE
       freeze_stmt->set_major_freeze(false);
       if (OB_NOT_NULL(parse_tree.children_[1])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("minor freeze has an unexpected target", KR(ret));
       } else if (OB_FAIL(resolve_target_(freeze_stmt, parse_tree.children_[2]))) {
       }
     } else {
@@ -161,10 +153,8 @@ int ObFreezeResolver::resolve_target_(ObFreezeStmt *freeze_stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(freeze_stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("freeze statement is null", KR(ret));
   } else if (OB_NOT_NULL(tablet_node)
              && OB_FAIL(Util::resolve_tablet_id(tablet_node, freeze_stmt->get_tablet_id()))) {
-      LOG_WARN("fail to resolve tablet id", KR(ret));
   }
   return ret;
 }
@@ -178,12 +168,8 @@ int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
     SERVER_LOG(WARN, "invalid session");
   } else if (OB_UNLIKELY(T_FLUSH_CACHE != parse_tree.type_ || parse_tree.num_child_ != 4)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument",
-             "type", get_type_name(parse_tree.type_),
-             "child_num", parse_tree.num_child_);
   } else if (NULL == parse_tree.children_[0]) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parse tree", K(ret));
   } else if (NULL == (stmt = create_stmt<ObFlushCacheStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("create ObFlushCacheStmt failed");
@@ -206,17 +192,14 @@ int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
       stmt->flush_cache_arg_.ns_type_ = ObLibCacheNameSpace::NS_INVALID;
     } else if (stmt->flush_cache_arg_.cache_type_ != CACHE_TYPE_LIB_CACHE) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("only support lib cache's cache evict by namespace", K(stmt->flush_cache_arg_.cache_type_), K(ret));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "only support lib cache's cache evict by namespace, other type");
     } else {
       if (OB_UNLIKELY(NULL == namespace_node->children_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("children should not be null");
       } else {
         ParseNode *node = namespace_node->children_[0];
         if (OB_UNLIKELY(NULL == node)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("node should not be null");
         } else {
           if (node->str_len_ <= 0) {
             ret = OB_ERR_UNEXPECTED;
@@ -244,16 +227,13 @@ int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
     } else if (stmt->flush_cache_arg_.cache_type_ != CACHE_TYPE_PLAN &&
                stmt->flush_cache_arg_.cache_type_ != CACHE_TYPE_PL_OBJ) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("only support plan cache's fine-grained cache evict", K(stmt->flush_cache_arg_.cache_type_), K(ret));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "only support plan cache's fine-grained cache evict, other type");
     } else if (OB_ISNULL(sql_id_node->children_)
                || OB_ISNULL(sql_id_node->children_[0])) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret));
     } else if (T_SQL_ID == sql_id_node->type_) {
       if (sql_id_node->children_[0]->str_len_ > (OB_MAX_SQL_ID_LENGTH+1)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid argument", K(ret));
       } else {
         stmt->flush_cache_arg_.sql_id_.assign_ptr(
             sql_id_node->children_[0]->str_value_,
@@ -265,7 +245,6 @@ int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
       stmt->flush_cache_arg_.is_fine_grained_ = true;
     } else {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret));
     }
 
     if (OB_FAIL(ret)) {
@@ -274,7 +253,6 @@ int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
       SERVER_LOG(WARN, "invalid argument", K(GCTX.schema_service_));
     } else if (OB_ISNULL(session_info_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("session info should not be null", K(ret));
     } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
                 schema_guard))) {
     } else {
@@ -299,7 +277,6 @@ int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
                || OB_ISNULL(db_node->children_[0])
                || T_DATABASE_LIST != db_node->type_) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret));
     } else {
       ObString db_names;
       ObString db_name;
@@ -350,7 +327,6 @@ int ObFlushKVCacheResolver::resolve(const ParseNode &parse_tree)
       stmt_ = stmt;
       if (OB_UNLIKELY(NULL == parse_tree.children_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("children should not be null");
       } else {
         ParseNode *node = parse_tree.children_[0];
         if (NULL == node) {
@@ -358,12 +334,10 @@ int ObFlushKVCacheResolver::resolve(const ParseNode &parse_tree)
         } else {
           if (OB_UNLIKELY(NULL == node->children_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("children should not be null");
           } else {
             node = node->children_[0];
             if (OB_UNLIKELY(NULL == node)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("node should not be null");
             } else {
               if (node->str_len_ <= 0) {
                 ret = OB_ERR_UNEXPECTED;
@@ -390,10 +364,8 @@ int ObFlushIlogCacheResolver::resolve(const ParseNode &parse_tree)
     LOG_WARN("type not match T_FLUSH_ILOGCACHE", "type", get_type_name(parse_tree.type_));
   } else if (OB_ISNULL(stmt = create_stmt<ObFlushIlogCacheStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("create ObFlushIlogCacheStmt error", K(ret));
   } else if (OB_ISNULL(parse_tree.children_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of parse tree is null", K(ret));
   } else {
     ParseNode *opt_file_id_node = parse_tree.children_[0];
     ParseNode *file_id_val_node = NULL;
@@ -402,15 +374,12 @@ int ObFlushIlogCacheResolver::resolve(const ParseNode &parse_tree)
       stmt_ = stmt;
     } else if (OB_ISNULL(opt_file_id_node->children_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("opt_file_id_node.children is null", K(ret));
     } else if (OB_ISNULL(file_id_val_node = opt_file_id_node->children_[0])) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("file_id_val_node is null", K(ret));
     } else {
       const int64_t file_id_val = file_id_val_node->value_;
       if (file_id_val <= 0 || file_id_val >= INT32_MAX) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid file_id when flush ilogcache", K(ret), K(file_id_val));
       } else {
         stmt->file_id_ = static_cast<int32_t>(file_id_val);
         stmt_ = stmt;
@@ -432,7 +401,6 @@ int ObFlushDagWarningsResolver::resolve(const ParseNode &parse_tree)
     LOG_WARN("type not match T_FLUSH_DAG_WARNINGS", "type", get_type_name(parse_tree.type_));
   } else if (OB_ISNULL(stmt = create_stmt<ObFlushDagWarningsStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("create ObFlushDagWarningsStmt error", K(ret));
   }
   return ret;
 }
@@ -448,7 +416,6 @@ int ObAdminMergeResolver::resolve(const ParseNode &parse_tree)
                          || nullptr == parse_tree.children_[0]
                          || T_INT != parse_tree.children_[0]->type_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid merge control parse tree", KR(ret), K(parse_tree.num_child_));
   } else if (OB_ISNULL(stmt_ = create_stmt<ObAdminMergeStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("create ObAdminMergeStmt failed", KR(ret));
@@ -458,7 +425,6 @@ int ObAdminMergeResolver::resolve(const ParseNode &parse_tree)
     static_cast<ObAdminMergeStmt *>(stmt_)->set_merge_type(ObAdminMergeStmt::MergeType::RESUME);
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected merge control type", KR(ret), "value", parse_tree.children_[0]->value_);
   }
   return ret;
 }
@@ -477,7 +443,6 @@ int ObRefreshMemStatResolver::resolve(const ParseNode &parse_tree)
       stmt_ = stmt;
       if (OB_UNLIKELY(NULL == parse_tree.children_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("children should not be null");
       }
     }
   }
@@ -498,7 +463,6 @@ int ObRefreshIOCalibrationResolver::resolve(const ParseNode &parse_tree)
   } else if (FALSE_IT(stmt_ = stmt)) {
   } else if (OB_UNLIKELY(NULL == parse_tree.children_ || 3 != parse_tree.num_child_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parse tree children is invalid", K(ret), K(parse_tree.num_child_));
   } else {
     param = &stmt->get_param();
   }
@@ -518,7 +482,6 @@ int ObRefreshIOCalibrationResolver::resolve(const ParseNode &parse_tree)
       param->only_refresh_ = true;
     } else if (nullptr == calibration_list_node->children_ || calibration_list_node->num_child_ <= 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("calibration list node has no children", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < calibration_list_node->num_child_; ++i) {
         common::ObIOBenchResult item;
@@ -526,9 +489,7 @@ int ObRefreshIOCalibrationResolver::resolve(const ParseNode &parse_tree)
         ObString calibration_string;
         if (OB_ISNULL(calibration_info_node)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("children of calibration_list should not be null", K(ret), KP(calibration_info_node), K(i));
         } else if (OB_FAIL(Util::resolve_string(calibration_info_node, calibration_string))) {
-          LOG_WARN("resolve calibration info node failed", K(ret));
           if (0 == i && calibration_info_node->str_len_ <= 0) {
             // empty means reset, do nothing
             param->only_refresh_ = false;
@@ -596,12 +557,10 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
   } else {
     if (OB_UNLIKELY(NULL == parse_tree.children_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("children should not be null");
     } else {
       const ParseNode *list_node = parse_tree.children_[0];
       if (OB_UNLIKELY(NULL == list_node)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("list_node should not be null");
       } else {
         ObSetConfigStmt *stmt = create_stmt<ObSetConfigStmt>();
         if (OB_UNLIKELY(NULL == stmt)) {
@@ -612,7 +571,6 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
             for (int64_t i = 0; OB_SUCC(ret) && i < list_node->num_child_; ++i) {
               if (OB_UNLIKELY(NULL == list_node->children_)) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("children should not be null");
                 break;
               }
 
@@ -626,26 +584,21 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                 if (OB_LIKELY(session_info_ != NULL)) {
 
                 } else {
-                  LOG_WARN("session is null");
 
                 }
 
                 if (OB_UNLIKELY(NULL == action_node->children_)) {
                   ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("children should not be null");
                   break;
                 } else if (OB_UNLIKELY(4 != action_node->num_child_)) {
                   ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("invalid system action child count", K(ret), K(action_node->num_child_));
                   break;
                 } else if (OB_FAIL(ObResolverUtils::resolve_local_runtime_selector(action_node->children_[3]))) {
-                  LOG_WARN("fail to resolve set-config runtime selector", K(ret));
                   break;
                 }
 
                 if (OB_UNLIKELY(NULL == action_node->children_[0])) {
                   ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("children[0] should not be null");
                   break;
                 }
 
@@ -653,7 +606,6 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                               action_node->children_[0]->str_value_);
                 ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, name);
                 if (OB_FAIL(item.name_.assign(name))) {
-                  LOG_WARN("assign config name failed", K(name), K(ret));
                   break;
                 }
 
@@ -662,14 +614,11 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                 ObDefaultValueRes resolve_res(val);
                 if (OB_UNLIKELY(NULL == action_node->children_[1])) {
                   ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("children[1] should not be null");
                   break;
                 } else if (OB_FAIL(ddl_resolver.resolve_default_value(action_node->children_[1], resolve_res))) {
-                  LOG_WARN("resolve config value failed", K(ret));
                   break;
                 } else if (!resolve_res.is_literal_) {
                   ret = OB_ERR_ILLEGAL_TYPE;
-                  LOG_WARN("resolve config value failed", K(ret), K(resolve_res.is_literal_));
                   break;
                 }
                 ObString str_val;
@@ -680,7 +629,6 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                     cast_coll_type = ObCharset::get_default_collation(ObCharset::get_default_charset());
                   } else {}
                 } else {
-                  LOG_WARN("session is null");
                   cast_coll_type = ObCharset::get_system_collation();
                 }
                 ObArenaAllocator allocator(ObModIds::OB_SQL_COMPILE);
@@ -692,16 +640,13 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                                    NULL);
                 EXPR_GET_VARCHAR_V2(val, str_val);
                 if (OB_FAIL(ret)) {
-                  LOG_WARN("get varchar value failed", K(ret), K(val));
                   break;
                 } else if (OB_FAIL(item.value_.assign(str_val))) {
-                  LOG_WARN("assign config value failed", K(ret), K(str_val));
                   break;
                 } else if (NULL != action_node->children_[2]) {
                   ObString comment(action_node->children_[2]->str_len_,
                                    action_node->children_[2]->str_value_);
                   if (OB_FAIL(item.comment_.assign(comment))) {
-                    LOG_WARN("assign comment failed", K(comment), K(ret));
                     break;
                   }
                 }
@@ -711,7 +656,6 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                   bool valid = ObConfigDefaultTableOrganizationChecker::check(item);
                   if (!valid) {
                     ret = OB_OP_NOT_ALLOW;
-                    LOG_WARN("can not set default_table_organization", "item", item, K(ret));
                   }
                 }
 
@@ -738,12 +682,10 @@ int ObSetTPResolver::resolve(const ParseNode &parse_tree)
   } else {
     if (OB_UNLIKELY(NULL == parse_tree.children_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("children should not be null");
     } else {
       const ParseNode *list_node = parse_tree.children_[0];
       if (OB_UNLIKELY(NULL == list_node)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("list_node should not be null");
       } else {
         ObSetTPStmt *stmt = create_stmt<ObSetTPStmt>();
         if (OB_UNLIKELY(NULL == stmt)) {
@@ -753,7 +695,6 @@ int ObSetTPResolver::resolve(const ParseNode &parse_tree)
           for (int64_t i = 0; OB_SUCC(ret) && i < list_node->num_child_; ++i) {
             if (OB_UNLIKELY(NULL == list_node->children_)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("children should not be null");
               break;
             }
 
@@ -854,7 +795,6 @@ int ObCancelTaskResolver::resolve(const ParseNode &parse_tree)
     LOG_WARN("type is not T_CANCEL_TASK", "type", get_type_name(parse_tree.type_));
   } else if (OB_ISNULL(parse_tree.children_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parse_tree's children is null", K(ret));
   } else {
     ObCancelTaskStmt *cancel_task = create_stmt<ObCancelTaskStmt>();
     if (NULL == cancel_task) {
@@ -866,7 +806,6 @@ int ObCancelTaskResolver::resolve(const ParseNode &parse_tree)
       ObString task_id_str;
       if (OB_ISNULL(task_id)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("task_id node is null", K(ret));
       } else if (OB_FAIL(Util::resolve_string(task_id, task_id_str))) {
       }
 
@@ -887,7 +826,6 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
 
   if (OB_UNLIKELY(T_ALTER_SYSTEM_SET != parse_tree.type_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parse_tree.type_ must be T_ALTER_SYSTEM_SET", K(ret), K(parse_tree.type_));
   } else if (OB_ISNULL(session_info_) || OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("session_info_ or allocator_ is NULL", K(ret), K(session_info_), K(allocator_));
@@ -897,22 +835,16 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
       ParseNode *set_node = nullptr, *set_param_node = nullptr;
       if (OB_ISNULL(set_node = parse_tree.children_[i])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("set_node should not be null", K(ret));
       } else if (T_ALTER_SYSTEM_SET_PARAMETER != set_node->type_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("set_node->type_ must be T_ALTER_SYSTEM_SET_PARAMETER", K(ret),
-                 K(set_node->type_));
       } else if (OB_ISNULL(set_param_node = set_node->children_[0])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("set_node is null", K(ret));
       } else if (OB_UNLIKELY(T_VAR_VAL != set_param_node->type_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("type is not T_VAR_VAL", K(ret), K(set_param_node->type_));
       } else {
         ParseNode *var = nullptr;
         if (OB_ISNULL(var = set_param_node->children_[0])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("var is NULL", K(ret));
         } else if (T_IDENT != var->type_) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED,
@@ -937,24 +869,18 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
       ObSetConfigStmt *setconfig_stmt = create_stmt<ObSetConfigStmt>();
       if (OB_ISNULL(setconfig_stmt)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("create set config stmt failed", KR(ret));
       } else {
         HEAP_VAR(ObCreateTableResolver, ddl_resolver, params_) {
           for (int64_t i = 0; OB_SUCC(ret) && i < parse_tree.num_child_; ++i) {
             ParseNode *set_node = nullptr, *set_param_node = nullptr;
             if (OB_ISNULL(set_node = parse_tree.children_[i])) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("set_node should not be null", K(ret));
             } else if (T_ALTER_SYSTEM_SET_PARAMETER != set_node->type_) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("set_node->type_ must be T_ALTER_SYSTEM_SET_PARAMETER",
-                       K(ret), K(set_node->type_));
             } else if (OB_ISNULL(set_param_node = set_node->children_[0])) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("set_node is null", K(ret));
             } else if (OB_UNLIKELY(T_VAR_VAL != set_param_node->type_)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("type is not T_VAR_VAL", K(ret), K(set_param_node->type_));
             } else {
               ParseNode *name_node = nullptr, *value_node = nullptr;
               HEAP_VAR(ObAdminSetConfigItem, item) {
@@ -962,7 +888,6 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
                 /* name */
                 if (OB_ISNULL(name_node = set_param_node->children_[0])) {
                   ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("var is NULL", K(ret));
                 } else if (T_IDENT != name_node->type_) {
                   ret = OB_NOT_SUPPORTED;
                   LOG_USER_ERROR(OB_NOT_SUPPORTED,
@@ -979,16 +904,13 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
                 /* value */
                 if (OB_ISNULL(value_node = set_param_node->children_[1])) {
                   ret = OB_INVALID_ARGUMENT;
-                  LOG_WARN("value node is NULL", K(ret));
                 } else {
                   ObObjParam val;
                   ObDefaultValueRes resolve_res(val);
                   if (OB_FAIL(ddl_resolver.resolve_default_value(value_node, resolve_res))) {
-                    LOG_WARN("resolve config value failed", K(ret));
                     break;
                   } else if (!resolve_res.is_literal_) {
                     ret = OB_ERR_ILLEGAL_TYPE;
-                    LOG_WARN("resolve config value failed", K(ret), K(resolve_res.is_literal_));
                     break;
                   }
                   ObString str_val;
@@ -1008,10 +930,8 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
                                      NULL);
                   EXPR_GET_VARCHAR_V2(val, str_val);
                   if (OB_FAIL(ret)) {
-                    LOG_WARN("get varchar value failed", K(ret), K(val));
                     break;
                   } else if (OB_FAIL(item.value_.assign(str_val))) {
-                    LOG_WARN("assign config value failed", K(ret), K(str_val));
                     break;
                   }
                 }
@@ -1039,17 +959,12 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
         for (int64_t i = 0; OB_SUCC(ret) && i < parse_tree.num_child_; ++i) {
           if (OB_ISNULL(set_node = parse_tree.children_[i])) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("set_node should not be null", K(ret));
           } else if (T_ALTER_SYSTEM_SET_PARAMETER != set_node->type_) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("set_node->type_ must be T_ALTER_SYSTEM_SET_PARAMETER",
-                     K(ret), K(set_node->type_));
           } else if (OB_ISNULL(set_param_node = set_node->children_[0])) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("set_node is null", K(ret));
           } else if (OB_UNLIKELY(T_VAR_VAL != set_param_node->type_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("type is not T_VAR_VAL", K(ret), K(set_param_node->type_));
           } else {
             ParseNode *var = NULL;
             var_node.set_scope_ = ObSetVar::SET_SCOPE_GLOBAL;
@@ -1057,7 +972,6 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
             /* resolve var_name */
             if (OB_ISNULL(var = set_param_node->children_[0])) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("var is NULL", K(ret));
             } else {
               ObString var_name;
               if (T_IDENT != var->type_) {
@@ -1081,7 +995,6 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
               if (OB_SUCC(ret)) {
                 if (OB_ISNULL(set_param_node->children_[1])) {
                   ret = OB_INVALID_ARGUMENT;
-                  LOG_WARN("value node is NULL", K(ret));
                 } else if (var_node.is_system_variable_) {
                   ParseNode value_node;
                   MEMCPY(&value_node, set_param_node->children_[1], sizeof(ParseNode));
@@ -1090,7 +1003,6 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
                 }
               }
               if (OB_SUCC(ret) && OB_FAIL(variable_set_stmt->add_variable_node(var_node))) {
-                LOG_WARN("Add set entry failed", K(ret));
               }
             }
           } // end resolve variable and value
@@ -1113,15 +1025,12 @@ int ObResetConfigResolver::resolve(const ParseNode &parse_tree)
   } else {
     if (OB_UNLIKELY(NULL == parse_tree.children_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("children should not be null");
     } else {
       const ParseNode *list_node = parse_tree.children_[0];
       if (OB_UNLIKELY(NULL == list_node)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("list_node should not be null");
       } else if (OB_UNLIKELY(NULL == list_node->children_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("children should not be null");
       } else {
         ObResetConfigStmt *stmt = create_stmt<ObResetConfigStmt>();
         if (OB_UNLIKELY(NULL == stmt)) {
@@ -1137,15 +1046,12 @@ int ObResetConfigResolver::resolve(const ParseNode &parse_tree)
                 if (OB_LIKELY(NULL != session_info_)) {
 
                 } else {
-                  LOG_WARN("session is null");
 
                 }
                 if (OB_UNLIKELY(NULL == action_node->children_)) {
                   ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("children should not be null");
                 } else if (OB_UNLIKELY(NULL == action_node->children_[0])) {
                   ret = OB_ERR_UNEXPECTED;
-                  LOG_WARN("children[0] should not be null");
                 } else {
                   // config name
                   ObString name(action_node->children_[0]->str_len_,
@@ -1157,7 +1063,6 @@ int ObResetConfigResolver::resolve(const ParseNode &parse_tree)
                         GCONF.get_container().get(ObConfigStringKey(item.name_.ptr()));
                     if (OB_ISNULL(config_item) || OB_ISNULL(*config_item)) {
                       ret = OB_ERR_SYS_CONFIG_UNKNOWN;
-                      LOG_WARN("unknown config", K(ret), K(item));
                     } else if (OB_FAIL(item.value_.assign((*config_item)->default_str()))) {
                     } else if (OB_FAIL(alter_system_set_reset_add_config_item(
                                    stmt->get_rpc_arg(), item))) {
@@ -1181,7 +1086,6 @@ int ObAlterSystemResetResolver::resolve(const ParseNode &parse_tree)
 
   if (OB_UNLIKELY(T_ALTER_SYSTEM_RESET != parse_tree.type_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parse_tree.type_ must be T_ALTER_SYSTEM_RESET", K(ret), K(parse_tree.type_));
   } else if (OB_ISNULL(session_info_) || OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("session_info_ or allocator_ is NULL", K(ret), K(session_info_), K(allocator_));
@@ -1191,22 +1095,16 @@ int ObAlterSystemResetResolver::resolve(const ParseNode &parse_tree)
       ParseNode *set_node = nullptr, *set_param_node = nullptr;
       if (OB_ISNULL(set_node = parse_tree.children_[i])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("set_node should not be null", K(ret));
       } else if (T_ALTER_SYSTEM_RESET_PARAMETER != set_node->type_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("set_node->type_ must be T_ALTER_SYSTEM_RESET_PARAMETER", K(ret),
-                 K(set_node->type_));
       } else if (OB_ISNULL(set_param_node = set_node->children_[0])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("set_node is null", K(ret));
       } else if (OB_UNLIKELY(T_VAR_VAL != set_param_node->type_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("type is not T_VAR_VAL", K(ret), K(set_param_node->type_));
       } else {
         ParseNode *var = nullptr;
         if (OB_ISNULL(var = set_param_node->children_[0])) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("var is NULL", K(ret));
         } else if (T_IDENT != var->type_) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED,
@@ -1230,23 +1128,17 @@ int ObAlterSystemResetResolver::resolve(const ParseNode &parse_tree)
       ObSetConfigStmt *setconfig_stmt = create_stmt<ObSetConfigStmt>();
       if (OB_ISNULL(setconfig_stmt)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("create set config stmt failed", KR(ret));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < parse_tree.num_child_; ++i) {
           ParseNode *set_node = nullptr, *set_param_node = nullptr;
           if (OB_ISNULL(set_node = parse_tree.children_[i])) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("set_node should not be null", K(ret));
           } else if (T_ALTER_SYSTEM_RESET_PARAMETER != set_node->type_) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("set_node->type_ must be T_ALTER_SYSTEM_RESET_PARAMETER",
-                      K(ret), K(set_node->type_));
           } else if (OB_ISNULL(set_param_node = set_node->children_[0])) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("set_node is null", K(ret));
           } else if (OB_UNLIKELY(T_VAR_VAL != set_param_node->type_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("type is not T_VAR_VAL", K(ret), K(set_param_node->type_));
           } else {
             ParseNode *name_node = nullptr, *value_node = nullptr;
             HEAP_VAR(ObAdminSetConfigItem, item) {
@@ -1254,7 +1146,6 @@ int ObAlterSystemResetResolver::resolve(const ParseNode &parse_tree)
               /* name */
               if (OB_ISNULL(name_node = set_param_node->children_[0])) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("var is NULL", K(ret));
               } else if (T_IDENT != name_node->type_) {
                 ret = OB_NOT_SUPPORTED;
                 LOG_USER_ERROR(OB_NOT_SUPPORTED,
@@ -1273,7 +1164,6 @@ int ObAlterSystemResetResolver::resolve(const ParseNode &parse_tree)
                   GCONF.get_container().get(ObConfigStringKey(item.name_.ptr()));
               if (OB_ISNULL(config_item) || OB_ISNULL(*config_item)) {
                 ret = OB_ERR_SYS_CONFIG_UNKNOWN;
-                LOG_WARN("unknown config", KR(ret), K(item));
               } else if (OB_FAIL(item.value_.assign((*config_item)->default_str()))) {
               }
               if (OB_SUCC(ret)) {
@@ -1287,7 +1177,6 @@ int ObAlterSystemResetResolver::resolve(const ParseNode &parse_tree)
       }
     } else {
       ret = OB_ERR_SYS_CONFIG_UNKNOWN;
-      LOG_WARN("variables do not support reset or unknown config item", KR(ret));
     }
   } // if
   return ret;

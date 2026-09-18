@@ -187,7 +187,6 @@ int ObWaitEventHistoryIter::get_next(ObWaitEventDesc *&item)
     item = &items_[(start_pos_ - curr_ + SESSION_WAIT_HISTORY_CNT) % SESSION_WAIT_HISTORY_CNT];
     curr_++;
     if (!item->is_valid()) {
-      LOG_WARN("wait event desc is invalid", K(ret), K(item->event_no_));
       if (OB_FAIL(get_next(item))) {
         if (ret != OB_ITER_END) {
           LOG_WARN("failed to get next wait event desc");

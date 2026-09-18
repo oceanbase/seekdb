@@ -48,8 +48,6 @@ static int update_tcp_keepalive_parameters_for_sql_nio_server(int tcp_keepalive_
       || tcp_keepcnt <= 0
       || tcp_keepcnt > static_cast<int64_t>(UINT32_MAX)) {
     ret = OB_INVALID_CONFIG;
-    LOG_WARN("TCP keepalive configuration exceeds the SQL-NIO ABI range",
-             K(ret), K(tcp_keepidle), K(tcp_keepintvl), K(tcp_keepcnt));
   } else if (NULL != global_sql_nio_server) {
     global_sql_nio_server->update_tcp_keepalive_params(
         tcp_keepalive_enabled, static_cast<uint32_t>(tcp_keepidle),

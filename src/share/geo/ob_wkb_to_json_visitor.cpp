@@ -121,12 +121,9 @@ int ObWkbToJsonVisitor::appendPoint(T_IBIN *geo)
   const char *type_name = "Point";
   // { "type": "Point", "coordinates": [x, y] }
   if (!in_multi_visit_ && OB_FAIL(appendJsonFields(geo->type(), type_name, geo))) {
-    LOG_WARN("fail to append buffer_", K(ret), K(in_multi_visit_), K(type_name));
   } else if (OB_FAIL(appendInnerPoint(geo->x(), geo->y()))) {
   } else if (!in_multi_visit_ && OB_FAIL(buffer_.append(right_curly_bracket_))) {
-    LOG_WARN("fail to append buffer_", K(ret), K(in_multi_visit_));
   } else if ((in_multi_visit_ || in_colloction_visit()) && OB_FAIL(buffer_.append(", "))) {
-    LOG_WARN("fail to append buffer_", K(ret));
   }
   return ret;
 }
@@ -181,17 +178,14 @@ int ObWkbToJsonVisitor::appendDouble(double x)
 int ObWkbToJsonVisitor::appendJsonFields(ObGeoType type, const char *type_name, ObGeometry *geo) {
   int ret = OB_SUCCESS;
   if (type <= ObGeoType::GEOMETRY || type >= ObGeoType::GEOTYPEMAX) {
-    LOG_WARN("invalid geo type", K(ret), K(type));
   } else if (OB_FAIL(buffer_.append(left_curly_bracket_))) {
   } else if (OB_FAIL(appendMySQLFlagInfo(geo))) {
   } else if (OB_FAIL(buffer_.append("\"type\": \""))) {
   } else if (OB_FAIL(buffer_.append(type_name))) {
   } else if (type != ObGeoType::GEOMETRYCOLLECTION &&
                OB_FAIL(buffer_.append("\", \"coordinates\": "))) {
-    LOG_WARN("fail to append coordinates field", K(ret));
   } else if (type == ObGeoType::GEOMETRYCOLLECTION &&
                OB_FAIL(buffer_.append("\", \"geometries\": "))) {
-    LOG_WARN("fail to append geometries field", K(ret));
   }
   return ret;
 }
@@ -218,7 +212,6 @@ int ObWkbToJsonVisitor::appendLine(T_IBIN *geo)
   INIT_SUCC(ret);
   const char *type_name = "LineString";
   if (!in_multi_visit_ && OB_FAIL(appendJsonFields(geo->type(), type_name, geo))) {
-    LOG_WARN("fail to append buffer_", K(ret), K(in_multi_visit_), K(type_name));
   } else if (OB_FAIL(buffer_.append(left_sq_bracket_))) {
   } else {
     const T_BIN *line = reinterpret_cast<const T_BIN *>(geo->val());
@@ -232,9 +225,7 @@ int ObWkbToJsonVisitor::appendLine(T_IBIN *geo)
     } else if (OB_FAIL(buffer_.set_length(buffer_.length() - 2))) {
     } else if (OB_FAIL(buffer_.append(right_sq_bracket_))) {
     } else if (!in_multi_visit_ && OB_FAIL(buffer_.append(right_curly_bracket_))) {
-      LOG_WARN("fail to append buffer_", K(ret));
     } else if ((in_multi_visit_ || in_colloction_visit()) && OB_FAIL(buffer_.append(", "))) {
-      LOG_WARN("fail to append buffer_", K(ret));
     }
   }
   return ret;
@@ -306,9 +297,7 @@ int ObWkbToJsonVisitor::appendPolygon(T_IBIN *geo)
   const char *type_name = "Polygon";
   if (geo->length() < WKB_COMMON_WKB_HEADER_LEN) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("invalid wkb length", K(ret), K(geo->length()));
   } else if (!in_multi_visit_ && OB_FAIL(appendJsonFields(geo->type(), type_name, geo))) {
-    LOG_WARN("fail to append buffer_", K(ret), K(in_multi_visit_), K(type_name));
   } else if (OB_FAIL(buffer_.append(left_sq_bracket_))) {
   } else {
     T_BIN& poly = *(T_BIN *)(geo->val());
@@ -350,9 +339,7 @@ int ObWkbToJsonVisitor::appendPolygon(T_IBIN *geo)
     } else if (OB_FAIL(buffer_.set_length(buffer_.length() - 2))) {
     } else if (OB_FAIL(buffer_.append(right_sq_bracket_))) {
     } else if (!in_multi_visit_ && OB_FAIL(buffer_.append(right_curly_bracket_))) {
-      LOG_WARN("fail to append buffer_", K(ret));      
     } else if ((in_multi_visit_ || in_colloction_visit()) && OB_FAIL(buffer_.append(", "))) {
-      LOG_WARN("fail to append buffer_", K(ret));
     }
   }
   return ret;
@@ -364,7 +351,6 @@ int ObWkbToJsonVisitor::visit(ObIWkbGeogMultiPolygon *geo)
   const char *type_name = "MultiPolygon";
   if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("geo is NULL", K(ret));
   } else if (OB_FAIL(appendMultiPrefix(geo->type(), type_name, geo))){
   }
   return ret;
@@ -376,7 +362,6 @@ int ObWkbToJsonVisitor::visit(ObIWkbGeomMultiPolygon *geo)
   const char *type_name = "MultiPolygon";
   if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("geo is NULL", K(ret));
   } else if (OB_FAIL(appendMultiPrefix(geo->type(), type_name, geo))){
   }
   return ret;
@@ -388,7 +373,6 @@ int ObWkbToJsonVisitor::visit(ObIWkbGeogCollection *geo)
   const char *type_name = "GeometryCollection";
   if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("geo is NULL", K(ret));
   } else if (OB_FAIL(appendMultiPrefix(geo->type(), type_name, geo))){
   }
   return ret;
@@ -400,7 +384,6 @@ int ObWkbToJsonVisitor::visit(ObIWkbGeomCollection *geo)
   const char *type_name = "GeometryCollection";
   if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("geo is NULL", K(ret));
   } else if (OB_FAIL(appendMultiPrefix(geo->type(), type_name, geo))){
   }
   return ret;
@@ -422,7 +405,6 @@ int ObWkbToJsonVisitor::appendMultiSuffix()
   } else if (OB_FAIL(buffer_.append(right_sq_bracket_))) {
   } else if (OB_FAIL(buffer_.append(right_curly_bracket_))) {
   } else if ((in_colloction_visit()) && OB_FAIL(buffer_.append(", "))) {
-    LOG_WARN("fail to append buffer_", K(ret));
   }
   return ret;
 }
@@ -433,7 +415,6 @@ int ObWkbToJsonVisitor::finish(ObIWkbGeogMultiPoint *geo)
   in_multi_visit_ = false;
   if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("geo is NULL", K(ret));
   } else if (OB_FAIL(appendMultiSuffix())) {
   }
   return ret;
@@ -445,7 +426,6 @@ int ObWkbToJsonVisitor::finish(ObIWkbGeomMultiPoint *geo)
   in_multi_visit_ = false;
   if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("geo is NULL", K(ret));
   } else if (OB_FAIL(appendMultiSuffix())) {
   }
   return ret;
@@ -457,7 +437,6 @@ int ObWkbToJsonVisitor::finish(ObIWkbGeogMultiLineString *geo)
   in_multi_visit_ = false;
   if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("geo is NULL", K(ret));
   } else if (OB_FAIL(appendMultiSuffix())) {
   }
   return ret;
@@ -469,7 +448,6 @@ int ObWkbToJsonVisitor::finish(ObIWkbGeomMultiLineString *geo)
   in_multi_visit_ = false;
   if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("geo is NULL", K(ret));
   } else if (OB_FAIL(appendMultiSuffix())) {
   }
   return ret;
@@ -481,7 +459,6 @@ int ObWkbToJsonVisitor::finish(ObIWkbGeogMultiPolygon *geo)
   in_multi_visit_ = false;
   if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("geo is NULL", K(ret));
   } else if (OB_FAIL(appendMultiSuffix())) {
   }
   return ret;
@@ -493,7 +470,6 @@ int ObWkbToJsonVisitor::finish(ObIWkbGeomMultiPolygon *geo)
   in_multi_visit_ = false;
   if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("geo is NULL", K(ret));
   } else if (OB_FAIL(appendMultiSuffix())) {
   }
   return ret;
@@ -505,7 +481,6 @@ int ObWkbToJsonVisitor::appendCollectionSuffix(T_IBIN *geo)
   INIT_SUCC(ret);
   ObString comma(2, buffer_.ptr() + buffer_.length() - 2);
   if ((comma.compare(", ") == 0) && OB_FAIL(buffer_.set_length(buffer_.length() - 2))) {
-      LOG_WARN("fail to set buffer_ len", K(ret), K(buffer_.length()));
   } else if (OB_FAIL(buffer_.append(right_sq_bracket_))) {
   } else if (OB_FAIL(buffer_.append(right_curly_bracket_))) {
   }
@@ -513,7 +488,6 @@ int ObWkbToJsonVisitor::appendCollectionSuffix(T_IBIN *geo)
   colloction_level_--;
   if (OB_FAIL(ret)) {
   } else if (in_colloction_visit() && OB_FAIL(buffer_.append(", "))) {
-    LOG_WARN("fail to append buffer_", K(ret));
   }
   return ret;
 }

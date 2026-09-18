@@ -90,11 +90,9 @@ int ObJsonSchemaTree::build_schema_tree(ObIJsonBase *json_doc)
 
   if (OB_ISNULL(json_doc) || OB_ISNULL(allocator_)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("shouldn't be null", K(ret), KPC(json_doc));
   } else if (json_doc->json_type() != ObJsonNodeType::J_OBJECT) {
     // json schema must be object
     ret = OB_ERR_TYPE_OF_JSON_SCHEMA;
-    LOG_WARN("json schema must be object", K(ret), K(json_doc->json_type()));
   } else if (json_doc->is_bin()) {
     ObJsonBin *j_bin = static_cast<ObJsonBin *>(json_doc);
     ObJsonNode *j_tree = nullptr;
@@ -113,7 +111,6 @@ int ObJsonSchemaTree::build_schema_tree(ObIJsonBase *json_doc)
           || OB_ISNULL(ref_ = OB_NEWx(ObJsonObject, allocator_, allocator_))
           || OB_ISNULL(typeless_ = OB_NEWx(ObJsonInt, allocator_, DEFAULT_PREVIOUS_NUMBER))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to init schema tree.", K(ret));
   } else if (OB_FAIL(schema_map_->append(cur_root))) {
   } else if (OB_FALSE_IT(++serial_num_) || OB_FALSE_IT(cur_schema_stk_.reset())) {
   } else if (OB_FAIL(cur_schema_stk_.push(cur_root))) {
@@ -223,7 +220,6 @@ int ObJsonSchemaTree::inner_build_schema_tree(ObJsonObject* origin_schema, bool 
   if (cur_schema_stk_.size() < 1 || OB_ISNULL(schema_map_) || OB_ISNULL(allocator_) 
       || OB_ISNULL(origin_schema) || (is_composition && OB_ISNULL(comp_array))) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("shouldn't be null.", K(ret), K(cur_schema_stk_.size()), KPC(schema_map_));
   } else if (OB_FAIL(get_schema_vec(schema_vec_stk, is_composition))) {
   } else if (if_have_ref(origin_schema)) {
     if (OB_FAIL(handle_ref_keywords(origin_schema, schema_vec_stk, is_composition, comp_array))) {
@@ -238,7 +234,6 @@ int ObJsonSchemaTree::inner_build_schema_tree(ObJsonObject* origin_schema, bool 
   } else if (OB_FAIL(ObJsonSchemaUtils::check_if_composition_legal(origin_schema, key_words))) {
   } else if (OB_FALSE_IT(schema_vec_stk.destroy())) { // useless now
   } else if (key_words.flags_ != 0 && OB_FAIL(handle_keywords_with_subschemas(key_words, origin_schema, schema_vec_stk, is_composition, comp_array))) {
-    LOG_WARN("fail to handle key words with subschema.", K(ret));
   }
   return ret;
 }
@@ -256,7 +251,6 @@ int ObJsonSchemaTree::get_schema_vec(ObIArray<ObJsonNode*> &schema_vec_stk, bool
       if (OB_ISNULL(tmp_json = cur_schema->get_value(ObJsonSchemaItem::COMPOSITION))) {
         if (OB_ISNULL(schema_vec = OB_NEWx(ObJsonArray, allocator_, allocator_))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("fail to alloc composition node.", K(ret));
         } else if (OB_FAIL(cur_schema->add(ObJsonSchemaItem::COMPOSITION, schema_vec, true, false, false))) {
         } else {
           res_vec = schema_vec;
@@ -265,13 +259,11 @@ int ObJsonSchemaTree::get_schema_vec(ObIArray<ObJsonNode*> &schema_vec_stk, bool
         res_vec = tmp_json;
       } else {
         ret = OB_ERR_INVALID_JSON_TYPE;
-        LOG_WARN("must be array.", K(ret));
       }
     } else if (OB_ISNULL(tmp_json = cur_schema->get_value(ObJsonSchemaItem::SCHEMA))) {
       ObJsonObject* schema_vec = nullptr;
       if (OB_ISNULL(schema_vec = OB_NEWx(ObJsonObject, allocator_, allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc schema node.", K(ret));
       } else if (OB_FAIL(cur_schema->add(ObJsonSchemaItem::SCHEMA, schema_vec, true, false, false))) {
       } else {
         res_vec = schema_vec;
@@ -280,7 +272,6 @@ int ObJsonSchemaTree::get_schema_vec(ObIArray<ObJsonNode*> &schema_vec_stk, bool
       res_vec = tmp_json;
     } else {
       ret = OB_ERR_INVALID_JSON_TYPE;
-      LOG_WARN("must be array.", K(ret));
     }
 
     // the schema need record to all members in schma_vec_stk
@@ -299,9 +290,7 @@ int ObJsonSchemaTree::generate_schema_and_record(const ObString& key_word,
 {
   INIT_SUCC(ret);
   if (is_composition && OB_FAIL(generate_comp_and_record(key_word, value, schema_vec_stk, comp_array))) {
-    LOG_WARN("fail to add comp node.", K(ret));
   } else if (!is_composition && OB_FAIL(generate_schema_info(key_word, value, schema_vec_stk))) {
-    LOG_WARN("fail to add schema node.", K(ret));
   }
   return ret;
 }
@@ -316,7 +305,6 @@ int ObJsonSchemaTree::generate_schema_info(const ObString& key_word, ObJsonNode*
     ObJsonNode* old_key_value = nullptr;
     if (cur_schema_node->json_type() != ObJsonNodeType::J_OBJECT) {
       ret = OB_ERR_WRONG_VALUE;
-      LOG_WARN("must be object type.", K(ret), K(i));
     } else if (OB_FALSE_IT(cur_schema_vec = static_cast<ObJsonObject*>(cur_schema_node))) {
     } else if (OB_ISNULL(old_key_value = cur_schema_vec->get_value(key_word))) {
       if (OB_FAIL(cur_schema_vec->add(key_word, value))) {
@@ -328,7 +316,6 @@ int ObJsonSchemaTree::generate_schema_info(const ObString& key_word, ObJsonNode*
         // same value, do nothing
       } else if (OB_FAIL(union_schema_def(key_word, value, old_key_value, update_old_key))) {
       } else if (update_old_key && OB_FAIL(cur_schema_vec->add(key_word, value, false, true, true))) {
-        LOG_WARN("fail to update value.", K(key_word), K(ret));
       }
     }
   } // end for
@@ -340,7 +327,6 @@ int ObJsonSchemaTree::union_type(ObJsonNode*& new_value, ObJsonNode* old_value, 
   INIT_SUCC(ret);
   if (new_value->json_type() != ObJsonNodeType::J_UINT || old_value->json_type() != ObJsonNodeType::J_UINT) {
     ret = OB_ERR_WRONG_VALUE;
-    LOG_WARN("must be array type.", K(ret));
   } else {
     ObJsonSchemaType old_val;
     old_val.flags_ = old_value->get_uint();
@@ -387,7 +373,6 @@ int ObJsonSchemaTree::union_array_key_words_value(ObJsonNode*& new_value, ObJson
   ObJsonContentUnique unique;
   if (new_value->json_type() != ObJsonNodeType::J_ARRAY || old_value->json_type() != ObJsonNodeType::J_ARRAY) {
     ret = OB_ERR_WRONG_VALUE;
-    LOG_WARN("must be array type.", K(ret));
   } else {
     ObJsonArray* new_val = static_cast<ObJsonArray*>(new_value);
     ObJsonArray* old_val = static_cast<ObJsonArray*>(old_value);
@@ -416,12 +401,10 @@ int ObJsonSchemaTree::union_array_key_words_value(ObJsonNode*& new_value, ObJson
           if (ret == OB_CONFLICT_VALUE) {
             ret = OB_SUCCESS; 
             if (!get_merge && OB_FAIL(old_val->append(node))) { // get union, only need confict value
-              LOG_WARN("fail to append.", K(ret));
             }
           }
         } else if (get_merge && OB_FAIL(old_val->append(node))) { 
           // get merge, add values that not in old_val
-          LOG_WARN("fail to append.", K(ret));
         }
       }
     }
@@ -440,7 +423,6 @@ int ObJsonSchemaTree::union_scalar_key_words_value(ObJsonNode*& new_value, ObJso
     ObJsonArray* array_val = nullptr;
     if (OB_ISNULL(array_val = OB_NEWx(ObJsonArray, allocator_, allocator_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc array node.", K(ret));
     } else if (OB_FAIL(array_val->array_append(old_value))) {
     } else if (OB_FAIL(array_val->array_append(new_value))) {
     } else {
@@ -456,7 +438,6 @@ int ObJsonSchemaTree::union_add_pro_value(ObJsonNode*& new_value, ObJsonNode* ol
   if (new_value->json_type() != ObJsonNodeType::J_ARRAY || old_value->json_type() != ObJsonNodeType::J_ARRAY
     || new_value->element_count() != ADDITIONAL_PRO_ARRAY_COUNT || (old_value->element_count()) % ADDITIONAL_PRO_ARRAY_COUNT != 0) {
     ret = OB_ERR_WRONG_VALUE;
-    LOG_WARN("must be object type.", K(ret));
   } else {
     int size = new_value->element_count();
     ObJsonArray* new_val = static_cast<ObJsonArray*>(new_value);
@@ -521,7 +502,6 @@ int ObJsonSchemaTree::union_schema_def(const ObString& key_word, ObJsonNode*& va
     case JS_MULTIPLE_LEN : {
       if (key_word.compare(ObJsonSchemaItem::MULTIPLE_OF) == 0 
         && OB_FAIL(union_scalar_key_words_value(value, old_key_value, update_old_key))) {
-        LOG_WARN("fail to union matiple.", K(ret));
       }
       break;
     }
@@ -549,13 +529,11 @@ int ObJsonSchemaTree::union_schema_def(const ObString& key_word, ObJsonNode*& va
     case JS_DEP_REQUIRED_LEN : {
       if (key_word.compare(ObJsonSchemaItem::DEPENDENTREQUIRED) == 0 
           && OB_FAIL(union_scalar_key_words_value(value, old_key_value, update_old_key))) {
-        LOG_WARN("fail to union matiple.", K(ret));
       }
       break;
     }
     case JS_ADD_PRO_LEN : {
       if (key_word.compare(ObJsonSchemaItem::ADDITIONAL_PRO) == 0 && OB_FAIL(union_add_pro_value(value, old_key_value))) {
-        LOG_WARN("fail to union additional pro.", K(ret));
       }
       break;
     }
@@ -569,7 +547,6 @@ int ObJsonSchemaTree::union_schema_def(const ObString& key_word, ObJsonNode*& va
     }
     default: {
       ret = OB_ERR_WRONG_VALUE;
-      LOG_WARN("wrong type.", K(ret));
     }
   }
   return ret;
@@ -586,7 +563,6 @@ int ObJsonSchemaTree::generate_comp_and_record(const ObString& key_word,
   int size = schema_vec_stk.count();
   if (OB_ISNULL(key_word_schema = OB_NEWx(ObJsonObject, allocator_, allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc key_word_schema node.", K(ret));
   } else if (OB_FAIL(key_word_schema->add(key_word, value, true, false, false))) {
   }
   for (int i = 0; OB_SUCC(ret) && i < size; ++i) {
@@ -601,16 +577,13 @@ int ObJsonSchemaTree::generate_comp_and_record(const ObString& key_word,
     }
     if (cur_schema_node->json_type() != ObJsonNodeType::J_ARRAY) {
       ret = OB_ERR_WRONG_VALUE;
-      LOG_WARN("must be array type.", K(ret), K(i));
     } else if (OB_FALSE_IT(cur_schema_vec = static_cast<ObJsonArray*>(cur_schema_node))) {
     } else if (OB_FAIL(schema_map_->append(record_schema))) {
     } else if (OB_ISNULL(record_schema_idx = OB_NEWx(ObJsonInt, allocator_, serial_num_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN( "fail to alloc memory for array json node", K(ret));
     } else if (OB_FAIL(cur_schema_vec->append(record_schema_idx))) {
     } else if (OB_ISNULL(record_schema_idx = OB_NEWx(ObJsonInt, allocator_, serial_num_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN( "fail to alloc memory for array json node", K(ret));
     } else if (OB_FAIL(comp_array->append(record_schema_idx))) {
     } else {
       // num of schema_map++
@@ -679,7 +652,6 @@ int ObJsonSchemaTree::handle_keywords_with_number_value(const ObString& key_word
     }
     if (OB_FAIL(ret)) {
     } else if (is_valid && OB_FAIL(generate_schema_and_record(key_word, node, schema_vec_stk, is_composition, comp_array))) {
-      LOG_WARN( "fail to add type schema", K(key_word), K(ret));
     }
   }
   return ret;
@@ -790,7 +762,6 @@ int ObJsonSchemaTree::get_difined_type(ObJsonObject* origin_schema,
     ObJsonUint* type_value = nullptr;
     if (OB_ISNULL(type_value = OB_NEWx(ObJsonUint, allocator_, s_type.flags_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN( "fail to alloc memory for array json node", K(ret));
     } else if (OB_FAIL(generate_schema_and_record(ObJsonSchemaItem::TYPE, type_value, 
                                                   schema_vec_stk, is_composition, comp_array))) {
     }
@@ -840,7 +811,6 @@ int ObJsonSchemaTree::get_dep_schema_if_defined(ObJsonObject* json_schema,
     } else if (count_schema_required > 0 
               && OB_FAIL(generate_schema_and_record(ObJsonSchemaItem::DEPENDENTREQUIRED, deps_require_node, 
                                                     schema_vec_stk, is_composition, comp_array))) {
-      LOG_WARN( "fail to add type schema", K(ret));
     }
   }
   return ret;
@@ -859,7 +829,6 @@ int ObJsonSchemaTree::check_keywords_by_type(const ObJsonSchemaType& schema_type
         || OB_FAIL(check_keywords_of_number(origin_schema, schema_vec_stk, is_composition, comp_array))
         || OB_FAIL(check_keywords_of_object(origin_schema, schema_vec_stk, key_words, is_composition, comp_array))
         || OB_FAIL(check_keywords_of_array(origin_schema, schema_vec_stk, key_words, is_composition, comp_array))) {
-        LOG_WARN("fail to get check keywords", K(ret));
       }
   } else {
     if (OB_SUCC(ret) && schema_type.string_ == 1) {
@@ -886,7 +855,6 @@ int ObJsonSchemaTree::check_keywords_of_string(ObJsonObject* origin_schema,
   INIT_SUCC(ret);
   if (OB_FAIL(handle_positive_int_keywords(ObJsonSchemaItem::MAX_LEN, origin_schema, schema_vec_stk, is_composition, comp_array))
    || OB_FAIL(handle_positive_int_keywords(ObJsonSchemaItem::MIN_LEN, origin_schema, schema_vec_stk, is_composition, comp_array))) {
-      LOG_WARN( "fail to add type max/min length", K(ret));
   } else {
     ObJsonNode* node = origin_schema->get_value(ObJsonSchemaItem::PATTERN);
     if (OB_ISNULL(node)) {
@@ -939,7 +907,6 @@ int ObJsonSchemaTree::check_keywords_of_number(ObJsonObject* origin_schema,
   
   if (OB_SUCC(ret) && OB_FAIL(handle_keywords_with_number_value(ObJsonSchemaItem::MULTIPLE_OF, 
                               origin_schema, schema_vec_stk, is_composition, comp_array, true))) {
-      LOG_WARN( "fail to add type maxmum/minmum/mutiple", K(ret));
   } 
   return ret;
 }
@@ -955,7 +922,6 @@ int ObJsonSchemaTree::check_keywords_of_object(ObJsonObject* origin_schema,
                                            schema_vec_stk, is_composition, comp_array))
    || OB_FAIL(handle_positive_int_keywords(ObJsonSchemaItem::MIN_PROPERTIES, origin_schema, 
                                            schema_vec_stk, is_composition, comp_array))) {
-      LOG_WARN( "fail to add type max/min properties", K(ret));
   } else if (OB_FAIL(get_dep_schema_if_defined(origin_schema, schema_vec_stk, key_words, 
                                                is_composition, comp_array))) {
   } else if (OB_FAIL(handle_keywords_with_specific_type(ObJsonSchemaItem::REQUIRED, 
@@ -1010,7 +976,6 @@ int ObJsonSchemaTree::add_required_key(ObJsonNode* pro, ObJsonNode* required, Ob
         ObJsonString* str_node = nullptr;
         if (OB_ISNULL(str_node = OB_NEWx(ObJsonString, allocator_, tmp_str->get_str()))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("alloc failed.", K(i), K(size), K(ret));
         } else if (OB_FAIL(pro_key_array->append(str_node))) {
         }
       }
@@ -1055,7 +1020,6 @@ int ObJsonSchemaTree::get_addition_pro_value(const ObJsonSubSchemaKeywords& key_
     || OB_ISNULL(pro_key_array = OB_NEWx(ObJsonArray, allocator_, allocator_))
     || OB_ISNULL(pattern_key_array = OB_NEWx(ObJsonArray, allocator_, allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc comp_array failed.", K(ret));
   } else if (OB_NOT_NULL(required_node) && required_node->json_type() != ObJsonNodeType::J_ARRAY
             && OB_FALSE_IT(required_node = nullptr)) { 
   } else if (OB_NOT_NULL(dep_node) && dep_node->json_type() != ObJsonNodeType::J_OBJECT
@@ -1088,7 +1052,6 @@ int ObJsonSchemaTree::get_addition_pro_value(const ObJsonSubSchemaKeywords& key_
           ObJsonString* str_node = nullptr;
           if (OB_ISNULL(str_node = OB_NEWx(ObJsonString, allocator_, key))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("alloc failed.", K(size), K(i), K(key), K(ret));
           } else if (OB_FAIL(pro_key_array->append(str_node))) {
           }
         }
@@ -1124,7 +1087,6 @@ int ObJsonSchemaTree::check_keywords_of_array(ObJsonObject* origin_schema,
                                            schema_vec_stk, is_composition, comp_array))
    || OB_FAIL(handle_positive_int_keywords(ObJsonSchemaItem::MIN_ITEMS, origin_schema, 
                                            schema_vec_stk, is_composition, comp_array))) {
-      LOG_WARN( "fail to add type max/min items", K(ret));
   } else if (OB_NOT_NULL(node = origin_schema->get_value(ObJsonSchemaItem::ITEMS))) {
     // property with sub_schema, just record, deal with it later
     if (node->json_type() == ObJsonNodeType::J_OBJECT && node->element_count() > 0) {   
@@ -1151,7 +1113,6 @@ int ObJsonSchemaTree::check_keywords_of_array(ObJsonObject* origin_schema,
       if (node->get_boolean()) {
       } else if (OB_ISNULL(tuple_size = OB_NEWx(ObJsonInt, allocator_, tuple_items_size))) { 
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to init schema tree.", K(ret));
       } else if (OB_FAIL(generate_schema_and_record(ObJsonSchemaItem::ADDITIONAL_ITEMS, tuple_size, 
                                                     schema_vec_stk, is_composition, comp_array))) {
       }
@@ -1204,52 +1165,41 @@ int ObJsonSchemaTree::handle_keywords_with_subschemas(ObJsonSubSchemaKeywords& k
     if (OB_FAIL(handle_array_tuple_schema(json_schema, is_composition, comp_array))) {
     } else if (key_words.additional_items_ == 1 
       && OB_FAIL(handle_array_schema(json_schema, is_composition, comp_array, true))) {
-      LOG_WARN("fail to handle additional items", K(ret));
     }
   }
   if (OB_SUCC(ret) && key_words.dep_schema_ == 1) {
     if (!is_composition 
         && OB_FAIL(handle_unnested_dependencies(json_schema))) {
-      LOG_WARN("fail to handle unnested_dependent_schemas.", K(ret));
     } else if (is_composition 
       && OB_FAIL(handle_nested_dependencies(json_schema, comp_array))) {
-      LOG_WARN("fail to handle nested_dependent_schemas.", K(ret));
     }
   }
   if (OB_SUCC(ret) && key_words.all_of_ == 1) {
     if (!is_composition 
         && OB_FAIL(handle_unnested_composition(ObJsonSchemaItem::ALLOF, json_schema))) {
-      LOG_WARN("fail to handle unnested_composition_allOf.", K(ret));
     } else if (is_composition 
       && OB_FAIL(handle_nested_composition(ObJsonSchemaItem::ALLOF, json_schema, comp_array))) {
-      LOG_WARN("fail to handle nested_composition_allOf.", K(ret));
     }
   }
   if (OB_SUCC(ret) && key_words.any_of_ == 1) {
     if (!is_composition 
         && OB_FAIL(handle_unnested_composition(ObJsonSchemaItem::ANYOF, json_schema))) {
-      LOG_WARN("fail to handle unnested_composition_anyOf.", K(ret));
     } else if (is_composition 
       && OB_FAIL(handle_nested_composition(ObJsonSchemaItem::ANYOF, json_schema, comp_array))) {
-      LOG_WARN("fail to handle nested_composition_anyOf.", K(ret));
     }
   }
   if (OB_SUCC(ret) && key_words.one_of_ == 1) {
     if (!is_composition 
         && OB_FAIL(handle_unnested_composition(ObJsonSchemaItem::ONEOF, json_schema))) {
-      LOG_WARN("fail to handle unnested_composition_oneOf.", K(ret));
     } else if (is_composition 
       && OB_FAIL(handle_nested_composition(ObJsonSchemaItem::ONEOF, json_schema, comp_array))) {
-      LOG_WARN("fail to handle nested_composition_oneOf.", K(ret));
     }
   }
   if (OB_SUCC(ret) && key_words.not_ == 1) {
     if (!is_composition 
         && OB_FAIL(handle_unnested_not(json_schema))) {
-      LOG_WARN("fail to handle unnested_composition_not.", K(ret));
     } else if (is_composition 
       && OB_FAIL(handle_nested_not(json_schema, comp_array))) {
-      LOG_WARN("fail to handle nested_composition_not.", K(ret));
     }
   }
   return ret;
@@ -1262,7 +1212,6 @@ int ObJsonSchemaTree::handle_unnested_dependencies(ObJsonObject* json_schema)
   if (OB_FAIL(ObJsonSchemaUtils::json_doc_move_to_key(ObJsonSchemaItem::DEPENDENCIES, json_schema))) {
   } else if (OB_ISNULL(dep_schema_value = OB_NEWx(ObJsonObject, allocator_, allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc nested_value failed.", K(ret));
   } else {
     int key_size = json_schema->element_count();
     ObJsonNode* value = nullptr;
@@ -1276,7 +1225,6 @@ int ObJsonSchemaTree::handle_unnested_dependencies(ObJsonObject* json_schema)
       } else if (OB_FALSE_IT(origin_schema = static_cast<ObJsonObject*>(value))) { 
       } else if (OB_ISNULL(comp_array = OB_NEWx(ObJsonArray, allocator_, allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc comp_array failed.", K(i), K(ret));
       } else if (OB_FAIL(inner_build_schema_tree(origin_schema, true, comp_array))) {
       } else if (OB_FAIL(dep_schema_value->add(key, comp_array, true, true, false))) {
       }
@@ -1296,10 +1244,8 @@ int ObJsonSchemaTree::handle_nested_dependencies(ObJsonObject* json_schema, ObJs
   if (OB_FAIL(ObJsonSchemaUtils::json_doc_move_to_key(ObJsonSchemaItem::DEPENDENCIES, json_schema))) {
   } else if (OB_ISNULL(dep_key = OB_NEWx(ObJsonObject, allocator_, allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc nested_key failed.", K(ret));
   } else if (OB_ISNULL(dep_value = OB_NEWx(ObJsonObject, allocator_, allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc nested_value failed.", K(ret));
   } else if (OB_FAIL(dep_key->add(ObJsonSchemaItem::DEPENDENTSCHEMAS, dep_value, true, false, false))) {
   } else {
     int key_size = json_schema->element_count();
@@ -1314,7 +1260,6 @@ int ObJsonSchemaTree::handle_nested_dependencies(ObJsonObject* json_schema, ObJs
       } else if (OB_FALSE_IT(origin_schema = static_cast<ObJsonObject*>(value))) { 
       } else if (OB_ISNULL(sub_dep_array = OB_NEWx(ObJsonArray, allocator_, allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc comp_array failed.", K(i), K(ret));
       } else if (OB_FAIL(inner_build_schema_tree(origin_schema, true, sub_dep_array))) {
       } else if (OB_FAIL(dep_value->add(key, sub_dep_array, true, false, false))) {
       }
@@ -1383,7 +1328,6 @@ int ObJsonSchemaTree::handle_pattern_properties(ObJsonObject* json_schema, ObJso
       } else if (OB_FAIL(json_schema_move_to_key(key))) {
       } else if (OB_NOT_NULL(pro_schema) && pro_array.count() > 0 
                 && OB_FAIL(add_pattern_pro_to_schema(pro_schema, pro_array, key))) { 
-        LOG_WARN("fail to add patter properties.", K(i), K(ret));
       } else if (OB_FAIL(inner_build_schema_tree(origin_schema, is_composition, comp_array))) {
       } else {
         while (origin_schema_stk_size < cur_schema_stk_.size()) {
@@ -1435,7 +1379,6 @@ int ObJsonSchemaTree::handle_array_schema(ObJsonObject* json_schema, bool is_com
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(array_schema)) {
       ret = OB_BAD_NULL_ERROR;
-      LOG_WARN("shouldn't be null.", K(ret));
     } else {
       int size = array_schema->element_count();
       buf.reset();
@@ -1464,7 +1407,6 @@ int ObJsonSchemaTree::handle_array_tuple_schema(ObJsonObject* json_schema, bool 
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(array_schema)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("shouldn't be null.", K(ret));
   } else {
     int size = array_schema->element_count();
     for (int i = 0; OB_SUCC(ret) && i < size; ++i) {
@@ -1473,7 +1415,6 @@ int ObJsonSchemaTree::handle_array_tuple_schema(ObJsonObject* json_schema, bool 
       buf.reset();
       if (value->json_type() != ObJsonNodeType::J_OBJECT) {
         ret = OB_ERR_TYPE_OF_JSON_SCHEMA;
-        LOG_WARN("json schema must be object", K(ret), K(i), K(value->json_type()));
       } else if (OB_FALSE_IT(origin_schema = static_cast<ObJsonObject*>(value))) { 
       } else if (OB_FAIL(ObJsonSchemaUtils::get_index_str(i, buf))) {
       } else if (OB_FAIL(json_schema_move_to_key(ObString(buf.length(), buf.ptr())))) {
@@ -1497,7 +1438,6 @@ int ObJsonSchemaTree::handle_unnested_composition(const ObString& key_word, ObJs
   if (OB_FAIL(ObJsonSchemaUtils::json_doc_move_to_array(key_word, json_schema, array_schema))) {
   } else if (OB_ISNULL(array_schema)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("shouldn't be null.", K(ret));
   } else {
     int size = array_schema->element_count();
     for (int i = 0; OB_SUCC(ret) && i < size; ++i) {
@@ -1507,11 +1447,9 @@ int ObJsonSchemaTree::handle_unnested_composition(const ObString& key_word, ObJs
       ObString idx_str;
       if (value->json_type() != ObJsonNodeType::J_OBJECT) {
         ret = OB_ERR_TYPE_OF_JSON_SCHEMA;
-        LOG_WARN("json schema must be object", K(ret), K(i), K(value->json_type()));
       } else if (OB_FALSE_IT(origin_schema = static_cast<ObJsonObject*>(value))) { 
       } else if (OB_ISNULL(comp_array = OB_NEWx(ObJsonArray, allocator_, allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc comp_array failed.", K(i), K(ret));
       } else if (OB_FAIL(inner_build_schema_tree(origin_schema, true, comp_array))) {
       } else if (OB_FAIL(json_schema_add_comp_value(key_word, comp_array))) {
       }
@@ -1528,7 +1466,6 @@ int ObJsonSchemaTree::handle_unnested_not(ObJsonObject* json_schema)
     ObJsonArray* comp_array = nullptr;
     if (OB_ISNULL(comp_array = OB_NEWx(ObJsonArray, allocator_, allocator_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc comp_array failed.", K(ret));
     } else if (OB_FAIL(inner_build_schema_tree(json_schema, true, comp_array))) {
     } else {
       int size = cur_schema_stk_.size();
@@ -1541,7 +1478,6 @@ int ObJsonSchemaTree::handle_unnested_not(ObJsonObject* json_schema)
           }
         } else if (tmp_node->json_type() != ObJsonNodeType::J_ARRAY) {
           ret = OB_ERR_WRONG_VALUE;
-          LOG_WARN("must be object type.", K(ret), K(i));
         } else {
           int arr_size = comp_array->element_count();
           ObJsonArray* old_arr = static_cast<ObJsonArray*>(tmp_node);
@@ -1565,13 +1501,10 @@ int ObJsonSchemaTree::handle_nested_composition(const ObString& key_word, ObJson
   if (OB_FAIL(ObJsonSchemaUtils::json_doc_move_to_array(key_word, json_schema, array_schema))) {
   } else if (OB_ISNULL(array_schema)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("shouldn't be null.", K(ret));
   } else if (OB_ISNULL(nested_key = OB_NEWx(ObJsonObject, allocator_, allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc nested_key failed.", K(ret));
   } else if (OB_ISNULL(nested_value = OB_NEWx(ObJsonArray, allocator_, allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc nested_value failed.", K(ret));
   } else if (OB_FAIL(nested_key->add(key_word, nested_value, true, false, false))) {
   } else {
     int size = array_schema->element_count();
@@ -1582,11 +1515,9 @@ int ObJsonSchemaTree::handle_nested_composition(const ObString& key_word, ObJson
       ObString idx_str;
       if (value->json_type() != ObJsonNodeType::J_OBJECT) {
         ret = OB_ERR_TYPE_OF_JSON_SCHEMA;
-        LOG_WARN("json schema must be object", K(ret), K(i), K(value->json_type()));
       } else if (OB_FALSE_IT(origin_schema = static_cast<ObJsonObject*>(value))) { 
       } else if (OB_ISNULL(sub_comp_array = OB_NEWx(ObJsonArray, allocator_, allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc comp_array failed.", K(i), K(ret));
       } else if (OB_FAIL(inner_build_schema_tree(origin_schema, true, sub_comp_array))) {
       } else if (OB_FAIL(nested_value->append(sub_comp_array))) {
       }
@@ -1607,10 +1538,8 @@ int ObJsonSchemaTree::handle_nested_not(ObJsonObject* json_schema, ObJsonArray* 
   if (OB_FAIL(ObJsonSchemaUtils::json_doc_move_to_key(ObJsonSchemaItem::NOT, json_schema))) {
   } else if (OB_ISNULL(nested_key = OB_NEWx(ObJsonObject, allocator_, allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc nested_key failed.", K(ret));
   } else if (OB_ISNULL(nested_value = OB_NEWx(ObJsonArray, allocator_, allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc nested_value failed.", K(ret));
   } else if (OB_FAIL(nested_key->add(ObJsonSchemaItem::NOT, nested_value, true, false, false))) {
   } else if (OB_FAIL(inner_build_schema_tree(json_schema, true, nested_value))) {
   } else if (OB_FAIL(comp_array->append(nested_key))) {
@@ -1638,14 +1567,12 @@ int ObJsonSchemaTree::json_schema_move_to_key(const ObString& key)
       ObJsonObject* key_value = nullptr;
       if (OB_ISNULL(key_value = OB_NEWx(ObJsonObject, allocator_, allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc composition node.", K(key), K(i), K(size), K(ret));
       } else if (OB_FAIL(cur_schema->add(key, key_value, true, false, false))) {
       } else {
         cur_schema = key_value;
       }
     } else if (tmp_node->json_type() != ObJsonNodeType::J_OBJECT) {
       ret = OB_ERR_WRONG_VALUE;
-      LOG_WARN("must be object type.", K(ret), K(size), K(i), K(key));
     } else {
       cur_schema = static_cast<ObJsonObject*>(tmp_node);
     }
@@ -1669,12 +1596,10 @@ int ObJsonSchemaTree::json_schema_move_to_array(const ObString& key, ObJsonArray
     if (OB_ISNULL(tmp_node = cur_schema->get_value(key))) {
       if (OB_ISNULL(key_value = OB_NEWx(ObJsonArray, allocator_, allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc composition node.", K(key), K(i), K(size), K(ret));
       } else if (OB_FAIL(cur_schema->add(key, key_value, true, false, false))) {
       }
     } else if (tmp_node->json_type() != ObJsonNodeType::J_ARRAY) {
       ret = OB_ERR_WRONG_VALUE;
-      LOG_WARN("must be object type.", K(ret), K(i), K(key));
     } else {
       key_value = static_cast<ObJsonArray*>(tmp_node);
     }
@@ -1683,7 +1608,6 @@ int ObJsonSchemaTree::json_schema_move_to_array(const ObString& key, ObJsonArray
     } else if (OB_FAIL(key_value->append(array_val))) {
     } else if (OB_ISNULL(object_val = OB_NEWx(ObJsonObject, allocator_, allocator_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc composition node.", K(key), K(i), K(size), K(ret));
     } else if (OB_FAIL(key_value->append(object_val))) {
     } else if (OB_FAIL(cur_schema_stk_.set(i, object_val))) {
     }
@@ -1703,14 +1627,12 @@ int ObJsonSchemaTree::json_schema_add_comp_value(const ObString& key, ObJsonArra
       ObJsonArray* key_value = nullptr;
       if (OB_ISNULL(key_value = OB_NEWx(ObJsonArray, allocator_, allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc composition node.", K(key), K(i), K(size), K(ret));
       } else if (OB_FAIL(cur_schema->add(key, key_value, true, false, false))) {
       } else {
         comp_array = key_value;
       }
     } else if (tmp_node->json_type() != ObJsonNodeType::J_ARRAY) {
       ret = OB_ERR_WRONG_VALUE;
-      LOG_WARN("must be object type.", K(ret), K(i), K(key));
     } else {
       comp_array = static_cast<ObJsonArray*>(tmp_node);
     }
@@ -1735,7 +1657,6 @@ int ObJsonSchemaTree::json_schema_add_dep_value(ObJsonObject* dep_val)
       }
     } else if (tmp_node->json_type() != ObJsonNodeType::J_OBJECT) {
       ret = OB_ERR_WRONG_VALUE;
-      LOG_WARN("must be object type.", K(i), K(size), K(ret));
     } else {
       origin_dep = static_cast<ObJsonObject*>(tmp_node);
       int new_key_size = dep_val->element_count();
@@ -1750,7 +1671,6 @@ int ObJsonSchemaTree::json_schema_add_dep_value(ObJsonObject* dep_val)
           }
         } else if (origin_val->json_type() != ObJsonNodeType::J_ARRAY) {
           ret = OB_ERR_WRONG_VALUE;
-          LOG_WARN("must be array type.", K(ret), K(i));   
         } else {
           arr_val = static_cast<ObJsonArray*>(origin_val);
           if (OB_FAIL(arr_val->append(val))) {
@@ -1771,10 +1691,8 @@ int ObJsonSchemaTree::json_schema_back_to_parent()
     ObJsonNode* parent = cur_schema->get_parent();
     if (OB_ISNULL(parent)) {
       ret = OB_BAD_NULL_ERROR;
-      LOG_WARN("should have parent", K(ret), K(i));
     } else if (parent->json_type() != ObJsonNodeType::J_OBJECT) {
       ret = OB_ERR_WRONG_VALUE;
-      LOG_WARN("must be object type.", K(ret), K(parent->json_type()));
     } else if (OB_FAIL(cur_schema_stk_.set(i, static_cast<ObJsonObject*>(parent)))) {
     }
   }
@@ -1791,14 +1709,11 @@ int ObJsonSchemaTree::json_schema_back_to_grandpa()
     ObJsonNode* grandpa = nullptr;
     if (OB_ISNULL(parent)) {
       ret = OB_BAD_NULL_ERROR;
-      LOG_WARN("should have parent", K(ret), K(i));
     } else if (OB_FALSE_IT(grandpa = parent->get_parent())) {
     } else if (OB_ISNULL(grandpa)) {
       ret = OB_BAD_NULL_ERROR;
-      LOG_WARN("should have parent", K(ret), K(i));
     } else if (grandpa->json_type() != ObJsonNodeType::J_OBJECT) {
       ret = OB_ERR_WRONG_VALUE;
-      LOG_WARN("must be object type.", K(ret), K(parent->json_type()));
     } else if (OB_FAIL(cur_schema_stk_.set(i, static_cast<ObJsonObject*>(grandpa)))) {
     }
   }
@@ -1825,10 +1740,8 @@ int ObJsonSchemaTree::add_pattern_pro_to_schema(ObJsonObject* pro_schema, const 
         ObJsonNode* match_val = nullptr;
         if (OB_ISNULL(match_val = json_schema->get_value(key))) {
           ret = OB_BAD_NULL_ERROR;
-          LOG_WARN("shouldn't be null", K(ret), K(i));
         } else if (match_val->json_type() != ObJsonNodeType::J_OBJECT) {
           ret = OB_ERR_WRONG_VALUE;
-          LOG_WARN("must be object type.", K(ret), K(match_val->json_type()));
         } else if (OB_FAIL(cur_schema_stk_.push(static_cast<ObJsonObject*>(match_val)))) {
         }
       }
@@ -1851,7 +1764,6 @@ int ObJsonSchemaValidator::get_json_or_schema_point(ObJsonBuffer& json_pointer, 
   for (int i = 0; i < size && OB_SUCC(ret); ++i) {
     if (OB_FAIL(json_pointer.append(stack_ptr->at(i)))) {
     } else if (i + 1 < size && OB_FAIL(json_pointer.append("/"))) {
-      LOG_WARN("fail to append.", K(ret));
     }
   }
   return ret;
@@ -1869,14 +1781,11 @@ int ObJsonSchemaValidator::schema_validator(ObIJsonBase *json_doc, bool& is_vali
 
   if (OB_ISNULL(schema_map_) || OB_ISNULL(json_doc)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("shouldn't be null.", KPC(schema_map_), KPC(json_doc), K(ret));
   } else if (schema_map_->json_type() != ObJsonNodeType::J_ARRAY || schema_map_->element_count() <= 1) {
     ret = OB_ERR_WRONG_VALUE;
-    LOG_WARN("must be array.", K(ret), K(schema_map_->json_type()), K(schema_map_->element_count()));
   } else if (OB_FAIL(schema_map_->get_array_element(0, json_schema))) {
   } else if (OB_ISNULL(json_schema) || json_schema->json_type() != ObJsonNodeType::J_OBJECT) { 
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("shouldn't be null or other type.", KPC(json_schema), K(ret));
   } else if (OB_FAIL(json_pointer_.push(ObJsonSchemaItem::ROOT))) {
   } else if (OB_FAIL(schema_pointer_.push(ObJsonSchemaItem::ROOT))) {
   } else if (OB_FAIL(schema_vec.push_back(json_schema))) {
@@ -1922,7 +1831,6 @@ int ObJsonSchemaValidator::inner_schema_validator(ObIJsonBase *json_doc, ObIArra
   if (!is_valid) {
   } else if (OB_ISNULL(json_doc) || schema_vec.count() < 1) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("shouldn't be null.", KPC(json_doc), K(ret), K(schema_vec.count()));
   } else if (OB_FAIL(check_all_schema_def(json_doc, schema_vec, is_valid))) {
   } else if (!is_valid) {
   } else if (OB_FAIL(check_all_composition_def(json_doc, schema_vec, ans_map))) {
@@ -1965,12 +1873,10 @@ int ObJsonSchemaValidator::get_schema_composition_ans(ObIJsonBase *json_doc, ObI
     failed_keyword_ = ObJsonSchemaItem::DEPENDENCIES;
   } else if (composition_ans_recorded_ 
             && OB_FAIL(get_vec_schema_composition_ans(json_doc, ObJsonSchemaComp::JS_COMP_ALLOF, ObJsonSchemaItem::ALLOF, schema_vec, ans_map, is_valid))) {
-    LOG_WARN("fail to check comp.", K(ret));
   } else if (!is_valid) {
     failed_keyword_ = ObJsonSchemaItem::ALLOF;
   } else if (composition_ans_recorded_
             && OB_FAIL(get_vec_schema_composition_ans(json_doc, ObJsonSchemaComp::JS_COMP_ANYOF, ObJsonSchemaItem::ANYOF, schema_vec, ans_map, is_valid))) {
-    LOG_WARN("fail to check comp.", K(ret));
   } else if (!is_valid) {
     failed_keyword_ = ObJsonSchemaItem::ANYOF;
   } else if (OB_FAIL(composition_ans_recorded_
@@ -2047,7 +1953,6 @@ int ObJsonSchemaValidator::check_dep_schema(ObIJsonBase *json_doc, ObIJsonBase* 
   INIT_SUCC(ret);
   if (dep_schema->json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_ERR_WRONG_VALUE;
-    LOG_WARN("must be object.", K(ret));
   } else {
     int size = dep_schema->element_count();
     for (int i = 0; i < size && OB_SUCC(ret) && is_valid; ++i) {
@@ -2064,7 +1969,6 @@ int ObJsonSchemaValidator::check_dep_schema(ObIJsonBase *json_doc, ObIJsonBase* 
         }
       } else if (tmp_schema->json_type() != ObJsonNodeType::J_ARRAY) {
         ret = OB_ERR_WRONG_VALUE;
-        LOG_WARN("must be array.", K(i), K(ret));
       } else if (OB_FALSE_IT(tmp_schema_size = tmp_schema->element_count())) {
       } else if (tmp_schema_size == 0) {
       } else if (OB_FAIL(check_single_comp_array(json_doc, tmp_schema, ans_map, is_valid))) {
@@ -2086,7 +1990,6 @@ int ObJsonSchemaValidator::get_single_element_and_check(ObIJsonBase *json_doc, c
     ret = OB_BAD_NULL_ERROR;
   } else if (tmp_schema->json_type() != ObJsonNodeType::J_ARRAY) {
     ret = OB_ERR_WRONG_VALUE;
-    LOG_WARN("must be array.", K(tmp_schema->json_type()), K(ret));
   } else if (OB_FALSE_IT(tmp_schema_size = tmp_schema->element_count())) {
   } else if (tmp_schema_size == 0) {
   } else if (OB_FAIL(check_single_comp_array(json_doc, tmp_schema, ans_map, is_valid))) {
@@ -2100,7 +2003,6 @@ int ObJsonSchemaValidator::check_allof_schema(ObIJsonBase *json_doc, ObIJsonBase
   INIT_SUCC(ret);
   if (allof_schema->json_type() != ObJsonNodeType::J_ARRAY) {
     ret = OB_ERR_WRONG_VALUE;
-    LOG_WARN("must be array.", K(ret));
   } else {
     int size = allof_schema->element_count();
     for (int i = 0; i < size && OB_SUCC(ret) && is_valid; ++i) {
@@ -2118,7 +2020,6 @@ int ObJsonSchemaValidator::check_anyof_schema(ObIJsonBase *json_doc, ObIJsonBase
   INIT_SUCC(ret);
   if (anyof_schema->json_type() != ObJsonNodeType::J_ARRAY) {
     ret = OB_ERR_WRONG_VALUE;
-    LOG_WARN("must be array.", K(anyof_schema->json_type()), K(ret));
   } else {
     int size = anyof_schema->element_count();
     bool anyof = true;
@@ -2144,7 +2045,6 @@ int ObJsonSchemaValidator::check_oneof_schema(ObIJsonBase *json_doc, ObIJsonBase
   INIT_SUCC(ret);
   if (oneof_schema->json_type() != ObJsonNodeType::J_ARRAY) {
     ret = OB_ERR_WRONG_VALUE;
-    LOG_WARN("must be array.", K(ret));
   } else {
     int size = oneof_schema->element_count();
     bool oneof = false;
@@ -2175,7 +2075,6 @@ int ObJsonSchemaValidator::check_not_schema(ObIJsonBase *json_doc, ObIJsonBase* 
   bool tmp_ans = true;
   if (not_schema->json_type() != ObJsonNodeType::J_ARRAY) {
     ret = OB_ERR_WRONG_VALUE;
-    LOG_WARN("must be array.", K(not_schema->json_type()), K(ret));
   } else if (OB_FAIL(check_single_comp_array(json_doc, not_schema, ans_map, tmp_ans))) {
   } else {
     is_valid = !tmp_ans;
@@ -2188,7 +2087,6 @@ int ObJsonSchemaValidator::check_single_composition_schema(ObIJsonBase *json_doc
   INIT_SUCC(ret);
   if (single_schema->element_count() != 1) {
     ret = OB_ERR_WRONG_VALUE;
-    LOG_WARN("must be one element.", K(single_schema->element_count()), K(ret));
   } else {
     ObString key;
     ObIJsonBase* ele = nullptr;
@@ -2387,7 +2285,6 @@ int ObJsonSchemaValidator::collect_schema_by_pattern_key(const ObString& key, Ob
   if (OB_ISNULL(schema_vec)) { // didn't define pattern, its normal
   } else if (schema_vec->json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_ERR_WRONG_VALUE;
-    LOG_WARN("should be object.", K(ret));
   } else {
     int size = schema_vec->element_count();
     for (int i = 0; i < size && OB_SUCC(ret); ++i) {
@@ -2413,7 +2310,6 @@ int ObJsonSchemaValidator::collect_schema_by_add_key(const ObString& key, ObIJso
   if (OB_ISNULL(schema_vec)) { // didn't define add_pro, its normal
   } else if (schema_vec->json_type() != ObJsonNodeType::J_ARRAY) {
     ret = OB_ERR_WRONG_VALUE;
-    LOG_WARN("should be array.", K(ret));
   } else {
     int size = schema_vec->element_count();
     if (size % ObJsonSchemaTree::ADDITIONAL_PRO_ARRAY_COUNT != 0) {
@@ -2474,7 +2370,6 @@ int ObJsonSchemaValidator::collect_schema_by_add_idx(const int& idx, ObIJsonBase
   if (OB_ISNULL(schema_vec)) { // didn't define add_pro, its normal
   } else if (schema_vec->json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_ERR_WRONG_VALUE;
-    LOG_WARN("should be array.", K(ret));
   } else {
     int size = schema_vec->element_count(); 
     for (int i = 0; i < size && OB_SUCC(ret); ++i) {
@@ -2485,7 +2380,6 @@ int ObJsonSchemaValidator::collect_schema_by_add_idx(const int& idx, ObIJsonBase
       } else {
         int64_t add_idx = strtoll(add_val.ptr(), NULL, 10);
         if (add_idx <= idx && OB_FAIL(recursive_vec.push_back(tmp_value))) {
-          LOG_WARN("fail to push schema.", K(i), K(size), K(ret));
         }
       }
     }
@@ -2533,7 +2427,6 @@ int ObJsonSchemaValidator::check_all_schema_def(ObIJsonBase *json_doc, ObIArray<
           if (OB_FAIL(ObJsonSchemaUtils::set_valid_number_type_by_mode(json_doc, valid_type))) {
           } else if (OB_FAIL(check_public_key_words(json_doc, schema_def, valid_type, is_valid))) {
           } else if (is_valid && OB_FAIL(check_number_and_integer(json_doc, schema_def, is_valid))) {
-            LOG_WARN("fail in check number/integer key words.", K(valid_type), K(ret));
           }
           break;
         }
@@ -2554,7 +2447,6 @@ int ObJsonSchemaValidator::check_all_schema_def(ObIJsonBase *json_doc, ObIArray<
           valid_type.string_ = 1;
           if (OB_FAIL(check_public_key_words(json_doc, schema_def, valid_type, is_valid))) {
           } else if (is_valid && OB_FAIL(check_string_type(json_doc, schema_def, is_valid))) {
-            LOG_WARN("fail in check number/integer key words.", K(valid_type), K(ret));
           }
           break;
         }
@@ -2562,7 +2454,6 @@ int ObJsonSchemaValidator::check_all_schema_def(ObIJsonBase *json_doc, ObIArray<
           valid_type.object_ = 1;
           if (OB_FAIL(check_public_key_words(json_doc, schema_def, valid_type, is_valid))) {
           } else if (is_valid && OB_FAIL(check_object_type(json_doc, schema_def, is_valid))) {
-            LOG_WARN("fail in check number/integer key words.", K(valid_type), K(ret));
           }
           break;
         }
@@ -2570,7 +2461,6 @@ int ObJsonSchemaValidator::check_all_schema_def(ObIJsonBase *json_doc, ObIArray<
           valid_type.array_ = 1;
           if (OB_FAIL(check_public_key_words(json_doc, schema_def, valid_type, is_valid))) {
           } else if (is_valid && OB_FAIL(check_array_type(json_doc, schema_def, is_valid))) {
-            LOG_WARN("fail in check number/integer key words.", K(valid_type), K(ret));
           }
           break;
         }
@@ -2612,7 +2502,6 @@ int ObJsonSchemaValidator::get_composition_schema_def(int idx, ObIJsonBase *sche
   if (OB_FAIL(ret)) {
   } else if (!found) {
     ret = OB_SEARCH_NOT_FOUND;
-    LOG_WARN("didn't found schema.", K(ret));
   }
   return ret;
 }
@@ -2934,7 +2823,6 @@ int ObJsonSchemaValidator::check_number_and_integer(ObIJsonBase *json_doc, ObIAr
           if (OB_FAIL(def_value->get_array_element(i, tmp_array))) {
           } else if (OB_ISNULL(tmp_array)) {
             ret = OB_BAD_NULL_ERROR;
-            LOG_WARN("shouldn't be null.", K(i), K(array_size), K(ret));
           } else if (!check_multiple_of(json_doc, def_value)) {
             is_valid = false;
             failed_keyword_ = ObJsonSchemaItem::MULTIPLE_OF;
@@ -2942,7 +2830,6 @@ int ObJsonSchemaValidator::check_number_and_integer(ObIJsonBase *json_doc, ObIAr
         }
       } else {
         ret = OB_ERR_WRONG_VALUE;
-        LOG_WARN("must be object type.", K(ret), K(def_value->json_type()));
       }
     }
   }
@@ -2967,7 +2854,6 @@ int ObJsonSchemaValidator::check_number_and_integer(ObIJsonBase *json_doc, ObIJs
     switch (key_word.length()) {
       case JS_TYPE_LEN: {
         if (key_word[0] == 't' && OB_FAIL(ObJsonSchemaUtils::set_valid_number_type_by_mode(json_doc, valid_type))) {
-          LOG_WARN("fail to set valid type.", K(key_word), K(ret));
         } else if (OB_FAIL(check_public_key_words(key_word[0], valid_type, json_doc, value, is_valid))) {
         }
         break;
@@ -3012,7 +2898,6 @@ int ObJsonSchemaValidator::check_number_and_integer(ObIJsonBase *json_doc, ObIJs
             if (OB_FAIL(value->get_array_element(i, tmp_array))) {
             } else if (OB_ISNULL(tmp_array)) {
               ret = OB_BAD_NULL_ERROR;
-              LOG_WARN("shouldn't be null.", K(ret), K(i), K(array_size));
             } else if (tmp_array->is_json_number(tmp_array->json_type())) {
               is_valid = check_multiple_of(json_doc, tmp_array);
             }
@@ -3080,7 +2965,6 @@ int ObJsonSchemaValidator::check_string_type(ObIJsonBase *json_doc, ObIArray<ObI
         if (OB_FAIL(def_value->get_array_element(i, tmp_array))) {
         } else if (OB_ISNULL(tmp_array)) {
           ret = OB_BAD_NULL_ERROR;
-          LOG_WARN("shouldn't be null.", K(i), K(array_size), K(ret));
         } else if (!check_pattern_keywords(json_doc, tmp_array)) {
           is_valid = false;
           failed_keyword_ = ObJsonSchemaItem::PATTERN;
@@ -3088,7 +2972,6 @@ int ObJsonSchemaValidator::check_string_type(ObIJsonBase *json_doc, ObIArray<ObI
       }
     } else {
       ret = OB_ERR_WRONG_VALUE;
-      LOG_WARN("must be object type.", K(ret), K(def_value->json_type()));
     }
   }
   return ret;
@@ -3144,7 +3027,6 @@ int ObJsonSchemaValidator::check_string_type(ObIJsonBase *json_doc, ObIJsonBase 
               if (OB_FAIL(value->get_array_element(i, tmp_array))) {
               } else if (OB_ISNULL(tmp_array)) {
                 ret = OB_BAD_NULL_ERROR;
-                LOG_WARN("shouldn't be null.", K(key_word), K(valid_type), K(ret), K(i), K(array_size));
               } else if (tmp_array->json_type() == ObJsonNodeType::J_STRING) {
                 is_valid = check_pattern_keywords(json_doc, tmp_array);
               }
@@ -3240,7 +3122,6 @@ int ObJsonSchemaValidator::check_object_type(ObIJsonBase *json_doc, ObIArray<ObI
         if (OB_FAIL(def_value->get_array_element(i, tmp_array))) {
         } else if (OB_ISNULL(tmp_array)) {
           ret = OB_BAD_NULL_ERROR;
-          LOG_WARN("shouldn't be null.", K(i), K(array_size), K(ret));
         } else if (OB_FAIL(check_dep_required(json_doc, def_value, is_valid))) {
         } else if (!is_valid) {
           failed_keyword_ = ObJsonSchemaItem::DEPENDENCIES;
@@ -3248,7 +3129,6 @@ int ObJsonSchemaValidator::check_object_type(ObIJsonBase *json_doc, ObIArray<ObI
       }
     } else {
       ret = OB_ERR_WRONG_VALUE;
-      LOG_WARN("must be object type.", K(ret), K(def_value->json_type()));
     }
 
     if (OB_FAIL(ret) || !is_valid) {// additional properties
@@ -3319,7 +3199,6 @@ int ObJsonSchemaValidator::check_object_type(ObIJsonBase *json_doc, ObIJsonBase 
             if (OB_FAIL(value->get_array_element(i, tmp_array))) {
             } else if (OB_ISNULL(tmp_array)) {
               ret = OB_BAD_NULL_ERROR;
-              LOG_WARN("shouldn't be null.", K(ret), K(i));
             } else if (tmp_array->json_type() == ObJsonNodeType::J_OBJECT) {
               if (OB_FAIL(check_dep_required(json_doc, value, is_valid))) {
               }
@@ -3554,7 +3433,6 @@ int ObJsonSchemaValidator::check_ref(ObIJsonBase *json_doc, ObIJsonBase *schema_
       if (OB_FAIL(schema_value->get_array_element(i, tmp_array))) {
       } else if (OB_ISNULL(tmp_array)) {
         ret = OB_BAD_NULL_ERROR;
-        LOG_WARN("shouldn't be null.", K(ret), K(i));
       } else if (tmp_array->json_type() == ObJsonNodeType::J_STRING) {
         ObString ref_str = ObString(tmp_array->get_data_length(), tmp_array->get_data());
         if (OB_FAIL(check_single_ref(json_doc, ref_str, is_valid))) {
@@ -3580,7 +3458,6 @@ int ObJsonSchemaValidator::check_single_ref(ObIJsonBase *json_doc, const ObStrin
   } else if (OB_FAIL(schema_map_->get_array_element(1, ref))) {
   } else if (ref->json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("should be OBJECT.", K(ref->json_type()), K(ret));
   } else if (OB_FAIL(ref->get_object_value(ref_key, ref_value)) || OB_ISNULL(ref_value)) {
     // didn't found, invalid, but not raise error
     ret = OB_SUCCESS;
@@ -3595,7 +3472,6 @@ int ObJsonSchemaValidator::check_single_ref(ObIJsonBase *json_doc, const ObStrin
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("should be OBJECT.", K(ref_value->json_type()), K(ret));
     }
   } 
   if (OB_SUCC(ret) && OB_NOT_NULL(ref_value)) {
@@ -3621,7 +3497,6 @@ int ObJsonSchemaValidator::check_enum(ObIJsonBase *json_doc, ObIJsonBase *schema
       if (OB_FAIL(schema_value->get_array_element(i, node))) {
       } else if (OB_ISNULL(node)) {
         ret = OB_BAD_NULL_ERROR;
-        LOG_WARN("shouldn't be null.", K(ret), K(i));
       } else if (OB_FAIL(json_doc->compare(*node, res))) {
       } else {
         is_valid = (res == 0);
@@ -3637,7 +3512,6 @@ int ObJsonSchemaValidator::check_required(ObIJsonBase *json_doc, ObIJsonBase *sc
   is_valid = true;
   if (schema_value->json_type() != ObJsonNodeType::J_ARRAY) {
     ret = OB_ERR_WRONG_VALUE;
-    LOG_WARN("must be object type.", K(ret), K(schema_value->json_type()));
   } else {
     int size = schema_value->element_count();
     for (int i = 0; i < size && OB_SUCC(ret) && is_valid; ++i) {
@@ -3645,7 +3519,6 @@ int ObJsonSchemaValidator::check_required(ObIJsonBase *json_doc, ObIJsonBase *sc
       if (OB_FAIL(schema_value->get_array_element(i, required_key))) {
       } else if (OB_ISNULL(required_key)) {
         ret = OB_BAD_NULL_ERROR;
-        LOG_WARN("shouldn't be null.", K(ret), K(i));
       } else if (required_key->json_type() == ObJsonNodeType::J_STRING) {
         ObIJsonBase *value = nullptr;
         ObString key(required_key->get_data_length(), required_key->get_data());
@@ -3666,7 +3539,6 @@ int ObJsonSchemaValidator::check_dep_required(ObIJsonBase *json_doc, ObIJsonBase
   is_valid = true;
   if (schema_value->json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_ERR_WRONG_VALUE;
-    LOG_WARN("must be object type.", K(ret), K(schema_value->json_type()));
   } else {
     int size = schema_value->element_count();
     for (int i = 0; i < size && OB_SUCC(ret) && is_valid; ++i) {
@@ -3676,7 +3548,6 @@ int ObJsonSchemaValidator::check_dep_required(ObIJsonBase *json_doc, ObIJsonBase
       if (OB_FAIL(schema_value->get_object_value(i, dep_key, dep_required_value))) {
       } else if (OB_ISNULL(dep_required_value)) {
         ret = OB_BAD_NULL_ERROR;
-        LOG_WARN("shouldn't be null.", K(ret), K(i));
       } else if (OB_FAIL(json_doc->get_object_value(dep_key, tmp_value))) {
         // didn't found, do not need to check dependencies
         ret = OB_SUCCESS;
@@ -3700,14 +3571,12 @@ int ObJsonSchemaValidator::check_add_pro_in_schema(ObIJsonBase *json_doc, ObIJso
   int size = json_doc->element_count();
   if (array_size % ObJsonSchemaTree::ADDITIONAL_PRO_ARRAY_COUNT != 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("wrong number.", K(ret));
   } else {
     for (int i = 0; i < array_size && OB_SUCC(ret); i += 2) {
       ObIJsonBase *tmp_value = nullptr;
       if (OB_FAIL(schema->get_array_element(i, tmp_value))) {
       } else if (OB_ISNULL(tmp_value) || tmp_value->json_type() != ObJsonNodeType::J_ARRAY) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("wrong number.", K(i), K(array_size), K(ret));
       } else {
         int pro_num = tmp_value->element_count();
         for (int i = 0; i < pro_num && OB_SUCC(ret); ++i) {
@@ -3715,7 +3584,6 @@ int ObJsonSchemaValidator::check_add_pro_in_schema(ObIJsonBase *json_doc, ObIJso
           if (OB_FAIL(tmp_value->get_array_element(i, tmp_str))) {
           } else if (OB_ISNULL(tmp_str) || tmp_str->json_type() != ObJsonNodeType::J_STRING) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("wrong number.", K(i), K(pro_num), K(ret));
           } else {
             ObString str = ObString(tmp_str->get_data_length(), tmp_str->get_data());
             ObSortedVector<ObString>::iterator pos = properties_vec.end();
@@ -3770,7 +3638,6 @@ int ObJsonSchemaValidator::check_pattern_key_in_add_pro(const ObString& key, ObI
     if (OB_FAIL(schema->get_array_element(i, tmp_value))) {
     } else if (OB_ISNULL(tmp_value) || tmp_value->json_type() != ObJsonNodeType::J_ARRAY) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("wrong number.", K(i), K(array_size), K(ret));
     } else {
       int pro_num = tmp_value->element_count();
       for (int i = 0; i < pro_num && OB_SUCC(ret) && !found; ++i) {
@@ -3778,7 +3645,6 @@ int ObJsonSchemaValidator::check_pattern_key_in_add_pro(const ObString& key, ObI
         if (OB_FAIL(tmp_value->get_array_element(i, tmp_str))) {
         } else if (OB_ISNULL(tmp_str) || tmp_str->json_type() != ObJsonNodeType::J_STRING) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("wrong number.", K(i), K(pro_num), K(ret));
         } else {
           ObString reg_str = ObString(tmp_str->get_data_length(), tmp_str->get_data());
           bool regex_ans = false;
@@ -3807,7 +3673,6 @@ int ObJsonSchemaValidator::check_unique_items(ObIJsonBase *json_doc, ObIJsonBase
     if (OB_FAIL(json_doc->get_array_element(i, tmp_value))) {
     } else if (OB_ISNULL(tmp_value)) {
       ret = OB_BAD_NULL_ERROR;
-      LOG_WARN("wrong number.", K(i), K(array_size), K(ret));
     } else if (OB_FAIL(dup.insert_unique(tmp_value, pos, cmp, unique))) {
       if (ret == OB_CONFLICT_VALUE) {
         ret = OB_SUCCESS; 
@@ -3861,7 +3726,6 @@ int ObJsonSchemaCache::find_and_add_cache(ObIJsonBase*& out_schema, ObString& in
       if (OB_FAIL(json_schema.build_schema_tree(in_json))) {
       } else if (OB_ISNULL(out_schema = json_schema.get_schema_map())) {
         ret = OB_BAD_NULL_ERROR;
-        LOG_WARN("should not be null", K(ret));
       } else if (OB_FAIL(ob_write_string(*allocator_, in_str, dst_str))) {
       } else {
         ret = set_schema(out_schema, dst_str, arg_idx, arg_idx);
@@ -3882,7 +3746,6 @@ int ObJsonSchemaCache::fill_empty(size_t reserve_size)
     } else if (OB_FAIL(stat_arr_.reserve(reserve_size))) {
     } else if (OB_FAIL(schema_str_.reserve(reserve_size))) {
     } else if (schema_arr_ptr_.size() != stat_arr_.size() || schema_str_.size() != stat_arr_.size()) {
-      LOG_WARN("Length is not equals.", K(ret), K(reserve_size));
     }
     int size = schema_arr_ptr_.size();
     for (size_t cur = size; OB_SUCC(ret) && cur < reserve_size; ++cur) {
@@ -3901,7 +3764,6 @@ int ObJsonSchemaCache::set_schema(ObIJsonBase* j_schema, const ObString& in_str,
   if (OB_FAIL(fill_empty(arg_idx + 1))) {
   } else if (index >= schema_arr_ptr_.size()) {
     ret = OB_ERROR_OUT_OF_RANGE;
-    LOG_WARN("index out of range.", K(ret), K(index), K(schema_arr_ptr_.size()));
   } else {
     schema_arr_ptr_[index] = j_schema;
     stat_arr_[index] = ObSchemaCacheStat(INITIALIZED, arg_idx);
@@ -3920,10 +3782,8 @@ int ObJsonSchemaUtils::is_all_children_subschema(ObJsonNode* array_of_subschema)
       ObJsonNode* tmp = (*array)[i];
       if (OB_ISNULL(tmp)){
         ret = OB_BAD_NULL_ERROR;
-        LOG_WARN("shouldn't be null", K(ret), K(i));
       } else if (tmp->json_type() != ObJsonNodeType::J_OBJECT) {
         ret = OB_ERR_TYPE_OF_JSON_SCHEMA;
-        LOG_WARN("json schema must be object", K(ret), K(i), K(tmp->json_type()));
       }
     }
   }
@@ -3974,13 +3834,10 @@ int ObJsonSchemaUtils::json_doc_move_to_key(const ObString& key_word, ObJsonObje
   ObJsonNode* tmp_node = nullptr;
   if (OB_ISNULL(json_schema)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("shouldn't be null.", K(ret));
   } else if (OB_ISNULL(tmp_node = json_schema->get_value(key_word))) {
     ret = OB_SEARCH_NOT_FOUND;
-    LOG_WARN("didn't find value of key.", K(ret), K(key_word));
   } else if (tmp_node->json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_ERR_WRONG_VALUE;
-    LOG_WARN("must be object type.", K(ret), K(key_word));
   } else {
     json_schema = static_cast<ObJsonObject*>(tmp_node);
   }
@@ -3993,13 +3850,10 @@ int ObJsonSchemaUtils::json_doc_move_to_array(const ObString& key_word, ObJsonOb
   ObJsonNode* tmp_node = nullptr;
   if (OB_ISNULL(json_schema)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("shouldn't be null.", K(ret));
   } else if (OB_ISNULL(tmp_node = json_schema->get_value(key_word))) {
     ret = OB_SEARCH_NOT_FOUND;
-    LOG_WARN("didn't find value of key.", K(ret), K(key_word));
   } else if (tmp_node->json_type() != ObJsonNodeType::J_ARRAY) {
     ret = OB_ERR_WRONG_VALUE;
-    LOG_WARN("must be object type.", K(ret), K(key_word));
   } else {
     array_schema = static_cast<ObJsonArray*>(tmp_node);
   }
@@ -4025,7 +3879,6 @@ int ObJsonSchemaUtils::get_index_str(const int& idx, ObStringBuffer& buf)
   char* ptr = nullptr;
   if (OB_ISNULL(ptr = ObCharset::lltostr(idx, res_ptr, 10, 1))) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("fail to transform the index(lltostr)", K(ret), K(idx));
   } else {
     buf.append(res_ptr, static_cast<int32_t>(ptr - res_ptr));
   }
@@ -4036,7 +3889,6 @@ int ObJsonSchemaUtils::collect_key(ObJsonNode* obj, ObIAllocator *allocator, ObJ
   INIT_SUCC(ret);
   if (obj->json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_ERR_WRONG_VALUE;
-    LOG_WARN("must be object type.", K(obj->json_type()), K(ret));
   } else {
     ObJsonObject* object_node = static_cast<ObJsonObject*>(obj);
     int size = object_node->element_count();
@@ -4049,7 +3901,6 @@ int ObJsonSchemaUtils::collect_key(ObJsonNode* obj, ObIAllocator *allocator, ObJ
              && (OB_FAIL((ObJsonSchemaUtils::is_valid_pattern(key, buf, valid_pattern))) || !valid_pattern)) {
       } else if (OB_ISNULL(str_node = OB_NEWx(ObJsonString, allocator, key))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc failed.", K(i), K(size), K(ret));
       } else if (OB_FAIL(array->append(str_node))) {
       }
     }
@@ -4066,17 +3917,14 @@ int ObJsonSchemaUtils::get_specific_type_of_child(const ObString& key, ObJsonNod
     ObIJsonBase* tmp_res = nullptr;
     if (OB_ISNULL(tmp_src)) {
       ret = OB_BAD_NULL_ERROR;
-      LOG_WARN("null value", K(ret));
     } else if (OB_FAIL(tmp_src->get_object_value(key, tmp_res))) { 
       if (ret == OB_SEARCH_NOT_FOUND) {
         ret = OB_SUCCESS; // didn't found, its normal
       }
     } else if (OB_ISNULL(tmp_res)) {
       ret = OB_BAD_NULL_ERROR;
-      LOG_WARN("null value", K(ret));
     } else if (tmp_res->json_type() != expect_type) {
       ret = OB_ERR_WRONG_VALUE;
-      LOG_WARN("must be object type.", K(ret), K(tmp_src->json_type()), K(expect_type));
     } else if (OB_FAIL(res.push_back(tmp_res))) {
     }
   }
@@ -4096,17 +3944,14 @@ int ObJsonSchemaUtils::get_all_composition_def(ObIArray<ObIJsonBase*> &src, ObIA
     ObIJsonBase* tmp_comp = nullptr;
     if (OB_ISNULL(tmp_src)) {
       ret = OB_BAD_NULL_ERROR;
-      LOG_WARN("null value", K(ret));
     } else if (OB_FAIL(tmp_src->get_object_value(ObJsonSchemaItem::COMPOSITION, tmp_comp))) { 
       if (ret == OB_SEARCH_NOT_FOUND) {
         ret = OB_SUCCESS; // didn't found, its normal
       }
     } else if (OB_ISNULL(tmp_comp)) {
       ret = OB_BAD_NULL_ERROR;
-      LOG_WARN("null value", K(ret));
     } else if (tmp_comp->json_type() != ObJsonNodeType::J_ARRAY) {
       ret = OB_ERR_WRONG_VALUE;
-      LOG_WARN("must be object type.", K(ret), K(tmp_src->json_type()));
     } else {
       int comp_size = tmp_comp->element_count();
       for (int i = 0; i < comp_size && OB_SUCC(ret); ++i) {
@@ -4114,10 +3959,8 @@ int ObJsonSchemaUtils::get_all_composition_def(ObIArray<ObIJsonBase*> &src, ObIA
         if (OB_FAIL(tmp_comp->get_array_element(i, tmp_def))) {
         } else if (OB_ISNULL(tmp_def)) {
           ret = OB_BAD_NULL_ERROR;
-          LOG_WARN("null value", K(i), K(comp_size), K(ret));
         } else if (tmp_def->json_type() != ObJsonNodeType::J_INT) {
           ret = OB_ERR_WRONG_VALUE;
-          LOG_WARN("must be object type.", K(ret), K(tmp_src->json_type()));
         } else if (OB_FAIL(res.push_back(tmp_def))) {
         }
       }
@@ -4148,14 +3991,11 @@ int ObJsonSchemaUtils::get_single_key_value(ObIJsonBase *single_schema, ObString
   INIT_SUCC(ret);
   if (OB_ISNULL(single_schema)) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("null value", K(ret));
   } else if (single_schema->element_count() != 1) {
     ret = OB_ERR_WRONG_VALUE;
-    LOG_WARN("must be object type.", K(ret), K(single_schema->element_count()));
   } else if (OB_FAIL(single_schema->get_object_value(0, key_words, value))) {
   } else if (OB_ISNULL(value) || key_words.empty()) {
     ret = OB_BAD_NULL_ERROR;
-    LOG_WARN("shouldn't be null", KPC(value), K(ret));
   }
   return ret;
 }

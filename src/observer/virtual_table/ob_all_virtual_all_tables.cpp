@@ -124,7 +124,6 @@ int ObAllVirtualAllTables::inner_open()
                                               ObModIds::OB_AUTOINCREMENT))) {
           SERVER_LOG(WARN, "failed to create seq values ObHashMap", K(ret), LITERAL_K(FETCH_SEQ_NUM_ONCE));
         } else if (OB_FAIL(tables_statistics_.create(table_schemas_.count(), "TableStat", "TableStat"))) {
-          LOG_WARN("failed to create table stat ObHashMap", K(ret), K(table_schemas_.count()));
         } else {
           bool fetch_inc = false;
           bool fetch_stat = false;
@@ -150,7 +149,6 @@ int ObAllVirtualAllTables::inner_open()
               case CHECKSUM: {
                 if (!fetch_stat) {
                   if (OB_FAIL(get_table_stats())) {
-                    LOG_WARN("failed to fetch table stats", K(ret));
                   }
                   fetch_stat = true;
                 }
@@ -209,17 +207,13 @@ int ObAllVirtualAllTables::get_table_stats()
       ObSqlString sql;
       if (OB_ISNULL(session_) || OB_ISNULL(sql_proxy_) || !sql_proxy_->is_inited()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(session_), K(sql_proxy_));
       } else if (OB_FAIL(sql.append_fmt(TABLE_STATUS_SQL, table_schema->get_table_id()))) {
-        LOG_WARN("failed to append sql", K(ret));
       } else {
         SMART_VAR(ObMySQLProxy::MySQLResult, res) {
           sqlclient::ObMySQLResult *result = NULL;
           if (OB_FAIL(sql_proxy_->read(res, sql.ptr()))) {
-            LOG_WARN("execute sql failed", "sql", sql.ptr(), K(ret));
           } else if (OB_ISNULL(result = res.get_result())) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("fail to execute ", "sql", sql.ptr(), K(ret));
           }
           while (OB_SUCC(ret)) {
             if (OB_FAIL(result->next())) {
@@ -227,7 +221,6 @@ int ObAllVirtualAllTables::get_table_stats()
                 ret = OB_SUCCESS;
                 break;
               } else {
-                LOG_WARN("get next row failed", K(ret));
               }
             } else {
               int64_t default_time = 0;
@@ -252,7 +245,6 @@ int ObAllVirtualAllTables::get_table_stats()
               ret = OB_SUCCESS;
               LOG_WARN("the table stat is already fetched", K(table_schema->get_table_id()), K(tab_stat));
             } else {
-              LOG_WARN("failed to set table stat", K(ret));
             }
           }
         }

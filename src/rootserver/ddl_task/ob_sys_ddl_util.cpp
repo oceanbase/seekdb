@@ -31,10 +31,8 @@ int ObSysDDLLocalBuilderUtil::push_task(ObAsyncTask &task)
       ::oceanbase::share::server_service<::oceanbase::rootserver::ObDDLScheduler>();
   if (OB_ISNULL(sys_ddl_scheduler)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(sys_ddl_scheduler));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("ddl service not started", KR(ret));
   } else {
     SERVER_MODULE_SCOPE {
       if (OB_FAIL(sys_ddl_scheduler->get_ddl_builder().push_task(task))) {

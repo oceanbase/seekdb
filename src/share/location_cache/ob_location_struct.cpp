@@ -45,7 +45,6 @@ int ObLSLocation::init(const ObLSID &ls_id,
                   || !server.is_valid()
                   || renew_time <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid LS location", KR(ret), K(ls_id), K(server), K(renew_time));
   } else {
     ls_id_ = ls_id;
     server_ = server;

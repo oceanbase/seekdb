@@ -79,7 +79,6 @@ int ObMediumListChecker::check_continue(
   } else if (OB_UNLIKELY(start_check_idx >= medium_info_array.count()
       || nullptr == (first_info = medium_info_array.at(start_check_idx)))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(start_check_idx), K(medium_info_array), KPC(first_info));
   } else {
     int64_t prev_medium_snapshot = first_info->medium_snapshot_;
     const ObMediumCompactionInfo *info = nullptr;
@@ -87,12 +86,8 @@ int ObMediumListChecker::check_continue(
       info = medium_info_array.at(idx);
       if (OB_ISNULL(info)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("medium info ist null", K(ret), KPC(info), K(idx), K(medium_info_array));
       } else if (OB_UNLIKELY(prev_medium_snapshot != info->last_medium_snapshot_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("medium info list is not continuous", K(ret), K(prev_medium_snapshot),
-            "last_medium_snapshot", info->last_medium_snapshot_,
-            K(medium_info_array));
       } else {
         prev_medium_snapshot = info->medium_snapshot_;
       }
@@ -115,7 +110,6 @@ int ObMediumListChecker::filter_finish_medium_info(
     info = medium_info_array.at(idx);
     if (OB_ISNULL(info)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("medium info ist null", K(ret), KPC(info), K(idx), K(medium_info_array));
     } else if (info->medium_snapshot_ > last_major_snapshot) {
       break;
     }
@@ -134,7 +128,6 @@ int ObMediumListChecker::check_extra_info(
   if (last_major_snapshot > 0 && extra_info.last_medium_scn_ > 0) {
     if (OB_UNLIKELY(extra_info.last_medium_scn_ != last_major_snapshot)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("medium list is invalid for last major sstable", K(ret), K(extra_info), K(last_major_snapshot));
     }
   }
   return ret;

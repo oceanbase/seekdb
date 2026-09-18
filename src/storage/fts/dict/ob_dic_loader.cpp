@@ -30,7 +30,6 @@ int ObDicLoader::load_dictionary_in_trans(ObMySQLTransaction &trans)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("the dic loader is not initialized", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < dic_tables_info_.count(); ++i) {
       int64_t array_size = dic_tables_info_.at(i).array_size_;
@@ -70,11 +69,9 @@ int ObDicLoader::load_dictionary_in_trans(ObMySQLTransaction &trans)
           int64_t affected_rows = 0;
           if (OB_ISNULL(GCTX.sql_proxy_)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("sql proxy is null", K(ret));
           } else if (OB_FAIL(trans.write(query_string.ptr(), affected_rows))) {
           } else if (OB_UNLIKELY(((array_size > 0) && affected_rows != DEFAULT_BATCH_SIZE) || (affected_rows <= 0))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("invalid affected rows", K(ret), K(affected_rows));
           }
         }
       }
@@ -88,7 +85,6 @@ int ObDicLoader::try_load_dictionary_in_trans(ObMySQLTransaction &trans)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("the dic loader is not initialized", K(ret));
   } else {
     if (!is_load_) {
       bool is_need_load_dic = false;
@@ -120,7 +116,6 @@ int ObDicLoader::try_load_dictionary_in_trans()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("the dic loader is not initialized", K(ret));
   } else {
     if (!is_load_) {
       ObTimeoutCtx timeout_ctx;
@@ -129,7 +124,6 @@ int ObDicLoader::try_load_dictionary_in_trans()
       ObMySQLTransaction trans;
       if (OB_ISNULL(GCTX.sql_proxy_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("sql proxy is null", K(ret));
       } else if (OB_FAIL(timeout_ctx.set_trx_timeout_us(timeout))) {
       } else if (OB_FAIL(timeout_ctx.set_timeout(timeout))) {
       } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
@@ -187,7 +181,6 @@ int ObDicLoaderHandle::set_loader(ObDicLoader *loader)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(loader)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), KP(loader));
   } else {
     reset();
     loader_ = loader;

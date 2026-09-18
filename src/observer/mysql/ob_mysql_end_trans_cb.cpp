@@ -65,7 +65,6 @@ int ObSqlEndTransCb::init(ObMPPacketSender& packet_sender,
     stmt_id_ = stmt_id;
     params_num_ = params_num;
     if (OB_FAIL(packet_sender_.snapshot_from(packet_sender))) {
-      LOG_WARN("failed to snapshot mysql request identity", K(ret));
       reset_callback_state();
     } else {
       state_ = ARMED;

@@ -49,7 +49,6 @@ int ObExprInetCommon::str_to_ipv4(int len, const char *str, bool& is_ip_format_i
     LOG_WARN("ip format invalid, too short or too long", K(len));
   } else if (OB_UNLIKELY(OB_UNLIKELY(OB_ISNULL(str) || OB_ISNULL(ipv4addr)))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ip_str or ipv4addr is null", K(ret), K(str), K(ipv4addr));
   } else {
     unsigned char byte_addr[4] = {0};
     int dotcnt = 0, numcnt = 0;
@@ -121,7 +120,6 @@ int ObExprInetCommon::str_to_ipv6(int len, const char *str, bool& is_ip_format_i
     LOG_WARN("ip format invalid, too short or too long", K(len));
   } else if (OB_UNLIKELY(OB_ISNULL(str) || OB_ISNULL(ipv6addr))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ip_str or ipv6addr is null", K(ret), K(str), K(ipv6addr));
   } else {
     int dst_index = 0;
     char c;
@@ -240,7 +238,6 @@ int ObExprInetCommon::ip_to_str(ObString& ip_binary, bool& is_ip_format_invalid,
   char result[common::MAX_IP_ADDR_LENGTH] = {0};
   if (OB_UNLIKELY(OB_ISNULL(ip) || OB_ISNULL(result_ptr))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ip or result is null", K(ret), K(ip), K(result));    
   }else if (sizeof(in_addr) == ip_binary.length()) {
     const unsigned char *ipv4_groups = (const unsigned char *) ip;
     sprintf((char *)result_ptr, "%d.%d.%d.%d", ipv4_groups[0], ipv4_groups[1], ipv4_groups[2], ipv4_groups[3]);
@@ -387,10 +384,8 @@ int ObExprInetAton::cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_expr, O
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("inet_aton expr should have one param", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_UNLIKELY(OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0]))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of inet_aton expr is null", K(ret), K(rt_expr.args_));
   } else {
     rt_expr.eval_func_ = ObExprInetAton::calc_inet_aton;
   }
@@ -416,7 +411,6 @@ int ObExprInetAton::calc_inet_aton(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& 
         ObSQLMode sql_mode = 0;
         if (OB_UNLIKELY(OB_ISNULL(session))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("session is NULL", K(ret));
         } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
         } else {
           ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
@@ -429,7 +423,6 @@ int ObExprInetAton::calc_inet_aton(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& 
           } else {
             ret = OB_ERR_INCORRECT_STRING_VALUE_FOR_INET;
             LOG_USER_ERROR(OB_ERR_INCORRECT_STRING_VALUE_FOR_INET, "inet_aton");
-            LOG_WARN("fail to convert ip to int", K(ret), K(m_text));
           }
         }
       }
@@ -463,7 +456,6 @@ inline int ObExprInet6Ntoa::calc_result_type1(
   const sql::ObSQLSessionInfo *session = type_ctx.get_session();
   if (OB_UNLIKELY(OB_ISNULL(session))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null",K(ret));
   } else {
     type.set_collation_type(get_default_collation_type(type.get_type(), type_ctx));
   }
@@ -477,10 +469,8 @@ int ObExprInet6Ntoa::cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_expr, 
   int ret = OB_SUCCESS;
   if (1 != rt_expr.arg_cnt_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("inet6_ntoa expr should have one param", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_UNLIKELY(OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0]))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of inet6_ntoa expr is null", K(ret), K(rt_expr.args_));
   } else {
     rt_expr.eval_func_ = ObExprInet6Ntoa::calc_inet6_ntoa;
   }
@@ -501,7 +491,6 @@ int ObExprInet6Ntoa::calc_inet6_ntoa(const ObExpr& expr, ObEvalCtx& ctx, ObDatum
       if (OB_FAIL(ret)) {
       } else if (OB_ISNULL(buf = expr.get_str_res_mem(ctx, MAX_IP_ADDR_LENGTH))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("Failed to allocate memory for lob locator", K(ret), K(MAX_IP_ADDR_LENGTH));
       } else {
         bool is_ip_format_invalid = false;
         ObString num_val = text.get_string();
@@ -509,7 +498,6 @@ int ObExprInet6Ntoa::calc_inet6_ntoa(const ObExpr& expr, ObEvalCtx& ctx, ObDatum
         if (!ob_is_varbinary_type(expr.args_[0]->datum_meta_.type_,expr.args_[0]->datum_meta_.cs_type_) ||
             num_val.length() == 0) {
           is_ip_format_invalid = true;
-          LOG_WARN("ip format invalid", K(ret), K(text));
         } else if (OB_FAIL(ObExprInetCommon::ip_to_str(num_val, is_ip_format_invalid, ip_str))) {
         } else if (!is_ip_format_invalid) {
           expr_datum.set_string(ip_str);
@@ -521,7 +509,6 @@ int ObExprInet6Ntoa::calc_inet6_ntoa(const ObExpr& expr, ObEvalCtx& ctx, ObDatum
           ObSQLMode sql_mode = 0;
           if (OB_UNLIKELY(OB_ISNULL(session))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("session is NULL", K(ret));
           } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
           } else {
             ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
@@ -532,7 +519,6 @@ int ObExprInet6Ntoa::calc_inet6_ntoa(const ObExpr& expr, ObEvalCtx& ctx, ObDatum
               expr_datum.set_null(); //support no strict sql_mode
             } else {
               ret = OB_INVALID_ARGUMENT;
-              LOG_WARN("ip format invalid", K(ret),K(text));
             }
           }
         }
@@ -567,10 +553,8 @@ int ObExprInet6Aton::cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_expr, 
   int ret = OB_SUCCESS;
   if (1 != rt_expr.arg_cnt_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("inet6_aton expr should have one param", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_UNLIKELY(OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0]))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of inet6_aton expr is null", K(ret), K(rt_expr.args_));
   } else {
     rt_expr.eval_func_ = ObExprInet6Aton::calc_inet6_aton;
   }
@@ -587,7 +571,6 @@ int ObExprInet6Aton::calc_inet6_aton(const ObExpr& expr, ObEvalCtx& ctx, ObDatum
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(buf = expr.get_str_res_mem(ctx, sizeof(in6_addr)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Failed to allocate memory for lob locator", K(ret), K(sizeof(in6_addr)));
     } else {
       ObDatum& text = expr.locate_param_datum(ctx, 0);
       ObString m_text = text.get_string();
@@ -604,7 +587,6 @@ int ObExprInet6Aton::calc_inet6_aton(const ObExpr& expr, ObEvalCtx& ctx, ObDatum
           ObSQLMode sql_mode = 0;
           if (OB_ISNULL(session)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("session is NULL", K(ret));
           } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
           } else {
             ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
@@ -617,7 +599,6 @@ int ObExprInet6Aton::calc_inet6_aton(const ObExpr& expr, ObEvalCtx& ctx, ObDatum
             } else {
               ret = OB_ERR_INCORRECT_STRING_VALUE_FOR_INET;
               LOG_USER_ERROR(OB_ERR_INCORRECT_STRING_VALUE_FOR_INET, "inet6_aton");
-              LOG_WARN("ip format invalid", K(ret));
             }
           }
         } else {
@@ -641,7 +622,6 @@ int ObExprInet6Aton::inet6_aton(const ObString& ip, bool& is_ip_format_invalid, 
     char *result_buf = str_result.ptr();
     if (OB_UNLIKELY(OB_ISNULL(result_buf))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("result_buf is null", K(ret));
     } else {
       MEMCPY(buf, ip.ptr(), ip.length());
       buf[ip.length()] = '\0';
@@ -713,10 +693,8 @@ int ObExprIsIpv4::cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_expr, ObE
   int ret = OB_SUCCESS;
   if (1 != rt_expr.arg_cnt_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("is_ipv4 expr should have one param", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_UNLIKELY(OB_UNLIKELY(OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of is_ipv4 expr is null", K(ret), K(rt_expr.args_));
   } else {
     rt_expr.eval_func_ = ObExprIsIpv4::calc_is_ipv4;
   }
@@ -754,10 +732,8 @@ int ObExprIsIpv4Mapped::cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_exp
   int ret = OB_SUCCESS;
   if (1 != rt_expr.arg_cnt_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("is_ipv4_mapped expr should have one param", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_UNLIKELY(OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0]))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of is_ipv4_mapped expr is null", K(ret), K(rt_expr.args_));
   } else {
     rt_expr.eval_func_ = ObExprIsIpv4Mapped::calc_is_ipv4_mapped;
   }
@@ -811,10 +787,8 @@ int ObExprIsIpv4Compat::cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_exp
   int ret = OB_SUCCESS;
   if (1 != rt_expr.arg_cnt_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("is_ipv4_compat expr should have one param", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_UNLIKELY(OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0]))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of is_ipv4_compat expr is null", K(ret), K(rt_expr.args_));
   } else {
     rt_expr.eval_func_ = ObExprIsIpv4Compat::calc_is_ipv4_compat;
   }
@@ -868,10 +842,8 @@ int ObExprIsIpv6::cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_expr, ObE
   int ret = OB_SUCCESS;
   if (1 != rt_expr.arg_cnt_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("is_ipv6 expr should have one param", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_UNLIKELY(OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0]))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of is_ipv6 expr is null", K(ret), K(rt_expr.args_));
   } else {
     rt_expr.eval_func_ = ObExprIsIpv6::calc_is_ipv6;
   }

@@ -42,14 +42,11 @@ int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
   if (OB_UNLIKELY((parse_tree.type_ != T_DROP_INDEX || 2 != parse_tree.num_child_))
       || OB_ISNULL(parse_tree.children_)) { // mysql mode
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parse tree type or invalid children number", K(parse_tree.type_),
-             K(parse_tree.num_child_), K(parse_tree.children_), K(ret));
   }
   
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(session_info_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("session info should not be null", K(ret));
     }
   }
   
@@ -69,7 +66,6 @@ int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
       ObString database_name;
       if (OB_ISNULL(relation_node)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("relation_node is NULL", K(ret));
       } else if (OB_FAIL(resolve_table_relation_node(relation_node, table_name, database_name))) {
       } else {
         drop_index_stmt->set_table_name(table_name);
@@ -81,7 +77,6 @@ int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
     if (OB_SUCC(ret)) {
       if (OB_ISNULL(index_node)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("index_node is NULL", K(ret));
       } else {
         int32_t len = static_cast<int32_t>(index_node->str_len_);
         ObString index_name(len, len, index_node->str_value_);
@@ -97,10 +92,8 @@ int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
             LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(drop_index_stmt->get_database_name()),
                 helper.convert(drop_index_stmt->get_table_name()));
           }
-          LOG_WARN("fail to get table schema", K(ret));
         } else if (OB_ISNULL(table_schema)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("table schema is NULL", K(ret));
         }
         if (OB_FAIL(ret)) {
         } else if (table_schema->is_parent_table() || table_schema->is_child_table()) {
@@ -119,7 +112,6 @@ int ObDropIndexResolver::resolve(const ParseNode &parse_tree)
               index_table_schema))) {
           } else if (OB_ISNULL(index_table_schema)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("table schema is NULL", K(ret));
           } else if (OB_FAIL(check_indexes_on_same_cols(*table_schema,
                                                         *index_table_schema,
                                                         *schema_checker_,

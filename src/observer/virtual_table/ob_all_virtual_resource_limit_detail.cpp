@@ -53,20 +53,16 @@ int ObResourceLimitDetailTable::get_next_resource_limit_val_(int64_t &val)
   while (OB_SUCC(ret)) {
     if (!iter_.is_ready()
         && OB_FAIL(iter_.set_ready(*::oceanbase::share::server_service<::oceanbase::share::ObResourceLimitCalculator>()))) {
-      LOG_WARN("iterator is not ready", K(ret));
     } else if ((iter_.get_curr_type() == 0 || iter_next_res)
                && OB_FAIL(iter_.get_next_type())) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("get next resource type failed", K(ret), K(iter_.get_curr_type()));
       }
     } else if (!constraint_iter_.is_ready()
                && OB_FAIL(constraint_iter_.set_ready(
                    *::oceanbase::share::server_service<::oceanbase::share::ObResourceLimitCalculator>(),
                    iter_.get_curr_type()))) {
-      LOG_WARN("constraint iterator is not ready", K(ret), K(iter_.get_curr_type()));
     } else if (OB_FAIL(constraint_iter_.get_next(val))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("get next constraint value failed", K(ret), K(constraint_iter_.get_curr_type()));
       } else {
         // iter next resource
         constraint_iter_.reset();
@@ -87,11 +83,9 @@ int ObResourceLimitDetailTable::inner_get_next_row(ObNewRow *&row)
   int64_t limit_value;
   if (NULL == allocator_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("allocator_ shouldn't be NULL", K(allocator_), K(ret));
   } else if (FALSE_IT(start_to_read_ = true)) {
   } else if (OB_FAIL(get_next_resource_limit_val_(limit_value))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("get_next_resource_info failed", K(ret));
     }
   } else {
     const int64_t col_count = output_column_ids_.count();
@@ -112,7 +106,6 @@ int ObResourceLimitDetailTable::inner_get_next_row(ObNewRow *&row)
           break;
         default:
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid col_id", K(ret), K(col_id));
           break;
       }
     }

@@ -76,9 +76,6 @@ public:
       if (OB_SUCC(ret)) {
         if (end_part < start_part) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("Invalid part position, the end part must be greater than "
-                   "start part",
-                   K(ret), K(start_part), K(end_part));
           LOG_USER_ERROR(OB_INVALID_ARGUMENT,
                          "SPLIT_PART function. The end part must be greater "
                          "than start part.");
@@ -87,7 +84,6 @@ public:
           end_part = end_part + splits_pos.count();
         } else if (start_part < 0 || end_part < 0) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("Invalid part position", K(ret), K(start_part), K(end_part));
           LOG_USER_ERROR(
               OB_INVALID_ARGUMENT,
               "SPLIT_PART function. The start_part and end_part must both be "

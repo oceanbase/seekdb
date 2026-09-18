@@ -36,11 +36,9 @@ int ObDBMSJobExecutor::init(
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("job scheduler executor already init", K(inited_), K(ret));
   } else if (OB_ISNULL(sql_proxy_ = sql_proxy)
           || OB_ISNULL(schema_service_ = schema_service)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("sql proxy or schema service is null", K(sql_proxy), K(ret));
   } else if (OB_FAIL(job_utils_.init(sql_proxy_))) {
   } else {
     inited_ = true;
@@ -54,7 +52,6 @@ int ObDBMSJobExecutor::run_dbms_job(
   int ret = OB_SUCCESS;
     UNUSEDx(job_info, allocator);
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not support", K(ret));
   return ret;
 }
 

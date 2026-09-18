@@ -32,10 +32,8 @@ int ObMdsInfoCompactionFilter::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("is inited", KR(ret));
   } else if (OB_UNLIKELY(!truncate_info_mgr.is_valid() || truncate_info_mgr.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid or empty mds filter info", KR(ret), K(truncate_info_mgr));
   } else if (OB_FAIL(truncate_filter_.init(schema_rowkey_cnt, cols_desc, nullptr, truncate_info_mgr))) {
   } else {
     is_inited_ = true;
@@ -51,7 +49,6 @@ int ObMdsInfoCompactionFilter::filter(
   bool filtered = false;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", KR(ret));
   } else if (OB_FAIL(truncate_filter_.filter(row, filtered))) {
   } else if (filtered) {
     filter_ret = FILTER_RET_REMOVE;

@@ -49,12 +49,10 @@ int pl_prepare_expressions(ObPLAstUnit &ast, ObPLExecutableUnit &unit)
     if (OB_FAIL(unit.get_sql_expression_factory().alloc(expr))) {
     } else if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to create expr", K(ret));
     } else if (OB_FAIL(array.push_back(expr))) {
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(unit.set_expressions(array))) {
-    LOG_WARN("failed to set expressions", K(ret));
   }
   return ret;
 }
@@ -86,7 +84,6 @@ int pl_finalize_expressions(sql::ObSQLSessionInfo &session_info,
       ObSqlExpression *expression = unit.get_expressions().at(i);
       if (OB_ISNULL(raw_expr) || OB_ISNULL(expression)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid arguments", K(i), K(raw_expr), K(expression), K(ret));
       } else if (OB_FAIL(expr_generator.generate(*raw_expr, *expression))) {
       } else {
         OZ (ObPLBuilder::link_sql_expr_rt(*raw_expr, *expression));
@@ -115,7 +112,6 @@ int ObPLBuilder::check_dep_schema(ObSchemaGetterGuard &schema_guard,
                                                   new_version))) {
       } else if (OB_INVALID_VERSION == new_version ||
                  new_version != dep_schema_objs.at(i).version_) {
-        LOG_WARN("schema version is invalid", K(ret), K(dep_schema_objs.at(i)), K(new_version));
       }
     } else {
       const ObSimpleTableSchemaV2 *table_schema = nullptr;
@@ -123,11 +119,9 @@ int ObPLBuilder::check_dep_schema(ObSchemaGetterGuard &schema_guard,
                                                       dep_schema_objs.at(i).object_id_,
                                                       table_schema))) {
       } else if (nullptr == table_schema) {
-        LOG_WARN("get an unexpected null table schema", K(dep_schema_objs.at(i).object_id_));
       } else if (table_schema->is_index_table()) {
         // do nothing
       } else if (table_schema->get_schema_version() != dep_schema_objs.at(i).version_) {
-        LOG_WARN("schema version is invalid", K(ret), K(dep_schema_objs.at(i)), K(table_schema->get_schema_version()));
       }
     }
   }
@@ -218,9 +212,6 @@ int ObPLBuilder::init_anonymous_ast(
         OX (pl_type = *user_type);
       } else {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN(
-          "anonymous block`s parameter has invalid udt id and not collection not supported",
-          K(ret), K(param));
         LOG_USER_ERROR(OB_NOT_SUPPORTED,
                        "anonymous block`s parameter has invalid udt id and not a coll");
       }
@@ -267,7 +258,6 @@ int ObPLBuilder::compile(
   ObPLFunctionAST *func_ast_ptr = OB_NEWx(ObPLFunctionAST, (&allocator_), allocator_);
   if (OB_ISNULL(func_ast_ptr)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate anonymous block AST", K(ret));
   } else {
     ObPLFunctionAST &func_ast = *func_ast_ptr;
 
@@ -295,7 +285,6 @@ int ObPLBuilder::compile(
                             params);
       if (OB_ISNULL(block)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("pl body is NULL", K(block), K(ret));
       } else if (OB_FAIL(resolver.init(func_ast))) {
       } else if (OB_FAIL(resolver.resolve_root(block, func_ast))) {
       }
@@ -357,14 +346,12 @@ int ObPLBuilder::compile(
           int64_t sys_schema_version = OB_INVALID_VERSION;
           if (OB_FAIL(schema_guard_.get_schema_version(runtime_schema_version))
               || OB_FAIL(schema_guard_.get_schema_version(sys_schema_version))) {
-            LOG_WARN("fail to get schema version", K(ret));
           } else {
             func.set_runtime_schema_version(runtime_schema_version);
             func.set_sys_schema_version(sys_schema_version);
           }
         }
         if (OB_SUCC(ret) && OB_FAIL(check_dep_schema(schema_guard_, func.get_dependency_table()))) {
-          LOG_WARN("fail to check schema version", K(ret));
         }
       } // end of HEAP_VAR
     }
@@ -393,13 +380,11 @@ int ObPLBuilder::compile(const uint64_t id, ObPLFunction &func)
   ObPLFunctionAST *func_ast = OB_NEWx(ObPLFunctionAST, (&allocator_), allocator_);
   if (OB_ISNULL(func_ast)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate func_ast", K(ret));
   } else {
     const share::schema::ObRoutineInfo *routine = NULL;
     OZ (schema_guard_.get_routine_info( id, routine));
     if (OB_SUCC(ret) && OB_ISNULL(routine)) {
       ret = OB_ERR_SP_DOES_NOT_EXIST;
-      LOG_WARN("routine info is not exist!", K(ret), K(id));
     }
     OZ (init_function(routine, func));
     OZ (compile(*routine, *func_ast, func));
@@ -601,8 +586,6 @@ int ObPLBuilder::update_schema_object_dep_info(ObIArray<ObSchemaObjVersion> &dp_
       || OB_INVALID_ID == dep_obj_id
       || OB_INVALID_SCHEMA_VERSION == schema_version) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("illegal schema version or owner id", K(ret), K(schema_version),
-                                                      K(owner_id), K(dep_obj_id));
       } else {
         for (int64_t i = 0 ; OB_SUCC(ret) && i < dep_infos.count(); ++i) {
           ObDependencyInfo & dep = dep_infos.at(i);
@@ -652,8 +635,6 @@ int ObPLBuilder::check_package_body_legal(const ObPLBlockNS *parent_ns,
       ret = OB_ERR_ITEM_NOT_IN_BODY;
       LOG_USER_ERROR(OB_ERR_ITEM_NOT_IN_BODY,
                      spec_routine_info->get_name().length(), spec_routine_info->get_name().ptr());
-      LOG_WARN("subprogram or cursor is declared in a package specification and must be defined in the package body",
-               K(ret), K(i), K(spec_routine_info->get_decl_str()));
       ObPL::insert_error_msg(ret);
       ObPLResolver::record_error_line(session_info_, 
                                       spec_routine_info->get_line_number(), 
@@ -671,8 +652,6 @@ int ObPLBuilder::check_package_body_legal(const ObPLBlockNS *parent_ns,
       CK (OB_NOT_NULL(var));
       if (OB_SUCC(ret)) {
         ret = OB_ERR_ITEM_NOT_IN_BODY;
-        LOG_WARN("subprogram or cursor is declared in a package specification and must be defined in the package body",
-               K(ret), K(i));
         LOG_USER_ERROR(OB_ERR_ITEM_NOT_IN_BODY, var->get_name().length(), var->get_name().ptr());
       }
     }
@@ -915,7 +894,6 @@ int ObPLBuilder::init_function(const share::schema::ObRoutineInfo *routine, ObPL
   ObString copy_exec_env;
   if (OB_ISNULL(routine)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("routine info is NULL", K(routine), K(ret));
   } else if (OB_FAIL(ob_write_string(func.get_allocator(), routine->get_exec_env(), copy_exec_env))) {
   } else if (OB_FAIL(func.get_exec_env().init(copy_exec_env))) {
   } else {
@@ -947,7 +925,6 @@ int ObPLBuilder::init_function(const share::schema::ObRoutineInfo *routine, ObPL
         int64_t param_pos = param->get_param_position();
         if (OB_ISNULL(param)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("routine param is NULL", K(i), K(ret));
         } else if (param->is_ret_param()) {
           // For the return value, if it is neither in nor out, do not process
         } else {
@@ -1029,14 +1006,12 @@ int ObPLBuilder::generate_package_conditions(const ObPLConditionTable &ast_condi
     const ObPLCondition *ast_condition = ast_condition_table.get_condition(i);
     if (OB_ISNULL(ast_condition)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("pl condition is null", K(ret), K(i), K(package.get_id()));
     } else {
       ObIAllocator &alloc = package.get_allocator();
       ObPLCondition *package_condition =
         static_cast<ObPLCondition *>(alloc.alloc(sizeof(ObPLCondition)));
       if (OB_ISNULL(package_condition)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret), K(package_condition));
       } else {
         ObIArray<ObPLCondition *> &package_condition_table =
           const_cast<ObIArray<ObPLCondition *> &>(package.get_condition_table());
@@ -1058,7 +1033,6 @@ int ObPLBuilder::generate_package_cursors(
     const ObPLCursor *ast_cursor = ast_cursor_table.get_cursor(i);
     if (OB_ISNULL(ast_cursor)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("package ast cursor is null", K(ret), K(i), K(ast_cursor));
     } else {
       ObString sql;
       ObString ps_sql;
@@ -1070,7 +1044,6 @@ int ObPLBuilder::generate_package_cursors(
         row_desc = static_cast<ObRecordType *>(package.get_allocator().alloc(sizeof(ObRecordType)));
         if (OB_ISNULL(row_desc)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to alloc record memory for record type", K(ret), K(row_desc));
         }
         OX (row_desc = new(row_desc)ObRecordType());
         OZ (row_desc->deep_copy(package.get_allocator(), *(ast_cursor->get_row_desc()), false));
@@ -1118,13 +1091,11 @@ int ObPLBuilder::generate_package_vars(
     const ObPLVar *ast_var = ast_var_table.get_symbol(i);
     if (OB_ISNULL(ast_var)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("pl var is null", "package_id", package.get_id(), K(i), K(ret));
     } else {
       ObIAllocator &alloc = package.get_allocator();
       ObPLVar *package_var = static_cast<ObPLVar *>(alloc.alloc(sizeof(ObPLVar)));
       if (OB_ISNULL(package_var)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret));
       } else {
         new (package_var) ObPLVar();
         OZ (package_var->deep_copy(*ast_var, alloc), K(package.get_id()), K(i));
@@ -1147,7 +1118,6 @@ int ObPLBuilder::compile_types(const ObIArray<const ObUserDefinedType*> &types,
     ObUserDefinedType *ast_type = const_cast<ObUserDefinedType *>(types.at(i));
     if (OB_ISNULL(ast_type)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("pl user defined type is null", K(i), K(ret));
     } else {
       ObIAllocator &alloc = unit.get_allocator();
       ObUserDefinedType *user_type = NULL;
@@ -1156,7 +1126,6 @@ int ObPLBuilder::compile_types(const ObIArray<const ObUserDefinedType*> &types,
         ObRecordType *record_type = static_cast<ObRecordType *>(alloc.alloc(sizeof(ObRecordType)));
         if (OB_ISNULL(record_type)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("allocate memory failed", K(ret), KPC(ast_type), K(i));
         } else {
           new (record_type) ObRecordType();
           if (OB_FAIL(record_type->deep_copy(unit.get_enum_set_ctx(),
@@ -1171,7 +1140,6 @@ int ObPLBuilder::compile_types(const ObIArray<const ObUserDefinedType*> &types,
         break;
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid pl type", K(ret), KPC(ast_type), K(i));
       }
         break;
       }
@@ -1230,7 +1198,6 @@ int ObPLBuilder::compile_subprogram_table(common::ObIAllocator &allocator,
       if (OB_ISNULL(routine
         = static_cast<ObPLFunction *>(compile_unit.get_allocator().alloc(sizeof(ObPLFunction))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret));
       } else {
         new (routine) ObPLFunction(compile_unit.get_mem_context());
         OZ (init_function(schema_guard, exec_env, *routine_info, *routine));
@@ -1376,7 +1343,6 @@ ObPLBuilderEnvGuard::~ObPLBuilderEnvGuard()
   if (need_reset_default_database_) {
     if ((ret = session_info_.set_default_database(old_db_name_.string())) != OB_SUCCESS) {
       ret_ = OB_SUCCESS == ret_ ? ret : ret_;
-      LOG_WARN("failed to reset default database in pl env guard", K(ret), K(ret_), K(old_db_name_));
     } else {
       session_info_.set_database_id(old_db_id_);
     }

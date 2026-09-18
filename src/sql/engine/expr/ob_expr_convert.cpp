@@ -58,7 +58,6 @@ int ObExprConvert::calc_result_type2(ObExprResType &type,
     ObCharsetType charset_type = CHARSET_INVALID;
     if (CHARSET_INVALID == (charset_type = ObCharset::charset_type(cs_name.trim()))) {
       ret = OB_ERR_UNKNOWN_CHARSET;
-      LOG_WARN("unknown charset", K(ret), K(cs_name));
     } else {
       type.set_collation_level(CS_LEVEL_IMPLICIT);
       type.set_collation_type(ObCharset::get_default_collation(charset_type));
@@ -94,7 +93,6 @@ int calc_convert_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
       ObSolidifiedVarsGetter helper(expr, ctx, session);
       if (OB_ISNULL(session)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("session is null", K(ret));
       } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
       } else if (OB_FAIL(ObSQLUtils::check_well_formed_str(child_res->get_string(),
                                                            cs_type,

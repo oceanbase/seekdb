@@ -139,7 +139,6 @@ SHARE_PUBLIC_HEADER_ROOTS = [
     "ob_merge_info.h",
     "ob_occam_thread_pool.h",
     "ob_occam_time_guard.h",
-    "ob_occam_timer.h",
     "ob_priv_common.h",
     "ob_rpc_struct.h",
     "ob_scheduled_job_utils.h",

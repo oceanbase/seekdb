@@ -36,7 +36,6 @@ public:
     int ret = OB_SUCCESS;
     if (nullptr == pattern || 0 == len) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument. pattern is null.", K(ret), K(pattern), K(len));
     } else {
       pattern_ = pattern;
       pattern_end_ = pattern_ + len;
@@ -64,7 +63,6 @@ public:
     // `pattern_` will not be null because it is prepared in `set_instr_info()`.
     if (nullptr == pattern_ || 0 == pattern_len_) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument. pattern_ is null.", K(ret), K(pattern_), K(pattern_len_));
     } else if (text == text_end) {
       // `text` is NULL, so `res` will be false.
     } else if (1 == pattern_len_) {
@@ -122,7 +120,6 @@ public:
     // pattern_ will not be null because it is prepared in set_instr_info().
     if (nullptr == pattern_ || 0 == pattern_len_) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument. pattern_ is null.", K(ret), K(pattern_), K(pattern_len_));
     } else if (pattern_len_ > text_end - text) {
       res = false;
     } else {
@@ -137,7 +134,6 @@ public:
     // pattern_ will not be null because it is prepared in set_instr_info().
     if (nullptr == pattern_ || 0 == pattern_len_) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument. pattern_ is null.", K(ret), K(pattern_), K(pattern_len_));
     } else if (pattern_len_ > text_end - text) {
       res = false;
     } else {
@@ -152,7 +148,6 @@ public:
     // pattern_ will not be null because it is prepared in set_instr_info().
     if (nullptr == pattern_ || 0 == pattern_len_) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument. pattern_ is null.", K(ret), K(pattern_), K(pattern_len_));
     } else if (pattern_len_ != text_end - text) {
       res = false;
     } else {
@@ -277,11 +272,9 @@ int ObExprLike::InstrInfo::record_pattern(char *&pattern_buf, const ObString &pa
     pattern_buf = instr_buf_;
   } else if (OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("allocator is null", K(ret));
   } else if (OB_ISNULL(pattern_buf = (char*)(allocator_->alloc(sizeof(char)
                                               * pattern.length() * 2)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("No more memories", K(ret));
   } else {
     instr_buf_ = pattern_buf;
     instr_buf_length_ = pattern.length() * 2;
@@ -310,7 +303,6 @@ int ObExprLike::InstrInfo::add_instr_info(const char *start, const uint32_t leng
         || OB_ISNULL(new_instr_lengths =
                     static_cast<uint32_t *>(allocator_->alloc(sizeof(uint32_t) * new_buf_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocator memory failed", K(ret), K(new_instr_starts), K(new_buf_size));
     } else {
       MEMCPY(new_instr_starts, instr_starts_, sizeof(char *) * instr_cnt_);
       MEMCPY(new_instr_lengths, instr_lengths_, sizeof(uint32_t) * instr_cnt_);
@@ -343,7 +335,6 @@ int ObExprLike::assign(const ObExprOperator &other)
   const ObExprLike *tmp_other = dynamic_cast<const ObExprLike *>(&other);
   if (OB_UNLIKELY(NULL == tmp_other)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObFuncExprOperator::assign(other))) {
     } else {
@@ -421,7 +412,6 @@ int ObExprLike::calc_result_type3(ObExprResType &type,
           || !is_type_valid(type2.get_type())
           || !is_type_valid(type3.get_type()))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the param is not castable", K(type1), K(type2), K(type3), K(ret));
   } else {
     type.set_int();
     ObObjMeta types[2] = {type1, type2};
@@ -473,7 +463,6 @@ int ObExprLike::set_instr_info(ObIAllocator *exec_allocator,
     //do nothing.just let it go.
   } else if (OB_ISNULL(exec_cal_buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Failed to get exec cal buf", K(ret));
   } else {
     int32_t escape_wc = 0;
     if (OB_FAIL(instr_info.record_pattern(pattern_buf, pattern))) {
@@ -546,7 +535,6 @@ int ObExprLike::set_instr_info(ObIAllocator *exec_allocator,
         void *buf = nullptr;
         if (OB_ISNULL(buf = exec_allocator->alloc(sizeof(StringSearcher)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to allocator memory", K(ret));
         } else if (FALSE_IT(like_ctx.string_searcher_ = new (buf) StringSearcher())) {
           // do nothing
         } else if (OB_FAIL(reinterpret_cast<StringSearcher *>(like_ctx.string_searcher_)->init(
@@ -620,10 +608,7 @@ int ObExprLike::calc_escape_wc(const ObCollationType escape_coll,
     escape_wc = 0;
   } else if (1 != length) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument to ESCAPE", K(escape), K(length), K(ret));
   } else if (OB_FAIL(ObCharset::mb_wc(escape_coll, escape, escape_wc))) {
-    LOG_WARN("failed to convert escape to wc", K(ret), K(escape),
-             K(escape_coll), K(escape_wc));
     ret = OB_INVALID_ARGUMENT;
   }
   return ret;
@@ -644,8 +629,6 @@ int ObExprLike::is_escape(const ObCollationType cs_type,
   ObString string(char_len, buf_start);
   int32_t wc = 0;
   if (OB_FAIL(ObCharset::mb_wc(cs_type, string, wc))) {
-    LOG_WARN("failed to get wc", K(ret), K(string),
-               K(cs_type));
     ret = OB_INVALID_ARGUMENT;
   } else {
     res = (wc == escape_wc);
@@ -708,26 +691,20 @@ int ObExprLike::cg_expr(ObExprCGCtx &op_cg_ctx,
     LOG_ERROR("null pointer", K(text_expr), K(pattern_expr), K(escape_expr));
   } else if (rt_expr.arg_cnt_ != 3 || OB_ISNULL(rt_expr.args_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("like expr should have 3 arguments", K(ret), K(rt_expr.arg_cnt_), K(rt_expr.args_));
   } else if (OB_ISNULL(rt_expr.args_[0]) || OB_ISNULL(rt_expr.args_[1])
             || OB_ISNULL(rt_expr.args_[2])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child is null", K(ret), K(rt_expr.args_[0]), K(rt_expr.args_[1]),
-                              K(rt_expr.args_[2]));
   } else if (OB_UNLIKELY(!((ob_is_string_tc(rt_expr.args_[0]->datum_meta_.type_)
                             || ob_is_text_tc(rt_expr.args_[0]->datum_meta_.type_)
                             || ObNullType == rt_expr.args_[0]->datum_meta_.type_)))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected param type", K(ret), K(rt_expr.args_[0]->datum_meta_));
   } else if (OB_UNLIKELY(!(ob_is_string_tc(rt_expr.args_[1]->datum_meta_.type_)
                            || ob_is_text_tc(rt_expr.args_[1]->datum_meta_.type_)
                            || ObNullType == rt_expr.args_[1]->datum_meta_.type_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected param type", K(ret), K(rt_expr.args_[1]->datum_meta_));
   } else if (OB_UNLIKELY(!(ObVarcharType == rt_expr.args_[2]->datum_meta_.type_
               || ObNullType == rt_expr.args_[2]->datum_meta_.type_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected param type", K(ret), K(rt_expr.args_[2]->datum_meta_));
   } else {
     //Do optimization even if pattern_expr/escape is pushdown parameter, pattern and escape are
     //checked whether the same as last time which is recorded in like_ctx for each row in execution.
@@ -772,7 +749,6 @@ int ObExprLike::record_last_check(ObExprLikeContext &like_ctx,
                                         like_ctx.pattern_buf_len_));
       if (OB_ISNULL(like_ctx.last_pattern_)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc memory failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -789,7 +765,6 @@ int ObExprLike::record_last_check(ObExprLikeContext &like_ctx,
                                           like_ctx.escape_buf_len_));
         if (OB_ISNULL(like_ctx.last_escape_)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("alloc memory failed", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -854,7 +829,6 @@ int ObExprLike::like_varchar_inner(const ObExpr &expr, ObEvalCtx &ctx,  ObDatum 
                       (ctx.exec_ctx_.get_expr_op_ctx(like_id)))) {
         ret = OB_ERR_UNEXPECTED;
         //like context should be created while checking validation.
-        LOG_WARN("like context is null", K(ret), K(like_id));
       }
       if (OB_SUCC(ret)) {
         if (OB_UNLIKELY((!checked_already<true>(*like_ctx, false, pattern_val,
@@ -1193,7 +1167,6 @@ int ObExprLike::like_text_vectorized_inner(const ObExpr &expr, ObEvalCtx &ctx,
                     (ctx.exec_ctx_.get_expr_op_ctx(like_id)))) {
       ret = OB_ERR_UNEXPECTED;
       //like context should be created while checking validation.
-      LOG_WARN("like context is null", K(ret), K(like_id));
     } else if (OB_UNLIKELY(!checked_already<true>(*like_ctx, false, pattern_val,
                                                                         false, escape_val))) {
       if (OB_FAIL(set_instr_info(&ctx.exec_ctx_.get_allocator(), coll_type, pattern_val,
@@ -1210,7 +1183,6 @@ int ObExprLike::like_text_vectorized_inner(const ObExpr &expr, ObEvalCtx &ctx,
     if (OB_FAIL(ret)) {
     } else if (INVALID_INSTR_MODE == instr_mode
                && OB_FAIL(calc_escape_wc(escape_coll, escape_val, escape_wc))) {
-      LOG_WARN("calc escape wc failed", K(ret));
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ESCAPE");
     } else {
       #define MATCH_TEXT_BATCH_ARG_LIST expr, ctx, skip, size, coll_type, escape_wc, pattern_val, \

@@ -89,11 +89,9 @@ int ObMajorMergeScheduler::init(
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", KR(ret));
   } else {
     if (OB_ISNULL(buf = common::ob_malloc(sizeof(ObMajorMergeProgressChecker), ObMemAttr("mrg_prog_cker")))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory", KR(ret));
     } else {
       progress_checker_ = new(buf) ObMajorMergeProgressChecker(stop_);
     }
@@ -103,7 +101,6 @@ int ObMajorMergeScheduler::init(
                                       sql_proxy,
                                       schema_service,
                                       merge_info_mgr))) {
-    LOG_WARN("fail to init progress_checker", KR(ret));
   } else if (OB_FAIL(idling_.init())) {
   } else {
     first_check_merge_us_ = 0;
@@ -122,7 +119,6 @@ int ObMajorMergeScheduler::start()
   set_run_wrapper(share::server_runtime());
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObMajorMergeScheduler not init", KR(ret));
   } else if (OB_FAIL(create(MAJOR_MERGE_SCHEDULER_THREAD_CNT, "MergeScheduler"))) {
   } else if (OB_FAIL(ObRsReentrantThread::start())) {
   } else {
@@ -137,7 +133,6 @@ void ObMajorMergeScheduler::run3()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -223,7 +218,6 @@ int ObMajorMergeScheduler::get_uncompacted_tablets(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else {
     if (OB_FAIL(progress_checker_->get_uncompacted_tablets(uncompacted_tablets, uncompacted_table_ids))) {
     }
@@ -238,14 +232,12 @@ int ObMajorMergeScheduler::do_work()
   HEAP_VAR(ObGlobalMergeInfo, global_info) {
     if (IS_NOT_INIT) {
       ret = OB_NOT_INIT;
-      LOG_WARN("not init", KR(ret));
     } else {
       FREEZE_TIME_GUARD;
       if (OB_FAIL(merge_info_mgr_->get_global_merge_mgr().try_reload())) {
       }
     }
     if (FAILEDx(merge_info_mgr_->get_global_merge_mgr().get_snapshot(global_info))) {
-      LOG_WARN("fail to get merge info", KR(ret));
     } else {
       bool need_merge = true;
       if (global_info.is_merge_error()) {
@@ -260,7 +252,6 @@ int ObMajorMergeScheduler::do_work()
           }
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid frozen_scn", KR(ret), K(global_info));
         }
       } else {
         // do major freeze with current broadcast_scn
@@ -318,7 +309,6 @@ int ObMajorMergeScheduler::do_one_round_major_merge()
         break;
       }
       if (FAILEDx(update_merge_status(global_info.global_broadcast_scn()))) {
-        LOG_WARN("fail to update merge status", KR(ret));
         if (TC_REACH_TIME_INTERVAL(ADD_EVENT_INTERVAL)) {
           MANAGEMENT_EVENT_ADD("daily_merge", "merge_process",
                             "check merge progress fail", ret,
@@ -366,9 +356,7 @@ int ObMajorMergeScheduler::update_merge_status(
   DEBUG_SYNC(RS_VALIDATE_CHECKSUM);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", KR(ret));
   } else if (OB_FAIL(progress_checker_->check_progress())) {
-    LOG_WARN("fail to check merge status", KR(ret));
     if (OB_CHECKSUM_ERROR == ret) {
       if (OB_TMP_FAIL(merge_info_mgr_->get_global_merge_mgr().set_merge_status(ObGlobalMergeInfo::CHECKSUM_ERROR))) {
       }
@@ -410,7 +398,6 @@ int ObMajorMergeScheduler::try_update_global_merged_scn()
     uint64_t global_broadcast_scn_val = UINT64_MAX;
     if (IS_NOT_INIT) {
       ret = OB_NOT_INIT;
-      LOG_WARN("not inited", KR(ret));
     } else if (OB_FAIL(merge_info_mgr_->get_global_merge_mgr().get_snapshot(global_info))) {
     } else if (global_info.is_merge_error()) {
       LOG_WARN("should not update global merged scn, cuz is_merge_error is true", K(global_info));
@@ -421,7 +408,6 @@ int ObMajorMergeScheduler::try_update_global_merged_scn()
       } else if (OB_FAIL(ObGlobalMergeTableOperator::load_global_merge_info(
             *GCTX.sql_proxy_, global_info, true/*print_sql*/))) {
       } else if (global_info.is_last_merge_complete() && OB_FAIL(progress_checker_->clear_cached_info())) { // clear only when merge finished
-        LOG_WARN("fail to do prepare handle of progress checker", KR(ret));
       } else {
         MANAGEMENT_EVENT_ADD("daily_merge", "global_merged",
                               "global_broadcast_scn", global_broadcast_scn_val);
@@ -453,7 +439,6 @@ void ObMajorMergeScheduler::check_merge_interval_time(const bool is_merging)
   int64_t global_merge_start_time = -1;
   if (OB_ISNULL(merge_info_mgr_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("merge info mgr is unexpected nullptr", KR(ret));
   } else if (OB_FAIL(merge_info_mgr_->get_global_merge_mgr().get_global_last_merged_time(global_last_merged_time))) {
   } else if (OB_FAIL(merge_info_mgr_->get_global_merge_mgr().get_global_merge_start_time(global_merge_start_time))) {
   } else {
@@ -461,8 +446,6 @@ void ObMajorMergeScheduler::check_merge_interval_time(const bool is_merging)
     const int64_t MAX_REFRESH_EPOCH_IN_MERGE_INTERVAL = 6 * 3600 * 1000 * 1000L; // 6 hours
     if ((global_last_merged_time < 0) || (global_merge_start_time < 0)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected global_last_merged_time and global_merge_start_time", KR(ret),
-               K(global_last_merged_time), K(global_merge_start_time));
     } else if ((0 == global_last_merged_time) && (0 == global_merge_start_time)) {
       if (0 == first_check_merge_us_) {
         first_check_merge_us_ = now;

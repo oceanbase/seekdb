@@ -41,7 +41,6 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
   if (OB_SUCC(ret) &&
       false) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not supported package in mysql mode", K(ret), K(lbt()));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "not supported package in mysql mode");
   }
   if (OB_SUCC(ret)) {
@@ -92,7 +91,6 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
         OZ (schema_checker_->get_schema_guard()->get_database_schema( database_id, database_schema));
         if (OB_FAIL(ret) || OB_ISNULL(database_schema)) {
           ret = OB_ERR_BAD_DATABASE;
-          LOG_WARN("fail to get database schema", K(ret));
           LOG_USER_ERROR(OB_ERR_BAD_DATABASE, db_name.length(), db_name.ptr());
         }
         if (OB_FAIL(ret)) {
@@ -127,7 +125,6 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
         OZ (resolver.init(package_ast));
         if (OB_SUCC(ret)
             && OB_FAIL(resolver.resolve(package_stmts_node, package_ast))) {
-          LOG_WARN("resolve package spec failed", K(ret));
           LOG_USER_WARN(OB_ERR_PACKAGE_COMPILE_ERROR, "PACKAGE",
                         db_name.length(), db_name.ptr(), package_name.length(), package_name.ptr());
           resolve_success = ObPLResolver::is_object_not_exist_error(ret) ? true : false;
@@ -142,7 +139,6 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
         if (OB_SUCC(ret)
             && OB_UNLIKELY(0 != package_name.case_compare(opt_package_name))) {
           ret = OB_ERR_SP_LILABEL_MISMATCH;
-          LOG_WARN("end package name not match", K(ret), K(package_name), K(opt_package_name));
           LOG_USER_ERROR(OB_ERR_SP_LILABEL_MISMATCH, opt_package_name.length(), opt_package_name.ptr());
         }
       }
@@ -150,7 +146,6 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
       if (OB_SUCC(ret)) {
         if (OB_ISNULL(stmt = create_stmt<ObCreatePackageStmt>())) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("allocate memory for create package stmt failed", K(ret));
         } else {
           obcall::ObCreatePackageArg &create_package_arg = stmt->get_create_package_arg();
           ObPackageInfo &package_info = create_package_arg.package_info_;
@@ -309,15 +304,12 @@ int ObCreatePackageResolver::resolve_invoke_accessible(const ParseNode *package_
         } else if (T_SP_ACCESSIBLE_BY == node->type_) {
           if (has_accessible_by_clause) {
             ret = OB_ERR_PARSER_SYNTAX;
-            LOG_WARN("at most one declaration for 'ACCESSIBLE BY' is permitted",
-                      K(ret), K(node->type_), K(has_accessible_by_clause));
           } else {
             has_accessible_by_clause = true;
             has_accessible_by = true;
           }
         } else {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("not supported other clause yet", K(ret), K(node));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "specified invoker clause");
         }
       }
@@ -428,7 +420,6 @@ int ObCreatePackageResolver::resolve_functions_spec(const ObPackageInfo &package
             ObRoutineParam* rountine_param = routine_info.get_routine_params().at(idx);
             if (OB_ISNULL(rountine_param)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("rountine param is null", K(ret), K(idx));
             } else if (OB_FAIL(rountine_param->set_default_value(param->get_default_value()))) {
             }
           }
@@ -465,14 +456,12 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
   if (OB_SUCC(ret) &&
       false) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("not supported package in mysql mode", K(ret), K(lbt()));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "package in mysql mode");
   }
 
   if (OB_SUCC(ret)
       && OB_ISNULL(stmt = create_stmt<ObCreatePackageStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory for create package stmt failed", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -494,7 +483,6 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
       if (OB_SUCC(ret)
           && OB_UNLIKELY(0 != package_name.case_compare(end_package_name))) {
         ret = OB_ERR_SP_LILABEL_MISMATCH;
-        LOG_WARN("end package body name not match", K(ret), K(package_name), K(end_package_name));
         LOG_USER_ERROR(OB_ERR_SP_LILABEL_MISMATCH,
                        end_package_name.length(), end_package_name.ptr());
       }
@@ -663,7 +651,6 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
           int64_t pos = 0;
           if (OB_ISNULL(buf)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("fail to allocate memory", K(ret));
           } else {
             OZ (ObExecEnv::gen_exec_env(*session_info_, buf, OB_MAX_PROC_ENV_LENGTH, pos));
             OZ (package_info.set_exec_env(ObString(pos, buf)));

@@ -60,11 +60,9 @@ int ObExprTimestampNvl::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 2) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("timestampnvl expr should have two params", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])
             || OB_ISNULL(rt_expr.args_[1])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of timestampnvl expr is null", K(ret), K(rt_expr.args_));
   } else {
     rt_expr.eval_func_ = ObExprTimestampNvl::calc_timestampnvl;
   }

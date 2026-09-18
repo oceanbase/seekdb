@@ -49,7 +49,6 @@ int ObExprArrayLength::calc_result_type1(ObExprResType &type,
   ObCollectionTypeBase *coll_type = NULL;
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   } else if (type1.is_null()){
     // do nothing
   } else if (!ob_is_collection_sql_type(type1.get_type())) {
@@ -58,7 +57,6 @@ int ObExprArrayLength::calc_result_type1(ObExprResType &type,
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type))) {
   } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid collection type", K(ret), K(coll_type->type_id_));
   }
   if (OB_SUCC(ret)) {
     type.set_uint32();
@@ -100,7 +98,6 @@ int ObExprArrayLength::eval_array_length(const ObExpr &expr, ObEvalCtx &ctx, ObD
       res.set_uint32(len);
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected array type", K(ret));
     }
   }
 
@@ -148,7 +145,6 @@ int ObExprArrayLength::eval_array_length_batch(const ObExpr &expr,
           res_datum.at(j)->set_uint32(len);
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected array type", K(ret));
         }
       }
     } // end for

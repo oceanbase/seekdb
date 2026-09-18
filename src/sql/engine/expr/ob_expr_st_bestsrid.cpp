@@ -46,14 +46,12 @@ int ObExprPrivSTBestsrid::calc_result_typeN(ObExprResType& type,
   INIT_SUCC(ret);
   if (OB_UNLIKELY(param_num != 2 && param_num != 1)) {
     ret = OB_ERR_PARAM_SIZE;
-    LOG_WARN("invalid argument number", K(ret), K(param_num));
   } else {
     for (int64_t i = 0; i < param_num && OB_SUCC(ret); i++) {
       if (types_stack[i].get_type() != ObGeometryType
           && !ob_is_string_type(types_stack[i].get_type())
           && types_stack[i].get_type() != ObNullType) {
         ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-        LOG_WARN("invalid type", K(ret), K(types_stack[i].get_type()));
       }
     }
     if (OB_SUCC(ret)) {
@@ -75,7 +73,6 @@ int ObExprPrivSTBestsrid::get_geog_box(ObEvalCtx &ctx, lib::MemoryContext &mem_c
   if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb, srs))) {
   } else if (OB_FAIL(ObGeoExprUtils::build_geometry(mem_ctx->get_arena_allocator(), wkb, geo, srs, N_PRIV_ST_BESTSRID, 
                                                     GEO_ALLOW_3D | GEO_NOT_COPY_WKB))) {
-    LOG_WARN("get geo failed", K(ret));
     if (ret != OB_ERR_SRS_NOT_FOUND && ret != OB_ERR_INVALID_GEOMETRY_TYPE) {
       ret = OB_ERR_GIS_INVALID_DATA;  
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_BESTSRID);   
@@ -137,7 +134,6 @@ int ObExprPrivSTBestsrid::eval_st_bestsrid(const ObExpr &expr, ObEvalCtx &ctx, O
     } else if (OB_FAIL(guard.init())) {
     } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("fail to get mem ctx", K(ret));
     } else if (OB_FAIL(ObExprPrivSTBestsrid::get_geog_box(ctx, *mem_ctx,
                                                           geo_str,
                                                           input_type,
@@ -149,7 +145,6 @@ int ObExprPrivSTBestsrid::eval_st_bestsrid(const ObExpr &expr, ObEvalCtx &ctx, O
   if (OB_SUCC(ret) && !is_null_res) {
     int32_t bestsrid = SRID_WORLD_MERCATOR_PG;
     if (!is_geo_empty && OB_FAIL(ObGeoExprUtils::get_box_bestsrid(geo_box1, geo_box2, bestsrid))) {
-      LOG_WARN("failed to get box bestsrid", K(ret), KP(geo_box1), KP(geo_box2));
     } else {
       res.set_int(bestsrid);
     }

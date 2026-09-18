@@ -162,7 +162,6 @@ int ObPlanCacheObject::check_pre_calc_cons(const bool is_ignore_stmt,
   ObSEArray<ObDatumObjParam, 4> datum_params;
   if (OB_ISNULL(phy_plan_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid physical plan ctx", K(ret), K(phy_plan_ctx));
   } else if (OB_FALSE_IT(phy_plan_ctx->set_ignore_stmt(is_ignore_stmt))) {
   } else if (PRE_CALC_ERROR == expect_res) {
     if (OB_FAIL(pre_calc_frame.eval_expect_err(exec_ctx, is_match))) {
@@ -190,7 +189,6 @@ int ObPlanCacheObject::match_pre_calc_cons(common::ObDList<ObPreCalcExprConstrai
   const ObDList<ObPreCalcExprConstraint> *cur_cons = pc_ctx.sql_ctx_.all_pre_calc_constraints_;
   if (OB_ISNULL(cur_cons)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(pc_ctx.sql_ctx_.all_pre_calc_constraints_));
   } else if (cached_cons.get_size() != cur_cons->get_size()) {
     is_matched = false;
   } else {
@@ -275,7 +273,6 @@ int ObPlanCacheObject::pre_calculation(const bool is_ignore_stmt,
   ObSEArray<ObDatumObjParam, 4> datum_params;
   if (OB_ISNULL(phy_plan_ctx) || OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid session or phy plan ctx", K(ret), K(phy_plan_ctx), K(session));
   } else if (OB_FALSE_IT(phy_plan_ctx->set_ignore_stmt(is_ignore_stmt))) {
   } else if (pre_calc_frame.pre_calc_rt_exprs_.count() <= 0) {
     /* do nothing */
@@ -305,12 +302,10 @@ int ObPlanCacheObject::type_to_name(const ObLibCacheNameSpace ns,
   char *buf = NULL;
   if (ns <= NS_INVALID || ns >= NS_MAX) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid cache obj type", K(ret), K(ns));
   } else {
     int32_t str_len = (int32_t)std::strlen(type_strs[static_cast<int64_t>(ns)]);
     if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(str_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory", K(ret), K(str_len));
     } else {
       MEMCPY(buf, type_strs[static_cast<int64_t>(ns)], str_len);
       type_name.assign(buf, str_len);

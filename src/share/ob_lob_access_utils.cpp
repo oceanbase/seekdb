@@ -522,8 +522,6 @@ int ObTextStringResult::calc_buffer_len(int64_t res_len)
       }
     } else {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("Lob: out row temp lob not implemented, not support length bigger than 512M",
-        K(ret), K(this), K(pos_), K(buff_len_), K(res_len));
     }
   }
   return ret;
@@ -538,7 +536,6 @@ int ObTextStringResult::fill_temp_lob_header(const int64_t res_len)
   if (!has_lob_header_) { // do nothing
   } else if (OB_ISNULL(buffer_)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Lob: allocate memory for lob result failed", K(type_), K(buff_len_), K(ret));
   } else if (!(is_lob_storage(type_))) { // do nothing
   } else if (res_len <= OB_MAX_LONGTEXT_LENGTH - MAX_TMP_LOB_HEADER_LEN) {
     ObLobCommon lob_common;
@@ -547,7 +544,6 @@ int ObTextStringResult::fill_temp_lob_header(const int64_t res_len)
     pos_ = buff_len_ - res_len; // only res_len could be used later
   } else { // outrow
     ret = OB_NOT_IMPLEMENT;
-    LOG_WARN("Lob: out row temp lob not implemented", K(this), K(pos_), K(buff_len_), K(ret));
   }
   return ret;
 }
@@ -557,10 +553,8 @@ int ObTextStringResult::init(int64_t res_len, ObIAllocator *allocator)
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(buffer_) || is_init_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Lob: textstring result init already", K(ret), K(*this));
   } else if (!(ob_is_string_or_lob_type(type_) || is_lob_storage(type_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Lob: unexpected expr result type for textstring result", K(ret), K(type_));
   } else if (OB_FAIL(calc_buffer_len(res_len))) {
   } else if (buff_len_ == 0) {
     OB_ASSERT(has_lob_header_ == false); // empty result without header
@@ -569,7 +563,6 @@ int ObTextStringResult::init(int64_t res_len, ObIAllocator *allocator)
               ? (char *)alloc_->alloc(buff_len_) : (char *)allocator->alloc(buff_len_);
     if (OB_ISNULL(buffer_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Lob: allocation failed", K(ret), K(type_), K(buff_len_));
     } else if (OB_FAIL(fill_temp_lob_header(res_len))) {
     }
   }
@@ -584,14 +577,11 @@ int ObTextStringResult::init(const int64_t res_len, ObString &res_buffer)
   int ret = OB_SUCCESS;
   if (is_init_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Lob: textstring result init already", K(ret), K(*this));
   } else if (!(ob_is_string_or_lob_type(type_) || is_lob_storage(type_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Lob: unexpected expr result type for textstring result", K(ret), K(type_));
   } else if (OB_FAIL(calc_buffer_len(res_len))) {
   } else if (buff_len_ != res_buffer.length()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Lob: res buffer is not enough", K(ret), K(buff_len_), K(res_buffer));
   } else {
     buffer_ = res_buffer.ptr();    
     if (OB_FAIL(fill_temp_lob_header(res_len))) {
@@ -614,7 +604,6 @@ int ObTextStringResult::copy(const ObLobLocatorV2 *loc)
     buffer_ = (char *)alloc_->alloc(buff_len_);
     if (OB_ISNULL(buffer_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Lob: allocate memory for copy locator failed", K(loc), K(loc->size_), K(ret));
     } else {
       MEMCPY(buffer_, loc->ptr_, buff_len_);
       has_lob_header_ = loc->has_lob_header_;
@@ -630,14 +619,12 @@ int ObTextStringResult::append(const char *buffer, int64_t len)
     if (len == 0) {
     } else if (pos_ + len > buff_len_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Lob: append content length too long", K(pos_), K(buff_len_), K(len), K(ret));
     } else {
       MEMCPY(buffer_ + pos_, buffer, len);
       pos_ += len;
     }
   } else {
     ret = OB_NOT_IMPLEMENT;
-    LOG_WARN("Lob: out row temp lob not implemented", K(this), K(pos_), K(buff_len_), K(ret));
   }
   return ret;
 }
@@ -649,13 +636,11 @@ int ObTextStringResult::fill(int64_t pos, int c, int64_t len)
     if (len == 0) {
     } else if (pos + len > buff_len_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Lob: append content length too long", K(this), K(pos), K(len), K(ret));
     } else {
       MEMSET(buffer_ + pos_ + pos, c, len);
     }
   } else {
     ret = OB_NOT_IMPLEMENT;
-    LOG_WARN("Lob: out row temp lob not implemented", K(this), K(pos_), K(buff_len_), K(ret));
   }
   return ret;
 }
@@ -667,7 +652,6 @@ int ObTextStringResult::lseek(int64_t offset, int state)
   int ret = OB_SUCCESS;
   if (pos_ + offset < 0 || pos_ + offset > buff_len_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Lob: lseek to invalid position", K(this), K(pos_), K(offset), K(state), K(ret));
   } else {
     pos_ += offset;
   }
@@ -683,11 +667,9 @@ int ObTextStringResult::get_reserved_buffer(char *&empty_start, int64_t &empty_l
     empty_len = buff_len_ - pos_;
     if (empty_len < 0) {
       ret = OB_SIZE_OVERFLOW;
-      LOG_WARN("Lob: no remaining", K(this), K(pos_), K(buff_len_), K(ret));
     }
   } else {
     ret = OB_NOT_IMPLEMENT;
-    LOG_WARN("Lob: out row temp lob not implemented", K(this), K(pos_), K(buff_len_), K(ret));
   }
   return ret;
 }
@@ -777,7 +759,6 @@ int ObDeltaLob::serialize_header(char* buf, const int64_t buf_len, int64_t& pos,
   int64_t size = get_header_serialize_size();
   if (pos + size > buf_len) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("buffer not enough", KR(ret), K(pos), K(size), K(buf_len), KP(buf));
   } else {
     ObMemLobCommon *mem_common = new (buf + pos) ObMemLobCommon(ObMemLobType::TEMP_DELTA_LOB, false);
     ObLobCommon *lob_common = new (mem_common->data_) ObLobCommon();
@@ -796,7 +777,6 @@ int ObDeltaLob::deserialize(const ObLobLocatorV2 &lob_locator)
   ObLobDiffHeader *diff_header = nullptr;
   if (! lob_locator.is_delta_temp_lob()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("input not delta tmp lob", KR(ret), K(lob_locator));
   } else if (OB_FAIL(lob_locator.get_disk_locator(lob_common))) {
   } else if (OB_ISNULL(diff_header = reinterpret_cast<ObLobDiffHeader*>(lob_common->buffer_))){
     ret = OB_ERR_UNEXPECTED;
@@ -823,11 +803,9 @@ int ObDeltaLob::has_diff(const ObLobLocatorV2 &locator, bool &res)
   ObLobCommon *lob_common = nullptr;
   if (! locator.is_delta_temp_lob()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not delta lob", K(ret), K(locator));
   } else if (OB_FAIL(locator.get_disk_locator(lob_common))) {
   } else if (! lob_common->in_row_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unsupport out row delta tmp lob locator", KR(ret), KPC(lob_common), K(locator));
   } else {
     ObLobDiffHeader *diff_header = reinterpret_cast<ObLobDiffHeader*>(lob_common->buffer_);
     res = diff_header->diff_cnt_ > 0;
@@ -1025,13 +1003,10 @@ int ObTextStringObObjResult::init(int64_t res_len, ObIAllocator *allocator)
 {
   int ret = OB_SUCCESS;
   if (is_init_) {
-    LOG_WARN("Lob: textstring result init already", K(ret), K(*this));
   } else if (OB_ISNULL(allocator) && OB_ISNULL(params_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Lob: invalid arguments", K(ret), K(type_), KP(params_), KP(allocator));
   } else if (OB_ISNULL(res_obj_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Lob: invalid arguments", K(ret), K(type_), KP(res_obj_));
   } else if (OB_FAIL(ObTextStringResult::calc_buffer_len(res_len))) {
   } else if (buff_len_ == 0) {
     OB_ASSERT(has_lob_header_ == false); // empty result without header
@@ -1040,7 +1015,6 @@ int ObTextStringObObjResult::init(int64_t res_len, ObIAllocator *allocator)
               ? static_cast<char*>(params_->alloc(buff_len_)) : static_cast<char*>(allocator->alloc(buff_len_));
     if (OB_ISNULL(buffer_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Lob: alloc buffer failed", K(ret), KP(params_), KP(allocator), K(buff_len_));
     } else if (OB_FAIL(fill_temp_lob_header(res_len))) {
     }
     if (OB_SUCC(ret)) {

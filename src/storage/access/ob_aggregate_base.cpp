@@ -75,10 +75,8 @@ int ObAggCellBase::reserve_bitmap(const int64_t count)
   void *buf = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("aggregate cell not inited", K(ret));
   } else if (OB_UNLIKELY(count <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid count", K(ret), K(count));
   } else if (OB_NOT_NULL(bitmap_)) {
     if (OB_FAIL(bitmap_->reserve(count))) {
     } else {
@@ -87,7 +85,6 @@ int ObAggCellBase::reserve_bitmap(const int64_t count)
   } else {
     if (OB_ISNULL(buf = allocator_.alloc(sizeof(ObBitmap)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Failed to alloc memory for bitmap", K(ret));
     } else if (FALSE_IT(bitmap_ = new (buf) ObBitmap(allocator_))) {
     } else if (OB_FAIL(bitmap_->init(count))) {
     }
@@ -157,12 +154,10 @@ int ObGroupByCellBase::check_distinct_and_ref_valid()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(ref_cnt_ <= 0 || distinct_cnt_ <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected state", K(ret), K(ref_cnt_), K(distinct_cnt_));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < ref_cnt_; ++i) {
     if (OB_UNLIKELY(refs_buf_[i] >= distinct_cnt_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected ref", K(ret), K(i), K(ref_cnt_), K(distinct_cnt_), K(ObArrayWrap<uint32_t>(refs_buf_, ref_cnt_)));
     }
   }
   return ret;
@@ -179,19 +174,15 @@ int ObAggDatumBuf::init(const int64_t size, const bool need_cell_data_ptr, const
   void *buf = nullptr;
   if (OB_UNLIKELY(size <= 0 || datum_size <= 0 || datum_size > common::OBJ_DATUM_DECIMALINT_MAX_RES_SIZE)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(size), K(datum_size));
   } else if (OB_ISNULL(buf = allocator_.alloc(sizeof(ObDatum) * size))) {
     ret = common::OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Failed to alloc datum buf", K(ret), K(size));
   } else if (FALSE_IT(datums_ = new (buf) ObDatum[size])) {
   } else if (OB_ISNULL(buf = allocator_.alloc(datum_size * size))) {
     ret = common::OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Failed to alloc datum buf", K(ret), K(size));
   } else if (FALSE_IT(buf_ = static_cast<char*>(buf))) {
   } else if (need_cell_data_ptr) {
     if (OB_ISNULL(buf = allocator_.alloc(sizeof(char*) * size))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Failed to alloc cell data ptrs", K(ret), K(size));
     } else {
       cell_data_ptrs_ = static_cast<const char**> (buf);
     }
@@ -245,7 +236,6 @@ int ObAggDatumBuf::new_agg_datum_buf(
   int64_t new_size = size;
   if (OB_UNLIKELY(size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid size", K(ret), K(size));
   } else if (nullptr != datum_buf) {
     if (size > datum_buf->get_capacity()) {
       new_size = MAX(size, 2 * datum_buf->get_capacity());
@@ -260,7 +250,6 @@ int ObAggDatumBuf::new_agg_datum_buf(
     void *buf = nullptr;
     if (OB_ISNULL(buf = allocator.alloc(sizeof(ObAggDatumBuf)))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Failed to alloc agg datum buffer", K(ret));
     } else if (FALSE_IT(datum_buf = new (buf) ObAggDatumBuf(allocator))) {
     } else if (OB_FAIL(datum_buf->init(new_size, need_cell_data_ptr, datum_size))) {
     }
@@ -301,7 +290,6 @@ int ObAggGroupByDatumBuf::reserve(const int32_t size)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(size <= 0 || size > USE_GROUP_BY_MAX_DISTINCT_CNT)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Unexpected size", K(ret), K(size));
   } else {
     capacity_ = MAX(sql_datums_cnt_, size);
     if (is_use_extra_buf()) {

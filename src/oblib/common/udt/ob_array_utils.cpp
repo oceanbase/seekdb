@@ -33,17 +33,14 @@ int ObArrayUtil::get_type_name(ObNestedType coll_type, const ObDataType &elem_ty
       }
     } else {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid collection type", K(ret), K(coll_type));
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%s", ob_sql_type_str(elem_type.get_obj_type())))) {
   } else if (elem_type.get_obj_type() == ObDecimalIntType
              && OB_FAIL(databuff_printf(buf, buf_len, pos, "(%d,%d)", elem_type.get_precision(), elem_type.get_scale()))) {
-    LOG_WARN("failed to add deciaml precision to string", K(ret));
   } else if (ob_is_string_tc(elem_type.get_obj_type())
              && OB_FAIL(databuff_printf(buf, buf_len, pos, "(%d)", elem_type.get_length()))) {
-    LOG_WARN("failed to add string len to string", K(ret));
   } 
   for (uint32_t i = 0; OB_SUCC(ret) && i < depth; i++) {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos, ")"))) {
@@ -73,7 +70,6 @@ int ObArrayUtil::append(ObIArrayType &array, const ObObjType elem_type, const Ob
     switch (elem_type) {
       case ObNullType: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expect null value", K(ret));
         break;
       }
       case ObTinyIntType: {
@@ -126,7 +122,6 @@ int ObArrayUtil::append(ObIArrayType &array, const ObObjType elem_type, const Ob
       }
       default:
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("unsupported element type", K(ret), K(elem_type));
     }
   }
   return ret;

@@ -128,7 +128,6 @@ void ObTmpFilePageCacheController::refresh_disk_usage_limit()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("tmp file page cache controller is not inited", KR(ret));
   } else {
     const int64_t max_disk_usage = GCONF.temporary_file_max_disk_size;
     int64_t disk_limit = max_disk_usage > 0 ? max_disk_usage : 0;

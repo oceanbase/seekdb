@@ -58,7 +58,6 @@ int ObTriggerResolver::resolve(const ParseNode &parse_tree)
   }
   default:
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid stmt type", K(ret), K(stmt_type));
   }
   return ret;
 }
@@ -68,7 +67,6 @@ int ObTriggerResolver::get_drop_trigger_stmt_table_name(ObDropTriggerStmt *stmt)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("drop trigger stmt is NULL", K(ret));
   } else {
     const obcall::ObDropTriggerArg &arg = stmt->get_trigger_arg();
 
@@ -90,26 +88,19 @@ int ObTriggerResolver::get_drop_trigger_stmt_table_name(ObDropTriggerStmt *stmt)
         LOG_USER_ERROR(OB_ERR_BAD_DATABASE, trigger_database.length(), trigger_database.ptr());
       } else if (db_schema->is_or_in_recyclebin()) {
         ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
-        LOG_WARN("Can't not operate db in recyclebin",
-                 K(trigger_database), K(trigger_database_id), K(*db_schema), K(ret));
       } else if (OB_INVALID_ID == (trigger_database_id = db_schema->get_database_id())) {
         ret = OB_ERR_BAD_DATABASE;
-        LOG_WARN("database id is invalid",
-                 K(trigger_database), K(trigger_database_id), K(*db_schema), K(ret));
       } else if (OB_FAIL(schema_guard->get_trigger_info( trigger_database_id,
                                                        trigger_name, trigger_info))) {
       } else if (OB_ISNULL(trigger_info)) {
         ret = OB_ERR_TRIGGER_NOT_EXIST;
       } else if (trigger_info->is_in_recyclebin()) {
         ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
-        LOG_WARN("trigger is in recyclebin", K(ret),
-                 K(trigger_info->get_trigger_id()), K(trigger_info->get_trigger_name()));
       } else if (OB_FAIL(schema_guard->get_table_schema(
                                                   trigger_info->get_base_object_id(),
                                                   table))) {
       } else if (OB_ISNULL(table)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Table schema should not be NULL", K(ret));
       } else {
         stmt->trigger_table_name_ = table->get_table_name_str();
       }
@@ -121,7 +112,6 @@ int ObTriggerResolver::get_drop_trigger_stmt_table_name(ObDropTriggerStmt *stmt)
         } else {
           LOG_MYSQL_USER_ERROR(OB_ERR_TRIGGER_NOT_EXIST);
         }
-        LOG_WARN("trigger not exist", K(arg.trigger_database_), K(arg.trigger_name_), K(ret));
       }
     }
   }
@@ -148,7 +138,6 @@ int ObTriggerResolver::resolve_sp_definer(const ParseNode *parse_node,
 
       if (OB_ISNULL(user_node)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("user must be specified", K(ret));
       } else {
         // Need to check if the current user has superuser permissions or set user ID permissions
         if (!session_info_->has_user_super_privilege()) {
@@ -173,7 +162,6 @@ int ObTriggerResolver::resolve_sp_definer(const ParseNode *parse_node,
                                                                          host_name,
                                                                          user_info))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("fail to get_user_info", K(ret));
           } else if (OB_ISNULL(user_info)) {
             LOG_USER_WARN(OB_ERR_USER_NOT_EXIST, user_name.length(), user_name.ptr());
             pl::ObPL::insert_error_msg(OB_ERR_USER_NOT_EXIST);
@@ -309,7 +297,6 @@ int ObTriggerResolver::resolve_trigger_source(const ParseNode &parse_node,
     // do nothing
   } else if (T_TG_SIMPLE_DML != parse_node.children_[1]->type_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected trigger definition", K(ret), K(parse_node.children_[1]->type_));
   } else {
     OX (trigger_arg.trigger_info_.set_simple_dml_type());
     OZ (resolve_simple_dml_trigger(*parse_node.children_[1], trigger_arg));
@@ -341,7 +328,6 @@ int ObTriggerResolver::resolve_simple_dml_trigger(const ParseNode &parse_node,
         trigger_arg.trigger_info_.add_after_row();
       } else {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("parse_node timing points is invalid", K(parse_node.int16_values_[0]), K(ret));
       }
       if (OB_SUCC(ret)) {
         switch (parse_node.children_[0]->type_)
@@ -357,7 +343,6 @@ int ObTriggerResolver::resolve_simple_dml_trigger(const ParseNode &parse_node,
           break;
         default:
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("parse_node type is invalid", K(ret), K(parse_node.children_[0]->type_));
           break;
         }
       }
@@ -445,7 +430,6 @@ int ObTriggerResolver::resolve_alter_clause(const ParseNode &alter_clause,
   CK (OB_LIKELY(T_TG_ALTER_OPTIONS == alter_clause.type_));
   if (FAILEDx(TRIGGER_ALTER_IF_EDITIONABLE == alter_clause.int16_values_[0])) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("alter editionable is not supported yet!", K(ret));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter editionable");
   } else if (TRIGGER_ALTER_IF_ENABLE == alter_clause.int16_values_[0]) {
     is_set_status = true;
@@ -456,7 +440,6 @@ int ObTriggerResolver::resolve_alter_clause(const ParseNode &alter_clause,
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected alter trigger option", K(ret), K(alter_clause.int16_values_[0]));
   }
   return ret;
 }
@@ -493,21 +476,16 @@ int ObTriggerResolver::resolve_base_object(ObCreateTriggerArg &tg_arg,
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table or view does not exist", K(tg_db_id),
-              K(tg_arg.base_object_name_), K(ret));
     LOG_MYSQL_USER_ERROR(OB_TABLE_NOT_EXIST, tg_arg.base_object_database_.ptr(),
                           tg_arg.base_object_name_.ptr());
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_BAD_TABLE;
-    LOG_WARN("table schema is invalid", K(ret));
   } else if (table_schema->is_in_recyclebin()) {
     ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
-    LOG_WARN("table is in recyclebin", K(ret));
   } else if (!table_schema->is_user_table()) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("simple dml trigger only support on user table", K(ret));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "simple dml trigger isn't used on user table");
   } else {
     uint64_t trigger_id = OB_INVALID_ID;
@@ -516,8 +494,6 @@ int ObTriggerResolver::resolve_base_object(ObCreateTriggerArg &tg_arg,
     const ObIArray<uint64_t> &trigger_list = table_schema->get_trigger_list();
     if (tg_db_id != table_schema->get_database_id()) {
       ret = OB_ERR_TRIGGER_IN_WRONG_SCHEMA;
-      LOG_WARN("trigger database must same as table database", K(tg_db_id),
-               K(table_schema->get_database_id()), K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < trigger_list.count(); i++) {
       OX (trigger_id = trigger_list.at(i));
@@ -554,13 +530,11 @@ int ObTriggerResolver::resolve_order_clause(const ParseNode *parse_node, ObCreat
         if (OB_FAIL(ret)) {
         } else if (NULL == ref_trg_info) {
           ret = OB_ERR_TRG_ORDER;
-          LOG_WARN("ref_trg_info is NULL", K(ref_trg_db_name), K(ref_trg_name), K(ret));
           LOG_MYSQL_USER_ERROR(OB_ERR_TRG_ORDER, ref_trg_name.ptr());
         } else {
           if (!ObTriggerInfo::is_same_timing_event(trg_info, *ref_trg_info)
               || trg_info.get_base_object_id() != ref_trg_info->get_base_object_id()) {
             ret = OB_ERR_TRG_ORDER;
-            LOG_WARN("trigger order invalid", K(ref_trg_db_name), K(ref_trg_name), K(ret));
             LOG_MYSQL_USER_ERROR(OB_ERR_TRG_ORDER, ref_trg_name.ptr());
           }
         }

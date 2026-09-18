@@ -66,10 +66,8 @@ int ObDDLTaskQueue::init(const int64_t bucket_num)
   common::ObSpinLockGuard guard(lock_);
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObDDLTaskQueue has already been inited", K(ret));
   } else if (bucket_num <= 0) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(bucket_num));
   } else if (OB_FAIL(task_map_.create(bucket_num, lib::ObLabel("DdlQue")))) {
   } else if (OB_FAIL(task_id_map_.create(bucket_num, lib::ObLabel("DdlQue")))) {
   } else {
@@ -87,13 +85,10 @@ int ObDDLTaskQueue::push_task(ObDDLTask *task)
   common::ObSpinLockGuard guard(lock_);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = common::OB_NOT_INIT;
-    LOG_WARN("ObDDLTaskQueue has not been inited", K(ret));
   } else if (has_set_stop()) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("scheduler has stopped", K(ret));
   } else if (OB_ISNULL(task)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(task));
   } else if (OB_FAIL(DDL_SIM(task->get_task_id(), PUSH_TASK_INTO_QUEUE_FAILED))) {
   } else if (!task_list_.add_last(task)) {
     ret = common::OB_ERR_UNEXPECTED;
@@ -105,7 +100,6 @@ int ObDDLTaskQueue::push_task(ObDDLTask *task)
       if (common::OB_HASH_EXIST == ret) {
         ret = common::OB_ENTRY_EXIST;
       } else {
-        LOG_WARN("fail to set task to task set", K(ret));
       }
     } else {
       task_add_to_map = true;
@@ -113,7 +107,6 @@ int ObDDLTaskQueue::push_task(ObDDLTask *task)
         if (common::OB_HASH_EXIST == ret) {
           ret = common::OB_ENTRY_EXIST;
         } else {
-          LOG_WARN("set task to task set", K(ret));
         }
       }
       LOG_INFO("add task", K(*task), KP(task), K(common::lbt()));
@@ -139,12 +132,10 @@ int ObDDLTaskQueue::get_next_task(ObDDLTask *&task)
   common::ObSpinLockGuard guard(lock_);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = common::OB_NOT_INIT;
-    LOG_WARN("ObDDLTaskQueue has not been inited", K(ret));
   } else if (0 == task_list_.get_size()) {
     ret = common::OB_ENTRY_NOT_EXIST;
   } else if (OB_ISNULL(task = task_list_.remove_first())) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("error unexpected, task must not be NULL", K(ret));
   }
   return ret;
 }
@@ -156,17 +147,14 @@ int ObDDLTaskQueue::remove_task(ObDDLTask *task)
   common::ObSpinLockGuard guard(lock_);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = common::OB_NOT_INIT;
-    LOG_WARN("ObDDLTaskQueue has not been inited", K(ret));
   } else if (OB_ISNULL(task)) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(task));
   } else if (OB_FAIL(DDL_SIM(task->get_task_id(), REMOVE_TASK_FROM_QUEUE_FAILED))) {
   } else if (OB_FAIL(task_map_.erase_refactored(task->get_task_key()))) {
   } else {
     LOG_INFO("succ to remove task", K(*task), KP(task));
   }
   if (OB_SUCCESS != (tmp_ret = task_id_map_.erase_refactored(task->get_ddl_task_id()))) {
-    LOG_WARN("erase task from map failed", K(ret));
     ret = OB_SUCCESS == ret ? tmp_ret : ret;
   }
   return ret;
@@ -178,13 +166,10 @@ int ObDDLTaskQueue::add_task_to_last(ObDDLTask *task)
   common::ObSpinLockGuard guard(lock_);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = common::OB_NOT_INIT;
-    LOG_WARN("ObDDLTaskQueue has not been inited", K(ret));
   } else if (has_set_stop()) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("scheduler has stopped", K(ret));
   } else if (OB_ISNULL(task)) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(task));
   } else if (!task_list_.add_last(task)) {
     ret = common::OB_ERR_UNEXPECTED;
     STORAGE_LOG(ERROR, "error unexpected, fail to move task to last", K(ret));
@@ -200,16 +185,12 @@ int ObDDLTaskQueue::modify_task(const ObDDLTaskKey &task_key, F &&op)
   ObDDLTask *task = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = common::OB_NOT_INIT;
-    LOG_WARN("ObDDLTaskQueue has not been inited", K(ret));
   } else if (OB_UNLIKELY(!task_key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(task_key));
   } else if (OB_FAIL(task_map_.get_refactored(task_key, task))) {
     ret = OB_HASH_NOT_EXIST == ret ? OB_ENTRY_NOT_EXIST : ret;
-    LOG_WARN("get from task map failed", K(ret), K(task_key));
   } else if (OB_ISNULL(task)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("invalid task", K(ret), K(task_key));
   } else if (OB_FAIL(op(*task))) {
   }
   return ret;
@@ -223,17 +204,13 @@ int ObDDLTaskQueue::modify_task(const ObDDLTaskID &task_id, F &&op)
   ObDDLTask *task = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = common::OB_NOT_INIT;
-    LOG_WARN("ObDDLTaskQueue has not been inited", K(ret));
   } else if (OB_UNLIKELY(!task_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(task_id));
   } else if (OB_FAIL(DDL_SIM(task_id.task_id_, GET_TASK_FROM_QUEUE_FAILED))) {
   } else if (OB_FAIL(task_id_map_.get_refactored(task_id, task))) {
     ret = OB_HASH_NOT_EXIST == ret ? OB_ENTRY_NOT_EXIST : ret;
-    LOG_WARN("get from task map failed", K(ret), K(task_id));
   } else if (OB_ISNULL(task)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("invalid task", K(ret), K(task_id));
   } else if (OB_FAIL(op(*task))) {
   }
   return ret;
@@ -247,18 +224,13 @@ int ObDDLTaskQueue::get_task(const ObDDLTaskKey &task_key, F &&op)
   ObDDLTask *task = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = common::OB_NOT_INIT;
-    LOG_WARN("ObDDLTaskQueue has not been inited", K(ret));
   } else if (OB_UNLIKELY(!task_key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(task_key));
   } else if (OB_FAIL(task_map_.get_refactored(task_key, task))) {
     ret = OB_HASH_NOT_EXIST == ret ? OB_ENTRY_NOT_EXIST : ret;
-    LOG_WARN("get from task map failed", K(ret), K(task_key));
   } else if (OB_ISNULL(task)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("invalid task", K(ret), K(task_key));
   } else if (OB_FAIL(op(*task))) {
-    LOG_WARN("failed to do task callback", K(ret));
   }
   return ret;
 }
@@ -276,17 +248,13 @@ int ObDDLTaskQueue::update_task_copy_deps_setting(const ObDDLTaskID &task_id,
   common::ObSpinLockGuard guard(lock_);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLTaskQueue has not been inited", K(ret));
   } else if (OB_UNLIKELY(!task_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(task_id));
   } else if (OB_FAIL(DDL_SIM(task_id.task_id_, GET_TASK_FROM_QUEUE_FAILED))) {
   } else if (OB_FAIL(task_id_map_.get_refactored(task_id, task))) {
     ret = OB_HASH_NOT_EXIST == ret ? OB_ENTRY_NOT_EXIST : ret;
-    LOG_WARN("get from task map failed", K(ret), K(task_id));
   } else if (OB_ISNULL(table_redefinition_task = static_cast<ObTableRedefinitionTask*>(task))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ddl_task is null", K(ret));
   } else {
     table_redefinition_task->set_is_copy_constraints(is_copy_constraints);
     table_redefinition_task->set_is_copy_indexes(is_copy_indexes);
@@ -305,17 +273,13 @@ int ObDDLTaskQueue::update_task_process_schedulable(const ObDDLTaskID &task_id)
   common::ObSpinLockGuard guard(lock_);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLTaskQueue has not been inited", K(ret));
   } else if (OB_UNLIKELY(!task_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(task_id));
   } else if (OB_FAIL(DDL_SIM(task_id.task_id_, GET_TASK_FROM_QUEUE_FAILED))) {
   } else if (OB_FAIL(task_id_map_.get_refactored(task_id, ddl_task))) {
     ret = OB_HASH_NOT_EXIST == ret ? OB_ENTRY_NOT_EXIST : ret;
-    LOG_WARN("get from task map failed", K(ret), K(task_id));
   } else if (OB_ISNULL(table_redefinition_task = static_cast<ObTableRedefinitionTask*>(ddl_task))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ddl_task is null", K(ret));
   } else {
     table_redefinition_task->set_is_do_finish(true);
   }
@@ -330,16 +294,12 @@ int ObDDLTaskQueue::update_task_ret_code(const ObDDLTaskID &task_id, const int r
   common::ObSpinLockGuard guard(lock_);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLTaskQueue has not been inited", K(ret));
   } else if (OB_UNLIKELY(!task_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(task_id));
   } else if (OB_FAIL(task_id_map_.get_refactored(task_id, ddl_task))) {
     ret = OB_HASH_NOT_EXIST == ret ? OB_ENTRY_NOT_EXIST : ret;
-    LOG_WARN("get from task map failed", K(ret), K(task_id));
   } else if (OB_ISNULL(table_redefinition_task = static_cast<ObTableRedefinitionTask*>(ddl_task))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ddl_task is null", K(ret));
   } else {
     const ObTabletID unused_tablet_id;
     const int64_t unused_snapshot_version = 0;
@@ -360,23 +320,18 @@ int ObDDLTaskQueue::abort_task(const ObDDLTaskID &task_id)
   common::ObSpinLockGuard guard(lock_);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLTaskQueue has not been inited", K(ret));
   } else if (OB_UNLIKELY(!task_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(task_id));
   } else if (OB_FAIL(DDL_SIM(task_id.task_id_, GET_TASK_FROM_QUEUE_FAILED))) {
   } else if (OB_FAIL(task_id_map_.get_refactored(task_id, ddl_task))) {
     ret = OB_HASH_NOT_EXIST == ret ? OB_ENTRY_NOT_EXIST : ret;
-    LOG_WARN("get from task map failed", K(ret), K(task_id));
   } else if (OB_ISNULL(ddl_task)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ddl_task is null", K(ret));
   } else {
     ddl_task->set_is_abort(true);
     trace_id.set(ddl_task->get_trace_id());
     if (OB_UNLIKELY(trace_id.is_invalid())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid arguments", K(ret), K(trace_id));
     } else if (OB_FAIL(SYS_TASK_STATUS_MGR.cancel_task(trace_id))) {
     } else if (OB_FAIL(DDL_SIM(task_id.task_id_, CANCEL_SYS_TASK_FAILED))) {
     } else {
@@ -399,7 +354,6 @@ int ObDDLTaskHeartBeatMananger::init()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObManagerRegisterHeartBeatTask inited twice", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -411,7 +365,6 @@ int ObDDLTaskHeartBeatMananger::update_task_active_time(const ObDDLTaskID &task_
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObManagerRegisterHeartBeatTask not inited", K(ret));
   } else if (OB_UNLIKELY(!task_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_INFO("invalid argument", K(ret), K(task_id));
@@ -428,7 +381,6 @@ int ObDDLTaskHeartBeatMananger::update_task_active_time(const ObDDLTaskID &task_
         }
       }
       if (!found && OB_FAIL(register_task_times_.push_back(TaskActiveTime(task_id, active_time)))) {
-        LOG_WARN("set register task time failed", K(ret), K(task_id));
       }
     }
   }
@@ -440,7 +392,6 @@ int ObDDLTaskHeartBeatMananger::remove_task(const ObDDLTaskID &task_id)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObManagerRegisterHeartBeatTask not inited", K(ret));
   } else if (OB_UNLIKELY(!task_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_INFO("invalid argument", K(ret), K(task_id));
@@ -456,7 +407,6 @@ int ObDDLTaskHeartBeatMananger::remove_task(const ObDDLTaskID &task_id)
     }
     if (!found) {
       ret = OB_HASH_NOT_EXIST;
-      LOG_WARN("remove register task time failed", K(ret), K(task_id));
     }
   }
   return ret;
@@ -467,7 +417,6 @@ int ObDDLTaskHeartBeatMananger::get_inactive_ddl_task_ids(ObArray<ObDDLTaskID>& 
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObManagerRegisterHeartBeatTask not inited", K(ret));
   } else {
     const int64_t TIME_OUT_THRESHOLD = 5L * 60L * 1000L * 1000L;
     const int64_t now = ObTimeUtility::current_time();
@@ -490,7 +439,6 @@ int ObRedefCallback::modify_info(ObTableRedefinitionTask &redef_task,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!redef_task.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("redef task is not valid", K(ret), K(redef_task));
   } else if (OB_FAIL(update_redef_task_info(redef_task))) {
   } else {
     ObString message;
@@ -501,7 +449,6 @@ int ObRedefCallback::modify_info(ObTableRedefinitionTask &redef_task,
       common::ObArenaAllocator allocator("DdLSchedulerTmp");
       if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(serialize_param_size)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret), K(serialize_param_size));
       } else if (OB_FAIL(redef_task.serialize_params_to_message(buf, serialize_param_size, pos))) {
       } else {
         message.reset();
@@ -519,7 +466,6 @@ int ObRedefCallback::modify_info(ObTableRedefinitionTask &redef_task,
                 ret = OB_EAGAIN;
                 LOG_INFO("entry exist, the ddl scheduler hasn't recovered the task yet", K(ret), K(redef_task.get_task_id()));
               } else {
-                LOG_WARN("this task does not exist int hash table", K(ret), K(redef_task.get_task_id()));
               }
             }
           }
@@ -548,7 +494,6 @@ int ObCopyTableDepCallback::set_infos(common::hash::ObHashMap<ObString, bool> *i
   int ret = OB_SUCCESS;
   if (OB_ISNULL(infos)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("infos is nullptr", K(ret));
   } else {
     infos_ = infos;
   }
@@ -560,10 +505,8 @@ int ObCopyTableDepCallback::update_redef_task_info(ObTableRedefinitionTask& rede
   int ret = OB_SUCCESS;
   if (OB_ISNULL(infos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("infos is nullptr", K(ret));
   } else if (infos_->size() != 5) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("infos count error", K(ret), K(infos_->size()));
   } else {
     bool is_copy_constraints = false;
     bool is_copy_indexes = false;
@@ -592,10 +535,8 @@ int ObCopyTableDepCallback::update_task_info_in_queue(ObTableRedefinitionTask& r
   int ret = OB_SUCCESS;
   if (OB_ISNULL(infos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("infos is nullptr", K(ret));
   } else if (infos_->size() != 5) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("infos count error", K(ret), K(infos_->size()));
   } else {
     bool is_copy_constraints = false;
     bool is_copy_indexes = false;
@@ -687,7 +628,6 @@ int ObDDLScheduler::DDLScanTask::init()
   FLOG_INFO("[DDLScanTask] begin init ddl scan task");
   if (OB_UNLIKELY(timer_.inited())) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("ddl scan task already inited", KR(ret));
   } else if (OB_FAIL(timer_.init("DDLScanTask", common::ObMemAttr("DDLScanTask")))) {
   }
   FLOG_INFO("[DDLScanTask] finish init ddl scan task", KR(ret));
@@ -724,7 +664,6 @@ int ObDDLScheduler::DDLScanTask::schedule()
   int ret = OB_SUCCESS;
   if (!timer_.inited()) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("ddl scan task not inited", KR(ret));
   } else if (OB_FAIL(timer_.schedule(*this, DDL_TASK_SCAN_PERIOD, true))) {
   }
   return ret;
@@ -747,7 +686,6 @@ int ObDDLScheduler::HeartBeatCheckTask::init()
   FLOG_INFO("[HeartBeatCheckTask] begin init heart beat check task");
   if (OB_UNLIKELY(timer_.inited())) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("heart beat check task already inited", KR(ret));
   } else if (OB_FAIL(timer_.init("HeartBeatCheck", common::ObMemAttr("HeartBeatCheck")))) {
   }
   FLOG_INFO("[HeartBeatCheckTask] finish init heart beat check task", KR(ret));
@@ -784,7 +722,6 @@ int ObDDLScheduler::HeartBeatCheckTask::schedule()
   int ret = OB_SUCCESS;
   if (!timer_.inited()) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("heart beat check task not inited", KR(ret));
   } else if (OB_FAIL(timer_.schedule(*this, DDL_TASK_CHECK_PERIOD, true))) {
   }
   return ret;
@@ -860,7 +797,6 @@ int ObDDLScheduler::activate()
             KR(ret),  K_(is_inited), K_(is_stop));
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K_(is_inited));
   } else {
     // The workers may run as soon as switch_to_leader() publishes them.  Make
     // the queue runnable first; otherwise they repeatedly leave do_work()
@@ -908,7 +844,6 @@ void ObDDLScheduler::deactivate()
             KR(ret),  K_(is_inited), K_(is_stop));
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("sys ddl scheduler is not inited", KR(ret), K(is_inited_));
   } else if (OB_FAIL(ObServerThreadHelper::switch_to_follower_gracefully())) {
   } else {
     stop();
@@ -924,7 +859,6 @@ int ObDDLScheduler::init()
             KR(ret),  K_(is_inited), K_(is_stop));
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(allocator_.init(
       OB_MALLOC_BIG_BLOCK_SIZE, "ddl_task", DDL_TASK_MEMORY_LIMIT))) {
   } else if (OB_FAIL(task_queue_.init(MAX_TASK_NUM))) {
@@ -952,7 +886,6 @@ void ObDDLScheduler::stop()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("sys ddl scheduler is not inited", KR(ret), K(is_inited_));
   } else if (OB_FAIL(scan_task_.cancel())) {
   } else if (OB_FAIL(heart_beat_check_task_.cancel())) {
   } else {
@@ -989,7 +922,6 @@ void ObDDLScheduler::do_work()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     const int64_t thread_cnt = ObServerThreadHelper::get_thread_count();
     int ret = OB_SUCCESS;
@@ -1011,12 +943,10 @@ void ObDDLScheduler::do_work()
             break;
           }
         } else {
-          LOG_WARN("fail to get next task", K(ret));
         }
         idle_time = ObDDLTask::MAX_IDLE_TIME_US;
       } else if (OB_ISNULL(task)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("error unexpected, task must not be NULL", K(ret));
       } else if (task == first_retry_task || !task->need_schedule()) {
         // add the task back to the queue
         if (OB_FAIL(task_queue_.add_task_to_last(task))) {
@@ -1070,10 +1000,8 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
   LOG_INFO("create ddl task", K(param));
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLScheduler has not been inited", K(ret));
   } else if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(param));
   } else if (ObDDLUtil::is_verifying_checksum_error_needed(param.type_)
       && OB_FAIL(ObDDLUtil::check_table_compaction_checksum_error(*GCTX.schema_service_,
           *GCTX.sql_proxy_, *GCTX.meta_db_pool_, param.src_table_schema_->get_table_id()))) {
@@ -1222,7 +1150,6 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
       case DDL_DROP_LOB:
         if (OB_ISNULL(param.dest_table_schema_)) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("param.dest_table_schema is NULL", K(ret), K(param));
         } else if (OB_FAIL(create_drop_lob_task(proxy,
                                          param,
                                          param.dest_table_schema_->get_aux_lob_meta_tid(),
@@ -1347,7 +1274,6 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
       case DDL_TRUNCATE_SUB_PARTITION:
       default:
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("error unexpected, ddl type is not supported", K(ret), K(param.type_));
     }
     LOG_INFO("create ddl task", K(ret), K(param), K(task_record));
   }
@@ -1359,7 +1285,6 @@ int ObDDLScheduler::add_sys_task(ObDDLTask *task)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(task)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(task));
   } else {
     const int64_t parent_task_id = task->get_parent_task_id();
 
@@ -1374,7 +1299,6 @@ int ObDDLScheduler::add_sys_task(ObDDLTask *task)
           ret = OB_SUCCESS;
           LOG_INFO("sys task already exist", K(sys_task_status.task_id_));
         } else {
-          LOG_WARN("add task failed", K(ret));
         }
       } else if (OB_FAIL(DDL_SIM(task->get_task_id(), DDL_SCHEDULER_ADD_SYS_TASK_FAILED))) {
       } else {
@@ -1392,7 +1316,6 @@ int ObDDLScheduler::remove_sys_task(ObDDLTask *task)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(task)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(task));
   } else {
     const ObCurTraceId::TraceId &task_id = task->get_sys_task_id();
     if (!task_id.is_invalid()) {
@@ -1415,7 +1338,6 @@ int ObDDLScheduler::prepare_alter_table_arg(const ObPrepareAlterTableArgParam &p
   const ObString &ddl_stmt_str = param.ddl_stmt_str_;
   if (OB_UNLIKELY(!param.is_valid() || OB_ISNULL(target_table_schema))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(param), KP(target_table_schema));
   } else if (FALSE_IT(alter_table_arg.session_id_ = param.session_id_)) {
     // do nothing
   } else if (FALSE_IT(alter_table_arg.sql_mode_ = param.sql_mode_)) {
@@ -1430,7 +1352,6 @@ int ObDDLScheduler::prepare_alter_table_arg(const ObPrepareAlterTableArgParam &p
   } else if (OB_FAIL(alter_table_schema->set_database_name(param.target_database_name_))) {
   } else if (!target_table_schema->is_mysql_tmp_table()
             && OB_FAIL(alter_table_schema->alter_option_bitset_.add_member(obcall::ObAlterTableArg::SESSION_ID))) {
-    LOG_WARN("failed to add member SESSION_ID for alter table schema", K(ret), K(alter_table_arg));
   } else if (OB_FAIL(alter_table_schema->alter_option_bitset_.add_member(obcall::ObAlterTableArg::TABLE_NAME))) {
   } else if (FALSE_IT(alter_table_arg.foreign_key_checks_ = param.foreign_key_checks_)) {
   } else {
@@ -1446,7 +1367,6 @@ int ObDDLScheduler::get_task_record(const ObDDLTaskID &task_id,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!task_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(task_id));
   } else {
     task_record.reset();
     if (OB_FAIL(task_queue_.modify_task(task_id, [&task_record, &allocator](ObDDLTask &task) -> int {
@@ -1454,9 +1374,7 @@ int ObDDLScheduler::get_task_record(const ObDDLTaskID &task_id,
           ObTableRedefinitionTask *table_redefinition_task = static_cast<ObTableRedefinitionTask*>(&task);
           if (OB_UNLIKELY(!table_redefinition_task->is_valid())) {
             ret = OB_INVALID_ARGUMENT;
-            LOG_WARN("table rdefinition task is not valid", K(ret));
           } else if (OB_FAIL(table_redefinition_task->convert_to_record(task_record, allocator))) {
-            LOG_WARN("convert to ddl task record failed", K(ret), K(*table_redefinition_task));
           }
           return ret;
         }))) {
@@ -1464,7 +1382,6 @@ int ObDDLScheduler::get_task_record(const ObDDLTaskID &task_id,
         int tmp_ret = OB_SUCCESS;
         if (OB_ISNULL(GCTX.sql_proxy_)) {
           tmp_ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid argument", KR(tmp_ret));
         } else if (OB_TMP_FAIL(ObDDLTaskRecordOperator::get_ddl_task_record(
                                                                     task_id.task_id_,
                                                                     *GCTX.sql_proxy_,
@@ -1474,7 +1391,6 @@ int ObDDLScheduler::get_task_record(const ObDDLTaskID &task_id,
           LOG_INFO("get ddl task record success", K(ret), K(task_record));
         }
       } else {
-        LOG_WARN("failed to modify task", K(ret));
       }
     }
   }
@@ -1492,7 +1408,6 @@ int ObDDLScheduler::modify_redef_task(const ObDDLTaskID &task_id, ObRedefCallbac
   common::ObArenaAllocator allocator(lib::ObLabel("task_info"));
   if (OB_UNLIKELY(!task_id.is_valid()) || OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(task_id), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(DDL_SIM(task_id.task_id_, REDEF_TABLE_ABORT_FAILED))) {
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
   } else if (OB_FAIL(ObDDLTaskRecordOperator::select_for_update(trans,
@@ -1510,7 +1425,6 @@ int ObDDLScheduler::modify_redef_task(const ObDDLTaskID &task_id, ObRedefCallbac
           need_reschedule = true;
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("fail to set redefinition task info", K(ret), K(task_id));
         }
       }
       if (OB_FAIL(ret)) {
@@ -1595,24 +1509,19 @@ int ObDDLScheduler::start_redef_table(const obcall::ObStartRedefTableArg &arg, o
   const ObDatabaseSchema *orig_database_schema = nullptr;
   if (OB_UNLIKELY(!arg.is_valid()) || OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(arg), KP(GCTX.sql_proxy_));
   } else if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_service is null", K(ret));
   } else if (OB_FAIL(schema_service->get_runtime_schema_guard(orig_schema_guard))) {
   } else if (OB_FAIL(orig_schema_guard.get_table_schema( table_id, orig_table_schema))) {
   } else if (OB_ISNULL(orig_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("orig_table_schema is nullptr", K(ret));
   } else if (OB_FAIL(orig_schema_guard.get_database_schema( orig_table_schema->get_database_id(), orig_database_schema))) {
   } else if (OB_ISNULL(orig_database_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("orig_database_schema is nullptr", K(ret));
   } else if (OB_FAIL(schema_service->get_runtime_schema_guard(target_schema_guard))) {
   } else if (OB_FAIL(target_schema_guard.get_table_schema( dest_table_id, target_table_schema))) {
   } else if (OB_ISNULL(target_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("target_table_schema is nullptr", K(ret));
   } else {
     HEAP_VAR(obcall::ObAlterTableArg, alter_table_arg) {
       ObPrepareAlterTableArgParam param;
@@ -1670,15 +1579,12 @@ int ObDDLScheduler::create_build_fts_index_task(
   SMART_VAR(ObFtsIndexBuildTask, index_task) {
     if (OB_UNLIKELY(!is_inited_)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("not init", K(ret));
     } else if (OB_ISNULL(create_index_arg) ||
                OB_ISNULL(data_table_schema) ||
                OB_ISNULL(index_schema) ||
                data_format_version <= 0 ||
                OB_ISNULL(GCTX.sql_proxy_)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), KPC(create_index_arg),
-          KPC(data_table_schema), KPC(index_schema), K(data_format_version), KP(GCTX.sql_proxy_));
     } else if (OB_FAIL(ObDDLTaskUtil::get_domain_index_share_table_snapshot(
                    data_table_schema, index_schema, parent_task_id, *create_index_arg, snapshot_version))) {
     } else if (OB_FAIL(ObFtsIndexBuilderUtil::check_supportability_for_building_index(data_table_schema, create_index_arg))) {
@@ -1720,15 +1626,11 @@ int ObDDLScheduler::create_build_vec_ivf_index_task(
   SMART_VAR(ObVecIVFIndexBuildTask, index_task) {
     if (OB_UNLIKELY(!is_inited_)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("not init", K(ret));
     } else if (OB_ISNULL(create_index_arg) || OB_ISNULL(data_table_schema)
               || OB_ISNULL(index_schema) || OB_UNLIKELY(data_format_version <= 0)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), KPC(create_index_arg),
-          KPC(data_table_schema), KPC(index_schema));
     } else if (OB_ISNULL(GCTX.sql_proxy_)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
     } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
     } else if (OB_FAIL(index_task.init(task_id,
                                        data_table_schema,
@@ -1765,13 +1667,10 @@ int ObDDLScheduler::create_build_vec_index_task(
   SMART_VAR(ObVecIndexBuildTask, index_task) {
     if (OB_UNLIKELY(!is_inited_)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("not init", K(ret));
     } else if (OB_ISNULL(create_index_arg) || OB_ISNULL(data_table_schema)
               || OB_ISNULL(index_schema) || OB_UNLIKELY(data_format_version <= 0)
               || OB_ISNULL(GCTX.sql_proxy_)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), KPC(create_index_arg),
-          KPC(data_table_schema), KPC(index_schema));
     } else if (OB_FAIL(ObDDLTaskUtil::get_domain_index_share_table_snapshot(
                    data_table_schema, index_schema, parent_task_id, *create_index_arg, snapshot_version))) {
     } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
@@ -1820,11 +1719,9 @@ int ObDDLScheduler::create_build_index_task(
   SMART_VAR(ObIndexBuildTask, index_task) {
     if (OB_UNLIKELY(!is_inited_)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("not init", K(ret));
     } else if (OB_ISNULL(create_index_arg) || OB_ISNULL(data_table_schema) || OB_ISNULL(index_schema)
         || OB_UNLIKELY(data_format_version <= 0) || OB_ISNULL(GCTX.sql_proxy_)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), KPC(create_index_arg), KPC(data_table_schema), KPC(index_schema), K(data_format_version));
     } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
     } else if (OB_FAIL(index_task.init(task_id,
                                       ddl_type,
@@ -1863,10 +1760,8 @@ int ObDDLScheduler::create_drop_index_task(
   int64_t task_id = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(index_schema) || OB_ISNULL(drop_index_arg) || OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(index_schema), KP(drop_index_arg));
   } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
   } else {
     const uint64_t data_table_id = index_schema->get_data_table_id();
@@ -1912,16 +1807,13 @@ int ObDDLScheduler::create_drop_fts_index_task(
   bool is_vec_spiv_index = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(index_schema) || OB_ISNULL(drop_index_arg) || OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(index_schema), KP(drop_index_arg), KP(GCTX.sql_proxy_));
   } else if (FALSE_IT(is_fts_index = (index_schema->is_fts_index_aux() || drop_index_arg->is_parent_task_dropping_fts_index_))) {
   } else if (FALSE_IT(is_multivalue_index = (index_schema->is_multivalue_index_aux() || drop_index_arg->is_parent_task_dropping_multivalue_index_))) {
   } else if (FALSE_IT(is_vec_spiv_index = (index_schema->is_vec_spiv_index_aux() || drop_index_arg->is_parent_task_dropping_spiv_index_))) {
   } else if (OB_UNLIKELY(schema_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(index_schema), K(schema_version));
   } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_,
           task_id))) {
   } else {
@@ -1943,7 +1835,6 @@ int ObDDLScheduler::create_drop_fts_index_task(
     } else if (target_object_id == OB_INVALID_ID) {
       if (OB_ISNULL(index_schema)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("fail to get valid target object id", K(ret));
       } else {
         target_object_id = index_schema->get_table_id();
       }
@@ -2007,13 +1898,10 @@ int ObDDLScheduler::create_drop_vec_index_task(
   // multivalue index may run here, need calc index type first
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(index_schema)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(index_schema), KP(drop_index_arg));
   } else if (OB_UNLIKELY(schema_version <= 0) || OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(index_schema), K(schema_version), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
   } else {
     if (OB_FAIL(ret) || OB_ISNULL(domain_index_schema)) {
@@ -2101,16 +1989,12 @@ int ObDDLScheduler::create_drop_vec_ivf_index_task(
 
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(index_schema)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(index_schema), KP(drop_index_arg));
   } else if (OB_UNLIKELY(schema_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(index_schema), K(schema_version));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
   } else {
     if (OB_FAIL(ret) || OB_ISNULL(centroid_schema)) {
@@ -2181,13 +2065,10 @@ int ObDDLScheduler::create_drop_lob_task(
   int64_t task_id = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (OB_ISNULL(param.ddl_arg_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
   } else {
     if (OB_FAIL(task.init(task_id, aux_lob_meta_table_id, param.object_id_, param.schema_version_,
@@ -2217,11 +2098,9 @@ int ObDDLScheduler::create_constraint_task(
   int64_t task_id = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(nullptr == table_schema || OB_INVALID_ID == constraint_id || schema_version <= 0
                          || nullptr == arg || !arg->is_valid()) || OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KPC(table_schema), K(constraint_id), K(schema_version), K(arg), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
   } else if (OB_FAIL(constraint_task.init(task_id, table_schema, constraint_id, ddl_type, schema_version, *arg, sub_task_trace_id, parent_task_id))) {
   } else if (OB_FAIL(constraint_task.set_trace_id(*ObCurTraceId::get_trace_id()))) {
@@ -2251,10 +2130,8 @@ int ObDDLScheduler::create_table_redefinition_task(
   SMART_VAR(ObTableRedefinitionTask, redefinition_task) {
     if (OB_UNLIKELY(!is_inited_)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("ObDDLScheduler has not been inited", K(ret));
     } else if (OB_UNLIKELY(0 == task_id || data_format_version <= 0) || OB_ISNULL(alter_table_arg) || OB_ISNULL(src_schema) || OB_ISNULL(dest_schema)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid arguments", K(ret), K(task_id), KP(alter_table_arg), KP(src_schema), KP(dest_schema),  K(data_format_version));
     } else if (OB_FAIL(redefinition_task.init(src_schema,
                                               dest_schema,
                                               parent_task_id,
@@ -2290,10 +2167,8 @@ int ObDDLScheduler::create_drop_primary_key_task(
   SMART_VAR(ObDropPrimaryKeyTask, drop_pk_task) {
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLScheduler has not been inited", K(ret));
   } else if (OB_UNLIKELY(0 == task_id || data_format_version <= 0) || OB_ISNULL(alter_table_arg) || OB_ISNULL(src_schema) || OB_ISNULL(dest_schema)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(task_id), KP(alter_table_arg), KP(src_schema), KP(dest_schema), K(data_format_version));
   } else if (OB_FAIL(drop_pk_task.init(src_schema,
                                        dest_schema,
                                        task_id,
@@ -2327,11 +2202,9 @@ int ObDDLScheduler::create_column_redefinition_task(
   SMART_VAR(ObColumnRedefinitionTask, redefinition_task) {
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLScheduler has not been inited", K(ret));
   } else if (OB_UNLIKELY(0 == task_id || data_format_version <= 0)
     || OB_ISNULL(alter_table_arg) || OB_ISNULL(src_schema) || OB_ISNULL(dest_schema)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(task_id), KP(alter_table_arg), KP(src_schema), KP(dest_schema), K(data_format_version));
   } else if (OB_FAIL(redefinition_task.init(task_id,
                                             type,
                                             src_schema->get_table_id(),
@@ -2363,11 +2236,9 @@ int ObDDLScheduler::create_modify_autoinc_task(
   SMART_VAR(ObModifyAutoincTask, modify_autoinc_task) {
     if (OB_UNLIKELY(!is_inited_)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("not init", K(ret));
     } else if (OB_UNLIKELY(OB_INVALID_ID == table_id
                           || schema_version <= 0 || 0 == task_id || nullptr == arg || !arg->is_valid())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", K(ret), K(table_id), K(schema_version), K(task_id), K(arg));
     } else if (OB_FAIL(modify_autoinc_task.init(task_id, table_id, schema_version, sub_task_trace_id, *arg))) {
     } else if (OB_FAIL(modify_autoinc_task.set_trace_id(*ObCurTraceId::get_trace_id()))) {
     } else if (OB_FAIL(insert_task_record(proxy, modify_autoinc_task, allocator, task_record))) {
@@ -2396,7 +2267,6 @@ int ObDDLScheduler::create_fork_table_task(
   SMART_VAR(ObForkTableTask, fork_table_task) {
     if (OB_UNLIKELY(!is_inited_)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("not init", KR(ret));
     } else if (OB_ISNULL(fork_table_arg)
                || OB_ISNULL(src_table_schema)
                || OB_ISNULL(dst_table_schema)
@@ -2404,8 +2274,6 @@ int ObDDLScheduler::create_fork_table_task(
                || schema_version <= 0
                || snapshot_version <= 0) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", KR(ret), K(fork_table_arg),
-          K(src_table_schema), K(dst_table_schema), K(schema_version), K(snapshot_version), KP(GCTX.sql_proxy_));
     } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
     } else if (OB_FAIL(fork_table_task.init(task_id,
                                             share::DDL_FORK_TABLE,
@@ -2434,16 +2302,13 @@ int ObDDLScheduler::insert_task_record(
   task_record.reset();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!ddl_task.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(ddl_task));
   } else if (OB_FAIL(ddl_task.convert_to_record(task_record, allocator))) {
   } else if (OB_FAIL(ObDDLTaskRecordOperator::insert_record(proxy, task_record))) {
     if (OB_ERR_PRIMARY_KEY_DUPLICATE == ret) {
       ret = OB_ENTRY_EXIST;
     } else {
-      LOG_WARN("insert ddl task record failed", K(ret), K(task_record));
     }
   } else if (OB_FAIL(DDL_SIM_WHEN(ddl_task.get_parent_task_id() > 0,
           ddl_task.get_task_id(), INSERT_CHILD_DDL_TASK_RECORD_EXIST))) {
@@ -2457,10 +2322,8 @@ int ObDDLScheduler::recover_task()
   int tmp_ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(GCTX.sql_proxy_) || OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_), KP(GCTX.schema_service_));
   } else {
     ObSqlString sql_string;
     ObArray<ObDDLTaskRecord> task_records;
@@ -2527,7 +2390,6 @@ int ObDDLScheduler::remove_inactive_ddl_task()
   int tmp_ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     if (OB_FAIL(manager_reg_heart_beat_task_.get_inactive_ddl_task_ids(remove_task_ids))){
     } else {
@@ -2540,7 +2402,6 @@ int ObDDLScheduler::remove_inactive_ddl_task()
             LOG_INFO("abort_redef_table() success, but manager_reg_heart_beat_task last deletion failed", K(ret));
             ret = OB_SUCCESS;
           } else {
-            LOG_WARN("remove ddl task fail", K(ret));
           }
         }
         if (OB_SUCC(ret)) {
@@ -2560,7 +2421,6 @@ int ObDDLScheduler::schedule_ddl_task(const ObDDLTaskRecord &record)
   ObTraceIDGuard guard(record.trace_id_);
   if (OB_UNLIKELY(!record.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ddl task record is invalid", K(ret), K(record));
   } else if (OB_FAIL(DDL_SIM(record.task_id_, SCHEDULE_DDL_TASK_FAILED))) {
   } else {
     switch (record.ddl_type_) {
@@ -2644,7 +2504,6 @@ int ObDDLScheduler::schedule_ddl_task(const ObDDLTaskRecord &record)
         break;
       default: {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("not supported task type", K(ret), K(record));
         break;
       }
     }
@@ -2663,13 +2522,11 @@ int ObDDLScheduler::schedule_build_fts_index_task(
   ObFtsIndexBuildTask *build_index_task = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(alloc_ddl_task(build_index_task))) {
   } else if (OB_FAIL(build_index_task->init(task_record))) {
   } else if (OB_FAIL(build_index_task->set_trace_id(task_record.trace_id_))) {
   } else if (OB_FAIL(inner_schedule_ddl_task(build_index_task, task_record))) {
     if (OB_ENTRY_EXIST != ret) {
-      LOG_WARN("inner schedule task failed", K(ret), K(*build_index_task));
     }
   }
   if (OB_FAIL(ret) && nullptr != build_index_task) {
@@ -2687,13 +2544,11 @@ int ObDDLScheduler::schedule_build_vec_ivf_index_task(
   ObVecIVFIndexBuildTask *build_index_task = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(alloc_ddl_task(build_index_task))) {
   } else if (OB_FAIL(build_index_task->init(task_record))) {
   } else if (OB_FAIL(build_index_task->set_trace_id(task_record.trace_id_))) {
   } else if (OB_FAIL(inner_schedule_ddl_task(build_index_task, task_record))) {
     if (OB_ENTRY_EXIST != ret) {
-      LOG_WARN("inner schedule task failed", K(ret), K(*build_index_task));
     }
   }
   if (OB_FAIL(ret) && nullptr != build_index_task) {
@@ -2711,13 +2566,11 @@ int ObDDLScheduler::schedule_build_vec_index_task(
   ObVecIndexBuildTask *build_index_task = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(alloc_ddl_task(build_index_task))) {
   } else if (OB_FAIL(build_index_task->init(task_record))) {
   } else if (OB_FAIL(build_index_task->set_trace_id(task_record.trace_id_))) {
   } else if (OB_FAIL(inner_schedule_ddl_task(build_index_task, task_record))) {
     if (OB_ENTRY_EXIST != ret) {
-      LOG_WARN("inner schedule task failed", K(ret), K(*build_index_task));
     }
   }
   if (OB_FAIL(ret) && nullptr != build_index_task) {
@@ -2735,14 +2588,12 @@ int ObDDLScheduler::schedule_build_index_task(
   ObIndexBuildTask *build_index_task = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(alloc_ddl_task(build_index_task))) {
   } else {
     if (OB_FAIL(build_index_task->init(task_record))) {
     } else if (OB_FAIL(build_index_task->set_trace_id(task_record.trace_id_))) {
     } else if (OB_FAIL(inner_schedule_ddl_task(build_index_task, task_record))) {
       if (OB_ENTRY_EXIST != ret) {
-        LOG_WARN("inner schedule task failed", K(ret), K(*build_index_task));
       }
     }
   }
@@ -2774,16 +2625,12 @@ int ObDDLScheduler::create_rebuild_index_task(
   SMART_VAR(ObRebuildIndexTask, index_task){
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (OB_ISNULL(index_schema) || OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(index_schema), KP(GCTX.sql_proxy_));
   } else if (!index_schema->is_vec_index()) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("only vec index is supported", KR(ret), KPC(index_schema));
   } else if (index_schema->is_vec_index() && index_schema->is_built_in_vec_index()) { // Expecting the rebuild to be initiated by the visibility table (hnsw delta buffer table or ivf centroid table)
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected index schema", KR(ret), KPC(index_schema));
   } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
   } else {
     const uint64_t data_table_id = index_schema->get_data_table_id();
@@ -2815,13 +2662,11 @@ int ObDDLScheduler::schedule_drop_primary_key_task(const ObDDLTaskRecord &task_r
   ObDropPrimaryKeyTask *drop_pk_task = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLScheduler has not been inited", K(ret));
   } else if (OB_FAIL(alloc_ddl_task(drop_pk_task))) {
   } else if (OB_FAIL(drop_pk_task->ObTableRedefinitionTask::init(task_record))) {
   } else if (OB_FAIL(drop_pk_task->set_trace_id(task_record.trace_id_))) {
   } else if (OB_FAIL(inner_schedule_ddl_task(drop_pk_task, task_record))) {
     if (OB_ENTRY_EXIST != ret) {
-      LOG_WARN("inner schedule task failed", K(ret), K(*drop_pk_task));
     }
   }
   if (nullptr != drop_pk_task) {
@@ -2841,13 +2686,11 @@ int ObDDLScheduler::schedule_table_redefinition_task(const ObDDLTaskRecord &task
   ObTableRedefinitionTask *redefinition_task = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLScheduler has not been inited", K(ret));
   } else if (OB_FAIL(alloc_ddl_task(redefinition_task))) {
   } else if (OB_FAIL(redefinition_task->init(task_record))) {
   } else if (OB_FAIL(redefinition_task->set_trace_id(task_record.trace_id_))) {
   } else if (OB_FAIL(inner_schedule_ddl_task(redefinition_task, task_record))) {
     if (OB_ENTRY_EXIST != ret) {
-      LOG_WARN("inner schedule task failed", K(ret), K(*redefinition_task));
     }
   }
   LOG_INFO("ddl_scheduler schedule table redefinition task", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(task_record));
@@ -2865,13 +2708,11 @@ int ObDDLScheduler::schedule_column_redefinition_task(const ObDDLTaskRecord &tas
   ObColumnRedefinitionTask *redefinition_task = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLScheduler has not been inited", K(ret));
   } else if (OB_FAIL(alloc_ddl_task(redefinition_task))) {
   } else if (OB_FAIL(redefinition_task->init(task_record))) {
   } else if (OB_FAIL(redefinition_task->set_trace_id(task_record.trace_id_))) {
   } else if (OB_FAIL(inner_schedule_ddl_task(redefinition_task, task_record))) {
     if (OB_ENTRY_EXIST != ret) {
-      LOG_WARN("inner schedule task failed", K(ret), K(*redefinition_task));
     }
   }
   if (nullptr != redefinition_task) {
@@ -2891,13 +2732,11 @@ int ObDDLScheduler::schedule_ddl_retry_task(const ObDDLTaskRecord &task_record)
   ObDDLRetryTask *ddl_retry_task = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLScheduler has not been inited", K(ret));
   } else if (OB_FAIL(alloc_ddl_task(ddl_retry_task))) {
   } else if (OB_FAIL(ddl_retry_task->init(task_record))) {
   } else if (OB_FAIL(ddl_retry_task->set_trace_id(task_record.trace_id_))) {
   } else if (OB_FAIL(inner_schedule_ddl_task(ddl_retry_task, task_record))) {
     if (OB_ENTRY_EXIST != ret) {
-      LOG_WARN("inner schedule task failed", K(ret));
     }
   }
   if (nullptr != ddl_retry_task) {
@@ -2917,13 +2756,11 @@ int ObDDLScheduler::schedule_constraint_task(const ObDDLTaskRecord &task_record)
   ObConstraintTask *constraint_task = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLScheduler has not been inited", K(ret));
   } else if (OB_FAIL(alloc_ddl_task(constraint_task))) {
   } else if (OB_FAIL(constraint_task->init(task_record))) {
   } else if (OB_FAIL(constraint_task->set_trace_id(task_record.trace_id_))) {
   } else if (OB_FAIL(inner_schedule_ddl_task(constraint_task, task_record))) {
     if (OB_ENTRY_EXIST != ret) {
-      LOG_WARN("inner schedule task failed", K(ret));
     }
   }
   if (nullptr != constraint_task) {
@@ -2943,13 +2780,11 @@ int ObDDLScheduler::schedule_modify_autoinc_task(const ObDDLTaskRecord &task_rec
   ObModifyAutoincTask *modify_autoinc_task = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLScheduler has not been inited", K(ret));
   } else if (OB_FAIL(alloc_ddl_task(modify_autoinc_task))) {
   } else if (OB_FAIL(modify_autoinc_task->init(task_record))) {
   } else if (OB_FAIL(modify_autoinc_task->set_trace_id(task_record.trace_id_))) {
   } else if (OB_FAIL(inner_schedule_ddl_task(modify_autoinc_task, task_record))) {
     if (OB_ENTRY_EXIST != ret) {
-      LOG_WARN("inner schedule task failed", K(ret));
     }
   }
   if (nullptr != modify_autoinc_task) {
@@ -2969,13 +2804,11 @@ int ObDDLScheduler::schedule_drop_index_task(const ObDDLTaskRecord &task_record)
   ObDropIndexTask *drop_index_task = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLScheduler has not been inited", K(ret));
   } else if (OB_FAIL(alloc_ddl_task(drop_index_task))) {
   } else if (OB_FAIL(drop_index_task->init(task_record))) {
   } else if (OB_FAIL(drop_index_task->set_trace_id(task_record.trace_id_))) {
   } else if (OB_FAIL(inner_schedule_ddl_task(drop_index_task, task_record))) {
     if (OB_ENTRY_EXIST != ret) {
-      LOG_WARN("inner schedule task failed", K(ret));
     }
   }
   if (nullptr != drop_index_task) {
@@ -2995,16 +2828,13 @@ int ObDDLScheduler::schedule_drop_vec_ivf_index_task(const ObDDLTaskRecord &task
   ObDropVecIVFIndexTask *drop_vec_ivf_index_task = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLScheduler has not been inited", K(ret));
   } else if (OB_FAIL(alloc_ddl_task(drop_vec_ivf_index_task))) {
   } else if (OB_ISNULL(drop_vec_ivf_index_task)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null pointer of drop_vec_ivf_index_task", K(ret));
   } else if (OB_FAIL(drop_vec_ivf_index_task->init(task_record))) {
   } else if (OB_FAIL(drop_vec_ivf_index_task->set_trace_id(task_record.trace_id_))) {
   } else if (OB_FAIL(inner_schedule_ddl_task(drop_vec_ivf_index_task, task_record))) {
     if (OB_ENTRY_EXIST != ret) {
-      LOG_WARN("fail to inner schedule task", K(ret));
     }
   }
   if (OB_FAIL(ret) && nullptr != drop_vec_ivf_index_task) {
@@ -3022,16 +2852,13 @@ int ObDDLScheduler::schedule_drop_vec_index_task(const ObDDLTaskRecord &task_rec
   ObDropVecIndexTask *drop_vec_index_task = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLScheduler has not been inited", K(ret));
   } else if (OB_FAIL(alloc_ddl_task(drop_vec_index_task))) {
   } else if (OB_ISNULL(drop_vec_index_task)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null pointer of drop_vec_index_task", K(ret));
   } else if (OB_FAIL(drop_vec_index_task->init(task_record))) {
   } else if (OB_FAIL(drop_vec_index_task->set_trace_id(task_record.trace_id_))) {
   } else if (OB_FAIL(inner_schedule_ddl_task(drop_vec_index_task, task_record))) {
     if (OB_ENTRY_EXIST != ret) {
-      LOG_WARN("fail to inner schedule task", K(ret));
     }
   }
   if (OB_FAIL(ret) && nullptr != drop_vec_index_task) {
@@ -3049,13 +2876,11 @@ int ObDDLScheduler::schedule_drop_fts_index_task(const ObDDLTaskRecord &task_rec
   ObDropFTSIndexTask *drop_fts_index_task = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLScheduler has not been inited", K(ret));
   } else if (OB_FAIL(alloc_ddl_task(drop_fts_index_task))) {
   } else if (OB_FAIL(drop_fts_index_task->init(task_record))) {
   } else if (OB_FAIL(drop_fts_index_task->set_trace_id(task_record.trace_id_))) {
   } else if (OB_FAIL(inner_schedule_ddl_task(drop_fts_index_task, task_record))) {
     if (OB_ENTRY_EXIST != ret) {
-      LOG_WARN("fail to inner schedule task", K(ret));
     }
   }
   if (OB_FAIL(ret) && nullptr != drop_fts_index_task) {
@@ -3072,13 +2897,11 @@ int ObDDLScheduler::schedule_drop_lob_task(const ObDDLTaskRecord &task_record)
   ObDropLobTask *drop_lob_task = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLScheduler has not been inited", K(ret));
   } else if (OB_FAIL(alloc_ddl_task(drop_lob_task))) {
   } else if (OB_FAIL(drop_lob_task->init(task_record))) {
   } else if (OB_FAIL(drop_lob_task->set_trace_id(task_record.trace_id_))) {
   } else if (OB_FAIL(inner_schedule_ddl_task(drop_lob_task, task_record))) {
     if (OB_ENTRY_EXIST != ret) {
-      LOG_WARN("inner schedule task failed", KR(ret));
     }
   }
   if (OB_FAIL(ret) && nullptr != drop_lob_task) {
@@ -3096,13 +2919,11 @@ int ObDDLScheduler::schedule_fork_table_task(
   ObForkTableTask *fork_table_task = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(alloc_ddl_task(fork_table_task))) {
   } else if (OB_FAIL(fork_table_task->init(task_record))) {
   } else if (OB_FAIL(fork_table_task->set_trace_id(task_record.trace_id_))) {
   } else if (OB_FAIL(inner_schedule_ddl_task(fork_table_task, task_record))) {
     if (OB_ENTRY_EXIST != ret) {
-      LOG_WARN("inner schedule task failed", K(ret), K(*fork_table_task));
     }
   }
   if (OB_FAIL(ret) && nullptr != fork_table_task) {
@@ -3119,13 +2940,11 @@ int ObDDLScheduler::schedule_rebuild_index_task(const ObDDLTaskRecord &task_reco
   ObRebuildIndexTask *rebuild_index_task = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLScheduler has not been inited", K(ret));
   } else if (OB_FAIL(alloc_ddl_task(rebuild_index_task))) {
   } else if (OB_FAIL(rebuild_index_task->init(task_record))) {
   } else if (OB_FAIL(rebuild_index_task->set_trace_id(task_record.trace_id_))) {
   } else if (OB_FAIL(inner_schedule_ddl_task(rebuild_index_task, task_record))) {
     if (OB_ENTRY_EXIST != ret) {
-      LOG_WARN("inner schedule task failed", KR(ret));
     }
   }
   if (nullptr != rebuild_index_task) {
@@ -3147,7 +2966,6 @@ int ObDDLScheduler::add_task_to_longops_mgr(ObDDLTask *ddl_task)
   bool registered = false;
   if (OB_ISNULL(ddl_task)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(ddl_task));
   } else if (ddl_task->support_longops_monitoring()) {
     if (OB_FAIL(longops_mgr.alloc_longops(longops_stat))) {
     } else if (OB_FAIL(longops_stat->init(ddl_task))) {
@@ -3156,7 +2974,6 @@ int ObDDLScheduler::add_task_to_longops_mgr(ObDDLTask *ddl_task)
         LOG_INFO("longops for this ddl task already registered", K(*ddl_task));
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("failed to register longops", K(ret));
       }
     } else {
       ddl_task->set_longops_stat(longops_stat);
@@ -3175,7 +2992,6 @@ int ObDDLScheduler::remove_task_from_longops_mgr(ObDDLTask *ddl_task)
   ObLongopsMgr &longops_mgr = ObLongopsMgr::get_instance();
   if (OB_ISNULL(ddl_task)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(ddl_task));
   } else if (ddl_task->support_longops_monitoring()) {
     if (OB_NOT_NULL(ddl_task->get_longops_stat())) {
       if (OB_FAIL(longops_mgr.unregister_longops(ddl_task->get_longops_stat()))) {
@@ -3192,7 +3008,6 @@ int ObDDLScheduler::remove_ddl_task(ObDDLTask *ddl_task)
   ObDDLTaskKey task_key;
   if (OB_ISNULL(ddl_task)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(ddl_task));
   } else if (OB_FALSE_IT(task_key = ddl_task->get_task_key())) {
   } else if (OB_FAIL(task_queue_.remove_task(ddl_task))) {
   } else {
@@ -3211,10 +3026,8 @@ int ObDDLScheduler::inner_schedule_ddl_task(ObDDLTask *ddl_task,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ddl_task)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(ddl_task));
   } else if (has_set_stop()) {
     ret = OB_NOT_RUNNING;
-    LOG_WARN("sys ddl scheduler has stopped", K(ret));
   } else if (OB_FAIL(DDL_SIM(ddl_task->get_task_id(), DDL_SCHEDULER_STOPPED))) {
   } else {
     int tmp_ret = OB_SUCCESS;
@@ -3227,7 +3040,6 @@ int ObDDLScheduler::inner_schedule_ddl_task(ObDDLTask *ddl_task,
     ddl_task->disable_schedule();
     if (OB_FAIL(task_queue_.push_task(ddl_task))) {
       if (OB_ENTRY_EXIST != ret) {
-        LOG_WARN("push back task to task queue failed", K(ret));
       }
       if (longops_added) {
         if (OB_TMP_FAIL(remove_task_from_longops_mgr(ddl_task))) {
@@ -3251,15 +3063,12 @@ int ObDDLScheduler::on_column_checksum_calc_reply(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!(task_key.is_valid() && tablet_id.is_valid()))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(task_key), K(tablet_id), K(ret_code));
   } else if (OB_FAIL(task_queue_.modify_task(task_key, [&tablet_id, &ret_code](ObDDLTask &task) -> int {
         int ret = OB_SUCCESS;
         if (OB_UNLIKELY(!is_create_index(task.get_task_type()))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("ddl task type not global index", K(ret), K(task));
         } else if (OB_FAIL(DDL_SIM(task.get_task_id(), ON_COLUMN_CHECKSUM_REPLY_FAILED))) {
           LOG_ERROR("sim column checksum reply failed", K(ret));
         } else if (OB_FAIL(reinterpret_cast<ObIndexBuildTask *>(&task)->update_column_checksum_calc_status(tablet_id, ret_code))) {
@@ -3287,10 +3096,8 @@ int ObDDLScheduler::on_sstable_complement_job_reply(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!(task_key.is_valid() && snapshot_version > 0 && execution_id >= 0))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(task_key), K(snapshot_version), K(execution_id), K(ret_code));
   } else if (OB_FAIL(task_queue_.modify_task(task_key, [&tablet_id, &snapshot_version, &execution_id, &ret_code, &addition_info](ObDDLTask &task) -> int {
         int ret = OB_SUCCESS;
         const int64_t task_type = task.get_task_type();
@@ -3298,12 +3105,10 @@ int ObDDLScheduler::on_sstable_complement_job_reply(
           case ObDDLType::DDL_CREATE_INDEX:
           case ObDDLType::DDL_CREATE_PARTITIONED_LOCAL_INDEX:
             if (OB_FAIL(static_cast<ObIndexBuildTask *>(&task)->update_complete_sstable_job_status(tablet_id, snapshot_version, execution_id, ret_code, addition_info))) {
-              LOG_WARN("update complete sstable job status failed", K(ret));
             }
             break;
           case ObDDLType::DDL_DROP_PRIMARY_KEY:
             if (OB_FAIL(static_cast<ObDropPrimaryKeyTask *>(&task)->update_complete_sstable_job_status(tablet_id, snapshot_version, execution_id, ret_code, addition_info))) {
-              LOG_WARN("update complete sstable job status", K(ret));
             }
             break;
           case ObDDLType::DDL_ADD_PRIMARY_KEY:
@@ -3314,31 +3119,26 @@ int ObDDLScheduler::on_sstable_complement_job_reply(
           case ObDDLType::DDL_TABLE_REDEFINITION:
           case ObDDLType::DDL_MODIFY_AUTO_INCREMENT_WITH_REDEFINITION:
             if (OB_FAIL(static_cast<ObTableRedefinitionTask *>(&task)->update_complete_sstable_job_status(tablet_id, snapshot_version, execution_id, ret_code, addition_info))) {
-              LOG_WARN("update complete sstable job status", K(ret));
             }
             break;
           case ObDDLType::DDL_CHECK_CONSTRAINT:
           case ObDDLType::DDL_FOREIGN_KEY_CONSTRAINT:
           case ObDDLType::DDL_ADD_NOT_NULL_COLUMN:
             if (OB_FAIL(static_cast<ObConstraintTask *>(&task)->update_check_constraint_finish(ret_code))) {
-              LOG_WARN("update check constraint finish", K(ret));
             }
             break;
           case ObDDLType::DDL_DROP_COLUMN:
           case ObDDLType::DDL_ADD_COLUMN_OFFLINE:
           case ObDDLType::DDL_COLUMN_REDEFINITION:
             if (OB_FAIL(static_cast<ObColumnRedefinitionTask *>(&task)->update_complete_sstable_job_status(tablet_id, snapshot_version, execution_id, ret_code, addition_info))) {
-              LOG_WARN("update complete sstable job status", K(ret), K(tablet_id), K(snapshot_version), K(ret_code));
             }
             break;
           case ObDDLType::DDL_DROP_VEC_INDEX:
            if (OB_FAIL(static_cast<ObDropVecIndexTask *>(&task)->update_drop_lob_meta_row_job_status(tablet_id, snapshot_version, execution_id, ret_code, addition_info))) {
-              LOG_WARN("update complete sstable job status", K(ret), K(tablet_id), K(snapshot_version), K(ret_code));
             }
             break;
           default:
             ret = OB_NOT_SUPPORTED;
-            LOG_WARN("not supported ddl task", K(ret), K(task));
             break;
         }
         return ret;
@@ -3361,10 +3161,8 @@ int ObDDLScheduler::on_ddl_task_finish(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLScheduler has not been inited", K(ret));
   } else if (OB_UNLIKELY(!parent_task_id.is_valid() || !child_task_key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(parent_task_id), K(child_task_key));
   } else {
     ObDDLTask *ddl_task = nullptr;
     if (OB_FAIL(task_queue_.modify_task(parent_task_id, [&child_task_key, &ret_code](ObDDLTask &task) -> int {
@@ -3384,10 +3182,8 @@ int ObDDLScheduler::notify_update_autoinc_end(const ObDDLTaskKey &task_key,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(!task_key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(task_key), K(ret_code));
   } else if (OB_FAIL(task_queue_.modify_task(task_key, [&autoinc_val, &ret_code](ObDDLTask &task) -> int {
         int ret = OB_SUCCESS;
         const int64_t task_type = task.get_task_type();
@@ -3397,17 +3193,14 @@ int ObDDLScheduler::notify_update_autoinc_end(const ObDDLTaskKey &task_key,
           case ObDDLType::DDL_TABLE_REDEFINITION:
           case ObDDLType::DDL_MODIFY_AUTO_INCREMENT_WITH_REDEFINITION:
             if (OB_FAIL(static_cast<ObTableRedefinitionTask *>(&task)->notify_update_autoinc_finish(autoinc_val, ret_code))) {
-              LOG_WARN("update complete sstable job status", K(ret));
             }
             break;
           case ObDDLType::DDL_MODIFY_AUTO_INCREMENT:
             if (OB_FAIL(static_cast<ObModifyAutoincTask *>(&task)->notify_update_autoinc_finish(autoinc_val, ret_code))) {
-              LOG_WARN("update complete sstable job status", K(ret), K(ret_code));
             }
             break;
           default:
             ret = OB_NOT_SUPPORTED;
-            LOG_WARN("not supported ddl task", K(ret), K(task));
             break;
         }
         return ret;
@@ -3444,10 +3237,8 @@ int ObDDLScheduler::update_ddl_task_active_time(const ObDDLTaskID &task_id)
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else if (!task_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(task_id));
   } else if (OB_FAIL(manager_reg_heart_beat_task_.update_task_active_time(task_id))) {
   }
   return ret;

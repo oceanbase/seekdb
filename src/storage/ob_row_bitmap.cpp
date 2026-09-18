@@ -28,7 +28,6 @@ int ObRowBitmap::get_next_valid_row(const int64_t row_id, int64_t &next_row_id) 
   next_row_id = -1;
   if (OB_UNLIKELY(row_id < start_row_id_ || row_id - start_row_id_ >= bitmap_.size())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid row id", K(ret), K(row_id), K_(start_row_id), K_(bitmap));
   } else {
     const int64_t start_offset = row_id - start_row_id_;
     if (OB_FAIL(bitmap_.next_valid_idx(start_offset, bitmap_.size() - start_offset, false, next_row_id))) {
@@ -46,7 +45,6 @@ int ObRowBitmap::bit_and(const common::ObBitmap &right)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(bitmap_.size() != right.size())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected bitmap size", K(ret), K(bitmap_.size()), K(right.size()));
   } else if (OB_FAIL(bitmap_.bit_and(right))) {
   }
   return ret;

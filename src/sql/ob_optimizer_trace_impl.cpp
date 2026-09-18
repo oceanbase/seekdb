@@ -43,7 +43,6 @@ int LogFileAppender::open()
   bool is_full = false;
   if (log_file_name_.empty() && 
       OB_FAIL(generate_log_file_name())) {
-    LOG_WARN("failed to generate log file", K(ret));
   } else if (OB_FAIL(open_log_file())) {
   } else if (OB_FAIL(check_log_file_full(is_full))) {
   } else if (is_full) {
@@ -76,7 +75,6 @@ int LogFileAppender::append(const char* buf, int64_t buf_len)
   int ret = OB_SUCCESS;
   if (!log_handle_.is_opened()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("log file not open", K(ret));
   } else if (OB_FAIL(log_handle_.append(buf, buf_len, false))) {
   }
   return ret;
@@ -88,7 +86,6 @@ int LogFileAppender::check_log_file_full(bool &is_full)
   is_full = false;
   if (!log_handle_.is_opened()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("log file not open", K(ret));
   } else if (log_handle_.get_file_pos() > MAX_LOG_FILE_SIZE) {
     is_full = true;
   }
@@ -118,10 +115,8 @@ int LogFileAppender::generate_log_file_name()
     } else if (OB_FAIL(log_file_name_.append(buf, file_id_len))) {
     } else if (!identifier_.empty() && 
               OB_FAIL(log_file_name_.append("_"))) {
-      LOG_WARN("failed to apend str", K(ret));
     } else if (!identifier_.empty() && 
               OB_FAIL(log_file_name_.append(identifier_))) {
-      LOG_WARN("failed to apend str", K(ret));
     } else if (OB_FAIL(log_file_name_.append(".trac"))) {
     } else if (OB_FAIL(FSU::is_exists(log_file_name_.ptr(), exists))) {
     } else if (exists) {
@@ -131,7 +126,6 @@ int LogFileAppender::generate_log_file_name()
 
   if (OB_SUCC(ret) && exists) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("can not generate new log file", K(ret));
   }
   return ret;
 }
@@ -471,7 +465,6 @@ int ObOptimizerTraceImpl::append(const ObJoinOrder *join_order)
   if (OB_ISNULL(join_order) || OB_ISNULL(plan=join_order->get_plan()) || 
       OB_ISNULL(plan->get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null param", K(ret));
   } else if (OB_FAIL(join_order->get_tables().to_array(array))) {
   } else {
     append("[");
@@ -482,7 +475,6 @@ int ObOptimizerTraceImpl::append(const ObJoinOrder *join_order)
       }
       if (OB_ISNULL(table)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null table item", K(ret));
       } else if (OB_FAIL(append(table->get_table_name()))) {
       }
     }
@@ -695,16 +687,12 @@ int ObOptimizerTraceImpl::append(const ObDSResultItem &ds_result)
   } else if (OB_FAIL(append("table id:", ds_result.index_id_))) {
   } else if (OB_DS_BASIC_STAT == ds_result.type_ &&
              OB_FAIL(append(", tpye:basic"))) {
-    LOG_WARN("failed to append msg", K(ret));
   } else if (OB_DS_OUTPUT_STAT == ds_result.type_ &&
              OB_FAIL(append(", tpye:output"))) {
-    LOG_WARN("failed to append msg", K(ret));
   } else if (OB_DS_INDEX_SCAN_STAT == ds_result.type_ &&
              OB_FAIL(append(", tpye:index scan"))) {
-    LOG_WARN("failed to append msg", K(ret));
   } else if (OB_DS_INDEX_BACK_STAT == ds_result.type_ &&
              OB_FAIL(append(", tpye:index back"))) {
-    LOG_WARN("failed to append msg", K(ret));
   } else if (OB_FALSE_IT(increase_section())) {
   } else if (OB_FAIL(new_line())) {
   } else if (OB_FAIL(append("rows:", 
@@ -745,7 +733,6 @@ int ObOptimizerTraceImpl::append(const ObDSResultItem &ds_result)
     }
     decrease_section();
     if (FAILEDx(new_line())) {
-      LOG_WARN("failed to append msg", K(ret));
     }
   }
   return ret;
@@ -809,7 +796,6 @@ int ObOptimizerTraceImpl::append(const ObOptTabletLoc& tablet_loc)
   if (OB_FAIL(append("(partition id:", tablet_loc.get_partition_id()))) {
   } else if (tablet_loc.get_first_level_part_id() >= 0 &&
              OB_FAIL(append(", first level partition id:", tablet_loc.get_first_level_part_id()))) {
-    LOG_WARN("failed to append", K(ret));
   } else if (OB_FAIL(append(", tablet id:"))) {
   } else if (OB_FAIL(append(tablet_loc.get_tablet_id().id()))) {
   } else if (OB_FAIL(append(")"))) {
@@ -831,7 +817,6 @@ int ObOptimizerTraceImpl::append(const ObBatchEstTasks& task)
   for (int64_t i = 0; OB_SUCC(ret) && i < cnt; i ++) {
     const ObIArray<ObEstRowCountRecord> &est_records = res.at(i).est_records_;
     if (i != 0 && OB_FAIL(new_line())) {
-      LOG_WARN("failed to append", K(ret));
     } else if (OB_FAIL(append("( index", params.at(i).index_id_))) {
     } else if (OB_FAIL(append(", tablet", params.at(i).tablet_id_.id()))) {
     } else if (ObSimpleBatch::T_SCAN == params.at(i).batch_.type_ &&
@@ -841,7 +826,6 @@ int ObOptimizerTraceImpl::append(const ObBatchEstTasks& task)
     } else if (OB_FAIL(append(") logical rows:", res.at(i).logical_row_count_))) {
     } else if (OB_FAIL(append(", physical rows:", res.at(i).physical_row_count_))) {
     } else if (!res.at(i).reliable_ && OB_FAIL(append(" [NOT RELIABLE]"))) {
-      LOG_WARN("failed to append", K(ret));
     }
     increase_section();
     for (int64_t j = 0; OB_SUCC(ret) && j < est_records.count(); j ++) {
@@ -971,7 +955,6 @@ int ObOptimizerTraceImpl::trace_static(const ObDMLStmt *stmt, OptTableMetas &tab
       if (OB_ISNULL(table) || 
           OB_ISNULL(table_meta = table_metas.get_table_meta_by_table_id(table->table_id_))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null table item", K(ret));
       } else if (OB_FAIL(stmt->get_column_items(table->table_id_, column_items))) {
       } else if (OB_FAIL(new_line())) {
       } else if (OB_FAIL(append(table->get_table_name(), ":"))) {
@@ -995,7 +978,6 @@ int ObOptimizerTraceImpl::trace_static(const ObDMLStmt *stmt, OptTableMetas &tab
         ColumnItem &col = column_items.at(j);
         if (OB_ISNULL(col_meta = table_metas.get_column_meta_by_table_id(table->table_id_, col.column_id_))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpect null column meta", K(ret));
         } else if (OB_FAIL(new_line())) {
         } else if (OB_FAIL(append(col.column_name_, ":"))) {
         } else if (OB_FALSE_IT(increase_section())) {

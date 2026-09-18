@@ -54,13 +54,10 @@ int ObCSExecutor::init(int64_t executor_id, int64_t thread_num, int64_t task_que
   int ret = common::OB_SUCCESS;
   if (is_inited_) {
     ret = common::OB_INIT_TWICE;
-    LOG_WARN("ObCSExecutor already inited", K(ret), K(executor_id));
   } else if (executor_id < 0 || thread_num <= 0 || task_queue_limit <= 0 || OB_ISNULL(name)) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("ObCSExecutor invalid argument", K(ret), K(executor_id), K(thread_num), K(task_queue_limit), KP(name));
   } else if (FALSE_IT(set_run_wrapper(share::server_runtime()))) {
   } else if (OB_FAIL(set_thread_count(thread_num))) {
-    LOG_WARN("ObCSExecutor set_thread_count failed", K(ret), K(executor_id));
     ObLinkQueueThreadPool::destroy();
   } else if (OB_FAIL(ObLinkQueueThreadPool::init(thread_num, task_queue_limit, name))) {
   } else {
@@ -107,7 +104,6 @@ int ObCSExecutor::push_subtask(ObCSExecSubTask *sub_task)
   int ret = common::OB_SUCCESS;
   if (!is_inited_ || OB_ISNULL(sub_task)) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("ObCSExecutor push_subtask invalid", K(ret), K(executor_id_));
   } else if (OB_FAIL(push(sub_task))) {
   }
   return ret;
@@ -158,7 +154,6 @@ int ObCSExecutor::process_sub_task(ObCSExecSubTask *sub_task)
     for (int64_t i = 0; OB_SUCC(ret) && i < ctx->plugin_cnt_; ++i) {
       ObCSPlugin *plugin = ctx->plugins_[i];
       if (OB_NOT_NULL(plugin) && OB_FAIL(plugin->process(rows, *ctx))) {
-        LOG_WARN("plugin process failed", KR(ret), K(executor_id_), K(i));
       }
     }
     if (OB_FAIL(ret)) {
@@ -248,7 +243,6 @@ void ObCSExecutor::do_finish_batch_(ObCSExecCtx *ctx, ObCSDispatcher &dispatcher
                 ctx->trans_, true, curr_refresh_scn))) {
         } else if (curr_refresh_scn.get_val_for_gts() > static_cast<uint64_t>(ctx->refresh_scn_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("refresh scn unexpected", KR(ret), K(ctx->refresh_scn_), K(curr_refresh_scn));
         } else if (OB_FAIL(ctx_refresh_scn.convert_for_tx(ctx->refresh_scn_))) {
         } else if (OB_FAIL(ObGlobalStatProxy::advance_change_stream_refresh_scn(
                 ctx->trans_, ctx_refresh_scn, affected_rows))) {
@@ -323,10 +317,8 @@ int ObCSWorker::init(int64_t executor_count)
   int ret = common::OB_SUCCESS;
   if (is_inited_) {
     ret = common::OB_INIT_TWICE;
-    LOG_WARN("ObCSWorker already inited", K(ret));
   } else if (executor_count <= 0) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("ObCSWorker invalid executor_count", K(ret), K(executor_count));
   } else {
     executor_count_ = executor_count;
     
@@ -334,7 +326,6 @@ int ObCSWorker::init(int64_t executor_count)
     void *buf = ob_malloc(executor_count_ * sizeof(ObCSExecutor *), attr);
     if (OB_ISNULL(buf)) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("ObCSWorker alloc executors array failed", K(ret), K(executor_count_));
     } else {
       executors_ = static_cast<ObCSExecutor **>(buf);
       for (int64_t i = 0; i < executor_count_; ++i) {
@@ -343,12 +334,10 @@ int ObCSWorker::init(int64_t executor_count)
       for (int64_t i = 0; OB_SUCC(ret) && i < executor_count_; ++i) {
         if (OB_ISNULL(executors_[i] = OB_NEW(ObCSExecutor, attr))) {
           ret = common::OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("ObCSWorker alloc executor failed", K(ret), K(i));
           break;
         }
         (void)snprintf(executors_[i]->get_name(), 64, "CSWorker%ld", i);
         if (OB_FAIL(executors_[i]->init(i, 1, CS_EXECUTOR_QUEUE_LIMIT, executors_[i]->get_name()))) {
-          LOG_WARN("ObCSWorker: executor init failed", K(ret), K(i));
           break;
         }
       }
@@ -377,11 +366,9 @@ int ObCSWorker::start()
   int ret = common::OB_SUCCESS;
   if (!is_inited_) {
     ret = common::OB_NOT_INIT;
-    LOG_WARN("ObCSWorker not inited", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < executor_count_; ++i) {
       if (OB_NOT_NULL(executors_[i]) && OB_FAIL(executors_[i]->start())) {
-        LOG_WARN("ObCSWorker: executor start failed", K(ret), K(i));
         break;
       }
     }
@@ -438,11 +425,8 @@ int ObCSWorker::push_subtask(int64_t slice_id, ObCSExecSubTask *sub_task)
   if (!is_inited_ || executor_count_ <= 0 || OB_ISNULL(executors_) || OB_ISNULL(sub_task)
       || slice_id < 0 || slice_id >= executor_count_) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("ObCSWorker push_subtask invalid", K(ret), K(executor_count_), K(slice_id), KP(executors_),
-        KP(sub_task), K(is_inited_));
   } else if (OB_ISNULL(executors_[slice_id])) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("ObCSWorker executor is null", K(ret), K(slice_id));
   } else if (OB_FAIL(executors_[slice_id]->push_subtask(sub_task))) {
   }
   return ret;

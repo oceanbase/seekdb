@@ -73,14 +73,12 @@ int hex_to_cstr(const void *in_data,
   if (OB_ISNULL(in_data) || 0 != data_length % 2
       || OB_ISNULL(buff) || buff_size < data_length / 2 + 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(in_data), K(data_length), KP(buff), K(buff_size));
   } else  {
     for (int64_t i = 0; OB_SUCC(ret) && i < data_length; i += 2) {
       const char &c1 = static_cast<const char*>(in_data)[i];
       const char &c2 = static_cast<const char*>(in_data)[i + 1];
       if (!isxdigit(c1) || !isxdigit(c2)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid input string", K(ret), K(c1), K(c2));
       } else {
         buff[i / 2] = (char)((get_xdigit(c1) << 4) | get_xdigit(c2));
       }
@@ -109,11 +107,9 @@ int to_hex_cstr(
       || OB_UNLIKELY(pos < 0)
       || OB_UNLIKELY(buf_len - pos) < 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", KP(in_data), KP(buf), K(data_length), K(buf_len), K(ret));
   } else if ((buf_len - pos) < (data_length * 2 + 1)) {
     buf[pos++] = '\0';
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("size is overflow", K(buf_len), K(data_length), K(buf_len), K(pos), K(ret));
   } else {
     unsigned const char *p = (unsigned const char *)in_data;
     char *dst = static_cast<char *>(buf + pos);
@@ -137,10 +133,8 @@ int hex_print(const void* in_buf, const int64_t in_len,
       || OB_UNLIKELY(buf_len < 0)
       || OB_UNLIKELY(pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(in_len), KP(in_buf), KP(buf), K(buf_len), K(pos), K(ret));
   } else if (OB_UNLIKELY(buf_len < pos) || OB_UNLIKELY((buf_len - pos) < in_len * 2)) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("size is overflow", K(in_len), K(buf_len), K(pos), K(ret));
   } else {
     unsigned const char *p = static_cast<unsigned const char *>(in_buf);
     for (int64_t i = 0; i < in_len; ++i) {
@@ -209,10 +203,8 @@ int bit_to_char_array(uint64_t value, int32_t bit_len, char *buf, int64_t len, i
       || OB_UNLIKELY(bit_len <= 0 )
       || OB_UNLIKELY(bit_len > OB_MAX_BIT_LENGTH)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", K(ret), KP(buf), K(bit_len), K(OB_MAX_BIT_LENGTH));
   } else if (OB_UNLIKELY(pos + MAX_LEN > len)) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("buffer size overflow", K(len), K(pos), K(MAX_LEN), K(ret));
   } else {
     for (int64_t i = 0; i < sizeof(uint64_t); i++) {
       *((reinterpret_cast<uint8_t *>(tmp_buf)) + i) = static_cast<uint8_t>(value >> (8 * (7 - i)));
@@ -426,7 +418,6 @@ int databuff_printf(char *&buf, int64_t &buf_len, int64_t &pos,
           pos = saved_pos;
         }
       } else {
-        LOG_WARN("failed to printf buf", K(ret));
       }
     } else {
       va_end(args);
@@ -451,7 +442,6 @@ int multiple_extend_buf(char *&buf, int64_t &buf_len, ObIAllocator &alloc)
   char *alloc_buf = static_cast<char *>(alloc.alloc(alloc_size));
   if (OB_ISNULL(alloc_buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to extend stmt buf", K(ret), K(alloc_size), KP(alloc_buf));
   } else {
     if (OB_NOT_NULL(buf)) {
       MEMCPY(alloc_buf, buf, buf_len);
@@ -551,7 +541,6 @@ int bit_print(uint64_t bit_val, char *buffer, int64_t buf_len, int64_t &pos)
   int64_t tmp_buf_len = 0;
   if (OB_ISNULL(buffer) || OB_UNLIKELY(pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KP(buffer), K(pos), K(ret));
   } else if (0 == bit_val) {
     if (OB_FAIL(databuff_printf(buffer, buf_len, pos, "0"))) {
     }
@@ -563,7 +552,6 @@ int bit_print(uint64_t bit_val, char *buffer, int64_t buf_len, int64_t &pos)
     tmp_buf_len = OB_MAX_BIT_LENGTH - tmp_pos;
     if (OB_UNLIKELY(buf_len - pos < tmp_buf_len)) {
       ret = OB_SIZE_OVERFLOW;
-      LOG_WARN("buffer size if not enough", K(ret), K(buf_len), K(pos), K(tmp_pos));
     } else {
       MEMCPY(buffer + pos, tmp_buf + tmp_pos, tmp_buf_len);
       pos += tmp_buf_len;

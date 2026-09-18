@@ -130,7 +130,6 @@ int ObDefaultBlockWriter::add_batch(const common::ObDatum **datums, const common
           char *buf = get_cur_buf();
           if (OB_ISNULL(buf)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("fail to get cur buf", K(ret));
           }
           ObChunkDatumStore::StoredRow *srow = reinterpret_cast<ObChunkDatumStore::StoredRow *>(buf);
           stored_rows[i] = srow;
@@ -211,7 +210,6 @@ int ObDefaultBlockWriter::inner_add_row(const blocksstable::ObStorageDatum *stor
   ObChunkDatumStore::StoredRow *sr = static_cast<ObChunkDatumStore::StoredRow *>((void*)get_cur_buf());
   if (OB_ISNULL(sr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get buffer", K(ret));
   } else {
     sr->cnt_ = column_count;
     for (int64_t i = 0; i < column_count; ++i) {
@@ -242,12 +240,10 @@ int ObDefaultBlockWriter::inner_add_row(const common::ObIArray<ObExpr*> &exprs, 
   ObChunkDatumStore::StoredRow *sr = static_cast<ObChunkDatumStore::StoredRow *>((void*)get_cur_buf());
   if (OB_ISNULL(sr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to get buffer", K(ret));
   } else {
     int64_t pos = sizeof(*sr) + sizeof(ObDatum) * exprs.count();
     if (pos > get_remain()) {
       ret = OB_BUF_NOT_ENOUGH;
-      LOG_WARN("wirte buffer is not enough", K(ret));
     } else {
       sr->cnt_ = exprs.count();
       ObDatum *datums = sr->cells();
@@ -323,7 +319,6 @@ int ObDefaultBlockWriter::block_unswizzling(ObTempBlockStore::Block *blk)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(blk)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to unswizzling block", K(ret));
   } else {
     int64_t cur_row = 0;
     int64_t cur_pos = 0;
@@ -385,7 +380,6 @@ int ObDefaultBlockWriter::ensure_write(const int64_t size)
     if (OB_FAIL(store_->new_block(new_blk_size, tmp_blk, true))) {
     } else if (OB_ISNULL(tmp_blk)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc block", K(ret));
     } else {
       cur_blk_ = tmp_blk;
     }

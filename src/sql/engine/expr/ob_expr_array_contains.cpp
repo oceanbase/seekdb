@@ -61,10 +61,8 @@ int ObExprArrayContains::calc_result_type2(ObExprResType &type,
   uint16_t subschema_id;
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   } else if (OB_ISNULL(type_ctx.get_raw_expr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("raw expr is null", K(ret));
   } else if (type_ctx.get_raw_expr()->get_reverse_param_order() != 0) {
     // It's any operator ,param order is reversed
     ObExprResType *type_tmp = type2_ptr;
@@ -260,11 +258,8 @@ int ObExprArrayContains::cg_expr(ObExprCGCtx &expr_cg_ctx,
   UNUSED(raw_expr);
   if (rt_expr.arg_cnt_ != 2 || OB_ISNULL(rt_expr.args_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("count of children is not 2 or children is null", K(ret), K(rt_expr.arg_cnt_),
-                                                              K(rt_expr.args_));
   } else if (OB_ISNULL(rt_expr.args_[0]) || OB_ISNULL(rt_expr.args_[1])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child is null", K(ret), K(rt_expr.args_[0]), K(rt_expr.args_[1]));
   } else {
     rt_expr.eval_func_ = NULL;
     rt_expr.may_not_need_raw_check_ = false;
@@ -313,7 +308,6 @@ int ObExprArrayContains::cg_expr(ObExprCGCtx &expr_cg_ctx,
           break;
         default :
           ret = OB_ERR_INVALID_TYPE_FOR_OP;
-          LOG_WARN("invalid type", K(ret), K(right_type), K(right_tc));
       }
     }
   }

@@ -64,7 +64,6 @@ int ObPurgeRecycleBinExecutor::execute(ObExecContext &ctx, ObPurgeRecycleBinStmt
                    return ctx.root_command_service().purge_expire_recycle_objects(
                        purge_recyclebin_arg, affected_rows);
                  }))) {
-        LOG_WARN("purge reyclebin objects failed", K(ret), K(affected_rows), K(purge_recyclebin_arg));
         // If failure occurs, there is no need to continue
         is_finished = false;
       } else {

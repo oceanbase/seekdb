@@ -50,7 +50,6 @@ int ObExprPrivSTGeoHash::calc_result_typeN(
     if (!ob_is_geometry(type_geom) && !ob_is_string_type(type_geom) && !ob_is_null(type_geom)) {
       ret = OB_ERR_GIS_INVALID_DATA;
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_GEOHASH);
-      LOG_WARN("invalid geometry type", K(ret), K(type_geom));
     } else if (param_num == 2) {
       ObObjType prec_type = types[1].get_type();
       if ((ob_is_integer_type(prec_type) && ObTinyIntType != prec_type) || ob_is_null(prec_type)) {
@@ -59,7 +58,6 @@ int ObExprPrivSTGeoHash::calc_result_typeN(
         types[1].set_calc_type(ObIntType);
       } else {
         ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-        LOG_WARN("invalid precision type", K(ret), K(prec_type));
       }
     }
   }
@@ -199,15 +197,12 @@ int ObExprPrivSTGeoHash::get_gbox(lib::MemoryContext &mem_ctx, ObGeometry *&geo,
               || ObGeoBoxUtil::is_float_gt(gbox->ymin , gbox->ymax)) {
     ret = OB_ERR_GIS_INVALID_DATA;
     LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_GEOHASH);
-    LOG_WARN("Geometric bounds invalid", K(ret), K(gbox->xmin), K(gbox->xmax), K(gbox->ymin), K(gbox->ymax));
   } else if (ObGeoBoxUtil::is_float_lt(gbox->xmin, -180.0) || ObGeoBoxUtil::is_float_gt(gbox->xmax, 180.0)) {
     ret = OB_OPERATE_OVERFLOW;
     LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "longitude", N_PRIV_ST_GEOHASH);
-    LOG_WARN("longitude is out of range", K(ret), K(gbox->xmin), K(gbox->xmax));
   } else if (ObGeoBoxUtil::is_float_lt(gbox->ymin, -90.0) || ObGeoBoxUtil::is_float_gt(gbox->ymax, 90.0)) {
     ret = OB_OPERATE_OVERFLOW;
     LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "latitude", N_PRIV_ST_GEOHASH);
-    LOG_WARN("latitude is out of range", K(ret), K(gbox->xmin), K(gbox->xmax));
   }
   return ret;
 }
@@ -274,7 +269,6 @@ int ObExprPrivSTGeoHash::process_input_geometry(
       if (tmp_prec > INT32_MAX || tmp_prec < INT32_MIN) {
         ret = OB_OPERATE_OVERFLOW;
         LOG_USER_ERROR(OB_OPERATE_OVERFLOW, "precision", N_PRIV_ST_GEOHASH);
-        LOG_WARN("precision is not in range", K(ret), K(tmp_prec));
       } else {
         precision = static_cast<int>(tmp_prec);
       }
@@ -307,20 +301,16 @@ int ObExprPrivSTGeoHash::eval_priv_st_geohash(const ObExpr &expr, ObEvalCtx &ctx
   } else if (OB_FAIL(guard.init())) {
   } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("fail to get mem ctx", K(ret));
   } else if (OB_FAIL(get_gbox(*mem_ctx, geo, gbox))) {
   } else if (OB_ISNULL(bounds = OB_NEWx(ObGeogBox, &temp_allocator))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory", K(ret), KP(bounds));
   } else if (precision <= 0 && OB_FAIL(calc_precision(gbox, bounds, precision))) {
-    LOG_WARN("fail to calculate precision", K(ret));
   } else if (OB_FAIL(calc_geohash(gbox, precision, geohash_buf))) {
   } else {
     ObExprStrResAlloc res_alloc(expr, ctx);
     char *res_buf = (char *)res_alloc.alloc(geohash_buf.length());
     if (OB_ISNULL(res_buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("result buffer allocation failed", K(ret), K(geohash_buf.length()));
     } else {
       MEMCPY(res_buf, geohash_buf.ptr(), geohash_buf.length());
       res.set_string(res_buf, geohash_buf.length());

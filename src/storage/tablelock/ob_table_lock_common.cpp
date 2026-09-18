@@ -148,7 +148,6 @@ DEFINE_SERIALIZE(ObLockID)
   int ret = OB_SUCCESS;
   if ((OB_ISNULL(buf)) || (buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument, ", K(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(serialization::encode_i8(buf, buf_len, pos, (int8_t)obj_type_))) {
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, obj_id_))) {
   }
@@ -160,7 +159,6 @@ DEFINE_DESERIALIZE(ObLockID)
   int ret = OB_SUCCESS;
   if ((OB_ISNULL(buf)) || (data_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument, ", K(ret), KP(buf), K(data_len));
   } else if (OB_FAIL(serialization::decode_i8(buf, data_len, pos, (int8_t *)&obj_type_))) {
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos,
       reinterpret_cast<int64_t *>(&obj_id_)))) {
@@ -184,7 +182,6 @@ int ObLockID::convert_to(common::ObTabletID &tablet_id) const
   common::ObTabletID tmp_id(obj_id_);
   if (!is_tablet_lock() || !tmp_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("can not convert to", K(ret), K_(obj_type), K_(obj_id));
   } else {
     tablet_id = tmp_id;
   }
@@ -197,7 +194,6 @@ int ObLockID::set(const ObLockOBJType &type, const uint64_t obj_id)
 
   if (!is_lock_obj_type_valid(type) || !is_valid_id(obj_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("init fail", K(ret), K(type), K(obj_id));
   } else {
     obj_type_ = type;
     obj_id_ = obj_id;
@@ -213,7 +209,6 @@ int get_lock_id(const uint64_t table_id,
   int ret = OB_SUCCESS;
   if (!is_valid_id(table_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument ", K(ret), K(table_id));
   } else if (OB_FAIL(lock_id.set(ObLockOBJType::OBJ_TYPE_TABLE,
                                  table_id))) {
   }
@@ -226,7 +221,6 @@ int get_lock_id(const ObTabletID &tablet,
   int ret = OB_SUCCESS;
   if (!tablet.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument ", K(ret), K(tablet));
   } else if (OB_FAIL(lock_id.set(ObLockOBJType::OBJ_TYPE_TABLET,
                                  tablet.id()))) {
   }
@@ -243,7 +237,6 @@ int get_lock_id(const ObIArray<ObTabletID> &tablets,
     tablet = tablets.at(i);
     if (!tablet.is_valid()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument ", K(ret), K(tablet));
     } else if (OB_FAIL(lock_id.set(ObLockOBJType::OBJ_TYPE_TABLET, tablet.id()))) {
     } else if (OB_FAIL(lock_ids.push_back(lock_id))) {
     }
@@ -282,7 +275,6 @@ int ObTableLockOwnerID::convert_from_value(const ObLockOwnerType owner_type,
   id_ = id;
   if (!is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(owner_type), K(id), K(type_), K(id_));
   } else {
     hash_value_ = inner_hash();
   }
@@ -295,7 +287,6 @@ int ObTableLockOwnerID::convert_from_session_id(const uint32_t sessid,
   int ret = OB_SUCCESS;
   if (INVALID_SESSID == sessid) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("session id is default value", K(ret), K(sessid), K(sess_create_ts));
   } else {
     type_ = static_cast<unsigned char>(ObLockOwnerType::SESS_ID_OWNER_TYPE);
     int64_t session_unique_id = sess_create_ts & SESS_CREATE_TS_MASK;
@@ -310,7 +301,6 @@ int ObTableLockOwnerID::convert_to_sessid(uint32_t &sessid) const
   int ret = OB_SUCCESS;
   if (type_ != static_cast<int64_t>(ObLockOwnerType::SESS_ID_OWNER_TYPE)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("this lock owner id cannot be converted to session id", K(ret), K_(type));
   } else {
     sessid = static_cast<uint32_t>(id_ & SESS_ID_MASK);
   }
@@ -322,7 +312,6 @@ int ObTableLockOwnerID::serialize(char* buf, const int64_t buf_len, int64_t& pos
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf) || OB_UNLIKELY(buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KP(buf), K(buf_len));
   } else {
     LST_DO_CODE(OB_UNIS_ENCODE,
                 MAGIC_NUM,
@@ -338,11 +327,9 @@ int ObTableLockOwnerID::deserialize(const char* buf, const int64_t data_len, int
   int64_t magic_num = 0;
   if (OB_ISNULL(buf) || OB_UNLIKELY(data_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), KP(buf), K(data_len));
   } else if (OB_FAIL(serialization::decode(buf, data_len, pos, magic_num))) {
   } else if (OB_UNLIKELY(magic_num != MAGIC_NUM)) {
     ret = OB_VERSION_NOT_MATCH;
-    LOG_WARN("table lock owner format mismatch", KR(ret), K(magic_num), K(MAGIC_NUM));
   } else {
     LST_DO_CODE(OB_UNIS_DECODE, type_, id_);
     if (OB_SUCC(ret)) {
@@ -369,7 +356,6 @@ int ObTableLockOwnerID::get_ddl_owner_id(int64_t &id) const
       && static_cast<unsigned char>(ObLockOwnerType::DEFAULT_OWNER_TYPE) != type_
       && static_cast<unsigned char>(ObLockOwnerType::FORK_TABLE_OWNER_TYPE) != type_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("this is not a ddl owner", K(ret), K(type_));
   } else {
     id = id_;
   }

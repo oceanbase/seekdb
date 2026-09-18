@@ -105,18 +105,11 @@ int ObExprWeightString::eval_weight_string(const ObExpr &expr, ObEvalCtx &ctx, O
   if (OB_ISNULL(expr.args_[0]) || OB_ISNULL(expr.args_[1]) || OB_ISNULL(expr.args_[2]) ||
       OB_ISNULL(expr.args_[3]) || OB_ISNULL(expr.args_[4])) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, arg)) ||
       OB_FAIL(expr.args_[1]->eval(ctx, result_length_arg)) ||
       OB_FAIL(expr.args_[2]->eval(ctx, nweights_arg)) ||
       OB_FAIL(expr.args_[3]->eval(ctx, flags_arg)) ||
       OB_FAIL(expr.args_[4]->eval(ctx, as_binary_arg))) {
-    LOG_WARN("eval arg failed", K(ret), 
-                                KP(arg),
-                                KP(result_length_arg),
-                                KP(nweights_arg),
-                                KP(flags_arg),
-                                KP(as_binary_arg));
   } else {
     const ObString str = arg->get_string();
     uint64_t result_length = result_length_arg->get_int();
@@ -140,7 +133,6 @@ int ObExprWeightString::eval_weight_string(const ObExpr &expr, ObEvalCtx &ctx, O
           ret = OB_SUCCESS;
           max_allowed_packet = OB_MAX_VARCHAR_LENGTH;
         } else {
-          LOG_WARN("Failed to get max allow packet size", K(ret));
         }
       } else {
 
@@ -193,7 +185,6 @@ int ObExprWeightString::eval_weight_string(const ObExpr &expr, ObEvalCtx &ctx, O
             const char* tmp_empty_str = "";
             if (OB_ISNULL(out_buf)) {
               ret = OB_ALLOCATE_MEMORY_FAILED;
-              LOG_WARN("failed to alloc output buf",K(ret));
             } else {
               frm_length = cs->coll->strnxfrm(cs,
                                             reinterpret_cast<uchar *>(out_buf), 

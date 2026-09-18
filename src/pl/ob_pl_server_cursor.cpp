@@ -88,10 +88,8 @@ int ObPLServerCursorInfo::deep_copy_field_columns(
   dst_fields.set_allocator(&allocator);
   if (OB_ISNULL(src_fields)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cannot copy null cursor fields", K(ret));
   } else if (src_fields->count() < 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid cursor field count", K(ret), K(src_fields->count()));
   } else if (OB_FAIL(dst_fields.reserve(src_fields->count()))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < src_fields->count(); ++i) {

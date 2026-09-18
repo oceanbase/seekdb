@@ -129,7 +129,6 @@ int ObSetTransactionResolver::build_isolation_expr(ObRawExpr *&expr, int32_t lev
     LOG_WARN("invalid stmt", K_(stmt));
   } else if (level_name.empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("isolation level is not invalid", K(ret), K(level));
   } else if (OB_FAIL(params_.expr_factory_->create_raw_expr(T_VARCHAR, c_expr))) {
   } else {
     // we use int type to represent isolation level, except for system variable tx_isolation,

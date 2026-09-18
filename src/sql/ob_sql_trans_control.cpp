@@ -102,7 +102,6 @@ int ObSqlTransControl::explicit_start_trans(ObExecContext &ctx, const bool read_
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx);
   if (OB_ISNULL(plan_ctx)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ctx), K(read_only), K(hint));
   } else {
     ret = explicit_start_trans(ctx.get_my_session(),
                                plan_ctx->get_trans_param(),
@@ -258,14 +257,20 @@ int ObSqlTransControl::end_trans(ObSQLSessionInfo *session,
                               expire_ts,
                               callback))) {
     }
+    const bool rollback_tx_ended =
+        is_rollback && data_plane::tx_desc_is_ended(session->get_tx_desc());
     ObSQLUtils::check_if_need_disconnect_after_end_trans(ret,
                                                          is_rollback,
                                                          is_explicit,
                                                          need_disconnect);
+    if (rollback_tx_ended) {
+      need_disconnect = false;
+    }
     if (is_rollback || OB_FAIL(ret) || !callback) {
       bool reuse_tx = OB_SUCCESS == ret
         || OB_TRANS_COMMITED == ret
-        || OB_TRANS_ROLLBACKED == ret;
+        || OB_TRANS_ROLLBACKED == ret
+        || rollback_tx_ended;
       reset_session_tx_state(session, reuse_tx, reset_trans_variable);
     }
   }
@@ -301,7 +306,6 @@ int ObSqlTransControl::end_trans_before_cmd_execute(ObSQLSessionInfo &session,
                                             !keep_trans_variable))) {
   } else if (session.need_recheck_txn_readonly() && session.get_tx_read_only()) {
     ret = OB_ERR_CANT_EXECUTE_IN_READ_ONLY_TRANSACTION;
-    LOG_WARN("cmd can not execute because txn is read only", K(ret));
   }
   return ret;
 }
@@ -441,7 +445,7 @@ int ObSqlTransControl::do_end_trans_(ObSQLSessionInfo *session,
     
     if (OB_FAIL(get_tx_service(session, txs))) {
     } else if (is_rollback) {
-      ret = txs->rollback_tx(*tx_ptr);
+      ret = txs->rollback_tx(*tx_ptr, expire_ts);
     } else if (callback) {
       if (OB_FAIL(inc_session_ref(session))) {
       } else {
@@ -742,7 +746,6 @@ int ObSqlTransControl::can_do_plain_insert(ObSQLSessionInfo *session,
   int last_query_retry_err = session->get_retry_info().get_last_query_retry_err();
   if (OB_ISNULL(session) || OB_ISNULL(plan)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null ptr", K(ret), KPC(session), KPC(plan));
   } else if (plan->get_need_serial_exec()
       || ObSQLUtils::is_nested_sql(&exec_ctx)
       || last_query_retry_err == OB_TRANSACTION_SET_VIOLATION

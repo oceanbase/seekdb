@@ -70,9 +70,7 @@ int ObHashIntersectOp::build_hash_table_by_part(const int64_t batch_size)
       if (OB_FAIL(hp_infras_.close_cur_part(InputSide::LEFT))) {
       }
     } else if (0 == batch_size && OB_FAIL(build_hash_table_from_left(false))) {
-      LOG_WARN("failed to build hash table", K(ret));
     } else if (batch_size > 0 && OB_FAIL(build_hash_table_from_left_batch(false, batch_size))) {
-      LOG_WARN("failed to build hash table batch", K(ret));
     } else if (OB_FAIL(hp_infras_.open_cur_part(InputSide::RIGHT))) {
     } else {
       found = true;
@@ -107,7 +105,6 @@ int ObHashIntersectOp::inner_get_next_row()
     if (!has_got_part_) {
       if (OB_FAIL(get_right_row())) {
         if (ret != OB_ITER_END) {
-          LOG_WARN("failed to get right row", K(ret));
         }
       } else {
         cur_exprs = &right_->get_spec().output_;
@@ -134,7 +131,6 @@ int ObHashIntersectOp::inner_get_next_row()
       } else if (OB_FAIL(hp_infras_.start_round())) {
       } else if (OB_FAIL(build_hash_table_by_part(batch_size))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("failed to build hash table", K(ret));
         }
       }
     } else if (OB_FAIL(ret)) {
@@ -154,7 +150,6 @@ int ObHashIntersectOp::inner_get_next_row()
         // dump right row if left is dumpe
         if (!hp_infras_.has_right_dumped()
             && OB_FAIL(hp_infras_.create_dumped_partitions(InputSide::RIGHT))) {
-          LOG_WARN("failed to create dump partitions", K(ret));
         } else if (OB_FAIL(hp_infras_.insert_row_on_partitions(*cur_exprs))) {
         }
       }
@@ -204,7 +199,6 @@ int ObHashIntersectOp::inner_get_next_batch(const int64_t max_row_cnt)
                                                        batch_size,
                                                        read_rows))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("failed to get next batch", K(ret));
       }
     } else {
       cur_exprs = &MY_SPEC.set_exprs_;
@@ -225,7 +219,6 @@ int ObHashIntersectOp::inner_get_next_batch(const int64_t max_row_cnt)
       } else if (OB_FAIL(hp_infras_.start_round())) {
       } else if (OB_FAIL(build_hash_table_by_part(read_rows))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("failed to build hash table", K(ret));
         }
       }
     } else if (OB_FAIL(ret)) {

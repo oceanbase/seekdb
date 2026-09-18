@@ -60,7 +60,6 @@ int ObAllVirtualServerSchemaInfo::inner_get_next_row(common::ObNewRow *&row)
         }
         default : {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid col_id", K(ret), K(col_id));
         }
       }
     }

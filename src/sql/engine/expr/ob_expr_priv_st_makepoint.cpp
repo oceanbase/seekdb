@@ -57,7 +57,6 @@ int ObExprPrivSTMakePoint::calc_result_typeN(
       types_stack[i].set_calc_type(ObDoubleType);
     } else {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_WARN("invalid input type", K(ret), K(i), K(type));
     }
   }
 
@@ -92,7 +91,6 @@ int ObExprPrivSTMakePoint::eval_priv_st_makepoint(
   for(int i = 0; OB_SUCC(ret) && i < num_args; i++) {
     if (expr.args_[i]->is_boolean_) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_WARN("invalid type", K(ret), K(i), K(expr.args_[i]->is_boolean_));
     } else if(ob_is_null(expr.args_[i]->datum_meta_.type_)) {
       is_null_result = true;
     } else if (OB_FAIL(expr.args_[i]->eval(ctx, datum[i]))) {
@@ -111,13 +109,10 @@ int ObExprPrivSTMakePoint::eval_priv_st_makepoint(
   } else if (OB_FAIL(res_wkb_buf.append(static_cast<char>(ENCODE_GEO_VERSION(GEO_VESION_1))))) {
   } else if (OB_FAIL(res_wkb_buf.append(static_cast<char>(ObGeoWkbByteOrder::LittleEndian)))) {
   } else if (num_args == 2 && OB_FAIL(res_wkb_buf.append(static_cast<uint32_t>(ObGeoType::POINT)))) {
-    LOG_WARN("fail to append 2D point type to makepoint wkb buf", K(ret));
   } else if (num_args == 3 && OB_FAIL(res_wkb_buf.append(static_cast<uint32_t>(ObGeoType::POINTZ)))) {
-    LOG_WARN("fail to append 3D point type to makepoint wkb buf", K(ret));
   } else if (OB_FAIL(res_wkb_buf.append(p[0]))) {
   } else if (OB_FAIL(res_wkb_buf.append(p[1]))) {
   } else if (num_args > 2 && OB_FAIL(res_wkb_buf.append(p[2]))) {
-    LOG_WARN("fail to append z to makepoint wkb buf", K(ret), K(p[2]));
   }
 
   if (OB_SUCC(ret)) {

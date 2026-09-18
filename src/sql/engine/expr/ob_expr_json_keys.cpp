@@ -77,7 +77,6 @@ int ObExprJsonKeys::get_keys_from_wrapper(ObIJsonBase *json_doc,
       void *node = allocator->alloc(sizeof(ObJsonString));
       if (OB_ISNULL(node)){
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("json_keys alloc jsonString failed", K(ret), K(str.length()));
       } else {
         ObJsonString *jstr = new (node) ObJsonString(key.ptr(), key.length());
         if (OB_FAIL(res_array.append(jstr))) {
@@ -103,7 +102,6 @@ int ObExprJsonKeys::eval_json_keys(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator());
   if (expr.datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN) {
     ret = OB_ERR_INVALID_JSON_CHARSET;
-    LOG_WARN("invalid out put charset", K(ret), K(expr.datum_meta_.cs_type_));
   } else if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 0,
                                                     json_doc, is_null_result, false))) {
   }

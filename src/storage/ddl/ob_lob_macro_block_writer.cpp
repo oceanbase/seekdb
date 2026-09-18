@@ -58,13 +58,11 @@ int ObLobMacroBlockWriter::init(const ObWriteMacroParam &param,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_UNLIKELY(
         !param.is_valid()
         || !data_tablet_id.is_valid()
         || !start_sequence.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(param), K(data_tablet_id), K(start_sequence));
   } else {
     lob_meta_tablet_id_ = param.lob_meta_tablet_id_;
     slice_idx_ = param.slice_idx_;
@@ -79,7 +77,6 @@ int ObLobMacroBlockWriter::init(const ObWriteMacroParam &param,
     if (OB_SUCC(ret) && param.slice_count_ > 0) {
       if (slice_idx_ >= param.slice_count_) { // idem mode, for table with primary key
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid slice idx", K(ret), K(slice_idx_), K(param));
       } else if (OB_FAIL(lob_id_generator_.init(slice_idx_ * ObTabletSliceParam::LOB_ID_SEQ_INTERVAL, // start
                                                 ObTabletSliceParam::LOB_ID_SEQ_INTERVAL, // interval
                                                 param.slice_count_ * ObTabletSliceParam::LOB_ID_SEQ_INTERVAL))) {
@@ -112,7 +109,6 @@ int ObLobMacroBlockWriter::write(const ObColumnSchemaItem &column_schema, ObIAll
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), K(is_inited_));
   } else {
     meta_write_iter_.reuse();
     lob_arena_.reuse();
@@ -122,7 +118,6 @@ int ObLobMacroBlockWriter::write(const ObColumnSchemaItem &column_schema, ObIAll
     lob_storage_param.is_index_table_ = param_.ddl_table_schema_.table_item_.is_index_table_;
     lob_storage_param.is_rowkey_col_ = column_schema.is_rowkey_column_;
     if (lob_id_cache_.remain_count() < lob_column_count_ && OB_FAIL(switch_lob_id_cache())) {
-      LOG_WARN("switch lob id cache failed", K(ret), K(lob_id_cache_), K(lob_column_count_), K(lob_id_generator_));
     } else if (OB_FAIL(ObInsertLobColumnHelper::insert_lob_column(row_allocator,
                                                                   lob_arena_/*lob_allocator*/,
                                                                   nullptr,
@@ -144,7 +139,6 @@ int ObLobMacroBlockWriter::write(const ObColumnSchemaItem &column_schema, ObIAll
       if (OB_FAIL(THIS_WORKER.check_status())) {
       } else if (OB_FAIL(meta_write_iter_.get_next_row(lob_meta_write_result))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("get next lob meta write resutl failed", K(ret));
         } else {
           ret = OB_SUCCESS;
           if (first_get_next) {
@@ -173,13 +167,11 @@ int ObLobMacroBlockWriter::transform_lob_meta_row(ObLobMetaWriteResult &lob_meta
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ObLobMetaUtil::transform_from_info_to_row(lob_meta_write_result.info_, &lob_meta_row_, true/*with_extra_rowkey*/))) {
   }
   if (OB_SUCC(ret)) {
     if (OB_UNLIKELY(!lob_meta_row_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid lob meta row", KR(ret), K(lob_meta_row_));
     } else if (OB_FAIL(ObDDLStorageUtil::check_null_and_length(false/*is_index_table*/,
                                                         false/*has_lob_rowkey*/,
                                                         ObLobMetaUtil::LOB_META_SCHEMA_ROWKEY_COL_CNT,
@@ -195,11 +187,9 @@ int ObLobMacroBlockWriter::prepare_macro_block_writer()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(macro_block_writer_)) {
     if (OB_ISNULL(macro_block_writer_ = OB_NEW(ObDDLMacroBlockWriter, ObMemAttr("lob_mb_writer")))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alocate memory for cg macro block writer failed", K(ret));
     }
   }
   if (OB_SUCC(ret) && OB_UNLIKELY(!macro_block_writer_->is_inited())) {
@@ -223,7 +213,6 @@ int ObLobMacroBlockWriter::switch_lob_id_cache()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(close_macro_block_writer())) {
   } else {
     uint64_t old_value = 0;
@@ -255,7 +244,6 @@ int ObLobMacroBlockWriter::close()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(close_macro_block_writer())) {
   } else {
     uint64_t last_lob_id = 0;
@@ -271,7 +259,6 @@ int ObLobMacroBlockWriter::close_macro_block_writer()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_NOT_NULL(macro_block_writer_)) {
     if (OB_FAIL(macro_block_writer_->close())) {
     } else {

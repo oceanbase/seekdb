@@ -44,7 +44,6 @@ int ObIncrementalStatEstimator::derive_split_gather_stats(ObExecContext &ctx,
     //do nothing
   } else if (OB_ISNULL(param.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(param));
   } else if (OB_FAIL(THIS_WORKER.check_status())) {
   } else {
     ObArenaAllocator allocator("IncrementStats", OB_MALLOC_NORMAL_BLOCK_SIZE);
@@ -104,7 +103,6 @@ int ObIncrementalStatEstimator::derive_split_gather_stats(ObExecContext &ctx,
                                                               all_cstats))) {
       } else if (OB_NOT_NULL(audit) &&
                  OB_FAIL(audit->add_flush_stats_audit(ObTimeUtility::current_time() - start_time))) {
-        LOG_WARN("failed to add flush stats audit", K(ret));
       }
     }
   }
@@ -134,7 +132,6 @@ int ObIncrementalStatEstimator::do_derive_part_stats_from_subpart_stats(
                                                        tmp_subpart_opt_stat.table_stat_->get_partition_id(),
                                                        cur_part_id))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(tmp_subpart_opt_stat.table_stat_));
       } else if (param.approx_part_infos_.at(i).part_id_ == cur_part_id) {
         if (OB_FAIL(subpart_opt_stats.push_back(tmp_subpart_opt_stat))) {
         } else {/*do nothing*/}
@@ -144,7 +141,6 @@ int ObIncrementalStatEstimator::do_derive_part_stats_from_subpart_stats(
     for (int64_t j = 0; OB_SUCC(ret) && j < gather_subpart_opt_stats.count(); ++j) {
       if (OB_ISNULL(gather_subpart_opt_stats.at(j).table_stat_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(gather_subpart_opt_stats.at(j).table_stat_));
       } else if (ObDbmsStatsUtils::is_subpart_id(param.all_subpart_infos_,
                                                  gather_subpart_opt_stats.at(j).table_stat_->get_partition_id(),
                                                  cur_part_id)) {
@@ -160,8 +156,6 @@ int ObIncrementalStatEstimator::do_derive_part_stats_from_subpart_stats(
     if (OB_SUCC(ret)) {
       if (OB_UNLIKELY(subpart_opt_stats.count() != param.approx_part_infos_.at(i).subpart_cnt_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(subpart_opt_stats.count()),
-                                         K(param.approx_part_infos_.at(i)));
       } else if (OB_FAIL(do_derive_global_stat(ctx, 
                                                alloc, 
                                                param, 
@@ -191,7 +185,6 @@ int ObIncrementalStatEstimator::generate_all_opt_stat(ObIArray<ObOptTableStat> &
     for (int64_t j = 0; OB_SUCC(ret) && opt_stat.column_stats_.count() < col_cnt && j < col_handles.count(); ++j) {
       if (OB_ISNULL(col_handles.at(j).stat_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(col_handles.at(j).stat_));
       } else if (opt_stat.table_stat_->get_partition_id() == col_handles.at(j).stat_->get_partition_id()) {
         if (OB_FAIL(opt_stat.column_stats_.push_back(
                                     const_cast<ObOptColumnStat*>(col_handles.at(j).stat_)))) {
@@ -201,7 +194,6 @@ int ObIncrementalStatEstimator::generate_all_opt_stat(ObIArray<ObOptTableStat> &
     if (OB_SUCC(ret)) {
       if (OB_UNLIKELY(opt_stat.column_stats_.count() != col_cnt)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(opt_stat.column_stats_), K(col_cnt));
       } else if (OB_FAIL(all_opt_stats.push_back(opt_stat))) {
       } else {/*do nothing*/}
     }
@@ -222,10 +214,8 @@ int ObIncrementalStatEstimator::generate_all_opt_stat(ObIArray<ObOptTableStat *>
       int64_t idx = i * col_cnt + j;
       if (OB_UNLIKELY(idx >= col_stats.count())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(idx), K(col_stats.count()));
       } else if (OB_ISNULL(col_stats.at(idx)) || OB_ISNULL(opt_stat.table_stat_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(table_stats), K(col_stats), K(i), K(idx));
       } else if (opt_stat.table_stat_->get_partition_id() == col_stats.at(idx)->get_partition_id()) {
         if (OB_FAIL(opt_stat.column_stats_.push_back(col_stats.at(idx)))) {
         } else {/*do nothing*/}
@@ -234,7 +224,6 @@ int ObIncrementalStatEstimator::generate_all_opt_stat(ObIArray<ObOptTableStat *>
     if (OB_SUCC(ret)) {
       if (OB_UNLIKELY(opt_stat.column_stats_.count() != col_cnt)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(table_stats), K(col_cnt), K(col_stats));
       } else if (OB_FAIL(all_opt_stats.push_back(opt_stat))) {
       } else {/*do nothing*/}
     }
@@ -275,14 +264,12 @@ int ObIncrementalStatEstimator::get_part_ids_and_column_ids_info(ObOptStat &src_
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(src_opt_stat.column_stats_.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error, expected isn't empty", K(ret), K(src_opt_stat.column_stats_));
   } else {
     int64_t no_gather_id = -1;
     for (int64_t i = 0; OB_SUCC(ret) && i < src_opt_stat.column_stats_.count(); ++i) {
       ObOptColumnStat *col_stat = NULL;
       if (OB_ISNULL(col_stat = src_opt_stat.column_stats_.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(col_stat));
       } else if (OB_FAIL(column_ids.push_back(col_stat->get_column_id()))) {
       } else {
         no_gather_id = col_stat->get_partition_id();
@@ -291,10 +278,8 @@ int ObIncrementalStatEstimator::get_part_ids_and_column_ids_info(ObOptStat &src_
     if (OB_SUCC(ret)) {
       if (OB_UNLIKELY(no_gather_id == -1)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error, expected valid id", K(ret), K(no_gather_id));
       } else if (OB_UNLIKELY(param.all_part_infos_.empty())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error, expected isn't empty", K(ret), K(param.all_part_infos_));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < param.all_part_infos_.count(); ++i) {
           if (param.all_part_infos_.at(i).part_id_ == no_gather_id) {
@@ -354,14 +339,11 @@ int ObIncrementalStatEstimator::derive_global_tbl_stat(ObIAllocator &alloc,
                   approx_level == SUBPARTITION_LEVEL) ||
       OB_ISNULL(tmp_tbl_stat = part_opt_stats.at(0).table_stat_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(tmp_tbl_stat), K(part_opt_stats.count()),
-                                     K(approx_level), K(ret));
   } else {
     ObOptTableStat *&table_stat = global_opt_stat.table_stat_;
     void *ptr = NULL;
     if (OB_ISNULL(ptr = alloc.alloc(sizeof(ObOptTableStat)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("memory is not enough", K(ret), K(ptr));
     } else {
       table_stat = new (ptr) ObOptTableStat();
       ObGlobalTableStat global_tstat;
@@ -370,7 +352,6 @@ int ObIncrementalStatEstimator::derive_global_tbl_stat(ObIAllocator &alloc,
         ObOptTableStat *opt_tbl_stat = part_opt_stats.at(i).table_stat_;
         if (OB_ISNULL(opt_tbl_stat)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret), K(opt_tbl_stat));
         } else {
           global_tstat.add(opt_tbl_stat->get_row_count(),
                            opt_tbl_stat->get_avg_row_size(),
@@ -419,14 +400,11 @@ int ObIncrementalStatEstimator::derive_global_col_stat(ObExecContext &ctx,
       OB_ISNULL(global_opt_stat.table_stat_) ||
       OB_ISNULL(param.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(part_cnt), K(column_cnt), K(approx_level),
-                                     K(global_opt_stat.table_stat_), K(param.allocator_), K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < column_cnt; ++i) {
       ObOptColumnStat *col_stat = NULL;
       if (OB_ISNULL(col_stat = ObOptColumnStat::malloc_new_column_stat(alloc))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("memory is not enough", K(ret), K(col_stat));
       } else {
         ObGlobalMinEval min_eval;
         ObGlobalMaxEval max_eval;
@@ -446,7 +424,6 @@ int ObIncrementalStatEstimator::derive_global_col_stat(ObExecContext &ctx,
                ++k) {
             if (OB_ISNULL(part_opt_stats.at(j).column_stats_.at(k))) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("get unexpected null", K(ret), K(part_opt_stats.at(j).column_stats_), K(k));
             } else if (param.column_params_.at(i).column_id_ ==
                        part_opt_stats.at(j).column_stats_.at(k)->get_column_id()) {
               opt_col_stat = part_opt_stats.at(j).column_stats_.at(k);
@@ -455,15 +432,12 @@ int ObIncrementalStatEstimator::derive_global_col_stat(ObExecContext &ctx,
           if (OB_FAIL(ret)) {
           } else if (OB_ISNULL(opt_col_stat) || OB_ISNULL(opt_tab_stat)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected null", K(ret), K(part_opt_stats.at(j).column_stats_),
-                                            K(param.column_params_.at(i)));
           } else if (OB_FALSE_IT(sample_size += opt_tab_stat->get_sample_size())) {
           } else if (OB_FALSE_IT(total_row_cnt += opt_tab_stat->get_row_count())) {
           } else if (opt_col_stat->get_num_distinct() == 0 && opt_col_stat->get_num_null() == 0) {
             /*do nothing*/
           } else if (need_derive_hist && opt_col_stat->get_histogram().is_valid() &&
                      OB_FAIL(all_part_histograms.push_back(opt_col_stat->get_histogram()))) {
-            LOG_WARN("failed to push back histogram", K(ret));
           } else {
             null_eval.add(opt_col_stat->get_num_null());
             if (opt_col_stat->get_num_distinct() != 0) {
@@ -549,11 +523,9 @@ int ObIncrementalStatEstimator::derive_global_col_stat(ObExecContext &ctx,
       } else if (OB_FAIL(gather_param.column_params_.assign(param.column_params_))) {
       } else if (gather_param.stat_level_ != TABLE_LEVEL &&
                  OB_FAIL(gather_param.partition_infos_.assign(param.approx_part_infos_))) {
-        LOG_WARN("failed to assign", K(ret));
       } else if (gather_param.stat_level_ != TABLE_LEVEL &&
                  OB_FAIL(ObDbmsStatsUtils::remove_stat_gather_param_partition_info(global_opt_stat.table_stat_->get_partition_id(),
                                                                                    gather_param))) {
-        LOG_WARN("failed to remove stat gather param partition info", K(ret));
       } else if (OB_FAIL(adjust_derive_gather_histogram_param(global_opt_stat,
                                                               param.need_estimate_block_ ? 
                                                                 partition_id_block_map : NULL,
@@ -575,7 +547,6 @@ int ObIncrementalStatEstimator::derive_global_col_stat(ObExecContext &ctx,
                  OB_FAIL(audit->add_histogram_estimate_audit(global_opt_stat.table_stat_->get_partition_id(),
                                                      topk_cost,
                                                      hybrid_cost))) {
-        LOG_WARN("failed to add histogram estimate audit", K(ret));
       } else if (OB_FAIL(tmp_opt_stats.push_back(global_opt_stat))) {
       } else if (OB_FAIL(ObDbmsStatsUtils::check_all_cols_range_skew(gather_param.column_params_,
                                                                      tmp_opt_stats))) {
@@ -603,7 +574,6 @@ int ObIncrementalStatEstimator::derive_global_histogram(ObIArray<ObHistogram> &a
     //do nothing
   } else if (OB_ISNULL(ptr = allocator.alloc(sizeof(ObTopKFrequencyHistograms)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory", K(ret), K(ptr));
   } else {
     ObTopKFrequencyHistograms *top_k_fre_hist = new (ptr) ObTopKFrequencyHistograms();
     top_k_fre_hist->set_window_size(ObStatTopKHist::get_window_size(max_bucket_num));
@@ -623,11 +593,9 @@ int ObIncrementalStatEstimator::derive_global_histogram(ObIArray<ObHistogram> &a
           }
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected hist type", K(ret), K(all_part_histograms.at(i).get_type()));
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(all_part_histograms.at(i)));
       }
     }
     if (OB_SUCC(ret)) {
@@ -739,7 +707,6 @@ int ObIncrementalStatEstimator::get_all_part_opt_stats(
   if (OB_UNLIKELY(param.part_level_ != share::schema::PARTITION_LEVEL_ONE &&
                   param.part_level_ != share::schema::PARTITION_LEVEL_TWO)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(param));
   } else if (OB_FAIL(get_partition_ids(partition_infos, partition_ids))) {
   } else if (OB_FAIL(get_column_ids(param.column_params_, column_ids))) {
   } else if (OB_FAIL(ObOptStatManager::get_instance().get_table_stat(param.table_id_,
@@ -781,7 +748,6 @@ int ObIncrementalStatEstimator::derive_part_index_stat_by_subpart_index_stats(
     for (int64_t j = 0; OB_SUCC(ret) && j < subpart_index_stats.count(); ++j) {
       if (OB_ISNULL(subpart_index_stats.at(j))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(subpart_index_stats.at(j)));
       } else if (ObDbmsStatsUtils::is_subpart_id(param.all_subpart_infos_,
                                                  subpart_index_stats.at(j)->get_partition_id(),
                                                  cur_part_id)) {
@@ -799,8 +765,6 @@ int ObIncrementalStatEstimator::derive_part_index_stat_by_subpart_index_stats(
       if (OB_ISNULL(param.allocator_) ||
           OB_UNLIKELY(subpart_opt_stats.count() != param.approx_part_infos_.at(i).subpart_cnt_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(param), K(subpart_opt_stats.count()),
-                                         K(param.approx_part_infos_.at(i)));
       } else if (OB_FAIL(derive_global_tbl_stat(*param.allocator_, param,
                                                 PARTITION_LEVEL,
                                                 param.approx_part_infos_.at(i).part_id_,
@@ -830,7 +794,6 @@ int ObIncrementalStatEstimator::derive_global_index_stat_by_part_index_stats(
     ObOptStat global_opt_stat;
     if (OB_ISNULL(param.allocator_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected error", K(ret), K(param.allocator_));
     } else if (OB_FAIL(derive_global_tbl_stat(*param.allocator_, param,
                                               TABLE_LEVEL,
                                               param.global_part_id_,
@@ -879,7 +842,6 @@ int ObIncrementalStatEstimator::prepare_get_opt_stats_param(const ObTableStatPar
         }
         if (OB_UNLIKELY(subpart_cnt != param.approx_part_infos_.at(i).subpart_cnt_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected error", K(ret), K(subpart_cnt), K(param));
         }
       }
     }
@@ -901,7 +863,6 @@ int ObIncrementalStatEstimator::derive_part_index_column_stat_by_subpart_index(O
     for (int64_t j = 0; OB_SUCC(ret) && j < part_index_stats.count(); ++j) {
       if (OB_ISNULL(part_index_stats.at(j).table_stat_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(part_index_stats.at(j).table_stat_));
       } else if (ObDbmsStatsUtils::is_subpart_id(param.all_subpart_infos_,
                                                  part_index_stats.at(j).table_stat_->get_partition_id(),
                                                  cur_part_id)) {
@@ -915,8 +876,6 @@ int ObIncrementalStatEstimator::derive_part_index_column_stat_by_subpart_index(O
     if (OB_SUCC(ret)) {
       if (OB_UNLIKELY(subpart_opt_stats.count() != param.approx_part_infos_.at(i).subpart_cnt_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(subpart_opt_stats.count()),
-                                         K(param.approx_part_infos_.at(i)));
       } else if (OB_FAIL(do_derive_global_stat(ctx, 
                                                alloc, 
                                                param, 
@@ -974,7 +933,6 @@ int ObIncrementalStatEstimator::adjust_derive_gather_histogram_param(
   double sample_ratio = 100.0;
   if (OB_ISNULL(opt_stat.table_stat_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     total_row_count = opt_stat.table_stat_->get_row_count();
     micro_block_num = opt_stat.table_stat_->get_micro_block_num();
@@ -986,11 +944,9 @@ int ObIncrementalStatEstimator::adjust_derive_gather_histogram_param(
         if (OB_LIKELY(OB_HASH_NOT_EXIST == ret)) {
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("failed to get refactored", K(ret));
         }
       } else if (OB_ISNULL(block_num_stat)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (block_num_stat->sstable_row_cnt_ + block_num_stat->memtable_row_cnt_ > total_row_count) {
         total_row_count = block_num_stat->sstable_row_cnt_ + block_num_stat->memtable_row_cnt_;
         micro_block_num = block_num_stat->tab_micro_cnt_;

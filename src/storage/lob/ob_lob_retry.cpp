@@ -30,12 +30,10 @@ int ObLobRetryUtil::check_need_retry(ObLobAccessParam &param, const int error_co
   int ret = OB_SUCCESS;
   need_retry = false;
   if (!is_retryable_error(error_code)) {
-    LOG_WARN("can not retry error code", K(ret), KR(ret), K(error_code), KR(error_code), K(retry_cnt), K(need_retry), K(param));
   } else if (ObTimeUtility::current_time() > param.timeout_) {
     need_retry = false;
     ret = OB_TIMEOUT;
     int64_t cur_time = ObTimeUtility::current_time();
-    LOG_WARN("[LOB RETRY] query timeout", K(cur_time), K(param.timeout_), K(ret));
   } else if (IS_INTERRUPTED()) {
     need_retry = false;
     LOG_INFO("[LOB RETRY] Retry is interrupted by worker interrupt signal", KR(ret), K(error_code), KR(error_code), K(retry_cnt), K(need_retry));
@@ -49,7 +47,6 @@ int ObLobRetryUtil::check_need_retry(ObLobAccessParam &param, const int error_co
       case  OB_TABLET_NOT_EXIST:
       case  OB_LS_OFFLINE: {
         if (OB_FAIL(ObLobLocationUtil::refresh_local_location(param, error_code, retry_cnt))) {
-          LOG_WARN("fail to do refresh location", K(ret), K(error_code), K(retry_cnt), K(param));
           need_retry = false;
         }
         LOG_INFO("retry again", K(ret), KR(ret), K(error_code), KR(error_code), K(retry_cnt), K(need_retry), K(param));
@@ -57,7 +54,6 @@ int ObLobRetryUtil::check_need_retry(ObLobAccessParam &param, const int error_co
       }
       default: {
         need_retry = false;
-        LOG_WARN("unknow retry error_code, not retry", K(ret), KR(ret), K(error_code), KR(error_code), K(retry_cnt), K(need_retry));
       }
     }
   }

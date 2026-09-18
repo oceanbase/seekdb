@@ -43,7 +43,6 @@ int ObExprSysViewBigintParam::calc_result_type1(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (NOT_ROW_DIMENSION != row_dimension_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("row dimension must be NOT_ROW_DIMENSION", K(ret), K(row_dimension_));
   } else {
     //keep enumset as origin
     type.set_int();

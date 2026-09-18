@@ -78,10 +78,8 @@ int ObFuseRowCacheKeyBase::deep_copy(char *buf, const int64_t buf_len, ObFuseRow
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == buf || buf_len < rowkey_size_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_len), "request_size", rowkey_size_);
   } else if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("invalid fuse row cache key", K(ret), K(*this));
   } else {
     
     dest.tablet_id_ = tablet_id_;
@@ -143,10 +141,8 @@ int ObFuseRowCacheKey::deep_copy(char *buf, const int64_t buf_len, ObIKVCacheKey
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == buf || buf_len < size())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_len), "request_size", size());
   } else if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("invalid fuse row cache key", K(ret), K(*this));
   } else {
     ObFuseRowCacheKey *pfuse_key = new (buf) ObFuseRowCacheKey();
     pfuse_key->tablet_snapshot_version_ = tablet_snapshot_version_;
@@ -202,10 +198,8 @@ int ObFuseRowCacheValue::deep_copy(char *buf, const int64_t buf_len, ObIKVCacheV
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == buf || buf_len < size())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_len), "request_size", size());
   } else if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("invalid row cache value", K(ret));
   } else {
     int64_t pos = 0;
     ObFuseRowCacheValue *pfuse_value = new (buf) ObFuseRowCacheValue();
@@ -242,15 +236,12 @@ int ObFuseRowCache::get_row(const ObFuseRowCacheKey &key, ObFuseRowValueHandle &
   const ObFuseRowCacheValue *value = nullptr;
   if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(key));
   } else if (OB_FAIL(get(key, value, handle.handle_))) {
     if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
-      LOG_WARN("fail to get key from row cache", K(ret));
     }
   } else {
     if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected error, the value must not be NULL", K(ret));
     } else {
       handle.value_ = const_cast<ObFuseRowCacheValue *>(value);
     }
@@ -263,7 +254,6 @@ int ObFuseRowCache::put_row(const ObFuseRowCacheKey &key, const ObFuseRowCacheVa
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!key.is_valid() || !value.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(key), K(value));
   } else if (OB_FAIL(put(key, value, true/*overwrite*/))) {
   }
   return ret;

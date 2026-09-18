@@ -78,7 +78,6 @@ int ObExprJsonMergePatch::eval_json_merge_patch(const ObExpr &expr, ObEvalCtx &c
   ObJsonNull j_null;
   if (expr.datum_meta_.cs_type_ != CS_TYPE_UTF8MB4_BIN) {
     ret = OB_ERR_INVALID_JSON_CHARSET;
-    LOG_WARN("invalid out put charset", K(ret), K(expr.datum_meta_.cs_type_));
   } else if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 0, j_base, has_null))) {
   } else if (has_null) {
     j_base = &j_null;
@@ -102,7 +101,6 @@ int ObExprJsonMergePatch::eval_json_merge_patch(const ObExpr &expr, ObEvalCtx &c
         void *buf = temp_allocator.alloc(sizeof(ObJsonObject));
         if (OB_ISNULL(buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("error, json merge patch allocate jsonobject buffer failed", K(ret));
         } else {
           j_obj = new (buf) ObJsonObject(&temp_allocator);
         }
@@ -186,7 +184,6 @@ int ObExprJsonMergePatch::eval_ora_json_merge_patch(const ObExpr &expr, ObEvalCt
   } else if ((expr.datum_meta_.cs_type_ == CS_TYPE_BINARY || dst_type == ObJsonType) && (opt_array[OPT_PRETTY_ID] > 0 || opt_array[OPT_ASCII_ID] > 0)) {
     // ascii or pretty only support text
     ret = OB_ERR_NON_TEXT_RET_NOTSUPPORT;
-    LOG_WARN("ASCII or PRETTY not supported for non-textual return data type", K(ret));
   }
 
   ObIJsonBase *j_base = NULL;
@@ -194,7 +191,6 @@ int ObExprJsonMergePatch::eval_ora_json_merge_patch(const ObExpr &expr, ObEvalCt
   ObJsonNull j_null;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 0, j_base, has_null))) {
-    LOG_WARN("get_json_doc failed", K(ret));
     SET_COVER_ERROR(ret);
   } else if (has_null) {
     j_base = &j_null;
@@ -210,7 +206,6 @@ int ObExprJsonMergePatch::eval_ora_json_merge_patch(const ObExpr &expr, ObEvalCt
     if (tmp_ret == OB_ERR_JSON_SYNTAX_ERROR) {
       ret = OB_ERR_JSON_PATCH_INVALID;
     }
-    LOG_WARN("get_json_doc failed", K(ret));
   } else if (has_null) {
     ret = OB_ERR_JSON_PATCH_INVALID;
     LOG_USER_ERROR(OB_ERR_JSON_PATCH_INVALID);
@@ -226,7 +221,6 @@ int ObExprJsonMergePatch::eval_ora_json_merge_patch(const ObExpr &expr, ObEvalCt
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         SET_COVER_ERROR(ret);
-        LOG_WARN("error, json merge patch allocate jsonobject buffer failed", K(ret));
       } else {
         j_obj = new (buf) ObJsonObject(&temp_allocator);
       }
@@ -234,7 +228,6 @@ int ObExprJsonMergePatch::eval_ora_json_merge_patch(const ObExpr &expr, ObEvalCt
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(j_obj->merge_patch(&temp_allocator, static_cast<ObJsonObject*>(j_patch_node)))) {
-        LOG_WARN("error, json merge patch failed", K(ret));
         SET_COVER_ERROR(ret);
       } else {
         j_base = j_obj;
@@ -257,7 +250,6 @@ int ObExprJsonMergePatch::eval_ora_json_merge_patch(const ObExpr &expr, ObEvalCt
 
       if (OB_ISNULL( jbuf = OB_NEWx(ObJsonBuffer, &temp_allocator, &temp_allocator))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to construct jbuf", K(ret));
       } else if (dst_type == ObJsonType) {
         if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, res_string, &temp_allocator))) {
         }
@@ -269,7 +261,6 @@ int ObExprJsonMergePatch::eval_ora_json_merge_patch(const ObExpr &expr, ObEvalCt
         if (OB_FAIL(j_base->print(*jbuf, is_quote, 0, is_pretty > 0))) {
         } else if (jbuf->empty()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("jbuf should not empty", K(ret));
         } else {
           tmp_val = jbuf->string();
           ObCollationType in_cs_type = CS_TYPE_UTF8MB4_BIN;
@@ -346,7 +337,6 @@ int ObExprJsonMergePatch::eval_ora_json_merge_patch(const ObExpr &expr, ObEvalCt
           char res_ptr[OB_MAX_DECIMAL_PRECISION] = {0};
           if (OB_ISNULL(ObCharset::lltostr(dst_len, res_ptr, 10, 1))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("failed to lltostr", K(ret), K(dst_len));
           }
           if (!err_type) { 
             ret = OB_ERR_VALUE_EXCEEDED_MAX;

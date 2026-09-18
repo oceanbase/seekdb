@@ -2844,7 +2844,6 @@ int ObSchemaRetrieveUtils::fill_base_part_info(const bool check_deleted,
       } else if (OB_SUCCESS != ret) {
       } else {
         if (FAILEDx(partition.set_list_vector_values_with_hex_str(blist_val))) {
-          SHARE_SCHEMA_LOG(WARN, "Failed to set list val to partition", K(ret));
         }
       }
     }
@@ -2876,7 +2875,6 @@ int ObSchemaRetrieveUtils::retrieve_aux_tables(T &result,
       EXTRACT_INT_FIELD_MYSQL(result, "index_type", index_type, ObIndexType);
       ObAuxTableMetaInfo aux_table_meta(table_id, table_type, index_type);
       if (FAILEDx(aux_tables.push_back(aux_table_meta))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to push back aux table", KR(ret), K(aux_table_meta));
       }
 
     }
@@ -3245,7 +3243,6 @@ int ObSchemaRetrieveUtils::fill_sys_table_lob_tid(ObTableSchema &table)
       // do nothing
     } else if (!get_sys_table_lob_aux_table_id(table_id, lob_meta_table_id, lob_piece_table_id)) {
       ret = OB_ENTRY_NOT_EXIST;
-      LOG_WARN("get lob aux table id failed.", K(ret), K(table_id));
     } else {
       table.set_aux_lob_meta_tid(lob_meta_table_id);
       table.set_aux_lob_piece_tid(lob_piece_table_id);
@@ -3309,7 +3306,6 @@ int ObSchemaRetrieveUtils::retrieve_table_latest_schema_versions(
     EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
 
     if (FAILEDx(table_schema_version.init(table_id, schema_version, is_deleted))) {
-      LOG_WARN("init failed", KR(ret), K(table_id), K(schema_version), K(is_deleted));
     } else if (OB_FAIL(table_schema_versions.push_back(table_schema_version))) {
     }
   }

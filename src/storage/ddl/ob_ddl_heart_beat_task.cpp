@@ -35,7 +35,6 @@ int ObRedefTableHeartBeatTask::init(common::ObTimer &timer)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObReDefTableHeartBeatTask has a already been inited", K(ret));
   } else if (OB_FAIL(timer.schedule(*this, HEARTBEAT_INTERVAL, true))) {
   } else {
     is_inited_ = true;
@@ -48,7 +47,6 @@ void ObRedefTableHeartBeatTask::runTimerTask()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObReDefTableHeartBeatTask has not been inited", K(ret));
   } else if (OB_FAIL(send_task_status_to_rs())) {
   } else {
     LOG_INFO("send to rs all task status succeed");
@@ -74,7 +72,6 @@ int ObDDLHeartBeatTaskContainer::init()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObDDLHeartBeatTaskContainer inited twice", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -86,10 +83,8 @@ int ObDDLHeartBeatTaskContainer::set_register_task_id(const int64_t task_id)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLHeartBeatTaskContainer not inited", K(ret));
   } else if (OB_UNLIKELY(task_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(task_id));
   } else {
     bool found = false;
     common::ObSpinLockGuard guard(lock_);
@@ -108,10 +103,8 @@ int ObDDLHeartBeatTaskContainer::remove_register_task_id(const int64_t task_id)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLHeartBeatTaskContainer not inited", K(ret));
   } else if (OB_UNLIKELY(task_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(task_id));
   } else {
     common::ObSpinLockGuard guard(lock_);
     for (int64_t i = 0; OB_SUCC(ret) && i < register_tasks_.count(); ++i) {
@@ -130,7 +123,6 @@ int ObDDLHeartBeatTaskContainer::send_task_status_to_rs()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLHeartBeatTaskContainer not inited", K(ret));
   } else {
     common::ObSEArray<int64_t, 4> task_ids;
     {

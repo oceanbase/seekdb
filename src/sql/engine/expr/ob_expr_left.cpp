@@ -69,7 +69,6 @@ int ObExprLeft::calc_result_type2(ObExprResType &type,
   ObSQLSessionInfo *session = const_cast<ObSQLSessionInfo *>(type_ctx.get_session());
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL", K(ret));
   } else if (session->is_varparams_sql_prepare()) {
     // the ps prepare stage does not do type deduction, and directly gives a default type.
     type.set_char();
@@ -111,7 +110,6 @@ int calc_left(ObString &res_str, const ObString &text, const ObCollationType typ
 	int64_t str_length = text.length();
 	if(OB_ISNULL(str_ptr) && 0 != str_length) {
 		ret = OB_INVALID_ARGUMENT;
-		LOG_WARN("invalid argument", K(ret));
 	} else {
 		int64_t input_num_char = ObCharset::strlen_char(type, text.ptr(), text.length());
 		int64_t expected_num_char = min(required_num_char, input_num_char);
@@ -140,7 +138,6 @@ int calc_left_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   ObDatum *n_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, s_datum)) ||
       OB_FAIL(expr.args_[1]->eval(ctx, n_datum))) {
-    LOG_WARN("eval arg failed", K(ret), KP(s_datum), KP(n_datum));
   } else if (s_datum->is_null() || n_datum->is_null()) {
     res_datum.set_null();
   } else {

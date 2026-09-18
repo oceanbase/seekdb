@@ -83,7 +83,6 @@ int ObDDLVector::create_vector(VectorFormat format, VecValueTypeClass value_tc,
 #undef FIXED_VECTOR_INIT_SWITCH
           default:
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected fixed vector value type class", KR(ret), K(value_tc));
             break;
         }
       }
@@ -121,13 +120,11 @@ int ObDDLVector::create_vector(VectorFormat format, VecValueTypeClass value_tc,
       break;
     default:
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected vector format", KR(ret), K(format));
       break;
   }
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(nullptr == dl_vector)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to new direct load vector", KR(ret), K(format));
   }
   return ret;
 }

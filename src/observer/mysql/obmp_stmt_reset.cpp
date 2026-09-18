@@ -36,16 +36,12 @@ int ObMPStmtReset::deserialize()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(req_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid packet", K(ret), K_(req));
   } else if (OB_UNLIKELY(req_->get_type() != ObRequest::OB_MYSQL)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid packet", K(ret), K_(req), K(req_->get_type()));
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     if (OB_UNLIKELY(ObMySQLCommandLayout::U32 != pkt.get_command_layout())) {
       ret = OB_INVALID_DATA;
-      LOG_WARN("unexpected stmt-reset command layout", K(ret),
-               K(pkt.get_command_layout()));
     } else {
       stmt_id_ = static_cast<uint32_t>(pkt.get_command_scalar0());
     }
@@ -61,14 +57,11 @@ int ObMPStmtReset::process()
   sql::ObSQLSessionInfo *session = NULL;
   if (OB_ISNULL(req_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid packet", K(ret), KP(req_));
   } else if (OB_INVALID_STMT_ID == stmt_id_) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("stmt_id is invalid", K(ret));
   } else if (OB_FAIL(get_session(session))) {
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL or invalid", K(ret), K(session));
   } else if (FALSE_IT(need_disconnect = false)) {
   } else {
     ObPieceCache *piece_cache = session->get_piece_cache();
@@ -87,7 +80,6 @@ int ObMPStmtReset::process()
       if (OB_FAIL(ps_cache->get_stmt_info_guard(inner_stmt_id, guard))) {
       } else if (OB_ISNULL(ps_info = guard.get_stmt_info())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get stmt info is null", K(ret));
       } else {
         param_num= ps_info->get_num_of_param();
       }
@@ -103,7 +95,6 @@ int ObMPStmtReset::process()
           if (OB_HASH_NOT_EXIST == ret) {
             ret = OB_SUCCESS;
           } else {
-            LOG_WARN("remove piece fail", K(stmt_id_), K(i), K(ret));
           }
         }
       }

@@ -37,13 +37,8 @@ int ObIndexBlockTreeTraverser::init(ObSSTable &sstable, const ObITableReadInfo &
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("Init twice for index block tree traverser", KR(ret));
   } else if (OB_UNLIKELY(!sstable.is_valid() || !index_read_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument for index block tree traverser",
-             KR(ret),
-             K(sstable),
-             K(index_read_info));
   } else {
     sstable_ = &sstable;
     read_info_ = &index_read_info;
@@ -73,7 +68,6 @@ int ObIndexBlockTreeTraverser::handle_overflow_ranges()
   while (OB_SUCC(ret) && !context_->is_ended()) {
     if (OB_FAIL(context_->next_range())) {
       if (ret != OB_ITER_END) {
-        LOG_WARN("Fail to go to next range", KR(ret), KPC(context_));
       } else {
         ret = OB_SUCCESS;
       }
@@ -92,10 +86,8 @@ int ObIndexBlockTreeTraverser::traverse(ObIMultiRangeEstimateContext &context,
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init traverser", KR(ret));
   } else if (OB_UNLIKELY(!context.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid context", KR(ret), K(context));
   } else if (FALSE_IT(context_ = &context)) {
   } else if (FALSE_IT(avg_range_visited_node_cnt_ = 1.0 * open_index_micro_block_limit / context.get_ranges_count())) {
   } else if (FALSE_IT(remain_can_visited_node_cnt_ = INIT_INDEX_MICRO_BLOCK_OPEN_COUNT)) {
@@ -152,7 +144,6 @@ int ObIndexBlockTreeTraverser::goto_next_level_node(const ObMicroIndexInfo &micr
   } else {
     if (OB_FAIL(path_caches_.find(level, &micro_index_info, is_in_cache))) {
       if (ret != OB_NOT_SUPPORTED) {
-        LOG_WARN("Fail to find node in path caches", KR(ret), K(micro_index_info));
       } else {
         ret = OB_SUCCESS;
         should_estimate = true;
@@ -235,7 +226,6 @@ int ObIndexBlockTreeTraverser::inner_node_traverse(const ObMicroIndexInfo *micro
     // step 1. locate range in multi index row
     if (OB_FAIL(node->locate_range(range, index_row_count))) {
       if (ret != OB_BEYOND_THE_RANGE) {
-        LOG_WARN("Fail to locate range", KR(ret));
       } else {
         // beyond the range, the remain ranges are all larger than node
         ret = OB_SUCCESS;
@@ -312,7 +302,6 @@ int ObIndexBlockTreeTraverser::inner_node_traverse(const ObMicroIndexInfo *micro
       break;
     } else if (OB_FAIL(context_->next_range())) {
       if (ret != OB_ITER_END) {
-        LOG_WARN("Fail to advance context", KR(ret), KPC(context_));
       } else {
         ret = OB_SUCCESS;
       }
@@ -381,7 +370,6 @@ int ObIndexBlockTreeTraverser::PathNodeCaches::get(const int64_t level,
 
     if (micro_index_info == nullptr) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Must load root node at first", KR(ret), K(level));
     } else if (cache_node->is_inited_) {
       cache_node->reuse();
     }
@@ -395,7 +383,6 @@ int ObIndexBlockTreeTraverser::PathNodeCaches::get(const int64_t level,
                    cache_node->is_inited_
                        ? cache_node->context_.open(cache_node->micro_data_, micro_index_info)
                        : cache_node->context_.init(cache_node->micro_data_, micro_index_info, traverser))) {
-      LOG_WARN("Fail to init root node context", KR(ret), K(cache_node->micro_data_));
     } else if (OB_FAIL(
                    cache_node->key_.assign(ObMicroBlockCacheKey(*micro_index_info)))) {
     } else {
@@ -423,10 +410,8 @@ int ObIndexBlockTreeTraverser::PathNodeCaches::prefetch(const ObMicroIndexInfo &
 
   if (OB_ISNULL(cache)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Fail to get block cache because of null", KR(ret), KP(cache));
   } else if (OB_FAIL(cache->get_cache_block(key, micro_handle.cache_handle_))) {
     if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
-      LOG_WARN("Fail to get cache block", KR(ret));
     } else {
       ret = OB_SUCCESS;
     }
@@ -472,7 +457,6 @@ int ObIndexBlockTreeTraverser::TreeNodeContext::init(const ObMicroBlockData &blo
 
   if (OB_UNLIKELY(!traverser.is_inited())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Invalid traverser", KR(ret));
   } else if (OB_FAIL(scanner_.init(traverser.get_read_info()->get_datum_utils(),
                                    allocator_,
                                    query_flag,
@@ -511,7 +495,6 @@ int ObIndexBlockTreeTraverser::TreeNodeContext::locate_range(const ObDatumRange 
 
   if (OB_FAIL(scanner_.locate_range(range, true, true))) {
     if (ret != OB_BEYOND_THE_RANGE) {
-      LOG_WARN("Fail to locate range", KR(ret), K(range));
     }
   } else if (OB_FAIL(scanner_.get_index_row_count(index_row_count))) {
   }
@@ -539,10 +522,8 @@ int ObMultiRangeRowEstimateContext::init(const ObIArray<ObPairStoreAndDatumRange
   // push all range's reference to range info array
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("Init estimate context twice", KR(ret));
   } else if (OB_UNLIKELY(ranges.empty() || range_precision > 100 || range_precision <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument for context", KR(ret), K(ranges), K(range_precision));
   } else if (OB_FAIL(ranges_.reserve(ranges.count()))) {
   } else {
     curr_range_idx_ = 0;
@@ -752,7 +733,6 @@ int ObMultiRangeSplitContext::try_to_add_new_split_range(int64_t &curr_row_count
   if (curr_row_count < split_row_limit_) {
   } else if (OB_ISNULL(info = split_ranges_->alloc_place_holder())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Fail to alloc place holder", KR(ret));
   } else {
     int cmp_ret = 0;
     info->row_count_ = curr_row_count;
@@ -852,7 +832,6 @@ int ObMultiRangeSplitContext::next_range()
         ObSplitRangeInfo *info = nullptr;
         if (OB_ISNULL(info = split_ranges_->alloc_place_holder())) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("Fail to alloc place holder", KR(ret));
         } else if (OB_FAIL(curr_range.range_->get_end_key().deep_copy(info->split_rowkey_,
                                                                       *allocator_))) {
         } else {
@@ -906,14 +885,12 @@ int ObPartitionMultiRangeSpliter::get_tables(ObTableStoreIterator &table_iter,
 
     if (OB_FAIL(table_iter.get_next(table))) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("Fail to get next table", KR(ret), K(table_iter));
       } else {
         ret = OB_SUCCESS;
         break;
       }
     } else if (OB_ISNULL(table)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Fail to get valid table", KR(ret), K(table_iter));
     } else if (table->is_major_sstable()) {
       major_size = static_cast<ObSSTable *>(table)->get_occupy_size();
       last_major_sstable = table;
@@ -953,7 +930,6 @@ int ObPartitionMultiRangeSpliter::fast_build_range_array(
 
   if (OB_UNLIKELY(expected_task_cnt > ranges.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to build single range array", KR(ret), K(ranges));
   } else if (OB_FAIL(multi_range_split_array.reserve(expected_task_cnt))) {
   } else {
     ObSEArray<ObRange, 4> one_task_ranges;
@@ -992,12 +968,6 @@ int ObPartitionMultiRangeSpliter::fast_build_range_array(
     if (OB_FAIL(ret)) {
     } else if (!one_task_ranges.empty() || multi_range_split_array.count() != expected_task_cnt) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Fail to fast build range array",
-               KR(ret),
-               K(multi_range_split_array),
-               K(expected_task_cnt),
-               K(ranges),
-               K(one_task_ranges));
     }
   }
 
@@ -1020,7 +990,6 @@ int ObPartitionMultiRangeSpliter::transform_to_datum_range_and_sort(
     ObPairStoreAndDatumRange *range = nullptr;
     if (OB_ISNULL(range = sorted_ranges.alloc_place_holder())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Fail to alloc place holder for datum range", KR(ret));
     } else if (OB_FAIL(range->datum_range_.from_range(ranges.at(i), allocator))) {
     } else {
       range->origin_store_range_ = &ranges.at(i);
@@ -1046,10 +1015,8 @@ int ObPartitionMultiRangeSpliterHelper::init(ObIAllocator &allocator,
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("Fail to init spliter helper", KR(ret));
   } else if (OB_UNLIKELY(!read_info.is_valid() || ranges.empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid read info or ranges", KR(ret), K(ranges), K(read_info));
   } else {
     allocator_ = &allocator;
     read_info_ = &read_info;
@@ -1115,7 +1082,6 @@ int ObPartitionMultiRangeSpliterHelper::construct_range(const ObDatumRowkey &sta
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init spliter helper", KR(ret));
   } else if (OB_FAIL(deepcopy_rowkey(start_key,
                                      for_compaction,
                                      const_cast<ObRange &>(range).get_start_key()))) {
@@ -1148,10 +1114,8 @@ int ObPartitionMultiRangeSpliterHelper::construct_and_push_range(
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init spliter helper", KR(ret));
   } else if (OB_ISNULL(start_key) || OB_ISNULL(end_key)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Invalid start key or end key", KR(ret), KPC(start_key), KPC(end_key));
   } else if (OB_FAIL(start_key->equal(*end_key, read_info_->get_datum_utils(), is_equal))) {
   } else if (is_equal && !(flag.inclusive_start() && flag.inclusive_end())) {
     // empty range
@@ -1243,7 +1207,6 @@ int ObPartitionMultiRangeSpliter::split_ranges_for_sstable(
 
   if (OB_ISNULL(iter = heap_element_iters.alloc_place_holder())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Fail to alloc place holder", KR(ret));
   } else if (OB_FAIL(row_estimate_context.init(
                  sorted_ranges, read_info, /* need_sort */ false, range_precision))) {
   } else if (OB_FAIL(traverser.init(sstable, read_info))) {
@@ -1284,7 +1247,6 @@ int ObPartitionMultiRangeSpliter::split_ranges_for_memtable(
 
   if (OB_ISNULL(iter = heap_element_iters.alloc_place_holder())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Fail to alloc place holder", KR(ret));
   } 
 
   // step 1. estimate rows
@@ -1341,7 +1303,6 @@ int ObPartitionMultiRangeSpliter::split_ranges_for_memtable(
 
         if (OB_ISNULL(info = iter->get_split_ranges().alloc_place_holder())) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("Fail to alloc place holder", KR(ret));
         } else if (OB_FAIL(info->split_rowkey_.from_rowkey(
                        store_ranges.at(j).get_end_key().get_rowkey(), allocator))) {
         } else {
@@ -1372,7 +1333,6 @@ int ObPartitionMultiRangeSpliter::build_heap(
     ObSplitRangeHeapElement element;
     if (OB_FAIL(iter.get_next(element))) {
       if (ret != OB_ITER_END) {
-        LOG_WARN("Fail to get next element", KR(ret));
       } else {
         ret = OB_SUCCESS;
       }
@@ -1426,7 +1386,6 @@ int ObPartitionMultiRangeSpliter::do_task_split_algorithm(
               start_key, end_key, flag, for_compaction, one_task_ranges))) {
       } else if (!one_task_ranges.empty() && OB_FAIL(multi_range_split_array.push_back(one_task_ranges))) {
         // if there are lots of multi-version same rowkey, the one_task_ranges may be empty
-        LOG_WARN("Fail to push back one task ranges", KR(ret));
       } else {
         total_row_count -= curr_task_rows_sum;
 
@@ -1485,7 +1444,6 @@ int ObPartitionMultiRangeSpliter::do_task_split_algorithm(
     } else if (OB_FAIL(heap.pop())) {
     } else if (OB_FAIL(element.iter_->get_next(new_element))) {
       if (ret != OB_ITER_END) {
-        LOG_WARN("Fail to get next element in iter", KR(ret), K(element));
       } else {
         ret = OB_SUCCESS;
       }
@@ -1498,7 +1456,6 @@ int ObPartitionMultiRangeSpliter::do_task_split_algorithm(
     if (OB_FAIL(helper.construct_and_push_range(
             start_key, end_key, flag, for_compaction, one_task_ranges))) {
     } else if (!one_task_ranges.empty() && OB_FAIL(multi_range_split_array.push_back(one_task_ranges))) {
-      LOG_WARN("Fail to push back one task ranges", KR(ret));
     }
   }
 
@@ -1591,11 +1548,6 @@ int ObPartitionMultiRangeSpliter::get_multi_range_size(const ObIArray<ObStoreRan
   if (OB_UNLIKELY(!index_read_info.is_valid() || range_precision < 0 || range_precision > 100
                   || max_time <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to get multi range size",
-             KR(ret),
-             K(index_read_info),
-             K(range_precision),
-             K(max_time));
   } else if (ranges.empty()) {
     // do nothing
   } else if (tables.empty()) {
@@ -1633,11 +1585,6 @@ int ObPartitionMultiRangeSpliter::get_multi_ranges_row_count(const ObIArray<ObSt
   if (OB_UNLIKELY(!index_read_info.is_valid() || range_precision < 0 || range_precision > 100
                   || max_time <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to get multi ranges row count",
-             KR(ret),
-             K(index_read_info),
-             K(range_precision),
-             K(max_time));
   } else if (FALSE_IT(recalc_range_precision(ranges, range_precision))) {
   } else if (OB_FAIL(get_tables(table_iter, tables))) {
   } else if (ranges.empty()) {
@@ -1674,7 +1621,6 @@ int ObPartitionMultiRangeSpliter::get_multi_range_size(const ObIArray<ObStoreRan
 
   if (OB_UNLIKELY(0 == table_iter.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to get split multi ranges", KR(ret), K(table_iter));
   } else if (FALSE_IT(recalc_range_precision(ranges, range_precision))) {
   } else if (OB_FAIL(get_tables(table_iter, tables))) {
   } else if (OB_FAIL(get_multi_range_size(
@@ -1811,11 +1757,6 @@ int ObPartitionMultiRangeSpliter::get_split_multi_ranges(
   if (OB_UNLIKELY(expected_task_count <= 0 || max_time <= 0 || range_precision < 0
                   || range_precision > 100)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to get split multi ranges",
-             KR(ret),
-             K(expected_task_count),
-             K(range_precision),
-             K(max_time));
   } else if (FALSE_IT(recalc_range_precision(ranges, range_precision))) {
   } else if (ranges.empty()) {
     // do nothing
@@ -1868,7 +1809,6 @@ int ObPartitionMultiRangeSpliter::get_split_multi_ranges(
 
   if (OB_UNLIKELY(0 == table_iter.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to get split multi ranges", KR(ret), K(table_iter));
   } else if (FALSE_IT(recalc_range_precision(ranges, range_precision))) {
   } else if (OB_FAIL(get_tables(table_iter, tables))) {
   } else if (OB_FAIL(get_split_multi_ranges(ranges,

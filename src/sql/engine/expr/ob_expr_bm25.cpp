@@ -39,7 +39,6 @@ int ObExprBM25::calc_result_typeN(
 
   if (OB_UNLIKELY(param_num != expected_param_num)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("BM25 expr should have correct parameters", K(ret), K(param_num), K(expected_param_num));
   } else {
     types[TOKEN_DOC_CNT_PARAM_IDX].set_calc_type(ObIntType);
     types[TOTAL_DOC_CNT_PARAM_IDX].set_calc_type(ObIntType);
@@ -83,9 +82,6 @@ int ObExprBM25::eval_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, ObD
       || doc_length_datum->is_null() || token_weight_datum->is_null()
       || avg_doc_token_cnt_datum->is_null() || related_token_cnt_datum->is_null())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null datum", K(ret), KPC(token_doc_cnt_datum), KPC(total_doc_cnt_datum),
-        KPC(doc_length_datum), KPC(token_weight_datum), KPC(avg_doc_token_cnt_datum),
-        KPC(related_token_cnt_datum));
   } else {
     const int64_t token_doc_cnt = token_doc_cnt_datum->get_int();
     const int64_t total_doc_cnt = total_doc_cnt_datum->get_int();
@@ -123,7 +119,6 @@ int ObExprBM25::eval_batch_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ct
   } else if (OB_UNLIKELY(token_doc_cnt_datum.at(0)->is_null() || total_doc_cnt_datum.at(0)->is_null()
       || token_weight_datum.at(0)->is_null() || avg_doc_token_cnt_datum.at(0)->is_null())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null datum", K(ret), KPC(token_weight_datum.at(0)), KPC(avg_doc_token_cnt_datum.at(0)));
   } else {
     const int64_t token_doc_cnt = token_doc_cnt_datum.at(0)->get_int();
     const int64_t total_doc_cnt = total_doc_cnt_datum.at(0)->get_int();
@@ -134,7 +129,6 @@ int ObExprBM25::eval_batch_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ct
     for (int64_t i = 0; OB_SUCC(ret) && i < size; ++i) {
       if (OB_UNLIKELY(doc_length_datum.at(i)->is_null() || related_token_cnt_datum.at(i)->is_null())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null datum", K(ret), KPC(doc_length_datum.at(i)), KPC(related_token_cnt_datum.at(i)));
       } else if (!skip.contain(i) && !eval_flags.at(i)) {
         const int64_t related_token_cnt = related_token_cnt_datum.at(i)->get_uint();
         const uint64_t doc_token_cnt = doc_length_datum.at(i)->get_uint();

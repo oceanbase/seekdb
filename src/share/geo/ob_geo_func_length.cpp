@@ -33,7 +33,6 @@ static int eval_length_without_strategy(const ObGeometry *g, double &result)
   const GeoType *geo_condidate = reinterpret_cast<const GeoType *>(const_cast<char *>(g->val()));
   if (OB_ISNULL(geo_condidate)) {
     ret = OB_ERR_GIS_INVALID_DATA;
-    LOG_WARN("invalid null geometry", K(ret));
   } else {
     result = bg::length(*geo_condidate);
   }
@@ -49,7 +48,6 @@ static int eval_length_with_strategy(
   const GeoType *geo_condidate = reinterpret_cast<const GeoType *>(const_cast<char *>(g->val()));
   if (OB_ISNULL(srs) || OB_ISNULL(geo_condidate)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("geography srs or geometry is null", K(ret), K(srs), K(geo_condidate));
   } else {
     bg::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
     bg::strategy::distance::andoyer<bg::srs::spheroid<double>> m_geographic_ll_la_aa_strategy(

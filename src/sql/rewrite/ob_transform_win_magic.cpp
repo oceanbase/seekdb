@@ -49,7 +49,6 @@ int ObTransformWinMagic::transform_one_stmt(common::ObIArray<ObParentDMLStmt> &p
   SMART_VARS_2((ObStmtCompareContext, context), (ObStmtMapInfo, map_info)) {
     if (OB_ISNULL(stmt) || OB_ISNULL(stmt->get_query_ctx())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("stmt is null", K(ret), K(stmt));
     } else if (OB_FAIL(get_view_to_trans(stmt, drill_down_idx, roll_up_idx, context, map_info, trans_tables))) {
     } else if (drill_down_idx == -1 || roll_up_idx == -2) {
       // no valid item to do trans
@@ -70,7 +69,6 @@ int ObTransformWinMagic::check_hint_valid(ObDMLStmt &stmt, TableItem &table, boo
     LOG_TRACE("check win magic hint is null", K(is_valid), K(table), K(stmt.get_stmt_hint()));
   } else if (OB_ISNULL(query_hint = stmt.get_stmt_hint().query_hint_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(query_hint));
   } else {
     is_valid = hint->enable_win_magic(query_hint->cs_type_, table);
   }
@@ -88,7 +86,6 @@ int ObTransformWinMagic::construct_transform_hint(ObDMLStmt &stmt, void *trans_p
       OB_ISNULL(win_magic_tables = static_cast<ObIArray<single_or_joined_table>*>(trans_params)) ||
       OB_UNLIKELY(win_magic_tables->count() < 2)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(ctx_), K(win_magic_tables));
   } else if (OB_FAIL(ObQueryHint::create_hint(ctx_->allocator_, T_WIN_MAGIC, hint))) {
   } else if (OB_FAIL(ctx_->outline_trans_hints_.push_back(hint))) {
   } else if (OB_FAIL(ctx_->add_used_trans_hint(get_hint(stmt.get_stmt_hint())))) {
@@ -100,7 +97,6 @@ int ObTransformWinMagic::construct_transform_hint(ObDMLStmt &stmt, void *trans_p
         TableItem *table = win_magic_tables->at(i).at(j);
         if (OB_ISNULL(table)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret));
         } else if (OB_FAIL(hint->get_tb_name_list().push_back(ObTableInHint(*table)))) {
         }
       }
@@ -117,21 +113,18 @@ int ObTransformWinMagic::construct_trans_table(const ObDMLStmt *stmt,
   ObSEArray<TableItem *, 4> trans_table;
   if (OB_ISNULL(stmt) || OB_ISNULL(table)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (table->is_joined_table()) {
     const JoinedTable *joined_table = static_cast<const JoinedTable *>(table);
     for (int64_t i = 0; OB_SUCC(ret) && i < joined_table->single_table_ids_.count(); ++i) {
       TableItem *table = stmt->get_table_item_by_id(joined_table->single_table_ids_.at(i));
       if (OB_ISNULL(table)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(trans_table.push_back(table))) {
       }
     }
   } else if (OB_FAIL(trans_table.push_back(const_cast<TableItem *>(table)))) {
   }
   if (OB_SUCC(ret) && OB_FAIL(trans_basic_tables.push_back(trans_table))) {
-    LOG_WARN("failed to push back trans tables", K(ret));
   }
   return ret;
 }
@@ -144,19 +137,16 @@ int ObTransformWinMagic::construct_trans_tables(const ObDMLStmt *stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < trans_tables.count(); ++i) {
       int64_t idx;
       const TableItem *table_item = NULL;
       if (OB_ISNULL(trans_tables.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(stmt->get_table_item_idx(trans_tables.at(i), idx))) {
       } else if (OB_LIKELY(idx >= 0 && idx < trans_stmt->get_table_size()) &&
                  OB_ISNULL(table_item = trans_stmt->get_table_item(idx))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("table item is null", K(ret));
       } else if (OB_FAIL(construct_trans_table(stmt,
                                                table_item,
                                                trans_basic_tables))) {
@@ -202,7 +192,6 @@ int ObTransformWinMagic::do_transform(common::ObIArray<ObParentDMLStmt> &parent_
   if (OB_ISNULL(stmt) || OB_ISNULL(stmt->get_query_ctx()) || OB_ISNULL(ctx_) ||
       OB_ISNULL(ctx_->stmt_factory_) || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt or stmt ctx is null", K(ret));
   } else if (NULL != myhint && myhint->is_disable_hint()) {
   } else if (OB_FAIL(try_trans_helper.fill_helper(stmt->get_query_ctx()))) {
   } else if (OB_FAIL(ObTransformUtils::deep_copy_stmt(*ctx_->stmt_factory_,
@@ -268,7 +257,6 @@ int ObTransformWinMagic::do_transform_from_type(ObDMLStmt *&stmt,
       OB_ISNULL(drill_down_table = main_stmt->get_table_item(main_stmt->get_from_item(drill_down_idx))) ||
       OB_ISNULL(drill_down_stmt = drill_down_table->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is null", K(ret), K(stmt), K(drill_down_table), K(drill_down_stmt));
   } else if (roll_up_idx == -1) {
     roll_up_stmt = main_stmt;
     match_main = true;
@@ -337,12 +325,10 @@ int ObTransformWinMagic::create_window_function(ObAggFunRawExpr *agg_expr,
   if (OB_ISNULL(ctx_) || OB_ISNULL(expr_factory = ctx_->expr_factory_) ||
       OB_ISNULL(ctx_->session_info_) || OB_ISNULL(agg_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", K(ret), K(ctx_), K(expr_factory), K(agg_expr));
   } else if (OB_FAIL(expr_factory->create_raw_expr(T_WINDOW_FUNCTION,
                                                    win_expr))) {
   } else if (OB_ISNULL(win_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", K(ret), K(win_expr));
   } else if (OB_FAIL(win_expr->set_partition_exprs(partition_exprs))) {
   } else {
     ObItemType func_type = agg_expr->get_expr_type();
@@ -373,7 +359,6 @@ int ObTransformWinMagic::check_view_table_basic(ObSelectStmt *stmt, bool &is_val
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is null", K(ret));
     //roll up stmt should have coarser granularity.
   } else if (stmt->has_limit()
             || stmt->has_having()
@@ -398,7 +383,6 @@ int ObTransformWinMagic::check_view_valid_to_trans(ObSelectStmt *view, ObStmtMap
   ObSEArray<ObRawExpr *, 4> lossless_conditions;
   if (OB_ISNULL(view)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", K(ret));
   }
   // for select * from t1 a, t1 b, (select * from t1 c) v where ...
   // table c should match which table? a or b ?
@@ -441,16 +425,12 @@ int ObTransformWinMagic::sanity_check_and_init(ObDMLStmt *stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt) || OB_ISNULL(view)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", K(ret));
   } else if (view->get_from_item_size() != map_info.from_map_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("from item size does not match to from map count", K(ret));
   } else if (view->get_condition_size() != map_info.cond_map_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("condtition size does not match to cond map count", K(ret));
   } else if (view->get_table_size() != map_info.table_map_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table size does not match to table map count", K(ret));
   } else if (OB_FAIL(context.init(view, stmt, map_info, nullptr))) {
   }
   return ret;
@@ -472,7 +452,6 @@ int ObTransformWinMagic::get_view_to_trans(ObDMLStmt *&stmt,
   roll_up_idx = -2; //-1 means main stmt
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", K(ret));
   }
   // compare generated_table with stmt
   for (int64_t i = 0; OB_SUCC(ret) && drill_down_idx == -1 && i < stmt->get_from_item_size(); i++) {
@@ -483,13 +462,11 @@ int ObTransformWinMagic::get_view_to_trans(ObDMLStmt *&stmt,
       //do nothing
     } else if (OB_ISNULL(rewrite_table = stmt->get_table_item_by_id(stmt->get_from_item(i).table_id_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("view stmt is null", K(ret));
     } else if (rewrite_table->is_generated_table()) {
       rewrite_view = rewrite_table->ref_query_;
       OPT_TRACE("try to transform view:", rewrite_table);
       if (OB_ISNULL(rewrite_view)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("view stmt is null", K(ret));
       } else if (OB_FAIL(check_view_table_basic(rewrite_view, is_valid))) {
       } else if (!is_valid) {
         //do nothing
@@ -517,13 +494,11 @@ int ObTransformWinMagic::get_view_to_trans(ObDMLStmt *&stmt,
     TableItem *drill_down_table = NULL;
     if (OB_ISNULL(drill_down_table = stmt->get_table_item(stmt->get_from_item(i)))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("view stmt is null", K(ret));
     } else if (drill_down_table->is_generated_table()) {
       drill_down_view = drill_down_table->ref_query_;
       bool is_valid = true;
       if (OB_ISNULL(drill_down_view)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("view stmt is null", K(ret));
       } else if (OB_FAIL(check_view_table_basic(drill_down_view, is_valid))) {
       } else if (is_valid) {
         for (int64_t j = 0; OB_SUCC(ret) && drill_down_idx == -1 && j < stmt->get_from_item_size(); j++) {
@@ -534,12 +509,10 @@ int ObTransformWinMagic::get_view_to_trans(ObDMLStmt *&stmt,
             //do nothing
           } else if (OB_ISNULL(roll_up_table = stmt->get_table_item(stmt->get_from_item(j)))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("view stmt is null", K(ret));
           } else if (roll_up_table->is_generated_table()) {
             roll_up_view = roll_up_table->ref_query_;
             if (OB_ISNULL(roll_up_view)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("view stmt is null", K(ret));
             } else if (OB_FAIL(check_view_table_basic(roll_up_view, is_valid))) {
             } else if (!is_valid) {
               //do nothing
@@ -583,12 +556,10 @@ int ObTransformWinMagic::check_mode_and_agg_type(ObSelectStmt *stmt, bool &is_va
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < stmt->get_aggr_item_size(); ++i) {
       if (OB_ISNULL(stmt->get_aggr_item(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("aggregation expr is null", K(ret));
       } else if (stmt->get_aggr_item(i)->get_expr_type() == T_FUN_COUNT) {
         is_valid = false;
       }
@@ -610,7 +581,6 @@ int ObTransformWinMagic::get_reverse_map(ObIArray<int64_t> &map, ObIArray<int64_
         //do nothing
       } else if (OB_UNLIKELY(map.at(i) >= size || map.at(i) < 0)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("out of range", K(ret));
       } else {
         reverse_map.at(map.at(i)) = i;
       }
@@ -638,7 +608,6 @@ int ObTransformWinMagic::check_stmt_and_view(ObDMLStmt *stmt,
   is_valid = true;
   if (OB_ISNULL(stmt) || OB_ISNULL(rewrite_table) || OB_ISNULL(rewrite_view = rewrite_table->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", K(ret));
   } else if (OB_FAIL(check_hint_valid(*stmt, *rewrite_table, is_valid))) {
   } else if (!is_valid) {
     OPT_TRACE("hint reject transform");
@@ -650,7 +619,6 @@ int ObTransformWinMagic::check_stmt_and_view(ObDMLStmt *stmt,
       //do nothing 
     } else if (OB_ISNULL(table = stmt->get_table_item(map_info.table_map_.at(k)))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table item is null", K(ret));
     } else if (OB_FAIL(tables.push_back(table))) {
     } else if (OB_FAIL(tables_id.add_member(map_info.table_map_.at(k) + 1))) {
     } else if (OB_FAIL(check_hint_valid(*stmt, *table, is_valid))) {
@@ -660,20 +628,15 @@ int ObTransformWinMagic::check_stmt_and_view(ObDMLStmt *stmt,
     ObRawExpr *expr = stmt->get_condition_exprs().at(i);
     if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expr is null", K(ret));
     } else if (expr->get_expr_type() == T_OP_EQ) {
       if (expr->get_param_count() < 0) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("param count not expected", K(ret));
       } else if (OB_ISNULL(expr->get_param_expr(0)) || OB_ISNULL(expr->get_param_expr(1))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expr is null", K(ret));
       } else if (expr->get_param_expr(0)->get_relation_ids().is_subset(tables_id) &&
                  OB_FAIL(column_exprs.push_back(expr->get_param_expr(0)))) {
-        LOG_WARN("push back item failed", K(ret));
       } else if (expr->get_param_expr(1)->get_relation_ids().is_subset(tables_id) &&
                  OB_FAIL(column_exprs.push_back(expr->get_param_expr(1)))) {
-        LOG_WARN("push back item failed", K(ret));
       }
     }
   }
@@ -733,7 +696,6 @@ int ObTransformWinMagic::check_view_and_view(ObDMLStmt *main_stmt,
       || OB_ISNULL(drill_down_view = drill_down_table->ref_query_) 
       || OB_ISNULL(roll_up_view = roll_up_table->ref_query_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("pointer is null", K(ret));
   // drill map roll => roll map drill
   } else if (!is_valid) {
     //do nothing
@@ -779,7 +741,6 @@ int ObTransformWinMagic::check_view_and_view(ObDMLStmt *main_stmt,
     ObRawExpr *expr = roll_up_view->get_select_item(i).expr_;
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("expr is null", K(ret));
     } else if (!expr->has_flag(CNT_AGG) && !expr->has_flag(CNT_COLUMN)) { // T_FUN_AVG is ok
       is_valid = false;
     }
@@ -812,7 +773,6 @@ int ObTransformWinMagic::check_view_and_view(ObDMLStmt *main_stmt,
   if (OB_SUCC(ret) && is_valid) {
     if (OB_FAIL(trans_tables.push_back(drill_down_table)) ||
         OB_FAIL(trans_tables.push_back(roll_up_table))) {
-      LOG_WARN("push back failed", K(ret));
     }
   }
   return ret;
@@ -822,18 +782,15 @@ int ObTransformWinMagic::remove_dup_condition(ObDMLStmt *stmt) {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", K(ret));
   }
   ObSEArray<ObRawExpr *, 4> new_conditions;
   for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_condition_size(); i++) {
     ObRawExpr *expr = stmt->get_condition_expr(i);
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("expr is null", K(ret));
     } else if (expr->get_expr_type() == T_OP_EQ) {
       if (expr->get_param_count() < 2) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("equal op expr's child less than 2", K(ret));
       } else if (!expr->get_param_expr(0)->same_as(*expr->get_param_expr(1))) {
         if (OB_FAIL(new_conditions.push_back(expr))) {
         }
@@ -847,7 +804,6 @@ int ObTransformWinMagic::remove_dup_condition(ObDMLStmt *stmt) {
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(stmt->get_condition_exprs().assign(new_conditions))) {
-    LOG_WARN("assign exprs failed", K(ret));
   }
   return ret;
 }
@@ -866,7 +822,6 @@ int ObTransformWinMagic::check_outer_stmt_conditions(ObDMLStmt *stmt,
   EqualSets equal_sets;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", K(ret));
   } else if (roll_group_exprs.count() > drill_group_exprs.count() ||
              roll_group_exprs.count() != map.count()) {
     is_valid = false;
@@ -898,7 +853,6 @@ int ObTransformWinMagic::check_expr_in_group(ObRawExpr *expr,
 
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && !found_match && i < group_exprs.count(); ++i) {
@@ -924,7 +878,6 @@ int ObTransformWinMagic::check_expr_in_group(ObRawExpr *expr,
       for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < expr->get_param_count(); ++i) {
         if (OB_ISNULL(expr->get_param_expr(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("expr child is null", K(ret));
         } else if (OB_FAIL(SMART_CALL(check_expr_in_group(expr->get_param_expr(i), 
                                                           group_exprs, is_valid)))) {
         }
@@ -957,7 +910,6 @@ int ObTransformWinMagic::check_select_expr_validity(ObSelectStmt &subquery, bool
   for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < subquery.get_select_item_size(); ++i) {
     if (OB_ISNULL(subquery.get_select_item(i).expr_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("select expr is null", K(ret));
     } else if (subquery.get_select_item(i).expr_->has_flag(CNT_AGG)) {
       found_agg = true;
     }
@@ -978,7 +930,6 @@ int ObTransformWinMagic::check_select_expr_validity(ObSelectStmt &subquery, bool
   for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < subquery.get_aggr_item_size(); ++i) {
     if (OB_ISNULL(subquery.get_aggr_item(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("aggregation expr is null", K(ret));
     } else if (subquery.get_aggr_item(i)->is_param_distinct()) {
       is_valid = false;
     } else if (subquery.get_aggr_item(i)->get_expr_type() != T_FUN_MIN &&
@@ -1016,7 +967,6 @@ int ObTransformWinMagic::adjust_column_and_table(ObDMLStmt *main_stmt,
   if (OB_ISNULL(main_stmt) || OB_ISNULL(view) || 
       OB_ISNULL(view_stmt = view->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", K(ret), K(main_stmt), K(view), K(view_stmt));
   }
 
   //remove mapped semi info from main stmt
@@ -1029,11 +979,9 @@ int ObTransformWinMagic::adjust_column_and_table(ObDMLStmt *main_stmt,
     } else if (OB_UNLIKELY(idx < 0 || idx >= main_stmt->get_semi_info_size()) ||
                OB_ISNULL(semi = main_stmt->get_semi_infos().at(idx))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("semi info is null", K(ret), K(idx), K(semi));
     } else if (OB_FAIL(rm_semi_infos.push_back(semi))) {
     } else if (OB_ISNULL(right_table = main_stmt->get_table_item_by_id(semi->right_table_id_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("right table is null", K(ret), K(semi->right_table_id_));
     } else if (OB_FAIL(rm_semi_right_tables.push_back(right_table))) {
     } else if (OB_FAIL(rm_semi_right_table_ids.push_back(semi->right_table_id_))) {
     }
@@ -1052,7 +1000,6 @@ int ObTransformWinMagic::adjust_column_and_table(ObDMLStmt *main_stmt,
     } else if (OB_UNLIKELY(idx < 0 || idx >= main_stmt->get_table_size()) ||
                OB_ISNULL(table = main_stmt->get_table_item(idx))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("index is invalid", K(ret), K(idx), K(table));
     } else if (ObOptimizerUtil::find_item(rm_semi_right_tables, table)) {
       // After removing the semi join information from the main statement, 
       // the corresponding right table of the semi join will no longer be accessible 
@@ -1085,7 +1032,6 @@ int ObTransformWinMagic::adjust_column_and_table(ObDMLStmt *main_stmt,
     TableItem *view_table = view_tables.at(i);
     if (OB_ISNULL(main_table)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table item is null", K(ret));
     } else if (OB_FAIL(ObTransformUtils::merge_table_items(view_stmt, 
                                                            view_table, 
                                                            main_table, 
@@ -1103,7 +1049,6 @@ int ObTransformWinMagic::adjust_column_and_table(ObDMLStmt *main_stmt,
     int64_t from_idx = map_info.from_map_.at(i);
     if (from_idx != OB_INVALID_ID && 
         OB_FAIL(rm_from_items.push_back(main_stmt->get_from_item(from_idx)))) {
-      LOG_WARN("failed to push back from item", K(ret));
     }
   }
   
@@ -1126,7 +1071,6 @@ int ObTransformWinMagic::adjust_column_and_table(ObDMLStmt *main_stmt,
       int64_t idx = -1;
       if (OB_ISNULL(table_infos.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("table info is null", K(ret));
       } else if (!ObOptimizerUtil::find_item(main_table_ids,
                                              table_infos.at(i)->table_id_,
                                              &idx)) {
@@ -1175,7 +1119,6 @@ int ObTransformWinMagic::adjust_column_and_table(ObDMLStmt *main_stmt,
     ObRawExpr *is_not_null = NULL;
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("gourp by expr is null", K(ret));
     } else if (OB_FAIL(ObTransformUtils::add_is_not_null(ctx_, expr, is_not_null))) {
     } else if (OB_FAIL(is_not_null_exprs.push_back(is_not_null))) {
     } else if (OB_FAIL(append(view_stmt->get_condition_exprs(), is_not_null_exprs))) {
@@ -1218,7 +1161,6 @@ int ObTransformWinMagic::adjust_agg_to_win(ObSelectStmt *view_stmt)
     if (OB_FAIL(append(aggr_exprs, view_stmt->get_aggr_items()))) {
     } else if (OB_UNLIKELY(aggr_exprs.count() != view_stmt->get_window_func_exprs().count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected aggr and winfun count", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < view_stmt->get_window_func_exprs().count(); i ++) {
       ObRawExpr *expr = view_stmt->get_window_func_exprs().at(i);
@@ -1228,7 +1170,6 @@ int ObTransformWinMagic::adjust_agg_to_win(ObSelectStmt *view_stmt)
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(view_stmt->replace_relation_exprs(aggr_exprs, win_exprs))) {
-      LOG_WARN("failed to replace relation expr", K(ret));
     }
   }
   return ret;
@@ -1257,7 +1198,6 @@ int ObTransformWinMagic::adjust_view_for_trans(ObDMLStmt *main_stmt,
       OB_ISNULL(drill_down_stmt = drill_down_table->ref_query_) ||
       OB_ISNULL(roll_up_stmt = roll_up_table->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", K(ret));
   } else if (OB_FAIL(ObTransformUtils::replace_with_empty_view(ctx_,
                                                                main_stmt,
                                                                transed_view_table,
@@ -1270,7 +1210,6 @@ int ObTransformWinMagic::adjust_view_for_trans(ObDMLStmt *main_stmt,
              OB_ISNULL(transed_view_table->ref_query_) ||
              OB_UNLIKELY(transed_view_table->ref_query_->get_table_size() != 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("transed view table is null", K(ret), K(transed_view_table));
   } else {
     drill_down_table = transed_view_table->ref_query_->get_table_item(0);
   }
@@ -1281,11 +1220,9 @@ int ObTransformWinMagic::adjust_view_for_trans(ObDMLStmt *main_stmt,
     ObSEArray<PartExprItem, 4> part_exprs;
     if (OB_ISNULL(table = roll_up_stmt->get_table_item(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table item is null", K(ret));
     } else if (OB_FAIL(ObTransformUtils::add_table_item(drill_down_stmt, table))) {
     } else if (OB_FAIL(main_stmt->get_part_expr_items(table->table_id_, part_exprs))) {
     } else if (!part_exprs.empty() && OB_FAIL(drill_down_stmt->set_part_expr_items(part_exprs))) {
-      LOG_WARN("failed to set part expr item", K(ret));
     } else if (OB_FAIL(main_stmt->remove_part_expr_items(table->table_id_))) {
     }
   }
@@ -1295,7 +1232,6 @@ int ObTransformWinMagic::adjust_view_for_trans(ObDMLStmt *main_stmt,
     if (OB_ISNULL(roll_up_stmt->get_column_item(i)) ||
         OB_ISNULL(roll_up_stmt->get_column_item(i)->get_expr())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("column or column expr is null", K(ret));
     } else if (OB_FAIL(drill_down_stmt->add_column_item(roll_up_stmt->get_column_items().at(i)))) {
     }
   }
@@ -1306,7 +1242,6 @@ int ObTransformWinMagic::adjust_view_for_trans(ObDMLStmt *main_stmt,
   for (int64_t i = 0; OB_SUCC(ret) && i < roll_up_stmt->get_aggr_item_size(); i++) {
     if (OB_ISNULL(roll_up_stmt->get_aggr_item(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("agg expr is null", K(ret));
     } else {
       bool found = false;
       for(int64_t j = 0; OB_SUCC(ret) && !found && j < drill_down_stmt->get_aggr_item_size(); j++) {
@@ -1314,7 +1249,6 @@ int ObTransformWinMagic::adjust_view_for_trans(ObDMLStmt *main_stmt,
           found = true;
           if (OB_FAIL(agg_in_roll.push_back(roll_up_stmt->get_aggr_item(i))) ||
               OB_FAIL(agg_in_drill.push_back(drill_down_stmt->get_aggr_item(j)))) {
-            LOG_WARN("push back expr into array failed", K(ret));
           } else if (OB_FAIL(append(map_info.equal_param_map_, context.equal_param_info_))) {
           } else {
             context.equal_param_info_.reset();
@@ -1337,7 +1271,6 @@ int ObTransformWinMagic::adjust_view_for_trans(ObDMLStmt *main_stmt,
     } else if (OB_ISNULL(table_in_roll_up = roll_up_stmt->get_table_item(map_info.table_map_.at(i))) ||
                OB_ISNULL(table_in_drill_down = drill_down_stmt->get_table_item(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table item is null", K(ret));
     } else if (OB_FAIL(ObTransformUtils::merge_table_items(drill_down_stmt, 
                                                            table_in_drill_down,
                                                            table_in_roll_up,
@@ -1418,7 +1351,6 @@ int ObTransformWinMagic::change_agg_to_win_func(ObDMLStmt *main_stmt,
   if (OB_ISNULL(main_stmt) || OB_ISNULL(roll_up_stmt) || OB_ISNULL(drill_down_stmt) 
       || OB_ISNULL(transed_view_table) || OB_ISNULL(transed_stmt = transed_view_table->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", K(ret));
   } else if (OB_FAIL(drill_down_stmt->get_select_exprs(drill_select_exprs))) {
   }
 
@@ -1431,7 +1363,6 @@ int ObTransformWinMagic::change_agg_to_win_func(ObDMLStmt *main_stmt,
       if (OB_ISNULL(group_expr_in_roll = roll_up_stmt->get_group_exprs().at(i)) || 
           OB_ISNULL(group_expr_in_drill = drill_down_stmt->get_group_exprs().at(j))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("group expr is null", K(ret));
       } else if (group_expr_in_drill->same_as(*group_expr_in_roll, &context)) {
         found = true;
         int64_t idx = -1;
@@ -1451,7 +1382,6 @@ int ObTransformWinMagic::change_agg_to_win_func(ObDMLStmt *main_stmt,
     ObRawExpr *is_not_null = NULL;
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("gourp by expr is null", K(ret));
     } else if (OB_FAIL(ObTransformUtils::add_is_not_null(ctx_, expr, is_not_null))) {
     } else if (OB_FAIL(is_not_null_exprs.push_back(is_not_null))) {
     } else if (OB_FAIL(append(transed_stmt->get_condition_exprs(), is_not_null_exprs))) {
@@ -1464,7 +1394,6 @@ int ObTransformWinMagic::change_agg_to_win_func(ObDMLStmt *main_stmt,
 
     if (OB_ISNULL(agg_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("expr is null", K(ret));
     }
 
     for (int64_t j = 0; OB_SUCC(ret) && sel_idx == -1 && j < drill_down_stmt->get_select_item_size(); j++) {
@@ -1479,15 +1408,12 @@ int ObTransformWinMagic::change_agg_to_win_func(ObDMLStmt *main_stmt,
     ColumnItem *col_in_transed = NULL;
     if (sel_idx == -1) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("select item idx is out of range", K(ret));
     } else if (OB_ISNULL(col_in_transed = transed_stmt->get_column_item_by_id(
                                                         transed_stmt->get_table_item(0)->table_id_, 
                                                         sel_idx + OB_APP_MIN_COLUMN_ID))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("can not find the corresponding select item", K(ret), K(sel_idx));
     } else if (OB_ISNULL(col_expr = col_in_transed->get_expr())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("col expr is null", K(ret));
     } else if (has_exist_in_array(old_col, col_expr)) {
       // do nothing
     } else if (FALSE_IT(type = (agg_expr->get_expr_type() == T_FUN_COUNT ? 
@@ -1496,11 +1422,9 @@ int ObTransformWinMagic::change_agg_to_win_func(ObDMLStmt *main_stmt,
     } else if (OB_FAIL(ObTransformUtils::create_aggr_expr(ctx_, type, new_agg_expr, col_expr))) {
     } else if (OB_ISNULL(new_agg_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("new agg expr is null", K(ret));
     } else if (OB_FAIL(create_window_function(new_agg_expr, partition_exprs, win_expr))) {
     } else if (OB_ISNULL(win_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("win function expr is null", K(ret));
     } else if (OB_FAIL(transed_stmt->add_window_func_expr(win_expr))) {
     } else if (FALSE_IT(cast_win_expr = win_expr)) {
     } else if (OB_FAIL(ObTransformUtils::add_cast_for_replace_if_need(
@@ -1533,7 +1457,6 @@ int ObTransformWinMagic::adjust_win_after_group_by(ObDMLStmt *main_stmt,
       || OB_ISNULL(roll_up_stmt = roll_up_table->ref_query_) 
       || OB_ISNULL(transed_stmt = transed_view_table->ref_query_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", K(ret));
   } else if (OB_FAIL(change_agg_to_win_func(main_stmt, roll_up_stmt, drill_down_stmt, transed_view_table, 
                                      map_info, context, 
                                      old_agg, new_win))) {
@@ -1545,7 +1468,6 @@ int ObTransformWinMagic::adjust_win_after_group_by(ObDMLStmt *main_stmt,
                                                                         OB_APP_MIN_COLUMN_ID).expr_;
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("expr is null", K(ret));
     } else if (OB_FAIL(ObTransformUtils::replace_expr(old_agg, new_win, expr))) {
     }
     ObSEArray<ObRawExpr *, 4> col_exprs;
@@ -1576,7 +1498,6 @@ int ObTransformWinMagic::check_join_push_down(ObDMLStmt *main_stmt,
   if (OB_ISNULL(main_stmt) || OB_ISNULL(view_table) || OB_ISNULL(view_table->ref_query_) ||
       OB_ISNULL(push_down_table)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("view table ref query is null", K(ret));
   } else if (view_table->ref_query_->has_group_by() ||
              view_table->ref_query_->has_limit() ||
              view_table->ref_query_->has_rollup() ||
@@ -1656,7 +1577,6 @@ int ObTransformWinMagic::check_join_push_down(ObDMLStmt *main_stmt,
         } else if (OB_ISNULL(expr->get_param_expr(0)) ||
                   OB_ISNULL(expr->get_param_expr(1))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("expr's param is null", K(ret));
         } else if (OB_FAIL(ObRawExprUtils::extract_column_exprs(expr, column_exprs))) {
         } else {
           bool found = true;
@@ -1704,7 +1624,6 @@ int ObTransformWinMagic::try_to_push_down_join(ObDMLStmt *&main_stmt)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(main_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < main_stmt->get_from_item_size(); i++) {
     FromItem view_from = main_stmt->get_from_item(i);
@@ -1713,7 +1632,6 @@ int ObTransformWinMagic::try_to_push_down_join(ObDMLStmt *&main_stmt)
       //do nothing
     } else if (OB_ISNULL(view_table = main_stmt->get_table_item_by_id(view_from.table_id_))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get table item by id failed", K(ret), K(view_from), K(i));
     } else if (!view_table->is_generated_table()) {
       //do nothing
     } else {
@@ -1728,7 +1646,6 @@ int ObTransformWinMagic::try_to_push_down_join(ObDMLStmt *&main_stmt)
           //do nothing
         } else if (OB_ISNULL(push_down_table = main_stmt->get_table_item_by_id(push_down_from.table_id_))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get table item by id failed", K(ret), K(i), K(j));
           //do nothing
         } else if (OB_FAIL(check_join_push_down(main_stmt, view_table, 
                                                 push_down_table, cond_to_push_down, is_valid))) {
@@ -1761,7 +1678,6 @@ int ObTransformWinMagic::push_down_join(ObDMLStmt *main_stmt,
   if (OB_ISNULL(main_stmt) || OB_ISNULL(view_table) || OB_ISNULL(push_down_table) || 
       OB_ISNULL(view_stmt = view_table->ref_query_) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", K(ret));
   } else if (OB_FAIL(ObTransformUtils::extract_query_ref_expr(cond_to_push_down, query_refs))) {
   } else if (OB_FAIL(main_stmt->get_view_output(*view_table, view_select_list, view_column_list))) {
   } else {
@@ -1780,13 +1696,11 @@ int ObTransformWinMagic::push_down_join(ObDMLStmt *main_stmt,
   } else if (OB_FAIL(view_stmt->add_from_item(push_down_table->table_id_))) {
   } else if (OB_FAIL(main_stmt->get_part_expr_items(push_down_table->table_id_, part_exprs))) {
   } else if (!part_exprs.empty() && OB_FAIL(view_stmt->set_part_expr_items(part_exprs))) {
-    LOG_WARN("failed to set part expr item", K(ret));
   } else if (OB_FAIL(main_stmt->remove_part_expr_items(push_down_table->table_id_))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < main_stmt->get_column_size(); i++) {
     if (OB_ISNULL(main_stmt->get_column_item(i)) || OB_ISNULL(main_stmt->get_column_item(i)->expr_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("column is null", K(ret));
     } else if (main_stmt->get_column_item(i)->expr_->get_table_id() == push_down_table->table_id_) {
       if (OB_FAIL(view_stmt->add_column_item(*main_stmt->get_column_item(i)))) {
       } else if (OB_FAIL(old_column.push_back(main_stmt->get_column_item(i)->expr_))) {

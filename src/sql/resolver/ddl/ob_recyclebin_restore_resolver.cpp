@@ -32,7 +32,6 @@ int ObRecyclebinRestoreTableResolver::resolve(const ParseNode &parser_tree)
   ObRecyclebinRestoreTableStmt *restore_table_from_recyclebin_stmt = NULL;
   if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_info is null", K(ret));
   } else if (T_RECYCLEBIN_RESTORE_TABLE != parser_tree.type_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid parse tree",  K(parser_tree.type_));
@@ -54,7 +53,6 @@ int ObRecyclebinRestoreTableResolver::resolve(const ParseNode &parser_tree)
     ObString origin_db_name;
     if (OB_ISNULL(table_node)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table_node should not be null", K(ret));
     } else if (OB_FAIL(resolve_table_relation_node(table_node,
                                                    origin_table_name,
                                                    origin_db_name,
@@ -89,10 +87,8 @@ int ObRecyclebinRestoreTableResolver::resolve(const ParseNode &parser_tree)
       if (origin_db_name.empty()) {
         if (OB_ISNULL(session_info_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("session_info_ is null", K(ret));
         } else if (OB_UNLIKELY(session_info_->get_database_name().empty())) {
           ret = OB_ERR_NO_DB_SELECTED;
-          LOG_WARN("database not specified", K(ret));
         } else {
           restore_table_from_recyclebin_stmt->set_origin_db_name(
               session_info_->get_database_name());
@@ -116,7 +112,6 @@ int ObRecyclebinRestoreDatabaseResolver::resolve(const ParseNode &parser_tree)
   int32_t max_database_name_length = OB_MAX_DATABASE_NAME_LENGTH;
   if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session_info is null", K(ret));
   } else if (T_RECYCLEBIN_RESTORE_DATABASE != parser_tree.type_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid parse tree",  K(parser_tree.type_));
@@ -136,7 +131,6 @@ int ObRecyclebinRestoreDatabaseResolver::resolve(const ParseNode &parser_tree)
     ParseNode *origin_dbname_node = parser_tree.children_[ORIGIN_DB_NODE];
     if (OB_ISNULL(origin_dbname_node) || OB_UNLIKELY(T_IDENT != origin_dbname_node->type_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid parse tree", K(ret));
     } else if (OB_UNLIKELY(
             static_cast<int32_t>(origin_dbname_node->str_len_) > max_database_name_length)) {
       ret = OB_ERR_TOO_LONG_IDENT;
@@ -154,7 +148,6 @@ int ObRecyclebinRestoreDatabaseResolver::resolve(const ParseNode &parser_tree)
       ObString new_db_name;
       if (OB_UNLIKELY(T_IDENT != new_db_node->type_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid parse tree", K(ret));
       } else if (OB_UNLIKELY(
           static_cast<int32_t>(new_db_node->str_len_) > max_database_name_length)) {
         ret = OB_ERR_TOO_LONG_IDENT;

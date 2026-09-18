@@ -48,7 +48,6 @@ int ObLogUpdate::get_plan_item_info(PlanText &plan_text,
       const IndexDMLInfo *info = get_index_dml_infos().at(k);
       if (OB_ISNULL(info)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("info is null", K(ret));
       } else if (!info->is_primary_index_ && !is_pdml()) {
         continue;
       } else {
@@ -101,7 +100,6 @@ int ObLogUpdate::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_plan())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get unexpected null", K(get_plan()), K(ret));
   } else if (OB_FAIL(ObLogDelUpd::inner_get_op_exprs(all_exprs, true))) {
   }
   return ret;
@@ -121,7 +119,6 @@ int ObLogUpdate::est_cost()
   ObLogicalOperator *child = NULL;
   if (OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child is null", K(ret));
   } else {
     double op_cost = 0.0;
     if (OB_FAIL(inner_est_cost(child->get_card(), op_cost))) {
@@ -140,7 +137,6 @@ int ObLogUpdate::do_re_est_cost(EstimateCostInfo &param, double &card, double &o
   ObLogicalOperator *child = NULL;
   if (OB_ISNULL(child = get_child(ObLogicalOperator::first_child))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(child), K(ret));
   } else {
     double child_card = child->get_card();
     double child_cost = child->get_cost();
@@ -159,7 +155,6 @@ int ObLogUpdate::inner_est_cost(double child_card, double &op_cost)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(get_plan()));
   } else if (OB_FAIL(inner_est_cost(get_plan()->get_optimizer_context(),
                                     get_index_dml_infos(),
                                     child_card,
@@ -181,7 +176,6 @@ int ObLogUpdate::inner_est_cost(const ObOptimizerContext &opt_ctx,
   if (OB_UNLIKELY(cost_info.index_count_ <= 0) ||
       OB_ISNULL(update_dml_info = index_infos.at(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(update_dml_info));
   } else if (OB_FALSE_IT(cost_info.constraint_count_ = update_dml_info->ck_cst_exprs_.count())) {
   } else if (OB_FAIL(ObOptEstCost::cost_update(cost_info, op_cost, opt_ctx))) {
   }
@@ -195,7 +189,6 @@ int ObLogUpdate::generate_part_id_expr_for_foreign_key(ObIArray<ObRawExpr*> &all
     IndexDMLInfo *dml_info = get_index_dml_infos().at(i);
     if (OB_ISNULL(dml_info)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("dml info is null", K(ret), K(dml_info));
     } else if (!dml_info->is_primary_index_) {
       // do nothing
     } else if (OB_FAIL(generate_fk_lookup_part_id_expr(*dml_info))) {
@@ -211,7 +204,6 @@ int ObLogUpdate::generate_multi_part_partition_id_expr()
   for (int64_t i = 0; OB_SUCC(ret) && i < get_index_dml_infos().count(); ++i) {
     if (OB_ISNULL(get_index_dml_infos().at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("index dml info is null", K(ret));
     } else if (OB_FAIL(generate_old_calc_partid_expr(*get_index_dml_infos().at(i)))) {
     } else if (OB_FAIL(generate_update_new_calc_partid_expr(*get_index_dml_infos().at(i)))) {
     } else { /*do nothing*/ }
@@ -227,7 +219,6 @@ int ObLogUpdate::op_is_update_pk_with_dop(bool &is_update)
     IndexDMLInfo *index_dml_info = index_dml_infos_.at(0);
     if (OB_ISNULL(index_dml_info)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected nullptr", K(ret), K(index_dml_infos_));
     } else if (index_dml_info->is_update_primary_key_ && (is_pdml() || get_das_dop() > 1)) {
       is_update = true;
     }

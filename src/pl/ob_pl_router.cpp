@@ -87,7 +87,6 @@ int ObPLRouter::check_error_in_resolve(int code)
       }
     }
     default: {
-      LOG_WARN("resolver error", K(ret), K(code));
       // do not recover the ret intentionaly.
       ObPL::insert_error_msg(code);
     }
@@ -220,12 +219,10 @@ int ObPLRouter::simple_resolve(ObPLFunctionAST &func_ast)
                           routine_info_.get_tg_timing_event());
     if (OB_ISNULL(parse_tree)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("pl body is NULL", K(parse_tree), K(ret));
     } else if (OB_FAIL(resolver.init(func_ast))) {
     } else if (OB_FAIL(resolver.resolve(parse_tree, func_ast))) {
     } else if (func_ast.is_function() && !func_ast.has_return()) {
       ret = OB_ERR_NO_RETURN_IN_FUNCTION;
-      LOG_WARN("mysql func need return. ", K(ret));
       LOG_USER_ERROR(OB_ERR_NO_RETURN_IN_FUNCTION, func_ast.get_name().length(), 
                                                    func_ast.get_name().ptr());
     } else { /*do nothing*/ }
@@ -249,7 +246,6 @@ int ObPLRouter::analyze_stmt(const ObPLStmt *stmt, ObString &route_sql)
       const ObPLCursor *cursor = open_stmt->get_cursor();
       if (OB_ISNULL(cursor)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("cursor is NULL", K(cursor), K(ret));
       } else {
         if (OB_FAIL(check_route_sql(&cursor->get_value(), route_sql))) {
         }

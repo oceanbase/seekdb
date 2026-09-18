@@ -111,7 +111,6 @@ void ObUncompactInfo::add_table(const uint64_t table_id)
   SpinWLockGuard w_guard(diagnose_rw_lock_);
   if (table_ids_.count() < DEBUG_INFO_CNT
       && OB_FAIL(table_ids_.push_back(table_id))) {
-    LOG_WARN("fail to push_back", KR(ret), K(table_id));
   }
 }
 
@@ -121,7 +120,6 @@ void ObUncompactInfo::add_skip_verify_table(const uint64_t table_id)
   // no need lock, just print log, not show in virtual_table
   if (skip_verify_tables_.count() < SKIP_VERIFY_TABLE_CNT
       && OB_FAIL(skip_verify_tables_.push_back(table_id))) {
-    LOG_WARN("fail to push_back", KR(ret), K(table_id));
   }
 }
 
@@ -131,7 +129,6 @@ void ObUncompactInfo::add_tablet(const share::ObTabletRuntimeInfo &tablet_info)
   SpinWLockGuard w_guard(diagnose_rw_lock_);
   if (tablets_.count() < DEBUG_INFO_CNT
       && OB_FAIL(tablets_.push_back(tablet_info))) {
-    LOG_WARN("fail to push_back", KR(ret), K(tablet_info));
   }
 }
 
@@ -143,7 +140,6 @@ void ObUncompactInfo::add_tablet(const common::ObTabletID &tablet_id)
   SpinWLockGuard w_guard(diagnose_rw_lock_);
   if (tablets_.count() < DEBUG_INFO_CNT
       && OB_FAIL(tablets_.push_back(fake_tablet_info))) {
-    LOG_WARN("fail to push_back", KR(ret), K(fake_tablet_info));
   }
 }
 

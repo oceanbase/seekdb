@@ -82,7 +82,6 @@ int ObExprInnerInfoColsColumnDefPrinter::eval_column_def(const ObExpr &expr, ObE
     const ObTableSchema *table_schema = NULL;
     if (OB_ISNULL(GCTX.schema_service_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get schema_service", K(ret));
     } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_table_schema( table_id->get_int(), table_schema))) {
     } else if (OB_ISNULL(table_schema)) {
@@ -91,7 +90,6 @@ int ObExprInnerInfoColsColumnDefPrinter::eval_column_def(const ObExpr &expr, ObE
       const ObColumnSchemaV2 *tmp_column_schema = NULL;
       if (OB_ISNULL(tmp_column_schema = table_schema->get_column_schema(column_id->get_int()))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to get column schema", K(ret), K(table_schema->get_table_id()), K(column_id->get_int()));
       } else {
         ObEvalCtx::TempAllocGuard alloc_guard(ctx);
         ObIAllocator &calc_alloc = alloc_guard.get_allocator();
@@ -104,7 +102,6 @@ int ObExprInnerInfoColsColumnDefPrinter::eval_column_def(const ObExpr &expr, ObE
           int64_t pos = 0;
           if (OB_UNLIKELY(NULL == (buf = static_cast<char*>(calc_alloc.alloc(buf_len))))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("fail to allocate memory", K(ret));
           } else if (def_obj.is_bit()) {
             if (OB_FAIL(def_obj.print_varchar_literal(buf, buf_len, pos, TZ_INFO(ctx.exec_ctx_.get_my_session())))) {
             } else {
@@ -418,11 +415,8 @@ int ObExprInnerInfoColsPrivPrinter::eval_column_priv(const ObExpr &expr, ObEvalC
     } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_session_priv_info(session_priv))) {
     } else if (OB_UNLIKELY(!session_priv.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN( "session priv is invalid", 
-                  "user_id", session_priv.user_id_, K(ret));
     } else if (OB_ISNULL(buf = static_cast<char*>(calc_alloc.alloc(buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN( "fail to allocate memory", K(ret));
     } else {
       const common::ObIArray<uint64_t> &enable_role_id_array = ctx.exec_ctx_.get_my_session()->get_enable_role_array();
       ObNeedPriv need_priv(database_name->get_string(), table_name->get_string(),
@@ -542,7 +536,6 @@ int ObExprInnerInfoColsExtraPrinter::eval_column_extra(const ObExpr &expr, ObEva
         int64_t pos = 0;
         if (OB_UNLIKELY(NULL == (buf = static_cast<char*> (calc_alloc.alloc(buf_len))))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN( "fail to allocate memory", K(ret));
         } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "on update current_timestamp(%d)", scale))) {
         } else {
           extra = ObString(static_cast<int32_t>(pos), buf);
@@ -650,12 +643,10 @@ int ObExprInnerInfoColsDataTypePrinter::eval_column_data_type(const ObExpr &expr
     if (OB_UNLIKELY(NULL == (data_type_str = static_cast<char *>(calc_alloc.alloc(
                             OB_MAX_SYS_PARAM_NAME_LENGTH))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory", K(ret));
     } else if (!extended_type_info->is_null() && 0 != extended_type_info->get_string().length()
                && OB_FAIL(ObSchema::deserialize_string_array(extended_type_info->get_string().ptr(),
                                                              extended_type_info->get_string().length(),
                                                              pos, extended_infos, &calc_alloc))) {
-      LOG_WARN("failed to get extended infos", K(ret));
     } else if (OB_FAIL(ob_sql_type_str(data_type_str,
                                        OB_MAX_SYS_PARAM_NAME_LENGTH,
                                        static_cast<ObObjType> (data_type->get_int()),
@@ -759,12 +750,10 @@ int ObExprInnerInfoColsColumnTypePrinter::eval_column_column_type(const ObExpr &
     if (OB_UNLIKELY(NULL == (data_type_str = static_cast<char *>(calc_alloc.alloc(
                             OB_MAX_SYS_PARAM_NAME_LENGTH))))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory", K(ret));
     } else if (!extended_type_info->is_null() && 0 != extended_type_info->get_string().length()
                && OB_FAIL(ObSchema::deserialize_string_array(extended_type_info->get_string().ptr(),
                                                              extended_type_info->get_string().length(),
                                                              pos, extended_infos, &calc_alloc))) {
-      LOG_WARN("failed to get extended infos", K(ret));
     } else {
       int64_t pos = 0;
       const ObLengthSemantics default_length_semantics = ctx.exec_ctx_.get_my_session()->get_default_length_semantics();
@@ -784,7 +773,6 @@ int ObExprInnerInfoColsColumnTypePrinter::eval_column_column_type(const ObExpr &
           if (OB_UNLIKELY(NULL == (data_type_str = static_cast<char *>(calc_alloc.alloc(
                                   OB_MAX_EXTENDED_TYPE_INFO_LENGTH))))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("fail to alloc memory", K(ret));
           } else if (OB_FAIL(ob_sql_type_str(meta,
                                              accuracy,
                                              extended_infos,
@@ -794,7 +782,6 @@ int ObExprInnerInfoColsColumnTypePrinter::eval_column_column_type(const ObExpr &
                                              pos, sub_type, is_string_lob->get_int()))) {
           }
         } else {
-          LOG_WARN("fail to get column type str",K(ret));
         }
       }
       if (OB_SUCC(ret) && zero_fill->get_int()) {
@@ -872,7 +859,6 @@ int ObExprInnerInfoColsColumnKeyPrinter::eval_column_column_key(const ObExpr &ex
     const ObTableSchema *table_schema = NULL;
     if (OB_ISNULL(GCTX.schema_service_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get schema_service", K(ret));
     } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_table_schema( table_id->get_int(), table_schema))) {
     } else if (OB_ISNULL(table_schema)) {
@@ -898,7 +884,6 @@ int ObExprInnerInfoColsColumnKeyPrinter::eval_column_column_key(const ObExpr &ex
       if (OB_FAIL(ret)) {
       } else if (OB_ISNULL(column_schema = table_schema->get_column_schema(column_id->get_int()))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to get column schema", K(ret), K(table_schema->get_table_id()), K(column_id->get_int()));
       } else if (column_schema->is_original_rowkey_column() || column_schema->is_heap_table_primary_key_column()) {
         expr_datum.set_string("PRI");
       } else if (OB_FAIL(table_schema->

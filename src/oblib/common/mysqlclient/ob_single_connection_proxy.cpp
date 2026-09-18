@@ -39,7 +39,6 @@ int ObSingleConnectionProxy::connect(const int32_t group_id, ObISQLClient *sql_c
   int ret = OB_SUCCESS;
   if (NULL == sql_client || group_id < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(sql_client), K(group_id));
   } else if (NULL != sql_client_ || conn_.is_valid()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("transaction can only be started once", K_(sql_client), KP(conn_.get_ptr()));
@@ -47,7 +46,6 @@ int ObSingleConnectionProxy::connect(const int32_t group_id, ObISQLClient *sql_c
     if (OB_FAIL(sql_client->acquire_connection(conn_, group_id))) {
     } else if (!conn_.is_valid()) {
       ret = OB_INNER_STAT_ERROR;
-      LOG_WARN("connection can not be NULL", K(ret));
     } else {
       sql_client_ = sql_client;
     }
@@ -66,7 +64,6 @@ int ObSingleConnectionProxy::acquire_connection(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(sql_client_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("sql client is null", K(ret));
   } else {
     ret = sql_client_->acquire_connection(conn, group_id);
   }
@@ -87,7 +84,6 @@ int ObSingleConnectionProxy::read(ReadResult &res, const char *sql, const int32_
     if (ERR_LOCK_WAIT_TIMEOUT == ret) {
       LOG_INFO("execute query failed", K(ret), KCSTRING(sql), K_(conn));
     } else {
-      LOG_WARN("execute query failed", K(ret), KCSTRING(sql), K_(conn));
     }
   }
   ++statement_count_;
@@ -104,10 +100,8 @@ int ObSingleConnectionProxy::write(
     LOG_WARN("check inner stat failed");
   } else if (NULL == sql_client_) {
     ret = OB_INACTIVE_SQL_CLIENT;
-    LOG_WARN("sql_client_ is NULL", K(ret), KCSTRING(sql));
   } else if (OB_FAIL(conn_->execute_write(sql, affected_rows))) {
     errno_ = ret;
-    LOG_WARN("execute sql failed", K(ret), KCSTRING(sql), K_(conn));
   }
   ++statement_count_;
   return ret;

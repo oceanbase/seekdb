@@ -194,6 +194,7 @@ function configure_cmake
       "-DCMAKE_TOOLCHAIN_FILE=${ndk_home}/build/cmake/android.toolchain.cmake"
       -DANDROID_ABI=arm64-v8a
       -DANDROID_PLATFORM=android-28
+      -DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON
     )
   fi
 

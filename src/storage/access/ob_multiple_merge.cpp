@@ -116,7 +116,6 @@ int ObMultipleMerge::init(
     STORAGE_LOG(WARN, "Invalid argument", K(ret), K(param), K(context), K(get_table_param));
   } else if (OB_ISNULL(long_life_allocator_ = context.get_long_life_allocator())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Unexpected null long life allocator", K(ret));
   } else if (OB_FAIL(cur_row_.init(*long_life_allocator_, param.get_max_out_col_cnt()))) {
   } else if (OB_FAIL(unprojected_row_.init(*long_life_allocator_, param.get_out_col_cnt()))) {
   } else if (OB_FAIL(nop_pos_.init(*long_life_allocator_, param.get_max_out_col_cnt()))) {
@@ -127,9 +126,7 @@ int ObMultipleMerge::init(
                       *param.iter_param_.out_cols_project_)))) {
     if (OB_SUCCESS == ret) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("output expr is NULL or row2exprs_projector_ is NULL", K(ret), K(param));
     } else {
-      LOG_WARN("init row to expr projector failed", K(ret));
     }
   } else if (OB_FAIL(init_lob_reader(param.iter_param_, context))) {
   }
@@ -162,14 +159,11 @@ int ObMultipleMerge::init(
     } else if (OB_FAIL(prepare_read_tables())) {
     } else if (OB_ISNULL(skip_bit_ = to_bit_vector(long_life_allocator_->alloc(ObBitVector::memory_size(batch_size))))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Failed to alloc skip bit", K(ret), K(batch_size));
     } else if (OB_UNLIKELY(access_param_->iter_param_.need_truncate_filter()) &&
                OB_FAIL(prepare_truncate_filter())) {
-      LOG_WARN("failed to prepare truncate filter", K(ret));
     } else if (OB_FAIL(alloc_row_store(context, param))) {
     } else if (param.iter_param_.is_use_stmt_iter_pool() &&
         OB_FAIL(access_ctx_->alloc_iter_pool())) {
-      LOG_WARN("Failed to init iter pool", K(ret));
     } else if (FALSE_IT(stmt_iter_pool_ = access_ctx_->get_stmt_iter_pool())) {
     } else {
       skip_bit_->init(batch_size);
@@ -188,16 +182,11 @@ int ObMultipleMerge::build_extra_access_ctx()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_table_param_) || OB_ISNULL(access_ctx_) || OB_ISNULL(access_ctx_->stmt_allocator_) || OB_ISNULL(access_ctx_->store_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument for build_extra_access_ctx", KR(ret),
-        KP_(get_table_param), KP_(access_ctx),
-        KP(access_ctx_ ? access_ctx_->stmt_allocator_ : nullptr),
-        KP(access_ctx_ ? access_ctx_->store_ctx_ : nullptr));
   } else {
     const ObIArray<ObForkTabletInfo> *fork_infos = get_table_param_->tablet_iter_.get_fork_infos();
     const int64_t total_cnt = OB_NOT_NULL(fork_infos) ? fork_infos->count() : 0;
     if (0 == total_cnt) {
     } else if (!extra_access_ctx_.created() && OB_FAIL(extra_access_ctx_.create(total_cnt * 2, "EAccessCtx"))) {
-      LOG_WARN("failed to create extra_access_ctx map", KR(ret), K(total_cnt));
     } else {
       for (int64_t i = 0; OB_NOT_NULL(fork_infos) && OB_SUCC(ret) && i < fork_infos->count(); i++) {
         const ObForkTabletInfo &fork_info = fork_infos->at(i);
@@ -211,7 +200,6 @@ int ObMultipleMerge::build_extra_access_ctx()
           tmp_ret = OB_SUCCESS;
         } else if (OB_SUCCESS != tmp_ret) {
           ret = tmp_ret;
-          LOG_WARN("fail to get fork access ctx", KR(ret), K(fork_info));
         }
 
         if (OB_FAIL(ret)) {
@@ -222,7 +210,6 @@ int ObMultipleMerge::build_extra_access_ctx()
           fork_store_ctx = (ObStoreCtx*)access_ctx_->stmt_allocator_->alloc(sizeof(ObStoreCtx));
           if (OB_ISNULL(fork_ctx) || OB_ISNULL(fork_store_ctx)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("fail to alloc memory for fork access ctx", KR(ret), K(i), KP(fork_ctx), KP(fork_store_ctx));
           } else {
             new (fork_ctx) ObTableAccessContext();
             new (fork_store_ctx) ObStoreCtx();
@@ -272,8 +259,6 @@ int ObMultipleMerge::get_access_ctx(ObTabletID tablet_id, ObTableAccessContext *
       access_ctx = access_ctx_;
     } else {
       ret = tmp_ret;
-      LOG_WARN("get extra access_ctx failed", KR(ret), K(tablet_id), K(access_ctx_->tablet_id_),
-          KP(access_ctx), KP(&extra_access_ctx_), K(extra_access_ctx_.size()));
     }
   }
   return ret;
@@ -293,7 +278,6 @@ int ObMultipleMerge::switch_param(
   if (OB_FAIL(prepare_read_tables())) {
   } else if (OB_FAIL(init_lob_reader(param.iter_param_, context))) {
   } else if (OB_UNLIKELY(param.iter_param_.need_truncate_filter()) && OB_FAIL(prepare_truncate_filter())) {
-    LOG_WARN("failed to prepare truncate filter", K(ret));
   } else if (OB_FAIL(build_extra_access_ctx())) {
   }
   return ret;
@@ -310,7 +294,6 @@ int ObMultipleMerge::switch_table(
   get_table_param_ = &get_table_param;
   access_param_->iter_param_.set_tablet_handle(get_table_param.tablet_iter_.get_tablet_handle_ptr());
   if (OB_UNLIKELY(nullptr != block_row_store_ || nullptr != skip_bit_)) {
-    LOG_WARN("Unexpected using global iter pool state", K(ret), KP(block_row_store_));
   } else if (NULL != param.get_op() && (NULL == param.output_exprs_ || NULL == param.row2exprs_projector_
       || OB_FAIL(param.row2exprs_projector_->init(
               *param.output_exprs_,
@@ -318,9 +301,7 @@ int ObMultipleMerge::switch_table(
               *param.iter_param_.out_cols_project_)))) {
     if (OB_SUCCESS == ret) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("output expr is NULL or row2exprs_projector_ is NULL", K(ret), K(param));
     } else {
-      LOG_WARN("init row to expr projector failed", K(ret));
     }
   } else {
     need_padding_ = is_pad_char_to_full_length(context.sql_mode_);
@@ -348,11 +329,9 @@ int ObMultipleMerge::switch_table(
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(prepare_read_tables())) {
     } else if (OB_UNLIKELY(param.iter_param_.need_truncate_filter()) && OB_FAIL(prepare_truncate_filter())) {
-      LOG_WARN("failed to prepare truncate filter", K(ret));
     } else if (OB_FAIL(alloc_row_store(context, param))) {
     } else if (OB_ISNULL(skip_bit_ = to_bit_vector(access_ctx_->stmt_allocator_->alloc(ObBitVector::memory_size(batch_size))))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Failed to alloc skip bit", K(ret), K(batch_size));
     } else {
       skip_bit_->init(batch_size);
       access_ctx_->block_row_store_ = block_row_store_;
@@ -410,7 +389,6 @@ int ObMultipleMerge::save_curr_rowkey()
     if (ScanState::SINGLE_ROW == scan_state_) {
       if (OB_UNLIKELY(!is_unprojected_row_valid_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected projcted row status", K(ret), KPC(this));
       } else if (OB_FAIL(tmp_rowkey.assign(unprojected_row_.storage_datums_,
                                            access_param_->iter_param_.get_schema_rowkey_count()))) {
       } else {
@@ -418,17 +396,14 @@ int ObMultipleMerge::save_curr_rowkey()
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected scan state", K(ret), K_(scan_state));
     }
 
     if (OB_FAIL(ret)) {
     } else if (OB_UNLIKELY(!tmp_rowkey.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Invalid tmp rowkey", K(ret), K(tmp_rowkey), K_(scan_state));
     } else if (OB_FAIL(tmp_rowkey.deep_copy(curr_rowkey_, *access_ctx_->allocator_))) {
     } else if (OB_ISNULL(rowkey_col_descs = access_param_->iter_param_.get_out_col_descs())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected null out cols", K(ret));
     } else if (OB_FAIL(curr_rowkey_.prepare_memtable_readable(*rowkey_col_descs, *access_ctx_->allocator_))) {
     }
   }
@@ -455,7 +430,6 @@ int ObMultipleMerge::project_row(const ObDatumRow &unprojected_row,
     idx = nullptr == projector ? i : projector->at(i);
     if (OB_UNLIKELY(idx >= unprojected_row.get_column_count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected project idx", K(ret), K(unprojected_row), K(projected_row), KPC(projector));
     } else if (idx >= 0) {
       projected_row.storage_datums_[i] = unprojected_row.storage_datums_[idx];
     } else {
@@ -535,7 +509,6 @@ int ObMultipleMerge::get_next_row(ObDatumRow *&row)
         } else if (OB_FAIL(process_fuse_row(not_using_static_engine, unprojected_row_, row))) {
         } else if (OB_NOT_NULL(access_param_->get_op()) &&
             OB_FAIL(access_param_->get_op()->write_trans_info_datum(unprojected_row_))) {
-          LOG_WARN("write trans_info to expr datum failed", K(ret), K(unprojected_row_));
         } else if (nullptr != row) {
           if (OB_UNLIKELY(nullptr != group_by_cell_)) {
             if (OB_FAIL(group_by_cell_->copy_single_output_row(access_param_->get_op()->get_eval_ctx()))) {
@@ -572,7 +545,6 @@ int ObMultipleMerge::get_next_rows(int64_t &count, int64_t capacity)
     ObDatumRow *row = nullptr;
     if (OB_FAIL(get_next_aggregate_row(row))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("failed to get aggregate row", K(ret));
       }
     } else {
       count = 1;
@@ -583,12 +555,10 @@ int ObMultipleMerge::get_next_rows(int64_t &count, int64_t capacity)
     const int64_t size = min(capacity, access_param_->get_op()->get_batch_size());
     if (OB_ISNULL(access_param_->get_op())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected access param: null op", K(ret));
     } else if (FALSE_IT(eval_ctx = &access_param_->get_op()->get_eval_ctx())) {
     } else if (FALSE_IT(eval_ctx->reuse(size))) {
     } else if (OB_FAIL(get_next_row(row))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("failed to get single row", K(ret));
       }
     } else {
       count = 1;
@@ -614,15 +584,11 @@ int ObMultipleMerge::get_next_normal_rows(int64_t &count, int64_t capacity)
   bool do_pause = false;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("The ObMultipleMerge has not been inited, ", K(ret));
   } else if (OB_UNLIKELY(nullptr == access_param_->get_op()
                          || !access_param_->get_op()->is_vectorized()
                          || !access_param_->iter_param_.vectorized_enabled_
                          || nullptr == block_row_store_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect pushdown operator in vectorized", K(ret), K(access_param_->iter_param_.pd_storage_flag_),
-             K(access_param_->get_op()), K(access_param_->get_op()->is_vectorized()), KP(block_row_store_),
-             K(access_param_->iter_param_.vectorized_enabled_));
   } else if (OB_FAIL(refresh_table_on_demand())) {
   } else {
     ObVectorStore *vector_store = reinterpret_cast<ObVectorStore *>(block_row_store_);
@@ -660,8 +626,6 @@ int ObMultipleMerge::get_next_normal_rows(int64_t &count, int64_t capacity)
               ret = OB_ITER_END;
             } else if (OB_FAIL(inner_get_next_rows())) {
               if (OB_UNLIKELY(OB_PUSHDOWN_STATUS_CHANGED != ret && OB_ITER_END != ret)) {
-                LOG_WARN("fail to get next rows fast", K(ret), K_(is_unprojected_row_valid),
-                         K(tables_.count()), K(iters_.count()), KPC(vector_store), KPC_(access_param));
               } else {
                 ret = OB_SUCCESS;
                 scan_state_ = ScanState::SINGLE_ROW;
@@ -672,8 +636,6 @@ int ObMultipleMerge::get_next_normal_rows(int64_t &count, int64_t capacity)
           case ScanState::SINGLE_ROW: {
             if (OB_FAIL(inner_get_next_row(unprojected_row_))) {
               if (OB_UNLIKELY(OB_PUSHDOWN_STATUS_CHANGED != ret && OB_ITER_END != ret)) {
-                LOG_WARN("fail to inner get next row", K(ret), K_(is_unprojected_row_valid),
-                         K(tables_.count()), K(iters_.count()), KPC_(access_param));
               } else if (OB_PUSHDOWN_STATUS_CHANGED == ret) {
                 ret = OB_SUCCESS;
                 vector_store->set_end();
@@ -690,7 +652,6 @@ int ObMultipleMerge::get_next_normal_rows(int64_t &count, int64_t capacity)
 
             if (OB_FAIL(ret)) {
             } else if (need_handle_lob_columns(unprojected_row_) && OB_FAIL(handle_lob_before_fuse_row())) {
-              LOG_WARN("Fail to handle lobs", K(ret), KP(this));
             } else {
               // back to normal path
               ObDatumRow *out_row = nullptr;
@@ -736,16 +697,11 @@ int ObMultipleMerge::get_next_aggregate_row(ObDatumRow *&row)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("the ObMultipleMerge has not been inited, ", K(ret));
   } else if (OB_UNLIKELY(nullptr == block_row_store_ || access_param_->iter_param_.need_fill_group_idx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected aggregate pushdown status", K(ret),
-             K(access_param_->get_op()), KP(block_row_store_), K(access_param_->iter_param_.need_fill_group_idx()));
   } else if (OB_UNLIKELY(nullptr != access_ctx_->range_array_pos_ &&
              access_ctx_->range_array_pos_->count() > 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect aggregate pushdown status", K(ret),
-             K(access_ctx_->range_array_pos_->count()));
   } else {
     ObBlockBatchedRowStore *batch_row_store = static_cast<ObBlockBatchedRowStore *>(block_row_store_);
     if (OB_NOT_NULL(access_param_->get_op())) {
@@ -778,8 +734,6 @@ int ObMultipleMerge::get_next_aggregate_row(ObDatumRow *&row)
             if (OB_FAIL(ret)) {
             } else if (OB_FAIL(inner_get_next_rows())) {
               if (OB_UNLIKELY(OB_PUSHDOWN_STATUS_CHANGED != ret && OB_ITER_END != ret)) {
-                LOG_WARN("fail to get next aggregate rows fast", K(ret), K_(is_unprojected_row_valid),
-                         K(tables_.count()), K(iters_.count()), KPC_(access_param));
               } else {
                 // OB_ITER_END should use fuse to make sure no greater key in dynamic data
                 ret = OB_SUCCESS;
@@ -791,8 +745,6 @@ int ObMultipleMerge::get_next_aggregate_row(ObDatumRow *&row)
           case ScanState::SINGLE_ROW: {
             if (OB_FAIL(inner_get_next_row(unprojected_row_))) {
               if (OB_UNLIKELY(OB_PUSHDOWN_STATUS_CHANGED != ret && OB_ITER_END != ret)) {
-                LOG_WARN("fail to get next row", K(ret), K_(is_unprojected_row_valid),
-                         K(tables_.count()), K(iters_.count()), KPC_(access_param));
               } else if (OB_PUSHDOWN_STATUS_CHANGED == ret) {
                 ret = OB_SUCCESS;
                 scan_state_ = ScanState::BATCH;
@@ -804,7 +756,6 @@ int ObMultipleMerge::get_next_aggregate_row(ObDatumRow *&row)
 
             if (OB_FAIL(ret)) {
             } else if (need_handle_lob_columns(unprojected_row_) && OB_FAIL(handle_lob_before_fuse_row())) {
-              LOG_WARN("Fail to handle lobs", K(ret), KP(this));
             } else {
               ObDatumRow *out_row = nullptr;
               if (OB_FAIL(process_fuse_row(
@@ -836,7 +787,6 @@ int ObMultipleMerge::get_next_aggregate_row(ObDatumRow *&row)
       ObAggStoreBase *agg_store_base = static_cast<ObAggregatedStore *>(batch_row_store);
       if (OB_FAIL(agg_store_base->collect_aggregated_result())) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("fail to collect aggregate row", K(ret));
         }
       }
       batch_row_store->ObBlockBatchedRowStore::set_end();
@@ -919,7 +869,6 @@ int ObMultipleMerge::process_fuse_row(const bool not_using_static_engine,
                          cur_row_)
           : project2output_exprs(in_row, cur_row_))) {
   } else if (need_fill_default_ && nop_pos_.count() > 0 && OB_FAIL(fuse_default(cur_row_))) {
-    LOG_WARN("Fail to fuse default row, ", K(ret));
   } else if (!need_fill_default_ && !need_output_row_with_nop_ && nop_pos_.count() > 0) {
     // this is for sample scan on increment data, we only output one row if increment data
     // has all the column data needed by the sample scan
@@ -928,11 +877,8 @@ int ObMultipleMerge::process_fuse_row(const bool not_using_static_engine,
              && OB_NOT_NULL(access_ctx_->lob_locator_helper_)
              && access_ctx_->lob_locator_helper_->enable_lob_locator_v2() == false
              && OB_FAIL(fill_lob_locator(cur_row_))) {
-    LOG_WARN("fill lob locator v1 failed", K(ret));
   } else if (need_padding_ && OB_FAIL(pad_columns(cur_row_))) {
-    LOG_WARN("Fail to padding columns, ", K(ret));
   } else if (need_fill_virtual_columns_ && OB_FAIL(fill_virtual_columns(cur_row_))) {
-    LOG_WARN("Fail to fill virtual columns, ", K(ret));
   }
   if (OB_FAIL(ret)) {
   } else {
@@ -1060,7 +1006,6 @@ void ObMultipleMerge::reset_extra_access_ctx()
         ObIAllocator *allocator = access_ctx->stmt_allocator_;
         if (OB_ISNULL(allocator)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("extra access ctx has null stmt_allocator", K(ret), KP(access_ctx), KP_(access_ctx));
         } else {
           ObStoreCtx *store_ctx = access_ctx->store_ctx_;
           access_ctx->store_ctx_ = nullptr;
@@ -1132,7 +1077,6 @@ int ObMultipleMerge::open()
     STORAGE_LOG(WARN, "The ObMultipleMerge has not been inited, ", K(ret));
   } else if (OB_UNLIKELY(nullptr == access_param_ || nullptr == access_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null access param", K(ret), KP(access_ctx_), KP(access_ctx_));
   } else if (OB_FAIL(cur_row_.reserve(access_param_->get_max_out_col_cnt()))) {
   } else if (OB_FAIL(nop_pos_.init(*long_life_allocator_, access_param_->get_max_out_col_cnt()))) {
   } else if (FALSE_IT(set_base_version())) {
@@ -1146,10 +1090,8 @@ int ObMultipleMerge::open()
     access_ctx_->block_row_store_ = block_row_store_;
     ObMultipleMerge::reuse();
     if (nullptr != block_row_store_ && OB_FAIL(block_row_store_->open(access_param_->iter_param_))) {
-      LOG_WARN("fail to open block_row_store", K(ret));
     } else if (nullptr != stmt_iter_pool_ && 0 != iters_.count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected state, all the iters in iters_ have must be returned to stmt_iter_pool", K(ret), K(iters_.count()));
     } else {
       scan_cnt_ = 0;
     }
@@ -1164,14 +1106,11 @@ int ObMultipleMerge::alloc_row_store(ObTableAccessContext &context, const ObTabl
   if (OB_UNLIKELY((param.iter_param_.enable_pd_aggregate() || param.iter_param_.enable_pd_group_by()) &&
       (ObQRIterType::T_SINGLE_GET == get_type() || ObQRIterType::T_MULTI_GET == get_type()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected state, group by can not pushdown in get", K(ret), K(param.iter_param_), K(get_type()));
   } else if (OB_UNLIKELY(param.iter_param_.enable_pd_group_by() && context.query_flag_.is_reverse_scan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected state, group by can not pushdown in reverse scan", K(ret));
   } else if (param.iter_param_.enable_pd_aggregate()) {
     if (OB_ISNULL(buf = context.stmt_allocator_->alloc(sizeof(ObAggregatedStore)))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc aggregated store", K(ret));
     } else {
       block_row_store_ = new (buf) ObAggregatedStore(
           param.iter_param_.vectorized_enabled_ ? param.get_op()->get_batch_size() : AGGREGATE_STORE_BATCH_SIZE,
@@ -1182,7 +1121,6 @@ int ObMultipleMerge::alloc_row_store(ObTableAccessContext &context, const ObTabl
     if (param.iter_param_.vectorized_enabled_) {
       if (OB_ISNULL(buf = context.stmt_allocator_->alloc(sizeof(ObVectorStore)))) {
         ret = common::OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc vector store", K(ret));
       } else {
         block_row_store_ = new (buf) ObVectorStore(
             param.get_op()->get_batch_size(),
@@ -1206,7 +1144,6 @@ int ObMultipleMerge::alloc_row_store(ObTableAccessContext &context, const ObTabl
   if (OB_SUCC(ret) && param.iter_param_.enable_pd_group_by() && !param.iter_param_.vectorized_enabled_) {
     if (OB_ISNULL(buf = context.stmt_allocator_->alloc(sizeof(ObGroupByCell)))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc aggregated store", K(ret));
     } else if (FALSE_IT(group_by_cell_ = new (buf) ObGroupByCell(0, *context.stmt_allocator_))) {
     } else if (OB_FAIL(group_by_cell_->init_for_single_row(param, context, param.get_op()->get_eval_ctx()))) {
     }
@@ -1222,7 +1159,6 @@ int ObMultipleMerge::fuse_default(ObDatumRow &row)
   const ObIArray<ObColumnParam *> *out_cols_param = access_param_->iter_param_.get_col_params();
   if (OB_ISNULL(out_cols_param)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null cols param", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < nop_pos_.count(); ++i) {
     if (OB_FAIL(nop_pos_.get_nop_pos(i, pos))) {
@@ -1249,7 +1185,6 @@ int ObMultipleMerge::fuse_default(ObDatumRow &row)
                          access_param_->get_op()->get_eval_ctx().exec_ctx_,
                          def_cell, expr->obj_meta_, expr->obj_datum_map_,
                          lob_reader_.get_allocator(), datum))) {
-            LOG_WARN("adjust lob datum failed", K(ret), K(def_cell.get_meta()), K(expr->obj_meta_));
           } else {
             eval_info.evaluated_ = true;
           }
@@ -1291,7 +1226,6 @@ int ObMultipleMerge::pad_columns(ObDatumRow &row)
   const ObIArray<ObColumnParam *> *out_cols_param = access_param_->iter_param_.get_col_params();
   if (OB_ISNULL(out_cols_param)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null cols param", K(ret));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && NULL != padding_cols && i < padding_cols->count(); ++i) {
@@ -1309,7 +1243,6 @@ int ObMultipleMerge::pad_columns(ObDatumRow &row)
       } else {
         if (OB_ISNULL(access_param_->get_op())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Unexpected access param: null op", K(ret));
         } else if (OB_FAIL(pad_column(col_param->get_accuracy(), access_param_->get_op()->get_eval_ctx(), *e))) {
         }
       }
@@ -1336,7 +1269,6 @@ int ObMultipleMerge::fill_virtual_columns(ObDatumRow &row)
             const int64_t col_idx = access_param_->iter_param_.out_cols_project_->at(pos);
             if (OB_ISNULL(access_param_->get_op())) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("Unexpected access param: null op", K(ret));
             } else if (OB_FAIL(pad_column(access_param_->iter_param_.get_col_params()->at(col_idx)->get_accuracy(),
                                           access_param_->get_op()->get_eval_ctx(),
                                           *expr))) {
@@ -1354,7 +1286,6 @@ int ObMultipleMerge::check_filtered(const ObDatumRow &row, bool &filtered)
   int ret = OB_SUCCESS;
   ObSampleFilterExecutor *sample_executor = static_cast<ObSampleFilterExecutor *>(access_ctx_->get_sample_executor());
   if (nullptr != sample_executor && OB_FAIL(sample_executor->check_filtered_after_fuse(filtered))) {
-    LOG_WARN("Failed to check row filtered after fuse", K(ret), KPC(sample_executor));
   } else if (!filtered && NULL != access_param_->op_filters_ && !access_param_->op_filters_->empty()) {
     // Execute filter in sql static typing engine.
     // %row is already projected to output expressions for main table scan.
@@ -1365,7 +1296,6 @@ int ObMultipleMerge::check_filtered(const ObDatumRow &row, bool &filtered)
     ObTruncatePartitionFilter *truncate_filter = access_ctx_->get_truncate_part_filter();
     if (nullptr != truncate_filter && truncate_filter->is_normal_filter() &&
         OB_FAIL(truncate_filter->filter(unprojected_row_, filtered))) {
-      LOG_WARN("failed to do truncate filter", K(ret), KPC(truncate_filter));
     }
   }
   return ret;
@@ -1389,8 +1319,6 @@ int ObMultipleMerge::prepare_read_tables(bool refresh)
   const bool is_mds_query = access_param_->iter_param_.is_mds_query_;
   if (OB_UNLIKELY(NULL == get_table_param_ || !access_param_->is_valid() || NULL == access_ctx_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObMultipleMerge has not been inited", K(ret), K_(get_table_param), KP_(access_param),
-        KP_(access_ctx));
   } else if (is_mds_query) {
     ObTableStoreIterator *table_store_iter = get_table_param_->tablet_iter_.table_iter();
     table_store_iter->reset();
@@ -1406,7 +1334,6 @@ int ObMultipleMerge::prepare_read_tables(bool refresh)
     if (OB_UNLIKELY(get_table_param_->frozen_version_ != -1)) {
       if (!get_table_param_->sample_info_.is_no_sample()) {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("sample query does not support frozen_version", K(ret), K_(get_table_param), KP_(access_param));
       } else if (OB_FAIL(get_table_param_->tablet_iter_.refresh_read_tables_from_tablet(
           get_table_param_->frozen_version_,
           false/*allow_not_ready*/,
@@ -1434,7 +1361,6 @@ int ObMultipleMerge::prepare_mds_tables(bool refresh)
 
   if (OB_UNLIKELY(refresh)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("mds query does not support refresh table currently", K(ret), K(refresh), K_(access_param));
   } else {
     ObTabletTableIterator &tablet_iter = get_table_param_->tablet_iter_;
     int64_t snapshot_version = get_table_param_->frozen_version_;
@@ -1466,16 +1392,13 @@ int ObMultipleMerge::prepare_tables_from_iterator(
     bool need_table = true;
     if (OB_FAIL(table_iter.get_next(table_ptr))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("failed to get next tables", K(ret));
       }
     } else if (OB_ISNULL(table_ptr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table must not be null", K(ret), K(table_iter));
     } else if (FALSE_IT(major_table_version_ = table_ptr->is_major_sstable() ? table_ptr->get_snapshot_version() :
                                                                                major_table_version_)) {
     } else if (OB_UNLIKELY(table_ptr->is_major_sstable() && major_table_version_ <= 0)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected major sstable", K(ret), KPC(table_ptr));
     } else if (nullptr != sample_info && !sample_info->is_no_sample()) {
       need_table = false;
       if (SampleInfo::SAMPLE_ALL_DATA == sample_info->scope_) {
@@ -1508,7 +1431,6 @@ int ObMultipleMerge::prepare_tables_from_iterator(
   if (OB_SUCC(ret)) {
     if (tables_.count() > common::MAX_TABLE_CNT_IN_STORAGE) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected table cnt", K(ret), K(memtable_cnt), K(tables_.count()), K(table_iter), K(tables_));
     }
   }
   if (OB_SUCC(ret) && memtable_cnt == tables_.count()) {
@@ -1570,7 +1492,6 @@ int ObMultipleMerge::refresh_table_on_demand()
     } else if (OB_FAIL(reset_tables())) {
     } else if (OB_UNLIKELY(access_param_->iter_param_.need_truncate_filter()) &&
                OB_FAIL(prepare_truncate_filter())) {
-      LOG_WARN("failed to prepare truncate filter", K(ret));
     } else if (nullptr != block_row_store_ && FALSE_IT(block_row_store_->reuse())) {
     } else {
       refreshed = true;
@@ -1590,7 +1511,6 @@ int ObMultipleMerge::refresh_tablet_iter()
   ObLS *tenant_ls = nullptr;
   if (OB_UNLIKELY(!get_table_param_->tablet_iter_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("tablet iter is invalid", K(ret), K(get_table_param_->tablet_iter_));
   } else {
     // reset first, in case get_read_tables fail and rowkey_read_info_ become dangling
     access_param_->iter_param_.rowkey_read_info_ = nullptr;
@@ -1599,7 +1519,6 @@ int ObMultipleMerge::refresh_tablet_iter()
     const int64_t snapshot_version = generate_read_tables_version();
     if (OB_UNLIKELY(remain_timeout <= 0)) {
       ret = OB_TIMEOUT;
-      LOG_WARN("timeout reached", K(ret), K(tablet_id), K(remain_timeout));
     } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
     } else if (OB_FAIL(tenant_ls->get_tablet_svr()->get_read_tables(
         tablet_id,
@@ -1655,7 +1574,6 @@ int ObMultipleMerge::read_lob_columns_full_data(blocksstable::ObDatumRow &row)
     STORAGE_LOG(WARN, "ObLobDataReader not init", K(ret));
   } else if (OB_ISNULL(out_cols)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Unexpected null cols desc", K(ret));
   } else if (out_cols->count() != row.count_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Invalid col count", K(row), KPC(out_cols));

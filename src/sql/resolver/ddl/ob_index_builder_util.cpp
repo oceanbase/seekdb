@@ -72,7 +72,6 @@ int ObIndexBuilderUtil::add_column(
   int ret = OB_SUCCESS;
   if (NULL == data_column) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("data_column is null", KP(data_column), K(ret));
   } else if (OB_INVALID_INDEX != row_desc.get_idx(
         data_column->get_table_id(), data_column->get_column_id())) {
     if (is_index) {
@@ -84,7 +83,6 @@ int ObIndexBuilderUtil::add_column(
       ObColumnSchemaV2 *store_column_schema = table_schema.get_column_schema(data_column->get_column_id());
       if (OB_ISNULL(store_column_schema)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("existed store column schema is null", K(ret), KPC(data_column), K(table_schema));
       } else {
         store_column_schema->add_column_flag(USER_SPECIFIED_STORING_COLUMN_FLAG);
       }
@@ -143,7 +141,6 @@ int ObIndexBuilderUtil::add_column(
         }
         column.set_is_hidden(false);
         if (FAILEDx(column.set_orig_default_value(default_value))) {
-          LOG_WARN("set orig default value failed", K(ret));
         } else if (OB_FAIL(column.set_cur_default_value(default_value, column.is_default_expr_v2_column()))) {
         }
       }
@@ -152,7 +149,6 @@ int ObIndexBuilderUtil::add_column(
         column.del_column_flag(VIRTUAL_GENERATED_COLUMN_FLAG);
         column.set_is_hidden(false);
         if (FAILEDx(column.set_orig_default_value(default_value))) {
-          LOG_WARN("set orig default value failed", K(ret));
         } else if (OB_FAIL(column.set_cur_default_value(default_value, column.is_default_expr_v2_column()))) {
         }
       }
@@ -193,7 +189,6 @@ int ObIndexBuilderUtil::add_shadow_pks(
   int ret = OB_SUCCESS;
   if (check_data_schema && !data_schema.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(data_schema), K(ret));
   } else {
     const bool is_index_column = false;
     const bool is_rowkey = true;
@@ -206,9 +201,7 @@ int ObIndexBuilderUtil::add_shadow_pks(
     ObSEArray<uint64_t, 2> column_ids;
     if (data_schema.is_table_without_pk() && schema.is_global_unique_index_table()) {
       if (partition_keys.is_valid() && OB_FAIL(partition_keys.get_column_ids(column_ids))) {
-        LOG_WARN("fail to get column ids from partition keys", K(ret));
       } else if (subpartition_keys.is_valid() && OB_FAIL(subpartition_keys.get_column_ids(column_ids))) {
-        LOG_WARN("fail to get column ids from subpartition keys", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
@@ -223,12 +216,8 @@ int ObIndexBuilderUtil::add_shadow_pks(
               "buffer size", OB_MAX_COLUMN_NAME_BUF_LENGTH, K(ret));
         } else if (NULL == (const_data_column = (data_schema.get_column_schema(column_id)))) {
           ret = OB_ERR_BAD_FIELD_ERROR;
-          LOG_WARN("get_column_schema failed", "table_id", data_schema.get_table_id(),
-              K(column_id), K(ret));
         } else if (const_data_column->is_key_forbid_lob()) {
           ret = OB_ERR_WRONG_KEY_COLUMN;
-          LOG_WARN("Unexpected lob column in shadow pk", "table_id", data_schema.get_table_id(),
-              K(column_id), K(ret));
         } else {
           if (OB_FAIL(data_column.assign(*const_data_column))) {
           } else if (OB_FAIL(set_shadow_column_info(shadow_pk_name, common::OB_MIN_SHADOW_COLUMN_ID + const_data_column->get_column_id(), data_column))) {
@@ -258,7 +247,6 @@ int ObIndexBuilderUtil::add_shadow_partition_keys(
   int ret = OB_SUCCESS;
   if (!data_schema.is_table_without_pk()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("only heap table should add shadow partition keys", K(data_schema), K(ret));
   } else {
     const bool is_index_column = false;
     const bool is_rowkey = !schema.is_unique_index();
@@ -269,9 +257,7 @@ int ObIndexBuilderUtil::add_shadow_partition_keys(
     ObSEArray<uint64_t, 2> column_ids;
     if (data_schema.is_table_without_pk()) {
       if (partition_keys.is_valid() && OB_FAIL(partition_keys.get_column_ids(column_ids))) {
-        LOG_WARN("fail to get column ids from partition keys", K(ret));
       } else if (subpartition_keys.is_valid() && OB_FAIL(subpartition_keys.get_column_ids(column_ids))) {
-        LOG_WARN("fail to get column ids from subpartition keys", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -279,20 +265,12 @@ int ObIndexBuilderUtil::add_shadow_partition_keys(
         uint64_t column_id = column_ids.at(i);
         if (NULL == (const_data_column = (data_schema.get_column_schema(column_id)))) {
           ret = OB_ERR_BAD_FIELD_ERROR;
-          LOG_WARN("get_column_schema failed", "table_id", data_schema.get_table_id(),
-              K(column_id), K(ret));
         } else if (const_data_column->is_key_forbid_lob()) {
           ret = OB_ERR_WRONG_KEY_COLUMN;
-          LOG_WARN("Unexpected lob column in shadow partition key", "table_id", data_schema.get_table_id(),
-              K(column_id), K(ret));
         } else if (ob_is_extend(const_data_column->get_data_type())) {
           ret = OB_ERR_WRONG_KEY_COLUMN;
-          LOG_WARN("Unexpected udt column in shadow partition key", "table_id", data_schema.get_table_id(),
-              K(column_id), K(ret));
         } else if (ob_is_json_tc(const_data_column->get_data_type())) {
           ret = OB_ERR_JSON_USED_AS_KEY;
-          LOG_WARN("Unexpected json column in shadow pk", "table_id", data_schema.get_table_id(),
-              K(column_id), K(ret));
         } else {
           if (OB_FAIL(data_column.assign(*const_data_column))) {
           } else if (data_column.get_column_id() > schema.get_max_used_column_id()) {
@@ -302,9 +280,6 @@ int ObIndexBuilderUtil::add_shadow_partition_keys(
           if (FAILEDx(add_column(&data_column, is_index_column, is_rowkey,
               data_column.get_order_in_rowkey(), row_desc, schema, 
               false /* is_hidden */, false /* is_specified_storing_col */))) {
-            LOG_WARN("add column failed", "data_column", data_column, K(is_index_column),
-                "order_in_rowkey", data_column.get_order_in_rowkey(),
-                K(row_desc), K(ret));
           } else if (data_column.is_generated_column()) {
             ObSEArray<uint64_t, 5> cascaded_columns;
             if (OB_FAIL(data_column.get_cascaded_column_ids(cascaded_columns))) {
@@ -315,7 +290,6 @@ int ObIndexBuilderUtil::add_shadow_partition_keys(
               const ObColumnSchemaV2 *cascaded_col_schema = data_schema.get_column_schema(column_id);
               if (OB_ISNULL(cascaded_col_schema)) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("failed to get column", K(data_schema), K(column_id), K(ret));
               } else if (OB_INVALID_INDEX == row_desc.get_idx(
                         cascaded_col_schema->get_table_id(), cascaded_col_schema->get_column_id())) {
                 if (cascaded_col_schema->get_column_id() > schema.get_max_used_column_id()) {
@@ -346,7 +320,6 @@ int ObIndexBuilderUtil::set_index_table_columns(
   if (check_data_schema && !data_schema.is_valid()) {
     // some items in arg may be invalid, don't check arg
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(data_schema), K(ret));
   } else if (data_schema.is_valid()) {
     use_mysql_errno = true;
   }
@@ -384,7 +357,6 @@ int ObIndexBuilderUtil::set_index_table_columns(
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fts arg index type not expected", K(ret));
     }
   } else { // not fts index
     HEAP_VAR(ObRowDesc, row_desc) {
@@ -401,43 +373,22 @@ int ObIndexBuilderUtil::set_index_table_columns(
           LOG_USER_ERROR(OB_ERR_KEY_COLUMN_DOES_NOT_EXITS,
                          sort_item.column_name_.length(),
                          sort_item.column_name_.ptr());
-          LOG_WARN("get_column_schema failed", 
-                   "database_id", data_schema.get_database_id(),
-                   "table_name", data_schema.get_table_name(),
-                   "column name", sort_item.column_name_, K(ret));
         } else if (data_column->is_key_forbid_lob()) {
           if (use_mysql_errno && data_column->is_func_idx_column()) {
             ret = OB_ERR_FUNCTIONAL_INDEX_ON_LOB;
-            LOG_WARN("Cannot create a functional index on an expression that returns a BLOB or TEXT.", K(ret));
           } else {
             ret = OB_ERR_WRONG_KEY_COLUMN;
             LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, sort_item.column_name_.length(), sort_item.column_name_.ptr());
-            LOG_WARN("Index column should not be lob type", 
-                    "database_id", data_schema.get_database_id(),
-                    "table_name", data_schema.get_table_name(),
-                    "column name", sort_item.column_name_,
-                    "column length", sort_item.prefix_len_, K(ret));
           }
         } else if (ob_is_extend(data_column->get_data_type())) {
           ret = OB_ERR_WRONG_KEY_COLUMN;
           LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, sort_item.column_name_.length(), sort_item.column_name_.ptr());
-          LOG_WARN("Index column should not be udt type", 
-                   "database_id", data_schema.get_database_id(),
-                   "table_name", data_schema.get_table_name(),
-                   "column name", sort_item.column_name_,
-                   "column length", sort_item.prefix_len_, K(ret));
         } else if (ob_is_json_tc(data_column->get_data_type())) {
           if (use_mysql_errno && data_column->is_func_idx_column()) {
             ret = OB_ERR_FUNCTIONAL_INDEX_ON_JSON_OR_GEOMETRY_FUNCTION;
-            LOG_WARN("Cannot create a functional index on an expression that returns a JSON or GEOMETRY.",K(ret));
           } else {
             ret = OB_ERR_JSON_USED_AS_KEY;
             LOG_USER_ERROR(OB_ERR_JSON_USED_AS_KEY, sort_item.column_name_.length(), sort_item.column_name_.ptr());
-            LOG_WARN("JSON column cannot be used in key specification", 
-                    "database_id", data_schema.get_database_id(),
-                    "table_name", data_schema.get_table_name(),
-                    "column name", sort_item.column_name_,
-                    "column length", sort_item.prefix_len_, K(ret));
           }
         } else if (OB_FAIL(add_column(data_column, is_index_column, is_rowkey,
             arg.index_columns_.at(i).order_type_, row_desc, index_schema,
@@ -471,23 +422,12 @@ int ObIndexBuilderUtil::set_index_table_columns(
           if (OB_FAIL(rowkey_info.get_column_id(i, column_id))) {
           } else if (NULL == (data_column = data_schema.get_column_schema(column_id))) {
             ret = OB_ERR_BAD_FIELD_ERROR;
-            LOG_WARN("get_column_schema failed", "table_id", data_schema.get_table_id(),
-                K(column_id), K(ret));
           } else if (data_column->is_key_forbid_lob()) {
             ret = OB_ERR_WRONG_KEY_COLUMN;
-            LOG_WARN("Lob column should not appear in rowkey position", "data_column", *data_column, K(is_index_column),
-                K(is_rowkey), "order_in_rowkey", data_column->get_order_in_rowkey(),
-                K(row_desc), K(ret));
           } else if (ob_is_extend(data_column->get_data_type())) {
             ret = OB_ERR_WRONG_KEY_COLUMN;
-            LOG_WARN("udt column should not appear in rowkey position", "data_column", *data_column, K(is_index_column),
-                K(is_rowkey), "order_in_rowkey", data_column->get_order_in_rowkey(),
-                K(row_desc), K(ret));
           } else if (ob_is_json_tc(data_column->get_data_type())) {
             ret = OB_ERR_JSON_USED_AS_KEY;
-            LOG_WARN("JSON column cannot be used in key specification.", "data_column", *data_column, K(is_index_column),
-                K(is_rowkey), "order_in_rowkey", data_column->get_order_in_rowkey(),
-                K(row_desc), K(ret));
           } else if (OB_FAIL(add_column(data_column, is_index_column, is_rowkey,
               data_column->get_order_in_rowkey(), row_desc, index_schema,
               false /* is_hidden */, false /* is_specified_storing_col */))) {
@@ -516,39 +456,21 @@ int ObIndexBuilderUtil::set_index_table_columns(
           const ObOrderType order_in_rowkey = ObOrderType::DESC;
           if (NULL == (data_column = data_schema.get_column_schema(arg.store_columns_.at(i)))) {
             ret = OB_ERR_BAD_FIELD_ERROR;
-            LOG_WARN("get_column_schema failed", 
-                "database_id", data_schema.get_database_id(), "table_name",
-                data_schema.get_table_name(), "column name", arg.store_columns_.at(i), K(ret));
           } else if (data_column->is_key_forbid_lob()) {
             ret = OB_ERR_WRONG_KEY_COLUMN;
             LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, arg.store_columns_.at(i).length(), arg.store_columns_.at(i).ptr());
-            LOG_WARN("Index storing column should not be lob type", 
-                "database_id", data_schema.get_database_id(), "table_name",
-                data_schema.get_table_name(), "column name", arg.store_columns_.at(i), K(ret));
           } else if (ob_is_extend(data_column->get_data_type())) {
             ret = OB_ERR_WRONG_KEY_COLUMN;
             LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, arg.store_columns_.at(i).length(), arg.store_columns_.at(i).ptr());
-            LOG_WARN("Index storing column should not be udt type", 
-                "database_id", data_schema.get_database_id(), "table_name",
-                data_schema.get_table_name(), "column name", arg.store_columns_.at(i), K(ret));
           } else if (ob_is_json_tc(data_column->get_data_type())) {
             ret = OB_ERR_JSON_USED_AS_KEY;
             LOG_USER_ERROR(OB_ERR_JSON_USED_AS_KEY, arg.store_columns_.at(i).length(), arg.store_columns_.at(i).ptr());
-            LOG_WARN("JSON column cannot be used in key specification.", 
-                "database_id", data_schema.get_database_id(), "table_name",
-                data_schema.get_table_name(), "column name", arg.store_columns_.at(i), K(ret));
           } else if (ob_is_collection_sql_type(data_column->get_data_type())) {
             ret = OB_ERR_WRONG_KEY_COLUMN;
             LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, arg.store_columns_.at(i).length(), arg.store_columns_.at(i).ptr());
-            LOG_WARN("Index storing column should not be collection type", 
-                "database_id", data_schema.get_database_id(), "table_name",
-                data_schema.get_table_name(), "column name", arg.store_columns_.at(i), K(ret));
           } else if (ob_is_geometry_tc(data_column->get_data_type())) {
             ret = OB_ERR_WRONG_KEY_COLUMN;
             LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, arg.store_columns_.at(i).length(), arg.store_columns_.at(i).ptr());
-            LOG_WARN("Index storing column should not be geometry type", 
-                "database_id", data_schema.get_database_id(), "table_name",
-                data_schema.get_table_name(), "column name", arg.store_columns_.at(i), K(ret));
           } else if (OB_FAIL(add_column(data_column, is_index_column, is_rowkey,
               order_in_rowkey, row_desc, index_schema, false /* is_hidden */, is_specified_storing_col))) {
           }
@@ -564,44 +486,26 @@ int ObIndexBuilderUtil::set_index_table_columns(
           const ObOrderType order_in_rowkey = ObOrderType::DESC;
           if (OB_ISNULL(data_column = data_schema.get_column_schema(arg.hidden_store_columns_.at(i)))) {
             ret = OB_ERR_BAD_FIELD_ERROR;
-            LOG_WARN("get_column_schema failed", 
-                "database_id", data_schema.get_database_id(), "table_name",
-                data_schema.get_table_name(), "column name", arg.hidden_store_columns_.at(i), K(ret));
           } else if (data_column->is_key_forbid_lob()) {
             ret = OB_ERR_WRONG_KEY_COLUMN;
             LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, arg.hidden_store_columns_.at(i).length(),
                                                     arg.hidden_store_columns_.at(i).ptr());
-            LOG_WARN("Index storing column should not be lob type",
-                "database_id", data_schema.get_database_id(), "table_name",
-                data_schema.get_table_name(), "column name", arg.hidden_store_columns_.at(i), K(ret));
           } else if (ob_is_extend(data_column->get_data_type())) {
             ret = OB_ERR_WRONG_KEY_COLUMN;
             LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, arg.hidden_store_columns_.at(i).length(),
                                                     arg.hidden_store_columns_.at(i).ptr());
-            LOG_WARN("Index storing column should not be udt type",
-                "database_id", data_schema.get_database_id(), "table_name",
-                data_schema.get_table_name(), "column name", arg.hidden_store_columns_.at(i), K(ret));
           } else if (ob_is_json_tc(data_column->get_data_type())) {
             ret = OB_ERR_JSON_USED_AS_KEY;
             LOG_USER_ERROR(OB_ERR_JSON_USED_AS_KEY, arg.hidden_store_columns_.at(i).length(),
                                                     arg.hidden_store_columns_.at(i).ptr());
-            LOG_WARN("JSON column '%.*s' cannot be used in key specification.",
-                "database_id", data_schema.get_database_id(), "table_name",
-                data_schema.get_table_name(), "column name", arg.hidden_store_columns_.at(i), K(ret));
           } else if (ob_is_collection_sql_type(data_column->get_data_type())) {
             ret = OB_ERR_WRONG_KEY_COLUMN;
             LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, arg.hidden_store_columns_.at(i).length(),
                                                     arg.hidden_store_columns_.at(i).ptr());
-            LOG_WARN("Index storing column should not be collection type",
-                "database_id", data_schema.get_database_id(), "table_name",
-                data_schema.get_table_name(), "column name", arg.hidden_store_columns_.at(i), K(ret));
           } else if (ob_is_geometry_tc(data_column->get_data_type())) {
             ret = OB_ERR_WRONG_KEY_COLUMN;
             LOG_USER_ERROR(OB_ERR_WRONG_KEY_COLUMN, arg.hidden_store_columns_.at(i).length(),
                                                     arg.hidden_store_columns_.at(i).ptr());
-            LOG_WARN("Index storing column should not be geometry type",
-                "database_id", data_schema.get_database_id(), "table_name",
-                data_schema.get_table_name(), "column name", arg.hidden_store_columns_.at(i), K(ret));
           } else if (OB_FAIL(add_column(data_column, is_index_column, is_rowkey,
                                         order_in_rowkey, row_desc, index_schema, 
                                         true /* is_hidden */, false /* is_specified_storing_col */))) {
@@ -714,21 +618,16 @@ int ObIndexBuilderUtil::adjust_ordinary_index_column_args(
             //real index expr, so generate hidden generated column in data table schema
             if (ob_is_geometry(expr->get_result_type().get_type())) {
               ret = OB_ERR_SPATIAL_FUNCTIONAL_INDEX;
-              LOG_WARN("Spatial functional index is not supported.", K(ret));
             } else if (ob_is_json_tc(expr->get_result_type().get_type())) {
               ret = OB_ERR_FUNCTIONAL_INDEX_ON_JSON_OR_GEOMETRY_FUNCTION;
-              LOG_WARN("Cannot create a functional index on an expression that returns a JSON or GEOMETRY.",K(ret));
             } else if (ob_is_collection_sql_type(expr->get_result_type().get_type())) {
               ret = OB_ERR_FUNCTIONAL_INDEX_ON_FIELD;
-              LOG_WARN("Cannot create a functional index on an expression that returns a ARRAY.",K(ret));
             } else if (ob_is_text_tc(expr->get_result_type().get_type())) {
               ret = OB_ERR_FUNCTIONAL_INDEX_ON_LOB;
-              LOG_WARN("Cannot create a functional index on an expression that returns a BLOB or TEXT.", K(ret));
             }
             if (OB_FAIL(ret)) {
             } else if (OB_ISNULL(GCTX.schema_service_)) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("unexpected null", K(ret));
             } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(guard))) {
             } else if (OB_FAIL(generate_ordinary_generated_column(
                 *expr, session, data_schema, gen_col, &guard))) {
@@ -746,21 +645,17 @@ int ObIndexBuilderUtil::adjust_ordinary_index_column_args(
                   const ObRawExpr *dep_column = dep_columns.at(j);
                   if (OB_ISNULL(dep_column)) {
                     ret = OB_ERR_UNEXPECTED;
-                    LOG_WARN("deps_column is null");
                   } else if (!dep_column->is_column_ref_expr()) {
                     ret = OB_ERR_UNEXPECTED;
-                    LOG_WARN("dep column is invalid", K(ret), KPC(dep_column));
                   } else if (dep_column->is_auto_increment()) {
                     ret = OB_ERR_FUNCTIONAL_INDEX_REF_AUTO_INCREMENT;
                     LOG_USER_ERROR(OB_ERR_FUNCTIONAL_INDEX_REF_AUTO_INCREMENT, arg.index_name_.length(), arg.index_name_.ptr());
-                    LOG_WARN("Functional index cannot refer to an auto-increment column.", K(ret));
                   }
                 }
               }
             }
           } else {
             ret = OB_ERR_FUNCTIONAL_INDEX_ON_FIELD;
-            LOG_WARN("Functional index on a column is not supported.", K(ret), K(*expr));
           }
           exec_ctx.set_physical_plan_ctx(NULL);
         }
@@ -856,10 +751,8 @@ int ObIndexBuilderUtil::generate_ordinary_generated_column(
           const ObRawExpr *dep_column = dep_columns.at(i);
           if (OB_ISNULL(dep_column)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("deps_column is null");
           } else if (!dep_column->is_column_ref_expr()) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("dep column is invalid", K(ret), KPC(dep_column));
           } else if (OB_FAIL(tmp_gen_col.add_cascaded_column_id(
               static_cast<const ObColumnRefRawExpr*>(dep_column)->get_column_id()))) {
           }
@@ -868,12 +761,10 @@ int ObIndexBuilderUtil::generate_ordinary_generated_column(
         if (OB_SUCC(ret) && OB_INVALID_ID != index_id) {
           if (index_id != gen_col->get_column_id()) {
             ret = OB_ERR_INVALID_COLUMN_ID;
-            LOG_WARN("column id specified by create index mismatch with column id", K(ret), K(gen_col), K(index_id));
           } else {
             ObColumnSchemaV2 *tmp_col = data_schema.get_column_schema(index_id);
             if (is_invalid || nullptr != tmp_col) {
               ret = OB_ERR_INVALID_COLUMN_ID;
-              LOG_WARN("invalid id", K(ret));
             } else {
               tmp_gen_col.set_column_id(index_id);
             }
@@ -921,7 +812,6 @@ int ObIndexBuilderUtil::generate_prefix_column(
     } else if (old_column->is_generated_column()) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "prefix index on generated column");
-      LOG_WARN("prefix index on generated column not supported", K(ret), KPC(old_column));
     } else if (OB_FAIL(sql::ObDDLResolver::check_prefix_key(sort_item.prefix_len_, *old_column))) {
     } else if (OB_FAIL(databuff_printf(col_name_buf, OB_MAX_COLUMN_NAMES_LENGTH, name_pos, "__substr%d_%ld",
                                        sort_item.prefix_len_, old_column->get_column_id()))) {
@@ -935,8 +825,6 @@ int ObIndexBuilderUtil::generate_prefix_column(
           ret = OB_ERR_INVALID_COLUMN_ID;
           LOG_USER_ERROR(OB_ERR_INVALID_COLUMN_ID,
               sort_item.column_name_.length(), sort_item.column_name_.ptr());
-          LOG_WARN("Column id specified by create prefix index mismatch with column schema id",
-                   K(ret), K(spec_id), K(is_invalid), K(data_schema));
         }
       }
     } else if (OB_FAIL(databuff_printf(expr_def, OB_MAX_DEFAULT_VALUE_LENGTH, def_pos, "SUBSTR(`%s`, 1, %d)",
@@ -948,7 +836,6 @@ int ObIndexBuilderUtil::generate_prefix_column(
       } else if (FALSE_IT(prefix_column.del_column_flag(HEAP_ALTER_ROWKEY_FLAG))) { // clear flag
       } else if (!prefix_column.is_valid()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("prefix column is invalid", K(ret));
       } else if (OB_FAIL(prefix_column.set_column_name(col_name_buf))) {
       } else if (OB_FAIL(prefix_column.set_orig_default_value(default_value))) {
       } else if (OB_FAIL(prefix_column.set_cur_default_value(
@@ -985,8 +872,6 @@ int ObIndexBuilderUtil::generate_prefix_column(
           				ret = OB_ERR_INVALID_COLUMN_ID;
           				LOG_USER_ERROR(OB_ERR_INVALID_COLUMN_ID,
                 sort_item.column_name_.length(), sort_item.column_name_.ptr());
-          				LOG_WARN("Column id specified by create prefix index mismatch with column schema id",
-          								 K(ret), K(spec_id), K(is_invalid), K(data_schema));
           } else {
             prefix_column.set_column_id(spec_id);
           }
@@ -1019,12 +904,10 @@ int ObIndexBuilderUtil::adjust_spatial_args(
   ObColumnSortItem mbr_sort_item;
   if (OB_UNLIKELY(sort_items.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get invalid arguments", K(ret));
   } else if (OB_FAIL(generate_spatial_columns(sort_items.at(0).column_name_, data_schema, spatial_cols))) {
   } else if (OB_UNLIKELY(spatial_cols.count() != 2) ||
              OB_ISNULL(spatial_cols.at(0)) || OB_ISNULL(spatial_cols.at(1))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get invalid spatial cols", K(ret), K(spatial_cols.count()));
   } else if (OB_FAIL(ob_write_string(allocator, spatial_cols.at(0)->get_column_name_str(),
                                      cellid_sort_item.column_name_))) {
   } else if (OB_FAIL(ob_write_string(allocator, spatial_cols.at(1)->get_column_name_str(),

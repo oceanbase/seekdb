@@ -62,7 +62,6 @@ int ObFTRangeDict::build_cache_from_ik_dict(const ObFTDictDesc &desc, ObFTCacheR
   } break;
   default:
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Not supported dict type.", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -98,10 +97,8 @@ public:
 
     if (OB_ISNULL(all_tries_) || idx >= static_cast<int64_t>(all_tries_->size()) || OB_ISNULL(all_tries_->at(idx))) {
       ret = OB_ARRAY_OUT_OF_RANGE;
-      LOG_WARN("all_tries_ is null or idx is out of range", K(idx), K(all_tries_->size()));
     } else if (OB_ISNULL(handles_) || idx >= static_cast<int64_t>(handles_->size()) || OB_ISNULL(handles_->at(idx))) {
       ret = OB_ARRAY_OUT_OF_RANGE;
-      LOG_WARN("handles_ is null or idx is out of range", K(idx), K(handles_->size()));
     } else {
 
       ObFTTrie<void> *trie = (*all_tries_)[idx];
@@ -153,7 +150,6 @@ int ObFTRangeDict::build_ranges_concurrently_thread_pool(const ObFTDictDesc &des
     ObFTTrie<void> *trie = OB_NEWx(ObFTTrie<void>, &tmp_alloc, tmp_alloc, desc.coll_type_);
     if (OB_ISNULL(trie)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Failed to allocate ObFTTrie", K(ret));
       break;
     }
 
@@ -176,14 +172,12 @@ int ObFTRangeDict::build_ranges_concurrently_thread_pool(const ObFTDictDesc &des
           LOG_WARN("First char is not valid.");
         } else if (DEFAULT_KEY_PER_RANGE == count
                    && OB_FAIL(end_char.set_word(key.ptr(), first_char_len))) {
-          LOG_WARN("Failed to record first char.", K(ret));
         } else if (count > DEFAULT_KEY_PER_RANGE
                    && (end_char.get_word() != ObString(first_char_len, key.ptr()))) {
           range_end = true;
         } else {
           if (OB_FAIL(trie->insert(key, {}))) {
           } else if (OB_FAIL(iter.next()) && OB_ITER_END != ret) {
-            LOG_WARN("Failed to step to next word entry.", K(ret));
           }
         }
       }
@@ -271,14 +265,12 @@ int ObFTRangeDict::build_one_range(const ObFTDictDesc &desc,
       LOG_WARN("First char is not valid.");
     } else if (DEFAULT_KEY_PER_RANGE == count
                && OB_FAIL(end_char.set_word(key.ptr(), first_char_len))) {
-      LOG_WARN("Failed to record first char.", K(ret));
     } else if (count > DEFAULT_KEY_PER_RANGE
                && (end_char.get_word() != ObString(first_char_len, key.ptr()))) {
       // end of range, this key is not consumed.
       range_end = true;
     } else if (OB_FAIL(trie.insert(key, {}))) {
     } else if (OB_FAIL(iter.next()) && OB_ITER_END != ret) {
-      LOG_WARN("Failed to step to next word entry.", K(ret));
     }
   }
 
@@ -345,7 +337,6 @@ int ObFTRangeDict::match(const ObString &single_word, ObDATrieHit &hit) const
   int ret = OB_SUCCESS;
   ObIFTDict *dict = nullptr;
   if (OB_FAIL(find_first_char_range(single_word, dict)) && OB_ENTRY_NOT_EXIST != ret) {
-    LOG_WARN("Failed to find first char range.", K(ret));
   } else if (OB_ENTRY_NOT_EXIST == ret) {
     hit.set_unmatch();
     ret = OB_SUCCESS;
@@ -372,11 +363,9 @@ int ObFTRangeDict::match(const ObString &words, bool &is_match) const
       is_match = false;
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("Failed to find first char range.", K(ret));
     }
   } else if (OB_ISNULL(dict)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("dict is null.", K(ret));
   } else if (OB_FAIL(dict->match(words, is_match))) {
   }
   return ret;
@@ -424,7 +413,6 @@ int ObFTRangeDict::build_dict_from_cache(const ObFTCacheRangeContainer &range_co
     ObFTDAT *dat = ptr->value_->dat_block_;
     if (OB_ISNULL(dict = OB_NEWx(ObFTCacheDict, &range_alloc_, ObCollationType::CS_TYPE_UTF8MB4_BIN, dat))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Failed to alloc memory.", K(ret));
     } else {
       ObFTRange range;
       range.start_ = dat->start_word_;
@@ -454,7 +442,6 @@ int ObFTRangeDict::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer
   } break;
   default:
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Not supported dict type.", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -483,7 +470,6 @@ int ObFTRangeDict::try_load_cache(const ObFTDictDesc &desc,
     if (OB_FAIL(range_container.fetch_info_for_dict(info))) {
     } else if (OB_FAIL(ObDictCache::get_instance().get_dict(key, info->value_, info->handle_))
                && OB_ENTRY_NOT_EXIST != ret) {
-      LOG_WARN("Failed to get dict from kv cache.", K(ret));
     } else if (OB_ENTRY_NOT_EXIST == ret) {
       range_container.reset();
       // not found, build cache outthere

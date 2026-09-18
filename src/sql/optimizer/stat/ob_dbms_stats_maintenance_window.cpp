@@ -54,7 +54,6 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
       ::oceanbase::share::server_service<::oceanbase::query::ObISchedulerService>();
   if (OB_ISNULL(scheduler)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("scheduler service is unavailable", K(ret));
   } else if (OB_FAIL(sql::ObExecEnv::gen_exec_env(sys_variable, buf, OB_MAX_PROC_ENV_LENGTH, pos))) {
   } else if (OB_FAIL(get_time_zone_offset(sys_variable, offset_sec))) {
   } else {
@@ -67,7 +66,6 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
         if (OB_FAIL(get_window_job_info(current_time, i + 1, offset_sec, start_usec, job_action))) {
         } else if (OB_UNLIKELY(start_usec == -1 || job_action.empty())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected error", K(ret), K(start_usec), K(job_action));
         } else {
           if (OB_FAIL(get_stat_window_job_info(
                                                     job_id,
@@ -222,13 +220,11 @@ int ObDbmsStatsMaintenanceWindow::get_window_job_info(const int64_t current_time
   ObTime ob_time;
   if (OB_UNLIKELY(nth_window < 1 || nth_window > DAYS_PER_WEEK || current_time <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(nth_window), K(current_time));
   } else if (OB_FAIL(ObTimeConverter::usec_to_ob_time(current_time + offset_sec * 1000000,
                                                       ob_time))) {
   } else if (OB_UNLIKELY(ob_time.parts_[DT_WDAY] < 1 ||
                          ob_time.parts_[DT_WDAY] > DAYS_PER_WEEK)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(ob_time.parts_[DT_WDAY]));
   } else {
     //work day set default start time is 22:00 and non-work day set default start time is 6:00
     int64_t default_start_hour = DEFAULT_WORKING_DAY_START_HOHR;
@@ -273,7 +269,6 @@ int ObDbmsStatsMaintenanceWindow::is_stats_maintenance_window_attr(sql::ObExecCo
   sql::ObSQLSessionInfo *session = ctx.get_my_session();
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(session));
   } else if (is_stats_job(job_name)) {
     //now we just support modify job_action、start_date
     if (0 == attr_name.case_compare("job_action")) {
@@ -297,7 +292,6 @@ int ObDbmsStatsMaintenanceWindow::is_stats_maintenance_window_attr(sql::ObExecCo
         }
       } else {
         ret = OB_ERR_DBMS_STATS_PL;
-        LOG_WARN("the hour of interval must be between 0 and 24", K(ret));
         LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "the hour of interval must be between 0 and 24");
       }
     } else if (0 == attr_name.case_compare("next_date")) {
@@ -327,7 +321,6 @@ int ObDbmsStatsMaintenanceWindow::is_stats_maintenance_window_attr(sql::ObExecCo
                                         current_time + SEC_TO_USEC(offset_sec), is_valid))) {
         } else if (!is_valid) {
           ret = OB_ERR_DBMS_STATS_PL;
-          LOG_WARN("Invalid date", K(ret));
           LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL,
                          "The date is invalid. Please check wether they are the same day in a week, or the day is passed.");
         } else if (OB_FAIL(dml.add_time_column("next_date", specify_time))) {
@@ -344,7 +337,6 @@ int ObDbmsStatsMaintenanceWindow::is_stats_maintenance_window_attr(sql::ObExecCo
       } else if (OB_FAIL(common::ob_atoll(cname, specify_time))) {
       } else if (specify_time < 0 || specify_time > DEFAULT_DAY_INTERVAL_USEC) {
         ret = OB_ERR_DBMS_STATS_PL;
-        LOG_WARN("the hour of interval must be between 0 and 24", K(ret));
         LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "the hour of interval must be between 0 and 24");
       } else if (OB_FAIL(dml.add_column("max_run_duration", specify_time))) {
       } else {
@@ -393,7 +385,6 @@ int ObDbmsStatsMaintenanceWindow::check_date_validate(const ObString &job_name,
   ObTime ob_time;
   if (specify_time <= 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(specify_time));
   } else if (current_time > specify_time) {
     is_valid = false;
   } else if (0 == job_name.case_compare(opt_stats_history_manager) ||
@@ -403,7 +394,6 @@ int ObDbmsStatsMaintenanceWindow::check_date_validate(const ObString &job_name,
   } else if (OB_UNLIKELY(ob_time.parts_[DT_WDAY] < 1 ||
                          ob_time.parts_[DT_WDAY] > DAYS_PER_WEEK)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(ob_time.parts_[DT_WDAY]));
   } else  {
     if (0 == job_name.case_compare(windows_name[ob_time.parts_[DT_WDAY]-1])) {
       is_valid = true;

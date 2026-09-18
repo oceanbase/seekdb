@@ -161,8 +161,6 @@ int ObTimeUtility2::timestamp_format_to_str(const struct tm &t, int64_t usec, co
       || OB_UNLIKELY(!is_valid_date(t.tm_year + 1900, t.tm_mon + 1, t.tm_mday))
       || OB_UNLIKELY(!is_valid_time(t.tm_hour, t.tm_min, t.tm_sec, static_cast<int>(usec)))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(format), K(buf), K(buf_len), K(t.tm_year), K(t.tm_mon),
-             K(t.tm_mday), K(t.tm_hour), K(t.tm_min), K(t.tm_sec), K(usec));
   } else if (pos >= buf_len) {
     ret = OB_SIZE_OVERFLOW;
     //size overflow isn't an error, so don't print warnings
@@ -448,7 +446,6 @@ int ObTimeUtility2::extract_usec(const ObString &str, int64_t &pos, int64_t &use
   if (OB_ISNULL(str.ptr()) || OB_UNLIKELY(str.length() <= 0)
       || OB_UNLIKELY(pos < 0) || OB_UNLIKELY(pos >= str.length())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(str), K(pos));
   } else {
     const char *cur_ptr = str.ptr() + pos;
     const char *end_ptr = str.ptr() + str.length();

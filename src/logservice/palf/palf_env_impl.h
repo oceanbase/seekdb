@@ -23,7 +23,6 @@
 #include "lib/trace/ob_trace_event.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/utility.h"
-#include "share/ob_occam_timer.h"
 #include "share/scn.h"
 #include "share/log/palf/log_define.h"
 #include "log_shared_queue_thread.h"

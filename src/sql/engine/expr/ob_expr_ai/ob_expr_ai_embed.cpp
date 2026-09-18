@@ -64,7 +64,6 @@ int ObExprAIEmbed::calc_result_typeN(ObExprResType &type,
         types_stack[DIM_IDX].set_scale(0);
       } else {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("dimension parameter must be an integer, not a decimal or float", K(ret), K(types_stack[DIM_IDX].get_type()));
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_embed, dimension parameter must be an integer, not a decimal or float");
       }
     }
@@ -83,10 +82,8 @@ int ObExprAIEmbed::eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
   ObDatum *arg_dim = nullptr;
   if (expr.arg_cnt_ == 3 ? OB_FAIL(expr.eval_param_value(ctx, arg_model_id, arg_content, arg_dim))
                          : OB_FAIL(expr.eval_param_value(ctx, arg_model_id, arg_content))) {
-    LOG_WARN("evaluate parameters failed", K(ret));
   } else if (arg_model_id->is_null() || arg_content->is_null()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("model id or content is null", K(ret));
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_embed, model id or content is null");
     res.set_null();
   } else {
@@ -103,7 +100,6 @@ int ObExprAIEmbed::eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
     ObString content = arg_content->get_string();
     if (model_id.empty() || content.empty()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("model id or input is empty", K(ret));
       LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_embed, model id or input is empty");
       res.set_null();
     }
@@ -115,7 +111,6 @@ int ObExprAIEmbed::eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
       dim = arg_dim->get_int();
       if (dim <= 0) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("dimension parameter must be a positive integer", K(ret), K(dim));
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_embed, dimension parameter must be a positive integer");
         res.set_null();
       } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_object(temp_allocator, config))) {
@@ -127,7 +122,6 @@ int ObExprAIEmbed::eval_ai_embed(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
     } else if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(temp_allocator, model_id, info))) {
     } else if (OB_ISNULL(endpoint_resolver)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("AI endpoint resolver is unavailable", K(ret));
     } else if (OB_FAIL(endpoint_resolver->resolve_by_model_name(
                    model_id, temp_allocator, resolved_endpoint))) {
     } else {

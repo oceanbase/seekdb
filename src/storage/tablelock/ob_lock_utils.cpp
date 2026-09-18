@@ -40,10 +40,8 @@ int ObInnerTableLockUtil::lock_inner_table_in_trans(
   if (OB_UNLIKELY(!is_inner_table(inner_table_id)
       || !is_lock_mode_valid(lock_mode))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", KR(ret), K(inner_table_id), K(lock_mode));
   } else if (OB_ISNULL(conn = trans.get_connection())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("connection is null", KR(ret));
   } else {
     ObLockTableRequest table_lock_arg;
     table_lock_arg.lock_mode_ = lock_mode;

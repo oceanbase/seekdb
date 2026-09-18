@@ -51,7 +51,6 @@ int ObDualMacroMetaIterator::open(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("Init twice", K(ret));
   } else if (OB_FAIL(macro_iter_.open(
       sstable,
       query_range,
@@ -80,10 +79,8 @@ int ObDualMacroMetaIterator::get_next_macro_block(ObMacroBlockDesc &block_desc)
   ObDataMacroBlockMeta *macro_meta = block_desc.macro_meta_;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Dual macro meta iterator not inited", K(ret));
   } else if (OB_ISNULL(macro_meta)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid null pointer to read macro meta", K(ret), K(block_desc), KP(macro_meta));
   } else if (OB_UNLIKELY(iter_end_)) {
     ret = OB_ITER_END;
   } else if (OB_SUCC(macro_iter_.get_next_macro_block(block_desc))) {
@@ -92,15 +89,11 @@ int ObDualMacroMetaIterator::get_next_macro_block(ObMacroBlockDesc &block_desc)
       if (OB_ITER_END == ret) {
         ret = OB_ERR_UNEXPECTED;
       }
-      LOG_WARN("Fail to get next secondary meta iterator", K(ret), K_(macro_iter), K_(sec_meta_iter));
     } else if (OB_UNLIKELY(block_desc.macro_block_id_ !=
                            macro_meta->get_macro_id())) {
       ret = OB_ERR_SYS;
-      LOG_WARN("Logic macro block id from iterated macro block and merge info not match",
-          K(ret), K(block_desc), KPC(macro_meta));
     }
   } else if (OB_UNLIKELY(OB_ITER_END != ret)) {
-    LOG_WARN("Fail to get next macro block from index tree", K(ret));
   } else {
     int tmp_ret = sec_meta_iter_.get_next(*macro_meta);
     if (OB_UNLIKELY(OB_ITER_END != tmp_ret)) {

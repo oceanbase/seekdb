@@ -85,9 +85,7 @@ int ObExprUtil::get_int64_from_num(number::ObNumber &nmb,
     //copy is essential since if we did not do that, obj will be modified
     if (OB_FAIL(newmb.from(nmb, cast_ctx))) {
     } else if (is_trunc && OB_FAIL(newmb.trunc(0))) {
-      LOG_WARN("trunc failed", K(ret), K(nmb));
     } else if (!is_trunc && OB_FAIL(newmb.round(0))) {
-      LOG_WARN("round failed", K(ret), K(nmb));
     } else {
       pnmb = &newmb;
     }
@@ -96,7 +94,6 @@ int ObExprUtil::get_int64_from_num(number::ObNumber &nmb,
     //do nothing
   } else if (OB_ISNULL(pnmb)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error. null pointer", K(ret));
   } else if (pnmb->is_valid_int64(tmp_int)) {
     out = tmp_int;
   } else if (pnmb->is_valid_uint64(tmp_uint)) {
@@ -235,7 +232,6 @@ int ObExprUtil::kmp(const char *pattern,
   if (OB_ISNULL(pattern) || OB_ISNULL(text) ||
        OB_UNLIKELY(pattern_len <= 0) || OB_UNLIKELY(text_len <= 0) || OB_ISNULL(next)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(pattern_len), K(text_len));
   } else if (OB_LIKELY(pattern_len <= text_len)) {
     int64_t i = 0; // for pattern
     int64_t j = 0; // for text
@@ -264,7 +260,6 @@ int ObExprUtil::kmp_next(const char *pattern, const int64_t pattern_len, int32_t
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pattern) || OB_UNLIKELY(pattern_len <= 0) || OB_ISNULL(next)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(pattern_len));
   } else {
     // calc the kmp next array of pattern, next[i] represents the common maximum length of
     // the prefix and suffix of the substring before the (i-1)th position of the pattern.
@@ -299,7 +294,6 @@ int ObExprUtil::kmp_reverse(const char *pattern,
   if (OB_ISNULL(pattern) || OB_ISNULL(text) ||
        OB_UNLIKELY(pattern_len <= 0) || OB_UNLIKELY(text_len <= 0) || OB_ISNULL(next)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(pattern_len), K(text_len));
   } else if (OB_LIKELY(pattern_len <= text_len)) {
     int64_t i = pattern_len - 1; // for pattern
     int64_t j = text_len - 1; // for text
@@ -330,7 +324,6 @@ int ObExprUtil::kmp_next_reverse(const char *pattern,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pattern) || OB_UNLIKELY(pattern_len <= 0) || OB_ISNULL(next)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(pattern_len));
   } else {
     // reverse next array for kmp, ABCABB's reverse next array is [4, 5, 5, 4, 5, 6].
     next[pattern_len - 1] = pattern_len;
@@ -364,12 +357,10 @@ int ObExprUtil::get_mb_str_info(const ObString &str,
   int64_t well_formed_len = 0;
   if (CS_TYPE_INVALID == cs_type) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid cs_type", K(ret), K(cs_type));
   } else if (0 == str.length()) {
     // do nothing
   } else if (OB_ISNULL(str.ptr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("str.ptr is null", K(ret));
   } else if (OB_FAIL(ObCharset::well_formed_len(cs_type,
                                                 str.ptr(),
                                                 str.length(),
@@ -508,7 +499,6 @@ int ObExprUtil::set_expr_ascii_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
       if (OB_FAIL(ret)) {
       } else if (OB_ISNULL(buf = expr.get_str_res_mem(ctx, out.length(), datum_idx))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret), K(out.length()));
       } else {
         MEMCPY(buf, out.ptr(), out.length());
         expr_datum.set_string(buf, out.length());
@@ -559,7 +549,6 @@ int ObExprUtil::need_convert_string_collation(const ObCollationType &in_collatio
   if (OB_UNLIKELY(!ObCharset::is_valid_collation(in_collation)
                   || !ObCharset::is_valid_collation(out_collation))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(in_collation), K(out_collation));
   } else if (ObCharset::charset_type_by_coll(in_collation)
              == ObCharset::charset_type_by_coll(out_collation) ||
              CS_TYPE_BINARY == in_collation ||
@@ -592,7 +581,6 @@ int ObExprUtil::convert_string_collation(const ObString &in_str,
     uint32_t result_len = 0;
     if (OB_ISNULL(buf = static_cast<char*>(alloc.alloc(buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc memory failed", K(ret));
     } else if (OB_FAIL(ObCharset::charset_convert(in_collation, in_str.ptr(), in_str.length(),
                                                   out_collation, buf, buf_len,
                                                   result_len))) {
@@ -615,7 +603,6 @@ int ObExprUtil::convert_string_collation_for_regexp(const ObString &in_str,
   } else if (OB_UNLIKELY(!ObCharset::is_valid_collation(in_collation) ||
                          !ObCharset::is_valid_collation(out_collation))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(in_collation), K(out_collation));
   } else if (ObCharset::charset_type_by_coll(in_collation) ==
              ObCharset::charset_type_by_coll(out_collation)) {
     out_str = in_str;
@@ -625,7 +612,6 @@ int ObExprUtil::convert_string_collation_for_regexp(const ObString &in_str,
     uint32_t result_len = 0;
     if (OB_ISNULL(buf = static_cast<char*>(alloc.alloc(buf_len)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc memory failed", K(ret));
     } else if (OB_FAIL(ObCharset::charset_convert(in_collation, in_str.ptr(), in_str.length(),
                                                   out_collation, buf, buf_len,
                                                   result_len))) {
@@ -689,15 +675,12 @@ int ObExprUtil::get_real_expr_without_cast(const ObExpr *expr, const ObExpr *&ou
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("expr is NULL", K(ret));
   } else {
     while (T_FUN_SYS_CAST == expr->type_ && CM_IS_IMPLICIT_CAST(expr->extra_)) {
       if (OB_UNLIKELY(2 != expr->arg_cnt_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("param_count of cast expr should be 2", K(ret), K(*expr));
       } else if (OB_ISNULL(expr = expr->args_[0])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("first child of cast expr is NULL", K(ret), K(*expr));
       }
     }
     if (OB_SUCC(ret)) {
@@ -722,13 +705,11 @@ int ObSolidifiedVarsContext::get_local_tz_info(const sql::ObBasicSessionInfo *se
         if (OB_SUCC(OTTZ_MGR.get_timezone_map(tz_map_wrap))) {
           tz_info_map = tz_map_wrap.get_tz_map();
         } else {
-          LOG_WARN("get tz info map failed", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_ISNULL(local_tz_wrap_ = OB_NEWx(ObTimeZoneInfoWrap, alloc_))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("alloc tz wrap failed", K(ret));
         } else if (OB_FAIL(local_tz_wrap_->init_time_zone(local_var->val_.get_string(),
                                         OB_INVALID_VERSION,
                                         *(const_cast<ObTZInfoMap *>(tz_info_map))))) {
@@ -770,13 +751,11 @@ int ObSolidifiedVarsGetter::get_dtc_params(ObDataTypeCastParams &dtc_params)
   dtc_params = ObBasicSessionInfo::create_dtc_params(session_);
   if (OB_ISNULL(session_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else if (OB_FAIL(get_time_zone_info(tz_info))) {
   } else if (NULL != local_session_var_
              && OB_FAIL(ObSQLUtils::merge_solidified_var_into_dtc_params(local_session_var_->get_local_vars(),
                                                                   tz_info,
                                                                   dtc_params))) {
-    LOG_WARN("fail to create local dtc params", K(ret));
   }
   return ret;
 }
@@ -789,10 +768,8 @@ int ObSolidifiedVarsGetter::get_time_zone_info(const common::ObTimeZoneInfo *&tz
   tz_info = NULL;
   if (OB_ISNULL(session_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else if (NULL != local_session_var_
              && OB_FAIL(const_cast<ObSolidifiedVarsContext *>(local_session_var_)->get_local_tz_info(session_, tz_info))) {
-    LOG_WARN("get local tz_info failed", K(ret));
   } else if (NULL == tz_info) {
     tz_info = session_->get_timezone_info();
   }
@@ -805,12 +782,10 @@ int ObSolidifiedVarsGetter::get_sql_mode(ObSQLMode &sql_mode)
   bool is_valid = false;
   if (OB_ISNULL(session_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else if (FALSE_IT(sql_mode = session_->get_sql_mode())) {
   } else if (NULL != local_session_var_
              && OB_FAIL(ObSQLUtils::merge_solidified_var_into_sql_mode(local_session_var_->get_local_vars(),
                                                                        sql_mode))) {
-    LOG_WARN("try get local sql mode failed", K(ret));
   }
   return ret;
 }
@@ -822,7 +797,6 @@ int ObSolidifiedVarsGetter::get_local_var(ObSysVarClassType var_type, ObSessionS
   if (NULL != local_session_var_
       && NULL != local_session_var_->get_local_vars()
       && OB_FAIL(local_session_var_->get_local_vars()->get_local_var(var_type, sys_var))) {
-    LOG_WARN("fail to get local var", K(ret));
   }
   return ret;
 }
@@ -833,12 +807,10 @@ int ObSolidifiedVarsGetter::get_max_allowed_packet(int64_t &max_size)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(session_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else if (FALSE_IT(session_->get_max_allowed_packet(max_size))) {
   } else if (NULL != local_session_var_
              && OB_FAIL(ObSQLUtils::merge_solidified_var_into_max_allowed_packet(local_session_var_->get_local_vars(),
                                                                               max_size))) {
-    LOG_WARN("try get local max allowed packet failed", K(ret));
   }
   return ret;
 }

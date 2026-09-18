@@ -184,7 +184,6 @@ int ObPrivPacker::pack_raw_priv(
     if (packed_array.count() > 0) {
       if (group_id >= packed_array.count()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("group id error", K(ret));
       } else {
         packed_array[group_id] |= packed_priv;
       }
@@ -332,7 +331,6 @@ int ObOraPrivCheck::raw_sys_priv_exists(
       if (OB_SUCC(ret)) {
         if (group_id >= packed_array.count()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("group id error", K(option), K(priv), K(packed_array), K(group_id), K(ret));
         } else if (OB_TEST_PRIVS(packed_array.at(group_id), packed_priv)) {
           exists = true;
         }
@@ -356,7 +354,6 @@ int ObOraPrivCheck::raw_sys_priv_exists(
     if (OB_SUCC(ret)) {
       if (group_id >= packed_array.count()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("group id error", K(priv), K(packed_array), K(group_id), K(ret));
       } else if (OB_TEST_PRIVS(packed_array.at(group_id), packed_priv)) {
         exists = true;
       }

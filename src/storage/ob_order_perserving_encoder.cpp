@@ -179,7 +179,6 @@ int ObOrderPerservingEncoder::make_order_perserving_encode_from_object(
         if (ret == OB_BUF_NOT_ENOUGH) {
           // ignore ret
         } else {
-          LOG_WARN("failed to encode number", K(ret));
         }
       }
       break;
@@ -191,7 +190,6 @@ int ObOrderPerservingEncoder::make_order_perserving_encode_from_object(
         if (ret == OB_BUF_NOT_ENOUGH) {
           // ignore ret
         } else {
-          LOG_WARN("failed to encode fix len str", K(ret));
         }
       }
       break;
@@ -201,7 +199,6 @@ int ObOrderPerservingEncoder::make_order_perserving_encode_from_object(
         if (ret == OB_BUF_NOT_ENOUGH) {
           // ignore ret
         } else {
-          LOG_WARN("failed to encode string", K(ret));
         }
       }
       break;
@@ -227,7 +224,6 @@ int ObOrderPerservingEncoder::make_order_perserving_encode_from_object(
     case ObHexStringType:
     default: {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("this type cannot make sortkey", K(ret), K(param.type_));
     }
   }
 
@@ -606,7 +602,6 @@ int ObOrderPerservingEncoder::encode_from_decint(const ObDecimalInt *decint, int
   int ret = OB_SUCCESS;
   if (OB_ISNULL(decint)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid decimal int", K(ret), K(decint));
   } else {
     switch (int_bytes) {
     case sizeof(int32_t): {
@@ -631,7 +626,6 @@ int ObOrderPerservingEncoder::encode_from_decint(const ObDecimalInt *decint, int
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected int bytes", K(ret), K(int_bytes));
     }
     }
   }
@@ -646,7 +640,6 @@ int ObOrderPerservingEncoder::encode_tails(unsigned char *to, int64_t max_buf_le
   // do nothing
   if (to_len + 8 > max_buf_len) {
     ret = OB_BUF_NOT_ENOUGH;
-    LOG_WARN("no enough memory to do encoding for string", K(ret));
   } else if (cs == CS_TYPE_COLLATION_FREE || cs == CS_TYPE_BINARY) {
     if (with_empty_str) {
       *to = 0x00;
@@ -707,7 +700,6 @@ int ObSortkeyConditioner::process_key_conditioning(
   // process null pos
   if (OB_ISNULL(to)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(to));
   } else if (max_buf_len < 1) {
     ret = OB_BUF_NOT_ENOUGH;
   } else if (param.is_nullable_) {
@@ -725,7 +717,6 @@ int ObSortkeyConditioner::process_key_conditioning(
   } else if (OB_FAIL(share::ObOrderPerservingEncoder::make_order_perserving_encode_from_object(
                data, to + to_len, max_buf_len, to_len, param))) {
     if (ret != OB_BUF_NOT_ENOUGH) {
-      LOG_WARN("failed  to encode sortkey", K(ret));
     }
   } else if (max_buf_len < to_len) {
     ret = OB_BUF_NOT_ENOUGH;

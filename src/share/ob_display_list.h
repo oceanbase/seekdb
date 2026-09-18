@@ -69,7 +69,6 @@ int list_to_display_str(Allocator &allocator, const common::ObIArray<Type> &list
           }
         }
         if (FAILEDx(data->to_display_str(buf, len, pos))) {
-          COMMON_LOG(WARN, "to display str failed", KR(ret), KPC(data), K(len), K(pos));
         }
       }
     }

@@ -46,18 +46,15 @@ int ObExprPrivSTTransform::calc_result_typeN(ObExprResType& type,
       !ob_is_null(type1)) {
     ret = OB_ERR_GIS_INVALID_DATA;
     LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_TRANSFORM);
-    LOG_WARN("invalid type", K(ret), K(type1));
   } else {
     for (int i = 1; i < param_num; i++) {
       if (!ob_is_string_type(types_stack[i].get_type()) && !ob_is_null(types_stack[i].get_type())) {
         if (i == 1 && param_num == 3) {
           ret = OB_ERR_GIS_INVALID_DATA;
           LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_TRANSFORM);
-          LOG_WARN("invalid function format for _st_transform", K(ret), K(type1));
         } else if (!ob_is_integer_type(types_stack[i].get_type())) {
           ret = OB_ERR_GIS_INVALID_DATA;
           LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_TRANSFORM);
-          LOG_WARN("invalid function format for _st_transform", K(ret), K(type1));
         }
       }
     }
@@ -92,7 +89,6 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
 
   if (expr.args_[1]->is_boolean_ || (param_num > 2 && expr.args_[2]->is_boolean_)) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;   
-    LOG_WARN("invalid type", K(ret));
   } else if (OB_FAIL(temp_allocator.eval_arg(expr.args_[0], ctx, gis_datum))) {
   } else if (OB_FAIL(temp_allocator.eval_arg(expr.args_[1], ctx, datum2))) {
   } else if (gis_datum->is_null() || datum2->is_null()) {
@@ -107,12 +103,10 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
     } else if (OB_FAIL(ObGeoTypeUtil::get_srid_from_wkb(wkb, src_srid))) {
       ret = OB_ERR_GIS_INVALID_DATA;
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_TRANSFORM);
-      LOG_WARN("get srid from wkb failed", K(wkb), K(ret));
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(
                    ctx, srs_guard, src_srid, src_srs_item))) {
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb, src_geo, src_srs_item, N_PRIV_ST_TRANSFORM, 
                                                     GEO_ALLOW_3D | GEO_NOT_COPY_WKB))) {
-      LOG_WARN("get geo by wkb failed", K(ret), K(wkb));
       if (ret != OB_ERR_SRS_NOT_FOUND) {
         ret = OB_ERR_GIS_INVALID_DATA;
         LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_TRANSFORM);
@@ -122,7 +116,6 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
         if (ob_is_integer_type(expr.args_[1]->datum_meta_.type_)) {
           if (datum2->get_int() < 0 || datum2->get_int() > UINT_MAX32) {
             ret = OB_OPERATE_OVERFLOW;
-            LOG_WARN("srid input value out of range", K(ret), K(dest_srid));
           }
           dest_srid = datum2->get_int();
           if (OB_SUCC(ret)){
@@ -173,7 +166,6 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
           dest_srid = datum3->get_int();
           if (datum3->get_int() < 0 || datum3->get_int() > UINT_MAX32) {
             ret = OB_OPERATE_OVERFLOW;
-            LOG_WARN("srid input value out of range", K(ret), K(dest_srid));
           }
           dest_srid = datum3->get_int();
           if (OB_SUCC(ret)) {
@@ -200,7 +192,6 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
       } else if (OB_FAIL(guard.init())) {
       } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
         ret = OB_ERR_NULL_VALUE;
-        LOG_WARN("fail to get mem ctx", K(ret));
       } else {
         int correct_result;
         ObGeoEvalCtx correct_context(*mem_ctx, src_srs_item);
@@ -221,15 +212,11 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
         } else if (OB_FAIL(transform_context.append_val_arg(&src_proj4))) {
         } else if (OB_FAIL(transform_context.append_val_arg(&dest_proj4))) {
         } else if (OB_NOT_NULL(src_srs_item) && OB_FAIL(ObGeoFunc<ObGeoFuncType::Correct>::geo_func::eval(correct_context, correct_result))) {
-          LOG_WARN("eval boost correct failed", K(ret));
         } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Transform>::geo_func::eval(transform_context, dest_geo))) {
-          LOG_WARN("eval boost transform failed", K(ret), K(src_proj4), K(dest_proj4), K(src_srid), K(dest_srid));
           ObGeoExprUtils::geo_func_error_handle(ret, N_PRIV_ST_TRANSFORM);
         } else if (dest_srs_item == NULL && OB_FAIL(ObGeoExprUtils::denormalize_wkb(dest_proj4, dest_geo))) {
-          LOG_WARN("failed to do denormalize wkb", K(ret), K(dest_proj4));
         } else if ((OB_ISNULL(dest_srs_item) && dest_srid != 0) || OB_ISNULL(dest_geo)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("expected null srs_item or res_geo", K(ret), K(dest_srid), KP(dest_srs_item), KP(dest_geo));
         } else {
           ObString res_wkb;
           if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*dest_geo, expr, ctx, dest_srs_item, res_wkb, dest_srid))){

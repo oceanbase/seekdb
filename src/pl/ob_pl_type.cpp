@@ -77,7 +77,6 @@ int ObPLDataType::get_table_type_by_name(uint64_t owner_id,
   OZ (schema_guard.get_table_schema( owner_id, table, false, table_info));
   if (OB_SUCC(ret) && OB_ISNULL(table_info)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table is not exist", K(ret), K(owner_id), K(table), K(type), K(is_rowtype));
   }
   if (is_rowtype) {
     CK (type.empty());
@@ -103,7 +102,6 @@ int ObPLDataType::get_table_type_by_name(uint64_t owner_id,
     }
     if (OB_SUCC(ret) && i == record_type->get_member_count()) {
       ret = OB_ERR_COLUMN_NOT_FOUND;
-      LOG_WARN("table`s column not found!", K(ret), K(owner_id), K(table), K(type));
     }
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(deps)) {
@@ -179,7 +177,6 @@ int ObPLDataType::transform_from_iparam(const ObRoutineParam *iparam,
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected extern type", K(ret), K(type));
         break;
       }
     }
@@ -351,7 +348,6 @@ int ObPLDataType::init_session_var(const ObPLResolveCtx &resolve_ctx,
         int64_t copy_pos = 0;
         if (OB_ISNULL(copy_data = static_cast<char *>(obj_allocator.alloc(copy_size)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("memory allocate failed", K(ret));
         } else if (OB_FAIL(obj.deep_copy(calc_obj, copy_data, copy_size, copy_pos))) {
         } else {}
       } else {
@@ -498,7 +494,6 @@ int ObPLDataType::get_all_depended_user_type(const ObPLResolveCtx &resolve_ctx,
       if (OB_ISNULL(user_type = current_ns.get_type_table()->get_external_type(user_type_id))) {
         if (OB_ISNULL(current_ns.get_external_ns())) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("external ns is null", K(ret), K(user_type_id), KPC(this));
         } else if (OB_ISNULL(current_ns.get_external_ns()->get_parent_ns())) {
           OZ (get_external_user_type(resolve_ctx, user_type));
           CK (OB_NOT_NULL(user_type));
@@ -533,12 +528,9 @@ int ObPLDataType::set_type_info(const ObIArray<common::ObString>& type_info)
     type_info_id_ = OB_INVALID_ID;
   } else if (OB_ISNULL(enum_set_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("enum_set_ctx_ is null", K(ret), K(this), K(type_info));
   } else if ( !enum_set_ctx_->is_inited() && OB_FAIL(enum_set_ctx_->init())) {
-    LOG_WARN("enum type info ctx init failed", K(ret));
   } else if (OB_FAIL(enum_set_ctx_->get_type_info_id(&type_info, type_info_id))) {
     if (OB_HASH_NOT_EXIST != ret) {
-      LOG_WARN("failed to get enum type info id by type info", K(ret), K(type_info));
     } else { //set a new enum type info
       ret = OB_SUCCESS;
       ObIArray<common::ObString>* dst_type_info = NULL;
@@ -563,10 +555,8 @@ int ObPLDataType::get_type_info(ObIArray<common::ObString> *&type_info) const
   if (is_enum_or_set_type()) {
     if (NULL == enum_set_ctx_ || !enum_set_ctx_->is_inited()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("enum_set_ctx is null or not inited", K(ret), KPC(enum_set_ctx_));
     } else if (OB_INVALID_ID == type_info_id_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid type_info_id_", K(ret), K(type_info_id_));
     } else if (OB_FAIL(enum_set_ctx_->get_enum_type_info(type_info_id_, type_info))) {
     }
   } else {
@@ -614,7 +604,6 @@ case type: {                                                            \
     case PL_INTEGER_TYPE: /*do nothing*/ break;
     default: {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("type for anytype is not supported", K(ret), K(src));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "type for anytype");
     } break;
   }
@@ -644,14 +633,12 @@ int ObPLDataType::obj_is_null(ObObj& obj, bool &is_null)
       }
       default: {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("check complex value is null not supported", K(ret), K(obj));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "check complex is null");
         break;
       }
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("check obj is null unexcepted error", K(ret), K(obj));
   }
   return ret;
 }
@@ -680,7 +667,6 @@ int ObPLEnumSetCtx::init()
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("enum type info ctx already inited", K(ret), K(*this));
   } else {
     if (OB_FAIL(enum_type_info_reverse_map_.create(common::hash::cal_next_prime(32), ObModIds::OB_HASH_BUCKET, ObModIds::OB_HASH_NODE))) {
     } else {
@@ -706,7 +692,6 @@ int ObPLEnumSetCtx::get_new_enum_type_info_id(uint16_t &type_info_id)
   int ret = OB_SUCCESS;
   if (UINT16_MAX == used_type_info_id_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("more then 64K different enum type info", K(ret));
   } else {
     type_info_id = used_type_info_id_++;
   }
@@ -718,7 +703,6 @@ int ObPLEnumSetCtx::ensure_array_capacity(const uint16_t count)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(count >= enum_type_info_array_.get_capacity()) &&
       OB_FAIL(enum_type_info_array_.reserve(next_pow2(count)))) {
-    LOG_WARN("fail to reserve array capacity", K(ret), K(count), K(enum_type_info_array_));
   } else if (OB_FAIL(enum_type_info_array_.prepare_allocate(count))) {
   }
   return ret;
@@ -747,7 +731,6 @@ int ObPLEnumSetCtx::set_enum_type_info(uint16_t type_info_id, ObIArray<common::O
       ret = OB_SUCCESS;
       enum_type_info_array_.at(type_info_id) = type_info;
     } else {
-      LOG_WARN("set enum type info reverse map failed", K(ret), K(type_info), K(type_info_id));
     }
   } else {
     enum_type_info_array_.at(type_info_id) = type_info;
@@ -775,7 +758,6 @@ int ObPLEnumSetCtx::assgin(const ObPLEnumSetCtx &other)
       reset();
     }
     if (!is_inited() && OB_FAIL(init())) {
-      LOG_WARN("fail to init pl enum set ctx", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < other.enum_type_info_array_.count(); ++i) {
         uint16_t type_info_id = i;
@@ -803,7 +785,6 @@ int ObPLEnumSetCtx::deep_copy_type_info(common::ObIAllocator &allocator,
   ObFixedArray<ObString, ObIAllocator> *type_info_value = NULL;
   if (OB_ISNULL(mem = allocator.alloc(sizeof(ObFixedArray<ObString, ObIAllocator>)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc type info", K(ret));
   } else {
     type_info_value = new(mem) ObFixedArray<ObString, ObIAllocator>(allocator);
     if (OB_FAIL(type_info_value->init(type_info.count()))) {
@@ -1192,7 +1173,6 @@ int ObObjAccessIdx::get_package_id(
   }
   if (OB_INVALID_ID == package_id) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get package id", K(ret), K(package_id), KPC(expr));
   }
   return ret;
 }
@@ -1245,7 +1225,6 @@ int ObObjAccessIdx::datum_need_copy(const ObRawExpr *into, const ObRawExpr *valu
   alloc_scop = IS_INVALID;
   if (OB_ISNULL(into)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("Invalid exor", K(into), K(value), K(ret));
   } else {
     /*
      * If our expression evaluation can guarantee that the result will never reuse the memory of the input expression, then we actually do not need to make any copies.
@@ -1354,7 +1333,6 @@ int ObPLCursorInfo::deep_copy(ObPLCursorInfo &src, common::ObIAllocator *allocat
   }
   if (is_streaming_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("streaming cursor can not be copy", K(src), K(ret));
   } else {
     ObSPICursor *src_cursor = src.get_spi_cursor();
     ObSPICursor *dest_cursor = NULL;
@@ -1403,7 +1381,6 @@ int ObPLCursorInfo::deep_copy(ObPLCursorInfo &src, common::ObIAllocator *allocat
             //do nothing
           } else if (OB_ISNULL(row)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("row is null", K(ret));
           } else {
             ObNewRow tmp_row = *row;
             for (int64_t i = 0; OB_SUCC(ret) && i < tmp_row.get_count(); ++i) {
@@ -1496,7 +1473,6 @@ int ObPLCursorInfo::get_found(bool &found, bool &isnull) const
   if (is_explicit_) {
     if (!isopen_) {
       ret = OB_ER_SP_CURSOR_NOT_OPEN;
-      LOG_WARN("cursor is not open", K(ret));
     } else if (!fetched_) {
       isnull = true;
     } else {
@@ -1533,7 +1509,6 @@ int ObPLCursorInfo::get_rowcount(int64_t &rowcount, bool &isnull) const
   if (is_explicit_) {
     if (!isopen_) {
       ret = OB_ER_SP_CURSOR_NOT_OPEN;
-      LOG_WARN("cursor is not open", K(ret));
     } else {
       rowcount = rowcount_;
     }
@@ -1553,7 +1528,6 @@ int ObPLCursorInfo::set_rowcount(int64_t rowcount)
   if (is_explicit_) {
     if (!isopen_) {
       ret = OB_ER_SP_CURSOR_NOT_OPEN;
-      LOG_WARN("cursor is not open", K(ret));
     } else {
       rowcount_ = rowcount;
     }
@@ -1570,16 +1544,13 @@ int ObPLCursorInfo::get_rowid(ObString &rowid) const
   if (is_explicit_) {
     if (!fetched_) {
       ret = OB_ER_SP_CURSOR_NOT_OPEN;
-      LOG_WARN("cursor is not fetched", K(*this), K(ret));
     } else if (!has_hidden_rowid_ || nullptr == current_row_.cells_) {
       ret = OB_INVALID_ROWID;
-      LOG_WARN("cursor has no rowid", K(*this), K(ret));
     } else {
       rowid = current_row_.get_cell(current_row_.get_count() - 1).get_string();
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("implicit cursor has no rowid", K(ret));
   }
   return ret;
 }
@@ -1640,7 +1611,6 @@ int ObPLCursorInfo::prepare_spi_cursor(ObSPICursor *&spi_cursor,
   ObIAllocator *spi_allocator = get_allocator();
   if (OB_ISNULL(spi_allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cursor allocator is null.", K(ret), K(spi_allocator), K(id_));
   } else if (OB_ISNULL(spi_cursor_)) {
     int64_t alloc_size = is_local_for_update
       ? (sizeof(ObSPICursor) > sizeof(ObSPIResultSet) ? sizeof(ObSPICursor) : sizeof(ObSPIResultSet)) 
@@ -1676,7 +1646,6 @@ int ObPLCursorInfo::set_current_position(int64_t position) {
       get_spi_cursor()->cur_ = position;
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("result set is null in unstreaming mode.", K(get_id()), K(ret));
     }
   }
   current_position_ = position;

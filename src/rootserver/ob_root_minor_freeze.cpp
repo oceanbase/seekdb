@@ -41,7 +41,6 @@ int ObRootMinorFreeze::init()
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("minor freeze service is already initialized", KR(ret));
   } else {
     inited_ = true;
     stopped_ = false;
@@ -70,10 +69,8 @@ int ObRootMinorFreeze::check_cancel() const
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("minor freeze service is not initialized", KR(ret));
   } else if (ATOMIC_LOAD(&stopped_)) {
     ret = OB_CANCELED;
-    LOG_WARN("rs is stopped", K(ret));
   }
   return ret;
 }

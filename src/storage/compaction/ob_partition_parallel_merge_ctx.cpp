@@ -155,7 +155,6 @@ int ObParallelMergeCtx::init(const compaction::ObMediumCompactionInfo &medium_in
       }
       multi_version_range.reset();
       if (FAILEDx(schema_rowkey_range.to_multi_version_range(allocator_, multi_version_range))) {
-        STORAGE_LOG(WARN, "failed to convert multi_version range", K(ret), K(schema_rowkey_range));
       } else if (OB_FAIL(range_array_.push_back(multi_version_range))) {
       }
     }

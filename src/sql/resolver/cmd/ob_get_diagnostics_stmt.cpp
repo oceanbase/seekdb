@@ -58,7 +58,6 @@ int ObGetDiagnosticsStmt::get_diag_info_type_by_name(const ObString &val, DIAG_I
     type = ROW_COUNT_TYPE;
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected diagnostic name", K(ret));
   }
   return ret;
 }

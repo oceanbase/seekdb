@@ -64,7 +64,6 @@ int ObRecursiveUnionAllOp::inner_open()
   ObOperatorKit *op_kit = nullptr;
   if (OB_ISNULL(left_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Left op is null", K(ret));
   } else if (OB_FAIL(inner_data_.init())) {
   } else if (OB_ISNULL(op_kit = ctx_.get_operator_kit(MY_SPEC.pump_operator_id_))
               || OB_ISNULL(op_kit->op_)) {
@@ -86,7 +85,6 @@ int ObRecursiveUnionAllOp::inner_open()
         || OB_ISNULL(expr->basic_funcs_->null_last_cmp_)
         || OB_ISNULL(expr->basic_funcs_->default_hash_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("left output expr is null or basic_funcs_ is null", K(ret));
       }
     }
   }
@@ -100,7 +98,6 @@ int ObRecursiveUnionAllOp::inner_get_next_row()
   if (OB_FAIL(try_check_status())) {
   } else if (OB_FAIL(inner_data_.get_next_row())) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("Failed to get next sort row from recursive inner data", K(ret));
     }
   }
   return ret;

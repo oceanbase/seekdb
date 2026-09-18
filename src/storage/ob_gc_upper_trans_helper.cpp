@@ -65,7 +65,6 @@ int ObGCUpperTransHelper::check_need_gc_or_update_upper_trans_version(
   ObIArray<int64_t> *new_upper_trans = upper_trans_param.new_upper_trans_;
   if (OB_UNLIKELY(new_upper_trans == nullptr || !new_upper_trans->empty())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("new_upper_trans is nullpr or empty", K(ret), K(tablet_id), K(new_upper_trans));
   } else if (is_paused) {
     ret = OB_EAGAIN;
     LOG_INFO("paused, cannot update trans version now", K(ret), K(tablet_id));
@@ -80,7 +79,6 @@ int ObGCUpperTransHelper::check_need_gc_or_update_upper_trans_version(
     while (OB_SUCC(ret) && OB_SUCC(iter.get_next(table))) {
       if (OB_ISNULL(table) || OB_UNLIKELY(!table->is_sstable())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, table is nullptr", K(ret), KPC(table));
       } else if (FALSE_IT(sstable = reinterpret_cast<ObSSTable *>(table))) {
       } else if (FALSE_IT(upper_trans_param.last_minor_end_scn_ = sstable->get_end_scn())) {
       } else if (FALSE_IT(new_upper_trans_version = sstable->get_upper_trans_version())) {

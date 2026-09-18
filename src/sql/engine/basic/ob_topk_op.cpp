@@ -48,7 +48,6 @@ int ObTopKOp::inner_open()
   int ret = OB_SUCCESS;
   if (!MY_SPEC.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("topk operator is invalid", K(ret));
   }
   return ret;
 }
@@ -65,7 +64,6 @@ int ObTopKOp::inner_get_next_row()
   if (0 == output_count_ || output_count_ < topk_final_count_) {
     if (OB_FAIL(child_->get_next_row())) {
       if (OB_ITER_END == ret) {
-        LOG_WARN("child get next row", K(ret), K(output_count_), K(topk_final_count_));
       }
     } else {
       if (0 == output_count_) {
@@ -94,12 +92,10 @@ int ObTopKOp::get_topk_final_count()
   ObPhysicalPlanCtx *plan_ctx = ctx_.get_physical_plan_ctx();
   if (OB_ISNULL(child_) || OB_ISNULL(plan_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child_ or plan_ctx is NULL", K(ret), KP(child_), KP(plan_ctx));
   } else if (OB_FAIL(ObLimitOp::get_int_val(MY_SPEC.org_limit_, eval_ctx_,
                                             limit, is_null_value))) {
   } else if (!is_null_value && OB_FAIL(ObLimitOp::get_int_val(MY_SPEC.org_offset_, eval_ctx_,
                                                               offset, is_null_value))) {
-    LOG_WARN("get offset values failed", K(ret));
   } else {
     limit = (is_null_value || limit < 0) ? 0 : limit;
     offset = (is_null_value || offset < 0) ? 0 : offset;
@@ -130,7 +126,6 @@ int ObTopKOp::get_topk_final_count()
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid child_ for topk operator", K(ret), K(op_type));
         break;
       }
     }

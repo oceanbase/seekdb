@@ -49,7 +49,6 @@ int ObShowGrants::add_priv_map(PRIV_MAP &priv_map, PrivKey &priv_key, ObPrivSet 
   ObPrivSet priv_set = OB_PRIV_SET_EMPTY;
   if (OB_FAIL(priv_map.get_refactored(priv_key, priv_set))) {
     if (OB_HASH_NOT_EXIST != ret) {
-      LOG_WARN("fail to get hash map", K(ret));
     } else {
       ret = OB_SUCCESS;
     }
@@ -401,7 +400,6 @@ int ObShowGrants::print_column_privs_to_buff(
   ObSEArray<ObString, 2> cols;
   if (OB_ISNULL(buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Buf is NULL", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < priv_key_array.count(); i++) {
     if ((priv_key_array.at(i).second & priv_type) != 0) {
@@ -425,7 +423,6 @@ int ObShowGrants::print_column_privs_to_buff(
       }
     } else {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid column priv type", K(ret), K(priv_type));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < cols.count(); i++) {
       if (OB_FAIL(databuff_printf(buf, buf_len, pos, "`%.*s`, ",
@@ -436,7 +433,6 @@ int ObShowGrants::print_column_privs_to_buff(
       pos -= 2; //Delete last ', '
     }
     if (OB_SUCC(ret) && OB_FAIL(BUF_PRINTF("),"))) {
-      LOG_WARN("buf print failed", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
@@ -497,21 +493,18 @@ int ObShowGrants::print_privs_to_buff(
       }
       if (OB_SUCC(ret) && priv_key_array != NULL && OB_FAIL(print_column_privs_to_buff(buf, buf_len, pos, 
                                                                               *priv_key_array, OB_PRIV_INSERT))) {
-        LOG_WARN("print column privs to buff failed", K(ret));
       }
       if ((priv_set & OB_PRIV_UPDATE) && OB_SUCCESS == ret) {
         ret = BUF_PRINTF(" UPDATE,");
       }
       if (OB_SUCC(ret) && priv_key_array != NULL && OB_FAIL(print_column_privs_to_buff(buf, buf_len, pos, 
                                                                             *priv_key_array, OB_PRIV_UPDATE))) {
-        LOG_WARN("print column privs to buff failed", K(ret));
       }
       if ((priv_set & OB_PRIV_SELECT) && OB_SUCCESS == ret) {
         ret = BUF_PRINTF(" SELECT,");
       }
       if (OB_SUCC(ret) && priv_key_array != NULL && OB_FAIL(print_column_privs_to_buff(buf, buf_len, pos, 
                                                                               *priv_key_array, OB_PRIV_SELECT))) {
-        LOG_WARN("print column privs to buff failed", K(ret));
       }
       if ((priv_set & OB_PRIV_INDEX) && OB_SUCCESS == ret) {
         ret = BUF_PRINTF(" INDEX,");
@@ -551,7 +544,6 @@ int ObShowGrants::print_privs_to_buff(
       }
       if (OB_SUCC(ret) && priv_key_array != NULL && OB_FAIL(print_column_privs_to_buff(buf, buf_len, pos, 
                                                                             *priv_key_array, OB_PRIV_REFERENCES))) {
-        LOG_WARN("print column privs to buff failed", K(ret));
       }
       if ((priv_set & OB_PRIV_READ) && OB_SUCCESS == ret) {
         ret = BUF_PRINTF(" READ,");
@@ -820,7 +812,6 @@ int ObShowGrants::grant_role_to_buff(
       const ObUserInfo *role = NULL;
       if (OB_ISNULL(role = schema_guard_->get_user_info(user_info.get_role_id_array().at(i)))) {
         //ignore error
-        LOG_WARN("role not exist", K(ret));
       } else {
         is_empty = false;
         OZ (databuff_printf(buf, buf_len, pos, "`%.*s`@`%.*s`,",

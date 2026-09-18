@@ -63,11 +63,8 @@ int ObRebuildIndexTask::init(
   if (OB_UNLIKELY(task_id <= 0 || OB_INVALID_ID == data_table_id
       || OB_INVALID_ID == index_table_id || schema_version <= 0 || parent_task_id < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", KR(ret), K(task_id), K(data_table_id),
-                                  K(index_table_id), K(schema_version), K(parent_task_id));
   } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, local management service is null", KR(ret));
   } else if (OB_FAIL(deep_copy_index_arg(allocator_, rebuild_index_arg, rebuild_index_arg_))) {
   } else if (OB_FALSE_IT(tmp_table_name = index_schema.get_table_name())) {
   } else if (OB_FAIL(ob_write_string(allocator_, tmp_table_name, target_object_name_))) {
@@ -97,10 +94,8 @@ int ObRebuildIndexTask::init(
   int64_t pos = 0;
   if (OB_UNLIKELY(!task_record.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", KR(ret), K(task_record));
   } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, local management service is null", KR(ret));
   } else {
   
     object_id_ = task_record.object_id_;
@@ -137,10 +132,8 @@ int ObRebuildIndexTask::prepare(const ObDDLTaskStatus new_status)
   DEBUG_SYNC(REBUILD_VEC_INDEX_PREPARE);
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObRebuildIndexTask has not been inited", KR(ret));
   } else if (ObDDLTaskStatus::PREPARE != task_status_) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("task status not match", K(ret), K(task_status_));
   } else if (OB_FAIL(switch_status(new_status, true, ret))) {
   }
   return ret;
@@ -168,12 +161,10 @@ int ObRebuildIndexTask::drop_index_impl()
   } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, index_schema))) {
   } else if (OB_ISNULL(index_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("index schema is null", KR(ret), K(target_object_id_));
   } else if (OB_FAIL(schema_guard.get_database_schema( index_schema->get_database_id(), database_schema))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( index_schema->get_data_table_id(), data_table_schema))) {
   } else if (OB_UNLIKELY(nullptr == database_schema || nullptr == data_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null schema", KR(ret), KP(database_schema), KP(data_table_schema));
   } else if (OB_FAIL(prepare_drop_index_arg(schema_guard, index_schema, database_schema, data_table_schema, drop_index_arg))) {
   } else {
     int64_t ddl_rpc_timeout = 0;
@@ -182,7 +173,6 @@ int ObRebuildIndexTask::drop_index_impl()
     } else if (OB_FAIL(DDL_SIM(task_id_, DROP_INDEX_RPC_FAILED))) {
     } else if (OB_UNLIKELY(ERRSIM_DROP_INDEX_IMPL_ERROR)) {
       ret = OB_EAGAIN;
-      LOG_WARN("errsim ERRSIM_DROP_INDEX_IMPL_ERROR", KR(ret));
     } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index(drop_index_arg, drop_index_res); }))) {
     } else {
       index_drop_task_id_ = drop_index_res.task_id_;
@@ -247,32 +237,26 @@ int ObRebuildIndexTask::rebuild_vec_index_impl()
   dbms_scheduler::ObDBMSSchedJobInfo job_info;
   if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().
                                                   get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, index_schema))) {
   } else if (OB_ISNULL(index_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("index schema is null", KR(ret), K(target_object_id_));
   } else if ((index_schema->is_vec_delta_buffer_type() || index_schema->is_hybrid_vec_index_log_type()) &&  // only hnsw index here, because ivf not support refresh 
              OB_FAIL(ObVectorIndexUtil::get_dbms_vector_job_info(*GCTX.sql_proxy_,
                                                                  index_schema->get_table_id(), 
                                                                  dbms_vector_job_info_allocator,
                                                                  schema_guard,
                                                                  job_info))) {
-    LOG_WARN("fail to get dbms_vector job info", K(ret), K(index_schema->get_table_id()));
   } else if (OB_FAIL(schema_guard.get_table_schema( index_schema->get_data_table_id(), table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null schema", KR(ret), KP(table_schema));
   } else if (table_schema->is_in_recyclebin()) {
     ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
-    LOG_WARN("can not create index of table in recyclebin.", KR(ret), KPC(table_schema));
   } else if (OB_FAIL(schema_guard.check_database_in_recyclebin(table_schema->get_database_id(),
                                                                is_db_in_recyclebin))) {
   } else if (is_db_in_recyclebin) {
     ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
-    LOG_WARN("Can not truncate index of db in recyclebin", KR(ret));
   } else {
     // parameters description：
     // 1. create_index_arg.index_name_
@@ -333,26 +317,21 @@ int ObRebuildIndexTask::create_and_wait_rebuild_task_finish(const ObDDLTaskStatu
   DEBUG_SYNC(REBUILD_VEC_INDEX_WAIT_CREATE_NEW_INDEX);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (ObDDLTaskStatus::REBUILD_SCHEMA != task_status_) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("task status not match", KR(ret), K(task_status_));
   } else if (-1 == index_build_task_id_ && OB_FAIL(rebuild_index())) {
-    LOG_WARN("failed to rebuild index", KR(ret));
   } else if (OB_FAIL(check_ddl_task_finish(index_build_task_id_, state_finished))) {
     if (OB_CANCELED == ret) {
       index_build_task_id_ = -1;
       new_index_id_ = -1;
       LOG_INFO("create index task is canceled, reset new_index_id_", KR(ret));
     }
-    LOG_WARN("check ddl task finish failed", K(ret), K(index_build_task_id_));
   } 
 
 #ifdef ERRSIM
   if (OB_SUCC(ret)) {
     ret = OB_E(EventTable::EN_VEC_INDEX_HNSW_REBUILD_CREATE_ERR) OB_SUCCESS;
     if (OB_FAIL(ret)) {
-      LOG_WARN("errsim ddl execute building the subtask of rebuild index failed", KR(ret));
     }
   }
 #endif
@@ -377,11 +356,9 @@ int ObRebuildIndexTask::update_task_message(common::ObISQLClient &proxy)
 
   if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(serialize_param_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory", KR(ret), K(serialize_param_size));
   } else if (OB_FAIL(serialize_params_to_message(buf, serialize_param_size, pos))) {
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else {
     msg.assign(buf, serialize_param_size);
     if (OB_FAIL(ObDDLTaskRecordOperator::update_message(*GCTX.sql_proxy_, task_id_, msg))) {
@@ -402,20 +379,16 @@ int ObRebuildIndexTask::switch_index_name(const ObDDLTaskStatus next_task_status
   
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (ObDDLTaskStatus::SWITCH_INDEX_NAME != task_status_) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("task status not match", KR(ret), K(task_status_));
   } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().
                                                   get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, index_schema))) {
   } else if (OB_ISNULL(index_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("index schema is null", KR(ret), K(target_object_id_));
   } else if (OB_FAIL(schema_guard.get_database_schema( index_schema->get_database_id(), database_schema))) {
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("database schema should not be null", K(ret));
   } else {
     int64_t rpc_timeout = 0;
     ObDDLTaskStatus new_status = next_task_status;
@@ -441,7 +414,6 @@ int ObRebuildIndexTask::switch_index_name(const ObDDLTaskStatus next_task_status
                      *GCTX.schema_service_, target_object_id_, rpc_timeout))) {
       } else if (OB_UNLIKELY(ERRSIM_SWITCH_INDEX_NAME_ERROR)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("errsim ERRSIM_SWITCH_INDEX_NAME_ERROR", KR(ret));
       } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->execute_ddl_task(alter_table_arg, unused_ids); }))) {
       } else {
         LOG_INFO("success to switch index name", K(ret), K(origin_table_name), K(alter_table_arg));
@@ -464,12 +436,9 @@ int ObRebuildIndexTask::create_and_wait_drop_task_finish(const ObDDLTaskStatus n
   bool state_finished = false;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (ObDDLTaskStatus::DROP_SCHEMA != task_status_) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("task status not match", KR(ret), K(task_status_));
   } else if (-1 == index_drop_task_id_ && OB_FAIL(drop_index_impl())) {
-    LOG_WARN("fail to build drop index task", K(ret));
   } else if (-1 == index_drop_task_id_) {
     state_finished = true;
     LOG_INFO("submit drop index task return task_id is -1", K(ret), K(index_drop_task_id_));
@@ -492,7 +461,6 @@ int ObRebuildIndexTask::check_ddl_task_finish(int64_t &child_task_id, bool &is_f
   is_finished = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (OB_UNLIKELY(child_task_id == OB_INVALID_ID)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_INFO("invalid argument", K(ret), K(child_task_id));
@@ -511,7 +479,6 @@ int ObRebuildIndexTask::check_ddl_task_finish(int64_t &child_task_id, bool &is_f
       if (OB_ENTRY_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("fail to get ddl error message", K(ret), K(child_task_id), K(task_id_));
       }
     } else {
       ret = error_message.ret_code_;
@@ -539,7 +506,6 @@ int ObRebuildIndexTask::fail()
   int ret = OB_SUCCESS;
   bool is_finished = false;
   if (-1 == index_drop_task_id_ && OB_FAIL(drop_index_impl())) {
-    LOG_WARN("drop index impl failed", KR(ret));
   } else if (-1 == index_drop_task_id_ ) {
     is_finished = true;
     LOG_INFO("submit drop index task return task_id is -1", K(ret), K(index_drop_task_id_));
@@ -560,10 +526,8 @@ int ObRebuildIndexTask::cleanup_impl()
   ObString unused_str;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (OB_ISNULL(GCTX.sql_proxy_) || OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else {
     ObMultiVersionSchemaService &schema_service = *GCTX.schema_service_;
     ObSchemaGetterGuard schema_guard;
@@ -577,7 +541,6 @@ int ObRebuildIndexTask::cleanup_impl()
     } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, data_schema))) {
     } else if (OB_ISNULL(data_schema)) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("fail to get table schema", K(ret), KPC(data_schema));
     } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
     } else if (OB_FAIL(owner_id.convert_from_value(ObLockOwnerType::DEFAULT_OWNER_TYPE, task_id_))) {
     } else if (OB_FAIL(ObDDLLock::unlock_for_rebuild_index(*data_schema, 
@@ -614,7 +577,6 @@ int ObRebuildIndexTask::process()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObRebuildIndexTask has not been inited", KR(ret));
   } else if (!need_retry()) {
     // task is done
   } else {
@@ -646,7 +608,6 @@ int ObRebuildIndexTask::process()
         break;
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("error unexpected, task status is not valid", KR(ret), K(task_status_));
     }
     if (OB_FAIL(ret)) {
       add_event_info("rebuild index task process fail");
@@ -667,7 +628,6 @@ int ObRebuildIndexTask::deep_copy_index_arg(
   const int64_t serialize_size = src_index_arg.get_serialize_size();
   if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(serialize_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc memory failed", KR(ret), K(serialize_size));
   } else if (OB_FAIL(src_index_arg.serialize(buf, serialize_size, pos))) {
   } else if (OB_FALSE_IT(pos = 0)) {
   } else if (OB_FAIL(dst_index_arg.deserialize(buf, serialize_size, pos))) {
@@ -684,7 +644,6 @@ int ObRebuildIndexTask::serialize_params_to_message(char *buf, const int64_t buf
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == buf || buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(ObDDLTask::serialize_params_to_message(buf, buf_len, pos))) {
   } else if (OB_FAIL(rebuild_index_arg_.serialize(buf, buf_len, pos))) {
   } else {
@@ -699,7 +658,6 @@ int ObRebuildIndexTask::deserialize_params_from_message(const char *buf, const i
   obcall::ObRebuildIndexArg tmp_rebuild_index_arg;
   if (OB_UNLIKELY(nullptr == buf || data_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), KP(buf), K(data_len));
   } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(buf, data_len, pos))) {
   } else if (OB_FAIL(tmp_rebuild_index_arg.deserialize(buf, data_len, pos))) {
   } else if (OB_FAIL(deep_copy_index_arg(allocator_, tmp_rebuild_index_arg, rebuild_index_arg_))) {

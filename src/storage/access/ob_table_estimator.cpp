@@ -33,8 +33,6 @@ int ObTableEstimator::estimate_row_count_for_get(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(base_input.is_table_invalid() || rowkeys.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(base_input.table_id_),
-                K(rowkeys), K(base_input.tables_.count()));
   } else {
     part_estimate.logical_row_count_ = part_estimate.physical_row_count_ = rowkeys.count();
   }
@@ -52,8 +50,6 @@ int ObTableEstimator::estimate_row_count_for_scan(
   est_records.reuse();
   if (OB_UNLIKELY(base_input.is_table_invalid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(base_input.table_id_),
-                K(ranges), K(base_input.tables_.count()));
   } else if (ranges.empty()) {
     part_estimate.logical_row_count_ = 0;
     part_estimate.physical_row_count_ = 0;
@@ -66,7 +62,6 @@ int ObTableEstimator::estimate_row_count_for_scan(
       ObITable *table = base_input.tables_.at(i);
       if (OB_ISNULL(table)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, store shouldn't be null", K(ret), KP(table));
       } else if (OB_UNLIKELY(table->is_empty())) {
         continue;
       } else if (OB_FAIL(estimate_multi_scan_row_count(base_input, table, ranges, table_est))) {
@@ -144,7 +139,6 @@ int ObTableEstimator::estimate_multi_scan_row_count(
           }
         }
         if (OB_FAIL(ret)) {
-          LOG_WARN("Failed to estimate memtable row count, ignore ret", K(ret), K(tmp_cost));
           ret = OB_SUCCESS;
         } else {
           tmp_cost.reset();
@@ -153,7 +147,6 @@ int ObTableEstimator::estimate_multi_scan_row_count(
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected table type", K(ret), K(*current_table));
     }
     if (OB_SUCC(ret)) {
       part_est.add(tmp_cost);
@@ -172,10 +165,8 @@ int ObTableEstimator::estimate_sstable_scan_row_count(
   part_est.reset();
   if (OB_UNLIKELY(!sstable->is_valid())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("The sstable has not been inited", K(ret), KPC(sstable));
   } else if (OB_UNLIKELY(!is_valid_id(base_input.table_id_))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid get arguments", K(ret), K(base_input.table_id_), K(key_range));
   } else {
     const ObIndexSSTableEstimateContext context(base_input.tablet_handle_, base_input.query_flag_);
     ObIndexBlockScanEstimator scan_estimator(context);
@@ -197,10 +188,8 @@ int ObTableEstimator::estimate_memtable_scan_row_count(
   part_est.reset();
   if (!memtable->is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN( "memtable not init", K(ret), K(base_input.table_id_));
   } else if (OB_UNLIKELY(!key_range.is_memtable_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid range to estimate row", K(ret), K(key_range));
   } else {
     memtable::ObMvccScanRange mvcc_scan_range;
     ObDatumRange real_range;

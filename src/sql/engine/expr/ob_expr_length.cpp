@@ -43,7 +43,6 @@ int ObExprLength::calc_result_type1(ObExprResType &type, ObExprResType &text,
   const ObSQLSessionInfo *session = type_ctx.get_session();
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL", K(ret));
   } else {
     type.set_int();
     type.set_scale(common::ObAccuracy::DDL_DEFAULT_ACCURACY[common::ObIntType].scale_);
@@ -65,10 +64,8 @@ int ObExprLength::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObE
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("length expr should have one param", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of length expr is null", K(ret), K(rt_expr.args_));
   } else {
     ObObjType text_type = rt_expr.args_[0]->datum_meta_.type_;
     ObObjTypeClass type_class = ob_obj_type_class(text_type);

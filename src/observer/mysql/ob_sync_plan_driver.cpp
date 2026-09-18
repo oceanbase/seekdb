@@ -54,7 +54,6 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
   bool admission_fail_and_need_retry = false;
   if (OB_ISNULL(result.get_physical_plan())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("should have set plan to result set", K(ret));
   } else if (OB_FAIL(session_.get_autocommit(ac))) {
   } else if (OB_FAIL(result.open())) {
     int cret = OB_SUCCESS;
@@ -70,8 +69,6 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
       if (OB_TRY_LOCK_ROW_CONFLICT == ret && retry_ctrl_.need_retry()) {
         //Lock conflict retry does not print logs to avoid screen flooding
       } else {
-        LOG_WARN("result set open failed, check if need retry",
-                 K(ret), K(cli_ret), K(retry_ctrl_.need_retry()));
       }
     }
     if (retry_ctrl_.need_retry()) {
@@ -92,7 +89,6 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
                                       result.has_more_result(),
                                       can_retry,
                                       OB_INVALID_COUNT))) {
-      LOG_WARN("response query result fail", K(ret));
       // move result.close() below, after test_and_save_retry_state().
       if (can_retry) {
         // Can retry, check here if we need to retry
@@ -103,8 +99,6 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
                                               result,
                                               ret,
                                               cli_ret);
-        LOG_WARN("result response failed, check if need retry",
-                 K(ret), K(cli_ret), K(retry_ctrl_.need_retry()));
         ret = cli_ret;
       } else {
         result.refresh_location_cache_by_errno(true, ret);
@@ -147,7 +141,6 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
         // Two-in-one protocol select statement result set EOF packets should be sent here
         // Not a combined protocol, the EOF packet without an additional OK packet needs to be sent here
         if (need_send_eof && OB_FAIL(sender_.response_packet(eofp))) {
-          LOG_WARN("response packet fail", K(ret));
         }
       }
     }

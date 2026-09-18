@@ -46,13 +46,10 @@ int ObTextTokenizer::open(const ObDatum &document, const ObCharsetInfo *cs)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("double init", K(ret), K_(is_inited), K_(iter_end), K_(cs), KPC_(input_doc));
   } else if (OB_ISNULL(cs)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Charset info is nullptr", K(ret), K(cs));
   } else if (OB_UNLIKELY(document.is_outrow())) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("out row document not supported for tokenizer yet", K(ret), K(document));
   } else {
     input_doc_ = &document;
     cs_ = cs;
@@ -93,7 +90,6 @@ int ObTextWhitespaceTokenizer::get_next(ObDatum &next_token, int64_t &token_freq
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (iter_end_) {
     ret = OB_ITER_END;
   } else {
@@ -172,10 +168,8 @@ int ObTokenNormalizer::init(const ObCharsetInfo *cs, ObITokenStream &in_stream)
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("double initialization", K(ret));
   } else if (OB_ISNULL(cs)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argment, charset info is nullptr", K(ret), KP(cs));
   } else {
     in_stream_ = &in_stream;
     cs_ = cs;
@@ -193,14 +187,12 @@ int ObTokenStopWordNormalizer::get_next(ObDatum &next_token, int64_t &token_freq
   token_freq = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   }
 
   while (OB_SUCC(ret) && !found_next_valid_token) {
     // Only filter out pure punctuation / control mark tokens for now
     if (OB_FAIL(in_stream_->get_next(next_token, token_freq))) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("failed to get next token from in stream", K(ret), KPC_(in_stream));
       }
     } else if (OB_FAIL(filter_special_marks(next_token, found_next_valid_token))) {
     } else if (!found_next_valid_token) {
@@ -249,7 +241,6 @@ int ObBasicEnglishNormalizer::get_next(ObDatum &next_token, int64_t &token_freq)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     next_token.reset();
     token_freq = 0;
@@ -262,7 +253,6 @@ int ObBasicEnglishNormalizer::get_next(ObDatum &next_token, int64_t &token_freq)
       tmp_datum.reset();
       if (OB_FAIL(in_stream_->get_next(tmp_datum, token_freq))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("failed to get next datum", K(ret));
         }
       } else {
         // trim leading and trailing non-alnum characters
@@ -292,7 +282,6 @@ int ObBasicEnglishNormalizer::get_next(ObDatum &next_token, int64_t &token_freq)
           // skip
         } else if (OB_UNLIKELY(last_alnum_pos < first_alnum_pos)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected alnum char pos", K(ret), K(last_alnum_pos), K(first_alnum_pos));
         } else {
           norm_token_len = last_alnum_pos - first_alnum_pos + 1;
           norm_token_ptr = token + first_alnum_pos;
@@ -303,7 +292,6 @@ int ObBasicEnglishNormalizer::get_next(ObDatum &next_token, int64_t &token_freq)
     if (OB_FAIL(ret)) {
     } else if (OB_UNLIKELY(!found_alnum)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected unfounded alnum in token", K(ret), K(tmp_datum));
     } else {
       ObString norm_alnum_token(norm_token_len, norm_token_ptr);
       ObString norm_lower_token;
@@ -349,7 +337,6 @@ int ObTextTokenGroupNormalizer::inner_init(const ObCharsetInfo *cs, ObITokenStre
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cs)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments, charset info is nullptr", K(ret), KP(cs));
   } else if (OB_FAIL(grouping_map_.create(
       DEFAULT_HASH_MAP_BUCKET_CNT,
       "TxtTokGrpHash",
@@ -363,9 +350,7 @@ int ObTextTokenGroupNormalizer::get_next(ObDatum &next_token, int64_t &token_fre
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else if (!in_stream_iter_end_ && OB_FAIL(build_grouping_map())) {
-    LOG_WARN("failed to build text token grouping map", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -386,7 +371,6 @@ int ObTextTokenGroupNormalizer::build_grouping_map()
   ObDatum token;
   if (OB_UNLIKELY(in_stream_iter_end_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("already iterated in stream", K(ret), K_(in_stream_iter_end), KPC_(in_stream));
   }
 
   while (OB_SUCC(ret)) {
@@ -394,7 +378,6 @@ int ObTextTokenGroupNormalizer::build_grouping_map()
     int64_t curr_token_freq = 0;
     if (OB_FAIL(in_stream_->get_next(token, curr_token_freq))) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
-        LOG_WARN("failed to get next token from in stream", K(ret), KPC_(in_stream));
       }
     } else {
       ObString token_string = token.get_string();
@@ -409,13 +392,11 @@ int ObTextTokenGroupNormalizer::build_grouping_map()
         *grouping_map_.get(token_string) += curr_token_freq;
       } else {
         ret = hash_ret;
-        LOG_WARN("failed to get value from grouping map", K(ret), K(token), K(token_string));
       }
     }
   }
 
   if (OB_UNLIKELY(ret != OB_ITER_END)) {
-    LOG_WARN("failed to iterate in token stream", K(ret), KPC_(in_stream));
   } else {
     ret = OB_SUCCESS;
     map_end_iter_ = grouping_map_.end();

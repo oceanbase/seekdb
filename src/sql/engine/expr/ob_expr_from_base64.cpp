@@ -100,7 +100,6 @@ int ObExprFromBase64::eval_from_base64(const ObExpr &expr,
           ret = OB_SUCCESS;
           res.set_null();
         } else {
-          LOG_WARN("failed to decode base64", K(ret));
         }
       } else {
         res.set_string(output_buf, pos);
@@ -151,7 +150,6 @@ int ObExprFromBase64::eval_from_base64_batch(const ObExpr &expr, ObEvalCtx &ctx,
             ret = OB_SUCCESS;
             res[j].set_null();
           } else {
-            LOG_WARN("failed to decode base64", K(ret));
           }
         } else {
           res[j].set_string(output_buf, pos);

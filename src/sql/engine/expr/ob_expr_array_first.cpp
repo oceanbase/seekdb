@@ -66,7 +66,6 @@ int ObExprArrayFirst::calc_result_typeN(ObExprResType& type,
 
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   } else if (ob_is_null(lambda_type)) {
     is_null_res = true;
   }
@@ -77,11 +76,9 @@ int ObExprArrayFirst::calc_result_typeN(ObExprResType& type,
       is_null_res = true;
     } else if (!ob_is_collection_sql_type(types_stack[i].get_type())) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_WARN("invalid data type", K(ret), K(types_stack[i].get_type()));
     } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, types_stack[i].get_subschema_id(), coll_type))) {
     } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_WARN("invalid collection type", K(ret), K(coll_type->type_id_));
     }
   }
   
@@ -90,14 +87,11 @@ int ObExprArrayFirst::calc_result_typeN(ObExprResType& type,
     type.set_null();
   } else if (!ob_is_int_uint_tc(lambda_type)) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid data type", K(ret), K(lambda_type));
   } else if (OB_FAIL(exec_ctx->get_sqludt_meta_by_subschema_id(types_stack[1].get_subschema_id(), arr_meta))) {
   } else if (OB_ISNULL(coll_info = reinterpret_cast<const ObSqlCollectionInfo *>(arr_meta.value_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("array collection info is null", K(ret));
   } else if (OB_ISNULL(arr_type = static_cast<ObCollectionArrayType *>(coll_info->collection_meta_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("array collection array type is null", K(ret), K(*coll_info));
   } else if (arr_type->element_type_->type_id_ == ObNestedType::OB_BASIC_TYPE) {
     ObCollectionBasicType *elem_type = static_cast<ObCollectionBasicType *>(arr_type->element_type_);
     type.set_meta(elem_type->basic_meta_.get_meta_type());
@@ -113,7 +107,6 @@ int ObExprArrayFirst::calc_result_typeN(ObExprResType& type,
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected ObNestedType type", K(ret), K(arr_type->element_type_->type_id_));
   }
 
   return ret;
@@ -134,7 +127,6 @@ int ObExprArrayFirst::eval_array_first(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     res.set_null();
   } else if (OB_UNLIKELY(OB_ISNULL(info))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr extra info is null", K(ret));
   } else if (OB_FAIL(eval_src_arrays(expr, ctx, tmp_allocator, src_arrs, arr_dim, is_null_res))) {
   } else if (is_null_res) {
     res.set_null();
@@ -148,7 +140,6 @@ int ObExprArrayFirst::eval_array_first(const ObExpr &expr, ObEvalCtx &ctx, ObDat
       } else if (OB_FAIL(expr.args_[0]->eval(ctx, datum_val))) {
       } else if (datum_val->is_null()) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
-        LOG_WARN("invalid data type", K(ret));
       } else if (datum_val->get_bool()) {
         found_res = true;
         if (src_arrs[0]->is_null(i)) {
@@ -169,7 +160,6 @@ int ObExprArrayFirst::eval_array_first(const ObExpr &expr, ObEvalCtx &ctx, ObDat
             res.from_obj(elem_obj);
             ObExprStrResAlloc res_alloc(expr, ctx);
             if (elem_obj.is_string_type() && OB_FAIL(res.deep_copy(res, res_alloc))) {
-              LOG_WARN("fail to deep copy for res datum", K(ret), K(elem_obj), K(res));
             }
           }
         }

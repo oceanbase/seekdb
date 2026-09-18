@@ -54,7 +54,6 @@ int ObDDLRetryTask::deep_copy_ddl_arg(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(source_arg)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("source arg is null", K(ret));
   } else {
     int64_t pos = 0;
     char *serialize_buf = nullptr;
@@ -62,25 +61,21 @@ int ObDDLRetryTask::deep_copy_ddl_arg(
     const int64_t serialize_size = source_arg->get_serialize_size();
     if (OB_ISNULL(serialize_buf = static_cast<char *>(allocator.alloc(serialize_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate memory failed", K(ret), K(serialize_size));
     } else if (ObDDLType::DDL_DROP_DATABASE == ddl_type) {
       if (OB_ISNULL(ddl_arg_buf = static_cast<char *>(allocator.alloc(sizeof(obcall::ObDropDatabaseArg))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret));
       } else {
         ddl_arg_ = new(ddl_arg_buf)obcall::ObDropDatabaseArg();
       }
     } else if (ObDDLType::DDL_DROP_TABLE == ddl_type) {
       if (OB_ISNULL(ddl_arg_buf = static_cast<char *>(allocator.alloc(sizeof(obcall::ObDropTableArg))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret));
       } else {
         ddl_arg_ = new(ddl_arg_buf)obcall::ObDropTableArg();
       }
     } else if (ObDDLType::DDL_TRUNCATE_TABLE == ddl_type) {
       if (OB_ISNULL(ddl_arg_buf = static_cast<char *>(allocator.alloc(sizeof(obcall::ObTruncateTableArg))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret));
       } else {
         ddl_arg_ = new(ddl_arg_buf)obcall::ObTruncateTableArg();
       }
@@ -92,19 +87,16 @@ int ObDDLRetryTask::deep_copy_ddl_arg(
             || ObDDLType::DDL_RENAME_SUB_PARTITION == ddl_type) {
       if (OB_ISNULL(ddl_arg_buf = static_cast<char *>(allocator.alloc(sizeof(obcall::ObAlterTableArg))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("allocate memory failed", K(ret));
       } else {
         ddl_arg_ = new(ddl_arg_buf)obcall::ObAlterTableArg();
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected ddl type", K(ret), K(ddl_type));
     }
         
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(ddl_arg_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("ddl arg is nullptr", K(ret), K(ddl_type));
     } else if (OB_FAIL(source_arg->serialize(serialize_buf, serialize_size, pos))) {
     } else if (FALSE_IT(pos = 0)) {
     } else if (OB_FAIL(ddl_arg_->deserialize(serialize_buf, serialize_size, pos))) {
@@ -139,17 +131,12 @@ int ObDDLRetryTask::init(const int64_t task_id,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObDDLRetryTask has already been inited", K(ret));
   } else if (OB_UNLIKELY(task_id <= 0 || OB_INVALID_ID == object_id
     || schema_version <= 0 || !is_drop_schema_block_concurrent_trans(ddl_type) || nullptr == ddl_arg 
     || ObDDLTaskStatus::PREPARE != task_status)) {
       ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(task_id), K(object_id),
-      K(schema_version), K(ddl_type), KP(ddl_arg), K(task_status));
   } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, local management service is null", K(ret));
-    LOG_WARN("fail to init task table operator", K(ret));
   } else if (OB_FAIL(deep_copy_ddl_arg(allocator_, ddl_type, ddl_arg))) {
   } else {
     set_gmt_create(ObTimeUtility::current_time());
@@ -175,11 +162,9 @@ int ObDDLRetryTask::init(const ObDDLTaskRecord &task_record)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!task_record.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(task_record));
   } else if (OB_FAIL(DDL_SIM(task_record.task_id_, DDL_TASK_INIT_BY_RECORD_FAILED))) {
   } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, local management service is null", K(ret));
   } else {
   
     object_id_ = task_record.object_id_;
@@ -212,7 +197,6 @@ int ObDDLRetryTask::prepare(const ObDDLTaskStatus next_task_status)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(switch_status(next_task_status, true, ret))) {
   }
   return ret;
@@ -232,27 +216,22 @@ int ObDDLRetryTask::get_forward_user_message(const rpc::frame::ObResultCode &rco
   ObWarningBuffer warning_buffer;
   if (warning_buffer.get_buffer_size() < rcode.warnings_.count()
     || common::OB_MAX_ERROR_MSG_LEN < strlen(rcode.msg_)) {
-    LOG_WARN("invalid arg", K(ret), K(rcode));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < rcode.warnings_.count(); i++) {
       if (warning_buffer.get_max_warn_len() < strlen(rcode.warnings_.at(i).msg_)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid arg", K(ret), K(rcode.warnings_.at(i)));
       }
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(tmp_buf = static_cast<char *>(allocator_.alloc(serialize_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret), K(serialize_size));
   } else if (OB_FAIL(rcode.serialize(tmp_buf, serialize_size, pos))) {
   } else if (OB_FALSE_IT(src.assign(tmp_buf, serialize_size))) {
   } else if (OB_FAIL(ObDDLTaskRecordOperator::to_hex_str(src, dst))) {
   } else if (OB_FALSE_IT(tmp_str.assign(dst.ptr(), dst.length()))) {
-    LOG_WARN("assign string failed", K(ret));
   } else if (OB_UNLIKELY((alloc_size = dst.length() + 1) < 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret), K(alloc_size), K(dst.length()), K(dst.ptr()));
   } else if (OB_FAIL(ob_write_string(allocator_, tmp_str, forward_user_message_, true /*cstyle, end with '\0'*/))) {
   }
   return ret;
@@ -263,12 +242,10 @@ int ObDDLRetryTask::check_schema_change_done()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (is_schema_change_done_) {
     // do nothing.
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(DDL_SIM(task_id_, RETRY_TASK_CHECK_SCHEMA_CHANGED_FAILED))) {
   } else {
     common::ObMySQLProxy &proxy = *GCTX.sql_proxy_;
@@ -277,7 +254,6 @@ int ObDDLRetryTask::check_schema_change_done()
       sqlclient::ObMySQLResult *result = NULL;
       if (OB_UNLIKELY(!proxy.is_inited())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected error, proxy is not inited", K(ret));
       } else if (OB_FAIL(query_string.assign_fmt(
           " SELECT status FROM %s WHERE task_id = %lu",
           OB_ALL_DDL_TASK_STATUS_TNAME, task_id_))) {
@@ -285,7 +261,6 @@ int ObDDLRetryTask::check_schema_change_done()
       } else if (OB_FAIL(proxy.read(res, query_string.ptr()))) {
       } else if (OB_UNLIKELY(nullptr == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("fail to get sql result", K(ret), KP(result));
       } else if (OB_FAIL(result->next())) {
       } else {
         int64_t table_task_status = 0;
@@ -303,11 +278,9 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
   ObDDLTaskStatus new_status = DROP_SCHEMA;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLRetryTask has not been inited", K(ret));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(ddl_arg_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret), KP(ddl_arg_));
   } else if (OB_FAIL(DDL_SIM(task_id_, RETRY_TASK_DROP_SCHEMA_FAILED))) {
   } else if (OB_FAIL(check_schema_change_done())) {
   } else if (is_schema_change_done_) {
@@ -362,7 +335,6 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
       }
       default: {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected ddl type", K(ret), K(task_type_));
         break;
       }
     }
@@ -393,10 +365,8 @@ int ObDDLRetryTask::wait_alter_table(const ObDDLTaskStatus new_status)
   bool finish = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLRetryTask has not been inited", K(ret));
   } else if (OB_ISNULL(ddl_arg_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret), KP(ddl_arg_));
   } else if (OB_FAIL(DDL_SIM(task_id_, RETRY_TASK_WAIT_ALTER_TABLE_FAILED))) {
   } else {
     switch (task_type_) {
@@ -434,7 +404,6 @@ int ObDDLRetryTask::wait_alter_table(const ObDDLTaskStatus new_status)
     }
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected ddl type", K(ret), K(task_type_));
       break;
     }
     }
@@ -452,10 +421,8 @@ int ObDDLRetryTask::cleanup_impl()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(report_error_code(forward_user_message_, affected_rows_))) {
   } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*GCTX.sql_proxy_, task_id_))) {
   } else {
@@ -480,10 +447,8 @@ int ObDDLRetryTask::check_health()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("ddl service not started", KR(ret));
     need_retry_ = false;
   } else if (OB_FAIL(refresh_status())) {
   } else if (OB_FAIL(refresh_schema_version())) {
@@ -496,7 +461,6 @@ int ObDDLRetryTask::process()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDDLRetryTask has not been inited", K(ret));
   } else if (OB_FAIL(check_health())) {
   } else if (!need_retry()) {
     // task finish, do nothing.
@@ -551,7 +515,6 @@ int ObDDLRetryTask::serialize_params_to_message(char *buf, const int64_t buf_siz
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == buf || buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_size));
   } else if (OB_FAIL(ObDDLTask::serialize_params_to_message(buf, buf_size, pos))) {
   } else if (OB_FAIL(ddl_arg_->serialize(buf, buf_size, pos))) {
   }
@@ -563,7 +526,6 @@ int ObDDLRetryTask::deserialize_params_from_message(const char *buf, const int64
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == buf || buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_size));
   } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(buf, buf_size, pos))) {
   } else if (ObDDLType::DDL_DROP_DATABASE == task_type_) {
     obcall::ObDropDatabaseArg tmp_arg;
@@ -617,13 +579,11 @@ int ObDDLRetryTask::update_task_status_wait_child_task_finish(
   int64_t unused_snapshot_ver = OB_INVALID_VERSION;
   if (OB_UNLIKELY(task_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(task_id));
   } else if (OB_FAIL(DDL_SIM(task_id, RETRY_TASK_UPDATE_BY_CHILD_FAILED))) {
   } else if (OB_FAIL(ObDDLTaskRecordOperator::select_for_update(trans, task_id, curr_task_status, 
       execution_id, ret_code, unused_snapshot_ver))) {
   } else if (OB_UNLIKELY(ObDDLTaskStatus::DROP_SCHEMA != curr_task_status)) {
     ret = OB_STATE_NOT_MATCH;
-    LOG_WARN("task status updated", K(ret), K(task_id), K(curr_task_status));
   } else if (OB_FAIL(ObDDLTaskRecordOperator::update_task_status(trans, task_id, new_task_status))) {
   } else {
     LOG_INFO("update task status to wait child task finish", K(ret));

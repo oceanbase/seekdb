@@ -95,7 +95,6 @@ int ObInnerKVItemStringValue::set_value(const char *value)
   ObString str(value);
   if (OB_ISNULL(value)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid value", K(ret), KP(value));
   } else if (OB_FAIL(set_value(str))) {
   }
   return ret;
@@ -148,7 +147,6 @@ int ObInnerKVItem::set_kv_name(const char *name)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(name)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid name", K(ret), KP(name));
   } else if (OB_FAIL(name_.assign(name))) {
   }
   return ret;
@@ -189,7 +187,6 @@ int ObInnerKVItem::fill_dml(share::ObDMLSqlSplicer &dml) const
   int ret = OB_SUCCESS;
   if (!is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("not a valid item", K(ret), K(this));
   } else if (OB_FAIL(fill_pkey_dml(dml))) {
   } else if (OB_FAIL(value_->fill_value_dml(dml))) {
   }
@@ -235,7 +232,6 @@ int ObInnerKVTableOperator::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObInnerKVTableOperator init twice", K(ret));
   } else if (OB_FAIL(operator_.init(tname))) {
   } else {
     is_inited_ = true;
@@ -249,7 +245,6 @@ int ObInnerKVTableOperator::get_item(ObISQLClient &proxy, const bool need_lock, 
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObInnerKVTableOperator not init", K(ret));
   } else if (OB_FAIL(operator_.get_row(proxy, need_lock, item, item))) {
   }
 
@@ -266,7 +261,6 @@ int ObInnerKVTableOperator::insert_or_update_item(ObISQLClient &proxy, const ObI
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObInnerKVTableOperator not init", K(ret));
   } else if (OB_FAIL(operator_.insert_or_update_row(proxy, item, affected_rows))) {
   }
 
@@ -281,7 +275,6 @@ int ObInnerKVTableOperator::increase_value_by(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObInnerKVTableOperator not init", K(ret));
   } else if (OB_FAIL(operator_.increase_column_by(proxy, key, "value", value, affected_rows))) {
   }
 

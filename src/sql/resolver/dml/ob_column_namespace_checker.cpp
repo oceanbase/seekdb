@@ -84,7 +84,6 @@ int ObColumnNamespaceChecker::check_table_column_namespace(const ObQualifiedName
         ret = OB_SUCCESS;
         //continue to search
       } else {
-        LOG_WARN("find column in table failed", K(ret));
       }
     } else {
       break; //found column in table
@@ -130,7 +129,6 @@ int ObColumnNamespaceChecker::check_column_existence_in_using_clause(const uint6
                                                        exist))) {
     } else if (exist) {
       ret = OB_ERR_QUALIFIER_EXISTS_FOR_USING_COLUMN;
-      LOG_WARN("column part of using clause can not have qualifier", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -146,7 +144,6 @@ int ObColumnNamespaceChecker::check_column_existence_in_using_clause(const uint6
     /*do nothing*/
   } else if (OB_ISNULL(join_infos_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("join_info shouldn't be null", K(ret));
   } else {
     const JoinedTable &joined_table = static_cast<const JoinedTable&>(table_item);
     bool table_exist = false;
@@ -179,8 +176,6 @@ int ObColumnNamespaceChecker::check_column_existence_in_using_clause(const uint6
       if (OB_ISNULL(joined_table.left_table_) ||
           OB_ISNULL(joined_table.right_table_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(joined_table.left_table_),
-            K(joined_table.right_table_), K(ret));
       } else if (OB_FAIL(SMART_CALL(check_column_existence_in_using_clause(table_id,
                                                                            column_name,
                                                                            *joined_table.left_table_,
@@ -211,7 +206,6 @@ int ObColumnNamespaceChecker::check_ext_table_column_namespace(
         table_item = cur_table;
       } else {
         ret = OB_NON_UNIQ_ERROR;
-        LOG_WARN("column in all tables is ambiguous", K(ret), K(q_name));
       }
     } else {
       bool is_match = true;
@@ -249,7 +243,6 @@ int ObColumnNamespaceChecker::check_using_column_namespace(const ObString &colum
       || OB_ISNULL(l_table = joined_table->left_table_)
       || OB_ISNULL(r_table = joined_table->right_table_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("current joined table is null", K(joined_table), K(l_table), K(r_table));
   } else if (OB_FAIL(find_column_in_table(*r_table, q_name, right_table, r_need_check_unique))) {
   } else if (OB_FAIL(find_column_in_table(*l_table, q_name, left_table, l_need_check_unique))) {
   }
@@ -268,10 +261,8 @@ int ObColumnNamespaceChecker::check_column_exists(const TableItem &table_item, c
   uint64_t table_id = table_item.ref_id_;
   if (OB_ISNULL(params_.schema_checker_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("schema_checker is null");
   } else if (OB_ISNULL(params_.session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params_.session_info_ is null", K(ret));
   } else if (table_item.is_basic_table()) {
     //check column name in schema checker
     if (0 == col_name.case_compare("ORA_ROWSCN")) {
@@ -285,7 +276,6 @@ int ObColumnNamespaceChecker::check_column_exists(const TableItem &table_item, c
     ObSelectStmt *ref_stmt = table_item.ref_query_;
     if (OB_ISNULL(ref_stmt)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("generate table ref stmt is null");
     } else {
       //use the dup_exist to mark unskippable column, the skippable column will not affect the dup_exist.
       int64_t unduplicable_count = 0;
@@ -307,7 +297,6 @@ int ObColumnNamespaceChecker::check_column_exists(const TableItem &table_item, c
             // is duplicated in a joined table, but not in using.
             // 2. in other cases, we raise error whenever there are columns with same name.
             ret = OB_NON_UNIQ_ERROR;
-            LOG_WARN("column duplicated", K(col_name), K(ret));
             ObString scope_name = ObString::make_string(get_scope_name(T_FIELD_LIST_SCOPE));
             LOG_USER_ERROR(OB_NON_UNIQ_ERROR,
                           col_name.length(),
@@ -340,13 +329,11 @@ int ObColumnNamespaceChecker::check_column_exists(const TableItem &table_item, c
     ObSEArray<ObColumnRefRawExpr *, 4> values_desc;
     if (OB_ISNULL(dml_stmt_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), K(dml_stmt_));
     } else if (OB_FAIL(dml_stmt_->get_column_exprs(table_item.table_id_, values_desc))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && !is_exist && i < values_desc.count(); ++i) {
         if (OB_ISNULL(values_desc.at(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret), K(values_desc.at(i)));
         } else {
           is_exist = ObCharset::case_insensitive_equal(values_desc.at(i)->get_column_name(), col_name);
         }
@@ -430,7 +417,6 @@ int ObColumnNamespaceChecker::find_column_in_joined_table(const JoinedTable &joi
       if (OB_ERR_BAD_FIELD_ERROR == ret) {
         ret = find_column_in_table(*joined_table.right_table_, q_name, found_table, need_check_unique);
       } else {
-        LOG_WARN("find column in left table failed", K(ret), K(q_name));
       }
     } else if (need_check_unique) {
       //check table column whether unique in joined table
@@ -440,7 +426,6 @@ int ObColumnNamespaceChecker::find_column_in_joined_table(const JoinedTable &joi
         if (OB_ERR_BAD_FIELD_ERROR == ret) {
           ret = OB_SUCCESS;
         } else {
-          LOG_WARN("find column in right table failed", K(ret));
         }
       } else {
         ret = OB_NON_UNIQ_ERROR;
@@ -504,19 +489,14 @@ int ObColumnNamespaceChecker::check_rowid_existence_in_joined_table(const ObSQLS
     //do nothing
   } else if (OB_ISNULL(joined_table)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(joined_table));
   } else if (OB_ISNULL(joined_table->left_table_) || OB_ISNULL(joined_table->right_table_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("left or right table of joined table is NULL", K(ret), KP(joined_table->left_table_),
-                                                            KP(joined_table->right_table_));
   } else if (!joined_table->left_table_->is_joined_table() &&
              OB_FAIL(ObResolverUtils::name_case_cmp(session_info,
                                                     tbl_name,
                                                     joined_table->left_table_->get_object_name(),
                                                     OB_TABLE_NAME_CLASS,
                                                     found_it))) {
-    LOG_WARN("table name case compare failed", K(ret), K(tbl_name),
-                                               K(joined_table->left_table_->get_object_name()));
   } else if (found_it) {
     table_item = joined_table->left_table_;
   } else if (joined_table->left_table_->is_joined_table() &&
@@ -525,7 +505,6 @@ int ObColumnNamespaceChecker::check_rowid_existence_in_joined_table(const ObSQLS
                                                                       reinterpret_cast<const JoinedTable*>(joined_table->left_table_),
                                                                       found_it,
                                                                       table_item)))) {
-    LOG_WARN("failed to check rowid existence in joined table", K(ret));
   } else if (found_it) {
     //do nothing
   } else if (!joined_table->right_table_->is_joined_table() &&
@@ -534,8 +513,6 @@ int ObColumnNamespaceChecker::check_rowid_existence_in_joined_table(const ObSQLS
                                                     joined_table->right_table_->get_object_name(),
                                                     OB_TABLE_NAME_CLASS,
                                                     found_it))) {
-    LOG_WARN("table name case compare failed", K(ret), K(tbl_name),
-                                               K(joined_table->right_table_->get_object_name()));
   } else if (found_it) {
     table_item = joined_table->right_table_;
   } else if (joined_table->right_table_->is_joined_table() &&
@@ -544,7 +521,6 @@ int ObColumnNamespaceChecker::check_rowid_existence_in_joined_table(const ObSQLS
                                                                       reinterpret_cast<const JoinedTable*>(joined_table->right_table_),
                                                                       found_it,
                                                                       table_item)))) {
-    LOG_WARN("failed to check rowid existence in joined table", K(ret));
   } else if (found_it) {
     //do nothing
   }

@@ -48,14 +48,12 @@ int ObExprSTAsGeoJson::calc_result_typeN(ObExprResType &type, ObExprResType *typ
         // geometry
         if (!ob_is_geometry(type) && !ob_is_string_type(type) && !ob_is_null(type)) {
           ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-          LOG_WARN("invalid type for geometry", K(ret), K(type));
         }
       } else {
         if (!ob_is_integer_type(type) && !ob_is_null(type)
             && !ob_is_varchar_char_type(type, types_stack[i].get_collation_type())
             && !ob_is_enum_or_set_type(type)) {
           ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-          LOG_WARN("invalid type", K(ret), K(type));
         } else {
           types_stack[i].set_calc_type(ObIntType);
           type_ctx.set_cast_mode(type_ctx.get_cast_mode() | CM_STRING_INTEGER_TRUNC);
@@ -116,7 +114,6 @@ int ObExprSTAsGeoJson::process_input_params(const ObExpr &expr, ObEvalCtx &ctx,
           flag_buf,
           func_str.length(),
           func_str.ptr());
-      LOG_WARN("Incorrect max decimal digits value for function st_asgeojson", K(ret), K(datum->get_int()));
     } else {
       max_dec_digits = datum->get_uint32();
     }
@@ -140,7 +137,6 @@ int ObExprSTAsGeoJson::process_input_params(const ObExpr &expr, ObEvalCtx &ctx,
           flag_buf,
           func_str.length(),
           func_str.ptr());
-      LOG_WARN("Incorrect options value for function st_asgeojson", K(ret), K(datum->get_int()));
     } else {
       flag = datum->get_uint8();
     }

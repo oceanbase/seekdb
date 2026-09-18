@@ -60,9 +60,7 @@ int ObExprTimeFormat::time_to_str_format(const int64_t &time_value, const ObStri
   } else if (OB_ISNULL(format.ptr()) || OB_ISNULL(buf)
             || OB_UNLIKELY(format.length() <= 0 || buf_len <= 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("format or output string is invalid", K(ret), K(format), K(buf), K(buf_len));
   } else if (IS_NEG_TIME(ob_time.mode_) && OB_FAIL(databuff_printf(buf, buf_len, pos, "-"))) {
-    LOG_WARN("print - failed", K(ret));
   } else {
     const char *format_ptr = format.ptr();
     const char *end_ptr = format.ptr() + format.length();
@@ -189,7 +187,6 @@ int ObExprTimeFormat::time_to_str_format(const int64_t &time_value, const ObStri
         if (OB_SUCC(ret)) {
           format_ptr++;
         } else {
-          LOG_WARN("print failed", K(ret), K(*format_ptr), K(time_value), K(ob_time));
         }
       } else if (pos >= buf_len) {
         ret = OB_SIZE_OVERFLOW;
@@ -211,11 +208,9 @@ int ObExprTimeFormat::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 2) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("date_format expr should have two params", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])
              || OB_ISNULL(rt_expr.args_[1])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of date_format expr is null", K(ret), K(rt_expr.args_));
   } else {
     rt_expr.eval_func_ = ObExprTimeFormat::calc_time_format;
   }
