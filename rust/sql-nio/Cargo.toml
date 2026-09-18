@@ -19,6 +19,8 @@ name = "sql_nio"
 crate-type = ["staticlib", "rlib"]
 
 [dependencies]
+# Keep all server Rust exports in one staticlib, with a single Rust runtime.
+embedding-response-ffi = { path = "../embedding-response-ffi" }
 # mio = epoll (Linux) / kqueue (macOS) / IOCP (Windows), no async runtime.
 # os-ext: mio::windows::NamedPipe for the per-reactor pending-pipe acceptor.
 mio = { version = "1", features = ["os-poll", "net", "os-ext"] }

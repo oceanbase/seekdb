@@ -14,6 +14,9 @@
 
 #![deny(improper_ctypes_definitions)]
 
+// The legacy libsql_nio archive is the server's single Rust link unit.
+pub use embedding_response_ffi::seekdb_embedding_response_parse;
+
 use std::alloc::{alloc_zeroed, dealloc, handle_alloc_error, Layout};
 use std::collections::{HashMap, TryReserveError};
 use std::ffi::{c_char, c_int, c_void, CStr};

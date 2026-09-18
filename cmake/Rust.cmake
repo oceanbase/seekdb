@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Build the Rust crate `sql-nio` (rust/sql-nio) with Cargo and expose it to the
-# C++ build as the imported-style INTERFACE target `sql_nio`.
+# Build the server's single Rust staticlib (sql-nio and embedding-response-ffi)
+# with Cargo and expose it to C++ as the INTERFACE target `sql_nio`.
 #
 # Usage from any C++ target:
 #     target_link_libraries(<your_target> PRIVATE sql_nio)
@@ -73,6 +73,12 @@ endif()
 
 # Sources whose change should retrigger a rebuild of the staticlib.
 file(GLOB_RECURSE _rust_sources CONFIGURE_DEPENDS "${RUST_CRATE_DIR}/src/*.rs")
+file(GLOB_RECURSE _embedding_sources CONFIGURE_DEPENDS
+  "${RUST_WORKSPACE_DIR}/embedding-response/src/*.rs"
+  "${RUST_WORKSPACE_DIR}/embedding-response-ffi/src/*.rs")
+list(APPEND _rust_sources ${_embedding_sources}
+  "${RUST_WORKSPACE_DIR}/embedding-response/Cargo.toml"
+  "${RUST_WORKSPACE_DIR}/embedding-response-ffi/Cargo.toml")
 list(APPEND _rust_sources
   "${RUST_WORKSPACE_DIR}/Cargo.toml"
   "${RUST_WORKSPACE_DIR}/rust-toolchain.toml"
@@ -175,6 +181,8 @@ endif()
 add_library(sql_nio INTERFACE)
 add_dependencies(sql_nio sql_nio_build)
 target_include_directories(sql_nio INTERFACE "${RUST_INCLUDE_DIR}")
+target_include_directories(sql_nio INTERFACE
+  "${RUST_WORKSPACE_DIR}/embedding-response-ffi/include")
 target_link_libraries(sql_nio INTERFACE "${RUST_STATICLIB}" ${_rust_syslibs})
 
 set_property(DIRECTORY APPEND PROPERTY

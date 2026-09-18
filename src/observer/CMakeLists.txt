@@ -109,6 +109,20 @@ if(ENABLE_SANITY)
   endif()
 endif()
 
+# Linux CI exercises the real adapter with the server's exact library closure.
+# Keep this out of the default server build; buildbase invokes it explicitly.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  add_executable(embedding_response_integration EXCLUDE_FROM_ALL
+    "${CMAKE_SOURCE_DIR}/rust/embedding-response-ffi/tests/cpp_adapter_test.cpp")
+  get_target_property(_embedding_test_libraries seekdb LINK_LIBRARIES)
+  list(REMOVE_ITEM _embedding_test_libraries ob_main)
+  target_link_libraries(embedding_response_integration PRIVATE ${_embedding_test_libraries})
+  get_target_property(_embedding_test_link_options seekdb LINK_OPTIONS)
+  if(_embedding_test_link_options)
+    target_link_options(embedding_response_integration PRIVATE ${_embedding_test_link_options})
+  endif()
+endif()
+
 if(APPLE AND OB_HAVE_BUNDLED_JEMALLOC)
   # jemalloc's macOS allocator takeover lives in a standalone archive member.
   # Force it into seekdb so its zone registration constructor is retained.
