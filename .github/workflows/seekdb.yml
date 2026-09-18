@@ -194,22 +194,37 @@ jobs:
           fi
           BAZEL_DIR="${RUNNER_TEMP}/seekdb-bazel"
           BAZEL_PATH="$BAZEL_DIR/bazel"
-          BAZEL_URL="https://releases.bazel.build/${BAZEL_VERSION}/release/bazel-${BAZEL_VERSION}-linux-x86_64"
+          BAZEL_URLS=(
+            "https://releases.bazel.build/${BAZEL_VERSION}/release/bazel-${BAZEL_VERSION}-linux-x86_64"
+            "https://mirrors.huaweicloud.com/bazel/${BAZEL_VERSION}/bazel-${BAZEL_VERSION}-linux-x86_64"
+          )
           mkdir -p "$BAZEL_DIR"
           CURL_ARGS=(--fail --location --retry 3 --retry-delay 2 \
             --connect-timeout 15 --speed-limit 10240 --speed-time 30 \
             --output "$BAZEL_PATH")
-          if curl --max-time 180 "${CURL_ARGS[@]}" "$BAZEL_URL" \
-              && echo "$BAZEL_LINUX_X86_64_SHA256  $BAZEL_PATH" | sha256sum --check --strict; then
-            echo "downloaded Bazel through the runner's configured network path"
-          else
-            echo "configured network path failed; retrying the official Bazel endpoint without proxy variables" >&2
+          BAZEL_SOURCE=""
+          for BAZEL_URL in "${BAZEL_URLS[@]}"; do
             rm -f "$BAZEL_PATH"
-            env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY \
-              -u http_proxy -u https_proxy -u all_proxy \
-              curl --max-time 600 "${CURL_ARGS[@]}" "$BAZEL_URL"
-            echo "$BAZEL_LINUX_X86_64_SHA256  $BAZEL_PATH" | sha256sum --check --strict
+            if curl --max-time 180 "${CURL_ARGS[@]}" "$BAZEL_URL" \
+                && echo "$BAZEL_LINUX_X86_64_SHA256  $BAZEL_PATH" | sha256sum --check --strict; then
+              BAZEL_SOURCE="$BAZEL_URL (configured network path)"
+              break
+            fi
+            echo "configured network path failed for $BAZEL_URL; retrying without proxy variables" >&2
+            rm -f "$BAZEL_PATH"
+            if env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY \
+                -u http_proxy -u https_proxy -u all_proxy \
+                curl --max-time 600 "${CURL_ARGS[@]}" "$BAZEL_URL" \
+                && echo "$BAZEL_LINUX_X86_64_SHA256  $BAZEL_PATH" | sha256sum --check --strict; then
+              BAZEL_SOURCE="$BAZEL_URL (direct network path)"
+              break
+            fi
+          done
+          if [[ -z "$BAZEL_SOURCE" ]]; then
+            echo "failed to download the pinned Bazel artifact from every configured endpoint" >&2
+            exit 1
           fi
+          echo "downloaded and verified Bazel from $BAZEL_SOURCE"
           chmod 0755 "$BAZEL_PATH"
           echo "BAZEL=$BAZEL_PATH" >> "$GITHUB_ENV"
           "$BAZEL_PATH" --version
