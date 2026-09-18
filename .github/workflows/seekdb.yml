@@ -194,11 +194,20 @@ jobs:
           fi
           BAZEL_DIR="${RUNNER_TEMP}/seekdb-bazel"
           BAZEL_PATH="$BAZEL_DIR/bazel"
+          BAZEL_URL="https://releases.bazel.build/${BAZEL_VERSION}/release/bazel-${BAZEL_VERSION}-linux-x86_64"
           mkdir -p "$BAZEL_DIR"
-          curl --fail --location --retry 3 --retry-delay 2 \
-            --output "$BAZEL_PATH" \
-            "https://github.com/bazelbuild/bazel/releases/download/${BAZEL_VERSION}/bazel-${BAZEL_VERSION}-linux-x86_64"
-          echo "$BAZEL_LINUX_X86_64_SHA256  $BAZEL_PATH" | sha256sum --check --strict
+          CURL_ARGS=(--fail --location --retry 3 --retry-delay 2 --output "$BAZEL_PATH")
+          if curl "${CURL_ARGS[@]}" "$BAZEL_URL" \
+              && echo "$BAZEL_LINUX_X86_64_SHA256  $BAZEL_PATH" | sha256sum --check --strict; then
+            echo "downloaded Bazel through the runner's configured network path"
+          else
+            echo "configured network path failed; retrying the official Bazel endpoint without proxy variables" >&2
+            rm -f "$BAZEL_PATH"
+            env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY \
+              -u http_proxy -u https_proxy -u all_proxy \
+              curl "${CURL_ARGS[@]}" "$BAZEL_URL"
+            echo "$BAZEL_LINUX_X86_64_SHA256  $BAZEL_PATH" | sha256sum --check --strict
+          fi
           chmod 0755 "$BAZEL_PATH"
           echo "BAZEL=$BAZEL_PATH" >> "$GITHUB_ENV"
           "$BAZEL_PATH" --version
