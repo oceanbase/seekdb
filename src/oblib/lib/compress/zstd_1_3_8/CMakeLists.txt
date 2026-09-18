@@ -18,6 +18,18 @@ if(WIN32)
   oblib_add_extra_objects(${CMAKE_CURRENT_BINARY_DIR}/zstd_1_3_8_objs.lib)
   set_source_files_properties(zstd_1_3_8_objs.lib PROPERTIES GENERATED TRUE)
   oblib_add_library(zstd_1_3_8 zstd_1_3_8_objs.lib)
+elseif(OB_MACOS27)
+  # Darwin ld -r makes hidden (private extern) symbols local by default.
+  add_custom_command(
+    OUTPUT zstd_1_3_8_objs.o
+    COMMAND "${OB_LD_BIN}" -arch "${ARCHITECTURE}" -r
+      $<TARGET_OBJECTS:zstd_1_3_8_objs> -o zstd_1_3_8_objs.o
+    DEPENDS zstd_1_3_8_objs
+    COMMAND_EXPAND_LISTS
+    VERBATIM)
+  oblib_add_extra_objects(${CMAKE_CURRENT_BINARY_DIR}/zstd_1_3_8_objs.o)
+  set_source_files_properties(zstd_1_3_8_objs.o PROPERTIES GENERATED TRUE)
+  oblib_add_library(zstd_1_3_8 zstd_1_3_8_objs.o)
 else()
   # On Unix/Linux/macOS, use ld -r for partial linking
   add_custom_command(

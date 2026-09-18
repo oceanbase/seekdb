@@ -120,6 +120,9 @@ if(WIN32)
   endif()
 endif()
 if(APPLE)
+  if(OB_MACOS27)
+    list(APPEND _rust_build_env "DEVELOPER_DIR=${OB_MACOS_DEVELOPER_DIR}")
+  endif()
   # CMake injects -isysroot into its own compile rules on Apple; the cc crate
   # gets no such implicit flag, so the vendored devtools clang cannot find the
   # macOS SDK headers (TargetConditionals.h). SDKROOT is the env var the clang

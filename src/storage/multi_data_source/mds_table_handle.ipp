@@ -56,7 +56,7 @@ struct MdsTableHandleHelper {
       return ret;
     }
     template <>
-    static int get_unit_id<MdsTableType::get_element_size()>(uint8_t &mds_unit_id) {
+    int get_unit_id<MdsTableType::get_element_size()>(uint8_t &mds_unit_id) {
       int ret = OB_OBJ_TYPE_ERROR;
       MDS_LOG(ERROR, "type error, no this KV unit in this MdsTable", KR(ret),
                       K(typeid(MdsTableType).name()), K(typeid(K).name()), K(typeid(V).name()),
@@ -77,7 +77,7 @@ struct MdsTableHandleHelper {
     return ret;
   }
   template <>
-  static int get_unit_id<MdsTableTypeTuple::get_element_size()>(const uint8_t mds_table_id,
+  int get_unit_id<MdsTableTypeTuple::get_element_size()>(const uint8_t mds_table_id,
                                                                 uint8_t &mds_unit_id) {
     int ret = OB_OBJ_TYPE_ERROR;
     MDS_LOG(ERROR, "type error, no this MdsTable", KR(ret), K(mds_table_id),
@@ -814,7 +814,7 @@ struct MdsTableUnitConvertHelper {
       return ret;
     }
     template <>
-    static int get_unit<MdsTableType::get_element_size()>(MdsTableBase *p_mds_table,
+    int get_unit<MdsTableType::get_element_size()>(MdsTableBase *p_mds_table,
                                                           MdsUnit<K, V> *&p_mds_unit) {
       int ret = OB_OBJ_TYPE_ERROR;
       MDS_LOG(ERROR, "type error, no this KV unit in this MdsTable", KR(ret),
@@ -838,7 +838,7 @@ struct MdsTableUnitConvertHelper {
     return ret;
   }
   template <>
-  static int get_unit<MdsTableTypeTuple::get_element_size()>(const uint8_t mds_table_id,
+  int get_unit<MdsTableTypeTuple::get_element_size()>(const uint8_t mds_table_id,
                                                              MdsTableBase *p_mds_table,
                                                              MdsUnit<K, V> *&p_mds_unit) {
     int ret = OB_OBJ_TYPE_ERROR;
