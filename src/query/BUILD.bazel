@@ -186,9 +186,13 @@ seekdb_test_interface(
 cc_library(
     name = "vector_embedding_runtime",
     srcs = QUERY_VECTOR_EMBEDDING_SOURCES,
-    hdrs = ["api/query/vector/ob_vector_embedding_handler.h"],
+    hdrs = [
+        "api/query/vector/embedding_response_parser.h",
+        "api/query/vector/ob_vector_embedding_handler.h",
+    ],
     deps = [
         ":vector_index_interface",
+        "//rust:embedding_response_headers",
         "//src/oblib:oblib_foundation",
         "//src/share:io",
         "//src/share:json_access",

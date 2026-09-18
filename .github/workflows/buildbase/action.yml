@@ -20,7 +20,9 @@ runs:
     - name: Rust unit tests
       shell: bash
       working-directory: rust
-      run: cargo test --locked -p sql-nio
+      # This workspace does not check in Cargo.lock. Resolve it on a fresh
+      # checkout; subsequent ABI/differential checks use that generated lockfile.
+      run: cargo test --workspace
 
     - name: Initialize release build
       shell: bash
@@ -40,3 +42,10 @@ runs:
         cd build_release && make -j4
         test -x src/observer/seekdb
         test -x src/observer/observer
+
+    - name: Embedding C++ and Rust integration
+      shell: bash
+      run: |
+        cmake --build build_release --target embedding_response_integration -j4
+        build_release/src/observer/embedding_response_integration
+        python3 rust/embedding-response/tests/compare_cpp.py --adapter-probe build_release/src/observer/embedding_response_integration
