@@ -177,6 +177,32 @@ jobs:
           export PATH="$GITHUB_WORKSPACE/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
           .github/script/seekdb/compile.sh
 
+      - name: Setup Bazel
+        shell: bash
+        env:
+          BAZEL_VERSION: "8.2.1"
+          BAZEL_LINUX_X86_64_SHA256: "7ff2b6a675b59a791d007c526977d5262ade8fa52efc8e0d1ff9e18859909fc0"
+        run: |
+          set -euo pipefail
+          if [[ "$(tr -d '\r\n' < .bazelversion)" != "$BAZEL_VERSION" ]]; then
+            echo ".bazelversion and the pinned CI Bazel artifact disagree" >&2
+            exit 1
+          fi
+          if [[ "$(uname -m)" != "x86_64" ]]; then
+            echo "the pinned CI Bazel artifact supports only x86_64" >&2
+            exit 1
+          fi
+          BAZEL_DIR="${RUNNER_TEMP}/seekdb-bazel"
+          BAZEL_PATH="$BAZEL_DIR/bazel"
+          mkdir -p "$BAZEL_DIR"
+          curl --fail --location --retry 3 --retry-delay 2 \
+            --output "$BAZEL_PATH" \
+            "https://github.com/bazelbuild/bazel/releases/download/${BAZEL_VERSION}/bazel-${BAZEL_VERSION}-linux-x86_64"
+          echo "$BAZEL_LINUX_X86_64_SHA256  $BAZEL_PATH" | sha256sum --check --strict
+          chmod 0755 "$BAZEL_PATH"
+          echo "BAZEL=$BAZEL_PATH" >> "$GITHUB_ENV"
+          "$BAZEL_PATH" --version
+
       - name: Replay submit iterator Bazel Sanity tests
         shell: bash
         run: |
