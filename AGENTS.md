@@ -9,3 +9,8 @@
 ## Code Review
 
 - For pull request or diff review tasks, read and follow `.agents/skills/code-review/SKILL.md`.
+
+## Test Placement
+
+- Prefer adding regression and correctness coverage to the repository's established test suites and test directories.
+- Avoid adding test-only or benchmark-only files under `tools/` unless the task specifically requires a reusable developer tool.
