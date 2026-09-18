@@ -1,0 +1,63 @@
+drop table if exists rollback_aborted_decision;
+create table rollback_aborted_decision(id int primary key, payload varchar(2000), tag int);
+insert into rollback_aborted_decision values (1, 'base', 1);
+set ob_global_debug_sync = 'reset';
+set ob_query_timeout = 60000000, ob_trx_timeout = 600000000, ob_trx_idle_timeout = 600000000;
+begin;
+alter system minor freeze;
+set ob_global_debug_sync = 'BEFORE_TX_ABORT_DECISION signal abort_paused wait_for release_abort timeout 30000000 execute 1';
+update rollback_aborted_decision set tag = 2 where id = 1;
+ERROR 25000: transaction needs rollback
+alter system set_tp tp_name = 'EN_TX_RESULT_INCOMPLETE', error_code = 0, frequency = 0;
+set ob_global_debug_sync = 'now wait_for abort_paused timeout 10000000';
+select id from rollback_aborted_decision where id = 1 for update nowait;
+ERROR HY000: Lock wait timeout exceeded; try restarting transaction
+rollback;
+select id from rollback_aborted_decision where id = 1 for update nowait;
+ERROR HY000: Lock wait timeout exceeded; try restarting transaction
+set ob_global_debug_sync = 'now signal release_abort';
+set ob_global_debug_sync = 'reset';
+select id, payload, tag from rollback_aborted_decision where id = 1 for update;
+id	payload	tag
+1	base	1
+select id from rollback_aborted_decision where id = 1 for update nowait;
+id
+1
+set ob_query_timeout = 60000000;
+begin;
+update rollback_aborted_decision set tag = 3 where id = 1;
+rollback;
+select tag from rollback_aborted_decision where id = 1;
+tag
+1
+set ob_query_timeout = 60000000, ob_trx_timeout = 600000000, ob_trx_idle_timeout = 600000000;
+begin;
+alter system minor freeze;
+set ob_global_debug_sync = 'BEFORE_TX_ABORT_DECISION signal abort_paused wait_for release_abort timeout 30000000 execute 1';
+update rollback_aborted_decision set tag = 2 where id = 1;
+ERROR 25000: transaction needs rollback
+alter system set_tp tp_name = 'EN_TX_RESULT_INCOMPLETE', error_code = 0, frequency = 0;
+set ob_global_debug_sync = 'now wait_for abort_paused timeout 10000000';
+select id from rollback_aborted_decision where id = 1 for update nowait;
+ERROR HY000: Lock wait timeout exceeded; try restarting transaction
+set ob_query_timeout = 1000000;
+rollback;
+ERROR HY000: Timeout
+select id from rollback_aborted_decision where id = 1 for update nowait;
+ERROR HY000: Lock wait timeout exceeded; try restarting transaction
+set ob_global_debug_sync = 'now signal release_abort';
+set ob_global_debug_sync = 'reset';
+select id, payload, tag from rollback_aborted_decision where id = 1 for update;
+id	payload	tag
+1	base	1
+select id from rollback_aborted_decision where id = 1 for update nowait;
+id
+1
+set ob_query_timeout = 60000000;
+begin;
+update rollback_aborted_decision set tag = 3 where id = 1;
+rollback;
+select tag from rollback_aborted_decision where id = 1;
+tag
+1
+drop table rollback_aborted_decision;
