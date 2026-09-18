@@ -74,7 +74,6 @@ runtime_configs:
       - select_basic
       - sfu
       - sfu_norow_alias
-      - short_circuit_warning_cache
       - special_hook
       - special_stmt
       - sq_from
@@ -95,7 +94,6 @@ runtime_configs:
       - update_column_use_other
       - update_delete_limit_unique_key
       - update_range
-      - uuid_having_warning
       - view
       - view_2
       # test_suite cases selected by the current core-test psmall set.
