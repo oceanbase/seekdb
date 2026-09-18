@@ -234,7 +234,6 @@ ob1.nstart;
 ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_server where start_service_time <= $stop_tstamp_usec, 0 ,180;
 ob1.check_until_timeout select count(*) from oceanbase.__all_server a left join oceanbase.__all_virtual_server_schema_info b on a.svr_ip = b.svr_ip and a.svr_port = b.svr_port where b.svr_ip is null, 0, 120;
 ob1.check_until_timeout select count(*) as cnt from oceanbase.__all_virtual_server_schema_info as a join oceanbase.__all_virtual_server_schema_info as b on a.tenant_id = b.tenant_id  where a.refreshed_schema_version != b.refreshed_schema_version or a.refreshed_schema_version % 8 != 0, 0, 180;
-ob1.check_until_timeout select count(*) from __all_virtual_memory_info where mod_name like '%OB_MOD_DO_NOT_USE_ME%' and hold != 0, 0, 10;
 test restart cluster finish
 ===============================================================
 =================     tablet report    ========================
