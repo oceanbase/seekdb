@@ -47,6 +47,59 @@ namespace oceanbase
 namespace share
 {
 
+// Conservatively identify redo that may affect a user table.  ChangeStream
+// must keep an unresolved user-DML transaction behind the refresh watermark:
+// the transaction service may already have assigned its commit version even
+// though Fetcher has not consumed the commit log yet.  Lock/metadata-only
+// redo, on the other hand, cannot produce async-index rows and must not make a
+// DDL transaction such as FORK TABLE wait on itself.
+static bool redo_may_contain_user_dml(const char *buf, const int64_t buf_len)
+{
+  bool may_contain_user_dml = true;
+  int ret = OB_SUCCESS;
+  int64_t pos = 0;
+  memtable::ObMemtableMutatorMeta meta;
+
+  if (OB_ISNULL(buf) || buf_len <= 0) {
+  } else if (OB_FAIL(meta.deserialize(buf, buf_len, pos))) {
+  } else {
+    may_contain_user_dml = false;
+    while (OB_SUCC(ret) && pos < buf_len && !may_contain_user_dml) {
+      memtable::ObMutatorRowHeader row_header;
+      if (OB_FAIL(row_header.deserialize(buf, buf_len, pos))) {
+        may_contain_user_dml = true;
+      } else {
+        const int64_t row_payload_start = pos;
+        const bool is_data_row =
+            row_header.mutator_type_ == memtable::MutatorType::MUTATOR_ROW
+            || row_header.mutator_type_ == memtable::MutatorType::MUTATOR_ROW_EXT_INFO;
+        const uint64_t tablet_id = row_header.tablet_id_.id();
+        if (is_data_row
+            && tablet_id >= OB_MAX_INNER_TABLE_ID
+            && tablet_id <= ObTabletID::MAX_USER_TABLET_ID) {
+          may_contain_user_dml = true;
+        } else {
+          // Every mutator entry starts with its encoded length.  We only need
+          // to locate the next entry; Dispatcher performs full deserialization
+          // after commit.
+          int32_t entry_len = 0;
+          if (OB_FAIL(common::serialization::decode_i32(buf, buf_len, pos, &entry_len))) {
+            may_contain_user_dml = true;
+          } else {
+            const int64_t next_pos = row_payload_start + static_cast<int64_t>(entry_len);
+            if (entry_len <= 0 || next_pos <= row_payload_start || next_pos > buf_len) {
+              may_contain_user_dml = true;
+            } else {
+              pos = next_pos;
+            }
+          }
+        }
+      }
+    }
+  }
+  return may_contain_user_dml;
+}
+
 ObCSFetcher::ObCSFetcher()
   : share::ObThreadPool(1),
     is_inited_(false),
@@ -282,7 +335,8 @@ int ObCSFetcher::get_min_dep_lsn(palf::LSN &min_lsn)
 // ---------------------------------------------------------------------------
 // get_refresh_scn: get GTS, then decide refresh_scn based on async-index state:
 //   1. !has_async: return GTS — no async vector index tables.
-//   2. has_async && tx_info_ not empty: return OB_SUCCESS with invalid refresh_scn — worker handles.
+//   2. has_async && unresolved user DML or committed tx still in dispatcher:
+//      return OB_SUCCESS with invalid refresh_scn — commit/worker handles.
 //   3. has_async && current_lsn_.is_valid() && current_lsn_ >= max_lsn:
 //      return GTS — no pending logs to consume.
 //   4. otherwise (including invalid current_lsn_): return current_scn_ —
@@ -309,8 +363,20 @@ int ObCSFetcher::get_refresh_scn(SCN &refresh_scn)
     return ret;
   }
 
-  // Case 2: in-flight tx — worker will advance refresh_scn after draining; skip here.
-  if (!tx_info_.empty()) {
+  // Case 2: committed DML handed to Dispatcher blocks until Worker commits.
+  // Unresolved user DML also blocks because commit_version_ == 0 only means
+  // Fetcher has not consumed its commit log; the transaction service may
+  // already have assigned a commit version.  Advancing past such a transaction
+  // could make Dispatcher skip its async-index changes.  Only an open
+  // transaction proven to contain no user-table DML (for example FORK TABLE's
+  // table-lock/metadata redo) is safe to ignore here.
+  bool has_blocking_tx = false;
+  for (common::hash::ObHashMap<int64_t, ObCSTxInfo *>::const_iterator it = tx_info_.begin();
+       !has_blocking_tx && it != tx_info_.end(); ++it) {
+    has_blocking_tx = OB_NOT_NULL(it->second)
+        && (it->second->commit_version_ > 0 || it->second->has_user_dml_);
+  }
+  if (has_blocking_tx) {
     return OB_SUCCESS;
   }
 
@@ -595,6 +661,7 @@ int ObCSFetcher::handle_redo_log_(
   if (OB_FAIL(get_or_create_tx_info_(tid, lsn, tx))) {
     // error already logged
   } else if (OB_NOT_NULL(tx)) {
+    const bool may_contain_user_dml = redo_may_contain_user_dml(mutator_buf, mutator_size);
     char *buf = static_cast<char *>(common::ob_malloc(mutator_size, "CSRedoBuf"));
     if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -607,6 +674,8 @@ int ObCSFetcher::handle_redo_log_(
       if (OB_FAIL(tx->redo_list_.push_back(rec))) {
         LOG_WARN("CSFetcher: fail to push redo record", KR(ret), K(tid));
         common::ob_free(buf);
+      } else {
+        tx->has_user_dml_ = tx->has_user_dml_ || may_contain_user_dml;
       }
     }
   }

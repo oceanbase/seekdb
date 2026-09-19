@@ -97,6 +97,7 @@ struct ObCSTxInfo
   palf::LSN start_lsn_;           // Used by get_min_dep_lsn for log reclaim and init restart.
   int64_t   schema_version_ = 0;  // Assigned from Fetcher's current_schema_version_ at commit time.
   bool      is_ddl_ = false;      // True if redo contains __all_ddl_operation rows.
+  bool      has_user_dml_ = false; // True if redo may contain user-table DML rows.
   common::ObSEArray<ObCSRollbackRange, 1> rollback_list_;
   common::ObSEArray<ObCSRedoRecord, 1>    redo_list_;
   int64_t in_dispatch_time_ = 0;
@@ -108,6 +109,7 @@ struct ObCSTxInfo
     start_lsn_.reset();
     schema_version_ = 0;
     is_ddl_ = false;
+    has_user_dml_ = false;
     rollback_list_.reset();
     redo_list_.reset();
     in_dispatch_time_ = 0;
@@ -116,7 +118,8 @@ struct ObCSTxInfo
   /// Free redo buffers and reset; caller then frees the ObCSTxInfo itself.
   void destroy();
 
-  TO_STRING_KV(K_(tx_id), K_(commit_version), K_(start_lsn), K_(schema_version), K_(is_ddl), K_(in_dispatch_time));
+  TO_STRING_KV(K_(tx_id), K_(commit_version), K_(start_lsn), K_(schema_version),
+               K_(is_ddl), K_(has_user_dml), K_(in_dispatch_time));
 };
 
 // ---------------------------------------------------------------------------
@@ -144,9 +147,11 @@ public:
 
   /// For change_stream_refresh_scn:
   /// - no async table: returns GTS
-  /// - async table with in-flight tx: returns invalid SCN (skip advancing this round)
-  /// - async table without in-flight tx: returns GTS only when current_lsn catches up;
-  ///   otherwise returns current_scn to avoid over-advancing.
+  /// - async table with unresolved user DML or committed dispatched tx: returns
+  ///   invalid SCN (skip advancing this round)
+  /// - lock/metadata-only open tx does not block the watermark
+  /// - otherwise returns GTS only when current_lsn catches up; returns
+  ///   current_scn while logs are still being consumed.
   int get_refresh_scn(SCN &refresh_scn);
   /// For log reclaim: returns the minimum LSN still depended on by in-flight tx.
   palf::LSN get_min_dep_lsn() const;

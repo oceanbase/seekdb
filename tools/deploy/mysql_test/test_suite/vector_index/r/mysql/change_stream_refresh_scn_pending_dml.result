@@ -1,0 +1,4 @@
+unresolved user DML kept behind refresh watermark
+select count(*) as committed_rows from cs_refresh_guard where id = 2;
+committed_rows
+1

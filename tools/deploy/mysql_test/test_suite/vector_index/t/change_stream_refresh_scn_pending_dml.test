@@ -1,0 +1,77 @@
+# owner: fankun.fan
+# owner group: vector
+# description: keep unresolved async-index DML behind the change-stream refresh watermark
+
+--disable_query_log
+connect (conn_sys,$OBMYSQL_MS0,root@sys,,oceanbase,$OBMYSQL_PORT);
+connect (conn_dml,$OBMYSQL_MS0,root@sys,,test,$OBMYSQL_PORT);
+
+connection conn_sys;
+alter system set vector_memory_limit = 0;
+
+connection conn_dml;
+--disable_warnings
+drop table if exists cs_refresh_guard;
+--enable_warnings
+create table cs_refresh_guard(
+  id bigint primary key,
+  embedding vector(3),
+  vector index idx_cs_refresh_guard(embedding)
+    with (distance=l2, type=hnsw, sync_mode=async)
+) organization heap;
+
+connection conn_sys;
+let $wait_timeout = 60;
+let $wait_condition =
+  select PENDING_TX_COUNT = 0 and REFRESH_SCN > 0
+  from oceanbase.DBA_OB_CHANGE_STREAM_REFRESH_STAT;
+--source include/wait_condition.inc
+# Force each row write to submit real transaction redo before commit.  The
+# production default (16K) buffers this deliberately tiny test row, so neither
+# a sleep nor a minor freeze alone guarantees an unresolved redo record for
+# ChangeStream to consume.
+alter system set _private_buffer_size = '1B';
+real_sleep 1;
+
+connection conn_dml;
+start transaction;
+insert into cs_refresh_guard values (2, '[1,2,3]');
+
+connection conn_sys;
+let $wait_timeout = 60;
+let $wait_condition =
+  select PENDING_TX_COUNT > 0
+  from oceanbase.DBA_OB_CHANGE_STREAM_REFRESH_STAT;
+--source include/wait_condition.inc
+
+let $refresh_scn_before =
+  `select REFRESH_SCN from oceanbase.DBA_OB_CHANGE_STREAM_REFRESH_STAT`;
+real_sleep 1;
+let $refresh_scn_after =
+  `select REFRESH_SCN from oceanbase.DBA_OB_CHANGE_STREAM_REFRESH_STAT`;
+if ($refresh_scn_before != $refresh_scn_after)
+{
+  die ChangeStream refresh SCN advanced past unresolved user DML;
+}
+
+connection conn_dml;
+commit;
+
+connection conn_sys;
+# Restore the production default before waiting or running another test case.
+alter system set _private_buffer_size = '16K';
+let $wait_timeout = 60;
+let $wait_condition =
+  select PENDING_TX_COUNT = 0
+  from oceanbase.DBA_OB_CHANGE_STREAM_REFRESH_STAT;
+--source include/wait_condition.inc
+
+connection conn_dml;
+--enable_query_log
+--echo unresolved user DML kept behind refresh watermark
+select count(*) as committed_rows from cs_refresh_guard where id = 2;
+--disable_query_log
+drop table cs_refresh_guard;
+disconnect conn_dml;
+disconnect conn_sys;
+--enable_query_log
