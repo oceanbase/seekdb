@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX COMMON
 #include "ob_dynamic_sampling.h"
+#include "lib/oblog/ob_warning_buffer.h"
 #include "data_plane/transaction/ob_i_transaction_service.h"
 #include "data_plane/transaction/ob_tx_desc_access.h"
 #include "query/session/ob_inner_sql_connection_access.h"
@@ -514,6 +515,10 @@ int ObDynamicSampling::estimte_rowcount(int64_t max_ds_timeout,
   if (OB_SUCC(ret)) {
     //do not trace dynamic sample sql execute
     STOP_OPT_TRACE;
+    // Sampling evaluates predicates only to estimate cardinality. Keep its
+    // diagnostics out of the user's statement, including EXPLAIN. Session
+    // preparation/restoration errors remain outside this scope.
+    ObWarningBufferIgnoreScope ignore_sampling_diagnostics;
     if (OB_FAIL(do_estimate_rowcount(session_info, raw_sql_str))) {
     }
     RESUME_OPT_TRACE;
