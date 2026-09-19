@@ -13,7 +13,7 @@ source "$HOME/.cargo/env"
 
 On Windows, download and run `rustup-init.exe` from the [official Rust installation page](https://www.rust-lang.org/tools/install), then open a new PowerShell window so `%USERPROFILE%\.cargo\bin` is available in `PATH`.
 
-The repository pins Rust `1.97.1`, includes the `clippy` component, and uses these targets:
+The repository pins Rust `1.98.1`, includes the `clippy` component, and uses these targets:
 
 ```text
 x86_64-unknown-linux-gnu

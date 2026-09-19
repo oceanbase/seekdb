@@ -3,7 +3,7 @@
 # install time, so two runners weeks apart would compile the network engine
 # with different compilers. Bump deliberately, in its own reviewed commit.
 [toolchain]
-channel = "1.97.1"
+channel = "1.98.1"
 # The cross-compilation targets keep Android builds and Windows `cargo check`
 # on the same pinned toolchain as native builds. The windows-gnu target keeps
 # the cfg(windows) transport code compiling without a Windows runner in CI.
