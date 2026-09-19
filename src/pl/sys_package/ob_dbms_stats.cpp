@@ -361,7 +361,10 @@ int ObDbmsStats::gather_table_index_stats(ObExecContext &ctx,
                         stat_table.table_id_, index_schema)) ||
                 OB_ISNULL(index_schema)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (!index_schema->is_normal_index() && !index_schema->is_unique_index()) {
+    } else if (index_schema->is_multivalue_index() ||
+               (!index_schema->is_normal_index() && !index_schema->is_unique_index())) {
+      // A unique multivalue index is not a scalar index. Its generated array
+      // column cannot be estimated by the ordinary index statistics query.
       is_valid_index = false;
     } else if (index_schema->is_global_index_table()) {
       index_param.is_global_index_ = true;
@@ -430,7 +433,8 @@ int ObDbmsStats::fast_gather_index_stats(ObExecContext &ctx,
                          stat_table.table_id_, index_schema)) ||
                  OB_ISNULL(index_schema)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (!index_schema->is_normal_index() && !index_schema->is_unique_index()) {
+      } else if (index_schema->is_multivalue_index() ||
+                 (!index_schema->is_normal_index() && !index_schema->is_unique_index())) {
         is_fast_gather = false;
       //glboal index can't reuse the partition data in fast gather index
       } else if (index_schema->is_global_index_table()) {
@@ -3457,7 +3461,8 @@ int ObDbmsStats::parse_index_table_info(ObExecContext &ctx,
     ObCStringHelper helper;
     LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(data_table_param.db_name_),
                                       helper.convert(index_name));
-  } else if (!index_schema->is_normal_index() && !index_schema->is_unique_index()) {
+  } else if (index_schema->is_multivalue_index() ||
+             (!index_schema->is_normal_index() && !index_schema->is_unique_index())) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "gather non-normal index stats");
   } else {
