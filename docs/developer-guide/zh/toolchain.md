@@ -35,7 +35,7 @@ index = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"
 
 在 Windows 上，从 [Rust 官方安装页面](https://www.rust-lang.org/tools/install) 下载并运行 `rustup-init.exe`，然后重新打开 PowerShell，使 `%USERPROFILE%\.cargo\bin` 出现在 `PATH` 中。
 
-仓库固定使用 Rust `1.97.1`，需要 `clippy` 组件，并声明以下目标：
+仓库固定使用 Rust `1.98.1`，需要 `clippy` 组件，并声明以下目标：
 
 ```text
 x86_64-unknown-linux-gnu
