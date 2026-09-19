@@ -219,14 +219,17 @@ void CtxLockGuard::set(CtxLock &lock, uint8_t mode)
 void CtxLockGuard::reset()
 {
   if (NULL != lock_) {
-    if (mode_ & MODE::CTX) {
-      lock_->unlock_ctx();
+    // Like CtxLock::unlock(), release the outer latches before unlock_ctx()
+    // invokes commit callbacks. A callback can take the transaction descriptor
+    // lock while a commit retry holds that lock and waits for these latches.
+    if (mode_ & MODE::ACCESS) {
+      lock_->unlock_access();
     }
     if ((mode_ & MODE::REDO_FLUSH_X) || (mode_ & MODE::REDO_FLUSH_R)) {
       lock_->unlock_flush_redo();
     }
-    if (mode_ & MODE::ACCESS) {
-      lock_->unlock_access();
+    if (mode_ & MODE::CTX) {
+      lock_->unlock_ctx();
     }
 
     lock_ = NULL;
