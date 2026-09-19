@@ -107,6 +107,37 @@ function find_cmake
   fi
 }
 
+function init_rust_toolchain
+{
+  local rust_workspace="${TOPDIR}/rust"
+  local toolchain_manifest="${rust_workspace}/rust-toolchain.toml"
+  local start_time end_time elapsed
+  local status=0
+
+  if [[ ! -f "${toolchain_manifest}" ]]; then
+    echo_err "Rust toolchain manifest not found: ${toolchain_manifest}"
+    return 1
+  fi
+  if ! command -v rustup >/dev/null 2>&1; then
+    echo_err "rustup is required to initialize ${toolchain_manifest}"
+    return 1
+  fi
+
+  start_time="$(date +%s)"
+  (
+    cd "${rust_workspace}" &&
+      rustup toolchain install --no-self-update
+  ) || status=$?
+  if (( status != 0 )); then
+    echo_err "Rust toolchain initialization failed with status ${status}"
+    return "${status}"
+  fi
+
+  end_time="$(date +%s)"
+  elapsed=$((end_time - start_time))
+  echo_log "Rust toolchain initialization completed in $((elapsed / 60))m$((elapsed % 60))s"
+}
+
 function do_init
 {
   local android_build=$1
@@ -127,6 +158,7 @@ function do_init
     echo_err "dependency initialization failed with status ${status}"
     return "${status}"
   fi
+  init_rust_toolchain || return $?
 
   end_time="$(date +%s)"
   elapsed=$((end_time - start_time))
