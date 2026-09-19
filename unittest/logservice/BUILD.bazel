@@ -1,0 +1,14 @@
+load("//bazel:seekdb_module_cc_test.bzl", "seekdb_module_cc_test")
+
+seekdb_module_cc_test(
+    name = "logservice_tests",
+    srcs = ["test_replay_submit_iterator.cpp"],
+    test_hdrs = [],
+    module_interface = "//src/logservice:logservice_unit_test_interface",
+    shard_count = 1,
+    target_compatible_with = select({
+        "//bazel:sanity_enabled": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+    visibility = ["//visibility:public"],
+)

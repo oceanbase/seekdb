@@ -43,6 +43,7 @@ jobs:
       - name: Checkout source
         shell: bash
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           SSH_PRIVATE_KEY: ${{ secrets.SEEKDB_CI_CHECKOUT_KEY }}
         run: |
           set -euo pipefail
@@ -63,20 +64,49 @@ jobs:
           git init "$GITHUB_WORKSPACE"
           git -C "$GITHUB_WORKSPACE" remote remove origin 2>/dev/null || true
           git -C "$GITHUB_WORKSPACE" remote add origin "$REMOTE_URL"
-          for attempt in 1 2 3; do
-            if git -C "$GITHUB_WORKSPACE" fetch --no-tags --depth=1 origin "$GITHUB_SHA"; then
-              break
+          checkout_succeeded=false
+          GIT_FETCH_TIMEOUT_SEC=120
+          if timeout "${GIT_FETCH_TIMEOUT_SEC}s" \
+              git -C "$GITHUB_WORKSPACE" fetch --no-tags --depth=1 origin "$GITHUB_SHA"; then
+            checkout_succeeded=true
+          elif [[ "$REMOTE_URL" == https://* ]]; then
+            echo "configured checkout path failed; retrying without proxy variables" >&2
+            if env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY \
+                -u http_proxy -u https_proxy -u all_proxy \
+                timeout "${GIT_FETCH_TIMEOUT_SEC}s" \
+                  git -C "$GITHUB_WORKSPACE" -c http.proxy= \
+                    fetch --no-tags --depth=1 origin "$GITHUB_SHA"; then
+              checkout_succeeded=true
             fi
-            if [[ "$attempt" -eq 3 ]]; then
-              echo "checkout fetch failed after $attempt attempts" >&2
-              exit 1
+          fi
+          if [[ "$checkout_succeeded" != true ]]; then
+            SOURCE_ARCHIVE="${RUNNER_TEMP}/seekdb-source-${GITHUB_SHA}.tar.gz"
+            SOURCE_ARCHIVE_URL="${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/tarball/${GITHUB_SHA}"
+            CURL_ARGS=(--fail --location --retry 3 --retry-delay 2 \
+              --connect-timeout 15 --speed-limit 10240 --speed-time 30 \
+              --max-time 300 --output "$SOURCE_ARCHIVE")
+            if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+              CURL_ARGS+=(--header "Authorization: Bearer ${GITHUB_TOKEN}")
             fi
-            delay=$((attempt * 5))
-            echo "checkout fetch attempt $attempt failed; retrying in ${delay}s" >&2
-            sleep "$delay"
-          done
-          git -C "$GITHUB_WORKSPACE" checkout --force --detach FETCH_HEAD
-          git -C "$GITHUB_WORKSPACE" clean -ffdx
+            rm -f "$SOURCE_ARCHIVE"
+            if ! curl "${CURL_ARGS[@]}" "$SOURCE_ARCHIVE_URL"; then
+              echo "configured source archive path failed; retrying without proxy variables" >&2
+              rm -f "$SOURCE_ARCHIVE"
+              env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY \
+                -u http_proxy -u https_proxy -u all_proxy \
+                curl "${CURL_ARGS[@]}" "$SOURCE_ARCHIVE_URL"
+            fi
+            tar -xzf "$SOURCE_ARCHIVE" --strip-components=1 -C "$GITHUB_WORKSPACE"
+            rm -f "$SOURCE_ARCHIVE"
+            test -f "$GITHUB_WORKSPACE/build.sh"
+            # Preserve the exact event revision for CMake/Bazel version stamping.
+            # The archive endpoint is addressed by this immutable 40-character SHA.
+            printf '%s\n' "$GITHUB_SHA" > "$GITHUB_WORKSPACE/.git/HEAD"
+            echo "checkout fetch failed on git transports; restored exact source archive instead"
+          else
+            git -C "$GITHUB_WORKSPACE" checkout --force --detach FETCH_HEAD
+            git -C "$GITHUB_WORKSPACE" clean -ffdx
+          fi
 
       # Source 与 run_attempt 无关：下游 job 重跑时直接复用同一提交的快照。
       - name: Persist source snapshot to NFS
@@ -176,6 +206,83 @@ jobs:
           export FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}"
           export PATH="$GITHUB_WORKSPACE/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
           .github/script/seekdb/compile.sh
+
+      - name: Setup Bazel
+        shell: bash
+        env:
+          BAZEL_VERSION: "8.2.1"
+          BAZEL_LINUX_X86_64_SHA256: "7ff2b6a675b59a791d007c526977d5262ade8fa52efc8e0d1ff9e18859909fc0"
+        run: |
+          set -euo pipefail
+          if [[ "$(tr -d '\r\n' < .bazelversion)" != "$BAZEL_VERSION" ]]; then
+            echo ".bazelversion and the pinned CI Bazel artifact disagree" >&2
+            exit 1
+          fi
+          if [[ "$(uname -m)" != "x86_64" ]]; then
+            echo "the pinned CI Bazel artifact supports only x86_64" >&2
+            exit 1
+          fi
+          BAZEL_DIR="${RUNNER_TEMP}/seekdb-bazel"
+          BAZEL_PATH="$BAZEL_DIR/bazel"
+          BAZEL_URLS=(
+            "https://releases.bazel.build/${BAZEL_VERSION}/release/bazel-${BAZEL_VERSION}-linux-x86_64"
+            "https://mirrors.huaweicloud.com/bazel/${BAZEL_VERSION}/bazel-${BAZEL_VERSION}-linux-x86_64"
+          )
+          mkdir -p "$BAZEL_DIR"
+          CURL_ARGS=(--fail --location --retry 3 --retry-delay 2 \
+            --connect-timeout 15 --speed-limit 10240 --speed-time 30 \
+            --output "$BAZEL_PATH")
+          BAZEL_SOURCE=""
+          for BAZEL_URL in "${BAZEL_URLS[@]}"; do
+            rm -f "$BAZEL_PATH"
+            if curl --max-time 180 "${CURL_ARGS[@]}" "$BAZEL_URL" \
+                && echo "$BAZEL_LINUX_X86_64_SHA256  $BAZEL_PATH" | sha256sum --check --strict; then
+              BAZEL_SOURCE="$BAZEL_URL (configured network path)"
+              break
+            fi
+            echo "configured network path failed for $BAZEL_URL; retrying without proxy variables" >&2
+            rm -f "$BAZEL_PATH"
+            if env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY \
+                -u http_proxy -u https_proxy -u all_proxy \
+                curl --max-time 600 "${CURL_ARGS[@]}" "$BAZEL_URL" \
+                && echo "$BAZEL_LINUX_X86_64_SHA256  $BAZEL_PATH" | sha256sum --check --strict; then
+              BAZEL_SOURCE="$BAZEL_URL (direct network path)"
+              break
+            fi
+          done
+          if [[ -z "$BAZEL_SOURCE" ]]; then
+            echo "failed to download the pinned Bazel artifact from every configured endpoint" >&2
+            exit 1
+          fi
+          echo "downloaded and verified Bazel from $BAZEL_SOURCE"
+          chmod 0755 "$BAZEL_PATH"
+          echo "BAZEL=$BAZEL_PATH" >> "$GITHUB_ENV"
+          "$BAZEL_PATH" --version
+
+      - name: Replay submit iterator Bazel Sanity tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./bazel.py test --sanity \
+            //unittest/logservice:logservice_tests \
+            --test_output=errors
+
+      - name: Build replay submit iterator integration server
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./build.sh replaytest \
+            -DOB_USE_CCACHE=ON \
+            -DNEED_PARSER_CACHE=OFF \
+            --make -j32
+
+      - name: Replay submit iterator handler contention test
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x .github/script/seekdb/replay_submit_iterator_integration.sh
+          .github/script/seekdb/replay_submit_iterator_integration.sh \
+            build_replaytest/src/observer/seekdb
 
       - name: Publish master build caches
         if: >-

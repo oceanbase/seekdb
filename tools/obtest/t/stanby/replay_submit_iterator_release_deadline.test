@@ -1,0 +1,114 @@
+# CASE_OWNER:
+#    @wangyunlai.wyl
+# CASE_DESC:
+#    Verify that primary promotion cannot release a replay submit iterator while
+#    a real submit handler still owns the ReplayStatus read lock.  The test also
+#    binds the timeout to the durable cutover written by StandbyStateStore.
+
+--disable_query_log
+--disable_result_log
+
+db_p=OBI(cluster=1,proxy_num=0,role=primary);
+db_p.reboot;
+
+db_s=OBI(cluster=1,proxy_num=0,primary=db_p);
+db_s.reboot;
+
+sleep 5;
+
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 30;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 30;
+
+ob_connect(conn_p, db_p.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+ob_connect(conn_s, db_s.z1.obs0, root@sys, , oceanbase, , USE_MYSQL_CONNECTOR);
+
+connection conn_p;
+create table replay_submit_iterator_release_deadline(
+  id bigint primary key,
+  marker varchar(128)
+);
+insert into replay_submit_iterator_release_deadline
+values (1, 'initial_non_empty_clog');
+
+db_s.check_until_timeout select count(*) from replay_submit_iterator_release_deadline where id = 1 and marker = 'initial_non_empty_clog', 1, 120;
+db_s.z1.obs0.check_log_until_success -c "succ to submit log task.*buf_:0x[1-9a-f][0-9a-f]*.*user:\"REPLAY\"";
+
+let $role_info_before = deploy_get_value(db_p.select select value as role_info from oceanbase.__all_virtual_sys_parameter where name = 'server_role_info', role_info, 1);
+let $role_gmt_before = deploy_get_value(db_p.select select gmt_modified as role_gmt from oceanbase.__all_virtual_sys_parameter where name = 'server_role_info', role_gmt, 1);
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter where name = 'server_role_info' and value = 'PRIMARY:INVALID:NORMAL:0', 1, 30;
+
+db_s.mysql alter system set debug_sync_timeout = '300s';
+db_s.mysql set ob_global_debug_sync = 'REPLAY_SUBMIT_TASK_BEFORE_UNLOCK signal replay_submit_rdlocked wait_for replay_submit_continue execute 1';
+
+# The action is installed before this unique DML.  If a different handler emits
+# the signal, this row cannot become visible while that handler remains paused,
+# so the setup fails rather than misattributing a later timeout.
+connection conn_p;
+insert into replay_submit_iterator_release_deadline
+values (2026091701, 'replay_submit_iterator_release_deadline');
+db_s.mysql set ob_global_debug_sync = 'now wait_for replay_submit_rdlocked';
+db_s.check_until_timeout select count(*) from replay_submit_iterator_release_deadline where id = 2026091701 and marker = 'replay_submit_iterator_release_deadline', 1, 120;
+
+# Fence the old primary only after the target batch has entered replay queues.
+connection conn_p;
+ALTER SYSTEM SWITCHOVER TO STANDBY;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
+
+# Read the generated SQLite virtual table backed by the exact
+# __all_sys_parameter row written by StandbyStateStore.  The before/after value
+# and integer gmt_modified comparison prove that this is the current fencing
+# operation, rather than a stale GCONF snapshot.
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter where name = 'server_role_info' and value <> '$role_info_before' and gmt_modified > $role_gmt_before and substring_index(value, ':', 3) = 'PRIMARY:STANDBY:PREPARING' and cast(substring_index(value, ':', -1) as unsigned) > 0, 1, 60;
+
+let $server_role_info = deploy_get_value(db_p.select select value as role_info from oceanbase.__all_virtual_sys_parameter where name = 'server_role_info', role_info, 1);
+let $role_gmt_after = deploy_get_value(db_p.select select gmt_modified as role_gmt from oceanbase.__all_virtual_sys_parameter where name = 'server_role_info', role_gmt, 1);
+let $cutover_scn = deploy_get_value(db_p.select select cast(substring_index(value, ':', -1) as unsigned) as cutover_scn from oceanbase.__all_virtual_sys_parameter where name = 'server_role_info', cutover_scn, 1);
+
+db_p.z1.obs0.check_log_until_success -c "persisted server role state.*PRIMARY.*STANDBY.*PREPARING.*$cutover_scn";
+
+db_s.check_until_timeout select count(*) from (select max(end_scn) as end_scn from oceanbase.__all_virtual_log_stat) t where t.end_scn >= $cutover_scn, 1, 120;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and sync_scn >= $cutover_scn, 1, 120;
+let $standby_end_scn = deploy_get_value(db_s.select select max(end_scn) as end_scn from oceanbase.__all_virtual_log_stat, end_scn, 1);
+let $standby_replay_scn = deploy_get_value(db_s.select select sync_scn as replay_scn from oceanbase.__all_virtual_server_stat where role = 'STANDBY', replay_scn, 1);
+
+--enable_result_log
+--replace_regex /[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]*/<value>/g
+eval select '$role_info_before' as role_info_before, $role_gmt_before as gmt_before, $role_gmt_after as gmt_after, $cutover_scn as cutover_scn, $standby_end_scn as standby_end_scn, $standby_replay_scn as standby_replay_scn;
+
+# The short deadline starts only after fencing and both progress checks.  The
+# paused handler must make try_wrlock return RWLOCK_BUSY until SQL times out.
+connection conn_s;
+set ob_query_timeout = 10000000;
+--error 4012
+ALTER SYSTEM SWITCHOVER TO PRIMARY;
+
+db_s.z1.obs0.check_log_until_success -c "replay submit iterator release blocked.*phase.*submit_iterator_release.*last_state.*RWLOCK_BUSY.*iterator_generation=1.*release_retry_count=0";
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
+--error 4688
+insert into replay_submit_iterator_release_deadline values (2, 'write_gate_must_stay_closed');
+
+# Unblock the handler, clear the finite debug-sync action, and retry with a new
+# deadline.  Only this attempt may publish the write gate and free the buffer.
+db_s.mysql set ob_global_debug_sync = 'now signal replay_submit_continue';
+db_s.mysql set ob_global_debug_sync = 'REPLAY_SUBMIT_TASK_BEFORE_UNLOCK clear';
+db_s.mysql set ob_global_debug_sync = 'reset';
+set ob_query_timeout = 120000000;
+ALTER SYSTEM SWITCHOVER TO PRIMARY;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
+insert into replay_submit_iterator_release_deadline values (2, 'write_gate_open_after_release');
+db_s.z1.obs0.check_log_until_success -c "replay submit iterator release finished.*phase.*submit_iterator_release.*last_state.*RELEASED";
+
+db_s.mysql alter system refresh memory stat;
+select count(*) as iterator_storage_rows_after_promotion from oceanbase.__all_virtual_memory_info where mod_name = 'IteratorStorage' and (count > 0 or hold > 0 or used > 0);
+
+ALTER SYSTEM MINOR FREEZE;
+sleep 5;
+db_s.mysql alter system refresh memory stat;
+select count(*) as iterator_storage_rows_after_checkpoint from oceanbase.__all_virtual_memory_info where mod_name = 'IteratorStorage' and (count > 0 or hold > 0 or used > 0);
+
+alter system set debug_sync_timeout = '0s';
+drop table replay_submit_iterator_release_deadline;
+
+--enable_result_log
+--enable_query_log
+--echo replay submit iterator release deadline test passed

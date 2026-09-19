@@ -1,5 +1,4 @@
 load("@rules_cc//cc:cc_import.bzl", "cc_import")
-load("@rules_cc//cc:cc_library.bzl", native_cc_library = "cc_library")
 load(
     ":oblib_build_defs.bzl",
     "OBLIB_STANDALONE_SOURCES",
@@ -31,7 +30,7 @@ _OBLIB_INTERFACE_VISIBILITY = [
 
 declare_oblib_header_interfaces(_OBLIB_INTERFACE_VISIBILITY)
 
-native_cc_library(
+cc_library(
     name = "_jemalloc_headers",
     deps = select({
         "//bazel:sanity_enabled": ["//deps/external:jemalloc_headers"],
