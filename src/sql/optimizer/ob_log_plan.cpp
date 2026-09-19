@@ -2044,7 +2044,9 @@ int ObLogPlan::generate_subplan_for_query_ref(ObQueryRefRawExpr *query_ref,
                                                         get_selectivity_ctx()))) {
   }
   if (OB_SUCC(ret)) {
-    if (force_serial) {
+    // Correlated subqueries must retain their own parallel planning policy.
+    // The partial-result protection is only needed for init-plan children.
+    if (force_serial && is_initplan) {
       saved_parallel_rule = opt_ctx.get_parallel_rule();
       saved_parallel = opt_ctx.get_parallel();
       opt_ctx.set_parallel_rule(PXParallelRule::PL_UDF_DAS_FORCE_SERIALIZE);
