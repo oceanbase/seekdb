@@ -1394,10 +1394,18 @@ int ObTxCtx::compensate_abort_log_()
   } else if(OB_FALSE_IT(runtime_state_.set_force_abort())) {
 
   } else if (OB_FAIL(submit_log_impl_(ObTxLogType::TX_ABORT_LOG))) {
+    const int submit_ret = ret;
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(restart_commit_retry_timer_())) {
+      TRANS_LOG(WARN, "restart abort log retry timer failed", KR(ret), KR(tmp_ret), K(*this));
+    } else if (OB_TX_NOLOGCB == ret) {
+      // Callback exhaustion is temporary. The abort has been accepted and
+      // handle_timeout will resubmit its log once a callback becomes available.
+      // Let explicit rollback wait for that decision instead of returning the
+      // internal flow-control error to the client.
+      ret = OB_SUCCESS;
     }
-    TRANS_LOG(WARN, "submit abort log failed", KR(ret), K(*this));
+    TRANS_LOG(WARN, "submit abort log failed", KR(submit_ret), KR(ret), K(*this));
   } else {
   }
   TRANS_LOG(INFO, "compensate abort log", K(ret), KPC(this));
@@ -2649,6 +2657,7 @@ int ObTxCtx::submit_commit_log_()
   return ret;
 }
 
+ERRSIM_POINT_DEF(ERRSIM_TX_ABORT_LOG_CALLBACK_ERROR)
 int ObTxCtx::submit_abort_log_()
 {
   int ret = OB_SUCCESS;
@@ -2691,7 +2700,7 @@ int ObTxCtx::submit_abort_log_()
     TRANS_LOG(ERROR, "cb arg array is empty", K(ret), K(log_block));
     return_log_cb_(log_cb);
     log_cb = NULL;
-  } else if (OB_FAIL(prepare_log_cb_(log_cb))) {
+  } else if (OB_FAIL(OB_E(ERRSIM_TX_ABORT_LOG_CALLBACK_ERROR) prepare_log_cb_(log_cb))) {
     if (OB_UNLIKELY(OB_TX_NOLOGCB != ret)) {
       TRANS_LOG(WARN, "get log cb failed", KR(ret), K(*this));
     }
