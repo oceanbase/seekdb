@@ -2099,6 +2099,9 @@ int ObTransformConstPropagate::do_replace_check_constraint_expr(ObDMLStmt *stmt,
         new_check_cst_expr = or_expr;
       }
       if (OB_FAIL(ret)) {
+      } else if (ObOptimizerUtil::find_equal_expr(stmt->get_condition_exprs(), new_check_cst_expr)) {
+        // A previous rewrite iteration may have already derived this predicate.
+        // Adding it again would alternate with predicate deduplication forever.
       } else if (OB_FAIL(batch_mark_expr_const_infos_used(old_column_exprs, expr_const_infos))) {
       } else if (OB_FAIL(stmt->get_condition_exprs().push_back(new_check_cst_expr))) {
       } else {
