@@ -381,7 +381,15 @@ int ObTransService::rollback_tx(ObTxDesc &tx, const int64_t expire_ts)
       need_finish_rollback = true;
       need_wait_write_ctx = tx.has_write_state();
       if (OB_FAIL(abort_write_state_(tx))) {
-        TRANS_LOG(WARN, "abort write state failed during rollback", KR(ret), K(tx));
+        if (OB_TRANS_CTX_NOT_EXIST == ret) {
+          // The write context can be reclaimed after an asynchronous abort
+          // while the descriptor still carries its write state. There is no
+          // remaining context to abort or decision to wait for in this case.
+          ret = OB_SUCCESS;
+          need_wait_write_ctx = false;
+        } else {
+          TRANS_LOG(WARN, "abort write state failed during rollback", KR(ret), K(tx));
+        }
       }
       break;
     case ObTxDesc::State::IDLE:
