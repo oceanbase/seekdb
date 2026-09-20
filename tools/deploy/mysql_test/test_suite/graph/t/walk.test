@@ -98,10 +98,26 @@ FROM seeds s, LATERAL (
     COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g
 ) x ORDER BY s.score DESC,x.hops,x.destination;
 
---echo adjacency_index_does_not_change_results
+--echo prepared_seed_parameter_rebinding_and_adjacency_index_plan_invalidation
 PREPARE walk_cached FROM
-  'SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person) COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g';
-EXECUTE walk_cached;
+  'SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=?)-[e IS knows]->{0,2}(b IS person) COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g';
+SET @walk_seed=1;
+EXECUTE walk_cached USING @walk_seed;
+SET @walk_seed=5;
+EXECUTE walk_cached USING @walk_seed;
+SET @walk_seed=3;
+EXECUTE walk_cached USING @walk_seed;
+
+--echo prepared_filter_parameter_rebinding
+PREPARE walk_filter_cached FROM
+  'SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=?)-[e IS knows WHERE e.since>=?]->{1,2}(b IS person WHERE b.id=?) COLUMNS(b.id AS destination,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edge_ids)) g ORDER BY hops,edge_ids';
+SET @walk_seed=1,@walk_min_since=2020,@walk_target=3;
+EXECUTE walk_filter_cached USING @walk_seed,@walk_min_since,@walk_target;
+SET @walk_min_since=2021;
+EXECUTE walk_filter_cached USING @walk_seed,@walk_min_since,@walk_target;
+SET @walk_target=2;
+EXECUTE walk_filter_cached USING @walk_seed,@walk_min_since,@walk_target;
+DEALLOCATE PREPARE walk_filter_cached;
 --source mysql_test/include/create_plan_table.inc
 --disable_result_log
 EXPLAIN INTO plan_table SET statement_id='walk_full_scan'
@@ -129,7 +145,10 @@ WHERE statement_id='walk_serial'
   AND (operator LIKE 'PX %' OR operator LIKE 'EXCHANGE %');
 CREATE INDEX graph_knows_out ON graph_knows(src,id);
 CREATE INDEX graph_knows_in ON graph_knows(dst,id);
-EXECUTE walk_cached;
+SET @walk_seed=1;
+EXECUTE walk_cached USING @walk_seed;
+SET @walk_seed=4;
+EXECUTE walk_cached USING @walk_seed;
 --disable_result_log
 EXPLAIN INTO plan_table SET statement_id='walk_out_index'
 SELECT * FROM GRAPH_TABLE(graph_social MATCH
@@ -166,7 +185,8 @@ SELECT * FROM GRAPH_TABLE(graph_social MATCH
   ORDER BY hops,destination,edge_ids;
 DROP INDEX graph_knows_out ON graph_knows;
 DROP INDEX graph_knows_in ON graph_knows;
-EXECUTE walk_cached;
+SET @walk_seed=1;
+EXECUTE walk_cached USING @walk_seed;
 DEALLOCATE PREPARE walk_cached;
 DROP TABLE plan_table;
 

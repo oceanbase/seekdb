@@ -1,0 +1,118 @@
+/*
+ * Copyright (c) 2026 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_SQL_GRAPH_FEEDBACK_LOOP_LOG_OP_H
+#define OCEANBASE_SQL_GRAPH_FEEDBACK_LOOP_LOG_OP_H
+
+#include "sql/optimizer/ob_logical_operator.h"
+
+namespace oceanbase
+{
+namespace sql
+{
+
+// Describes how one feedback iteration reaches the edge table. This is kept on
+// the graph operator instead of being inferred by EXPLAIN from a generic SET
+// subtree. UNKNOWN is retained for defensive diagnostics while the current
+// recursive-SQL lowering is being replaced by a logical GraphExpand child.
+enum class GraphFeedbackAccessMethod : int8_t
+{
+  UNKNOWN = 0,
+  FULL_SCAN,
+  INDEX_SCAN
+};
+
+// Logical controller for a bounded graph WALK. The first child produces seed
+// path states and the second child performs one expansion step over the current
+// frontier. Unlike ObLogSet, this operator never applies relational set
+// distinctness: every path state retains WALK bag multiplicity.
+class GraphFeedbackLoopLogOp final : public ObLogicalOperator
+{
+public:
+  explicit GraphFeedbackLoopLogOp(ObLogPlan &plan)
+      : ObLogicalOperator(plan)
+  {}
+  ~GraphFeedbackLoopLogOp() override = default;
+
+  void configure_path(int64_t min_hops,
+                      int64_t max_hops,
+                      bool reverse,
+                      bool pull_to_local)
+  {
+    min_hops_ = min_hops;
+    max_hops_ = max_hops;
+    reverse_ = reverse;
+    pull_to_local_ = pull_to_local;
+  }
+
+  int initialize_step_access_method();
+  int64_t get_min_hops() const { return min_hops_; }
+  int64_t get_max_hops() const { return max_hops_; }
+  bool is_reverse() const { return reverse_; }
+  GraphFeedbackAccessMethod get_step_access_method() const
+  {
+    return step_access_method_;
+  }
+
+  int get_plan_item_info(PlanText &plan_text, ObSqlPlanItem &plan_item) override;
+  int get_op_exprs(ObIArray<ObRawExpr *> &all_exprs) override;
+  int is_my_fixed_expr(const ObRawExpr *expr, bool &is_fixed) override;
+  int est_cost() override;
+  int est_width() override;
+  int do_re_est_cost(EstimateCostInfo &param,
+                     double &card,
+                     double &op_cost,
+                     double &cost) override;
+  int est_ambient_card() override { return OB_SUCCESS; }
+  int get_card_without_filter(double &card) override;
+  uint64_t hash(uint64_t seed) const override;
+
+  int compute_const_exprs() override;
+  int compute_equal_set() override;
+  int compute_fd_item_set() override;
+  int compute_op_ordering() override;
+  int compute_one_row_info() override;
+  int compute_sharding_info() override;
+  int compute_op_parallel_info() override;
+  int allocate_startup_expr_post() override { return OB_SUCCESS; }
+  int check_use_child_ordering(bool &used,
+                               int64_t &inherit_child_ordering_index) override;
+  bool is_consume_child_1by1() const override { return true; }
+
+  VIRTUAL_TO_STRING_KV("min hops", min_hops_,
+                       "max hops", max_hops_,
+                       K_(reverse),
+                       "pull to local", pull_to_local_,
+                       "step access", static_cast<int64_t>(step_access_method_));
+
+private:
+  int get_feedback_exprs(ObIArray<ObRawExpr *> &exprs) const;
+
+private:
+  // Inclusive path-length bounds represented by SQL/PGQ {n,m}.
+  int64_t min_hops_{0};
+  int64_t max_hops_{0};
+  bool reverse_{false};
+  bool pull_to_local_{false};
+  GraphFeedbackAccessMethod step_access_method_{GraphFeedbackAccessMethod::UNKNOWN};
+
+  DISALLOW_COPY_AND_ASSIGN(GraphFeedbackLoopLogOp);
+};
+
+} // namespace sql
+} // namespace oceanbase
+
+#endif // OCEANBASE_SQL_GRAPH_FEEDBACK_LOOP_LOG_OP_H

@@ -197,7 +197,8 @@ REGISTER_OPERATOR(ObLogSet, PHY_RECURSIVE_UNION_ALL, ObRecursiveUnionAllSpec,
 
 class GraphFeedbackLoopSpec;
 class GraphFeedbackLoopOp;
-REGISTER_OPERATOR(ObLogSet, PHY_GRAPH_FEEDBACK_LOOP, GraphFeedbackLoopSpec,
+class GraphFeedbackLoopLogOp;
+REGISTER_OPERATOR(GraphFeedbackLoopLogOp, PHY_GRAPH_FEEDBACK_LOOP, GraphFeedbackLoopSpec,
                   GraphFeedbackLoopOp, NOINPUT, VECTORIZED_OP);
 
 class ObLogTableScan;

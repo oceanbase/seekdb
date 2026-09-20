@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SQL_OPT
 #include "sql/optimizer/ob_log_set.h"
-#include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/ob_join_order.h"
 #include "sql/optimizer/ob_log_distinct.h"
@@ -25,79 +24,6 @@ using namespace oceanbase;
 using namespace sql;
 using namespace oceanbase::common;
 using namespace oceanbase::sql::log_op_def;
-
-namespace
-{
-// Keep graph-walk estimates finite and representable in plan-table cardinality
-// fields while still allowing substantially more growth than the generic
-// recursive-CTE heuristic (which stops at seven rounds or 100x the seed).
-const double GRAPH_FEEDBACK_ESTIMATE_LIMIT = 1.0e15;
-
-double bounded_graph_estimate_add(double left, double right)
-{
-  return left >= GRAPH_FEEDBACK_ESTIMATE_LIMIT - right
-      ? GRAPH_FEEDBACK_ESTIMATE_LIMIT
-      : left + right;
-}
-
-double bounded_graph_estimate_multiply(double left, double right)
-{
-  double result = 0.0;
-  if (left > 0.0 && right > 0.0) {
-    result = left >= GRAPH_FEEDBACK_ESTIMATE_LIMIT / right
-        ? GRAPH_FEEDBACK_ESTIMATE_LIMIT
-        : left * right;
-  }
-  return result;
-}
-
-void estimate_bounded_graph_feedback(double seed_rows,
-                                     double first_step_rows,
-                                     int64_t upper_bound,
-                                     double &recursive_rows,
-                                     double &total_rows,
-                                     double &relative_work)
-{
-  seed_rows = std::max(0.0, seed_rows);
-  first_step_rows = std::max(0.0, first_step_rows);
-  recursive_rows = 0.0;
-  relative_work = 0.0;
-  if (seed_rows > 0.0 && first_step_rows > 0.0 && upper_bound > 0) {
-    const double fanout = first_step_rows / std::max(1.0, seed_rows);
-    double frontier_rows = first_step_rows;
-    for (int64_t hop = 1; hop <= upper_bound; ++hop) {
-      if (hop > 1) {
-        frontier_rows = bounded_graph_estimate_multiply(frontier_rows, fanout);
-      }
-      recursive_rows = bounded_graph_estimate_add(recursive_rows, frontier_rows);
-      relative_work = bounded_graph_estimate_add(
-          relative_work, frontier_rows / first_step_rows);
-    }
-    // A full-scan recursive branch still runs once per non-empty level even
-    // when estimated fan-out shrinks, so do not cost fewer than the bounded
-    // number of hops. An empty first level terminates eagerly.
-    relative_work = std::max(relative_work, static_cast<double>(upper_bound));
-  }
-  total_rows = bounded_graph_estimate_add(seed_rows, recursive_rows);
-}
-
-const ObLogTableScan *find_graph_table_scan(const ObLogicalOperator *root,
-                                            const ObString &table_name)
-{
-  const ObLogTableScan *result = nullptr;
-  if (root != nullptr && root->get_type() == LOG_TABLE_SCAN) {
-    const ObLogTableScan *scan = static_cast<const ObLogTableScan *>(root);
-    if (scan->get_table_name().case_compare(table_name) == 0) {
-      result = scan;
-    }
-  }
-  for (int64_t i = 0; result == nullptr && root != nullptr
-                      && i < root->get_num_of_child(); ++i) {
-    result = find_graph_table_scan(root->get_child(i), table_name);
-  }
-  return result;
-}
-} // namespace
 
 const char *ObLogSet::get_name() const
 {
@@ -124,9 +50,7 @@ const char *ObLogSet::get_name() const
     "HASH EXCEPT DISTINCT",
   };
   const char *ret_char = "Unknown type";
-  if (is_graph_feedback_loop_) {
-    ret_char = "GRAPH FEEDBACK LOOP";
-  } else if (set_op_ >= 0 && set_op_ < ObSelectStmt::SET_OP_NUM
+  if (set_op_ >= 0 && set_op_ < ObSelectStmt::SET_OP_NUM
       && set_algo_ != INVALID_SET_ALGO) {
     ret_char = !is_distinct_ ? set_op_all[set_op_] :
                (HASH_SET == set_algo_ ? hash_set_op_distinct[set_op_] : merge_set_op_distinct[set_op_]);
@@ -135,29 +59,6 @@ const char *ObLogSet::get_name() const
     }
   } else { /* Do nothing */ }
   return ret_char;
-}
-
-int ObLogSet::get_plan_item_info(PlanText &plan_text,
-                                 ObSqlPlanItem &plan_item)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObLogicalOperator::get_plan_item_info(plan_text, plan_item))) {
-  } else if (is_graph_feedback_loop_) {
-    const ObLogTableScan *edge_scan = ::find_graph_table_scan(
-        get_child(second_child), ObString::make_string("__g_step_edge"));
-    const char *access = edge_scan == nullptr
-        ? "unknown"
-        : (edge_scan->is_index_scan() ? "index-scan" : "full-scan");
-    BEGIN_BUF_PRINT;
-    if (OB_FAIL(BUF_PRINTF("direction=%s, hops={%ld,%ld}, access=%s",
-                           graph_path_reverse_ ? "IN" : "OUT",
-                           graph_path_lower_bound_,
-                           graph_path_upper_bound_,
-                           access))) {
-    }
-    END_BUF_PRINT(plan_item.special_predicates_, plan_item.special_predicates_len_);
-  }
-  return ret;
 }
 
 const ObSelectStmt *ObLogSet::get_left_stmt() const
@@ -518,32 +419,6 @@ int ObLogSet::get_re_est_cost_infos(const EstimateCostInfo &param,
       child_cost += cur_child_cost;
     }
   }
-  if (OB_SUCC(ret) && is_graph_feedback_loop_) {
-    if (OB_UNLIKELY(2 != cost_infos.count()) ||
-        OB_UNLIKELY(graph_path_upper_bound_ < 0)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected graph feedback cost inputs",
-               K(ret), K(cost_infos.count()), K(graph_path_upper_bound_));
-    } else {
-      ObBasicCostInfo &seed_info = cost_infos.at(first_child);
-      ObBasicCostInfo &step_info = cost_infos.at(second_child);
-      const double seed_rows = std::max(0.0, seed_info.rows_);
-      const double first_step_rows = std::max(0.0, step_info.rows_);
-      const double first_step_cost = std::max(0.0, step_info.cost_);
-      double recursive_rows = 0.0;
-      double total_rows = 0.0;
-      double relative_work = 0.0;
-      estimate_bounded_graph_feedback(seed_rows, first_step_rows,
-                                      graph_path_upper_bound_, recursive_rows,
-                                      total_rows, relative_work);
-
-      step_info.rows_ = recursive_rows;
-      step_info.cost_ = bounded_graph_estimate_multiply(first_step_cost, relative_work);
-      card = total_rows;
-      child_cost = bounded_graph_estimate_add(std::max(0.0, seed_info.cost_),
-                                               step_info.cost_);
-    }
-  }
   return ret;
 }
 
@@ -717,10 +592,6 @@ uint64_t ObLogSet::hash(uint64_t seed) const
 {
   seed = do_hash(is_distinct_, seed);
   seed = do_hash(set_op_, seed);
-  seed = do_hash(is_graph_feedback_loop_, seed);
-  seed = do_hash(graph_path_lower_bound_, seed);
-  seed = do_hash(graph_path_upper_bound_, seed);
-  seed = do_hash(graph_path_reverse_, seed);
   seed = ObLogicalOperator::hash(seed);
 
   return seed;
@@ -918,14 +789,7 @@ int ObLogSet::check_has_push_down(bool &has_push_down)
 int ObLogSet::compute_op_parallel_info()
 {
   int ret = OB_SUCCESS;
-  if (is_graph_feedback_loop_) {
-    // A feedback frontier has a single owner. DAS below the recursive branch
-    // may still batch remote/local reads, but the loop itself must not be split
-    // into PX workers because that would duplicate or lose frontier states.
-    set_parallel(ObGlobalHint::DEFAULT_PARALLEL);
-    set_available_parallel(ObGlobalHint::DEFAULT_PARALLEL);
-    set_op_parallel_rule(OpParallelRule::OP_DAS_DOP);
-  } else if (OB_FAIL(compute_normal_multi_child_parallel_info())) {
+  if (OB_FAIL(compute_normal_multi_child_parallel_info())) {
   } else if (DistAlgo::DIST_PARTITION_WISE == get_distributed_algo()) {
     ObLogicalOperator *child = get_child(first_child);
     if (OB_ISNULL(child)) {
@@ -979,23 +843,7 @@ int ObLogSet::get_card_without_filter(double &card)
 {
   int ret = OB_SUCCESS;
   card = 0.0;
-  if (is_graph_feedback_loop_) {
-    if (OB_UNLIKELY(2 != get_num_of_child()) ||
-        OB_ISNULL(get_child(first_child)) ||
-        OB_ISNULL(get_child(second_child))) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected graph feedback children", K(ret), K(get_num_of_child()));
-    } else {
-      double recursive_rows = 0.0;
-      double relative_work = 0.0;
-      estimate_bounded_graph_feedback(get_child(first_child)->get_card(),
-                                      get_child(second_child)->get_card(),
-                                      graph_path_upper_bound_, recursive_rows,
-                                      card, relative_work);
-    }
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && !is_graph_feedback_loop_
-       && i < get_num_of_child(); ++i) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < get_num_of_child(); ++i) {
     const ObLogicalOperator *child = get_child(i);
     if (ObSelectStmt::UNION == get_set_op() && !is_set_distinct()) {
       ObSelectStmt::SetOperator set_type = is_recursive_union() ? ObSelectStmt::RECURSIVE : ObSelectStmt::UNION;

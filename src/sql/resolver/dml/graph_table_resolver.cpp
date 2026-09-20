@@ -1105,7 +1105,7 @@ int make_edge_identity(GraphRelationBuilder &builder,
 int build_recursive_graph_match(GraphRelationBuilder &builder,
                                 const GraphSchema &graph,
                                 const ObString &database_name,
-                                const GraphPathSpec &spec,
+                                const GraphPathDesc &path_desc,
                                 const ObString *adjacency_index,
                                 const GraphBinding &source_pattern,
                                 const GraphBinding &edge_pattern,
@@ -1279,7 +1279,7 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
     }
     if (OB_SUCC(ret)) {
       builder.append_condition(builder.binary(T_OP_LT,
-          builder.column(frontier_alias, DEPTH_NAME), builder.integer(spec.upper_bound_)),
+          builder.column(frontier_alias, DEPTH_NAME), builder.integer(path_desc.upper_bound_)),
           recursive_where);
       ParseNode *condition = nullptr;
       if (edge_filter != nullptr
@@ -1292,7 +1292,7 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
       }
     }
     if (OB_SUCC(ret)) {
-      const bool reverse = spec.direction_ == GraphPathDirection::IN;
+      const bool reverse = path_desc.direction_ == GraphPathDirection::IN;
       const uint64_t expected_current = reverse ? edge.element_->destination_id_
                                                 : edge.element_->source_id_;
       const uint64_t expected_next = reverse ? edge.element_->source_id_
@@ -1351,10 +1351,10 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
         || with_as == nullptr || with_list == nullptr) {
       ret = builder.error();
     } else {
-      set->int16_values_[0] = static_cast<int16_t>(spec.lower_bound_);
-      set->int16_values_[1] = static_cast<int16_t>(spec.upper_bound_);
+      set->int16_values_[0] = static_cast<int16_t>(path_desc.lower_bound_);
+      set->int16_values_[1] = static_cast<int16_t>(path_desc.upper_bound_);
       set->int16_values_[2] = static_cast<int16_t>(
-          spec.direction_ == GraphPathDirection::IN ? 1 : 0);
+          path_desc.direction_ == GraphPathDirection::IN ? 1 : 0);
       set->children_[0] = anchor;
       set->children_[1] = recursive;
       builder.force_serial(cte_query);
@@ -1382,7 +1382,7 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
     }
     if (OB_SUCC(ret)) {
       builder.append_condition(builder.binary(T_OP_GE,
-          builder.column(path_alias, DEPTH_NAME), builder.integer(spec.lower_bound_)), where);
+          builder.column(path_alias, DEPTH_NAME), builder.integer(path_desc.lower_bound_)), where);
       for (int64_t i = 0; i < source_pattern.element_->key_count_; ++i) {
         builder.append_condition(builder.binary(T_OP_EQ,
             builder.column(result_source, source_pattern.element_->key_columns_[i]),
@@ -1501,7 +1501,7 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
 int build_graph_path_branch(GraphRelationBuilder &builder,
                             const GraphSchema &graph,
                             const ObString &database_name,
-                            const GraphPathSpec &spec,
+                            const GraphPathDesc &path_desc,
                             const ObString *adjacency_index,
                             const GraphBinding &source_pattern,
                             const GraphBinding &edge_pattern,
@@ -1520,9 +1520,9 @@ int build_graph_path_branch(GraphRelationBuilder &builder,
   ObSEArray<GraphBinding, GRAPH_WALK_MAX_HOPS> edges;
   const GraphElement *traversal_target = target_pattern.element_;
   const ObTableSchema *traversal_target_table = target_pattern.table_;
-  const char *vertex_prefix = spec.direction_ == GraphPathDirection::OUT
+  const char *vertex_prefix = path_desc.direction_ == GraphPathDirection::OUT
       ? "__g_walk_out_v_" : "__g_walk_in_v_";
-  const char *edge_prefix = spec.direction_ == GraphPathDirection::OUT
+  const char *edge_prefix = path_desc.direction_ == GraphPathDirection::OUT
       ? "__g_walk_out_e_" : "__g_walk_in_e_";
   for (int64_t i = 0; OB_SUCC(ret) && i <= hop; ++i) {
     GraphBinding binding = {i == 0 ? source_pattern.element_ : traversal_target,
@@ -1548,7 +1548,7 @@ int build_graph_path_branch(GraphRelationBuilder &builder,
   if (OB_SUCC(ret)) {
     if (needs_separate_terminal) {
       separate_terminal.variable_ = builder.internal_identifier(
-          spec.direction_ == GraphPathDirection::OUT
+          path_desc.direction_ == GraphPathDirection::OUT
               ? "__g_walk_out_terminal_" : "__g_walk_in_terminal_",
           hop, 0);
       terminal = &separate_terminal;
@@ -1615,7 +1615,7 @@ int build_graph_path_branch(GraphRelationBuilder &builder,
     const GraphBinding &current = vertices.at(i);
     const GraphBinding &edge = edges.at(i);
     const GraphBinding &next = vertices.at(i + 1);
-    const bool reverse = spec.direction_ == GraphPathDirection::IN;
+    const bool reverse = path_desc.direction_ == GraphPathDirection::IN;
     const uint64_t expected_current = reverse ? edge.element_->destination_id_ : edge.element_->source_id_;
     const uint64_t expected_next = reverse ? edge.element_->source_id_ : edge.element_->destination_id_;
     if (current.element_->id_ != expected_current || next.element_->id_ != expected_next) {
@@ -1644,8 +1644,8 @@ int build_graph_path_branch(GraphRelationBuilder &builder,
   ParseNode *match_number = nullptr;
   if (OB_SUCC(ret)) {
     match_number = make_match_number(builder, vertices, edges, hop,
-                                     spec.lower_bound_, spec.upper_bound_);
-    if (spec.row_shape_ == GraphPathRowShape::PER_MATCH) {
+                                     path_desc.lower_bound_, path_desc.upper_bound_);
+    if (path_desc.row_shape_ == GraphPathRowShape::PER_MATCH) {
       if (OB_FAIL(add_expr_binding(expr_bindings, *source_pattern.variable_,
                                    GraphExprBindingKind::SCALAR, &vertices.at(0), nullptr,
                                    -1, false))) {
@@ -1880,7 +1880,7 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
         }
       }
     } else if (OB_SUCC(ret)) {
-      GraphPathSpec spec;
+      GraphPathDesc path_desc;
       if (quantifier == nullptr || quantifier->type_ != T_GRAPH_QUANTIFIER
           || quantifier->num_child_ != 2) {
         ret = OB_ERR_UNEXPECTED;
@@ -1889,29 +1889,29 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
         ret = OB_NOT_SUPPORTED;
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "unbounded graph path quantifiers (*, + or {n,})");
       } else {
-        spec.graph_id_ = graph->get_graph_id();
-        spec.graph_version_ = graph->get_schema_version();
-        spec.source_element_id_ = bindings.at(0).element_->id_;
-        spec.edge_element_id_ = bindings.at(1).element_->id_;
-        spec.target_element_id_ = bindings.at(2).element_->id_;
-        spec.lower_bound_ = quantifier->children_[0] == nullptr
+        path_desc.graph_id_ = graph->get_graph_id();
+        path_desc.graph_version_ = graph->get_schema_version();
+        path_desc.source_element_id_ = bindings.at(0).element_->id_;
+        path_desc.edge_element_id_ = bindings.at(1).element_->id_;
+        path_desc.target_element_id_ = bindings.at(2).element_->id_;
+        path_desc.lower_bound_ = quantifier->children_[0] == nullptr
             ? 0 : quantifier->children_[0]->value_;
-        spec.upper_bound_ = quantifier->value_ == 0
-            ? spec.lower_bound_ : quantifier->children_[1]->value_;
-        spec.direction_ = chain.children_[1]->value_ == 1
+        path_desc.upper_bound_ = quantifier->value_ == 0
+            ? path_desc.lower_bound_ : quantifier->children_[1]->value_;
+        path_desc.direction_ = chain.children_[1]->value_ == 1
             ? GraphPathDirection::IN : GraphPathDirection::OUT;
-        spec.row_shape_ = shape != nullptr && shape->value_ == 1
+        path_desc.row_shape_ = shape != nullptr && shape->value_ == 1
             ? GraphPathRowShape::PER_STEP : GraphPathRowShape::PER_MATCH;
-        spec.need_path_ = spec.row_shape_ == GraphPathRowShape::PER_STEP
+        path_desc.need_path_ = path_desc.row_shape_ == GraphPathRowShape::PER_STEP
             || contains_item_type(projects, T_FUN_JSON_ARRAYAGG);
-        if (spec.lower_bound_ < 0 || spec.upper_bound_ < 0
-            || spec.lower_bound_ > spec.upper_bound_) {
+        if (path_desc.lower_bound_ < 0 || path_desc.upper_bound_ < 0
+            || path_desc.lower_bound_ > path_desc.upper_bound_) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "graph path bounds with lower greater than upper");
-        } else if (spec.upper_bound_ > GRAPH_WALK_MAX_HOPS) {
+        } else if (path_desc.upper_bound_ > GRAPH_WALK_MAX_HOPS) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "graph path upper bounds greater than 16");
-        } else if (!spec.is_valid()) {
+        } else if (!path_desc.is_valid()) {
           ret = OB_ERR_UNEXPECTED;
         }
       }
@@ -1943,16 +1943,16 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
       ParseNode *select = nullptr;
       ObString adjacency_index;
       if (OB_SUCC(ret) && OB_FAIL(find_adjacency_index(
-              bindings.at(1), spec.direction_,
+              bindings.at(1), path_desc.direction_,
               *schema_checker_->get_schema_guard(), adjacency_index))) {
-        LOG_WARN("failed to select graph adjacency index", K(ret), K(spec));
+        LOG_WARN("failed to select graph adjacency index", K(ret), K(path_desc));
       }
       const ObString *adjacency_index_ptr = adjacency_index.empty()
           ? nullptr : &adjacency_index;
-      const bool use_feedback_loop = spec.row_shape_ == GraphPathRowShape::PER_MATCH
+      const bool use_feedback_loop = path_desc.row_shape_ == GraphPathRowShape::PER_MATCH
           && bindings.at(0).element_->id_ == bindings.at(2).element_->id_;
       if (OB_SUCC(ret) && use_feedback_loop) {
-        ret = build_recursive_graph_match(builder, *graph, database_name, spec,
+        ret = build_recursive_graph_match(builder, *graph, database_name, path_desc,
                                            adjacency_index_ptr,
                                            bindings.at(0), bindings.at(1), bindings.at(2),
                                            chain.children_[0]->children_[2],
@@ -1961,14 +1961,16 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
                                            projects, select);
       } else if (OB_SUCC(ret)) {
         ObSEArray<GraphParseNode, 32> branches;
-        for (int64_t hop = spec.lower_bound_; OB_SUCC(ret) && hop <= spec.upper_bound_; ++hop) {
-          const int64_t first_step = spec.row_shape_ == GraphPathRowShape::PER_STEP
+        for (int64_t hop = path_desc.lower_bound_;
+             OB_SUCC(ret) && hop <= path_desc.upper_bound_;
+             ++hop) {
+          const int64_t first_step = path_desc.row_shape_ == GraphPathRowShape::PER_STEP
               ? (hop == 0 ? 0 : 1) : -1;
-          const int64_t last_step = spec.row_shape_ == GraphPathRowShape::PER_STEP
+          const int64_t last_step = path_desc.row_shape_ == GraphPathRowShape::PER_STEP
               ? (hop == 0 ? 0 : hop) : -1;
           for (int64_t step = first_step; OB_SUCC(ret) && step <= last_step; ++step) {
             ParseNode *branch = nullptr;
-            if (OB_FAIL(build_graph_path_branch(builder, *graph, database_name, spec,
+            if (OB_FAIL(build_graph_path_branch(builder, *graph, database_name, path_desc,
                                                  adjacency_index_ptr,
                                                  bindings.at(0), bindings.at(1), bindings.at(2),
                                                  chain.children_[0]->children_[2],

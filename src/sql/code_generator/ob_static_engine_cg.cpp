@@ -44,6 +44,7 @@
 #include "sql/optimizer/ob_log_temp_table_transformation.h"
 #include "sql/optimizer/ob_log_stat_collector.h"
 #include "sql/optimizer/ob_log_expand.h"
+#include "sql/optimizer/graph_feedback_loop_log_op.h"
 #include "sql/engine/ob_operator_factory.h"
 #include "sql/engine/basic/ob_limit_op.h"
 #include "sql/engine/basic/ob_values_op.h"
@@ -1173,7 +1174,7 @@ int ObStaticEngineCG::generate_spec(ObLogSet &op, ObRecursiveUnionAllSpec &spec,
   return ret;
 }
 
-int ObStaticEngineCG::generate_spec(ObLogSet &op,
+int ObStaticEngineCG::generate_spec(GraphFeedbackLoopLogOp &op,
                                     GraphFeedbackLoopSpec &spec,
                                     const bool in_root_job)
 {
@@ -1181,9 +1182,9 @@ int ObStaticEngineCG::generate_spec(ObLogSet &op,
   UNUSED(in_root_job);
   if (OB_FAIL(generate_recursive_union_all_spec(op, spec))) {
   } else {
-    spec.set_graph_path(op.get_graph_path_lower_bound(),
-                        op.get_graph_path_upper_bound(),
-                        op.is_graph_path_reverse()
+    spec.set_graph_path(op.get_min_hops(),
+                        op.get_max_hops(),
+                        op.is_reverse()
                             ? GraphPathDirection::IN
                             : GraphPathDirection::OUT);
   }
@@ -1246,7 +1247,8 @@ int ObStaticEngineCG::generate_merge_set_spec(ObLogSet &op, ObMergeSetSpec &spec
   return ret;
 }
 
-int ObStaticEngineCG::generate_recursive_union_all_spec(ObLogSet &op, ObRecursiveUnionAllSpec &spec)
+int ObStaticEngineCG::generate_recursive_union_all_spec(ObLogicalOperator &op,
+                                                        ObRecursiveUnionAllSpec &spec)
 {
   int ret = OB_SUCCESS;
   uint64_t last_cte_table_id = OB_INVALID_ID;
@@ -6091,9 +6093,7 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
       switch (op.get_set_op()) {
         case ObSelectStmt::UNION:
           type = op.is_recursive_union()
-                   ? (op.is_graph_feedback_loop()
-                          ? PHY_GRAPH_FEEDBACK_LOOP
-                          : PHY_RECURSIVE_UNION_ALL)
+                   ? PHY_RECURSIVE_UNION_ALL
                    : (MERGE_SET == op.get_algo() ? PHY_MERGE_UNION : PHY_HASH_UNION);
           break;
         case ObSelectStmt::INTERSECT:
@@ -6105,6 +6105,10 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
         default:
           break;
       }
+      break;
+    }
+    case log_op_def::LOG_GRAPH_FEEDBACK_LOOP: {
+      type = PHY_GRAPH_FEEDBACK_LOOP;
       break;
     }
     case log_op_def::LOG_SUBPLAN_FILTER: {

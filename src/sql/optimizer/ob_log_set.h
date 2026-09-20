@@ -32,10 +32,6 @@ public:
       ObLogicalOperator(plan),
       is_distinct_(true),
       is_recursive_union_(false),
-      is_graph_feedback_loop_(false),
-      graph_path_lower_bound_(0),
-      graph_path_upper_bound_(0),
-      graph_path_reverse_(false),
       set_algo_(INVALID_SET_ALGO),
       set_dist_algo_(DIST_INVALID_METHOD),
       set_op_(ObSelectStmt::NONE),
@@ -53,25 +49,9 @@ public:
   const ObSelectStmt *get_left_stmt() const;
   int get_my_set_exprs(ObIArray<ObRawExpr*> &set_exprs);
   const char *get_name() const;
-  virtual int get_plan_item_info(PlanText &plan_text,
-                                 ObSqlPlanItem &plan_item) override;
   inline void assign_set_distinct(const bool is_distinct) { is_distinct_ = is_distinct; }
   inline void set_recursive_union(bool is_recursive_union) { is_recursive_union_ = is_recursive_union; }
   inline bool is_recursive_union() { return is_recursive_union_; }
-  inline void set_graph_feedback_loop(bool enabled,
-                                      int64_t lower_bound,
-                                      int64_t upper_bound,
-                                      bool reverse)
-  {
-    is_graph_feedback_loop_ = enabled;
-    graph_path_lower_bound_ = lower_bound;
-    graph_path_upper_bound_ = upper_bound;
-    graph_path_reverse_ = reverse;
-  }
-  inline bool is_graph_feedback_loop() const { return is_graph_feedback_loop_; }
-  inline int64_t get_graph_path_lower_bound() const { return graph_path_lower_bound_; }
-  inline int64_t get_graph_path_upper_bound() const { return graph_path_upper_bound_; }
-  inline bool is_graph_path_reverse() const { return graph_path_reverse_; }
   inline bool is_set_distinct() const { return is_distinct_; }
   // Currently only union supports reading left first and then right, but merge_union's distinct does not support
   // Add hash intersect and hash except operator 1by1 capability
@@ -123,10 +103,6 @@ public:
   const ObIArray<int64_t> &get_map_array() const { return map_array_; }
   VIRTUAL_TO_STRING_KV(N_SET_OP, (int)set_op_,
                        "recursive union", is_recursive_union_,
-                       "graph feedback loop", is_graph_feedback_loop_,
-                       "graph lower bound", graph_path_lower_bound_,
-                       "graph upper bound", graph_path_upper_bound_,
-                       "graph reverse", graph_path_reverse_,
                        N_DISTINCT, is_distinct_);
 
   inline SetAlgo get_algo() const { return set_algo_; }
@@ -147,10 +123,6 @@ public:
 private:
   bool is_distinct_;
   bool is_recursive_union_;
-  bool is_graph_feedback_loop_;
-  int64_t graph_path_lower_bound_;
-  int64_t graph_path_upper_bound_;
-  bool graph_path_reverse_;
   SetAlgo set_algo_;
   DistAlgo set_dist_algo_;
   ObSelectStmt::SetOperator set_op_;

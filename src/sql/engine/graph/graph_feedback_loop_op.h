@@ -28,6 +28,10 @@ namespace sql
 // an independent physical operator type so plan cache serialization, EXPLAIN
 // and future graph-specific accounting do not depend on recognizing a generic
 // recursive CTE after code generation.
+// TODO(graph-walk-v2): This inheritance is transitional. RecursiveUnionAll is
+// coupled to FakeCTETable and UNION row semantics. When GraphFeedbackLoop
+// directly drives GraphExpand and graph path states, extract a generic feedback
+// loop shared with recursive CTE, or make the graph Spec and Op independent.
 class GraphFeedbackLoopSpec final : public ObRecursiveUnionAllSpec
 {
   OB_UNIS_VERSION_V(1);

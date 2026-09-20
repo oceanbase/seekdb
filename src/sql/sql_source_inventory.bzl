@@ -1182,6 +1182,7 @@ SQL_UNITY_GROUPS = [
         name = "ob_sql_optimizer_1",
         language = "c++",
         srcs = [
+            "src/sql/optimizer/graph_feedback_loop_log_op.cpp",
             "src/sql/optimizer/ob_log_plan_factory.cpp",
             "src/sql/optimizer/ob_log_select_into.cpp",
             "src/sql/optimizer/ob_log_set.cpp",

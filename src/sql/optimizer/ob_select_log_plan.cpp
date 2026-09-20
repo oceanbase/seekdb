@@ -26,6 +26,7 @@
 #include "sql/optimizer/ob_log_window_function.h"
 #include "sql/optimizer/ob_log_topk.h"
 #include "sql/optimizer/ob_log_expand.h"
+#include "sql/optimizer/graph_feedback_loop_log_op.h"
 
 using namespace oceanbase;
 using namespace sql;
@@ -3007,29 +3008,46 @@ int ObSelectLogPlan::allocate_recursive_union_all_as_top(ObLogicalOperator *left
                                                          ObLogicalOperator *&top)
 {
   int ret = OB_SUCCESS;
-  ObLogSet *set_op = NULL;
   const ObSelectStmt *select_stmt = NULL;
   if (OB_ISNULL(select_stmt = get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL((set_op = static_cast<ObLogSet*>(
-                                 get_log_op_factory().allocate(*this, LOG_SET))))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("Allocate memory for ObLogSet failed", K(ret));
-  } else {
-    set_op->set_left_child(left_child);
-    set_op->set_right_child(right_child);
-    set_op->assign_set_distinct(false);
-    set_op->assign_set_op(select_stmt->get_set_op());
-    set_op->set_algo_type(MERGE_SET);
-    set_op->set_distributed_algo(dist_set_method);
-    set_op->set_recursive_union(true);
-    set_op->set_graph_feedback_loop(select_stmt->is_graph_feedback_loop(),
-                                    select_stmt->get_graph_path_lower_bound(),
-                                    select_stmt->get_graph_path_upper_bound(),
-                                    select_stmt->is_graph_path_reverse());
-    if (OB_FAIL(set_op->compute_property())) {
+  } else if (select_stmt->is_graph_feedback_loop()) {
+    GraphFeedbackLoopLogOp *graph_op = static_cast<GraphFeedbackLoopLogOp *>(
+        get_log_op_factory().allocate(*this, LOG_GRAPH_FEEDBACK_LOOP));
+    if (OB_ISNULL(graph_op)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_ERROR("failed to allocate graph feedback loop logical operator", K(ret));
     } else {
-      top = set_op;
+      graph_op->set_left_child(left_child);
+      graph_op->set_right_child(right_child);
+      graph_op->configure_path(select_stmt->get_graph_path_lower_bound(),
+                               select_stmt->get_graph_path_upper_bound(),
+                               select_stmt->is_graph_path_reverse(),
+                               dist_set_method == DistAlgo::DIST_PULL_TO_LOCAL);
+      if (OB_FAIL(graph_op->initialize_step_access_method())) {
+      } else if (OB_FAIL(graph_op->compute_property())) {
+      } else {
+        top = graph_op;
+      }
+    }
+  } else {
+    ObLogSet *set_op = static_cast<ObLogSet *>(
+        get_log_op_factory().allocate(*this, LOG_SET));
+    if (OB_ISNULL(set_op)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_ERROR("Allocate memory for ObLogSet failed", K(ret));
+    } else {
+      set_op->set_left_child(left_child);
+      set_op->set_right_child(right_child);
+      set_op->assign_set_distinct(false);
+      set_op->assign_set_op(select_stmt->get_set_op());
+      set_op->set_algo_type(MERGE_SET);
+      set_op->set_distributed_algo(dist_set_method);
+      set_op->set_recursive_union(true);
+      if (OB_FAIL(set_op->compute_property())) {
+      } else {
+        top = set_op;
+      }
     }
   }
   return ret;

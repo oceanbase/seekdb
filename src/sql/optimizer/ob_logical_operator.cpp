@@ -802,8 +802,9 @@ int ObLogicalOperator::compute_op_other_info()
   } else {
     // compute contains fake cte
     if (OB_SUCC(ret)) {
-      if (get_type() == log_op_def::ObLogOpType::LOG_SET &&
-          static_cast<ObLogSet*>(this)->is_recursive_union()) {
+      if (get_type() == log_op_def::ObLogOpType::LOG_GRAPH_FEEDBACK_LOOP ||
+          (get_type() == log_op_def::ObLogOpType::LOG_SET &&
+           static_cast<ObLogSet*>(this)->is_recursive_union())) {
         /*do nothing*/
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && !contain_fake_cte_ && i < get_num_of_child(); i++) {
@@ -1553,7 +1554,8 @@ int ObLogicalOperator::do_plan_tree_traverse(const TraverseOp &operation, void *
 int ObLogicalOperator::should_allocate_gi_for_dml(bool &is_valid)
 {
   int ret = OB_SUCCESS;
-  if (LOG_JOIN == get_type() || LOG_SET == get_type()) {
+  if (LOG_JOIN == get_type() || LOG_SET == get_type()
+      || LOG_GRAPH_FEEDBACK_LOOP == get_type()) {
     is_valid = false;
   } else if (LOG_INSERT == get_type()) {
     const ObLogInsert *log_insert = static_cast<const ObLogInsert *>(this);
@@ -2310,6 +2312,10 @@ int ObLogicalOperator::gen_location_constraint(void *ctx)
             (is_union_all && DistAlgo::DIST_SET_PARTITION_WISE == set_op->get_distributed_algo()) ||
             (DistAlgo::DIST_BASIC_METHOD == set_op->get_distributed_algo() && set_op->is_local());
         is_setop_ext_pw = (DistAlgo::DIST_EXT_PARTITION_WISE == set_op->get_distributed_algo());
+      } else if (log_op_def::LOG_GRAPH_FEEDBACK_LOOP == get_type()) {
+        // The bounded walk is serial and its two branches must be colocated.
+        // It has no SET partition-wise distribution semantics.
+        is_non_strict_pw = is_local();
       } else if (log_op_def::LOG_JOIN == get_type()) {
         ObLogJoin *join_op = static_cast<ObLogJoin *>(this);
         is_non_strict_pw = DistAlgo::DIST_BASIC_METHOD == join_op->get_dist_method() &&
@@ -2982,8 +2988,9 @@ int ObLogicalOperator::px_rescan_pre()
         static_cast<ObLogJoin*>(this)->set_px_batch_rescan(true);
       }
     }
-  } else if (LOG_SET == type_ &&
-            static_cast<ObLogSet*>(this)->is_recursive_union()) {
+  } else if (LOG_GRAPH_FEEDBACK_LOOP == type_ ||
+             (LOG_SET == type_ &&
+              static_cast<ObLogSet*>(this)->is_recursive_union())) {
     // recursive union all need to restart plan when rescan right child.
     if (OB_ISNULL(get_child(second_child))) {
       ret = OB_ERR_UNEXPECTED;
@@ -3525,9 +3532,10 @@ int ObLogicalOperator::px_pipe_blocking_post(ObPxPipeBlockingCtx &ctx)
       }
     }
     if (OB_SUCC(ret)) {
-      if (LOG_SET == get_type() && !got_in_exch) {
-        ObLogSet *set_op = static_cast<ObLogSet *>(this);
-        bool is_union = ObSelectStmt::UNION == set_op->get_set_op();
+      if ((LOG_SET == get_type() || LOG_GRAPH_FEEDBACK_LOOP == get_type())
+          && !got_in_exch) {
+        const bool is_union = LOG_GRAPH_FEEDBACK_LOOP == get_type()
+            || ObSelectStmt::UNION == static_cast<ObLogSet *>(this)->get_set_op();
         if (is_union && max_dfo_child_idx > 0) {
           got_in_exch = true;
         }
@@ -3613,6 +3621,7 @@ int ObLogicalOperator::allocate_granule_nodes_above(AllocGIContext &ctx)
   } else if (LOG_TABLE_SCAN != get_type()
              && LOG_JOIN != get_type()
              && LOG_SET != get_type()
+             && LOG_GRAPH_FEEDBACK_LOOP != get_type()
              && LOG_GROUP_BY != get_type()
              && LOG_DISTINCT != get_type()
              && LOG_SUBPLAN_FILTER != get_type()

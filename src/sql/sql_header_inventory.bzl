@@ -1036,6 +1036,7 @@ SQL_PRIVATE_HEADERS = [
     "executor/ob_memory_tracker_wrapper.h",
     "hybrid_search/ob_query_translator.h",
     "ob_trans_character.h",
+    "optimizer/graph_feedback_loop_log_op.h",
     "optimizer/ob_access_path_estimation.h",
     "optimizer/ob_del_upd_log_plan.h",
     "optimizer/ob_delete_log_plan.h",

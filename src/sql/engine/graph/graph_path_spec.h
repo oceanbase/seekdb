@@ -43,7 +43,7 @@ enum class GraphPathRowShape : int8_t
 
 // Compile-time description of the one quantified edge segment supported by
 // P2-WALK. Element IDs are mapping identities, not labels or table IDs.
-struct GraphPathSpec
+struct GraphPathDesc
 {
   GraphPathSpec()
     : graph_id_(common::OB_INVALID_ID),

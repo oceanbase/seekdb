@@ -9204,8 +9204,10 @@ int ObLogPlan::get_source_table_info(ObLogicalOperator &top,
                                                         source_table_part)))) {
     }
   }
-  if (OB_SUCC(ret) && OB_UNLIKELY(log_op_def::ObLogOpType::LOG_SET == top.get_type()
-                                  && NULL != source_sharding)) {
+  if (OB_SUCC(ret) && OB_UNLIKELY(
+          (log_op_def::ObLogOpType::LOG_SET == top.get_type()
+           || log_op_def::ObLogOpType::LOG_GRAPH_FEEDBACK_LOOP == top.get_type())
+          && NULL != source_sharding)) {
     int64_t total_part_cnt = 0;
     if (!source_sharding->is_distributed() && OB_FAIL(source_sharding->get_total_part_cnt(total_part_cnt))) {
     } else if (source_sharding->is_distributed() || total_part_cnt > 1) {
@@ -9464,6 +9466,7 @@ int ObLogPlan::adjust_final_plan_info(ObLogicalOperator *&op)
         child->set_parent(op);
         op->set_child(i, child);
         if (op->get_type() == log_op_def::LOG_SET ||
+            op->get_type() == log_op_def::LOG_GRAPH_FEEDBACK_LOOP ||
             op->get_type() == log_op_def::LOG_SUBPLAN_SCAN ||
             (op->get_type() == log_op_def::LOG_SUBPLAN_FILTER && i > 0)) {
           child->mark_is_plan_root();
@@ -9550,8 +9553,10 @@ int ObLogPlan::adjust_final_plan_info(ObLogicalOperator *&op)
       }
     }
 
-    if (OB_SUCC(ret) && op->get_type() == LOG_SET &&
-        static_cast<ObLogSet*>(op)->is_recursive_union()) {
+    if (OB_SUCC(ret) &&
+        (op->get_type() == LOG_GRAPH_FEEDBACK_LOOP ||
+         (op->get_type() == LOG_SET &&
+          static_cast<ObLogSet*>(op)->is_recursive_union()))) {
       ObLogicalOperator* right_child = NULL;
       if (OB_UNLIKELY(2 != op->get_num_of_child()) ||
           OB_ISNULL(right_child = op->get_child(ObLogicalOperator::second_child))) {
@@ -11282,9 +11287,13 @@ int ObLogPlan::find_possible_join_filter_tables(ObLogicalOperator *op,
       || OB_ISNULL(stmt = get_stmt())
       || OB_ISNULL(stmt->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (op->get_type() == log_op_def::LOG_SET) {
-    ObLogSet *log_set = static_cast<ObLogSet *>(op);
-    bool is_ext_pw = (log_set->get_distributed_algo() == DistAlgo::DIST_SET_PARTITION_WISE);
+  } else if (op->get_type() == log_op_def::LOG_SET
+             || op->get_type() == log_op_def::LOG_GRAPH_FEEDBACK_LOOP) {
+    bool is_ext_pw = false;
+    if (op->get_type() == log_op_def::LOG_SET) {
+      ObLogSet *log_set = static_cast<ObLogSet *>(op);
+      is_ext_pw = log_set->get_distributed_algo() == DistAlgo::DIST_SET_PARTITION_WISE;
+    }
     is_fully_partition_wise |= (op->is_fully_partition_wise() || is_ext_pw);
     for (int64_t i = 0; OB_SUCC(ret) && i < op->get_num_of_child(); ++i) {
       ObLogicalOperator* child_op;
