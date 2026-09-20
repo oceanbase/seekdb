@@ -450,6 +450,7 @@ _ROOTSERVER_GROUP_IMPLEMENTATION_DEPS = {
         "//src/share:seekdb_runtime_foundation",
         "//src/share:sql_persistence_support",
         "//src/share:system_variable_metadata",
+        "//src/share:time_wheel",
         "//src/storage:_textual_ob_keybtree",
         "//src/storage:storage_runtime_interface",
     ],

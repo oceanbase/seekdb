@@ -17,6 +17,9 @@
 #include "ob_replay_status.h"
 #include "logservice/ob_log_service.h"
 #include "share/ob_structured_event_logger.h"
+#ifdef ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK
+#include "share/ob_debug_sync.h"
+#endif
 
 namespace oceanbase
 {
@@ -826,8 +829,27 @@ bool ObReplayStatus::need_submit_log() const
 
 void ObReplayStatus::disable_local_replay()
 {
-  WLockGuard guard(local_replay_lock_);
-  local_replay_enabled_ = false;
+  {
+    WLockGuard guard(local_replay_lock_);
+    local_replay_enabled_ = false;
+  }
+#ifdef ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK
+  // A caught-up submit task is normally idle until PALF reports new logs.  The
+  // replaytest profile requeues that same task once so the promotion test can
+  // deterministically hold the real submit-handler read lock after replay has
+  // reached the fenced cutover boundary.  Release and Sanity builds do not
+  // compile this path.
+  {
+    int ret = OB_SUCCESS;
+    RLockGuard guard(rwlock_);
+    if (is_enabled_
+        && OB_SUCCESS != (ret = submit_task_to_replay_service_(submit_log_task_))) {
+      CLOG_LOG(WARN, "failed to requeue replay submit task for integration test",
+               K(ret), KPC(this));
+    }
+  }
+  DEBUG_SYNC(REPLAY_SUBMIT_TASK_AFTER_TEST_REQUEUE);
+#endif
   CLOG_LOG(INFO, "disable local replay", KPC(this));
 }
 

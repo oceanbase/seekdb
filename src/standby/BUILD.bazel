@@ -52,6 +52,7 @@ STANDBY_DEPS = [
     "//src/share:tenant_role_transition_interface",
     "//src/share:tenant_runtime",
     "//src/share:task_control",
+    "//src/share:time_wheel",
     "//src/storage:storage_runtime_internal_headers",
     "//src/storage:storage_runtime_interface",
 ]

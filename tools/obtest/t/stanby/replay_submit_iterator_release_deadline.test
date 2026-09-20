@@ -37,16 +37,14 @@ let $role_info_before = deploy_get_value(db_p.select select value as role_info f
 let $role_gmt_before = deploy_get_value(db_p.select select gmt_modified as role_gmt from oceanbase.__all_virtual_sys_parameter where name = 'server_role_info', role_gmt, 1);
 db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_sys_parameter where name = 'server_role_info' and value = 'PRIMARY:INVALID:NORMAL:0', 1, 30;
 
-db_s.mysql alter system set debug_sync_timeout = '300s';
-db_s.mysql set ob_global_debug_sync = 'REPLAY_SUBMIT_TASK_BEFORE_UNLOCK signal replay_submit_rdlocked wait_for replay_submit_continue execute 1';
-
-# The action is installed before this unique DML.  If a different handler emits
-# the signal, this row cannot become visible while that handler remains paused,
-# so the setup fails rather than misattributing a later timeout.
+# Use a unique DML to advance both received-log and replay progress before the
+# old primary is fenced.  The submit-handler lock is acquired only after the
+# fenced boundary is fully replayed; otherwise the paused handler itself would
+# prevent sync_scn from reaching that boundary and promotion would time out
+# before exercising submit-iterator release.
 connection conn_p;
 insert into replay_submit_iterator_release_deadline
 values (2026091701, 'replay_submit_iterator_release_deadline');
-db_s.mysql set ob_global_debug_sync = 'now wait_for replay_submit_rdlocked';
 db_s.check_until_timeout select count(*) from replay_submit_iterator_release_deadline where id = 2026091701 and marker = 'replay_submit_iterator_release_deadline', 1, 120;
 
 # Fence the old primary only after the target batch has entered replay queues.
@@ -71,6 +69,15 @@ db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_sta
 let $standby_end_scn = deploy_get_value(db_s.select select max(end_scn) as end_scn from oceanbase.__all_virtual_log_stat, end_scn, 1);
 let $standby_replay_scn = deploy_get_value(db_s.select select sync_scn as replay_scn from oceanbase.__all_virtual_server_stat where role = 'STANDBY', replay_scn, 1);
 
+# The lite deployment has one LS and therefore one ReplayStatus submit task.
+# Install the finite action only after end_scn and sync_scn cover the durable
+# cutover.  The replaytest-only disable path requeues the caught-up submit task
+# and waits until that real handler owns the exact read lock that promotion
+# must contend with, without blocking the progress prerequisite above.
+db_s.mysql alter system set debug_sync_timeout = '300s';
+db_s.mysql set ob_global_debug_sync = 'REPLAY_SUBMIT_TASK_BEFORE_UNLOCK signal replay_submit_rdlocked wait_for replay_submit_continue execute 1';
+db_s.mysql set ob_global_debug_sync = 'REPLAY_SUBMIT_TASK_AFTER_TEST_REQUEUE wait_for replay_submit_rdlocked execute 1';
+
 --enable_result_log
 --replace_regex /[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]*/<value>/g
 eval select '$role_info_before' as role_info_before, $role_gmt_before as gmt_before, $role_gmt_after as gmt_after, $cutover_scn as cutover_scn, $standby_end_scn as standby_end_scn, $standby_replay_scn as standby_replay_scn;
@@ -91,6 +98,7 @@ insert into replay_submit_iterator_release_deadline values (2, 'write_gate_must_
 # deadline.  Only this attempt may publish the write gate and free the buffer.
 db_s.mysql set ob_global_debug_sync = 'now signal replay_submit_continue';
 db_s.mysql set ob_global_debug_sync = 'REPLAY_SUBMIT_TASK_BEFORE_UNLOCK clear';
+db_s.mysql set ob_global_debug_sync = 'REPLAY_SUBMIT_TASK_AFTER_TEST_REQUEUE clear';
 db_s.mysql set ob_global_debug_sync = 'reset';
 set ob_query_timeout = 120000000;
 ALTER SYSTEM SWITCHOVER TO PRIMARY;
