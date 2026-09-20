@@ -17,7 +17,9 @@ option(ENABLE_SANITY "Build with seekdb memory Sanity instrumentation" OFF)
 option(ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK
   "Build the replay submit iterator integration-test hook" OFF)
 
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
+# EL7's supported Python 3 interpreter is 3.6. Keep configure-time generators
+# compatible with that floor and reject older interpreters explicitly.
+find_package(Python3 3.6 REQUIRED COMPONENTS Interpreter)
 set(SEEKDB_GENERATED_ROOT "${CMAKE_BINARY_DIR}/generated")
 set(SEEKDB_INNER_TABLE_GENERATOR
   "${CMAKE_SOURCE_DIR}/src/share/inner_table/generate_inner_table_schema.py")

@@ -27,7 +27,7 @@ import ast
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 
 # Python 3.14 removed these deprecated AST compatibility node classes.  Keep
@@ -193,7 +193,7 @@ PRETEST_MODULES: Sequence[str] = (
 )
 
 
-def _pretest_sanity_only(node: ast.AST | None, path: Path) -> bool:
+def _pretest_sanity_only(node: Optional[ast.AST], path: Path) -> bool:
     if node is None:
         return False
     if not (
