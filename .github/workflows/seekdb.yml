@@ -207,11 +207,11 @@ jobs:
           export PATH="$GITHUB_WORKSPACE/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
           .github/script/seekdb/compile.sh
 
-      - name: Build replay submit iterator CMake Sanity tests
+      - name: Build replay submit iterator CMake tests and integration server
         shell: bash
         run: |
           set -euo pipefail
-          ./build.sh sanity \
+          ./build.sh replaytest \
             -DOB_USE_CCACHE=ON \
             -DNEED_PARSER_CACHE=OFF \
             --make -j32 logservice_tests
@@ -220,18 +220,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ./build_sanity/unittest/run_tests.sh \
+          ./build_replaytest/unittest/run_tests.sh \
             -R '^logservice_tests_shard_[0-9]+$' \
             --output-on-failure
-
-      - name: Build replay submit iterator integration server
-        shell: bash
-        run: |
-          set -euo pipefail
-          ./build.sh replaytest \
-            -DOB_USE_CCACHE=ON \
-            -DNEED_PARSER_CACHE=OFF \
-            --make -j32
 
       - name: Replay submit iterator handler contention test
         shell: bash

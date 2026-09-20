@@ -262,7 +262,7 @@ protected:
 // need be protected by lock
 class ObReplayServiceSubmitTask : public ObReplayServiceTask
 {
-#ifdef ENABLE_SANITY
+#if defined(ENABLE_SANITY) || defined(ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK)
   friend class ReplaySubmitIteratorTestPeer;
 #endif
 public:
@@ -273,7 +273,7 @@ public:
     base_scn_(),
     iterator_(),
     iterator_generation_(0)
-#ifdef ENABLE_SANITY
+#if defined(ENABLE_SANITY) || defined(ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK)
     , iterator_opener_for_test_()
 #endif
   {
@@ -337,7 +337,7 @@ private:
   //for unittest, should be a member not pointer
   palf::PalfBufferIterator iterator_;
   int64_t iterator_generation_;
-#ifdef ENABLE_SANITY
+#if defined(ENABLE_SANITY) || defined(ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK)
   common::ObFunction<int(const palf::LSN &, palf::PalfBufferIterator &)> iterator_opener_for_test_;
 #endif
 };
@@ -418,7 +418,7 @@ private:
 class ObReplayStatus
 {
   friend class ObReplayServiceSubmitTask;
-#ifdef ENABLE_SANITY
+#if defined(ENABLE_SANITY) || defined(ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK)
   friend class ReplaySubmitIteratorTestPeer;
 #endif
 public:

@@ -193,6 +193,32 @@ PRETEST_MODULES: Sequence[str] = (
 )
 
 
+def _pretest_sanity_only(node: ast.AST | None, path: Path) -> bool:
+    if node is None:
+        return False
+    if not (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "select"
+        and len(node.args) == 1
+        and not node.keywords
+    ):
+        raise InventoryError(
+            "%s has unsupported target_compatible_with expression" % path
+        )
+    compatibility = _read_value(node.args[0])
+    expected = {
+        "//bazel:sanity_enabled": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }
+    if compatibility != expected:
+        raise InventoryError(
+            "%s has unsupported target_compatible_with select: %r"
+            % (path, compatibility)
+        )
+    return True
+
+
 def _pretest_spec(path: Path, module: str) -> Mapping[str, Any]:
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -223,6 +249,9 @@ def _pretest_spec(path: Path, module: str) -> Mapping[str, Any]:
     name = _read_value(keywords["name"])
     unity_size = _read_value(keywords.get("unity_size", ast.Constant(value=8)))
     shard_count = _read_value(keywords["shard_count"])
+    sanity_only = _pretest_sanity_only(
+        keywords.get("target_compatible_with"), path
+    )
     exceptions = _read_value(
         keywords.get("unity_exceptions", ast.Dict(keys=[], values=[]))
     )
@@ -244,6 +273,7 @@ def _pretest_spec(path: Path, module: str) -> Mapping[str, Any]:
         "name": name,
         "unity_size": unity_size,
         "shard_count": shard_count,
+        "sanity_only": sanity_only,
         "unity_exceptions": sorted(exceptions),
     }
 
@@ -406,6 +436,10 @@ def emit(repo: Path, output: Path) -> None:
         lines.append('set(%s_TARGET "%s")' % (prefix, spec["name"]))
         lines.append("set(%s_UNITY_SIZE %d)" % (prefix, spec["unity_size"]))
         lines.append("set(%s_SHARD_COUNT %d)" % (prefix, spec["shard_count"]))
+        lines.append(
+            "set(%s_SANITY_ONLY %s)"
+            % (prefix, "ON" if spec["sanity_only"] else "OFF")
+        )
         _emit_set(lines, "%s_UNITY_EXCEPTIONS" % prefix, exception_paths)
 
     output.parent.mkdir(parents=True, exist_ok=True)

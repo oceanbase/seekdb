@@ -156,7 +156,7 @@ void ObReplayServiceSubmitTask::destroy()
   //iterator does not support reset semantics, cannot call destroy interface in interfaces that may be reused later
   iterator_.destroy();
   ATOMIC_STORE(&iterator_generation_, 0);
-#ifdef ENABLE_SANITY
+#if defined(ENABLE_SANITY) || defined(ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK)
   iterator_opener_for_test_.reset();
 #endif
   ObReplayServiceTask::destroy();
@@ -170,7 +170,7 @@ void ObReplayServiceSubmitTask::release_iterator()
 int ObReplayServiceSubmitTask::open_iterator_(const LSN &begin_lsn)
 {
   int ret = OB_SUCCESS;
-#ifdef ENABLE_SANITY
+#if defined(ENABLE_SANITY) || defined(ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK)
   if (iterator_opener_for_test_.is_valid()) {
     ret = iterator_opener_for_test_(begin_lsn, iterator_);
   } else
