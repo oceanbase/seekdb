@@ -22,16 +22,16 @@ PARTITIONED_LOB_CHILD = b"child-lob:" + b"c" * (65 * 1024)
 PARTITIONED_LOB_BRANCH = b"branch-lob:" + b"b" * (66 * 1024)
 
 
-def connect(port):
-    return pymysql.connect(host="127.0.0.1", port=port, user="root", password="",
+def connect(endpoint):
+    return pymysql.connect(unix_socket=endpoint, user="root", password="",
                            autocommit=True, connect_timeout=3,
                            read_timeout=int(os.environ.get(
                                "SEEKDB_TEST_READ_TIMEOUT", "20")))
 
 
-def connect_tls(port, wallet):
+def connect_tls(endpoint, wallet):
     return pymysql.connect(
-        host="127.0.0.1", port=port, user="root", password="",
+        unix_socket=endpoint, host="127.0.0.1", user="root", password="",
         autocommit=True, connect_timeout=3, read_timeout=20,
         ssl_ca=str(wallet / "ca.pem"),
         ssl_cert=str(wallet / "server-cert.pem"),
@@ -69,11 +69,11 @@ def assert_subpartitions(ddl, names):
     assert [name.lower() for name in subpartition_names] == list(names), ddl
 
 
-def connect_ready(port, timeout=60):
+def connect_ready(endpoint, timeout=60):
     deadline = time.monotonic() + timeout
     while True:
         try:
-            return connect(port)
+            return connect(endpoint)
         except pymysql.OperationalError as error:
             if error.args[0] not in (4023, 8001) or time.monotonic() >= deadline:
                 raise
@@ -108,7 +108,7 @@ def refresh_namespace_endpoint_events(experiment):
         paths.append(output)
     pattern = re.compile(
         r"PROTOTYPE_V10_WORKER_READY ns=(\d+) generation=(\d+) "
-        r"pid=(\d+) port=(\d+)")
+        r"pid=(\d+) endpoint=(\S+)")
     for path in paths:
         try:
             stat = path.stat()
@@ -131,7 +131,9 @@ def refresh_namespace_endpoint_events(experiment):
             for line in lines:
                 match = pattern.search(line)
                 if match:
-                    state["events"].append(tuple(map(int, match.groups())))
+                    ns, generation, pid, endpoint = match.groups()
+                    state["events"].append(
+                        (int(ns), int(generation), int(pid), endpoint))
         except FileNotFoundError:
             # Log rotation can rename a path between glob and open. The same
             # inode is consumed under its new name on the next poll.
@@ -142,13 +144,18 @@ def refresh_namespace_endpoint_events(experiment):
 def namespace_endpoint(experiment, namespace, exclude_pid=None, timeout=20):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
-        for ns, generation, pid, port in reversed(
+        for ns, generation, pid, endpoint in reversed(
                 refresh_namespace_endpoint_events(experiment)):
-            if (ns == namespace and port != 0 and pid != exclude_pid
+            if (ns == namespace and endpoint and pid != exclude_pid
                     and process_alive(pid)):
-                return pid, port, generation
+                return pid, endpoint, generation
         time.sleep(.05)
     raise AssertionError(("namespace endpoint was not published", namespace, exclude_pid))
+
+
+def endpoint_row(row):
+    return tuple(value.decode() if isinstance(value, bytes) else value
+                 for value in row)
 
 
 def wait_process_dead(pid, timeout=10):
@@ -204,12 +211,12 @@ def assert_worker_memory_budgets(experiment, expected_budget):
         namespaces=sorted({namespace for namespace, _, _ in records}))
 
 
-def protocol_probe(experiment, port):
-    result = subprocess.run(["mysql", "--protocol=TCP", "-h127.0.0.1", f"-P{port}",
+def protocol_probe(experiment, endpoint):
+    result = subprocess.run(["mysql", f"--socket={endpoint}",
                              "-uroot", "--connect-timeout=3", "-N", "-B", "-e", "SELECT 1"],
                             check=True, capture_output=True, text=True, timeout=15)
     assert result.stdout.strip() == "1", result
-    with pymysql.connect(host="127.0.0.1", port=port, user="root", autocommit=True,
+    with pymysql.connect(unix_socket=endpoint, user="root", autocommit=True,
                          charset="utf8mb4", client_flag=pymysql.constants.CLIENT.MULTI_STATEMENTS,
                          connect_timeout=3, read_timeout=20) as connection:
         with connection.cursor() as cursor:
@@ -220,7 +227,7 @@ def protocol_probe(experiment, port):
             assert not cursor.nextset()
     experiment.record("direct_cli_multiresult_charset_verified")
 
-    connection = mysql.connector.connect(host="127.0.0.1", port=port, user="root", password="",
+    connection = mysql.connector.connect(unix_socket=endpoint, user="root", password="",
                                          use_pure=True, ssl_disabled=True, autocommit=True,
                                          database="direct_check", connection_timeout=3)
     connection._socket.sock.settimeout(20)
@@ -247,8 +254,8 @@ def protocol_probe(experiment, port):
         connection.close()
 
 
-def cursor_snapshot_probe(experiment, port):
-    with connect(port) as connection, connection.cursor() as cursor:
+def cursor_snapshot_probe(experiment, endpoint):
+    with connect(endpoint) as connection, connection.cursor() as cursor:
         cursor.execute("USE direct_check")
         cursor.execute(
             "CREATE PROCEDURE cursor_snapshot_ok(OUT result VARCHAR(64)) BEGIN "
@@ -292,20 +299,20 @@ def cursor_snapshot_probe(experiment, port):
         registrations_released=4)
 
 
-def authentication_probe(experiment, port):
-    with connect(port) as root, root.cursor() as cursor:
+def authentication_probe(experiment, endpoint):
+    with connect(endpoint) as root, root.cursor() as cursor:
         cursor.execute("CREATE USER 'direct_reader'@'%' IDENTIFIED BY 'Direct-test-19!'")
         cursor.execute("GRANT SELECT ON direct_check.t TO 'direct_reader'@'%'")
     for user, password in [("direct_reader", "incorrect"), ("missing_reader", "")]:
         try:
-            pymysql.connect(host="127.0.0.1", port=port, user=user, password=password,
+            pymysql.connect(unix_socket=endpoint, user=user, password=password,
                             connect_timeout=3, read_timeout=20)
         except pymysql.MySQLError as error:
             assert error.args[0] == 1045, error
         else:
             raise AssertionError("invalid credentials were accepted")
     experiment.record("direct_authentication_rejection_verified")
-    with pymysql.connect(host="127.0.0.1", port=port, user="direct_reader", password="Direct-test-19!",
+    with pymysql.connect(unix_socket=endpoint, user="direct_reader", password="Direct-test-19!",
                          database="direct_check", autocommit=True, connect_timeout=3, read_timeout=20) as connection:
         with connection.cursor() as cursor:
             cursor.execute("SELECT v FROM t WHERE id=1")
@@ -316,7 +323,7 @@ def authentication_probe(experiment, port):
                 assert error.args[0] == 1142, error
             else:
                 raise AssertionError("table write without a grant was accepted")
-            with connect(port) as root, root.cursor() as admin:
+            with connect(endpoint) as root, root.cursor() as admin:
                 admin.execute("REVOKE SELECT ON direct_check.t FROM 'direct_reader'@'%'")
             try:
                 cursor.execute("SELECT v FROM t WHERE id=1")
@@ -324,7 +331,7 @@ def authentication_probe(experiment, port):
                 assert error.args[0] in (1044, 1142), error
             else:
                 raise AssertionError("revoked table grant remained effective")
-            with connect(port) as root, root.cursor() as admin:
+            with connect(endpoint) as root, root.cursor() as admin:
                 admin.execute("GRANT SELECT(v) ON direct_check.t TO 'direct_reader'@'%'")
             cursor.execute("SELECT v FROM t ORDER BY v")
             assert cursor.fetchall() == (("committed",), ("second",))
@@ -337,9 +344,9 @@ def authentication_probe(experiment, port):
     experiment.record("direct_table_privileges_verified")
 
 
-def lifecycle_probe(experiment, port):
-    with connect(port) as control, control.cursor() as admin:
-        victim = connect(port)
+def lifecycle_probe(experiment, endpoint):
+    with connect(endpoint) as control, control.cursor() as admin:
+        victim = connect(endpoint)
         with victim.cursor() as cursor:
             cursor.execute("BEGIN")
             cursor.execute("UPDATE direct_check.t SET v='disconnected' WHERE id=1")
@@ -347,7 +354,7 @@ def lifecycle_probe(experiment, port):
         admin.execute("SET ob_query_timeout=3000000")
         admin.execute("UPDATE direct_check.t SET v='committed' WHERE id=1")
         experiment.record("direct_disconnect_rollback_unlock_verified")
-        with connect(port) as victim:
+        with connect(endpoint) as victim:
             def interrupted_query():
                 with victim.cursor() as cursor:
                     try:
@@ -365,8 +372,8 @@ def lifecycle_probe(experiment, port):
                 cursor.execute("SELECT 1")
                 assert cursor.fetchone() == (1,)
         experiment.record("direct_query_cancel_session_reuse_verified")
-        holder = connect(port)
-        blocked = connect(port)
+        holder = connect(endpoint)
+        blocked = connect(endpoint)
         try:
             with holder.cursor() as cursor:
                 cursor.execute("BEGIN")
@@ -404,7 +411,7 @@ def lifecycle_probe(experiment, port):
                 blocked.close()
         admin.execute("SET GLOBAL autocommit=0")
         try:
-            with pymysql.connect(host="127.0.0.1", port=port, user="root", autocommit=None,
+            with pymysql.connect(unix_socket=endpoint, user="root", autocommit=None,
                                  connect_timeout=3, read_timeout=20) as fresh:
                 assert not fresh.server_status & 2
                 with fresh.cursor() as cursor:
@@ -415,9 +422,9 @@ def lifecycle_probe(experiment, port):
         experiment.record("direct_global_variable_greeting_verified")
 
 
-def management_concurrency_probe(experiment, port):
+def management_concurrency_probe(experiment, endpoint):
     def client(index):
-        with connect(port) as connection, connection.cursor() as cursor:
+        with connect(endpoint) as connection, connection.cursor() as cursor:
             for generation in range(2):
                 database = f"concurrent_ddl_{index}_{generation}"
                 cursor.execute(f"CREATE DATABASE {database}")
@@ -431,13 +438,13 @@ def management_concurrency_probe(experiment, port):
     experiment.record("direct_concurrent_management_verified", clients=3, databases=6)
 
 
-def forked_namespace_probe(experiment, control_port):
+def forked_namespace_probe(experiment, control_endpoint):
     def activate(namespace):
         # FORK publishes the endpoint through the lifecycle path.  Do not use
         # the compatibility SQL router to create the Worker as a side effect.
         return namespace_endpoint(experiment, namespace)
 
-    with connect(control_port) as control, control.cursor() as cursor:
+    with connect(control_endpoint) as control, control.cursor() as cursor:
         cursor.execute("SHOW TABLES FROM __fork_proto_meta")
         assert {row[0] for row in cursor.fetchall()} == {
             "endpoints", "namespaces", "pages", "roots", "snapshots"}
@@ -458,17 +465,18 @@ def forked_namespace_probe(experiment, control_port):
                        "WHERE name IN ('direct_b','direct_c')")
         namespaces = {name.decode(): namespace for namespace, name in cursor.fetchall()}
     branch_id = namespaces["direct_b"]
-    branch_pid, branch_port, branch_generation = activate(branch_id)
-    assert branch_port != control_port
-    with connect(control_port) as control, control.cursor() as cursor:
-        cursor.execute("SELECT worker_pid,port,generation FROM __fork_proto_meta.endpoints "
+    branch_pid, branch_endpoint, branch_generation = activate(branch_id)
+    assert branch_endpoint != control_endpoint
+    with connect(control_endpoint) as control, control.cursor() as cursor:
+        cursor.execute("SELECT worker_pid,endpoint,generation FROM __fork_proto_meta.endpoints "
                        "WHERE namespace_id=%s", (branch_id,))
-        assert cursor.fetchone() == (branch_pid, branch_port, branch_generation)
+        assert endpoint_row(cursor.fetchone()) == (
+            branch_pid, branch_endpoint, branch_generation)
         cursor.execute("SELECT directory_page,directory_cap,schema_version "
                        "FROM __fork_proto_meta.namespaces WHERE namespace_id=%s",
                        (branch_id,))
         branch_root_before_ddl = cursor.fetchone()
-    with connect(branch_port) as branch, branch.cursor() as cursor:
+    with connect(branch_endpoint) as branch, branch.cursor() as cursor:
         cursor.execute("SHOW DATABASES LIKE '__fork_proto_meta'")
         assert cursor.fetchall() == ()
         for statement in (
@@ -617,7 +625,7 @@ def forked_namespace_probe(experiment, control_port):
     # delta before publishing its endpoint.
     def exchange_for_crash_recovery():
         try:
-            with connect(branch_port) as branch, branch.cursor() as cursor:
+            with connect(branch_endpoint) as branch, branch.cursor() as cursor:
                 cursor.execute(
                     "ALTER TABLE branch_only.recovery_exchange_source "
                     "EXCHANGE PARTITION p0 WITH TABLE "
@@ -627,12 +635,12 @@ def forked_namespace_probe(experiment, control_port):
         raise AssertionError("exchange returned before the Worker crash")
 
     old_branch_pid = branch_pid
-    old_branch_port = branch_port
+    old_branch_endpoint = branch_endpoint
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
         exchange_future = pool.submit(exchange_for_crash_recovery)
         deadline = time.monotonic() + 10
         while True:
-            with connect(control_port) as control, control.cursor() as cursor:
+            with connect(control_endpoint) as control, control.cursor() as cursor:
                 cursor.execute(
                     "SELECT active_schema_changes,pending_schema_version "
                     "FROM __fork_proto_meta.namespaces WHERE namespace_id=%s",
@@ -646,17 +654,17 @@ def forked_namespace_probe(experiment, control_port):
         os.kill(old_branch_pid, 9)
         wait_process_dead(old_branch_pid)
         exchange_error = exchange_future.result(timeout=10)
-    branch_pid, branch_port, branch_generation = namespace_endpoint(
+    branch_pid, branch_endpoint, branch_generation = namespace_endpoint(
         experiment, branch_id, exclude_pid=old_branch_pid)
-    assert branch_pid != old_branch_pid and branch_port != old_branch_port
-    with connect_ready(branch_port) as branch, branch.cursor() as cursor:
+    assert branch_pid != old_branch_pid and branch_endpoint != old_branch_endpoint
+    with connect_ready(branch_endpoint) as branch, branch.cursor() as cursor:
         cursor.execute(
             "SELECT id,v FROM branch_only.recovery_exchange_source ORDER BY id")
         assert cursor.fetchall() == ((2, 20), (11, 110))
         cursor.execute(
             "SELECT id,v FROM branch_only.recovery_exchange_heap ORDER BY id")
         assert cursor.fetchall() == ((1, 10),)
-    with connect(control_port) as control, control.cursor() as cursor:
+    with connect(control_endpoint) as control, control.cursor() as cursor:
         cursor.execute(
             "SELECT active_schema_changes,pending_schema_version "
             "FROM __fork_proto_meta.namespaces WHERE namespace_id=%s",
@@ -666,8 +674,8 @@ def forked_namespace_probe(experiment, control_port):
         "multi_table_schema_delta_crash_recovery_verified",
         namespace=branch_id,
         pending_version=recovery_pending_version,
-        old={"pid": old_branch_pid, "port": old_branch_port},
-        new={"pid": branch_pid, "port": branch_port,
+        old={"pid": old_branch_pid, "endpoint": old_branch_endpoint},
+        new={"pid": branch_pid, "endpoint": branch_endpoint,
              "generation": branch_generation},
         client_error=exchange_error)
 
@@ -675,18 +683,18 @@ def forked_namespace_probe(experiment, control_port):
     # the namespace-directory delta is published. A concurrent fork must wait
     # on the persistent namespace fence and then inherit both schema and tablet.
     def create_fenced_table():
-        with connect(branch_port) as branch, branch.cursor() as cursor:
+        with connect(branch_endpoint) as branch, branch.cursor() as cursor:
             cursor.execute("CREATE TABLE branch_only.fenced(id INT PRIMARY KEY,v INT)")
 
     def fork_fenced_namespace():
-        with connect(control_port) as control, control.cursor() as cursor:
+        with connect(control_endpoint) as control, control.cursor() as cursor:
             cursor.execute("FORK DATABASE direct_b TO direct_fenced")
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
         ddl_future = pool.submit(create_fenced_table)
         deadline = time.monotonic() + 10
         while True:
-            with connect(control_port) as control, control.cursor() as cursor:
+            with connect(control_endpoint) as control, control.cursor() as cursor:
                 cursor.execute(
                     "SELECT active_schema_changes,pending_schema_version "
                     "FROM __fork_proto_meta.namespaces WHERE namespace_id=%s",
@@ -702,7 +710,7 @@ def forked_namespace_probe(experiment, control_port):
         assert not fork_future.done(), "fork crossed an unpublished DDL"
         ddl_future.result(timeout=15)
         fork_future.result(timeout=15)
-    with connect(control_port) as control, control.cursor() as cursor:
+    with connect(control_endpoint) as control, control.cursor() as cursor:
         cursor.execute("SELECT namespace_id FROM __fork_proto_meta.namespaces "
                        "WHERE name='direct_fenced'")
         fenced_id, = cursor.fetchone()
@@ -711,17 +719,17 @@ def forked_namespace_probe(experiment, control_port):
             "FROM __fork_proto_meta.namespaces WHERE namespace_id=%s",
             (branch_id,))
         assert cursor.fetchone() == (0, 0)
-    fenced_pid, fenced_port, fenced_generation = activate(fenced_id)
-    with connect(fenced_port) as fenced, fenced.cursor() as cursor:
+    fenced_pid, fenced_endpoint, fenced_generation = activate(fenced_id)
+    with connect(fenced_endpoint) as fenced, fenced.cursor() as cursor:
         cursor.execute("INSERT INTO branch_only.fenced VALUES(1,77)")
         cursor.execute("SELECT v FROM branch_only.fenced")
         assert cursor.fetchone() == (77,)
     experiment.record(
         "direct_ddl_fork_fence_verified", namespace=fenced_id,
-        worker_pid=fenced_pid, port=fenced_port,
+        worker_pid=fenced_pid, endpoint=fenced_endpoint,
         generation=fenced_generation, pending_version=pending_version)
 
-    with connect(control_port) as control, control.cursor() as cursor:
+    with connect(control_endpoint) as control, control.cursor() as cursor:
         cursor.execute("SELECT directory_page,directory_cap,schema_version "
                        "FROM __fork_proto_meta.namespaces WHERE namespace_id=%s",
                        (branch_id,))
@@ -751,18 +759,18 @@ def forked_namespace_probe(experiment, control_port):
                           directory_cap=child_root_after_fork[1],
                           schema_version=child_root_after_fork[2])
         assert child_root_after_fork[0] == branch_root_before_fork[0]
-    child_pid, child_port, child_generation = activate(child_id)
-    assert len({control_port, branch_port, child_port}) == 3
-    with connect(control_port) as control, control.cursor() as cursor:
-        cursor.execute("SELECT namespace_id,worker_pid,port,generation "
+    child_pid, child_endpoint, child_generation = activate(child_id)
+    assert len({control_endpoint, branch_endpoint, child_endpoint}) == 3
+    with connect(control_endpoint) as control, control.cursor() as cursor:
+        cursor.execute("SELECT namespace_id,worker_pid,endpoint,generation "
                        "FROM __fork_proto_meta.endpoints "
                        "WHERE namespace_id IN (%s,%s) ORDER BY namespace_id",
                        (branch_id, child_id))
-        assert cursor.fetchall() == (
-            (branch_id, branch_pid, branch_port, branch_generation),
-            (child_id, child_pid, child_port, child_generation))
+        assert [endpoint_row(row) for row in cursor.fetchall()] == [
+            (branch_id, branch_pid, branch_endpoint, branch_generation),
+            (child_id, child_pid, child_endpoint, child_generation)]
 
-    with connect(branch_port) as branch, connect(child_port) as child, connect(control_port) as source:
+    with connect(branch_endpoint) as branch, connect(child_endpoint) as child, connect(control_endpoint) as source:
         with child.cursor() as cursor:
             cursor.execute("SELECT v FROM direct_check.t WHERE id=1")
             assert cursor.fetchone() == ("branch snapshot",)
@@ -980,9 +988,9 @@ def forked_namespace_probe(experiment, control_port):
             assert cursor.fetchall() == ((2, 20),)
 
     barrier = threading.Barrier(3)
-    def concurrent_namespace_writer(endpoint):
-        label, port = endpoint
-        with connect(port) as connection, connection.cursor() as cursor:
+    def concurrent_namespace_writer(target):
+        label, endpoint = target
+        with connect(endpoint) as connection, connection.cursor() as cursor:
             barrier.wait(timeout=10)
             cursor.execute("UPDATE direct_check.t SET v=%s WHERE id=1", (label,))
             for key in range(100, 116):
@@ -992,13 +1000,13 @@ def forked_namespace_probe(experiment, control_port):
             assert cursor.fetchone() == (label,)
             cursor.execute("SELECT COUNT(*) FROM direct_check.t WHERE id BETWEEN 100 AND 115")
             assert cursor.fetchone() == (16,)
-    endpoints = (("source concurrent", control_port),
-                 ("branch concurrent", branch_port),
-                 ("child concurrent", child_port))
+    endpoints = (("source concurrent", control_endpoint),
+                 ("branch concurrent", branch_endpoint),
+                 ("child concurrent", child_endpoint))
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
         list(pool.map(concurrent_namespace_writer, endpoints))
-    for label, port in endpoints:
-        with connect(port) as connection, connection.cursor() as cursor:
+    for label, endpoint in endpoints:
+        with connect(endpoint) as connection, connection.cursor() as cursor:
             cursor.execute("SELECT v FROM direct_check.t WHERE id=1")
             assert cursor.fetchone() == (label,)
             cursor.execute("SELECT v FROM direct_check.t WHERE id=100")
@@ -1006,25 +1014,25 @@ def forked_namespace_probe(experiment, control_port):
     experiment.record("direct_concurrent_namespace_writes_verified",
                       namespaces=3, writes_per_namespace=17)
 
-    with connect(control_port) as control, control.cursor() as cursor:
+    with connect(control_endpoint) as control, control.cursor() as cursor:
         cursor.execute("FORK DATABASE direct_a TO direct_survivor")
         cursor.execute("SELECT namespace_id FROM __fork_proto_meta.namespaces "
                        "WHERE name='direct_survivor'")
         survivor_id, = cursor.fetchone()
-    survivor_pid, survivor_port, survivor_generation = activate(survivor_id)
-    with connect(survivor_port) as survivor, survivor.cursor() as cursor:
+    survivor_pid, survivor_endpoint, survivor_generation = activate(survivor_id)
+    with connect(survivor_endpoint) as survivor, survivor.cursor() as cursor:
         cursor.execute("UPDATE direct_check.t SET v='survivor before crash' WHERE id=1")
         cursor.execute("CREATE DATABASE survivor_only")
         cursor.execute("CREATE TABLE survivor_only.t(id INT PRIMARY KEY,v VARCHAR(64))")
         cursor.execute("INSERT INTO survivor_only.t VALUES(1,'durable')")
     experiment.survivor_endpoint = {
-        "namespace": survivor_id, "pid": survivor_pid, "port": survivor_port,
+        "namespace": survivor_id, "pid": survivor_pid, "endpoint": survivor_endpoint,
         "generation": survivor_generation}
 
     # The storage process owns access leases. Pause a scan after admission and
     # prove DROP closes the namespace but cannot reclaim it until that shared
     # lease is released.
-    fenced_reader = connect(fenced_port)
+    fenced_reader = connect(fenced_endpoint)
 
     def read_fenced_while_dropping():
         with fenced_reader.cursor() as cursor:
@@ -1032,13 +1040,13 @@ def forked_namespace_probe(experiment, control_port):
             return cursor.fetchall()
 
     def drop_fenced_namespace():
-        with connect(control_port) as control, control.cursor() as cursor:
+        with connect(control_endpoint) as control, control.cursor() as cursor:
             cursor.execute("FORK DATABASE direct_fenced TO __drop__")
 
-    with connect(control_port) as control, control.cursor() as cursor:
+    with connect(control_endpoint) as control, control.cursor() as cursor:
         cursor.execute("ALTER SYSTEM SET debug_sync_timeout='600s'")
-    config_ports = (branch_port, child_port, fenced_port, survivor_port)
-    for endpoint in config_ports:
+    config_endpoints = (branch_endpoint, child_endpoint, fenced_endpoint, survivor_endpoint)
+    for endpoint in config_endpoints:
         with connect(endpoint) as worker, worker.cursor() as cursor:
             cursor.execute(
                 "SELECT value FROM oceanbase.__all_virtual_parameter_stat "
@@ -1048,7 +1056,7 @@ def forked_namespace_probe(experiment, control_port):
         "namespace_worker_config_broadcast_verified",
         namespaces=4,
         value="600s")
-    with connect(control_port) as control, control.cursor() as cursor:
+    with connect(control_endpoint) as control, control.cursor() as cursor:
         cursor.execute(
             "SET ob_global_debug_sync='AFTER_TABLE_SCAN signal "
             "namespace_drop_read_ready wait_for namespace_drop_read_release "
@@ -1056,7 +1064,7 @@ def forked_namespace_probe(experiment, control_port):
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
         reader = pool.submit(read_fenced_while_dropping)
         try:
-            with connect(control_port) as control, control.cursor() as cursor:
+            with connect(control_endpoint) as control, control.cursor() as cursor:
                 cursor.execute(
                     "SET ob_global_debug_sync='now wait_for "
                     "namespace_drop_read_ready timeout 10000000'")
@@ -1064,7 +1072,7 @@ def forked_namespace_probe(experiment, control_port):
             pending_drop = pool.submit(drop_fenced_namespace)
             deadline = time.monotonic() + 10
             while True:
-                with connect(control_port) as control, control.cursor() as cursor:
+                with connect(control_endpoint) as control, control.cursor() as cursor:
                     cursor.execute(
                         "SELECT state FROM __fork_proto_meta.namespaces "
                         "WHERE namespace_id=%s", (fenced_id,))
@@ -1078,7 +1086,7 @@ def forked_namespace_probe(experiment, control_port):
             experiment.record(
                 "namespace_drop_waited_for_shared_scan", namespace=fenced_id)
         finally:
-            with connect(control_port) as control, control.cursor() as cursor:
+            with connect(control_endpoint) as control, control.cursor() as cursor:
                 cursor.execute(
                     "SET ob_global_debug_sync='now signal "
                     "namespace_drop_read_release'")
@@ -1092,11 +1100,11 @@ def forked_namespace_probe(experiment, control_port):
             assert error.args[0] in (2006, 2013, 4179), error
         pending_drop.result(timeout=15)
     fenced_reader.close()
-    with connect(control_port) as control, control.cursor() as cursor:
+    with connect(control_endpoint) as control, control.cursor() as cursor:
         cursor.execute("SET ob_global_debug_sync='AFTER_TABLE_SCAN clear'")
     wait_process_dead(fenced_pid)
 
-    with connect(control_port) as control, control.cursor() as cursor:
+    with connect(control_endpoint) as control, control.cursor() as cursor:
         cursor.execute("FORK DATABASE direct_c TO __drop__")
         cursor.execute("FORK DATABASE direct_b TO __drop__")
         cursor.execute("SELECT name,state FROM __fork_proto_meta.namespaces "
@@ -1115,8 +1123,8 @@ def forked_namespace_probe(experiment, control_port):
     # replacement must become useful before endpoint publication can complete,
     # because that publication itself is a GLOBAL-table write routed through
     # the replacement Worker.
-    old_control_pid, old_control_port = experiment.control_endpoint
-    with connect(old_control_port) as control, control.cursor() as cursor:
+    old_control_pid, old_control_endpoint = experiment.control_endpoint
+    with connect(old_control_endpoint) as control, control.cursor() as cursor:
         cursor.execute(
             "SELECT generation FROM __fork_proto_meta.endpoints "
             "WHERE namespace_id=1")
@@ -1124,17 +1132,25 @@ def forked_namespace_probe(experiment, control_port):
     os.kill(old_control_pid, 9)
     wait_process_dead(old_control_pid)
     control_recovery_started = time.monotonic()
-    control_pid, control_port, control_generation = namespace_endpoint(
+    control_pid, control_endpoint, control_generation = namespace_endpoint(
         experiment, 1, exclude_pid=old_control_pid, timeout=90)
     control_recovery_seconds = time.monotonic() - control_recovery_started
     assert control_pid != old_control_pid
     assert control_generation > old_control_generation
-    with connect_ready(control_port) as control, control.cursor() as cursor:
-        cursor.execute(
-            "SELECT worker_pid,port,generation "
-            "FROM __fork_proto_meta.endpoints WHERE namespace_id=1")
-        assert cursor.fetchone() == (
-            control_pid, control_port, control_generation)
+    with connect_ready(control_endpoint) as control, control.cursor() as cursor:
+        # A lazy session open may win the respawn race; endpoint publication
+        # then lands in the asynchronous recovery task. Wait for it.
+        deadline = time.monotonic() + 30
+        while True:
+            cursor.execute(
+                "SELECT worker_pid,endpoint,generation "
+                "FROM __fork_proto_meta.endpoints WHERE namespace_id=1")
+            row = endpoint_row(cursor.fetchone())
+            if row == (control_pid, control_endpoint, control_generation):
+                break
+            assert time.monotonic() < deadline, (
+                row, control_pid, control_endpoint, control_generation)
+            time.sleep(.05)
         cursor.execute(
             "SELECT id,v FROM direct_check.t "
             "WHERE id IN (1,2,100,115) ORDER BY id")
@@ -1146,13 +1162,13 @@ def forked_namespace_probe(experiment, control_port):
             "SELECT namespace_id FROM __fork_proto_meta.namespaces "
             "WHERE name='control_recovery_child'")
         recovery_child_id, = cursor.fetchone()
-    recovery_child_pid, recovery_child_port, _ = activate(recovery_child_id)
-    with connect(recovery_child_port) as child, child.cursor() as cursor:
+    recovery_child_pid, recovery_child_endpoint, _ = activate(recovery_child_id)
+    with connect(recovery_child_endpoint) as child, child.cursor() as cursor:
         cursor.execute("SELECT id,v FROM direct_check.t WHERE id IN (1,2) ORDER BY id")
         assert cursor.fetchall() == ((1, "source concurrent"), (2, "second"))
         cursor.execute("SHOW DATABASES LIKE '__fork_proto_meta'")
         assert cursor.fetchall() == ()
-    with connect(control_port) as control, control.cursor() as cursor:
+    with connect(control_endpoint) as control, control.cursor() as cursor:
         cursor.execute("FORK DATABASE control_recovery_child TO __drop__")
         cursor.execute(
             "SELECT state FROM __fork_proto_meta.namespaces "
@@ -1160,12 +1176,12 @@ def forked_namespace_probe(experiment, control_port):
         assert cursor.fetchone() == (2,)
     wait_process_dead(recovery_child_pid)
     assert_shared_namespace_released(experiment, (recovery_child_id,))
-    experiment.control_endpoint = (control_pid, control_port)
+    experiment.control_endpoint = (control_pid, control_endpoint)
     experiment.record(
         "default_worker_crash_recovery_verified",
-        old={"pid": old_control_pid, "port": old_control_port,
+        old={"pid": old_control_pid, "endpoint": old_control_endpoint,
              "generation": old_control_generation},
-        new={"pid": control_pid, "port": control_port,
+        new={"pid": control_pid, "endpoint": control_endpoint,
              "generation": control_generation},
         recovery_seconds=round(control_recovery_seconds, 3),
         namespace_data_recovered=True,
@@ -1174,11 +1190,11 @@ def forked_namespace_probe(experiment, control_port):
 
     experiment.record(
         "direct_forked_namespace_endpoints_verified",
-        source_port=control_port,
+        source_endpoint=control_endpoint,
         branch={"namespace": branch_id, "pid": branch_pid,
-                "port": branch_port, "generation": branch_generation},
+                "endpoint": branch_endpoint, "generation": branch_generation},
         child={"namespace": child_id, "pid": child_pid,
-               "port": child_port, "generation": child_generation},
+               "endpoint": child_endpoint, "generation": child_generation},
         survivor=experiment.survivor_endpoint,
         inherited_database_ddl=True,
         inherited_auto_increment_and_generated_columns=True,
@@ -1234,12 +1250,12 @@ def endpoint_recovery_probe(experiment):
         cursor.execute("SELECT id,v FROM survivor_only.t")
         assert cursor.fetchall() == ((1, "durable"),)
     with connect(new_control[1]) as control, control.cursor() as cursor:
-        cursor.execute("SELECT namespace_id,worker_pid,port,generation "
+        cursor.execute("SELECT namespace_id,worker_pid,endpoint,generation "
                        "FROM __fork_proto_meta.endpoints ORDER BY namespace_id")
-        assert cursor.fetchall() == (
+        assert [endpoint_row(row) for row in cursor.fetchall()] == [
             (1, new_control[0], new_control[1], new_control[2]),
             (old_survivor["namespace"], new_survivor[0],
-             new_survivor[1], new_survivor[2]))
+             new_survivor[1], new_survivor[2])]
         cursor.execute("SELECT id,v FROM direct_check.t "
                        "WHERE id IN (1,2,100,115) ORDER BY id")
         assert cursor.fetchall() == (
@@ -1258,8 +1274,8 @@ def endpoint_recovery_probe(experiment):
     experiment.record(
         "direct_endpoint_recovery_verified",
         namespace=old_survivor["namespace"],
-        old={"pid": old_survivor["pid"], "port": old_survivor["port"]},
-        new={"pid": new_survivor[0], "port": new_survivor[1],
+        old={"pid": old_survivor["pid"], "endpoint": old_survivor["endpoint"]},
+        new={"pid": new_survivor[0], "endpoint": new_survivor[1],
              "generation": new_survivor[2]},
         worker_recreated_automatically=True,
         endpoint_catalog_rebuilt=True,
@@ -1270,9 +1286,9 @@ def endpoint_recovery_probe(experiment):
 
 
 def tls_probe(experiment):
-    control_pid, control_port, _ = namespace_endpoint(experiment, 1)
+    control_pid, control_endpoint, _ = namespace_endpoint(experiment, 1)
     wallet = experiment.base / "wallet"
-    with connect_tls(control_port, wallet) as control, control.cursor() as cursor:
+    with connect_tls(control_endpoint, wallet) as control, control.cursor() as cursor:
         assert control._sock.cipher() is not None
         cursor.execute("CREATE DATABASE tls_data")
         cursor.execute("CREATE TABLE tls_data.t(id INT PRIMARY KEY,v VARCHAR(32))")
@@ -1283,13 +1299,13 @@ def tls_probe(experiment):
             "SELECT namespace_id FROM __fork_proto_meta.namespaces "
             "WHERE name='tls_child'")
         child_id, = cursor.fetchone()
-    child_pid, child_port, _ = namespace_endpoint(experiment, child_id)
-    with connect_tls(child_port, wallet) as child, child.cursor() as cursor:
+    child_pid, child_endpoint, _ = namespace_endpoint(experiment, child_id)
+    with connect_tls(child_endpoint, wallet) as child, child.cursor() as cursor:
         cipher = child._sock.cipher()
         assert cipher is not None and cipher[1] in ("TLSv1.2", "TLSv1.3"), cipher
         cursor.execute("SELECT id,v FROM tls_data.t")
         assert cursor.fetchone() == (1, "encrypted")
-    with connect_tls(control_port, wallet) as control, control.cursor() as cursor:
+    with connect_tls(control_endpoint, wallet) as control, control.cursor() as cursor:
         cursor.execute("FORK DATABASE tls_child TO __drop__")
     wait_process_dead(child_pid)
     experiment.record(
@@ -1301,8 +1317,8 @@ def tls_probe(experiment):
         forked_data_visible=True)
 
 
-def ddl_probe(experiment, port):
-    with connect(port) as connection, connection.cursor() as cursor:
+def ddl_probe(experiment, endpoint):
+    with connect(endpoint) as connection, connection.cursor() as cursor:
         cursor.execute("CREATE DATABASE ddl_check")
         cursor.execute("ALTER DATABASE ddl_check CHARACTER SET utf8mb4 COLLATE utf8mb4_bin")
         cursor.execute("USE ddl_check")
@@ -1358,14 +1374,16 @@ def ddl_probe(experiment, port):
 
 
 def probe(experiment, case="full"):
-    matches = re.findall(r"PROTOTYPE_V10_WORKER_READY ns=1 generation=\d+ pid=(\d+) port=(\d+)",
+    matches = re.findall(r"PROTOTYPE_V10_WORKER_READY ns=1 generation=\d+ pid=(\d+) endpoint=(\S+)",
                          experiment.engine_log())
     assert matches, experiment.base
-    pid, port = map(int, matches[-1])
-    assert port and port != experiment.port
-    experiment.control_endpoint = (pid, port)
-    experiment.record("direct_endpoint", worker_pid=pid, port=port)
-    with connect_ready(port) as connection:
+    pid, endpoint = matches[-1]
+    pid = int(pid)
+    assert endpoint.startswith("run/namespace-worker-")
+    assert endpoint.endswith("/run/sql.sock")
+    experiment.control_endpoint = (pid, endpoint)
+    experiment.record("direct_endpoint", worker_pid=pid, endpoint=endpoint)
+    with connect_ready(endpoint) as connection:
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1, CONNECTION_ID()")
             assert cursor.fetchone()[0] == 1
@@ -1490,7 +1508,7 @@ def probe(experiment, case="full"):
                 current_scn=int(current_scn), weak_read=True)
             experiment.record("direct_ddl_dml_verified")
     def client(value):
-        with connect(port) as connection:
+        with connect(endpoint) as connection:
             with connection.cursor() as cursor:
                 cursor.execute("SET @direct_value=%s", (value,))
                 cursor.execute("SELECT @direct_value, SLEEP(0.1)")
@@ -1498,8 +1516,8 @@ def probe(experiment, case="full"):
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
         list(pool.map(client, range(8)))
     if case == "full":
-        protocol_probe(experiment, port)
-        cursor_snapshot_probe(experiment, port)
+        protocol_probe(experiment, endpoint)
+        cursor_snapshot_probe(experiment, endpoint)
     failures = []
     checks = [("management_concurrency", management_concurrency_probe),
               ("authentication", authentication_probe), ("lifecycle", lifecycle_probe),
@@ -1508,7 +1526,7 @@ def probe(experiment, case="full"):
         checks = checks[-1:]
     for name, check in checks:
         try:
-            check(experiment, port)
+            check(experiment, endpoint)
         except Exception as error:
             traceback.print_exc()
             failures.append((name, repr(error)))
@@ -1524,14 +1542,16 @@ def main():
     parser.add_argument("--case", choices=("full", "forked", "tls"), default="full")
     args = parser.parse_args()
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-    os.environ["SEEKDB_NAMESPACE_SQL_WORKER_LISTEN"] = "1"
     os.environ["SEEKDB_NAMESPACE_SQL_WORKER_DIRECT_PROBE"] = "1"
     os.environ["SEEKDB_NAMESPACE_DDL_PUBLISH_DELAY_US"] = "500000"
     experiment = BootstrapExperiment(args.binary, "direct_v19", prototype=6)
+    # Worker endpoints are published relative to the instance base; resolve
+    # them from there so deep test roots stay under the AF_UNIX sun_path limit.
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(experiment.base)
     try:
         if args.case == "tls":
-            wallet_script = os.path.abspath(
-                os.path.join(os.path.dirname(__file__), "generate_wallet.sh"))
+            wallet_script = os.path.join(script_dir, "generate_wallet.sh")
             subprocess.run(
                 [wallet_script],
                 cwd=experiment.base, check=True, capture_output=True, text=True)

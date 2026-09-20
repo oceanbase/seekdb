@@ -1337,10 +1337,22 @@ int ObServer::start()
       FLOG_INFO("server metadata is ready");
     }
 
+    // Worker mode: the namespace proxy owns the public MySQL port. The shared
+    // process NIO keeps only its local Unix endpoint (run/sql.sock).
+    if (OB_SUCC(ret) && !namespace_worker_prototype::worker_process) {
+      config_.mysql_port_mode.set_value("disabled");
+    }
+
     if (FAILEDx(net_frame_.start())) {
       LOG_ERROR("fail to start net frame", KR(ret));
     } else {
       FLOG_INFO("success to start net frame");
+    }
+
+    if (FAILEDx(namespace_worker_prototype::proxy::start())) {
+      LOG_ERROR("fail to start the namespace worker proxy", KR(ret));
+    } else {
+      FLOG_INFO("success to start the namespace worker proxy");
     }
 
     if (OB_SUCC(ret) && OB_FAIL(standby_module_->start_listener())) {
@@ -1555,6 +1567,7 @@ void ObServer::set_stop()
 
 int ObServer::stop()
 {
+  namespace_worker_prototype::proxy::stop();
   namespace_worker_prototype::stop_all();
   int ret = OB_SUCCESS;
   int fail_ret = OB_SUCCESS;
@@ -3068,3 +3081,4 @@ void set_server_stop()
 #include "observer/namespace_worker_gateway_prototype.ipp"
 #include "observer/namespace_worker_inner_sql_prototype.ipp"
 #include "observer/namespace_sql_worker_prototype.ipp"
+#include "observer/namespace_worker_proxy_prototype.ipp"

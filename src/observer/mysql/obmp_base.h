@@ -76,8 +76,6 @@ protected:
   int create_session(ObSMConnection *conn, sql::ObSQLSessionInfo *&sess_info);
   int free_session();
   int get_session(sql::ObSQLSessionInfo *&sess_info);
-  int namespace_worker_request_prototype(sql::ObSQLSessionInfo &session,
-      const common::ObString &text, bool change_database = false);
   int revert_session(sql::ObSQLSessionInfo *sess_info);
   int flush_buffer(const bool is_last);
   int init_process_var(sql::ObSqlCtx &ctx,

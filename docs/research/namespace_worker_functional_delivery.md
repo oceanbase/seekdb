@@ -1,6 +1,6 @@
 # Worker 功能交付：独立入口、原生协议、通用 DDL
 
-> 2026-09-18 状态：本节是当前实现基线。后文保留的是 V19 的排障时间线，其中“尚未完成”等中间状态不再代表当前结论。
+> 2026-09-20 状态：本节是当前实现基线。后文保留的是 V19 的排障时间线，其中“尚未完成”等中间状态不再代表当前结论。
 
 ## 当前架构基线
 
@@ -9,8 +9,9 @@
 - Worker 模式本身就禁止共享进程执行 SQL，不再依赖第二个 bootstrap 实验开关。共享后台服务调用 `GCTX.sql_proxy_` 时，`ObInnerSQLConnection` 将读、写和事务操作转发给已绑定 namespace 的 Worker，再由 Worker 经过原生 SQL 链路执行。
 - Worker 激活时创建一个构造后不可变的 namespace Channel 绑定。普通存储帧不携带 namespace_id；共享端从 Channel 取得唯一作用域。`Exchange`、`SessionBinding` 和 `DirectStorageContext` 不再各保存一份可能不一致的 ID。
 - SQL/DAS 与共享存储的边界使用 `StorageSpaceHandle`，显式区分 `NAMESPACE(id)` 与 `GLOBAL` 作用域。普通请求继承启动时绑定在 Channel 上的 namespace，只在访问全局表时发送一个 GLOBAL 作用域标记，不重复携带 namespace ID；共享入口只允许默认 namespace 的 Channel 使用 GLOBAL。当前用户数据路径只在入口适配层展开 namespace ID，事务、tablet 和 B+Tree 等深层接口继续使用物理对象 ID。
-- 客户端目前直接连接 Worker 独立端口。一条用户 SQL 只在 Worker 内完成 SQL 处理，再按 DAS/事务操作访问共享存储，不经共享 SQL 入口往返转发。
-- 已发布 Channel 异常断开时，共享进程向现有 server runtime 提交一次带 generation 校验的 Worker 恢复任务；新 Worker 先完成未发布 schema delta 的启动恢复，再更新 endpoint 表并开放端口。DROP 和共享进程正常停机先关闭自动恢复标志，不会把已删除的 namespace 重新拉起；这条路径不增加常驻后台线程。
+- 客户端连接 Worker 的 Unix socket，不再有独立 TCP 端口。Worker 恒定初始化 NIO runtime 并绑定 `<实例目录>/run/namespace-worker-<ns>-<generation>/run/sql.sock`，`mysql_port_mode=disabled` 关闭 TCP 监听。一条用户 SQL 只在 Worker 内完成 SQL 处理，再按 DAS/事务操作访问共享存储，不经共享 SQL 入口往返转发。UDS 直连同时保留为排障通道。
+- Worker 就绪帧发布相对于实例目录的 endpoint 路径（`run/namespace-worker-<ns>-<generation>/run/sql.sock`），注册表列由 `port` 改为 `endpoint VARCHAR(512)`。绝对路径在深部署目录下会超过 AF_UNIX `sun_path` 上限（编码 namespace ID 有 7 位数字），相对路径约 45 字节与部署位置无关；共享进程（未来的代理）与实例同 cwd，可直接使用。
+- 已发布 Channel 异常断开时，共享进程向现有 server runtime 提交一次带 generation 校验的 Worker 恢复任务；新 Worker 先完成未发布 schema delta 的启动恢复，再更新 endpoint 表并开放入口。session open 的懒路径可能先于恢复任务拉起替代 Worker，该路径无法在持锁期间发布 endpoint（注册表 GLOBAL 写要路由回本 namespace），恢复任务现在会认领这种"已拉起但未发布"的 generation 并补发注册表行（按 `published_generation` 判重）。DROP 和共享进程正常停机先关闭自动恢复标志，不会把已删除的 namespace 重新拉起；这条路径不增加常驻后台线程。
 - Worker 的原生连接上下文直接持有本地 session 引用；不对每个 packet 做全局 `session_id` 查找。
 - namespace 中的用户表、索引、`all_*` 系统表和 `ddl_operation` 由该 Worker 的 native SchemaService 管理。不再使用一份额外的“namespace catalog”作为 schema 权威。
 - `schema_version` 在 namespace 内独立增长。fork 时 child 继承 source 当时的 schema version，之后父子各自演进。
@@ -43,6 +44,42 @@
 - `ALTER SYSTEM` 先由共享进程验证并持久化，再通过已有多路复用 Channel 将动态参数广播到发起命令的默认 Worker 和所有已运行 child。Worker 动态覆盖项单独持久化在控制 SQLite，共享进程崩溃后也能在发布 endpoint 前向新 Worker 回放。静态参数只持久化并标记下次启动生效，不会制造“配置值已变但 runtime 尚未重定容”的假象。Worker session 的全局 debug-sync broadcaster 绑定到 `RemoteRootserverLocalRuntime`，物理同步点在共享进程执行。
 - Worker 内存定容不再写死在子进程中。共享进程在 spawn 时通过启动帧传入 `namespace_sql_worker_memory_budget`，Worker 用该值定容分配器、KV cache 和 runtime；参数修改在 Worker 下次启动时生效。共享存储仍使用 `memory_budget`，两者是显式的独立配额。
 - TLS 启动配置与 Worker 内存预算一样由共享进程通过 bootstrap 帧下发。子进程的 Rust NIO 直接读取实例 wallet 的绝对路径，不依赖 Worker 独立工作目录中的证书副本。TLS 开关与最低协议版本在 NIO 启动时生效，运行中 `ALTER SYSTEM` 将它们标记为 Worker 重启项，不会只改参数表而不改监听器。
+- Worker 激活（spawn/bootstrap/健康探测）在持有 Channel 锁期间依赖 server runtime 线程池处理新 Worker 的存储帧。反向依赖已从根因上切断：Worker 对 `__all_*` 内部表的扫描和写入统一携带调用方已解析的逻辑 schema，共享端存储帧路径不走 SchemaService 懒加载——懒加载的 inner SQL 必须路由回正在激活的 Worker，会构成循环等待；未携带调用方 schema 的 scan/write 帧直接拒绝（`OB_NOT_SUPPORTED`），不再保留 encoded-id 存量回退。激活健康探测改用 sid-less internal 直连路由，跳过可能递归回 Worker 的默认变量装载。共享端 SchemaService 只服务于 ns1 catalog 读取等本地管理路径，Worker 数据路径不依赖它。
+
+## 终态设计：共享入口薄路由（已确认方向）
+
+- 终态形态：共享进程 = 存储引擎 + fork 控制面 + 薄 TCP 路由器；Worker 是唯一 MySQL 端点。不再保留单体进程兼容。
+- 登录方式：`root@分支名`（不带 `@` 默认 ns1）。分支名由登录者自己管理（fork 时给定，登录时按名字路由）。
+- 2881 共享入口的代理流水线：`发 greeting →（TLS upgrade 钩子，v1 空实现）→ 读用户名路由 → 字节流代理到目标 Worker 的 UDS`。代理不懂协议内容：TLS 端到端、协议特性全通、无 session 影子状态。
+- 代理向 Worker 发送 PROXY v2 头携带真实客户端 IP/端口（否则 Worker 侧 `user@host` 权限匹配全部变成 127.0.0.1）；v1 只带地址，TLV 前向兼容。
+- 已否决：fd 移交（SCM_RIGHTS）。字节流代理在资源占用、扩展性、跨平台上更均衡；跨机留给 endpoint 字符串的 `tcp:` 扩展位。
+- TLS：终态必须终结在边缘（MySQL 无 SNI，TLS 之后用户名不可路由）。v1 入口明文，设计上留三处坑位：PROXY v2 TLV、握手流水线中的 upgrade 钩子、greeting 能力位集中处理。
+- 客户端数据通道第一版不依赖端口（无跨机）；内部控制/存储通道保持 fork 管道帧（stdin/stdout，slot 复用），不动。
+- Windows：首选 AF_UNIX（Win10 1803+ 原生支持，与 socket 模型同构）；named pipe 只在"官方客户端直连 Worker"的可选场景才需要——mariadb-c-connect 在 Windows 仅支持 named pipe 的限制不影响两端都是我们自己代码的内部通道。
+
+### 工作清单
+
+- Step 1（已完成）：Worker 客户端接入点从随机 TCP 端口改为 Unix socket；就绪帧发布 endpoint 字符串；删除 `SEEKDB_NAMESPACE_SQL_WORKER_LISTEN` 开关；UDS 直连保留为排障通道。
+- Step 2（已完成）：2881 入口 `root@分支名` 路由 + 字节流代理 + PROXY v2 头 + TLS upgrade 空钩子。
+- Step 3（已完成）：删帧转发层。共享端：删 `namespace_worker_query_prototype.ipp`（COM_QUERY/COM_INIT_DB 转发）、`obmp_connect` 的 `__fork_ns_` 登录选址与 `open_session`/`namespace_worker_id_` 挂载、转发连接的 COM 白名单、gateway `query()`；`ObSMConnection::namespace_worker_id_` 字段删除（`namespace_worker_binding_` 保留，Worker 侧直连存储会话仍在用）。Worker 侧：删 `'Q'/'U'` 帧分发与 `execute` lambda、`namespace_worker_sql_request_prototype.ipp` 整文件（`check_worker_sql`/`check_worker_plan`/`WorkerPacketSender`）。保留 inner SQL 通道（`'I'/'a'/'C'` 帧 + `inner_call/inner_read`，控制面与共享端 inner SQL 在用）；`__fork_ns_` 限定名在 schema 解析层的拒绝语义保留（`root@b` 下跨 namespace 引用仍 1146）。
+- Step 4（已完成）：去兼容代码。`NamespaceForkKernelPrototype` 五级开关（enabled/namespace_mode/lifetime_mode/lineage_mode/metadata_gc_mode）与 `namespace_worker_prototype::enabled()` 全部恒定化，`SEEKDB_NAMESPACE_FORK_PROTOTYPE`/`SEEKDB_NAMESPACE_SQL_WORKER_PROTOTYPE` 环境开关删除（保留 `SEEKDB_NAMESPACE_SQL_WORKER_THREADS` 并发调优与 `SEEKDB_NAMESPACE_SQL_WORKER_DIRECT_PROBE` 开发探针两个运行时旋钮）。`check_sql_execution_role` 固化为 `!worker_process` 即拒。level 1/2 旧实验 `NamespaceForkPrototype` 整体删除（类、头文件、`fork_database_prototype_`、vanilla fork 死代码、fork_table 里的 prototype 快照旁路）。kernel 文件内部仍有约 50 处 `namespace_mode() ?` 风格三元表达式由常量折叠消除，行为不变，文本清扫留作后续。
+
+## 2026-09-21 验收证据
+
+- Step 4 落地（去兼容代码）：IPC 矩阵三连过 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_timeout_v13_{79i2cmoa,r0usk0we,pkf2fv9w}/data.tar.gz`、direct suite `--case full` `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_gru33ixs/data.tar.gz`（或 n9ve8fct，两轮均过）、`--case tls` 同批通过、bootstrap 回归两轮通过（`namespace_fork_PROTOTYPE_bootstrap_v18_qluib7mb`、`yywosfnj`）。
+- 解析超时抖动已根因修复：共享端 `StorageDispatch::Processor::run`（代理 resolve、channel 存储服务共用）复用 runtime 线程时不重置 `THIS_WORKER` 的 timeout_ts，若该线程此前跑过带截止时间的请求处理器，残留值已过期，inner SQL 期限计算 `min(残留值, now+query_timeout)` 取到过去时间 → Exchange 立即判超时并发送 'Z' 取消 → Worker 侧扫描以 -5065 QUERY_INTERRUPTED 中止 → 代理解析报 `namespace worker unavailable (err=-4012)`。修复：dispatch 任务入口统一 `THIS_WORKER.set_timeout_ts(INT64_MAX)`（与 Worker 侧 `before_process` 同款）。修复前该抖动在 Step 3/4 二进制上各复现一次，修复后 IPC 矩阵 3/3 通过。
+
+## 2026-09-20 验收证据
+- Step 3 落地（删帧转发层）：四套件通过——IPC 矩阵 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_timeout_v13_54szewxm/data.tar.gz`、direct suite `--case full` `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_ofiza4w_/data.tar.gz`、`--case tls` `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_9f652jrz/data.tar.gz`、bootstrap 回归 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_bootstrap_v18_kifee9rj/data.tar.gz`。手动冒烟（fork b→b2、`root@b2` 读写、ns 间隔离、`__fork_ns_` 跨 namespace 引用保持 1146、CONNECTION_ID 经 PROXY v2 TLV 透传）正常。注意：本轮 IPC 矩阵首次运行复现了已记录的解析超时抖动（fork c 后第二次连接分支 b 的 resolve 报 -4012，ns1 Worker 日志中对应 inner SQL 读被 QUERY_INTERRUPTED 取消，疑似共享端 StorageDispatch 任务线程携带过期 timeout_ts 导致期限被立即判超时；重跑即通过，与 Step 3 删除无关，根因待查）。
+- Step 2 落地：2881 入口 `root@分支名` 路由 + 字节流代理 + PROXY v2 头（携带真实客户端地址与连接号 TLV）。无 `@` 默认 ns1；未知分支返回 1049 `Unknown namespace`；Worker 崩溃后下一次连接自动触发重生（新 generation/pid），旧连接被拒。IPC 矩阵 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_timeout_v13_ou_rjekx/data.tar.gz`、direct suite `--case full` `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_11t3fun0/data.tar.gz`、`--case tls` `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_1_dqrwk0/data.tar.gz`、bootstrap 回归 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_bootstrap_v18_he220qpj/data.tar.gz` 全部通过。
+- UPDATE IGNORE 丢行修复：共享端 `ObWriteContext`（StoreCtxGuard）跨 batch 持有，写状态只在语句结束释放时才 merge 进 tx 描述符，导致 savepoint 回滚时 tx 仍是 IDLE，`rollback_to_global_implicit_savepoint_` 走 IDLE 分支只释放 savepoint 不做 undo，冲突行的 DELETE 被静默保留。修复对齐 vanilla 时序：处理隐式 savepoint 回滚（'B'）前先释放该会话所有打开的写上下文（`revert_store_ctx` 自然 merge 写状态，tx 转 IMPLICIT_ACTIVE），下一次写 batch 懒重 acquire。vanilla 本来就是每行写完释放 store ctx 再回滚，此改动只是把 IPC 模型拉回同一时序。修复后 ns1/分支上 `UPDATE IGNORE`（单行/多行链式冲突）、`INSERT IGNORE`、`REPLACE`、`ON DUPLICATE KEY UPDATE` 全部正确。
+- DML 语义面扫描：23 组场景（INSERT/IGNORE/ON DUPLICATE/REPLACE/UPDATE IGNORE/多表 UPDATE/多表 DELETE/显式 savepoint/事务内 IGNORE/FOR UPDATE/INSERT...SELECT/auto_increment 冲突/批量冲突）同一脚本分别在 vanilla（14444）、ns1 Worker、分支 Worker（`root@b`）执行，输出逐字节对比：数据、行数、错误码全部一致。仅两处消息保真差异（非数据语义）：dup-key 错误文本缺 `Duplicate entry 'x' for key 'y'` 明细（LOG_USER_ERROR 明细写在共享进程线程本地 buffer，未随 IPC 回传）；`DROP TABLE IF EXISTS` 不存在表时缺 1051 note（Worker 本地 DDL 警告路径）。两者已记录为已知差异，不影响 Step 3。
+- 已知抖动：IPC 矩阵曾观察到一次 Worker 被杀后重生延迟超过 60s 解析超时（respawn 的 gen-N Worker 卡在 bootstrap 本地步骤，同环境重跑及后续两轮均秒级恢复），暂未复现，保持观察。
+- Worker 客户端入口改为 Unix socket 后：direct suite `--case full` `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_s3zng7cd/data.tar.gz`、`--case tls`（UDS 上 TLSv1.3 直连验证）`/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_rnrz9osz/data.tar.gz`、bootstrap 回归 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_bootstrap_v18_7_uwlz0w/data.tar.gz`、IPC 矩阵 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_timeout_v13_5ttywd5o/data.tar.gz` 全部通过。IPC 矩阵的 fd 断言更新为：Worker 只允许持有自己的 UDS listen socket，其余 `socket:`/storage fd 仍视为泄漏；Worker 私有内存约 34MB，线程数 19（含 1 个 NIO io 线程）。
+- `source ~/.bashrc && make -j80 seekdb`：通过。
+- 反向依赖根因修复后，进一步移除激活期线程名 fail-fast 启发式，并把共享端 scan/write 的 SchemaService 回退改为硬拒绝（`OB_NOT_SUPPORTED`）：direct suite `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_29srmc01/data.tar.gz`（ns1 SIGKILL 恢复 0.672s，全程未触发硬拒绝标记）、bootstrap 回归 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_bootstrap_v18_ayoq6kmq/data.tar.gz`、IPC 矩阵 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_timeout_v13__9gcdik_/data.tar.gz` 全部通过。
+- 默认 Worker（ns1）崩溃恢复死锁修复后的完整 direct suite 两次通过：`/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19__662wht_/data.tar.gz`、`/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_8jtwrj3w/data.tar.gz`。ns1 Worker SIGKILL 后自动恢复从原先超 90 秒卡死降为约 0.52 秒完成，endpoint 重新发布、全局目录重发布与生命周期命令恢复均验证通过；重启后 endpoint 恢复（`endpoint_recovery`）同时通过。
+- 严格冷启动及崩溃恢复回归：`/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_bootstrap_v18_jyk_3p4c/data.tar.gz`（`cold_bootstrap`、`shared_sql_forbidden`、`recovery` 全通过）。
 
 ## 2026-09-18 验收证据
 
@@ -78,7 +115,8 @@
 - 共享存储的普通请求已由 Channel 绑定 `StorageSpaceHandle`；Gateway 将 namespace 逻辑对象转成编码后的物理 ID，事务、锁、Tablet 和 B+Tree 深层不传递独立 namespace 标量。显式 ID 仅保留在 fork/drop/启动等跨 namespace 生命周期操作及 Gateway 目录解析中。
 - Worker 已有显式的每进程内存配额；动态资源治理与按整体节点预算自动分配尚未做。TLS 直连及 forked child 已在 Linux 通过功能验收，其他目标平台仍未做生产级验收。
 - `ALTER SYSTEM` 已刷新所有已运行 Worker，并将 Worker 动态覆盖项单独持久化到控制 SQLite；后续启动的 child 和共享进程崩溃后重建的 Worker 都会回放它们。静态参数仍只在 Worker 重启时生效。
-- 当前每 Worker 一个端口；统一公网入口、跨主机 Worker 及其传输尚未落地。
+- 统一公网入口已落地（2881 `root@分支名` 路由 + 字节流代理）；Worker 另有 UDS 直连作为排障通道。跨主机 Worker 及其传输尚未落地（endpoint 字符串预留 `tcp:` 扩展位）。入口 TLS 终结留有三处坑位但 v1 为明文。
+- 入口消息保真两处已知差异：dup-key 错误文本缺行键明细（共享端线程本地 LOG_USER_ERROR 未回传）、`DROP TABLE IF EXISTS` 缺 1051 note。
 - 分区表的 CREATE/读写/fork/DROP/TRUNCATE、在线重分区、RANGE `ADD/DROP PARTITION`、二级分区维护、`EXCHANGE PARTITION`、分区 LOB 和分区索引已经覆盖；生产规模压力仍未验收。
 
 ## 历史排障记录

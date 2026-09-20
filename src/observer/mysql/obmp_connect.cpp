@@ -232,16 +232,6 @@ int ObMPConnect::process()
   ObSMConnection *conn = NULL;
   ObSQLSessionInfo *session = NULL;
   bool autocommit = false;
-  uint64_t requested_namespace = 1;
-  ObString requested_database;
-  const bool namespace_address = !namespace_worker_prototype::worker_process
-      && namespace_worker_prototype::enabled()
-      && namespace_worker_prototype::enabled()
-      && storage::NamespaceForkKernelPrototype::is_namespace_address(db_name_);
-  if (OB_SUCC(ret) && namespace_address) {
-    ret = storage::NamespaceForkKernelPrototype::parse_namespace_address(
-        db_name_, requested_namespace, requested_database);
-  }
   THIS_WORKER.set_timeout_ts(INT64_MAX); // avoid see a former timeout value
   if (THE_TRACE != nullptr) {
     THE_TRACE->reset();
@@ -258,12 +248,22 @@ int ObMPConnect::process()
     LOG_ERROR("session mgr is NULL", K(ret));
   } else if (OB_FAIL(conn->ret_)) {
   } else {
+    if (namespace_worker_prototype::worker_process) {
+      // The PROXY v2 preamble was consumed when Rust parsed this login. A
+      // proxied connection adopts the client-visible id the namespace entry
+      // allocated; CONNECTION_ID() then matches the greeting the client saw.
+      ObSqlSockDesc desc;
+      SQL_REQ_OP.get_sock_desc(req_, desc);
+      const int64_t proxy_conn_id = nio_get_proxy_conn_id(desc.sock_desc_);
+      if (proxy_conn_id > 0) {
+        conn->sessid_ = static_cast<uint32_t>(proxy_conn_id);
+      }
+    }
     if (SS_STOPPING == GCTX.status_) {
       ret = OB_SERVER_IS_STOPPING;
       LOG_WARN("server is stopping", K(ret));
     } else if (OB_FAIL(share::check_server_runtime_ready())) {
     } else if (namespace_worker_prototype::worker_process
-               && namespace_worker_prototype::enabled()
                && OB_FAIL(refresh_namespace_worker_login_state(gctx_, *conn))) {
       // Direct clients bypass the gateway executor that normally refreshes the
       // worker's namespace schema before each statement. Load it before the
@@ -277,31 +277,8 @@ int ObMPConnect::process()
       LOG_ERROR("null session", K(ret), K(session));
     } else if (OB_FAIL(verify_identify(*conn, *session))) {
     } else if (OB_FAIL(update_charset_sys_vars(*conn, *session))) {
-    } else if (namespace_address) {
-      ret = session->set_default_database(requested_database);
-      if (OB_SUCC(ret)) { session->set_database_id(OB_INVALID_ID); }
-    } else if (!namespace_worker_prototype::worker_process && namespace_worker_prototype::enabled()
-               && (namespace_worker_prototype::enabled() || storage::NamespaceForkKernelPrototype::is_encoded_id(session->get_database_id()))
-               ) {
-      ret = OB_SUCCESS;
-    }
-    if (OB_SUCC(ret) && !namespace_worker_prototype::worker_process
-        && namespace_worker_prototype::enabled()
-        && (namespace_worker_prototype::enabled()
-            || storage::NamespaceForkKernelPrototype::is_encoded_id(session->get_database_id()))) {
-      ret = namespace_worker_prototype::open_session(
-          namespace_address ? requested_namespace
-          : storage::NamespaceForkKernelPrototype::is_encoded_id(session->get_database_id())
-              ? (session->get_database_id() & ~(1ULL << 62)) >> 32 : 1,
-          *session, conn->namespace_worker_binding_);
     }
     if (OB_SUCC(ret)) {
-      if (!namespace_worker_prototype::worker_process && namespace_worker_prototype::enabled()
-          && (namespace_worker_prototype::enabled() || storage::NamespaceForkKernelPrototype::is_encoded_id(session->get_database_id()))) {
-        conn->namespace_worker_id_ = namespace_address ? requested_namespace
-            : storage::NamespaceForkKernelPrototype::is_encoded_id(session->get_database_id())
-            ? (session->get_database_id() & ~(1ULL << 62)) >> 32 : 1;
-      }
       // set connection info to session
       LOG_TRACE("setup user session OK", "user_id", session->get_user_id(), K(user_name_));
       conn->set_auth_phase();
@@ -433,31 +410,18 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
       // Normalize the requested database name before session privilege checks.
       if (!db_name_.empty()) {
         ObString db_name = db_name_;
-        uint64_t namespace_id = 0;
-        ObString logical_database;
-        const bool routed_namespace = !namespace_worker_prototype::worker_process
-            && namespace_worker_prototype::enabled()
-            && namespace_worker_prototype::enabled()
-            && storage::NamespaceForkKernelPrototype::is_namespace_address(db_name);
-        if (routed_namespace) {
-          // The gateway authenticates the account only. Database visibility is
-          // namespace-local and is checked by the target worker after routing.
-          ret = storage::NamespaceForkKernelPrototype::parse_namespace_address(
-              db_name, namespace_id, logical_database);
+        ObNameCaseMode mode = OB_NAME_CASE_INVALID;
+        bool perserve_lettercase = true;
+        ObCollationType cs_type = CS_TYPE_INVALID;
+        if (OB_FAIL(session.get_collation_connection(cs_type))) {
+        } else if (OB_FAIL(session.get_name_case_mode(mode))) {
+        } else if (FALSE_IT(perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE))) {
+        } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
+                    cs_type, perserve_lettercase, db_name))) {
+        } else if (OB_FAIL(ObSQLUtils::cvt_db_name_to_org(
+                    schema_guard, &session, db_name, &allocator_))) {
         } else {
-          ObNameCaseMode mode = OB_NAME_CASE_INVALID;
-          bool perserve_lettercase = true;
-          ObCollationType cs_type = CS_TYPE_INVALID;
-          if (OB_FAIL(session.get_collation_connection(cs_type))) {
-          } else if (OB_FAIL(session.get_name_case_mode(mode))) {
-          } else if (FALSE_IT(perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE))) {
-          } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
-                      cs_type, perserve_lettercase, db_name))) {
-          } else if (OB_FAIL(ObSQLUtils::cvt_db_name_to_org(
-                      schema_guard, &session, db_name, &allocator_))) {
-          } else {
-            login_info.db_ = db_name;
-          }
+          login_info.db_ = db_name;
         }
       }
       LOG_TRACE("some important information required for login verification, print it before doing login", K(ret), K(ObString(sizeof(conn->scramble_buf_), conn->scramble_buf_)), K(hsr_.get_auth_plugin_name()), K(hsr_.get_auth_response()));
@@ -699,6 +663,21 @@ int ObMPConnect::check_client_property(ObSMConnection &conn)
     const char *peer_ip = client_ip_buf_;
     client_ip_.assign_ptr(peer_ip, static_cast<int32_t>(STRLEN(peer_ip)));
     client_port_ = get_peer().get_port();
+    if (namespace_worker_prototype::worker_process) {
+      // Behind the namespace proxy the Unix socket peer is the shared
+      // process; the PROXY v2 preamble carries the real client address.
+      // Privilege host matching and host_name derive from client_ip_.
+      char proxy_ip[common::MAX_IP_ADDR_LENGTH] = {};
+      int proxy_port = 0;
+      ObSqlSockDesc desc;
+      SQL_REQ_OP.get_sock_desc(req_, desc);
+      if (0 == nio_get_proxy_peer(desc.sock_desc_, proxy_ip, sizeof(proxy_ip),
+                                  &proxy_port)) {
+        MEMCPY(client_ip_buf_, proxy_ip, STRLEN(proxy_ip) + 1);
+        client_ip_.assign_ptr(client_ip_buf_, static_cast<int32_t>(STRLEN(proxy_ip)));
+        client_port_ = proxy_port;
+      }
+    }
     hsr_.set_capability_flags(client_cap);
     conn.cap_flags_ = client_cap;
   }
@@ -744,6 +723,20 @@ int ObMPConnect::verify_identify(ObSMConnection &conn, ObSQLSessionInfo &session
     SQL_REQ_OP.bind_sql_session(req_);
     session.set_peer_addr(get_peer());
     session.set_client_addr(get_peer());
+    if (namespace_worker_prototype::worker_process) {
+      // Behind the namespace proxy the Unix socket peer is the shared
+      // process; the PROXY v2 preamble carries the real client address for
+      // host-based privileges, audit and processlist.
+      char proxy_ip[OB_IP_STR_BUFF] = {};
+      int proxy_port = 0;
+      common::ObAddr proxy_addr;
+      if (0 == nio_get_proxy_peer(session.get_sock_desc().sock_desc_,
+                                  proxy_ip, sizeof(proxy_ip), &proxy_port)
+          && proxy_addr.set_ip_addr(proxy_ip, proxy_port)) {
+        session.set_peer_addr(proxy_addr);
+        session.set_client_addr(proxy_addr);
+      }
+    }
     session.set_trans_type(transaction::ObTxClass::USER);
     // Lock the single server runtime until the connection is destroyed.
     if (NULL != share::server_service<omt::ObServerRuntimeController>()) {

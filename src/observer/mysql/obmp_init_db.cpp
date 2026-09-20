@@ -49,18 +49,6 @@ int ObMPInitDB::deserialize()
 
 int ObMPInitDB::process()
 {
-  if (!namespace_worker_prototype::worker_process && get_conn() && get_conn()->namespace_worker_binding_) {
-    ObSQLSessionInfo *session = nullptr;
-    int ret = get_session(session);
-    if (!ret && !session) { ret = OB_ERR_SESSION_INTERRUPTED; }
-    if (!ret) {
-      ObSQLSessionInfo::LockGuard guard(session->get_query_lock());
-      ret = namespace_worker_request_prototype(*session, db_name_, true);
-    }
-    if (ret) { send_error_packet(ret, nullptr); }
-    if (session) { revert_session(session); }
-    return ret;
-  }
   LOG_INFO("init db", K_(db_name));
   int ret = OB_SUCCESS;
   bool need_disconnect = true;

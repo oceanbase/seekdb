@@ -24,6 +24,7 @@
 #include "share/ob_server_struct.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "sql/engine/cmd/ob_set_names_executor.h"
 #include "sql/session/ob_inner_sql_connection.h"
 using namespace oceanbase::common;
@@ -253,6 +254,16 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
                   LOG_USER_WARN(OB_NOT_SUPPORTED, "This system variable now is mock");
                 }
               } else {
+                // Global variables are instance-level state owned by namespace
+                // 1; a branch worker rejects them like the gateway's
+                // privilege-limited session did.
+                if (OB_SUCC(ret) && set_var.set_scope_ == ObSetVar::SET_SCOPE_GLOBAL
+                    && observer::namespace_worker_prototype::worker_process
+                    && observer::namespace_worker_prototype::worker_namespace > 1) {
+                  ret = OB_ERR_NO_PRIVILEGE;
+                  LOG_USER_ERROR(OB_ERR_NO_PRIVILEGE, "SUPER");
+                  LOG_WARN("SET GLOBAL rejected in a branch namespace worker", K(ret));
+                }
                 if (OB_SUCC(ret) && set_var.set_scope_ == ObSetVar::SET_SCOPE_GLOBAL) {
                   if(set_var.var_name_ == OB_SV_TIME_ZONE) {
                     if(OB_FAIL(global_variable_timezone_formalize(ctx, value_obj))) {

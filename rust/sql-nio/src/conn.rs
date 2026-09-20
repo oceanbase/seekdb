@@ -187,6 +187,13 @@ pub(crate) struct ConnInner {
     pub(crate) req_compressed: bool,
     pub(crate) next_comp_seq: u8,
     pub(crate) login: Option<ParsedLogin>,
+    // PROXY v2 preamble sniffing on local sockets (the namespace worker
+    // entry sends it before the login packet to carry the real client addr).
+    pub(crate) proxy_checked: bool,
+    pub(crate) proxy_peer: Option<std::net::SocketAddr>,
+    // Client-visible connection id allocated by the namespace entry, carried
+    // in a private PROXY v2 TLV so CONNECTION_ID() matches the greeting.
+    pub(crate) proxy_conn_id: Option<u32>,
 }
 
 impl ConnInner {

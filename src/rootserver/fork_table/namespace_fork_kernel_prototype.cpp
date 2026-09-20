@@ -172,8 +172,7 @@ std::map<uint64_t, std::unique_ptr<DatabaseHolder>> database_schemas;
 // shared process and must still avoid constructing the legacy schema catalog.
 bool native_namespace_schema_authority()
 {
-  return NamespaceForkKernelPrototype::namespace_mode()
-      && observer::namespace_worker_prototype::enabled();
+  return true;
 }
 
 // Namespace management metadata is global. A target namespace DDL keeps its
@@ -1077,28 +1076,13 @@ int collect_metadata() {
 
 }
 
-bool NamespaceForkKernelPrototype::enabled() {
-  static bool on = [] { const char *s = std::getenv("SEEKDB_NAMESPACE_FORK_PROTOTYPE");
-    return s && (!std::strcmp(s, "2") || !std::strcmp(s, "3") || !std::strcmp(s, "4") || !std::strcmp(s, "5") || !std::strcmp(s, "6")); }();
-  return on;
-}
-bool NamespaceForkKernelPrototype::namespace_mode() {
-  static bool on = [] { const char *s = std::getenv("SEEKDB_NAMESPACE_FORK_PROTOTYPE");
-    return s && (!std::strcmp(s, "3") || !std::strcmp(s, "4") || !std::strcmp(s, "5") || !std::strcmp(s, "6")); }();
-  return on;
-}
-bool NamespaceForkKernelPrototype::lifetime_mode() {
-  static bool on = [] { const char *s = std::getenv("SEEKDB_NAMESPACE_FORK_PROTOTYPE"); return s && (!std::strcmp(s, "4") || !std::strcmp(s, "5") || !std::strcmp(s, "6")); }();
-  return on;
-}
-bool NamespaceForkKernelPrototype::lineage_mode() {
-  static bool on = [] { const char *s = std::getenv("SEEKDB_NAMESPACE_FORK_PROTOTYPE"); return s && (!std::strcmp(s, "5") || !std::strcmp(s, "6")); }();
-  return on;
-}
-bool NamespaceForkKernelPrototype::metadata_gc_mode() {
-  static bool on = [] { const char *s = std::getenv("SEEKDB_NAMESPACE_FORK_PROTOTYPE"); return s && !std::strcmp(s, "6"); }();
-  return on;
-}
+// Worker mode is the only mode on this branch; the graduated prototype
+// switches (SEEKDB_NAMESPACE_FORK_PROTOTYPE 2..6) collapsed into constants.
+bool NamespaceForkKernelPrototype::enabled() { return true; }
+bool NamespaceForkKernelPrototype::namespace_mode() { return true; }
+bool NamespaceForkKernelPrototype::lifetime_mode() { return true; }
+bool NamespaceForkKernelPrototype::lineage_mode() { return true; }
+bool NamespaceForkKernelPrototype::metadata_gc_mode() { return true; }
 int NamespaceForkKernelPrototype::ensure_control_schema() {
   if (!namespace_mode()) { return OB_SUCCESS; }
   if (!GCTX.sql_proxy_) { return OB_NOT_INIT; }
@@ -1120,7 +1104,7 @@ int NamespaceForkKernelPrototype::ensure_control_schema() {
       "active_schema_changes BIGINT DEFAULT 0,pending_schema_version BIGINT DEFAULT 0)",
     "CREATE TABLE IF NOT EXISTS __fork_proto_meta.endpoints("
       "namespace_id BIGINT UNSIGNED PRIMARY KEY,generation BIGINT UNSIGNED,"
-      "worker_pid BIGINT UNSIGNED,port BIGINT UNSIGNED)",
+      "worker_pid BIGINT UNSIGNED,endpoint VARCHAR(512))",
     lineage_mode()
       ? "CREATE TABLE IF NOT EXISTS __fork_proto_meta.snapshots("
           "snapshot_id BIGINT UNSIGNED PRIMARY KEY,catalog_page BIGINT UNSIGNED,"
@@ -1162,7 +1146,7 @@ int NamespaceForkKernelPrototype::begin_namespace_drop(const ObString &name, uin
   int ret = trans.start(GCTX.sql_proxy_);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(namespace_named(trans, name, id))) {
-  } else if (id == 1 && native_namespace_schema_authority()) {
+  } else if (id == 1) {
     // Namespace 1 is both the default user namespace and the only SQL control
     // entry. It remains a valid fork source, but deleting it would orphan the
     // GLOBAL catalog and every child endpoint.
@@ -1853,68 +1837,26 @@ int NamespaceForkKernelPrototype::database_by_id(uint64_t id, const ObSimpleData
   return ret;
 }
 int NamespaceForkKernelPrototype::observe_database(ObISQLClient &trans, const ObDatabaseSchema &schema) {
-  if (!namespace_mode() || is_inner_db(schema.get_database_id())
-      || schema.get_database_name_str().prefix_match("__fork_proto_meta")) { return OB_SUCCESS; }
-  if (native_namespace_schema_authority()) { return OB_SUCCESS; }
-  if (is_namespace_address(schema.get_database_name_str())
-      || !NamespaceObjectKey{1, schema.get_database_id()}.is_valid()) { return OB_NOT_SUPPORTED; }
-  bool ready = false; int ret = namespace_registry_ready(ready);
-  if (ret != OB_SUCCESS || !ready) { return ret; }
-  MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
-  Roots root; ret = roots(trans, 1, root, true);
-  if (ret == OB_ITER_END) {
-    if (lifetime_mode()) {
-      ret = roots(trans, 1, root, false, true);
-      if (ret == OB_SUCCESS) { return OB_OP_NOT_ALLOW; }
-    }
-    return ret == OB_ITER_END ? OB_SUCCESS : ret;
-  }
-  if (ret != OB_SUCCESS) { return ret; }
-  std::string data(schema.get_serialize_size(), '\0'); int64_t pos = 0; uint64_t object = 0; Value value;
-  if (OB_FAIL(schema.serialize(data.data(), data.size(), pos))) {
-  } else if (OB_FAIL(save_blob(trans, data, object))) {
-  } else {
-    value.data = entry(object, schema.get_database_id(), 0);
-    if (OB_FAIL(put(trans, root.catalog, "D" + std::string(schema.get_database_name()), value, root.catalog))) {
-    } else if (OB_FAIL(put(trans, root.catalog, "@" + key_of(schema.get_database_id()), value, root.catalog))) {
-    } else {
-      root.schema_version = std::max(root.schema_version, schema.get_schema_version());
-      ret = save_roots(trans, 1, root);
-    }
-  }
-  return ret;
-}
-int NamespaceForkKernelPrototype::check_database_ddl(const ObDatabaseSchema &schema, const ObISQLClient *trans) {
-  if (lifetime_mode() && trans && source_drop_trans.load() == trans) { return OB_SUCCESS; }
-  if (!namespace_mode()) { return OB_SUCCESS; }
-  if (native_namespace_schema_authority()) {
-    return !observer::namespace_worker_prototype::can_access_namespace_control_database()
-        && observer::namespace_worker_prototype::is_namespace_control_database(
-            schema.get_database_name_str())
-        ? OB_NOT_SUPPORTED : OB_SUCCESS;
-  }
-  if (is_encoded_id(schema.get_database_id())) { return OB_NOT_SUPPORTED; }
   if (is_inner_db(schema.get_database_id())
       || schema.get_database_name_str().prefix_match("__fork_proto_meta")) { return OB_SUCCESS; }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
-  bool ready = false; int ret = namespace_registry_ready(ready);
-  if (ret != OB_SUCCESS || !ready) { return ret; }
-  if (!GCTX.sql_proxy_) { return OB_NOT_INIT; }
-  MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
-  Roots root; Value existing;
-  ret = roots(*GCTX.sql_proxy_, 1, root, false, true);
-  if (ret == OB_ITER_END) { return OB_SUCCESS; }
-  if (ret != OB_SUCCESS) { return ret; }
-  ret = find(*GCTX.sql_proxy_, root.catalog, "@" + key_of(schema.get_database_id()), existing);
-  // Only databases captured in namespace metadata need the prototype's DDL protection.
-  return ret == OB_ENTRY_NOT_EXIST ? OB_SUCCESS : ret == OB_SUCCESS ? OB_NOT_SUPPORTED : ret;
+  // Namespace schema authority is native: databases live in each worker's own
+  // schema cache, no legacy catalog enrollment.
+  return OB_SUCCESS;
+}
+int NamespaceForkKernelPrototype::check_database_ddl(const ObDatabaseSchema &schema, const ObISQLClient *trans) {
+  if (trans && source_drop_trans.load() == trans) { return OB_SUCCESS; }
+  // Namespace schema authority is native: only the control database is
+  // protected, and only from workers without control access.
+  return !observer::namespace_worker_prototype::can_access_namespace_control_database()
+      && observer::namespace_worker_prototype::is_namespace_control_database(
+          schema.get_database_name_str())
+      ? OB_NOT_SUPPORTED : OB_SUCCESS;
 }
 int NamespaceForkKernelPrototype::control_namespace(const ObString &source, const ObString &target, uint64_t &id) {
-  if (!namespace_mode() || !GCTX.sql_proxy_ || target.empty() || target.length() > 128) { return OB_INVALID_ARGUMENT; }
+  if (!GCTX.sql_proxy_ || target.empty() || target.length() > 128) { return OB_INVALID_ARGUMENT; }
   ControlSqlNamespaceScope control_sql;
   if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
-  if (metadata_gc_mode() && source == "__gc__" && target == "__gc__") { id = OB_INVALID_ID; return collect_metadata(); }
+  if (source == "__gc__" && target == "__gc__") { id = OB_INVALID_ID; return collect_metadata(); }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   const int64_t begin_us = ObTimeUtility::current_time();
   const bool bootstrap = source == "__empty__";
@@ -1927,8 +1869,6 @@ int NamespaceForkKernelPrototype::control_namespace(const ObString &source, cons
     } else if (bootstrap) {
       source_locked = true;
     } else if (OB_FAIL(namespace_named(trans, source, source_id))) {
-    } else if (source_id != 1 && !lineage_mode()) {
-      ret = OB_NOT_SUPPORTED;
     } else if (OB_FAIL(roots(trans, source_id, root, true))) {
     } else if (root.active_schema_changes == 0 && root.pending_schema_version == 0) {
       source_locked = true;

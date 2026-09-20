@@ -778,36 +778,16 @@ static int prototype_catalog_schema(ObSchemaGetterGuard &guard, uint64_t db,
 {
   schema = nullptr;
   if (observer::namespace_worker_prototype::owns_namespace_schema()) { return OB_SUCCESS; }
-  if (!storage::NamespaceForkKernelPrototype::enabled()) { return OB_SUCCESS; }
-  if (storage::NamespaceForkKernelPrototype::namespace_mode()) {
-    return storage::NamespaceForkKernelPrototype::is_encoded_id(db)
-        ? storage::NamespaceForkKernelPrototype::schema_by_name(db, name, schema) : OB_SUCCESS;
-  }
-  const ObDatabaseSchema *database = nullptr;
-  int ret = guard.get_database_schema(db, database);
-  if (ret == OB_SUCCESS && database != nullptr
-      && database->get_database_name_str().prefix_match("__fork_proto_b")) {
-    ret = storage::NamespaceForkKernelPrototype::schema_by_name(db, name, schema);
-  }
-  return ret;
+  return storage::NamespaceForkKernelPrototype::is_encoded_id(db)
+      ? storage::NamespaceForkKernelPrototype::schema_by_name(db, name, schema) : OB_SUCCESS;
 }
 
 static int prototype_catalog_schemas(ObSchemaGetterGuard &guard, uint64_t db,
                                      ObIArray<const ObTableSchema *> &schemas)
 {
   if (observer::namespace_worker_prototype::owns_namespace_schema()) { return OB_SUCCESS; }
-  if (!storage::NamespaceForkKernelPrototype::enabled()) { return OB_SUCCESS; }
-  if (storage::NamespaceForkKernelPrototype::namespace_mode()) {
-    return storage::NamespaceForkKernelPrototype::is_encoded_id(db)
-        ? storage::NamespaceForkKernelPrototype::list_schemas(db, schemas) : OB_SUCCESS;
-  }
-  const ObDatabaseSchema *database = nullptr;
-  int ret = guard.get_database_schema(db, database);
-  if (ret == OB_SUCCESS && database != nullptr
-      && database->get_database_name_str().prefix_match("__fork_proto_b")) {
-    ret = storage::NamespaceForkKernelPrototype::list_schemas(db, schemas);
-  }
-  return ret;
+  return storage::NamespaceForkKernelPrototype::is_encoded_id(db)
+      ? storage::NamespaceForkKernelPrototype::list_schemas(db, schemas) : OB_SUCCESS;
 }
 
 int ObSchemaGetterGuard::get_table_id(uint64_t database_id,

@@ -103,14 +103,6 @@ int ObMPBase::before_process()
     ret = gctx_.schema_service_->refresh_and_add_schema(false);
     if (ret) { send_error_packet(ret, nullptr); return ret; }
   }
-  if (get_conn() && get_conn()->namespace_worker_id_ != 0) {
-    const auto cmd = static_cast<const obmysql::ObMySQLRawPacket &>(req_->get_packet()).get_cmd();
-    if (cmd != obmysql::COM_QUERY && cmd != obmysql::COM_QUIT && cmd != obmysql::COM_PING
-        && cmd != obmysql::COM_INIT_DB) {
-      send_error_packet(OB_NOT_SUPPORTED, "SQL worker prototype accepts text queries only");
-      return OB_NOT_SUPPORTED;
-    }
-  }
   process_timestamp_ = common::ObTimeUtility::current_time();
   return ret;
 }

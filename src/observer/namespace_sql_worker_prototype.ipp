@@ -20,7 +20,9 @@
 #include "sql/resolver/ddl/ob_use_database_stmt.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "rpc/obmysql/ob_sql_nio_server.h"
-#include "observer/namespace_worker_sql_request_prototype.ipp"
+#include <limits.h>
+#include <string.h>
+#include <unistd.h>
 
 namespace oceanbase { namespace observer {
 int ObServer::namespace_sql_worker_prototype(const char *query)
@@ -401,123 +403,6 @@ int ObServer::namespace_sql_worker_prototype(const char *query)
       return ret ? ret : lib::Worker::check_status();
     }
   };
-  auto execute = [&](SessionOwner &owner, const ObString &text, int64_t deadline) -> int {
-    const int64_t previous_request_schema_version = worker_request_schema_version;
-    worker_request_schema_version = OB_INVALID_VERSION;
-    struct RequestSchemaVersionScope {
-      int64_t previous;
-      ~RequestSchemaVersionScope() { worker_request_schema_version = previous; }
-    } request_schema_version_scope{previous_request_schema_version};
-    ObSQLSessionInfo &session = owner.session;
-    const int64_t started = ObTimeUtility::current_time();
-    THIS_WORKER.set_timeout_ts(deadline);
-    THIS_WORKER.set_session(&session);
-    ObCurTraceId::init(self_addr_);
-    session.set_query_start_time(started);
-    session.reset_warnings_buf();
-    ob_setup_tsi_warning_buffer(&session.get_warnings_buffer());
-    struct FinishRequest {
-      ObSQLSessionInfo &session;
-      ~FinishRequest() {
-        session.set_session_in_retry(SESS_NOT_IN_RETRY);
-        session.reset_query_string(); session.reset_warnings_buf(); session.set_session_sleep();
-        ob_setup_tsi_warning_buffer(nullptr);
-        THIS_WORKER.set_session(nullptr);
-      }
-    } finish{session};
-    int ret = THIS_WORKER.check_status();
-    if (!ret) { ret = session.check_and_init_retry_info(*ObCurTraceId::get_trace_id(), text); }
-    {
-      ObArenaAllocator allocator(ObMemAttr("NsSQLPolicy"));
-      if (!ret) { ret = check_worker_sql(text, session, allocator); }
-    }
-    if (ret) { return ret; }
-    ObQueryRetryCtrl retry;
-    do {
-      retry.clear_state_before_each_retry(session.get_retry_info_for_update());
-      session.reset_warnings_buf();
-      ret = THIS_WORKER.check_status();
-      if (ret) { break; }
-      ObArenaAllocator allocator(ObMemAttr("WorkerProto"));
-      share::schema::ObSchemaGetterGuard guard;
-      ObSqlCtx context;
-      context.session_info_ = &session; context.schema_guard_ = &guard;
-      context.retry_times_ = retry.get_retry_times();
-      auto result = std::make_unique<ObMySQLResultSet>(session, allocator, sql_engine_.get_plan_cache_access_service());
-      WorkerPacketSender sender;
-      // This process owns one namespace schema cache. Refresh from that
-      // namespace's native system tables before pinning the statement guard.
-      int64_t local_schema_version = 0;
-      if (!ret && owns_namespace_schema()) {
-        ret = refresh_namespace_schema();
-        fprintf(stderr, "PROTOTYPE_NATIVE_SCHEMA_REFRESH ns=%llu ret=%d\n",
-                (unsigned long long)worker_namespace, ret);
-        if (!ret) { ret = schema_service_.get_runtime_refreshed_schema_version(local_schema_version); }
-        fprintf(stderr, "PROTOTYPE_NATIVE_SCHEMA_VERSION ns=%llu ret=%d version=%lld\n",
-                (unsigned long long)worker_namespace, ret, (long long)local_schema_version);
-      } else if (!ret) {
-        ret = schema_service_.get_runtime_refreshed_schema_version(local_schema_version);
-      }
-      if (!ret && owns_namespace_schema()
-          && worker_request_schema_version == OB_INVALID_VERSION) {
-        worker_request_schema_version = local_schema_version;
-      }
-      // A namespace is owned by this process. Take its version once and pin
-      // every schema lookup made through this statement's guard to that value.
-      if (!ret) { ret = schema_service_.get_runtime_schema_guard(guard, local_schema_version); }
-      if (owns_namespace_schema()) {
-        fprintf(stderr, "PROTOTYPE_NATIVE_SCHEMA_GUARD ns=%llu ret=%d version=%lld\n",
-                (unsigned long long)worker_namespace, ret, (long long)local_schema_version);
-      }
-      if (!ret && owns_namespace_schema()) {
-        const share::schema::ObDatabaseSchema *database = nullptr;
-        const int lookup_ret = guard.get_database_schema(session.get_database_id(), database);
-        fprintf(stderr, "PROTOTYPE_NATIVE_SCHEMA ns=%llu version=%lld database=%llu lookup=%d found=%d\n",
-                (unsigned long long)worker_namespace, (long long)local_schema_version,
-                (unsigned long long)session.get_database_id(), lookup_ret, database != nullptr);
-      }
-      if (!ret) { ret = session.update_query_sensitive_system_variable(guard); }
-      if (!ret) { ret = result->init(); }
-      int64_t version = 0;
-      if (!ret) { ret = guard.get_schema_version(version); }
-      if (!ret) {
-        retry.set_current_local_schema_version(version);
-        retry.set_current_global_schema_version(version);
-        auto &task = result->get_exec_context().get_sql_exec_ctx();
-        task.schema_service_ = &schema_service_; task.set_query_begin_schema_version(version);
-        // DML operators open nested SQL through the execution context. Keep
-        // the worker's routed proxy attached so that path uses the same
-        // worker/shared storage bridge instead of observing a null proxy.
-        result->get_exec_context().set_sql_proxy(&sql_proxy_);
-        session.set_current_execution_id(sql_engine_.get_execution_id());
-        session.reset_plsql_exec_time(); session.reset_plsql_compile_time(); session.set_stmt_type(stmt::T_NONE);
-        ret = session.set_session_active(text, started, started, obmysql::COM_QUERY);
-      }
-      if (!ret) {
-        ret = sql_engine_.stmt_query(text, context, *result);
-        if (ret) {
-          int client_ret = ret;
-          retry.test_and_save_retry_state(gctx_, context, *result, ret, client_ret);
-          ret = client_ret;
-        } else if (!(ret = check_worker_plan(*result))) {
-          result->set_end_trans_async(false);
-          result->get_exec_context().set_plan_start_time(ObTimeUtility::current_time());
-          if (result->get_physical_plan()) {
-            ObSyncPlanDriver driver(gctx_, context, session, retry, sender);
-            ret = driver.response_result(*result);
-          } else {
-            ObSyncCmdDriver driver(gctx_, context, session, retry, sender);
-            ret = driver.response_result(*result);
-          }
-        }
-      }
-      session.set_session_in_retry(retry.need_retry());
-      fprintf(stderr, "PROTOTYPE_V16_NATIVE_EXECUTE session=%u attempt=%lld retry=%d ret=%d\n",
-          session.get_server_sid(), (long long)context.retry_times_, static_cast<int>(retry.get_retry_type()), ret);
-      if (!retry.need_retry() && !ret) { ret = sender.complete(); }
-    } while (retry.get_retry_type() == RETRY_TYPE_LOCAL);
-    return ret;
-  };
   auto execute_inner = [&](SessionOwner &owner, Frame &input) -> int {
     const bool previous_inner_sql_execution = worker_inner_sql_execution;
     worker_inner_sql_execution = true;
@@ -677,9 +562,11 @@ int ObServer::namespace_sql_worker_prototype(const char *query)
         // Exercise a worker-originated route with no gateway SQL exchange
         // serving its storage frames.  Avoid a shared SchemaService lookup
         // here: a cache miss would recursively open this not-yet-published
-        // namespace 1 Channel.
+        // namespace 1 Channel.  The sid-less internal route additionally skips
+        // default variable loading, which can recurse into this still
+        // initializing Worker.
         SessionBinding *binding = nullptr;
-        if (!result) { result = begin_direct_request(1, binding); }
+        if (!result) { result = begin_direct_request(0, binding, true); }
         const int finish_ret = finish_direct_request();
         if (!result) { result = finish_ret; }
         close_session(binding);
@@ -708,26 +595,7 @@ int ObServer::namespace_sql_worker_prototype(const char *query)
       } else if (input.type() == 'I') {
         result = execute_inner(*job.owner, input);
       } else {
-        const int64_t deadline = static_cast<int64_t>(input.number());
-        ObString sql = input.string();
-        std::string use_statement;
-        if (!input.consumed()) { result = OB_INVALID_ARGUMENT; }
-        if (!result && input.type() == 'U') {
-          use_statement = "USE `";
-          for (int64_t i = 0; i < sql.length(); ++i) {
-            if (sql[i] == '`') { use_statement.push_back('`'); }
-            use_statement.push_back(sql[i]);
-          }
-          use_statement.push_back('`');
-          sql.assign_ptr(use_statement.data(), use_statement.size());
-        }
-        fprintf(stderr, "PROTOTYPE_V12_EXECUTE_BEGIN request=%llu generation=%llu session=%u\n",
-            (unsigned long long)job.request->tag.slot, (unsigned long long)job.request->tag.generation,
-            job.owner->session.get_server_sid());
-        if (!result) { result = execute(*job.owner, sql, deadline); }
-        fprintf(stderr, "PROTOTYPE_V12_EXECUTE_END request=%llu generation=%llu session=%u ret=%d\n",
-            (unsigned long long)job.request->tag.slot, (unsigned long long)job.request->tag.generation,
-            job.owner->session.get_server_sid(), result);
+        result = OB_NOT_SUPPORTED;
       }
       complete(job.request, result, job.owner.get());
     worker_request = previous_request;
@@ -793,22 +661,31 @@ int ObServer::namespace_sql_worker_prototype(const char *query)
   });
   if ((ret = executors.start())) { return ret; }
   fprintf(stderr, "PROTOTYPE_V12_EXECUTORS count=%lld max_requests=%zu\n", (long long)concurrency, MAX_REQUESTS);
-  const bool direct_listener = std::getenv("SEEKDB_NAMESPACE_SQL_WORKER_LISTEN") != nullptr;
-  if (direct_listener) {
-    WORKER_STEP(server_runtime_controller_.init_sql_worker_runtime());
-    bind_server_service<omt::ObServerRuntimeController>(&server_runtime_controller_);
-    WORKER_STEP(conn_res_mgr_.init(schema_service_, server_gtimer_));
-    session_mgr_.bind_lifecycle_services(
-        *mods_ps_cache_, remote_debug_sync_broadcaster, conn_res_mgr_);
-    WORKER_STEP(server_gtimer_.schedule(session_mgr_, ObSQLSessionMgr::SCHEDULE_PERIOD, true));
-    config_.mysql_port_mode.set_value("random");
-    config_.sql_net_thread_count.set_value("1");
-    WORKER_STEP(net_frame_.init());
-    WORKER_STEP(net_frame_.start());
-    if (ret) { std::_Exit(1); }
-  }
+  WORKER_STEP(server_runtime_controller_.init_sql_worker_runtime());
+  bind_server_service<omt::ObServerRuntimeController>(&server_runtime_controller_);
+  WORKER_STEP(conn_res_mgr_.init(schema_service_, server_gtimer_));
+  session_mgr_.bind_lifecycle_services(
+      *mods_ps_cache_, remote_debug_sync_broadcaster, conn_res_mgr_);
+  WORKER_STEP(server_gtimer_.schedule(session_mgr_, ObSQLSessionMgr::SCHEDULE_PERIOD, true));
+  // Clients reach this worker through its Unix socket only: the shared entry
+  // proxies client connections to it, diagnostics may connect directly.
+  config_.mysql_port_mode.set_value("disabled");
+  config_.sql_net_thread_count.set_value("1");
+  WORKER_STEP(net_frame_.init());
+  WORKER_STEP(net_frame_.start());
+  if (ret) { std::_Exit(1); }
   Frame ready('Y'); ready.number(worker_namespace);
-  if (direct_listener) { ready.number(obmysql::get_sql_nio_bound_tcp_port()); }
+  // The NIO layer binds run/sql.sock under this worker's base directory.
+  // Publish it relative to the instance base (the shared process working
+  // directory): an absolute path can exceed the AF_UNIX sun_path limit for
+  // deep deployment directories.
+  char cwd[PATH_MAX];
+  if (!getcwd(cwd, sizeof(cwd))) { return OB_ERR_UNEXPECTED; }
+  const char *dir = strrchr(cwd, '/');
+  char client_endpoint[PATH_MAX];
+  snprintf(client_endpoint, sizeof(client_endpoint),
+           "run/%s/run/sql.sock", dir ? dir + 1 : cwd);
+  ready.string(ObString::make_string(client_endpoint));
   // Publish the same native serving state as ObServer::start(). SQL executors
   // use it to distinguish an asynchronous DDL wait from server shutdown.
   prepare_stop_ = false;
@@ -866,7 +743,7 @@ int ObServer::namespace_sql_worker_prototype(const char *query)
     if (input.type() == 'P') { complete(request, input.consumed() ? OB_SUCCESS : OB_INVALID_ARGUMENT); continue; }
     int result = OB_SUCCESS;
     std::shared_ptr<SessionOwner> owner;
-    if (input.type() == 'Q' || input.type() == 'U' || input.type() == 'C' || input.type() == 'I') {
+    if (input.type() == 'C' || input.type() == 'I') {
       const uint64_t index = input.number(), generation = input.number();
       {
         std::lock_guard<std::mutex> guard(sessions_mutex);
@@ -915,10 +792,7 @@ int ObServer::namespace_sql_worker_prototype(const char *query)
   worker_storage_routes.fail();
   // The worker is a process lifetime boundary. Stop it before unwinding the
   // SQL/storage adapters that its native network tasks can still reference.
-  if (direct_listener) { std::_Exit(ret == OB_SUCCESS ? 0 : 1); }
-  { std::lock_guard<std::mutex> guard(jobs_mutex); stopping = true; }
-  jobs_changed.notify_all(); executors.stop(); executors.wait();
-  has_stopped_ = true;
+  std::_Exit(ret == OB_SUCCESS ? 0 : 1);
 
 #undef WORKER_STEP
   return ret;

@@ -16,8 +16,6 @@ from namespace_fork_prototype import Experiment
 class BootstrapExperiment(Experiment):
     def start(self):
         env = os.environ.copy()
-        env.update(SEEKDB_NAMESPACE_FORK_PROTOTYPE="6",
-                   SEEKDB_NAMESPACE_SQL_WORKER_PROTOTYPE="1")
         # Worker mode itself enforces Worker-only SQL execution; there is no
         # separate bootstrap rollout switch.
         command = [self.binary, "--nodaemon", "--base-dir=" + str(self.base), "-P" + str(self.port),

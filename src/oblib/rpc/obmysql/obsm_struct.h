@@ -102,8 +102,8 @@ public:
   rpc::ConnectionPhaseEnum connection_phase_;
   uint32_t sessid_;
   uint32_t version_;
-  // Throwaway V10 binding. Zero keeps the existing in-process SQL path.
-  uint64_t namespace_worker_id_ = 0;
+  // Worker-side storage session cached per MySQL connection. Null keeps the
+  // existing in-process SQL path.
   namespace_worker_prototype::SessionBinding *namespace_worker_binding_ = nullptr;
   int64_t sess_create_time_; // client connection creation time
 

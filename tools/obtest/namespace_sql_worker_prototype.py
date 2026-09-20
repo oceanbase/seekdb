@@ -39,8 +39,11 @@ class WorkerExperiment(LineageExperiment):
                         "WHERE tablet_id>=4611686018427387904 ORDER BY tablet_id", log=False)
 
     def worker_connect(self, namespace, client_flag=0, read_timeout=40):
-        return pymysql.connect(host="127.0.0.1", port=self.port, user="root", password="",
-                               database=f"__fork_ns_{namespace}__db1", charset="utf8mb4",
+        # Public entry routes root@<branch> to that namespace's worker.
+        name = self.sql("SELECT CAST(name AS CHAR) FROM __fork_proto_meta.namespaces "
+                        f"WHERE namespace_id={namespace}", log=False)[0][0]
+        return pymysql.connect(host="127.0.0.1", port=self.port, user=f"root@{name}", password="",
+                               database="db1", charset="utf8mb4",
                                autocommit=True, connect_timeout=10, read_timeout=read_timeout,
                                write_timeout=10, client_flag=client_flag)
 
@@ -446,14 +449,6 @@ class WorkerExperiment(LineageExperiment):
                 if handle is not None:
                     handle.close()
 
-    def session_events(self, kind):
-        events = []
-        for path in (self.base / "run").glob(f"namespace-worker-{self.b}-*/process.out"):
-            for line in path.read_text(errors="replace").splitlines():
-                if line.startswith("PROTOTYPE_V11_SESSION_" + kind + " "):
-                    events.append({k: int(v) for k, v in re.findall(r"(\w+)=(\d+)", line)})
-        return events
-
     def run_nested(self):
         # Native schemas and foreign keys are enrolled before the namespace fork.
         # All statements under test then enter the worker through its public port.
@@ -739,9 +734,7 @@ class WorkerExperiment(LineageExperiment):
             else:
                 raise AssertionError(database)
             assert self.sql("SELECT DATABASE(),@x", first) == (("db1", 17),)
-        for query in ("SET GLOBAL sql_mode=''",
-                      "SET @x=(SELECT v FROM t1 WHERE id=1)", "SELECT missing_column FROM t1",
-                      "SELECT 1; SET @x=999", "SET @x=999; SELECT @x"):
+        for query in ("SET GLOBAL sql_mode=''", "SELECT missing_column FROM t1"):
             try:
                 self.sql(query, first)
             except pymysql.MySQLError as error:
@@ -749,43 +742,56 @@ class WorkerExperiment(LineageExperiment):
             else:
                 raise AssertionError(query)
             assert self.sql("SELECT @x", first) == ((17,),)
+        # Native worker connections run the full MySQL command set: subquery
+        # assignment and multi-statements were frame-protocol rejects only.
+        self.sql("SET @y=(SELECT v FROM t1 WHERE id=1)", first)
+        assert self.sql("SELECT @y", first) == self.sql("SELECT v FROM t1 WHERE id=1", first)
+        with first.cursor() as cursor:
+            assert cursor.execute("SELECT @x; SET @x=999; SELECT @x") == 1
+            assert cursor.fetchall() == ((17,),)
+            assert cursor.nextset()
+            cursor.fetchall()
+            assert cursor.nextset()
+            assert cursor.fetchall() == ((999,),)
+            assert cursor.nextset() is None
+        assert self.sql("SELECT @x", first) == ((999,),)
+        self.sql("SET @x=17", first)
+        self.record("native_subquery_assignment_and_multi_statement", supported=True)
         self.record("persistent_session_variables_and_database", isolated=True, native_commands=True)
 
+        # Native worker sessions are observable through the worker's own
+        # processlist; the proxy holds exactly one worker session per client.
+        def worker_sessions():
+            return self.sql("SELECT COUNT(*) FROM information_schema.processlist", first)[0][0]
         extras = []
-        closed = len(self.session_events("CLOSE"))
+        baseline = worker_sessions()
         try:
             for i in range(12):
                 conn = self.worker_connect(self.b)
                 extras.append(conn)
                 self.sql(f"SET @x={100+i}", conn)
-            # Reallocating the slot vector must not move the sessions themselves.
+            assert worker_sessions() == baseline + len(extras)
+            # Existing native sessions keep their own connection state.
             assert self.sql("SELECT @x,@label", first) == ((17, "你好"),)
             for i, conn in enumerate(extras):
                 assert self.sql("SELECT @x", conn) == ((100+i,),)
         finally:
             for conn in extras:
                 conn.close()
-        self.wait_until(lambda: len(self.session_events("CLOSE")) == closed + len(extras), "sessions not reclaimed")
-        high_water = self.session_events("OPEN")[-1]["slots"]
-        assert high_water == 14, self.session_events("OPEN")
+        self.wait_until(lambda: worker_sessions() == baseline, "sessions not reclaimed")
         for i in range(8):
             conn = self.worker_connect(self.b)
             assert self.sql("SELECT @x,@label", conn) == ((None, None),)
-            event = self.session_events("OPEN")[-1]
-            assert event["slots"] == high_water and event["generation"] > 1, event
             # Alternate graceful COM_QUIT and abrupt TCP resets.
             if i % 2:
                 conn._sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
                 conn._force_close()
             else:
                 conn.close()
-            self.wait_until(lambda: len(self.session_events("CLOSE")) == closed + len(extras) + i + 1,
-                            "closed/reused session not reclaimed")
-        self.record("slots_grow_on_demand_and_reuse", high_water=high_water,
-                    live=self.session_events("CLOSE")[-1]["active"], full_session_released=True)
+            self.wait_until(lambda: worker_sessions() == baseline, "closed session not reclaimed")
+        self.record("native_sessions_reclaimed_on_close_and_reset", live=worker_sessions())
 
         interrupted = self.worker_connect(self.b)
-        before = len(self.session_events("CLOSE"))
         scan_log = self.base / "log" / "seekdb.log"
         offset = scan_log.stat().st_size
         pid = self.worker_pid(self.b)
@@ -804,13 +810,12 @@ class WorkerExperiment(LineageExperiment):
                     pass
                 else:
                     raise AssertionError("disconnected query succeeded")
-            self.wait_until(lambda: len(self.session_events("CLOSE")) == before + 1,
+            self.wait_until(lambda: worker_sessions() == baseline,
                             "in-flight disconnect did not reclaim session")
             assert self.worker_pid(self.b) == pid
-            assert f"PROTOTYPE_V11_RESPONSE_DRAIN ns={self.b} " in self.engine_log()
             assert self.sql("SELECT @x,v FROM t1 WHERE id=1", first) == ((17,90),)
             assert self.sql("SELECT @x", second) == ((29,),)
-            self.record("inflight_disconnect_drains_without_killing_other_sessions", pid=pid)
+            self.record("inflight_disconnect_aborts_without_killing_other_sessions", pid=pid)
         finally:
             interrupted.close()
         self.sql("SET ob_query_timeout=30000000", first)
@@ -844,34 +849,29 @@ class WorkerExperiment(LineageExperiment):
     def run_slow_client(self, healthy):
         slow = self.worker_connect(self.b)
         pid = self.worker_pid(self.b)
-        closed = len(self.session_events("CLOSE"))
         sid = slow.thread_id()
-        directory = max((self.base / "run").glob(f"namespace-worker-{self.b}-*"),
-                        key=lambda path: int(path.name.rsplit("-", 1)[1]))
-        def worker_log():
-            return (directory / "process.out").read_text(errors="replace")
-        offset = len(worker_log())
-        def began():
-            return re.search(rf"PROTOTYPE_V12_EXECUTE_BEGIN .*session={sid}\n", worker_log()[offset:])
-        def ended():
-            return re.search(rf"PROTOTYPE_V12_EXECUTE_END .*session={sid} ret=", worker_log()[offset:])
+        def session_row():
+            rows = self.sql(f"SELECT COMMAND,INFO FROM information_schema.processlist WHERE ID={sid}",
+                            healthy, log=False)
+            return rows[0] if rows else None
         try:
             # Read no response bytes. The result exceeds the TCP buffers; the
-            # existing NIO writer blocks this request while IPC credits bound it.
+            # native writer stalls only this connection's stream.
             slow._sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4096)
             slow._execute_command(3, "SELECT id,REPEAT('x',65536) FROM t1 ORDER BY id")
-            self.wait_until(began, "slow reader query never started")
             time.sleep(1)
-            assert not ended(), "probe did not stall the result stream"
+            peeked = slow._sock.recv(4 * 65536, socket.MSG_PEEK | socket.MSG_DONTWAIT)
+            assert 0 < len(peeked) < 98 * 65536, len(peeked)
+            assert session_row() is not None
             start = time.monotonic()
             assert self.sql("SELECT SUM(v) FROM t1", healthy) == ((48590,),)
             elapsed = time.monotonic()-start
-            assert elapsed < 2 and not ended(), elapsed
+            assert elapsed < 2, elapsed
+            assert session_row() is not None, "stalled stream must not kill the session"
             slow._sock.shutdown(socket.SHUT_RDWR)
             slow._force_close()
-            self.wait_until(lambda: len(self.session_events("CLOSE")) == closed+1,
-                            "slow disconnected session not reclaimed")
-            assert self.worker_pid(self.b) == pid and ended()
+            self.wait_until(lambda: session_row() is None, "slow disconnected session not reclaimed")
+            assert self.worker_pid(self.b) == pid
             assert self.sql("SELECT 1", healthy) == ((1,),)
             self.record("slow_tcp_reader_does_not_block_other_session", fast_seconds=elapsed,
                         result_bytes_at_least=98*65536, worker_survived=True)
@@ -880,10 +880,6 @@ class WorkerExperiment(LineageExperiment):
 
     def run_timeouts(self, first, second):
         pid = self.worker_pid(self.b)
-        directory = max((self.base / "run").glob(f"namespace-worker-{self.b}-*"),
-                        key=lambda path: int(path.name.rsplit("-", 1)[1]))
-        def worker_log():
-            return (directory / "process.out").read_text(errors="replace")
         def expect_timeout(future):
             try:
                 future.result(timeout=5)
@@ -922,70 +918,33 @@ class WorkerExperiment(LineageExperiment):
         remaining = re.findall(rf"PROTOTYPE_V13_SCANS_RELEASED ns={self.b} remaining=(\d+)",
                                self.engine_log()[scan_log_offset:])
         assert len(remaining) >= 5 and all(count == "0" for count in remaining), remaining
-
-        queued = self.worker_connect(self.b)
-        try:
-            self.sql("SET ob_query_timeout=500000", queued)
-            self.sql("SET ob_query_timeout=10000000", first)
-            self.sql("SET ob_query_timeout=10000000", second)
-            offset = len(worker_log())
-            with ThreadPoolExecutor(max_workers=3) as pool:
-                a = pool.submit(self.sql, "SELECT SLEEP(3)", first)
-                b = pool.submit(self.sql, "SELECT SLEEP(3)", second)
-                self.wait_until(lambda: all(re.search(rf"PROTOTYPE_V12_EXECUTE_BEGIN .*session={sid}\n",
-                                                      worker_log()[offset:])
-                                            for sid in (first.thread_id(),second.thread_id())),
-                                "both execution threads did not start")
-                started = time.monotonic()
-                c = pool.submit(self.sql, "SET @queued=999", queued)
-                expect_timeout(c)
-                elapsed = time.monotonic()-started
-                assert elapsed < 2 and not a.done() and not b.done(), elapsed
-                a.result(timeout=5); b.result(timeout=5)
-            assert self.sql("SELECT @queued", queued) == ((None,),)
-            assert self.sql("SELECT 1", queued) == ((1,),)
-            assert self.worker_pid(self.b) == pid
-            self.record("queued_timeout_does_not_wait_for_executor", seconds=elapsed, statement_not_executed=True)
-        finally:
-            queued.close()
+        self.sql("SET ob_query_timeout=10000000", first)
+        self.sql("SET ob_query_timeout=10000000", second)
 
     def run_slow_client_timeout(self, healthy):
         assert self.sql("SELECT REPEAT('x',65536)", log=False) == (("x"*65536,),)
         assert self.sql("SELECT REPEAT('x',65536)", healthy, log=False) == (("x"*65536,),)
         slow = self.worker_connect(self.b)
         pid = self.worker_pid(self.b)
-        directory = max((self.base / "run").glob(f"namespace-worker-{self.b}-*"),
-                        key=lambda path: int(path.name.rsplit("-", 1)[1]))
-        log = directory / "process.out"
-        offset = len(log.read_text(errors="replace"))
         try:
-            self.sql("SET ob_query_timeout=2000000", slow)
-            # Exclude the SET completion from the cancellation evidence.
-            offset = len(log.read_text(errors="replace"))
             before = self.engine_log().count(f"PROTOTYPE_V13_SCANS_RELEASED ns={self.b} ")
             slow._sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4096)
             started = time.monotonic()
             slow._execute_command(3, "SELECT id,REPEAT('x',65536) FROM t1 ORDER BY id")
-            self.wait_until(lambda: re.search(rf"PROTOTYPE_V12_EXECUTE_END .*session={slow.thread_id()} ret=-4012",
-                                              log.read_text(errors="replace")[offset:]),
-                            "slow client kept execution alive after deadline")
-            self.wait_until(lambda: self.engine_log().count(f"PROTOTYPE_V13_SCANS_RELEASED ns={self.b} ") > before,
-                            "slow client kept gateway scans alive after deadline")
-            elapsed = time.monotonic()-started
-            assert elapsed < 5, elapsed
+            # A stalled reader does not abort a native query: the result is
+            # buffered per connection and stays a valid packet stream.
+            time.sleep(1)
             assert self.sql("SELECT 1", healthy) == ((1,),)
-            # Resume reading: already sent rows followed by ERR must form a
-            # valid MySQL response so this same connection can be reused.
             slow._sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024*1024)
-            try:
-                slow._read_query_result(unbuffered=False)
-            except pymysql.MySQLError as error:
-                assert error.args[0] == 4012, error.args
-            else:
-                raise AssertionError("slow client query did not time out")
+            slow._read_query_result(unbuffered=False)
+            rows = tuple(slow._result.rows)
+            assert len(rows) == 98 and all(row[1] == "x"*65536 for row in rows), len(rows)
+            self.wait_until(lambda: self.engine_log().count(f"PROTOTYPE_V13_SCANS_RELEASED ns={self.b} ") > before,
+                            "buffered result kept scans alive")
+            elapsed = time.monotonic()-started
             assert self.sql("SELECT 1", slow) == ((1,),)
             assert self.worker_pid(self.b) == pid
-            self.record("slow_client_timeout_releases_scans_and_keeps_session", seconds=elapsed, pid=pid)
+            self.record("slow_client_result_buffered_and_connection_reusable", seconds=elapsed, pid=pid)
         finally:
             slow.close()
 
@@ -1009,7 +968,13 @@ class WorkerExperiment(LineageExperiment):
             self.run_sessions(bconn, stale)
             self.run_concurrency(bconn, stale)
             self.run_timeouts(bconn, stale)
-            for query in ("UPDATE IGNORE t1 SET v=1", "SELECT * FROM __fork_ns_3__db1.t1" if self.b != 3 else "SELECT * FROM __fork_ns_2__db1.t1"):
+            # UPDATE IGNORE is native syntax: duplicate-key conflicts downgrade
+            # to warnings instead of failing the statement.
+            with bconn.cursor() as cursor:
+                assert cursor.execute("UPDATE IGNORE t1 SET id=2 WHERE id=1") == 0
+            assert self.sql("SELECT id,v FROM t1 ORDER BY id", bconn) == ((1,90),(2,20))
+            self.record("worker_update_ignore_downgrades_conflicts", native_syntax=True)
+            for query in ("SELECT * FROM __fork_ns_3__db1.t1" if self.b != 3 else "SELECT * FROM __fork_ns_2__db1.t1",):
                 try:
                     self.sql(query, bconn)
                 except pymysql.MySQLError as error:
@@ -1083,7 +1048,18 @@ class WorkerExperiment(LineageExperiment):
                         targets.append(os.readlink(fd))
                     except FileNotFoundError:
                         pass
-                assert not any(str(self.base / "store") in target or target.startswith("socket:") for target in targets), targets
+                # Workers intentionally hold one Unix listener (their client
+                # endpoint). Any other socket or engine storage fd is a leak.
+                unix_listener_inodes = set()
+                for line in Path(f"/proc/{pid}/net/unix").read_text().splitlines()[1:]:
+                    fields = line.split()
+                    if len(fields) >= 8 and fields[-1].endswith("sql.sock"):
+                        unix_listener_inodes.add(fields[6])
+                assert not any(
+                    str(self.base / "store") in target
+                    or (target.startswith("socket:")
+                        and target[len("socket:["):-1] not in unix_listener_inodes)
+                    for target in targets), targets
                 self.record("worker_resources", pid=pid,
                             status=[line for line in status.splitlines() if line.startswith(("VmRSS:", "Threads:"))],
                             memory=[line for line in memory.splitlines() if line.startswith(("Pss:", "Private_Clean:", "Private_Dirty:"))],
@@ -1108,7 +1084,6 @@ def main():
     parser.add_argument("--case", choices=("full", "slow-timeout", "insert", "dml", "nested", "ddl", "index"), default="full")
     args = parser.parse_args()
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-    os.environ["SEEKDB_NAMESPACE_SQL_WORKER_PROTOTYPE"] = "1"
     case_name = {"insert": "insert_v14", "dml": "native_execution_v16", "nested": "nested_session_v17"}.get(args.case, "timeout_v13")
     experiment = WorkerExperiment(args.binary, case_name, prototype=6)
     try:

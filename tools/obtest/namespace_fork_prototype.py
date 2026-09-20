@@ -52,7 +52,6 @@ class Experiment:
 
     def start(self):
         env = os.environ.copy()
-        env["SEEKDB_NAMESPACE_FORK_PROTOTYPE"] = str(int(self.prototype))
         command = [self.binary, "--nodaemon", "--base-dir=" + str(self.base), "-P" + str(self.port),
                    "--log-level=INFO", "--parameter", "memory_budget=2G",
                    "--parameter", "datafile_size=256M", "--parameter", "datafile_maxsize=512M",
@@ -73,8 +72,6 @@ class Experiment:
         if self.connection is None:
             raise TimeoutError("seekdb startup: " + str(self.base))
         self.sql("ALTER SYSTEM SET debug_sync_timeout='600s'")
-        if os.environ.get("SEEKDB_NAMESPACE_SQL_WORKER_PROTOTYPE") != "1":
-            self.sql("SET ob_global_debug_sync='reset'")
         self.sql("SET recyclebin=off")
         # Make the old-S test stricter, instead of extending the ordinary history window.
         self.sql("ALTER SYSTEM SET undo_retention=0")

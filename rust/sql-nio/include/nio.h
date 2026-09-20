@@ -565,6 +565,11 @@ int nio_interrupt_read(void *sess, uint64_t generation);
 int nio_release_read_packet(void *sess, uint64_t generation,
                             uint64_t packet_lease);
 int nio_get_login_view(void *sess, uint64_t generation, nio_login_view *out);
+/* Client address from a PROXY v2 preamble on a local socket: 0 fills ip/port,
+ * 1 means the connection carried no preamble, -1 is an error. */
+int nio_get_proxy_peer(void *sess, char *ip, int ip_len, int *port);
+/* Client-visible connection id from the PROXY v2 private TLV, or -1. */
+int64_t nio_get_proxy_conn_id(void *sess);
 /* The returned certificate pointer is borrowed from the active Rustls
  * connection; it must not be retained after the current request finishes. */
 int nio_get_tls_session_info(void *sess, uint64_t generation,

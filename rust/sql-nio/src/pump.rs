@@ -290,6 +290,52 @@ pub unsafe extern "C" fn nio_get_login_view(
 }
 
 /// # Safety
+/// `sess` is a live C++ session pointer; `ip` points to `ip_len` writable
+/// bytes. Returns 0 with the text address and port from a PROXY v2 preamble,
+/// 1 when the connection carried none, -1 on error.
+#[no_mangle]
+pub unsafe extern "C" fn nio_get_proxy_peer(
+    sess: *mut c_void,
+    ip: *mut c_char,
+    ip_len: c_int,
+    port: *mut c_int,
+) -> c_int {
+    let conn = match conn_of(sess) {
+        Some(c) => c,
+        None => return -1,
+    };
+    let g = conn.mu.lock().unwrap();
+    let peer = match g.proxy_peer {
+        Some(p) => p,
+        None => return 1,
+    };
+    let text = peer.ip().to_string();
+    if ip.is_null() || port.is_null() || ip_len <= 0 || (ip_len as usize) <= text.len() {
+        return -1;
+    }
+    unsafe {
+        std::ptr::copy_nonoverlapping(text.as_ptr().cast::<c_char>(), ip, text.len());
+        *ip.add(text.len()) = 0;
+        *port = peer.port() as c_int;
+    }
+    0
+}
+
+/// # Safety
+/// `sess` is a live C++ session pointer. Returns the client-visible
+/// connection id from the PROXY v2 preamble's private TLV, or -1.
+#[no_mangle]
+pub unsafe extern "C" fn nio_get_proxy_conn_id(sess: *mut c_void) -> i64 {
+    match conn_of(sess) {
+        Some(conn) => match conn.mu.lock().unwrap().proxy_conn_id {
+            Some(id) => i64::from(id),
+            None => -1,
+        },
+        None => -1,
+    }
+}
+
+/// # Safety
 /// `out` points to writable storage for one `NioTlsSessionInfo`. The
 /// certificate pointer in the result is borrowed from the connection and is
 /// valid only until the active request is committed or aborted.
@@ -389,10 +435,104 @@ fn tls_string_view(value: &[u8]) -> NioTlsStringView {
     }
 }
 
+const PROXY_V2_SIGNATURE: &[u8; 12] = b"\r\n\r\n\0\r\nQUIT\n";
+
+pub(crate) enum ProxySniff {
+    NeedMore,
+    Done,
+}
+
+// Consume a PROXY v2 preamble on local sockets before the login packet. A
+// MySQL login packet carries sequence id 1 at offset 3 where the signature
+// has a NUL, so four buffered bytes already rule the header out.
+pub(crate) fn sniff_proxy_header(g: &mut ConnInner) -> ProxySniff {
+    if g.proxy_checked || g.tls.is_some() || !g.sock.is_local() {
+        return ProxySniff::Done;
+    }
+    let buffered = &g.inbuf[g.rpos..];
+    let prefix = buffered.len().min(PROXY_V2_SIGNATURE.len());
+    if buffered[..prefix] != PROXY_V2_SIGNATURE[..prefix] {
+        g.proxy_checked = true;
+        return ProxySniff::Done;
+    }
+    if buffered.len() < 16 {
+        return ProxySniff::NeedMore;
+    }
+    let version_command = buffered[12];
+    let family = buffered[13];
+    let len = u16::from_be_bytes([buffered[14], buffered[15]]) as usize;
+    let total = 16usize.saturating_add(len);
+    if version_command != 0x21 || buffered.len() < total {
+        if version_command == 0x21 {
+            return ProxySniff::NeedMore; // header body still in flight
+        }
+        g.proxy_checked = true;
+        return ProxySniff::Done; // not a v2 PROXY header; login parse decides
+    }
+    let addr_len = match family {
+        0x11 if len >= 12 => {
+            g.proxy_peer = Some(std::net::SocketAddr::new(
+                std::net::Ipv4Addr::new(buffered[16], buffered[17], buffered[18], buffered[19])
+                    .into(),
+                u16::from_be_bytes([buffered[24], buffered[25]]),
+            ));
+            12
+        }
+        0x12 if len >= 36 => {
+            let mut ip = [0u8; 16];
+            ip.copy_from_slice(&buffered[16..32]);
+            g.proxy_peer = Some(std::net::SocketAddr::new(
+                std::net::Ipv6Addr::from(ip).into(),
+                u16::from_be_bytes([buffered[48], buffered[49]]),
+            ));
+            36
+        }
+        // UNIX-family or unknown: no routable peer to report; TLVs may follow.
+        _ if family != 0x11 && family != 0x12 => 0,
+        _ => {
+            g.proxy_checked = true;
+            return ProxySniff::Done; // truncated address block; login parse decides
+        }
+    };
+    // Private TLV carrying the client-visible connection id.
+    const PROXY_TLV_CONN_ID: u8 = 0xE1;
+    let mut tlv_at = 16 + addr_len;
+    while tlv_at + 3 <= 16 + len {
+        let tlv_len = u16::from_be_bytes([buffered[tlv_at + 1], buffered[tlv_at + 2]]) as usize;
+        let value_at = tlv_at + 3;
+        if value_at + tlv_len > 16 + len {
+            break;
+        }
+        if buffered[tlv_at] == PROXY_TLV_CONN_ID && tlv_len == 4 {
+            g.proxy_conn_id = Some(u32::from_be_bytes([
+                buffered[value_at],
+                buffered[value_at + 1],
+                buffered[value_at + 2],
+                buffered[value_at + 3],
+            ]));
+        }
+        tlv_at = value_at + tlv_len;
+    }
+    g.consume_raw_input(total);
+    g.proxy_checked = true;
+    ProxySniff::Done
+}
+
 pub(crate) fn connect_pump(conn: &Arc<Conn>, cb: NioCallbacks) -> bool {
     let peer_closed_before = conn.peer_closed.load(Ordering::Acquire);
     let (parsed, tls_active) = {
         let mut g = conn.mu.lock().unwrap();
+        if !g.proxy_checked && g.tls.is_none() && g.sock.is_local() {
+            // read_packet_locked drains lazily; the preamble sniff needs
+            // freshly read bytes to decide, so pull input first.
+            if drain_socket(&mut g, conn, false).is_err() {
+                mark_connection_error(conn);
+                return true;
+            }
+            if let ProxySniff::NeedMore = sniff_proxy_header(&mut g) {
+                return true; // incomplete preamble; wait for the next readable edge
+            }
+        }
         let expected_seq = g.expected_login_seq;
         match WireProtocol::Plain.read_packet_locked(&mut g, conn, Some(expected_seq)) {
             Ok(packet) => (packet, g.tls.is_some()),

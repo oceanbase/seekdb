@@ -284,8 +284,12 @@ sql::ObSQLSessionInfo *bound_session(SessionBinding *binding);
 int append_session_state(sql::ObSQLSessionInfo &session, Frame &frame, bool identity = false);
 int apply_session_state(sql::ObSQLSessionInfo &session, Frame &frame);
 void close_session(SessionBinding *binding);
-int query(SessionBinding &binding, const common::ObString &sql, bool change_database,
-          const std::function<int(Frame &)> &response);
 void stop_all();
+// Thin TCP entry (worker mode): routes "user@branch" logins on the public
+// MySQL port to the branch's worker Unix socket and byte-proxies from there.
+namespace proxy {
+int start();
+void stop();
+}
 } } }
 #endif

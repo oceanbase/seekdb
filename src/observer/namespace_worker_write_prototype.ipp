@@ -1018,6 +1018,9 @@ struct EngineWrite {
   ObArray<const ObTableSchema *> materialization_schemas;
   ObDmlTablePlan plan{allocator};
   ObTimeZoneInfo timezone;
+  ObDmlWriteSpec spec;
+  ObTxReadSnapshot snapshot;
+  concurrent_control::ObWriteFlag write_flag;
   ObWriteContext context;
   ObDmlExecution execution; // Released before context, plan and allocator.
   ObSEArray<uint64_t, 2> columns;
@@ -1027,7 +1030,6 @@ struct EngineWrite {
 
   int prepare(StorageSpaceHandle channel_space, ObTxDesc &tx, Frame &request) {
     const uint64_t table = request.number();
-    ObDmlWriteSpec spec;
     spec.schema_version_ = request.number();
     const bool has_logical_schema = request.number() != 0;
     int ret = read_storage_space(request, channel_space, storage_space);
@@ -1063,9 +1065,7 @@ struct EngineWrite {
     spec.check_schema_version_ = request.number() != 0;
     spec.access_vector_id_as_master_table_ = request.number() != 0;
     request.read(timezone); spec.tz_info_ = &timezone;
-    ObTxReadSnapshot snapshot;
-    concurrent_control::ObWriteFlag flag;
-    request.read(snapshot); request.read(flag);
+    request.read(snapshot); request.read(write_flag);
     const uint64_t count = request.number();
     if (request.ret || count == 0 || count > OB_MAX_COLUMN_NUMBER) {
       fprintf(stderr, "PROTOTYPE_V17_WRITE_PREPARE ns=%llu table=%llu columns=%llu stage=validate ret=%d\n",
@@ -1090,11 +1090,10 @@ struct EngineWrite {
         if (!ret) { schema = &routed_schema; }
       }
     } else {
-      ret = storage_schema(storage_space, table, guard, schema);
-      if (!ret) {
-        ret = route_namespace_system_schema(
-            storage_space, schema, routed_schema, schema);
-      }
+      // Same rule as the scan path: no SchemaService fallback here.  Lazy
+      // loading would route inner SQL back to the requesting Worker and can
+      // deadlock Worker activation, so requests must carry their schema.
+      ret = OB_NOT_SUPPORTED;
     }
     if (!ret && has_logical_schema) {
       // The request carries the exact schema pinned by the worker's SchemaGuard.
@@ -1141,16 +1140,31 @@ struct EngineWrite {
       return ret;
     }
     if (!ret) { ret = plan.build(schema, spec.schema_version_, columns); }
-    if (!ret) { ret = share::server_service<ObIWriteContextService>()->acquire_write_context(
-        spec.timeout_, tx, snapshot, spec.branch_id_, flag, context); }
-    if (!ret) { ret = share::server_service<ObIDmlService>()->prepare_execution(
-        spec, plan, snapshot, allocator, context, flag, execution); }
+    if (!ret) { ret = acquire(tx); }
     if (ret) {
       fprintf(stderr, "PROTOTYPE_V17_WRITE_PREPARE ns=%llu table=%llu tablet=%llu stage=native ret=%d\n",
           (unsigned long long)ns, (unsigned long long)table,
           (unsigned long long)(logical_tablets.empty() ? 0 : logical_tablets.front()), ret);
     }
     return ret;
+  }
+
+  int acquire(ObTxDesc &tx) {
+    int ret = OB_SUCCESS;
+    if (context.is_valid()) { return ret; }
+    if (!ret) { ret = share::server_service<ObIWriteContextService>()->acquire_write_context(
+        spec.timeout_, tx, snapshot, spec.branch_id_, write_flag, context); }
+    if (!ret) { ret = share::server_service<ObIDmlService>()->prepare_execution(
+        spec, plan, snapshot, allocator, context, write_flag, execution); }
+    return ret;
+  }
+
+  // Native store ctxs merge write state into the tx descriptor only when
+  // released. Savepoint rollback decisions depend on that state, so the 'B'
+  // handler releases all open contexts first; the next batch re-acquires.
+  void release_context() {
+    execution.reset();
+    context.reset();
   }
 
   int batch(char operation, ObTxDesc &tx, Frame &request,
@@ -1173,6 +1187,8 @@ struct EngineWrite {
       ret = NamespaceForkKernelPrototype::ensure_tablet(
           tablet, *schema, materialization_schemas);
     }
+    if (OB_FAIL(ret)) { return ret; }
+    if (OB_SUCC(ret)) { ret = acquire(tx); }
     if (OB_FAIL(ret)) { return ret; }
     int64_t lock_timeout = 0;
     ObRowLockMode lock_mode = ObRowLockMode::NONE;
@@ -1267,7 +1283,8 @@ struct EngineWrite {
     else if (!ret && operation == 'p') { ret = service->put_rows(tablet, tx, execution, columns, &rows, affected); }
     else if (!ret) { ret = service->insert_rows(tablet, tx, execution, columns, &rows, affected); }
     fprintf(stderr, "PROTOTYPE_V15_WRITE_BATCH op=%c tx=%lld rows=%llu affected=%lld ret=%d\n",
-        operation, (long long)tx.get_tx_id().get_id(), (unsigned long long)(update ? count / 2 : count), (long long)affected, ret);
+        operation, (long long)tx.get_tx_id().get_id(), (unsigned long long)(update ? count / 2 : count), (long long)affected,
+        ret);
     return ret;
   }
 };
@@ -1728,7 +1745,13 @@ struct EngineWrites {
         const bool touched = request.number() != 0;
         auto policy = static_cast<ObTxCleanPolicy>(request.number());
         if (!request.consumed() || (policy != FAST_ROLLBACK && policy != ROLLBACK && policy != KEEP)) { ret = OB_INVALID_ARGUMENT; }
-        else { ret = service->rollback_to_implicit_savepoint(*tx, savepoint, deadline, touched, policy); }
+        else {
+          // Native releases each store ctx before savepoint rollback, which
+          // merges write state into the tx descriptor. Without that merge the
+          // tx still looks IDLE and the rollback silently skips the undo.
+          for (auto &entry : writes) { entry.second->release_context(); }
+          ret = service->rollback_to_implicit_savepoint(*tx, savepoint, deadline, touched, policy);
+        }
       } else if (operation == 'J' || operation == 'I') {
         ObTxSEQ savepoint;
         const int16_t branch = operation == 'J' ? request.number() : 0;
@@ -2878,9 +2901,11 @@ public:
     ObSEArray<uint64_t, 16> effective_columns;
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *logical_schema = nullptr;
+    // Inner tables carry their schema even for namespace 1, matching the scan
+    // path: the shared side must not re-resolve them through its own
+    // SchemaService, whose lazy load needs inner SQL to this Worker.
     bool send_logical_schema = owns_namespace_schema()
-        && !NamespaceForkKernelPrototype::is_encoded_id(table_id)
-        && (!is_inner_table(table_id) || worker_namespace > 1);
+        && !NamespaceForkKernelPrototype::is_encoded_id(table_id);
     StorageSpaceHandle storage_space =
         StorageSpaceHandle::namespace_space(worker_namespace);
     int ret = OB_SUCCESS;

@@ -80,12 +80,11 @@ uint64_t resolve_shared_inner_sql_namespace() {
       binding != shared_inner_sql_namespaces.end());
   return namespace_id;
 }
-bool enabled() {
-  const char *value = std::getenv("SEEKDB_NAMESPACE_SQL_WORKER_PROTOTYPE");
-  return value && !std::strcmp(value, "1") && NamespaceForkKernelPrototype::metadata_gc_mode();
-}
+bool enabled() { return true; }
 int check_sql_execution_role() {
-  if (enabled() && !worker_process) {
+  // User SQL executes only in namespace workers; the shared process owns
+  // storage, fork control and the thin TCP router.
+  if (!worker_process) {
     fprintf(stderr, "PROTOTYPE_V18_SHARED_SQL_REJECT\n");
     return OB_NOT_SUPPORTED;
   }
@@ -250,6 +249,10 @@ struct StorageDispatch : std::enable_shared_from_this<StorageDispatch> {
       ~Processor() { if (!finished) { owner->finish(); } }
       int run() override {
         std::lock_guard<std::mutex> guard(owner->execution_mutex);
+        // Dispatch tasks are not deadline-driven requests. Runtime threads
+        // recycle a stale timeout from earlier request processors, which would
+        // make inner SQL below instantly time out.
+        THIS_WORKER.set_timeout_ts(INT64_MAX);
         ObCurTraceId::TraceId trace;
         if (is_storage_request(input.type()) || (input.tag().slot & WORKER_REQUEST)) {
           input.read(trace);
@@ -293,7 +296,7 @@ struct Channel : std::enable_shared_from_this<Channel> {
   void *handle = nullptr;
   uint64_t generation = 0;
   uint32_t pid = 0;
-  uint32_t client_port = 0;
+  std::string client_endpoint;
   std::atomic<bool> closed{false};
   std::atomic<bool> restart_on_failure{false};
   RequestRoutes routes;
@@ -341,7 +344,11 @@ struct Channel : std::enable_shared_from_this<Channel> {
   }
 
 };
-struct Child { std::mutex mutex; std::shared_ptr<Channel> current; };
+struct Child {
+  std::mutex mutex;
+  std::shared_ptr<Channel> current;
+  uint64_t published_generation = 0;
+};
 std::mutex children_mutex;
 std::map<uint64_t, std::shared_ptr<Child>> children;
 std::mutex worker_config_overrides_mutex;
@@ -611,7 +618,7 @@ int serve_storage(StorageSpaceHandle storage_space, ReadScans *scans,
       }
       result = Frame('c'); result.number(command_ret);
       if (!command_ret && operation == 3) {
-        result.number(endpoint->client_port);
+        result.string(ObString(endpoint->client_endpoint.size(), endpoint->client_endpoint.data()));
         result.number(endpoint->generation);
         result.number(endpoint->pid);
       } else if (!command_ret && operation == 6) {
@@ -1105,11 +1112,11 @@ int ensure_channel(uint64_t ns, std::shared_ptr<Channel> &channel) {
       if (ret || !worker_ready || ready.number() != ns) {
         next->fail(); return OB_CONNECT_ERROR;
       }
-      const uint64_t client_port = ready.consumed() ? 0 : ready.number();
-      if (!ready.consumed() || client_port > UINT16_MAX) {
+      const ObString client_endpoint = ready.string();
+      if (!ready.consumed() || client_endpoint.empty()) {
         next->fail(); return OB_INVALID_ARGUMENT;
       }
-      next->client_port = static_cast<uint32_t>(client_port);
+      next->client_endpoint.assign(client_endpoint.ptr(), client_endpoint.length());
       if (namespace_proto_dispatch(next->handle, Channel::receive_frame, next.get())) {
         next->fail(); return OB_CONNECT_ERROR;
       }
@@ -1127,9 +1134,9 @@ int ensure_channel(uint64_t ns, std::shared_ptr<Channel> &channel) {
       }
       next->restart_on_failure = true;
       child->current = next;
-      fprintf(stderr, "PROTOTYPE_V10_WORKER_READY ns=%llu generation=%llu pid=%u port=%u\n",
+      fprintf(stderr, "PROTOTYPE_V10_WORKER_READY ns=%llu generation=%llu pid=%u endpoint=%s\n",
           (unsigned long long)ns, (unsigned long long)next->generation,
-          next->pid, next->client_port);
+          next->pid, next->client_endpoint.c_str());
     }
     channel = child->current;
   }
@@ -1151,9 +1158,9 @@ int stop_channel(uint64_t ns) {
   if (endpoint) {
     endpoint->restart_on_failure = false;
     fprintf(stderr,
-        "PROTOTYPE_NAMESPACE_ENDPOINT_STOP ns=%llu generation=%llu pid=%u port=%u\n",
+        "PROTOTYPE_NAMESPACE_ENDPOINT_STOP ns=%llu generation=%llu pid=%u endpoint=%s\n",
         (unsigned long long)ns, (unsigned long long)endpoint->generation,
-        endpoint->pid, endpoint->client_port);
+        endpoint->pid, endpoint->client_endpoint.c_str());
     endpoint->fail();
   }
   return OB_SUCCESS;
@@ -1172,28 +1179,40 @@ int write_endpoint_registry(const ObSqlString &statement) {
   return ret;
 }
 int publish_endpoint(uint64_t namespace_id, uint64_t generation,
-                     uint32_t pid, uint32_t client_port) {
+                     uint32_t pid, const std::string &client_endpoint) {
   if (namespace_id == 0 || namespace_id >= (1ULL << 30)
-      || generation == 0 || pid == 0 || client_port > UINT16_MAX) {
+      || generation == 0 || pid == 0 || client_endpoint.empty()) {
     return OB_INVALID_ARGUMENT;
   }
   ObSqlString statement;
   int ret = statement.assign_fmt(
-      "INSERT INTO __fork_proto_meta.endpoints(namespace_id,generation,worker_pid,port) "
-      "VALUES(%lu,%lu,%u,%u) ON DUPLICATE KEY UPDATE "
-      "generation=VALUES(generation),worker_pid=VALUES(worker_pid),port=VALUES(port)",
-      namespace_id, generation, pid, client_port);
+      "INSERT INTO __fork_proto_meta.endpoints(namespace_id,generation,worker_pid,endpoint) "
+      "VALUES(%lu,%lu,%u,'%s') ON DUPLICATE KEY UPDATE "
+      "generation=VALUES(generation),worker_pid=VALUES(worker_pid),endpoint=VALUES(endpoint)",
+      namespace_id, generation, pid, client_endpoint.c_str());
   return ret ? ret : write_endpoint_registry(statement);
 }
 int recover_channel(uint64_t namespace_id, uint64_t failed_generation) {
   std::shared_ptr<Child> child;
   int ret = attach(namespace_id, child);
+  std::shared_ptr<Channel> endpoint;
   if (OB_SUCC(ret)) {
     std::lock_guard<std::mutex> guard(child->mutex);
     if (!child->current
-        || child->current->generation != failed_generation
-        || !child->current->closed) {
+        || (child->current->generation == failed_generation
+            && !child->current->closed)) {
       return OB_SUCCESS;
+    }
+    if (child->current->generation != failed_generation) {
+      // A lazy session open may have already respawned the worker. That path
+      // cannot publish the endpoint because the GLOBAL registry write routes
+      // through this namespace itself. Adopt the live replacement and publish
+      // it below.
+      if (child->current->closed
+          || child->current->generation == child->published_generation) {
+        return OB_SUCCESS;
+      }
+      endpoint = child->current;
     }
   }
   int64_t schema_version = OB_INVALID_VERSION;
@@ -1201,19 +1220,25 @@ int recover_channel(uint64_t namespace_id, uint64_t failed_generation) {
     ret = NamespaceForkKernelPrototype::namespace_schema_version(
         namespace_id, schema_version);
   }
-  std::shared_ptr<Channel> endpoint;
-  if (OB_SUCC(ret)) { ret = ensure_channel(namespace_id, endpoint); }
+  if (OB_SUCC(ret) && !endpoint) { ret = ensure_channel(namespace_id, endpoint); }
   if (OB_SUCC(ret)) {
     ret = publish_endpoint(namespace_id, endpoint->generation,
-        endpoint->pid, endpoint->client_port);
+        endpoint->pid, endpoint->client_endpoint);
+    if (OB_SUCC(ret)) {
+      std::lock_guard<std::mutex> guard(child->mutex);
+      if (child->current == endpoint) {
+        child->published_generation = endpoint->generation;
+      }
+    }
   }
   fprintf(stderr,
       "PROTOTYPE_NAMESPACE_ENDPOINT_RECOVERED ns=%llu failed_generation=%llu "
-      "generation=%llu pid=%u port=%u schema_version=%lld ret=%d\n",
+      "generation=%llu pid=%u endpoint=%s schema_version=%lld ret=%d\n",
       static_cast<unsigned long long>(namespace_id),
       static_cast<unsigned long long>(failed_generation),
       static_cast<unsigned long long>(endpoint ? endpoint->generation : 0),
-      endpoint ? endpoint->pid : 0, endpoint ? endpoint->client_port : 0,
+      endpoint ? endpoint->pid : 0,
+      endpoint ? endpoint->client_endpoint.c_str() : "",
       static_cast<long long>(schema_version), ret);
   return ret;
 }
@@ -1240,21 +1265,22 @@ int activate_namespace(uint64_t namespace_id) {
   if (!ret) { ret = worker_read(reply); }
   if (!ret && reply.type() != 'c') { ret = OB_INVALID_ARGUMENT; }
   if (!ret) { ret = static_cast<int>(reply.number()); }
-  const uint64_t port = !ret ? reply.number() : 0;
+  const ObString endpoint = !ret ? reply.string() : ObString();
   const uint64_t generation = !ret ? reply.number() : 0;
   const uint64_t pid = !ret ? reply.number() : 0;
-  if (!ret && (!reply.consumed() || port > UINT16_MAX
+  if (!ret && (!reply.consumed() || endpoint.empty()
       || generation == 0 || pid == 0 || pid > UINT32_MAX)) {
     ret = OB_INVALID_ARGUMENT;
   }
   if (!ret) {
     ret = publish_endpoint(namespace_id, generation,
-        static_cast<uint32_t>(pid), static_cast<uint32_t>(port));
+        static_cast<uint32_t>(pid),
+        std::string(endpoint.ptr(), endpoint.length()));
   }
   fprintf(stderr,
-      "PROTOTYPE_NAMESPACE_ENDPOINT_ACTIVATED ns=%llu generation=%llu pid=%llu port=%llu ret=%d\n",
+      "PROTOTYPE_NAMESPACE_ENDPOINT_ACTIVATED ns=%llu generation=%llu pid=%llu endpoint=%.*s ret=%d\n",
       (unsigned long long)namespace_id, (unsigned long long)generation,
-      (unsigned long long)pid, (unsigned long long)port, ret);
+      (unsigned long long)pid, endpoint.length(), endpoint.ptr(), ret);
   return ret;
 }
 int deactivate_namespace(uint64_t namespace_id) {
@@ -1308,14 +1334,14 @@ int reconcile_namespace_workers() {
     if (OB_SUCC(ret)) { ret = ensure_channel(namespace_id, endpoint); }
     if (OB_SUCC(ret)) {
       ret = publish_endpoint(namespace_id, endpoint->generation,
-          endpoint->pid, endpoint->client_port);
+          endpoint->pid, endpoint->client_endpoint);
     }
     if (OB_SUCC(ret)) {
       fprintf(stderr,
-          "PROTOTYPE_NAMESPACE_ENDPOINT_RECONCILED ns=%llu generation=%llu pid=%u port=%u\n",
+          "PROTOTYPE_NAMESPACE_ENDPOINT_RECONCILED ns=%llu generation=%llu pid=%u endpoint=%s\n",
           (unsigned long long)namespace_id,
           (unsigned long long)endpoint->generation,
-          endpoint->pid, endpoint->client_port);
+          endpoint->pid, endpoint->client_endpoint.c_str());
     }
   }
   return ret;
@@ -1407,39 +1433,6 @@ void close_session(SessionBinding *binding) {
   };
   if (owned->internal) { close(); } // The native inner connection already owns this lock.
   else { sql::ObSQLSessionInfo::LockGuard lock(owned->gateway->get_query_lock()); close(); }
-}
-int query(SessionBinding &binding, const ObString &sql, bool change_database,
-          const std::function<int(Frame &)> &response) {
-  if (binding.channel->closed) { return OB_CONNECT_ERROR; }
-  EngineWrites &writes = *binding.writes;
-  ReadScans scans(binding.channel->storage_space); // Release scans before their borrowed transaction.
-  Frame request(change_database ? 'U' : 'Q', MAX_SQL_MESSAGE);
-  request.number(binding.slot); request.number(binding.slot_generation);
-  const int64_t deadline = THIS_WORKER.get_timeout_ts();
-  request.number(deadline); request.string(sql);
-  if (request.ret) { return request.ret; }
-  int response_ret = OB_SUCCESS;
-  const int ret = exchange(*binding.channel, request, &scans, [&](Frame &frame) {
-    if (frame.type() == 'D') { return apply_session_state(*binding.gateway, frame); }
-    if (!response_ret) {
-      response_ret = response(frame);
-      if (response_ret) {
-        fprintf(stderr, "PROTOTYPE_V11_RESPONSE_DRAIN ns=%llu slot=%llu ret=%d\n",
-            (unsigned long long)binding.channel->storage_space.namespace_id(),
-            (unsigned long long)binding.slot, response_ret);
-      }
-    }
-    // Worker::is_timeout uses the cached clock, which can lag the Rust writer's
-    // real clock. Use the same absolute deadline when classifying its failure.
-    return response_ret && ObTimeUtility::current_time() >= deadline ? OB_TIMEOUT : response_ret;
-  }, deadline, &writes);
-  // The native SQL result has completed its cleanup before D. Keep the session
-  // transaction across requests, but release this statement's snapshot pin.
-  scans.scans.clear();
-  binding.gateway->reset_reserved_snapshot_version();
-  if (writes.check_finished()) { binding.channel->fail(); }
-  if (ret == OB_TIMEOUT) { return ret; }
-  return response_ret ? response_ret : ret;
 }
 void stop_all() {
   std::map<uint64_t, std::shared_ptr<Child>> detached;

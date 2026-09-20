@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX RS
 
-#include "rootserver/fork_table/namespace_fork_prototype.h"
 
 #include "rootserver/ddl_task/ob_sys_ddl_util.h"
 #include "rootserver/fork_table/ob_fork_table_helper.h"
@@ -44,7 +43,6 @@ int ObDDLService::fork_single_table_in_trans_(const ObTableSchema &src_table_sch
     common::hash::ObHashMap<uint64_t, uint64_t> *table_id_map,
     ObSArray<ObTableSchema> *out_table_schemas) {
   int ret = OB_SUCCESS;
-  NamespaceForkPrototype::note_materialization();
   ObSchemaService *schema_service = schema_service_->get_schema_service();
   ObArenaAllocator inner_allocator(ObModIds::OB_RS_PARTITION_TABLE_TEMP);
   ObSArray<ObTableSchema> table_schemas;
@@ -345,11 +343,10 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
       } else if (FALSE_IT(src_table_schemas.push_back(src_table_schema))) {
       }
 
-      const bool prototype = NamespaceForkPrototype::is_target(fork_table_arg.dst_database_name_);
       // For tables with async vector indexes, lock the source table to block DML
       // and wait for ChangeStream to catch up before obtaining the snapshot.
       // This ensures the fork snapshot covers both main table data and async index data.
-      if (OB_SUCC(ret) && !prototype) {
+      if (OB_SUCC(ret)) {
         bool has_async_vec_index = false;
         if (OB_FAIL(check_has_async_vector_index(*src_table_schema, schema_guard,
                                                  has_async_vec_index))) {
@@ -375,10 +372,6 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
       }
 
       if (OB_FAIL(ret)) {
-      } else if (prototype) {
-        ret = NamespaceForkPrototype::get_snapshot(get_sql_proxy(), *src_table_schema,
-                                                  dst_db_schema->get_database_id(),
-                                                  fork_snapshot_version);
       } else if (OB_FAIL(ObForkTableUtil::obtain_snapshot(
                      trans, schema_guard, src_table_schemas,
                      fork_snapshot_version))) {

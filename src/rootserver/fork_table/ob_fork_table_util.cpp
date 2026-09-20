@@ -31,7 +31,6 @@
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "query/vector/ob_vector_index_util.h"
 #include "lib/hash/ob_hashset.h"
-#include "rootserver/fork_table/namespace_fork_prototype.h"
 #include "share/ob_snapshot_table_proxy.h"
 #include "storage/compaction/ob_freeze_info_mgr.h"
 #include <array>
@@ -46,124 +45,6 @@ using namespace oceanbase::common;
 using namespace oceanbase::share::schema;
 using namespace oceanbase::rootserver;
 
-namespace {
-struct PrototypeForkRecord
-{
-  uint64_t source_id = OB_INVALID_ID;
-  uint64_t target_id = OB_INVALID_ID;
-  int64_t schema_version = 0;
-  int64_t snapshot = 0;
-};
-// ponytail: eight process-local experiment slots; persistent registry is outside this prototype.
-std::array<PrototypeForkRecord, 8> prototype_forks;
-std::mutex prototype_forks_mutex;
-std::atomic<int64_t> prototype_materializations{0};
-std::atomic<int64_t> prototype_tablet_collections{0};
-}
-
-bool NamespaceForkPrototype::enabled()
-{
-  static const bool enabled = [] {
-    const char *value = std::getenv("SEEKDB_NAMESPACE_FORK_PROTOTYPE");
-    return value != nullptr && (std::strcmp(value, "1") == 0 || std::strcmp(value, "2") == 0);
-  }();
-  return enabled;
-}
-
-bool NamespaceForkPrototype::is_target(const ObString &name)
-{
-  return enabled() && name.prefix_match("__fork_proto_b");
-}
-
-int NamespaceForkPrototype::publish(uint64_t source_id, uint64_t target_id,
-                                    int64_t schema_version, int64_t snapshot)
-{
-  std::lock_guard<std::mutex> guard(prototype_forks_mutex);
-  int ret = OB_SIZE_OVERFLOW;
-  for (auto &record : prototype_forks) {
-    if (record.target_id == source_id || record.target_id == target_id) {
-      return OB_NOT_SUPPORTED;
-    }
-  }
-  for (auto &record : prototype_forks) {
-    if (record.snapshot == 0) {
-      record.source_id = source_id;
-      record.target_id = target_id;
-      record.schema_version = schema_version;
-      record.snapshot = snapshot;
-      ret = OB_SUCCESS;
-      break;
-    }
-  }
-  return ret;
-}
-
-int NamespaceForkPrototype::get_snapshot(ObISQLClient &proxy, const ObTableSchema &source,
-                                         uint64_t target_id, int64_t &snapshot)
-{
-  int ret = OB_SUCCESS;
-  snapshot = 0;
-  PrototypeForkRecord found;
-  {
-    std::lock_guard<std::mutex> guard(prototype_forks_mutex);
-    for (const auto &record : prototype_forks) {
-      if (record.target_id == target_id) { found = record; break; }
-    }
-  }
-  // Only the fixed two-integer-column fixture is supported; no late schema cloning.
-  const ObColumnSchemaV2 *id = source.get_column_schema("id");
-  const ObColumnSchemaV2 *value = source.get_column_schema("v");
-  ObSnapshotTableProxy snapshots;
-  ObSnapshotInfo pin;
-  SCN scn;
-  storage::ObStorageSnapshotInfo reserved;
-  auto *freeze_mgr = share::server_service<storage::ObFreezeInfoMgr>();
-  if (!enabled() || found.snapshot <= 0 || found.source_id != source.get_database_id()) {
-    ret = OB_STATE_NOT_MATCH;
-  } else if (source.get_schema_version() > found.schema_version
-      || source.get_table_type() != USER_TABLE || source.is_partitioned_table()
-      || source.get_index_tid_count() != 0 || source.has_lob_aux_table()
-      || !source.get_foreign_key_infos().empty() || !source.get_trigger_list().empty()
-      || source.has_generated_column() || source.get_autoinc_column_id() != 0
-      || source.get_column_count() != 2 || source.get_rowkey_column_num() != 1
-      || id == nullptr || value == nullptr || !ob_is_integer_type(id->get_data_type())
-      || !ob_is_integer_type(value->get_data_type()) || !id->is_rowkey_column()) {
-    ret = OB_NOT_SUPPORTED;
-  } else if (OB_FAIL(scn.convert_for_tx(found.snapshot))) {
-  } else if (OB_FAIL(snapshots.get_snapshot(proxy, SNAPSHOT_FOR_MULTI_VERSION, scn, pin))) {
-  } else if (pin.tablet_id_ != 0 || pin.schema_version_ != found.schema_version) {
-    ret = OB_STATE_NOT_MATCH;
-  } else if (OB_ISNULL(freeze_mgr)) {
-    ret = OB_NOT_INIT;
-  } else if (OB_FAIL(freeze_mgr->reload_for_test())) {
-  // Probe retention at S. Passing zero would select the special pre-major zero watermark.
-  } else if (OB_FAIL(freeze_mgr->get_min_reserved_snapshot(source.get_tablet_id(), found.snapshot, reserved))) {
-  } else if (reserved.snapshot_ > found.snapshot) {
-    ret = OB_SNAPSHOT_DISCARDED;
-  } else {
-    snapshot = found.snapshot;
-    LOG_INFO("PROTOTYPE_FORK_PIN_USED", K(target_id), K(snapshot), K(reserved),
-             "gc_scn", freeze_mgr->get_snapshot_gc_ts(), "source_tablet", source.get_tablet_id());
-  }
-  return ret;
-}
-
-void NamespaceForkPrototype::note_materialization()
-{
-  if (enabled()) { ++prototype_materializations; }
-}
-
-void NamespaceForkPrototype::note_tablet_collection()
-{
-  if (enabled()) { ++prototype_tablet_collections; }
-}
-
-void NamespaceForkPrototype::log_work(const char *stage, uint64_t database_id)
-{
-  LOG_INFO("PROTOTYPE_FORK_WORK", K(stage), K(database_id),
-           "materializations", prototype_materializations.load(),
-           "tablet_collections", prototype_tablet_collections.load());
-}
 
 int ObForkTableUtil::collect_complete_domain_index_schemas(
     ObSchemaGetterGuard &schema_guard,
@@ -299,7 +180,6 @@ int ObForkTableUtil::collect_tablet_ids_from_table(
     common::ObIArray<common::ObTabletID> &tablet_ids)
 {
   int ret = OB_SUCCESS;
-  NamespaceForkPrototype::note_tablet_collection();
   tablet_ids.reset();
 
   {

@@ -49,17 +49,6 @@ bool owns_table(uint64_t ns, uint64_t id) {
   return storage_schema(StorageSpaceHandle::namespace_space(ns), id, guard, schema)
       == OB_SUCCESS && schema != nullptr;
 }
-int route_namespace_system_schema(StorageSpaceHandle storage_space,
-                                  const ObTableSchema *logical,
-                                  ObTableSchema &routed, const ObTableSchema *&schema) {
-  schema = logical;
-  if (!storage_space.is_namespace() || storage_space.namespace_id() == 1
-      || logical == nullptr || !logical->is_sys_table()) { return OB_SUCCESS; }
-  const uint64_t ns = storage_space.namespace_id();
-  const int ret = NamespaceForkKernelPrototype::make_storage_schema(ns, *logical, routed);
-  if (!ret) { schema = &routed; }
-  return ret;
-}
 int worker_storage_space_for_schema(const ObTableSchema &schema,
                                     ObSchemaGetterGuard &guard,
                                     StorageSpaceHandle &storage_space) {
@@ -263,11 +252,13 @@ struct EngineScan {
         if (!ret) { schema = &routed_schema; }
       }
     } else {
-      ret = storage_schema(storage_space, logical_table_id, guard, schema);
-      if (!ret) {
-        ret = route_namespace_system_schema(
-            storage_space, schema, routed_schema, schema);
-      }
+      // Resolving through the shared process SchemaService could lazy-load
+      // via inner SQL routed back to the requesting Worker, which deadlocks
+      // Worker activation.  Requests must carry the caller-resolved schema.
+      fprintf(stderr, "PROTOTYPE_SCAN_SCHEMA_REQUIRED ns=%llu table=%llu local=%d\n",
+          (unsigned long long)ns, (unsigned long long)logical_table_id,
+          static_cast<int>(namespace_local));
+      ret = OB_NOT_SUPPORTED;
     }
     if (ret) { return ret; }
     uint64_t tablet_id = logical_tablet_id;
@@ -493,9 +484,13 @@ public:
     }
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *logical_schema = nullptr;
+    // Inner tables must carry their schema even for namespace 1: the shared
+    // process otherwise re-resolves them through its own SchemaService, whose
+    // lazy load needs inner SQL to this namespace's Worker.  During Worker
+    // activation (crash recovery) that Worker is busy initialising itself, so
+    // the lookup cannot complete and the activation deadlocks or fails.
     bool send_logical_schema = owns_namespace_schema()
-        && !NamespaceForkKernelPrototype::is_encoded_id(param.index_id_)
-        && (!is_inner_table(param.index_id_) || worker_namespace > 1);
+        && !NamespaceForkKernelPrototype::is_encoded_id(param.index_id_);
     StorageSpaceHandle storage_space =
         StorageSpaceHandle::namespace_space(worker_namespace);
     int ret = send_logical_schema
