@@ -502,6 +502,13 @@ int ObJoinOrder::compute_base_table_path_ordering(AccessPath *path)
     // As a result, the final output order of the data may not match the original index table output order.
     // Therefore, it's necessary to add an additional sort operator at the upper level.
     path->ordering_.reset();
+  } else if (!path->ordering_.empty()
+             && path->table_partition_info_->get_phy_tbl_location_info().get_partition_cnt() > 1
+             && (ObGlobalHint::DEFAULT_PARALLEL < path->parallel_ ||
+                 ObGlobalHint::DEFAULT_PARALLEL < path->available_parallel_ ||
+                 ObGlobalHint::DEFAULT_PARALLEL < get_plan()->get_optimizer_context().get_parallel())) {
+    // Parallel scans over multiple tablets do not preserve the index order globally.
+    path->ordering_.reset();
   } else if (!path->use_das_
              && !path->strong_sharding_->is_distributed()
              && path->table_partition_info_->get_phy_tbl_location_info().get_partition_cnt() > 1) {

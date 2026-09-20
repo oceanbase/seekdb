@@ -6149,7 +6149,8 @@ int ObSelectLogPlan::split_win_funcs_by_dist_method(const bool distributed,
         const double pby_ndv = pby_cnt == 0 ? 0 : sort_key_ndvs.at(pby_cnt - 1);
         const double pby_oby_ndv = pby_oby_cnt == 0 ? 0 : sort_key_ndvs.at(pby_oby_cnt - 1);
         cur_method = WinDistAlgo::WIN_DIST_NONE | (valid_method & WinDistAlgo::WIN_DIST_HASH);
-        if (!win_opt.disable_range_distribution_ && card > WF_CARD_DOP_RADIO * dop
+        if (!win_opt.disable_range_distribution_ && 0 == pby_cnt
+            && card > WF_CARD_DOP_RADIO * dop
             && pby_ndv < WF_PBY_DOP_RADIO * dop) {
           cur_method |= valid_method & WinDistAlgo::WIN_DIST_RANGE;
           if (pby_oby_ndv < WF_PBY_DOP_RADIO * dop) {

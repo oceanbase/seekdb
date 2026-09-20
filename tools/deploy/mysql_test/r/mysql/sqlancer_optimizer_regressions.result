@@ -26,4 +26,23 @@ insert into d5_t0(c2, c1, c0) values (4.70805083, '', ''), (37.25662755, 'x', 'y
 select count(*) as d5_having_tlp_count from ((select /*+ no_use_hash */ max(distinct d5_t0.c2) as af0 from d5_t0 having ((not ((af0) in (cast(af0 as signed))))) and ((cast(((false) in ((0), (-1))) or ((af0,0,0) not in ((false,-1,0))) as signed)) && ((min("")) like ("224617187%")))) union all (select /*+ no_use_hash */ max(distinct d5_t0.c2) as af0 from d5_t0 having (! (((! ((af0) in (cast(af0 as signed))))) and ((cast(((false) in ((0), (-1))) or ((af0,0,0) not in ((false,-1,0))) as signed)) && ((min("")) like ("224617187%")))))) union all (select /*+ no_use_hash */ all max(distinct d5_t0.c2) as af0 from d5_t0 having (((! ((af0) in (cast(af0 as signed))))) and ((cast(((false) in ((0), (-1))) or ((af0,0,0) not in ((false,-1,0))) as signed)) && ((min("")) like ("224617187%")))) is null)) q;
 d5_having_tlp_count
 1
+create table d6_t1(c3 decimal(10,0) not null, primary key(c3));
+create table d6_t4(c0 decimal(10,0) default null, c1 datetime default null, key i350(c1,c0) local) partition by key(c1) partitions 3;
+insert into d6_t1(c3) values (-504448753),(3628),(7934528);
+insert into d6_t4 values (-4930123,'2026-09-20 06:05:19');
+(select /*+ parallel(7) */ all d6_t4.c0 from d6_t4 left outer join d6_t1 on (d6_t4.c1) = (d6_t1.c3) where (d6_t4.c0) and ((! ((cast(d6_t1.c3 as signed)) is true)))) union all (select /*+ parallel(7) */ d6_t4.c0 from d6_t4 left outer join d6_t1 on (d6_t4.c1) = (d6_t1.c3) where (d6_t4.c0) && (((cast(d6_t1.c3 as signed)) is true) is null));
+c0
+-4930123
+create table d7_nums(n int primary key);
+insert into d7_nums values (0),(1),(2),(3),(4),(5),(6),(7),(8),(9);
+create table d7_t0(c0 int not null primary key, c1 int, c3 int, c4 int, key i600(c3,c1,c0));
+create table d7_t2(c0 int, c4 int) partition by key(c0) partitions 8;
+insert into d7_t0 select n, n % 5, n % 7, n from (select a.n + 10 * b.n as n from d7_nums a, d7_nums b) s where n < 60;
+update d7_t0 set c1 = null, c4 = null where c0 = 0;
+insert into d7_t2 select n, n + 1000 from (select a.n + 10 * b.n as n from d7_nums a, d7_nums b) s;
+update d7_t2 set c4 = null where c0 = 0;
+set ob_query_timeout = 10000000;
+select count(*) as d7_window_timeout_count from (select * from (select /*+ parallel(9) */ d7_t0.c4 as c0, rank() over(partition by d7_t0.c1, d7_t0.c3 order by d7_t0.c4 desc) as wf from d7_t0 inner join d7_t2 on (d7_t0.c4) != (d7_t2.c4)) l0 where (c0,wf) not in (select d7_t0.c4, d7_t0.c1 from d7_t0 where (999) not in (d7_t0.c3, d7_t0.c3)) order by c0 asc) q;
+d7_window_timeout_count
+0
 drop database if exists sqlancer_optimizer_regressions;
