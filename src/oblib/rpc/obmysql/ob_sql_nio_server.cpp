@@ -99,8 +99,7 @@ int get_fd_from_sess(void* sess)
 }
 
 int ObSqlNioServer::start(int port, rpc::frame::ObReqDeliver* deliver,
-                          int n_thread, bool disable_tcp, bool use_tls,
-                          const char *min_tls_version)
+                          int n_thread, bool use_tls, const char *min_tls_version)
 {
   static_assert(alignof(ObSqlSockSession) <= 16,
                 "Rust embedded session storage must satisfy C++ alignment");
@@ -115,10 +114,16 @@ int ObSqlNioServer::start(int port, rpc::frame::ObReqDeliver* deliver,
     cb.on_disconnect = nio_on_disconnect;
     cb.on_close = nio_on_close;
     char addr[64];
-    // Match the old engine's family selection: an IPv6 deployment must bind
-    // the v6 wildcard or the MySQL port is unreachable. The Rust bind path
-    // sets IPV6_V6ONLY for a v6 address, mirroring the deleted C++ listener.
-    if (oceanbase::lib::use_ipv6()) {
+    const bool disable_tcp = port < 0;
+    if (port <= 0) {
+      // Embedded callers request a loopback-only ephemeral TCP endpoint with
+      // zero. A negative port still supplies a parseable address to the ABI,
+      // but disable_tcp below prevents the TCP listener from being created.
+      snprintf(addr, sizeof(addr), "127.0.0.1:0");
+    } else if (oceanbase::lib::use_ipv6()) {
+      // Match the old engine's family selection: an IPv6 deployment must bind
+      // the v6 wildcard or the MySQL port is unreachable. The Rust bind path
+      // sets IPV6_V6ONLY for a v6 address, mirroring the deleted C++ listener.
       snprintf(addr, sizeof(addr), "[::]:%d", port);
     } else {
       snprintf(addr, sizeof(addr), "0.0.0.0:%d", port);
@@ -146,8 +151,10 @@ int ObSqlNioServer::start(int port, rpc::frame::ObReqDeliver* deliver,
       LOG_WARN("nio_start failed", K(ret), K(port), K(start_err),
                K(disable_tcp), K(use_tls));
     } else {
+      const uint32_t bound_tcp_port = nio_get_bound_tcp_port(reactor_);
       n_thread_ = (n_thread <= 0 ? 1 : n_thread);
-      LOG_INFO("seekdb_nio (rust) started", K(port), K(n_thread));
+      LOG_INFO("seekdb_nio (rust) started", K(port), K(bound_tcp_port),
+               K(n_thread));
       // A local-endpoint failure is non-fatal when TCP is enabled, matching
       // the old engine. Surface that degraded startup instead of hiding it.
       const char *local_endpoint =
@@ -156,7 +163,7 @@ int ObSqlNioServer::start(int port, rpc::frame::ObReqDeliver* deliver,
 #else
           "run/sql.sock";
 #endif
-      if (0 != access(local_endpoint, F_OK)) {
+      if (OB_SUCC(ret) && 0 != access(local_endpoint, F_OK)) {
         LOG_WARN("local SQL endpoint missing", K(errno), K(disable_tcp));
       }
     }
@@ -217,5 +224,12 @@ void ObSqlNioServer::update_tcp_keepalive_params(int keepalive_enabled, uint32_t
 }
 
 ObSqlNioServer* global_sql_nio_server = NULL;
+
+int64_t get_sql_nio_bound_tcp_port()
+{
+  return nullptr == global_sql_nio_server
+             ? 0
+             : global_sql_nio_server->get_bound_tcp_port();
+}
 }; // end namespace obmysql
 }; // end namespace oceanbase

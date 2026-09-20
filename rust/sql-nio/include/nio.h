@@ -441,6 +441,9 @@ nio_reactor *nio_start(const char *addr, uint32_t abi_version,
                        size_t session_size, size_t thread_count,
                        const nio_tls_config *tls, size_t tls_size,
                        int32_t *out_err, int32_t disable_tcp);
+/* Return the actual bound TCP port, including the ephemeral port selected for
+ * an address ending in :0. Returns 0 for NULL or a TCP-disabled reactor. */
+uint32_t nio_get_bound_tcp_port(const nio_reactor *reactor);
 void nio_stop(nio_reactor *reactor);
 void nio_wait_destroy(nio_reactor *reactor);
 int nio_update_tcp_keepalive_params(nio_reactor *reactor, int32_t enabled,

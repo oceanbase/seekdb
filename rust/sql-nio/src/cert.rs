@@ -31,7 +31,7 @@ pub(crate) struct PeerCertificateInfo {
 impl PeerCertificateInfo {
     pub(crate) fn parse(der: &[u8]) -> Self {
         match parse_x509_certificate(der) {
-            Ok((remaining, cert)) if remaining.is_empty() => {
+            Ok(([], cert)) => {
                 let issuer = format_name(cert.issuer());
                 let subject = format_name(cert.subject());
                 let common_name = cert

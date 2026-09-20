@@ -78,6 +78,7 @@ pub(crate) fn tls_cipher_name(suite: rustls::CipherSuite) -> Option<&'static [u8
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::tls_cipher_name;
 
