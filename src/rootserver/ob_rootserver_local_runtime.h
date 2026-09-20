@@ -27,6 +27,7 @@ namespace oceanbase
 namespace common
 {
 class ObMySQLProxy;
+class ObMySQLTransaction;
 }
 namespace rootserver
 {
@@ -63,6 +64,25 @@ public:
       const obcall::ObDDLCheckTabletMergeStatusArg &arg,
       obcall::ObDDLCheckTabletMergeStatusResult &result) = 0;
   virtual int check_server_empty(bool &is_empty) = 0;
+  // Tablet binding is physical storage state. The SQL worker supplies logical
+  // tablet ids and the catalog transaction; the runtime applies the MDS in
+  // that same transaction at the storage boundary.
+  virtual int modify_tablet_binding_for_rw_defensive(
+      common::ObMySQLTransaction &trans,
+      const common::ObIArray<common::ObTabletID> &tablet_ids,
+      int64_t schema_version,
+      int64_t abs_timeout_us) = 0;
+  virtual int modify_tablet_binding_for_write_defensive(
+      common::ObMySQLTransaction &trans,
+      const common::ObIArray<common::ObTabletID> &tablet_ids,
+      int64_t schema_version,
+      int64_t abs_timeout_us) = 0;
+  virtual int modify_tablet_binding_for_unbind(
+      common::ObMySQLTransaction &trans,
+      const common::ObIArray<common::ObTabletID> &orig_tablet_ids,
+      const common::ObIArray<common::ObTabletID> &hidden_tablet_ids,
+      int64_t schema_version,
+      int64_t abs_timeout_us) = 0;
   virtual int wait_until_change_stream_refreshed(
       common::ObMySQLProxy &mysql_proxy,
       int64_t timeout_us) = 0;

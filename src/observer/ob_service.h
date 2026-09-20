@@ -153,6 +153,22 @@ public:
 
   int submit_async_refresh_schema_task(const int64_t schema_version);
   int check_server_empty(bool &server_empty) override;
+  int modify_tablet_binding_for_rw_defensive(
+      common::ObMySQLTransaction &trans,
+      const common::ObIArray<common::ObTabletID> &tablet_ids,
+      int64_t schema_version,
+      int64_t abs_timeout_us) override;
+  int modify_tablet_binding_for_write_defensive(
+      common::ObMySQLTransaction &trans,
+      const common::ObIArray<common::ObTabletID> &tablet_ids,
+      int64_t schema_version,
+      int64_t abs_timeout_us) override;
+  int modify_tablet_binding_for_unbind(
+      common::ObMySQLTransaction &trans,
+      const common::ObIArray<common::ObTabletID> &orig_tablet_ids,
+      const common::ObIArray<common::ObTabletID> &hidden_tablet_ids,
+      int64_t schema_version,
+      int64_t abs_timeout_us) override;
   int wait_until_change_stream_refreshed(
       common::ObMySQLProxy &mysql_proxy,
       int64_t timeout_us) override;

@@ -31,6 +31,9 @@ static void force_release_tx_when_session_destroy(ObTxDesc &tx);
  * interrupt any work in progress thread
  */
 int interrupt(ObTxDesc &tx, int cause);
+// Cross-session callers, such as KILL QUERY, only have the target transaction
+// id. Resolve the authoritative descriptor inside the storage process.
+int interrupt(const ObTransID &tx_id, int cause);
 
 /*
  * create an implicit savepoint when txn is active
@@ -107,6 +110,8 @@ int iterate_all_observer_tx_stat(ObTxStatIterator &tx_stat_iter);
 int iterate_tx_scheduler_stat(ObTxSchedulerStatIterator &tx_scheduler_stat_iter);
 
 int gen_trans_id(ObTransID &trans_id);
+int gen_unique_id(int64_t &unique_id, int64_t timeout_us) override;
+int get_gts_sync(int64_t timeout_us, share::SCN &gts) override;
 
 TO_STRING_KV(K(is_inited_), KP(this));
 

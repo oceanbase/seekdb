@@ -417,6 +417,35 @@ public:
   bool can_partition_retry() const;
   bool has_for_update() const;
   int64_t get_ddl_task_id() const;
+  void set_direct_insert_task_info(const uint64_t data_format_version,
+                                   const int64_t snapshot_version,
+                                   const int64_t schema_version,
+                                   const uint64_t target_object_id,
+                                   const bool is_offline_index_rebuild)
+  {
+    direct_insert_data_format_version_ = data_format_version;
+    direct_insert_snapshot_version_ = snapshot_version;
+    direct_insert_schema_version_ = schema_version;
+    direct_insert_target_object_id_ = target_object_id;
+    direct_insert_is_offline_index_rebuild_ = is_offline_index_rebuild;
+  }
+  bool has_direct_insert_task_info() const
+  {
+    return direct_insert_data_format_version_ > 0
+        && direct_insert_snapshot_version_ > 0
+        && direct_insert_schema_version_ > 0
+        && direct_insert_target_object_id_ > 0;
+  }
+  uint64_t get_direct_insert_data_format_version() const
+  { return direct_insert_data_format_version_; }
+  int64_t get_direct_insert_snapshot_version() const
+  { return direct_insert_snapshot_version_; }
+  int64_t get_direct_insert_schema_version() const
+  { return direct_insert_schema_version_; }
+  uint64_t get_direct_insert_target_object_id() const
+  { return direct_insert_target_object_id_; }
+  bool is_direct_insert_offline_index_rebuild() const
+  { return direct_insert_is_offline_index_rebuild_; }
   ObTableScanStat &get_table_scan_stat()
   {
     return table_scan_stat_;
@@ -552,6 +581,14 @@ private:
   common::ObCurTraceId::TraceId last_trace_id_;
   int64_t srs_version_;
   ObSEArray<ObArrayParamGroup, 2> array_param_groups_;
+  // Read by the QC's SQL worker, then serialized to its local SQCs.  Neither
+  // an SQC nor the shared storage process should issue SQL to rediscover these
+  // DDL task facts.
+  uint64_t direct_insert_data_format_version_;
+  int64_t direct_insert_snapshot_version_;
+  int64_t direct_insert_schema_version_;
+  uint64_t direct_insert_target_object_id_;
+  bool direct_insert_is_offline_index_rebuild_;
 
 private:
   /**

@@ -36,6 +36,7 @@ namespace
 
 int get_system_tablet_handle(
     const common::ObTabletID &tablet_id,
+    const int64_t snapshot_version,
     storage::ObTabletHandle &tablet_handle)
 {
   int ret = OB_SUCCESS;
@@ -49,7 +50,16 @@ int get_system_tablet_handle(
   } else if (OB_ISNULL(ls)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ls is null", K(ret));
-  } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle))) {
+  } else {
+    share::SCN snapshot;
+    if (OB_FAIL(snapshot.convert_for_tx(snapshot_version))) {
+    } else if (OB_FAIL(ls->get_tablet_with_timeout(
+                   tablet_id,
+                   tablet_handle,
+                   ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US,
+                   ObMDSGetTabletMode::READ_READABLE_COMMITED,
+                   snapshot))) {
+    }
   }
   return ret;
 }
@@ -361,6 +371,7 @@ int ObTabletAutoincrementService::clear_tablet_autoinc_seq_cache(const common::O
 int ObTabletAutoincrementService::copy_sequences_for_fork(
     const common::ObIArray<common::ObTabletID> &source_tablet_ids,
     const common::ObIArray<common::ObTabletID> &destination_tablet_ids,
+    const common::ObIArray<int64_t> &source_snapshot_versions,
     common::ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
@@ -368,10 +379,12 @@ int ObTabletAutoincrementService::copy_sequences_for_fork(
   common::ObArenaAllocator allocator("ForkAutoinc");
 
   if (OB_UNLIKELY(source_tablet_ids.empty()
-      || source_tablet_ids.count() != destination_tablet_ids.count())) {
+      || source_tablet_ids.count() != destination_tablet_ids.count()
+      || source_tablet_ids.count() != source_snapshot_versions.count())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid tablet pairs for sequence copy", K(ret),
-        K(source_tablet_ids.count()), K(destination_tablet_ids.count()));
+        K(source_tablet_ids.count()), K(destination_tablet_ids.count()),
+        K(source_snapshot_versions.count()));
   } else {
     arg.is_tablet_creating_ = true;
   }
@@ -380,24 +393,30 @@ int ObTabletAutoincrementService::copy_sequences_for_fork(
     allocator.reuse();
     const common::ObTabletID &source_tablet_id = source_tablet_ids.at(i);
     const common::ObTabletID &destination_tablet_id = destination_tablet_ids.at(i);
+    const int64_t source_snapshot_version = source_snapshot_versions.at(i);
     storage::ObTabletHandle tablet_handle;
     storage::ObTabletAutoincSeq autoinc_seq;
+    share::SCN source_snapshot;
     ObTabletAutoincSeqCopyParam param;
     param.src_tablet_id_ = source_tablet_id;
     param.dest_tablet_id_ = destination_tablet_id;
     param.ret_code_ = OB_SUCCESS;
 
     if (OB_UNLIKELY(!source_tablet_id.is_valid()
-        || !destination_tablet_id.is_valid())) {
+        || !destination_tablet_id.is_valid()
+        || source_snapshot_version <= 0)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid tablet pair for sequence copy", K(ret),
-          K(source_tablet_id), K(destination_tablet_id), K(i));
-    } else if (OB_FAIL(get_system_tablet_handle(source_tablet_id, tablet_handle))) {
+          K(source_tablet_id), K(destination_tablet_id),
+          K(source_snapshot_version), K(i));
+    } else if (OB_FAIL(source_snapshot.convert_for_tx(source_snapshot_version))) {
+    } else if (OB_FAIL(get_system_tablet_handle(
+                   source_tablet_id, source_snapshot_version, tablet_handle))) {
     } else if (OB_ISNULL(tablet_handle.get_obj())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tablet handle is null", K(ret), K(source_tablet_id));
-    } else if (OB_FAIL(tablet_handle.get_obj()->get_autoinc_seq(
-                   autoinc_seq, allocator))) {
+    } else if (OB_FAIL(tablet_handle.get_obj()->ObITabletMdsInterface::get_autoinc_seq(
+                   allocator, source_snapshot, autoinc_seq))) {
     } else if (OB_FAIL(autoinc_seq.get_autoinc_seq_value(param.autoinc_seq_))) {
     } else if (OB_FAIL(arg.autoinc_params_.push_back(param))) {
     }

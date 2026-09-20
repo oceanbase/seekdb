@@ -179,6 +179,15 @@ public:
                                  const int64_t *column_checksums,
                                  const int64_t column_count,
                                  const uint64_t data_format_version);
+  static int report_ddl_checksum_with_column_descs(
+      const ObTabletID &tablet_id,
+      const uint64_t table_id,
+      const int64_t execution_id,
+      const int64_t ddl_task_id,
+      const int64_t *column_checksums,
+      const int64_t column_count,
+      const uint64_t data_format_version,
+      const common::ObIArray<share::schema::ObColDesc> &column_descs);
 
   static int check_and_get_major_sstable(
       const ObTabletID &tablet_id,

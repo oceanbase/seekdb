@@ -30,7 +30,7 @@ SEEKDB_FORK_PROTOTYPE_TEST_ROOT=/tmp python3 tools/obtest/namespace_worker_boots
   --binary build_release/src/observer/seekdb
 ```
 
-脚本自动设置三个实验开关：`SEEKDB_NAMESPACE_FORK_PROTOTYPE=6`、`SEEKDB_NAMESPACE_SQL_WORKER_PROTOTYPE=1`、`SEEKDB_NAMESPACE_SQL_WORKER_BOOTSTRAP_PROTOTYPE=1`。创建独立临时目录和端口，验证后停止实例并归档数据。
+脚本自动设置两个实验开关：`SEEKDB_NAMESPACE_FORK_PROTOTYPE=6`和 `SEEKDB_NAMESPACE_SQL_WORKER_PROTOTYPE=1`。Worker 模式本身就禁止共享进程执行 SQL，不再需要独立的 bootstrap 开关。脚本创建独立临时目录和端口，验证后停止实例并归档数据。
 
 在命令前加 `SEEKDB_NAMESPACE_SQL_WORKER_THREADS=1` 可以复现单执行线程验证。
 

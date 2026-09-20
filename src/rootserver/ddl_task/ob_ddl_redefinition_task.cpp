@@ -211,6 +211,9 @@ int ObDDLRedefinitionSSTableBuildTask::process()
       session_param.ddl_info_.set_dest_table_hidden(true);
       session_param.ddl_info_.set_heap_table_ddl(use_heap_table_ddl_plan_);
       session_param.ddl_info_.set_retryable_ddl(is_retryable_ddl_);
+      session_param.ddl_info_.set_direct_insert_task_info(
+          data_format_version_, snapshot_version_, schema_version_,
+          dest_table_id_, false /* is_offline_index_rebuild */);
       const int64_t DDL_INNER_SQL_EXECUTE_TIMEOUT = ObDDLUtil::calc_inner_sql_execute_timeout();
       user_sql_proxy = GCTX.ddl_sql_proxy_;
       add_event_info(ret, "ddl redefinition sstable build task generate innersql");

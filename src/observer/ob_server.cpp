@@ -27,6 +27,8 @@
 #include <thread>
 #include "observer/ob_server.h"
 #include "observer/namespace_worker_protocol_prototype.h"
+#include "data_plane/ddl/ob_direct_insert.h"
+#include "data_plane/ddl/ob_ddl_schedule.h"
 #include "share/ob_autoincrement_service.h"
 #include "observer/ob_req_time_service.h"
 #include "observer/omt/ob_ai_service.h"
@@ -222,6 +224,23 @@ int ObServer::get_or_insert_schedule_info(
              && OB_FAIL(part_ranges.assign(ddl_slice_info.part_ranges_))) {
     LOG_WARN("restore persistent DDL slice ranges failed", KR(ret), K(task_id));
   }
+  common::ObSEArray<data_plane::ObDDLTabletSliceCount, 8> slice_counts;
+  for (int64_t i = 0; OB_SUCC(ret) && i < part_ranges.count(); ++i) {
+    const sql::ObPxTabletRange &range = part_ranges.at(i);
+    if (OB_FAIL(slice_counts.push_back(data_plane::ObDDLTabletSliceCount(
+            range.tablet_id_, range.range_cut_.count() + 1)))) {
+      LOG_WARN("build compact DDL schedule failed", KR(ret), K(task_id));
+    }
+  }
+  if (OB_SUCC(ret) && OB_FAIL(
+          data_plane::ObDirectInsertOrchestrator::publish_ordered_input(
+              task_id, slice_counts))) {
+    LOG_WARN("publish DDL schedule to direct insert task failed", KR(ret),
+        K(task_id), K(slice_counts));
+  }
+  fprintf(stderr,
+          "PROTOTYPE_V22_DDL_SCHEDULE_PUBLISH ret=%d task=%ld ranges=%ld\n",
+          ret, task_id, slice_counts.count());
   return ret;
 }
 

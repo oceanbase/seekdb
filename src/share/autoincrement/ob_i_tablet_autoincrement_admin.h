@@ -49,6 +49,7 @@ public:
   virtual int copy_sequences_for_fork(
       const common::ObIArray<common::ObTabletID> &source_tablet_ids,
       const common::ObIArray<common::ObTabletID> &destination_tablet_ids,
+      const common::ObIArray<int64_t> &source_snapshot_versions,
       common::ObMySQLTransaction &trans) = 0;
 
   // Cache invalidation is deliberately two-phase: collect tablet IDs while

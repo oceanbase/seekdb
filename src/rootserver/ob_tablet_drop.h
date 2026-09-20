@@ -65,6 +65,8 @@ public:
   // 2. or all are local indexes of a table
   int add_drop_tablets_of_table_arg(
       const common::ObIArray<const share::schema::ObTableSchema*> &schemas);
+  int add_drop_tablets_arg(
+      const common::ObIArray<common::ObTabletID> &tablet_ids);
 private:
   int drop_tablet_(
       const common::ObIArray<const share::schema::ObTableSchema *> &table_schema_ptr_array,

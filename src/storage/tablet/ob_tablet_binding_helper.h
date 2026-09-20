@@ -46,6 +46,12 @@ namespace transaction
 {
 struct ObMulSourceDataNotifyArg;
 class ObTransID;
+class ObTxDesc;
+}
+
+namespace data_plane
+{
+class ObITransactionService;
 }
 
 namespace storage
@@ -279,35 +285,69 @@ public:
   static int modify_tablet_binding_for_create(const obcall::ObBatchCreateTabletArg &arg,
     const int64_t abs_timeout_us,
     ObMySQLTransaction &trans);
+  static int modify_tablet_binding_for_create(const obcall::ObBatchCreateTabletArg &arg,
+    const int64_t abs_timeout_us,
+    transaction::ObTxDesc &tx,
+    data_plane::ObITransactionService &tx_service);
   static int modify_tablet_binding_for_unbind(
     const ObIArray<ObTabletID> &orig_tablet_ids,
     const ObIArray<ObTabletID> &hidden_tablet_ids,
     const int64_t redefined_schema_version,
     const int64_t abs_timeout_us,
     ObMySQLTransaction &trans);
+  static int modify_tablet_binding_for_unbind(
+    const ObIArray<ObTabletID> &orig_tablet_ids,
+    const ObIArray<ObTabletID> &hidden_tablet_ids,
+    const int64_t redefined_schema_version,
+    const int64_t abs_timeout_us,
+    transaction::ObTxDesc &tx,
+    data_plane::ObITransactionService &tx_service);
   static int modify_tablet_binding_for_rw_defensive(const ObIArray<ObTabletID> &tablet_ids,
+    const int64_t schema_version,
+    const int64_t abs_timeout_us,
+    ObMySQLTransaction &trans);
+  static int modify_tablet_binding_for_rw_defensive(const ObIArray<ObTabletID> &tablet_ids,
+    const int64_t schema_version,
+    const int64_t abs_timeout_us,
+    transaction::ObTxDesc &tx,
+    data_plane::ObITransactionService &tx_service);
+  static int modify_tablet_binding_for_write_defensive(const ObIArray<ObTabletID> &tablet_ids,
     const int64_t schema_version,
     const int64_t abs_timeout_us,
     ObMySQLTransaction &trans);
   static int modify_tablet_binding_for_write_defensive(const ObIArray<ObTabletID> &tablet_ids,
     const int64_t schema_version,
     const int64_t abs_timeout_us,
-    ObMySQLTransaction &trans);
+    transaction::ObTxDesc &tx,
+    data_plane::ObITransactionService &tx_service);
 
 private:
-  template<typename F>
+  template<typename RegisterMds>
+  static int modify_tablet_binding_for_create_(const obcall::ObBatchCreateTabletArg &arg,
+    const int64_t abs_timeout_us,
+    RegisterMds &register_mds);
+  template<typename F, typename RegisterMds>
   static int modify_tablet_binding_batch_(const ObIArray<ObTabletID> &tablet_ids,
     const int64_t abs_timeout_us,
     F &&op,
-    ObMySQLTransaction &trans);
+    RegisterMds &register_mds);
   template<typename F>
   static int modify_tablet_binding_(const ObIArray<ObTabletID> &tablet_ids,
     const int64_t abs_timeout_us,
     F &&op,
     ObMySQLTransaction &trans);
+  template<typename F, typename RegisterMds>
+  static int modify_sorted_tablet_binding_(const ObIArray<ObTabletID> &tablet_ids,
+    const int64_t abs_timeout_us,
+    F &&op,
+    RegisterMds &register_mds);
   static int register_mds_(
     const ObTabletBindingMdsArg &arg,
     ObMySQLTransaction &trans);
+  static int register_mds_(
+    const ObTabletBindingMdsArg &arg,
+    transaction::ObTxDesc &tx,
+    data_plane::ObITransactionService &tx_service);
 
   static int modify_(const ObTabletBindingMdsArg &arg, const share::SCN &scn, mds::BufferCtx &ctx);
   static int set_tablet_binding_mds_(

@@ -102,7 +102,12 @@ struct ObSessionDDLInfo final
 {
 public:
   ObSessionDDLInfo()
-    : ddl_info_(), session_id_(OB_INVALID_ID)
+    : ddl_info_(), session_id_(OB_INVALID_ID),
+      direct_insert_data_format_version_(0),
+      direct_insert_snapshot_version_(0),
+      direct_insert_schema_version_(0),
+      direct_insert_target_object_id_(0),
+      direct_insert_is_offline_index_rebuild_(false)
   {
   }
   ~ObSessionDDLInfo() = default;
@@ -120,6 +125,18 @@ public:
   void set_is_dummy_ddl_for_inner_visibility(const bool flag) { ddl_info_.set_is_dummy_ddl_for_inner_visibility(flag); }
   void set_is_vec_tablet_rebuild(const bool flag) { ddl_info_.set_is_vec_tablet_rebuild(flag); }
   void set_partition_local_ddl(const bool flag) { ddl_info_.set_is_partition_local_ddl(flag); }
+  void set_direct_insert_task_info(const uint64_t data_format_version,
+                                   const int64_t snapshot_version,
+                                   const int64_t schema_version,
+                                   const uint64_t target_object_id,
+                                   const bool is_offline_index_rebuild)
+  {
+    direct_insert_data_format_version_ = data_format_version;
+    direct_insert_snapshot_version_ = snapshot_version;
+    direct_insert_schema_version_ = schema_version;
+    direct_insert_target_object_id_ = target_object_id;
+    direct_insert_is_offline_index_rebuild_ = is_offline_index_rebuild;
+  }
 
   bool is_ddl() const { return ddl_info_.is_ddl(); }
   bool is_source_table_hidden() const { return ddl_info_.is_source_table_hidden(); }
@@ -130,16 +147,49 @@ public:
   bool is_dummy_ddl_for_inner_visibility() const { return ddl_info_.is_dummy_ddl_for_inner_visibility(); }
   bool is_vec_tablet_rebuild() const { return ddl_info_.is_vec_tablet_rebuild(); }
   bool is_partition_local_ddl() const { return ddl_info_.is_partition_local_ddl(); }
+  bool has_direct_insert_task_info() const
+  {
+    return direct_insert_data_format_version_ > 0
+        && direct_insert_snapshot_version_ > 0
+        && direct_insert_schema_version_ > 0
+        && direct_insert_target_object_id_ > 0;
+  }
+  uint64_t get_direct_insert_data_format_version() const
+  { return direct_insert_data_format_version_; }
+  int64_t get_direct_insert_snapshot_version() const
+  { return direct_insert_snapshot_version_; }
+  int64_t get_direct_insert_schema_version() const
+  { return direct_insert_schema_version_; }
+  uint64_t get_direct_insert_target_object_id() const
+  { return direct_insert_target_object_id_; }
+  bool is_direct_insert_offline_index_rebuild() const
+  { return direct_insert_is_offline_index_rebuild_; }
   inline uint64_t get_session_id() const { return session_id_;}
-  inline void reset() { session_id_ = OB_INVALID_ID;
-                        ddl_info_.reset();}
+  inline void reset()
+  {
+    session_id_ = OB_INVALID_ID;
+    ddl_info_.reset();
+    direct_insert_data_format_version_ = 0;
+    direct_insert_snapshot_version_ = 0;
+    direct_insert_schema_version_ = 0;
+    direct_insert_target_object_id_ = 0;
+    direct_insert_is_offline_index_rebuild_ = false;
+  }
   bool is_valid() { return !(is_ddl() && OB_INVALID_ID == session_id_); }
   InnerDDLInfo &get_inner_ddl_info() { return ddl_info_; }
-  TO_STRING_KV(K_(ddl_info), K_(session_id));
-  OB_UNIS_VERSION(1);
+  TO_STRING_KV(K_(ddl_info), K_(session_id),
+      K_(direct_insert_data_format_version), K_(direct_insert_snapshot_version),
+      K_(direct_insert_schema_version), K_(direct_insert_target_object_id),
+      K_(direct_insert_is_offline_index_rebuild));
+  OB_UNIS_VERSION(2);
 private:
   InnerDDLInfo ddl_info_;
   uint64_t session_id_;
+  uint64_t direct_insert_data_format_version_;
+  int64_t direct_insert_snapshot_version_;
+  int64_t direct_insert_schema_version_;
+  uint64_t direct_insert_target_object_id_;
+  bool direct_insert_is_offline_index_rebuild_;
 };
 
 struct ObSessionParam final

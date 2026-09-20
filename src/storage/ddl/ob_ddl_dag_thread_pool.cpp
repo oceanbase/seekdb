@@ -55,12 +55,19 @@ void ObDDLDagThreadPool::run1()
     LOG_WARN("not init", K(ret), K(is_inited_));
   } else {
     worker_context_->bind_current_thread();
+    data_plane::ObIDirectInsertWorkerContext *previous_context =
+        data_plane::set_current_direct_insert_worker_context(worker_context_);
     char thread_name[OB_THREAD_NAME_BUF_LEN] = { 0 };
     snprintf(thread_name, OB_THREAD_NAME_BUF_LEN, "DDL_%ld", ddl_dag_->get_ddl_task_param().ddl_task_id_);
     lib::set_thread_name(thread_name);
     ObCurTraceId::set(ddl_dag_->get_dag_id());
     FLOG_INFO("ddl dag thread start", "thread_idx", get_thread_idx(), KPC(ddl_dag_));
-    IGNORE_RETURN ddl_dag_->process();
+    ret = ddl_dag_->process();
+    data_plane::set_current_direct_insert_worker_context(previous_context);
+    fprintf(stderr,
+            "PROTOTYPE_V22_DIRECT_INSERT_POOL ret=%d dag_ret=%d final=%d thread=%ld\n",
+            ret, ddl_dag_->get_dag_ret(), ddl_dag_->is_final_status(),
+            get_thread_idx());
     FLOG_INFO("ddl dag thread stop", "thread_idx", get_thread_idx(), KPC(ddl_dag_));
   }
 }

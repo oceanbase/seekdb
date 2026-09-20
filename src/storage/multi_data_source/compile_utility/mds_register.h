@@ -136,9 +136,11 @@ _GENERATE_MDS_UNIT_(KEY_TYPE, VALUE_TYPE, NEED_MULTI_VERSION)
   GENERATE_MDS_UNIT(::oceanbase::storage::mds::DummyKey,\
                     ::oceanbase::storage::ObTabletBindingMdsUserData,\
                     false)
+  // Lazy namespace materialization must recover the sequence visible at the
+  // fork snapshot, even after the source tablet has advanced or been deleted.
   GENERATE_MDS_UNIT(::oceanbase::storage::mds::DummyKey,\
                     ::oceanbase::storage::ObTabletAutoincSeq,\
-                    false)
+                    true)
   GENERATE_MDS_UNIT(::oceanbase::compaction::ObMediumCompactionInfoKey,\
                     ::oceanbase::compaction::ObMediumCompactionInfo,\
                     false)

@@ -1780,7 +1780,6 @@ int ObCalcColumnChecksumRequestArg::SingleItem::assign(const SingleItem &other)
 
 OB_SERIALIZE_MEMBER(
     ObCalcColumnChecksumRequestArg,
-
     target_table_id_,
     schema_version_,
     execution_id_,
@@ -1788,14 +1787,39 @@ OB_SERIALIZE_MEMBER(
     source_table_id_,
     task_id_,
     calc_items_,
-    user_parallelism_);
+    user_parallelism_,
+    data_format_version_,
+    source_schema_,
+    target_schema_);
+
+int ObCalcColumnChecksumRequestArg::assign(
+    const ObCalcColumnChecksumRequestArg &other)
+{
+  int ret = OB_SUCCESS;
+  target_table_id_ = other.target_table_id_;
+  schema_version_ = other.schema_version_;
+  execution_id_ = other.execution_id_;
+  snapshot_version_ = other.snapshot_version_;
+  source_table_id_ = other.source_table_id_;
+  task_id_ = other.task_id_;
+  user_parallelism_ = other.user_parallelism_;
+  data_format_version_ = other.data_format_version_;
+  if (OB_FAIL(calc_items_.assign(other.calc_items_))) {
+  } else if (OB_FAIL(source_schema_.assign(other.source_schema_))) {
+  } else if (OB_FAIL(target_schema_.assign(other.target_schema_))) {
+  }
+  return ret;
+}
 
 bool ObCalcColumnChecksumRequestArg::is_valid() const
 {
   bool bret = OB_INVALID_ID != target_table_id_
       && OB_INVALID_VERSION != schema_version_ && execution_id_ >= 0
       && OB_INVALID_VERSION != snapshot_version_ && OB_INVALID_ID != source_table_id_
-      && task_id_ > 0;
+      && task_id_ > 0 && data_format_version_ > 0
+      && source_schema_.is_valid() && target_schema_.is_valid()
+      && source_schema_.get_table_id() == static_cast<uint64_t>(source_table_id_)
+      && target_schema_.get_table_id() == target_table_id_;
   for (int64_t i = 0; bret && i < calc_items_.count(); ++i) {
     bret = calc_items_.at(i).is_valid();
   }
@@ -1812,9 +1836,19 @@ void ObCalcColumnChecksumRequestArg::reset()
   execution_id_ = -1;
   task_id_ = 0;
   user_parallelism_ = 0;
+  data_format_version_ = 0;
+  calc_items_.reset();
+  source_schema_.reset();
+  target_schema_.reset();
 }
 
-OB_SERIALIZE_MEMBER(ObCalcColumnChecksumRequestRes, ret_codes_);
+OB_SERIALIZE_MEMBER(
+    ObCalcColumnChecksumCompletion,
+    finished_, ret_code_, column_ids_, column_checksums_);
+
+OB_SERIALIZE_MEMBER(
+    ObCalcColumnChecksumRequestRes,
+    ret_codes_, completions_);
 
 OB_SERIALIZE_MEMBER(
     ObCalcColumnChecksumResponseArg,
@@ -1823,7 +1857,9 @@ OB_SERIALIZE_MEMBER(
     ret_code_,
     source_table_id_,
     schema_version_,
-    task_id_);
+    task_id_,
+    column_ids_,
+    column_checksums_);
 
 bool ObCalcColumnChecksumResponseArg::is_valid() const
 {
@@ -1831,7 +1867,9 @@ bool ObCalcColumnChecksumResponseArg::is_valid() const
       && OB_INVALID_ID != target_table_id_
       && OB_INVALID_ID != source_table_id_
       && schema_version_ > 0
-      && task_id_ > 0;
+      && task_id_ > 0
+      && ret_code_ <= OB_SUCCESS
+      && column_ids_.count() == column_checksums_.count();
 }
 
 void ObCalcColumnChecksumResponseArg::reset()
@@ -1842,7 +1880,8 @@ void ObCalcColumnChecksumResponseArg::reset()
   source_table_id_ = OB_INVALID_ID;
   schema_version_ = OB_INVALID_VERSION;
   task_id_ = 0;
-
+  column_ids_.reset();
+  column_checksums_.reset();
 }
 
 //----End structs for partition online/offline----
@@ -1862,7 +1901,7 @@ OB_SERIALIZE_MEMBER(ObSwitchSchemaArg, schema_info_, force_refresh_, is_async_);
 
 
 OB_SERIALIZE_MEMBER(ObTabletPair, tablet_id_);
-OB_SERIALIZE_MEMBER(ObCheckSchemaVersionElapsedArg, schema_version_, need_wait_trans_end_, tablets_, ddl_task_id_);
+OB_SERIALIZE_MEMBER(ObCheckSchemaVersionElapsedArg, schema_version_, need_wait_trans_end_, tablets_, ddl_task_id_, schema_version_refreshed_by_caller_);
 
 bool ObCheckSchemaVersionElapsedArg::is_valid() const
 {

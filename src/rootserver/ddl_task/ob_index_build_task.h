@@ -38,11 +38,14 @@ public:
       const common::ObCurTraceId::TraceId &trace_id,
       const int64_t parallelism,
       const bool is_partitioned_local_index_task,
+      const uint64_t data_format_version,
+      const bool is_offline_index_rebuild,
       const bool is_retryable_ddl)
       : task_id_(task_id), data_table_id_(data_table_id), dest_table_id_(dest_table_id),
         schema_version_(schema_version), snapshot_version_(snapshot_version), execution_id_(execution_id),
         trace_id_(trace_id), parallelism_(parallelism), is_partitioned_local_index_task_(is_partitioned_local_index_task),
-        allocator_("IdxSSTBuildTask"), is_retryable_ddl_(is_retryable_ddl)
+        allocator_("IdxSSTBuildTask"), data_format_version_(data_format_version),
+        is_offline_index_rebuild_(is_offline_index_rebuild), is_retryable_ddl_(is_retryable_ddl)
   {
     set_retry_times(0);
   }
@@ -71,6 +74,8 @@ private:
   bool is_partitioned_local_index_task_;
   common::ObArenaAllocator allocator_;
   ObDDLTaskInfo addition_info_;
+  uint64_t data_format_version_;
+  bool is_offline_index_rebuild_;
   bool is_retryable_ddl_;
 
   DISALLOW_COPY_AND_ASSIGN(ObIndexSSTableBuildTask);

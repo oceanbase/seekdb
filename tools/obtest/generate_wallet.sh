@@ -12,6 +12,7 @@ LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}')
 if [ -z "$LOCAL_IP" ]; then
     LOCAL_IP="127.0.0.1"
 fi
+CERT_CN="${SEEKDB_TEST_CERT_CN:-seekdb-client}"
 
 echo "Generating wallet in $WALLET_DIR (IP: $LOCAL_IP)..."
 rm -rf "$WALLET_DIR"
@@ -29,10 +30,10 @@ openssl req -x509 -new -nodes \
     -out "$WALLET_DIR/ca.pem"
 
 # Node key and cert (SAN includes local IP + loopback)
-openssl genrsa -out "$WALLET_DIR/key.pem" 2048 2>/dev/null
+openssl genrsa -out "$WALLET_DIR/server-key.pem" 2048 2>/dev/null
 openssl req -new \
-    -key "$WALLET_DIR/key.pem" \
-    -subj "/O=OceanBase/CN=$LOCAL_IP" \
+    -key "$WALLET_DIR/server-key.pem" \
+    -subj "/O=OceanBase/CN=$CERT_CN" \
     -out "$TMPDIR/node.csr"
 
 echo "subjectAltName=IP:$LOCAL_IP,IP:127.0.0.1" > "$TMPDIR/san.ext"
@@ -44,12 +45,12 @@ openssl x509 -req \
     -CAcreateserial \
     -extfile "$TMPDIR/san.ext" \
     -days $DAYS_VALID -sha256 \
-    -out "$WALLET_DIR/cert.pem" 2>/dev/null
+    -out "$WALLET_DIR/server-cert.pem" 2>/dev/null
 
-chmod 600 "$WALLET_DIR/key.pem"
-chmod 644 "$WALLET_DIR/ca.pem" "$WALLET_DIR/cert.pem"
+chmod 600 "$WALLET_DIR/server-key.pem"
+chmod 644 "$WALLET_DIR/ca.pem" "$WALLET_DIR/server-cert.pem"
 
 echo "Done:"
 echo "  $WALLET_DIR/ca.pem"
-echo "  $WALLET_DIR/cert.pem  (SAN: IP:$LOCAL_IP, IP:127.0.0.1)"
-echo "  $WALLET_DIR/key.pem"
+echo "  $WALLET_DIR/server-cert.pem  (CN: $CERT_CN; SAN: IP:$LOCAL_IP, IP:127.0.0.1)"
+echo "  $WALLET_DIR/server-key.pem"

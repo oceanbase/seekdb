@@ -148,7 +148,7 @@ public:
                            const char *buf,
                            const int64_t buf_len,
                            const ObRegisterMdsFlag &register_flag = ObRegisterMdsFlag(),
-                           const transaction::ObTxSEQ seq_no = transaction::ObTxSEQ());
+                           const transaction::ObTxSEQ seq_no = transaction::ObTxSEQ()) override;
   ObTxELRUtil &get_tx_elr_util() { return elr_util_; }
   bool can_elr() const override { return elr_util_.is_can_elr(); }
 #ifdef ENABLE_DEBUG_LOG

@@ -18,6 +18,8 @@
 #include "observer/ob_system_package_load_task.h"
 #include "pl/ob_pl_package_manager.h"
 #include "rootserver/ob_admin_job_table_operator.h"
+#include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "share/ob_server_struct.h"
 #include "share/rc/ob_server_runtime.h"
 
@@ -99,7 +101,17 @@ int ObSystemPackageLoadTask::load_system_package_()
   } else if (OB_FAIL(ADMIN_JOB_FIND(LOAD_MYSQL_SYS_PACKAGE, job_id))) {
     if (ret == OB_ENTRY_NOT_EXIST) {
       ret = OB_SUCCESS;
-      GCTX.sys_package_ready_ = true;
+      if (OB_FAIL(storage::NamespaceForkKernelPrototype::ensure_control_schema())) {
+      } else if (OB_FAIL(observer::namespace_worker_prototype::reconcile_namespace_workers())) {
+      } else {
+        ATOMIC_STORE(&GCTX.sys_package_ready_, true);
+        const int notify_ret =
+            observer::namespace_worker_prototype::broadcast_system_package_ready(true);
+        if (OB_SUCCESS != notify_ret) {
+          LOG_WARN("failed to notify a namespace worker that system packages are ready",
+                   K(notify_ret));
+        }
+      }
       LOG_INFO("find a success job or job_id not exist", KR(ret), K(job_id));
     } else {
       LOG_WARN("failed to get INPROGRESS rs job", KR(ret));
@@ -108,8 +120,16 @@ int ObSystemPackageLoadTask::load_system_package_()
                          *sql_proxy,
                          false/*from_file*/))) {
   } else if (OB_FAIL(ADMIN_JOB_COMPLETE(job_id, 0/*result_code*/))) {
+  } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::ensure_control_schema())) {
+  } else if (OB_FAIL(observer::namespace_worker_prototype::reconcile_namespace_workers())) {
   } else {
-    GCTX.sys_package_ready_ = true;
+    ATOMIC_STORE(&GCTX.sys_package_ready_, true);
+    const int notify_ret =
+        observer::namespace_worker_prototype::broadcast_system_package_ready(true);
+    if (OB_SUCCESS != notify_ret) {
+      LOG_WARN("failed to notify a namespace worker that system packages are ready",
+               K(notify_ret));
+    }
   }
   return ret;
 }
@@ -122,7 +142,7 @@ void ObSystemPackageLoadTask::runTimerTask()
     LOG_WARN("task not inited", KR(ret), K_(inited));
   } else if (!share::server_is_write_enabled()) {
     LOG_INFO("read-only server skips loading sys package");
-  } else if (GCTX.sys_package_ready_) {
+  } else if (ATOMIC_LOAD(&GCTX.sys_package_ready_)) {
     LOG_INFO("sys package already loaded");
   } else if (OB_FAIL(load_system_package_())) {
     fail_count_++;

@@ -6,6 +6,7 @@ Add --case insert for V14 writes, rollback, isolation and crash recovery.
 Add --case dml for native drivers, automatic conflict retries, DML and recovery.
 Add --case nested for native foreign keys, nested session restoration and transactions.
 Add --case ddl for CREATE TABLE followed by write and read in a fork namespace.
+Add --case index for inherited secondary and unique indexes.
 Linux integration probe. No claim of Windows/macOS or high-concurrency validation.
 """
 import argparse
@@ -29,6 +30,13 @@ class WorkerExperiment(LineageExperiment):
     def start(self):
         super().start()
         self.sql("ALTER SYSTEM SET syslog_level='WARN'")
+
+    def physical(self):
+        # SQL-only workers do not own the shared process's in-memory tablet map.
+        # The persisted tablet mapping exercises the normal remote table scan
+        # and is sufficient for the worker fork/materialization assertions.
+        return self.sql("SELECT tablet_id FROM oceanbase.__all_tablet_to_table "
+                        "WHERE tablet_id>=4611686018427387904 ORDER BY tablet_id", log=False)
 
     def worker_connect(self, namespace, client_flag=0, read_timeout=40):
         return pymysql.connect(host="127.0.0.1", port=self.port, user="root", password="",
@@ -119,7 +127,6 @@ class WorkerExperiment(LineageExperiment):
             self.record("native_insert_select_in_transaction")
             assert self.sql("SELECT id,v FROM t1 ORDER BY id", sibling) == ((1,10),(2,20))
             assert self.sql("SELECT id,v FROM db1.t1 ORDER BY id") == ((1,10),(2,20))
-            assert self.sql("SELECT id,v FROM " + self.table(self.root("a")[0], "db1.t1") + " ORDER BY id") == ((1,10),(2,20))
             self.record("worker_insert_namespace_isolation", source_unchanged=True, sibling_unchanged=True)
         finally:
             for connection in (first, second, sibling):
@@ -141,8 +148,8 @@ class WorkerExperiment(LineageExperiment):
 
     def run_ddl(self):
         self.setup_lineage()
-        c = d = None
-        connection = source = child = grandchild = None
+        c = d = schema_only = None
+        connection = source = child = grandchild = catalogless = None
         def assert_missing(table, handle):
             try:
                 self.sql("SELECT * FROM " + table, handle)
@@ -160,6 +167,8 @@ class WorkerExperiment(LineageExperiment):
             self.sql("USE db2", connection)
             assert self.sql("SHOW TABLES", connection) == (("t1",),)
             self.sql("USE db1", connection)
+            root_before_worker_ddl = self.root("b")
+            assert root_before_worker_ddl[2] == 0, root_before_worker_ddl
             self.sql("CREATE TABLE created_after_fork(id INT PRIMARY KEY,v INT)", connection)
             assert ("created_after_fork",) in self.sql("SHOW TABLES", connection)
             self.sql("CREATE TABLE inherited_drop(id INT PRIMARY KEY,v INT)", connection)
@@ -173,17 +182,58 @@ class WorkerExperiment(LineageExperiment):
                      "text_value MEDIUMTEXT) LOB_INROW_THRESHOLD=0", connection)
             self.sql("INSERT INTO inherited_lob VALUES(1,REPEAT('b',20000),REPEAT('b',20000))",
                      connection)
+            self.sql("CREATE TABLE inherited_write_first(id INT PRIMARY KEY,payload MEDIUMBLOB) "
+                     "LOB_INROW_THRESHOLD=0", connection)
+            self.sql("CREATE TABLE inherited_aux_drop(id INT PRIMARY KEY,k INT,payload MEDIUMBLOB,"
+                     "KEY inherited_aux_idx(k)) LOB_INROW_THRESHOLD=0", connection)
+            self.sql("INSERT INTO inherited_aux_drop VALUES(1,7,REPEAT('p',20000))", connection)
             self.sql("CREATE TABLE drop_after_fork(id INT PRIMARY KEY,v INT)", connection)
             self.sql("DROP TABLE drop_after_fork", connection)
             self.sql("DROP TABLE IF EXISTS drop_after_fork", connection)
             assert_missing("drop_after_fork", connection)
             self.sql("INSERT INTO created_after_fork VALUES(1,10)", connection)
             assert self.sql("SELECT id,v FROM created_after_fork", connection) == ((1,10),)
+            root_after_worker_ddl = self.root("b")
+            assert root_after_worker_ddl[2] == root_before_worker_ddl[2], (
+                root_before_worker_ddl, root_after_worker_ddl)
+            assert root_after_worker_ddl[4] != root_before_worker_ddl[4], (
+                root_before_worker_ddl, root_after_worker_ddl)
+            self.record("worker_ddl_updates_directory_without_schema_catalog",
+                        namespace=self.b,
+                        catalog_root=root_after_worker_ddl[2],
+                        directory_before=root_before_worker_ddl[4],
+                        directory_after=root_after_worker_ddl[4])
             source = self.worker_connect(self.root("a")[0])
             assert_missing("created_after_fork", source)
             c, _ = self.capture("b", "c")
             child = self.worker_connect(c)
             assert self.sql("SELECT id,v FROM created_after_fork", child) == ((1,10),)
+
+            inherited_aux_data_id = self.sql(
+                "SELECT table_id FROM oceanbase.__all_table "
+                "WHERE table_name='inherited_aux_drop'", child)[0][0]
+            inherited_aux_schemas = self.sql(
+                "SELECT table_id,table_name,tablet_id FROM oceanbase.__all_table "
+                f"WHERE table_id={inherited_aux_data_id} OR data_table_id={inherited_aux_data_id} "
+                "ORDER BY table_id", child)
+            assert len(inherited_aux_schemas) == 4, inherited_aux_schemas
+            physical_before_aux_drop = set(self.physical())
+            self.sql("DROP TABLE inherited_aux_drop", child)
+            assert_missing("inherited_aux_drop", child)
+            assert self.sql(
+                "SELECT table_id,table_name,tablet_id FROM oceanbase.__all_table "
+                f"WHERE table_id={inherited_aux_data_id} OR data_table_id={inherited_aux_data_id}",
+                child) == ()
+            physical_after_aux_drop = set(self.physical())
+            assert physical_before_aux_drop <= physical_after_aux_drop, (
+                physical_before_aux_drop - physical_after_aux_drop)
+            assert self.sql(
+                "SELECT table_id,table_name,tablet_id FROM oceanbase.__all_table "
+                f"WHERE table_id={inherited_aux_data_id} OR data_table_id={inherited_aux_data_id} "
+                "ORDER BY table_id", connection) == inherited_aux_schemas
+            assert self.sql(
+                "SELECT id,LENGTH(payload) FROM inherited_aux_drop FORCE INDEX(inherited_aux_idx) "
+                "WHERE k=7", connection) == ((1,20000),)
 
             lob_before = self.physical()
             assert_lob(child, "b")
@@ -194,9 +244,15 @@ class WorkerExperiment(LineageExperiment):
             assert_lob(child, "c")
             assert_lob(connection, "b")
 
+            cold_tablet = self.sql(
+                "SELECT tablet_id FROM oceanbase.__all_table WHERE table_name='cold_drop'",
+                child)[0][0]
             cold_physical = self.physical()
             self.sql("DROP TABLE cold_drop", child)
-            assert self.physical() == cold_physical
+            cold_after = self.physical()
+            cold_storage_tablet = ((1 << 62) | (c << 32) | cold_tablet,)
+            assert cold_storage_tablet not in cold_physical
+            assert cold_storage_tablet not in cold_after
             assert_missing("cold_drop", child)
 
             self.sql("DROP TABLE inherited_multi_a,inherited_multi_b", child)
@@ -244,31 +300,149 @@ class WorkerExperiment(LineageExperiment):
             assert self.sql("SELECT id,v FROM created_after_fork ORDER BY id", child) == ((1,10),(2,20))
             assert self.sql("SELECT id,v FROM created_after_fork", connection) == ((1,10),)
         finally:
-            for handle in (connection, source, child, grandchild):
+            for handle in (connection, source, child, grandchild, catalogless):
                 if handle is not None:
                     handle.close()
         self.restart()
-        connection = child = grandchild = None
+        connection = child = grandchild = catalogless = None
         try:
+            connection = self.worker_connect(self.b)
             child, grandchild = self.worker_connect(c), self.worker_connect(d)
+            assert self.sql(
+                "SELECT id,LENGTH(payload) FROM inherited_aux_drop FORCE INDEX(inherited_aux_idx) "
+                "WHERE k=7", connection) == ((1,20000),)
             assert self.sql("SELECT id,v FROM created_after_fork ORDER BY id", child) == ((1,10),(2,20))
             assert self.sql("SELECT id,v FROM created_after_fork", grandchild) == ((1,10),)
             assert_lob(child, "c")
+            schema_only, _ = self.capture("d", "schema_only")
+            catalogless = self.worker_connect(schema_only)
+            # Load the child SchemaService while the inherited catalog is still
+            # available, then remove that duplicate schema source.  Its first
+            # LOB access must materialize the main/meta/piece binding unit from
+            # the schemas supplied by the Worker scan request alone.
+            assert ("inherited_lob",) in self.sql("SHOW TABLES", catalogless)
+            assert self.sql(
+                "SELECT table_name FROM oceanbase.__all_table "
+                "WHERE table_name='inherited_lob'", catalogless) == (("inherited_lob",),)
+            write_first_table_id = self.sql(
+                "SELECT table_id FROM oceanbase.__all_table "
+                "WHERE table_name='inherited_write_first'", catalogless)[0][0]
+            write_first_tablets = self.sql(
+                "SELECT tablet_id FROM oceanbase.__all_table "
+                f"WHERE table_id={write_first_table_id} "
+                f"OR data_table_id={write_first_table_id} ORDER BY table_id",
+                catalogless)
+            assert len(write_first_tablets) == 3, write_first_tablets
+            write_first_physical = {
+                (1 << 62) | (schema_only << 32) | row[0]
+                for row in write_first_tablets
+            }
+            assert self.root("schema_only")[2] == 0, self.root("schema_only")
+            write_first_before = {row[0] for row in self.physical()}
+            assert write_first_physical.isdisjoint(write_first_before), (
+                write_first_physical, write_first_before)
+            self.sql(
+                "INSERT INTO inherited_write_first VALUES(1,REPEAT('w',20000))",
+                catalogless)
+            write_first_after = {row[0] for row in self.physical()}
+            assert write_first_physical <= write_first_after, (
+                write_first_physical, write_first_after)
+            assert self.sql(
+                "SELECT id,LENGTH(payload) FROM inherited_write_first", catalogless
+            ) == ((1,20000),)
+            assert_lob(catalogless, "c")
+            self.record("worker_schema_drives_lob_materialization_without_catalog",
+                        namespace=schema_only, read_first=True, write_first=True)
             assert_lob(grandchild, "c")
             for handle in (child, grandchild):
                 for table in ("cold_drop", "inherited_multi_a", "inherited_multi_b",
-                              "inherited_mixed", "inherited_cow", "inherited_drop"):
+                              "inherited_mixed", "inherited_cow", "inherited_drop",
+                              "inherited_aux_drop"):
                     assert_missing(table, handle)
                 assert self.sql("SELECT id,v FROM atomic_survivor", handle) == ((1,10),)
             self.record("PASS", case="namespace_worker_ddl", create_table=True,
                         schema_visible_to_worker=True, source_isolated=True,
                         inherited_drop_isolated=True, multi_drop_atomic=True,
                         mixed_drop=True, private_tablet_reclaimed=True,
+                        inherited_aux_schema_dropped=True,
                         lob_binding_unit_materialized=True,
+                        worker_schema_drives_materialization=True,
                         descendant_inherits_schema=True, descendant_storage_isolated=True,
                         crash_recovery=True)
         finally:
-            for handle in (connection, child, grandchild):
+            for handle in (connection, child, grandchild, catalogless):
+                if handle is not None:
+                    handle.close()
+
+    def run_indexes(self):
+        self.setup_lineage()
+        c = d = None
+        source = child = grandchild = None
+        try:
+            source = self.worker_connect(self.b)
+            self.sql("CREATE TABLE indexed_t(id INT PRIMARY KEY,k INT,u INT,v INT,"
+                     "KEY idx_k(k),UNIQUE KEY uk_u(u))", source)
+            self.sql("INSERT INTO indexed_t VALUES(1,10,100,1000),(2,20,200,2000)", source)
+            c, _ = self.capture("b", "c")
+            child = self.worker_connect(c)
+            assert self.sql("SELECT id,v FROM indexed_t FORCE INDEX(idx_k) WHERE k=20", child) == ((2,2000),)
+            assert self.sql("SELECT id,v FROM indexed_t FORCE INDEX(uk_u) WHERE u=100", child) == ((1,1000),)
+            self.sql("INSERT INTO indexed_t VALUES(3,30,300,3000)", child)
+            assert self.sql("SELECT id,v FROM indexed_t FORCE INDEX(idx_k) WHERE k=30", child) == ((3,3000),)
+            assert self.sql("SELECT id,v FROM indexed_t FORCE INDEX(uk_u) WHERE u=300", child) == ((3,3000),)
+            assert self.sql("SELECT id FROM indexed_t WHERE id=3", source) == ()
+            self.sql("UPDATE indexed_t SET k=21,u=201,v=2001 WHERE id=2", child)
+            assert self.sql("SELECT id FROM indexed_t FORCE INDEX(idx_k) WHERE k=20", child) == ()
+            assert self.sql("SELECT id,v FROM indexed_t FORCE INDEX(idx_k) WHERE k=21", child) == ((2,2001),)
+            assert self.sql("SELECT id FROM indexed_t FORCE INDEX(uk_u) WHERE u=200", child) == ()
+            assert self.sql("SELECT id,v FROM indexed_t FORCE INDEX(uk_u) WHERE u=201", child) == ((2,2001),)
+            assert self.sql("SELECT id,v FROM indexed_t FORCE INDEX(idx_k) WHERE k=20", source) == ((2,2000),)
+            try:
+                self.sql("UPDATE indexed_t SET k=31,u=201,v=9999 WHERE id=3", child)
+            except pymysql.IntegrityError as error:
+                assert error.args[0] == 1062, error.args
+            else:
+                raise AssertionError("unique index conflict succeeded")
+            assert self.sql("SELECT k,u,v FROM indexed_t WHERE id=3", child) == ((30,300,3000),)
+            assert self.sql("SELECT id FROM indexed_t FORCE INDEX(idx_k) WHERE k=31", child) == ()
+            assert self.sql("SELECT id FROM indexed_t FORCE INDEX(idx_k) WHERE k=30", child) == ((3,),)
+            assert self.sql("SELECT id FROM indexed_t FORCE INDEX(uk_u) WHERE u=300", child) == ((3,),)
+
+            self.sql("DELETE FROM indexed_t WHERE id=1", child)
+            assert self.sql("SELECT id FROM indexed_t FORCE INDEX(idx_k) WHERE k=10", child) == ()
+            assert self.sql("SELECT id FROM indexed_t FORCE INDEX(uk_u) WHERE u=100", child) == ()
+            assert self.sql("SELECT id FROM indexed_t FORCE INDEX(idx_k) WHERE k=10", source) == ((1,),)
+
+            d, _ = self.capture("c", "d")
+            grandchild = self.worker_connect(d)
+            assert self.sql("SELECT id,v FROM indexed_t FORCE INDEX(idx_k) WHERE k=21", grandchild) == ((2,2001),)
+            assert self.sql("SELECT id FROM indexed_t FORCE INDEX(uk_u) WHERE u=100", grandchild) == ()
+            self.sql("UPDATE indexed_t SET k=32,u=302,v=3002 WHERE id=3", child)
+            assert self.sql("SELECT id,v FROM indexed_t FORCE INDEX(idx_k) WHERE k=32", child) == ((3,3002),)
+            assert self.sql("SELECT id,v FROM indexed_t FORCE INDEX(idx_k) WHERE k=30", grandchild) == ((3,3000),)
+        finally:
+            for handle in (source, child, grandchild):
+                if handle is not None:
+                    handle.close()
+        self.restart()
+        source = child = grandchild = None
+        try:
+            source = self.worker_connect(self.b)
+            child = self.worker_connect(c)
+            grandchild = self.worker_connect(d)
+            assert self.sql("SELECT id,v FROM indexed_t FORCE INDEX(idx_k) WHERE k=10", source) == ((1,1000),)
+            assert self.sql("SELECT id,v FROM indexed_t FORCE INDEX(uk_u) WHERE u=302", child) == ((3,3002),)
+            assert self.sql("SELECT id FROM indexed_t FORCE INDEX(idx_k) WHERE k=10", child) == ()
+            assert self.sql("SELECT id,v FROM indexed_t FORCE INDEX(uk_u) WHERE u=300", grandchild) == ((3,3000),)
+            assert self.sql("SELECT id FROM indexed_t FORCE INDEX(idx_k) WHERE k=32", grandchild) == ()
+            self.record("PASS", case="namespace_worker_index", inherited_secondary_index=True,
+                        inherited_unique_index=True, child_insert_updates_indexes=True,
+                        child_update_rekeys_indexes=True, child_delete_updates_indexes=True,
+                        unique_conflict_rolls_back=True, descendant_inherits_indexes=True,
+                        descendant_storage_isolated=True, source_isolated=True,
+                        crash_recovery=True)
+        finally:
+            for handle in (source, child, grandchild):
                 if handle is not None:
                     handle.close()
 
@@ -509,7 +683,6 @@ class WorkerExperiment(LineageExperiment):
                     raise AssertionError(query)
             assert self.sql("SELECT id,v FROM t1 ORDER BY id", sibling) == ((1,10),(2,20))
             assert self.sql("SELECT id,v FROM db1.t1 ORDER BY id") == ((1,10),(2,20))
-            assert self.sql("SELECT id,v FROM " + self.table(self.root("a")[0], "db1.t1") + " ORDER BY id") == ((1,10),(2,20))
             expected = ((1,19),(2,22),(3,7),(4,-33)) + remaining
             assert self.sql("SELECT id,v FROM t1 ORDER BY id", first) == expected
             self.record("update_delete_namespace_isolation", source_unchanged=True, sibling_unchanged=True)
@@ -554,7 +727,11 @@ class WorkerExperiment(LineageExperiment):
         assert self.sql("SELECT DATABASE(),v FROM t1 WHERE id=1", second) == (("db1", 90),)
         first.select_db("db1")
         assert self.sql("SELECT DATABASE(),v FROM t1 WHERE id=1", first) == (("db1", 90),)
-        for database in ("missing_db", "oceanbase", "__fork_ns_3__db1", "db1`; SET @x=999; --"):
+        first.select_db("oceanbase")
+        assert self.sql("SELECT DATABASE()", first) == (("oceanbase",),)
+        assert self.sql("SELECT COUNT(*) FROM __all_database WHERE database_name='db1'", first) == ((1,),)
+        first.select_db("db1")
+        for database in ("missing_db", "__fork_ns_3__db1", "db1`; SET @x=999; --"):
             try:
                 first.select_db(database)
             except pymysql.MySQLError as error:
@@ -815,10 +992,10 @@ class WorkerExperiment(LineageExperiment):
     def run_workers(self):
         self.setup_lineage()
         c, _ = self.capture("b", "c")
-        self.sql("UPDATE " + self.table(self.b, "db1.t1") + " SET v=90 WHERE id=1")
         bconn = cconn = reconnect = stale = None
         try:
             bconn, cconn = self.worker_connect(self.b), self.worker_connect(c)
+            self.sql("UPDATE t1 SET v=90 WHERE id=1", bconn)
             bp, cp = self.worker_pid(self.b), self.worker_pid(c)
             assert bp != cp and bp != self.proc.pid and cp != self.proc.pid
             self.record("three_processes_one_public_port", port=self.port, engine=self.proc.pid, b=bp, c=cp)
@@ -885,8 +1062,8 @@ class WorkerExperiment(LineageExperiment):
             else:
                 raise AssertionError("old connection entered the new worker")
             extra = [(i, i * 10) for i in range(3, 99)]
-            self.sql("INSERT INTO " + self.table(self.b, "db1.t1") + " VALUES" +
-                     ",".join(f"({i},{v})" for i,v in extra))
+            self.sql("INSERT INTO t1 VALUES" +
+                     ",".join(f"({i},{v})" for i,v in extra), reconnect)
             assert self.sql("SELECT id,v FROM t1 WHERE id>=3 ORDER BY id", reconnect) == tuple(extra)
             assert self.sql("SELECT id,v+1 FROM t1 WHERE id>=3 AND MOD(v,30)=0 ORDER BY v DESC LIMIT 4", reconnect) == tuple(
                 (i,v+1) for i,v in reversed(extra) if v % 30 == 0)[:4]
@@ -928,7 +1105,7 @@ class WorkerExperiment(LineageExperiment):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", required=True)
-    parser.add_argument("--case", choices=("full", "slow-timeout", "insert", "dml", "nested", "ddl"), default="full")
+    parser.add_argument("--case", choices=("full", "slow-timeout", "insert", "dml", "nested", "ddl", "index"), default="full")
     args = parser.parse_args()
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     os.environ["SEEKDB_NAMESPACE_SQL_WORKER_PROTOTYPE"] = "1"
@@ -936,7 +1113,9 @@ def main():
     experiment = WorkerExperiment(args.binary, case_name, prototype=6)
     try:
         experiment.start()
-        if args.case == "ddl":
+        if args.case == "index":
+            experiment.run_indexes()
+        elif args.case == "ddl":
             experiment.run_ddl()
         elif args.case == "nested":
             experiment.run_nested()

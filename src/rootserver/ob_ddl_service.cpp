@@ -22,6 +22,7 @@
 
 #include "ob_ddl_service.h"
 #include "rootserver/ob_runtime_ddl_service.h"
+#include "rootserver/ob_rootserver_local_runtime.h"
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "share/ob_ddl_common.h"
 #include "share/rc/ob_server_runtime.h"
@@ -37,9 +38,11 @@
 #include "share/ob_global_stat_proxy.h"
 #include "rootserver/fork_table/ob_fork_table_util.h"
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_modify_column_name.h"
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
+#include <cstdlib>
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // ObSysDDLSchedulerUtil
 #include "rootserver/ddl_task/ob_ddl_task_util.h"
 #include "rootserver/ob_index_builder.h"
@@ -14672,7 +14675,11 @@ int ObDDLService::build_single_table_rw_defensive_(const ObArray<ObTabletID> &ta
   } else {
     const int64_t abs_timeout_us = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_ts()
                                                                      : ObTimeUtility::current_time() + GCONF.rpc_timeout;
-    if (OB_FAIL(ObTabletBindingMdsHelper::modify_tablet_binding_for_rw_defensive(tablet_ids, schema_version, abs_timeout_us, trans))) {
+    ObIRootserverLocalRuntime *runtime = rootserver_local_runtime();
+    if (OB_ISNULL(runtime)) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(runtime->modify_tablet_binding_for_rw_defensive(
+                   trans, tablet_ids, schema_version, abs_timeout_us))) {
       LOG_WARN("failed to modify tablet binding", K(ret), K(abs_timeout_us));
     }
   }
@@ -17361,7 +17368,16 @@ int ObDDLService::unbind_hidden_tablets(
   } else {
     const int64_t abs_timeout_us = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_ts()
                                                                      : ObTimeUtility::current_time() + GCONF.rpc_timeout;
-    if (OB_FAIL(ObTabletBindingMdsHelper::modify_tablet_binding_for_unbind(orig_tablet_ids, hidden_tablet_ids, schema_version, abs_timeout_us, trans))) {
+    rootserver::ObIRootserverLocalRuntime *runtime = rootserver_local_runtime();
+    if (OB_ISNULL(runtime)) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("rootserver local runtime is not initialized", K(ret));
+    } else if (OB_FAIL(runtime->modify_tablet_binding_for_unbind(
+        trans,
+        orig_tablet_ids,
+        hidden_tablet_ids,
+        schema_version,
+        abs_timeout_us))) {
       LOG_WARN("failed to modify tablet binding", K(ret), K(abs_timeout_us));
     }
   }
@@ -25150,6 +25166,7 @@ int ObDDLSQLTransaction::start(ObISQLClient *proxy,
     LOG_WARN("schema service is null", KR(ret),
              KP(schema_service_), KP(schema_service_->get_schema_service()));
   } else {
+    namespace_base_schema_version_ = runtime_refreshed_schema_version;
     
     auto *tsi_oper = GET_TSI(share::schema::TSILastOper);
     if (OB_ISNULL(tsi_oper)) {
@@ -25185,6 +25202,11 @@ int ObDDLSQLTransaction::start(ObISQLClient *proxy,
                  K(runtime_refreshed_schema_version), K(version_in_inner_table));
       }
     }
+    if (OB_SUCC(ret)
+        && observer::namespace_worker_prototype::worker_process
+        && OB_FAIL(storage::NamespaceForkKernelPrototype::begin_schema_changes(*this))) {
+      LOG_WARN("fail to begin namespace schema changes", KR(ret));
+    }
   }
   return ret;
 }
@@ -25217,6 +25239,7 @@ int ObDDLSQLTransaction::end(const bool commit)
   int ret = OB_SUCCESS;
 
   int tmp_ret = OB_SUCCESS;
+  int64_t committed_schema_version = OB_INVALID_VERSION;
   auto *tsi_oper = GET_TSI(share::schema::TSILastOper);
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(tsi_oper)) {
@@ -25280,15 +25303,57 @@ int ObDDLSQLTransaction::end(const bool commit)
       if (OB_FAIL(proxy.set_normal_schema_version(final_schema_version))) {
         LOG_WARN("failed to set normal schema watermark",
                  KR(ret), K(final_schema_version));
+      } else {
+        committed_schema_version = final_schema_version;
       }
     }
+  }
+
+  // Namespace directory mutations are part of the DDL transaction, but they
+  // must run after all native schema-table writes.  Publishing them earlier
+  // locks the namespace root and can deadlock a later first-write COW of an
+  // inherited __all_* tablet against this same transaction.
+  if (observer::namespace_worker_prototype::worker_process) {
+    const int flush_ret = storage::NamespaceForkKernelPrototype::flush_schema_changes(
+        *this, commit && OB_SUCC(ret)
+            && observer::namespace_worker_prototype::worker_namespace <= 1);
+    if (OB_SUCC(ret)) { ret = flush_ret; }
   }
 
   if (OB_SUCCESS != (tmp_ret = common::ObMySQLTransaction::end(commit && OB_SUCC(ret)))) {
     LOG_WARN("failed to end transaction", K(ret), K(tmp_ret), K(commit));
   }
-
   ret = OB_SUCC(ret) ? tmp_ret : ret;
+  const bool namespace_transaction_committed = commit && OB_SUCC(ret);
+  const int finish_schema_ret = storage::NamespaceForkKernelPrototype::finish_schema_changes(
+      *this, namespace_transaction_committed && committed_schema_version > 0
+          ? committed_schema_version : 0);
+  if (OB_SUCC(ret)) { ret = finish_schema_ret; }
+  if (namespace_transaction_committed
+      && OB_SUCC(ret)
+      && committed_schema_version > 0
+      && observer::namespace_worker_prototype::worker_namespace > 1) {
+    if (const char *delay_text = std::getenv(
+            "SEEKDB_NAMESPACE_DDL_PUBLISH_DELAY_US")) {
+      char *end = nullptr;
+      const int64_t delay_us = std::strtoll(delay_text, &end, 10);
+      if (*delay_text && end && !*end && delay_us > 0 && delay_us <= 2000000) {
+        ob_usleep(delay_us);
+      }
+    }
+    const int64_t base_schema_version = namespace_base_schema_version_ > 0
+        ? namespace_base_schema_version_ : start_operation_schema_version_;
+    int64_t published_schema_version = OB_INVALID_VERSION;
+    if (base_schema_version <= 0) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(observer::namespace_worker_prototype::sync_namespace_schema_delta(
+            observer::namespace_worker_prototype::worker_namespace,
+            base_schema_version,
+            published_schema_version))) {
+      LOG_WARN("failed to publish committed namespace schema transaction",
+          KR(ret), K(base_schema_version), K(committed_schema_version));
+    }
+  }
   // Clear runtime_ for success or failure
   
   return ret;

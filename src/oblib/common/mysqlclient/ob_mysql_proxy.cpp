@@ -40,7 +40,12 @@ int OB_WEAK_SYMBOL create_inner_sql_connection_for_proxy(
 } // end namespace oceanbase
 
 OB_SERIALIZE_MEMBER(ObSessionDDLInfo, ddl_info_.ddl_info_, // FARM COMPAT WHITELIST
-                                      session_id_);
+                                      session_id_,
+                                      direct_insert_data_format_version_,
+                                      direct_insert_snapshot_version_,
+                                      direct_insert_schema_version_,
+                                      direct_insert_target_object_id_,
+                                      direct_insert_is_offline_index_rebuild_);
 
 ObCommonSqlProxy::ObCommonSqlProxy()
     : inited_(false),
@@ -237,6 +242,11 @@ int ObCommonSqlProxy::acquire_connection(
     LOG_WARN("sql proxy stopped", K(ret));
   } else {
     ret = create_inner_sql_connection_for_proxy(is_ddl_, group_id, conn);
+    if (OB_FAIL(ret)) {
+      fprintf(stderr,
+              "PROTOTYPE_V22_SQL_PROXY_ACQUIRE ret=%d ddl=%d group=%d\n",
+              ret, is_ddl_, group_id);
+    }
   }
   return ret;
 }

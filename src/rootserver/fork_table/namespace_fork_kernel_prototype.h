@@ -38,9 +38,10 @@ public:
   static bool lifetime_mode();
   static bool lineage_mode();
   static bool metadata_gc_mode();
+  static int ensure_control_schema();
   static int begin_namespace_drop(const common::ObString &name, uint64_t &id, bool &done);
   static int lock_namespace_drop(common::ObISQLClient &trans, uint64_t id,
-                                 common::ObIArray<const share::schema::ObTableSchema *> &bound);
+                                 common::ObIArray<common::ObTabletID> &bound);
   static int finish_namespace_drop(common::ObISQLClient &trans, uint64_t id);
   static int check_table_access(uint64_t table_id, const common::ObTabletID &tablet_id, bool &held);
   static int check_baseline_access(const common::ObTabletID &tablet_id, bool &held);
@@ -48,6 +49,9 @@ public:
   static int drain_access();
   static int protect_snapshot_tablets(common::ObIArray<common::ObTabletID> &candidates, bool &need_retry);
   static bool is_namespace_address(const common::ObString &name);
+  static int parse_namespace_address(const common::ObString &address,
+                                     uint64_t &namespace_id,
+                                     common::ObString &database_name);
   static int control_namespace(const common::ObString &source, const common::ObString &target,
                                 uint64_t &namespace_id);
   static int observe_database(common::ObISQLClient &trans, const share::schema::ObDatabaseSchema &schema);
@@ -60,13 +64,49 @@ public:
   static int database_by_id(uint64_t id, const share::schema::ObDatabaseSchema *&schema);
   static int database_by_id(uint64_t id, const share::schema::ObSimpleDatabaseSchema *&schema);
   static bool is_encoded_id(uint64_t id);
+  static uint64_t current_namespace_id();
+  static int local_object_id(uint64_t namespace_id, uint64_t object_id, uint64_t &local_id);
+  static int storage_object_id(uint64_t namespace_id, uint64_t object_id, uint64_t &storage_id);
   static uint64_t encode_object(uint64_t database_id, uint64_t local_id);
+  static int make_namespace_schema(uint64_t namespace_id,
+                                   const share::schema::ObTableSchema &storage_schema,
+                                   share::schema::ObTableSchema &namespace_schema);
+  static int make_storage_schema(uint64_t namespace_id,
+                                 const share::schema::ObTableSchema &logical_schema,
+                                 share::schema::ObTableSchema &storage_schema);
   static int namespace_schema_version(uint64_t namespace_id, int64_t &schema_version);
+  // Persistent lifecycle fence between namespace-local DDL and namespace
+  // fork. The shared storage process invokes these operations; SQL Workers
+  // only use the typed protocol declared in namespace_worker_protocol_prototype.h.
+  static int begin_schema_change(uint64_t namespace_id);
+  static int finish_schema_change(uint64_t namespace_id, int64_t schema_version);
+  static int begin_schema_recovery(uint64_t namespace_id, bool &needed);
+  static int finish_schema_recovery(uint64_t namespace_id, int64_t schema_version);
+  static int begin_schema_changes(common::ObISQLClient &trans);
+  static int finish_schema_changes(common::ObISQLClient &trans,
+                                   int64_t committed_schema_version);
   static int observe_schema(common::ObISQLClient &trans, const share::schema::ObTableSchema &schema);
+  static int observe_schemas(common::ObISQLClient &trans,
+                             const common::ObIArray<share::schema::ObTableSchema> &schemas);
+  static int flush_schema_changes(common::ObISQLClient &trans, bool commit);
   static int forget_schema(common::ObISQLClient &trans, const share::schema::ObTableSchema &schema,
                            int64_t schema_version, bool *private_tablet = nullptr);
-  static int is_schema_owned(uint64_t table_id, bool &owned);
+  static int publish_schema_delta(
+      uint64_t namespace_id,
+      int64_t schema_version,
+      const common::ObIArray<const share::schema::ObTableSchema *> &current_schemas,
+      const common::ObIArray<const share::schema::ObTableSchema *> &previous_schemas);
+  static int is_tablet_owned(uint64_t namespace_id,
+                             const common::ObTabletID &tablet_id,
+                             bool &owned);
+  static int owned_storage_tablets(
+      uint64_t namespace_id,
+      const common::ObIArray<common::ObTabletID> &logical_tablets,
+      common::ObIArray<common::ObTabletID> &owned_tablets);
   static void release_schema(uint64_t table_id);
+  static int release_namespace_schemas(uint64_t namespace_id,
+                                       int64_t &table_count,
+                                       int64_t &database_count);
   static int capture(common::ObISQLClient &trans, uint64_t source, uint64_t target,
                      int64_t snapshot, int64_t schema_version);
   static int schema_by_name(uint64_t database, const common::ObString &name,
@@ -78,7 +118,26 @@ public:
   static int check_ddl(const share::schema::ObSimpleTableSchemaV2 &schema,
                        const common::ObISQLClient *trans = nullptr);
   static int ensure_tablet(const common::ObTabletID &tablet_id);
+  static int ensure_tablet(
+      const common::ObTabletID &tablet_id,
+      const share::schema::ObTableSchema &requested_schema,
+      const common::ObIArray<const share::schema::ObTableSchema *> &binding_schemas);
   static int schedule_baseline(const ObTablet &tablet);
+private:
+  static int ensure_tablet_impl(
+      const common::ObTabletID &tablet_id,
+      const share::schema::ObTableSchema *requested_schema,
+      const common::ObIArray<const share::schema::ObTableSchema *> *binding_schemas);
+  static int observe_schema_in_namespace(common::ObISQLClient &trans,
+                                         const share::schema::ObTableSchema &schema,
+                                         uint64_t namespace_id);
+  static int forget_schema_in_namespace(common::ObISQLClient &trans,
+                                        const share::schema::ObTableSchema &schema,
+                                        int64_t schema_version,
+                                        uint64_t namespace_id,
+                                        bool *private_tablet = nullptr,
+                                        common::ObIArray<common::ObTabletID> *private_tablets = nullptr,
+                                        const share::schema::ObTableSchema *replacement_schema = nullptr);
 };
 }
 }

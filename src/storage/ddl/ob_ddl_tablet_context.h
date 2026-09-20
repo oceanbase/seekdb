@@ -144,6 +144,10 @@ public:
   // const param
   ObTabletID tablet_id_;
   ObWriteTabletParam tablet_param_;
+  // SQL column identities are supplied with the direct-insert schema facts.
+  // ObStorageSchema may normalize shadow-column IDs and cannot reconstruct
+  // the catalog IDs required by DDL checksum records.
+  const common::ObIArray<share::schema::ObColDesc> *column_descs_;
   ObTabletID lob_meta_tablet_id_;
   ObWriteTabletParam lob_meta_tablet_param_;
   int64_t slice_count_;

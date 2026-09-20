@@ -50,6 +50,7 @@
 #include "share/ob_server_struct.h"    // GCTX
 #include "storage/tx_storage/ob_ls_service.h"  // ObLSService
 #include "storage/ls/ob_ls.h"
+#include "storage/tablet/ob_tablet_binding_helper.h"
 #include "storage/tx/ob_trans_service.h"
 #include "data_plane/scheduler/ob_sys_task_stat.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
@@ -394,7 +395,9 @@ int ObService::calc_column_checksum_request(const obcall::ObCalcColumnChecksumRe
                                            arg.task_id_,
                                            arg.execution_id_,
                                            arg.snapshot_version_,
-                                           arg.user_parallelism_))) {
+                                           arg.user_parallelism_,
+                                           &arg.source_schema_,
+                                           &arg.target_schema_))) {
             STORAGE_LOG(WARN, "fail to init ObUniqueCheckingDag", KR(tmp_ret));
           } else if (OB_TMP_FAIL(dag->alloc_global_index_task_callback(calc_item.tablet_id_,
                                                                        arg.target_table_id_,
@@ -658,7 +661,8 @@ int ObService::check_schema_version_elapsed(
         } else if (OB_TMP_FAIL(tablet_handle.get_obj()->check_schema_version_elapsed(arg.schema_version_,
                                                                                      arg.need_wait_trans_end_,
                                                                                      single_result.snapshot_,
-                                                                                     single_result.pending_tx_id_))) {
+                                                                                     single_result.pending_tx_id_,
+                                                                                     arg.schema_version_refreshed_by_caller_))) {
           LOG_WARN("check schema version elapsed failed", K(tmp_ret), K(arg), K(tablet_id));
         }
         if (OB_SUCC(ret)) {
@@ -914,6 +918,43 @@ int ObService::check_server_empty(bool &is_empty)
     }
   }
   return ret;
+}
+
+int ObService::modify_tablet_binding_for_write_defensive(
+    common::ObMySQLTransaction &trans,
+    const common::ObIArray<common::ObTabletID> &tablet_ids,
+    const int64_t schema_version,
+    const int64_t abs_timeout_us)
+{
+  return storage::ObTabletBindingMdsHelper::
+      modify_tablet_binding_for_write_defensive(
+          tablet_ids, schema_version, abs_timeout_us, trans);
+}
+
+int ObService::modify_tablet_binding_for_rw_defensive(
+    common::ObMySQLTransaction &trans,
+    const common::ObIArray<common::ObTabletID> &tablet_ids,
+    const int64_t schema_version,
+    const int64_t abs_timeout_us)
+{
+  return storage::ObTabletBindingMdsHelper::
+      modify_tablet_binding_for_rw_defensive(
+          tablet_ids, schema_version, abs_timeout_us, trans);
+}
+
+int ObService::modify_tablet_binding_for_unbind(
+    common::ObMySQLTransaction &trans,
+    const common::ObIArray<common::ObTabletID> &orig_tablet_ids,
+    const common::ObIArray<common::ObTabletID> &hidden_tablet_ids,
+    const int64_t schema_version,
+    const int64_t abs_timeout_us)
+{
+  return storage::ObTabletBindingMdsHelper::modify_tablet_binding_for_unbind(
+      orig_tablet_ids,
+      hidden_tablet_ids,
+      schema_version,
+      abs_timeout_us,
+      trans);
 }
 
 int ObService::set_ds_action(const obcall::ObDebugSyncActionArg &arg)

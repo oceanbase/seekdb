@@ -227,6 +227,11 @@ int ObPxMsgProc::on_sqc_finish_msg(ObExecContext &ctx,
                                    const ObPxFinishSqcResultMsg &pkt)
 {
   int ret = OB_SUCCESS;
+  if (OB_SUCCESS != pkt.rc_) {
+    fprintf(stderr,
+            "PROTOTYPE_V22_PX_SQC_FINISH ret=%d dfo=%ld sqc=%ld user_ret=%d user_msg=%s\n",
+            pkt.rc_, pkt.dfo_id_, pkt.sqc_id_, pkt.err_msg_.rcode_, pkt.err_msg_.msg_);
+  }
   ObDfo *edge = NULL;
   ObPxSqcMeta *sqc = NULL;
   if (OB_FAIL(coord_info_.dfo_mgr_.find_dfo_edge(pkt.dfo_id_, edge))) {

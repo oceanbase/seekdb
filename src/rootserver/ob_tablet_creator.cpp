@@ -21,6 +21,7 @@
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "storage/tx/ob_tx_log.h"
 #include "storage/tablet/ob_tablet_ddl_complete_mds_helper.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 
 namespace oceanbase
 {
@@ -352,7 +353,11 @@ int ObTabletCreator::execute()
         int64_t end_time = ObTimeUtility::current_time();
         LOG_INFO("generate create arg", KR(ret), K(buf_len), K(batch_arg->batch_arg_.tablets_.count()),
                                         K(batch_arg->batch_arg_), "cost_ts", end_time - start_time);
-        if (OB_SUCC(ret) && batch_arg->batch_arg_.set_binding_info_outside_create()) {
+        // Namespace workers do not own an LS.  Their storage gateway performs
+        // the binding immediately after registering CREATE_TABLET_NEW_MDS in
+        // the shared transaction, using the already-routed physical tablets.
+        if (OB_SUCC(ret) && batch_arg->batch_arg_.set_binding_info_outside_create()
+            && !observer::namespace_worker_prototype::worker_process) {
           const int64_t start_time = ObTimeUtility::current_time();
           if (OB_FAIL(ObTabletBindingMdsHelper::modify_tablet_binding_for_create(batch_arg->batch_arg_, ctx.get_abs_timeout(), trans_))) {
           }

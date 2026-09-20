@@ -35,12 +35,17 @@ class ObIDDLMergeHelper;
 struct ObDDLIndependentDagInitParam : public share::ObIDagInitParam
 {
 public:
-  ObDDLIndependentDagInitParam() : direct_load_type_(ObDirectLoadType::DIRECT_LOAD_INVALID), ddl_thread_count_(0) {}
+  ObDDLIndependentDagInitParam()
+      : direct_load_type_(ObDirectLoadType::DIRECT_LOAD_INVALID),
+        ddl_thread_count_(0), table_schema_(nullptr),
+        lob_meta_table_schema_(nullptr) {}
   ObDDLIndependentDagInitParam(const ObDDLIndependentDagInitParam &other)
       : direct_load_type_(other.direct_load_type_),
         ddl_thread_count_(other.ddl_thread_count_),
         ddl_task_param_(other.ddl_task_param_),
-        tablet_ids_(other.tablet_ids_) {}
+        tablet_ids_(other.tablet_ids_),
+        table_schema_(other.table_schema_),
+        lob_meta_table_schema_(other.lob_meta_table_schema_) {}
   virtual bool is_valid() const override
   {
     return is_valid_direct_load(direct_load_type_) &&
@@ -55,6 +60,8 @@ public:
   int64_t ddl_thread_count_;
   ObDDLTaskParam ddl_task_param_;
   ObArray<ObTabletID> tablet_ids_;
+  const share::schema::ObTableSchema *table_schema_;
+  const share::schema::ObTableSchema *lob_meta_table_schema_;
 };
 
 class ObDDLIndependentDag : public share::ObIndependentDag
@@ -93,7 +100,7 @@ protected:
       const ObIArray<ObTabletID> &tablet_ids,
       ObIArray<share::ObITask *> &vector_index_task_array);
 private:
-  int init_ddl_table_schema();
+  int init_ddl_table_schema(const ObDDLIndependentDagInitParam &init_param);
   int init_tablet_context_map();
   int push_chunk(ObDDLSlice *ddl_slice, ObChunk *&chunk_data);
   int add_vector_index_append_pipeline(const ObIndexType &index_type, ObDDLTabletContext *tablet_context, ObDDLSlice *ddl_slice);

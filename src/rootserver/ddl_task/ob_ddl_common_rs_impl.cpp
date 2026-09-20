@@ -32,6 +32,7 @@
 #include "rootserver/ddl_task/ob_index_build_task.h"
 #include "rootserver/ddl_task/ob_ddl_task_util.h"
 #include "rootserver/ob_local_management_service.h"
+#include "data_plane/api/data_plane/transaction/ob_i_transaction_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 
@@ -39,7 +40,6 @@
 #include "sql/engine/px/ob_px_dtl_msg.h"
 #include "query/vector/ob_vector_index_util.h"
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
-#include "storage/tx/ob_ts_mgr.h"
 #include "storage/tablet/ob_tablet_binding_helper.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
 #include "rootserver/ob_index_builder.h"
@@ -762,7 +762,12 @@ int ObDDLTaskUtil::calc_snapshot_with_gts(
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else {
     {
-      if (OB_FAIL(OB_TS_MGR.get_gts_sync(timeout_us, curr_ts))) {
+      data_plane::ObITransactionService *tx_service =
+          data_plane::query_transaction_service();
+      if (OB_ISNULL(tx_service)) {
+        ret = OB_NOT_INIT;
+        LOG_WARN("transaction service is not initialized", KR(ret));
+      } else if (OB_FAIL(tx_service->get_gts_sync(timeout_us, curr_ts))) {
       }
     }
     if (OB_SUCC(ret)) {

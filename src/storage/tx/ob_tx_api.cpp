@@ -759,6 +759,39 @@ int ObTransService::register_tx_snapshot_verify(ObTxReadSnapshot &snapshot)
   return ret;
 }
 
+int ObTransService::refresh_tx_snapshot_verify(ObTxReadSnapshot &snapshot)
+{
+  UNUSED(snapshot);
+  // register_tx_snapshot_verify() stores the native caller's address, and the
+  // rollback/commit paths update that object directly.
+  return OB_SUCCESS;
+}
+
+int ObTransService::unregister_tx_snapshot_verify(ObTxReadSnapshot &snapshot)
+{
+  int ret = OB_SUCCESS;
+  const ObTransID &tx_id = snapshot.core_.tx_id_;
+  if (tx_id.is_valid()) {
+    ObTxDesc *tx = NULL;
+    if (OB_SUCC(tx_desc_mgr_.get(tx_id, tx))) {
+      ObSpinLockGuard guard(tx->lock_);
+      for (int64_t i = 0; OB_SUCC(ret) && i < tx->savepoints_.count(); ++i) {
+        ObTxSavePoint &savepoint = tx->savepoints_.at(i);
+        if (savepoint.is_snapshot() && savepoint.snapshot_ == &snapshot) {
+          ret = tx->savepoints_.remove(i);
+          break;
+        }
+      }
+    } else if (ret == OB_ENTRY_NOT_EXIST) {
+      ret = OB_SUCCESS;
+    }
+    if (OB_NOT_NULL(tx)) {
+      tx_desc_mgr_.revert(*tx);
+    }
+  }
+  return ret;
+}
+
 
 int ObTransService::create_branch_savepoint(ObTxDesc &tx,
                                             const int16_t branch,

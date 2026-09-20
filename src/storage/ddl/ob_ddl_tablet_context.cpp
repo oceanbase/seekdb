@@ -152,7 +152,7 @@ int ObDDLSlice::pop_chunk(ObChunk *&chunk_data)
 
 ObDDLTabletContext::ObDDLTabletContext()
   : is_inited_(false), arena_(ObMemAttr("ddl_tblt_ctx")),
-    slice_count_(0), table_slice_offset_(0), scan_task_(nullptr),
+    column_descs_(nullptr), slice_count_(0), table_slice_offset_(0), scan_task_(nullptr),
     lob_read_service_(nullptr),
     last_lob_id_(0), last_autoinc_val_(0), bucket_count_(0),
     vector_index_ctx_(nullptr)
@@ -201,6 +201,7 @@ int ObDDLTabletContext::init(
              K(direct_load_type));
   } else {
     tablet_id_ = tablet_id;
+    column_descs_ = &ddl_table_schema.column_descs_;
     lob_read_service_ = &lob_read_service;
     bucket_count_ = ddl_thread_count * 2;
     if (OB_FAIL(slice_map_.create(bucket_count_, ObMemAttr("tblt_slice_map")))) {
@@ -259,6 +260,7 @@ void ObDDLTabletContext::reset()
   is_inited_ = false;
   tablet_id_.reset();
   tablet_param_.reset();
+  column_descs_ = nullptr;
   lob_meta_tablet_id_.reset();
   lob_meta_tablet_param_.reset();
   slice_count_ = 0;

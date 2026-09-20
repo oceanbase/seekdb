@@ -99,8 +99,14 @@ int ObStatCollectorOp::inner_rescan()
     by_pass_ = true;
     non_partition_row_count_ = 0;
     OZ(set_no_need_sample());
+    fprintf(stderr,
+            "PROTOTYPE_V22_STAT_RESCAN stage=disable_sample ret=%d bypass=%d\n",
+            ret, by_pass_);
   }
   OZ(ObOperator::inner_rescan());
+  fprintf(stderr,
+          "PROTOTYPE_V22_STAT_RESCAN stage=done ret=%d bypass=%d\n",
+          ret, by_pass_);
   return ret;
 }
 
@@ -116,6 +122,9 @@ int ObStatCollectorOp::set_no_need_sample()
       static_cast<ObTableScanOp *>(tsc)->set_report_checksum(true);
     }
     OZ(static_cast<ObTableScanOp *>(tsc)->reset_sample_scan());
+    fprintf(stderr,
+            "PROTOTYPE_V22_STAT_RESCAN stage=reset_sample ret=%d tsc=%p\n",
+            ret, tsc);
   }
   return ret;
 }

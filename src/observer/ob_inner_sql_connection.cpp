@@ -33,6 +33,7 @@
 #include "ob_inner_sql_read_context.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 #include "observer/namespace_worker_protocol_prototype.h"
+#include <algorithm>
 
 namespace oceanbase
 {
@@ -72,8 +73,11 @@ public:
       dup_sql->ptr()[sql_.length()] = '\0';
       res.get_session().store_query_string(*dup_sql);
       if (namespace_worker_prototype::worker_namespace) {
-        fprintf(stderr, "PROTOTYPE_V17_INNER_SQL session=%u nested=%lld\n",
-            res.get_session().get_server_sid(), (long long)res.get_session().get_nested_count());
+        const int32_t preview_length = std::min<int32_t>(sql_.length(), 256);
+        fprintf(stderr, "PROTOTYPE_V17_INNER_SQL session=%u nested=%lld length=%d sql=%.*s%s\n",
+            res.get_session().get_server_sid(), (long long)res.get_session().get_nested_count(),
+            sql_.length(), preview_length, sql_.ptr(),
+            preview_length < sql_.length() ? "..." : "");
       }
       ret = engine.stmt_query(*dup_sql, ctx, res);
     }
@@ -444,7 +448,9 @@ int ObInnerSQLConnection::init_session(sql::ObSQLSessionInfo* extern_session, co
   int ret = OB_SUCCESS;
   if (NULL == extern_session) {
     const bool is_extern_session = false;
-    const bool is_create_session_mgr = OB_NOT_NULL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>());
+    const bool is_create_session_mgr =
+        !namespace_worker_prototype::worker_process
+        && OB_NOT_NULL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>());
     if (is_create_session_mgr && is_inner_session_mgr_enable()) {
       if (OB_FAIL(create_session_by_mgr())) {
       }
@@ -524,6 +530,14 @@ int ObInnerSQLConnection::process_retry(ObInnerSQLResult &res,
                                         last_ret, client_ret,
                                         force_local_retry, is_inner_sql);
   need_retry = (ObQueryRetryType::RETRY_TYPE_LOCAL == retry_ctrl_.get_retry_type());
+  if (namespace_worker_prototype::worker_shared_bootstrap_request
+      && (OB_TABLET_NOT_EXIST == last_ret || OB_SNAPSHOT_DISCARDED == last_ret)) {
+    // An absent or not-yet-committed bootstrap system tablet cannot become
+    // readable until the shared bootstrap thread gets an executor of its own.
+    // Return to the periodic caller instead of holding the SQL worker until
+    // timeout.
+    need_retry = false;
+  }
   return client_ret;
 }
 
@@ -716,6 +730,9 @@ int ObInnerSQLConnection::do_query(sqlclient::ObIExecutor &executor, ObInnerSQLR
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("ob_sql_ is NULL", K(ret));
     } else if (OB_FAIL(executor.execute(*ob_sql_, res.sql_ctx(), res.result_set()))) {
+      if (namespace_worker_prototype::worker_process) {
+        fprintf(stderr, "PROTOTYPE_V22_INNER_QUERY stage=compile ret=%d\n", ret);
+      }
     } else {
       ObSQLSessionInfo &session = res.result_set().get_session();
       if (OB_ISNULL(res.sql_ctx().schema_guard_)) {
@@ -731,6 +748,9 @@ int ObInnerSQLConnection::do_query(sqlclient::ObIExecutor &executor, ObInnerSQLR
         // Opening the result set would attempt to execute/prefetch, which
         // fails with OB_NOT_INIT because there is no physical plan.
       } else if (OB_FAIL(res.open())) {
+        if (namespace_worker_prototype::worker_process) {
+          fprintf(stderr, "PROTOTYPE_V22_INNER_QUERY stage=open ret=%d\n", ret);
+        }
       }
     }
   }
@@ -958,7 +978,7 @@ int ObInnerSQLConnection::start_transaction(
 int ObInnerSQLConnection::start_transaction_inner(
     bool with_snap_shot /* = false */)
 {
-  if (namespace_worker_prototype::bootstrap_enabled() && !namespace_worker_prototype::worker_process) {
+  if (namespace_worker_prototype::enabled() && !namespace_worker_prototype::worker_process) {
     namespace_worker_prototype::Frame payload; payload.number('B'); payload.number(with_snap_shot);
     int64_t affected = 0;
     int ret = namespace_worker_prototype::inner_call(worker_binding_, *this, std::move(payload), affected);
@@ -1023,21 +1043,39 @@ int ObInnerSQLConnection::register_multi_data_source(
       } else if (OB_ISNULL(tx_desc = get_session().get_tx_desc())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Invalid tx_desc", K(ret), K(type));
+      } else if (namespace_worker_prototype::worker_process
+                 && OB_ISNULL(get_session().namespace_storage_binding())) {
+        ret = OB_NOT_INIT;
+        LOG_WARN("inner SQL transaction has no namespace storage binding",
+                 KR(ret), K(type), K(get_session().get_server_sid()));
       } else {
-        SERVER_MODULE_SCOPE
-        {
-          if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>()->register_mds_into_tx(*tx_desc,
-                                                                         type,
-                                                                         buf,
-                                                                         buf_len,
-                                                                         register_flag))) {
-          } else if (OB_FAIL(res.close())) {
-          }
+        // register_mds_into_tx is invoked after SQL transaction control has
+        // returned to its caller.  A shared-originated inner SQL may therefore
+        // be nested inside another IPC request at this point.  Restore this
+        // connection's persistent route so MDS joins the same native
+        // transaction as its catalog writes and table locks.
+        namespace_worker_prototype::StorageSessionScope storage_scope(
+            &get_session(), false);
+        data_plane::ObITransactionService *tx_service =
+            data_plane::query_transaction_service();
+        if (OB_FAIL(storage_scope.error())) {
+          LOG_WARN("failed to restore inner SQL namespace storage binding",
+                   KR(ret), K(type), K(get_session().get_server_sid()));
+        } else if (OB_ISNULL(tx_service)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("transaction service is null", KR(ret), K(type));
+        } else if (OB_FAIL(tx_service->register_mds_into_tx(
+                       *tx_desc,
+                       type,
+                       buf,
+                       buf_len,
+                       register_flag,
+                       transaction::ObTxSEQ()))) {
+        } else if (OB_FAIL(res.close())) {
         }
       }
     }
   }
-
 
   LOG_INFO("register mds in inner_sql_connection",
            KR(ret),
@@ -1049,7 +1087,7 @@ int ObInnerSQLConnection::register_multi_data_source(
 
 int ObInnerSQLConnection::rollback()
 {
-  if (namespace_worker_prototype::bootstrap_enabled() && !namespace_worker_prototype::worker_process) {
+  if (namespace_worker_prototype::enabled() && !namespace_worker_prototype::worker_process) {
     namespace_worker_prototype::Frame payload; payload.number('X'); int64_t affected = 0;
     int ret = namespace_worker_prototype::inner_call(worker_binding_, *this, std::move(payload), affected);
     set_is_in_trans(false); return ret;
@@ -1079,7 +1117,7 @@ int ObInnerSQLConnection::rollback()
 
 int ObInnerSQLConnection::commit()
 {
-  if (namespace_worker_prototype::bootstrap_enabled() && !namespace_worker_prototype::worker_process) {
+  if (namespace_worker_prototype::enabled() && !namespace_worker_prototype::worker_process) {
     namespace_worker_prototype::Frame payload; payload.number('C'); int64_t affected = 0;
     int ret = namespace_worker_prototype::inner_call(worker_binding_, *this, std::move(payload), affected);
     set_is_in_trans(false); return ret;
@@ -1135,7 +1173,7 @@ int ObInnerSQLConnection::execute_proc(ObIAllocator &allocator,
 int ObInnerSQLConnection::execute_write_inner(const ObString &sql,
     int64_t &affected_rows, bool is_user_sql)
 {
-  if (namespace_worker_prototype::bootstrap_enabled() && !namespace_worker_prototype::worker_process) {
+  if (namespace_worker_prototype::enabled() && !namespace_worker_prototype::worker_process) {
     namespace_worker_prototype::Frame payload('?', namespace_worker_prototype::MAX_SQL_MESSAGE);
     payload.number('W'); payload.number(is_user_sql); payload.string(sql);
     return namespace_worker_prototype::inner_call(worker_binding_, *this, std::move(payload), affected_rows);
@@ -1159,8 +1197,16 @@ int ObInnerSQLConnection::execute_write_inner(const ObString &sql,
     } else {
       res.result_set().set_user_sql(is_user_sql);
       if (OB_FAIL(query(executor, res))) {
+        fprintf(stderr, "PROTOTYPE_NATIVE_INNER_WRITE_STAGE stage=query ret=%d session=%u\n",
+            ret, get_session().get_server_sid());
       } else if (FALSE_IT(affected_rows = res.result_set().get_affected_rows())) {
       } else if (OB_FAIL(res.close())) {
+        fprintf(stderr, "PROTOTYPE_NATIVE_INNER_WRITE_STAGE stage=close ret=%d session=%u\n",
+            ret, get_session().get_server_sid());
+      }
+      if (!ret) {
+        fprintf(stderr, "PROTOTYPE_NATIVE_INNER_WRITE_STAGE stage=done ret=%d session=%u affected=%lld\n",
+            ret, get_session().get_server_sid(), static_cast<long long>(affected_rows));
       }
       if (get_session().get_ddl_info().is_ddl()) {
         SERVER_EVENT_ADD(
@@ -1206,7 +1252,7 @@ int ObInnerSQLConnection::execute_read_inner(const ObString &sql,
                                              ObISQLClient::ReadResult &res,
                                              bool is_user_sql)
 {
-  if (namespace_worker_prototype::bootstrap_enabled() && !namespace_worker_prototype::worker_process) {
+  if (namespace_worker_prototype::enabled() && !namespace_worker_prototype::worker_process) {
     return namespace_worker_prototype::inner_read(worker_binding_, *this, sql, res, is_user_sql);
   }
   int ret = OB_SUCCESS;
@@ -1397,7 +1443,7 @@ int ObInnerSQLConnection::set_session_variable(const ObString &name, int64_t val
   } else if (0 == name.case_compare("ob_read_consistency")) {
     LOG_INFO("inner session use weak consitency", K(val), "inner_connection_p", this);
   }
-  if (!ret && namespace_worker_prototype::bootstrap_enabled() && !namespace_worker_prototype::worker_process) {
+  if (!ret && namespace_worker_prototype::enabled() && !namespace_worker_prototype::worker_process) {
     namespace_worker_prototype::Frame payload; payload.number('S'); payload.string(name);
     ObObj value; value.set_int(val); payload.append(value); int64_t affected = 0;
     ret = namespace_worker_prototype::inner_call(worker_binding_, *this, std::move(payload), affected);
@@ -1413,7 +1459,7 @@ int ObInnerSQLConnection::set_session_variable(const ObString &name, const ObStr
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(get_session().update_sys_variable(name, val))) {
   }
-  if (!ret && namespace_worker_prototype::bootstrap_enabled() && !namespace_worker_prototype::worker_process) {
+  if (!ret && namespace_worker_prototype::enabled() && !namespace_worker_prototype::worker_process) {
     namespace_worker_prototype::Frame payload; payload.number('S'); payload.string(name);
     ObObj value; value.set_varchar(val); payload.append(value); int64_t affected = 0;
     ret = namespace_worker_prototype::inner_call(worker_binding_, *this, std::move(payload), affected);
@@ -1488,6 +1534,16 @@ int ObInnerSQLConnection::create_default_session()
   } else if (FALSE_IT(inner_session_ = new(buf) ObSQLSessionInfo())) {
   } else if (FALSE_IT(free_session_ctx_.sessid_ = INNER_SQL_SESS_ID)) {
   } else if (OB_FAIL(inner_session_->init(INNER_SQL_SESS_ID, allocator))) {
+  } else if (namespace_worker_prototype::worker_process) {
+    auto *session_mgr = ::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>();
+    if (OB_ISNULL(session_mgr)) {
+      ret = OB_NOT_INIT;
+    } else {
+      // SQL-only workers intentionally omit the runtime-controller graph, so
+      // nested inner SQL uses this lightweight session. Native DML cleanup
+      // still needs the worker session manager for deadlock bookkeeping.
+      inner_session_->set_session_manager(session_mgr);
+    }
   }
   return ret;
 }

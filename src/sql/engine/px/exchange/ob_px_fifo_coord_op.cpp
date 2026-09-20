@@ -123,6 +123,9 @@ int ObPxFifoCoordOp::fetch_rows(const int64_t row_cnt)
   } else if (OB_UNLIKELY(!first_row_fetched_)) {
     // Drive initial DFO distribution
     if (OB_FAIL(msg_proc_.startup_msg_loop(ctx_))) {
+      fprintf(stderr,
+              "PROTOTYPE_V22_PX_FIFO stage=startup ret=%d first_error=%d\n",
+              ret, coord_info_.first_error_code_);
     }
     
     first_row_fetched_ = true; // control no longer actively calling startup_msg_loop, subsequent loops are message triggered
@@ -192,10 +195,17 @@ int ObPxFifoCoordOp::fetch_rows(const int64_t row_cnt)
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ctx_.fast_check_status())) {
+      fprintf(stderr,
+              "PROTOTYPE_V22_PX_FIFO stage=check_status ret=%d first_error=%d\n",
+              ret, coord_info_.first_error_code_);
     } else if (OB_FAIL(msg_loop_.process_any())) {
       if (OB_DTL_WAIT_EAGAIN == ret) {
         ret = OB_SUCCESS;
       } else if (OB_ITER_END != ret) {
+        fprintf(stderr,
+                "PROTOTYPE_V22_PX_FIFO stage=process_message ret=%d first_error=%d msg=%d\n",
+                ret, coord_info_.first_error_code_,
+                static_cast<int>(msg_loop_.get_last_msg_type()));
         LOG_WARN("fail process message", K(ret));
       }
     } else {
@@ -229,6 +239,9 @@ int ObPxFifoCoordOp::fetch_rows(const int64_t row_cnt)
     iter_end_ = true;
   } else if (OB_UNLIKELY(OB_SUCCESS != ret)) {
     int ret_terminate = terminate_running_dfos(coord_info_.dfo_mgr_);
+    fprintf(stderr,
+            "PROTOTYPE_V22_PX_FIFO stage=terminate ret=%d terminate=%d first_error=%d\n",
+            ret, ret_terminate, coord_info_.first_error_code_);
     LOG_WARN("QC get error code", K(ret), K(ret_terminate));
     if ((OB_ERR_SIGNALED_IN_PARALLEL_QUERY_SERVER == ret
         || OB_GOT_SIGNAL_ABORTING == ret)

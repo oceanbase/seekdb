@@ -145,6 +145,13 @@ private:
     bool is_enable_lock_priority_;
     ObTableLockPriority lock_priority_;
 
+    // The SQL/storage gateway may resolve a namespace-local schema before the
+    // request enters shared storage.  In that case native table locking still
+    // owns the lock transaction and ordering, but must not look the table up in
+    // the shared process' SchemaService again.
+    bool has_explicit_tablets_;
+    int64_t explicit_schema_version_;
+
     // use to kill the whole lock table stmt.
     transaction::ObTxSEQ stmt_savepoint_;
     bool is_for_replace_;
@@ -157,7 +164,8 @@ private:
                  K(lock_mode_), K(lock_owner_),
                  K(schema_version_), K(tx_is_killed_),
                  K(is_from_sql_), K(ret_code_before_end_stmt_or_tx_), K(stmt_savepoint_),
-                 K(is_enable_lock_priority_), K(lock_priority_), K_(is_for_replace));
+                 K(is_enable_lock_priority_), K(lock_priority_),
+                 K(has_explicit_tablets_), K(explicit_schema_version_), K_(is_for_replace));
   };
 
   class ObReplaceTableLockCtx : public ObTableLockCtx
@@ -299,6 +307,16 @@ public:
            const ObTxParam &tx_param,
            const ObLockRequest &arg,
            const bool is_for_replace = false);
+  // Execute a native table/tablet/partition lock after an upper storage
+  // gateway has resolved the table schema to physical tablet identities.
+  // This is deliberately an explicit input rather than ambient namespace
+  // context: storage below this boundary only sees physical objects.
+  int lock_with_explicit_tablets(
+      ObTxDesc &tx_desc,
+      const ObTxParam &tx_param,
+      const ObLockRequest &arg,
+      const int64_t schema_version,
+      const common::ObIArray<common::ObTabletID> &tablet_ids);
   int unlock(ObTxDesc &tx_desc,
              const ObTxParam &tx_param,
              const ObUnLockRequest &arg);

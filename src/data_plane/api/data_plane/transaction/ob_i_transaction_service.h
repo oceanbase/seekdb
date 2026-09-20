@@ -31,7 +31,9 @@ class SCN;
 namespace transaction
 {
 class ObITxCallback;
+struct ObRegisterMdsFlag;
 class ObTxDesc;
+enum class ObTxDataSourceType : int64_t;
 class ObTxExecResult;
 class ObTxReadSnapshot;
 class ObTxSEQ;
@@ -47,6 +49,15 @@ class ObITransactionService
 {
 public:
   virtual ~ObITransactionService() {}
+
+  // Allocate from the storage process' global transaction-id source. SQL-side
+  // DDL task ids must remain unique across namespace workers.
+  virtual int gen_unique_id(int64_t &unique_id,
+                            int64_t timeout_us) = 0;
+  // The transaction clock lives with storage. DDL running in a SQL worker
+  // must acquire its ordering timestamp through this boundary as well.
+  virtual int get_gts_sync(int64_t timeout_us,
+                           share::SCN &gts) = 0;
 
   virtual int acquire_tx(transaction::ObTxDesc *&tx,
                          uint32_t session_id = 0) = 0;
@@ -68,6 +79,13 @@ public:
   virtual int interrupt(transaction::ObTxDesc &tx, int cause) = 0;
   virtual int prepare_tx_for_statement(transaction::ObTxDesc &tx) = 0;
   virtual int prepare_tx_for_autocommit_retry(transaction::ObTxDesc &tx) = 0;
+  virtual int register_mds_into_tx(
+      transaction::ObTxDesc &tx,
+      const transaction::ObTxDataSourceType &type,
+      const char *buffer,
+      int64_t buffer_size,
+      const transaction::ObRegisterMdsFlag &flag,
+      transaction::ObTxSEQ sequence) = 0;
 
   virtual int get_read_snapshot(transaction::ObTxDesc &tx,
                                 transaction::ObTxIsolationLevel isolation_level,
@@ -78,6 +96,13 @@ public:
   virtual int get_weak_read_snapshot_version(int64_t max_read_stale_time,
                                              share::SCN &snapshot_version) = 0;
   virtual int register_tx_snapshot_verify(
+      transaction::ObTxReadSnapshot &snapshot) = 0;
+  // Refresh a registered snapshot before a later cursor fetch. Native
+  // implementations update the registered object in place; a remote
+  // implementation synchronizes the storage-owned registration explicitly.
+  virtual int refresh_tx_snapshot_verify(
+      transaction::ObTxReadSnapshot &snapshot) = 0;
+  virtual int unregister_tx_snapshot_verify(
       transaction::ObTxReadSnapshot &snapshot) = 0;
 
   virtual int create_implicit_savepoint(transaction::ObTxDesc &tx,

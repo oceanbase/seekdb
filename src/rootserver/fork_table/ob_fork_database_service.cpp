@@ -32,6 +32,7 @@
 #include "share/ob_debug_sync.h"
 #include "storage/compaction/ob_freeze_info_mgr.h"
 #include "rootserver/ddl_task/ob_ddl_task_util.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 
 namespace oceanbase {
 using namespace common;
@@ -47,10 +48,10 @@ int ObDDLService::drop_namespace_prototype_(const ObString &name)
   if (ret != OB_SUCCESS || done) { return ret; }
   ObSchemaGetterGuard guard; int64_t version = 0;
   ObArray<const ObDatabaseSchema *> databases;
-  ObArray<const ObTableSchema *> bound;
+  ObArray<ObTabletID> bound;
   ObDDLSQLTransaction trans(schema_service_);
   ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
-  if (OB_FAIL(NamespaceForkKernelPrototype::drain_access())) {
+  if (OB_FAIL(observer::namespace_worker_prototype::drain_storage_namespace_access(id))) {
   } else if (OB_FAIL(get_runtime_schema_guard_with_version_in_inner_table(guard))) {
   } else if (OB_FAIL(guard.get_schema_version(version))) {
   } else if (id == 1 && OB_FAIL(guard.get_database_schemas_in_runtime(databases))) {
@@ -76,13 +77,9 @@ int ObDDLService::drop_namespace_prototype_(const ObString &name)
       locks.op_type_ = ObTableLockOpType::IN_TRANS_COMMON_LOCK;
       locks.timeout_us_ = std::max(int64_t(1), THIS_WORKER.get_timeout_remain());
       if (OB_FAIL(drop.init())) {
+      } else if (!bound.empty() && OB_FAIL(locks.tablet_ids_.assign(bound))) {
+      } else if (!bound.empty() && OB_FAIL(drop.add_drop_tablets_arg(bound))) {
       } else {
-        for (int64_t i = 0; OB_SUCC(ret) && i < bound.count(); ++i) {
-          ObArray<const ObTableSchema *> table;
-          if (OB_FAIL(locks.tablet_ids_.push_back(bound.at(i)->get_tablet_id()))) {
-          } else if (OB_FAIL(table.push_back(bound.at(i)))) {
-          } else { ret = drop.add_drop_tablets_of_table_arg(table); }
-        }
         if (OB_SUCC(ret) && !bound.empty()) {
           if (OB_FAIL(ObInnerConnectionLockUtil::lock_tablet(locks, trans.get_connection()))) {
           } else { ret = drop.execute(); }
@@ -96,13 +93,41 @@ int ObDDLService::drop_namespace_prototype_(const ObString &name)
     }
   }
   if (trans.is_started()) { const int end = trans.end(ret == OB_SUCCESS); if (ret == OB_SUCCESS) { ret = end; } }
+  int64_t released_tables = 0;
+  int64_t released_databases = 0;
+  int64_t released_storage_tables = 0;
+  int64_t released_storage_databases = 0;
+  if (OB_SUCC(ret) && id > 1) {
+    ret = NamespaceForkKernelPrototype::release_namespace_schemas(
+        id, released_tables, released_databases);
+  }
+  if (OB_SUCC(ret) && id > 1) {
+    ret = observer::namespace_worker_prototype::release_storage_namespace_schemas(
+        id, released_storage_tables, released_storage_databases);
+  }
   if (OB_SUCC(ret)) {
-    auto *freeze = share::server_service<ObFreezeInfoMgr>();
-    ret = freeze ? freeze->reload_for_test() : OB_NOT_INIT;
+    if (observer::namespace_worker_prototype::worker_process) {
+      ret = observer::namespace_worker_prototype::reload_storage_freeze_info();
+    } else {
+      auto *freeze = share::server_service<ObFreezeInfoMgr>();
+      ret = freeze ? freeze->reload_for_test() : OB_NOT_INIT;
+    }
   }
   if (OB_SUCC(ret) && id == 1) { ret = publish_schema(); }
+  if (OB_SUCC(ret) && id > 1
+      && observer::namespace_worker_prototype::worker_process) {
+    const int endpoint_ret = observer::namespace_worker_prototype::deactivate_namespace(id);
+    if (endpoint_ret != OB_SUCCESS) {
+      // Deletion is already committed. A stale endpoint rejects storage via
+      // the namespace tombstone and the lifecycle manager can retry teardown.
+      LOG_WARN("namespace deleted before worker endpoint teardown failed",
+          K(endpoint_ret), K(id));
+    }
+  }
   // A failed attempt leaves DELETING persisted. Reissuing the same operation resumes it.
-  LOG_INFO("PROTOTYPE_V7_NAMESPACE_DROP", K(ret), K(name), K(id), "private_tablets", bound.count());
+  LOG_INFO("PROTOTYPE_V7_NAMESPACE_DROP", K(ret), K(name), K(id),
+      "private_tablets", bound.count(), K(released_tables), K(released_databases),
+      K(released_storage_tables), K(released_storage_databases));
   return ret;
 }
 
@@ -181,6 +206,13 @@ int ObDDLService::fork_database(
   } else if (!fork_database_arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(fork_database_arg));
+  } else if (NamespaceForkKernelPrototype::namespace_mode()
+      && observer::namespace_worker_prototype::worker_process
+      && observer::namespace_worker_prototype::worker_namespace != 1) {
+    // Namespace lifecycle metadata is global and is currently coordinated by
+    // the default Worker. Reject before opening the control transaction; a
+    // child must never commit a namespace whose endpoint it cannot activate.
+    ret = OB_NOT_SUPPORTED;
   } else if (NamespaceForkKernelPrototype::lifetime_mode()
       && fork_database_arg.dst_database_name_ == "__drop__") {
     ret = drop_namespace_prototype_(fork_database_arg.src_database_name_);

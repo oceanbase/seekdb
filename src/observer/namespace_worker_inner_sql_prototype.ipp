@@ -10,6 +10,7 @@ Frame inner_request(SessionBinding &binding, ObInnerSQLConnection &connection, F
   deadline = std::min(THIS_WORKER.get_timeout_ts(), ObTimeUtility::current_time() + timeout);
   Frame request('I', MAX_SQL_MESSAGE); request.number(binding.slot); request.number(binding.slot_generation);
   request.number(deadline);
+  request.number(GCTX.in_bootstrap_);
   request.append(connection.get_session().get_ddl_info());
   request.data.insert(request.data.end(), payload.data.begin() + Frame::HEADER_SIZE, payload.data.end());
   if (!request.ret) { request.ret = payload.ret; }
@@ -21,7 +22,8 @@ struct InnerExchange {
   ReadScans scans;
   Exchange pump;
   InnerExchange(SessionBinding &b, Frame request, int64_t deadline)
-      : binding(b), scans(b.ns), pump(*b.channel, b.ns, std::move(request), &scans,
+      : binding(b), scans(b.channel->storage_space),
+        pump(*b.channel, std::move(request), &scans,
                                     deadline, b.writes.get()) {}
   int next(Frame &frame) {
     int ret = pump.next(frame);
@@ -78,7 +80,7 @@ public:
     int ret = stream->next(frame);
     if (ret) { return ret; }
     if (frame.type() != 'r' || frame.number() != cells.size()) { return OB_INVALID_ARGUMENT; }
-    for (auto &cell : cells) { frame.read(cell); }
+    for (auto &cell : cells) { frame.read_object(cell); }
     if (!frame.consumed()) { return OB_INVALID_ARGUMENT; }
     row.cells_ = cells.data(); row.count_ = cells.size(); positioned = true; return OB_SUCCESS;
   }
@@ -153,7 +155,14 @@ public:
 };
 int inner_call(SessionBinding *&binding, ObInnerSQLConnection &connection, Frame payload, int64_t &affected) {
   if (payload.ret) { return payload.ret; }
-  int ret = binding ? OB_SUCCESS : open_session(1, connection.get_session(), binding, true);
+  const uint64_t namespace_id = resolve_shared_inner_sql_namespace();
+  if (binding && binding->channel->storage_space
+          != StorageSpaceHandle::namespace_space(namespace_id)) {
+    close_session(binding);
+    binding = nullptr;
+  }
+  int ret = binding ? OB_SUCCESS : open_session(
+      namespace_id, connection.get_session(), binding, true);
   if (ret) { return ret; }
   int64_t deadline = 0;
   Frame request = inner_request(*binding, connection, std::move(payload), deadline);
@@ -170,7 +179,14 @@ int inner_call(SessionBinding *&binding, ObInnerSQLConnection &connection, Frame
 int inner_read(SessionBinding *&binding, ObInnerSQLConnection &connection, const ObString &sql,
                common::ObISQLClient::ReadResult &result, bool is_user_sql) {
   result.reuse();
-  int ret = binding ? OB_SUCCESS : open_session(1, connection.get_session(), binding, true);
+  const uint64_t namespace_id = resolve_shared_inner_sql_namespace();
+  if (binding && binding->channel->storage_space
+          != StorageSpaceHandle::namespace_space(namespace_id)) {
+    close_session(binding);
+    binding = nullptr;
+  }
+  int ret = binding ? OB_SUCCESS : open_session(
+      namespace_id, connection.get_session(), binding, true);
   if (ret) { return ret; }
   Frame payload('?', MAX_SQL_MESSAGE); payload.number('R'); payload.number(is_user_sql); payload.string(sql);
   InnerResult *handler = nullptr;

@@ -544,6 +544,93 @@ int ObDDLTableSchema::fill_ddl_table_schema(const uint64_t table_id,
   return ret;
 }
 
+int ObDDLTableSchema::fill_ddl_table_schema(
+    const ObTableSchema &table_schema,
+    const ObTableSchema *lob_meta_table_schema,
+    ObArenaAllocator &allocator,
+    ObDDLTableSchema &ddl_table_schema)
+{
+  int ret = OB_SUCCESS;
+  ObArray<ObColDesc> column_descs;
+  if (OB_UNLIKELY(OB_INVALID_ID == table_schema.get_table_id())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid table schema", K(ret), K(table_schema.get_table_id()));
+  } else if (OB_INVALID_ID != table_schema.get_aux_lob_meta_tid()
+             && (OB_ISNULL(lob_meta_table_schema)
+                 || lob_meta_table_schema->get_table_id()
+                    != table_schema.get_aux_lob_meta_tid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("missing or mismatched lob meta table schema", K(ret),
+        "table_id", table_schema.get_table_id(),
+        "lob_meta_table_id", table_schema.get_aux_lob_meta_tid(),
+        KP(lob_meta_table_schema));
+  } else if (ObDDLUtil::is_vector_index_complement(table_schema.get_index_type())) {
+    // Vector direct insert needs related data/parameter table schemas as well.
+    // The namespace protocol will add those facts when that path is enabled.
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("vector direct insert requires related schema facts", K(ret),
+        "table_id", table_schema.get_table_id());
+  } else if (OB_FAIL(table_schema.get_multi_version_column_descs(column_descs))) {
+  } else {
+    ddl_table_schema.table_id_ = table_schema.get_table_id();
+    ddl_table_schema.table_item_.is_index_table_ = table_schema.is_index_table();
+    ddl_table_schema.table_item_.is_unique_index_ = table_schema.is_unique_index();
+    ddl_table_schema.table_item_.rowkey_column_num_ = table_schema.get_rowkey_column_num();
+    ddl_table_schema.table_item_.lob_inrow_threshold_ = table_schema.get_lob_inrow_threshold();
+    ddl_table_schema.table_item_.compress_type_ = table_schema.get_compressor_type();
+    ddl_table_schema.table_item_.index_type_ = table_schema.get_index_type();
+
+    if (OB_FAIL(ddl_table_schema.column_descs_.assign(column_descs))) {
+    } else if (OB_FAIL(ObDDLStorageUtil::convert_to_storage_schema(
+                   &table_schema, allocator,
+                   ddl_table_schema.storage_schema_))) {
+    } else if (OB_NOT_NULL(lob_meta_table_schema)
+               && OB_FAIL(ObDDLStorageUtil::convert_to_storage_schema(
+                      lob_meta_table_schema, allocator,
+                      ddl_table_schema.lob_meta_storage_schema_))) {
+    } else if (OB_FAIL(ddl_table_schema.column_items_.reserve(column_descs.count()))) {
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < column_descs.count(); ++i) {
+      const ObColDesc &col_desc = column_descs.at(i);
+      const schema::ObColumnSchemaV2 *column_schema = nullptr;
+      ObColumnSchemaItem column_item;
+      if (i >= ddl_table_schema.table_item_.rowkey_column_num_
+          && i < ddl_table_schema.table_item_.rowkey_column_num_
+                 + ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt()) {
+        column_item.col_type_ = col_desc.col_type_;
+      } else if (OB_ISNULL(column_schema = table_schema.get_column_schema(col_desc.col_id_))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("column schema is null", K(ret), K(i), K(column_descs), K(col_desc.col_id_));
+      } else {
+        column_item.is_valid_ = true;
+        column_item.col_type_ = column_schema->get_meta_type();
+        if (column_schema->is_decimal_int()) {
+          column_item.col_type_.set_stored_precision(
+              column_schema->get_accuracy().get_precision());
+        }
+        column_item.col_accuracy_ = column_schema->get_accuracy();
+        column_item.column_flags_ = column_schema->get_column_flags();
+        column_item.is_rowkey_column_ =
+            i < ddl_table_schema.table_item_.rowkey_column_num_;
+        column_item.is_nullable_ = column_schema->is_nullable();
+      }
+      if (OB_SUCC(ret)) {
+        if (OB_FAIL(ddl_table_schema.column_items_.push_back(column_item))) {
+        } else if (column_item.col_type_.is_lob_storage()) {
+          if (OB_FAIL(ddl_table_schema.lob_column_idxs_.push_back(i))) {
+          } else if (i < ddl_table_schema.table_item_.rowkey_column_num_) {
+            ddl_table_schema.table_item_.has_lob_rowkey_ = true;
+          }
+        } else if (ObDDLUtil::need_reshape(column_item.col_type_)) {
+          if (OB_FAIL(ddl_table_schema.reshape_column_idxs_.push_back(i))) {
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 void ObDDLTableSchema::reset()
 {
   table_id_ = 0;

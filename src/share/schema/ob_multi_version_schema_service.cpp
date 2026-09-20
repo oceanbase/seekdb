@@ -658,8 +658,11 @@ int ObMultiVersionSchemaService::get_runtime_schema_guard(
     int64_t runtime_schema_version/* = common::OB_INVALID_VERSION*/,
     const RefreshSchemaMode refresh_schema_mode /* = RefreshSchemaMode::NORMAL */)
 {
-  const bool remote = observer::namespace_worker_prototype::worker_namespace != 0;
-  const int64_t requested_version = runtime_schema_version;
+  const bool remote = observer::namespace_worker_prototype::uses_remote_schema();
+  int64_t requested_version = runtime_schema_version;
+  if (remote && requested_version == OB_INVALID_VERSION) {
+    requested_version = observer::namespace_worker_prototype::worker_request_schema_version;
+  }
   // The local bootstrap manager supplies immutable engine definitions. Remote
   // catalog reads use the shared service's version, including historical guards.
   if (remote) { runtime_schema_version = OB_INVALID_VERSION; }
@@ -711,10 +714,11 @@ int ObMultiVersionSchemaService::get_runtime_schema_guard(
   }
 
   if (OB_SUCC(ret) && remote) {
-    int64_t version = OB_INVALID_VERSION;
-    ret = observer::namespace_worker_prototype::fetch_schema_version(false, true, version);
-    if (!ret && requested_version > version) { ret = OB_SCHEMA_EAGAIN; }
-    if (!ret) { guard.worker_schema_version_ = requested_version == OB_INVALID_VERSION ? version : requested_version; }
+    int64_t version = requested_version;
+    if (version == OB_INVALID_VERSION) {
+      ret = observer::namespace_worker_prototype::fetch_schema_version(false, true, version);
+    }
+    if (!ret) { guard.worker_schema_version_ = version; }
   }
 
   return ret;
@@ -1214,10 +1218,34 @@ int ObMultiVersionSchemaService::init_system_runtime_user_schema()
   return ret;
 }
 
-int ObMultiVersionSchemaService::broadcast_runtime_schema(const common::ObIArray<share::schema::ObTableSchema> &table_schemas)
+int ObMultiVersionSchemaService::broadcast_runtime_schema(
+    const common::ObIArray<share::schema::ObTableSchema> &table_schemas,
+    const int64_t schema_version)
 {
   int ret = OB_SUCCESS;
   lib::ObMutexGuard guard(schema_refresh_mutex_);
+  ObDatabaseSchema sys_database;
+  ObSimpleDatabaseSchema simple_sys_database;
+  sys_database.set_database_id(OB_SYS_DATABASE_ID);
+  sys_database.set_schema_version(schema_version);
+  sys_database.set_charset_type(ObCharset::get_default_charset());
+  sys_database.set_collation_type(
+      ObCharset::get_default_collation(ObCharset::get_default_charset()));
+  sys_database.set_name_case_mode(OB_LOWERCASE_AND_INSENSITIVE);
+  simple_sys_database.set_database_id(OB_SYS_DATABASE_ID);
+  simple_sys_database.set_schema_version(schema_version);
+  simple_sys_database.set_name_case_mode(OB_LOWERCASE_AND_INSENSITIVE);
+  if (schema_version <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(sys_database.set_database_name(OB_SYS_DATABASE_NAME))) {
+  } else if (OB_FAIL(simple_sys_database.set_database_name(
+                 ObString::make_string(OB_SYS_DATABASE_NAME)))) {
+  } else if (OB_FAIL(schema_cache_.put_schema(
+                 DATABASE_SCHEMA,
+                 sys_database.get_database_id(),
+                 sys_database.get_schema_version(),
+                 sys_database))) {
+  }
   FOREACH_CNT_X(table_schema, table_schemas, OB_SUCC(ret)) {
     if (OB_ALL_CORE_TABLE_TID == table_schema->get_table_id()) {
       continue;
@@ -1236,18 +1264,46 @@ int ObMultiVersionSchemaService::broadcast_runtime_schema(const common::ObIArray
                   common::ModulePageAllocator(allocator));
   ObSchemaMgr *schema_mgr_for_cache = NULL;
   const bool refresh_full_schema = true;
-  if (FAILEDx(convert_to_simple_schema(allocator, table_schemas, simple_table_schemas))) {
+  if (OB_FAIL(ret)) {
+  } else if (FAILEDx(convert_to_simple_schema(allocator, table_schemas, simple_table_schemas))) {
     LOG_WARN("failed to convert", KR(ret));
   } else if (FALSE_IT(schema_mgr_for_cache = ATOMIC_LOAD(&schema_mgr_for_cache_))) {
   } else if (OB_ISNULL(schema_mgr_for_cache)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema_mgr is null", KR(ret));
+  } else if (OB_FAIL(schema_mgr_for_cache->add_database(simple_sys_database))) {
   } else if (OB_FAIL(schema_mgr_for_cache->add_tables(simple_table_schemas, refresh_full_schema))) {
-  } else if (FALSE_IT(schema_mgr_for_cache->set_schema_version(
-             OB_CORE_SCHEMA_VERSION + 1))) {
+  } else if (FALSE_IT(schema_mgr_for_cache->set_schema_version(schema_version))) {
   } else if (OB_FAIL(add_schema(false))) {
   } else {
     LOG_INFO("broadcast runtime schema", KR(ret));
+  }
+  return ret;
+}
+
+int ObMultiVersionSchemaService::refresh_runtime_schema_from_static_system()
+{
+  int ret = OB_SUCCESS;
+  lib::ObMutexGuard guard(schema_refresh_mutex_);
+  ObSchemaMgr *schema_mgr = ATOMIC_LOAD(&schema_mgr_for_cache_);
+  ObRefreshSchemaStatus status;
+  status.snapshot_timestamp_ = OB_INVALID_TIMESTAMP;
+  status.readable_schema_version_ = OB_INVALID_VERSION;
+  int64_t schema_version = OB_INVALID_VERSION;
+  if (!check_inner_stat() || OB_ISNULL(sql_proxy_) || OB_ISNULL(schema_mgr)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(get_schema_version_in_inner_table(
+                 *sql_proxy_, status, schema_version))) {
+  } else if (schema_mgr->get_schema_version() >= schema_version) {
+  } else if (OB_FAIL(refresh_runtime_full_schema(
+                 *sql_proxy_, status, schema_version, nullptr, true))) {
+  } else if (FALSE_IT(schema_mgr->set_schema_version(schema_version))) {
+  } else if (OB_FAIL(publish_schema())) {
+  } else {
+    refresh_full_schema_ = false;
+    refresh_full_schema_present_ = true;
+    const int publish_ret = set_published_schema_version(schema_version);
+    if (publish_ret != OB_SUCCESS) { ret = publish_ret; }
   }
   return ret;
 }
@@ -1593,11 +1649,16 @@ int ObMultiVersionSchemaService::async_refresh_schema(const int64_t schema_versi
   int ret = OB_SUCCESS;
   int64_t local_schema_version = OB_INVALID_VERSION;
   bool check_formal = ObSchemaService::is_formal_version(schema_version);
+  // A user statement normally observes its pinned schema version.  Refresh
+  // progress is different: it must read the actual shared-service version or
+  // a DDL would wait forever on the statement's older snapshot.
+  auto get_live_schema_version = [this](int64_t &version) {
+    return get_live_runtime_refreshed_schema_version(version);
+  };
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("inner stat error", KR(ret));
-  } else if (OB_FAIL(get_runtime_refreshed_schema_version(
-                     local_schema_version))) {
+  } else if (OB_FAIL(get_live_schema_version(local_schema_version))) {
   } else if (local_schema_version >= schema_version
              && (!check_formal || ObSchemaService::is_formal_version(local_schema_version))) {
     // do nothing
@@ -1611,8 +1672,7 @@ int ObMultiVersionSchemaService::async_refresh_schema(const int64_t schema_versi
     const int64_t MAX_RETRY_CNT = 100 * 1000 * 1000L / RETRY_IDLE_TIME; // 100s at most
     const int64_t SUBMIT_TASK_FREQUENCE = 2 * 1000 * 1000L / RETRY_IDLE_TIME; // each 2s
     while (OB_SUCC(ret)) {
-      if (OB_FAIL(get_runtime_refreshed_schema_version(
-                         local_schema_version))) {
+      if (OB_FAIL(get_live_schema_version(local_schema_version))) {
       } else if (local_schema_version >= schema_version
                  && (!check_formal || ObSchemaService::is_formal_version(local_schema_version))) {
         // success
@@ -1654,6 +1714,15 @@ int ObMultiVersionSchemaService::async_refresh_schema(const int64_t schema_versi
         }
       }
     }
+  }
+  if (OB_SUCC(ret)
+      && observer::namespace_worker_prototype::uses_remote_schema()
+      && observer::namespace_worker_prototype::worker_request_schema_version != OB_INVALID_VERSION
+      && schema_version > observer::namespace_worker_prototype::worker_request_schema_version) {
+    // DDL and explicit schema refresh are visibility fences inside the current
+    // request.  Once the live catalog has reached the target, later work in
+    // that same statement must be allowed to observe it.
+    observer::namespace_worker_prototype::worker_request_schema_version = schema_version;
   }
   return ret;
 }
@@ -2303,7 +2372,11 @@ int ObMultiVersionSchemaService::get_runtime_refreshed_schema_version(
     int64_t &schema_version,
     const bool core_version) const
 {
-  if (observer::namespace_worker_prototype::worker_namespace == 1) {
+  if (observer::namespace_worker_prototype::uses_remote_schema()) {
+    if (observer::namespace_worker_prototype::worker_request_schema_version != OB_INVALID_VERSION) {
+      schema_version = observer::namespace_worker_prototype::worker_request_schema_version;
+      return OB_SUCCESS;
+    }
     return observer::namespace_worker_prototype::fetch_schema_version(false, core_version, schema_version);
   }
   int ret = OB_SUCCESS;
@@ -2318,11 +2391,22 @@ int ObMultiVersionSchemaService::get_runtime_refreshed_schema_version(
   return ret;
 }
 
+int ObMultiVersionSchemaService::get_live_runtime_refreshed_schema_version(
+    int64_t &schema_version,
+    const bool core_version) const
+{
+  if (observer::namespace_worker_prototype::uses_remote_schema()) {
+    return observer::namespace_worker_prototype::fetch_schema_version(
+        false, core_version, schema_version);
+  }
+  return get_runtime_refreshed_schema_version(schema_version, core_version);
+}
+
 int ObMultiVersionSchemaService::get_published_schema_version(
     int64_t &schema_version,
     const bool core_schema_version) const
 {
-  if (observer::namespace_worker_prototype::worker_namespace == 1) {
+  if (observer::namespace_worker_prototype::uses_remote_schema()) {
     return observer::namespace_worker_prototype::fetch_schema_version(true, core_schema_version, schema_version);
   }
   int ret = OB_SUCCESS;

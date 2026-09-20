@@ -97,6 +97,11 @@ int ObMPBase::before_process()
     THIS_WORKER.set_timeout_ts(INT64_MAX);
     ret = namespace_worker_prototype::begin_direct_request(get_conn()->sessid_, get_conn()->namespace_worker_binding_);
     if (ret) { send_error_packet(ret, nullptr); return ret; }
+    // Direct MySQL commands do not pass through the gateway executor's schema
+    // refresh. Advance this worker's one namespace cache before pinning the
+    // command guard, so a DDL is visible to the following command/session.
+    ret = gctx_.schema_service_->refresh_and_add_schema(false);
+    if (ret) { send_error_packet(ret, nullptr); return ret; }
   }
   if (get_conn() && get_conn()->namespace_worker_id_ != 0) {
     const auto cmd = static_cast<const obmysql::ObMySQLRawPacket &>(req_->get_packet()).get_cmd();

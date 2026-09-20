@@ -19,6 +19,7 @@
 
 #include "storage/ddl/ob_ddl_struct.h"
 #include "storage/ddl/ob_ddl_independent_dag.h"
+#include "data_plane/ddl/ob_ddl_schedule.h"
 #include "data_plane/scheduler/ob_dag_scheduler.h"
 
 namespace oceanbase
@@ -46,7 +47,8 @@ public:
   virtual int init_by_param(const share::ObIDagInitParam *param) override;
 
   int set_px_finished();
-  int update_tablet_range_count();
+  int update_tablet_range_count(
+      const common::ObIArray<data_plane::ObDDLTabletSliceCount> &tablet_slice_counts);
   int64_t get_total_slice_count() const { return total_slice_count_; }
   virtual bool is_scan_finished() override { return px_thread_count_ > 0 && px_finished_count_ >= px_thread_count_; }
 

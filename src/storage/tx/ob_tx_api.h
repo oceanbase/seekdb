@@ -248,6 +248,10 @@ int release_snapshot(ObTxDesc &tx);
  */
 int register_tx_snapshot_verify(ObTxReadSnapshot &snapshot);
 
+// Native registrations point at the caller's snapshot, so no synchronization
+// is needed before fetch. The method exists for process-separated clients.
+int refresh_tx_snapshot_verify(ObTxReadSnapshot &snapshot) override;
+
 /**
  * unregister_tx_snapshot_verify - unregister a snapshot reigstered
  *                                 for verify
@@ -256,6 +260,7 @@ int register_tx_snapshot_verify(ObTxReadSnapshot &snapshot);
  *
  * @snapshot:                      the snapshot to unregister
  */
+int unregister_tx_snapshot_verify(ObTxReadSnapshot &snapshot) override;
 
 // ------------------------------------------------------------------
 // savepoint creation and rollback to and release

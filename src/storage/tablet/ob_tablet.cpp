@@ -4160,11 +4160,11 @@ int ObTablet::check_schema_version_elapsed(
     const int64_t schema_version,
     const bool need_wait_trans_end,
     int64_t &max_commit_version,
-    transaction::ObTransID &pending_tx_id)
+    transaction::ObTransID &pending_tx_id,
+    const bool schema_version_refreshed_by_caller)
 {
   int ret = OB_SUCCESS;
   const common::ObTabletID &tablet_id = tablet_meta_.tablet_id_;
-  ObMultiVersionSchemaService *schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service();
   SCN scn;
   SCN max_commit_scn;
   int64_t runtime_refreshed_schema_version = 0;
@@ -4191,18 +4191,35 @@ int ObTablet::check_schema_version_elapsed(
     if (OB_FAIL(get_ddl_info(refreshed_schema_version, refreshed_schema_ts))) {
     } else if (refreshed_schema_version >= schema_version) {
       // schema version already refreshed
-    } else if (OB_FAIL(schema_service->get_runtime_refreshed_schema_version(runtime_refreshed_schema_version))) {
-      ret = OB_ENTRY_NOT_EXIST == ret ? OB_SCHEMA_EAGAIN : ret;
-      LOG_WARN("get runtime refreshed schema version failed", K(ret));
-    } else if (runtime_refreshed_schema_version < schema_version) {
-      ret = OB_EAGAIN;
-      LOG_WARN("current schema version not latest, need retry", K(ret), K(schema_version), K(runtime_refreshed_schema_version));
-    } else if (OB_FAIL(replay_schema_version_change_log(schema_version))) {
-    } else if (OB_FAIL(write_tablet_schema_version_change_clog(schema_version, scn))) {
-      LOG_WARN("write partition schema version change clog error", K(ret), K(schema_version));
-      // override ret
-      ret = OB_EAGAIN;
-    } else if (OB_FAIL(update_ddl_info(schema_version, scn, refreshed_schema_ts))) {
+    } else {
+      if (!schema_version_refreshed_by_caller) {
+        share::schema::ObSchemaRuntimeService *runtime_service =
+            ::oceanbase::share::server_service<
+                share::schema::ObSchemaRuntimeService>();
+        ObMultiVersionSchemaService *schema_service = nullptr;
+        if (OB_ISNULL(runtime_service)
+            || OB_ISNULL(schema_service = runtime_service->get_schema_service())) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("schema runtime service is null", K(ret), KP(runtime_service), KP(schema_service));
+        } else if (OB_FAIL(schema_service->get_runtime_refreshed_schema_version(
+                       runtime_refreshed_schema_version))) {
+          ret = OB_ENTRY_NOT_EXIST == ret ? OB_SCHEMA_EAGAIN : ret;
+          LOG_WARN("get runtime refreshed schema version failed", K(ret));
+        } else if (runtime_refreshed_schema_version < schema_version) {
+          ret = OB_EAGAIN;
+          LOG_WARN("current schema version not latest, need retry", K(ret),
+              K(schema_version), K(runtime_refreshed_schema_version));
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(replay_schema_version_change_log(schema_version))) {
+      } else if (OB_SUCC(ret)
+                 && OB_FAIL(write_tablet_schema_version_change_clog(schema_version, scn))) {
+        LOG_WARN("write partition schema version change clog error", K(ret), K(schema_version));
+        // override ret
+        ret = OB_EAGAIN;
+      } else if (OB_SUCC(ret)
+                 && OB_FAIL(update_ddl_info(schema_version, scn, refreshed_schema_ts))) {
+      }
     }
 
     if (OB_SUCC(ret)) {

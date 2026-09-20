@@ -60,6 +60,35 @@ ObString extract_user_name(const ObString &in)
   return user_name;
 }
 
+int refresh_namespace_worker_login_state(
+    const share::ObGlobalContext &gctx,
+    ObSMConnection &conn)
+{
+  int ret = OB_SUCCESS;
+  int64_t current_autocommit = 0;
+  if (OB_ISNULL(gctx.schema_service_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(gctx.schema_service_
+                         ->refresh_runtime_schema_from_static_system())) {
+    // A concurrent bootstrap is retryable and must not create a partially
+    // initialized client session.
+  } else if (OB_FAIL(share::schema::ObSchemaUtils::get_runtime_int_variable(
+                 *gctx.schema_service_, share::SYS_VAR_AUTOCOMMIT,
+                 current_autocommit))) {
+  } else if (OB_UNLIKELY(current_autocommit != 0
+                         && current_autocommit != 1)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("unexpected global autocommit", K(ret), K(current_autocommit));
+  } else {
+    // The Rust accept callback snapshots this value before the login packet
+    // reaches the SQL worker. A schema refresh can make that snapshot stale
+    // after SET GLOBAL, so update it before load_privilege_info() copies global
+    // defaults into the new SQL session.
+    conn.autocommit_snapshot_ = current_autocommit;
+  }
+  return ret;
+}
+
 }  // namespace observer
 }  // namespace oceanbase
 
@@ -203,6 +232,16 @@ int ObMPConnect::process()
   ObSMConnection *conn = NULL;
   ObSQLSessionInfo *session = NULL;
   bool autocommit = false;
+  uint64_t requested_namespace = 1;
+  ObString requested_database;
+  const bool namespace_address = !namespace_worker_prototype::worker_process
+      && namespace_worker_prototype::enabled()
+      && namespace_worker_prototype::enabled()
+      && storage::NamespaceForkKernelPrototype::is_namespace_address(db_name_);
+  if (OB_SUCC(ret) && namespace_address) {
+    ret = storage::NamespaceForkKernelPrototype::parse_namespace_address(
+        db_name_, requested_namespace, requested_database);
+  }
   THIS_WORKER.set_timeout_ts(INT64_MAX); // avoid see a former timeout value
   if (THE_TRACE != nullptr) {
     THE_TRACE->reset();
@@ -223,6 +262,13 @@ int ObMPConnect::process()
       ret = OB_SERVER_IS_STOPPING;
       LOG_WARN("server is stopping", K(ret));
     } else if (OB_FAIL(share::check_server_runtime_ready())) {
+    } else if (namespace_worker_prototype::worker_process
+               && namespace_worker_prototype::enabled()
+               && OB_FAIL(refresh_namespace_worker_login_state(gctx_, *conn))) {
+      // Direct clients bypass the gateway executor that normally refreshes the
+      // worker's namespace schema before each statement. Load it before the
+      // authentication lookup; a concurrent bootstrap reports EAGAIN and the
+      // client can retry without entering a partially initialized session.
     } else if (OB_FAIL(check_client_property(*conn))) {
     } else if (OB_FAIL(verify_connection())) {
     } else if (OB_FAIL(create_session(conn, session))) {
@@ -231,21 +277,29 @@ int ObMPConnect::process()
       LOG_ERROR("null session", K(ret), K(session));
     } else if (OB_FAIL(verify_identify(*conn, *session))) {
     } else if (OB_FAIL(update_charset_sys_vars(*conn, *session))) {
+    } else if (namespace_address) {
+      ret = session->set_default_database(requested_database);
+      if (OB_SUCC(ret)) { session->set_database_id(OB_INVALID_ID); }
     } else if (!namespace_worker_prototype::worker_process && namespace_worker_prototype::enabled()
-               && (namespace_worker_prototype::bootstrap_enabled() || storage::NamespaceForkKernelPrototype::is_encoded_id(session->get_database_id()))
+               && (namespace_worker_prototype::enabled() || storage::NamespaceForkKernelPrototype::is_encoded_id(session->get_database_id()))
                ) {
       ret = OB_SUCCESS;
     }
-    if (OB_SUCC(ret) && !namespace_worker_prototype::worker_process && namespace_worker_prototype::enabled()
-               && (namespace_worker_prototype::bootstrap_enabled() || storage::NamespaceForkKernelPrototype::is_encoded_id(session->get_database_id()))
-               && OB_FAIL(namespace_worker_prototype::open_session(
-                   storage::NamespaceForkKernelPrototype::is_encoded_id(session->get_database_id())
-                       ? (session->get_database_id() & ~(1ULL << 62)) >> 32 : 1,
-                   *session, conn->namespace_worker_binding_))) {
-    } else {
+    if (OB_SUCC(ret) && !namespace_worker_prototype::worker_process
+        && namespace_worker_prototype::enabled()
+        && (namespace_worker_prototype::enabled()
+            || storage::NamespaceForkKernelPrototype::is_encoded_id(session->get_database_id()))) {
+      ret = namespace_worker_prototype::open_session(
+          namespace_address ? requested_namespace
+          : storage::NamespaceForkKernelPrototype::is_encoded_id(session->get_database_id())
+              ? (session->get_database_id() & ~(1ULL << 62)) >> 32 : 1,
+          *session, conn->namespace_worker_binding_);
+    }
+    if (OB_SUCC(ret)) {
       if (!namespace_worker_prototype::worker_process && namespace_worker_prototype::enabled()
-          && (namespace_worker_prototype::bootstrap_enabled() || storage::NamespaceForkKernelPrototype::is_encoded_id(session->get_database_id()))) {
-        conn->namespace_worker_id_ = storage::NamespaceForkKernelPrototype::is_encoded_id(session->get_database_id())
+          && (namespace_worker_prototype::enabled() || storage::NamespaceForkKernelPrototype::is_encoded_id(session->get_database_id()))) {
+        conn->namespace_worker_id_ = namespace_address ? requested_namespace
+            : storage::NamespaceForkKernelPrototype::is_encoded_id(session->get_database_id())
             ? (session->get_database_id() & ~(1ULL << 62)) >> 32 : 1;
       }
       // set connection info to session
@@ -379,17 +433,31 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
       // Normalize the requested database name before session privilege checks.
       if (!db_name_.empty()) {
         ObString db_name = db_name_;
-        ObNameCaseMode mode = OB_NAME_CASE_INVALID;
-        bool perserve_lettercase = true;
-        ObCollationType cs_type = CS_TYPE_INVALID;
-        if (OB_FAIL(session.get_collation_connection(cs_type))) {
-        } else if (OB_FAIL(session.get_name_case_mode(mode))) {
-        } else if (FALSE_IT(perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE))) {
-        } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
-                    cs_type, perserve_lettercase, db_name))) {
-        } else if (OB_FAIL(ObSQLUtils::cvt_db_name_to_org(schema_guard, &session, db_name, &allocator_))) {
+        uint64_t namespace_id = 0;
+        ObString logical_database;
+        const bool routed_namespace = !namespace_worker_prototype::worker_process
+            && namespace_worker_prototype::enabled()
+            && namespace_worker_prototype::enabled()
+            && storage::NamespaceForkKernelPrototype::is_namespace_address(db_name);
+        if (routed_namespace) {
+          // The gateway authenticates the account only. Database visibility is
+          // namespace-local and is checked by the target worker after routing.
+          ret = storage::NamespaceForkKernelPrototype::parse_namespace_address(
+              db_name, namespace_id, logical_database);
         } else {
-          login_info.db_ = db_name;
+          ObNameCaseMode mode = OB_NAME_CASE_INVALID;
+          bool perserve_lettercase = true;
+          ObCollationType cs_type = CS_TYPE_INVALID;
+          if (OB_FAIL(session.get_collation_connection(cs_type))) {
+          } else if (OB_FAIL(session.get_name_case_mode(mode))) {
+          } else if (FALSE_IT(perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE))) {
+          } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
+                      cs_type, perserve_lettercase, db_name))) {
+          } else if (OB_FAIL(ObSQLUtils::cvt_db_name_to_org(
+                      schema_guard, &session, db_name, &allocator_))) {
+          } else {
+            login_info.db_ = db_name;
+          }
         }
       }
       LOG_TRACE("some important information required for login verification, print it before doing login", K(ret), K(ObString(sizeof(conn->scramble_buf_), conn->scramble_buf_)), K(hsr_.get_auth_plugin_name()), K(hsr_.get_auth_response()));

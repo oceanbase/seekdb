@@ -159,6 +159,33 @@ int ObTabletDrop::add_drop_tablets_of_table_arg(
   return ret;
 }
 
+int ObTabletDrop::add_drop_tablets_arg(
+    const common::ObIArray<common::ObTabletID> &tablet_ids)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!inited_)) {
+    ret = OB_NOT_INIT;
+  } else if (tablet_ids.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_ISNULL(tablet_ids_)) {
+    void *memory = allocator_.alloc(sizeof(ObArray<ObTabletID>));
+    if (OB_ISNULL(memory)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      tablet_ids_ = new (memory) ObArray<ObTabletID, ObIAllocator &>(
+          OB_MALLOC_NORMAL_BLOCK_SIZE, allocator_);
+    }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
+    if (!tablet_ids.at(i).is_valid()) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      ret = tablet_ids_->push_back(tablet_ids.at(i));
+    }
+  }
+  return ret;
+}
+
 int ObTabletDrop::drop_tablet_(
     const common::ObIArray<const share::schema::ObTableSchema *> &table_schema_ptr_array,
     const int64_t part_idx,

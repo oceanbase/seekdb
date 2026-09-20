@@ -75,7 +75,8 @@ int check_worker_plan(ObMySQLResultSet &result) {
     }
   } else if (!ret && result.get_stmt_type() == stmt::T_USE_DATABASE) {
     auto *command = static_cast<ObUseDatabaseStmt *>(result.get_cmd());
-    if (!command || ((static_cast<uint64_t>(command->get_db_id()) & ~(1ULL << 62)) >> 32) != worker_namespace) {
+    if (!command || storage::NamespaceForkKernelPrototype::is_encoded_id(
+        static_cast<uint64_t>(command->get_db_id()))) {
       ret = OB_NOT_SUPPORTED;
     }
   }

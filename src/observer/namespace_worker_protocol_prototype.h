@@ -17,6 +17,34 @@ constexpr size_t MAX_FRAME = 256 * 1024;
 constexpr size_t MAX_SQL_MESSAGE = 64 * 1024 * 1024;
 struct RequestTag { uint64_t slot = 0, generation = 0; };
 constexpr uint64_t WORKER_REQUEST = 1ULL << 63;
+class StorageSpaceHandle final
+{
+public:
+  enum class Scope : uint8_t { INVALID, NAMESPACE, GLOBAL };
+  StorageSpaceHandle() = default;
+  static StorageSpaceHandle namespace_space(uint64_t namespace_id)
+  {
+    return namespace_id > 0 && namespace_id < (1ULL << 30)
+        ? StorageSpaceHandle(Scope::NAMESPACE, namespace_id) : StorageSpaceHandle();
+  }
+  static StorageSpaceHandle global_space()
+  {
+    return StorageSpaceHandle(Scope::GLOBAL, 0);
+  }
+  bool is_valid() const { return scope_ != Scope::INVALID; }
+  bool is_namespace() const { return scope_ == Scope::NAMESPACE; }
+  bool is_global() const { return scope_ == Scope::GLOBAL; }
+  uint64_t namespace_id() const { return is_namespace() ? value_ : 0; }
+  bool operator==(const StorageSpaceHandle &other) const
+  {
+    return scope_ == other.scope_ && value_ == other.value_;
+  }
+  bool operator!=(const StorageSpaceHandle &other) const { return !(*this == other); }
+private:
+  StorageSpaceHandle(Scope scope, uint64_t value) : scope_(scope), value_(value) {}
+  Scope scope_ = Scope::INVALID;
+  uint64_t value_ = 0;
+};
 struct Frame {
   static constexpr int64_t HEADER_SIZE = 17; // type + request slot + generation
   std::vector<char> data;
@@ -80,12 +108,137 @@ struct Frame {
   }
   bool consumed() const { return !ret && pos == static_cast<int64_t>(data.size()); }
 };
+// Storage requests normally inherit the immutable space bound to their
+// Channel. Only GLOBAL needs a wire discriminator; namespace_id is never
+// repeated on ordinary requests. The shared endpoint treats GLOBAL as a
+// capability available only to the default namespace Worker.
+inline void write_storage_space(Frame &frame, const StorageSpaceHandle &space)
+{
+  if (!space.is_valid()) {
+    frame.ret = common::OB_INVALID_ARGUMENT;
+  } else {
+    frame.number(space.is_global() ? 1 : 0);
+  }
+}
+inline int read_storage_space(Frame &frame,
+                              const StorageSpaceHandle &channel_space,
+                              StorageSpaceHandle &request_space)
+{
+  const uint64_t wire_scope = frame.number();
+  int ret = frame.ret;
+  if (OB_SUCC(ret) && wire_scope == 0 && channel_space.is_namespace()) {
+    request_space = channel_space;
+  } else if (OB_SUCC(ret) && wire_scope == 1
+             && channel_space.is_namespace()
+             && channel_space.namespace_id() == 1) {
+    request_space = StorageSpaceHandle::global_space();
+  } else if (OB_SUCC(ret)) {
+    ret = common::OB_INVALID_ARGUMENT;
+  }
+  return ret;
+}
 using CatalogFetch = int (*)(char, uint64_t, const common::ObString &, int64_t, Frame &);
 inline CatalogFetch worker_catalog_fetch = nullptr;
 inline uint64_t worker_namespace = 0;
 inline bool worker_process = false;
-bool bootstrap_enabled();
+inline bool worker_bootstrapping = false;
+// Shared-process inner SQL is executed by this worker as well. While serving
+// that bounced request, schema lookups must use the worker's local cache;
+// fetching the version through IPC again would route the same SQL back here.
+inline thread_local bool worker_inner_sql_execution = false;
+// Shared storage can start periodic SQL callers before bootstrap has created
+// every native system tablet.  Mark those bounced inner-SQL requests so the
+// worker does not occupy an executor retrying a tablet that bootstrap itself
+// still has to create.
+inline thread_local bool worker_shared_bootstrap_request = false;
+// A user statement pins one namespace schema version at admission. Native SQL
+// may create many short-lived guards while resolving and optimizing that same
+// statement; all of them must reuse the pinned version instead of asking the
+// shared process for a newer version on every lookup.
+inline thread_local int64_t worker_request_schema_version = common::OB_INVALID_VERSION;
+// Storage scope is independent from the worker's fixed namespace identity.
+// A narrow global scope lets a native SQL operation address shared control
+// tablets in the same transaction without switching the worker SchemaService.
+inline thread_local uint64_t worker_global_storage_scope_depth = 0;
+class GlobalStorageScope final
+{
+public:
+  GlobalStorageScope() { ++worker_global_storage_scope_depth; }
+  ~GlobalStorageScope() { --worker_global_storage_scope_depth; }
+  GlobalStorageScope(const GlobalStorageScope &) = delete;
+  GlobalStorageScope &operator=(const GlobalStorageScope &) = delete;
+};
+inline bool uses_global_storage_scope()
+{
+  return worker_global_storage_scope_depth != 0;
+}
+inline StorageSpaceHandle active_worker_storage_space()
+{
+  return uses_global_storage_scope()
+      ? StorageSpaceHandle::global_space()
+      : StorageSpaceHandle::namespace_space(worker_namespace);
+}
+inline bool is_namespace_control_database(const common::ObString &name)
+{
+  return name.prefix_match("__fork_proto_meta");
+}
+inline bool can_access_namespace_control_database()
+{
+  return !worker_process || worker_namespace <= 1;
+}
+inline bool owns_namespace_schema()
+{
+  return worker_process && worker_namespace != 0;
+}
+inline bool uses_remote_schema()
+{
+  return worker_process && worker_namespace != 0 && !owns_namespace_schema();
+}
+// Shared management code can move across runtime threads before it starts
+// native inner SQL. Bind namespace to the propagated call trace at the IPC
+// boundary instead of deriving it from database/table IDs.
+int bind_shared_inner_sql_namespace(uint64_t trace_seq, uint64_t namespace_id);
+void unbind_shared_inner_sql_namespace(uint64_t trace_seq);
+int push_inner_sql_namespace_override(uint64_t namespace_id);
+void pop_inner_sql_namespace_override();
+uint64_t resolve_shared_inner_sql_namespace();
 int check_sql_execution_role();
+// A worker owns the decision to create a fork snapshot, while the storage
+// process owns the transaction clock used to produce its SCN.
+int acquire_storage_snapshot(int64_t &snapshot);
+// Snapshot retention is cached by the shared storage process. Refresh that
+// cache after the worker commits a new acquired-snapshot row.
+int reload_storage_freeze_info();
+// Namespace access leases and compatibility schema holders live beside the
+// shared storage engine. Namespace DROP must drain and reclaim them in that
+// process rather than touching the control Worker's process-local copies.
+int drain_storage_namespace_access(uint64_t namespace_id);
+int release_storage_namespace_schemas(uint64_t namespace_id,
+                                      int64_t &table_count,
+                                      int64_t &database_count);
+// A committed namespace owns a Worker endpoint.  The namespace-1 Worker asks
+// the shared process manager to create that endpoint without routing a dummy
+// SQL session through the compatibility listener.
+int activate_namespace(uint64_t namespace_id);
+// Remove the endpoint after namespace deletion has committed. Existing client
+// sessions are disconnected through the same Channel failure path as crashes.
+int deactivate_namespace(uint64_t namespace_id);
+// Recreate endpoints for durable LIVE namespaces after the shared process has
+// completed bootstrap. Sessions are intentionally not recovered.
+int reconcile_namespace_workers();
+// The package loader runs once in the shared process, while CALL resolution
+// waits on process-local GCTX state. Publish the completed durable state to
+// every live SQL Worker; workers spawned later receive it in their bootstrap.
+int broadcast_system_package_ready(bool ready);
+// Publish the table-schema delta committed by a namespace-local DDL into the
+// shared namespace directory before the SQL command is acknowledged.
+int sync_namespace_schema_delta(uint64_t namespace_id,
+                                int64_t base_schema_version,
+                                int64_t &published_schema_version);
+int begin_namespace_schema_change();
+int finish_namespace_schema_change(int64_t committed_schema_version);
+int begin_namespace_schema_recovery(bool &needed);
+int finish_namespace_schema_recovery(int64_t reconciled_schema_version);
 int fetch_schema_version(bool published, bool core_version, int64_t &version);
 share::schema::ObPrivMgr *make_remote_priv_mgr(int64_t version);
 int admin_set_config(obcall::ObAdminSetConfigArg &arg);
@@ -106,6 +259,22 @@ private:
   int error_ = common::OB_SUCCESS;
   StorageSessionScope(const StorageSessionScope &) = delete;
   StorageSessionScope &operator=(const StorageSessionScope &) = delete;
+};
+// Native worker services such as the DDL scheduler run outside a client SQL
+// request. Give one such call its own multiplexed storage route; it must not
+// borrow a user session merely to reach the shared storage process.
+class IndependentStorageScope final {
+public:
+  IndependentStorageScope();
+  ~IndependentStorageScope();
+  int error() const { return error_; }
+private:
+  SessionBinding *binding_ = nullptr;
+  PendingRequest *previous_ = nullptr;
+  int64_t previous_timeout_ = 0;
+  int error_ = common::OB_SUCCESS;
+  IndependentStorageScope(const IndependentStorageScope &) = delete;
+  IndependentStorageScope &operator=(const IndependentStorageScope &) = delete;
 };
 int begin_direct_request(uint32_t sid, SessionBinding *&binding, bool internal = false);
 int finish_direct_request();

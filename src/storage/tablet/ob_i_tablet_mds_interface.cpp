@@ -152,9 +152,9 @@ int ObITabletMdsInterface::get_autoinc_seq(
   if (OB_UNLIKELY(!check_is_inited_())) {
     ret = OB_NOT_INIT;
     MDS_LOG_GET(WARN, "not inited");
-  } else if (OB_UNLIKELY(!snapshot.is_max())) {
-    ret = OB_NOT_SUPPORTED;
-    MDS_LOG_GET(WARN, "only support read latest data currently");
+  } else if (OB_UNLIKELY(!snapshot.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    MDS_LOG_GET(WARN, "invalid snapshot");
   } else {
     if (CLICK_FAIL((get_snapshot<mds::DummyKey, ObTabletAutoincSeq>(mds::DummyKey(),
         ReadAutoIncSeqOp(allocator, data), snapshot, timeout)))) {

@@ -27,12 +27,18 @@ int ObDDLBlockSampleScanOp::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableScanOp::inner_open())) {
+    fprintf(stderr,
+            "PROTOTYPE_V22_DDL_SAMPLE_OP stage=base_open ret=%d use_dist=%d gi=%d\n",
+            ret, MY_SPEC.use_dist_das(), MY_SPEC.gi_above_);
   } else if (MY_SPEC.use_dist_das()) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "Block Sample Scan with dist DAS");
   } else {
     need_sample_ = !MY_SPEC.get_sample_info().is_no_sample();
     tsc_rtdef_.scan_rtdef_.sample_info_ = need_sample_ ? &(MY_SPEC.get_sample_info()) : nullptr;
+    fprintf(stderr,
+            "PROTOTYPE_V22_DDL_SAMPLE_OP stage=open_done ret=%d sample=%d gi=%d\n",
+            ret, MY_SPEC.get_sample_info().method_, MY_SPEC.gi_above_);
   }
   return ret;
 }
@@ -52,6 +58,9 @@ int ObDDLBlockSampleScanOp::inner_get_next_batch(const int64_t max_row_cnt)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableScanOp::inner_get_next_batch(max_row_cnt))) {
+    fprintf(stderr,
+            "PROTOTYPE_V22_DDL_SAMPLE_OP stage=next_batch ret=%d init=%d iter_end=%d\n",
+            ret, need_init_before_get_row_, iter_end_);
   }
   return ret;
 }

@@ -142,6 +142,7 @@ impl Worker {
     fn interrupt(&self) {
         // Kill before waiting for the receive lock: EOF wakes a blocked receive.
         let mut child = self.child.lock().unwrap();
+        eprintln!("namespace worker interrupt pid={} state={:?}", child.id(), child.try_wait());
         let _ = child.kill();
         let _ = child.wait();
         drop(child);
@@ -165,7 +166,8 @@ impl Drop for Worker {
 }
 
 fn spawn(namespace: u64, generation: u64) -> io::Result<Worker> {
-    let base = std::env::current_dir()?
+    let instance_base = std::env::current_dir()?;
+    let base = instance_base
         .join("run")
         .join(format!("namespace-worker-{namespace}-{generation}"));
     std::fs::create_dir_all(&base)?;
@@ -178,6 +180,10 @@ fn spawn(namespace: u64, generation: u64) -> io::Result<Worker> {
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(stderr);
+    let wallet = instance_base.join("wallet");
+    if wallet.is_dir() {
+        command.env("SEEKDB_SQL_NIO_WALLET_DIR", wallet);
+    }
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
@@ -220,6 +226,9 @@ fn spawn(namespace: u64, generation: u64) -> io::Result<Worker> {
         .spawn(move || loop {
             let frame = read_frame(&mut output);
             let failed = frame.is_err();
+            if let Err(error) = &frame {
+                eprintln!("namespace worker pipe read failed: {error}");
+            }
             let target = reader_dispatch.lock().unwrap();
             if let Some(callback) = *target {
                 drop(target);
@@ -351,6 +360,7 @@ pub unsafe extern "C" fn namespace_proto_dispatch(
 #[no_mangle]
 pub unsafe extern "C" fn namespace_proto_interrupt(worker: *mut c_void) {
     if !worker.is_null() {
+        eprintln!("namespace_proto_interrupt");
         (&*worker.cast::<Worker>()).interrupt();
     }
 }
@@ -358,6 +368,7 @@ pub unsafe extern "C" fn namespace_proto_interrupt(worker: *mut c_void) {
 #[no_mangle]
 pub unsafe extern "C" fn namespace_proto_stop(worker: *mut c_void) {
     if !worker.is_null() {
+        eprintln!("namespace_proto_stop");
         // Join callbacks through a shared borrow before creating exclusive Box
         // ownership. A callback may still be executing interrupt(&Worker).
         (&*worker.cast::<Worker>()).stop();

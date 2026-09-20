@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_table_sql_service.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 #include "lib/literals/ob_literals.h"
 #include "share/ob_global_stat_proxy.h"
@@ -685,7 +686,7 @@ int ObTableSqlService::exchange_subpart_info(
   return ret;
 }
 
-int ObTableSqlService::drop_table(const ObTableSchema &table_schema,
+int ObTableSqlService::drop_table(const ObTableSchema &storage_schema,
                                   const int64_t new_schema_version,
                                   ObISQLClient &sql_client,
                                   const ObString *ddl_stmt_str/*=NULL*/,
@@ -697,9 +698,19 @@ int ObTableSqlService::drop_table(const ObTableSchema &table_schema,
 {
   int ret = OB_SUCCESS;
   ObSqlString sql;
-  
+
+  ObTableSchema namespace_schema;
+  const uint64_t namespace_id =
+      observer::namespace_worker_prototype::resolve_shared_inner_sql_namespace();
+  if (namespace_id > 1) {
+    ret = storage::NamespaceForkKernelPrototype::make_namespace_schema(
+        namespace_id, storage_schema, namespace_schema);
+  }
+  const ObTableSchema &table_schema =
+      namespace_id > 1 ? namespace_schema : storage_schema;
   const uint64_t table_id = table_schema.get_table_id();
-  if (OB_FAIL(check_ddl_allowed(table_schema, &sql_client))) {
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(check_ddl_allowed(table_schema, &sql_client))) {
   } else {
     // delete from __all_table_history
     if (OB_FAIL(delete_from_all_table_history(
@@ -1795,8 +1806,8 @@ int ObTableSqlService::batch_add_table_for_create_table(common::ObISQLClient &sq
     } else if (FALSE_IT(time_guard.click("insert_all_table_history"))) {
     }
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); ++i) {
-    ret = storage::NamespaceForkKernelPrototype::observe_schema(sql_client, tables.at(i));
+  if (OB_SUCC(ret)) {
+    ret = storage::NamespaceForkKernelPrototype::observe_schemas(sql_client, tables);
   }
   return ret;
 }
@@ -2186,15 +2197,31 @@ int ObTableSqlService::batch_create_table(ObIArray<ObTableSchema> &tables,
   int64_t start_usec = ObTimeUtility::current_time();
   int64_t end_usec = 0;
   int64_t cost_usec = 0;
-  if (tables.empty()) {
+  ObSEArray<ObTableSchema, 4> namespace_tables;
+  ObIArray<ObTableSchema> *metadata_tables = &tables;
+  const uint64_t namespace_id =
+      observer::namespace_worker_prototype::resolve_shared_inner_sql_namespace();
+  if (namespace_id > 1) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); ++i) {
+      ObTableSchema logical_schema;
+      if (OB_FAIL(storage::NamespaceForkKernelPrototype::make_namespace_schema(
+              namespace_id, tables.at(i), logical_schema))) {
+      } else if (OB_FAIL(namespace_tables.push_back(logical_schema))) {
+      }
+    }
+    if (OB_SUCC(ret)) { metadata_tables = &namespace_tables; }
+  }
+  ObIArray<ObTableSchema> &schemas = *metadata_tables;
+  if (OB_FAIL(ret)) {
+  } else if (schemas.empty()) {
   } else {
     ObDMLSqlSplicer ddl_operation_dml;
     
-    const bool has_sys_table = is_sys_table(tables.at(0).get_table_id());
+    const bool has_sys_table = is_sys_table(schemas.at(0).get_table_id());
     const bool update_object_status_ignore_version = false;
     // generate dmls
-    for (int64_t i = 0; i < tables.count() && OB_SUCC(ret); i++) {
-      ObTableSchema &table = tables.at(i);
+    for (int64_t i = 0; i < schemas.count() && OB_SUCC(ret); i++) {
+      ObTableSchema &table = schemas.at(i);
       int64_t tmp = 0;
       if (OB_FAIL(table.check_valid(true/*count by byte*/))) {
       } else if (OB_FAIL(check_ddl_allowed(table))) {
@@ -2202,7 +2229,7 @@ int ObTableSqlService::batch_create_table(ObIArray<ObTableSchema> &tables,
           && !table.is_force_view() && table.get_column_count() <= 0) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get wrong view schema", KR(ret), K(table));
-      } else if (has_sys_table != is_sys_table(tables.at(i).get_table_id())) {
+      } else if (has_sys_table != is_sys_table(schemas.at(i).get_table_id())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("sys table should not be created with user table", KR(ret), K(table));
       } else if (table.is_force_view()
@@ -2232,7 +2259,7 @@ int ObTableSqlService::batch_create_table(ObIArray<ObTableSchema> &tables,
       if (OB_FAIL(ret)) {
       } else if (is_sys_table(table.get_table_id())) {
         if (OB_FAIL(inner_create_sys_table(table, opt,
-                (sync_schema_version_for_last_table && i + 1 == tables.count()), sql_client))) {
+                (sync_schema_version_for_last_table && i + 1 == schemas.count()), sql_client))) {
         }
       } else {
         // for user table
@@ -2243,24 +2270,24 @@ int ObTableSqlService::batch_create_table(ObIArray<ObTableSchema> &tables,
     }
     time_guard.click("log_operation");
     if (OB_FAIL(ret) || has_sys_table) {
-    } else if (OB_FAIL(batch_add_sequence_for_create_table(sql_client, tables))) {
+    } else if (OB_FAIL(batch_add_sequence_for_create_table(sql_client, schemas))) {
     } else if (FALSE_IT(time_guard.click("insert_auto_increment"))) {
-    } else if (OB_FAIL(batch_add_table_for_create_table(sql_client, tables))) {
+    } else if (OB_FAIL(batch_add_table_for_create_table(sql_client, schemas))) {
     } else if (FALSE_IT(time_guard.click("insert_all_table"))) {
-    } else if (OB_FAIL(batch_add_columns_for_create_table(sql_client, tables))) {
+    } else if (OB_FAIL(batch_add_columns_for_create_table(sql_client, schemas))) {
     } else if (FALSE_IT(time_guard.click("insert_all_column"))) {
-    } else if (OB_FAIL(batch_add_constraints_for_create_table(sql_client, tables))) {
+    } else if (OB_FAIL(batch_add_constraints_for_create_table(sql_client, schemas))) {
     } else if (FALSE_IT(time_guard.click("insert_all_cst"))) {
-    } else if (OB_FAIL(batch_add_table_part_info(sql_client, tables))) {
+    } else if (OB_FAIL(batch_add_table_part_info(sql_client, schemas))) {
     } else if (FALSE_IT(time_guard.click("add_table_part_info"))) {
     } else if (OB_FAIL(exec_dml(sql_client, OB_ALL_DDL_OPERATION_TNAME, ddl_operation_dml,
-            tables.count()))) {
+            schemas.count()))) {
     } else if (FALSE_IT(time_guard.click("insert_all_ddl_operation"))) {
     } else {
-      ObTableSchema &last_table = tables.at(tables.count() - 1);
-      for (int64_t i = 0; i < tables.count() && OB_SUCC(ret); i++) {
-        if (is_inner_table(tables.at(i).get_table_id())) {
-        } else if (OB_FAIL(add_foreign_key(sql_client, tables.at(i), false/*only_history*/))) {
+      ObTableSchema &last_table = schemas.at(schemas.count() - 1);
+      for (int64_t i = 0; i < schemas.count() && OB_SUCC(ret); i++) {
+        if (is_inner_table(schemas.at(i).get_table_id())) {
+        } else if (OB_FAIL(add_foreign_key(sql_client, schemas.at(i), false/*only_history*/))) {
         }
       }
       time_guard.click("add_foreign_key");

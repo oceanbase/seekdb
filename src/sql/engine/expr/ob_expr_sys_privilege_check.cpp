@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_sys_privilege_check.h"
 
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "sql/engine/ob_exec_context.h"
 
 using namespace oceanbase::common;
@@ -85,7 +86,11 @@ int ObExprSysPrivilegeCheck::check_show_priv(bool &allow_show,
     ret = OB_SCHEMA_ERROR;
   }
   allow_show = true;
-  if (OB_SUCC(ret)) {
+  if (OB_SUCC(ret)
+      && !observer::namespace_worker_prototype::can_access_namespace_control_database()
+      && observer::namespace_worker_prototype::is_namespace_control_database(db_name)) {
+    allow_show = false;
+  } else if (OB_SUCC(ret)) {
     if (OB_FAIL(exec_ctx.get_my_session()->get_session_priv_info(session_priv))) {
     } else if (0 == level_str.case_compare("db_acc")) {
       if (OB_FAIL(const_cast<share::schema::ObSchemaGetterGuard *>(schema_guard)->check_db_show(

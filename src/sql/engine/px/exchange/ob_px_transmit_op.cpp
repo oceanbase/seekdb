@@ -202,6 +202,11 @@ int ObPxTransmitOp::transmit()
   begin_cpu_time_counting();
   int ret = do_transmit();
   end_cpu_time_counting();
+  if (OB_NOT_SUPPORTED == ret) {
+    fprintf(stderr,
+            "PROTOTYPE_V22_PX_TRANSMIT ret=%d op_type=%s op_id=%ld\n",
+            ret, op_name(), get_spec().id_);
+  }
   return ret;
 }
 

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 
+#include "data_plane/ddl/ob_direct_insert.h"
 #include "data_plane/report/ob_tablet_report.h"
 #include "storage/ddl/ob_ddl_storage_util.h"
 #include "share/rc/ob_server_runtime.h"
@@ -1243,13 +1244,44 @@ int ObTabletDDLUtil::report_ddl_checksum(
   } else if (OB_FAIL(DDL_SIM(ddl_task_id, REPORT_DDL_CHECKSUM_FAILED))) {
   } else {
     ObArray<ObColDesc> column_ids;
-    ObArray<ObDDLChecksumItem> ddl_checksum_items;
     if (OB_FAIL(table_schema->get_multi_version_column_descs(column_ids))) {
-    } else if (OB_UNLIKELY(column_count > column_ids.count())) {
+    } else if (OB_FAIL(report_ddl_checksum_with_column_descs(
+                   tablet_id, table_id, execution_id, ddl_task_id,
+                   column_checksums, column_count, data_format_version,
+                   column_ids))) {
+    }
+  }
+  return ret;
+}
+
+int ObTabletDDLUtil::report_ddl_checksum_with_column_descs(
+    const ObTabletID &tablet_id,
+    const uint64_t table_id,
+    const int64_t execution_id,
+    const int64_t ddl_task_id,
+    const int64_t *column_checksums,
+    const int64_t column_count,
+    const uint64_t data_format_version,
+    const ObIArray<ObColDesc> &column_descs)
+{
+  int ret = OB_SUCCESS;
+  ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
+  ObArray<ObDDLChecksumItem> ddl_checksum_items;
+  ObArray<uint64_t> report_column_ids;
+  ObArray<int64_t> report_column_checksums;
+  if (OB_UNLIKELY(!tablet_id.is_valid() || OB_INVALID_ID == ddl_task_id
+      || !is_valid_id(table_id) || 0 == table_id || execution_id < 0
+      || nullptr == column_checksums || column_count <= 0
+      || data_format_version < 0 || OB_ISNULL(sql_proxy))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid explicit DDL checksum facts", K(ret), K(tablet_id),
+        K(table_id), K(execution_id), K(ddl_task_id), K(column_count),
+        K(data_format_version), KP(sql_proxy));
+  } else if (OB_UNLIKELY(column_count > column_descs.count())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpect error, column checksums count larger than column ids count", K(ret),
-          K(tablet_id), K(column_count), K(column_ids.count()));
-    }
+          K(tablet_id), K(column_count), K(column_descs.count()));
+  }
     for (int64_t i = 0; OB_SUCC(ret) && i < column_count; ++i) {
       share::ObDDLChecksumItem item;
       item.execution_id_ = execution_id;
@@ -1257,7 +1289,7 @@ int ObTabletDDLUtil::report_ddl_checksum(
       item.table_id_ = table_id;
       item.tablet_id_ = tablet_id.id();
       item.ddl_task_id_ = ddl_task_id;
-      item.column_id_ = column_ids.at(i).col_id_;
+      item.column_id_ = column_descs.at(i).col_id_;
       item.task_id_ = tablet_id.id();
       item.checksum_ = column_checksums[i];
 #ifdef ERRSIM
@@ -1274,6 +1306,8 @@ int ObTabletDDLUtil::report_ddl_checksum(
           item.column_id_ == OB_HIDDEN_SQL_SEQUENCE_COLUMN_ID) {
         continue;
       } else if (OB_FAIL(ddl_checksum_items.push_back(item))) {
+      } else if (OB_FAIL(report_column_ids.push_back(item.column_id_))) {
+      } else if (OB_FAIL(report_column_checksums.push_back(item.checksum_))) {
       }
     }
 #ifdef ERRSIM
@@ -1285,11 +1319,21 @@ int ObTabletDDLUtil::report_ddl_checksum(
     }
 #endif
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObDDLChecksumOperator::update_checksum(data_format_version, ddl_checksum_items, *sql_proxy))) {
+    } else {
+      const int report_ret = data_plane::report_direct_insert_ddl_checksum(
+          data_format_version, execution_id, ddl_task_id, table_id, tablet_id,
+          report_column_ids, report_column_checksums);
+      if (OB_NOT_SUPPORTED == report_ret) {
+        ret = ObDDLChecksumOperator::update_checksum(
+            data_format_version, ddl_checksum_items, *sql_proxy);
+      } else {
+        ret = report_ret;
+      }
+    }
+    if (OB_FAIL(ret)) {
     } else {
       LOG_INFO("report ddl checkum success", K(tablet_id), K(table_id), K(execution_id), K(ddl_checksum_items), K(common::lbt()));
     }
-  }
   return ret;
 }
 

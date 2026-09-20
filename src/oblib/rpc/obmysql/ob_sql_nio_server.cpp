@@ -19,6 +19,8 @@
 #include "lib/ob_running_mode.h"
 #include "lib/string/ob_string.h"
 #include <stdio.h>
+#include <stdlib.h>
+#include <string>
 #ifdef _WIN32
 #include <io.h>
 #define access _access
@@ -133,9 +135,16 @@ int ObSqlNioServer::start(int port, rpc::frame::ObReqDeliver* deliver,
     // returns OB_NOT_SUPPORTED): toggling ssl_client_authentication at
     // runtime requires an observer restart to take effect.
     nio_tls_config tls_cfg = {};
-    tls_cfg.ca_file = OB_SSL_CA_FILE;
-    tls_cfg.cert_file = OB_SSL_CERT_FILE;
-    tls_cfg.key_file = OB_SSL_KEY_FILE;
+    const char *wallet_dir = getenv("SEEKDB_SQL_NIO_WALLET_DIR");
+    const std::string ca_file = wallet_dir && wallet_dir[0]
+        ? std::string(wallet_dir) + "/ca.pem" : OB_SSL_CA_FILE;
+    const std::string cert_file = wallet_dir && wallet_dir[0]
+        ? std::string(wallet_dir) + "/server-cert.pem" : OB_SSL_CERT_FILE;
+    const std::string key_file = wallet_dir && wallet_dir[0]
+        ? std::string(wallet_dir) + "/server-key.pem" : OB_SSL_KEY_FILE;
+    tls_cfg.ca_file = ca_file.c_str();
+    tls_cfg.cert_file = cert_file.c_str();
+    tls_cfg.key_file = key_file.c_str();
     tls_cfg.min_tls_version = nio_tls_min_version(min_tls_version);
     const nio_tls_config *tls = use_tls ? &tls_cfg : NULL;
     int32_t start_err = NIO_START_OK;

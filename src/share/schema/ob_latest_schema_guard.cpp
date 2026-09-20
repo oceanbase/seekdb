@@ -17,12 +17,23 @@
 
 #include "share/schema/ob_latest_schema_guard.h"
 #include "share/schema/ob_multi_version_schema_service.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::share::schema;
+
+namespace
+{
+bool hide_namespace_control_database(const ObString &database_name)
+{
+  using namespace oceanbase::observer::namespace_worker_prototype;
+  return !can_access_namespace_control_database()
+      && is_namespace_control_database(database_name);
+}
+}
 
 ObLatestSchemaGuard::ObLatestSchemaGuard(
   ObMultiVersionSchemaService *schema_service,
@@ -172,6 +183,10 @@ int ObLatestSchemaGuard::get_database_id(
   } else if (OB_UNLIKELY(database_name.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("database_name is empty", KR(ret), K(database_name));
+  } else if (hide_namespace_control_database(database_name)) {
+    // A forked all_* snapshot can contain inert control-schema rows. Keep one
+    // visibility rule at the SchemaService boundary; GLOBAL table storage uses
+    // the gateway's identity root and is never addressable from this worker.
   } else if (OB_FAIL(schema_service_impl->get_database_id(
              *sql_client, database_name, database_id))) {
   } else if (OB_UNLIKELY(OB_INVALID_ID == database_id)) {
@@ -208,6 +223,15 @@ int ObLatestSchemaGuard::get_table_id(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("database_id/table_name is invalid",
              KR(ret), K(database_id), K(table_name));
+  } else if (!oceanbase::observer::namespace_worker_prototype::can_access_namespace_control_database()) {
+    const ObDatabaseSchema *database_schema = nullptr;
+    if (OB_FAIL(get_database_schema(database_id, database_schema))) {
+    } else if (OB_ISNULL(database_schema)) {
+      // Hidden or missing database: keep table_id invalid.
+    } else if (OB_FAIL(schema_service_impl->get_table_id(
+                   *sql_client, database_id, session_id,
+                   table_name, table_id, table_type, schema_version))) {
+    }
   } else if (OB_FAIL(schema_service_impl->get_table_id(
              *sql_client, database_id, session_id,
              table_name, table_id, table_type, schema_version))) {
@@ -352,6 +376,13 @@ int ObLatestSchemaGuard::get_table_schema(
   if (OB_FAIL(check_inner_stat_())) {
   } else if (OB_FAIL(get_schema_(TABLE_SCHEMA,
              table_id, table_schema))) {
+  } else if (OB_NOT_NULL(table_schema)
+             && !oceanbase::observer::namespace_worker_prototype::can_access_namespace_control_database()) {
+    const ObDatabaseSchema *database_schema = nullptr;
+    if (OB_FAIL(get_database_schema(table_schema->get_database_id(), database_schema))) {
+    } else if (OB_ISNULL(database_schema)) {
+      table_schema = nullptr;
+    }
   } else if (OB_ISNULL(table_schema)) {
     LOG_INFO("table not exist", KR(ret), K(table_id));
   }
@@ -387,6 +418,10 @@ int ObLatestSchemaGuard::get_database_schema(
     LOG_WARN("database_id is invalid", KR(ret), K(database_id));
   } else if (OB_FAIL(get_schema_(DATABASE_SCHEMA,
              database_id, database_schema))) {
+  } else if (OB_NOT_NULL(database_schema)
+             && hide_namespace_control_database(
+                    database_schema->get_database_name_str())) {
+    database_schema = nullptr;
   } else if (OB_ISNULL(database_schema)) {
     LOG_INFO("database not exist", KR(ret), K(database_id));
   }

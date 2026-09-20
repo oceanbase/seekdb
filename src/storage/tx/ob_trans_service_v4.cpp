@@ -537,6 +537,24 @@ int ObTransService::interrupt(ObTxDesc &tx, int cause)
   return ret;
 }
 
+int ObTransService::interrupt(const ObTransID &tx_id, int cause)
+{
+  int ret = OB_SUCCESS;
+  ObTxDesc *tx = nullptr;
+  if (!tx_id.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(tx_desc_mgr_.get(tx_id, tx))) {
+  } else if (OB_ISNULL(tx)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ret = interrupt(*tx, cause);
+  }
+  if (OB_NOT_NULL(tx)) {
+    tx_desc_mgr_.revert(*tx);
+  }
+  return ret;
+}
+
 int ObTransService::report_write_ctx_status(const ObTransID &tx_id,
                                             const int status,
                                             int &tx_status)
@@ -1209,6 +1227,42 @@ int ObTransService::gen_trans_id(ObTransID &trans_id)
     if (OB_SUCC(ret)) {
       trans_id = ObTransID(start_id);
     }
+  }
+  return ret;
+}
+
+int ObTransService::gen_unique_id(int64_t &unique_id, const int64_t timeout_us)
+{
+  int ret = OB_SUCCESS;
+  ObTransID trans_id;
+  const int64_t expire_ts = ObTimeUtility::current_time() + timeout_us;
+  do {
+    if (OB_SUCC(gen_trans_id(trans_id))) {
+      unique_id = trans_id.get_id();
+    } else if (OB_GTI_NOT_READY == ret) {
+      if (ObTimeUtility::current_time() > expire_ts) {
+        ret = OB_NEED_RETRY;
+        TRANS_LOG(WARN, "get unique id not ready", K(ret), K(expire_ts));
+      } else {
+        ob_usleep(1000);
+      }
+    } else {
+      TRANS_LOG(WARN, "get unique id fail", KR(ret));
+    }
+  } while (OB_GTI_NOT_READY == ret);
+  return ret;
+}
+
+int ObTransService::get_gts_sync(const int64_t timeout_us, share::SCN &gts)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(timeout_us <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_ISNULL(ts_mgr_)) {
+    ret = OB_NOT_INIT;
+    TRANS_LOG(WARN, "timestamp manager is not initialized", KR(ret));
+  } else {
+    ret = ts_mgr_->get_gts_sync(timeout_us, gts);
   }
   return ret;
 }

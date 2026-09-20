@@ -18,9 +18,8 @@
 
 #include "ob_common_id_utils.h"
 #include "common/ob_timeout_ctx.h"
+#include "data_plane/transaction/ob_i_transaction_service.h"
 #include "share/ob_share_util.h"
-#include "share/rc/ob_server_runtime.h"
-#include "storage/tx/ob_unique_id_service.h" // ObUniqueIDService
 
 namespace oceanbase
 {
@@ -38,8 +37,10 @@ int ObCommonIDUtils::gen_unique_id(ObCommonID &id)
   id.reset();
 
   if (OB_FAIL(share::ObShareUtil::set_default_timeout_ctx(ctx, DEFAULT_TIMEOUT))) {
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::transaction::ObUniqueIDService>()->gen_unique_id(unique_id,
-      ctx.get_timeout()))) {
+  } else if (OB_ISNULL(data_plane::query_transaction_service())) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(data_plane::query_transaction_service()->gen_unique_id(
+      unique_id, ctx.get_timeout()))) {
   } else {
     id = ObCommonID(unique_id);
   }

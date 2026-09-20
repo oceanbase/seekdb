@@ -21,6 +21,8 @@
 #include "share/ob_server_struct.h"
 #include "share/ob_share_util.h"
 #include "share/inner_table/ob_load_inner_table_schema.h"
+#include "observer/namespace_worker_protocol_prototype.h"
+#include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 #include "lib/statistic_event/ob_stat_event.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 namespace oceanbase
@@ -1765,6 +1767,31 @@ int ObServerSchemaService::fetch_increment_schemas(
     }
   }
 
+  if (OB_SUCC(ret) && observer::namespace_worker_prototype::owns_namespace_schema()) {
+    const uint64_t namespace_id = observer::namespace_worker_prototype::worker_namespace;
+    for (ObSimpleTableSchemaV2 *schema : simple_incre_schemas.simple_table_schemas_) {
+      uint64_t database_id = OB_INVALID_ID;
+      if (schema == nullptr) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::local_object_id(
+                     namespace_id, schema->get_database_id(), database_id))) {
+      } else {
+        schema->set_database_id(database_id);
+      }
+      if (ret != OB_SUCCESS) { break; }
+    }
+    for (int64_t i = 0; OB_SUCC(ret)
+        && i < simple_incre_schemas.simple_database_schemas_.count(); ++i) {
+      ObSimpleDatabaseSchema &schema = simple_incre_schemas.simple_database_schemas_.at(i);
+      uint64_t database_id = OB_INVALID_ID;
+      if (OB_FAIL(storage::NamespaceForkKernelPrototype::local_object_id(
+              namespace_id, schema.get_database_id(), database_id))) {
+      } else {
+        schema.set_database_id(database_id);
+      }
+    }
+  }
+
 #undef GET_BATCH_SCHEMAS
   return ret;
 
@@ -2851,6 +2878,13 @@ int ObServerSchemaService::refresh_increment_schema(
       } else {
         break;
       }
+      if (observer::namespace_worker_prototype::owns_namespace_schema()) {
+        fprintf(stderr,
+            "PROTOTYPE_NATIVE_REFRESH_RETRY ret=%d local=%lld core=%lld schema=%lld core_change=%d sys_change=%d retry=%lld\n",
+            ret, (long long)local_schema_version, (long long)core_schema_version,
+            (long long)schema_version, core_schema_change, sys_schema_change,
+            (long long)retry_count);
+      }
       if (OB_FAIL(ret)) {
         // check whether failed because of sys table schema change, go to suitable pos,
         // if during check core table schema change, go to suitable pos
@@ -3057,7 +3091,8 @@ int ObServerSchemaService::refresh_runtime_full_schema(
     ObISQLClient &sql_client,
     const ObRefreshSchemaStatus &schema_status,
     const int64_t schema_version,
-    common::ObIArray<share::schema::ObTableSchema> *table_schemas)
+    common::ObIArray<share::schema::ObTableSchema> *table_schemas,
+    const bool reuse_static_system_schema)
 {
   int ret = OB_SUCCESS;
   
@@ -3182,6 +3217,31 @@ int ObServerSchemaService::refresh_runtime_full_schema(
         }
       }
 
+      // Global namespace-management tables use namespace 1 as their SQL
+      // owner. Their rows can be present in the system-table snapshot used to
+      // bootstrap a child, but their definitions must never enter that
+      // child's SchemaService. This keeps SHOW/resolution and storage routing
+      // consistent without teaching every schema consumer about global scope.
+      if (OB_SUCC(ret)
+          && observer::namespace_worker_prototype::owns_namespace_schema()
+          && observer::namespace_worker_prototype::worker_namespace > 1) {
+        uint64_t control_database_id = OB_INVALID_ID;
+        for (int64_t i = simple_databases.count() - 1; OB_SUCC(ret) && i >= 0; --i) {
+          if (observer::namespace_worker_prototype::is_namespace_control_database(
+                  simple_databases.at(i).get_database_name_str())) {
+            control_database_id = simple_databases.at(i).get_database_id();
+            ret = simple_databases.remove(i);
+          }
+        }
+        for (int64_t i = simple_tables.count() - 1;
+             OB_SUCC(ret) && i >= 0 && control_database_id != OB_INVALID_ID; --i) {
+          if (simple_tables.at(i) != nullptr
+              && simple_tables.at(i)->get_database_id() == control_database_id) {
+            ret = simple_tables.remove(i);
+          }
+        }
+      }
+
       const bool refresh_full_schema = true;
       // add simple schema for cache
       if (OB_FAIL(ret)) {
@@ -3220,7 +3280,7 @@ int ObServerSchemaService::refresh_runtime_full_schema(
                "obj_mysql_privs", obj_mysql_privs.count());
     }
 
-    if (OB_SUCC(ret)) {
+    if (OB_SUCC(ret) && !reuse_static_system_schema) {
       ObArenaAllocator allocator;
       ObArray<uint64_t> non_sys_table_ids;
       ObArray<ObTableSchema *> non_sys_tables;

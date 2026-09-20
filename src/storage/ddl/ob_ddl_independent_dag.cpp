@@ -91,7 +91,7 @@ int ObDDLIndependentDag::init_by_param(const share::ObIDagInitParam *param)
     direct_load_type_ = init_param->direct_load_type_;
     ddl_thread_count_ = init_param->ddl_thread_count_;
     ddl_task_param_ = init_param->ddl_task_param_;
-    if (OB_FAIL(init_ddl_table_schema())) {
+    if (OB_FAIL(init_ddl_table_schema(*init_param))) {
     } else if (OB_FAIL(init_tablet_context_map())) {
     } else {
       is_inited_ = true;
@@ -101,10 +101,18 @@ int ObDDLIndependentDag::init_by_param(const share::ObIDagInitParam *param)
   return ret;
 }
 
-int ObDDLIndependentDag::init_ddl_table_schema()
+int ObDDLIndependentDag::init_ddl_table_schema(
+    const ObDDLIndependentDagInitParam &init_param)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObDDLTableSchema::fill_ddl_table_schema(ddl_task_param_.target_table_id_, arena_, ddl_table_schema_))) {
+  if (OB_NOT_NULL(init_param.table_schema_)) {
+    if (OB_FAIL(ObDDLTableSchema::fill_ddl_table_schema(
+            *init_param.table_schema_, init_param.lob_meta_table_schema_,
+            arena_, ddl_table_schema_))) {
+    }
+  } else if (OB_FAIL(ObDDLTableSchema::fill_ddl_table_schema(
+                 ddl_task_param_.target_table_id_, arena_,
+                 ddl_table_schema_))) {
   }
   return ret;
 }

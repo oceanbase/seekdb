@@ -45,6 +45,11 @@ ObPhysicalPlanCtx::ObPhysicalPlanCtx(common::ObIAllocator &allocator)
       orig_question_mark_cnt_(0),
       srs_version_(OB_INVALID_VERSION),
       array_param_groups_(),
+      direct_insert_data_format_version_(0),
+      direct_insert_snapshot_version_(0),
+      direct_insert_schema_version_(0),
+      direct_insert_target_object_id_(0),
+      direct_insert_is_offline_index_rebuild_(false),
       affected_rows_(0),
       is_affect_found_row_(false),
       found_rows_(0),
@@ -600,6 +605,11 @@ OB_DEF_SERIALIZE(ObPhysicalPlanCtx)
     }
   }
   OB_UNIS_ENCODE(check_pdml_affected_rows_);
+  OB_UNIS_ENCODE(direct_insert_data_format_version_);
+  OB_UNIS_ENCODE(direct_insert_snapshot_version_);
+  OB_UNIS_ENCODE(direct_insert_schema_version_);
+  OB_UNIS_ENCODE(direct_insert_target_object_id_);
+  OB_UNIS_ENCODE(direct_insert_is_offline_index_rebuild_);
   return ret;
 }
 
@@ -694,6 +704,11 @@ OB_DEF_SERIALIZE_SIZE(ObPhysicalPlanCtx)
     }
   }
   OB_UNIS_ADD_LEN(check_pdml_affected_rows_);
+  OB_UNIS_ADD_LEN(direct_insert_data_format_version_);
+  OB_UNIS_ADD_LEN(direct_insert_snapshot_version_);
+  OB_UNIS_ADD_LEN(direct_insert_schema_version_);
+  OB_UNIS_ADD_LEN(direct_insert_target_object_id_);
+  OB_UNIS_ADD_LEN(direct_insert_is_offline_index_rebuild_);
   return len;
 }
 
@@ -804,6 +819,11 @@ OB_DEF_DESERIALIZE(ObPhysicalPlanCtx)
     }
   }
   OB_UNIS_DECODE(check_pdml_affected_rows_);
+  OB_UNIS_DECODE(direct_insert_data_format_version_);
+  OB_UNIS_DECODE(direct_insert_snapshot_version_);
+  OB_UNIS_DECODE(direct_insert_schema_version_);
+  OB_UNIS_DECODE(direct_insert_target_object_id_);
+  OB_UNIS_DECODE(direct_insert_is_offline_index_rebuild_);
   return ret;
 }
 

@@ -79,6 +79,37 @@ int ObResultSet::clear_ddl_checksum(ObPhysicalPlan *physical_plan)
   }
   return ret;
 }
+
+int ObResultSet::prepare_direct_insert_task_info(
+    ObPhysicalPlan *physical_plan,
+    ObPhysicalPlanCtx &plan_ctx,
+    const ObSessionDDLInfo &ddl_info)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(physical_plan)
+      || OB_UNLIKELY(physical_plan->get_ddl_task_id() <= 0)
+      || OB_UNLIKELY(physical_plan->get_ddl_table_id() <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid direct insert plan", K(ret), KP(physical_plan));
+  } else if (OB_UNLIKELY(!ddl_info.has_direct_insert_task_info())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("DDL submitter did not provide direct insert task info", K(ret),
+        K(ddl_info), "ddl_task_id", physical_plan->get_ddl_task_id());
+  } else if (OB_UNLIKELY(ddl_info.get_direct_insert_target_object_id()
+                         != static_cast<uint64_t>(physical_plan->get_ddl_table_id()))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("direct insert target table does not match ddl task", K(ret),
+        K(ddl_info), "ddl_table_id", physical_plan->get_ddl_table_id());
+  } else {
+    plan_ctx.set_direct_insert_task_info(
+        ddl_info.get_direct_insert_data_format_version(),
+        ddl_info.get_direct_insert_snapshot_version(),
+        ddl_info.get_direct_insert_schema_version(),
+        ddl_info.get_direct_insert_target_object_id(),
+        ddl_info.is_direct_insert_offline_index_rebuild());
+  }
+  return ret;
+}
 } // namespace sql
 } // namespace oceanbase
 
@@ -178,7 +209,11 @@ int ObResultSet::open()
   LinkExecCtxGuard link_guard(my_session_, get_exec_context());
   ObTraceSpanGuard open_span(&my_session_, TRACE_OPEN);
   if (OB_FAIL(execute())) {
+    fprintf(stderr, "PROTOTYPE_V22_RESULT_OPEN stage=execute ret=%d stmt_type=%d\n",
+            ret, static_cast<int>(stmt_type_));
   } else if (OB_FAIL(open_result())) {
+    fprintf(stderr, "PROTOTYPE_V22_RESULT_OPEN stage=open_result ret=%d stmt_type=%d\n",
+            ret, static_cast<int>(stmt_type_));
   }
 
   if (OB_SUCC(ret)) {
@@ -458,6 +493,7 @@ OB_INLINE int ObResultSet::do_open_plan(ObExecContext &ctx)
   ObPhysicalPlan* physical_plan_ = static_cast<ObPhysicalPlan*>(cache_obj_guard_.get_cache_obj());
   NG_TRACE_EXT(do_open_plan_begin, OB_ID(plan_id), physical_plan_->get_plan_id());
   int ret = OB_SUCCESS;
+  ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
   ctx.reset_op_env();
   exec_result_ = &(ctx.get_sql_exec_ctx().get_execute_result());
   if (stmt::T_PREPARE != stmt_type_) {
@@ -474,6 +510,16 @@ OB_INLINE int ObResultSet::do_open_plan(ObExecContext &ctx)
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(start_stmt())) {
+  } else if (my_session_.get_ddl_info().is_ddl()
+             && stmt::T_INSERT == get_stmt_type()
+             && (OB_ISNULL(plan_ctx)
+                 || OB_FAIL(prepare_direct_insert_task_info(
+                        physical_plan_, *plan_ctx,
+                        my_session_.get_ddl_info())))) {
+    if (OB_SUCC(ret)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("physical plan context is null", K(ret));
+    }
   } else {
     /* Set exec_result_ to the executor's runtime environment for returning data */
     /* execute plan,

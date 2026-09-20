@@ -1357,7 +1357,14 @@ int ObDDLWaitTransEndCtx::do_write_defensive(const int64_t ddl_task_id,
   } else if (OB_UNLIKELY(ddl_task_status != static_cast<share::ObDDLTaskStatus>(cur_task_status))) {
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("task status not match, operation is stale", K(ret), K(ddl_task_id), K(ddl_task_status), K(cur_task_status));
-  } else if (OB_FAIL(storage::ObTabletBindingMdsHelper::modify_tablet_binding_for_write_defensive(tablet_ids, schema_version, ObTimeUtility::current_time() + timeout_us, trans))) {
+  } else if (OB_ISNULL(rootserver_local_runtime())) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(rootserver_local_runtime()->
+             modify_tablet_binding_for_write_defensive(
+                 trans,
+                 tablet_ids,
+                 schema_version,
+                 ObTimeUtility::current_time() + timeout_us))) {
   }
   if (trans.is_started()) {
     int temp_ret = OB_SUCCESS;
@@ -1586,7 +1593,8 @@ int ObDDLWaitColumnChecksumCtx::init(
     const int64_t snapshot_version,
     const int64_t execution_id,
     const int64_t timeout_us,
-    const int64_t parallelism)
+    const int64_t parallelism,
+    const uint64_t data_format_version)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -1600,7 +1608,8 @@ int ObDDLWaitColumnChecksumCtx::init(
         || schema_version <= 0
         || snapshot_version <= 0
         || execution_id < 0
-        || timeout_us <= 0)) {
+        || timeout_us <= 0
+        || data_format_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(task_id), K(source_table_id), K(target_table_id),
         K(schema_version), K(snapshot_version), K(execution_id));
@@ -1644,6 +1653,7 @@ int ObDDLWaitColumnChecksumCtx::init(
       task_id_ = task_id;
       is_inited_ = true;
       parallelism_ = parallelism;
+      data_format_version_ = data_format_version;
     }
   }
   return ret;
@@ -1662,6 +1672,7 @@ void ObDDLWaitColumnChecksumCtx::reset()
   stat_array_.reset();
   task_id_ = 0;
   parallelism_ = 0;
+  data_format_version_ = 0;
 }
 
 int ObDDLWaitColumnChecksumCtx::try_wait(bool &is_column_checksum_ready)
@@ -1806,13 +1817,67 @@ int send_batch_calc_rpc(const ObCalcColumnChecksumRequestArg &arg,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("return codes count not match the argument", K(ret), K(arg.calc_items_.count()),
         K(res.ret_codes_.count()), K(send_array.count()));
+  } else if (!res.completions_.empty()
+             && res.completions_.count() != tablet_count) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("completion count does not match request", K(ret),
+        K(tablet_count), K(res.completions_.count()));
   } else {
     LOG_INFO("send checksum validation task", K(arg));
+    ObArray<ObDDLChecksumItem> checksum_items;
+    if (!res.completions_.empty()) {
+      for (int64_t i = 0; OB_SUCC(ret) && i < tablet_count; ++i) {
+        const ObCalcColumnChecksumCompletion &completion = res.completions_.at(i);
+        if (!completion.is_valid()) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (completion.finished_ && OB_SUCCESS == completion.ret_code_) {
+          for (int64_t j = 0;
+               OB_SUCC(ret) && j < completion.column_ids_.count(); ++j) {
+            ObDDLChecksumItem checksum_item;
+            checksum_item.execution_id_ = arg.execution_id_;
+            checksum_item.table_id_ = arg.calc_items_.at(i).calc_table_id_;
+            checksum_item.tablet_id_ = arg.calc_items_.at(i).tablet_id_.id();
+            checksum_item.ddl_task_id_ = arg.task_id_;
+            checksum_item.column_id_ = completion.column_ids_.at(j);
+            checksum_item.task_id_ = -arg.calc_items_.at(i).tablet_id_.id();
+            checksum_item.checksum_ = completion.column_checksums_.at(j);
+            if (OB_FAIL(checksum_items.push_back(checksum_item))) {
+            }
+          }
+        }
+      }
+      if (OB_SUCC(ret) && !checksum_items.empty()) {
+        if (OB_ISNULL(GCTX.sql_proxy_)) {
+          ret = OB_NOT_INIT;
+        } else if (OB_FAIL(ObDDLChecksumOperator::update_checksum(
+                       arg.data_format_version_, checksum_items,
+                       *GCTX.sql_proxy_))) {
+          LOG_WARN("failed to persist worker-owned checksum facts", K(ret),
+              K(arg.task_id_), K(checksum_items.count()));
+        }
+      }
+    }
+    if (OB_FAIL(ret)) {
+      return ret;
+    }
     SpinWLockGuard guard(item_lock);
     for (int64_t i = 0; i < tablet_count; ++i) { // ignore ret
       PartitionColChecksumStat *item = reinterpret_cast<PartitionColChecksumStat *>(send_array.at(i).other_info_);
       int ret_code = res.ret_codes_.at(i);
-      if (OB_SUCCESS == ret_code) {
+      const ObCalcColumnChecksumCompletion *completion =
+          res.completions_.empty() ? nullptr : &res.completions_.at(i);
+      if (completion != nullptr && completion->finished_) {
+        if (OB_SUCCESS == completion->ret_code_) {
+          item->snapshot_ = arg.snapshot_version_;
+          item->col_checksum_stat_ = CCS_SUCCEED;
+        } else if (ObIDDLTask::in_ddl_retry_white_list(completion->ret_code_)) {
+          item->snapshot_ = -1;
+          item->col_checksum_stat_ = CCS_NOT_MASTER;
+        } else {
+          item->ret_code_ = completion->ret_code_;
+          item->col_checksum_stat_ = CCS_FAILED;
+        }
+      } else if (OB_SUCCESS == ret_code) {
         item->snapshot_ = arg.snapshot_version_;
         item->col_checksum_stat_ = CCS_INVALID;
         ++send_succ_count;
@@ -1845,6 +1910,25 @@ int ObDDLWaitColumnChecksumCtx::send_calc_rpc(int64_t &send_succ_count)
     arg.execution_id_ = execution_id_;
     arg.snapshot_version_ = snapshot_version_;
     arg.user_parallelism_ = parallelism_;
+    arg.data_format_version_ = data_format_version_;
+    ObSchemaGetterGuard schema_guard;
+    const ObTableSchema *source_schema = nullptr;
+    const ObTableSchema *target_schema = nullptr;
+    if (OB_ISNULL(GCTX.schema_service_)) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+                   schema_guard, schema_version_))) {
+    } else if (OB_FAIL(schema_guard.get_table_schema(
+                   source_table_id_, source_schema))) {
+    } else if (OB_ISNULL(source_schema)) {
+      ret = OB_TABLE_NOT_EXIST;
+    } else if (OB_FAIL(schema_guard.get_table_schema(
+                   target_table_id_, target_schema))) {
+    } else if (OB_ISNULL(target_schema)) {
+      ret = OB_TABLE_NOT_EXIST;
+    } else if (OB_FAIL(arg.source_schema_.assign(*source_schema))) {
+    } else if (OB_FAIL(arg.target_schema_.assign(*target_schema))) {
+    }
     for (int64_t i = 0; OB_SUCC(ret) && i < stat_array_.count(); ++i) {
       PartitionColChecksumStat &item = stat_array_.at(i);
       if (!item.is_valid()) {
@@ -2376,17 +2460,18 @@ int ObDDLTaskRecordOperator::get_schedule_info(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(task_id));
   } else {
-    // select schedule_info for update, unhex and deserialize it into persistent_slice_info
+    // Select schedule_info for update and deserialize it into
+    // persistent_slice_info. Idempotent mode is a runtime policy and does not
+    // depend on deserializing the entire DDL task message.
     ObString schedule_info;
-    ObString message;
     ObSqlString sql_string;
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *result = NULL;
       if (is_for_update) {
-        if (OB_FAIL(sql_string.assign_fmt("SELECT UNHEX(message) as message_unhex, UNHEX(schedule_info) as schedule_info_unhex FROM %s WHERE task_id = %lu FOR UPDATE",
+        if (OB_FAIL(sql_string.assign_fmt("SELECT UNHEX(schedule_info) as schedule_info_unhex FROM %s WHERE task_id = %lu FOR UPDATE",
                 OB_ALL_DDL_TASK_STATUS_TNAME, task_id))) {
         }
-      } else if (OB_FAIL(sql_string.assign_fmt("SELECT UNHEX(message) as message_unhex, UNHEX(schedule_info) as schedule_info_unhex FROM %s WHERE task_id = %lu",
+      } else if (OB_FAIL(sql_string.assign_fmt("SELECT UNHEX(schedule_info) as schedule_info_unhex FROM %s WHERE task_id = %lu",
                      OB_ALL_DDL_TASK_STATUS_TNAME, task_id))) {
       }
       if (OB_FAIL(ret)) {
@@ -2394,6 +2479,8 @@ int ObDDLTaskRecordOperator::get_schedule_info(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("the sql string is not valid", K(ret), K(sql_string));
       } else if (OB_FAIL(proxy.read(res, sql_string.ptr()))) {
+        fprintf(stderr, "PROTOTYPE_V22_DDL_SLICE_READ stage=query ret=%d task=%ld\n",
+                ret, task_id);
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get sql result", K(ret), KP(result));
@@ -2403,25 +2490,28 @@ int ObDDLTaskRecordOperator::get_schedule_info(
         } else {
           LOG_WARN("fail to get next row", K(ret));
         }
+        fprintf(stderr, "PROTOTYPE_V22_DDL_SLICE_READ stage=next ret=%d task=%ld\n",
+                ret, task_id);
       } else {
         EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(*result, "schedule_info_unhex", schedule_info);
-        EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(*result, "message_unhex", message);
+        if (OB_FAIL(ret)) {
+          fprintf(stderr, "PROTOTYPE_V22_DDL_SLICE_READ stage=fields ret=%d task=%ld\n",
+                  ret, task_id);
+        }
         if (OB_SUCC(ret) && !schedule_info.empty()) {
           // deserialize persistent slice info
           int64_t pos = 0;
           ObDDLSliceInfo tmp_slice_info;
           if (OB_FAIL(tmp_slice_info.deserialize(schedule_info.ptr(), schedule_info.length(), pos))) {
+            fprintf(stderr, "PROTOTYPE_V22_DDL_SLICE_READ stage=decode_ranges ret=%d task=%ld\n",
+                    ret, task_id);
           } else if (OB_FAIL(ddl_slice_info.deep_copy(tmp_slice_info, allocator))) {
+            fprintf(stderr, "PROTOTYPE_V22_DDL_SLICE_READ stage=copy_ranges ret=%d task=%ld\n",
+                    ret, task_id);
           }
         }
         if (OB_SUCC(ret)) {
-          SMART_VAR(rootserver::ObDDLTask, task) {
-            int64_t pos = 0;
-            if (OB_FAIL(task.deserialize_params_from_message(message.ptr(), message.length(), pos))) {
-            } else {
-              is_idempotence_mode = ObDDLUtil::use_idempotent_mode();
-            }
-          }
+          is_idempotence_mode = ObDDLUtil::use_idempotent_mode();
         }
       }
     }
@@ -2479,7 +2569,14 @@ int ObDDLTaskRecordOperator::get_or_insert_schedule_info(const int64_t task_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(task_id), K(ddl_slice_info));
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
-  } else if (OB_FAIL(get_schedule_info(trans, task_id, arena, true/*is_for_update*/, persistent_slice_info, is_idempotent_mode))) {
+    fprintf(stderr, "PROTOTYPE_V22_DDL_SLICE stage=begin ret=%d task=%ld\n",
+            ret, task_id);
+  } else if (OB_FAIL(get_schedule_info(trans, task_id, arena,
+                                        true/*is_for_update*/,
+                                        persistent_slice_info,
+                                        is_idempotent_mode))) {
+    fprintf(stderr, "PROTOTYPE_V22_DDL_SLICE stage=read ret=%d task=%ld\n",
+            ret, task_id);
   }
   if (OB_SUCC(ret) && is_idempotent_mode) {
     // merge slice info from input params and the persistent one
@@ -2488,6 +2585,8 @@ int ObDDLTaskRecordOperator::get_or_insert_schedule_info(const int64_t task_id,
     ObDDLSliceInfo output_slice_info;
     ObDDLSliceInfo total_slice_info;
     if (OB_FAIL(copied_input_slice_info.deep_copy(ddl_slice_info, arena))) {
+      fprintf(stderr, "PROTOTYPE_V22_DDL_SLICE stage=copy_input ret=%d task=%ld\n",
+              ret, task_id);
     } else if (persistent_slice_info.is_valid() && OB_FAIL(total_slice_info.assign(persistent_slice_info))) {
       LOG_WARN("assign persistent slice info failed", K(ret));
     }
@@ -2511,7 +2610,11 @@ int ObDDLTaskRecordOperator::get_or_insert_schedule_info(const int64_t task_id,
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(update_schedule_info(trans, task_id, total_slice_info))) {
+        fprintf(stderr, "PROTOTYPE_V22_DDL_SLICE stage=write ret=%d task=%ld\n",
+                ret, task_id);
       } else if (OB_FAIL(ddl_slice_info.deep_copy(output_slice_info, allocator))) {
+        fprintf(stderr, "PROTOTYPE_V22_DDL_SLICE stage=copy_output ret=%d task=%ld\n",
+                ret, task_id);
       }
     }
   }
@@ -2521,9 +2624,14 @@ int ObDDLTaskRecordOperator::get_or_insert_schedule_info(const int64_t task_id,
     int tmp_ret = OB_SUCCESS;
     bool need_commit = OB_SUCC(ret);
     if (OB_TMP_FAIL(trans.end(need_commit))) {
+      fprintf(stderr, "PROTOTYPE_V22_DDL_SLICE stage=end ret=%d original=%d task=%ld commit=%d\n",
+              tmp_ret, ret, task_id, need_commit);
     }
     ret = OB_SUCC(ret) ? tmp_ret : ret;
   }
+  fprintf(stderr,
+          "PROTOTYPE_V22_DDL_SLICE stage=done ret=%d task=%ld idem=%d ranges=%ld\n",
+          ret, task_id, is_idempotent_mode, ddl_slice_info.part_ranges_.count());
   return ret;
 }
 

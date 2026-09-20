@@ -2960,6 +2960,7 @@ int ObSPIService::unstreaming_cursor_open(ObPLExecCtx *ctx,
           OX (for_update ? cursor.set_for_update() : (void)NULL);
           OX (for_update ? cursor.set_trans_id(session_info.get_tx_id()) : (void)NULL);
           OX (has_hidden_rowid ? cursor.set_hidden_rowid() : (void)NULL);
+          OZ (setup_cursor_snapshot_verify_(&cursor, &spi_result));
           if (!cursor.is_ps_cursor()) {
             retry_guard.test();
           }
@@ -3179,6 +3180,15 @@ int ObSPIService::do_cursor_fetch(ObPLExecCtx *ctx,
     ret = OB_ER_SP_CURSOR_NOT_OPEN;
     LOG_USER_ERROR(OB_ER_SP_CURSOR_NOT_OPEN);
     LOG_WARN("Cursor is not open", K(cursor), K(ret));
+  } else if (cursor->is_need_check_snapshot()) {
+    data_plane::ObITransactionService *tx_service =
+        data_plane::query_transaction_service();
+    CK (OB_NOT_NULL(tx_service));
+    OZ (tx_service->refresh_tx_snapshot_verify(cursor->get_snapshot()));
+    if (OB_SUCC(ret) && !cursor->get_snapshot().is_valid()) {
+      ret = OB_SNAPSHOT_DISCARDED;
+      LOG_WARN("cursor snapshot was invalidated", K(ret), KPC(cursor));
+    }
   }
 
   if (OB_FAIL(ret)) {

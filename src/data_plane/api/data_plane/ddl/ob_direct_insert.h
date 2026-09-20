@@ -23,6 +23,7 @@
 #include "lib/allocator/ob_allocator.h"
 #include "lib/container/ob_array.h"
 #include "lib/ob_define.h"
+#include "lib/string/ob_string.h"
 
 namespace oceanbase
 {
@@ -38,6 +39,8 @@ class ObISpillBatchSpoolFactory;
 namespace data_plane
 {
 
+struct ObDDLTabletSliceCount;
+
 // Installs the query worker state required by a direct-insert background
 // thread.  The context must outlive the session passed to start().
 class ObIDirectInsertWorkerContext
@@ -45,7 +48,36 @@ class ObIDirectInsertWorkerContext
 public:
   virtual ~ObIDirectInsertWorkerContext() {}
   virtual void bind_current_thread() = 0;
+  // A storage-side direct-insert DAG computes physical-tablet checksums.  A
+  // split SQL worker owns the namespace system tables, so its boundary
+  // context may persist the logical form there.  Integrated execution keeps
+  // the native SQL fallback by returning OB_NOT_SUPPORTED.
+  virtual int report_ddl_checksum(
+      uint64_t data_format_version,
+      int64_t execution_id,
+      int64_t ddl_task_id,
+      uint64_t table_id,
+      const common::ObTabletID &tablet_id,
+      const common::ObIArray<uint64_t> &column_ids,
+      const common::ObIArray<int64_t> &column_checksums)
+  {
+    return common::OB_NOT_SUPPORTED;
+  }
 };
+
+// Direct-insert DAG work can move to its private thread pool.  These helpers
+// bind the session-lifetime coordinator context to the current storage thread
+// without exposing SQL-worker types to Storage.
+ObIDirectInsertWorkerContext *set_current_direct_insert_worker_context(
+    ObIDirectInsertWorkerContext *context);
+int report_direct_insert_ddl_checksum(
+    uint64_t data_format_version,
+    int64_t execution_id,
+    int64_t ddl_task_id,
+    uint64_t table_id,
+    const common::ObTabletID &tablet_id,
+    const common::ObIArray<uint64_t> &column_ids,
+    const common::ObIArray<int64_t> &column_checksums);
 
 struct ObDirectInsertStartParam final
 {
@@ -53,19 +85,31 @@ struct ObDirectInsertStartParam final
 
   ObDirectInsertStartParam()
     : ddl_task_id_(0), execution_id_(0), table_id_(0), worker_count_(0),
+      data_format_version_(0), snapshot_version_(0), schema_version_(0),
+      is_offline_index_rebuild_(false),
+      table_schema_(), lob_meta_table_schema_(),
       participants_()
   {}
 
   bool is_valid() const
   {
     return ddl_task_id_ > 0 && execution_id_ >= 0 && table_id_ > 0
-        && worker_count_ > 0 && !participants_.empty();
+        && worker_count_ > 0 && data_format_version_ > 0
+        && snapshot_version_ > 0 && schema_version_ > 0
+        && !table_schema_.empty()
+        && !participants_.empty();
   }
 
   int64_t ddl_task_id_;
   int64_t execution_id_;
   int64_t table_id_;
   int64_t worker_count_;
+  uint64_t data_format_version_;
+  int64_t snapshot_version_;
+  int64_t schema_version_;
+  bool is_offline_index_rebuild_;
+  common::ObString table_schema_;
+  common::ObString lob_meta_table_schema_;
   common::ObArray<Participant> participants_;
 };
 
@@ -286,7 +330,11 @@ class ObIDirectInsertSession
 {
 public:
   virtual bool is_final() const = 0;
+  // Query execution obtains the sampled ranges from its task-lifetime
+  // rendezvous. Storage receives the same compact facts explicitly over IPC.
   virtual int prepare_ordered_input() = 0;
+  virtual int prepare_ordered_input(
+      const common::ObIArray<ObDDLTabletSliceCount> &slice_counts) = 0;
   virtual int complete_px_worker() = 0;
   virtual int resolve_write_policy(const ObDirectInsertPlanFacts &facts,
                                    ObDirectInsertWritePolicy &policy) const = 0;
@@ -318,6 +366,9 @@ public:
                     const ObDirectInsertStartParam &param,
                     ObIDirectInsertWorkerContext &worker_context,
                     ObIDirectInsertSession *&session) = 0;
+  virtual int publish_ordered_input(
+      int64_t task_id,
+      const common::ObIArray<ObDDLTabletSliceCount> &slice_counts) = 0;
 };
 
 class ObDirectInsertOrchestrator final
@@ -328,6 +379,9 @@ public:
                    ObIDirectInsertWorkerContext &worker_context,
                    ObIDirectInsertSession *&session);
   static int finish(ObIDirectInsertSession *&session);
+  static int publish_ordered_input(
+      int64_t task_id,
+      const common::ObIArray<ObDDLTabletSliceCount> &slice_counts);
 };
 
 } // namespace data_plane

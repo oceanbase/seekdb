@@ -78,6 +78,11 @@ DEF_PARAM(memory_budget, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         "0 targets 80% of cgroup or physical memory while reserving at least 1G "
         "for the system when possible. The minimum automatic value is 1G. Range: 0, [1G,).",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(namespace_sql_worker_memory_budget, CAP, OB_CLUSTER_PARAMETER, "512M", "[256M,)",
+        "the logical memory budget of each namespace SQL worker process. "
+        "The shared storage process continues to use memory_budget. Changes take effect "
+        "when a namespace SQL worker is next started. Range: [256M, +∞).",
+        ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::STATIC_EFFECTIVE));
 DEF_PARAM(memory_limit, CAP_WITH_CHECKER, OB_CLUSTER_PARAMETER, "0M",
         common::MemoryBudgetConfigChecker, "[0M,)",
         "deprecated compatibility parameter. The configured value is accepted and persisted, "

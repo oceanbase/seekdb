@@ -706,6 +706,11 @@ int ObOperator::open()
       }
     }
 
+    if (OB_NOT_SUPPORTED == ret) {
+      fprintf(stderr,
+              "PROTOTYPE_V22_OPERATOR_OPEN ret=%d op_type=%s op_id=%ld open_order=%d\n",
+              ret, op_name(), spec_.id_, static_cast<int>(open_order));
+    }
     LOG_DEBUG("open op", K(ret), "op_type", op_name(), "op_id", spec_.id_, K(open_order));
   }
   return ret;
@@ -1010,6 +1015,11 @@ int ObOperator::get_next_row()
     }
   }
   end_cpu_time_counting();
+  if (OB_NOT_SUPPORTED == ret) {
+    fprintf(stderr,
+            "PROTOTYPE_V22_OPERATOR_NEXT ret=%d mode=row op_type=%s op_id=%ld\n",
+            ret, op_name(), spec_.id_);
+  }
   return ret;
 }
 
@@ -1202,6 +1212,11 @@ int ObOperator::get_next_batch(const int64_t max_row_cnt, const ObBatchRows *&ba
   }
 
   end_cpu_time_counting();
+  if (OB_NOT_SUPPORTED == ret) {
+    fprintf(stderr,
+            "PROTOTYPE_V22_OPERATOR_NEXT ret=%d mode=batch op_type=%s op_id=%ld\n",
+            ret, op_name(), spec_.id_);
+  }
   return ret;
 }
 

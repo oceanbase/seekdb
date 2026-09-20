@@ -280,6 +280,8 @@ public:
   { return share::schema::INDEX_STATUS_AVAILABLE == index_status_; }
   uint64_t get_table_id () const
   { return table_id_; }
+  void set_table_id(const uint64_t table_id)
+  { table_id_ = table_id; }
   int64_t get_truncate_version() const
   { return truncate_version_; }
   bool is_valid() const

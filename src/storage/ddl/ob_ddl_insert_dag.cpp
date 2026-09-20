@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include "data_plane/ddl/ob_ddl_schedule.h"
 #include "storage/ddl/ob_ddl_insert_dag.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/ddl/ob_tablet_slice_row_iterator.h"
@@ -80,7 +79,8 @@ int ObDDLInsertDag::set_px_finished()
   return ret;
 }
 
-int ObDDLInsertDag::update_tablet_range_count()
+int ObDDLInsertDag::update_tablet_range_count(
+    const ObIArray<data_plane::ObDDLTabletSliceCount> &tablet_slice_counts)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
@@ -91,48 +91,43 @@ int ObDDLInsertDag::update_tablet_range_count()
     if (is_range_count_ready_) {
       // do nothing
     } else {
-      ObArray<data_plane::ObDDLTabletSliceCount> tablet_slice_counts;
-      if (OB_FAIL(data_plane::load_idempotent_ddl_tablet_slice_counts(
-              ddl_task_param_.ddl_task_id_, tablet_slice_counts))) {
-      } else {
-        total_slice_count_ = 0;
-        if (0 == tablet_slice_counts.count()) {
+      total_slice_count_ = 0;
+      if (0 == tablet_slice_counts.count()) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("no partition range", K(ret), K(ddl_task_param_));
+      } else if (1 == tablet_slice_counts.count() && 0 == tablet_slice_counts.at(0).tablet_id_) {
+        // for unpartitioned table, there is only one tablet and its tablet id is 0
+        if (tablet_ids_.count() != 1) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("no partition range", K(ret), K(ddl_task_param_));
-        } else if (1 == tablet_slice_counts.count() && 0 == tablet_slice_counts.at(0).tablet_id_) {
-          // for unpartitioned table, there is only one tablet and its tablet id is 0
-          if (tablet_ids_.count() != 1) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("tablet count not match", K(ret), K(tablet_slice_counts.count()), K(tablet_ids_));
-          } else {
-            const ObTabletID &tablet_id = tablet_ids_.at(0);
-            total_slice_count_ = tablet_slice_counts.at(0).slice_count_;
-            ObDDLTabletContext *tablet_context = nullptr;
-            if (OB_FAIL(get_tablet_context(tablet_id, tablet_context))) {
-            } else {
-              tablet_context->slice_count_ = total_slice_count_;
-              tablet_context->table_slice_offset_ = 0;
-            }
-          }
+          LOG_WARN("tablet count not match", K(ret), K(tablet_slice_counts.count()), K(tablet_ids_));
         } else {
-          for (int64_t i = 0; OB_SUCC(ret) && i < tablet_slice_counts.count(); ++i) {
-            const data_plane::ObDDLTabletSliceCount &slice_count = tablet_slice_counts.at(i);
-            const int64_t tablet_slice_count = slice_count.slice_count_;
-            ObTabletID tablet_id(slice_count.tablet_id_);
-            ObDDLTabletContext *tablet_context = nullptr;
-            if (OB_FAIL(get_tablet_context(tablet_id, tablet_context))) {
-              if (OB_HASH_NOT_EXIST != ret) {
-                LOG_WARN("get tablet context failed", K(ret), K(tablet_id));
-              } else {
-                // may get tablet not in this node, skip it, but add total slice count
-                total_slice_count_ += tablet_slice_count;
-                ret = OB_SUCCESS;
-              }
+          const ObTabletID &tablet_id = tablet_ids_.at(0);
+          total_slice_count_ = tablet_slice_counts.at(0).slice_count_;
+          ObDDLTabletContext *tablet_context = nullptr;
+          if (OB_FAIL(get_tablet_context(tablet_id, tablet_context))) {
+          } else {
+            tablet_context->slice_count_ = total_slice_count_;
+            tablet_context->table_slice_offset_ = 0;
+          }
+        }
+      } else {
+        for (int64_t i = 0; OB_SUCC(ret) && i < tablet_slice_counts.count(); ++i) {
+          const data_plane::ObDDLTabletSliceCount &slice_count = tablet_slice_counts.at(i);
+          const int64_t tablet_slice_count = slice_count.slice_count_;
+          ObTabletID tablet_id(slice_count.tablet_id_);
+          ObDDLTabletContext *tablet_context = nullptr;
+          if (OB_FAIL(get_tablet_context(tablet_id, tablet_context))) {
+            if (OB_HASH_NOT_EXIST != ret) {
+              LOG_WARN("get tablet context failed", K(ret), K(tablet_id));
             } else {
-              tablet_context->slice_count_ = tablet_slice_count;
-              tablet_context->table_slice_offset_ = total_slice_count_;
+              // may get tablet not in this node, skip it, but add total slice count
               total_slice_count_ += tablet_slice_count;
+              ret = OB_SUCCESS;
             }
+          } else {
+            tablet_context->slice_count_ = tablet_slice_count;
+            tablet_context->table_slice_offset_ = total_slice_count_;
+            total_slice_count_ += tablet_slice_count;
           }
         }
       }

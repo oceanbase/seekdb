@@ -16,12 +16,17 @@ from namespace_fork_prototype import Experiment
 class BootstrapExperiment(Experiment):
     def start(self):
         env = os.environ.copy()
-        env.update(SEEKDB_NAMESPACE_FORK_PROTOTYPE="6", SEEKDB_NAMESPACE_SQL_WORKER_PROTOTYPE="1",
-                   SEEKDB_NAMESPACE_SQL_WORKER_BOOTSTRAP_PROTOTYPE="1")
+        env.update(SEEKDB_NAMESPACE_FORK_PROTOTYPE="6",
+                   SEEKDB_NAMESPACE_SQL_WORKER_PROTOTYPE="1")
+        # Worker mode itself enforces Worker-only SQL execution; there is no
+        # separate bootstrap rollout switch.
         command = [self.binary, "--nodaemon", "--base-dir=" + str(self.base), "-P" + str(self.port),
                    "--log-level=WARN", "--parameter", "memory_budget=2G", "--parameter", "cpu_count=4",
+                   "--parameter", "namespace_sql_worker_memory_budget=640M",
                    "--parameter", "datafile_size=256M", "--parameter", "datafile_maxsize=512M",
                    "--parameter", "log_disk_size=2G", "--parameter", "max_syslog_file_count=16"]
+        for name, value in getattr(self, "extra_parameters", ()):
+            command.extend(("--parameter", f"{name}={value}"))
         self.proc = subprocess.Popen(command, env=env, stdout=self.output, stderr=subprocess.STDOUT)
         self.record("setup", binary=self.binary, base=self.base, pid=self.proc.pid, port=self.port)
         deadline = time.monotonic() + 120
@@ -59,6 +64,10 @@ class BootstrapExperiment(Experiment):
         assert "[bootstrap 10/10] cluster bootstrap success" in log
         workers = list((self.base / "run").glob("namespace-worker-1-*/process.out"))
         assert workers and any("PROTOTYPE_V18_INNER_EXECUTE" in path.read_text(errors="replace") for path in workers)
+        assert any(
+            "PROTOTYPE_NAMESPACE_WORKER_RESOURCES ns=1 memory_budget=671088640 threads=2"
+            in path.read_text(errors="replace")
+            for path in workers), workers
         self.record("worker_only_sql_verified", system_databases=len(databases), variable_names=len(names))
 
 

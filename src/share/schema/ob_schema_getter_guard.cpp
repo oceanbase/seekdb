@@ -69,6 +69,40 @@ namespace share
 {
 namespace schema
 {
+namespace
+{
+bool use_remote_worker_database(const uint64_t database_id)
+{
+  using namespace observer::namespace_worker_prototype;
+  return uses_remote_schema()
+      && (!worker_inner_sql_execution || database_id != OB_SYS_DATABASE_ID);
+}
+
+bool use_remote_worker_database(const ObString &database_name)
+{
+  using namespace observer::namespace_worker_prototype;
+  return uses_remote_schema()
+      && (!worker_inner_sql_execution
+          || database_name.case_compare(OB_SYS_DATABASE_NAME) != 0);
+}
+
+bool use_remote_worker_schema(const ObSchemaType schema_type, const uint64_t schema_id)
+{
+  using namespace observer::namespace_worker_prototype;
+  if (!uses_remote_schema()) {
+    return false;
+  } else if (!worker_inner_sql_execution) {
+    return true;
+  } else if (schema_type == TABLE_SCHEMA) {
+    return !is_inner_table(schema_id);
+  } else if (schema_type == DATABASE_SCHEMA) {
+    return schema_id != OB_SYS_DATABASE_ID;
+  } else {
+    return schema_type == USER_SCHEMA || schema_type == SYS_VARIABLE_SCHEMA;
+  }
+}
+}
+
 template<typename T>
 int ObSchemaGetterGuard::worker_schema_prototype(char operation, uint64_t id, const ObString &name,
                                                 ObSchemaType type, const T *&schema)
@@ -78,8 +112,9 @@ int ObSchemaGetterGuard::worker_schema_prototype(char operation, uint64_t id, co
   if (name.empty() && get_from_local_cache(type, id, schema) == OB_SUCCESS) { return OB_SUCCESS; }
   Frame reply;
   int64_t version = OB_INVALID_VERSION;
-  int ret = get_schema_version(version);
-  if (ret != OB_SUCCESS || version == OB_INVALID_VERSION) {
+  int ret = worker_inner_sql_execution ? OB_SUCCESS : get_schema_version(version);
+  if (ret != OB_SUCCESS
+      || (version == OB_INVALID_VERSION && !worker_inner_sql_execution)) {
     return ret != OB_SUCCESS ? ret : OB_SCHEMA_EAGAIN;
   }
   ret = worker_catalog_fetch(operation, id, name, version, reply);
@@ -117,7 +152,7 @@ int ObSchemaGetterGuard::worker_table_schemas_prototype(
   using namespace observer::namespace_worker_prototype;
   table_schemas.reset();
   int64_t version = OB_INVALID_VERSION;
-  int ret = get_schema_version(version);
+  int ret = worker_inner_sql_execution ? OB_SUCCESS : get_schema_version(version);
   Frame reply;
   if (OB_SUCC(ret)) {
     ret = worker_catalog_fetch('l', database_id, ObString(), version, reply);
@@ -153,7 +188,7 @@ void ObSchemaGetterGuard::release_worker_schemas_prototype()
 int ObSchemaGetterGuard::get_priv_mgr(const ObPrivMgr *&priv_mgr)
 {
   priv_mgr = nullptr;
-  if (observer::namespace_worker_prototype::worker_namespace == 1) {
+  if (observer::namespace_worker_prototype::uses_remote_schema()) {
     if (!worker_priv_mgr_) {
       int64_t version = OB_INVALID_VERSION;
       const int ret = get_schema_version(version);
@@ -286,19 +321,7 @@ int ObSchemaGetterGuard::get_schema_version(int64_t &schema_version) const
   if (worker_schema_version_ != OB_INVALID_VERSION) {
     schema_version = worker_schema_version_; return OB_SUCCESS;
   }
-  // Fork workers do not materialize __all_ddl_operation locally.  A schema
-  // guard created before the first catalog fetch must therefore use the
-  // shared catalog's current snapshot instead of running the native
-  // schema-version inner SQL against an empty worker schema.
-  if (observer::namespace_worker_prototype::worker_namespace != 0) {
-    // Ask the shared catalog for the snapshot version used to plan this
-    // statement.  DML planning needs a concrete version even though the
-    // worker does not materialize __all_ddl_operation locally.
-    if (observer::namespace_worker_prototype::worker_namespace > 1) {
-      const int ret = observer::namespace_worker_prototype::fetch_schema_version(
-          false, false, schema_version);
-      if (ret == OB_SUCCESS && schema_version != OB_INVALID_VERSION) { return ret; }
-    }
+  if (observer::namespace_worker_prototype::uses_remote_schema()) {
     schema_version = OB_INVALID_VERSION;
     return OB_SUCCESS;
   }
@@ -476,7 +499,7 @@ int ObSchemaGetterGuard::get_user_id(const ObString &user_name,
                                      uint64_t &user_id,
                                      const bool is_role /*false*/)
 {
-  if (observer::namespace_worker_prototype::worker_namespace == 1) {
+  if (observer::namespace_worker_prototype::uses_remote_schema()) {
     const ObUserInfo *user = nullptr;
     const int ret = get_user_info(user_name, host_name, user);
     user_id = user ? user->get_user_id() : OB_INVALID_ID;
@@ -695,7 +718,7 @@ int ObSchemaGetterGuard::get_can_write_index_array(const uint64_t table_id,
 int ObSchemaGetterGuard::get_database_id(const ObString &database_name,
                                          uint64_t &database_id)
 {
-  if (observer::namespace_worker_prototype::worker_namespace == 1
+  if (use_remote_worker_database(database_name)
       && database_name.case_compare(OB_SYS_DATABASE_NAME) != 0) {
     const ObDatabaseSchema *schema = nullptr;
     int ret = worker_schema_prototype('d', 1, database_name, DATABASE_SCHEMA, schema);
@@ -703,6 +726,7 @@ int ObSchemaGetterGuard::get_database_id(const ObString &database_name,
     return ret;
   }
   if (observer::namespace_worker_prototype::worker_namespace != 0
+      && !observer::namespace_worker_prototype::owns_namespace_schema()
       && !storage::NamespaceForkKernelPrototype::is_namespace_address(database_name)
       && database_name.case_compare(OB_SYS_DATABASE_NAME) != 0) {
     const ObDatabaseSchema *schema = nullptr;
@@ -753,6 +777,7 @@ static int prototype_catalog_schema(ObSchemaGetterGuard &guard, uint64_t db,
                                     const ObString &name, const ObTableSchema *&schema)
 {
   schema = nullptr;
+  if (observer::namespace_worker_prototype::owns_namespace_schema()) { return OB_SUCCESS; }
   if (!storage::NamespaceForkKernelPrototype::enabled()) { return OB_SUCCESS; }
   if (storage::NamespaceForkKernelPrototype::namespace_mode()) {
     return storage::NamespaceForkKernelPrototype::is_encoded_id(db)
@@ -770,6 +795,7 @@ static int prototype_catalog_schema(ObSchemaGetterGuard &guard, uint64_t db,
 static int prototype_catalog_schemas(ObSchemaGetterGuard &guard, uint64_t db,
                                      ObIArray<const ObTableSchema *> &schemas)
 {
+  if (observer::namespace_worker_prototype::owns_namespace_schema()) { return OB_SUCCESS; }
   if (!storage::NamespaceForkKernelPrototype::enabled()) { return OB_SUCCESS; }
   if (storage::NamespaceForkKernelPrototype::namespace_mode()) {
     return storage::NamespaceForkKernelPrototype::is_encoded_id(db)
@@ -791,7 +817,7 @@ int ObSchemaGetterGuard::get_table_id(uint64_t database_id,
                                       uint64_t &table_id,
                                       const bool is_built_in_index/* = false*/)
 {
-  if (observer::namespace_worker_prototype::worker_namespace == 1) {
+  if (use_remote_worker_database(database_id)) {
     const ObSimpleTableSchemaV2 *schema = nullptr;
     int ret = get_simple_table_schema(database_id, table_name, is_index, schema,
                                      USER_HIDDEN_TABLE_TYPE == check_type, is_built_in_index);
@@ -1035,14 +1061,16 @@ int ObSchemaGetterGuard::get_database_schema(
                                              const uint64_t database_id,
                                              const ObDatabaseSchema *&database_schema)
 {
-  if (observer::namespace_worker_prototype::worker_namespace > 1
+  if (!observer::namespace_worker_prototype::owns_namespace_schema()
+      && observer::namespace_worker_prototype::worker_namespace > 1
       && database_id != OB_SYS_DATABASE_ID
       && !storage::NamespaceForkKernelPrototype::is_encoded_id(database_id)) {
     const uint64_t encoded_db = (1ULL << 62)
         | (observer::namespace_worker_prototype::worker_namespace << 32) | database_id;
     return storage::NamespaceForkKernelPrototype::database_by_id(encoded_db, database_schema);
   }
-  if (storage::NamespaceForkKernelPrototype::namespace_mode()
+  if (!observer::namespace_worker_prototype::owns_namespace_schema()
+      && storage::NamespaceForkKernelPrototype::namespace_mode()
       && storage::NamespaceForkKernelPrototype::is_encoded_id(database_id)) {
     return storage::NamespaceForkKernelPrototype::database_by_id(database_id, database_schema);
   }
@@ -1067,13 +1095,14 @@ int ObSchemaGetterGuard::get_database_schema(
                                              const uint64_t database_id,
                                              const ObSimpleDatabaseSchema *&database_schema)
 {
-  if (observer::namespace_worker_prototype::worker_namespace > 1
+  if (!observer::namespace_worker_prototype::owns_namespace_schema()
+      && observer::namespace_worker_prototype::worker_namespace > 1
       && database_id != OB_SYS_DATABASE_ID
       && !storage::NamespaceForkKernelPrototype::is_encoded_id(database_id)) {
     const uint64_t encoded_db = (1ULL << 62)
         | (observer::namespace_worker_prototype::worker_namespace << 32) | database_id;
     return storage::NamespaceForkKernelPrototype::database_by_id(encoded_db, database_schema);
-  } else if (observer::namespace_worker_prototype::worker_namespace == 1) {
+  } else if (use_remote_worker_database(database_id)) {
     const ObDatabaseSchema *full = nullptr;
     int ret = get_database_schema(database_id, full);
     database_schema = nullptr;
@@ -1089,7 +1118,8 @@ int ObSchemaGetterGuard::get_database_schema(
     }
     return ret;
   }
-  if (storage::NamespaceForkKernelPrototype::namespace_mode()
+  if (!observer::namespace_worker_prototype::owns_namespace_schema()
+      && storage::NamespaceForkKernelPrototype::namespace_mode()
       && storage::NamespaceForkKernelPrototype::is_encoded_id(database_id)) {
     return storage::NamespaceForkKernelPrototype::database_by_id(database_id, database_schema);
   }
@@ -1116,14 +1146,16 @@ int ObSchemaGetterGuard::get_table_schema(
     const uint64_t table_id,
     const ObTableSchema *&table_schema)
 {
-  if (observer::namespace_worker_prototype::worker_namespace > 1
+  if (!observer::namespace_worker_prototype::owns_namespace_schema()
+      && observer::namespace_worker_prototype::worker_namespace > 1
       && !storage::NamespaceForkKernelPrototype::is_encoded_id(table_id)
       && !is_inner_table(table_id)) {
     const uint64_t encoded_table = (1ULL << 62)
         | (observer::namespace_worker_prototype::worker_namespace << 32) | table_id;
     return storage::NamespaceForkKernelPrototype::schema_by_id(encoded_table, table_schema);
   }
-  if (storage::NamespaceForkKernelPrototype::is_encoded_id(table_id)) {
+  if (!observer::namespace_worker_prototype::owns_namespace_schema()
+      && storage::NamespaceForkKernelPrototype::is_encoded_id(table_id)) {
     return storage::NamespaceForkKernelPrototype::schema_by_id(table_id, table_schema);
   }
   int ret = OB_SUCCESS;
@@ -1178,7 +1210,7 @@ int ObSchemaGetterGuard::get_user_info(const ObString &user_name,
                                        const ObString &host_name,
                                        const ObUserInfo *&user_info)
 {
-  if (observer::namespace_worker_prototype::worker_namespace == 1) {
+  if (observer::namespace_worker_prototype::uses_remote_schema()) {
     ObSEArray<const ObUserInfo *, 4> users;
     user_info = nullptr;
     const int ret = get_user_info(user_name, users);
@@ -1216,7 +1248,7 @@ int ObSchemaGetterGuard::get_user_info(const ObString &user_name,
 int ObSchemaGetterGuard::get_user_info(const ObString &user_name,
                                        ObIArray<const ObUserInfo *> &users_info)
 {
-  if (observer::namespace_worker_prototype::worker_namespace == 1) {
+  if (observer::namespace_worker_prototype::uses_remote_schema()) {
     using namespace observer::namespace_worker_prototype;
     Frame reply;
     int64_t version = OB_INVALID_VERSION;
@@ -1269,14 +1301,16 @@ int ObSchemaGetterGuard::get_database_schema(
                                              const ObString &database_name,
                                              const ObDatabaseSchema *&database_schema)
 {
-  if (observer::namespace_worker_prototype::worker_namespace > 1
+  if (!observer::namespace_worker_prototype::owns_namespace_schema()
+      && observer::namespace_worker_prototype::worker_namespace > 1
       && database_name.prefix_match("__fork_ns_")) {
     return storage::NamespaceForkKernelPrototype::database_in_namespace(
         observer::namespace_worker_prototype::worker_namespace, database_name, database_schema);
-  } else if (observer::namespace_worker_prototype::worker_namespace == 1) {
+  } else if (use_remote_worker_database(database_name)) {
     return worker_schema_prototype('d', 1, database_name, DATABASE_SCHEMA, database_schema);
   }
-  if (storage::NamespaceForkKernelPrototype::is_namespace_address(database_name)) {
+  if (!observer::namespace_worker_prototype::owns_namespace_schema()
+      && storage::NamespaceForkKernelPrototype::is_namespace_address(database_name)) {
     return storage::NamespaceForkKernelPrototype::database_by_address(database_name, database_schema);
   }
   int ret = OB_SUCCESS;
@@ -1316,9 +1350,11 @@ int ObSchemaGetterGuard::get_simple_table_schema(
     const bool with_hidden_flag/*false*/,
     const bool is_built_in_index/*false*/)
 {
-  const bool fork_user_database = observer::namespace_worker_prototype::worker_namespace > 1
+  const bool fork_user_database = !observer::namespace_worker_prototype::owns_namespace_schema()
+      && observer::namespace_worker_prototype::worker_namespace > 1
       && storage::NamespaceForkKernelPrototype::is_encoded_id(database_id);
-  if (observer::namespace_worker_prototype::worker_namespace > 1
+  if (!observer::namespace_worker_prototype::owns_namespace_schema()
+      && observer::namespace_worker_prototype::worker_namespace > 1
       && !table_name.prefix_match("__") && !fork_user_database) {
     const uint64_t encoded_db = (1ULL << 62)
         | (observer::namespace_worker_prototype::worker_namespace << 32) | database_id;
@@ -1326,7 +1362,7 @@ int ObSchemaGetterGuard::get_simple_table_schema(
     const int ret = storage::NamespaceForkKernelPrototype::schema_by_name(encoded_db, table_name, full);
     simple_table_schema = full;
     return ret;
-  } else if (observer::namespace_worker_prototype::worker_namespace == 1 || fork_user_database) {
+  } else if (use_remote_worker_database(database_id) || fork_user_database) {
     const ObTableSchema *full = nullptr;
     int ret = worker_schema_prototype(is_index ? 'j' : 't', database_id, table_name, TABLE_SCHEMA, full);
     simple_table_schema = full;
@@ -1382,7 +1418,8 @@ int ObSchemaGetterGuard::get_table_schema(
   } else if (NULL == simple_table) {
     LOG_INFO("table not exist",
              K(database_id), K(table_name), K(is_index));
-  } else if (storage::NamespaceForkKernelPrototype::is_encoded_id(simple_table->get_table_id())) {
+  } else if (!observer::namespace_worker_prototype::owns_namespace_schema()
+      && storage::NamespaceForkKernelPrototype::is_encoded_id(simple_table->get_table_id())) {
     ret = storage::NamespaceForkKernelPrototype::schema_by_id(simple_table->get_table_id(), table_schema);
   } else if (OB_FAIL(get_schema(TABLE_SCHEMA,
                                 simple_table->get_table_id(),
@@ -2520,7 +2557,7 @@ int ObSchemaGetterGuard::get_schema_version(
     int64_t &schema_version,
     uint64_t *schema_belong_db_id)
 {
-  if (observer::namespace_worker_prototype::worker_namespace == 1
+  if (use_remote_worker_schema(schema_type, schema_id)
       && (schema_type == USER_SCHEMA || schema_type == SYS_VARIABLE_SCHEMA)) {
     const ObUserInfo *user = nullptr;
     const ObSysVariableSchema *variables = nullptr;
@@ -2529,7 +2566,7 @@ int ObSchemaGetterGuard::get_schema_version(
     if (schema_belong_db_id) { *schema_belong_db_id = OB_INVALID_ID; }
     return ret;
   }
-  if (observer::namespace_worker_prototype::worker_namespace == 1
+  if (use_remote_worker_schema(schema_type, schema_id)
       && (schema_type == TABLE_SCHEMA || schema_type == DATABASE_SCHEMA)) {
     const ObTableSchema *table = nullptr;
     const ObDatabaseSchema *database = nullptr;
@@ -2538,7 +2575,8 @@ int ObSchemaGetterGuard::get_schema_version(
     if (schema_belong_db_id) { *schema_belong_db_id = table ? table->get_database_id() : database ? schema_id : OB_INVALID_ID; }
     return ret;
   }
-  if (schema_type == DATABASE_SCHEMA && storage::NamespaceForkKernelPrototype::namespace_mode()
+  if (!observer::namespace_worker_prototype::owns_namespace_schema()
+      && schema_type == DATABASE_SCHEMA && storage::NamespaceForkKernelPrototype::namespace_mode()
       && storage::NamespaceForkKernelPrototype::is_encoded_id(schema_id)) {
     const ObDatabaseSchema *schema = nullptr;
     int ret = storage::NamespaceForkKernelPrototype::database_by_id(schema_id, schema);
@@ -2546,7 +2584,8 @@ int ObSchemaGetterGuard::get_schema_version(
     if (schema_belong_db_id && schema) { *schema_belong_db_id = schema->get_database_id(); }
     return ret;
   }
-  if (schema_type == TABLE_SCHEMA && storage::NamespaceForkKernelPrototype::is_encoded_id(schema_id)) {
+  if (!observer::namespace_worker_prototype::owns_namespace_schema()
+      && schema_type == TABLE_SCHEMA && storage::NamespaceForkKernelPrototype::is_encoded_id(schema_id)) {
     const ObTableSchema *inherited = nullptr;
     int ret = storage::NamespaceForkKernelPrototype::schema_by_id(schema_id, inherited);
     if (ret == OB_SUCCESS && inherited != nullptr) {
@@ -2761,9 +2800,7 @@ int ObSchemaGetterGuard::get_schema(
     const T *&schema,
     int64_t specified_version /*=OB_INVALID_VERSION*/)
 {
-  const bool fork_user_schema = observer::namespace_worker_prototype::worker_namespace > 1
-      && storage::NamespaceForkKernelPrototype::is_encoded_id(schema_id);
-  if (observer::namespace_worker_prototype::worker_namespace == 1 || fork_user_schema) {
+  if (use_remote_worker_schema(schema_type, schema_id)) {
     const ObSchema *remote = nullptr;
     int remote_ret = OB_SUCCESS;
     if (schema_type == TABLE_SCHEMA) {
@@ -3104,7 +3141,8 @@ int ObSchemaGetterGuard::get_table_ids_in_runtime(ObIArray<uint64_t> &table_ids)
     const ObSchemaMgr *mgr = NULL;                                                   \
     ObArray<const ObSimpleTableSchemaV2 *> schemas;                                  \
     schema_array.reset();                                                            \
-    if (observer::namespace_worker_prototype::worker_namespace > 1                   \
+    if (!observer::namespace_worker_prototype::owns_namespace_schema()              \
+        && observer::namespace_worker_prototype::worker_namespace > 1               \
         && storage::NamespaceForkKernelPrototype::is_encoded_id(dst_schema_id)) {    \
       return worker_table_schemas_prototype(dst_schema_id, schema_array);            \
     } else if (!check_inner_stat()) {                                                \
@@ -3230,7 +3268,8 @@ int ObSchemaGetterGuard::get_table_schemas_in_##DST_SCHEMA( \
   int ret = OB_SUCCESS; \
   const ObSchemaMgr *mgr = NULL; \
   table_schemas.reset(); \
-  if (observer::namespace_worker_prototype::worker_namespace > 1 \
+  if (!observer::namespace_worker_prototype::owns_namespace_schema() \
+      && observer::namespace_worker_prototype::worker_namespace > 1 \
       && storage::NamespaceForkKernelPrototype::is_encoded_id(dst_schema_id)) { \
     ObArray<const ObTableSchema *> full_schemas; \
     if (OB_FAIL(worker_table_schemas_prototype(dst_schema_id, full_schemas))) { \
@@ -4164,11 +4203,12 @@ int ObSchemaGetterGuard::get_simple_table_schema(
     const uint64_t table_id,
     const ObSimpleTableSchemaV2 * &table_schema)
 {
-  if (observer::namespace_worker_prototype::worker_namespace == 1) {
+  if (use_remote_worker_schema(TABLE_SCHEMA, table_id)) {
     const ObTableSchema *full = nullptr;
     int ret = get_table_schema(table_id, full); table_schema = full; return ret;
   }
-  if (storage::NamespaceForkKernelPrototype::is_encoded_id(table_id)) {
+  if (!observer::namespace_worker_prototype::owns_namespace_schema()
+      && storage::NamespaceForkKernelPrototype::is_encoded_id(table_id)) {
     const ObTableSchema *inherited = nullptr;
     int ret = storage::NamespaceForkKernelPrototype::schema_by_id(table_id, inherited);
     table_schema = inherited; return ret;

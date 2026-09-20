@@ -29,12 +29,44 @@
 #include "sql/engine/basic/ob_select_into_op.h"
 #include "storage/ddl/ob_ddl_direct_load_utils.h"
 #include "storage/ddl/ob_ddl_insert_dag.h"
+#include "share/ob_server_struct.h"
+#include "share/schema/ob_multi_version_schema_service.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
 using namespace oceanbase::share;
 using namespace oceanbase::sql::dtl;
 using namespace oceanbase::storage;
+
+namespace
+{
+int serialize_direct_insert_table_schema(
+    const share::schema::ObTableSchema &table_schema,
+    common::ObIAllocator &allocator,
+    common::ObString &serialized_schema)
+{
+  int ret = OB_SUCCESS;
+  const int64_t size = table_schema.get_serialize_size();
+  char *buffer = nullptr;
+  int64_t pos = 0;
+  if (OB_UNLIKELY(size <= 0 || size > INT32_MAX)) {
+    ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("invalid serialized table schema size", K(ret), K(size),
+        K(table_schema.get_table_id()));
+  } else if (OB_ISNULL(buffer = static_cast<char *>(allocator.alloc(size)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate serialized table schema", K(ret), K(size));
+  } else if (OB_FAIL(table_schema.serialize(buffer, size, pos))) {
+  } else if (OB_UNLIKELY(pos != size)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("serialized table schema size mismatch", K(ret), K(pos), K(size));
+  } else {
+    serialized_schema.assign_ptr(buffer, static_cast<int32_t>(size));
+  }
+  return ret;
+}
+}
+
 // Note: each Task within a thread is equal, the only difference is
 // They get different task ranges from the granule
 int ObPxSubCoord::pre_process()
@@ -63,17 +95,20 @@ int ObPxSubCoord::pre_process()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sqc args should not be NULL", K(ret));
   } else if (OB_FAIL(try_prealloc_data_channel(sqc_ctx_, sqc_arg_.sqc_))) {
+    fprintf(stderr, "PROTOTYPE_V22_PX_PRE_PROCESS stage=prealloc_channel ret=%d\n", ret);
   } else {
     // ObOperator *op = NULL;
     if (OB_ISNULL(sqc_arg_.op_spec_root_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected status: op root is null", K(ret));
     } else if (OB_FAIL(rebuild_sqc_access_table_locations())) {
+      fprintf(stderr, "PROTOTYPE_V22_PX_PRE_PROCESS stage=rebuild_locations ret=%d\n", ret);
     } else if (OB_FAIL(setup_op_input(*sqc_arg_.exec_ctx_,
                                       *sqc_arg_.op_spec_root_,
                                       sqc_ctx_,
                                       sqc_arg_.sqc_.get_access_table_locations(),
                                       sqc_arg_.sqc_.get_access_table_location_keys()))) {
+      fprintf(stderr, "PROTOTYPE_V22_PX_PRE_PROCESS stage=setup_input ret=%d\n", ret);
     }
   }
   if (OB_SUCC(ret) && !sqc_arg_.sqc_.get_pruning_table_locations().empty()) {
@@ -473,6 +508,11 @@ int ObPxSubCoord::setup_op_input(ObExecContext &ctx,
       }
     }
   }
+  if (OB_NOT_SUPPORTED == ret) {
+    fprintf(stderr,
+            "PROTOTYPE_V22_PX_SETUP_INPUT ret=%d op_type=%s op_id=%ld\n",
+            ret, root.op_name(), root.id_);
+  }
   return ret;
 }
 // Build the local worker tasks after SQC admission has chosen the task count.
@@ -752,7 +792,55 @@ int ObPxSubCoord::start_ddl()
     start_param.execution_id_ = ddl_execution_id;
     start_param.table_id_ = ddl_table_id;
     start_param.worker_count_ = px_thread_count;
-    if (OB_FAIL(get_participants(sqc_arg_.sqc_, ddl_table_id,
+    share::schema::ObSchemaGetterGuard schema_guard;
+    const share::schema::ObTableSchema *table_schema = nullptr;
+    const share::schema::ObTableSchema *lob_meta_table_schema = nullptr;
+    if (OB_UNLIKELY(!plan_ctx->has_direct_insert_task_info())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("direct insert task info was not prepared by QC", K(ret),
+          K(ddl_task_id), K(ddl_table_id));
+    } else if (OB_UNLIKELY(plan_ctx->get_direct_insert_target_object_id()
+                           != static_cast<uint64_t>(ddl_table_id))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("direct insert target table does not match ddl task", K(ret),
+          K(ddl_table_id),
+          "target_object_id", plan_ctx->get_direct_insert_target_object_id());
+    } else if (FALSE_IT(start_param.data_format_version_ =
+                           plan_ctx->get_direct_insert_data_format_version())) {
+    } else if (FALSE_IT(start_param.snapshot_version_ =
+                           plan_ctx->get_direct_insert_snapshot_version())) {
+    } else if (FALSE_IT(start_param.schema_version_ =
+                           plan_ctx->get_direct_insert_schema_version())) {
+    } else if (FALSE_IT(start_param.is_offline_index_rebuild_ =
+                           plan_ctx->is_direct_insert_offline_index_rebuild())) {
+    } else if (OB_ISNULL(GCTX.schema_service_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("schema service is null", K(ret));
+    } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+                   schema_guard))) {
+    } else if (OB_FAIL(schema_guard.get_table_schema(
+                   ddl_table_id, table_schema))) {
+    } else if (OB_ISNULL(table_schema)) {
+      ret = OB_TABLE_NOT_EXIST;
+      LOG_WARN("direct insert table schema does not exist", K(ret),
+          K(ddl_table_id));
+    } else if (OB_FAIL(serialize_direct_insert_table_schema(
+                   *table_schema, exec_ctx->get_allocator(),
+                   start_param.table_schema_))) {
+    } else if (OB_INVALID_ID != table_schema->get_aux_lob_meta_tid()
+               && OB_FAIL(schema_guard.get_table_schema(
+                      table_schema->get_aux_lob_meta_tid(),
+                      lob_meta_table_schema))) {
+    } else if (OB_INVALID_ID != table_schema->get_aux_lob_meta_tid()
+               && OB_ISNULL(lob_meta_table_schema)) {
+      ret = OB_TABLE_NOT_EXIST;
+      LOG_WARN("direct insert lob meta table schema does not exist", K(ret),
+          "lob_meta_table_id", table_schema->get_aux_lob_meta_tid());
+    } else if (OB_NOT_NULL(lob_meta_table_schema)
+               && OB_FAIL(serialize_direct_insert_table_schema(
+                      *lob_meta_table_schema, exec_ctx->get_allocator(),
+                      start_param.lob_meta_table_schema_))) {
+    } else if (OB_FAIL(get_participants(sqc_arg_.sqc_, ddl_table_id,
                                  start_param.participants_))) {
     } else if (OB_FAIL(data_plane::ObDirectInsertOrchestrator::start(
                    exec_ctx->get_allocator(), start_param, *this,
@@ -773,6 +861,9 @@ int ObPxSubCoord::end_ddl(const bool need_commit)
     DEBUG_SYNC(END_DDL_IN_PX_SUBCOORD);
     FLOG_INFO("end ddl with direct insert session", K(ret), KP(ddl_session_));
     ret = data_plane::ObDirectInsertOrchestrator::finish(ddl_session_);
+    fprintf(stderr,
+            "PROTOTYPE_V22_DIRECT_INSERT_END ret=%d commit=%d\n",
+            ret, need_commit);
   }
   ddl_rewrite_ret_code(ret);
   return ret;

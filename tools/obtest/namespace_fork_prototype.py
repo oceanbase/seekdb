@@ -41,10 +41,12 @@ class Experiment:
         print(line, flush=True)
 
     def connect(self):
+        read_timeout = int(os.environ.get("SEEKDB_FORK_READ_TIMEOUT_S", "45"))
         con = pymysql.connect(host="127.0.0.1", port=self.port, user="root", password="",
-                              autocommit=True, connect_timeout=2, read_timeout=45, write_timeout=10)
+                              autocommit=True, connect_timeout=2, read_timeout=read_timeout, write_timeout=10)
         with con.cursor() as cur:
-            cur.execute("SET ob_query_timeout=30000000")
+            query_timeout = int(os.environ.get("SEEKDB_FORK_QUERY_TIMEOUT_US", "30000000"))
+            cur.execute("SET ob_query_timeout=" + str(query_timeout))
             cur.execute("SET ob_trx_timeout=300000000")
         return con
 
@@ -71,7 +73,8 @@ class Experiment:
         if self.connection is None:
             raise TimeoutError("seekdb startup: " + str(self.base))
         self.sql("ALTER SYSTEM SET debug_sync_timeout='600s'")
-        self.sql("SET ob_global_debug_sync='reset'")
+        if os.environ.get("SEEKDB_NAMESPACE_SQL_WORKER_PROTOTYPE") != "1":
+            self.sql("SET ob_global_debug_sync='reset'")
         self.sql("SET recyclebin=off")
         # Make the old-S test stricter, instead of extending the ordinary history window.
         self.sql("ALTER SYSTEM SET undo_retention=0")

@@ -354,6 +354,9 @@ private:
   int drive_dml_query();
   int inner_get_next_row(const common::ObNewRow *&row);
   static int clear_ddl_checksum(ObPhysicalPlan *physical_plan);
+  static int prepare_direct_insert_task_info(ObPhysicalPlan *physical_plan,
+                                             ObPhysicalPlanCtx &plan_ctx,
+                                             const ObSessionDDLInfo &ddl_info);
 
   // make final field name
   int make_final_field_name(char *src, int64_t len, common::ObString &field_name);

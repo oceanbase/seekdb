@@ -383,6 +383,10 @@ public:
   static int fill_ddl_table_schema(const uint64_t table_id,
                                    common::ObArenaAllocator &allocator,
                                    ObDDLTableSchema &ddl_table_schema);
+  static int fill_ddl_table_schema(const ObTableSchema &table_schema,
+                                   const ObTableSchema *lob_meta_table_schema,
+                                   common::ObArenaAllocator &allocator,
+                                   ObDDLTableSchema &ddl_table_schema);
 private:
   static int fill_vector_index_schema_item(ObSchemaGetterGuard &schema_guard,
                                            const ObTableSchema *table_schema,

@@ -299,7 +299,11 @@ int ObPxTaskProcess::execute(const ObOpSpec &root_spec)
           static_cast<ObPxTransmitOp *>(root)->set_batch_param_remain(false);
         }
       }
-      OZ(static_cast<ObPxTransmitOp *>(root)->transmit());
+      if (OB_SUCC(ret) && OB_FAIL(static_cast<ObPxTransmitOp *>(root)->transmit())) {
+        fprintf(stderr,
+                "PROTOTYPE_V22_PX_TASK stage=transmit ret=%d root_type=%s root_id=%ld dfo=%ld sqc=%ld task=%ld\n",
+                ret, root->op_name(), root_spec.id_, get_dfo_id(), get_sqc_id(), get_worker_id());
+      }
     }
 
     if (OB_FAIL(ret)) {

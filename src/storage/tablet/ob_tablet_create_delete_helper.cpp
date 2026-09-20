@@ -359,7 +359,21 @@ int ObTabletCreateDeleteHelper::check_read_snapshot_for_deleted(
           K(ret), K(tablet_id), K(trans_state), K(read_snapshot), K(trans_version));
     }
   } else if (mds::TwoPhaseCommitState::ON_COMMIT == trans_state) {
-    if (read_snapshot < trans_version) {
+    // A committed MDS value restored from the tablet meta has no live
+    // transaction node, so get_latest() reports MAX as its trans_version.
+    // The user data carries the durable delete commit version and must remain
+    // authoritative for historical reads after restart.
+    const int64_t delete_commit_version = user_data.delete_commit_version_;
+    if (delete_commit_version != ObTransVersion::INVALID_TRANS_VERSION
+        && delete_commit_version != ObTransVersion::MAX_TRANS_VERSION) {
+      if (snapshot_version < delete_commit_version) {
+        // allow to read
+      } else {
+        ret = OB_TABLET_NOT_EXIST;
+        LOG_WARN("read snapshot is no smaller than durable delete commit version",
+            K(ret), K(tablet_id), K(snapshot_version), K(delete_commit_version));
+      }
+    } else if (read_snapshot < trans_version) {
       // allow to read
     } else {
       ret = OB_TABLET_NOT_EXIST;

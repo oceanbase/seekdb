@@ -18,16 +18,17 @@
 #define OCEANBASE_DATA_PLANE_DDL_OB_DDL_SCHEDULE_H_
 
 #include <stdint.h>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <vector>
 
+#include "lib/container/ob_iarray.h"
+#include "lib/ob_errno.h"
 #include "lib/utility/ob_print_utils.h"
 
 namespace oceanbase
 {
-namespace common
-{
-template <typename T>
-class ObIArray;
-}
 namespace data_plane
 {
 
@@ -45,11 +46,116 @@ struct ObDDLTabletSliceCount final
   int64_t slice_count_;
 };
 
-// Load a schedule that is valid for idempotent DDL execution. The output is
-// reset before use; a non-idempotent schedule is rejected by the adapter.
-int load_idempotent_ddl_tablet_slice_counts(
-    int64_t task_id,
-    common::ObIArray<ObDDLTabletSliceCount> &slice_counts);
+// A DDL sampling result exists only while at least one direct-insert session
+// for the task is alive.  It bridges the PX sampling and root-insert DFOs;
+// storage receives a value copy over its normal direct-insert request.
+class DirectInsertSchedule final
+{
+public:
+  int publish(const common::ObIArray<ObDDLTabletSliceCount> &slice_counts)
+  {
+    int ret = common::OB_SUCCESS;
+    std::vector<ObDDLTabletSliceCount> staged;
+    if (slice_counts.empty()) {
+      ret = common::OB_INVALID_ARGUMENT;
+    } else {
+      staged.reserve(slice_counts.count());
+      for (int64_t i = 0; common::OB_SUCCESS == ret && i < slice_counts.count(); ++i) {
+        const ObDDLTabletSliceCount &entry = slice_counts.at(i);
+        // ObPxTabletRange uses int64_t as a bit container. Namespace storage
+        // IDs may set the uint64_t high bit, and an unpartitioned PX schedule
+        // uses zero as its tablet placeholder.
+        if (entry.slice_count_ <= 0) {
+          ret = common::OB_INVALID_ARGUMENT;
+        } else {
+          staged.push_back(entry);
+        }
+      }
+    }
+    if (common::OB_SUCCESS == ret) {
+      std::lock_guard<std::mutex> guard(mutex_);
+      slice_counts_.swap(staged);
+      ready_ = true;
+    }
+    return ret;
+  }
+
+  int snapshot(std::vector<ObDDLTabletSliceCount> &slice_counts) const
+  {
+    int ret = common::OB_SUCCESS;
+    std::lock_guard<std::mutex> guard(mutex_);
+    if (!ready_) {
+      ret = common::OB_STATE_NOT_MATCH;
+    } else {
+      slice_counts = slice_counts_;
+    }
+    return ret;
+  }
+
+private:
+  mutable std::mutex mutex_;
+  std::vector<ObDDLTabletSliceCount> slice_counts_;
+  bool ready_ = false;
+};
+
+// The registry keeps weak references only. Sessions own schedules and release
+// their key during teardown, so completed DDL tasks leave no resident entry.
+class DirectInsertScheduleRegistry final
+{
+public:
+  std::shared_ptr<DirectInsertSchedule> acquire(const int64_t task_id)
+  {
+    std::shared_ptr<DirectInsertSchedule> schedule;
+    if (task_id > 0) {
+      std::lock_guard<std::mutex> guard(mutex_);
+      auto &entry = schedules_[task_id];
+      schedule = entry.lock();
+      if (!schedule) {
+        schedule = std::make_shared<DirectInsertSchedule>();
+        entry = schedule;
+      }
+    }
+    return schedule;
+  }
+
+  int publish(const int64_t task_id,
+              const common::ObIArray<ObDDLTabletSliceCount> &slice_counts)
+  {
+    int ret = common::OB_SUCCESS;
+    std::shared_ptr<DirectInsertSchedule> schedule;
+    {
+      std::lock_guard<std::mutex> guard(mutex_);
+      auto iter = schedules_.find(task_id);
+      if (iter != schedules_.end()) {
+        schedule = iter->second.lock();
+        if (!schedule) {
+          schedules_.erase(iter);
+        }
+      }
+    }
+    // Dynamic sampling is also used without direct insert. In that case there
+    // is deliberately no consumer to publish to.
+    if (schedule) {
+      ret = schedule->publish(slice_counts);
+    }
+    return ret;
+  }
+
+  void release(const int64_t task_id,
+               std::shared_ptr<DirectInsertSchedule> &schedule)
+  {
+    schedule.reset();
+    std::lock_guard<std::mutex> guard(mutex_);
+    auto iter = schedules_.find(task_id);
+    if (iter != schedules_.end() && iter->second.expired()) {
+      schedules_.erase(iter);
+    }
+  }
+
+private:
+  std::mutex mutex_;
+  std::map<int64_t, std::weak_ptr<DirectInsertSchedule>> schedules_;
+};
 
 } // namespace data_plane
 } // namespace oceanbase

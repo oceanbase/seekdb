@@ -20,7 +20,6 @@
 #include "ob_local_management_service.h"
 #include "observer/namespace_worker_protocol_prototype.h"
 #include "data_plane/ddl/ob_ddl_coordinator.h"
-#include "data_plane/ddl/ob_ddl_schedule.h"
 #include "query/command/ob_local_command_service.h"
 #include "share/ob_server_struct.h"
 #include "share/rc/ob_server_runtime.h"
@@ -47,6 +46,9 @@
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
 #include "rootserver/ob_local_ddl_serial_call.h"
+#include <algorithm>
+#include <mutex>
+#include <vector>
 #include "parallel_ddl/ob_create_table_helper.h" // ObCreateTableHelper
 #include "parallel_ddl/ob_create_table_like_helper.h" // ObCreateTableLikeHelper
 #include "rootserver/parallel_ddl/ob_create_view_helper.h"  // ObCreateViewHelper
@@ -184,6 +186,43 @@ int ObLocalManagementService::init(ObServerConfig &config,
     LOG_ERROR("failed to initialize local management services", KR(ret));
   }
 
+  return ret;
+}
+
+int ObLocalManagementService::init_sql_worker(
+    ObServerConfig &config,
+    ObConfigManager &config_mgr,
+    ObAddr &self,
+    ObMySQLProxy &sql_proxy,
+    ObMultiVersionSchemaService &schema_service)
+{
+  int ret = OB_SUCCESS;
+  if (inited_) {
+    ret = OB_INIT_TWICE;
+  } else if (!self.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    config_ = &config;
+    config_mgr_ = &config_mgr;
+    self_addr_ = self;
+    sql_proxy_.assign(sql_proxy);
+    schema_service_ = &schema_service;
+    need_bootstrap_ = false;
+    service_started_ = false;
+  }
+  if (OB_SUCC(ret) && OB_FAIL(ddl_service_.init(
+          sql_proxy_, schema_service, snapshot_manager_, runtime_ddl_service_))) {
+    LOG_WARN("init SQL worker ddl service failed", KR(ret));
+  } else if (OB_SUCC(ret) && OB_FAIL(runtime_ddl_service_.init(
+          ddl_service_, sql_proxy_, schema_service))) {
+    LOG_WARN("init SQL worker runtime ddl service failed", KR(ret));
+  } else if (OB_SUCC(ret) && OB_FAIL(snapshot_manager_.init(self_addr_))) {
+    LOG_WARN("init SQL worker snapshot manager failed", KR(ret));
+  }
+  if (OB_SUCC(ret)) {
+    inited_ = true;
+    local_services_ready_ = true;
+  }
   return ret;
 }
 
@@ -3101,11 +3140,167 @@ namespace oceanbase
 namespace data_plane
 {
 
+namespace
+{
+struct ColumnChecksumPollEntry
+{
+  uint64_t tablet_id_ = common::OB_INVALID_ID;
+  uint64_t target_table_id_ = common::OB_INVALID_ID;
+  uint64_t source_table_id_ = common::OB_INVALID_ID;
+  int64_t schema_version_ = common::OB_INVALID_VERSION;
+  int64_t task_id_ = 0;
+  int ret_code_ = common::OB_EAGAIN;
+  int64_t touched_at_ = 0;
+  bool finished_ = false;
+  std::vector<int64_t> column_ids_;
+  std::vector<int64_t> column_checksums_;
+};
+
+std::mutex g_column_checksum_poll_lock;
+std::vector<ColumnChecksumPollEntry> g_column_checksum_polls;
+constexpr int64_t COLUMN_CHECKSUM_POLL_TTL_US = 60L * 60L * 1000L * 1000L;
+
+bool same_column_checksum_poll(
+    const ColumnChecksumPollEntry &entry,
+    const obcall::ObCalcColumnChecksumResponseArg &key)
+{
+  return entry.tablet_id_ == key.tablet_id_.id()
+      && entry.target_table_id_ == key.target_table_id_
+      && entry.source_table_id_ == static_cast<uint64_t>(key.source_table_id_)
+      && entry.schema_version_ == key.schema_version_
+      && entry.task_id_ == key.task_id_;
+}
+
+void prune_column_checksum_polls(const int64_t now)
+{
+  g_column_checksum_polls.erase(
+      std::remove_if(
+          g_column_checksum_polls.begin(), g_column_checksum_polls.end(),
+          [now](const ColumnChecksumPollEntry &entry) {
+            return entry.touched_at_ + COLUMN_CHECKSUM_POLL_TTL_US < now;
+          }),
+      g_column_checksum_polls.end());
+}
+
+void set_column_checksum_poll_key(
+    const obcall::ObCalcColumnChecksumResponseArg &key,
+    ColumnChecksumPollEntry &entry)
+{
+  entry.tablet_id_ = key.tablet_id_.id();
+  entry.target_table_id_ = key.target_table_id_;
+  entry.source_table_id_ = static_cast<uint64_t>(key.source_table_id_);
+  entry.schema_version_ = key.schema_version_;
+  entry.task_id_ = key.task_id_;
+}
+} // namespace
+
+int prepare_column_checksum_poll(
+    const obcall::ObCalcColumnChecksumResponseArg &key,
+    bool &should_submit,
+    bool &is_finished,
+    obcall::ObCalcColumnChecksumResponseArg &completion)
+{
+  int ret = common::OB_SUCCESS;
+  const int64_t now = common::ObTimeUtility::current_time();
+  should_submit = false;
+  is_finished = false;
+  completion.reset();
+  if (!key.is_valid()) {
+    ret = common::OB_INVALID_ARGUMENT;
+  } else {
+    std::lock_guard<std::mutex> guard(g_column_checksum_poll_lock);
+    prune_column_checksum_polls(now);
+    auto iter = std::find_if(
+        g_column_checksum_polls.begin(), g_column_checksum_polls.end(),
+        [&key](const ColumnChecksumPollEntry &entry) {
+          return same_column_checksum_poll(entry, key);
+        });
+    if (iter == g_column_checksum_polls.end()) {
+      ColumnChecksumPollEntry entry;
+      set_column_checksum_poll_key(key, entry);
+      entry.touched_at_ = now;
+      g_column_checksum_polls.push_back(std::move(entry));
+      should_submit = true;
+    } else if (!iter->finished_) {
+      iter->touched_at_ = now;
+    } else {
+      completion.tablet_id_ = common::ObTabletID(iter->tablet_id_);
+      completion.target_table_id_ = iter->target_table_id_;
+      completion.source_table_id_ = static_cast<int64_t>(iter->source_table_id_);
+      completion.schema_version_ = iter->schema_version_;
+      completion.task_id_ = iter->task_id_;
+      completion.ret_code_ = iter->ret_code_;
+      for (int64_t value : iter->column_ids_) {
+        if (OB_FAIL(completion.column_ids_.push_back(value))) {
+          break;
+        }
+      }
+      for (int64_t value : iter->column_checksums_) {
+        if (OB_SUCC(ret) && OB_FAIL(completion.column_checksums_.push_back(value))) {
+          break;
+        }
+      }
+      if (OB_SUCC(ret)) {
+        is_finished = true;
+        g_column_checksum_polls.erase(iter);
+      }
+    }
+  }
+  return ret;
+}
+
+int cancel_column_checksum_poll(
+    const obcall::ObCalcColumnChecksumResponseArg &key)
+{
+  int ret = common::OB_SUCCESS;
+  std::lock_guard<std::mutex> guard(g_column_checksum_poll_lock);
+  auto iter = std::find_if(
+      g_column_checksum_polls.begin(), g_column_checksum_polls.end(),
+      [&key](const ColumnChecksumPollEntry &entry) {
+        return same_column_checksum_poll(entry, key);
+      });
+  if (iter != g_column_checksum_polls.end()) {
+    g_column_checksum_polls.erase(iter);
+  }
+  return ret;
+}
+
+bool is_column_checksum_response_polled(
+    const obcall::ObCalcColumnChecksumResponseArg &key)
+{
+  std::lock_guard<std::mutex> guard(g_column_checksum_poll_lock);
+  return std::any_of(
+      g_column_checksum_polls.begin(), g_column_checksum_polls.end(),
+      [&key](const ColumnChecksumPollEntry &entry) {
+        return same_column_checksum_poll(entry, key);
+      });
+}
+
 int report_column_checksum_response(
     const obcall::ObCalcColumnChecksumResponseArg &arg)
 {
   int ret = common::OB_SUCCESS;
-  if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
+  bool is_polled = false;
+  {
+    std::lock_guard<std::mutex> guard(g_column_checksum_poll_lock);
+    auto iter = std::find_if(
+        g_column_checksum_polls.begin(), g_column_checksum_polls.end(),
+        [&arg](const ColumnChecksumPollEntry &entry) {
+          return same_column_checksum_poll(entry, arg);
+        });
+    if (iter != g_column_checksum_polls.end()) {
+      is_polled = true;
+      iter->ret_code_ = arg.ret_code_;
+      iter->finished_ = true;
+      iter->touched_at_ = common::ObTimeUtility::current_time();
+      iter->column_ids_.assign(arg.column_ids_.begin(), arg.column_ids_.end());
+      iter->column_checksums_.assign(
+          arg.column_checksums_.begin(), arg.column_checksums_.end());
+    }
+  }
+  if (is_polled) {
+    // The owning SQL worker will consume the result through its next poll.
+  } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = common::OB_ERR_UNEXPECTED;
     LOG_WARN("local management service is null", K(ret));
   } else if (OB_FAIL(
@@ -3159,41 +3354,6 @@ int rebuild_vector_index(
                    return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->rebuild_vec_index(
                        arg, res);
                  }))) {
-  }
-  return ret;
-}
-
-int load_idempotent_ddl_tablet_slice_counts(
-    const int64_t task_id,
-    common::ObIArray<ObDDLTabletSliceCount> &slice_counts)
-{
-  int ret = common::OB_SUCCESS;
-  slice_counts.reset();
-  common::ObArenaAllocator allocator(common::ObMemAttr("DdlSliceCount"));
-  rootserver::ObDDLSliceInfo slice_info;
-  bool use_idempotent_mode = false;
-  if (task_id <= 0) {
-    ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid DDL task id", K(ret), K(task_id));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
-    ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy is null", K(ret), K(task_id));
-  } else if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::get_schedule_info(
-                 *GCTX.sql_proxy_, task_id, allocator, false /*is_for_update*/,
-                 slice_info, use_idempotent_mode))) {
-  } else if (!use_idempotent_mode) {
-    ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("DDL schedule is not idempotent", K(ret), K(task_id));
-  } else {
-    for (int64_t i = 0;
-         OB_SUCC(ret) && i < slice_info.part_ranges_.count();
-         ++i) {
-      const sql::ObPxTabletRange &range = slice_info.part_ranges_.at(i);
-      if (OB_FAIL(slice_counts.push_back(
-              ObDDLTabletSliceCount(
-                  range.tablet_id_, range.range_cut_.count() + 1)))) {
-      }
-    }
   }
   return ret;
 }

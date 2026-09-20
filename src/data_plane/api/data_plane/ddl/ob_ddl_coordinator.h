@@ -36,6 +36,19 @@ namespace data_plane
 int report_column_checksum_response(
     const obcall::ObCalcColumnChecksumResponseArg &arg);
 
+// Namespace storage uses a pull completion path because the SQL worker owns
+// the DDL scheduler.  Entries exist only for an active storage task and are
+// consumed by the worker that registered them.
+int prepare_column_checksum_poll(
+    const obcall::ObCalcColumnChecksumResponseArg &key,
+    bool &should_submit,
+    bool &is_finished,
+    obcall::ObCalcColumnChecksumResponseArg &completion);
+int cancel_column_checksum_poll(
+    const obcall::ObCalcColumnChecksumResponseArg &key);
+bool is_column_checksum_response_polled(
+    const obcall::ObCalcColumnChecksumResponseArg &key);
+
 // Storage reports completion of replica-side DDL work through the same seam;
 // RootService remains an implementation detail of Rootserver.
 int report_ddl_single_replica_response(

@@ -3673,6 +3673,12 @@ int ObStaticEngineCG::generate_normal_tsc(ObLogTableScan &op, ObTableScanSpec &s
     spec.is_index_global_ = op.get_is_index_global();
     spec.frozen_version_ = op.get_plan()->get_optimizer_context().get_global_hint().frozen_version_;
     spec.use_dist_das_ = op.use_das();
+    if (op.is_sample_scan()) {
+      fprintf(stderr,
+              "PROTOTYPE_V22_DDL_SCAN_SPEC table=%llu sample=%d use_dist_das=%d gi=%d\n",
+              static_cast<unsigned long long>(op.get_ref_table_id()),
+              op.get_sample_info().method_, op.use_das(), op.is_gi_above());
+    }
     spec.batch_scan_flag_ = op.use_batch();
     spec.table_row_count_ = op.get_table_row_count();
     spec.output_row_count_ = static_cast<int64_t>(op.get_output_row_count());

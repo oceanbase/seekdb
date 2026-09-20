@@ -208,6 +208,11 @@ public:
   virtual int get_runtime_refreshed_schema_version(
               int64_t &schema_version,
               const bool core_schema_version = false) const;
+  // Read schema refresh progress without applying a worker request's pinned
+  // read version.  DDL visibility fences and refresh loops use this path.
+  int get_live_runtime_refreshed_schema_version(
+              int64_t &schema_version,
+              const bool core_schema_version = false) const;
   virtual int get_published_schema_version(int64_t &schema_version, const bool core_schema_version = false) const;
   virtual int get_last_refreshed_schema_info(ObRefreshSchemaInfo &schema_info);
   int get_baseline_schema_version(
@@ -272,7 +277,10 @@ public:
 
   int get_runtime_name_case_mode(ObNameCaseMode &name_case_mode);
   /*------------- refresh schema interface -----------------*/
-  int broadcast_runtime_schema(const common::ObIArray<share::schema::ObTableSchema> &table_schemas);
+  int broadcast_runtime_schema(
+      const common::ObIArray<share::schema::ObTableSchema> &table_schemas,
+      int64_t schema_version = OB_CORE_SCHEMA_VERSION + 1);
+  int refresh_runtime_schema_from_static_system();
 
   // new schema refresh interface
   int refresh_and_add_schema(bool check_bootstrap = false,

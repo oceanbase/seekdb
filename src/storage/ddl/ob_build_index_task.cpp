@@ -533,14 +533,17 @@ int ObUniqueCheckingDag::init(
     const int64_t task_id,
     const int64_t execution_id,
     const int64_t snapshot_version,
-    const int64_t user_parallelism)
+    const int64_t user_parallelism,
+    const ObTableSchema *data_table_schema,
+    const ObTableSchema *index_schema)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "ObUniqueCheckingDag has already been inited", K(ret));
   } else if (OB_FAIL(param_.init(tablet_id, is_scan_index, index_table_id,
-                     schema_version, task_id, execution_id, snapshot_version, user_parallelism))) {
+                     schema_version, task_id, execution_id, snapshot_version,
+                     user_parallelism, data_table_schema, index_schema))) {
   } else if (OB_UNLIKELY(!param_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("error unexpected", K(ret), K(param_));
@@ -901,7 +904,14 @@ int ObUniqueCheckingMergeTask::process()
       }
     }
 
-    if (OB_SUCC(ret)) {
+    obcall::ObCalcColumnChecksumResponseArg response_key;
+    response_key.tablet_id_ = param_->tablet_id_;
+    response_key.target_table_id_ = param_->index_schema_->get_table_id();
+    response_key.source_table_id_ = param_->data_table_schema_->get_table_id();
+    response_key.schema_version_ = param_->index_schema_->get_schema_version();
+    response_key.task_id_ = param_->task_id_;
+    if (OB_SUCC(ret)
+        && !data_plane::is_column_checksum_response_polled(response_key)) {
       uint64_t data_format_version = 0;
       int64_t snapshot_version = 0;
       share::ObDDLTaskStatus unused_task_status = share::ObDDLTaskStatus::PREPARE;
@@ -920,7 +930,8 @@ int ObUniqueCheckingMergeTask::process()
     if (NULL != param_->index_schema_) {
       STORAGE_LOG(INFO, "unique checking callback", K(param_->tablet_id_), "index_id", param_->index_schema_->get_table_id());
     }
-    if (OB_FAIL(param_->callback_->operator()(context_->unique_checking_ret_))) {
+    if (OB_FAIL(param_->callback_->operator()(
+            context_->unique_checking_ret_, column_ids, column_checksum))) {
     }
   }
   return ret;
@@ -932,7 +943,10 @@ ObGlobalUniqueIndexCallback::ObGlobalUniqueIndexCallback(
 {
 }
 
-int ObGlobalUniqueIndexCallback::operator()(const int ret_code)
+int ObGlobalUniqueIndexCallback::operator()(
+    const int ret_code,
+    const ObIArray<int64_t> &column_ids,
+    const ObIArray<int64_t> &column_checksums)
 {
   int ret = OB_SUCCESS;
   obcall::ObCalcColumnChecksumResponseArg arg;
@@ -943,7 +957,10 @@ int ObGlobalUniqueIndexCallback::operator()(const int ret_code)
   arg.source_table_id_ = data_table_id_;
   arg.schema_version_ = schema_version_;
   arg.task_id_ = task_id_;
-  
+  if (OB_FAIL(arg.column_ids_.assign(column_ids))) {
+  } else if (OB_FAIL(arg.column_checksums_.assign(column_checksums))) {
+  }
+
 #ifdef ERRSIM
     if (OB_SUCC(ret)) {
       ret = OB_E(EventTable::EN_DDL_REPORT_LOCAL_BUILD_STATUS_FAIL) OB_SUCCESS;
@@ -962,10 +979,15 @@ ObLocalUniqueIndexCallback::ObLocalUniqueIndexCallback()
 {
 }
 
-int ObLocalUniqueIndexCallback::operator()(const int ret_code)
+int ObLocalUniqueIndexCallback::operator()(
+    const int ret_code,
+    const ObIArray<int64_t> &column_ids,
+    const ObIArray<int64_t> &column_checksums)
 {
   int ret = OB_SUCCESS;
   UNUSED(ret_code);
+  UNUSED(column_ids);
+  UNUSED(column_checksums);
   return ret;
 }
 
@@ -978,7 +1000,9 @@ int ObUniqueCheckingParam::init(
   const int64_t task_id,
   const int64_t execution_id,
   const int64_t snapshot_version,
-  const int64_t user_parallelism)
+  const int64_t user_parallelism,
+  const ObTableSchema *data_table_schema,
+  const ObTableSchema *index_schema)
 {
   int ret = OB_SUCCESS;
   ObMultiVersionSchemaService *schema_service = nullptr;
@@ -991,6 +1015,31 @@ int ObUniqueCheckingParam::init(
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid arguments", K(ret), K(tablet_id),
         K(index_table_id), K(schema_version), K(task_id), K(execution_id), K(snapshot_version));
+  } else if ((data_table_schema == nullptr) != (index_schema == nullptr)) {
+    ret = OB_INVALID_ARGUMENT;
+    STORAGE_LOG(WARN, "schema facts must be supplied together", K(ret),
+        KP(data_table_schema), KP(index_schema));
+  } else if (data_table_schema != nullptr) {
+    if (OB_UNLIKELY(!data_table_schema->is_valid()
+        || !index_schema->is_valid()
+        || index_schema->get_table_id() != index_table_id
+        || index_schema->get_data_table_id() != data_table_schema->get_table_id())) {
+      ret = OB_INVALID_ARGUMENT;
+      STORAGE_LOG(WARN, "invalid explicit schema facts", K(ret),
+          K(index_table_id), KPC(data_table_schema), KPC(index_schema));
+    } else if (OB_FAIL(owned_data_table_schema_.assign(*data_table_schema))) {
+    } else if (OB_FAIL(owned_index_schema_.assign(*index_schema))) {
+    } else {
+      data_table_schema_ = &owned_data_table_schema_;
+      index_schema_ = &owned_index_schema_;
+      tablet_id_ = tablet_id;
+      is_scan_index_ = is_scan_index;
+      execution_id_ = execution_id;
+      snapshot_version_ = snapshot_version;
+      task_id_ = task_id;
+      user_parallelism_ = user_parallelism;
+      is_inited_ = true;
+    }
   } else {
     SERVER_MODULE_SCOPE {
       if (OB_ISNULL(schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service())) {

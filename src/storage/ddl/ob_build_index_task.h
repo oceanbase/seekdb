@@ -113,7 +113,10 @@ private:
 class ObIUniqueCheckingCompleteCallback
 {
 public:
-  virtual int operator()(const int ret_code) = 0;
+  virtual int operator()(
+      const int ret_code,
+      const common::ObIArray<int64_t> &column_ids,
+      const common::ObIArray<int64_t> &column_checksums) = 0;
   virtual ~ObIUniqueCheckingCompleteCallback() {};
 };
 
@@ -122,7 +125,10 @@ class ObGlobalUniqueIndexCallback : public ObIUniqueCheckingCompleteCallback
 public:
   ObGlobalUniqueIndexCallback(const common::ObTabletID &tablet_id, const uint64_t index_id,
       const uint64_t data_table_id, const int64_t schema_version, const int64_t task_id);
-  int operator()(const int ret_code) override;
+  int operator()(
+      const int ret_code,
+      const common::ObIArray<int64_t> &column_ids,
+      const common::ObIArray<int64_t> &column_checksums) override;
 private:
   common::ObTabletID tablet_id_;
   uint64_t index_id_;
@@ -135,7 +141,10 @@ class ObLocalUniqueIndexCallback : public ObIUniqueCheckingCompleteCallback
 {
 public:
   ObLocalUniqueIndexCallback();
-  int operator()(const int ret_code) override;
+  int operator()(
+      const int ret_code,
+      const common::ObIArray<int64_t> &column_ids,
+      const common::ObIArray<int64_t> &column_checksums) override;
 };
 
 struct ObUniqueCheckingParam final
@@ -146,7 +155,8 @@ public:
     is_scan_index_(false), schema_service_(nullptr), schema_guard_(share::schema::ObSchemaMgrItem::MOD_UNIQ_CHECK),
     index_schema_(nullptr), data_table_schema_(nullptr), callback_(nullptr), execution_id_(0),
     snapshot_version_(0), task_id_(0), user_parallelism_(0),
-    concurrent_cnt_(0), ranges_(), allocator_("UniqueChecking", OB_MALLOC_NORMAL_BLOCK_SIZE)
+    concurrent_cnt_(0), allocator_("UniqueChecking", OB_MALLOC_NORMAL_BLOCK_SIZE),
+    owned_data_table_schema_(&allocator_), owned_index_schema_(&allocator_), ranges_()
     {}
   ~ObUniqueCheckingParam() { destroy(); }
   int init(const ObTabletID &tablet_id,
@@ -156,12 +166,15 @@ public:
           const int64_t task_id,
           const int64_t execution_id,
           const int64_t snapshot_version,
-          const int64_t user_parallelism);
+          const int64_t user_parallelism,
+          const share::schema::ObTableSchema *data_table_schema = nullptr,
+          const share::schema::ObTableSchema *index_schema = nullptr);
   int prepare_task_ranges();
   bool is_valid() const
   {
     return tablet_id_.is_valid() && snapshot_version_ > 0
-    && schema_service_ != nullptr && execution_id_ >= 0 && task_id_ > 0
+    && data_table_schema_ != nullptr && index_schema_ != nullptr
+    && execution_id_ >= 0 && task_id_ > 0
     && user_parallelism_ > 0;
   }
 
@@ -177,6 +190,8 @@ public:
     schema_guard_.reset();
     index_schema_ = nullptr;
     data_table_schema_ = nullptr;
+    owned_data_table_schema_.reset();
+    owned_index_schema_.reset();
     if (NULL != callback_) {
       callback_->~ObIUniqueCheckingCompleteCallback();
       ob_free(callback_);
@@ -206,8 +221,10 @@ public:
   int64_t task_id_;
   int64_t user_parallelism_;
   int64_t concurrent_cnt_;
-  ObArray<blocksstable::ObDatumRange> ranges_;
   common::ObArenaAllocator allocator_;
+  share::schema::ObTableSchema owned_data_table_schema_;
+  share::schema::ObTableSchema owned_index_schema_;
+  ObArray<blocksstable::ObDatumRange> ranges_;
 };
 
 struct ObUniqueCheckingContext final
@@ -252,7 +269,9 @@ public:
       const int64_t task_id,
       const int64_t execution_id = -1,
       const int64_t snapshot_version = OB_INVALID_VERSION,
-      const int64_t parallelism = 1);
+      const int64_t parallelism = 1,
+      const share::schema::ObTableSchema *data_table_schema = nullptr,
+      const share::schema::ObTableSchema *index_schema = nullptr);
   const share::schema::ObTableSchema *get_index_schema() const { return param_.index_schema_; }
   const share::schema::ObTableSchema *get_data_table_schema() const { return param_.data_table_schema_; }
   int64_t get_execution_id() const { return param_.execution_id_; }

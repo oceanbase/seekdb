@@ -140,6 +140,9 @@ int ObIndexSSTableBuildTask::process()
         session_param.ddl_info_.set_source_table_hidden(data_schema->is_user_hidden_table());
         session_param.ddl_info_.set_dest_table_hidden(index_schema->is_user_hidden_table());
         session_param.ddl_info_.set_retryable_ddl(is_retryable_ddl_);
+        session_param.ddl_info_.set_direct_insert_task_info(
+            data_format_version_, snapshot_version_, schema_version_,
+            dest_table_id_, is_offline_index_rebuild_);
         int tmp_ret = OB_SUCCESS;
         user_sql_proxy = GCTX.ddl_sql_proxy_;
         DEBUG_SYNC(BEFORE_INDEX_SSTABLE_BUILD_TASK_SEND_SQL);
@@ -212,6 +215,8 @@ ObAsyncTask *ObIndexSSTableBuildTask::deep_copy(char *buf, const int64_t buf_siz
         trace_id_,
         parallelism_,
         is_partitioned_local_index_task_,
+        data_format_version_,
+        is_offline_index_rebuild_,
         is_retryable_ddl_);
     if (OB_SUCCESS != (task->set_addition_info(addition_info_.partition_ids_))) {
       task->~ObIndexSSTableBuildTask();
@@ -804,6 +809,8 @@ int ObIndexBuildTask::send_local_build_request(
           trace_id_,
           parallelism,
           is_partitioned_local_index_task,
+          data_format_version_,
+          create_index_arg_.is_offline_rebuild_,
           is_retryable_ddl_);
       if (OB_FAIL(task.set_addition_info(index_partition_ids))) {
       } else if (OB_FAIL(local_management_service_->submit_ddl_local_build_task(task))) {
@@ -1222,7 +1229,9 @@ int ObIndexBuildTask::verify_checksum()
     bool is_column_checksum_ready = false;
     bool dummy_equal = false;
     if (!wait_column_checksum_ctx_.is_inited() && OB_FAIL(wait_column_checksum_ctx_.init(
-            task_id_, object_id_, index_table_id_, schema_version_, check_unique_snapshot_, 0/*execution_id*/, checksum_wait_timeout, parallelism_))) {
+            task_id_, object_id_, index_table_id_, schema_version_,
+            check_unique_snapshot_, 0/*execution_id*/, checksum_wait_timeout,
+            parallelism_, data_format_version_))) {
       LOG_ERROR("init context of wait column checksum failed", K(ret), K(object_id_), K(index_table_id_));
     } else {
       if (OB_FAIL(wait_column_checksum_ctx_.try_wait(is_column_checksum_ready))) {

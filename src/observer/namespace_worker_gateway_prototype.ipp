@@ -1,6 +1,8 @@
 // Included in the Observer composition unit. Shared storage serves SQL workers.
 #include "observer/namespace_worker_protocol_prototype.h"
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
+#include "rootserver/ddl_task/ob_ddl_task_util.h"
+#include "storage/compaction/ob_freeze_info_mgr.h"
 #include <map>
 #include <mutex>
 #include "rpc/ob_sql_request_operator.h"
@@ -27,20 +29,166 @@ namespace oceanbase { namespace observer { namespace namespace_worker_prototype 
 using namespace common;
 using namespace share::schema;
 using storage::NamespaceForkKernelPrototype;
+std::mutex shared_inner_sql_namespaces_mutex;
+std::map<uint64_t, std::pair<uint64_t, uint64_t>> shared_inner_sql_namespaces;
+thread_local std::vector<uint64_t> inner_sql_namespace_overrides;
+int bind_shared_inner_sql_namespace(uint64_t trace_seq, uint64_t namespace_id) {
+  if (trace_seq == 0 || namespace_id == 0 || namespace_id >= (1ULL << 30)) {
+    return OB_INVALID_ARGUMENT;
+  }
+  std::lock_guard<std::mutex> guard(shared_inner_sql_namespaces_mutex);
+  auto &binding = shared_inner_sql_namespaces[trace_seq];
+  if (binding.second != 0 && binding.first != namespace_id) { return OB_STATE_NOT_MATCH; }
+  binding.first = namespace_id;
+  ++binding.second;
+  fprintf(stderr, "PROTOTYPE_NATIVE_NAMESPACE_BIND trace=%llu ns=%llu refs=%llu\n",
+      (unsigned long long)trace_seq, (unsigned long long)namespace_id,
+      (unsigned long long)binding.second);
+  return OB_SUCCESS;
+}
+void unbind_shared_inner_sql_namespace(uint64_t trace_seq) {
+  std::lock_guard<std::mutex> guard(shared_inner_sql_namespaces_mutex);
+  auto binding = shared_inner_sql_namespaces.find(trace_seq);
+  if (binding != shared_inner_sql_namespaces.end()
+      && --binding->second.second == 0) {
+    shared_inner_sql_namespaces.erase(binding);
+  }
+}
+int push_inner_sql_namespace_override(uint64_t namespace_id) {
+  if (namespace_id == 0 || namespace_id >= (1ULL << 30)) { return OB_INVALID_ARGUMENT; }
+  inner_sql_namespace_overrides.push_back(namespace_id);
+  return OB_SUCCESS;
+}
+void pop_inner_sql_namespace_override() {
+  if (!inner_sql_namespace_overrides.empty()) { inner_sql_namespace_overrides.pop_back(); }
+}
+uint64_t resolve_shared_inner_sql_namespace() {
+  if (worker_process && worker_namespace != 0) {
+    return worker_namespace;
+  }
+  if (!inner_sql_namespace_overrides.empty()) {
+    return inner_sql_namespace_overrides.back();
+  }
+  const auto *trace = ObCurTraceId::get_trace_id();
+  if (!trace || !trace->is_valid()) { return 1; }
+  std::lock_guard<std::mutex> guard(shared_inner_sql_namespaces_mutex);
+  auto binding = shared_inner_sql_namespaces.find(trace->get_seq());
+  const uint64_t namespace_id = binding == shared_inner_sql_namespaces.end()
+      ? 1 : binding->second.first;
+  fprintf(stderr, "PROTOTYPE_NATIVE_NAMESPACE_RESOLVE trace=%llu ns=%llu found=%d\n",
+      (unsigned long long)trace->get_seq(), (unsigned long long)namespace_id,
+      binding != shared_inner_sql_namespaces.end());
+  return namespace_id;
+}
 bool enabled() {
   const char *value = std::getenv("SEEKDB_NAMESPACE_SQL_WORKER_PROTOTYPE");
   return value && !std::strcmp(value, "1") && NamespaceForkKernelPrototype::metadata_gc_mode();
 }
-bool bootstrap_enabled() {
-  const char *value = std::getenv("SEEKDB_NAMESPACE_SQL_WORKER_BOOTSTRAP_PROTOTYPE");
-  return value && !std::strcmp(value, "1");
-}
 int check_sql_execution_role() {
-  if (bootstrap_enabled() && !worker_process) {
+  if (enabled() && !worker_process) {
     fprintf(stderr, "PROTOTYPE_V18_SHARED_SQL_REJECT\n");
     return OB_NOT_SUPPORTED;
   }
   return OB_SUCCESS;
+}
+int acquire_storage_snapshot(int64_t &snapshot) {
+  snapshot = 0;
+  // Freeze metadata remains SQL/schema state in the namespace worker. The
+  // helper obtains only the transaction clock through ObITransactionService.
+  return rootserver::ObDDLTaskUtil::calc_snapshot_with_gts(snapshot);
+}
+int reload_storage_freeze_info() {
+  if (!worker_process) {
+    auto *freeze = share::server_service<storage::ObFreezeInfoMgr>();
+    return freeze ? freeze->reload_for_test() : OB_NOT_INIT;
+  }
+  Frame request('C'), reply; request.number(2);
+  int ret = worker_send(request);
+  if (!ret) { ret = worker_read(reply); }
+  if (!ret && reply.type() != 'c') { ret = OB_INVALID_ARGUMENT; }
+  if (!ret) { ret = static_cast<int>(reply.number()); }
+  if (!ret && !reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
+  return ret;
+}
+bool worker_config_requires_restart(const common::ObConfigItem &config,
+                                    const char *name)
+{
+  return config.reboot_effective()
+      || 0 == std::strcmp(name, "ssl_client_authentication")
+      || 0 == std::strcmp(name, "sql_protocol_min_tls_version");
+}
+int apply_dynamic_worker_config(const obcall::ObAdminSetConfigArg &arg,
+                                int64_t &applied,
+                                int64_t &restart_required) {
+  applied = 0;
+  restart_required = 0;
+  int ret = arg.is_valid() ? OB_SUCCESS : OB_INVALID_ARGUMENT;
+  for (int64_t i = 0; !ret && i < arg.items_.count(); ++i) {
+    const auto &item = arg.items_.at(i);
+    common::ObConfigItem *const *config = GCONF.get_container().get(
+        common::ObConfigStringKey(item.name_.ptr()));
+    if (OB_ISNULL(config) || OB_ISNULL(*config)) {
+      ret = OB_ERR_SYS_CONFIG_UNKNOWN;
+    } else if (worker_config_requires_restart(**config, item.name_.ptr())) {
+      ++restart_required;
+    } else {
+      ObSqlString extra;
+      if (OB_FAIL(extra.assign_fmt("%s=%s", item.name_.ptr(), item.value_.ptr()))) {
+      } else if (OB_FAIL(GCONF.add_extra_config(
+                     extra.ptr(), GCONF.update_version(), true))) {
+      } else {
+        ++applied;
+      }
+    }
+  }
+  return ret;
+}
+int broadcast_dynamic_worker_config(const obcall::ObAdminSetConfigArg &arg,
+                                    uint64_t excluded_namespace);
+int drain_storage_namespace_access(uint64_t namespace_id) {
+  if (namespace_id <= 1 || namespace_id >= (1ULL << 30)) {
+    return OB_INVALID_ARGUMENT;
+  }
+  if (!worker_process) {
+    return storage::NamespaceForkKernelPrototype::drain_access();
+  }
+  if (worker_namespace != 1) { return OB_NOT_SUPPORTED; }
+  Frame request('C'), reply;
+  request.number(5);
+  request.number(namespace_id);
+  int ret = worker_send(request);
+  if (!ret) { ret = worker_read(reply); }
+  if (!ret && reply.type() != 'c') { ret = OB_INVALID_ARGUMENT; }
+  if (!ret) { ret = static_cast<int>(reply.number()); }
+  if (!ret && !reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
+  return ret;
+}
+int release_storage_namespace_schemas(uint64_t namespace_id,
+                                      int64_t &table_count,
+                                      int64_t &database_count) {
+  table_count = 0;
+  database_count = 0;
+  if (namespace_id <= 1 || namespace_id >= (1ULL << 30)) {
+    return OB_INVALID_ARGUMENT;
+  }
+  if (!worker_process) {
+    return storage::NamespaceForkKernelPrototype::release_namespace_schemas(
+        namespace_id, table_count, database_count);
+  }
+  if (worker_namespace != 1) { return OB_NOT_SUPPORTED; }
+  Frame request('C'), reply;
+  request.number(6);
+  request.number(namespace_id);
+  int ret = worker_send(request);
+  if (!ret) { ret = worker_read(reply); }
+  if (!ret && reply.type() != 'c') { ret = OB_INVALID_ARGUMENT; }
+  if (!ret) { ret = static_cast<int>(reply.number()); }
+  if (!ret) {
+    table_count = static_cast<int64_t>(reply.number());
+    database_count = static_cast<int64_t>(reply.number());
+  }
+  if (!ret && !reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
+  return ret;
 }
 int admin_set_config(obcall::ObAdminSetConfigArg &arg) {
   if (worker_namespace != 1) { return OB_NOT_SUPPORTED; }
@@ -50,13 +198,28 @@ int admin_set_config(obcall::ObAdminSetConfigArg &arg) {
   if (!ret && reply.type() != 'g') { ret = OB_INVALID_ARGUMENT; }
   if (!ret) { ret = static_cast<int>(reply.number()); }
   if (!ret && !reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
+  // The shared process validates and persists the authoritative configuration.
+  // Apply the committed values to the SQL process that issued ALTER SYSTEM as
+  // well; otherwise packet admission and SQL features keep using stale GCONF
+  // values until this Worker is restarted.
+  int64_t applied = 0;
+  int64_t restart_required = 0;
+  if (!ret) {
+    ret = apply_dynamic_worker_config(arg, applied, restart_required);
+  }
+  fprintf(stderr,
+      "PROTOTYPE_NAMESPACE_WORKER_CONFIG_APPLIED ns=%llu applied=%lld restart=%lld ret=%d\n",
+      static_cast<unsigned long long>(worker_namespace),
+      static_cast<long long>(applied),
+      static_cast<long long>(restart_required), ret);
   return ret;
 }
 bool is_storage_request(char type) {
-  return type == 'd' || type == 'b' || type == 't' || type == 'i' || type == 'j' || type == 'k' || type == 'l'
+  return type == 'C'
+      || type == 'd' || type == 'b' || type == 't' || type == 'i' || type == 'j' || type == 'k' || type == 'l'
       || type == 'u' || type == 'n' || type == 'p'
-      || type == 'O' || type == 'F' || type == 'X' || type == 'M' || type == 'T' || type == 'W' || type == 'G' || type == 'J'
-      || type == 'h';
+      || type == 'O' || type == 'F' || type == 'X' || type == 'M' || type == 'T' || type == 'W' || type == 'G' || type == 'J' || type == 'Y'
+      || type == 'h' || type == 'A';
 }
 // One admitted storage RPC at a time per SQL request. Native request workers
 // execute it; the pipe reader only submits the task. No per-session thread.
@@ -124,18 +287,25 @@ struct StorageDispatch : std::enable_shared_from_this<StorageDispatch> {
 struct Channel;
 int receive_direct_storage(Channel &channel, Frame input);
 void stop_direct_storage(Channel &channel);
+int recover_channel(uint64_t ns, uint64_t failed_generation);
 struct Channel : std::enable_shared_from_this<Channel> {
+  explicit Channel(StorageSpaceHandle space) : storage_space(space) {}
   void *handle = nullptr;
   uint64_t generation = 0;
   uint32_t pid = 0;
   uint32_t client_port = 0;
   std::atomic<bool> closed{false};
+  std::atomic<bool> restart_on_failure{false};
   RequestRoutes routes;
   RequestRoutes storage_routes{WORKER_REQUEST};
-  uint64_t namespace_id = 0;
+  const StorageSpaceHandle storage_space;
   std::mutex bindings_mutex;
   SessionBinding *bindings = nullptr;
-  ~Channel() { fail(); namespace_proto_stop(handle); }
+  ~Channel() {
+    restart_on_failure = false;
+    fail();
+    namespace_proto_stop(handle);
+  }
   void fail();
   int send(const Frame &frame) {
     if (closed) { return OB_CONNECT_ERROR; }
@@ -174,10 +344,15 @@ struct Channel : std::enable_shared_from_this<Channel> {
 struct Child { std::mutex mutex; std::shared_ptr<Channel> current; };
 std::mutex children_mutex;
 std::map<uint64_t, std::shared_ptr<Child>> children;
+std::mutex worker_config_overrides_mutex;
+std::map<std::string, std::string> worker_config_overrides;
+bool worker_config_overrides_loaded = false;
 uint64_t next_generation = 0;
+int ensure_channel(uint64_t ns, std::shared_ptr<Channel> &channel);
+int stop_channel(uint64_t ns);
 struct SessionBinding {
   std::shared_ptr<Channel> channel;
-  uint64_t ns = 0, slot = 0, slot_generation = 0;
+  uint64_t slot = 0, slot_generation = 0;
   sql::ObSQLSessionInfo *gateway = nullptr;
   bool internal = false;
   std::shared_ptr<PendingRequest> direct_request;
@@ -195,6 +370,7 @@ struct SessionBinding {
   }
 };
 void Channel::fail() {
+  bool restart = false;
   if (!closed.exchange(true)) {
     stop_direct_storage(*this);
     routes.fail(); namespace_proto_interrupt(handle);
@@ -204,6 +380,29 @@ void Channel::fail() {
     for (auto *binding = bindings; binding; binding = binding->next) {
       auto &socket = binding->gateway->get_sock_desc();
       if (socket.sock_desc_) { SQL_REQ_OP.disconnect_by_sql_sock_desc(socket); }
+    }
+    restart = restart_on_failure && storage_space.is_namespace();
+  }
+  if (restart) {
+    const uint64_t namespace_id = storage_space.namespace_id();
+    const uint64_t failed_generation = generation;
+    auto recovery = std::make_shared<StorageDispatch>();
+    recovery->process = [namespace_id, failed_generation](Frame &) {
+      // ObServerRuntime may reuse a worker whose previous request deadline has
+      // expired. Recovery is an independent background operation; otherwise
+      // its GLOBAL endpoint write can fail before it is sent to namespace 1.
+      const int64_t previous_timeout = THIS_WORKER.get_timeout_ts();
+      THIS_WORKER.set_timeout_ts(INT64_MAX);
+      const int ret = recover_channel(namespace_id, failed_generation);
+      THIS_WORKER.set_timeout_ts(previous_timeout);
+      return ret;
+    };
+    const int ret = recovery->submit(Frame());
+    if (ret != OB_SUCCESS) {
+      fprintf(stderr,
+          "PROTOTYPE_NAMESPACE_ENDPOINT_RECOVERY_SUBMIT ns=%llu generation=%llu ret=%d\n",
+          static_cast<unsigned long long>(namespace_id),
+          static_cast<unsigned long long>(failed_generation), ret);
     }
   }
 }
@@ -272,7 +471,16 @@ int catalog_schema_guard(int64_t version, ObSchemaGetterGuard &guard) {
   if (!ret) { ret = service.get_runtime_schema_guard(guard, version == current ? OB_INVALID_VERSION : version); }
   int64_t actual = OB_INVALID_VERSION;
   if (!ret) { ret = guard.get_schema_version(actual); }
-  if (!ret && version != OB_INVALID_VERSION && actual != version) { ret = OB_SCHEMA_EAGAIN; }
+  if (!ret && version != OB_INVALID_VERSION && actual != version) {
+    fprintf(stderr,
+        "PROTOTYPE_CATALOG_VERSION_MISMATCH requested=%lld current=%lld actual=%lld\n",
+        (long long)version, (long long)current, (long long)actual);
+    ret = OB_SCHEMA_EAGAIN;
+  } else if (ret == OB_SCHEMA_EAGAIN) {
+    fprintf(stderr,
+        "PROTOTYPE_CATALOG_GUARD_EAGAIN requested=%lld current=%lld actual=%lld\n",
+        (long long)version, (long long)current, (long long)actual);
+  }
   return ret;
 }
 int catalog(uint64_t ns, Frame &request, Frame &reply) {
@@ -356,9 +564,62 @@ int catalog(uint64_t ns, Frame &request, Frame &reply) {
   if (!ret && variables) { reply.append(*variables); }
   return reply.ret;
 }
-int serve_storage(uint64_t ns, ReadScans *scans, EngineWrites *writes, int state, Frame &input, Frame &result) {
+int serve_storage(StorageSpaceHandle storage_space, ReadScans *scans,
+    EngineWrites *writes, int state, Frame &input, Frame &result) {
+    const uint64_t ns = storage_space.namespace_id();
     int ret = OB_SUCCESS;
-    if (input.type() == 'd' || input.type() == 'b' || input.type() == 't' || input.type() == 'i' || input.type() == 'j' || input.type() == 'k' || input.type() == 'l'
+    if (!storage_space.is_namespace()) { return OB_INVALID_ARGUMENT; }
+    if (input.type() == 'C') {
+      const uint64_t operation = input.number();
+      int command_ret = state;
+      std::shared_ptr<Channel> endpoint;
+      uint64_t target_namespace = 0;
+      int64_t released_tables = 0;
+      int64_t released_databases = 0;
+      if (!command_ret
+          && (operation == 3 || operation == 4 || operation == 5 || operation == 6)) {
+        target_namespace = input.number();
+      }
+      if (!command_ret && !input.consumed()) {
+        command_ret = OB_INVALID_ARGUMENT;
+      } else if (!command_ret && operation == 2) {
+        auto *freeze = share::server_service<storage::ObFreezeInfoMgr>();
+        command_ret = freeze ? freeze->reload_for_test() : OB_NOT_INIT;
+      } else if (!command_ret && operation == 3) {
+        command_ret = ns != 1 || target_namespace <= 1
+            ? OB_NOT_SUPPORTED : ensure_channel(target_namespace, endpoint);
+      } else if (!command_ret && operation == 4) {
+        command_ret = ns != 1 || target_namespace <= 1
+            ? OB_NOT_SUPPORTED : stop_channel(target_namespace);
+      } else if (!command_ret && operation == 5) {
+        command_ret = ns != 1 || target_namespace <= 1
+            ? OB_NOT_SUPPORTED : NamespaceForkKernelPrototype::drain_access();
+        fprintf(stderr,
+            "PROTOTYPE_NAMESPACE_ACCESS_DRAINED ns=%llu ret=%d\n",
+            (unsigned long long)target_namespace, command_ret);
+      } else if (!command_ret && operation == 6) {
+        command_ret = ns != 1 || target_namespace <= 1
+            ? OB_NOT_SUPPORTED
+            : NamespaceForkKernelPrototype::release_namespace_schemas(
+                target_namespace, released_tables, released_databases);
+        fprintf(stderr,
+            "PROTOTYPE_NAMESPACE_SCHEMA_HOLDERS_RELEASED ns=%llu tables=%lld databases=%lld ret=%d\n",
+            (unsigned long long)target_namespace,
+            (long long)released_tables, (long long)released_databases, command_ret);
+      } else if (!command_ret) {
+        command_ret = OB_INVALID_ARGUMENT;
+      }
+      result = Frame('c'); result.number(command_ret);
+      if (!command_ret && operation == 3) {
+        result.number(endpoint->client_port);
+        result.number(endpoint->generation);
+        result.number(endpoint->pid);
+      } else if (!command_ret && operation == 6) {
+        result.number(released_tables);
+        result.number(released_databases);
+      }
+      ret = result.ret;
+    } else if (input.type() == 'd' || input.type() == 'b' || input.type() == 't' || input.type() == 'i' || input.type() == 'j' || input.type() == 'k' || input.type() == 'l'
         || input.type() == 'u' || input.type() == 'n' || input.type() == 'p') {
       result = Frame('c');
       if (state) { result.number(state); }
@@ -366,11 +627,21 @@ int serve_storage(uint64_t ns, ReadScans *scans, EngineWrites *writes, int state
     } else if (input.type() == 'h') {
       result = Frame('r');
       if (state) { result.number(state); }
-      else { ret = process_lob_read(input, result, writes ? writes->tx : nullptr); }
+      else { ret = process_lob_read(
+          storage_space, input, result, writes ? writes->tx : nullptr); }
+    } else if (input.type() == 'A') {
+      result = Frame('g');
+      if (state) { result.number(state); }
+      else { ret = process_tablet_autoincrement_cache_invalidation(
+          storage_space, input, result); }
     } else if (input.type() == 'G') {
       result = Frame('g');
       if (state) { result.number(state); }
-      else { ret = process_ranges(ns, input, result); }
+      else { ret = process_ranges(storage_space, input, result); }
+    } else if (input.type() == 'Y') {
+      result = Frame('w');
+      if (state) { result.number(state); }
+      else { ret = process_rootserver_local_runtime(storage_space, input, result); }
     } else if (scans && (input.type() == 'O' || input.type() == 'F' || input.type() == 'X')) {
       result = Frame('s');
       if (state && input.type() != 'X') { result.number(state); }
@@ -378,16 +649,45 @@ int serve_storage(uint64_t ns, ReadScans *scans, EngineWrites *writes, int state
     } else if (input.type() == 'M') {
       result = Frame('g');
       const uint64_t operation = input.number();
-      if (operation == 2) {
-        if (state) { result.number(state); }
-        else { ret = process_root_command(ns, input, result); }
-        return ret;
+      if (operation == 2 || operation == 4 || operation == 5 || operation == 6) {
+        const int64_t schema_version = operation == 4 || operation == 6
+            ? static_cast<int64_t>(input.number()) : 0;
+        int command_ret = state;
+        if (!command_ret && !input.consumed()) {
+          command_ret = OB_INVALID_ARGUMENT;
+        } else if (!command_ret && operation == 2) {
+          command_ret = storage::NamespaceForkKernelPrototype::begin_schema_change(ns);
+        } else if (!command_ret && operation == 4) {
+          command_ret = storage::NamespaceForkKernelPrototype::finish_schema_change(
+              ns, schema_version);
+        } else if (!command_ret && operation == 5) {
+          bool recovery_needed = false;
+          command_ret = storage::NamespaceForkKernelPrototype::begin_schema_recovery(
+              ns, recovery_needed);
+          result.number(0);
+          result.number(command_ret);
+          if (!command_ret) { result.number(recovery_needed); }
+          return result.ret;
+        } else if (!command_ret) {
+          command_ret = storage::NamespaceForkKernelPrototype::finish_schema_recovery(
+              ns, schema_version);
+        }
+        result.number(0);
+        result.number(command_ret);
+        return result.ret;
+      }
+      if (operation == 3) {
+        const int command_ret = state ? state : apply_namespace_schema_delta(ns, input);
+        result.number(0);
+        result.number(command_ret);
+        return result.ret;
       }
       obcall::ObAdminSetConfigArg arg;
       input.read(arg);
       int command_ret = state ? state : ns != 1 || operation != 1 ? OB_NOT_SUPPORTED
           : !input.consumed() || !arg.is_valid() ? OB_INVALID_ARGUMENT : OB_SUCCESS;
       if (!command_ret) { command_ret = ObServer::get_instance().get_local_management_service().admin_set_config(arg); }
+      if (!command_ret) { command_ret = broadcast_dynamic_worker_config(arg, ns); }
       result.number(command_ret);
     } else if (writes && (input.type() == 'T' || input.type() == 'W')) {
       result = Frame('w');
@@ -407,10 +707,9 @@ struct DirectStorageContext {
   DirectInsertRoute direct_insert;
   std::weak_ptr<Channel> channel;
   RequestTag tag;
-  uint64_t ns;
   bool initialized = false;
   DirectStorageContext(std::shared_ptr<Channel> owner, RequestTag request)
-      : scans(owner->namespace_id), channel(owner), tag(request), ns(owner->namespace_id) {}
+      : scans(owner->storage_space), channel(owner), tag(request) {}
   int process(Frame &input) {
     auto owner = channel.lock();
     if (!owner) { return OB_CONNECT_ERROR; }
@@ -428,8 +727,18 @@ struct DirectStorageContext {
       const uint64_t internal = input.number();
       if (initialized || !input.consumed() || internal > 1 || (!sid && !internal) || sid > UINT32_MAX) { ret = OB_INVALID_ARGUMENT; }
       else { ret = session.test_init(1, static_cast<uint32_t>(sid), &session_state->allocator); }
-      if (!ret) { ret = session.load_default_sys_variable(false, false); }
-      if (!ret) { writes = std::make_unique<EngineWrites>(ns, session); initialized = true; }
+      // A sid-less internal route is a short-lived catalog/background storage
+      // context. Loading variables for it can recurse into a worker that is
+      // still initializing; transaction sessions with a real SID stay native.
+      if (!ret && (sid != 0 || !internal)) { ret = session.load_default_sys_variable(false, false); }
+      if (!ret) {
+        writes = std::make_unique<EngineWrites>(owner->storage_space, session);
+        initialized = true;
+      }
+      fprintf(stderr, "PROTOTYPE_NATIVE_DIRECT_OPEN ns=%llu sid=%llu internal=%llu ret=%d\n",
+          (unsigned long long)owner->storage_space.namespace_id(),
+          (unsigned long long)sid,
+          (unsigned long long)internal, ret);
       result.number(ret);
     } else if (!initialized) {
       ret = OB_NOT_INIT;
@@ -444,9 +753,11 @@ struct DirectStorageContext {
       }
       result.number(ret);
     } else if (input.type() == 'J') {
-      ret = direct_insert.process(ns, tag, owner->storage_routes, session_state, input, result);
+      ret = direct_insert.process(owner->storage_space, tag, owner->storage_routes,
+          session_state, input, result);
     } else {
-      ret = serve_storage(ns, &scans, writes.get(), OB_SUCCESS, input, result);
+      ret = serve_storage(owner->storage_space, &scans, writes.get(),
+          OB_SUCCESS, input, result);
     }
     THIS_WORKER.set_session(old_session);
     THIS_WORKER.set_timeout_ts(old_timeout);
@@ -505,7 +816,6 @@ void stop_direct_storage(Channel &channel) {
 // through the native shared runtime, including while the result consumer sleeps.
 struct Exchange {
   Channel &channel;
-  uint64_t ns;
   ReadScans *scans;
   EngineWrites *writes;
   bool query, finished = false;
@@ -513,12 +823,16 @@ struct Exchange {
   std::atomic<int> cancelled{OB_SUCCESS};
   std::shared_ptr<PendingRequest> pending;
   std::shared_ptr<StorageDispatch> storage;
-  Exchange(Channel &c, uint64_t n, Frame request, ReadScans *s, int64_t deadline, EngineWrites *w)
-      : channel(c), ns(n), scans(s), writes(w),
+  Exchange(Channel &c, Frame request, ReadScans *s, int64_t deadline, EngineWrites *w)
+      : channel(c), scans(s), writes(w),
         query(request.type() == 'Q' || request.type() == 'U' || request.type() == 'I') {
     pending = channel.routes.allocate(!query);
     if (!pending) { error = channel.closed ? OB_CONNECT_ERROR : OB_EAGAIN; return; }
-    pending->deadline = query ? deadline : ObTimeUtility::current_time() + 30L * 1000000;
+    // A positive explicit deadline applies to every frame type. Callers that
+    // omit it keep the historical policy: queries are unbounded and control
+    // exchanges get a 30-second safety limit.
+    pending->deadline = deadline > 0 ? deadline
+        : query ? INT64_MAX : ObTimeUtility::current_time() + 30L * 1000000;
     storage = std::make_shared<StorageDispatch>();
     storage->process = [this](Frame &input) { return serve(input); };
     pending->dispatch_storage = [context = storage](Frame input) { return context->submit(std::move(input)); };
@@ -556,7 +870,8 @@ struct Exchange {
     THIS_WORKER.set_timeout_ts(pending->deadline);
     THIS_WORKER.set_session(writes ? &writes->session : nullptr);
     Frame result;
-    int ret = serve_storage(ns, scans, writes, cancelled.load(), input, result);
+    int ret = serve_storage(channel.storage_space, scans, writes,
+        cancelled.load(), input, result);
     THIS_WORKER.set_session(saved_session);
     THIS_WORKER.set_timeout_ts(saved_timeout);
     result.tag(pending->tag);
@@ -584,10 +899,10 @@ struct Exchange {
     channel.fail(); return error;
   }
 };
-int exchange(Channel &channel, uint64_t ns, Frame request, ReadScans *scans,
-             const std::function<int(Frame &)> &response, int64_t deadline = INT64_MAX,
+int exchange(Channel &channel, Frame request, ReadScans *scans,
+             const std::function<int(Frame &)> &response, int64_t deadline = 0,
              EngineWrites *writes = nullptr) {
-  Exchange pump(channel, ns, std::move(request), scans, deadline, writes);
+  Exchange pump(channel, std::move(request), scans, deadline, writes);
   Frame reply;
   int ret = OB_SUCCESS;
   while (!(ret = pump.next(reply))) {
@@ -607,9 +922,141 @@ int exchange(Channel &channel, uint64_t ns, Frame request, ReadScans *scans,
   }
   return ret;
 }
-int open_session(uint64_t ns, sql::ObSQLSessionInfo &gateway, SessionBinding *&binding, bool internal) {
-  binding = nullptr;
-  std::unique_ptr<SessionBinding> owned(new SessionBinding());
+int load_worker_config_overrides_locked()
+{
+  int ret = OB_SUCCESS;
+  if (!worker_config_overrides_loaded) {
+    if (OB_ISNULL(GCTX.config_mgr_)) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(GCTX.config_mgr_->get_storage().load_namespace_worker_configs(
+                   worker_config_overrides))) {
+    } else {
+      worker_config_overrides_loaded = true;
+      fprintf(stderr,
+          "PROTOTYPE_NAMESPACE_WORKER_CONFIG_RESTORED count=%llu\n",
+          static_cast<unsigned long long>(worker_config_overrides.size()));
+    }
+  }
+  return ret;
+}
+int remember_dynamic_worker_config(const obcall::ObAdminSetConfigArg &arg)
+{
+  std::lock_guard<std::mutex> guard(worker_config_overrides_mutex);
+  int ret = arg.is_valid() ? OB_SUCCESS : OB_INVALID_ARGUMENT;
+  if (!ret) { ret = load_worker_config_overrides_locked(); }
+  for (int64_t i = 0; !ret && i < arg.items_.count(); ++i) {
+    const auto &item = arg.items_.at(i);
+    common::ObConfigItem *const *config = GCONF.get_container().get(
+        common::ObConfigStringKey(item.name_.ptr()));
+    if (OB_ISNULL(config) || OB_ISNULL(*config)) {
+      ret = OB_ERR_SYS_CONFIG_UNKNOWN;
+    } else if (!worker_config_requires_restart(**config, item.name_.ptr())) {
+      ret = GCTX.config_mgr_->get_storage().upsert_namespace_worker_config(
+          item.name_.ptr(), item.value_.ptr());
+      if (!ret) {
+        worker_config_overrides[item.name_.ptr()] = item.value_.ptr();
+      }
+    }
+  }
+  return ret;
+}
+int remembered_dynamic_worker_config(obcall::ObAdminSetConfigArg &arg)
+{
+  std::lock_guard<std::mutex> guard(worker_config_overrides_mutex);
+  int ret = load_worker_config_overrides_locked();
+  for (const auto &entry : worker_config_overrides) {
+    obcall::ObAdminSetConfigItem item;
+    common::ObConfigItem *const *config = GCONF.get_container().get(
+        common::ObConfigStringKey(entry.first.c_str()));
+    if (OB_ISNULL(config) || OB_ISNULL(*config)) {
+      ret = OB_ERR_SYS_CONFIG_UNKNOWN;
+    } else if (worker_config_requires_restart(**config, entry.first.c_str())) {
+      continue;
+    } else if (OB_FAIL(item.name_.assign(entry.first.c_str()))) {
+    } else if (OB_FAIL(item.value_.assign(entry.second.c_str()))) {
+    } else {
+      ret = arg.items_.push_back(item);
+    }
+  }
+  return ret;
+}
+int send_dynamic_worker_config(Channel &channel,
+                               const obcall::ObAdminSetConfigArg &arg)
+{
+  if (arg.items_.empty()) { return OB_SUCCESS; }
+  Frame request('V');
+  request.append(arg);
+  return request.ret ? request.ret
+      : exchange(channel, std::move(request), nullptr,
+                 [](Frame &) { return OB_INVALID_ARGUMENT; });
+}
+int broadcast_dynamic_worker_config(const obcall::ObAdminSetConfigArg &arg,
+                                    uint64_t excluded_namespace)
+{
+  int ret = remember_dynamic_worker_config(arg);
+  std::vector<std::pair<uint64_t, std::shared_ptr<Child>>> snapshot;
+  {
+    std::lock_guard<std::mutex> guard(children_mutex);
+    snapshot.assign(children.begin(), children.end());
+  }
+  int64_t delivered = 0;
+  if (!ret) {
+    for (const auto &entry : snapshot) {
+      if (entry.first == excluded_namespace) { continue; }
+      std::shared_ptr<Channel> channel;
+      {
+        std::lock_guard<std::mutex> guard(entry.second->mutex);
+        channel = entry.second->current;
+      }
+      if (channel && !channel->closed) {
+        const int send_ret = send_dynamic_worker_config(*channel, arg);
+        if (!send_ret) { ++delivered; }
+        else if (!ret) { ret = send_ret; }
+      }
+    }
+  }
+  fprintf(stderr,
+      "PROTOTYPE_NAMESPACE_WORKER_CONFIG_BROADCAST excluded=%llu delivered=%lld ret=%d\n",
+      static_cast<unsigned long long>(excluded_namespace),
+      static_cast<long long>(delivered), ret);
+  return ret;
+}
+int send_system_package_ready(Channel &channel, const bool ready)
+{
+  Frame request('E');
+  request.number(ready ? 1 : 0);
+  return exchange(channel, std::move(request), nullptr,
+                  [](Frame &) { return OB_INVALID_ARGUMENT; });
+}
+int broadcast_system_package_ready(const bool ready)
+{
+  if (worker_process) { return OB_NOT_SUPPORTED; }
+  std::vector<std::shared_ptr<Child>> snapshot;
+  {
+    std::lock_guard<std::mutex> guard(children_mutex);
+    for (const auto &entry : children) { snapshot.push_back(entry.second); }
+  }
+  int ret = OB_SUCCESS;
+  int64_t delivered = 0;
+  for (const auto &child : snapshot) {
+    std::shared_ptr<Channel> channel;
+    {
+      std::lock_guard<std::mutex> guard(child->mutex);
+      channel = child->current;
+    }
+    if (channel && !channel->closed) {
+      const int send_ret = send_system_package_ready(*channel, ready);
+      if (!send_ret) { ++delivered; }
+      else if (!ret) { ret = send_ret; }
+    }
+  }
+  fprintf(stderr,
+      "PROTOTYPE_NAMESPACE_SYSTEM_PACKAGE_READY ready=%d delivered=%lld ret=%d\n",
+      ready, static_cast<long long>(delivered), ret);
+  return ret;
+}
+int ensure_channel(uint64_t ns, std::shared_ptr<Channel> &channel) {
+  channel.reset();
   std::shared_ptr<Child> child;
   int ret = attach(ns, child);
   if (ret) { return ret; }
@@ -617,50 +1064,287 @@ int open_session(uint64_t ns, sql::ObSQLSessionInfo &gateway, SessionBinding *&b
     // Only worker activation is serialized; existing queries continue running.
     std::lock_guard<std::mutex> guard(child->mutex);
     if (child->current && !child->current->closed) {
-      const int ping = exchange(*child->current, ns, Frame('P'), nullptr, [](Frame &) { return OB_INVALID_ARGUMENT; });
+      const int ping = exchange(*child->current, Frame('P'), nullptr,
+          [](Frame &) { return OB_INVALID_ARGUMENT; });
       if (ping == OB_EAGAIN) { return ping; }
       if (ping) { child->current->fail(); }
     }
     if (!child->current || child->current->closed) {
-      auto channel = std::make_shared<Channel>();
-      channel->namespace_id = ns;
-      { std::lock_guard<std::mutex> lock(children_mutex); channel->generation = ++next_generation; }
-      channel->handle = namespace_proto_spawn(ns, channel->generation, &channel->pid);
+      auto next = std::make_shared<Channel>(StorageSpaceHandle::namespace_space(ns));
+      { std::lock_guard<std::mutex> lock(children_mutex); next->generation = ++next_generation; }
+      next->handle = namespace_proto_spawn(ns, next->generation, &next->pid);
       Frame bootstrap('B');
       char logical_ip[OB_IP_STR_BUFF] = {};
       const auto &logical_address = ObServer::get_instance().get_self();
-      if (!channel->handle || !logical_address.ip_to_string(logical_ip, sizeof(logical_ip))) {
-        channel->fail(); return OB_CONNECT_ERROR;
+      if (!next->handle || !logical_address.ip_to_string(logical_ip, sizeof(logical_ip))) {
+        next->fail(); return OB_CONNECT_ERROR;
       }
-      bootstrap.number(logical_address.get_port()); bootstrap.string(ObString::make_string(logical_ip));
-      if (channel->send(bootstrap)) { return OB_CONNECT_ERROR; }
+      bootstrap.number(logical_address.get_port());
+      bootstrap.string(ObString::make_string(logical_ip));
+      bootstrap.number(GCONF.namespace_sql_worker_memory_budget);
+      bootstrap.number(GCONF.ssl_client_authentication);
+      bootstrap.string(GCONF.sql_protocol_min_tls_version.str());
+      bootstrap.string(GCONF.ob_ssl_invited_common_names.str());
+      bootstrap.number(ATOMIC_LOAD(&GCTX.sys_package_ready_) ? 1 : 0);
+      if (next->send(bootstrap)) { return OB_CONNECT_ERROR; }
       Frame ready;
-      if (!channel->handle || channel->receive(ready) || ready.type() != 'Y' || ready.number() != ns) {
-        channel->fail(); return OB_CONNECT_ERROR;
+      bool worker_ready = false;
+      while (!worker_ready && !ret) {
+        ret = next->handle ? next->receive(ready) : OB_CONNECT_ERROR;
+        fprintf(stderr, "PROTOTYPE_NATIVE_BOOTSTRAP_FRAME ns=%llu ret=%d type=%c slot=%llu\n",
+            (unsigned long long)ns, ret, ready.type(),
+            (unsigned long long)ready.tag().slot);
+        if (!ret && ready.type() == 'Y') {
+          worker_ready = true;
+        } else if (!ret && (ready.tag().slot & WORKER_REQUEST)) {
+          ret = receive_direct_storage(*next, std::move(ready));
+        } else if (!ret) {
+          ret = OB_INVALID_ARGUMENT;
+        }
+      }
+      if (ret || !worker_ready || ready.number() != ns) {
+        next->fail(); return OB_CONNECT_ERROR;
       }
       const uint64_t client_port = ready.consumed() ? 0 : ready.number();
       if (!ready.consumed() || client_port > UINT16_MAX) {
-        channel->fail(); return OB_INVALID_ARGUMENT;
+        next->fail(); return OB_INVALID_ARGUMENT;
       }
-      channel->client_port = static_cast<uint32_t>(client_port);
-      if (namespace_proto_dispatch(channel->handle, Channel::receive_frame, channel.get())) {
-        channel->fail(); return OB_CONNECT_ERROR;
+      next->client_port = static_cast<uint32_t>(client_port);
+      if (namespace_proto_dispatch(next->handle, Channel::receive_frame, next.get())) {
+        next->fail(); return OB_CONNECT_ERROR;
       }
-      child->current = channel;
-      if (std::getenv("SEEKDB_NAMESPACE_SQL_WORKER_DIRECT_PROBE")) {
-        ret = exchange(*channel, ns, Frame('H'), nullptr, [](Frame &) { return OB_INVALID_ARGUMENT; });
-        if (ret) { channel->fail(); return ret; }
+      obcall::ObAdminSetConfigArg worker_config;
+      if (OB_FAIL(remembered_dynamic_worker_config(worker_config))
+          || OB_FAIL(send_dynamic_worker_config(*next, worker_config))) {
+        next->fail(); return ret;
       }
+      if (ns == 1 || std::getenv("SEEKDB_NAMESPACE_SQL_WORKER_DIRECT_PROBE")) {
+        Frame health('H');
+        health.number(ns == 1 && !GCTX.in_bootstrap_ ? 1 : 0);
+        ret = exchange(*next, std::move(health), nullptr,
+            [](Frame &) { return OB_INVALID_ARGUMENT; }, INT64_MAX);
+        if (ret) { next->fail(); return ret; }
+      }
+      next->restart_on_failure = true;
+      child->current = next;
       fprintf(stderr, "PROTOTYPE_V10_WORKER_READY ns=%llu generation=%llu pid=%u port=%u\n",
-          (unsigned long long)ns, (unsigned long long)channel->generation, channel->pid, channel->client_port);
+          (unsigned long long)ns, (unsigned long long)next->generation,
+          next->pid, next->client_port);
     }
-    owned->channel = child->current;
+    channel = child->current;
   }
+  return channel && !channel->closed ? OB_SUCCESS : OB_CONNECT_ERROR;
+}
+int stop_channel(uint64_t ns) {
+  std::shared_ptr<Child> child;
+  {
+    std::lock_guard<std::mutex> guard(children_mutex);
+    const auto it = children.find(ns);
+    if (it == children.end()) { return OB_SUCCESS; }
+    child = it->second;
+  }
+  std::shared_ptr<Channel> endpoint;
+  {
+    std::lock_guard<std::mutex> guard(child->mutex);
+    endpoint = std::move(child->current);
+  }
+  if (endpoint) {
+    endpoint->restart_on_failure = false;
+    fprintf(stderr,
+        "PROTOTYPE_NAMESPACE_ENDPOINT_STOP ns=%llu generation=%llu pid=%u port=%u\n",
+        (unsigned long long)ns, (unsigned long long)endpoint->generation,
+        endpoint->pid, endpoint->client_port);
+    endpoint->fail();
+  }
+  return OB_SUCCESS;
+}
+int write_endpoint_registry(const ObSqlString &statement) {
+  if (!GCTX.sql_proxy_) { return OB_NOT_INIT; }
+  bool override_held = false;
+  int ret = OB_SUCCESS;
+  if (!worker_process) {
+    ret = push_inner_sql_namespace_override(1);
+    override_held = ret == OB_SUCCESS;
+  }
+  int64_t affected_rows = 0;
+  if (!ret) { ret = GCTX.sql_proxy_->write(statement.ptr(), affected_rows); }
+  if (override_held) { pop_inner_sql_namespace_override(); }
+  return ret;
+}
+int publish_endpoint(uint64_t namespace_id, uint64_t generation,
+                     uint32_t pid, uint32_t client_port) {
+  if (namespace_id == 0 || namespace_id >= (1ULL << 30)
+      || generation == 0 || pid == 0 || client_port > UINT16_MAX) {
+    return OB_INVALID_ARGUMENT;
+  }
+  ObSqlString statement;
+  int ret = statement.assign_fmt(
+      "INSERT INTO __fork_proto_meta.endpoints(namespace_id,generation,worker_pid,port) "
+      "VALUES(%lu,%lu,%u,%u) ON DUPLICATE KEY UPDATE "
+      "generation=VALUES(generation),worker_pid=VALUES(worker_pid),port=VALUES(port)",
+      namespace_id, generation, pid, client_port);
+  return ret ? ret : write_endpoint_registry(statement);
+}
+int recover_channel(uint64_t namespace_id, uint64_t failed_generation) {
+  std::shared_ptr<Child> child;
+  int ret = attach(namespace_id, child);
+  if (OB_SUCC(ret)) {
+    std::lock_guard<std::mutex> guard(child->mutex);
+    if (!child->current
+        || child->current->generation != failed_generation
+        || !child->current->closed) {
+      return OB_SUCCESS;
+    }
+  }
+  int64_t schema_version = OB_INVALID_VERSION;
+  if (OB_SUCC(ret) && namespace_id > 1) {
+    ret = NamespaceForkKernelPrototype::namespace_schema_version(
+        namespace_id, schema_version);
+  }
+  std::shared_ptr<Channel> endpoint;
+  if (OB_SUCC(ret)) { ret = ensure_channel(namespace_id, endpoint); }
+  if (OB_SUCC(ret)) {
+    ret = publish_endpoint(namespace_id, endpoint->generation,
+        endpoint->pid, endpoint->client_port);
+  }
+  fprintf(stderr,
+      "PROTOTYPE_NAMESPACE_ENDPOINT_RECOVERED ns=%llu failed_generation=%llu "
+      "generation=%llu pid=%u port=%u schema_version=%lld ret=%d\n",
+      static_cast<unsigned long long>(namespace_id),
+      static_cast<unsigned long long>(failed_generation),
+      static_cast<unsigned long long>(endpoint ? endpoint->generation : 0),
+      endpoint ? endpoint->pid : 0, endpoint ? endpoint->client_port : 0,
+      static_cast<long long>(schema_version), ret);
+  return ret;
+}
+int remove_endpoint(uint64_t namespace_id) {
+  if (namespace_id == 0 || namespace_id >= (1ULL << 30)) { return OB_INVALID_ARGUMENT; }
+  ObSqlString statement;
+  int ret = statement.assign_fmt(
+      "DELETE FROM __fork_proto_meta.endpoints WHERE namespace_id=%lu", namespace_id);
+  return ret ? ret : write_endpoint_registry(statement);
+}
+int reset_endpoint_registry() {
+  ObSqlString statement;
+  int ret = statement.assign("DELETE FROM __fork_proto_meta.endpoints");
+  return ret ? ret : write_endpoint_registry(statement);
+}
+int activate_namespace(uint64_t namespace_id) {
+  if (!worker_process || worker_namespace != 1 || namespace_id <= 1
+      || namespace_id >= (1ULL << 30)) {
+    return OB_NOT_SUPPORTED;
+  }
+  Frame request('C'), reply;
+  request.number(3); request.number(namespace_id);
+  int ret = worker_send(request);
+  if (!ret) { ret = worker_read(reply); }
+  if (!ret && reply.type() != 'c') { ret = OB_INVALID_ARGUMENT; }
+  if (!ret) { ret = static_cast<int>(reply.number()); }
+  const uint64_t port = !ret ? reply.number() : 0;
+  const uint64_t generation = !ret ? reply.number() : 0;
+  const uint64_t pid = !ret ? reply.number() : 0;
+  if (!ret && (!reply.consumed() || port > UINT16_MAX
+      || generation == 0 || pid == 0 || pid > UINT32_MAX)) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  if (!ret) {
+    ret = publish_endpoint(namespace_id, generation,
+        static_cast<uint32_t>(pid), static_cast<uint32_t>(port));
+  }
+  fprintf(stderr,
+      "PROTOTYPE_NAMESPACE_ENDPOINT_ACTIVATED ns=%llu generation=%llu pid=%llu port=%llu ret=%d\n",
+      (unsigned long long)namespace_id, (unsigned long long)generation,
+      (unsigned long long)pid, (unsigned long long)port, ret);
+  return ret;
+}
+int deactivate_namespace(uint64_t namespace_id) {
+  if (!worker_process || worker_namespace != 1 || namespace_id <= 1
+      || namespace_id >= (1ULL << 30)) {
+    return OB_NOT_SUPPORTED;
+  }
+  Frame request('C'), reply;
+  request.number(4); request.number(namespace_id);
+  int ret = worker_send(request);
+  if (!ret) { ret = worker_read(reply); }
+  if (!ret && reply.type() != 'c') { ret = OB_INVALID_ARGUMENT; }
+  if (!ret) { ret = static_cast<int>(reply.number()); }
+  if (!ret && !reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
+  if (!ret) { ret = remove_endpoint(namespace_id); }
+  fprintf(stderr, "PROTOTYPE_NAMESPACE_ENDPOINT_DEACTIVATED ns=%llu ret=%d\n",
+      (unsigned long long)namespace_id, ret);
+  return ret;
+}
+int reconcile_namespace_workers() {
+  // Namespace storage can be exercised without the process-separated SQL
+  // worker prototype. In that mode there are no endpoints to reconcile.
+  if (!enabled()) { return OB_SUCCESS; }
+  if (worker_process || !GCTX.sql_proxy_) { return OB_NOT_SUPPORTED; }
+  std::vector<uint64_t> namespaces{1};
+  int ret = push_inner_sql_namespace_override(1);
+  if (!ret) {
+    struct OverrideGuard {
+      ~OverrideGuard() { pop_inner_sql_namespace_override(); }
+    } override_guard;
+    ObMySQLProxy::MySQLResult result;
+    sqlclient::ObMySQLResult *rows = nullptr;
+    ret = GCTX.sql_proxy_->read(result,
+        "SELECT namespace_id FROM __fork_proto_meta.namespaces "
+        "WHERE namespace_id>1 AND state=0 ORDER BY namespace_id");
+    if (!ret && !(rows = result.get_result())) { ret = OB_ERR_UNEXPECTED; }
+    while (!ret) {
+      ret = rows->next();
+      if (ret == OB_ITER_END) { ret = OB_SUCCESS; break; }
+      uint64_t namespace_id = 0;
+      if (!ret) { ret = rows->get_uint(0L, namespace_id); }
+      if (!ret && (namespace_id <= 1 || namespace_id >= (1ULL << 30))) {
+        ret = OB_INVALID_ARGUMENT;
+      }
+      if (!ret) { namespaces.push_back(namespace_id); }
+    }
+  }
+  if (!ret) { ret = reset_endpoint_registry(); }
+  for (uint64_t namespace_id : namespaces) {
+    std::shared_ptr<Channel> endpoint;
+    if (OB_SUCC(ret)) { ret = ensure_channel(namespace_id, endpoint); }
+    if (OB_SUCC(ret)) {
+      ret = publish_endpoint(namespace_id, endpoint->generation,
+          endpoint->pid, endpoint->client_port);
+    }
+    if (OB_SUCC(ret)) {
+      fprintf(stderr,
+          "PROTOTYPE_NAMESPACE_ENDPOINT_RECONCILED ns=%llu generation=%llu pid=%u port=%u\n",
+          (unsigned long long)namespace_id,
+          (unsigned long long)endpoint->generation,
+          endpoint->pid, endpoint->client_port);
+    }
+  }
+  return ret;
+}
+int open_session(uint64_t ns, sql::ObSQLSessionInfo &gateway, SessionBinding *&binding, bool internal) {
+  binding = nullptr;
+  // The shared process coordinates package installation through an internal
+  // namespace-1 session.  Do not expose an external Worker session until that
+  // DDL is complete: otherwise a process crash can make an unrelated user DDL
+  // the first waiter on the recovering package transaction's runtime lock.
+  if (enabled() && !worker_process && !internal
+      && !ATOMIC_LOAD(&GCTX.sys_package_ready_)) {
+    return OB_EAGAIN;
+  } else if (ns > 1) {
+    int64_t schema_version = common::OB_INVALID_VERSION;
+    const int namespace_ret = storage::NamespaceForkKernelPrototype::namespace_schema_version(
+        ns, schema_version);
+    if (namespace_ret != common::OB_SUCCESS || schema_version <= 0) {
+      return namespace_ret != common::OB_SUCCESS
+          ? namespace_ret : common::OB_STATE_NOT_MATCH;
+    }
+  }
+  std::unique_ptr<SessionBinding> owned(new SessionBinding());
+  int ret = ensure_channel(ns, owned->channel);
+  if (ret) { return ret; }
   owned->internal = internal;
   if (internal) { owned->gateway = &gateway; }
   else if ((ret = share::server_service<sql::ObSQLSessionMgr>()->get_session(gateway.get_server_sid(), owned->gateway))) { return ret; }
-  owned->ns = ns;
-  owned->writes = std::make_unique<EngineWrites>(ns, gateway);
+  owned->writes = std::make_unique<EngineWrites>(owned->channel->storage_space, gateway);
   Frame request(internal ? 'a' : 'A'); request.number(gateway.get_server_sid());
   request.number(gateway.get_capability().capability_);
   if ((ret = append_session_state(gateway, request, !internal))) { return ret; }
@@ -670,7 +1354,7 @@ int open_session(uint64_t ns, sql::ObSQLSessionInfo &gateway, SessionBinding *&b
   // visibility errors; protocol/authentication errors remain terminal.
   for (int attempt = 0; attempt < 8 && !opened; ++attempt) {
     Frame attempt_request = request;
-    ret = exchange(*owned->channel, ns, std::move(attempt_request), nullptr, [&](Frame &reply) {
+    ret = exchange(*owned->channel, std::move(attempt_request), nullptr, [&](Frame &reply) {
       if (reply.type() != 'a' || opened) { return OB_INVALID_ARGUMENT; }
       owned->slot = reply.number(); owned->slot_generation = reply.number();
       opened = reply.consumed() && owned->slot_generation != 0;
@@ -715,7 +1399,8 @@ void close_session(SessionBinding *binding) {
     // either its bound transaction or the binding borrowed by that task.
     if (!owned->channel->closed) {
       Frame request('C'); request.number(owned->slot); request.number(owned->slot_generation);
-      const int ret = exchange(*owned->channel, owned->ns, request, nullptr, [](Frame &) { return OB_INVALID_ARGUMENT; });
+      const int ret = exchange(*owned->channel, request, nullptr,
+          [](Frame &) { return OB_INVALID_ARGUMENT; });
       if (ret) { owned->channel->fail(); }
     }
     owned->writes.reset();
@@ -727,20 +1412,21 @@ int query(SessionBinding &binding, const ObString &sql, bool change_database,
           const std::function<int(Frame &)> &response) {
   if (binding.channel->closed) { return OB_CONNECT_ERROR; }
   EngineWrites &writes = *binding.writes;
-  ReadScans scans(binding.ns); // Release scans before their borrowed transaction.
+  ReadScans scans(binding.channel->storage_space); // Release scans before their borrowed transaction.
   Frame request(change_database ? 'U' : 'Q', MAX_SQL_MESSAGE);
   request.number(binding.slot); request.number(binding.slot_generation);
   const int64_t deadline = THIS_WORKER.get_timeout_ts();
   request.number(deadline); request.string(sql);
   if (request.ret) { return request.ret; }
   int response_ret = OB_SUCCESS;
-  const int ret = exchange(*binding.channel, binding.ns, request, &scans, [&](Frame &frame) {
+  const int ret = exchange(*binding.channel, request, &scans, [&](Frame &frame) {
     if (frame.type() == 'D') { return apply_session_state(*binding.gateway, frame); }
     if (!response_ret) {
       response_ret = response(frame);
       if (response_ret) {
         fprintf(stderr, "PROTOTYPE_V11_RESPONSE_DRAIN ns=%llu slot=%llu ret=%d\n",
-            (unsigned long long)binding.ns, (unsigned long long)binding.slot, response_ret);
+            (unsigned long long)binding.channel->storage_space.namespace_id(),
+            (unsigned long long)binding.slot, response_ret);
       }
     }
     // Worker::is_timeout uses the cached clock, which can lag the Rust writer's
@@ -760,7 +1446,10 @@ void stop_all() {
   { std::lock_guard<std::mutex> guard(children_mutex); detached.swap(children); }
   for (auto &entry : detached) {
     std::lock_guard<std::mutex> guard(entry.second->mutex);
-    if (entry.second->current) { entry.second->current->fail(); }
+    if (entry.second->current) {
+      entry.second->current->restart_on_failure = false;
+      entry.second->current->fail();
+    }
   }
 }
 int worker_send_wire(Frame frame) {
@@ -802,7 +1491,27 @@ int worker_send(const Frame &frame, bool cleanup) {
 int worker_read(Frame &frame) {
   // Once an RPC is sent, consume its reply even after cancellation so cleanup
   // cannot mistake an earlier operation's reply for its own.
-  return worker_request ? worker_request->take(frame, true) : OB_ERR_UNEXPECTED;
+  if (!worker_request) { return OB_ERR_UNEXPECTED; }
+  if (worker_bootstrapping) {
+    int ret = OB_SUCCESS;
+    while (!ret) {
+      Frame incoming;
+      if ((ret = worker_read_wire(incoming))) { break; }
+      if (incoming.tag().slot != worker_request->tag.slot
+          || incoming.tag().generation != worker_request->tag.generation) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        const char incoming_type = incoming.type();
+        ret = worker_request->post(std::move(incoming));
+        if (!ret && incoming_type != 'K') {
+          ret = worker_request->take(frame, true);
+          break;
+        }
+      }
+    }
+    return ret;
+  }
+  return worker_request->take(frame, true);
 }
 int begin_direct_request(uint32_t sid, SessionBinding *&binding, bool internal) {
   if (!worker_process) { return OB_SUCCESS; }
@@ -875,6 +1584,18 @@ void StorageSessionScope::close(SessionBinding *&binding) {
     close_session(binding); binding = nullptr;
   }
 }
+IndependentStorageScope::IndependentStorageScope()
+    : previous_(worker_request), previous_timeout_(THIS_WORKER.get_timeout_ts()) {
+  if (worker_process && worker_namespace && !worker_request) {
+    if (previous_timeout_ <= 0) { THIS_WORKER.set_timeout_ts(INT64_MAX); }
+    error_ = begin_direct_request(0, binding_, true);
+  }
+}
+IndependentStorageScope::~IndependentStorageScope() {
+  if (binding_) { close_session(binding_); }
+  worker_request = previous_;
+  THIS_WORKER.set_timeout_ts(previous_timeout_);
+}
 int fetch_catalog(char type, uint64_t id, const ObString &name, int64_t version, Frame &reply) {
   // Greeting construction and native background tasks read metadata before a
   // SQL session exists. Give those calls a short-lived independent route.
@@ -899,6 +1620,12 @@ int fetch_schema_version(bool published, bool core_version, int64_t &version) {
   int ret = fetch_catalog('k', core_version, published ? ObString::make_string("published") : ObString(),
       OB_INVALID_VERSION, reply);
   if (!ret) { version = static_cast<int64_t>(reply.number()); }
+  if (worker_request_schema_version != OB_INVALID_VERSION) {
+    fprintf(stderr,
+        "PROTOTYPE_SCHEMA_VERSION_FETCH ns=%llu published=%d core=%d pin=%lld fetched=%lld ret=%d\n",
+        (unsigned long long)worker_namespace, published, core_version,
+        (long long)worker_request_schema_version, (long long)version, ret);
+  }
   return ret ? ret : reply.consumed() ? OB_SUCCESS : OB_INVALID_ARGUMENT;
 }
 } } }

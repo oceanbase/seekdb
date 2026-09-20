@@ -21,6 +21,8 @@
 #include "share/config/ob_system_config_key.h"
 #include "share/config/ob_system_config_value.h"
 #include "share/storage/ob_sqlite_connection_pool.h"
+#include <map>
+#include <string>
 
 struct sqlite3_stmt;
 namespace oceanbase
@@ -48,6 +50,9 @@ public:
       const char *scope,
       const char *source,
       const char *edit_level);
+
+  int load_namespace_worker_configs(std::map<std::string, std::string> &configs);
+  int upsert_namespace_worker_config(const char *name, const char *value);
 
   bool is_inited() const { return nullptr != pool_; }
 

@@ -1,5 +1,88 @@
 # Worker 功能交付：独立入口、原生协议、通用 DDL
 
+> 2026-09-18 状态：本节是当前实现基线。后文保留的是 V19 的排障时间线，其中“尚未完成”等中间状态不再代表当前结论。
+
+## 当前架构基线
+
+- 每个 namespace 由一个完整 SQL Worker 承载。Worker 拥有网络入口、session、SQL、DDL、inner SQL、SchemaService 和 SQL 对象缓存，启动后固定绑定一个 namespace，执行期不切换 namespace。
+- 共享进程承载事务、锁、日志、tablet、物理页缓存、B+Tree 和 COW。用户 SQL 不在共享进程执行；Worker 通过 typed storage IPC 调用共享存储。
+- Worker 模式本身就禁止共享进程执行 SQL，不再依赖第二个 bootstrap 实验开关。共享后台服务调用 `GCTX.sql_proxy_` 时，`ObInnerSQLConnection` 将读、写和事务操作转发给已绑定 namespace 的 Worker，再由 Worker 经过原生 SQL 链路执行。
+- Worker 激活时创建一个构造后不可变的 namespace Channel 绑定。普通存储帧不携带 namespace_id；共享端从 Channel 取得唯一作用域。`Exchange`、`SessionBinding` 和 `DirectStorageContext` 不再各保存一份可能不一致的 ID。
+- SQL/DAS 与共享存储的边界使用 `StorageSpaceHandle`，显式区分 `NAMESPACE(id)` 与 `GLOBAL` 作用域。普通请求继承启动时绑定在 Channel 上的 namespace，只在访问全局表时发送一个 GLOBAL 作用域标记，不重复携带 namespace ID；共享入口只允许默认 namespace 的 Channel 使用 GLOBAL。当前用户数据路径只在入口适配层展开 namespace ID，事务、tablet 和 B+Tree 等深层接口继续使用物理对象 ID。
+- 客户端目前直接连接 Worker 独立端口。一条用户 SQL 只在 Worker 内完成 SQL 处理，再按 DAS/事务操作访问共享存储，不经共享 SQL 入口往返转发。
+- 已发布 Channel 异常断开时，共享进程向现有 server runtime 提交一次带 generation 校验的 Worker 恢复任务；新 Worker 先完成未发布 schema delta 的启动恢复，再更新 endpoint 表并开放端口。DROP 和共享进程正常停机先关闭自动恢复标志，不会把已删除的 namespace 重新拉起；这条路径不增加常驻后台线程。
+- Worker 的原生连接上下文直接持有本地 session 引用；不对每个 packet 做全局 `session_id` 查找。
+- namespace 中的用户表、索引、`all_*` 系统表和 `ddl_operation` 由该 Worker 的 native SchemaService 管理。不再使用一份额外的“namespace catalog”作为 schema 权威。
+- `schema_version` 在 namespace 内独立增长。fork 时 child 继承 source 当时的 schema version，之后父子各自演进。
+- 普通 DDL 在目标 Worker 内走原生 SQL/DDL 链路。旧的共享端 root-command SQL 执行路径已移除；共享端只接收存储及生命周期类型化操作。
+- 系统包仍由共享启动流程装载，但“系统包已就绪”状态会通过 Worker bootstrap 和运行时广播同步。Worker 的 PL/存储过程不再等待一份进程私有、永远不会变为 true 的 `GCTX.sys_package_ready_`。
+- 游标事务快照由 Worker 保存值、共享事务服务保存稳定的注册副本；每次 `FETCH` 前显式刷新失效/提交状态，`CLOSE` 和 PL 异常清理时显式注销。共享副本的数量因此只随当前打开且需要校验的游标增长，不随长连接历史累计。
+
+## fork 与 DDL 一致性
+
+- namespace 目录是不可变 B+Tree/COW 根。fork 复制 root/snapshot 引用，不枚举表、索引或 LOB tablet，数据量和表数不进入 fork 主路径复杂度。
+- DDL 通过通用 `ObDDLSQLTransaction` 边界登记，不针对 `CREATE TABLE` / `CREATE INDEX` / `DROP INDEX` 分别打补丁。
+- 持久化栅栏使用 `active_schema_changes` 和 `pending_schema_version`：前者表示 DDL 未提交，后者表示 DDL 已提交但 namespace 存储目录尚未发布。fork/drop 锁定 source 后只在两者均为零时继续。
+- Worker 在 DDL 真正提交后发布 schema delta，成功后与目录变更在同一控制元数据事务中清除 pending version。进程在两步之间崩溃时，重启 Worker 会先完成全量 schema/目录对齐，再开放端口。
+- 干净的 child 启动不做全量目录重建，因此保留 fork 时的同一根页。
+- 原生 schema 模式的目录准入只验证实际存储能力，不再按自增列、生成列等 DDL 类型维护白名单。schema delta 命中已有 tablet 时保留原物理绑定，避免一次 `ALTER` 或恢复发布把继承 tablet 错标成本 namespace 已物化。
+- 目录按 tablet 而非 table 登记。分区 schema 的全部 tablet ID 在 Worker/存储边界统一编解码，扫描和写入使用 DAS 请求携带的具体 tablet，因此 HASH 分区表可以跨多级 fork 按分区惰性物化。
+- Worker 的 DROP 事务只修改本 namespace 的原生 schema，不再在事务中查询共享控制目录或删除物理 tablet。提交后的通用 schema delta 在共享存储端逐 tablet 判断所有权，只回收该 namespace 已经物化的物理 tablet；仍继承自父 namespace 的 tablet 只删除逻辑绑定。
+- schema delta 传输整个 DDL 批次内所有变更表的前后 schema，并在一次目录根事务中计算完整的旧、新 tablet 所有权集合。新集合仍包含的 tablet 会完整保留原 `bound` 和快照 `cap`，即使它从一张表移动到另一张表；只有从整个新集合消失的本 namespace 私有 tablet 才进入物理回收。DROP、TRUNCATE、重分区和 `EXCHANGE PARTITION` 共用这一条 batch replacement 路径，child 的原生 DELETE_TABLET MDS 不再成为第二个物理清理者。
+- 分区表、分区索引和分区 LOB 的主表/LOB meta/LOB piece 通过相同分区序号组成物化单元。首次访问某个分区只物化这一组 tablet，不会把整张表或其他分区提前复制到 child。
+- child 对控制 schema 的隐藏规则统一放在 latest-schema guard 边界，避免常规 SchemaService、DDL latest guard 和显式表 ID 路径得到不同可见性。fork 后 `all_*` 中允许保留不可访问的冗余控制 schema 行；GLOBAL 表的实际 Tablet 始终由 gateway identity root 寻址，child 无法访问。
+
+## 全局元数据边界
+
+- 当前原型把 namespace 注册、endpoint、snapshot 和页目录放在 namespace 1 的 `__fork_proto_meta`。namespace 1 是可承载正常用户数据的默认 Worker，同时是管理入口，不能删除且可作为 fork source。
+- child 的物理快照可以含有这些页，但 child SchemaService 不发布控制 schema，因此 `SHOW` 和显式访问都不可见，管理语句也在变更前被拒绝。
+- 控制表的扫描和普通 DML 已显式选择 `StorageSpaceHandle::GLOBAL`；GLOBAL 请求沿用同一事务服务，但不进入 namespace 的逻辑到物理对象路由。当前分类仍在 Worker schema 边界根据原型控制数据库识别。
+- 表锁、Tablet create/delete MDS、Tablet binding、Rootserver 物理 DDL、Range split、LOB 读取和 Tablet 自增缓存失效也使用同一 storage-space wire discriminator。表锁和 CREATE_TABLET MDS 在 Worker 的 schema 边界完成分类；共享事务、锁和 Tablet 服务只接收已经选定的作用域与物理对象。
+- GLOBAL 已作为 storage gateway 的显式 identity root：它直接使用原生物理 Tablet，不经过 namespace 逻辑 ID 编码，也不参与 fork/COW。GLOBAL 没有快照语义，因此无需再复制一棵仅用于形式对称的 COW 目录；未来只有在全局元数据也需要快照时才增加相应 root。namespace 1 Worker 仍是 SQL 管理入口；共享存储深层只处理 tablet/page 句柄，不执行 SQL，也不解析 schema。
+- namespace DROP 在控制 Worker 完成语义解析，但访问排空和兼容 schema holder 回收通过类型化 storage RPC 在共享进程执行。child Worker 停止时直接释放其 SchemaService；共享端 native 路径不建立第二份 schema 对象缓存。
+- `ALTER SYSTEM` 先由共享进程验证并持久化，再通过已有多路复用 Channel 将动态参数广播到发起命令的默认 Worker 和所有已运行 child。Worker 动态覆盖项单独持久化在控制 SQLite，共享进程崩溃后也能在发布 endpoint 前向新 Worker 回放。静态参数只持久化并标记下次启动生效，不会制造“配置值已变但 runtime 尚未重定容”的假象。Worker session 的全局 debug-sync broadcaster 绑定到 `RemoteRootserverLocalRuntime`，物理同步点在共享进程执行。
+- Worker 内存定容不再写死在子进程中。共享进程在 spawn 时通过启动帧传入 `namespace_sql_worker_memory_budget`，Worker 用该值定容分配器、KV cache 和 runtime；参数修改在 Worker 下次启动时生效。共享存储仍使用 `memory_budget`，两者是显式的独立配额。
+- TLS 启动配置与 Worker 内存预算一样由共享进程通过 bootstrap 帧下发。子进程的 Rust NIO 直接读取实例 wallet 的绝对路径，不依赖 Worker 独立工作目录中的证书副本。TLS 开关与最低协议版本在 NIO 启动时生效，运行中 `ALTER SYSTEM` 将它们标记为 Worker 重启项，不会只改参数表而不改监听器。
+
+## 2026-09-18 验收证据
+
+- `source ~/.bashrc && make -j80 seekdb`：通过。
+- 完整 direct suite：`/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_m7cbgu7v/data.tar.gz`。覆盖原生客户端协议、认证/权限、显式事务、断连回滚、取消、预处理/长参数、并行查询/DML、普通/唯一索引、LOB schema、通用 DDL、多 namespace 并发写、fork/drop 和 Worker 崩溃恢复；另覆盖分区索引、分区 out-row LOB、按分区惰性物化以及部分物化后的整表 DROP。
+- 严格冷启动及崩溃恢复：`/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_bootstrap_v18_2hrzjd_e/data.tar.gz`。两次均由 Worker 执行系统 inner SQL，共享 SQL 执行保持禁止。
+- IPC/兼容入口完整矩阵：`/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_timeout_v13__r42alin/data.tar.gz`。覆盖多 session 隔离、慢查询、排队超时、取消、Worker 死亡唤醒、重启、慢客户端背压和资源释放。
+- Channel 单一绑定收敛后，fork/恢复回归 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_0fl_haz9/data.tar.gz` 和同 session 多层 inner SQL/事务回归 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_nested_session_v17_yrln8rob/data.tar.gz` 通过。
+- `StorageSpaceHandle` 收敛后的完整 direct suite `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_vti5umb4/data.tar.gz` 与嵌套事务 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_nested_session_v17_6rr2ng0q/data.tar.gz` 通过。
+- 自增列、虚拟生成列及多级 fork 的目录所有权修复通过完整 direct suite `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_1ez1vcs_/data.tar.gz`；同 session 嵌套事务回归 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_nested_session_v17_jr_vjy3p/data.tar.gz` 通过。
+- 四分区 HASH 表已通过建表、跨分区写入、两级 fork、child 全表扫描、父子分别更新/插入、COW 隔离及崩溃恢复：`/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_do6wu3dg/data.tar.gz`。
+- 同 session 嵌套 SQL 与事务回归 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_nested_session_v17_wh4k4wf9/data.tar.gz` 通过：覆盖外键递归读取未提交数据、内层语句失败只回滚当前语句、多层级联与保存点、取消、断连及 Worker 死亡后的事务回滚。
+- 部分物化的三分区表在 child 执行整表 TRUNCATE 后，child/二级 child 只看到新写入行，source 仍看到原三行；随后多 namespace 并发写、按逆序删除 namespace 和共享进程崩溃恢复均通过：`/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_fp5vi4s4/data.tar.gz`。
+- 部分物化的三分区表在 child 在线重分区为五分区后，9 行数据及更新值保持正确；二级 child 继承五分区 schema，source 仍保持原三分区 schema 和数据。完整 direct suite 同时覆盖协议、权限、事务、并行查询/DML、索引、LOB、DDL/fork 栅栏、多 namespace 并发写、逆序删除和共享进程崩溃恢复：`/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_o2vcb_dl/data.tar.gz`。
+- 显式 GLOBAL 扫描/DML 作用域接通后的完整 direct suite `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_b2zrm9vu/data.tar.gz` 通过；默认 Worker 可读写控制元数据，child 仍无法解析或修改控制表。嵌套事务回归 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_nested_session_v17_nyr9qzxt/data.tar.gz` 同时通过。
+- storage-space 继续收敛到锁、MDS、Tablet binding、物理 DDL、Range、LOB 和自增缓存路径后，完整 direct suite `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19__f434jsw/data.tar.gz` 通过；其中新增 child `parallel(2)` 扫描，验证 fork 后 Range split 会按 child root 惰性物化并返回逻辑 range。嵌套事务回归 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_nested_session_v17_q249homx/data.tar.gz` 通过。
+- DROP 生命周期进程边界修正后的完整 direct suite `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_psqjrdhn/data.tar.gz` 通过。一个 child scan 在共享存储完成准入后被强制暂停，namespace 先进入关闭态，而 DROP 在 300 ms 内没有越过共享端 drain；释放 scan 后删除完成。3 个连续删除和崩溃恢复后的第 4 个删除均由共享进程完成访问排空；共享端回收前的 schema holder 计数全部为 0，验证 native SchemaService 路径没有在共享进程产生重复 schema 对象缓存，4 个 child Worker 均退出。
+- session debug-sync 远程运行时与 Worker 配置刷新改造后，同 session 嵌套事务回归 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_nested_session_v17_8gvmkldg/data.tar.gz` 通过，覆盖外键递归读取未提交数据、语句级回滚、多层级联和保存点、取消、断连及 Worker 死亡后的事务回滚。
+- Worker 资源启动帧改造后，冷启动/共享进程崩溃恢复 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_bootstrap_v18_7uw_9gty/data.tar.gz` 与多 namespace fork/删除/恢复 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_dwhk70q9/data.tar.gz` 通过。测试将 `namespace_sql_worker_memory_budget` 设为 640 MiB，namespace 1/2/3/4/5 以及崩溃后重建的 namespace 5 Worker 均记录为 671088640 字节，证明预算来自共享进程配置而非子进程常量。同一用例还在 namespace 2/3/4/5 已运行时执行 `ALTER SYSTEM SET debug_sync_timeout='600s'`，4 个 child 的虚拟参数表均立即返回 `600s`，后续 DROP 访问排空时序仍通过。
+- Worker 动态配置持久恢复回归 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_c3gvy7sh/data.tar.gz` 通过：运行中的 4 个 child 都立即观察到 `debug_sync_timeout=600s`；强制杀掉共享进程后，自动重建的 namespace 5 Worker 仍通过原生虚拟参数表返回 `600s`，同时数据、endpoint 目录、DROP 排空及全部 6 个 Worker 的 640 MiB 启动预算均通过。
+- 配置持久改造后的完整直连矩阵 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_hah8_xfj/data.tar.gz` 通过，覆盖原生协议、权限、事务、通用 DDL/索引、分区、多 namespace 并发、DROP 排空及崩溃恢复。
+- Worker TLS 回归 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_dhh0f492/data.tar.gz` 通过：namespace 1 与 fork 出的 child 均使用 wallet 完成证书验证，协商 `TLSv1.3 / TLS_AES_256_GCM_SHA384`，child 通过 TLS 读到 fork 前数据并正常删除。非 TLS 的严格冷启动及崩溃恢复 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_bootstrap_v18_pfjj828l/data.tar.gz` 也通过。
+- 强制 DDL/fork 竞态已验证：人为将 DDL 提交后的目录发布延迟 500 ms，fork 在 pending version 清零前不返回；child 能直接读写该 DDL 创建的表。
+- 旧原型数据目录 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_6c_dprkn/data.tar.gz` 实测升级：启动时幂等增加两个栅栏列，18 行旧用户数据仍可读，重启后能从原 namespace 1 正常 fork 出 child。
+- 系统包就绪同步及远端游标快照生命周期接通后，完整 direct suite `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_hoyafdk9/data.tar.gz` 通过。新增用例连续打开并正常关闭三个 `FOR UPDATE` 游标，每次共享注册数都回到 0；第四个游标在创建它之前的 savepoint 被回滚后，下一次 `FETCH` 返回 4138，PL 异常清理仍将共享注册数归零。namespace 2 创建的游标存储过程也由二级 child namespace 4 从相同 root 继承并成功调用，共享日志记录 child 的注册、刷新和最终注销。该归档同时覆盖多级 fork/COW、DDL、锁中断、DROP 排空、Worker 崩溃恢复和全部 Worker 内存预算。
+- 同一构建的严格冷启动及共享进程崩溃恢复 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_bootstrap_v18_jhq8enyj/data.tar.gz` 通过，两次启动都只由 Worker 执行系统 inner SQL，共享 SQL 入口保持禁止。嵌套 SQL/事务回归 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_nested_session_v17_4bad7n0o/data.tar.gz` 通过，覆盖外键递归、语句级回滚、保存点、取消、断连和 Worker 死亡回滚。
+- Worker-only SQL 的第二个 bootstrap 开关已删除；冷启动和崩溃恢复仍必须出现 Worker inner-SQL 执行证据，且不得出现共享 SQL 执行拒绝日志。本次回归归档为 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_bootstrap_v18_kpll5owc/data.tar.gz`；同一构建的完整 direct suite 为 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_gb3sgade/data.tar.gz`，嵌套 SQL/事务回归为 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_nested_session_v17_xnicoinl/data.tar.gz`。
+- RANGE 分区维护回归 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19_73pn9tij/data.tar.gz` 通过：child 对继承表先物化单分区，再执行 `ADD PARTITION` 和 `DROP PARTITION`；二级 child 继承新分区 schema 后再次增删分区。source、child 和二级 child 的分区列表与行集合各自隔离，共享进程崩溃后 endpoint 和数据恢复仍通过。这条路径继续使用通用前后 schema tablet 集合差分，未新增分区语句特判。
+- DDL 批量目录替换和 Worker 故障恢复回归 `/data/1/nijia.nj/test/namespace_fork_PROTOTYPE_direct_v19__bcnddyx/data.tar.gz` 通过：child 对继承表执行 `RENAME TABLE` 后改回原名并读到已物化数据；一级 child 与二级 child 分别执行 `EXCHANGE PARTITION`，交换后的两张表行集合正确且 source 保持隔离。用例还在一组独立交换表的 native schema 已提交、目录尚未发布时 `SIGKILL` namespace 2 Worker；共享进程自动启动 generation 3 Worker，新进程在发布 endpoint 前完成整个双表 delta，交换数据正确且两个持久化栅栏归零。该实现保留继承目录项的物理 `bound` 与快照 `cap`，没有增加 rename 或 exchange 语句特判；同一归档还通过并发写、DDL/fork 栅栏、DROP 排空、共享进程崩溃恢复和 Worker 内存预算检查。
+
+## 尚未完成的目标形态
+
+- 共享存储的普通请求已由 Channel 绑定 `StorageSpaceHandle`；Gateway 将 namespace 逻辑对象转成编码后的物理 ID，事务、锁、Tablet 和 B+Tree 深层不传递独立 namespace 标量。显式 ID 仅保留在 fork/drop/启动等跨 namespace 生命周期操作及 Gateway 目录解析中。
+- Worker 已有显式的每进程内存配额；动态资源治理与按整体节点预算自动分配尚未做。TLS 直连及 forked child 已在 Linux 通过功能验收，其他目标平台仍未做生产级验收。
+- `ALTER SYSTEM` 已刷新所有已运行 Worker，并将 Worker 动态覆盖项单独持久化到控制 SQLite；后续启动的 child 和共享进程崩溃后重建的 Worker 都会回放它们。静态参数仍只在 Worker 重启时生效。
+- 当前每 Worker 一个端口；统一公网入口、跨主机 Worker 及其传输尚未落地。
+- 分区表的 CREATE/读写/fork/DROP/TRUNCATE、在线重分区、RANGE `ADD/DROP PARTITION`、二级分区维护、`EXCHANGE PARTITION`、分区 LOB 和分区索引已经覆盖；生产规模压力仍未验收。
+
+## 历史排障记录
+
 起点：`ae890cffe`（V18）。用户目标是完整实现以下 1～3；单独增加监听端口或通过少量 SQL 探针不代表完成。
 
 ## 1. 独立客户端入口与共享存储服务

@@ -685,7 +685,6 @@ public:
   ObSchemaStatusProxy *get_schema_status_proxy() const { return schema_status_proxy_; }
   bool is_in_bootstrap() const { return nullptr != in_bootstrap_ && *in_bootstrap_; }
   void dump_schema_manager() const;
-
   // public utils
   virtual int get_schema_version_in_inner_table(
     common::ObISQLClient &sql_client,
@@ -723,6 +722,12 @@ protected:
       common::ObISQLClient &sql_client,
       const share::schema::ObRefreshSchemaStatus &schema_status,
       ObTableSchema &table_schema);
+  int refresh_runtime_full_schema(
+      common::ObISQLClient &sql_client,
+      const ObRefreshSchemaStatus &schema_status,
+      int64_t schema_version,
+      common::ObIArray<share::schema::ObTableSchema> *table_schemas = nullptr,
+      bool reuse_static_system_schema = false);
 private:
   virtual int destroy();
 
@@ -788,11 +793,6 @@ private:
       const int64_t &schema_version_in_inner_table,
       const int64_t &local_schema_version,
       ObSchemaMgr *&schema_mgr_for_cache);
-  int refresh_runtime_full_schema(
-      common::ObISQLClient &sql_client,
-      const ObRefreshSchemaStatus &schema_status,
-      const int64_t schema_version,
-      common::ObIArray<share::schema::ObTableSchema> *table_schemas = nullptr);
   int construct_related_table_schemas(
       const common::ObIArray<uint64_t> &table_ids,
       common::ObIArray<share::schema::ObTableSchema> *table_schemas,

@@ -113,6 +113,11 @@ public:
            common::ObAddr &self, common::ObMySQLProxy &sql_proxy,
            share::schema::ObMultiVersionSchemaService *schema_mgr_,
            const bool need_bootstrap);
+  int init_sql_worker(common::ObServerConfig &config,
+                      common::ObConfigManager &config_mgr,
+                      common::ObAddr &self,
+                      common::ObMySQLProxy &sql_proxy,
+                      share::schema::ObMultiVersionSchemaService &schema_service);
   inline bool is_inited() const { return inited_; }
   void destroy();
 

@@ -200,6 +200,11 @@ int ObPxDistTransmitOp::do_transmit()
       }
       default: {
         ret = OB_NOT_SUPPORTED;
+        fprintf(stderr,
+                "PROTOTYPE_V22_PX_DIST_UNSUPPORTED ret=%d method=%d method_name=%s op_id=%ld\n",
+                ret, static_cast<int>(MY_SPEC.dist_method_),
+                ObPQDistributeMethod::get_type_string(MY_SPEC.dist_method_),
+                get_spec().id_);
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "this transmit distribution method");
         LOG_WARN("distribution method not supported right now", K(ret), K(MY_SPEC.dist_method_));
       }

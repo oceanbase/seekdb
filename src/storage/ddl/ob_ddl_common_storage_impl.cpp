@@ -172,7 +172,8 @@ int oceanbase::storage::ObDDLStorageUtil::report_ddl_checksum_from_major_sstable
       const uint64_t target_table_id,
       const int64_t execution_id,
       const int64_t ddl_task_id,
-      const int64_t data_format_version)
+      const int64_t data_format_version,
+      const ObIArray<ObColDesc> &column_descs)
 {
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
@@ -194,7 +195,10 @@ int oceanbase::storage::ObDDLStorageUtil::report_ddl_checksum_from_major_sstable
     } else if (OB_ISNULL(first_major_sstable = static_cast<ObSSTable *>(table_store_wrapper.get_member()->get_major_sstables().get_boundary_table(false/*first*/)))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("no major after wait merge success", K(ret), K(tablet_id));
-    } else if (OB_FAIL(report_ddl_sstable_checksum(tablet_id, target_table_id, execution_id, ddl_task_id, data_format_version, tablet_handle, first_major_sstable))) {
+    } else if (OB_FAIL(report_ddl_sstable_checksum(
+                   tablet_id, target_table_id, execution_id, ddl_task_id,
+                   data_format_version, tablet_handle, first_major_sstable,
+                   column_descs))) {
     }
   }
   return ret;
@@ -207,7 +211,8 @@ int oceanbase::storage::ObDDLStorageUtil::report_ddl_sstable_checksum(
       const int64_t ddl_task_id,
       const int64_t data_format_version,
       ObTabletHandle &tablet_handle,
-      ObSSTable *first_major_sstable)
+      ObSSTable *first_major_sstable,
+      const ObIArray<ObColDesc> &column_descs)
 {
   int ret = OB_SUCCESS;
   ObSSTableMetaHandle sst_meta_hdl;
@@ -220,18 +225,21 @@ int oceanbase::storage::ObDDLStorageUtil::report_ddl_sstable_checksum(
   } else {
     const int64_t *column_checksums = sst_meta_hdl.get_sstable_meta().get_col_checksum();
     int64_t column_count = sst_meta_hdl.get_sstable_meta().get_col_checksum_cnt();
-    for (int64_t retry_cnt = 10; retry_cnt > 0; retry_cnt--) { // overwrite ret
-      if (OB_FAIL(ObTabletDDLUtil::report_ddl_checksum(tablet_id,
-                                                      target_table_id,
-                                                      execution_id,
-                                                      ddl_task_id,
-                                                      column_checksums,
-                                                      column_count,
-                                                      data_format_version))) {
-      } else {
-        break;
+    if (OB_SUCC(ret)) {
+      for (int64_t retry_cnt = 10; retry_cnt > 0; retry_cnt--) { // overwrite ret
+        if (OB_FAIL(ObTabletDDLUtil::report_ddl_checksum_with_column_descs(
+                       tablet_id, target_table_id, execution_id, ddl_task_id,
+                       column_checksums, column_count, data_format_version,
+                       column_descs))) {
+        } else {
+          break;
+        }
       }
     }
+    fprintf(stderr,
+            "PROTOTYPE_V22_DDL_TARGET_CHECKSUM ret=%d task=%ld tablet=%llu columns=%ld\n",
+            ret, ddl_task_id,
+            static_cast<unsigned long long>(tablet_id.id()), column_count);
     ob_usleep(100L * 1000L);
   }
   return ret;

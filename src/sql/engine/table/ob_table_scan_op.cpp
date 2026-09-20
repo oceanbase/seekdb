@@ -1573,13 +1573,27 @@ int ObTableScanOp::do_init_before_get_row()
       if (MY_SPEC.gi_above_) {
         ObGranuleTaskInfo info;
         if (OB_FAIL(get_access_tablet_loc(info))) {
+          if (PHY_DDL_BLOCK_SAMPLE_SCAN == MY_SPEC.get_type()) {
+            fprintf(stderr, "PROTOTYPE_V22_DDL_SCAN_NEXT stage=get_tablet ret=%d\n", ret);
+          }
         } else if (OB_FAIL(reassign_task_ranges(info))) {
+          if (PHY_DDL_BLOCK_SAMPLE_SCAN == MY_SPEC.get_type()) {
+            fprintf(stderr, "PROTOTYPE_V22_DDL_SCAN_NEXT stage=reassign_ranges ret=%d\n", ret);
+          }
         }
       }
       if (OB_FAIL(ret) || OB_UNLIKELY(iter_end_)) {
         // do nothing
       } else if (OB_FAIL(prepare_all_das_tasks())) {
+        if (PHY_DDL_BLOCK_SAMPLE_SCAN == MY_SPEC.get_type()) {
+          fprintf(stderr,
+                  "PROTOTYPE_V22_DDL_SCAN_NEXT stage=prepare_tasks ret=%d gi=%d input_tablet=%p\n",
+                  ret, MY_SPEC.gi_above_, MY_INPUT.tablet_loc_);
+        }
       } else if (OB_FAIL(do_table_scan())) {
+        if (PHY_DDL_BLOCK_SAMPLE_SCAN == MY_SPEC.get_type()) {
+          fprintf(stderr, "PROTOTYPE_V22_DDL_SCAN_NEXT stage=do_scan ret=%d\n", ret);
+        }
         if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
           LOG_WARN("fail to do table scan", K(ret));
         }
@@ -1590,6 +1604,9 @@ int ObTableScanOp::do_init_before_get_row()
           group_id_ = ctx_.get_das_ctx().get_current_group_id();
         }
         if (OB_FAIL(output_->set_merge_status(is_group_rescan() ? SORT_MERGE : SEQUENTIAL_MERGE))) {
+          if (PHY_DDL_BLOCK_SAMPLE_SCAN == MY_SPEC.get_type()) {
+            fprintf(stderr, "PROTOTYPE_V22_DDL_SCAN_NEXT stage=merge_status ret=%d\n", ret);
+          }
         }
       }
     }
@@ -2297,6 +2314,13 @@ int ObTableScanOp::inner_get_next_batch_for_tsc(const int64_t max_row_cnt)
     if (0 == batch_size) {
       brs_.end_ = true;
     } else if (OB_FAIL(get_next_batch_with_das(brs_.size_, batch_size))) {
+      if (PHY_DDL_BLOCK_SAMPLE_SCAN == MY_SPEC.get_type()) {
+        fprintf(stderr,
+                "PROTOTYPE_V22_DDL_SCAN_NEXT stage=fetch ret=%d rows=%ld end=%d tasks=%d report=%d\n",
+                ret, brs_.size_, brs_.end_,
+                scan_iter_ == nullptr ? -1 : scan_iter_->get_das_task_cnt(),
+                report_checksum_);
+      }
       if (OB_ITER_END != ret) {
         LOG_WARN("get next batch with mode failed", K(ret));
       } else {
@@ -2333,7 +2357,19 @@ int ObTableScanOp::inner_get_next_batch_for_tsc(const int64_t max_row_cnt)
                             K(MY_CTDEF.scan_ctdef_.ref_table_id_));
     }
     if (OB_FAIL(add_ddl_column_checksum_batch(brs_.size_))) {
+      if (PHY_DDL_BLOCK_SAMPLE_SCAN == MY_SPEC.get_type()) {
+        fprintf(stderr,
+                "PROTOTYPE_V22_DDL_SCAN_NEXT stage=checksum_batch ret=%d rows=%ld end=%d tasks=%d report=%d\n",
+                ret, brs_.size_, brs_.end_,
+                scan_iter_ == nullptr ? -1 : scan_iter_->get_das_task_cnt(),
+                report_checksum_);
+      }
     } else if (OB_FAIL(check_has_invalid_outrow_lob(true/*is_batch*/))) {
+      if (PHY_DDL_BLOCK_SAMPLE_SCAN == MY_SPEC.get_type()) {
+        fprintf(stderr,
+                "PROTOTYPE_V22_DDL_SCAN_NEXT stage=lob_check ret=%d rows=%ld end=%d\n",
+                ret, brs_.size_, brs_.end_);
+      }
     }
   }
 
@@ -2360,6 +2396,11 @@ int ObTableScanOp::inner_get_next_batch_for_tsc(const int64_t max_row_cnt)
     }
     scan_param.main_table_scan_stat_.reset_cache_stat();
     if (OB_FAIL(report_ddl_column_checksum())) {
+      if (PHY_DDL_BLOCK_SAMPLE_SCAN == MY_SPEC.get_type()) {
+        fprintf(stderr,
+                "PROTOTYPE_V22_DDL_SCAN_NEXT stage=checksum_report ret=%d tasks=%d\n",
+                ret, scan_iter_->get_das_task_cnt());
+      }
     }
   }
 
@@ -2884,6 +2925,11 @@ int ObTableScanOp::add_ddl_column_checksum_batch(const int64_t row_count)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("error unexpected, expr is nullptr", K(ret));
       } else if (OB_FAIL(e->eval_batch(eval_ctx_, *brs_.skip_, brs_.size_))) {
+        if (PHY_DDL_BLOCK_SAMPLE_SCAN == MY_SPEC.get_type()) {
+          fprintf(stderr,
+                  "PROTOTYPE_V22_DDL_SCAN_NEXT stage=checksum_expr ret=%d expr=%ld rows=%ld batch=%ld\n",
+                  ret, i, row_count, brs_.size_);
+        }
       } else {
         ObDatumVector datum_array = e->locate_expr_datumvector(eval_ctx_);
         for (int64_t j = 0; OB_SUCC(ret) && j < row_count; j++) {
@@ -2974,16 +3020,20 @@ int ObTableScanOp::report_ddl_column_checksum()
     uint64_t VIRTUAL_GEN_FIXED_LEN_MASK = ~(1ULL << 63);
     const int64_t column_cnt = MY_SPEC.ddl_output_cids_.count();
     uint64_t data_format_version = 0;
-    int64_t snapshot_version = 0;
-    share::ObDDLTaskStatus unused_task_status = share::ObDDLTaskStatus::PREPARE;
+    ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
     int64_t task_idx = 0;
     const int64_t scan_task_id_base = scan_task_id_;
     if (OB_FAIL(ensure_ddl_column_checksum_array())) {
-    } else if (OB_FAIL(ObDDLUtil::get_data_information(*GCTX.sql_proxy_,
-                                                       MY_SPEC.plan_->get_ddl_task_id(),
-                                                       data_format_version,
-                                                       snapshot_version,
-                                                       unused_task_status))) {
+      fprintf(stderr,
+              "PROTOTYPE_V22_DDL_CHECKSUM stage=ensure ret=%d task=%ld\n",
+              ret, MY_SPEC.plan_->get_ddl_task_id());
+    } else if (OB_ISNULL(plan_ctx) || OB_UNLIKELY(!plan_ctx->has_direct_insert_task_info())) {
+      ret = OB_ERR_UNEXPECTED;
+      fprintf(stderr,
+              "PROTOTYPE_V22_DDL_CHECKSUM stage=task_info ret=%d task=%ld\n",
+              ret, MY_SPEC.plan_->get_ddl_task_id());
+    } else if (FALSE_IT(data_format_version =
+                           plan_ctx->get_direct_insert_data_format_version())) {
     }
     if (OB_SUCC(ret)) {
       for (DASTaskIter task_iter = scan_iter_->begin_task_iter();
@@ -3028,6 +3078,11 @@ int ObTableScanOp::report_ddl_column_checksum()
           if (OB_FAIL(ObDDLChecksumOperator::update_checksum(data_format_version,
                                                              checksum_items,
                                                              *GCTX.sql_proxy_))) {
+            fprintf(stderr,
+                    "PROTOTYPE_V22_DDL_CHECKSUM stage=update ret=%d task=%ld tablet=%llu items=%ld\n",
+                    ret, MY_SPEC.plan_->get_ddl_task_id(),
+                    static_cast<unsigned long long>(tablet_loc->tablet_id_.id()),
+                    checksum_items.count());
           }
         }
       }

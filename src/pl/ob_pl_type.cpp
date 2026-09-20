@@ -1444,6 +1444,12 @@ int ObPLCursorInfo::deep_copy(ObPLCursorInfo &src, common::ObIAllocator *allocat
         }
       }
     }
+    if (OB_SUCC(ret) && is_need_check_snapshot_) {
+      data_plane::ObITransactionService *tx_service =
+          data_plane::query_transaction_service();
+      CK (OB_NOT_NULL(tx_service));
+      OZ (tx_service->register_tx_snapshot_verify(snapshot_));
+    }
   }
 
   return ret;
@@ -1452,6 +1458,7 @@ int ObPLCursorInfo::deep_copy(ObPLCursorInfo &src, common::ObIAllocator *allocat
 int ObPLCursorInfo::close(sql::ObSQLSessionInfo &session, bool is_reuse)
 {
   int ret = OB_SUCCESS;
+  int unregister_ret = OB_SUCCESS;
   LOG_DEBUG("close cursor", K(isopen()), K(id_), K(this), K(*this), K(session.get_server_sid()));
   if (isopen()) { //If the cursor is already open, resources need to be released
     if (!is_server_cursor()) {   // delete cursor from cursor map first, then release resource
@@ -1486,7 +1493,17 @@ int ObPLCursorInfo::close(sql::ObSQLSessionInfo &session, bool is_reuse)
   } else {
     LOG_INFO("NOTICE: cursor is closed without openning", K(*this), K(ret));
   }
+  if (is_need_check_snapshot()) {
+    data_plane::ObITransactionService *tx_service =
+        data_plane::query_transaction_service();
+    if (OB_ISNULL(tx_service)) {
+      unregister_ret = OB_ERR_UNEXPECTED;
+    } else {
+      unregister_ret = tx_service->unregister_tx_snapshot_verify(snapshot_);
+    }
+  }
   is_reuse ? reuse() : reset();
+  ret = OB_SUCCESS == ret ? unregister_ret : ret;
   return ret;
 }
 

@@ -6,6 +6,7 @@ python3 tools/obtest/namespace_fork_kernel_prototype.py --binary build_release/s
 import argparse
 from concurrent.futures import ThreadPoolExecutor
 import json
+import os
 import subprocess
 import struct
 import threading
@@ -18,7 +19,8 @@ from namespace_fork_prototype import Experiment
 class KernelExperiment(Experiment):
     def start(self):
         super().start()
-        self.sql("SET ob_global_debug_sync='reset'")
+        if os.environ.get("SEEKDB_NAMESPACE_SQL_WORKER_PROTOTYPE") != "1":
+            self.sql("SET ob_global_debug_sync='reset'")
         self.sql("CREATE DATABASE IF NOT EXISTS __fork_proto_meta")
         self.sql("CREATE TABLE IF NOT EXISTS __fork_proto_meta.pages("
                  "id BIGINT UNSIGNED PRIMARY KEY,payload VARBINARY(60000))")

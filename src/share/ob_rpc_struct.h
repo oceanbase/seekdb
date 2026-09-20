@@ -2071,7 +2071,7 @@ using ObClearTabletAutoincSeqCacheArg = ObBatchRemoveTabletArg;
 
 struct ObCalcColumnChecksumRequestArg final
 {
-  OB_UNIS_VERSION(1);
+  OB_UNIS_VERSION(2);
 public:
   ObCalcColumnChecksumRequestArg() { reset(); }
   ~ObCalcColumnChecksumRequestArg() = default;
@@ -2079,7 +2079,8 @@ public:
   void reset();
   int assign(const ObCalcColumnChecksumRequestArg &other);
   TO_STRING_KV(K_(target_table_id), K_(schema_version), K_(execution_id),
-      K_(snapshot_version), K_(source_table_id), K_(task_id), K_(calc_items), K_(user_parallelism));
+      K_(snapshot_version), K_(source_table_id), K_(task_id), K_(calc_items),
+      K_(user_parallelism), K_(data_format_version));
   struct SingleItem final
   {
     OB_UNIS_VERSION(2);
@@ -2103,20 +2104,50 @@ public:
   int64_t task_id_;
   common::ObSEArray<SingleItem, 10> calc_items_;
   int64_t user_parallelism_;
+  uint64_t data_format_version_;
+  // The namespace worker owns SchemaService.  Storage receives immutable task
+  // facts and must not look these schemas up in a process-local cache.
+  share::schema::ObTableSchema source_schema_;
+  share::schema::ObTableSchema target_schema_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObCalcColumnChecksumRequestArg);
 };
 
-struct ObCalcColumnChecksumRequestRes final
+struct ObCalcColumnChecksumCompletion final
 {
   OB_UNIS_VERSION(1);
 public:
+  ObCalcColumnChecksumCompletion()
+    : finished_(false), ret_code_(common::OB_SUCCESS),
+      column_ids_(), column_checksums_()
+  {}
+  bool is_valid() const
+  {
+    return !finished_
+        || (ret_code_ <= common::OB_SUCCESS
+            && column_ids_.count() == column_checksums_.count());
+  }
+  TO_STRING_KV(K_(finished), K_(ret_code), K_(column_ids), K_(column_checksums));
+  bool finished_;
+  int ret_code_;
+  common::ObSEArray<int64_t, 16> column_ids_;
+  common::ObSEArray<int64_t, 16> column_checksums_;
+};
+
+struct ObCalcColumnChecksumRequestRes final
+{
+  OB_UNIS_VERSION(2);
+public:
   common::ObSEArray<int, 10> ret_codes_;
+  // Empty for the in-process implementation.  The namespace storage gateway
+  // fills one entry per request item so the SQL worker can poll asynchronous
+  // storage work without a reverse RPC into its DDL scheduler.
+  common::ObSEArray<ObCalcColumnChecksumCompletion, 10> completions_;
 };
 
 struct ObCalcColumnChecksumResponseArg
 {
-  OB_UNIS_VERSION(2);
+  OB_UNIS_VERSION(3);
 public:
   ObCalcColumnChecksumResponseArg() { reset(); }
   ~ObCalcColumnChecksumResponseArg() = default;
@@ -2130,10 +2161,13 @@ public:
     source_table_id_ = other.source_table_id_;
     schema_version_ = other.schema_version_;
     task_id_ = other.task_id_;
-
+    if (OB_FAIL(column_ids_.assign(other.column_ids_))) {
+    } else if (OB_FAIL(column_checksums_.assign(other.column_checksums_))) {
+    }
     return ret;
   }
-  TO_STRING_KV(K_(task_id), K_(tablet_id), K_(target_table_id), K_(ret_code), K_(source_table_id), K_(schema_version));
+  TO_STRING_KV(K_(task_id), K_(tablet_id), K_(target_table_id), K_(ret_code),
+      K_(source_table_id), K_(schema_version), K_(column_ids), K_(column_checksums));
 public:
   common::ObTabletID tablet_id_;
   uint64_t target_table_id_;
@@ -2141,6 +2175,8 @@ public:
   int64_t source_table_id_;
   int64_t schema_version_;
   int64_t task_id_;
+  common::ObSEArray<int64_t, 16> column_ids_;
+  common::ObSEArray<int64_t, 16> column_checksums_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObCalcColumnChecksumResponseArg);
@@ -2200,16 +2236,22 @@ struct ObCheckSchemaVersionElapsedArg final
   OB_UNIS_VERSION(1);
 public:
   ObCheckSchemaVersionElapsedArg()
-    : schema_version_(0), need_wait_trans_end_(true), ddl_task_id_(0)
+    : schema_version_(0), need_wait_trans_end_(true), ddl_task_id_(0),
+      schema_version_refreshed_by_caller_(false)
   {}
   bool is_valid() const;
-  TO_STRING_KV(K_(schema_version), K_(need_wait_trans_end), K_(tablets), K_(ddl_task_id));
+  TO_STRING_KV(K_(schema_version), K_(need_wait_trans_end), K_(tablets),
+      K_(ddl_task_id), K_(schema_version_refreshed_by_caller));
 
 
   int64_t schema_version_;
   bool need_wait_trans_end_;
   ObSEArray<ObTabletPair, 10> tablets_;
   int64_t ddl_task_id_;
+  // A namespace SQL worker owns the authoritative SchemaService. Once it has
+  // observed schema_version_, storage can advance Tablet DDL state without
+  // consulting the shared process' unrelated schema clock.
+  bool schema_version_refreshed_by_caller_;
 };
 
 struct ObDDLCheckTabletMergeStatusArg final

@@ -60,6 +60,8 @@ ObTableLockService::ObTableLockCtx::ObTableLockCtx() :
   is_from_sql_(false),
   ret_code_before_end_stmt_or_tx_(OB_SUCCESS),
   lock_priority_(ObTableLockPriority::NORMAL),
+  has_explicit_tablets_(false),
+  explicit_schema_version_(OB_INVALID_VERSION),
   stmt_savepoint_(),
   is_for_replace_(false)
 {
@@ -702,6 +704,50 @@ int ObTableLockService::lock(ObTxDesc &tx_desc,
       if (OB_FAIL(process_lock_task_(ctx))) {
         LOG_WARN("process lock task failed", K(ret), K(ctx), K(arg));
         ret = rewrite_return_code_(ret, ctx.ret_code_before_end_stmt_or_tx_, ctx.is_from_sql_);
+      }
+    }
+  }
+  return ret;
+}
+
+int ObTableLockService::lock_with_explicit_tablets(
+    ObTxDesc &tx_desc,
+    const ObTxParam &tx_param,
+    const ObLockRequest &arg,
+    const int64_t schema_version,
+    const common::ObIArray<common::ObTabletID> &tablet_ids)
+{
+  int ret = OB_SUCCESS;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("lock service is not inited", K(ret));
+  } else if (OB_UNLIKELY(!tx_desc.is_valid())
+             || OB_UNLIKELY(!tx_param.is_valid())
+             || OB_UNLIKELY(!arg.is_valid())
+             || OB_UNLIKELY(schema_version < 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid explicit table lock argument", K(ret), K(tx_desc),
+        K(tx_param), K(arg), K(schema_version), K(tablet_ids));
+  } else {
+    ObTableLockCtx ctx;
+    if (OB_FAIL(ctx.set_by_lock_req(arg))) {
+    } else if (OB_UNLIKELY(ctx.is_obj_lock_task()
+                          || ctx.is_alone_tablet_lock_task()
+                          || ctx.is_replace_task())) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("explicit tablet set is invalid for lock task", K(ret), K(ctx));
+    } else if (OB_FAIL(ctx.set_tablet_id(tablet_ids))) {
+      LOG_WARN("failed to set explicit tablet ids", K(ret), K(tablet_ids));
+    } else {
+      ctx.is_in_trans_ = true;
+      ctx.tx_desc_ = &tx_desc;
+      ctx.tx_param_ = tx_param;
+      ctx.has_explicit_tablets_ = true;
+      ctx.explicit_schema_version_ = schema_version;
+      if (OB_FAIL(process_lock_task_(ctx))) {
+        LOG_WARN("process explicit table lock task failed", K(ret), K(ctx), K(arg));
+        ret = rewrite_return_code_(
+            ret, ctx.ret_code_before_end_stmt_or_tx_, ctx.is_from_sql_);
       }
     }
   }
@@ -1728,7 +1774,17 @@ int ObTableLockService::get_tablet_lock_set_(const ObTableLockMode lock_mode,
   ObArenaAllocator allocator("TableSchema");
   bool is_allowed = false;
 
-  if (OB_FAIL(get_table_schema_(ctx, allocator, table_schema))) {
+  if (ctx.has_explicit_tablets_) {
+    bool write_enabled = false;
+    if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
+    } else if (!write_enabled) {
+      ret = OB_OP_NOT_ALLOW;
+      LOG_WARN("explicit table lock is not allowed now", K(ret), K(ctx));
+    } else {
+      ctx.schema_version_ = ctx.explicit_schema_version_;
+      ret = get_lock_set_(ctx, ctx.tablet_list_, tablet_lock_set);
+    }
+  } else if (OB_FAIL(get_table_schema_(ctx, allocator, table_schema))) {
   } else if (OB_FAIL(check_op_allowed_(ctx.table_id_, table_schema, is_allowed))) {
   } else if (!is_allowed) {
     ret = OB_OP_NOT_ALLOW;
@@ -2015,7 +2071,6 @@ int ObTableLockService::get_table_schema_(const ObTableLockCtx &ctx,
                                           ObSimpleTableSchemaV2 *&table_schema)
 {
   int ret = OB_SUCCESS;
-  
 
   if (OB_UNLIKELY(ctx.is_alone_tablet_lock_task() || ctx.is_obj_lock_task())) {
     ret = OB_INVALID_ARGUMENT;

@@ -1296,10 +1296,27 @@ int ObJoinOrder::check_exec_force_use_das(const uint64_t table_id,
                          (opt_ctx.is_batched_multi_stmt() && table_item->is_basic_table()) || //batch update table(multi queries or arraybinding)
                          (table_item->for_update_ && table_item->skip_locked_ && session_info->get_pl_context()) // select for update skip locked stmt in PL use das force
                          ;
-    bool is_select_sample_scan = get_plan()->get_stmt()->is_select_stmt()
-                                && ((NULL != table_item->sample_info_ && !table_item->sample_info_->is_no_sample()) //block(row) sample scan do not support DAS TSC
-                                    || (opt_ctx.is_online_ddl() && opt_ctx.get_root_stmt()->is_insert_stmt()) // online ddl plan use sample table scan, create index not support DAS TSC
-                                   );
+    // A sampled table scan is implemented only by the basic table-scan path.
+    // The source query of an online DDL is nested below INSERT, so its current
+    // statement is not guaranteed to be a SELECT even though the source table
+    // already carries SampleInfo.  Test the table itself before the statement
+    // shape; otherwise nested DDL is incorrectly forced onto distributed DAS.
+    bool is_select_sample_scan =
+        (NULL != table_item->sample_info_ && !table_item->sample_info_->is_no_sample())
+        || (opt_ctx.is_online_ddl()
+            && opt_ctx.get_root_stmt()->is_insert_stmt());
+    if (opt_ctx.is_online_ddl() || NULL != table_item->sample_info_ || force_das_tsc) {
+      fprintf(stderr,
+              "PROTOTYPE_V22_DDL_ACCESS_PATH table=%llu nested=%d online=%d stmt_select=%d "
+              "root_insert=%d sample=%d sample_method=%d force_das=%d basic=%d\n",
+              static_cast<unsigned long long>(table_id),
+              opt_ctx.in_nested_sql(), opt_ctx.is_online_ddl(),
+              get_plan()->get_stmt()->is_select_stmt(),
+              opt_ctx.get_root_stmt()->is_insert_stmt(),
+              NULL != table_item->sample_info_,
+              NULL == table_item->sample_info_ ? -1 : table_item->sample_info_->method_,
+              force_das_tsc, is_select_sample_scan);
+    }
 
     if (is_select_sample_scan
         || is_virtual_table(table_item->ref_id_)) {

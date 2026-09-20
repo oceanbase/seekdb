@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "data_plane/ddl/ob_direct_insert.h"
+#include "data_plane/ddl/ob_ddl_schedule.h"
 #include "data_plane/ddl/ob_direct_load_type.h"
 #include "query/engine/basic/ob_spill_batch_spool.h"
 #include "share/ob_batch_selector.h"
@@ -36,6 +37,14 @@ namespace data_plane
 {
 namespace
 {
+
+thread_local ObIDirectInsertWorkerContext *current_worker_context = nullptr;
+
+DirectInsertScheduleRegistry &native_schedule_registry()
+{
+  static DirectInsertScheduleRegistry registry;
+  return registry;
+}
 
 enum DirectInsertWriterImplType
 {
@@ -206,8 +215,14 @@ public:
     FINISHED
   };
 
-  explicit ObDirectInsertSessionImpl(common::ObIAllocator &allocator)
-    : allocator_(&allocator), dag_(nullptr), thread_pool_(),
+  ObDirectInsertSessionImpl(
+      common::ObIAllocator &allocator,
+      DirectInsertScheduleRegistry &schedule_registry,
+      const int64_t task_id,
+      std::shared_ptr<DirectInsertSchedule> schedule)
+    : allocator_(&allocator), schedule_registry_(&schedule_registry),
+      task_id_(task_id), schedule_(std::move(schedule)),
+      dag_(nullptr), thread_pool_(),
       dag_initialized_(false), pool_started_(false), state_(CREATED)
   {}
 
@@ -215,6 +230,9 @@ public:
   {
     int ret = finish();
     if (OB_SUCCESS != ret) {
+    }
+    if (nullptr != schedule_registry_) {
+      schedule_registry_->release(task_id_, schedule_);
     }
   }
 
@@ -231,17 +249,43 @@ public:
           K(param.ddl_task_id_), K(param.execution_id_), K(param.table_id_),
           K(param.worker_count_), K(param.participants_.count()));
     } else {
-      uint64_t tenant_data_version = 0;
-      share::ObDDLTaskDataInfo task_data_info;
       storage::ObDDLInsertDagInitParam dag_param;
+      share::schema::ObTableSchema table_schema(allocator_);
+      share::schema::ObTableSchema lob_meta_table_schema(allocator_);
+      int64_t schema_pos = 0;
+      int64_t lob_schema_pos = 0;
 
-      if (OB_FAIL(share::ObDDLUtil::get_data_information(
-              *GCTX.sql_proxy_, param.ddl_task_id_, task_data_info))) {
-      } else if (FALSE_IT(tenant_data_version = task_data_info.data_format_version_)) {
-      } else if (tenant_data_version < storage::DDL_IDEM_DATA_FORMAT_VERSION) {
+      if (OB_FAIL(table_schema.deserialize(
+              param.table_schema_.ptr(), param.table_schema_.length(),
+              schema_pos))) {
+        LOG_WARN("failed to deserialize direct insert table schema", K(ret));
+      } else if (OB_UNLIKELY(schema_pos != param.table_schema_.length()
+                             || table_schema.get_table_id()
+                                != static_cast<uint64_t>(param.table_id_))) {
+        ret = common::OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid direct insert table schema", K(ret), K(schema_pos),
+            K(param.table_schema_.length()), K(table_schema.get_table_id()),
+            K(param.table_id_));
+      } else if (!param.lob_meta_table_schema_.empty()
+                 && OB_FAIL(lob_meta_table_schema.deserialize(
+                        param.lob_meta_table_schema_.ptr(),
+                        param.lob_meta_table_schema_.length(),
+                        lob_schema_pos))) {
+        LOG_WARN("failed to deserialize direct insert lob meta schema", K(ret));
+      } else if (!param.lob_meta_table_schema_.empty()
+                 && OB_UNLIKELY(lob_schema_pos
+                                != param.lob_meta_table_schema_.length())) {
+        ret = common::OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid direct insert lob meta schema", K(ret),
+            K(lob_schema_pos), K(param.lob_meta_table_schema_.length()));
+      } else if (param.data_format_version_
+                 < storage::DDL_IDEM_DATA_FORMAT_VERSION) {
         ret = common::OB_NOT_SUPPORTED;
+        fprintf(stderr,
+                "PROTOTYPE_V22_DIRECT_INSERT_START stage=data_version ret=%d format=%lu required=%ld\n",
+                ret, param.data_format_version_, storage::DDL_IDEM_DATA_FORMAT_VERSION);
         LOG_WARN("direct insert data format is not supported", K(ret),
-            K(tenant_data_version));
+            K(param.data_format_version_));
       } else {
         dag_param.direct_load_type_ =
             storage::ObDDLDirectLoadUtil::ddl_get_direct_load_type();
@@ -249,12 +293,16 @@ public:
         dag_param.px_thread_count_ = param.worker_count_;
         dag_param.ddl_task_param_.ddl_task_id_ = param.ddl_task_id_;
         dag_param.ddl_task_param_.execution_id_ = param.execution_id_;
-        dag_param.ddl_task_param_.data_format_version_ = tenant_data_version;
-        dag_param.ddl_task_param_.snapshot_version_ = task_data_info.snapshot_version_;
+        dag_param.ddl_task_param_.data_format_version_ = param.data_format_version_;
+        dag_param.ddl_task_param_.snapshot_version_ = param.snapshot_version_;
         dag_param.ddl_task_param_.target_table_id_ = param.table_id_;
-        dag_param.ddl_task_param_.schema_version_ = task_data_info.schema_version_;
+        dag_param.ddl_task_param_.schema_version_ = param.schema_version_;
         dag_param.ddl_task_param_.is_offline_index_rebuild_ =
-            task_data_info.is_offline_index_rebuild_;
+            param.is_offline_index_rebuild_;
+        dag_param.table_schema_ = &table_schema;
+        dag_param.lob_meta_table_schema_ =
+            param.lob_meta_table_schema_.empty()
+                ? nullptr : &lob_meta_table_schema;
       }
 
       if (OB_FAIL(ret)) {
@@ -262,6 +310,7 @@ public:
       } else if (OB_FAIL(share::ObDagScheduler::alloc_dag(
                      *allocator_, false /* is_ha_dag */, dag_))) {
       } else if (OB_FAIL(dag_->init(&dag_param, nullptr, true /* add trace id */))) {
+        fprintf(stderr, "PROTOTYPE_V22_DIRECT_INSERT_START stage=dag_init ret=%d\n", ret);
       } else if (FALSE_IT(dag_initialized_ = true)) {
       } else {
         const share::schema::ObIndexType index_type =
@@ -272,7 +321,9 @@ public:
           ret = common::OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected vector index type for direct insert", K(ret), K(index_type));
         } else if (OB_FAIL(thread_pool_.init(param.worker_count_, dag_, worker_context))) {
+          fprintf(stderr, "PROTOTYPE_V22_DIRECT_INSERT_START stage=pool_init ret=%d\n", ret);
         } else if (OB_FAIL(thread_pool_.start())) {
+          fprintf(stderr, "PROTOTYPE_V22_DIRECT_INSERT_START stage=pool_start ret=%d\n", ret);
         } else {
           pool_started_ = true;
           dag_->set_start_time();
@@ -310,14 +361,39 @@ public:
 
   bool is_final() const override
   {
-    return RUNNING != state_ || nullptr == dag_ || dag_->is_final_status();
+    const bool final = RUNNING != state_ || nullptr == dag_
+        || dag_->is_final_status();
+    if (final) {
+      fprintf(stderr,
+              "PROTOTYPE_V22_DIRECT_INSERT_FINAL state=%d dag=%p dag_ret=%d\n",
+              state_, dag_, nullptr == dag_ ? common::OB_NOT_INIT
+                                             : dag_->get_dag_ret());
+    }
+    return final;
+  }
+
+  int prepare_ordered_input(
+      const common::ObIArray<ObDDLTabletSliceCount> &slice_counts) override
+  {
+    int ret = check_running();
+    if (OB_SUCC(ret) && OB_FAIL(dag_->update_tablet_range_count(slice_counts))) {
+      LOG_WARN("prepare ordered direct insert input failed", K(ret));
+    }
+    return ret;
   }
 
   int prepare_ordered_input() override
   {
-    int ret = check_running();
-    if (OB_SUCC(ret) && OB_FAIL(dag_->update_tablet_range_count())) {
-      LOG_WARN("prepare ordered direct insert input failed", K(ret));
+    int ret = common::OB_SUCCESS;
+    std::vector<ObDDLTabletSliceCount> slice_counts;
+    if (OB_ISNULL(schedule_)) {
+      ret = common::OB_NOT_INIT;
+    } else if (OB_FAIL(schedule_->snapshot(slice_counts))) {
+      LOG_WARN("direct insert schedule is not ready", K(ret), K(task_id_));
+    } else {
+      BorrowedIArray<ObDDLTabletSliceCount> view(
+          slice_counts.data(), slice_counts.size());
+      ret = prepare_ordered_input(view);
     }
     return ret;
   }
@@ -338,6 +414,10 @@ public:
       LOG_WARN("direct insert dag failed; returning first dag error",
           K(ret), K(worker_ret));
     }
+    fprintf(stderr,
+            "PROTOTYPE_V22_DIRECT_INSERT_COMPLETE ret=%d dag_ret=%d final=%d\n",
+            ret, nullptr == dag_ ? common::OB_NOT_INIT : dag_->get_dag_ret(),
+            nullptr == dag_ ? 1 : dag_->is_final_status());
     return ret;
   }
 
@@ -537,6 +617,9 @@ private:
 
 private:
   common::ObIAllocator *allocator_;
+  DirectInsertScheduleRegistry *schedule_registry_;
+  int64_t task_id_;
+  std::shared_ptr<DirectInsertSchedule> schedule_;
   storage::ObDDLInsertDag *dag_;
   storage::ObDDLDagThreadPool thread_pool_;
   bool dag_initialized_;
@@ -545,6 +628,30 @@ private:
 };
 
 } // namespace
+
+ObIDirectInsertWorkerContext *set_current_direct_insert_worker_context(
+    ObIDirectInsertWorkerContext *context)
+{
+  ObIDirectInsertWorkerContext *previous = current_worker_context;
+  current_worker_context = context;
+  return previous;
+}
+
+int report_direct_insert_ddl_checksum(
+    const uint64_t data_format_version,
+    const int64_t execution_id,
+    const int64_t ddl_task_id,
+    const uint64_t table_id,
+    const common::ObTabletID &tablet_id,
+    const common::ObIArray<uint64_t> &column_ids,
+    const common::ObIArray<int64_t> &column_checksums)
+{
+  return nullptr == current_worker_context
+      ? common::OB_NOT_SUPPORTED
+      : current_worker_context->report_ddl_checksum(
+            data_format_version, execution_id, ddl_task_id, table_id,
+            tablet_id, column_ids, column_checksums);
+}
 
 void ObIDirectInsertWriterFactory::destroy(ObIDirectInsertWriter *&writer)
 {
@@ -566,11 +673,18 @@ int ObDirectInsertOrchestrator::start(
     return service->start(allocator, param, worker_context, session);
   }
   ObDirectInsertSessionImpl *impl = nullptr;
+  std::shared_ptr<DirectInsertSchedule> schedule;
   if (OB_UNLIKELY(!param.is_valid())) {
     ret = common::OB_INVALID_ARGUMENT;
     LOG_WARN("invalid direct insert start parameter", K(ret));
+  } else if (OB_ISNULL(schedule = native_schedule_registry().acquire(
+                           param.ddl_task_id_))) {
+    ret = common::OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate direct insert schedule failed", K(ret),
+        K(param.ddl_task_id_));
   } else if (OB_ISNULL(impl = OB_NEWx(ObDirectInsertSessionImpl, &allocator,
-                                     allocator))) {
+                                     allocator, native_schedule_registry(),
+                                     param.ddl_task_id_, schedule))) {
     ret = common::OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate direct insert session failed", K(ret));
   } else if (OB_FAIL(impl->start(param, worker_context))) {
@@ -585,6 +699,9 @@ int ObDirectInsertOrchestrator::start(
     impl->~ObDirectInsertSessionImpl();
     allocator.free(impl);
   }
+  if (OB_FAIL(ret) && schedule) {
+    native_schedule_registry().release(param.ddl_task_id_, schedule);
+  }
   return ret;
 }
 
@@ -595,6 +712,21 @@ int ObDirectInsertOrchestrator::finish(ObIDirectInsertSession *&session)
     ObIDirectInsertSession *owned = session;
     session = nullptr;
     ret = owned->finish_and_destroy();
+  }
+  return ret;
+}
+
+int ObDirectInsertOrchestrator::publish_ordered_input(
+    const int64_t task_id,
+    const common::ObIArray<ObDDLTabletSliceCount> &slice_counts)
+{
+  int ret = common::OB_SUCCESS;
+  if (OB_UNLIKELY(task_id <= 0 || slice_counts.empty())) {
+    ret = common::OB_INVALID_ARGUMENT;
+  } else if (auto *service = share::server_service<IDirectInsertService>()) {
+    ret = service->publish_ordered_input(task_id, slice_counts);
+  } else {
+    ret = native_schedule_registry().publish(task_id, slice_counts);
   }
   return ret;
 }

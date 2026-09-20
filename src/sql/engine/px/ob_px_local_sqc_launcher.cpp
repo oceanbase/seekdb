@@ -86,9 +86,13 @@ int ObLocalSqcLauncher::process()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Sqc handler can't be nullptr", K(ret));
   } else if (OB_FAIL(sqc_handler->init_env())) {
+    fprintf(stderr, "PROTOTYPE_V22_PX_LAUNCH stage=init_env ret=%d\n", ret);
   } else if (OB_FAIL(sqc_handler->pre_acquire_px_worker(result_.reserved_thread_count_))) {
+    fprintf(stderr, "PROTOTYPE_V22_PX_LAUNCH stage=acquire_worker ret=%d\n", ret);
   } else if (OB_FAIL(pre_setup_op_input(*sqc_handler))) {
+    fprintf(stderr, "PROTOTYPE_V22_PX_LAUNCH stage=setup_input ret=%d\n", ret);
   } else if (OB_FAIL(sqc_handler->thread_count_auto_scaling(result_.reserved_thread_count_))) {
+    fprintf(stderr, "PROTOTYPE_V22_PX_LAUNCH stage=scale_worker ret=%d\n", ret);
   } else if (result_.reserved_thread_count_ <= 0) {
     ret = OB_ERR_INSUFFICIENT_PX_WORKER;
     ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(dop_, sqc_handler->get_phy_plan().get_px_dop());
@@ -96,6 +100,7 @@ int ObLocalSqcLauncher::process()
     ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(admitted_px_workers_number_, result_.reserved_thread_count_);
     LOG_WARN("Worker thread res not enough", K_(result));
   } else if (OB_FAIL(sqc_handler->link_qc_sqc_channel())) {
+    fprintf(stderr, "PROTOTYPE_V22_PX_LAUNCH stage=link_channel ret=%d\n", ret);
   } else {
     /*do nothing*/
   }
@@ -172,7 +177,11 @@ int ObLocalSqcLauncher::startup_normal_sqc(ObPxSqcHandler &sqc_handler)
     arg.exec_ctx_->set_ori_expr_op_size(arg.exec_ctx_->get_expr_op_size());
     if (OB_FAIL(session->store_query_string(ObString::make_string("PX SUB COORDINATOR")))) {
     } else if (OB_FAIL(sub_coord.pre_process())) {
+      fprintf(stderr, "PROTOTYPE_V22_PX_LAUNCH stage=pre_process ret=%d\n", ret);
     } else if (OB_FAIL(sub_coord.try_start_tasks(dispatched_worker_count))) {
+      fprintf(stderr,
+              "PROTOTYPE_V22_PX_LAUNCH stage=start_tasks ret=%d dispatched=%ld\n",
+              ret, dispatched_worker_count);
       /**
        * When starting some workers fails, we proactively interrupt the already started workers.
        * This operation is blocking, and after successful interruption, the sqc handler is released directly.
@@ -219,6 +228,9 @@ int ObLocalSqcLauncher::after_process(int error_code)
      */
     LOG_TRACE("process dfo", K(arg), K(sqc_handler->get_reserved_px_thread_count()));
     ret = startup_normal_sqc(*sqc_handler);
+    if (OB_NOT_SUPPORTED == ret) {
+      fprintf(stderr, "PROTOTYPE_V22_PX_LAUNCH stage=startup_sqc ret=%d\n", ret);
+    }
     session->set_session_sleep();
   }
 

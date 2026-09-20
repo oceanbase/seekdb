@@ -142,10 +142,18 @@ int ObDDLChecksumOperator::update_checksum(const uint64_t data_format_version, c
     if (OB_SUCC(ret)) {
       if (OB_FAIL(DDL_SIM(checksum_items.at(0).ddl_task_id_, UPDATE_DDL_CHECKSUM_SLOW))) {
       } else if (OB_FAIL(sql_proxy.write(sql.ptr(), affected_rows))) {
+        fprintf(stderr,
+                "PROTOTYPE_V22_DDL_CHECKSUM_WRITE ret=%d rows=%ld count=%ld sql=%s\n",
+                ret, affected_rows, checksum_items.count(), sql.ptr());
       } else if (OB_UNLIKELY(affected_rows > 2 * checksum_items.count())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("error unexpected, invalid affected rows", K(ret), K(affected_rows),
             K(checksum_items.count()));
+      }
+      if (OB_SUCC(ret)) {
+        fprintf(stderr,
+                "PROTOTYPE_V22_DDL_CHECKSUM_WRITE ret=0 rows=%ld count=%ld\n",
+                affected_rows, checksum_items.count());
       }
     }
   }

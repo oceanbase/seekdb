@@ -347,10 +347,19 @@ int ObDASScanOp::open_op()
   reset_access_datums_ptr();
   ObDASIterTreeType tree_type = ITER_TREE_INVALID;
   if (OB_FAIL(init_scan_param())) {
+    if (OB_NOT_SUPPORTED == ret) {
+      fprintf(stderr, "PROTOTYPE_V22_DAS_SCAN_OPEN stage=init_param ret=%d\n", ret);
+    }
   } else if (FALSE_IT(tree_type = get_iter_tree_type())) {
   } else if (SUPPORTED_DAS_ITER_TREE(tree_type)) {
     ObDASIter *result = nullptr;
     if (OB_FAIL(init_related_tablet_ids(tablet_ids_))) {
+      if (OB_NOT_SUPPORTED == ret) {
+        fprintf(stderr,
+                "PROTOTYPE_V22_DAS_SCAN_OPEN stage=related ret=%d table=%llu tree=%d sample=%d\n",
+                ret, static_cast<unsigned long long>(scan_param_.index_id_),
+                tree_type, scan_param_.sample_info_.method_);
+      }
     } else if (OB_FAIL(ObDASIterUtils::create_das_scan_iter_tree(tree_type,
                                                                  scan_param_,
                                                                  scan_ctdef_,
@@ -364,9 +373,21 @@ int ObDASScanOp::open_op()
                                                                  snapshot_,
                                                                  op_alloc_,
                                                                  result))) {
+      if (OB_NOT_SUPPORTED == ret) {
+        fprintf(stderr,
+                "PROTOTYPE_V22_DAS_SCAN_OPEN stage=create_tree ret=%d table=%llu tree=%d sample=%d\n",
+                ret, static_cast<unsigned long long>(scan_param_.index_id_),
+                tree_type, scan_param_.sample_info_.method_);
+      }
     } else {
       result_ = result;
       if (OB_FAIL(result->do_table_scan())) {
+        if (OB_NOT_SUPPORTED == ret) {
+          fprintf(stderr,
+                  "PROTOTYPE_V22_DAS_SCAN_OPEN stage=table_scan ret=%d table=%llu tree=%d sample=%d\n",
+                  ret, static_cast<unsigned long long>(scan_param_.index_id_),
+                  tree_type, scan_param_.sample_info_.method_);
+        }
       }
     }
   } else {

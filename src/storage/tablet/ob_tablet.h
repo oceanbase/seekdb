@@ -474,7 +474,8 @@ public:
       const int64_t schema_version,
       const bool need_wait_trans_end,
       int64_t &max_commit_version,
-      transaction::ObTransID &pending_tx_id);
+      transaction::ObTransID &pending_tx_id,
+      const bool schema_version_refreshed_by_caller = false);
   int replay_schema_version_change_log(const int64_t schema_version);
   int get_tablet_runtime_info(
       share::ObTabletRuntimeInfo &runtime_info,
