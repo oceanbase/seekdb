@@ -35,9 +35,14 @@ enum class GraphPathDirection : int8_t
   IN = 1
 };
 
+// Controls how one matched path is exposed as relational rows and how path
+// variables are bound. COLUMNS expressions still determine the actual output
+// column types.
 enum class GraphPathRowShape : int8_t
 {
+  // One row for the complete path; the quantified edge is a group variable.
   PER_MATCH = 0,
+  // One row for each traversed edge; iteration variables bind that step.
   PER_STEP = 1
 };
 
@@ -45,19 +50,6 @@ enum class GraphPathRowShape : int8_t
 // P2-WALK. Element IDs are mapping identities, not labels or table IDs.
 struct GraphPathDesc
 {
-  GraphPathSpec()
-    : graph_id_(common::OB_INVALID_ID),
-      graph_version_(0),
-      source_element_id_(common::OB_INVALID_ID),
-      edge_element_id_(common::OB_INVALID_ID),
-      target_element_id_(common::OB_INVALID_ID),
-      lower_bound_(0),
-      upper_bound_(0),
-      direction_(GraphPathDirection::OUT),
-      row_shape_(GraphPathRowShape::PER_MATCH),
-      need_path_(false)
-  {}
-
   bool is_valid() const
   {
     return graph_id_ != common::OB_INVALID_ID
@@ -72,31 +64,32 @@ struct GraphPathDesc
             || row_shape_ == GraphPathRowShape::PER_STEP);
   }
 
-  uint64_t graph_id_;
-  int64_t graph_version_;
-  uint64_t source_element_id_;
-  uint64_t edge_element_id_;
-  uint64_t target_element_id_;
-  int64_t lower_bound_;
-  int64_t upper_bound_;
-  GraphPathDirection direction_;
-  GraphPathRowShape row_shape_;
-  bool need_path_;
+  uint64_t graph_id_ = common::OB_INVALID_ID;
+  int64_t graph_version_ = 0;
+  uint64_t source_element_id_ = common::OB_INVALID_ID;
+  uint64_t edge_element_id_ = common::OB_INVALID_ID;
+  uint64_t target_element_id_ = common::OB_INVALID_ID;
+  // Inclusive hop range after normalizing the edge quantifier {n}, {n,m}, or {,m}.
+  int64_t lower_bound_ = 0;
+  int64_t upper_bound_ = 0;
+  GraphPathDirection direction_ = GraphPathDirection::OUT;
+  // Chooses per-path/per-step row cardinality and graph-variable binding shape;
+  // COLUMNS still defines the output column count, names, and SQL data types.
+  GraphPathRowShape row_shape_ = GraphPathRowShape::PER_MATCH;
+  bool need_path_ = false;
   TO_STRING_KV(K_(graph_id), K_(graph_version), K_(source_element_id),
                K_(edge_element_id), K_(target_element_id), K_(lower_bound),
                K_(upper_bound), K_(direction), K_(row_shape), K_(need_path));
 };
 
-// JSON identities are presentation values. Internal comparison always uses
-// this typed identity so collation or JSON text formatting cannot change it.
+// Internal typed identity of one mapped vertex or edge. graph_id_ and
+// element_id_ select the graph element mapping; keys_ contains that mapping's
+// complete base-table primary key in declaration order. The Oracle-compatible
+// VERTEX_ID() and EDGE_ID() SQL functions expose equivalent identity
+// information as JSON; execution compares these typed fields, never the
+// serialized JSON text.
 struct GraphElementIdentity
 {
-  GraphElementIdentity()
-    : graph_id_(common::OB_INVALID_ID),
-      element_id_(common::OB_INVALID_ID),
-      key_count_(0)
-  {}
-
   void reset()
   {
     graph_id_ = common::OB_INVALID_ID;
@@ -140,24 +133,23 @@ struct GraphElementIdentity
     return value;
   }
 
-  uint64_t graph_id_;
-  uint64_t element_id_;
-  int64_t key_count_;
-  common::ObObj keys_[GRAPH_IDENTITY_MAX_KEYS];
+  uint64_t graph_id_ = common::OB_INVALID_ID;
+  uint64_t element_id_ = common::OB_INVALID_ID;
+  int64_t key_count_ = 0;
+  common::ObObj keys_[GRAPH_IDENTITY_MAX_KEYS]{};
   TO_STRING_KV(K_(graph_id), K_(element_id), K_(key_count),
                "key0", keys_[0], "key1", keys_[1]);
 };
 
-// A parent link lets GraphBuildPath retain the path only when a projection
-// actually consumes it.
+// Represents one node in a query-local, parent-linked path-state store.
+// path_state_id_ is a store key, not an encoded path: following
+// parent_path_state_id_ back to the root and reversing the nodes reconstructs
+// the full path. All descendants of one anchor/outer row retain its opaque
+// binding_id_; that row may remain in the outer operator or be materialized in
+// a separate row store. The frontier owner allocates these IDs and nodes;
+// GraphExpand only preserves their association.
 struct GraphPathState
 {
-  GraphPathState()
-    : binding_id_(0),
-      path_state_id_(GRAPH_INVALID_PATH_STATE_ID),
-      parent_path_state_id_(GRAPH_INVALID_PATH_STATE_ID),
-      hop_(0)
-  {}
   bool is_valid() const
   {
     return binding_id_ >= 0
@@ -169,32 +161,40 @@ struct GraphPathState
             || (hop_ > 0 && parent_path_state_id_ >= 0
                 && incoming_edge_identity_.is_valid()));
   }
-  int64_t binding_id_;
-  int64_t path_state_id_;
-  int64_t parent_path_state_id_;
-  int64_t hop_;
-  GraphElementIdentity current_identity_;
-  GraphElementIdentity incoming_edge_identity_;
+  int64_t binding_id_ = 0;
+  int64_t path_state_id_ = GRAPH_INVALID_PATH_STATE_ID;
+  int64_t parent_path_state_id_ = GRAPH_INVALID_PATH_STATE_ID;
+  int64_t hop_ = 0;
+  GraphElementIdentity current_identity_{};
+  GraphElementIdentity incoming_edge_identity_{};
   TO_STRING_KV(K_(binding_id), K_(path_state_id), K_(parent_path_state_id),
                K_(hop), K_(current_identity), K_(incoming_edge_identity));
 };
 
-// Association IDs survive adjacency sharing. Source reads may be deduplicated,
-// but output multiplicity is restored from these fields.
+// One current frontier path. binding_id_ is the owner's correlation handle for
+// the anchor/outer input row; it does not require a particular BindingStore
+// representation. path_state_id_ identifies this path prefix in the owner's
+// state store. source_identity_ repeats that state's current vertex so
+// GraphExpand can batch equal adjacency reads without dereferencing owner state.
+// Neither ID is a persistent graph or table identifier.
 struct GraphExpandInput
 {
   int64_t binding_id_ = 0;
   int64_t path_state_id_ = GRAPH_INVALID_PATH_STATE_ID;
-  GraphElementIdentity source_identity_;
+  GraphElementIdentity source_identity_{};
   TO_STRING_KV(K_(binding_id), K_(path_state_id), K_(source_identity));
 };
 
+// One candidate extension of an input path. binding_id_ and path_state_id_ are
+// copied unchanged from the input; in particular, path_state_id_ still names
+// the parent prefix. The frontier owner combines it with edge_identity_ and
+// target_identity_ to allocate the child GraphPathState for the next hop.
 struct GraphExpandOutput
 {
   int64_t binding_id_ = 0;
   int64_t path_state_id_ = GRAPH_INVALID_PATH_STATE_ID;
-  GraphElementIdentity edge_identity_;
-  GraphElementIdentity target_identity_;
+  GraphElementIdentity edge_identity_{};
+  GraphElementIdentity target_identity_{};
   TO_STRING_KV(K_(binding_id), K_(path_state_id), K_(edge_identity),
                K_(target_identity));
 };
@@ -203,9 +203,9 @@ struct GraphExpandOutput
 // Implementations must return pages in stable edge-identity order.
 struct GraphExpandEdge
 {
-  GraphElementIdentity source_identity_;
-  GraphElementIdentity edge_identity_;
-  GraphElementIdentity target_identity_;
+  GraphElementIdentity source_identity_{};
+  GraphElementIdentity edge_identity_{};
+  GraphElementIdentity target_identity_{};
   TO_STRING_KV(K_(source_identity), K_(edge_identity), K_(target_identity));
 };
 

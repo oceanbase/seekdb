@@ -10,6 +10,10 @@
 
 - Use `#pragma once` in new C++ header files instead of macro-based `#ifndef`/`#define` include guards.
 
+## C++ Struct Initialization
+
+- Initialize members of newly added C++ structs at their declarations, using brace-or-equal initializers. Do not use a constructor initializer list only to establish member defaults.
+
 ## Code Review
 
 - For pull request or diff review tasks, read and follow `.agents/skills/code-review/SKILL.md`.
