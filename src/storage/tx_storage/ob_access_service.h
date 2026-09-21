@@ -314,7 +314,8 @@ protected:
       const ObTableScanParam &scan_param,
       ObTabletHandle &tablet_handle,
       ObStoreCtxGuard &ctx_guard,
-      share::SCN user_specified_snapshot);
+      share::SCN user_specified_snapshot,
+      common::ObTabletID *resolved_tablet_id = nullptr);
   int check_write_allowed_(
       const common::ObTabletID &tablet_id,
       const ObStoreAccessType access_type,

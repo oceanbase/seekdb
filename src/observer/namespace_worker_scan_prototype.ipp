@@ -292,9 +292,6 @@ struct EngineScan {
   ObArenaAllocator iter_allocator{ObMemAttr("NsRemoteScanIt")};
   ObSchemaGetterGuard guard;
   std::shared_ptr<EngineSchemaCacheEntry> cached_schema;
-  std::vector<std::unique_ptr<ObTableSchema>> logical_materialization_schemas;
-  std::vector<std::unique_ptr<ObTableSchema>> routed_materialization_schemas;
-  ObArray<const ObTableSchema *> materialization_schemas;
   ObTableParam table{allocator};
   ObTableScanParam param;
   std::vector<ObObj> keys;
@@ -325,24 +322,6 @@ struct EngineScan {
       if (OB_FAIL(engine_schema_resolve(ns, namespace_local, schema_blob, cached_schema))) {
         return ret;
       }
-    }
-    const uint64_t materialization_schema_count = request.number();
-    if (materialization_schema_count > 3
-        || (!namespace_local && materialization_schema_count != 0)) {
-      return OB_INVALID_ARGUMENT;
-    }
-    for (uint64_t i = 0; !request.ret && i < materialization_schema_count; ++i) {
-      auto logical = std::make_unique<ObTableSchema>(&allocator);
-      request.read(*logical);
-      if (request.ret) { break; }
-      auto routed = std::make_unique<ObTableSchema>(&allocator);
-      int schema_ret = !namespace_local || ns == 1
-          ? routed->assign(*logical)
-          : NamespaceForkKernelPrototype::make_storage_schema(ns, *logical, *routed);
-      if (schema_ret != OB_SUCCESS) { return schema_ret; }
-      if (OB_FAIL(materialization_schemas.push_back(routed.get()))) { return ret; }
-      logical_materialization_schemas.push_back(std::move(logical));
-      routed_materialization_schemas.push_back(std::move(routed));
     }
     param.scan_flag_.flag_ = request.number();
     const bool get = request.number() != 0;
@@ -475,10 +454,8 @@ struct EngineScan {
     // still live in the shared storage process, so an unmarked system-table
     // locator cannot be materialized after it crosses IPC.
     table.get_enable_lob_locator_v2() = true;
-    if (!materialization_schemas.empty()) {
-      ret = NamespaceForkKernelPrototype::ensure_tablet(
-          ObTabletID(tablet_id), *schema, materialization_schemas);
-    }
+    // Reads never materialize: an inherited tablet is served through
+    // resolve_read_tablet redirection inside the storage layer instead.
     if (!ret) { ret = table.convert(*schema, param.column_ids_, sql::ObStoragePushdownFlag()); }
     if (!ret) {
       param.table_param_ = &table;
@@ -669,12 +646,6 @@ public:
               param.index_id_, param.schema_version_, schema_guard, logical_schema,
               storage_space)
         : OB_SUCCESS;
-    const bool namespace_local = storage_space.is_namespace();
-    ObArray<const ObTableSchema *> materialization_schemas;
-    if (!ret && send_logical_schema && namespace_local && worker_namespace > 1) {
-      ret = worker_materialization_schemas(
-          *logical_schema, schema_guard, materialization_schemas);
-    }
     if (ret) {
       fprintf(stderr,
               "PROTOTYPE_V22_SCAN_OPEN stage=schema ret=%d table=%llu schema=%lld send=%d\n",
@@ -696,10 +667,6 @@ public:
       for (unsigned i = 0; i < 8; ++i) {
         request.data[len_pos + i] = static_cast<char>(len >> (8 * i));
       }
-    }
-    request.number(materialization_schemas.count());
-    for (const ObTableSchema *schema : materialization_schemas) {
-      request.append(*schema);
     }
     request.number(param.scan_flag_.flag_); request.number(param.is_get_);
     // Legacy op_filters are SQL callbacks even when storage pushdown is off.

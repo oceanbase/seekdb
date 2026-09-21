@@ -356,6 +356,7 @@ int ObAccessService::table_scan(
   const common::ObTabletID &data_tablet_id = vparam.tablet_id_;
   ObTableScanIterator *iter = nullptr;
   ObTabletHandle tablet_handle;
+  ObTabletID read_tablet_id;
   ObTableScanParam &param = static_cast<ObTableScanParam &>(vparam);
   ObStoreAccessType access_type = param.scan_flag_.is_read_latest() ?
     ObStoreAccessType::READ_LATEST : ObStoreAccessType::READ;
@@ -380,16 +381,19 @@ int ObAccessService::table_scan(
     LOG_WARN("alloc table scan iterator fail", K(ret));
   } else if (FALSE_IT(result = iter)) {
     // upper layer responsible for releasing iter object
+  } else if (FALSE_IT(read_tablet_id = data_tablet_id)) {
   } else if (OB_FAIL(check_read_allowed_(data_tablet_id,
                                          access_type,
                                          param,
                                          tablet_handle,
                                          iter->get_ctx_guard(),
-                                         user_specified_snapshot_scn))) {
+                                         user_specified_snapshot_scn,
+                                         &read_tablet_id))) {
     if (OB_TABLET_NOT_EXIST != ret) {
       LOG_WARN("fail to check query allowed", K(ret), K(data_tablet_id));
     }
     // skip inner table, one key reason is to let tablet merge going
+  } else if (FALSE_IT(param.tablet_id_ = read_tablet_id)) {
   } else if (OB_FAIL(iter->get_ctx_guard().get_ls()->get_tablet_svr()->table_scan(
                          tablet_handle, *iter, param))) {
     if (OB_TABLET_NOT_EXIST != ret) {
@@ -431,16 +435,19 @@ int ObAccessService::table_rescan(
       user_specified_snapshot_scn = param.fb_snapshot_;
     }
     NG_TRACE(storage_table_scan_begin);
+    ObTabletID read_tablet_id = data_tablet_id;
     if (OB_FAIL(check_read_allowed_(data_tablet_id,
                                     access_type,
                                     param, /*scan_param*/
                                     tablet_handle,
                                     iter->get_ctx_guard(),
-                                    user_specified_snapshot_scn))) {
+                                    user_specified_snapshot_scn,
+                                    &read_tablet_id))) {
       if (OB_TABLET_NOT_EXIST != ret) {
         LOG_WARN("fail to check query allowed", K(ret), K(result), K(data_tablet_id));
       }
     // skip inner table, one key reason is to let tablet merge going
+    } else if (FALSE_IT(param.tablet_id_ = read_tablet_id)) {
     } else if (OB_FAIL(iter->get_ctx_guard().get_ls()->get_tablet_svr()->table_rescan(
                            tablet_handle, param, result))) {
       if (OB_TABLET_NOT_EXIST != ret) {
@@ -578,7 +585,8 @@ int ObAccessService::check_read_allowed_(
     const ObTableScanParam &scan_param,
     ObTabletHandle &tablet_handle,
     ObStoreCtxGuard &ctx_guard,
-    SCN user_specified_snapshot)
+    SCN user_specified_snapshot,
+    common::ObTabletID *resolved_tablet_id)
 {
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
@@ -669,6 +677,12 @@ int ObAccessService::check_read_allowed_(
       && NamespaceForkKernelPrototype::is_encoded_id(tablet_id.id())) {
     // Existing sync point: admitted scan has not fetched its inherited inputs yet.
     DEBUG_SYNC(AFTER_TABLE_SCAN);
+  }
+  if (OB_SUCC(ret) && resolved_tablet_id != nullptr) {
+    // The iterator stack below keys memstore/sstable access on
+    // scan_param.tablet_id_; hand it the same physical tablet the store ctx
+    // was built on, or a redirected read breaks at fetch time.
+    *resolved_tablet_id = read_tablet_id;
   }
   return ret;
 }
@@ -1565,6 +1579,7 @@ int ObAccessService::do_table_scan_(
   int ret = OB_SUCCESS;
   ObTableScanIterator *iter = nullptr;
   ObTabletHandle tablet_handle;
+  ObTabletID read_tablet_id;
   ObStoreAccessType access_type = param.scan_flag_.is_read_latest() ?
     ObStoreAccessType::READ_LATEST : ObStoreAccessType::READ;
   SCN user_specified_snapshot_scn;
@@ -1587,16 +1602,19 @@ int ObAccessService::do_table_scan_(
     LOG_WARN("alloc table scan iterator fail", K(ret));
   } else if (FALSE_IT(result = iter)) {
     // upper layer responsible for releasing iter object
+  } else if (FALSE_IT(read_tablet_id = data_tablet_id)) {
   } else if (OB_FAIL(check_read_allowed_(data_tablet_id,
                                          access_type,
                                          param,
                                          tablet_handle,
                                          iter->get_ctx_guard(),
-                                         user_specified_snapshot_scn))) {
+                                         user_specified_snapshot_scn,
+                                         &read_tablet_id))) {
     if (OB_TABLET_NOT_EXIST != ret) {
       LOG_WARN("fail to check query allowed", K(ret), K(data_tablet_id));
     }
     // skip inner table, one key reason is to let tablet merge going
+  } else if (FALSE_IT(param.tablet_id_ = read_tablet_id)) {
   } else if (OB_FAIL(iter->get_ctx_guard().get_ls()->get_tablet_svr()->table_scan(
                          tablet_handle, *iter, param))) {
     if (OB_TABLET_NOT_EXIST != ret) {
@@ -1628,16 +1646,19 @@ int ObAccessService::scan_block_stat(ObBlockStatScanParam &scan_param, ObBlockSt
     if (ObAccessTypeCheck::is_read_access_type(access_type) && table_scan_param.fb_snapshot_.is_valid()) {
       user_specified_snapshot_scn = table_scan_param.fb_snapshot_;
     }
+    ObTabletID read_tablet_id = tablet_id;
     if (OB_FAIL(check_read_allowed_(
         tablet_id,
         access_type,
         table_scan_param,
         tablet_handle,
         ctx_guard,
-        user_specified_snapshot_scn))) {
+        user_specified_snapshot_scn,
+        &read_tablet_id))) {
       if (OB_UNLIKELY(OB_TABLET_NOT_EXIST != ret)) {
         LOG_WARN("fail to check read allowed", K(ret), K(tablet_id), K(access_type));
       }
+    } else if (FALSE_IT(table_scan_param.tablet_id_ = read_tablet_id)) {
     } else if (OB_FAIL(ctx_guard.get_ls()->get_tablet_svr()->scan_block_stat(
                            tablet_handle, scan_param, iter))) {
       if (OB_UNLIKELY(OB_TABLET_NOT_EXIST != ret)) {

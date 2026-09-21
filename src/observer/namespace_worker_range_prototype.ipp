@@ -39,35 +39,7 @@ int process_ranges(StorageSpaceHandle channel_space, Frame &request, Frame &repl
   const uint64_t ns = storage_space.namespace_id();
   ObArenaAllocator allocator(ObMemAttr("NsRanges"));
   ObTableSchema logical_schema(&allocator);
-  ObTableSchema storage_schema(&allocator);
   if (has_logical_schema) { request.read(logical_schema); }
-  const uint64_t materialization_schema_count = request.number();
-  std::vector<std::unique_ptr<ObTableSchema>> logical_materialization_schemas;
-  std::vector<std::unique_ptr<ObTableSchema>> routed_materialization_schemas;
-  ObArray<const ObTableSchema *> materialization_schemas;
-  if (materialization_schema_count > 3
-      || (!namespace_local && materialization_schema_count != 0)) {
-    ret = OB_INVALID_ARGUMENT;
-  }
-  for (uint64_t i = 0; OB_SUCC(ret) && i < materialization_schema_count; ++i) {
-    auto logical = std::make_unique<ObTableSchema>(&allocator);
-    request.read(*logical);
-    if (request.ret) {
-      ret = request.ret;
-    } else {
-      auto routed = std::make_unique<ObTableSchema>(&allocator);
-      int schema_ret = ns <= 1
-          ? routed->assign(*logical)
-          : NamespaceForkKernelPrototype::make_storage_schema(ns, *logical, *routed);
-      if (schema_ret != OB_SUCCESS) {
-        ret = schema_ret;
-      } else if (OB_FAIL(materialization_schemas.push_back(routed.get()))) {
-      } else {
-        logical_materialization_schemas.push_back(std::move(logical));
-        routed_materialization_schemas.push_back(std::move(routed));
-      }
-    }
-  }
   const int64_t deadline = request.number();
   const int64_t tasks = request.number();
   const uint64_t count = request.number();
@@ -76,18 +48,12 @@ int process_ranges(StorageSpaceHandle channel_space, Frame &request, Frame &repl
       ? logical_schema.get_table_id() : OB_INVALID_ID;
   uint64_t storage_table_id = logical_table_id;
   ObTabletID tablet = logical_tablet;
-  const ObTableSchema *effective_schema = has_logical_schema
-      ? &logical_schema : nullptr;
   if (OB_SUCC(ret) && namespace_local && ns > 1) {
     if (!has_logical_schema) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (OB_FAIL(NamespaceForkKernelPrototype::make_storage_schema(
-                   ns, logical_schema, storage_schema))) {
     } else if (OB_FAIL(NamespaceForkKernelPrototype::storage_object_id(
                    ns, logical_table_id, storage_table_id))) {
     } else if (OB_FAIL(route_tablet_id(storage_space, tablet))) {
-    } else {
-      effective_schema = &storage_schema;
     }
   }
   ObSEArray<ObStoreRange, 4> ranges;
@@ -103,9 +69,13 @@ int process_ranges(StorageSpaceHandle channel_space, Frame &request, Frame &repl
     if (!ret) { ret = ranges.push_back(range); }
   }
   if (!ret && !request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-  if (!ret && !materialization_schemas.empty()) {
-    ret = NamespaceForkKernelPrototype::ensure_tablet(
-        tablet, *effective_schema, materialization_schemas);
+  if (!ret && NamespaceForkKernelPrototype::is_encoded_id(tablet.id())) {
+    // Reads never materialize: an inherited tablet resolves along the parent
+    // chain to the ancestor's physical copy.  Range costs and splits are
+    // rowkey-based, so the ancestor's answer is valid for the child.
+    ObTabletID physical; int64_t redirect_cap = 0;
+    ret = NamespaceForkKernelPrototype::resolve_read_tablet(tablet, physical, redirect_cap);
+    if (!ret) { tablet = physical; }
   }
   const int64_t remaining = std::min(deadline, THIS_WORKER.get_timeout_ts()) - ObTimeUtility::current_time();
   if (!ret && remaining <= 0) { ret = OB_TIMEOUT; }
@@ -160,12 +130,6 @@ public:
             *logical_schema, schema_guard, storage_space);
       }
     }
-    ObArray<const ObTableSchema *> materialization_schemas;
-    if (!ret && send_logical_schema && storage_space.is_namespace()
-        && worker_namespace > 1) {
-      ret = worker_materialization_schemas(
-          *logical_schema, schema_guard, materialization_schemas);
-    }
     for (int64_t i = 1; !ret && i < ranges.count(); ++i) {
       if (ranges.at(i).get_table_id() != table_id) { ret = OB_INVALID_ARGUMENT; }
     }
@@ -173,10 +137,6 @@ public:
     request.number(send_logical_schema);
     write_storage_space(request, storage_space);
     if (send_logical_schema) { request.append(*logical_schema); }
-    request.number(materialization_schemas.count());
-    for (const ObTableSchema *schema : materialization_schemas) {
-      request.append(*schema);
-    }
     const int64_t now = ObTimeUtility::current_time();
     request.number(timeout > INT64_MAX - now ? INT64_MAX : now + timeout);
     request.number(tasks); request.number(ranges.count());
