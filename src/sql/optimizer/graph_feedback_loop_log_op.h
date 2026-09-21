@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_SQL_GRAPH_FEEDBACK_LOOP_LOG_OP_H
-#define OCEANBASE_SQL_GRAPH_FEEDBACK_LOOP_LOG_OP_H
+#pragma once
 
 #include "sql/optimizer/ob_logical_operator.h"
 
@@ -114,5 +113,3 @@ private:
 
 } // namespace sql
 } // namespace oceanbase
-
-#endif // OCEANBASE_SQL_GRAPH_FEEDBACK_LOOP_LOG_OP_H

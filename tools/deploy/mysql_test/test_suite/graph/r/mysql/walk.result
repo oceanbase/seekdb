@@ -50,6 +50,12 @@ SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH
 COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
 paths
 1
+max_hop_internal_identifier_capacity
+SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=1)-[e IS works]->{16}(b IS company)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+paths
+0
 per_hop_edge_filter_and_terminal_only_filter
 SELECT * FROM GRAPH_TABLE(graph_social MATCH
 (a IS person WHERE a.id=1)-[e IS knows WHERE e.since>=2021]->{1,2}

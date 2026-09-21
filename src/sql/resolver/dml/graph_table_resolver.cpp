@@ -90,18 +90,16 @@ public:
   ParseNode *internal_identifier(const char *prefix, int64_t group, int64_t index)
   {
     ParseNode *node = nullptr;
-    char *buffer = nullptr;
+    // Generated aliases are ordinary SQL identifiers. Use the full supported
+    // column-name capacity instead of coupling future prefixes or path bounds
+    // to an unrelated fixed buffer size.
+    char buffer[OB_MAX_COLUMN_NAME_BUF_LENGTH] = {'\0'};
     if (error_ == OB_SUCCESS) {
-      buffer = static_cast<char *>(allocator_.alloc(48));
-      if (buffer == nullptr) {
-        error_ = OB_ALLOCATE_MEMORY_FAILED;
+      const int length = snprintf(buffer, sizeof(buffer), "%s%ld_%ld", prefix, group, index);
+      if (length <= 0 || length >= static_cast<int>(sizeof(buffer))) {
+        error_ = OB_ERR_UNEXPECTED;
       } else {
-        const int length = snprintf(buffer, 48, "%s%ld_%ld", prefix, group, index);
-        if (length <= 0 || length >= 48) {
-          error_ = OB_ERR_UNEXPECTED;
-        } else {
-          node = identifier(ObString(length, buffer));
-        }
+        node = identifier(ObString(length, buffer));
       }
     }
     return node;
