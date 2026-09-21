@@ -64,16 +64,18 @@ int ObMPResetConnection::process()
     } else if (OB_FAIL(session->load_all_sys_vars(*sys_variable_schema, true))) {
     } else if (OB_FAIL(session->update_database_variables(&schema_guard))) {
     } else if (OB_FAIL(update_charset_sys_vars(*conn, *session))) {
-    } else if (OB_FAIL(session->get_query_timeout(query_timeout))) {
-    } else if (OB_ISNULL(::oceanbase::observer::get_observer_sql_engine())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("invalid sql engine", K(ret), K(gctx_));
-    } else if (FALSE_IT(execution_id = ::oceanbase::observer::get_observer_sql_engine()->get_execution_id())) {
-      //nothing to do
-    } else if (OB_FAIL(set_session_active("reset connection.", *session, ObTimeUtil::current_time()))) {
     } else {
-      THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
-      session->set_current_execution_id(execution_id);
+      OB_ASSERT_SUCC(ret = session->get_query_timeout(query_timeout));
+      if (OB_ISNULL(::oceanbase::observer::get_observer_sql_engine())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_ERROR("invalid sql engine", K(ret), K(gctx_));
+      } else if (FALSE_IT(execution_id = ::oceanbase::observer::get_observer_sql_engine()->get_execution_id())) {
+        // nothing to do
+      } else if (OB_FAIL(set_session_active("reset connection.", *session, ObTimeUtil::current_time()))) {
+      } else {
+        THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
+        session->set_current_execution_id(execution_id);
+      }
     }
 
     /*

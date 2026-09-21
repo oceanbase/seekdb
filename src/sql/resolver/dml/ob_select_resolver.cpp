@@ -128,8 +128,7 @@ int ObSelectResolver::do_check_node_in_cte_recursive_union(const ParseNode* curr
   if (OB_ISNULL(current_node)) {
   } else if (current_node->type_ == T_RELATION_FACTOR) {
     // find relation factor, check it
-    if (OB_FAIL(do_check_basic_table_in_cte_recursive_union(*current_node, recursive_union))) {
-    }
+    OB_ASSERT_SUCC(ret = do_check_basic_table_in_cte_recursive_union(*current_node, recursive_union));
   } else {
     for (int32_t i = 0; OB_SUCC(ret) && i < current_node->num_child_ && !recursive_union; i += 1) {
       if (OB_FAIL(SMART_CALL(do_check_node_in_cte_recursive_union(current_node->children_[i], recursive_union)))) {
@@ -1387,16 +1386,17 @@ int ObSelectResolver::resolve_field_list(const ParseNode &node)
     if (OB_SUCC(ret)) {
       // processing alias
       ObCollationType cs_type = CS_TYPE_INVALID;
-      if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-      } else if (project_node->type_ == T_ALIAS
-                 && OB_FAIL(prepare_get_child_at(project_node, 1))) {
-      } else if (project_node->type_ == T_ALIAS) {
-        alias_node = project_node->children_[1];
-        project_node = project_node->children_[0];
-        select_item.is_real_alias_ = true;
-        /* check if the alias name is legal */
-        select_item.alias_name_.assign_ptr(const_cast<char *>(alias_node->str_value_),
-                                           static_cast<int32_t>(alias_node->str_len_));
+      {
+        OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(cs_type));
+        if (project_node->type_ == T_ALIAS && OB_FAIL(prepare_get_child_at(project_node, 1))) {
+        } else if (project_node->type_ == T_ALIAS) {
+          alias_node = project_node->children_[1];
+          project_node = project_node->children_[0];
+          select_item.is_real_alias_ = true;
+          /* check if the alias name is legal */
+          select_item.alias_name_.assign_ptr(const_cast<char *>(alias_node->str_value_),
+                                             static_cast<int32_t>(alias_node->str_len_));
+        }
       }
     }
 
@@ -1798,36 +1798,41 @@ int ObSelectResolver::resolve_star_for_table_groups()
     if (OB_ISNULL(table_item)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      if (OB_FAIL(find_joined_table_group_for_table(table_item->table_id_, jointable_idx))) {
-      } else if (jointable_idx != -1) {
-        // located in joined table with jointable_idx of joined_tables
-        if (is_contain(visited_jointable_idx, jointable_idx)) {
-          // skip table in visited joined group
-        } else if (OB_FAIL(find_select_columns_for_join_group(jointable_idx, &target_list))) {
-        } else if (OB_FAIL(visited_jointable_idx.push_back(jointable_idx))) {
-        } else {
-          // push back select items to select stmt
-          for (int j = 0; OB_SUCC(ret) && j < target_list.count(); j++) {
-            SelectItem &item = target_list.at(j);
-            if (OB_FAIL(item.expr_->extract_info())) {
-            } else if (OB_FAIL(item.expr_->deduce_type(session_info_))) {
-            } else if (OB_FAIL(select_stmt->add_select_item(item))) {
-            } else if (is_only_full_group_by_on(session_info_->get_sql_mode())) {
-              // If it is only full group by, all columns in the target list must be checked to see if they satisfy the group constraint
-              if (OB_FAIL(standard_group_checker_.add_unsettled_expr(item.expr_))) {
+      {
+        OB_ASSERT_SUCC(ret = find_joined_table_group_for_table(table_item->table_id_, jointable_idx));
+        if (jointable_idx != -1) {
+          // located in joined table with jointable_idx of joined_tables
+          if (is_contain(visited_jointable_idx, jointable_idx)) {
+            // skip table in visited joined group
+          } else if (OB_FAIL(find_select_columns_for_join_group(jointable_idx, &target_list))) {
+          } else if (OB_FAIL(visited_jointable_idx.push_back(jointable_idx))) {
+          } else {
+            // push back select items to select stmt
+            for (int j = 0; OB_SUCC(ret) && j < target_list.count(); j++) {
+              SelectItem &item = target_list.at(j);
+              if (OB_FAIL(item.expr_->extract_info())) {
+              } else if (OB_FAIL(item.expr_->deduce_type(session_info_))) {
+              } else if (OB_FAIL(select_stmt->add_select_item(item))) {
+              } else if (is_only_full_group_by_on(session_info_->get_sql_mode())) {
+                // If it is only full group by, all columns in the target list must be checked to see if they satisfy
+                // the group constraint
+                if (OB_FAIL(standard_group_checker_.add_unsettled_expr(item.expr_))) {
+                }
+                // For select * from t1 group by c1, c2; such statements, * expansion is column, so the expression and
+                // the columns referenced by the expression are all self
               }
-              // For select * from t1 group by c1, c2; such statements, * expansion is column, so the expression and the columns referenced by the expression are all self
             }
           }
-        }
-      } else {
-        // based table or alias table or generated table
-        OZ( expand_target_list(*table_item, target_list), table_item );
-        for (int64_t i = 0; OB_SUCC(ret) && i < target_list.count(); ++i) {
-          if (OB_FAIL(select_stmt->add_select_item(target_list.at(i)))) {
-          } else if (is_only_full_group_by_on(session_info_->get_sql_mode())) {
-            // If it is only full group by, all columns in the target list must be checked to satisfy the group constraint
-            OZ( standard_group_checker_.add_unsettled_expr(target_list.at(i).expr_) );
+        } else {
+          // based table or alias table or generated table
+          OZ(expand_target_list(*table_item, target_list), table_item);
+          for (int64_t i = 0; OB_SUCC(ret) && i < target_list.count(); ++i) {
+            if (OB_FAIL(select_stmt->add_select_item(target_list.at(i)))) {
+            } else if (is_only_full_group_by_on(session_info_->get_sql_mode())) {
+              // If it is only full group by, all columns in the target list must be checked to satisfy the group
+              // constraint
+              OZ(standard_group_checker_.add_unsettled_expr(target_list.at(i).expr_));
+            }
           }
         }
       }
@@ -3905,11 +3910,8 @@ int ObSelectResolver::check_win_func_arg_valid(ObSelectStmt *select_stmt,
     } else {
       // skip add const constraint during prepare stage in PL
       const ParamStore *param_store = (NULL != params_.secondary_namespace_) ? NULL : params_.param_list_;
-      if (OB_FAIL(ObGroupByChecker::check_analytic_function(param_store,
-                                                            select_stmt,
-                                                            arg_exp_arr,
-                                                            partition_exp_arr))) {
-      }
+      OB_ASSERT_SUCC(
+          ret = ObGroupByChecker::check_analytic_function(param_store, select_stmt, arg_exp_arr, partition_exp_arr));
     }
   }
   return ret;
@@ -4533,31 +4535,30 @@ int ObSelectResolver::check_union_leaf_to_values_table_valid(const ParseNode &pa
     bool enable_decimal_int = false;
     if (OB_ISNULL(session_info_)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(session_info_->get_collation_connection(connect_collation))) {
-    } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session_info_, enable_decimal_int))) {
     } else {
-      const ObCollationType nchar_collation = session_info_->get_nls_collation_nation();
-      for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < project_list->num_child_; i++) {
-        const ParseNode *param_node = NULL;
-        ObObjType param_type;
-        ObCollationType dummy_collation_type;
-        ObCollationLevel dummy_collation_level;
-        if (OB_ISNULL(project_list->children_[i]) ||
-            OB_UNLIKELY(project_list->children_[i]->num_child_ < 1) ||
-            OB_ISNULL(param_node = project_list->children_[i]->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (T_ALIAS == param_node->type_ &&
-                   OB_ISNULL(param_node = param_node->children_[0])) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (!IS_DATATYPE_OR_QUESTIONMARK_OP(param_node->type_)) {
-          is_valid = false;
-        } else if (OB_FAIL(ObResolverUtils::fast_get_param_type(*param_node, param_store,
-                                                    connect_collation, nchar_collation,
-                                                    static_cast<ObCollationType>(server_collation),
-                                                    enable_decimal_int, *allocator_, param_type,
-                                                    dummy_collation_type, dummy_collation_level))) {
-        } else if (ob_is_enum_or_set_type(param_type)) {
-          is_valid = false;
+      OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(connect_collation));
+      if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session_info_, enable_decimal_int))) {
+      } else {
+        const ObCollationType nchar_collation = session_info_->get_nls_collation_nation();
+        for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < project_list->num_child_; i++) {
+          const ParseNode *param_node = NULL;
+          ObObjType param_type;
+          ObCollationType dummy_collation_type;
+          ObCollationLevel dummy_collation_level;
+          if (OB_ISNULL(project_list->children_[i]) || OB_UNLIKELY(project_list->children_[i]->num_child_ < 1) ||
+              OB_ISNULL(param_node = project_list->children_[i]->children_[0])) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (T_ALIAS == param_node->type_ && OB_ISNULL(param_node = param_node->children_[0])) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (!IS_DATATYPE_OR_QUESTIONMARK_OP(param_node->type_)) {
+            is_valid = false;
+          } else if (OB_FAIL(ObResolverUtils::fast_get_param_type(
+                         *param_node, param_store, connect_collation, nchar_collation,
+                         static_cast<ObCollationType>(server_collation), enable_decimal_int, *allocator_, param_type,
+                         dummy_collation_type, dummy_collation_level))) {
+          } else if (ob_is_enum_or_set_type(param_type)) {
+            is_valid = false;
+          }
         }
       }
     }

@@ -40,34 +40,34 @@ int ObOutlineResolver::resolve_outline_name(const ParseNode *node, ObString &db_
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(session_info_->get_name_case_mode(mode))) {
-  } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-  } else if (OB_ISNULL(stmt_)) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
-    const ParseNode *db_name_node = node->children_[0];
-    const ParseNode *outline_name_node = node->children_[1];
-
-    //get outline name, TODO(tingshuai.yts):check outline_name length
-    outline_name.assign_ptr(outline_name_node->str_value_, static_cast<ObString::obstr_size_t>(outline_name_node->str_len_));
-
-    //get database name
-    bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
-    if (NULL == db_name_node) {
-      if (session_info_->get_database_name().empty()) {
-        db_name = OB_MOCK_DEFAULT_DATABASE_NAME;
-      } else {
-        db_name = session_info_->get_database_name();
-      }
+    OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(cs_type));
+    if (OB_ISNULL(stmt_)) {
+      ret = OB_ERR_UNEXPECTED;
     } else {
-      db_name.assign_ptr(db_name_node->str_value_, static_cast<int32_t>(db_name_node->str_len_));
-      if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(cs_type, perserve_lettercase, db_name))) {
+      const ParseNode *db_name_node = node->children_[0];
+      const ParseNode *outline_name_node = node->children_[1];
+
+      // get outline name, TODO(tingshuai.yts):check outline_name length
+      outline_name.assign_ptr(outline_name_node->str_value_,
+                              static_cast<ObString::obstr_size_t>(outline_name_node->str_len_));
+
+      // get database name
+      bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
+      if (NULL == db_name_node) {
+        if (session_info_->get_database_name().empty()) {
+          db_name = OB_MOCK_DEFAULT_DATABASE_NAME;
+        } else {
+          db_name = session_info_->get_database_name();
+        }
       } else {
-        CK (OB_NOT_NULL(schema_checker_));
-        CK (OB_NOT_NULL(schema_checker_->get_schema_guard()));
-        OZ (ObSQLUtils::cvt_db_name_to_org(*schema_checker_->get_schema_guard(),
-                                           session_info_,
-                                           db_name,
-                                           allocator_));
+        db_name.assign_ptr(db_name_node->str_value_, static_cast<int32_t>(db_name_node->str_len_));
+        if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(cs_type, perserve_lettercase, db_name))) {
+        } else {
+          CK(OB_NOT_NULL(schema_checker_));
+          CK(OB_NOT_NULL(schema_checker_->get_schema_guard()));
+          OZ(ObSQLUtils::cvt_db_name_to_org(*schema_checker_->get_schema_guard(), session_info_, db_name, allocator_));
+        }
       }
     }
   }

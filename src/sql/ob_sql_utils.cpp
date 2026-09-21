@@ -1561,8 +1561,8 @@ int ObSQLUtils::construct_outline_sql(ObIAllocator &allocator,
   ObSqlString sql_helper;
   // This interface will remove both comments and hints
   if (OB_FAIL(filter_hint_in_query_sql(allocator, session, orig_sql, filter_sql))) {
-  } else if (OB_FAIL(filter_head_space(filter_sql))) {
-  }
+  } else
+    OB_ASSERT_SUCC(ret = filter_head_space(filter_sql));
   if (OB_SUCC(ret)) {
     char empty_split = find_first_empty_char(filter_sql);
     ObString first_token = filter_sql.split_on(empty_split);
@@ -2041,13 +2041,7 @@ int ObSQLUtils::get_partition_range(ObObj *start_row_key,
     // opt logic. no need evalute.
     if ((part_type == share::schema::ObPartitionFuncType::PARTITION_FUNC_TYPE_RANGE_COLUMNS ||
         part_type == share::schema::ObPartitionFuncType::PARTITION_FUNC_TYPE_LIST_COLUMNS)) {
-      if (OB_FAIL(get_range_for_vector(
-                                    start_row_key,
-                                    end_row_key,
-                                    range_key_count,
-                                    table_id,
-                                    part_range))) {
-      }
+      OB_ASSERT_SUCC(ret = get_range_for_vector(start_row_key, end_row_key, range_key_count, table_id, part_range));
     } else {
       // part expr only have one column.
       if (OB_FAIL(get_range_for_scalar(
@@ -2300,10 +2294,9 @@ int ObSQLUtils::merge_solidified_vars_into_type_ctx(ObExprTypeCtx &type_ctx,
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(merge_solidified_var_into_dtc_params(&session_vars_snapshot,
-                                                        type_ctx.get_local_tz_wrap().get_time_zone_info(),
-                                                        type_ctx.get_dtc_params()))) {
-      }
+      OB_ASSERT_SUCC(ret = merge_solidified_var_into_dtc_params(&session_vars_snapshot,
+                                                                type_ctx.get_local_tz_wrap().get_time_zone_info(),
+                                                                type_ctx.get_dtc_params()));
     }
   }
   //merge sql mode

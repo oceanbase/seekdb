@@ -53,19 +53,20 @@ int ObTxDataTable::init(ObLS *ls, ObTxCtxTable *tx_ctx_table)
     STORAGE_LOG(WARN, "unexpected null runtime object", KR(ret), KP(tx_data_allocator_));
   } else if (FALSE_IT(ls_tablet_svr_ = ls->get_tablet_svr())) {
   } else if (OB_FAIL(ls_tablet_svr_->get_tx_data_memtable_mgr(memtable_mgr_handle))) {
-  } else if (OB_FAIL(init_arena_allocator_())) {
-  } else if (OB_FAIL(init_tx_data_read_schema_())) {
   } else {
-    calc_upper_trans_version_cache_.commit_versions_.array_.set_attr(
-      ObMemAttr("CommitVersions"));
+    OB_ASSERT_SUCC(ret = init_arena_allocator_());
+    if (OB_FAIL(init_tx_data_read_schema_())) {
+    } else {
+      calc_upper_trans_version_cache_.commit_versions_.array_.set_attr(ObMemAttr("CommitVersions"));
 
-    ls_ = ls;
-    memtable_mgr_ = static_cast<ObTxDataMemtableMgr *>(memtable_mgr_handle.get_memtable_mgr());
-    tx_ctx_table_ = tx_ctx_table;
-    tablet_id_ = LS_TX_DATA_TABLET;
+      ls_ = ls;
+      memtable_mgr_ = static_cast<ObTxDataMemtableMgr *>(memtable_mgr_handle.get_memtable_mgr());
+      tx_ctx_table_ = tx_ctx_table;
+      tablet_id_ = LS_TX_DATA_TABLET;
 
-    is_inited_ = true;
-    FLOG_INFO("tx data table init success", K(sizeof(ObTxData)), K(sizeof(ObTxDataLinkNode)), KPC(this));
+      is_inited_ = true;
+      FLOG_INFO("tx data table init success", K(sizeof(ObTxData)), K(sizeof(ObTxDataLinkNode)), KPC(this));
+    }
   }
   return ret;
 }
@@ -190,8 +191,8 @@ int ObTxDataTable::offline()
     STORAGE_LOG(WARN, "tx data table is not inited", KR(ret), KPC(this));
   } else if (OB_FAIL(get_memtable_mgr_()->offline()) && OB_NOT_INIT != ret) {
     STORAGE_LOG(WARN, "release memtables failed", KR(ret));
-  } else if (OB_FAIL(clean_memtables_cache_())) {
   } else {
+    OB_ASSERT_SUCC(ret = clean_memtables_cache_());
     is_started_ = false;
     calc_upper_trans_version_cache_.reset();
   }
@@ -446,11 +447,13 @@ int ObTxDataTable::check_tx_data_with_cache_once_(const transaction::ObTransID t
     } else {
       int64_t memtable_head = -1;
       int64_t memtable_tail = -1;
-      if (OB_FAIL(get_memtable_mgr_()->get_memtable_range(memtable_head, memtable_tail))) {
-      } else if (memtable_head != memtables_cache_.memtable_head_ || memtable_tail != memtables_cache_.memtable_tail_) {
-        ret = OB_EAGAIN;
-      } else {
-        ret = OB_TRANS_CTX_NOT_EXIST;
+      {
+        OB_ASSERT_SUCC(ret = get_memtable_mgr_()->get_memtable_range(memtable_head, memtable_tail));
+        if (memtable_head != memtables_cache_.memtable_head_ || memtable_tail != memtables_cache_.memtable_tail_) {
+          ret = OB_EAGAIN;
+        } else {
+          ret = OB_TRANS_CTX_NOT_EXIST;
+        }
       }
     }
   }
@@ -521,10 +524,12 @@ int ObTxDataTable::check_need_update_memtables_cache_(bool &need_update)
   int ret = OB_SUCCESS;
   int64_t memtable_head = -1;
   int64_t memtable_tail = -1;
-  if (OB_FAIL(get_memtable_mgr_()->get_memtable_range(memtable_head, memtable_tail))) {
-  } else if (memtables_cache_.memtable_head_ == memtable_head && memtables_cache_.memtable_tail_ == memtable_tail) {
-    // cache already up to date, skip update
-    need_update = false;
+  {
+    OB_ASSERT_SUCC(ret = get_memtable_mgr_()->get_memtable_range(memtable_head, memtable_tail));
+    if (memtables_cache_.memtable_head_ == memtable_head && memtables_cache_.memtable_tail_ == memtable_tail) {
+      // cache already up to date, skip update
+      need_update = false;
+    }
   }
 
   return ret;
@@ -615,14 +620,16 @@ int ObTxDataTable::get_tx_data_in_sstable_(const transaction::ObTransID tx_id, O
   } else {
     const ObSSTableArray &sstables = table_store_wrapper.get_member()->get_minor_sstables();
     ObTxDataSingleRowGetter getter(iter_param, sstables, *tx_data_allocator_, recycled_scn);
-    if (OB_FAIL(getter.init(tx_id))) {
-    } else if (OB_FAIL(getter.get_next_row(tx_data))) {
-      if (OB_ITER_END == ret) {
-        ret = OB_TRANS_CTX_NOT_EXIST;
+    {
+      OB_ASSERT_SUCC(ret = getter.init(tx_id));
+      if (OB_FAIL(getter.get_next_row(tx_data))) {
+        if (OB_ITER_END == ret) {
+          ret = OB_TRANS_CTX_NOT_EXIST;
+        }
+        STORAGE_LOG(WARN, "get tx data in sstable failed.", KR(ret), KP(this), K(tablet_id_));
+      } else {
+        // get tx data from sstable succeed.
       }
-      STORAGE_LOG(WARN, "get tx data in sstable failed.", KR(ret), KP(this), K(tablet_id_));
-    } else {
-      // get tx data from sstable succeed.
     }
   }
   return ret;

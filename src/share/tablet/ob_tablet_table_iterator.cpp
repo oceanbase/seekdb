@@ -64,9 +64,11 @@ int ObTabletMetaIterator::next(ObTabletRuntimeInfo &tablet_info)
       if (prefetch_tablet_idx_ < prefetched_tablets_.count()) {
         // directly get from prefetched tablet_info
         tablet_info.reset();
-        if (OB_FAIL(tablet_info.assign(prefetched_tablets_.at(prefetch_tablet_idx_)))) {
-        } else if (tablet_info.is_valid()) {
-          find = true;
+        {
+          OB_ASSERT_SUCC(ret = tablet_info.assign(prefetched_tablets_.at(prefetch_tablet_idx_)));
+          if (tablet_info.is_valid()) {
+            find = true;
+          }
         }
         ++prefetch_tablet_idx_;
       } else if (OB_FAIL(prefetch())) { // need to prefetch a batch of tablet_info

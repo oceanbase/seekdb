@@ -183,8 +183,7 @@ int ObMonitoringDumpOp::inner_get_next_batch(const int64_t max_row_cnt)
       }
     } // end for
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(brs_.copy(child_brs))) {
-      }
+      OB_ASSERT_SUCC(ret = brs_.copy(child_brs));
     }
     LOG_INFO("", K(op_name_.get_string()), K(MY_SPEC.dst_op_id_),
              K(child_brs->size_), K(skip_cnt), K(child_brs->end_));

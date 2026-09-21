@@ -1512,14 +1512,16 @@ int ObRawExprUtils::check_deterministic_single(const ObRawExpr *expr,
   if (OB_SUCC(ret) && ObResolverUtils::DISABLE_CHECK != check_status) {
     if (expr->is_sys_func_expr()) {
       bool is_non_pure_func = false;
-      if (OB_FAIL(expr->is_non_pure_sys_func_expr(is_non_pure_func))) {
-      } else if (OB_UNLIKELY(is_non_pure_func)) {
-        if (ObResolverUtils::CHECK_FOR_GENERATED_COLUMN == check_status) {
-          ret = OB_ERR_ONLY_PURE_FUNC_CANBE_VIRTUAL_COLUMN_EXPRESSION;
-        } else if (ObResolverUtils::CHECK_FOR_FUNCTION_INDEX == check_status) {
-          ret = OB_ERR_ONLY_PURE_FUNC_CANBE_INDEXED;
-        } else if (ObResolverUtils::CHECK_FOR_CHECK_CONSTRAINT == check_status) {
-          ret = OB_ERR_CHECK_CONSTRAINT_NAMED_FUNCTION_IS_NOT_ALLOWED;
+      {
+        OB_ASSERT_SUCC(ret = expr->is_non_pure_sys_func_expr(is_non_pure_func));
+        if (OB_UNLIKELY(is_non_pure_func)) {
+          if (ObResolverUtils::CHECK_FOR_GENERATED_COLUMN == check_status) {
+            ret = OB_ERR_ONLY_PURE_FUNC_CANBE_VIRTUAL_COLUMN_EXPRESSION;
+          } else if (ObResolverUtils::CHECK_FOR_FUNCTION_INDEX == check_status) {
+            ret = OB_ERR_ONLY_PURE_FUNC_CANBE_INDEXED;
+          } else if (ObResolverUtils::CHECK_FOR_CHECK_CONSTRAINT == check_status) {
+            ret = OB_ERR_CHECK_CONSTRAINT_NAMED_FUNCTION_IS_NOT_ALLOWED;
+          }
         }
       }
     } else {
@@ -1869,34 +1871,36 @@ int ObRawExprUtils::build_raw_expr(ObRawExprFactory &expr_factory,
   int ret = OB_SUCCESS;
   ObCollationType collation_connection = CS_TYPE_INVALID;
   ObCharsetType character_set_connection = CHARSET_INVALID;
-  if (OB_FAIL(session_info.get_collation_connection(collation_connection))) {
-  } else if (OB_FAIL(session_info.get_character_set_connection(character_set_connection))) {
-  } else {
-    ObExprResolveContext ctx(expr_factory, session_info.get_timezone_info(), OB_NAME_CASE_INVALID);
-    if (use_def_collation) {
-      ctx.dest_collation_ = def_collation;
+  {
+    OB_ASSERT_SUCC(ret = session_info.get_collation_connection(collation_connection));
+    if (OB_FAIL(session_info.get_character_set_connection(character_set_connection))) {
     } else {
-      ctx.dest_collation_ = collation_connection;
+      ObExprResolveContext ctx(expr_factory, session_info.get_timezone_info(), OB_NAME_CASE_INVALID);
+      if (use_def_collation) {
+        ctx.dest_collation_ = def_collation;
+      } else {
+        ctx.dest_collation_ = collation_connection;
+      }
+      ctx.connection_charset_ = character_set_connection;
+      ctx.param_list_ = param_list;
+      ctx.is_extract_param_type_ = !is_prepare_protocol; // when prepare do not extract
+      ctx.external_param_info_ = external_param_info;
+      ctx.current_scope_ = current_scope;
+      ctx.stmt_ = stmt;
+      ctx.schema_checker_ = schema_checker;
+      ctx.session_info_ = &session_info;
+      ctx.secondary_namespace_ = ns;
+      ctx.tg_timing_event_ = tg_timing_event;
+      ObSEArray<ObUserVarIdentRawExpr *, 1> user_var_exprs;
+      ObArray<ObInListInfo> inlist_infos;
+      ObSEArray<ObMatchFunRawExpr *, 1> match_exprs;
+      ObRawExprResolverImpl expr_resolver(ctx);
+      if (OB_FAIL(session_info.get_name_case_mode(ctx.case_mode_))) {
+      } else if (OB_FAIL(expr_resolver.resolve(&node, expr, columns, sys_vars, sub_query_info, aggr_exprs, win_exprs,
+                                               udf_info, op_exprs, user_var_exprs, inlist_infos, match_exprs))) {
+      } else { /*do nothing*/
+      }
     }
-    ctx.connection_charset_ = character_set_connection;
-    ctx.param_list_ = param_list;
-    ctx.is_extract_param_type_ = !is_prepare_protocol; //when prepare do not extract
-    ctx.external_param_info_ = external_param_info;
-    ctx.current_scope_ = current_scope;
-    ctx.stmt_ = stmt;
-    ctx.schema_checker_ = schema_checker;
-    ctx.session_info_ = &session_info;
-    ctx.secondary_namespace_ = ns;
-    ctx.tg_timing_event_ = tg_timing_event;
-    ObSEArray<ObUserVarIdentRawExpr*, 1> user_var_exprs;
-    ObArray<ObInListInfo> inlist_infos;
-    ObSEArray<ObMatchFunRawExpr*, 1> match_exprs;
-    ObRawExprResolverImpl expr_resolver(ctx);
-    if (OB_FAIL(session_info.get_name_case_mode(ctx.case_mode_))) {
-    } else if (OB_FAIL(expr_resolver.resolve(&node, expr, columns, sys_vars,
-                                             sub_query_info, aggr_exprs, win_exprs,
-                                             udf_info, op_exprs, user_var_exprs, inlist_infos, match_exprs))) {
-    } else { /*do nothing*/ }
   }
   return ret;
 }

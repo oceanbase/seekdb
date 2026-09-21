@@ -42,3 +42,17 @@ OB_NORETURN OB_WEAK_SYMBOL void ob_abort (void) __THROW
   fprintf(stderr, "OB_ABORT, tid: %ld, lbt: %s\n", GETTID(), oceanbase::common::lbt());
   abort();
 }
+
+namespace oceanbase
+{
+namespace common
+{
+void assert_success_failed(int code, const char *expr, const char *file, int line)
+{
+  // Do not depend on the configured log level or expand logging at call sites.
+  fprintf(stderr, "OB_ASSERT_SUCC failed: expr=%s, code=%d, file=%s, line=%d\n",
+          expr, code, file, line);
+  ob_abort();
+}
+}
+}

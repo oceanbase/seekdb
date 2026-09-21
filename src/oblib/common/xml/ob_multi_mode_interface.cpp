@@ -355,29 +355,31 @@ int ObIMulModeBase::print_unparsed(ObStringBuffer& x_buf, ObCollationType charse
   ObString encoding = get_encoding();
   uint16_t standalone = get_standalone();
   uint64_t reserve_size = 0;
-  if (OB_FAIL(get_print_buffer_size(reserve_size))) {
-  } else if (reserve_size > 0 && OB_FAIL(x_buf.reserve(reserve_size))) {
-  } else if (!(format_flag & ObXmlFormatType::HIDE_PROLOG) && has_flags(XML_DECL_FLAG)) {
-    if (OB_FAIL(x_buf.append("<?xml"))) {
-    } else if (!version.empty()) {
-      if (OB_FAIL(x_buf.append(" version=\""))) {
-      } else if (OB_FAIL(x_buf.append(version, 0))) {
-      } else if (OB_FAIL(x_buf.append("\""))) {
+  {
+    OB_ASSERT_SUCC(ret = get_print_buffer_size(reserve_size));
+    if (reserve_size > 0 && OB_FAIL(x_buf.reserve(reserve_size))) {
+    } else if (!(format_flag & ObXmlFormatType::HIDE_PROLOG) && has_flags(XML_DECL_FLAG)) {
+      if (OB_FAIL(x_buf.append("<?xml"))) {
+      } else if (!version.empty()) {
+        if (OB_FAIL(x_buf.append(" version=\""))) {
+        } else if (OB_FAIL(x_buf.append(version, 0))) {
+        } else if (OB_FAIL(x_buf.append("\""))) {
+        }
       }
-    }
-    if (OB_SUCC(ret) && (!encoding.empty() || has_flags(XML_ENCODING_EMPTY_FLAG))) {
-      if (charset != ObCollationType::CS_TYPE_INVALID) {
-        encoding = ObXmlUtil::get_charset_name(charset);
+      if (OB_SUCC(ret) && (!encoding.empty() || has_flags(XML_ENCODING_EMPTY_FLAG))) {
+        if (charset != ObCollationType::CS_TYPE_INVALID) {
+          encoding = ObXmlUtil::get_charset_name(charset);
+        }
+        if (OB_FAIL(x_buf.append(" encoding=\""))) {
+        } else if (OB_FAIL(x_buf.append(encoding, 0))) {
+        } else if (OB_FAIL(x_buf.append("\""))) {
+        }
       }
-      if (OB_FAIL(x_buf.append(" encoding=\""))) {
-      } else if (OB_FAIL(x_buf.append(encoding, 0))) {
-      } else if (OB_FAIL(x_buf.append("\""))) {
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (standalone == OB_XML_STANDALONE_NO && OB_FAIL(x_buf.append(" standalone=\"no\""))) {
-      } else if (standalone == OB_XML_STANDALONE_YES && OB_FAIL(x_buf.append(" standalone=\"yes\""))) {
-      } else if (OB_FAIL(x_buf.append("?>\n"))) {
+      if (OB_SUCC(ret)) {
+        if (standalone == OB_XML_STANDALONE_NO && OB_FAIL(x_buf.append(" standalone=\"no\""))) {
+        } else if (standalone == OB_XML_STANDALONE_YES && OB_FAIL(x_buf.append(" standalone=\"yes\""))) {
+        } else if (OB_FAIL(x_buf.append("?>\n"))) {
+        }
       }
     }
   }
@@ -410,30 +412,32 @@ int ObIMulModeBase::print_document(ObStringBuffer& x_buf, ObCollationType charse
   uint16_t standalone = get_standalone();
   bool need_newline_end = true;
   uint64_t reserve_size = 0;
-  if (OB_FAIL(get_print_buffer_size(reserve_size))) {
-  } else if (reserve_size > 0 && OB_FAIL(x_buf.reserve(reserve_size))) {
-  } else if (!(format_flag & ObXmlFormatType::HIDE_PROLOG) && has_flags(XML_DECL_FLAG)) {
-    if (OB_FAIL(x_buf.append("<?xml"))) {
-    } else if (!version.empty()) {
-      if (OB_FAIL(x_buf.append(" version=\""))) {
-      } else if (OB_FAIL(x_buf.append(version, 0))) {
-      } else if (OB_FAIL(x_buf.append("\""))) {
+  {
+    OB_ASSERT_SUCC(ret = get_print_buffer_size(reserve_size));
+    if (reserve_size > 0 && OB_FAIL(x_buf.reserve(reserve_size))) {
+    } else if (!(format_flag & ObXmlFormatType::HIDE_PROLOG) && has_flags(XML_DECL_FLAG)) {
+      if (OB_FAIL(x_buf.append("<?xml"))) {
+      } else if (!version.empty()) {
+        if (OB_FAIL(x_buf.append(" version=\""))) {
+        } else if (OB_FAIL(x_buf.append(version, 0))) {
+        } else if (OB_FAIL(x_buf.append("\""))) {
+        }
       }
-    }
-    if (OB_SUCC(ret) && (!encoding.empty() || has_flags(XML_ENCODING_EMPTY_FLAG))) {
-      if (charset != ObCollationType::CS_TYPE_INVALID) {
-        encoding = ObXmlUtil::get_charset_name(charset);
+      if (OB_SUCC(ret) && (!encoding.empty() || has_flags(XML_ENCODING_EMPTY_FLAG))) {
+        if (charset != ObCollationType::CS_TYPE_INVALID) {
+          encoding = ObXmlUtil::get_charset_name(charset);
+        }
+        if (OB_FAIL(x_buf.append(" encoding=\""))) {
+        } else if (OB_FAIL(x_buf.append(encoding, 0))) {
+        } else if (OB_FAIL(x_buf.append("\""))) {
+        }
       }
-      if (OB_FAIL(x_buf.append(" encoding=\""))) {
-      } else if (OB_FAIL(x_buf.append(encoding, 0))) {
-      } else if (OB_FAIL(x_buf.append("\""))) {
-      }
-    }
 
-    if (OB_SUCC(ret)) {
-      if (standalone == OB_XML_STANDALONE_NO && OB_FAIL(x_buf.append(" standalone=\"no\""))) {
-      } else if (standalone == OB_XML_STANDALONE_YES && OB_FAIL(x_buf.append(" standalone=\"yes\""))) {
-      } else if (OB_FAIL(x_buf.append("?>\n"))) {
+      if (OB_SUCC(ret)) {
+        if (standalone == OB_XML_STANDALONE_NO && OB_FAIL(x_buf.append(" standalone=\"no\""))) {
+        } else if (standalone == OB_XML_STANDALONE_YES && OB_FAIL(x_buf.append(" standalone=\"yes\""))) {
+        } else if (OB_FAIL(x_buf.append("?>\n"))) {
+        }
       }
     }
   }
@@ -484,28 +488,30 @@ int ObIMulModeBase::print_content(ObStringBuffer& x_buf, bool with_encoding, boo
   bool need_newline_end = true;
   uint64_t reserve_size = 0;
 
-  if (OB_FAIL(get_print_buffer_size(reserve_size))) {
-  } else if (reserve_size > 0 && OB_FAIL(x_buf.reserve(reserve_size))) {
-  } else if (with_encoding || with_version) {
-    if (OB_FAIL(x_buf.append("<?xml"))) {
-    } else if (with_version) {
-      if (OB_FAIL(x_buf.append(" version=\""))) {
-      } else if (OB_FAIL(x_buf.append(param_list.version, 0))) {
-      } else if (OB_FAIL(x_buf.append("\""))) {
+  {
+    OB_ASSERT_SUCC(ret = get_print_buffer_size(reserve_size));
+    if (reserve_size > 0 && OB_FAIL(x_buf.reserve(reserve_size))) {
+    } else if (with_encoding || with_version) {
+      if (OB_FAIL(x_buf.append("<?xml"))) {
+      } else if (with_version) {
+        if (OB_FAIL(x_buf.append(" version=\""))) {
+        } else if (OB_FAIL(x_buf.append(param_list.version, 0))) {
+        } else if (OB_FAIL(x_buf.append("\""))) {
+        }
       }
-    }
-    if (OB_SUCC(ret) && with_encoding) {
-      if (OB_FAIL(x_buf.append(" encoding=\""))) {
-      } else if (OB_FAIL(x_buf.append(param_list.encode, 0))) {
-      } else if (OB_FAIL(x_buf.append("\""))) {
+      if (OB_SUCC(ret) && with_encoding) {
+        if (OB_FAIL(x_buf.append(" encoding=\""))) {
+        } else if (OB_FAIL(x_buf.append(param_list.encode, 0))) {
+        } else if (OB_FAIL(x_buf.append("\""))) {
+        }
       }
-    }
-    if (OB_SUCC(ret)) {
-      if (get_standalone() == OB_XML_STANDALONE_NO && OB_FAIL(x_buf.append(" standalone=\"no\""))) {
-      } else if (get_standalone() == OB_XML_STANDALONE_YES && OB_FAIL(x_buf.append(" standalone=\"yes\""))) {
-      } else if (OB_FAIL(x_buf.append("?>"))) {
-      } else if ((format_flag & ObXmlFormatType::NEWLINE_AND_INDENT) && 
-                  OB_FAIL(ObXmlUtil::append_newline_and_indent(x_buf, 0, param_list.indent))) {
+      if (OB_SUCC(ret)) {
+        if (get_standalone() == OB_XML_STANDALONE_NO && OB_FAIL(x_buf.append(" standalone=\"no\""))) {
+        } else if (get_standalone() == OB_XML_STANDALONE_YES && OB_FAIL(x_buf.append(" standalone=\"yes\""))) {
+        } else if (OB_FAIL(x_buf.append("?>"))) {
+        } else if ((format_flag & ObXmlFormatType::NEWLINE_AND_INDENT) &&
+                   OB_FAIL(ObXmlUtil::append_newline_and_indent(x_buf, 0, param_list.indent))) {
+        }
       }
     }
   }

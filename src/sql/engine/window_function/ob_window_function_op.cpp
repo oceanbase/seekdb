@@ -1743,8 +1743,7 @@ int ObWindowFunctionOp::compute(RowsReader &row_reader, WinFuncCell &wf_cell,
         }
       }
     } else {
-      if (OB_FAIL(set_compute_result_for_invalid_frame(wf_cell, val))) {
-      }
+      OB_ASSERT_SUCC(ret = set_compute_result_for_invalid_frame(wf_cell, val));
     }
   }
 
@@ -1992,8 +1991,7 @@ int ObWindowFunctionOp::partial_next_row()
       LOG_DEBUG("ObWindowFunctionOp::partial_next_row() begin compute",
                 K(input_rows_.cur_->count()), K(last_output_row_idx_), K(MY_SPEC.get_role_type()));
       // load && compute
-      if (OB_FAIL(reset_for_part_scan())) {
-      }
+      OB_ASSERT_SUCC(ret = reset_for_part_scan());
       int64_t check_times = 0;
       do {
         // <1> get first row

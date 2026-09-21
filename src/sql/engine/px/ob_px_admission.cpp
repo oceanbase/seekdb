@@ -163,9 +163,8 @@ void ObPxAdmission::exit_query_admission(ObSQLSessionInfo &session,
     ObSqlExecutorCtx *task_exec_ctx = GET_SQL_EXECUTOR_CTX(exec_ctx);
     if (OB_ISNULL(task_exec_ctx)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(OB_PX_TARGET_MONITOR.release_target(
-                   task_exec_ctx->get_admited_worker_cnt()))) {
     } else {
+      OB_ASSERT_SUCC(ret = OB_PX_TARGET_MONITOR.release_target(task_exec_ctx->get_admited_worker_cnt()));
       exec_ctx.set_admission_acquired(false);
     }
   }

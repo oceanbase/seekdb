@@ -2184,44 +2184,45 @@ int ObRawExprDeduceType::visit(ObWinFunRawExpr &expr)
       ObCollationType coll_type = CS_TYPE_INVALID;
       if (OB_FAIL(push_back_types(func_params.at(0), types))) {
       } else if (OB_FAIL(push_back_types(func_params.at(2), types))) {
-      } else if (OB_FAIL(my_session_->get_collation_connection(coll_type))) {
-      } else if (OB_FAIL(ObExprOperator::aggregate_result_type_for_merge(res_type,
-                                                                  &types.at(0),
-                                                                  types.count(),
-                                                                  type_ctx))) {
       } else {
-        if (res_type.is_json()) {
-          ObRawExprResType merged_type = func_params.at(0)->get_result_type();
-          if (merged_type.is_json()) {
-            merged_type = func_params.at(2)->get_result_type();
-          } else {}
-          if (merged_type.get_type() >= ObTinyIntType &&
-              merged_type.get_type() <= ObHexStringType) {
-            res_type.set_varchar();
-          } else if (merged_type.is_blob()) {
-            res_type.set_blob();
-          } else {
-            // json or max, do nothing
-          }
-        } else if (ob_is_real_type(res_type.get_type())) {
-          res_type.set_double();
-        } else {}
-        ObCastMode def_cast_mode = CM_NONE;
-        ObRawExpr *cast_expr = NULL;
-        if (!func_params.at(0)->get_result_type().has_result_flag(NOT_NULL_FLAG) ||
-            !func_params.at(2)->get_result_type().has_result_flag(NOT_NULL_FLAG)) {
-          res_type.unset_result_flag(NOT_NULL_FLAG);
-        }
-        res_type.set_calc_meta(res_type.get_obj_meta());
-        res_type.set_calc_accuracy(res_type.get_accuracy());
-        if (OB_FAIL(ObSQLUtils::get_default_cast_mode(false, 0, my_session_, def_cast_mode))) {
-        } else if (OB_FAIL(try_add_cast_expr_above_for_deduce_type(*func_params.at(0), cast_expr, res_type, def_cast_mode))) {
+        OB_ASSERT_SUCC(ret = my_session_->get_collation_connection(coll_type));
+        if (OB_FAIL(ObExprOperator::aggregate_result_type_for_merge(res_type, &types.at(0), types.count(), type_ctx))) {
         } else {
-          func_params.at(0) = cast_expr;
-          expr.set_result_type(res_type);
-          if (func_params.at(0)->is_enum_set_with_subschema()) {
-            expr.set_subschema_id(func_params.at(0)->get_subschema_id());
-            expr.mark_enum_set_with_subschema(func_params.at(0)->get_enum_set_subschema_state());
+          if (res_type.is_json()) {
+            ObRawExprResType merged_type = func_params.at(0)->get_result_type();
+            if (merged_type.is_json()) {
+              merged_type = func_params.at(2)->get_result_type();
+            } else {
+            }
+            if (merged_type.get_type() >= ObTinyIntType && merged_type.get_type() <= ObHexStringType) {
+              res_type.set_varchar();
+            } else if (merged_type.is_blob()) {
+              res_type.set_blob();
+            } else {
+              // json or max, do nothing
+            }
+          } else if (ob_is_real_type(res_type.get_type())) {
+            res_type.set_double();
+          } else {
+          }
+          ObCastMode def_cast_mode = CM_NONE;
+          ObRawExpr *cast_expr = NULL;
+          if (!func_params.at(0)->get_result_type().has_result_flag(NOT_NULL_FLAG) ||
+              !func_params.at(2)->get_result_type().has_result_flag(NOT_NULL_FLAG)) {
+            res_type.unset_result_flag(NOT_NULL_FLAG);
+          }
+          res_type.set_calc_meta(res_type.get_obj_meta());
+          res_type.set_calc_accuracy(res_type.get_accuracy());
+          if (OB_FAIL(ObSQLUtils::get_default_cast_mode(false, 0, my_session_, def_cast_mode))) {
+          } else if (OB_FAIL(try_add_cast_expr_above_for_deduce_type(*func_params.at(0), cast_expr, res_type,
+                                                                     def_cast_mode))) {
+          } else {
+            func_params.at(0) = cast_expr;
+            expr.set_result_type(res_type);
+            if (func_params.at(0)->is_enum_set_with_subschema()) {
+              expr.set_subschema_id(func_params.at(0)->get_subschema_id());
+              expr.mark_enum_set_with_subschema(func_params.at(0)->get_enum_set_subschema_state());
+            }
           }
         }
       }

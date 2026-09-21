@@ -40,15 +40,17 @@ int ObMPAuthResponse::process()
   } else if (OB_FAIL(get_session(session))) {
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(session->get_query_timeout(query_timeout))) {
-  } else if (FALSE_IT(THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout))) {
-  } else if (OB_FAIL(session->set_login_auth_data(auth_data_))) {
-  } else if (OB_FAIL(load_privilege_info_for_change_user(session))) {
   } else {
-    conn->set_auth_phase();
-    ObOKPParam ok_param; // use default values
-    ok_param.is_on_change_user_ = true;
-    if (OB_FAIL(send_ok_packet(*session, ok_param))) {
+    OB_ASSERT_SUCC(ret = session->get_query_timeout(query_timeout));
+    if (FALSE_IT(THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout))) {
+    } else if (OB_FAIL(session->set_login_auth_data(auth_data_))) {
+    } else if (OB_FAIL(load_privilege_info_for_change_user(session))) {
+    } else {
+      conn->set_auth_phase();
+      ObOKPParam ok_param; // use default values
+      ok_param.is_on_change_user_ = true;
+      if (OB_FAIL(send_ok_packet(*session, ok_param))) {
+      }
     }
   }
   if (OB_LIKELY(NULL != session)) {

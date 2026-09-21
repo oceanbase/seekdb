@@ -384,8 +384,8 @@ int ObTabletTableStore::deep_copy(
     } else if (OB_FAIL(ddl_sstables_.deep_copy(buf, buf_len, pos, new_table_store->ddl_sstables_))) {
     } else if (OB_FAIL(meta_major_tables_.deep_copy(buf, buf_len, pos, new_table_store->meta_major_tables_))) {
     } else if (OB_FAIL(mds_sstables_.deep_copy(buf, buf_len, pos, new_table_store->mds_sstables_))) {
-    } else if (OB_FAIL(memtables_.assign(new_table_store->memtables_))) {
     } else {
+      OB_ASSERT_SUCC(ret = memtables_.assign(new_table_store->memtables_));
       new_table_store->version_ = version_;
       new_table_store->is_inited_ = is_inited_;
       new_table_store->is_ready_for_read_ = is_ready_for_read_;

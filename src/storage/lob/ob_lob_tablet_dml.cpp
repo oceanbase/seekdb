@@ -122,11 +122,14 @@ int ObLobTabletDmlHelper::process_lob_column_after_insert(
     del_param.total_seq_cnt_ = lob_disk_locator.get_seq_no_cnt();
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(lob_disk_locator.reset_for_dml())) {
-  } else if(OB_FAIL(insert_lob_col(run_ctx, row, info.col_idx_, datum, &del_param, locator_data, &info.lob_meta_list_, true/*try_flush_redo*/))) {
-  } else if (datum.get_string().ptr() != locator_data.ptr() || datum.get_string().length() != locator_data.length()) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(register_ext_info_commit_cb(run_ctx, column, dup_locator_data, locator_data))) {
+  } else {
+    OB_ASSERT_SUCC(ret = lob_disk_locator.reset_for_dml());
+    if (OB_FAIL(insert_lob_col(run_ctx, row, info.col_idx_, datum, &del_param, locator_data, &info.lob_meta_list_,
+                               true /*try_flush_redo*/))) {
+    } else if (datum.get_string().ptr() != locator_data.ptr() || datum.get_string().length() != locator_data.length()) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(register_ext_info_commit_cb(run_ctx, column, dup_locator_data, locator_data))) {
+    }
   }
   return ret;
 }
@@ -190,15 +193,18 @@ int ObLobTabletDmlHelper::process_lob_column_after_update(
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(lob_disk_locator.reset_for_dml())) {
-  } else if (OB_ISNULL(new_lob_common = lob_disk_locator.get_lob_common())) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (data_tbl_rowkey_change) {
-    // need lob_param when use pre alloc seq no
-    if (OB_FAIL(insert_lob_col(run_ctx, new_row, info.col_idx_, new_datum,
-        use_seq_pre_alloc ? &lob_param : nullptr, locator_data, &info.lob_meta_list_, true/*try_flush_redo*/))) {
+  } else {
+    OB_ASSERT_SUCC(ret = lob_disk_locator.reset_for_dml());
+    if (OB_ISNULL(new_lob_common = lob_disk_locator.get_lob_common())) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (data_tbl_rowkey_change) {
+      // need lob_param when use pre alloc seq no
+      if (OB_FAIL(insert_lob_col(run_ctx, new_row, info.col_idx_, new_datum, use_seq_pre_alloc ? &lob_param : nullptr,
+                                 locator_data, &info.lob_meta_list_, true /*try_flush_redo*/))) {
+      }
+    } else if (OB_FAIL(insert_lob_col(run_ctx, new_row, info.col_idx_, new_datum, &lob_param, locator_data,
+                                      &info.lob_meta_list_, true /*try_flush_redo*/))) {
     }
-  } else if (OB_FAIL(insert_lob_col(run_ctx, new_row, info.col_idx_, new_datum, &lob_param, locator_data, &info.lob_meta_list_, true/*try_flush_redo*/))) {
   }
 
   if (OB_FAIL(ret)) {

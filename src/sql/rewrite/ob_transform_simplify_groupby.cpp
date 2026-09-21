@@ -205,21 +205,22 @@ int ObTransformSimplifyGroupby::get_valid_child_stmts(ObSelectStmt *upper_stmt,
                                             is_valid))) {
   } else if (!is_valid) {
     /*do nothing*/
-  } else if (OB_FAIL(check_upper_group_by(*upper_stmt, no_aggr_column_exprs, is_valid))) {
-  } else if (!is_valid) {
-    /*do nothing*/
-  } else if (OB_FAIL(check_aggrs_matched(upper_stmt->get_aggr_items(),//condition 3
-                                         aggr_column_exprs, no_aggr_column_exprs,
-                                         child_aggr_exprs, is_valid))) {
-  } else if (!is_valid) {
-    /*do nothing*/
-  } else if (OB_FAIL(check_upper_condition(upper_stmt->get_condition_exprs(),//Judge condition 4
-                                           aggr_column_exprs, is_valid))) {
-  } else if (!is_valid) {
-    /*do nothing*/
-  } else if (OB_FAIL(valid_child_stmts.push_back(stmt))) {
   } else {
-    /*do nothing*/
+    OB_ASSERT_SUCC(ret = check_upper_group_by(*upper_stmt, no_aggr_column_exprs, is_valid));
+    if (!is_valid) {
+      /*do nothing*/
+    } else if (OB_FAIL(check_aggrs_matched(upper_stmt->get_aggr_items(), // condition 3
+                                           aggr_column_exprs, no_aggr_column_exprs, child_aggr_exprs, is_valid))) {
+    } else if (!is_valid) {
+      /*do nothing*/
+    } else if (OB_FAIL(check_upper_condition(upper_stmt->get_condition_exprs(), // Judge condition 4
+                                             aggr_column_exprs, is_valid))) {
+    } else if (!is_valid) {
+      /*do nothing*/
+    } else if (OB_FAIL(valid_child_stmts.push_back(stmt))) {
+    } else {
+      /*do nothing*/
+    }
   }
   return ret;
 }

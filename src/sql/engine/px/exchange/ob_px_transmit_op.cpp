@@ -391,11 +391,13 @@ int ObPxTransmitOp::next_batch(const int64_t max_row_cnt)
   clear_evaluated_flag();
   const ObBatchRows *brs = NULL;
   if (OB_FAIL(child_->get_next_batch(max_row_cnt, brs))) {
-  } else if (OB_FAIL(brs_.copy(brs))) {
-  } else if (NULL != MY_SPEC.random_expr_ && brs->size_ > 0) {
-    ObDatum *datums = MY_SPEC.random_expr_->locate_datums_for_update(eval_ctx_, brs->size_);
-    for (int64_t i = 0; i < brs->size_; i++) {
-      datums[i].set_int(get_random_seq());
+  } else {
+    OB_ASSERT_SUCC(ret = brs_.copy(brs));
+    if (NULL != MY_SPEC.random_expr_ && brs->size_ > 0) {
+      ObDatum *datums = MY_SPEC.random_expr_->locate_datums_for_update(eval_ctx_, brs->size_);
+      for (int64_t i = 0; i < brs->size_; i++) {
+        datums[i].set_int(get_random_seq());
+      }
     }
   }
   return ret;

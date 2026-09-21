@@ -259,14 +259,14 @@ int ObExprInnerDoubleToInt::eval_inner_double_to_int(const ObExpr &expr, ObEvalC
       // do nothing
     } else if ((val > 0. && !is_start) ||
         (val < 0. && is_start)) {
-      if (OB_FAIL(add_double_bit_1(val, tmp_d))) {
-      } else {
+      {
+        OB_ASSERT_SUCC(ret = add_double_bit_1(val, tmp_d));
         val = tmp_d;
       }
     } else if ((val > 0. && is_start) ||
                (val < 0. && !is_start)) {
-      if (OB_FAIL(sub_double_bit_1(val, tmp_d))) {
-      } else {
+      {
+        OB_ASSERT_SUCC(ret = sub_double_bit_1(val, tmp_d));
         val = tmp_d;
       }
     }
@@ -302,11 +302,13 @@ int ObExprInnerDoubleToInt::eval_inner_double_to_int(const ObExpr &expr, ObEvalC
         expr_datum.set_int(INT64_MIN);
       }
     } else {
-      if (OB_FAIL(convert_double_to_int64_range(val, start, end))) {
-      } else if (is_start) {
-        expr_datum.set_int(start);
-      } else {
-        expr_datum.set_int(end);
+      {
+        OB_ASSERT_SUCC(ret = convert_double_to_int64_range(val, start, end));
+        if (is_start) {
+          expr_datum.set_int(start);
+        } else {
+          expr_datum.set_int(end);
+        }
       }
     }
   } else {
@@ -336,11 +338,13 @@ int ObExprInnerDoubleToInt::eval_inner_double_to_int(const ObExpr &expr, ObEvalC
         expr_datum.set_uint(0);
       }
     } else {
-      if (OB_FAIL(convert_double_to_uint64_range(val, start, end))) {
-      } else if (is_start) {
-        expr_datum.set_uint(start);
-      } else {
-        expr_datum.set_uint(end);
+      {
+        OB_ASSERT_SUCC(ret = convert_double_to_uint64_range(val, start, end));
+        if (is_start) {
+          expr_datum.set_uint(start);
+        } else {
+          expr_datum.set_uint(end);
+        }
       }
     }
   }

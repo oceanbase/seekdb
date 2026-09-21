@@ -203,13 +203,15 @@ int ObOptimizerStatsGatheringOp::inner_get_next_batch(const int64_t max_row_cnt)
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(brs_.copy(child_brs))) {
-    } else if (brs_.end_) {
-      if (MY_SPEC.type_ == OSG_TYPE::GATHER_OSG) {
-        if (OB_FAIL(send_stats())) {
-        }
-      } else if (MY_SPEC.type_ != OSG_TYPE::GATHER_OSG) {
-        if (OB_FAIL(msg_end())) {
+    {
+      OB_ASSERT_SUCC(ret = brs_.copy(child_brs));
+      if (brs_.end_) {
+        if (MY_SPEC.type_ == OSG_TYPE::GATHER_OSG) {
+          if (OB_FAIL(send_stats())) {
+          }
+        } else if (MY_SPEC.type_ != OSG_TYPE::GATHER_OSG) {
+          if (OB_FAIL(msg_end())) {
+          }
         }
       }
     }
@@ -380,10 +382,11 @@ int ObOptimizerStatsGatheringOp::calc_stats()
   int ret = OB_SUCCESS;
   int64_t row_len = 0;
   bool ignore = false;
-  if (OB_FAIL(sample_helper_.sample_row(ignore))) {
-  } else if (!ignore &&
-             OB_FAIL(calc_columns_stats(row_len))) {
-  } else if (OB_FAIL(calc_table_stats(row_len, ignore))) {
+  {
+    OB_ASSERT_SUCC(ret = sample_helper_.sample_row(ignore));
+    if (!ignore && OB_FAIL(calc_columns_stats(row_len))) {
+    } else if (OB_FAIL(calc_table_stats(row_len, ignore))) {
+    }
   }
   return ret;
 }

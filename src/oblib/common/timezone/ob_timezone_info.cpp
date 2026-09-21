@@ -39437,14 +39437,16 @@ int ObTimeZoneInfoPos::get_timezone_offset(int64_t value, int32_t &offset_sec,
     offset_sec = default_type_.info_.offset_sec_;
     tz_abbr_str.assign_ptr(default_type_.info_.abbr_, static_cast<int32_t>(strlen(default_type_.info_.abbr_)));
     tran_type_id = default_type_.info_.tran_type_id_;
-  } else if (OB_FAIL(find_time_range(value, tz_tran_types, type_idx))) {
-  } else if (OB_UNLIKELY(type_idx < 0 || type_idx >= tz_tran_types.count())) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
-    const ObTZTransitionStruct &info = tz_tran_types.at(type_idx).info_;
-    offset_sec = info.offset_sec_;
-    tz_abbr_str.assign_ptr(info.abbr_, static_cast<int32_t>(strlen(info.abbr_)));
-    tran_type_id = info.tran_type_id_;
+    OB_ASSERT_SUCC(ret = find_time_range(value, tz_tran_types, type_idx));
+    if (OB_UNLIKELY(type_idx < 0 || type_idx >= tz_tran_types.count())) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      const ObTZTransitionStruct &info = tz_tran_types.at(type_idx).info_;
+      offset_sec = info.offset_sec_;
+      tz_abbr_str.assign_ptr(info.abbr_, static_cast<int32_t>(strlen(info.abbr_)));
+      tran_type_id = info.tran_type_id_;
+    }
   }
   return ret;
 }
@@ -39484,13 +39486,15 @@ int ObTimeZoneInfoPos::get_timezone_offset(const int32_t tran_type_id,
   } else if (tran_type_id == default_type_.info_.tran_type_id_) {
     offset_sec = default_type_.info_.offset_sec_;
     tz_abbr_str.assign_ptr(default_type_.info_.abbr_, static_cast<int32_t>(strlen(default_type_.info_.abbr_)));
-  } else if (OB_FAIL(find_offset_range(tran_type_id, tz_tran_types, type_idx))) {
-  } else if (OB_UNLIKELY(type_idx < 0 || type_idx >= tz_tran_types.count())) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
-    const ObTZTransitionStruct &info = tz_tran_types.at(type_idx).info_;
-    offset_sec = info.offset_sec_;
-    tz_abbr_str.assign_ptr(info.abbr_, static_cast<int32_t>(strlen(info.abbr_)));
+    OB_ASSERT_SUCC(ret = find_offset_range(tran_type_id, tz_tran_types, type_idx));
+    if (OB_UNLIKELY(type_idx < 0 || type_idx >= tz_tran_types.count())) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      const ObTZTransitionStruct &info = tz_tran_types.at(type_idx).info_;
+      offset_sec = info.offset_sec_;
+      tz_abbr_str.assign_ptr(info.abbr_, static_cast<int32_t>(strlen(info.abbr_)));
+    }
   }
 
   return ret;
@@ -39505,34 +39509,36 @@ int ObTimeZoneInfoPos::get_timezone_sub_offset(int64_t value, const ObString &tz
   int64_t type_idx = 0;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(find_revt_time_range(value, tz_revt_types, type_idx))) {
-  } else if (OB_UNLIKELY(type_idx < 0 || type_idx >= tz_revt_types.count())) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
-    const ObTZRevertTypeInfo &revt_type_info = tz_revt_types.at(type_idx);
-    if (OB_UNLIKELY(revt_type_info.is_gap())) {//gap
-      ret = OB_ERR_UNEXPECTED_TZ_TRANSITION;
-    } else if (OB_UNLIKELY(revt_type_info.is_overlap())) {//overlap
-      if (OB_LIKELY(tz_abbr_str.empty())) {
-        if (error_on_overlap_time_) {
+    OB_ASSERT_SUCC(ret = find_revt_time_range(value, tz_revt_types, type_idx));
+    if (OB_UNLIKELY(type_idx < 0 || type_idx >= tz_revt_types.count())) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      const ObTZRevertTypeInfo &revt_type_info = tz_revt_types.at(type_idx);
+      if (OB_UNLIKELY(revt_type_info.is_gap())) { // gap
+        ret = OB_ERR_UNEXPECTED_TZ_TRANSITION;
+      } else if (OB_UNLIKELY(revt_type_info.is_overlap())) { // overlap
+        if (OB_LIKELY(tz_abbr_str.empty())) {
+          if (error_on_overlap_time_) {
+            ret = OB_ERR_UNEXPECTED_TZ_TRANSITION;
+          } else { // if error_on_overlap_time_ == false,
+            // Use standard offset here; the abbreviation path selects offset by abbreviation.
+            offset_sec = revt_type_info.info_.offset_sec_;
+            tran_type_id = revt_type_info.info_.tran_type_id_;
+          }
+        } else if (OB_FAIL(revt_type_info.get_offset_according_abbr(tz_abbr_str, offset_sec, tran_type_id))) {
           ret = OB_ERR_UNEXPECTED_TZ_TRANSITION;
-        } else {//if error_on_overlap_time_ == false,
-        // Use standard offset here; the abbreviation path selects offset by abbreviation.
+        }
+      } else if (revt_type_info.is_normal()) { // normal
+        if (OB_LIKELY(tz_abbr_str.empty())) {
           offset_sec = revt_type_info.info_.offset_sec_;
           tran_type_id = revt_type_info.info_.tran_type_id_;
+        } else if (OB_FAIL(revt_type_info.get_offset_according_abbr(tz_abbr_str, offset_sec, tran_type_id))) {
+          ret = OB_ERR_UNEXPECTED_TZ_TRANSITION;
         }
-      } else if (OB_FAIL(revt_type_info.get_offset_according_abbr(tz_abbr_str, offset_sec, tran_type_id))) {
-        ret = OB_ERR_UNEXPECTED_TZ_TRANSITION;
+      } else {
+        ret = OB_ERR_UNEXPECTED;
       }
-    } else if (revt_type_info.is_normal()) {//normal
-      if (OB_LIKELY(tz_abbr_str.empty())) {
-        offset_sec = revt_type_info.info_.offset_sec_;
-        tran_type_id = revt_type_info.info_.tran_type_id_;
-      } else if (OB_FAIL(revt_type_info.get_offset_according_abbr(tz_abbr_str, offset_sec, tran_type_id))) {
-        ret = OB_ERR_UNEXPECTED_TZ_TRANSITION;
-      }
-    } else {
-      ret = OB_ERR_UNEXPECTED;
     }
   }
   return ret;

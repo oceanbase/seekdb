@@ -28,8 +28,7 @@ namespace sql
 ObHashJoinBatch::~ObHashJoinBatch()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(close())) {
-  }
+  OB_ASSERT_SUCC(ret = close());
 }
 
 int ObHashJoinBatch::rescan()

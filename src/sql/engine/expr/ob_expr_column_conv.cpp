@@ -215,8 +215,8 @@ int ObExprColumnConv::calc_result_typeN(ObExprResType &type,
     ret = OB_INVALID_ARGUMENT;
     SQL_ENG_LOG(WARN, "invalid argument, param_num should be 5 or 6",
                K(param_num), K(types), K(ret));
-  } else if (OB_FAIL(type_ctx.get_session()->get_collation_connection(coll_type))) {
   } else {
+    OB_ASSERT_SUCC(ret = type_ctx.get_session()->get_collation_connection(coll_type));
     type.set_type(types[0].get_type());
     type.set_collation_type(types[1].get_collation_type());
     // set collation level

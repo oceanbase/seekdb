@@ -58,97 +58,99 @@ int ObMPInitDB::process()
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("null pointer");
-  } else if (OB_FAIL(session->get_query_timeout(query_timeout))) {
-  } else if (OB_ISNULL(gctx_.schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
-    ObCollationType old_db_coll_type = CS_TYPE_INVALID;
-    ObCollationType collation_connection = CS_TYPE_INVALID;
-    ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
-    setup_wb(*session);
-    tmp_db_name = session->get_database_name();
-    session->update_last_active_time();
-    
-    int64_t global_version = OB_INVALID_VERSION;
-    int64_t local_version = OB_INVALID_VERSION;
-    ObQueryRetryType retry_type = RETRY_TYPE_NONE;
-    int64_t retry_times = 0;
-    THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
-    ObNameCaseMode mode = OB_NAME_CASE_INVALID;
-    if (OB_UNLIKELY(session->is_zombie())) {
-      ret = OB_ERR_SESSION_INTERRUPTED;
-    } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(global_version))) {
-    } else if (OB_FAIL(gctx_.schema_service_->get_runtime_refreshed_schema_version(local_version))) {
-    } else if (OB_FAIL(session->get_collation_database(old_db_coll_type))) {
-    } else if (OB_FAIL(session->get_collation_connection(collation_connection))) {
-    } else if (OB_FAIL(session->get_name_case_mode(mode))) {
+    OB_ASSERT_SUCC(ret = session->get_query_timeout(query_timeout));
+    if (OB_ISNULL(gctx_.schema_service_)) {
+      ret = OB_ERR_UNEXPECTED;
     } else {
-      need_disconnect = false;
-      bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
-      if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(allocator,
-                                                                     session->get_dtc_params(),
-                                                                     db_name_))) {
-      } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
-                  collation_connection, perserve_lettercase, db_name_))) {
+      ObCollationType old_db_coll_type = CS_TYPE_INVALID;
+      ObCollationType collation_connection = CS_TYPE_INVALID;
+      ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
+      setup_wb(*session);
+      tmp_db_name = session->get_database_name();
+      session->update_last_active_time();
+
+      int64_t global_version = OB_INVALID_VERSION;
+      int64_t local_version = OB_INVALID_VERSION;
+      ObQueryRetryType retry_type = RETRY_TYPE_NONE;
+      int64_t retry_times = 0;
+      THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
+      ObNameCaseMode mode = OB_NAME_CASE_INVALID;
+      if (OB_UNLIKELY(session->is_zombie())) {
+        ret = OB_ERR_SESSION_INTERRUPTED;
+      } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(global_version))) {
+      } else if (OB_FAIL(gctx_.schema_service_->get_runtime_refreshed_schema_version(local_version))) {
+      } else if (OB_FAIL(session->get_collation_database(old_db_coll_type))) {
       } else {
-        bool force_local_retry = false;
-        do {
-          retry_type = RETRY_TYPE_NONE;
-          ret = do_process(session);
-          if (is_schema_error(ret)) {
-            if (local_version < global_version) {
-              if (!THIS_WORKER.is_timeout()) {
-                if (force_local_retry
-                    || retry_times < ObQueryRetryCtrl::MAX_SCHEMA_ERROR_LOCAL_RETRY_TIMES) {
-                  retry_type = RETRY_TYPE_LOCAL;
-                } else {
-                  retry_type = RETRY_TYPE_PACKET;
-                }
-                retry_times++;
-                if (RETRY_TYPE_LOCAL == retry_type) {
-                  ob_usleep(ObQueryRetryCtrl::WAIT_LOCAL_SCHEMA_REFRESHED_US
-                         * ObQueryRetryCtrl::linear_timeout_factor(retry_times));
-                }
-                int tmp_ret = gctx_.schema_service_->get_runtime_refreshed_schema_version(local_version);
-                if (OB_SUCCESS != tmp_ret) {
+        OB_ASSERT_SUCC(ret = session->get_collation_connection(collation_connection));
+        if (OB_FAIL(session->get_name_case_mode(mode))) {
+        } else {
+          need_disconnect = false;
+          bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
+          if (OB_FAIL(
+                  ObSQLUtils::convert_sql_text_to_schema_for_storing(allocator, session->get_dtc_params(), db_name_))) {
+          } else if (OB_FAIL(
+                         ObSQLUtils::check_and_convert_db_name(collation_connection, perserve_lettercase, db_name_))) {
+          } else {
+            bool force_local_retry = false;
+            do {
+              retry_type = RETRY_TYPE_NONE;
+              ret = do_process(session);
+              if (is_schema_error(ret)) {
+                if (local_version < global_version) {
+                  if (!THIS_WORKER.is_timeout()) {
+                    if (force_local_retry || retry_times < ObQueryRetryCtrl::MAX_SCHEMA_ERROR_LOCAL_RETRY_TIMES) {
+                      retry_type = RETRY_TYPE_LOCAL;
+                    } else {
+                      retry_type = RETRY_TYPE_PACKET;
+                    }
+                    retry_times++;
+                    if (RETRY_TYPE_LOCAL == retry_type) {
+                      ob_usleep(ObQueryRetryCtrl::WAIT_LOCAL_SCHEMA_REFRESHED_US *
+                                ObQueryRetryCtrl::linear_timeout_factor(retry_times));
+                    }
+                    int tmp_ret = gctx_.schema_service_->get_runtime_refreshed_schema_version(local_version);
+                    if (OB_SUCCESS != tmp_ret) {
+                    }
+                  }
                 }
               }
-            }
+              force_local_retry = false;
+              if (OB_UNLIKELY(session->is_zombie())) {
+                ret = OB_ERR_SESSION_INTERRUPTED;
+              } else if (RETRY_TYPE_LOCAL == retry_type) {
+                // Retry in this thread
+                force_local_retry = true;
+              } else if (RETRY_TYPE_PACKET == retry_type) {
+                // Put back into the queue for retry
+                if (!THIS_WORKER.can_retry()) {
+                  // Do not requeue, retry in this thread
+                  // FIXME: when will we be here?
+                  force_local_retry = true;
+                  LOG_WARN("fail to set retry flag, force to do local retry");
+                } else {
+                  THIS_WORKER.set_need_retry();
+                  is_packet_retry = true;
+                }
+              }
+              if (force_local_retry) {
+                clear_wb_content(*session);
+              }
+            } while (force_local_retry);
           }
-          force_local_retry = false;
-          if (OB_UNLIKELY(session->is_zombie())) {
-            ret = OB_ERR_SESSION_INTERRUPTED;
-          } else if (RETRY_TYPE_LOCAL == retry_type) {
-            // Retry in this thread
-            force_local_retry = true;
-          } else if (RETRY_TYPE_PACKET == retry_type) {
-            // Put back into the queue for retry
-            if (!THIS_WORKER.can_retry()) {
-              // Do not requeue, retry in this thread
-              // FIXME: when will we be here?
-              force_local_retry = true;
-              LOG_WARN("fail to set retry flag, force to do local retry");
-            } else {
-              THIS_WORKER.set_need_retry();
-              is_packet_retry = true;
-            }
-          }
-          if (force_local_retry) {
-            clear_wb_content(*session);
-          }
-        } while (force_local_retry);
+        }
       }
-    }
-    if (OB_FAIL(ret)) {
-      int set_db_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (set_db_ret = session->set_default_database(tmp_db_name, old_db_coll_type))) {
+      if (OB_FAIL(ret)) {
+        int set_db_ret = OB_SUCCESS;
+        if (OB_SUCCESS != (set_db_ret = session->set_default_database(tmp_db_name, old_db_coll_type))) {
+        }
       }
-    }
 
-    session->set_show_warnings_buf(ret);
-    session->reset_warnings_buf();
-    ob_setup_tsi_warning_buffer(NULL);
-  }  // end session guard
+      session->set_show_warnings_buf(ret);
+      session->reset_warnings_buf();
+      ob_setup_tsi_warning_buffer(NULL);
+    }
+  } // end session guard
 
   if (OB_FAIL(ret)) {
     if (false == is_packet_retry && need_disconnect && is_conn_valid()) {

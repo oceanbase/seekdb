@@ -160,31 +160,33 @@ int ObMPStmtPrepare::process()
       LOG_ERROR("invalid session", K_(sql), K(ret));
     } else if (OB_UNLIKELY(session.is_zombie())) {
       ret = OB_ERR_SESSION_INTERRUPTED;
-    } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
-    } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(
-                database_schema_version))) {
-    } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
-      ret = OB_ERR_NET_PACKET_TOO_LARGE;
-      need_disconnect = false;
     } else {
-      THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
-      retry_ctrl_.set_current_global_schema_version(database_schema_version);
-      session.set_pl_can_retry(true);
-
-      bool has_more = false;
-      bool force_sync_resp = false;
-      need_disconnect = false;
-      need_response_error = false;
-      if (OB_FAIL(multiple_query_check(session, sql_, force_sync_resp, need_response_error))) {
-        need_disconnect = OB_NOT_SUPPORTED == ret ? false : true; 
+      OB_ASSERT_SUCC(ret = session.get_query_timeout(query_timeout));
+      if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(database_schema_version))) {
+      } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
+        ret = OB_ERR_NET_PACKET_TOO_LARGE;
+        need_disconnect = false;
       } else {
-        ret = process_prepare_stmt(ObMultiStmtItem(false, 0, sql_), session, has_more, force_sync_resp, async_resp_used);
-      }
+        THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
+        retry_ctrl_.set_current_global_schema_version(database_schema_version);
+        session.set_pl_can_retry(true);
 
-      if (OB_FAIL(ret)) {
-        // Log the current attempt; retryable errors are handled by the upper scheduler.
-        if (is_conn_valid()) { // The SQL text may be request-owned after an async handoff.
+        bool has_more = false;
+        bool force_sync_resp = false;
+        need_disconnect = false;
+        need_response_error = false;
+        if (OB_FAIL(multiple_query_check(session, sql_, force_sync_resp, need_response_error))) {
+          need_disconnect = OB_NOT_SUPPORTED == ret ? false : true;
         } else {
+          ret = process_prepare_stmt(ObMultiStmtItem(false, 0, sql_), session, has_more, force_sync_resp,
+                                     async_resp_used);
+        }
+
+        if (OB_FAIL(ret)) {
+          // Log the current attempt; retryable errors are handled by the upper scheduler.
+          if (is_conn_valid()) { // The SQL text may be request-owned after an async handoff.
+          } else {
+          }
         }
       }
     }
@@ -339,50 +341,51 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
         ctx_.retry_times_ = retry_ctrl_.get_retry_times();
         if (OB_ISNULL(ctx_.schema_guard_)) {
           ret = OB_INVALID_ARGUMENT;
-        } else if (OB_FAIL(result.init())) {
-        } else if (OB_ISNULL(::oceanbase::observer::get_observer_sql_engine())) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_ERROR("invalid sql engine", K(ret), K(gctx_));
-        } else if (FALSE_IT(execution_id = ::oceanbase::observer::get_observer_sql_engine()->get_execution_id())) {
-          //nothing to do
-        } else if (OB_FAIL(set_session_active(sql, session, ObTimeUtil::current_time(), obmysql::ObMySQLCmd::COM_STMT_PREPARE))) {
-        } else if (OB_FAIL(::oceanbase::observer::get_observer_sql_engine()->stmt_prepare(sql, ctx_, result, false/*is_inner_sql*/))) {
-          exec_start_timestamp_ = ObTimeUtility::current_time();
-          int cli_ret = OB_SUCCESS;
-          retry_ctrl_.test_and_save_retry_state(gctx_, ctx_, result, ret, cli_ret);
-          ret = cli_ret;
-        } else if (common::OB_INVALID_ID != result.get_statement_id()
-                   && OB_FAIL(session.get_inner_ps_stmt_id(result.get_statement_id(), inner_stmt_id))) {
-          ret = OB_ERR_UNEXPECTED;
         } else {
-          //Monitoring item statistics start
-          exec_start_timestamp_ = ObTimeUtility::current_time();
-          // All errors within this branch will be handled properly inside response_result
-          // No need to handle the error response packet additionally
-          need_response_error = false;
-          is_diagnostics_stmt = ObStmt::is_diagnostic_stmt(result.get_literal_stmt_type());
-          ctx_.is_show_trace_stmt_ = ObStmt::is_show_trace_stmt(result.get_literal_stmt_type());
-          session.set_current_execution_id(execution_id);
+          OB_ASSERT_SUCC(ret = result.init());
+          if (OB_ISNULL(::oceanbase::observer::get_observer_sql_engine())) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_ERROR("invalid sql engine", K(ret), K(gctx_));
+          } else if (FALSE_IT(execution_id = ::oceanbase::observer::get_observer_sql_engine()->get_execution_id())) {
+            // nothing to do
+          } else if (OB_FAIL(set_session_active(sql, session, ObTimeUtil::current_time(),
+                                                obmysql::ObMySQLCmd::COM_STMT_PREPARE))) {
+          } else if (OB_FAIL(::oceanbase::observer::get_observer_sql_engine()->stmt_prepare(sql, ctx_, result,
+                                                                                            false /*is_inner_sql*/))) {
+            exec_start_timestamp_ = ObTimeUtility::current_time();
+            int cli_ret = OB_SUCCESS;
+            retry_ctrl_.test_and_save_retry_state(gctx_, ctx_, result, ret, cli_ret);
+            ret = cli_ret;
+          } else if (common::OB_INVALID_ID != result.get_statement_id() &&
+                     OB_FAIL(session.get_inner_ps_stmt_id(result.get_statement_id(), inner_stmt_id))) {
+            ret = OB_ERR_UNEXPECTED;
+          } else {
+            // Monitoring item statistics start
+            exec_start_timestamp_ = ObTimeUtility::current_time();
+            // All errors within this branch will be handled properly inside response_result
+            // No need to handle the error response packet additionally
+            need_response_error = false;
+            is_diagnostics_stmt = ObStmt::is_diagnostic_stmt(result.get_literal_stmt_type());
+            ctx_.is_show_trace_stmt_ = ObStmt::is_show_trace_stmt(result.get_literal_stmt_type());
+            session.set_current_execution_id(execution_id);
 
-          //response_result
-          if (OB_SUCC(ret) && OB_FAIL(response_result(result,
-                                                      session,
-                                                      force_sync_resp,
-                                                      async_resp_used))) {
-            ObPhysicalPlanCtx *plan_ctx = result.get_exec_context().get_physical_plan_ctx();
-            if (OB_ISNULL(plan_ctx)) {
-              // ignore ret
-              LOG_ERROR("execute query fail, and plan_ctx is NULL", K(ret));
-            } else {
+            // response_result
+            if (OB_SUCC(ret) && OB_FAIL(response_result(result, session, force_sync_resp, async_resp_used))) {
+              ObPhysicalPlanCtx *plan_ctx = result.get_exec_context().get_physical_plan_ctx();
+              if (OB_ISNULL(plan_ctx)) {
+                // ignore ret
+                LOG_ERROR("execute query fail, and plan_ctx is NULL", K(ret));
+              } else {
+              }
             }
-          }
-          //Monitoring item statistics end
-          exec_end_timestamp_ = ObTimeUtility::current_time();
+            // Monitoring item statistics end
+            exec_end_timestamp_ = ObTimeUtility::current_time();
 
-          // some statistics must be recorded for plan stat, even though sql audit disabled
-          bool first_record = (1 == audit_record.try_cnt_);
-          ObExecStatUtils::record_exec_timestamp(*this, first_record, audit_record.exec_timestamp_);
-          audit_record.exec_timestamp_.update_stage_time();
+            // some statistics must be recorded for plan stat, even though sql audit disabled
+            bool first_record = (1 == audit_record.try_cnt_);
+            ObExecStatUtils::record_exec_timestamp(*this, first_record, audit_record.exec_timestamp_);
+            audit_record.exec_timestamp_.update_stage_time();
+          }
         }
       }
     } // diagnose end

@@ -166,8 +166,8 @@ int ObStatCollectorOp::inner_get_next_batch(const int64_t max_row_cnt)
       } else {
         iter_end_ = true;
       }
-    } else if (OB_FAIL(brs_.copy(brs))) {
-    }
+    } else
+      OB_ASSERT_SUCC(ret = brs_.copy(brs));
   } else if (OB_FAIL(generate_sample_partition_range(batch_cnt))) {
   }
   return ret;

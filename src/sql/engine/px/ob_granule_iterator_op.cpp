@@ -925,8 +925,8 @@ int ObGranuleIteratorOp::try_get_rows(const int64_t max_row_cnt)
 
         const ObBatchRows *brs = NULL;
         if (OB_FAIL(child_->get_next_batch(max_row_cnt, brs))) {
-        } else if (OB_FAIL(brs_.copy(brs))) {
         } else {
+          OB_ASSERT_SUCC(ret = brs_.copy(brs));
           if (brs->size_ > 0) {
             got_next_row = true;
           }

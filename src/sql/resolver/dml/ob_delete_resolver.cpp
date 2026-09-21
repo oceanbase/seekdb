@@ -109,9 +109,12 @@ int ObDeleteResolver::resolve(const ParseNode &parse_tree)
       if (OB_FAIL(view_pullup_part_exprs())) {
       } else if (OB_FAIL(check_view_deletable())) {
       } else if (OB_FAIL(delete_stmt->check_dml_need_filter_null())) {
-      } else if (OB_FAIL(delete_stmt->check_dml_source_from_join())) {
-      } else if (OB_FAIL(check_safe_update_mode(delete_stmt, is_multi_table_delete))) {
-      } else { /*do nothing */ }
+      } else {
+        OB_ASSERT_SUCC(ret = delete_stmt->check_dml_source_from_join());
+        if (OB_FAIL(check_safe_update_mode(delete_stmt, is_multi_table_delete))) {
+        } else { /*do nothing */
+        }
+      }
     }
   }
   return ret;
@@ -351,35 +354,37 @@ int ObDeleteResolver::generate_delete_table_info(const TableItem &table_item)
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(schema_checker_->get_can_write_index_array(base_table_item.ref_id_,
                                                                 index_tid, gindex_cnt, true))) {
-  } else if (OB_FAIL(params_.session_info_->get_binlog_row_image(binlog_row_image))) {
-  } else if (NULL == (ptr = allocator_->alloc(sizeof(ObDeleteTableInfo)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    table_info = new(ptr) ObDeleteTableInfo();
-    if (OB_FAIL(table_info->part_ids_.assign(base_table_item.part_ids_))) {
+    OB_ASSERT_SUCC(ret = params_.session_info_->get_binlog_row_image(binlog_row_image));
+    if (NULL == (ptr = allocator_->alloc(sizeof(ObDeleteTableInfo)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      // todo @zimiao error logging also need all columns ?
-      if (OB_FAIL(add_all_rowkey_columns_to_stmt(table_item, table_info->column_exprs_))) {
-      } else if (need_all_columns(*table_schema, binlog_row_image)) {
-        if (OB_FAIL(add_all_columns_to_stmt(table_item, table_info->column_exprs_))) {
+      table_info = new (ptr) ObDeleteTableInfo();
+      if (OB_FAIL(table_info->part_ids_.assign(base_table_item.part_ids_))) {
+      } else {
+        // todo @zimiao error logging also need all columns ?
+        if (OB_FAIL(add_all_rowkey_columns_to_stmt(table_item, table_info->column_exprs_))) {
+        } else if (need_all_columns(*table_schema, binlog_row_image)) {
+          if (OB_FAIL(add_all_columns_to_stmt(table_item, table_info->column_exprs_))) {
+          }
+        } else if (OB_FAIL(add_all_index_rowkey_to_stmt(table_item, table_info->column_exprs_))) {
+        } else if (OB_FAIL(add_all_lob_columns_to_stmt(table_item, table_info->column_exprs_))) {
         }
-      } else if (OB_FAIL(add_all_index_rowkey_to_stmt(table_item,
-                                                      table_info->column_exprs_))) {
-      } else if (OB_FAIL(add_all_lob_columns_to_stmt(table_item, table_info->column_exprs_))) {
+        if (OB_SUCC(ret)) {
+          table_info->table_id_ = table_item.table_id_;
+          table_info->loc_table_id_ = base_table_item.table_id_;
+          table_info->ref_table_id_ = base_table_item.ref_id_;
+          table_info->table_name_ = table_schema->get_table_name_str();
+        }
       }
       if (OB_SUCC(ret)) {
-        table_info->table_id_ = table_item.table_id_;
-        table_info->loc_table_id_ = base_table_item.table_id_;
-        table_info->ref_table_id_ = base_table_item.ref_id_;
-        table_info->table_name_ = table_schema->get_table_name_str();
+        TableItem *rowkey_doc = NULL;
+        if (OB_FAIL(delete_stmt->get_delete_table_info().push_back(table_info))) {
+        } else if (gindex_cnt > 0) {
+          delete_stmt->set_has_global_index(true);
+        } else { /*do nothing*/
+        }
       }
-    }
-    if (OB_SUCC(ret)) {
-      TableItem *rowkey_doc = NULL;
-      if (OB_FAIL(delete_stmt->get_delete_table_info().push_back(table_info))) {
-      } else if (gindex_cnt > 0) {
-        delete_stmt->set_has_global_index(true);
-      } else { /*do nothing*/ }
     }
   }
   return ret;

@@ -1331,8 +1331,8 @@ int ObAccessPathEstimation::add_index_info(ObOptimizerContext &ctx,
              OB_FAIL(task->range_idx_.push_back(range_idx))) {
   } else if (OB_ISNULL(index_est_arg = task->arg_.index_params_.alloc_place_holder())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(get_key_ranges(ctx, allocator, tablet.tablet_id_, ap, scan_ranges))) {
   } else {
+    OB_ASSERT_SUCC(ret = get_key_ranges(ctx, allocator, tablet.tablet_id_, ap, scan_ranges));
     index_est_arg->index_id_ = ap.index_id_;
     index_est_arg->scan_flag_.index_back_ = ap.est_cost_info_.index_meta_info_.is_index_back_;
     index_est_arg->range_columns_count_ = ap.est_cost_info_.range_columns_.count();

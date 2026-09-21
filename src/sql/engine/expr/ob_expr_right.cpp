@@ -85,8 +85,8 @@ int calc_right_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   } else {
     ObString res_str;
     const ObCollationType arg_cs_type = expr.args_[0]->datum_meta_.cs_type_;
-		if(OB_FAIL(do_right(s_datum->get_string(), arg_cs_type, n_datum->get_int(), res_str))) {
-    } else {
+    {
+      OB_ASSERT_SUCC(ret = do_right(s_datum->get_string(), arg_cs_type, n_datum->get_int(), res_str));
       res_datum.set_string(res_str);
     }
   }

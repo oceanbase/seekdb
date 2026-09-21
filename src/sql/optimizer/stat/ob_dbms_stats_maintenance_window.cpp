@@ -67,16 +67,13 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
         } else if (OB_UNLIKELY(start_usec == -1 || job_action.empty())) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          if (OB_FAIL(get_stat_window_job_info(
-                                                    job_id,
-                                                    windows_name[i],
-                                                    exec_env,
-                                                    start_usec,
-                                                    job_action,
-                                                    job_info))) {
-          } else if (OB_FAIL(scheduler->create_job(sql_client, job_id, job_info))) {
-          } else {
-            ++ job_id;
+          {
+            OB_ASSERT_SUCC(
+                ret = get_stat_window_job_info(job_id, windows_name[i], exec_env, start_usec, job_action, job_info));
+            if (OB_FAIL(scheduler->create_job(sql_client, job_id, job_info))) {
+            } else {
+              ++job_id;
+            }
           }
         }
       }

@@ -647,20 +647,22 @@ int ObMacroBlockWriter::inner_init(
     }
     int64_t tmp_macro_seq = -1; // to get first macro seq
     if (FAILEDx(macro_seq_generator_->get_next(tmp_macro_seq))) {
-    } else if (OB_FAIL(macro_blocks_[0].init(data_store_desc, tmp_macro_seq, merge_block_info_))) {
-    } else if (is_need_macro_buffer_
-               && OB_FAIL(macro_seq_generator_->preview_next(macro_seq_generator_->get_current(), tmp_macro_seq))) {
-    } else if (is_need_macro_buffer_
-               && OB_FAIL(macro_blocks_[1].init(data_store_desc, tmp_macro_seq, merge_block_info_))) {
-      STORAGE_LOG(WARN, "Fail to init 1th macro block, ", K(ret));
-    } else if (!data_store_desc_->is_major_merge_type()) {
-      // do nothing
-    } else if (OB_ISNULL(curr_micro_column_checksum_ = static_cast<int64_t *>(
-                             allocator_.alloc(sizeof(int64_t) * data_store_desc_->get_row_column_count())))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      STORAGE_LOG(WARN, "fail to allocate memory for curr micro block column checksum", K(ret));
     } else {
-      MEMSET(curr_micro_column_checksum_, 0, sizeof(int64_t) * data_store_desc_->get_row_column_count());
+      OB_ASSERT_SUCC(ret = macro_blocks_[0].init(data_store_desc, tmp_macro_seq, merge_block_info_));
+      if (is_need_macro_buffer_ &&
+          OB_FAIL(macro_seq_generator_->preview_next(macro_seq_generator_->get_current(), tmp_macro_seq))) {
+      } else if (is_need_macro_buffer_ &&
+                 OB_FAIL(macro_blocks_[1].init(data_store_desc, tmp_macro_seq, merge_block_info_))) {
+        STORAGE_LOG(WARN, "Fail to init 1th macro block, ", K(ret));
+      } else if (!data_store_desc_->is_major_merge_type()) {
+        // do nothing
+      } else if (OB_ISNULL(curr_micro_column_checksum_ = static_cast<int64_t *>(
+                               allocator_.alloc(sizeof(int64_t) * data_store_desc_->get_row_column_count())))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        STORAGE_LOG(WARN, "fail to allocate memory for curr micro block column checksum", K(ret));
+      } else {
+        MEMSET(curr_micro_column_checksum_, 0, sizeof(int64_t) * data_store_desc_->get_row_column_count());
+      }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_NOT_NULL(sstable_index_builder)) {
@@ -1844,10 +1846,8 @@ int ObMacroBlockWriter::post_flush(ObMacroBlock &macro_block)
   if (OB_FAIL(macro_seq_generator_->get_next(current_macro_seq))) {
   } else if (is_need_macro_buffer_) {
     /* if use buffer, init in wait_io_finish */
-  } else if (OB_FAIL(macro_block.init(*data_store_desc_,
-                                      current_macro_seq,
-                                      merge_block_info_))) {
-  }
+  } else
+    OB_ASSERT_SUCC(ret = macro_block.init(*data_store_desc_, current_macro_seq, merge_block_info_));
   return ret;
 }
 
@@ -1956,10 +1956,8 @@ int ObMacroBlockWriter::wait_io_finish(ObStorageObjectHandle &macro_handle, ObMa
     if (OB_FAIL(ret)) {
     } else if (!is_need_macro_buffer_) {
     } else if (OB_FAIL(macro_seq_generator_->preview_next(macro_seq_generator_->get_current(), current_macro_seq))) {
-    } else if (OB_FAIL(macro_block->init(*data_store_desc_,
-                                         current_macro_seq,
-                                         merge_block_info_))) {
-    }
+    } else
+      OB_ASSERT_SUCC(ret = macro_block->init(*data_store_desc_, current_macro_seq, merge_block_info_));
     macro_handle.reset();
   }
   return ret;

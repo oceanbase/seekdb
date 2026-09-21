@@ -388,12 +388,15 @@ void ObIOUsage::accumulate(ObIORequest &req)
   } else if (idx >= info_.count() || idx < 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_INFO("invalid io usage index", K(idx), K(info_.count()), K(ret));
-  } else if (OB_FAIL(req.io_result_->cal_delay_us(
-                 prepare_delay, schedule_delay, submit_delay, device_delay, total_delay))) {
-  } else if (req.io_result_->time_log_.return_ts_ > 0 && req.io_result_->ret_code_.io_ret_ == 0) {
-    info_.at(idx).io_stat_.accumulate(1, io_size, prepare_delay, schedule_delay, submit_delay, device_delay, total_delay);
   } else {
-    failed_req_info_.at(idx).inc(io_size, prepare_delay, schedule_delay, submit_delay, device_delay, total_delay);
+    OB_ASSERT_SUCC(
+        ret = req.io_result_->cal_delay_us(prepare_delay, schedule_delay, submit_delay, device_delay, total_delay));
+    if (req.io_result_->time_log_.return_ts_ > 0 && req.io_result_->ret_code_.io_ret_ == 0) {
+      info_.at(idx).io_stat_.accumulate(1, io_size, prepare_delay, schedule_delay, submit_delay, device_delay,
+                                        total_delay);
+    } else {
+      failed_req_info_.at(idx).inc(io_size, prepare_delay, schedule_delay, submit_delay, device_delay, total_delay);
+    }
   }
 }
 
@@ -1853,8 +1856,8 @@ void ObIOFaultDetector::record_io_timeout(const ObIOResult &result, const ObIORe
     RetryTask *retry_task = nullptr;
     if (OB_ISNULL(retry_task = op_alloc(RetryTask))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_FAIL(set_detect_task_io_info_(retry_task->io_info_, result, req))) {
     } else {
+      OB_ASSERT_SUCC(ret = set_detect_task_io_info_(retry_task->io_info_, result, req));
       retry_task->timeout_ms_ = io_config_.data_storage_warning_tolerance_time_; // default 5s
       if (OB_FAIL(common::ObSimpleThreadPool::push(retry_task))) {
       }
@@ -1895,8 +1898,8 @@ int ObIOFaultDetector::record_read_failure_(const ObIOResult &result, const ObIO
   RetryTask *retry_task = nullptr;
   if (OB_ISNULL(retry_task = op_alloc(RetryTask))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(set_detect_task_io_info_(retry_task->io_info_, result, req))) {
   } else {
+    OB_ASSERT_SUCC(ret = set_detect_task_io_info_(retry_task->io_info_, result, req));
     retry_task->timeout_ms_ = 5000L; // 5s
     if (OB_FAIL(common::ObSimpleThreadPool::push(retry_task))) {
     } else {

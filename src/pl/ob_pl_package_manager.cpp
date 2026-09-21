@@ -521,11 +521,14 @@ int ObPLPackageManager::get_package_var(const ObPLResolveCtx &resolve_ctx, uint6
                              package_spec->get_name().length(), package_spec->get_name().ptr());
       }
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(tmp_package->get_var(var_idx, var))) {
-        } else if (OB_ISNULL(var)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (!var->is_readonly() && OB_ISNULL(package_body)) {// For non-constant values, need to ensure the validity of the body
-          OZ (get_cached_package(resolve_ctx, package_id, package_spec, package_body, false));
+        {
+          OB_ASSERT_SUCC(ret = tmp_package->get_var(var_idx, var));
+          if (OB_ISNULL(var)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (!var->is_readonly() &&
+                     OB_ISNULL(package_body)) { // For non-constant values, need to ensure the validity of the body
+            OZ(get_cached_package(resolve_ctx, package_id, package_spec, package_body, false));
+          }
         }
       }
     }

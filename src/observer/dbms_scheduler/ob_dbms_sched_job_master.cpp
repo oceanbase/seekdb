@@ -45,14 +45,16 @@ int ObDBMSSchedJobMaster::init(common::ObMySQLProxy *sql_proxy,
           || OB_ISNULL(schema_service)
           ) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(table_operator_.init(sql_proxy))) {
-  } else if (OB_FAIL(alive_jobs_.create(1024, ObMemAttr("DbmsSched_Job")))) {
-  } else if (OB_FAIL(thread_cond_.init(ObWaitEventIds::REENTRANT_THREAD_COND_WAIT))) {
-  } else if (OB_ISNULL(ObCurTraceId::get())) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
-    schema_service_ = schema_service;
-    inited_ = true;
+    OB_ASSERT_SUCC(ret = table_operator_.init(sql_proxy));
+    if (OB_FAIL(alive_jobs_.create(1024, ObMemAttr("DbmsSched_Job")))) {
+    } else if (OB_FAIL(thread_cond_.init(ObWaitEventIds::REENTRANT_THREAD_COND_WAIT))) {
+    } else if (OB_ISNULL(ObCurTraceId::get())) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      schema_service_ = schema_service;
+      inited_ = true;
+    }
   }
   LOG_INFO("dbms sched job master inited!", K(ret));
   return ret;

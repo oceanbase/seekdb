@@ -2431,16 +2431,18 @@ int ObMultiVersionSchemaService::get_tablet_to_table_history(const ObIArray<ObTa
       } else if (tablet_id.is_inner_tablet()) {
         // case 1: inner tablet_id is equal to its table_id
         table_id = tablet_id.id();
-      } else if (OB_FAIL(key.init(tablet_id, schema_version))) {
-      } else if (OB_FAIL(schema_cache_.get_tablet_cache(key, table_id))) {
-        if (OB_ENTRY_NOT_EXIST != ret) {
-        } else if (OB_FAIL(fetch_idxs.push_back(i))) {
-        } else {
-          // case 2: cache miss, fetch later
-          table_id = OB_INVALID_ID; // occupancy
-        }
       } else {
-        // case 3: cache hit
+        OB_ASSERT_SUCC(ret = key.init(tablet_id, schema_version));
+        if (OB_FAIL(schema_cache_.get_tablet_cache(key, table_id))) {
+          if (OB_ENTRY_NOT_EXIST != ret) {
+          } else if (OB_FAIL(fetch_idxs.push_back(i))) {
+          } else {
+            // case 2: cache miss, fetch later
+            table_id = OB_INVALID_ID; // occupancy
+          }
+        } else {
+          // case 3: cache hit
+        }
       }
       if (FAILEDx(table_ids.push_back(table_id))) {
       }

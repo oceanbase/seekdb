@@ -4208,8 +4208,7 @@ int ObDagScheduler::get_compaction_dag_count(int64_t dag_count)
   int ret = OB_SUCCESS;
   dag_count = 0;
   for (int64_t i = 0; OB_SUCC(ret) && i < ObIDag::MergeDagPrioCnt; ++i) {
-    if (OB_FAIL(prio_sche_[ObIDag::MergeDagPrio[i]].get_compaction_dag_count(dag_count))) {
-    }
+    OB_ASSERT_SUCC(ret = prio_sche_[ObIDag::MergeDagPrio[i]].get_compaction_dag_count(dag_count));
   }
   return ret;
 }
@@ -4516,8 +4515,8 @@ int ObDagScheduler::loop_ready_dag_lists()
   for (int64_t i = 0; OB_SUCC(ret) && !is_found && i < ObDagPrio::DAG_PRIO_MAX; ++i) {
     if (!prio_sche_[i].is_inited()) {
       continue;
-    } else if (OB_FAIL(prio_sche_[i].loop_ready_dag_list(is_found))) {
-    }
+    } else
+      OB_ASSERT_SUCC(ret = prio_sche_[i].loop_ready_dag_list(is_found));
   }
 
   if (!is_found) {
@@ -4767,8 +4766,8 @@ int ObDagScheduler::get_first_dag_net(ObIDagNet *&dag_net)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "ObDagScheduler is not inited", K(ret));
-  } else if (OB_FAIL(dag_net_sche_.get_first_dag_net(dag_net))) {
-  }
+  } else
+    OB_ASSERT_SUCC(ret = dag_net_sche_.get_first_dag_net(dag_net));
   return ret;
 }
 

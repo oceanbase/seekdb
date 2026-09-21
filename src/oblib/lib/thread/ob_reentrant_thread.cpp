@@ -34,8 +34,7 @@ ObReentrantThread::ObReentrantThread() : stop_(true), created_(false),
 ObReentrantThread::~ObReentrantThread()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(destroy())) {
-  }
+  OB_ASSERT_SUCC(ret = destroy());
 }
 
 int ObReentrantThread::create(const int64_t thread_cnt, const char* thread_name,

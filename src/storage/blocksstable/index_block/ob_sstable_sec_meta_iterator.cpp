@@ -492,8 +492,7 @@ int ObSSTableSecMetaIterator::get_micro_block(
                                 idx_row_header.get_block_size(),
                                 idx_row_header.get_logic_micro_id(),
                                 idx_row_header.get_data_checksum());
-    if (OB_FAIL(idx_row_header.fill_micro_des_meta(data_handle.des_meta_))) {
-    }
+    OB_ASSERT_SUCC(ret = idx_row_header.fill_micro_des_meta(data_handle.des_meta_));
   }
   return ret;
 }

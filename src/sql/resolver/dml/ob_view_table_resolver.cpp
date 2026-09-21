@@ -156,12 +156,13 @@ int ObViewTableResolver::set_select_item(SelectItem &select_item, bool is_auto_g
   } else if (is_create_view_ && !select_item.is_real_alias_) {
     if (OB_FAIL(ObSelectResolver::set_select_item(select_item, is_auto_gen))) {
     }
-  } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-  } else if (select_item.is_real_alias_
-             && OB_FAIL(ObSQLUtils::check_column_name(cs_type, select_item.alias_name_, true))) {
-    // Only check real alias here,
-    // auto generated alias will be checked in ObSelectResolver::check_auto_gen_column_names().
-  } else if (OB_FAIL(select_stmt->add_select_item(select_item))) {
+  } else {
+    OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(cs_type));
+    if (select_item.is_real_alias_ && OB_FAIL(ObSQLUtils::check_column_name(cs_type, select_item.alias_name_, true))) {
+      // Only check real alias here,
+      // auto generated alias will be checked in ObSelectResolver::check_auto_gen_column_names().
+    } else if (OB_FAIL(select_stmt->add_select_item(select_item))) {
+    }
   }
   return ret;
 }

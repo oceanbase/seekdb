@@ -1,0 +1,9 @@
+load("//bazel:defs.bzl", "seekdb_module_cc_test")
+
+seekdb_module_cc_test(
+    name = "oblib_tests",
+    srcs = ["lib/utility/test_assert_succ.cpp"],
+    test_hdrs = [],
+    module_interface = "//src/oblib:oblib_foundation",
+    shard_count = 1,
+)

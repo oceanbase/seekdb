@@ -285,8 +285,8 @@ int ObTabletCacheKey::deep_copy(char *buf,
     ObTabletCacheKey *new_key = new (buf) ObTabletCacheKey();
     if (OB_ISNULL(new_key)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(new_key->init(tablet_id_, schema_version_))) {
     } else {
+      OB_ASSERT_SUCC(ret = new_key->init(tablet_id_, schema_version_));
       key = new_key;
     }
   }
@@ -326,8 +326,8 @@ int ObTabletCacheValue::deep_copy(char *buf,
     ObTabletCacheValue *new_value = new (buf) ObTabletCacheValue();
     if (OB_ISNULL(new_value)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(new_value->init(table_id_))) {
     } else {
+      OB_ASSERT_SUCC(ret = new_value->init(table_id_));
       value = new_value;
     }
   }
@@ -521,8 +521,10 @@ int ObSchemaCache::put_tablet_cache(
     ret = OB_INNER_STAT_ERROR;
   } else if (OB_UNLIKELY(!key.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(value.init(table_id))) {
-  } else if (OB_FAIL(tablet_cache_.put(key, value))) {
+  } else {
+    OB_ASSERT_SUCC(ret = value.init(table_id));
+    if (OB_FAIL(tablet_cache_.put(key, value))) {
+    }
   }
   return ret;
 }

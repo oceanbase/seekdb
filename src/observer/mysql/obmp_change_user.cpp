@@ -72,22 +72,24 @@ int ObMPChangeUser::process()
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("fail to get session info", K(ret), K(session));
-  } else if (OB_FAIL(session->get_query_timeout(query_timeout))) {
-  } else if (FALSE_IT(THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout))) {
   } else {
-    need_disconnect = false;
-    if (has_charset_) {
-      get_conn()->client_cs_type_ = charset_;
-    }
-    ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
-    session->update_last_active_time();
-    if (OB_FAIL(ObSqlTransControl::rollback_trans(session, need_disconnect))) {
+    OB_ASSERT_SUCC(ret = session->get_query_timeout(query_timeout));
+    if (FALSE_IT(THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout))) {
     } else {
-      session->clean_status();
-      if (OB_FAIL(load_login_info(session))) {
-      } else if (need_send_auth_switch) {
-        // do nothing
-      } else if (OB_FAIL(load_privilege_info_for_change_user(session))) {
+      need_disconnect = false;
+      if (has_charset_) {
+        get_conn()->client_cs_type_ = charset_;
+      }
+      ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
+      session->update_last_active_time();
+      if (OB_FAIL(ObSqlTransControl::rollback_trans(session, need_disconnect))) {
+      } else {
+        session->clean_status();
+        if (OB_FAIL(load_login_info(session))) {
+        } else if (need_send_auth_switch) {
+          // do nothing
+        } else if (OB_FAIL(load_privilege_info_for_change_user(session))) {
+        }
       }
     }
   }

@@ -135,10 +135,12 @@ int ObSqlSockHandler::on_readable(void *udata, char *body, int64_t body_len,
   } else if (OB_FAIL(build_mysql_raw_packet_view(sess->pool_, body, body_len,
                                                  wire_bytes, mode, command_view,
                                                  pkt))) {
-  } else if (OB_FAIL(build_sql_req(*sess, pkt, generation, sql_req))) {
-  } else if (NULL == sql_req) {
-    // nothing to deliver
-  } else if (OB_FAIL(deliver_->deliver(*sql_req))) {
+  } else {
+    OB_ASSERT_SUCC(ret = build_sql_req(*sess, pkt, generation, sql_req));
+    if (NULL == sql_req) {
+      // nothing to deliver
+    } else if (OB_FAIL(deliver_->deliver(*sql_req))) {
+    }
   }
   return ret;
 }

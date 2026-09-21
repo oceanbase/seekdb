@@ -644,9 +644,9 @@ ObRefreshSchemaInfo::ObRefreshSchemaInfo(const ObRefreshSchemaInfo &other)
 int ObRefreshSchemaInfo::assign(const ObRefreshSchemaInfo &other)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(sequence_id_.assign(other.sequence_id_))) {
-  } else {
-    
+  {
+    OB_ASSERT_SUCC(ret = sequence_id_.assign(other.sequence_id_));
+
     schema_version_ = other.schema_version_;
   }
   return ret;

@@ -1759,15 +1759,16 @@ int ObDMLResolver::resolve_into_variables(const ParseNode *node,
         if (T_FUN_SYS_CAST == expr->get_expr_type()) {
           cast_dst_type.add_decimal_int_cast_mode(expr->get_cast_mode());
         }
-        if (OB_FAIL(params_.session_info_->get_collation_connection(coll_type))) {
-        } else if (FALSE_IT(cast_dst_type.set_collation_type(coll_type))) {
-        } else if (OB_FAIL(ObSQLUtils::get_default_cast_mode(params_.session_info_, cast_mode))) {
-        } else if (OB_FAIL(ObRawExprUtils::try_add_cast_expr_above(
-                                              params_.expr_factory_, params_.session_info_,
-                                              *expr,  cast_dst_type, cast_mode, new_expr))) {
-        } else if (OB_FAIL(new_expr->add_flag(IS_OP_OPERAND_IMPLICIT_CAST))) {
-        } else {
-          item.expr_ = new_expr;
+        {
+          OB_ASSERT_SUCC(ret = params_.session_info_->get_collation_connection(coll_type));
+          if (FALSE_IT(cast_dst_type.set_collation_type(coll_type))) {
+          } else if (OB_FAIL(ObSQLUtils::get_default_cast_mode(params_.session_info_, cast_mode))) {
+          } else if (OB_FAIL(ObRawExprUtils::try_add_cast_expr_above(params_.expr_factory_, params_.session_info_,
+                                                                     *expr, cast_dst_type, cast_mode, new_expr))) {
+          } else if (OB_FAIL(new_expr->add_flag(IS_OP_OPERAND_IMPLICIT_CAST))) {
+          } else {
+            item.expr_ = new_expr;
+          }
         }
       }
     }
@@ -3465,32 +3466,27 @@ int ObDMLResolver::resolve_str_const(const ParseNode &parse_tree, ObString& path
   if (OB_ISNULL(params_.expr_factory_) || OB_ISNULL(params_.session_info_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("resolve status is invalid", K_(params_.expr_factory), K_(params_.session_info));
-  } else if (OB_FAIL(params_.session_info_->get_collation_connection(collation_connection))) {
-  } else if (OB_FAIL(params_.session_info_->get_character_set_connection(character_set_connection))) {
-  } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session_info, enable_decimal_int))) {
-  } else if (OB_FAIL(ObSQLUtils::check_enable_mysql_compatible_dates(session_info, false,
-                                                                     enable_mysql_compatible_dates))) {
-  } else if (OB_FAIL(ObResolverUtils::resolve_const(&parse_tree,
-                                             // stmt_type is unused in MySQL-only mode.
-                                             stmt::T_NONE,
-                                             params_.expr_factory_->get_allocator(),
-                                             collation_connection, nation_collation, TZ_INFO(params_.session_info_),
-                                             val, is_paramlize,
-                                             literal_prefix,
-                                             default_length_semantics,
-                                             static_cast<ObCollationType>(server_collation),
-                                             &parents_expr_info,
-                                             session_info->get_sql_mode(),
-                                             enable_decimal_int,
-                                             compat_type,
-                                             enable_mysql_compatible_dates,
-                                             session_info->get_min_const_integer_precision(),
-                                             nullptr != params_.secondary_namespace_))) {
-  } else if (OB_ISNULL(buf = static_cast<char*>(allocator_->alloc(val.get_string().length())))) { // deep copy str value
-    ret = common::OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    MEMCPY(buf, val.get_string().ptr(), val.get_string().length());
-    path_str.assign_ptr(buf, val.get_string().length());
+    OB_ASSERT_SUCC(ret = params_.session_info_->get_collation_connection(collation_connection));
+    if (OB_FAIL(params_.session_info_->get_character_set_connection(character_set_connection))) {
+    } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session_info, enable_decimal_int))) {
+    } else if (OB_FAIL(ObSQLUtils::check_enable_mysql_compatible_dates(session_info, false,
+                                                                       enable_mysql_compatible_dates))) {
+    } else if (OB_FAIL(ObResolverUtils::resolve_const(
+                   &parse_tree,
+                   // stmt_type is unused in MySQL-only mode.
+                   stmt::T_NONE, params_.expr_factory_->get_allocator(), collation_connection, nation_collation,
+                   TZ_INFO(params_.session_info_), val, is_paramlize, literal_prefix, default_length_semantics,
+                   static_cast<ObCollationType>(server_collation), &parents_expr_info, session_info->get_sql_mode(),
+                   enable_decimal_int, compat_type, enable_mysql_compatible_dates,
+                   session_info->get_min_const_integer_precision(), nullptr != params_.secondary_namespace_))) {
+    } else if (OB_ISNULL(
+                   buf = static_cast<char *>(allocator_->alloc(val.get_string().length())))) { // deep copy str value
+      ret = common::OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      MEMCPY(buf, val.get_string().ptr(), val.get_string().length());
+      path_str.assign_ptr(buf, val.get_string().length());
+    }
   }
   return ret;
 }
@@ -4743,28 +4739,29 @@ int ObDMLResolver::resolve_partition_expr(const ParseNode &part_expr_node, ObRaw
   if (OB_ISNULL(params_.expr_factory_) || OB_ISNULL(params_.session_info_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("resolve status is invalid", K_(params_.expr_factory), K_(params_.session_info));
-  } else if (OB_FAIL(params_.session_info_->get_collation_connection(collation_connection))) {
-  } else if (OB_FAIL(params_.session_info_->get_character_set_connection(character_set_connection))) {
   } else {
-    ObExprResolveContext ctx(*params_.expr_factory_, params_.session_info_->get_timezone_info(),
-                             OB_NAME_CASE_INVALID);
-    ctx.dest_collation_ = collation_connection;
-    ctx.connection_charset_ = character_set_connection;
-    ctx.param_list_ = params_.param_list_;
-    ctx.stmt_ = static_cast<ObStmt*>(get_stmt());
-    ctx.session_info_ = params_.session_info_;
-    ctx.query_ctx_ = params_.query_ctx_;
-    ObRawExprResolverImpl expr_resolver(ctx);
-    if (OB_FAIL(params_.session_info_->get_name_case_mode(ctx.case_mode_))) {
-    } else if (OB_FAIL(expr_resolver.resolve(&part_expr_node, expr, columns, sys_vars,
-                                             sub_query_info, aggr_exprs, win_exprs, udf_info,
-                                             op_exprs, user_var_exprs, inlist_infos, match_exprs))) {
-    } else if (sub_query_info.count() > 0 || sys_vars.count() > 0 || aggr_exprs.count() > 0 ||
-               columns.count() <= 0 || udf_info.count() > 0 || op_exprs.count() > 0 ||
-               inlist_infos.count() > 0) {
-      ret = OB_ERR_UNEXPECTED; //TODO Molly not allow type cast in part expr?
-      LOG_WARN("part expr is invalid", K(sub_query_info.count()), K(sys_vars.count()),
-                K(aggr_exprs.count()), K(columns.count()), K(udf_info.count()));
+    OB_ASSERT_SUCC(ret = params_.session_info_->get_collation_connection(collation_connection));
+    if (OB_FAIL(params_.session_info_->get_character_set_connection(character_set_connection))) {
+    } else {
+      ObExprResolveContext ctx(*params_.expr_factory_, params_.session_info_->get_timezone_info(),
+                               OB_NAME_CASE_INVALID);
+      ctx.dest_collation_ = collation_connection;
+      ctx.connection_charset_ = character_set_connection;
+      ctx.param_list_ = params_.param_list_;
+      ctx.stmt_ = static_cast<ObStmt *>(get_stmt());
+      ctx.session_info_ = params_.session_info_;
+      ctx.query_ctx_ = params_.query_ctx_;
+      ObRawExprResolverImpl expr_resolver(ctx);
+      if (OB_FAIL(params_.session_info_->get_name_case_mode(ctx.case_mode_))) {
+      } else if (OB_FAIL(expr_resolver.resolve(&part_expr_node, expr, columns, sys_vars, sub_query_info, aggr_exprs,
+                                               win_exprs, udf_info, op_exprs, user_var_exprs, inlist_infos,
+                                               match_exprs))) {
+      } else if (sub_query_info.count() > 0 || sys_vars.count() > 0 || aggr_exprs.count() > 0 || columns.count() <= 0 ||
+                 udf_info.count() > 0 || op_exprs.count() > 0 || inlist_infos.count() > 0) {
+        ret = OB_ERR_UNEXPECTED; // TODO Molly not allow type cast in part expr?
+        LOG_WARN("part expr is invalid", K(sub_query_info.count()), K(sys_vars.count()), K(aggr_exprs.count()),
+                 K(columns.count()), K(udf_info.count()));
+      }
     }
   }
   return ret;
@@ -5563,8 +5560,7 @@ int ObDMLResolver::do_resolve_subquery_info(const ObSubQueryInfo &subquery_info,
     subquery_info.ref_expr_->set_ref_stmt(sub_stmt);
     if (OB_FAIL(stmt->add_subquery_ref(const_cast<ObSubQueryInfo&>(subquery_info).ref_expr_))) {
     } else {
-      if (OB_FAIL(check_order_by_for_subquery_stmt(subquery_info))) {
-      }
+      OB_ASSERT_SUCC(ret = check_order_by_for_subquery_stmt(subquery_info));
     }
   }
   return ret;
@@ -10885,8 +10881,8 @@ int ObDMLResolver::resolve_with_clause_opt_alias_colnames(const ParseNode *parse
     } else if (OB_ISNULL(session_info_)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(session_info_->get_name_case_mode(mode))) {
-    } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
     } else {
+      OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(cs_type));
       //bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
       // Check if aliases are equal, note that pseudo columns are not included
       for (int64_t i = 0; OB_SUCC(ret) && i < sub_select_stmt_item_count; ++i) {
@@ -11399,12 +11395,13 @@ int ObDMLResolver::get_values_res_types(const ObIArray<ObRawExprResType> &cur_va
       ObCollationType coll_type = CS_TYPE_INVALID;
       if (OB_FAIL(tmp_types.push_back(res_types.at(i))) ||
           OB_FAIL(tmp_types.push_back(cur_values_types.at(i)))) {
-      } else if (OB_FAIL(session_info_->get_collation_connection(coll_type))) {
-      } else if (OB_FAIL(dummy_op.aggregate_result_type_for_merge(new_res_type, &tmp_types.at(0),
-                                                                  tmp_types.count(),
-                                                                  type_ctx))) {
       } else {
-        res_types.at(i) = new_res_type;
+        OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(coll_type));
+        if (OB_FAIL(dummy_op.aggregate_result_type_for_merge(new_res_type, &tmp_types.at(0), tmp_types.count(),
+                                                             type_ctx))) {
+        } else {
+          res_types.at(i) = new_res_type;
+        }
       }
     }
   }

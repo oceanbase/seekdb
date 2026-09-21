@@ -1543,8 +1543,8 @@ int ObResolverUtils::resolve_sp_name(ObSQLSessionInfo &session_info,
              || OB_UNLIKELY(sp_node->type_ != T_IDENT)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(session_info.get_name_case_mode(mode))) {
-  } else if (OB_FAIL(session_info.get_collation_connection(cs_type))) {
   } else {
+    OB_ASSERT_SUCC(ret = session_info.get_collation_connection(cs_type));
     const ParseNode *db_node = NULL;
     bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
     sp_name.assign_ptr(sp_node->str_value_, static_cast<int32_t>(sp_node->str_len_));
@@ -2451,59 +2451,60 @@ int ObResolverUtils::resolve_const_expr(ObResolverParams &params,
   if (OB_ISNULL(params.expr_factory_) || OB_ISNULL(params.session_info_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("resolve status is invalid", K_(params.expr_factory), K_(params.session_info));
-  } else if (OB_FAIL(params.session_info_->get_collation_connection(collation_connection))) {
-  } else if (OB_FAIL(params.session_info_->get_character_set_connection(character_set_connection))) {
   } else {
-    ObExprResolveContext ctx(*params.expr_factory_, params.session_info_->get_timezone_info(),
-                             OB_NAME_CASE_INVALID);
-    ctx.dest_collation_ = collation_connection;
-    ctx.connection_charset_ = character_set_connection;
-    ctx.param_list_ = params.param_list_;
-    ctx.is_extract_param_type_ = !params.is_prepare_protocol_; //when prepare do not extract
-    ctx.schema_checker_ = params.schema_checker_;
-    ctx.session_info_ = params.session_info_;
-    ctx.secondary_namespace_ = params.secondary_namespace_;
-    ctx.query_ctx_ = params.query_ctx_;
-    ObRawExprResolverImpl expr_resolver(ctx);
-    if (OB_FAIL(params.session_info_->get_name_case_mode(ctx.case_mode_))) {
-    } else if (OB_FAIL(expr_resolver.resolve(&node, const_expr, columns, sys_vars,
-                                             sub_query_info, aggr_exprs, win_exprs,
-                                             udf_info, op_exprs, user_var_exprs, inlist_infos, match_exprs))) {
-    } else if (OB_FAIL(resolve_columns_for_const_expr(const_expr, columns, params))) {
-    } else if (sub_query_info.count() > 0) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "subqueries or stored function calls here");
-    } else if (udf_info.count() > 0) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("UDFInfo should not found be here!!!", K(ret));
-    } else if (OB_UNLIKELY(!inlist_infos.empty())) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (match_exprs.count() > 0) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("fulltext search expr should not found be here", K(ret));
-    }
-
-    // Process implicit conversion for comparison operators.
-    if (OB_SUCC(ret) && op_exprs.count() > 0) {
-      if (OB_FAIL(ObRawExprUtils::resolve_op_exprs_for_comparison_implicit_cast(ctx.expr_factory_,
-                                                                  ctx.session_info_, op_exprs))) {
+    OB_ASSERT_SUCC(ret = params.session_info_->get_collation_connection(collation_connection));
+    if (OB_FAIL(params.session_info_->get_character_set_connection(character_set_connection))) {
+    } else {
+      ObExprResolveContext ctx(*params.expr_factory_, params.session_info_->get_timezone_info(), OB_NAME_CASE_INVALID);
+      ctx.dest_collation_ = collation_connection;
+      ctx.connection_charset_ = character_set_connection;
+      ctx.param_list_ = params.param_list_;
+      ctx.is_extract_param_type_ = !params.is_prepare_protocol_; // when prepare do not extract
+      ctx.schema_checker_ = params.schema_checker_;
+      ctx.session_info_ = params.session_info_;
+      ctx.secondary_namespace_ = params.secondary_namespace_;
+      ctx.query_ctx_ = params.query_ctx_;
+      ObRawExprResolverImpl expr_resolver(ctx);
+      if (OB_FAIL(params.session_info_->get_name_case_mode(ctx.case_mode_))) {
+      } else if (OB_FAIL(expr_resolver.resolve(&node, const_expr, columns, sys_vars, sub_query_info, aggr_exprs,
+                                               win_exprs, udf_info, op_exprs, user_var_exprs, inlist_infos,
+                                               match_exprs))) {
+      } else if (OB_FAIL(resolve_columns_for_const_expr(const_expr, columns, params))) {
+      } else if (sub_query_info.count() > 0) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "subqueries or stored function calls here");
+      } else if (udf_info.count() > 0) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_ERROR("UDFInfo should not found be here!!!", K(ret));
+      } else if (OB_UNLIKELY(!inlist_infos.empty())) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (match_exprs.count() > 0) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_ERROR("fulltext search expr should not found be here", K(ret));
       }
-    }
 
-    if (OB_SUCC(ret)) {
-      if (T_SP_CPARAM == const_expr->get_expr_type()) {
-        ObCallParamRawExpr *call_expr = static_cast<ObCallParamRawExpr*>(const_expr);
-        CK (OB_NOT_NULL(call_expr->get_expr()));
-        OZ (call_expr->get_expr()->formalize(params.session_info_));
-      } else {
-        OZ (const_expr->formalize(params.session_info_));
+      // Process implicit conversion for comparison operators.
+      if (OB_SUCC(ret) && op_exprs.count() > 0) {
+        if (OB_FAIL(ObRawExprUtils::resolve_op_exprs_for_comparison_implicit_cast(ctx.expr_factory_, ctx.session_info_,
+                                                                                  op_exprs))) {
+        }
       }
+
       if (OB_SUCC(ret)) {
-        if (var_infos != NULL) {
-          if (OB_FAIL(ObRawExprUtils::merge_variables(sys_vars, *var_infos))) {
-          }
+        if (T_SP_CPARAM == const_expr->get_expr_type()) {
+          ObCallParamRawExpr *call_expr = static_cast<ObCallParamRawExpr *>(const_expr);
+          CK(OB_NOT_NULL(call_expr->get_expr()));
+          OZ(call_expr->get_expr()->formalize(params.session_info_));
         } else {
-          params.prepare_param_count_ += ctx.prepare_param_count_; //prepare param count
+          OZ(const_expr->formalize(params.session_info_));
+        }
+        if (OB_SUCC(ret)) {
+          if (var_infos != NULL) {
+            if (OB_FAIL(ObRawExprUtils::merge_variables(sys_vars, *var_infos))) {
+            }
+          } else {
+            params.prepare_param_count_ += ctx.prepare_param_count_; // prepare param count
+          }
         }
       }
     }
@@ -3109,53 +3110,54 @@ int ObResolverUtils::resolve_partition_range_value_expr(ObResolverParams &params
   } else if (OB_ISNULL(params.expr_factory_) || OB_ISNULL(params.session_info_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("resolve status is invalid", K_(params.expr_factory), K_(params.session_info));
-  } else if (OB_FAIL(params.session_info_->get_collation_connection(collation_connection))) {
-  } else if (OB_FAIL(params.session_info_->get_character_set_connection(character_set_connection))) {
   } else {
-    ObArray<ObQualifiedName> columns;
-    ObArray<ObSubQueryInfo> sub_query_info;
-    ObArray<ObVarInfo> sys_vars;
-    ObArray<ObAggFunRawExpr*> aggr_exprs;
-    ObArray<ObWinFunRawExpr*> win_exprs;
-    ObArray<ObUDFInfo> udf_info;
-    ObArray<ObColumnRefRawExpr*> part_column_refs;
-    ObArray<ObOpRawExpr*> op_exprs;
-    ObSEArray<ObUserVarIdentRawExpr*, 1> user_var_exprs;
-    ObArray<ObInListInfo> inlist_infos;
-    ObSEArray<ObMatchFunRawExpr*, 1> match_exprs;
-    ObExprResolveContext ctx(*params.expr_factory_, params.session_info_->get_timezone_info(), OB_NAME_CASE_INVALID);
-    ctx.dest_collation_ = collation_connection;
-    ctx.connection_charset_ = ObCharset::charset_type_by_coll(part_func_expr.get_collation_type());
-    ctx.param_list_ = params.param_list_;
-    ctx.session_info_ = params.session_info_;
-    ctx.query_ctx_ = params.query_ctx_;
-    ObRawExprResolverImpl expr_resolver(ctx);
-    if (OB_FAIL(params.session_info_->get_name_case_mode(ctx.case_mode_))) {
-    } else if (OB_FAIL(expr_resolver.resolve(&node, part_value_expr, columns, sys_vars,
-                                             sub_query_info, aggr_exprs, win_exprs, udf_info,
-                                             op_exprs, user_var_exprs, inlist_infos, match_exprs))) {
-    } else if (sub_query_info.count() > 0) {
-      ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
-    } else if (OB_FAIL(resolve_columns_for_partition_range_value_expr(part_value_expr, columns))) {
-    } else if (udf_info.count() > 0) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "udf");
-    } else if (OB_UNLIKELY(!inlist_infos.empty())) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_UNLIKELY(match_exprs.count() > 0)) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "fulltext search func");
-    } else { /* do nothing */ }
-
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(part_value_expr)) {
+    OB_ASSERT_SUCC(ret = params.session_info_->get_collation_connection(collation_connection));
+    if (OB_FAIL(params.session_info_->get_character_set_connection(character_set_connection))) {
+    } else {
+      ObArray<ObQualifiedName> columns;
+      ObArray<ObSubQueryInfo> sub_query_info;
+      ObArray<ObVarInfo> sys_vars;
+      ObArray<ObAggFunRawExpr *> aggr_exprs;
+      ObArray<ObWinFunRawExpr *> win_exprs;
+      ObArray<ObUDFInfo> udf_info;
+      ObArray<ObColumnRefRawExpr *> part_column_refs;
+      ObArray<ObOpRawExpr *> op_exprs;
+      ObSEArray<ObUserVarIdentRawExpr *, 1> user_var_exprs;
+      ObArray<ObInListInfo> inlist_infos;
+      ObSEArray<ObMatchFunRawExpr *, 1> match_exprs;
+      ObExprResolveContext ctx(*params.expr_factory_, params.session_info_->get_timezone_info(), OB_NAME_CASE_INVALID);
+      ctx.dest_collation_ = collation_connection;
+      ctx.connection_charset_ = ObCharset::charset_type_by_coll(part_func_expr.get_collation_type());
+      ctx.param_list_ = params.param_list_;
+      ctx.session_info_ = params.session_info_;
+      ctx.query_ctx_ = params.query_ctx_;
+      ObRawExprResolverImpl expr_resolver(ctx);
+      if (OB_FAIL(params.session_info_->get_name_case_mode(ctx.case_mode_))) {
+      } else if (OB_FAIL(expr_resolver.resolve(&node, part_value_expr, columns, sys_vars, sub_query_info, aggr_exprs,
+                                               win_exprs, udf_info, op_exprs, user_var_exprs, inlist_infos,
+                                               match_exprs))) {
+      } else if (sub_query_info.count() > 0) {
+        ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
+      } else if (OB_FAIL(resolve_columns_for_partition_range_value_expr(part_value_expr, columns))) {
+      } else if (udf_info.count() > 0) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "udf");
+      } else if (OB_UNLIKELY(!inlist_infos.empty())) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(part_value_expr->formalize(params.session_info_))) {
-      } else if (OB_FAIL(check_partition_value_expr_for_range(part_name,
-                                                              part_func_expr,
-                                                              *part_value_expr,
-                                                              part_type))) {
-      } else {
+      } else if (OB_UNLIKELY(match_exprs.count() > 0)) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "fulltext search func");
+      } else { /* do nothing */
+      }
+
+      if (OB_SUCC(ret)) {
+        if (OB_ISNULL(part_value_expr)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(part_value_expr->formalize(params.session_info_))) {
+        } else if (OB_FAIL(
+                       check_partition_value_expr_for_range(part_name, part_func_expr, *part_value_expr, part_type))) {
+        } else {
+        }
       }
     }
   }
@@ -3250,63 +3252,53 @@ int ObResolverUtils::resolve_partition_range_value_expr(ObResolverParams &params
   } else if (OB_ISNULL(params.expr_factory_) || OB_ISNULL(params.session_info_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("resolve status is invalid", K_(params.expr_factory), K_(params.session_info));
-  } else if (OB_FAIL(params.session_info_->get_collation_connection(collation_connection))) {
-  } else if (OB_FAIL(params.session_info_->get_character_set_connection(character_set_connection))) {
   } else {
-    ObArray<ObQualifiedName> columns;
-    ObArray<ObSubQueryInfo> sub_query_info;
-    ObArray<ObVarInfo> sys_vars;
-    ObArray<ObAggFunRawExpr*> aggr_exprs;
-    ObArray<ObWinFunRawExpr*> win_exprs;
-    ObArray<ObUDFInfo> udf_info;
-    ObArray<ObColumnRefRawExpr*> part_column_refs;
-    ObArray<ObOpRawExpr*> op_exprs;
-    ObSEArray<ObUserVarIdentRawExpr*, 1> user_var_exprs;
-    ObArray<ObInListInfo> inlist_infos;
-    ObSEArray<ObMatchFunRawExpr*, 1> match_exprs;
-    ObExprResolveContext ctx(*params.expr_factory_,
-                             params.session_info_->get_timezone_info(),
-                             OB_NAME_CASE_INVALID);
-    ctx.dest_collation_ = collation_connection;
-    ctx.connection_charset_ = character_set_connection;
-    ctx.param_list_ = params.param_list_;
-    ctx.session_info_ = params.session_info_;
-    ctx.query_ctx_ = params.query_ctx_;
-    ObRawExprResolverImpl expr_resolver(ctx);
-    if (OB_FAIL(params.session_info_->get_name_case_mode(ctx.case_mode_))) {
-    } else if (OB_FAIL(expr_resolver.resolve(&node,
-                                             part_value_expr,
-                                             columns,
-                                             sys_vars,
-                                             sub_query_info,
-                                             aggr_exprs,
-                                             win_exprs,
-                                             udf_info,
-                                             op_exprs,
-                                             user_var_exprs,
-                                             inlist_infos,
-                                             match_exprs))) {
-    } else if (sub_query_info.count() > 0) {
-      ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
+    OB_ASSERT_SUCC(ret = params.session_info_->get_collation_connection(collation_connection));
+    if (OB_FAIL(params.session_info_->get_character_set_connection(character_set_connection))) {
+    } else {
+      ObArray<ObQualifiedName> columns;
+      ObArray<ObSubQueryInfo> sub_query_info;
+      ObArray<ObVarInfo> sys_vars;
+      ObArray<ObAggFunRawExpr *> aggr_exprs;
+      ObArray<ObWinFunRawExpr *> win_exprs;
+      ObArray<ObUDFInfo> udf_info;
+      ObArray<ObColumnRefRawExpr *> part_column_refs;
+      ObArray<ObOpRawExpr *> op_exprs;
+      ObSEArray<ObUserVarIdentRawExpr *, 1> user_var_exprs;
+      ObArray<ObInListInfo> inlist_infos;
+      ObSEArray<ObMatchFunRawExpr *, 1> match_exprs;
+      ObExprResolveContext ctx(*params.expr_factory_, params.session_info_->get_timezone_info(), OB_NAME_CASE_INVALID);
+      ctx.dest_collation_ = collation_connection;
+      ctx.connection_charset_ = character_set_connection;
+      ctx.param_list_ = params.param_list_;
+      ctx.session_info_ = params.session_info_;
+      ctx.query_ctx_ = params.query_ctx_;
+      ObRawExprResolverImpl expr_resolver(ctx);
+      if (OB_FAIL(params.session_info_->get_name_case_mode(ctx.case_mode_))) {
+      } else if (OB_FAIL(expr_resolver.resolve(&node, part_value_expr, columns, sys_vars, sub_query_info, aggr_exprs,
+                                               win_exprs, udf_info, op_exprs, user_var_exprs, inlist_infos,
+                                               match_exprs))) {
+      } else if (sub_query_info.count() > 0) {
+        ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
 
-    } else if (OB_FAIL(resolve_columns_for_partition_range_value_expr(part_value_expr, columns))) {
-    } else if (OB_UNLIKELY(udf_info.count() > 0)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("UDFInfo should not found be here!!!", K(ret));
-    } else if (OB_UNLIKELY(!inlist_infos.empty())) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_UNLIKELY(match_exprs.count() > 0)) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "fulltext search func");
-    } else {/* do nothing */}
-
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(part_value_expr)) {
+      } else if (OB_FAIL(resolve_columns_for_partition_range_value_expr(part_value_expr, columns))) {
+      } else if (OB_UNLIKELY(udf_info.count() > 0)) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(part_value_expr->formalize(params.session_info_))) {
-      } else if (OB_FAIL(check_partition_value_expr_for_range(part_name,
-                                                              *part_value_expr,
-                                                              part_type))) {
+        LOG_ERROR("UDFInfo should not found be here!!!", K(ret));
+      } else if (OB_UNLIKELY(!inlist_infos.empty())) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_UNLIKELY(match_exprs.count() > 0)) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "fulltext search func");
+      } else { /* do nothing */
+      }
+
+      if (OB_SUCC(ret)) {
+        if (OB_ISNULL(part_value_expr)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(part_value_expr->formalize(params.session_info_))) {
+        } else if (OB_FAIL(check_partition_value_expr_for_range(part_name, *part_value_expr, part_type))) {
+        }
       }
     }
   }
@@ -3419,51 +3411,51 @@ int ObResolverUtils::resolve_partition_expr(ObResolverParams &params,
   if (OB_ISNULL(params.expr_factory_) || OB_ISNULL(params.session_info_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("resolve status is invalid", K_(params.expr_factory), K_(params.session_info));
-  } else if (OB_FAIL(params.session_info_->get_collation_connection(collation_connection))) {
-  } else if (OB_FAIL(params.session_info_->get_character_set_connection(character_set_connection))) {
   } else {
-    ObExprResolveContext ctx(*params.expr_factory_, params.session_info_->get_timezone_info(),
-                             OB_NAME_CASE_INVALID);
-    ctx.dest_collation_ = collation_connection;
-    ctx.connection_charset_ = character_set_connection;
-    ctx.param_list_ = params.param_list_;
-    ctx.session_info_ = params.session_info_;
-    ctx.query_ctx_ = params.query_ctx_;
-    ObRawExprResolverImpl expr_resolver(ctx);
-    if (OB_FAIL(params.session_info_->get_name_case_mode(ctx.case_mode_))) {
-    } else if (OB_FAIL(expr_resolver.resolve(&node, part_expr, columns, sys_vars,
-                                             sub_query_info, aggr_exprs, win_exprs, udf_info,
-                                             op_exprs, user_var_exprs, inlist_infos, match_exprs))) {
-    } else if (sub_query_info.count() > 0) {
-      ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
+    OB_ASSERT_SUCC(ret = params.session_info_->get_collation_connection(collation_connection));
+    if (OB_FAIL(params.session_info_->get_character_set_connection(character_set_connection))) {
+    } else {
+      ObExprResolveContext ctx(*params.expr_factory_, params.session_info_->get_timezone_info(), OB_NAME_CASE_INVALID);
+      ctx.dest_collation_ = collation_connection;
+      ctx.connection_charset_ = character_set_connection;
+      ctx.param_list_ = params.param_list_;
+      ctx.session_info_ = params.session_info_;
+      ctx.query_ctx_ = params.query_ctx_;
+      ObRawExprResolverImpl expr_resolver(ctx);
+      if (OB_FAIL(params.session_info_->get_name_case_mode(ctx.case_mode_))) {
+      } else if (OB_FAIL(expr_resolver.resolve(&node, part_expr, columns, sys_vars, sub_query_info, aggr_exprs,
+                                               win_exprs, udf_info, op_exprs, user_var_exprs, inlist_infos,
+                                               match_exprs))) {
+      } else if (sub_query_info.count() > 0) {
+        ret = OB_ERR_PARTITION_FUNCTION_IS_NOT_ALLOWED;
 
-    } else if (columns.size() <= 0) {
-      // Handle the case where partition is a constant expression partition by hash(1+1+1) /partition by range (1+1+1)
-      // Used to limit partition by hash(1)
-      ret = OB_ERR_WRONG_EXPR_IN_PARTITION_FUNC_ERROR;
-    } else if (udf_info.count() > 0) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "udf");
-    } else if (OB_UNLIKELY(!inlist_infos.empty())) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_UNLIKELY(match_exprs.count() > 0)) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "fulltext search func");
-    } else if (OB_FAIL(resolve_columns_for_partition_expr(params, part_expr, columns, tbl_schema,
-                       part_func_type, partition_key_start, partition_keys))) {
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(part_expr)) {
+      } else if (columns.size() <= 0) {
+        // Handle the case where partition is a constant expression partition by hash(1+1+1) /partition by range (1+1+1)
+        // Used to limit partition by hash(1)
+        ret = OB_ERR_WRONG_EXPR_IN_PARTITION_FUNC_ERROR;
+      } else if (udf_info.count() > 0) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "udf");
+      } else if (OB_UNLIKELY(!inlist_infos.empty())) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (is_hash_part(part_func_type) || is_range_part(part_func_type)
-              || is_list_part(part_func_type) || PARTITION_FUNC_TYPE_KEY == part_func_type) {
-        if (OB_FAIL(check_expr_valid_for_partition(
-            *part_expr, *params.session_info_, part_func_type, tbl_schema))) {
+      } else if (OB_UNLIKELY(match_exprs.count() > 0)) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "fulltext search func");
+      } else if (OB_FAIL(resolve_columns_for_partition_expr(params, part_expr, columns, tbl_schema, part_func_type,
+                                                            partition_key_start, partition_keys))) {
+      }
+      if (OB_SUCC(ret)) {
+        if (OB_ISNULL(part_expr)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (is_hash_part(part_func_type) || is_range_part(part_func_type) || is_list_part(part_func_type) ||
+                   PARTITION_FUNC_TYPE_KEY == part_func_type) {
+          if (OB_FAIL(check_expr_valid_for_partition(*part_expr, *params.session_info_, part_func_type, tbl_schema))) {
+          }
         }
       }
-    }
 
-    if (OB_SUCC(ret) && OB_FAIL(part_expr->formalize(params.session_info_))) {
+      if (OB_SUCC(ret) && OB_FAIL(part_expr->formalize(params.session_info_))) {
+      }
     }
   }
   return ret;
@@ -4664,8 +4656,7 @@ int ObResolverUtils::foreign_key_column_match_index_column(const ObTableSchema &
     // Check if the foreign key column of the parent table matches the primary key column
     // check_match_columns: Only allow complete match. E.g. (a, b, c) matches (a, b, c)
     // check_partial_match_columns: allow matching a prefix, such as (a, b) matching (a, b, c)
-    if (OB_FAIL(check_partial_match_columns(parent_columns, pk_columns, tmp_is_match))) {
-    }
+    OB_ASSERT_SUCC(ret = check_partial_match_columns(parent_columns, pk_columns, tmp_is_match));
 
     if (OB_FAIL(ret)) {
       // do nothing
@@ -4701,18 +4692,20 @@ int ObResolverUtils::foreign_key_column_match_index_column(const ObTableSchema &
 
             if (OB_FAIL(ret)) {
             } else {
-              if (OB_FAIL(check_partial_match_columns(parent_columns, key_columns, tmp_is_match))) {
-              } else if (tmp_is_match) {
-                is_match = true;
-                /* unique when and only when index is unique index and all columns match */
-                if (index_arg.is_unique_primary_index() && parent_columns.count() == key_columns.count()) {
-                  fk_ref_type = FK_REF_TYPE_UNIQUE_KEY;
-                  is_pk_uk_match = true;
-                } else {
-                  fk_ref_type = FK_REF_TYPE_NON_UNIQUE_KEY;
+              {
+                OB_ASSERT_SUCC(ret = check_partial_match_columns(parent_columns, key_columns, tmp_is_match));
+                if (tmp_is_match) {
+                  is_match = true;
+                  /* unique when and only when index is unique index and all columns match */
+                  if (index_arg.is_unique_primary_index() && parent_columns.count() == key_columns.count()) {
+                    fk_ref_type = FK_REF_TYPE_UNIQUE_KEY;
+                    is_pk_uk_match = true;
+                  } else {
+                    fk_ref_type = FK_REF_TYPE_NON_UNIQUE_KEY;
+                  }
+                  // RS end would handle ObDDLService::get_uk_cst_id_for_self_ref /
+                  // ObDDLService::get_index_cst_id_for_self_ref Fill in arg.ref_cst_id_
                 }
-                // RS end would handle ObDDLService::get_uk_cst_id_for_self_ref / ObDDLService::get_index_cst_id_for_self_ref
-                // Fill in arg.ref_cst_id_
               }
             }
           }
@@ -4746,17 +4739,19 @@ int ObResolverUtils::foreign_key_column_match_index_column(const ObTableSchema &
           if (OB_FAIL(ret)) {
             // do nothing
           } else {
-            if (OB_FAIL(check_partial_match_columns(parent_columns, key_columns, tmp_is_match))) {
-            } else if (tmp_is_match) {
-              is_match = true;
-              /* unique when and only when index is unique index and all columns match */
-              if (index_table_schema->is_unique_index() && parent_columns.count() == key_columns.count()) {
-                fk_ref_type = FK_REF_TYPE_UNIQUE_KEY;
-                is_pk_uk_match = true;
-              } else {
-                fk_ref_type = FK_REF_TYPE_NON_UNIQUE_KEY;
+            {
+              OB_ASSERT_SUCC(ret = check_partial_match_columns(parent_columns, key_columns, tmp_is_match));
+              if (tmp_is_match) {
+                is_match = true;
+                /* unique when and only when index is unique index and all columns match */
+                if (index_table_schema->is_unique_index() && parent_columns.count() == key_columns.count()) {
+                  fk_ref_type = FK_REF_TYPE_UNIQUE_KEY;
+                  is_pk_uk_match = true;
+                } else {
+                  fk_ref_type = FK_REF_TYPE_NON_UNIQUE_KEY;
+                }
+                ref_cst_id = index_table_schema->get_table_id();
               }
-              ref_cst_id = index_table_schema->get_table_id();
             }
           }
         }
@@ -4907,8 +4902,7 @@ int ObResolverUtils::check_match_columns(const ObIArray<ObString> &parent_column
   int ret = OB_SUCCESS;
   is_match = false;
   if (parent_columns.count() == key_columns.count() && parent_columns.count() > 0) {
-    if (OB_FAIL(check_partial_match_columns(parent_columns, key_columns, is_match))) {
-    }
+    OB_ASSERT_SUCC(ret = check_partial_match_columns(parent_columns, key_columns, is_match));
   }
   return ret;
 }

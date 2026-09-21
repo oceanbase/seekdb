@@ -259,11 +259,17 @@ int ObLobMetaUtil::transform_from_row_to_info(const blocksstable::ObDatumRow *ro
   } else if (row->get_column_count() != expcect_row_cnt) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(transform_lob_id(row, info))) {
-  } else if (OB_FAIL(transform_seq_id(row, info))) {
-  } else if (OB_FAIL(transform_byte_len(row, info, with_extra_rowkey))) {
-  } else if (OB_FAIL(transform_char_len(row, info, with_extra_rowkey))) {
-  } else if (OB_FAIL(transform_piece_id(row, info, with_extra_rowkey))) {
-  } else if (OB_FAIL(transform_lob_data(row, info, with_extra_rowkey))) {
+  } else {
+    OB_ASSERT_SUCC(ret = transform_seq_id(row, info));
+    {
+      OB_ASSERT_SUCC(ret = transform_byte_len(row, info, with_extra_rowkey));
+      {
+        OB_ASSERT_SUCC(ret = transform_char_len(row, info, with_extra_rowkey));
+        if (OB_FAIL(transform_piece_id(row, info, with_extra_rowkey))) {
+        } else if (OB_FAIL(transform_lob_data(row, info, with_extra_rowkey))) {
+        }
+      }
+    }
   }
   return ret;
 }

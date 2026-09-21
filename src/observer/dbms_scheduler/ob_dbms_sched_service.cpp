@@ -110,8 +110,8 @@ void ObDBMSSchedService::destroy()
 {
   int ret = OB_SUCCESS;
   if (job_master_.is_inited()) {
-    if (OB_FAIL(job_master_.destroy())) {
-    } else {
+    {
+      OB_ASSERT_SUCC(ret = job_master_.destroy());
       LOG_INFO("[DBMS_SCHED_SERVICE] job master destroy success");
     }
     ObServerThreadHelper::destroy();

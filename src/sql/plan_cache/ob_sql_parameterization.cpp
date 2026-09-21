@@ -148,8 +148,8 @@ int ObSqlParameterization::transform_syntax_tree(ObIAllocator &allocator,
   } else if (OB_ISNULL(children_node)){
     ret = OB_INVALID_ARGUMENT;
     SQL_PC_LOG(WARN, "invalid argument", K(tree), K(ret));
-  } else if (OB_FAIL(session.get_collation_connection(collation_connection))) {
   } else {
+    OB_ASSERT_SUCC(ret = session.get_collation_connection(collation_connection));
     sql_info.sql_traits_.stmt_type_ = children_node->type_;
     TransformTreeCtx ctx;
     ctx.collation_type_ = collation_connection;
@@ -1335,13 +1335,15 @@ int ObSqlParameterization::try_format_in_expr(const common::ObString &con_sql,
     while (!need_break) {
       bool found = false;
       int old_in_pos = in_pos;
-      if (OB_FAIL(search_in_expr_pos(con_sql.ptr(), con_sql.length(), in_pos, found))) {
-      } else if (!found) {
-        need_break = true;
-        in_pos = con_sql.length();
-      } else if (OB_FAIL(search_vector(con_sql.ptr(), con_sql.length(), in_pos, in_end, can_format, qm_cnt))) {
-      } else {
-        // do nothing
+      {
+        OB_ASSERT_SUCC(ret = search_in_expr_pos(con_sql.ptr(), con_sql.length(), in_pos, found));
+        if (!found) {
+          need_break = true;
+          in_pos = con_sql.length();
+        } else {
+          OB_ASSERT_SUCC(ret = search_vector(con_sql.ptr(), con_sql.length(), in_pos, in_end, can_format, qm_cnt));
+          // do nothing
+        }
       }
       if (OB_FAIL(ret)) {
         // do nothing

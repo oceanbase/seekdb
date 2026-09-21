@@ -532,14 +532,16 @@ bool ObSQLSessionMgr::CheckSessionFunctor::operator()(sql::ObSQLSessionMgr::Key 
           // Refresh cached runtime configuration periodically.
           sess_info->refresh_runtime_config();
           // send client commit result if txn commit timeout
-          if (OB_FAIL(sess_info->is_trx_commit_timeout(commit_cb, callback_retcode))) {
-          } else if (commit_cb) {
-            LOG_INFO("transaction commit reach timeout", K(callback_retcode), K(key.sessid_));
-          } else if (OB_FAIL(sess_info->is_trx_idle_timeout(is_timeout))) {
-          } else if (true == is_timeout) {
-            LOG_INFO("transaction is idle timeout, start to rollback", K(key.sessid_));
-            int tmp_ret;
-            if (OB_SUCCESS != (tmp_ret = sess_mgr_->kill_idle_timeout_tx(sess_info))) {
+          {
+            OB_ASSERT_SUCC(ret = sess_info->is_trx_commit_timeout(commit_cb, callback_retcode));
+            if (commit_cb) {
+              LOG_INFO("transaction commit reach timeout", K(callback_retcode), K(key.sessid_));
+            } else if (OB_FAIL(sess_info->is_trx_idle_timeout(is_timeout))) {
+            } else if (true == is_timeout) {
+              LOG_INFO("transaction is idle timeout, start to rollback", K(key.sessid_));
+              int tmp_ret;
+              if (OB_SUCCESS != (tmp_ret = sess_mgr_->kill_idle_timeout_tx(sess_info))) {
+              }
             }
           }
         }
@@ -657,13 +659,14 @@ int ObSQLSessionMgr::get_deadlock_facts(
   } else {
     const transaction::ObTxDesc *tx = session_info->get_tx_desc();
     facts.current_query_ = session_info->get_current_query_string();
-    if (OB_FAIL(session_info->get_query_timeout(facts.query_timeout_us_))) {
-    } else if (nullptr != tx) {
-      facts.has_transaction_ = true;
-      facts.transaction_id_ = data_plane::tx_desc_id(tx).get_id();
-      facts.transaction_scheduler_ = data_plane::tx_desc_scheduler(tx);
-      facts.transaction_start_ts_ =
-          data_plane::tx_desc_active_timestamp(tx);
+    {
+      OB_ASSERT_SUCC(ret = session_info->get_query_timeout(facts.query_timeout_us_));
+      if (nullptr != tx) {
+        facts.has_transaction_ = true;
+        facts.transaction_id_ = data_plane::tx_desc_id(tx).get_id();
+        facts.transaction_scheduler_ = data_plane::tx_desc_scheduler(tx);
+        facts.transaction_start_ts_ = data_plane::tx_desc_active_timestamp(tx);
+      }
     }
   }
   return ret;
@@ -685,10 +688,12 @@ int ObSQLSessionMgr::get_lock_wait_facts(
     facts.has_explicit_transaction_ =
         session_info->has_explicit_start_trans();
     facts.server_session_id_ = session_info->get_server_sid();
-    if (OB_FAIL(session_info->get_autocommit(facts.autocommit_))) {
-    } else if (nullptr != tx) {
-      facts.has_transaction_ = true;
-      facts.transaction_id_ = data_plane::tx_desc_id(tx).get_id();
+    {
+      OB_ASSERT_SUCC(ret = session_info->get_autocommit(facts.autocommit_));
+      if (nullptr != tx) {
+        facts.has_transaction_ = true;
+        facts.transaction_id_ = data_plane::tx_desc_id(tx).get_id();
+      }
     }
   }
   return ret;

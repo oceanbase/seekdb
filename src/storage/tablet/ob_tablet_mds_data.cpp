@@ -891,8 +891,8 @@ int ObTabletMdsData::build_tablet_status(
     // set tablet status cache
     if (OB_FAIL(ret)) {
     } else if (tx_data.is_in_tx()) {
-    } else if (OB_FAIL(mds_data.tablet_status_cache_.assign(user_data))) {
-    }
+    } else
+      OB_ASSERT_SUCC(ret = mds_data.tablet_status_cache_.assign(user_data));
 
     if (OB_FAIL(ret) && OB_NOT_NULL(buffer)) {
       allocator.free(buffer);
@@ -1033,8 +1033,8 @@ int ObTabletMdsData::set_tablet_status(
   if (OB_ISNULL(buffer)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(user_data.serialize(buffer, length, pos))) {
-  } else if (OB_FAIL(tablet_status_cache_.assign(user_data))) {
   } else {
+    OB_ASSERT_SUCC(ret = tablet_status_cache_.assign(user_data));
     mds::MdsDumpNode &node = tablet_status_.committed_kv_.get_ptr()->v_;
     node.allocator_ = &allocator;
     node.user_data_.assign(buffer, length);

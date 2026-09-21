@@ -618,35 +618,31 @@ int ObSQLSessionInfo::drop_temp_tables(const bool is_disconn,
   int ret = OB_SUCCESS;
   bool ac = false;
   bool is_sess_disconn = is_disconn;
-  if (OB_FAIL(get_autocommit(ac))) {
-  } else if (!(is_inner() && !is_user_session())
-             && (get_has_temp_table_flag()
-                 || has_accessed_session_level_temp_table()
-                 || has_tx_level_temp_table())
-             && (!get_is_deserialized() || ac)) {
-    bool need_drop_temp_table = false;
-    // Cleanup is needed on direct connection disconnect or reset connection.
-    if (OB_SUCC(ret)) {
-      if (is_sess_disconn || is_reset_connection) {
-        need_drop_temp_table = true;
+  {
+    OB_ASSERT_SUCC(ret = get_autocommit(ac));
+    if (!(is_inner() && !is_user_session()) &&
+        (get_has_temp_table_flag() || has_accessed_session_level_temp_table() || has_tx_level_temp_table()) &&
+        (!get_is_deserialized() || ac)) {
+      bool need_drop_temp_table = false;
+      // Cleanup is needed on direct connection disconnect or reset connection.
+      if (OB_SUCC(ret)) {
+        if (is_sess_disconn || is_reset_connection) {
+          need_drop_temp_table = true;
+        }
       }
-    }
-    if (need_drop_temp_table) {
-      LOG_DEBUG("need_drop_temp_table",
-               K(get_current_query_string()),
-               K(1UL),
-               K(1UL),
-               K(lbt()));
-      obcall::ObDDLRes res;
-      obcall::ObDropTableArg drop_table_arg;
-      drop_table_arg.if_exist_ = true;
-      drop_table_arg.to_recyclebin_ = false;
-      drop_table_arg.table_type_ = share::schema::TMP_TABLE;
-      drop_table_arg.session_id_ = get_sessid_for_table();
+      if (need_drop_temp_table) {
+        LOG_DEBUG("need_drop_temp_table", K(get_current_query_string()), K(1UL), K(1UL), K(lbt()));
+        obcall::ObDDLRes res;
+        obcall::ObDropTableArg drop_table_arg;
+        drop_table_arg.if_exist_ = true;
+        drop_table_arg.to_recyclebin_ = false;
+        drop_table_arg.table_type_ = share::schema::TMP_TABLE;
+        drop_table_arg.session_id_ = get_sessid_for_table();
       
       
       
         LOG_INFO("temporary tables dropped due to connection disconnected", K(is_sess_disconn), K(drop_table_arg));
+    }
     }
   }
   if (OB_FAIL(ret)) {

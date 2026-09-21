@@ -318,15 +318,17 @@ int ObDASScanOp::init_related_tablet_ids(ObDASRelatedTabletID &related_tablet_id
   related_tablet_ids.reset();
 
   bool is_vec_index_query = ObDASUtils::is_vec_idx_scan(attach_ctdef_);
-  if (OB_FAIL(get_table_lookup_tablet_id(related_tablet_ids.lookup_tablet_id_))) {
-  } else if (OB_ISNULL(attach_ctdef_) || OB_ISNULL(attach_rtdef_)) { // no attached task.
-  } else if (OB_UNLIKELY(related_ctdefs_.count() != related_tablet_ids_.count())) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(get_rowkey_domain_tablet_id(related_tablet_ids))) {
-  } else if (OB_FAIL(get_doc_rowkey_tablet_id(related_tablet_ids))) {
-  } else if (OB_FAIL(get_index_merge_tablet_ids(related_tablet_ids.index_merge_tablet_ids_))) {
-  } else if (OB_FAIL(get_fts_tablet_ids(related_tablet_ids.fts_tablet_ids_, attach_rtdef_))) {
-  } else if (is_vec_index_query && OB_FAIL(get_vec_ir_tablet_ids(related_tablet_ids))) {
+  {
+    OB_ASSERT_SUCC(ret = get_table_lookup_tablet_id(related_tablet_ids.lookup_tablet_id_));
+    if (OB_ISNULL(attach_ctdef_) || OB_ISNULL(attach_rtdef_)) { // no attached task.
+    } else if (OB_UNLIKELY(related_ctdefs_.count() != related_tablet_ids_.count())) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(get_rowkey_domain_tablet_id(related_tablet_ids))) {
+    } else if (OB_FAIL(get_doc_rowkey_tablet_id(related_tablet_ids))) {
+    } else if (OB_FAIL(get_index_merge_tablet_ids(related_tablet_ids.index_merge_tablet_ids_))) {
+    } else if (OB_FAIL(get_fts_tablet_ids(related_tablet_ids.fts_tablet_ids_, attach_rtdef_))) {
+    } else if (is_vec_index_query && OB_FAIL(get_vec_ir_tablet_ids(related_tablet_ids))) {
+    }
   }
   return ret;
 }

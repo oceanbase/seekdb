@@ -81,10 +81,11 @@ int ObCreateDatabaseResolver::resolve(const ParseNode &parse_tree)
         } else {
           bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
           ObCollationType cs_type = CS_TYPE_INVALID;
-          if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-          } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
-                      cs_type, perserve_lettercase, database_name))) {
-          } else if (OB_FAIL(create_database_stmt->set_database_name(database_name))) {
+          {
+            OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(cs_type));
+            if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(cs_type, perserve_lettercase, database_name))) {
+            } else if (OB_FAIL(create_database_stmt->set_database_name(database_name))) {
+            }
           }
         }
       }

@@ -100,8 +100,8 @@ int ObProtectedMemtableMgrHandle::release_memtables_and_try_reset_memtable_mgr_h
   } else if (tablet_id.is_ls_inner_tablet()) {
     // do nothing
   } else if (!need_reset_()) {
-  } else if (OB_FAIL(try_reset_memtable_mgr_handle_())) {
-  }
+  } else
+    OB_ASSERT_SUCC(ret = try_reset_memtable_mgr_handle_());
   return ret;
 }
 

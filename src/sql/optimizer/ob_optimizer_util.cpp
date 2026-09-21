@@ -5176,8 +5176,8 @@ int ObOptimizerUtil::get_set_res_types(ObIAllocator *allocator,
   if (OB_ISNULL(allocator) || OB_ISNULL(session_info) || OB_UNLIKELY(child_querys.empty())
       || OB_ISNULL(select_stmt = child_querys.at(0))) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(session_info->get_collation_connection(coll_type))) {
   } else {
+    OB_ASSERT_SUCC(ret = session_info->get_collation_connection(coll_type));
     ObExprVersion dummy_op(*allocator);
     ObExprTypeCtx type_ctx;
     ObSQLUtils::init_type_ctx(session_info, type_ctx);
@@ -5291,8 +5291,8 @@ int ObOptimizerUtil::try_add_cast_to_set_child_list(ObIAllocator *allocator,
     ret = OB_ERR_COLUMN_SIZE;
     LOG_WARN("The used SELECT statements have a different number of columns",
                                         K(left_types.count()),  K(right_types.count()));
-  } else if (OB_FAIL(session_info->get_collation_connection(coll_type))) {
   } else {
+    OB_ASSERT_SUCC(ret = session_info->get_collation_connection(coll_type));
     const ObLengthSemantics length_semantics = session_info->get_actual_length_semantics();
     const bool is_ps_prepare_stage = session_info->is_varparams_sql_prepare();
     const int64_t num = left_types.count();
@@ -5493,8 +5493,8 @@ int ObOptimizerUtil::try_add_cast_to_select_list(ObIAllocator *allocator,
   } else if (OB_UNLIKELY(select_exprs.count() % column_cnt != 0)) {
     ret = OB_ERR_COLUMN_SIZE;
     LOG_WARN("The used SELECT statements have a different number of columns", K(column_cnt));
-  } else if (OB_FAIL(session_info->get_collation_connection(coll_type))) {
   } else {
+    OB_ASSERT_SUCC(ret = session_info->get_collation_connection(coll_type));
     if (NULL != res_types) {
       res_types->reuse();
     }
@@ -8151,11 +8151,9 @@ int ObOptimizerUtil::can_extract_implicit_cast_range(ObItemType cmp_type,
   if (column_expr.get_result_type().get_type() ==
              target_expr.get_result_type().get_type() &&
              column_expr.get_result_type().is_string_type()) {
-    if (OB_FAIL(is_implicit_collation_range_valid(cmp_type,
-                                                  column_expr.get_result_type().get_collation_type(),
-                                                  target_expr.get_result_type().get_collation_type(),
-                                                  can_extract))) {
-    }
+    OB_ASSERT_SUCC(ret = is_implicit_collation_range_valid(cmp_type, column_expr.get_result_type().get_collation_type(),
+                                                           target_expr.get_result_type().get_collation_type(),
+                                                           can_extract));
   } else if ((ObIntTC == column_tc || ObUIntTC == column_tc) &&
              (const_tc == ObDoubleTC || const_tc == ObFloatTC)) {
     can_extract = true;

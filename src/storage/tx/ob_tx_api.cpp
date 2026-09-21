@@ -1576,8 +1576,8 @@ int ObTransService::start_epoch_(ObTxDesc &tx)
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "tx released, cannot start new epoch", K(ret), K(tx));
     } else if (OB_FAIL(tx_desc_mgr_.remove(tx))) {
-    } else if (OB_FAIL(tx.switch_to_idle())) {
-    }
+    } else
+      OB_ASSERT_SUCC(ret = tx.switch_to_idle());
 #ifndef NDEBUG
     TRANS_LOG(INFO, "tx start new epoch", K(ret), K(tx));
 #endif

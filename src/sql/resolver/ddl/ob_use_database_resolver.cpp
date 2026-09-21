@@ -62,41 +62,40 @@ int ObUseDatabaseResolver::resolve(const ParseNode &parse_tree)
     } else {
       bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
       ObCollationType cs_type = CS_TYPE_INVALID;
-      if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-      } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
-                  cs_type, perserve_lettercase, db_name))) {
-      } else {
-        CK (OB_NOT_NULL(schema_checker_));
-        CK (OB_NOT_NULL(schema_checker_->get_schema_guard()));
-        OZ (ObSQLUtils::cvt_db_name_to_org(*schema_checker_->get_schema_guard(),
-                                           session_info_,
-                                           db_name,
-                                           allocator_));
-        use_database_stmt->set_db_name(db_name);
-        
-        share::schema::ObSessionPrivInfo session_priv;
-        uint64_t database_id = OB_INVALID_ID;
-        const share::schema::ObDatabaseSchema *db_schema = NULL;
-        if (OB_FAIL(session_info_->get_session_priv_info(session_priv))) {
-        } else if (OB_FAIL(schema_checker_->get_database_id(db_name, database_id))) {
-          LOG_USER_ERROR(OB_ERR_BAD_DATABASE, db_name.length(), db_name.ptr());
-          LOG_WARN("invalid database name. ", K(db_name));
-        } else if (OB_FAIL(schema_checker_->check_db_access(session_priv, session_info_->get_enable_role_array(), db_name))) {
-          SQL_ENG_LOG(WARN, "fail to check user privilege", K(db_name), K(ret));
-          if (params_.disable_privilege_check_ == PRIV_CHECK_FLAG_DISABLE) {
-            LOG_WARN("db access privilege check is disabled");
-            ret = OB_SUCCESS;
+      {
+        OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(cs_type));
+        if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(cs_type, perserve_lettercase, db_name))) {
+        } else {
+          CK(OB_NOT_NULL(schema_checker_));
+          CK(OB_NOT_NULL(schema_checker_->get_schema_guard()));
+          OZ(ObSQLUtils::cvt_db_name_to_org(*schema_checker_->get_schema_guard(), session_info_, db_name, allocator_));
+          use_database_stmt->set_db_name(db_name);
+
+          share::schema::ObSessionPrivInfo session_priv;
+          uint64_t database_id = OB_INVALID_ID;
+          const share::schema::ObDatabaseSchema *db_schema = NULL;
+          if (OB_FAIL(session_info_->get_session_priv_info(session_priv))) {
+          } else if (OB_FAIL(schema_checker_->get_database_id(db_name, database_id))) {
+            LOG_USER_ERROR(OB_ERR_BAD_DATABASE, db_name.length(), db_name.ptr());
+            LOG_WARN("invalid database name. ", K(db_name));
+          } else if (OB_FAIL(schema_checker_->check_db_access(session_priv, session_info_->get_enable_role_array(),
+                                                              db_name))) {
+            SQL_ENG_LOG(WARN, "fail to check user privilege", K(db_name), K(ret));
+            if (params_.disable_privilege_check_ == PRIV_CHECK_FLAG_DISABLE) {
+              LOG_WARN("db access privilege check is disabled");
+              ret = OB_SUCCESS;
+            }
           }
-        }
-        if (OB_SUCC(ret)) {
-          if (OB_FAIL(schema_checker_->get_database_schema( database_id, db_schema))) {
-          } else {
-            use_database_stmt->set_db_id(database_id);
-            use_database_stmt->set_db_priv_set(session_priv.db_priv_set_);
-            use_database_stmt->set_db_charset(
-                ObString::make_string(ObCharset::charset_name(db_schema->get_charset_type())));
-            use_database_stmt->set_db_collation(
-                ObString::make_string(ObCharset::collation_name(db_schema->get_collation_type())));
+          if (OB_SUCC(ret)) {
+            if (OB_FAIL(schema_checker_->get_database_schema(database_id, db_schema))) {
+            } else {
+              use_database_stmt->set_db_id(database_id);
+              use_database_stmt->set_db_priv_set(session_priv.db_priv_set_);
+              use_database_stmt->set_db_charset(
+                  ObString::make_string(ObCharset::charset_name(db_schema->get_charset_type())));
+              use_database_stmt->set_db_collation(
+                  ObString::make_string(ObCharset::collation_name(db_schema->get_collation_type())));
+            }
           }
         }
       }

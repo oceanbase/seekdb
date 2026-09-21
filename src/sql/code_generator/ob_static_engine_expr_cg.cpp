@@ -65,11 +65,12 @@ int ObStaticEngineExprCG::generate(const ObRawExprUniqueSet &all_raw_exprs,
     // do nothing
   } else if (OB_FAIL(flattened_raw_exprs.flatten_and_add_raw_exprs(all_raw_exprs))) {
   } else if (OB_FAIL(generate_extra_questionmarks(flattened_raw_exprs, expr_factory))) {
-  } else if (OB_FAIL(divide_probably_local_exprs(
-                     const_cast<ObIArray<ObRawExpr *> &>(flattened_raw_exprs.get_expr_array())))) {
-  } else if (OB_FAIL(construct_exprs(flattened_raw_exprs.get_expr_array(),
-                                     expr_info.rt_exprs_))) {
-  } else if (OB_FAIL(cg_exprs(flattened_raw_exprs.get_expr_array(), expr_info))) {
+  } else {
+    OB_ASSERT_SUCC(
+        ret = divide_probably_local_exprs(const_cast<ObIArray<ObRawExpr *> &>(flattened_raw_exprs.get_expr_array())));
+    if (OB_FAIL(construct_exprs(flattened_raw_exprs.get_expr_array(), expr_info.rt_exprs_))) {
+    } else if (OB_FAIL(cg_exprs(flattened_raw_exprs.get_expr_array(), expr_info))) {
+    }
   }
   return ret;
 }

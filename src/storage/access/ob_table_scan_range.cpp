@@ -141,8 +141,8 @@ int ObTableScanRange::always_false(const common::ObNewRange &range, bool &is_fal
 
   if (OB_LIKELY(enable_new_false_range_)) {
     is_false = false;
-  } else if (OB_FAIL(range.get_start_key().compare(range.get_end_key(), cmp))) {
   } else {
+    OB_ASSERT_SUCC(ret = range.get_start_key().compare(range.get_end_key(), cmp));
     is_false = (cmp > 0) || (0 == cmp && (!range.border_flag_.inclusive_start() || !range.border_flag_.inclusive_end()));
     if (is_false) {
     }

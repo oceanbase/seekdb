@@ -206,10 +206,9 @@ int scale_decimalint(const ObDecimalInt *decint, const int32_t int_bytes,
       LOG_WARN("invalid out precision", K(out_prec), K(lbt()));
     }
     if (OB_FAIL(ret)) { // do nothing
-    } else if (OB_FAIL(align_decint_precision_unsafe(scaled_val.get_decimal_int(),
-                                                     scaled_val.get_int_bytes(), expected_int_bytes,
-                                                     val))) {
-    }
+    } else
+      OB_ASSERT_SUCC(ret = align_decint_precision_unsafe(scaled_val.get_decimal_int(), scaled_val.get_int_bytes(),
+                                                         expected_int_bytes, val));
   }
   return ret;
 }

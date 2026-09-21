@@ -191,8 +191,8 @@ int ObDASMatchIter::inner_init(ObDASIterParam &param)
       if (OB_ISNULL(bestfield_collector = OB_NEWx(
           ObDASMatchBestFieldCollector, &myself_allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (OB_FAIL(bestfield_collector->init())) {
       } else {
+        OB_ASSERT_SUCC(ret = bestfield_collector->init());
         relevance_collector_ = bestfield_collector;
       }
     } else {
@@ -200,8 +200,8 @@ int ObDASMatchIter::inner_init(ObDASIterParam &param)
       if (OB_ISNULL(inner_product_relevance_collector = OB_NEWx(
           ObDASMatchSumRelevanceCollector, &myself_allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (OB_FAIL(inner_product_relevance_collector->init(0))) {
       } else {
+        OB_ASSERT_SUCC(ret = inner_product_relevance_collector->init(0));
         relevance_collector_ = inner_product_relevance_collector;
       }
     }

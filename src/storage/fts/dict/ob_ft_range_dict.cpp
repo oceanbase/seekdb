@@ -66,8 +66,10 @@ int ObFTRangeDict::build_cache_from_ik_dict(const ObFTDictDesc &desc, ObFTCacheR
 
   if (OB_SUCC(ret)) {
     ObIKDictIterator iter(raw_dict);
-    if (OB_FAIL(iter.init())) {
-    } else if (OB_FAIL(ObFTRangeDict::build_ranges_concurrently_thread_pool(desc, iter, range_container))) {
+    {
+      OB_ASSERT_SUCC(ret = iter.init());
+      if (OB_FAIL(ObFTRangeDict::build_ranges_concurrently_thread_pool(desc, iter, range_container))) {
+      }
     }
   }
 
@@ -111,13 +113,11 @@ public:
 
       if (OB_FAIL(builder.init(*trie))) {
       } else if (OB_FAIL(builder.build_from_trie(*trie))) {
-      } else if (OB_FAIL(builder.get_mem_block(dat_buff, buffer_size))) {
-      } else if (OB_FAIL(ObFTCacheDict::make_and_fetch_cache_entry(*desc_,
-                                                                    dat_buff,
-                                                                    buffer_size,
-                                                                    static_cast<int32_t>(idx),
-                                                                    info->value_,
-                                                                    info->handle_))) {
+      } else {
+        OB_ASSERT_SUCC(ret = builder.get_mem_block(dat_buff, buffer_size));
+        if (OB_FAIL(ObFTCacheDict::make_and_fetch_cache_entry(*desc_, dat_buff, buffer_size, static_cast<int32_t>(idx),
+                                                              info->value_, info->handle_))) {
+        }
       }
       dat_alloc.reset();
     }
@@ -284,16 +284,14 @@ int ObFTRangeDict::build_one_range(const ObFTDictDesc &desc,
     // to do clean up
   } else if (OB_FAIL(builder.init(trie))) {
   } else if (OB_FAIL(builder.build_from_trie(trie))) {
-  } else if (OB_FAIL(builder.get_mem_block(dat_buff, buffer_size))) {
-  } else if (OB_FAIL(container.fetch_info_for_dict(info))) {
-  } else if (OB_FAIL(ObFTCacheDict::make_and_fetch_cache_entry(desc,
-                                                               dat_buff,
-                                                               buffer_size,
-                                                               range_id,
-                                                               info->value_,
-                                                               info->handle_))) {
   } else {
-    // okay
+    OB_ASSERT_SUCC(ret = builder.get_mem_block(dat_buff, buffer_size));
+    if (OB_FAIL(container.fetch_info_for_dict(info))) {
+    } else if (OB_FAIL(ObFTCacheDict::make_and_fetch_cache_entry(desc, dat_buff, buffer_size, range_id, info->value_,
+                                                                 info->handle_))) {
+    } else {
+      // okay
+    }
   }
   tmp_alloc.reset();
 

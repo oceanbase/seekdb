@@ -2196,8 +2196,7 @@ int ObSumAggCell::eval_double_batch(const common::ObDatum *datums, const int64_t
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-    if (OB_FAIL(eval_double_inner(datums[i]))) {
-    }
+    OB_ASSERT_SUCC(ret = eval_double_inner(datums[i]));
   }
   return ret;
 }

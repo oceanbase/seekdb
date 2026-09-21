@@ -1898,15 +1898,17 @@ int ObLogicalOperator::find_producer_id_for_shared_expr(const ObRawExpr *expr,
   bool need_pushdown = false;
   bool can_pushdown = false;
   uint64_t pushdown_producer_id = OB_INVALID_ID;
-  if (OB_FAIL(check_need_pushdown_expr(producer_id, need_pushdown))) {
-  } else if (!need_pushdown) {
-    // do nothing
-  } else if (OB_FAIL(check_can_pushdown_expr(expr, can_pushdown))) {
-  } else if (!can_pushdown) {
-    // do nothing
-  } else if (OB_FAIL(get_pushdown_producer_id(expr, pushdown_producer_id))) {
-  } else if (OB_INVALID_ID != pushdown_producer_id) {
-    producer_id = pushdown_producer_id;
+  {
+    OB_ASSERT_SUCC(ret = check_need_pushdown_expr(producer_id, need_pushdown));
+    if (!need_pushdown) {
+      // do nothing
+    } else if (OB_FAIL(check_can_pushdown_expr(expr, can_pushdown))) {
+    } else if (!can_pushdown) {
+      // do nothing
+    } else if (OB_FAIL(get_pushdown_producer_id(expr, pushdown_producer_id))) {
+    } else if (OB_INVALID_ID != pushdown_producer_id) {
+      producer_id = pushdown_producer_id;
+    }
   }
   return ret;
 }

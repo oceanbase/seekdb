@@ -1621,8 +1621,7 @@ int ObMergeJoinOp::output_side_rows(ChildBatchFetcher &batch_fetcher,
       for (int64_t i = 0; i < brs_.size_ && OB_SUCC(ret); i++) {
         if (!brs_.skip_->contain(i)) {
           guard.set_batch_idx(i);
-          if (OB_FAIL(ObJoinOp::blank_row(*blank_exprs))) {
-          }
+          OB_ASSERT_SUCC(ret = ObJoinOp::blank_row(*blank_exprs));
         }
       }
     }

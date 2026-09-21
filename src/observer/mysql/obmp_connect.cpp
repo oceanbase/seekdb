@@ -146,19 +146,21 @@ int ObMPConnect::init_process_single_stmt(const ObMultiStmtItem &multi_stmt_item
     HEAP_VAR(ObMySQLResultSet, result, session, allocator,
              ::oceanbase::observer::get_observer_sql_engine()->get_plan_cache_access_service()) {
       result.set_has_more_result(has_more_result);
-      if (OB_FAIL(result.init())) {
-      } else if (OB_ISNULL(::oceanbase::observer::get_observer_sql_engine())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("invalid sql engine", K(ret), K(gctx_));
-      } else if (OB_FAIL(::oceanbase::observer::get_observer_sql_engine()->stmt_query(sql, ctx, result))) {
-      } else {
-        int open_ret = result.open();
-        if (open_ret) {
-          LOG_WARN("failed to do result set open", K(open_ret));
+      {
+        OB_ASSERT_SUCC(ret = result.init());
+        if (OB_ISNULL(::oceanbase::observer::get_observer_sql_engine())) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_ERROR("invalid sql engine", K(ret), K(gctx_));
+        } else if (OB_FAIL(::oceanbase::observer::get_observer_sql_engine()->stmt_query(sql, ctx, result))) {
+        } else {
+          int open_ret = result.open();
+          if (open_ret) {
+            LOG_WARN("failed to do result set open", K(open_ret));
+          }
+          if (OB_FAIL(result.close())) {
+          }
+          ret = (open_ret != OB_SUCCESS) ? open_ret : ret;
         }
-        if (OB_FAIL(result.close())) {
-        }
-        ret = (open_ret != OB_SUCCESS) ? open_ret : ret;
       }
       ObThreadLogLevelUtils::clear();
     }
@@ -356,14 +358,15 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
         ObNameCaseMode mode = OB_NAME_CASE_INVALID;
         bool perserve_lettercase = true;
         ObCollationType cs_type = CS_TYPE_INVALID;
-        if (OB_FAIL(session.get_collation_connection(cs_type))) {
-        } else if (OB_FAIL(session.get_name_case_mode(mode))) {
-        } else if (FALSE_IT(perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE))) {
-        } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
-                    cs_type, perserve_lettercase, db_name))) {
-        } else if (OB_FAIL(ObSQLUtils::cvt_db_name_to_org(schema_guard, &session, db_name, &allocator_))) {
-        } else {
-          login_info.db_ = db_name;
+        {
+          OB_ASSERT_SUCC(ret = session.get_collation_connection(cs_type));
+          if (OB_FAIL(session.get_name_case_mode(mode))) {
+          } else if (FALSE_IT(perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE))) {
+          } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(cs_type, perserve_lettercase, db_name))) {
+          } else if (OB_FAIL(ObSQLUtils::cvt_db_name_to_org(schema_guard, &session, db_name, &allocator_))) {
+          } else {
+            login_info.db_ = db_name;
+          }
         }
       }
       LOG_TRACE("some important information required for login verification, print it before doing login", K(ret), K(ObString(sizeof(conn->scramble_buf_), conn->scramble_buf_)), K(hsr_.get_auth_plugin_name()), K(hsr_.get_auth_response()));

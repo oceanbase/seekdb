@@ -66,8 +66,8 @@ int ObTableEstimator::estimate_row_count_for_scan(
         continue;
       } else if (OB_FAIL(estimate_multi_scan_row_count(base_input, table, ranges, table_est))) {
       } else if (FALSE_IT(fix_invalid_logic_row(part_estimate, table_est))) {
-      } else if (OB_FAIL(part_estimate.add(table_est))) {
       } else {
+        OB_ASSERT_SUCC(ret = part_estimate.add(table_est));
         record.table_id_ = base_input.table_id_;
         record.table_type_ = table->get_key().table_type_;
         record.logical_row_count_ = table_est.logical_row_count_;

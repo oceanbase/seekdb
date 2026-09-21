@@ -222,48 +222,50 @@ int ObVariableSetResolver::resolve_value_expr(ParseNode &val_node, ObRawExpr *&v
   if (OB_ISNULL(params_.expr_factory_) || OB_ISNULL(params_.session_info_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("resolve status is invalid", K_(params_.expr_factory), K_(params_.session_info));
-  } else if (OB_FAIL(params_.session_info_->get_collation_connection(collation_connection))) {
-  } else if (OB_FAIL(params_.session_info_->get_character_set_connection(character_set_connection))) {
   } else {
-    ObExprResolveContext ctx(*params_.expr_factory_, params_.session_info_->get_timezone_info(),
-                             OB_NAME_CASE_INVALID);
-    ctx.dest_collation_ = collation_connection;
-    ctx.connection_charset_ = character_set_connection;
-    ctx.param_list_ = params_.param_list_;
-    ctx.is_extract_param_type_ = !params_.is_prepare_protocol_; //when prepare do not extract
-    ctx.schema_checker_ = params_.schema_checker_;
-    ctx.session_info_ = params_.session_info_;
-    ctx.secondary_namespace_ = params_.secondary_namespace_;
-    ctx.query_ctx_ = params_.query_ctx_;
-    ObRawExprResolverImpl expr_resolver(ctx);
-    if (OB_FAIL(params_.session_info_->get_name_case_mode(ctx.case_mode_))) {
-    } else if (OB_FAIL(expr_resolver.resolve(&val_node, value_expr, columns, sys_vars,
-                                             sub_query_info, aggr_exprs, win_exprs,
-                                             udf_info, op_exprs, user_var_exprs, inlist_infos, match_exprs))) {
-    } else if (udf_info.count() > 0) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("UDFInfo should not found be here!!!", K(ret));
-    } else if (inlist_infos.count() > 0) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_UNLIKELY(match_exprs.count() > 0)) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "fulltext search func");
-    } else if (value_expr->get_expr_type() == T_SP_CPARAM) {
-      ObCallParamRawExpr *call_expr = static_cast<ObCallParamRawExpr *>(value_expr);
-      if (OB_ISNULL(call_expr->get_expr())) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(call_expr->get_expr()->formalize(params_.session_info_))) {
-      }
-    } else if (value_expr->has_flag(CNT_SUB_QUERY)) {
-      if (OB_FAIL(resolve_subquery_info(sub_query_info, value_expr))) {
-      }
-      LOG_TRACE("set user variable with subquery", K(sub_query_info.count()));
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObResolverUtils::resolve_columns_for_const_expr(value_expr, columns, params_))) {
-    } else if (OB_FAIL(value_expr->formalize(params_.session_info_))) {
+    OB_ASSERT_SUCC(ret = params_.session_info_->get_collation_connection(collation_connection));
+    if (OB_FAIL(params_.session_info_->get_character_set_connection(character_set_connection))) {
     } else {
-      params_.prepare_param_count_ += ctx.prepare_param_count_; //prepare param count
+      ObExprResolveContext ctx(*params_.expr_factory_, params_.session_info_->get_timezone_info(),
+                               OB_NAME_CASE_INVALID);
+      ctx.dest_collation_ = collation_connection;
+      ctx.connection_charset_ = character_set_connection;
+      ctx.param_list_ = params_.param_list_;
+      ctx.is_extract_param_type_ = !params_.is_prepare_protocol_; // when prepare do not extract
+      ctx.schema_checker_ = params_.schema_checker_;
+      ctx.session_info_ = params_.session_info_;
+      ctx.secondary_namespace_ = params_.secondary_namespace_;
+      ctx.query_ctx_ = params_.query_ctx_;
+      ObRawExprResolverImpl expr_resolver(ctx);
+      if (OB_FAIL(params_.session_info_->get_name_case_mode(ctx.case_mode_))) {
+      } else if (OB_FAIL(expr_resolver.resolve(&val_node, value_expr, columns, sys_vars, sub_query_info, aggr_exprs,
+                                               win_exprs, udf_info, op_exprs, user_var_exprs, inlist_infos,
+                                               match_exprs))) {
+      } else if (udf_info.count() > 0) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_ERROR("UDFInfo should not found be here!!!", K(ret));
+      } else if (inlist_infos.count() > 0) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_UNLIKELY(match_exprs.count() > 0)) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_USER_ERROR(OB_NOT_SUPPORTED, "fulltext search func");
+      } else if (value_expr->get_expr_type() == T_SP_CPARAM) {
+        ObCallParamRawExpr *call_expr = static_cast<ObCallParamRawExpr *>(value_expr);
+        if (OB_ISNULL(call_expr->get_expr())) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(call_expr->get_expr()->formalize(params_.session_info_))) {
+        }
+      } else if (value_expr->has_flag(CNT_SUB_QUERY)) {
+        if (OB_FAIL(resolve_subquery_info(sub_query_info, value_expr))) {
+        }
+        LOG_TRACE("set user variable with subquery", K(sub_query_info.count()));
+      }
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(ObResolverUtils::resolve_columns_for_const_expr(value_expr, columns, params_))) {
+      } else if (OB_FAIL(value_expr->formalize(params_.session_info_))) {
+      } else {
+        params_.prepare_param_count_ += ctx.prepare_param_count_; // prepare param count
+      }
     }
   }
   return ret;

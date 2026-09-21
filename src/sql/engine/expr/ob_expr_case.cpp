@@ -165,11 +165,13 @@ int ObExprCase::calc_case_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_
   int64_t expr_idx = 0;
   for ( ; OB_SUCC(ret) && !match_when && expr_idx < loop; expr_idx += 2) {
     if (OB_FAIL(expr.args_[expr_idx]->eval(ctx, when_datum))) {
-    } else if (OB_FAIL(check_is_match(*when_datum, match_when))) {
-    } else if (match_when) {
-      if (OB_FAIL(expr.args_[expr_idx+1]->eval(ctx, then_datum))) {
-      } else {
-        has_result = true;
+    } else {
+      OB_ASSERT_SUCC(ret = check_is_match(*when_datum, match_when));
+      if (match_when) {
+        if (OB_FAIL(expr.args_[expr_idx + 1]->eval(ctx, then_datum))) {
+        } else {
+          has_result = true;
+        }
       }
     }
   }
@@ -255,12 +257,14 @@ int ObExprCase::eval_case_batch(const ObExpr &expr,
           if (case_when_match->at(j)) {
             continue;
           }
-          if (OB_FAIL(check_is_match(*when_datums.at(j), match_when))) {
-          } else if (match_when) {
-            case_when_match->set(j);
-          } else {
-            // not match, mark case_not_match to stop calculating then branch
-            case_not_match->set(j);
+          {
+            OB_ASSERT_SUCC(ret = check_is_match(*when_datums.at(j), match_when));
+            if (match_when) {
+              case_when_match->set(j);
+            } else {
+              // not match, mark case_not_match to stop calculating then branch
+              case_not_match->set(j);
+            }
           }
         }
         //now eval then datums

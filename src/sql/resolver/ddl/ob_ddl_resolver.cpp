@@ -1738,8 +1738,10 @@ int ObDDLResolver::resolve_column_name(common::ObString &col_name, ParseNode *no
       LOG_USER_ERROR(OB_WRONG_COLUMN_NAME, static_cast<int32_t>(name_length), name_ptr);
     } else {
       ObCollationType cs_type = CS_TYPE_INVALID;
-      if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-      } else if (OB_FAIL(ObSQLUtils::check_column_name(cs_type, col_name))) {
+      {
+        OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(cs_type));
+        if (OB_FAIL(ObSQLUtils::check_column_name(cs_type, col_name))) {
+        }
       }
     }
   }

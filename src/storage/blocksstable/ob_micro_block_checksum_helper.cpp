@@ -147,8 +147,7 @@ int ObMicroBlockChecksumHelper::cal_column_checksum(
       if (OB_FAIL(cal_column_checksum_sse42(vectors, start, row_count, curr_micro_column_checksum))) {
       }
     } else {
-      if (OB_FAIL(cal_column_checksum_normal(vectors, start, row_count, curr_micro_column_checksum))) {
-      }
+      OB_ASSERT_SUCC(ret = cal_column_checksum_normal(vectors, start, row_count, curr_micro_column_checksum));
     }
   }
   return ret;

@@ -516,8 +516,8 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
               // use connection_collation. for cast('a' as char)
               if (OB_ISNULL(ctx_.session_info_)) {
                 ret = OB_ERR_UNEXPECTED;
-              } else if (OB_FAIL(ctx_.session_info_->get_collation_connection(coll_type))) {
-              }
+              } else
+                OB_ASSERT_SUCC(ret = ctx_.session_info_->get_collation_connection(coll_type));
             }
             if (OB_SUCC(ret)) {
               ParseNode tmp_node;

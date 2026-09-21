@@ -942,13 +942,14 @@ int ObReplayStatus::get_min_unreplayed_log_info(LSN &lsn,
     SCN queue_scn;
     bool is_queue_empty = true;
     for (int64_t i = 0; OB_SUCC(ret) && i < REPLAY_TASK_QUEUE_SIZE; ++i) {
-      if (OB_FAIL(task_queues_[i].get_min_unreplayed_log_info(queue_lsn, queue_scn, replay_hint, log_type,
-                                                              first_handle_ts, replay_cost, retry_cost, is_queue_empty))) {
-      } else if (!is_queue_empty
-                && queue_lsn < lsn
-                && queue_scn < scn) {
-        lsn = queue_lsn;
-        scn = queue_scn;
+      {
+        OB_ASSERT_SUCC(ret = task_queues_[i].get_min_unreplayed_log_info(queue_lsn, queue_scn, replay_hint, log_type,
+                                                                         first_handle_ts, replay_cost, retry_cost,
+                                                                         is_queue_empty));
+        if (!is_queue_empty && queue_lsn < lsn && queue_scn < scn) {
+          lsn = queue_lsn;
+          scn = queue_scn;
+        }
       }
     }
     if (palf_reach_time_interval(5 * 1000 * 1000, get_log_info_debug_time_)) {

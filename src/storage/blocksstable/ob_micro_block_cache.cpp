@@ -1185,34 +1185,35 @@ int ObDataMicroBlockCache::put_cache_block(
     int64_t extra_size = 0;
     bool need_decoder = false;
     ObMicroBlockBufTransformer buf_transformer(des_meta, &reader, header, payload_buf, payload_size);
-    if (OB_FAIL(buf_transformer.init())) {
-    } else if (OB_FAIL(buf_transformer.get_buf_size(block_size))) {
-    } else if (FALSE_IT(value_size = calc_value_size(block_size, des_meta.row_store_type_, need_decoder))) {
-    } else if (OB_FAIL(alloc(
-        sizeof(ObMicroBlockCacheKey), value_size, kvpair, cache_handle, inst_handle))) {
-    } else {
-      char *block_buf = reinterpret_cast<char *>(kvpair->value_) + sizeof(ObMicroBlockCacheValue);
-      kvpair->key_ = new (kvpair->key_) ObMicroBlockCacheKey(key);
-      ObMicroBlockCacheValue *cache_value = new (kvpair->value_) ObMicroBlockCacheValue(block_buf, block_size);
-      ObMicroBlockData &micro_data = cache_value->get_block_data();
-      micro_data.type_ = get_type();
-      if (OB_FAIL(buf_transformer.transfrom(block_buf, block_size))) {
-      } else if (need_decoder && OB_FAIL(write_extra_buf(
-          des_meta.row_store_type_, block_buf, block_size, block_buf + block_size, micro_data))) {
-      } else if (FALSE_IT(micro_block = cache_value)) {
-      } else if (OB_FAIL(put_kvpair(inst_handle, kvpair, cache_handle, false /* overwrite */))) {
-        if (OB_ENTRY_EXIST != ret) {
-        } else {
-          ret = OB_SUCCESS;
-        }
+    {
+      OB_ASSERT_SUCC(ret = buf_transformer.init());
+      if (OB_FAIL(buf_transformer.get_buf_size(block_size))) {
+      } else if (FALSE_IT(value_size = calc_value_size(block_size, des_meta.row_store_type_, need_decoder))) {
+      } else if (OB_FAIL(alloc(sizeof(ObMicroBlockCacheKey), value_size, kvpair, cache_handle, inst_handle))) {
       } else {
-        const int64_t put_size = ObKVStoreMemBlock::get_align_size(key, *cache_value);
-        if (OB_FAIL(add_put_size(put_size))) {
+        char *block_buf = reinterpret_cast<char *>(kvpair->value_) + sizeof(ObMicroBlockCacheValue);
+        kvpair->key_ = new (kvpair->key_) ObMicroBlockCacheKey(key);
+        ObMicroBlockCacheValue *cache_value = new (kvpair->value_) ObMicroBlockCacheValue(block_buf, block_size);
+        ObMicroBlockData &micro_data = cache_value->get_block_data();
+        micro_data.type_ = get_type();
+        if (OB_FAIL(buf_transformer.transfrom(block_buf, block_size))) {
+        } else if (need_decoder && OB_FAIL(write_extra_buf(des_meta.row_store_type_, block_buf, block_size,
+                                                           block_buf + block_size, micro_data))) {
+        } else if (FALSE_IT(micro_block = cache_value)) {
+        } else if (OB_FAIL(put_kvpair(inst_handle, kvpair, cache_handle, false /* overwrite */))) {
+          if (OB_ENTRY_EXIST != ret) {
+          } else {
+            ret = OB_SUCCESS;
+          }
+        } else {
+          const int64_t put_size = ObKVStoreMemBlock::get_align_size(key, *cache_value);
+          if (OB_FAIL(add_put_size(put_size))) {
+          }
         }
-      }
-      if (OB_FAIL(ret)) {
-        cache_handle.reset();
-        micro_block = nullptr;
+        if (OB_FAIL(ret)) {
+          cache_handle.reset();
+          micro_block = nullptr;
+        }
       }
     }
   }
@@ -1407,30 +1408,32 @@ int ObIndexMicroBlockCache::put_cache_block(
     char *block_buf = nullptr;
     ObMicroBlockBufTransformer buf_transformer(des_meta, &reader, header, payload_buf, payload_size);
     ObIndexBlockDataTransformer idx_transformer;
-    if (OB_FAIL(buf_transformer.init())) {
-    } else if (OB_FAIL(buf_transformer.get_buf_size(block_size))) {
-    } else if (OB_ISNULL(block_buf = static_cast<char *>(allocator.alloc(block_size)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_FAIL(buf_transformer.transfrom(block_buf, block_size))) {
-    } else {
-      ObMicroBlockCacheValue cache_value(block_buf, block_size);
-      ObMicroBlockData &block_data = cache_value.get_block_data();
-      block_data.type_ = get_type();
-      char *allocated_buf = nullptr;
-      if (OB_FAIL(idx_transformer.transform(block_data, block_data, allocator, allocated_buf, table_read_info))) {
-      } else if (OB_FAIL(put_and_fetch(key, cache_value, micro_block, cache_handle, false /* overwrite */))) {
-        if (OB_ENTRY_EXIST != ret) {
-        } else {
-          ret = OB_SUCCESS;
-        }
+    {
+      OB_ASSERT_SUCC(ret = buf_transformer.init());
+      if (OB_FAIL(buf_transformer.get_buf_size(block_size))) {
+      } else if (OB_ISNULL(block_buf = static_cast<char *>(allocator.alloc(block_size)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else if (OB_FAIL(buf_transformer.transfrom(block_buf, block_size))) {
       } else {
-        const int64_t put_size = ObKVStoreMemBlock::get_align_size(key, cache_value);
-        if (OB_FAIL(add_put_size(put_size))) {
+        ObMicroBlockCacheValue cache_value(block_buf, block_size);
+        ObMicroBlockData &block_data = cache_value.get_block_data();
+        block_data.type_ = get_type();
+        char *allocated_buf = nullptr;
+        if (OB_FAIL(idx_transformer.transform(block_data, block_data, allocator, allocated_buf, table_read_info))) {
+        } else if (OB_FAIL(put_and_fetch(key, cache_value, micro_block, cache_handle, false /* overwrite */))) {
+          if (OB_ENTRY_EXIST != ret) {
+          } else {
+            ret = OB_SUCCESS;
+          }
+        } else {
+          const int64_t put_size = ObKVStoreMemBlock::get_align_size(key, cache_value);
+          if (OB_FAIL(add_put_size(put_size))) {
+          }
         }
-      }
 
-      if (nullptr != allocated_buf) {
-        allocator.free(allocated_buf);
+        if (nullptr != allocated_buf) {
+          allocator.free(allocated_buf);
+        }
       }
     }
     if (nullptr != block_buf) {

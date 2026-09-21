@@ -386,8 +386,8 @@ int ObTableLockDetector::get_unlock_request_list(share::ObILockMetadataSession &
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(get_unlock_request_list_(result, allocator, arg_list))) {
-      } else if (OB_FAIL(fill_owner_id_for_unlock_request_(owner_id, arg_list))) {
-      }
+      } else
+        OB_ASSERT_SUCC(ret = fill_owner_id_for_unlock_request_(owner_id, arg_list));
     }  // end SMART_VAR
   }
 

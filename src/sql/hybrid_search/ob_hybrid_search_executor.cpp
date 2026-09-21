@@ -186,17 +186,18 @@ int ObHybridSearchExecutor::parse_search_params(
   if (OB_ISNULL(search_params_str.ptr()) || search_params_str.length() <= 0) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
-  } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-  } else if (OB_FAIL(query::ObSQLNameService::resolve_table_name(
-              cs_type, case_mode, search_arg_.table_name_,
-              database_name, table_name))) {
-  } else if (database_name.empty() && FALSE_IT(database_name = session_info_->get_database_name())) {
-  } else if (OB_UNLIKELY(database_name.empty())) {
-    ret = OB_ERR_NO_DB_SELECTED;
   } else {
-    ObESQueryParser parser(allocator_, need_wrap_result, &table_name, &database_name);
-    if (OB_FAIL(construct_column_index_info(allocator_, parser))) {
-    } else if (OB_FAIL(parser.parse(search_params_str, query_req))) {
+    OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(cs_type));
+    if (OB_FAIL(query::ObSQLNameService::resolve_table_name(cs_type, case_mode, search_arg_.table_name_, database_name,
+                                                            table_name))) {
+    } else if (database_name.empty() && FALSE_IT(database_name = session_info_->get_database_name())) {
+    } else if (OB_UNLIKELY(database_name.empty())) {
+      ret = OB_ERR_NO_DB_SELECTED;
+    } else {
+      ObESQueryParser parser(allocator_, need_wrap_result, &table_name, &database_name);
+      if (OB_FAIL(construct_column_index_info(allocator_, parser))) {
+      } else if (OB_FAIL(parser.parse(search_params_str, query_req))) {
+      }
     }
   }
   return ret;

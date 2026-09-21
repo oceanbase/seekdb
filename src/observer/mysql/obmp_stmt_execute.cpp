@@ -707,8 +707,10 @@ int ObMPStmtExecute::parse_request_param_value(ObIAllocator &alloc,
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(session->get_character_set_connection(charset))) {
-  } else if (OB_FAIL(session->get_collation_connection(cs_conn))) {
-  } else if (OB_FAIL(session->get_collation_server(cs_server))) {
+  } else {
+    OB_ASSERT_SUCC(ret = session->get_collation_connection(cs_conn));
+    if (OB_FAIL(session->get_collation_server(cs_server))) {
+    }
   }
   // Step5: decode value
   ObObjType ob_type;
@@ -1201,23 +1203,24 @@ int ObMPStmtExecute::request_params(ObSQLSessionInfo *session,
 
   if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(session->get_character_set_connection(charset))) {
-  } else if (OB_FAIL(session->get_collation_connection(cs_conn))) {
-  } else if (OB_FAIL(session->get_collation_server(cs_server))) {
-  } else if (OB_FAIL(session->get_ps_session_info(stmt_id_, ps_session_info))) {
-  } else if (OB_ISNULL(ps_session_info)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (DEFAULT_ITERATION_COUNT == ps_stmt_checksum) {
-    // do nothing
-    // New protocol is not handled here
-  } else if (ps_stmt_checksum != ps_session_info->get_ps_stmt_checksum()) {
-    ret = OB_ERR_PREPARE_STMT_CHECKSUM;
-    LOG_ERROR("ps stmt checksum fail", K(ret), "session_id", session->get_server_sid(),
-                                        K(ps_stmt_checksum), K(*ps_session_info));
-    LOG_DBA_ERROR_V2(OB_SERVER_PS_STMT_CHECKSUM_MISMATCH, ret,
-                     "ps stmt checksum fail. ",
-                     "the ps stmt checksum is ", ps_stmt_checksum,
-                     ", but current session stmt checksum is ", ps_session_info->get_ps_stmt_checksum(),
-                     ". current session id is ", session->get_server_sid(), ". ");
+  } else {
+    OB_ASSERT_SUCC(ret = session->get_collation_connection(cs_conn));
+    if (OB_FAIL(session->get_collation_server(cs_server))) {
+    } else if (OB_FAIL(session->get_ps_session_info(stmt_id_, ps_session_info))) {
+    } else if (OB_ISNULL(ps_session_info)) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (DEFAULT_ITERATION_COUNT == ps_stmt_checksum) {
+      // do nothing
+      // New protocol is not handled here
+    } else if (ps_stmt_checksum != ps_session_info->get_ps_stmt_checksum()) {
+      ret = OB_ERR_PREPARE_STMT_CHECKSUM;
+      LOG_ERROR("ps stmt checksum fail", K(ret), "session_id", session->get_server_sid(), K(ps_stmt_checksum),
+                K(*ps_session_info));
+      LOG_DBA_ERROR_V2(OB_SERVER_PS_STMT_CHECKSUM_MISMATCH, ret, "ps stmt checksum fail. ", "the ps stmt checksum is ",
+                       ps_stmt_checksum, ", but current session stmt checksum is ",
+                       ps_session_info->get_ps_stmt_checksum(), ". current session id is ", session->get_server_sid(),
+                       ". ");
+    }
   }
   if (OB_SUCC(ret)) {
     LOG_TRACE("ps session info",
@@ -1565,28 +1568,24 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
         session.reset_plsql_compile_time();
         if (OB_ISNULL(ctx_.schema_guard_)) {
           ret = OB_INVALID_ARGUMENT;
-        } else if (OB_FAIL(result.init())) {
-        } else if (OB_ISNULL(::oceanbase::observer::get_observer_sql_engine()) || OB_ISNULL(param_store)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_ERROR("invalid sql engine", K(ret), K(gctx_), K(param_store));
-        } else if (FALSE_IT(execution_id = ::oceanbase::observer::get_observer_sql_engine()->get_execution_id())) {
-          // do nothing ...
-        } else if (OB_FAIL(set_session_active(session))) {
         } else {
-          ret = execute_response(session,
-                                  result,
-                                  need_response_error,
-                                  is_diagnostics_stmt,
-                                  execution_id,
-                                  force_sync_resp,
-                                  async_resp_used,
-                                  inner_stmt_id);
-          if ((OB_SUCC(ret) && is_diagnostics_stmt) || async_resp_used) {
-            // if diagnostic stmt succeed, no need to clear warning buf.
-            // or async resp is used, it will be cleared in callback thread.
-            session.update_show_warnings_buf();
+          OB_ASSERT_SUCC(ret = result.init());
+          if (OB_ISNULL(::oceanbase::observer::get_observer_sql_engine()) || OB_ISNULL(param_store)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_ERROR("invalid sql engine", K(ret), K(gctx_), K(param_store));
+          } else if (FALSE_IT(execution_id = ::oceanbase::observer::get_observer_sql_engine()->get_execution_id())) {
+            // do nothing ...
+          } else if (OB_FAIL(set_session_active(session))) {
           } else {
-            session.set_show_warnings_buf(ret);
+            ret = execute_response(session, result, need_response_error, is_diagnostics_stmt, execution_id,
+                                   force_sync_resp, async_resp_used, inner_stmt_id);
+            if ((OB_SUCC(ret) && is_diagnostics_stmt) || async_resp_used) {
+              // if diagnostic stmt succeed, no need to clear warning buf.
+              // or async resp is used, it will be cleared in callback thread.
+              session.update_show_warnings_buf();
+            } else {
+              session.set_show_warnings_buf(ret);
+            }
           }
         }
       }
@@ -1945,34 +1944,33 @@ int ObMPStmtExecute::process()
       //session has been killed some moment ago
       ret = OB_ERR_SESSION_INTERRUPTED;
     } else if (OB_FAIL(session.check_and_init_retry_info(*cur_trace_id, ctx_.cur_sql_))) {
-    } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
-    } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(
-                database_schema_version))) {
-    } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
-      //packet size check with session variable max_allowd_packet or net_buffer_length
-      ret = OB_ERR_NET_PACKET_TOO_LARGE;
-    } else if (OB_FAIL(session.gen_configs_in_pc_str())) {
-    } else if (is_arraybinding_ && OB_FAIL(check_precondition_for_arraybinding(session))) {
     } else {
-      THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
-      retry_ctrl_.set_current_global_schema_version(database_schema_version);
-      session.set_pl_can_retry(true);
-      session.set_enable_mysql_compatible_dates(
-        session.get_enable_mysql_compatible_dates_from_config());
+      OB_ASSERT_SUCC(ret = session.get_query_timeout(query_timeout));
+      if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(database_schema_version))) {
+      } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
+        // packet size check with session variable max_allowd_packet or net_buffer_length
+        ret = OB_ERR_NET_PACKET_TOO_LARGE;
+      } else if (OB_FAIL(session.gen_configs_in_pc_str())) {
+      } else if (is_arraybinding_ && OB_FAIL(check_precondition_for_arraybinding(session))) {
+      } else {
+        THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
+        retry_ctrl_.set_current_global_schema_version(database_schema_version);
+        session.set_pl_can_retry(true);
+        session.set_enable_mysql_compatible_dates(session.get_enable_mysql_compatible_dates_from_config());
 
-      need_response_error = false;
-      need_disconnect = false;
-      ret = process_execute_stmt(ObMultiStmtItem(false, 0, ObString()),
-                                 session,
-                                 false, // has_mode
-                                 false, // force_sync_resp
-                                 async_resp_used);
-      // Print out the SQL statement before exiting, for easy problem location
-      if (OB_FAIL(ret)) {
-        if (OB_EAGAIN == ret) {
-          // Retryable request is handled by the upper scheduler.
-        } else if (is_conn_valid()) { // The SQL text may be request-owned after an async handoff.
-        } else {
+        need_response_error = false;
+        need_disconnect = false;
+        ret = process_execute_stmt(ObMultiStmtItem(false, 0, ObString()), session,
+                                   false, // has_mode
+                                   false, // force_sync_resp
+                                   async_resp_used);
+        // Print out the SQL statement before exiting, for easy problem location
+        if (OB_FAIL(ret)) {
+          if (OB_EAGAIN == ret) {
+            // Retryable request is handled by the upper scheduler.
+          } else if (is_conn_valid()) { // The SQL text may be request-owned after an async handoff.
+          } else {
+          }
         }
       }
     }

@@ -54,135 +54,122 @@ int ObSyncPlanDriver::response_result(ObMySQLResultSet &result)
   bool admission_fail_and_need_retry = false;
   if (OB_ISNULL(result.get_physical_plan())) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(session_.get_autocommit(ac))) {
-  } else if (OB_FAIL(result.open())) {
-    int cret = OB_SUCCESS;
-    int cli_ret = OB_SUCCESS;
-    // move result.close() below, after test_and_save_retry_state().
-    // open failed, decide whether to retry
-    retry_ctrl_.test_and_save_retry_state(gctx_,
-                                          ctx_,
-                                          result,
-                                          ret,
-                                          cli_ret);
-    if (OB_TRANSACTION_SET_VIOLATION != ret && OB_REPLICA_NOT_READABLE != ret) {
-      if (OB_TRY_LOCK_ROW_CONFLICT == ret && retry_ctrl_.need_retry()) {
-        //Lock conflict retry does not print logs to avoid screen flooding
-      } else {
-      }
-    }
-    if (retry_ctrl_.need_retry()) {
-      result.set_will_retry();
-    }
-    cret = result.close(cli_ret);
-    if (cret != OB_SUCCESS &&
-        cret != OB_TRANSACTION_SET_VIOLATION &&
-        OB_TRY_LOCK_ROW_CONFLICT != cret) {
-      LOG_WARN("close result set fail", K(cret));
-    }
-    ret = cli_ret;
-  } else if (result.is_with_rows()) {
-    // is the result set, no retries after starting to send data
-    bool can_retry = false;
-    if (OB_FAIL(response_query_result(result,
-                                      result.is_ps_protocol(),
-                                      result.has_more_result(),
-                                      can_retry,
-                                      OB_INVALID_COUNT))) {
+  } else {
+    OB_ASSERT_SUCC(ret = session_.get_autocommit(ac));
+    if (OB_FAIL(result.open())) {
+      int cret = OB_SUCCESS;
+      int cli_ret = OB_SUCCESS;
       // move result.close() below, after test_and_save_retry_state().
-      if (can_retry) {
-        // Can retry, check here if we need to retry
-        int cli_ret = OB_SUCCESS;
-        // response query result failed, decide whether to retry
-        retry_ctrl_.test_and_save_retry_state(gctx_,
-                                              ctx_,
-                                              result,
-                                              ret,
-                                              cli_ret);
-        ret = cli_ret;
-      } else {
-        result.refresh_location_cache_by_errno(true, ret);
+      // open failed, decide whether to retry
+      retry_ctrl_.test_and_save_retry_state(gctx_, ctx_, result, ret, cli_ret);
+      if (OB_TRANSACTION_SET_VIOLATION != ret && OB_REPLICA_NOT_READABLE != ret) {
+        if (OB_TRY_LOCK_ROW_CONFLICT == ret && retry_ctrl_.need_retry()) {
+          // Lock conflict retry does not print logs to avoid screen flooding
+        } else {
+        }
       }
       if (retry_ctrl_.need_retry()) {
         result.set_will_retry();
       }
-      int cret = result.close(ret);
-      if (cret != OB_SUCCESS) {
+      cret = result.close(cli_ret);
+      if (cret != OB_SUCCESS && cret != OB_TRANSACTION_SET_VIOLATION && OB_TRY_LOCK_ROW_CONFLICT != cret) {
+        LOG_WARN("close result set fail", K(cret));
       }
-    } else if (OB_FAIL(result.close())) {
-    } else {
-      process_ok = true;
-
-      OMPKEOF eofp;
-      bool need_send_eof = false;
-      const ObWarningBuffer *warnings_buf = common::ob_get_tsi_warning_buffer();
-      uint16_t warning_count = 0;
-      if (OB_ISNULL(warnings_buf)) {
-        // ignore ret
-        LOG_WARN("can not get thread warnings buffer");
-      } else {
-        warning_count = static_cast<uint16_t>(warnings_buf->get_readable_warning_count());
-      }
-      eofp.set_warning_count(warning_count);
-      ObServerStatusFlags flags = eofp.get_server_status();
-      flags.status_flags_.OB_SERVER_STATUS_IN_TRANS
-        = (session_.is_server_status_in_transaction() ? 1 : 0);
-      flags.status_flags_.OB_SERVER_STATUS_AUTOCOMMIT = (ac ? 1 : 0);
-      flags.status_flags_.OB_SERVER_MORE_RESULTS_EXISTS = result.has_more_result();
-      eofp.set_server_status(flags);
-
-      if (OB_SUCC(ret) && !result.get_is_com_filed_list()) {
-        need_send_eof = true;
-      }
-
-      if (OB_FAIL(ret)) {
-        // do nothing
-      } else {
-        // Two-in-one protocol select statement result set EOF packets should be sent here
-        // Not a combined protocol, the EOF packet without an additional OK packet needs to be sent here
-        if (need_send_eof && OB_FAIL(sender_.response_packet(eofp))) {
+      ret = cli_ret;
+    } else if (result.is_with_rows()) {
+      // is the result set, no retries after starting to send data
+      bool can_retry = false;
+      if (OB_FAIL(response_query_result(result, result.is_ps_protocol(), result.has_more_result(), can_retry,
+                                        OB_INVALID_COUNT))) {
+        // move result.close() below, after test_and_save_retry_state().
+        if (can_retry) {
+          // Can retry, check here if we need to retry
+          int cli_ret = OB_SUCCESS;
+          // response query result failed, decide whether to retry
+          retry_ctrl_.test_and_save_retry_state(gctx_, ctx_, result, ret, cli_ret);
+          ret = cli_ret;
+        } else {
+          result.refresh_location_cache_by_errno(true, ret);
         }
-      }
-    }
-  } else {
-    if (OB_FAIL(result.close())) {
-    } else {
-      if (!result.has_implicit_cursor()) {
-        //no implicit cursor, send one ok packet to client
-        ObOKPParam ok_param;
-        ok_param.message_ = const_cast<char*>(result.get_message());
-        ok_param.affected_rows_ = result.get_affected_rows();
-        ok_param.lii_ = result.get_last_insert_id_to_client();
+        if (retry_ctrl_.need_retry()) {
+          result.set_will_retry();
+        }
+        int cret = result.close(ret);
+        if (cret != OB_SUCCESS) {
+        }
+      } else if (OB_FAIL(result.close())) {
+      } else {
+        process_ok = true;
+
+        OMPKEOF eofp;
+        bool need_send_eof = false;
         const ObWarningBuffer *warnings_buf = common::ob_get_tsi_warning_buffer();
+        uint16_t warning_count = 0;
         if (OB_ISNULL(warnings_buf)) {
           // ignore ret
           LOG_WARN("can not get thread warnings buffer");
         } else {
-          ok_param.warnings_count_ =
-              static_cast<uint16_t>(warnings_buf->get_readable_warning_count());
+          warning_count = static_cast<uint16_t>(warnings_buf->get_readable_warning_count());
         }
-        ok_param.has_more_result_ = result.has_more_result();
-        process_ok = true;
-        if (OB_FAIL(sender_.send_ok_packet(session_, ok_param))) {
+        eofp.set_warning_count(warning_count);
+        ObServerStatusFlags flags = eofp.get_server_status();
+        flags.status_flags_.OB_SERVER_STATUS_IN_TRANS = (session_.is_server_status_in_transaction() ? 1 : 0);
+        flags.status_flags_.OB_SERVER_STATUS_AUTOCOMMIT = (ac ? 1 : 0);
+        flags.status_flags_.OB_SERVER_MORE_RESULTS_EXISTS = result.has_more_result();
+        eofp.set_server_status(flags);
+
+        if (OB_SUCC(ret) && !result.get_is_com_filed_list()) {
+          need_send_eof = true;
         }
+
+        if (OB_FAIL(ret)) {
+          // do nothing
+        } else {
+          // Two-in-one protocol select statement result set EOF packets should be sent here
+          // Not a combined protocol, the EOF packet without an additional OK packet needs to be sent here
+          if (need_send_eof && OB_FAIL(sender_.response_packet(eofp))) {
+          }
+        }
+      }
+    } else {
+      if (OB_FAIL(result.close())) {
       } else {
-        //has implicit cursor, send ok packet to client by implicit cursor
-        result.reset_implicit_cursor_idx();
-        int64_t curr_affected_row = 0;
-        while (OB_SUCC(ret) && OB_SUCC(result.switch_implicit_cursor(curr_affected_row))) {
+        if (!result.has_implicit_cursor()) {
+          // no implicit cursor, send one ok packet to client
           ObOKPParam ok_param;
-          ok_param.message_ = const_cast<char*>(result.get_message());
-          ok_param.affected_rows_ = curr_affected_row;
-          ok_param.has_more_result_ = !result.is_cursor_end();
+          ok_param.message_ = const_cast<char *>(result.get_message());
+          ok_param.affected_rows_ = result.get_affected_rows();
           ok_param.lii_ = result.get_last_insert_id_to_client();
+          const ObWarningBuffer *warnings_buf = common::ob_get_tsi_warning_buffer();
+          if (OB_ISNULL(warnings_buf)) {
+            // ignore ret
+            LOG_WARN("can not get thread warnings buffer");
+          } else {
+            ok_param.warnings_count_ = static_cast<uint16_t>(warnings_buf->get_readable_warning_count());
+          }
+          ok_param.has_more_result_ = result.has_more_result();
           process_ok = true;
           if (OB_FAIL(sender_.send_ok_packet(session_, ok_param))) {
           }
-        }
-        if (OB_ITER_END == ret) {
-          ret = OB_SUCCESS;
-        }
-        if (OB_FAIL(ret)) {
+        } else {
+          // has implicit cursor, send ok packet to client by implicit cursor
+          result.reset_implicit_cursor_idx();
+          int64_t curr_affected_row = 0;
+          while (OB_SUCC(ret) && OB_SUCC(result.switch_implicit_cursor(curr_affected_row))) {
+            ObOKPParam ok_param;
+            ok_param.message_ = const_cast<char *>(result.get_message());
+            ok_param.affected_rows_ = curr_affected_row;
+            ok_param.has_more_result_ = !result.is_cursor_end();
+            ok_param.lii_ = result.get_last_insert_id_to_client();
+            process_ok = true;
+            if (OB_FAIL(sender_.send_ok_packet(session_, ok_param))) {
+            }
+          }
+          if (OB_ITER_END == ret) {
+            ret = OB_SUCCESS;
+          }
+          if (OB_FAIL(ret)) {
+          }
         }
       }
     }

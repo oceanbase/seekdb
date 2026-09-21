@@ -1007,8 +1007,7 @@ int ObOperator::push_stash_rows(const int64_t max_row_cnt, const int64_t output_
     stash_brs_.end_ = brs_.end_;
     stash_rows_cnt_ = output_row_cnt;
     stash_rows_idx_ = 0;
-    if (OB_FAIL(pop_stash_rows(max_row_cnt))) {
-    }
+    OB_ASSERT_SUCC(ret = pop_stash_rows(max_row_cnt));
   }
   return ret;
 }
@@ -1055,8 +1054,7 @@ int ObOperator::get_next_batch(const int64_t max_row_cnt, const ObBatchRows *&ba
       bool all_filtered = false;
       while (OB_SUCC(ret) && !brs_.end_) {
         if (OB_UNLIKELY(stash_rows_cnt_ > 0)) {
-          if (OB_FAIL(pop_stash_rows(op_max_row_cnt))) {
-          }
+          OB_ASSERT_SUCC(ret = pop_stash_rows(op_max_row_cnt));
         } else {
           if (OB_FAIL(inner_get_next_batch(op_max_row_cnt))) {
           } else {

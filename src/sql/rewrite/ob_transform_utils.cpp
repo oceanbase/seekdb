@@ -5681,9 +5681,11 @@ int ObTransformUtils::pushdown_pseudo_column_like_exprs(ObDMLStmt &upper_stmt,
   for (int64_t i = 0; OB_SUCC(ret) && i < upper_pseudo_columns.count(); ++i) {
     if (OB_ISNULL(expr = upper_pseudo_columns.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(check_need_pushdown_pseudo_column(*expr, push_group_by, need_pushdown))) {
-    } else if (need_pushdown && OB_FAIL(new_pushdown_exprs.push_back(expr))) {
-    } else if (!need_pushdown && OB_FAIL(new_upper_pseudo_columns.push_back(expr))) {
+    } else {
+      OB_ASSERT_SUCC(ret = check_need_pushdown_pseudo_column(*expr, push_group_by, need_pushdown));
+      if (need_pushdown && OB_FAIL(new_pushdown_exprs.push_back(expr))) {
+      } else if (!need_pushdown && OB_FAIL(new_upper_pseudo_columns.push_back(expr))) {
+      }
     }
   }
   if (OB_SUCC(ret) && !new_pushdown_exprs.empty()) {
@@ -8753,22 +8755,17 @@ int ObTransformUtils::check_correlated_exprs_can_pullup(const ObIArray<ObExecPar
     } else if (OB_FAIL(check_fixed_expr_correlated(exec_params, subquery, can_pullup))) {
     } else if (!can_pullup) {
       //do nothing
-    } else if (OB_FAIL(check_can_pullup_conds(subquery, has_special_expr))) {
-    } else if (OB_FAIL(is_from_item_correlated(exec_params, 
-                                               subquery, 
-                                               is_correlated))) {
-    } else if (is_correlated) {
-      can_pullup = false;
-    } else if (OB_FAIL(check_correlated_having_expr_can_pullup(exec_params,
-                                                               subquery,
-                                                               has_special_expr,
-                                                               can_pullup))) {
-    } else if (!can_pullup) {
-      //do nothing
-    } else if (OB_FAIL(check_correlated_where_expr_can_pullup(exec_params,
-                                                              subquery,
-                                                              has_special_expr,
-                                                              can_pullup))) {
+    } else {
+      OB_ASSERT_SUCC(ret = check_can_pullup_conds(subquery, has_special_expr));
+      if (OB_FAIL(is_from_item_correlated(exec_params, subquery, is_correlated))) {
+      } else if (is_correlated) {
+        can_pullup = false;
+      } else if (OB_FAIL(
+                     check_correlated_having_expr_can_pullup(exec_params, subquery, has_special_expr, can_pullup))) {
+      } else if (!can_pullup) {
+        // do nothing
+      } else if (OB_FAIL(check_correlated_where_expr_can_pullup(exec_params, subquery, has_special_expr, can_pullup))) {
+      }
     }
     if (OB_SUCC(ret) && can_pullup) {
       // check group-by, rollup, order by exprs

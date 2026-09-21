@@ -37,68 +37,72 @@ int ObDbmsStatsGather::gather_stats(ObExecContext &ctx,
   if (OB_ISNULL(param.allocator_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(init_opt_stats(*param.allocator_, param, opt_stats))) {
-  } else if (OB_FAIL(adjust_sample_param(opt_stats, const_cast<ObOptStatGatherParam&>(param)))) {
-  } else if (!opt_stats.empty()) {
-    //1.firstly esimate basic stat
-    ObBasicStatsEstimator basic_est(ctx, *param.allocator_);
-    int64_t start_time = ObTimeUtility::current_time();
-    int64_t basic_duration_time = 0;
-    if (OB_FAIL(basic_est.estimate(param, opt_stats))) {
-    } else if (OB_FALSE_IT(basic_duration_time = ObTimeUtility::current_time() - start_time)) {
-    } else if (OB_FAIL(audit.add_basic_estimate_audit(param.partition_infos_, false, basic_duration_time))) {
-    } else if (param.need_histogram_) {
-      for (int64_t i = 0; OB_SUCC(ret) && i < opt_stats.count(); ++i) {
-        ObOptStatGatherParam new_param;
-        ObTopkHistEstimator topk_est(ctx, *param.allocator_);
-        ObHybridHistEstimator hybrid_est(ctx, *param.allocator_);
-        int64_t topk_duration_time = 0;
-        int64_t hybrid_duration_time = 0;
-        if (OB_ISNULL(opt_stats.at(i).table_stat_)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(THIS_WORKER.check_status())) {
-        } else if (opt_stats.at(i).table_stat_->get_row_count() <= 0) {
-          //empty table or empty partition, no need gather histogram, just skip.
-        } else if (OB_FAIL(new_param.assign(param))) {
-        } else if (new_param.stat_level_ != TABLE_LEVEL &&
-                   OB_FAIL(ObDbmsStatsUtils::remove_stat_gather_param_partition_info(opt_stats.at(i).table_stat_->get_partition_id(),
-                                                                                     new_param))) {
-        } else if (OB_FAIL(classfy_column_histogram(new_param, opt_stats.at(i)))) {
-        } else if (OB_FALSE_IT(start_time = ObTimeUtility::current_time())) {
-        } else if (OB_FAIL(topk_est.estimate(new_param, opt_stats.at(i)))) {
-        } else if (OB_FALSE_IT(topk_duration_time = ObTimeUtility::current_time() - start_time)) {
-        } else if (OB_FALSE_IT(start_time = ObTimeUtility::current_time())) {
-        } else if (OB_FAIL(hybrid_est.estimate(new_param, opt_stats.at(i)))) {
-        } else if (OB_FALSE_IT(hybrid_duration_time = ObTimeUtility::current_time() - start_time)) {
-        } else if (OB_FAIL(audit.add_histogram_estimate_audit(new_param.stat_level_ != TABLE_LEVEL ? 
-                                    opt_stats.at(i).table_stat_->get_partition_id() : new_param.table_id_, 
-                                    topk_duration_time, hybrid_duration_time))) {
+  } else {
+    OB_ASSERT_SUCC(ret = adjust_sample_param(opt_stats, const_cast<ObOptStatGatherParam &>(param)));
+    if (!opt_stats.empty()) {
+      // 1.firstly esimate basic stat
+      ObBasicStatsEstimator basic_est(ctx, *param.allocator_);
+      int64_t start_time = ObTimeUtility::current_time();
+      int64_t basic_duration_time = 0;
+      if (OB_FAIL(basic_est.estimate(param, opt_stats))) {
+      } else if (OB_FALSE_IT(basic_duration_time = ObTimeUtility::current_time() - start_time)) {
+      } else if (OB_FAIL(audit.add_basic_estimate_audit(param.partition_infos_, false, basic_duration_time))) {
+      } else if (param.need_histogram_) {
+        for (int64_t i = 0; OB_SUCC(ret) && i < opt_stats.count(); ++i) {
+          ObOptStatGatherParam new_param;
+          ObTopkHistEstimator topk_est(ctx, *param.allocator_);
+          ObHybridHistEstimator hybrid_est(ctx, *param.allocator_);
+          int64_t topk_duration_time = 0;
+          int64_t hybrid_duration_time = 0;
+          if (OB_ISNULL(opt_stats.at(i).table_stat_)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_FAIL(THIS_WORKER.check_status())) {
+          } else if (opt_stats.at(i).table_stat_->get_row_count() <= 0) {
+            // empty table or empty partition, no need gather histogram, just skip.
+          } else if (OB_FAIL(new_param.assign(param))) {
+          } else if (new_param.stat_level_ != TABLE_LEVEL &&
+                     OB_FAIL(ObDbmsStatsUtils::remove_stat_gather_param_partition_info(
+                         opt_stats.at(i).table_stat_->get_partition_id(), new_param))) {
+          } else if (OB_FAIL(classfy_column_histogram(new_param, opt_stats.at(i)))) {
+          } else if (OB_FALSE_IT(start_time = ObTimeUtility::current_time())) {
+          } else if (OB_FAIL(topk_est.estimate(new_param, opt_stats.at(i)))) {
+          } else if (OB_FALSE_IT(topk_duration_time = ObTimeUtility::current_time() - start_time)) {
+          } else if (OB_FALSE_IT(start_time = ObTimeUtility::current_time())) {
+          } else if (OB_FAIL(hybrid_est.estimate(new_param, opt_stats.at(i)))) {
+          } else if (OB_FALSE_IT(hybrid_duration_time = ObTimeUtility::current_time() - start_time)) {
+          } else if (OB_FAIL(audit.add_histogram_estimate_audit(new_param.stat_level_ != TABLE_LEVEL
+                                                                    ? opt_stats.at(i).table_stat_->get_partition_id()
+                                                                    : new_param.table_id_,
+                                                                topk_duration_time, hybrid_duration_time))) {
+          }
         }
+      } else { /*do nothing*/
       }
-    } else {/*do nothing*/}
-    
-    if (OB_SUCC(ret) &&
-        param.sample_info_.is_specify_sample() && param.need_refine_min_max_) {
-      for (int64_t i = 0; OB_SUCC(ret) && i < opt_stats.count(); ++i) {
-        ObOptStatGatherParam new_param;
-        ObMinMaxEstimator min_max_est(ctx, *param.allocator_);
-        if (OB_ISNULL(opt_stats.at(i).table_stat_)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(THIS_WORKER.check_status())) {
-        } else if (opt_stats.at(i).table_stat_->get_row_count() <= 0) {
-          //empty table or empty partition, no need gather histogram, just skip.
-        } else if (OB_FAIL(new_param.assign(param))) {
-        } else if (new_param.stat_level_ != TABLE_LEVEL &&
-                   OB_FAIL(ObDbmsStatsUtils::remove_stat_gather_param_partition_info(opt_stats.at(i).table_stat_->get_partition_id(),
-                                                                                     new_param))) {
-        } else if (OB_FALSE_IT(start_time = ObTimeUtility::current_time())) {
-        } else if (OB_FAIL(min_max_est.estimate(new_param, opt_stats.at(i)))) {
-        } else if (OB_FAIL(audit.add_refine_estimate_audit(false, new_param.stat_level_ != TABLE_LEVEL ? 
-                                    opt_stats.at(i).table_stat_->get_partition_id() : new_param.table_id_,
-                                    ObTimeUtility::current_time() - start_time))) {
+
+      if (OB_SUCC(ret) && param.sample_info_.is_specify_sample() && param.need_refine_min_max_) {
+        for (int64_t i = 0; OB_SUCC(ret) && i < opt_stats.count(); ++i) {
+          ObOptStatGatherParam new_param;
+          ObMinMaxEstimator min_max_est(ctx, *param.allocator_);
+          if (OB_ISNULL(opt_stats.at(i).table_stat_)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_FAIL(THIS_WORKER.check_status())) {
+          } else if (opt_stats.at(i).table_stat_->get_row_count() <= 0) {
+            // empty table or empty partition, no need gather histogram, just skip.
+          } else if (OB_FAIL(new_param.assign(param))) {
+          } else if (new_param.stat_level_ != TABLE_LEVEL &&
+                     OB_FAIL(ObDbmsStatsUtils::remove_stat_gather_param_partition_info(
+                         opt_stats.at(i).table_stat_->get_partition_id(), new_param))) {
+          } else if (OB_FALSE_IT(start_time = ObTimeUtility::current_time())) {
+          } else if (OB_FAIL(min_max_est.estimate(new_param, opt_stats.at(i)))) {
+          } else if (OB_FAIL(audit.add_refine_estimate_audit(false,
+                                                             new_param.stat_level_ != TABLE_LEVEL
+                                                                 ? opt_stats.at(i).table_stat_->get_partition_id()
+                                                                 : new_param.table_id_,
+                                                             ObTimeUtility::current_time() - start_time))) {
+          }
         }
       }
     }
-
   }
   return ret;
 }

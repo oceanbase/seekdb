@@ -444,26 +444,25 @@ int ObSSTableRowWholeScanner::open_macro_block()
       const ObITableReadInfo *rowkey_read_info = nullptr;
       micro_block_iter_.reset();
 
-      if (OB_FAIL(iter_param_->get_index_read_info(rowkey_read_info))) {
-      } else if (access_ctx_->query_flag_.is_multi_version_minor_merge() &&
-          OB_FAIL(check_macro_block_recycle(scan_handle.macro_block_desc_, can_recycle))) {
-      } else if (can_recycle) {
-        last_micro_block_recycled_ = true;
-        cur_macro_cursor_++;
-        FLOG_INFO("macro block recycled", K(scan_handle.macro_block_desc_.macro_block_id_));
-      } else if (OB_FAIL(scan_handle.macro_io_handle_.wait())) {
-      } else if (OB_FAIL(micro_block_iter_.open(
-                  scan_handle.macro_io_handle_.get_buffer(),
-                  scan_handle.macro_io_handle_.get_data_size(),
-                  query_range_,
-                  *rowkey_read_info,
-                  scan_handle.is_left_border_,
-                  scan_handle.is_right_border_))) {
-      } else {
-        if (iter_macro_cnt_ < 10) {
-          LOG_TRACE("iter macro block id", K(scan_handle.macro_block_desc_.macro_block_id_), K(iter_macro_cnt_++), K(sstable_));
+      {
+        OB_ASSERT_SUCC(ret = iter_param_->get_index_read_info(rowkey_read_info));
+        if (access_ctx_->query_flag_.is_multi_version_minor_merge() &&
+            OB_FAIL(check_macro_block_recycle(scan_handle.macro_block_desc_, can_recycle))) {
+        } else if (can_recycle) {
+          last_micro_block_recycled_ = true;
+          cur_macro_cursor_++;
+          FLOG_INFO("macro block recycled", K(scan_handle.macro_block_desc_.macro_block_id_));
+        } else if (OB_FAIL(scan_handle.macro_io_handle_.wait())) {
+        } else if (OB_FAIL(micro_block_iter_.open(
+                       scan_handle.macro_io_handle_.get_buffer(), scan_handle.macro_io_handle_.get_data_size(),
+                       query_range_, *rowkey_read_info, scan_handle.is_left_border_, scan_handle.is_right_border_))) {
+        } else {
+          if (iter_macro_cnt_ < 10) {
+            LOG_TRACE("iter macro block id", K(scan_handle.macro_block_desc_.macro_block_id_), K(iter_macro_cnt_++),
+                      K(sstable_));
+          }
+          break;
         }
-        break;
       }
     }
   }

@@ -112,23 +112,24 @@ int ObPushDownTopNFilterMsg::init(const ObPushDownTopNFilterInfo *pd_topn_filter
     task_id = exec_ctx->get_px_task_id();
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(ObP2PDatahubMsgBase::init(
-          pd_topn_filter_info->p2p_dh_id_, px_seq_id, task_id, timeout_ts))) {
-  } else if (FALSE_IT(total_sk_cnt_ = pd_topn_filter_info->total_sk_cnt_)) {
-  } else if (OB_FAIL(heap_top_datums_.prepare_allocate(effective_sk_cnt))) {
-  } else if (OB_FAIL(cells_size_.prepare_allocate(effective_sk_cnt))) {
-  } else if (OB_FAIL(compares_.prepare_allocate(effective_sk_cnt))) {
   } else {
-    for (int64_t i = 0; i < effective_sk_cnt && OB_SUCC(ret); ++i) {
-      // TODO XUNSI: in join scene, if the sort key is the join key of the right table
-      // the build_meta_ and filter_meta_ may different, preprae it
-      compares_.at(i).build_meta_.cmp_func_ = pd_topn_filter_info->cmp_metas_.at(i).cmp_func_;
-      compares_.at(i).build_meta_.obj_meta_.set_meta(pd_topn_filter_info->cmp_metas_.at(i).obj_meta_);
-      compares_.at(i).filter_meta_.cmp_func_ = pd_topn_filter_info->cmp_metas_.at(i).cmp_func_;
-      compares_.at(i).filter_meta_.obj_meta_.set_meta(pd_topn_filter_info->cmp_metas_.at(i).obj_meta_);
-      cells_size_.at(i) = 0;
-      compares_.at(i).is_ascending_ = sort_collations->at(i).is_ascending_;
-      compares_.at(i).null_pos_ = sort_collations->at(i).null_pos_;
+    OB_ASSERT_SUCC(ret = ObP2PDatahubMsgBase::init(pd_topn_filter_info->p2p_dh_id_, px_seq_id, task_id, timeout_ts));
+    if (FALSE_IT(total_sk_cnt_ = pd_topn_filter_info->total_sk_cnt_)) {
+    } else if (OB_FAIL(heap_top_datums_.prepare_allocate(effective_sk_cnt))) {
+    } else if (OB_FAIL(cells_size_.prepare_allocate(effective_sk_cnt))) {
+    } else if (OB_FAIL(compares_.prepare_allocate(effective_sk_cnt))) {
+    } else {
+      for (int64_t i = 0; i < effective_sk_cnt && OB_SUCC(ret); ++i) {
+        // TODO XUNSI: in join scene, if the sort key is the join key of the right table
+        // the build_meta_ and filter_meta_ may different, preprae it
+        compares_.at(i).build_meta_.cmp_func_ = pd_topn_filter_info->cmp_metas_.at(i).cmp_func_;
+        compares_.at(i).build_meta_.obj_meta_.set_meta(pd_topn_filter_info->cmp_metas_.at(i).obj_meta_);
+        compares_.at(i).filter_meta_.cmp_func_ = pd_topn_filter_info->cmp_metas_.at(i).cmp_func_;
+        compares_.at(i).filter_meta_.obj_meta_.set_meta(pd_topn_filter_info->cmp_metas_.at(i).obj_meta_);
+        cells_size_.at(i) = 0;
+        compares_.at(i).is_ascending_ = sort_collations->at(i).is_ascending_;
+        compares_.at(i).null_pos_ = sort_collations->at(i).null_pos_;
+      }
     }
   }
   return ret;

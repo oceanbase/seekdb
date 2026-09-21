@@ -81,13 +81,11 @@ int ObRLEDecoder::batch_decode(
   int64_t unused_null_cnt;
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(extract_ref_and_null_count(row_ids, row_cap, datums, unused_null_cnt))) {
-  } else if (OB_FAIL(dict_decoder_.batch_decode_dict(
-      ctx.col_header_->get_store_obj_type(),
-      cell_datas,
-      row_cap,
-      ctx.col_header_->length_ - meta_header_->offset_,
-      datums))) {
+  } else {
+    OB_ASSERT_SUCC(ret = extract_ref_and_null_count(row_ids, row_cap, datums, unused_null_cnt));
+    if (OB_FAIL(dict_decoder_.batch_decode_dict(ctx.col_header_->get_store_obj_type(), cell_datas, row_cap,
+                                                ctx.col_header_->length_ - meta_header_->offset_, datums))) {
+    }
   }
   return ret;
 }
@@ -104,8 +102,8 @@ int ObRLEDecoder::get_null_count(
   null_count = 0;
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(extract_ref_and_null_count(row_ids, row_cap, nullptr, null_count))) {
-  }
+  } else
+    OB_ASSERT_SUCC(ret = extract_ref_and_null_count(row_ids, row_cap, nullptr, null_count));
   return ret;
 }
 
@@ -552,8 +550,7 @@ int ObRLEDecoder::read_reference(
 {
   int ret = OB_SUCCESS;
   int64_t null_cnt = 0;
-  if (OB_FAIL(extract_ref_and_null_count(row_ids, row_cap, group_by_cell.get_refs_buf(), null_cnt))) {
-  }
+  OB_ASSERT_SUCC(ret = extract_ref_and_null_count(row_ids, row_cap, group_by_cell.get_refs_buf(), null_cnt));
   return ret;
 }
 

@@ -146,9 +146,12 @@ int ObUpdateResolver::resolve(const ParseNode &parse_tree)
   if (OB_SUCC(ret)) {
     if (OB_FAIL(check_view_updatable())) {
     } else if (OB_FAIL(update_stmt->check_dml_need_filter_null())) {
-    } else if (OB_FAIL(update_stmt->check_dml_source_from_join())) {
-    } else if (OB_FAIL(check_safe_update_mode(update_stmt))) {
-    } else { /*do nothing*/ }
+    } else {
+      OB_ASSERT_SUCC(ret = update_stmt->check_dml_source_from_join());
+      if (OB_FAIL(check_safe_update_mode(update_stmt))) {
+      } else { /*do nothing*/
+      }
+    }
   }
   return ret;
 }
@@ -354,39 +357,43 @@ int ObUpdateResolver::generate_update_table_info(ObTableAssignment &table_assign
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(schema_checker_->get_can_write_index_array(table_item->get_base_table_item().ref_id_,
                                                                 index_tid, gindex_cnt, true))) {
-  } else if (OB_FAIL(params_.session_info_->get_binlog_row_image(binlog_row_image))) {
-  } else if (NULL == (ptr = allocator_->alloc(sizeof(ObUpdateTableInfo)))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    table_info = new(ptr) ObUpdateTableInfo();
-    if (OB_FAIL(table_info->assignments_.assign(table_assign.assignments_))) {
-    } else if (OB_FAIL(table_info->part_ids_.assign(table_item->get_base_table_item().part_ids_))) {
+    OB_ASSERT_SUCC(ret = params_.session_info_->get_binlog_row_image(binlog_row_image));
+    if (NULL == (ptr = allocator_->alloc(sizeof(ObUpdateTableInfo)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      if (OB_FAIL(add_all_rowkey_columns_to_stmt(*table_item, table_info->column_exprs_))) {
-      } else if (need_all_columns(*table_schema, binlog_row_image)) {
-        if (OB_FAIL(add_all_columns_to_stmt(*table_item, table_info->column_exprs_))) {
-        }
+      table_info = new (ptr) ObUpdateTableInfo();
+      if (OB_FAIL(table_info->assignments_.assign(table_assign.assignments_))) {
+      } else if (OB_FAIL(table_info->part_ids_.assign(table_item->get_base_table_item().part_ids_))) {
       } else {
-        for (int64_t i = 0; OB_SUCC(ret) && i < table_assign.assignments_.count(); ++i) {
-          ObAssignment &assign = table_assign.assignments_.at(i);
-          if (OB_FAIL(add_var_to_array_no_dup(table_info->column_exprs_, assign.column_expr_))) {
-          } else if (OB_FAIL(add_index_related_columns_to_stmt(*table_item,
-                             assign.column_expr_->get_column_id(), table_info->column_exprs_))) {
-          } else { /*do nothing*/ }
+        if (OB_FAIL(add_all_rowkey_columns_to_stmt(*table_item, table_info->column_exprs_))) {
+        } else if (need_all_columns(*table_schema, binlog_row_image)) {
+          if (OB_FAIL(add_all_columns_to_stmt(*table_item, table_info->column_exprs_))) {
+          }
+        } else {
+          for (int64_t i = 0; OB_SUCC(ret) && i < table_assign.assignments_.count(); ++i) {
+            ObAssignment &assign = table_assign.assignments_.at(i);
+            if (OB_FAIL(add_var_to_array_no_dup(table_info->column_exprs_, assign.column_expr_))) {
+            } else if (OB_FAIL(add_index_related_columns_to_stmt(*table_item, assign.column_expr_->get_column_id(),
+                                                                 table_info->column_exprs_))) {
+            } else { /*do nothing*/
+            }
+          }
+        }
+        if (OB_SUCC(ret)) {
+          table_info->table_id_ = table_item->table_id_;
+          table_info->loc_table_id_ = table_item->get_base_table_item().table_id_;
+          table_info->ref_table_id_ = table_item->get_base_table_item().ref_id_;
+          table_info->table_name_ = table_schema->get_table_name_str();
         }
       }
       if (OB_SUCC(ret)) {
-        table_info->table_id_ = table_item->table_id_;
-        table_info->loc_table_id_ = table_item->get_base_table_item().table_id_;
-        table_info->ref_table_id_ = table_item->get_base_table_item().ref_id_;
-        table_info->table_name_ = table_schema->get_table_name_str();
+        if (OB_FAIL(update_stmt->get_update_table_info().push_back(table_info))) {
+        } else if (gindex_cnt > 0) {
+          update_stmt->set_has_global_index(true);
+        } else { /*do nothing*/
+        }
       }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(update_stmt->get_update_table_info().push_back(table_info))) {
-      } else if (gindex_cnt > 0) {
-        update_stmt->set_has_global_index(true);
-      } else { /*do nothing*/ }
     }
   }
   return ret;

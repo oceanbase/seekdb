@@ -851,10 +851,12 @@ int ObMediumCompactionScheduleFunc::prepare_medium_info(
     }
   }
   if (FAILEDx(init_parallel_range_and_schema_changed(result, medium_info))) {
-  } else if (OB_FAIL(choose_encoding_limit(medium_info))) {
-  } else if (FALSE_IT(medium_info.last_medium_snapshot_ = result.handle_.get_table(0)->get_snapshot_version())) {
-  } else if (OB_FAIL(fill_mds_filter_info(medium_info))) {
   } else {
+    OB_ASSERT_SUCC(ret = choose_encoding_limit(medium_info));
+    if (FALSE_IT(medium_info.last_medium_snapshot_ = result.handle_.get_table(0)->get_snapshot_version())) {
+    } else if (OB_FAIL(fill_mds_filter_info(medium_info))) {
+    } else {
+    }
   }
 
   return ret;

@@ -1665,8 +1665,8 @@ int ObJsonBin::init_cursor(const ObString& data)
     } else {
       cursor_ = ctx_->update_ctx_->cursor_;
     }
-  } else if (OB_FAIL(local_cursor_.init(data))) {
   } else {
+    OB_ASSERT_SUCC(ret = local_cursor_.init(data));
     cursor_ = &local_cursor_;
   }
   return ret;

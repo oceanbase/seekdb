@@ -315,52 +315,54 @@ int ObLocalDevice::init(const common::ObIODOpts &opts)
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     SHARE_LOG(WARN, "The local device has been inited, ", K(ret));
-  } else if (OB_FAIL(allocator_.init(OB_MALLOC_MIDDLE_BLOCK_SIZE, default_blk_alloc, mem_attr))) {
-  } else if (OB_FAIL(iocb_pool_.init(allocator_))) {
-  } else if (0 == opts.opt_cnt_) {
-    // Log devices share the local-device implementation but do not own the
-    // data block file, so LogIODeviceWrapper intentionally supplies no
-    // block-file options.
-    SHARE_LOG(INFO, "No block-file options supplied, skip initializing block_file");
   } else {
-    const char *store_dir = nullptr;
-    const char *sstable_dir = nullptr;
-    int64_t datafile_size = 0;
-    int64_t block_size = 0;
-    int64_t datafile_disk_percentage = 0;
-    bool is_exist = false;
-    int64_t media_id = 0;
+    OB_ASSERT_SUCC(ret = allocator_.init(OB_MALLOC_MIDDLE_BLOCK_SIZE, default_blk_alloc, mem_attr));
+    if (OB_FAIL(iocb_pool_.init(allocator_))) {
+    } else if (0 == opts.opt_cnt_) {
+      // Log devices share the local-device implementation but do not own the
+      // data block file, so LogIODeviceWrapper intentionally supplies no
+      // block-file options.
+      SHARE_LOG(INFO, "No block-file options supplied, skip initializing block_file");
+    } else {
+      const char *store_dir = nullptr;
+      const char *sstable_dir = nullptr;
+      int64_t datafile_size = 0;
+      int64_t block_size = 0;
+      int64_t datafile_disk_percentage = 0;
+      bool is_exist = false;
+      int64_t media_id = 0;
 
-    for (int64_t i = 0; OB_SUCC(ret) && i < opts.opt_cnt_; ++i) {
-      if (0 == STRCMP(opts.opts_[i].key_, "data_dir")) {
-        store_dir = opts.opts_[i].value_.value_str;
-      } else if (0 == STRCMP(opts.opts_[i].key_, "sstable_dir")) {
-        sstable_dir = opts.opts_[i].value_.value_str;
-      } else if (0 == STRCMP(opts.opts_[i].key_, "block_size")) {
-        block_size = opts.opts_[i].value_.value_int64;
-      } else if (0 == STRCMP(opts.opts_[i].key_, "datafile_disk_percentage")) {
-        datafile_disk_percentage = opts.opts_[i].value_.value_int64;
-      } else if (0 == STRCMP(opts.opts_[i].key_, "datafile_size")) {
-        datafile_size = opts.opts_[i].value_.value_int64;
-      } else if (0 == STRCMP(opts.opts_[i].key_, "media_id")) {
-        media_id = opts.opts_[i].value_.value_int64;
-      } else {
-        ret = OB_NOT_SUPPORTED;
-        SHARE_LOG(WARN, "Not supported option, ", K(ret), K(i), K(opts.opts_[i].key_));
+      for (int64_t i = 0; OB_SUCC(ret) && i < opts.opt_cnt_; ++i) {
+        if (0 == STRCMP(opts.opts_[i].key_, "data_dir")) {
+          store_dir = opts.opts_[i].value_.value_str;
+        } else if (0 == STRCMP(opts.opts_[i].key_, "sstable_dir")) {
+          sstable_dir = opts.opts_[i].value_.value_str;
+        } else if (0 == STRCMP(opts.opts_[i].key_, "block_size")) {
+          block_size = opts.opts_[i].value_.value_int64;
+        } else if (0 == STRCMP(opts.opts_[i].key_, "datafile_disk_percentage")) {
+          datafile_disk_percentage = opts.opts_[i].value_.value_int64;
+        } else if (0 == STRCMP(opts.opts_[i].key_, "datafile_size")) {
+          datafile_size = opts.opts_[i].value_.value_int64;
+        } else if (0 == STRCMP(opts.opts_[i].key_, "media_id")) {
+          media_id = opts.opts_[i].value_.value_int64;
+        } else {
+          ret = OB_NOT_SUPPORTED;
+          SHARE_LOG(WARN, "Not supported option, ", K(ret), K(i), K(opts.opts_[i].key_));
+        }
       }
-    }
 
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(store_dir) || 0 == STRLEN(store_dir)) {
-        ret = OB_INVALID_ARGUMENT;
-        SHARE_LOG(WARN, "invalid args", K(ret), KP(store_dir));
-      } else {
-        block_size_ = block_size;
-        block_file_size_ = datafile_size;
-        disk_percentage_ = datafile_disk_percentage;
-        STRNCPY(store_dir_, store_dir, STRLEN(store_dir));
-        STRNCPY(sstable_dir_, sstable_dir, STRLEN(sstable_dir));
-        media_id_ = media_id;
+      if (OB_SUCC(ret)) {
+        if (OB_ISNULL(store_dir) || 0 == STRLEN(store_dir)) {
+          ret = OB_INVALID_ARGUMENT;
+          SHARE_LOG(WARN, "invalid args", K(ret), KP(store_dir));
+        } else {
+          block_size_ = block_size;
+          block_file_size_ = datafile_size;
+          disk_percentage_ = datafile_disk_percentage;
+          STRNCPY(store_dir_, store_dir, STRLEN(store_dir));
+          STRNCPY(sstable_dir_, sstable_dir, STRLEN(sstable_dir));
+          media_id_ = media_id;
+        }
       }
     }
   }

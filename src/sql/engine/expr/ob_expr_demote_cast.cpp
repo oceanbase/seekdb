@@ -51,8 +51,8 @@ int ObExprDemoteCastBase::get_column_res_type(const ObExprResType &param_type,
   ObDatumMeta column_datum_meta;
   if (!param_type.is_int() && !param_type.get_param().is_int()) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(get_column_datum_meta(param_type.get_param().get_int(), column_datum_meta))) {
   } else {
+    OB_ASSERT_SUCC(ret = get_column_datum_meta(param_type.get_param().get_int(), column_datum_meta));
     column_res_type.set_type(static_cast<ObObjType>(column_datum_meta.type_));
     column_res_type.set_cs_type(static_cast<ObCollationType>(column_datum_meta.cs_type_));
     if (ob_is_string_type(column_res_type.get_type())) {
@@ -157,13 +157,15 @@ int ObExprDemoteCastBase::demote_cast(const ObExpr &expr, ObEvalCtx &ctx, TypeDe
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, column_info))) {
   } else if (OB_UNLIKELY(column_info->is_null())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(get_column_datum_meta(column_info->get_int(), // restore column meta from args
-                                           column_datum_meta))) {
-  } else if (OB_UNLIKELY(constant->is_null())) {
-    if (OB_FAIL(demote_null_constant(expr.args_[0], column_datum_meta, res))) {
-    }
   } else {
-    if (OB_FAIL(demote_field_constant(*constant, constant_datum_meta, column_datum_meta, res))) {
+    OB_ASSERT_SUCC(ret = get_column_datum_meta(column_info->get_int(), // restore column meta from args
+                                               column_datum_meta));
+    if (OB_UNLIKELY(constant->is_null())) {
+      if (OB_FAIL(demote_null_constant(expr.args_[0], column_datum_meta, res))) {
+      }
+    } else {
+      if (OB_FAIL(demote_field_constant(*constant, constant_datum_meta, column_datum_meta, res))) {
+      }
     }
   }
   return ret;
@@ -481,8 +483,7 @@ int ObExprDemoteCast::calc_result_type2(ObExprResType &type,
     } else {
       type.set_accuracy(column_res_type.get_accuracy());
     }
-    if (OB_FAIL(set_calc_type_for_const_param(column_res_type, type1, type_ctx))) {
-    }
+    OB_ASSERT_SUCC(ret = set_calc_type_for_const_param(column_res_type, type1, type_ctx));
   }
   return ret;
 }
@@ -532,8 +533,8 @@ int ObExprRangePlacement::calc_result_type2(ObExprResType &type,
   type.set_accuracy(ObAccuracy::DDL_DEFAULT_ACCURACY[ObInt32Type]);
   ObExprResType column_res_type;
   if (OB_FAIL(get_column_res_type(type2, column_res_type))) {
-  } else if (OB_FAIL(set_calc_type_for_const_param(column_res_type, type1, type_ctx))) {
-  }
+  } else
+    OB_ASSERT_SUCC(ret = set_calc_type_for_const_param(column_res_type, type1, type_ctx));
   return ret;
 }
 

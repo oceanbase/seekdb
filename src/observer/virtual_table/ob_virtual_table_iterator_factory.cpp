@@ -766,8 +766,8 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           {
             ObTableColumns *table_columns = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObTableColumns, table_columns))) {
-              if (OB_FAIL(table_columns->init())) {
-              } else {
+              {
+                OB_ASSERT_SUCC(ret = table_columns->init());
                 vt_iter = static_cast<ObVirtualTableIterator *>(table_columns);
               }
             }
@@ -776,8 +776,8 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           case OB_ALL_VIRTUAL_TABLE_INDEX_TID: {
             ObTableIndex *table_index = NULL;
             if (OB_SUCC(NEW_VIRTUAL_TABLE(ObTableIndex, table_index))) {
-              if (OB_FAIL(table_index->init())) {
-              } else {
+              {
+                OB_ASSERT_SUCC(ret = table_index->init());
                 vt_iter = static_cast<ObVirtualTableIterator *>(table_index);
               }
             }

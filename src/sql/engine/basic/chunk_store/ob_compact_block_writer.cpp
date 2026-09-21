@@ -383,8 +383,10 @@ int ObCompactBlockWriter::ensure_write(const blocksstable::ObStorageDatum *stora
 {
   int ret = OB_SUCCESS;
   uint64_t row_size = 0;
-  if (OB_FAIL(get_row_stored_size(storage_datums, column_count, extra_size, row_size))) {
-  } else if (OB_FAIL(ensure_write(row_size))) {
+  {
+    OB_ASSERT_SUCC(ret = get_row_stored_size(storage_datums, column_count, extra_size, row_size));
+    if (OB_FAIL(ensure_write(row_size))) {
+    }
   }
 
   return ret;

@@ -250,14 +250,16 @@ int ObTxDataMemtable::pre_process_for_merge()
     STORAGE_LOG(INFO, "call pre process more than once. skip pre process.");
   } else if (OB_FAIL(memtable_mgr_->get_tx_data_table()->alloc_tx_data(fake_tx_data_guard, false /* enable_throttle */))) {
   } else if (OB_FAIL(prepare_tx_data_list())) {
-  } else if (OB_FAIL(do_sort_by_start_scn_())) {
-  } else if (OB_FAIL(pre_process_commit_version_row_(fake_tx_data_guard.tx_data()))) {
-  } else if (FALSE_IT(tg.click("finish process commit version"))) {
-  } else if (OB_FAIL(insert_fake_tx_data_to_list_and_map_(fake_tx_data_guard.tx_data()))) {
-  } else if (OB_FAIL(do_sort_by_tx_id_())) {
   } else {
-    pre_process_done_ = true;
-    tg.click("finish pre process");
+    OB_ASSERT_SUCC(ret = do_sort_by_start_scn_());
+    if (OB_FAIL(pre_process_commit_version_row_(fake_tx_data_guard.tx_data()))) {
+    } else if (FALSE_IT(tg.click("finish process commit version"))) {
+    } else if (OB_FAIL(insert_fake_tx_data_to_list_and_map_(fake_tx_data_guard.tx_data()))) {
+    } else {
+      OB_ASSERT_SUCC(ret = do_sort_by_tx_id_());
+      pre_process_done_ = true;
+      tg.click("finish pre process");
+    }
   }
 
   STORAGE_LOG(INFO,

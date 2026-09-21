@@ -736,8 +736,10 @@ int ObOBJLock::get_table_lock_store_info(
           if (curr->lock_op_.commit_scn_ <= freeze_scn &&
               (curr->is_complete_outtrans_lock() || curr->is_complete_outtrans_unlock())) {
             ObTableLockOp store_info;
-            if(OB_FAIL(curr->get_table_lock_store_info(store_info))) {
-            } else if (OB_FAIL(store_arr.push_back(store_info))) {
+            {
+              OB_ASSERT_SUCC(ret = curr->get_table_lock_store_info(store_info));
+              if (OB_FAIL(store_arr.push_back(store_info))) {
+              }
             }
           }
 

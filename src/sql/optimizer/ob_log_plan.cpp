@@ -2038,10 +2038,11 @@ int ObLogPlan::generate_subplan_for_query_ref(ObQueryRefRawExpr *query_ref,
     // never reach
   } else if (OB_FAIL(subquery->has_ref_assign_user_var(has_ref_assign_user_var))) {
   } else if (OB_FALSE_IT(is_initplan = !query_ref->has_exec_param() && !has_ref_assign_user_var)) {
-  } else if (OB_FAIL(logical_plan->init_rescan_info_for_query_ref(*this, !is_initplan))) {
-  } else if (OB_FAIL(logical_plan->add_exec_params_meta(query_ref->get_exec_params(),
-                                                        get_basic_table_metas(),
-                                                        get_selectivity_ctx()))) {
+  } else {
+    OB_ASSERT_SUCC(ret = logical_plan->init_rescan_info_for_query_ref(*this, !is_initplan));
+    if (OB_FAIL(logical_plan->add_exec_params_meta(query_ref->get_exec_params(), get_basic_table_metas(),
+                                                   get_selectivity_ctx()))) {
+    }
   }
   if (OB_SUCC(ret)) {
     if (force_serial) {
@@ -10890,53 +10891,36 @@ int ObLogPlan::gen_calc_part_id_expr(uint64_t table_id,
   share::schema::ObPartitionLevel part_level = share::schema::PARTITION_LEVEL_MAX;
   ObRawExpr *part_expr = NULL;
   ObRawExpr *subpart_expr = NULL;
-  if (OB_FAIL(get_cache_calc_part_id_expr(table_id, ref_table_id, calc_id_type, expr))) {
-  } else if (NULL != expr) {
-    //do nothing
-  } else if (OB_INVALID_ID == ref_table_id) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(session = get_optimizer_context().get_session_info())) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(get_part_exprs(table_id,
-                                    ref_table_id,
-                                    part_level,
-                                    part_expr,
-                                    subpart_expr))) {
-  } else {
-    ObRawExprFactory &expr_factory = get_optimizer_context().get_expr_factory();
-    if (CALC_TABLET_ID == calc_id_type) {
-      if (OB_FAIL(ObRawExprUtils::build_calc_tablet_id_expr(expr_factory,
-                                                            *session,
-                                                            ref_table_id,
-                                                            part_level,
-                                                            part_expr,
-                                                            subpart_expr,
-                                                            expr))) {
+  {
+    OB_ASSERT_SUCC(ret = get_cache_calc_part_id_expr(table_id, ref_table_id, calc_id_type, expr));
+    if (NULL != expr) {
+      // do nothing
+    } else if (OB_INVALID_ID == ref_table_id) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_ISNULL(session = get_optimizer_context().get_session_info())) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(get_part_exprs(table_id, ref_table_id, part_level, part_expr, subpart_expr))) {
+    } else {
+      ObRawExprFactory &expr_factory = get_optimizer_context().get_expr_factory();
+      if (CALC_TABLET_ID == calc_id_type) {
+        if (OB_FAIL(ObRawExprUtils::build_calc_tablet_id_expr(expr_factory, *session, ref_table_id, part_level,
+                                                              part_expr, subpart_expr, expr))) {
+        }
+      } else if (CALC_PARTITION_ID == calc_id_type) {
+        if (OB_FAIL(ObRawExprUtils::build_calc_part_id_expr(expr_factory, *session, ref_table_id, part_level, part_expr,
+                                                            subpart_expr, expr))) {
+        }
+      } else if (OB_FAIL(ObRawExprUtils::build_calc_partition_tablet_id_expr(
+                     expr_factory, *session, ref_table_id, part_level, part_expr, subpart_expr, expr))) {
       }
-    } else if (CALC_PARTITION_ID == calc_id_type) {
-      if (OB_FAIL(ObRawExprUtils::build_calc_part_id_expr(expr_factory,
-                                                          *session,
-                                                          ref_table_id,
-                                                          part_level,
-                                                          part_expr,
-                                                          subpart_expr,
-                                                          expr))) {
-      }
-    } else if (OB_FAIL(ObRawExprUtils::build_calc_partition_tablet_id_expr(expr_factory,
-                                                                           *session,
-                                                                           ref_table_id,
-                                                                           part_level,
-                                                                           part_expr,
-                                                                           subpart_expr,
-                                                                           expr))) {
-    }
-    if (OB_SUCC(ret)) {
-      PartIdExpr part_id_expr;
-      part_id_expr.table_id_ = table_id;
-      part_id_expr.ref_table_id_ = ref_table_id;
-      part_id_expr.calc_part_id_expr_ = expr;
-      part_id_expr.calc_type_ = calc_id_type;
-      if (OB_FAIL(cache_part_id_exprs_.push_back(part_id_expr))) {
+      if (OB_SUCC(ret)) {
+        PartIdExpr part_id_expr;
+        part_id_expr.table_id_ = table_id;
+        part_id_expr.ref_table_id_ = ref_table_id;
+        part_id_expr.calc_part_id_expr_ = expr;
+        part_id_expr.calc_type_ = calc_id_type;
+        if (OB_FAIL(cache_part_id_exprs_.push_back(part_id_expr))) {
+        }
       }
     }
   }

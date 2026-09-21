@@ -425,18 +425,18 @@ int ObPluginVectorIndexLoadScheduler::execute_adapter_maintenance(ObIArray<uint6
           ret = OB_TABLE_NOT_EXIST;
         } else if (table_schema->is_in_recyclebin()) {
           // do nothing
-        } else if (OB_FAIL(check_is_vector_index_table(*table_schema, is_vector_index, is_shared_index))) {
-        } else if (is_vector_index) {
-          const ObTableSchema *tmp_table_schema = nullptr;
-          if (OB_FAIL(schema_guard.get_table_schema( table_id, tmp_table_schema))) {
-          } else if (OB_ISNULL(tmp_table_schema)) {
-            ret = OB_TABLE_NOT_EXIST;
-          } else if (OB_FAIL(acquire_adapter_in_maintenance(table_id, tmp_table_schema, shared_table_info_map))) {
+        } else {
+          OB_ASSERT_SUCC(ret = check_is_vector_index_table(*table_schema, is_vector_index, is_shared_index));
+          if (is_vector_index) {
+            const ObTableSchema *tmp_table_schema = nullptr;
+            if (OB_FAIL(schema_guard.get_table_schema(table_id, tmp_table_schema))) {
+            } else if (OB_ISNULL(tmp_table_schema)) {
+              ret = OB_TABLE_NOT_EXIST;
+            } else if (OB_FAIL(acquire_adapter_in_maintenance(table_id, tmp_table_schema, shared_table_info_map))) {
+            }
+          } else if (is_shared_index &&
+                     OB_FAIL(set_shared_table_info_in_maintenance(table_id, table_schema, shared_table_info_map))) {
           }
-        } else if (is_shared_index
-                  && OB_FAIL(set_shared_table_info_in_maintenance(table_id,
-                                                                  table_schema,
-                                                                  shared_table_info_map))) {
         }
       }
     }

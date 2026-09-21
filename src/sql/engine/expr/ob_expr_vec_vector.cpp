@@ -107,8 +107,8 @@ int ObExprVecVector::cg_expr(
       common::ObArenaAllocator &ctx_allocator = tmp_alloc_g.get_allocator();
       int64_t timeout = 0;
       int64_t query_st = eval_ctx.exec_ctx_.get_my_session()->get_query_start_time();
-      if (OB_FAIL(eval_ctx.exec_ctx_.get_my_session()->get_query_timeout(timeout))) {
-      } else {
+      {
+        OB_ASSERT_SUCC(ret = eval_ctx.exec_ctx_.get_my_session()->get_query_timeout(timeout));
         timeout += query_st;
         int64_t lob_len = 0;
         ObString vector_buff;

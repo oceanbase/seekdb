@@ -801,8 +801,8 @@ int ObMPPacketSender::send_ok_packet(ObSQLSessionInfo &session, ObOKPParam &ok_p
     bool ac = true;
     bool is_no_backslash_escapes = false;
     IS_NO_BACKSLASH_ESCAPES(session.get_sql_mode(), is_no_backslash_escapes);
-    if (OB_FAIL(session.get_autocommit(ac))) {
-    } else {
+    {
+      OB_ASSERT_SUCC(ret = session.get_autocommit(ac));
       ObServerStatusFlags flags = okp.get_server_status();
       flags.status_flags_.OB_SERVER_STATUS_IN_TRANS
         = (session.is_server_status_in_transaction() ? 1 : 0);

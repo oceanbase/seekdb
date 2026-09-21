@@ -85,8 +85,8 @@ int ObColumnSchemaV2::assign(const ObColumnSchemaV2 &src_schema)
     } else if (OB_FAIL(set_extended_type_info(src_schema.extended_type_info_))) {
     } else if (src_schema.column_ref_idxs_ != NULL) {
       if (OB_FAIL(alloc_column_ref_set())) {
-      } else if (OB_FAIL(column_ref_idxs_->add_members(*src_schema.column_ref_idxs_))) {
-      }
+      } else
+        OB_ASSERT_SUCC(ret = column_ref_idxs_->add_members(*src_schema.column_ref_idxs_));
     } else {/*do nothing*/}
 
     if (OB_SUCC(ret)) {

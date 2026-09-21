@@ -138,20 +138,22 @@ int ObTmpFileFlushPriorityManager::insert_flush_list_(const bool is_meta, ObITmp
   ObSpinLock* locks = is_meta ? meta_list_locks_ : data_list_locks_;
   ObTmpFileFlushList *flush_lists =  is_meta ? meta_flush_lists_ : data_flush_lists_;
 
-  if (OB_FAIL(get_file_flush_node_(is_meta, file, flush_node))) {
-  } else if (OB_ISNULL(flush_node)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_UNLIKELY(flush_node->get_next() != nullptr)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_UNLIKELY(flush_idx < FileList::L1 || flush_idx >= FileList::MAX)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ObSpinLockGuard guard(locks[flush_idx]);
-    file.inc_ref_cnt();
-    if (OB_UNLIKELY(!flush_lists[flush_idx].add_last(flush_node))) {
-      file.dec_ref_cnt();
+  {
+    OB_ASSERT_SUCC(ret = get_file_flush_node_(is_meta, file, flush_node));
+    if (OB_ISNULL(flush_node)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(set_flush_page_level_(is_meta, flush_idx, file))) {
+    } else if (OB_UNLIKELY(flush_node->get_next() != nullptr)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_UNLIKELY(flush_idx < FileList::L1 || flush_idx >= FileList::MAX)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      ObSpinLockGuard guard(locks[flush_idx]);
+      file.inc_ref_cnt();
+      if (OB_UNLIKELY(!flush_lists[flush_idx].add_last(flush_node))) {
+        file.dec_ref_cnt();
+        ret = OB_ERR_UNEXPECTED;
+      } else
+        OB_ASSERT_SUCC(ret = set_flush_page_level_(is_meta, flush_idx, file));
     }
   }
 
@@ -197,35 +199,39 @@ int ObTmpFileFlushPriorityManager::update_flush_list_(const bool is_meta, ObITmp
   ObTmpFileFlushList *flush_lists =  is_meta ? meta_flush_lists_ : data_flush_lists_;
   FileList cur_flush_idx = FileList::INVALID;
 
-  if (OB_FAIL(get_file_flush_node_(is_meta, file, flush_node))) {
-  } else if (OB_ISNULL(flush_node)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(get_file_flush_level_(is_meta, file, cur_flush_idx))) {
-  } else if (cur_flush_idx < FileList::L1 || cur_flush_idx >= FileList::MAX){
-    ret = OB_ERR_UNEXPECTED;
-  } else if (new_flush_idx == cur_flush_idx) {
-    // no need to update
-  } else { // need to move file into a new flush list
-    bool is_in_flushing = false;
-    {
-      ObSpinLockGuard guard(locks[cur_flush_idx]);
-      if (OB_ISNULL(flush_node->get_next())) {
-        // before we lock the list, flush task mgr has popped the node from list and is operating it, do nothing
-        is_in_flushing = true;
-      } else if (OB_UNLIKELY(!flush_lists[cur_flush_idx].remove(flush_node))) {
-        ret = OB_ERR_UNEXPECTED;
-      }
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (is_in_flushing) {
-      // the node will be added into flush list again by flush task mgr
-      // do nothing
+  {
+    OB_ASSERT_SUCC(ret = get_file_flush_node_(is_meta, file, flush_node));
+    if (OB_ISNULL(flush_node)) {
+      ret = OB_ERR_UNEXPECTED;
     } else {
-      ObSpinLockGuard guard(locks[new_flush_idx]);
-      if (OB_UNLIKELY(!flush_lists[new_flush_idx].add_last(flush_node))) {
+      OB_ASSERT_SUCC(ret = get_file_flush_level_(is_meta, file, cur_flush_idx));
+      if (cur_flush_idx < FileList::L1 || cur_flush_idx >= FileList::MAX) {
         ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(set_flush_page_level_(is_meta, new_flush_idx, file))) {
+      } else if (new_flush_idx == cur_flush_idx) {
+        // no need to update
+      } else { // need to move file into a new flush list
+        bool is_in_flushing = false;
+        {
+          ObSpinLockGuard guard(locks[cur_flush_idx]);
+          if (OB_ISNULL(flush_node->get_next())) {
+            // before we lock the list, flush task mgr has popped the node from list and is operating it, do nothing
+            is_in_flushing = true;
+          } else if (OB_UNLIKELY(!flush_lists[cur_flush_idx].remove(flush_node))) {
+            ret = OB_ERR_UNEXPECTED;
+          }
+        }
+
+        if (OB_FAIL(ret)) {
+        } else if (is_in_flushing) {
+          // the node will be added into flush list again by flush task mgr
+          // do nothing
+        } else {
+          ObSpinLockGuard guard(locks[new_flush_idx]);
+          if (OB_UNLIKELY(!flush_lists[new_flush_idx].add_last(flush_node))) {
+            ret = OB_ERR_UNEXPECTED;
+          } else
+            OB_ASSERT_SUCC(ret = set_flush_page_level_(is_meta, new_flush_idx, file));
+        }
       }
     }
   }
@@ -250,26 +256,29 @@ int ObTmpFileFlushPriorityManager::remove_file(const bool is_meta, ObITmpFile &f
   FileList flush_idx = FileList::INVALID ;
   ObITmpFile::ObTmpFileNode *flush_node = nullptr;
 
-  if (OB_FAIL(get_file_flush_level_(is_meta, file, flush_idx))) {
-  } else if (FileList::INVALID == flush_idx) {
-    // file doesn't exist in the flushing list
-    // do nothing
-  } else if (flush_idx < FileList::L1 || flush_idx >= FileList::MAX){
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(get_file_flush_node_(is_meta, file, flush_node))) {
-  } else if (OB_ISNULL(flush_node)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    ObSpinLock* locks = is_meta ? meta_list_locks_ : data_list_locks_;
-    ObTmpFileFlushList *flush_lists = is_meta ? meta_flush_lists_ : data_flush_lists_;
-    ObSpinLockGuard guard(locks[flush_idx]);
-    if (OB_ISNULL(flush_node->get_next())) {
-      // node has not been inserted, do nothing
-    } else if (OB_ISNULL(flush_lists[flush_idx].remove(flush_node))) {
-      ret = OB_ERR_UNEXPECTED;
+  {
+    OB_ASSERT_SUCC(ret = get_file_flush_level_(is_meta, file, flush_idx));
+    if (FileList::INVALID == flush_idx) {
+      // file doesn't exist in the flushing list
+      // do nothing
+    } else if (flush_idx < FileList::L1 || flush_idx >= FileList::MAX) {
+      ret = OB_INVALID_ARGUMENT;
     } else {
-      file.dec_ref_cnt();
-      if (OB_FAIL(set_flush_page_level_(is_meta, FileList::INVALID, file))) {
+      OB_ASSERT_SUCC(ret = get_file_flush_node_(is_meta, file, flush_node));
+      if (OB_ISNULL(flush_node)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        ObSpinLock *locks = is_meta ? meta_list_locks_ : data_list_locks_;
+        ObTmpFileFlushList *flush_lists = is_meta ? meta_flush_lists_ : data_flush_lists_;
+        ObSpinLockGuard guard(locks[flush_idx]);
+        if (OB_ISNULL(flush_node->get_next())) {
+          // node has not been inserted, do nothing
+        } else if (OB_ISNULL(flush_lists[flush_idx].remove(flush_node))) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          file.dec_ref_cnt();
+          OB_ASSERT_SUCC(ret = set_flush_page_level_(is_meta, FileList::INVALID, file));
+        }
       }
     }
   }
@@ -296,12 +305,14 @@ int ObTmpFileFlushPriorityManager::popN_from_file_list(const bool is_meta, const
       } else if (OB_FAIL(file_handles.push_back(file))) {
         int tmp_ret = OB_SUCCESS;
         ObITmpFile::ObTmpFileNode *node = nullptr;
-        if (OB_FAIL(get_file_flush_node_(is_meta, *file, node))) {
-        } else if (OB_ISNULL(node)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_UNLIKELY(!flush_lists[list_idx].add_last(node))) {
-          tmp_ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("fail to add node to list", KR(tmp_ret), K(list_idx), KP(file));
+        {
+          OB_ASSERT_SUCC(ret = get_file_flush_node_(is_meta, *file, node));
+          if (OB_ISNULL(node)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_UNLIKELY(!flush_lists[list_idx].add_last(node))) {
+            tmp_ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("fail to add node to list", KR(tmp_ret), K(list_idx), KP(file));
+          }
         }
       } else {
         file->dec_ref_cnt(); // ref_cnt of flush list

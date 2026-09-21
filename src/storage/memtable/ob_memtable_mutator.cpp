@@ -658,8 +658,8 @@ int ObMutatorWriter::append_row_kv(
       } else {
         ret = OB_BUF_NOT_ENOUGH;
       }
-    } else if (OB_FAIL(meta_.inc_row_count())) {
     } else {
+      OB_ASSERT_SUCC(ret = meta_.inc_row_count());
       buf_.get_position() = tmp_pos;
       row_capacity_ = row_capacity;
     }
@@ -728,8 +728,8 @@ int ObMutatorWriter::append_table_lock_kv(
       } else {
         ret = OB_BUF_NOT_ENOUGH;
       }
-    } else if (OB_FAIL(meta_.inc_row_count())) {
     } else {
+      OB_ASSERT_SUCC(ret = meta_.inc_row_count());
       buf_.get_position() = tmp_pos;
     }
   }
@@ -789,8 +789,8 @@ int ObMutatorWriter::append_ext_info_log_kv(
       } else {
         ret = OB_BUF_NOT_ENOUGH;
       }
-    } else if (OB_FAIL(meta_.inc_row_count())) {
     } else {
+      OB_ASSERT_SUCC(ret = meta_.inc_row_count());
       buf_.get_position() = tmp_pos;
       row_capacity_ = row_capacity;
     }

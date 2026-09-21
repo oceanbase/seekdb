@@ -937,9 +937,11 @@ int ObMemtable::replay_row(ObStoreCtx &ctx,
                     scn,          /*scn*/
                     column_cnt    /*column_cnt*/);
 
-    if (OB_FAIL(mtk.encode(&rowkey))) {
-    } else if (OB_FAIL(mvcc_replay_(ctx, &mtk, arg))) {
-    } else if (FALSE_IT(timeguard.click("mvcc_replay_"))) {
+    {
+      OB_ASSERT_SUCC(ret = mtk.encode(&rowkey));
+      if (OB_FAIL(mvcc_replay_(ctx, &mtk, arg))) {
+      } else if (FALSE_IT(timeguard.click("mvcc_replay_"))) {
+      }
     }
 
     if (OB_SUCCESS != ret) {

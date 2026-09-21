@@ -496,10 +496,12 @@ int ObPLObjectValue::get_all_dep_schema(ObSchemaGetterGuard &schema_guard,
 
   for (int64_t i = 0; OB_SUCC(ret) && i < dep_schema_objs.count(); ++i) {
     if (TABLE_SCHEMA != dep_schema_objs.at(i).get_schema_type()) {
-      if (OB_FAIL(tmp_schema_obj.init_with_version_obj(dep_schema_objs.at(i)))) {
-      } else if (OB_FAIL(schema_array.push_back(tmp_schema_obj))) {
-      } else {
-        tmp_schema_obj.reset();
+      {
+        OB_ASSERT_SUCC(ret = tmp_schema_obj.init_with_version_obj(dep_schema_objs.at(i)));
+        if (OB_FAIL(schema_array.push_back(tmp_schema_obj))) {
+        } else {
+          tmp_schema_obj.reset();
+        }
       }
     } else if (OB_FAIL(schema_guard.get_simple_table_schema(
                                      dep_schema_objs.at(i).get_object_id(),
@@ -678,10 +680,12 @@ int ObPLObjectValue::set_stored_schema_objs(const DependenyTableStore &dep_table
           // do nothing
         } else if (FALSE_IT(pcv_schema_obj->is_explicit_db_name_ = table_version.is_db_explicit_)) {
           // do nothing
-        } else if (OB_FAIL(pcv_schema_obj->init_with_version_obj(table_version))) {
-        } else if (OB_FAIL(stored_schema_objs_.push_back(pcv_schema_obj))) {
         } else {
-          // do nothing
+          OB_ASSERT_SUCC(ret = pcv_schema_obj->init_with_version_obj(table_version));
+          if (OB_FAIL(stored_schema_objs_.push_back(pcv_schema_obj))) {
+          } else {
+            // do nothing
+          }
         }
       } else if (OB_FAIL(schema_guard->get_table_schema(
                   table_version.get_object_id(),

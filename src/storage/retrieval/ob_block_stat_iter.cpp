@@ -338,8 +338,10 @@ int ObBlockStatIterator::refresh_scan_table_on_demand()
     } else if (OB_FAIL(construct_iters())) {
     } else if (use_merged_range()) {
       iter_idxs_.reuse();
-      if (OB_FAIL(release_merge_heap())) {
-      } else if (OB_FAIL(build_merge_heap(rowkey_read_info_))) {
+      {
+        OB_ASSERT_SUCC(ret = release_merge_heap());
+        if (OB_FAIL(build_merge_heap(rowkey_read_info_))) {
+        }
       }
     }
   }

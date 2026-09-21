@@ -1116,8 +1116,8 @@ int ObHashJoinOp::reuse_for_next_chunk()
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(init_bloom_filter(mem_context_->get_malloc_allocator(), hash_table_.nbuckets_))) {
-    } else if (OB_FAIL(right_batch_->rescan())) {
     } else {
+      OB_ASSERT_SUCC(ret = right_batch_->rescan());
       nth_right_row_ = -1;
     }
     LOG_TRACE("trace hash table", K(ret), K(hash_table.nbuckets_), K(row_count),
@@ -4551,10 +4551,12 @@ int ObHashJoinOp::read_hashrow_normal()
 int ObHashJoinOp::join_rows_with_right_null()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(blank_row(right_->get_spec().output_))) {
-  } else if (OB_FAIL(only_join_left_row())) {
-  } else {
-    has_fill_right_row_ = true;
+  {
+    OB_ASSERT_SUCC(ret = blank_row(right_->get_spec().output_));
+    if (OB_FAIL(only_join_left_row())) {
+    } else {
+      has_fill_right_row_ = true;
+    }
   }
   return ret;
 }
@@ -4568,10 +4570,12 @@ int ObHashJoinOp::join_rows_with_left_null_batch_one(int64_t batch_idx)
 int ObHashJoinOp::join_rows_with_left_null()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(blank_row(left_->get_spec().output_))) {
-  } else if (OB_FAIL(only_join_right_row())) {
-  } else {
-    has_fill_left_row_ = true;
+  {
+    OB_ASSERT_SUCC(ret = blank_row(left_->get_spec().output_));
+    if (OB_FAIL(only_join_right_row())) {
+    } else {
+      has_fill_left_row_ = true;
+    }
   }
   return ret;
 }

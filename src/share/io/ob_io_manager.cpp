@@ -759,21 +759,23 @@ int ObIOService::alloc_req_and_result(const ObIOInfo &info, ObIOHandle &handle, 
   if (OB_FAIL(alloc_and_init_result(info, io_result))) {
   } else if (OB_ISNULL(io_result)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(handle.set_result(*io_result))) {
-  } else if (OB_FAIL(alloc_io_request(io_request))) {
-    if (OB_ALLOCATE_MEMORY_FAILED == ret) {
-      //blocking foreground thread
-      ret = OB_SUCCESS;
-      if (OB_FAIL(try_alloc_req_until_timeout(ObTimeUtility::current_time() + info.timeout_us_, io_request))) {
+  } else {
+    OB_ASSERT_SUCC(ret = handle.set_result(*io_result));
+    if (OB_FAIL(alloc_io_request(io_request))) {
+      if (OB_ALLOCATE_MEMORY_FAILED == ret) {
+        // blocking foreground thread
+        ret = OB_SUCCESS;
+        if (OB_FAIL(try_alloc_req_until_timeout(ObTimeUtility::current_time() + info.timeout_us_, io_request))) {
+        }
+      } else {
       }
-    } else {
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(io_request)) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(io_request->basic_init())) {
-    }
+    } else
+      OB_ASSERT_SUCC(ret = io_request->basic_init());
   } 
 
   if (OB_FAIL(ret)) {

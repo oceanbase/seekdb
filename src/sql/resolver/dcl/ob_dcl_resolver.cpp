@@ -33,22 +33,18 @@ int ObDCLResolver::check_and_convert_name(ObString &db, ObString &table)
   } else {
     bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
     ObCollationType cs_type = CS_TYPE_INVALID;
-    if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-    } else if (db.length() > 0
-               && OB_FAIL(ObSQLUtils::check_and_convert_db_name(
-                       cs_type, perserve_lettercase, db))) {
-    } else if (table.length() > 0
-               && OB_FAIL(ObSQLUtils::check_and_convert_table_name(
-                       cs_type, perserve_lettercase, table))) {
-    } else {
-      //do nothing
-      if (db.length() > 0) {
-        CK (OB_NOT_NULL(schema_checker_));
-        CK (OB_NOT_NULL(schema_checker_->get_schema_guard()));
-        OZ (ObSQLUtils::cvt_db_name_to_org(*schema_checker_->get_schema_guard(),
-                                           session_info_,
-                                           db,
-                                           allocator_));
+    {
+      OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(cs_type));
+      if (db.length() > 0 && OB_FAIL(ObSQLUtils::check_and_convert_db_name(cs_type, perserve_lettercase, db))) {
+      } else if (table.length() > 0 &&
+                 OB_FAIL(ObSQLUtils::check_and_convert_table_name(cs_type, perserve_lettercase, table))) {
+      } else {
+        // do nothing
+        if (db.length() > 0) {
+          CK(OB_NOT_NULL(schema_checker_));
+          CK(OB_NOT_NULL(schema_checker_->get_schema_guard()));
+          OZ(ObSQLUtils::cvt_db_name_to_org(*schema_checker_->get_schema_guard(), session_info_, db, allocator_));
+        }
       }
     }
   }

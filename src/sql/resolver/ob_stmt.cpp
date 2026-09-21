@@ -41,8 +41,9 @@ int ObStmt::assign(const ObStmt &other)
 int ObStmt::deep_copy(const ObStmt &other)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(assign(other))) {
-  } else { /*do nothing*/ }
+  {
+    OB_ASSERT_SUCC(ret = assign(other)); /*do nothing*/
+  }
   return ret;
 }
 

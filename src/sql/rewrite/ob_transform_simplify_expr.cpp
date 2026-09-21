@@ -2406,63 +2406,64 @@ int ObTransformSimplifyExpr::do_push_not(ObRawExpr *&expr,
     } else if (NULL != push_expr) {
       expr = push_expr;
       trans_happened = true;
-    } else if (OB_FAIL(get_opposite_op(child->get_expr_type(), opp_type))) {
-    } else if (opp_type == child->get_expr_type()) {
-      //when opp_type = original_type means no oppsite type
-    } else if (child->get_expr_type() == T_OP_OR ||
-               child->get_expr_type() == T_OP_AND) {
-      ObItemType new_type = opp_type;
-      ObOpRawExpr *new_expr = NULL;
-      if (OB_FAIL(expr_factory->create_raw_expr(new_type, new_expr))) {
-      } else if (OB_ISNULL(new_expr)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(new_expr->init_param_exprs(child->get_param_count()))) {
+    } else {
+      OB_ASSERT_SUCC(ret = get_opposite_op(child->get_expr_type(), opp_type));
+      if (opp_type == child->get_expr_type()) {
+        // when opp_type = original_type means no oppsite type
+      } else if (child->get_expr_type() == T_OP_OR || child->get_expr_type() == T_OP_AND) {
+        ObItemType new_type = opp_type;
+        ObOpRawExpr *new_expr = NULL;
+        if (OB_FAIL(expr_factory->create_raw_expr(new_type, new_expr))) {
+        } else if (OB_ISNULL(new_expr)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(new_expr->init_param_exprs(child->get_param_count()))) {
+        } else {
+          for (int64_t i = 0; OB_SUCC(ret) && i < child->get_param_count(); ++i) {
+            ObOpRawExpr *not_expr = NULL;
+            if (OB_FAIL(expr_factory->create_raw_expr(T_OP_NOT, not_expr))) {
+            } else if (OB_ISNULL(not_expr)) {
+              ret = OB_ERR_UNEXPECTED;
+            } else if (OB_FAIL(not_expr->set_param_expr(child->get_param_expr(i)))) {
+            } else if (OB_FAIL(new_expr->add_param_expr(not_expr))) {
+            } else if (OB_FAIL(not_expr->add_flag(IS_NOT))) {
+            }
+          }
+          if (FAILEDx(new_expr->formalize(ctx_->session_info_))) {
+          } else {
+            expr = new_expr;
+            trans_happened = true;
+            if (OB_FAIL(new_expr->formalize(ctx_->session_info_))) {
+            } else if (OB_FAIL(push_expr_map.set_refactored(key, new_expr))) {
+            }
+          }
+        }
       } else {
-        for (int64_t i = 0; OB_SUCC(ret) && i < child->get_param_count(); ++i) {
-          ObOpRawExpr *not_expr = NULL;
-          if (OB_FAIL(expr_factory->create_raw_expr(T_OP_NOT, not_expr))) {
-          } else if (OB_ISNULL(not_expr)) {
+        ObItemType new_type = opp_type;
+        ObOpRawExpr *new_expr = NULL;
+        if (OB_FAIL(expr_factory->create_raw_expr(new_type, new_expr))) {
+        } else if (OB_ISNULL(new_expr)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(new_expr->set_param_exprs(static_cast<ObOpRawExpr *>(child)->get_param_exprs()))) {
+        } else if (IS_COMMON_COMPARISON_OP(new_expr->get_expr_type())) {
+          ObRawExpr *left_expr = NULL;
+          ObRawExpr *right_expr = NULL;
+          if (OB_UNLIKELY(2 != new_expr->get_param_count())) {
+            ret = OB_INVALID_ARGUMENT;
+          } else if (OB_ISNULL(left_expr = new_expr->get_param_expr(0)) ||
+                     OB_ISNULL(right_expr = new_expr->get_param_expr(1))) {
             ret = OB_ERR_UNEXPECTED;
-          } else if (OB_FAIL(not_expr->set_param_expr(child->get_param_expr(i)))) {
-          } else if (OB_FAIL(new_expr->add_param_expr(not_expr))) {
-          } else if (OB_FAIL(not_expr->add_flag(IS_NOT))) {
+          } else if (OB_FAIL(reverse_cmp_type_of_align_date4cmp(left_expr, expr_factory, new_type, true))) {
+          } else if (OB_FAIL(reverse_cmp_type_of_align_date4cmp(right_expr, expr_factory, new_type, false))) {
           }
         }
         if (FAILEDx(new_expr->formalize(ctx_->session_info_))) {
         } else {
           expr = new_expr;
-          trans_happened = true;
           if (OB_FAIL(new_expr->formalize(ctx_->session_info_))) {
           } else if (OB_FAIL(push_expr_map.set_refactored(key, new_expr))) {
           }
+          trans_happened = true;
         }
-      }
-    } else {
-      ObItemType new_type = opp_type;
-      ObOpRawExpr *new_expr = NULL;
-      if (OB_FAIL(expr_factory->create_raw_expr(new_type, new_expr))) {
-      } else if (OB_ISNULL(new_expr)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(new_expr->set_param_exprs(static_cast<ObOpRawExpr*>(child)->get_param_exprs()))) {
-      } else if (IS_COMMON_COMPARISON_OP(new_expr->get_expr_type())) {
-        ObRawExpr *left_expr = NULL;
-        ObRawExpr *right_expr = NULL;
-        if (OB_UNLIKELY(2 != new_expr->get_param_count())) {
-          ret = OB_INVALID_ARGUMENT;
-        } else if (OB_ISNULL(left_expr = new_expr->get_param_expr(0)) ||
-                  OB_ISNULL(right_expr = new_expr->get_param_expr(1))) {
-          ret = OB_ERR_UNEXPECTED;
-        } else if (OB_FAIL(reverse_cmp_type_of_align_date4cmp(left_expr, expr_factory, new_type, true))) {
-        } else if (OB_FAIL(reverse_cmp_type_of_align_date4cmp(right_expr, expr_factory, new_type, false))) {
-        }
-      }
-      if (FAILEDx(new_expr->formalize(ctx_->session_info_))) {
-      } else {
-        expr = new_expr;
-        if (OB_FAIL(new_expr->formalize(ctx_->session_info_))) {
-        } else if (OB_FAIL(push_expr_map.set_refactored(key, new_expr))) {
-        }
-        trans_happened = true;
       }
     }
   }

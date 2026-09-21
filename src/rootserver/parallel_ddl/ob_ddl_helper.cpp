@@ -525,8 +525,10 @@ int ObDDLHelper::lock_objects_in_map_(
   } else {
     ObLockObjPair pair;
     FOREACH_X(it, lock_map, OB_SUCC(ret)) {
-      if (OB_FAIL(pair.init(it->first, it->second))) {
-      } else if (OB_FAIL(lock_pairs.push_back(pair))) {
+      {
+        OB_ASSERT_SUCC(ret = pair.init(it->first, it->second));
+        if (OB_FAIL(lock_pairs.push_back(pair))) {
+        }
       }
     } // end foreach
     if (OB_SUCC(ret)) {

@@ -1098,8 +1098,7 @@ int ObLogReplayService::fetch_and_submit_single_log_(ObReplayStatus &replay_stat
       replay_task = new (task_buf) ObLogReplayTask(header, cur_lsn, cur_log_submit_scn, log_size);
       char *task_log_buf = task_buf + sizeof(ObLogReplayTask);
       MEMCPY(task_log_buf, log_buf, log_size);
-      if (OB_FAIL(replay_task->init(task_log_buf))) {
-      }
+      OB_ASSERT_SUCC(ret = replay_task->init(task_log_buf));
     }
   }
   if (OB_SUCC(ret) && NULL != replay_task) {

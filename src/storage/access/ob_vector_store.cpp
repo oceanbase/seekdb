@@ -338,8 +338,8 @@ int ObVectorStore::fill_output_rows(
     eval_ctx_.set_batch_idx(count_);
     // todo: support data cross microblocks in vectorized
     set_end();
-    if (OB_FAIL(fill_group_idx(group_idx))) {
-    } else {
+    {
+      OB_ASSERT_SUCC(ret = fill_group_idx(group_idx));
       if (OB_UNLIKELY(IterEndState::LIMIT_ITER_END == iter_end_flag_)) {
         ret = OB_ITER_END;
       }
@@ -387,8 +387,8 @@ int ObVectorStore::fill_group_by_rows(
   } else {
     count_ = output_cnt;
     eval_ctx_.set_batch_idx(count_);
-    if (OB_FAIL(fill_group_idx(group_idx))) {
-    } else {
+    {
+      OB_ASSERT_SUCC(ret = fill_group_idx(group_idx));
       set_end();
       if (!group_by_cell_->is_processing()) {
         begin_index = end_index;
@@ -497,8 +497,8 @@ int ObVectorStore::fill_rows(const int64_t group_idx, const int64_t row_count)
   } else {
     count_ = row_count;
     eval_ctx_.set_batch_idx(count_);
-    if (OB_FAIL(fill_group_idx(group_idx))) {
-    } else {
+    {
+      OB_ASSERT_SUCC(ret = fill_group_idx(group_idx));
       set_end();
     }
   }

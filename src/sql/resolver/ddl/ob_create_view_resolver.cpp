@@ -214,8 +214,8 @@ int ObCreateViewResolver::resolve(const ParseNode &parse_tree)
         ObCollationType coll_connection_type = CS_TYPE_INVALID;
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(session_info_->get_character_set_client(cs_client_type))) {
-        } else if (OB_FAIL(session_info_->get_collation_connection(coll_connection_type))) {
         } else {
+          OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(coll_connection_type));
           bool with_check_option = VIEW_CHECK_OPTION_NONE != check_option;
           view_schema.set_character_set_client(cs_client_type);
           view_schema.set_collation_connection(coll_connection_type);
@@ -304,8 +304,8 @@ int ObCreateViewResolver::check_view_columns(ObSelectStmt &select_stmt,
       can_expand_star = false;
       add_undefined_columns = true;
     }
-  } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
   } else {
+    OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(cs_type));
     ParseNode *child_node = NULL;
     int64_t col_cnt_from_node = 0;
     for (int64_t i = 0; OB_SUCC(ret) && !is_col_dup && i < view_columns_node->num_child_; i++) {
@@ -636,8 +636,7 @@ int ObCreateViewResolver::check_view_stmt_col_name(
   ObCollationType cs_type = CS_TYPE_INVALID;
   bool need_gen_name = false;
   int64_t select_item_size = select_stmt.get_select_item_size();
-  if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-  }
+  OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(cs_type));
   /*
   *check real alias name first
   *create view v as select 'K ','k','c' as 'k';
@@ -706,8 +705,7 @@ int ObCreateViewResolver::create_alias_names_auto(
   ObCollationType cs_type = CS_TYPE_INVALID;
   bool need_gen_name = false;
   ObString dup_col_name;
-  if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-  }
+  OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(cs_type));
   for (int64_t j = 0; OB_SUCC(ret) && j < long_col_name_num; ++j) {
     // Create system-generated column names and check for conflicts
     hash_ret = OB_HASH_EXIST;

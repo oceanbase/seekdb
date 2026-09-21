@@ -143,18 +143,20 @@ int ObIvfCacheMgr::check_memory_limit(int64_t base)
   } else if (OB_ISNULL(mem_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (!is_reach_limit_) {
-    if (OB_FAIL(
-            ObPluginVectorIndexHelper::get_vector_memory_limit_size(memory_limit_size))) {
-    } else if (curr_used + base > memory_limit_size) {
-      is_reach_limit_ = true;
+    {
+      OB_ASSERT_SUCC(ret = ObPluginVectorIndexHelper::get_vector_memory_limit_size(memory_limit_size));
+      if (curr_used + base > memory_limit_size) {
+        is_reach_limit_ = true;
+      }
     }
   } else if (reach_limit_cnt_ >= 10) {
     // check is memory limit changed
     reach_limit_cnt_ = 0;
-    if (OB_FAIL(
-            ObPluginVectorIndexHelper::get_vector_memory_limit_size(memory_limit_size))) {
-    } else if (curr_used + base < memory_limit_size) {
-      is_reach_limit_ = false;
+    {
+      OB_ASSERT_SUCC(ret = ObPluginVectorIndexHelper::get_vector_memory_limit_size(memory_limit_size));
+      if (curr_used + base < memory_limit_size) {
+        is_reach_limit_ = false;
+      }
     }
   } else {
     ++reach_limit_cnt_;

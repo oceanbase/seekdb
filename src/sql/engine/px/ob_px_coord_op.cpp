@@ -330,8 +330,10 @@ int ObPxCoordOp::terminate_running_dfos(ObDfoMgr &dfo_mgr)
   // notify all running dfo exit
   ObSEArray<ObDfo *, 32> dfos;
   if (OB_FAIL(dfo_mgr.get_running_dfos(dfos))) {
-  } else if (OB_FAIL(ObInterruptUtil::broadcast_px(dfos, OB_GOT_SIGNAL_ABORTING))) {
-  } else if (!dfos.empty() && OB_FAIL(wait_all_running_dfos_exit())) {
+  } else {
+    OB_ASSERT_SUCC(ret = ObInterruptUtil::broadcast_px(dfos, OB_GOT_SIGNAL_ABORTING));
+    if (!dfos.empty() && OB_FAIL(wait_all_running_dfos_exit())) {
+    }
   }
   return ret;
 }

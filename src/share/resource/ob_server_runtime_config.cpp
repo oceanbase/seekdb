@@ -41,8 +41,8 @@ int ObServerRuntimeConfig::init(
     const bool has_memstore)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(resource_config_.assign(resource_config))) {
-  } else {
+  {
+    OB_ASSERT_SUCC(ret = resource_config_.assign(resource_config));
     mode_ = compat_mode;
     has_memstore_ = has_memstore;
   }
@@ -67,8 +67,8 @@ int ObServerRuntimeConfig::assign(const ObServerRuntimeConfig &other)
 {
   int ret = OB_SUCCESS;
   if (this != &other) {
-    if (OB_FAIL(resource_config_.assign(other.resource_config_))) {
-    } else {
+    {
+      OB_ASSERT_SUCC(ret = resource_config_.assign(other.resource_config_));
       mode_ = other.mode_;
       has_memstore_ = other.has_memstore_;
     }

@@ -319,12 +319,15 @@ int ObLobWriteBuffer::append(char *data_ptr, int64_t data_byte_len, int64_t &rea
   if (! use_buffer()) {
     if (OB_FAIL(set_data(data_ptr, data_byte_len, real_write_byte_len))) {
     }
-  } else if (OB_FAIL(align_write_postion(data_ptr, data_byte_len, inner_buffer_.remain(), write_byte_len, write_char_len))) {
-  } else if (inner_buffer_.write(data_ptr, write_byte_len) != write_byte_len) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
-    real_write_byte_len = write_byte_len;
-    is_full_ = (is_char() && inner_buffer_.remain() < max_bytes_in_char_);
+    OB_ASSERT_SUCC(
+        ret = align_write_postion(data_ptr, data_byte_len, inner_buffer_.remain(), write_byte_len, write_char_len));
+    if (inner_buffer_.write(data_ptr, write_byte_len) != write_byte_len) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      real_write_byte_len = write_byte_len;
+      is_full_ = (is_char() && inner_buffer_.remain() < max_bytes_in_char_);
+    }
   }
   return ret;
 }
@@ -356,13 +359,15 @@ int ObLobWriteBuffer::set_data(char *data_ptr, int64_t data_byte_len, int64_t &r
   int ret = OB_SUCCESS;
   int64_t char_len = 0;
   int64_t byte_len = 0;
-  if (OB_FAIL(align_write_postion(data_ptr, data_byte_len, max_byte_len_, byte_len, char_len))) {
-  } else if (char_len != -1 && OB_FAIL(set_char_len(char_len))) {
-  } else {
-    inner_buffer_.assign_ptr(data_ptr, byte_len);
-    use_buffer_ = false;
-    is_full_ = true;
-    real_set_byte_len = byte_len;
+  {
+    OB_ASSERT_SUCC(ret = align_write_postion(data_ptr, data_byte_len, max_byte_len_, byte_len, char_len));
+    if (char_len != -1 && OB_FAIL(set_char_len(char_len))) {
+    } else {
+      inner_buffer_.assign_ptr(data_ptr, byte_len);
+      use_buffer_ = false;
+      is_full_ = true;
+      real_set_byte_len = byte_len;
+    }
   }
   return ret;
 }

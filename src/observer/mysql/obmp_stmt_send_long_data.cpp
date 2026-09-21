@@ -125,12 +125,13 @@ int ObMPStmtSendLongData::process()
       ret = OB_ERR_SESSION_INTERRUPTED;
     } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
-    } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
-    } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(
-                runtime_version))) {
     } else {
-      THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
-      if (OB_FAIL(process_send_long_data_stmt(session))) {
+      OB_ASSERT_SUCC(ret = session.get_query_timeout(query_timeout));
+      if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(runtime_version))) {
+      } else {
+        THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
+        if (OB_FAIL(process_send_long_data_stmt(session))) {
+        }
       }
     }
 

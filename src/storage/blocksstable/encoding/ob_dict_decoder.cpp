@@ -232,9 +232,8 @@ int ObDictDecoder::decode(const ObColumnDecoderCtx &ctx, ObDatum &datum, const i
 
     // get ref value
     if (ctx.is_bit_packing()) {
-      if (OB_FAIL(ObBitStream::get(col_data, row_id * meta_header_->row_ref_size_,
-          meta_header_->row_ref_size_, ref))) {
-      }
+      OB_ASSERT_SUCC(
+          ret = ObBitStream::get(col_data, row_id * meta_header_->row_ref_size_, meta_header_->row_ref_size_, ref));
     } else {
       MEMCPY(&ref, col_data + row_id * meta_header_->row_ref_size_,
           meta_header_->row_ref_size_);

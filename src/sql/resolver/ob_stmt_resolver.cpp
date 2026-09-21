@@ -77,8 +77,8 @@ int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
   if (OB_ISNULL(session_info_) || OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(session_info_->get_name_case_mode(mode))) {
-  } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
   } else {
+    OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(cs_type));
     bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
     int tmp_ret = ObSQLUtils::check_and_convert_table_name(cs_type, perserve_lettercase, table_name);
     // Because the index table has a prefix, so when checking if table_name is too long for the first time, we need to continue to obtain db information to determine if it is an index table
@@ -146,8 +146,8 @@ int ObStmtResolver::resolve_ref_factor(const ParseNode *node,
     table_name.assign_ptr(const_cast<char*>(relation_node->str_value_), table_len);
     ObCollationType cs_type = CS_TYPE_INVALID;
     if (OB_FAIL(session_info->get_name_case_mode(mode))) {
-    } else if (OB_FAIL(session_info->get_collation_connection(cs_type))) {
     } else {
+      OB_ASSERT_SUCC(ret = session_info->get_collation_connection(cs_type));
       bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
       if (OB_FAIL(ObSQLUtils::check_and_convert_table_name(cs_type, perserve_lettercase, table_name))) {
       } else {
@@ -166,7 +166,6 @@ int ObStmtResolver::resolve_ref_factor(const ParseNode *node,
         }
       }
     }
-
   }
   return ret;
 }

@@ -197,8 +197,8 @@ void ObLockContext::register_for_deadlock_(ObSQLSessionInfo &session_info,
   if (parent_tx_id != child_tx_id &&
       parent_tx_id.is_valid() &&
       child_tx_id.is_valid()) {
-    if (OB_FAIL(session_info.get_query_timeout(query_timeout))) {
-    } else {
+    {
+      OB_ASSERT_SUCC(ret = session_info.get_query_timeout(query_timeout));
       if (OB_FAIL(data_plane::register_autonomous_transaction_dependency(
               parent_tx_id, child_tx_id, query_timeout))) {
       }

@@ -7044,12 +7044,10 @@ int ObAggregateProcessor::fast_single_row_agg(
               const int64_t precision = aggr_info.expr_->datum_meta_.precision_;
               if (ObIntTC == tc) {
                 const int64_t val = aggr_info.param_exprs_.at(0)->locate_expr_datum(eval_ctx).get_int();
-                if (OB_FAIL(DecIntAggFuncCtx::int_to_decimalint(val, precision, result))) {
-                }
+                OB_ASSERT_SUCC(ret = DecIntAggFuncCtx::int_to_decimalint(val, precision, result));
               } else {
                 const uint64_t val = aggr_info.param_exprs_.at(0)->locate_expr_datum(eval_ctx).get_uint();
-                if (OB_FAIL(DecIntAggFuncCtx::int_to_decimalint(val, precision, result))) {
-                }
+                OB_ASSERT_SUCC(ret = DecIntAggFuncCtx::int_to_decimalint(val, precision, result));
               }
             } else {
               ObNumStackAllocator<2> tmp_alloc;
@@ -7149,11 +7147,9 @@ int ObAggregateProcessor::fast_single_row_agg_batch(ObEvalCtx &eval_ctx, const i
             }
             if (param_vec.at(batch_idx)->is_null()) {
               result[batch_idx].set_null();
-            } else if (OB_FAIL(DecIntAggFuncCtx::int_to_decimalint(
-                                  param_vec.at(batch_idx)->get_int(),
-                                  precision,
-                                  result[batch_idx]))) {
-            }
+            } else
+              OB_ASSERT_SUCC(ret = DecIntAggFuncCtx::int_to_decimalint(param_vec.at(batch_idx)->get_int(), precision,
+                                                                       result[batch_idx]));
           }
         } else if (ObIntTC == tc) { // number
           for (int64_t batch_idx = 0; OB_SUCC(ret) && batch_idx < batch_size; ++batch_idx) {
@@ -7177,11 +7173,9 @@ int ObAggregateProcessor::fast_single_row_agg_batch(ObEvalCtx &eval_ctx, const i
             }
             if (param_vec.at(batch_idx)->is_null()) {
               result[batch_idx].set_null();
-            } else if (OB_FAIL(DecIntAggFuncCtx::int_to_decimalint(
-                                  param_vec.at(batch_idx)->get_uint64(),
-                                  precision,
-                                  result[batch_idx]))) {
-            }
+            } else
+              OB_ASSERT_SUCC(ret = DecIntAggFuncCtx::int_to_decimalint(param_vec.at(batch_idx)->get_uint64(), precision,
+                                                                       result[batch_idx]));
           }
         } else if (ObUIntTC == tc) { // number
           for (int64_t batch_idx = 0; OB_SUCC(ret) && batch_idx < batch_size; ++batch_idx) {
