@@ -511,19 +511,15 @@ int resolve_inherited_tablet(ObISQLClient &sql, uint64_t ns, uint64_t local,
   uint64_t cur = ns;
   int64_t cap = 0;
   bool found = false;
-  const char *stage = "done";
-  uint64_t hop_ns = ns, hop_parent = 0, hop_candidate = 0;
   for (int depth = 0; OB_SUCC(ret) && !found && depth < 64; ++depth) {
     uint64_t parent = 0; int64_t fork_cap = 0;
     ret = namespace_chain_link(sql, cur, parent, fork_cap);
-    stage = "chain_link"; hop_ns = cur;
     if (ret == OB_ITER_END) { ret = OB_SUCCESS; break; }
     if (OB_FAIL(ret) || parent == 0) { break; }
     cap = cap_min(cap, fork_cap);
     const uint64_t candidate = encoded(parent, local);
     bool exists = false;
-    hop_parent = parent; hop_candidate = candidate;
-    if (OB_FAIL(probe_physical_tablet(candidate, exists))) { stage = "probe"; break; }
+    if (OB_FAIL(probe_physical_tablet(candidate, exists))) { break; }
     if (exists) {
       physical = candidate; cap_scn = cap; found = true;
     } else {
@@ -531,12 +527,6 @@ int resolve_inherited_tablet(ObISQLClient &sql, uint64_t ns, uint64_t local,
     }
   }
   if (OB_SUCC(ret) && !found) { ret = OB_TABLET_NOT_EXIST; }
-  if (ret != OB_SUCCESS && ret != OB_TABLET_NOT_EXIST) {
-    fprintf(stderr, "PROTOTYPE_V24_RESOLVE_FAIL ns=%llu local=%llu ret=%d stage=%s hop_ns=%llu hop_parent=%llu candidate=%llu\n",
-        (unsigned long long)ns, (unsigned long long)local, ret, stage,
-        (unsigned long long)hop_ns, (unsigned long long)hop_parent,
-        (unsigned long long)hop_candidate);
-  }
   return ret;
 }
 int read_node(ObISQLClient &sql, Ref ref, Node &node) {

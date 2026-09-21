@@ -132,13 +132,6 @@ int worker_storage_space_for_schema(const ObTableSchema &schema,
         ? StorageSpaceHandle::global_space()
         : StorageSpaceHandle::namespace_space(worker_namespace);
     if (!storage_space.is_valid()) { ret = OB_INVALID_ARGUMENT; }
-    if (OB_SUCC(ret) && storage_space.is_global()) {
-      fprintf(stderr, "PROTOTYPE_V24_GLOBAL_SPACE table_id=%llu db=%.*s control=%d\n",
-          (unsigned long long)schema.get_table_id(),
-          database ? database->get_database_name_str().length() : 0,
-          database ? database->get_database_name_str().ptr() : "",
-          control_database ? 1 : 0);
-    }
   }
   return ret;
 }
