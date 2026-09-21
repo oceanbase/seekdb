@@ -26,6 +26,10 @@
 
 namespace oceanbase
 {
+namespace storage
+{
+class ObTableScanParam;
+}
 namespace share
 {
 
@@ -55,6 +59,12 @@ public:
   struct CbParam
   {
     virtual ~CbParam() = default;
+    virtual int prepare_stream_size() { return OB_NOT_SUPPORTED; }
+    virtual int get_stream_size(int64_t &size) const
+    {
+      size = 0;
+      return OB_NOT_SUPPORTED;
+    }
   };
   using Callback = ObFunction<int(const char *, const int64_t, CbParam &)>;
   explicit ObOStreamBuf(char *data, const int64_t capacity, CbParam &cb_param, Callback &cb) 
@@ -130,11 +140,15 @@ public:
   struct CbParam : public ObIStreamBuf::CbParam {
     CbParam(ObNewRowIterator *iter,
             ObIAllocator *allocator,
-            const common::ObLobReadOptions &lob_read_options)
+            const common::ObLobReadOptions &lob_read_options,
+            storage::ObTableScanParam *scan_param = nullptr)
       : iter_(iter),
         allocator_(allocator),
         lob_read_options_(&lob_read_options),
-        str_iter_(nullptr)
+        str_iter_(nullptr),
+        scan_param_(scan_param),
+        stream_size_(0),
+        stream_size_valid_(false)
     {}
     virtual ~CbParam() {
       if (str_iter_ != nullptr) {
@@ -152,10 +166,20 @@ public:
              && nullptr != lob_read_options_
              && nullptr != lob_read_options_->read_service_;
     }
+    virtual int prepare_stream_size() override;
+    virtual int get_stream_size(int64_t &size) const override
+    {
+      int ret = stream_size_valid_ ? OB_SUCCESS : OB_NOT_SUPPORTED;
+      size = stream_size_;
+      return ret;
+    }
     ObNewRowIterator *iter_;
     ObIAllocator *allocator_;
     const common::ObLobReadOptions *lob_read_options_;
     ObTextStringIter *str_iter_;
+    storage::ObTableScanParam *scan_param_;
+    int64_t stream_size_;
+    bool stream_size_valid_;
   };
 public:
   ObHNSWDeserializeCallback(void *adp) : index_type_(VIAT_MAX), adp_(adp)

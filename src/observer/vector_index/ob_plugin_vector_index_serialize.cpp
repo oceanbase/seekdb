@@ -106,34 +106,31 @@ ObIStreamBuf::pos_type ObIStreamBuf::seekoff(off_type off, std::ios_base::seekdi
       last_error_code_ = do_callback();
     }
     if (is_valid() && is_success()) {
+      const off_type block_begin = static_cast<off_type>(stream_pos_);
+      const off_type block_end = block_begin + static_cast<off_type>(egptr() - eback());
+      const off_type current = block_begin + static_cast<off_type>(gptr() - eback());
       if (std::ios_base::cur == dir) {
-        if (synthetic_end_) {
-          ret = pos_type(std::numeric_limits<off_type>::max() + off);
-        } else if (off >= 0 && off <= egptr() - gptr()) {
-          gbump(static_cast<int>(off));
-          ret = pos_type(stream_pos_ + (gptr() - eback()));
+        const off_type target = current + off;
+        if (!synthetic_end_ && target >= block_begin && target <= block_end) {
+          setg(eback(), eback() + (target - block_begin), egptr());
+          ret = pos_type(target);
         }
       } else if (std::ios_base::end == dir) {
-        // The stream is forward-only across callback buffers.  Returning a
-        // synthetic end lets VSAG discover that the stream is unbounded from
-        // the streambuf's point of view; it must still seek back to its saved
-        // cursor before reading.  Reporting egptr() here would make VSAG's
-        // BufferStreamReader cap the whole index at one LOB block.
-        synthetic_end_ = true;
-        ret = pos_type(std::numeric_limits<off_type>::max() + off);
-      } else if (std::ios_base::beg == dir) {
-        if (off >= 0 && off <= egptr() - eback()) {
-          synthetic_end_ = false;
-          setg(eback(), eback() + off, egptr());
-          stream_pos_ = off;
-          ret = pos_type(stream_pos_ + (gptr() - eback()));
-        } else if (off >= 0) {
-          // A callback-backed stream cannot seek to a position in a future
-          // block.  VSAG probes the end of the stream before deciding that
-          // the legacy format has no footer; keep that probe non-fatal and
-          // leave the current block selected.  The following PopSeek(0)
-          // restores the saved cursor before any real data is consumed.
+        // IOStreamReader probes the stream length before deserializing.  The
+        // callback-backed stream has no physical end pointer, so use the
+        // length calculated from the LOB metadata.  Do not report a fake
+        // INT64_MAX end: VSAG would then request a full block after the real
+        // final partial block and turn a valid stream into VSAG 7604.
+        int64_t stream_size = 0;
+        if (OB_SUCC(cb_param_.get_stream_size(stream_size)) && off <= 0
+            && off >= -static_cast<off_type>(stream_size)) {
           synthetic_end_ = true;
+          ret = pos_type(static_cast<off_type>(stream_size) + off);
+        }
+      } else if (std::ios_base::beg == dir) {
+        if (off >= block_begin && off <= block_end) {
+          synthetic_end_ = false;
+          setg(eback(), eback() + (off - block_begin), egptr());
           ret = pos_type(off);
         }
       }
@@ -253,7 +250,10 @@ int ObVectorIndexSerializer::deserialize(void *&index, ObIStreamBuf::CbParam &cb
   char *data = nullptr;
   ObIStreamBuf streambuf(nullptr, 0, cb_param, cb);
   std::istream in(&streambuf);
-  if (OB_FAIL(streambuf.init())) {
+  int prepare_ret = cb_param.prepare_stream_size();
+  if (prepare_ret != OB_SUCCESS && prepare_ret != OB_NOT_SUPPORTED) {
+    ret = prepare_ret;
+  } else if (OB_FAIL(streambuf.init())) {
     if (ret == OB_ITER_END) {
       LOG_INFO("[vec index deserialize] read table is empty, just return");
       ret = OB_SUCCESS;
@@ -274,6 +274,61 @@ int ObVectorIndexSerializer::deserialize(void *&index, ObIStreamBuf::CbParam &cb
       LOG_INFO("[vec index deserialize] read table finish, just return");
       ret = OB_SUCCESS;
     } else {
+    }
+  }
+  return ret;
+}
+
+int ObHNSWDeserializeCallback::CbParam::prepare_stream_size()
+{
+  int ret = OB_SUCCESS;
+  if (stream_size_valid_) {
+  } else if (OB_ISNULL(scan_param_) || OB_ISNULL(iter_) || OB_ISNULL(allocator_)
+             || OB_ISNULL(lob_read_options_)) {
+    ret = OB_NOT_SUPPORTED;
+  } else {
+    ObTableScanIterator *scan_iter = dynamic_cast<ObTableScanIterator *>(iter_);
+    if (OB_ISNULL(scan_iter)) {
+      ret = OB_NOT_SUPPORTED;
+    } else {
+      int64_t total_size = 0;
+      int scan_ret = OB_SUCCESS;
+      blocksstable::ObDatumRow *row = nullptr;
+      while (OB_SUCC(scan_ret) && OB_SUCC(scan_ret = scan_iter->get_next_row(row))) {
+        if (OB_ISNULL(row) || row->get_column_count() < 2) {
+          scan_ret = OB_ERR_UNEXPECTED;
+        } else {
+          ObTextStringIter str_iter(
+              ObLongTextType, CS_TYPE_BINARY, row->storage_datums_[1].get_string(), true);
+          int64_t lob_size = 0;
+          int tmp_ret = str_iter.init(0, lob_read_options_, allocator_);
+          if (OB_FAIL(tmp_ret)) {
+            scan_ret = tmp_ret;
+          } else {
+            tmp_ret = str_iter.get_byte_len(lob_size);
+            if (OB_FAIL(tmp_ret)) {
+              scan_ret = tmp_ret;
+            } else if (lob_size < 0
+                       || total_size > std::numeric_limits<int64_t>::max() - lob_size) {
+              scan_ret = OB_SIZE_OVERFLOW;
+            } else {
+              total_size += lob_size;
+            }
+          }
+        }
+      }
+      if (scan_ret == OB_ITER_END) {
+        scan_ret = OB_SUCCESS;
+      }
+      int rescan_ret = scan_iter->rescan(*scan_param_);
+      if (OB_FAIL(scan_ret)) {
+        ret = scan_ret;
+      } else if (OB_FAIL(rescan_ret)) {
+        ret = rescan_ret;
+      } else {
+        stream_size_ = total_size;
+        stream_size_valid_ = true;
+      }
     }
   }
   return ret;

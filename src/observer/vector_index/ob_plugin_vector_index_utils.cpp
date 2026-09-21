@@ -701,7 +701,7 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
   
         ObArenaAllocator tmp_allocator("VectorAdaptor", OB_MALLOC_NORMAL_BLOCK_SIZE);
         ObHNSWDeserializeCallback::CbParam param(
-            snapshot_idx_iter, &tmp_allocator, lob_read_options);
+            snapshot_idx_iter, &tmp_allocator, lob_read_options, &snapshot_scan_param);
     
         ObHNSWDeserializeCallback callback(static_cast<void*>(new_adapter));
         ObIStreamBuf::Callback cb = callback;
