@@ -25,9 +25,20 @@ namespace oceanbase
 namespace sql
 {
 
-static const int64_t GRAPH_WALK_MAX_HOPS = 16;
+static const int64_t GRAPH_PATH_MAX_HOPS = 16;
 static const int64_t GRAPH_IDENTITY_MAX_KEYS = 2;
 static const int64_t GRAPH_INVALID_PATH_STATE_ID = -1;
+
+// Controls which repeated graph elements are legal inside one matched path.
+// WALK and TRAIL are implemented in P2; SIMPLE and ACYCLIC reserve the public
+// path-mode vocabulary for later vertex-history support.
+enum class GraphPathMode : int8_t
+{
+  WALK = 0,
+  TRAIL = 1,
+  SIMPLE = 2,
+  ACYCLIC = 3
+};
 
 enum class GraphPathDirection : int8_t
 {
@@ -46,8 +57,8 @@ enum class GraphPathRowShape : int8_t
   PER_STEP = 1
 };
 
-// Compile-time description of the one quantified edge segment supported by
-// P2-WALK. Element IDs are mapping identities, not labels or table IDs.
+// Compile-time description of the one quantified edge segment supported by P2.
+// Element IDs are mapping identities, not labels or table IDs.
 struct GraphPathDesc
 {
   bool is_valid() const
@@ -58,8 +69,9 @@ struct GraphPathDesc
         && target_element_id_ != common::OB_INVALID_ID
         && lower_bound_ >= 0
         && lower_bound_ <= upper_bound_
-        && upper_bound_ <= GRAPH_WALK_MAX_HOPS
+        && upper_bound_ <= GRAPH_PATH_MAX_HOPS
         && (direction_ == GraphPathDirection::OUT || direction_ == GraphPathDirection::IN)
+        && (path_mode_ == GraphPathMode::WALK || path_mode_ == GraphPathMode::TRAIL)
         && (row_shape_ == GraphPathRowShape::PER_MATCH
             || row_shape_ == GraphPathRowShape::PER_STEP);
   }
@@ -73,13 +85,17 @@ struct GraphPathDesc
   int64_t lower_bound_ = 0;
   int64_t upper_bound_ = 0;
   GraphPathDirection direction_ = GraphPathDirection::OUT;
+  // WALK permits repeated edges and vertices. TRAIL rejects an edge identity
+  // already present in the same path while still permitting repeated vertices.
+  GraphPathMode path_mode_ = GraphPathMode::WALK;
   // Chooses per-path/per-step row cardinality and graph-variable binding shape;
   // COLUMNS still defines the output column count, names, and SQL data types.
   GraphPathRowShape row_shape_ = GraphPathRowShape::PER_MATCH;
   bool need_path_ = false;
   TO_STRING_KV(K_(graph_id), K_(graph_version), K_(source_element_id),
                K_(edge_element_id), K_(target_element_id), K_(lower_bound),
-               K_(upper_bound), K_(direction), K_(row_shape), K_(need_path));
+               K_(upper_bound), K_(direction), K_(path_mode), K_(row_shape),
+               K_(need_path));
 };
 
 // Internal typed identity of one mapped vertex or edge. graph_id_ and
@@ -155,7 +171,7 @@ struct GraphPathState
     return binding_id_ >= 0
         && path_state_id_ >= 0
         && hop_ >= 0
-        && hop_ <= GRAPH_WALK_MAX_HOPS
+        && hop_ <= GRAPH_PATH_MAX_HOPS
         && current_identity_.is_valid()
         && ((hop_ == 0 && parent_path_state_id_ == GRAPH_INVALID_PATH_STATE_ID)
             || (hop_ > 0 && parent_path_state_id_ >= 0

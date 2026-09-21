@@ -1186,7 +1186,8 @@ int ObStaticEngineCG::generate_spec(GraphFeedbackLoopLogOp &op,
                         op.get_max_hops(),
                         op.is_reverse()
                             ? GraphPathDirection::IN
-                            : GraphPathDirection::OUT);
+                            : GraphPathDirection::OUT,
+                        op.get_path_mode());
   }
   return ret;
 }

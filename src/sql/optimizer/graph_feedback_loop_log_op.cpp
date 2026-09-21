@@ -126,6 +126,22 @@ const char *access_method_name(GraphFeedbackAccessMethod access_method)
   return name;
 }
 
+const char *path_mode_name(GraphPathMode path_mode)
+{
+  const char *name = "UNKNOWN";
+  switch (path_mode) {
+    case GraphPathMode::WALK:
+      name = "WALK";
+      break;
+    case GraphPathMode::TRAIL:
+      name = "TRAIL";
+      break;
+    default:
+      break;
+  }
+  return name;
+}
+
 } // namespace
 
 int GraphFeedbackLoopLogOp::initialize_step_access_method()
@@ -155,11 +171,12 @@ int GraphFeedbackLoopLogOp::get_plan_item_info(PlanText &plan_text,
   if (OB_FAIL(ObLogicalOperator::get_plan_item_info(plan_text, plan_item))) {
   } else {
     BEGIN_BUF_PRINT;
-    if (OB_FAIL(BUF_PRINTF("direction=%s, hops={%ld,%ld}, access=%s",
+    if (OB_FAIL(BUF_PRINTF("direction=%s, hops={%ld,%ld}, access=%s, mode=%s",
                            reverse_ ? "IN" : "OUT",
                            min_hops_,
                            max_hops_,
-                           access_method_name(step_access_method_)))) {
+                           access_method_name(step_access_method_),
+                           path_mode_name(path_mode_)))) {
     }
     END_BUF_PRINT(plan_item.special_predicates_, plan_item.special_predicates_len_);
   }
@@ -323,6 +340,7 @@ uint64_t GraphFeedbackLoopLogOp::hash(uint64_t seed) const
   seed = do_hash(max_hops_, seed);
   seed = do_hash(reverse_, seed);
   seed = do_hash(pull_to_local_, seed);
+  seed = do_hash(static_cast<int64_t>(path_mode_), seed);
   seed = do_hash(static_cast<int64_t>(step_access_method_), seed);
   return ObLogicalOperator::hash(seed);
 }
@@ -358,7 +376,7 @@ int GraphFeedbackLoopLogOp::compute_fd_item_set()
 
 int GraphFeedbackLoopLogOp::compute_op_ordering()
 {
-  // WALK promises no row order in the absence of an outer ORDER BY.
+  // Graph path modes promise no row order in the absence of an outer ORDER BY.
   reset_op_ordering();
   return OB_SUCCESS;
 }

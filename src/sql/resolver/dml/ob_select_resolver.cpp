@@ -27,6 +27,7 @@
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
 #include "sql/engine/expr/ob_expr_regexp_context.h"
 #include "sql/engine/expr/ob_json_param_type.h"
+#include "sql/engine/graph/graph_path_spec.h"
 #include "sql/parser/ob_parser_utils.h"
 
 #include "sql/executor/ob_memory_tracker.h"
@@ -508,7 +509,8 @@ int ObSelectResolver::set_stmt_set_type(ObSelectStmt *select_stmt,
           true,
           set_node->int16_values_[0],
           set_node->int16_values_[1],
-          set_node->int16_values_[2] != 0);
+          set_node->int16_values_[2] != 0,
+          static_cast<GraphPathMode>(set_node->int16_values_[3]));
       break;
     case T_SET_INTERSECT:
       select_stmt->assign_set_op(ObSelectStmt::INTERSECT);

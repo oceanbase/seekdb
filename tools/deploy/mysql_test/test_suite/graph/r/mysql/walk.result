@@ -79,6 +79,70 @@ ORDER BY edge_ids;
 destination	edge_ids
 3	[13, 10, 12]
 3	[13, 11, 12]
+trail_rejects_repeated_edges_but_allows_repeated_vertices
+SELECT COUNT(*) AS walk_paths FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=1)-[e IS knows]->{4}(b IS person)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+walk_paths
+4
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+(a IS person WHERE a.id=1)-[e IS knows]->{4}(b IS person)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops,
+JSON_ARRAYAGG(e.id) AS edge_ids)) g ORDER BY edge_ids;
+destination	hops	edge_ids
+2	4	[10, 12, 13, 11]
+2	4	[11, 12, 13, 10]
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+(a IS person WHERE a.id=1)-[e IS knows]->{3}(b IS person)
+COLUMNS(b.id AS destination,JSON_ARRAYAGG(e.id) AS edge_ids)) g
+ORDER BY edge_ids;
+destination	edge_ids
+1	[10, 12, 13]
+1	[11, 12, 13]
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+(a IS person WHERE a.id=4)-[e IS knows]->{0,16}(b IS person)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops,
+JSON_ARRAYAGG(e.id) AS edge_ids)) g ORDER BY hops;
+destination	hops	edge_ids
+4	0	NULL
+4	1	[14]
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+(a IS person WHERE a.id=3)<-[e IS knows]-{1,4}(b IS person)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops,
+JSON_ARRAYAGG(e.id) AS edge_ids)) g ORDER BY hops,edge_ids;
+destination	hops	edge_ids
+2	1	[12]
+1	2	[12, 10]
+1	2	[12, 11]
+3	3	[12, 10, 13]
+3	3	[12, 11, 13]
+trail_one_row_per_step_and_fixed_chain
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+(a IS person WHERE a.id=1)-[e IS knows]->{4}(b IS person)
+ONE ROW PER STEP (v1,step_e,v2)
+COLUMNS(JSON_ARRAYAGG(e.id) AS path_edges,MATCHNUM() AS match_no,
+ELEMENT_NUMBER(step_e) AS step_no,v1.id AS from_id,
+step_e.id AS edge_id,v2.id AS to_id)) g
+ORDER BY path_edges,step_no;
+path_edges	match_no	step_no	from_id	edge_id	to_id
+[10, 12, 13, 11]	1	2	1	10	2
+[10, 12, 13, 11]	1	4	2	12	3
+[10, 12, 13, 11]	1	6	3	13	1
+[10, 12, 13, 11]	1	8	1	11	2
+[11, 12, 13, 10]	2	2	1	11	2
+[11, 12, 13, 10]	2	4	2	12	3
+[11, 12, 13, 10]	2	6	3	13	1
+[11, 12, 13, 10]	2	8	1	10	2
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+(a IS person WHERE a.id=1)-[e1 IS knows]->(b IS person)
+-[e2 IS knows]->(c IS person)-[e3 IS knows]->(d IS person)
+-[e4 IS knows]->(f IS person)
+COLUMNS(e1.id AS edge1,e2.id AS edge2,e3.id AS edge3,
+e4.id AS edge4,f.id AS destination)) g
+ORDER BY edge1,edge2,edge3,edge4;
+edge1	edge2	edge3	edge4	destination
+10	12	13	11	2
+11	12	13	10	2
 heterogeneous_endpoints_exclude_zero_hop_without_type_leakage
 SELECT * FROM GRAPH_TABLE(graph_social MATCH
 (a IS person WHERE a.id=1)-[e IS works]->{0,1}(b IS company WHERE b.name='Acme')
@@ -165,6 +229,21 @@ SET @walk_seed=3;
 EXECUTE walk_cached USING @walk_seed;
 paths
 4
+prepared_trail_seed_parameter_rebinding
+PREPARE trail_cached FROM
+'SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH TRAIL (a IS person WHERE a.id=?)-[e IS knows]->{0,4}(b IS person) COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g';
+SET @trail_seed=1;
+EXECUTE trail_cached USING @trail_seed;
+paths
+9
+SET @trail_seed=4;
+EXECUTE trail_cached USING @trail_seed;
+paths
+2
+SET @trail_seed=3;
+EXECUTE trail_cached USING @trail_seed;
+paths
+6
 prepared_filter_parameter_rebinding
 PREPARE walk_filter_cached FROM
 'SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=?)-[e IS knows WHERE e.since>=?]->{1,2}(b IS person WHERE b.id=?) COLUMNS(b.id AS destination,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edge_ids)) g ORDER BY hops,edge_ids';
@@ -233,6 +312,10 @@ EXPLAIN INTO plan_table SET statement_id='walk_serial'
 SELECT /*+ PARALLEL(4) */ * FROM GRAPH_TABLE(graph_social MATCH
 (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person)
 COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+EXPLAIN INTO plan_table SET statement_id='trail_full_scan'
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+(a IS person WHERE a.id=1)-[e IS knows]->{0,4}(b IS person)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
 SELECT COUNT(*)=1 AS has_feedback_full_scan
 FROM plan_table
 WHERE statement_id='walk_full_scan'
@@ -253,6 +336,13 @@ WHERE statement_id='walk_serial'
   AND (operator LIKE 'PX %' OR operator LIKE 'EXCHANGE %');
 graph_walk_has_no_px
 1
+SELECT COUNT(*)=1 AS has_feedback_trail
+FROM plan_table
+WHERE statement_id='trail_full_scan'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%direction=OUT, hops={0,4}, access=full-scan, mode=TRAIL%';
+has_feedback_trail
+1
 CREATE INDEX graph_knows_out ON graph_knows(src,id);
 CREATE INDEX graph_knows_in ON graph_knows(dst,id);
 SET @walk_seed=1;
@@ -263,6 +353,10 @@ SET @walk_seed=4;
 EXECUTE walk_cached USING @walk_seed;
 paths
 3
+SET @trail_seed=1;
+EXECUTE trail_cached USING @trail_seed;
+paths
+9
 EXPLAIN INTO plan_table SET statement_id='walk_out_index'
 SELECT * FROM GRAPH_TABLE(graph_social MATCH
 (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person)
@@ -270,6 +364,10 @@ COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
 EXPLAIN INTO plan_table SET statement_id='walk_in_index'
 SELECT * FROM GRAPH_TABLE(graph_social MATCH
 (a IS person WHERE a.id=3)<-[e IS knows]-{1,2}(b IS person)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+EXPLAIN INTO plan_table SET statement_id='trail_out_index'
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+(a IS person WHERE a.id=1)-[e IS knows]->{0,4}(b IS person)
 COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
 SELECT COUNT(*)=1 AS has_feedback_out_index
 FROM plan_table
@@ -299,6 +397,13 @@ WHERE statement_id='walk_in_index'
   AND object_alias='__g_step_edge(graph_knows_in)';
 has_in_adjacency_range
 1
+SELECT COUNT(*)=1 AS has_feedback_trail_index
+FROM plan_table
+WHERE statement_id='trail_out_index'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%direction=OUT, hops={0,4}, access=index-scan, mode=TRAIL%';
+has_feedback_trail_index
+1
 SELECT * FROM GRAPH_TABLE(graph_social MATCH
 (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person)
 COLUMNS(b.id AS destination,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edge_ids)) g
@@ -315,7 +420,12 @@ SET @walk_seed=1;
 EXECUTE walk_cached USING @walk_seed;
 paths
 5
+SET @trail_seed=1;
+EXECUTE trail_cached USING @trail_seed;
+paths
+9
 DEALLOCATE PREPARE walk_cached;
+DEALLOCATE PREPARE trail_cached;
 DROP TABLE plan_table;
 composite_identity_declaration_order
 CREATE TABLE gp_vertex (tenant BIGINT NOT NULL, id BIGINT NOT NULL, name VARCHAR(32), PRIMARY KEY(tenant,id));
@@ -356,6 +466,17 @@ source_tenant	source_id	target_tenant	target_id	hops	edge_ids
 1	1	1	1	2	[2, 7]
 1	1	1	3	2	[1, 4]
 1	1	1	3	2	[2, 4]
+trail_uses_complete_composite_edge_identity
+SELECT * FROM GRAPH_TABLE(graph_composite MATCH TRAIL
+(a IS person WHERE a.tenant=2 AND a.id=1)-[e IS knows]->{3}(b IS person)
+COLUMNS(b.tenant AS destination_tenant,b.id AS destination_id,
+JSON_ARRAYAGG(e.tenant) AS edge_tenants,
+JSON_ARRAYAGG(e.id) AS edge_ids)) g
+ORDER BY edge_ids;
+destination_tenant	destination_id	edge_tenants	edge_ids
+1	1	[2, 1, 1]	[1, 4, 7]
+1	3	[2, 1, 1]	[1, 7, 1]
+1	3	[2, 1, 1]	[1, 7, 2]
 transaction_reads_own_writes_and_orphans_are_excluded
 START TRANSACTION;
 INSERT INTO graph_person VALUES (6,'Txn',20);
@@ -420,15 +541,12 @@ ERROR 0A000: graph path bounds with lower greater than upper not supported
 SELECT * FROM GRAPH_TABLE(graph_social MATCH
 (a IS person)-[e IS knows]-{1}(b IS person) COLUMNS(COUNT(e.id) AS hops)) g;
 ERROR 0A000: undirected graph path segments not supported
-SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
-(a IS person)-[e IS knows]->{1}(b IS person) COLUMNS(COUNT(e.id) AS hops)) g;
-ERROR 0A000: TRAIL, SIMPLE and ACYCLIC graph path modes not supported
 SELECT * FROM GRAPH_TABLE(graph_social MATCH SIMPLE
 (a IS person)-[e IS knows]->{1}(b IS person) COLUMNS(COUNT(e.id) AS hops)) g;
-ERROR 0A000: TRAIL, SIMPLE and ACYCLIC graph path modes not supported
+ERROR 0A000: SIMPLE and ACYCLIC graph path modes not supported
 SELECT * FROM GRAPH_TABLE(graph_social MATCH ACYCLIC
 (a IS person)-[e IS knows]->{1}(b IS person) COLUMNS(COUNT(e.id) AS hops)) g;
-ERROR 0A000: TRAIL, SIMPLE and ACYCLIC graph path modes not supported
+ERROR 0A000: SIMPLE and ACYCLIC graph path modes not supported
 SELECT * FROM GRAPH_TABLE(graph_social MATCH
 (a IS person)-[e IS knows]->{1}(b IS person)-[f IS knows]->{1}(c IS person)
 COLUMNS(COUNT(e.id) AS hops)) g;

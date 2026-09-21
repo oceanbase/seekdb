@@ -319,7 +319,7 @@ int find_adjacency_index(const GraphBinding &edge,
                || !index_schema->is_index_visible()
                || index_schema->is_final_invalid_index()) {
       // Special, remote, invisible or unavailable indexes are not adjacency
-      // access paths for the single-node WALK operator.
+      // access paths for the single-node graph feedback operator.
     } else {
       const ObIndexInfo &index_columns = index_schema->get_index_info();
       bool prefix_matches = index_columns.get_size() >= column_count;
@@ -737,7 +737,7 @@ private:
       // Match the existing aggregate-on-empty-set result.
       result = builder_.null_value();
     } else if (OB_SUCC(ret)) {
-      ObSEArray<GraphParseNode, GRAPH_WALK_MAX_HOPS> values;
+      ObSEArray<GraphParseNode, GRAPH_PATH_MAX_HOPS> values;
       for (int64_t i = 0; OB_SUCC(ret) && i < group_binding->group_->count(); ++i) {
         ObSEArray<GraphExprBinding, 8> scalar_bindings;
         if (OB_FAIL(scalar_bindings.assign(bindings_))) {
@@ -1054,6 +1054,73 @@ ParseNode *make_internal_column(GraphRelationBuilder &builder,
   return name == nullptr ? nullptr : builder.column(variable, graph_node_name(*name));
 }
 
+ParseNode *make_internal_column(GraphRelationBuilder &builder,
+                                ParseNode *variable,
+                                const char *prefix,
+                                int64_t group,
+                                int64_t index)
+{
+  ParseNode *name = builder.internal_identifier(prefix, group, index);
+  return name == nullptr ? nullptr : builder.column(variable, graph_node_name(*name));
+}
+
+// Graph edge identity is (graph mapping, element mapping, complete typed key).
+// The graph is fixed for one GRAPH_TABLE invocation, so different element
+// mappings are always different identities. Edges from the same mapping are
+// different when at least one non-null primary-key component differs.
+int make_edge_identity_not_equal(GraphRelationBuilder &builder,
+                                 const GraphBinding &left,
+                                 const GraphBinding &right,
+                                 ParseNode *&condition)
+{
+  int ret = OB_SUCCESS;
+  condition = nullptr;
+  if (left.element_ == nullptr || right.element_ == nullptr
+      || left.table_ == nullptr || right.table_ == nullptr) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (left.element_->id_ == right.element_->id_) {
+    if (left.element_->key_count_ <= 0
+        || left.element_->key_count_ != right.element_->key_count_) {
+      ret = OB_ERR_UNEXPECTED;
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < left.element_->key_count_; ++i) {
+      ParseNode *key_differs = builder.binary(
+          T_OP_NE,
+          builder.column(left, left.element_->key_columns_[i]),
+          builder.column(right, right.element_->key_columns_[i]));
+      condition = condition == nullptr
+          ? key_differs : builder.binary(T_OP_OR, condition, key_differs);
+    }
+  }
+  if (OB_SUCC(ret) && builder.error() != OB_SUCCESS) {
+    ret = builder.error();
+  }
+  return ret;
+}
+
+// TRAIL is a per-path constraint. It does not deduplicate different paths; it
+// only rejects a row when two edge positions in that row bind the same typed
+// graph edge identity.
+int append_trail_edge_conditions(GraphRelationBuilder &builder,
+                                 const ObIArray<GraphBinding> &edges,
+                                 ParseNode *&where)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < edges.count(); ++i) {
+    for (int64_t j = i + 1; OB_SUCC(ret) && j < edges.count(); ++j) {
+      ParseNode *condition = nullptr;
+      if (OB_FAIL(make_edge_identity_not_equal(builder, edges.at(i), edges.at(j),
+                                               condition))) {
+      } else {
+        // A null condition means the two positions use different graph element
+        // mappings and therefore cannot denote the same graph edge.
+        builder.append_condition(condition, where);
+      }
+    }
+  }
+  return ret;
+}
+
 int make_project_list(GraphRelationBuilder &builder,
                       const ObIArray<GraphParseNode> &expressions,
                       ParseNode *&projects)
@@ -1097,9 +1164,10 @@ int make_edge_identity(GraphRelationBuilder &builder,
 
 // Build a real breadth-first feedback loop for the common homogeneous
 // ONE ROW PER MATCH case. The recursive member performs exactly one edge hop,
-// joins the target vertex on every iteration, and carries only typed frontier
-// keys plus JSON presentation arrays. Source predicates live exclusively in
-// the anchor; terminal predicates live exclusively in the result query.
+// joins the target vertex on every iteration, and carries typed frontier keys,
+// optional TRAIL edge-key history and JSON presentation arrays. Source
+// predicates live exclusively in the anchor; terminal predicates live
+// exclusively in the result query.
 int build_recursive_graph_match(GraphRelationBuilder &builder,
                                 const GraphSchema &graph,
                                 const ObString &database_name,
@@ -1119,6 +1187,7 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
   static const ObString DEPTH_NAME = ObString::make_string("__g_depth");
   static const char *SOURCE_KEY_PREFIX = "__g_source_key_";
   static const char *CURRENT_KEY_PREFIX = "__g_current_key_";
+  static const char *TRAIL_EDGE_KEY_PREFIX = "__g_trail_edge_key_";
   static const char *EDGE_PROPERTY_PREFIX = "__g_edge_property_";
   static const ObString EDGE_IDENTITY_NAME = ObString::make_string("__g_edge_identity");
 
@@ -1137,6 +1206,7 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
 
   bool need_match_number = false;
   bool need_edge_identity = false;
+  const bool need_trail_history = path_desc.path_mode_ == GraphPathMode::TRAIL;
   ObSEArray<const GraphProperty *, 4> edge_properties;
   if (OB_FAIL(collect_path_projection_requirements(
           projects, graph, edge_pattern, need_match_number,
@@ -1164,6 +1234,19 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
     if (OB_FAIL(anchor_exprs.push_back(GraphParseNode{
             builder.column(seed, source_pattern.element_->key_columns_[i])}))) {
     } else if (OB_FAIL(cte_column_names.push_back(GraphParseNode{name}))) {
+    }
+  }
+  // A bounded TRAIL keeps one typed edge-key slot per possible hop. Slot N is
+  // populated while expanding a frontier at depth N. Keeping key components as
+  // SQL values avoids using the JSON returned by EDGE_ID() for internal
+  // equality, and the recursive CTE row store accounts the extra memory.
+  for (int64_t slot = 0; OB_SUCC(ret) && need_trail_history
+       && slot < path_desc.upper_bound_; ++slot) {
+    for (int64_t key = 0; OB_SUCC(ret) && key < edge_pattern.element_->key_count_; ++key) {
+      ParseNode *name = builder.internal_identifier(TRAIL_EDGE_KEY_PREFIX, slot, key);
+      if (OB_FAIL(anchor_exprs.push_back(GraphParseNode{builder.integer(0)}))) {
+      } else if (OB_FAIL(cte_column_names.push_back(GraphParseNode{name}))) {
+      }
     }
   }
   if (OB_SUCC(ret) && need_edge_identity) {
@@ -1249,6 +1332,24 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
               builder.column(step_vertex, target_pattern.element_->key_columns_[i])}))) {
       }
     }
+    for (int64_t slot = 0; OB_SUCC(ret) && need_trail_history
+         && slot < path_desc.upper_bound_; ++slot) {
+      for (int64_t key = 0; OB_SUCC(ret) && key < edge_pattern.element_->key_count_; ++key) {
+        ObSEArray<GraphParseNode, 3> arguments;
+        if (OB_FAIL(arguments.push_back(GraphParseNode{builder.binary(
+                T_OP_EQ,
+                builder.column(frontier_alias, DEPTH_NAME),
+                builder.integer(slot))}))) {
+        } else if (OB_FAIL(arguments.push_back(GraphParseNode{
+                       builder.column(edge, edge_pattern.element_->key_columns_[key])}))) {
+        } else if (OB_FAIL(arguments.push_back(GraphParseNode{
+                       make_internal_column(builder, frontier_alias,
+                                            TRAIL_EDGE_KEY_PREFIX, slot, key)}))) {
+        } else if (OB_FAIL(recursive_exprs.push_back(GraphParseNode{
+                       builder.function("if", arguments)}))) {
+        }
+      }
+    }
     if (OB_SUCC(ret) && need_edge_identity) {
       ParseNode *edge_identity = nullptr;
       ObSEArray<GraphParseNode, 3> arguments;
@@ -1288,6 +1389,30 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
       } else {
         builder.append_condition(condition, recursive_where);
       }
+    }
+    // Only slots before the current depth contain previously traversed edges.
+    // For every active slot, require at least one primary-key component of the
+    // candidate edge to differ. This is a per-frontier-row check, so paths that
+    // happen to use the same edge remain separate paths rather than being
+    // globally deduplicated.
+    for (int64_t slot = 0; OB_SUCC(ret) && need_trail_history
+         && slot < path_desc.upper_bound_; ++slot) {
+      ParseNode *edge_differs = nullptr;
+      for (int64_t key = 0; key < edge_pattern.element_->key_count_; ++key) {
+        ParseNode *key_differs = builder.binary(
+            T_OP_NE,
+            builder.column(edge, edge_pattern.element_->key_columns_[key]),
+            make_internal_column(builder, frontier_alias,
+                                 TRAIL_EDGE_KEY_PREFIX, slot, key));
+        edge_differs = edge_differs == nullptr
+            ? key_differs : builder.binary(T_OP_OR, edge_differs, key_differs);
+      }
+      ParseNode *slot_unused = builder.binary(
+          T_OP_LE,
+          builder.column(frontier_alias, DEPTH_NAME),
+          builder.integer(slot));
+      builder.append_condition(builder.binary(T_OP_OR, slot_unused, edge_differs),
+                               recursive_where);
     }
     if (OB_SUCC(ret)) {
       const bool reverse = path_desc.direction_ == GraphPathDirection::IN;
@@ -1353,6 +1478,7 @@ int build_recursive_graph_match(GraphRelationBuilder &builder,
       set->int16_values_[1] = static_cast<int16_t>(path_desc.upper_bound_);
       set->int16_values_[2] = static_cast<int16_t>(
           path_desc.direction_ == GraphPathDirection::IN ? 1 : 0);
+      set->int16_values_[3] = static_cast<int16_t>(path_desc.path_mode_);
       set->children_[0] = anchor;
       set->children_[1] = recursive;
       builder.force_serial(cte_query);
@@ -1514,8 +1640,8 @@ int build_graph_path_branch(GraphRelationBuilder &builder,
                             ParseNode *&select)
 {
   int ret = OB_SUCCESS;
-  ObSEArray<GraphBinding, GRAPH_WALK_MAX_HOPS + 1> vertices;
-  ObSEArray<GraphBinding, GRAPH_WALK_MAX_HOPS> edges;
+  ObSEArray<GraphBinding, GRAPH_PATH_MAX_HOPS + 1> vertices;
+  ObSEArray<GraphBinding, GRAPH_PATH_MAX_HOPS> edges;
   const GraphElement *traversal_target = target_pattern.element_;
   const ObTableSchema *traversal_target_table = target_pattern.table_;
   const char *vertex_prefix = path_desc.direction_ == GraphPathDirection::OUT
@@ -1635,6 +1761,9 @@ int build_graph_path_branch(GraphRelationBuilder &builder,
       }
     }
   }
+  if (OB_SUCC(ret) && path_desc.path_mode_ == GraphPathMode::TRAIL
+      && OB_FAIL(append_trail_edge_conditions(builder, edges, where))) {
+  }
   if (OB_SUCC(ret) && needs_separate_terminal) {
     builder.append_condition(builder.false_value(), where);
   }
@@ -1730,6 +1859,7 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
   ObString database_name;
   uint64_t database_id = OB_INVALID_ID;
   const GraphSchema *graph = nullptr;
+  GraphPathMode path_mode = GraphPathMode::WALK;
   ObSEArray<GraphBinding, 8> bindings;
   if (params_.resolver_scope_stmt_type_ == T_CREATE_VIEW || params_.is_in_view_) {
     ret = OB_NOT_SUPPORTED;
@@ -1739,9 +1869,18 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "GRAPH_TABLE as a DML target");
   } else if (node.num_child_ != 6 || node.children_ == nullptr) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (node.children_[GRAPH_TABLE_PATH_MODE] != nullptr) {
+  } else if (node.children_[GRAPH_TABLE_PATH_MODE] != nullptr
+             && (node.children_[GRAPH_TABLE_PATH_MODE]->type_ != T_GRAPH_PATH_MODE
+                 || node.children_[GRAPH_TABLE_PATH_MODE]->value_
+                        < static_cast<int64_t>(GraphPathMode::TRAIL)
+                 || node.children_[GRAPH_TABLE_PATH_MODE]->value_
+                        > static_cast<int64_t>(GraphPathMode::ACYCLIC))) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (node.children_[GRAPH_TABLE_PATH_MODE] != nullptr
+             && node.children_[GRAPH_TABLE_PATH_MODE]->value_
+                    != static_cast<int64_t>(GraphPathMode::TRAIL)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "TRAIL, SIMPLE and ACYCLIC graph path modes");
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "SIMPLE and ACYCLIC graph path modes");
   } else if (OB_FAIL(resolve_table_relation_node(node.children_[GRAPH_TABLE_GRAPH], name, database_name))) {
   } else if (OB_FAIL(schema_checker_->get_database_id(database_name, database_id))) {
   } else if (database_id != session_info_->get_database_id()) {
@@ -1753,6 +1892,9 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
     ObCStringHelper helper;
     LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(database_name), helper.convert(name));
   } else {
+    path_mode = node.children_[GRAPH_TABLE_PATH_MODE] == nullptr
+        ? GraphPathMode::WALK
+        : static_cast<GraphPathMode>(node.children_[GRAPH_TABLE_PATH_MODE]->value_);
     const ParseNode &chain = *node.children_[GRAPH_TABLE_PATTERN];
     const ParseNode *shape = node.children_[GRAPH_TABLE_SHAPE];
     const ParseNode &projects = *node.children_[GRAPH_TABLE_PROJECTS];
@@ -1854,6 +1996,15 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
             }
           }
         }
+        if (OB_SUCC(ret) && path_mode == GraphPathMode::TRAIL) {
+          ObSEArray<GraphBinding, GRAPH_PATH_MAX_HOPS> edges;
+          for (int64_t i = 1; OB_SUCC(ret) && i < bindings.count(); i += 2) {
+            ret = edges.push_back(bindings.at(i));
+          }
+          if (OB_SUCC(ret)) {
+            ret = append_trail_edge_conditions(builder, edges, where);
+          }
+        }
         select->children_[PARSE_SELECT_FROM] = from;
         select->children_[PARSE_SELECT_SELECT] = node.children_[GRAPH_TABLE_PROJECTS];
         if (where != nullptr) {
@@ -1898,15 +2049,17 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
             ? path_desc.lower_bound_ : quantifier->children_[1]->value_;
         path_desc.direction_ = chain.children_[1]->value_ == 1
             ? GraphPathDirection::IN : GraphPathDirection::OUT;
+        path_desc.path_mode_ = path_mode;
         path_desc.row_shape_ = shape != nullptr && shape->value_ == 1
             ? GraphPathRowShape::PER_STEP : GraphPathRowShape::PER_MATCH;
-        path_desc.need_path_ = path_desc.row_shape_ == GraphPathRowShape::PER_STEP
+        path_desc.need_path_ = path_desc.path_mode_ == GraphPathMode::TRAIL
+            || path_desc.row_shape_ == GraphPathRowShape::PER_STEP
             || contains_item_type(projects, T_FUN_JSON_ARRAYAGG);
         if (path_desc.lower_bound_ < 0 || path_desc.upper_bound_ < 0
             || path_desc.lower_bound_ > path_desc.upper_bound_) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "graph path bounds with lower greater than upper");
-        } else if (path_desc.upper_bound_ > GRAPH_WALK_MAX_HOPS) {
+        } else if (path_desc.upper_bound_ > GRAPH_PATH_MAX_HOPS) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "graph path upper bounds greater than 16");
         } else if (!path_desc.is_valid()) {

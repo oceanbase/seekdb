@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "sql/engine/graph/graph_path_spec.h"
 #include "sql/optimizer/ob_logical_operator.h"
 
 namespace oceanbase
@@ -34,10 +35,10 @@ enum class GraphFeedbackAccessMethod : int8_t
   INDEX_SCAN
 };
 
-// Logical controller for a bounded graph WALK. The first child produces seed
+// Logical controller for a bounded graph path. The first child produces seed
 // path states and the second child performs one expansion step over the current
 // frontier. Unlike ObLogSet, this operator never applies relational set
-// distinctness: every path state retains WALK bag multiplicity.
+// distinctness: both WALK and TRAIL retain bag multiplicity between paths.
 class GraphFeedbackLoopLogOp final : public ObLogicalOperator
 {
 public:
@@ -49,18 +50,21 @@ public:
   void configure_path(int64_t min_hops,
                       int64_t max_hops,
                       bool reverse,
-                      bool pull_to_local)
+                      bool pull_to_local,
+                      GraphPathMode path_mode)
   {
     min_hops_ = min_hops;
     max_hops_ = max_hops;
     reverse_ = reverse;
     pull_to_local_ = pull_to_local;
+    path_mode_ = path_mode;
   }
 
   int initialize_step_access_method();
   int64_t get_min_hops() const { return min_hops_; }
   int64_t get_max_hops() const { return max_hops_; }
   bool is_reverse() const { return reverse_; }
+  GraphPathMode get_path_mode() const { return path_mode_; }
   GraphFeedbackAccessMethod get_step_access_method() const
   {
     return step_access_method_;
@@ -95,6 +99,7 @@ public:
                        "max hops", max_hops_,
                        K_(reverse),
                        "pull to local", pull_to_local_,
+                       "path mode", static_cast<int64_t>(path_mode_),
                        "step access", static_cast<int64_t>(step_access_method_));
 
 private:
@@ -106,6 +111,7 @@ private:
   int64_t max_hops_{0};
   bool reverse_{false};
   bool pull_to_local_{false};
+  GraphPathMode path_mode_{GraphPathMode::WALK};
   GraphFeedbackAccessMethod step_access_method_{GraphFeedbackAccessMethod::UNKNOWN};
 
   DISALLOW_COPY_AND_ASSIGN(GraphFeedbackLoopLogOp);

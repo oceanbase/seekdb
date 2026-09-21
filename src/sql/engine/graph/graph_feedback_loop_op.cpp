@@ -24,17 +24,15 @@ namespace sql
 
 GraphFeedbackLoopSpec::GraphFeedbackLoopSpec(common::ObIAllocator &allocator,
                                              const ObPhyOperatorType type)
-    : ObRecursiveUnionAllSpec(allocator, type),
-      lower_bound_(0),
-      upper_bound_(0),
-      direction_(GraphPathDirection::OUT)
+    : ObRecursiveUnionAllSpec(allocator, type)
 {
 }
 
 OB_SERIALIZE_MEMBER((GraphFeedbackLoopSpec, ObRecursiveUnionAllSpec),
                     lower_bound_,
                     upper_bound_,
-                    direction_);
+                    direction_,
+                    path_mode_);
 
 } // namespace sql
 } // namespace oceanbase

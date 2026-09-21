@@ -18,6 +18,7 @@
 #include "sql/resolver/dml/ob_select_stmt.h"
 #include "sql/resolver/expr/ob_shared_expr_resolver.h"
 #include "sql/optimizer/ob_optimizer_util.h"
+#include "sql/engine/graph/graph_path_spec.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -202,6 +203,7 @@ int ObSelectStmt::assign(const ObSelectStmt &other)
     graph_path_lower_bound_ = other.graph_path_lower_bound_;
     graph_path_upper_bound_ = other.graph_path_upper_bound_;
     graph_path_reverse_ = other.graph_path_reverse_;
+    graph_path_mode_ = other.graph_path_mode_;
     is_distinct_ = other.is_distinct_;
     is_view_stmt_ = other.is_view_stmt_;
     view_ref_id_ = other.view_ref_id_;
@@ -249,6 +251,7 @@ int ObSelectStmt::deep_copy_stmt_struct(ObIAllocator &allocator,
     graph_path_lower_bound_ = other.graph_path_lower_bound_;
     graph_path_upper_bound_ = other.graph_path_upper_bound_;
     graph_path_reverse_ = other.graph_path_reverse_;
+    graph_path_mode_ = other.graph_path_mode_;
     is_distinct_ = other.is_distinct_;
     is_view_stmt_ = other.is_view_stmt_;
     view_ref_id_ = other.view_ref_id_;
@@ -382,6 +385,7 @@ ObSelectStmt::ObSelectStmt()
   graph_path_lower_bound_ = 0;
   graph_path_upper_bound_ = 0;
   graph_path_reverse_ = false;
+  graph_path_mode_ = GraphPathMode::WALK;
   is_view_stmt_ = false;
   view_ref_id_ = OB_INVALID_ID;
   select_type_ = AFFECT_FOUND_ROWS;

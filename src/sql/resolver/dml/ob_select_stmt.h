@@ -30,6 +30,8 @@ namespace oceanbase
 {
 namespace sql
 {
+enum class GraphPathMode : int8_t;
+
 enum SelectTypeAffectFoundRows
 {
   AFFECT_FOUND_ROWS,
@@ -345,12 +347,14 @@ public:
   void set_graph_feedback_loop(bool is_graph_feedback_loop,
                                int64_t lower_bound,
                                int64_t upper_bound,
-                               bool reverse)
+                               bool reverse,
+                               GraphPathMode path_mode)
   {
     is_graph_feedback_loop_ = is_graph_feedback_loop;
     graph_path_lower_bound_ = lower_bound;
     graph_path_upper_bound_ = upper_bound;
     graph_path_reverse_ = reverse;
+    graph_path_mode_ = path_mode;
   }
   void assign_distinct() { is_distinct_ = true; }
   void assign_all() { is_distinct_ = false; }
@@ -377,6 +381,7 @@ public:
   int64_t get_graph_path_lower_bound() const { return graph_path_lower_bound_; }
   int64_t get_graph_path_upper_bound() const { return graph_path_upper_bound_; }
   bool is_graph_path_reverse() const { return graph_path_reverse_; }
+  GraphPathMode get_graph_path_mode() const { return graph_path_mode_; }
   bool is_set_distinct() const { return is_set_distinct_; }
   bool is_from_show_stmt() const { return show_stmt_ctx_.is_from_show_stmt_; }
   // view
@@ -568,6 +573,7 @@ private:
   int64_t graph_path_lower_bound_;
   int64_t graph_path_upper_bound_;
   bool graph_path_reverse_;
+  GraphPathMode graph_path_mode_;
   /* These fields are only used by normal select */
   bool is_distinct_;
   // Used for the sort column specified in the search by clause of the cte recursive statement

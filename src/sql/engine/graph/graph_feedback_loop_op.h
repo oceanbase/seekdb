@@ -24,11 +24,11 @@ namespace oceanbase
 namespace sql
 {
 
-// The bounded graph walk has recursive-union execution semantics, but it uses
+// The bounded graph path has recursive-union execution semantics, but it uses
 // an independent physical operator type so plan cache serialization, EXPLAIN
 // and future graph-specific accounting do not depend on recognizing a generic
 // recursive CTE after code generation.
-// TODO(graph-walk-v2): This inheritance is transitional. RecursiveUnionAll is
+// TODO(graph-path-v2): This inheritance is transitional. RecursiveUnionAll is
 // coupled to FakeCTETable and UNION row semantics. When GraphFeedbackLoop
 // directly drives GraphExpand and graph path states, extract a generic feedback
 // loop shared with recursive CTE, or make the graph Spec and Op independent.
@@ -42,21 +42,25 @@ public:
 
   void set_graph_path(int64_t lower_bound,
                       int64_t upper_bound,
-                      GraphPathDirection direction)
+                      GraphPathDirection direction,
+                      GraphPathMode path_mode)
   {
     lower_bound_ = lower_bound;
     upper_bound_ = upper_bound;
     direction_ = direction;
+    path_mode_ = path_mode;
   }
 
   int64_t get_lower_bound() const { return lower_bound_; }
   int64_t get_upper_bound() const { return upper_bound_; }
   GraphPathDirection get_direction() const { return direction_; }
+  GraphPathMode get_path_mode() const { return path_mode_; }
 
 private:
-  int64_t lower_bound_;
-  int64_t upper_bound_;
-  GraphPathDirection direction_;
+  int64_t lower_bound_{0};
+  int64_t upper_bound_{0};
+  GraphPathDirection direction_{GraphPathDirection::OUT};
+  GraphPathMode path_mode_{GraphPathMode::WALK};
 };
 
 class GraphFeedbackLoopOp final : public ObRecursiveUnionAllOp
