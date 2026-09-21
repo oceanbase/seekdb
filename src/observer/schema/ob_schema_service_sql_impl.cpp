@@ -1012,13 +1012,6 @@ int ObSchemaServiceSQLImpl::get_mock_fk_parent_table_schema_from_inner_table(
   return ret;
 }
 
-#define FETCH_ALL_TABLE_HISTORY_SQL3            COMMON_SCHEMA_SQL
-#define FETCH_ALL_TABLE_HISTORY_FULL_SCHEMA     "SELECT /*+ leading(b a) use_nl(b a) no_rewrite() */ a.* FROM %s AS a JOIN "\
-                                               "(SELECT table_id, MAX(schema_version) AS schema_version FROM %s "\
-                                               "WHERE schema_version <= %ld GROUP BY table_id) AS b "\
-                                               "ON a.table_id = b.table_id AND a.schema_version = b.schema_version "\
-                                               "WHERE a.is_deleted = 0 and a.table_id != %lu"
-
 // when optimizer statistics is disabled, to prevent incorrect selection of the larger table as the driving table of join,
 // we use leading hint to fix the value list as the driving table.
 #define FETCH_ALL_TABLE_HISTORY_WITH_ROWKEY     "SELECT /*+ LEADING(@\"SEL$1\" (\"VALUES_TABLE1\"@\"SEL$3\" \"a\"@\"SEL$1\")) USE_NL(@\"SEL$1\" \"a\"@\"SEL$1\") */ a.* FROM "\
@@ -3663,8 +3656,15 @@ int ObSchemaServiceSQLImpl::fetch_tables(
     } else if (!is_increase_schema) {
       const char *tname = OB_ALL_TABLE_HISTORY_TNAME;
       if (OB_FAIL(set_refresh_full_schema_timeout_ctx_(sql_client, tname, ctx))) {
-      } else if (OB_FAIL(sql.append_fmt(FETCH_ALL_TABLE_HISTORY_FULL_SCHEMA,
-                                 table_name, table_name,
+      // A group-by/nested-loop history join degenerates into one storage
+      // point lookup per table; over the worker IPC channel that is the
+      // dominant refresh cost.  Scan the history once in (table_id,
+      // schema_version) order and let retrieve_table_schema keep the latest
+      // non-deleted row per table in memory, same as fetch_all_table_info.
+      } else if (OB_FAIL(sql.append_fmt(FETCH_ALL_TABLE_HISTORY_SQL,
+                                 table_name,
+                                 OB_INVALID_RUNTIME_ID))) {
+      } else if (OB_FAIL(sql.append_fmt(" AND schema_version <= %ld AND table_id != %lu",
                                  schema_version,
                                  OB_ALL_CORE_TABLE_TID))) {
       } else if (OB_FAIL(sql.append_fmt(" ORDER BY table_id DESC, schema_version DESC"))) {
@@ -3685,7 +3685,9 @@ int ObSchemaServiceSQLImpl::fetch_tables(
     if (OB_SUCC(ret)) {
       SMART_VAR(ObMySQLProxy::MySQLResult, res) {
         DEFINE_SQL_CLIENT_RETRY_WEAK_WITH_SNAPSHOT(sql_client, snapshot_timestamp);
-        const bool check_deleted = true; // not used
+        // The full-refresh branch no longer filters is_deleted in SQL; the
+        // retrieve skip below is what excludes tables deleted before the cap.
+        const bool check_deleted = true;
         if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
         } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
           ret = OB_ERR_UNEXPECTED;
