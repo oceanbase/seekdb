@@ -95,57 +95,6 @@ class ObTxMultiDataSourceLog;
 enum class NotifyType : int64_t;
 typedef palf::LSN LogOffSet;
 enum { MAX_CALLBACK_LIST_COUNT = 64 };
-class ObReserveAllocator : public ObIAllocator
-{
-public:
-  ObReserveAllocator() : pos_(0), size_(0) {}
-  ~ObReserveAllocator() { reset(); }
-  void *alloc(const int64_t sz)
-  {
-    return alloc_from_buf_(sz);
-  }
-  void* alloc(const int64_t sz, const ObMemAttr &attr)
-  {
-    UNUSED(attr);
-    return alloc_from_buf_(sz);
-  }
-  void free(void *p)
-  {
-    // do nothing
-  }
-public:
-  bool is_contain(void *p) const
-  {
-    return ((int64_t)p >= (int64_t)buf_) && ((int64_t)p < (int64_t)buf_ + size_);
-  }
-  void reset()
-  {
-    pos_ = 0;
-    size_ = 0;
-  }
-  void reuse()
-  {
-    pos_ = 0;
-  }
-private:
-  void *alloc_from_buf_(const int64_t sz)
-  {
-    void *ptr = NULL;
-    const int64_t aligned_sz = ob_aligned_to2(sz, 16);
-    if (pos_ + aligned_sz < size_) {
-      ptr = reinterpret_cast<void *>(buf_ + pos_);
-      pos_ = pos_ + aligned_sz;
-    }
-    return ptr;
-  }
-private:
-  static const int64_t RESERVED_MEM_SIZE = 256;
-private:
-  char buf_[RESERVED_MEM_SIZE];
-  int64_t pos_;
-  int64_t size_;
-};
-
 class TransModulePageAllocator : public common::ModulePageAllocator
 {
 public:
@@ -155,44 +104,6 @@ public:
   explicit TransModulePageAllocator(common::ObIAllocator &allocator)
     : ModulePageAllocator(allocator) {}
   virtual ~TransModulePageAllocator() {}
-  void *alloc(const int64_t sz)
-  {
-    return inner_alloc_(sz, attr_);
-  }
-  void *alloc(const int64_t sz, const ObMemAttr &attr)
-  {
-    return inner_alloc_(sz, attr);
-  }
-  void free(void *ptr)
-  {
-    if (NULL != ptr) {
-      inner_free_(ptr);
-    }
-  }
-  void reset()
-  {
-    common::ModulePageAllocator::reset();
-    reserve_allocator_.reset();
-  }
-protected:
-  void *inner_alloc_(const int64_t sz, const ObMemAttr &attr)
-  {
-    void *ptr = ModulePageAllocator::alloc(sz, attr);
-    if (NULL == ptr) {
-      ptr = reserve_allocator_.alloc(sz);
-    }
-    return ptr;
-  }
-  void inner_free_(void *ptr)
-  {
-    if (reserve_allocator_.is_contain(ptr)) {
-      reserve_allocator_.free(ptr);
-    } else {
-      ModulePageAllocator::free(ptr);
-    }
-  }
-private:
-  ObReserveAllocator reserve_allocator_;
 };
 
 

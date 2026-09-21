@@ -965,8 +965,10 @@ int ObTxLogBlock::get_next_log(ObTxLogHeader &header,
 
         if (OB_ISNULL(big_segment_buf)) {
           ret = OB_LOG_ALREADY_SPLIT;
-          TRANS_LOG(WARN, "the tx log entry has been split, need big_segment_buf", K(ret),
-                    KPC(big_segment_buf), KPC(this));
+          if (OB_ISNULL(contain_big_segment)) {
+            TRANS_LOG(WARN, "the tx log entry has been split, need big_segment_buf", K(ret),
+                      KPC(big_segment_buf), KPC(this));
+          }
         } else if (OB_NOT_NULL(big_segment_buf_)) {
           ret = OB_ERR_UNEXPECTED;
           TRANS_LOG(WARN, "A completed big segment need be serialized", K(ret), KPC(this),
