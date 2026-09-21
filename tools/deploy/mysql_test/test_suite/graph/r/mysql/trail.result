@@ -1,0 +1,191 @@
+trail_rejects_repeated_edges_but_allows_repeated_vertices
+SELECT COUNT(*) AS walk_paths FROM GRAPH_TABLE(graph_social MATCH
+(a IS person WHERE a.id=1)-[e IS knows]->{4}(b IS person)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+walk_paths
+4
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+(a IS person WHERE a.id=1)-[e IS knows]->{4}(b IS person)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops,
+JSON_ARRAYAGG(e.id) AS edge_ids)) g ORDER BY edge_ids;
+destination	hops	edge_ids
+2	4	[10, 12, 13, 11]
+2	4	[11, 12, 13, 10]
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+(a IS person WHERE a.id=1)-[e IS knows]->{3}(b IS person)
+COLUMNS(b.id AS destination,JSON_ARRAYAGG(e.id) AS edge_ids)) g
+ORDER BY edge_ids;
+destination	edge_ids
+1	[10, 12, 13]
+1	[11, 12, 13]
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+(a IS person WHERE a.id=4)-[e IS knows]->{0,16}(b IS person)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops,
+JSON_ARRAYAGG(e.id) AS edge_ids)) g ORDER BY hops;
+destination	hops	edge_ids
+4	0	NULL
+4	1	[14]
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+(a IS person WHERE a.id=3)<-[e IS knows]-{1,4}(b IS person)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops,
+JSON_ARRAYAGG(e.id) AS edge_ids)) g ORDER BY hops,edge_ids;
+destination	hops	edge_ids
+2	1	[12]
+1	2	[12, 10]
+1	2	[12, 11]
+3	3	[12, 10, 13]
+3	3	[12, 11, 13]
+trail_one_row_per_step_and_fixed_chain
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+(a IS person WHERE a.id=1)-[e IS knows]->{4}(b IS person)
+ONE ROW PER STEP (v1,step_e,v2)
+COLUMNS(JSON_ARRAYAGG(e.id) AS path_edges,MATCHNUM() AS match_no,
+ELEMENT_NUMBER(step_e) AS step_no,v1.id AS from_id,
+step_e.id AS edge_id,v2.id AS to_id)) g
+ORDER BY path_edges,step_no;
+path_edges	match_no	step_no	from_id	edge_id	to_id
+[10, 12, 13, 11]	1	2	1	10	2
+[10, 12, 13, 11]	1	4	2	12	3
+[10, 12, 13, 11]	1	6	3	13	1
+[10, 12, 13, 11]	1	8	1	11	2
+[11, 12, 13, 10]	2	2	1	11	2
+[11, 12, 13, 10]	2	4	2	12	3
+[11, 12, 13, 10]	2	6	3	13	1
+[11, 12, 13, 10]	2	8	1	10	2
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+(a IS person WHERE a.id=1)-[e1 IS knows]->(b IS person)
+-[e2 IS knows]->(c IS person)-[e3 IS knows]->(d IS person)
+-[e4 IS knows]->(f IS person)
+COLUMNS(e1.id AS edge1,e2.id AS edge2,e3.id AS edge3,
+e4.id AS edge4,f.id AS destination)) g
+ORDER BY edge1,edge2,edge3,edge4;
+edge1	edge2	edge3	edge4	destination
+10	12	13	11	2
+11	12	13	10	2
+prepared_trail_seed_parameter_rebinding_and_index_plan_invalidation
+PREPARE trail_cached FROM
+'SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH TRAIL (a IS person WHERE a.id=?)-[e IS knows]->{0,4}(b IS person) COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g';
+SET @trail_seed=1;
+EXECUTE trail_cached USING @trail_seed;
+paths
+9
+SET @trail_seed=4;
+EXECUTE trail_cached USING @trail_seed;
+paths
+2
+SET @trail_seed=3;
+EXECUTE trail_cached USING @trail_seed;
+paths
+6
+drop table if exists plan_table;
+create table plan_table (
+statement_id varchar(30),
+plan_id int,
+gmt_create timestamp,
+remarks varchar(4000),
+operator varchar(255),
+options varchar(255),
+object_node varchar(40),
+object_owner varchar(128),
+object_name varchar(128),
+object_alias varchar(261),
+object_instance int,
+object_type varchar(30),
+optimizer varchar(4000),
+search_columns int,
+id int,
+parent_id int,
+depth int,
+position int,
+is_last_child int,
+cost int,
+cardinality int,
+bytes int,
+rowset int,
+other_tag varchar(4000),
+partition_start varchar(4000),
+partition_stop varchar(4000),
+partition_id int,
+other varchar(4000),
+distribution varchar(64),
+cpu_cost int,
+io_cost int,
+temp_space int,
+access_predicates varchar(4000),
+filter_predicates varchar(4000),
+startup_predicates varchar(4000),
+projection varchar(4000),
+special_predicates longtext,
+time int,
+qblock_name varchar(128),
+other_xml varchar(4000)
+);
+EXPLAIN INTO plan_table SET statement_id='trail_full_scan'
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+(a IS person WHERE a.id=1)-[e IS knows]->{0,4}(b IS person)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+SELECT COUNT(*)=1 AS has_feedback_trail
+FROM plan_table
+WHERE statement_id='trail_full_scan'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%direction=OUT, hops={0,4}, access=full-scan, mode=TRAIL%';
+has_feedback_trail
+1
+CREATE INDEX graph_knows_out ON graph_knows(src,id);
+SET @trail_seed=1;
+EXECUTE trail_cached USING @trail_seed;
+paths
+9
+EXPLAIN INTO plan_table SET statement_id='trail_out_index'
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+(a IS person WHERE a.id=1)-[e IS knows]->{0,4}(b IS person)
+COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+SELECT COUNT(*)=1 AS has_feedback_trail_index
+FROM plan_table
+WHERE statement_id='trail_out_index'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%direction=OUT, hops={0,4}, access=index-scan, mode=TRAIL%';
+has_feedback_trail_index
+1
+DROP INDEX graph_knows_out ON graph_knows;
+SET @trail_seed=1;
+EXECUTE trail_cached USING @trail_seed;
+paths
+9
+DEALLOCATE PREPARE trail_cached;
+DROP TABLE plan_table;
+trail_uses_complete_composite_edge_identity
+CREATE TABLE gp_vertex (tenant BIGINT NOT NULL, id BIGINT NOT NULL, name VARCHAR(32), PRIMARY KEY(tenant,id));
+CREATE TABLE gp_edge (tenant BIGINT NOT NULL, id BIGINT NOT NULL, src_tenant BIGINT, src BIGINT, dst_tenant BIGINT, dst BIGINT, weight BIGINT, PRIMARY KEY(tenant,id), KEY gp_out(src_tenant,src,tenant,id), KEY gp_in(dst_tenant,dst,tenant,id));
+CREATE TABLE gp_company (tenant BIGINT NOT NULL, id BIGINT NOT NULL, name VARCHAR(32), PRIMARY KEY(tenant,id));
+CREATE TABLE gp_works (tenant BIGINT NOT NULL, id BIGINT NOT NULL, src_tenant BIGINT, src BIGINT, dst_tenant BIGINT, dst BIGINT, PRIMARY KEY(tenant,id));
+CREATE TABLE gp_binding (binding_id BIGINT PRIMARY KEY, tenant BIGINT NOT NULL, id BIGINT NOT NULL);
+INSERT INTO gp_vertex VALUES (1,1,'A'),(1,2,'B'),(1,3,'C'),(1,4,NULL),(1,5,'isolated'),(2,1,'D');
+INSERT INTO gp_edge VALUES (1,1,1,1,1,3,1),(1,2,1,1,1,3,2),(1,3,1,2,1,3,1),(1,4,1,3,1,3,1),(1,5,1,1,9,9,1),(1,6,9,9,1,1,1),(1,7,1,3,1,1,1),(1,8,1,4,1,4,1),(1,9,1,1,NULL,NULL,1),(2,1,2,1,1,3,1);
+INSERT INTO gp_company VALUES (1,1,'company-A');
+INSERT INTO gp_works VALUES (1,1,1,1,1,1);
+INSERT INTO gp_binding VALUES (10,1,1),(11,1,1),(12,1,2),(13,2,1),(14,9,9);
+CREATE PROPERTY GRAPH graph_composite
+VERTEX TABLES (
+gp_vertex KEY (tenant,id) LABEL person PROPERTIES (tenant,id,name)
+)
+EDGE TABLES (
+gp_edge KEY (tenant,id)
+SOURCE KEY (src_tenant,src) REFERENCES gp_vertex (tenant,id)
+DESTINATION KEY (dst_tenant,dst) REFERENCES gp_vertex (tenant,id)
+LABEL knows PROPERTIES (tenant,id,weight)
+);
+SELECT * FROM GRAPH_TABLE(graph_composite MATCH TRAIL
+(a IS person WHERE a.tenant=2 AND a.id=1)-[e IS knows]->{3}(b IS person)
+COLUMNS(b.tenant AS destination_tenant,b.id AS destination_id,
+JSON_ARRAYAGG(e.tenant) AS edge_tenants,
+JSON_ARRAYAGG(e.id) AS edge_ids)) g
+ORDER BY edge_ids;
+destination_tenant	destination_id	edge_tenants	edge_ids
+1	1	[2, 1, 1]	[1, 4, 7]
+1	3	[2, 1, 1]	[1, 7, 1]
+1	3	[2, 1, 1]	[1, 7, 2]
+DROP PROPERTY GRAPH graph_composite;
+DROP TABLE gp_binding,gp_works,gp_company,gp_edge,gp_vertex;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;

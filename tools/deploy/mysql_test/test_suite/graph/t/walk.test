@@ -57,43 +57,6 @@ SELECT * FROM GRAPH_TABLE(graph_social MATCH
   COLUMNS(b.id AS destination,JSON_ARRAYAGG(e.id) AS edge_ids)) g
   ORDER BY edge_ids;
 
---echo trail_rejects_repeated_edges_but_allows_repeated_vertices
-SELECT COUNT(*) AS walk_paths FROM GRAPH_TABLE(graph_social MATCH
-  (a IS person WHERE a.id=1)-[e IS knows]->{4}(b IS person)
-  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
-SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
-  (a IS person WHERE a.id=1)-[e IS knows]->{4}(b IS person)
-  COLUMNS(b.id AS destination,COUNT(e.id) AS hops,
-          JSON_ARRAYAGG(e.id) AS edge_ids)) g ORDER BY edge_ids;
-SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
-  (a IS person WHERE a.id=1)-[e IS knows]->{3}(b IS person)
-  COLUMNS(b.id AS destination,JSON_ARRAYAGG(e.id) AS edge_ids)) g
-  ORDER BY edge_ids;
-SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
-  (a IS person WHERE a.id=4)-[e IS knows]->{0,16}(b IS person)
-  COLUMNS(b.id AS destination,COUNT(e.id) AS hops,
-          JSON_ARRAYAGG(e.id) AS edge_ids)) g ORDER BY hops;
-SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
-  (a IS person WHERE a.id=3)<-[e IS knows]-{1,4}(b IS person)
-  COLUMNS(b.id AS destination,COUNT(e.id) AS hops,
-          JSON_ARRAYAGG(e.id) AS edge_ids)) g ORDER BY hops,edge_ids;
-
---echo trail_one_row_per_step_and_fixed_chain
-SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
-  (a IS person WHERE a.id=1)-[e IS knows]->{4}(b IS person)
-  ONE ROW PER STEP (v1,step_e,v2)
-  COLUMNS(JSON_ARRAYAGG(e.id) AS path_edges,MATCHNUM() AS match_no,
-          ELEMENT_NUMBER(step_e) AS step_no,v1.id AS from_id,
-          step_e.id AS edge_id,v2.id AS to_id)) g
-  ORDER BY path_edges,step_no;
-SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
-  (a IS person WHERE a.id=1)-[e1 IS knows]->(b IS person)
-  -[e2 IS knows]->(c IS person)-[e3 IS knows]->(d IS person)
-  -[e4 IS knows]->(f IS person)
-  COLUMNS(e1.id AS edge1,e2.id AS edge2,e3.id AS edge3,
-          e4.id AS edge4,f.id AS destination)) g
-  ORDER BY edge1,edge2,edge3,edge4;
-
 --echo heterogeneous_endpoints_exclude_zero_hop_without_type_leakage
 SELECT * FROM GRAPH_TABLE(graph_social MATCH
   (a IS person WHERE a.id=1)-[e IS works]->{0,1}(b IS company WHERE b.name='Acme')
@@ -150,16 +113,6 @@ EXECUTE walk_cached USING @walk_seed;
 SET @walk_seed=3;
 EXECUTE walk_cached USING @walk_seed;
 
---echo prepared_trail_seed_parameter_rebinding
-PREPARE trail_cached FROM
-  'SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH TRAIL (a IS person WHERE a.id=?)-[e IS knows]->{0,4}(b IS person) COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g';
-SET @trail_seed=1;
-EXECUTE trail_cached USING @trail_seed;
-SET @trail_seed=4;
-EXECUTE trail_cached USING @trail_seed;
-SET @trail_seed=3;
-EXECUTE trail_cached USING @trail_seed;
-
 --echo prepared_filter_parameter_rebinding
 PREPARE walk_filter_cached FROM
   'SELECT * FROM GRAPH_TABLE(graph_social MATCH (a IS person WHERE a.id=?)-[e IS knows WHERE e.since>=?]->{1,2}(b IS person WHERE b.id=?) COLUMNS(b.id AS destination,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edge_ids)) g ORDER BY hops,edge_ids';
@@ -180,10 +133,6 @@ EXPLAIN INTO plan_table SET statement_id='walk_serial'
 SELECT /*+ PARALLEL(4) */ * FROM GRAPH_TABLE(graph_social MATCH
   (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person)
   COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
-EXPLAIN INTO plan_table SET statement_id='trail_full_scan'
-SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
-  (a IS person WHERE a.id=1)-[e IS knows]->{0,4}(b IS person)
-  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
 --enable_result_log
 SELECT COUNT(*)=1 AS has_feedback_full_scan
 FROM plan_table
@@ -199,19 +148,12 @@ SELECT COUNT(*)=0 AS graph_walk_has_no_px
 FROM plan_table
 WHERE statement_id='walk_serial'
   AND (operator LIKE 'PX %' OR operator LIKE 'EXCHANGE %');
-SELECT COUNT(*)=1 AS has_feedback_trail
-FROM plan_table
-WHERE statement_id='trail_full_scan'
-  AND operator='GRAPH FEEDBACK LOOP'
-  AND special_predicates LIKE '%direction=OUT, hops={0,4}, access=full-scan, mode=TRAIL%';
 CREATE INDEX graph_knows_out ON graph_knows(src,id);
 CREATE INDEX graph_knows_in ON graph_knows(dst,id);
 SET @walk_seed=1;
 EXECUTE walk_cached USING @walk_seed;
 SET @walk_seed=4;
 EXECUTE walk_cached USING @walk_seed;
-SET @trail_seed=1;
-EXECUTE trail_cached USING @trail_seed;
 --disable_result_log
 EXPLAIN INTO plan_table SET statement_id='walk_out_index'
 SELECT * FROM GRAPH_TABLE(graph_social MATCH
@@ -220,10 +162,6 @@ SELECT * FROM GRAPH_TABLE(graph_social MATCH
 EXPLAIN INTO plan_table SET statement_id='walk_in_index'
 SELECT * FROM GRAPH_TABLE(graph_social MATCH
   (a IS person WHERE a.id=3)<-[e IS knows]-{1,2}(b IS person)
-  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
-EXPLAIN INTO plan_table SET statement_id='trail_out_index'
-SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
-  (a IS person WHERE a.id=1)-[e IS knows]->{0,4}(b IS person)
   COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
 --enable_result_log
 SELECT COUNT(*)=1 AS has_feedback_out_index
@@ -246,11 +184,6 @@ FROM plan_table
 WHERE statement_id='walk_in_index'
   AND operator='TABLE RANGE SCAN'
   AND object_alias='__g_step_edge(graph_knows_in)';
-SELECT COUNT(*)=1 AS has_feedback_trail_index
-FROM plan_table
-WHERE statement_id='trail_out_index'
-  AND operator='GRAPH FEEDBACK LOOP'
-  AND special_predicates LIKE '%direction=OUT, hops={0,4}, access=index-scan, mode=TRAIL%';
 SELECT * FROM GRAPH_TABLE(graph_social MATCH
   (a IS person WHERE a.id=1)-[e IS knows]->{0,2}(b IS person)
   COLUMNS(b.id AS destination,COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edge_ids)) g
@@ -259,10 +192,7 @@ DROP INDEX graph_knows_out ON graph_knows;
 DROP INDEX graph_knows_in ON graph_knows;
 SET @walk_seed=1;
 EXECUTE walk_cached USING @walk_seed;
-SET @trail_seed=1;
-EXECUTE trail_cached USING @trail_seed;
 DEALLOCATE PREPARE walk_cached;
-DEALLOCATE PREPARE trail_cached;
 DROP TABLE plan_table;
 
 --echo composite_identity_declaration_order
@@ -287,14 +217,6 @@ FROM GRAPH_TABLE(graph_composite MATCH
   COLUMNS(VERTEX_ID(a) AS a,VERTEX_ID(b) AS b,
           COUNT(e.id) AS hops,JSON_ARRAYAGG(e.id) AS edge_ids)) g
 ORDER BY hops,target_tenant,target_id,edge_ids;
-
---echo trail_uses_complete_composite_edge_identity
-SELECT * FROM GRAPH_TABLE(graph_composite MATCH TRAIL
-  (a IS person WHERE a.tenant=2 AND a.id=1)-[e IS knows]->{3}(b IS person)
-  COLUMNS(b.tenant AS destination_tenant,b.id AS destination_id,
-          JSON_ARRAYAGG(e.tenant) AS edge_tenants,
-          JSON_ARRAYAGG(e.id) AS edge_ids)) g
-  ORDER BY edge_ids;
 
 --echo transaction_reads_own_writes_and_orphans_are_excluded
 START TRANSACTION;

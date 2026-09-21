@@ -1,0 +1,114 @@
+--disable_query_log
+DROP PROPERTY GRAPH IF EXISTS graph_social;
+DROP PROPERTY GRAPH IF EXISTS graph_composite;
+--disable_warnings
+DROP TABLE IF EXISTS graph_works,graph_knows,graph_company,graph_person;
+DROP TABLE IF EXISTS gp_binding,gp_works,gp_company,gp_edge,gp_vertex;
+--enable_warnings
+--source mysql_test/test_suite/graph/mapping_fixture.sql
+--enable_query_log
+
+--echo trail_rejects_repeated_edges_but_allows_repeated_vertices
+SELECT COUNT(*) AS walk_paths FROM GRAPH_TABLE(graph_social MATCH
+  (a IS person WHERE a.id=1)-[e IS knows]->{4}(b IS person)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+  (a IS person WHERE a.id=1)-[e IS knows]->{4}(b IS person)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops,
+          JSON_ARRAYAGG(e.id) AS edge_ids)) g ORDER BY edge_ids;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+  (a IS person WHERE a.id=1)-[e IS knows]->{3}(b IS person)
+  COLUMNS(b.id AS destination,JSON_ARRAYAGG(e.id) AS edge_ids)) g
+  ORDER BY edge_ids;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+  (a IS person WHERE a.id=4)-[e IS knows]->{0,16}(b IS person)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops,
+          JSON_ARRAYAGG(e.id) AS edge_ids)) g ORDER BY hops;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+  (a IS person WHERE a.id=3)<-[e IS knows]-{1,4}(b IS person)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops,
+          JSON_ARRAYAGG(e.id) AS edge_ids)) g ORDER BY hops,edge_ids;
+
+--echo trail_one_row_per_step_and_fixed_chain
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+  (a IS person WHERE a.id=1)-[e IS knows]->{4}(b IS person)
+  ONE ROW PER STEP (v1,step_e,v2)
+  COLUMNS(JSON_ARRAYAGG(e.id) AS path_edges,MATCHNUM() AS match_no,
+          ELEMENT_NUMBER(step_e) AS step_no,v1.id AS from_id,
+          step_e.id AS edge_id,v2.id AS to_id)) g
+  ORDER BY path_edges,step_no;
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+  (a IS person WHERE a.id=1)-[e1 IS knows]->(b IS person)
+  -[e2 IS knows]->(c IS person)-[e3 IS knows]->(d IS person)
+  -[e4 IS knows]->(f IS person)
+  COLUMNS(e1.id AS edge1,e2.id AS edge2,e3.id AS edge3,
+          e4.id AS edge4,f.id AS destination)) g
+  ORDER BY edge1,edge2,edge3,edge4;
+
+--echo prepared_trail_seed_parameter_rebinding_and_index_plan_invalidation
+PREPARE trail_cached FROM
+  'SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_social MATCH TRAIL (a IS person WHERE a.id=?)-[e IS knows]->{0,4}(b IS person) COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g';
+SET @trail_seed=1;
+EXECUTE trail_cached USING @trail_seed;
+SET @trail_seed=4;
+EXECUTE trail_cached USING @trail_seed;
+SET @trail_seed=3;
+EXECUTE trail_cached USING @trail_seed;
+
+--source mysql_test/include/create_plan_table.inc
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='trail_full_scan'
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+  (a IS person WHERE a.id=1)-[e IS knows]->{0,4}(b IS person)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+--enable_result_log
+SELECT COUNT(*)=1 AS has_feedback_trail
+FROM plan_table
+WHERE statement_id='trail_full_scan'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%direction=OUT, hops={0,4}, access=full-scan, mode=TRAIL%';
+
+CREATE INDEX graph_knows_out ON graph_knows(src,id);
+SET @trail_seed=1;
+EXECUTE trail_cached USING @trail_seed;
+--disable_result_log
+EXPLAIN INTO plan_table SET statement_id='trail_out_index'
+SELECT * FROM GRAPH_TABLE(graph_social MATCH TRAIL
+  (a IS person WHERE a.id=1)-[e IS knows]->{0,4}(b IS person)
+  COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g;
+--enable_result_log
+SELECT COUNT(*)=1 AS has_feedback_trail_index
+FROM plan_table
+WHERE statement_id='trail_out_index'
+  AND operator='GRAPH FEEDBACK LOOP'
+  AND special_predicates LIKE '%direction=OUT, hops={0,4}, access=index-scan, mode=TRAIL%';
+
+DROP INDEX graph_knows_out ON graph_knows;
+SET @trail_seed=1;
+EXECUTE trail_cached USING @trail_seed;
+DEALLOCATE PREPARE trail_cached;
+DROP TABLE plan_table;
+
+--echo trail_uses_complete_composite_edge_identity
+--source mysql_test/test_suite/graph/fixture.sql
+CREATE PROPERTY GRAPH graph_composite
+  VERTEX TABLES (
+    gp_vertex KEY (tenant,id) LABEL person PROPERTIES (tenant,id,name)
+  )
+  EDGE TABLES (
+    gp_edge KEY (tenant,id)
+      SOURCE KEY (src_tenant,src) REFERENCES gp_vertex (tenant,id)
+      DESTINATION KEY (dst_tenant,dst) REFERENCES gp_vertex (tenant,id)
+      LABEL knows PROPERTIES (tenant,id,weight)
+  );
+SELECT * FROM GRAPH_TABLE(graph_composite MATCH TRAIL
+  (a IS person WHERE a.tenant=2 AND a.id=1)-[e IS knows]->{3}(b IS person)
+  COLUMNS(b.tenant AS destination_tenant,b.id AS destination_id,
+          JSON_ARRAYAGG(e.tenant) AS edge_tenants,
+          JSON_ARRAYAGG(e.id) AS edge_ids)) g
+  ORDER BY edge_ids;
+
+DROP PROPERTY GRAPH graph_composite;
+DROP TABLE gp_binding,gp_works,gp_company,gp_edge,gp_vertex;
+DROP PROPERTY GRAPH graph_social;
+DROP TABLE graph_works,graph_knows,graph_company,graph_person;
