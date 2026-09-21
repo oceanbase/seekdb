@@ -199,11 +199,8 @@ int ObSelectStmt::assign(const ObSelectStmt &other)
   } else {
     set_op_ = other.set_op_;
     is_recursive_cte_ = other.is_recursive_cte_;
-    is_graph_feedback_loop_ = other.is_graph_feedback_loop_;
-    graph_path_lower_bound_ = other.graph_path_lower_bound_;
-    graph_path_upper_bound_ = other.graph_path_upper_bound_;
-    graph_path_reverse_ = other.graph_path_reverse_;
-    graph_path_mode_ = other.graph_path_mode_;
+    set_graph_feedback_loop(other.is_graph_feedback_loop_,
+                            other.get_graph_path_desc());
     is_distinct_ = other.is_distinct_;
     is_view_stmt_ = other.is_view_stmt_;
     view_ref_id_ = other.view_ref_id_;
@@ -247,11 +244,8 @@ int ObSelectStmt::deep_copy_stmt_struct(ObIAllocator &allocator,
   } else {
     set_op_ = other.set_op_;
     is_recursive_cte_ = other.is_recursive_cte_;
-    is_graph_feedback_loop_ = other.is_graph_feedback_loop_;
-    graph_path_lower_bound_ = other.graph_path_lower_bound_;
-    graph_path_upper_bound_ = other.graph_path_upper_bound_;
-    graph_path_reverse_ = other.graph_path_reverse_;
-    graph_path_mode_ = other.graph_path_mode_;
+    set_graph_feedback_loop(other.is_graph_feedback_loop_,
+                            other.get_graph_path_desc());
     is_distinct_ = other.is_distinct_;
     is_view_stmt_ = other.is_view_stmt_;
     view_ref_id_ = other.view_ref_id_;
@@ -370,7 +364,40 @@ int ObSelectStmt::iterate_stmt_expr(ObStmtExprVisitor &visitor)
   return ret;
 }
 
+void ObSelectStmt::set_graph_feedback_loop(
+    bool is_graph_feedback_loop,
+    const GraphPathDesc &path_desc)
+{
+  is_graph_feedback_loop_ = is_graph_feedback_loop;
+  graph_path_graph_id_ = path_desc.graph_id_;
+  graph_path_graph_version_ = path_desc.graph_version_;
+  graph_path_source_element_id_ = path_desc.source_element_id_;
+  graph_path_edge_element_id_ = path_desc.edge_element_id_;
+  graph_path_target_element_id_ = path_desc.target_element_id_;
+  graph_path_lower_bound_ = path_desc.lower_bound_;
+  graph_path_upper_bound_ = path_desc.upper_bound_;
+  graph_path_direction_ = path_desc.direction_;
+  graph_path_mode_ = path_desc.path_mode_;
+  graph_path_row_shape_ = path_desc.row_shape_;
+  graph_path_need_path_ = path_desc.need_path_;
+}
 
+GraphPathDesc ObSelectStmt::get_graph_path_desc() const
+{
+  GraphPathDesc path_desc;
+  path_desc.graph_id_ = graph_path_graph_id_;
+  path_desc.graph_version_ = graph_path_graph_version_;
+  path_desc.source_element_id_ = graph_path_source_element_id_;
+  path_desc.edge_element_id_ = graph_path_edge_element_id_;
+  path_desc.target_element_id_ = graph_path_target_element_id_;
+  path_desc.lower_bound_ = graph_path_lower_bound_;
+  path_desc.upper_bound_ = graph_path_upper_bound_;
+  path_desc.direction_ = graph_path_direction_;
+  path_desc.path_mode_ = graph_path_mode_;
+  path_desc.row_shape_ = graph_path_row_shape_;
+  path_desc.need_path_ = graph_path_need_path_;
+  return path_desc;
+}
 
 ObSelectStmt::ObSelectStmt()
     : ObDMLStmt(stmt::T_SELECT)
@@ -382,10 +409,6 @@ ObSelectStmt::ObSelectStmt()
   set_op_ = NONE;
   is_recursive_cte_ = false;
   is_graph_feedback_loop_ = false;
-  graph_path_lower_bound_ = 0;
-  graph_path_upper_bound_ = 0;
-  graph_path_reverse_ = false;
-  graph_path_mode_ = GraphPathMode::WALK;
   is_view_stmt_ = false;
   view_ref_id_ = OB_INVALID_ID;
   select_type_ = AFFECT_FOUND_ROWS;

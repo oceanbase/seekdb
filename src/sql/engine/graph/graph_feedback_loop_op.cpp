@@ -278,13 +278,21 @@ GraphFeedbackLoopSpec::GraphFeedbackLoopSpec(common::ObIAllocator &allocator,
 {
 }
 
-// RecursivePumpSpec replaces the former ObRecursiveUnionAllSpec envelope with
-// the same version and payload, preserving the graph spec's wire layout.
+// Cached plans need the graph and element mapping IDs as well as traversal
+// controls. A native access adapter can therefore consume this descriptor
+// directly instead of reverse-engineering the recursive child plan.
 OB_SERIALIZE_MEMBER((GraphFeedbackLoopSpec, RecursivePumpSpec),
-                    lower_bound_,
-                    upper_bound_,
-                    direction_,
-                    path_mode_);
+                    path_desc_.graph_id_,
+                    path_desc_.graph_version_,
+                    path_desc_.source_element_id_,
+                    path_desc_.edge_element_id_,
+                    path_desc_.target_element_id_,
+                    path_desc_.lower_bound_,
+                    path_desc_.upper_bound_,
+                    path_desc_.direction_,
+                    path_desc_.path_mode_,
+                    path_desc_.row_shape_,
+                    path_desc_.need_path_);
 
 } // namespace sql
 } // namespace oceanbase

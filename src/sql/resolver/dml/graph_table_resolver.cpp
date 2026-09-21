@@ -2155,8 +2155,16 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
       if (OB_SUCC(ret)) {
         ObSchemaGetterGuard &guard = *schema_checker_->get_schema_guard();
         const int64_t saved_session_id = guard.get_session_id();
+        const GraphPathDesc *saved_path_desc = params_.internal_graph_path_desc_;
         guard.set_session_id(0);
+        if (use_feedback_loop) {
+          // The generated T_GRAPH_FEEDBACK_LOOP node only has two relational
+          // children. Carry the typed graph mapping through resolver context
+          // instead of hiding persistent IDs in generated aliases or columns.
+          params_.internal_graph_path_desc_ = &path_desc;
+        }
         ret = resolve_generate_table(*select, node.children_[GRAPH_TABLE_ALIAS], table_item);
+        params_.internal_graph_path_desc_ = saved_path_desc;
         guard.set_session_id(saved_session_id);
         if (OB_SUCC(ret)) {
           ObSchemaObjVersion dependency(graph->get_graph_id(), graph->get_schema_version(),

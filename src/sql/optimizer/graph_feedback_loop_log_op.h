@@ -47,24 +47,20 @@ public:
   {}
   ~GraphFeedbackLoopLogOp() override = default;
 
-  void configure_path(int64_t min_hops,
-                      int64_t max_hops,
-                      bool reverse,
-                      bool pull_to_local,
-                      GraphPathMode path_mode)
+  void configure_path(const GraphPathDesc &path_desc,
+                      bool pull_to_local)
   {
-    min_hops_ = min_hops;
-    max_hops_ = max_hops;
-    reverse_ = reverse;
+    path_desc_ = path_desc;
     pull_to_local_ = pull_to_local;
-    path_mode_ = path_mode;
   }
 
   int initialize_step_access_method();
-  int64_t get_min_hops() const { return min_hops_; }
-  int64_t get_max_hops() const { return max_hops_; }
-  bool is_reverse() const { return reverse_; }
-  GraphPathMode get_path_mode() const { return path_mode_; }
+  const GraphPathDesc &get_path_desc() const { return path_desc_; }
+  int64_t get_min_hops() const { return path_desc_.lower_bound_; }
+  int64_t get_max_hops() const { return path_desc_.upper_bound_; }
+  bool is_reverse() const
+  { return path_desc_.direction_ == GraphPathDirection::IN; }
+  GraphPathMode get_path_mode() const { return path_desc_.path_mode_; }
   GraphFeedbackAccessMethod get_step_access_method() const
   {
     return step_access_method_;
@@ -95,23 +91,16 @@ public:
                                int64_t &inherit_child_ordering_index) override;
   bool is_consume_child_1by1() const override { return true; }
 
-  VIRTUAL_TO_STRING_KV("min hops", min_hops_,
-                       "max hops", max_hops_,
-                       K_(reverse),
+  VIRTUAL_TO_STRING_KV(K_(path_desc),
                        "pull to local", pull_to_local_,
-                       "path mode", static_cast<int64_t>(path_mode_),
                        "step access", static_cast<int64_t>(step_access_method_));
 
 private:
   int get_feedback_exprs(ObIArray<ObRawExpr *> &exprs) const;
 
 private:
-  // Inclusive path-length bounds represented by SQL/PGQ {n,m}.
-  int64_t min_hops_{0};
-  int64_t max_hops_{0};
-  bool reverse_{false};
+  GraphPathDesc path_desc_{};
   bool pull_to_local_{false};
-  GraphPathMode path_mode_{GraphPathMode::WALK};
   GraphFeedbackAccessMethod step_access_method_{GraphFeedbackAccessMethod::UNKNOWN};
 
   DISALLOW_COPY_AND_ASSIGN(GraphFeedbackLoopLogOp);

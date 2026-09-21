@@ -95,27 +95,19 @@ public:
                                  const ObPhyOperatorType type);
   ~GraphFeedbackLoopSpec() = default;
 
-  void set_graph_path(int64_t lower_bound,
-                      int64_t upper_bound,
-                      GraphPathDirection direction,
-                      GraphPathMode path_mode)
+  void set_graph_path(const GraphPathDesc &path_desc)
   {
-    lower_bound_ = lower_bound;
-    upper_bound_ = upper_bound;
-    direction_ = direction;
-    path_mode_ = path_mode;
+    path_desc_ = path_desc;
   }
 
-  int64_t get_lower_bound() const { return lower_bound_; }
-  int64_t get_upper_bound() const { return upper_bound_; }
-  GraphPathDirection get_direction() const { return direction_; }
-  GraphPathMode get_path_mode() const { return path_mode_; }
+  const GraphPathDesc &get_path_desc() const { return path_desc_; }
+  int64_t get_lower_bound() const { return path_desc_.lower_bound_; }
+  int64_t get_upper_bound() const { return path_desc_.upper_bound_; }
+  GraphPathDirection get_direction() const { return path_desc_.direction_; }
+  GraphPathMode get_path_mode() const { return path_desc_.path_mode_; }
 
 private:
-  int64_t lower_bound_{0};
-  int64_t upper_bound_{0};
-  GraphPathDirection direction_{GraphPathDirection::OUT};
-  GraphPathMode path_mode_{GraphPathMode::WALK};
+  GraphPathDesc path_desc_{};
 };
 
 class GraphFeedbackLoopOp final : public RecursivePumpOp

@@ -172,11 +172,12 @@ int GraphFeedbackLoopLogOp::get_plan_item_info(PlanText &plan_text,
   } else {
     BEGIN_BUF_PRINT;
     if (OB_FAIL(BUF_PRINTF("direction=%s, hops={%ld,%ld}, access=%s, mode=%s",
-                           reverse_ ? "IN" : "OUT",
-                           min_hops_,
-                           max_hops_,
+                           path_desc_.direction_ == GraphPathDirection::IN
+                               ? "IN" : "OUT",
+                           path_desc_.lower_bound_,
+                           path_desc_.upper_bound_,
                            access_method_name(step_access_method_),
-                           path_mode_name(path_mode_)))) {
+                           path_mode_name(path_desc_.path_mode_)))) {
     }
     END_BUF_PRINT(plan_item.special_predicates_, plan_item.special_predicates_len_);
   }
@@ -268,10 +269,10 @@ int GraphFeedbackLoopLogOp::do_re_est_cost(EstimateCostInfo &param,
 
   if (OB_ISNULL(get_plan()) || OB_ISNULL(seed) || OB_ISNULL(step)
       || OB_UNLIKELY(get_num_of_child() != 2)
-      || OB_UNLIKELY(min_hops_ < 0 || max_hops_ < min_hops_)) {
+      || OB_UNLIKELY(!path_desc_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid graph feedback cost inputs", K(ret), K(min_hops_),
-             K(max_hops_), K(get_num_of_child()), K(seed), K(step));
+    LOG_WARN("invalid graph feedback cost inputs", K(ret), K_(path_desc),
+             K(get_num_of_child()), K(seed), K(step));
   } else if (OB_FAIL(child_param.assign(param))) {
   } else {
     // A LIMIT above the walk cannot reduce an intermediate frontier without
@@ -288,8 +289,8 @@ int GraphFeedbackLoopLogOp::do_re_est_cost(EstimateCostInfo &param,
   if (OB_SUCC(ret)) {
     estimate_bounded_graph_feedback(seed_rows,
                                     first_step_rows,
-                                    min_hops_,
-                                    max_hops_,
+                                    path_desc_.lower_bound_,
+                                    path_desc_.upper_bound_,
                                     step_access_method_,
                                     recursive_work_rows,
                                     output_rows,
@@ -324,8 +325,8 @@ int GraphFeedbackLoopLogOp::get_card_without_filter(double &card)
   } else {
     estimate_bounded_graph_feedback(seed->get_card(),
                                     step->get_card(),
-                                    min_hops_,
-                                    max_hops_,
+                                    path_desc_.lower_bound_,
+                                    path_desc_.upper_bound_,
                                     step_access_method_,
                                     recursive_work_rows,
                                     card,
@@ -336,11 +337,18 @@ int GraphFeedbackLoopLogOp::get_card_without_filter(double &card)
 
 uint64_t GraphFeedbackLoopLogOp::hash(uint64_t seed) const
 {
-  seed = do_hash(min_hops_, seed);
-  seed = do_hash(max_hops_, seed);
-  seed = do_hash(reverse_, seed);
+  seed = do_hash(path_desc_.graph_id_, seed);
+  seed = do_hash(path_desc_.graph_version_, seed);
+  seed = do_hash(path_desc_.source_element_id_, seed);
+  seed = do_hash(path_desc_.edge_element_id_, seed);
+  seed = do_hash(path_desc_.target_element_id_, seed);
+  seed = do_hash(path_desc_.lower_bound_, seed);
+  seed = do_hash(path_desc_.upper_bound_, seed);
+  seed = do_hash(static_cast<int64_t>(path_desc_.direction_), seed);
+  seed = do_hash(static_cast<int64_t>(path_desc_.path_mode_), seed);
+  seed = do_hash(static_cast<int64_t>(path_desc_.row_shape_), seed);
+  seed = do_hash(path_desc_.need_path_, seed);
   seed = do_hash(pull_to_local_, seed);
-  seed = do_hash(static_cast<int64_t>(path_mode_), seed);
   seed = do_hash(static_cast<int64_t>(step_access_method_), seed);
   return ObLogicalOperator::hash(seed);
 }
