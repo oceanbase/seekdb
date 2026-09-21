@@ -83,13 +83,10 @@ int ObTmpFileIOCtx::init(const int64_t fd, const int64_t dir_id,
   } else if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_TMP_FILE_FD == fd ||
                          ObTmpFileGlobal::INVALID_TMP_FILE_DIR_ID == dir_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(fd), K(dir_id));
   } else if (OB_UNLIKELY(!io_flag.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(fd), K(io_flag));
   } else if (OB_UNLIKELY(io_timeout_ms < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(fd), K(io_timeout_ms));
   } else {
     fd_ = fd;
     dir_id_ = dir_id;
@@ -168,13 +165,10 @@ int ObTmpFileIOCtx::prepare_read(char *read_buf, const int64_t read_size)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", KR(ret), KPC(this));
   } else if (OB_ISNULL(read_buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(fd_), KP(read_buf));
   } else if (OB_UNLIKELY(read_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(fd_), K(read_size));
   } else {
     is_read_ = true;
     buf_ = read_buf;
@@ -191,7 +185,6 @@ int ObTmpFileIOCtx::prepare_read(char *read_buf, const int64_t read_size, const 
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(read_offset < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(fd_), K(read_offset));
   } else if (OB_FAIL(prepare_read(read_buf, read_size))) {
   } else {
     read_offset_in_file_ = read_offset;
@@ -204,13 +197,10 @@ int ObTmpFileIOCtx::prepare_write(char *write_buf, const int64_t write_size)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", KR(ret), KPC(this));
   } else if (OB_ISNULL(write_buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(fd_), KP(write_buf));
   } else if (OB_UNLIKELY(write_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(fd_), K(write_size));
   } else {
     is_read_ = false;
     buf_ = write_buf;
@@ -227,16 +217,12 @@ int ObTmpFileIOCtx::update_data_size(const int64_t size)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", KR(ret), KPC(this));
   } else if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid ctx", KR(ret), KPC(this));
   } else if (OB_UNLIKELY(size > todo_size_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(fd_), K(size), K(todo_size_));
   } else if (OB_UNLIKELY(is_read_ && read_offset_in_file_ < 0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("read offset is invalid", KR(ret), K(fd_), K(read_offset_in_file_));
   } else {
     if (is_read_) {
       read_offset_in_file_ += size;
@@ -253,10 +239,8 @@ int ObTmpFileIOCtx::wait()
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", KR(ret), KPC(this));
   } else if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid ctx", KR(ret), K(fd_), KPC(this));
   } else if (!is_read_) {
     // due to tmp file always writes data in buffer,
     // there are no asynchronous io tasks need to wait
@@ -273,10 +257,8 @@ int ObTmpFileIOCtx::wait_read_finish_()
 
   if (OB_UNLIKELY(!is_read_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the handle is prepared for writing, not allowed to wait read finish", KR(ret), KPC(this));
   } else if (OB_UNLIKELY(buf_size_ != done_size_ + todo_size_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("done_size_ + todo_size_ is not equal to buf size", KR(ret), KPC(this));
   } else if (OB_FAIL(do_read_wait_())) {
   }
 
@@ -291,7 +273,6 @@ int ObTmpFileIOCtx::do_read_wait_()
     ObPageCacheHandle &page_cache_handle = page_cache_handles_.at(i);
     if (OB_UNLIKELY(!page_cache_handle.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("page cache handle is not valid", KR(ret), K(fd_), K(page_cache_handle), KPC(this));
     } else {
       const char * page_buf = page_cache_handle.page_handle_.value_->get_buffer();
       const int64_t offset_in_page = page_cache_handle.offset_in_src_data_buf_;
@@ -299,13 +280,10 @@ int ObTmpFileIOCtx::do_read_wait_()
       char * read_buf = page_cache_handle.dest_user_read_buf_;
       if (OB_ISNULL(page_buf)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("data buf is null", KR(ret), K(fd_), K(page_cache_handle));
       } else if (OB_UNLIKELY(!check_buf_range_valid(read_buf, read_size))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid range", KR(ret), K(fd_), KP(read_buf), KP(buf_), K(read_size), K(buf_size_), KPC(this));
       } else if (OB_UNLIKELY(offset_in_page + read_size > ObTmpFileGlobal::ALLOC_PAGE_SIZE)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("read size is over than page range", KR(ret), KPC(this), K(offset_in_page), K(read_size));
       } else {
         MEMCPY(read_buf, page_buf + offset_in_page, read_size);
         page_cache_handle.page_handle_.reset();
@@ -320,7 +298,6 @@ int ObTmpFileIOCtx::do_read_wait_()
     ObBlockCacheHandle &block_cache_handle = block_cache_handles_.at(i);
     if (OB_UNLIKELY(!block_cache_handle.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("block cache handle is not valid", KR(ret), K(fd_), K(block_cache_handle), KPC(this));
     } else {
       const char * block_buf = block_cache_handle.block_handle_.value_->get_buffer();
       const int64_t offset_in_block = block_cache_handle.offset_in_src_data_buf_;
@@ -328,13 +305,10 @@ int ObTmpFileIOCtx::do_read_wait_()
       char * read_buf = block_cache_handle.dest_user_read_buf_;
       if (OB_ISNULL(block_buf)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("data buf is null", KR(ret), K(fd_), K(block_cache_handle));
       } else if (OB_UNLIKELY(!check_buf_range_valid(read_buf, read_size))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid range", KR(ret), K(fd_), KP(read_buf), KP(buf_), K(read_size), K(buf_size_), KPC(this));
       } else if (OB_UNLIKELY(offset_in_block + read_size > ObTmpFileGlobal::SN_BLOCK_SIZE)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("read size is over than macro block range", KR(ret), KPC(this), K(offset_in_block), K(read_size));
       } else {
         MEMCPY(read_buf, block_buf + offset_in_block, read_size);
         block_cache_handle.block_handle_.reset();
@@ -350,7 +324,6 @@ int ObTmpFileIOCtx::do_read_wait_()
     ObIOReadHandle &io_handle = io_handles_.at(i);
     if (OB_UNLIKELY(!io_handle.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("io handle is not valid", KR(ret), K(fd_), K(io_handle), KPC(this));
     } else if (OB_FAIL(io_handle.handle_.wait())) {
     } else {
       const char * data_buf = io_handle.handle_.get_buffer();
@@ -359,10 +332,8 @@ int ObTmpFileIOCtx::do_read_wait_()
       char * read_buf = io_handle.dest_user_read_buf_;
       if (OB_ISNULL(data_buf)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("data buf is null", KR(ret), K(fd_), K(io_handle));
       } else if (OB_UNLIKELY(!check_buf_range_valid(read_buf, size))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid range", KR(ret), K(fd_), KP(read_buf), KP(buf_), K(size), K(buf_size_), KPC(this));
       } else {
         MEMCPY(read_buf, data_buf + offset, size);
         io_handle.handle_.reset();

@@ -43,7 +43,6 @@ int ObMySQLUtil::store_length(char *buf, int64_t len, uint64_t length, int64_t &
     ret = OB_SIZE_OVERFLOW;
   } else if (OB_ISNULL(buf)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid input buf", K(ret), KP(buf));
   } else {
     int64_t remain = len - pos;
     if (OB_SUCC(ret)) {
@@ -93,7 +92,6 @@ int ObMySQLUtil::get_length(const char *&pos, uint64_t &length)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pos)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid input buf", KP(pos), K(ret));
   } else {
     get_uint1(pos, sentinel);
     if (sentinel < 251) {
@@ -129,7 +127,6 @@ int ObMySQLUtil::store_str_v(char *buf, int64_t len, const char *str,
 
   if (OB_ISNULL(buf)) { // str could be null
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid input args", KP(buf), K(ret));
   } else {
     if (OB_FAIL(store_length(buf, len, length, pos))) {
     } else if (len >= pos && length <= static_cast<uint64_t>(len - pos)) {
@@ -138,7 +135,6 @@ int ObMySQLUtil::store_str_v(char *buf, int64_t len, const char *str,
         pos += length;
       } else {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid args", "str", ObString(length, str), K(length));
       }
     } else {
       LOG_INFO("=========== store_str_v ====", K(len), K(length), K(pos), K(pos_bk));

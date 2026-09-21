@@ -55,13 +55,9 @@ DEFINE_SERIALIZE(ObIOFd)
   const int64_t ser_len = get_serialize_size();
   if (NULL == buf || buf_len <= 0 || (buf_len - pos) < ser_len) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments.", K(ret), KP(buf), K(buf_len), K(pos), K(ser_len));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, first_id_))) {
-    LOG_WARN("serialize first id failed.", K(ret), K(pos), K(buf_len), K(ser_len), K(*this));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, second_id_))) {
-    LOG_WARN("serialize second id failed.", K(ret), K(pos), K(buf_len), K(ser_len), K(*this));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, third_id_))) {
-    LOG_WARN("serialize third id failed.", K(ret), K(pos), K(buf_len), K(ser_len), K(*this));
   }
   return ret;
 }
@@ -71,13 +67,9 @@ DEFINE_DESERIALIZE(ObIOFd)
   int ret = OB_SUCCESS;
   if (NULL == buf || data_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments.", KP(buf), K(data_len), K(ret));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &first_id_))) {
-    LOG_WARN("decode first_id_ failed.", K(ret), K(pos), K(data_len), K(*this));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &second_id_))) {
-    LOG_WARN("decode second_id_ failed.", K(ret), K(pos), K(data_len), K(*this));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &third_id_))) {
-    LOG_WARN("decode third_id_ failed.", K(ret), K(pos), K(data_len), K(*this));
   }
   return ret;
 }
@@ -99,7 +91,6 @@ int ObDirRegularEntryNameFilter::func(const dirent *entry)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(entry)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (STRLEN(entry->d_name) >= STRLEN(filter_str_)){
     bool is_matched = false;
     switch(type_) {
@@ -121,13 +112,11 @@ int ObDirRegularEntryNameFilter::func(const dirent *entry)
       break;
     default:
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("invalid FilterOperator type", K(ret), K(type_));
       break;
     }
     if (OB_SUCC(ret) && is_matched) {
       ObIODirentEntry p_entry(entry->d_name, entry->d_type);
       if (OB_FAIL(d_entrys_.push_back(p_entry))) {
-        LOG_WARN("fail to push back directory entry", K(ret), K(p_entry), KCSTRING(filter_str_));
       }
     }
   }
@@ -146,7 +135,6 @@ int ObIODevice::get_io_aligned_size(int64_t &aligned_size) const
     aligned_size = DIO_ALIGN_SIZE;
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid device type", K(ret), K_(device_type));
   }
   return ret;
 }
@@ -176,7 +164,6 @@ int ObIODevice::get_device_name(char *buf, int32_t len)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf) || len <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(buf), K(len));
   } else {
     snprintf(buf, len, "DeviceType:%d/MediaID:%ld", device_type_, media_id_);
   }

@@ -37,7 +37,6 @@ int ObSqlSockSession::init() {
   if (OB_SUCC(ret) &&
       OB_ISNULL(nio_connection_handle_ = nio_connection_handle_acquire(this))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to acquire Rust SQL-NIO connection handle", K(ret));
   }
   return ret;
 }

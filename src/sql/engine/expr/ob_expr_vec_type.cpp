@@ -37,7 +37,6 @@ int ObExprVecType::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(param_num < 1) || OB_ISNULL(types)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument for fulltext expr", K(ret), K(param_num), KP(types));
   } else {
     type.set_char();
     type.set_length(0);
@@ -65,7 +64,6 @@ int ObExprVecType::cg_expr(
   UNUSED(expr_cg_ctx);
   if (OB_UNLIKELY(rt_expr.arg_cnt_ < 1) || OB_ISNULL(rt_expr.args_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(rt_expr.arg_cnt_), KP(rt_expr.args_), K(rt_expr.type_));
   } else {
     rt_expr.eval_func_ = generate_vec_type;
   }

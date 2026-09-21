@@ -40,16 +40,12 @@ int ObAccessPathEstimation::estimate_rowcount(ObOptimizerContext &ctx,
 
   if (OB_UNLIKELY(paths.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(classify_paths(paths, normal_paths, geo_paths, index_merge_paths))) {
   } else if (!normal_paths.empty() &&
              OB_FAIL(inner_estimate_rowcount(ctx, normal_paths, is_inner_path, filter_exprs, method))) {
-    LOG_WARN("failed to do estimate rowcount for normal paths", K(ret));
   } else if (!geo_paths.empty() &&
              OB_FAIL(inner_estimate_rowcount(ctx, geo_paths, is_inner_path, filter_exprs, geo_method))) {
-    LOG_WARN("failed to do estimate rowcount for geo paths", K(ret));
   } else if (!index_merge_paths.empty() && inner_estimate_index_merge_rowcount(index_merge_paths, method)) {
-    LOG_WARN("failed to do estimate rowcount for index merge paths", K(ret));
   } else if (normal_paths.empty() && index_merge_paths.empty() && !geo_paths.empty()) {
     method = geo_method;
   }
@@ -70,14 +66,12 @@ int ObAccessPathEstimation::inner_estimate_index_merge_rowcount(common::ObIArray
         || OB_ISNULL(sel_ctx = paths.at(i)->est_cost_info_.sel_ctx_)
         || OB_ISNULL(table_meta_info = paths.at(i)->est_cost_info_.table_meta_info_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), KPC(paths.at(i)), K(sel_ctx), K(table_meta_info));
     } else if (OB_FAIL(ObOptEstCost::calculate_filter_selectivity(*paths.at(i)))) {
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < paths.at(i)->root_->children_.count(); ++j) {
       ObIndexMergeNode *child = paths.at(i)->root_->children_.at(j);
       if (OB_ISNULL(child) || OB_ISNULL(child->ap_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null child node", K(ret), KPC(child));
       } else if (OB_FAIL(selectivities.push_back(1.0 - child->ap_->est_cost_info_.prefix_filter_sel_))) {
       } else {
         sum_child_sel += child->ap_->est_cost_info_.prefix_filter_sel_;
@@ -123,7 +117,6 @@ int ObAccessPathEstimation::inner_estimate_rowcount(ObOptimizerContext &ctx,
   for (int64_t i = 0; OB_SUCC(ret) && i < paths.count(); i ++) {
     if (OB_ISNULL(paths.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), K(paths.at(i)));
     } else {
       paths.at(i)->est_cost_info_.est_method_ = method;
     }
@@ -144,7 +137,6 @@ int ObAccessPathEstimation::do_estimate_rowcount(ObOptimizerContext &ctx,
       OB_UNLIKELY((method & EST_DS_FULL) && (method & EST_DS_BASIC)) ||
       OB_UNLIKELY((method & EST_DEFAULT) && (method & EST_STAT))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected est method", K(ret), K(method));
   }
 
   if (OB_SUCC(ret) && (method & (EST_DS_BASIC | EST_DS_FULL))) {
@@ -198,7 +190,6 @@ int ObAccessPathEstimation::get_valid_est_methods(ObOptimizerContext &ctx,
       OB_ISNULL(log_plan->get_stmt()) ||
       FALSE_IT(table_meta = log_plan->get_basic_table_metas().get_table_meta_by_table_id(paths.at(0)->table_id_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(log_plan));
   } else if (ctx.use_default_stat()) {
     valid_methods = EST_DEFAULT;
   } else {
@@ -245,7 +236,6 @@ int ObAccessPathEstimation::get_valid_est_methods(ObOptimizerContext &ctx,
   if (OB_SUCC(ret) && (valid_methods & EST_DS_METHODS) &&
       OB_FAIL(check_can_use_dynamic_sampling(
           ctx, *log_plan, *table_meta, filter_exprs, valid_methods, hint_specify_methods))) {
-    LOG_WARN("failed to check dynamic sampling", K(ret));
   }
 
   return ret;
@@ -268,7 +258,6 @@ int ObAccessPathEstimation::check_can_use_dynamic_sampling(ObOptimizerContext &c
   int64_t valid_filter_cnt = 0;
   if (OB_ISNULL(table_meta.get_base_meta_info())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(table_meta));
   } else if (OB_FAIL(ObDynamicSamplingUtils::get_valid_dynamic_sampling_level(
       ctx.get_session_info(),
       log_plan.get_log_plan_hint().get_dynamic_sampling_hint(table_meta.get_table_id()),
@@ -290,7 +279,6 @@ int ObAccessPathEstimation::check_can_use_dynamic_sampling(ObOptimizerContext &c
     bool invalid = false;
     if (OB_ISNULL(filter_exprs.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), K(filter_exprs.at(i)));
     } else if (OB_FAIL(ObDynamicSamplingUtils::check_ds_can_be_applied_to_filter(filter_exprs.at(i), invalid, total_expr_cnt))) {
     } else if (total_expr_cnt > OB_DS_MAX_FILTER_EXPR_COUNT) {
       valid_methods &= ~EST_DS_FULL;
@@ -354,7 +342,6 @@ int ObAccessPathEstimation::choose_best_est_method(ObOptimizerContext &ctx,
 
   if (OB_ISNULL(ctx.get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null param", K(ret));
   }
 
   // check is simple scene
@@ -362,10 +349,8 @@ int ObAccessPathEstimation::choose_best_est_method(ObOptimizerContext &ctx,
   for (int64_t i = 0; OB_SUCC(ret) && !is_table_get && i < paths.count(); ++i) {
     if (OB_ISNULL(paths.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), K(paths.at(i)));
     } else if (paths.at(i)->get_query_range_provider() != NULL &&
                OB_FAIL(paths.at(i)->get_query_range_provider()->is_get(is_table_get))) {
-      LOG_WARN("check query range is table get", K(ret));
     }
   }
   is_simple_scene = is_table_get;
@@ -450,7 +435,6 @@ int ObAccessPathEstimation::is_storage_estimation_enabled(const ObLogPlan* log_p
   bool is_hint_enabled = false;
   if (OB_ISNULL(log_plan)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(log_plan));
   } else if (is_virtual_table(ref_table_id)) {
     //virtual table
     can_use = false;
@@ -475,7 +459,6 @@ int ObAccessPathEstimation::check_path_can_use_storage_estimation(const AccessPa
   int64_t partition_limit = 0;
   if (OB_ISNULL(path) || OB_ISNULL(ctx.get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param is invalid", K(ret), K(path), K(ctx.get_session_info()));
   } else if (OB_FAIL(is_storage_estimation_enabled(path->parent_->get_plan(), ctx ,path->table_id_, path->ref_table_id_, can_use))) {
   } else if (!can_use) {
     can_use = false;
@@ -484,7 +467,6 @@ int ObAccessPathEstimation::check_path_can_use_storage_estimation(const AccessPa
     const ObTablePartitionInfo *part_info = NULL;
     if (OB_ISNULL(part_info = path->table_partition_info_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table partition info is null", K(ret), K(part_info));
     } else {
       int64_t scan_range_count = get_scan_range_count(path->get_query_ranges());
       if (range_limit < 0 && partition_limit < 0) {
@@ -513,7 +495,6 @@ int ObAccessPathEstimation::process_vtable_default_estimation(AccessPath *path)
   double output_row_count = 0.0;
   if (OB_ISNULL(path)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("path is null", K(ret), K(path));
   } else {
     ObCostTableScanInfo &est_cost_info = path->est_cost_info_;
     est_cost_info.batch_type_ = ObSimpleBatch::T_SCAN;
@@ -540,16 +521,13 @@ int ObAccessPathEstimation::process_table_default_estimation(ObOptimizerContext 
     AccessPath *path = paths.at(i);
     if (OB_ISNULL(path)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(paths));
     } else if (ctx.use_default_stat()) {
       if (OB_FAIL(process_table_force_default_estimation(path))) {
       } else if (i == 0 && OB_FAIL(update_table_stat_info_by_default(path))) {
-        LOG_WARN("failed to update table stat by default", K(ret));
       }
     } else if (is_virtual_table(path->ref_table_id_)) {
       if (OB_FAIL(process_vtable_default_estimation(path))) {
       } else if (i == 0 && OB_FAIL(update_table_stat_info_by_default(path))) {
-        LOG_WARN("failed to update table stat by default", K(ret));
       }
     } else if (OB_FAIL(process_statistics_estimation(path))) {
     } 
@@ -563,7 +541,6 @@ int ObAccessPathEstimation::process_table_force_default_estimation(AccessPath *p
   double output_row_count = ObOptStatManager::get_default_table_row_count();
   if (OB_ISNULL(path)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("path is null", K(ret), K(path));
   } else {
     ObCostTableScanInfo &est_cost_info = path->est_cost_info_;
     path->est_cost_info_.logical_query_range_row_count_ = output_row_count;
@@ -609,7 +586,6 @@ int ObAccessPathEstimation::process_storage_estimation(ObOptimizerContext &ctx,
       OB_ISNULL(ctx.get_exec_ctx()) ||
       OB_ISNULL(ctx.get_exec_ctx()->get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param is invalid", K(ret), K(ctx.get_session_info()), K(ctx.get_exec_ctx()));
   } else if (OB_FAIL(get_index_dive_limit(ctx, &range_limit, &partition_limit))) {
   } else {
     if (partition_limit < 0 && range_limit < 0) {
@@ -631,10 +607,8 @@ int ObAccessPathEstimation::process_storage_estimation(ObOptimizerContext &ctx,
       if (OB_ISNULL(ap = paths.at(i)) || OB_ISNULL(ap->parent_) || OB_ISNULL(ap->parent_->get_plan()) ||
           OB_ISNULL(table_part_info = ap->table_partition_info_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("access path is invalid", K(ret), K(ap), K(table_part_info), K(ctx.get_exec_ctx()));
       } else if (OB_ISNULL(result_helper = result_helpers.alloc_place_holder())) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to alloc", K(ret));
       } else {
         result_helper->path_ = ap;
         result_helper->result_.valid_partition_count_ = ap->est_cost_info_.index_meta_info_.index_part_count_;
@@ -655,7 +629,6 @@ int ObAccessPathEstimation::process_storage_estimation(ObOptimizerContext &ctx,
                 OB_FAIL(tmp_part_info.replace_final_location_key(*ctx.get_exec_ctx(),
                                                                  ap->index_id_,
                                                                  true))) {
-        LOG_WARN("failed to replace final location key", K(ret));
       } else if (OB_FAIL(calc_range_partition_helper.init(ap->get_table_id(),
                                                           ap->is_global_index_ ? ap->get_index_table_id() : ap->get_ref_table_id(),
                                                           ap->parent_->get_plan()->get_stmt(),
@@ -700,12 +673,10 @@ int ObAccessPathEstimation::process_storage_estimation(ObOptimizerContext &ctx,
   for (int64_t i = 0; OB_SUCC(ret) && !need_fallback && i < tasks.count(); ++i) {
     if (OB_ISNULL(tasks.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("task is null", K(ret));
     } else if (OB_FAIL(do_storage_estimation(*tasks.at(i)))) {
       if (is_retry_ret(ret)) {
         //retry code throw error, and retry
       } else {
-        LOG_WARN("failed to process storage estimation", K(ret));
         need_fallback = true;
         ret = OB_SUCCESS;
       }
@@ -721,7 +692,6 @@ int ObAccessPathEstimation::process_storage_estimation(ObOptimizerContext &ctx,
 
   if (OB_SUCC(ret) && !need_fallback &&
       OB_FAIL(process_storage_estimation_result(tasks, result_helpers, is_success))) {
-    LOG_WARN("failed to process result", K(ret));
   }
 
   // deconstruct ObBatchEstTasks
@@ -759,7 +729,6 @@ int ObAccessPathEstimation::add_storage_estimation_task(ObOptimizerContext &ctx,
   const ObTableMetaInfo *table_meta = NULL;
   if (OB_ISNULL(table_meta = ap.est_cost_info_.table_meta_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("access path is invalid", K(ret), K(ap), K(table_meta));
   } else if (OB_FAIL(choose_storage_estimation_partitions(partition_limit,
                                                           index_partitions,
                                                           chosen_partitions))) {
@@ -818,7 +787,6 @@ int ObAccessPathEstimation::add_storage_estimation_task_by_ranges(ObOptimizerCon
       OB_UNLIKELY(ori_partitions.count() != index_partitions.count()) ||
       OB_UNLIKELY(ori_partitions.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected param", K(ret), K(table_meta), K(ori_partitions), K(index_partitions));
   } else if (OB_FAIL(choose_storage_estimation_ranges(range_limit,
                                                       ap.est_cost_info_.ranges_,
                                                       ap.est_cost_info_.index_meta_info_.is_geo_index_,
@@ -841,7 +809,6 @@ int ObAccessPathEstimation::add_storage_estimation_task_by_ranges(ObOptimizerCon
         if (ObOptimizerUtil::find_item(tablet_ids,
                         ori_partitions.at(j).get_partition_location().get_tablet_id()) &&
             OB_FAIL(valid_partitions_for_range.push_back(index_partitions.at(j)))) {
-          LOG_WARN("failed to push back", K(ret));
         }
       }
     }
@@ -918,16 +885,13 @@ int ObAccessPathEstimation::get_storage_estimation_task(ObOptimizerContext &ctx,
   } else if (!tasks.empty()) {
     if (OB_ISNULL(task = tasks.at(0))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid local storage estimation task", K(ret));
     }
   } else if (OB_ISNULL(ptr = arena.alloc(sizeof(ObBatchEstTasks)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("memory is not enough", K(ret));
   } else {
     task = new (ptr) ObBatchEstTasks();
     task->arg_.schema_version_ = table_meta.schema_version_;
     if (OB_FAIL(tasks.push_back(task))) {
-      LOG_WARN("failed to push back", K(ret));
       task->~ObBatchEstTasks();
       task = nullptr;
     }
@@ -949,7 +913,6 @@ int ObAccessPathEstimation::process_storage_estimation_result(ObIArray<ObBatchEs
     const ObBatchEstTasks *task = tasks.at(i);
     if (OB_ISNULL(task)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected param", K(ret));
     } else {
       OPT_TRACE(*tasks.at(i));
     }
@@ -961,7 +924,6 @@ int ObAccessPathEstimation::process_storage_estimation_result(ObIArray<ObBatchEs
       if (OB_ISNULL(path) || OB_UNLIKELY(j >= task->arg_.index_params_.count()) ||
           OB_UNLIKELY(j >= task->range_idx_.count())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null path", K(ret));
       } else if (OB_FAIL(append(path->est_records_, res.est_records_))) {
       } else if (!res.reliable_) {
         // do nothing
@@ -1046,7 +1008,6 @@ int ObAccessPathEstimation::process_storage_estimation_result(ObIArray<ObBatchEs
                                                  result_helpers.at(i).result_.physical_row_count_,
                                                  range_graph_with_exec_param,
                                                  path->est_cost_info_))) {
-        LOG_WARN("failed to estimate prefix range rowcount", K(ret));
       } else if (OB_FAIL(fill_cost_table_scan_info(path->est_cost_info_))) {
       }
       OPT_TRACE("The storage estimation result of index", result_helpers.at(i).path_->index_id_, "is",
@@ -1070,7 +1031,6 @@ int ObAccessPathEstimation::get_result_helper(ObIArray<EstResultHelper> &result_
   }
   if (idx < 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get result helper", K(ret));
   }
   return ret;
 }
@@ -1207,7 +1167,6 @@ int ObAccessPathEstimation::choose_storage_estimation_partitions(const int64_t p
     }
     if (OB_FAIL(min_max_index.add_member(min_index)) ||
         OB_FAIL(min_max_index.add_member(max_index))) {
-      LOG_WARN("failed to add member", K(ret));
     } else if (OB_FAIL(ObOptimizerUtil::choose_random_members(
                           STORAGE_EST_SAMPLE_SEED, partitions, partition_limit,
                           chosen_partitions, &min_max_index))) {
@@ -1231,7 +1190,6 @@ int ObAccessPathEstimation::choose_storage_estimation_ranges(const int64_t range
     int64_t total_cnt = geo_ranges.count();
     if (geo_ranges.at(0).get_start_key().get_obj_cnt() < SPATIAL_ROWKEY_MIN_NUM) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("The count of rowkey from spatial_index_table is wrong.", K(ret), K(geo_ranges.at(0).get_start_key().get_obj_cnt()));
     } else if (total_cnt <= range_limit || range_limit <= 0) {
       if (OB_FAIL(scan_ranges.assign(geo_ranges))) {
       }
@@ -1283,7 +1241,6 @@ int ObAccessPathEstimation::get_valid_partition_info(ObOptimizerContext &ctx,
   for (int i = 0; OB_SUCC(ret) && !find_valid_info && i < valid_partition_infos.count(); i ++) {
     if (OB_ISNULL(valid_partition_infos.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret));
     } else if (valid_partition_infos.at(i)->get_ref_table_id() == table_partition_info.get_ref_table_id()) {
       find_valid_info = true;
       valid_partition_info = valid_partition_infos.at(i);
@@ -1293,11 +1250,9 @@ int ObAccessPathEstimation::get_valid_partition_info(ObOptimizerContext &ctx,
     void *ptr = allocator.alloc(sizeof(ObTablePartitionInfo));
     if (OB_ISNULL(ptr)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory", K(ptr), K(ret));
     } else {
       valid_partition_info = new(ptr)ObTablePartitionInfo(allocator);
       if (OB_FAIL(valid_partition_infos.push_back(valid_partition_info))) {
-        LOG_WARN("failed to push back", K(ret));
         valid_partition_info->~ObTablePartitionInfo();
         valid_partition_info = nullptr;
       } else if (OB_FAIL(get_valid_partition_info(ctx, table_partition_info, *valid_partition_info))) {
@@ -1326,7 +1281,6 @@ int ObAccessPathEstimation::get_valid_partition_info(ObOptimizerContext &ctx,
       OB_ISNULL(ctx.get_opt_stat_manager()) ||
       OB_UNLIKELY(all_partitions.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(table_partition_info), K(ctx.get_session_info()), K(ctx.get_opt_stat_manager()));
   } else {
     valid_table_loc.set_table_location_key(table_loc.get_table_location_key(), table_loc.get_ref_table_id());
   }
@@ -1338,7 +1292,6 @@ int ObAccessPathEstimation::get_valid_partition_info(ObOptimizerContext &ctx,
   if (FAILEDx(ctx.get_opt_stat_manager()->get_table_stat(table_partition_info.get_ref_table_id(),
                                                          all_part_ids,
                                                          part_stats))) {
-    LOG_WARN("failed to get table stats", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < part_stats.count(); i ++) {
     const ObOptTableStat &stat = part_stats.at(i);
@@ -1373,14 +1326,11 @@ int ObAccessPathEstimation::add_index_info(ObOptimizerContext &ctx,
   obcall::ObEstPartArgElement *index_est_arg = NULL;
   if (OB_ISNULL(task) || OB_ISNULL(ctx.get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid access path or batch task", K(ret), K(task), K(ap));
   } else if (OB_FAIL(scan_ranges.assign(chosen_scan_ranges))) {
   } else if (OB_FAIL(task->paths_.push_back(&ap)) ||
              OB_FAIL(task->range_idx_.push_back(range_idx))) {
-    LOG_WARN("failed to push back access path", K(ret));
   } else if (OB_ISNULL(index_est_arg = task->arg_.index_params_.alloc_place_holder())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate index argument", K(ret));
   } else if (OB_FAIL(get_key_ranges(ctx, allocator, tablet.tablet_id_, ap, scan_ranges))) {
   } else {
     index_est_arg->index_id_ = ap.index_id_;
@@ -1397,7 +1347,6 @@ int ObAccessPathEstimation::add_index_info(ObOptimizerContext &ctx,
       scan_ranges.at(i).table_id_ = ap.index_id_;
     }
     if (FAILEDx(construct_scan_range_batch(allocator, scan_ranges, index_est_arg->batch_))) {
-      LOG_WARN("failed to construct scan range batch", K(ret));
     } 
   }
   return ret;
@@ -1411,7 +1360,6 @@ int ObAccessPathEstimation::process_statistics_estimation(AccessPath *path)
   const ObTableMetaInfo *table_meta_info = NULL;
   if (OB_ISNULL(path) || OB_ISNULL(table_meta_info = path->est_cost_info_.table_meta_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("path is null", K(ret), K(path), K(table_meta_info));
   } else if (OB_FAIL(ObOptEstCost::calculate_filter_selectivity(*path))) {
   } else {
     ObArenaAllocator allocator;
@@ -1490,7 +1438,6 @@ int ObAccessPathEstimation::construct_scan_range_batch(ObIAllocator &allocator,
     void *ptr = allocator.alloc(sizeof(SQLScanRange));
     if (OB_ISNULL(ptr)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory", K(ptr), K(ret));
     } else {
       SQLScanRange *range = new(ptr)SQLScanRange();
       *range = scan_ranges.at(0);
@@ -1502,7 +1449,6 @@ int ObAccessPathEstimation::construct_scan_range_batch(ObIAllocator &allocator,
     void *ptr = allocator.alloc(sizeof(SQLScanRangeArray));
     if (OB_ISNULL(ptr)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory", K(ptr), K(ret));
     } else {
       range_array = new(ptr)SQLScanRangeArray();
       batch.type_ = ObSimpleBatch::T_MULTI_SCAN;
@@ -1568,7 +1514,6 @@ int ObAccessPathEstimation::estimate_full_table_rowcount(ObOptimizerContext &ctx
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(part_loc_info_array));
   }
   return ret;
 }
@@ -1587,7 +1532,6 @@ int ObAccessPathEstimation::storage_estimate_full_table_rowcount(ObOptimizerCont
     arg.schema_version_ = meta.schema_version_;
     if (OB_ISNULL(ctx.get_session_info())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (is_virtual_table(meta.ref_table_id_)) {
       // do nothing
     } else if (get_local_estimation_tablet(part_loc_info, local_tablet)) {
@@ -1607,18 +1551,15 @@ int ObAccessPathEstimation::storage_estimate_full_table_rowcount(ObOptimizerCont
                                                range))) {
       } else if (OB_ISNULL(path_arg.batch_.range_ = range)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to generate whole range", K(ret), K(range));
       } else if (OB_FAIL(arg.index_params_.push_back(path_arg))) {
       } else if (OB_FAIL(do_storage_estimation(task))) {
         if (is_retry_ret(ret)) {
           //retry code throw error, and retry
         } else {
-          LOG_WARN("failed to do storage estimation", K(ret));
           ret = OB_SUCCESS;
         }
       } else if (OB_UNLIKELY(res.index_param_res_.count() != 1)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("storage estimation result size is unexpected", K(ret));
       } else if (res.index_param_res_.at(0).reliable_) {
         int64_t logical_row_count = res.index_param_res_.at(0).logical_row_count_;
         meta.table_row_count_ = logical_row_count;
@@ -1648,7 +1589,6 @@ int ObAccessPathEstimation::storage_estimate_range_rowcount(ObOptimizerContext &
   int64_t total_part_cnt = part_loc_infos.count();
   if (OB_ISNULL(ctx.get_session_info()) || (!estimate_whole_range && OB_ISNULL(ranges))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (is_virtual_table(meta.ref_table_id_)) {
     need_fallback = true;
   } else if (OB_FAIL(ctx.get_global_hint().opt_params_.get_sys_var(ObOptParamHint::PARTITION_INDEX_DIVE_LIMIT,
@@ -1673,7 +1613,6 @@ int ObAccessPathEstimation::storage_estimate_range_rowcount(ObOptimizerContext &
                                                range))) {
       } else if (OB_ISNULL(range)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("null range", K(ret));
       } else if (OB_FAIL(whole_range.push_back(*range))) {
       } else {
         ranges = &whole_range;
@@ -1684,7 +1623,6 @@ int ObAccessPathEstimation::storage_estimate_range_rowcount(ObOptimizerContext &
   if (OB_FAIL(ret) || need_fallback) {
   } else if (OB_ISNULL(ranges)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ranges is null", K(ret));
   } else if (OB_FAIL(choose_storage_estimation_ranges(range_limit, *ranges, false, chosen_scan_ranges))) {
   } else if (OB_FAIL(choose_storage_estimation_partitions(partition_limit,
                                                           part_loc_infos,
@@ -1719,12 +1657,10 @@ int ObAccessPathEstimation::storage_estimate_range_rowcount(ObOptimizerContext &
     ObBatchEstTasks *task = NULL;
     if (OB_ISNULL(task = tasks.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("task is null", K(ret));
     } else if (OB_FAIL(do_storage_estimation(*tasks.at(i)))) {
       if (is_retry_ret(ret)) {
         //retry code throw error, and retry
       } else {
-        LOG_WARN("failed to process storage estimation", K(ret));
         need_fallback = true;
         ret = OB_SUCCESS;
       }
@@ -1776,7 +1712,6 @@ int ObAccessPathEstimation::estimate_full_table_rowcount_by_meta_table(ObOptimiz
     //do nothing
   } else if (OB_ISNULL(ctx.get_session_info()) || OB_ISNULL(ctx.get_opt_stat_manager())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(ctx.get_session_info()), K(ctx.get_opt_stat_manager()));
   } else if (OB_FAIL(ctx.get_opt_stat_manager()->get_table_rowcnt(meta.ref_table_id_,
                                                                   all_tablet_ids,
                                                                   meta.table_row_count_))) {
@@ -1809,7 +1744,6 @@ int ObAccessPathEstimation::process_dynamic_sampling_estimation(ObOptimizerConte
              OB_ISNULL(table_meta = log_plan->get_basic_table_metas().get_table_meta_by_table_id(paths.at(0)->table_id_)) ||
              OB_UNLIKELY(OB_INVALID_ID == table_meta->get_ref_table_id())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(log_plan), KPC(table_meta));
   } else if (OB_FAIL(ObDynamicSamplingUtils::get_ds_table_param(ctx, log_plan, table_meta,
                                                                 ds_table_param, specify_ds))) {
   } else if (!ds_table_param.is_valid()) {
@@ -1851,7 +1785,6 @@ int ObAccessPathEstimation::process_dynamic_sampling_estimation(ObOptimizerConte
             is_success = false;
           }
         } else {
-          LOG_WARN("failed to dynamic sampling", K(ret), K(start_time), K(ds_table_param));
         }
       } else if (OB_FAIL(update_table_stat_info_by_dynamic_sampling(paths.at(0),
                                                                     ds_table_param.ds_level_,
@@ -1885,7 +1818,6 @@ int ObAccessPathEstimation::add_ds_result_items(ObIArray<AccessPath *> &paths,
       OB_ISNULL(paths.at(0)) ||
       OB_ISNULL(paths.at(0)->parent_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(paths));
   } else if (only_ds_basic_stat) {// some filters invalid, only dynamic basic stats
     ObDSResultItem basic_item(ObDSResultItemType::OB_DS_BASIC_STAT, paths.at(0)->ref_table_id_);
     if (OB_FAIL(get_need_dynamic_sampling_columns(paths.at(0)->parent_->get_plan(),
@@ -1903,18 +1835,15 @@ int ObAccessPathEstimation::add_ds_result_items(ObIArray<AccessPath *> &paths,
                                                   paths.at(0)->table_id_,
                                                   filter_item.exprs_, true, false,
                                                   basic_item.exprs_))) {
-      LOG_WARN("failed to get need dynamic sampling columns", K(ret));
     //1.init ds basic stat item
     } else if (OB_FAIL(ds_result_items.push_back(basic_item))) {
     } else if (!filter_item.exprs_.empty() &&
                OB_FAIL(ds_result_items.push_back(filter_item))) {
-      LOG_WARN("failed to push back", K(ret));
     } 
     //3.init query range item
     for (int64_t i = 0; OB_SUCC(ret) && i < paths.count(); ++i) {
       if (OB_ISNULL(paths.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(paths.at(i)));
       } else if (!paths.at(i)->est_cost_info_.prefix_filters_.empty() ||
                  !paths.at(i)->est_cost_info_.pushdown_prefix_filters_.empty()) {
         ObDSResultItem tmp_item(ObDSResultItemType::OB_DS_INDEX_SCAN_STAT, paths.at(i)->index_id_);
@@ -1948,18 +1877,14 @@ int ObAccessPathEstimation::get_need_dynamic_sampling_columns(const ObLogPlan* l
   ObSEArray<ObRawExpr*, 16> condition_raw_exprs;
   if (OB_ISNULL(log_plan)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(log_plan));
   } else if (OB_ISNULL(log_plan->get_stmt()) ||
              OB_UNLIKELY(!log_plan->get_stmt()->is_select_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parameters", K(ret), KPC(log_plan->get_stmt()));
   } else if (OB_FAIL(log_plan->get_stmt()->get_where_scope_conditions(condition_raw_exprs))) {
   } else if (need_except_filter &&
              OB_FAIL(ObOptimizerUtil::except_exprs(condition_raw_exprs, filter_exprs, relation_raw_exprs))) {
-    LOG_WARN("failed to except exprs", K(ret));
   } else if (!need_except_filter &&
              OB_FAIL(relation_raw_exprs.assign(condition_raw_exprs))) {
-    LOG_WARN("failed to assign", K(ret));
   } else if (depend_on_join_filter && relation_raw_exprs.empty()) {
     //do nothing
   } else {
@@ -1971,7 +1896,6 @@ int ObAccessPathEstimation::get_need_dynamic_sampling_columns(const ObLogPlan* l
       for (int64_t i = 0; OB_SUCC(ret) && i < select_stmt->get_select_item_size(); ++i) {
         if (OB_ISNULL(select_stmt->get_select_item(i).expr_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret), K(select_stmt->get_select_item(i)));
         } else if (!select_stmt->get_select_item(i).expr_->is_column_ref_expr()) {
           //do nothing
         } else if (OB_FAIL(relation_raw_exprs.push_back(select_stmt->get_select_item(i).expr_))) {
@@ -2004,7 +1928,6 @@ int ObAccessPathEstimation::update_table_stat_info_by_dynamic_sampling(AccessPat
       OB_UNLIKELY(item->stat_handle_.stat_->get_sample_block_ratio() <= 0 ||
                   item->stat_handle_.stat_->get_sample_block_ratio() > 100.0)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), KPC(path), KPC(item), K(ds_result_items));
   } else if (item->stat_handle_.stat_->get_rowcount() == 0 && item->stat_handle_.stat_->get_sample_block_ratio() != 100.0) {
     no_ds_data = true;
   } else {
@@ -2039,7 +1962,6 @@ int ObAccessPathEstimation::update_table_stat_info_by_default(AccessPath *path)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(path)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), KPC(path));
   } else if (path->get_output_row_count() > 0) {
     OptTableMetas &table_metas = path->parent_->get_plan()->get_basic_table_metas();
     OptTableMeta *table_meta = table_metas.get_table_meta_by_table_id(path->table_id_);
@@ -2082,7 +2004,6 @@ int ObAccessPathEstimation::estimate_path_rowcount_by_dynamic_sampling(const uin
       OB_ISNULL(table_metas = paths.at(0)->est_cost_info_.table_metas_) ||
       OB_ISNULL(sel_ctx = paths.at(0)->est_cost_info_.sel_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(table_id), KPC(all_filter_item), K(paths), K(ds_result_items));
   } else {
     double output_rowcnt = all_filter_item->stat_handle_.stat_->get_rowcount();
     int64_t micro_block_count = all_filter_item->stat_handle_.stat_->get_micro_block_num();
@@ -2100,7 +2021,6 @@ int ObAccessPathEstimation::estimate_path_rowcount_by_dynamic_sampling(const uin
       double index_back_non_ds_sel = 1.0;
       if (OB_ISNULL(paths.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(paths.at(i)));
       } else {
         const ObDSResultItem *index_range_result_item = ObDynamicSamplingUtils::get_ds_result_item(ObDSResultItemType::OB_DS_INDEX_SCAN_STAT,
                                                                                                paths.at(i)->index_id_,
@@ -2110,10 +2030,8 @@ int ObAccessPathEstimation::estimate_path_rowcount_by_dynamic_sampling(const uin
                                                                                                ds_result_items);
         if (NULL != index_range_result_item &&
             OB_FAIL(process_non_ds_filters(*table_metas, *sel_ctx, *index_range_result_item, index_range_non_ds_sel, all_predicate_sel))) {
-          LOG_WARN("failed to get non ds sel", K(ret), KPC(all_filter_item));
         } else if (NULL != index_back_result_item &&
                    OB_FAIL(process_non_ds_filters(*table_metas, *sel_ctx, *index_back_result_item, index_back_non_ds_sel, all_predicate_sel))) {
-          LOG_WARN("failed to get non ds sel", K(ret), KPC(all_filter_item));
         } else {
           ObCostTableScanInfo &est_cost_info = paths.at(i)->est_cost_info_;
           est_cost_info.table_meta_info_->micro_block_count_ = micro_block_count;
@@ -2268,7 +2186,6 @@ int ObAccessPathEstimation::classify_paths(ObIArray<AccessPath *> &paths,
   for (int64_t i = 0; OB_SUCC(ret) && i < paths.count(); ++i) {
     if (OB_ISNULL(paths.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get null path", K(ret));
     } else if (paths.at(i)->is_index_merge_path()) {
       if (OB_FAIL(index_merge_paths.push_back(static_cast<IndexMergePath*>(paths.at(i))))) {
       } else if (OB_FAIL(static_cast<IndexMergePath*>(paths.at(i))->get_all_scan_access_paths(normal_paths))) {
@@ -2289,19 +2206,16 @@ int ObAccessPathEstimation::get_index_dive_limit(ObOptimizerContext &ctx,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ctx.get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else if (NULL != partition_index_dive_limit &&
              OB_FAIL(ctx.get_global_hint().opt_params_.get_sys_var(ObOptParamHint::PARTITION_INDEX_DIVE_LIMIT,
                                                                    ctx.get_session_info(),
                                                                    share::SYS_VAR_PARTITION_INDEX_DIVE_LIMIT,
                                                                    *partition_index_dive_limit))) {
-    LOG_WARN("failed to get hint system variable", K(ret));
   } else if (NULL != range_index_dive_limit &&
              OB_FAIL(ctx.get_global_hint().opt_params_.get_sys_var(ObOptParamHint::RANGE_INDEX_DIVE_LIMIT,
                                                                    ctx.get_session_info(),
                                                                    share::SYS_VAR_RANGE_INDEX_DIVE_LIMIT,
                                                                    *range_index_dive_limit))) {
-    LOG_WARN("failed to get hint system variable", K(ret));
   }
   return ret;
 }
@@ -2321,7 +2235,6 @@ int RangePartitionHelper::init(uint64_t table_id,
   table_partition_info_ = &table_partition_info;
   if (OB_UNLIKELY(share::schema::PARTITION_LEVEL_MAX == part_level_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected part level.", K(ret), K(table_location));
   } else if (share::schema::PARTITION_LEVEL_ZERO == part_level_) {
     all_partition_is_valid_ = true;
   } else if (OB_FAIL(get_range_projector(table_id,
@@ -2375,7 +2288,6 @@ int RangePartitionHelper::init(uint64_t table_id,
       if (share::schema::PARTITION_LEVEL_TWO == part_level_ &&
           OB_FAIL(add_var_to_array_no_dup(used_level_one_part_ids_,
                                           static_cast<ObObjectID>(tablet_loc.get_first_level_part_id())))) {
-        LOG_WARN("failed to add var", K(ret));
       } else if (OB_FAIL(used_tablet_ids_.push_back(tablet_loc.get_tablet_id()))) {
       }
     }
@@ -2407,7 +2319,6 @@ int RangePartitionHelper::get_range_projector(uint64_t table_id,
   bool all_find = true;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(stmt));
   } else {
     if (OB_FAIL(stmt->get_partition_columns(table_id, ref_table_id,
                                             share::schema::PARTITION_LEVEL_ONE,
@@ -2416,7 +2327,6 @@ int RangePartitionHelper::get_range_projector(uint64_t table_id,
               OB_FAIL(stmt->get_partition_columns(table_id, ref_table_id,
                                                   share::schema::PARTITION_LEVEL_TWO,
                                                   sub_part_columns, sub_gen_columns))) {
-      LOG_WARN("failed to get partition columns", K(ret));
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < range_columns.count(); ++i) {
@@ -2425,8 +2335,6 @@ int RangePartitionHelper::get_range_projector(uint64_t table_id,
   }
   // get partition projector by partition columns
   if (FAILEDx(extract_column_projector(range_exprs, part_columns, part_projector))) {
-    LOG_WARN("failed to extract projector", K(ret), K(range_exprs), K(part_columns));
-  // get partition projector by generated columns
   } else if (OB_FAIL(extract_column_projector(range_exprs, gen_columns, gen_projector))) {
   } else if (OB_FAIL(extract_column_projector(range_exprs, sub_part_columns, sub_part_projector))) {
   } else if (OB_FAIL(extract_column_projector(range_exprs, sub_gen_columns, sub_gen_projector))) {
@@ -2462,7 +2370,6 @@ int RangePartitionHelper::get_scan_range_partitions(ObExecContext &exec_ctx,
   ObSEArray<ObObjectID, 8> sub_part_ids;
   if (OB_ISNULL(table_partition_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(table_partition_info_));
   } else if (all_partition_is_valid_) {
     // do nothing
   } else if (share::schema::PARTITION_LEVEL_ONE == part_level_) {
@@ -2502,7 +2409,6 @@ int RangePartitionHelper::get_scan_range_partitions(ObExecContext &exec_ctx,
                                                  tablet_ids,
                                                  sub_part_ids,
                                                  &part_ids))) {
-      LOG_WARN("failed to get scan range partitions", K(ret));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -2531,15 +2437,12 @@ int RangePartitionHelper::get_scan_range_partitions(ObExecContext &exec_ctx,
   bool is_valid = true;
   if (OB_UNLIKELY(part_projector.empty() && gen_projector.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("part projector and gen projector both empty", K(ret));
   } else if (!part_projector.empty() &&
              OB_FAIL(construct_partition_range(alloc, scan_range, part_range, part_projector, is_valid))) {
-    LOG_WARN("failed to construct partition range", K(ret));
   } else if (!is_valid) {
     // do nothing
   } else if (!gen_projector.empty() &&
              OB_FAIL(construct_partition_range(alloc, scan_range, gen_range, gen_projector, is_valid))) {
-    LOG_WARN("failed to construct partition range", K(ret));
   } else if (!is_valid) {
     // do nothing
   } else {
@@ -2580,13 +2483,11 @@ int RangePartitionHelper::construct_partition_range(ObArenaAllocator &allocator,
   if (OB_ISNULL(start_key = static_cast<ObObj*>(allocator.alloc(sizeof(ObObj) * key_count))) ||
       OB_ISNULL(end_key = static_cast<ObObj*>(allocator.alloc(sizeof(ObObj) * key_count)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory", K(ret), K(start_key), K(end_key));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < key_count; ++i) {
     int64_t pos = part_projector.at(i);
     if (OB_UNLIKELY(pos < 0 || pos >= scan_range.start_key_.get_obj_cnt())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid array pos", K(ret), K(pos), K(scan_range.start_key_.get_obj_cnt()));
     } else {
       start_key[i] = scan_range.start_key_.get_obj_ptr()[pos];
       end_key[i] = scan_range.end_key_.get_obj_ptr()[pos];

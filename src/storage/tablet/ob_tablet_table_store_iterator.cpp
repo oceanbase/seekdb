@@ -130,7 +130,6 @@ int ObTableStoreIterator::get_next(ObTableHandleV2 &table_handle)
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected table type", K(ret), KPC(table));
     }
     if (OB_SUCC(ret)) {
       pos_ += step_;
@@ -146,7 +145,6 @@ int ObTableStoreIterator::get_boundary_table(const bool is_last, ObITable *&tabl
   int64_t table_idx = -1;
   if (!is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid table store iterator to get boundary table", K(ret), K_(table_ptr_array));
   } else {
     if (is_last) {
       table_idx = step_ > 0 ? (count - 1) : 0;
@@ -178,7 +176,6 @@ int ObTableStoreIterator::set_handle(const ObStorageMetaHandle &table_store_hand
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!table_store_handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid table store handle", K(ret), K(table_store_handle));
   } else {
     table_store_handle_ = table_store_handle;
   }
@@ -192,7 +189,6 @@ int ObTableStoreIterator::add_table(ObITable *table)
   TablePtr table_ptr;
   if (OB_ISNULL(table)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid table ptr", K(ret), KP(table));
   } else if (FALSE_IT(table_ptr.table_ = table)) {
   } else if (table->is_memtable()) {
     // lifetime guaranteed by tablet_handle_
@@ -202,7 +198,6 @@ int ObTableStoreIterator::add_table(ObITable *table)
   }
 
   if (FAILEDx(table_ptr_array_.push_back(table_ptr))) {
-    LOG_WARN("fail to push table handle into array", K(ret));
   }
   return ret;
 }
@@ -248,7 +243,6 @@ int ObTableStoreIterator::add_tables(
       || start_pos < 0
       || start_pos + count > sstable_array.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(sstable_array), K(start_pos), K(count));
   } else {
     for (int64_t i = start_pos; OB_SUCC(ret) && i < start_pos + count; ++i) {
       if (OB_FAIL(add_table(sstable_array[i]))) {
@@ -265,7 +259,6 @@ int ObTableStoreIterator::add_tables(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!memtable_array.is_valid() || start_pos >= memtable_array.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(memtable_array), K(start_pos));
   } else {
     for (int64_t i = start_pos; OB_SUCC(ret) && i < memtable_array.count(); ++i) {
       if (OB_FAIL(add_table(memtable_array[i]))) {
@@ -281,10 +274,8 @@ int ObTableStoreIterator::get_ith_table(const int64_t pos, ObITable *&table)
   ObITable *tmp_table = nullptr;
   if (OB_UNLIKELY(pos < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(pos));
   } else if (OB_ISNULL(tmp_table = table_ptr_array_.at(pos).table_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected invalid table handle", K(ret), KP(tmp_table), K(pos), K(table_ptr_array_));
   } else if (tmp_table->is_memtable()) {
     table = tmp_table;
   } else if (static_cast<ObSSTable *>(tmp_table)->is_loaded() || !need_load_sstable_) {
@@ -295,7 +286,6 @@ int ObTableStoreIterator::get_ith_table(const int64_t pos, ObITable *&table)
     ObSSTable *sstable = nullptr;
     if (OB_UNLIKELY(hdl_idx < 0 || hdl_idx >= sstable_handle_array_.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected handle idx for loaded sstable", K(ret), K(hdl_idx), KPC(tmp_table), KPC(this));
     } else if (OB_FAIL(sstable_handle_array_.at(hdl_idx).get_sstable(sstable))) {
     } else {
       table = sstable;
@@ -315,7 +305,6 @@ int ObTableStoreIterator::set_retire_check()
     const TablePtr &table_ptr = table_ptr_array_.at(i);
     if (OB_UNLIKELY(!table_ptr.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected invalid table handle", K(ret), K(table_ptr), K(*this));
     } else if (table_ptr.table_->is_memtable()) {
       first_memtable = table_ptr.table_;
     } else {

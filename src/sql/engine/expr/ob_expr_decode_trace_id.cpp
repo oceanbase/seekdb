@@ -37,7 +37,6 @@ int ObExprDecodeTraceId::calc_result_type1(ObExprResType &type,
   UNUSED(type_ctx);
   if (!trace_id.is_null() && !trace_id.is_string_type()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument type", K(ret));
   } else {
     trace_id.set_calc_type_default_varchar();
     trace_id.set_calc_collation_level(CS_LEVEL_SYSCONST);
@@ -57,7 +56,6 @@ int ObExprDecodeTraceId::calc_decode_trace_id_expr(const ObExpr &expr, ObEvalCtx
   if (OB_FAIL(expr.args_[0]->eval(ctx, trace_id_datum))) {
   } else if (OB_ISNULL(trace_id_datum)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param datum is null pointer", K(ret));
   } else if (trace_id_datum->is_null()) {
     res_datum.set_null();
   } else if (OB_FAIL(calc_one_row(expr, ctx, *trace_id_datum, res_datum))) {
@@ -75,10 +73,8 @@ int ObExprDecodeTraceId::calc_decode_trace_id_expr_batch(const ObExpr &expr, ObE
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else if (OB_ISNULL(results = expr.locate_batch_datums(ctx))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("results datum is null pointer", K(ret));
   } else if (OB_ISNULL(trace_id_datum_array = expr.args_[0]->locate_batch_datums(ctx))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param datum is null pointer", K(ret));
   } else {
     ObEvalCtx::BatchInfoScopeGuard guard(ctx);
     guard.set_batch_size(batch_size);
@@ -106,10 +102,8 @@ int ObExprDecodeTraceId::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("extract expr should have 1 params", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of extract expr is null", K(ret), K(rt_expr.args_));
   } else {
     rt_expr.eval_func_ = ObExprDecodeTraceId::calc_decode_trace_id_expr;
     rt_expr.eval_batch_func_ = ObExprDecodeTraceId::calc_decode_trace_id_expr_batch;

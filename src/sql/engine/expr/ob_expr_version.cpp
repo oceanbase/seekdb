@@ -52,7 +52,6 @@ int ObExprVersion::eval_version(const ObExpr &expr, ObEvalCtx &ctx,
   ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
   if (OB_ISNULL(session)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("session is null", K(ret));
   } else {
     ObString version;
     if (OB_FAIL(session->get_sys_variable(share::SYS_VAR_VERSION, version))) {

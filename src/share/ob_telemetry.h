@@ -35,8 +35,11 @@ static const int64_t TELEMETRY_UUID_STRING_LENGTH = 36;
 // HMAC-SHA256(machine-id bytes,
 //             app-id[16]
 //             || uint64_be(base-dir byte length) || base-dir bytes
-//             [|| uint64_be(16) || container-scope-id bytes[16]]),
+//             [|| uint64_be(16) || container-scope-id bytes[16]]
+//             [|| uint64_be(created-at-us)]),
 // truncated to 16 bytes before applying the UUID v8 and RFC variant bits.
+// Positive creation time is persisted in telemetry.json and never updated.
+// Zero omits the creation-time suffix for callers using the old derivation.
 int generate_telemetry_uuid(const char *machine_id,
                             const int64_t machine_id_len,
                             const char *base_dir,
@@ -44,7 +47,8 @@ int generate_telemetry_uuid(const char *machine_id,
                             const char *scope_id,
                             const int64_t scope_id_len,
                             char *uuid,
-                            const int64_t uuid_len);
+                            const int64_t uuid_len,
+                            const int64_t created_at_us = 0);
 
 int report_telemetry(const char *reporter, const char *event_name);
 

@@ -25,10 +25,8 @@ int CopyTableStatHelper::copy_part_stat(ObIArray<ObOptTableStat *> &table_stats)
   ObOptTableStat *dst_part_stat = NULL;
   if (OB_ISNULL(src_part_stat_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_ISNULL(dst_part_stat = OB_NEWx(ObOptTableStat, allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate mem", K(ret));
   } else {
     dst_part_stat->set_table_id(table_id_);
     dst_part_stat->set_partition_id(dst_part_id_);
@@ -55,7 +53,6 @@ int CopyTableStatHelper::copy_part_stat(ObIArray<ObOptTableStat *> &table_stats)
         || dst_part_stat->get_macro_block_num() < 0
         || dst_part_stat->get_micro_block_num() < 0) {
       ret = OB_DATA_OUT_OF_RANGE;
-      LOG_WARN("data of dst_part_stat out of range", K(ret), K(scale_factor_), KPC(dst_part_stat));
     } else if (OB_FAIL(table_stats.push_back(dst_part_stat))) {
     } else {
     }
@@ -71,7 +68,6 @@ int CopyTableStatHelper::copy_col_stat(bool is_subpart,
   bool is_src_part_equal_to_lower_bound = true;
   if (OB_ISNULL(src_part_stat_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else if (OB_FAIL(check_range_part(is_subpart, col_handles, is_src_part_equal_to_lower_bound))) {
   } else {
     for (int i = 0; OB_SUCC(ret) && i < col_handles.count(); ++i) {
@@ -80,7 +76,6 @@ int CopyTableStatHelper::copy_col_stat(bool is_subpart,
       ObCopyPartInfo *dst_part_info = NULL;
       if (OB_ISNULL(src_col_stat) || OB_ISNULL(allocator_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), KP(allocator_), KP(src_col_stat));
       } else if (src_col_stat->get_partition_id() != src_part_stat_->get_partition_id()) {
         LOG_TRACE("partition id not match, do nothing", K(src_col_stat->get_partition_id()),
                                                         K(src_part_stat_->get_partition_id()));
@@ -89,7 +84,6 @@ int CopyTableStatHelper::copy_col_stat(bool is_subpart,
       } else {
         if (OB_ISNULL(dst_col_stat = ObOptColumnStat::malloc_new_column_stat(*allocator_))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to allocate mem", K(ret));
         } else if ((!is_subpart && !is_contain(part_column_ids_, src_col_stat->get_column_id()))
                    || (is_subpart && !is_contain(subpart_column_ids_, src_col_stat->get_column_id()))) {
           if (OB_FAIL(dst_col_stat->deep_copy(*src_col_stat))) {
@@ -102,7 +96,6 @@ int CopyTableStatHelper::copy_col_stat(bool is_subpart,
         } else if (OB_FAIL(dst_part_map_.get_refactored(src_col_stat->get_column_id(), dst_part_info))) {
         } else if (OB_ISNULL(dst_part_info)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret));
         } else {
           if (dst_part_info->is_normal_range_part_ && is_src_part_equal_to_lower_bound) {
             dst_part_info->min_res_type_ = CopyPrePartUpperBound;
@@ -145,7 +138,6 @@ int CopyTableStatHelper::copy_col_stat(bool is_subpart,
           dst_col_stat->set_num_distinct(2);
         }
         if (OB_SUCC(ret) && OB_FAIL(column_stats.push_back(dst_col_stat))) {
-          LOG_WARN("failed to push back column stat", K(ret));
         }
       }
     }
@@ -165,7 +157,6 @@ int CopyTableStatHelper::check_range_part(bool is_subpart,
     ObCopyPartInfo *dst_part_info = NULL;
     if (OB_ISNULL(allocator_) || OB_ISNULL(src_col_stat)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), KP(allocator_), KP(src_col_stat));
     } else if (src_col_stat->get_partition_id() != src_part_stat_->get_partition_id()) {
     } else if ((!is_subpart && !is_contain(part_column_ids_, src_col_stat->get_column_id()))
                || (is_subpart && !is_contain(subpart_column_ids_, src_col_stat->get_column_id()))) {
@@ -174,7 +165,6 @@ int CopyTableStatHelper::check_range_part(bool is_subpart,
       if (OB_FAIL(dst_part_map_.get_refactored(src_col_stat->get_column_id(), dst_part_info))) {
       } else if (OB_ISNULL(dst_part_info)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (0 != src_col_stat->get_min_value().compare(dst_part_info->src_part_lower_bound_) ||
                  0 != src_col_stat->get_max_value().compare(dst_part_info->src_part_lower_bound_) ||
                  1 != src_col_stat->get_num_distinct()) {
@@ -192,7 +182,6 @@ int CopyTableStatHelper::copy_min_val(const common::ObObj &src_min_val,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator_) || OB_ISNULL(dst_part_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), KP(allocator_), KP(dst_part_info));
   } else {
     switch (dst_part_info->min_res_type_) {
       case CopyDstPartLowerBound: {
@@ -219,7 +208,6 @@ int CopyTableStatHelper::copy_min_val(const common::ObObj &src_min_val,
       case CopyMaxSrcValDstBound:
       default: {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("get invalid argument", K(ret));
       }
     }
   }
@@ -233,7 +221,6 @@ int CopyTableStatHelper::copy_max_val(const common::ObObj &src_max_val,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator_) || OB_ISNULL(dst_part_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), KP(allocator_), KP(dst_part_info));
   } else {
     switch (dst_part_info->max_res_type_) {
       case CopyDstPartLowerBound: {
@@ -269,7 +256,6 @@ int CopyTableStatHelper::copy_max_val(const common::ObObj &src_max_val,
       case CopySrcPartMinVal:
       default: {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("get invalid argument", K(ret));
       }
     }
   }
@@ -295,7 +281,6 @@ int ObDbmsStatsCopyTableStats::extract_partition_column_ids(CopyTableStatHelper 
   ObSEArray<uint64_t, 8> column_ids;
   if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(table_schema->get_column_ids(column_ids))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < column_ids.count(); ++i) {
@@ -304,14 +289,12 @@ int ObDbmsStatsCopyTableStats::extract_partition_column_ids(CopyTableStatHelper 
         if (OB_FAIL(table_schema->get_partition_key_info().is_rowkey_column(column_ids.at(i), is_part))) {
         } else if (is_part &&
                  OB_FAIL(add_var_to_array_no_dup(copy_stat_helper.part_column_ids_, column_ids.at(i)))) {
-          LOG_WARN("failed to push back part column ids", K(ret));
         }
         if (OB_SUCC(ret) && PARTITION_LEVEL_TWO == table_schema->get_part_level()) {
           bool is_subpart = false;
           if (OB_FAIL(table_schema->get_subpartition_key_info().is_rowkey_column(column_ids.at(i), is_subpart))) {
           } else if (is_subpart &&
                   OB_FAIL(add_var_to_array_no_dup(copy_stat_helper.subpart_column_ids_, column_ids.at(i)))) {
-            LOG_WARN("failed to push back part column ids", K(ret));
           }
         }
       }
@@ -331,7 +314,6 @@ int ObDbmsStatsCopyTableStats::check_parts_valid(sql::ObExecContext &ctx,
   const ObString &dstpart_name = helper.dstpart_name_;
   if (table_stat_param.part_infos_.empty()) {
     ret = OB_WRONG_PARTITION_NAME;
-    LOG_WARN("The table is not partitioned, so the partition name is invalid", K(ret));
     LOG_USER_ERROR(OB_WRONG_PARTITION_NAME, srcpart_name.length(), srcpart_name.ptr());
   } else {
     bool is_src_onepart = ObDbmsStatsUtils::find_part(table_stat_param.all_part_infos_,
@@ -353,8 +335,6 @@ int ObDbmsStatsCopyTableStats::check_parts_valid(sql::ObExecContext &ctx,
     if ((!is_src_onepart && !is_src_twopart) ||
         (!is_dst_onepart && !is_dst_twopart)) {
       ret = OB_WRONG_PARTITION_NAME;
-      LOG_WARN("invalid src/dst part name", K(ret), K(is_src_onepart), K(is_src_twopart),
-               K(is_dst_onepart), K(is_dst_twopart), K(srcpart_name), K(dstpart_name));
       if (!is_dst_onepart && !is_dst_twopart) {
         LOG_USER_ERROR(OB_WRONG_PARTITION_NAME, dstpart_name.length(), dstpart_name.ptr());
       } else {
@@ -363,7 +343,6 @@ int ObDbmsStatsCopyTableStats::check_parts_valid(sql::ObExecContext &ctx,
     } else if ((is_src_twopart && is_dst_onepart)
                || (is_src_onepart && is_dst_twopart)) {
       ret = OB_ERR_DBMS_STATS_PL;
-      LOG_WARN("src partition and dst partition type are different", K(ret));
       LOG_USER_ERROR(OB_ERR_DBMS_STATS_PL, "src partition and dst partition type are different");
     } else if (is_src_onepart && is_dst_onepart) {
       copy_level = CopyOnePartLevel;
@@ -421,11 +400,9 @@ int ObDbmsStatsCopyTableStats::find_src_tab_stat(const ObTableStatParam &table_s
   src_tab_stat = NULL;
   if (OB_UNLIKELY(table_stat_param.part_infos_.count() != 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("should only have one part info", K(ret), K(table_stat_param.part_infos_.count()));
   } else if (table_stat_param.is_subpart_name_
              && OB_UNLIKELY(table_stat_param.subpart_infos_.count() != 1)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("should only have one subpart info", K(ret), K(table_stat_param.subpart_infos_.count()));
   } else {
     int64_t src_part_id = OB_INVALID_ID;
     if (table_stat_param.is_subpart_name_) {
@@ -437,7 +414,6 @@ int ObDbmsStatsCopyTableStats::find_src_tab_stat(const ObTableStatParam &table_s
       ObOptTableStat * cur_tab_stat = const_cast<ObOptTableStat *>(tab_handles.at(i).stat_);
       if (OB_ISNULL(cur_tab_stat)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(cur_tab_stat), K(table_stat_param.part_infos_));
       } else if (src_part_id == cur_tab_stat->get_partition_id()) {
         src_tab_stat = cur_tab_stat;
       }
@@ -458,7 +434,6 @@ int ObDbmsStatsCopyTableStats::get_dst_part_infos(const ObTableStatParam &table_
   bool found_src = false;
   if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (!table_schema->is_partitioned_table()) {
     // do nothing
   } else if (OB_FAIL(helper.dst_part_map_.create(7, "DstPartBucket", "DstPartNode"))) {
@@ -471,7 +446,6 @@ int ObDbmsStatsCopyTableStats::get_dst_part_infos(const ObTableStatParam &table_
     while (OB_SUCC(ret) && !is_found && OB_SUCC(iter.next(part))) {
       if (OB_ISNULL(part)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get null partition", K(ret), K(part));
       } else if (ObCharset::case_insensitive_equal(helper.dstpart_name_, part->get_part_name())) {
         if (OB_FAIL(get_dst_part_info(table_schema, helper, part, pre_part, copy_level))) {
         } else {
@@ -496,7 +470,6 @@ int ObDbmsStatsCopyTableStats::get_dst_part_infos(const ObTableStatParam &table_
     while (OB_SUCC(ret) && !is_found && OB_SUCC(iter.next(part))) {
       if (OB_ISNULL(part)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("part is null", KR(ret));
       } else {
         ObSubPartIterator sub_iter(*table_schema, *part, check_partition_mode);
         const ObSubPartition *subpart = NULL;
@@ -504,7 +477,6 @@ int ObDbmsStatsCopyTableStats::get_dst_part_infos(const ObTableStatParam &table_
         while (OB_SUCC(ret) && !is_found && OB_SUCC(sub_iter.next(subpart))) {
           if (OB_ISNULL(subpart)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get null subpartition", K(ret));
           } else if (ObCharset::case_insensitive_equal(helper.dstpart_name_, subpart->get_part_name())) {
             if (OB_FAIL(get_dst_part_info(table_schema, helper, subpart, pre_subpart, copy_level))) {
             } else {
@@ -542,7 +514,6 @@ int ObDbmsStatsCopyTableStats::get_dst_part_info(const ObTableSchema *table_sche
   int ret = OB_SUCCESS;
   if (OB_ISNULL(part) || OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", KPC(part), K(table_schema));
   } else if ((copy_level == CopyOnePartLevel &&
               is_hash_like_part(table_schema->get_part_option().get_part_func_type())) ||
              (copy_level == CopyTwoPartLevel &&
@@ -557,7 +528,6 @@ int ObDbmsStatsCopyTableStats::get_dst_part_info(const ObTableSchema *table_sche
     int64_t list_val_cnt = part->get_list_row_values().count();
     if (OB_UNLIKELY(list_val_cnt == 0)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("get invalid argument", K(ret), KPC(part));
     } else if (list_val_cnt == 1 && part->get_list_row_values().at(0).get_cell(0).is_max_value()) {
       // default part
       if (OB_FAIL(get_hash_or_default_part_info(table_schema,
@@ -597,7 +567,6 @@ int ObDbmsStatsCopyTableStats::get_hash_or_default_part_info(const ObTableSchema
   int ret = OB_SUCCESS;
   if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     int64_t sz = 0;
     if (copy_level == CopyOnePartLevel) {
@@ -610,7 +579,6 @@ int ObDbmsStatsCopyTableStats::get_hash_or_default_part_info(const ObTableSchema
       if (OB_FAIL(get_copy_part_info(table_schema, copy_level, i, helper, dst_part_info))) {
       } else if (OB_ISNULL(dst_part_info)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else {
         dst_part_info->min_res_type_ = CopySrcPartMinVal;
         dst_part_info->max_res_type_ = CopySrcPartMaxVal;
@@ -630,7 +598,6 @@ int ObDbmsStatsCopyTableStats::get_normal_list_part_info(const ObTableSchema *ta
   int ret = OB_SUCCESS;
   if (OB_ISNULL(table_schema) || OB_ISNULL(part)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(table_schema), K(part));
   } else {
     const common::ObNewRow &low_row = part->get_list_row_values().at(0);
     const common::ObNewRow &high_row = part->get_list_row_values().at(list_val_cnt - 1);
@@ -639,7 +606,6 @@ int ObDbmsStatsCopyTableStats::get_normal_list_part_info(const ObTableSchema *ta
       if (OB_FAIL(get_copy_part_info(table_schema, copy_level, i, helper, dst_part_info))) {
       } else if (OB_ISNULL(dst_part_info)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(ob_write_obj(*helper.allocator_,
                                       low_row.get_cell(i),
                                       dst_part_info->part_lower_bound_))) {
@@ -667,7 +633,6 @@ int ObDbmsStatsCopyTableStats::get_range_part_info(const ObTableSchema *table_sc
   int ret = OB_SUCCESS;
   if (OB_ISNULL(table_schema) || OB_ISNULL(part)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(table_schema), K(part));
   } else {
     const ObRowkey &high_bound_val = part->get_high_bound_val();
     const ObRowkey &low_bound_val = part->get_low_bound_val();
@@ -680,24 +645,20 @@ int ObDbmsStatsCopyTableStats::get_range_part_info(const ObTableSchema *table_sc
                                       dst_part_info))) {
       } else if (OB_ISNULL(dst_part_info)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate memory", K(ret));
       } else if (NULL != high_bound_val.get_obj_ptr()
                   && OB_FAIL(ob_write_obj(*helper.allocator_,
                                       high_bound_val.get_obj_ptr()[i],
                                       dst_part_info->part_upper_bound_))) {
-        LOG_WARN("failed to copy obj", K(ret));
       } else if (NULL != low_bound_val.get_obj_ptr()
                   && OB_FAIL(ob_write_obj(*helper.allocator_,
                                       low_bound_val.get_obj_ptr()[i],
                                       dst_part_info->part_lower_bound_))) {
-        LOG_WARN("failed to copy obj", K(ret));
       } else if (NULL != pre_part) {
         const ObRowkey &pre_high_bound_val = pre_part->get_high_bound_val();
         if (NULL != pre_high_bound_val.get_obj_ptr()
                   && OB_FAIL(ob_write_obj(*helper.allocator_,
                                       pre_high_bound_val.get_obj_ptr()[i],
                                       dst_part_info->pre_part_upper_bound_))) {
-          LOG_WARN("failed to copy obj", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -737,21 +698,16 @@ int ObDbmsStatsCopyTableStats::get_copy_part_info(const ObTableSchema *table_sch
   ObRowkeyColumn column;
   if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (copy_level == CopyOnePartLevel &&
             OB_FAIL(table_schema->get_partition_key_info().get_column(idx, column))) {
-    LOG_WARN("failed to get partition key info", K(ret));
   } else if (copy_level == CopyTwoPartLevel &&
             OB_FAIL(table_schema->get_subpartition_key_info().get_column(idx, column))) {
-    LOG_WARN("failed to get subpartition key info", K(ret));
   } else if (OB_FAIL(helper.dst_part_map_.get_refactored(column.column_id_, dst_part_info))) {
     if (OB_UNLIKELY(ret != OB_HASH_NOT_EXIST)) {
-      LOG_WARN("failed to get copy part info", K(ret));
     } else {
       ret = OB_SUCCESS;
       if (OB_ISNULL(dst_part_info = OB_NEWx(ObCopyPartInfo, helper.allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate part info", K(ret));
       } else if (OB_FAIL(helper.dst_part_map_.set_refactored(column.column_id_, dst_part_info))) {
       } else {
       }
@@ -769,12 +725,10 @@ int ObDbmsStatsCopyTableStats::get_src_part_info(const ObTableSchema *table_sche
   int ret = OB_SUCCESS;
   if (OB_ISNULL(table_schema) || OB_ISNULL(part)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(part), K(table_schema));
   } else if (OB_UNLIKELY(!table_schema->is_partitioned_table()
             || (CopyOnePartLevel == copy_level && !table_schema->is_range_part())
             || (CopyTwoPartLevel == copy_level && !table_schema->is_range_subpart()))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("only range partitioned table need to get src part info", K(ret));
   } else {
     const ObRowkey &high_bound_val = part->get_high_bound_val();
     const ObRowkey &low_bound_val = NULL != pre_part ? pre_part->get_high_bound_val()
@@ -782,7 +736,6 @@ int ObDbmsStatsCopyTableStats::get_src_part_info(const ObTableSchema *table_sche
     int64_t rowkey_cnt = high_bound_val.get_obj_cnt();
     if (OB_UNLIKELY(rowkey_cnt == 0)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("get invalid rowkey cnt", K(ret), K(high_bound_val));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_cnt; ++i) {
         ObCopyPartInfo *dst_part_info = NULL;
@@ -792,12 +745,10 @@ int ObDbmsStatsCopyTableStats::get_src_part_info(const ObTableSchema *table_sche
                                        dst_part_info))) {
         } else if (OB_ISNULL(dst_part_info)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("failed to allocate memory", K(ret));
         } else if (NULL != low_bound_val.get_obj_ptr()
                    && OB_FAIL(ob_write_obj(*helper.allocator_,
                                         low_bound_val.get_obj_ptr()[i],
                                         dst_part_info->src_part_lower_bound_))) {
-          LOG_WARN("failed to copy obj", K(ret));
         }
       }
     }

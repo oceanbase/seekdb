@@ -51,7 +51,6 @@ int ObAllVirtualPxTargetMonitor::inner_get_next_row(common::ObNewRow *&row)
     ret = OB_ITER_END;
   } else if (OB_ISNULL(cells = cur_row_.cells_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cur row cell is NULL", K(ret));
   } else {
     OB_PX_TARGET_MONITOR.get_target_info(target_info);
     const int64_t col_count = output_column_ids_.count();
@@ -73,7 +72,6 @@ int ObAllVirtualPxTargetMonitor::inner_get_next_row(common::ObNewRow *&row)
         }
         default: {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid column_id", K(ret), K(col_id));
         }
       }
     }

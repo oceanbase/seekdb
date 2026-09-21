@@ -68,21 +68,16 @@ int ObBlockRowStore::init(const ObTableAccessParam &param, common::hash::ObHashS
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObBlockRowStore init twice", K(ret));
   } else if (OB_ISNULL(context_.stmt_allocator_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to init store pushdown filter", K(ret));
   } else if (OB_FAIL(pd_filter_info_.init(param.iter_param_, *context_.stmt_allocator_))) {
   } else if (nullptr != context_.sample_filter_ 
               && OB_FAIL(context_.sample_filter_->combine_to_filter_tree(pd_filter_info_.filter_))) {
-      LOG_WARN("Failed to combine sample filter to filter tree", K(ret), K_(pd_filter_info), KP_(context_.sample_filter));
   } else if (nullptr != pd_filter_info_.filter_ && param.iter_param_.enable_pd_filter_reorder()) {
     if (OB_UNLIKELY(nullptr != where_optimizer_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected where optimizer", K(ret), KP_(where_optimizer));
     } else if (OB_ISNULL(where_optimizer_ = OB_NEWx(ObWhereOptimizer, context_.stmt_allocator_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Failed to alloc memory for ObWhereOptimizer", K(ret));
     } else if (OB_FAIL(where_optimizer_->init(&param.iter_param_, pd_filter_info_.filter_))) {
     }
   }
@@ -102,16 +97,13 @@ int ObBlockRowStore::open(ObTableIterParam &iter_param)
   bool filter_valid = true;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("Not init", K(ret));
   } else if (OB_UNLIKELY(!iter_param.is_valid() ||
         nullptr == iter_param.get_col_params() ||
         nullptr == iter_param.out_cols_project_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to init store pushdown filter", K(ret), K(iter_param));
   } else if (nullptr != context_.truncate_part_filter_
              && context_.truncate_part_filter_->need_combined_to_pd_filter()
              && OB_FAIL(context_.truncate_part_filter_->combine_to_filter_tree(pd_filter_info_.filter_))) {
-    LOG_WARN("Failed to combine truncate filter to filter tree", K(ret), KP_(context_.truncate_part_filter));
   } else if (nullptr == pd_filter_info_.filter_) {
     // nothing to do
   } else if (OB_FAIL(pd_filter_info_.filter_->init_evaluated_datums(filter_valid))) {
@@ -126,7 +118,6 @@ int ObBlockRowStore::open(ObTableIterParam &iter_param)
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(on_scan_start())) {
-    LOG_WARN("failed to start block row store scan", K(ret));
   }
   return ret;
 }
@@ -146,22 +137,18 @@ int PushdownFilterInfo::init(const storage::ObTableIterParam &iter_param,
   allocator_ = &alloc;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("Init twice", K(ret));
   } else if (OB_UNLIKELY(!iter_param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument to init store pushdown filter", K(ret), K(iter_param));
   } else if ((orig_filter_is_null_ = nullptr == iter_param.pushdown_filter_)) {
     // Nothing to allocate when Storage has no pushdown tree.
   } else if (OB_ISNULL(buf = alloc.alloc(
                  sizeof(blocksstable::ObStorageDatum) * out_col_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Fail to allocate memory for pushdown filter col buf", K(ret), K(out_col_cnt));
   } else if (FALSE_IT(datum_buf_ =
                  new (buf) blocksstable::ObStorageDatum[out_col_cnt]())) {
   } else if (OB_ISNULL(buf = alloc.alloc(
                  sizeof(blocksstable::ObStorageDatum) * out_col_cnt))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("Fail to allocate memory for pushdown filter col buf", K(ret), K(out_col_cnt));
   } else if (FALSE_IT(tmp_datum_buf_ =
                  new (buf) blocksstable::ObStorageDatum[out_col_cnt]())) {
   } else {
@@ -177,18 +164,14 @@ int PushdownFilterInfo::init(const storage::ObTableIterParam &iter_param,
     if (OB_FAIL(col_datum_buf_.init(batch_size_, alloc))) {
     } else if (OB_ISNULL(buf = alloc.alloc(sizeof(char *) * batch_size_))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc cell data ptr", K(ret), K(batch_size_));
     } else if (FALSE_IT(cell_data_ptrs_ = reinterpret_cast<const char **>(buf))) {
     } else if (OB_ISNULL(skip_bit_ =
                  to_bit_vector(alloc.alloc(ObBitVector::memory_size(batch_size_))))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Failed to alloc skip bit", K(ret), K_(batch_size));
     } else if (OB_ISNULL(buf = alloc.alloc(sizeof(int32_t) * batch_size_))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc row_ids", K(ret), K(batch_size_));
     } else if (OB_ISNULL(len_array_buf = alloc.alloc(sizeof(uint32_t) * batch_size_))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc len_array_buf", K(ret), K_(batch_size));
     } else {
       skip_bit_->init(batch_size_);
       row_ids_ = reinterpret_cast<int32_t *>(buf);

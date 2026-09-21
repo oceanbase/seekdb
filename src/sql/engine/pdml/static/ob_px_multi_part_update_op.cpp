@@ -36,7 +36,6 @@ int ObPxMultiPartUpdateOp::inner_open()
   if (OB_FAIL(ObTableModifyOp::inner_open())) {
   } else if (!(MY_SPEC.row_desc_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table or row desc is invalid", K(ret), K(MY_SPEC.row_desc_));
   } else if (OB_FAIL(data_driver_.init(get_spec(), ctx_.get_allocator(), upd_rtdef_, this, this, false))) {
   } else if (OB_FAIL(ObDMLService::init_upd_rtdef(dml_rtctx_,
                                                   upd_rtdef_,
@@ -52,11 +51,9 @@ int ObPxMultiPartUpdateOp::inner_get_next_row()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(child_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the child op is null", K(ret));
   } else if (MY_SPEC.is_returning_) {
     if (OB_FAIL(data_driver_.get_next_row(ctx_, child_->get_spec().output_))) {
       if (OB_ITER_END != ret) {
-        LOG_WARN("failed get next row from data driver", K(ret));
       } else {
       }
     } else {
@@ -68,7 +65,6 @@ int ObPxMultiPartUpdateOp::inner_get_next_row()
     do {
       if (OB_FAIL(data_driver_.get_next_row(ctx_, child_->get_spec().output_))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("failed get next row from data driver", K(ret));
         } else {
         }
       } else {
@@ -119,13 +115,10 @@ int ObPxMultiPartUpdateOp::read_row(ObExecContext &ctx,
   ObPhysicalPlanCtx *plan_ctx = NULL;
   if (OB_ISNULL(plan_ctx = ctx.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get physical plan context failed", K(ret));
   } else if (OB_ISNULL(child_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child op is null", K(ret));
   } else if (OB_FAIL(child_->get_next_row())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("fail get next row from child", K(ret));
     }
   } else {
     op_monitor_info_.otherstat_2_value_++;
@@ -143,7 +136,6 @@ int ObPxMultiPartUpdateOp::read_row(ObExecContext &ctx,
         ObDASTableLoc *table_loc = upd_rtdef_.dupd_rtdef_.table_loc_;
         if (OB_ISNULL(table_loc) || table_loc->get_tablet_locs().size() != 1) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("insert table location is invalid", K(ret), KPC(table_loc));
         } else {
           tablet_id = table_loc->get_first_tablet_loc()->tablet_id_;
         }
@@ -177,7 +169,6 @@ int ObPxMultiPartUpdateOp::write_rows(ObExecContext &ctx,
       if (OB_FAIL(try_check_status())) {
       } else if (OB_FAIL(dml_row_iter.get_next_row(child_->get_spec().output_))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("fail to get next row", K(ret));
         } else {
           iter_end_ = true;
         }

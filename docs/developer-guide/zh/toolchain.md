@@ -35,11 +35,12 @@ index = "sparse+https://mirrors.tuna.tsinghua.edu.cn/crates.io-index/"
 
 在 Windows 上，从 [Rust 官方安装页面](https://www.rust-lang.org/tools/install) 下载并运行 `rustup-init.exe`，然后重新打开 PowerShell，使 `%USERPROFILE%\.cargo\bin` 出现在 `PATH` 中。
 
-仓库固定使用 Rust `1.97.1`，需要 `clippy` 组件，并声明以下目标：
+仓库固定使用 Rust `1.98.1`，需要 `clippy` 组件，并声明以下目标：
 
 ```text
 x86_64-unknown-linux-gnu
 x86_64-pc-windows-gnu
+aarch64-linux-android
 ```
 
 CMake 编译 `sql-nio` 库时会从 Rust 工作区调用 Cargo，rustup 随后会自动读取 `rust/rust-toolchain.toml`，并安装固定版本的工具链、组件和目标。首次构建还可能下载 Cargo 的锁定依赖；如果主机无法访问默认 registry，请配置 crates.io 镜像。

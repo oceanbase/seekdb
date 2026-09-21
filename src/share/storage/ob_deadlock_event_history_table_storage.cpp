@@ -43,7 +43,6 @@ int ObDeadlockEventHistoryTableStorage::init(ObSQLiteConnectionPool *pool)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pool_ = pool)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid pool", K(ret));
   } else if (OB_FAIL(create_table_if_not_exists())) {
   }
   if (OB_FAIL(ret)) {
@@ -57,12 +56,10 @@ int ObDeadlockEventHistoryTableStorage::create_table_if_not_exists()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pool_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("pool not set", K(ret));
   } else {
     ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_DEADLOCK_EVENT_HISTORY, nullptr))) {
     }
   }
@@ -74,7 +71,6 @@ int ObDeadlockEventHistoryTableStorage::insert(const ObDeadlockEventHistoryEntry
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     const char *insert_sql =
       "INSERT INTO __all_deadlock_event_history "
@@ -109,7 +105,6 @@ int ObDeadlockEventHistoryTableStorage::insert(const ObDeadlockEventHistoryEntry
       ObSQLiteConnectionGuard guard(pool_);
       if (!guard) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to acquire connection", K(ret));
       } else if (OB_FAIL(guard->execute(insert_sql, binder))) {
       }
   }
@@ -121,7 +116,6 @@ int ObDeadlockEventHistoryTableStorage::insert_all(const ObIArray<ObDeadlockEven
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (entries.empty()) {
     // do nothing
   } else {
@@ -136,7 +130,6 @@ int ObDeadlockEventHistoryTableStorage::insert_all(const ObIArray<ObDeadlockEven
     ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else {
       // Begin transaction for batch insert
       if (OB_FAIL(guard->begin_transaction())) {
@@ -196,7 +189,6 @@ int ObDeadlockEventHistoryTableStorage::delete_expired(int64_t report_time_befor
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     // SQLite doesn't support DELETE ... LIMIT, use subquery with rowid instead
     ObSqlString sql;
@@ -212,7 +204,6 @@ int ObDeadlockEventHistoryTableStorage::delete_expired(int64_t report_time_befor
       ObSQLiteConnectionGuard guard(pool_);
       if (!guard) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to acquire connection", K(ret));
       } else if (OB_FAIL(guard->execute(sql.ptr(), nullptr))) {
       }
     }

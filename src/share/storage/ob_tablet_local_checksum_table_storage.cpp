@@ -46,7 +46,6 @@ int ObTabletLocalChecksumTableStorage::init(ObSQLiteConnectionPool *pool)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pool_ = pool)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid pool", K(ret));
   } else if (OB_FAIL(create_table_if_not_exists())) {
   }
   if (OB_FAIL(ret)) {
@@ -60,12 +59,10 @@ int ObTabletLocalChecksumTableStorage::create_table_if_not_exists()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(pool_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("pool not set", K(ret));
   } else {
     ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_TABLET_LOCAL_CHECKSUM, nullptr))) {
     }
   }
@@ -82,7 +79,6 @@ int ObTabletLocalChecksumTableStorage::batch_get(
   items.reset();
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (tablet_ids.empty()) {
     // do nothing
   } else {
@@ -99,7 +95,6 @@ int ObTabletLocalChecksumTableStorage::batch_get(
         const ObTabletID &tablet_id = tablet_ids.at(i);
         if (OB_UNLIKELY(!tablet_id.is_valid())) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid tablet id", K(ret), K(tablet_id));
         } else if (OB_FAIL(sql.append_fmt(
             "%s %ld",
             i == 0 ? "" : ",",
@@ -115,7 +110,6 @@ int ObTabletLocalChecksumTableStorage::batch_get(
           }
         }
         if (OB_SUCC(ret) && OB_FAIL(sql.append(" ORDER BY tablet_id;"))) {
-          LOG_WARN("failed to append ordering", K(ret));
         }
       }
     }
@@ -154,7 +148,6 @@ int ObTabletLocalChecksumTableStorage::batch_get(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("invalid local checksum item", K(ret), K(item));
         } else if (OB_SUCC(ret) && OB_FAIL(items.push_back(item))) {
-          LOG_WARN("failed to push back item", K(ret));
         }
         return ret;
       };
@@ -162,10 +155,8 @@ int ObTabletLocalChecksumTableStorage::batch_get(
       ObSQLiteConnectionGuard guard(pool_);
       if (!guard) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to acquire connection", K(ret));
       } else if (OB_FAIL(guard->query(sql.ptr(), nullptr, row_processor))) {
         if (OB_ENTRY_NOT_EXIST != ret) {
-          LOG_WARN("failed to query", K(ret));
         } else {
           ret = OB_SUCCESS; // No rows is acceptable
         }
@@ -183,7 +174,6 @@ int ObTabletLocalChecksumTableStorage::get_row_count(
   row_count = 0;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     const char *select_sql =
       "SELECT row_count FROM __all_tablet_local_checksum "
@@ -205,10 +195,8 @@ int ObTabletLocalChecksumTableStorage::get_row_count(
     ObSQLiteConnectionGuard guard(pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->query(select_sql, binder, row_processor))) {
       if (OB_ENTRY_NOT_EXIST != ret) {
-        LOG_WARN("failed to query", K(ret));
       } else {
         ret = OB_SUCCESS; // No rows is acceptable
       }

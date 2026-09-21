@@ -20,8 +20,38 @@
 #include "sql/rewrite/ob_stmt_comparer.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/expr/ob_shared_expr_resolver.h"
+#include "sql/engine/ob_physical_plan.h"
 
 using namespace oceanbase::sql;
+
+namespace
+{
+int has_scalar_in_predicate(ObRawExpr *expr, bool &has_in)
+{
+  int ret = OB_SUCCESS;
+  has_in = false;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("null expr", K(ret));
+  } else if (T_OP_IN == expr->get_expr_type() || T_OP_NOT_IN == expr->get_expr_type()) {
+    ObRawExpr *left_expr = NULL;
+    if (OB_UNLIKELY(expr->get_param_count() < 1)
+        || OB_ISNULL(left_expr = expr->get_param_expr(0))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected in expr", K(ret), K(expr->get_param_count()), K(left_expr));
+    } else {
+      has_in = T_OP_ROW != left_expr->get_expr_type();
+    }
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && !has_in && i < expr->get_param_count(); ++i) {
+      if (OB_FAIL(has_scalar_in_predicate(expr->get_param_expr(i), has_in))) {
+      }
+    }
+  }
+  return ret;
+}
+
+}
 
 int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt> &parent_stmts,
                                                 ObDMLStmt *&stmt,
@@ -32,7 +62,6 @@ int ObTransformSimplifyExpr::transform_one_stmt(common::ObIArray<ObParentDMLStmt
   UNUSED(parent_stmts);
   if (OB_ISNULL(stmt) || OB_ISNULL(stmt->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null pointer", K(ret), K(stmt));
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(flatten_stmt_exprs(stmt, is_happened))) {
@@ -118,11 +147,9 @@ int ObTransformSimplifyExpr::flatten_stmt_exprs(ObDMLStmt *stmt, bool &trans_hap
   bool having_happened = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null stmt", K(ret), K(stmt));
   } else if (OB_FAIL(flatten_exprs(stmt->get_condition_exprs(), where_happened))) {
   } else if (stmt->is_select_stmt()
              && OB_FAIL(flatten_exprs(static_cast<ObSelectStmt*>(stmt)->get_having_exprs(), having_happened))) {
-    LOG_WARN("failed to flatten expr in having", K(ret));
   } else {
     trans_happened = where_happened | having_happened;
     ObIArray<JoinedTable*> &joined_table = stmt->get_joined_tables();
@@ -147,13 +174,11 @@ int ObTransformSimplifyExpr::flatten_join_condition_exprs(TableItem *table, bool
   bool right_happened = false;
   if (OB_ISNULL(table)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(table));
   } else if (!table->is_joined_table()) {
     /*do nothing*/
   } else if (OB_ISNULL(join_table = static_cast<JoinedTable*>(table)) ||
              OB_ISNULL(join_table->left_table_) || OB_ISNULL(join_table->right_table_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(join_table));
   } else if (OB_FAIL(flatten_exprs(join_table->join_conditions_, cur_happened))) {
   } else if (OB_FAIL(SMART_CALL(flatten_join_condition_exprs(join_table->left_table_,
                                                              left_happened)))) {
@@ -176,7 +201,6 @@ int ObTransformSimplifyExpr::flatten_exprs(common::ObIArray<ObRawExpr*> &exprs, 
     for (int64_t i = 0; OB_SUCC(ret) && i < temp_exprs.count(); i++) {
       if (OB_ISNULL(temp_exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("null expr", K(ret));
       } else if (OB_FAIL(ObTransformUtils::flatten_expr(temp_exprs.at(i), exprs))) {
       } else { /*do nothing*/ }
     }
@@ -202,7 +226,6 @@ int ObTransformSimplifyExpr::replace_is_null_condition(ObDMLStmt *stmt, bool &tr
   bool is_happened = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("data member or parameter is NULL", K(stmt), K(ctx_));
   } else if (stmt->is_sel_del_upd()) {
     ObNotNullContext not_null_ctx(*ctx_, stmt);
     if (OB_FAIL(not_null_ctx.generate_stmt_context(NULLABLE_SCOPE::NS_FROM))){
@@ -223,11 +246,9 @@ int ObTransformSimplifyExpr::replace_is_null_condition(ObDMLStmt *stmt, bool &tr
         bool exist_in_ctx = ObOptimizerUtil::find_item(not_null_ctx.having_filters_, 
                                                        sel_stmt->get_having_exprs().at(i));
         if (exist_in_ctx && OB_FAIL(not_null_ctx.remove_having_filter(sel_stmt->get_having_exprs().at(i)))){
-          LOG_WARN("failed to remove filter", K(ret));
         } else if (OB_FAIL(inner_replace_is_null_condition(
                       sel_stmt, sel_stmt->get_having_exprs().at(i), not_null_ctx, is_happened))) {
         } else if (exist_in_ctx && OB_FAIL(not_null_ctx.add_having_filter(sel_stmt->get_having_exprs().at(i)))) {
-          LOG_WARN("failed to add filter", K(ret));
         } else {
           trans_happened |= is_happened;
         }
@@ -248,11 +269,9 @@ int ObTransformSimplifyExpr::inner_replace_is_null_condition(ObDMLStmt *stmt,
   bool is_stack_overflow = false;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null expr", K(expr), K(ret));
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(ret));
   } else if (expr->is_op_expr()) {
     // do transformation for child exprs first
     ObOpRawExpr *op_expr = static_cast<ObOpRawExpr*>(expr);
@@ -260,7 +279,6 @@ int ObTransformSimplifyExpr::inner_replace_is_null_condition(ObDMLStmt *stmt,
       ObRawExpr *temp = NULL;
       if (OB_ISNULL(temp = op_expr->get_param_expr(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("null expr", K(ret));
       } else if (OB_FAIL(SMART_CALL(inner_replace_is_null_condition(stmt,
                                                                     temp,
                                                                     not_null_ctx,
@@ -285,7 +303,6 @@ int ObTransformSimplifyExpr::inner_replace_is_null_condition(ObDMLStmt *stmt,
   if (OB_SUCC(ret) && trans_happened) {
     if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ctx_), K(ret));
     } else if (OB_FAIL(expr->formalize(ctx_->session_info_))) {
     } else { /*do nothing*/ }
   }
@@ -301,19 +318,16 @@ int ObTransformSimplifyExpr::do_replace_is_null_condition(ObDMLStmt *stmt,
   trans_happened = false;
   if (OB_ISNULL(expr) || OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(stmt), K(expr), K(ret));
   } else if (T_OP_IS == expr->get_expr_type() ||
              T_OP_IS_NOT == expr->get_expr_type()) {
     const ObOpRawExpr *op_expr = static_cast<ObOpRawExpr *>(expr);
     if (OB_UNLIKELY(op_expr->get_param_count() != 2)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected param numm", K(op_expr->get_param_count()), K(ret));
     } else {
       const ObRawExpr *child_0 = op_expr->get_param_expr(0);
       const ObRawExpr *child_1 = op_expr->get_param_expr(1);
       if (OB_ISNULL(child_0) || OB_ISNULL(child_1)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpecte null", K(child_0), K(child_1), K(ret));
       } else if (child_1->get_expr_type() == T_NULL) {
         bool is_expected = false;
         const ObColumnRefRawExpr *col_expr = NULL;
@@ -359,13 +373,11 @@ int ObTransformSimplifyExpr::replace_op_null_condition(ObDMLStmt *stmt, bool &tr
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->exec_ctx_) ||
       OB_ISNULL(plan_ctx = ctx_->exec_ctx_->get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is NULL", K(ret), K(stmt), K(ctx_), K(plan_ctx));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_condition_size(); ++i) {
     ObRawExpr *cond = NULL;
     if (OB_ISNULL(cond = stmt->get_condition_expr(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("condition expr is null", K(ret));
     } else if (OB_FAIL(replace_cmp_null_condition(stmt->get_condition_exprs().at(i),
                                                   *stmt,
                                                   plan_ctx->get_param_store(),
@@ -402,11 +414,9 @@ int ObTransformSimplifyExpr::replace_cmp_null_condition(ObRawExpr *&expr,
   bool is_stack_overflow = false;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null expr", K(ret), K(expr));
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
   } else if (T_OP_OR == expr->get_expr_type()) {
     for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
       if (OB_FAIL(SMART_CALL(replace_cmp_null_condition(expr->get_param_expr(i), stmt,
@@ -425,7 +435,6 @@ int ObTransformSimplifyExpr::replace_cmp_null_condition(ObRawExpr *&expr,
         for (int64_t i = 0; OB_SUCC(ret) && i < null_expr_lists.count(); ++i) {
           if (OB_ISNULL(null_expr_lists.at(i))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("expr is null", K(ret));
           } else if (null_expr_lists.at(i)->is_static_const_expr()) {
             ObExprConstraint cons(const_cast<ObRawExpr*>(null_expr_lists.at(i)), 
                                     PRE_CALC_RESULT_NULL);
@@ -452,19 +461,24 @@ int ObTransformSimplifyExpr::extract_null_expr(ObRawExpr *expr,
   UNUSED(param_store);
   if (OB_ISNULL(expr) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null param", K(expr), K_(ctx), K(ret));
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
-    LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
   } else if (expr->is_static_scalar_const_expr()) {
     ObObj result;
     bool got_result = false;
-    if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx_->exec_ctx_,
-                                                          expr,
-                                                          result,
-                                                          got_result,
-                                                          *ctx_->allocator_))) {
+    bool has_warning = false;
+    if (OB_FAIL(ObTransformUtils::calc_const_expr_result(expr,
+                                                         ctx_,
+                                                         result,
+                                                         got_result,
+                                                         &has_warning))) {
+    } else if (has_warning) {
+      // Null inference is speculative. Leave diagnostics to execution and do
+      // not let a cached probe hide them from later simplification rules.
+      got_result = false;
+    }
+    if (OB_FAIL(ret)) {
     } else if (got_result && !result.is_ext() && (result.is_null()))  {
       if (OB_FAIL(null_expr_lists.push_back(expr))) {
       }
@@ -474,7 +488,6 @@ int ObTransformSimplifyExpr::extract_null_expr(ObRawExpr *expr,
       ObRawExpr *temp = NULL;
       if (OB_ISNULL(temp = expr->get_param_expr(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("null expr", K(ret));
       } else if (OB_FAIL(SMART_CALL(extract_null_expr(temp, stmt, param_store, null_expr_lists)))) {
       } else {
         /*do nothing*/
@@ -491,7 +504,6 @@ int ObTransformSimplifyExpr::convert_preds_vector_to_scalar(ObDMLStmt *stmt, boo
   bool is_happened = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL stmt", K(ret));
   } else if (!stmt->is_sel_del_upd()) {
     //do nothing
   } else {
@@ -526,7 +538,6 @@ int ObTransformSimplifyExpr::recursively_convert_join_preds_vector_to_scalar(Tab
   JoinedTable *joined_table = NULL;
   if (OB_ISNULL(table_item) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL table item", K(ret));
   } else if (!table_item->is_joined_table()) {
   } else if (FALSE_IT(joined_table = reinterpret_cast<JoinedTable*>(table_item))){
   } else if (OB_FAIL(SMART_CALL(recursively_convert_join_preds_vector_to_scalar(joined_table->left_table_,
@@ -563,7 +574,6 @@ int ObTransformSimplifyExpr::check_like_condition(ObRawExpr *&expr,
   bool is_replaced = false;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null expr", K(ret), K(expr));
   } else if (ObOptimizerUtil::find_item(old_exprs, expr)) {
     //skip replaced exprs
     is_replaced = true;
@@ -572,7 +582,6 @@ int ObTransformSimplifyExpr::check_like_condition(ObRawExpr *&expr,
     for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); i++) {
       if (OB_ISNULL(expr->get_param_expr(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("null expr", K(ret));
       } else if (OB_FAIL(SMART_CALL(check_like_condition(expr->get_param_expr(i), old_exprs, new_exprs, constraints)))) {
       } else {
         //do nothing
@@ -592,9 +601,9 @@ int ObTransformSimplifyExpr::do_check_like_condition(ObRawExpr *&expr,
                                                      ObIArray<ObRawExpr *> &new_exprs,
                                                      ObIArray<ObExprConstraint> &constraints) {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(expr) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_)) {
+  if (OB_ISNULL(expr) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_)
+      || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(expr), K(ctx_), K(ctx_->session_info_));
   } else if (T_OP_LIKE == expr->get_expr_type()) {
     ObRawExpr *text_expr = expr->get_param_expr(0);
     ObRawExpr *pattern_expr = expr->get_param_expr(1);
@@ -602,7 +611,6 @@ int ObTransformSimplifyExpr::do_check_like_condition(ObRawExpr *&expr,
     bool can_replace = true;
     if (OB_ISNULL(text_expr) || OB_ISNULL(pattern_expr) || OB_ISNULL(escape_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret), K(text_expr), K(pattern_expr), K(escape_expr));
     } else if (!pattern_expr->is_static_const_expr()) {
       /* not calculable*/
       can_replace = false;
@@ -638,7 +646,6 @@ int ObTransformSimplifyExpr::do_check_like_condition(ObRawExpr *&expr,
           new_pattern_expr = pattern_expr->get_param_expr(0);
           if (OB_ISNULL(new_pattern_expr)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected null", K(ret));
           } else if (ObVarcharType == new_pattern_expr->get_result_type().get_type()) {
             pattern_expr = new_pattern_expr;
           } else {
@@ -654,7 +661,6 @@ int ObTransformSimplifyExpr::do_check_like_condition(ObRawExpr *&expr,
           if (OB_FAIL(ObRawExprUtils::create_cast_expr(*ctx_->expr_factory_, pattern_expr, cast_type, cast_expr, ctx_->session_info_))) {
           } else if (OB_ISNULL(cast_expr)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected null", K(ret), K(cast_expr));
           } else {
             pattern_expr = cast_expr;
           }
@@ -663,7 +669,6 @@ int ObTransformSimplifyExpr::do_check_like_condition(ObRawExpr *&expr,
       if (OB_SUCC(ret)) {
         if (text_expr->get_expr_type() == T_FUN_SYS_CAST &&
             OB_FAIL(text_expr->clear_flag(IS_INNER_ADDED_EXPR))) {  //avoid reconstuct sql is wrong.
-          LOG_WARN("failed to clear flag", K(ret));
         } else if (OB_FAIL(ObRawExprUtils::create_equal_expr(*ctx_->expr_factory_,
                                                               ctx_->session_info_,
                                                               pattern_expr,
@@ -671,7 +676,6 @@ int ObTransformSimplifyExpr::do_check_like_condition(ObRawExpr *&expr,
                                                               eq_expr))) {
         } else if (OB_ISNULL(eq_expr)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null", K(ret), K(eq_expr));
         } else if (OB_FAIL(eq_expr->add_relation_ids(expr->get_relation_ids()))) {
         } else if (OB_FAIL(old_exprs.push_back(expr))) {
         } else if (OB_FAIL(new_exprs.push_back(eq_expr))) {
@@ -697,14 +701,12 @@ int ObTransformSimplifyExpr::remove_dummy_exprs(ObDMLStmt *stmt, bool &trans_hap
   ObSEArray<ObExprConstraint, 4> constraints;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null stmt", K(ret), K(ctx_));
   } else if (OB_FAIL(remove_dummy_case_when(stmt, trans_happened))) {
   } else if (OB_FAIL(remove_dummy_nvl(stmt, trans_happened))) {
   } else if (OB_FAIL(remove_dummy_filter_exprs(stmt->get_condition_exprs(), constraints))) {
   } else if (stmt->is_select_stmt() && !static_cast<ObSelectStmt*>(stmt)->is_scala_group_by() &&
              OB_FAIL(remove_dummy_filter_exprs(static_cast<ObSelectStmt*>(stmt)->get_having_exprs(),
                                                constraints))) {
-    LOG_WARN("failed to post process filter exprs", K(ret));
   } else {
     ObIArray<JoinedTable*> &joined_table = stmt->get_joined_tables();
     for (int64_t i = 0; OB_SUCC(ret) && i < joined_table.count(); i++) {
@@ -729,11 +731,9 @@ int ObTransformSimplifyExpr::inner_remove_dummy_expr(common::ObIArray<ObRawExpr*
     ObRawExpr *tmp = NULL;
     if (OB_ISNULL(tmp = exprs.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null expr", K(ret));
     } else if (OB_FAIL(inner_remove_dummy_expr(tmp, constraints))) {
     } else if (OB_ISNULL(tmp)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null expr", K(ret));
     } else {
       exprs.at(i) = tmp;
     }
@@ -761,7 +761,8 @@ int ObTransformSimplifyExpr::remove_dummy_filter_exprs(common::ObIArray<ObRawExp
     if (OB_FAIL(ObTransformUtils::extract_const_bool_expr_info(ctx_,
                                                                exprs,
                                                                true_exprs,
-                                                               false_exprs))) {
+                                                               false_exprs,
+                                                               true))) {
     } else if (true_exprs.empty() && false_exprs.empty()) {
       /* do nothing */
     } else if (1 == exprs.count() && 1 == false_exprs.count()
@@ -792,13 +793,11 @@ int ObTransformSimplifyExpr::remove_dummy_join_condition_exprs(TableItem *table,
   JoinedTable *join_table = NULL;
   if (OB_ISNULL(table)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(table));
   } else if (!table->is_joined_table()) {
     /*do nothing*/
   } else if (OB_ISNULL(join_table = static_cast<JoinedTable*>(table)) ||
              OB_ISNULL(join_table->left_table_) || OB_ISNULL(join_table->right_table_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(join_table));
   } else if (OB_FAIL(remove_dummy_filter_exprs(join_table->join_conditions_, constraints))) {
   } else if (OB_FAIL(SMART_CALL(remove_dummy_join_condition_exprs(join_table->left_table_,
                                                                   constraints)))) {
@@ -815,7 +814,6 @@ int ObTransformSimplifyExpr::inner_remove_dummy_expr(ObRawExpr *&expr,
   bool is_valid_type = false;
   if (OB_ISNULL(expr) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ctx_), K(ret));
   } else if (OB_FAIL(is_valid_transform_type(expr, is_valid_type))) {
   } else if (!is_valid_type) {
   } else {
@@ -827,11 +825,9 @@ int ObTransformSimplifyExpr::inner_remove_dummy_expr(ObRawExpr *&expr,
       ObRawExpr *temp = NULL;
       if (OB_ISNULL(temp = op_expr->get_param_expr(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("null expr", K(ret));
       } else if (OB_FAIL(SMART_CALL(inner_remove_dummy_expr(temp, constraints)))) {
       } else if (OB_ISNULL(temp)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("null expr", K(ret));
       } else {
         op_expr->get_param_expr(i) = temp;
       }
@@ -839,15 +835,62 @@ int ObTransformSimplifyExpr::inner_remove_dummy_expr(ObRawExpr *&expr,
     if (OB_FAIL(ret)) {
     } else if (OB_UNLIKELY(op_expr->get_param_count() <= 1)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("should have at least one param", K(op_expr->get_param_count()), K(ret));
     } else if (op_expr->get_param_count() > 1) {
       ObSEArray<int64_t, 2> true_exprs;
       ObSEArray<int64_t, 2> false_exprs;
       ObRawExpr *bool_expr = NULL;
-      if (OB_FAIL(ObTransformUtils::extract_const_bool_expr_info(ctx_,
-                                                                 op_expr->get_param_exprs(),
-                                                                 true_exprs,
-                                                                 false_exprs))) {
+      bool has_short_circuit_const = false;
+      bool short_circuit_value = false;
+      bool has_uncacheable_in_expr = false;
+      for (int64_t i = 0; OB_SUCC(ret) && i < op_expr->get_param_count(); ++i) {
+        ObRawExpr *temp = op_expr->get_param_expr(i);
+        bool is_true = false;
+        bool is_error_free = true;
+        bool has_in = false;
+        if (OB_ISNULL(temp)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("null expr", K(ret));
+        } else if (OB_FAIL(ObTransformUtils::check_error_free_expr(temp, is_error_free))) {
+        } else if (!is_error_free && OB_FAIL(has_scalar_in_predicate(temp, has_in))) {
+        } else if (!is_error_free && has_in) {
+          has_uncacheable_in_expr = true;
+        }
+        if (OB_FAIL(ret)) {
+        } else if (OB_ISNULL(temp)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("null expr", K(ret));
+        } else if (has_short_circuit_const) {
+          /* do nothing */
+        } else if (!temp->is_const_raw_expr()) {
+          /* do nothing */
+        } else if (OB_FAIL(ObObjEvaluator::is_true(
+                   static_cast<ObConstRawExpr*>(temp)->get_value(), is_true))) {
+        } else if ((T_OP_AND == expr->get_expr_type() && !is_true)
+                   || (T_OP_OR == expr->get_expr_type() && is_true)) {
+          has_short_circuit_const = true;
+          short_circuit_value = is_true;
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (has_short_circuit_const) {
+        bool has_warning = false;
+        if (OB_FAIL(ObTransformUtils::check_static_expr_has_warning(ctx_, op_expr, has_warning))) {
+        } else if (has_warning) {
+          // Keep the expression so each execution, including plan-cache hits,
+          // evaluates the operands that produce diagnostics. The short-circuit
+          // result alone is not sufficient to replace it with a literal.
+        } else if (OB_FAIL(ObRawExprUtils::build_const_bool_expr(ctx_->expr_factory_,
+                                                                 transed_expr,
+                                                                 short_circuit_value))) {
+          LOG_WARN("create const bool expr failed", K(ret));
+        } else if (has_uncacheable_in_expr && OB_NOT_NULL(ctx_->phy_plan_)) {
+          ctx_->phy_plan_->get_phy_plan_hint().plan_cache_policy_ = OB_USE_PLAN_CACHE_NONE;
+        }
+      } else if (OB_FAIL(ObTransformUtils::extract_const_bool_expr_info(ctx_,
+                                                                        op_expr->get_param_exprs(),
+                                                                        true_exprs,
+                                                                        false_exprs,
+                                                                        true))) {
       } else if (true_exprs.empty() && false_exprs.empty()) {
         /*do nothing*/
       } else if (OB_FAIL(adjust_dummy_expr(true_exprs, false_exprs,
@@ -855,14 +898,14 @@ int ObTransformSimplifyExpr::inner_remove_dummy_expr(ObRawExpr *&expr,
                                            op_expr->get_param_exprs(),
                                            transed_expr,
                                            constraints))) {
-      } else if (transed_expr != NULL) {
+      }
+      if (OB_SUCC(ret) && transed_expr != NULL) {
         expr = transed_expr;
       }
     }
     if (OB_SUCC(ret) && old_cons_count != constraints.count()) {
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(expr));
       } else if (OB_FAIL(expr->formalize(ctx_->session_info_))) {
       }
     }
@@ -877,7 +920,6 @@ int ObTransformSimplifyExpr::is_valid_transform_type(ObRawExpr *expr,
   is_valid = false;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null expr", K(expr), K(ret));
   } else if (T_OP_AND == expr->get_expr_type() ||
              T_OP_OR == expr->get_expr_type()) {
     is_valid = expr->get_result_type().is_integer_type();
@@ -886,7 +928,6 @@ int ObTransformSimplifyExpr::is_valid_transform_type(ObRawExpr *expr,
       ObRawExpr *temp = NULL;
       if (OB_ISNULL(temp = expr->get_param_expr(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("null expr", K(ret));
       } else {
         is_valid &= temp->get_result_type().is_integer_type();
       }
@@ -908,16 +949,54 @@ int ObTransformSimplifyExpr::adjust_dummy_expr(const ObIArray<int64_t> &true_exp
                                     : !true_exprs.empty(); // true or ... -> true
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_) || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ctx_), K(ret));
   } else {
     ObRawExpr *op_expr = NULL;
     ObSEArray<ObRawExpr*, 4> op_params;
+    bool is_error_free = true;
+    bool cur_error_free = true;
+    bool has_uncacheable_in_expr = false;
     const PreCalcExprExpectResult expect_result = ((is_and_op && !false_exprs.empty())
                                                    || (!is_and_op && true_exprs.empty()))
         ? PreCalcExprExpectResult::PRE_CALC_RESULT_FALSE
         : PreCalcExprExpectResult::PRE_CALC_RESULT_TRUE;
     if (OB_FAIL(ObTransformUtils::extract_target_exprs_by_idx(adjust_exprs, true_exprs, op_params))) {
     } else if (OB_FAIL(ObTransformUtils::extract_target_exprs_by_idx(adjust_exprs, false_exprs, op_params))) {
+    } else {
+      const ObIArray<ObRawExpr*> &check_exprs = remove_all ? adjust_exprs : op_params;
+      int64_t check_expr_count = check_exprs.count();
+      if (remove_all) {
+        check_expr_count = (is_and_op ? false_exprs.at(0) : true_exprs.at(0)) + 1;
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && is_error_free && i < check_expr_count; ++i) {
+        bool has_warning = false;
+        bool cur_cache_safe = true;
+        bool has_in = false;
+        const bool checked_expr_was_evaluated = ObOptimizerUtil::find_item(op_params, check_exprs.at(i));
+        if (OB_ISNULL(check_exprs.at(i))) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("null expr", K(ret));
+        } else if (OB_FAIL(ObTransformUtils::check_error_free_expr(check_exprs.at(i), cur_cache_safe))) {
+        } else if (!cur_cache_safe && OB_FAIL(has_scalar_in_predicate(check_exprs.at(i), has_in))) {
+        } else if (!cur_cache_safe && has_in) {
+          has_uncacheable_in_expr = true;
+        }
+        if (OB_FAIL(ret)) {
+        } else if (checked_expr_was_evaluated && check_exprs.at(i)->is_static_scalar_const_expr()) {
+          // The caller has already evaluated this static predicate and emitted
+          // its warnings once, so it is safe to remove with its constraint.
+        } else if (OB_FAIL(ObTransformUtils::check_static_expr_has_warning(ctx_,
+                                                                           check_exprs.at(i),
+                                                                           has_warning))) {
+        } else if (has_warning) {
+          is_error_free = false;
+        } else if (OB_FAIL(ObTransformUtils::check_error_free_expr(check_exprs.at(i), cur_error_free))) {
+        } else {
+          is_error_free = cur_error_free;
+        }
+      }
+    }
+    if (OB_FAIL(ret) || !is_error_free) {
+      // Keep the original predicate when a removed branch may raise warnings/errors at runtime.
     } else if (remove_all) {
       //to keep the or/and expr contains at least 2 params.
       const bool b_value = is_and_op ? false : true;
@@ -936,23 +1015,22 @@ int ObTransformSimplifyExpr::adjust_dummy_expr(const ObIArray<int64_t> &true_exp
     } else if (adjust_exprs.count() - op_params.count() == 0) {
       if (is_and_op && false_exprs.empty() // and(all true) -> true
           && OB_FAIL(ObRawExprUtils::build_const_bool_expr(ctx_->expr_factory_, transed_expr, true))) {
-        LOG_WARN("create const bool expr failed", K(ret));
       } else if (!is_and_op && true_exprs.empty() // or(all false) -> false
                  && OB_FAIL(ObRawExprUtils::build_const_bool_expr(ctx_->expr_factory_, transed_expr, false))) {
-        LOG_WARN("create const bool expr failed", K(ret));
       }
     }
 
-    if (OB_FAIL(ret)) {
+    if (OB_FAIL(ret) || !is_error_free) {
+    } else if (has_uncacheable_in_expr && OB_NOT_NULL(ctx_->phy_plan_)) {
+      // These transformations depend on concrete literal values and warning
+      // behavior; do not share the folded plan with another literal set.
+      ctx_->phy_plan_->get_phy_plan_hint().plan_cache_policy_ = OB_USE_PLAN_CACHE_NONE;
     } else if (is_and_op && OB_FAIL(ObRawExprUtils::build_and_expr(*ctx_->expr_factory_,
                                                                    op_params, op_expr))) {
-      LOG_WARN("failed to build and expr", K(ret));
     } else if (!is_and_op && OB_FAIL(ObRawExprUtils::build_or_exprs(*ctx_->expr_factory_,
                                                                     op_params, op_expr))) {
-      LOG_WARN("failed to build or expr", K(ret));
     } else if (OB_ISNULL(op_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret), K(op_expr));
     } else if (OB_FAIL(op_expr->formalize(ctx_->session_info_))) {
     } else if (OB_FAIL(constraints.push_back(ObExprConstraint(op_expr, expect_result)))) {
     } else { /*do nothing*/ }
@@ -969,7 +1047,6 @@ int ObTransformSimplifyExpr::remove_dummy_case_when(ObDMLStmt *stmt,
   ObSEArray<ObRawExpr *, 8> relation_exprs;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is null", K(ret));
   } else {
     ObStmtExprGetter visitor;
     visitor.set_relation_scope();
@@ -999,7 +1076,6 @@ int ObTransformSimplifyExpr::remove_dummy_case_when(ObQueryCtx* query_ctx,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr) || OB_ISNULL(query_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param has null", K(ret));
   } else if (T_OP_CASE == expr->get_expr_type()) {
     ObCaseOpRawExpr *case_expr = static_cast<ObCaseOpRawExpr *>(expr);
     if (OB_FAIL(inner_remove_dummy_case_when(query_ctx,
@@ -1024,10 +1100,8 @@ int ObTransformSimplifyExpr::inner_remove_dummy_case_when(ObQueryCtx* query_ctx,
   ObStmtCompareContext context;
   if (OB_ISNULL(case_expr) || OB_ISNULL(ctx_) || OB_ISNULL(query_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param has null", K(query_ctx), K(ctx_), K(case_expr), K(ret));
   } else if (case_expr->get_when_expr_size() != case_expr->get_then_expr_size()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("incorrect case when expr", K(*case_expr), K(ret));
   } else {
     context.init(&query_ctx->calculable_items_);
   }
@@ -1039,7 +1113,6 @@ int ObTransformSimplifyExpr::inner_remove_dummy_case_when(ObQueryCtx* query_ctx,
     context.equal_param_info_.reset();
     if (OB_ISNULL(when) || OB_ISNULL(then)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null case when expr", K(when), K(then), K(ret));
     } else if (T_OP_CASE != then->get_expr_type()) {
       //do nothing
     } else if (OB_FALSE_IT(child_case_expr = static_cast<ObCaseOpRawExpr*>(then))) {
@@ -1047,7 +1120,6 @@ int ObTransformSimplifyExpr::inner_remove_dummy_case_when(ObQueryCtx* query_ctx,
       //do nothing
     } else if (OB_ISNULL(child_when = child_case_expr->get_when_param_expr(0))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null case when expr", K(ret));
     } else if (when->same_as(*child_when, &context)) {
       ObRawExpr *child_then = child_case_expr->get_then_param_expr(0);
       if (OB_FAIL(case_expr->replace_then_param_expr(i, child_then))) {
@@ -1073,7 +1145,6 @@ int ObTransformSimplifyExpr::remove_dummy_nvl(ObDMLStmt *stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is NULL", K(stmt));
   } else if (stmt->is_sel_del_upd()) {
     ObNotNullContext not_null_ctx(*ctx_, stmt);
     ObSEArray<ObRawExpr*, 4> ignore_exprs;
@@ -1119,7 +1190,6 @@ int ObTransformSimplifyExpr::remove_dummy_nvl(ObDMLStmt *stmt,
 
     not_null_ctx.reset();
     if (FAILEDx(not_null_ctx.generate_stmt_context(NULLABLE_SCOPE::NS_TOP))){
-      LOG_WARN("failed to generate not null context", K(ret));
     }
     if (OB_SUCC(ret) && stmt->is_select_stmt() && !static_cast<ObSelectStmt *>(stmt)->is_scala_group_by()) {
       ObSelectStmt *sel_stmt = static_cast<ObSelectStmt *>(stmt);
@@ -1127,14 +1197,12 @@ int ObTransformSimplifyExpr::remove_dummy_nvl(ObDMLStmt *stmt,
         bool exist_in_ctx = ObOptimizerUtil::find_item(not_null_ctx.having_filters_, 
                                                        sel_stmt->get_having_exprs().at(i));
         if (exist_in_ctx && OB_FAIL(not_null_ctx.remove_having_filter(sel_stmt->get_having_exprs().at(i)))){
-          LOG_WARN("failed to remove filter", K(ret));
         } else if (OB_FAIL(inner_remove_dummy_nvl(stmt,
                                                   sel_stmt->get_having_exprs().at(i),
                                                   not_null_ctx,
                                                   ignore_exprs,
                                                   trans_happened))) {
         } else if (exist_in_ctx && OB_FAIL(not_null_ctx.add_having_filter(sel_stmt->get_having_exprs().at(i)))) {
-          LOG_WARN("failed to add filter", K(ret));
         }
       }
 
@@ -1169,7 +1237,6 @@ int ObTransformSimplifyExpr::inner_remove_dummy_nvl(ObDMLStmt *stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)){
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(expr));
   }
   // do transformation for child exprs first
   for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
@@ -1184,7 +1251,45 @@ int ObTransformSimplifyExpr::inner_remove_dummy_nvl(ObDMLStmt *stmt,
   if (OB_SUCC(ret)
       && (T_FUN_SYS_NVL == expr->get_expr_type() 
       || T_FUN_SYS_IFNULL == expr->get_expr_type())) {
-    if (ObOptimizerUtil::find_item(ignore_exprs, expr)) {
+    ObOpRawExpr *op_expr = static_cast<ObOpRawExpr *>(expr);
+    ObRawExpr *child_0 = NULL;
+    ObRawExpr *cur = NULL;
+    int64_t not_cnt = 0;
+    if (op_expr->get_param_count() != 2 || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_) ||
+        OB_ISNULL(ctx_->session_info_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected nvl expr", K(ret), KPC(expr), K(ctx_));
+    } else if (OB_ISNULL(child_0 = op_expr->get_param_expr(0))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null child expr", K(ret), KPC(expr));
+    } else {
+      cur = child_0;
+      while (OB_SUCC(ret) && T_OP_NOT == cur->get_expr_type()) {
+        ++not_cnt;
+        if (OB_UNLIKELY(1 != cur->get_param_count()) ||
+            OB_ISNULL(cur = cur->get_param_expr(0))) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected not expr", K(ret), KPC(child_0));
+        }
+      }
+      if (OB_SUCC(ret) && not_cnt > 1 && 0 == not_cnt % 2) {
+        ObRawExpr *new_child = NULL;
+        if (OB_FAIL(ObRawExprUtils::try_create_bool_expr(cur, new_child, *ctx_->expr_factory_))) {
+        } else if (OB_ISNULL(new_child)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("unexpected null bool expr", K(ret));
+        } else if (OB_FAIL(new_child->formalize(ctx_->session_info_))) {
+        } else {
+          op_expr->get_param_expr(0) = new_child;
+          if (OB_FAIL(expr->formalize(ctx_->session_info_))) {
+          } else {
+            trans_happened = true;
+          }
+        }
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (ObOptimizerUtil::find_item(ignore_exprs, expr)) {
       // nvl expr is rollup expr, do nothing
     } else if (OB_FAIL(do_remove_dummy_nvl(stmt,
                                     expr,
@@ -1205,21 +1310,19 @@ int ObTransformSimplifyExpr::do_remove_dummy_nvl(ObDMLStmt *stmt,
   if (OB_ISNULL(expr) || OB_ISNULL(stmt)
       || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->exec_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(stmt), K(expr), K(ret));
   } else if (T_FUN_SYS_NVL == expr->get_expr_type() ||
              T_FUN_SYS_IFNULL == expr->get_expr_type()) {
     const ObOpRawExpr *op_expr = static_cast<ObOpRawExpr *>(expr);
     if (OB_UNLIKELY(op_expr->get_param_count() != 2)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected param numm", K(op_expr->get_param_count()), K(ret));
     } else {
       ObRawExpr *child_0 = op_expr->get_param_exprs().at(0);
       ObRawExpr *child_1 = op_expr->get_param_exprs().at(1);
       if (OB_ISNULL(child_0) || OB_ISNULL(child_1)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpecte null", K(child_0), K(child_1), K(ret));
       } else {
         bool not_null = false;
+        bool is_error_free = false;
         ObRawExpr *new_expr = NULL;
         ObArray<ObRawExpr *> not_null_constraints;
         if (OB_FAIL(ObTransformUtils::is_expr_not_null(not_null_ctx,
@@ -1228,7 +1331,12 @@ int ObTransformSimplifyExpr::do_remove_dummy_nvl(ObDMLStmt *stmt,
                                                        &not_null_constraints))) {
         } else if (not_null){
           // NVL(child_0, child_1) -> child_0  IF child_0 is not null
-          if (OB_FAIL(ObTransformUtils::add_param_not_null_constraint(*ctx_, not_null_constraints))) {
+          if (child_0->has_flag(CNT_NOT)) {
+            // NOT chains can be simplified later; keep IFNULL/NVL to avoid unsafe not-null constraints.
+          } else if (OB_FAIL(ObTransformUtils::check_error_free_expr(child_0, is_error_free))) {
+          } else if (!is_error_free) {
+            // Keep IFNULL/NVL if the input may raise conversion/runtime errors.
+          } else if (OB_FAIL(ObTransformUtils::add_param_not_null_constraint(*ctx_, not_null_constraints))) {
           } else {
             new_expr = child_0;
           }
@@ -1254,7 +1362,6 @@ int ObTransformSimplifyExpr::do_remove_dummy_nvl(ObDMLStmt *stmt,
                               *ctx_->expr_factory_, expr, new_expr, ctx_->session_info_))) {
           } else if (OB_ISNULL(new_expr)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get unexpected null cast expr", K(ret));
           } else {
             expr = new_expr;
             trans_happened = true;
@@ -1278,7 +1385,6 @@ int ObTransformSimplifyExpr::convert_nvl_predicate(ObDMLStmt *stmt, bool &trans_
   bool is_happened = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is NULL", K(stmt));
   } else if (stmt->is_sel_del_upd()) {
     ObSEArray<ObRawExpr*, 4> ignore_exprs;
     for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_condition_size(); ++i) {
@@ -1319,17 +1425,14 @@ int ObTransformSimplifyExpr::inner_convert_nvl_predicate(ObDMLStmt *stmt,
   trans_happened = false;
   if (OB_ISNULL(expr)){
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(expr), K(ret));
   } else if (IS_COMMON_COMPARISON_OP(expr->get_expr_type())) {
     ObOpRawExpr *op_expr = static_cast<ObOpRawExpr*>(expr);
     ObRawExpr *child_0 = NULL, *child_1 = NULL;
     if (OB_UNLIKELY(op_expr->get_param_count() != 2)){
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected param count", K(op_expr->get_param_count()), K(ret));
     } else if (OB_ISNULL(child_0 = op_expr->get_param_expr(0))
                || OB_ISNULL(child_1 = op_expr->get_param_expr(1))){
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null expr", K(child_0), K(child_1), K(ret));
     } else {
       bool is_nvl_at_left = false;
       bool is_nvl_cmp_const = false;
@@ -1369,12 +1472,28 @@ int ObTransformSimplifyExpr::inner_convert_nvl_predicate(ObDMLStmt *stmt,
   if (OB_SUCC(ret)&& trans_happened){
     if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_)){
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ctx_), K(ret));
     } else if (OB_FAIL(expr->formalize(ctx_->session_info_))){
     }
   }
 
   return ret;
+}
+
+namespace
+{
+bool is_row_cmp_expr(const ObRawExpr *expr)
+{
+  bool bret = false;
+  if (OB_NOT_NULL(expr)
+      && IS_COMMON_COMPARISON_OP(expr->get_expr_type())
+      && 2 == expr->get_param_count()
+      && OB_NOT_NULL(expr->get_param_expr(0))
+      && OB_NOT_NULL(expr->get_param_expr(1))) {
+    bret = T_OP_ROW == expr->get_param_expr(0)->get_expr_type()
+        || T_OP_ROW == expr->get_param_expr(1)->get_expr_type();
+  }
+  return bret;
+}
 }
 
 // parent_expr should be at the root of where condition or having condition
@@ -1391,7 +1510,6 @@ int ObTransformSimplifyExpr::do_convert_nvl_predicate(ObDMLStmt *stmt,
   trans_happened = false;
   if (OB_ISNULL(parent_expr) || OB_ISNULL(nvl_expr) || OB_ISNULL(sibling_expr)){
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(parent_expr), K(nvl_expr), K(sibling_expr));
   } else {
     ObOpRawExpr *op_nvl_expr = static_cast<ObOpRawExpr*>(nvl_expr);
     ObRawExpr *exp1 = op_nvl_expr->get_param_exprs().at(0);
@@ -1401,7 +1519,6 @@ int ObTransformSimplifyExpr::do_convert_nvl_predicate(ObDMLStmt *stmt,
 
     if (OB_ISNULL(exp1) || OB_ISNULL(exp2)){
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(exp1), K(exp2));
     } else if (OB_FAIL(ObTransformUtils::add_cast_for_replace_if_need(*ctx_->expr_factory_,
                                                                       nvl_expr,
                                                                       exp2,
@@ -1424,10 +1541,13 @@ int ObTransformSimplifyExpr::do_convert_nvl_predicate(ObDMLStmt *stmt,
         // IF exp2 ~ exp3 ≡ FALSE, NVL(exp1, exp2) ~ exp3 -> exp1 is not null and exp1 ~ exp3
         // IF exp2 ~ exp3 ≡ TRUE,  NVL(exp1, exp2) ~ exp3 -> exp1 is null or exp1 ~ exp3
         ObRawExpr *exp1_cmp_exp3 = NULL;
-        if (OB_FAIL(ObTransformUtils::add_cast_for_replace_if_need(*ctx_->expr_factory_,
-                                                                   nvl_expr,
-                                                                   exp1,
-                                                                   ctx_->session_info_))) {
+        if (is_row_cmp_expr(exp1)) {
+          // Keep row comparisons intact; splitting them out of NVL can move multi-column predicates
+          // across joins before their operands are available.
+        } else if (OB_FAIL(ObTransformUtils::add_cast_for_replace_if_need(*ctx_->expr_factory_,
+                                                                          nvl_expr,
+                                                                          exp1,
+                                                                          ctx_->session_info_))) {
         } else if (OB_FAIL(ObRawExprUtils::create_double_op_expr(*(ctx_->expr_factory_),
                                                           ctx_->session_info_,
                                                           parent_expr->get_expr_type(),
@@ -1488,7 +1608,6 @@ int ObTransformSimplifyExpr::remove_subquery_when_filter_is_false(ObDMLStmt* stm
   ObSEArray<ObRawExprPointer, 16> relation_expr_pointers;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is null", K(ret), K(stmt));
   } else if (stmt->get_subquery_expr_size() < 1) {
     //do nothing
   } else if (OB_FAIL(stmt->get_relation_exprs(relation_expr_pointers))) {
@@ -1500,14 +1619,12 @@ int ObTransformSimplifyExpr::remove_subquery_when_filter_is_false(ObDMLStmt* stm
     } else {
       trans_happened |= is_happened;
       if (is_happened && OB_FAIL(relation_expr_pointers.at(i).set(expr))) {
-        LOG_WARN("failed to set relation expr pointer", K(ret));
       }
     }
   }
   if (OB_SUCC(ret) && 
       trans_happened &&
       OB_FAIL(stmt->adjust_subquery_list())) {
-    LOG_WARN("failed to adjust subquery list", K(ret));
   }
   return ret;
 }
@@ -1520,7 +1637,6 @@ int ObTransformSimplifyExpr::try_remove_subquery_in_expr(ObDMLStmt* stmt, ObRawE
 
   if (OB_ISNULL(stmt) || OB_ISNULL(expr) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parameters have null", K(stmt), K(expr), K(ctx_));
   } else if (expr->is_query_ref_expr()) {
     bool is_empty = false;
     if (OB_FAIL(do_remove_subquery(stmt, expr, is_happened, is_empty))) {
@@ -1548,10 +1664,8 @@ int ObTransformSimplifyExpr::try_remove_subquery_in_expr(ObDMLStmt* stmt, ObRawE
     if (OB_FAIL(ret)) {
     } else if (NULL != param_expr_left &&
                OB_FAIL(do_remove_subquery(stmt, param_expr_left, left_transform_happened, is_empty_left))) {
-      LOG_WARN("failed to do_remove_subquery_as_expr", K(ret));
     } else if (NULL != param_expr_right &&
                OB_FAIL(do_remove_subquery(stmt, param_expr_right, right_transform_happened, is_empty_right))) {
-      LOG_WARN("failed to do_remove_subquery_as_expr", K(ret));
     } else if (!left_transform_happened && !right_transform_happened) {
       // do nothing
     } else if (OB_FAIL(adjust_subquery_comparison_expr(expr, is_empty_left, is_empty_right, param_expr_left, param_expr_right))) {
@@ -1593,7 +1707,6 @@ int ObTransformSimplifyExpr::adjust_subquery_comparison_expr(ObRawExpr*& expr,
       || OB_ISNULL(ctx_->expr_factory_) 
       || OB_ISNULL(param_expr_left)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null parameter", K(expr), K(ctx_));
   } else if (T_OP_NOT_EXISTS == expr->get_expr_type()) {
     // NOT EXISTS (empty set)     -> true
     // NOT EXISTS (non-empty set) -> false
@@ -1629,20 +1742,16 @@ int ObTransformSimplifyExpr::adjust_subquery_comparison_expr(ObRawExpr*& expr,
     ObItemType op_type = expr->get_expr_type();
     if (OB_ISNULL(param_expr_right)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret));
     } else if ((!param_expr_left->is_query_ref_expr() 
                 && !param_expr_right->is_query_ref_expr() 
                 && OB_FAIL(ObTransformUtils::query_cmp_to_value_cmp(expr->get_expr_type(), op_type)))
                || T_INVALID == op_type) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get op type", K(ret), K(op_type));
     } else if (OB_FAIL(ctx_->expr_factory_->create_raw_expr(op_type, new_expr))) {
     } else if (OB_ISNULL(new_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("row expr is null", K(ret));
     } else if (expr->get_param_count() != 2) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("expr param count != 2", K(ret));
     } else if (OB_FAIL(new_expr->set_param_exprs(param_expr_left, param_expr_right))) {
     } else {
       expr = new_expr;
@@ -1684,13 +1793,11 @@ int ObTransformSimplifyExpr::do_remove_subquery(ObDMLStmt* stmt, ObRawExpr*& exp
   ObRawExpr *limit_cons = NULL;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parameters have null", K(ret), K(stmt), K(expr));
   } else if (expr->is_query_ref_expr()) {
     ObQueryRefRawExpr* query_ref = static_cast<ObQueryRefRawExpr*>(expr);
     ObSelectStmt* sub_stmt = query_ref->get_ref_stmt();
     if (OB_ISNULL(sub_stmt)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null stmt", K(ret));
     } else if (OB_FAIL(is_valid_for_remove_subquery(sub_stmt, is_valid))) {
     } else if (!is_valid) { 
       /* do nothing */
@@ -1730,7 +1837,6 @@ int ObTransformSimplifyExpr::is_filter_false(ObSelectStmt* stmt, bool& is_where_
   bool is_true = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parameters have null", K(ret));
   } else if (OB_FAIL(is_filter_exprs_false(stmt->get_having_exprs(), is_having_false, is_having_true))) {
   } else if (!is_having_false) {
     if (OB_FAIL(is_filter_exprs_false(stmt->get_condition_exprs(), is_where_false, is_true))) {
@@ -1746,7 +1852,6 @@ int ObTransformSimplifyExpr::is_filter_exprs_false(common::ObIArray<ObRawExpr*>&
     ObRawExpr* filter_expr = filter_exprs.at(0);
     if (OB_ISNULL(filter_expr)){
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("null expr", K(ret));
     } else if (filter_expr->get_result_type().is_integer_type() &&
                T_OP_AND != filter_expr->get_expr_type() && 
                T_OP_OR != filter_expr->get_expr_type() &&
@@ -1754,7 +1859,6 @@ int ObTransformSimplifyExpr::is_filter_exprs_false(common::ObIArray<ObRawExpr*>&
       if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->allocator_) || OB_ISNULL(ctx_->exec_ctx_) ||
           OB_ISNULL(ctx_->exec_ctx_->get_physical_plan_ctx())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ctx_), K(ret));
       } else {
         ObObj result;
         bool is_cal_true = false;
@@ -1789,7 +1893,6 @@ int ObTransformSimplifyExpr::check_limit_value(ObSelectStmt* stmt,
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->exec_ctx_) ||
       OB_ISNULL(plan_ctx = ctx_->exec_ctx_->get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(stmt), K(ctx_), K(ctx_->exec_ctx_), K(plan_ctx));
   } else if (stmt->get_limit_expr() != NULL) {
     int64_t limit_value = 0;
     limit_expr = stmt->get_limit_expr();
@@ -1825,7 +1928,6 @@ int ObTransformSimplifyExpr::build_expr_for_not_empty_set(ObSelectStmt* sub_stmt
   int64_t select_item_size;
   if (OB_ISNULL(sub_stmt) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parameters have null", K(sub_stmt), K(ctx_), K(ctx_->expr_factory_));
   } else {
     int64_t select_item_size = sub_stmt->get_select_item_size();
     ObRawExpr* select_expr = NULL;
@@ -1839,7 +1941,6 @@ int ObTransformSimplifyExpr::build_expr_for_not_empty_set(ObSelectStmt* sub_stmt
     if (OB_FAIL(ret)) {
     } else if (select_item_size < 1) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid select item size", K(*sub_stmt), K(ret));
     } else if (select_item_size == 1) {
       expr = sub_stmt->get_select_item(0).expr_;
     } else {
@@ -1847,7 +1948,6 @@ int ObTransformSimplifyExpr::build_expr_for_not_empty_set(ObSelectStmt* sub_stmt
       if (OB_FAIL(ctx_->expr_factory_->create_raw_expr(T_OP_ROW, row_expr))) {
       } else if (OB_ISNULL(row_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("row expr is null", K(ret));
       } else if (OB_FAIL(row_expr->init_param_exprs(select_item_size))) {
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < select_item_size; ++i) {
@@ -1855,7 +1955,6 @@ int ObTransformSimplifyExpr::build_expr_for_not_empty_set(ObSelectStmt* sub_stmt
           }
         }
         if (FAILEDx(row_expr->formalize(ctx_->session_info_))) {
-          LOG_WARN("formalize row expr failed", K(ret));
         } else {
           expr = row_expr;
         }
@@ -1872,11 +1971,9 @@ int ObTransformSimplifyExpr::build_null_for_empty_set(const ObSelectStmt* sub_st
   ObRawExpr* null_expr = NULL;
   if (OB_ISNULL(sub_stmt) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parameters have null", K(sub_stmt), K(ctx_), K(ctx_->expr_factory_));
   } else if (FALSE_IT(select_item_size = sub_stmt->get_select_item_size())) {
   } else if (1 > select_item_size) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid select item size", K(*sub_stmt), K(ret));
   } else if (1 == select_item_size) {
     if (OB_FAIL(build_null_expr_and_cast(sub_stmt->get_select_item(0).expr_, null_expr))) {
     } else {
@@ -1887,7 +1984,6 @@ int ObTransformSimplifyExpr::build_null_for_empty_set(const ObSelectStmt* sub_st
     if (OB_FAIL(ctx_->expr_factory_->create_raw_expr(T_OP_ROW, row_expr))){
     } else if (OB_ISNULL(row_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("row expr is null", K(ret));
     } else if (OB_FAIL(row_expr->init_param_exprs(select_item_size))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < select_item_size; ++i) {
@@ -1896,7 +1992,6 @@ int ObTransformSimplifyExpr::build_null_for_empty_set(const ObSelectStmt* sub_st
         }
       }
       if (FAILEDx(row_expr->formalize(ctx_->session_info_))) {
-        LOG_WARN("formalize row expr failed", K(ret));
       } else {
         expr = row_expr;
       }
@@ -1911,11 +2006,9 @@ int ObTransformSimplifyExpr::build_null_expr_and_cast(const ObRawExpr* expr, ObR
   cast_expr = NULL;
   if (OB_ISNULL(expr) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parameters have null", K(expr), K(ctx_));
   } else if (OB_FAIL(ObRawExprUtils::build_null_expr(*ctx_->expr_factory_, cast_expr))) {
   } else if (OB_ISNULL(cast_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(ObTransformUtils::add_cast_for_replace_if_need(*ctx_->expr_factory_,
                                                                     expr,
                                                                     cast_expr,
@@ -1929,7 +2022,6 @@ int ObTransformSimplifyExpr::replace_expr_when_filter_is_false(ObRawExpr*& expr)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parameters have null", K(expr), K(ctx_));
   } else if (expr->has_flag(IS_COLUMN)) {
     ObRawExpr* null_expr = NULL;
     if (OB_FAIL(build_null_expr_and_cast(expr, null_expr))) {
@@ -1945,7 +2037,6 @@ int ObTransformSimplifyExpr::replace_expr_when_filter_is_false(ObRawExpr*& expr)
       if (OB_FAIL(ObRawExprUtils::build_const_int_expr(*ctx_->expr_factory_, ObIntType, 0, zero_expr))) {
       } else if (OB_ISNULL(zero_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (FALSE_IT(cast_expr = zero_expr)) {
       } else if (OB_FAIL(ObTransformUtils::add_cast_for_replace_if_need(*ctx_->expr_factory_,
                                                                    expr,
@@ -1987,7 +2078,6 @@ int ObTransformSimplifyExpr::transform_is_false_true_expr(ObDMLStmt *stmt, bool 
   bool having_happened = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(remove_false_true(stmt->get_condition_exprs(), where_happened))) {
   } else if (OB_FAIL(stmt->is_select_stmt() && 
                      remove_false_true(static_cast<ObSelectStmt*>(stmt)->get_having_exprs(), having_happened))) {
@@ -2006,7 +2096,6 @@ int ObTransformSimplifyExpr::remove_false_true(common::ObIArray<ObRawExpr*> &exp
     bool is_happened = false;
     if (OB_ISNULL(cond)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(is_valid_remove_false_true(cond, is_valid))) {
     } else if (!is_valid) {
       // do nothing
@@ -2025,7 +2114,6 @@ int ObTransformSimplifyExpr::is_valid_remove_false_true(ObRawExpr *expr, bool &i
   is_valid = false;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null", K(ret));
   } else if (T_OP_IS != expr->get_expr_type() && T_OP_IS_NOT != expr->get_expr_type()) {
     // do nothing
   } else if (2 > expr->get_param_count()) {
@@ -2033,7 +2121,6 @@ int ObTransformSimplifyExpr::is_valid_remove_false_true(ObRawExpr *expr, bool &i
   } else if (OB_ISNULL(param_left = expr->get_param_expr(0)) ||
              OB_ISNULL(param_right = expr->get_param_expr(1))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param_left or param right is null", K(ret));
   } else if ((T_OP_EXISTS == param_left->get_expr_type() || T_OP_NOT_EXISTS == param_left->get_expr_type()) && 
              T_BOOL == param_right->get_expr_type()) {
     is_valid = true;
@@ -2055,11 +2142,9 @@ int ObTransformSimplifyExpr::remove_false_true(ObRawExpr *expr,
       OB_ISNULL(factory = ctx_->expr_factory_) ||
       OB_ISNULL(session = ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("NULL param", K(ret), K(expr), K_(ctx), K(factory), K(session));
   } else if (OB_ISNULL(param_left = expr->get_param_expr(0)) ||
              OB_ISNULL(param_right = expr->get_param_expr(1))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param_left or param right is null", K(ret), K(param_left), K(param_right));
   } else {
     bool is_true = static_cast<const ObConstRawExpr *>(param_right)->get_value().get_bool();
     is_true = (is_true && T_OP_IS == expr->get_expr_type()) ||
@@ -2072,11 +2157,9 @@ int ObTransformSimplifyExpr::remove_false_true(ObRawExpr *expr,
       ObItemType new_type = get_opposite_compare_type(param_left->get_expr_type());
       if (T_INVALID == new_type) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get_opposite_expr_type is invalid", K(ret), K(param_left->get_expr_type()));
       } else if (OB_FAIL(factory->create_raw_expr(new_type, new_expr))) {
       } else if (OB_ISNULL(new_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("new expr is NULL", K(ret));
       } else if (OB_FAIL(new_expr->set_param_expr(param_left->get_param_expr(0)))) {
       } else if (OB_FAIL(new_expr->formalize(ctx_->session_info_))){
       } else {
@@ -2097,7 +2180,6 @@ int ObTransformSimplifyExpr::canonicalize_conditions(ObDMLStmt *stmt, bool &tran
   bool canonicalize_match_condition = false;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null pointer error", K(stmt), K(ret));
   } else {
     OPT_TRACE("canonicalize where condition start:");
     if (OB_FAIL(do_canonicalize(stmt, stmt->get_condition_exprs(), canonicalize_where))) {
@@ -2119,7 +2201,6 @@ int ObTransformSimplifyExpr::canonicalize_conditions(ObDMLStmt *stmt, bool &tran
           bool is_happended = false;
           if (OB_ISNULL(stmt->get_semi_infos().at(i))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpect null semi info", K(stmt->get_semi_infos().at(i)), K(ret));
           } else if (OB_FAIL(do_canonicalize(stmt, stmt->get_semi_infos().at(i)->semi_conditions_, is_happended))) {
           } else {
             canonicalize_semi_info |= is_happended;
@@ -2131,7 +2212,6 @@ int ObTransformSimplifyExpr::canonicalize_conditions(ObDMLStmt *stmt, bool &tran
           bool is_happended = false;
           if (OB_ISNULL(stmt->get_joined_tables().at(i))) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpect null joined table item", K(stmt->get_joined_tables().at(i)), K(ret));
           } else if (OB_FAIL(recursive_canonicalize_join_conditions(stmt, stmt->get_joined_tables().at(i), is_happended))) {
           } else {
             canonicalize_join |= is_happended;
@@ -2157,13 +2237,11 @@ int ObTransformSimplifyExpr::recursive_canonicalize_join_conditions(ObDMLStmt *s
   bool right_happened = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(table)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null pointer", K(stmt), K(table), K(ret));
   } else if (!table->is_joined_table()) {
     /*do nothing*/
   } else if (OB_ISNULL(join_table = static_cast<JoinedTable*>(table)) ||
              OB_ISNULL(join_table->left_table_) || OB_ISNULL(join_table->right_table_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(join_table), K(join_table->left_table_), K(join_table));
   } else if (OB_FAIL(do_canonicalize(stmt, join_table->join_conditions_, cur_happened))) {
   } else if (OB_FAIL(SMART_CALL(recursive_canonicalize_join_conditions(stmt,
                                                                       join_table->left_table_,
@@ -2186,7 +2264,6 @@ int ObTransformSimplifyExpr::do_canonicalize(ObDMLStmt *stmt, ObIArray<ObRawExpr
   bool pull_similar_happend = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null pointer error", K(stmt), K(ret));
   } else if (conditions.count() == 0) {
     //do nothing
   } else if (OB_FAIL(push_not(conditions, push_not_happend))) {
@@ -2200,7 +2277,6 @@ int ObTransformSimplifyExpr::do_canonicalize(ObDMLStmt *stmt, ObIArray<ObRawExpr
       for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); ++i) {
         if (OB_ISNULL(conditions.at(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpect null expr", K(ret));
         } else if (OB_FAIL(conditions.at(i)->formalize(ctx_->session_info_))) {
         }
       }
@@ -2217,13 +2293,11 @@ int ObTransformSimplifyExpr::push_not(ObIArray<ObRawExpr*> &conditions, bool &tr
   int ret = OB_SUCCESS;
   hash::ObHashMap<uint64_t, ObRawExpr *> push_expr_map;
   if (!push_expr_map.created() && OB_FAIL(push_expr_map.create(20, ObModIds::OB_SQL_COMPILE))) {
-    LOG_WARN("failed to create push_expr_map", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); i++) {
     ObRawExpr *&child_expr = conditions.at(i);
     if (OB_ISNULL(child_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("expr is null pointer", K(child_expr), K(ret));
     } else if (!child_expr->has_flag(CNT_NOT)) {
      //do nothing
     } else if (OB_FAIL(recursive_push_not(child_expr, push_expr_map, trans_happened))) {
@@ -2243,7 +2317,6 @@ int ObTransformSimplifyExpr::recursive_push_not(ObRawExpr *&expr,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr is null pointer", K(expr), K(ret));
   } else if (!expr->has_flag(IS_NOT)) {
     //do nothing
   } else if (OB_FAIL(do_push_not(expr, push_expr_map, trans_happened))) {
@@ -2252,7 +2325,6 @@ int ObTransformSimplifyExpr::recursive_push_not(ObRawExpr *&expr,
     ObRawExpr *&child_expr = expr->get_param_expr(i);
     if (OB_ISNULL(child_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("param expr is null", K(child_expr), K(ret));
     } else if (!child_expr->has_flag(CNT_NOT)) {
       //do nothing
     } else if (OB_FAIL(SMART_CALL(recursive_push_not(child_expr, push_expr_map, trans_happened)))) {
@@ -2276,19 +2348,16 @@ int ObTransformSimplifyExpr::do_push_not(ObRawExpr *&expr,
       OB_ISNULL(expr_factory = ctx_->expr_factory_) ||
       OB_ISNULL(ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null pointer error", K(expr), K_(ctx), K(expr_factory), K(ret));
   } else if (!expr->is_op_expr() || expr->get_expr_type() != T_OP_NOT) {
     //do nothing
   } else if (OB_ISNULL(child = expr->get_param_expr(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child expr is null", K(child), K(ret));
   } else if (child->get_expr_type() == T_OP_NOT) {
     ObRawExpr *cur = child;
     int count = 1;
     while (OB_SUCC(ret) && cur->get_expr_type() == T_OP_NOT) {
       if (OB_ISNULL(cur->get_param_expr(0))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expr is null",K(cur), K(ret));
       } else {
         count++;
         key = reinterpret_cast<const uint64_t>(cur->get_param_expr(0));
@@ -2312,7 +2381,6 @@ int ObTransformSimplifyExpr::do_push_not(ObRawExpr *&expr,
       if (OB_FAIL(ObRawExprUtils::try_create_bool_expr(cur, temp, *expr_factory))) {
       } else if (OB_ISNULL(temp)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null expr", K(ret));
       } else if (OB_FAIL(temp->formalize(ctx_->session_info_))) {
       } else {
         expr = temp;
@@ -2331,7 +2399,6 @@ int ObTransformSimplifyExpr::do_push_not(ObRawExpr *&expr,
       if (OB_HASH_NOT_EXIST == ret) {
         ret = OB_SUCCESS;
       } else {
-        LOG_WARN("failed to get push expr from push_expr_map", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
@@ -2349,7 +2416,6 @@ int ObTransformSimplifyExpr::do_push_not(ObRawExpr *&expr,
       if (OB_FAIL(expr_factory->create_raw_expr(new_type, new_expr))) {
       } else if (OB_ISNULL(new_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("new_expr is null", K(new_expr), K(ret));
       } else if (OB_FAIL(new_expr->init_param_exprs(child->get_param_count()))) {
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < child->get_param_count(); ++i) {
@@ -2357,14 +2423,12 @@ int ObTransformSimplifyExpr::do_push_not(ObRawExpr *&expr,
           if (OB_FAIL(expr_factory->create_raw_expr(T_OP_NOT, not_expr))) {
           } else if (OB_ISNULL(not_expr)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("not_expr is null", K(not_expr), K(ret));
           } else if (OB_FAIL(not_expr->set_param_expr(child->get_param_expr(i)))) {
           } else if (OB_FAIL(new_expr->add_param_expr(not_expr))) {
           } else if (OB_FAIL(not_expr->add_flag(IS_NOT))) {
           }
         }
         if (FAILEDx(new_expr->formalize(ctx_->session_info_))) {
-          LOG_WARN("failed to formalize", K(ret));
         } else {
           expr = new_expr;
           trans_happened = true;
@@ -2379,24 +2443,20 @@ int ObTransformSimplifyExpr::do_push_not(ObRawExpr *&expr,
       if (OB_FAIL(expr_factory->create_raw_expr(new_type, new_expr))) {
       } else if (OB_ISNULL(new_expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("new_expr is null", K(new_expr), K(ret));
       } else if (OB_FAIL(new_expr->set_param_exprs(static_cast<ObOpRawExpr*>(child)->get_param_exprs()))) {
       } else if (IS_COMMON_COMPARISON_OP(new_expr->get_expr_type())) {
         ObRawExpr *left_expr = NULL;
         ObRawExpr *right_expr = NULL;
         if (OB_UNLIKELY(2 != new_expr->get_param_count())) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid param cnt", K(ret), K(new_expr->get_param_count()));
         } else if (OB_ISNULL(left_expr = new_expr->get_param_expr(0)) ||
                   OB_ISNULL(right_expr = new_expr->get_param_expr(1))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", K(ret), K(left_expr), K(right_expr));
         } else if (OB_FAIL(reverse_cmp_type_of_align_date4cmp(left_expr, expr_factory, new_type, true))) {
         } else if (OB_FAIL(reverse_cmp_type_of_align_date4cmp(right_expr, expr_factory, new_type, false))) {
         }
       }
       if (FAILEDx(new_expr->formalize(ctx_->session_info_))) {
-        LOG_WARN("failed to formalize", K(ret));
       } else {
         expr = new_expr;
         if (OB_FAIL(new_expr->formalize(ctx_->session_info_))) {
@@ -2419,7 +2479,6 @@ int ObTransformSimplifyExpr::reverse_cmp_type_of_align_date4cmp(ObRawExpr* expr,
   ObConstRawExpr *cmp_type_expr = NULL;
   if (OB_ISNULL(expr) || OB_ISNULL(expr_factory) || !IS_COMMON_COMPARISON_OP(cmp_type)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null error", K(expr), K(ret));
   } else if (is_left) {
     switch (cmp_type) {
       case T_OP_LE: {
@@ -2451,7 +2510,6 @@ int ObTransformSimplifyExpr::reverse_cmp_type_of_align_date4cmp(ObRawExpr* expr,
   } else if (OB_FAIL(ObRawExprUtils::build_const_int_expr(*expr_factory, ObIntType, new_cmp_type, cmp_type_expr))) {
   } else if (OB_ISNULL(cmp_type_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cmp_type_expr is null.", K(ret));
   } else {
     expr->get_param_expr(1) = cmp_type_expr;
   }
@@ -2460,7 +2518,6 @@ int ObTransformSimplifyExpr::reverse_cmp_type_of_align_date4cmp(ObRawExpr* expr,
     ObRawExpr *child_expr = expr->get_param_expr(i);
     if (OB_ISNULL(child_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("expr is null pointer", K(child_expr), K(ret));
     } else if (OB_FAIL(reverse_cmp_type_of_align_date4cmp(child_expr, expr_factory, cmp_type, is_left))) {
     }
   }
@@ -2586,7 +2643,6 @@ int ObTransformSimplifyExpr::recursive_remove_duplicate_exprs(ObQueryCtx &query_
       OB_ISNULL(ctx_->expr_factory_) ||
       OB_ISNULL(ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null pointer error", K(expr), K_(ctx), K_(ctx_->expr_factory), K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
       if (OB_FAIL(SMART_CALL(recursive_remove_duplicate_exprs(query_ctx,
@@ -2610,7 +2666,6 @@ int ObTransformSimplifyExpr::recursive_remove_duplicate_exprs(ObQueryCtx &query_
         if (OB_FAIL(ObRawExprUtils::try_create_bool_expr(param_conds.at(0), temp, *ctx_->expr_factory_))) {
         }  else if (OB_ISNULL(temp)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null expr", K(ret));
         } else if (OB_FAIL(temp->formalize(ctx_->session_info_))) {
         } else {
           expr = temp;
@@ -2632,18 +2687,15 @@ int ObTransformSimplifyExpr::do_remove_duplicate_exprs(ObQueryCtx &query_ctx,
   const int64_t param_count = exprs.count();
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null pointer error", K_(ctx), K_(ctx_->expr_factory), K(ret));
   } else {
     ObQuestionmarkEqualCtx cmp_ctx(false);
     for (int64_t i = param_count - 1; OB_SUCC(ret) && i >= 1; i--) {
       if (OB_ISNULL(exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null pointer error");
       }
       for (int64_t j = 0; OB_SUCC(ret) && j < i; j++) {
         if (OB_ISNULL(exprs.at(j))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpect null pointer error");
         } else if (exprs.at(i)->same_as(*exprs.at(j), &cmp_ctx)) {
           if (OB_FAIL(exprs.remove(i))) {
           } else if (!cmp_ctx.equal_pairs_.empty()) {
@@ -2685,7 +2737,6 @@ int ObTransformSimplifyExpr::pull_similar_expr(ObDMLStmt *stmt,
   for (int64_t i = 0; OB_SUCC(ret) && i < conditions.count(); i++) {
     if (OB_ISNULL(conditions.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null pointer error", K(conditions.at(i)), K(ret));
     } else if (OB_FAIL(recursive_pull_similar(stmt, conditions.at(i), trans_happened))) {
     }
   }
@@ -2697,7 +2748,6 @@ int ObTransformSimplifyExpr::pull_similar_expr(ObDMLStmt *stmt,
       //do nothing
     } else if (OB_ISNULL(expr = conditions.at(0))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null pointer error", K(expr), K(ret));
     } else if (OB_FAIL(do_pull_similar(stmt, expr, conditions, T_OP_AND, happend))) {
     } else if (!happend) {
       //do nothing
@@ -2721,12 +2771,10 @@ int ObTransformSimplifyExpr::recursive_pull_similar(ObDMLStmt *stmt, ObRawExpr* 
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null pointer error", K(expr), K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); i++) {
       if (OB_ISNULL(expr->get_param_expr(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpect null pointer error", K(ret));
       } else if (OB_FAIL(SMART_CALL(recursive_pull_similar(stmt, expr->get_param_expr(i), trans_happened)))) {
       }
     }
@@ -2764,13 +2812,11 @@ int ObTransformSimplifyExpr::do_pull_similar(ObDMLStmt *stmt,
       OB_ISNULL(factory = ctx_->expr_factory_) ||
       OB_ISNULL(ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null pointer error", K(expr), K_(ctx), K(factory), K(ret));
   } 
   for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
     ObSEArray<ObRawExpr *, 4> params;
     if (OB_ISNULL(exprs.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null pointer error", K(exprs.at(i)), K(ret));
     } else if (OB_FAIL(get_params_array(params, exprs.at(i), expr_type))) {
     } else if (OB_FAIL(params_sets.push_back(params))) {
     } else { /*do nothing*/ }
@@ -2792,7 +2838,6 @@ int ObTransformSimplifyExpr::do_pull_similar(ObDMLStmt *stmt,
       if (OB_FAIL(ObRawExprUtils::try_create_bool_expr(intersection.at(0), temp, *factory))) {
       } else if (OB_ISNULL(temp)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null expr", K(ret));
       } else if (OB_FAIL(temp->formalize(ctx_->session_info_))) {
       } else {
         new_expr = static_cast<ObOpRawExpr*>(temp);
@@ -2800,13 +2845,11 @@ int ObTransformSimplifyExpr::do_pull_similar(ObDMLStmt *stmt,
     } else if (OB_FAIL(factory->create_raw_expr(new_type, new_expr))) {
     } else if (OB_ISNULL(new_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null pointer error", K(new_expr), K(ret));
     } else if (OB_FAIL(new_expr->set_param_exprs(intersection))) {
     }
   } else if (OB_FAIL(factory->create_raw_expr(new_type, new_expr))) {
   } else if (OB_ISNULL(new_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null pointer error", K(new_expr), K(ret));
   } else if (OB_FAIL(new_expr->init_param_exprs(intersection.count() + 1))) {
   } else if (OB_FAIL(append(new_expr->get_param_exprs(), intersection))) {
   } else if (OB_FAIL(new_expr->add_param_expr(new_param))) {
@@ -2832,7 +2875,6 @@ int ObTransformSimplifyExpr::get_intersection(ObDMLStmt *stmt,
   ObStmtCompareContext context;
   if (OB_ISNULL(ctx_) || OB_ISNULL(stmt) || OB_ISNULL(stmt->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null pointer error", K_(ctx), K(stmt), K(stmt->get_query_ctx()), K(ret));
   } else if (OB_FAIL(params.assign(params_sets.at(0)))) {
   } else {
     context.init(&stmt->get_query_ctx()->calculable_items_);
@@ -2856,7 +2898,6 @@ int ObTransformSimplifyExpr::get_intersection(ObDMLStmt *stmt,
     }
   }
   if (OB_SUCC(ret) && is_valid && OB_FAIL(intersection.assign(params))) {
-    LOG_WARN("fail to assign array", K(ret));
   }
   return ret;
 }
@@ -2869,7 +2910,6 @@ int ObTransformSimplifyExpr::remove_intersect_item(ObDMLStmt *stmt,
   ObStmtCompareContext context;
   if (OB_ISNULL(ctx_) || OB_ISNULL(stmt) || OB_ISNULL(stmt->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null pointer error", K_(ctx), K(stmt), K(stmt->get_query_ctx()), K(ret));
   } else {
     context.init(&stmt->get_query_ctx()->calculable_items_);
   }
@@ -2912,7 +2952,6 @@ int ObTransformSimplifyExpr::gen_not_intersect_param(ObRawExpr* &expr,
       OB_ISNULL(factory = ctx_->expr_factory_) ||
       OB_ISNULL(ctx_->session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null pointer error", K_(ctx), K(factory), K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && is_valid && i < params_sets.count(); i++) {
     ObOpRawExpr* new_expr = NULL;
@@ -2928,7 +2967,6 @@ int ObTransformSimplifyExpr::gen_not_intersect_param(ObRawExpr* &expr,
     } else if (OB_FAIL(factory->create_raw_expr(new_type, new_expr))) {
     } else if (OB_ISNULL(new_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpect null pointer error", K(new_expr), K(ret));
     } else if (OB_FAIL(new_expr->set_param_exprs(item))) {
     } else if (OB_FAIL(new_expr->formalize(ctx_->session_info_))) {
     } else if (OB_FAIL(params.push_back(new_expr))) {
@@ -2943,7 +2981,6 @@ int ObTransformSimplifyExpr::gen_not_intersect_param(ObRawExpr* &expr,
     if (OB_FAIL(ObRawExprUtils::try_create_bool_expr(params.at(0), new_expr, *factory))) {
     } else if (OB_ISNULL(new_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null expr", K(ret));
     } else if (OB_FAIL(new_expr->formalize(ctx_->session_info_))) {
     } else {
       expr = new_expr;
@@ -2951,7 +2988,6 @@ int ObTransformSimplifyExpr::gen_not_intersect_param(ObRawExpr* &expr,
   } else if (OB_FAIL(factory->create_raw_expr(expr_type, op_expr))) {
   } else if (OB_ISNULL(op_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null pointer error", K(op_expr), K(ret));
   } else if (OB_FAIL(op_expr->set_param_exprs(params))) {
   } else if (OB_FAIL(op_expr->formalize(ctx_->session_info_))) {
   } else {
@@ -2967,7 +3003,6 @@ int ObTransformSimplifyExpr::get_params_array(ObIArray<ObRawExpr*> &exprs,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null pointer error", K(expr), K(ret));
   } else if ((T_OP_AND == expr->get_expr_type() && T_OP_OR == parent_type) ||
              (T_OP_OR == expr->get_expr_type() && T_OP_AND == parent_type)) {
     ObOpRawExpr *op_expr = static_cast<ObOpRawExpr*>(expr);
@@ -3003,7 +3038,6 @@ int ObTransformSimplifyExpr::convert_case_when_predicate(ObDMLStmt *stmt,
 
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null stmt", K(ret));
   } else {
     // try to simplify by then exprs for condition exprs
     for (int64_t i = 0; OB_SUCC(ret) && i < stmt->get_condition_exprs().count(); ++i) {
@@ -3011,7 +3045,6 @@ int ObTransformSimplifyExpr::convert_case_when_predicate(ObDMLStmt *stmt,
       bool cnt_subquery = false;
       if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null expr");
       } else if (OB_FALSE_IT(cnt_subquery = expr->has_flag(CNT_SUB_QUERY))) {
       } else if (OB_FAIL(try_convert_case_when_by_then_exprs(expr,
                                                              extracted_preds,
@@ -3038,7 +3071,6 @@ int ObTransformSimplifyExpr::convert_case_when_predicate(ObDMLStmt *stmt,
         bool cnt_subquery = false;
         if (OB_ISNULL(expr)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null expr");
         } else if (OB_FALSE_IT(cnt_subquery = expr->has_flag(CNT_SUB_QUERY))) {
         } else if (expr->has_flag(CNT_AGG) && select_stmt->is_scala_group_by()) {
           // do nothing
@@ -3061,7 +3093,6 @@ int ObTransformSimplifyExpr::convert_case_when_predicate(ObDMLStmt *stmt,
 
     // adjust subquery list
     if (OB_SUCC(ret) && need_adjust_subquery && OB_FAIL(stmt->adjust_subquery_list())) {
-      LOG_WARN("failed to adjust subquery list", K(ret));
     }
   }
   return ret;
@@ -3084,7 +3115,6 @@ int ObTransformSimplifyExpr::try_convert_case_when_by_then_exprs(ObRawExpr *&exp
   
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(expr), K(ret));
   } else if (OB_FAIL(check_convert_then_exprs_validity(expr, case_expr, is_all_false, is_all_true, 
                                                        reserved_branch_cnt, true_exprs, 
                                                        false_null_exprs, extracted_preds, is_valid))) {
@@ -3138,7 +3168,6 @@ int ObTransformSimplifyExpr::check_convert_then_exprs_validity(ObRawExpr *parent
   if (OB_ISNULL(parent_expr) || OB_ISNULL(ctx_) || 
       OB_ISNULL(ctx_->expr_factory_) || OB_ISNULL(ctx_->allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected param is NULL", K(ret));
   } else if (!IS_COMMON_COMPARISON_OP(parent_expr->get_expr_type())) {
     is_valid = false;
   } else {
@@ -3148,11 +3177,9 @@ int ObTransformSimplifyExpr::check_convert_then_exprs_validity(ObRawExpr *parent
     ObOpRawExpr *op_expr = static_cast<ObOpRawExpr*>(parent_expr);
     if (OB_UNLIKELY(2 != op_expr->get_param_count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected param count", K(op_expr->get_param_count()), K(ret));
     } else if (OB_ISNULL(child_0 = op_expr->get_param_expr(0)) 
             || OB_ISNULL(child_1 = op_expr->get_param_expr(1))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null expr", K(ret));
     } else if ((T_OP_CASE == child_0->get_expr_type()) 
                 && child_1->is_static_const_expr()) {
       is_case_at_left = true;
@@ -3173,7 +3200,6 @@ int ObTransformSimplifyExpr::check_convert_then_exprs_validity(ObRawExpr *parent
   } else if (OB_UNLIKELY(case_expr->get_when_expr_size() != case_expr->get_then_expr_size()) ||
              OB_UNLIKELY(case_expr->get_when_expr_size() < 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("incorrect params of case expr", K(ret));
   } else if (OB_FAIL(enum_exprs.assign(case_expr->get_then_param_exprs()))) {
   } else if (OB_FAIL(enum_exprs.push_back(case_expr->get_default_param_expr()))) {
   } else {
@@ -3184,14 +3210,12 @@ int ObTransformSimplifyExpr::check_convert_then_exprs_validity(ObRawExpr *parent
       ObRawExpr *cur_then_filter = NULL;
       if (OB_ISNULL(enum_expr = enum_exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("expr is NULL", K(ret), K(enum_expr));
         // Generally, the target expression of each branch is at least comparable even if the types are not exactly the same. NULL is special, so we make a special adaptation here
       } else if (enum_expr->is_const_expr() && enum_expr->get_result_type().is_null() &&
                  OB_FAIL(ObTransformUtils::add_cast_for_replace_if_need(*(ctx_->expr_factory_), 
                                                                         case_expr, 
                                                                         enum_expr, 
                                                                         ctx_->session_info_))) {
-        LOG_WARN("failed to add cast above null", K(ret));
       } else if (OB_FAIL(ObRawExprUtils::create_double_op_expr(*(ctx_->expr_factory_), 
                                                               ctx_->session_info_,
                                                               parent_expr->get_expr_type(),
@@ -3279,7 +3303,6 @@ int ObTransformSimplifyExpr::get_preds_for_convert_case_when_by_then(ObCaseOpRaw
   ObRawExpr* new_cmp_expr = NULL;
   if (OB_ISNULL(case_expr) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected NULL", K(ret));
   } else if (is_all_true) {
     // do nothing
   } else if (is_all_false) {
@@ -3289,7 +3312,6 @@ int ObTransformSimplifyExpr::get_preds_for_convert_case_when_by_then(ObCaseOpRaw
   } else if (OB_UNLIKELY(reserved_branch_cnt < 0 || 
                          reserved_branch_cnt > case_expr->get_when_expr_size())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected branch count", K(ret), K(reserved_branch_cnt));
   } else if (reserved_branch_cnt > 0) {
     // need to build a new case when expr to preserve preceding conditions
     for (int64_t i = 0; OB_SUCC(ret) && i < reserved_branch_cnt; ++i) {
@@ -3297,7 +3319,6 @@ int ObTransformSimplifyExpr::get_preds_for_convert_case_when_by_then(ObCaseOpRaw
       ObConstRawExpr* then_expr = NULL;
       if (OB_ISNULL(when_expr = case_expr->get_when_param_expr(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null expr", K(ret));
       } else if (OB_FAIL(ObRawExprUtils::build_const_int_expr(*ctx_->expr_factory_, 
                                                               ObIntType, 0, then_expr))) {
       } else if (OB_FAIL(when_exprs.push_back(when_expr))) {
@@ -3327,20 +3348,17 @@ int ObTransformSimplifyExpr::add_constraint_for_convert_case_when_by_then(ObIArr
   ObRawExpr *false_cons_expr = NULL;
   if (OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected param is NULL",K(ret));
   }
   
   for (int64_t i = 0; OB_SUCC(ret) && i < false_null_exprs.count(); i++) {
     ObRawExpr *lnnvl_expr = NULL;
     if (OB_ISNULL(false_null_exprs.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null expr", K(ret));
     } else if (OB_FAIL(ObRawExprUtils::build_lnnvl_expr(*ctx_->expr_factory_, 
                                                         false_null_exprs.at(i),
                                                         lnnvl_expr))) {
     } else if (OB_ISNULL(lnnvl_expr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null expr", K(ret));
     } else if (OB_FAIL(lnnvl_expr->formalize(ctx_->session_info_))) {
     } else {
       ObExprConstraint true_cons(lnnvl_expr, PreCalcExprExpectResult::PRE_CALC_RESULT_TRUE);
@@ -3352,7 +3370,6 @@ int ObTransformSimplifyExpr::add_constraint_for_convert_case_when_by_then(ObIArr
   for (int64_t i = 0; OB_SUCC(ret) && i < true_exprs.count(); i++) {
     if (OB_ISNULL(true_exprs.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null expr", K(ret));
     } else {
       ObExprConstraint true_cons(true_exprs.at(i), PreCalcExprExpectResult::PRE_CALC_RESULT_TRUE);
       if (OB_FAIL(ctx_->expr_constraints_.push_back(true_cons))) {

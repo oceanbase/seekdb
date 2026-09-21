@@ -36,7 +36,6 @@ struct Compare
     } else if (OB_UNLIKELY(l.col_obj_.is_null()) ||
                OB_UNLIKELY(r.col_obj_.is_null())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret));
     } else {
       less = l.fre_times_ > r.fre_times_;//Descending sort
     }
@@ -70,7 +69,6 @@ int ObTopKFrequencyHistograms::create_topk_fre_items(const ObObjMeta *obj_meta/*
       ObTopkItem *topk_item = NULL;
       if (OB_ISNULL(topk_item = static_cast<ObTopkItem *>(used_list_.at(i)))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), KPC(topk_item));
       } else {
         topk_fre_items_.at(i) = *topk_item;
       }
@@ -80,7 +78,6 @@ int ObTopKFrequencyHistograms::create_topk_fre_items(const ObObjMeta *obj_meta/*
           OB_ISNULL(datum_item->datum_) ||
           OB_ISNULL(obj_meta)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(datum_item), K(obj_meta));
       } else if (OB_FAIL(datum_item->datum_->to_obj(topk_fre_items_.at(i).col_obj_, *obj_meta))) {
       } else {
         topk_fre_items_.at(i).fre_times_ = datum_item->fre_times_;
@@ -109,7 +106,6 @@ int ObTopKFrequencyHistograms::sort_topk_fre_items(ObIArray<ObTopkItem> &items)
             CopyableComparer(cmp));
   if (OB_FAIL(cmp.ret_)) {
     ret = cmp.ret_;
-    LOG_WARN("failed to sort frequency item", K(ret));
   }
   return ret;
 }
@@ -132,13 +128,11 @@ int ObTopKFrequencyHistograms::merge_distribute_top_k_fre_items(const ObObj &obj
     //do nothing
   } else if (OB_UNLIKELY(!obj.is_lob())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(obj), K(ret));
   } else if (OB_UNLIKELY(window_size_ <= 0 ||
                          item_size_ <= 0 ||
                          get_max_reserved_item_size() >= window_size_ ||
                          !is_need_merge_topk_hist())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid argument", K(window_size_), K(item_size_), K(!is_need_merge_topk_hist()), K(ret));
   } else if (OB_FAIL(topk_hist.read_result(obj))) {
   } else if (topk_hist.is_by_pass()) {
     N_ += topk_hist.get_total_fre_item();
@@ -193,7 +187,6 @@ int ObTopKFrequencyHistograms::add_top_k_frequency_item(uint64_t datum_hash, con
                   get_max_reserved_item_size() >= window_size_ ||
                   is_need_merge_topk_hist())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid argument", K(window_size_), K(item_size_), K(is_need_merge_topk_hist()), K(ret));
   } else if (!datum.is_null()) {
     if (OB_UNLIKELY(!topk_map_.created())) {
       int64_t hash_map_size = window_size_ + get_max_reserved_item_size();
@@ -230,12 +223,10 @@ int ObTopKFrequencyHistograms::add_batch_items(const char **payloads, int32_t *l
                   get_max_reserved_item_size() >= window_size_ ||
                   is_need_merge_topk_hist())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid argument", K(window_size_), K(item_size_), K(is_need_merge_topk_hist()), K(ret));
   } else if (OB_ISNULL(payloads) ||
              OB_ISNULL(lens) ||
              OB_ISNULL(hash_val)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(payloads), K(lens), K(hash_val));
   } else if (OB_UNLIKELY(!by_pass_ && !topk_map_.created())) {
     int64_t hash_map_size = window_size_ + get_max_reserved_item_size();
     if (OB_FAIL(topk_map_.create(hash_map_size, "TopkMap", "TopkNode"))) {
@@ -280,7 +271,6 @@ int ObTopKFrequencyHistograms::add_top_k_frequency_item(const ObObj &obj, int64_
                   get_max_reserved_item_size() >= window_size_ ||
                   !is_need_merge_topk_hist())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("get invalid argument", K(window_size_), K(item_size_), K(!is_need_merge_topk_hist()), K(ret));
   } else if (!obj.is_null()) {
     if (OB_UNLIKELY(!topk_map_.created())) {
       int64_t hash_map_size = window_size_ + get_max_reserved_item_size();
@@ -334,7 +324,6 @@ int ObTopKFrequencyHistograms::add_entry(const uint64_t &datum_hash,
   if (OB_ISNULL(item = alloc_topk_datum_item()) ||
       OB_ISNULL(item->datum_ = OB_NEWx(ObDatum, (&get_allocator())))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory", K(ret));
   } else {
     item->fre_times_ = fre_time;
     item->delta_ = delta;
@@ -356,7 +345,6 @@ int ObTopKFrequencyHistograms::add_entry(const uint64_t &obj_hash,
   ObTopkItem *item = NULL;
   if (OB_ISNULL(item = alloc_topk_item())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to get topk item", K(ret));
   } else {
     item->fre_times_ = fre_time;
     item->delta_ = delta;
@@ -404,13 +392,10 @@ int ObTopKFrequencyHistograms::remove_entry(ObTopkBaseItem *item)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(item)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("item is null", K(ret));
   } else if (is_need_merge_topk_hist() &&
              OB_FAIL(topk_map_.erase_refactored(static_cast<ObTopkItem*>(item)->obj_hash_))) {
-    LOG_WARN("failed to erase item", K(ret));
   } else if (!is_need_merge_topk_hist() &&
              OB_FAIL(topk_map_.erase_refactored(static_cast<ObTopkDatumItem*>(item)->datum_hash_))) {
-    LOG_WARN("failed to erase item", K(ret));
   } else if (OB_FAIL(free_list_.push_back(item))) {
   }
   return ret;
@@ -431,7 +416,6 @@ int ObTopKFrequencyHistograms::shrink_topk_items()
     ObTopkBaseItem *item = NULL;
     if (OB_ISNULL(item = used_list_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null", K(ret), K(i));
     } else if (item->fre_times_ + item->delta_ > bucket_num_ ||
                rm_cnt >= max_rm_cnt) {
       used_list_.at(pos++) = item;
@@ -452,7 +436,6 @@ int ObTopKFrequencyHistograms::shrink_topk_items()
       if (OB_UNLIKELY(obj_memory_limit_ < MIN_OBJ_MEMORY_LIMIT ||
                       obj_memory_limit_ > MAX_OBJ_MEMORY_LIMIT)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), K(obj_memory_limit_));
       } else if (OB_UNLIKELY(get_allocator().used() > obj_memory_limit_)) {
         if (OB_FAIL(shrink_memory_usage())) {
         }
@@ -533,12 +516,10 @@ int ObTopKFrequencyHistograms::shrink_memory_usage()
   for (int64_t i = 0; OB_SUCC(ret) && i < used_list_.count(); ++i) {
     if (OB_ISNULL(used_list_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("topk item is null", K(ret));
     } else if (is_need_merge_topk_hist()) {
       ObTopkItem *topk_item = NULL;
       if (OB_ISNULL(topk_item = static_cast<ObTopkItem *>(used_list_.at(i)))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), KPC(topk_item));
       } else if (OB_FAIL(ob_write_obj(next_allocator,
                                       topk_item->col_obj_,
                                       topk_item->col_obj_))) {
@@ -551,10 +532,8 @@ int ObTopKFrequencyHistograms::shrink_memory_usage()
       if (OB_ISNULL(datum_item = static_cast<ObTopkDatumItem *>(used_list_.at(i))) ||
           OB_ISNULL(tmp_datum = datum_item->datum_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), KPC(datum_item));
       } else if (OB_ISNULL(datum_item->datum_ = OB_NEWx(ObDatum, (&next_allocator)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("failed to allocate memory", K(ret));
       } else if (OB_FAIL(datum_item->datum_->deep_copy(*tmp_datum, next_allocator))) {
       } else if (OB_FAIL(topk_map_.set_refactored(datum_item->datum_hash_,
                                                   reinterpret_cast<uint64_t>(datum_item)))) {
@@ -577,7 +556,6 @@ int ObTopKFrequencyHistograms::read_result(const ObObj &result_obj)
     // do nothing
   } else if (OB_UNLIKELY(!result_obj.is_lob())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("lob is expected", K(ret));
   } else if (OB_FAIL(result_obj.get_string(result_str))) {
   } else if (OB_FAIL(deserialize(result_str.ptr(), result_str.length(), pos))) {
   }
@@ -662,10 +640,8 @@ int ObTopkHistEstimator::estimate(const ObOptStatGatherParam &param,
   } else if (OB_FAIL(add_from_table(allocator, param.db_name_, param.tab_name_))) {
   } else if (OB_UNLIKELY(param.partition_infos_.count() > 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(param));
   } else if (!param.partition_infos_.empty() &&
              OB_FAIL(fill_partition_info(allocator, param, param.partition_infos_.at(0)))) {
-    LOG_WARN("failed to add partition info", K(ret));
   } else if (OB_FAIL(fill_parallel_info(allocator, param.degree_))) {
   } else if (OB_FAIL(ObDbmsStatsUtils::get_valid_duration_time(param.gather_start_time_,
                                                                param.max_duration_time_,
@@ -689,14 +665,12 @@ int ObTopkHistEstimator::add_topk_hist_stat_items(const ObIArray<ObColumnStatPar
   if (OB_ISNULL(opt_stat.table_stat_) ||
       OB_UNLIKELY(opt_stat.column_stats_.count() != column_params.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(opt_stat), K(column_params));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < column_params.count(); ++i) {
       const ObColumnStatParam *col_param = &column_params.at(i);
       if (OB_ISNULL(opt_stat.column_stats_.at(i)) ||
           OB_UNLIKELY(col_param->column_id_ != opt_stat.column_stats_.at(i)->get_column_id())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected error", K(ret), KPC(opt_stat.column_stats_.at(i)), KPC(col_param));
       } else if (opt_stat.column_stats_.at(i)->get_histogram().get_type() != ObHistType::TOP_FREQUENCY) {
         //do nothing
       } else {

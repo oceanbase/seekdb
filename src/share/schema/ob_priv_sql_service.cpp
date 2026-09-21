@@ -70,7 +70,6 @@ int ObPrivSqlService::grant_database(
 
   if (!db_priv_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(db_priv_key), K(ret));
   } else {
     int64_t affected_rows = 0;
     ObDMLExecHelper exec(sql_client);
@@ -91,7 +90,6 @@ int ObPrivSqlService::grant_database(
       if (OB_FAIL(ret)) {
       } else if (!is_single_row(affected_rows) && !is_double_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("affected_rows unexpected to be one or two", K(affected_rows), K(ret));
       }
     }
 
@@ -100,11 +98,9 @@ int ObPrivSqlService::grant_database(
       if (is_deleted) {
         if (OB_FAIL(dml.add_pk_column("schema_version", new_schema_version))
             || OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
-          LOG_WARN("add column failed", K(ret));
         } else if (OB_FAIL(exec.exec_replace(OB_ALL_DATABASE_PRIVILEGE_HISTORY_TNAME, dml, affected_rows))) {
         } else if (!is_single_row(affected_rows)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("affected_rows expeccted to be one", K(affected_rows), K(ret));
         }
       } else {
         if (OB_FAIL(add_db_priv_history(db_priv_key, priv_set, new_schema_version, sql_client))) {
@@ -162,7 +158,6 @@ int ObPrivSqlService::insert_objauth(
         } else {
           ret = OB_ERR_UNEXPECTED;
         }
-        LOG_WARN("affected_rows unexpected to be one ", K(affected_rows), K(ret));
       }
       // insert into __all_objauth_history
       if (OB_SUCC(ret)) {
@@ -173,7 +168,6 @@ int ObPrivSqlService::insert_objauth(
                             affected_rows));
         if (OB_SUCC(ret) && !is_single_row(affected_rows)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("affected_rows expeccted to be one", K(affected_rows), K(ret));
         }
       }
     }
@@ -209,10 +203,8 @@ int ObPrivSqlService::grant_table(
 
   if (!table_priv_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(table_priv_key), K(ret));
   } else if ((obj_priv_array.count()) > 0 && !obj_priv_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(obj_priv_key), K(ret));
   } else {
     int64_t affected_rows = 0;
     ObDMLExecHelper exec(sql_client);
@@ -232,7 +224,6 @@ int ObPrivSqlService::grant_table(
       if (OB_FAIL(ret)) {
       } else if (!is_single_row(affected_rows) && !is_double_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("affected_rows unexpected to be one ", K(affected_rows), K(ret));
       }
     }
 
@@ -241,11 +232,9 @@ int ObPrivSqlService::grant_table(
       if (is_deleted) {
         if (OB_FAIL(dml.add_pk_column("schema_version", new_schema_version))
             || OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
-          LOG_WARN("add column failed", K(ret));
         } else if (OB_FAIL(exec.exec_replace(OB_ALL_TABLE_PRIVILEGE_HISTORY_TNAME, dml, affected_rows))) {
         } else if (!is_single_row(affected_rows)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("affected_rows expeccted to be one", K(affected_rows), K(ret));
         }
       } else {
         if (OB_FAIL(add_table_priv_history(table_priv_key, priv_set,
@@ -351,7 +340,6 @@ int ObPrivSqlService::gen_delete_routine_priv_sql(
       if (OB_FAIL(sql_client.read(result, sql.ptr()))) {
       } else if (OB_ISNULL(res = result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected NULL result set", K(ret));
       } else if (OB_FAIL(res->next())) {
       } else {
         EXTRACT_VARCHAR_FIELD_MYSQL(*res, "routine_name", routine_name);
@@ -367,13 +355,11 @@ int ObPrivSqlService::gen_delete_routine_priv_sql(
         // do nothing
       } else if (OB_FAIL(res->next())) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("failed to iter result set", K(ret), K(sql));
         } else {
           ret = OB_SUCCESS;
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected multiple rows", K(ret), K(sql));
       }
     }
   }
@@ -442,7 +428,6 @@ int ObPrivSqlService::grant_routine(
   
   if (!routine_priv_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(routine_priv_key), K(ret));
   } else {
     int64_t affected_rows = 0;
     CatalogDMLSqlHelper exec(sql_client);
@@ -464,7 +449,6 @@ int ObPrivSqlService::grant_routine(
       if (OB_FAIL(ret)) {
       } else if (!is_single_row(affected_rows) && !is_double_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("affected_rows unexpected to be one ", K(affected_rows), K(ret));
       }
     }
 
@@ -472,11 +456,9 @@ int ObPrivSqlService::grant_routine(
     if (OB_SUCC(ret)) {
       if (OB_FAIL(dml.add_pk_column("schema_version", new_schema_version))
           || OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
-        LOG_WARN("add column failed", K(ret));
       } else if (OB_FAIL(exec.exec_insert(OB_ALL_ROUTINE_PRIVILEGE_HISTORY_TNAME, dml, affected_rows))) {
       } else if (!is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("affected_rows expeccted to be one", K(affected_rows), K(ret));
       }
     }
 
@@ -514,10 +496,8 @@ int ObPrivSqlService::grant_column(
   
   if (!column_priv_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(column_priv_key), K(ret));
   } else if (OB_INVALID_ID == column_priv_id) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("column priv id is invalid", K(ret));
   } else {
     int64_t affected_rows = 0;
     ObDMLExecHelper exec(sql_client);
@@ -538,7 +518,6 @@ int ObPrivSqlService::grant_column(
       if (OB_FAIL(ret)) {
       } else if (!is_single_row(affected_rows) && !is_double_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("affected_rows unexpected to be one ", K(affected_rows), K(ret));
       }
     }
 
@@ -546,11 +525,9 @@ int ObPrivSqlService::grant_column(
     if (OB_SUCC(ret)) {
       if (OB_FAIL(dml.add_pk_column("schema_version", new_schema_version))
           || OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
-        LOG_WARN("add column failed", K(ret));
       } else if (OB_FAIL(exec.exec_insert(OB_ALL_COLUMN_PRIVILEGE_HISTORY_TNAME, dml, affected_rows))) {
       } else if (!is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("affected_rows expeccted to be one", K(affected_rows), K(ret));
       }
     }
     //log operation
@@ -588,7 +565,6 @@ int ObPrivSqlService::gen_column_priv_dml(
       || OB_FAIL(dml.add_column("table_name", column_priv_key.table_))
       || OB_FAIL(dml.add_column("column_name", column_priv_key.column_))
       || OB_FAIL(dml.add_column("all_priv", all_priv))) {
-    LOG_WARN("add column failed", K(ret));
   }
   return ret;
 }
@@ -638,7 +614,6 @@ int ObPrivSqlService::grant_table_ora_only(
 
   if (!obj_priv_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(obj_priv_key), K(ret));
   } else {
     ObDMLExecHelper exec(sql_client);
     ObDMLSqlSplicer dml;
@@ -733,7 +708,6 @@ int ObPrivSqlService::delete_db_priv(
 
   if (!org_db_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid arguments", K(org_db_key), K(ret));
   } else {
     int64_t affected_rows = 0;
     ObDMLExecHelper exec(sql_client);
@@ -742,13 +716,11 @@ int ObPrivSqlService::delete_db_priv(
                                                org_db_key.user_id_)))
         || OB_FAIL(dml.add_pk_column("DATABASE_NAME", ObHexEscapeSqlStr(org_db_key.db_)))
         || OB_FAIL(dml.add_gmt_modified())) {
-      LOG_WARN("add column failed", K(ret));
     }
 
     // delete from __all_database_privilege
     if (FAILEDx(exec.exec_delete(
                    OB_ALL_DATABASE_PRIVILEGE_TNAME, dml, affected_rows))) {
-      LOG_WARN("execute sql failed", K(ret));
     } else if (!is_single_row(affected_rows)) {
       //for mysql, if db name and table name is case sensitive, 
       //then for a privilege on t1 and T1 should exist 2 records in the inner table.
@@ -760,7 +732,6 @@ int ObPrivSqlService::delete_db_priv(
       if (OB_FAIL(schema_guard.get_runtime_name_case_mode(mode))) {
       } else if (mode != OB_ORIGIN_AND_SENSITIVE) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("affected_rows expect to 1", K(affected_rows), K(ret));
       } else {
         //by pass
       }
@@ -770,11 +741,9 @@ int ObPrivSqlService::delete_db_priv(
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(dml.add_pk_column("SCHEMA_VERSION", new_schema_version))
         || OB_FAIL(dml.add_column("IS_DELETED", 1))) {
-      LOG_WARN("add column failed", K(ret));
     } else if (OB_FAIL(exec.exec_replace(OB_ALL_DATABASE_PRIVILEGE_HISTORY_TNAME, dml, affected_rows))) {
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("affected_rows expect to 1", K(affected_rows), K(ret));
     }
 
     // log operation
@@ -805,7 +774,6 @@ int ObPrivSqlService::delete_table_priv(
 
   if (!table_priv_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid arguments", K(table_priv_key), K(ret));
   } else {
     int64_t affected_rows = 0;
     ObDMLExecHelper exec(sql_client);
@@ -815,13 +783,11 @@ int ObPrivSqlService::delete_table_priv(
         || OB_FAIL(dml.add_pk_column("DATABASE_NAME", ObHexEscapeSqlStr(table_priv_key.db_)))
         || OB_FAIL(dml.add_pk_column("TABLE_NAME", ObHexEscapeSqlStr(table_priv_key.table_)))
         || OB_FAIL(dml.add_gmt_modified())) {
-      LOG_WARN("add column failed", K(ret));
     }
 
     // delete from __all_table_privilege
     if (FAILEDx(exec.exec_delete(
                    OB_ALL_TABLE_PRIVILEGE_TNAME, dml, affected_rows))) {
-      LOG_WARN("execute sql failed", K(ret));
     } else if (!is_single_row(affected_rows)) {
         //for mysql, if db name and table name is case sensitive, 
       //then for a privilege on t1 and T1 should exist 2 records in the inner table.
@@ -833,7 +799,6 @@ int ObPrivSqlService::delete_table_priv(
       if (OB_FAIL(schema_guard.get_runtime_name_case_mode(mode))) {
       } else if (mode != OB_ORIGIN_AND_SENSITIVE) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("affected_rows expect to 1", K(affected_rows), K(ret));
       } else {
         // by pass
       }
@@ -843,11 +808,9 @@ int ObPrivSqlService::delete_table_priv(
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(dml.add_pk_column("SCHEMA_VERSION", new_schema_version))
         || OB_FAIL(dml.add_column("IS_DELETED", 1))) {
-      LOG_WARN("add column failed", K(ret));
     } else if (OB_FAIL(exec.exec_replace(OB_ALL_TABLE_PRIVILEGE_HISTORY_TNAME, dml, affected_rows))) {
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("affected_rows expect to 1", K(affected_rows), K(ret));
     }
 
     // log operation
@@ -906,7 +869,6 @@ int ObPrivSqlService::delete_obj_priv(
 
   if (!obj_priv.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid arguments", K(obj_priv), K(ret));
   } else {
     ObDMLExecHelper exec(sql_client);
     ObDMLSqlSplicer dml;
@@ -951,12 +913,10 @@ int ObPrivSqlService::add_db_priv_history(
     const int64_t is_deleted = 0;
     if (OB_FAIL(dml.add_pk_column("schema_version", schema_version))
         || OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
-      LOG_WARN("add column failed", K(ret));
     }  else if (OB_FAIL(exec.exec_replace(OB_ALL_DATABASE_PRIVILEGE_HISTORY_TNAME,
             dml, affected_rows))) {
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("update should affect only 1 row", K(affected_rows), K(ret));
     }
   }
   return ret;
@@ -981,12 +941,10 @@ int ObPrivSqlService::add_table_priv_history(
     const int64_t is_deleted = 0;
     if (OB_FAIL(dml.add_pk_column("schema_version", schema_version))
         || OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
-      LOG_WARN("add column failed", K(ret));
     } else if (OB_FAIL(exec.exec_replace(OB_ALL_TABLE_PRIVILEGE_HISTORY_TNAME,
         dml, affected_rows))) {
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("update should affect only 1 row", K(affected_rows), K(ret));
     }
   }
   return ret;
@@ -1043,12 +1001,9 @@ int ObPrivSqlService::gen_table_priv_dml(
       || OB_FAIL(dml.add_column("PRIV_CREATE_VIEW", priv_set & OB_PRIV_CREATE_VIEW ? 1 : 0))
       || OB_FAIL(dml.add_column("PRIV_SHOW_VIEW", priv_set & OB_PRIV_SHOW_VIEW ? 1 : 0))
       || OB_FAIL(dml.add_gmt_modified())) {
-    LOG_WARN("add column failed", K(ret));
   } else if (OB_FAIL(dml.add_column("PRIV_OTHERS", priv_others))) {
   } else if (grantor.length() > 0 && OB_FAIL(dml.add_column("GRANTOR", grantor))) {
-    LOG_WARN("add column failed", K(ret));
   } else if (grantor_host.length() > 0 && OB_FAIL(dml.add_column("GRANTOR_HOST", grantor_host))) {
-    LOG_WARN("add column failed", K(ret));
   }
   return ret;
 }
@@ -1071,15 +1026,12 @@ int ObPrivSqlService::gen_routine_priv_dml(
       // || OB_FAIL(dml.add_pk_column("routine_name", ObHexEscapeSqlStr(routine_priv_key.routine_)))
       || OB_FAIL(dml.add_pk_column("routine_type", routine_priv_key.routine_type_))
       || OB_FAIL(dml.add_column("all_priv", all_priv))) {
-    LOG_WARN("add column failed", K(ret));
   }
 
   if (OB_FAIL(ret)) {
   } else {
     if (grantor.length() > 0 && OB_FAIL(dml.add_column("GRANTOR", grantor))) {
-      LOG_WARN("add column failed", K(ret));
     } else if (grantor_host.length() > 0 && OB_FAIL(dml.add_column("GRANTOR_HOST", grantor_host))) {
-      LOG_WARN("add column failed", K(ret));
     }
   }
   return ret;
@@ -1113,7 +1065,6 @@ int ObPrivSqlService::gen_db_priv_dml(
       || OB_FAIL(dml.add_column("PRIV_CREATE_VIEW", priv_set & OB_PRIV_CREATE_VIEW ? 1 : 0))
       || OB_FAIL(dml.add_column("PRIV_SHOW_VIEW", priv_set & OB_PRIV_SHOW_VIEW ? 1 : 0))
       || OB_FAIL(dml.add_gmt_modified())) {
-    LOG_WARN("add column failed", K(ret));
   } else if (OB_FAIL(dml.add_column("PRIV_OTHERS", priv_others))) {
   }
 
@@ -1135,7 +1086,6 @@ int ObPrivSqlService::gen_grant_sys_priv_dml(
       || OB_FAIL(dml.add_pk_column("priv_id", raw_priv))
       || OB_FAIL(dml.add_column("priv_option", option))
       || OB_FAIL(dml.add_gmt_modified())) {
-    LOG_WARN("add column failed", K(ret));
   }
   return ret;
 }
@@ -1156,7 +1106,6 @@ int ObPrivSqlService::alter_user_default_role(
 
   if (!is_valid_id(user_id)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid arguments", K(user_id), K(ret));
   } else {
     ObDMLSqlSplicer dml;
     int64_t affected_rows = 0;
@@ -1172,14 +1121,12 @@ int ObPrivSqlService::alter_user_default_role(
                                                   role_id)))
           || OB_FAIL(dml.add_column("disable_flag",disable_flag_array.at(i)))
           || OB_FAIL(dml.add_gmt_modified())) {
-        LOG_WARN("add column failed", K(ret));
       }
 
       // replace __all_role_grantee_map
       OZ (exec.exec_update(OB_ALL_ROLE_GRANTEE_MAP_TNAME, dml, affected_rows));
       if (OB_SUCC(ret) && !is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("update should affect only 1 row", K(role_id), K(affected_rows), K(ret));
       }
 
       // insert __all_role_grantee_map_history
@@ -1188,7 +1135,6 @@ int ObPrivSqlService::alter_user_default_role(
       OZ (exec.exec_insert(OB_ALL_ROLE_GRANTEE_MAP_HISTORY_TNAME, dml, affected_rows));
       if (OB_SUCC(ret) && !is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("update should affect only 1 row", K(role_id), K(affected_rows), K(ret));
       }
     }
 
@@ -1245,11 +1191,9 @@ int ObPrivSqlService::grant_revoke_role(
             ObSchemaUtils::get_extract_schema_id(role_id),
             option,
             static_cast<uint64_t>(1)  /* disable flag */))) {
-          LOG_WARN("append sql failed, ", K(ret));
         }
       }
       if (FAILEDx(sql_client.write(sql.ptr(), affected_rows))) {
-        LOG_WARN("execute sql failed,  ", "sql", sql.ptr(), K(ret));
       }
     }
   } else {
@@ -1265,7 +1209,6 @@ int ObPrivSqlService::grant_revoke_role(
         }
       }
       if (FAILEDx(sql.append_fmt("%lu", ObSchemaUtils::get_extract_schema_id(role_id)))) {
-        LOG_WARN("append sql failed, ", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -1273,7 +1216,6 @@ int ObPrivSqlService::grant_revoke_role(
       } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
       } else if (role_ids.count() != affected_rows) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("affected_rows is not expected", K(ret), K(affected_rows), K(role_ids.count()));
       }
     }
   }
@@ -1281,7 +1223,6 @@ int ObPrivSqlService::grant_revoke_role(
   // insert into __all_role_grantee_map_history
   sql.reset();
   if (FAILEDx(sql.append_fmt("INSERT INTO %s VALUES ", OB_ALL_ROLE_GRANTEE_MAP_HISTORY_TNAME))) {
-    LOG_WARN("append table name failed, ", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < role_ids.count(); i++) {
       const uint64_t role_id = role_ids.at(i);
@@ -1296,14 +1237,12 @@ int ObPrivSqlService::grant_revoke_role(
           is_deleted,
           option,
           static_cast<uint64_t>(1)/* disable flag */))) {
-        LOG_WARN("append sql failed, ", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
       } else if (role_ids.count() != affected_rows) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("affected_rows is not expected", K(ret), K(affected_rows), K(role_ids.count()));
       }
     }
   }
@@ -1336,10 +1275,8 @@ int ObPrivSqlService::grant_revoke_role(
         const uint64_t role_id = role_ids.at(i);
         const ObUserInfo *role= NULL;
         if (FAILEDx(schema_guard.get_user_info(role_id, role))) {
-          LOG_WARN("failed to get user info", K(ret), K(role_id));
         } else if (NULL == role) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("role is null", K(ret), K(role_id));
         } else {
           const ObUserInfo role_info_tmp = *role;
           if (OB_FAIL(role_infos.push_back(role_info_tmp))) {
@@ -1398,8 +1335,6 @@ int ObPrivSqlService::grant_sys_priv_to_ur(
     }
     if (OB_SUCC(ret) && !is_single_row(affected_rows) && !is_double_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("affected_rows unexpected to be one ",
-               K(grantee_id), K(priv_array.at(idx)), K(affected_rows), K(ret));
     }
     // insert __all_sysauth_history
     OZ (dml.add_pk_column("schema_version", new_schema_version));
@@ -1407,8 +1342,6 @@ int ObPrivSqlService::grant_sys_priv_to_ur(
     OZ (exec.exec_insert(OB_ALL_SYSAUTH_HISTORY_TNAME, dml, affected_rows));
     if (OB_SUCC(ret) && !is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("affected_rows unexpected to be one ",
-               K(grantee_id), K(affected_rows), K(ret));
     }
   }
   // log operations
@@ -1447,7 +1380,6 @@ int ObPrivSqlService::grant_object(
   const bool is_deleted = (priv_set == 0);
   if (!obj_mysql_priv_key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(obj_mysql_priv_key), K(ret));
   } else {
     int64_t affected_rows = 0;
     ObDMLExecHelper exec(sql_client);
@@ -1465,7 +1397,6 @@ int ObPrivSqlService::grant_object(
       if (OB_FAIL(ret)) {
       } else if (!is_single_row(affected_rows) && !is_double_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("affected_rows unexpected to be one", K(affected_rows), K(ret));
       }
     }
 
@@ -1473,12 +1404,10 @@ int ObPrivSqlService::grant_object(
       if (is_deleted) {
         if (OB_FAIL(dml.add_pk_column("schema_version", new_schema_version))
             || OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
-          LOG_WARN("add column failed", K(ret));
         } else if (OB_FAIL(exec.exec_replace(
                        OB_ALL_OBJAUTH_MYSQL_HISTORY_TNAME, dml, affected_rows))) {
         } else if (!is_single_row(affected_rows)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("affected_rows expected to be one", K(affected_rows), K(ret));
         }
       } else if (OB_FAIL(add_obj_mysql_priv_history(
                      obj_mysql_priv_key,
@@ -1536,7 +1465,6 @@ int ObPrivSqlService::delete_obj_mysql_priv(
   int ret = OB_SUCCESS;
   if (!obj_priv.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid arguments", K(obj_priv), K(ret));
   } else {
     const ObObjMysqlPrivSortKey object_priv_key = obj_priv.get_sort_key();
     OZ (grant_object(object_priv_key,
@@ -1570,12 +1498,10 @@ int ObPrivSqlService::add_obj_mysql_priv_history(
     const int64_t is_deleted = 0;
     if (OB_FAIL(dml.add_pk_column("schema_version", schema_version))
         || OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
-      LOG_WARN("add column failed", K(ret));
     } else if (OB_FAIL(exec.exec_replace(
                    OB_ALL_OBJAUTH_MYSQL_HISTORY_TNAME, dml, affected_rows))) {
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("update should affect only 1 row", K(affected_rows), K(ret));
     }
   }
   return ret;
@@ -1598,12 +1524,9 @@ int ObPrivSqlService::gen_obj_mysql_priv_dml(
           "obj_name", ObHexEscapeSqlStr(obj_mysql_priv_key.object_name_)))
       || OB_FAIL(dml.add_pk_column("obj_type", obj_mysql_priv_key.object_type_))
       || OB_FAIL(dml.add_column("all_priv", all_priv))) {
-    LOG_WARN("add column failed", K(ret));
   } else if (grantor.length() > 0 && OB_FAIL(dml.add_column("GRANTOR", grantor))) {
-    LOG_WARN("add column failed", K(ret));
   } else if (grantor_host.length() > 0
              && OB_FAIL(dml.add_column("GRANTOR_HOST", grantor_host))) {
-    LOG_WARN("add column failed", K(ret));
   }
   return ret;
 }

@@ -13,11 +13,12 @@ source "$HOME/.cargo/env"
 
 On Windows, download and run `rustup-init.exe` from the [official Rust installation page](https://www.rust-lang.org/tools/install), then open a new PowerShell window so `%USERPROFILE%\.cargo\bin` is available in `PATH`.
 
-The repository pins Rust `1.97.1`, includes the `clippy` component, and uses these targets:
+The repository pins Rust `1.98.1`, includes the `clippy` component, and uses these targets:
 
 ```text
 x86_64-unknown-linux-gnu
 x86_64-pc-windows-gnu
+aarch64-linux-android
 ```
 
 The CMake build invokes Cargo from the Rust workspace when compiling the `sql-nio` library. Rustup then reads `rust/rust-toolchain.toml` and installs the pinned toolchain, components, and targets automatically. The first build may also download the locked Cargo dependencies; configure a crates.io mirror if the host cannot reach the default registry.

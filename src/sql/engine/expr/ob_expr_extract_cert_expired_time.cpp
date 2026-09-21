@@ -48,7 +48,6 @@ int ObExprExtractExpiredTime::calc_result_type1(ObExprResType &type,
   } else {
     if (!is_type_valid(text.get_type())) {
       ret = OB_INVALID_ARGUMENT_NUM;
-      LOG_WARN("the param is not castable", K(text), K(ret));
     } else {
       type.set_timestamp();
       type.set_scale(common::MAX_SCALE_FOR_TEMPORAL);
@@ -65,7 +64,6 @@ int ObExprExtractExpiredTime::eval_extract_cert_expired_time(const ObExpr &expr,
       || OB_ISNULL(expr.args_)
       || OB_ISNULL(expr.args_[0])) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     ObDatum *arg = NULL;
     int64_t expired_time = 0;

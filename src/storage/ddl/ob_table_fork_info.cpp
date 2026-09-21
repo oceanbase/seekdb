@@ -62,7 +62,6 @@ int ObTableForkInfo::assign(const ObTableForkInfo &info)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(info));
   } else if (OB_FAIL(source_tablet_ids_.assign(info.source_tablet_ids_))) {
   } else if (OB_FAIL(dest_tablet_ids_.assign(info.dest_tablet_ids_))) {
   } else {
@@ -92,10 +91,8 @@ int ObTableForkInfo::generate_fork_params(common::ObIArray<ObTabletForkParam> &p
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid fork info", K(ret), K(*this));
   } else if (OB_UNLIKELY(source_tablet_ids_.count() != dest_tablet_ids_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("source and dest tablet ids count mismatch", K(ret), K_(source_tablet_ids), K_(dest_tablet_ids));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < source_tablet_ids_.count(); ++i) {
       ObTabletForkParam fork_param;
@@ -123,10 +120,8 @@ int ObTableForkInfo::get_tablet_fork_param(
   int64_t found_idx = -1;
   if (OB_UNLIKELY(!is_valid() || !tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid args", K(ret), K(*this), K(tablet_id));
   } else if (OB_UNLIKELY(source_tablet_ids_.count() != dest_tablet_ids_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("source and dest tablet ids count mismatch", K(ret), K_(source_tablet_ids), K_(dest_tablet_ids));
   } else {
     for (int64_t i = 0; i < source_tablet_ids_.count(); ++i) {
       if (source_tablet_ids_.at(i) == tablet_id) {

@@ -16,6 +16,7 @@ load(
     "seekdb_sanity_cxxopts",
     "seekdb_sanity_implementation_deps",
     "seekdb_sanity_local_defines",
+    "seekdb_sanity_target_compatible_with",
 )
 load("//bazel:oblib_compile_deps.bzl", "oblib_compile_deps")
 
@@ -45,6 +46,7 @@ def seekdb_cc_library(
     cxxopts = kwargs.pop("cxxopts", [])
     implementation_deps = kwargs.pop("implementation_deps", [])
     public_deps = kwargs.get("deps", [])
+    target_compatible_with = kwargs.pop("target_compatible_with", [])
     if type(implementation_deps) == "list":
         automatic_oblib_deps = [
             dependency
@@ -80,6 +82,10 @@ def seekdb_cc_library(
             (SEEKDB_RELEASE_LOCAL_DEFINES if local_defines == None else local_defines) +
             seekdb_platform_local_defines() +
             seekdb_sanity_local_defines()
+        ),
+        target_compatible_with = (
+            target_compatible_with +
+            seekdb_sanity_target_compatible_with()
         ),
         **kwargs
     )

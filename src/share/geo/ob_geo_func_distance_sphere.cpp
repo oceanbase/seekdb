@@ -40,19 +40,14 @@ int ObGeoFuncDistanceSphereUtil::eval(const GeoType1 *g1,
 
   if (OB_ISNULL(sphere_radius)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sphere_radius is null", K(ret), K(context.get_val_count()));
   } else if (OB_ISNULL(g1) || OB_ISNULL(g2)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("geometry is null", K(ret), KP(g1), KP(g2));
   } else if (ObGeoCRS::Geographic != g1->crs() || ObGeoCRS::Geographic != g2->crs()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid crs type", K(ret), K(g1->crs()), K(g1->crs()));
   } else if (ObGeoType::POINT != g1->type() && ObGeoType::MULTIPOINT != g1->type()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid geo1 type", K(ret), K(g1->type()));
   } else if (ObGeoType::POINT != g2->type() && ObGeoType::MULTIPOINT != g2->type()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid geo2 type", K(ret), K(g2->type()));
   } else if (ObGeoType::MULTIPOINT == g1->type() && ObGeoType::MULTIPOINT == g2->type()) {
     double min_dis = DBL_MAX;
     double tmp_result = 0.0;
@@ -89,7 +84,6 @@ int ObGeoFuncDistanceSphereUtil::eval(const ObGeometry *g1,
 
   if (OB_ISNULL(g1) || OB_ISNULL(g2)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("geometry is null", K(ret), KP(g1), KP(g2));
   } else {
     const GeoType1 *geo1 = reinterpret_cast<const GeoType1 *>(g1->val());
     const GeoType2 *geo2 = reinterpret_cast<const GeoType2 *>(g2->val());
@@ -132,7 +126,6 @@ int ObGeoFuncDistanceSphereUtil::reinterpret_as_degrees(const ObWkbGeomPoint *ca
 
   if (OB_ISNULL(cart_pt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("geometry is null", K(ret));
   } else if (OB_FAIL(reinterpret_as_degrees(cart_pt->get<0>(), cart_pt->get<1>(), x, y, result))) {
   } else {
     geog_pt.set<0>(x);
@@ -153,19 +146,14 @@ int ObGeoFuncDistanceSphereUtil::reinterpret_as_degrees(ObIAllocator *allocator,
 
   if (OB_ISNULL(g)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("geometry is null", K(ret));
   } else if (OB_ISNULL(allocator)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("allocator is null", K(ret));
   } else if (ObGeoType::MULTIPOINT != g->type()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid geometry type", K(ret), K(g->type()));
   } else if (ObGeoCRS::Cartesian != g->crs()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid crs type", K(ret), K(g->crs()));
   } else if (OB_ISNULL(buf = allocator->alloc(g->length()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc memory", K(ret), K(g->length()));
   } else {
     MEMMOVE(buf, g->val(), g->length());
     crat_mpt = new (buf) ObWkbGeomMultiPoint();

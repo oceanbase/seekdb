@@ -88,7 +88,6 @@ int ObTabletRuntimeMetaUpdateTask::init(
   if (OB_UNLIKELY(!tablet_id.is_valid()
       || 0 >= add_timestamp)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("task init failed", KR(ret), K(tablet_id), K(add_timestamp));
   } else {
     tablet_id_ = tablet_id;
     add_timestamp_ = add_timestamp;
@@ -196,7 +195,6 @@ int ObTabletRuntimeMetaUpdater::init()
   const int64_t update_task_thread_cnt = cal_thread_count_();
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("inited twice", KR(ret));
   } else if (OB_FAIL(update_queue_.init(this,
                                         update_task_thread_cnt,
                                         update_queue_size,
@@ -265,10 +263,8 @@ int ObTabletRuntimeMetaUpdater::submit_update_task(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTabletRuntimeMetaUpdater is not inited", KR(ret));
   } else if (!tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tablet_id));
   } else if (OB_FAIL(async_update(tablet_id, need_diagnose))) {
   }
   return ret;
@@ -283,11 +279,9 @@ int ObTabletRuntimeMetaUpdater::async_update(
   ObTabletRuntimeMetaUpdateTask task;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTabletRuntimeMetaUpdater is not inited", KR(ret));
   } else if (tablet_id.is_reserved_tablet()) {
   } else if (!tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tablet_id));
   } else if (OB_FAIL(task.init(tablet_id,
                                add_timestamp,
                                need_diagnose))) {
@@ -303,10 +297,8 @@ int ObTabletRuntimeMetaUpdater::add_task_(
   int tmp_ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", KR(ret));
   } else if (!task.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid task", KR(ret), K(task));
   }
   if (FAILEDx(update_queue_.add(task))){
     // TODO: deal with barrier-tasks when execute
@@ -315,7 +307,6 @@ int ObTabletRuntimeMetaUpdater::add_task_(
     }
   }
   if (OB_FAIL(ret)) {
-    LOG_WARN("add tablet runtime metadata update task failed", KR(ret), K(task));
     if (task.need_diagnose() && OB_TMP_FAIL(compaction::ADD_SUSPECT_INFO(
         compaction::MEDIUM_MERGE, share::ObDiagnoseTabletType::TYPE_RUNTIME_META_UPDATE,
         task.get_tablet_id(),
@@ -340,13 +331,11 @@ int ObTabletRuntimeMetaUpdater::reput_to_queue_(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else { // try to push task back to queue, ignore ret code
     ARRAY_FOREACH_NORET(tasks, i) {
       const ObTabletRuntimeMetaUpdateTask &task = tasks.at(i);
       if (OB_UNLIKELY(!task.is_valid())) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid task", KR(ret), K(task));
       } else if (OB_FAIL(add_task_(task))) {
       }
     }
@@ -361,7 +350,6 @@ int ObTabletRuntimeMetaUpdater::process_barrier(
   int ret = OB_NOT_SUPPORTED;
   UNUSED(task);
   UNUSED(stopped);
-  LOG_WARN("not supported now", KR(ret), K(task), K(stopped));
   return ret;
 }
 
@@ -383,7 +371,6 @@ int ObTabletRuntimeMetaUpdater::check_exist(
   exist = false;
   if (!tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tablet_id));
   } else {
     ObTabletRuntimeMetaUpdateTask task(tablet_id, ObClockGenerator::getClock());
     if (OB_FAIL(update_queue_.check_exist(task, exist))) {
@@ -400,7 +387,6 @@ int ObTabletRuntimeMetaUpdater::check_processing_exist(
   exist = false;
   if (!tablet_id.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(tablet_id));
   } else {
     ObTabletRuntimeMetaUpdateTask task(tablet_id, ObClockGenerator::getClock());
     if (OB_FAIL(update_queue_.check_processing_exist(task, exist))) {
@@ -471,13 +457,10 @@ int ObTabletRuntimeMetaUpdater::generate_tasks_(
   int64_t retry_tablet_count = 0;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTabletRuntimeMetaUpdater is not inited", KR(ret));
   } else if (OB_ISNULL(GCTX.tablet_operator_) || OB_ISNULL(::oceanbase::share::server_service<::oceanbase::observer::ObService>())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.tablet_operator_), KP(::oceanbase::share::server_service<::oceanbase::observer::ObService>()));
   } else if (OB_UNLIKELY(batch_tasks.count() <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("batch_tasks count <= 0", KR(ret), "tasks_count", batch_tasks.count());
   }
 
   ObTabletRuntimeInfo tablet_info;
@@ -486,7 +469,6 @@ int ObTabletRuntimeMetaUpdater::generate_tasks_(
     // split tasks into remove and update
     if (OB_ISNULL(task)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid task", KR(ret), K(task));
     } else if (FALSE_IT(task->check_task_status())) {
     } else if (FALSE_IT(tablet_info.reset())) {
     } else if (FALSE_IT(checksum_item.reset())) {
@@ -501,7 +483,6 @@ int ObTabletRuntimeMetaUpdater::generate_tasks_(
           ret = OB_SUCCESS; // do not affect update of other tablets
         }
       } else if (OB_SERVER_RUNTIME_NOT_READY != ret && OB_LS_NOT_EXIST != ret && OB_TABLET_NOT_EXIST != ret) {
-        LOG_WARN("failed to fill tablet runtime info", KR(ret), KPC(task));
       } else if (OB_SERVER_RUNTIME_NOT_READY == ret) {
         is_remove_task = true;
         ret = OB_SUCCESS;
@@ -570,10 +551,8 @@ int ObTabletRuntimeMetaUpdater::batch_process_tasks(
   }
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTabletRuntimeMetaUpdater is not inited", KR(ret));
   } else if (batch_tasks.count() <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid batch_tasks", KR(ret), "task count", batch_tasks.count());
   }
   if (OB_FAIL(ret)) {
     // do nothing
@@ -640,19 +619,15 @@ int ObTabletRuntimeMetaUpdater::do_batch_remove_(
   const int64_t batch_remove_start_time = ObTimeUtility::current_time();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (OB_UNLIKELY(tasks_count != tablet_infos.count() || OB_ISNULL(GCTX.tablet_operator_))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tasks count", KR(ret), K(tasks_count), KP(GCTX.tablet_operator_));
   } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("meta_db_pool_ not initialized", K(ret));
   } else {
     // Use SQLite transaction for multi-table operations
     share::ObSQLiteConnectionGuard guard(GCTX.meta_db_pool_);
     if (!guard) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->begin_transaction())) {
     } else if (OB_FAIL(GCTX.tablet_operator_->batch_remove(guard.get_connection(), tablet_infos))) {
     } else if (OB_FAIL(ObTabletLocalChecksumOperator::batch_remove_with_trans(guard.get_connection(), tablet_infos))) {
@@ -694,7 +669,6 @@ int ObTabletRuntimeMetaUpdater::do_batch_update_(
   const int64_t batch_update_start_time = ObTimeUtility::current_time();
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (tasks.count() != tablet_infos.count()
       || tasks.count() != checksums.count()
       || OB_ISNULL(GCTX.tablet_operator_)) {
@@ -704,13 +678,11 @@ int ObTabletRuntimeMetaUpdater::do_batch_update_(
   } else {
     if (OB_ISNULL(GCTX.meta_db_pool_)) {
       ret = OB_NOT_INIT;
-      LOG_WARN("meta_db_pool_ not initialized", K(ret));
     } else {
       // Use SQLite transaction for multi-table operations
       share::ObSQLiteConnectionGuard guard(GCTX.meta_db_pool_);
       if (!guard) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to acquire connection", K(ret));
       } else if (OB_FAIL(guard->begin_transaction())) {
       } else if (OB_FAIL(GCTX.tablet_operator_->batch_update(guard.get_connection(), tablet_infos))) {
       } else if (OB_FAIL(ObTabletLocalChecksumOperator::batch_update_with_trans(guard.get_connection(), checksums))) {

@@ -61,7 +61,6 @@ int ObExprArrayRemove::calc_result_type2(ObExprResType &type,
   uint16_t subschema_id = type1.get_subschema_id();
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   } else if (type1.is_null()) {
     type.set_null();
   } else if (!ob_is_collection_sql_type(type1.get_type())) {
@@ -157,9 +156,7 @@ int ObExprArrayRemove::eval_array_remove_array(const ObExpr &expr, ObEvalCtx &ct
     res_arr_obj = arr_obj;
   } else if (!datum_val->is_null()
              && OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, r_meta_id, datum_val->get_string(), remove_arr_obj))) {
-    LOG_WARN("construct array obj failed", K(ret));
   } else if (remove_arr_obj != NULL &&  OB_FAIL(ObArrayUtil::contains(*arr_obj, *remove_arr_obj, bret))) {
-    LOG_WARN("array contains failed", K(ret));
   } else if (!bret) {
     changed = false;
     res_arr_obj = arr_obj;
@@ -299,9 +296,7 @@ int ObExprArrayRemove::eval_array_remove_array_batch(
       } else if (!val_array.at(j)->is_null() &&
                  OB_FAIL(ObArrayExprUtils::get_array_obj(
                      tmp_allocator, ctx, r_meta_id, val_array.at(j)->get_string(), remove_arr_obj))) {
-        LOG_WARN("construct array obj failed", K(ret));
       } else if (!val_array.at(j)->is_null() && OB_FAIL(ObArrayUtil::contains(*arr_obj, *remove_arr_obj, bret))) {
-        LOG_WARN("array contains failed", K(ret));
       } else if (!bret) {
         changed = false;
         res_arr_obj = arr_obj;
@@ -321,7 +316,6 @@ int ObExprArrayRemove::eval_array_remove_array_batch(
           } else if (OB_FAIL(output_result.get_reserved_buffer(res_buf, res_buf_len))) {
           } else if (res_buf_len < res_size) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get invalid res buf len", K(ret), K(res_buf_len), K(res_size));
           } else if (OB_FAIL(res_arr_obj->get_raw_binary(res_buf, res_buf_len))) {
           } else if (OB_FAIL(output_result.lseek(res_size, 0))) {
           } else {
@@ -343,11 +337,8 @@ int ObExprArrayRemove::cg_expr(ObExprCGCtx &expr_cg_ctx,
   UNUSED(raw_expr);
   if (rt_expr.arg_cnt_ != 2 || OB_ISNULL(rt_expr.args_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("count of children is not 2 or children is null", K(ret), K(rt_expr.arg_cnt_),
-                                                              K(rt_expr.args_));
   } else if (OB_ISNULL(rt_expr.args_[0]) || OB_ISNULL(rt_expr.args_[1])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child is null", K(ret), K(rt_expr.args_[0]), K(rt_expr.args_[1]));
   } else {
     rt_expr.eval_func_ = NULL;
     const ObObjType right_type = rt_expr.args_[1]->datum_meta_.type_;  
@@ -394,7 +385,6 @@ int ObExprArrayRemove::cg_expr(ObExprCGCtx &expr_cg_ctx,
           break;
         default :
           ret = OB_ERR_INVALID_TYPE_FOR_OP;
-          LOG_WARN("invalid type", K(ret), K(right_type), K(right_tc));
       }
     }
   }

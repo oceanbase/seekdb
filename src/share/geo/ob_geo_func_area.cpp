@@ -66,7 +66,6 @@ OB_GEO_UNARY_FUNC_BEGIN(ObGeoFuncAreaImpl, ObWkbGeogPolygon, double)
   const ObSrsItem *srs = context.get_srs();
   if (OB_ISNULL(srs)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("srs is null", K(ret), K(g->get_srid()), K(g));
   } else {
     boost::geometry::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
     boost::geometry::strategy::area::geographic<> area_strategy(geog_sphere);
@@ -82,7 +81,6 @@ OB_GEO_UNARY_FUNC_BEGIN(ObGeoFuncAreaImpl, ObWkbGeogMultiPolygon, double)
   const ObSrsItem *srs = context.get_srs();
   if (OB_ISNULL(srs)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("srs is null", K(ret), K(g->get_srid()), K(g));
   } else {
     boost::geometry::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
     boost::geometry::strategy::area::geographic<> area_strategy(geog_sphere);

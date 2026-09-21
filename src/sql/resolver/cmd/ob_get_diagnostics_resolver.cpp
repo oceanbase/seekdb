@@ -43,22 +43,18 @@ int ObGetDiagnosticsResolver::resolve(const ParseNode &parse_tree)
   ObString sel_sql;
   if (OB_ISNULL(session_info_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("session info is not init", K(ret));
   } else if (OB_ISNULL(diagnostics_stmt = create_stmt<ObGetDiagnosticsStmt>())) {
     ret = OB_SQL_RESOLVER_NO_MEMORY;
     LOG_WARN("failed to create select stmt");
   } else if (FALSE_IT(params_.query_ctx_->set_literal_stmt_type(stmt::T_DIAGNOSTICS))) {
   } else if (OB_UNLIKELY(parse_tree.num_child_ != 4)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parser tree is wrong", K(ret));
   } else if (OB_ISNULL(is_condition = parse_tree.children_[0]) ||
              OB_ISNULL(is_current = parse_tree.children_[1]) ||
              OB_ISNULL(item_list = parse_tree.children_[3])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parser tree is wrong", K(ret));
   } else if (NULL == session_info_->get_pl_context() && is_current->value_ == 0) {
     ret = OB_ERR_GET_STACKED_DIAGNOSTICS;
-    LOG_WARN("GET STACKED DIAGNOSTICS when handler not active", K(ret));
   } else if (FALSE_IT(condition_node = parse_tree.children_[2])) {
   } else if (OB_FAIL(set_diagnostics_type(diagnostics_stmt, is_current->value_, is_condition->value_))) {
   } else {
@@ -78,7 +74,6 @@ int ObGetDiagnosticsResolver::resolve(const ParseNode &parse_tree)
           int64_t idx = strtoll(condition_node->str_value_, NULL, 10);
           if (INT64_MAX == idx) {
             ret = OB_SIZE_OVERFLOW;
-            LOG_WARN("strtoll error", K(ret), K(ObString(condition_node->str_len_, condition_node->str_value_)));
           } else if (OB_FAIL(diagnostics_stmt->add_origin_param_index(idx))) {
           }
         }
@@ -95,10 +90,8 @@ int ObGetDiagnosticsResolver::resolve(const ParseNode &parse_tree)
         ret = OB_ERR_BAD_FIELD_ERROR;
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("condition node type is unexpected", K(ret), K(condition_node->type_));
       }
       if (OB_SUCC(ret) && OB_FAIL(diagnostics_stmt->add_param(condition_num))) {
-        LOG_WARN("add conditon param error", K(ret));
       }
     }
 
@@ -110,24 +103,19 @@ int ObGetDiagnosticsResolver::resolve(const ParseNode &parse_tree)
       if (OB_ISNULL(item) || item->num_child_ != 2 || 
           OB_ISNULL(var = item->children_[0]) || OB_ISNULL(val = item->children_[1])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("parser tree is wrong", K(ret));
       } else if (T_IDENT == var->type_) {
         ret = OB_ERR_SP_UNDECLARED_VAR;
-        LOG_WARN("undeclared var", K(ret));
         LOG_USER_ERROR(OB_ERR_SP_UNDECLARED_VAR, static_cast<int>(var->str_len_), var->str_value_);
       } else if (T_QUESTIONMARK != var->type_ && T_USER_VARIABLE_IDENTIFIER != var->type_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("var type is unexpected", K(ret));
       } else if ((T_QUESTIONMARK == var->type_) &&
                  (OB_FAIL(ObResolverUtils::resolve_const_expr(params_, *var, info_expr, NULL)) ||
                  OB_FAIL(diagnostics_stmt->add_origin_param_index(strtoll(var->str_value_, NULL, 10))))) {
-        LOG_WARN("resolve_const_expr failed", K(ret));
       } else if (T_USER_VARIABLE_IDENTIFIER == var->type_ &&
                  OB_FAIL(ObRawExprUtils::build_get_user_var(*params_.expr_factory_,
                                                       ObString(var->str_len_, var->str_value_),
                                                       info_expr,
                                                       session_info_))) {
-        LOG_WARN("build_get_user_var failed", K(ret));
       } else if (OB_FAIL(diagnostics_stmt->add_param(info_expr))) {
       } else if (OB_FAIL(diagnostics_stmt->add_info_argument(ObString(val->str_len_, val->str_value_)))) {
       }
@@ -147,7 +135,6 @@ int ObGetDiagnosticsResolver::set_diagnostics_type(ObGetDiagnosticsStmt *diagnos
   int ret = OB_SUCCESS;
   if (OB_ISNULL(diagnostics_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt is null", K(ret));
   } else if (is_condition == 1 && is_current== 1) {
     diagnostics_stmt->set_diagnostics_type(DiagnosticsType::GET_CURRENT_COND);
   } else if (is_condition == 0 && is_current == 1) {

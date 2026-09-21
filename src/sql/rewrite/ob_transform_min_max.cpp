@@ -44,7 +44,6 @@ int ObTransformMinMax::transform_one_stmt(common::ObIArray<ObParentDMLStmt> &par
   UNUSED(parent_stmts);
   if (OB_ISNULL(stmt) || OB_ISNULL(ctx_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(stmt), K(ctx_));
   } else if (!stmt->is_select_stmt()) {
     //do nothing
     OPT_TRACE("not select stmt");
@@ -70,7 +69,6 @@ int ObTransformMinMax::check_transform_validity(ObTransformerCtx &ctx,
   is_valid = false;
   if (OB_ISNULL(select_stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(select_stmt));
   } else if (select_stmt->has_recursive_cte()) {
     OPT_TRACE("stmt has recusive cte");
   } else if (select_stmt->get_from_item_size() != 1 || select_stmt->get_from_item(0).is_joined_
@@ -88,7 +86,6 @@ int ObTransformMinMax::check_transform_validity(ObTransformerCtx &ctx,
   } else if (!is_valid) {
     OPT_TRACE("having condition is invalid");
   } else if (select_stmt->get_aggr_item_size() > 1 && OB_FAIL(is_valid_order_list(*select_stmt, is_valid))) {
-    LOG_WARN("failed to check is valid order by", K(ret));
   } else if (!is_valid) {
     OPT_TRACE("order by is invalid for multi min/max");
   } else {
@@ -101,7 +98,6 @@ int ObTransformMinMax::do_transform(ObSelectStmt *select_stmt)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(select_stmt)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("params have null", K(ret), K(select_stmt));
   } else if (select_stmt->get_aggr_item_size() == 1) {
     if (OB_FAIL(do_single_minmax_transform(select_stmt))) {
     }
@@ -122,16 +118,13 @@ int ObTransformMinMax::do_single_minmax_transform(ObSelectStmt *select_stmt)
   ObSEArray<ObRawExpr*, 1> new_exprs;
   if (OB_ISNULL(select_stmt) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("params have null", K(ret), K(select_stmt), K(ctx_));
   } else if (select_stmt->get_aggr_item_size() != 1) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected param", K(ret));
   } else {
     ObAggFunRawExpr *aggr_expr = select_stmt->get_aggr_item(0);
     ObRawExprCopier copier(*ctx_->expr_factory_);
     if (OB_ISNULL(aggr_expr) || OB_ISNULL(aggr_param = aggr_expr->get_param_expr(0))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("aggr expr unexpected null", K(ret));
     } else if (OB_FAIL(ObTransformUtils::create_simple_view(ctx_, select_stmt, child_stmt))) {
     } else if (OB_FAIL(select_stmt->get_column_exprs(old_exprs))) {
     } else if (OB_FAIL(child_stmt->get_select_exprs(new_exprs))) {
@@ -162,7 +155,6 @@ int ObTransformMinMax::do_multi_minmax_transform(ObSelectStmt *select_stmt)
   ObRawExpr *target_expr = NULL;
   if (OB_ISNULL(select_stmt) || OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("params have null", K(ret), K(select_stmt), K(ctx_));
   } else {
     ObRawExprCopier copier(*ctx_->expr_factory_);
     if (OB_FAIL(ObTransformUtils::create_simple_view(ctx_, select_stmt, view_child_stmt))) {
@@ -174,7 +166,6 @@ int ObTransformMinMax::do_multi_minmax_transform(ObSelectStmt *select_stmt)
       if (OB_ISNULL(aggr_expr = select_stmt->get_aggr_item(i))
           || OB_ISNULL(aggr_param = aggr_expr->get_param_expr(0))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(copier.copy(aggr_param, new_aggr_param))) {
       } else if (OB_FAIL(deep_copy_subquery_for_aggr(*view_child_stmt,
                                                      new_aggr_param,
@@ -186,7 +177,6 @@ int ObTransformMinMax::do_multi_minmax_transform(ObSelectStmt *select_stmt)
                  || OB_UNLIKELY(child_stmt->get_select_item_size() != 1)
                  || OB_ISNULL(target_expr = child_stmt->get_select_item(0).expr_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null expr or select item size of child stmt", K(ret));
       } else {
         query_ref_expr->set_ref_stmt(child_stmt);
         query_ref_expr->set_output_column(1);
@@ -231,14 +221,12 @@ int ObTransformMinMax::deep_copy_subquery_for_aggr(const ObSelectStmt &copied_st
   if (OB_ISNULL(ctx_) || OB_ISNULL(ctx_->expr_factory_) || OB_ISNULL(ctx_->stmt_factory_)
       || OB_ISNULL(ctx_->allocator_) || OB_ISNULL(aggr_param)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("params have null", K(ret), K(aggr_param), K(ctx_));
   } else if (OB_FAIL(ObTransformUtils::deep_copy_stmt(*ctx_->stmt_factory_,
                                                       *ctx_->expr_factory_,
                                                       &copied_stmt,
                                                       dml_stmt))) {
   } else if (OB_ISNULL(child_stmt = static_cast<ObSelectStmt *>(dml_stmt))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("child stmt is null", K(ret));
   } else if (OB_FAIL(child_stmt->adjust_statement_id(ctx_->allocator_,
                                                      ctx_->src_qb_name_,
                                                      ctx_->src_hash_val_))) {
@@ -246,18 +234,15 @@ int ObTransformMinMax::deep_copy_subquery_for_aggr(const ObSelectStmt &copied_st
   } else if (child_stmt->get_table_size() != 1
               || OB_ISNULL(table = child_stmt->get_table_item(0))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected table size or table item is null", K(ret), KPC(child_stmt));
   } else if (OB_FALSE_IT(table->qb_name_ = qb_name)) {
   } else if (OB_FAIL(child_stmt->update_stmt_table_id(ctx_->allocator_, copied_stmt))) {
   } else if (OB_FAIL(copied_stmt.get_select_exprs(select_exprs))) {
   } else if (!ObOptimizerUtil::find_item(select_exprs, aggr_param, &new_aggr_param_index)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to find new aggr param", K(ret));
   } else if (OB_FAIL(child_stmt->get_select_exprs(new_select_exprs))) {
   } else if (new_aggr_param_index < 0 || new_aggr_param_index >= new_select_exprs.count()
              || OB_ISNULL(new_aggr_param = new_select_exprs.at(new_aggr_param_index))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to find new aggr param", K(ret));
   } else {
     child_stmt->get_select_items().reset();
   }
@@ -293,14 +278,12 @@ int ObTransformMinMax::is_valid_aggr_items(ObTransformerCtx &ctx,
   for (int64_t i = 0; OB_SUCC(ret) && valid && i < stmt.get_aggr_item_size(); ++i) {
     if (OB_ISNULL(expr = stmt.get_aggr_item(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("params have null", K(ret), KP(expr));
     } else if ((T_FUN_MAX != expr->get_expr_type() && T_FUN_MIN != expr->get_expr_type()) ||
                 expr->get_real_param_count() != 1) {
       OPT_TRACE("aggr expr is not min/max expr");
       valid = false;
     } else if (OB_ISNULL(expr->get_param_expr(0))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get unexpected null expr", K(ret));
     } else if (is_contain(valid_col_exprs, expr->get_param_expr(0))) {
       valid = true;
     } else if (OB_FAIL(is_valid_index_column(ctx,
@@ -338,7 +321,6 @@ int ObTransformMinMax::is_valid_select_expr(const ObRawExpr *expr, bool &is_vali
   bool valid = true;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("expr should not be NULL", K(ret), KP(expr));
   } else if (expr->has_flag(IS_AGG) || expr->is_const_expr()) {
     /* do nothing */
   } else if (expr->has_flag(CNT_AGG)) {
@@ -371,7 +353,6 @@ int ObTransformMinMax::is_valid_having_expr(const ObRawExpr *expr, bool &is_vali
   bool valid = true;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("current expr is null", K(ret));
   } else if (expr->has_flag(IS_AGG)) {
     /* do nothing*/
   } else if (expr->is_column_ref_expr() || expr->has_flag(CNT_SUB_QUERY)) {
@@ -404,7 +385,6 @@ int ObTransformMinMax::is_valid_order_expr(const ObRawExpr *expr, bool &is_valid
   bool valid = true;
   if (OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("current expr is null", K(ret));
   } else if (expr->has_flag(IS_AGG)) {
     /* do nothing*/
   } else if (expr->is_column_ref_expr()) {
@@ -434,13 +414,11 @@ int ObTransformMinMax::is_valid_index_column(ObTransformerCtx &ctx,
   is_valid = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", K(ret), K(stmt), K(expr));
   } else if (!expr->is_column_ref_expr()) {
     /* do nothing */
   } else if (OB_FALSE_IT(col_expr = static_cast<const ObColumnRefRawExpr *>(expr))) {
   } else if (OB_ISNULL(table_item = stmt->get_table_item_by_id(col_expr->get_table_id()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("table item is null", K(ret));
   } else if (!table_item->is_basic_table()) {
     /* do nothing */
   } else {
@@ -471,7 +449,6 @@ int ObTransformMinMax::set_child_order_item(ObSelectStmt *stmt,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt) || OB_ISNULL(aggr_param)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("params have null", K(ret), K(stmt), K(aggr_param));
   } else {
     OrderItem new_order_item;
     new_order_item.expr_ = aggr_param;
@@ -481,7 +458,6 @@ int ObTransformMinMax::set_child_order_item(ObSelectStmt *stmt,
       new_order_item.order_type_ = default_asc_direction();
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("aggregate function type must by max or min", K(ret));
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(stmt->add_order_item(new_order_item))) {
@@ -499,7 +475,6 @@ int ObTransformMinMax::set_child_condition(ObSelectStmt *stmt, ObRawExpr *aggr_p
   ObArray<ObRawExpr *> constraints;
   if (OB_ISNULL(stmt) || OB_ISNULL(aggr_param) || OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params have null", K(ret), K(stmt), K(aggr_param));
   } else if (OB_FAIL(ObTransformUtils::is_expr_not_null(ctx_, stmt, aggr_param, NULLABLE_SCOPE::NS_WHERE,
                                                         is_not_null, &constraints))) {
   } else if (is_not_null) {

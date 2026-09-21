@@ -44,10 +44,8 @@ int ObExprWeekOfYear::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("weekofyear expr should have one param", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of weekofyear expr is null", K(ret), K(rt_expr.args_));
   } else {
     rt_expr.eval_func_ = ObExprWeekOfYear::calc_weekofyear;
   }
@@ -67,7 +65,6 @@ int ObExprWeekOfYear::calc_weekofyear(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
   const common::ObTimeZoneInfo *tz_info = NULL;
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
   } else if (OB_UNLIKELY(param_datum->is_null())) {
     expr_datum.set_null();
@@ -80,7 +77,6 @@ int ObExprWeekOfYear::calc_weekofyear(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
                  tz_info,
                  ot, get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()), date_sql_mode,
                  expr.args_[0]->obj_meta_.has_lob_header()))) {
-    LOG_WARN("cast to ob time failed", K(ret));
     uint64_t cast_mode = 0;
     ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                       session->is_ignore_stmt(),
@@ -125,10 +121,8 @@ int ObExprWeekDay::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("weekday expr should have one param", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of weekday expr is null", K(ret), K(rt_expr.args_));
   } else {
     rt_expr.eval_func_ = ObExprWeekDay::calc_weekday;
   }
@@ -147,7 +141,6 @@ int ObExprWeekDay::calc_weekday(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
   const common::ObTimeZoneInfo *tz_info = NULL;
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
   } else if (OB_UNLIKELY(param_datum->is_null())) {
     expr_datum.set_null();
@@ -160,7 +153,6 @@ int ObExprWeekDay::calc_weekday(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
                  tz_info,
                  ot, get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()), date_sql_mode,
                  expr.args_[0]->obj_meta_.has_lob_header()))) {
-    LOG_WARN("cast to ob time failed", K(ret));
     uint64_t cast_mode = 0;
     ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                       session->is_ignore_stmt(),
@@ -206,7 +198,6 @@ int ObExprYearWeek::calc_result_typeN(ObExprResType& type,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(types_stack)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null types",K(ret));
   } else if (OB_UNLIKELY(param_num > 2)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("param num is not correct", K(param_num));
@@ -274,7 +265,6 @@ static int ob_expr_calc_yearweek(const int64_t &mode_value,
     break;
   default:
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected flag value",K(ret),K(flag), K(mode));
     break;
   }
   if(OB_SUCC(ret)) {
@@ -294,13 +284,10 @@ int ObExprYearWeek::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1 && rt_expr.arg_cnt_ != 2) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("yearweek expr should have one or two params", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of yearweek expr is null", K(ret), K(rt_expr.args_));
   } else if (2 == rt_expr.arg_cnt_ && OB_ISNULL(rt_expr.args_[1])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("second child of yearweek expr is null", K(ret), K(rt_expr.args_));
   } else {
     rt_expr.eval_func_ = ObExprYearWeek::calc_yearweek;
   }
@@ -321,7 +308,6 @@ int ObExprYearWeek::calc_yearweek(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
   const common::ObTimeZoneInfo *tz_info = NULL;
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
   } else if (OB_UNLIKELY(param_datum->is_null())) {
     expr_datum.set_null();
@@ -334,7 +320,6 @@ int ObExprYearWeek::calc_yearweek(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
                      tz_info,
                      ot, get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()),
                      date_sql_mode, expr.args_[0]->obj_meta_.has_lob_header()))) {
-    LOG_WARN("cast to ob time failed", K(ret));
     uint64_t cast_mode = 0;
     ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                       session->is_ignore_stmt(),
@@ -387,7 +372,6 @@ int ObExprWeek::calc_result_typeN(ObExprResType& type,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(types_stack)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null types",K(ret));
   } else if (OB_UNLIKELY(params_count > 2)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("param num is not correct", K(params_count));
@@ -417,13 +401,10 @@ int ObExprWeek::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1 && rt_expr.arg_cnt_ != 2) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("week expr should have one or two params", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("children of week expr is null", K(ret), K(rt_expr.args_));
   } else if (2 == rt_expr.arg_cnt_ && OB_ISNULL(rt_expr.args_[1])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("second child of week expr is null", K(ret), K(rt_expr.args_));
   } else {
     rt_expr.eval_func_ = ObExprWeek::calc_week;
   }
@@ -444,7 +425,6 @@ int ObExprWeek::calc_week(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
   const common::ObTimeZoneInfo *tz_info = NULL;
   if (OB_ISNULL(session = ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
   } else if (OB_UNLIKELY(param_datum->is_null())) {
     expr_datum.set_null();
@@ -457,14 +437,12 @@ int ObExprWeek::calc_week(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datu
                  tz_info,
                  ot, get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()), date_sql_mode,
                  expr.args_[0]->obj_meta_.has_lob_header()))) {
-    LOG_WARN("cast to ob time failed", K(ret));
     uint64_t cast_mode = 0;
     ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                       session->is_ignore_stmt(),
                                       sql_mode,
                                       cast_mode);
     if (CM_IS_WARN_ON_FAIL(cast_mode)) {
-      LOG_WARN("cast to ob time failed", K(ret));
       LOG_USER_WARN(OB_ERR_CAST_VARCHAR_TO_TIME);
       ret = OB_SUCCESS;
     }

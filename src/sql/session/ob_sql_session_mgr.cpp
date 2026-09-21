@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SQL
 
+#include <new>
+
 #include "ob_sql_session_mgr.h"
 #include "rpc/ob_sql_request_operator.h"
 #include "data_plane/transaction/ob_tx_desc_access.h"
@@ -57,10 +59,8 @@ bool GetMinActiveSnapshotVersionFunctor::operator()(
 
   if (OB_ISNULL(sess_info)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("session info is NULL");
   } else if (!sess_info->is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("session info is not valid", K(ret));
   } else if (sess_info->get_is_deserialized()) {
     // Visit only the original session.
   } else {
@@ -173,14 +173,9 @@ ObSQLSessionMgr::~ObSQLSessionMgr()
 
 ObSQLSessionInfo *ObSQLSessionMgr::ValueAlloc::alloc_value()
 {
-  int ret = OB_SUCCESS;
-  ObSQLSessionInfo *session = op_instance_alloc_args(&session_allocator_,
-                                                     ObSQLSessionInfo);
+  ObSQLSessionInfo *session = new (std::nothrow) ObSQLSessionInfo();
   int64_t alloc_total_count = 0;
-  if (OB_ISNULL(session)) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to alloc session", K(ret));
-  } else {
+  if (OB_NOT_NULL(session)) {
     ATOMIC_FAA(&active_count_, 1);
     session->set_valid(true);
     session->set_shadow(true);
@@ -196,7 +191,7 @@ void ObSQLSessionMgr::ValueAlloc::free_value(ObSQLSessionInfo *session)
 {
   if (OB_NOT_NULL(session)) {
     int64_t free_total_count = 0;
-    op_free(session);
+    delete session;
     ATOMIC_FAA(&active_count_, -1);
     free_total_count = ATOMIC_FAA(&free_total_count_, 1);
     if (free_total_count > 0 && free_total_count % 10000 == 0) {
@@ -258,7 +253,6 @@ int ObSQLSessionMgr::create_sessid(uint32_t &sessid)
       // sessid in use, try next
     } else {
       ret = probe_ret;
-      LOG_WARN("probe sessid failed", K(ret), K(candidate));
     }
   }
   return ret;
@@ -271,11 +265,9 @@ int ObSQLSessionMgr::create_session(ObSMConnection *conn, ObSQLSessionInfo *&ses
   sess_info = NULL;
   if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("conn is NULL", K(ret));
   } else if (OB_FAIL(create_session(conn->sessid_, sess_info))) {
   } else if (OB_ISNULL(sess_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sess_info is null", K(ret));
   } else {
     sess_info->inc_in_bytes(conn->connect_in_bytes_);
   }
@@ -293,15 +285,12 @@ int ObSQLSessionMgr::create_session(const uint32_t sessid,
       || OB_ISNULL(debug_sync_broadcaster_)
       || OB_ISNULL(connect_resource_manager_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("SQL session runtime services are not bound", K(ret));
   } else if (OB_FAIL(sessinfo_map_.create(Key(sessid), tmp_sess))) {
-    LOG_WARN("fail to create session", K(ret), K(sessid));
     if (OB_ENTRY_EXIST == ret) {
       ret = OB_SESSION_ENTRY_EXIST;
     }
   } else if (OB_ISNULL(tmp_sess)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail to alloc session info", K(ret), K(sessid));
   }
 
   if (OB_FAIL(ret)) {
@@ -312,7 +301,6 @@ int ObSQLSessionMgr::create_session(const uint32_t sessid,
       }
     }
   } else if (OB_FAIL(tmp_sess->init(sessid, NULL, NULL))) {
-    LOG_WARN("fail to init session", K(ret), K(tmp_sess), K(sessid));
     if (FALSE_IT(revert_session(tmp_sess))) {
       LOG_ERROR("fail to free session", K(err), K(sessid));
     } else if (OB_SUCCESS != (err = sessinfo_map_.del(Key(sessid)))) {
@@ -463,8 +451,6 @@ int ObSQLSessionMgr::kill_session(ObSQLSessionInfo &session)
              "server_sid", session.get_server_sid(),
              "query_str", session.get_current_query_string());
   } else {
-    LOG_WARN("get conn from session info is null", K(session.get_server_sid()),
-        K(session.get_magic_num()));
   }
 
   return ret;
@@ -515,31 +501,26 @@ bool ObSQLSessionMgr::CheckSessionFunctor::operator()(sql::ObSQLSessionMgr::Key 
   bool is_timeout = false;
   if (OB_ISNULL(sess_info)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("session info is NULL");
   } else if (false == sess_info->is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("session info is not valid", K(ret));
   } else {
     int callback_retcode = OB_SUCCESS;
     transaction::ObITxCallback *commit_cb = NULL;
     // NOTE: The order of the following two guards cannot be changed, otherwise there is a chance of forming a deadlock
     if (OB_FAIL(sess_info->try_lock_query())) {
       if (OB_UNLIKELY(OB_EAGAIN != ret)) {
-        LOG_WARN("fail to try lock query", K(ret));
       } else {
         ret = OB_SUCCESS;
       }
     } else {
       if (OB_FAIL(sess_info->try_lock_thread_data())) {
         if (OB_UNLIKELY(OB_EAGAIN != ret)) {
-          LOG_WARN("fail to try lock thread data", K(ret));
         } else {
           ret = OB_SUCCESS;
         }
       } else {
         if (OB_ISNULL(sess_mgr_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("session manager point is NULL");
         } else if (OB_FAIL(sess_info->is_timeout(is_timeout))) {
         } else if (true == is_timeout) {
           LOG_INFO("session is timeout, kill this session", K(key.sessid_));
@@ -615,10 +596,8 @@ bool ObSQLSessionMgr::KillAllSessions::operator() (
   int ret = OB_SUCCESS;
   if (OB_ISNULL(mgr_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("session mgr_ is NULL", K(mgr_));
   } else if (OB_ISNULL(sess_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sess info is NULL", K(sess_info));
   } else {
     LOG_INFO("kill session", K(sess_info->get_server_sid()), K_(force_kill));
     ret = mgr_->kill_session(*sess_info);
@@ -652,7 +631,6 @@ int ObSQLSessionMgr::acquire_session(uint32_t session_id, void *&session)
   if (OB_FAIL(get_session(session_id, session_info))) {
   } else if (OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("deadlock session is null", KR(ret), K(session_id));
   } else {
     session = session_info;
   }
@@ -825,8 +803,6 @@ int is_session_alive(ObIDeadlockSessionService &service,
       is_alive = false;
       ret = common::OB_SUCCESS;
     } else {
-      LOG_WARN("acquire session for liveness check failed",
-               KR(ret), K(session_id));
     }
   } else if (OB_FAIL(guard.get_lock_wait_facts(facts))) {
   } else {

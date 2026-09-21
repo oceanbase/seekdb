@@ -69,7 +69,6 @@ int ObExprGetMySQLRoutineParameterTypeStr::get_mysql_routine_parameter_type_str(
     if (OB_FAIL(ret)) {
     } else if (OB_ISNULL(routine_info)) {
       ret = OB_ERR_SP_DOES_NOT_EXIST;
-      LOG_WARN("routine info is NULL", K(ret), K(routine_id));
     } else {
       share::schema::ObRoutineParam *param = NULL;
       OZ (routine_info->get_routine_param(param_pos, param));
@@ -80,7 +79,6 @@ int ObExprGetMySQLRoutineParameterTypeStr::get_mysql_routine_parameter_type_str(
         type_str = static_cast<char *>(ctx.get_expr_res_alloc().alloc(OB_MAX_SYS_PARAM_NAME_LENGTH));
         if (OB_ISNULL(type_str)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("allocate memory for type str failed", K(ret));
         } else {
           memset(type_str, 0, OB_MAX_SYS_PARAM_NAME_LENGTH);
           OZ (ob_sql_type_str(param->get_param_type().get_meta_type(),

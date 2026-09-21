@@ -31,16 +31,13 @@ int ColumnHashMap::init(const int64_t bucket_num)
   int ret = OB_SUCCESS;
   if (is_inited()) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("cannot init twice", K(ret));
   } else if (bucket_num <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid bucket_num", K(ret), K(bucket_num));
   } else {
     HashNode **buckets =
       static_cast<HashNode **>(allocator_.alloc(bucket_num * sizeof(HashNode *)));
     if (NULL == buckets) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc buckets failed", K(ret));
     } else {
       MEMSET(buckets, 0, bucket_num * sizeof(HashNode *));
       buckets_ = buckets;
@@ -69,20 +66,17 @@ int ColumnHashMap::set(const uint64_t key, const int32_t value)
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     HashNode *&bucket = buckets_[key % bucket_num_];
     HashNode *dst_node = NULL;
     if (OB_FAIL(find_node(key, bucket, dst_node))) {
     } else if (NULL != dst_node) {
       ret = OB_HASH_EXIST;
-      LOG_WARN("key already exists", K(key), K(ret));
     } else {
       HashNode *new_node =
         static_cast<HashNode *>(allocator_.alloc(sizeof(HashNode)));
       if (NULL == new_node) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc new node failed", K(ret));
       } else {
         new_node->key_ = key;
         new_node->value_ = value;
@@ -99,14 +93,12 @@ int ColumnHashMap::get(const uint64_t key, int32_t &value) const
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     HashNode *&bucket = buckets_[key % bucket_num_];
     HashNode *dst_node = NULL;
     if (OB_FAIL(find_node(key, bucket, dst_node))) {
     } else if (NULL == dst_node) {
       ret = OB_HASH_NOT_EXIST;
-      LOG_WARN("key not exists", K(key), K(ret));
     } else {
       value = dst_node->value_;
     }
@@ -121,7 +113,6 @@ int ColumnHashMap::find_node(const uint64_t key, HashNode *head, HashNode *&node
 
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (NULL == head) {
     // do-nothing
   } else {
@@ -143,14 +134,12 @@ int ColumnMap::init(const common::ObIArray<ObColumnParam *> &column_params)
   int ret = OB_SUCCESS;
   if (is_inited()) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("cannot init twice", K(ret));
   } else {
     ObSEArray<uint64_t, 10> column_ids;
     for (int64_t i = 0; i < column_params.count() && OB_SUCC(ret); ++i) {
       ObColumnParam *column = nullptr;
       if (OB_ISNULL(column = column_params.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL ptr", K(column), K(ret));
       } else if (OB_FAIL(column_ids.push_back(column->get_column_id()))) {
       }
     }
@@ -168,7 +157,6 @@ int ColumnMap::init(const common::ObIArray<ObColDesc> &column_descs)
   int ret = OB_SUCCESS;
   if (is_inited()) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("cannot init twice", K(ret));
   } else {
     ObSEArray<uint64_t, 10> column_ids;
     for (int64_t i = 0; i < column_descs.count() && OB_SUCC(ret); ++i) {
@@ -188,7 +176,6 @@ int ColumnMap::init(const common::ObIArray<uint64_t> &column_ids)
   int ret = OB_SUCCESS;
   if (is_inited()) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("cannot init twice", K(ret));
   } else {
     uint64_t max_column_id = OB_INVALID_ID;
     uint64_t max_shadow_column_id = OB_INVALID_ID;
@@ -198,7 +185,6 @@ int ColumnMap::init(const common::ObIArray<uint64_t> &column_ids)
       const uint64_t column_id = column_ids.at(i);
       if (OB_INVALID_ID == column_id) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid column_id", K(column_id), K(ret));
       } else {
         if (!IS_SHADOW_COLUMN(column_id)) {
           if (OB_INVALID_ID == max_column_id
@@ -274,7 +260,6 @@ int ColumnMap::create(const bool use_array,
         int64_t array_idx = column_id - offset;
         if (!(array_idx >= 0 && array_idx < array_size)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("NULL ptr", K(array_idx), K(array_size), K(ret));
         } else {
           array.at(array_idx) = idx;
         }
@@ -315,10 +300,8 @@ int ColumnMap::get(const uint64_t column_id, int32_t &proj) const
 
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_INVALID_ID == column_id) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column_id", K(column_id), K(ret));
   } else {
 #define GET_FROM_ARRAY_OR_MAP(use_array, array, map, offset) \
   if (use_array) {                                    \
@@ -603,7 +586,6 @@ OB_DEF_SERIALIZE(ObTableParam)
 
   if (OB_ISNULL(main_read_info_)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("table read info allocation failed", KR(ret));
   } else {
     LST_DO_CODE(OB_UNIS_ENCODE,
                 table_id_,
@@ -656,7 +638,6 @@ OB_DEF_DESERIALIZE(ObTableParam)
               use_lob_locator_);
   if (OB_SUCC(ret) && OB_ISNULL(main_read_info_)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("table read info allocation failed", KR(ret));
   } else if (OB_SUCC(ret)) {
     if (OB_FAIL(main_read_info_->deserialize(allocator_, buf, data_len, pos))) {
     }
@@ -767,7 +748,6 @@ int ObTableParam::get_columns_serialize_size(const Columns &columns, int64_t &si
   for (int64_t i = 0; OB_SUCC(ret) && i < columns.count(); ++i) {
     if (OB_ISNULL(columns.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL ptr", K(ret), K(i));
     } else {
       size += columns.at(i)->get_serialize_size();
     }
@@ -784,7 +764,6 @@ int ObTableParam::serialize_columns(const Columns &columns, char *buf, const int
   for (int64_t i = 0; OB_SUCC(ret) && i < columns.count(); ++i) {
     if (OB_ISNULL(columns.at(i))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL ptr", K(ret), K(i));
     } else if (OB_FAIL(columns.at(i)->serialize(buf, data_len, pos))) {
     }
   }
@@ -800,14 +779,12 @@ int ObTableParam::deserialize_columns(const char *buf, const int64_t data_len,
   void *tmp_ptr  = NULL;
   if (OB_ISNULL(buf) || OB_UNLIKELY(data_len <= 0) || OB_UNLIKELY(pos > data_len)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("buf should not be null", K(buf), K(data_len), K(pos), K(ret));
   } else if (pos == data_len) {
     //do nothing
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &column_cnt))) {
   } else if (column_cnt > 0) {
     if (NULL == (tmp_ptr = allocator.alloc(column_cnt * sizeof(ObColumnParam *)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Fail to alloc", K(ret), K(column_cnt));
     } else if (FALSE_IT(column = static_cast<ObColumnParam **>(tmp_ptr))) {
       // not reach
     } else {
@@ -853,7 +830,6 @@ int ObTableParam::construct_columns_and_projector(
 
   if (OB_ISNULL(main_read_info_)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("table read info allocation failed", KR(ret));
   } else {
     // column array
     const ObRowkeyInfo &rowkey_info = table_schema.get_rowkey_info();
@@ -871,10 +847,8 @@ int ObTableParam::construct_columns_and_projector(
       ObColumnParam *column = NULL;
       if (OB_ISNULL(rowkey_column = rowkey_info.get_column(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("The rowkey column is NULL", K(ret), K(i), K(rowkey_info));
       } else if (OB_ISNULL(column_schema = table_schema.get_column_schema(rowkey_column->column_id_))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("The column schema is NULL", K(ret), K(i), K(table_schema));
       } else if (OB_FAIL(alloc_column(allocator_, column))) {
       } else if(OB_FAIL(convert_column_schema_to_param(*column_schema, *column))) {
       } else if (OB_FAIL(tmp_access_cols_param.push_back(column))) {
@@ -903,7 +877,6 @@ int ObTableParam::construct_columns_and_projector(
         const ObColumnSchemaV2 *column_schema = NULL;
         if (OB_ISNULL(column_schema = table_schema.get_column_schema(column_id))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("The column is NULL", K(ret), K(table_schema.get_table_id()), K(column_id), K(i));
         } else if (column_schema->is_user_specified_storing_column()) {
         } else if (OB_FAIL(truncate_col_ids.push_back(column_id))) {
         }
@@ -943,7 +916,6 @@ int ObTableParam::construct_columns_and_projector(
         }
       } else if (OB_ISNULL(column_schema = table_schema.get_column_schema(column_id))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("The column is NULL", K(ret), K(table_schema.get_table_id()), K(column_id), K(i));
       } else if (column_schema->is_rowkey_column()) {
         // continue if is rowkeycolumn
         continue;
@@ -986,7 +958,6 @@ int ObTableParam::construct_columns_and_projector(
         const ObColumnParam *column = tmp_access_cols_param.at(j);
         if (OB_ISNULL(column)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("The column is NULL", K(ret), K(j));
         } else if (output_column_ids.at(i) == column->get_column_id()) {
           idx = j;
         }
@@ -994,7 +965,6 @@ int ObTableParam::construct_columns_and_projector(
       if (OB_SUCC(ret)) {
         if (OB_INVALID_INDEX == idx) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected index", K(ret));
         } else {
           ret = tmp_output_projector.push_back(idx);
         }
@@ -1061,7 +1031,6 @@ int ObTableParam::construct_pad_projector(
     const ObColumnParam *column = dst_columns.at(dst_output_projector.at(i));
     if (OB_ISNULL(column)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL ptr", K(ret), K(i));
     } else if (column->get_meta_type().is_char()) {
       ret = pad_col_projector.push_back(i);
     }
@@ -1088,7 +1057,6 @@ int ObTableParam::convert(const ObTableSchema &table_schema,
   if (OB_FAIL(construct_columns_and_projector(table_schema, access_column_ids, tsc_out_cols, force_mysql_mode, pd_pushdown_flag))) {
   } else if (OB_ISNULL(cols_param = main_read_info_->get_columns())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cols param array is unexpected null ", K(ret), KPC_(main_read_info));
   } else if (OB_FAIL(construct_pad_projector(*cols_param, output_projector_, pad_col_projector_))) {
   } else if ((enable_lob_locator_v2_)
              && OB_FAIL(construct_lob_locator_param(table_schema,
@@ -1096,9 +1064,7 @@ int ObTableParam::convert(const ObTableSchema &table_schema,
                                                     output_projector_,
                                                     use_lob_locator_,
                                                     enable_lob_locator_v2_))) {
-    LOG_WARN("fail to construct rowid dep column projector", K(ret));
   } else if (table_schema.is_fts_index() && OB_FAIL(convert_fulltext_index_info(table_schema))) {
-    LOG_WARN("fail to convert fulltext index info", K(ret));
   } else {
   }
 
@@ -1126,7 +1092,6 @@ int ObTableParam::convert_group_by(const ObTableSchema &table_schema,
           if (aggregate_column_ids.at(i) == output_column_ids.at(j)) {
             if (j > output_projector_.count()) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("unexpected index", K(ret), K(j), K(output_column_ids.count()), K(output_projector_.count()));
             } else {
               break;
             }
@@ -1135,7 +1100,6 @@ int ObTableParam::convert_group_by(const ObTableSchema &table_schema,
         if (OB_SUCC(ret)) {
           if (OB_INVALID_INDEX == output_projector_.at(j)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected index", K(ret), K(output_column_ids), K(aggregate_column_ids), K(i));
           } else if (OB_FAIL(aggregate_projector_.push_back(output_projector_.at(j)))) {
           }
         }
@@ -1151,10 +1115,8 @@ int ObTableParam::convert_group_by(const ObTableSchema &table_schema,
         if (group_by_column_ids.at(i) == output_column_ids.at(j)) {
           if (j > output_projector_.count()) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected index", K(ret), K(j), K(output_column_ids.count()), K(output_projector_.count()));
           } else if (OB_INVALID_INDEX == output_projector_.at(j)) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected index", K(ret), K(output_column_ids), K(output_projector_), K(i));
           } else if (OB_FAIL(group_by_projector_.push_back(output_projector_.at(j)))) {
           } else {
             found = true;
@@ -1164,14 +1126,12 @@ int ObTableParam::convert_group_by(const ObTableSchema &table_schema,
       if (OB_FAIL(ret)) {
       } else if (OB_UNLIKELY(!found)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected group by column id", K(ret), K(i), K(output_column_ids), K(group_by_column_ids));
       }
     }
   }
 
   if (OB_SUCC(ret)) {
     if (table_schema.is_fts_index() && OB_FAIL(convert_fulltext_index_info(table_schema))) {
-      LOG_WARN("fail to convert fulltext index info", K(ret));
     }
   }
   return ret;
@@ -1191,7 +1151,6 @@ int ObTableParam::construct_lob_locator_param(const ObTableSchema &table_schema,
     for (int64_t i = 0; OB_SUCC(ret) && !use_lob_locator && i < storage_project_columns.count(); i++) {
       if (OB_ISNULL(col_param = storage_project_columns.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Unexpected null col param", K(ret), K(i), K(storage_project_columns));
       } else {
         ObObjType type = col_param->get_meta_type().get_type();
         use_lob_locator = is_lob_storage(type);
@@ -1202,7 +1161,6 @@ int ObTableParam::construct_lob_locator_param(const ObTableSchema &table_schema,
       for (int64_t i = 0; OB_SUCC(ret) && !use_lob_locator && i < storage_project_columns.count(); i++) {
         if (OB_ISNULL(col_param = storage_project_columns.at(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("Unexpected null col param", K(ret), K(i), K(storage_project_columns));
         } else {
           use_lob_locator = col_param->get_meta_type().get_type() == ObLongTextType;
         }
@@ -1260,7 +1218,6 @@ int ObTableParam::alloc_column(ObIAllocator &allocator, ObColumnParam *& col_ptr
   void *tmp_ptr = nullptr;
   if (OB_ISNULL(tmp_ptr = allocator.alloc(sizeof(ObColumnParam)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc failed", K(ret));
   } else {
     col_ptr = new (tmp_ptr) ObColumnParam(allocator);
   }

@@ -41,7 +41,6 @@ int ObVirtualOutlineBase::inner_open()
   const uint64_t BUCKET_NUM = 100;
   if (OB_UNLIKELY(NULL == schema_guard_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("data member is not init", K(ret), K(schema_guard_));
   } else if (OB_FAIL(schema_guard_->get_outline_infos_in_runtime(outline_infos_))) {
   } else if (OB_FAIL(database_infos_.create(BUCKET_NUM, ObModIds::OMT_VIRTUAL_TABLE, ObModIds::OMT_VIRTUAL_TABLE))) {
   } else {
@@ -59,7 +58,6 @@ int ObVirtualOutlineBase::set_database_infos_and_get_value(uint64_t database_id,
   const ObDatabaseSchema *db_schema = NULL;
   if (OB_ISNULL(schema_guard_) || OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parameter is NULL", K(ret), K(schema_guard_), K(allocator_));
   } else if (database_id == OB_MOCK_DEFAULT_DATABASE_ID) {
     // virtual outline database
     if (OB_FAIL(ob_write_string(*allocator_, OB_MOCK_DEFAULT_DATABASE_NAME, db_name))) {
@@ -72,7 +70,6 @@ int ObVirtualOutlineBase::set_database_infos_and_get_value(uint64_t database_id,
   } else if (OB_FAIL(schema_guard_->get_database_schema( database_id, db_schema))) {
   } else if (OB_ISNULL(db_schema)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("db_schema is NULL", K(ret), K(database_id));
   } else if (OB_FAIL(ob_write_string(*allocator_, db_schema->get_database_name_str(), db_name))) {
   } else if (FALSE_IT(db_info.db_name_ = db_name)) {
   } else if (FALSE_IT(db_info.is_recycle_ = db_schema->is_in_recyclebin())) {
@@ -91,7 +88,6 @@ int ObVirtualOutlineBase::is_database_recycle(uint64_t database_id, bool &is_rec
   is_recycle = false;
   if (false == database_infos_.created()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("hash map is not created", K(ret));
   } else {
     ret = database_infos_.get_refactored(database_id, db_info);
     if (OB_SUCC(ret)) {
@@ -101,7 +97,6 @@ int ObVirtualOutlineBase::is_database_recycle(uint64_t database_id, bool &is_rec
       if (OB_FAIL(set_database_infos_and_get_value(database_id, is_recycle))) {
       }
     } else {
-      LOG_WARN("fail to get hash value", K(ret));
     }
   }
   return ret;
@@ -121,11 +116,8 @@ int ObVirtualOutline::fill_cells(const ObOutlineInfo *outline_info)
       || OB_ISNULL(session_)
       || OB_ISNULL(outline_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("some data member is NULL", K(ret), K(cells), K(allocator_), K(session_),
-              K(outline_info));
   } else if (OB_UNLIKELY(reserved_column_cnt_ < output_column_ids_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("wrong column count", K(ret), K(reserved_column_cnt_), K(output_column_ids_.count()));
   } else {
     for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < output_column_ids_.count(); ++cell_idx) {
       const uint64_t col_id = output_column_ids_.at(cell_idx);
@@ -268,7 +260,6 @@ int ObVirtualOutline::fill_cells(const ObOutlineInfo *outline_info)
         }
         default: {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected column id", K(col_id), K(cell_idx), K(ret));
             break;
         }
       }
@@ -284,7 +275,6 @@ int ObVirtualOutline::is_output_outline(const ObOutlineInfo *outline_info, bool 
   bool is_recycle = false;
   if (OB_ISNULL(outline_info) || OB_ISNULL(schema_guard_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("parameter is NULL", K(ret), K(outline_info), K(schema_guard_));
   } else if (outline_info->get_outline_content_str().empty()) {
     is_output = false;
   } else if (is_outline_database_id(outline_info->get_database_id())) {
@@ -304,14 +294,12 @@ int ObVirtualOutline::inner_get_next_row(common::ObNewRow *&row)
   bool is_output = false;
   if (outline_info_idx_ < 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid array idx", K(ret), K(outline_info_idx_));
   } else if (outline_info_idx_ >= outline_infos_.count()) {
     ret = OB_ITER_END;
   } else {
     while (OB_SUCC(ret) && outline_info_idx_ < outline_infos_.count() && !is_output) {
       if (OB_ISNULL(outline_info = outline_infos_.at(outline_info_idx_))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("outline info is NULL", K(ret), K(outline_info_idx_));
       } else if (OB_FAIL(is_output_outline(outline_info, is_output))) {
       } else if (is_output) {
         if (OB_FAIL(fill_cells(outline_info))) {

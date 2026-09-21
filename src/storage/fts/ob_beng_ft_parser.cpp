@@ -42,20 +42,15 @@ int ObBEngFTParser::get_next_token(
   word_freq = 0;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("beng ft parser isn't initialized", K(ret), K(is_inited_));
   } else if (OB_ISNULL(token_stream_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("token stream is nullptr", K(ret), KP(token_stream_));
   } else if (OB_FAIL(token_stream_->get_next(token, token_freq))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("fail to get next token", K(ret), KPC(token_stream_));
     }
   } else if (OB_ISNULL(token.ptr_) || OB_UNLIKELY(0 >= token.len_ || 0 >= token_freq)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(token.ptr_), K(token.len_), K(token_freq));
   } else if (OB_ISNULL(buf = static_cast<char *>(allocator_.alloc(token.len_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate word memory", K(ret), K(token.len_));
   } else {
     MEMCPY(buf, token.ptr_, token.len_);
     word = buf;
@@ -72,13 +67,10 @@ int ObBEngFTParser::init(ObFTParserParam *param)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), K(is_inited_));
   } else if (OB_ISNULL(param) || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("param is nullptr", K(ret), KPC(param));
   } else if (OB_UNLIKELY(UINT32_MAX < param->ft_length_)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("too large document, english analyzer hasn't be supported", K(ret), K(param->ft_length_));
   } else {
     doc_.set_string(param->fulltext_, param->ft_length_);
     analysis_ctx_.cs_ = param->cs_;
@@ -88,7 +80,6 @@ int ObBEngFTParser::init(ObFTParserParam *param)
     } else if (OB_FAIL(segment(doc_, token_stream_))) {
     } else if (OB_ISNULL(token_stream_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("token stream is nullptr", K(ret), KP(token_stream_));
     } else {
       is_inited_ = true;
     }
@@ -106,10 +97,8 @@ int ObBEngFTParser::segment(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(doc.ptr_) || OB_UNLIKELY(0 >= doc.len_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), KP(doc.ptr_), K(doc.len_));
   } else if (OB_UNLIKELY(UINT32_MAX < doc.len_)) {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("too large document, english analyzer hasn't be supported", K(ret), K(doc.len_));
   } else if (OB_FAIL(english_analyzer_.analyze(doc, token_stream))) {
   }
   return ret;
@@ -134,10 +123,8 @@ int ObBasicEnglishFTParserDesc::segment(
   ObBEngFTParser *parser = nullptr;
   if (OB_ISNULL(param) || OB_ISNULL(param->fulltext_) || OB_UNLIKELY(!param->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KPC(param));
   } else if (OB_ISNULL(parser = OB_NEWx(ObBEngFTParser, param->allocator_, *(param->allocator_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to allocate basic english ft parser", K(ret));
   } else if (OB_FAIL(parser->init(param))) {
   } else {
     iter = parser;

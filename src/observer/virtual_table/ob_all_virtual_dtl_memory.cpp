@@ -75,7 +75,6 @@ int ObAllVirtualDtlMemoryIterator::init()
   mem_pool_infos_.set_block_allocator(ObWrapperAllocator(iter_allocator_));
   if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::sql::dtl::ObDfc>())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("DFC manager is not initialized", K(ret));
   }
   return ret;
 }
@@ -106,7 +105,6 @@ int ObAllVirtualDtlMemoryIterator::get_next_memory_pools()
   int ret = OB_SUCCESS;
   if (0 != mem_pool_infos_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("mem pool infos must be empty", K(ret));
   } else if (!done_) {
     done_ = true;
     if (OB_FAIL(get_memory_pool_infos())) {
@@ -137,7 +135,6 @@ int ObAllVirtualDtlMemoryIterator::get_next_mem_pool_info(ObAllVirtualDtlMemoryP
       mem_pool_infos_.reset();
       if (OB_FAIL(get_next_memory_pools())) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("failed to get dtl memory pool infos", K(ret));
         }
       }
     }
@@ -203,7 +200,6 @@ int ObAllVirtualDtlMemory::inner_get_next_row(ObNewRow *&row)
   ObAllVirtualDtlMemoryPoolInfo mem_pool_info;
   if (OB_FAIL(iter_.get_next_mem_pool_info(mem_pool_info))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("failed to get next channel", K(ret));
     } else {
       arena_allocator_.reuse();
     }

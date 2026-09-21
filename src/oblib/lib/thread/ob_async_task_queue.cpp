@@ -43,10 +43,8 @@ int ObAsyncTaskQueue::init(const int64_t thread_cnt, const int64_t queue_size, c
   int ret = OB_SUCCESS;
   if (is_inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("task queue has already been initialized", K(ret));
   } else if (thread_cnt <= 0|| queue_size <= 0 || 0 != (queue_size & (queue_size - 1))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(thread_cnt), K(queue_size), K(ret));
   } else if (OB_FAIL(allocator_.init(TOTAL_LIMIT, HOLD_LIMIT, page_size))) {
   } else if (OB_FAIL(queue_.init(queue_size))) {
   } else if (OB_FAIL(create(thread_cnt, thread_name))) {
@@ -78,20 +76,17 @@ int ObAsyncTaskQueue::push(const ObAsyncTask &task)
   char *buf = NULL;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (NULL == (buf = static_cast<char *>(allocator_.alloc(buf_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("allocator alloc memory failed", K(buf_size), K(ret));
   } else if (NULL == (task_ptr = task.deep_copy(buf, buf_size))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("task deep copy failed", K(ret));
     allocator_.free(buf);
     buf = NULL;
   } else {
     task_ptr->set_retry_times(task.get_retry_times());
     task_ptr->set_retry_interval(task.get_retry_interval());
     if (OB_FAIL(queue_.push(task_ptr))) {
-      LOG_WARN("push task to queue failed", K(ret), "queue_size", queue_.size());
       task_ptr->~ObAsyncTask();
       allocator_.free(buf);
       buf = NULL;
@@ -106,7 +101,6 @@ void ObAsyncTaskQueue::run2()
   LOG_INFO("async task queue start");
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     ObAddr zero_addr;
     while (!stop_) {
@@ -119,11 +113,9 @@ void ObAsyncTaskQueue::run2()
       ret = pop(task);
       if (OB_FAIL(ret))  {
         if (OB_ENTRY_NOT_EXIST != ret) {
-          LOG_WARN("pop task from queue failed", K(ret));
         }
       } else if (NULL == task) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("pop return a null task", K(ret));
       } else {
         bool rescheduled = false;
         if (task->get_last_execute_time() > 0) {
@@ -142,9 +134,6 @@ void ObAsyncTaskQueue::run2()
         // just do it
         ret = task->process();
         if (OB_FAIL(ret)) {
-          LOG_WARN("task process failed, start retry", "max retry time",
-              task->get_retry_times(), "retry interval", task->get_retry_interval(),
-              K(ret));
           if (task->get_retry_times() > 0) {
             task->set_retry_times(task->get_retry_times() - 1);
             task->set_last_execute_time(ObTimeUtility::current_time());
@@ -177,7 +166,6 @@ void ObAsyncTaskQueue::wait()
   int ret = OB_SUCCESS;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     logical_wait();
     ObAsyncTask *task = NULL;
@@ -196,12 +184,10 @@ int ObAsyncTaskQueue::pop(ObAsyncTask *&task)
   const int64_t timeout = 1000 * 1000;
   if (!is_inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     ret = queue_.pop(vp, timeout);
     if (OB_FAIL(ret)) {
       if (OB_ENTRY_NOT_EXIST != ret) {
-        LOG_WARN("queue pop failed", K(ret));
       }
     } else {
       task = static_cast<ObAsyncTask *>(vp);

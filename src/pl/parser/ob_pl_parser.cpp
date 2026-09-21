@@ -29,7 +29,6 @@ int obpl_parser_check_stack_overflow() {
   int ret = OB_SUCCESS;
   bool is_overflow = true;
   if (OB_FAIL(check_stack_overflow(is_overflow))) {
-    LOG_WARN("failed to check stack overflow status", K(ret));
   }
   return is_overflow;
 }
@@ -65,11 +64,9 @@ int ObPLParser::parse(const ObString &stmt_block,
       LOG_WARN("parse stmt block failed", K(ret), K(ObString(MIN(MAX_PRINT_LEN, stmt_block.length()) ,stmt_block.ptr())),
                                                   K(ObString(MIN(MAX_PRINT_LEN, orig_stmt_block.length()) ,orig_stmt_block.ptr())));
     } else {
-      LOG_WARN("parse stmt block failed", K(ret));
     }
   } else if (OB_ISNULL(parse_result.result_tree_)) {
     ret = OB_ERR_PARSE_SQL;
-    LOG_WARN("result tree is NULL", K(stmt_block), K(ret));
   } else {
     parse_result.question_mark_ctx_ = question_mark_ctx;
     parse_result.input_sql_ = stmt_block.ptr();
@@ -130,13 +127,11 @@ int ObPLParser::parse_procedure(const ObString &stmt_block,
           size_t out_len = 0;
           if (OB_ISNULL(dst_str = static_cast<char *>(allocator_.alloc(dst_len + 1)))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("failed to allocate string buffer", K(ret), K(dst_len + 1));
           } else {
             out_len = static_cast<int64_t>(ob_convert(dst_str, dst_len, &ob_charset_utf8mb4_bin, err_str, err_len, parse_ctx.charset_info_, false, '?', &errors));
             if (0 != errors) {
               // The OB_ERR_INCORRECT_STRING_VALUE error code returned after convet fails will cause disconnection.
               // Therefore, the error code is not changed here and the OB_ERR_PARSE_SQL error is still returned. Only the log is printed.
-              LOG_WARN("ob_convert failed", K(ret), K(errors), K( parse_ctx.charset_info_), K(ObString(err_len, err_str)));
             } else {
               dst_str[out_len] = '\0';
               err_str = dst_str;
@@ -146,14 +141,11 @@ int ObPLParser::parse_procedure(const ObString &stmt_block,
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected first column or last column", K(ret), K(first_column), K(last_column), K(parse_ctx.stmt_len_));
       }
       err_line = parse_ctx.cur_error_info_->stmt_loc_.last_line_ + 1;
       global_errmsg = parse_ctx.global_errmsg_;
     }
     ObString stmt(MIN(MAX_PRINT_LEN, parse_ctx.stmt_len_), parse_ctx.stmt_str_);
-    LOG_WARN("failed to parser pl stmt",
-             K(ret), K(err_line), K(global_errmsg), K(stmt));
     LOG_USER_ERROR(OB_ERR_PARSE_SQL, ob_errpkt_strerror(OB_ERR_PARSER_SYNTAX),
                    err_len, err_str, err_line);
   } else if (parse_ctx.mysql_compatible_comment_) {
@@ -206,7 +198,6 @@ int ObPLParser::parse_routine_body(const ObString &routine_body,
     parse_ctx.scanner_ctx_.sql_mode_ = sql_mode_;
 
     if (OB_FAIL(parse_stmt_block(parse_ctx, routine_stmt))) {
-      LOG_WARN("failed to parse stmt block", K(ret));
     }
   }
   return ret;
@@ -240,7 +231,6 @@ int ObPLParser::parse_package(const ObString &package,
   parse_ctx.scanner_ctx_.sql_mode_ = sql_mode_;
 
   if (OB_FAIL(parse_stmt_block(parse_ctx, package_stmt))) {
-    LOG_WARN("failed to parse stmt block", K(ret));
   }
   return ret;
 }
@@ -250,7 +240,6 @@ int ObPLParser::parse_stmt_block(ObParseCtx &parse_ctx, ObStmtNodeTree *&multi_s
   int ret = OB_SUCCESS;
   if (0 != obpl_parser_init(&parse_ctx)) {
     ret = OB_ERR_PARSER_INIT;
-    LOG_WARN("failed to initialized parser", K(ret));
   } else if (OB_FAIL(obpl_parser_parse(&parse_ctx))) {
     if (OB_ERR_PARSE_SQL == ret && parse_ctx.is_for_preprocess_) {
       LOG_INFO("meet condition syntax, try preparse for condition compile",
@@ -272,9 +261,7 @@ int ObPLParser::parse_stmt_block(ObParseCtx &parse_ctx, ObStmtNodeTree *&multi_s
       pre_parse_ctx.contain_sensitive_data_ = parse_ctx.contain_sensitive_data_;
       if (0 != obpl_parser_init(&pre_parse_ctx)) {
         ret = OB_ERR_PARSER_INIT;
-        LOG_WARN("failed to initialized parser", K(ret));
       } else if (OB_FAIL(obpl_parser_parse(&pre_parse_ctx))) {
-        LOG_WARN("failed to preparse", K(ret));
       } else {
         OX (multi_stmt = pre_parse_ctx.stmt_tree_);
       }

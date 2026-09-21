@@ -46,17 +46,14 @@ int ObExprAlignDate4Cmp::calc_result_type3(ObExprResType &type,
   ObOpRawExpr *op_expr = static_cast<ObOpRawExpr *>(raw_expr);
   if (OB_ISNULL(op_expr) || OB_UNLIKELY(op_expr->get_param_count() != 3)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("op raw expr is null or param_count error", K(ret), K(op_expr));
   } else {
     ObRawExpr *param3 = op_expr->get_param_expr(2);
     if (!param3->is_const_expr()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("raw expr is not const expr", K(ret), KPC(param3));
     } else {
       ObConstRawExpr *const_param = static_cast<ObConstRawExpr *>(param3);
       if (OB_ISNULL(const_param)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("third child of the expr is null", K(ret), K(const_param));
       } else {
         if (const_param->get_value().is_null()) {
           type.set_null();
@@ -77,7 +74,6 @@ int ObExprAlignDate4Cmp::calc_result_type3(ObExprResType &type,
             }
             default: {
               ret = OB_INVALID_ARGUMENT;
-              LOG_WARN("unexpected res type.", K(ret), K(res_type));
               break;
             }
           }
@@ -96,12 +92,10 @@ int ObExprAlignDate4Cmp::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_
   UNUSED(raw_expr);
   if (rt_expr.arg_cnt_ != 3) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the arg_cnt of expr_align_date4cmp error.", K(ret), K(rt_expr.arg_cnt_));
   } else if (OB_ISNULL(rt_expr.args_[0]) ||
              OB_ISNULL(rt_expr.args_[1]) ||
              OB_ISNULL(rt_expr.args_[2])) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("the arg of expr_align_date4cmp is null.", K(ret), K(rt_expr));
   } else {
     rt_expr.eval_func_ = eval_align_date4cmp;
     rt_expr.extra_ = raw_expr.get_cast_mode();
@@ -432,7 +426,6 @@ int ObExprAlignDate4Cmp::datum_to_ob_time(ObExecContext &exec_ctx,
       }
       default: {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("date_arg_obj_type error: ", K(ret), K(date_arg_obj_type));
         break;
       }
     }
@@ -490,7 +483,6 @@ int ObExprAlignDate4Cmp::set_res(ObDatum &res, ObTime &ob_time,
     }
     default: {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("unexpected res type.", K(ret), K(res_type));
       break;
     }
   }
@@ -525,7 +517,6 @@ int ObExprAlignDate4Cmp::set_zero_res(ObDatum &res, ObTime &ob_time,
     }
     default: {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("unexpected res type.", K(ret), K(res_type));
       break;
     }
   }

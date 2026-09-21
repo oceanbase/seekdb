@@ -64,19 +64,16 @@ int ObCallProcedureResolver::resolve_cparams(const ParseNode *params_node,
   if (OB_SUCC(ret) && OB_NOT_NULL(params_node)) {
     if (T_SP_CPARAM_LIST != params_node->type_) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid params list node", K(ret), K(params_node->type_));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < params_node->num_child_; ++i) {
       if (OB_ISNULL(params_node->children_[i])) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("param node is NULL", K(i), K(ret));
       } else if (T_SP_CPARAM == params_node->children_[i]->type_) {
         has_assign_param = true;
         if (OB_FAIL(resolve_cparam_with_assign(params_node->children_[i], routine_info, params, deps))) {
         }
       } else if (has_assign_param) {
         ret = OB_ERR_SP_WRONG_ARG_NUM;
-        LOG_WARN("can not set param without assign after param with assign", K(ret));
       } else if (OB_FAIL(resolve_cparam_without_assign(params_node->children_[i], i, params, deps))) {
       }
     }
@@ -90,7 +87,6 @@ int ObCallProcedureResolver::resolve_cparams(const ParseNode *params_node,
       CK (OB_NOT_NULL(routine_param));
       if (OB_SUCC(ret) && routine_param->get_default_value().empty()) {
         ret = OB_ERR_SP_WRONG_ARG_NUM;
-        LOG_WARN("routine param dese not has default value", K(ret));
       }
       CK (OB_NOT_NULL(params_.expr_factory_));
       OZ (ObRawExprUtils::build_const_int_expr(
@@ -106,7 +102,6 @@ int ObCallProcedureResolver::resolve_cparams(const ParseNode *params_node,
     for (int64_t i = 0; v && OB_SUCC(ret) && i < params.count(); i ++) {
       if (OB_ISNULL(params.at(i))) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid argument", K(ret));
       } else if (params.at(i)->is_const_raw_expr()) {
         const ObConstRawExpr *const_expr = static_cast<const ObConstRawExpr *>(params.at(i));
         if (T_QUESTIONMARK != const_expr->get_expr_type()) {
@@ -132,19 +127,15 @@ int ObCallProcedureResolver::resolve_cparam_without_assign(const ParseNode *para
   if (OB_FAIL(ret)) {
   } else if (position < 0 || position >= params.count()) {
     ret = OB_ERR_SP_WRONG_ARG_NUM;
-    LOG_WARN("wrong argument number", K(ret), K(position), K(params.count()));
   } else if (OB_NOT_NULL(params.at(position))) {
     ret = OB_ERR_SP_DUP_PARAM;
-    LOG_WARN("dup params", K(ret), K(position));
   } else if (OB_FAIL(pl::ObPLResolver::resolve_raw_expr(*param_node, params_, param, false, nullptr, &deps))) {
   } else if (OB_ISNULL(param)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param expr is null", K(ret), K(param));
   } else if (OB_FAIL(check_param_expr_legal(param))) {
   } else if (T_OP_ROW == param->get_expr_type() && 1 != param->get_param_count()) {
     ret = OB_ERR_INVALID_COLUMN_NUM;
     LOG_USER_ERROR(OB_ERR_INVALID_COLUMN_NUM, static_cast<int64_t>(1));
-    LOG_WARN("op_row input param count is not 1", K(param->get_param_count()), K(ret));
   } else {
     params.at(position) = param;
   }
@@ -181,7 +172,6 @@ int ObCallProcedureResolver::resolve_cparam_with_assign(const ParseNode *param_n
       name_node = param_node->children_[0]->children_[2];
     } else {
       ret = OB_ERR_CALL_WRONG_ARG;
-      LOG_WARN("wrong number or types of arguments in call", K(ret));
       LOG_USER_ERROR(OB_ERR_CALL_WRONG_ARG, routine_info->get_routine_name().length(),
                     routine_info->get_routine_name().ptr());
     }
@@ -192,7 +182,6 @@ int ObCallProcedureResolver::resolve_cparam_with_assign(const ParseNode *param_n
       if (OB_FAIL(routine_info->find_param_by_name(name, position))) {
       } else if (OB_UNLIKELY(-1 == position)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid postition value", K(ret), K(position));
       } else if (OB_FAIL(resolve_cparam_without_assign(param_node->children_[1], position, params, deps))) {
       }
     }
@@ -222,10 +211,8 @@ int ObCallProcedureResolver::generate_pl_cache_ctx(pl::ObPLCacheCtx &pc_ctx)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(schema_checker_) || OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("argument is NULL", K(schema_checker_), K(session_info_), K(ret));
   } else if (OB_ISNULL(schema_checker_->get_schema_mgr())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("argument is NULL", K(ret));
   } else {
     pc_ctx.session_info_ = session_info_;
     pc_ctx.schema_guard_ = schema_checker_->get_schema_mgr();
@@ -248,13 +235,11 @@ int ObCallProcedureResolver::add_call_proc_info(ObCallProcedureInfo *call_info)
   ObPlanCache *plan_cache = params_.plan_cache_;
   if (OB_ISNULL(plan_cache)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("plan cache is not bound to resolver", K(ret));
     return ret;
   }
   pl::ObPLCacheCtx pc_ctx(*plan_cache);
   if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("argument is NULL", K(ret));
   } else if (OB_FAIL(generate_pl_cache_ctx(pc_ctx))) {
   } else if (OB_FAIL(pl::ObPLCacheMgr::add_pl_cache(plan_cache, call_info, pc_ctx))) {
     if (OB_SQL_PC_PLAN_DUPLICATE == ret) {
@@ -269,7 +254,6 @@ int ObCallProcedureResolver::add_call_proc_info(ObCallProcedureInfo *call_info)
     } else if (is_not_supported_err(ret)) {
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("Failed to add plan to ObPlanCache", K(ret));
       ret = OB_SUCCESS; // ensure that failure of plan cache does not affect normal execution path
     }
   }
@@ -283,13 +267,11 @@ int ObCallProcedureResolver::find_call_proc_info(ObCallProcedureStmt &stmt)
   ObCallProcedureInfo *call_proc_info = NULL;
   if (OB_ISNULL(plan_cache)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("plan cache is not bound to resolver", K(ret));
     return ret;
   }
   pl::ObPLCacheCtx pc_ctx(*plan_cache);
   if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("argument is NULL", K(ret));
   } else if (OB_FAIL(generate_pl_cache_ctx(pc_ctx))) {
   } else if (OB_FAIL(pl::ObPLCacheMgr::get_pl_cache(plan_cache, stmt.get_cacheobj_guard(), pc_ctx))) {
       LOG_INFO("get pl function by sql failed, will ignore this error",
@@ -318,17 +300,14 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
   ObPlanCache *plan_cache = params_.plan_cache_;
   if (OB_ISNULL(schema_checker_) || OB_ISNULL(session_info_) || OB_ISNULL(plan_cache)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("argument is NULL", K(schema_checker_), K(session_info_), K(ret));
   } else if (OB_UNLIKELY(T_SP_CALL_STMT != parse_tree.type_ || OB_ISNULL(name_node))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("the children of parse tree is NULL", K(parse_tree.type_), K(name_node), K(ret));
   } else if (OB_ISNULL(stmt = create_stmt<ObCallProcedureStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("create call stmt failed", K(ret));
   } else if (FALSE_IT(stmt_ = stmt)) {
   } else if (params_.is_execute_call_stmt_ && 0 != params_.cur_sql_.length() &&
              OB_FAIL(find_call_proc_info(*stmt))) {
-    LOG_WARN("fail to find call stmt", K(ret));
   } else if (NULL != stmt->get_call_proc_info()) {
     // find call procedure info in pl cache.
   } else {
@@ -349,7 +328,6 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
     if (OB_SUCC(ret)) {
       if (T_SP_ACCESS_NAME != name_node->type_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Invalid procedure name node", K(name_node->type_), K(ret));
       } else {
         if (OB_FAIL(ObResolverUtils::resolve_sp_access_name(*schema_checker_,
                                                             session_info_->get_database_name(),
@@ -358,7 +336,6 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
                                                             nullptr))) {
         } else if (db_name.empty() && session_info_->get_database_name().empty()) {
           ret = OB_ERR_NO_DB_SELECTED;
-          LOG_WARN("no database selected", K(ret), K(db_name));
         } else {
           if (!db_name.empty()) {
             OZ (call_proc_info->set_db_name(db_name));
@@ -375,7 +352,6 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
     if (OB_SUCC(ret)) {
       if (OB_NOT_NULL(params_node)
           && OB_FAIL(resolve_param_exprs(params_node, expr_params))) {
-        LOG_WARN("failed to resolve param exprs", K(ret));
       } else if (OB_FAIL(ObResolverUtils::get_routine(*params_.package_guard_,
                                                       params_,
                                                       (*session_info_).get_database_name(),
@@ -388,11 +364,8 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
                                                       &(call_proc_info->get_allocator())))) {
       } else if (OB_ISNULL(proc_info)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("proc info is null", K(ret), K(db_name), K(package_name), K(sp_name), K(proc_info));
       } else if (proc_info->has_accessible_by_clause()) {
         ret = OB_ERR_MISMATCH_SUBPROGRAM;
-        LOG_WARN("mismatch between string on a subprogram specification and body",
-                K(ret), KPC(proc_info));
       }
       if (OB_SUCC(ret)) {
         ObSchemaObjVersion obj_version;
@@ -454,15 +427,12 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
                 && !(param->get_expr_type() == T_QUESTIONMARK && params_.is_prepare_protocol_)) {
               ret = OB_ER_SP_NOT_VAR_ARG;
               LOG_USER_ERROR(OB_ER_SP_NOT_VAR_ARG, static_cast<int32_t>(i), static_cast<int32_t>(sp_name.length()), sp_name.ptr());
-              LOG_WARN("OUT or INOUT argument for routine is not a variable", K(param->get_expr_type()), K(ret));
             } else if (param->is_obj_access_expr() && !(static_cast<const ObObjAccessRawExpr *>(param))->for_write()) {
               ret = OB_ERR_OUT_PARAM_NOT_BIND_VAR;
-              LOG_WARN("output parameter not a bind variable", K(ret));
             } else if (pl_type.is_user_type()) {
               // Through Call statement to execute PL and the parameter is a complex type, only supported in PS mode, complex data types cannot be constructed by the client;
               // PS mode only supports UDT as output parameter, here we disable complex type output parameters for other modes;
               ret = OB_NOT_SUPPORTED;
-              LOG_WARN("not supported other type as out parameter except udt", K(ret), K(pl_type.is_user_type()));
               LOG_USER_ERROR(OB_NOT_SUPPORTED, "other complex type as out parameter except user define type");
             } else {
               const bool is_client_out_param =

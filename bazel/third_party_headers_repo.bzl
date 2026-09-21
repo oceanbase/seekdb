@@ -78,6 +78,12 @@ cc_library(
     includes = ["devtools/include"],
 )
 
+cc_library(
+    name = "jemalloc_headers",
+    hdrs = glob(["include/jemalloc/**/*." + extension for extension in HEADER_EXTENSIONS], allow_empty = True),
+    includes = ["include"],
+)
+
 filegroup(
     name = "sanity_pass",
     srcs = ["devtools/lib64/libsanitypass.so"],

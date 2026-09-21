@@ -44,7 +44,6 @@ private:
     int ret = OB_SUCCESS;
     if (g->type() != ObGeoType::GEOMETRYCOLLECTION) {
       ret = OB_ERR_GIS_INVALID_DATA;
-      LOG_WARN("input geometry is not collection type", K(ret), K(g->type()));
     } else {
       ObCartesianMultipoint *mpt = nullptr;
       ObCartesianMultilinestring *ml = nullptr;
@@ -54,14 +53,12 @@ private:
       ObGeoToTreeVisitor tree_visitor(allocator);
       if (OB_ISNULL(res_geo)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("fail to alloc memory for result grometry", K(ret));
       } else if (OB_FAIL(const_cast<ObGeometry *>(g)->do_visit(tree_visitor))) {
       } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_split(*allocator,
               *static_cast<const ObCartesianGeometrycollection *>(tree_visitor.get_geometry()),
                   mpt, ml, mpo))) {
       } else if (OB_ISNULL(mpt) || OB_ISNULL(ml) || OB_ISNULL(mpo)) {
         ret = OB_ERR_GIS_INVALID_DATA;
-        LOG_WARN("unexpected null geometry collection split", K(ret), KP(mpt), KP(ml), KP(mpo));
       } else {
         if (!mpo->empty()) {
           boost::geometry::centroid(*mpo, *res_geo);
@@ -85,7 +82,6 @@ private:
     ObCartesianPoint *res_geo = OB_NEWx(ObCartesianPoint, context.get_allocator(), 0, 0, g->get_srid());
     if (OB_ISNULL(res_geo)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("fail to alloc memory for result grometry", K(ret));
     } else {
       GeoType *geo_candidate = nullptr;
       if (!g->is_tree()) {
@@ -95,7 +91,6 @@ private:
       }
       if (OB_ISNULL(geo_candidate)) {
         ret = OB_ERR_INVALID_NULL_SDO_GEOMETRY;
-        LOG_WARN("invalid null geometry", K(ret));
       } else {
         boost::geometry::centroid(*geo_candidate, *res_geo);
         result = res_geo;

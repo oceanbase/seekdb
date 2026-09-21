@@ -100,7 +100,6 @@ int ObLogValuesTableAccess::do_re_est_cost(EstimateCostInfo &param, double &card
   int ret = OB_SUCCESS;
   if (OB_ISNULL(get_plan()) || OB_ISNULL(get_values_path()) || OB_ISNULL(table_def_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else {
     ObOptimizerContext &opt_ctx = get_plan()->get_optimizer_context();
     double read_rows = table_def_->row_cnt_;
@@ -120,7 +119,6 @@ int ObLogValuesTableAccess::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(table_def_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
   } else if (OB_FAIL(append(all_exprs, table_def_->access_exprs_))) {
   } else if (OB_FAIL(append(all_exprs, column_exprs_))) {
@@ -135,13 +133,11 @@ int ObLogValuesTableAccess::allocate_expr_post(ObAllocExprContext &ctx)
     ObColumnRefRawExpr *value_col = column_exprs_.at(i);
     if (OB_FAIL(mark_expr_produced(value_col, branch_id_, id_, ctx))) {
     } else if (!is_plan_root() && OB_FAIL(output_exprs_.push_back(value_col))) {
-      LOG_WARN("failed to push back exprs", K(ret));
     } else { /*do nothing*/ }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObLogicalOperator::allocate_expr_post(ctx))) {
   } else if (get_output_exprs().empty() && OB_FAIL(allocate_dummy_output())) {
-    LOG_WARN("failed to allocate dummy output", K(ret));
   } else if (OB_FAIL(mark_probably_local_exprs())) {
   } else { /*do nothing*/ }
   return ret;
@@ -187,7 +183,6 @@ int ObLogValuesTableAccess::allocate_dummy_output()
   ObConstRawExpr *dummy_expr = NULL;
   if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(ObRawExprUtils::build_const_int_expr(
                                              get_plan()->get_optimizer_context().get_expr_factory(),
                                              ObIntType,
@@ -195,7 +190,6 @@ int ObLogValuesTableAccess::allocate_dummy_output()
                                              dummy_expr))) {
   } else if (OB_ISNULL(dummy_expr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(dummy_expr->extract_info())) {
   } else if (OB_FAIL(output_exprs_.push_back(dummy_expr))) {
   } else if (OB_FAIL(get_plan()->get_optimizer_context().get_all_exprs().append(dummy_expr))) {
@@ -208,7 +202,6 @@ int ObLogValuesTableAccess::inner_replace_op_exprs(ObRawExprReplacer &replacer)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(table_def_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(replace_exprs_action(replacer, table_def_->access_exprs_))) {
   }
   return ret;

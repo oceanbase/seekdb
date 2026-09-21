@@ -44,7 +44,6 @@ static int check_expr_and_eval(const ObExpr &expr, ObEvalCtx &ctx,
       || OB_UNLIKELY(expr.arg_cnt_ != 1) || OB_ISNULL(expr.args_)
       || OB_ISNULL(expr.args_[0])) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
   } else if (param_datum->is_null()) {
     found_null = true;
@@ -169,7 +168,6 @@ DEF_EVAL_ABS_FUNC(ObIntType)
     // Only mysql mode will call this function, if INT64_MIN is found, out of range needs to be reported
     if (INT64_MIN == param_int) {
       ret = OB_OPERATE_OVERFLOW;
-      LOG_WARN("value out of range", K(ret));
     } else {
       expr_datum.set_int(param_int >= 0 ? param_int : -param_int);
     }
@@ -219,7 +217,6 @@ DEF_EVAL_ABS_FUNC(ObDecimalIntType)
         MAKE_DECIMAL_INT_OPPOSITE(int512)
         default: {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("int_bytes is unexpected", K(ret), K(int_bytes));
           break;
         }
       }
@@ -260,7 +257,6 @@ int ObExprAbs::assign(const ObExprOperator &other)
   const ObExprAbs *tmp_other = dynamic_cast<const ObExprAbs *>(&other);
   if (OB_UNLIKELY(NULL == tmp_other)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
     } else {
@@ -278,7 +274,6 @@ int ObExprAbs::calc_result_type1(ObExprResType &type, ObExprResType &type1,
   const ObSQLSessionInfo *session = type_ctx.get_session();
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL", K(ret));
   } else if (NOT_ROW_DIMENSION == row_dimension_) {
     // result type
     ObObjType itype;
@@ -307,7 +302,6 @@ int ObExprAbs::calc_result_type1(ObExprResType &type, ObExprResType &type1,
       ObObjType param_calc_type = calc_param_type(type1.get_type());
       if (OB_UNLIKELY(ObMaxType == param_calc_type)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("invalid param calc type", K(ret), K(type1.get_type()), K(param_calc_type));
       } else {
         type1.set_calc_type(param_calc_type);
         if (type1.get_type() == ObJsonType) {
@@ -356,10 +350,8 @@ int ObExprAbs::cg_expr(ObExprCGCtx &ctx,
       || OB_UNLIKELY(rt_expr.arg_cnt_ !=  1)
       || OB_ISNULL(rt_expr.args_[0])) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret));
   } else if (OB_UNLIKELY(rt_expr.args_[0]->datum_meta_.type_ >= ObMaxType)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg type for abs", K(ret));
   } else {
     rt_expr.eval_func_ = abs_funcs[rt_expr.args_[0]->datum_meta_.type_];
   }

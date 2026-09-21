@@ -227,7 +227,6 @@ OB_DEF_SERIALIZE(ObColumnSchemaV2)
               next_column_id_);
 
   if (!OB_SUCC(ret)) {
-    LOG_WARN("Fail to serialize fixed length data", K(ret));
   } else if (OB_FAIL(serialize_string_array(buf, buf_len, pos, extended_type_info_))) {
   } else {
     LST_DO_CODE(OB_UNIS_ENCODE,
@@ -284,7 +283,6 @@ OB_DEF_DESERIALIZE(ObColumnSchemaV2)
               next_column_id_);
 
   if (!OB_SUCC(ret)) {
-    LOG_WARN("Fail to deserialize data, ", K(ret));
   } else if (OB_FAIL(deserialize_string_array(buf, data_len, pos, extended_type_info_, get_allocator()))) {
   } else if (OB_FAIL(deep_copy_obj(orig_default_value, orig_default_value_))) {
   } else if (OB_FAIL(deep_copy_obj(cur_default_value, cur_default_value_))) {
@@ -351,7 +349,6 @@ int ObColumnSchemaV2::set_part_key_pos(const int64_t part_key_pos)
   int ret = OB_SUCCESS;
   if (part_key_pos > UINT8_MAX) {
     ret =OB_ERR_UNEXPECTED;
-    LOG_WARN("Partition key position should not big than UINT8_MAX", K(ret), K(part_key_pos));
   } else {
     part_pos_.part_key_pos_ = static_cast<uint8_t>(part_key_pos);
     if (0 != part_pos_.part_key_pos_) {
@@ -366,7 +363,6 @@ int ObColumnSchemaV2::set_subpart_key_pos(const int64_t subpart_key_pos)
   int ret = OB_SUCCESS;
   if (subpart_key_pos > UINT8_MAX) {
     ret =OB_ERR_UNEXPECTED;
-    LOG_WARN("Partition key position should not big than UINT8_MAX", K(ret), K(subpart_key_pos));
   } else {
     part_pos_.subpart_key_pos_ = static_cast<uint8_t>(subpart_key_pos);
     if (0 != part_pos_.subpart_key_pos_) {
@@ -426,7 +422,6 @@ int ObColumnSchemaV2::get_byte_length(
   if (CS_TYPE_INVALID == get_collation_type()
       && !ob_is_extend(meta_type_.get_type())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("collation type is invalid", K(ret));
   } else if (ob_is_text_tc(meta_type_.get_type()) || ob_is_json(meta_type_.get_type())
              || ob_is_geometry(meta_type_.get_type())) {
     if (for_check_length) {
@@ -439,7 +434,6 @@ int ObColumnSchemaV2::get_byte_length(
     int64_t mbmaxlen = 0;
     if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(get_collation_type(), mbmaxlen))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail to get mbmaxlen", K(ret), K(get_collation_type()));
     } else {
       length = get_data_length() * mbmaxlen;
     }
@@ -482,10 +476,8 @@ int ObColumnSchemaV2::del_cascaded_column_id(const uint64_t column_id)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(column_id < OB_APP_MIN_COLUMN_ID)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid column id", K(ret));
   } else if (OB_ISNULL(column_ref_idxs_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid column ref idxs", K(ret));
   } else if (OB_FAIL(column_ref_idxs_->del_member(column_id - OB_APP_MIN_COLUMN_ID))) {
   } else {
     // do nothing
@@ -643,7 +635,6 @@ int ObColumnSchemaV2::set_geo_type(const int32_t type_val)
 
     default: {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("undefined geometry type", K(ret), K(type_val));
       break;
     }
   }
@@ -656,7 +647,6 @@ int ObColumnSchemaV2::is_same_collection_column(const ObColumnSchemaV2 &other, b
   if (get_extended_type_info().count() == other.get_extended_type_info().count()) {
     if (get_extended_type_info().count() != 1) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to check type info incremental change", K(ret));
     } else {
       ObString src_sub_name = get_extended_type_info().at(0);
       ObString dst_sub_name = other.get_extended_type_info().at(0);

@@ -63,14 +63,9 @@ public:
   // @param [in] ls_epoch, the epoch increases monotonically in database scope when an LS is created
   // @param [in] ls_meta, all the parameters that is needed to create a LS for replay
   int replay_create_ls(const int64_t ls_epoch, const ObLSMeta &ls_meta);
-  // replay create ls commit slog.
-  int replay_create_ls_commit();
   // create a LS for replay or update LS's meta
   // @param [in] ls_meta, all the parameters that is needed to create a LS for replay
   int replay_update_ls(const ObLSMeta &ls_meta);
-  // Set the LS to REMOVED state for replay create abort or remove.
-  int replay_remove_ls();
-
   // get the only log stream in seekdb.
   int get_ls(ObLS *&ls);
 
@@ -79,7 +74,7 @@ public:
   int prepare_local_append(const int64_t deadline_us);
   int activate_local_append();
 
-  // remove the ls that is creating and write abort slog.
+  // Remove an incompletely created LS after recovery.
   int gc_ls_after_replay_slog();
   // online the log stream
   int online_ls();
@@ -107,10 +102,9 @@ private:
       CREATE_STATE_INIT = 0, // begin
       CREATE_STATE_LS_ALLOCATED = 1,
       CREATE_STATE_PUBLISHED = 2,
-      CREATE_STATE_WRITE_PREPARE_SLOG = 3,
-      CREATE_STATE_PALF_ENABLED = 4,
-      CREATE_STATE_INNER_TABLET_CREATED = 5,
-      CREATE_STATE_FINISH = 6
+      CREATE_STATE_PALF_ENABLED = 3,
+      CREATE_STATE_INNER_TABLET_CREATED = 4,
+      CREATE_STATE_FINISH = 5
   };
 
   struct ObCreateLSCommonArg
@@ -129,9 +123,8 @@ private:
                        ObLS *&ls);
   int publish_ls_(ObLS *ls);
   void free_ls_(ObLS *ls);
-  void remove_ls_(ObLS *ls, const bool remove_from_disk, const bool write_slog);
+  void remove_ls_(ObLS *ls, const bool remove_from_disk);
   int stop_and_remove_ls_(ObLS *ls, const bool remove_from_disk);
-  int replay_remove_ls_();
   int replay_create_ls_(const int64_t ls_epoch, const ObLSMeta &ls_meta);
   int replay_update_ls_(const ObLSMeta &ls_meta);
   int post_create_ls_(const bool is_restore, ObLS *ls);

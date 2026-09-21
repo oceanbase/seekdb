@@ -37,7 +37,6 @@ int ObDataAccessRetry::wait(const int64_t retry_count)
     THIS_WORKER.sched_run();
     if (THIS_WORKER.is_timeout()) {
       ret = common::OB_TIMEOUT;
-      LOG_WARN("worker timed out after data access retry sleep", K(ret));
     }
   }
   return ret;

@@ -69,7 +69,6 @@ bool ObDatumRowCompare::operator()(
     // already fail
   } else if (!is_inited() || OB_ISNULL(l) || OB_ISNULL(r)) {
     ret = !is_inited() ? OB_NOT_INIT : OB_INVALID_ARGUMENT;
-    LOG_WARN("not init or invalid argument", K(ret), KP(l), KP(r));
   } else {
     const ObDatum *lcells = l->cells();
     const ObDatum *rcells = r->cells();
@@ -138,7 +137,6 @@ bool ObMaxDatumRowCompare::operator()(
     // already fail
   } else if (!is_inited() || OB_ISNULL(l) || OB_ISNULL(r)) {
     ret = !is_inited() ? OB_NOT_INIT : OB_INVALID_ARGUMENT;
-    LOG_WARN("not init or invalid argument", K(ret), KP(l), KP(r));
   } else {
     const ObDatum *lcells = l->cells();
     const ObDatum *rcells = r->cells();

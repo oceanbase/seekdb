@@ -35,18 +35,14 @@ int ObOutlineResolver::resolve_outline_name(const ParseNode *node, ObString &db_
       || OB_UNLIKELY(RELATION_FACTOR_CHILD_COUNT > node->num_child_)
       || OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parse tree", K(ret));
   } else if (OB_ISNULL(node->children_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid node children is NULL", K(node), K(ret));
   } else if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session info is NULL", K(ret));
   } else if (OB_FAIL(session_info_->get_name_case_mode(mode))) {
   } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
   } else if (OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("stmt_ is NULL", K(ret));
   } else {
     const ParseNode *db_name_node = node->children_[0];
     const ParseNode *outline_name_node = node->children_[1];
@@ -83,7 +79,6 @@ int ObOutlineResolver::resolve_outline_stmt(const ParseNode *node, ObStmt *&out_
   int ret = OB_SUCCESS;
   if (OB_ISNULL(node) || OB_ISNULL(stmt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid parameter", K(ret), K(node), K(stmt_));
   } else {
     ObStmt *outline_stmt = NULL;
     ObResolver resolver(params_);
@@ -93,11 +88,9 @@ int ObOutlineResolver::resolve_outline_stmt(const ParseNode *node, ObStmt *&out_
         && node->type_ != T_DELETE
         && node->type_ != T_UPDATE) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected node type", K(node->type_), K(ret));
     } else if (OB_FAIL(resolver.resolve(ObResolver::IS_NOT_PREPARED_STMT, *node, outline_stmt))) {
     } else if (OB_ISNULL(outline_stmt)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid outline_stmt is NULL", K(ret));
     } else {
       out_stmt = outline_stmt;
       out_sql.assign_ptr(node->str_value_, static_cast<int32_t>(node->str_len_));

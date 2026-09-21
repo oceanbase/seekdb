@@ -525,7 +525,10 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
         ],
     ),
     "runtime_context": struct(
-        hdrs = ["ob_server_struct.h"],
+        hdrs = [
+            "ob_cpu_share_calculator.h",
+            "ob_server_struct.h",
+        ],
         deps = [
             ":cluster_topology",
             ":config",
@@ -748,16 +751,13 @@ _SHARE_SEMANTIC_HEADER_TARGETS = {
             "ob_check_stop_provider.h",
             "ob_occam_thread_pool.h",
             "ob_occam_time_guard.h",
-            "ob_occam_timer.h",
             "ob_shared_timer.h",
             "ob_throttling_utils.h",
         ],
         deps = [
             ":core_types",
-            ":delegate_interface",
             ":tenant_runtime",
             ":thread_pool_interface",
-            ":time_wheel",
             "//src/oblib:oblib_foundation",
         ],
     ),

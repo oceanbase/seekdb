@@ -41,10 +41,8 @@ int ObDeleteLobMetaRowParam::init(const obcall::ObDDLLocalBuildArg &arg)
   const int64_t table_id = arg.source_table_id_;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObDeleteLobMetaRowParam has been inited before", K(ret));
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(arg));
   }
 
   if (OB_SUCC(ret)) {
@@ -78,14 +76,11 @@ int ObDeleteLobMetaRowDag::init(const obcall::ObDDLLocalBuildArg &arg)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObDeleteLobMetaRowDag has already been inited", K(ret));
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(arg));
   } else if (OB_FAIL(param_.init(arg))) {
   } else if (OB_UNLIKELY(!param_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("error unexpected", K(ret), K(param_));
   } else {
     is_inited_ = true;
   }
@@ -98,11 +93,9 @@ int ObDeleteLobMetaRowDag::create_first_task()
   ObDeleteLobMetaRowTask *delete_task = nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(alloc_task(delete_task))) {
   } else if (OB_ISNULL(delete_task)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr task", K(ret));
   } else if (OB_FAIL(delete_task->init(param_))) {
   } else if (OB_FAIL(add_task(*delete_task))) {
   }
@@ -160,10 +153,8 @@ int ObDeleteLobMetaRowDag::fill_info_param(compaction::ObIBasicInfoParam *&out_p
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDeleteLobMetaRowDag has not been initialized", K(ret));
   } else if (OB_UNLIKELY(!param_.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid param", K(ret), K(param_));
   } else if (OB_FAIL(ADD_DAG_WARN_INFO_PARAM(out_param, allocator, get_type(), 
                                 static_cast<int64_t>(param_.table_id_),
                                 static_cast<int64_t>(param_.tablet_id_.id()),
@@ -179,10 +170,8 @@ int ObDeleteLobMetaRowDag::fill_dag_key(char *buf, const int64_t buf_len) const
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDeleteLobMetaRowDag has not been initialized", K(ret));
   } else if (OB_UNLIKELY(!param_.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid params", K(ret), K(param_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, "tablet_id=%ld lob_meta_tablet_id=%ld",
                               param_.tablet_id_.id(), param_.dest_tablet_id_.id()))) {
   }
@@ -194,10 +183,8 @@ int ObDeleteLobMetaRowDag::report_local_build_status()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObComplementDataDag has not been inited", K(ret));
   } else if (OB_UNLIKELY(!param_.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid param", K(ret), K(param_));
   } else {
 #ifdef ERRSIM
     if (OB_SUCC(ret)) {
@@ -241,10 +228,8 @@ int ObDeleteLobMetaRowTask::init(ObDeleteLobMetaRowParam &param)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObDeleteLobMetaRowTask has already been inited", K(ret));
   } else if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(param));
   } else {
     param_ = &param;
     is_inited_ = true;
@@ -259,7 +244,6 @@ int ObDeleteLobMetaRowTask::init_scan_param(ObTableScanParam& scan_param)
   ObSchemaGetterGuard schema_guard;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDeleteLobMetaRowTask has not been inited", K(ret));
   } else {
     
     const int64_t table_id = param_->table_id_;
@@ -269,7 +253,6 @@ int ObDeleteLobMetaRowTask::init_scan_param(ObTableScanParam& scan_param)
     } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
-      LOG_WARN("table not exist", K(ret), K(table_id));
     } else {
       scan_param.tablet_id_ = param_->tablet_id_;
       scan_param.schema_version_ = param_->schema_version_;
@@ -290,7 +273,6 @@ int ObDeleteLobMetaRowTask::init_scan_param(ObTableScanParam& scan_param)
         const ObColumnSchemaV2 *column_schema = table_schema->get_column_schema_by_idx(i);
         if (OB_ISNULL(column_schema)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected error, column schema is nullptr", K(ret), K(i), KPC(this));
         } else if (!column_schema->is_vec_hnsw_key_column() && !column_schema->is_vec_hnsw_data_column()) {
           // do nothing
         } else if (OB_FAIL(scan_param.column_ids_.push_back(column_schema->get_column_id()))) {
@@ -324,7 +306,6 @@ int ObDeleteLobMetaRowTask::init_scan_param(ObTableScanParam& scan_param)
         void *buf = nullptr;
         if (OB_ISNULL(buf = param_->allocator_.alloc(sizeof(ObTableParam)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("Fail to allocate memory", K(ret));
         } else {
           table_param = new (buf) ObTableParam(param_->allocator_);
           table_param->get_enable_lob_locator_v2() = true;
@@ -356,7 +337,6 @@ int ObDeleteLobMetaRowTask::process()
   int tmp_ret = OB_SUCCESS;
    if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDeleteLobMetaRowTask has not been inited", K(ret));
   } else {
     ObTableScanParam scan_param;
     transaction::ObTxDesc *tx_desc = nullptr;
@@ -370,7 +350,6 @@ int ObDeleteLobMetaRowTask::process()
     const uint64_t timeout_us = ObTimeUtility::current_time() + ObInsertLobColumnHelper::LOB_TX_TIMEOUT;
     if (OB_ISNULL(txs) || OB_ISNULL(tsc_service) || OB_ISNULL(lob_mngr)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("should not be null", K(ret), KP(txs), KP(tsc_service), KP(lob_mngr));
     } else if (OB_FAIL(ObInsertLobColumnHelper::start_trans(true/*is_for_read*/, timeout_us, tx_desc))) {
     } else if (OB_FAIL(txs->get_read_snapshot(*tx_desc, transaction::ObTxIsolationLevel::RC, timeout_us, scan_param.snapshot_))) {
     } else if (OB_FAIL(init_scan_param(scan_param))) {
@@ -378,21 +357,17 @@ int ObDeleteLobMetaRowTask::process()
       if (OB_SNAPSHOT_DISCARDED == ret && scan_param.fb_snapshot_.is_valid()) {
         ret = OB_INVALID_QUERY_TIMESTAMP;
       } else if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-        LOG_WARN("fail to scan table", K(scan_param), K(ret));
       }
     } else if (OB_FALSE_IT(table_scan_iter = static_cast<ObTableScanIterator *>(scan_iter))) {
     } else if (OB_ISNULL(table_scan_iter)) {
       ret = OB_BAD_NULL_ERROR;
-      LOG_WARN("scan iter is nullptr", K(ret));
     } else {
       while (OB_SUCC(ret)) {
         if (OB_FAIL(table_scan_iter->get_next_row(datum_row))) {
           if (OB_ITER_END != ret) {
-            LOG_WARN("failed to get next row from snapshot table.", K(ret));
           }
         } else if (datum_row->get_column_count() != 1) { 
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get row column cnt invalid.", K(ret), K(datum_row->get_column_count()));
         } else if (OB_FAIL(ObInsertLobColumnHelper::delete_lob_column(param_->allocator_,
                                                                       param_->tablet_id_,
                                                                       collation_type_,
@@ -408,7 +383,6 @@ int ObDeleteLobMetaRowTask::process()
 
     if (nullptr != tx_desc) {
       if (OB_SUCCESS != (end_trans_ret = ObInsertLobColumnHelper::end_trans(tx_desc, OB_SUCCESS != ret, INT64_MAX))) {
-        LOG_WARN("fail to end read trans", K(ret));
         ret = end_trans_ret;
       }
     }
@@ -423,7 +397,6 @@ int ObDeleteLobMetaRowTask::process()
       ObDeleteLobMetaRowDag *dag = nullptr;
       if (OB_ISNULL(tmp_dag) || ObDagType::DAG_TYPE_DDL_DEL_LOB_META != tmp_dag->get_type()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("dag is invalid", K(ret), KP(tmp_dag));
       } else if (FALSE_IT(dag = static_cast<ObDeleteLobMetaRowDag *>(tmp_dag))) {
       } else if (OB_SUCCESS != (tmp_ret = dag->report_local_build_status())) {
         // do not override ret if it has already failed.

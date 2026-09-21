@@ -37,7 +37,6 @@ int ObExprVecChunk::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(types)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument for hybrid vector index expr", K(ret), K(param_num), KP(types));
   } else {
     type.set_type(types->get_type());
     type.set_length(types->get_length());
@@ -64,7 +63,6 @@ int ObExprVecChunk::cg_expr(
   UNUSED(expr_cg_ctx);
   if (OB_UNLIKELY(rt_expr.arg_cnt_ < 1) || OB_ISNULL(rt_expr.args_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(rt_expr.arg_cnt_), KP(rt_expr.args_), K(rt_expr.type_));
   } else {
     rt_expr.eval_func_ = generate_vec_chunk;
   }
@@ -81,7 +79,6 @@ int ObExprVecChunk::generate_vec_chunk(
   if (OB_FAIL(raw_ctx.args_[0]->eval(eval_ctx, datum))) {
   } else if (OB_ISNULL(datum)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get null datum", K(ret), KPC(raw_ctx.args_[0]));
   } else if (datum->is_null()) {
     expr_datum.set_null();
   } else {

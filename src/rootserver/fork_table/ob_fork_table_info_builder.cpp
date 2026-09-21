@@ -37,10 +37,8 @@ int ObForkTableInfoBuilder::init_with_fork_table_info(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObForkTableInfoBuilder init twice", KR(ret));
   } else if (OB_UNLIKELY(!main_fork_table_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid main fork table info", KR(ret), K(main_fork_table_info));
   } else if (OB_FAIL(fork_table_infos_.create(dest_table_ids.count(), "ForkTableInfo"))) {
   } else if (OB_FAIL(generate_fork_table_infos_(
               main_fork_table_info,
@@ -70,15 +68,12 @@ int ObForkTableInfoBuilder::build_fork_tablet_infos(
       share::ObForkTabletInfo fork_tablet_info;
       if (OB_ISNULL(table_schema)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("table schema is null", KR(ret), K(i), K(schemas.count()));
       } else {
         const uint64_t table_id = table_schema->get_table_id();
         if (OB_FAIL(fork_table_infos_.get_refactored(table_id, fork_table_info))) {
           if (OB_HASH_NOT_EXIST == ret) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("fork table info not found for table", KR(ret), K(table_id));
           } else {
-            LOG_WARN("fail to get fork table info", KR(ret), K(table_id));
           }
         } else if (OB_FAIL(generate_fork_tablet_info_(part_idx,
                                                       subpart_idx,
@@ -108,7 +103,6 @@ int ObForkTableInfoBuilder::generate_fork_table_infos_(
 
   if (OB_UNLIKELY(!main_fork_table_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("main fork table info is invalid", KR(ret), K(main_fork_table_info));
   } else if (FALSE_IT(src_main_table_id = main_fork_table_info.get_fork_src_table_id())) {
   } else if (FALSE_IT(fork_snapshot_version = main_fork_table_info.get_fork_snapshot_version())) {
   } else if (OB_FAIL(schema_guard.get_table_schema(
@@ -116,7 +110,6 @@ int ObForkTableInfoBuilder::generate_fork_table_infos_(
                                                    src_main_table_schema))) {
   } else if (OB_ISNULL(src_main_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("src main table not exist", KR(ret), K(src_main_table_id));
   } else if (OB_FAIL(rootserver::ObForkTableUtil::collect_table_ids_from_table(
       schema_guard, *src_main_table_schema, src_table_ids))) {
   } else if (OB_UNLIKELY(src_table_ids.count() != dest_table_ids.count())) {
@@ -158,11 +151,9 @@ int ObForkTableInfoBuilder::generate_fork_tablet_info_(
   src_tablet_id.reset();
   if (OB_UNLIKELY(!fork_table_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid fork table info", KR(ret), K(fork_table_info));
   } else if (OB_FAIL(schema_guard.get_table_schema( fork_table_info.get_fork_src_table_id(), src_table_schema))) {
   } else if (OB_ISNULL(src_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("source table not exist", KR(ret), K(fork_table_info.get_fork_src_table_id()));
   } else {
     if (share::schema::PARTITION_LEVEL_ZERO == src_table_schema->get_part_level()) {
       src_tablet_id = src_table_schema->get_tablet_id();
@@ -171,7 +162,6 @@ int ObForkTableInfoBuilder::generate_fork_tablet_info_(
       if (OB_FAIL(src_table_schema->get_part_by_idx(part_idx, subpart_idx, src_part))) {
       } else if (OB_ISNULL(src_part)) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("source part is null", KR(ret), KPC(src_table_schema), K(part_idx), K(subpart_idx));
       } else {
         src_tablet_id = src_part->get_tablet_id();
       }

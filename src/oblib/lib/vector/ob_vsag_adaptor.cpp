@@ -35,39 +35,35 @@ namespace obvsag {
 
 using namespace vsag;
 
+static constexpr int64_t VSAG_SINDI_N_CANDIDATE_FACTOR = 500;
+
 static int vsag_errcode2ob(vsag::ErrorType vsag_errcode)
 {
   int ret = OB_ERR_VSAG_RETURN_ERROR;
   switch (vsag_errcode) {
     case vsag::ErrorType::INVALID_ARGUMENT: {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid vsag parameter", K(ret), K(vsag_errcode));
       break;
     }
     case vsag::ErrorType::UNSUPPORTED_INDEX:
     case vsag::ErrorType::UNSUPPORTED_INDEX_OPERATION: {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("not support vsag feature", K(ret), K(vsag_errcode));
       break;
     }
     case vsag::ErrorType::DIMENSION_NOT_EQUAL: {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("the dimension of request is NOT equal to index", K(ret), K(vsag_errcode));
       break;
     }
     case vsag::ErrorType::INDEX_EMPTY: {
       ret = OB_OP_NOT_ALLOW;
-      LOG_WARN("index is empty, cannot search or serialize", K(ret), K(vsag_errcode));
       break;
     }
     case vsag::ErrorType::NO_ENOUGH_MEMORY: {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to alloc memory in vasg", K(ret), K(vsag_errcode));
       break;
     }
     default: {
       ret = OB_ERR_VSAG_RETURN_ERROR;
-      LOG_WARN("vsag return error", K(ret), K(vsag_errcode));
       break;
     }
   }
@@ -269,7 +265,6 @@ int HnswIndexHandler::cal_distance_by_id(uint32_t len, uint32_t *dims, float *va
   float *dist_tmp = (float*)allocator_->Allocate(count * sizeof(float));
   if (OB_ISNULL(dist_tmp)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to alloc memory for cal_distance", K(ret), K(count));
   }
   // TODO(ningxin.ning): support CalcDistanceById in sparse vector
   for (int i = 0; i < count && OB_SUCC(ret); ++i) {
@@ -634,7 +629,6 @@ int construct_vsag_create_param(
              OB_FAIL(databuff_printf(result_param_str, buf_len, pos,
                                  ",\"extra_info_size\": %d",
                                  extra_info_size))) {
-    LOG_WARN("failed to fill result_param_str", K(ret), K(extra_info_size));
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos,
                                  ",\"use_old_serial_format\":true"))) {
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos,
@@ -646,7 +640,6 @@ int construct_vsag_create_param(
   } else if (! is_hgraph_type && OB_FAIL(databuff_printf(result_param_str,
                                  buf_len, pos, ",\"ef_search\":%d",
                                  ef_search))) {
-    LOG_WARN("failed to fill result_param_str", K(ret), K(ef_search));
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos,
                                      ",\"max_degree\":%d",
                                      max_degree))) {
@@ -655,39 +648,31 @@ int construct_vsag_create_param(
           result_param_str, buf_len, pos,
           ",\"base_quantization_type\":\"%s\"",
           base_quantization_type))) {
-    LOG_WARN("failed to fill result_param_str", K(ret), K(base_quantization_type));
   } else if (is_hgraph_type &&
              OB_FAIL(databuff_printf(result_param_str, buf_len, pos,
                                      ",\"build_thread_count\":%d",
                                      0))) {
-    LOG_WARN("failed to fill result_param_str", K(ret));
   } else if (create_type == HNSW_BQ_TYPE &&
              OB_FAIL(databuff_printf(
                  result_param_str, buf_len, pos,
                  ",\"use_reorder\":true"))) {
-    LOG_WARN("failed to fill result_param_str", K(ret));
   } else if (create_type == HNSW_BQ_TYPE &&
              OB_FAIL(databuff_printf(
                  result_param_str, buf_len, pos,
                  ",\"ignore_reorder\":true"))) {
-    LOG_WARN("failed to fill result_param_str", K(ret));
   } else if (create_type == HNSW_BQ_TYPE &&
              OB_FAIL(databuff_printf(
                  result_param_str, buf_len, pos,
                  ",\"precise_quantization_type\":\"%s\"", get_precise_quantization_type(refine_type)))) {
-    LOG_WARN("failed to fill result_param_str", K(ret), K(refine_type));
   } else if (create_type == HNSW_BQ_TYPE &&
              OB_FAIL(databuff_printf(result_param_str, buf_len, pos,
                                      ",\"precise_io_type\":\"block_memory_io\""))) {
-    LOG_WARN("failed to fill result_param_str", K(ret));
   } else if (create_type == HNSW_BQ_TYPE &&
              OB_FAIL(databuff_printf(result_param_str, buf_len, pos,
                                      ",\"rabitq_bits_per_dim_query\":%d", bq_bits_query))) {
-    LOG_WARN("failed to fill result_param_str", K(ret), K(bq_bits_query));
   } else if (create_type == HNSW_BQ_TYPE &&
              OB_FAIL(databuff_printf(result_param_str, buf_len, pos,
                                      ",\"rabitq_use_fht\":%s", (bq_use_fht ? "true" : "false")))) {
-    LOG_WARN("failed to fill result_param_str", K(ret), K(bq_use_fht));
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos,
                                      "}}"))) {
   }
@@ -768,7 +753,6 @@ int construct_vsag_search_param(uint8_t create_type,
                         buf_len, 
                         pos, 
                         ",\"use_extra_info_filter\":%s", use_extra_info_filter ? "true" : "false"))) {
-    LOG_WARN("failed to fill result_param_str", K(ret), K(index_type_str));
   } else if (OB_FAIL(databuff_printf(result_param_str, 
                         buf_len, 
                         pos, 
@@ -817,7 +801,6 @@ int create_index(VectorIndexPtr &index_handler,
   int ret = OB_SUCCESS;
   if (dtype == nullptr || metric == nullptr) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("[OBVSAG] null pointer", KP(dtype), KP(metric));
   } else {
     vsag::Allocator *vsag_allocator = nullptr;
     if (allocator == nullptr) {
@@ -848,7 +831,6 @@ int create_index(VectorIndexPtr &index_handler,
             refine_type, bq_bits_query, bq_use_fht);
         if (OB_ISNULL(hnsw_index)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("new HnswIndexHandler fail", K(ret), K(index_type));
         } else {
           index_handler = static_cast<VectorIndexPtr>(hnsw_index);
         }
@@ -868,7 +850,6 @@ int validate_create_index(const CreateIndexParam &param, std::string &err_msg)
   err_msg.clear();
   if (param.dtype_ == nullptr || param.metric_ == nullptr) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("[OBVSAG] null pointer", KP(param.dtype_), KP(param.metric_));
   } else {
     vsag::Allocator *vsag_allocator = nullptr;
     if (param.allocator_ == nullptr) {
@@ -922,7 +903,6 @@ int create_index(VectorIndexPtr &index_handler, IndexType index_type, const char
   int ret = OB_SUCCESS;
   if (dtype == nullptr || metric == nullptr) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("[OBVSAG] null pointer", KP(dtype), KP(metric));
   } else {
     vsag::Allocator *vsag_allocator = nullptr;
     if (allocator == nullptr) {
@@ -965,7 +945,6 @@ int create_index(VectorIndexPtr &index_handler, IndexType index_type, const char
             window_size);
         if (OB_ISNULL(hnsw_index)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("new HnswIndexHandler fail", K(ret), K(index_type));
         } else {
           index_handler = static_cast<VectorIndexPtr>(hnsw_index);
         }
@@ -984,7 +963,6 @@ int build_index(VectorIndexPtr &index_handler, float *vector_list,
   int ret = OB_SUCCESS;
   if (index_handler == nullptr || vector_list == nullptr || ids == nullptr) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("[OBVSAG] null pointer addr", KP(index_handler), KP(vector_list), K(ids));
   } else {
     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
     DatasetPtr dataset = vsag::Dataset::Make();
@@ -1008,7 +986,6 @@ int build_index(VectorIndexPtr &index_handler, uint32_t *lens, uint32_t *dims, f
   int ret = OB_SUCCESS;
   if (index_handler == nullptr || lens == nullptr || dims == nullptr || vals == nullptr || ids == nullptr) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("[OBVSAG] null pointer addr", KP(index_handler), KP(lens), KP(dims), KP(vals), KP(vals), KP(ids));
   } else {
     uint32_t *cur_dims_ptr = dims;
     float *cur_vals_ptr = vals;
@@ -1039,7 +1016,6 @@ int add_index(VectorIndexPtr &index_handler, float *vector,
   int ret = OB_SUCCESS;
   if (index_handler == nullptr || vector == nullptr || ids == nullptr) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("[OBVSAG] null pointer addr", KP(index_handler), KP(vector), KP(ids));
   } else {
     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
     // add index
@@ -1064,7 +1040,6 @@ int add_index(VectorIndexPtr &index_handler, uint32_t *lens, uint32_t *dims, flo
   int ret = OB_SUCCESS;
   if (index_handler == nullptr || lens == nullptr || dims == nullptr || vals == nullptr || ids == nullptr) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("[OBVSAG] null pointer addr", KP(index_handler), KP(lens), KP(dims), KP(vals), KP(vals), KP(ids));
   } else {
     uint32_t *cur_dims_ptr = dims;
     float *cur_vals_ptr = vals;
@@ -1084,7 +1059,6 @@ int add_index(VectorIndexPtr &index_handler, uint32_t *lens, uint32_t *dims, flo
         max_dim = MAX(max_dim, sparse_vectors[i].ids_[j]);
         if (OB_UNLIKELY(max_dim > MAX_DIM_LIMIT)) {
           ret = OB_NOT_SUPPORTED;
-          LOG_WARN("sparse vector dimension greater than 500000 is not supported.", K(ret), K(max_dim));
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "sparse vector dimension greater than 500000 is");
         }
       }
@@ -1117,7 +1091,6 @@ int get_index_number(VectorIndexPtr &index_handler, int64_t &size)
   int ret = OB_SUCCESS;
   if (index_handler == nullptr) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("[OBVSAG] null pointer addr", K(index_handler));
   } else {
     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
     size = hnsw->get_index_number();
@@ -1132,7 +1105,6 @@ int cal_distance_by_id(VectorIndexPtr &index_handler,
   int ret = OB_SUCCESS;
   if (index_handler == nullptr) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("[OBVSAG] null pointer addr", K(index_handler));
   } else {
     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
     if (OB_FAIL(hnsw->cal_distance_by_id(vector, ids, count, distances))) {
@@ -1147,7 +1119,6 @@ int cal_distance_by_id(VectorIndexPtr &index_handler, uint32_t len, uint32_t *di
   int ret = OB_SUCCESS;
   if (index_handler == nullptr) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("[OBVSAG] null pointer addr", K(index_handler));
   } else {
     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
     if (OB_FAIL(hnsw->cal_distance_by_id(len, dims, vals, ids, count, distances))) {
@@ -1162,7 +1133,6 @@ int get_vid_bound(VectorIndexPtr &index_handler,
   int ret = OB_SUCCESS;
   if (nullptr == index_handler) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("[OBVSAG] null pointer addr", KP(index_handler));
   } else {
     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
     const IndexType index_type = static_cast<IndexType>(hnsw->get_index_type());
@@ -1188,7 +1158,6 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
   int ret = OB_SUCCESS;
   if (index_handler == nullptr || query_vector == nullptr) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("[OBVSAG] null pointer addr", KP(index_handler), KP(query_vector));
   } else {
     FilterInterface *bitmap = static_cast<FilterInterface *>(invalid);
     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
@@ -1228,7 +1197,6 @@ int knn_search(VectorIndexPtr &index_handler, float *query_vector,
   int ret = OB_SUCCESS;
   if (index_handler == nullptr || query_vector == nullptr) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("[OBVSAG] null pointer addr", K(index_handler), K(query_vector));
   } else {
     FilterInterface *bitmap = static_cast<FilterInterface *>(invalid);
     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
@@ -1267,7 +1235,6 @@ int knn_search(obvsag::VectorIndexPtr &index_handler, uint32_t len, uint32_t *di
   int ret = OB_SUCCESS;
   if (index_handler == nullptr || dims == nullptr || vals == nullptr) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("[OBVSAG] null pointer addr", K(index_handler), K(dims), K(vals));
   } else {
     FilterInterface *bitmap = static_cast<FilterInterface *>(invalid);
     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
@@ -1277,6 +1244,12 @@ int knn_search(obvsag::VectorIndexPtr &index_handler, uint32_t len, uint32_t *di
     } else if (len == 0) {
       result_size = 0;
     } else {
+      // VSAG SINDI requires n_candidate <= 500 * k. SeekDB supports refine_k up to 1000,
+      // so use the minimum internal k accepted by VSAG and let the caller merge and trim
+      // the extra results to the SQL query limit. This preserves the requested candidate pool.
+      const int64_t min_vsag_topk = n_candidate / VSAG_SINDI_N_CANDIDATE_FACTOR
+                                    + (n_candidate % VSAG_SINDI_N_CANDIDATE_FACTOR != 0);
+      const int64_t vsag_topk = std::max(topk, min_vsag_topk);
       const std::string input_json_string(result_param_str);
       vsag::SparseVector sparse;
       sparse.len_ = len;
@@ -1284,7 +1257,7 @@ int knn_search(obvsag::VectorIndexPtr &index_handler, uint32_t len, uint32_t *di
       sparse.vals_ = vals;
       DatasetPtr query = vsag::Dataset::Make();
       query->NumElements(1)->SparseVectors(&sparse)->Owner(false);
-      if (OB_FAIL(hnsw->knn_search(query, topk, input_json_string, result_dist, result_ids,
+      if (OB_FAIL(hnsw->knn_search(query, vsag_topk, input_json_string, result_dist, result_ids,
                             result_size, valid_ratio, index_type, bitmap,
                             reverse_filter, need_extra_info, extra_infos, allocator))) {
       }
@@ -1298,7 +1271,6 @@ int fserialize(VectorIndexPtr &index_handler, std::ostream &out_stream)
   int ret = OB_SUCCESS;
   if (index_handler == nullptr) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("[OBVSAG] null pointer addr", K(index_handler));
   } else {
     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
     tl::expected<void, Error> bs = hnsw->get_index()->Serialize(out_stream);
@@ -1318,7 +1290,6 @@ int fdeserialize(VectorIndexPtr &index_handler,
   int ret = OB_SUCCESS;
   if (index_handler == nullptr) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("[OBVSAG] null pointer addr", K(index_handler));
   } else {
     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
     std::shared_ptr<vsag::Index> hnsw_index;
@@ -1410,7 +1381,6 @@ int get_extra_info_by_ids(VectorIndexPtr &index_handler,
   int ret = OB_SUCCESS;
   if (index_handler == nullptr) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("[OBVSAG] null pointer addr", K(index_handler));
   } else {
     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
     if (OB_FAIL(hnsw->get_extra_info_by_ids(ids, count, extra_infos))) {
@@ -1434,7 +1404,6 @@ int immutable_optimize(VectorIndexPtr& index_handler)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(index_handler)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("[OBVSAG] null pointer addr", K(ret), KP(index_handler));
   } else {
     HnswIndexHandler *hnsw = static_cast<HnswIndexHandler *>(index_handler);
     if (OB_FAIL(hnsw->immutable_optimize())) {

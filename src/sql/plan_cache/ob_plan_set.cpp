@@ -61,7 +61,6 @@ int ObPlanSet::get_variable_meta(const ObSQLSessionInfo *session_info, const ObS
       meta = UNKNOWN_VAR_DEFAULT_META;
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("failed to get user variable", K(ret), K(var_name));
     }
   } else {
     meta.parse_from_variable(sess_var);
@@ -113,12 +112,8 @@ int ObPlanSet::match_params_info(const ParamStore *params,
     if (OB_SUCC(ret) && is_same && related_user_var_names_.count() > 0) {
       if (related_user_var_names_.count() != related_user_sess_var_metas_.count()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("related_user_var_names and related_user_sess_vars should have the same size",
-                 K(ret), K(related_user_var_names_.count()), K(related_user_sess_var_metas_.count()));
       } else if (OB_ISNULL(pc_ctx.sql_ctx_.session_info_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null",
-                 K(ret), K(pc_ctx.sql_ctx_.session_info_));
       } else {
         ObSQLSessionInfo *session_info = pc_ctx.sql_ctx_.session_info_;
         ObPCUserVarMeta tmp_meta;
@@ -139,17 +134,14 @@ int ObPlanSet::match_params_info(const ParamStore *params,
 
       if (OB_ISNULL(session)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null session", K(ret));
       } else if (OB_ISNULL(plan_ctx)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null plan context", K(ret));
       } else if (fetch_cur_time_ && FALSE_IT(plan_ctx->set_cur_time(
                                 ObClockGenerator::getClock(), *session))) {
         // never reach
       } else if (FALSE_IT(plan_ctx->set_last_trace_id(session->get_last_trace_id()))) {
       } else if (params->count() != params_info_.count()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("param info count is different", K(params_info_), K(*params), K(ret));
       } else {
         /* check calculable expr constraints*/
         DLIST_FOREACH(pre_calc_con, all_pre_calc_constraints_) {
@@ -194,10 +186,8 @@ int ObPlanSet::copy_param_flag_from_param_info(ParamStore *params)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(params)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params is null", K(ret));
   } else if (params->count() != params_info_.count()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params is null", K(ret), KPC(params), K(params_info_));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < params->count(); ++i) {
     params->at(i).set_param_flag(params_info_.at(i).flag_);
@@ -319,22 +309,18 @@ int ObPlanSet::match_multi_stmt_info(const ParamStore &params,
       int64_t pos = multi_stmt_rowkey_pos.at(i);
       if (OB_UNLIKELY(pos < 0 || pos >= params.count())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected array pos",K(pos), K(params.count()), K(ret));
       } else if (OB_UNLIKELY(!params.at(pos).is_ext_sql_array())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected type", K(params.at(pos)), K(ret));
       } else {
         const ObSqlArrayObj *array_params = reinterpret_cast<const ObSqlArrayObj*>(
                                                   params.at(pos).get_ext());
         if (OB_ISNULL(array_params)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected null", KPC(array_params), K(ret));
         } else if (OB_FAIL(binding_data.push_back(array_params->data_))) {
         } else if (i == 0) {
           stmt_count = array_params->count_;
         } else if (OB_UNLIKELY(stmt_count != array_params->count_)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected stmt count", K(ret));
         } else { /*do nothing*/ }
       }
     }
@@ -362,7 +348,6 @@ int ObPlanSet::match_multi_stmt_info(const ParamStore &params,
               if (OB_FAIL(unique_ctx.set_refactored(hash_key))) {
               }
             } else {
-              LOG_WARN("check rowkey distinct failed", K(ret));
             }
           }
         }
@@ -410,7 +395,6 @@ int ObPlanSet::match_params_info(const Ob2DArray<ObParamInfo,
   ObSQLSessionInfo *session_info = pc_ctx.sql_ctx_.session_info_;
   if (OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null session_info", K(ret));
   } else if (infos.count() != params_info_.count()) {
     is_same = false;
   } else {
@@ -549,9 +533,7 @@ int ObPlanSet::remove_cache_obj_entry(const ObCacheObjID obj_id)
   if (OB_ISNULL(get_plan_cache_value())
      || OB_ISNULL(pcv_set = get_plan_cache_value()->get_pcv_set())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", K(pcv_set));
   } else if (NULL == (pc = get_plan_cache())) {
-    LOG_WARN("invalid argument", K(pc));
   } else if (OB_FAIL(pcv_set->remove_cache_obj_entry(obj_id))) {
   } else if (OB_FAIL(pc->remove_cache_obj_stat_entry(obj_id))) {
   }
@@ -568,7 +550,6 @@ int ObPlanSet::init_new_set(const ObPlanCacheCtx &pc_ctx,
   const ObSQLSessionInfo *session_info = sql_ctx.session_info_;
   if (OB_ISNULL(pc = get_plan_cache()) || OB_ISNULL(session_info)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid null plan cache or session info", K(ret), K(pc), K(session_info));
   } else {
     
     alloc_.set_ctx_id(ObCtxIds::PLAN_CACHE_CTX_ID);
@@ -607,8 +588,6 @@ int ObPlanSet::init_new_set(const ObPlanCacheCtx &pc_ctx,
         buf = (char *)alloc_.alloc(sql_ctx.related_user_var_names_.at(i).length());
         if (OB_ISNULL(buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to allocate memory",
-                   K(ret), K(sql_ctx.related_user_var_names_.at(i).length()));
         } else {
           MEMCPY(buf, sql_ctx.related_user_var_names_.at(i).ptr(), sql_ctx.related_user_var_names_.at(i).length());
           var_name.assign_ptr(buf, sql_ctx.related_user_var_names_.at(i).length());
@@ -699,11 +678,9 @@ int ObPlanSet::set_const_param_constraint(ObIArray<ObPCConstParamInfo> &const_pa
 
               if (OB_ISNULL(tmp_buf = (char *)alloc_.alloc(deep_cp_size))) {
                 ret = OB_ALLOCATE_MEMORY_FAILED;
-                LOG_WARN("failed to allocate mem", K(ret));
               } else if (OB_FAIL(tmp_info.const_params_.at(i).deep_copy(src_obj, tmp_buf, deep_cp_size, pos))) {
               } else if (pos != deep_cp_size) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("deep copy went wrong", K(ret));
               } else {
                 // do nothing
               }
@@ -736,7 +713,6 @@ int ObPlanSet::set_equal_param_constraint(common::ObIArray<ObPCParamEqualInfo> &
         equal_info.second_param_idx_ > params_info_.count() ||
         equal_info.first_param_idx_ == equal_info.second_param_idx_) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("get invalid equal param constraint", K(ret), K(equal_info));
     } else if (OB_FAIL(all_equal_param_constraints_.push_back(equal_info))) {
     }
   }
@@ -752,7 +728,6 @@ int ObPlanSet::set_pre_calc_constraint(common::ObDList<ObPreCalcExprConstraint> 
   DLIST_FOREACH(cur_cons, pre_calc_cons) {
     if (OB_ISNULL(cons_buf = alloc_.alloc(sizeof(ObPreCalcExprConstraint)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory", K(ret));
     } else {
       pre_calc_constraint = new(cons_buf)ObPreCalcExprConstraint(alloc_);
     }
@@ -760,7 +735,6 @@ int ObPlanSet::set_pre_calc_constraint(common::ObDList<ObPreCalcExprConstraint> 
     } else if (OB_FAIL(pre_calc_constraint->assign(*cur_cons, alloc_))) {
     } else if (OB_UNLIKELY(!all_pre_calc_constraints_.add_last(pre_calc_constraint))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to add element to dlist", K(ret));
     }
   }
   return ret;
@@ -781,7 +755,6 @@ int ObPlanSet::match_cons(const ObPlanCacheCtx &pc_ctx, bool &is_matched)
       OB_ISNULL(equal_cons)) {
     is_matched = false;
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(param_cons), K(possible_param_cons), K(equal_cons));
   } else if (param_cons->count() != all_plan_const_param_constraints_.count() ||
              possible_param_cons->count() != all_possible_const_param_constraints_.count() ||
              equal_cons->count() != all_equal_param_constraints_.count()) {
@@ -822,12 +795,9 @@ int ObPlanSet::match_constraint(const ParamStore &params, bool &is_matched)
         const ObObj &const_param = const_param_info.const_params_.at(j);
         if (param_idx >= params.count()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get an unexpected param index", K(ret), K(param_idx), K(params.count()));
         } else if (const_param.is_invalid_type() ||
                    params.at(param_idx).is_invalid_type()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected invalid type",
-                   K(ret), K(const_param.get_type()), K(params.at(param_idx).get_type()));
         } else if (!const_param.can_compare(params.at(param_idx)) ||
                    0 != const_param.compare(params.at(param_idx))) {
           LOG_TRACE("not matched const param", K(const_param), K(params.at(param_idx)));
@@ -850,12 +820,9 @@ int ObPlanSet::match_constraint(const ParamStore &params, bool &is_matched)
         const ObObj &const_param = const_param_info.const_params_.at(j);
         if (param_idx >= params.count()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get an unexpected param index", K(ret), K(param_idx), K(params.count()));
         } else if (const_param.is_invalid_type() ||
                    params.at(param_idx).is_invalid_type()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected invalid type",
-                   K(ret), K(const_param.get_type()), K(params.at(param_idx).get_type()));
         } else if (!const_param.can_compare(params.at(param_idx)) ||
                    0 != const_param.compare(params.at(param_idx))) {
           match_const = false;
@@ -883,7 +850,6 @@ int ObPlanSet::match_constraint(const ParamStore &params, bool &is_matched)
     if (OB_UNLIKELY(first_idx < 0 || first_idx >= params.count() ||
                     second_idx < 0 || second_idx >= params.count())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("param index is invalid", K(ret), K(params.count()), K(first_idx), K(second_idx));
     } else if (!all_equal_param_constraints_.at(i).use_abs_cmp_ &&
                param1.can_compare(param2) &&
                param1.get_collation_type() == param2.get_collation_type()) {
@@ -938,7 +904,6 @@ int ObPlanSet::init_pre_calc_exprs(const ObPlanCacheObject &phy_plan,
     LOG_WARN("plan cache allocator has not been initialized.");
   } else if(OB_ISNULL( buf = pc_alloc_->alloc(sizeof(PreCalcExprHandler)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate memory.", K(ret));
   } else {
     pre_cal_expr_handler_ = new(buf)PreCalcExprHandler();
     pre_cal_expr_handler_->init(pc_alloc_);
@@ -947,7 +912,6 @@ int ObPlanSet::init_pre_calc_exprs(const ObPlanCacheObject &phy_plan,
 
     if (OB_ISNULL(buf = pre_expr_alloc.alloc(sizeof(common::ObDList<ObPreCalcExprFrameInfo>)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate memory.", K(ret));
     } else {
       pre_cal_expr_handler_->pre_calc_frames_ =
                               new (buf)common::ObDList<ObPreCalcExprFrameInfo>;
@@ -959,14 +923,12 @@ int ObPlanSet::init_pre_calc_exprs(const ObPlanCacheObject &phy_plan,
       DLIST_FOREACH(frame, phy_plan.get_pre_calc_frames()) {
         if (OB_ISNULL(frame_buf = pre_expr_alloc.alloc(sizeof(ObPreCalcExprFrameInfo)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          LOG_WARN("failed to allocate memory", K(ret));
         } else if (FALSE_IT(pre_calc_frame = new(frame_buf)ObPreCalcExprFrameInfo(
                                                                      pre_expr_alloc))) {
           // do nothing
         } else if (OB_FAIL(pre_calc_frame->assign(*frame, pre_expr_alloc))) {
         } else if (OB_UNLIKELY(!pre_calc_frames->add_last(pre_calc_frame))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("failed to add element to dlist", K(ret));
         } else {
           frame_buf = NULL;
           pre_calc_frame = NULL;
@@ -1082,10 +1044,8 @@ int ObSqlPlanSet::init_new_set(const ObPlanCacheCtx &pc_ctx,
   const ObSQLSessionInfo *session_info = sql_ctx.session_info_;
   if (OB_ISNULL(session_info)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid null plan cache or session info", K(ret), K(session_info));
   } else if (OB_ISNULL(pc_malloc_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pc_allocator has not been initialized.", K(ret));
   } else if (OB_FAIL(ObPlanSet::init_new_set(pc_ctx, plan, pc_malloc_))) {
   } else if (OB_FAIL(table_locations_.prepare_allocate_and_keep_count(sql_ctx.get_partition_info_count(),
                                                         *plan_cache_value_->get_pcv_set()->get_allocator()))) {
@@ -1118,7 +1078,6 @@ int ObSqlPlanSet::init_new_set(const ObPlanCacheCtx &pc_ctx,
     // do nothing
   } else if (NS_CRSR != plan.get_ns()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected cache object type", K(ret), K(plan.get_ns()));
   } else {
     const ObPhysicalPlan &sql_plan = dynamic_cast<const ObPhysicalPlan &>(plan);
     enable_inner_part_parallel_exec_ = sql_plan.get_px_dop() > 1;
@@ -1148,12 +1107,10 @@ int ObSqlPlanSet::select_plan(ObPlanCacheCtx &pc_ctx, ObPlanCacheObject *&cache_
   ObPhysicalPlan *plan = NULL;
   if (OB_ISNULL(plan_cache_value_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("location cache not init", K(plan_cache_value_), K(ret));
   } else {
     if (OB_FAIL(get_plan_special(pc_ctx, plan))) {
       if (OB_SQL_PC_NOT_EXIST == ret) {
       } else {
-        LOG_WARN("fail to get plan special", K(ret));
       }
     }
   }
@@ -1170,7 +1127,6 @@ int ObSqlPlanSet::add_physical_plan(const ObPhyPlanType plan_type,
   int ret = OB_SUCCESS;
   if (plan_type != OB_PHY_PLAN_LOCAL && plan_type != OB_PHY_PLAN_DISTRIBUTED) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid plan type", K(ret), K(plan_type));
   } else if (OB_PHY_PLAN_LOCAL == plan_type) {
     if (OB_FAIL(add_local_plan(plan))) {
     }
@@ -1424,7 +1380,6 @@ int ObSqlPlanSet::add_local_plan(ObPhysicalPlan &plan)
     direct_local_plan_ = &plan;
     if (OB_FAIL(local_plans_.push_back(&plan))) {
       direct_local_plan_ = nullptr;
-      LOG_WARN("failed to add local plan", K(ret));
     }
   }
   return ret;

@@ -78,7 +78,6 @@ int ObCSAsyncIndexProcessor::init_schema_guard_()
           : nullptr;
   if (OB_ISNULL(schema_service)) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", K(ret));
   } else if (OB_FAIL(schema_service->get_runtime_schema_guard(
       schema_guard_, ctx_.schema_version_,
       ObMultiVersionSchemaService::RefreshSchemaMode::FORCE_FALLBACK))) {
@@ -121,9 +120,7 @@ int ObCSAsyncIndexProcessor::process(common::ObIArray<ObCSRow> &rows)
   if (rows.count() == 0) {
     // nothing to process
   } else if (!vec_index_cache_.created() && OB_FAIL(vec_index_cache_.create(64, "CSAsyncIdxCa"))) {
-    LOG_WARN("create vec_index_cache failed", K(ret));
   } else if (!tablet_to_table_.created() && OB_FAIL(tablet_to_table_.create(64, "CSTabletToTb"))) {
-    LOG_WARN("create tablet_to_table failed", K(ret));
   } else if (OB_FAIL(init_schema_guard_())) {
   } else {
     common::ObSEArray<TabletEventGroup, 16> groups;
@@ -141,7 +138,6 @@ int ObCSAsyncIndexProcessor::process(common::ObIArray<ObCSRow> &rows)
           LOG_INFO("skip non-existent tablet_id", K(row.tablet_id_), K(row));
           ret = common::OB_SUCCESS;
         } else {
-          LOG_WARN("resolve_table_id_from_tablet_id_ failed", K(ret), K(row.tablet_id_), K(row));
         }
       } else if (common::OB_INVALID_ID == data_table_id) {
         LOG_INFO("skip invalid tablet_id", K(row.tablet_id_), K(row));
@@ -180,7 +176,6 @@ int ObCSAsyncIndexProcessor::process(common::ObIArray<ObCSRow> &rows)
               if (OB_SUCC(ret)) {
                 if (group_idx < 0 || group_idx >= groups.count()) {
                   ret = common::OB_ERR_UNEXPECTED;
-                  LOG_WARN("invalid group_idx", K(ret), K(group_idx), K(groups.count()), K(key));
                 } else if (groups.at(group_idx).table_id_ != data_table_id) {
                   ret = common::OB_ERR_UNEXPECTED;
                   LOG_WARN("group key maps to different table_id in this batch",
@@ -265,7 +260,6 @@ int ObCSAsyncIndexProcessor::resolve_vector_index_info_(
   if (OB_FAIL(schema_guard.get_table_schema( table_id, data_table_schema))) {
   } else if (OB_ISNULL(data_table_schema)) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("data table schema is null", K(ret), K(table_id));
   } else if (!data_table_schema->is_user_table() || !data_table_schema->is_heap_organized_table()) {
     // Skip: not user table or not heap table (async index only supports heap + ASYNC)
     need_resolve = false;
@@ -283,7 +277,6 @@ int ObCSAsyncIndexProcessor::resolve_vector_index_info_(
         if (OB_FAIL(schema_guard.get_table_schema( index_table_id, index_schema))) {
         } else if (OB_ISNULL(index_schema)) {
           ret = common::OB_ERR_UNEXPECTED;
-          LOG_WARN("index table schema is null", K(ret), K(index_table_id));
         } else if (!schema::is_vec_index_id_type(index_schema->get_index_type())) {
           // skip non-vector-index-id tables
         } else {
@@ -293,7 +286,6 @@ int ObCSAsyncIndexProcessor::resolve_vector_index_info_(
                     *data_table_schema, *index_schema, vec_col_ids))) {
           } else if (vec_col_ids.count() <= 0) {
             ret = common::OB_ERR_UNEXPECTED;
-            LOG_WARN("no vector column id found for vector index", K(ret), K(table_id), K(index_id_table_id));
           } else {
             // Check SYNC_MODE=ASYNC: only non-semantic async HNSW indexes on heap
             // table are handled here. Semantic indexes use different aux tables and
@@ -306,8 +298,6 @@ int ObCSAsyncIndexProcessor::resolve_vector_index_info_(
               const ObColumnSchemaV2 *data_col_schema = data_table_schema->get_column_schema(vec_col_ids.at(0));
               if (OB_ISNULL(data_col_schema)) {
                 ret = common::OB_ERR_UNEXPECTED;
-                LOG_WARN("data column schema is null", K(ret), K(table_id), K(index_id_table_id),
-                         K(vec_col_ids));
               } else if (ob_is_varchar_type(data_col_schema->get_data_type(),
                                             data_col_schema->get_collation_type())) {
                 ObVectorIndexParam param;
@@ -335,7 +325,6 @@ int ObCSAsyncIndexProcessor::resolve_vector_index_info_(
                 }
                 if (vec_col_idx < 0) {
                   ret = common::OB_ERR_UNEXPECTED;
-                  LOG_WARN("vector column not found in col_descs", K(ret), K(table_id), K(vec_column_id));
                 }
 
                 int64_t dim = 0;
@@ -343,7 +332,6 @@ int ObCSAsyncIndexProcessor::resolve_vector_index_info_(
                 } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_dim(*index_schema, dim))) {
                 } else if (dim <= 0) {
                   ret = common::OB_ERR_UNEXPECTED;
-                  LOG_WARN("unexpected vector dimension", K(ret), K(table_id), K(dim), K(index_id_table_id));
                 }
 
                 uint64_t delta_buffer_table_id = common::OB_INVALID_ID;
@@ -356,7 +344,6 @@ int ObCSAsyncIndexProcessor::resolve_vector_index_info_(
                       if (OB_FAIL(schema_guard.get_table_schema( simple_index_infos.at(k).table_id_, candidate_schema))) {
                       } else if (OB_ISNULL(candidate_schema)) {
                         ret = common::OB_ERR_UNEXPECTED;
-                        LOG_WARN("candidate schema is null", K(ret));
                       } else if (schema::is_vec_delta_buffer_type(candidate_schema->get_index_type())) {
                         ObString candidate_prefix;
                         if (OB_FAIL(ObPluginVectorIndexUtils::get_vector_index_prefix(*candidate_schema, candidate_prefix))) {
@@ -368,8 +355,6 @@ int ObCSAsyncIndexProcessor::resolve_vector_index_info_(
                     }
                     if (OB_SUCC(ret) && delta_buffer_table_id == common::OB_INVALID_ID) {
                       ret = common::OB_ERR_UNEXPECTED;
-                      LOG_WARN("delta_buffer table not found for vector index",
-                               K(ret), K(table_id), K(index_id_table_id));
                     }
                   }
                 }
@@ -420,7 +405,6 @@ int ObCSAsyncIndexProcessor::resolve_vector_index_info_(
                   }
 
                   if (OB_SUCC(ret) && OB_FAIL(vec_infos.push_back(vec_info))) {
-                    LOG_WARN("fail to push back vec_info", K(ret), K(vec_info));
                   }
                 }
               }
@@ -444,7 +428,6 @@ int ObCSAsyncIndexProcessor::resolve_table_id_from_tablet_id_(
 
   if (OB_UNLIKELY(!tablet_id.is_valid())) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid tablet_id", K(ret), K(tablet_id));
   } else if (tablet_id.is_inner_tablet()) {
     table_id = tablet_id.id();
   } else if (OB_SUCC(tablet_to_table_.get_refactored(tablet_id.id(), table_id))) {
@@ -452,10 +435,8 @@ int ObCSAsyncIndexProcessor::resolve_table_id_from_tablet_id_(
       ret = common::OB_TABLET_NOT_EXIST;
     }
   } else if (OB_HASH_NOT_EXIST != ret) {
-    LOG_WARN("get cache failed", KR(ret));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("sql_proxy is null", K(ret));
   } else {
     common::ObSEArray<common::ObTabletID, 1> tablet_ids;
     common::ObSEArray<ObTabletTablePair, 1> infos;
@@ -463,22 +444,18 @@ int ObCSAsyncIndexProcessor::resolve_table_id_from_tablet_id_(
     } else if (OB_FAIL(ObTabletMappingTableOperator::batch_get(
                    *GCTX.sql_proxy_, tablet_ids, infos))) {
       if (common::OB_ITEM_NOT_MATCH == ret) {
-        LOG_WARN("tablet mapping not found", K(ret), K(tablet_id));
         ret = common::OB_TABLET_NOT_EXIST;
         table_id = common::OB_INVALID_ID;
         if (OB_FAIL(tablet_to_table_.set_refactored(tablet_id.id(), common::OB_INVALID_ID))) {
         }
       } else {
-        LOG_WARN("fail to get table_id from tablet mapping", K(ret), K(tablet_id));
       }
     } else if (OB_UNLIKELY(infos.count() != 1)) {
       ret = common::OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected infos count", K(ret), K(infos.count()));
     } else {
       table_id = infos.at(0).get_table_id();
       if (common::OB_INVALID_ID == table_id) {
         ret = common::OB_ERR_UNEXPECTED;
-        LOG_WARN("table_id invalid in tablet mapping", K(ret), K(tablet_id));
       } else if (OB_FAIL(tablet_to_table_.set_refactored(tablet_id.id(), table_id))) {
       }
     }
@@ -512,7 +489,6 @@ int ObCSAsyncIndexProcessor::build_event_from_row_(
   } else if (ObCSAsyncIndexEventType::INSERT == event_type
              && (row.new_row_.size_ <= 0 || OB_ISNULL(row.new_row_.data_))) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("INSERT/UPDATE row has no new_row data", K(ret), K(row));
   } else if (ObCSAsyncIndexEventType::INSERT == event_type) {
     int extract_ret = extract_vector_data_(row.new_row_, vec_info, vec_data, vec_len);
     if (common::OB_ERR_UNEXPECTED == extract_ret && OB_ISNULL(vec_data)) {
@@ -576,10 +552,8 @@ int ObCSAsyncIndexProcessor::extract_vector_data_(
   vec_len = 0;
   if (OB_ISNULL(new_row.data_) || new_row.size_ <= 0) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("new_row data is null or empty", K(ret), K(new_row));
   } else if (vec_info.vec_col_idx_ < 0) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid vec_col_idx", K(ret), K(vec_info));
   }
   // Step 1: use ObRowReader::read_column() to read the specific vector column
   blocksstable::ObStorageDatum datum;
@@ -593,16 +567,12 @@ int ObCSAsyncIndexProcessor::extract_vector_data_(
   if (OB_FAIL(ret)) {
   } else if (datum.is_nop()) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("vector column is NOP (not modified)", K(ret), K(vec_info));
   } else if (datum.is_null()) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("vector column is NULL", K(ret), K(vec_info));
   } else if (datum.len_ <= 0) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("vector datum has zero length", K(ret), K(vec_info), K(datum.len_));
   } else if (OB_ISNULL(datum.ptr_)) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("vector datum ptr is null", K(ret), K(vec_info), K(datum.len_));
   } else {
     // Step 3: parse vector data and return pointer + length
     const int64_t expected_len = vec_info.dim_ * static_cast<int64_t>(sizeof(float));
@@ -615,8 +585,6 @@ int ObCSAsyncIndexProcessor::extract_vector_data_(
       vec_len = expected_len;
     } else {
       ret = common::OB_ERR_UNEXPECTED;
-      LOG_WARN("vector data length does not match expected dense size",
-               K(ret), K(datum.len_), K(expected_len), K(header_len), K(vec_info));
     }
   }
   return ret;
@@ -629,13 +597,10 @@ int ObCSAsyncIndexProcessor::get_tx_desc_from_ctx_(transaction::ObTxDesc *&tx_de
   observer::ObInnerSQLConnection *inner_conn = nullptr;
   if (OB_ISNULL(ctx_.trans_.get_connection())) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("ObMySQLTransaction connection is null", K(ret));
   } else if (OB_ISNULL(inner_conn = static_cast<observer::ObInnerSQLConnection *>(ctx_.trans_.get_connection()))) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("Failed to cast ObISQLConnection to ObInnerSQLConnection", K(ret));
   } else if (OB_ISNULL(tx_desc = inner_conn->get_session().get_tx_desc())) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("Failed to get tx_desc from ObInnerSQLConnection session", K(ret));
   }
   return ret;
 }
@@ -649,20 +614,16 @@ int ObCSAsyncIndexProcessor::build_das_ins_ctdef_(common::ObArenaAllocator &allo
   ins_ctdef = nullptr;
   if (OB_ISNULL(insert_op)) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("insert_op is null", K(ret));
   } else if (OB_FAIL(sql::ObDASTaskFactory::alloc_das_ctdef(
           sql::DAS_OP_TABLE_INSERT, allocator, ins_ctdef))) {
   } else if (OB_ISNULL(ins_ctdef)) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("ins_ctdef is null after allocation", K(ret));
   } else {
     
     const schema::ObTableSchema *index_id_schema = nullptr;
     if (OB_FAIL(schema_guard_.get_table_schema( vec_info.index_id_table_id_, index_id_schema))) {
     } else if (OB_ISNULL(index_id_schema)) {
       ret = common::OB_ERR_UNEXPECTED;
-      LOG_WARN("index_id_table schema not found, may be dropped",
-                K(ret), K(vec_info.index_id_table_id_));
     } else {
       ins_ctdef->table_id_ = vec_info.data_table_id_;
       ins_ctdef->index_tid_ = vec_info.index_id_table_id_;
@@ -674,7 +635,6 @@ int ObCSAsyncIndexProcessor::build_das_ins_ctdef_(common::ObArenaAllocator &allo
       if (OB_FAIL(ins_ctdef->column_ids_.reserve(column_count)) ||
           OB_FAIL(ins_ctdef->column_types_.reserve(column_count)) ||
           OB_FAIL(ins_ctdef->column_accuracys_.reserve(column_count))) {
-        LOG_WARN("Failed to reserve column arrays", K(ret), K(column_count));
       } else {
         common::ObSEArray<const schema::ObColumnSchemaV2 *, 8> sorted_columns;
         for (schema::ObTableSchema::const_column_iterator iter = index_id_schema->column_begin();
@@ -697,20 +657,16 @@ int ObCSAsyncIndexProcessor::build_das_ins_ctdef_(common::ObArenaAllocator &allo
           const schema::ObColumnSchemaV2 *column_schema = sorted_columns.at(i);
           if (OB_ISNULL(column_schema)) {
             ret = common::OB_ERR_UNEXPECTED;
-            LOG_WARN("column_schema is null", K(ret));
           } else if (OB_FAIL(ins_ctdef->column_ids_.push_back(column_schema->get_column_id())) ||
                      OB_FAIL(ins_ctdef->column_types_.push_back(column_schema->get_meta_type())) ||
                      OB_FAIL(ins_ctdef->column_accuracys_.push_back(column_schema->get_accuracy()))) {
-            LOG_WARN("Failed to push column info", K(ret), K(column_schema->get_column_id()));
           }
         }
       }
 
       if (OB_SUCC(ret) && OB_FAIL(ins_ctdef->table_param_.build(
               index_id_schema, ctx_.schema_version_, ins_ctdef->column_ids_))) {
-        LOG_WARN("Failed to convert table_param", K(ret), K(vec_info.index_id_table_id_));
       } else if (OB_SUCC(ret) && OB_FAIL(ins_ctdef->new_row_projector_.prepare_allocate(column_count))) {
-        LOG_WARN("Failed to prepare new_row_projector", K(ret), K(column_count));
       } else if (OB_SUCC(ret)) {
         // Identity mapping: output column i = stored row index i (DASDMLIterator uses this for col_count).
         for (int64_t i = 0; i < column_count; ++i) {
@@ -737,12 +693,10 @@ int ObCSAsyncIndexProcessor::build_das_ins_rtdef_(common::ObArenaAllocator &allo
   ins_rtdef = nullptr;
   if (OB_ISNULL(insert_op)) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("insert_op is null", K(ret));
   } else if (OB_FAIL(sql::ObDASTaskFactory::alloc_das_rtdef(
           sql::DAS_OP_TABLE_INSERT, allocator, ins_rtdef))) {
   } else if (OB_ISNULL(ins_rtdef)) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("ins_rtdef is null after allocation", K(ret));
   } else {
     const int64_t current_time = common::ObTimeUtility::current_time();
     // Use at least 5 minutes for change-stream async index DAS insert to
@@ -787,12 +741,10 @@ int ObCSAsyncIndexProcessor::build_insert_buffer_from_events_(common::ObArenaAll
 
   if (OB_ISNULL(insert_op) || OB_ISNULL(ins_ctdef)) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("insert_op or ins_ctdef is null", K(ret));
   } else if (OB_FAIL(insert_op->init_task_info(sql::ObDASWriteBuffer::DAS_ROW_DEFAULT_EXTEND_SIZE))) {
   } else if (OB_FAIL(schema_guard_.get_table_schema( vec_info.index_id_table_id_, index_id_schema))) {
   } else if (OB_ISNULL(index_id_schema)) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("index_id_table schema not found", K(ret), K(vec_info.index_id_table_id_));
   } else if (OB_FAIL(col_id_to_idx_map.create(ins_ctdef->column_ids_.count(), "CSColIdMap"))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < ins_ctdef->column_ids_.count(); ++i) {
@@ -804,19 +756,15 @@ int ObCSAsyncIndexProcessor::build_insert_buffer_from_events_(common::ObArenaAll
   if (OB_FAIL(ret)) {
   } else if (3 != index_id_schema->get_rowkey_info().get_size()) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("index_id_table rowkey count must be 3 (scn, vid, type)", K(ret),
-             K(index_id_schema->get_rowkey_info().get_size()));
   } else if (OB_FAIL(index_id_schema->get_rowkey_info().get_column_id(0, scn_col_id)) ||
              OB_FAIL(index_id_schema->get_rowkey_info().get_column_id(1, vid_col_id)) ||
              OB_FAIL(index_id_schema->get_rowkey_info().get_column_id(2, type_col_id))) {
-    LOG_WARN("Failed to get rowkey column ids from index_id_table", K(ret));
   } else {
     for (schema::ObTableSchema::const_column_iterator iter = index_id_schema->column_begin();
          OB_SUCC(ret) && iter != index_id_schema->column_end(); ++iter) {
       const schema::ObColumnSchemaV2 *col_schema = *iter;
       if (OB_ISNULL(col_schema)) {
         ret = common::OB_ERR_UNEXPECTED;
-        LOG_WARN("column_schema is null", K(ret));
         break;
       } else if (0 == col_schema->get_rowkey_position() &&
                  schema::ObSchemaUtils::is_vec_hnsw_vector_column(col_schema->get_column_flags())) {
@@ -830,11 +778,8 @@ int ObCSAsyncIndexProcessor::build_insert_buffer_from_events_(common::ObArenaAll
   } else if (OB_FAIL(col_id_to_idx_map.get_refactored(scn_col_id, scn_idx)) ||
              OB_FAIL(col_id_to_idx_map.get_refactored(vid_col_id, vid_idx)) ||
              OB_FAIL(col_id_to_idx_map.get_refactored(type_col_id, type_idx))) {
-    LOG_WARN("Column id not in insert column list", K(ret),
-             K(scn_col_id), K(vid_col_id), K(type_col_id));
   } else if (common::OB_INVALID_ID != vector_col_id &&
              OB_FAIL(col_id_to_idx_map.get_refactored(vector_col_id, vector_idx))) {
-    LOG_WARN("Vector column id not in insert column list", K(ret), K(vector_col_id));
   } else if (OB_FAIL(shadow_row.init(allocator, ins_ctdef->column_types_, false))) {
   } else {
     sql::ObDASWriteBuffer &insert_buffer = insert_op->get_insert_buffer();
@@ -858,7 +803,6 @@ int ObCSAsyncIndexProcessor::build_insert_buffer_from_events_(common::ObArenaAll
           char *type_buf = static_cast<char*>(allocator.alloc(1));
           if (OB_ISNULL(type_buf)) {
             ret = common::OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("Failed to allocate memory for type column", K(ret));
           } else {
             *type_buf = event.type_;
             datum_row.storage_datums_[type_idx].set_string(type_buf, 1);
@@ -904,10 +848,8 @@ int ObCSAsyncIndexProcessor::set_das_insert_context_(const common::ObIArray<ObAS
   int ret = common::OB_SUCCESS;
   if (OB_ISNULL(tx_desc) || OB_ISNULL(insert_op)) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("tx_desc or insert_op is null", K(ret));
   } else if (events.count() <= 0) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("events array is empty", K(ret));
   } else {
     insert_op->set_trans_desc(tx_desc);
     const common::ObTabletID &data_tablet_id = events.at(0).tablet_id_;
@@ -929,7 +871,6 @@ int ObCSAsyncIndexProcessor::set_das_insert_context_(const common::ObIArray<ObAS
                                                                       vbitmap_tablet_id))) {
     } else if (!vbitmap_tablet_id.is_valid()) {
       ret = common::OB_ERR_UNEXPECTED;
-      LOG_WARN("Invalid vbitmap_tablet_id from schema", K(ret), K(vec_info.index_id_table_id_));
     } else {
       insert_op->set_tablet_id(vbitmap_tablet_id);
     }
@@ -938,14 +879,12 @@ int ObCSAsyncIndexProcessor::set_das_insert_context_(const common::ObIArray<ObAS
       void *snapshot_buf = allocator.alloc(sizeof(transaction::ObTxReadSnapshot));
       if (OB_ISNULL(snapshot_buf)) {
         ret = common::OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("Failed to allocate ObTxReadSnapshot", K(ret));
       } else {
         transaction::ObTxReadSnapshot *snapshot = new(snapshot_buf) transaction::ObTxReadSnapshot();
         transaction::ObTransService *txs =
             ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
         if (OB_ISNULL(txs)) {
           ret = common::OB_ERR_UNEXPECTED;
-          LOG_WARN("ObTransService is null", K(ret));
         } else {
           const int64_t timeout_ts = common::ObTimeUtility::current_time() + GCONF.internal_sql_execute_timeout;
           if (OB_FAIL(txs->get_read_snapshot(*tx_desc,
@@ -954,7 +893,6 @@ int ObCSAsyncIndexProcessor::set_das_insert_context_(const common::ObIArray<ObAS
                                              *snapshot))) {
           } else if (!snapshot->is_valid()) {
             ret = common::OB_ERR_UNEXPECTED;
-            LOG_WARN("Invalid snapshot from get_read_snapshot", K(ret), KPC(snapshot));
           } else {
             insert_op->set_snapshot(snapshot);
           }
@@ -984,7 +922,6 @@ int ObCSAsyncIndexProcessor::insert_vector_index_log_batch_(
 
   if (events.count() <= 0) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("[insert_vector_index_log_batch] step=check_events, events array is empty", K(ret));
   } else if (OB_UNLIKELY(events.at(0).table_id_ != target_vec_info.data_table_id_)) {
     ret = common::OB_INVALID_ARGUMENT;
     LOG_WARN("[insert_vector_index_log_batch] step=check_table_id, events data_table_id mismatch with vec_info",
@@ -993,8 +930,6 @@ int ObCSAsyncIndexProcessor::insert_vector_index_log_batch_(
   } else if (OB_FAIL(das_factory.create_das_task_op(sql::DAS_OP_TABLE_INSERT, das_op))) {
   } else if (OB_ISNULL(das_op)) {
     ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("[insert_vector_index_log_batch] step=create_das_op, DAS InsertOp is null after creation",
-             K(ret), "event_cnt", events.count());
   } else {
     insert_op = static_cast<sql::ObDASInsertOp *>(das_op);
     if (OB_FAIL(build_das_ins_ctdef_(das_allocator, target_vec_info, insert_op, ins_ctdef))) {
@@ -1007,15 +942,6 @@ int ObCSAsyncIndexProcessor::insert_vector_index_log_batch_(
       if (OB_FAIL(insert_op->open_op())) {
         const sql::ObDASInsCtDef *ctdef = static_cast<const sql::ObDASInsCtDef *>(insert_op->get_ctdef());
         const sql::ObDASInsRtDef *rtdef = static_cast<sql::ObDASInsRtDef *>(insert_op->get_rtdef());
-        LOG_WARN("[insert_vector_index_log_batch] step=open_op, failed to execute DAS insert",
-                 K(ret), "event_cnt", events.count(), K(target_vec_info),
-                 "first_event", events.at(0), "index_id_table_id", target_vec_info.index_id_table_id_,
-                 "data_tablet_id", events.at(0).tablet_id_,
-                 "tablet_id", insert_op->get_tablet_id(),
-                 "tx_desc_valid", (tx_desc != nullptr && tx_desc->is_valid()),
-                 "schema_version", ctx_.schema_version_, "timeout_ts", rtdef != nullptr ? rtdef->timeout_ts_ : -1,
-                 "column_ids_cnt", ctdef != nullptr ? ctdef->column_ids_.count() : 0,
-                 "insert_row_cnt", insert_op->get_row_cnt());
       } else {
         const int64_t affected_rows = insert_op->get_affected_rows();
         const int64_t expected_rows = events.count();
@@ -1064,7 +990,6 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
     common::ObTabletID inc_tablet_id;
     if (OB_ISNULL(vec_index_service)) {
       ret = common::OB_ERR_UNEXPECTED;
-      LOG_WARN("ObPluginVectorIndexService is null", K(ret));
     } else if (OB_FAIL(table::ObTableUtils::get_part_idx_by_tablet_id(schema_guard_,
                                                                        vec_info.data_table_id_,
                                                                        data_tablet_id,
@@ -1077,7 +1002,6 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
                                                                       inc_tablet_id))) {
     } else if (!inc_tablet_id.is_valid()) {
       ret = common::OB_ERR_UNEXPECTED;
-      LOG_WARN("Invalid inc_tablet_id from schema", K(ret), K(vec_info.delta_buffer_table_id_));
     } else {
       
       const schema::ObTableSchema *delta_buf_schema = nullptr;
@@ -1086,7 +1010,6 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
       if (OB_FAIL(schema_guard_.get_table_schema( vec_info.delta_buffer_table_id_, delta_buf_schema))) {
       } else if (OB_ISNULL(delta_buf_schema)) {
         ret = common::OB_ERR_UNEXPECTED;
-        LOG_WARN("delta_buffer schema is null", K(ret), K(vec_info.delta_buffer_table_id_));
       } else {
         vec_idx_param = delta_buf_schema->get_index_params();
         // For HNSW+heap+async, delta_buffer may have empty index_params; fallback to index_id table.
@@ -1106,7 +1029,6 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
         adaptor = adapter_guard.get_adatper();
         if (OB_ISNULL(adaptor)) {
           ret = common::OB_ERR_UNEXPECTED;
-          LOG_WARN("Adapter is null after acquire_adapter_guard", K(ret));
         }
       }
     }
@@ -1123,13 +1045,11 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
       if (OB_FAIL(ret)) {
       } else if (OB_ISNULL(incr_data)) {
         ret = common::OB_ERR_UNEXPECTED;
-        LOG_WARN("incr_data is null after init attempt", K(ret));
       } else {
         index_handler = static_cast<obvsag::VectorIndexPtr>(incr_data->index_);
         SCN dml_scn;
         if (OB_ISNULL(index_handler)) {
           ret = common::OB_ERR_UNEXPECTED;
-          LOG_WARN("vsag index handler is null after init attempt", K(ret));
         } else if (OB_FAIL(dml_scn.convert_for_tx(events.at(events.count()-1).commit_version_))) {
         } else {
           incr_data->last_dml_scn_.inc_update(dml_scn);
@@ -1156,11 +1076,9 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
 
           if (OB_ISNULL(vids = static_cast<int64_t *>(tmp_allocator.alloc(sizeof(int64_t) * insert_count)))) {
             ret = common::OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("Failed to allocate memory for vids", K(ret), K(insert_count));
           } else if (OB_ISNULL(vectors = static_cast<float *>(
                                   tmp_allocator.alloc(sizeof(float) * insert_count * dim)))) {
             ret = common::OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("Failed to allocate memory for vectors", K(ret), K(insert_count), K(dim));
           } else {
             int64_t insert_idx = 0;
             for (int64_t i = 0; OB_SUCC(ret) && i < events.count(); ++i) {
@@ -1171,8 +1089,6 @@ int ObCSAsyncIndexProcessor::write_to_vsag_(
                 const int64_t expected_len = dim * static_cast<int64_t>(sizeof(float));
                 if (event.vec_data_len_ != expected_len) {
                   ret = common::OB_ERR_UNEXPECTED;
-                  LOG_WARN("Vector data length mismatch",
-                           K(ret), K(event.vec_data_len_), K(expected_len), K(dim));
                 } else {
                   vids[insert_idx] = event.vid_;
                   const float *src_vector = reinterpret_cast<const float *>(event.vec_data_);
@@ -1231,7 +1147,6 @@ int ObCSPluginAsyncIndex::init()
   int ret = common::OB_SUCCESS;
   if (is_inited_) {
     ret = common::OB_INIT_TWICE;
-    LOG_WARN("ObCSPluginAsyncIndex already inited", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -1254,7 +1169,6 @@ int ObCSPluginAsyncIndex::process(common::ObIArray<ObCSRow> &rows, ObCSExecCtx &
   int ret = common::OB_SUCCESS;
   if (!is_inited_) {
     ret = common::OB_NOT_INIT;
-    LOG_WARN("ObCSPluginAsyncIndex not inited", K(ret));
   } else if (rows.count() == 0) {
     // nothing to process, ret stays OB_SUCCESS
   } else {
@@ -1273,7 +1187,6 @@ int ObCSPluginAsyncIndex::commit()
   int ret = common::OB_SUCCESS;
   if (!is_inited_) {
     ret = common::OB_NOT_INIT;
-    LOG_WARN("ObCSPluginAsyncIndex not inited", K(ret));
   } else {
     // Periodically trigger GC of fallback schema cache to prevent
     // TenaSchMgrForLi arena memory leak.

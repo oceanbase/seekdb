@@ -322,7 +322,6 @@ int ObExprResultTypeUtil::get_remainder_result_type(ObObjType &result_type,
                                                 ObNullType : result_type) : rule.param2_calc_type);
     if (OB_UNLIKELY(!ob_is_valid_obj_type(result_type))) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
-      LOG_WARN("unsupported type for div", K(ret), K(type1), K(type2), K(lbt()));
     }
   }
   return ret;
@@ -461,19 +460,15 @@ int check_string_res_type_extended(const ObExprResType &type)
   int ret = OB_SUCCESS;
   if (!type.is_string_or_lob_locator_type()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("incorrect type of target type", K(ret), K(type));
   } else if (type.is_blob()) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "blob cast to other type");
-    LOG_WARN("not support blob cast to other type", K(ret));
   } else if (!ObCharset::is_valid_collation(type.get_collation_type())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("incorrect charset of target type", K(ret), K(type));
   } else if (!type.is_clob() &&
              CS_TYPE_BINARY != type.get_collation_type() &&
              LS_CHAR != type.get_length_semantics() && LS_BYTE != type.get_length_semantics()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("incorrect length_semantics of target type", K(ret), K(type));
   }
   return ret;
 }
@@ -531,11 +526,9 @@ int ObExprResultTypeUtil::deduce_max_string_length_extended(const ObDataTypeCast
                                                                 out.get_string_len()));
           if (!ObCharset::is_valid_collation(out.get_collation_type())) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unexpected const value cast result", K(ret), K(out), K(orig_obj), K(target_type), K(cast_mode));
           }
         } else {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("invalid length_semantics", K(length_semantics), K(ret));
         }
       }
     } else if (orig_type.is_string_or_lob_locator_type()) {
@@ -611,7 +604,6 @@ int ObExprResultTypeUtil::get_array_calc_type(ObExecContext *exec_ctx,
   int ret = OB_SUCCESS;
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   } else {
     uint32_t depth = 0;
     bool is_compatiable = false;
@@ -624,7 +616,6 @@ int ObExprResultTypeUtil::get_array_calc_type(ObExecContext *exec_ctx,
                                                                   type2.get_subschema_id(), is_compatiable))) {
     } else if (!is_compatiable) {
       ret = OB_ERR_ARRAY_TYPE_MISMATCH;
-      LOG_WARN("nested type is mismatch", K(ret));
     } else if (OB_FAIL(ObArrayExprUtils::get_array_element_type(exec_ctx, type1.get_subschema_id(), coll_elem1_type, depth, l_is_vec))) {
     } else if (OB_FAIL(ObArrayExprUtils::get_array_element_type(exec_ctx, type2.get_subschema_id(), coll_elem2_type, depth, r_is_vec))) {
     } else if (l_is_vec || r_is_vec) {
@@ -701,7 +692,6 @@ int ObExprResultTypeUtil::get_array_calc_type(ObExecContext *exec_ctx,
   ObString type_info;
   if (coll_calc_type == ObMaxType) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid subschema type", K(ret), K(type1), K(type2));
   } else if (OB_FAIL(ObArrayUtil::get_type_name(ObNestedType::OB_ARRAY_TYPE, elem_data, type_name, MAX_LEN, depth))) {
   } else if (FALSE_IT(type_info.assign_ptr(type_name, static_cast<ObString::obstr_size_t>(strlen(type_name))))) {
   } else if (OB_FAIL(exec_ctx->get_subschema_id_by_type_string(type_info, subschema_id))) {
@@ -769,12 +759,10 @@ int ObExprResultTypeUtil::get_collection_calc_type(ObExecContext *exec_ctx,
   const ObSqlCollectionInfo *r_coll_info = NULL;
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_info_by_subschema_id(exec_ctx, type1.get_subschema_id(), l_coll_info))) {
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_info_by_subschema_id(exec_ctx, type2.get_subschema_id(), r_coll_info))) {
   } else if (!l_coll_info->has_same_super_type(*r_coll_info)) {
     ret = OB_ERR_ARRAY_TYPE_MISMATCH;
-    LOG_WARN("nested type is mismatch", K(ret));
   } else if (l_coll_info->collection_meta_->type_id_ == ObNestedType::OB_MAP_TYPE 
              || r_coll_info->collection_meta_->type_id_ == ObNestedType::OB_MAP_TYPE
              || l_coll_info->collection_meta_->type_id_ == ObNestedType::OB_SPARSE_VECTOR_TYPE 
@@ -788,7 +776,6 @@ int ObExprResultTypeUtil::get_collection_calc_type(ObExecContext *exec_ctx,
     const ObCollectionMapType *r_map_type = dynamic_cast<const ObCollectionMapType*>(r_coll_info->collection_meta_);
     if (OB_ISNULL(l_map_type) || OB_ISNULL(r_map_type)) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("map type is null", K(ret));
     } else {
       uint32_t key_depth = 0;
       uint32_t value_depth = 0;

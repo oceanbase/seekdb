@@ -67,7 +67,6 @@ int ObExprRepeat::calc_result_type2(ObExprResType &type,
       int64_t cur_time = 0;
       ObCastMode cast_mode = CM_NONE;
       if (FALSE_IT(ObSQLUtils::get_default_cast_mode(type_ctx.get_sql_mode(), cast_mode))) {
-        LOG_WARN("failed to get default cast mode", K(ret));
       } else {
         cast_mode |= CM_WARN_ON_FAIL;
         ObCastCtx cast_ctx(
@@ -126,8 +125,6 @@ int ObExprRepeat::repeat(ObString &output,
 
     // Safe length check
     if ((length > max_result_size / count) || (length > INT_MAX / count)) {
-      LOG_WARN("Result of repeat was larger than max_allow_packet_size",
-          K(ret), K(length), K(count), K(max_result_size));
       ret = OB_ERR_FUNC_RESULT_TOO_LARGE;
       LOG_USER_ERROR(OB_ERR_FUNC_RESULT_TOO_LARGE, "repeat", static_cast<int>(max_result_size));
     } else {
@@ -177,8 +174,6 @@ int ObExprRepeat::repeat_text(ObObjType res_type,
     int64_t length = static_cast<int64_t>(text.length());
     // Safe length check
     if ((length > max_result_size / count) || (length > INT_MAX / count)) {
-      LOG_WARN("Result of repeat was larger than max_allow_packet_size",
-          K(ret), K(length), K(count), K(max_result_size));
       ret = OB_ERR_FUNC_RESULT_TOO_LARGE;
       LOG_USER_ERROR(OB_ERR_FUNC_RESULT_TOO_LARGE, "repeat", static_cast<int>(max_result_size));
     } else {
@@ -218,11 +213,9 @@ int ObExprRepeat::calc(ObObj &result,
   bool has_lob_header = (res_type != ObTinyTextType);
   if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("null allocator", K(ret), K(allocator));
   } else if (false == ob_is_string_type(res_type)) {
     ret = OB_INVALID_ARGUMENT;
     // ObExprRepeat::calc_result_type2() method specifies that the return result type must belong to some string type
-    LOG_WARN("make sure res_type is string type", K(ret), K(res_type));
   } else if (!ob_is_text_tc(res_type)) {
     ret = repeat(output, is_null, text, count, *allocator, max_result_size);
   } else {
@@ -262,7 +255,6 @@ int ObExprRepeat::eval_repeat(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_
   ObString text_str;
   if (OB_FAIL(expr.args_[0]->eval(ctx, text))
       || OB_FAIL(expr.args_[1]->eval(ctx, count))) {
-    LOG_WARN("evaluate parameters failed", K(ret));
   } else if (text->is_null() || count->is_null()) {
     expr_datum.set_null();
   } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_max_allowed_packet(max_size))) {

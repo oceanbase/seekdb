@@ -69,7 +69,6 @@ inline int ObWorkerProcessor::process_one(rpc::ObRequest &req)
 
   if (OB_FAIL(process_err_test())) {
   } else if (OB_FAIL(translator_.translate(req, processor))) {
-    LOG_WARN("translate request fail", K(ret));
     on_translate_fail(&req, ret);
   } else if (OB_ISNULL(processor)) {
     ret = OB_ERR_UNEXPECTED;

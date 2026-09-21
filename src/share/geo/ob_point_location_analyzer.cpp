@@ -26,11 +26,9 @@ int ObPointLocationAnalyzer::calculate_point_position(const ObPoint2d &test_poin
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cache_geo_)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("rtree index or cache geo is null", K(cache_geo_), K(ret));
   } else if (!rtree_index_.is_built()) {
     if (OB_ISNULL(cache_geo_->get_segments())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("should not be null.", K(ret));
     } else if (OB_FAIL(rtree_index_.construct_rtree_index(*(cache_geo_->get_segments())))) {
     }
   } 

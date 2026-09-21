@@ -54,21 +54,17 @@ int ObMdsSchemaHelper::init()
 
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret), K_(is_inited));
   } else {
      // mock
     if (OB_FAIL(build_table_schema(DATABASE_ID, MDS_TABLE_ID, MDS_TABLE_NAME, table_schema_))) {
     } else if (OB_UNLIKELY(!table_schema_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid table schema", K(ret), K_(table_schema));
     } else if (OB_FAIL(storage_schema_.init(allocator_, table_schema_))) {
     } else if (OB_UNLIKELY(!storage_schema_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid storage schema", K(ret), K_(storage_schema));
     } else if (OB_FAIL(build_rowkey_read_info(allocator_, storage_schema_, rowkey_read_info_))) {
     } else if (OB_UNLIKELY(!rowkey_read_info_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid rowkey read info", K(ret), K_(rowkey_read_info));
     } else {
       is_inited_ = true;
     }
@@ -97,7 +93,6 @@ const ObStorageSchema *ObMdsSchemaHelper::get_storage_schema() const
 
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret), K_(is_inited));
   } else {
     ptr = &storage_schema_;
   }
@@ -112,7 +107,6 @@ const share::schema::ObTableSchema *ObMdsSchemaHelper::get_table_schema() const
 
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret), K_(is_inited));
   } else {
     ptr = &table_schema_;
   }
@@ -127,7 +121,6 @@ const ObRowkeyReadInfo *ObMdsSchemaHelper::get_rowkey_read_info() const
 
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret), K_(is_inited));
   } else {
     ptr = &rowkey_read_info_;
   }

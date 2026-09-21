@@ -131,7 +131,6 @@ int ObRawExprAddToContext::add_expr(ObRawExpr &expr)
 
   if (OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", K(ret));
   } else {
     ExprProducer *existing_producer = NULL;
     if (!ObOptimizerUtil::find_expr(ctx_, expr, existing_producer)) {
@@ -145,7 +144,6 @@ int ObRawExprAddToContext::add_expr(ObRawExpr &expr)
       }
     } else if (OB_ISNULL(existing_producer)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("existing_producer is unexpected null", K(ret));
     } else {
       //if we need the same expr below the predetermined producer
       //restore predetermined_producer_ so it can be produced here

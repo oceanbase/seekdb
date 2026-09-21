@@ -220,7 +220,6 @@ int ObExprSTAsText::eval_st_astext_common(const ObExpr &expr,
         }
         default: {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected axis order parse result", K(ret));
           break;
         }
       }
@@ -230,10 +229,8 @@ int ObExprSTAsText::eval_st_astext_common(const ObExpr &expr,
   if (!is_null_result && OB_SUCC(ret)) {
     if (OB_ISNULL(geo)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null geo", K(ret));
     } else {
       if (is_geog && need_reverse && OB_FAIL(ObGeoExprUtils::reverse_coordinate(geo, func_name))) {
-        LOG_WARN("failed to reverse geometry coordinate", K(ret));
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(to_wkt(tmp_allocator, geo, res_wkt, func_name))) {
@@ -258,7 +255,6 @@ int ObExprSTAsText::to_wkt(ObIAllocator &allocator, ObGeometry *geo, ObString &r
   int ret = OB_SUCCESS;
   if (OB_ISNULL(geo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null geo", K(ret));
   } else if (ObGeoTypeUtil::is_3d_geo_type(geo->type())) {
     ObGeometry3D *geo_3d  = static_cast<ObGeometry3D *>(geo);
     if (OB_FAIL(geo_3d->to_wkt(allocator, res_wkt))) {
@@ -268,7 +264,6 @@ int ObExprSTAsText::to_wkt(ObIAllocator &allocator, ObGeometry *geo, ObString &r
     if (OB_FAIL(geo->do_visit(wkt_visitor))) {
       ret = OB_ERR_GIS_INVALID_DATA;
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, func_name);
-      LOG_WARN("failed to transform geo to wkt", K(ret));
     } else {
       wkt_visitor.get_wkt(res_wkt);
     }

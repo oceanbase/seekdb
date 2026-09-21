@@ -60,10 +60,8 @@ int ObExprArraySlice::calc_result_typeN(ObExprResType &type,
 
   if (OB_ISNULL(session = const_cast<ObSQLSessionInfo *>(type_ctx.get_session()))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObSQLSessionInfo is null", K(ret));
   } else if (OB_ISNULL(exec_ctx = session->get_cur_exec_ctx())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObExecContext is null", K(ret));
   } else if (ob_is_null(arr_type->get_type())) {
     is_null = true;
   } else if (!ob_is_collection_sql_type(arr_type->get_type())) {
@@ -72,7 +70,6 @@ int ObExprArraySlice::calc_result_typeN(ObExprResType &type,
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, arr_type->get_subschema_id(), coll_type))) {
   } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
-    LOG_WARN("invalid collection type", K(ret), K(coll_type->type_id_));
   } else if (ob_is_null(offset_type->get_type())) {
     is_null = true;
   } else if (param_num == 3) {
@@ -114,7 +111,6 @@ int ObExprArraySlice::eval_array_slice(const ObExpr &expr,
   if (OB_FAIL(expr.args_[0]->eval(ctx, arr_datum))) {
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, offset_datum))) {
   } else if (expr.arg_cnt_ > 2 && OB_FAIL(expr.args_[2]->eval(ctx, len_datum))) {
-    LOG_WARN("eval len failed", K(ret));
   } else if (arr_datum->is_null() || offset_datum->is_null() ||
              (expr.arg_cnt_ > 2 && len_datum->is_null())) {
     res.set_null();
@@ -172,7 +168,6 @@ int ObExprArraySlice::eval_array_slice_batch(const ObExpr &expr,
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
   } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
   } else if (expr.arg_cnt_ > 2 && OB_FAIL(expr.args_[2]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval len failed", K(ret));
   } else {
     ObDatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
     ObDatumVector offset_array = expr.args_[1]->locate_expr_datumvector(ctx);
@@ -215,7 +210,6 @@ int ObExprArraySlice::eval_array_slice_batch(const ObExpr &expr,
           } else if (OB_FAIL(output_result.get_reserved_buffer(res_buf, res_buf_len))) {
           } else if (res_buf_len < res_size) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("get invalid res buf len", K(ret), K(res_buf_len), K(res_size));
           } else if (OB_FAIL(res_arr->get_raw_binary(res_buf, res_buf_len))) {
           } else if (OB_FAIL(output_result.lseek(res_size, 0))) {
           } else {

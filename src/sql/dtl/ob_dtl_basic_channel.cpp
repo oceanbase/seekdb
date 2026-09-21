@@ -46,7 +46,6 @@ int SendMsgResponse::init()
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice");
   } else if (OB_FAIL(cond_.init(common::ObWaitEventIds::DEFAULT_COND_WAIT))) {
   } else {
     inited_ = true;
@@ -59,7 +58,6 @@ int SendMsgResponse::start()
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     ret_ = OB_SUCCESS;
     in_process_ = true;
@@ -74,7 +72,6 @@ int SendMsgResponse::on_start_fail()
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     in_process_ = false;
     finish_ = true;
@@ -88,7 +85,6 @@ int SendMsgResponse::on_finish(const bool is_block, const int return_code)
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), KP(ch_id_));
   } else {
     ObThreadCondGuard guard(cond_);
     ret_ = return_code;
@@ -104,7 +100,6 @@ int SendMsgResponse::wait()
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret), KP(ch_id_));
   } else {
     ObThreadCondGuard guard(cond_);
     int64_t count_v = 0;
@@ -299,7 +294,6 @@ int ObDtlBasicChannel::send(const ObDtlMsg &msg, int64_t timeout_ts,
   }
   if (OB_FAIL(write_msg(msg, timeout_ts, eval_ctx, is_eof))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("write buffer fail", K(ret));
     }
   }
   if (!send_list_.is_empty()) {
@@ -332,7 +326,6 @@ int ObDtlBasicChannel::mock_eof_buffer(int64_t timeout_ts)
     ObChunkDatumStore::Block* block = NULL;
     if (OB_ISNULL(buffer = alloc_buf(min_buf_size))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc buffer failed", K(ret));
     } else if (OB_FAIL(row_store.init_block_buffer(static_cast<void *>(buffer->buf()), buffer->size(), block))) {
     } else {
       buffer->msg_type() = ObDtlMsgType::PX_DATUM_ROW;
@@ -369,7 +362,6 @@ int ObDtlBasicChannel::attach(ObDtlLinkedBuffer *&linked_buffer, bool inc_recv_b
   bool is_eof = linked_buffer->is_eof();
   if (!is_data_msg
       && OB_FAIL(ObDtlLinkedBuffer::deserialize_msg_header(*linked_buffer, header, keep_pos))) {
-    LOG_WARN("failed to deserialize msg header", K(ret));
   } else if (header.is_drain()) {
     alloc_buffer_count();
     if (inc_recv_buf_cnt) {
@@ -382,7 +374,6 @@ int ObDtlBasicChannel::attach(ObDtlLinkedBuffer *&linked_buffer, bool inc_recv_b
     linked_buffer = nullptr;
   } else if (header.is_px_bloom_filter_data()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("can't attach bloom filter message", K(ret));
   } else if (OB_FAIL(block_on_increase_size(linked_buffer->size()))) {
   } else if (OB_FAIL(recv_list_.push(linked_buffer))) {
   } else {
@@ -530,7 +521,6 @@ int ObDtlBasicChannel::process1(
         if (nullptr == process_buffer_ && OB_FAIL(get_processed_buffer(timeout))) {
           if (OB_DTL_WAIT_EAGAIN == ret) {
           } else {
-            LOG_WARN("failed to get buffer", K(ret));
           }
         } else if (nullptr != process_buffer_) {
           auto &buffer = process_buffer_;
@@ -565,9 +555,6 @@ int ObDtlBasicChannel::process1(
             int tmp_ret = ret;
             if (OB_SUCCESS != (tmp_ret = unblock_on_decrease_size(buffer->size()))) {
               ret = tmp_ret;
-              LOG_WARN("failed to decrease buffer size for dfc",
-                       KP(id_), K(ret), K(get_processed_buffer_cnt()),
-                       K(get_recv_buffer_cnt()));
             }
             if (transferred) {
               // only increase the statist
@@ -597,15 +584,12 @@ int ObDtlBasicChannel::process1(
           } else if (ignore_error()) {
             ret = OB_SUCCESS;
           } else {
-            LOG_WARN("fail to get row store", K(ret));
           }
         } else if (FALSE_IT(result_info = result_info_guard_.result_info_)) {
         } else if (OB_SUCCESS != result_info->ret_) {
           ret = result_info->ret_;
-          LOG_WARN("the interm result info meet a error", K(ret));
         } else if (!result_info->is_store_valid()) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("there is no row store in internal result", K(ret));
         } else if (OB_FAIL(DTL_IR_STORE_DO(*result_info, finish_add_row, true))) {
         } else if (OB_FAIL(result_info->datum_store_->begin(datum_iter_))) {
         }
@@ -671,7 +655,6 @@ int ObDtlBasicChannel::flush(bool force_flush, bool wait_resp)
       if (OB_SUCC(send_list_.pop(link))) {
         auto buffer = static_cast<ObDtlLinkedBuffer *>(link);
         if (OB_FAIL(send_message(buffer))) {
-          LOG_WARN("send message failed", KP(id_), K(ret), K(buffer));
           if (nullptr != buffer) {
             free_buf(buffer);
           }
@@ -700,13 +683,11 @@ int ObDtlBasicChannel::wait_unblocking_if_blocked()
   if (belong_to_transmit_data()) {
     if (!msg_response_.is_init()) {
       ret = OB_NOT_INIT;
-      LOG_WARN("not init", K(ret));
     } else if (msg_response_.is_block()) {
       // receive response, then set block info for dfc
       msg_response_.reset_block();
       if (OB_ISNULL(dfc_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("channel loop is null", K(ret));
       } else if (OB_FAIL(dfc_->block_channel(this))) {
       } else {
         // only block this channel, for other channels, it will also set block, or other channel can't be blocked
@@ -733,11 +714,9 @@ int ObDtlBasicChannel::wait_unblocking()
     int64_t timeout_ts = 0;
     if (OB_ISNULL(channel_loop_) || OB_ISNULL(dfc_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("channel loop is null", K(ret));
     } else if (FALSE_IT(timeout_ts = dfc_->get_timeout_ts())) {
     } else if (0 == timeout_ts) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("timeout is not set", K(ret));
     } else if (OB_FAIL(channel_loop_->find(this, idx))) {
     } else {
       int64_t start_t = ObTimeUtility::current_time();
@@ -762,7 +741,6 @@ int ObDtlBasicChannel::wait_unblocking()
             int64_t end_t = ObTimeUtility::current_time();
             if (end_t > timeout_ts) {
               ret = OB_TIMEOUT;
-              LOG_WARN("get row from channel timeout", K(ret), K(timeout_ts));
             } else {
               int tmp_ret = THIS_WORKER.check_status();
               if (OB_SUCCESS != tmp_ret) {
@@ -785,7 +763,6 @@ int ObDtlBasicChannel::wait_unblocking()
               ret = OB_SUCCESS;
             }
           } else {
-            LOG_WARN("fail to process unblocking msg", K(ret), K(dfc_->is_block()), KP(id_));
           }
         } else {
           // receive unblocking msg:
@@ -793,7 +770,6 @@ int ObDtlBasicChannel::wait_unblocking()
           // channel is blocked, then unblock the channel
           if (idx != got_channel_idx) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("no channel is processed", K(ret), K(got_channel_idx), K(idx));
           } else if (OB_FAIL(dfc_->unblock_channel(this))) {
           }
         }
@@ -888,8 +864,6 @@ int ObDtlBasicChannel::switch_writer(const ObDtlMsg &msg)
         msg_writer_ = &datum_msg_writer_;
       } else {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unkown msg writer", K(msg.get_type()),
-          K(px_row.get_data_type()), K(msg_writer_->type()), K(ret));
       }
       LOG_TRACE("msg writer", K(px_row.get_data_type()), K(msg_writer_->type()), K(ret));
     } else {
@@ -926,7 +900,6 @@ int ObDtlBasicChannel::inner_write_msg(const ObDtlMsg &msg, int64_t timeout_ts,
   bool need_new = false;
   if (OB_FAIL(switch_writer(msg))) {
   } else if (is_eof && OB_FAIL(msg_writer_->handle_eof())) {
-    LOG_WARN("fail to handle eof", K(ret));
   } else if (OB_FAIL(msg_writer_->need_new_buffer(msg, eval_ctx, need_size, need_new))) {
   } else if (OB_UNLIKELY(need_new)) {
     if (OB_FAIL(switch_buffer(need_size, is_eof, timeout_ts,
@@ -936,7 +909,6 @@ int ObDtlBasicChannel::inner_write_msg(const ObDtlMsg &msg, int64_t timeout_ts,
   if (OB_SUCC(ret)) {
     if (OB_FAIL(msg_writer_->write(msg, eval_ctx, is_eof))) {
       if (OB_BUF_NOT_ENOUGH != ret) {
-        LOG_WARN("failed to write msg", K(ret), K(is_eof));
       }
     } else {
       LOG_DEBUG("trace msg write", K(is_eof), K(is_data_msg_), K(msg.get_type()),
@@ -955,7 +927,6 @@ int ObDtlBasicChannel::write_msg(const ObDtlMsg &msg, int64_t timeout_ts,
       if (OB_FAIL(inner_write_msg(msg, timeout_ts, eval_ctx, is_eof))) {
       }
     } else {
-      LOG_WARN("failed to write msg", K(ret));
     }
   }
   return ret;
@@ -968,7 +939,6 @@ int ObDtlBasicChannel::switch_buffer(const int64_t min_size, const bool is_eof,
   if (write_buffer_ != nullptr && write_buffer_->pos() != 0) {
     if (CHUNK_DATUM_WRITER != msg_writer_->type()
         && OB_FAIL(msg_writer_->serialize())) {
-      LOG_WARN("convert block to copyable failed", K(ret));
     } else if (OB_FAIL(push_back_send_list())) {
     }
   } else if (write_buffer_ != nullptr) {
@@ -985,11 +955,9 @@ int ObDtlBasicChannel::switch_buffer(const int64_t min_size, const bool is_eof,
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(write_buffer_ = alloc_buf(std::max(send_buffer_size_, min_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("alloc buffer failed", K(ret));
     } else if (OB_FAIL(msg_writer_->init(write_buffer_))) {
       free_buf(write_buffer_);
       write_buffer_ = nullptr;
-      LOG_WARN("failed to init message writer", K(ret));
     } else {
       if (OB_NOT_NULL(dfc_)) {
         write_buffer_->set_dfo_key(dfc_->get_dfo_key());
@@ -1041,7 +1009,6 @@ int ObDtlBasicChannel::send_buffer(ObDtlLinkedBuffer *&buffer)
       buffer->set_enable_channel_sync(enable_channel_sync_);
       if (buffer->is_batch_info_valid() && OB_ISNULL(msg_writer_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("msg_writer_ is null", K(ret));
       } else {
         const int64_t row_cnt = buffer->is_batch_info_valid() ? msg_writer_->rows() : 0;
         if (OB_FAIL(buffer->push_batch_id(batch_id_,row_cnt))) {
@@ -1071,7 +1038,6 @@ int ObDtlBasicChannel::push_buffer_batch_info()
     // means last buffer has been flushed, do nothing.
   } else if (OB_ISNULL(msg_writer_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("msg_writer_ is null", K(ret));
   } else if (OB_FAIL(msg_writer_->handle_eof())) {
   } else if (OB_FAIL(write_buffer_->add_batch_info(batch_id_, msg_writer_->rows()))) {
   }
@@ -1093,7 +1059,6 @@ int ObDtlRowMsgWriter::init(ObDtlLinkedBuffer *buffer)
   int ret = OB_SUCCESS;
   if (nullptr == buffer) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("write buffer is null", K(ret));
   } else {
     reset();
     row_store_.init(0, common::ObCtxIds::DEFAULT_CTX_ID, "SqlDtlRowMsg");
@@ -1158,7 +1123,6 @@ int ObDtlDatumMsgWriter::init(ObDtlLinkedBuffer *buffer)
   int ret = OB_SUCCESS;
   if (nullptr == buffer) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("write buffer is null", K(ret));
   } else {
     reset();
     if (OB_FAIL(ObChunkDatumStore::init_block_buffer(

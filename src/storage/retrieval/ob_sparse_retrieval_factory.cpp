@@ -114,7 +114,6 @@ int ObSparseRetrievalDaaTCursor::init(const ObSparseRetrievalDaaTRequest &reques
   int ret = OB_SUCCESS;
   if (CursorState::RESET != state_ || owns_ports_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("DAAT cursor initialized twice", K(ret));
   } else if (OB_ISNULL(request.allocator_)
       || OB_ISNULL(request.sources_)
       || OB_ISNULL(request.id_ops_)
@@ -123,12 +122,10 @@ int ObSparseRetrievalDaaTCursor::init(const ObSparseRetrievalDaaTRequest &reques
       || (OB_NOT_NULL(request.dimension_weights_)
           && request.dimension_weights_->count() != request.sources_->count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid DAAT request", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < request.sources_->count(); ++i) {
     if (OB_ISNULL(request.sources_->at(i))) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("null DAAT source", K(ret), K(i));
     } else if (OB_FAIL(sources_.push_back(request.sources_->at(i)))) {
     } else if (OB_FAIL(source_states_.push_back(SourceState()))) {
     }
@@ -174,11 +171,9 @@ int ObSparseRetrievalDaaTCursor::load_missing_entries(bool &all_exhausted)
           ret = OB_SUCCESS;
           source_state.exhausted_ = true;
         } else {
-          LOG_WARN("DAAT source failed", K(ret), K(i));
         }
       } else if (OB_UNLIKELY(!entry.id_.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("DAAT source returned an invalid id", K(ret), K(i));
       } else {
         source_state.entry_ = entry;
         source_state.has_entry_ = true;
@@ -248,7 +243,6 @@ int ObSparseRetrievalDaaTCursor::retain_candidate(const ObSparseRetrievalMatch &
   int ret = OB_SUCCESS;
   bool accepted = true;
   if (nullptr != filter_ && OB_FAIL(filter_->accept(match.id_.view(), accepted))) {
-    LOG_WARN("DAAT filter failed", K(ret));
   } else if (!accepted || 0 == candidate_limit_) {
   } else if (results_.count() < candidate_limit_) {
     if (OB_FAIL(results_.push_back(match))) {
@@ -381,14 +375,12 @@ int ObSparseRetrievalDaaTCursor::materialize()
         ret = OB_SUCCESS;
         all_exhausted = true;
       } else {
-        LOG_WARN("failed to find next DAAT id", K(ret));
       }
     } else if (OB_FAIL(collect_current_id(min_source_idx, match))) {
     } else if (OB_FAIL(retain_candidate(match))) {
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(sort_results())) {
-    LOG_WARN("failed to sort DAAT results", K(ret));
   }
   if (OB_SUCC(ret)) {
     result_index_ = 0;
@@ -406,7 +398,6 @@ int ObSparseRetrievalDaaTCursor::next(const ObSparseRetrievalMatch *&match)
   if (OB_FAIL(next_batch(1, matches, count))) {
   } else if (OB_UNLIKELY(1 != count || OB_ISNULL(matches))) {
     ret = fail(OB_ERR_UNEXPECTED);
-    LOG_WARN("unexpected DAAT single-row result", K(ret), K(count));
   } else {
     match = matches;
   }
@@ -596,7 +587,6 @@ int ObSparseRetrievalBMWCursor::init(
   int ret = OB_SUCCESS;
   if (CursorState::RESET != state_ || owns_ports_) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("BMW cursor initialized twice", K(ret));
   } else if (OB_ISNULL(request.allocator_)
       || OB_ISNULL(request.sources_)
       || OB_ISNULL(request.block_sources_)
@@ -607,7 +597,6 @@ int ObSparseRetrievalBMWCursor::init(
       || (OB_NOT_NULL(request.dimension_weights_)
           && request.dimension_weights_->count() != request.sources_->count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid BMW request", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < request.sources_->count(); ++i) {
     const double weight = OB_ISNULL(request.dimension_weights_)
@@ -617,14 +606,12 @@ int ObSparseRetrievalBMWCursor::init(
         || !std::isfinite(weight)
         || weight < 0.0) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid BMW dimension", K(ret), K(i), K(weight));
     } else if (OB_FAIL(sources_.push_back(request.sources_->at(i)))) {
     } else if (OB_FAIL(block_sources_.push_back(request.block_sources_->at(i)))) {
     } else if (OB_FAIL(source_states_.push_back(SourceState()))) {
     } else if (OB_FAIL(global_max_scores_.push_back(0.0))) {
     } else if (OB_NOT_NULL(request.dimension_weights_)
         && OB_FAIL(dimension_weights_.push_back(weight))) {
-      LOG_WARN("failed to copy BMW dimension weight", K(ret), K(i));
     }
   }
   if (OB_SUCC(ret)) {
@@ -662,11 +649,9 @@ int ObSparseRetrievalBMWCursor::load_missing_entries(bool &all_exhausted)
           ret = OB_SUCCESS;
           source_state.exhausted_ = true;
         } else {
-          LOG_WARN("BMW exact source failed", K(ret), K(i));
         }
       } else if (!entry.id_.is_valid()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("BMW exact source returned an invalid id", K(ret), K(i));
       } else {
         source_state.entry_ = entry;
         source_state.has_entry_ = true;
@@ -739,7 +724,6 @@ int ObSparseRetrievalBMWCursor::prepare_blocks()
       if (OB_FAIL(block_sources_.at(i)->max_score(max_score))) {
       } else if (!std::isfinite(max_score)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("BMW global bound is not finite", K(ret), K(i), K(max_score));
       } else {
         // A dimension absent from a document contributes zero, so zero is
         // always a safe upper bound when a physical score bound is negative.
@@ -779,12 +763,10 @@ int ObSparseRetrievalBMWCursor::advance_one_source(
       } else if (OB_FAIL(ret)) {
       } else if (!entry.id_.is_valid()) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("BMW exact advance returned an invalid id", K(ret), K(source_idx));
       } else {
         if (OB_FAIL(id_ops_->compare(entry.id_, boundary, cmp_result))) {
         } else if (cmp_result < 0) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("BMW exact source did not reach its boundary", K(ret), K(source_idx));
         } else if (0 == cmp_result && inclusive) {
           if (OB_FAIL(sources_.at(source_idx)->next(entry))) {
             if (OB_ITER_END == ret) {
@@ -792,11 +774,9 @@ int ObSparseRetrievalBMWCursor::advance_one_source(
               source_state.has_entry_ = false;
               source_state.exhausted_ = true;
             } else {
-              LOG_WARN("failed to pass inclusive BMW boundary", K(ret), K(source_idx));
             }
           } else if (!entry.id_.is_valid()) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("BMW exact source returned an invalid post-boundary id", K(ret));
           } else {
             source_state.entry_ = entry;
             source_state.has_entry_ = true;
@@ -853,17 +833,13 @@ int ObSparseRetrievalBMWCursor::try_prune_range(
     if (OB_ITER_END == block_ret) {
       if (!source_states_.at(i).exhausted_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("BMW block source ended before its exact source", K(ret), K(i));
       }
     } else if (OB_SUCCESS != block_ret) {
       ret = block_ret;
-      LOG_WARN("BMW block source failed", K(ret), K(i));
     } else if (!block.min_id_.is_valid() || !block.max_id_.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("BMW block source returned an invalid interval", K(ret), K(i));
     } else if (!std::isfinite(block.score_upper_bound_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("BMW block bound is not finite", K(ret), K(i), K(block.score_upper_bound_));
     } else {
       int range_cmp = 0;
       int min_cmp = 0;
@@ -871,12 +847,10 @@ int ObSparseRetrievalBMWCursor::try_prune_range(
       if (OB_FAIL(id_ops_->compare(block.min_id_, block.max_id_, range_cmp))) {
       } else if (range_cmp > 0) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("BMW block source returned a reversed interval", K(ret), K(i));
       } else if (OB_FAIL(id_ops_->compare(block.min_id_, start, min_cmp))) {
       } else if (OB_FAIL(id_ops_->compare(block.max_id_, start, max_cmp))) {
       } else if (max_cmp < 0) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("BMW block source did not reach the requested id", K(ret), K(i));
       } else {
         const bool covers_start = min_cmp <= 0;
         if (!covers_start && source_states_.at(i).has_entry_) {
@@ -885,7 +859,6 @@ int ObSparseRetrievalBMWCursor::try_prune_range(
               source_states_.at(i).entry_.id_, block.min_id_, exact_to_block_cmp))) {
           } else if (exact_to_block_cmp < 0) {
             ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("BMW exact posting is not covered by a block", K(ret), K(i));
           }
         }
         const ObSparseRetrievalIdView candidate_boundary = covers_start
@@ -918,7 +891,6 @@ int ObSparseRetrievalBMWCursor::try_prune_range(
 
   if (OB_SUCC(ret) && !finished && !has_boundary) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("BMW exact sources outlived every block source", K(ret));
   } else if (OB_SUCC(ret) && !finished && block_upper_bound <= threshold()) {
     if (OB_FAIL(advance_sources_to_boundary(boundary.view(), boundary_inclusive))) {
     } else {
@@ -1013,7 +985,6 @@ int ObSparseRetrievalBMWCursor::retain_candidate(
   int ret = OB_SUCCESS;
   bool accepted = true;
   if (OB_NOT_NULL(filter_) && OB_FAIL(filter_->accept(match.id_.view(), accepted))) {
-    LOG_WARN("BMW filter failed", K(ret));
   } else if (!accepted || 0 == candidate_limit_) {
   } else if (results_.count() < candidate_limit_) {
     if (OB_FAIL(results_.push_back(match))) {
@@ -1058,7 +1029,6 @@ int ObSparseRetrievalBMWCursor::materialize()
         ret = OB_SUCCESS;
         all_exhausted = true;
       } else {
-        LOG_WARN("failed to find next BMW id", K(ret));
       }
     } else {
       bool pruned = false;
@@ -1077,7 +1047,6 @@ int ObSparseRetrievalBMWCursor::materialize()
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(sort_results())) {
-    LOG_WARN("failed to sort BMW results", K(ret));
   }
   if (OB_SUCC(ret)) {
     result_index_ = 0;
@@ -1095,7 +1064,6 @@ int ObSparseRetrievalBMWCursor::next(const ObSparseRetrievalMatch *&match)
   if (OB_FAIL(next_batch(1, matches, count))) {
   } else if (1 != count || OB_ISNULL(matches)) {
     ret = fail(OB_ERR_UNEXPECTED);
-    LOG_WARN("unexpected BMW single-row result", K(ret), K(count));
   } else {
     match = matches;
   }
@@ -1217,16 +1185,12 @@ int ObSparseRetrievalFactory::create_daat(
   ObSparseRetrievalDaaTCursor *cursor = nullptr;
   if (handle.is_valid()) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("retrieval handle already owns a cursor", K(ret));
   } else if (OB_ISNULL(request.allocator_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("missing DAAT cursor allocator", K(ret));
   } else if (OB_ISNULL(buffer = request.allocator_->alloc(sizeof(ObSparseRetrievalDaaTCursor)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate DAAT cursor", K(ret));
   } else if (FALSE_IT(cursor = new (buffer) ObSparseRetrievalDaaTCursor(*request.allocator_))) {
   } else if (OB_FAIL(cursor->init(request))) {
-    LOG_WARN("failed to initialize DAAT cursor", K(ret));
     cursor->~ObSparseRetrievalDaaTCursor();
     request.allocator_->free(buffer);
   } else {
@@ -1244,16 +1208,12 @@ int ObSparseRetrievalFactory::create_block_max_wand(
   ObSparseRetrievalBMWCursor *cursor = nullptr;
   if (handle.is_valid()) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("retrieval handle already owns a cursor", K(ret));
   } else if (OB_ISNULL(request.allocator_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("missing BMW cursor allocator", K(ret));
   } else if (OB_ISNULL(buffer = request.allocator_->alloc(sizeof(ObSparseRetrievalBMWCursor)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate BMW cursor", K(ret));
   } else if (FALSE_IT(cursor = new (buffer) ObSparseRetrievalBMWCursor(*request.allocator_))) {
   } else if (OB_FAIL(cursor->init(request))) {
-    LOG_WARN("failed to initialize BMW cursor", K(ret));
     cursor->~ObSparseRetrievalBMWCursor();
     request.allocator_->free(buffer);
   } else {

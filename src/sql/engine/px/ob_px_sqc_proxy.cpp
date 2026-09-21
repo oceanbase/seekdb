@@ -61,7 +61,6 @@ int ObPxSQCProxy::link_sqc_qc_channel(ObPxInitSqcArgs &sqc_arg)
   // This is an optimization, to be able to receive the data channel information from qc as early as possible
   if (OB_ISNULL(ch)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("fail link sqc qc channel", K(sqc), K(ret));
   } else {
     (void) sqc_ctx_.msg_loop_.register_channel(*ch);
     const ObDtlBasicChannel *basic_channel = static_cast<ObDtlBasicChannel*>(sqc.get_sqc_channel());
@@ -117,7 +116,6 @@ int ObPxSQCProxy::process_dtl_msg(int64_t timeout_ts)
   if (OB_DTL_WAIT_EAGAIN == ret) {
     ret = OB_SUCCESS;
   } else {
-    LOG_WARN("leader fail process dtl msg", K(ret));
   }
   return ret;
 }
@@ -130,7 +128,6 @@ int ObPxSQCProxy::do_process_dtl_msg(int64_t timeout_ts)
     if (OB_FAIL(sqc_ctx_.msg_loop_.process_any(10))) {
       if (OB_DTL_WAIT_EAGAIN == ret) {
       } else {
-        LOG_WARN("fail proccess dtl msg", K(timeout_ts), K(ret));
       }
     }
   }
@@ -162,10 +159,8 @@ int ObPxSQCProxy::get_transmit_data_ch(
               // If there are no messages in provider, and it is determined that data should not be retrieved through dtl, it indicates a logical error
               if (!need_process_dtl) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("expect peek data channel succ", K(ret));
               }
             } else {
-              LOG_WARN("fail peek data channel from ch_provider", K(ret));
             }
           }
         }
@@ -205,10 +200,8 @@ int ObPxSQCProxy::get_receive_data_ch(int64_t child_dfo_id,
               // If there are no messages in provider, and it is determined that data should not be retrieved through dtl, it indicates a logical error
               if (!need_process_dtl) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("expect peek data channel succ", K(ret));
               }
             } else {
-              LOG_WARN("fail peek data channel from ch_provider", K(ret));
             }
           } else {
           }
@@ -244,10 +237,8 @@ int ObPxSQCProxy::get_part_ch_map(ObPxPartChInfo &map, int64_t timeout_ts)
               // If there are no messages in provider, and it is determined that data should not be retrieved through dtl, it indicates a logical error
               if (!need_process_dtl) {
                 ret = OB_ERR_UNEXPECTED;
-                LOG_WARN("expect peek data channel succ", K(ret));
               }
             } else {
-              LOG_WARN("fail peek data channel from ch_provider", K(ret));
             }
           }
         }
@@ -299,7 +290,6 @@ int ObPxSQCProxy::check_task_finish_status(int64_t timeout_ts)
       if (!all_tasks_finish && !all_ctrl_msg_received) {
         if (OB_FAIL(process_dtl_msg(timeout_ts))) {
           if (OB_DTL_WAIT_EAGAIN != ret) {
-            LOG_WARN("fail process dtl msg", K(ret));
           }
         }
       }
@@ -408,7 +398,6 @@ int ObPxSQCProxy::report(int end_ret) const
       static bool errsim = false;
       errsim = !errsim;
       if (errsim) {
-        LOG_WARN("sqc report to qc by design", K(ret), K(query_timeout));
         return OB_SUCCESS;
       }
     }
@@ -419,7 +408,6 @@ int ObPxSQCProxy::report(int end_ret) const
   // overwrite ret
   if (OB_ISNULL(ch)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("empty channel", K(sqc), K(ret));
   } else if (OB_FAIL(ch->send(finish_msg,
       sqc_arg.exec_ctx_->get_physical_plan_ctx()->get_timeout_timestamp()))) {
   } else if (OB_FAIL(ch->flush())) {
@@ -476,7 +464,6 @@ int ObPxSQCProxy::make_sqc_sample_piece_msg(ObDynamicSamplePieceMsg &msg, bool &
   int ret = OB_SUCCESS;
   if (msg.sample_type_ == HEADER_INPUT_SAMPLE && sample_msg_.row_stores_.empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected row stores", K(ret));
   } else if (OB_FAIL(sample_msg_.merge_piece_msg(
       sqc_ctx_.get_task_count(),
       msg,
@@ -536,7 +523,6 @@ int ObPxSQCProxy::sync_wait_all(ObPxDatahubDataProvider &provider)
         if (OB_UNLIKELY(IS_INTERRUPTED())) {
           ObInterruptCode &code = GET_INTERRUPT_CODE();
           ret = code.code_;
-          LOG_WARN("message loop is interrupted", K(code), K(ret));
         } else if (OB_FAIL(THIS_WORKER.check_status())) {
         }
       }

@@ -83,7 +83,6 @@ static int print_json_path(const ObString &path, ObStringBuffer &buf)
   for (int i = 0; OB_SUCC(ret) && i < path.length(); ++i) {
     char c = *(path.ptr() + i);
     if ((c == '"' || c == '\\') && OB_FAIL(buf.append("\\", 1))) {
-      LOG_WARN("append slash fail", K(ret), K(i), K(c));
     } else if (OB_FAIL(buf.append(&c, 1))) {
     }
   }

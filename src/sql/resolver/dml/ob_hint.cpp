@@ -394,7 +394,6 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
       PRINT_GLOBAL_HINT_STR("READ_CONSISTENCY( STRONG )");
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected READ_CONSISTENCY", K(ret), K_(read_consistency));
     }
   }
   if (OB_SUCC(ret) && UNSET_QUERY_TIMEOUT != query_timeout_) { //QUERY_TIMEOUT
@@ -435,7 +434,6 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
       PRINT_GLOBAL_HINT_STR("DISABLE_PARALLEL_DML");
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected pdml hint value", K(ret), K_(pdml_option));
     }
   }
   if (OB_SUCC(ret) && ObParallelDASOption::NOT_SPECIFIED != parallel_das_dml_option_) { //PDML
@@ -445,13 +443,11 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
      PRINT_GLOBAL_HINT_STR("DISABLE_PARALLEL_DAS_DML");
    } else {
      ret = OB_ERR_UNEXPECTED;
-     LOG_WARN("unexpected pdml hint value", K(ret), K_(pdml_option));
    }
   }
   if (OB_SUCC(ret) && ObParamOption::NOT_SPECIFIED != param_option_) { // PARAM
     if (OB_UNLIKELY(ObParamOption::EXACT != param_option_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected param hint value", K(ret), K_(param_option));
     } else {
       PRINT_GLOBAL_HINT_STR("CURSOR_SHARING_EXACT");
     }
@@ -466,10 +462,8 @@ int ObGlobalHint::print_global_hint(PlanText &plan_text) const
     PRINT_GLOBAL_HINT_NUM("DYNAMIC_SAMPLING", dynamic_sampling_);
   }
   if (OB_SUCC(ret) && OB_FAIL(opt_params_.print_opt_param_hint(plan_text))) {
-    LOG_WARN("failed to print opt param hint", K(ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(osg_hint_.print_osg_hint(plan_text))) {
-    LOG_WARN("failed to print optimizer statistics gathering hint", K(ret));
   }
   if (OB_SUCC(ret) && has_dbms_stats_hint()) {
     PRINT_GLOBAL_HINT_STR("DBMS_STATS");
@@ -513,25 +507,20 @@ int ObGlobalHint::print_alloc_op_hints(PlanText &plan_text) const
       if (alloc_op_hints_.at(i).flags_ & ObAllocOpHint::OB_MONITOR_TRACING) {
         if (ObAllocOpHint::OB_ENUMERATE == alloc_op_hints_.at(i).alloc_level_
                    && OB_FAIL(tracing_ids.push_back(alloc_op_hints_.at(i).id_))){
-          LOG_WARN("failed to push back", K(ret));
         }
       }
       if (OB_SUCC(ret) && alloc_op_hints_.at(i).flags_ & ObAllocOpHint::OB_MONITOR_STAT) {
         if (ObAllocOpHint::OB_ENUMERATE == alloc_op_hints_.at(i).alloc_level_
                    && OB_FAIL(stat_ids.push_back(alloc_op_hints_.at(i).id_))){
-          LOG_WARN("failed to push back", K(ret));
         }
       }
       if (OB_SUCC(ret) && alloc_op_hints_.at(i).flags_ & ObAllocOpHint::OB_MATERIAL) {
         if (ObAllocOpHint::OB_ALL == alloc_op_hints_.at(i).alloc_level_
             && OB_FAIL(BUF_PRINTF("%sBLOCKING('ALL')", outline_indent))) {
-          LOG_WARN("failed to print blocking hint", K(ret));
         } else if (ObAllocOpHint::OB_DFO == alloc_op_hints_.at(i).alloc_level_
                    && OB_FAIL(BUF_PRINTF("%sBLOCKING('DFO')", outline_indent))) {
-          LOG_WARN("failed to print blocking hint", K(ret));
         } else if (ObAllocOpHint::OB_ENUMERATE == alloc_op_hints_.at(i).alloc_level_
                    && OB_FAIL(blocking_ids.push_back(alloc_op_hints_.at(i).id_))){
-          LOG_WARN("failed to push back", K(ret));
         }
       }
     }
@@ -543,7 +532,6 @@ int ObGlobalHint::print_alloc_op_hints(PlanText &plan_text) const
         } 
       }
       if (OB_SUCC(ret) && OB_FAIL(BUF_PRINTF(")"))) {
-        LOG_WARN("failed to print tracing hint", K(ret));
       }
     }
     if (OB_SUCC(ret) && !stat_ids.empty()) {
@@ -554,7 +542,6 @@ int ObGlobalHint::print_alloc_op_hints(PlanText &plan_text) const
         } 
       }
       if (OB_SUCC(ret) && OB_FAIL(BUF_PRINTF(")"))) {
-        LOG_WARN("failed to print tracing hint", K(ret));
       }
     }
     if (OB_SUCC(ret) && !blocking_ids.empty()) {
@@ -565,7 +552,6 @@ int ObGlobalHint::print_alloc_op_hints(PlanText &plan_text) const
         }
       }
       if (OB_SUCC(ret) && OB_FAIL(BUF_PRINTF(")"))) {
-        LOG_WARN("failed to print blocking hint", K(ret));
       }
     }
   }
@@ -579,7 +565,6 @@ int ObOptParamHint::print_opt_param_hint(PlanText &plan_text) const
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(param_types_.count() != param_vals_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected opt param hint", K(ret), K(*this));
   } else if (param_types_.empty()) {
     /* do nothing*/
   } else {
@@ -592,18 +577,14 @@ int ObOptParamHint::print_opt_param_hint(PlanText &plan_text) const
       if (OB_UNLIKELY(OptParamType::INVALID_OPT_PARAM_TYPE == param_types_.at(i))
           || OB_ISNULL(param_name = get_opt_param_string(param_types_.at(i)))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected param type in opt param hint", K(ret), K(param_types_.at(i)));
       } else if (OB_UNLIKELY(!param_vals_.at(i).is_int() && !param_vals_.at(i).is_varchar())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected param value type", K(ret), K(param_vals_.at(i)));
       } else if (OB_FAIL(BUF_PRINTF("%sOPT_PARAM(\'%s\'", outline_indent, param_name))) {
       } else if (param_vals_.at(i).is_int() &&
                  OB_FAIL(BUF_PRINTF(" %ld)", param_vals_.at(i).get_int()))) {
-        LOG_WARN("failed to opt param hint value", K(ret), K(param_vals_.at(i)));
       } else if (param_vals_.at(i).is_varchar() &&
                  OB_FAIL(BUF_PRINTF(" \'%.*s\')", param_vals_.at(i).get_varchar().length(),
                                                   param_vals_.at(i).get_varchar().ptr()))) {
-        LOG_WARN("failed to opt param hint value", K(ret), K(param_vals_.at(i)));
       }
     }
   }
@@ -616,7 +597,6 @@ int ObOptParamHint::merge_opt_param_hint(const ObOptParamHint &other)
   if (OB_UNLIKELY(param_types_.count() != param_vals_.count()
                   || other.param_types_.count() != other.param_vals_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected opt param hint", K(ret), K(other));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < other.param_types_.count(); ++i) {
     if (OB_FAIL(add_opt_param_hint(other.param_types_.at(i), other.param_vals_.at(i)))) {
@@ -636,7 +616,6 @@ int ObOptParamHint::add_opt_param_hint(const OptParamType param_type, const ObOb
     /* exists opt param hint for this type, use the first opt param hint */
   } else if (OB_FAIL(param_types_.push_back(param_type))
              || OB_FAIL(param_vals_.push_back(val))) {
-    LOG_WARN("failed to push back", K(ret), K(param_type), K(val));
   }
   return ret;
 }
@@ -820,7 +799,6 @@ int ObOptParamHint::get_opt_param(const OptParamType param_type, ObObj &val) con
     /* do nothing */
   } else if (OB_UNLIKELY(idx < 0 || idx >= param_vals_.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected idx in opt param hint", K(ret));
   } else {
     val = param_vals_.at(idx);
   }
@@ -850,7 +828,6 @@ int ObOptParamHint::get_bool_opt_param(const OptParamType param_type, bool &val,
     // do nothing
   } else if (!obj.is_varchar()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param obj is invalid", K(ret), K(obj));
   } else {
     val = (0 == obj.get_varchar().case_compare("true"));
     is_exists = true;
@@ -874,7 +851,6 @@ int ObOptParamHint::get_integer_opt_param(const OptParamType param_type, int64_t
     // do nothing
   } else if (!obj.is_int()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param obj is invalid", K(ret), K(obj));
   } else {
     val = obj.get_int();
     is_exists = true;
@@ -897,7 +873,6 @@ int ObOptParamHint::get_opt_param_runtime_filter_type(int64_t &rf_type) const
     // do nothing
   } else if (!obj.is_varchar()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("runtime filter opt param obj is invalid", K(ret), K(obj));
   } else {
     ObString str_val = obj.get_varchar();
     rf_type = ObConfigRuntimeFilterChecker::get_runtime_filter_type(str_val.ptr(),
@@ -944,11 +919,9 @@ int ObOptParamHint::get_enum_opt_param(const OptParamType param_type, int64_t &v
       }
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("enum param is invalid", K(ret), K(obj));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("param obj is invalid", K(ret), K(obj));
   }
   return ret;
 }
@@ -986,7 +959,6 @@ int ObOptParamHint::inner_get_sys_var(const OptParamType param_type,
   bool has_hint = false;
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(session));
   } else if (OB_FAIL(has_opt_param(param_type, has_hint))) {
   } else if (has_hint) {
     if (OB_FAIL((this->*PARAM_FUNC)(param_type, val))) {
@@ -1170,7 +1142,6 @@ int ObHint::print_hint(PlanText &plan_text) const
   } else if (OB_FALSE_IT(old_pos1 = pos)) {
   } else if (!hint->qb_name_.empty() &&
              OB_FAIL(BUF_PRINTF("@\"%.*s\" ", hint->qb_name_.length(), hint->qb_name_.ptr()))) {
-    LOG_WARN("failed to print qb_name", K(ret));
   } else if (!hint->qb_name_.empty() && OB_FALSE_IT(old_pos2 = pos)) {
   } else if (OB_FAIL(hint->print_hint_desc(plan_text))) {
   } else if (old_pos1 == pos) {
@@ -1225,7 +1196,6 @@ int ObHint::deep_copy_hint_contain_table(ObIAllocator *allocator, ObHint *&hint)
     case HINT_UNION_MERGE: DEEP_COPY_NORMAL_HINT(ObUnionMergeHint); break;
     default:  {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected hint type to deep copy", K(ret), K(hint_class_));
     }
   }
   return ret;
@@ -1247,7 +1217,6 @@ int ObHint::create_push_down_hint(ObIAllocator *allocator,
     for (int64_t i = 0; !need_replace && OB_SUCC(ret) && i < all_tables.count(); ++i) {
       if (OB_ISNULL(all_tables.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null", K(ret));
       } else {
         need_replace = all_tables.at(i)->is_match_table_item(cs_type, source_table);
       }
@@ -1261,7 +1230,6 @@ int ObHint::create_push_down_hint(ObIAllocator *allocator,
       for (int64_t i = 0; OB_SUCC(ret) && i < all_tables.count(); ++i) {
         if (OB_ISNULL(all_tables.at(i))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null", K(ret));
         } else if (all_tables.at(i)->is_match_table_item(cs_type, source_table)) {
           all_tables.at(i)->set_table(target_table);
         }
@@ -1297,7 +1265,6 @@ int ObHint::merge_hint(const ObHint *cur_hint,
   if (OB_ISNULL(other) || 
       OB_LIKELY(NULL != cur_hint && cur_hint->get_hint_type() != other->get_hint_type())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected input hints", K(ret), K(cur_hint), K(other));
   } else if (NULL == cur_hint) {
     if (has_exist_in_array(conflict_hints, other->get_hint_type())) {
       if (RIGHT_HINT_DOMINATED == policy) {
@@ -1374,12 +1341,9 @@ int ObHint::print_table_list(const ObIArray<TablesInHint> &table_list, PlanText 
     for (int64_t i = 0; OB_SUCC(ret) && i < table_list.count(); ++i) {
       const TablesInHint &cur_table = table_list.at(i);
       if (cur_table.count() > 1 && OB_FAIL(BUF_PRINTF("("))) {
-        LOG_WARN("failed to do BUF_PRINTF", K(ret));
       } else if (OB_FAIL(ObTableInHint::print_join_tables_in_hint(plan_text, cur_table))) {
       } else if (cur_table.count() > 1 && OB_FAIL(BUF_PRINTF(")"))) {
-        LOG_WARN("failed to do BUF_PRINTF", K(ret));
       } else if (i < table_list.count() - 1 && OB_FAIL(BUF_PRINTF(" "))) {
-        LOG_WARN("failed to do BUF_PRINTF", K(ret));
       }
     }
   }
@@ -1395,10 +1359,8 @@ int ObViewMergeHint::print_hint_desc(PlanText &plan_text) const
   int64_t &pos = plan_text.pos_;
   if (!parent_qb_name_.empty() && !is_query_push_down_ &&
       OB_FAIL(BUF_PRINTF("> \"%.*s\"", parent_qb_name_.length(), parent_qb_name_.ptr()))) {
-    LOG_WARN("fail to print parent qb name", K(ret));
   } else if (!parent_qb_name_.empty() && is_query_push_down_ &&
              OB_FAIL(BUF_PRINTF("< \"%.*s\"", parent_qb_name_.length(), parent_qb_name_.ptr()))) {
-    LOG_WARN("fail to print parent qb name", K(ret));
   }
   return ret;
 }
@@ -1432,7 +1394,6 @@ bool QbNameList::has_qb_name(const ObDMLStmt *stmt) const
   int ret = OB_SUCCESS;
   if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpect null stmt", K(ret));
   } else if (OB_FAIL(stmt->get_qb_name(qb_name))) {
   } else {
     for (int i = 0; !bret && i < qb_names_.count(); ++i) {
@@ -1501,7 +1462,6 @@ bool QbNameList::is_subset(const ObIArray<ObSelectStmt*> &stmts) const
         int ret = OB_SUCCESS;
         if (OB_ISNULL(stmts.at(j))) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("unexpected null stmt");
         } else if (OB_FAIL(stmts.at(j)->get_qb_name(stmt_qb_name))) {
         } else if (0 == stmt_qb_name.case_compare(qb_names_.at(i))) {
           find = true;
@@ -1527,17 +1487,14 @@ int QbNameList::print_qb_names(PlanText &plan_text, const bool print_quote) cons
     int64_t &buf_len = plan_text.buf_len_;
     int64_t &pos = plan_text.pos_;
     if (print_quote && OB_FAIL(BUF_PRINTF("("))) {
-      LOG_WARN("failed to do BUF_PRINTF", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < qb_names_.count(); ++i) {
       const ObString &qb_name = qb_names_.at(i);
       if (OB_FAIL(BUF_PRINTF("\"%.*s\"", qb_name.length(), qb_name.ptr()))) {
       } else if (i != qb_names_.count() - 1 && OB_FAIL(BUF_PRINTF(" "))) {
-        LOG_WARN("failed to do BUF_PRINTF", K(ret));
       }
     }
     if (OB_SUCC(ret) && print_quote && OB_FAIL(BUF_PRINTF(")"))) {
-      LOG_WARN("failed to do BUF_PRINTF", K(ret));
     }
   }
   return ret;
@@ -1685,11 +1642,8 @@ int ObCoalesceAggrHint::print_hint_desc(PlanText &plan_text) const
   int64_t &buf_len = plan_text.buf_len_;
   int64_t &pos = plan_text.pos_;
   if (enable_trans_wo_pullup_ && enable_trans_with_pullup_ && OB_FAIL(BUF_PRINTF("WO_PULLUP WITH_PULLUP"))) {
-    LOG_WARN("failed to do BUF_PRINTF", K(ret));
   } else if (enable_trans_wo_pullup_ && !enable_trans_with_pullup_ && OB_FAIL(BUF_PRINTF("WO_PULLUP"))) {
-    LOG_WARN("failed to do BUF_PRINTF", K(ret));
   } else if (!enable_trans_wo_pullup_ && enable_trans_with_pullup_ && OB_FAIL(BUF_PRINTF("WITH_PULLUP"))) {
-    LOG_WARN("failed to do BUF_PRINTF", K(ret));
   }
   return ret;
 }
@@ -1720,17 +1674,13 @@ int ObWinMagicHint::print_hint_desc(PlanText &plan_text) const
     int64_t &pos = plan_text.pos_;
     if (OB_UNLIKELY(table_list_.count() < 2)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("table in hint count < 2", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < table_list_.count(); ++i) {
       const ObTableInHint &cur_table = table_list_.at(i);
       if (table_list_.count() > 2 && i == 1 && OB_FAIL(BUF_PRINTF("("))) {
-        LOG_WARN("failed to do BUF_PRINTF", K(ret));
       } else if (OB_FAIL(cur_table.print_table_in_hint(plan_text))) {
       } else if (table_list_.count() > 2 && i == table_list_.count() - 1 && OB_FAIL(BUF_PRINTF(")"))) {
-        LOG_WARN("failed to do BUF_PRINTF", K(ret));
       } else if (i != table_list_.count() - 1 && OB_FAIL(BUF_PRINTF(" "))) {
-        LOG_WARN("failed to do BUF_PRINTF", K(ret));
       } 
     }
   }
@@ -1774,7 +1724,6 @@ int ObMaterializeHint::print_hint_desc(PlanText &plan_text) const
         }
       }
       if (OB_SUCC(ret) && OB_FAIL(BUF_PRINTF(")"))) {
-        LOG_WARN("fail to print materialize hint", K(ret));
       }
     }
     
@@ -1834,10 +1783,8 @@ int ObSemiToInnerHint::print_hint_desc(PlanText &plan_text) const
   if (tables_.empty()) {
     //do nothing
   } else if (tables_.count() > 1 && OB_FAIL(BUF_PRINTF("("))) {
-    LOG_WARN("failed to print hint", K(ret));
   } else if (OB_FAIL(ObTableInHint::print_join_tables_in_hint(plan_text, tables_, true))) {
   } else if (tables_.count() > 1 && OB_FAIL(BUF_PRINTF(")"))) {
-    LOG_WARN("failed to print hint", K(ret));
   }
   return ret;
 }
@@ -1877,7 +1824,6 @@ int ObCoalesceSqHint::print_hint_desc(PlanText &plan_text) const
         }
       }
       if (OB_SUCC(ret) && OB_FAIL(BUF_PRINTF(")"))) {
-        LOG_WARN("fail to print coalesce sq hint", K(ret));
       }
     }
   }
@@ -2019,15 +1965,11 @@ int ObJoinHint::print_hint_desc(PlanText &plan_text) const
   int64_t &pos = plan_text.pos_;
   if (OB_UNLIKELY(tables_.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected join hint", K(ret));
   } else if (tables_.count() > 1 && OB_FAIL(BUF_PRINTF("("))) {
-    LOG_WARN("failed to print hint", K(ret));
   } else if (OB_FAIL(ObTableInHint::print_join_tables_in_hint(plan_text, tables_))) {
   } else if (tables_.count() > 1 && OB_FAIL(BUF_PRINTF(")"))) {
-    LOG_WARN("failed to print hint", K(ret));
   } else if (T_PQ_DISTRIBUTE == hint_type_ && NULL != algo_str
              && OB_FAIL(BUF_PRINTF(" %s", algo_str))) {
-    LOG_WARN("failed to print dist algo", K(ret));
   }
   return ret;
 }
@@ -2105,15 +2047,11 @@ int ObJoinFilterHint::print_hint_desc(PlanText &plan_text) const
   if (OB_FAIL(filter_table_.print_table_in_hint(plan_text))) {
   } else if (!left_tables_.empty() && OB_FAIL(BUF_PRINTF(" "))) {
   } else if (left_tables_.count() > 1 && OB_FAIL(BUF_PRINTF("("))) {
-    LOG_WARN("failed to print hint", K(ret));
   } else if (OB_FAIL(ObTableInHint::print_join_tables_in_hint(plan_text, left_tables_))) {
   } else if (left_tables_.count() > 1 && OB_FAIL(BUF_PRINTF(")"))) {
-    LOG_WARN("failed to print hint", K(ret));
   } else if (has_pushdown_filter_table() && OB_FAIL(BUF_PRINTF(" "))) {
-    LOG_WARN("fail to print table in hint", K(ret));
   } else if (has_pushdown_filter_table() &&
              OB_FAIL(pushdown_filter_table_.print_table_in_hint(plan_text))) {
-    LOG_WARN("fail to print table in hint", K(ret));
   }
   return ret;
 }
@@ -2128,7 +2066,6 @@ int ObPQSetHint::set_pq_set_hint(const DistAlgo dist_algo,
   if (OB_UNLIKELY(child_num < 2 || random_none_idx >= child_num)
       ||OB_UNLIKELY(random_none_idx < 0 && DistAlgo::DIST_SET_RANDOM == dist_algo)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected params", K(ret), K(child_num), K(random_none_idx), K(dist_algo));
   } else if (DistAlgo::DIST_BASIC_METHOD == dist_algo) {
     /* do nothing */
   } else if (OB_FAIL(dist_methods_.prepare_allocate(child_num))) {
@@ -2208,7 +2145,6 @@ int ObPQSetHint::set_pq_set_hint(const DistAlgo dist_algo,
       }
       default : {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected dist algo", K(ret), K(dist_algo));
       }
     }
   } else {  // multi child union all
@@ -2225,7 +2161,6 @@ int ObPQSetHint::set_pq_set_hint(const DistAlgo dist_algo,
       method = T_DISTRIBUTE_RANDOM;
     } else {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected dist algo", K(ret), K(dist_algo));
     }
     if (OB_SUCC(ret)) {
       for (int i = 0; i < child_num; ++i) {
@@ -2247,10 +2182,8 @@ int ObPQSetHint::print_hint_desc(PlanText &plan_text) const
   int64_t &pos = plan_text.pos_;
   if (OB_UNLIKELY(false == is_valid_dist_methods(dist_methods_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected pq set hint", K(ret));
   } else if (!left_branch_.empty()
              && OB_FAIL(BUF_PRINTF(" \"%.*s\"", left_branch_.length(), left_branch_.ptr()))) {
-    LOG_WARN("failed to print left branch qb name", K(ret));
   }
   for (int i = 0; OB_SUCC(ret) && i < dist_methods_.count(); ++i) {
     if (OB_FAIL(BUF_PRINTF(" %s", get_dist_method_str(dist_methods_.at(i))))) {
@@ -2369,7 +2302,6 @@ int ObPQSubqueryHint::print_hint_desc(PlanText &plan_text) const
   if (OB_FAIL(sub_qb_names_.print_qb_names(plan_text, true))) {
   } else if (NULL != (algo_str = ObJoinHint::get_dist_algo_str(get_dist_algo()))
              && OB_FAIL(BUF_PRINTF(" %s", algo_str))) {
-    LOG_WARN("failed to print dist algo", K(ret));
   }
   return ret;
 }
@@ -2384,10 +2316,8 @@ int ObPQHint::print_hint_desc(PlanText &plan_text) const
   const char *str = NULL;
   if (OB_ISNULL(str = ObPQHint::get_dist_method_str(dist_method_))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), K(dist_method_));
   } else if (OB_FAIL(BUF_PRINTF(" %s", str))) {
   } else if (ObGlobalHint::UNSET_PARALLEL < parallel_ && OB_FAIL(BUF_PRINTF(" %ld", parallel_))) {
-    LOG_WARN("fail to print parallel", K(ret));
   }
   return ret;
 }
@@ -2435,7 +2365,6 @@ int ObJoinOrderHint::merge_hint(const ObHint *cur_hint,
   if (OB_ISNULL(other) || OB_UNLIKELY(!other->is_join_order_hint())
       || OB_UNLIKELY(NULL != cur_hint && !cur_hint->is_join_order_hint())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected hint", K(ret), K(other), K(cur_hint));
   } else if (NULL == cur_hint) {
     if (has_exist_in_array(conflict_hints, other->get_hint_type())) {
       const ObJoinOrderHint *other_join_order = static_cast<const ObJoinOrderHint*>(other);
@@ -2507,13 +2436,10 @@ int ObLeadingTable::get_all_table_in_leading_table(ObIArray<ObTableInHint*> &all
 {
   int ret = OB_SUCCESS;
   if (NULL != table_ && OB_FAIL(all_tables.push_back(table_))) {
-    LOG_WARN("failed to push back hint table", K(ret));
   } else if (NULL != left_table_ &&
              OB_FAIL(SMART_CALL(left_table_->get_all_table_in_leading_table(all_tables)))) {
-    LOG_WARN("failed to get all table in leading table", K(ret));
   } else if (NULL != left_table_ &&
              OB_FAIL(SMART_CALL(right_table_->get_all_table_in_leading_table(all_tables)))) {
-    LOG_WARN("failed to get all table in leading table", K(ret));
   }
   return ret;
 }
@@ -2526,7 +2452,6 @@ int ObLeadingTable::print_leading_table(PlanText &plan_text) const
   int64_t &pos = plan_text.pos_;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected leading table", K(ret), K(table_), K(left_table_), K(right_table_));
   } else if (is_single_table()) {
     if (OB_FAIL(table_->print_table_in_hint(plan_text))) {
     }
@@ -2613,14 +2538,11 @@ int ObTableInHint::print_table_in_hint(PlanText &plan_text,
   int64_t &pos = plan_text.pos_;
   if (OB_UNLIKELY(table_name_.empty())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get empty table name for table in hint", K(ret), K(table_name_));
   } else if (!db_name_.empty() &&
              OB_FAIL(BUF_PRINTF("\"%.*s\".", db_name_.length(), db_name_.ptr()))) {
-    LOG_WARN("fail to print db_name", K(ret), K(db_name_), K(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(BUF_PRINTF("\"%.*s\"", table_name_.length(), table_name_.ptr()))) {
   } else if (!ignore_qb_name && !qb_name_.empty() &&
              OB_FAIL(BUF_PRINTF("@\"%.*s\"", qb_name_.length(), qb_name_.ptr()))) {
-    LOG_WARN("fail to print qb_name", K(ret), K(qb_name_), K(buf), K(buf_len), K(pos));
   }
   return ret;
 }
@@ -2798,12 +2720,10 @@ int ObWindowDistHint::add_win_dist_option(const ObIArray<ObWinFunRawExpr*> &all_
   for (int64_t i = 0; OB_SUCC(ret) && i < cur_win_funcs.count(); ++i) {
     if (OB_UNLIKELY(!ObOptimizerUtil::find_item(all_win_funcs, cur_win_funcs.at(i), &idx))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to find item", K(ret), K(all_win_funcs), K(cur_win_funcs));
     } else if (OB_FAIL(win_func_idxs.push_back(idx))) {
     }
   }
   if (OB_SUCC(ret) && add_win_dist_option(win_func_idxs, algo, is_push_down, use_hash_sort, use_topn_sort)) {
-    LOG_WARN("failed to add win dist option", K(ret));
   }
   return ret;
 }
@@ -2837,7 +2757,6 @@ int ObWindowDistHint::WinDistOption::print_win_dist_option(PlanText &plan_text) 
   int64_t &pos = plan_text.pos_;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid WinDistOption", K(ret), K(*this));
   } else if (win_func_idxs_.empty()) {
     /* do nothing */
   } else if (OB_FAIL(BUF_PRINTF(" (%ld", win_func_idxs_.at(0)))) {
@@ -2847,18 +2766,14 @@ int ObWindowDistHint::WinDistOption::print_win_dist_option(PlanText &plan_text) 
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(BUF_PRINTF(")"))) {
-      LOG_WARN("failed to print win func idx", K(ret));
     }
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(BUF_PRINTF(" %s", ObWindowDistHint::get_dist_algo_str(algo_)))) {
   } else if (use_hash_sort_ && OB_FAIL(BUF_PRINTF(" PARTITION_SORT"))) {
-    LOG_WARN("failed to print win func sort", K(ret));
   } else if (is_push_down_ && OB_FAIL(BUF_PRINTF(" PUSHDOWN"))) {
-    LOG_WARN("failed to print win func push down", K(ret));
   } else if (use_topn_sort_ && OB_FAIL(BUF_PRINTF(" WF_TOPN"))) {
-    LOG_WARN("failed to print win func sort", K(ret));
   }
   return ret;
 }
@@ -2913,9 +2828,7 @@ int ObAggHint::print_hint_desc(PlanText &plan_text) const
     int64_t &buf_len = plan_text.buf_len_;
     int64_t &pos = plan_text.pos_;
     if (use_partition_sort_ && OB_FAIL(BUF_PRINTF("PARTITION_SORT"))) {
-      LOG_WARN("print failed", K(ret));
     } else if (!use_partition_sort_ && OB_FAIL(BUF_PRINTF("NO_PARTITION_SORT"))) {
-      LOG_WARN("print failed", K(ret));
     }  
   }
   return ret;
@@ -2932,7 +2845,6 @@ int ObTableDynamicSamplingHint::print_hint_desc(PlanText &plan_text) const
   } else if (OB_FAIL(BUF_PRINTF(" %ld", dynamic_sampling_))) {
   } else if (sample_block_cnt_ > 0 &&
              OB_FAIL(BUF_PRINTF(" %ld", sample_block_cnt_))) {
-    LOG_WARN("fail to print dynamic sampling sample percent", K(ret));
   }
   return ret;
 }
@@ -2956,7 +2868,6 @@ bool ObIndexHint::is_match_index(const ObCollationType cs_type,
   ObString index_name;
   if (OB_UNLIKELY(!index_schema.is_index_table())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("got unexpected param", K(ret));
   } else if (!table_.is_match_table_item(cs_type, ref_table)) {
     /* do nothing */
   } else if (OB_FAIL(index_schema.get_index_name(index_name))) {

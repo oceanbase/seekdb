@@ -48,7 +48,6 @@ int ObLogicResourceStatIterator::get_next(ObResourceInfo &info)
   int ret = OB_SUCCESS;
   if (!is_ready()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLogicResourceStatIterator is not ready", K(ret));
   } else {
     bool need_retry = false;
     do {
@@ -70,7 +69,6 @@ int ObLogicResourceStatIterator::get_next_type()
   int ret = OB_SUCCESS;
   if (!is_ready()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObLogicResourceStatIterator is not ready", K(ret));
   } else {
     bool need_retry = false;
     do {
@@ -102,10 +100,8 @@ int ObResourceConstraintIterator::set_ready(
 
   if (is_ready_) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("ObResourceConstraintIterator is already ready", K(ret));
   } else if (!is_valid_logic_res_type(res_type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(res_type));
   } else if (OB_FAIL(calculator.get_logic_resource_constraint_value(res_type, res_))) {
   } else {
     res_type_ = res_type;
@@ -119,7 +115,6 @@ int ObResourceConstraintIterator::get_next(int64_t &val)
   int ret = OB_SUCCESS;
   if (!is_ready()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObResourceConstraintIterator is not ready", K(ret));
   } else {
     bool need_retry = false;
     do {
@@ -141,7 +136,6 @@ int ObUserResourceCalculateArg::set_type_value(const int64_t type, const int64_t
   int ret = OB_SUCCESS;
   if (!is_valid_logic_res_type(type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(type));
   } else {
     int64_t count = needed_num_.count();
     while (OB_SUCC(ret) && count < MAX_LOGIC_RESOURCE) {
@@ -162,7 +156,6 @@ int ObUserResourceCalculateArg::get_type_value(const int64_t type, int64_t &valu
   int ret = OB_SUCCESS;
   if (!is_valid_logic_res_type(type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(type));
   } else if (type < needed_num_.count()) {
     value = needed_num_[type];
   } else {
@@ -203,10 +196,8 @@ int ObResourceLimitCalculator::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("resource limit calculator already initialized", K(ret));
   } else if (OB_ISNULL(tablet_handler)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid resource limit handler", K(ret), KP(tablet_handler));
   } else {
     WLockGuard guard(lock_);
     handlers_[LOGIC_RESOURCE_TABLET] = tablet_handler;
@@ -224,13 +215,10 @@ int ObResourceLimitCalculator::get_logic_resource_stat(
   RLockGuard guard(lock_);
   if (IS_NOT_INIT) {
     ret = OB_NOT_RUNNING;
-    LOG_WARN("resource limit calculator not running", K(ret));
   } else if (!is_valid_logic_res_type(type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid resource type", K(ret), K(type));
   } else if (OB_ISNULL(handler = handlers_[type])) {
     ret = OB_NOT_RUNNING;
-    LOG_WARN("resource handler is unavailable", K(ret), KP(handler));
   } else if (OB_FAIL(handler->get_current_info(val))) {
   }
   return ret;
@@ -245,13 +233,10 @@ int ObResourceLimitCalculator::get_logic_resource_constraint_value(
   RLockGuard guard(lock_);
   if (IS_NOT_INIT) {
     ret = OB_NOT_RUNNING;
-    LOG_WARN("resource limit calculator not running", K(ret));
   } else if (!is_valid_logic_res_type(type)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid resource type", K(ret), K(type));
   } else if (OB_ISNULL(handler = handlers_[type])) {
     ret = OB_NOT_RUNNING;
-    LOG_WARN("resource handler is unavailable", K(ret), KP(handler));
   } else if (OB_FAIL(handler->get_resource_constraint_value(val))) {
   }
   return ret;
@@ -266,7 +251,6 @@ int ObResourceLimitCalculator::get_min_phy_resource_value(
   ObMinPhyResourceResult tmp;
   if (IS_NOT_INIT) {
     ret = OB_NOT_RUNNING;
-    LOG_WARN("resource limit calculator not running", K(ret));
   } else {
     RLockGuard guard(lock_);
     for (int64_t type = INVALID_LOGIC_RESOURCE + 1; OB_SUCC(ret) && type < MAX_LOGIC_RESOURCE; ++type) {
@@ -276,7 +260,6 @@ int ObResourceLimitCalculator::get_min_phy_resource_value(
         // skip unregistered enum values
       } else if (OB_ISNULL(handler)) {
         ret = OB_NOT_RUNNING;
-        LOG_WARN("the tenant may be destroyed", K(ret), K(type));
       } else if (OB_FAIL(arg.get_type_value(type, needed_num))) {
       } else if (OB_FAIL(handler->cal_min_phy_resource_needed(needed_num, tmp))) {
       } else if (OB_FAIL(min_res.inc_update(tmp))) {
@@ -301,14 +284,12 @@ int ObResourceLimitCalculator::get_runtime_logical_resource(ObUserResourceCalcul
   ObLogicResourceStatIterator iter;
   if (IS_NOT_INIT) {
     ret = OB_NOT_RUNNING;
-    LOG_WARN("resource limit calculator not running", KR(ret));
   } else if (OB_FAIL(iter.set_ready(*this))) {
   } else {
     ObResourceInfo info;
     while(OB_SUCC(ret)) {
       if (OB_FAIL(iter.get_next(info))) {
         if (OB_ITER_END != ret) {
-          LOG_WARN("failed to get next", KR(ret));
         }
       } else if (OB_FAIL(arg.set_type_value(iter.get_curr_type(), info.curr_utilization_))) {
       }

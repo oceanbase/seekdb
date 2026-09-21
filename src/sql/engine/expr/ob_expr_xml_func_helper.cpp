@@ -118,7 +118,6 @@ int ObXMLExprHelper::update_new_nodes_ns(ObIAllocator &allocator, ObXmlNode *par
   ObXmlAttribute *update_node_default_ns = NULL;
   if (OB_ISNULL(parent) || OB_ISNULL(update_node)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("node is NULL", K(ret), K(parent), K(update_node));
   } else if (OB_FAIL(get_valid_default_ns_from_parent(parent, default_ns))) {
   } else if (OB_NOT_NULL(default_ns) && !default_ns->get_value().empty()) {
     // need to update the new node default ns with empty default ns
@@ -126,7 +125,6 @@ int ObXMLExprHelper::update_new_nodes_ns(ObIAllocator &allocator, ObXmlNode *par
     } else if (OB_ISNULL(update_node_default_ns) || update_node_default_ns->get_value().empty()) {
       if (OB_ISNULL(empty_ns = OB_NEWx(ObXmlAttribute, (&allocator), ObMulModeNodeType::M_NAMESPACE, parent->get_mem_ctx()))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("alloc failed", K(ret)); 
       } else {
         empty_ns->set_xml_key(ObXmlConstants::XMLNS_STRING);
         empty_ns->set_value(ObString::make_empty_string());
@@ -147,7 +145,6 @@ int ObXMLExprHelper::get_valid_default_ns_from_parent(ObXmlNode *cur_node, ObXml
   bool is_found = false;
   if (OB_ISNULL(cur_node)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("update node is NULL", K(ret));
   } else if (!ObXMLExprHelper::is_xml_element_node(cur_node->type())) {
     t_node = cur_node->get_parent();
   } else {
@@ -176,7 +173,6 @@ int ObXMLExprHelper::set_ns_recrusively(ObXmlNode *update_node, ObXmlAttribute *
   int ret = OB_SUCCESS;
   if (OB_ISNULL(update_node) || OB_ISNULL(ns)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("update node is NULL", K(ret), K(update_node), K(ns));
   } else if (!ObXMLExprHelper::is_xml_element_node(update_node->type())) {
     // no need to set default ns
   } else {

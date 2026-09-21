@@ -103,8 +103,6 @@ int ObBloomFilterBuildTask::process()
   if (OB_UNLIKELY(!macro_id_.is_valid())
       || OB_UNLIKELY(prefix_len_ <= 0)) {
     ret = OB_INVALID_DATA;
-    LOG_WARN("The bloom filter build task is not valid, ",
-      K_(macro_id), K_(prefix_len), K(ret));
   } else if (OB_FAIL(build_bloom_filter())) {
   } else {
     LOG_INFO("Success to build bloom filter, ", K_(table_id), K_(macro_id), K_(prefix_len));
@@ -161,7 +159,6 @@ int ObBloomFilterBuildTask::build_bloom_filter()
       } else if (OB_FAIL(macro_bare_iter->get_macro_block_header(macro_header))) {
       } else if (OB_UNLIKELY(!macro_header.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Invalid macro block header", K(ret), K(macro_header));
       } else if (OB_FAIL(bfcache_value.init(prefix_len_, macro_header.fixed_header_.row_count_))) {
       } else {
         ObStorageDatumUtils datum_utils;
@@ -178,7 +175,6 @@ int ObBloomFilterBuildTask::build_bloom_filter()
           }
         }
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("Fail to iterate macro block", K(ret));
         } else if (OB_FAIL(ObStorageCacheSuite::get_instance().get_bf_cache().put_bloom_filter(macro_id_, bfcache_value))) {
         }
       }

@@ -66,7 +66,6 @@ int calc_charset_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
     ObCharsetType charset_type = ObCharset::charset_type_by_coll(cs_type);
     if (CHARSET_INVALID == charset_type) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("invalid collation type", K(ret), K(cs_type));
     } else {
       charset_str = ObCharset::charset_name(charset_type);
       res_datum.set_string(charset_str);
@@ -293,12 +292,10 @@ int calc_set_collation_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_dat
   ObDatum *cs_arg = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, dst_arg)) ||
       OB_FAIL(expr.args_[1]->eval(ctx, cs_arg))) {
-    LOG_WARN("eval arg failed", K(ret), KP(dst_arg), KP(cs_arg));
   } else if (dst_arg->is_null()) {
     res_datum.set_null();
   } else if (cs_arg->is_null()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cs_arg cannot be null", K(ret));
   } else {
     ObCollationType dst_coll = static_cast<ObCollationType>(cs_arg->get_int());
     ObCharsetType ori_charset_type =
@@ -382,7 +379,6 @@ int calc_cmp_meta_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   const char *ptr = helper.convert(expr.args_[0]->obj_meta_);
   if (OB_ISNULL(ptr)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to convert obj_meta", K(ret));
   } else if (OB_FAIL(ob_alloc_printf(res_str, res_alloc, "%s", ptr))) {
   } else {
     res_datum.set_string(res_str);

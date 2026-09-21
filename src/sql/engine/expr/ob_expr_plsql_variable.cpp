@@ -43,7 +43,6 @@ int ObExprPLSQLVariable::assign(const ObExprOperator &other)
   const ObExprPLSQLVariable *tmp = dynamic_cast<const ObExprPLSQLVariable *>(&other);
   if (OB_UNLIKELY(OB_ISNULL(tmp))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument. wrong type for other", K(other), K(ret));
   } else if (OB_LIKELY(this != tmp)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
     } else {
@@ -86,7 +85,6 @@ int ObExprPLSQLVariable::calc_result_type0(
           type.set_length_semantics(LS_BYTE);
         }
       } else {
-        LOG_WARN("failed to get system variable by name", K(ret), K(plsql_variable_));
       }
     } else {
       type.set_meta(value.get_meta());
@@ -147,7 +145,6 @@ int ObExprPLSQLVariable::cg_expr(ObExprCGCtx &op_cg_ctx,
   ObPLSQLVariableInfo *info = OB_NEWx(ObPLSQLVariableInfo, (&alloc), alloc, T_FUN_PLSQL_VARIABLE);
   if (NULL == info) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("allocate memory failed", K(ret));
   } else {
     OZ(info->from_raw_expr(fun_sys, alloc));
     info->result_type_ = result_type_;
@@ -163,7 +160,6 @@ int ObExprPLSQLVariable::eval_plsql_variable(const ObExpr &expr, ObEvalCtx &ctx,
   ObObj result;
   if (OB_ISNULL(info) || OB_ISNULL(ctx.exec_ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get expr info", K(ret));
   } else if (0 == info->plsql_variable_.case_compare("PLSQL_LINE")) {
     result.set_int32(info->plsql_line_);
   } else if (0 == info->plsql_variable_.case_compare("PLSQL_UNIT")
@@ -182,7 +178,6 @@ int ObExprPLSQLVariable::eval_plsql_variable(const ObExpr &expr, ObEvalCtx &ctx,
         result.set_null();
         OX (result.set_collation_type(ObCharset::get_system_collation()));
       } else {
-        LOG_WARN("failed to get system variable by name", K(ret), K(info->plsql_variable_));
       }
     }
   }

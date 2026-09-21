@@ -47,7 +47,6 @@ int ObMPPing::process()
   if (OB_FAIL(get_session(session))) {
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql session info is null", K(ret));
   } else if (FALSE_IT(session->update_last_active_time())) {
     // COM_PING used for keepping connection alive
   } else {

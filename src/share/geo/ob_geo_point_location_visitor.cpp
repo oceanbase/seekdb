@@ -36,7 +36,6 @@ int ObGeoPointLocationVisitor::calculate_ring_intersects_cnt(T &ext, uint32_t &i
   int ret = OB_SUCCESS;
   if (ext.size() <= 1) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid exterior ring", K(ret), K(ext.size()));
   } else {
     typename T::const_iterator iter_befor = ext.begin();
     typename T::const_iterator iter_cur = ext.begin() + 1;

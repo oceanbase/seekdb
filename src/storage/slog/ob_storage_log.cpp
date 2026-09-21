@@ -22,40 +22,6 @@ namespace oceanbase
 using namespace share;
 namespace storage
 {
-ObCreateRuntimePrepareLog::ObCreateRuntimePrepareLog(omt::ObServerRuntimeMeta &meta)
-  : meta_(meta)
-{
-}
-
-bool ObCreateRuntimePrepareLog::is_valid() const
-{
-  return meta_.is_valid();
-}
-
-OB_SERIALIZE_MEMBER(ObCreateRuntimePrepareLog, meta_);
-
-ObCreateRuntimeCommitLog::ObCreateRuntimeCommitLog()
-{
-}
-
-bool ObCreateRuntimeCommitLog::is_valid() const
-{
-  return true;
-}
-
-OB_SERIALIZE_MEMBER(ObCreateRuntimeCommitLog);
-
-ObCreateRuntimeAbortLog::ObCreateRuntimeAbortLog()
-{
-}
-
-bool ObCreateRuntimeAbortLog::is_valid() const
-{
-  return true;
-}
-
-OB_SERIALIZE_MEMBER(ObCreateRuntimeAbortLog);
-
 ObUpdateServerResourcesLog::ObUpdateServerResourcesLog(share::ObServerRuntimeConfig &runtime_config)
   : runtime_config_(runtime_config)
 {
@@ -101,16 +67,6 @@ DEF_TO_STRING(ObLSMetaLog)
 }
 
 OB_SERIALIZE_MEMBER(ObLSMetaLog, ls_meta_);
-
-DEF_TO_STRING(ObLSMarkerLog)
-{
-  int64_t pos = 0;
-  J_OBJ_START();
-  J_OBJ_END();
-  return pos;
-}
-
-OB_SERIALIZE_MEMBER(ObLSMarkerLog);
 
 ObDeleteTabletLog::ObDeleteTabletLog()
   : tablet_id_()

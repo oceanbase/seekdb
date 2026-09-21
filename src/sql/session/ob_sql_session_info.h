@@ -431,7 +431,7 @@ public:
   void reset_show_warnings_buf() { show_warnings_buf_.reset(); }
   ObPrivSet get_user_priv_set() const { return user_priv_set_; }
   ObPrivSet get_db_priv_set() const { return db_priv_set_; }
-  void *get_btree_iter_cache() { return btree_iter_cache_; }
+  void *get_iter_cache() { return iter_cache_; }
   void set_user_priv_set(const ObPrivSet priv_set) { user_priv_set_ = priv_set; }
   void set_db_priv_set(const ObPrivSet priv_set) { db_priv_set_ = priv_set; }
   void set_show_warnings_buf(int error_code);
@@ -1070,7 +1070,7 @@ private:
   int64_t out_bytes_;
   share::schema::ObUserLoginInfo login_info_;
   dbms_scheduler::ObDBMSSchedJobInfo *job_info_; // dbms_scheduler related.
-  void *btree_iter_cache_;
+  void *iter_cache_;
   common::ObString audit_filter_name_;
   ObExecutingSqlStatRecord executing_sql_stat_record_;
 };

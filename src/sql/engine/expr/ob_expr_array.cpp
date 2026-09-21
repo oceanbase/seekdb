@@ -57,7 +57,6 @@ int ObExprArray::calc_result_typeN(ObExprResType& type,
   uint16_t subschema_id;
   if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("exec ctx is null", K(ret));
   } else if (param_num > MAX_ARRAY_ELEMENT_SIZE) {
     ret = OB_SIZE_OVERFLOW;
     OB_LOG(WARN, "array element size exceed max", K(ret), K(param_num), K(MAX_ARRAY_ELEMENT_SIZE));
@@ -90,14 +89,12 @@ int ObExprArray::eval_array(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
   if (OB_FAIL(ctx.exec_ctx_.get_sqludt_meta_by_subschema_id(subschema_id, value))) {
   } else if (value.type_ >= OB_SUBSCHEMA_MAX_TYPE) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid subschema type", K(ret), K(value));
   } else {
     ObIArrayType *arr_obj = NULL;
     coll_info = reinterpret_cast<const ObSqlCollectionInfo *>(value.value_);
     ObCollectionArrayType *arr_type = static_cast<ObCollectionArrayType *>(coll_info->collection_meta_);
     if (OB_ISNULL(coll_info)) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("collect info is null", K(ret), K(subschema_id));
     } else if (OB_FAIL(ObArrayTypeObjFactory::construct(tmp_allocator, *arr_type, arr_obj))) {
     } else {
       int num_args = expr.arg_cnt_;
@@ -150,14 +147,12 @@ int ObExprArray::add_elem_to_nested_array(ObIAllocator &tmp_allocator, ObEvalCtx
   if (OB_FAIL(ctx.exec_ctx_.get_sqludt_meta_by_subschema_id(subschema_id, value))) {
   } else if (value.type_ >= OB_SUBSCHEMA_MAX_TYPE) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid subschema type", K(ret), K(value));
   } else {
     ObIArrayType *arr_obj = NULL;
     const ObSqlCollectionInfo *coll_info = reinterpret_cast<const ObSqlCollectionInfo *>(value.value_);
     ObCollectionArrayType *arr_type = static_cast<ObCollectionArrayType *>(coll_info->collection_meta_);
     if (OB_ISNULL(coll_info)) {
       ret = OB_ERR_NULL_VALUE;
-      LOG_WARN("collect info is null", K(ret), K(subschema_id));
     } else if (OB_FAIL(ObArrayTypeObjFactory::construct(tmp_allocator, *arr_type, arr_obj))) {
     } else if (OB_FAIL(arr_obj->init(raw_bin))) {
     } else if (OB_FAIL(nest_array->push_back(*arr_obj))) {

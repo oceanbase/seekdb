@@ -159,7 +159,6 @@ int ObBloomFilter::merge(const ObBloomFilter &src_bf)
   if (OB_UNLIKELY(src_bf.bits_ == nullptr || bits_ == nullptr ||
                   src_bf.nhash_ != nhash_ || src_bf.nbit_ != nbit_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fail to merge bloom filter, invalid argument", K(ret), K(src_bf), KPC(this));
   } else {
     const int64_t nbyte = get_nbytes();
     for (int64_t i = 0; i < nbyte; ++i) {
@@ -599,7 +598,6 @@ int ObBloomFilterCache::inc_empty_read(
                   || !(empty_read_prefix > 0
                        && empty_read_prefix <= OB_USER_MAX_ROWKEY_COLUMN_NUMBER /* max rowkey column count */))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Invalid argument", K(ret), K(macro_id), K(table_id), K(empty_read_prefix));
   } else if (0 == bf_cache_miss_count_threshold_) {
     // bf cache is disabled, do nothing
   } else {
@@ -609,11 +607,9 @@ int ObBloomFilterCache::inc_empty_read(
     storage::ObEmptyReadCell *cell = nullptr;
     if (OB_UNLIKELY(!bfc_key.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("Invalid argument", K(bfc_key), K(ret));
     } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObEmptyReadBucket>()->get_cell(key_hash, cell))) {
     } else if (OB_ISNULL(cell)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Unexpected error, the cell value is NULL", K(ret));
     } else if (OB_FAIL(cell->inc_and_fetch(key_hash, empty_read_cnt, cur_cnt))) {
     } else if (cell->check_timeout()) {
       // do nothing

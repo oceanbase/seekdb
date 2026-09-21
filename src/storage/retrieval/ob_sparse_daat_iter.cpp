@@ -37,14 +37,12 @@ int ObSRMergeCmp::init(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(iter_ids)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr", K(ret), KP(iter_ids));
   } else {
     iter_ids_ = iter_ids;
     common::ObDatumBasicFuncs *basic_funcs = ObDatumFuncs::get_basic_func(id_meta.type_, id_meta.cs_type_);
     cmp_func_ = basic_funcs->null_first_cmp_;
     if (OB_ISNULL(cmp_func_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to init IRIterLoserTreeCmp", K(ret));
     } else {
       is_inited_ = true;
     }
@@ -60,7 +58,6 @@ int ObSRMergeCmp::cmp(
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else {
     int tmp_ret = 0;
     if (OB_FAIL(cmp_func_(
@@ -98,10 +95,8 @@ int ObSRDaaTIterImpl::init(
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("double initialization", K(ret));
   } else if (OB_UNLIKELY(iter_param.max_batch_size_ <= 0)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected max batch size", K(ret), K(iter_param.max_batch_size_));
   } else {
     iter_allocator_ = &iter_allocator;
     iter_param_ = &iter_param;
@@ -116,7 +111,6 @@ int ObSRDaaTIterImpl::init(
     if (OB_UNLIKELY(dim_iters.count() == 0)) {
     } else if (OB_NOT_NULL(iter_param_->dim_weights_) && dim_iters.count() != iter_param_->dim_weights_->count()) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected dim iters count", K(ret), K(dim_iters_->count()), KP(iter_param_->dim_weights_));
     } else if (FALSE_IT(iter_domain_ids_.set_allocator(iter_allocator_))) {
     } else if (OB_FAIL(iter_domain_ids_.init(dim_iters.count()))) {
     } else if (OB_FAIL(iter_domain_ids_.prepare_allocate(dim_iters.count()))) {
@@ -195,7 +189,6 @@ void ObSRDaaTIterImpl::reuse(const bool switch_tablet)
       double dim_score = 0.0;
       if (OB_ISNULL(dim_iter) || OB_ISNULL(iter_param_->dim_weights_)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unexpected null dimension iter", K(ret), K(i));
       } else if (OB_FAIL(dim_iter->get_dim_max_score(dim_score))) {
       } else {
         score += dim_score * iter_param_->field_boost_ * iter_param_->dim_weights_->at(i);
@@ -211,14 +204,11 @@ int ObSRDaaTIterImpl::get_next_row()
   int64_t count = 0;
   if (OB_FAIL(get_next_rows(1, count))) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("failed to get next row", K(ret));
     } else if (OB_UNLIKELY(count != 0)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected row count", K(ret), K(count));
     }
   } else if (OB_UNLIKELY(count != 1)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected row count", K(ret), K(count));
   }
   return ret;
 }
@@ -228,7 +218,6 @@ int ObSRDaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
   } else if (OB_UNLIKELY(0 == capacity)) {
     count = 0;
   } else if (0 == dim_iters_->count()) {
@@ -237,7 +226,6 @@ int ObSRDaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
     ret = OB_ITER_END;
   } else if (OB_FAIL(pre_process())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("failed to pre process", K(ret));
     } else {
       count = 0;
     }
@@ -247,14 +235,12 @@ int ObSRDaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
     while (OB_SUCC(ret) && count < real_capacity) {
       if (OB_FAIL(do_one_merge_round(count))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
-          LOG_WARN("failed to do one merge round", K(ret), K(count));
         }
       }
     }
 
     if (OB_SUCC(ret) || OB_ITER_END == ret) {
       if (count > 0 && OB_FAIL(project_results(count))) {
-        LOG_WARN("failed to project results", K(ret), K(count));
       }
     }
 
@@ -275,14 +261,11 @@ int ObSRDaaTIterImpl::do_one_merge_round(int64_t &count)
   const ObDatum *id_datum = nullptr;
   if (OB_FAIL(fill_merge_heap())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
-      LOG_WARN("failed to fill merge heap", K(ret));
     }
   } else if (OB_FAIL(collect_dims_by_id(id_datum, relevance, need_project))) {
   } else if (need_project && OB_FAIL(filter_on_demand(count, relevance, need_project))) {
-    LOG_WARN("failed to process filter", K(ret));
   } else if (need_project && OB_FAIL(cache_result(count, *id_datum, relevance))) {
     if (OB_ITER_END != ret) {
-      LOG_WARN("failed to cache result", K(ret));
     }
   }
   return ret;
@@ -297,7 +280,6 @@ int ObSRDaaTIterImpl::fill_merge_heap()
     ObISRDaaTDimIter *dim_iter = nullptr;
     if (OB_ISNULL(dim_iter = dim_iters_->at(iter_idx))) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null dimension iter", K(ret), K(iter_idx), KPC_(iter_param));
     } else if (OB_FAIL(dim_iter->get_next_row())) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
         LOG_WARN("fail to try load next batch dimension data", K(ret));\
@@ -318,7 +300,6 @@ int ObSRDaaTIterImpl::fill_merge_heap()
   } else if (merge_heap_->empty()) {
     ret = OB_ITER_END;
   } else if (0 != next_round_cnt_ && OB_FAIL(merge_heap_->rebuild())) {
-    LOG_WARN("fail to rebuild merge heap", K(ret));
   } else {
     next_round_cnt_ = 0;
   }
@@ -352,10 +333,8 @@ int ObSRDaaTIterImpl::collect_dims_by_id(const ObDatum *&id_datum, double &relev
     id_datum = iter_domain_ids_[iter_idx];
     if (OB_ISNULL(id_datum)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected null id datum", K(ret));
     } else if (OB_FAIL(relevance_collector_->get_result(relevance, got_valid_id))) {
     } else if (got_valid_id && OB_FAIL(process_collected_row(*id_datum, relevance))) {
-      LOG_WARN("failed to process collected row", K(ret));
     }
   }
 
@@ -380,7 +359,6 @@ int ObSRDaaTIterImpl::filter_on_demand(const int64_t count, const double relevan
   } else if (eval_ctx->is_vectorized()) {
     if (OB_UNLIKELY(count >= eval_ctx->max_batch_size_)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected count", K(ret), K(count), K(eval_ctx->max_batch_size_));
     } else {
       guard.set_batch_idx(count);
       ObDatum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
@@ -396,7 +374,6 @@ int ObSRDaaTIterImpl::filter_on_demand(const int64_t count, const double relevan
     }
   } else if (OB_UNLIKELY(0 != count)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected number of results to project", K(ret), K(count));
   } else {
     guard.set_batch_idx(0);
     ObDatum &relevance_proj_datum = relevance_proj_expr->locate_datum_for_write(*eval_ctx);
@@ -418,7 +395,6 @@ int ObSRDaaTIterImpl::cache_result(int64_t &count, const ObDatum &id_datum, cons
     // don't need to project
   } else if (OB_UNLIKELY(count >= buffered_domain_ids_.count() || count >= buffered_relevances_.count())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid buffered idx", K(ret), K(count), K(buffered_domain_ids_.count()), K(buffered_relevances_.count()));
   } else {
     buffered_domain_ids_[count].from_datum(id_datum);
     buffered_relevances_[count] = relevance;
@@ -460,7 +436,6 @@ int ObSRDaaTIterImpl::project_results(const int64_t count)
     }
   } else if (OB_UNLIKELY(1 != count)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected number of results to project", K(ret), K(count));
   } else {
     guard.set_batch_idx(0);
     ObDatum &id_proj_datum = id_proj_expr->locate_datum_for_write(*eval_ctx);
@@ -481,13 +456,11 @@ int ObSRDaaTIterImpl::init_merge_heap(const int64_t count)
   if (count <= ObSRSimpleMerger::USE_SIMPLE_MERGER_MAX_TABLE_CNT) {
     if (OB_ISNULL(simple_merge = OB_NEWx(ObSRSimpleMerger, iter_allocator_, merge_cmp_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate simple merger", K(ret), K(count));
     } else {
       merge_heap_ = simple_merge;
     }
   } else if (OB_ISNULL(loser_tree = OB_NEWx(ObSRLoserTree, iter_allocator_, merge_cmp_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed to allocate loser tree", K(ret));
   } else {
     merge_heap_ = loser_tree;
   }

@@ -32,7 +32,6 @@ int ObDASIter::set_merge_status(MergeType merge_type)
   for (uint32_t i = 0; i < children_cnt_; i++) {
     if (OB_ISNULL(children_[i])) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected nullptr das iter child", K(i), K_(children_cnt), K(ret));
     } else if (OB_FAIL(children_[i]->set_merge_status(merge_type))) {
     }
   }
@@ -44,10 +43,8 @@ int ObDASIter::init(ObDASIterParam &param)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("das iter init twice", K(ret));
   } else if (!param.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid das iter param", K(param), K(ret));
   } else {
     inited_ = true;
     type_ = param.type_;
@@ -69,7 +66,6 @@ int ObDASIter::reuse()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("reuse das iter before init", K(ret));
   } else if (OB_FAIL(inner_reuse())) {
   }
   return ret;
@@ -83,7 +79,6 @@ int ObDASIter::release()
   for (uint32_t i = 0; i < children_cnt_; i++) {
     if (OB_ISNULL(children_[i])) {
       tmp_ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected nullptr das iter child", K(i), K_(children_cnt), K(tmp_ret));
     } else if (OB_TMP_FAIL(children_[i]->release())) {
     }
     child_ret = tmp_ret;
@@ -109,7 +104,6 @@ int ObDASIter::get_next_row()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("das iter get next row before init", K(ret));
   } else {
     ret = inner_get_next_row();
   }
@@ -122,7 +116,6 @@ int ObDASIter::get_next_rows(int64_t &count, int64_t capacity)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("das iter get next rows before init", K(ret));
   } else {
     ret = inner_get_next_rows(count, capacity);
   }
@@ -135,7 +128,6 @@ int ObDASIter::get_domain_id_merge_iter(ObDASDomainIdMergeIter *&domain_id_merge
   domain_id_merge_iter = nullptr;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("das iter get next rows before init", K(ret));
   } else if (ObDASIterType::DAS_ITER_DOMAIN_ID_MERGE == type_) {
     domain_id_merge_iter = static_cast<ObDASDomainIdMergeIter *>(this);
   } else {
@@ -143,7 +135,6 @@ int ObDASIter::get_domain_id_merge_iter(ObDASDomainIdMergeIter *&domain_id_merge
       ObDASIter *iter = children_[i];
       if (OB_ISNULL(iter)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("das iter is nullptr", K(ret), KPC(iter));
       } else if (OB_FAIL(iter->get_domain_id_merge_iter(domain_id_merge_iter))) {
       }
     }

@@ -40,7 +40,6 @@ int ObExprInnerDecodeLike::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(6 != rt_expr.arg_cnt_)) {
     ret = OB_ERR_PARAM_SIZE;
-    LOG_WARN("invalid arg cnt of expr", K(ret), K(rt_expr));
   } else {
     rt_expr.eval_func_ = ObExprInnerDecodeLike::eval_inner_decode_like;
   }
@@ -59,19 +58,15 @@ int ObExprInnerDecodeLike::eval_inner_decode_like(const ObExpr &expr, ObEvalCtx 
   const ObDataTypeCastParams &dtc_params = ctx.exec_ctx_.get_my_session()->get_dtc_params();
   if (OB_ISNULL(expr.args_[0]) ||OB_ISNULL(expr.args_[1])) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, pattern, escape, is_start, col_type, col_collation, col_length))) {
   } else if (OB_ISNULL(pattern) || OB_ISNULL(escape)
             || OB_ISNULL(is_start) || OB_ISNULL(col_collation) || OB_ISNULL(col_length)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("params are unexpected null", K(ret), K(pattern), K(escape),
-                                           K(is_start), K(col_collation), K(col_length));
   } else if (pattern->is_null()) {
     //a like null return empty range
     expr_datum.set_null();
   } else if (col_length->get_int() <= 0) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument, unexpected length", K(ret));
   } else if (OB_FAIL(cast_like_obj_if_needed(ctx, *expr.args_[0], pattern, expr, pattern_val))) {
   } else {
     int64_t mbmaxlen = 1;
@@ -104,7 +99,6 @@ int ObExprInnerDecodeLike::eval_inner_decode_like(const ObExpr &expr, ObEvalCtx 
     } else if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(cs_type, mbmaxlen))) {
     } else if (OB_ISNULL(escape_str.ptr())) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Escape str should not be NULL", K(ret));
     } else if (OB_UNLIKELY(1 > escape_str.length())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("failed to check escape length", K(escape_str), K(escape_str.length()));
@@ -143,7 +137,6 @@ int ObExprInnerDecodeLike::eval_inner_decode_like(const ObExpr &expr, ObEvalCtx 
                                                static_cast<char*>(max_str_buf),
                                                &max_str_len,
                                                &prefix_len))) {
-        LOG_WARN("calc like range failed", K(ret), K(pattern_str), K(escape_str), K(cs_type));
         if (OB_EMPTY_RANGE == ret) {
           expr_datum.set_null();
           ret = OB_SUCCESS;
@@ -174,7 +167,6 @@ int ObExprInnerDecodeLike::eval_inner_decode_like(const ObExpr &expr, ObEvalCtx 
                                                      static_cast<char*>(max_str_buf),
                                                      &max_str_len))) {
               ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("calc like range failed", K(ret), K(pattern_str), K(escape_str), K(cs_type));
             }
           }
         }
@@ -191,7 +183,6 @@ int ObExprInnerDecodeLike::eval_inner_decode_like(const ObExpr &expr, ObEvalCtx 
           buf =  (char*)res_alloc.alloc(res_len);
           if (OB_ISNULL(buf)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("alloc memory failed", K(ret), K(min_str_len));
           } else {
             MEMCPY(buf, res_buf, res_len);
             expr_datum.set_string(buf, res_len);
@@ -211,7 +202,6 @@ int ObExprInnerDecodeLike::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (param_num != 6) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid param num", K(ret), K(param_num));
   } else {
     const ObObj &dest_type = types_stack[3].get_param();
     const ObObj &dest_collation = types_stack[4].get_param();
@@ -219,8 +209,6 @@ int ObExprInnerDecodeLike::calc_result_typeN(ObExprResType &type,
     if (!types_stack[2].is_int() || !types_stack[3].is_int() || !types_stack[4].is_int() || !types_stack[5].is_int()
         || !types_stack[1].is_string_type() || !types_stack[0].is_string_type()) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument, unexpected obj type", K(ret), K(types_stack[0]), K(types_stack[1]), K(types_stack[2]),
-                                                      K(types_stack[3]), K(types_stack[4]), K(types_stack[5]));
     } else {
       ObObjType expected_type = static_cast<ObObjType>(dest_type.get_int());
       ObCollationType cs_type = static_cast<ObCollationType>(dest_collation.get_int());
@@ -262,7 +250,6 @@ int ObExprInnerDecodeLike::cast_like_obj_if_needed(ObEvalCtx &ctx, const ObExpr 
       && pattern_expr.datum_meta_.cs_type_ == dst_expr.datum_meta_.cs_type_) {
     cast_datum = pattern_datum;
   } else if (OB_ISNULL(ctx.datum_caster_) && OB_FAIL(ctx.init_datum_caster())) {
-    LOG_WARN("init datum caster failed", K(ret));
   } else if (OB_FAIL(ctx.datum_caster_->to_type(dst_expr.datum_meta_, pattern_expr, cm, cast_datum, ctx.get_batch_idx()))) {
   }
   return ret;
@@ -290,16 +277,13 @@ int ObExprInnerDecodeLike::get_pattern_prefix_len(const ObCollationType &cs_type
       char *max_str_buf = NULL;
       if (OB_ISNULL(min_str_buf = (char *)allocator.alloc(min_str_len))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("no enough memory", K(ret), K(pattern_len));
       } else if (OB_ISNULL(max_str_buf = (char *)allocator.alloc(max_str_len))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_WARN("no enough memory", K(ret), K(pattern_len));
       } else if (OB_FAIL(ObCharset::like_range(cs_type, pattern_str, *(escape_str.ptr()),
                                        min_str_buf, &min_str_len,
                                        max_str_buf, &max_str_len,
                                        &prefix_len))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("failed to retrive like range", K(ret));
       } else {
         pattern_prefix_len = ObCharset::strlen_char(cs_type, min_str_buf, prefix_len);
       }

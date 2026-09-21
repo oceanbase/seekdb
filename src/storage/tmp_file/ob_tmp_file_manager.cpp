@@ -28,7 +28,6 @@ int ObTmpFileManager::server_module_init(ObTmpFileManager *&manager)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(manager)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("fail to initialize runtime tmp file manager, null pointer argument", KR(ret), KP(manager));
   } else if (OB_FAIL(manager->init())) {
   }
   return ret;
@@ -39,7 +38,6 @@ int ObTmpFileManager::init()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("ObTmpFileManager init twice", K(ret), K(is_inited_));
   } else {
     if (OB_FAIL(get_sn_file_manager().init())) {
     }
@@ -57,7 +55,6 @@ int ObTmpFileManager::start()
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().start())) {
     }
@@ -90,7 +87,6 @@ int ObTmpFileManager::alloc_dir(int64_t &dir_id)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().alloc_dir(dir_id))) {
     }
@@ -103,7 +99,6 @@ int ObTmpFileManager::open(int64_t &fd, const int64_t &dir_id, const char* const
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().open(fd, dir_id, label))) {
     }
@@ -116,7 +111,6 @@ int ObTmpFileManager::remove(const int64_t fd)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().remove(fd))) {
     }
@@ -130,7 +124,6 @@ int ObTmpFileManager::aio_read(const ObTmpFileIOInfo &io_info,
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().aio_read(io_info, io_handle))) {
     }
@@ -144,7 +137,6 @@ int ObTmpFileManager::aio_pread(const ObTmpFileIOInfo &io_info,
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().aio_pread(io_info, offset, io_handle))) {
     }
@@ -158,7 +150,6 @@ int ObTmpFileManager::read(const ObTmpFileIOInfo &io_info,
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().read(io_info, io_handle))) {
     }
@@ -172,7 +163,6 @@ int ObTmpFileManager::pread(const ObTmpFileIOInfo &io_info,
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().pread(io_info, offset, io_handle))) {
     }
@@ -186,7 +176,6 @@ int ObTmpFileManager::aio_write(const ObTmpFileIOInfo &io_info,
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().aio_write(io_info, io_handle))) {
     }
@@ -199,7 +188,6 @@ int ObTmpFileManager::write(const ObTmpFileIOInfo &io_info)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().write(io_info))) {
     }
@@ -212,7 +200,6 @@ int ObTmpFileManager::truncate(const int64_t fd, const int64_t offset)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().truncate(fd, offset))) {
     }
@@ -225,7 +212,6 @@ int ObTmpFileManager::seal(const int64_t fd)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(sn_file_manager_.seal(fd))) {
     }
@@ -238,7 +224,6 @@ int ObTmpFileManager::get_tmp_file_size(const int64_t fd, int64_t &file_size)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().get_tmp_file_size(fd, file_size))) {
     }
@@ -251,7 +236,6 @@ int ObTmpFileManager::get_tmp_file(const int64_t fd, ObITmpFileHandle &handle)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().ObITmpFileManager::get_tmp_file(fd, handle))) {
     }
@@ -264,7 +248,6 @@ int ObTmpFileManager::get_tmp_file_disk_usage(int64_t &disk_data_size, int64_t &
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().get_tmp_file_disk_usage(disk_data_size, occupied_disk_size))) {
     }
@@ -278,7 +261,6 @@ int ObTmpFileManager::get_tmp_file_fds(ObIArray<int64_t> &fd_arr)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().get_tmp_file_fds(fd_arr))) {
     }
@@ -293,10 +275,8 @@ int ObTmpFileManager::get_tmp_file_info(const int64_t fd, ObTmpFileInfo *tmp_fil
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObTmpFileManager has not been inited", KR(ret));
   } else if (OB_ISNULL(tmp_file_info)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), K(fd), KP(tmp_file_info));
   } else {
     if (OB_FAIL(get_sn_file_manager().get_tmp_file_info(fd, *tmp_file_info))) {
     }
@@ -379,7 +359,6 @@ int submit_io(const ObTmpFileIOInfo &io_info,
   if (OB_FAIL(ObTmpFileAccess::ensure(io_handle, impl))) {
   } else if (OB_ISNULL(get_tmp_file_manager())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("tmp file manager is not initialized", KR(ret));
   } else {
     tmp_file::ObTmpFileIOInfo impl_info;
     translate_io_info(io_info, impl_info);
@@ -511,7 +490,6 @@ int tmp_file_aio_pread(const ObTmpFileIOInfo &io_info,
   if (OB_FAIL(ObTmpFileAccess::ensure(io_handle, impl))) {
   } else if (OB_ISNULL(get_tmp_file_manager())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("tmp file manager is not initialized", KR(ret));
   } else {
     tmp_file::ObTmpFileIOInfo impl_info;
     translate_io_info(io_info, impl_info);
@@ -529,7 +507,6 @@ int tmp_file_pread(const ObTmpFileIOInfo &io_info,
   if (OB_FAIL(ObTmpFileAccess::ensure(io_handle, impl))) {
   } else if (OB_ISNULL(get_tmp_file_manager())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("tmp file manager is not initialized", KR(ret));
   } else {
     tmp_file::ObTmpFileIOInfo impl_info;
     translate_io_info(io_info, impl_info);

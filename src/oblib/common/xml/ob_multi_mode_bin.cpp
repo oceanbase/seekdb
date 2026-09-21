@@ -119,20 +119,17 @@ int ObMulBinHeaderSerializer::deserialize()
   INIT_SUCC(ret);
   if (data_len_ < 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("failed to deserialize, data len is 0", K(ret));
   } else {
     type_ = static_cast<ObMulModeNodeType>(*data_);
     if (is_scalar_data_type(type_) && is_extend_type(type_)) {
       if (data_len_ <= 2) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("failed to deserialize, data len is 2", K(ret), K(type_), K(data_len_));
       } else {
         type_ = eval_data_type(type_, static_cast<uint8_t>(data_[1]));
       }
     } else if (is_scalar_data_type(type_)) {
     } else if (data_len_ <= 2) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("failed to deserialize, data len less than 2", K(ret), K(type_), K(data_len_));
     } else {
       const ObMulModeBinHeader* header = reinterpret_cast<const ObMulModeBinHeader*>(data_);
       obj_var_size_ = ObMulModeVar::get_var_size(header->obj_size_type_);
@@ -151,8 +148,6 @@ int ObMulBinHeaderSerializer::deserialize()
 
       if (obj_var_offset_ + obj_var_size_ > data_len_) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("failed to deserialize, data len less than 2", K(ret), K(type_), 
-                K(data_len_), K(entry_var_size_), K(count_var_size_), K(obj_var_size_));
       } else {
         if (is_extend_type(type_)) {
           type_ = eval_data_type(type_, data_[2]);
@@ -201,7 +196,6 @@ int ObMulModeVar::read_var(const char *data, uint8_t type, uint64_t *var)
   INIT_SUCC(ret);
   if (OB_ISNULL(data)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("input data null val.", K(ret));
   } else {
     ObMulModeBinLenSize size = static_cast<ObMulModeBinLenSize>(type);
     switch (size) {
@@ -223,7 +217,6 @@ int ObMulModeVar::read_var(const char *data, uint8_t type, uint64_t *var)
       }
       default: {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("invalid var type.", K(ret), K(type));
         break;
       }
     }
@@ -244,7 +237,6 @@ int ObMulModeVar::read_size_var(const char *data, uint8_t var_size, int64_t *var
     *var = *reinterpret_cast<const int64_t*>(data);
   } else {
     ret = OB_NOT_SUPPORTED;
-    LOG_WARN("invalid var type.", K(ret), K(var_size));
   }
   return ret;
 }
@@ -256,7 +248,6 @@ int ObMulModeVar::set_var(uint64_t var, uint8_t type, char *pos)
   INIT_SUCC(ret);
   if (OB_ISNULL(pos)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("output pos is null.", K(ret));
   } else {
     ObMulModeBinLenSize size = static_cast<ObMulModeBinLenSize>(type);
     switch (size) {
@@ -282,7 +273,6 @@ int ObMulModeVar::set_var(uint64_t var, uint8_t type, char *pos)
       }
       default: {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("invalid var type.", K(ret), K(size));
         break;
       }
     }
@@ -325,7 +315,6 @@ int ObMulModeVar::read_var(const char *data, uint8_t type, int64_t *var)
   INIT_SUCC(ret);
   if (OB_ISNULL(data)) {
     ret = OB_ERR_NULL_VALUE;
-    LOG_WARN("input data is null.", K(ret));
   } else {
     ObMulModeBinLenSize size = static_cast<ObMulModeBinLenSize>(type);
     switch (size) {
@@ -347,7 +336,6 @@ int ObMulModeVar::read_var(const char *data, uint8_t type, int64_t *var)
       }
       default: {
         ret = OB_NOT_SUPPORTED;
-        LOG_WARN("invalid var type.", K(ret), K(type));
         break;
       }
     }

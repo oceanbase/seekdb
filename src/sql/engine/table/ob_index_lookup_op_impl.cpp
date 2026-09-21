@@ -49,7 +49,6 @@ int ObIndexLookupOpImpl::get_next_row()
           do_clear_evaluated_flag();
           if (OB_FAIL(get_next_row_from_index_table())) {
             if (OB_ITER_END != ret) {
-              LOG_WARN("get next row from index table failed", K(ret));
             } else {
               index_end_ = true;
               ret = OB_SUCCESS;
@@ -84,7 +83,6 @@ int ObIndexLookupOpImpl::get_next_row()
               state_ = INDEX_SCAN;
             }
           } else {
-            LOG_WARN("look up get next row failed", K(ret));
           }
         } else {
           got_next_row = true;
@@ -125,7 +123,6 @@ int ObIndexLookupOpImpl::get_next_rows(int64_t &count, int64_t capacity)
           do_clear_evaluated_flag();
           if (OB_FAIL(get_next_rows_from_index_table(rowkey_count, default_row_batch_cnt - lookup_rowkey_cnt_))) {
             if (OB_ITER_END != ret) {
-              LOG_WARN("get next rows from index table failed", K(ret));
             } else {
               if (rowkey_count == 0) {
                 index_end_ = true;
@@ -172,7 +169,6 @@ int ObIndexLookupOpImpl::get_next_rows(int64_t &count, int64_t capacity)
               }
             }
           } else {
-            LOG_WARN("look up get next rows failed", K(ret));
           }
         } else {
           got_next_rows = true;
@@ -206,7 +202,6 @@ int ObIndexLookupOpImpl::build_trans_datum(ObExpr *expr,
   datum_ptr = nullptr;
   if (OB_ISNULL(expr) || OB_ISNULL(eval_ctx)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr", K(ret), K(expr), K(eval_ctx));
   }
   if (OB_SUCC(ret)) {
     void *buf = nullptr;
@@ -215,7 +210,6 @@ int ObIndexLookupOpImpl::build_trans_datum(ObExpr *expr,
     int64_t len = sizeof(ObDatum) + col_datum.len_;
     if (OB_ISNULL(buf = alloc.alloc(len))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("allocate buffer failed", K(ret));
     } else if (FALSE_IT(datum_ptr = new (buf) ObDatum)) {
       // do nothing
     } else if (OB_FAIL(datum_ptr->deep_copy(col_datum, static_cast<char *>(buf), sizeof(ObDatum) + col_datum.len_, pos))) {

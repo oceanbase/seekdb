@@ -76,7 +76,6 @@ int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
   ObCollationType cs_type = CS_TYPE_INVALID;
   if (OB_ISNULL(session_info_) || OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("session is NULL", K(ret));
   } else if (OB_FAIL(session_info_->get_name_case_mode(mode))) {
   } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
   } else {
@@ -118,17 +117,14 @@ int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
          if (OB_FAIL(schema_checker_->check_table_exists(db_name, table_name, true, is_hidden, is_index_table))) {
          } else if (!is_index_table && // check again
              OB_FAIL(schema_checker_->check_table_exists(db_name, table_name, true, is_hidden, is_index_table, is_built_in_index))) {
-           LOG_WARN("fail to check table exist again", K(ret), K(db_name), K(table_name));
          } else if (OB_FAIL(ObSQLUtils::check_and_convert_table_name(cs_type, perserve_lettercase, table_name, stmt_type, is_index_table))) {
          }
       } else if (OB_ERR_TOO_LONG_IDENT == tmp_ret) {
         // For compatibility with MySQL, prioritize returning the error code from the first table name check
         ret = tmp_ret;
-        LOG_WARN("fail to check and convert table name", K(table_name), K(ret));
       } else {  } // do  nothing
     } else {
       ret = tmp_ret;
-      LOG_WARN("fail to check and convert table name", K(table_name), K(ret));
     }
   }
   return ret;
@@ -143,7 +139,6 @@ int ObStmtResolver::resolve_ref_factor(const ParseNode *node,
   ObNameCaseMode mode = OB_NAME_CASE_INVALID;
   if (OB_ISNULL(node) || OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("argument is NULL", K(node), K(session_info), K(ret));
   } else {
     ParseNode *db_node = node->children_[0];
     ParseNode *relation_node = node->children_[1];
@@ -184,10 +179,8 @@ int ObStmtResolver::resolve_database_factor(const ParseNode *node,
   database_id = OB_INVALID_ID;
   if (OB_ISNULL(node)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("node is NULL", K(ret));
   } else if (OB_UNLIKELY(T_IDENT != node->type_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("node type is not T_IDENT", K(ret), K(node->type_));
   } else if (FALSE_IT(db_name.assign_ptr(const_cast<char*>(node->str_value_),
                                   static_cast<int32_t>(node->str_len_)))) {
     // won't be here
@@ -203,7 +196,6 @@ int ObStmtResolver::normalize_table_or_database_names(ObString &name)
   ObNameCaseMode case_mode;
   if (name.empty() || OB_ISNULL(session_info_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid name is empty", K(name), K(ret));
   } else if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
   } else if (OB_LOWERCASE_AND_INSENSITIVE == case_mode) {
     ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, name);
@@ -261,11 +253,9 @@ int ObStmtResolver::check_table_name_equal(const ObString &name1, const ObString
   equal = false;
   if (OB_ISNULL(session_info_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected session info", K(ret));
   } else if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
   } else if (OB_NAME_CASE_INVALID == case_mode) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected name case mode", K(ret));
   } else {
     equal = ObCharset::case_mode_equal(case_mode, name1, name2);
   }

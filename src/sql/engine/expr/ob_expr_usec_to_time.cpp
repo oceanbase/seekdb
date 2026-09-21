@@ -73,7 +73,6 @@ int calc_usec_to_time_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datu
       if (!ObTimeConverter::is_valid_datetime(value)) {
         ret = OB_DATETIME_FUNCTION_OVERFLOW;
         value -= SEC_TO_USEC(offset);
-        LOG_WARN("datetime overflow", K(ret), K(value));
       } else {
         value -= SEC_TO_USEC(offset);
         res_datum.set_int(value);

@@ -50,7 +50,6 @@ int ObAnalyzeExecutor::execute(ObExecContext &ctx, ObAnalyzeStmt &stmt)
   ObSQLSessionInfo *session = ctx.get_my_session();
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(session));
   } else {
     
     bool write_enabled = false;
@@ -61,7 +60,6 @@ int ObAnalyzeExecutor::execute(ObExecContext &ctx, ObAnalyzeStmt &stmt)
     }
   }
   if (FAILEDx(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
-    LOG_WARN("failed to implicit commit before gather stats", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::cancel_async_gather_stats(ctx))) {
   } else if (OB_FAIL(stmt.fill_table_stat_params(ctx, params))) {
   } else {
@@ -75,7 +73,6 @@ int ObAnalyzeExecutor::execute(ObExecContext &ctx, ObAnalyzeStmt &stmt)
         bool cascade_indexes = true;
         if (OB_UNLIKELY(params.count() != 1)) {
           ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get unexpected error", K(ret), K(params));
         } else {
           ObArenaAllocator tmp_alloc("DeleteStats", OB_MALLOC_NORMAL_BLOCK_SIZE);
           params.at(0).allocator_ = &tmp_alloc;//use the temp allocator to free memory after delete stats.

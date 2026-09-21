@@ -89,7 +89,6 @@ int ObIndexBlockScanEstimator::init_index_scanner(ObSSTable &sstable)
               sstable.get_macro_offset()))) {
   }
   if (FAILEDx(sstable.get_index_tree_root(root_index_block_))) {
-    STORAGE_LOG(WARN, "Failed to get index tree root", K(ret));
   }
   return ret;
 }

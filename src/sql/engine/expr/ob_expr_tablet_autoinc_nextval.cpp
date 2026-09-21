@@ -66,8 +66,6 @@ int ObExprTabletAutoincNextval::calc_result_typeN(ObExprResType &type,
       ObObjTypeClass tc = ob_obj_type_class(type.get_type());
       if (!(ObNullTC == tc || ObIntTC == tc || ObUIntTC == tc)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("only int/uint type class supported for tablet auto_increment column",
-                 K(ret));
       } else {
         static_cast<ObObjMeta &>(type) = types_array[1];
       }

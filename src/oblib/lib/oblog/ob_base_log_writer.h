@@ -16,7 +16,7 @@
 
 #ifndef OB_BASE_LOG_WRITER_H_
 #define OB_BASE_LOG_WRITER_H_
-#include <pthread.h>
+#include <mutex>
 #include <stdint.h>
 #include <stdlib.h>
 #ifdef __linux__
@@ -101,10 +101,11 @@ public:
   }
 protected:
   void flush_log();
+  void flush_log_once();
   virtual void process_log_items(ObIBaseLogItem **items, const int64_t item_cnt, int64_t &finish_cnt) = 0;
 private:
   static void *flush_log_thread(void *arg);
-  void do_flush_log();
+  void do_flush_log(const bool drain_all = true);
   bool need_flush();
   virtual void drop_log_items(ObIBaseLogItem **items, const int64_t item_cnt);
 
@@ -124,7 +125,7 @@ protected:
   int64_t log_item_push_idx_ CACHE_ALIGNED;
   int64_t log_item_pop_idx_ CACHE_ALIGNED;
 
-  pthread_mutex_t thread_mutex_;
+  std::mutex thread_mutex_;
 
   SimpleCond* log_write_cond_;
   SimpleCond* log_flush_cond_;

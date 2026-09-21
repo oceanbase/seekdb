@@ -88,7 +88,6 @@ int ObExprPad::calc_pad_expr(const ObExpr &expr, ObEvalCtx &ctx,
   ObDatum *len = NULL;
   if (OB_UNLIKELY(3 != expr.arg_cnt_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid arg cnt, must be 3", K(ret), K(expr.arg_cnt_));
   } else if (OB_FAIL(expr.eval_param_value(ctx, src, pad, len))) {
   } else if (src->is_null() || pad->is_null() || len->is_null()) {
     res.set_null();
@@ -107,7 +106,6 @@ int ObExprPad::calc_pad_expr(const ObExpr &expr, ObEvalCtx &ctx,
       ObExprStrResAlloc res_alloc(expr, ctx); // make sure alloc() is called only once
       if (OB_ISNULL(session)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("session is NULL", K(ret));
       } else if (OB_FAIL(ObExprBaseLRpad::calc_mysql(ObExprBaseLRpad::RPAD_TYPE, expr, ctx,
                             *src, len_char, *pad, *session, res_alloc, res))) {
       }

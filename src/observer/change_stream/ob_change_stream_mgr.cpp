@@ -48,7 +48,6 @@ int ObChangeStreamMgr::server_module_init(
   int ret = common::OB_SUCCESS;
   if (OB_ISNULL(mgr)) {
     ret = common::OB_INVALID_ARGUMENT;
-    LOG_WARN("ObChangeStreamMgr: mgr is null", K(ret));
   } else if (OB_FAIL(
       mgr->init(log_storage, schema_publish_signal, run_wrapper))) {
   } else {
@@ -82,7 +81,6 @@ int ObChangeStreamMgr::start()
   int ret = common::OB_SUCCESS;
   if (!is_inited_) {
     ret = common::OB_NOT_INIT;
-    LOG_WARN("ObChangeStreamMgr is not inited", K(ret));
   } else {
     if (OB_FAIL(fetcher_.start())) {
     } else if (OB_FAIL(dispatcher_.start())) {
@@ -146,11 +144,8 @@ int ObChangeStreamMgr::wait_refresh_scn(
       ObCSDispatcher *dispatcher = (OB_NOT_NULL(mgr) ? &mgr->dispatcher_ : nullptr);
       if (now >= abs_timeout_us) {
         ret = OB_TIMEOUT;
-        LOG_WARN("wait change stream refresh scn timeout", KR(ret),
-                 K(safe_visible_scn), K(current_refresh_scn));
       } else if (OB_ISNULL(mgr) || !mgr->is_inited()) {
         ret = OB_NOT_INIT;
-        LOG_WARN("change stream mgr is not inited", KR(ret), KP(mgr));
       } else if (OB_FAIL(current_refresh_scn.convert_for_tx(
                      dispatcher->get_refresh_scn()))) {
       } else if (current_refresh_scn >= safe_visible_scn) {

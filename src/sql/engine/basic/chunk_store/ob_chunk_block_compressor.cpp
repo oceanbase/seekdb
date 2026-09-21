@@ -66,7 +66,6 @@ int ObChunkBlockCompressor::calc_need_size(int64_t in_size, int64_t &need_size)
     need_size = in_size;
   } else if (OB_ISNULL(compressor_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("compressor is unexpected null", K(ret), K_(compressor));
   } else if (OB_FAIL(compressor_->get_max_overflow_size(in_size, max_overflow_size))) {
   } else {
     need_size = max_overflow_size + in_size;
@@ -84,7 +83,6 @@ int ObChunkBlockCompressor::compress(const char *in, const int64_t in_size, cons
     out_size = in_size;
   } else if (OB_ISNULL(compressor_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("compressor is unexpected null", K(ret), K_(compressor));
   } else {
     int64_t comp_size = 0;
     if (OB_FAIL(compressor_->compress(in, in_size, out, max_comp_size, comp_size))) {
@@ -109,7 +107,6 @@ int ObChunkBlockCompressor::decompress(const char *in, const int64_t in_size,
     out_size = in_size;
   } else if (OB_ISNULL(compressor_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("compressor is unexpected null", K(ret), K_(compressor));
   } else if (OB_FAIL(compressor_->decompress(in, in_size, out, uncomp_size,
                                              decomp_size))) {
   } else {

@@ -67,7 +67,6 @@ int ObSQLClientRetry::read(ReadResult &res, const char *sql, const int32_t group
     ret = sql_client_->read(res, sql, group_id);
     if (OB_FAIL(ret)) {
       for (int32_t retry = 0; retry < retry_limit_ && OB_SUCCESS != ret; retry++) {
-        LOG_WARN("retry execute query when failed", K(ret), K(retry), K_(retry_limit), K(sql));
         ret = sql_client_->read(res, sql, group_id);
       }
     }

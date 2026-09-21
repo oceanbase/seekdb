@@ -33,8 +33,6 @@ int ObPxAdmission::get_parallel_session_target(ObSQLSessionInfo &session,
   parallel_servers_target = OB_PX_TARGET_MONITOR.get_parallel_servers_target();
   if (OB_UNLIKELY(minimal_session_target > parallel_servers_target)) {
     ret = OB_ERR_PARALLEL_SERVERS_TARGET_NOT_ENOUGH;
-    LOG_WARN("minimal_session_target is more than parallel_servers_target", K(ret),
-                                      K(minimal_session_target), K(parallel_servers_target));
   } else if (OB_LIKELY(true)) {
     session_target = parallel_servers_target;
     int64_t pmas = GCONF._parallel_max_active_sessions;
@@ -165,7 +163,6 @@ void ObPxAdmission::exit_query_admission(ObSQLSessionInfo &session,
     ObSqlExecutorCtx *task_exec_ctx = GET_SQL_EXECUTOR_CTX(exec_ctx);
     if (OB_ISNULL(task_exec_ctx)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("task executor ctx is null", K(ret));
     } else if (OB_FAIL(OB_PX_TARGET_MONITOR.release_target(
                    task_exec_ctx->get_admited_worker_cnt()))) {
     } else {

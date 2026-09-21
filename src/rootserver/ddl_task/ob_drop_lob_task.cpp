@@ -52,11 +52,8 @@ int ObDropLobTask::init(
   if (OB_UNLIKELY(task_id <= 0 || OB_INVALID_ID == data_table_id
       || schema_version <= 0 || parent_task_id < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", KR(ret), K(task_id), K(data_table_id),
-        K(schema_version), K(parent_task_id));
   } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, local management service is null", KR(ret));
   } else if (OB_FAIL(deep_copy_ddl_arg(allocator_, ddl_arg, ddl_arg_))) {
   } else {
     set_gmt_create(ObTimeUtility::current_time());
@@ -81,10 +78,8 @@ int ObDropLobTask::init(
   int64_t pos = 0;
   if (OB_UNLIKELY(!task_record.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", KR(ret), K(task_record));
   } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, local management service is null", KR(ret));
   } else {
   
     object_id_ = task_record.object_id_;
@@ -119,7 +114,6 @@ int ObDropLobTask::prepare(const ObDDLTaskStatus new_status)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDropLobTask has not been inited", KR(ret));
   } else if (OB_FAIL(switch_status(new_status, true, ret))) {
   }
   return ret;
@@ -134,12 +128,10 @@ int ObDropLobTask::drop_lob_impl()
   ObSqlString drop_lob_sql;
   if (OB_ISNULL(local_management_service_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, local_management_service is nullptr", KR(ret));
   } else if (OB_FAIL(local_management_service_->get_schema_service().get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, data_table_schema))) {
   } else if (OB_ISNULL(data_table_schema)) {
     ret = OB_SCHEMA_ERROR;
-    LOG_WARN("data table schema is null", KR(ret), K(object_id_));
   } else if (OB_FAIL(drop_lob_sql.assign(ddl_arg_.ddl_stmt_str_))) {
   } else {
     int64_t ddl_rpc_timeout = 0;
@@ -190,11 +182,9 @@ int ObDropLobTask::cleanup_impl()
   ObString unused_str;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (OB_FAIL(report_error_code(unused_str))) {
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*GCTX.sql_proxy_, task_id_))) {
   } else {
     need_retry_ = false;      // clean succ, stop the task
@@ -213,7 +203,6 @@ int ObDropLobTask::process()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("ObDropLobTask has not been inited", KR(ret));
   } else if (!need_retry()) {
     // task is done
   } else if (OB_FAIL(check_switch_succ_())) {
@@ -242,7 +231,6 @@ int ObDropLobTask::process()
         break;
       default:
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("error unexpected, task status is not valid", KR(ret), K(task_status_));
     }
   }
   return ret;
@@ -257,10 +245,8 @@ int ObDropLobTask::check_switch_succ_()
   bool is_index_exist = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
   } else if (OB_ISNULL(local_management_service_)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys", KR(ret));
   } else if (OB_FAIL(refresh_schema_version())) {
   } else if (OB_FAIL(local_management_service_->get_schema_service().get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, data_table_schema_ptr))) {
@@ -286,7 +272,6 @@ int ObDropLobTask::deep_copy_ddl_arg(common::ObIAllocator &allocator,
   const int64_t serialize_size = src_ddl_arg.get_serialize_size();
   if (OB_ISNULL(buf = static_cast<char *>(allocator.alloc(serialize_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("alloc memory failed", KR(ret), K(serialize_size));
   } else if (OB_FAIL(src_ddl_arg.ObDDLArg::serialize(buf, serialize_size, pos))) {
   } else if (OB_FALSE_IT(pos = 0)) {
   } else if (OB_FAIL(dst_ddl_arg.ObDDLArg::deserialize(buf, serialize_size, pos))) {
@@ -299,7 +284,6 @@ int ObDropLobTask::serialize_params_to_message(char *buf, const int64_t buf_size
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(nullptr == buf || buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), KP(buf), K(buf_size));
   } else if (OB_FAIL(ObDDLTask::serialize_params_to_message(buf, buf_size, pos))) {
   } else if (OB_FAIL(ddl_arg_.serialize(buf, buf_size, pos))) {
   }
@@ -312,7 +296,6 @@ int ObDropLobTask::deserialize_params_from_message(const char *buf, const int64_
   obcall::ObDDLArg tmp_ddl_arg;
   if (OB_UNLIKELY(nullptr == buf || buf_size <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), KP(buf), K(buf_size));
   } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(buf, buf_size, pos))) {
   } else if (OB_FAIL(tmp_ddl_arg.deserialize(buf, buf_size, pos))) {
   } else if (OB_FAIL(deep_copy_ddl_arg(allocator_, tmp_ddl_arg, ddl_arg_))) {

@@ -41,6 +41,10 @@ using NioStartFn = nio_reactor *(*)(const char *, uint32_t,
                                     int32_t *, int32_t);
 static_assert(std::is_same<decltype(&nio_start), NioStartFn>::value,
               "nio_start argument slots drifted");
+using NioGetBoundTcpPortFn = uint32_t (*)(const nio_reactor *);
+static_assert(std::is_same<decltype(&nio_get_bound_tcp_port),
+                           NioGetBoundTcpPortFn>::value,
+              "nio_get_bound_tcp_port signature drifted");
 
 // The single cross-language capability vocabulary: nio.h's NIO_CLIENT_* bits
 // must agree with C++'s ObClientCapabilityPos (Rust's capability.rs is pinned

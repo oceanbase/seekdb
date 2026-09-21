@@ -166,7 +166,6 @@ int scale_decimalint(const ObDecimalInt *decint, const int32_t int_bytes,
   int cmp_min = 0, cmp_max = 0;
   if (OB_ISNULL(decint)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid null decimal int", K(ret), K(decint));
   } else if (CM_IS_CONST_TO_DECIMAL_INT(cast_mode)) {
     ret = scale_const_decimalint_expr(decint, int_bytes, in_scale, out_scale, out_prec, cast_mode, val);
   } else if (CM_IS_COLUMN_CONVERT(cast_mode) || CM_IS_EXPLICIT_CAST(cast_mode)) {
@@ -233,15 +232,12 @@ int check_decimalint_accuracy(const ObCastMode cast_mode,
     is_finish = true;
   } else if (OB_ISNULL(res_decint)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid null decimal int", K(ret), K(res_decint));
   } else if (OB_UNLIKELY(precision < OB_MIN_DECIMAL_PRECISION
                          || precision > number::ObNumber::MAX_PRECISION)
              || OB_UNLIKELY(scale < 0 || scale > number::ObNumber::MAX_SCALE)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid precision and scale", K(ret), K(precision), K(scale));
   } else if (OB_UNLIKELY(precision < scale)) {
     ret = OB_ERR_M_BIGGER_THAN_D;
-    LOG_WARN("invalid precision and scale", K(ret), K(precision), K(scale));
   }
   if (OB_SUCC(ret) && !is_finish) {
     const ObDecimalInt *min_decint = nullptr, *max_decint = nullptr;
@@ -255,8 +251,6 @@ int check_decimalint_accuracy(const ObCastMode cast_mode,
     if (OB_ISNULL(cmp_fp) || OB_ISNULL(res_decint) || OB_ISNULL(min_decint)
         || OB_ISNULL(max_decint)) {
       ret = OB_ERR_UNDEFINED;
-      LOG_WARN("unexpected null cmp function", K(ret), K(int_bytes), K(int_bytes2), K(res_decint),
-               K(min_decint), K(max_decint));
     } else {
       int cmp_min = cmp_fp(res_decint, min_decint);
       int cmp_max = cmp_fp(res_decint, max_decint);

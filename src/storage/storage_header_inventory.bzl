@@ -713,7 +713,7 @@ STORAGE_PRIVATE_HEADERS = [
     "lob/ob_lob_retry.h",
     "lob/ob_lob_tablet_dml.h",
     "lob/ob_lob_write_buffer.h",
-    "memtable/mvcc/ob_btree_iter_cache.h",
+    "ob_iter_cache.h",
     "memtable/ob_memtable_compact_writer.h",
     "memtable/ob_memtable_ctx_obj_pool.h",
     "memtable/ob_memtable_read_row_util.h",

@@ -41,7 +41,6 @@ int ObDDLVectorUtils::new_vector_uniform(VecValueTypeClass value_tc,
   ObEvalInfo *eval_info = nullptr;
   if (OB_ISNULL(eval_info = OB_NEWx(ObEvalInfo, &allocator))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to new ObEvalInfo", KR(ret));
   } else {
     MEMSET(eval_info, 0, sizeof(ObEvalInfo));
     switch (value_tc) {
@@ -89,7 +88,6 @@ int ObDDLVectorUtils::new_vector_uniform(VecValueTypeClass value_tc,
 #undef UNIFORM_VECTOR_INIT_SWITCH
     default:
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected vector value type class", KR(ret), K(value_tc));
       break;
     }
   }

@@ -813,7 +813,6 @@ int ObFreezer::tablet_freeze(const ObIArray<ObTabletID> &tablet_ids,
   } else if (OB_FAIL(get_ls_weak_read_scn(freeze_snapshot_version))) {
   } else if (ObScnRange::MAX_SCN == freeze_snapshot_version || ObScnRange::MIN_SCN >= freeze_snapshot_version) {
     ret = OB_MINOR_FREEZE_NOT_ALLOW;
-    LOG_WARN("[Freezer] invalid weak read scn", K(ret));
   } else if (try_guard && OB_FAIL(guard.try_set_tablet_freeze_begin())) {
     STORAGE_LOG(WARN, "[Freezer] ls freeze is running", KR(ret), K(tablet_ids));
   } else if (OB_FAIL(loop_set_freeze_flag(max_loop_time))) {
@@ -945,7 +944,6 @@ int ObFreezer::set_tablet_freeze_flag_(const ObTabletID tablet_id,
     stat_.add_diagnose_info("fail to get tablet");
   } else if (FALSE_IT(tablet = tablet_handle.get_obj())) {
   } else if (OB_FAIL(tablet->get_protected_memtable_mgr_handle(protected_handle))) {
-    LOG_WARN("[Freezer] failed to get_protected_memtable_mgr_handle", K(ret), KPC(tablet));
 #ifdef ERRSIM
   } else if (frozen_memtable_handles.count() >= 1 && OB_FAIL(ret = ERRSIM_BATCH_TABLET_FREEZE_FAILURE)) {
     LOG_ERROR("[Freezer] errsim failure during freezer freeze", K(ret));
@@ -1022,7 +1020,6 @@ int ObFreezer::handle_no_active_memtable_(const ObTabletID &tablet_id,
     } else if (is_exist) {
       // we need to wait the current mini compaction dag to complete
       ret = OB_EAGAIN;
-      LOG_WARN("exist running mini compaction dag, try later", K(ret), K(tablet_id));
     } else if (OB_FAIL(get_ls_tablet_svr()->update_tablet_snapshot_version(tablet_id,
                                                                            freeze_snapshot_version.get_val_for_tx()))) {
     } else if (OB_FAIL(tablet->get_protected_memtable_mgr_handle(protected_handle))) {
@@ -1353,7 +1350,6 @@ int ObFreezer::decide_max_decided_scn(SCN &max_decided_scn)
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[Freezer] not inited", K(ret));
   } else if (OB_FAIL(get_ls_log_handler()->get_max_decided_scn(max_decided_scn))) {
     if (OB_STATE_NOT_MATCH == ret) {
       max_decided_scn.reset();
@@ -1374,7 +1370,6 @@ int ObFreezer::get_max_consequent_callbacked_scn(SCN &max_consequent_callbacked_
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LOG_WARN("[Freezer] not inited", K(ret));
   } else if (OB_FAIL(get_ls_log_handler()->get_max_decided_scn(max_consequent_callbacked_scn))) {
     if (OB_STATE_NOT_MATCH == ret) {
       max_consequent_callbacked_scn.set_min();

@@ -369,7 +369,6 @@ int ObFreezeInfoMgr::get_min_reserved_snapshot(
       freeze_info.frozen_scn_.set_min();
     } else if (OB_FAIL(get_freeze_info_compare_with_snapshot_version_(merged_version, share::ObFreezeInfoManager::CmpType::GREATER_THAN, freeze_info))) {
       if (OB_ENTRY_NOT_EXIST != ret) {
-        LOG_WARN("failed to get freeze info behind snapshot", K(ret), K(merged_version));
       } else {
         freeze_info.frozen_scn_.set_max();
         ret = OB_SUCCESS;

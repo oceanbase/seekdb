@@ -41,9 +41,7 @@ int ObLobSeqId::get_seq_id(int64_t idx, ObString &seq_id)
   INIT_SUCC(ret);
   if (seq_id.length() < sizeof(uint32_t)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("seq id buffer not enough", K(ret), K(idx), K(seq_id));
   } else if ((idx + 1) * ObLobSeqId::LOB_SEQ_STEP_LEN > ObLobSeqId::LOB_SEQ_STEP_MAX) {
-    LOG_WARN("idx too big", K(ret), K(idx));
   } else {
     uint32_t seq_num = (idx + 1) * ObLobSeqId::LOB_SEQ_STEP_LEN;
     ObLobSeqId::store32be(seq_id.ptr(), seq_num);
@@ -166,19 +164,14 @@ int ObLobSeqId::get_next_seq_id(ObString& seq_id, ObLobSeqId &end)
 {
   int ret = OB_SUCCESS;
   if (!parsed_ && OB_FAIL(parse())) {
-    LOG_WARN("failed get next seq id, parse failed.", K(ret), K(seq_id_));
   } else if (!end.parsed_ && OB_FAIL(end.parse())) {
-     LOG_WARN("failed get next seq id, parse end seq id failed.", K(ret), K(end.seq_id_));
   } else if (end.empty()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("end should not be empty", K(ret));
   } else if (compare(end) != -1) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("end is not bigger than this.", K(ret));
   } else if (empty()) {
     uint32_t val = (LOB_SEQ_ID_MIN > end.digits_[0] / 2) ? (end.digits_[0] / 2) : LOB_SEQ_ID_MIN;
     if (OB_FAIL(add_digits(LOB_SEQ_ID_MIN)) || OB_FAIL(append_seq_buf(LOB_SEQ_ID_MIN))) {
-      LOG_WARN("failed add seq node.", K(ret));
     } else {
       seq_id.assign_ptr(buf_, len_);
     }
@@ -198,7 +191,6 @@ int ObLobSeqId::get_next_seq_id(ObString& seq_id, ObLobSeqId &end)
     }
     if (need_expend) {
       if (OB_FAIL(add_digits(LOB_SEQ_ID_MIN)) || OB_FAIL(append_seq_buf(LOB_SEQ_ID_MIN))) {
-        LOG_WARN("failed add seq node.", K(ret), K(len_), K(cap_), K(dig_len_), K(dig_cap_));
       } else {
         seq_id.assign_ptr(buf_, len_);
       }
@@ -215,10 +207,8 @@ int ObLobSeqId::get_next_seq_id(ObString& seq_id)
   int ret = OB_SUCCESS;
   if (!parsed_ &&
       OB_FAIL(parse())) {
-    LOG_WARN("failed get next seq id, parse failed.", K(ret), K(seq_id_));
   } else if (empty()) {
     if (OB_FAIL(add_digits(LOB_SEQ_ID_MIN)) || OB_FAIL(append_seq_buf(LOB_SEQ_ID_MIN))) {
-      LOG_WARN("failed add seq node.", K(ret));
     } else {
       seq_id.assign_ptr(buf_, len_);
     }
@@ -227,7 +217,6 @@ int ObLobSeqId::get_next_seq_id(ObString& seq_id)
     cur += LOB_SEQ_STEP_LEN;
     if (cur > LOB_SEQ_STEP_MAX) {
       if (OB_FAIL(add_digits(LOB_SEQ_ID_MIN)) || OB_FAIL(append_seq_buf(LOB_SEQ_ID_MIN))) {
-        LOG_WARN("failed add seq node.", K(ret), K(len_), K(cap_), K(dig_len_), K(dig_cap_));
       } else {
         seq_id.assign_ptr(buf_, len_);
       }
@@ -250,10 +239,8 @@ int ObLobSeqId::init_digits()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("failed init digits, allocator is null.", K(ret));
   } else if (OB_ISNULL(digits_ = static_cast<uint32_t*>(allocator_->alloc(LOB_SEQ_DIGIT_DEFAULT_LEN * sizeof(uint32_t))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed init digits, allocator digits buf null.", K(ret));
   } else {
     MEMSET(digits_, 0, LOB_SEQ_DIGIT_DEFAULT_LEN * sizeof(uint32_t));
     dig_len_ = 0;
@@ -267,10 +254,8 @@ int ObLobSeqId::init_seq_buf()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("failed init seq buf, allocator is null.", K(ret));
   } else if (OB_ISNULL(buf_ = static_cast<char*>(allocator_->alloc(LOB_SEQ_DEFAULT_SEQ_BUF_LEN)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed init seq buf, allocator buf null.", K(ret));
   } else {
     MEMSET(buf_, 0, LOB_SEQ_DEFAULT_SEQ_BUF_LEN);
     len_ = 0;
@@ -283,7 +268,6 @@ int ObLobSeqId::add_digits(uint32_t val)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(digits_) && OB_FAIL(init_digits())) {
-    LOG_WARN("failed init digits, init digits failed.", K(ret));
   } else if (dig_len_ < dig_cap_) {
     digits_[dig_len_] = val;
     ++dig_len_;
@@ -299,7 +283,6 @@ int ObLobSeqId::append_seq_buf(uint32_t val)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(buf_) && OB_FAIL(init_seq_buf())) {
-    LOG_WARN("failed add seq buf, init seq buf failed.", K(ret));
   } else if (len_ + sizeof(val) < cap_) {
     last_seq_buf_pos_ = len_;
     (void)store32be(buf_ + len_, val);
@@ -318,7 +301,6 @@ int ObLobSeqId::replace_seq_buf_last_node(uint32_t val)
   if (last_seq_buf_pos_ + sizeof(val) < cap_) {
     if (dig_len_ == 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed replace seq digits array, digits is empty.", K(ret), K(dig_len_), K(dig_cap_));
     } else {
       digits_[dig_len_ - 1] = val;
       (void)store32be(buf_ + last_seq_buf_pos_, val);
@@ -338,7 +320,6 @@ int ObLobSeqId::extend_digits()
   uint32_t* extend_dig = NULL;
   if (OB_ISNULL(extend_dig = static_cast<uint32_t*>(allocator_->alloc(extend_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed extend dig buf, allocator buf null.", K(ret));
   } else {
     MEMCPY(extend_dig, digits_, dig_cap_ * sizeof(uint32_t));
     MEMSET(reinterpret_cast<char*>(extend_dig) + dig_cap_ * sizeof(uint32_t),
@@ -357,7 +338,6 @@ int ObLobSeqId::extend_seq_buf()
   char* extend_buf = NULL;
   if (OB_ISNULL(extend_buf = static_cast<char*>(allocator_->alloc(extend_len)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("failed init seq buf, allocator buf null.", K(ret));
   } else {
     MEMCPY(extend_buf, buf_, cap_);
     MEMSET(extend_buf + cap_, 0, cap_);
@@ -382,14 +362,12 @@ int ObLobSeqId::parse()
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("failed parse seq_id, allocator is null.", K(ret));
   } else {
     ObString tmp_seq = seq_id_;
     size_t len = tmp_seq.length();
 
     if ((len % sizeof(uint32_t)) > 0) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("fail parse seq, internel unexpected.", K(ret), K(len));
     } else {
       const uint32_t* ori_dig = reinterpret_cast<const uint32_t*>(tmp_seq.ptr());
       const uint32_t ori_len = len / sizeof(uint32_t);

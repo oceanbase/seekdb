@@ -44,7 +44,6 @@ int ObRLEEncoder::init(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnEncoder::init(ctx, column_index, rows))) {
   } else if (OB_FAIL(dict_encoder_.init(ctx, column_index, rows))) {
   } else {
@@ -70,7 +69,6 @@ int ObRLEEncoder::traverse(bool &suitable)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(dict_encoder_.traverse(suitable))) {
   } else {
     // FIXME: maybe we can decide whether RLE is
@@ -104,8 +102,6 @@ int ObRLEEncoder::traverse(bool &suitable)
       suitable = false;
     } else if (OB_UNLIKELY(max_rle_row_id > UINT32_MAX || max_ref > UINT32_MAX)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("row_id_byte and ref_byte should be less than or equal to 2",
-          K(ret), K(max_rle_row_id), K(max_ref));
     } else {
       row_id_byte_ = get_byte_packed_int_size(max_rle_row_id);
       ref_byte_ = get_byte_packed_int_size(max_ref);
@@ -136,7 +132,6 @@ int ObRLEEncoder::store_meta(ObBufferWriter &buf_writer)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     char *buf = buf_writer.current();
     rle_meta_header_ = reinterpret_cast<ObRLEMetaHeader *>(buf);
@@ -183,7 +178,6 @@ int ObRLEEncoder::store_data(const int64_t row_id, ObBitStream &bs,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     UNUSED(row_id);
     UNUSED(bs);
@@ -198,7 +192,6 @@ int ObRLEEncoder::get_row_checksum(int64_t &checksum) const
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
   } else {
     checksum = 0;
     FOREACH(l, *ht_) {

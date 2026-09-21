@@ -41,7 +41,6 @@ int ObExprPLSQLCodeSQLErrm::assign(const ObExprOperator &other)
   const ObExprPLSQLCodeSQLErrm *tmp = dynamic_cast<const ObExprPLSQLCodeSQLErrm *>(&other);
   if (OB_UNLIKELY(OB_ISNULL(tmp))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument. wrong type for other", K(other), K(ret));
   } else if (OB_LIKELY(this != tmp)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
     } else {
@@ -59,7 +58,6 @@ int ObExprPLSQLCodeSQLErrm::calc_result_typeN(ObExprResType &type,
   int ret = OB_SUCCESS;
   if (param_num > 1) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid number of arguments", K(param_num), K(ret));
   } else {
     if (is_sqlcode_) {
       type.set_int32();
