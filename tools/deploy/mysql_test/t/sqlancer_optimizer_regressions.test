@@ -51,6 +51,13 @@ set ob_query_timeout = 10000000;
 
 select count(*) as d7_window_timeout_count from (select * from (select /*+ parallel(9) */ d7_t0.c4 as c0, rank() over(partition by d7_t0.c1, d7_t0.c3 order by d7_t0.c4 desc) as wf from d7_t0 inner join d7_t2 on (d7_t0.c4) != (d7_t2.c4)) l0 where (c0,wf) not in (select d7_t0.c4, d7_t0.c1 from d7_t0 where (999) not in (d7_t0.c3, d7_t0.c3)) order by c0 asc) q;
 
+create table d8_t2(c0 decimal(10, 0), c1 int, c2 int, primary key(c2)) partition by hash(c2) partitions 4;
+create table d8_t3(c0 longtext, c1 varchar(32), c2 datetime, c3 bigint generated always as (length(c0)) stored);
+insert into d8_t2 values (10, 100, 1), (20, 200, 2), (30, 300, 100);
+insert into d8_t3(c0, c1, c2) values ('10', 'a', '2026-09-21 07:39:41'), ('20', 'b', '2026-09-21 07:39:41');
+
+select count(*) as d8_seek646_window_count from (select all * from (select /*+ parallel(5),enable_parallel_dml */ d8_t3.c2 as c0, d8_t2.c2 as c1, d8_t3.c1 as c2, d8_t2.c1 as c3, d8_t2.c0 as c4, dense_rank() over(partition by d8_t2.c2, d8_t3.c2 order by d8_t3.c2, d8_t2.c2, d8_t3.c1, d8_t2.c1, d8_t2.c0 desc) as wf from d8_t3 left join d8_t2 on (d8_t3.c0) > (d8_t2.c2)) l0 where (c1,c0,concat(c4,''),c3) not in (select all d8_t3.c3, d8_t3.c2, d8_t3.c1, d8_t3.c3 from d8_t3) order by c1 asc) q;
+
 --disable_warnings
 drop database if exists sqlancer_optimizer_regressions;
 --enable_warnings
