@@ -110,11 +110,6 @@ int ObTableReplaceOp::check_need_exec_single_row()
 {
   int ret = OB_SUCCESS;
   ret = ObTableModifyOp::check_need_exec_single_row();
-  if (OB_SUCC(ret) && MY_SPEC.plan_->contain_pl_udf_or_trigger()) {
-    // Finish each replacement before evaluating the next input row's PL UDFs.
-    // Otherwise a later conflict could roll back their nested DML as well.
-    execute_single_row_ = true;
-  }
   if (OB_SUCC(ret) && !execute_single_row_) {
     ObReplaceCtDef *replace_ctdef = MY_SPEC.replace_ctdefs_.at(0);
     const ObInsCtDef *ins_ctdef = replace_ctdef->ins_ctdef_;
@@ -352,7 +347,11 @@ OB_INLINE int ObTableReplaceOp::load_all_replace_row(bool &is_iter_end,
       if (OB_ITER_END != ret) {
       }
     } else if (MY_SPEC.plan_->contain_pl_udf_or_trigger() && OB_FAIL(eval_replace_input())) {
-    } else if (row_cnt == 0 &&
+    // Trial inserts only buffer DAS_SERIALIZATION tasks until loading finishes.
+    // Advance past every input UDF's writes, including later rows in this batch.
+    // Writing triggers already force single-row execution, so their effects
+    // remain after the savepoint and are undone before the conflict retry.
+    } else if ((row_cnt == 0 || MY_SPEC.plan_->contain_pl_udf_or_trigger()) &&
                OB_FAIL(ObSqlTransControl::create_anonymous_savepoint(ctx_, savepoint_no))) {
     } else if (OB_FAIL(insert_row_to_das(is_skipped))) {
     } else if (get_all_saved_exprs().empty()) {
