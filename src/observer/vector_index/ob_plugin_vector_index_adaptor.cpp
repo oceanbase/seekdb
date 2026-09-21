@@ -3922,6 +3922,15 @@ int ObPluginVectorIndexAdaptor::query_result(ObVectorQueryAdaptorResultContext *
     if (query_cond->only_complete_data_) {
       // do nothing
     } else if (OB_FAIL(vsag_query_vids(ctx, query_cond, dim, query_vector, vids_iter))) {
+      if (ret == OB_ERR_VSAG_RETURN_ERROR) {
+        // The in-memory index can be replaced while a query is starting.  Use
+        // the normal refresh path for the same transient VSAG error handled
+        // below after snapshot loading.
+        ctx->status_ = PVQ_REFRESH;
+        LOG_INFO("vsag query got transient error, mark refresh",
+            K(ret), K(snapshot_tablet_id_), K(get_snapshot_key_prefix()));
+        ret = OB_SUCCESS;
+      }
     }
   } else { // need load data
     if (OB_ISNULL(query_cond->row_iter_) || OB_ISNULL(query_cond->scan_param_)) {
@@ -3963,6 +3972,15 @@ int ObPluginVectorIndexAdaptor::query_result(ObVectorQueryAdaptorResultContext *
     } else if (query_cond->only_complete_data_) {
       // do nothing
     } else if (OB_FAIL(vsag_query_vids(ctx, query_cond, dim, query_vector, vids_iter))) {
+      if (ret == OB_ERR_VSAG_RETURN_ERROR) {
+        // A query can race with an index refresh/replacement just as the
+        // snapshot deserialization above can.  Return the existing refresh
+        // status instead of exposing a transient VSAG error to SQL.
+        ctx->status_ = PVQ_REFRESH;
+        LOG_INFO("vsag query got transient error, mark refresh",
+            K(ret), K(snapshot_tablet_id_), K(get_snapshot_key_prefix()));
+        ret = OB_SUCCESS;
+      }
     } else {
       close_snap_data_rb_flag();
     }

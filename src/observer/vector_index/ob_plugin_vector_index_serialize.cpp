@@ -100,20 +100,43 @@ int ObIStreamBuf::init()
 ObIStreamBuf::pos_type ObIStreamBuf::seekoff(off_type off, std::ios_base::seekdir dir, std::ios_base::openmode mode)
 {
   UNUSED(mode);
-  pos_type ret = 0;
+  pos_type ret = pos_type(off_type(-1));
   if (is_success()) {
     if (!is_valid()) {
       last_error_code_ = do_callback();
     }
     if (is_valid() && is_success()) {
       if (std::ios_base::cur == dir) {
-        gbump(static_cast<int>(off));
+        if (synthetic_end_) {
+          ret = pos_type(std::numeric_limits<off_type>::max() + off);
+        } else if (off >= 0 && off <= egptr() - gptr()) {
+          gbump(static_cast<int>(off));
+          ret = pos_type(stream_pos_ + (gptr() - eback()));
+        }
       } else if (std::ios_base::end == dir) {
-        setg(eback(), egptr() + off, egptr());
+        // The stream is forward-only across callback buffers.  Returning a
+        // synthetic end lets VSAG discover that the stream is unbounded from
+        // the streambuf's point of view; it must still seek back to its saved
+        // cursor before reading.  Reporting egptr() here would make VSAG's
+        // BufferStreamReader cap the whole index at one LOB block.
+        synthetic_end_ = true;
+        ret = pos_type(std::numeric_limits<off_type>::max() + off);
       } else if (std::ios_base::beg == dir) {
-        setg(eback(), eback() + off, egptr());
+        if (off >= 0 && off <= egptr() - eback()) {
+          synthetic_end_ = false;
+          setg(eback(), eback() + off, egptr());
+          stream_pos_ = off;
+          ret = pos_type(stream_pos_ + (gptr() - eback()));
+        } else if (off >= 0) {
+          // A callback-backed stream cannot seek to a position in a future
+          // block.  VSAG probes the end of the stream before deciding that
+          // the legacy format has no footer; keep that probe non-fatal and
+          // leave the current block selected.  The following PopSeek(0)
+          // restores the saved cursor before any real data is consumed.
+          synthetic_end_ = true;
+          ret = pos_type(off);
+        }
       }
-      ret = gptr() - eback();
     }
   }
   return ret;
@@ -174,6 +197,11 @@ int ObIStreamBuf::do_callback()
   int ret = OB_SUCCESS;
   char *read_data = data_;
   int64_t read_size = 0;
+  if (is_valid()) {
+    // do_callback() is called only after the current get area is consumed.
+    // Advance the logical position before replacing the callback buffer.
+    stream_pos_ += egptr() - eback();
+  }
   // The input callback may return a LOB block directly instead of filling
   // data_.  The returned size is therefore the only valid readable range.
   if (OB_FAIL(cb_(read_data, capacity_, read_size, cb_param_))) {

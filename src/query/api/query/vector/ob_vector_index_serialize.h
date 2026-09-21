@@ -16,6 +16,7 @@
 #ifndef OCEANBASE_QUERY_VECTOR_INDEX_SERIALIZE_H_
 #define OCEANBASE_QUERY_VECTOR_INDEX_SERIALIZE_H_
 #include <iostream>
+#include <limits>
 #include "lib/function/ob_function.h"
 #include "lib/allocator/page_arena.h"
 #include "common/row/ob_row_iterator.h"
@@ -91,7 +92,9 @@ public:
   explicit ObIStreamBuf(char *data, const int64_t capacity, CbParam &cb_param, Callback &cb) 
     : ObStreamBuf(data, capacity),
       cb_param_(cb_param),
-      cb_(cb)
+      cb_(cb),
+      stream_pos_(0),
+      synthetic_end_(false)
   {
     setg(data_, data_, data_);
   }
@@ -114,6 +117,12 @@ private:
 private:
   CbParam &cb_param_;
   Callback cb_;
+  // Position of the current callback buffer in the logical input stream.
+  int64_t stream_pos_;
+  // IOStreamReader probes the stream length with seekg(0, end).  The input
+  // is callback-backed and has no seekable end, so retain a synthetic end
+  // position until the caller seeks back to the saved cursor.
+  bool synthetic_end_;
 };
 
 class ObHNSWDeserializeCallback {
