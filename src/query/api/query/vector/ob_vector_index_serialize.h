@@ -59,12 +59,6 @@ public:
   struct CbParam
   {
     virtual ~CbParam() = default;
-    virtual int prepare_stream_size() { return OB_NOT_SUPPORTED; }
-    virtual int get_stream_size(int64_t &size) const
-    {
-      size = 0;
-      return OB_NOT_SUPPORTED;
-    }
   };
   using Callback = ObFunction<int(const char *, const int64_t, CbParam &)>;
   explicit ObOStreamBuf(char *data, const int64_t capacity, CbParam &cb_param, Callback &cb) 
@@ -97,6 +91,12 @@ public:
   struct CbParam
   {
     virtual ~CbParam() = default;
+    virtual int prepare_stream_size() { return OB_NOT_SUPPORTED; }
+    virtual int get_stream_size(int64_t &size) const
+    {
+      size = 0;
+      return OB_NOT_SUPPORTED;
+    }
   };
   using Callback = ObFunction<int(char *&, const int64_t, int64_t &, CbParam &)>;
   explicit ObIStreamBuf(char *data, const int64_t capacity, CbParam &cb_param, Callback &cb) 
