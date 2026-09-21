@@ -64,12 +64,8 @@ class ObILogReplayService
 public:
   virtual int is_replay_done(const palf::LSN &end_lsn, bool &is_done) = 0;
   virtual int is_submit_task_clear(bool &is_clear) = 0;
-  virtual int enable_local_replay(const palf::LSN &begin_lsn,
-                                  const share::SCN &base_scn) = 0;
   virtual int disable_local_replay() = 0;
-  // The caller must hold the target LS lifecycle write lock.
-  virtual int try_release_submit_iterator(SubmitIteratorReleaseState &state,
-                                          int64_t &iterator_generation) = 0;
+  virtual int try_release_submit_iterator(SubmitIteratorReleaseState &state) = 0;
 };
 /*
 TODO(yaoying.yyy): memory management of replayservice needs to be documented
@@ -100,10 +96,7 @@ public:
   int block_submit_log();
   int unblock_submit_log();
   int disable_local_replay();
-  int try_release_submit_iterator(SubmitIteratorReleaseState &state,
-                                  int64_t &iterator_generation);
-  int enable_local_replay(const palf::LSN &begin_lsn,
-                          const share::SCN &base_scn);
+  int try_release_submit_iterator(SubmitIteratorReleaseState &state);
   int is_replay_done(const palf::LSN &end_lsn,
                      bool &is_done);
   int is_submit_task_clear(bool &is_clear);

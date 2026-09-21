@@ -14,12 +14,8 @@ project("OceanBase"
 
 option(OB_ENABLE_STANDBY "Build physical standby support" ON)
 option(ENABLE_SANITY "Build with seekdb memory Sanity instrumentation" OFF)
-option(ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK
-  "Build the replay submit iterator integration-test hook" OFF)
 
-# EL7's supported Python 3 interpreter is 3.6. Keep configure-time generators
-# compatible with that floor and reject older interpreters explicitly.
-find_package(Python3 3.6 REQUIRED COMPONENTS Interpreter)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
 set(SEEKDB_GENERATED_ROOT "${CMAKE_BINARY_DIR}/generated")
 set(SEEKDB_INNER_TABLE_GENERATOR
   "${CMAKE_SOURCE_DIR}/src/share/inner_table/generate_inner_table_schema.py")
@@ -154,10 +150,6 @@ if(OB_ERRSIM OR WITH_COVERAGE OR OB_BUILD_CCLS)
 endif()
 if(ENABLE_SANITY AND SEEKDB_CMAKE_PACKAGE_BUILD)
   message(FATAL_ERROR "Sanity instrumentation cannot be combined with packaging")
-endif()
-if(ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK AND SEEKDB_CMAKE_PACKAGE_BUILD)
-  message(FATAL_ERROR
-    "The replay submit iterator test hook cannot be combined with packaging")
 endif()
 if((ENABLE_AUTO_FDO OR ENABLE_THIN_LTO OR ENABLE_HOTFUNC OR
     OB_STATIC_LINK_LGPL_DEPS) AND NOT SEEKDB_CMAKE_PACKAGE_BUILD)
@@ -321,11 +313,9 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux"
     set(SEEKDB_PRETEST_PREFIX
       "SEEKDB_PRETEST_${SEEKDB_PRETEST_MODULE_UPPER}")
     set(SEEKDB_PRETEST_TARGET "${${SEEKDB_PRETEST_PREFIX}_TARGET}")
-    if(TARGET ${SEEKDB_PRETEST_TARGET})
-      install(PROGRAMS "$<TARGET_FILE:${SEEKDB_PRETEST_TARGET}>"
-        DESTINATION "unittest/${SEEKDB_PRETEST_MODULE}"
-        COMPONENT pretest)
-    endif()
+    install(PROGRAMS "$<TARGET_FILE:${SEEKDB_PRETEST_TARGET}>"
+      DESTINATION "unittest/${SEEKDB_PRETEST_MODULE}"
+      COMPONENT pretest)
   endforeach()
 endif()
 

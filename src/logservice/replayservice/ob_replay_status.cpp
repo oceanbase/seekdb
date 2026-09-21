@@ -17,9 +17,6 @@
 #include "ob_replay_status.h"
 #include "logservice/ob_log_service.h"
 #include "share/ob_structured_event_logger.h"
-#ifdef ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK
-#include "share/ob_debug_sync.h"
-#endif
 
 namespace oceanbase
 {
@@ -117,9 +114,13 @@ int ObReplayServiceSubmitTask::init(const palf::LSN &base_lsn,
                                     ObReplayStatus *replay_status)
 {
   int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
   if (OB_ISNULL(replay_status)) {
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid argument", K(type_), K(ret), K(replay_status));
+  } else if (OB_FAIL(seek_log_iterator_no_shared_storage(
+                 replay_status->palf_env_, base_lsn, iterator_))) {
+  } else if (OB_FAIL(iterator_.set_io_context(palf::LogIOContext(palf::LogIOUser::REPLAY)))) {
   } else if (OB_UNLIKELY(!base_scn.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(ERROR, "base_scn is invalid", K(type_), K(base_lsn), K(base_scn), KR(ret));
@@ -130,12 +131,10 @@ int ObReplayServiceSubmitTask::init(const palf::LSN &base_lsn,
     base_lsn_ = base_lsn;
     base_scn_ = base_scn;
     type_ = ObReplayServiceTaskType::SUBMIT_LOG_TASK;
-    if (OB_FAIL(prepare_iterator_(base_lsn, true /*ignore_next_error*/))) {
-      CLOG_LOG(WARN, "failed to prepare submit iterator", K(ret), K(base_lsn), K(base_scn));
-    } else {
-      CLOG_LOG(INFO, "submit log task init success", K(type_), K(next_to_submit_lsn_),
-               K(next_to_submit_scn_), K(iterator_generation_), K(replay_status_));
+    if (OB_SUCCESS != (tmp_ret = iterator_.next())) {
     }
+    CLOG_LOG(INFO, "submit log task init success", K(type_), K(next_to_submit_lsn_),
+             K(next_to_submit_scn_), K(replay_status_));
   }
   return ret;
 }
@@ -155,51 +154,12 @@ void ObReplayServiceSubmitTask::destroy()
   reset();
   //iterator does not support reset semantics, cannot call destroy interface in interfaces that may be reused later
   iterator_.destroy();
-  ATOMIC_STORE(&iterator_generation_, 0);
-#if defined(ENABLE_SANITY) || defined(ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK)
-  iterator_opener_for_test_.reset();
-#endif
   ObReplayServiceTask::destroy();
 }
 
 void ObReplayServiceSubmitTask::release_iterator()
 {
   iterator_.destroy();
-}
-
-int ObReplayServiceSubmitTask::open_iterator_(const LSN &begin_lsn)
-{
-  int ret = OB_SUCCESS;
-#if defined(ENABLE_SANITY) || defined(ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK)
-  if (iterator_opener_for_test_.is_valid()) {
-    ret = iterator_opener_for_test_(begin_lsn, iterator_);
-  } else
-#endif
-  {
-    ret = seek_log_iterator_no_shared_storage(replay_status_->palf_env_, begin_lsn, iterator_);
-  }
-  return ret;
-}
-
-int ObReplayServiceSubmitTask::prepare_iterator_(const LSN &begin_lsn,
-                                                 const bool ignore_next_error)
-{
-  int ret = OB_SUCCESS;
-  int next_ret = OB_SUCCESS;
-  if (OB_FAIL(open_iterator_(begin_lsn))) {
-  } else if (OB_FAIL(iterator_.set_io_context(palf::LogIOContext(palf::LogIOUser::REPLAY)))) {
-  } else {
-    ATOMIC_INC(&iterator_generation_);
-    next_ret = iterator_.next();
-    if (OB_SUCCESS == next_ret || OB_ITER_END == next_ret || ignore_next_error) {
-      ret = OB_SUCCESS;
-      CLOG_LOG(INFO, "prepared replay submit iterator", KP(this), K(begin_lsn),
-               K(iterator_generation_), K(iterator_));
-    } else {
-      ret = next_ret;
-    }
-  }
-  return ret;
 }
 
 int ObReplayServiceSubmitTask::get_next_to_submit_log_info(LSN &lsn, SCN &scn) const
@@ -328,29 +288,6 @@ int ObReplayServiceSubmitTask::next_log(const SCN &replayable_point,
     }
   } else {
     // do nothing
-  }
-  return ret;
-}
-
-int ObReplayServiceSubmitTask::reset_iterator(const LSN &begin_lsn,
-                                              const SCN &base_scn)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!begin_lsn.is_valid() || !base_scn.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "invalid replay iterator reset point", K(ret), K(begin_lsn), K(base_scn));
-  } else {
-    next_to_submit_lsn_ = std::max(next_to_submit_lsn_, begin_lsn);
-    base_lsn_ = next_to_submit_lsn_;
-    if (base_scn_ < base_scn) {
-      base_scn_ = base_scn;
-    }
-    if (next_to_submit_scn_ < base_scn_) {
-      next_to_submit_scn_ = base_scn_;
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(prepare_iterator_(next_to_submit_lsn_, false /*ignore_next_error*/))) {
   }
   return ret;
 }
@@ -605,6 +542,7 @@ ObReplayStatus::ObReplayStatus():
     is_enabled_(false),
     is_submit_blocked_(true),
     local_replay_enabled_(true),
+    submit_iterator_released_(false),
     ref_cnt_(0),
     post_barrier_lsn_(),
     err_info_(),
@@ -646,6 +584,7 @@ int ObReplayStatus::init(PalfEnv *palf_env,
     check_enable_debug_time_ = OB_INVALID_TIMESTAMP;
     palf_env_ = palf_env;
     rp_sv_ = rp_sv;
+    submit_iterator_released_ = false;
     IGNORE_RETURN new (&fs_cb_) ObReplayFsCb(this);
     is_inited_ = true;
     if (OB_FAIL(palf_handle_.register_file_size_cb(&fs_cb_))) {
@@ -682,6 +621,7 @@ void ObReplayStatus::destroy()
     }
     is_submit_blocked_ = true;
     local_replay_enabled_ = true;
+    submit_iterator_released_ = false;
     post_barrier_lsn_.reset();
     err_info_.reset();
     last_check_memstore_lsn_.reset();
@@ -714,10 +654,19 @@ int ObReplayStatus::enable(const LSN &base_lsn, const SCN &base_scn)
 int ObReplayStatus::enable_(const LSN &base_lsn, const SCN &base_scn)
 {
   int ret = OB_SUCCESS;
-  // Processing submit_task requires setting the enable state first
-  is_enabled_ = true;
-  is_submit_blocked_ = false;
-  if (0 != pending_task_count_) {
+  bool need_cleanup = false;
+  if (submit_iterator_released_) {
+    ret = OB_STATE_NOT_MATCH;
+    CLOG_LOG(WARN, "cannot enable a replay status after releasing its submit iterator",
+             K(ret), K(base_lsn), K(base_scn), KPC(this));
+  } else {
+    // Processing submit_task requires setting the enable state first
+    is_enabled_ = true;
+    is_submit_blocked_ = false;
+    need_cleanup = true;
+  }
+  if (OB_SUCCESS != ret) {
+  } else if (0 != pending_task_count_) {
     //Defense check for reuse scenario
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "remain pending task when enable replay status", K(ret), KPC(this));
@@ -733,7 +682,7 @@ int ObReplayStatus::enable_(const LSN &base_lsn, const SCN &base_scn)
       }
     }
   }
-  if (OB_SUCCESS != ret) {
+  if (OB_SUCCESS != ret && need_cleanup) {
     disable_();
     is_submit_blocked_ = true;
   }
@@ -833,77 +782,18 @@ void ObReplayStatus::disable_local_replay()
     WLockGuard guard(local_replay_lock_);
     local_replay_enabled_ = false;
   }
-#ifdef ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK
-  // A caught-up submit task is normally idle until PALF reports new logs.  The
-  // replaytest profile requeues that same task once so the promotion test can
-  // deterministically hold the real submit-handler read lock after replay has
-  // reached the fenced cutover boundary.  Release and Sanity builds do not
-  // compile this path.
-  {
-    int ret = OB_SUCCESS;
-    RLockGuard guard(rwlock_);
-    if (is_enabled_
-        && OB_SUCCESS != (ret = submit_task_to_replay_service_(submit_log_task_))) {
-      CLOG_LOG(WARN, "failed to requeue replay submit task for integration test",
-               K(ret), KPC(this));
-    }
-  }
-  DEBUG_SYNC(REPLAY_SUBMIT_TASK_AFTER_TEST_REQUEUE);
-#endif
   CLOG_LOG(INFO, "disable local replay", KPC(this));
 }
 
-int ObReplayStatus::enable_local_replay(const palf::LSN &begin_lsn,
-                                        const SCN &base_scn)
-{
-  int ret = OB_SUCCESS;
-  // Reset the iterator and open the local replay gate in one write-locked
-  // transition.  Release observes the same lock and cannot destroy a newly
-  // rebuilt iterator after the gate becomes visible.
-  do {
-    WLockGuardWithRetryInterval wguard(rwlock_, WRLOCK_TRY_THRESHOLD, WRLOCK_RETRY_INTERVAL);
-    if (!is_enabled_) {
-      // do nothing
-    } else if (OB_FAIL(submit_log_task_.reset_iterator(begin_lsn, base_scn))) {
-      CLOG_LOG(WARN, "failed to reset local replay iterator", K(ret), K(begin_lsn), K(base_scn));
-    }
-    if (OB_SUCC(ret)) {
-      WLockGuard replay_guard(local_replay_lock_);
-      local_replay_enabled_ = true;
-    }
-  } while (0);
-
-#ifdef ERRSIM
-int tmp_ret = OB_E(EventTable::EN_REPLAY_SERVICE_SUBMIT_TASK_SLEEP) OB_SUCCESS;
-if (OB_SUCCESS != tmp_ret) {
-  CLOG_LOG(INFO, "fake EN_REPLAY_SERVICE_SUBMIT_TASK_SLEEP ", KPC(this), K(begin_lsn));
-  share::server_event_sync_add("REPLAYSERVICE", "BEFORE_PUSH_SUBMIT_TASK");
-}
-  DEBUG_SYNC(REPLAY_ENABLE_LOCAL_BEFORE_PUSH_SUBMIT_TASK);
-#endif
-
-  if (OB_SUCC(ret)) {
-    RLockGuard rguard(rwlock_);
-    if (!is_enabled_) {
-      // do nothing
-    } else if (OB_FAIL(submit_task_to_replay_service_(submit_log_task_))) {
-    }
-  }
-  CLOG_LOG(INFO, "enable local replay", K(ret), KPC(this), K(begin_lsn), K(base_scn));
-  return ret;
-}
-
-int ObReplayStatus::try_release_submit_iterator(SubmitIteratorReleaseState &state,
-                                                int64_t &iterator_generation)
+int ObReplayStatus::try_release_submit_iterator(SubmitIteratorReleaseState &state)
 {
   int ret = OB_SUCCESS;
   state = SubmitIteratorReleaseState::RWLOCK_BUSY;
-  iterator_generation = submit_log_task_.get_iterator_generation();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     CLOG_LOG(WARN, "replay status has not been inited", K(ret));
   } else if (!rwlock_.try_wrlock()) {
-    // The caller owns the retry deadline.  Never wait for a reader here.
+    // The caller owns the retry deadline. Never wait for a reader here.
   } else {
     {
       RLockGuard replay_guard(local_replay_lock_);
@@ -912,18 +802,16 @@ int ObReplayStatus::try_release_submit_iterator(SubmitIteratorReleaseState &stat
         state = SubmitIteratorReleaseState::LOCAL_REPLAY_ENABLED;
       } else if (!submit_log_task_.is_idle()) {
         state = SubmitIteratorReleaseState::TASK_BUSY;
+      } else if (submit_iterator_released_) {
+        state = SubmitIteratorReleaseState::RELEASED;
       } else {
         submit_log_task_.release_iterator();
+        submit_iterator_released_ = true;
         state = SubmitIteratorReleaseState::RELEASED;
-        iterator_generation = submit_log_task_.get_iterator_generation();
+        CLOG_LOG(INFO, "released replay submit iterator", KPC(this));
       }
     }
     rwlock_.unlock();
-  }
-  if (SubmitIteratorReleaseState::RELEASED == state) {
-    CLOG_LOG(INFO, "released replay submit iterator", K(ret),
-             "state", submit_iterator_release_state_str(state),
-             KP(&submit_log_task_), K(iterator_generation));
   }
   return ret;
 }

@@ -18,9 +18,6 @@
 #include "logservice/ob_i_log_storage.h"
 #include "share/config/ob_server_config.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
-#if defined(ENABLE_SANITY) || defined(ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK)
-#include "share/ob_debug_sync.h"
-#endif
 
 namespace oceanbase
 {
@@ -541,29 +538,7 @@ int ObLogReplayService::disable_local_replay()
   return ret;
 }
 
-int ObLogReplayService::try_release_submit_iterator(SubmitIteratorReleaseState &state,
-                                                    int64_t &iterator_generation)
-{
-  int ret = OB_SUCCESS;
-  ObReplayStatus *replay_status = NULL;
-  ObReplayStatusGuard guard;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    CLOG_LOG(WARN, "replay service not init", K(ret));
-  } else if (OB_FAIL(get_replay_status_(guard))) {
-  } else if (OB_ISNULL(replay_status = guard.get_replay_status())) {
-    ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(WARN, "replay status is not exist", K(ret));
-  } else if (OB_FAIL(replay_status->try_release_submit_iterator(state, iterator_generation))) {
-    if (OB_STATE_NOT_MATCH != ret) {
-      CLOG_LOG(WARN, "failed to release replay submit iterator", K(ret));
-    }
-  }
-  return ret;
-}
-
-int ObLogReplayService::enable_local_replay(const palf::LSN &begin_lsn,
-                                            const SCN &base_scn)
+int ObLogReplayService::try_release_submit_iterator(SubmitIteratorReleaseState &state)
 {
   int ret = OB_SUCCESS;
   ObReplayStatus *replay_status = NULL;
@@ -575,8 +550,10 @@ int ObLogReplayService::enable_local_replay(const palf::LSN &begin_lsn,
   } else if (NULL == (replay_status = guard.get_replay_status())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "replay status is not exist", K(ret));
-  } else if (OB_FAIL(replay_status->enable_local_replay(begin_lsn, base_scn))) {
-    CLOG_LOG(WARN, "failed to enable local replay", K(ret), K(begin_lsn), K(base_scn));
+  } else if (OB_FAIL(replay_status->try_release_submit_iterator(state))) {
+    if (OB_STATE_NOT_MATCH != ret) {
+      CLOG_LOG(WARN, "failed to release replay submit iterator", K(ret));
+    }
   }
   return ret;
 }
@@ -1236,9 +1213,6 @@ int ObLogReplayService::handle_submit_task_(ObReplayServiceSubmitTask *submit_ta
     };
     if (OB_SUCCESS !=(tmp_ret = replay_status->batch_push_all_task_queue())) {
     }
-#if defined(ENABLE_SANITY) || defined(ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK)
-    DEBUG_SYNC(REPLAY_SUBMIT_TASK_BEFORE_UNLOCK);
-#endif
     replay_status->unlock();
   } else {
     //return OB_EAGAIN to avoid taking up worker threads

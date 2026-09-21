@@ -27,6 +27,8 @@
 #include "sql/engine/px/ob_px_sqc_handler.h"
 #include "sql/engine/window_function/ob_window_function_op.h"
 #include "sql/engine/basic/ob_select_into_op.h"
+#include "storage/ddl/ob_ddl_direct_load_utils.h"
+#include "storage/ddl/ob_ddl_insert_dag.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;

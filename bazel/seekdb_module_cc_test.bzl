@@ -27,15 +27,11 @@ def seekdb_module_cc_test(
         shard_count = 8,
         data = [],
         tags = [],
-        target_compatible_with = [],
         visibility = None):
     """Builds one Module-owned test ELF from private Unity compile groups.
 
     Test registration objects are always linked into the final ELF; the only
     entry point is //unittest:all_tests_main.cpp.
-
-    target_compatible_with is propagated to every generated target so package
-    wildcards cannot analyze private Unity helpers for an incompatible test.
     """
 
     if not srcs:
@@ -61,7 +57,6 @@ def seekdb_module_cc_test(
         hdrs = test_hdrs,
         testonly = True,
         tags = tags,
-        target_compatible_with = target_compatible_with,
         visibility = ["//visibility:private"],
     )
 
@@ -81,7 +76,6 @@ def seekdb_module_cc_test(
             textual_hdrs = members,
             testonly = True,
             tags = tags,
-            target_compatible_with = target_compatible_with,
             visibility = ["//visibility:private"],
         )
         unity_source = seekdb_generated_unity_source(
@@ -104,7 +98,6 @@ def seekdb_module_cc_test(
             ],
             testonly = True,
             tags = tags,
-            target_compatible_with = target_compatible_with,
             visibility = ["//visibility:private"],
         )
         unity_targets.append(":" + group_name)
@@ -122,7 +115,6 @@ def seekdb_module_cc_test(
         ],
         testonly = True,
         tags = tags,
-        target_compatible_with = target_compatible_with,
         visibility = ["//visibility:private"],
     )
 
@@ -140,6 +132,5 @@ def seekdb_module_cc_test(
         ],
         shard_count = shard_count,
         tags = tags,
-        target_compatible_with = target_compatible_with,
         visibility = visibility,
     )

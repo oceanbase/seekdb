@@ -1,6 +1,2 @@
 seekdb_apply_unity_inventory(ob_logservice SEEKDB_LOGSERVICE_UNITY)
 ob_server_add_target(ob_logservice)
-if(ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK)
-  target_compile_definitions(ob_logservice PRIVATE
-    ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK=1)
-endif()

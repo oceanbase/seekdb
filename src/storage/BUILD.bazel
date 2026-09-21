@@ -1954,7 +1954,6 @@ _STORAGE_GROUP_SHARE_IMPLEMENTATION_DEPS = {
         "//src/share:scn_interface",
         "//src/share:task_control",
         "//src/share:tenant_runtime",
-        "//src/share:time_wheel",
         "//src/share:worker_runtime",
     ],
     "ob_storage_tmp_file_0": [

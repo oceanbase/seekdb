@@ -262,20 +262,13 @@ protected:
 // need be protected by lock
 class ObReplayServiceSubmitTask : public ObReplayServiceTask
 {
-#if defined(ENABLE_SANITY) || defined(ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK)
-  friend class ReplaySubmitIteratorTestPeer;
-#endif
 public:
   ObReplayServiceSubmitTask(): ObReplayServiceTask(),
     next_to_submit_lsn_(),
     next_to_submit_scn_(),
     base_lsn_(),
     base_scn_(),
-    iterator_(),
-    iterator_generation_(0)
-#if defined(ENABLE_SANITY) || defined(ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK)
-    , iterator_opener_for_test_()
-#endif
+    iterator_()
   {
     type_ = ObReplayServiceTaskType::SUBMIT_LOG_TASK;
   }
@@ -303,22 +296,15 @@ public:
   int get_log(const char *&buffer, int64_t &nbytes, share::SCN &scn, palf::LSN &offset);
   int next_log(const share::SCN &replayable_point,
                bool &iterate_end_by_replayable_point);
-  // Reset the iterator with the current endpoint as the new starting point
-  int reset_iterator(const palf::LSN &begin_lsn,
-                     const share::SCN &base_scn);
   void release_iterator();
-  int64_t get_iterator_generation() const { return ATOMIC_LOAD(&iterator_generation_); }
 
   INHERIT_TO_STRING_KV("ObReplayServiceSubmitTask", ObReplayServiceTask,
                        K(next_to_submit_lsn_),
                        K(next_to_submit_scn_),
                        K(base_lsn_),
                        K(base_scn_),
-                       K(iterator_generation_),
                        K(iterator_));
 private:
-  int prepare_iterator_(const palf::LSN &begin_lsn, const bool ignore_next_error);
-  int open_iterator_(const palf::LSN &begin_lsn);
   int update_next_to_submit_lsn_(const palf::LSN &lsn);
   int update_next_to_submit_scn_(const share::SCN &scn);
   void set_next_to_submit_log_info_(const palf::LSN &lsn, const share::SCN &scn);
@@ -336,10 +322,6 @@ private:
   share::SCN base_scn_;
   //for unittest, should be a member not pointer
   palf::PalfBufferIterator iterator_;
-  int64_t iterator_generation_;
-#if defined(ENABLE_SANITY) || defined(ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK)
-  common::ObFunction<int(const palf::LSN &, palf::PalfBufferIterator &)> iterator_opener_for_test_;
-#endif
 };
 
 class ObReplayServiceReplayTask : public ObReplayServiceTask
@@ -418,14 +400,10 @@ private:
 class ObReplayStatus
 {
   friend class ObReplayServiceSubmitTask;
-#if defined(ENABLE_SANITY) || defined(ENABLE_REPLAY_SUBMIT_ITERATOR_TEST_HOOK)
-  friend class ReplaySubmitIteratorTestPeer;
-#endif
 public:
   typedef common::RWLock RWLock;
   typedef RWLock::RLockGuard RLockGuard;
   typedef RWLock::WLockGuard WLockGuard;
-  typedef RWLock::WLockGuardWithRetryInterval WLockGuardWithRetryInterval;
 public:
   struct LSErrInfo
   {
@@ -490,10 +468,7 @@ public:
   }
 
   void disable_local_replay();
-  int enable_local_replay(const palf::LSN &begin_lsn,
-                          const share::SCN &base_scn);
-  int try_release_submit_iterator(SubmitIteratorReleaseState &state,
-                                  int64_t &iterator_generation);
+  int try_release_submit_iterator(SubmitIteratorReleaseState &state);
   // check whether all logs has finished replaying
   //
   // Before enabling local append, there must be no remaining log to replay.
@@ -612,12 +587,13 @@ private:
   static const int64_t LS_CHECK_MEMSTORE_INTERVAL_THRESHOLD = 16 * (1LL << 20);
   //Expect that the replay of a log will not exceed 1s
   static const int64_t WRLOCK_TRY_THRESHOLD = 1000 * 1000;
-  static const int64_t WRLOCK_RETRY_INTERVAL = 20 * 1000; //20ms
 
   bool is_inited_;
   bool is_enabled_;  // forbidden replay and fetch log if false
   bool is_submit_blocked_; // allow replay log if true
   bool local_replay_enabled_;
+  // Releasing the submit iterator is terminal for this replay status lifecycle.
+  bool submit_iterator_released_;
   // guarantee the effectiveness of self memory:
   // inc_ref() before push task into replay_service, dec_ref() after replay_service finished handling task
   int64_t ref_cnt_;

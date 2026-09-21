@@ -1151,7 +1151,6 @@ _SQL_RUNTIME_GROUP_OBLIB_DEPS = {
         "//src/oblib:oblib_mysql_client_model",
         "//src/oblib:oblib_mysql_client_runtime",
         "//src/oblib:oblib_mysql_client_services",
-        "//src/oblib:oblib_mysql_protocol_advanced",
         "//src/oblib:oblib_mysql_protocol_model",
         "//src/oblib:oblib_mysql_protocol_primitives",
         "//src/oblib:oblib_mysql_protocol_runtime",

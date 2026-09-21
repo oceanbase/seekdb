@@ -428,9 +428,7 @@ int ObLS::start_local_log_(const int64_t deadline_us, const bool activate_handle
   bool is_done = false;
   logservice::SubmitIteratorReleaseState release_state =
       logservice::SubmitIteratorReleaseState::RWLOCK_BUSY;
-  int64_t iterator_generation = 0;
   int64_t release_retry_count = 0;
-  bool has_logged_release_blocker = false;
   logservice::ObLogApplyService *apply_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_log_apply_service();
   logservice::ObLogReplayService *replay_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_log_replay_service();
   if (OB_FAIL(log_handler_.get_end_lsn(end_lsn))) {
@@ -449,33 +447,27 @@ int ObLS::start_local_log_(const int64_t deadline_us, const bool activate_handle
   if (OB_SUCC(ret) && OB_FAIL(replay_service->disable_local_replay())) {
     LOG_WARN("stop local replay failed", K(ret));
   }
-  while (OB_SUCC(ret) &&
-         logservice::SubmitIteratorReleaseState::RELEASED != release_state) {
-    if (OB_FAIL(replay_service->try_release_submit_iterator(release_state,
-                                                            iterator_generation))) {
-      FLOG_WARN("failed to release replay submit iterator", K(ret),
-               "phase", "submit_iterator_release",
-               "last_state", logservice::submit_iterator_release_state_str(release_state),
-               K(iterator_generation), K(deadline_us), K(release_retry_count), K_(ls_meta));
+  while (OB_SUCC(ret)
+         && logservice::SubmitIteratorReleaseState::RELEASED != release_state) {
+    if (OB_FAIL(replay_service->try_release_submit_iterator(release_state))) {
+      LOG_WARN("failed to release replay submit iterator", K(ret),
+               "state", logservice::submit_iterator_release_state_str(release_state),
+               K(release_retry_count), K(deadline_us));
     } else if (logservice::SubmitIteratorReleaseState::RELEASED == release_state) {
-      FLOG_INFO("replay submit iterator release finished",
-               "phase", "submit_iterator_release",
-               "last_state", logservice::submit_iterator_release_state_str(release_state),
-               K(iterator_generation), K(deadline_us), K(release_retry_count), K_(ls_meta));
+      LOG_INFO("released replay submit iterator",
+               "state", logservice::submit_iterator_release_state_str(release_state),
+               K(release_retry_count));
+    } else if (logservice::SubmitIteratorReleaseState::RWLOCK_BUSY != release_state
+               && logservice::SubmitIteratorReleaseState::TASK_BUSY != release_state) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected replay submit iterator release state", K(ret),
+               "state", logservice::submit_iterator_release_state_str(release_state));
     } else if (ObTimeUtility::current_time() >= deadline_us) {
       ret = OB_TIMEOUT;
-      FLOG_WARN("replay submit iterator release timed out", K(ret),
-               "phase", "submit_iterator_release",
-               "last_state", logservice::submit_iterator_release_state_str(release_state),
-               K(iterator_generation), K(deadline_us), K(release_retry_count), K_(ls_meta));
+      LOG_WARN("replay submit iterator release timed out", K(ret),
+               "state", logservice::submit_iterator_release_state_str(release_state),
+               K(release_retry_count), K(deadline_us));
     } else {
-      if (!has_logged_release_blocker) {
-        FLOG_INFO("replay submit iterator release blocked",
-                  "phase", "submit_iterator_release",
-                  "last_state", logservice::submit_iterator_release_state_str(release_state),
-                  K(iterator_generation), K(deadline_us), K(release_retry_count), K_(ls_meta));
-        has_logged_release_blocker = true;
-      }
       ++release_retry_count;
       ob_usleep(1000);
     }
@@ -534,9 +526,7 @@ int ObLS::stop_local_log_(const int64_t deadline_us)
   int ret = OB_SUCCESS;
   bool is_done = false;
   palf::LSN end_lsn;
-  share::SCN end_scn;
   logservice::ObLogApplyService *apply_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_log_apply_service();
-  logservice::ObLogReplayService *replay_service = ::oceanbase::share::server_service<::oceanbase::logservice::ObLogService>()->get_log_replay_service();
   log_handler_.set_local_append_enabled(false);
   local_log_handler_set_.deactivate();
   if (OB_FAIL(apply_service->wait_append_sync())) {
@@ -552,12 +542,7 @@ int ObLS::stop_local_log_(const int64_t deadline_us)
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(log_handler_.get_end_scn(end_scn))) {
-    } else if (OB_FAIL(replay_service->enable_local_replay(
-        end_lsn, share::SCN::scn_inc(end_scn)))) {
-    } else {
-      is_local_append_mode_ = false;
-    }
+    is_local_append_mode_ = false;
   }
   return ret;
 }
