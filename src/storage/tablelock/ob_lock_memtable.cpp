@@ -137,35 +137,39 @@ int ObLockMemtable::lock_(
                                                    output_status_check_counter))) {
       } else {
         mem_ctx = static_cast<ObMemtableCtx *>(ctx.mvcc_acc_ctx_.mem_ctx_);
-        ObLockMemCtx::AddLockGuard guard(mem_ctx->get_lock_mem_ctx());
-        if (OB_FAIL(guard.ret())) {
-        } else if (OB_FAIL(mem_ctx->check_lock_exist(lock_op.lock_id_,
-                                                     lock_op.owner_id_,
-                                                     lock_op.lock_mode_,
-                                                     lock_op.op_type_,
-                                                     lock_exist,
-                                                     lock_mode_cnt_in_same_trans))) {
-        } else if (lock_exist) {
-          // if the lock is DBMS_LOCK, we should return error code
-          // to notify PL to return the actual execution result.
-          if (lock_op.lock_id_.obj_type_ == ObLockOBJType::OBJ_TYPE_DBMS_LOCK) {
-            ret = OB_OBJ_LOCK_EXIST;
-          }
-        } else if (OB_FAIL(obj_lock_map_.lock(param, ctx, lock_op, lock_mode_cnt_in_same_trans, conflict_tx_set))) {
-          if (ret != OB_TRY_LOCK_ROW_CONFLICT &&
-              ret != OB_OBJ_LOCK_EXIST) {
-          }
-        } else if (FALSE_IT(succ_step = STEP_IN_LOCK_MGR)) {
-        } else if (OB_FAIL(mem_ctx->add_lock_record(lock_op))) {
-          if (OB_EAGAIN == ret) {
-            need_retry = true;
-          }
-        } else if (FALSE_IT(succ_step = STEP_IN_MEM_CTX)) {
+        ObLockMemCtx *lock_mem_ctx = NULL;
+        if (OB_FAIL(mem_ctx->get_lock_mem_ctx(lock_mem_ctx))) {
         } else {
-          input_status_check_counter = output_status_check_counter;
-          ret = check_tablet_write_allow_(lock_op,
-                                          input_status_check_counter,
-                                          output_status_check_counter);
+          ObLockMemCtx::AddLockGuard guard(*lock_mem_ctx);
+          if (OB_FAIL(guard.ret())) {
+          } else if (OB_FAIL(mem_ctx->check_lock_exist(lock_op.lock_id_,
+                                                       lock_op.owner_id_,
+                                                       lock_op.lock_mode_,
+                                                       lock_op.op_type_,
+                                                       lock_exist,
+                                                       lock_mode_cnt_in_same_trans))) {
+          } else if (lock_exist) {
+            // if the lock is DBMS_LOCK, we should return error code
+            // to notify PL to return the actual execution result.
+            if (lock_op.lock_id_.obj_type_ == ObLockOBJType::OBJ_TYPE_DBMS_LOCK) {
+              ret = OB_OBJ_LOCK_EXIST;
+            }
+          } else if (OB_FAIL(obj_lock_map_.lock(param, ctx, lock_op, lock_mode_cnt_in_same_trans, conflict_tx_set))) {
+            if (ret != OB_TRY_LOCK_ROW_CONFLICT &&
+                ret != OB_OBJ_LOCK_EXIST) {
+            }
+          } else if (FALSE_IT(succ_step = STEP_IN_LOCK_MGR)) {
+          } else if (OB_FAIL(mem_ctx->add_lock_record(lock_op))) {
+            if (OB_EAGAIN == ret) {
+              need_retry = true;
+            }
+          } else if (FALSE_IT(succ_step = STEP_IN_MEM_CTX)) {
+          } else {
+            input_status_check_counter = output_status_check_counter;
+            ret = check_tablet_write_allow_(lock_op,
+                                            input_status_check_counter,
+                                            output_status_check_counter);
+          }
         }
       }
       if (OB_FAIL(ret) && succ_step == STEP_IN_LOCK_MGR) {
@@ -1072,19 +1076,23 @@ int ObLockMemtable::add_priority_task(
     } else {
       // TODO, check whether the task can be added
       // serialize multiple writer-thread add row exclusive lock
-      ObLockMemCtx::AddLockGuard guard(mem_ctx->get_lock_mem_ctx());
-      const ObTableLockPrioArg arg(param.lock_priority_);
-      if (OB_FAIL(guard.ret())) {
-      } else if (OB_FAIL(obj_lock_map_.add_priority_task(param, ctx, lock_op))) {
-        if (OB_ENTRY_EXIST == ret) {
-          LOG_INFO("duplicate priority task", K(ret), K(param), K(lock_op));
-          // rewrite ret
-          ret = OB_SUCCESS;
-        } else {
-        }
-      } else if (OB_FAIL(mem_ctx->add_priority_record(arg, lock_op))) {
-        // if fail, need remove priority task from obj_lock
-        if (OB_FAIL(obj_lock_map_.remove_priority_task(arg, lock_op))) {
+      ObLockMemCtx *lock_mem_ctx = NULL;
+      if (OB_FAIL(mem_ctx->get_lock_mem_ctx(lock_mem_ctx))) {
+      } else {
+        ObLockMemCtx::AddLockGuard guard(*lock_mem_ctx);
+        const ObTableLockPrioArg arg(param.lock_priority_);
+        if (OB_FAIL(guard.ret())) {
+        } else if (OB_FAIL(obj_lock_map_.add_priority_task(param, ctx, lock_op))) {
+          if (OB_ENTRY_EXIST == ret) {
+            LOG_INFO("duplicate priority task", K(ret), K(param), K(lock_op));
+            // rewrite ret
+            ret = OB_SUCCESS;
+          } else {
+          }
+        } else if (OB_FAIL(mem_ctx->add_priority_record(arg, lock_op))) {
+          // if fail, need remove priority task from obj_lock
+          if (OB_FAIL(obj_lock_map_.remove_priority_task(arg, lock_op))) {
+          }
         }
       }
     }

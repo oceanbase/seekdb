@@ -430,17 +430,9 @@ public: // callback
   virtual void free_mvcc_row_callback(ObITransCallback *cb) override;
   virtual storage::ObExtInfoCallback *alloc_ext_info_callback() override;
   virtual void free_ext_info_callback(ObITransCallback *cb) override;
-  void *alloc_lock_link_node() { return mem_ctx_obj_pool_.alloc<transaction::tablelock::ObMemCtxLockOpLinkNode>(); }
-  void free_lock_link_node(void *ptr) { mem_ctx_obj_pool_.free<transaction::tablelock::ObMemCtxLockOpLinkNode>(ptr); }
-  void *alloc_table_lock_callback() { return mem_ctx_obj_pool_.alloc<transaction::tablelock::ObOBJLockCallback>(); }
-  virtual void free_table_lock_callback(ObITransCallback *cb) override
-  {
-    mem_ctx_obj_pool_.free<transaction::tablelock::ObOBJLockCallback>(cb);
-  }
-  virtual ObOBJLockCallback *create_table_lock_callback(ObIMvccCtx &ctx, ObLockMemtable *memtable) override
-  {
-    return lock_mem_ctx_.create_table_lock_callback(ctx, memtable);
-  }
+  virtual void free_table_lock_callback(ObITransCallback *cb) override;
+  virtual ObOBJLockCallback *create_table_lock_callback(ObIMvccCtx &ctx,
+                                                        ObLockMemtable *memtable) override;
 
   bool is_for_replay() const { return trans_mgr_.is_for_replay(); }
   int append_callback(ObITransCallback *cb) { return trans_mgr_.append(cb); }
@@ -458,10 +450,6 @@ public: // callback
   void set_for_replay(const bool for_replay) { trans_mgr_.set_for_replay(for_replay); }
   void inc_pending_log_size(const int64_t size) { trans_mgr_.inc_pending_log_size(size); }
   void inc_flushed_log_size(const int64_t size) { trans_mgr_.inc_flushed_log_size(size); }
-  void *alloc_prio_link_node()
-  { return mem_ctx_obj_pool_.alloc<transaction::tablelock::ObMemCtxLockPrioOpLinkNode>(); }
-  void free_prio_link_node(void *ptr)
-  { mem_ctx_obj_pool_.free<transaction::tablelock::ObMemCtxLockPrioOpLinkNode>(ptr); }
   int64_t get_write_epoch() const { return trans_mgr_.get_write_epoch(); }
 public:
   // tx_status
@@ -479,7 +467,7 @@ public:
   int enable_lock_table(transaction::ObLSTxCtxMgr *ls_tx_ctx_mgr);
   // for mintest
   int enable_lock_table(storage::ObTableHandleV2 &handle);
-  transaction::tablelock::ObLockMemCtx &get_lock_mem_ctx() { return lock_mem_ctx_; }
+  int get_lock_mem_ctx(transaction::tablelock::ObLockMemCtx *&lock_mem_ctx);
   int get_tx_seq_replay_idx(const transaction::ObTxSEQ seq) const
   { return trans_mgr_.get_tx_seq_replay_idx(seq); }
   int check_lock_exist(const ObLockID &lock_id,
@@ -508,8 +496,8 @@ public:
   int recover_from_table_lock_durable_info(const ObTableLockInfo &table_lock_info);
   int get_table_lock_store_info(ObTableLockInfo &table_lock_info);
   // for deadlock detect.
-  void set_table_lock_killed() { lock_mem_ctx_.set_killed(); }
-  bool is_table_lock_killed() const { return lock_mem_ctx_.is_killed(); }
+  void set_table_lock_killed();
+  bool is_table_lock_killed() const;
   // The SQL can be rollbacked, and the callback of it will be removed, too.
   // In this case, the remove count of callbacks is larger than 0, but the callbacks
   // may be all decided. So we can't exactly know whether they're decided.
@@ -519,10 +507,7 @@ public:
   }
   void print_first_mvcc_callback();
   int get_callback_list_stat(ObIArray<ObTxCallbackListStat> &stats);
-  int get_lock_memtable(ObLockMemtable *&memtable)
-  {
-    return lock_mem_ctx_.get_lock_memtable(memtable);
-  }
+  int get_lock_memtable(ObLockMemtable *&memtable);
   int add_priority_record(const transaction::tablelock::ObTableLockPrioArg &arg,
                           const transaction::tablelock::ObTableLockOp &lock_op);
   int remove_priority_record(const transaction::tablelock::ObTableLockOp &lock_op);
@@ -541,6 +526,8 @@ private:
                            const transaction::ObTxSEQ from_seq_no);
   int register_multi_source_data_if_need_(
       const transaction::tablelock::ObTableLockOp &lock_op);
+  int ensure_lock_mem_ctx_();
+  void destroy_lock_mem_ctx_();
   static int64_t get_us() { return ::oceanbase::common::ObTimeUtility::current_time(); }
   int reset_log_generator_();
   int reuse_log_generator_();
@@ -584,7 +571,8 @@ private:
   bool has_row_updated_;
   transaction::ObMemtableCtxObjPool mem_ctx_obj_pool_;
   // table lock mem ctx.
-  transaction::tablelock::ObLockMemCtx lock_mem_ctx_;
+  transaction::ObLSTxCtxMgr *ls_tx_ctx_mgr_;
+  transaction::tablelock::ObLockMemCtx *lock_mem_ctx_;
   // trans callback mgr
   ObTransCallbackMgr trans_mgr_;
   bool is_inited_;
