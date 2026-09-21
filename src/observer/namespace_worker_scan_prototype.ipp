@@ -12,6 +12,58 @@ using namespace share::schema;
 using namespace storage;
 int worker_send(const Frame &, bool cleanup = false);
 int worker_read(Frame &);
+// Cumulative exchange timing per frame type, dumped by slow inner queries.
+struct ScanExchangeStats {
+  std::atomic<int64_t> count{0};
+  std::atomic<int64_t> send_us{0};
+  std::atomic<int64_t> wait_us{0};
+};
+static ScanExchangeStats (&scan_exchange_stats())[128] {
+  static ScanExchangeStats per_type[128];
+  return per_type;
+}
+// Per-table open counting for the slow inner-query dump.
+namespace scan_open_counter {
+struct Entry { uint64_t table; int64_t count; };
+inline Entry entries[64];
+inline std::atomic<int> used{0};
+inline lib::ObMutex lock;
+}
+inline void scan_open_count(uint64_t table) {
+  using namespace scan_open_counter;
+  ObMutexGuard guard(lock);
+  int n = used.load();
+  for (int i = 0; i < n; ++i) {
+    if (entries[i].table == table) { ++entries[i].count; return; }
+  }
+  if (n < 64) { entries[n] = Entry{table, 1}; used.store(n + 1); }
+}
+void scan_exchange_stats_dump(FILE *out) {
+  auto &per = scan_exchange_stats();
+  for (int t = 0; t < 128; ++t) {
+    const int64_t n = per[t].count.exchange(0);
+    const int64_t send = per[t].send_us.exchange(0);
+    const int64_t wait = per[t].wait_us.exchange(0);
+    if (n) {
+      fprintf(out, "PROTOTYPE_V23_SCAN_STATS type=%c count=%lld send_us=%lld wait_us=%lld\n",
+              t >= 32 && t < 127 ? t : '?', static_cast<long long>(n),
+              static_cast<long long>(send), static_cast<long long>(wait));
+    }
+  }
+  {
+    using namespace scan_open_counter;
+    ObMutexGuard guard(lock);
+    int n = used.load();
+    for (int i = 0; i < n; ++i) {
+      if (entries[i].count >= 100) {
+        fprintf(out, "PROTOTYPE_V23_SCAN_OPENS table=%llu count=%lld\n",
+                static_cast<unsigned long long>(entries[i].table),
+                static_cast<long long>(entries[i].count));
+      }
+      entries[i].count = 0;
+    }
+  }
+}
 int storage_schema(StorageSpaceHandle storage_space, uint64_t id,
                    ObSchemaGetterGuard &guard, const ObTableSchema *&schema) {
   schema = nullptr;
@@ -80,6 +132,13 @@ int worker_storage_space_for_schema(const ObTableSchema &schema,
         ? StorageSpaceHandle::global_space()
         : StorageSpaceHandle::namespace_space(worker_namespace);
     if (!storage_space.is_valid()) { ret = OB_INVALID_ARGUMENT; }
+    if (OB_SUCC(ret) && storage_space.is_global()) {
+      fprintf(stderr, "PROTOTYPE_V24_GLOBAL_SPACE table_id=%llu db=%.*s control=%d\n",
+          (unsigned long long)schema.get_table_id(),
+          database ? database->get_database_name_str().length() : 0,
+          database ? database->get_database_name_str().ptr() : "",
+          control_database ? 1 : 0);
+    }
   }
   return ret;
 }
@@ -150,6 +209,72 @@ int worker_materialization_schemas(
   }
   return ret;
 }
+// The NLJ right side reships the same serialized table schema per probe.
+// Cache the decoded and namespace-routed schema keyed by the wire bytes: a
+// repeated open pays one memcmp instead of a deserialize + schema copy.
+struct EngineSchemaCacheEntry {
+  ObArenaAllocator alloc{ObMemAttr("NsScanSchema")};
+  ObTableSchema *logical = nullptr;
+  ObTableSchema *routed = nullptr;
+  ObArray<ObTabletID> logical_tablets;
+  ObArray<ObTabletID> storage_tablets;
+};
+inline uint64_t engine_schema_hash(uint64_t ns, const ObString &blob) {
+  uint64_t h = 1469598103934665603ULL ^ (ns * 1099511628211ULL);
+  const char *p = blob.ptr();
+  int32_t n = blob.length();
+  while (n >= 8) {
+    uint64_t w;
+    memcpy(&w, p, 8);
+    h = (h ^ w) * 1099511628211ULL;
+    p += 8; n -= 8;
+  }
+  while (n-- > 0) { h = (h ^ static_cast<unsigned char>(*p++)) * 1099511628211ULL; }
+  return h;
+}
+int engine_schema_resolve(uint64_t ns, bool namespace_local, const ObString &blob,
+                          std::shared_ptr<EngineSchemaCacheEntry> &entry) {
+  struct Cache {
+    lib::ObMutex lock;
+    std::map<uint64_t, std::pair<std::string, std::shared_ptr<EngineSchemaCacheEntry>>> by_hash;
+  };
+  static Cache cache;
+  if (blob.empty() || blob.length() > 4 * 1024 * 1024) { return OB_INVALID_ARGUMENT; }
+  const uint64_t hash = engine_schema_hash(ns, blob);
+  {
+    ObMutexGuard guard(cache.lock);
+    auto it = cache.by_hash.find(hash);
+    if (it != cache.by_hash.end()
+        && it->second.first.size() == static_cast<size_t>(blob.length())
+        && memcmp(it->second.first.data(), blob.ptr(), blob.length()) == 0) {
+      entry = it->second.second;
+      return OB_SUCCESS;
+    }
+  }
+  auto built = std::make_shared<EngineSchemaCacheEntry>();
+  void *buf = built->alloc.alloc(sizeof(ObTableSchema));
+  if (!buf) { return OB_ALLOCATE_MEMORY_FAILED; }
+  built->logical = new (buf) ObTableSchema(&built->alloc);
+  int64_t pos = 0;
+  int ret = built->logical->deserialize(blob.ptr(), blob.length(), pos);
+  if (ret || pos != blob.length()) { return ret ? ret : OB_INVALID_ARGUMENT; }
+  if (OB_FAIL(built->logical->get_tablet_ids(built->logical_tablets))) { return ret; }
+  if (namespace_local && ns > 1) {
+    buf = built->alloc.alloc(sizeof(ObTableSchema));
+    if (!buf) { return OB_ALLOCATE_MEMORY_FAILED; }
+    built->routed = new (buf) ObTableSchema(&built->alloc);
+    if (OB_FAIL(NamespaceForkKernelPrototype::make_storage_schema(
+            ns, *built->logical, *built->routed))) { return ret; }
+  } else {
+    built->routed = built->logical;
+  }
+  if (OB_FAIL(built->routed->get_tablet_ids(built->storage_tablets))) { return ret; }
+  ObMutexGuard guard(cache.lock);
+  if (cache.by_hash.size() >= 256) { cache.by_hash.clear(); }
+  cache.by_hash[hash] = {std::string(blob.ptr(), blob.length()), built};
+  entry = std::move(built);
+  return OB_SUCCESS;
+}
 struct EngineScan {
   struct VirtualContext {
     sql::ObExecContext execution;
@@ -162,9 +287,11 @@ struct EngineScan {
     }
   };
   ObArenaAllocator allocator{ObMemAttr("NsRemoteScan")};
+  // Iterator and range-key memory live in this per-scan arena so an NLJ
+  // rescan can drop them without touching the schema copies in allocator.
+  ObArenaAllocator iter_allocator{ObMemAttr("NsRemoteScanIt")};
   ObSchemaGetterGuard guard;
-  ObTableSchema logical_schema{&allocator};
-  ObTableSchema routed_schema{&allocator};
+  std::shared_ptr<EngineSchemaCacheEntry> cached_schema;
   std::vector<std::unique_ptr<ObTableSchema>> logical_materialization_schemas;
   std::vector<std::unique_ptr<ObTableSchema>> routed_materialization_schemas;
   ObArray<const ObTableSchema *> materialization_schemas;
@@ -192,7 +319,13 @@ struct EngineScan {
     const bool namespace_local = storage_space.is_namespace();
     const uint64_t ns = storage_space.namespace_id();
     const int64_t requested_schema_version = request.number();
-    if (has_logical_schema) { request.read(logical_schema); }
+    // Length-prefixed blob: the cache keys on the exact wire bytes.
+    const ObString schema_blob = has_logical_schema ? request.string() : ObString();
+    if (has_logical_schema && !request.ret) {
+      if (OB_FAIL(engine_schema_resolve(ns, namespace_local, schema_blob, cached_schema))) {
+        return ret;
+      }
+    }
     const uint64_t materialization_schema_count = request.number();
     if (materialization_schema_count > 3
         || (!namespace_local && materialization_schema_count != 0)) {
@@ -216,41 +349,30 @@ struct EngineScan {
     param.limit_param_.limit_ = static_cast<int64_t>(request.number());
     param.limit_param_.offset_ = static_cast<int64_t>(request.number());
     const uint64_t count = request.number();
-    fprintf(stderr, "PROTOTYPE_V17_SCAN_REQUEST ns=%llu table=%llu tablet=%llu columns=%llu\n",
-        (unsigned long long)ns, (unsigned long long)logical_table_id,
-        (unsigned long long)logical_tablet_id, (unsigned long long)count);
     if (request.ret || count > OB_MAX_COLUMN_NUMBER) { return OB_NOT_SUPPORTED; }
     bool logical_tablet_matches = !has_logical_schema;
     if (has_logical_schema) {
-      ObArray<ObTabletID> tablets;
-      if (OB_FAIL(logical_schema.get_tablet_ids(tablets))) {
-        return ret;
-      }
-      for (int64_t i = 0; i < tablets.count(); ++i) {
-        if (tablets.at(i).id() == logical_tablet_id) {
+      for (int64_t i = 0; i < cached_schema->logical_tablets.count(); ++i) {
+        if (cached_schema->logical_tablets.at(i).id() == logical_tablet_id) {
           logical_tablet_matches = true;
           break;
         }
       }
     }
+    const ObTableSchema *logical =
+        has_logical_schema ? cached_schema->logical : nullptr;
     if (request.ret || (!has_logical_schema && namespace_local && ns > 1)
         || (has_logical_schema && ((requested_schema_version <= 0
                 && !is_inner_table(logical_table_id))
-            || logical_schema.get_table_id() != logical_table_id
+            || logical->get_table_id() != logical_table_id
             || !logical_tablet_matches
-            || logical_schema.get_schema_version() < 0
+            || logical->get_schema_version() < 0
             || (requested_schema_version > 0
-                && logical_schema.get_schema_version() != requested_schema_version)))) {
+                && logical->get_schema_version() != requested_schema_version)))) {
       return OB_INVALID_ARGUMENT;
     }
     if (has_logical_schema) {
-      if (!namespace_local || ns == 1) {
-        schema = &logical_schema;
-      } else {
-        ret = NamespaceForkKernelPrototype::make_storage_schema(
-            ns, logical_schema, routed_schema);
-        if (!ret) { schema = &routed_schema; }
-      }
+      schema = cached_schema->routed;
     } else {
       // Resolving through the shared process SchemaService could lazy-load
       // via inner SQL routed back to the requesting Worker, which deadlocks
@@ -267,14 +389,12 @@ struct EngineScan {
           ns, logical_tablet_id, tablet_id);
     }
     bool storage_tablet_matches = false;
-    ObArray<ObTabletID> storage_tablets;
-    if (OB_SUCC(ret) && schema != nullptr
-        && OB_FAIL(schema->get_tablet_ids(storage_tablets))) {
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < storage_tablets.count(); ++i) {
-      if (storage_tablets.at(i).id() == tablet_id) {
-        storage_tablet_matches = true;
-        break;
+    if (OB_SUCC(ret) && cached_schema) {
+      for (int64_t i = 0; i < cached_schema->storage_tablets.count(); ++i) {
+        if (cached_schema->storage_tablets.at(i).id() == tablet_id) {
+          storage_tablet_matches = true;
+          break;
+        }
       }
     }
     if (OB_FAIL(ret)) { return ret; }
@@ -302,7 +422,7 @@ struct EngineScan {
       range.border_flag_.set_data(request.number());
       for (uint64_t j = 0; !ret && j < width * 2; ++j) {
         ObObj value; request.read(value);
-        ret = request.ret ? request.ret : ob_write_obj(allocator, value, keys[i * width * 2 + j]);
+        ret = request.ret ? request.ret : ob_write_obj(iter_allocator, value, keys[i * width * 2 + j]);
       }
       range.start_key_.assign(&keys[i * width * 2], width);
       range.end_key_.assign(&keys[i * width * 2 + width], width);
@@ -316,7 +436,7 @@ struct EngineScan {
       param.schema_version_ = schema->get_schema_version();
       param.runtime_schema_version_ = schema->get_schema_version();
       param.timeout_ = THIS_WORKER.get_timeout_ts();
-      param.scan_allocator_ = &allocator; param.reserved_cell_count_ = count;
+      param.scan_allocator_ = &iter_allocator; param.reserved_cell_count_ = count;
       param.op_ = &virtual_context->op;
       ret = share::server_service<ObIVirtualTableScan>()->table_scan(param, iter);
       fprintf(stderr, "PROTOTYPE_V18_VIRTUAL_SCAN table=%llu ret=%d\n", (unsigned long long)table_id, ret);
@@ -348,7 +468,7 @@ struct EngineScan {
     param.runtime_schema_version_ = storage_schema_version;
     param.timeout_ = THIS_WORKER.get_timeout_ts();
     param.is_get_ = get;
-    param.allocator_ = &allocator; param.scan_allocator_ = &allocator;
+    param.allocator_ = &iter_allocator; param.scan_allocator_ = &iter_allocator;
     param.reserved_cell_count_ = count;
     // Match the native SQL scan path: every LOB storage column needs a V2
     // locator, including __all_* columns. The worker owns SQL but the bytes
@@ -368,6 +488,49 @@ struct EngineScan {
         static_cast<unsigned long long>(ns), static_cast<unsigned long long>(table_id), ret);
     if (txid) { fprintf(stderr, "PROTOTYPE_V15_TX_SCAN tx=%llu latest=%d ret=%d\n", (unsigned long long)txid, read_latest, ret); }
     return ret;
+  }
+  // NLJ rescans only change key ranges. Rebuild the storage iterator in place
+  // instead of paying a full schema ship + tablet lookup + scan open per row.
+  int rescan(Frame &request, Frame &reply) {
+    const uint64_t flag = request.number();
+    const bool get = request.number() != 0;
+    const uint64_t ranges = request.number();
+    const uint64_t width = request.number();
+    if (virtual_context || !iter || request.ret) { reply.number(OB_NOT_SUPPORTED); return OB_SUCCESS; }
+    if (ranges > 256 || width == 0 || width > OB_MAX_ROWKEY_COLUMN_NUMBER) {
+      reply.number(OB_INVALID_ARGUMENT);
+      return OB_SUCCESS;
+    }
+    // Validate against the live iterator first; shallow cells stay frame-backed.
+    std::vector<uint64_t> borders(ranges);
+    std::vector<ObObj> shallow(ranges * 2 * width);
+    for (uint64_t i = 0; i < ranges && !request.ret; ++i) {
+      borders[i] = request.number();
+      for (uint64_t j = 0; j < width * 2; ++j) { request.read(shallow[i * width * 2 + j]); }
+    }
+    if (request.ret || !request.consumed()) { reply.number(OB_INVALID_ARGUMENT); return OB_SUCCESS; }
+    share::server_service<ObITabletScan>()->revert_scan_iter(iter);
+    iter = nullptr;
+    iter_allocator.reset();
+    param.key_ranges_.reset();
+    keys.resize(ranges * 2 * width);
+    int ret = OB_SUCCESS;
+    for (uint64_t i = 0; !ret && i < ranges; ++i) {
+      ObNewRange range; range.table_id_ = param.index_id_;
+      range.border_flag_.set_data(borders[i]);
+      for (uint64_t j = 0; !ret && j < width * 2; ++j) {
+        ret = ob_write_obj(iter_allocator, shallow[i * width * 2 + j], keys[i * width * 2 + j]);
+      }
+      range.start_key_.assign(&keys[i * width * 2], width);
+      range.end_key_.assign(&keys[i * width * 2 + width], width);
+      if (!ret) { ret = param.key_ranges_.push_back(range); }
+    }
+    param.scan_flag_.flag_ = flag;
+    param.is_get_ = get;
+    param.timeout_ = THIS_WORKER.get_timeout_ts();
+    if (!ret) { ret = share::server_service<ObITabletScan>()->table_scan(param, iter); }
+    reply.number(ret);
+    return OB_SUCCESS;
   }
   int fetch(Frame &reply) {
     Frame rows('s'); rows.number(0); rows.number(0); rows.number(0);
@@ -440,7 +603,14 @@ struct ReadScans {
     } else {
       const uint64_t id = request.number();
       auto it = scans.find(id);
-      if (!request.consumed() || it == scans.end()) { reply.number(OB_INVALID_ARGUMENT); }
+      if (request.type() == 'R') {
+        // Rescan carries fresh key ranges beyond the handle; consume them in
+        // the scan itself. A logical failure is a reply value so the worker
+        // can fall back to a full reopen on the still-healthy channel.
+        if (it == scans.end()) { reply.number(OB_INVALID_ARGUMENT); }
+        else { it->second->rescan(request, reply); }
+      }
+      else if (!request.consumed() || it == scans.end()) { reply.number(OB_INVALID_ARGUMENT); }
       else if (request.type() == 'X') { scans.erase(it); reply.number(0); }
       else if (request.type() == 'F') { ret = it->second->fetch(reply); }
       else { reply.number(OB_NOT_SUPPORTED); }
@@ -463,6 +633,7 @@ public:
   ~RemoteScanIterator() override { reset(); }
   int open() {
     const sql::ObStoragePushdownFlag flags(param.pd_storage_flag_);
+    scan_open_count(param.index_id_);
     // The storage process deliberately does not execute SQL expressions. A
     // pushed filter still has its expression list in op_filters_, so evaluate
     // it in this worker while streaming rows from the physical tablet.
@@ -514,7 +685,18 @@ public:
     Frame request('O'); request.number(param.index_id_); request.number(param.tablet_id_.id());
     request.number(send_logical_schema); write_storage_space(request, storage_space);
     request.number(param.schema_version_);
-    if (send_logical_schema) { request.append(*logical_schema); }
+    if (send_logical_schema) {
+      // Length-prefixed in place so the shared side can key its decoded
+      // schema cache on the exact wire bytes without a second copy.
+      const int64_t len_pos = request.data.size();
+      request.number(0);
+      const int64_t begin = request.data.size();
+      request.append(*logical_schema);
+      const uint64_t len = request.data.size() - begin;
+      for (unsigned i = 0; i < 8; ++i) {
+        request.data[len_pos + i] = static_cast<char>(len >> (8 * i));
+      }
+    }
     request.number(materialization_schemas.count());
     for (const ObTableSchema *schema : materialization_schemas) {
       request.append(*schema);
@@ -635,11 +817,48 @@ public:
     if (handle) { Frame request('X'), reply; request.number(handle); exchange(request, reply); handle = 0; }
     cells.clear(); row_index = 0; rows_left = 0; end = false; qualified = 0; returned = 0;
   }
+  // NLJ rescan: same table, same columns, only the key ranges changed. Reuse
+  // the shared-side scan instead of re-shipping the schema per row. Falls
+  // back to a full close+open when the shared side cannot rescan.
+  int rescan() {
+    cells.clear(); row_index = 0; rows_left = 0; end = false; qualified = 0; returned = 0;
+    if (!handle || is_virtual_table(param.index_id_)) { reset(); return open(); }
+    Frame request('R'); request.number(handle);
+    request.number(param.scan_flag_.flag_); request.number(param.is_get_);
+    request.number(param.key_ranges_.count());
+    const int64_t width = param.key_ranges_.empty() ? 1 : param.key_ranges_.at(0).start_key_.get_obj_cnt();
+    request.number(width);
+    for (int64_t i = 0; i < param.key_ranges_.count(); ++i) {
+      const ObNewRange &range = param.key_ranges_.at(i);
+      if (range.start_key_.get_obj_cnt() != width || range.end_key_.get_obj_cnt() != width) {
+        return OB_NOT_SUPPORTED;
+      }
+      request.number(range.border_flag_.get_data());
+      for (int64_t j = 0; j < width; ++j) { request.append(range.start_key_.get_obj_ptr()[j]); }
+      for (int64_t j = 0; j < width; ++j) { request.append(range.end_key_.get_obj_ptr()[j]); }
+    }
+    Frame reply;
+    const int ret = request.ret ? request.ret : exchange(request, reply);
+    if (ret) {
+      fprintf(stderr, "PROTOTYPE_V23_SCAN_RESCAN_FALLBACK ret=%d table=%llu ranges=%lld\n",
+          ret, static_cast<unsigned long long>(param.index_id_),
+          static_cast<long long>(param.key_ranges_.count()));
+      reset(); return open();
+    }
+    return OB_SUCCESS;
+  }
 private:
   int exchange(const Frame &request, Frame &reply) {
     StorageSessionScope scope(param.op_ ? param.op_->get_eval_ctx().exec_ctx_.get_my_session() : nullptr);
+    const int64_t begin = ObTimeUtility::current_time();
     int ret = scope.error() ? scope.error() : worker_send(request, request.type() == 'X');
+    const int64_t sent = ObTimeUtility::current_time();
     if (!ret) { ret = worker_read(reply); }
+    const int64_t done = ObTimeUtility::current_time();
+    auto &stats = scan_exchange_stats()[static_cast<unsigned char>(request.type()) & 0x7f];
+    stats.count.fetch_add(1);
+    stats.send_us.fetch_add(sent - begin);
+    stats.wait_us.fetch_add(done - sent);
     if (!ret && reply.type() != 's') { ret = OB_INVALID_ARGUMENT; }
     if (!ret) { ret = static_cast<int>(reply.number()); }
     return ret ? ret : reply.ret;
@@ -661,7 +880,7 @@ public:
   int table_rescan(ObVTableScanParam &, ObNewRowIterator *iter) override {
     auto *scan = static_cast<RemoteScanIterator *>(iter);
     if (!scan) { return OB_INVALID_ARGUMENT; }
-    scan->reset(); return scan->open();
+    return scan->rescan();
   }
 };
 } } }

@@ -447,7 +447,7 @@ def forked_namespace_probe(experiment, control_endpoint):
     with connect(control_endpoint) as control, control.cursor() as cursor:
         cursor.execute("SHOW TABLES FROM __fork_proto_meta")
         assert {row[0] for row in cursor.fetchall()} == {
-            "endpoints", "namespaces", "pages", "roots", "snapshots"}
+            "endpoints", "exceptions", "namespaces", "pages", "roots", "snapshots"}
         cursor.execute("FORK DATABASE __empty__ TO direct_a")
         cursor.execute("FORK DATABASE direct_a TO direct_b")
         try:
@@ -738,7 +738,9 @@ def forked_namespace_probe(experiment, control_endpoint):
                           directory_page=branch_root_before_fork[0],
                           directory_cap=branch_root_before_fork[1],
                           schema_version=branch_root_before_fork[2])
-        assert branch_root_before_fork[0] != branch_root_before_ddl[0], (
+        # The exception-table model keeps directory_page frozen; branch DDL
+        # advances the namespace schema_version instead.
+        assert branch_root_before_fork[2] != branch_root_before_ddl[2], (
             branch_root_before_ddl, branch_root_before_fork)
         cursor.execute("SHOW TABLES FROM __fork_proto_meta LIKE 'endpoints'")
         assert cursor.fetchone() == ("endpoints",)
@@ -750,15 +752,16 @@ def forked_namespace_probe(experiment, control_endpoint):
                        "WHERE name='direct_c'")
         child_id, child_name = cursor.fetchone()
         assert child_name == b"direct_c"
-        cursor.execute("SELECT directory_page,directory_cap,schema_version "
+        cursor.execute("SELECT parent_namespace,fork_cap,schema_version "
                        "FROM __fork_proto_meta.namespaces WHERE namespace_id=%s",
                        (child_id,))
         child_root_after_fork = cursor.fetchone()
         experiment.record("child_root_after_fork", namespace=child_id,
-                          directory_page=child_root_after_fork[0],
-                          directory_cap=child_root_after_fork[1],
+                          parent_namespace=child_root_after_fork[0],
+                          fork_cap=child_root_after_fork[1],
                           schema_version=child_root_after_fork[2])
-        assert child_root_after_fork[0] == branch_root_before_fork[0]
+        # The child links to its fork source instead of sharing a directory root.
+        assert child_root_after_fork[0] == branch_id
     child_pid, child_endpoint, child_generation = activate(child_id)
     assert len({control_endpoint, branch_endpoint, child_endpoint}) == 3
     with connect(control_endpoint) as control, control.cursor() as cursor:

@@ -3164,15 +3164,22 @@ int ObServerSchemaService::refresh_runtime_full_schema(
       #undef INIT_ARRAY
       ObSimpleSysVariableSchema simple_sys_variable;
 
+      const int64_t prof_start = common::ObTimeUtility::fast_current_time();
+      auto prof = [&](const char *stage) {
+        fprintf(stderr, "PROTOTYPE_SCHEMA_REFRESH_PROF stage=%s us=%lld\n", stage,
+            static_cast<long long>(common::ObTimeUtility::fast_current_time() - prof_start));
+      };
       if (OB_FAIL(schema_service_->get_sys_variable(sql_client, schema_status,
           schema_version, simple_sys_variable))) {
       } else if (OB_FAIL(schema_service_->get_all_users(
           sql_client, schema_status, schema_version, simple_users))) {
       } else if (OB_FAIL(schema_service_->get_all_databases(
           sql_client, schema_status, schema_version, simple_databases))) {
+      } else if (FALSE_IT(prof("before_tables"))) {
       } else if (!is_in_bootstrap() && OB_FAIL(schema_service_->get_all_tables(
           sql_client, allocator, schema_status, schema_version, simple_tables))) {
         LOG_WARN("get all table schema failed", KR(ret), K(schema_version));
+      } else if (FALSE_IT(prof("tables"))) {
       } else if (OB_FAIL(schema_service_->get_all_outlines(
           sql_client, schema_status, schema_version, simple_outlines))) {
       } else if (OB_FAIL(schema_service_->get_all_routines(
@@ -3213,9 +3220,10 @@ int ObServerSchemaService::refresh_runtime_full_schema(
 
       if (OB_SUCC(ret)) {
         if (OB_FAIL(schema_service_->get_all_obj_mysql_privs(
-          sql_client, schema_status, schema_version, obj_mysql_privs))) {
+            sql_client, schema_status, schema_version, obj_mysql_privs))) {
         }
       }
+      prof("all_fetched");
 
       // Global namespace-management tables use namespace 1 as their SQL
       // owner. Their rows can be present in the system-table snapshot used to
@@ -3266,6 +3274,7 @@ int ObServerSchemaService::refresh_runtime_full_schema(
       } else if (OB_FAIL(schema_mgr_for_cache->priv_mgr_.add_column_privs(column_privs))) {
       } else if (OB_FAIL(schema_mgr_for_cache->add_ai_models(simple_ai_models))) {
       }
+      prof("mgr_filled");
 
       LOG_INFO("add runtime schemas finish", K(schema_version), K(schema_status),
                "users", simple_users.count(),

@@ -142,6 +142,9 @@ inline CatalogFetch worker_catalog_fetch = nullptr;
 inline uint64_t worker_namespace = 0;
 inline bool worker_process = false;
 inline bool worker_bootstrapping = false;
+// Defined in namespace_worker_scan_prototype.ipp. Dumps and resets cumulative
+// storage-frame exchange timing (count, send, wait per frame type).
+void scan_exchange_stats_dump(FILE *out);
 // Shared-process inner SQL is executed by this worker as well. While serving
 // that bounced request, schema lookups must use the worker's local cache;
 // fetching the version through IPC again would route the same SQL back here.

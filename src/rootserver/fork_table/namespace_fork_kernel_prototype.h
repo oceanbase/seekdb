@@ -118,6 +118,13 @@ public:
   static int check_ddl(const share::schema::ObSimpleTableSchemaV2 &schema,
                        const common::ObISQLClient *trans = nullptr);
   static int ensure_tablet(const common::ObTabletID &tablet_id);
+  // Read-path binding resolution without materialization. An encoded tablet
+  // that exists locally resolves to itself; an unmaterialized inherited tablet
+  // redirects to its bound source physical tablet, and cap_scn is the fork
+  // snapshot the read must not exceed. Unencoded tablets pass through.
+  static int resolve_read_tablet(const common::ObTabletID &tablet_id,
+                                 common::ObTabletID &physical_tablet_id,
+                                 int64_t &cap_scn);
   static int ensure_tablet(
       const common::ObTabletID &tablet_id,
       const share::schema::ObTableSchema &requested_schema,

@@ -716,6 +716,8 @@ int ObInnerSQLConnection::process_final(const T &sql,
 int ObInnerSQLConnection::do_query(sqlclient::ObIExecutor &executor, ObInnerSQLResult &res)
 {
   int ret = OB_SUCCESS;
+  const int64_t prof_begin = namespace_worker_prototype::worker_process
+      ? ObTimeUtility::current_time() : 0;
   WITH_CONTEXT(res.mem_context_) {
     // are there no restrictions on internal SQL such as refresh schema?
     // MEM_TRACKER_GUARD(CURRENT_CONTEXT);
@@ -755,6 +757,14 @@ int ObInnerSQLConnection::do_query(sqlclient::ObIExecutor &executor, ObInnerSQLR
     }
   }
 
+  if (prof_begin) {
+    const int64_t prof_us = ObTimeUtility::current_time() - prof_begin;
+    fprintf(stderr, "PROTOTYPE_V23_INNER_QUERY_TIME us=%lld ret=%d\n",
+        static_cast<long long>(prof_us), ret);
+    if (prof_us >= 1000 * 1000) {
+      namespace_worker_prototype::scan_exchange_stats_dump(stderr);
+    }
+  }
   return ret;
 }
 

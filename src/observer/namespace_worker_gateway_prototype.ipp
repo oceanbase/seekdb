@@ -218,6 +218,7 @@ bool is_storage_request(char type) {
       || type == 'd' || type == 'b' || type == 't' || type == 'i' || type == 'j' || type == 'k' || type == 'l'
       || type == 'u' || type == 'n' || type == 'p'
       || type == 'O' || type == 'F' || type == 'X' || type == 'M' || type == 'T' || type == 'W' || type == 'G' || type == 'J' || type == 'Y'
+      || type == 'R'
       || type == 'h' || type == 'A';
 }
 // One admitted storage RPC at a time per SQL request. Native request workers
@@ -649,7 +650,7 @@ int serve_storage(StorageSpaceHandle storage_space, ReadScans *scans,
       result = Frame('w');
       if (state) { result.number(state); }
       else { ret = process_rootserver_local_runtime(storage_space, input, result); }
-    } else if (scans && (input.type() == 'O' || input.type() == 'F' || input.type() == 'X')) {
+    } else if (scans && (input.type() == 'O' || input.type() == 'F' || input.type() == 'X' || input.type() == 'R')) {
       result = Frame('s');
       if (state && input.type() != 'X') { result.number(state); }
       else { ret = scans->process(input, result, writes ? writes->tx : nullptr, writes ? &writes->session : nullptr); }

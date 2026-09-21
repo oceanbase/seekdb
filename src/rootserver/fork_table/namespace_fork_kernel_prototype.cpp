@@ -34,6 +34,7 @@
 #include <shared_mutex>
 #include <string>
 #include <vector>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace oceanbase {
@@ -51,11 +52,44 @@ const char *ROOTS = "__fork_proto_meta.roots";
 const char *PAGES = "__fork_proto_meta.pages";
 const char *NAMESPACES = "__fork_proto_meta.namespaces";
 const char *SNAPSHOTS = "__fork_proto_meta.snapshots";
+const char *EXCEPTIONS = "__fork_proto_meta.exceptions";
 // Only the native source DROP uses this scoped internal DDL capability.
 std::atomic<const ObISQLClient *> source_drop_trans{nullptr};
 // ponytail: one global count, so DROP can wait for unrelated long scans/DAGs.
 // No per-namespace registry/cache; use worker-local draining for production isolation.
 std::atomic<int64_t> active_accesses{0};
+// check_table_access runs on every storage scan/DML open; a roots() SQL per
+// open dominated branch-worker cold schema refresh. The namespace registry is
+// only mutated by begin/finish_namespace_drop in this process, so a LIVE entry
+// stays valid until locally invalidated. Readers still register active_accesses
+// before consulting the cache, so drain_access keeps covering the close window.
+std::shared_mutex namespace_state_mutex;
+std::unordered_map<uint64_t, int64_t> namespace_state_cache;
+bool cached_namespace_state(uint64_t id, int64_t &state) {
+  std::shared_lock<std::shared_mutex> lock(namespace_state_mutex);
+  const auto it = namespace_state_cache.find(id);
+  if (it == namespace_state_cache.end()) { return false; }
+  state = it->second;
+  return true;
+}
+void remember_namespace_state(uint64_t id, int64_t state) {
+  std::unique_lock<std::shared_mutex> lock(namespace_state_mutex);
+  namespace_state_cache[id] = state;
+}
+void invalidate_namespace_state(uint64_t id) {
+  std::unique_lock<std::shared_mutex> lock(namespace_state_mutex);
+  namespace_state_cache.erase(id);
+}
+// Encoded tablet -> table bindings are immutable (local ids are never reused),
+// but tablet-stat refresh used to re-walk the directory per tablet per pass.
+std::shared_mutex tablet_table_mutex;
+std::unordered_map<uint64_t, uint64_t> tablet_table_cache;
+void remember_tablet_table(uint64_t tablet, uint64_t table) {
+  if (table == OB_INVALID_ID) { return; }
+  std::unique_lock<std::shared_mutex> lock(tablet_table_mutex);
+  if (tablet_table_cache.size() > (1u << 20)) { tablet_table_cache.clear(); }
+  tablet_table_cache[tablet] = table;
+}
 // ponytail: manual GC excludes all metadata operations while marking/sweeping.
 // One lock and nesting depth per thread, no resident page/reader registry. Use
 // versioned reader epochs if measurements justify concurrent marking later.
@@ -307,43 +341,6 @@ bool entry(const std::string &s, uint64_t &object, uint64_t &table, uint64_t &ta
 int write_sql(ObISQLClient &sql, const ObSqlString &statement) {
   int64_t affected = 0; return sql.write(statement.ptr(), affected);
 }
-int ensure_control_column(ObISQLClient &sql, const char *column, const char *definition) {
-  int ret = OB_SUCCESS;
-  ObSqlString q;
-  bool missing = false;
-  {
-    ObMySQLProxy::MySQLResult res;
-    sqlclient::ObMySQLResult *r = nullptr;
-    if (OB_FAIL(q.assign_fmt("SHOW COLUMNS FROM %s", NAMESPACES))) {
-    } else if (OB_FAIL(sql.read(res, q.ptr()))) {
-    } else if (OB_ISNULL(r = res.get_result())) {
-      ret = OB_ERR_UNEXPECTED;
-      missing = true;
-    } else {
-      missing = true;
-      ObString name;
-      while (OB_SUCC(ret = r->next())) {
-        if (OB_FAIL(r->get_varchar(0L, name))) {
-          break;
-        } else if (name == column) {
-          missing = false;
-          break;
-        }
-      }
-      if (ret == OB_ITER_END) { ret = OB_SUCCESS; }
-    }
-  }
-  if (OB_SUCC(ret) && missing) {
-    q.reset();
-    if (OB_FAIL(q.assign_fmt("ALTER TABLE %s ADD COLUMN %s %s",
-                             NAMESPACES, column, definition))) {
-    } else {
-      ret = write_sql(sql, q);
-      LOG_INFO("PROTOTYPE_NAMESPACE_CONTROL_COLUMN_MIGRATED", K(ret), "column", column);
-    }
-  }
-  return ret;
-}
 int blob(ObISQLClient &sql, uint64_t id, std::string &out) {
   int ret = OB_SUCCESS;
   ObSqlString q; ObMySQLProxy::MySQLResult res; sqlclient::ObMySQLResult *r = nullptr;
@@ -376,6 +373,170 @@ int save_blob(ObISQLClient &sql, const std::string &data, uint64_t &id) {
       } else { ret = write_sql(sql, q); }
     }
   } else if (existing != data) { ret = OB_CHECKSUM_ERROR; }
+  return ret;
+}
+// Exception-table model: a namespace row stores only its immutable parent link
+// (parent_namespace, fork_cap), and the exceptions table records just the
+// tablets this namespace physically owns or has explicitly dropped. Everything
+// else is resolved by probing deterministic physical ids along the parent
+// chain; encode(1, local) == local, so namespace 1 terminates every walk with
+// its raw tablet ids.
+// Parent links never change after fork commit and namespace ids are never
+// reused, so this cache needs no invalidation.
+std::shared_mutex chain_mutex;
+std::unordered_map<uint64_t, std::pair<uint64_t, int64_t>> chain_links;
+void remember_chain_link(uint64_t ns, uint64_t parent, int64_t fork_cap) {
+  std::unique_lock<std::shared_mutex> lock(chain_mutex);
+  chain_links[ns] = {parent, fork_cap};
+}
+int namespace_chain_link(ObISQLClient &sql, uint64_t ns, uint64_t &parent, int64_t &fork_cap) {
+  {
+    std::shared_lock<std::shared_mutex> lock(chain_mutex);
+    const auto it = chain_links.find(ns);
+    if (it != chain_links.end()) {
+      parent = it->second.first; fork_cap = it->second.second;
+      return OB_SUCCESS;
+    }
+  }
+  ObSqlString q; ObMySQLProxy::MySQLResult res; sqlclient::ObMySQLResult *r = nullptr;
+  int ret = q.assign_fmt(
+      "SELECT parent_namespace,fork_cap FROM %s WHERE namespace_id=%lu AND state=0",
+      NAMESPACES, ns);
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(sql.read(res, q.ptr()))) {
+  } else if (OB_ISNULL(r = res.get_result())) { ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(r->next())) {
+  } else if (OB_FAIL(r->get_uint(0L, parent))) {
+  } else {
+    // fork_cap is BIGINT UNSIGNED; the worker-bounced result set rejects
+    // get_int on an unsigned cell.
+    uint64_t cap_value = 0;
+    if (OB_FAIL(r->get_uint(1L, cap_value))) {
+    } else {
+      fork_cap = static_cast<int64_t>(cap_value);
+      remember_chain_link(ns, parent, fork_cap);
+    }
+  }
+  return ret;
+}
+// Exception rows are written only by this process, inside the same transaction
+// as the physical tablet change they describe, and applied here synchronously
+// after commit. The lazy SELECT load and every post-commit apply serialize on
+// one mutex, and a commit always precedes its apply, so the cache can never
+// miss a committed row.
+struct ExceptionSet {
+  bool loaded = false;
+  std::unordered_map<uint64_t, uint64_t> owned; // local tablet -> local table
+  std::unordered_set<uint64_t> tombstoned;      // dropped here: never inherit
+};
+std::mutex exceptions_mutex;
+std::unordered_map<uint64_t, ExceptionSet> exception_sets;
+int load_exceptions(ObISQLClient &sql, uint64_t ns) {
+  std::lock_guard<std::mutex> lock(exceptions_mutex);
+  ExceptionSet &set = exception_sets[ns];
+  if (set.loaded) { return OB_SUCCESS; }
+  ObSqlString q; ObMySQLProxy::MySQLResult res; sqlclient::ObMySQLResult *r = nullptr;
+  int ret = q.assign_fmt(
+      "SELECT tablet_id,table_id,kind FROM %s WHERE namespace_id=%lu", EXCEPTIONS, ns);
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(sql.read(res, q.ptr()))) {
+  } else if (OB_ISNULL(r = res.get_result())) { ret = OB_ERR_UNEXPECTED;
+  } else {
+    while (OB_SUCC(ret = r->next())) {
+      uint64_t tablet = 0, table = 0; int64_t kind = 0;
+      if (OB_FAIL(r->get_uint(0L, tablet)) || OB_FAIL(r->get_uint(1L, table))
+          || OB_FAIL(r->get_int(2L, kind))) {
+        break;
+      } else if (kind == 0) {
+        set.owned[tablet] = table;
+      } else {
+        set.tombstoned.insert(tablet);
+        set.owned.erase(tablet);
+      }
+    }
+    if (ret == OB_ITER_END) { ret = OB_SUCCESS; }
+  }
+  if (OB_SUCC(ret)) { set.loaded = true; }
+  if (OB_FAIL(ret)) { exception_sets.erase(ns); }
+  return ret;
+}
+// Callers must have loaded the namespace's set first.
+bool exception_owned(uint64_t ns, uint64_t local, uint64_t *table = nullptr) {
+  std::lock_guard<std::mutex> lock(exceptions_mutex);
+  const auto it = exception_sets.find(ns);
+  if (it == exception_sets.end() || !it->second.loaded) { return false; }
+  const auto owned = it->second.owned.find(local);
+  if (owned == it->second.owned.end()) { return false; }
+  if (table != nullptr) { *table = owned->second; }
+  return true;
+}
+bool exception_tombstoned(uint64_t ns, uint64_t local) {
+  std::lock_guard<std::mutex> lock(exceptions_mutex);
+  const auto it = exception_sets.find(ns);
+  return it != exception_sets.end() && it->second.loaded
+      && it->second.tombstoned.count(local) != 0;
+}
+void apply_exception_owned(uint64_t ns, uint64_t local, uint64_t table) {
+  std::lock_guard<std::mutex> lock(exceptions_mutex);
+  const auto it = exception_sets.find(ns);
+  if (it != exception_sets.end() && it->second.loaded) {
+    it->second.owned[local] = table;
+    it->second.tombstoned.erase(local);
+  }
+}
+void drop_exception_cache(uint64_t ns) {
+  std::lock_guard<std::mutex> lock(exceptions_mutex);
+  exception_sets.erase(ns);
+}
+// Committed physical presence in the tablet manager. Uncommitted creations do
+// not count, so a reader racing a materialization simply falls through to the
+// ancestor copy, which holds the same data at its fork cap.
+int probe_physical_tablet(uint64_t id, bool &exists) {
+  exists = false;
+  ObTabletHandle handle;
+  const int ret = ObTabletCreateDeleteHelper::check_and_get_tablet(
+      ObTabletMapKey(ObTabletID(id)), handle, 0,
+      ObMDSGetTabletMode::READ_READABLE_COMMITED,
+      transaction::ObTransVersion::MAX_TRANS_VERSION);
+  if (ret == OB_SUCCESS) { exists = true; return OB_SUCCESS; }
+  return ret == OB_TABLET_NOT_EXIST || ret == OB_ENTRY_NOT_EXIST || ret == OB_EAGAIN
+      ? OB_SUCCESS : ret;
+}
+// Find the nearest ancestor that physically holds this tablet. The cap
+// accumulates the fork snapshot of every crossed hop, so a hit at any depth
+// yields exactly the view the namespace had at its own fork.
+int resolve_inherited_tablet(ObISQLClient &sql, uint64_t ns, uint64_t local,
+                             uint64_t &physical, int64_t &cap_scn) {
+  int ret = OB_SUCCESS;
+  uint64_t cur = ns;
+  int64_t cap = 0;
+  bool found = false;
+  const char *stage = "done";
+  uint64_t hop_ns = ns, hop_parent = 0, hop_candidate = 0;
+  for (int depth = 0; OB_SUCC(ret) && !found && depth < 64; ++depth) {
+    uint64_t parent = 0; int64_t fork_cap = 0;
+    ret = namespace_chain_link(sql, cur, parent, fork_cap);
+    stage = "chain_link"; hop_ns = cur;
+    if (ret == OB_ITER_END) { ret = OB_SUCCESS; break; }
+    if (OB_FAIL(ret) || parent == 0) { break; }
+    cap = cap_min(cap, fork_cap);
+    const uint64_t candidate = encoded(parent, local);
+    bool exists = false;
+    hop_parent = parent; hop_candidate = candidate;
+    if (OB_FAIL(probe_physical_tablet(candidate, exists))) { stage = "probe"; break; }
+    if (exists) {
+      physical = candidate; cap_scn = cap; found = true;
+    } else {
+      cur = parent;
+    }
+  }
+  if (OB_SUCC(ret) && !found) { ret = OB_TABLET_NOT_EXIST; }
+  if (ret != OB_SUCCESS && ret != OB_TABLET_NOT_EXIST) {
+    fprintf(stderr, "PROTOTYPE_V24_RESOLVE_FAIL ns=%llu local=%llu ret=%d stage=%s hop_ns=%llu hop_parent=%llu candidate=%llu\n",
+        (unsigned long long)ns, (unsigned long long)local, ret, stage,
+        (unsigned long long)hop_ns, (unsigned long long)hop_parent,
+        (unsigned long long)hop_candidate);
+  }
   return ret;
 }
 int read_node(ObISQLClient &sql, Ref ref, Node &node) {
@@ -896,49 +1057,6 @@ int database_from_value(uint64_t ns, const Value &value, const ObDatabaseSchema 
     auto &slot = database_schemas[id]; if (!slot) { slot = std::move(holder); } schema = &slot->schema; }
   return OB_SUCCESS;
 }
-// Find an owned binding, or a snapshot binding retained by a LIVE descendant.
-// The caller registers its activity before this lookup when it will read storage.
-// ponytail: temporary graph walk per background lookup; no resident lineage index.
-int bound_value(ObISQLClient &sql, const ObTabletID &tablet, Roots &root, Value &value) {
-  const uint64_t local = local_of(tablet.id());
-  int ret = roots(sql, database_of(tablet.id()), root);
-  auto matches = [&](Ref directory) -> int {
-    int result = find(sql, directory, key_of(local), value);
-    if (result != OB_SUCCESS) { return result; }
-    uint64_t object = 0, table = 0, source = 0, bound = 0;
-    if (!entry(value.data, object, table, source, bound) || source != local) { return OB_CHECKSUM_ERROR; }
-    return bound == tablet.id() ? OB_SUCCESS : OB_ENTRY_NOT_EXIST;
-  };
-  if (ret == OB_SUCCESS) { return matches(root.directory); }
-  if (ret != OB_ITER_END) { return ret; }
-  std::vector<uint64_t> pending, visited;
-  {
-    ObSqlString q; ObMySQLProxy::MySQLResult res; sqlclient::ObMySQLResult *r = nullptr;
-    if (OB_FAIL(q.assign_fmt("SELECT snapshot_ref FROM %s WHERE state=0 AND snapshot_ref>0", NAMESPACES))) {
-    } else if (OB_FAIL(sql.read(res, q.ptr()))) {
-    } else if (OB_ISNULL(r = res.get_result())) { ret = OB_ERR_UNEXPECTED;
-    } else {
-      while (OB_SUCC(ret = r->next())) {
-        uint64_t id = 0;
-        if (OB_FAIL(r->get_uint(0L, id))) { break; }
-        pending.push_back(id);
-      }
-      if (ret == OB_ITER_END) { ret = OB_SUCCESS; }
-    }
-  }
-  while (ret == OB_SUCCESS && !pending.empty()) {
-    uint64_t id = pending.back(); pending.pop_back();
-    if (std::find(visited.begin(), visited.end(), id) != visited.end()) { continue; }
-    visited.push_back(id);
-    if ((ret = snapshot_roots(sql, id, root)) != OB_SUCCESS) { break; }
-    ret = matches(root.directory);
-    if (ret == OB_SUCCESS) { return ret; }
-    if (ret != OB_ENTRY_NOT_EXIST) { break; }
-    ret = OB_SUCCESS;
-    if (root.parent_ref) { pending.push_back(root.parent_ref); }
-  }
-  return ret == OB_SUCCESS ? OB_ENTRY_NOT_EXIST : ret;
-}
 int release_lineage(ObISQLClient &trans, uint64_t id) {
   int ret = OB_SUCCESS;
   // Locks go from newer snapshots to older parents. A child owns exactly one
@@ -1101,10 +1219,15 @@ int NamespaceForkKernelPrototype::ensure_control_schema() {
       "source_id BIGINT UNSIGNED,catalog_page BIGINT UNSIGNED,catalog_cap BIGINT,"
       "directory_page BIGINT UNSIGNED,directory_cap BIGINT,snapshot BIGINT,schema_version BIGINT,"
       "snapshot_ref BIGINT UNSIGNED DEFAULT 0,state BIGINT DEFAULT 0,"
-      "active_schema_changes BIGINT DEFAULT 0,pending_schema_version BIGINT DEFAULT 0)",
+      "active_schema_changes BIGINT DEFAULT 0,pending_schema_version BIGINT DEFAULT 0,"
+      "parent_namespace BIGINT UNSIGNED DEFAULT 0,fork_cap BIGINT UNSIGNED DEFAULT 0)",
     "CREATE TABLE IF NOT EXISTS __fork_proto_meta.endpoints("
       "namespace_id BIGINT UNSIGNED PRIMARY KEY,generation BIGINT UNSIGNED,"
       "worker_pid BIGINT UNSIGNED,endpoint VARCHAR(512))",
+    "CREATE TABLE IF NOT EXISTS __fork_proto_meta.exceptions("
+      "namespace_id BIGINT UNSIGNED,tablet_id BIGINT UNSIGNED,"
+      "table_id BIGINT UNSIGNED,kind BIGINT,drop_scn BIGINT DEFAULT 0,"
+      "PRIMARY KEY(namespace_id,tablet_id))",
     lineage_mode()
       ? "CREATE TABLE IF NOT EXISTS __fork_proto_meta.snapshots("
           "snapshot_id BIGINT UNSIGNED PRIMARY KEY,catalog_page BIGINT UNSIGNED,"
@@ -1118,12 +1241,6 @@ int NamespaceForkKernelPrototype::ensure_control_schema() {
   for (const char *statement : statements) {
     int64_t affected_rows = 0;
     if (OB_FAIL(GCTX.sql_proxy_->write(statement, affected_rows))) { break; }
-  }
-  if (OB_SUCC(ret)) {
-    ret = ensure_control_column(*GCTX.sql_proxy_, "active_schema_changes", "BIGINT DEFAULT 0");
-  }
-  if (OB_SUCC(ret)) {
-    ret = ensure_control_column(*GCTX.sql_proxy_, "pending_schema_version", "BIGINT DEFAULT 0");
   }
   LOG_INFO("PROTOTYPE_NAMESPACE_CONTROL_SCHEMA", K(ret));
   return ret;
@@ -1156,9 +1273,27 @@ int NamespaceForkKernelPrototype::begin_namespace_drop(const ObString &name, uin
     ret = OB_EAGAIN;
   } else if (root.state == 2) { done = true;
   } else if (root.state != 0 && root.state != 1) { ret = OB_STATE_NOT_MATCH;
+  } else if (id != 1 && OB_FAIL([&]() -> int {
+      // A child namespace reads inherited tablets through this namespace's
+      // physical copies. Dropping a parent with live forks would orphan them,
+      // so refuse until the children are gone. (Prototype simplification; the
+      // directory model retained source snapshots instead.)
+      ObMySQLProxy::MySQLResult res; sqlclient::ObMySQLResult *r = nullptr;
+      int check = q.assign_fmt(
+          "SELECT 1 FROM %s WHERE parent_namespace=%lu AND state<>2 LIMIT 1", NAMESPACES, id);
+      if (check != OB_SUCCESS) {
+      } else if (OB_SUCCESS != (check = trans.read(res, q.ptr()))) {
+      } else if (OB_ISNULL(r = res.get_result())) { check = OB_ERR_UNEXPECTED;
+      } else if ((check = r->next()) == OB_SUCCESS) {
+        check = OB_OP_NOT_ALLOW;
+        LOG_USER_ERROR(OB_OP_NOT_ALLOW, "drop a namespace with live forks");
+      } else if (check == OB_ITER_END) { check = OB_SUCCESS; }
+      return check;
+  }())) {
   } else if (OB_FAIL(q.assign_fmt("UPDATE %s SET state=1 WHERE namespace_id=%lu", NAMESPACES, id))) {
   } else { ret = write_sql(trans, q); }
   if (trans.is_started()) { const int end = trans.end(ret == OB_SUCCESS); if (ret == OB_SUCCESS) { ret = end; } }
+  if (OB_SUCC(ret)) { invalidate_namespace_state(id); }
   LOG_INFO("PROTOTYPE_V7_NAMESPACE_CLOSE", K(ret), K(id), K(done));
   return ret;
 }
@@ -1169,23 +1304,21 @@ int NamespaceForkKernelPrototype::lock_namespace_drop(ObISQLClient &trans, uint6
   if (ret != OB_SUCCESS) { return ret; }
   if (root.state != 1) { return OB_STATE_NOT_MATCH; }
   if (id == 1) { return OB_SUCCESS; } // Native DROP owns its own enumeration.
-  std::vector<Ref> pending; if (root.directory.page) { pending.push_back(root.directory); }
-  while (OB_SUCC(ret) && !pending.empty()) {
-    Ref ref = pending.back(); pending.pop_back(); Node node;
-    if (OB_FAIL(read_node(trans, ref, node))) {
-    } else if (!node.leaf) { pending.insert(pending.end(), node.children.begin(), node.children.end());
-    } else {
-      for (const auto &value : node.values) {
-        uint64_t object = 0, table = 0, source = 0, bound = 0;
-        if (!entry(value.data, object, table, source, bound)) { ret = OB_CHECKSUM_ERROR;
-        } else if (!bound) { continue; // Inherited input belongs to the snapshot, never this branch.
-        } else if (lineage_mode() && is_encoded_id(bound) && database_of(bound) != id) {
-          continue; // An inherited physical binding is owned by an ancestor snapshot.
-        } else if (bound != encoded(id, source)) { ret = OB_STATE_NOT_MATCH;
-        } else { ret = bound_tablets.push_back(ObTabletID(bound)); }
-        if (ret != OB_SUCCESS) { break; }
+  // The owned exception rows are exactly this namespace's private tablets.
+  ObSqlString q; ObMySQLProxy::MySQLResult res; sqlclient::ObMySQLResult *r = nullptr;
+  if (OB_FAIL(q.assign_fmt(
+      "SELECT tablet_id FROM %s WHERE namespace_id=%lu AND kind=0", EXCEPTIONS, id))) {
+  } else if (OB_FAIL(trans.read(res, q.ptr()))) {
+  } else if (OB_ISNULL(r = res.get_result())) { ret = OB_ERR_UNEXPECTED;
+  } else {
+    while (OB_SUCC(ret = r->next())) {
+      uint64_t tablet = 0;
+      if (OB_FAIL(r->get_uint(0L, tablet))) {
+      } else {
+        ret = bound_tablets.push_back(ObTabletID(encoded(id, tablet)));
       }
     }
+    if (ret == OB_ITER_END) { ret = OB_SUCCESS; }
   }
   return ret;
 }
@@ -1194,6 +1327,9 @@ int NamespaceForkKernelPrototype::finish_namespace_drop(ObISQLClient &trans, uin
   Roots root; ObSqlString q; int ret = roots(trans, id, root, true, true);
   if (OB_FAIL(ret)) {
   } else if (root.state != 1) { ret = OB_STATE_NOT_MATCH;
+  } else if (id != 1 && OB_FAIL(q.assign_fmt(
+      "DELETE FROM %s WHERE namespace_id=%lu", EXCEPTIONS, id))) {
+  } else if (id != 1 && OB_FAIL(write_sql(trans, q))) {
   } else if (OB_FAIL(q.assign_fmt("UPDATE %s SET state=2,source_id=0,snapshot_ref=0,catalog_page=0,catalog_cap=0,directory_page=0,directory_cap=0,snapshot=0,schema_version=0,active_schema_changes=0,pending_schema_version=0 WHERE namespace_id=%lu AND state=1", NAMESPACES, id))) {
   } else { ret = write_sql(trans, q); }
   if (OB_SUCC(ret) && root.snapshot_ref && lineage_mode()) {
@@ -1232,6 +1368,10 @@ int NamespaceForkKernelPrototype::finish_namespace_drop(ObISQLClient &trans, uin
       LOG_INFO("PROTOTYPE_V7_RELEASE_SNAPSHOT_IN_TRANS", K(ret), K(id), "snapshot", root.snapshot_ref);
     }
   }
+  // The caller still commits, but a spurious cache miss after a rollback is
+  // harmless while a stale LIVE entry after a committed drop is not.
+  if (OB_SUCC(ret)) { invalidate_namespace_state(id); }
+  if (OB_SUCC(ret)) { drop_exception_cache(id); }
   return ret;
 }
 int NamespaceForkKernelPrototype::check_baseline_access(const ObTabletID &tablet_id, bool &held) {
@@ -1240,10 +1380,26 @@ int NamespaceForkKernelPrototype::check_baseline_access(const ObTabletID &tablet
   if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   if (!held) { active_accesses.fetch_add(1); held = true; }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
-  Roots root; Value value;
-  // A deleted parent may still serve a LIVE descendant. Requiring a LIVE owner in
-  // the graph walk prevents a new DAG entering after the final descendant closes.
-  return bound_value(*GCTX.sql_proxy_, tablet_id, root, value);
+  if (!is_encoded_id(tablet_id.id())) { return OB_SUCCESS; }
+  const uint64_t ns = database_of(tablet_id.id());
+  // A baseline DAG is only valid on a tablet its namespace still owns. DROP
+  // drains active accesses before deleting the owned rows, so an admitted DAG
+  // always finishes against a valid binding.
+  int64_t state = 0;
+  if (cached_namespace_state(ns, state)) {
+  } else {
+    Roots root;
+    const int roots_ret = roots(*GCTX.sql_proxy_, ns, root, false, true);
+    if (roots_ret != OB_SUCCESS) { return roots_ret; }
+    state = root.state;
+    remember_namespace_state(ns, state);
+  }
+  if (state != 0) { return OB_ENTRY_NOT_EXIST; }
+  int ret = load_exceptions(*GCTX.sql_proxy_, ns);
+  if (OB_SUCC(ret) && !exception_owned(ns, local_of(tablet_id.id()))) {
+    ret = OB_ENTRY_NOT_EXIST;
+  }
+  return ret;
 }
 void NamespaceForkKernelPrototype::release_access(bool &held) {
   if (held) { held = false; active_accesses.fetch_sub(1); }
@@ -1282,9 +1438,17 @@ int NamespaceForkKernelPrototype::check_table_access(uint64_t table_id, const Ob
     // Register BEFORE reading LIVE; release only after iterators/store contexts or
     // a baseline DAG have released their inputs. New work after close cannot enter.
     if (!held) { active_accesses.fetch_add(1); held = true; }
-    Roots root;
-    if (OB_FAIL(roots(*GCTX.sql_proxy_, id, root, false, true))) {
-    } else if (root.state != 0) {
+    int64_t state = 0;
+    if (cached_namespace_state(id, state)) {
+    } else {
+      Roots root;
+      if (OB_FAIL(roots(*GCTX.sql_proxy_, id, root, false, true))) {
+        return ret;
+      }
+      state = root.state;
+      remember_namespace_state(id, state);
+    }
+    if (state != 0) {
       ret = OB_OP_NOT_ALLOW;
       LOG_USER_ERROR(OB_OP_NOT_ALLOW, "access a closing or deleted prototype namespace");
     }
@@ -1297,46 +1461,92 @@ int NamespaceForkKernelPrototype::protect_snapshot_tablets(ObIArray<ObTabletID> 
   if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   int ret = OB_SUCCESS;
-  // Candidates are committed deletions, collected BEFORE reading snapshot roots.
-  // A closing source cannot publish another snapshot. Failed reads stop this GC pass.
-  std::vector<Ref> directories;
+  // Candidates are committed deletions. A candidate stays referenced while any
+  // LIVE namespace still resolves the tablet to it: the namespace itself must
+  // not have a tombstone for the local id, and no nearer level on its parent
+  // chain may hold its own owned copy. Prototype simplification: ownership is
+  // checked regardless of fork order, so a tablet dropped in a parent is
+  // retained until every LIVE descendant is gone.
+  std::unordered_map<uint64_t, uint64_t> live_parents;
   {
     ObSqlString q; ObMySQLProxy::MySQLResult res; sqlclient::ObMySQLResult *r = nullptr;
-    if (OB_FAIL(lineage_mode()
-        ? q.assign_fmt("SELECT directory_page,directory_cap FROM %s WHERE ref_count>0", SNAPSHOTS)
-        : q.assign_fmt("SELECT s.directory_page,s.snapshot FROM %s s WHERE EXISTS(SELECT 1 FROM %s n WHERE n.snapshot_ref=s.snapshot_id)", SNAPSHOTS, NAMESPACES))) {
+    if (OB_FAIL(q.assign_fmt("SELECT namespace_id,parent_namespace FROM %s WHERE state=0", NAMESPACES))) {
     } else if (OB_FAIL(GCTX.sql_proxy_->read(res, q.ptr()))) {
     } else if (OB_ISNULL(r = res.get_result())) { ret = OB_ERR_UNEXPECTED;
     } else {
-      while (OB_SUCC(ret) && OB_SUCC(ret = r->next())) {
-        Ref ref;
-        if (OB_FAIL(r->get_uint(0L, ref.page)) || OB_FAIL(r->get_int(1L, ref.cap))) {
-        } else { directories.push_back(ref); }
+      while (OB_SUCC(ret = r->next())) {
+        uint64_t ns = 0, parent = 0;
+        if (OB_FAIL(r->get_uint(0L, ns)) || OB_FAIL(r->get_uint(1L, parent))) { break; }
+        live_parents[ns] = parent;
       }
       if (ret == OB_ITER_END) { ret = OB_SUCCESS; }
     }
   }
+  std::unordered_map<uint64_t, std::unordered_set<uint64_t>> owned_by_local;
+  std::unordered_map<uint64_t, std::unordered_set<uint64_t>> tombstoned_by_local;
+  if (OB_SUCC(ret)) {
+    ObSqlString q;
+    if (OB_FAIL(q.assign_fmt("SELECT namespace_id,tablet_id,kind FROM %s WHERE tablet_id IN (", EXCEPTIONS))) {
+    } else {
+      std::unordered_set<uint64_t> locals;
+      for (int64_t i = 0; OB_SUCC(ret) && i < candidates.count(); ++i) {
+        const uint64_t local = local_of(candidates.at(i).id());
+        if (locals.insert(local).second) {
+          ret = q.append_fmt("%s%lu", locals.size() == 1 ? "" : ",", local);
+        }
+      }
+      if (OB_SUCC(ret)) { ret = q.append(")"); }
+    }
+    if (OB_SUCC(ret)) {
+      ObMySQLProxy::MySQLResult res; sqlclient::ObMySQLResult *r = nullptr;
+      if (OB_FAIL(GCTX.sql_proxy_->read(res, q.ptr()))) {
+      } else if (OB_ISNULL(r = res.get_result())) { ret = OB_ERR_UNEXPECTED;
+      } else {
+        while (OB_SUCC(ret = r->next())) {
+          uint64_t ns = 0, tablet = 0; int64_t kind = 0;
+          if (OB_FAIL(r->get_uint(0L, ns)) || OB_FAIL(r->get_uint(1L, tablet))
+              || OB_FAIL(r->get_int(2L, kind))) {
+            break;
+          } else if (kind == 0) {
+            owned_by_local[tablet].insert(ns);
+          } else {
+            tombstoned_by_local[tablet].insert(ns);
+          }
+        }
+        if (ret == OB_ITER_END) { ret = OB_SUCCESS; }
+      }
+    }
+  }
   ObArray<ObTabletID> unreferenced;
   for (int64_t i = 0; OB_SUCC(ret) && i < candidates.count(); ++i) {
+    const uint64_t id = candidates.at(i).id();
+    const uint64_t owner = is_encoded_id(id) ? database_of(id) : 1;
+    const uint64_t local = local_of(id);
     bool retained = false;
-    for (const auto &ref : directories) {
-      Value value;
-      ret = find(*GCTX.sql_proxy_, ref, key_of(lineage_mode() ? local_of(candidates.at(i).id()) : candidates.at(i).id()), value);
-      if (ret == OB_ENTRY_NOT_EXIST) { ret = OB_SUCCESS; continue; }
-      if (ret != OB_SUCCESS) { break; }
-      uint64_t object = 0, table = 0, source = 0, bound = 0;
-      if (!entry(value.data, object, table, source, bound)) { ret = OB_CHECKSUM_ERROR;
-      } else if (lineage_mode()) {
-        retained = (bound ? bound : source) == candidates.at(i).id();
-      } else if (source != candidates.at(i).id() || bound) { ret = OB_CHECKSUM_ERROR;
-      } else { retained = true; }
-      if (ret != OB_SUCCESS || retained) { break; }
+    for (const auto &live : live_parents) {
+      const uint64_t reader = live.first;
+      if (reader == owner) { continue; }
+      if (tombstoned_by_local[local].count(reader) != 0) { continue; }
+      // Walk the reader's chain: the first owned copy below the owner serves
+      // the reader instead, and reaching namespace 1 only helps a raw
+      // candidate.
+      uint64_t cur = reader;
+      bool via_candidate = false;
+      for (int depth = 0; depth < 64; ++depth) {
+        if (owned_by_local[local].count(cur) != 0) { break; }
+        if (cur == owner) { via_candidate = true; break; }
+        const auto parent = live_parents.find(cur);
+        if (parent == live_parents.end() || parent->second == 0) { break; }
+        cur = parent->second;
+      }
+      if (via_candidate) { retained = true; break; }
     }
-    if (OB_FAIL(ret)) {
-    } else if (retained) {
+    if (retained) {
       need_retry = true;
       LOG_INFO("PROTOTYPE_V6_RETAIN_SNAPSHOT_TABLET", "tablet_id", candidates.at(i));
-    } else { ret = unreferenced.push_back(candidates.at(i)); }
+    } else {
+      ret = unreferenced.push_back(candidates.at(i));
+    }
   }
   if (OB_SUCC(ret)) { ret = candidates.assign(unreferenced); }
   return ret;
@@ -1904,37 +2114,9 @@ int NamespaceForkKernelPrototype::control_namespace(const ObString &source, cons
   if (OB_SUCC(ret)) { ret = write_sql(trans, q); }
   if (OB_SUCC(ret)) { ret = namespace_named(trans, target, id); }
   if (OB_SUCC(ret) && !NamespaceObjectKey{id, 1}.is_valid()) { ret = OB_SIZE_OVERFLOW; }
-  if (OB_SUCC(ret) && bootstrap) {
-    // One-time enrollment of every physical schema tablet before any fork.
-    // System-table data then follows the same immutable directory root as user
-    // data. Future CREATEs maintain the source root in their DDL transaction.
-    ObArray<const ObTableSchema *> system_tables;
-    ObArray<const ObDatabaseSchema *> databases;
-    if (OB_FAIL(guard.get_table_schemas_in_runtime(system_tables))) {
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < system_tables.count(); ++i) {
-        const ObTableSchema &table = *system_tables.at(i);
-        if (table.is_sys_table() || table.is_aux_lob_table()
-            || (is_inner_table(table.get_table_id()) && table.is_index_table())) {
-          ret = observe_schema(trans, table);
-        }
-      }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(guard.get_database_schemas_in_runtime(databases))) {
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < databases.count(); ++i) {
-        const auto &db = *databases.at(i);
-        if (is_inner_db(db.get_database_id()) || db.get_database_name_str().prefix_match("__fork_proto_meta")) { continue; }
-        ObArray<const ObTableSchema *> tables;
-        if (OB_FAIL(observe_database(trans, db))) {
-        } else if (OB_FAIL(guard.get_table_schemas_in_database(db.get_database_id(), tables))) {
-        } else {
-          for (int64_t j = 0; OB_SUCC(ret) && j < tables.count(); ++j) { ret = observe_schema(trans, *tables.at(j)); }
-        }
-      }
-    }
-  } else if (OB_SUCC(ret)) {
+  // The exception-table model has no per-table enrollment: namespace 1 keeps
+  // its raw tablets and a fork records only its parent link and fork cap.
+  if (OB_SUCC(ret) && !bootstrap) {
     ObSnapshotInfo pin; ObSnapshotTableProxy pins;
     if (OB_FAIL(observer::namespace_worker_prototype::acquire_storage_snapshot(root.snapshot))) {
     } else if (OB_FAIL(pin.snapshot_scn_.convert_for_tx(root.snapshot))) {
@@ -1977,6 +2159,12 @@ int NamespaceForkKernelPrototype::control_namespace(const ObString &source, cons
         }
         root.source = lifetime_mode() ? 0 : source_id;
         if (OB_SUCC(ret)) { ret = save_roots(trans, id, root); }
+        if (OB_SUCC(ret)) {
+          ret = q.assign_fmt(
+              "UPDATE %s SET parent_namespace=%lu,fork_cap=%ld WHERE namespace_id=%lu",
+              NAMESPACES, source_id, root.snapshot, id);
+        }
+        if (OB_SUCC(ret)) { ret = write_sql(trans, q); }
       }
     }
   }
@@ -1986,6 +2174,10 @@ int NamespaceForkKernelPrototype::control_namespace(const ObString &source, cons
   }
   const int end = trans.end(ret == OB_SUCCESS); if (ret == OB_SUCCESS) { ret = end; }
   const int64_t published_us = ObTimeUtility::current_time();
+  if (ret == OB_SUCCESS && !bootstrap) {
+    // The parent link is immutable from this commit on; cache it forever.
+    remember_chain_link(id, source_id, root.snapshot);
+  }
   if (ret == OB_SUCCESS && !bootstrap) {
     ret = observer::namespace_worker_prototype::reload_storage_freeze_info();
   }
@@ -2021,6 +2213,12 @@ int NamespaceForkKernelPrototype::observe_schema_in_namespace(
     ObISQLClient &trans, const ObTableSchema &schema, uint64_t namespace_id) {
   if (!enabled() || (!schema.is_user_table() && !schema.is_index_table()
       && !schema.is_sys_table() && !schema.is_aux_lob_table())) {
+    return OB_SUCCESS;
+  }
+  if (native_namespace_schema_authority()) {
+    // The exception-table model has no per-table directory registration:
+    // tablets of a forked namespace resolve along the parent chain until they
+    // are materialized, and namespace 1 keeps its raw tablets unregistered.
     return OB_SUCCESS;
   }
   if (namespace_id >= (1ULL << 30)) { return OB_INVALID_ARGUMENT; }
@@ -2350,6 +2548,12 @@ int NamespaceForkKernelPrototype::forget_schema_in_namespace(
     ObIArray<ObTabletID> *private_tablets,
     const ObTableSchema *replacement_schema) {
   if (private_tablet != nullptr) { *private_tablet = false; }
+  if (native_namespace_schema_authority()) {
+    // Namespace DDL in a fork publishes its tablet ownership delta through
+    // publish_schema_delta; namespace 1 keeps raw tablets and needs no
+    // unregistration either.
+    return OB_SUCCESS;
+  }
   // Dropping namespace 1 deletes its native schema rows and then clears the
   // whole namespace root.  Per-table directory updates would read that root as
   // LIVE after begin_namespace_drop() has already made it DELETING.  They are
@@ -2562,12 +2766,12 @@ int collect_directory_tablets(
   return ret;
 }
 
-// Apply a complete native-schema delta against one immutable directory root.
+// Apply a complete native-schema delta to the namespace's exception set.
 // Looking at the whole delta is essential: operations such as EXCHANGE
 // PARTITION move an existing tablet between tables without changing its
 // physical binding. Per-table forget/observe calls cannot distinguish that
 // move from a drop followed by a conflicting create.
-int replace_namespace_directory(
+int replace_namespace_exceptions(
     ObISQLClient &trans,
     uint64_t namespace_id,
     int64_t schema_version,
@@ -2589,88 +2793,77 @@ int replace_namespace_directory(
   }
   Roots root;
   if (OB_SUCC(ret)) {
+    // The row lock serializes this delta against forks and materializations.
     ret = roots(trans, namespace_id, root, true);
   }
+  if (OB_SUCC(ret)) {
+    ret = load_exceptions(trans, namespace_id);
+  }
 
-  // Remove only tablets that disappeared from the complete changed-schema
-  // set. A tablet retained by another table is a logical ownership move and
-  // must keep its inherited or already-materialized physical binding.
+  // Tablets that disappeared from the changed-schema set are dropped here:
+  // physically delete the ones this namespace owns, and tombstone every one
+  // so no later read can fall through to an inherited ancestor copy.
   for (auto it = previous_tablets.begin(); OB_SUCC(ret)
       && it != previous_tablets.end(); ++it) {
     const uint64_t tablet_id = it->first;
-    const DirectoryTabletState &previous = it->second;
     if (current_tablets.count(tablet_id) != 0) { continue; }
-    Value existing;
-    const int find_ret = find(trans, root.directory, key_of(tablet_id), existing);
-    if (find_ret == OB_ENTRY_NOT_EXIST) {
-      continue; // Idempotent recovery after the directory commit won.
-    } else if (find_ret != OB_SUCCESS) {
-      ret = find_ret;
-    } else {
-      uint64_t object = 0;
-      uint64_t existing_table = 0;
-      uint64_t existing_tablet = 0;
-      uint64_t bound = 0;
-      Ref next;
-      if (!entry(existing.data, object, existing_table, existing_tablet, bound)) {
-        ret = OB_CHECKSUM_ERROR;
-      } else if (existing_table != previous.table_id
-          || existing_tablet != tablet_id) {
-        ret = OB_STATE_NOT_MATCH;
-      } else if (bound == previous.physical_tablet_id
-          && OB_FAIL(private_tablets.push_back(ObTabletID(bound)))) {
-      } else if (OB_FAIL(remove_key(
-          trans, root.directory, key_of(tablet_id), next))) {
+    if (exception_owned(namespace_id, tablet_id)) {
+      const NamespaceObjectKey key{namespace_id, tablet_id};
+      if (!key.is_valid()) {
+        ret = OB_INVALID_ARGUMENT;
       } else {
-        root.directory = next;
+        ret = private_tablets.push_back(ObTabletID(key.storage_id()));
       }
+    }
+    ObSqlString q;
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(q.assign_fmt("REPLACE INTO %s VALUES(%lu,%lu,%lu,1,0)",
+        EXCEPTIONS, namespace_id, tablet_id, it->second.table_id))) {
+    } else {
+      ret = write_sql(trans, q);
     }
   }
 
-  // Upsert the final ownership map. Existing values retain their physical
-  // binding even when their logical table changes; only truly new logical
-  // tablets receive a namespace-owned physical id.
+  // Truly new logical tablets are physically created by the worker's DDL and
+  // become owned rows here. A kept tablet only needs its table id refreshed
+  // when the delta moved it between tables.
   for (auto it = current_tablets.begin(); OB_SUCC(ret)
       && it != current_tablets.end(); ++it) {
     const uint64_t tablet_id = it->first;
-    const DirectoryTabletState &current = it->second;
     const auto previous_it = previous_tablets.find(tablet_id);
-    Value existing;
-    const int find_ret = find(trans, root.directory, key_of(tablet_id), existing);
-    uint64_t bound = current.physical_tablet_id;
-    int64_t cap = 0;
-    if (find_ret == OB_SUCCESS) {
-      uint64_t object = 0;
-      uint64_t existing_table = 0;
-      uint64_t existing_tablet = 0;
-      if (!entry(existing.data, object, existing_table, existing_tablet, bound)) {
-        ret = OB_CHECKSUM_ERROR;
-      } else if (existing_tablet != tablet_id
-          || (existing_table != current.table_id
-              && (previous_it == previous_tablets.end()
-                  || existing_table != previous_it->second.table_id))) {
-        ret = OB_STATE_NOT_MATCH;
+    ObSqlString q;
+    if (previous_it == previous_tablets.end()) {
+      // A recovery delta can list tablets this namespace only inherits: their
+      // physical copy lives in an ancestor, so they must stay chain-resolved.
+      // Only a tablet whose physical copy exists locally becomes an owned row.
+      const NamespaceObjectKey key{namespace_id, tablet_id};
+      bool exists = false;
+      if (!key.is_valid()) {
+        ret = OB_INVALID_ARGUMENT;
+      } else if (OB_FAIL(probe_physical_tablet(key.storage_id(), exists))) {
+      } else if (!exists) {
+      } else if (OB_FAIL(q.assign_fmt("REPLACE INTO %s VALUES(%lu,%lu,%lu,0,0)",
+          EXCEPTIONS, namespace_id, tablet_id, it->second.table_id))) {
       } else {
-        cap = existing.cap;
+        ret = write_sql(trans, q);
       }
-    } else if (find_ret != OB_ENTRY_NOT_EXIST) {
-      ret = find_ret;
-    }
-    if (OB_SUCC(ret)) {
-      Value updated;
-      Ref next;
-      updated.data = entry(0, current.table_id, tablet_id, bound);
-      updated.cap = cap;
-      if (OB_FAIL(put(trans, root.directory, key_of(tablet_id), updated, next))) {
+    } else if (previous_it->second.table_id != it->second.table_id) {
+      if (OB_FAIL(q.assign_fmt(
+          "UPDATE %s SET table_id=%lu WHERE namespace_id=%lu AND tablet_id=%lu AND kind=0",
+          EXCEPTIONS, it->second.table_id, namespace_id, tablet_id))) {
       } else {
-        root.directory = next;
+        ret = write_sql(trans, q);
       }
     }
   }
 
-  if (OB_SUCC(ret)) {
-    root.schema_version = std::max(root.schema_version, schema_version);
-    ret = save_roots(trans, namespace_id, root);
+  if (OB_SUCC(ret) && schema_version > root.schema_version) {
+    ObSqlString q;
+    if (OB_FAIL(q.assign_fmt("UPDATE %s SET schema_version=%ld WHERE namespace_id=%lu",
+        NAMESPACES, schema_version, namespace_id))) {
+    } else {
+      ret = write_sql(trans, q);
+    }
   }
   return ret;
 }
@@ -2724,7 +2917,7 @@ int NamespaceForkKernelPrototype::publish_schema_delta(
     ObMySQLTransaction trans;
     if (OB_SUCC(ret)) { ret = trans.start(GCTX.sql_proxy_); }
     if (OB_SUCC(ret) && native_namespace_schema_authority()) {
-      ret = replace_namespace_directory(
+      ret = replace_namespace_exceptions(
           trans, namespace_id, schema_version,
           current_schemas, previous_schemas, private_tablets);
     } else {
@@ -2767,6 +2960,11 @@ int NamespaceForkKernelPrototype::publish_schema_delta(
     if (OB_SUCC(ret)) { ret = end_ret; }
   }
 
+  if (OB_SUCC(ret)) {
+    // The delta rewrote several exception rows; force a lazy reload rather
+    // than tracking every mutation.
+    drop_exception_cache(namespace_id);
+  }
   // Native schema rows live in the namespace worker. Physical tablet mappings
   // are shared engine metadata, so reclaim them only after the namespace
   // catalog commit and through a control-namespace transaction.
@@ -2817,24 +3015,11 @@ int NamespaceForkKernelPrototype::is_tablet_owned(
   ControlSqlNamespaceScope control_sql;
   if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
-  Roots root; Value directory_value;
-  ret = roots(*GCTX.sql_proxy_, namespace_id, root);
-  if (ret == OB_SUCCESS) {
-    ret = find(*GCTX.sql_proxy_, root.directory,
-               key_of(local_tablet_id), directory_value);
-  }
-  uint64_t directory_object = 0, directory_table = 0;
-  uint64_t directory_tablet = 0, bound = 0;
-  if (ret == OB_SUCCESS
-      && (!entry(directory_value.data, directory_object, directory_table,
-                 directory_tablet, bound)
-          || directory_table == 0 || directory_tablet != local_tablet_id)) {
-    ret = OB_CHECKSUM_ERROR;
-  } else if (ret == OB_SUCCESS) {
-    // Ownership is a storage-directory property. Native worker entries leave
-    // object empty; compatibility entries may still carry a schema blob.
-    // Neither representation affects the physical ownership decision.
-    owned = bound == encoded(namespace_id, local_tablet_id);
+  // Ownership is exactly the owned exception row: the physical tablet id is a
+  // pure function of (namespace, local tablet), so no binding is recorded.
+  if (OB_FAIL(load_exceptions(*GCTX.sql_proxy_, namespace_id))) {
+  } else {
+    owned = exception_owned(namespace_id, local_tablet_id);
   }
   return ret;
 }
@@ -2851,30 +3036,19 @@ int NamespaceForkKernelPrototype::owned_storage_tablets(
   if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   MetadataReadGuard access;
   if (access.error() != OB_SUCCESS) { return access.error(); }
-  Roots root;
-  int ret = roots(*GCTX.sql_proxy_, namespace_id, root);
+  int ret = load_exceptions(*GCTX.sql_proxy_, namespace_id);
   for (int64_t i = 0; OB_SUCC(ret) && i < logical_tablets.count(); ++i) {
     uint64_t local_tablet_id = OB_INVALID_ID;
-    Value directory_value;
     if (!logical_tablets.at(i).is_valid()) {
       ret = OB_INVALID_ARGUMENT;
     } else if (OB_FAIL(local_object_id(
             namespace_id, logical_tablets.at(i).id(), local_tablet_id))) {
-    } else if (OB_FAIL(find(*GCTX.sql_proxy_, root.directory,
-            key_of(local_tablet_id), directory_value))) {
     } else {
-      uint64_t directory_object = 0;
-      uint64_t directory_table = 0;
-      uint64_t directory_tablet = 0;
-      uint64_t bound = 0;
       const NamespaceObjectKey local_key{namespace_id, local_tablet_id};
-      if (!local_key.is_valid()
-          || !entry(directory_value.data, directory_object, directory_table,
-                    directory_tablet, bound)
-          || directory_table == 0 || directory_tablet != local_tablet_id) {
-        ret = OB_CHECKSUM_ERROR;
-      } else if (bound == local_key.storage_id()) {
-        ret = owned_tablets.push_back(ObTabletID(bound));
+      if (!local_key.is_valid()) {
+        ret = OB_INVALID_ARGUMENT;
+      } else if (exception_owned(namespace_id, local_tablet_id)) {
+        ret = owned_tablets.push_back(ObTabletID(local_key.storage_id()));
       }
     }
   }
@@ -2979,25 +3153,23 @@ int NamespaceForkKernelPrototype::table_id_for_tablet(const ObTabletID &tablet, 
                                                      uint64_t &table_id) {
   table_id = OB_INVALID_ID;
   if (!is_encoded_id(tablet.id()) || !GCTX.sql_proxy_) { return OB_INVALID_ARGUMENT; }
+  {
+    std::shared_lock<std::shared_mutex> lock(tablet_table_mutex);
+    const auto it = tablet_table_cache.find(tablet.id());
+    if (it != tablet_table_cache.end()) { table_id = it->second; return OB_SUCCESS; }
+  }
   ControlSqlNamespaceScope control_sql;
   if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
-  const uint64_t db = database_of(tablet.id()); Roots root; Value value;
-  if (lineage_mode()) {
-    int result = bound_value(*GCTX.sql_proxy_, tablet, root, value);
-    if (result == OB_ENTRY_NOT_EXIST) { return OB_SUCCESS; }
-    if (result != OB_SUCCESS) { return result; }
-    uint64_t object = 0, table = 0, source = 0, bound = 0;
-    if (!entry(value.data, object, table, source, bound)) { return OB_CHECKSUM_ERROR; }
-    table_id = encoded(db, table); return OB_SUCCESS;
-  }
-  int ret = roots(*GCTX.sql_proxy_, db, root);
+  // Only owned tablets have a table binding here; inherited tablets resolve
+  // through their ancestor and never appear in this namespace's set.
+  const uint64_t db = database_of(tablet.id());
+  uint64_t local_table = 0;
+  const int ret = load_exceptions(*GCTX.sql_proxy_, db);
   if (ret != OB_SUCCESS) { return ret; }
-  if (!root.snapshot || schema_version < root.schema_version) { return OB_SUCCESS; }
-  if ((ret = find(*GCTX.sql_proxy_, root.directory, key_of(local_of(tablet.id())), value)) != OB_SUCCESS) { return ret; }
-  uint64_t object = 0, table = 0, source = 0, bound = 0;
-  if (!entry(value.data, object, table, source, bound)) { return OB_CHECKSUM_ERROR; }
-  if (bound == tablet.id()) { table_id = encoded(db, table); }
+  if (!exception_owned(db, local_of(tablet.id()), &local_table)) { return OB_SUCCESS; }
+  table_id = encoded(db, local_table);
+  remember_tablet_table(tablet.id(), table_id);
   return OB_SUCCESS;
 }
 int NamespaceForkKernelPrototype::list_schemas(uint64_t db, ObIArray<const ObTableSchema *> &out) {
@@ -3072,31 +3244,29 @@ int NamespaceForkKernelPrototype::schedule_baseline(const ObTablet &tablet) {
   ControlSqlNamespaceScope control_sql;
   if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
-  int ret = OB_SUCCESS; Roots root; Value value;
+  int ret = OB_SUCCESS;
   ObArenaAllocator allocator("NsForkBaseline");
   ObStorageSchema *storage_schema = nullptr;
   const uint64_t db = database_of(meta.tablet_id_.id());
-  uint64_t object = 0, table = 0, source = 0, bound = 0;
-  if (OB_FAIL(lineage_mode() ? bound_value(*GCTX.sql_proxy_, meta.tablet_id_, root, value)
-      : roots(*GCTX.sql_proxy_, db, root))) {
-  } else if (!lineage_mode() && OB_FAIL(find(*GCTX.sql_proxy_, root.directory, key_of(local_of(meta.tablet_id_.id())), value))) {
-  } else if (!entry(value.data, object, table, source, bound)) { ret = OB_CHECKSUM_ERROR;
-  } else if (bound == 0) { // Physical CREATE MDS may not have committed its directory binding yet.
-  } else if (bound != meta.tablet_id_.id() || (!lineage_mode()
-      && (source != meta.fork_info_.get_fork_src_tablet_id().id()
-          || root.snapshot != meta.fork_info_.get_fork_snapshot_version()))) { ret = OB_STATE_NOT_MATCH;
+  const uint64_t local = local_of(meta.tablet_id_.id());
+  uint64_t table = OB_INVALID_ID;
+  // The owned exception row is the proof that this tablet's physical binding
+  // committed. A dropped namespace has no rows left and simply skips.
+  if (OB_FAIL(load_exceptions(*GCTX.sql_proxy_, db))) {
+  } else if (!exception_owned(db, local, &table)) {
+    ret = OB_ENTRY_NOT_EXIST;
   } else if (OB_FAIL(tablet.load_storage_schema(allocator, storage_schema))) {
   } else if (OB_ISNULL(storage_schema)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     ObTabletForkParam param; bool ready = false;
-    // The directory owns logical-to-physical identity; the tablet owns the
-    // physical schema needed by compaction.  Baseline scheduling must not
-    // resurrect the duplicate serialized ObTableSchema catalog.
+    // The exception table owns logical-to-physical identity; the tablet owns
+    // the physical schema needed by compaction.
     param.table_id_ = is_inner_table(table) ? table : encoded(db, table);
     param.schema_version_ = storage_schema->get_schema_version();
     // Stable DAG identity only; no rootserver DDL task is created.
-    param.task_id_ = bound; param.source_tablet_id_ = meta.fork_info_.get_fork_src_tablet_id();
+    param.task_id_ = meta.tablet_id_.id();
+    param.source_tablet_id_ = meta.fork_info_.get_fork_src_tablet_id();
     param.dest_tablet_id_ = meta.tablet_id_; param.fork_snapshot_version_ = meta.fork_info_.get_fork_snapshot_version();
     param.data_format_version_ = DATA_CURRENT_VERSION;
     if (OB_FAIL(ObTabletForkUtil::check_satisfy_fork_condition(param, ready))) {
@@ -3113,6 +3283,40 @@ int NamespaceForkKernelPrototype::schedule_baseline(const ObTablet &tablet) {
 int NamespaceForkKernelPrototype::ensure_tablet(const ObTabletID &tablet_id) {
   return ensure_tablet_impl(tablet_id, nullptr, nullptr);
 }
+int NamespaceForkKernelPrototype::resolve_read_tablet(
+    const ObTabletID &tablet_id, ObTabletID &physical_tablet_id, int64_t &cap_scn) {
+  physical_tablet_id = tablet_id; cap_scn = 0;
+  if (!lifetime_mode() || !is_encoded_id(tablet_id.id())) { return OB_SUCCESS; }
+  {
+    // Committed local tablets serve their own reads; only a miss means the
+    // tablet is still inherited and must resolve along the parent chain.
+    bool exists = false;
+    const int ret = probe_physical_tablet(tablet_id.id(), exists);
+    if (ret != OB_SUCCESS) { return ret; }
+    if (exists) { return OB_SUCCESS; }
+  }
+  if (!GCTX.sql_proxy_) { return OB_NOT_INIT; }
+  ControlSqlNamespaceScope control_sql;
+  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
+  MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
+  const uint64_t db = database_of(tablet_id.id());
+  const uint64_t local = local_of(tablet_id.id());
+  int ret = load_exceptions(*GCTX.sql_proxy_, db);
+  if (OB_FAIL(ret)) { return ret; }
+  if (exception_tombstoned(db, local)) {
+    // Dropped in this namespace: never fall through to an inherited copy.
+    return OB_TABLET_NOT_EXIST;
+  }
+  if (exception_owned(db, local)) {
+    // Owned here; the creation commit is ahead of tablet-manager visibility,
+    // so let the caller's tablet open wait out the transient instead of failing.
+    return OB_SUCCESS;
+  }
+  uint64_t physical = 0;
+  ret = resolve_inherited_tablet(*GCTX.sql_proxy_, db, local, physical, cap_scn);
+  if (ret == OB_SUCCESS) { physical_tablet_id = ObTabletID(physical); }
+  return OB_SUCCESS;
+}
 int NamespaceForkKernelPrototype::ensure_tablet(
     const ObTabletID &tablet_id,
     const ObTableSchema &requested_schema,
@@ -3124,82 +3328,70 @@ int NamespaceForkKernelPrototype::ensure_tablet_impl(
     const ObTableSchema *supplied_schema,
     const ObIArray<const ObTableSchema *> *binding_schemas) {
   if (!is_encoded_id(tablet_id.id())) { return OB_SUCCESS; }
-  int ret = OB_SUCCESS; const uint64_t db = database_of(tablet_id.id()), local = local_of(tablet_id.id());
+  int ret = OB_SUCCESS;
+  const uint64_t db = database_of(tablet_id.id()), local = local_of(tablet_id.id());
   {
     // Reuse the tablet manager and its existing committed-status cache. A valid
-    // logical birth S alone is not proof that physical creation has committed.
-    ObTabletHandle handle;
-    ret = ObTabletCreateDeleteHelper::check_and_get_tablet(ObTabletMapKey(tablet_id), handle,
-        0, ObMDSGetTabletMode::READ_READABLE_COMMITED, transaction::ObTransVersion::MAX_TRANS_VERSION);
-    if (ret == OB_SUCCESS) { return ret; }
-    if (ret != OB_TABLET_NOT_EXIST && ret != OB_ENTRY_NOT_EXIST
-        && ret != OB_EAGAIN) {
-      return ret;
-    }
-  } // Do not pin an uncommitted tablet while waiting for its creator's root lock.
-  LOG_INFO("PROTOTYPE_V4_DIRECTORY_SLOW_PATH", K(tablet_id), "lookup_ret", ret);
-  ret = OB_SUCCESS;
+    // logical birth SCN alone is not proof that physical creation has committed.
+    bool exists = false;
+    ret = probe_physical_tablet(tablet_id.id(), exists);
+    if (OB_FAIL(ret)) { return ret; }
+    if (exists) { return OB_SUCCESS; }
+  } // Do not pin an uncommitted tablet while waiting for its creator's row lock.
+  LOG_INFO("PROTOTYPE_V4_DIRECTORY_SLOW_PATH", K(tablet_id));
   if (!GCTX.sql_proxy_) { return OB_NOT_INIT; }
   ControlSqlNamespaceScope control_sql;
   if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
-  ObMySQLTransaction trans; Roots root; Value value;
+  if (OB_FAIL(load_exceptions(*GCTX.sql_proxy_, db))) { return ret; }
+  if (exception_tombstoned(db, local)) {
+    // Dropped in this namespace: there is nothing to materialize onto.
+    return OB_TABLET_NOT_EXIST;
+  }
+  if (exception_owned(db, local)) {
+    // Creation commit is ahead of tablet-manager visibility.
+    return OB_SUCCESS;
+  }
   struct MaterializeItem {
-    Value value;
-    uint64_t object = 0;
-    uint64_t table = 0;
-    uint64_t local_tablet = 0;
-    uint64_t bound = 0;
-    uint64_t source_tablet = 0;
     const ObTableSchema *schema = nullptr;
+    uint64_t local_tablet = 0;
+    uint64_t source_tablet = 0;
+    int64_t cap = 0;
   };
   std::vector<MaterializeItem> items;
+  Roots root;
   const char *failure_stage = "start";
   auto materialize_step = [&](const char *stage, int step_ret) {
     failure_stage = stage;
     return step_ret;
   };
+  ObMySQLTransaction trans;
+  bool already = false;
   // The row lock joins concurrent requests before physical creation. The business transaction is untouched.
   if (OB_FAIL(materialize_step("transaction", trans.start(GCTX.sql_proxy_)))) {
   } else if (OB_FAIL(materialize_step("roots", roots(trans, db, root, true)))) {
-  } else if (lifetime_mode() && OB_FAIL(materialize_step("snapshot_root", [&]() -> int {
-      Roots snapshot;
-      int result = snapshot_roots(trans, root.snapshot_ref, snapshot);
-      // The fork snapshot identity is stable. Namespace-local DDL legitimately
-      // advances schema_version and replaces immutable catalog roots.
-      if (result == OB_SUCCESS && snapshot.snapshot != root.snapshot) {
-        result = OB_STATE_NOT_MATCH;
-      }
+  } else if (OB_FAIL(materialize_step("recheck", [&]() -> int {
+      // A concurrent materializer may have committed while this request waited
+      // on the namespace row lock; re-check inside it before creating anything.
+      bool exists = false;
+      int result = probe_physical_tablet(tablet_id.id(), exists);
+      if (result == OB_SUCCESS) { already = exists || exception_owned(db, local); }
       return result;
-    }()))) {
-  } else if (OB_FAIL(materialize_step(
-                 "directory_find", find(trans, root.directory, key_of(local), value)))) {
-    if (ret == OB_ENTRY_NOT_EXIST && root.snapshot_ref != 0) {
-      Roots captured_root;
-      Value captured_value;
-      const int snapshot_ret = snapshot_roots(trans, root.snapshot_ref, captured_root);
-      const int captured_find_ret = snapshot_ret == OB_SUCCESS
-          ? find(trans, captured_root.directory, key_of(local), captured_value)
-          : snapshot_ret;
-      fprintf(stderr,
-          "PROTOTYPE_NAMESPACE_DIRECTORY_MISS namespace=%llu tablet=%llu "
-          "current_root=%llu current_cap=%ld captured_root=%llu captured_cap=%ld "
-          "snapshot_ret=%d captured_find_ret=%d\n",
-          static_cast<unsigned long long>(db),
-          static_cast<unsigned long long>(local),
-          static_cast<unsigned long long>(root.directory.page),
-          static_cast<long>(root.directory.cap),
-          static_cast<unsigned long long>(captured_root.directory.page),
-          static_cast<long>(captured_root.directory.cap),
-          snapshot_ret, captured_find_ret);
-    }
-  } else {
+  }()))) {
+  }
+  if (OB_SUCC(ret) && !already) {
     failure_stage = "schema";
     const bool supplied = supplied_schema != nullptr && binding_schemas != nullptr;
+    const ObTableSchema *requested_schema = supplied_schema;
+    if (!supplied) {
+      // The namespace worker is the schema authority and always supplies the
+      // binding schemas on this path; physical creation without one is not
+      // representable here.
+      ret = OB_NOT_SUPPORTED;
+    }
     auto supplied_by_table = [&](uint64_t table_id) -> const ObTableSchema * {
-      if (!supplied) { return nullptr; }
       const uint64_t local_table_id = local_of(table_id);
-      for (int64_t i = 0; i < binding_schemas->count(); ++i) {
+      for (int64_t i = 0; binding_schemas && i < binding_schemas->count(); ++i) {
         const ObTableSchema *schema = binding_schemas->at(i);
         if (schema != nullptr && local_of(schema->get_table_id()) == local_table_id) {
           return schema;
@@ -3207,10 +3399,8 @@ int NamespaceForkKernelPrototype::ensure_tablet_impl(
       }
       return nullptr;
     };
-    const ObTableSchema *requested_schema = supplied_schema;
-    const ObTableSchema *accessed_schema = requested_schema;
     uint64_t requested_local_tablet = local;
-    if (supplied) {
+    if (OB_SUCC(ret)) {
       ObArray<ObTabletID> requested_tablets;
       bool contains_requested_tablet = false;
       if (schema_tablet_ids(*requested_schema, requested_tablets) != OB_SUCCESS) {
@@ -3225,61 +3415,41 @@ int NamespaceForkKernelPrototype::ensure_tablet_impl(
         }
       }
       if (OB_SUCC(ret) && !contains_requested_tablet) { ret = OB_INVALID_ARGUMENT; }
-    } else if (OB_FAIL(schema_from_value(db, value, requested_schema))) {
     }
-    if (OB_SUCC(ret)) {
-      accessed_schema = requested_schema;
-    }
+    const ObTableSchema *accessed_schema = requested_schema;
     if (OB_SUCC(ret) && requested_schema->is_aux_lob_table()) {
       // An LOB main tablet and both auxiliaries are one storage binding unit.
       // Canonicalize an auxiliary first access to the main schema so no partial
       // materialization can make that unit impossible to bind later.
       const uint64_t main_table = local_of(requested_schema->get_data_table_id());
-      if (supplied) {
-        requested_schema = supplied_by_table(main_table);
-        if (requested_schema == nullptr || requested_schema->is_aux_lob_table()) {
-          ret = OB_INVALID_ARGUMENT;
-        }
+      requested_schema = supplied_by_table(main_table);
+      if (requested_schema == nullptr || requested_schema->is_aux_lob_table()) {
+        ret = OB_INVALID_ARGUMENT;
       } else {
-        Value main_catalog;
-        if (OB_FAIL(find(trans, root.catalog, "#" + key_of(main_table), main_catalog))) {
-        } else if (OB_FAIL(schema_from_value(db, main_catalog, requested_schema))) {
+        uint64_t main_tablet = OB_INVALID_ID;
+        if (OB_FAIL(corresponding_tablet_id(
+                *accessed_schema, local, *requested_schema, main_tablet))) {
+        } else {
+          requested_local_tablet = local_of(main_tablet);
         }
-      }
-      uint64_t main_tablet = OB_INVALID_ID;
-      if (OB_SUCC(ret) && OB_FAIL(corresponding_tablet_id(
-              *accessed_schema, local, *requested_schema, main_tablet))) {
-      } else if (OB_SUCC(ret)
-                 && FALSE_IT(requested_local_tablet = local_of(main_tablet))) {
-      } else if (OB_SUCC(ret) && OB_FAIL(find(trans, root.directory,
-              key_of(requested_local_tablet), value))) {
       }
     }
-    auto append_item = [&](const ObTableSchema *schema, const Value &directory_value,
-                           uint64_t expected_tablet) -> int {
+    auto append_item = [&](const ObTableSchema *schema, uint64_t item_local) -> int {
       MaterializeItem item;
-      item.value = directory_value;
-      if (!schema || !entry(item.value.data, item.object, item.table, item.local_tablet, item.bound)) {
-        return OB_CHECKSUM_ERROR;
-      }
-      const bool locally_bound = item.bound == encoded(db, item.local_tablet);
-      if (item.local_tablet != expected_tablet
-          || (locally_bound && item.value.cap != 0)
-          || (!locally_bound && (item.value.cap <= 0 || item.value.cap > root.snapshot
-              || (!lineage_mode() && (item.bound != 0 || item.value.cap != root.snapshot))
-              || (item.bound && (!is_encoded_id(item.bound)
-                  || local_of(item.bound) != item.local_tablet
-                  || database_of(item.bound) == db))))) {
-        return OB_STATE_NOT_MATCH;
-      }
-      item.source_tablet = item.bound ? item.bound : item.local_tablet;
       item.schema = schema;
-      items.push_back(std::move(item));
+      item.local_tablet = item_local;
+      const int resolve_ret = resolve_inherited_tablet(
+          trans, db, item_local, item.source_tablet, item.cap);
+      if (resolve_ret != OB_SUCCESS) { return resolve_ret; }
+      // The cap of every hop is a fork snapshot of this namespace's chain, so
+      // it can never exceed this namespace's own fork snapshot.
+      if (item.cap <= 0 || item.cap > root.snapshot) { return OB_STATE_NOT_MATCH; }
+      items.push_back(item);
       return OB_SUCCESS;
     };
     if (OB_SUCC(ret)) {
       failure_stage = "append";
-      ret = append_item(requested_schema, value, requested_local_tablet);
+      ret = append_item(requested_schema, requested_local_tablet);
     }
     const uint64_t auxiliary_tables[] = {
       OB_SUCC(ret) ? requested_schema->get_aux_lob_meta_tid() : OB_INVALID_ID,
@@ -3287,89 +3457,51 @@ int NamespaceForkKernelPrototype::ensure_tablet_impl(
     };
     for (uint64_t auxiliary_table : auxiliary_tables) {
       if (OB_SUCC(ret) && auxiliary_table != OB_INVALID_ID) {
-        Value auxiliary_directory;
-        const ObTableSchema *auxiliary_schema = supplied
-            ? supplied_by_table(auxiliary_table) : nullptr;
-        if (supplied && auxiliary_schema == nullptr) {
+        const ObTableSchema *auxiliary_schema = supplied_by_table(auxiliary_table);
+        if (auxiliary_schema == nullptr) {
           ret = OB_INVALID_ARGUMENT;
-        } else if (!supplied) {
-          Value auxiliary_catalog;
-          if (OB_FAIL(find(trans, root.catalog,
-                  "#" + key_of(local_of(auxiliary_table)), auxiliary_catalog))) {
-          } else {
-            ret = schema_from_value(db, auxiliary_catalog, auxiliary_schema);
-          }
-        }
-        if (OB_FAIL(ret)) {
-        } else if (!auxiliary_schema || !auxiliary_schema->is_aux_lob_table()) {
+        } else if (!auxiliary_schema->is_aux_lob_table()) {
           ret = OB_STATE_NOT_MATCH;
         } else {
           uint64_t auxiliary_tablet = OB_INVALID_ID;
           if (OB_FAIL(corresponding_tablet_id(
                   *requested_schema, requested_local_tablet,
                   *auxiliary_schema, auxiliary_tablet))) {
-          } else if (OB_FAIL(find(trans, root.directory,
-                                 key_of(local_of(auxiliary_tablet)), auxiliary_directory))) {
           } else {
-            ret = append_item(auxiliary_schema, auxiliary_directory,
-                              local_of(auxiliary_tablet));
+            ret = append_item(auxiliary_schema, local_of(auxiliary_tablet));
           }
         }
       }
     }
-    bool committed = OB_SUCC(ret);
-    failure_stage = "snapshot_pin";
-    for (const auto &item : items) {
-      committed = committed && item.bound == encoded(db, item.local_tablet);
-    }
-    if (OB_SUCC(ret) && !committed) {
-      failure_stage = "tablet_create";
-      for (const auto &item : items) {
-        if (item.bound == encoded(db, item.local_tablet)) { ret = OB_STATE_NOT_MATCH; break; }
-      }
-    }
     auto *freeze = share::server_service<ObFreezeInfoMgr>();
-    if (OB_SUCC(ret) && !committed && !freeze) {
+    if (OB_SUCC(ret) && !freeze) {
       ret = OB_STATE_NOT_MATCH;
     }
     ObSnapshotTableProxy pins;
     for (const auto &item : items) {
-      if (OB_FAIL(ret) || committed) { break; }
+      if (OB_FAIL(ret)) { break; }
+      failure_stage = "snapshot_pin";
+      // The resolved cap is exactly the fork snapshot id of the chain hop
+      // below the source, so its snapshot row is a point query away.
       Roots inherited;
-      uint64_t snapshot_id = root.snapshot_ref;
-      const int64_t lineage_begin = ObTimeUtility::current_time();
-      int64_t lineage_steps = 0;
-      if (lineage_mode()) {
-        while (OB_SUCC(ret)) {
-          ++lineage_steps;
-          if (snapshot_id < uint64_t(item.value.cap)) { ret = OB_STATE_NOT_MATCH; break; }
-          if (OB_FAIL(snapshot_roots(trans, snapshot_id, inherited))) { break; }
-          if (snapshot_id == uint64_t(item.value.cap)) { break; }
-          snapshot_id = inherited.parent_ref;
-        }
+      if (OB_FAIL(snapshot_roots(trans, uint64_t(item.cap), inherited))) {
       } else {
-        inherited.schema_version = root.schema_version;
-      }
-      if (metadata_gc_mode()) {
-        LOG_INFO("PROTOTYPE_V9_LINEAGE_LOOKUP", K(ret), "tablet_id", item.schema->get_tablet_id(),
-            K(lineage_steps), "lineage_us", ObTimeUtility::current_time() - lineage_begin);
-      }
-      ObSnapshotInfo pin;
-      SCN scn;
-      ObStorageSnapshotInfo reserved;
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(scn.convert_for_tx(item.value.cap))) {
-      } else if (OB_FAIL(pins.get_snapshot(trans, SNAPSHOT_FOR_MULTI_VERSION, scn, pin))) {
-      } else if (pin.tablet_id_ != 0 || pin.schema_version_ != inherited.schema_version) {
-        ret = OB_STATE_NOT_MATCH;
-      } else if (OB_FAIL(freeze->get_min_reserved_snapshot(
-                     ObTabletID(item.source_tablet), item.value.cap, reserved))) {
-      } else if (reserved.snapshot_ > item.value.cap) {
-        ret = OB_SNAPSHOT_DISCARDED;
+        ObSnapshotInfo pin;
+        SCN scn;
+        ObStorageSnapshotInfo reserved;
+        if (OB_FAIL(scn.convert_for_tx(item.cap))) {
+        } else if (OB_FAIL(pins.get_snapshot(trans, SNAPSHOT_FOR_MULTI_VERSION, scn, pin))) {
+        } else if (pin.tablet_id_ != 0 || pin.schema_version_ != inherited.schema_version) {
+          ret = OB_STATE_NOT_MATCH;
+        } else if (OB_FAIL(freeze->get_min_reserved_snapshot(
+                       ObTabletID(item.source_tablet), item.cap, reserved))) {
+        } else if (reserved.snapshot_ > item.cap) {
+          ret = OB_SNAPSHOT_DISCARDED;
+        }
       }
     }
-    if (OB_SUCC(ret) && !committed) {
-      const int64_t input_snapshot = items.front().value.cap;
+    if (OB_SUCC(ret)) {
+      failure_stage = "tablet_create";
       rootserver::ObTabletCreator creator(SCN::min_scn(), trans);
       rootserver::ObTabletCreatorArg arg;
       ObArray<ObTabletID> ids;
@@ -3382,14 +3514,14 @@ int NamespaceForkKernelPrototype::ensure_tablet_impl(
       ObArray<int64_t> source_snapshot_versions;
       for (const auto &item : items) {
         ObForkTabletInfo fork;
-        fork.set_fork_snapshot_version(item.value.cap);
+        fork.set_fork_snapshot_version(item.cap);
         fork.set_fork_src_tablet_id(ObTabletID(item.source_tablet));
         const ObTabletID destination(encoded(db, item.local_tablet));
         if (OB_FAIL(ids.push_back(destination)) || OB_FAIL(definitions.push_back(item.schema))
-            || OB_FAIL(empty_major.push_back(false)) || OB_FAIL(logical_birth.push_back(item.value.cap))
+            || OB_FAIL(empty_major.push_back(false)) || OB_FAIL(logical_birth.push_back(item.cap))
             || OB_FAIL(fork_infos.push_back(fork))
             || OB_FAIL(source_ids.push_back(ObTabletID(item.source_tablet)))
-            || OB_FAIL(source_snapshot_versions.push_back(item.value.cap))
+            || OB_FAIL(source_snapshot_versions.push_back(item.cap))
             || OB_FAIL(mappings.push_back(ObTabletTablePair(destination, item.schema->get_table_id())))) {
           break;
         }
@@ -3407,44 +3539,44 @@ int NamespaceForkKernelPrototype::ensure_tablet_impl(
                                  source_ids, ids, source_snapshot_versions, trans))) {
       } else if (OB_FAIL(ObTabletMappingTableOperator::batch_update(trans, mappings))) {
       } else {
-        const uint64_t previous_root = root.directory.page;
-        for (auto &item : items) {
+        failure_stage = "exceptions";
+        for (const auto &item : items) {
+          ObSqlString q;
           if (OB_FAIL(ret)) { break; }
-          item.value.data = entry(item.object, item.table, item.local_tablet,
-                                  encoded(db, item.local_tablet));
-          item.value.cap = 0;
-          ret = put(trans, root.directory, key_of(item.local_tablet), item.value, root.directory);
+          if (OB_FAIL(q.assign_fmt("REPLACE INTO %s VALUES(%lu,%lu,%lu,0,0)", EXCEPTIONS,
+                  db, item.local_tablet, local_of(item.schema->get_table_id())))) {
+          } else {
+            ret = write_sql(trans, q);
+          }
         }
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(save_roots(trans, db, root))) {
-        } else {
+        if (OB_SUCC(ret)) {
           // Reuse the existing mapping-update sync point in this isolated prototype.
-          // It exposes the whole physical binding unit plus an uncommitted directory.
+          // It exposes the whole physical binding unit plus uncommitted exceptions.
           DEBUG_SYNC(AFTER_UPDATE_TABLET_TO_LS);
           ret = THIS_WORKER.check_status();
           LOG_INFO("PROTOTYPE_V2_STORAGE_MATERIALIZE", K(tablet_id), "tablet_count", items.size(),
-              K(input_snapshot), "namespace_snapshot", root.snapshot,
-              K(previous_root), "next_root", root.directory.page,
+              "input_snapshot", items.front().cap, "namespace_snapshot", root.snapshot,
               "entry_layer", "ObAccessService", K(ret));
         }
       }
     }
   }
   if (trans.is_started()) { int end = trans.end(ret == OB_SUCCESS); if (ret == OB_SUCCESS) { ret = end; } }
+  if (ret == OB_SUCCESS && !already) {
+    for (const auto &item : items) {
+      apply_exception_owned(db, item.local_tablet, local_of(item.schema->get_table_id()));
+    }
+  }
   if (ret != OB_SUCCESS) {
     const MaterializeItem *item = items.empty() ? nullptr : &items.front();
     fprintf(stderr,
         "PROTOTYPE_NAMESPACE_MATERIALIZE_FAILED ret=%d stage=%s namespace=%llu tablet=%llu "
-        "snapshot=%ld snapshot_ref=%llu directory=%llu cap=%ld items=%zu "
-        "value_cap=%ld bound=%llu source=%llu local=%llu\n",
+        "snapshot=%ld snapshot_ref=%llu items=%zu cap=%ld source=%llu local=%llu\n",
         ret, failure_stage, static_cast<unsigned long long>(db),
         static_cast<unsigned long long>(tablet_id.id()),
         static_cast<long>(root.snapshot),
-        static_cast<unsigned long long>(root.snapshot_ref),
-        static_cast<unsigned long long>(root.directory.page),
-        static_cast<long>(root.directory.cap), items.size(),
-        static_cast<long>(item ? item->value.cap : 0),
-        static_cast<unsigned long long>(item ? item->bound : 0),
+        static_cast<unsigned long long>(root.snapshot_ref), items.size(),
+        static_cast<long>(item ? item->cap : 0),
         static_cast<unsigned long long>(item ? item->source_tablet : 0),
         static_cast<unsigned long long>(item ? item->local_tablet : 0));
     LOG_WARN("prototype storage materialization failed", K(ret), K(tablet_id));

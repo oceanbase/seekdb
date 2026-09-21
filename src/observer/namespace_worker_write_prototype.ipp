@@ -755,6 +755,9 @@ int process_table_lock(StorageSpaceHandle channel_space,
   const auto operation = static_cast<obcall::ObInnerSQLTransmitArg::InnerSQLOperationType>(request.number());
   StorageSpaceHandle storage_space;
   int ret = read_storage_space(request, channel_space, storage_space);
+  const char *lock_stage = "head";
+  uint64_t plan_marker = 0;
+  uint64_t plan_count = 0;
   const uint64_t ns = storage_space.namespace_id();
   ObTxParam tx_param;
   request.read(tx_param);
@@ -768,9 +771,12 @@ int process_table_lock(StorageSpaceHandle channel_space,
     const uint64_t marker = request.number();
     schema_version = static_cast<int64_t>(request.number());
     const uint64_t count = request.number();
+    plan_marker = marker;
+    plan_count = count;
     if (request.ret || marker != EXPLICIT_TABLE_LOCK_PLAN
         || schema_version < 0 || count > 65536) {
       ret = OB_INVALID_ARGUMENT;
+      lock_stage = "plan_header";
     }
     ObTabletIDArray logical_tablet_ids;
     for (uint64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
@@ -778,6 +784,7 @@ int process_table_lock(StorageSpaceHandle channel_space,
       ObTabletID tablet_id(logical_tablet_id);
       if (request.ret || !tablet_id.is_valid()) {
         ret = OB_INVALID_ARGUMENT;
+        lock_stage = "plan_tablet";
       } else {
         ret = logical_tablet_ids.push_back(tablet_id);
       }
@@ -794,6 +801,10 @@ int process_table_lock(StorageSpaceHandle channel_space,
     } else if (OB_SUCC(ret) && ns > 1) {
       ret = storage::NamespaceForkKernelPrototype::owned_storage_tablets(
           ns, logical_tablet_ids, tablet_ids);
+    } else if (OB_SUCC(ret) && storage_space.is_global()) {
+      // Global-space tablets (the namespace-control catalog) are already
+      // physical ids; namespace routing applies to namespace spaces only.
+      ret = tablet_ids.assign(logical_tablet_ids);
     } else if (OB_SUCC(ret)) {
       for (int64_t i = 0; OB_SUCC(ret) && i < logical_tablet_ids.count(); ++i) {
         ObTabletID tablet_id = logical_tablet_ids.at(i);
@@ -810,37 +821,49 @@ int process_table_lock(StorageSpaceHandle channel_space,
   ObTableLockService *service = share::server_service<ObTableLockService>();
   if (!ret && (!consumed || !valid_param || payload.empty())) {
     ret = OB_INVALID_ARGUMENT;
+    lock_stage = "frame_tail";
   } else if (!ret && OB_ISNULL(service)) {
     ret = OB_NOT_INIT;
+    lock_stage = "service";
   }
 
 #define DECODE_AND_LOCK(Type) do {                                                \
   Type arg;                                                                       \
   if (OB_FAIL(deserialize_lock_request(payload, arg))) {                           \
+    lock_stage = "deserialize";                                                    \
   } else if (OB_FAIL(service->lock(tx, tx_param, arg))) {                         \
+    lock_stage = "native_lock";                                                    \
   }                                                                               \
 } while (false)
 #define DECODE_AND_UNLOCK(Type) do {                                              \
   Type arg;                                                                       \
   if (OB_FAIL(deserialize_lock_request(payload, arg))) {                           \
+    lock_stage = "deserialize";                                                    \
   } else if (OB_FAIL(service->unlock(tx, tx_param, arg))) {                       \
+    lock_stage = "native_unlock";                                                  \
   }                                                                               \
 } while (false)
 #define DECODE_AND_EXPLICIT_LOCK(Type, NativeCall) do {                           \
   Type arg;                                                                       \
   if (OB_FAIL(deserialize_lock_request(payload, arg))) {                           \
+    lock_stage = "deserialize";                                                    \
   } else if (has_explicit_tablets) {                                               \
     if (OB_FAIL(route_table_lock_id(ns, arg.table_id_))) {                         \
+      lock_stage = "route_table";                                                  \
     } else if (OB_FAIL(service->lock_with_explicit_tablets(                       \
                    tx, tx_param, arg, schema_version, tablet_ids))) {              \
+      lock_stage = "native_explicit";                                              \
     }                                                                              \
   } else if (ns > 1) {                                                            \
     ret = OB_NOT_SUPPORTED;                                                        \
+    lock_stage = "unsupported";                                                    \
   } else if (OB_FAIL(service->NativeCall(tx, tx_param, arg))) {                    \
+    lock_stage = "native_plain";                                                   \
   }                                                                                \
 } while (false)
 
   if (OB_SUCC(ret)) {
+    lock_stage = "dispatch";
     switch (operation) {
       case obcall::ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_TABLE:
         DECODE_AND_EXPLICIT_LOCK(ObLockTableRequest, lock); break;
@@ -934,6 +957,25 @@ int process_table_lock(StorageSpaceHandle channel_space,
 #undef DECODE_AND_LOCK
 #undef DECODE_AND_UNLOCK
 #undef DECODE_AND_EXPLICIT_LOCK
+  if (ret != OB_SUCCESS) {
+    fprintf(stderr,
+        "PROTOTYPE_V24_LOCK_FAIL ns=%llu op=%d ret=%d stage=%s explicit=%d schema_version=%lld marker=%llx plan_count=%llu consumed=%d valid=%d payload=%lld\n",
+        (unsigned long long)ns, static_cast<int>(operation), ret, lock_stage,
+        has_explicit_tablets ? 1 : 0, (long long)schema_version,
+        (unsigned long long)plan_marker, (unsigned long long)plan_count,
+        consumed ? 1 : 0, valid_param ? 1 : 0, (long long)payload.length());
+    if (operation == obcall::ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_TABLET
+        && payload.length() > 0) {
+      ObLockTabletsRequest lock_arg;
+      if (OB_SUCCESS == deserialize_lock_request(payload, lock_arg)) {
+        fprintf(stderr,
+            "PROTOTYPE_V24_LOCK_FAIL_TABLE table_id=%llu tablet=%llu\n",
+            (unsigned long long)lock_arg.table_id_,
+            (unsigned long long)(lock_arg.tablet_ids_.empty()
+                ? 0 : lock_arg.tablet_ids_.at(0).id()));
+      }
+    }
+  }
   return ret;
 }
 

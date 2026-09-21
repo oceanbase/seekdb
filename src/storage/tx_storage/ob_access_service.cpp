@@ -582,17 +582,29 @@ int ObAccessService::check_read_allowed_(
 {
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
+  ObTabletID read_tablet_id = tablet_id;
+  int64_t redirect_cap = 0;
 
   if (OB_FAIL(NamespaceForkKernelPrototype::check_table_access(scan_param.index_id_, tablet_id, ctx_guard.prototype_access()))) {
-  } else if (OB_FAIL(NamespaceForkKernelPrototype::ensure_tablet(tablet_id))) {
+  } else if (OB_FAIL(NamespaceForkKernelPrototype::resolve_read_tablet(tablet_id, read_tablet_id, redirect_cap))) {
   } else if (OB_FAIL(ls_svr_->get_ls(ls))) {
   } else if (OB_FAIL(ctx_guard.init(ls))) {
   } else {
     ObStoreCtx &ctx = ctx_guard.get_store_ctx();
     ctx.ls_ = ls;
     ctx.timeout_ = scan_param.timeout_;
-    ctx.tablet_id_ = tablet_id;
-    if (user_specified_snapshot.is_valid()) {
+    ctx.tablet_id_ = read_tablet_id;
+    if (redirect_cap > 0) {
+      // An inherited tablet only contains data up to the fork snapshot; clamp
+      // the read so later writes on the source namespace stay invisible.
+      SCN cap_scn;
+      if (OB_FAIL(cap_scn.convert_for_tx(redirect_cap))) {
+      } else if (!user_specified_snapshot.is_valid() || cap_scn < user_specified_snapshot) {
+        user_specified_snapshot = cap_scn;
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (user_specified_snapshot.is_valid()) {
       if (OB_FAIL(ls->get_read_store_ctx(user_specified_snapshot,
                                          scan_param.tx_lock_timeout_,
                                          ctx))) {
@@ -644,7 +656,7 @@ int ObAccessService::check_read_allowed_(
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(construct_store_ctx_other_variables_(*ls, tablet_id, scan_param.timeout_,
+    } else if (OB_FAIL(construct_store_ctx_other_variables_(*ls, read_tablet_id, scan_param.timeout_,
          ctx.mvcc_acc_ctx_.get_snapshot_version(), tablet_handle, ctx_guard))) {
       if (OB_SNAPSHOT_DISCARDED == ret && scan_param.fb_snapshot_.is_valid()) {
         ret = OB_TABLE_DEFINITION_CHANGED;
