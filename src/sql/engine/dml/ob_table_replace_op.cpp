@@ -110,6 +110,11 @@ int ObTableReplaceOp::check_need_exec_single_row()
 {
   int ret = OB_SUCCESS;
   ret = ObTableModifyOp::check_need_exec_single_row();
+  if (OB_SUCC(ret) && MY_SPEC.plan_->contain_pl_udf_or_trigger()) {
+    // Finish each replacement before evaluating the next input row's PL UDFs.
+    // Otherwise a later conflict could roll back their nested DML as well.
+    execute_single_row_ = true;
+  }
   if (OB_SUCC(ret) && !execute_single_row_) {
     ObReplaceCtDef *replace_ctdef = MY_SPEC.replace_ctdefs_.at(0);
     const ObInsCtDef *ins_ctdef = replace_ctdef->ins_ctdef_;
@@ -306,7 +311,25 @@ OB_INLINE int ObTableReplaceOp::get_next_row_from_child()
   return ret;
 }
 
-OB_INLINE int ObTableReplaceOp::load_all_replace_row(bool &is_iter_end)
+int ObTableReplaceOp::eval_replace_input()
+{
+  int ret = OB_SUCCESS;
+  const ObInsCtDef &ins_ctdef = *MY_SPEC.replace_ctdefs_.at(0)->ins_ctdef_;
+  const ObInsRtDef &ins_rtdef = replace_rtdefs_.at(0).ins_rtdef_;
+  // Input expressions can still be lazy after child_->get_next_row(). Evaluate
+  // them before the speculative insert savepoint, but leave BEFORE triggers
+  // inside it so retrying a conflicting insert does not retain their first DML.
+  if (OB_FAIL(ObDMLService::init_heap_table_pk_for_ins(ins_ctdef, eval_ctx_))) {
+  } else if (OB_FAIL(ObDMLService::check_column_type(ins_ctdef.new_row_,
+                                                   ins_rtdef.cur_row_num_ + 1,
+                                                   ins_ctdef.column_infos_,
+                                                   *this))) {
+  }
+  return ret;
+}
+
+OB_INLINE int ObTableReplaceOp::load_all_replace_row(bool &is_iter_end,
+                                                    transaction::ObTxSEQ &savepoint_no)
 {
   int ret = OB_SUCCESS;
   is_iter_end = false;
@@ -328,6 +351,9 @@ OB_INLINE int ObTableReplaceOp::load_all_replace_row(bool &is_iter_end)
     if (OB_FAIL(get_next_row_from_child())) {
       if (OB_ITER_END != ret) {
       }
+    } else if (MY_SPEC.plan_->contain_pl_udf_or_trigger() && OB_FAIL(eval_replace_input())) {
+    } else if (row_cnt == 0 &&
+               OB_FAIL(ObSqlTransControl::create_anonymous_savepoint(ctx_, savepoint_no))) {
     } else if (OB_FAIL(insert_row_to_das(is_skipped))) {
     } else if (get_all_saved_exprs().empty()) {
       ret = OB_ERR_UNEXPECTED;
@@ -574,8 +600,7 @@ int ObTableReplaceOp::do_replace_into()
     int64_t end_time = 0;
     // must set conflict_row fetch flag
     add_need_conflict_result_flag();
-    if (OB_FAIL(ObSqlTransControl::create_anonymous_savepoint(ctx_, savepoint_no))) {
-    } else if (OB_FAIL(load_all_replace_row(is_iter_end))) {
+    if (OB_FAIL(load_all_replace_row(is_iter_end, savepoint_no))) {
     } else if (OB_FAIL(post_all_try_insert_das_task(dml_rtctx_))) {
     } else if (!check_is_duplicated() && OB_FAIL(ObDMLService::handle_after_row_processing(this, &dml_modify_rows_))) {
     } else if (!check_is_duplicated()) {
