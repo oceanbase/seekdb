@@ -16,13 +16,72 @@
 
 #pragma once
 
-#include "sql/engine/graph/graph_path_spec.h"
+#include "sql/engine/graph/graph_expand.h"
+#include "sql/engine/graph/graph_path_state_store.h"
 #include "sql/engine/recursive_cte/ob_recursive_union_all_op.h"
 
 namespace oceanbase
 {
 namespace sql
 {
+
+// Query-local owner of one breadth-first path frontier. Each call to expand()
+// converts the current path-state IDs into GraphExpandInput batches, consumes
+// their single-hop extensions, and installs the accepted child states as the
+// next frontier. GraphFeedbackLoopOp will use this controller once its current
+// recursive-SQL child is replaced by a native GraphExpand access adapter.
+class GraphFeedbackFrontier final
+{
+public:
+  GraphFeedbackFrontier(common::ObIAllocator &allocator,
+                        GraphExpand &expand,
+                        int64_t input_batch_size,
+                        int64_t memory_limit);
+  ~GraphFeedbackFrontier() = default;
+
+  // Seeds may only be added to the zero-hop frontier. Duplicate seed rows are
+  // intentionally assigned independent path states to preserve bag semantics.
+  int add_seed(int64_t binding_id,
+               const GraphElementIdentity &source_identity);
+
+  // Advances exactly one hop. WALK accepts every extension; TRAIL rejects an
+  // edge already present in that extension's own parent chain. An empty current
+  // frontier returns OB_ITER_END without modifying the controller.
+  int expand(GraphPathDirection direction, GraphPathMode path_mode);
+
+  int get_frontier_state(int64_t index, GraphPathState &state) const;
+  int64_t get_hop() const { return hop_; }
+  int64_t get_frontier_count() const { return current_state_ids_->count(); }
+  int64_t get_path_state_count() const { return state_store_.count(); }
+  int64_t get_peak_memory() const { return peak_memory_bytes_; }
+  bool empty() const { return current_state_ids_->empty(); }
+
+  // Clears path history and both frontier buffers for close, rescan, or any
+  // terminal error. The referenced GraphExpand object remains reusable.
+  void reset();
+
+private:
+  int build_input_batch(int64_t start, int64_t &next_start);
+  int consume_input_batch(GraphPathDirection direction,
+                          GraphPathMode path_mode);
+  int check_memory_limit();
+  int fail(int error);
+
+private:
+  GraphExpand &expand_;
+  GraphPathStateStore state_store_;
+  int64_t input_batch_size_;
+  int64_t memory_limit_;
+  common::ObArray<int64_t> frontier_buffer_a_;
+  common::ObArray<int64_t> frontier_buffer_b_;
+  common::ObArray<int64_t> *current_state_ids_{nullptr};
+  common::ObArray<int64_t> *next_state_ids_{nullptr};
+  common::ObArray<GraphExpandInput> input_batch_;
+  int64_t hop_{0};
+  int64_t peak_memory_bytes_{0};
+
+  DISALLOW_COPY_AND_ASSIGN(GraphFeedbackFrontier);
+};
 
 // The graph operator has its own semantic spec while temporarily sharing the
 // recursive row-pump mechanics used by recursive CTE.  A later increment can

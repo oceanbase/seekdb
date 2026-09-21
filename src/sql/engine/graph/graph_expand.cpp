@@ -25,7 +25,6 @@ using namespace common;
 namespace sql
 {
 
-static constexpr int64_t GRAPH_EXPAND_MAX_INPUT_STATE_COUNT = 4096;
 static constexpr int64_t GRAPH_EXPAND_MAX_EDGE_PAGE_SIZE = 4096;
 // Conservative fixed-memory reserves for container bookkeeping and identity
 // buffers; variable-length ObObj payloads are accounted by identity_allocator_.
@@ -125,15 +124,24 @@ int GraphExpand::stabilize_edge_page()
 int GraphExpand::check_memory_limit()
 {
   int ret = OB_SUCCESS;
-  const int64_t identity_bytes = identity_allocator_.used();
-  if (identity_bytes > memory_limit_
-      || fixed_memory_bytes_ > memory_limit_ - identity_bytes) {
+  const int64_t resident_bytes = used_memory();
+  if (resident_bytes > memory_limit_) {
     ret = OB_EXCEED_QUERY_MEM_LIMIT;
   } else {
     stats_.peak_path_memory_ = std::max(stats_.peak_path_memory_,
-                                       fixed_memory_bytes_ + identity_bytes);
+                                       resident_bytes);
   }
   return ret;
+}
+
+int64_t GraphExpand::used_memory() const
+{
+  // reuse() keeps arena pages for the following batch, so report resident
+  // capacity rather than only bytes populated by the current scanner call.
+  const int64_t identity_bytes = identity_allocator_.total();
+  return fixed_memory_bytes_ > INT64_MAX - identity_bytes
+      ? INT64_MAX
+      : fixed_memory_bytes_ + identity_bytes;
 }
 
 bool GraphExpand::contains(const ObIArray<GraphElementIdentity> &identities,

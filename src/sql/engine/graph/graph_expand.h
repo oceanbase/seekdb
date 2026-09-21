@@ -26,6 +26,10 @@ namespace oceanbase
 namespace sql
 {
 
+// GraphExpand validates this protocol limit independently of the caller's
+// query-memory budget. Frontier controllers split larger levels into batches.
+static const int64_t GRAPH_EXPAND_MAX_INPUT_STATE_COUNT = 4096;
+
 // The DAS-facing access adapter owns the transaction descriptor, statement
 // snapshot and schema guard. It must return an error for scan/RPC failures and
 // must never encode a failed read as an empty successful page.
@@ -74,6 +78,7 @@ public:
   void release();
 
   const GraphExpandStats &get_stats() const { return stats_; }
+  int64_t used_memory() const;
   bool is_open() const { return is_open_; }
 
 private:
