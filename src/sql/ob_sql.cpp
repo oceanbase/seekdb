@@ -1111,6 +1111,9 @@ int ObSql::prepare_pl_sql(const ObString &sql,
           } else if (OB_FAIL(set_timeout_for_pl(sess, cur_timeout_us))) {
           } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
                                   schema_guard))) {
+          } else if (OB_NOT_NULL(pl_prepare_ctx.parent_schema_guard_)
+                     && pl_prepare_ctx.parent_schema_guard_->has_routine_overlay()
+                     && OB_FAIL(schema_guard.inherit_routine_overlay(*pl_prepare_ctx.parent_schema_guard_))) {
           } else if (FALSE_IT(context.schema_guard_ = &schema_guard)) {
           } else if (OB_FAIL(init_result_set(context, result))) {
           } else if (OB_ISNULL(result.get_exec_context().get_physical_plan_ctx())) {
@@ -2976,9 +2979,21 @@ int ObSql::init_result_set(ObSqlCtx &context, ObResultSet &result_set)
 OB_INLINE int ObSql::init_exec_context(const ObSqlCtx &context, ObExecContext &exec_ctx)
 {
   int ret = OB_SUCCESS;
+  // Text, prepared and nested PL execution share this pre-compilation path.
+  // Binding precedes cache lookup so existing provisional-cache isolation also
+  // applies to later statements of a caller-owned catalog transaction.
+  if (context.schema_guard_ != nullptr && context.schema_guard_->has_retired_routine_overlay()) {
+    // Internal callers must acquire a fresh guard, never fall back through a
+    // previous transaction's private schema/ACL or compile against stale state.
+    ret = OB_STATE_NOT_MATCH;
+  } else if (context.session_info_ != nullptr && context.session_info_->has_plugin_catalog_transaction()) {
+    ret = context.schema_guard_ == nullptr ? OB_ERR_UNEXPECTED
+        : context.session_info_->bind_plugin_catalog_view(*context.schema_guard_);
+  }
   ObSqlExecutorCtx &task_exec_ctx = exec_ctx.get_sql_exec_ctx();
   task_exec_ctx.set_retry_times(context.retry_times_);
-  if (OB_FAIL(exec_ctx.create_physical_plan_ctx())) {
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(exec_ctx.create_physical_plan_ctx())) {
   } else {
     exec_ctx.set_my_session(context.session_info_);
     bind_exec_context_runtime_services(exec_ctx);
@@ -3062,6 +3077,18 @@ int ObSql::pc_get_plan(ObPlanCacheCtx &pc_ctx,
                        int &get_plan_err,
                        bool &need_disconnect)
 {
+  if (OB_NOT_NULL(pc_ctx.sql_ctx_.schema_guard_)
+      && pc_ctx.sql_ctx_.schema_guard_->has_routine_overlay()) {
+    // Bypass shared lookup and hit statistics. Do not swallow the invalid
+    // nonempty-output case: regeneration must never reuse that old object.
+    get_plan_err = OB_ISNULL(guard.get_cache_obj()) ? OB_SQL_PC_NOT_EXIST : OB_ERR_UNEXPECTED;
+    if (OB_ERR_UNEXPECTED == get_plan_err) {
+      return get_plan_err;
+    } else if (pc_ctx.sql_ctx_.multi_stmt_item_.is_batched_multi_stmt()) {
+      return OB_BATCHED_MULTI_STMT_ROLLBACK;
+    }
+    return OB_SUCCESS;
+  }
   ACTIVE_SESSION_FLAG_SETTER_GUARD(in_get_plan_cache);
   int ret = OB_SUCCESS;
   //NG_TRACE(cache_get_plan_begin);
@@ -3375,6 +3402,11 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
             if (OB_UNLIKELY(NULL == (plan_cache = plan_cache_))) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("Invalid plan cache", K(ret));
+            } else if (OB_NOT_NULL(pc_ctx.sql_ctx_.schema_guard_)
+                       && pc_ctx.sql_ctx_.schema_guard_->has_routine_overlay()) {
+              // This is a private compilation, not a shared-cache miss. It
+              // must not affect access statistics or cache parameterization.
+              add_plan_to_pc = false;
             } else {
               plan_cache->inc_access_cnt();
               if (OB_SQL_PC_NOT_EXIST == get_plan_err) {
@@ -3385,7 +3417,9 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
             }
           }
           if (OB_SUCC(ret) && stmt::T_EXPLAIN == stmt_type) {
-            if (OB_SQL_PC_NOT_EXIST == get_plan_err) {
+            if (OB_SQL_PC_NOT_EXIST == get_plan_err
+                && (OB_ISNULL(pc_ctx.sql_ctx_.schema_guard_)
+                    || !pc_ctx.sql_ctx_.schema_guard_->has_routine_overlay())) {
               is_explain_parameterize = true;
             } else {
               is_explain_parameterize = false;
@@ -3495,6 +3529,11 @@ int ObSql::pc_add_plan(ObPlanCacheCtx &pc_ctx,
 {
   int ret = OB_SUCCESS;
   ObPhysicalPlan *phy_plan = result.get_physical_plan();
+  if (OB_NOT_NULL(pc_ctx.sql_ctx_.schema_guard_)
+      && pc_ctx.sql_ctx_.schema_guard_->has_routine_overlay()) {
+    plan_added = false;
+    return OB_ISNULL(phy_plan) || OB_ISNULL(plan_cache) ? OB_NOT_INIT : OB_SUCCESS;
+  }
   pc_ctx.fp_result_.pc_key_.namespace_ = ObLibCacheNameSpace::NS_CRSR;
   plan_added = false;
   bool is_batch_exec = pc_ctx.sql_ctx_.is_batch_params_execute();
@@ -3643,6 +3682,11 @@ int ObSql::need_add_plan(const ObPlanCacheCtx &pc_ctx,
                          bool &need_add_plan)
 {
   int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(pc_ctx.sql_ctx_.schema_guard_)
+      && pc_ctx.sql_ctx_.schema_guard_->has_routine_overlay()) {
+    need_add_plan = false;
+    return OB_SUCCESS;
+  }
   result.get_exec_context().get_stmt_factory()->get_query_ctx();
   if (false == need_add_plan) {
     // do nothing
@@ -3985,6 +4029,8 @@ void ObSql::generate_sql_id(ObPlanCacheCtx &pc_ctx,
   // It has been checked during parser_and_check, there is no need to check again here
   if (OB_SUCCESS == err_code
       && PC_TEXT_MODE == pc_ctx.mode_
+      && (OB_ISNULL(pc_ctx.sql_ctx_.schema_guard_)
+          || !pc_ctx.sql_ctx_.schema_guard_->has_routine_overlay())
       && T_SP_CALL_STMT == parse_result.result_tree_->children_[0]->type_) {
     signature_sql = pc_ctx.fp_result_.pc_key_.name_;
   } else if (add_plan_to_pc == false

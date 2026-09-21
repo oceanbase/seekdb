@@ -235,6 +235,9 @@ public:
     return (
         // database
         stmt_type == stmt::T_CREATE_DATABASE
+            || stmt_type == stmt::T_CREATE_EXTENSION
+            || stmt_type == stmt::T_ALTER_EXTENSION
+            || stmt_type == stmt::T_DROP_EXTENSION
             || stmt_type == stmt::T_ALTER_DATABASE
             || stmt_type == stmt::T_DROP_DATABASE
             || stmt_type == stmt::T_FORK_DATABASE

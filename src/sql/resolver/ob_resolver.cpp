@@ -83,6 +83,9 @@
 #include "sql/resolver/cmd/ob_set_names_resolver.h"
 #include "sql/resolver/cmd/ob_set_transaction_resolver.h"
 #include "sql/resolver/cmd/ob_empty_query_resolver.h"
+#include "sql/resolver/cmd/create_extension_resolver.h"
+#include "sql/resolver/cmd/alter_extension_resolver.h"
+#include "sql/resolver/cmd/drop_extension_resolver.h"
 #include "sql/resolver/cmd/ob_anonymous_block_resolver.h"
 #include "sql/resolver/cmd/ob_call_procedure_resolver.h"
 #include "sql/resolver/cmd/ob_load_data_resolver.h"
@@ -520,6 +523,18 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       case T_INSTALL_PLUGIN:
       case T_UNINSTALL_PLUGIN: {
         REGISTER_STMT_RESOLVER(EmptyQuery);
+        break;
+      }
+      case T_CREATE_EXTENSION: {
+        ret = stmt_resolver_func<CreateExtensionResolver>(params_, *real_parse_tree, stmt);
+        break;
+      }
+      case T_ALTER_EXTENSION: {
+        ret = stmt_resolver_func<AlterExtensionResolver>(params_, *real_parse_tree, stmt);
+        break;
+      }
+      case T_DROP_EXTENSION: {
+        ret = stmt_resolver_func<DropExtensionResolver>(params_, *real_parse_tree, stmt);
         break;
       }
       case T_LOCK_TABLE: {

@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
+#include "share/schema/catalog_dml_sql_helper.h"
 #include "ob_dependency_info.h"
 #include "lib/utility/ob_smart_call.h"  // SMART_CALL, previously hidden behind the exec_context include chain, make the dependency explicit
 
@@ -170,7 +171,7 @@ int ObDependencyInfo::delete_schema_object_dependency(common::ObISQLClient &tran
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("delete error info unexpected.", K(ret),
                                               K(dep_obj_id), K(dep_obj_type));
-  } else if (sql.assign_fmt("delete FROM %s WHERE dep_obj_id = %ld \
+  } else if (sql.assign_fmt("delete FROM oceanbase.%s WHERE dep_obj_id = %ld \
                                                   AND dep_obj_type = %ld",
             OB_ALL_DEPENDENCY_TNAME,
             extract_obj_id(dep_obj_id),
@@ -206,10 +207,10 @@ int ObDependencyInfo::insert_schema_object_dependency(common::ObISQLClient &tran
     // rule out self reference
   } else if (OB_FAIL(gen_dependency_dml(dml))) {
   } else {
-    ObDMLExecHelper exec(trans);
+    CatalogDMLSqlHelper exec(trans);
     int64_t affected_rows = 0;
     if (!only_history) {
-      ObDMLExecHelper exec(trans);
+      CatalogDMLSqlHelper exec(trans);
       if (is_replace) {
         if (OB_FAIL(exec.exec_insert_update(OB_ALL_DEPENDENCY_TNAME, dml, affected_rows))) {
         }
@@ -418,7 +419,7 @@ int ObDependencyInfo::collect_ref_infos(uint64_t dep_obj_id,
   {
     common::sqlclient::ObMySQLResult *result = nullptr;
     ObSqlString sql;
-    if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE dep_obj_id = %lu ORDER BY dep_order",
+    if (OB_FAIL(sql.assign_fmt("SELECT * FROM oceanbase.%s WHERE dep_obj_id = %lu ORDER BY dep_order",
                                OB_ALL_DEPENDENCY_TNAME,
                                dep_obj_id))) {
     } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
@@ -457,7 +458,7 @@ int ObDependencyInfo::collect_dep_infos(uint64_t ref_obj_id,
   {
     common::sqlclient::ObMySQLResult *result = nullptr;
     ObSqlString sql;
-    if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE ref_obj_id = %lu",
+    if (OB_FAIL(sql.assign_fmt("SELECT * FROM oceanbase.%s WHERE ref_obj_id = %lu",
                                OB_ALL_DEPENDENCY_TNAME,
                                ref_obj_id))) {
     } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
@@ -504,7 +505,7 @@ int ObDependencyInfo::collect_all_dep_objs_inner(uint64_t root_obj_id,
   {
     HEAP_VAR(common::ObMySQLProxy::MySQLResult, res) {
       common::sqlclient::ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql.assign_fmt("SELECT dep_obj_id, dep_obj_type FROM %s WHERE ref_obj_id = %lu",
+      if (OB_FAIL(sql.assign_fmt("SELECT dep_obj_id, dep_obj_type FROM oceanbase.%s WHERE ref_obj_id = %lu",
                                         OB_ALL_DEPENDENCY_TNAME,
                                         ref_obj_id))) {
       } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
@@ -578,7 +579,7 @@ int ObDependencyInfo::collect_all_dep_objs(
     HEAP_VAR(common::ObMySQLProxy::MySQLResult, res) {
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(sql.assign_fmt(
-          "SELECT dep_obj_id, dep_obj_type, schema_version FROM %s "
+          "SELECT dep_obj_id, dep_obj_type, schema_version FROM oceanbase.%s "
           "WHERE (ref_obj_id, ref_obj_type) IN (",
           OB_ALL_DEPENDENCY_TNAME))) {
       }
@@ -678,7 +679,7 @@ int ObDependencyInfo::batch_invalidate_dependents(const common::ObIArray<Critica
     int64_t affected_rows = 0;
     ObSqlString sql;
     if (OB_FAIL(ret) || dml.get_row_count() <= 0) {
-    } else if (OB_FAIL(dml.splice_batch_insert_update_sql(OB_ALL_ERROR_TNAME, sql))) {
+    } else if (OB_FAIL(dml.splice_batch_insert_update_sql("oceanbase.__all_error", sql))) {
     } else if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
     } else {
       // insert or update __all_error succeed!
@@ -1011,7 +1012,7 @@ int ObReferenceObjTable::batch_execute_delete_obj_dependency(const ObReferenceOb
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(dml.splice_batch_delete_sql(OB_ALL_DEPENDENCY_TNAME, sql))) {
+    } else if (OB_FAIL(dml.splice_batch_delete_sql("oceanbase.__all_dependency", sql))) {
     } else if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
     } else {
     }

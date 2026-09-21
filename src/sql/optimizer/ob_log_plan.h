@@ -16,6 +16,7 @@
 
 #ifndef OCEANBASE_SQL_OB_LOG_PLAN_H
 #define OCEANBASE_SQL_OB_LOG_PLAN_H
+#include "seekdb/plugin/server_dev_planner.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/string/ob_string.h"
 #include "sql/ob_sql_context.h"
@@ -883,6 +884,16 @@ public:
 
   int get_minimal_cost_candidate(const ObIArray<CandidatePlan> &candidates,
                                  CandidatePlan &best_candidate);
+  int get_minimal_cost_candidate_core(const ObIArray<CandidatePlan> &candidates,
+                                     CandidatePlan &best_candidate);
+  int contribute_plugin_relation_paths(const ObIArray<CandidatePlan> &candidates,
+                                      ObIArray<CandidatePlan> &result);
+  int run_plugin_candidate_phase(const ObIArray<CandidatePlan> &candidates,
+                                CandidatePlan &selected, ObIArray<CandidatePlan> *contributions,
+                                seekdb_plugin_candidate_phase_t phase = SEEKDB_PLUGIN_PHASE_SELECT);
+  int contribute_plugin_upper_paths(seekdb_plugin_candidate_phase_t phase);
+  int refresh_plugin_join_hooks();
+  bool plugin_join_paths_enabled() const { return plugin_join_paths_enabled_; }
 
   int classify_candidates_based_on_sharding(const ObIArray<CandidatePlan> &candidates,
                                             ObIArray<ObSEArray<CandidatePlan, 16>> &candidate_list);
@@ -1785,6 +1796,7 @@ protected: // member variable
   const ObDMLStmt *stmt_;
   ObLogOperatorFactory log_op_factory_;
   All_Candidate_Plans candidates_;
+  bool plugin_join_paths_enabled_ = false;
   common::ObSEArray<std::pair<ObRawExpr *, ObRawExpr *>, 4, common::ModulePageAllocator, true > group_replaced_exprs_;
   ObRawExprReplacer group_replacer_;
   ObRawExprReplacer window_function_replacer_;

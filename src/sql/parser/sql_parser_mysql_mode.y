@@ -81,6 +81,7 @@
 %token <node> ID_DOT_ID_DOT_ID
 %token <node> ID_DOT_ID
 %token INSTALL UNINSTALL PLUGIN SONAME PLUGINS
+%token <non_reserved_keyword> EXTENSION VERSION
 /*empty_query::
 // (1) 对于只有空格或者;的查询语句需要报错：如："" 或者 "   " 或者 ";" 或者 " ;  " 都需要报错：err_msg:Query was empty  errno:1065
 // (2) 对于只含有注释或者空格或者;的查询语句则需要返回成功：如："#fadfadf " 或者"/**\/" 或者 "/**\/  ;" 返回成功
@@ -422,7 +423,7 @@ END_P SET_VAR DELIMITER
 %type <node> opt_equal_mark opt_default_mark read_only_or_write not not2
 %type <node> int_or_decimal
 %type <node> opt_column_attribute_list column_attribute column_attribute_list opt_column_default_value opt_column_default_value_list
-%type <node> show_stmt plugin_stmt from_or_in columns_or_fields database_or_schema index_or_indexes_or_keys opt_from_or_in_database_clause opt_show_condition opt_desc_column_option opt_status opt_storage opt_show_engine check_table_options check_table_option
+%type <node> show_stmt plugin_stmt create_extension_stmt opt_extension_version alter_extension_stmt opt_extension_update_version drop_extension_stmt opt_extension_drop_behavior from_or_in columns_or_fields database_or_schema index_or_indexes_or_keys opt_from_or_in_database_clause opt_show_condition opt_desc_column_option opt_status opt_storage opt_show_engine check_table_options check_table_option
 %type <node> prepare_stmt stmt_name preparable_stmt
 %type <node> variable_set_stmt var_and_val_list var_and_val to_or_eq set_expr_or_default sys_var_and_val
 %type <node> execute_stmt argument_list argument opt_using_args
@@ -651,6 +652,9 @@ stmt:
   | optimize_stmt     { $$ = $1; check_question_mark($$, result); }
   | flush_privileges_stmt { $$ = $1; check_question_mark($$, result); }
   | plugin_stmt            { $$ = $1; check_question_mark($$, result); }
+  | create_extension_stmt  { $$ = $1; check_question_mark($$, result); }
+  | alter_extension_stmt  { $$ = $1; check_question_mark($$, result); }
+  | drop_extension_stmt    { $$ = $1; check_question_mark($$, result); }
   | dump_memory_stmt  { $$ = $1; check_question_mark($$, result); }
   | get_diagnostics_stmt    { $$ = $1; question_mark_issue($$, result); }
   | pl_expr_stmt            { $$ = $1; question_mark_issue($$, result); }
@@ -2517,6 +2521,12 @@ MOD '(' expr ',' expr ')'
 {
   $$ = $1;
 }
+| CAST '(' expr AS NAME_OB ')'
+{
+  /* Keep the type name as an identifier, not a parameterizable SQL value.
+     Catalog binding happens after source-column resolution. */
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FUN_SYS_PLUGIN_TYPE_VALUE, 2, $3, $5);
+}
 | CAST '(' expr AS cast_data_type opt_array sys_view_cast_opt ')'
 {
   // opt_array add for multivalue index, CAST(... AS UNSIGNED ARRAY) syntax support
@@ -2660,6 +2670,10 @@ MOD '(' expr ',' expr ')'
   malloc_non_terminal_node(params, result->malloc_pool_, T_EXPR_LIST, 2, $3, $5);
   make_name_node($$, result->malloc_pool_, "left");
   malloc_non_terminal_node($$, result->malloc_pool_, T_FUN_SYS, 2, $$, params);
+}
+| CONVERT '(' expr ',' NAME_OB ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FUN_SYS_PLUGIN_TYPE_VALUE, 2, $3, $5);
 }
 | CONVERT '(' expr ',' cast_data_type ')'
 {
@@ -12870,6 +12884,43 @@ SHOW opt_extended_or_full TABLES opt_from_or_in_database_clause opt_show_conditi
 }
 ;
 
+create_extension_stmt:
+CREATE EXTENSION relation_name opt_extension_version
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_CREATE_EXTENSION, 2, $3, $4);
+}
+;
+
+opt_extension_version:
+/* empty */ { $$ = NULL; }
+| VERSION STRING_VALUE { $$ = $2; }
+;
+
+alter_extension_stmt:
+ALTER EXTENSION relation_name UPDATE opt_extension_update_version
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_ALTER_EXTENSION, 2, $3, $5);
+}
+;
+
+opt_extension_update_version:
+/* empty */ { $$ = NULL; }
+| TO STRING_VALUE { $$ = $2; }
+;
+
+drop_extension_stmt:
+DROP EXTENSION relation_name opt_extension_drop_behavior
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_DROP_EXTENSION, 2, $3, $4);
+}
+;
+
+opt_extension_drop_behavior:
+/* empty */ { malloc_terminal_node($$, result->malloc_pool_, T_INT); $$->value_ = 0; }
+| RESTRICT { malloc_terminal_node($$, result->malloc_pool_, T_INT); $$->value_ = 0; }
+| CASCADE { malloc_terminal_node($$, result->malloc_pool_, T_INT); $$->value_ = 1; }
+;
+
 plugin_stmt:
 INSTALL PLUGIN NAME_OB SONAME STRING_VALUE
 {
@@ -16402,6 +16453,14 @@ NAME_OB
 {
   make_name_node($$, result->malloc_pool_, "version");
 }
+| VERSION
+{
+  make_name_node($$, result->malloc_pool_, "version");
+}
+| EXTENSION
+{
+  make_name_node($$, result->malloc_pool_, "extension");
+}
 | USER
 {
   make_name_node($$, result->malloc_pool_, "user");
@@ -17703,6 +17762,8 @@ ACCOUNT
 |       EXTENDED
 |       EXTENDED_NOADDR
 |       EXTENT_SIZE
+|       EXTENSION
+|       VERSION
 |       EXTRACT
 |       FAIL
 |       FAILOVER

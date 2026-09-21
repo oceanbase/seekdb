@@ -40,9 +40,15 @@
 #include "share/rc/ob_context.h"
 #include "sql/ob_optimizer_trace_impl.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
+#include <memory>
 
 namespace oceanbase
 {
+namespace share { namespace schema {
+class RoutineCatalogTransaction;
+class RoutineSchemaOverlay;
+class RoutinePrivilegeOverlay;
+} }
 namespace common
 {
 class ObISrsProvider;
@@ -855,6 +861,36 @@ public:
   int on_user_connect(share::schema::ObSessionPrivInfo &priv_info, const ObUserInfo *user_info);
   int on_user_disconnect();
   virtual void reset_tx_variable(bool reset_next_scope = true);
+  // Host-only catalog participant. Caller owns the session query lock; no
+  // catalog authorization or durable write is conferred by recording a mark.
+  int record_plugin_catalog_view(const transaction::ObTxSEQ &barrier,
+      std::shared_ptr<share::schema::RoutineSchemaOverlay> schema,
+      std::shared_ptr<share::schema::RoutinePrivilegeOverlay> privileges);
+  // Host-only, after normal object admission and a real data savepoint. Lazily
+  // owns one transaction-wide pair and records its pre-mutation mark in Rust.
+  // Outputs are cleared on failure. No SQL/DDL permission or transaction start.
+  int prepare_plugin_catalog_view(const transaction::ObTxSEQ &barrier,
+      std::shared_ptr<share::schema::RoutineSchemaOverlay> &schema,
+      std::shared_ptr<share::schema::RoutinePrivilegeOverlay> &privileges,
+      std::shared_ptr<share::schema::RoutineCatalogTransaction> &journal);
+  // Before compilation/cache lookup. Idempotent for this same view, rejects a
+  // foreign overlay. Caller holds the session exclusively, including commit SQL.
+  int bind_plugin_catalog_view(share::schema::ObSchemaGetterGuard &guard);
+  bool has_plugin_catalog_transaction() const { return plugin_catalog_transaction_ != nullptr; }
+  bool owns_plugin_catalog_transaction(const share::schema::RoutineCatalogTransaction *journal,
+      int64_t transaction_id, int64_t sequence_base) const
+  {
+    return journal != nullptr && plugin_catalog_transaction_.get() == journal &&
+        plugin_catalog_tx_id_ == transaction_id && plugin_catalog_seq_base_ == sequence_base;
+  }
+  int rollback_plugin_catalog_view(int64_t transaction_id, const transaction::ObTxSEQ &resolved);
+  // Fail only the captured participant, never a replacement TX. Retire access
+  // before data abort; no allocation/SQL and no inference of a durable outcome.
+  int fail_plugin_catalog_transaction(int64_t transaction_id, int64_t sequence_base, int cause);
+  int prepare_plugin_catalog_commit(int64_t absolute_deadline = 0);
+  int record_plugin_catalog_schema_version(const transaction::ObTxSEQ &barrier, int64_t version);
+  int complete_plugin_catalog_transaction(int64_t transaction_id, int data_result, bool rollback);
+  void discard_plugin_catalog_transaction();
   ObOptimizerTraceImpl& get_optimizer_tracer() { return optimizer_tracer_; }
   void set_is_lock_session(bool v) { is_lock_session_ = v; }
   bool is_lock_session() const { return is_lock_session_; }
@@ -871,12 +907,21 @@ public:
   int close_all_ps_stmt(ObPsCache &ps_cache);
 private:
   void release_all_ps_session_info();
+  int check_plugin_catalog_transaction_context();
   void set_cur_exec_ctx(ObExecContext *cur_exec_ctx) { cur_exec_ctx_ = cur_exec_ctx; }
 
   static const int64_t MAX_STORED_PLANS_COUNT = 10240;
   static const int64_t MAX_IPADDR_LENGTH = 64;
 private:
   bool is_inited_;
+  // Unconditional layout: other targets compile this header without SQL's
+  // plugin macro. Shared ownership permits incomplete type in disabled builds;
+  // it is NOT permission to concurrently use a session or its private views.
+  std::shared_ptr<share::schema::RoutineCatalogTransaction> plugin_catalog_transaction_;
+  std::shared_ptr<share::schema::RoutineSchemaOverlay> plugin_catalog_schema_;
+  std::shared_ptr<share::schema::RoutinePrivilegeOverlay> plugin_catalog_privileges_;
+  int64_t plugin_catalog_tx_id_ = 0;
+  int64_t plugin_catalog_seq_base_ = 0;
   // store the warning message from the most recent statement in the current session
   common::ObWarningBuffer warnings_buf_;
   common::ObWarningBuffer show_warnings_buf_;

@@ -70,6 +70,7 @@
 #define SEEKDB_PLUGIN_MAX_IDENTIFIER_BYTES 255u
 #define SEEKDB_PLUGIN_MAX_BUILD_ID_BYTES 255u
 #define SEEKDB_PLUGIN_MAX_SERVICES 4096u
+#define SEEKDB_PLUGIN_MAX_REGISTRATION_TRANSACTIONS 65536u
 
 #if defined(_WIN32) || defined(__CYGWIN__)
 #define SEEKDB_PLUGIN_EXPORT __declspec(dllexport)
@@ -147,7 +148,11 @@ enum seekdb_plugin_capability {
    * manifest itself, required-service descriptors, or executable
    * implementation references.  The loader does not publish this service.
    */
-  SEEKDB_PLUGIN_CAPABILITY_EXTENSION_CATALOG = UINT64_C(1) << 5
+  SEEKDB_PLUGIN_CAPABILITY_EXTENSION_CATALOG = UINT64_C(1) << 5,
+  /* Manifest-only opt-in; requires the suffix in server_dev.h. Invalid on
+   * service descriptors, requirements and implementation references.
+   * Older hosts reject this unknown bit before lifecycle callbacks. */
+  SEEKDB_PLUGIN_CAPABILITY_SERVER_DEV = UINT64_C(1) << 6
 };
 
 /* Opaque identities.  No implementation may depend on their layout. */
@@ -229,6 +234,11 @@ typedef void(SEEKDB_PLUGIN_CALL *seekdb_plugin_deinit_fn)(
     seekdb_plugin_instance_handle_t *instance);
 
 /* Allocation sizes and alignments are bytes; alignment MUST be a power of two. */
+/* Module-owned allocation, not a query arena. Use the same host, size and
+ * alignment for free. Zero size or invalid alignment returns NULL; the host
+ * may impose a per-module quota. NULL free is a no-op. Neither these callbacks
+ * nor a Rust implementation account for arbitrary plugin-owned heaps or GPU
+ * allocations. Complete matching frees before deinit; do not rely on dlclose. */
 typedef void *(SEEKDB_PLUGIN_CALL *seekdb_plugin_alloc_fn)(
     seekdb_plugin_host_handle_t *host, uint64_t size, uint32_t alignment);
 typedef void(SEEKDB_PLUGIN_CALL *seekdb_plugin_free_fn)(
@@ -262,14 +272,19 @@ typedef void(SEEKDB_PLUGIN_CALL *seekdb_plugin_release_service_fn)(
     seekdb_plugin_service_lease_t *lease);
 
 /*
- * Service publication is atomic.  After begin succeeds, exactly one commit or
- * abort call MUST be made.  Descriptors passed to register remain borrowed only
+ * Service publication is atomic. After begin succeeds, the transaction MUST
+ * end with one successful commit or an abort. A failed commit leaves the
+ * transaction open for retry or abort. Descriptors remain borrowed only
  * until that transaction completes.  A successful commit does not retain the
  * descriptor or its strings, but the plugin MUST retain each accepted service
  * table according to the published-service lifetime above; the outer activation
  * publication may occur after this callback returns.  If a transaction fails or
  * aborts and its service was never published, the plugin may release that table
  * after the transaction completes.  A failed register does not end the txn.
+ * A module activation may issue at most MAX_REGISTRATION_TRANSACTIONS tokens,
+ * including ended/empty transactions. Ended token addresses remain reserved
+ * until the host registration domain is destroyed, preventing stale-token
+ * aliasing. Batch related contributions into a transaction.
  */
 typedef seekdb_plugin_status_t(
     SEEKDB_PLUGIN_CALL *seekdb_plugin_begin_registration_fn)(
@@ -291,7 +306,8 @@ typedef void(SEEKDB_PLUGIN_CALL *seekdb_plugin_abort_registration_fn)(
 /*
  * host_handle and all callback pointers are owned by seekdb.  A plugin may
  * retain this table only from successful init until deinit returns.  It MUST
- * check struct_size before using callbacks appended by a newer ABI minor.
+ * check struct_size before using callbacks appended by a newer host API.
+ * Optional suffixes have their own SPI version; the v1 prefix never changes.
  */
 typedef struct seekdb_plugin_host_api_v1 {
   uint32_t struct_size;

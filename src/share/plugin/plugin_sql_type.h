@@ -49,23 +49,27 @@ inline bool parse_plugin_sql_type_number(const common::ObString &value,
   return valid && number != 0;
 }
 
-inline bool is_plugin_sql_type(
-    const common::ObIArray<common::ObString> &type_info)
+template <typename TypeInfo>
+inline bool is_plugin_sql_type(const TypeInfo &type_info)
 {
-  bool is_plugin_type =
-      type_info.count() == SEEKDB_PLUGIN_SQL_TYPE_METADATA_FIELD_COUNT &&
-      type_info.at(SEEKDB_PLUGIN_SQL_TYPE_METADATA_MARKER_FIELD) ==
-          common::ObString::make_string(SEEKDB_PLUGIN_SQL_TYPE_METADATA_MARKER);
+  if (type_info.count() != SEEKDB_PLUGIN_SQL_TYPE_METADATA_FIELD_COUNT) return false;
+  const common::ObString &marker = type_info.at(SEEKDB_PLUGIN_SQL_TYPE_METADATA_MARKER_FIELD);
+  const bool legacy = marker == common::ObString::make_string(SEEKDB_PLUGIN_SQL_TYPE_METADATA_MARKER);
+  const bool stable = marker == common::ObString::make_string(SEEKDB_PLUGIN_SQL_TYPE_METADATA_MARKER_V2);
+  bool is_plugin_type = legacy || stable;
   for (int64_t i = 1; is_plugin_type && i < type_info.count(); ++i) {
     is_plugin_type = !type_info.at(i).empty() &&
                      type_info.at(i).length() <=
-                         SEEKDB_PLUGIN_MAX_IDENTIFIER_BYTES;
+                         SEEKDB_PLUGIN_MAX_IDENTIFIER_BYTES &&
+                     nullptr == std::memchr(type_info.at(i).ptr(), '\0', type_info.at(i).length());
   }
   uint64_t number = 0;
   if (is_plugin_type) {
-    is_plugin_type = parse_plugin_sql_type_number(
-        type_info.at(SEEKDB_PLUGIN_SQL_TYPE_METADATA_OWNER_GENERATION_FIELD),
-        std::numeric_limits<uint64_t>::max(), number);
+    const common::ObString &generation =
+        type_info.at(SEEKDB_PLUGIN_SQL_TYPE_METADATA_OWNER_GENERATION_FIELD);
+    is_plugin_type = stable ? generation == common::ObString::make_string("0")
+                            : parse_plugin_sql_type_number(generation,
+                                  std::numeric_limits<uint64_t>::max(), number);
   }
   if (is_plugin_type) {
     is_plugin_type = parse_plugin_sql_type_number(
@@ -82,8 +86,9 @@ inline const common::ObString &plugin_sql_type_name(
   return type_info.at(SEEKDB_PLUGIN_SQL_TYPE_METADATA_SQL_NAME_FIELD);
 }
 
+template <typename TypeInfo>
 inline bool decode_plugin_sql_type(
-    const common::ObIArray<common::ObString> &type_info,
+    const TypeInfo &type_info,
     seekdb_plugin_sql_binding_v1_t &binding)
 {
   const bool valid = is_plugin_sql_type(type_info);
@@ -106,9 +111,10 @@ inline bool decode_plugin_sql_type(
       std::memcpy(destinations[i], field.ptr(), field.length());
     }
     uint64_t physical_format_version = 0;
-    (void)parse_plugin_sql_type_number(
-        type_info.at(SEEKDB_PLUGIN_SQL_TYPE_METADATA_OWNER_GENERATION_FIELD),
-        std::numeric_limits<uint64_t>::max(), binding.owner_generation);
+    // v1 generations are validated for legacy format integrity but are not
+    // current execution fences. Both formats decode to a logical identity.
+    // This binding must not be used as an executable runtime binding.
+    binding.owner_generation = 0;
     (void)parse_plugin_sql_type_number(
         type_info.at(
             SEEKDB_PLUGIN_SQL_TYPE_METADATA_PHYSICAL_FORMAT_VERSION_FIELD),
@@ -117,6 +123,19 @@ inline bool decode_plugin_sql_type(
         static_cast<uint32_t>(physical_format_version);
   }
   return valid;
+}
+
+template <typename Left, typename Right>
+inline bool same_plugin_sql_type_metadata(const Left &left, const Right &right)
+{
+  seekdb_plugin_sql_binding_v1_t lhs = {};
+  seekdb_plugin_sql_binding_v1_t rhs = {};
+  return decode_plugin_sql_type(left, lhs) && decode_plugin_sql_type(right, rhs) &&
+         std::strcmp(lhs.sql_name, rhs.sql_name) == 0 &&
+         std::strcmp(lhs.object_id, rhs.object_id) == 0 &&
+         std::strcmp(lhs.owner_plugin_id, rhs.owner_plugin_id) == 0 &&
+         std::strcmp(lhs.physical_format_id, rhs.physical_format_id) == 0 &&
+         lhs.physical_format_version == rhs.physical_format_version;
 }
 
 } // namespace plugin

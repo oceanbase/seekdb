@@ -21,6 +21,7 @@
 #include "data_plane/transaction/ob_tx_options.h"
 #include "lib/string/ob_string.h"
 #include "lib/utility/ob_print_utils.h"
+#include "share/ob_errno.h"
 
 namespace oceanbase
 {
@@ -98,6 +99,15 @@ public:
   virtual int rollback_to_explicit_savepoint(transaction::ObTxDesc &tx,
                                              const common::ObString &savepoint,
                                              int64_t expire_ts) = 0;
+  // Return the exact barrier selected under the transaction lock, only after
+  // successful data rollback. Optional for alternate implementations: callers
+  // coordinating additional transaction-local state must not silently fall back
+  // to the old overload or reconstruct savepoint name/stack semantics themselves.
+  virtual int rollback_to_explicit_savepoint(transaction::ObTxDesc &,
+                                             const common::ObString &,
+                                             int64_t,
+                                             transaction::ObTxSEQ &)
+  { return common::OB_NOT_SUPPORTED; }
   virtual int release_explicit_savepoint(transaction::ObTxDesc &tx,
                                          const common::ObString &savepoint) = 0;
   virtual int create_stash_savepoint(transaction::ObTxDesc &tx,

@@ -288,8 +288,11 @@ int ObDynamicSamplePieceMsgCtx::init(const ObIArray<uint64_t> &tablet_ids)
           sort_def_.cmp_funs_,
           &coord_.get_eval_ctx(),
           &exec_ctx_,
-          false/*in_local_order*/,
-          true/*need_rewind*/))) {
+          false /* enable_encode_sortkey */,
+          false /* in_local_order */,
+          true /* need_rewind */,
+          0, INT64_MAX, false, ObChunkDatumStore::BLOCK_SIZE, NONE_COMPRESSOR,
+          sort_def_.exprs_))) {
   } else {
     sort_impl_.set_io_event_observer(&coord_.get_io_event_observer());
     char *buf = (char *)exec_ctx_.get_allocator().alloc(tablet_ids.count() * sizeof(ObChunkDatumStore));

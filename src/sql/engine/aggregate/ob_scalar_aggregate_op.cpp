@@ -32,19 +32,19 @@ int ObScalarAggregateOp::inner_open()
   int ret = OB_SUCCESS;
   
   if (OB_FAIL(ObGroupByOp::inner_open())) {
-  } else if (OB_FAIL(ObChunkStoreUtil::alloc_dir_id(dir_id_))) {
-  } else if (FALSE_IT(aggr_processor_.set_dir_id(dir_id_))) {
   } else if (FALSE_IT(aggr_processor_.set_io_event_observer(&io_event_observer_))) {
   } else if (MY_SPEC.enable_hash_base_distinct_
     && OB_FAIL(init_hp_infras_group_mgr())) {
     LOG_WARN("failed to init hp infras group manager", K(ret));
-  } else if (OB_FAIL(aggr_processor_.init_one_group())) {
   } else {
-    bool need_dir_id = aggr_processor_.processor_need_alloc_dir_id();
+    // Ordinary scalar aggregates keep only their accumulator in memory. Do
+    // not require tmp-file services (or initialize the group twice) for them.
+    // DISTINCT may spill even when its underlying aggregate is MIN/MAX/SUM.
+    const bool need_dir_id = aggr_processor_.processor_need_alloc_dir_id()
+                            || aggr_processor_.has_distinct();
     if (need_dir_id && OB_FAIL(ObChunkStoreUtil::alloc_dir_id(dir_id_))) {
       LOG_WARN("failed to alloc dir id", K(ret));
     } else if (need_dir_id && FALSE_IT(aggr_processor_.set_dir_id(dir_id_))) {
-    } else if (FALSE_IT(aggr_processor_.set_io_event_observer(&io_event_observer_))) {
     } else if (OB_FAIL(aggr_processor_.init_one_group())) {
     } else {
       started_ = false;

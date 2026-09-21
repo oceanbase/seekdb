@@ -21,6 +21,9 @@
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/code_generator/ob_expr_generator_impl.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
+#ifdef SEEKDB_WITH_EXPERIMENTAL_PLUGINS
+#include "sql/engine/expr/plugin_function_expr.h"
+#endif
 
 namespace oceanbase
 {
@@ -504,6 +507,22 @@ int ObStaticEngineExprCG::cg_expr_by_operator(const ObIArray<ObRawExpr *> &raw_e
         && NULL != rt_expr->eval_func_) {
       if (NULL == rt_expr->eval_batch_func_) {
         rt_expr->eval_batch_func_ = &expr_default_eval_batch_func;
+#ifdef SEEKDB_WITH_EXPERIMENTAL_PLUGINS
+        // Plugin comparisons are lowered to an internal ordering/boolean
+        // followed by a native wrapper. NSEQ and BETWEEN have only a scalar
+        // evaluator; do not let that wrapper scalarize the plugin subtree.
+        // Only compiler-created forms with constant remaining operands qualify.
+        if (rt_expr->arg_cnt_ >= 2 && rt_expr->args_ && rt_expr->args_[0] &&
+            ((rt_expr->type_ == T_OP_NSEQ && rt_expr->arg_cnt_ == 2 &&
+              rt_expr->args_[0]->type_ == T_FUN_SYS_PLUGIN_TYPE_COMPARE) ||
+             ((rt_expr->type_ == T_OP_BTW || rt_expr->type_ == T_OP_NOT_BTW) && rt_expr->arg_cnt_ == 3 &&
+              rt_expr->args_[0]->type_ == T_FUN_SYS_PLUGIN_TYPE_BETWEEN))) {
+          bool constant_tail = raw_expr->get_param_count() == rt_expr->arg_cnt_;
+          for (int64_t a = 1; constant_tail && a < raw_expr->get_param_count(); ++a)
+            constant_tail = raw_expr->get_param_expr(a) && raw_expr->get_param_expr(a)->is_const_raw_expr();
+          if (constant_tail) rt_expr->eval_batch_func_ = PluginFunctionExpr::evaluate_argument_batch;
+        }
+#endif
       }
     }
   }

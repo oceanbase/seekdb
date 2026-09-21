@@ -72,6 +72,12 @@
 #include "sql/resolver/ddl/ob_optimize_stmt.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/cmd/ob_empty_query_executor.h"
+#include "sql/engine/cmd/create_extension_executor.h"
+#include "sql/resolver/cmd/create_extension_stmt.h"
+#include "sql/engine/cmd/alter_extension_executor.h"
+#include "sql/resolver/cmd/alter_extension_stmt.h"
+#include "sql/engine/cmd/drop_extension_executor.h"
+#include "sql/resolver/cmd/drop_extension_stmt.h"
 #include "sql/engine/cmd/ob_dcl_executor.h"
 #include "sql/engine/cmd/ob_tcl_executor.h"
 #include "sql/engine/cmd/ob_recyclebin_executor.h"
@@ -155,6 +161,12 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         // DDL release the specific version of schema_mgr held before sending rpc to RS
         // Avoid the DDL in the queue always occupying slots causing the DDL being processed by RS to have no new slots available and resulting in a deadlock issue
         if (stmt::T_CREATE_OUTLINE == static_cast<stmt::StmtType>(cmd.get_cmd_type())
+            // Extension scripts still need the outer snapshot for resolution;
+            // the installer releases it after taking owned DDL argument copies.
+            || stmt::T_CREATE_EXTENSION == static_cast<stmt::StmtType>(cmd.get_cmd_type())
+            || stmt::T_ALTER_EXTENSION == static_cast<stmt::StmtType>(cmd.get_cmd_type())
+            // DROP rechecks session privileges before releasing this snapshot.
+            || stmt::T_DROP_EXTENSION == static_cast<stmt::StmtType>(cmd.get_cmd_type())
             || stmt::T_ALTER_OUTLINE == static_cast<stmt::StmtType>(cmd.get_cmd_type())
           // create outline and alter outline will continue to use schema guard to generate logical plan at execute
           // reset delay to ObCreateOutlineExecutor::execute and ObAlterOutlineExecutor::execute
@@ -277,6 +289,18 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
           }
         }
         sql_text = ObString::make_empty_string();
+        break;
+      }
+      case stmt::T_CREATE_EXTENSION: {
+        DEFINE_EXECUTE_CMD(CreateExtensionStmt, CreateExtensionExecutor);
+        break;
+      }
+      case stmt::T_ALTER_EXTENSION: {
+        DEFINE_EXECUTE_CMD(AlterExtensionStmt, AlterExtensionExecutor);
+        break;
+      }
+      case stmt::T_DROP_EXTENSION: {
+        DEFINE_EXECUTE_CMD(DropExtensionStmt, DropExtensionExecutor);
         break;
       }
       case stmt::T_DIAGNOSTICS: {

@@ -82,6 +82,18 @@ int ObPluginSqlBinder::bind_blob(const void *value, int value_len)
   return common::OB_SUCCESS;
 }
 
+int ObPluginSqlRowReader::read_int64(int column, int64_t &value) const
+{
+  value = 0;
+  return nullptr == result_ ? common::OB_NOT_INIT : result_->get_int(column, value);
+}
+
+int ObPluginSqlRowReader::read_text(int column, common::ObString &value) const
+{
+  value.reset();
+  return nullptr == result_ ? common::OB_NOT_INIT : result_->get_varchar(column, value);
+}
+
 int64_t ObPluginSqlRowReader::get_int64(int column) const
 {
   int64_t value = 0;
@@ -200,7 +212,8 @@ int ObPluginSqlConnection::query(
       }
       if (common::OB_ITER_END == ret) ret = common::OB_SUCCESS;
     }
-    (void)result.close();
+    const int close_ret = result.close();
+    if (common::OB_SUCCESS == ret) ret = close_ret;
   }
   return ret;
 }

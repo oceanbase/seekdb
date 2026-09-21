@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Fail when a seekdb plugin crosses the public C ABI boundary."""
+"""Check declared native profiles and core/plugin dependency direction."""
 
 from __future__ import annotations
 
 import pathlib
 import re
 import sys
+from plugin_profile import profile
 
 
 SOURCE_SUFFIXES = {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".ipp"}
@@ -26,6 +27,8 @@ CORE_PREFIXES = (
     "rootserver/",
     "logservice/",
     "objit/",
+    "query/",
+    "data_plane/",
     "common/",
     "lib/",
     "deps/",
@@ -34,7 +37,7 @@ CORE_TARGET_RE = re.compile(r"^(?:oceanbase|seekdb|ob)")
 PRIVATE_MARKER_RE = re.compile(
     r"\b(?:SEEKDB_PLUGIN_PRIVATE_LIBRARY|SEEKDB_PLUGIN_PRIVATE_ROOT|"
     r"SEEKDB_EXPLICIT_PLUGIN_PRIVATE_TARGETS|SEEKDB_MANAGED_PLUGIN_TARGETS|"
-    r"SEEKDB_MANAGED_PLUGIN_ROOT)\b"
+    r"SEEKDB_MANAGED_PLUGIN_ROOT|SEEKDB_SERVER_DEV_[A-Z_]+)\b"
 )
 
 
@@ -48,10 +51,18 @@ def check_plugin_includes(repo: pathlib.Path, errors: list[str]) -> None:
     plugin_root = repo / "plugins"
     if not plugin_root.is_dir():
         return
+    profiles = {}
     for path in source_files(plugin_root):
         text = path.read_text(encoding="utf-8", errors="replace")
         relative_parts = path.relative_to(plugin_root).parts
         own_plugin_root = plugin_root / relative_parts[0]
+        if own_plugin_root not in profiles:
+            manifest = own_plugin_root / "plugin.toml"
+            try:
+                profiles[own_plugin_root] = profile(manifest, repo) if manifest.is_file() else {"headers": []}
+            except (OSError, ValueError) as error:
+                errors.append(f"{manifest.relative_to(repo)}: {error}")
+                profiles[own_plugin_root] = {"headers": []}
         literal_starts = {match.start() for match in INCLUDE_RE.finditer(text)}
         for directive in INCLUDE_DIRECTIVE_RE.finditer(text):
             if directive.start() not in literal_starts:
@@ -65,6 +76,8 @@ def check_plugin_includes(repo: pathlib.Path, errors: list[str]) -> None:
             normalized = include.replace("\\", "/")
             line = text.count("\n", 0, match.start()) + 1
             if normalized.startswith("seekdb/"):
+                continue
+            if normalized in profiles[own_plugin_root]["headers"]:
                 continue
             if normalized.startswith(CORE_PREFIXES) or "/../src/" in f"/{normalized}":
                 errors.append(
@@ -182,6 +195,41 @@ def check_plugin_links(repo: pathlib.Path, errors: list[str]) -> None:
                 )
 
 
+def validate_plugin_expression_ids(query_text: str, jit_text: str) -> list[str]:
+    """The legacy JIT header can precede Query's header via the same guard.
+
+    Check the plugin-owned function range, not unrelated legacy parser drift.
+    """
+    errors: list[str] = []
+    maps = []
+    for label, text in (("Query", query_text), ("JIT", jit_text)):
+        text = re.sub(r"/\*.*?\*/|//[^\n]*", "", text, flags=re.DOTALL)
+        entries = re.findall(r"\b(T_[A-Z0-9_]+)\s*=\s*([0-9]+)\s*,", text)
+        wanted = re.findall(r"\b(T_FUN_SYS_PLUGIN_[A-Z0-9_]+)\s*=", text)
+        plugin = [(name, int(value)) for name, value in entries if name.startswith("T_FUN_SYS_PLUGIN_")]
+        if not wanted or sorted(wanted) != sorted(name for name, _ in plugin):
+            errors.append(f"{label}: plugin expression IDs require explicit decimal values")
+        if len(wanted) != len(set(wanted)):
+            errors.append(f"{label}: duplicate plugin expression name")
+        for name, value in plugin:
+            collisions = [other for other, number in entries if int(number) == value and other != name]
+            if collisions:
+                errors.append(f"{label}: {name}={value} collides with {', '.join(collisions)}")
+        maps.append(dict(plugin))
+    if maps[0] != maps[1]:
+        errors.append("Query/JIT plugin expression IDs differ; update both ob_item_type.h headers")
+    return errors
+
+
+def check_plugin_expression_ids(repo: pathlib.Path, errors: list[str]) -> None:
+    headers = [repo / "src/query/api/query/parser/ob_item_type.h",
+               repo / "src/objit/include/objit/common/ob_item_type.h"]
+    if any(not header.is_file() for header in headers):
+        errors.append("missing Query/JIT expression headers for plugin boundary check")
+    else:
+        errors.extend(validate_plugin_expression_ids(*(header.read_text(encoding="utf-8") for header in headers)))
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print("usage: plugin_boundary_check.py <seekdb-source-root>", file=sys.stderr)
@@ -191,6 +239,7 @@ def main() -> int:
     check_plugin_includes(repo, errors)
     check_core_includes(repo, errors)
     check_plugin_links(repo, errors)
+    check_plugin_expression_ids(repo, errors)
     if errors:
         print("seekdb plugin boundary violations:", file=sys.stderr)
         for error in sorted(errors):

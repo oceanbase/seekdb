@@ -64,6 +64,9 @@ enum seekdb_plugin_extension_flags {
   SEEKDB_PLUGIN_EXTENSION_FLAG_NONE = UINT64_C(0),
   SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC = UINT64_C(1) << 0,
   SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE = UINT64_C(1) << 1,
+  /* For a table function, a NULL argument after implicit coercion produces
+   * zero rows without invoking its open/next/rescan implementation. Without
+   * this flag the implementation receives NULL and defines its own result. */
   SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING = UINT64_C(1) << 2,
   SEEKDB_PLUGIN_EXTENSION_FLAG_PERSISTENT = UINT64_C(1) << 3,
   SEEKDB_PLUGIN_EXTENSION_FLAG_PARALLEL_SAFE = UINT64_C(1) << 4,
@@ -109,7 +112,9 @@ typedef struct seekdb_plugin_type_descriptor_v1 {
  * Equal sql_name values are permitted for function overloads; object_id is the
  * stable overload identity.  v1 records an arity envelope.  A non-NULL
  * static_result_type_id is a fixed result type; NULL means the callable SPI
- * must resolve it from argument metadata.  A later minor may append typed
+ * must resolve it from argument metadata using function_service_v2 and
+ * EXECUTION_RESULT_TYPE_MINOR; hosts without that suffix cannot bind such a
+ * function. A later minor may append typed
  * signature metadata without changing the identity or service reference below.
  */
 typedef struct seekdb_plugin_function_descriptor_v1 {
@@ -227,9 +232,9 @@ typedef struct seekdb_plugin_das_hook_descriptor_v1 {
  * content.  Before materialization or publication, a production verifier and
  * catalog MUST reconcile it with authenticated package metadata and payload;
  * syntax/format validation alone establishes neither binding nor trust.
- * Arbitrary SQL is deliberately not passed through this ABI.  The catalog
- * coordinator materializes the known object kind transactionally and records
- * plugin ownership.
+ * This legacy metadata descriptor has no SQL text field. The catalog
+ * coordinator materializes its known object kind and records ownership.
+ * It is not the contract for future transaction-scoped installation SQL.
  */
 typedef struct seekdb_plugin_catalog_object_descriptor_v1 {
   uint32_t struct_size;
@@ -310,6 +315,43 @@ typedef struct seekdb_plugin_extension_catalog_service_v1 {
   seekdb_plugin_describe_extensions_fn describe_extensions;
   uint64_t reserved[8];
 } seekdb_plugin_extension_catalog_service_v1_t;
+
+/* Direct object registration joins the SAME transaction as register_service.
+ * Descriptors and their referenced strings/arrays are borrowed only for the
+ * duration of this call; the host copies them before returning. descriptor_bytes
+ * must equal the descriptor's struct_size (including any supported suffix).
+ * Unsupported object kinds fail explicitly. This API does not require a
+ * describe_extensions service or a plugin-owned immutable snapshot.
+ *
+ * Registration is currently valid during init/start. commit_registration stages
+ * the entire transaction, not an independently visible SQL commit. The loader
+ * publishes objects/services together only after the catalog activation commit.
+ * Cross-transaction, snapshot and installed-object conflicts are rechecked at
+ * activation. Runtime DDL and installation SQL will need a transaction-scoped
+ * catalog context; this callback does not authorize arbitrary system-table SQL.
+ */
+typedef seekdb_plugin_status_t (SEEKDB_PLUGIN_CALL *seekdb_plugin_register_extension_fn)(
+    seekdb_plugin_host_handle_t *host,
+    seekdb_plugin_registration_txn_t *transaction,
+    seekdb_plugin_extension_kind_t kind,
+    const void *descriptor,
+    uint32_t descriptor_bytes);
+
+#define SEEKDB_PLUGIN_REGISTRATION_SPI_MAJOR 1u
+
+/* Append-only host API extension. The v1 prefix (including reserved fields)
+ * keeps its original layout. A host sets host.struct_size to the full size.
+ * Plugins MUST check that size before accessing the suffix. An older host can
+ * still load snapshot-based plugins; a plugin requiring direct registration
+ * should return UNSUPPORTED_ABI when this suffix is absent.
+ */
+typedef struct seekdb_plugin_host_api_v2 {
+  seekdb_plugin_host_api_v1_t host;
+  uint32_t registration_spi_major;
+  uint32_t registration_spi_minor;
+  seekdb_plugin_register_extension_fn register_extension;
+  uint64_t registration_reserved[4];
+} seekdb_plugin_host_api_v2_t;
 
 #ifdef __cplusplus
 } /* extern "C" */

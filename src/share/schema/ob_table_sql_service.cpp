@@ -96,12 +96,7 @@ bool same_plugin_sql_type(const ObColumnSchemaV2 &left,
       left.get_extended_type_info();
   const common::ObIArray<common::ObString> &right_info =
       right.get_extended_type_info();
-  bool same = plugin::is_plugin_sql_type(left_info) &&
-              plugin::is_plugin_sql_type(right_info);
-  for (int64_t i = 0; same && i < left_info.count(); ++i) {
-    same = left_info.at(i) == right_info.at(i);
-  }
-  return same;
+  return plugin::same_plugin_sql_type_metadata(left_info, right_info);
 }
 
 } // namespace

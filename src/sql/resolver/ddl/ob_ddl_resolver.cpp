@@ -1888,14 +1888,12 @@ int ObDDLResolver::resolve_column_definition(ObColumnSchemaV2 &column,
       column.set_charset_type(data_type.get_charset_type());
       column.set_collation_type(data_type.get_collation_type());
       if (is_plugin_type) {
-        const std::string owner_generation =
-            std::to_string(plugin_type_binding.owner_generation);
         const std::string format_version =
             std::to_string(plugin_type_binding.physical_format_version);
         const char *type_metadata[] = {
-            SEEKDB_PLUGIN_SQL_TYPE_METADATA_MARKER, plugin_type_binding.sql_name,
+            SEEKDB_PLUGIN_SQL_TYPE_METADATA_MARKER_V2, plugin_type_binding.sql_name,
             plugin_type_binding.object_id, plugin_type_binding.owner_plugin_id,
-            owner_generation.c_str(), plugin_type_binding.physical_format_id,
+            "0", plugin_type_binding.physical_format_id,
             format_version.c_str()};
         for (size_t i = 0;
              OB_SUCC(ret) && i < sizeof(type_metadata) / sizeof(type_metadata[0]);

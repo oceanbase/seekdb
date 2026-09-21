@@ -11,13 +11,15 @@ target_link_libraries(ob_share_extra PUBLIC ob_base_without_pass)
 
 if (SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS)
   target_sources(ob_share PRIVATE
+    schema/routine_catalog_transaction.cpp
+    plugin/extension_package.cpp
     plugin/ob_plugin_catalog.cpp
     plugin/ob_plugin_loader.cpp
     plugin/ob_plugin_registry.cpp
     plugin/ob_plugin_sql_catalog.cpp)
   target_compile_definitions(ob_share PRIVATE
     SEEKDB_ENABLE_CORE_GIS=$<BOOL:${SEEKDB_ENABLE_CORE_GIS}>)
-  target_link_libraries(ob_share PUBLIC seekdb_plugin_sdk)
+  target_link_libraries(ob_share PUBLIC seekdb_plugin_sdk seekdb_rust_host)
 endif()
 
 if (NOT SEEKDB_ENABLE_CORE_GIS)

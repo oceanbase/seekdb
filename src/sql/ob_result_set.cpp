@@ -328,6 +328,10 @@ int ObResultSet::end_stmt(const bool is_rollback)
   }
   if (OB_FAIL(ret)) {
     // do nothing
+  } else if (get_exec_context().has_plugin_sql_savepoint()) {
+    // Plugin SQL can turn a plain SELECT into a writer. Keep its savepoint
+    // through all close hooks and result bookkeeping, not merely op close.
+    // do_close() finishes this statement immediately before transaction end.
   } else if (get_trans_state().is_start_stmt_executed()
       && get_trans_state().is_start_stmt_success()) {
     ObPhysicalPlan* physical_plan_ = static_cast<ObPhysicalPlan*>(cache_obj_guard_.get_cache_obj());
@@ -727,6 +731,9 @@ OB_INLINE int ObResultSet::do_close_plan(int errcode, ObExecContext &ctx)
       LOG_WARN("physical plan ctx is null");
     } else if (OB_SUCCESS != (close_ret = executor_.close(ctx))) {
     }
+    if (ctx.has_plugin_sql_savepoint() && OB_SUCC(ret) && close_ret != OB_SUCCESS) {
+      ret = close_ret;
+    }
 
     ObPxAdmission::exit_query_admission(my_session_, get_exec_context(), get_stmt_type(), *get_physical_plan());
 //    // Must be called after executor_.execute_plan runs to call a series of functions on exec_result_.
@@ -822,6 +829,23 @@ int ObResultSet::do_close(int *client_ret)
     ret = ins_ret;
   }
 
+  if (get_exec_context().has_plugin_sql_savepoint()) {
+    // Include client/consumer errors discovered outside get_next_row (for
+    // example a failed result sink). The outer savepoint covers *all* callback
+    // invocations, including ones that returned successfully on earlier rows.
+    const int caller_error = client_ret == nullptr ? OB_SUCCESS : *client_ret;
+    const ObPhysicalPlanCtx *plan_ctx = get_exec_context().get_physical_plan_ctx();
+    const bool rollback = need_rollback(ret, caller_error,
+        plan_ctx != nullptr && plan_ctx->is_error_ignored());
+    get_exec_context().set_errcode(OB_SUCC(ret) ? caller_error : ret);
+    const int end_ret = ObSqlTransControl::end_stmt(get_exec_context(), rollback, is_will_retry_());
+    get_trans_state().clear_start_stmt_executed();
+    if (OB_SUCC(ret)) ret = end_ret;
+    if (OB_SUCC(ret) && caller_error != OB_SUCCESS && caller_error != OB_ITER_END) {
+      ret = caller_error;
+    }
+  }
+
   int prev_ret = ret;
   bool async = false; // for debug purpose
   if (OB_NOT_NULL(physical_plan_)) {
@@ -844,6 +868,8 @@ int ObResultSet::do_close(int *client_ret)
     }
     ret = auto_end_plan_trans(*physical_plan_, ret, is_tx_active, async);
   }
+
+  get_exec_context().set_plugin_sql_savepoint(false);
 
   if (is_user_sql_ && my_session_.need_reset_package()) {
     // need_reset_package is set, it must be reset package, wether exec succ or not.
@@ -904,7 +930,7 @@ OB_INLINE int ObResultSet::auto_end_plan_trans(ObPhysicalPlan& plan,
     //
     // after execute UDF1, snapshot is kept in ObTxDesc, must cleanup before run
     // other Query
-    bool reset_tx_variable = plan.is_need_trans();
+    bool reset_tx_variable = plan.is_need_trans() || get_exec_context().has_plugin_sql_savepoint();
     ObPhysicalPlanCtx *plan_ctx = NULL;
     if (OB_ISNULL(plan_ctx = get_exec_context().get_physical_plan_ctx())) {
       ret = OB_ERR_UNEXPECTED;

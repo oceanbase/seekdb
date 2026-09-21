@@ -81,29 +81,10 @@ endfunction()
 # Apply the exact Unity groups frozen by the Bazel production inventory.  This
 # avoids a second source list and prevents CMake's grouping from drifting away
 # from the action boundaries already validated by Bazel.
-set(SEEKDB_CORE_GIS_SQL_REPLACEMENTS
-  ob_expr_priv_st_transform.cpp
-  ob_expr_st_transform.cpp
-  ob_expr_st_bestsrid.cpp
-  ob_expr_st_buffer.cpp
-  ob_expr_priv_st_clipbybox2d.cpp
-  ob_expr_st_union.cpp
-  ob_expr_st_difference.cpp
-  ob_expr_st_symdifference.cpp
-  ob_expr_priv_st_asmvtgeom.cpp
-  ob_expr_priv_st_makevalid.cpp
-  ob_expr_priv_st_point.cpp
-  ob_expr_spatial_cellid.cpp
-  ob_expr_spatial_mbr.cpp
-  ob_expr_priv_st_geohash.cpp
-  ob_expr_spatial_collection.cpp
-  ob_geo_expr_utils.cpp)
-
 function(seekdb_filter_core_gis_sql_sources output_var)
   set(filtered_sources)
   foreach(source IN LISTS ARGN)
-    get_filename_component(source_name "${source}" NAME)
-    list(FIND SEEKDB_CORE_GIS_SQL_REPLACEMENTS "${source_name}" replacement_index)
+    list(FIND SEEKDB_SQL_CORE_GIS_REPLACED_SOURCES "${source}" replacement_index)
     if (replacement_index EQUAL -1 OR SEEKDB_ENABLE_CORE_GIS)
       list(APPEND filtered_sources "${source}")
     endif()
@@ -149,6 +130,19 @@ function(seekdb_apply_standalone_inventory target variable)
     set_source_files_properties(${standalone_sources}
       PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
     set("${target}_cache_objects_" "${all_sources}" PARENT_SCOPE)
+  endif()
+endfunction()
+
+function(seekdb_apply_sql_plugin_profile target)
+  # Baseline GIS implementations were pruned by apply_*_inventory above. These
+  # adapters replace their registrations without linking the geometry engine.
+  if (NOT SEEKDB_ENABLE_CORE_GIS)
+    target_sources(${target} PRIVATE ${SEEKDB_SQL_GIS_PLUGIN_ADAPTER_SOURCES})
+  endif()
+  if (SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS)
+    # SQL executors must enter the real host paths, not their disabled stubs.
+    target_compile_definitions(${target} PRIVATE SEEKDB_WITH_EXPERIMENTAL_PLUGINS=1)
+    target_sources(${target} PRIVATE ${SEEKDB_SQL_EXTENSION_RUNTIME_SOURCES})
   endif()
 endfunction()
 

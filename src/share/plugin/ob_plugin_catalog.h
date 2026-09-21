@@ -23,10 +23,12 @@
 #include <vector>
 
 #include "share/plugin/ob_plugin_loader.h"
+#include "share/plugin/extension_install.h"
 #include "common/mysqlclient/ob_isql_client.h"
 
 namespace oceanbase
 {
+namespace common { class ObMySQLTransaction; }
 namespace share
 {
 
@@ -187,7 +189,10 @@ struct ObPluginStartupReport
 // to assign generation/runtime/operation fencing identities.  The class never
 // holds its catalog mutex while invoking loader or plugin code.
 class ObPluginCatalog final : public ObPluginActivationGuard,
-                              public ObPluginDisableGuard
+                              public ObPluginDisableGuard,
+                              public IExtensionCatalogInstaller,
+                              public IExtensionCatalogDropper,
+                              public IExtensionCatalogUpdater
 {
 public:
   ObPluginCatalog();
@@ -201,6 +206,55 @@ public:
 
   int install_package(const ObPluginPackageInstallSpec &spec,
                       std::string &error);
+  // Autocommit management path: owns ONE SQL catalog transaction spanning
+  // schema apply and membership recording. spec.members_ must initially be
+  // empty. Does not join a user's existing transaction; SQL command dispatch
+  // must choose transaction semantics explicitly before invoking this API.
+  // COMMIT/rollback transport failures report OB_TRANS_UNKNOWN and must be
+  // reconciled by database/name, never blindly retried. No plugin callbacks or
+  // schema work runs while holding the package catalog mutex.
+  int install_extension(const ExtensionInstallSpec &spec,
+                         IExtensionSchemaInstaller &installer,
+                         uint64_t &extension_id, std::string &error,
+                         common::ObMySQLTransaction *ddl_transaction = nullptr,
+                         int64_t refreshed_schema_version = 0) override;
+  // One owned DDL transaction: lock snapshot/admit, detach members, drop actual
+  // schema objects, remove instance, commit. No package files/module required.
+  // Only a committed result sets dropped_extension_id. Caller publishes schema
+  // after commit and MUST hold the normal Root DDL serialization authority.
+  int drop_extension(const ExtensionDropRequest &request, IExtensionSchemaDropper &dropper,
+                      uint64_t &dropped_extension_id, std::string &error,
+                      common::ObMySQLTransaction *ddl_transaction,
+                      int64_t refreshed_schema_version) override;
+  int update_extension(const ExtensionUpdateRequest &request, IExtensionSchemaUpdater &updater,
+                        uint64_t &extension_id, bool &changed, std::string &error,
+                        common::ObMySQLTransaction *ddl_transaction,
+                        int64_t refreshed_schema_version) override;
+  int read_update_source(uint64_t tenant_id, uint64_t database_id, const std::string &name,
+                         ExtensionVersionSnapshot &snapshot, std::string &error) override;
+  // A supplied DDL transaction must be unstarted and outlive this call. Its
+  // virtual start(proxy, schema_version)/end methods own the SAME transaction
+  // used for schema and membership writes (including DDL watermark/signals).
+  // A positive, freshly checked schema version is required. Already active
+  // transactions are rejected without ending them. The schema caller publishes
+  // only after success; publication failure does not undo the committed install.
+  // Host install-coordinator API, not a public plugin bypass. Caller verifies
+  // database/owner privileges, canonicalizes name, and creates/validates every
+  // schema member in this SAME active write transaction before recording it.
+  // No commit, rollback, independent transaction or registry publication here.
+  // On any failure caller MUST roll back its whole install transaction. Output
+  // is provisional until that transaction commits. IDs are never generations.
+  int record_extension_install(ObPluginSqlConnection &connection,
+                               const ExtensionInstallSpec &spec,
+                               uint64_t &extension_id, std::string &error);
+  // Called only after the coordinator has dropped/reassigned all member schema
+  // objects in the same transaction. This removes ownership metadata, not the
+  // objects themselves. Expected owner and stable installation ID fence stale
+  // requests. No module availability requirement: broken installs need cleanup.
+  int record_extension_drop(ObPluginSqlConnection &connection,
+                            uint64_t tenant_id, uint64_t database_id,
+                            uint64_t extension_id, uint64_t expected_owner_id,
+                            std::string &error);
   int uninstall_restrict(const std::string &plugin_id,
                          const std::string &operator_id,
                          const std::string &audit_id,
@@ -212,20 +266,28 @@ public:
   int remove_dependency(const ObPluginDependencySpec &dependency,
                         std::string &error);
   // Transaction-scoped variants for schema/DDL integration.  connection must
-  // already be in a write transaction.  The INSERT/DELETE participates in the
-  // writer exclusion before returning, so a concurrent restricted disable
-  // cannot pass its dependency check until the caller commits or rolls back.
+  // already be in a write transaction. Additions lock the provider package row
+  // before admission; RESTRICT locks that same row before its current-read
+  // dependency check. Removal deletes the explicitly fenced dependency row.
   // These overloads never acquire the catalog mutex.  While holding that
   // external writer transaction, the caller MUST NOT call any other catalog
   // API which acquires the mutex; it must commit/rollback first.  This single
   // writer -> no catalog-mutex rule prevents inversion with management paths,
-  // whose order is catalog mutex -> SQL writer.
+  // whose order is catalog mutex -> SQL row locks.
   int add_dependency(ObPluginSqlConnection &connection,
                      const ObPluginDependencySpec &dependency,
                      std::string &error);
   int remove_dependency(ObPluginSqlConnection &connection,
                         const ObPluginDependencySpec &dependency,
                         std::string &error);
+  // Column metadata identifies a logical type, NOT a module generation.
+  // Resolve the current durable provider fence in the caller's schema write
+  // transaction. Removal uses the recorded edge even if the module is stopped.
+  // No catalog mutex, independent transaction, commit or runtime lookup here.
+  int mutate_type_dependency(ObPluginSqlConnection &connection,
+                             const seekdb_plugin_sql_binding_v1_t &identity,
+                             uint64_t table_id, uint64_t column_id, bool add,
+                             std::string &error);
   int list_restrict_blockers(
       const std::string &plugin_id,
       std::vector<ObPluginRestrictBlocker> &blockers) const;
@@ -256,6 +318,21 @@ public:
       std::string &error) const noexcept override;
 
 private:
+  int lock_extension_requirements(ObPluginSqlConnection &connection, const ExtensionInstallSpec &spec,
+                                  std::vector<uint64_t> &identities, std::string &error);
+  int check_extension_restrict(ObPluginSqlConnection &connection, uint64_t tenant_id,
+                               uint64_t database_id, uint64_t extension_id);
+  int prepare_extension_requirement_update(ObPluginSqlConnection &connection,
+      const ExtensionUpdateRequest &request, std::vector<uint64_t> &identities, std::string &error);
+  // Only the coordinator may detach, after authenticated schema/dependency
+  // admission. These are not independent metadata-deletion entry points.
+  int lock_extension_for_drop(ObPluginSqlConnection &connection, const ExtensionDropRequest &request,
+                              ExtensionDropSnapshot &snapshot, std::string &error);
+  int detach_extension_members(ObPluginSqlConnection &connection, const ExtensionDropSnapshot &snapshot);
+  int record_extension_update(ObPluginSqlConnection &connection, const ExtensionUpdateRequest &request,
+                              const ExtensionUpdateSnapshot &snapshot,
+                              const std::vector<ExtensionMemberIdentity> &members,
+                              const std::vector<uint64_t> &dependencies);
   struct Impl;
   std::unique_ptr<Impl> impl_;
 };

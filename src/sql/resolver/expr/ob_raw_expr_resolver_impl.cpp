@@ -32,6 +32,20 @@ namespace sql
 {
 
 namespace {
+#ifdef SEEKDB_WITH_EXPERIMENTAL_PLUGINS
+// Types on columns and subqueries are not known yet in early expression
+// resolution. Keep one value node until normal logical type deduction.
+bool retain_plugin_single_eval(const ObRawExpr *value, uint32_t depth = 0)
+{
+  if (!value || depth >= 64 || value->get_plugin_type() ||
+      value->get_expr_type() == T_REF_COLUMN || value->get_expr_type() == T_REF_QUERY ||
+      value->get_expr_type() == T_FUN_SYS_PLUGIN_FUNCTION ||
+      value->get_expr_type() == T_FUN_SYS_PLUGIN_CAST || value->get_expr_type() == T_FUN_SYS_PLUGIN_TYPE_VALUE) return true;
+  for (int64_t i = 0; i < value->get_param_count(); ++i)
+    if (retain_plugin_single_eval(value->get_param_expr(i), depth + 1)) return true;
+  return false;
+}
+#endif
 static int change_json_expr_res_type_if_need(common::ObIAllocator &allocator, ObString &str, ParseNode &ret_node, int8_t json_expr_flag)
 {
   INIT_SUCC(ret);
@@ -950,6 +964,22 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
         modification_type_to_int(const_cast<ParseNode&>(*node));
         // deal node
         if (OB_FAIL(SMART_CALL(recursive_resolve(node, expr)))) {
+        }
+        break;
+      }
+      case T_FUN_SYS_PLUGIN_TYPE_VALUE: {
+        if (node->num_child_ != 2 || !node->children_ || !node->children_[0] || !node->children_[1] ||
+            node->children_[1]->type_ != T_IDENT || !node->children_[1]->str_value_ ||
+            node->children_[1]->str_len_ <= 0 || node->children_[1]->str_len_ > SEEKDB_PLUGIN_MAX_IDENTIFIER_BYTES) {
+          ret = OB_ERR_PARSER_SYNTAX;
+        } else {
+          ObRawExpr *value = nullptr;
+          if (OB_FAIL(SMART_CALL(recursive_resolve(node->children_[0], value)))) {
+          } else if (OB_FAIL(PluginTypeValueExpr::prepare(ctx_.expr_factory_,
+              ObString(node->children_[1]->str_len_, node->children_[1]->str_value_), value))) {
+          } else {
+            expr = value;
+          }
         }
         break;
       }
@@ -2982,6 +3012,14 @@ int ObRawExprResolverImpl::process_between_node(const ParseNode *node, ObRawExpr
         }
       }
     }
+    #ifdef SEEKDB_WITH_EXPERIMENTAL_PLUGINS
+    if (OB_SUCC(ret) && can_transform_in_mysql_mode) {
+      // Do not duplicate a plugin value or choose two independent common
+      // types before column/subquery types have been resolved. Native BETWEEN
+      // still has its ordinary evaluator and range-extraction implementation.
+      can_transform_in_mysql_mode = !retain_plugin_single_eval(btw_params[0]);
+    }
+    #endif
     // The content of the 4th raw expr is same to that of the 1st raw expr.
     // But the ptr addresses need to be different because our optimizer relys on it.
     if (OB_SUCC(ret)) {
@@ -3283,10 +3321,16 @@ int ObRawExprResolverImpl::process_in_or_not_in_node(const ParseNode *node,
       }
     } else if (T_OP_ROW == param_type2) {
       ObOpRawExpr *row_expr = static_cast<ObOpRawExpr *>(sub_expr2);
+      bool keep_single_list = false;
+#ifdef SEEKDB_WITH_EXPERIMENTAL_PLUGINS
+      if (row_expr && row_expr->get_param_count() == 1) {
+        keep_single_list = retain_plugin_single_eval(sub_expr1) || retain_plugin_single_eval(row_expr->get_param_expr(0));
+      }
+#endif
       if (OB_ISNULL(row_expr)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to cast ObOpRawExpr", K(ret));
-      } else if (1 == row_expr->get_param_count()) {
+      } else if (1 == row_expr->get_param_count() && !keep_single_list) {
         ObRawExpr *param = row_expr->get_param_expr(0);
         if (OB_FAIL(in_expr->set_param_exprs(sub_expr1, param))) {
         } else {

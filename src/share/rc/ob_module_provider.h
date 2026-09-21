@@ -18,8 +18,13 @@
 #define OCEANBASE_SHARE_RC_OB_MODULE_PROVIDER_H_
 
 #include <memory>
+#include <string>
 
 #include "seekdb/plugin/execution_spi.h"
+#include "seekdb/plugin/optimizer_spi.h"
+#include "seekdb/plugin/server_dev_planner.h"
+#include "share/plugin/custom_executor.h"
+#include "lib/ob_errno.h"
 #include "seekdb/plugin/extension_spi.h"
 #include "seekdb/plugin/sql_catalog.h"
 
@@ -50,6 +55,38 @@ class ObIModuleProvider
 {
 public:
   virtual ~ObIModuleProvider() = default;
+  virtual int bind_plugin_custom_executor(const char *, uint32_t, uint32_t,
+      plugin::CustomExecutorBinding &binding)
+  { binding = {}; return common::OB_NOT_SUPPORTED; }
+  virtual int open_plugin_custom_executor(const plugin::CustomExecutorBinding &, const uint8_t *, uint32_t,
+      std::unique_ptr<plugin::ICustomExecutor> &)
+  { return common::OB_NOT_SUPPORTED; }
+  // Default for core-only/controlled providers: no extension is installed.
+  virtual int estimate_bound_plugin_table_function(const seekdb_plugin_sql_binding_v1_t &,
+      seekdb_plugin_table_estimate_v1_t &estimate)
+  { estimate = {}; return common::OB_NOT_SUPPORTED; }
+  virtual int run_plugin_optimizer_hooks(const seekdb_plugin_optimizer_info_v1_t &,
+      int (*next)(void *), void *context) { return next(context); }
+  virtual int run_plugin_candidate_hooks(const seekdb_plugin_candidate_context_v1_t &,
+      int (*next)(void *), void *context, int (*validate)(void *))
+  { const int ret = next(context); return ret == common::OB_SUCCESS ? validate(context) : ret; }
+  virtual int run_plugin_relation_hooks(const seekdb_plugin_candidate_context_v1_t &,
+      int (*next)(void *), void *context, int (*validate)(void *))
+  { const int ret = next(context); return ret == common::OB_SUCCESS ? validate(context) : ret; }
+  virtual int plugin_join_hooks_available(bool &available)
+  { available = false; return common::OB_SUCCESS; }
+  virtual int plugin_upper_hooks_available(seekdb_plugin_candidate_phase_t phase, bool &available)
+  { available = false; return phase >= SEEKDB_PLUGIN_PHASE_GROUP && phase <= SEEKDB_PLUGIN_PHASE_ORDERED ?
+      common::OB_SUCCESS : common::OB_INVALID_ARGUMENT; }
+  virtual int run_plugin_upper_hooks(seekdb_plugin_candidate_phase_t phase,
+      const seekdb_plugin_candidate_context_v1_t &, int (*next)(void *), void *context, int (*validate)(void *))
+  {
+    if (phase < SEEKDB_PLUGIN_PHASE_GROUP || phase > SEEKDB_PLUGIN_PHASE_ORDERED) return common::OB_INVALID_ARGUMENT;
+    const int ret = next(context); return ret == common::OB_SUCCESS ? validate(context) : ret;
+  }
+  virtual int run_plugin_join_hooks(const seekdb_plugin_candidate_context_v1_t &,
+      int (*next)(void *), void *context, int (*validate)(void *))
+  { const int ret = next(context); return ret == common::OB_SUCCESS ? validate(context) : ret; }
   virtual int execute_plugin_function(
       const char *service_id,
       uint32_t abi_major,
@@ -74,10 +111,45 @@ public:
       const seekdb_plugin_execution_context_v1 *context,
       const seekdb_plugin_execution_value_v1 *arguments,
       uint32_t argument_count) = 0;
+  virtual int execute_bound_plugin_function_batch(
+      const seekdb_plugin_sql_binding_v1_t *, const seekdb_plugin_batch_context_v1_t *,
+      const seekdb_plugin_batch_row_v1_t *, uint32_t)
+  { return common::OB_NOT_SUPPORTED; }
   virtual int describe_plugin_sql_column(
       const seekdb_plugin_sql_binding_v1_t *binding,
       uint32_t column_index,
       seekdb_plugin_sql_column_v1_t *column) = 0;
+  virtual int decode_bound_plugin_type(
+      const seekdb_plugin_sql_binding_v1_t *binding,
+      const seekdb_plugin_execution_context_v1 *context,
+      const uint8_t *encoded, uint64_t encoded_size) = 0;
+  virtual int encode_bound_plugin_type(
+      const seekdb_plugin_sql_binding_v1_t *binding,
+      const seekdb_plugin_execution_context_v1 *context,
+      const seekdb_plugin_execution_value_v1 *value) = 0;
+  virtual int resolve_plugin_type_by_id(const char *, seekdb_plugin_sql_binding_v1_t *binding,
+      uint64_t = 0)
+  {
+    if (!binding) return common::OB_INVALID_ARGUMENT;
+    *binding = {}; return common::OB_NOT_SUPPORTED;
+  }
+  virtual int check_bound_plugin_type_comparison(const seekdb_plugin_sql_binding_v1_t &)
+  { return common::OB_NOT_SUPPORTED; }
+  virtual int compare_bound_plugin_type(const seekdb_plugin_sql_binding_v1_t &,
+      const seekdb_plugin_execution_value_v1_t &, const seekdb_plugin_execution_value_v1_t &,
+      int32_t &ordering)
+  { ordering = 0; return common::OB_NOT_SUPPORTED; }
+  // Host-internal type composition API, not a public DSO ABI. Inputs are
+  // logical IDs, nullptr denotes unknown NULL. Success owns its ID/epoch;
+  // failure clears both. Resolving metadata never grants an execution lease.
+  virtual int resolve_plugin_common_type(const char *const *type_ids, uint32_t count,
+      std::string &common_type, uint64_t &registry_epoch) = 0;
+  virtual int resolve_plugin_cast(const char *source_type_id, const char *target_type_id,
+      seekdb_plugin_cast_context_t requested_context, seekdb_plugin_sql_cast_binding_v1_t *binding,
+      uint64_t expected_epoch = 0) = 0;
+  virtual int execute_bound_plugin_cast(const seekdb_plugin_sql_cast_binding_v1_t *binding,
+      const seekdb_plugin_execution_context_v1 *context,
+      const seekdb_plugin_execution_value_v1 *value) = 0;
   virtual int open_bound_plugin_table_function(
       const seekdb_plugin_sql_binding_v1_t *binding,
       const seekdb_plugin_table_execution_context_v1_t *context,

@@ -87,6 +87,68 @@ int ObServer::execute_bound_plugin_function(
       : plugin_runtime_->execute_bound_function(binding, context, arguments,
                                                   argument_count);
 }
+int ObServer::execute_bound_plugin_function_batch(
+    const seekdb_plugin_sql_binding_v1_t *binding, const seekdb_plugin_batch_context_v1_t *context,
+    const seekdb_plugin_batch_row_v1_t *rows, uint32_t row_count)
+{
+  return plugin_runtime_ ? plugin_runtime_->execute_bound_function_batch(binding, context, rows, row_count)
+                         : common::OB_NOT_INIT;
+}
+int ObServer::decode_bound_plugin_type(const seekdb_plugin_sql_binding_v1_t *binding,
+    const seekdb_plugin_execution_context_v1 *context,
+    const uint8_t *encoded, uint64_t encoded_size)
+{
+  return plugin_runtime_ ? plugin_runtime_->decode_bound_type(binding, context, encoded, encoded_size)
+                         : common::OB_NOT_INIT;
+}
+int ObServer::encode_bound_plugin_type(const seekdb_plugin_sql_binding_v1_t *binding,
+    const seekdb_plugin_execution_context_v1 *context,
+    const seekdb_plugin_execution_value_v1 *value)
+{
+  return plugin_runtime_ ? plugin_runtime_->encode_bound_type(binding, context, value)
+                         : common::OB_NOT_INIT;
+}
+int ObServer::resolve_plugin_type_by_id(const char *logical_type_id,
+    seekdb_plugin_sql_binding_v1_t *binding, uint64_t expected_epoch)
+{
+  if (!binding) return common::OB_INVALID_ARGUMENT;
+  *binding = {};
+  return plugin_runtime_ ? plugin_runtime_->resolve_type_by_id(logical_type_id, binding, expected_epoch)
+                         : common::OB_NOT_INIT;
+}
+int ObServer::check_bound_plugin_type_comparison(const seekdb_plugin_sql_binding_v1_t &binding)
+{
+  return plugin_runtime_ ? plugin_runtime_->check_bound_type_comparison(binding) : common::OB_NOT_INIT;
+}
+int ObServer::compare_bound_plugin_type(const seekdb_plugin_sql_binding_v1_t &binding,
+    const seekdb_plugin_execution_value_v1_t &left, const seekdb_plugin_execution_value_v1_t &right,
+    int32_t &ordering)
+{
+  ordering = 0;
+  return plugin_runtime_ ? plugin_runtime_->compare_bound_type(binding, left, right, ordering)
+                         : common::OB_NOT_INIT;
+}
+int ObServer::resolve_plugin_common_type(const char *const *type_ids, uint32_t count,
+    std::string &common_type, uint64_t &registry_epoch)
+{
+  common_type.clear(); registry_epoch = 0;
+  return plugin_runtime_ ? plugin_runtime_->resolve_common_type(type_ids, count, common_type, registry_epoch)
+                         : common::OB_NOT_INIT;
+}
+int ObServer::resolve_plugin_cast(const char *source_type_id, const char *target_type_id,
+    seekdb_plugin_cast_context_t requested_context, seekdb_plugin_sql_cast_binding_v1_t *binding,
+    uint64_t expected_epoch)
+{
+  if (binding) *binding = {};
+  return plugin_runtime_ ? plugin_runtime_->resolve_sql_cast(source_type_id, target_type_id, requested_context, binding, expected_epoch)
+                         : common::OB_NOT_INIT;
+}
+int ObServer::execute_bound_plugin_cast(const seekdb_plugin_sql_cast_binding_v1_t *binding,
+    const seekdb_plugin_execution_context_v1 *context, const seekdb_plugin_execution_value_v1 *value)
+{
+  return plugin_runtime_ ? plugin_runtime_->execute_bound_cast(binding, context, value)
+                         : common::OB_NOT_INIT;
+}
 int ObServer::describe_plugin_sql_column(
     const seekdb_plugin_sql_binding_v1_t *binding,
     const uint32_t column_index,
@@ -107,6 +169,69 @@ int ObServer::open_bound_plugin_table_function(
       ? common::OB_NOT_INIT
       : plugin_runtime_->open_bound_table_function(
           binding, context, arguments, argument_count, cursor);
+}
+int ObServer::run_plugin_optimizer_hooks(const seekdb_plugin_optimizer_info_v1_t &info,
+    int (*next)(void *), void *context)
+{
+  return plugin_runtime_ ? plugin_runtime_->run_optimizer_hooks(info, next, context) : next(context);
+}
+int ObServer::estimate_bound_plugin_table_function(const seekdb_plugin_sql_binding_v1_t &binding,
+    seekdb_plugin_table_estimate_v1_t &estimate)
+{
+  estimate = {};
+  return plugin_runtime_ ? plugin_runtime_->estimate_bound_table_function(binding, estimate) : common::OB_NOT_INIT;
+}
+int ObServer::run_plugin_candidate_hooks(const seekdb_plugin_candidate_context_v1_t &view,
+    int (*next)(void *), void *context, int (*validate)(void *))
+{
+  if (plugin_runtime_) return plugin_runtime_->run_candidate_hooks(view, next, context, validate);
+  const int ret = next(context);
+  return ret == common::OB_SUCCESS ? validate(context) : ret;
+}
+int ObServer::run_plugin_relation_hooks(const seekdb_plugin_candidate_context_v1_t &view,
+    int (*next)(void *), void *context, int (*validate)(void *))
+{
+  if (plugin_runtime_) return plugin_runtime_->run_candidate_hooks(view, next, context, validate, SEEKDB_PLUGIN_PHASE_RELATION);
+  const int ret = next(context);
+  return ret == common::OB_SUCCESS ? validate(context) : ret;
+}
+int ObServer::plugin_join_hooks_available(bool &available)
+{
+  available = false;
+  return plugin_runtime_ ? plugin_runtime_->plugin_join_hooks_available(available) : common::OB_SUCCESS;
+}
+int ObServer::run_plugin_join_hooks(const seekdb_plugin_candidate_context_v1_t &view,
+    int (*next)(void *), void *context, int (*validate)(void *))
+{
+  if (plugin_runtime_) return plugin_runtime_->run_candidate_hooks(view, next, context, validate, SEEKDB_PLUGIN_PHASE_JOIN);
+  const int ret = next(context);
+  return ret == common::OB_SUCCESS ? validate(context) : ret;
+}
+int ObServer::bind_plugin_custom_executor(const char *service_id, uint32_t major, uint32_t minimum_minor,
+    share::plugin::CustomExecutorBinding &binding)
+{
+  binding = {};
+  return plugin_runtime_ ? plugin_runtime_->bind_custom_executor(service_id, major, minimum_minor, binding) : common::OB_NOT_INIT;
+}
+int ObServer::plugin_upper_hooks_available(seekdb_plugin_candidate_phase_t phase, bool &available)
+{
+  available = false;
+  if (phase < SEEKDB_PLUGIN_PHASE_GROUP || phase > SEEKDB_PLUGIN_PHASE_ORDERED) return common::OB_INVALID_ARGUMENT;
+  return plugin_runtime_ ? plugin_runtime_->candidate_hooks_available(phase, available) : common::OB_SUCCESS;
+}
+int ObServer::run_plugin_upper_hooks(seekdb_plugin_candidate_phase_t phase,
+    const seekdb_plugin_candidate_context_v1_t &view,
+    int (*next)(void *), void *context, int (*validate)(void *))
+{
+  if (phase < SEEKDB_PLUGIN_PHASE_GROUP || phase > SEEKDB_PLUGIN_PHASE_ORDERED) return common::OB_INVALID_ARGUMENT;
+  if (plugin_runtime_) return plugin_runtime_->run_candidate_hooks(view, next, context, validate, phase);
+  const int ret = next(context);
+  return ret == common::OB_SUCCESS ? validate(context) : ret;
+}
+int ObServer::open_plugin_custom_executor(const share::plugin::CustomExecutorBinding &binding,
+    const uint8_t *plan, uint32_t size, std::unique_ptr<share::plugin::ICustomExecutor> &cursor)
+{
+  return plugin_runtime_ ? plugin_runtime_->open_custom_executor(binding, plan, size, cursor) : common::OB_NOT_INIT;
 }
 int ObServer::mutate_plugin_type_dependency(
     common::ObISQLClient &sql_client,
@@ -997,9 +1122,9 @@ void ObServer::destroy()
     sql::register_ddl_slice_store(nullptr);
   }
 
-  // The experimental bridge owns no runtime loader yet.  It does own a
-  // catalog with a non-owning meta_db_pool_ reference, so release it before
-  // any remaining server teardown can reach member destruction.
+  // Release the optional runtime and its injected catalog capability before
+  // SQL proxy/member teardown. Shutdown must already have stopped query
+  // admission and drained requests; shared ownership is not a drain barrier.
   destroy_plugin_runtime();
 
   FLOG_INFO("begin to destroy config manager");
@@ -1797,12 +1922,18 @@ int ObServer::init_plugin_runtime(const ObServerOptions &opts)
         plugin_root.assign(opts.base_dir_.ptr(), opts.base_dir_.length());
         plugin_root.append("/plugins");
       }
-      if (OB_FAIL(runtime->init(&sql_proxy_, plugin_root))) {
+      const std::string extension_root = opts.extension_dir_.empty() ? std::string() :
+          std::string(opts.extension_dir_.ptr(), opts.extension_dir_.length());
+      if (OB_FAIL(runtime->init(&sql_proxy_, plugin_root, extension_root,
+                               opts.plugin_memory_limit_, opts.plugin_allocation_limit_))) {
       }
     }
     if (OB_SUCC(ret)) {
       plugin_runtime_ = std::move(runtime);
       GCTX.plugin_runtime_ = plugin_runtime_.get();
+      local_management_service_.set_extension_catalog_installer(plugin_runtime_->extension_catalog_installer());
+      local_management_service_.set_extension_catalog_dropper(plugin_runtime_->extension_catalog_dropper());
+      local_management_service_.set_extension_catalog_updater(plugin_runtime_->extension_catalog_updater());
     }
   }
   return ret;
@@ -1826,6 +1957,9 @@ int ObServer::check_plugin_server_ready()
 
 void ObServer::destroy_plugin_runtime() noexcept
 {
+  local_management_service_.set_extension_catalog_installer(nullptr);
+  local_management_service_.set_extension_catalog_dropper(nullptr);
+  local_management_service_.set_extension_catalog_updater(nullptr);
   if (plugin_runtime_) {
     GCTX.plugin_runtime_ = nullptr;
     plugin_runtime_->destroy();

@@ -134,7 +134,13 @@ int ObPLCacheMgr::get_pl_cache(ObPlanCache *lib_cache, ObCacheObjGuard& guard, O
 {
   int ret = OB_SUCCESS;
   ObGlobalReqTimeService::check_req_timeinfo();
-  if (OB_NOT_NULL(pc_ctx.session_info_) &&
+  if (OB_NOT_NULL(pc_ctx.schema_guard_) && pc_ctx.schema_guard_->has_routine_overlay()) {
+    // Provisional routines can change without a published schema version. Do
+    // not look up (or evict) shared entries, adjust keys, or count an access.
+    // A miss requires an empty output guard. Preserve an existing reference and
+    // return the error that HANDLE_PL_CACHE_RET_VALUE does not suppress.
+    ret = OB_ISNULL(guard.get_cache_obj()) ? OB_SQL_PC_NOT_EXIST : OB_ERR_UNEXPECTED;
+  } else if (OB_NOT_NULL(pc_ctx.session_info_) &&
       false == pc_ctx.session_info_->get_local_ob_enable_pl_cache()) {
     // do nothing
   } else if (OB_FAIL(pc_ctx.adjust_definer_database_id())) {
@@ -198,6 +204,10 @@ int ObPLCacheMgr::add_pl_cache(ObPlanCache *lib_cache, ObILibCacheObject *pl_obj
   if (OB_ISNULL(lib_cache)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lib cache is null");
+  } else if (OB_NOT_NULL(pc_ctx.schema_guard_) && pc_ctx.schema_guard_->has_routine_overlay()) {
+    // The caller retains its private compiled object; no shared publication or
+    // cache memory/key/statistics access is allowed for this schema view.
+    ret = OB_ISNULL(pl_object) ? OB_INVALID_ARGUMENT : OB_SUCCESS;
   } else if (OB_NOT_NULL(pc_ctx.session_info_) &&
               false == pc_ctx.session_info_->get_local_ob_enable_pl_cache()) {
     // do nothing

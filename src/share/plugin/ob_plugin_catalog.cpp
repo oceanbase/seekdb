@@ -32,6 +32,7 @@
 #include "lib/ob_errno.h"
 #include "lib/time/ob_time_utility.h"
 #include "share/plugin/ob_plugin_sql_catalog.h"
+#include "plugin_runtime.h"
 
 namespace oceanbase
 {
@@ -1523,8 +1524,8 @@ int validate_and_rebind_exact_replay(
 int begin_write(ObPluginSqlConnection &connection)
 {
   // ObMySQLTransaction starts a WAL-backed seekdb transaction on the regular
-  // SQL catalog connection.  Writer serialization is provided by seekdb;
-  // there is no file-backed database-specific BEGIN variant here.
+  // SQL catalog connection. BEGIN alone does not serialize catalog writers;
+  // competing operations must take the same provider/edge row locks below.
   return connection.begin_transaction();
 }
 
@@ -1606,7 +1607,7 @@ struct ObPluginCatalog::Impl
                         std::string &runtime_incarnation);
   int load_record(ObPluginSqlConnection &connection,
                   const std::string &plugin_id,
-                  ObPluginCatalogRecord &record) const;
+                  ObPluginCatalogRecord &record, bool for_update = false) const;
   int has_unfinished_operation(ObPluginSqlConnection &connection,
                                const std::string &plugin_id,
                                bool &has_unfinished) const;
@@ -1639,7 +1640,7 @@ struct ObPluginCatalog::Impl
                         std::string &error);
   int list_blockers(ObPluginSqlConnection &connection,
                     const std::string &plugin_id,
-                    std::vector<ObPluginRestrictBlocker> &blockers) const;
+                     std::vector<ObPluginRestrictBlocker> &blockers, bool for_update = false) const;
   int uninstall(const std::string &plugin_id,
                 const std::string &operator_id,
                 const std::string &audit_id,
@@ -1841,7 +1842,7 @@ int ObPluginCatalog::Impl::initialize_schema()
 int ObPluginCatalog::Impl::load_record(
     ObPluginSqlConnection &connection,
     const std::string &plugin_id,
-    ObPluginCatalogRecord &record) const
+    ObPluginCatalogRecord &record, const bool for_update) const
 {
   static const char SQL[] =
       "SELECT plugin_id,relative_path,build_id,package_digest,"
@@ -1851,8 +1852,9 @@ int ObPluginCatalog::Impl::load_record(
       "last_error,operator_id,audit_id,gmt_create,gmt_modified "
       "FROM __all_plugin_package WHERE plugin_id=?";
   bool found = false;
+  const std::string sql = for_update ? std::string(SQL) + " FOR UPDATE" : SQL;
   int ret = connection.query(
-      SQL,
+      sql.c_str(),
       [&](ObPluginSqlBinder &binder) { return bind_string(binder, plugin_id); },
       [&](ObPluginSqlRowReader &reader) {
         found = true;
@@ -3149,16 +3151,46 @@ int ObPluginCatalog::Impl::mark_disable_recovery_required(
 int ObPluginCatalog::Impl::list_blockers(
     ObPluginSqlConnection &connection,
     const std::string &plugin_id,
-    std::vector<ObPluginRestrictBlocker> &blockers) const
+    std::vector<ObPluginRestrictBlocker> &blockers, const bool for_update) const
 {
   int ret = OB_SUCCESS;
   blockers.clear();
   std::vector<ObPluginRestrictBlocker> candidates;
-  ret = connection.query(
+  std::vector<ObPluginRestrictBlocker> installations;
+  // Database teardown removes instances/members before dropping objects and
+  // their native dependency edges. Acquire instance locks BEFORE dependency
+  // locks too, or RESTRICT and DROP DATABASE can form a lock-order cycle.
+  // record_extension_install holds the same provider fence before admission;
+  // use a current read here when that fence is held by this caller.
+  const std::string instances = std::string(
+      "SELECT tenant_id,database_id,extension_id,extension_name "
+      "FROM __all_extension_instance WHERE native_module_id=? "
+      "ORDER BY tenant_id,database_id,extension_name") +
+      (for_update ? " FOR UPDATE" : "");
+  ret = connection.query(instances.c_str(),
+      [&](ObPluginSqlBinder &binder) { return bind_string(binder, plugin_id); },
+      [&](ObPluginSqlRowReader &reader) {
+        const int64_t tenant = reader.get_int64(0);
+        const int64_t database = reader.get_int64(1);
+        const int64_t identity = reader.get_int64(2);
+        if (tenant <= 0 || database <= 0 || identity <= 0) return OB_INVALID_DATA;
+        ObPluginRestrictBlocker blocker{};
+        blocker.consumer_kind_ = ObPluginDependencyConsumerKind::CATALOG_OBJECT;
+        blocker.consumer_id_ = "extension." + std::to_string(tenant) + "." +
+            std::to_string(database) + "." + std::to_string(identity);
+        blocker.dependency_kind_ = ObPluginDependencyKind::EXTENSION_OBJECT;
+        blocker.dependency_id_ = read_string(reader, 3);
+        installations.push_back(std::move(blocker));
+        return OB_SUCCESS;
+      });
+  if (OB_SUCCESS != ret) return ret;
+  const std::string sql = std::string(
       "SELECT consumer_kind,consumer_id,consumer_plugin_id,"
       "consumer_generation,dependency_kind,dependency_id,service_abi_major "
       "FROM __all_plugin_dependency WHERE provider_plugin_id=? "
-      "ORDER BY consumer_kind,consumer_id,consumer_plugin_id",
+      "ORDER BY consumer_kind,consumer_id,consumer_plugin_id") +
+      (for_update ? " FOR UPDATE" : "");
+  ret = connection.query(sql.c_str(),
       [&](ObPluginSqlBinder &binder) { return bind_string(binder, plugin_id); },
       [&](ObPluginSqlRowReader &reader) {
         ObPluginRestrictBlocker blocker;
@@ -3203,6 +3235,11 @@ int ObPluginCatalog::Impl::list_blockers(
     }
     if (OB_SUCCESS == ret && blocks) blockers.push_back(candidate);
   }
+  if (OB_SUCCESS == ret) {
+    // Preserve the diagnostic ordering (native dependencies, then installs)
+    // independently from the lock acquisition order.
+    for (auto &installation : installations) blockers.push_back(std::move(installation));
+  }
   return ret;
 }
 
@@ -3226,7 +3263,7 @@ int ObPluginCatalog::Impl::mutate_dependency(
     bool unfinished = false;
     bool provider_resolves = false;
     if (OB_FAIL(load_record(connection, dependency.provider_plugin_id_,
-                            provider))) {
+                            provider, true))) {
       error = "plugin dependency provider is not installed";
     } else if (provider.desired_state_ != ObPluginDesiredState::ACTIVE ||
                provider.actual_state_ != ObPluginState::ACTIVE ||
@@ -3423,7 +3460,7 @@ int ObPluginCatalog::Impl::begin_disable(
     } else if (OB_FAIL(begin_write(*guard.get_connection()))) {
       error = "cannot reserve plugin catalog writer";
     } else if (OB_FAIL(load_record(*guard.get_connection(), plugin_id,
-                                   record))) {
+                                   record, true))) {
       error = "plugin package is not installed";
     } else if (record.desired_state_ != ObPluginDesiredState::ACTIVE ||
                record.actual_state_ != ObPluginState::ACTIVE ||
@@ -3437,7 +3474,7 @@ int ObPluginCatalog::Impl::begin_disable(
       ret = OB_EAGAIN;
       error = "plugin has an unfinished catalog operation";
     } else if (OB_FAIL(list_blockers(*guard.get_connection(), plugin_id,
-                                     blockers))) {
+                                     blockers, true))) {
       error = "cannot inspect durable plugin dependencies";
     } else if (!blockers.empty()) {
       ret = OB_OP_NOT_ALLOW;
@@ -3973,13 +4010,13 @@ int ObPluginCatalog::Impl::uninstall(
     error = "plugin catalog database is unavailable";
   } else if (OB_FAIL(begin_write(*guard.get_connection()))) {
     error = "cannot reserve plugin catalog writer";
-  } else if (OB_FAIL(load_record(*guard.get_connection(), plugin_id, record))) {
+  } else if (OB_FAIL(load_record(*guard.get_connection(), plugin_id, record, true))) {
     error = "plugin package is not installed";
   } else if (record.desired_state_ == ObPluginDesiredState::UNINSTALLED) {
     ret = OB_ENTRY_NOT_EXIST;
     error = "plugin package is already uninstalled";
   } else if (OB_FAIL(list_blockers(*guard.get_connection(), plugin_id,
-                                   blockers))) {
+                                   blockers, true))) {
     error = "cannot inspect durable plugin dependencies";
   } else if (!blockers.empty()) {
     ret = OB_OP_NOT_ALLOW;
@@ -4403,9 +4440,23 @@ int ObPluginCatalog::Impl::prepare_startup(
 
   // Persistent plugin-to-plugin edges determine startup order.  Edges from
   // archived generations are ignored; orphaned/missing providers fail closed.
-  std::map<std::string, std::set<std::string> > outgoing;
-  std::map<std::string, size_t> indegree;
-  for (const auto &item : unordered_entries) indegree[item.first] = 0;
+  // C++ resolves durable identity/visibility against this writer snapshot;
+  // the shared Rust planner owns deduplication, indegrees and ordering.
+  std::map<std::string, uint32_t> node_indices;
+  std::vector<const ObPluginStartupEntry *> nodes;
+  std::vector<seekdb_runtime_dependency_edge_t> edges;
+  if (OB_SUCCESS == ret &&
+      unordered_entries.size() > SEEKDB_RUNTIME_DEPENDENCY_MAX_NODES) {
+    ret = OB_SIZE_OVERFLOW;
+    error = "plugin startup dependency node limit exceeded";
+  }
+  if (OB_SUCCESS == ret) {
+    nodes.reserve(unordered_entries.size());
+    for (const auto &item : unordered_entries) {
+      node_indices.emplace(item.first, static_cast<uint32_t>(nodes.size()));
+      nodes.push_back(&item.second);
+    }
+  }
   if (OB_SUCCESS == ret && !unordered_entries.empty()) {
     ret = guard->query(
         "SELECT consumer_plugin_id,consumer_generation,provider_plugin_id "
@@ -4431,45 +4482,45 @@ int ObPluginCatalog::Impl::prepare_startup(
                 unordered_entries.count(provider) == 0) {
               return OB_STATE_NOT_MATCH;
             }
-            if (provider != consumer &&
-                outgoing[provider].insert(consumer).second) {
-              ++indegree[consumer];
+            const auto consumer_node = node_indices.find(consumer);
+            const auto provider_node = node_indices.find(provider);
+            if (consumer_node == node_indices.end() || provider_node == node_indices.end()) {
+              return OB_INVALID_DATA;
             }
+            if (edges.size() == SEEKDB_RUNTIME_DEPENDENCY_MAX_EDGES) return OB_SIZE_OVERFLOW;
+            edges.push_back({provider_node->second, consumer_node->second});
           }
           return OB_SUCCESS;
         });
     if (OB_ENTRY_NOT_EXIST == ret) ret = OB_SUCCESS;
     if (OB_STATE_NOT_MATCH == ret)
       error = "plugin startup dependency provider is not desired ACTIVE";
+    if (OB_SIZE_OVERFLOW == ret)
+      error = "plugin startup dependency edge limit exceeded";
+    if (OB_INVALID_DATA == ret)
+      error = "plugin startup dependency node is absent from activation snapshot";
   }
 
   if (OB_SUCCESS == ret) {
-    std::set<std::string> ready_plugins;
-    for (const auto &item : indegree) {
-      if (item.second == 0) ready_plugins.insert(item.first);
-    }
-    while (!ready_plugins.empty()) {
-      const std::string plugin_id = *ready_plugins.begin();
-      ready_plugins.erase(ready_plugins.begin());
-      entries.push_back(unordered_entries.find(plugin_id)->second);
-      const auto dependants = outgoing.find(plugin_id);
-      if (dependants != outgoing.end()) {
-        for (const std::string &dependant : dependants->second) {
-          size_t &degree = indegree[dependant];
-          if (degree == 0) {
-            ret = OB_ERR_UNEXPECTED;
-            error = "plugin startup DAG accounting underflow";
-            break;
-          }
-          --degree;
-          if (degree == 0) ready_plugins.insert(dependant);
-        }
-      }
-      if (OB_SUCCESS != ret) break;
-    }
-    if (OB_SUCCESS == ret && entries.size() != unordered_entries.size()) {
+    std::vector<uint32_t> order(nodes.size());
+    uint32_t blocked = UINT32_MAX;
+    const int32_t status = seekdb_runtime_dependency_plan(
+        static_cast<uint32_t>(nodes.size()), edges.data(),
+        static_cast<uint32_t>(edges.size()), 1, order.data(),
+        static_cast<uint32_t>(order.size()), &blocked);
+    if (SEEKDB_RUNTIME_OK == status) {
+      entries.reserve(nodes.size());
+      for (const uint32_t index : order) entries.push_back(*nodes[index]);
+    } else if (SEEKDB_RUNTIME_DEPENDENCY_CYCLE == status) {
       ret = OB_INVALID_DATA;
       error = "plugin startup dependency graph contains a cycle";
+      if (blocked < nodes.size()) error += "; blocked plugin: " + nodes[blocked]->plugin_id_;
+    } else if (SEEKDB_RUNTIME_NO_MEMORY == status) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      error = "plugin startup dependency planner allocation failed";
+    } else {
+      ret = SEEKDB_RUNTIME_LIMIT == status ? OB_SIZE_OVERFLOW : OB_INVALID_DATA;
+      error = "plugin startup dependency graph is invalid or exceeds limits";
     }
   }
 
@@ -5096,6 +5147,1150 @@ int ObPluginCatalog::remove_dependency(
   } catch (...) {
     ret = OB_ERR_UNEXPECTED;
     error = "unexpected plugin dependency removal failure";
+  }
+  return ret;
+}
+
+namespace
+{
+int validate_extension_requirements(const std::string &name, const std::vector<std::string> &requirements,
+                                    const std::vector<std::string> &prerequisites = {})
+{
+  if (name.size() > 255 || requirements.size() > 64 || prerequisites.size() > 64 - requirements.size()) return OB_INVALID_ARGUMENT;
+  std::vector<seekdb_runtime_package_input_text> entries;
+  for (const auto *names : {&requirements, &prerequisites}) {
+    for (const auto &dependency : *names) {
+      if (dependency.size() > 255) return OB_INVALID_ARGUMENT;
+      entries.push_back({reinterpret_cast<const uint8_t *>(dependency.data()), static_cast<uint32_t>(dependency.size())});
+    }
+  }
+  const int status = seekdb_runtime_extension_requires_validate(
+      reinterpret_cast<const uint8_t *>(name.data()), static_cast<uint32_t>(name.size()), entries.data(), entries.size());
+  return status == SEEKDB_RUNTIME_OK ? OB_SUCCESS : status == SEEKDB_RUNTIME_CONFLICT ? OB_ENTRY_EXIST : OB_INVALID_ARGUMENT;
+}
+
+bool same_extension_requirements(const std::vector<std::string> &left, const std::vector<std::string> &right)
+{
+  auto a = left, b = right;
+  std::sort(a.begin(), a.end()); std::sort(b.begin(), b.end());
+  return a == b;
+}
+
+int validate_extension_install_spec(const ExtensionInstallSpec &spec)
+{
+  const int dependencies = validate_extension_requirements(spec.name_, spec.requires_, spec.prerequisites_);
+  if (dependencies != OB_SUCCESS) return dependencies;
+  if (spec.members_.size() > SEEKDB_PLUGIN_MAX_EXTENSIONS || spec.name_.size() > 255 ||
+      spec.version_.size() > 255 || spec.native_module_id_.size() > 255) {
+    return OB_INVALID_ARGUMENT;
+  }
+  std::vector<seekdb_runtime_extension_member_t> members;
+  members.reserve(spec.members_.size());
+  for (const auto &member : spec.members_) {
+    members.push_back({member.object_class_, 0, member.object_id_});
+  }
+  const int32_t status = seekdb_runtime_extension_install_validate(
+      spec.tenant_id_, spec.database_id_, spec.owner_id_,
+      reinterpret_cast<const uint8_t *>(spec.name_.data()), static_cast<uint32_t>(spec.name_.size()),
+      reinterpret_cast<const uint8_t *>(spec.version_.data()), static_cast<uint32_t>(spec.version_.size()),
+      reinterpret_cast<const uint8_t *>(spec.native_module_id_.data()), static_cast<uint32_t>(spec.native_module_id_.size()),
+      members.data(), static_cast<uint32_t>(members.size()));
+  return status == SEEKDB_RUNTIME_OK ? OB_SUCCESS :
+         status == SEEKDB_RUNTIME_NO_MEMORY ? OB_ALLOCATE_MEMORY_FAILED :
+         status == SEEKDB_RUNTIME_CONFLICT ? OB_ENTRY_EXIST : OB_INVALID_ARGUMENT;
+}
+} // namespace
+
+int ObPluginCatalog::install_extension(
+    const ExtensionInstallSpec &spec, IExtensionSchemaInstaller &installer,
+    uint64_t &extension_id, std::string &error,
+    common::ObMySQLTransaction *ddl_transaction, int64_t refreshed_schema_version)
+{
+  extension_id = 0;
+  error.clear();
+  if (!impl_) return OB_ALLOCATE_MEMORY_FAILED;
+  if (!impl_->initialized_.load(std::memory_order_acquire)) return OB_NOT_INIT;
+  // Reject before entering the driver: its failed-BEGIN path requests rollback
+  // and must not accidentally end a caller's pre-existing transaction.
+  if (nullptr != ddl_transaction &&
+      (ddl_transaction->is_started() || refreshed_schema_version <= 0)) {
+    return OB_INVALID_ARGUMENT;
+  }
+  int ret = OB_SUCCESS;
+  bool uncertain = false;
+  try {
+    // Only this connection owns the installation transaction. The Rust driver
+    // decides ordering/cleanup, while C++ keeps the actual SQL transaction.
+    ObPluginSqlConnection connection(nullptr == ddl_transaction ? impl_->sql_client_ : ddl_transaction);
+    ExtensionInstallSpec planned = spec;
+    struct Context
+    {
+      ObPluginCatalog &catalog_;
+      ObPluginSqlConnection &connection_;
+      IExtensionSchemaInstaller &installer_;
+      ExtensionInstallSpec &spec_;
+      std::string &error_;
+      bool lost_transaction_;
+      common::ObMySQLTransaction *ddl_transaction_;
+      common::ObISQLClient *sql_client_;
+      int64_t refreshed_schema_version_;
+
+      static int32_t step(void *opaque, uint32_t phase, uint64_t *identity) noexcept
+      {
+        Context &context = *static_cast<Context *>(opaque);
+        try {
+          int ret = OB_SUCCESS;
+          switch (phase) {
+            case SEEKDB_RUNTIME_INSTALL_PREFLIGHT:
+              if (!context.spec_.members_.empty()) return OB_INVALID_ARGUMENT;
+              ret = validate_extension_install_spec(context.spec_);
+              if (OB_SUCCESS == ret) ret = context.installer_.preflight(context.spec_, context.error_);
+              return ret;
+            case SEEKDB_RUNTIME_INSTALL_BEGIN:
+              if (context.connection_.is_in_transaction()) return OB_STATE_NOT_MATCH;
+              if (nullptr != context.ddl_transaction_) {
+                return context.ddl_transaction_->start(context.sql_client_, context.refreshed_schema_version_);
+              }
+              return context.connection_.begin_transaction();
+            case SEEKDB_RUNTIME_INSTALL_APPLY: {
+              if (!context.connection_.is_in_transaction()) return OB_STATE_NOT_MATCH;
+              std::vector<ExtensionMemberIdentity> members;
+              std::vector<uint64_t> dependencies;
+              ret = context.catalog_.lock_extension_requirements(context.connection_, context.spec_, dependencies, context.error_);
+              if (OB_SUCCESS == ret) ret = context.installer_.apply(context.connection_, context.spec_, members, context.error_);
+              if (!context.connection_.is_in_transaction()) {
+                context.lost_transaction_ = true;
+                if (OB_SUCCESS == ret) ret = OB_STATE_NOT_MATCH;
+              }
+              if (OB_SUCCESS == ret) context.spec_.members_.swap(members);
+              return ret;
+            }
+            case SEEKDB_RUNTIME_INSTALL_RECORD:
+              return context.catalog_.record_extension_install(
+                  context.connection_, context.spec_, *identity, context.error_);
+            case SEEKDB_RUNTIME_INSTALL_COMMIT:
+              if (!context.connection_.is_in_transaction()) return OB_STATE_NOT_MATCH;
+              if (nullptr != context.ddl_transaction_) return context.ddl_transaction_->end(true);
+              return context.connection_.commit();
+            case SEEKDB_RUNTIME_INSTALL_ROLLBACK:
+              // A buggy adapter may have ended the transaction. A no-op
+              // rollback must never be reported as undoing its writes.
+              if (context.lost_transaction_) return OB_TRANS_UNKNOWN;
+              if (nullptr != context.ddl_transaction_) {
+                return context.ddl_transaction_->is_started() ? context.ddl_transaction_->end(false) : OB_SUCCESS;
+              }
+              return context.connection_.rollback();
+            default:
+              return OB_INVALID_ARGUMENT;
+          }
+        } catch (const std::bad_alloc &) {
+          if (phase == SEEKDB_RUNTIME_INSTALL_APPLY && !context.connection_.is_in_transaction()) {
+            context.lost_transaction_ = true;
+          }
+          return OB_ALLOCATE_MEMORY_FAILED;
+        } catch (...) {
+          // Never unwind across the Rust driver. Its next step still rolls
+          // back the owned transaction for an apply/record exception.
+          if (phase == SEEKDB_RUNTIME_INSTALL_APPLY && !context.connection_.is_in_transaction()) {
+            context.lost_transaction_ = true;
+          }
+          return OB_ERR_UNEXPECTED;
+        }
+      }
+    } context{*this, connection, installer, planned, error, false,
+              ddl_transaction, impl_->sql_client_, refreshed_schema_version};
+    seekdb_runtime_extension_install_result_t result{};
+    const int32_t status = seekdb_runtime_extension_install_run(&context, Context::step, &result);
+    if (SEEKDB_RUNTIME_OK != status) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (result.outcome == SEEKDB_RUNTIME_INSTALL_COMMITTED) {
+      extension_id = result.extension_id;
+    } else if (result.outcome == SEEKDB_RUNTIME_INSTALL_COMMIT_UNKNOWN ||
+               result.outcome == SEEKDB_RUNTIME_INSTALL_ROLLBACK_UNKNOWN) {
+      uncertain = true;
+      ret = OB_TRANS_UNKNOWN;
+      error = "extension transaction outcome unknown; reconcile by tenant/database/name; phase=" +
+          std::to_string(result.failed_phase) + ", status=" + std::to_string(result.operation_status) +
+          ", rollback_status=" + std::to_string(result.rollback_status);
+    } else {
+      ret = result.operation_status < 0 ? result.operation_status : OB_ERR_UNEXPECTED;
+      if (error.empty()) error = "extension installation failed before commit; phase=" +
+          std::to_string(result.failed_phase) + ", status=" + std::to_string(result.operation_status);
+    }
+  } catch (const std::bad_alloc &) {
+    ret = uncertain ? OB_TRANS_UNKNOWN : OB_ALLOCATE_MEMORY_FAILED;
+  } catch (...) {
+    ret = uncertain ? OB_TRANS_UNKNOWN : OB_ERR_UNEXPECTED;
+  }
+  return ret;
+}
+
+int ObPluginCatalog::record_extension_install(
+    ObPluginSqlConnection &connection, const ExtensionInstallSpec &spec,
+    uint64_t &extension_id, std::string &error)
+{
+  extension_id = 0;
+  error.clear();
+  if (!impl_) return OB_ALLOCATE_MEMORY_FAILED;
+  int ret = OB_SUCCESS;
+  try {
+    // Same external writer -> no catalog mutex rule as schema dependencies.
+    if (!impl_->initialized_.load(std::memory_order_acquire)) {
+      ret = OB_NOT_INIT;
+    } else if (!connection.is_in_transaction()) {
+      ret = OB_STATE_NOT_MATCH;
+      error = "extension installation requires the caller's schema write transaction";
+    } else if (OB_SUCCESS != (ret = validate_extension_install_spec(spec))) {
+      error = "invalid database extension identity or duplicate schema member";
+    }
+    if (OB_SUCCESS == ret && !spec.native_module_id_.empty()) {
+      ObPluginCatalogRecord provider;
+      bool unfinished = false;
+      ret = impl_->load_record(connection, spec.native_module_id_, provider, true);
+      if (OB_SUCCESS == ret &&
+          (provider.desired_state_ != ObPluginDesiredState::ACTIVE ||
+           provider.actual_state_ != ObPluginState::ACTIVE)) {
+        ret = OB_STATE_NOT_MATCH;
+      }
+      if (OB_SUCCESS == ret) {
+        ret = impl_->has_unfinished_operation(connection, spec.native_module_id_, unfinished);
+        if (OB_SUCCESS == ret && unfinished) ret = OB_EAGAIN;
+      }
+      if (OB_SUCCESS != ret) error = "extension native module is not stably ACTIVE";
+    }
+
+    // An independently locked, rollback-aware SQL sequence assigns persistent
+    // Extension identity. It is deliberately not the module operation counter.
+    static const char SEQUENCE[] = "sql-extension-instance";
+    std::vector<uint64_t> dependencies;
+    if (OB_SUCCESS == ret) ret = lock_extension_requirements(connection, spec, dependencies, error);
+    int64_t next = 0;
+    bool found = false;
+    if (OB_SUCCESS == ret) {
+      ret = connection.execute(
+          "INSERT INTO __all_plugin_sequence(sequence_name,next_value) VALUES(?,1) "
+          "ON DUPLICATE KEY UPDATE sequence_name=VALUES(sequence_name)",
+          [&](ObPluginSqlBinder &binder) { return bind_string(binder, SEQUENCE); });
+    }
+    if (OB_SUCCESS == ret) {
+      ret = connection.query(
+          "SELECT next_value FROM __all_plugin_sequence WHERE sequence_name=? FOR UPDATE",
+          [&](ObPluginSqlBinder &binder) { return bind_string(binder, SEQUENCE); },
+          [&](ObPluginSqlRowReader &reader) {
+            found = true;
+            next = reader.get_int64(0);
+            return OB_ITER_END;
+          });
+      if (OB_SUCCESS == ret && (!found || next <= 0 || next == INT64_MAX)) ret = OB_SIZE_OVERFLOW;
+    }
+    if (OB_SUCCESS == ret) {
+      int64_t affected = 0;
+      ret = connection.execute(
+          "UPDATE __all_plugin_sequence SET next_value=? WHERE sequence_name=? AND next_value=?",
+          [&](ObPluginSqlBinder &binder) {
+            int bind_ret = binder.bind_int64(next + 1);
+            if (OB_SUCCESS == bind_ret) bind_ret = bind_string(binder, SEQUENCE);
+            if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(next);
+            return bind_ret;
+          }, &affected);
+      if (OB_SUCCESS == ret && affected != 1) ret = OB_EAGAIN;
+    }
+    if (OB_SUCCESS == ret) {
+      ret = connection.execute(
+          "INSERT INTO __all_extension_instance(tenant_id,database_id,extension_name,"
+          "extension_id,owner_id,extension_version,native_module_id,gmt_create) "
+          "VALUES(?,?,?,?,?,?,?,?)",
+          [&](ObPluginSqlBinder &binder) {
+            int bind_ret = binder.bind_int64(spec.tenant_id_);
+            if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(spec.database_id_);
+            if (OB_SUCCESS == bind_ret) bind_ret = bind_string(binder, spec.name_);
+            if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(next);
+            if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(spec.owner_id_);
+            if (OB_SUCCESS == bind_ret) bind_ret = bind_string(binder, spec.version_);
+            if (OB_SUCCESS == bind_ret) bind_ret = bind_string(binder, spec.native_module_id_);
+            if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(ObTimeUtility::current_time());
+            return bind_ret;
+          });
+    }
+    for (const auto &member : spec.members_) {
+      if (OB_SUCCESS != ret) break;
+      ret = connection.execute(
+          "INSERT INTO __all_extension_member(tenant_id,database_id,object_class,object_id,extension_id) "
+          "VALUES(?,?,?,?,?)",
+          [&](ObPluginSqlBinder &binder) {
+            int bind_ret = binder.bind_int64(spec.tenant_id_);
+            if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(spec.database_id_);
+            if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(member.object_class_);
+            if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(member.object_id_);
+            if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(next);
+            return bind_ret;
+          });
+    }
+    for (const uint64_t required : dependencies) {
+      if (OB_SUCCESS != ret) break;
+      ret = connection.execute(
+          "INSERT INTO __all_extension_dependency(tenant_id,database_id,required_extension_id,extension_id) VALUES(?,?,?,?)",
+          [&](ObPluginSqlBinder &binder) {
+            int code = binder.bind_int64(spec.tenant_id_);
+            if (OB_SUCCESS == code) code = binder.bind_int64(spec.database_id_);
+            if (OB_SUCCESS == code) code = binder.bind_int64(required);
+            if (OB_SUCCESS == code) code = binder.bind_int64(next);
+            return code;
+          });
+    }
+    if (OB_SUCCESS == ret) extension_id = static_cast<uint64_t>(next);
+    else if (error.empty()) error = "extension catalog recording failed; roll back the install transaction";
+  } catch (const std::bad_alloc &) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } catch (...) {
+    ret = OB_ERR_UNEXPECTED;
+  }
+  return ret;
+}
+
+namespace {
+// Share row decoding between the planning observation and the authoritative
+// lock. Only the latter may be followed by member locks and schema mutation.
+int read_extension_version(ObPluginSqlConnection &connection, uint64_t tenant_id,
+                           uint64_t database_id, const std::string &name, bool for_update,
+                           ExtensionVersionSnapshot &snapshot)
+{
+  snapshot = ExtensionVersionSnapshot{};
+  if (name.size() > 255 || SEEKDB_RUNTIME_OK != seekdb_runtime_extension_drop_validate(
+      tenant_id, database_id, 0, reinterpret_cast<const uint8_t *>(name.data()),
+      static_cast<uint32_t>(name.size()))) return OB_INVALID_ARGUMENT;
+  if (for_update && !connection.is_in_transaction()) return OB_STATE_NOT_MATCH;
+  ExtensionVersionSnapshot staged;
+  bool found = false;
+  std::string sql = "SELECT extension_id,owner_id,extension_version,native_module_id "
+      "FROM __all_extension_instance WHERE tenant_id=? AND database_id=? AND extension_name=?";
+  if (for_update) sql += " FOR UPDATE";
+  int ret = connection.query(sql.c_str(), [&](ObPluginSqlBinder &binder) {
+    int code = binder.bind_int64(tenant_id);
+    if (OB_SUCCESS == code) code = binder.bind_int64(database_id);
+    if (OB_SUCCESS == code) code = bind_string(binder, name);
+    return code;
+  }, [&](ObPluginSqlRowReader &reader) {
+    if (found) return OB_INVALID_DATA;
+    found = true;
+    int64_t id = 0, owner = 0;
+    ObString version, module;
+    int code = reader.read_int64(0, id);
+    if (OB_SUCCESS == code) code = reader.read_int64(1, owner);
+    if (OB_SUCCESS == code) code = reader.read_text(2, version);
+    if (OB_SUCCESS == code) code = reader.read_text(3, module);
+    if (OB_SUCCESS != code) return code;
+    if (id <= 0 || owner <= 0 || version.length() <= 0 || version.length() > 255 ||
+        version.ptr() == nullptr || module.length() < 0 || module.length() > 255 ||
+        (module.length() != 0 && module.ptr() == nullptr)) return OB_INVALID_DATA;
+    staged.extension_id_ = id;
+    staged.owner_id_ = owner;
+    staged.version_.assign(version.ptr(), version.length());
+    if (!module.empty()) staged.native_module_id_.assign(module.ptr(), module.length());
+    return OB_SUCCESS;
+  });
+  if (OB_SUCC(ret) && !found) ret = OB_ENTRY_NOT_EXIST;
+  if (OB_SUCC(ret)) {
+    ExtensionInstallSpec spec;
+    spec.tenant_id_ = tenant_id;
+    spec.database_id_ = database_id;
+    spec.name_ = name;
+    spec.owner_id_ = staged.owner_id_;
+    spec.version_ = staged.version_;
+    spec.native_module_id_ = staged.native_module_id_;
+    // The same Rust identity/text validation as the locked/full installation
+    // path, applied before exposing even a planning-only observation.
+    ret = validate_extension_install_spec(spec);
+    if (ret == OB_INVALID_ARGUMENT || ret == OB_ENTRY_EXIST) ret = OB_INVALID_DATA;
+    if (OB_SUCC(ret)) snapshot = std::move(staged);
+  }
+  return ret;
+}
+}
+
+int ObPluginCatalog::read_update_source(uint64_t tenant_id, uint64_t database_id,
+                                       const std::string &name, ExtensionVersionSnapshot &snapshot,
+                                       std::string &error)
+{
+  snapshot = ExtensionVersionSnapshot{};
+  error.clear();
+  if (!impl_) return OB_ALLOCATE_MEMORY_FAILED;
+  if (!impl_->initialized_.load(std::memory_order_acquire)) return OB_NOT_INIT;
+  int ret = OB_SUCCESS;
+  try {
+    ObPluginSqlConnection connection(impl_->sql_client_);
+    // Planning must not observe a caller's uncommitted installation or end its
+    // transaction. The runtime normally binds a SQL proxy, not a transaction.
+    if (connection.is_in_transaction()) ret = OB_STATE_NOT_MATCH;
+    else ret = read_extension_version(connection, tenant_id, database_id, name, false, snapshot);
+    if (OB_FAIL(ret)) error = "cannot read an installed Extension version for update planning";
+  } catch (const std::bad_alloc &) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } catch (...) {
+    ret = OB_ERR_UNEXPECTED;
+  }
+  if (OB_FAIL(ret)) snapshot = ExtensionVersionSnapshot{};
+  return ret;
+}
+
+int ObPluginCatalog::lock_extension_requirements(ObPluginSqlConnection &connection,
+    const ExtensionInstallSpec &spec, std::vector<uint64_t> &identities, std::string &error)
+{
+  identities.clear();
+  if (!connection.is_in_transaction()) return OB_STATE_NOT_MATCH;
+  int ret = validate_extension_requirements(spec.name_, spec.requires_, spec.prerequisites_);
+  if (OB_FAIL(ret)) return ret;
+  // Native provider precedes SQL instance locks, matching native RESTRICT
+  // management. Never acquire this provider after first locking dependencies.
+  if (!spec.native_module_id_.empty()) {
+    ObPluginCatalogRecord module;
+    bool unfinished = false;
+    ret = impl_->load_record(connection, spec.native_module_id_, module, true);
+    if (OB_SUCC(ret) && (module.desired_state_ != ObPluginDesiredState::ACTIVE || module.actual_state_ != ObPluginState::ACTIVE))
+      ret = OB_STATE_NOT_MATCH;
+    if (OB_SUCC(ret)) ret = impl_->has_unfinished_operation(connection, spec.native_module_id_, unfinished);
+    if (OB_SUCC(ret) && unfinished) ret = OB_EAGAIN;
+    if (OB_FAIL(ret)) { error = "extension native module is not stably ACTIVE"; return ret; }
+  }
+  auto names = spec.requires_;
+  names.insert(names.end(), spec.prerequisites_.begin(), spec.prerequisites_.end());
+  std::vector<uint64_t> all_identities;
+  std::sort(names.begin(), names.end()); // Consistent provider lock order.
+  for (const auto &name : names) {
+    ExtensionVersionSnapshot provider;
+    ret = read_extension_version(connection, spec.tenant_id_, spec.database_id_, name, true, provider);
+    if (OB_FAIL(ret)) {
+      error = "required Extension is unavailable in the target database: " + name;
+      identities.clear(); return ret;
+    }
+    if (std::find(all_identities.begin(), all_identities.end(), provider.extension_id_) != all_identities.end()) {
+      identities.clear(); return OB_ENTRY_EXIST; // Reject aliases of the same durable provider.
+    }
+    all_identities.push_back(provider.extension_id_);
+    if (std::find(spec.requires_.begin(), spec.requires_.end(), name) != spec.requires_.end())
+      identities.push_back(provider.extension_id_);
+  }
+  return ret;
+}
+
+int ObPluginCatalog::prepare_extension_requirement_update(ObPluginSqlConnection &connection,
+    const ExtensionUpdateRequest &request, std::vector<uint64_t> &identities, std::string &error)
+{
+  identities.clear();
+  if (!connection.is_in_transaction()) return OB_STATE_NOT_MATCH;
+  int ret = validate_extension_requirements(request.name_, request.requires_, request.prerequisites_);
+  if (OB_FAIL(ret)) return ret;
+  // The update coordinator already owns the graph-update fence and target
+  // instance. Resolve new provider identities and keep their rows locked until
+  // commit. Never acquire a native provider here (instance -> native inversion).
+  auto names = request.requires_;
+  names.insert(names.end(), request.prerequisites_.begin(), request.prerequisites_.end());
+  std::vector<uint64_t> all_identities;
+  std::sort(names.begin(), names.end());
+  for (const auto &name : names) {
+    ExtensionVersionSnapshot provider;
+    ret = read_extension_version(connection, request.tenant_id_, request.database_id_, name, true, provider);
+    if (OB_FAIL(ret)) { error = "required Extension is unavailable in the target database: " + name; return ret; }
+    if (provider.extension_id_ == request.expected_extension_id_ ||
+        std::find(all_identities.begin(), all_identities.end(), provider.extension_id_) != all_identities.end()) return OB_INVALID_ARGUMENT;
+    all_identities.push_back(provider.extension_id_);
+    if (std::find(request.requires_.begin(), request.requires_.end(), name) != request.requires_.end())
+      identities.push_back(provider.extension_id_);
+  }
+  std::vector<seekdb_runtime_extension_dependency_t> graph;
+  ret = connection.query(
+      "SELECT required_extension_id,extension_id FROM __all_extension_dependency "
+      "WHERE tenant_id=? AND database_id=? ORDER BY required_extension_id,extension_id FOR UPDATE",
+      [&](ObPluginSqlBinder &b) {
+        int code = b.bind_int64(request.tenant_id_);
+        if (OB_SUCCESS == code) code = b.bind_int64(request.database_id_);
+        return code;
+      }, [&](ObPluginSqlRowReader &r) {
+        int64_t provider = 0, consumer = 0;
+        int code = r.read_int64(0, provider);
+        if (OB_SUCCESS == code) code = r.read_int64(1, consumer);
+        if (code != OB_SUCCESS) return code;
+        if (provider <= 0 || consumer <= 0) return OB_INVALID_DATA;
+        if (graph.size() >= SEEKDB_RUNTIME_DEPENDENCY_MAX_EDGES) return OB_SIZE_OVERFLOW;
+        graph.push_back({static_cast<uint64_t>(provider), static_cast<uint64_t>(consumer)});
+        return OB_SUCCESS;
+      });
+  if (OB_SUCC(ret)) {
+    const int status = seekdb_runtime_extension_dependency_replace_validate(request.expected_extension_id_,
+        graph.data(), static_cast<uint32_t>(graph.size()), identities.data(), static_cast<uint32_t>(identities.size()));
+    if (status == SEEKDB_RUNTIME_DEPENDENCY_CYCLE) {
+      ret = OB_OP_NOT_ALLOW;
+      error = "Extension dependency update would introduce or retain a cycle";
+    } else if (status == SEEKDB_RUNTIME_LIMIT) ret = OB_SIZE_OVERFLOW;
+    else if (status == SEEKDB_RUNTIME_NO_MEMORY) ret = OB_ALLOCATE_MEMORY_FAILED;
+    else if (status != SEEKDB_RUNTIME_OK) ret = OB_INVALID_DATA;
+  }
+  return ret;
+}
+
+int ObPluginCatalog::check_extension_restrict(ObPluginSqlConnection &connection,
+    uint64_t tenant_id, uint64_t database_id, uint64_t extension_id)
+{
+  if (!connection.is_in_transaction()) return OB_STATE_NOT_MATCH;
+  // Caller already locks the provider instance. New dependency insertion must
+  // take that same lock, so an empty incoming set cannot race a new consumer.
+  bool incoming = false;
+  int ret = connection.query(
+      "SELECT extension_id FROM __all_extension_dependency WHERE tenant_id=? AND database_id=? "
+      "AND required_extension_id=? FOR UPDATE",
+      [&](ObPluginSqlBinder &binder) {
+        int code = binder.bind_int64(tenant_id);
+        if (OB_SUCCESS == code) code = binder.bind_int64(database_id);
+        if (OB_SUCCESS == code) code = binder.bind_int64(extension_id);
+        return code;
+      }, [&](ObPluginSqlRowReader &reader) {
+        int64_t id = 0;
+        const int code = reader.read_int64(0, id);
+        if (code != OB_SUCCESS) return code;
+        if (id <= 0 || id == static_cast<int64_t>(extension_id)) return OB_INVALID_DATA;
+        incoming = true; return OB_ITER_END;
+      });
+  return OB_SUCCESS == ret && incoming ? OB_STATE_NOT_MATCH : ret;
+}
+
+int ObPluginCatalog::lock_extension_for_drop(
+    ObPluginSqlConnection &connection, const ExtensionDropRequest &request,
+    ExtensionDropSnapshot &snapshot, std::string &error)
+{
+  snapshot = ExtensionDropSnapshot{};
+  error.clear();
+  if (!impl_ || !impl_->initialized_.load(std::memory_order_acquire)) return OB_NOT_INIT;
+  if (!connection.is_in_transaction()) return OB_STATE_NOT_MATCH;
+  if (request.name_.size() > 255 || SEEKDB_RUNTIME_OK != seekdb_runtime_extension_drop_validate(
+      request.tenant_id_, request.database_id_, request.expected_extension_id_,
+      reinterpret_cast<const uint8_t *>(request.name_.data()), static_cast<uint32_t>(request.name_.size()))) {
+    return OB_INVALID_ARGUMENT;
+  }
+  int ret = OB_SUCCESS;
+  try {
+    ExtensionDropSnapshot staged;
+    auto &spec = staged.installed_;
+    spec.tenant_id_ = request.tenant_id_;
+    spec.database_id_ = request.database_id_;
+    spec.name_ = request.name_;
+    // Same instance -> member order as whole-database teardown. Never acquire
+    // the catalog mutex or provider row while holding these transaction locks.
+    ExtensionVersionSnapshot version;
+    ret = read_extension_version(connection, request.tenant_id_, request.database_id_, request.name_, true, version);
+    if (OB_SUCC(ret)) {
+      staged.extension_id_ = version.extension_id_;
+      spec.owner_id_ = version.owner_id_;
+      spec.version_ = std::move(version.version_);
+      spec.native_module_id_ = std::move(version.native_module_id_);
+    }
+    if (OB_SUCC(ret) && request.expected_extension_id_ != 0 &&
+        request.expected_extension_id_ != staged.extension_id_) ret = OB_STATE_NOT_MATCH;
+    if (OB_SUCC(ret)) {
+      ret = connection.query(
+          "SELECT object_class,object_id FROM __all_extension_member "
+          "WHERE tenant_id=? AND database_id=? AND extension_id=? ORDER BY object_class,object_id FOR UPDATE",
+          [&](ObPluginSqlBinder &binder) {
+            int code = binder.bind_int64(spec.tenant_id_);
+            if (OB_SUCCESS == code) code = binder.bind_int64(spec.database_id_);
+            if (OB_SUCCESS == code) code = binder.bind_int64(staged.extension_id_);
+            return code;
+          },
+          [&](ObPluginSqlRowReader &reader) {
+            int64_t object_class = 0, id = 0;
+            int code = reader.read_int64(0, object_class);
+            if (OB_SUCCESS == code) code = reader.read_int64(1, id);
+            if (OB_SUCCESS != code) return code;
+            if (spec.members_.size() >= SEEKDB_PLUGIN_MAX_EXTENSIONS ||
+                object_class <= 0 || object_class > UINT32_MAX || id <= 0) return OB_INVALID_DATA;
+            spec.members_.push_back({static_cast<uint32_t>(object_class), static_cast<uint64_t>(id)});
+            return OB_SUCCESS;
+          });
+    }
+    if (OB_SUCC(ret)) {
+      ret = connection.query(
+          "SELECT i.extension_name FROM __all_extension_dependency d LEFT JOIN __all_extension_instance i "
+          "ON i.tenant_id=d.tenant_id AND i.database_id=d.database_id AND i.extension_id=d.required_extension_id "
+          "WHERE d.tenant_id=? AND d.database_id=? AND d.extension_id=? ORDER BY d.required_extension_id",
+          [&](ObPluginSqlBinder &binder) {
+            int code = binder.bind_int64(spec.tenant_id_);
+            if (OB_SUCCESS == code) code = binder.bind_int64(spec.database_id_);
+            if (OB_SUCCESS == code) code = binder.bind_int64(staged.extension_id_);
+            return code;
+          }, [&](ObPluginSqlRowReader &reader) {
+            ObString name;
+            const int code = reader.read_text(0, name);
+            if (code != OB_SUCCESS) return code;
+            if (name.empty() || name.length() > 255 || name.ptr() == nullptr || spec.requires_.size() >= 64) return OB_INVALID_DATA;
+            spec.requires_.emplace_back(name.ptr(), name.length()); return OB_SUCCESS;
+          });
+    }
+    if (OB_SUCC(ret)) ret = validate_extension_install_spec(spec);
+    if (OB_SUCC(ret)) snapshot = std::move(staged);
+    else error = "cannot lock a valid extension identity and complete member snapshot";
+  } catch (const std::bad_alloc &) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } catch (...) {
+    ret = OB_ERR_UNEXPECTED;
+  }
+  return ret;
+}
+
+int ObPluginCatalog::detach_extension_members(
+    ObPluginSqlConnection &connection, const ExtensionDropSnapshot &snapshot)
+{
+  if (!connection.is_in_transaction()) return OB_STATE_NOT_MATCH;
+  if (snapshot.extension_id_ == 0 || snapshot.extension_id_ > MAX_DURABLE_GENERATION) return OB_INVALID_ARGUMENT;
+  int ret = validate_extension_install_spec(snapshot.installed_);
+  if (OB_SUCC(ret)) {
+    const auto &spec = snapshot.installed_;
+    int64_t affected = 0;
+    ret = connection.execute(
+        "DELETE FROM __all_extension_member WHERE tenant_id=? AND database_id=? AND extension_id=?",
+        [&](ObPluginSqlBinder &binder) {
+          int code = binder.bind_int64(spec.tenant_id_);
+          if (OB_SUCCESS == code) code = binder.bind_int64(spec.database_id_);
+          if (OB_SUCCESS == code) code = binder.bind_int64(snapshot.extension_id_);
+          return code;
+        }, &affected);
+    if (OB_SUCC(ret) && affected != static_cast<int64_t>(spec.members_.size())) ret = OB_STATE_NOT_MATCH;
+  }
+  return ret;
+}
+
+int ObPluginCatalog::drop_extension(
+    const ExtensionDropRequest &request, IExtensionSchemaDropper &dropper,
+    uint64_t &dropped_extension_id, std::string &error,
+    common::ObMySQLTransaction *ddl_transaction, int64_t refreshed_schema_version)
+{
+  dropped_extension_id = 0;
+  error.clear();
+  if (!impl_ || !impl_->initialized_.load(std::memory_order_acquire)) return OB_NOT_INIT;
+  // Drop always changes schema. Never silently fall back to a non-DDL transaction.
+  if (nullptr == ddl_transaction || ddl_transaction->is_started() || refreshed_schema_version <= 0) {
+    return OB_INVALID_ARGUMENT;
+  }
+  int ret = OB_SUCCESS;
+  bool uncertain = false;
+  try {
+    ObPluginSqlConnection connection(ddl_transaction);
+    ExtensionDropSnapshot snapshot;
+    struct Context {
+      ObPluginCatalog &catalog;
+      ObPluginSqlConnection &connection;
+      common::ObMySQLTransaction &transaction;
+      common::ObISQLClient *sql_client;
+      int64_t schema_version;
+      const ExtensionDropRequest &request;
+      IExtensionSchemaDropper &dropper;
+      ExtensionDropSnapshot &snapshot;
+      std::string &error;
+      bool lost_transaction = false;
+
+      static int32_t step(void *opaque, uint32_t phase, uint64_t *identity) noexcept {
+        auto &c = *static_cast<Context *>(opaque);
+        int ret = OB_SUCCESS;
+        try {
+          switch (phase) {
+            case SEEKDB_RUNTIME_DROP_PREFLIGHT:
+              if (c.request.name_.size() > 255 || SEEKDB_RUNTIME_OK != seekdb_runtime_extension_drop_validate(
+                  c.request.tenant_id_, c.request.database_id_, c.request.expected_extension_id_,
+                  reinterpret_cast<const uint8_t *>(c.request.name_.data()), static_cast<uint32_t>(c.request.name_.size()))) {
+                ret = OB_INVALID_ARGUMENT;
+              } else ret = c.dropper.preflight(c.request, c.error);
+              break;
+            case SEEKDB_RUNTIME_DROP_BEGIN:
+              ret = c.transaction.start(c.sql_client, c.schema_version);
+              break;
+            case SEEKDB_RUNTIME_DROP_LOCK_SNAPSHOT:
+              if (OB_SUCC(ret = c.catalog.lock_extension_for_drop(c.connection, c.request, c.snapshot, c.error))) {
+                *identity = c.snapshot.extension_id_;
+                ret = c.dropper.admit(c.connection, c.request, c.snapshot, c.error);
+                if (OB_SUCC(ret)) {
+                  ret = c.catalog.check_extension_restrict(c.connection,
+                      c.request.tenant_id_, c.request.database_id_, c.snapshot.extension_id_);
+                  if (ret == OB_STATE_NOT_MATCH) c.error = "Extension is required by another installed Extension";
+                }
+              }
+              break;
+            case SEEKDB_RUNTIME_DROP_DETACH:
+              ret = c.catalog.detach_extension_members(c.connection, c.snapshot);
+              break;
+            case SEEKDB_RUNTIME_DROP_APPLY:
+              if (!c.connection.is_in_transaction()) ret = OB_STATE_NOT_MATCH;
+              else ret = c.dropper.apply(c.connection, c.snapshot, c.error);
+              break;
+            case SEEKDB_RUNTIME_DROP_RECORD:
+              ret = c.catalog.record_extension_drop(c.connection, c.snapshot.installed_.tenant_id_,
+                  c.snapshot.installed_.database_id_, c.snapshot.extension_id_, c.snapshot.installed_.owner_id_, c.error);
+              break;
+            case SEEKDB_RUNTIME_DROP_COMMIT:
+              ret = c.transaction.is_started() ? c.transaction.end(true) : OB_STATE_NOT_MATCH;
+              break;
+            case SEEKDB_RUNTIME_DROP_ROLLBACK:
+              ret = c.lost_transaction ? OB_TRANS_UNKNOWN :
+                  c.transaction.is_started() ? c.transaction.end(false) : OB_SUCCESS;
+              break;
+            default: ret = OB_INVALID_ARGUMENT;
+          }
+        } catch (const std::bad_alloc &) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        } catch (...) {
+          ret = OB_ERR_UNEXPECTED;
+        }
+        if ((phase == SEEKDB_RUNTIME_DROP_LOCK_SNAPSHOT || phase == SEEKDB_RUNTIME_DROP_APPLY) &&
+            !c.connection.is_in_transaction()) {
+          c.lost_transaction = true;
+          if (OB_SUCC(ret)) ret = OB_STATE_NOT_MATCH;
+        }
+        return ret;
+      }
+    } context{*this, connection, *ddl_transaction, impl_->sql_client_, refreshed_schema_version,
+              request, dropper, snapshot, error};
+    seekdb_runtime_extension_drop_result_t result{};
+    const int32_t status = seekdb_runtime_extension_drop_run(&context, Context::step, &result);
+    if (status != SEEKDB_RUNTIME_OK) ret = OB_INVALID_ARGUMENT;
+    else if (result.outcome == SEEKDB_RUNTIME_INSTALL_COMMITTED) dropped_extension_id = result.extension_id;
+    else if (result.outcome == SEEKDB_RUNTIME_INSTALL_COMMIT_UNKNOWN ||
+             result.outcome == SEEKDB_RUNTIME_INSTALL_ROLLBACK_UNKNOWN) {
+      uncertain = true;
+      ret = OB_TRANS_UNKNOWN;
+      error = "extension drop outcome unknown; reconcile by tenant/database/name/id; phase=" +
+          std::to_string(result.failed_phase) + ", id=" + std::to_string(result.extension_id) +
+          ", status=" + std::to_string(result.operation_status) + ", rollback_status=" + std::to_string(result.rollback_status);
+    } else {
+      ret = result.operation_status < 0 ? result.operation_status : OB_ERR_UNEXPECTED;
+      if (error.empty()) error = "extension drop failed before commit; phase=" + std::to_string(result.failed_phase);
+    }
+  } catch (const std::bad_alloc &) {
+    ret = uncertain ? OB_TRANS_UNKNOWN : OB_ALLOCATE_MEMORY_FAILED;
+  } catch (...) {
+    ret = uncertain ? OB_TRANS_UNKNOWN : OB_ERR_UNEXPECTED;
+  }
+  return ret;
+}
+
+namespace {
+int validate_extension_update_request(const ExtensionUpdateRequest &request)
+{
+  if (request.from_version_ == request.to_version_ && !request.prerequisites_.empty()) return OB_INVALID_ARGUMENT;
+  const int dependencies = validate_extension_requirements(request.name_, request.requires_, request.prerequisites_);
+  if (dependencies != OB_SUCCESS) return dependencies;
+  if (request.name_.size() > 255 || request.from_version_.size() > 255 || request.to_version_.size() > 255) {
+    return OB_INVALID_ARGUMENT;
+  }
+  return SEEKDB_RUNTIME_OK == seekdb_runtime_extension_update_validate(
+      request.tenant_id_, request.database_id_, request.expected_extension_id_,
+      reinterpret_cast<const uint8_t *>(request.name_.data()), static_cast<uint32_t>(request.name_.size()),
+      reinterpret_cast<const uint8_t *>(request.from_version_.data()), static_cast<uint32_t>(request.from_version_.size()),
+      reinterpret_cast<const uint8_t *>(request.to_version_.data()), static_cast<uint32_t>(request.to_version_.size()))
+      ? OB_SUCCESS : OB_INVALID_ARGUMENT;
+}
+}
+
+int ObPluginCatalog::record_extension_update(
+    ObPluginSqlConnection &connection, const ExtensionUpdateRequest &request,
+    const ExtensionUpdateSnapshot &snapshot, const std::vector<ExtensionMemberIdentity> &members,
+    const std::vector<uint64_t> &dependencies)
+{
+  if (!impl_ || !impl_->initialized_.load(std::memory_order_acquire)) return OB_NOT_INIT;
+  if (!connection.is_in_transaction()) return OB_STATE_NOT_MATCH;
+  int ret = validate_extension_update_request(request);
+  if (OB_FAIL(ret)) return ret;
+  const auto &installed = snapshot.installed_;
+  if (snapshot.extension_id_ != request.expected_extension_id_ || installed.tenant_id_ != request.tenant_id_ ||
+      installed.database_id_ != request.database_id_ || installed.name_ != request.name_ ||
+      installed.version_ != request.from_version_ || request.from_version_ == request.to_version_ ||
+      dependencies.size() != request.requires_.size()) return OB_STATE_NOT_MATCH;
+  if (members.size() > SEEKDB_PLUGIN_MAX_EXTENSIONS) return OB_INVALID_ARGUMENT;
+  // Exceptions propagate only to the noexcept phase adapter, which requests
+  // rollback. The complete membership is validated before inserting any rows.
+  ExtensionInstallSpec updated = installed;
+  updated.version_ = request.to_version_;
+  updated.requires_ = request.requires_;
+  updated.members_ = members;
+  if (OB_FAIL(validate_extension_install_spec(updated))) return ret;
+  for (const auto &member : updated.members_) {
+    ret = connection.execute(
+        "INSERT INTO __all_extension_member(tenant_id,database_id,object_class,object_id,extension_id) "
+        "VALUES(?,?,?,?,?)",
+        [&](ObPluginSqlBinder &binder) {
+          int code = binder.bind_int64(updated.tenant_id_);
+          if (OB_SUCCESS == code) code = binder.bind_int64(updated.database_id_);
+          if (OB_SUCCESS == code) code = binder.bind_int64(member.object_class_);
+          if (OB_SUCCESS == code) code = binder.bind_int64(member.object_id_);
+          if (OB_SUCCESS == code) code = binder.bind_int64(snapshot.extension_id_);
+          return code;
+        });
+    if (OB_FAIL(ret)) return ret; // A member of another Extension remains a conflict.
+  }
+  // Provider IDs were admitted under the graph-update fence before detach.
+  // Replace the complete outgoing set in the same schema/version transaction.
+  ret = connection.execute(
+      "DELETE FROM __all_extension_dependency WHERE tenant_id=? AND database_id=? AND extension_id=?",
+      [&](ObPluginSqlBinder &b) {
+        int code = b.bind_int64(installed.tenant_id_);
+        if (OB_SUCCESS == code) code = b.bind_int64(installed.database_id_);
+        if (OB_SUCCESS == code) code = b.bind_int64(snapshot.extension_id_);
+        return code;
+      });
+  for (const uint64_t provider : dependencies) {
+    if (OB_FAIL(ret)) break;
+    ret = connection.execute(
+        "INSERT INTO __all_extension_dependency(tenant_id,database_id,required_extension_id,extension_id) VALUES(?,?,?,?)",
+        [&](ObPluginSqlBinder &b) {
+          int code = b.bind_int64(installed.tenant_id_);
+          if (OB_SUCCESS == code) code = b.bind_int64(installed.database_id_);
+          if (OB_SUCCESS == code) code = b.bind_int64(provider);
+          if (OB_SUCCESS == code) code = b.bind_int64(snapshot.extension_id_);
+          return code;
+        });
+  }
+  if (OB_FAIL(ret)) return ret;
+  int64_t affected = 0;
+  ret = connection.execute(
+      "UPDATE __all_extension_instance SET extension_version=? WHERE tenant_id=? AND database_id=? "
+      "AND extension_name=? AND extension_id=? AND owner_id=? AND extension_version=? AND native_module_id=?",
+      [&](ObPluginSqlBinder &binder) {
+        int code = bind_string(binder, request.to_version_);
+        if (OB_SUCCESS == code) code = binder.bind_int64(installed.tenant_id_);
+        if (OB_SUCCESS == code) code = binder.bind_int64(installed.database_id_);
+        if (OB_SUCCESS == code) code = bind_string(binder, installed.name_);
+        if (OB_SUCCESS == code) code = binder.bind_int64(snapshot.extension_id_);
+        if (OB_SUCCESS == code) code = binder.bind_int64(installed.owner_id_);
+        if (OB_SUCCESS == code) code = bind_string(binder, request.from_version_);
+        if (OB_SUCCESS == code) code = bind_string(binder, installed.native_module_id_);
+        return code;
+      }, &affected);
+  if (OB_SUCC(ret) && affected != 1) ret = OB_STATE_NOT_MATCH;
+  return ret;
+}
+
+int ObPluginCatalog::update_extension(
+    const ExtensionUpdateRequest &request, IExtensionSchemaUpdater &updater,
+    uint64_t &extension_id, bool &changed, std::string &error,
+    common::ObMySQLTransaction *ddl_transaction, int64_t refreshed_schema_version)
+{
+  extension_id = 0;
+  changed = false;
+  error.clear();
+  if (!impl_ || !impl_->initialized_.load(std::memory_order_acquire)) return OB_NOT_INIT;
+  if (nullptr == ddl_transaction || ddl_transaction->is_started() || refreshed_schema_version <= 0) return OB_INVALID_ARGUMENT;
+  int ret = OB_SUCCESS;
+  bool uncertain = false;
+  try {
+    ObPluginSqlConnection connection(ddl_transaction);
+    ExtensionUpdateSnapshot snapshot;
+    std::vector<ExtensionMemberIdentity> members;
+    std::vector<uint64_t> dependencies;
+    const bool no_op = request.from_version_ == request.to_version_;
+    struct Context {
+      ObPluginCatalog &catalog;
+      ObPluginSqlConnection &connection;
+      common::ObMySQLTransaction &transaction;
+      common::ObISQLClient *sql_client;
+      int64_t schema_version;
+      const ExtensionUpdateRequest &request;
+      IExtensionSchemaUpdater &updater;
+      ExtensionUpdateSnapshot &snapshot;
+      std::vector<ExtensionMemberIdentity> &members;
+      std::vector<uint64_t> &dependencies;
+      std::string &error;
+      bool lost_transaction = false;
+
+      static int32_t step(void *opaque, uint32_t phase, uint64_t *identity) noexcept {
+        auto &c = *static_cast<Context *>(opaque);
+        int ret = OB_SUCCESS;
+        try {
+          switch (phase) {
+            case SEEKDB_RUNTIME_UPDATE_PREFLIGHT:
+              if (OB_SUCC(ret = validate_extension_update_request(c.request))) {
+                ret = c.updater.preflight(c.request, c.error);
+              }
+              break;
+            case SEEKDB_RUNTIME_UPDATE_BEGIN:
+              ret = c.transaction.start(c.sql_client, c.schema_version);
+              if (OB_SUCC(ret) && c.request.from_version_ != c.request.to_version_) {
+                // A distinct transactional fence serializes graph replacements
+                // before any instance locks. Do NOT reuse the identity sequence:
+                // installation takes provider locks before allocating IDs.
+                ret = c.connection.execute(
+                    "INSERT INTO __all_plugin_sequence(sequence_name,next_value) VALUES(?,1) "
+                    "ON DUPLICATE KEY UPDATE sequence_name=VALUES(sequence_name)",
+                    [&](ObPluginSqlBinder &b) { return bind_string(b, "sql-extension-dependency-update"); });
+              }
+              break;
+            case SEEKDB_RUNTIME_UPDATE_LOCK_SNAPSHOT: {
+              ExtensionDropRequest lookup;
+              lookup.tenant_id_ = c.request.tenant_id_;
+              lookup.database_id_ = c.request.database_id_;
+              lookup.name_ = c.request.name_;
+              lookup.expected_extension_id_ = c.request.expected_extension_id_;
+              if (OB_FAIL(c.catalog.lock_extension_for_drop(c.connection, lookup, c.snapshot, c.error))) {
+              } else if (c.snapshot.installed_.version_ != c.request.from_version_) {
+                ret = OB_STATE_NOT_MATCH;
+                c.error = "Extension version changed after update planning; no members have been detached";
+              } else if (c.request.from_version_ == c.request.to_version_ &&
+                         !same_extension_requirements(c.snapshot.installed_.requires_, c.request.requires_)) {
+                ret = OB_NOT_SUPPORTED;
+                c.error = "same-version Extension update cannot change its declared dependency set";
+              } else {
+                *identity = c.snapshot.extension_id_;
+                if (c.request.from_version_ != c.request.to_version_) {
+                  ret = c.catalog.prepare_extension_requirement_update(c.connection, c.request, c.dependencies, c.error);
+                }
+                if (OB_SUCC(ret)) ret = c.updater.admit(c.connection, c.request, c.snapshot, c.error);
+              }
+              break;
+            }
+            case SEEKDB_RUNTIME_UPDATE_DETACH:
+              ret = c.catalog.detach_extension_members(c.connection, c.snapshot);
+              break;
+            case SEEKDB_RUNTIME_UPDATE_APPLY:
+              c.members.clear();
+              if (!c.connection.is_in_transaction()) ret = OB_STATE_NOT_MATCH;
+              else ret = c.updater.apply(c.connection, c.request, c.snapshot, c.members, c.error);
+              break;
+            case SEEKDB_RUNTIME_UPDATE_RECORD:
+              ret = c.catalog.record_extension_update(c.connection, c.request, c.snapshot, c.members, c.dependencies);
+              break;
+            case SEEKDB_RUNTIME_UPDATE_COMMIT:
+              ret = c.transaction.is_started() ? c.transaction.end(true) : OB_STATE_NOT_MATCH;
+              break;
+            case SEEKDB_RUNTIME_UPDATE_ROLLBACK:
+              ret = c.lost_transaction ? OB_TRANS_UNKNOWN :
+                  c.transaction.is_started() ? c.transaction.end(false) : OB_SUCCESS;
+              break;
+            default: ret = OB_INVALID_ARGUMENT;
+          }
+        } catch (const std::bad_alloc &) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+        catch (...) { ret = OB_ERR_UNEXPECTED; }
+        if ((phase == SEEKDB_RUNTIME_UPDATE_LOCK_SNAPSHOT || phase == SEEKDB_RUNTIME_UPDATE_APPLY) &&
+            !c.connection.is_in_transaction()) {
+          c.lost_transaction = true;
+          if (OB_SUCC(ret)) ret = OB_STATE_NOT_MATCH;
+        }
+        return ret;
+      }
+    } context{*this, connection, *ddl_transaction, impl_->sql_client_, refreshed_schema_version,
+              request, updater, snapshot, members, dependencies, error};
+    seekdb_runtime_extension_update_result_t result{};
+    const int32_t status = seekdb_runtime_extension_update_run(
+        &context, Context::step, request.expected_extension_id_, no_op ? 1 : 0, &result);
+    if (status != SEEKDB_RUNTIME_OK) ret = OB_INVALID_ARGUMENT;
+    else if (result.outcome == SEEKDB_RUNTIME_INSTALL_COMMITTED) {
+      extension_id = result.extension_id;
+      changed = !no_op;
+    } else if (result.outcome == SEEKDB_RUNTIME_INSTALL_COMMIT_UNKNOWN ||
+               result.outcome == SEEKDB_RUNTIME_INSTALL_ROLLBACK_UNKNOWN) {
+      uncertain = true;
+      ret = OB_TRANS_UNKNOWN;
+      error = "extension update outcome unknown; reconcile by tenant/database/name/id and source/target version; phase=" +
+          std::to_string(result.failed_phase) + ", id=" + std::to_string(result.extension_id) +
+          ", status=" + std::to_string(result.operation_status) + ", rollback_status=" + std::to_string(result.rollback_status);
+    } else {
+      ret = result.operation_status < 0 ? result.operation_status : OB_ERR_UNEXPECTED;
+      if (error.empty()) error = "extension update failed before commit; phase=" + std::to_string(result.failed_phase);
+    }
+  } catch (const std::bad_alloc &) { ret = uncertain ? OB_TRANS_UNKNOWN : OB_ALLOCATE_MEMORY_FAILED; }
+  catch (...) { ret = uncertain ? OB_TRANS_UNKNOWN : OB_ERR_UNEXPECTED; }
+  return ret;
+}
+
+int ObPluginCatalog::record_extension_drop(
+    ObPluginSqlConnection &connection, const uint64_t tenant_id,
+    const uint64_t database_id, const uint64_t extension_id,
+    const uint64_t expected_owner_id, std::string &error)
+{
+  error.clear();
+  if (!impl_) return OB_ALLOCATE_MEMORY_FAILED;
+  int ret = OB_SUCCESS;
+  try {
+    const auto valid_id = [](uint64_t value) { return value > 0 && value <= MAX_DURABLE_GENERATION; };
+    if (!impl_->initialized_.load(std::memory_order_acquire)) {
+      ret = OB_NOT_INIT;
+    } else if (!connection.is_in_transaction()) {
+      ret = OB_STATE_NOT_MATCH;
+    } else if (!valid_id(tenant_id) || !valid_id(database_id) ||
+               !valid_id(extension_id) || !valid_id(expected_owner_id)) {
+      ret = OB_INVALID_ARGUMENT;
+    }
+    bool found = false;
+    if (OB_SUCCESS == ret) {
+      // Removal never waits for the provider row: management may hold it while
+      // waiting for this instance. This avoids an instance -> provider lock
+      // inversion and permits cleanup when the native module is unavailable.
+      ret = connection.query(
+          "SELECT owner_id FROM __all_extension_instance "
+          "WHERE tenant_id=? AND database_id=? AND extension_id=? FOR UPDATE",
+          [&](ObPluginSqlBinder &binder) {
+            int bind_ret = binder.bind_int64(tenant_id);
+            if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(database_id);
+            if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(extension_id);
+            return bind_ret;
+          },
+          [&](ObPluginSqlRowReader &reader) {
+            if (found) return OB_INVALID_DATA;
+            found = true;
+            int64_t owner = 0;
+            const int code = reader.read_int64(0, owner);
+            return OB_SUCCESS != code ? code : owner == static_cast<int64_t>(expected_owner_id)
+                ? OB_SUCCESS : OB_STATE_NOT_MATCH;
+          });
+      if (OB_SUCCESS == ret && !found) ret = OB_ENTRY_NOT_EXIST;
+    }
+    if (OB_SUCCESS == ret) ret = check_extension_restrict(connection, tenant_id, database_id, extension_id);
+    if (OB_SUCCESS == ret) {
+      ret = connection.execute(
+          "DELETE FROM __all_extension_dependency WHERE tenant_id=? AND database_id=? AND extension_id=?",
+          [&](ObPluginSqlBinder &binder) {
+            int code = binder.bind_int64(tenant_id);
+            if (OB_SUCCESS == code) code = binder.bind_int64(database_id);
+            if (OB_SUCCESS == code) code = binder.bind_int64(extension_id);
+            return code;
+          });
+    }
+    if (OB_SUCCESS == ret) {
+      ret = connection.execute(
+          "DELETE FROM __all_extension_member WHERE tenant_id=? AND database_id=? AND extension_id=?",
+          [&](ObPluginSqlBinder &binder) {
+            int bind_ret = binder.bind_int64(tenant_id);
+            if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(database_id);
+            if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(extension_id);
+            return bind_ret;
+          });
+    }
+    if (OB_SUCCESS == ret) {
+      int64_t affected = 0;
+      ret = connection.execute(
+          "DELETE FROM __all_extension_instance WHERE tenant_id=? AND database_id=? "
+          "AND extension_id=? AND owner_id=?",
+          [&](ObPluginSqlBinder &binder) {
+            int bind_ret = binder.bind_int64(tenant_id);
+            if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(database_id);
+            if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(extension_id);
+            if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(expected_owner_id);
+            return bind_ret;
+          }, &affected);
+      if (OB_SUCCESS == ret && affected != 1) ret = OB_STATE_NOT_MATCH;
+    }
+    if (OB_SUCCESS != ret) error = "extension ownership removal failed; roll back the drop transaction";
+  } catch (const std::bad_alloc &) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } catch (...) {
+    ret = OB_ERR_UNEXPECTED;
+  }
+  return ret;
+}
+
+int ObPluginCatalog::mutate_type_dependency(
+    ObPluginSqlConnection &connection,
+    const seekdb_plugin_sql_binding_v1_t &identity,
+    const uint64_t table_id, const uint64_t column_id, const bool add,
+    std::string &error)
+{
+  if (!impl_) return OB_ALLOCATE_MEMORY_FAILED;
+  int ret = OB_SUCCESS;
+  error.clear();
+  try {
+    auto valid_field = [](const char *value, size_t size) {
+      return value[0] != '\0' && std::memchr(value, '\0', size) != nullptr;
+    };
+    if (!impl_->initialized_.load(std::memory_order_acquire)) {
+      ret = OB_NOT_INIT;
+      error = "plugin catalog is not initialized";
+    } else if (!connection.is_in_transaction()) {
+      ret = OB_STATE_NOT_MATCH;
+      error = "logical type dependency requires the schema write transaction";
+    } else if (identity.struct_size < sizeof(identity) ||
+               identity.kind != SEEKDB_PLUGIN_EXTENSION_TYPE ||
+               !valid_field(identity.object_id, sizeof(identity.object_id)) ||
+               !valid_field(identity.owner_plugin_id, sizeof(identity.owner_plugin_id)) ||
+               !valid_field(identity.physical_format_id, sizeof(identity.physical_format_id)) ||
+               identity.physical_format_version == 0 || table_id == 0 || column_id == 0) {
+      ret = OB_INVALID_ARGUMENT;
+      error = "logical plugin type identity is invalid";
+    } else {
+      ObPluginDependencySpec dependency;
+      dependency.consumer_kind_ = ObPluginDependencyConsumerKind::PERSISTENT_DATA;
+      dependency.consumer_id_ = "table." + std::to_string(table_id) +
+                                ".column." + std::to_string(column_id);
+      dependency.provider_plugin_id_ = identity.owner_plugin_id;
+      dependency.dependency_kind_ = ObPluginDependencyKind::PERSISTENT_FORMAT;
+      dependency.dependency_id_ = identity.physical_format_id;
+      dependency.requested_version_.minimum_inclusive = {identity.physical_format_version, 0, 0};
+      if (identity.physical_format_version < std::numeric_limits<uint32_t>::max()) {
+        dependency.requested_version_.maximum_exclusive = {identity.physical_format_version + 1, 0, 0};
+      }
+      size_t matches = 0;
+      auto read_generation = [&](ObPluginSqlRowReader &reader) {
+        if (add && (static_cast<uint64_t>(reader.get_int64(1)) &
+                    SEEKDB_PLUGIN_EXTENSION_FLAG_PERSISTENT) == 0) return OB_STATE_NOT_MATCH;
+        const int64_t generation = reader.get_int64(0);
+        if (++matches != 1 || generation <= 0) return OB_INVALID_DATA;
+        dependency.provider_generation_ = static_cast<uint64_t>(generation);
+        return OB_SUCCESS;
+      };
+      if (add) {
+        // Read/lock the current durable type and provider, not a name-resolved
+        // runtime snapshot. Rebinding a column after restart must not depend on
+        // the generation that happened to be loaded when the column was made.
+        // Use the same parent-row lock order as dependency admission and
+        // RESTRICT. A transaction start by itself is not writer exclusion.
+        ObPluginCatalogRecord provider;
+        ret = impl_->load_record(connection, dependency.provider_plugin_id_, provider, true);
+        if (OB_SUCCESS == ret) ret = connection.query(
+            "SELECT t.generation,t.flags FROM __all_sql_extension_type t "
+            "JOIN __all_plugin_package p ON p.plugin_id=t.plugin_id "
+            "AND p.generation=t.generation WHERE t.type_id=? AND t.plugin_id=? "
+            "AND t.physical_format_id=? AND t.physical_format_version=? "
+            "AND p.desired_state=? AND p.actual_state=? FOR UPDATE",
+            [&](ObPluginSqlBinder &binder) {
+              int bind_ret = bind_string(binder, identity.object_id);
+              if (OB_SUCCESS == bind_ret) bind_ret = bind_string(binder, dependency.provider_plugin_id_);
+              if (OB_SUCCESS == bind_ret) bind_ret = bind_string(binder, dependency.dependency_id_);
+              if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(identity.physical_format_version);
+              if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int(static_cast<int32_t>(ObPluginDesiredState::ACTIVE));
+              if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int(static_cast<int32_t>(ObPluginState::ACTIVE));
+              return bind_ret;
+            }, read_generation);
+      } else {
+        // Recovery may already have moved this edge to a new generation. Lock
+        // that exact logical edge and remove its recorded fence. No active
+        // module is required to drop a column/table or clean up its dependency.
+        ret = connection.query(
+            "SELECT provider_generation FROM __all_plugin_dependency "
+            "WHERE consumer_kind=? AND consumer_id=? AND consumer_plugin_id='' "
+            "AND consumer_generation=0 AND provider_plugin_id=? "
+            "AND dependency_kind=? AND dependency_id=? AND service_abi_major=0 "
+            "AND requested_min_version_major=? AND requested_min_version_minor=0 "
+            "AND requested_min_version_patch=0 AND requested_max_version_major=? "
+            "AND requested_max_version_minor=0 AND requested_max_version_patch=0 "
+            "AND required_capabilities=0 AND optional=0 FOR UPDATE",
+            [&](ObPluginSqlBinder &binder) {
+              int bind_ret = binder.bind_int(static_cast<int32_t>(dependency.consumer_kind_));
+              if (OB_SUCCESS == bind_ret) bind_ret = bind_string(binder, dependency.consumer_id_);
+              if (OB_SUCCESS == bind_ret) bind_ret = bind_string(binder, dependency.provider_plugin_id_);
+              if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int(static_cast<int32_t>(dependency.dependency_kind_));
+              if (OB_SUCCESS == bind_ret) bind_ret = bind_string(binder, dependency.dependency_id_);
+              if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(dependency.requested_version_.minimum_inclusive.major);
+              if (OB_SUCCESS == bind_ret) bind_ret = binder.bind_int64(dependency.requested_version_.maximum_exclusive.major);
+              return bind_ret;
+            }, read_generation);
+      }
+      if (OB_SUCCESS == ret && matches == 0) ret = OB_ENTRY_NOT_EXIST;
+      if (OB_SUCCESS != ret) {
+        error = add ? "current durable plugin type binding is missing or invalid"
+                    : "logical plugin type dependency is missing or invalid";
+      } else {
+        ret = impl_->mutate_dependency(connection, dependency, add, error);
+      }
+    }
+  } catch (const std::bad_alloc &) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    error = "logical plugin type dependency allocation failed";
+  } catch (...) {
+    ret = OB_ERR_UNEXPECTED;
+    error = "unexpected logical plugin type dependency failure";
   }
   return ret;
 }

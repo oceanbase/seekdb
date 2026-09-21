@@ -17,11 +17,14 @@
 #define USING_LOG_PREFIX SQL_RESV
 
 #include "ob_raw_expr_util.h"
+#include "sql/resolver/expr/plugin_expr_type.h"
+#include "share/plugin/plugin_sql_type.h"
 #include "lib/json/ob_json_print_utils.h"
 #include "sql/parser/ob_sql_parser.h"
 #include "sql/engine/expr/ob_expr_to_type.h"
 #include "sql/engine/expr/ob_expr_type_to_str.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
+#include "sql/engine/expr/plugin_function_expr.h"
 #include "sql/pl/ob_pl_resolver.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/dml/ob_select_resolver.h"
@@ -3447,6 +3450,9 @@ int ObRawExprUtils::create_new_exec_param(ObRawExprFactory &expr_factory,
     LOG_WARN("exec param is null", K(ret), K(exec_param));
   } else if (OB_FAIL(exec_param->add_flag(IS_CONST))) {
   } else if (OB_FAIL(exec_param->add_flag(IS_DYNAMIC_PARAM))) {
+  } else if (OB_FAIL(exec_param->copy_plugin_type_from(*ref_expr))) {
+    // Optimizer-created parameters may reach codegen without another type
+    // deduction pass. Preserve logical identity as well as physical type.
   } else {
     exec_param->set_ref_expr(ref_expr, is_onetime);
     exec_param->set_param_index(-1);
@@ -3483,17 +3489,9 @@ int ObRawExprUtils::get_exec_param_expr(ObRawExprFactory &expr_factory,
   // we create a new one here
   if (OB_SUCC(ret) && NULL == param_expr) {
     ObExecParamRawExpr *exec_param = NULL;
-    if (OB_FAIL(expr_factory.create_raw_expr(T_QUESTIONMARK, exec_param))) {
-    } else if (OB_ISNULL(exec_param)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("exec param is null", K(ret), K(exec_param));
+    if (OB_FAIL(create_new_exec_param(expr_factory, outer_val_expr, exec_param))) {
     } else if (OB_FAIL(query_ref_exec_params->push_back(exec_param))) {
-    } else if (OB_FAIL(exec_param->add_flag(IS_CONST))) {
-    } else if (OB_FAIL(exec_param->add_flag(IS_DYNAMIC_PARAM))) {
     } else {
-      exec_param->set_ref_expr(outer_val_expr);
-      exec_param->set_param_index(-1);
-      exec_param->set_result_type(outer_val_expr->get_result_type());
       param_expr = exec_param;
     }
   }
@@ -3516,6 +3514,7 @@ int ObRawExprUtils::create_new_exec_param(ObQueryCtx *query_ctx,
     LOG_WARN("exec param is null", K(ret), K(exec_param));
   } else if (OB_FAIL(exec_param->add_flag(IS_CONST))) {
   } else if (OB_FAIL(exec_param->add_flag(IS_DYNAMIC_PARAM))) {
+  } else if (OB_FAIL(exec_param->copy_plugin_type_from(*expr))) {
   } else {
     exec_param->set_ref_expr(expr, is_onetime);
     exec_param->set_param_index(*query_ctx);
@@ -3602,6 +3601,16 @@ int ObRawExprUtils::build_column_conv_expr(ObRawExprFactory &expr_factory,
   int ret = OB_SUCCESS;
   CK(OB_NOT_NULL(session_info));
   CK(OB_NOT_NULL(column_schema));
+  ObColumnRefRawExpr *plugin_target = nullptr;
+  if (OB_SUCC(ret) && column_schema->get_extended_type_info().count() > 0 &&
+      (column_schema->get_extended_type_info().at(0) == ObString::make_string(SEEKDB_PLUGIN_SQL_TYPE_METADATA_MARKER) ||
+       column_schema->get_extended_type_info().at(0) == ObString::make_string(SEEKDB_PLUGIN_SQL_TYPE_METADATA_MARKER_V2))) {
+    if (OB_FAIL(expr_factory.create_raw_expr(T_REF_COLUMN, plugin_target))) {
+    } else if (OB_FAIL(init_column_expr(*column_schema, session_info, *plugin_target))) {
+    } else if (OB_FAIL(PluginTypeEncodeExpr::build(expr_factory, *plugin_target, expr, session_info))) {
+    }
+  }
+  const uint64_t plugin_epoch = expr && expr->get_plugin_type() ? expr->get_plugin_type()->catalog_epoch_ : 0;
   if (OB_SUCC(ret)) {
     if (column_schema->is_fulltext_column() 
         || column_schema->is_spatial_generated_column() 
@@ -3622,6 +3631,11 @@ int ObRawExprUtils::build_column_conv_expr(ObRawExprFactory &expr_factory,
                                               false,
                                               local_vars))) {
     }
+    if (OB_SUCC(ret) && plugin_target && plugin_target->get_plugin_type()) {
+      PluginExprType converted_type = *plugin_target->get_plugin_type();
+      if (plugin_epoch) converted_type.catalog_epoch_ = plugin_epoch;
+      ret = expr->set_plugin_type(converted_type);
+    }
   }
   return ret;
 }
@@ -3637,6 +3651,7 @@ int ObRawExprUtils::build_column_conv_expr(ObRawExprFactory &expr_factory,
 {
   int ret = OB_SUCCESS;
   ObString column_conv_info;
+  uint64_t plugin_epoch = 0;
   const ObString &database_name = col_ref.get_database_name();
   const ObString &table_name = col_ref.get_table_name();
   const ObString &column_name = col_ref.get_column_name();
@@ -3693,7 +3708,10 @@ int ObRawExprUtils::build_column_conv_expr(ObRawExprFactory &expr_factory,
         col_ref.is_vec_index_column()) {
       // Full text column will not violate constraints, and data will not be stored, skip casting
       // Space index column is a virtual column, skip casting
-    } else if (OB_FAIL(build_column_conv_expr(session_info,
+    } else if (OB_FAIL(PluginTypeEncodeExpr::build(expr_factory, col_ref, expr, session_info))) {
+    } else {
+      plugin_epoch = expr && expr->get_plugin_type() ? expr->get_plugin_type()->catalog_epoch_ : 0;
+      ret = build_column_conv_expr(session_info,
                                               expr_factory,
                                               col_ref.get_data_type(),
                                               obj_meta.get_collation_type(),
@@ -3704,7 +3722,12 @@ int ObRawExprUtils::build_column_conv_expr(ObRawExprFactory &expr_factory,
                                               type_infos,
                                               expr, false, is_generated_column,
                                               local_vars,
-                                              local_var_id))) {
+                                              local_var_id);
+    }
+    if (OB_SUCC(ret) && col_ref.get_plugin_type()) {
+      PluginExprType converted_type = *col_ref.get_plugin_type();
+      if (plugin_epoch) converted_type.catalog_epoch_ = plugin_epoch;
+      ret = expr->set_plugin_type(converted_type);
     }
   }
   return ret;
@@ -4980,6 +5003,23 @@ int ObRawExprUtils::init_column_expr(const share::schema::ObColumnSchemaV2 &colu
   column_expr.set_is_rowkey_column(column_schema.is_rowkey_column());
   column_expr.set_srs_id(column_schema.get_srs_id());
   column_expr.set_udt_set_id(column_schema.get_udt_set_id());
+  column_expr.clear_plugin_type();
+  const auto &plugin_info = column_schema.get_extended_type_info();
+  if (plugin_info.count() > 0 &&
+      (plugin_info.at(0) == ObString::make_string(SEEKDB_PLUGIN_SQL_TYPE_METADATA_MARKER) ||
+       plugin_info.at(0) == ObString::make_string(SEEKDB_PLUGIN_SQL_TYPE_METADATA_MARKER_V2))) {
+    seekdb_plugin_sql_binding_v1_t binding = {};
+    if (!share::plugin::decode_plugin_sql_type(plugin_info, binding)) return OB_INVALID_DATA;
+    PluginExprType type;
+    type.logical_id_ = ObString::make_string(binding.object_id);
+    type.physical_type_ = column_schema.get_data_type();
+    type.stored_ = true;
+    type.sql_name_ = ObString::make_string(binding.sql_name);
+    type.owner_ = ObString::make_string(binding.owner_plugin_id);
+    type.format_ = ObString::make_string(binding.physical_format_id);
+    type.format_version_ = binding.physical_format_version;
+    if (OB_FAIL(column_expr.set_plugin_type(type))) return ret;
+  }
   if (ob_is_string_type(column_schema.get_data_type())
       || ob_is_enumset_tc(column_schema.get_data_type())
       || ob_is_json_tc(column_schema.get_data_type())

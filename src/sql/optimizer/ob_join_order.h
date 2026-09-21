@@ -388,6 +388,9 @@ class Path
         inherit_sharding_index_(-1)
     {  }
     virtual ~Path() {}
+    // A plugin implementation belongs to an ordinary relation, but is not an
+    // instance of that relation's built-in AccessPath/JoinPath subclass.
+    virtual bool is_plugin_path() const { return false; }
     int assign(const Path &other, common::ObIAllocator *allocator);
     bool is_cte_path() const;
     bool is_function_table_path() const;
@@ -1520,6 +1523,8 @@ struct NullAwareAntiJoinInfo {
      * @return
      */
     int add_path(Path* path);
+    int add_plugin_path(ObLogicalOperator &root, Path *&published);
+    int contribute_plugin_join_paths();
     int add_recycled_paths(Path* path);
     int compute_vec_idx_path_relationship(const AccessPath &first_path,
                                           const AccessPath &second_path,
@@ -2966,6 +2971,9 @@ struct NullAwareAntiJoinInfo {
     common::ObSEArray<ObConflictDetector*, 8, common::ModulePageAllocator, true> used_conflict_detectors_; // record which conflict detectors are used by the current join order
     common::ObSEArray<ObRawExpr*, 16, common::ModulePageAllocator, true> restrict_info_set_; // For base table (SubQuery) record single-table conditions; for ordinary Join it is empty
     common::ObSEArray<Path*, 32, common::ModulePageAllocator, true> interesting_paths_;
+    // Materialized native paths cannot be recycled; pointer identity remains
+    // valid across different decompositions of this relation.
+    common::ObSEArray<Path*, 8, common::ModulePageAllocator, true> plugin_seen_paths_;
     bool is_at_most_one_row_;
     EqualSets output_equal_sets_;
     common::ObSEArray<ObRawExpr*, 16, common::ModulePageAllocator, true> output_const_exprs_;

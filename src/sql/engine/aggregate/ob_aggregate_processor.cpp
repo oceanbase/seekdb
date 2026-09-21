@@ -31,6 +31,7 @@
 #include "common/xml/ob_binary_aggregate.h"
 #include "sql/engine/expr/ob_expr_xml_func_helper.h"
 #include "sql/pl/ob_pl.h"
+#include "sql/engine/expr/plugin_function_expr.h"
 
 namespace oceanbase
 {
@@ -2947,14 +2948,14 @@ int ObAggregateProcessor::rollup_aggregation(AggrCell &aggr_cell, AggrCell &roll
       ret = max_calc(rollup_cell, target_result,
                      src_result,
                      aggr_info.expr_->basic_funcs_->null_first_cmp_,
-                     aggr_info.is_number());
+                     aggr_info.is_number(), aggr_info.param_exprs_.empty() ? nullptr : aggr_info.param_exprs_.at(0));
       break;
     }
     case T_FUN_MIN: {
       ret = min_calc(rollup_cell, target_result,
                      src_result,
                      aggr_info.expr_->basic_funcs_->null_first_cmp_,
-                     aggr_info.is_number());
+                     aggr_info.is_number(), aggr_info.param_exprs_.empty() ? nullptr : aggr_info.param_exprs_.at(0));
       break;
     }
     case T_FUN_AVG:
@@ -3625,7 +3626,7 @@ int ObAggregateProcessor::process_aggr_batch_result(
       ret = max_calc_batch(aggr_cell, aggr_cell.get_iter_result(),
                       aggr_input_datums,
                       aggr_info.expr_->basic_funcs_->null_first_cmp_,
-                      aggr_info.is_number(), selector);
+                      aggr_info.is_number(), selector, aggr_info.param_exprs_.empty() ? nullptr : aggr_info.param_exprs_.at(0));
       break;
     }
     case T_FUN_MIN: {
@@ -3633,7 +3634,7 @@ int ObAggregateProcessor::process_aggr_batch_result(
       ret = min_calc_batch(aggr_cell, aggr_cell.get_iter_result(),
                       aggr_input_datums,
                       aggr_info.expr_->basic_funcs_->null_first_cmp_,
-                      aggr_info.is_number(), selector);
+                      aggr_info.is_number(), selector, aggr_info.param_exprs_.empty() ? nullptr : aggr_info.param_exprs_.at(0));
       break;
     }
     case T_FUN_AVG: {
@@ -3843,7 +3844,7 @@ int ObAggregateProcessor::process_aggr_result(const ObChunkDatumStore::StoredRow
         ret = max_calc(aggr_cell, aggr_cell.get_iter_result(),
                        stored_row.cells()[0],
                        aggr_info.expr_->basic_funcs_->null_first_cmp_,
-                       aggr_info.is_number());
+                       aggr_info.is_number(), aggr_info.param_exprs_.empty() ? nullptr : aggr_info.param_exprs_.at(0));
       }
       break;
     }
@@ -3855,7 +3856,7 @@ int ObAggregateProcessor::process_aggr_result(const ObChunkDatumStore::StoredRow
         ret = min_calc(aggr_cell, aggr_cell.get_iter_result(),
                        stored_row.cells()[0],
                        aggr_info.expr_->basic_funcs_->null_first_cmp_,
-                       aggr_info.is_number());
+                       aggr_info.is_number(), aggr_info.param_exprs_.empty() ? nullptr : aggr_info.param_exprs_.at(0));
       }
       break;
     }
@@ -4782,8 +4783,17 @@ int ObAggregateProcessor::get_percentile_param(const ObAggrInfo &aggr_info,
   return ret;
 }
 
+int ObAggregateProcessor::compare_extremum(const ObExpr *ordered, ObDatumCmpFuncType native,
+    const ObDatum &left, const ObDatum &right, int &ordering)
+{
+  bool handled = false;
+  int ret = PluginTypeValueExpr::compare_ordered(ordered, eval_ctx_, left, right, handled, ordering);
+  if (OB_SUCC(ret) && !handled) ret = native ? native(left, right, ordering, datum_access_ctx_) : OB_ERR_UNEXPECTED;
+  return ret;
+}
+
 int ObAggregateProcessor::max_calc(AggrCell &aggr_cell, ObDatum &base, const ObDatum &other,
-    ObDatumCmpFuncType cmp_func, const bool is_number)
+    ObDatumCmpFuncType cmp_func, const bool is_number, const ObExpr *ordered)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cmp_func)) {
@@ -4791,7 +4801,7 @@ int ObAggregateProcessor::max_calc(AggrCell &aggr_cell, ObDatum &base, const ObD
     LOG_WARN("cmp_func is NULL", K(ret));
   } else if (!base.is_null() && !other.is_null()) {
     int cmp_ret = 0;
-    if (OB_FAIL(cmp_func(base, other, cmp_ret, datum_access_ctx_))) {
+    if (OB_FAIL(compare_extremum(ordered, cmp_func, base, other, cmp_ret))) {
       LOG_WARN("failed to compare", K(ret));
     } else if (cmp_ret < 0) {
       ret = clone_aggr_cell(aggr_cell, other, is_number);
@@ -4809,7 +4819,7 @@ int ObAggregateProcessor::max_calc(AggrCell &aggr_cell, ObDatum &base, const ObD
 }
 
 int ObAggregateProcessor::min_calc(AggrCell &aggr_cell, ObDatum &base, const ObDatum &other,
-    ObDatumCmpFuncType cmp_func, const bool is_number)
+    ObDatumCmpFuncType cmp_func, const bool is_number, const ObExpr *ordered)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cmp_func)) {
@@ -4817,7 +4827,7 @@ int ObAggregateProcessor::min_calc(AggrCell &aggr_cell, ObDatum &base, const ObD
     LOG_WARN("cmp_func is NULL", K(ret));
   } else if (!base.is_null() && !other.is_null()) {
     int cmp_ret = 0;
-    if (OB_FAIL(cmp_func(base, other, cmp_ret, datum_access_ctx_))) {
+    if (OB_FAIL(compare_extremum(ordered, cmp_func, base, other, cmp_ret))) {
       LOG_WARN("failed to compare", K(ret));
     } else if (cmp_ret > 0) {
       ret = clone_aggr_cell(aggr_cell, other, is_number);
@@ -4838,7 +4848,7 @@ template <typename T>
 int ObAggregateProcessor::max_calc_batch(
   AggrCell &aggr_cell,
   ObDatum &dst, const ObDatumVector &src, ObDatumCmpFuncType cmp_func, const bool is_number,
-  const T &selector)
+  const T &selector, const ObExpr *ordered)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(OB_ISNULL(cmp_func))) {
@@ -4854,7 +4864,7 @@ int ObAggregateProcessor::max_calc_batch(
     for (auto it = selector.begin(); OB_SUCC(ret) && it < selector.end(); selector.next(it)) {
       i = selector.get_batch_index(it);
       if (max && !src.at(i)->is_null()) {
-        if (OB_FAIL(cmp_func(*max, *src.at(i), cmp_ret, datum_access_ctx_))) {
+        if (OB_FAIL(compare_extremum(ordered, cmp_func, *max, *src.at(i), cmp_ret))) {
           LOG_WARN("failed to compare", K(ret));
         } else if (cmp_ret < 0) {
           max = src.at(i);
@@ -4862,7 +4872,7 @@ int ObAggregateProcessor::max_calc_batch(
       } else if (!src.at(i)->is_null()) {
         if (dst.is_null()) {
           max = src.at(i);
-        } else if (OB_FAIL(cmp_func(dst, *src.at(i), cmp_ret, datum_access_ctx_))) {
+        } else if (OB_FAIL(compare_extremum(ordered, cmp_func, dst, *src.at(i), cmp_ret))) {
           LOG_WARN("failed to compare", K(ret));
         } else if (cmp_ret < 0) {
           max = src.at(i);
@@ -4880,7 +4890,7 @@ template <typename T>
 int ObAggregateProcessor::min_calc_batch(
     AggrCell &aggr_cell,
     ObDatum &dst, const ObDatumVector &src, ObDatumCmpFuncType cmp_func, const bool is_number,
-    const T &selector)
+    const T &selector, const ObExpr *ordered)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(OB_ISNULL(cmp_func))) {
@@ -4896,7 +4906,7 @@ int ObAggregateProcessor::min_calc_batch(
     for (auto it = selector.begin(); OB_SUCC(ret) && it < selector.end(); selector.next(it)) {
       i = selector.get_batch_index(it);
       if (min && !src.at(i)->is_null()) {
-        if (OB_FAIL(cmp_func(*min, *src.at(i), cmp_ret, datum_access_ctx_))) {
+        if (OB_FAIL(compare_extremum(ordered, cmp_func, *min, *src.at(i), cmp_ret))) {
           LOG_WARN("failed to compare", K(ret));
         } else if (cmp_ret > 0) {
           min = src.at(i);
@@ -4904,7 +4914,7 @@ int ObAggregateProcessor::min_calc_batch(
       } else if (!src.at(i)->is_null()) {
         if (dst.is_null()) {
           min = src.at(i);
-        } else if (OB_FAIL(cmp_func(dst, *src.at(i), cmp_ret, datum_access_ctx_))) {
+        } else if (OB_FAIL(compare_extremum(ordered, cmp_func, dst, *src.at(i), cmp_ret))) {
           LOG_WARN("failed to compare", K(ret));
         } else if (cmp_ret > 0) {
           min = src.at(i);

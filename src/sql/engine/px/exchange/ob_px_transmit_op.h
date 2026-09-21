@@ -317,7 +317,8 @@ int ObPxTransmitOp::send_rows_in_batch(ObSliceIdxCalc &slice_calc)
     const ObPxTransmitSpec &spec = static_cast<const ObPxTransmitSpec &>(get_spec());
     batch_info_guard.set_batch_size(brs_.size_);
     if (OB_FAIL(ret) || brs_.size_ <= 0) {
-    } else if (!slice_calc.support_vectorized_calc() || NULL != spec.tablet_id_expr_) {
+    } else if (!slice_calc.support_vectorized_calc() ||
+               (NULL != spec.tablet_id_expr_ && !slice_calc.support_vectorized_tablet_ids())) {
       for (int64_t i = 0; OB_SUCC(ret) && i < brs_.size_; i++) {
         if (brs_.skip_->at(i)) {
           continue;
@@ -339,9 +340,12 @@ int ObPxTransmitOp::send_rows_in_batch(ObSliceIdxCalc &slice_calc)
       }
     } else {
       int64_t *indexes = NULL;
+      const int64_t *tablet_ids = nullptr;
       if (OB_FAIL((slice_calc.get_slice_idx_batch<CALC_TYPE>(spec_.output_, eval_ctx_,
                                                *brs_.skip_, brs_.size_,
                                                indexes)))) {
+      } else if (NULL != spec.tablet_id_expr_ &&
+                 OB_FAIL(slice_calc.get_previous_batch_tablet_ids(brs_.size_, tablet_ids))) {
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < brs_.size_; i++) {
           if (brs_.skip_->at(i) || indexes[i] < 0) { continue; }
@@ -366,7 +370,8 @@ int ObPxTransmitOp::send_rows_in_batch(ObSliceIdxCalc &slice_calc)
           batch_info_guard.set_batch_idx(i);
           row_count += 1;
           metric_.count();
-          if (OB_FAIL(send_row(indexes[i], send_row_time_recorder, tablet_id.get_int()))) {
+          if (OB_FAIL(send_row(indexes[i], send_row_time_recorder,
+                              tablet_ids ? tablet_ids[i] : tablet_id.get_int()))) {
           }
         }
       }

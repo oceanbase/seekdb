@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_SHARE_PLUGIN_OB_PLUGIN_REGISTRY_H_
 #define OCEANBASE_SHARE_PLUGIN_OB_PLUGIN_REGISTRY_H_
 
-#include <condition_variable>
 #include <cstdint>
 #include <map>
 #include <memory>
@@ -27,6 +26,8 @@
 
 #include "seekdb/plugin/extension_spi.h"
 #include "seekdb/plugin/sql_catalog.h"
+
+struct seekdb_runtime_generation;
 
 namespace oceanbase
 {
@@ -76,7 +77,7 @@ class ObPluginGeneration
 {
 public:
   ObPluginGeneration(const std::string &plugin_id, const uint64_t generation);
-  ~ObPluginGeneration() = default;
+  ~ObPluginGeneration();
 
   ObPluginGeneration(const ObPluginGeneration &) = delete;
   ObPluginGeneration &operator=(const ObPluginGeneration &) = delete;
@@ -108,11 +109,9 @@ private:
 private:
   const std::string plugin_id_;
   const uint64_t generation_;
-  mutable std::mutex mutex_;
-  std::condition_variable drained_cv_;
-  ObPluginState state_;
-  int64_t lease_count_;
-  bool activation_reserved_;
+  // Single authoritative lifecycle state lives in the Rust host runtime.
+  // shared_ptr owners in the registry/leases pin this handle across calls.
+  seekdb_runtime_generation *runtime_;
 };
 
 // A lease is the only supported way to invoke a service implementation.  It
@@ -399,7 +398,8 @@ public:
   int acquire_extension_with_implementation(
       const ObPluginExtensionInfo &expected,
       ObPluginExtensionLease &extension_lease,
-      ObPluginLease &implementation_lease);
+      ObPluginLease &implementation_lease,
+      uint64_t expected_epoch = 0);
 
   // Logical unload: stop new acquisitions and unpublish every service owned by
   // this generation atomically.  Existing leases remain valid and are drained
@@ -412,6 +412,10 @@ public:
 
   int list_services(std::vector<ObPluginServiceInfo> &services) const;
   int list_extensions(std::vector<ObPluginExtensionInfo> &extensions) const;
+  // Exact logical identity lookup from one immutable snapshot, not SQL-name
+  // resolution. The copied metadata does not grant an executable lease.
+  int find_type_by_id(const char *logical_type_id, ObPluginExtensionInfo &extension,
+                      uint64_t &registry_epoch, uint64_t expected_epoch = 0) const;
   // Returns host-owned binding candidates and the epoch observed atomically.
   // Copies do not pin code.  A chosen result must be passed unchanged to
   // acquire_extension_with_implementation(), which rejects stale generations.
@@ -437,6 +441,17 @@ public:
                  seekdb_plugin_cast_context_t requested_context,
                  std::vector<ObPluginExtensionInfo> &extensions,
                  uint64_t &registry_epoch) const;
+  // Rust selects a minimum-cost direct conversion from one immutable snapshot.
+  // Equal minimum costs are ambiguous, not broken by object/registration order.
+  int resolve_cast(const char *source_type_id, const char *target_type_id,
+                   seekdb_plugin_cast_context_t requested_context,
+                   ObPluginExtensionInfo &extension, uint64_t &registry_epoch) const;
+  // Rust common-type selection over one owned snapshot. Input IDs are already
+  // resolved expression types (nullptr is unknown NULL), not SQL names. Returns
+  // an owned ID and epoch, not executable leases; subsequent cast bindings must
+  // match that epoch. No CASE/UNION lowering or built-in SQL coercion here.
+  int resolve_common_type(const char *const *type_ids, uint32_t count,
+                          std::string &common_type, uint64_t &registry_epoch) const;
   int find_hooks(seekdb_plugin_extension_kind_t kind,
                  const char *hook_point,
                  std::vector<ObPluginExtensionInfo> &extensions,
@@ -478,17 +493,8 @@ private:
     std::shared_ptr<ObPluginGeneration> owner_;
   };
 
-  struct ExtensionKey
-  {
-    ExtensionKey();
-    ExtensionKey(seekdb_plugin_extension_kind_t kind,
-                 const std::string &object_id);
-    bool operator<(const ExtensionKey &other) const;
-
-    seekdb_plugin_extension_kind_t kind_;
-    std::string object_id_;
-  };
-
+  struct ExtensionCatalog;
+  struct ExtensionSignature;
   struct ExtensionEntry
   {
     ExtensionEntry();
@@ -496,6 +502,7 @@ private:
                    const std::shared_ptr<ObPluginGeneration> &owner);
 
     std::shared_ptr<const ObPluginExtensionInfo> info_;
+    std::shared_ptr<const ExtensionSignature> signature_;
     std::shared_ptr<ObPluginGeneration> owner_;
   };
 

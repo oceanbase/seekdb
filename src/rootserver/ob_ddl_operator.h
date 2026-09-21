@@ -495,14 +495,16 @@ public:
                             const uint64_t option,
                             const bool gen_ddl_stmt = true,
                             const common::ObString &grantor = "",
-                            const common::ObString &grantor_host = "");
+                            const common::ObString &grantor_host = "",
+                            const bool read_transaction_privileges = false);
   virtual int revoke_routine(const share::schema::ObRoutinePrivSortKey &routine_priv_key,
                             const ObPrivSet priv_set,
                             common::ObMySQLTransaction &trans,
                             const bool report_error = true,
                             const bool gen_ddl_stmt = true,
                             const common::ObString &grantor = "",
-                            const common::ObString &grantor_host = "");
+                            const common::ObString &grantor_host = "",
+                            const bool read_transaction_privileges = false);
   virtual int grant_column(share::schema::ObSchemaGetterGuard &schema_guard,
                            const share::schema::ObColumnPrivSortKey &column_priv_key,
                            const ObPrivSet priv_set,

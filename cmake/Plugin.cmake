@@ -3,6 +3,7 @@
 
 include_guard(GLOBAL)
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+include("${CMAKE_CURRENT_LIST_DIR}/ServerDev.cmake")
 
 if (NOT TARGET seekdb_plugin_sdk)
   add_library(seekdb_plugin_sdk INTERFACE)
@@ -20,7 +21,15 @@ if (NOT TARGET seekdb_plugin_sdk)
   install(FILES
     "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/seekdb_plugin_abi.h"
     "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/extension_spi.h"
+    "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/catalog_spi.h"
+    "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/memory_spi.h"
     "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/execution_spi.h"
+    "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/optimizer_spi.h"
+    "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/server_dev.h"
+    "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/server_dev_planner.h"
+    "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/server_dev_executor.h"
+    "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/sql_spi.h"
+    "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/sql_catalog.h"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/seekdb/plugin"
     COMPONENT plugin-sdk)
   install(TARGETS seekdb_plugin_sdk
@@ -93,10 +102,24 @@ function(_seekdb_require_plugin_callsite callsite)
 endfunction()
 
 function(_seekdb_validate_plugin_compile_surface target plugin_root imported)
+  get_property(_server_targets GLOBAL PROPERTY SEEKDB_SERVER_DEV_TARGETS)
+  list(FIND _server_targets "${target}" _server_index)
+  set(_server_includes "")
+  set(_server_definitions "")
+  set(_server_options "")
+  if(NOT _server_index EQUAL -1)
+    get_target_property(_server_includes "${target}" SEEKDB_SERVER_DEV_INCLUDE_DIRS)
+    get_target_property(_server_definitions "${target}" SEEKDB_SERVER_DEV_DEFINITIONS)
+    get_target_property(_server_options "${target}" SEEKDB_SERVER_DEV_OPTIONS)
+  endif()
   foreach(_include_property INCLUDE_DIRECTORIES INTERFACE_INCLUDE_DIRECTORIES)
     get_target_property(_include_dirs "${target}" "${_include_property}")
     if (_include_dirs AND NOT _include_dirs MATCHES "-NOTFOUND$")
       foreach(_include_dir IN LISTS _include_dirs)
+        list(FIND _server_includes "${_include_dir}" _server_include_index)
+        if(NOT _server_include_index EQUAL -1)
+          continue()
+        endif()
         if (_include_dir MATCHES "\\$<")
           message(FATAL_ERROR
             "plugin target ${target} has unverifiable ${_include_property}: ${_include_dir}")
@@ -140,6 +163,10 @@ function(_seekdb_validate_plugin_compile_surface target plugin_root imported)
       COMPILE_FLAGS LINK_FLAGS)
     get_target_property(_forbidden_value "${target}" "${_forbidden_property}")
     if (_forbidden_value AND NOT _forbidden_value MATCHES "-NOTFOUND$")
+      if(_forbidden_property STREQUAL "COMPILE_OPTIONS" AND
+          "${_forbidden_value}" STREQUAL "${_server_options}")
+        continue()
+      endif()
       message(FATAL_ERROR
         "plugin target ${target} has unreviewable ${_forbidden_property}: "
         "${_forbidden_value}")
@@ -152,6 +179,10 @@ function(_seekdb_validate_plugin_compile_surface target plugin_root imported)
     get_target_property(_definitions "${target}" "${_definition_property}")
     if (_definitions AND NOT _definitions MATCHES "-NOTFOUND$")
       foreach(_definition IN LISTS _definitions)
+        list(FIND _server_definitions "${_definition}" _server_definition_index)
+        if(NOT _server_definition_index EQUAL -1)
+          continue()
+        endif()
         if (_definition MATCHES "\\$<" OR
             NOT _definition MATCHES
               "^[A-Za-z_][A-Za-z0-9_]*(=(\"[A-Za-z0-9_.:+-]*\"|[A-Za-z0-9_.:+-]+))?$")
@@ -298,6 +329,14 @@ function(_seekdb_validate_plugin_private_shape target plugin_root)
 endfunction()
 
 function(_seekdb_validate_all_marked_plugin_targets)
+  # plugins/ is configured before the final host target in the production
+  # tree. Bind compiler context only after that target and ob_sql are complete.
+  get_property(_pending_server_targets GLOBAL PROPERTY SEEKDB_SERVER_DEV_PENDING)
+  foreach(_target IN LISTS _pending_server_targets)
+    get_target_property(_profile "${_target}" SEEKDB_SERVER_DEV_PROFILE)
+    _seekdb_configure_server_dev("${_target}" "${_profile}")
+  endforeach()
+  set_property(GLOBAL PROPERTY SEEKDB_SERVER_DEV_PENDING "")
   get_property(_explicit_targets GLOBAL
     PROPERTY SEEKDB_EXPLICIT_PLUGIN_PRIVATE_TARGETS)
   foreach(_private_target IN LISTS _explicit_targets)
@@ -308,12 +347,18 @@ function(_seekdb_validate_all_marked_plugin_targets)
   # target_link_libraries/set_property call cannot add an unregistered edge
   # after seekdb_add_plugin performed its immediate validation.
   get_property(_managed_plugins GLOBAL PROPERTY SEEKDB_MANAGED_PLUGIN_TARGETS)
+  get_property(_server_targets GLOBAL PROPERTY SEEKDB_SERVER_DEV_TARGETS)
   foreach(_plugin_target IN LISTS _managed_plugins)
+    list(FIND _server_targets "${_plugin_target}" _server_index)
     get_target_property(_plugin_root "${_plugin_target}" SEEKDB_MANAGED_PLUGIN_ROOT)
     _seekdb_validate_plugin_compile_surface(
       "${_plugin_target}" "${_plugin_root}" FALSE)
     get_target_property(_plugin_sources "${_plugin_target}" SOURCES)
+    get_target_property(_server_source "${_plugin_target}" SEEKDB_SERVER_DEV_SOURCE)
     foreach(_source IN LISTS _plugin_sources)
+      if(NOT _server_index EQUAL -1 AND _source STREQUAL _server_source)
+        continue()
+      endif()
       if (_source MATCHES "\\$<")
         message(FATAL_ERROR
           "managed plugin ${_plugin_target} gained generator-expression source ${_source}")
@@ -363,6 +408,10 @@ function(_seekdb_validate_all_marked_plugin_targets)
         # source tree; arbitrary linker scripts remain forbidden.
         if (_option MATCHES "^-Wl,--version-script=(.+)$")
           set(_version_script "${CMAKE_MATCH_1}")
+          get_target_property(_server_export_map "${_plugin_target}" SEEKDB_SERVER_DEV_EXPORT_MAP)
+          if(NOT _server_index EQUAL -1 AND _version_script STREQUAL _server_export_map)
+            continue()
+          endif()
           if (EXISTS "${_version_script}")
             file(REAL_PATH "${_version_script}" _version_script_real)
             string(FIND "${_version_script_real}" "${_plugin_root}/" _version_script_prefix)
@@ -475,9 +524,9 @@ function(seekdb_mark_plugin_private_library target)
     "${_explicit_targets}")
 endfunction()
 
-# Add a native seekdb plugin without exposing or linking any core-private
-# target.  Plugins communicate with seekdb exclusively through the C ABI host
-# table in include/seekdb/plugin/seekdb_plugin_abi.h.
+# Add a native seekdb plugin. Public uses the C ABI; the explicit Server-dev
+# profile also inherits the host compiler context and declared headers. Neither
+# profile links a copy of core libraries into the module.
 #
 # seekdb_add_plugin(<target>
 #   SOURCES <source>...
@@ -508,6 +557,14 @@ function(seekdb_add_plugin target)
     message(FATAL_ERROR
       "seekdb_add_plugin(${target}) requires an existing MANIFEST")
   endif()
+  execute_process(COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/plugin_profile.py"
+    --manifest "${_plugin_manifest_absolute}" --source "${PROJECT_SOURCE_DIR}"
+    RESULT_VARIABLE _profile_result OUTPUT_VARIABLE _profile_json ERROR_VARIABLE _profile_error)
+  if(NOT _profile_result EQUAL 0)
+    message(FATAL_ERROR "invalid native plugin profile: ${_profile_error}")
+  endif()
+  set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_plugin_manifest_absolute}")
+  string(JSON _api_profile GET "${_profile_json}" profile)
   if (TARGET ${target})
     message(FATAL_ERROR "seekdb_add_plugin(${target}): target already exists")
   endif()
@@ -582,11 +639,29 @@ function(seekdb_add_plugin target)
     target_link_options(${target} PRIVATE "-Wl,-z,defs")
   endif()
 
+  set(_export_arguments "")
+  if(_api_profile STREQUAL "server-dev")
+    if(NOT _plugin_manifest_absolute STREQUAL "${CMAKE_CURRENT_SOURCE_DIR}/plugin.toml")
+      message(FATAL_ERROR "server-dev declarations must use the plugin root plugin.toml for source auditing")
+    endif()
+    set_property(GLOBAL APPEND PROPERTY SEEKDB_SERVER_DEV_PENDING "${target}")
+    set_property(TARGET "${target}" PROPERTY SEEKDB_SERVER_DEV_PROFILE "${_profile_json}")
+    string(JSON _export_count LENGTH "${_profile_json}" exports)
+    if(_export_count GREATER 0)
+      math(EXPR _export_last "${_export_count} - 1")
+      foreach(_i RANGE 0 ${_export_last})
+        string(JSON _symbol GET "${_profile_json}" exports ${_i})
+        list(APPEND _export_arguments --allow-export "${_symbol}")
+      endforeach()
+    endif()
+  endif()
+
   add_custom_command(TARGET ${target} POST_BUILD
     COMMAND ${Python3_EXECUTABLE}
             "${PROJECT_SOURCE_DIR}/cmake/plugin_binary_check.py"
             --binary "$<TARGET_FILE:${target}>"
             --nm "${CMAKE_NM}"
+            ${_export_arguments}
     COMMENT "Auditing seekdb plugin binary ${target}"
     VERBATIM)
 
@@ -605,6 +680,7 @@ function(seekdb_add_plugin target)
 endfunction()
 
 # Validate again after all subdirectories have had a chance to mutate targets.
+include("${CMAKE_CURRENT_LIST_DIR}/RustPlugin.cmake")
 # The project requires CMake 3.20, so deferred directory calls are available.
 cmake_language(DEFER DIRECTORY "${CMAKE_SOURCE_DIR}"
   CALL _seekdb_validate_all_marked_plugin_targets)

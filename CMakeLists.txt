@@ -111,6 +111,7 @@ execute_process(
     "${CMAKE_SOURCE_DIR}/tools/cmake/emit_bazel_source_inventory.py"
     --repo "${CMAKE_SOURCE_DIR}"
     --output "${SEEKDB_CMAKE_INVENTORY}"
+    --generated-root "${SEEKDB_GENERATED_ROOT}"
   RESULT_VARIABLE SEEKDB_CMAKE_INVENTORY_RESULT)
 if(NOT SEEKDB_CMAKE_INVENTORY_RESULT EQUAL 0)
   message(FATAL_ERROR "Failed to translate Bazel production source inventories")
@@ -249,6 +250,10 @@ endif()
 include(cmake/Rust.cmake)
 
 add_subdirectory(plugins EXCLUDE_FROM_ALL)
+if(SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS)
+  # SQL-only delivery must not inherit the native plugins' excluded install.
+  add_subdirectory(plugins/sql_packages)
+endif()
 add_subdirectory(src)
 
 # Farm compile and pretest still publish and consume liboberror.so.  Keep the

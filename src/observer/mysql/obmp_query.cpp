@@ -507,8 +507,9 @@ OB_INLINE int ObMPQuery::get_schema_info_(ObCachedSchemaGuardInfo *cache_info,
   ObSchemaGetterGuard &cached_guard = cache_info->get_schema_guard();
   bool need_refresh = false;
 
-  if (!cached_guard.is_inited()) {
-    // First get schema guard
+  if (!cached_guard.is_inited() || cached_guard.has_retired_routine_overlay()) {
+    // A finished catalog transaction invalidates its private view even when
+    // the base schema version has not changed (rollback/unknown outcome).
     need_refresh = true;
   } else {
     int64_t tmp_database_schema_version = 0;

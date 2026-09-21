@@ -4932,6 +4932,7 @@ int ObSelectLogPlan::allocate_plan_top()
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(candi_allocate_group_by())) {
+        } else if (OB_FAIL(contribute_plugin_upper_paths(SEEKDB_PLUGIN_PHASE_GROUP))) {
         } else {
           LOG_TRACE("succeed to allocate group-by operator",
               K(candidates_.candidate_plans_.count()));
@@ -4942,6 +4943,7 @@ int ObSelectLogPlan::allocate_plan_top()
     // step. allocate 'window-sort' if needed
     if (OB_SUCC(ret) && select_stmt->has_window_function()) {
       if (OB_FAIL(candi_allocate_window_function())) {
+      } else if (OB_FAIL(contribute_plugin_upper_paths(SEEKDB_PLUGIN_PHASE_WINDOW))) {
       } else {
         LOG_TRACE("succeed to allocate window function",
             K(candidates_.candidate_plans_.count()));
@@ -4960,6 +4962,7 @@ int ObSelectLogPlan::allocate_plan_top()
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(candi_allocate_distinct())) {
+        } else if (OB_FAIL(contribute_plugin_upper_paths(SEEKDB_PLUGIN_PHASE_DISTINCT))) {
         } else {
           LOG_TRACE("succeed to allocate distinct operator",
               K(candidates_.candidate_plans_.count()));
@@ -4980,6 +4983,7 @@ int ObSelectLogPlan::allocate_plan_top()
         !get_optimizer_context().is_online_ddl()) {
       candidates_.is_final_sort_ = true;
       if (OB_FAIL(candi_allocate_order_by(need_limit, order_items))) {
+      } else if (OB_FAIL(contribute_plugin_upper_paths(SEEKDB_PLUGIN_PHASE_ORDERED))) {
       } else {
         candidates_.is_final_sort_ = false;
         LOG_TRACE("succeed to allocate order by operator",

@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <stdint.h>
 #include "lib/string/ob_string.h"
 #include "lib/string/ob_sql_string.h"
 #include "lib/container/ob_array.h"
@@ -46,6 +47,11 @@ public:
   bool    initialize_  = false; // TODO wangyunlai.wyl remove me before 2025-12-01
 
   common::ObSqlString base_dir_;
+  // Administrator-owned SQL packages; empty disables discovery. Startup only.
+  common::ObSqlString extension_dir_;
+  // Startup-only, per-generation host payload/live allocations; not process RSS.
+  uint64_t plugin_memory_limit_ = UINT64_MAX;
+  uint64_t plugin_allocation_limit_ = UINT64_MAX;
   common::ObSqlString data_dir_;
   common::ObSqlString redo_dir_;
   KeyValueArray       parameters_;

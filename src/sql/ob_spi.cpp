@@ -111,6 +111,36 @@ int ObSPIService::PLPrepareResult::init(
   return ret;
 }
 
+int ObSPIResultSet::capture_routine_overlay(const share::schema::ObSchemaGetterGuard *parent)
+{
+  int ret = OB_SUCCESS;
+  if (routine_overlay_captured_) return OB_INIT_TWICE;
+  std::shared_ptr<const share::schema::RoutineSchemaOverlay> overlay;
+  if (OB_NOT_NULL(parent) && parent->has_routine_overlay()
+      && OB_FAIL(parent->capture_routine_overlay(overlay))) {
+  } else {
+    routine_overlay_ = std::move(overlay);
+    routine_overlay_captured_ = true;
+  }
+  return ret;
+}
+
+int ObSPIResultSet::restore_routine_overlay()
+{
+  if (!routine_overlay_captured_) return OB_STATE_NOT_MATCH;
+  if (schema_guard_.has_routine_overlay()) return OB_INIT_TWICE;
+  return routine_overlay_ == nullptr ? OB_SUCCESS : schema_guard_.attach_routine_overlay(routine_overlay_);
+}
+
+static int inherit_exec_routine_overlay(const ObExecContext &exec_ctx,
+                                        share::schema::ObSchemaGetterGuard &guard)
+{
+  const ObSqlCtx *context = exec_ctx.get_sql_ctx();
+  return context != nullptr && context->schema_guard_ != nullptr
+      && context->schema_guard_->has_routine_overlay()
+      ? guard.inherit_routine_overlay(*context->schema_guard_) : OB_SUCCESS;
+}
+
 int ObSPIResultSet::init(
     sql::ObSQLSessionInfo &session_info,
     query::ObIPlanCacheAccessService &plan_cache_access_service)
@@ -377,6 +407,8 @@ int ObSPIResultSet::start_cursor_stmt(
   CK (OB_NOT_NULL(pl_ctx));
   CK (OB_NOT_NULL(pl_ctx->exec_ctx_));
   CK (OB_NOT_NULL(session = pl_ctx->exec_ctx_->get_my_session()));
+  OZ (capture_routine_overlay(pl_ctx->exec_ctx_->get_sql_ctx() == nullptr
+      ? nullptr : pl_ctx->exec_ctx_->get_sql_ctx()->schema_guard_));
   if (OB_SUCC(ret)) {
     OZ (store_orign_session(session));
     OX (need_end_nested_stmt_ = EST_RESTORE_SESSION);
@@ -419,6 +451,8 @@ int ObSPIResultSet::start_nested_stmt_if_need(ObPLExecCtx *pl_ctx, const ObStrin
   CK (OB_NOT_NULL(pl_ctx));
   CK (OB_NOT_NULL(pl_ctx->exec_ctx_));
   CK (OB_NOT_NULL(session = pl_ctx->exec_ctx_->get_my_session()));
+  OZ (capture_routine_overlay(pl_ctx->exec_ctx_->get_sql_ctx() == nullptr
+      ? nullptr : pl_ctx->exec_ctx_->get_sql_ctx()->schema_guard_));
   // If no nesting occurs, there is no restriction on the type of execution statement here; judgment is only made in the case of nesting
   if (OB_FAIL(ret)) {
     // do nothing ...
@@ -1112,6 +1146,7 @@ int ObSPIService::spi_calc_package_expr(ObPLExecCtx *ctx,
   CK (OB_NOT_NULL(pl_engine = exec_ctx->get_pl_engine()));
   OZ (GCTX.schema_service_->get_runtime_schema_guard(
                             schema_guard));
+  OZ (inherit_exec_routine_overlay(*exec_ctx, schema_guard));
   if (OB_SUCC(ret)) {
     ObPLPackageGuard package_guard{};
     ObSqlExpression *sql_expr = NULL;
@@ -1234,6 +1269,7 @@ int ObSPIService::spi_set_package_variable(
     resolve_ctx.params_.lob_read_service_ = exec_ctx->get_lob_read_service();
     OZ (GCTX.schema_service_->get_runtime_schema_guard(
         schema_guard));
+    OZ (inherit_exec_routine_overlay(*exec_ctx, schema_guard));
     OZ (package_guard.init());
     OZ (pl_manager.set_package_var_val(
           resolve_ctx, *exec_ctx, package_id, var_idx, result),
@@ -1909,7 +1945,7 @@ int ObSPIService::spi_parse_prepare(common::ObIAllocator &allocator,
     if (OB_FAIL(parser.prepare_parse(sql, static_cast<void*>(secondary_namespace), parse_result))) {
     } else if (OB_FAIL(ob_write_string(allocator, ObString(parse_result.no_param_sql_len_, parse_result.no_param_sql_), prepare_result.route_sql_))) {
     } else {
-      PLPrepareCtx pl_prepare_ctx(session, NULL, false, false, false);
+      PLPrepareCtx pl_prepare_ctx(session, NULL, false, false, false, &schema_guard);
       SMART_VAR(PLPrepareResult, pl_prepare_result) {
         CK (OB_NOT_NULL(pl_sql_runtime));
 #ifdef ERRSIM
@@ -2122,7 +2158,9 @@ int ObSPIService::prepare_dynamic(ObPLExecCtx *ctx,
   stmt_type = stmt::T_NONE;
   bool is_prepare_with_param = OB_NOT_NULL(params);
   if (OB_SUCC(ret)) {
-    PLPrepareCtx pl_prepare_ctx(*session, NULL, true, false, is_prepare_with_param);
+    const ObSqlCtx *parent_sql_ctx = ctx->exec_ctx_->get_sql_ctx();
+    PLPrepareCtx pl_prepare_ctx(*session, NULL, true, false, is_prepare_with_param,
+        OB_ISNULL(parent_sql_ctx) ? nullptr : parent_sql_ctx->schema_guard_);
 
     SMART_VAR(PLPrepareResult, pl_prepare_result) {
 #ifdef ERRSIM
@@ -2473,6 +2511,7 @@ int ObSPIService::spi_get_package_cursor_info(ObPLExecCtx *ctx,
   CK (OB_NOT_NULL(pl_engine = exec_ctx->get_pl_engine()));
   OZ (GCTX.schema_service_->get_runtime_schema_guard(
                             schema_guard));
+  OZ (inherit_exec_routine_overlay(*exec_ctx, schema_guard));
   ObPLPackageGuard package_guard{};
   OZ (package_guard.init());
   if (OB_SUCC(ret)) {
@@ -3889,6 +3928,7 @@ int ObSPIService::spi_get_package_allocator(
   CK (OB_NOT_NULL(pl_engine = exec_ctx->get_pl_engine()));
   OZ (GCTX.schema_service_->get_runtime_schema_guard(
                             schema_guard));
+  OZ (inherit_exec_routine_overlay(*exec_ctx, schema_guard));
   ObPLPackageGuard package_guard{};
   OZ (package_guard.init());
   OX (allocator = NULL);
@@ -6306,6 +6346,7 @@ ObSPIRetryCtrlGuard::ObSPIRetryCtrlGuard(
     ret = OB_TIMEOUT;
     LOG_WARN("already timeout!", K(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(spi_result_.get_scheme_guard()))) {
+  } else if (OB_FAIL(spi_result_.restore_routine_overlay())) {
   } else if (OB_FAIL(spi_result_.get_scheme_guard().get_schema_version(database_schema_version))) {
   } else {
     retry_ctrl_.set_current_local_schema_version(database_schema_version);

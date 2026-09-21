@@ -77,6 +77,12 @@ if(WIN32)
   target_sources(ob_main PRIVATE ob_win_service.cpp)
 endif()
 target_link_libraries(ob_main PUBLIC ob_base)
+if (SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS)
+  # CLI limit parsing is implemented by the same Rust host as the runtime.
+  # ob_main is a separate object target: ob_server's PRIVATE flags do not reach it.
+  target_compile_definitions(ob_main PRIVATE SEEKDB_WITH_EXPERIMENTAL_PLUGINS=1)
+  target_link_libraries(ob_main PRIVATE seekdb_rust_host)
+endif()
 
 add_executable(seekdb)
 if(WIN32)

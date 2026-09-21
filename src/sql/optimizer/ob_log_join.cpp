@@ -454,7 +454,14 @@ int ObLogJoin::print_outline_data(PlanText &plan_text)
 
     // 1. print leading
     if (OB_SUCC(ret) && !get_plan()->has_added_leading()) {
-      if (OB_FAIL(BUF_PRINTF("%s%s(@\"%.*s\" ", ObQueryHint::get_outline_indent(plan_text.is_oneline_),
+      ObLogicalOperator *custom = nullptr;
+      // Native LEADING cannot describe a plugin's private multi-input order.
+      // Keep EXPLAIN and outer native algorithm hints, without inventing an
+      // inner binary JOIN tree by following only the plugin's first input.
+      if (OB_FAIL(find_first_recursive(LOG_PLUGIN_CUSTOM, custom))) {
+      } else if (custom) {
+        get_plan()->set_added_leading();
+      } else if (OB_FAIL(BUF_PRINTF("%s%s(@\"%.*s\" ", ObQueryHint::get_outline_indent(plan_text.is_oneline_),
                                                 ObHint::get_hint_name(T_LEADING),
                                                 qb_name.length(), qb_name.ptr()))) {
       } else if (OB_FAIL(print_leading_tables(*stmt, plan_text, this))) {
@@ -595,8 +602,12 @@ int ObLogJoin::check_used_leading(const ObIArray<LeadingInfo> &leading_infos,
   used_hint = true;
   ObLogicalOperator *l_child = NULL;
   ObLogicalOperator *r_child = NULL;
-  if (OB_ISNULL(op = find_child_join(op))
-      || OB_UNLIKELY(LOG_JOIN != op->get_type())
+  op = find_child_join(op);
+  if (op && op->get_type() == LOG_PLUGIN_CUSTOM) {
+    // The relation can honor the result semantics without implementing the
+    // original binary join order. Do not report that LEADING as fully used.
+    used_hint = false;
+  } else if (OB_ISNULL(op) || OB_UNLIKELY(LOG_JOIN != op->get_type())
       || OB_ISNULL(l_child = op->get_child(first_child))
       || OB_ISNULL(r_child = op->get_child(second_child))) {
     ret = OB_ERR_UNEXPECTED;
@@ -630,7 +641,8 @@ bool ObLogJoin::find_leading_info(const ObIArray<LeadingInfo> &leading_infos,
 }
 
 const ObLogicalOperator *ObLogJoin::find_child_join(const ObLogicalOperator *op) {
-  while (NULL != op && !is_scan_operator(op->get_type()) && LOG_JOIN != op->get_type()) {
+  while (NULL != op && !is_scan_operator(op->get_type()) && LOG_JOIN != op->get_type()
+         && LOG_PLUGIN_CUSTOM != op->get_type()) {
     op = op->get_child(first_child);
   }
   return op;

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_routine_sql_service.h"
+#include "share/schema/catalog_dml_sql_helper.h"
 namespace oceanbase
 {
 using namespace common;
@@ -90,7 +91,7 @@ int ObRoutineSqlService::add_package(common::ObISQLClient &sql_client,
   ObDMLSqlSplicer dml;
   if (OB_FAIL(gen_package_dml(package_info, dml))) {
   } else {
-    ObDMLExecHelper exec(sql_client);
+    CatalogDMLSqlHelper exec(sql_client);
     int64_t affected_rows = 0;
     if (!only_history) {
       if (is_replace) {
@@ -219,6 +220,7 @@ int ObRoutineSqlService::drop_routine(const ObRoutineInfo &routine_info,
       || OB_UNLIKELY(OB_INVALID_ID == routine_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid routine info in drop procedure", K(db_id), K(routine_id));
+  } else if (OB_FAIL(check_extension_member_drop(sql_client, db_id, ROUTINE_SCHEMA, routine_id))) {
   } else if (OB_FAIL(del_routine(sql_client, routine_info, new_schema_version))) {
   } else if (routine_info.get_routine_params().count() > 0 && OB_FAIL(del_routine_params(sql_client, routine_info, new_schema_version))) {
     LOG_WARN("delete from __all_routine_param failed", K(ret));
@@ -250,7 +252,7 @@ int ObRoutineSqlService::del_package(ObISQLClient &sql_client,
   if (OB_FAIL(dml.add_pk_column("package_id", ObSchemaUtils::get_extract_schema_id(
                                                  package_id)))) {
   } else {
-    ObDMLExecHelper exec(sql_client);
+    CatalogDMLSqlHelper exec(sql_client);
     if (OB_FAIL(exec.exec_delete(OB_ALL_PACKAGE_TNAME, dml, affected_rows))) {
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
@@ -259,7 +261,7 @@ int ObRoutineSqlService::del_package(ObISQLClient &sql_client,
   }
 
   if (OB_SUCCESS == ret) {
-    if (OB_FAIL(sql.assign_fmt("INSERT INTO %s(package_id, schema_version, is_deleted)"
+    if (OB_FAIL(sql.assign_fmt("INSERT INTO oceanbase.%s(package_id, schema_version, is_deleted)"
         " VALUES(%lu,%ld,%d)",
         OB_ALL_PACKAGE_HISTORY_TNAME,
         ObSchemaUtils::get_extract_schema_id(package_id),
@@ -286,7 +288,7 @@ int ObRoutineSqlService::del_routine(ObISQLClient &sql_client,
                                                  routine_id)))) {
   } else {
     int64_t affected_rows = 0;
-    ObDMLExecHelper exec(sql_client);
+    CatalogDMLSqlHelper exec(sql_client);
     if (OB_FAIL(exec.exec_delete(OB_ALL_ROUTINE_TNAME, dml, affected_rows))) {
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
@@ -298,7 +300,7 @@ int ObRoutineSqlService::del_routine(ObISQLClient &sql_client,
     ObSqlString sql;
     int64_t affected_rows = 0;
     // insert into __all_routine_history
-    if (OB_FAIL(sql.assign_fmt("INSERT INTO %s(routine_id, schema_version, is_deleted) VALUES(%lu,%lu,%d)",
+    if (OB_FAIL(sql.assign_fmt("INSERT INTO oceanbase.%s(routine_id, schema_version, is_deleted) VALUES(%lu,%lu,%d)",
         OB_ALL_ROUTINE_HISTORY_TNAME,
         ObSchemaUtils::get_extract_schema_id(routine_id),
         new_schema_version, 1))) {
@@ -327,7 +329,7 @@ int ObRoutineSqlService::del_routine_params(ObISQLClient &sql_client,
                                                  routine_id)))) {
   } else {
     int64_t affected_rows = 0;
-    ObDMLExecHelper exec(sql_client);
+    CatalogDMLSqlHelper exec(sql_client);
     if (OB_FAIL(exec.exec_delete(OB_ALL_ROUTINE_PARAM_TNAME, dml, affected_rows))) {
     } else if (affected_rows < routine_info.get_routine_params().count()) {
       ret = OB_ERR_UNEXPECTED;
@@ -342,7 +344,7 @@ int ObRoutineSqlService::del_routine_params(ObISQLClient &sql_client,
     ObSqlString sql;
     int64_t affected_rows = 0;
 
-    if (OB_FAIL(sql.append_fmt("INSERT /*+use_plan_cache(none)*/ INTO %s "
+    if (OB_FAIL(sql.append_fmt("INSERT /*+use_plan_cache(none)*/ INTO oceanbase.%s "
         "(routine_id, sequence, schema_version, is_deleted) VALUES ",
         OB_ALL_ROUTINE_PARAM_HISTORY_TNAME))) {
     }
@@ -507,10 +509,10 @@ int ObRoutineSqlService::add_routine(ObISQLClient &sql_client,
   ObDMLSqlSplicer dml;
   if (OB_FAIL(gen_routine_dml(routine_info, dml, is_replace))) {
   } else {
-    ObDMLExecHelper exec(sql_client);
+    CatalogDMLSqlHelper exec(sql_client);
     int64_t affected_rows = 0;
     if (!only_history) {
-      ObDMLExecHelper exec(sql_client);
+      CatalogDMLSqlHelper exec(sql_client);
       if (is_replace) {
         if (OB_FAIL(exec.exec_update(OB_ALL_ROUTINE_TNAME, dml, affected_rows))) {
         }
@@ -558,10 +560,10 @@ int ObRoutineSqlService::add_routine_params(ObISQLClient &sql_client,
       //do nothing
     } else if (OB_FAIL(gen_routine_param_dml(*routine_param, dml))) {
     } else {
-      ObDMLExecHelper exec(sql_client);
+      CatalogDMLSqlHelper exec(sql_client);
       int64_t affected_rows = 0;
       if (!only_history) {
-        ObDMLExecHelper exec(sql_client);
+        CatalogDMLSqlHelper exec(sql_client);
         if (OB_FAIL(exec.exec_insert(OB_ALL_ROUTINE_PARAM_TNAME, dml, affected_rows))) {
         } else if (!is_single_row(affected_rows)) {
           ret = OB_ERR_UNEXPECTED;

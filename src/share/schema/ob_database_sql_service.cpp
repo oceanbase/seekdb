@@ -24,6 +24,7 @@
 #include "lib/string/ob_sql_string.h"
 #include "lib/string/ob_string.h"
 #include "mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
 #include "object/ob_object.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_dml_sql_splicer.h"
@@ -170,6 +171,40 @@ int ObDatabaseSqlService::update_database(const ObDatabaseSchema &database_schem
       }
     }
   }
+  return ret;
+}
+
+int ObDatabaseSqlService::delete_extensions_before_database_drop(
+    uint64_t database_id, ObISQLClient &sql_client)
+{
+  int ret = OB_SUCCESS;
+  auto *transaction = dynamic_cast<ObMySQLTransaction *>(&sql_client);
+  ObSqlString sql;
+  int64_t affected_rows = 0;
+  if (database_id == 0 || database_id > static_cast<uint64_t>(INT64_MAX)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (nullptr == transaction || !transaction->is_started()) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (OB_FAIL(sql.assign_fmt(
+      "DELETE FROM %s WHERE tenant_id=1 AND database_id=%lu",
+      OB_ALL_EXTENSION_INSTANCE_TNAME, database_id))) {
+  } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
+    LOG_WARN("failed to remove database extension instances", KR(ret), K(database_id));
+  } else if (OB_FAIL(sql.assign_fmt(
+      "DELETE FROM %s WHERE tenant_id=1 AND database_id=%lu",
+      OB_ALL_EXTENSION_MEMBER_TNAME, database_id))) {
+  } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
+    LOG_WARN("failed to remove database extension members", KR(ret), K(database_id));
+  } else if (OB_FAIL(sql.assign_fmt(
+      "DELETE FROM %s WHERE tenant_id=1 AND database_id=%lu",
+      OB_ALL_EXTENSION_DEPENDENCY_TNAME, database_id))) {
+  } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
+    LOG_WARN("failed to remove database extension dependencies", KR(ret), K(database_id));
+  }
+  // Lock/delete instances before members, as in the per-extension drop path.
+  // No provider lock or runtime mutex: modules can serve other databases and
+  // need not be available for teardown. Other sessions see removals only after
+  // the encompassing database DDL commits. Any failure requires whole rollback.
   return ret;
 }
 

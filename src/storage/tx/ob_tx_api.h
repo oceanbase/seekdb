@@ -391,6 +391,12 @@ int create_explicit_savepoint(ObTxDesc &tx,
 int rollback_to_explicit_savepoint(ObTxDesc &tx,
                                    const ObString &savepoint,
                                    const int64_t expire_ts);
+// resolved is invalid on failure and the successfully rolled-back barrier on
+// success; selection, data rollback and observation share the same tx lock.
+int rollback_to_explicit_savepoint(ObTxDesc &tx,
+                                   const ObString &savepoint,
+                                   const int64_t expire_ts,
+                                   ObTxSEQ &resolved);
 
 /**
  * release_explicit_savepoint - release savepoint

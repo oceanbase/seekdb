@@ -118,6 +118,11 @@ public:
       const int64_t new_schema_version,
       common::ObISQLClient &sql_client,
       ObSchemaGetterGuard &schema_guard);
+  // Read this DDL transaction's own writes; schema guards cannot see automatic
+  // grants/revokes performed earlier in a multi-statement Extension update.
+  static int get_routine_priv_in_transaction(const ObRoutinePrivSortKey &key,
+                                             common::ObMySQLTransaction &transaction,
+                                             ObPrivSet &privileges);
   virtual int grant_routine(
     const ObRoutinePrivSortKey &routine_priv_key,
     const ObPrivSet priv_set,

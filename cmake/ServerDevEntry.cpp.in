@@ -1,0 +1,27 @@
+// Generated profile wrapper; original plugin entry is renamed at compilation.
+#undef seekdb_plugin_entry_v1
+#include "seekdb/plugin/server_dev.h"
+#include "server_dev_contract.h"
+extern "C" const seekdb_plugin_manifest_v1_t *SEEKDB_PLUGIN_CALL
+seekdb_plugin_server_dev_entry_impl(void);
+extern "C" SEEKDB_PLUGIN_EXPORT const seekdb_plugin_manifest_v1_t *SEEKDB_PLUGIN_CALL
+seekdb_plugin_entry_v1(void)
+{
+  static const seekdb_plugin_server_dev_manifest_v1_t contract = [] {
+    seekdb_plugin_server_dev_manifest_v1_t result = {};
+    const auto *original = seekdb_plugin_server_dev_entry_impl();
+    // Do not truncate another suffix or silently replace a hand-written binding.
+    if (!original || original->struct_size != sizeof(*original) ||
+        (original->capabilities & SEEKDB_PLUGIN_CAPABILITY_SERVER_DEV)) return result;
+    result.v1 = *original;
+    result.v1.struct_size = sizeof(result);
+    result.v1.capabilities |= SEEKDB_PLUGIN_CAPABILITY_SERVER_DEV;
+    result.bridge_version = SEEKDB_PLUGIN_SERVER_DEV_BRIDGE_VERSION;
+    result.host_build_id_size = SEEKDB_SERVER_DEV_HOST_BUILD_ID_SIZE;
+    const uint8_t bytes[] = SEEKDB_SERVER_DEV_HOST_BUILD_ID_BYTES;
+    static_assert(sizeof(bytes) <= sizeof(result.host_build_id), "invalid host identity");
+    for (unsigned i = 0; i < sizeof(bytes); ++i) result.host_build_id[i] = bytes[i];
+    return result;
+  }();
+  return contract.v1.struct_size ? &contract.v1 : nullptr;
+}

@@ -201,7 +201,7 @@ int ObPxMSCoordOp::init_row_heap(int64_t n_ways)
   } else if (OB_FAIL(row_heap_.init(n_ways,
       &MY_SPEC.sort_collations_,
       &MY_SPEC.sort_cmp_funs_,
-      datum_access_ctx_))) {
+      datum_access_ctx_, &MY_SPEC.all_exprs_, &eval_ctx_))) {
   }
   return ret;
 }

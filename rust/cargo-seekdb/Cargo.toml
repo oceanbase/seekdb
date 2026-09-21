@@ -1,0 +1,11 @@
+[package]
+name = "cargo-seekdb"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Developer tooling for seekdb extensions"
+
+[workspace]
+
+[dependencies]
+seekdb-plugin-runtime = { path = "../plugin-runtime" }

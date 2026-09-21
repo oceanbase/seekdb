@@ -22,12 +22,41 @@
 #include "sql/optimizer/ob_opt_cost_model_parameter.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
+#include "share/rc/ob_module_provider.h"
 
 using namespace oceanbase;
 using namespace sql;
 using namespace oceanbase::common;
 
 int ObOptimizer::optimize(ObDMLStmt &stmt, ObLogPlan *&logical_plan)
+{
+  logical_plan = nullptr;
+  if (!share::g_mp) return optimize_core(stmt, logical_plan);
+  seekdb_plugin_optimizer_info_v1_t info = {};
+  info.struct_size = sizeof(info);
+  info.statement_kind = stmt.is_explain_stmt() ? SEEKDB_PLUGIN_OPTIMIZER_EXPLAIN :
+      stmt.is_select_stmt() ? SEEKDB_PLUGIN_OPTIMIZER_SELECT :
+      stmt.is_insert_stmt() ? SEEKDB_PLUGIN_OPTIMIZER_INSERT :
+      stmt.is_update_stmt() ? SEEKDB_PLUGIN_OPTIMIZER_UPDATE :
+      stmt.is_delete_stmt() ? SEEKDB_PLUGIN_OPTIMIZER_DELETE : SEEKDB_PLUGIN_OPTIMIZER_OTHER;
+  const auto *session = ctx_.get_session_info();
+  if (session) {
+    info.database_id = session->get_database_id() == OB_INVALID_ID ? 0 : session->get_database_id();
+    info.user_id = session->get_priv_user_id() == OB_INVALID_ID ? 0 : session->get_priv_user_id();
+  }
+  struct Invocation {
+    ObOptimizer &optimizer; ObDMLStmt &stmt; ObLogPlan *&plan;
+    static int next(void *opaque) {
+      auto &self = *static_cast<Invocation *>(opaque);
+      return self.optimizer.optimize_core(self.stmt, self.plan);
+    }
+  } invocation{*this, stmt, logical_plan};
+  const int ret = share::g_mp->run_plugin_optimizer_hooks(info, Invocation::next, &invocation);
+  if (ret != OB_SUCCESS) logical_plan = nullptr;
+  return ret;
+}
+
+int ObOptimizer::optimize_core(ObDMLStmt &stmt, ObLogPlan *&logical_plan)
 {
   ACTIVE_SESSION_FLAG_SETTER_GUARD(in_sql_optimize);
   int ret = OB_SUCCESS;

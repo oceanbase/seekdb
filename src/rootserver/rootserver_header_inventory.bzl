@@ -1,6 +1,7 @@
 """Native public and private header ownership for Rootserver."""
 
 ROOTSERVER_PUBLIC_HEADERS = [
+    "catalog_commit_preparation.h",
     "dbms_job/ob_dbms_job_master.h",
     "dbms_job/ob_dbms_job_utils.h",
     "ddl_task/ob_column_redefinition_task.h",
@@ -52,6 +53,8 @@ ROOTSERVER_PUBLIC_HEADERS = [
     "ob_thread_idling.h",
     "pl_ddl/ob_pl_ddl_operator.h",
     "pl_ddl/ob_pl_ddl_service.h",
+    "pl_ddl/routine_catalog_writer.h",
+    "pl_ddl/routine_cache_invalidation.h",
     "ob_admin_job_table_operator.h",
     "ob_admin_job_type.h",
     "ob_local_ddl_serial_call.h",

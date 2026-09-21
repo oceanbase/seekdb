@@ -2722,6 +2722,29 @@ _plugin_table('__all_sql_extension_column', 1149,
   [('column_name', 'varchar:256', 'false'),
    ('type_id', 'varchar:256', 'false'), ('nullable', 'int', 'false')])
 
+# Database installation identity is independent from plugin runtime generations.
+# Object classes/IDs below belong to the normal schema catalog, not descriptor
+# strings. The install coordinator writes these rows with the schema mutation.
+_plugin_table('__all_extension_instance', 1150,
+  [('tenant_id', 'int', 'false'), ('database_id', 'int', 'false'),
+   ('extension_name', 'varchar:256', 'false')],
+  [('extension_id', 'int', 'false'), ('owner_id', 'int', 'false'),
+   ('extension_version', 'varchar:256', 'false'),
+   ('native_module_id', 'varchar:256', 'false'),
+   ('gmt_create', 'int', 'false')])
+
+_plugin_table('__all_extension_member', 1151,
+  [('tenant_id', 'int', 'false'), ('database_id', 'int', 'false'),
+   ('object_class', 'int', 'false'), ('object_id', 'int', 'false')],
+  [('extension_id', 'int', 'false')])
+
+# Stable Extension-to-Extension dependency edges, scoped to one database.
+# Provider-leading key supports RESTRICT admission while its instance is locked.
+_plugin_table('__all_extension_dependency', 1152,
+  [('tenant_id', 'int', 'false'), ('database_id', 'int', 'false'),
+   ('required_extension_id', 'int', 'false'), ('extension_id', 'int', 'false')],
+  [])
+
 
 
 # Reserved position (placeholder before this line)
@@ -6539,6 +6562,34 @@ def_table_schema(
     ('fetch_lsn', 'int'),
     ('fetch_scn', 'int'),
   ],
+)
+
+# 12565: __all_virtual_plugin_memory
+def_table_schema(
+  owner = 'seekdb-plugin',
+  table_name = '__all_virtual_plugin_memory',
+  table_id = '12565',
+  table_type = 'VIRTUAL_TABLE',
+  gm_columns = [],
+  rowkey_columns = [
+    ('plugin_id', 'varchar:256'),
+    ('generation', 'uint'),
+    ('runtime_incarnation', 'varchar:256'),
+  ],
+  normal_columns = [
+    ('runtime_state', 'varchar:32'),
+    ('lease_count', 'int'),
+    ('used_bytes', 'uint'),
+    ('peak_bytes', 'uint'),
+    ('live_allocations', 'uint'),
+    ('peak_allocations', 'uint'),
+    ('allocation_failures', 'uint'),
+    ('invalid_frees', 'uint'),
+    ('byte_limit', 'uint'),
+    ('allocation_limit', 'uint'),
+    ('sample_time', 'timestamp'),
+  ],
+  vtable_route_policy = 'local',
 )
 
 # Reserved position (placeholder before this line)

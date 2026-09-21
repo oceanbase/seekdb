@@ -907,6 +907,12 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprGeneratorFunc);
     REG_OP(PluginFunctionExpr);
     REG_OP(PluginTableFunctionExpr);
+    REG_OP(PluginTypeEncodeExpr);
+    REG_OP(PluginCastExpr);
+    REG_OP(PluginTypeValueExpr);
+    REG_OP(PluginTypeComparisonExpr);
+    REG_OP(PluginTypeBetweenExpr);
+    REG_OP(PluginTypeInExpr);
     REG_OP(ObExprZipf);
     REG_OP(ObExprNormal);
     REG_OP(ObExprUniform);

@@ -180,6 +180,12 @@ void ObSqlEndTransCb::allow_request_completion()
 //cb_param : the error code from SQL engine
 void ObSqlEndTransCb::callback(int cb_param)
 {
+  // Legacy entry has no authoritative transaction identity/outcome.
+  callback(cb_param, OB_ERR_UNEXPECTED, 0, false);
+}
+
+void ObSqlEndTransCb::callback(int cb_param, int data_result, int64_t transaction_id, bool rollback)
+{
   int ret = OB_SUCCESS;
   uint32_t sessid = 0;
   bool need_revert_session = false;
@@ -190,6 +196,12 @@ void ObSqlEndTransCb::callback(int cb_param)
     SERVER_LOG(ERROR, "session info is NULL", "ret", ret, K(session_info));
   } else {
     sql::ObSQLSessionInfo::LockGuard lock_guard(session_info->get_query_lock());
+    if (ARMED == state_ || OWNED_BLOCKED == state_ || OWNED_READY == state_ ||
+        ABORTED_BLOCKED == state_ || ABORTED_READY == state_) {
+      pending_data_result_ = data_result;
+      pending_transaction_id_ = transaction_id;
+      pending_rollback_ = rollback;
+    }
     if (ARMED == state_) {
       // ARMED is only observable by a callback synchronously re-entering the
       // worker's recursive query lock. Preserve that worker's TSI state until
@@ -236,6 +248,12 @@ void ObSqlEndTransCb::complete_callback_locked(int cb_param,
                                                 uint32_t &sessid)
 {
   sessid = session_info->get_server_sid();
+  const int catalog_ret = session_info->complete_plugin_catalog_transaction(
+      pending_transaction_id_, pending_data_result_, pending_rollback_);
+  if (catalog_ret != OB_SUCCESS) {
+    if (cb_param == OB_SUCCESS) cb_param = catalog_ret;
+    need_disconnect_ = true;
+  }
   const bool reuse_tx = OB_SUCCESS == cb_param
       || OB_TRANS_COMMITED == cb_param
       || OB_TRANS_ROLLBACKED == cb_param;
@@ -300,6 +318,9 @@ void ObSqlEndTransCb::complete_aborted_callback_locked(
     uint32_t &sessid)
 {
   sessid = session_info->get_server_sid();
+  const int catalog_ret = session_info->complete_plugin_catalog_transaction(
+      pending_transaction_id_, pending_data_result_, pending_rollback_);
+  if (cb_param == OB_SUCCESS) cb_param = catalog_ret;
   const bool reuse_tx = OB_SUCCESS == cb_param
       || OB_TRANS_COMMITED == cb_param
       || OB_TRANS_ROLLBACKED == cb_param;
@@ -362,6 +383,9 @@ void ObSqlEndTransCb::reset_callback_state()
   params_num_ = 0;
   state_ = IDLE;
   pending_cb_param_ = OB_SUCCESS;
+  pending_data_result_ = OB_ERR_UNEXPECTED;
+  pending_transaction_id_ = 0;
+  pending_rollback_ = false;
 }
 
 } // end of namespace obmysql

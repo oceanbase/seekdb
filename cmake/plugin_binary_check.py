@@ -120,6 +120,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--binary", required=True)
     parser.add_argument("--nm", required=True)
+    parser.add_argument("--allow-export", action="append", default=[])
     args = parser.parse_args()
 
     binary = pathlib.Path(args.binary).resolve()
@@ -129,7 +130,9 @@ def main() -> int:
 
     try:
         exports = exported_symbols(binary, args.nm)
-        allowed = {ENTRY} | ELF_RUNTIME_MARKERS
+        if any(not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", symbol) for symbol in args.allow_export):
+            raise RuntimeError("allowed exports must be literal C symbol names")
+        allowed = {ENTRY} | ELF_RUNTIME_MARKERS | set(args.allow_export)
         unexpected = sorted(exports - allowed)
         errors: list[str] = []
         if ENTRY not in exports:

@@ -378,8 +378,6 @@ int ObMPBase::do_after_process(sql::ObSQLSessionInfo &session,
 int ObMPBase::check_and_refresh_schema(ObSQLSessionInfo *session_info)
 {
   int ret = OB_SUCCESS;
-  int64_t local_version = 0;
-  int64_t last_version = 0;
 
   if (OB_ISNULL(gctx_.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -396,12 +394,7 @@ int ObMPBase::check_and_refresh_schema(ObSQLSessionInfo *session_info)
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(gctx_.schema_service_->get_runtime_refreshed_schema_version(local_version))) {
-      } else if (FALSE_IT(last_version = session_info->get_last_ddl_schema_version())) {
-      } else if (local_version >= last_version) {
-        // skip
-      } else if (OB_FAIL(gctx_.schema_service_->async_refresh_schema(last_version))) {
-      }
+      ret = gctx_.schema_service_->refresh_schema_for_client(session_info->get_last_ddl_schema_version());
       if (need_revert_session && OB_LIKELY(NULL != session_info)) {
         revert_session(session_info);
       }

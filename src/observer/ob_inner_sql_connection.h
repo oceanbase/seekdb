@@ -211,6 +211,7 @@ public:
   bool is_extern_session() const { return NULL != extern_session_; }
   bool is_inner_session() const { return NULL == extern_session_; }
   bool is_spi_conn() const { return is_spi_conn_; }
+  int enable_plugin_catalog_sql() override;
   // set timeout to session variable
   int set_session_timeout(int64_t query_timeout, int64_t trx_timeout);
 
@@ -260,6 +261,9 @@ public:
   static const int64_t MAX_BT_SIZE = 20;
   static const int64_t EXTRA_REFRESH_LOCATION_TIME = 1L * 1000 * 1000;
 private:
+  friend class PluginCatalogConnectionTestAccess;
+  int init_plugin_catalog_context(sql::ObExecContext &context);
+  int check_mds_transaction(transaction::ObTxDataSourceType type) const;
   int init_session(sql::ObSQLSessionInfo* session_info = NULL, const bool is_ddl = false);
   int init_result(ObInnerSQLResult &res,
                   ObVirtualTableIteratorFactory *vt_iter_factory,
@@ -314,6 +318,7 @@ private:
   sql::ObSQLSessionInfo *inner_session_;
   common::ObWeakGuard<common::sqlclient::ObISQLConnection> self_weak_guard_;
   bool is_spi_conn_;
+  bool plugin_catalog_sql_;
   sql::ObSql *ob_sql_;
   ObVTIterCreator *vt_iter_creator_;
   ObInnerSQLReadContext *ref_ctx_;

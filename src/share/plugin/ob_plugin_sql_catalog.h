@@ -64,6 +64,10 @@ public:
   const char *get_text(int column, int *len = nullptr) const;
   common::ObString get_string(int column) const;
   const void *get_blob(int column, int *len = nullptr) const;
+  // Checked access for destructive catalog admission; never interpret a failed
+  // conversion/NULL as an empty module, zero ID or absent dependency.
+  int read_int64(int column, int64_t &value) const;
+  int read_text(int column, common::ObString &value) const;
 
 private:
   common::sqlclient::ObMySQLResult *result_;

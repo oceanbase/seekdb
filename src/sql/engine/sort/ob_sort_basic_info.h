@@ -60,6 +60,15 @@ typedef common::ObCmpFunc ObSortCmpFunc;
 typedef common::ObFixedArray<ObSortFieldCollation, common::ObIAllocator> ObSortCollations;
 typedef common::ObFixedArray<ObSortCmpFunc, common::ObIAllocator> ObSortFuncs;
 
+class ObExpr;
+struct ObEvalCtx;
+// Shared by local sorting and PX merge consumers. The expression map carries
+// fixed logical TYPE bindings; native comparator ABI and NULL ordering remain unchanged.
+int compare_sort_datums(const ObSortFieldCollation &collation,
+    const ObSortCmpFunc &native, const common::ObIArray<ObExpr *> *expressions,
+    ObEvalCtx *context, const common::ObDatum &left, const common::ObDatum &right,
+    int &ordering, const common::ObDatumAccessContext *access);
+
 } // end namespace sql
 } // end namespace oceanbase
 

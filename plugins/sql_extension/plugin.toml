@@ -7,7 +7,15 @@ abi_minor = 0
 catalog_schema_version = 1
 data_format_version = 1
 entrypoint = "seekdb_sql_extension.so"
-capabilities = ["extension.catalog.v1"]
+capabilities = ["extension.registration.v1"]
+
+[[provides]]
+service_id = "org.seekdb.sql-extension.sql-exec"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.sql-extension.sql-add-one"
+version = "1.0.0"
 
 [[provides]]
 service_id = "org.seekdb.sql-extension.add-one"
@@ -27,8 +35,4 @@ version = "1.0.0"
 
 [[provides]]
 service_id = "org.seekdb.sql-extension.payload-codec"
-version = "1.0.0"
-
-[[provides]]
-service_id = "org.seekdb.sql-extension.extensions"
 version = "1.0.0"

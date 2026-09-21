@@ -715,16 +715,58 @@ public:
       const seekdb_plugin_execution_context_v1 *context,
       const seekdb_plugin_execution_value_v1 *arguments,
       uint32_t argument_count) override;
+  int execute_bound_plugin_function_batch(
+      const seekdb_plugin_sql_binding_v1_t *binding, const seekdb_plugin_batch_context_v1_t *context,
+      const seekdb_plugin_batch_row_v1_t *rows, uint32_t row_count) override;
   int describe_plugin_sql_column(
       const seekdb_plugin_sql_binding_v1_t *binding,
       uint32_t column_index,
       seekdb_plugin_sql_column_v1_t *column) override;
+  int decode_bound_plugin_type(const seekdb_plugin_sql_binding_v1_t *binding,
+      const seekdb_plugin_execution_context_v1 *context,
+      const uint8_t *encoded, uint64_t encoded_size) override;
+  int encode_bound_plugin_type(const seekdb_plugin_sql_binding_v1_t *binding,
+      const seekdb_plugin_execution_context_v1 *context,
+      const seekdb_plugin_execution_value_v1 *value) override;
+  int resolve_plugin_common_type(const char *const *type_ids, uint32_t count,
+      std::string &common_type, uint64_t &registry_epoch) override;
+  int resolve_plugin_type_by_id(const char *logical_type_id, seekdb_plugin_sql_binding_v1_t *binding,
+      uint64_t expected_epoch = 0) override;
+  int check_bound_plugin_type_comparison(const seekdb_plugin_sql_binding_v1_t &binding) override;
+  int compare_bound_plugin_type(const seekdb_plugin_sql_binding_v1_t &binding,
+      const seekdb_plugin_execution_value_v1_t &left, const seekdb_plugin_execution_value_v1_t &right,
+      int32_t &ordering) override;
+  int resolve_plugin_cast(const char *source_type_id, const char *target_type_id,
+      seekdb_plugin_cast_context_t requested_context, seekdb_plugin_sql_cast_binding_v1_t *binding,
+      uint64_t expected_epoch = 0) override;
+  int execute_bound_plugin_cast(const seekdb_plugin_sql_cast_binding_v1_t *binding,
+      const seekdb_plugin_execution_context_v1 *context,
+      const seekdb_plugin_execution_value_v1 *value) override;
   int open_bound_plugin_table_function(
       const seekdb_plugin_sql_binding_v1_t *binding,
       const seekdb_plugin_table_execution_context_v1_t *context,
       const seekdb_plugin_execution_value_v1_t *arguments,
       uint32_t argument_count,
       std::unique_ptr<share::IPluginTableCursor> &cursor) override;
+  int run_plugin_optimizer_hooks(const seekdb_plugin_optimizer_info_v1_t &info,
+      int (*next)(void *), void *context) override;
+  int run_plugin_candidate_hooks(const seekdb_plugin_candidate_context_v1_t &view,
+      int (*next)(void *), void *context, int (*validate)(void *)) override;
+  int run_plugin_relation_hooks(const seekdb_plugin_candidate_context_v1_t &view,
+      int (*next)(void *), void *context, int (*validate)(void *)) override;
+  int plugin_join_hooks_available(bool &available) override;
+  int plugin_upper_hooks_available(seekdb_plugin_candidate_phase_t phase, bool &available) override;
+  int run_plugin_upper_hooks(seekdb_plugin_candidate_phase_t phase,
+      const seekdb_plugin_candidate_context_v1_t &view,
+      int (*next)(void *), void *context, int (*validate)(void *)) override;
+  int run_plugin_join_hooks(const seekdb_plugin_candidate_context_v1_t &view,
+      int (*next)(void *), void *context, int (*validate)(void *)) override;
+  int bind_plugin_custom_executor(const char *service_id, uint32_t major, uint32_t minimum_minor,
+      share::plugin::CustomExecutorBinding &binding) override;
+  int open_plugin_custom_executor(const share::plugin::CustomExecutorBinding &binding, const uint8_t *plan,
+      uint32_t size, std::unique_ptr<share::plugin::ICustomExecutor> &cursor) override;
+  int estimate_bound_plugin_table_function(const seekdb_plugin_sql_binding_v1_t &binding,
+      seekdb_plugin_table_estimate_v1_t &estimate) override;
   int mutate_plugin_type_dependency(
       common::ObISQLClient &sql_client,
       const seekdb_plugin_sql_binding_v1_t &binding,

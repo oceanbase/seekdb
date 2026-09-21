@@ -17,7 +17,7 @@
 #include "share/plugin/ob_plugin_registry.h"
 
 #include <algorithm>
-#include <chrono>
+#include "plugin_runtime.h"
 #include <cstring>
 #include <exception>
 #include <limits>
@@ -39,46 +39,36 @@ using namespace oceanbase::common;
 namespace
 {
 
-bool is_valid_transition(const ObPluginState from, const ObPluginState to)
+int runtime_status_to_ob(const int32_t status)
 {
-  bool valid = false;
-  switch (from) {
-    case ObPluginState::DISCOVERED:
-      valid = ObPluginState::VALIDATED == to || ObPluginState::FAILED == to;
-      break;
-    case ObPluginState::VALIDATED:
-      valid = ObPluginState::LOADED == to || ObPluginState::FAILED == to;
-      break;
-    case ObPluginState::LOADED:
-      valid = ObPluginState::INITIALIZING == to || ObPluginState::FAILED == to;
-      break;
-    case ObPluginState::INITIALIZING:
-      valid = ObPluginState::ACTIVE == to || ObPluginState::FAILED == to ||
-              ObPluginState::BLOCKED == to;
-      break;
-    case ObPluginState::ACTIVE:
-      valid = ObPluginState::QUIESCING == to || ObPluginState::FAILED == to ||
-              ObPluginState::BLOCKED == to;
-      break;
-    case ObPluginState::QUIESCING:
-      valid = ObPluginState::STOPPED == to || ObPluginState::FAILED == to ||
-              ObPluginState::BLOCKED == to;
-      break;
-    case ObPluginState::FAILED:
-      valid = ObPluginState::QUIESCING == to || ObPluginState::STOPPED == to;
-      break;
-    case ObPluginState::BLOCKED:
-      // BLOCKED means a plugin callback may still be live.  It can converge
-      // only through terminal_mark_stopped(), whose authority is held by the
-      // process-exit loader path.
-      valid = false;
-      break;
-    case ObPluginState::STOPPED:
-      valid = false;
-      break;
+  switch (status) {
+    case SEEKDB_RUNTIME_OK: return OB_SUCCESS;
+    case SEEKDB_RUNTIME_INVALID: return OB_INVALID_ARGUMENT;
+    case SEEKDB_RUNTIME_STATE_MISMATCH: return OB_STATE_NOT_MATCH;
+    case SEEKDB_RUNTIME_BUSY: return OB_EAGAIN;
+    case SEEKDB_RUNTIME_TIMEOUT: return OB_TIMEOUT;
+    default: return OB_ERR_UNEXPECTED;
   }
-  return valid;
 }
+
+static_assert(static_cast<uint8_t>(ObPluginState::DISCOVERED) == SEEKDB_RUNTIME_DISCOVERED,
+              "Rust/C++ plugin state mismatch");
+static_assert(static_cast<uint8_t>(ObPluginState::VALIDATED) == SEEKDB_RUNTIME_VALIDATED,
+              "Rust/C++ plugin state mismatch");
+static_assert(static_cast<uint8_t>(ObPluginState::LOADED) == SEEKDB_RUNTIME_LOADED,
+              "Rust/C++ plugin state mismatch");
+static_assert(static_cast<uint8_t>(ObPluginState::INITIALIZING) == SEEKDB_RUNTIME_INITIALIZING,
+              "Rust/C++ plugin state mismatch");
+static_assert(static_cast<uint8_t>(ObPluginState::ACTIVE) == SEEKDB_RUNTIME_ACTIVE,
+              "Rust/C++ plugin state mismatch");
+static_assert(static_cast<uint8_t>(ObPluginState::QUIESCING) == SEEKDB_RUNTIME_QUIESCING,
+              "Rust/C++ plugin state mismatch");
+static_assert(static_cast<uint8_t>(ObPluginState::STOPPED) == SEEKDB_RUNTIME_STOPPED,
+              "Rust/C++ plugin state mismatch");
+static_assert(static_cast<uint8_t>(ObPluginState::FAILED) == SEEKDB_RUNTIME_FAILED,
+              "Rust/C++ plugin state mismatch");
+static_assert(static_cast<uint8_t>(ObPluginState::BLOCKED) == SEEKDB_RUNTIME_BLOCKED,
+              "Rust/C++ plugin state mismatch");
 
 bool is_valid_service_name(const char *name)
 {
@@ -383,137 +373,80 @@ bool exceeds_live_entry_limit(const size_t live_count,
 
 ObPluginGeneration::ObPluginGeneration(const std::string &plugin_id,
                                        const uint64_t generation)
-    : plugin_id_(plugin_id),
-      generation_(generation),
-      mutex_(),
-      drained_cv_(),
-      state_(ObPluginState::DISCOVERED),
-      lease_count_(0),
-      activation_reserved_(false)
+    : plugin_id_(plugin_id), generation_(generation),
+      runtime_(seekdb_runtime_generation_create())
 {
+  if (nullptr == runtime_) {
+    throw std::bad_alloc();
+  }
+}
+
+ObPluginGeneration::~ObPluginGeneration()
+{
+  seekdb_runtime_generation_destroy(runtime_);
 }
 
 ObPluginState ObPluginGeneration::state() const
 {
-  std::lock_guard<std::mutex> guard(mutex_);
-  return state_;
+  return static_cast<ObPluginState>(seekdb_runtime_generation_state(runtime_));
 }
 
 int64_t ObPluginGeneration::lease_count() const
 {
-  std::lock_guard<std::mutex> guard(mutex_);
-  return lease_count_;
+  return seekdb_runtime_generation_leases(runtime_);
 }
 
 int ObPluginGeneration::transition_to(const ObPluginState next)
 {
-  int ret = OB_SUCCESS;
-  std::lock_guard<std::mutex> guard(mutex_);
-  if (activation_reserved_) {
-    ret = OB_EAGAIN;
-  } else if (!is_valid_transition(state_, next)) {
-    ret = OB_STATE_NOT_MATCH;
-  } else {
-    state_ = next;
-  }
-  return ret;
+  return runtime_status_to_ob(seekdb_runtime_generation_transition(
+      runtime_, static_cast<uint8_t>(next)));
 }
 
 int ObPluginGeneration::reserve_activation()
 {
-  int ret = OB_SUCCESS;
-  std::lock_guard<std::mutex> guard(mutex_);
-  if (activation_reserved_) {
-    ret = OB_EAGAIN;
-  } else if (ObPluginState::INITIALIZING != state_) {
-    ret = OB_STATE_NOT_MATCH;
-  } else {
-    activation_reserved_ = true;
-  }
-  return ret;
+  return runtime_status_to_ob(seekdb_runtime_generation_reserve(runtime_));
 }
 
 void ObPluginGeneration::abort_reserved_activation()
 {
-  std::lock_guard<std::mutex> guard(mutex_);
-  activation_reserved_ = false;
+  if (SEEKDB_RUNTIME_OK != seekdb_runtime_generation_abort(runtime_)) {
+    std::terminate();
+  }
 }
 
 void ObPluginGeneration::promote_reserved_activation()
 {
-  std::lock_guard<std::mutex> guard(mutex_);
-  // Only the registry holding the matching global reservation can call this.
-  // transition_to() rejects all competing lifecycle changes while reserved.
-  state_ = ObPluginState::ACTIVE;
-  activation_reserved_ = false;
+  // A prepared registry candidate owns the reservation; publication cannot fail.
+  if (SEEKDB_RUNTIME_OK != seekdb_runtime_generation_promote(runtime_)) {
+    std::terminate();
+  }
 }
 
 bool ObPluginGeneration::try_acquire_lease()
 {
-  bool acquired = false;
-  std::lock_guard<std::mutex> guard(mutex_);
-  if (ObPluginState::ACTIVE == state_) {
-    ++lease_count_;
-    acquired = true;
-  }
-  return acquired;
+  return 0 != seekdb_runtime_generation_acquire(runtime_);
 }
 
 void ObPluginGeneration::release_lease()
 {
-  std::lock_guard<std::mutex> guard(mutex_);
-  if (lease_count_ > 0) {
-    --lease_count_;
-    if (0 == lease_count_) {
-      drained_cv_.notify_all();
-    }
+  if (SEEKDB_RUNTIME_OK != seekdb_runtime_generation_release(runtime_)) {
+    std::terminate();
   }
 }
 
 int ObPluginGeneration::begin_quiesce()
 {
-  int ret = OB_SUCCESS;
-  std::lock_guard<std::mutex> guard(mutex_);
-  if (ObPluginState::ACTIVE == state_ || ObPluginState::FAILED == state_) {
-    state_ = ObPluginState::QUIESCING;
-  } else if (ObPluginState::QUIESCING != state_) {
-    ret = OB_STATE_NOT_MATCH;
-  }
-  return ret;
+  return runtime_status_to_ob(seekdb_runtime_generation_quiesce(runtime_));
 }
 
 int ObPluginGeneration::wait_for_drain(const int64_t timeout_us)
 {
-  int ret = OB_SUCCESS;
-  if (timeout_us < 0) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    std::unique_lock<std::mutex> guard(mutex_);
-    if (ObPluginState::QUIESCING != state_ && ObPluginState::FAILED != state_) {
-      ret = OB_STATE_NOT_MATCH;
-    } else if (lease_count_ > 0) {
-      const bool drained = drained_cv_.wait_for(
-          guard, std::chrono::microseconds(timeout_us), [this]() { return 0 == lease_count_; });
-      if (!drained) {
-        ret = OB_TIMEOUT;
-      }
-    }
-  }
-  return ret;
+  return runtime_status_to_ob(seekdb_runtime_generation_drain(runtime_, timeout_us));
 }
 
 int ObPluginGeneration::terminal_mark_stopped()
 {
-  int ret = OB_SUCCESS;
-  std::lock_guard<std::mutex> guard(mutex_);
-  if (ObPluginState::BLOCKED != state_) {
-    ret = OB_STATE_NOT_MATCH;
-  } else if (0 != lease_count_) {
-    ret = OB_EAGAIN;
-  } else {
-    state_ = ObPluginState::STOPPED;
-  }
-  return ret;
+  return runtime_status_to_ob(seekdb_runtime_generation_terminal_stop(runtime_));
 }
 
 ObPluginLease::ObPluginLease()
@@ -836,34 +769,22 @@ ObPluginServiceRegistry::ServiceEntry::ServiceEntry(
 {
 }
 
-ObPluginServiceRegistry::ExtensionKey::ExtensionKey()
-    : kind_(0), object_id_()
+struct ObPluginServiceRegistry::ExtensionSignature
 {
-}
-
-ObPluginServiceRegistry::ExtensionKey::ExtensionKey(
-    const seekdb_plugin_extension_kind_t kind,
-    const std::string &object_id)
-    : kind_(kind), object_id_(object_id)
-{
-}
-
-bool ObPluginServiceRegistry::ExtensionKey::operator<(
-    const ExtensionKey &other) const
-{
-  return kind_ < other.kind_ ||
-         (kind_ == other.kind_ && object_id_ < other.object_id_);
-}
+  // Built once alongside immutable metadata, shared across registry snapshot
+  // copies. Never rebuild every argument span of every overload on a lookup.
+  std::vector<seekdb_runtime_text_t> types_;
+};
 
 ObPluginServiceRegistry::ExtensionEntry::ExtensionEntry()
-    : info_(), owner_()
+    : info_(), signature_(), owner_()
 {
 }
 
 ObPluginServiceRegistry::ExtensionEntry::ExtensionEntry(
     const ObPluginExtensionSpec &spec,
     const std::shared_ptr<ObPluginGeneration> &owner)
-    : info_(), owner_(owner)
+    : info_(), signature_(), owner_(owner)
 {
   std::shared_ptr<ObPluginExtensionInfo> info(
       new ObPluginExtensionInfo());
@@ -871,7 +792,70 @@ ObPluginServiceRegistry::ExtensionEntry::ExtensionEntry(
   info->owner_plugin_id_ = owner->plugin_id();
   info->owner_generation_ = owner->generation();
   info_ = info;
+  if (!info->spec_.argument_type_ids_.empty()) {
+    auto signature = std::make_shared<ExtensionSignature>();
+    signature->types_.reserve(info->spec_.argument_type_ids_.size());
+    for (const auto &type : info->spec_.argument_type_ids_) {
+      signature->types_.push_back({reinterpret_cast<const uint8_t *>(type.data()),
+                                   static_cast<uint32_t>(type.size())});
+    }
+    signature_ = signature;
+  }
 }
+
+struct ObPluginServiceRegistry::ExtensionCatalog
+{
+  ExtensionCatalog() : handle_(seekdb_runtime_objects_create())
+  { if (nullptr == handle_) throw std::bad_alloc(); }
+  ExtensionCatalog(const ExtensionCatalog &other)
+      : handle_(seekdb_runtime_objects_clone(other.handle_))
+  { if (nullptr == handle_) throw std::bad_alloc(); }
+  ExtensionCatalog &operator=(const ExtensionCatalog &) = delete;
+  ~ExtensionCatalog() { seekdb_runtime_objects_destroy(handle_); }
+
+  static void release(void *payload) noexcept
+  { delete static_cast<ExtensionEntry *>(payload); }
+  uint32_t size() const noexcept { return seekdb_runtime_objects_count(handle_); }
+  const ExtensionEntry &at(uint32_t index) const noexcept
+  {
+    const auto *entry = static_cast<const ExtensionEntry *>(seekdb_runtime_objects_at(handle_, index));
+    if (nullptr == entry) std::terminate();
+    return *entry;
+  }
+  const ExtensionEntry *find(seekdb_plugin_extension_kind_t kind,
+                             const std::string &id) const noexcept
+  {
+    return static_cast<const ExtensionEntry *>(seekdb_runtime_objects_find(
+        handle_, static_cast<uint32_t>(kind), reinterpret_cast<const uint8_t *>(id.data()),
+        static_cast<uint32_t>(id.size())));
+  }
+  int insert(const ObPluginExtensionSpec &spec,
+             const std::shared_ptr<ObPluginGeneration> &owner)
+  {
+    std::unique_ptr<ExtensionEntry> entry(new ExtensionEntry(spec, owner));
+    const int32_t status = seekdb_runtime_objects_insert(handle_, spec.kind_,
+        reinterpret_cast<const uint8_t *>(spec.object_id_.data()),
+        static_cast<uint32_t>(spec.object_id_.size()), entry.get(), release);
+    if (SEEKDB_RUNTIME_OK == status) { entry.release(); return OB_SUCCESS; }
+    if (SEEKDB_RUNTIME_NO_MEMORY == status) return OB_ALLOCATE_MEMORY_FAILED;
+    if (SEEKDB_RUNTIME_CONFLICT == status) return OB_ENTRY_EXIST;
+    if (SEEKDB_RUNTIME_LIMIT == status) return OB_SIZE_OVERFLOW;
+    return OB_INVALID_ARGUMENT;
+  }
+  static uint8_t owned_by(const void *context, const void *payload) noexcept
+  {
+    return static_cast<const ExtensionEntry *>(payload)->owner_.get() ==
+           static_cast<const ObPluginGeneration *>(context) ? 1 : 0;
+  }
+  void remove_owner(const std::shared_ptr<ObPluginGeneration> &owner) noexcept
+  {
+    if (SEEKDB_RUNTIME_OK != seekdb_runtime_objects_remove_if(handle_, owner.get(), owned_by)) {
+      std::terminate();
+    }
+  }
+
+  seekdb_runtime_object_catalog *handle_;
+};
 
 struct ObPluginServiceRegistry::RegistrySnapshot
 {
@@ -879,7 +863,7 @@ struct ObPluginServiceRegistry::RegistrySnapshot
   RegistrySnapshot(const RegistrySnapshot &) = default;
 
   std::map<ServiceKey, ServiceEntry> services_;
-  std::map<ExtensionKey, ExtensionEntry> extensions_;
+  ExtensionCatalog extensions_;
 };
 
 // Kept out of the public header so candidate consumers cannot mutate or even
@@ -1064,10 +1048,9 @@ int ObPluginServiceRegistry::prepare_registration(
       }
       for (const ObPluginExtensionSpec &spec :
            registration.staged_extensions_) {
-        for (auto it = mutable_next->extensions_.begin();
-             OB_SUCCESS == ret && it != mutable_next->extensions_.end(); ++it) {
-          if (it->second.info_ && has_conflicting_extension_identity(
-                                      it->second.info_->spec_, spec)) {
+        for (uint32_t i = 0; OB_SUCCESS == ret && i < mutable_next->extensions_.size(); ++i) {
+          const auto &entry = mutable_next->extensions_.at(i);
+          if (entry.info_ && has_conflicting_extension_identity(entry.info_->spec_, spec)) {
             ret = OB_ENTRY_EXIST;
           }
         }
@@ -1098,12 +1081,7 @@ int ObPluginServiceRegistry::prepare_registration(
           }
         }
         if (OB_SUCCESS == ret) {
-          const auto inserted = mutable_next->extensions_.insert(
-              std::make_pair(ExtensionKey(spec.kind_, spec.object_id_),
-                             ExtensionEntry(spec, registration.owner_)));
-          if (!inserted.second) {
-            ret = OB_ENTRY_EXIST;
-          }
+          ret = mutable_next->extensions_.insert(spec, registration.owner_);
         }
       }
 
@@ -1191,10 +1169,9 @@ bool ObPluginServiceRegistry::candidate_conflicts_locked(
     }
   }
   for (const ObPluginExtensionSpec &spec : candidate.staged_extensions_) {
-    for (auto it = live_snapshot_->extensions_.begin();
-         !conflict && it != live_snapshot_->extensions_.end(); ++it) {
-      conflict = it->second.info_ && has_conflicting_extension_identity(
-                                          it->second.info_->spec_, spec);
+    for (uint32_t i = 0; !conflict && i < live_snapshot_->extensions_.size(); ++i) {
+      const auto &entry = live_snapshot_->extensions_.at(i);
+      conflict = entry.info_ && has_conflicting_extension_identity(entry.info_->spec_, spec);
     }
   }
   return conflict;
@@ -1300,7 +1277,8 @@ int ObPluginServiceRegistry::acquire(const char *name,
 int ObPluginServiceRegistry::acquire_extension_with_implementation(
     const ObPluginExtensionInfo &expected,
     ObPluginExtensionLease &extension_lease,
-    ObPluginLease &implementation_lease)
+    ObPluginLease &implementation_lease,
+    const uint64_t expected_epoch)
 {
   int ret = OB_SUCCESS;
   const seekdb_plugin_extension_kind_t kind = expected.spec_.kind_;
@@ -1315,24 +1293,25 @@ int ObPluginServiceRegistry::acquire_extension_with_implementation(
   } else {
     try {
       std::lock_guard<std::mutex> guard(mutex_);
-      const auto extension_it = live_snapshot_->extensions_.find(
-          ExtensionKey(kind, object_id));
-      if (live_snapshot_->extensions_.end() == extension_it ||
-          !extension_it->second.info_ ||
-          extension_it->second.info_->owner_plugin_id_ !=
+      const auto *extension = live_snapshot_->extensions_.find(kind, object_id);
+      if (expected_epoch != 0 && expected_epoch != registry_epoch_) {
+        ret = OB_STATE_NOT_MATCH;
+      } else if (nullptr == extension ||
+          !extension->info_ ||
+          extension->info_->owner_plugin_id_ !=
               expected.owner_plugin_id_ ||
-          extension_it->second.info_->owner_generation_ !=
+          extension->info_->owner_generation_ !=
               expected.owner_generation_) {
         ret = OB_ENTRY_NOT_EXIST;
       } else {
         const ObPluginImplementationSpec &implementation =
-            extension_it->second.info_->spec_.implementation_;
+            extension->info_->spec_.implementation_;
         const seekdb_plugin_version_range_t &range =
             implementation.version_range_;
         const auto service_it = live_snapshot_->services_.find(ServiceKey(
             implementation.service_id_, range.minimum_inclusive.major));
         if (live_snapshot_->services_.end() == service_it ||
-            service_it->second.owner_ != extension_it->second.owner_ ||
+            service_it->second.owner_ != extension->owner_ ||
             !extension_version_in_range(
                 {range.minimum_inclusive.major, service_it->second.abi_minor_,
                  service_it->second.abi_patch_},
@@ -1341,16 +1320,16 @@ int ObPluginServiceRegistry::acquire_extension_with_implementation(
              implementation.required_capabilities_) !=
                 implementation.required_capabilities_) {
           ret = OB_ENTRY_NOT_EXIST;
-        } else if (!extension_it->second.owner_->try_acquire_lease()) {
+        } else if (!extension->owner_->try_acquire_lease()) {
           ret = OB_STATE_NOT_MATCH;
         } else if (!service_it->second.owner_->try_acquire_lease()) {
           // Both entries share one generation and registry mutex excludes
           // quiesce, so this branch is defensive against future state changes.
-          extension_it->second.owner_->release_lease();
+          extension->owner_->release_lease();
           ret = OB_STATE_NOT_MATCH;
         } else {
           extension_lease = ObPluginExtensionLease(
-              extension_it->second.owner_, extension_it->second.info_);
+              extension->owner_, extension->info_);
           implementation_lease = ObPluginLease(
               service_it->second.owner_, service_it->second.service_,
               service_it->second.abi_minor_, service_it->second.abi_patch_,
@@ -1401,14 +1380,7 @@ int ObPluginServiceRegistry::quiesce(const std::shared_ptr<ObPluginGeneration> &
               ++it;
             }
           }
-          for (auto it = mutable_next->extensions_.begin();
-               it != mutable_next->extensions_.end();) {
-            if (it->second.owner_ == owner) {
-              it = mutable_next->extensions_.erase(it);
-            } else {
-              ++it;
-            }
-          }
+          mutable_next->extensions_.remove_owner(owner);
           next_snapshot = mutable_next;
         } catch (const std::bad_alloc &) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1497,9 +1469,10 @@ int ObPluginServiceRegistry::list_extensions(
   try {
     std::vector<ObPluginExtensionInfo> candidate;
     candidate.reserve(live_snapshot_->extensions_.size());
-    for (const auto &item : live_snapshot_->extensions_) {
-      if (item.second.info_) {
-        candidate.push_back(*item.second.info_);
+    for (uint32_t i = 0; i < live_snapshot_->extensions_.size(); ++i) {
+      const auto &entry = live_snapshot_->extensions_.at(i);
+      if (entry.info_) {
+        candidate.push_back(*entry.info_);
       }
     }
     extensions.swap(candidate);
@@ -1509,6 +1482,30 @@ int ObPluginServiceRegistry::list_extensions(
     ret = OB_ERR_UNEXPECTED;
   }
   return ret;
+}
+
+int ObPluginServiceRegistry::find_type_by_id(const char *logical_type_id,
+    ObPluginExtensionInfo &extension, uint64_t &registry_epoch, uint64_t expected_epoch) const
+try {
+  extension = {}; registry_epoch = 0;
+  if (!is_valid_service_name(logical_type_id)) return OB_INVALID_ARGUMENT;
+  std::shared_ptr<const RegistrySnapshot> snapshot;
+  uint64_t epoch = 0;
+  {
+    std::lock_guard<std::mutex> guard(mutex_);
+    if (expected_epoch && expected_epoch != registry_epoch_) return OB_STATE_NOT_MATCH;
+    snapshot = live_snapshot_;
+    epoch = registry_epoch_;
+  }
+  const auto *entry = snapshot->extensions_.find(SEEKDB_PLUGIN_EXTENSION_TYPE, logical_type_id);
+  if (!entry || !entry->info_) return OB_ENTRY_NOT_EXIST;
+  extension = *entry->info_;
+  registry_epoch = epoch;
+  return OB_SUCCESS;
+} catch (const std::bad_alloc &) {
+  extension = {}; registry_epoch = 0; return OB_ALLOCATE_MEMORY_FAILED;
+} catch (...) {
+  extension = {}; registry_epoch = 0; return OB_ERR_UNEXPECTED;
 }
 
 int ObPluginServiceRegistry::find_extensions_by_sql_name(
@@ -1528,10 +1525,11 @@ int ObPluginServiceRegistry::find_extensions_by_sql_name(
     std::lock_guard<std::mutex> guard(mutex_);
     try {
       std::vector<ObPluginExtensionInfo> candidate;
-      for (const auto &item : live_snapshot_->extensions_) {
-        if (item.first.kind_ == kind && item.second.info_ &&
-            item.second.info_->spec_.sql_name_ == sql_name) {
-          candidate.push_back(*item.second.info_);
+      for (uint32_t i = 0; i < live_snapshot_->extensions_.size(); ++i) {
+        const auto &entry = live_snapshot_->extensions_.at(i);
+        if (entry.info_ && entry.info_->spec_.kind_ == kind &&
+            entry.info_->spec_.sql_name_ == sql_name) {
+          candidate.push_back(*entry.info_);
         }
       }
       extensions.swap(candidate);
@@ -1563,94 +1561,58 @@ int ObPluginServiceRegistry::resolve_sql_extension(
   }
 
   int ret = OB_ENTRY_NOT_EXIST;
-  std::lock_guard<std::mutex> guard(mutex_);
   try {
-    bool has_known_argument_type = false;
+    std::vector<seekdb_runtime_text_t> arguments(argument_count);
     for (uint32_t i = 0; i < argument_count; ++i) {
-      if (nullptr != argument_type_ids[i]) {
-        has_known_argument_type = true;
-        break;
+      if (argument_type_ids[i] != nullptr) {
+        if (!is_valid_service_name(argument_type_ids[i])) return OB_INVALID_ARGUMENT;
+        arguments[i] = {reinterpret_cast<const uint8_t *>(argument_type_ids[i]),
+                        static_cast<uint32_t>(std::strlen(argument_type_ids[i]))};
       }
     }
-    const ObPluginExtensionInfo *best = nullptr;
-    uint64_t best_cost = std::numeric_limits<uint64_t>::max();
-    bool ambiguous = false;
-    for (const auto &entry : live_snapshot_->extensions_) {
-      if (kind != entry.first.kind_ || !entry.second.info_ ||
-          entry.second.info_->spec_.sql_name_ != sql_name) {
-        continue;
-      }
-      const ObPluginExtensionInfo &candidate = *entry.second.info_;
-      const ObPluginExtensionSpec &spec = candidate.spec_;
-      if (SEEKDB_PLUGIN_EXTENSION_TYPE != kind &&
-          (argument_count < spec.minimum_arity_ ||
-           argument_count > spec.maximum_arity_)) {
-        continue;
-      }
-
-      uint64_t cost = spec.argument_type_ids_.empty() ? 1000000 : 0;
-      bool compatible = true;
-      for (uint32_t i = 0; compatible && i < argument_count; ++i) {
-        if (nullptr == argument_type_ids[i]) {
-          // Resolver may ask for name/arity existence before child typing.
-          cost += spec.argument_type_ids_.empty() ? 0 : 1;
-          continue;
-        }
-        if (!is_valid_service_name(argument_type_ids[i])) {
-          return OB_INVALID_ARGUMENT;
-        }
-        if (spec.argument_type_ids_.empty()) {
-          continue;
-        }
-        const size_t signature_index =
-            std::min(static_cast<size_t>(i), spec.argument_type_ids_.size() - 1);
-        const std::string &expected = spec.argument_type_ids_[signature_index];
-        if (expected == argument_type_ids[i]) {
-          continue;
-        }
-
-        uint32_t best_cast_cost = std::numeric_limits<uint32_t>::max();
-        for (const auto &cast_entry : live_snapshot_->extensions_) {
-          if (SEEKDB_PLUGIN_EXTENSION_CAST != cast_entry.first.kind_ ||
-              !cast_entry.second.info_) {
-            continue;
-          }
-          const ObPluginExtensionSpec &cast = cast_entry.second.info_->spec_;
-          if (cast.source_type_id_ == argument_type_ids[i] &&
-              cast.target_type_id_ == expected &&
-              cast.cast_context_ == SEEKDB_PLUGIN_CAST_IMPLICIT) {
-            best_cast_cost = std::min(best_cast_cost, cast.cost_);
-          }
-        }
-        if (best_cast_cost == std::numeric_limits<uint32_t>::max()) {
-          compatible = false;
-        } else {
-          cost += 1 + best_cast_cost;
-        }
-      }
-      if (!compatible) {
-        continue;
-      }
-      if (nullptr == best || cost < best_cost) {
-        best = &candidate;
-        best_cost = cost;
-        ambiguous = false;
-      } else if (cost == best_cost) {
-        if (has_known_argument_type || argument_count == 0) {
-          ambiguous = true;
-        } else if (candidate.spec_.object_id_ < best->spec_.object_id_) {
-          // Name/arity probing precedes child typing.  Any overload proves the
-          // SQL name exists; defer ambiguity checks until types are available.
-          best = &candidate;
-        }
-      }
+    std::shared_ptr<const RegistrySnapshot> snapshot;
+    {
+      std::lock_guard<std::mutex> guard(mutex_);
+      snapshot = live_snapshot_;
+      registry_epoch = registry_epoch_;
     }
-    registry_epoch = registry_epoch_;
-    if (ambiguous) {
-      ret = OB_ENTRY_EXIST;
-    } else if (nullptr != best) {
-      extension = *best;
+    // Snapshot ownership pins every borrowed string and generation while Rust
+    // resolves. No registry mutex is held during marshaling or cost matching;
+    // subsequent acquire still validates the returned generation atomically.
+    const auto text = [](const std::string &value) -> seekdb_runtime_text_t {
+      return {reinterpret_cast<const uint8_t *>(value.data()), static_cast<uint32_t>(value.size())};
+    };
+    std::vector<seekdb_runtime_sql_candidate_t> candidates;
+    std::vector<const ObPluginExtensionInfo *> objects;
+    std::vector<seekdb_runtime_sql_cast_t> casts;
+    for (uint32_t i = 0; i < snapshot->extensions_.size(); ++i) {
+      const auto &entry = snapshot->extensions_.at(i);
+      if (!entry.info_) continue;
+      const auto &spec = entry.info_->spec_;
+      if (SEEKDB_PLUGIN_EXTENSION_CAST == spec.kind_) {
+        casts.push_back({text(spec.source_type_id_), text(spec.target_type_id_),
+                         static_cast<uint32_t>(spec.cast_context_), spec.cost_});
+      }
+      if (kind != spec.kind_ || spec.sql_name_ != sql_name) continue;
+      const auto *signature = entry.signature_.get();
+      candidates.push_back({text(spec.object_id_), signature == nullptr ? nullptr : signature->types_.data(),
+          static_cast<uint32_t>(spec.argument_type_ids_.size()), spec.minimum_arity_, spec.maximum_arity_, 0});
+      objects.push_back(entry.info_.get());
+    }
+    uint32_t selected = UINT32_MAX;
+    const int32_t status = seekdb_runtime_resolve_sql(
+        candidates.data(), static_cast<uint32_t>(candidates.size()),
+        casts.data(), static_cast<uint32_t>(casts.size()), arguments.data(), argument_count,
+        SEEKDB_PLUGIN_EXTENSION_TYPE == kind ? 0 : 1, &selected);
+    if (SEEKDB_RUNTIME_OK == status && selected < objects.size()) {
+      extension = *objects[selected];
       ret = OB_SUCCESS;
+    } else if (SEEKDB_RUNTIME_AMBIGUOUS == status) {
+      ret = OB_ENTRY_EXIST;
+    } else if (SEEKDB_RUNTIME_NOT_FOUND == status) {
+      ret = OB_ENTRY_NOT_EXIST;
+    } else {
+      ret = SEEKDB_RUNTIME_INVALID == status ? OB_INVALID_ARGUMENT : OB_ERR_UNEXPECTED;
     }
   } catch (const std::bad_alloc &) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1658,6 +1620,93 @@ int ObPluginServiceRegistry::resolve_sql_extension(
     ret = OB_ERR_UNEXPECTED;
   }
   return ret;
+}
+
+int ObPluginServiceRegistry::resolve_cast(
+    const char *source_type_id, const char *target_type_id,
+    const seekdb_plugin_cast_context_t requested_context,
+    ObPluginExtensionInfo &extension, uint64_t &registry_epoch) const
+try {
+  if (!is_valid_service_name(source_type_id) || !is_valid_service_name(target_type_id) ||
+      requested_context < SEEKDB_PLUGIN_CAST_EXPLICIT || requested_context > SEEKDB_PLUGIN_CAST_IMPLICIT)
+    return OB_INVALID_ARGUMENT;
+  std::shared_ptr<const RegistrySnapshot> snapshot;
+  uint64_t epoch = 0;
+  {
+    std::lock_guard<std::mutex> guard(mutex_);
+    snapshot = live_snapshot_;
+    epoch = registry_epoch_;
+  }
+  const auto text = [](const char *value) -> seekdb_runtime_text_t {
+    return {reinterpret_cast<const uint8_t *>(value), static_cast<uint32_t>(std::strlen(value))};
+  };
+  std::vector<seekdb_runtime_sql_cast_t> casts;
+  std::vector<const ObPluginExtensionInfo *> objects;
+  for (uint32_t i = 0; i < snapshot->extensions_.size(); ++i) {
+    const auto &entry = snapshot->extensions_.at(i);
+    if (!entry.info_ || entry.info_->spec_.kind_ != SEEKDB_PLUGIN_EXTENSION_CAST) continue;
+    const auto &spec = entry.info_->spec_;
+    casts.push_back({text(spec.source_type_id_.c_str()), text(spec.target_type_id_.c_str()),
+                     static_cast<uint32_t>(spec.cast_context_), spec.cost_});
+    objects.push_back(entry.info_.get());
+  }
+  uint32_t selected = UINT32_MAX;
+  const int status = seekdb_runtime_resolve_cast(casts.data(), static_cast<uint32_t>(casts.size()),
+      text(source_type_id), text(target_type_id), static_cast<uint32_t>(requested_context), &selected);
+  if (status == SEEKDB_RUNTIME_NOT_FOUND) return OB_ENTRY_NOT_EXIST;
+  if (status == SEEKDB_RUNTIME_AMBIGUOUS) return OB_ENTRY_EXIST;
+  if (status != SEEKDB_RUNTIME_OK || selected >= objects.size())
+    return status == SEEKDB_RUNTIME_INVALID ? OB_INVALID_ARGUMENT : OB_ERR_UNEXPECTED;
+  ObPluginExtensionInfo chosen = *objects[selected];
+  extension = std::move(chosen);
+  registry_epoch = epoch;
+  return OB_SUCCESS;
+} catch (const std::bad_alloc &) { return OB_ALLOCATE_MEMORY_FAILED;
+} catch (...) { return OB_ERR_UNEXPECTED; }
+
+int ObPluginServiceRegistry::resolve_common_type(const char *const *type_ids, uint32_t count,
+    std::string &common_type, uint64_t &registry_epoch) const
+try {
+  common_type.clear(); registry_epoch = 0;
+  if (count > SEEKDB_PLUGIN_MAX_ARGUMENTS || (count && !type_ids)) return OB_INVALID_ARGUMENT;
+  std::vector<seekdb_runtime_text_t> arguments(count);
+  for (uint32_t i = 0; i < count; ++i) {
+    if (type_ids[i]) {
+      if (!is_valid_service_name(type_ids[i])) return OB_INVALID_ARGUMENT;
+      arguments[i] = {reinterpret_cast<const uint8_t *>(type_ids[i]), static_cast<uint32_t>(std::strlen(type_ids[i]))};
+    }
+  }
+  std::shared_ptr<const RegistrySnapshot> snapshot;
+  uint64_t epoch = 0;
+  {
+    std::lock_guard<std::mutex> guard(mutex_);
+    snapshot = live_snapshot_;
+    epoch = registry_epoch_;
+  }
+  const auto text = [](const std::string &id) -> seekdb_runtime_text_t {
+    return {reinterpret_cast<const uint8_t *>(id.data()), static_cast<uint32_t>(id.size())};
+  };
+  std::vector<seekdb_runtime_sql_cast_t> casts;
+  for (uint32_t i = 0; i < snapshot->extensions_.size(); ++i) {
+    const auto &entry = snapshot->extensions_.at(i);
+    if (!entry.info_ || entry.info_->spec_.kind_ != SEEKDB_PLUGIN_EXTENSION_CAST) continue;
+    const auto &spec = entry.info_->spec_;
+    casts.push_back({text(spec.source_type_id_), text(spec.target_type_id_),
+                    static_cast<uint32_t>(spec.cast_context_), spec.cost_});
+  }
+  uint32_t selected = UINT32_MAX;
+  const int status = seekdb_runtime_resolve_common_type(arguments.data(), count, casts.data(), casts.size(), &selected);
+  if (status == SEEKDB_RUNTIME_NOT_FOUND) return OB_ENTRY_NOT_EXIST;
+  if (status == SEEKDB_RUNTIME_AMBIGUOUS) return OB_ENTRY_EXIST;
+  if (status == SEEKDB_RUNTIME_NO_MEMORY) return OB_ALLOCATE_MEMORY_FAILED;
+  if (status != SEEKDB_RUNTIME_OK || selected >= count || !type_ids[selected])
+    return status == SEEKDB_RUNTIME_INVALID ? OB_INVALID_ARGUMENT : OB_ERR_UNEXPECTED;
+  common_type = type_ids[selected]; registry_epoch = epoch;
+  return OB_SUCCESS;
+} catch (const std::bad_alloc &) {
+  common_type.clear(); registry_epoch = 0; return OB_ALLOCATE_MEMORY_FAILED;
+} catch (...) {
+  common_type.clear(); registry_epoch = 0; return OB_ERR_UNEXPECTED;
 }
 
 int ObPluginServiceRegistry::find_casts(
@@ -1679,13 +1728,13 @@ int ObPluginServiceRegistry::find_casts(
       uint64_t observed_epoch = 0;
       {
         std::lock_guard<std::mutex> guard(mutex_);
-        for (const auto &item : live_snapshot_->extensions_) {
-          if (SEEKDB_PLUGIN_EXTENSION_CAST == item.first.kind_ &&
-              item.second.info_ &&
-              item.second.info_->spec_.source_type_id_ == source_type_id &&
-              item.second.info_->spec_.target_type_id_ == target_type_id &&
-              item.second.info_->spec_.cast_context_ >= requested_context) {
-            candidate.push_back(*item.second.info_);
+        for (uint32_t i = 0; i < live_snapshot_->extensions_.size(); ++i) {
+          const auto &entry = live_snapshot_->extensions_.at(i);
+          if (entry.info_ && SEEKDB_PLUGIN_EXTENSION_CAST == entry.info_->spec_.kind_ &&
+              entry.info_->spec_.source_type_id_ == source_type_id &&
+              entry.info_->spec_.target_type_id_ == target_type_id &&
+              entry.info_->spec_.cast_context_ >= requested_context) {
+            candidate.push_back(*entry.info_);
           }
         }
         observed_epoch = registry_epoch_;
@@ -1725,10 +1774,11 @@ int ObPluginServiceRegistry::find_hooks(
       uint64_t observed_epoch = 0;
       {
         std::lock_guard<std::mutex> guard(mutex_);
-        for (const auto &item : live_snapshot_->extensions_) {
-          if (kind == item.first.kind_ && item.second.info_ &&
-              item.second.info_->spec_.hook_point_ == hook_point) {
-            candidate.push_back(*item.second.info_);
+        for (uint32_t i = 0; i < live_snapshot_->extensions_.size(); ++i) {
+          const auto &entry = live_snapshot_->extensions_.at(i);
+          if (entry.info_ && kind == entry.info_->spec_.kind_ &&
+              entry.info_->spec_.hook_point_ == hook_point) {
+            candidate.push_back(*entry.info_);
           }
         }
         observed_epoch = registry_epoch_;
@@ -1768,13 +1818,13 @@ int ObPluginServiceRegistry::find_catalog_objects(
     try {
       std::vector<ObPluginExtensionInfo> candidate;
       std::lock_guard<std::mutex> guard(mutex_);
-      for (const auto &item : live_snapshot_->extensions_) {
-        if (SEEKDB_PLUGIN_EXTENSION_CATALOG_OBJECT == item.first.kind_ &&
-            item.second.info_ &&
-            item.second.info_->spec_.catalog_object_kind_ == object_kind &&
-            item.second.info_->spec_.schema_name_ == schema_name &&
-            item.second.info_->spec_.sql_name_ == sql_name) {
-          candidate.push_back(*item.second.info_);
+      for (uint32_t i = 0; i < live_snapshot_->extensions_.size(); ++i) {
+        const auto &entry = live_snapshot_->extensions_.at(i);
+        if (entry.info_ && SEEKDB_PLUGIN_EXTENSION_CATALOG_OBJECT == entry.info_->spec_.kind_ &&
+            entry.info_->spec_.catalog_object_kind_ == object_kind &&
+            entry.info_->spec_.schema_name_ == schema_name &&
+            entry.info_->spec_.sql_name_ == sql_name) {
+          candidate.push_back(*entry.info_);
         }
       }
       extensions.swap(candidate);

@@ -251,6 +251,33 @@ int ObFunctionTableOp::inner_get_next_row_plugin()
   return ret;
 }
 
+int ObFunctionTableOp::inner_get_next_batch(const int64_t max_row_cnt)
+{
+  clear_evaluated_flag();
+  clear_datum_eval_flag();
+  brs_.size_ = 0;
+  const int64_t maximum = std::min(max_row_cnt, MY_SPEC.max_batch_size_);
+  if (maximum <= 0 || maximum > UINT32_MAX || !MY_SPEC.value_expr_) return OB_INVALID_ARGUMENT;
+  int ret = ctx_.check_status();
+  if (OB_SUCCESS != ret) return ret;
+  ObEvalCtx::BatchInfoScopeGuard batch(eval_ctx_);
+  batch.set_batch_idx(0); batch.set_batch_size(maximum);
+  if (MY_SPEC.value_expr_->type_ == T_FUN_SYS_PLUGIN_TABLE_FUNCTION) {
+    uint32_t rows = 0;
+    ret = PluginTableFunctionExpr::fetch_batch(*MY_SPEC.value_expr_, eval_ctx_, MY_SPEC.column_exprs_,
+        static_cast<uint32_t>(maximum), rows);
+    if (ret == OB_SUCCESS) brs_.size_ = rows;
+  } else {
+    // Legacy PL/system function tables retain one-row evaluation semantics;
+    // vectorized parents may consume that row without a new materialization.
+    batch.set_batch_size(1);
+    ret = inner_get_next_row();
+    if (ret == OB_SUCCESS) brs_.size_ = 1;
+  }
+  if (ret == OB_ITER_END) { brs_.end_ = true; ret = OB_SUCCESS; }
+  return ret;
+}
+
 
 } // end namespace sql
 } // end namespace oceanbase

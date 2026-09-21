@@ -20,6 +20,10 @@
 #include "seekdb/plugin/extension_spi.h"
 
 #define SEEKDB_PLUGIN_SQL_TYPE_METADATA_MARKER "seekdb.plugin.type:v1"
+#define SEEKDB_PLUGIN_SQL_TYPE_METADATA_MARKER_V2 "seekdb.plugin.type:v2"
+/* v2 preserves the seven-field layout, but field 4 MUST be the literal "0".
+ * Persisted type identity is logical; generation is resolved transactionally
+ * when creating/removing its durable dependency, never read from the column. */
 #define SEEKDB_PLUGIN_SQL_TYPE_METADATA_FIELD_COUNT 7u
 
 enum seekdb_plugin_sql_type_metadata_field {
@@ -58,6 +62,24 @@ typedef struct seekdb_plugin_sql_binding_v1 {
   uint32_t physical_format_version;
   uint64_t reserved[4];
 } seekdb_plugin_sql_binding_v1_t;
+
+/* Host-owned compiled direct cast identity. No executable pointer, implicit
+ * identity conversion or generation-zero wildcard. requested_context records
+ * where SQL used the cast; declared_context must permit it. Execution validates
+ * catalog_epoch atomically with acquisition of the object/code leases. */
+typedef struct seekdb_plugin_sql_cast_binding_v1 {
+  uint32_t struct_size;
+  seekdb_plugin_cast_context_t requested_context;
+  seekdb_plugin_cast_context_t declared_context;
+  uint32_t reserved_word;
+  char object_id[SEEKDB_PLUGIN_MAX_IDENTIFIER_BYTES + 1];
+  char owner_plugin_id[SEEKDB_PLUGIN_MAX_IDENTIFIER_BYTES + 1];
+  char source_type_id[SEEKDB_PLUGIN_MAX_IDENTIFIER_BYTES + 1];
+  char target_type_id[SEEKDB_PLUGIN_MAX_IDENTIFIER_BYTES + 1];
+  uint64_t owner_generation;
+  uint64_t catalog_epoch;
+  uint64_t reserved[4];
+} seekdb_plugin_sql_cast_binding_v1_t;
 
 /* A bounded, host-owned table column description with no plugin pointers. */
 typedef struct seekdb_plugin_sql_column_v1 {

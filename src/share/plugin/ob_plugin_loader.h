@@ -24,7 +24,10 @@
 
 #include "seekdb/plugin/seekdb_plugin_abi.h"
 #include "seekdb/plugin/execution_spi.h"
+#include "seekdb/plugin/optimizer_spi.h"
+#include "seekdb/plugin/server_dev_planner.h"
 #include "share/plugin/ob_plugin_registry.h"
+#include "share/plugin/custom_executor.h"
 
 namespace oceanbase
 {
@@ -33,6 +36,8 @@ namespace share
 class IPluginTableCursor;
 namespace plugin
 {
+struct ExtensionPackageSource;
+class ICatalogDeclarations;
 
 struct ObPluginArtifactMetadata
 {
@@ -326,6 +331,27 @@ public:
       std::string &error) const noexcept = 0;
 };
 
+// Host-allocator limits for EACH module generation in this loader. They do not
+// bound plugin-owned heaps, GPU allocations, query memory or process RSS.
+// Defaults preserve historical admission; zero explicitly disables allocation.
+struct PluginMemoryLimits
+{
+  uint64_t bytes_ = UINT64_MAX;
+  uint64_t allocations_ = UINT64_MAX;
+};
+
+struct PluginMemoryUsage
+{
+  uint64_t bytes_ = 0;
+  uint64_t peak_bytes_ = 0;
+  uint64_t allocations_ = 0;
+  uint64_t peak_allocations_ = 0;
+  uint64_t allocation_failures_ = 0;
+  uint64_t invalid_frees_ = 0;
+  uint64_t byte_limit_ = 0;
+  uint64_t allocation_limit_ = 0;
+};
+
 struct ObPluginStatusSnapshot
 {
   ObPluginStatusSnapshot();
@@ -338,6 +364,7 @@ struct ObPluginStatusSnapshot
   std::string operation_id_;
   ObPluginState state_;
   int64_t lease_count_;
+  PluginMemoryUsage host_memory_;
   std::string last_error_;
 };
 
@@ -376,7 +403,8 @@ public:
            const std::shared_ptr<const ObPluginVerifier> &verifier,
            const std::shared_ptr<const ObPluginActivationGuard> &activation_guard,
            const std::shared_ptr<const ObPluginDisableGuard> &disable_guard,
-           const std::shared_ptr<ObPluginServiceRegistry> &registry);
+           const std::shared_ptr<ObPluginServiceRegistry> &registry,
+           PluginMemoryLimits memory_limits = PluginMemoryLimits());
   bool is_initialized() const;
 
   // relative_path is an untrusted catalog-relative path.  Absolute paths,
@@ -421,6 +449,11 @@ public:
                        const seekdb_plugin_execution_context_v1_t *context,
                        const seekdb_plugin_execution_value_v1_t *arguments,
                        uint32_t argument_count);
+  // Optional native installation callback. Pure SQL/no matching service returns
+  // success with null output. A nonnull output retains the module execution
+  // lease through the caller's installation transaction and publication.
+  int prepare_catalog_install(const ExtensionPackageSource &source, uint64_t tenant_id,
+      uint64_t database_id, uint64_t owner_id, std::unique_ptr<ICatalogDeclarations> &output);
 
   // Resolve a catalog function extension by SQL name, atomically acquire its
   // extension/implementation leases, and invoke the same execution SPI. This
@@ -431,19 +464,76 @@ public:
                         const seekdb_plugin_execution_context_v1_t *context,
                         const seekdb_plugin_execution_value_v1_t *arguments,
                         uint32_t argument_count);
+  // Dynamic scalar result types are resolved by a metadata-only, leased v2
+  // callback after overload/coercion selection. No unknown-type bytes fallback.
   int resolve_sql_extension(seekdb_plugin_extension_kind_t kind,
                             const char *sql_name,
                             const char *const *argument_type_ids,
                             uint32_t argument_count,
                             seekdb_plugin_sql_binding_v1_t &binding) const;
+  // Typed scalar bindings apply direct implicit argument casts before invocation.
+  // Conversion-dependent bindings require their catalog epoch to remain current
+  // through preparation; all function/cast leases are pinned before callbacks.
   int execute_bound_function(
       const seekdb_plugin_sql_binding_v1_t &binding,
       const seekdb_plugin_execution_context_v1_t *context,
       const seekdb_plugin_execution_value_v1_t *arguments,
       uint32_t argument_count);
+  // Pins one function/implementation and all argument casts for the batch.
+  // Uses the optional v3 callback, otherwise the legacy scalar entry. Outputs
+  // are validated/copied before delivery; callers discard on delivery failure.
+  int execute_bound_function_batch(
+      const seekdb_plugin_sql_binding_v1_t &binding,
+      const seekdb_plugin_batch_context_v1_t *context,
+      const seekdb_plugin_batch_row_v1_t *rows, uint32_t row_count);
+  // Invoke a previously resolved type/cast identity under joint object/code
+  // leases. These are host adapters, not new public ABI or SQL syntax. Codec
+  // contexts expose the v1 prefix only; caller sinks validate/copy output.
+  int decode_type(const ObPluginExtensionInfo &expected,
+                  const seekdb_plugin_execution_context_v1_t *context,
+                  const uint8_t *encoded, uint64_t encoded_size);
+  int encode_type(const ObPluginExtensionInfo &expected,
+                  const seekdb_plugin_execution_context_v1_t *context,
+                  const seekdb_plugin_execution_value_v1_t *value);
+  // SQL-facing codecs accept a pointer-free, resolved TYPE binding, never a
+  // persisted generation-zero identity. Decode consumes storage bytes; encode
+  // consumes a logical value. Output is synchronous and owned/copied by the sink.
+  int decode_bound_type(const seekdb_plugin_sql_binding_v1_t &binding,
+                        const seekdb_plugin_execution_context_v1_t *context,
+                        const uint8_t *encoded, uint64_t encoded_size);
+  int encode_bound_type(const seekdb_plugin_sql_binding_v1_t &binding,
+                        const seekdb_plugin_execution_context_v1_t *context,
+      const seekdb_plugin_execution_value_v1_t *value);
+  // Pins the exact TYPE and codec generation. Probe never invokes plugin code.
+  // Non-NULL decoded values only; no physical-byte fallback on missing support.
+  int check_bound_type_comparison(const seekdb_plugin_sql_binding_v1_t &binding);
+  // Runtime expressions carry logical IDs, not necessarily SQL type names.
+  // Success returns a pointer-free binding for that exact TYPE and epoch.
+  int resolve_type_by_id(const char *logical_type_id, seekdb_plugin_sql_binding_v1_t &binding,
+                        uint64_t expected_epoch = 0) const;
+  int compare_bound_type(const seekdb_plugin_sql_binding_v1_t &binding,
+      const seekdb_plugin_execution_value_v1_t &left,
+      const seekdb_plugin_execution_value_v1_t &right, int32_t &ordering);
+  int execute_cast(const ObPluginExtensionInfo &expected,
+                   const seekdb_plugin_execution_context_v1_t *context,
+                   const seekdb_plugin_execution_value_v1_t *value,
+                   uint64_t expected_epoch = 0);
+  // Logical selection only; output owns its identity and does not pin code.
+  // Bind each required conversion against this epoch before publishing a plan.
+  int resolve_common_type(const char *const *type_ids, uint32_t count,
+                          std::string &common_type, uint64_t &registry_epoch) const;
+  int resolve_sql_cast(const char *source_type_id, const char *target_type_id,
+                       seekdb_plugin_cast_context_t requested_context,
+                       seekdb_plugin_sql_cast_binding_v1_t &binding,
+                       uint64_t expected_epoch = 0) const;
+  int execute_bound_cast(const seekdb_plugin_sql_cast_binding_v1_t &binding,
+                         const seekdb_plugin_execution_context_v1_t *context,
+                         const seekdb_plugin_execution_value_v1_t *value);
   int describe_sql_column(const seekdb_plugin_sql_binding_v1_t &binding,
                           uint32_t column_index,
                           seekdb_plugin_sql_column_v1_t &column) const;
+  // NULL_PROPAGATING is evaluated after implicit casts. An empty strict call
+  // returns OB_ITER_END with no cursor and no table callback invocation.
   int open_bound_table_function(
       const seekdb_plugin_sql_binding_v1_t &binding,
       const seekdb_plugin_table_execution_context_v1_t *context,
@@ -452,6 +542,21 @@ public:
       std::unique_ptr<IPluginTableCursor> &cursor);
 
   int get_status(const std::string &plugin_id, ObPluginStatusSnapshot &status) const;
+  int run_optimizer_hooks(const seekdb_plugin_optimizer_info_v1_t &info,
+      int (*next)(void *), void *context);
+  int run_candidate_hooks(const seekdb_plugin_candidate_context_v1_t &view,
+      int (*next)(void *), void *context, int (*validate)(void *),
+      seekdb_plugin_candidate_phase_t phase = SEEKDB_PLUGIN_PHASE_SELECT);
+  int candidate_hooks_available(seekdb_plugin_candidate_phase_t phase, bool &available);
+  int plugin_join_hooks_available(bool &available);
+  // Service registration alone grants no deep execution privilege: both bind
+  // and open require the implementation owner to be Server-dev admitted.
+  int bind_custom_executor(const char *service_id, uint32_t major, uint32_t minimum_minor,
+      CustomExecutorBinding &binding);
+  int open_custom_executor(const CustomExecutorBinding &binding, const uint8_t *plan,
+      uint32_t plan_size, std::unique_ptr<ICustomExecutor> &cursor);
+  int estimate_bound_table_function(const seekdb_plugin_sql_binding_v1_t &binding,
+      seekdb_plugin_table_estimate_v1_t &estimate);
   int list_status(std::vector<ObPluginStatusSnapshot> &statuses) const;
   std::string last_error() const;
   ObPluginLoadFailureReason last_failure_reason() const;
