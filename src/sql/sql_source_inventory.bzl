@@ -180,6 +180,7 @@ SQL_UNITY_GROUPS = [
         srcs = [
             "src/sql/engine/graph/graph_feedback_loop_op.cpp",
             "src/sql/engine/graph/graph_expand.cpp",
+            "src/sql/engine/graph/graph_path_state_store.cpp",
             "src/sql/engine/window_function/ob_window_function_op.cpp",
             "src/sql/engine/opt_statistics/ob_optimizer_stats_gathering_op.cpp",
             "src/sql/engine/ob_subschema_ctx.cpp",
