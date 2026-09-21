@@ -324,9 +324,15 @@ int PalfHandleImpl::submit_imported_group(
     if (!palf_env_impl_->check_disk_space_enough()) {
       ret = OB_LOG_OUTOF_DISK_SPACE;
     } else if (!state_mgr_.can_append()) {
-      ret = OB_STATE_NOT_MATCH;
-      PALF_LOG(WARN, "cannot submit imported group", K(ret), KPC(this),
-          K(buf_len), "state", state_mgr_.get_state());
+      // Standby log sync is scheduled immediately at startup.  PALF can still
+      // be recovering at that point, before any imported group's continuity
+      // has been checked.  Retry that transient state, while preserving
+      // OB_STATE_NOT_MATCH for other non-append states and continuity errors.
+      ret = state_mgr_.is_recovering() ? OB_EAGAIN : OB_STATE_NOT_MATCH;
+      if (OB_EAGAIN != ret) {
+        PALF_LOG(WARN, "cannot submit imported group", K(ret), KPC(this),
+            K(buf_len), "state", state_mgr_.get_state());
+      }
     } else if (OB_FAIL(sw_.submit_imported_group(source_lsn, source_scn, buf, buf_len))) {
       if (OB_EAGAIN != ret) {
         PALF_LOG(WARN, "submit imported group failed", K(ret), KPC(this), K(buf_len));
