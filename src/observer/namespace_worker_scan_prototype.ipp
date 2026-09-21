@@ -383,7 +383,9 @@ struct EngineScan {
       else { ret = param.column_ids_.push_back(column); }
     }
     const uint64_t ranges = request.number();
-    if (ret || request.ret || ranges > 256) { return ret ? ret : OB_NOT_SUPPORTED; }
+    // Must cover MAX_IN_QUERY_PER_TIME (1000): IN-batch refreshes arrive as
+    // one range per element over a single IPC roundtrip.
+    if (ret || request.ret || ranges > 8192) { return ret ? ret : OB_NOT_SUPPORTED; }
     const uint64_t width = request.number();
     if (request.ret || width == 0 || width > OB_MAX_ROWKEY_COLUMN_NUMBER) {
       return OB_INVALID_ARGUMENT;

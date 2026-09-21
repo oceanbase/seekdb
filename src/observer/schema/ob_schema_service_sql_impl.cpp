@@ -2398,15 +2398,17 @@ int ObSchemaServiceSQLImpl::fetch_all_table_info(const ObRefreshSchemaStatus &sc
         } else if (OB_FAIL(sql.append_fmt(" ORDER BY TABLE_ID DESC, SCHEMA_VERSION DESC"))) {
         }
       } else {
-        ObSqlString table_id_list;
-        for (int64_t i = 0; OB_SUCC(ret) && i < table_ids_size; i++) {
-          if (OB_FAIL(table_id_list.append_fmt("%srow(%lu)", 0 == i ? "" : ", ", table_ids[i]))) {
-          }
-        }
-        if (FAILEDx(sql.append_fmt(FETCH_ALL_TABLE_HISTORY_WITH_ROWKEY,
-                                    table_id_list.ptr(),
-                                    table_name,
-                                    schema_version))) {
+        // One IN-scan over the requested ids instead of a per-id lateral lookup:
+        // with worker-separated storage each point lookup pays an IPC roundtrip,
+        // so a single multi-range scan plus in-memory reduce (first row per
+        // table_id, deleted rows skipped) is both cheaper and equivalent.
+        if (OB_FAIL(sql.append_fmt(FETCH_ALL_TABLE_HISTORY_SQL,
+                                   table_name,
+                                   OB_INVALID_RUNTIME_ID))) {
+        } else if (OB_FAIL(sql.append_fmt(" AND table_id IN "))) {
+        } else if (OB_FAIL(sql_append_pure_ids(schema_status, table_ids, table_ids_size, sql))) {
+        } else if (OB_FAIL(sql.append_fmt(" AND SCHEMA_VERSION <= %ld", schema_version))) {
+        } else if (OB_FAIL(sql.append_fmt(" ORDER BY TABLE_ID DESC, SCHEMA_VERSION DESC"))) {
           LOG_WARN("append sql failed", KR(ret));
         }
       }
@@ -3717,7 +3719,9 @@ int ObSchemaServiceSQLImpl::fetch_tables(
     }
     if (OB_SUCC(ret) && table_ids.count() > 0) {
       LOG_TRACE("build table_ids", KR(ret), K(orig_cnt), "table_ids_cnt", table_ids.count(), K(table_ids));
-      const int64_t BATCH_FETCH_NUM = 100;
+      // Worker-separated storage turns every inner SQL into an IPC roundtrip,
+      // so keep batches as large as MAX_IN_QUERY_PER_TIME allows.
+      const int64_t BATCH_FETCH_NUM = MAX_IN_QUERY_PER_TIME;
       int64_t begin = 0;
       int64_t end = min(begin + BATCH_FETCH_NUM, table_ids.count());
       // fetch table schema from the range [begin, end) of table_ids.

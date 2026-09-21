@@ -69,7 +69,7 @@ private:
     return a->get_table_id() < b->get_table_id();
   }
 public:
-  const static int64_t MAX_IN_QUERY_PER_TIME = 100L; //FIXME@xiyu:change from 1000 to 100 for debugging
+  const static int64_t MAX_IN_QUERY_PER_TIME = 1000L;
   const static int64_t MAX_BATCH_PART_NUM = 5000;
 
   struct TableTrunc {
