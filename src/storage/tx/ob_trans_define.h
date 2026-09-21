@@ -25,7 +25,6 @@
 #include "common/ob_tablet_id.h"
 #include "lib/core_local/ob_core_local_storage.h"
 #include "lib/list/ob_list.h"
-#include "lib/trace/ob_trace_event.h"
 #include "share/log/palf/lsn.h"
 #include "share/log/ob_log_base_header.h"
 #include "share/scn.h"
@@ -485,24 +484,6 @@ private:
 };
 
 typedef common::ObReserveArenaAllocator<1024> ObTxReserveArenaAllocator;
-
-class ObTransTraceLog : public common::ObTraceEventRecorder
-{
-public:
-  ObTransTraceLog()
-      : common::ObTraceEventRecorder::ObTraceEventRecorderBase(
-          true, common::ObLatchIds::TRANS_TRACE_RECORDER_LOCK) {}
-  ~ObTransTraceLog() {}
-  void destroy() {}
-  int64_t to_string(char *buf, const int64_t buf_len) const
-  {
-    int64_t ret = 0;
-    check_lock();
-    ret = ObTraceEventRecorder::to_string(buf, buf_len);
-    check_unlock();
-    return ret;
-  }
-};
 
 class ObStmtInfo  // unreferenced, need remove
 {

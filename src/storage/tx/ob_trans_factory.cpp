@@ -15,6 +15,7 @@
  */
 
 
+#include <new>
 #include "ob_trans_factory.h"
 #include "lib/objectpool/ob_server_object_pool.h"
 #include "share/rc/ob_server_runtime.h"
@@ -96,7 +97,7 @@ ObTxCtx *ObTxCtxFactory::alloc()
   if (ATOMIC_LOAD(&active_tx_ctx_count_) > MAX_TX_CTX_COUNT && GCTX.status_ == ObServiceStatus::SS_SERVING) {
     TRANS_LOG_RET(ERROR, tmp_ret, "transaction context memory alloc failed", K_(active_tx_ctx_count));
     tmp_ret = OB_TRANS_CTX_COUNT_REACH_LIMIT;
-  } else if (NULL != (ctx = sop_borrow(ObTxCtx))) {
+  } else if (NULL != (ctx = new (std::nothrow) ObTxCtx())) {
     (void)ATOMIC_FAA(&active_tx_ctx_count_, 1);
   } else {
     // do nothing
@@ -116,8 +117,7 @@ void ObTxCtxFactory::release(ObTransCtx *ctx)
     TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "context pointer is null when released", KP(ctx));
   } else {
     ObTxCtx *tx_ctx = static_cast<ObTxCtx *>(ctx);
-    tx_ctx->destroy();
-    sop_return(ObTxCtx, tx_ctx);
+    delete tx_ctx;
     (void)ATOMIC_FAA(&active_tx_ctx_count_, -1);
     (void)ATOMIC_FAA(&total_release_tx_ctx_count_, 1);
     ctx = NULL;
@@ -207,7 +207,6 @@ const char *TransRpcTaskFactory::get_mod_type()
 
 MAKE_FACTORY_CLASS_IMPLEMENT_USE_RP_ALLOC(ClogBuf, ObModIds::OB_TRANS_CLOG_BUF)
 MAKE_FACTORY_CLASS_IMPLEMENT_USE_RP_ALLOC(MutatorBuf, ObModIds::OB_TRANS_MUTATOR_BUF)
-MAKE_FACTORY_CLASS_IMPLEMENT_USE_RP_ALLOC(ObTransTraceLog, ObModIds::OB_TRANS_AUDIT_RECORD)
 MAKE_FACTORY_CLASS_IMPLEMENT_USE_RP_ALLOC(ObPartitionAuditInfo, ObModIds::OB_PARTITION_AUDIT_INFO)
 MAKE_FACTORY_CLASS_IMPLEMENT_USE_RP_ALLOC(ObCoreLocalPartitionAuditInfo, ObModIds::OB_CORE_LOCAL_STORAGE)
 MAKE_FACTORY_CLASS_IMPLEMENT_USE_RP_ALLOC(ObTxCommitCallbackTask, ObModIds::OB_END_TRANS_CB_TASK)

@@ -2880,7 +2880,7 @@ int ObLSTabletService::check_old_row_legitimacy(
                          OB_ERR_DEFENSIVE_CHECK,
                          "Fatal Error!!! Catch a defensive error!");
         LOG_ERROR("Dump data table info", K(ret), K(data_table));
-        store_ctx.force_print_trace_log();
+        store_ctx.force_dump_tx_state();
       }
     }
   }
