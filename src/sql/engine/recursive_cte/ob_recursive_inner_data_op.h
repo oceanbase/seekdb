@@ -31,8 +31,7 @@ namespace sql
 {
 class ObRecursiveInnerDataOp {
   using ObTreeNode = ObSearchMethodOp::ObTreeNode;
-  friend class ObRecursiveUnionAllOp;
-  friend class ObRecursiveUnionAllSpec;
+  friend class RecursivePumpOp;
 public:
   struct RowComparer;
   enum RecursiveUnionState {

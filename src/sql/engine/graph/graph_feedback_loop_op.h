@@ -24,15 +24,11 @@ namespace oceanbase
 namespace sql
 {
 
-// The bounded graph path has recursive-union execution semantics, but it uses
-// an independent physical operator type so plan cache serialization, EXPLAIN
-// and future graph-specific accounting do not depend on recognizing a generic
-// recursive CTE after code generation.
-// TODO(graph-path-v2): This inheritance is transitional. RecursiveUnionAll is
-// coupled to FakeCTETable and UNION row semantics. When GraphFeedbackLoop
-// directly drives GraphExpand and graph path states, extract a generic feedback
-// loop shared with recursive CTE, or make the graph Spec and Op independent.
-class GraphFeedbackLoopSpec final : public ObRecursiveUnionAllSpec
+// The graph operator has its own semantic spec while temporarily sharing the
+// recursive row-pump mechanics used by recursive CTE.  A later increment can
+// replace RecursivePumpOp with GraphExpand/frontier execution without changing
+// the recursive CTE operator hierarchy.
+class GraphFeedbackLoopSpec final : public RecursivePumpSpec
 {
   OB_UNIS_VERSION_V(1);
 public:
@@ -63,13 +59,13 @@ private:
   GraphPathMode path_mode_{GraphPathMode::WALK};
 };
 
-class GraphFeedbackLoopOp final : public ObRecursiveUnionAllOp
+class GraphFeedbackLoopOp final : public RecursivePumpOp
 {
 public:
   explicit GraphFeedbackLoopOp(ObExecContext &exec_ctx,
                                const ObOpSpec &spec,
                                ObOpInput *input)
-      : ObRecursiveUnionAllOp(exec_ctx, spec, input)
+      : RecursivePumpOp(exec_ctx, spec, input)
   {}
   ~GraphFeedbackLoopOp() = default;
 };

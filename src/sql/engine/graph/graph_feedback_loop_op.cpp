@@ -24,11 +24,13 @@ namespace sql
 
 GraphFeedbackLoopSpec::GraphFeedbackLoopSpec(common::ObIAllocator &allocator,
                                              const ObPhyOperatorType type)
-    : ObRecursiveUnionAllSpec(allocator, type)
+    : RecursivePumpSpec(allocator, type)
 {
 }
 
-OB_SERIALIZE_MEMBER((GraphFeedbackLoopSpec, ObRecursiveUnionAllSpec),
+// RecursivePumpSpec replaces the former ObRecursiveUnionAllSpec envelope with
+// the same version and payload, preserving the graph spec's wire layout.
+OB_SERIALIZE_MEMBER((GraphFeedbackLoopSpec, RecursivePumpSpec),
                     lower_bound_,
                     upper_bound_,
                     direction_,

@@ -1169,7 +1169,7 @@ int ObStaticEngineCG::generate_spec(ObLogSet &op, ObRecursiveUnionAllSpec &spec,
   UNUSED(in_root_job);
   LOG_DEBUG("static engine cg generate recursive union all", K(spec.get_left()->output_),
             K(spec.get_right()->output_), K(op.get_output_exprs()));
-  if (OB_FAIL(generate_recursive_union_all_spec(op, spec))) {
+  if (OB_FAIL(generate_recursive_pump_spec(op, spec))) {
   }
   return ret;
 }
@@ -1180,7 +1180,7 @@ int ObStaticEngineCG::generate_spec(GraphFeedbackLoopLogOp &op,
 {
   int ret = OB_SUCCESS;
   UNUSED(in_root_job);
-  if (OB_FAIL(generate_recursive_union_all_spec(op, spec))) {
+  if (OB_FAIL(generate_recursive_pump_spec(op, spec))) {
   } else {
     spec.set_graph_path(op.get_min_hops(),
                         op.get_max_hops(),
@@ -1248,8 +1248,8 @@ int ObStaticEngineCG::generate_merge_set_spec(ObLogSet &op, ObMergeSetSpec &spec
   return ret;
 }
 
-int ObStaticEngineCG::generate_recursive_union_all_spec(ObLogicalOperator &op,
-                                                        ObRecursiveUnionAllSpec &spec)
+int ObStaticEngineCG::generate_recursive_pump_spec(ObLogicalOperator &op,
+                                                   RecursivePumpSpec &spec)
 {
   int ret = OB_SUCCESS;
   uint64_t last_cte_table_id = OB_INVALID_ID;
