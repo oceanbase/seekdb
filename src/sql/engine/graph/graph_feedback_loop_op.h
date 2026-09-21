@@ -99,8 +99,14 @@ public:
   {
     path_desc_ = path_desc;
   }
+  void set_expand_access(const GraphExpandAccessDesc &expand_access_desc)
+  {
+    expand_access_desc_ = expand_access_desc;
+  }
 
   const GraphPathDesc &get_path_desc() const { return path_desc_; }
+  const GraphExpandAccessDesc &get_expand_access_desc() const
+  { return expand_access_desc_; }
   int64_t get_lower_bound() const { return path_desc_.lower_bound_; }
   int64_t get_upper_bound() const { return path_desc_.upper_bound_; }
   GraphPathDirection get_direction() const { return path_desc_.direction_; }
@@ -108,6 +114,7 @@ public:
 
 private:
   GraphPathDesc path_desc_{};
+  GraphExpandAccessDesc expand_access_desc_{};
 };
 
 class GraphFeedbackLoopOp final : public RecursivePumpOp
@@ -119,6 +126,11 @@ public:
       : RecursivePumpOp(exec_ctx, spec, input)
   {}
   ~GraphFeedbackLoopOp() = default;
+  int inner_open() override;
+
+private:
+  const GraphFeedbackLoopSpec &get_graph_spec() const
+  { return static_cast<const GraphFeedbackLoopSpec &>(spec_); }
 };
 
 } // namespace sql

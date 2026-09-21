@@ -23,12 +23,74 @@
 
 namespace oceanbase
 {
+namespace share
+{
+namespace schema
+{
+class ObSchemaGetterGuard;
+}
+}
 namespace sql
 {
 
 // GraphExpand validates this protocol limit independently of the caller's
 // query-memory budget. Frontier controllers split larger levels into batches.
 static const int64_t GRAPH_EXPAND_MAX_INPUT_STATE_COUNT = 4096;
+
+// Physical table/column binding for one GraphExpand hop. Endpoint columns are
+// normalized to the traversal direction: edge_current_columns_ join the input
+// frontier, while edge_next_columns_ produce target vertex identities. The
+// selected edge access table is either edge_table_id_ itself or a readable
+// local index whose leading columns are edge_current_columns_.
+struct GraphExpandAccessDesc
+{
+  OB_UNIS_VERSION(1);
+public:
+  int init(const GraphPathDesc &path_desc,
+           uint64_t edge_access_table_id,
+           share::schema::ObSchemaGetterGuard &schema_guard);
+  bool is_valid() const;
+  bool uses_adjacency_index() const
+  { return edge_access_table_id_ != edge_table_id_; }
+  uint64_t hash(uint64_t seed = 0) const;
+
+  uint64_t source_table_id_{common::OB_INVALID_ID};
+  int64_t source_table_version_{0};
+  uint64_t edge_table_id_{common::OB_INVALID_ID};
+  int64_t edge_table_version_{0};
+  uint64_t target_table_id_{common::OB_INVALID_ID};
+  int64_t target_table_version_{0};
+  uint64_t edge_access_table_id_{common::OB_INVALID_ID};
+  int64_t edge_access_table_version_{0};
+  int64_t source_key_count_{0};
+  int64_t edge_key_count_{0};
+  int64_t target_key_count_{0};
+  uint64_t source_key_columns_[GRAPH_IDENTITY_MAX_KEYS]{
+      common::OB_INVALID_ID, common::OB_INVALID_ID};
+  uint64_t edge_key_columns_[GRAPH_IDENTITY_MAX_KEYS]{
+      common::OB_INVALID_ID, common::OB_INVALID_ID};
+  uint64_t target_key_columns_[GRAPH_IDENTITY_MAX_KEYS]{
+      common::OB_INVALID_ID, common::OB_INVALID_ID};
+  uint64_t edge_current_columns_[GRAPH_IDENTITY_MAX_KEYS]{
+      common::OB_INVALID_ID, common::OB_INVALID_ID};
+  uint64_t edge_next_columns_[GRAPH_IDENTITY_MAX_KEYS]{
+      common::OB_INVALID_ID, common::OB_INVALID_ID};
+  TO_STRING_KV(K_(source_table_id), K_(source_table_version),
+               K_(edge_table_id), K_(edge_table_version),
+               K_(target_table_id), K_(target_table_version),
+               K_(edge_access_table_id), K_(edge_access_table_version),
+               K_(source_key_count), K_(edge_key_count), K_(target_key_count),
+               "source_key_0", source_key_columns_[0],
+               "source_key_1", source_key_columns_[1],
+               "edge_key_0", edge_key_columns_[0],
+               "edge_key_1", edge_key_columns_[1],
+               "target_key_0", target_key_columns_[0],
+               "target_key_1", target_key_columns_[1],
+               "edge_current_0", edge_current_columns_[0],
+               "edge_current_1", edge_current_columns_[1],
+               "edge_next_0", edge_next_columns_[0],
+               "edge_next_1", edge_next_columns_[1]);
+};
 
 // The DAS-facing access adapter owns the transaction descriptor, statement
 // snapshot and schema guard. It must return an error for scan/RPC failures and

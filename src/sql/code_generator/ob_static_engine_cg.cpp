@@ -1183,6 +1183,7 @@ int ObStaticEngineCG::generate_spec(GraphFeedbackLoopLogOp &op,
   if (OB_FAIL(generate_recursive_pump_spec(op, spec))) {
   } else {
     spec.set_graph_path(op.get_path_desc());
+    spec.set_expand_access(op.get_expand_access_desc());
   }
   return ret;
 }

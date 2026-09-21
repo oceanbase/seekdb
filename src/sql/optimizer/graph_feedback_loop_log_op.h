@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "sql/engine/graph/graph_path_spec.h"
+#include "sql/engine/graph/graph_expand.h"
 #include "sql/optimizer/ob_logical_operator.h"
 
 namespace oceanbase
@@ -54,8 +54,10 @@ public:
     pull_to_local_ = pull_to_local;
   }
 
-  int initialize_step_access_method();
+  int initialize_expand_access();
   const GraphPathDesc &get_path_desc() const { return path_desc_; }
+  const GraphExpandAccessDesc &get_expand_access_desc() const
+  { return expand_access_desc_; }
   int64_t get_min_hops() const { return path_desc_.lower_bound_; }
   int64_t get_max_hops() const { return path_desc_.upper_bound_; }
   bool is_reverse() const
@@ -91,7 +93,7 @@ public:
                                int64_t &inherit_child_ordering_index) override;
   bool is_consume_child_1by1() const override { return true; }
 
-  VIRTUAL_TO_STRING_KV(K_(path_desc),
+  VIRTUAL_TO_STRING_KV(K_(path_desc), K_(expand_access_desc),
                        "pull to local", pull_to_local_,
                        "step access", static_cast<int64_t>(step_access_method_));
 
@@ -100,6 +102,7 @@ private:
 
 private:
   GraphPathDesc path_desc_{};
+  GraphExpandAccessDesc expand_access_desc_{};
   bool pull_to_local_{false};
   GraphFeedbackAccessMethod step_access_method_{GraphFeedbackAccessMethod::UNKNOWN};
 

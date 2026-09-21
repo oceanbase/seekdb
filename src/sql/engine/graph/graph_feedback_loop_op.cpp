@@ -278,6 +278,20 @@ GraphFeedbackLoopSpec::GraphFeedbackLoopSpec(common::ObIAllocator &allocator,
 {
 }
 
+int GraphFeedbackLoopOp::inner_open()
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!get_graph_spec().get_path_desc().is_valid()
+                  || !get_graph_spec().get_expand_access_desc().is_valid())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid graph feedback physical descriptor", K(ret),
+             K(get_graph_spec().get_path_desc()),
+             K(get_graph_spec().get_expand_access_desc()));
+  } else if (OB_FAIL(RecursivePumpOp::inner_open())) {
+  }
+  return ret;
+}
+
 // Cached plans need the graph and element mapping IDs as well as traversal
 // controls. A native access adapter can therefore consume this descriptor
 // directly instead of reverse-engineering the recursive child plan.
@@ -292,7 +306,8 @@ OB_SERIALIZE_MEMBER((GraphFeedbackLoopSpec, RecursivePumpSpec),
                     path_desc_.direction_,
                     path_desc_.path_mode_,
                     path_desc_.row_shape_,
-                    path_desc_.need_path_);
+                    path_desc_.need_path_,
+                    expand_access_desc_);
 
 } // namespace sql
 } // namespace oceanbase

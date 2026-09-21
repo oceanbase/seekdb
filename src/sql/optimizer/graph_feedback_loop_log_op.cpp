@@ -144,20 +144,27 @@ const char *path_mode_name(GraphPathMode path_mode)
 
 } // namespace
 
-int GraphFeedbackLoopLogOp::initialize_step_access_method()
+int GraphFeedbackLoopLogOp::initialize_expand_access()
 {
   int ret = OB_SUCCESS;
   const ObLogicalOperator *step = get_child(second_child);
   const ObLogTableScan *edge_scan = nullptr;
-  if (OB_ISNULL(step)) {
+  share::schema::ObSchemaGetterGuard *schema_guard = nullptr;
+  if (OB_ISNULL(get_plan())
+      || OB_ISNULL(schema_guard = get_plan()->get_optimizer_context().get_schema_guard())
+      || OB_ISNULL(step)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("graph feedback step child is null", K(ret));
+    LOG_WARN("graph feedback access dependencies are missing", K(ret),
+             K(get_plan()), K(schema_guard), K(step));
   } else if (OB_ISNULL(edge_scan = find_step_edge_scan(step))) {
-    // Keep UNKNOWN visible in EXPLAIN instead of guessing. The internal alias
-    // lookup is transitional until the step child is a logical GraphExpand.
-    step_access_method_ = GraphFeedbackAccessMethod::UNKNOWN;
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("graph feedback edge scan is missing", K(ret), KPC(step));
+  } else if (OB_FAIL(expand_access_desc_.init(
+                 path_desc_, edge_scan->get_index_table_id(), *schema_guard))) {
+    LOG_WARN("failed to initialize graph expand access", K(ret), K_(path_desc),
+             "edge_access_table_id", edge_scan->get_index_table_id());
   } else {
-    step_access_method_ = edge_scan->is_index_scan()
+    step_access_method_ = expand_access_desc_.uses_adjacency_index()
         ? GraphFeedbackAccessMethod::INDEX_SCAN
         : GraphFeedbackAccessMethod::FULL_SCAN;
   }
@@ -348,6 +355,7 @@ uint64_t GraphFeedbackLoopLogOp::hash(uint64_t seed) const
   seed = do_hash(static_cast<int64_t>(path_desc_.path_mode_), seed);
   seed = do_hash(static_cast<int64_t>(path_desc_.row_shape_), seed);
   seed = do_hash(path_desc_.need_path_, seed);
+  seed = expand_access_desc_.hash(seed);
   seed = do_hash(pull_to_local_, seed);
   seed = do_hash(static_cast<int64_t>(step_access_method_), seed);
   return ObLogicalOperator::hash(seed);

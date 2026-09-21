@@ -3023,7 +3023,7 @@ int ObSelectLogPlan::allocate_recursive_union_all_as_top(ObLogicalOperator *left
       graph_op->configure_path(
           select_stmt->get_graph_path_desc(),
           dist_set_method == DistAlgo::DIST_PULL_TO_LOCAL);
-      if (OB_FAIL(graph_op->initialize_step_access_method())) {
+      if (OB_FAIL(graph_op->initialize_expand_access())) {
       } else if (OB_FAIL(graph_op->compute_property())) {
       } else {
         top = graph_op;
