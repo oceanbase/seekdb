@@ -23,6 +23,33 @@
 
 - namespace 目录是不可变 B+Tree/COW 根。fork 复制 root/snapshot 引用，不枚举表、索引或 LOB tablet，数据量和表数不进入 fork 主路径复杂度。
 - DDL 通过通用 `ObDDLSQLTransaction` 边界登记，不针对 `CREATE TABLE` / `CREATE INDEX` / `DROP INDEX` 分别打补丁。
+
+## fork 门禁测试（如何运行）
+
+四个 prototype 套件构成合入门禁，全部在 `tools/obtest/` 下，用 `--binary` 指向待测二进制。统一前置：
+
+```bash
+source ~/.bashrc && cd build_release && CARGO_NET_OFFLINE=true make -j80 seekdb   # 产出 build_release/src/observer/seekdb
+export SEEKDB_FORK_PROTOTYPE_TEST_ROOT=/data/1/nijia.nj/test                       # 测试实例与证据归档根目录
+```
+
+```bash
+# 1. 冷启动门禁：共享进程禁止执行 SQL、Worker bootstrap、崩溃恢复
+python3 tools/obtest/namespace_worker_bootstrap_prototype.py --binary build_release/src/observer/seekdb
+
+# 2. SQL Worker 全量：嵌套 SQL、事务、查询超时/取消、DDL、索引（--case 可选 insert/dml/nested/ddl/index 单跑）
+python3 tools/obtest/namespace_sql_worker_prototype.py --binary build_release/src/observer/seekdb --case full
+
+# 3. 原生客户端入口全量：UDS 直连、root@ns 登录路由、权限、协议特性（--case 可选 forked/tls）
+python3 tools/obtest/namespace_worker_direct_prototype.py --binary build_release/src/observer/seekdb --case full
+
+# 4. TLS 变体：入口 TLS 端到端
+python3 tools/obtest/namespace_worker_direct_prototype.py --binary build_release/src/observer/seekdb --case tls
+```
+
+- 通过判据：进程 exit 0 且输出含 `{"event": "PASS", ...}`；每个套件自动把实例数据打包为 `$SEEKDB_FORK_PROTOTYPE_TEST_ROOT/namespace_fork_PROTOTYPE_<套件>_<随机串>/data.tar.gz` 作为证据（文档中"四套件 PASS"后附的 tar.gz 路径即来源于此）。
+- 排障：PROTOTYPE 打印在实例目录的 `log/seekdb.log`（不是 shared-stdout.log）；套件输出里的 `event` 行给出失败阶段。
+- 注意：四个套件各自独立部署临时实例，串行跑即可；不要与手工实例（a0_measure 等）占用同一 TEST_ROOT 下的运行端口段同时压测。
 - 持久化栅栏使用 `active_schema_changes` 和 `pending_schema_version`：前者表示 DDL 未提交，后者表示 DDL 已提交但 namespace 存储目录尚未发布。fork/drop 锁定 source 后只在两者均为零时继续。
 - Worker 在 DDL 真正提交后发布 schema delta，成功后与目录变更在同一控制元数据事务中清除 pending version。进程在两步之间崩溃时，重启 Worker 会先完成全量 schema/目录对齐，再开放端口。
 - 干净的 child 启动不做全量目录重建，因此保留 fork 时的同一根页。
@@ -364,3 +391,7 @@
 - 后台 detach 作业（长命只读子的主动物化解套）：TODO，v1 不做。
 - `check_sys_schema_change` 81ms 全表扫（用户明确先不做）。
 - fork→可用当前 ~1.2s；单进程化后无进程 spawn/bootstrap，预计进入 100ms 量级。
+
+### 回滚记录
+
+- 2026-09-22 回滚 IPC 层性能 commit（92e3d9b9e）：`81e2e1907`（scan 融合/自动关闭/tx 去重）与 `5a6c13262`（探测消除/本地版本读/DDL 栅栏）的代码改动全部回滚——两者优化的是单进程化要删除的 IPC 层，留着只是对 vanilla 语义的额外偏离（每查询本地 schema 刷新、上游双 prepare）。文档中的实测记录保留作历史证据；`b2dd38f5c`（sysbench 对比文档）有意保留。回滚后四套件 PASS：bootstrap `eskhj7_0`、sql_worker full `k23xit4k`、direct full `uimc6c8w`、direct tls `skyg425u`。单进程化落地前门禁以此为准；若过渡期需要性能数字可摘樱桃恢复。
