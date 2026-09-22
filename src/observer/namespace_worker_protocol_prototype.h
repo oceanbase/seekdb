@@ -245,7 +245,6 @@ int finish_namespace_schema_recovery(int64_t reconciled_schema_version);
 int fetch_schema_version(bool published, bool core_version, int64_t &version);
 share::schema::ObPrivMgr *make_remote_priv_mgr(int64_t version);
 int admin_set_config(obcall::ObAdminSetConfigArg &arg);
-bool enabled();
 struct SessionBinding;
 struct PendingRequest;
 // Native inner SQL can switch sessions while keeping the same execution stack.

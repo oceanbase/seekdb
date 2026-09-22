@@ -1050,7 +1050,6 @@ int ObSchemaGetterGuard::get_database_schema(
     return storage::NamespaceForkKernelPrototype::database_by_id(encoded_db, database_schema);
   }
   if (!observer::namespace_worker_prototype::owns_namespace_schema()
-      && storage::NamespaceForkKernelPrototype::namespace_mode()
       && storage::NamespaceForkKernelPrototype::is_encoded_id(database_id)) {
     return storage::NamespaceForkKernelPrototype::database_by_id(database_id, database_schema);
   }
@@ -1099,7 +1098,6 @@ int ObSchemaGetterGuard::get_database_schema(
     return ret;
   }
   if (!observer::namespace_worker_prototype::owns_namespace_schema()
-      && storage::NamespaceForkKernelPrototype::namespace_mode()
       && storage::NamespaceForkKernelPrototype::is_encoded_id(database_id)) {
     return storage::NamespaceForkKernelPrototype::database_by_id(database_id, database_schema);
   }
@@ -2556,7 +2554,7 @@ int ObSchemaGetterGuard::get_schema_version(
     return ret;
   }
   if (!observer::namespace_worker_prototype::owns_namespace_schema()
-      && schema_type == DATABASE_SCHEMA && storage::NamespaceForkKernelPrototype::namespace_mode()
+      && schema_type == DATABASE_SCHEMA
       && storage::NamespaceForkKernelPrototype::is_encoded_id(schema_id)) {
     const ObDatabaseSchema *schema = nullptr;
     int ret = storage::NamespaceForkKernelPrototype::database_by_id(schema_id, schema);

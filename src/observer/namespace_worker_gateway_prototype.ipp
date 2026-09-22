@@ -80,7 +80,6 @@ uint64_t resolve_shared_inner_sql_namespace() {
       binding != shared_inner_sql_namespaces.end());
   return namespace_id;
 }
-bool enabled() { return true; }
 int check_sql_execution_role() {
   // User SQL executes only in namespace workers; the shared process owns
   // storage, fork control and the thin TCP router.
@@ -416,7 +415,7 @@ void Channel::fail() {
 }
 sql::ObSQLSessionInfo *bound_session(SessionBinding *binding) { return binding ? binding->gateway : nullptr; }
 int attach(uint64_t ns, std::shared_ptr<Child> &child) {
-  if (!enabled() || ns == 0 || ns >= (1ULL << 30)) { return OB_NOT_SUPPORTED; }
+  if (ns == 0 || ns >= (1ULL << 30)) { return OB_NOT_SUPPORTED; }
   std::lock_guard<std::mutex> guard(children_mutex);
   auto it = children.find(ns);
   if (it == children.end()) {
@@ -1304,9 +1303,6 @@ int deactivate_namespace(uint64_t namespace_id) {
   return ret;
 }
 int reconcile_namespace_workers() {
-  // Namespace storage can be exercised without the process-separated SQL
-  // worker prototype. In that mode there are no endpoints to reconcile.
-  if (!enabled()) { return OB_SUCCESS; }
   if (worker_process || !GCTX.sql_proxy_) { return OB_NOT_SUPPORTED; }
   std::vector<uint64_t> namespaces{1};
   int ret = push_inner_sql_namespace_override(1);
@@ -1355,7 +1351,7 @@ int open_session(uint64_t ns, sql::ObSQLSessionInfo &gateway, SessionBinding *&b
   // namespace-1 session.  Do not expose an external Worker session until that
   // DDL is complete: otherwise a process crash can make an unrelated user DDL
   // the first waiter on the recovering package transaction's runtime lock.
-  if (enabled() && !worker_process && !internal
+  if (!worker_process && !internal
       && !ATOMIC_LOAD(&GCTX.sys_package_ready_)) {
     return OB_EAGAIN;
   } else if (ns > 1) {

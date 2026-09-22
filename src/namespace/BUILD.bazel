@@ -1,0 +1,19 @@
+load(
+    "//bazel:defs.bzl",
+    cc_library = "seekdb_cc_library",
+)
+
+# Boundary layer: only the entry layer (observer) and the SQL layer may depend
+# on namespace semantics. storage/share/rootserver storage-side code must stay
+# ns-blind -- depending on this package from those layers is a compile error.
+package(default_visibility = ["//visibility:private"])
+
+cc_library(
+    name = "namespace",
+    hdrs = ["namespace.h"],
+    features = ["layering_check"],
+    visibility = [
+        "//src/observer:__pkg__",
+        "//src/sql:__pkg__",
+    ],
+)

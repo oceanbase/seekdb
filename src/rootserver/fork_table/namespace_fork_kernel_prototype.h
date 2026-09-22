@@ -33,11 +33,6 @@ struct NamespaceObjectKey
 class NamespaceForkKernelPrototype final
 {
 public:
-  static bool enabled();
-  static bool namespace_mode();
-  static bool lifetime_mode();
-  static bool lineage_mode();
-  static bool metadata_gc_mode();
   static int ensure_control_schema();
   static int begin_namespace_drop(const common::ObString &name, uint64_t &id, bool &done);
   static int lock_namespace_drop(common::ObISQLClient &trans, uint64_t id,

@@ -18,6 +18,7 @@ ROOTSERVER_PUBLIC_HEADERS = [
     "ddl_task/ob_modify_autoinc_task.h",
     "ddl_task/ob_table_redefinition_task.h",
     "fork_table/ob_fork_table_util.h",
+    "fork_table/namespace_fork_kernel_prototype.h",
     "freeze/ob_checksum_validator.h",
     "freeze/ob_daily_major_freeze_launcher.h",
     "freeze/ob_freeze_info_detector.h",

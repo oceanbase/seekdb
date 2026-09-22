@@ -385,7 +385,7 @@ void accept_loop() {
   }
 }
 int start() {
-  if (!enabled() || worker_process) { return OB_SUCCESS; }
+  if (worker_process) { return OB_SUCCESS; }
   int ret = OB_SUCCESS;
   const int64_t port = GCONF.mysql_port;
   const bool ipv6 = lib::use_ipv6();
