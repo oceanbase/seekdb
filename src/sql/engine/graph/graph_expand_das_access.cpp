@@ -404,63 +404,67 @@ int GraphExpandDasAccess::lookup_vertices(
 }
 
 int GraphExpandDasAccess::init_scan_rtdef(
-    const VertexLookupBinding &binding,
+    const ObTableScanSpec &scan_spec,
+    const ObDASScanCtDef &scan_ctdef,
+    bool uses_index_back,
     ObIAllocator &scan_allocator,
     ObDASScanRtDef &scan_rtdef) const
 {
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *plan_ctx = exec_ctx_.get_physical_plan_ctx();
   ObSQLSessionInfo *session = exec_ctx_.get_my_session();
-  const ObTableScanSpec *scan_spec = binding.scan_spec_;
-  if (OB_ISNULL(plan_ctx) || OB_ISNULL(session) || OB_ISNULL(scan_spec)
-      || OB_ISNULL(binding.scan_ctdef_)) {
+  if (OB_ISNULL(plan_ctx) || OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("graph vertex lookup runtime context is incomplete", K(ret),
-             K(plan_ctx), K(session), K(scan_spec), K(binding.scan_ctdef_));
+    LOG_WARN("graph DAS scan runtime context is incomplete", K(ret),
+             K(plan_ctx), K(session));
   } else {
-    scan_rtdef.ctdef_ = binding.scan_ctdef_;
+    const bool is_lookup = &scan_ctdef == scan_spec.tsc_ctdef_.lookup_ctdef_;
+    scan_rtdef.ctdef_ = &scan_ctdef;
     scan_rtdef.timeout_ts_ = plan_ctx->get_ps_timeout_timestamp();
     scan_rtdef.tx_lock_timeout_ = session->get_trx_lock_timeout();
-    scan_rtdef.scan_flag_ = scan_spec->tsc_ctdef_.scan_flags_;
-    scan_rtdef.scan_flag_.scan_order_ = ObQueryFlag::NoOrder;
-    scan_rtdef.scan_flag_.index_back_ = false;
+    scan_rtdef.scan_flag_ = scan_spec.tsc_ctdef_.scan_flags_;
+    scan_rtdef.scan_flag_.scan_order_ = uses_index_back && is_lookup
+        ? ObQueryFlag::KeepOrder : ObQueryFlag::NoOrder;
+    scan_rtdef.scan_flag_.index_back_ = uses_index_back;
     scan_rtdef.scan_flag_.is_need_feedback_ = false;
-    scan_rtdef.need_check_output_datum_ = scan_spec->need_check_output_datum_;
+    scan_rtdef.need_check_output_datum_ = scan_spec.need_check_output_datum_;
     scan_rtdef.sql_mode_ = session->get_sql_mode();
     scan_rtdef.stmt_allocator_.set_alloc(&scan_allocator);
     scan_rtdef.scan_allocator_.set_alloc(&scan_allocator);
     scan_rtdef.eval_ctx_ = &eval_ctx_;
-    scan_rtdef.frozen_version_ = scan_spec->frozen_version_;
-    scan_rtdef.scan_op_id_ = scan_spec->get_id();
-    scan_rtdef.scan_rows_size_ = scan_spec->rows_ * scan_spec->width_;
+    scan_rtdef.frozen_version_ = scan_spec.frozen_version_;
+    scan_rtdef.scan_op_id_ = scan_spec.get_id();
+    scan_rtdef.scan_rows_size_ = scan_spec.rows_ * scan_spec.width_;
     scan_rtdef.runtime_schema_version_
         = exec_ctx_.get_sql_exec_ctx().get_query_begin_schema_version();
-    if (OB_FAIL(scan_rtdef.init_pd_op(exec_ctx_, *binding.scan_ctdef_))) {
-      LOG_WARN("failed to initialize graph vertex lookup pushdown", K(ret),
-               KPC(binding.scan_ctdef_));
-    } else if (OB_FAIL(scan_spec->tsc_ctdef_.snapshot_item_
+    if (OB_FAIL(scan_rtdef.init_pd_op(exec_ctx_, scan_ctdef))) {
+      LOG_WARN("failed to initialize graph DAS scan pushdown", K(ret),
+               K(scan_ctdef));
+    } else if (OB_FAIL(scan_spec.tsc_ctdef_.snapshot_item_
                            .set_snapshot_query_info(eval_ctx_, scan_rtdef))) {
-      LOG_WARN("failed to initialize graph vertex lookup snapshot", K(ret),
-               KPC(scan_spec));
+      LOG_WARN("failed to initialize graph DAS scan snapshot", K(ret),
+               K(scan_spec));
     } else {
       scan_rtdef.table_loc_ = DAS_CTX(exec_ctx_).get_table_loc_by_id(
-          scan_spec->get_table_loc_id(), binding.scan_ctdef_->ref_table_id_);
+          scan_spec.get_table_loc_id(), scan_ctdef.ref_table_id_);
       if (scan_rtdef.table_loc_ == nullptr
-          && binding.scan_ctdef_ == scan_spec->tsc_ctdef_.lookup_ctdef_
-          && scan_spec->tsc_ctdef_.lookup_loc_meta_ != nullptr) {
+          && &scan_ctdef == scan_spec.tsc_ctdef_.lookup_ctdef_
+          && scan_spec.tsc_ctdef_.lookup_loc_meta_ != nullptr) {
         ret = DAS_CTX(exec_ctx_).extended_table_loc(
-            *scan_spec->tsc_ctdef_.lookup_loc_meta_, scan_rtdef.table_loc_);
+            *scan_spec.tsc_ctdef_.lookup_loc_meta_, scan_rtdef.table_loc_);
       }
       if (OB_SUCC(ret)
           && (OB_ISNULL(scan_rtdef.table_loc_)
               || OB_ISNULL(scan_rtdef.table_loc_->loc_meta_))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("graph vertex lookup table location metadata is missing", K(ret),
-                 K(scan_spec->get_table_loc_id()),
-                 K(binding.scan_ctdef_->ref_table_id_));
+        LOG_WARN("graph DAS scan table location metadata is missing", K(ret),
+                 K(scan_spec.get_table_loc_id()), K(scan_ctdef.ref_table_id_));
       } else if (OB_SUCC(ret)
                  && scan_rtdef.table_loc_->loc_meta_->is_weak_read_) {
         scan_rtdef.scan_flag_.set_is_select_follower();
+      }
+      if (OB_SUCC(ret) && scan_spec.ref_table_id_ != scan_ctdef.ref_table_id_) {
+        scan_rtdef.need_scn_ = false;
       }
     }
   }
@@ -479,7 +483,8 @@ int GraphExpandDasAccess::lookup_vertices(
       OB_MALLOC_NORMAL_BLOCK_SIZE,
       ModulePageAllocator(das_ref.get_das_alloc(), "GraphVtxRange"));
   das_ref.set_mem_attr(ObMemAttr("GraphVtxLookup"));
-  if (OB_FAIL(init_scan_rtdef(binding, das_ref.get_das_alloc(), scan_rtdef))) {
+  if (OB_FAIL(init_scan_rtdef(*binding.scan_spec_, *binding.scan_ctdef_, false,
+                              das_ref.get_das_alloc(), scan_rtdef))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < requested.count(); ++i) {
     bool duplicate = false;
@@ -578,16 +583,25 @@ int GraphExpandDasAccess::lookup_vertices(
 }
 
 int GraphExpandDasAccess::materialize_identity(
-    const VertexLookupBinding &binding,
+    uint64_t element_id,
+    int64_t key_count,
+    ObExpr *const *key_exprs,
     GraphElementIdentity &identity) const
 {
   int ret = OB_SUCCESS;
-  identity.graph_id_ = path_desc_.graph_id_;
-  identity.element_id_ = binding.element_id_;
-  identity.key_count_ = binding.key_count_;
-  for (int64_t key = 0; OB_SUCC(ret) && key < binding.key_count_; ++key) {
+  identity.reset();
+  if (OB_UNLIKELY(element_id == OB_INVALID_ID || key_count <= 0
+                  || key_count > GRAPH_IDENTITY_MAX_KEYS
+                  || key_exprs == nullptr)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    identity.graph_id_ = path_desc_.graph_id_;
+    identity.element_id_ = element_id;
+    identity.key_count_ = key_count;
+  }
+  for (int64_t key = 0; OB_SUCC(ret) && key < key_count; ++key) {
     ObDatum *datum = nullptr;
-    ObExpr *expr = binding.key_exprs_[key];
+    ObExpr *expr = key_exprs[key];
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
@@ -595,7 +609,70 @@ int GraphExpandDasAccess::materialize_identity(
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(datum->to_obj(identity.keys_[key], expr->obj_meta_,
                                      expr->obj_datum_map_))) {
+    } else if (OB_UNLIKELY(identity.keys_[key].get_type() != ObIntType)) {
+      ret = OB_ERR_UNEXPECTED;
     }
+  }
+  return ret;
+}
+
+int GraphExpandDasAccess::materialize_identity(
+    const VertexLookupBinding &binding,
+    GraphElementIdentity &identity) const
+{
+  return materialize_identity(binding.element_id_, binding.key_count_,
+                              binding.key_exprs_, identity);
+}
+
+int GraphExpandDasAccess::edge_row_has_null_endpoint(bool &has_null) const
+{
+  int ret = OB_SUCCESS;
+  has_null = false;
+  for (int endpoint = 0; OB_SUCC(ret) && !has_null && endpoint < 2;
+       ++endpoint) {
+    const int64_t key_count = endpoint == 0 ? edge_binding_.source_key_count_
+                                            : edge_binding_.target_key_count_;
+    ObExpr *const *key_exprs = endpoint == 0 ? edge_binding_.source_exprs_
+                                              : edge_binding_.target_exprs_;
+    for (int64_t key = 0; OB_SUCC(ret) && !has_null && key < key_count; ++key) {
+      ObDatum *datum = nullptr;
+      if (OB_ISNULL(key_exprs[key])) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(key_exprs[key]->eval(eval_ctx_, datum))) {
+      } else if (OB_ISNULL(datum)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        has_null = datum->is_null();
+      }
+    }
+  }
+  return ret;
+}
+
+int GraphExpandDasAccess::materialize_edge(GraphExpandEdge &edge,
+                                           bool &matches) const
+{
+  int ret = OB_SUCCESS;
+  bool has_null_endpoint = false;
+  edge = GraphExpandEdge();
+  matches = false;
+  if (OB_UNLIKELY(!edge_binding_.is_valid())) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(edge_row_has_null_endpoint(has_null_endpoint))) {
+  } else if (has_null_endpoint) {
+    // SQL equality does not join a NULL endpoint to a frontier or vertex key,
+    // so this physical row is not a graph-edge match.
+  } else if (OB_FAIL(materialize_identity(
+                 path_desc_.source_element_id_, edge_binding_.source_key_count_,
+                 edge_binding_.source_exprs_, edge.source_identity_))) {
+  } else if (OB_FAIL(materialize_identity(
+                 path_desc_.edge_element_id_, edge_binding_.edge_key_count_,
+                 edge_binding_.edge_exprs_, edge.edge_identity_))) {
+  } else if (OB_FAIL(materialize_identity(
+                 path_desc_.target_element_id_, edge_binding_.target_key_count_,
+                 edge_binding_.target_exprs_, edge.target_identity_))) {
+  } else {
+    matches = true;
   }
   return ret;
 }

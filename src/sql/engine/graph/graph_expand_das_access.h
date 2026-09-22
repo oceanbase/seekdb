@@ -132,11 +132,19 @@ private:
   int lookup_vertices(const VertexLookupBinding &binding,
                       const common::ObIArray<GraphElementIdentity> &requested,
                       common::ObIArray<GraphElementIdentity> &existing);
-  int init_scan_rtdef(const VertexLookupBinding &binding,
+  int init_scan_rtdef(const ObTableScanSpec &scan_spec,
+                      const ObDASScanCtDef &scan_ctdef,
+                      bool uses_index_back,
                       common::ObIAllocator &scan_allocator,
                       ObDASScanRtDef &scan_rtdef) const;
+  int materialize_identity(uint64_t element_id,
+                           int64_t key_count,
+                           ObExpr *const *key_exprs,
+                           GraphElementIdentity &identity) const;
   int materialize_identity(const VertexLookupBinding &binding,
                            GraphElementIdentity &identity) const;
+  int edge_row_has_null_endpoint(bool &has_null) const;
+  int materialize_edge(GraphExpandEdge &edge, bool &matches) const;
   int64_t find_requested(
       const common::ObIArray<GraphElementIdentity> &requested,
       const GraphElementIdentity &identity) const;
