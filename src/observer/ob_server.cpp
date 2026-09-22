@@ -2313,6 +2313,9 @@ int ObServer::init_schema()
   if (OB_SUCC(ret) && nullptr != ::getenv("SEEKDB_NAMESPACE_SECOND_SCHEMA_PROBE")) {
     probe_second_schema_service();
   }
+  if (OB_SUCC(ret) && nullptr != ::getenv("SEEKDB_NAMESPACE_SERVICE_GROUP_PROBE")) {
+    probe_namespace_service_group();
+  }
 
   return ret;
 }
@@ -2467,6 +2470,101 @@ void ObServer::probe_second_schema_service()
   if (OB_NOT_NULL(second_schema)) {
     second_schema->destroy();
     share::schema::ObMultiVersionSchemaService::free_instance(second_schema);
+  }
+}
+
+// Issue 05 (Phase 1c) service-group entry: drive a real per-namespace service
+// group (NamespaceRuntime) through allocation and init of its own schema service
+// instance, alongside the process singleton. This is what a forked namespace
+// will run when it activates; here it runs on a throwaway runtime so that the
+// entry path is verified without yet creating a real second namespace.
+// Diagnostic only: writes /tmp/ns-runtime-group.result and never fails startup.
+void ObServer::probe_namespace_service_group()
+{
+  int ret = OB_SUCCESS;
+  namespace_fork::NamespaceRegistry registry;
+  namespace_fork::Namespace probe_ns;
+  namespace_fork::NamespaceRuntime probe_runtime;
+  share::ObSchemaStatusProxy probe_status_proxy(sql_proxy_);
+  share::schema::ObSchemaPublishSignal probe_signal;
+  rootserver::ObMaxIdCacheAdapter *probe_max_id = nullptr;
+  share::schema::ObSchemaServiceSQLImpl *probe_backend = nullptr;
+  ObSchemaRefreshSchedulerAdapter *probe_scheduler = nullptr;
+  share::schema::ObMultiVersionSchemaService *owned_schema = nullptr;
+  int64_t singleton_before = OB_INVALID_VERSION;
+  int64_t singleton_after = OB_INVALID_VERSION;
+  int64_t owned_before = OB_INVALID_VERSION;
+  int64_t owned_after = OB_INVALID_VERSION;
+  const int64_t probe_version = 4100000000LL;
+  const char *const instance_tag = "_ns5_probe";
+
+  if (OB_FAIL(registry.init())) {
+  } else if (FALSE_IT(probe_ns = namespace_fork::Namespace(
+                 5 /* a real forked id shape */, common::ObString::make_string("probe5"),
+                 1 /* parent */, 0 /* fork scn */))) {
+  } else if (OB_FAIL(registry.register_namespace(probe_ns, probe_runtime))) {
+  } else if (OB_ISNULL(owned_schema =
+                 share::schema::ObMultiVersionSchemaService::alloc_instance())) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (FALSE_IT(probe_runtime.set_owned_schema_service(owned_schema, instance_tag))) {
+  } else if (OB_FAIL(probe_status_proxy.init())) {
+  } else if (OB_FAIL(probe_signal.init())) {
+  } else if (OB_ISNULL(probe_max_id = OB_NEW(
+      rootserver::ObMaxIdCacheAdapter, ObModIds::OB_SCHEMA_SERVICE, local_management_service_))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_ISNULL(probe_backend = OB_NEW(
+      share::schema::ObSchemaServiceSQLImpl, ObModIds::OB_SCHEMA_SERVICE,
+      probe_max_id, ddl_sql_proxy_, *owned_schema))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_ISNULL(probe_scheduler = OB_NEW(
+      ObSchemaRefreshSchedulerAdapter, ObModIds::OB_SCHEMA_SERVICE, ob_service_, *owned_schema))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(owned_schema->init(
+      &sql_proxy_, &config_, probe_status_proxy, gctx_.status_, gctx_.in_bootstrap_,
+      OB_MAX_VERSION_COUNT, *probe_backend, *probe_scheduler, probe_signal,
+      probe_runtime.get_schema_service_instance_tag()))) {
+  } else if (FALSE_IT(probe_runtime.set_service_inited())) {
+  } else if (OB_FAIL(schema_service_.get_published_schema_version(singleton_before, false))) {
+  } else if (OB_FAIL(owned_schema->get_published_schema_version(owned_before, false))) {
+  } else if (OB_FAIL(owned_schema->set_published_schema_version(probe_version))) {
+  } else if (OB_FAIL(owned_schema->get_published_schema_version(owned_after, false))) {
+  } else if (OB_FAIL(schema_service_.get_published_schema_version(singleton_after, false))) {
+  }
+  if (OB_FAIL(ret)) {
+    FILE *fp = ::fopen("/tmp/ns-runtime-group.result", "w");
+    if (nullptr != fp) {
+      ::fprintf(fp, "group_ok=false ret=%d\n", ret);
+      ::fclose(fp);
+    }
+  } else {
+    FILE *fp = ::fopen("/tmp/ns-runtime-group.result", "w");
+    if (nullptr != fp) {
+      ::fprintf(fp,
+                "group_ok=true runtime_active=%d owns_schema=%d service_inited=%d "
+                "tag=%s singleton_leaked=%d owned_isolation=%d registry_count=%ld\n",
+                probe_runtime.is_active() ? 1 : 0,
+                probe_runtime.owns_schema_service() ? 1 : 0,
+                probe_runtime.is_service_inited() ? 1 : 0,
+                probe_runtime.get_schema_service_instance_tag(),
+                singleton_after != singleton_before ? 1 : 0,
+                owned_after == probe_version ? 1 : 0,
+                registry.count());
+      ::fclose(fp);
+    }
+  }
+
+  if (OB_NOT_NULL(probe_scheduler)) {
+    OB_DELETE(ObSchemaRefreshSchedulerAdapter, ObModIds::OB_SCHEMA_SERVICE, probe_scheduler);
+  }
+  if (OB_NOT_NULL(probe_backend)) {
+    OB_DELETE(ObSchemaServiceSQLImpl, ObModIds::OB_SCHEMA_SERVICE, probe_backend);
+  }
+  if (OB_NOT_NULL(probe_max_id)) {
+    OB_DELETE(ObMaxIdCacheAdapter, ObModIds::OB_SCHEMA_SERVICE, probe_max_id);
+  }
+  if (OB_NOT_NULL(owned_schema)) {
+    owned_schema->destroy();
+    share::schema::ObMultiVersionSchemaService::free_instance(owned_schema);
   }
 }
 

@@ -113,14 +113,17 @@ private:
 // schedulers, ...). It is a pure compute layer: it is constructed once, bound to
 // one namespace, and interprets no namespace identity internally.
 //
-// Issue 03 creates the skeleton with an explicitly injected schema service.
-// Issue 04 adds the remaining services of the group; issue 05 makes the hot path
-// use them through the session binding.
+// Issue 03 created the skeleton with an injected schema service. Issue 05 adds
+// the per-namespace service group entry point. The group's objects are owned by
+// the process-level owner of the runtime (currently ObServer) rather than
+// destroyed here: this header stays free of the schema service's complete type,
+// which it cannot include without a dependency cycle.
 class NamespaceRuntime
 {
 public:
   NamespaceRuntime()
-    : namespace_(), schema_service_(nullptr), active_(false)
+    : namespace_(), schema_service_(nullptr), owns_schema_service_(false), active_(false),
+      service_inited_(false)
   {}
 
   // The runtime owns its copy of the namespace metadata, so the caller is free
@@ -146,21 +149,57 @@ public:
     return active_ ? namespace_.get_id() : OB_INVALID_ID;
   }
 
-  // The per-namespace schema service. For now it is the injected server schema
-  // service; issue 04 replaces it with the instance this runtime owns.
+  // Inject a schema service the runtime does not own. Used for the system
+  // namespace, whose schema authority is the process-level service.
   void set_schema_service(share::schema::ObMultiVersionSchemaService *schema_service)
   {
-    schema_service_ = schema_service;
+    if (schema_service_ != schema_service) {
+      release_schema_service();
+      schema_service_ = schema_service;
+    }
   }
   share::schema::ObMultiVersionSchemaService *get_schema_service() const
   {
     return schema_service_;
   }
 
+  // Record that the service group owns its own schema service instance, allocated
+  // by the caller through ObMultiVersionSchemaService::alloc_instance(). The
+  // instance tag namespaces its KV caches in the process-global registry (issue
+  // 04), so several runtimes can coexist. The caller owns the instance and frees
+  // it with free_instance() when the runtime is torn down; the runtime never
+  // destroys it, so this header needs no complete type.
+  void set_owned_schema_service(share::schema::ObMultiVersionSchemaService *schema_service,
+                                const char *instance_tag)
+  {
+    schema_service_ = schema_service;
+    owns_schema_service_ = OB_NOT_NULL(schema_service);
+    instance_tag_ = (nullptr == instance_tag) ? "" : instance_tag;
+    service_inited_ = false;
+  }
+  bool owns_schema_service() const { return owns_schema_service_; }
+  const char *get_schema_service_instance_tag() const { return instance_tag_.c_str(); }
+
+  // Where the owned instance has completed init(). The runtime is "service
+  // ready" only then; the login path treats a not-ready runtime as unavailable
+  // and lets the caller retry (the lazy-activation decision).
+  void set_service_inited() { service_inited_ = true; }
+  bool is_service_inited() const { return service_inited_; }
+
 private:
+  void release_schema_service()
+  {
+    owns_schema_service_ = false;
+    schema_service_ = nullptr;
+    service_inited_ = false;
+  }
+
   Namespace namespace_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
+  std::string instance_tag_;
+  bool owns_schema_service_;
   bool active_;
+  bool service_inited_;
 };
 
 // NamespaceRegistry: the process-wide map from namespace name/id to Namespace and

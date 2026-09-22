@@ -369,6 +369,7 @@ private:
   int init_namespace_registry();
   int register_worker_namespace(const uint64_t ns_id);
   void probe_second_schema_service();
+  void probe_namespace_service_group();
   int init_inner_table_monitor();
   int init_autoincrement_service();
   int init_tablet_autoincrement_service();

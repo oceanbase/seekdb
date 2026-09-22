@@ -67,3 +67,63 @@ worker bootstrap 步骤实测：`init_namespace_registry() => 0`、`register_wor
 - **per-ns 服务组**：runtime 现在只注入 schema service；issue 04 的 `alloc_instance`/instance_tag 机制要接进来，让每个 runtime 拥有自己的 schema service。
 - **`root@ns` 在共享进程的端到端**：共享进程的 2881 入口现在由 worker 代理接管，因此 gate 套件只覆盖 worker 侧的绑定；共享进程按名路由的路径要等单进程形态（Phase 3 删代理）才端到端可用。
 - **依赖方向**：`src/sql/session/ob_sql_session_info.h` 反向 include 了 `src/namespace/...`，与 `plan.md` 的 `namespace → observer → sql → storage` 方向相反。当前用最小 include 降低影响；Phase 1 收尾时应把 session 侧的 runtime 绑定改为不透明句柄（或把该类型下沉），并靠 bazel 门禁固化。
+
+---
+
+# 附：Phase 1c 进展（issue 05，进行中）
+
+状态：**服务组入口打通并验证**；"单进程内 fork 出 ns2"与性能门禁仍需单进程 fork 机制，未完成。
+
+## 7. runtime 拥有 per-ns schema service 实例（已完成）
+
+`NamespaceRuntime` 新增 `set_owned_schema_service(instance, tag)` / `owns_schema_service()` / `get_schema_service_instance_tag()` / `set_service_inited()` / `is_service_inited()`：
+
+- 实例由调用方通过 issue 04 的 `alloc_instance()` 分配、用 `free_instance()` 释放；
+  runtime 只记录归属与 tag，**不解引用 schema service 的完整类型**（头文件保持零依赖）。
+- tag 即 issue 04 的 cache 命名空间化参数，保证多实例在进程级 KV 注册表里不撞名。
+- 系统 ns 仍走 `set_schema_service(&schema_service_)`（进程级 schema 权威），行为不变。
+- `is_service_inited()` 为将来"懒激活：首连接阻塞等待 runtime 就绪"预留判据。
+
+验证（probe `SEEKDB_NAMESPACE_SERVICE_GROUP_PROBE=1`，写 `/tmp/ns-runtime-group.result`）：
+
+```
+group_ok=true runtime_active=1 owns_schema=1 service_inited=1 tag=_ns5_probe
+singleton_leaked=0 owned_isolation=1 registry_count=1
+```
+
+即：runtime 完成绑定、own 了一个真实 schema service 实例、该实例 init 成功且与自己 tag 对应；写它的 published version 不会污染进程单例（`singleton_leaked=0`），实例自身状态独立可写（`owned_isolation=1`）。
+
+同时跑 issue 04 的 probe（两者互不影响）：
+
+```
+coexist=true init_ret=0 primary_leaked=0 second_isolation=1
+```
+
+门禁（三种模式全绿）：
+
+| 运行 | 结果 |
+|---|---|
+| 两个 probe 全开 | PASS（cold_bootstrap / shared_sql_forbidden / recovery） |
+| 仅服务组 probe | PASS，归档 `.../bootstrap_v18_p4tp9k4z/data.tar.gz` |
+| 全关（回归） | PASS，归档 `.../bootstrap_v18_1clkg5kh/data.tar.gz` |
+
+## 8. 明确不做的改动及理由：`worker_request_schema_version` 转 session 级
+
+`plan.md` Phase 1.4 要求把"每语句版本 pin 从 thread_local 改 session 级（约 6 处）"。实测该 thread_local 的**全部 4 个读写点都被 `observer::namespace_worker_prototype::uses_remote_schema()` 门控**：
+
+- `ob_multi_version_schema_service.cpp:664`（读，remote 时兜底 requested_version）
+- `:1733-1738`（DDL/刷新可见性栅栏，remote 时抬升 pin）
+- `:2389-2390`（读，remote 时作为 published version）
+- `:1619-1623`（gateway 诊断打印）
+
+也就是说它只服务 **worker 进程的远程 schema 路径**，而 worker 进程模式在 ADR-0001 里已被判死刑、Phase 3 整体删除。现在把它改成 session 级，等于给一条即将删除的路径重做载体，且 `bind_login_namespace` 之后的 session 与 schema service 之间没有现成通道。**结论：本阶段不转换，随 Phase 3 删除该路径时一并消失**；单进程下的等价机制是"runtime 拥有自己的 schema service 实例"（§7 已完成），版本自然按 runtime 归属，不需要 thread_local。
+
+如果 reviewer 认为仍需在 worker 路径上消除 thread_local，应作为 Phase 3 之前的一次独立清理，而不是混在 issue 05 里。
+
+## 9. issue 05 剩余工作
+
+1. **单进程内 fork 出 ns2**：需要把 `FORK NAMESPACE` 从 worker/kernel 原型路径接入单进程 registry（创建 Namespace 记录 + runtime 懒激活）。这是 issue 05 的主线，依赖控制元数据（`__all_namespace`）与 kernel 的 id 编码翻译层在单进程内的落位。
+2. **plan cache per-ns 实例化**：`ObPlanCache` 已是 `server_module_*` 风格，需按 runtime 持有。
+3. **热路径 4 入口**（`obmp_query.cpp:104/515/850`、`ob_sql.cpp:1115`）改为取 session 绑定的 runtime 的 schema 版本。
+4. **性能门禁**：sysbench `oltp_point_select` 1t/8t 对比单体基线（issue 06）。
+
