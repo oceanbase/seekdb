@@ -61,24 +61,26 @@
 - Phase 1（per-ns）：worker prototype 已经 per-worker new 了 `mods_px_pools_`，照搬，**零新增改动**。
 - 未来共享：因为 ns 全程走任务上下文、不走路由，共享只需把 `get_or_create(group_id)` 的 key 归一成单池，**改动极小**。PX 是线程池共享化最理想的候选，但第一阶段不做。
 
-### freeze 家族专项：执行层共享、调度层 per-ns（推荐）
+### freeze 家族专项：执行层共享、调度层也全局（已定，用户拍板）
+
+原则：**Runtime 是纯计算层，不承载调度**。调度（merge/freeze 的发起与进度追踪）是全局协调者，允许知道 registry；执行层 ns-blind。
 
 实测拆分：
 
 - **执行层（共享，ns-blind）**：memstore freezer、checkpoint、compaction 执行、dag、tablet GC——全部 tablet 键组织，不读 schema。
 - **调度/进度层（schema 耦合，是唯一的 ns 感知点）**：`ObMajorMergeScheduler` init 绑定单个 `ObMultiVersionSchemaService&`（`ob_major_merge_scheduler.h:64`），`ObMajorMergeProgressChecker` 经 `schema_guard.get_simple_table_schema` 逐表枚举 tablet、按 table_id 做 checksum 校验（`ob_major_merge_progress_checker.cpp:250`），`ObDailyMajorFreezeLauncher` 经 sql_proxy 写 freeze info 内部表。单进程化后没有"覆盖所有 ns 的单一 schema service"，这个引用拿谁的就是问题。
 
-三条路：
+**已定做法：调度器全局单例 + registry 遍历**。关键实测便利点：`ObMajorMergeProgressChecker` 的各方法本来就把 `ObSchemaGetterGuard&` 当参数传（`ob_major_merge_progress_checker.cpp:170/221`），不持有 schema_service。因此只需把 scheduler 的"持有一个 schema_service 引用"改为"持有 `NamespaceRegistry&`，每轮调度遍历所有活跃 ns、逐个取 guard 传入"——checker 内部零改动，合并语义保持全局一轮（broadcast scn / freeze info 不变）。这正是不变式 2 的形态：ns 由调度任务显式传入，模块内部无感知。
 
-| 方案 | 做法 | 评价 |
-| --- | --- | --- |
-| A（推荐） | 调度层 per-ns 进 Runtime，每 ns 独立调度本 ns 表的合并轮次；执行层照旧共享 | 模块内部零改动（本来就只认一个 schema_service）；语义变化=major merge 从全局一轮变每 ns 一轮，需确认 broadcast scn / freeze info / GC pin 语义（GC pin 全局不动，各 ns 推进互不影响，等价于"最慢 ns 卡住全局 gc scn"，与现状同构） |
-| B | 调度层保持全局单例，枚举源从 schema 改为存储层 tablet 元信息（`ObTabletRuntimeInfo` 全局视图现成），checksum 经 registry 按需懒取各 ns schema | 保持全局一轮合并；中等改动，checksum 路径变异步 |
-| C | 保留覆盖全 ns 的全局 schema 视图专供调度 | 内存 double，已否决 |
+待解细节（Phase 2）：`__all_freeze_info` 等全局元数据内部表的归属——指定一个系统 ns（候选 `__template__` 或独立 system ns）承载全局调度元数据，调度器的 sql_proxy 操作定向到该 ns。
+
+已否决：
+
+- 调度层 per-ns 进 Runtime：违反"Runtime 纯计算层"定位（用户拍板）。
+- 保留覆盖全 ns 的全局 schema 视图专供调度：内存 double，已否决。
 
 ### 待定/后续阶段再定
 
-- freeze 调度层方案 A/B 最终拍板（倾向 A，Phase 2 验证语义）。
 - 共享线程池化（合并 per-ns timer/px/ddl 线程）：待 ns 数上来后按实测资源占用决定，休眠机制（Phase 4）优先于池合并。
 
 ## 阶段拆解
