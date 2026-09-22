@@ -1112,7 +1112,7 @@ int ObSql::prepare_pl_sql(const ObString &sql,
             ret = OB_ERR_EMPTY_QUERY;
             LOG_WARN("query is empty", K(ret));
           } else if (OB_FAIL(set_timeout_for_pl(sess, cur_timeout_us))) {
-          } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+          } else if (OB_FAIL(sess.effective_schema_service()->get_runtime_schema_guard(
                                   schema_guard))) {
           } else if (FALSE_IT(context.schema_guard_ = &schema_guard)) {
           } else if (OB_FAIL(init_result_set(context, result))) {

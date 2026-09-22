@@ -62,6 +62,13 @@ namespace ns
 {
 class NamespaceRuntime;
 }
+namespace share
+{
+namespace schema
+{
+class ObMultiVersionSchemaService;
+}
+}
 namespace dbms_scheduler
 {
 class ObDBMSSchedJobInfo;
@@ -167,6 +174,9 @@ public:
   // Caller needs to decide whether to call the refresh_runtime_schema_version interface based on the situation
   share::schema::ObSchemaGetterGuard &get_schema_guard() { return schema_guard_; }
   int refresh_runtime_schema_guard();
+  // Namespace-aware variant: refreshes from the session's effective schema
+  // service instead of the process-wide THE_ONE.
+  int refresh_runtime_schema_guard(share::schema::ObMultiVersionSchemaService &service);
   // Try to return the ref of schema_mgr, rule: perform a revert operation on schema_guard every 10s;
   // 1. If session has request access, then after each statement ends, attempt to trigger once;
   // 2. If session does not have frequent access, solve it through background traversal by session_mgr;
@@ -422,6 +432,10 @@ public:
   // re-resolves through the registry.
   ns::NamespaceRuntime *ns_runtime() const { return ns_runtime_; }
   void set_ns_runtime(ns::NamespaceRuntime *runtime) { ns_runtime_ = runtime; }
+  // Schema service for this session's namespace: the runtime's bound
+  // instance when the namespace has one, otherwise the process-wide THE_ONE
+  // (system namespace 1 and namespace-agnostic paths).
+  share::schema::ObMultiVersionSchemaService *effective_schema_service() const;
   void reset(bool skip_sys_var);
   void clean_status();
   const common::ObWarningBuffer &get_show_warnings_buffer() const { return show_warnings_buf_; }

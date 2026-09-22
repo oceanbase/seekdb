@@ -42,10 +42,27 @@ private:
 class NamespaceRuntime final
 {
 public:
+  // Typed service instances are owned by the observer/sql layers; the
+  // boundary layer only carries opaque pointers so it stays STL-only.
+  enum ServiceSlot : uint8_t
+  {
+    SCHEMA_SERVICE = 0,
+    PLAN_CACHE = 1,
+    SLOT_COUNT
+  };
   explicit NamespaceRuntime(Namespace &ns) : ns_(ns) {}
   Namespace &ns() const { return ns_; }
+  void set_service(ServiceSlot slot, void *service)
+  {
+    if (slot < SLOT_COUNT) { services_[slot] = service; }
+  }
+  void *service(ServiceSlot slot) const
+  {
+    return slot < SLOT_COUNT ? services_[slot] : nullptr;
+  }
 private:
   Namespace &ns_;
+  void *services_[SLOT_COUNT] = {};
 };
 
 // The single sanctioned new global (ADR 0003). Everything else stays

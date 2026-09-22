@@ -33,6 +33,8 @@
 #include "sql/plan_cache/ob_ps_cache.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h" // for ObOptStatManager
 #include "sql/session/ob_user_resource_mgr.h"
+#include "namespace/namespace.h"
+#include "share/schema/ob_multi_version_schema_service.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -83,6 +85,20 @@ int ObCachedSchemaGuardInfo::refresh_runtime_schema_guard()
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard_))) {
+  } else if (OB_FAIL(schema_guard_.get_schema_version(schema_version_))) {
+  } else {
+    ref_ts_ = ObClockGenerator::getClock();
+  }
+
+  return ret;
+}
+
+int ObCachedSchemaGuardInfo::refresh_runtime_schema_guard(
+    share::schema::ObMultiVersionSchemaService &service)
+{
+  int ret = OB_SUCCESS;
+
+  if (OB_FAIL(service.get_runtime_schema_guard(schema_guard_))) {
   } else if (OB_FAIL(schema_guard_.get_schema_version(schema_version_))) {
   } else {
     ref_ts_ = ObClockGenerator::getClock();
@@ -167,6 +183,15 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
 ObSQLSessionInfo::~ObSQLSessionInfo()
 {
   destroy(false);
+}
+
+share::schema::ObMultiVersionSchemaService *ObSQLSessionInfo::effective_schema_service() const
+{
+  void *service = ns_runtime_ != nullptr
+      ? ns_runtime_->service(ns::NamespaceRuntime::SCHEMA_SERVICE) : nullptr;
+  return service != nullptr
+      ? static_cast<share::schema::ObMultiVersionSchemaService *>(service)
+      : &share::schema::ObMultiVersionSchemaService::get_instance();
 }
 
 void ObSQLSessionInfo::configure_obj_cast(

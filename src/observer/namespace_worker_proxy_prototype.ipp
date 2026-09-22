@@ -400,6 +400,11 @@ int start() {
   if (0 != ns::namespace_registry().add(1, "")) {
     return OB_ERR_UNEXPECTED;
   }
+  ns::NamespaceRuntime *home_runtime = nullptr;
+  if (ns::namespace_registry().get(1, home_runtime) && home_runtime != nullptr) {
+    home_runtime->set_service(ns::NamespaceRuntime::SCHEMA_SERVICE,
+        &share::schema::ObMultiVersionSchemaService::get_instance());
+  }
   const int64_t port = GCONF.mysql_port;
   const bool ipv6 = lib::use_ipv6();
   const int fd = ::socket(ipv6 ? AF_INET6 : AF_INET, SOCK_STREAM, 0);

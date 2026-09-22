@@ -101,7 +101,7 @@ int ObMPQuery::process()
                  K(session.get_server_sid()), K(ret));
       } else if (OB_FAIL(session.check_and_init_retry_info(*cur_trace_id, sql_))) {
       } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
-      } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(
+      } else if (OB_FAIL(session.effective_schema_service()->get_published_schema_version(
                   database_schema_version))) {
       } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
         //packet size check with session variable max_allowd_packet or net_buffer_length
@@ -499,7 +499,8 @@ OB_NOINLINE int ObMPQuery::process_with_tmp_context(ObSQLSessionInfo &session,
   return ret;
 }
 
-OB_INLINE int ObMPQuery::get_schema_info_(ObCachedSchemaGuardInfo *cache_info,
+OB_INLINE int ObMPQuery::get_schema_info_(ObSQLSessionInfo &session,
+                                          ObCachedSchemaGuardInfo *cache_info,
                                           ObSchemaGetterGuard *&schema_guard,
                                           int64_t &database_schema_version)
 {
@@ -512,7 +513,7 @@ OB_INLINE int ObMPQuery::get_schema_info_(ObCachedSchemaGuardInfo *cache_info,
     need_refresh = true;
   } else {
     int64_t tmp_database_schema_version = 0;
-    if (OB_FAIL(gctx_.schema_service_->get_runtime_refreshed_schema_version(tmp_database_schema_version))) {
+    if (OB_FAIL(session.effective_schema_service()->get_runtime_refreshed_schema_version(tmp_database_schema_version))) {
     } else if (OB_FAIL(cached_guard.get_schema_version(database_schema_version))) {
     } else if (tmp_database_schema_version != database_schema_version) {
       //Need to obtain schema guard
@@ -525,7 +526,7 @@ OB_INLINE int ObMPQuery::get_schema_info_(ObCachedSchemaGuardInfo *cache_info,
     if (!need_refresh) {
       //Get the latest schema guard cached on the session
       schema_guard = &(cache_info->get_schema_guard());
-    } else if (OB_FAIL(cache_info->refresh_runtime_schema_guard())) {
+    } else if (OB_FAIL(cache_info->refresh_runtime_schema_guard(*session.effective_schema_service()))) {
     } else {
       //Get the latest schema guard cached on the session
       schema_guard = &(cache_info->get_schema_guard());
@@ -818,7 +819,7 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
   ObIAllocator &allocator = CURRENT_CONTEXT->get_arena_allocator();
   SMART_VAR(ObMySQLResultSet, result, session, allocator,
             ::oceanbase::observer::get_observer_sql_engine()->get_plan_cache_access_service()) {
-    if (OB_FAIL(get_schema_info_(&cached_schema_info,
+    if (OB_FAIL(get_schema_info_(session, &cached_schema_info,
                                  schema_guard,
                                  database_schema_version))) {
     } else if (OB_FAIL(session.update_query_sensitive_system_variable(*schema_guard))) {
@@ -847,7 +848,7 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
       }
       result.set_has_more_result(has_more_result);
       ObSqlExecutorCtx &task_ctx = result.get_exec_context().get_sql_exec_ctx();
-      task_ctx.schema_service_ = gctx_.schema_service_;
+      task_ctx.schema_service_ = session.effective_schema_service();
       task_ctx.set_query_begin_schema_version(retry_ctrl_.get_current_local_schema_version());
       ctx_.retry_times_ = retry_ctrl_.get_retry_times();
       //storage::ObPartitionService* ps = static_cast<storage::ObPartitionService *> (GCTX.par_ser_);
