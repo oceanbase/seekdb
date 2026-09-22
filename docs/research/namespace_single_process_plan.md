@@ -6,7 +6,7 @@
 
 - 目标：`oltp_point_select` 追平单体（0.13ms/query 量级）；fork→可用保持秒级并向 100ms 收敛；通用负载不退化。
 - 不变式 1：**存储引擎 ns-blind**——只认编码 id，ns 语义由 id 编码承载、翻译层解释（审计 §1 实测：存储读路径 0 处感知）。
-- 不变式 2：**无 ambient 上下文**——ns 只能经由 session/任务显式传入，不引入 thread_local 当前 ns / scoped guard（OB MTL 的老路，漏一次 = 跨 ns 静默读错）。
+- 不变式 2：**无 ambient 上下文（全局原则，不限于 ns）**——设计上避开全局单例与 thread_local，一律显式传递代替。ns 只能经由 session/任务显式传入，不引入 thread_local 当前 ns / scoped guard（OB MTL 的老路，漏一次 = 跨 ns 静默读错）。实例：`ControlSqlNamespaceScope` 的 thread_local override 废弃，改 inner SQL 入口显式目标 ns 参数；`get_instance()` 单例（如 autoincrement）改 Runtime 持有实例、构造注入。存量全局单例不追求一次清完，但**新增代码禁止引入**，改造经过时顺手实例化。
 - 不变式 3：**SQL 执行线程与 NIO 全局共享**（session 驱动，session 携带 ns）；**后台服务 per-ns 实例化**（构造即绑定 ns，模块内部保持单 ns 逻辑零感知）。多 ns 由"多个实例"承载，不由"实例感知多 ns"承载。
 - 不变式 4：模块边界靠机制——bazel visibility + layering_check 做架构门禁，不靠评审自觉。
 
