@@ -2598,7 +2598,8 @@ void ObServer::probe_namespace_service_group()
                 "group_ok=true registry_count=%ld resolve_ret=%d resolved_id=%lu "
                 "runtime_by_id_ok=%d runtime_by_name_ok=%d same_runtime=%d "
                 "owns_schema=%d service_inited=%d tag=%s fork_parent=%lu "
-                "singleton_leaked=%d owned_isolation=%d shape_active=%d shape_owns=%d\n",
+                "singleton_leaked=%d owned_isolation=%d shape_active=%d shape_owns=%d "
+                "system_routes_to_singleton=%d fork_routes_to_owned=%d\n",
                 namespace_registry_.count(), resolve_ret, resolved_id,
                 id_ret == OB_SUCCESS ? 1 : 0, name_ret == OB_SUCCESS ? 1 : 0,
                 (id_ret == OB_SUCCESS && name_ret == OB_SUCCESS && by_id == by_name) ? 1 : 0,
@@ -2608,7 +2609,15 @@ void ObServer::probe_namespace_service_group()
                 namespace_fork_runtime_.get_namespace()->get_parent_id(),
                 singleton_after != singleton_before ? 1 : 0,
                 owned_after == probe_version ? 1 : 0,
-                shape_active, shape_owns);
+                shape_active, shape_owns,
+                // The exact routing contract the hot path now uses: a session on
+                // the system runtime keeps the process singleton, a session on an
+                // activated forked runtime reads that runtime's own instance.
+                namespace_fork::resolve_session_schema_service(&namespace_system_runtime_)
+                        == &schema_service_ ? 1 : 0,
+                namespace_fork::resolve_session_schema_service(&namespace_fork_runtime_)
+                        == namespace_fork_runtime_.get_schema_service()
+                    && namespace_fork_runtime_.get_schema_service() != &schema_service_ ? 1 : 0);
       ::fclose(fp);
     }
   }

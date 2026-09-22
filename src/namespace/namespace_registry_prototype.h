@@ -343,6 +343,15 @@ inline int split_login_namespace(const common::ObString &in,
   return ret;
 }
 
+// Resolve the schema authority a namespace runtime's sessions read from: the
+// runtime's own instance once it is service-ready, otherwise the process-level
+// service. Defined in src/sql/session/ob_sql_session_info.cpp, the lowest layer
+// that has the schema service's complete type; declared here so the boundary's
+// routing decision has exactly one implementation shared by the session
+// accessor and the diagnostic probes.
+share::schema::ObMultiVersionSchemaService *resolve_session_schema_service(
+    const NamespaceRuntime *runtime);
+
 } // namespace namespace_fork
 } // namespace oceanbase
 

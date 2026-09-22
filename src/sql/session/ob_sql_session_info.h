@@ -59,6 +59,13 @@ namespace observer
 class ObSqlEndTransCb;
 namespace namespace_worker_prototype { struct SessionBinding; }
 }
+namespace share
+{
+namespace schema
+{
+class ObMultiVersionSchemaService;
+}
+}
 namespace dbms_scheduler
 {
 class ObDBMSSchedJobInfo;
@@ -423,6 +430,13 @@ public:
   { return namespace_runtime_; }
   void set_namespace_runtime(namespace_fork::NamespaceRuntime *runtime)
   { namespace_runtime_ = runtime; }
+  // The schema authority this session's statements must read from. A session
+  // whose namespace runtime owns a schema service instance (a forked namespace
+  // that has activated) uses that instance; every other session keeps the
+  // process-level service, so the default namespace is unchanged. Declared here
+  // and defined in the .cpp, where the schema service's complete type is
+  // available.
+  share::schema::ObMultiVersionSchemaService *get_schema_service() const;
   void reset(bool skip_sys_var);
   void clean_status();
   const common::ObWarningBuffer &get_show_warnings_buffer() const { return show_warnings_buf_; }

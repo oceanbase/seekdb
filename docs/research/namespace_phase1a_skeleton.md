@@ -151,4 +151,38 @@ singleton_leaked=0 owned_isolation=1 shape_active=1 shape_owns=1
 
 **仍未完成**：这一步只证明"路由 + 服务组"这半边闭环；ns2 的数据隔离（fork 的 COW/快照语义、`root@ns2` 实际读写不串数据）仍依赖 kernel 在单进程内落位，属于 §9.1。
 
+## 11. 热路径改为按 session 绑定的 runtime 取 schema 权威（本轮）
+
+`plan.md` Phase 1.6 的 4 个入口不再直接拿进程单例：
+
+| 原 | 现 |
+|---|---|
+| `obmp_query.cpp:104` `gctx_.schema_service_->get_published_schema_version(...)` | `session.get_schema_service()->…` |
+| `obmp_query.cpp:515` `gctx_.schema_service_->get_runtime_refreshed_schema_version(...)` | `session.get_schema_service()->…`（`get_schema_info_` 因此新增 `session` 形参） |
+| `obmp_query.cpp:850` `task_ctx.schema_service_ = gctx_.schema_service_` | `task_ctx.schema_service_ = session.get_schema_service()` |
+| `ob_sql.cpp:1115` `GCTX.schema_service_->get_runtime_schema_guard(...)` | `sess.get_schema_service()->…` |
+
+`ObSQLSessionInfo::get_schema_service()` 的判定委托给唯一的实现 `namespace_fork::resolve_session_schema_service(runtime)`（定义在 `ob_sql_session_info.cpp`，那里有 schema service 完整类型）：
+
+```
+runtime 拥有并已就绪的实例  →  用它
+否则                        →  进程单例
+```
+
+因此**默认 ns 的 session 拿到的仍是指针相同的进程单例，行为逐字节不变**（这正是 gate 三种模式全绿的原因）。
+
+验证（服务组 probe 新增两项，直接断言这条路由契约）：
+
+```
+system_routes_to_singleton=1   # ns1 session → 进程单例（行为不变）
+fork_routes_to_owned=1         # 已激活 ns2 session → ns2 自己的实例，且不是单例
+```
+
+`group_ok=true … registry_count=2 … same_runtime=1 … system_routes_to_singleton=1 fork_routes_to_owned=1`
+
+门禁：三种模式（服务组 probe / 第二 schema probe / 全关回归）全部 PASS。
+
+**仍未完成**：这条路由要真正被"用户可见地"验证，需要 ns2 上跑一条真实查询并观察它读 ns2 的 schema；那仍要等 §9.1 的 fork 数据语义在单进程内落位。本轮的证据是路由契约本身（指针相等性）而非端到端查询。
+
+
 

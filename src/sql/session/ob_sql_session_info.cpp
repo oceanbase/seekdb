@@ -24,6 +24,7 @@
 #include "query/command/ob_root_command_service.h"
 #include "query/session/ob_session_access.h"
 #include "ob_sql_session_info.h"
+#include "share/schema/ob_multi_version_schema_service.h"
 #include "share/object/ob_obj_cast.h"
 #include "share/ob_rpc_struct.h"
 #include "query/command/ob_root_service_serialization.h"
@@ -216,6 +217,35 @@ int ObSQLSessionInfo::test_init(uint32_t version, uint32_t sessid,
     is_inited_ = true;
   }
   return ret;
+}
+
+// Resolve the schema authority a namespace runtime's sessions must read from:
+// the runtime's own instance once it is service-ready, otherwise the
+// process-level service. Exposed so the login/hot-path routing decision is
+// testable without a session, and so ObSQLSessionInfo::get_schema_service() and
+// any other caller share exactly one implementation.
+share::schema::ObMultiVersionSchemaService *namespace_fork::resolve_session_schema_service(
+    const namespace_fork::NamespaceRuntime *runtime)
+{
+  share::schema::ObMultiVersionSchemaService *service = nullptr;
+  if (OB_NOT_NULL(runtime)
+      && runtime->owns_schema_service()
+      && runtime->is_service_inited()) {
+    service = runtime->get_schema_service();
+  }
+  if (OB_ISNULL(service)) {
+    service = &share::schema::ObMultiVersionSchemaService::get_instance();
+  }
+  return service;
+}
+
+// The schema authority this session reads from: the namespace runtime's own
+// instance once that runtime has activated (a forked namespace), otherwise the
+// process-level service. The default namespace has no owned instance, so nothing
+// changes for it.
+share::schema::ObMultiVersionSchemaService *ObSQLSessionInfo::get_schema_service() const
+{
+  return namespace_fork::resolve_session_schema_service(namespace_runtime_);
 }
 
 void ObSQLSessionInfo::reset(bool skip_sys_var)
