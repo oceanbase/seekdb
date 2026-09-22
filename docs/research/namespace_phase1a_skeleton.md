@@ -127,3 +127,28 @@ coexist=true init_ret=0 primary_leaked=0 second_isolation=1
 3. **热路径 4 入口**（`obmp_query.cpp:104/515/850`、`ob_sql.cpp:1115`）改为取 session 绑定的 runtime 的 schema 版本。
 4. **性能门禁**：sysbench `oltp_point_select` 1t/8t 对比单体基线（issue 06）。
 
+## 10. 路由 + 服务组半边已闭环（本轮）
+
+`probe_namespace_service_group` 现在把 **ns2 真的注册进 live registry**（id=500001、name="ns2"、parent=1），并让它拥有自己的 schema service 实例；注册后即参与登录路由。probe 结果：
+
+```
+group_ok=true registry_count=2 resolve_ret=0 resolved_id=500001
+runtime_by_id_ok=1 runtime_by_name_ok=1 same_runtime=1
+owns_schema=1 service_inited=1 tag=_ns2_probe fork_parent=1
+singleton_leaked=0 owned_isolation=1 shape_active=1 shape_owns=1
+```
+
+逐项含义：
+
+- `registry_count=2`：系统 ns + fork 出的 ns2 同时在册；
+- `resolve_name("ns2") → 500001`，且 **by-id 与 by-name 取到同一个 runtime**（`same_runtime=1`）—— 这正是 `bind_login_namespace` 的解析路径，`root@ns2` 会落到 ns2 的 runtime；
+- `owns_schema=1 / service_inited=1 / tag=_ns2_probe`：ns2 runtime 拥有并初始化了自己的 schema service 实例；
+- `fork_parent=1`：血缘记录 ns2 的父是系统 ns；
+- `singleton_leaked=0 / owned_isolation=1`：写 ns2 实例的 published version 不污染进程单例，且 ns2 实例自身状态独立可写；
+- `shape_active/shape_owns`：临时 runtime 的绑定/归属语义正确。
+
+本轮同时修掉两个真实缺陷：`NamespaceRegistry::init/register_namespace` 现在**幂等**（崩溃恢复会在同一进程内重跑启动序列，原先第二次会返回 `OB_INIT_TWICE`/`OB_ENTRY_EXIST`，probe 复跑还会二次分配并覆盖 ns2 指针，实测导致 `-11` 崩溃）；probe 自身也做了已注册短路。
+
+**仍未完成**：这一步只证明"路由 + 服务组"这半边闭环；ns2 的数据隔离（fork 的 COW/快照语义、`root@ns2` 实际读写不串数据）仍依赖 kernel 在单进程内落位，属于 §9.1。
+
+

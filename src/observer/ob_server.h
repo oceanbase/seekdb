@@ -483,6 +483,11 @@ private:
   // object from the system one, registered by id only (the name lives in the
   // system namespace's control metadata).
   namespace_fork::NamespaceRuntime namespace_worker_runtime_;
+  // A namespace forked in this process (issue 05 probe / Phase 1c). Both the
+  // runtime and the name buffer must outlive the registry entry. The buffer is
+  // value-initialized by its initializer, so the probe needs no ctor wiring.
+  namespace_fork::NamespaceRuntime namespace_fork_runtime_;
+  char namespace_fork_name_buf_[16] = {};
   StandbyHostAdapter *standby_host_;
   standby::StandbyModule *standby_module_;
   // All operations and processing logic relating to ob server is

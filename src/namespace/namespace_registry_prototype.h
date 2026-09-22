@@ -213,15 +213,13 @@ public:
   NamespaceRegistry() : inited_(false) {}
   ~NamespaceRegistry() {}
 
+  // Idempotent: the process may run its startup sequence more than once (crash
+  // recovery re-runs initWithOptions), and the registry holds only
+  // process-lifetime state, so a second init() is a no-op rather than an error.
   int init()
   {
-    int ret = OB_SUCCESS;
-    if (inited_) {
-      ret = OB_INIT_TWICE;
-    } else {
-      inited_ = true;
-    }
-    return ret;
+    inited_ = true;
+    return OB_SUCCESS;
   }
 
   // Register a namespace and its runtime. Names and ids are both unique; the
@@ -240,10 +238,11 @@ public:
       ret = OB_NOT_INIT;
     } else if (!ns.is_valid()) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (runtimes_.end() != runtimes_.find(id)) {
-      ret = OB_ENTRY_EXIST;
     } else if (!name.empty() && !Namespace::is_valid_name(name)) {
       ret = OB_INVALID_ARGUMENT;
+    } else if (runtimes_.end() != runtimes_.find(id)) {
+      // Idempotent for a repeated registration during startup recovery.
+      ret = OB_SUCCESS;
     } else if (OB_FAIL(runtime.init(ns))) {
       // The runtime rejects a second binding, so retry safety comes for free.
     } else {

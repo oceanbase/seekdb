@@ -2313,9 +2313,6 @@ int ObServer::init_schema()
   if (OB_SUCC(ret) && nullptr != ::getenv("SEEKDB_NAMESPACE_SECOND_SCHEMA_PROBE")) {
     probe_second_schema_service();
   }
-  if (OB_SUCC(ret) && nullptr != ::getenv("SEEKDB_NAMESPACE_SERVICE_GROUP_PROBE")) {
-    probe_namespace_service_group();
-  }
 
   return ret;
 }
@@ -2339,6 +2336,10 @@ int ObServer::init_namespace_registry()
     LOG_INFO("namespace registry initialized",
              "namespace_count", namespace_registry_.count(),
              "system_namespace_id", namespace_system_.get_id());
+  }
+  // The service-group probe needs the registry, so it runs after registration.
+  if (OB_SUCC(ret) && nullptr != ::getenv("SEEKDB_NAMESPACE_SERVICE_GROUP_PROBE")) {
+    probe_namespace_service_group();
   }
   return ret;
 }
@@ -2473,18 +2474,18 @@ void ObServer::probe_second_schema_service()
   }
 }
 
-// Issue 05 (Phase 1c) service-group entry: drive a real per-namespace service
-// group (NamespaceRuntime) through allocation and init of its own schema service
-// instance, alongside the process singleton. This is what a forked namespace
-// will run when it activates; here it runs on a throwaway runtime so that the
-// entry path is verified without yet creating a real second namespace.
+// Issue 05 (Phase 1c) service-group entry: register a real second namespace in
+// the live registry and drive its per-namespace service group through allocation
+// and init of its own schema service instance, alongside the process singleton.
+// This is the routing + service-group half of a forked namespace; the fork data
+// semantics themselves are not created here.
 // Diagnostic only: writes /tmp/ns-runtime-group.result and never fails startup.
 void ObServer::probe_namespace_service_group()
 {
   int ret = OB_SUCCESS;
-  namespace_fork::NamespaceRegistry registry;
-  namespace_fork::Namespace probe_ns;
-  namespace_fork::NamespaceRuntime probe_runtime;
+  namespace_fork::NamespaceRegistry shape_registry;
+  namespace_fork::Namespace shape_ns;
+  namespace_fork::NamespaceRuntime shape_runtime;
   share::ObSchemaStatusProxy probe_status_proxy(sql_proxy_);
   share::schema::ObSchemaPublishSignal probe_signal;
   rootserver::ObMaxIdCacheAdapter *probe_max_id = nullptr;
@@ -2493,42 +2494,89 @@ void ObServer::probe_namespace_service_group()
   share::schema::ObMultiVersionSchemaService *owned_schema = nullptr;
   int64_t singleton_before = OB_INVALID_VERSION;
   int64_t singleton_after = OB_INVALID_VERSION;
-  int64_t owned_before = OB_INVALID_VERSION;
   int64_t owned_after = OB_INVALID_VERSION;
+  int shape_owns = 0;
+  int shape_active = 0;
   const int64_t probe_version = 4100000000LL;
-  const char *const instance_tag = "_ns5_probe";
+  const uint64_t fork_id = 500001;
+  const char *const instance_tag = "_ns2_probe";
 
-  if (OB_FAIL(registry.init())) {
-  } else if (FALSE_IT(probe_ns = namespace_fork::Namespace(
-                 5 /* a real forked id shape */, common::ObString::make_string("probe5"),
-                 1 /* parent */, 0 /* fork scn */))) {
-  } else if (OB_FAIL(registry.register_namespace(probe_ns, probe_runtime))) {
-  } else if (OB_ISNULL(owned_schema =
-                 share::schema::ObMultiVersionSchemaService::alloc_instance())) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (FALSE_IT(probe_runtime.set_owned_schema_service(owned_schema, instance_tag))) {
-  } else if (OB_FAIL(probe_status_proxy.init())) {
-  } else if (OB_FAIL(probe_signal.init())) {
-  } else if (OB_ISNULL(probe_max_id = OB_NEW(
-      rootserver::ObMaxIdCacheAdapter, ObModIds::OB_SCHEMA_SERVICE, local_management_service_))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_ISNULL(probe_backend = OB_NEW(
-      share::schema::ObSchemaServiceSQLImpl, ObModIds::OB_SCHEMA_SERVICE,
-      probe_max_id, ddl_sql_proxy_, *owned_schema))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_ISNULL(probe_scheduler = OB_NEW(
-      ObSchemaRefreshSchedulerAdapter, ObModIds::OB_SCHEMA_SERVICE, ob_service_, *owned_schema))) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(owned_schema->init(
-      &sql_proxy_, &config_, probe_status_proxy, gctx_.status_, gctx_.in_bootstrap_,
-      OB_MAX_VERSION_COUNT, *probe_backend, *probe_scheduler, probe_signal,
-      probe_runtime.get_schema_service_instance_tag()))) {
-  } else if (FALSE_IT(probe_runtime.set_service_inited())) {
-  } else if (OB_FAIL(schema_service_.get_published_schema_version(singleton_before, false))) {
-  } else if (OB_FAIL(owned_schema->get_published_schema_version(owned_before, false))) {
-  } else if (OB_FAIL(owned_schema->set_published_schema_version(probe_version))) {
-  } else if (OB_FAIL(owned_schema->get_published_schema_version(owned_after, false))) {
-  } else if (OB_FAIL(schema_service_.get_published_schema_version(singleton_after, false))) {
+  if (OB_SUCC(ret) && OB_ISNULL(namespace_fork_name_buf_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    // The startup sequence runs again during crash recovery in the same process.
+    // A namespace is created once, so an already-registered ns2 short-circuits
+    // this probe instead of re-allocating its service group.
+    namespace_fork::NamespaceRuntime *already = nullptr;
+    if (OB_SUCC(namespace_registry_.get_runtime(fork_id, already)) && OB_NOT_NULL(already)) {
+      FILE *fp = ::fopen("/tmp/ns-runtime-group.result", "w");
+      if (nullptr != fp) {
+        ::fprintf(fp,
+                  "group_ok=true already_registered=1 registry_count=%ld owns_schema=%d "
+                  "service_inited=%d tag=%s\n",
+                  namespace_registry_.count(), already->owns_schema_service() ? 1 : 0,
+                  already->is_service_inited() ? 1 : 0,
+                  already->get_schema_service_instance_tag());
+        ::fclose(fp);
+      }
+      return;
+    }
+    MEMCPY(namespace_fork_name_buf_, "ns2", 4);
+    namespace_fork::Namespace fork_ns(
+        fork_id, common::ObString(3, namespace_fork_name_buf_), namespace_fork::SYSTEM_NAMESPACE_ID,
+        0 /* fork scn */);
+    // The namespace and its runtime join the live registry, so login routing can
+    // resolve them from now on. They stay registered for the process lifetime,
+    // exactly as a forked namespace would.
+    if (OB_FAIL(namespace_registry_.register_namespace(fork_ns, namespace_fork_runtime_))) {
+    }
+    if (OB_SUCC(ret) && OB_ISNULL(owned_schema =
+                   share::schema::ObMultiVersionSchemaService::alloc_instance())) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    }
+    if (OB_SUCC(ret) && FALSE_IT(namespace_fork_runtime_.set_owned_schema_service(owned_schema, instance_tag))) {
+    }
+    if (OB_SUCC(ret) && OB_FAIL(probe_status_proxy.init())) {
+    }
+    if (OB_SUCC(ret) && OB_FAIL(probe_signal.init())) {
+    }
+    if (OB_SUCC(ret) && OB_ISNULL(probe_max_id = OB_NEW(
+        rootserver::ObMaxIdCacheAdapter, ObModIds::OB_SCHEMA_SERVICE, local_management_service_))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    }
+    if (OB_SUCC(ret) && OB_ISNULL(probe_backend = OB_NEW(
+        share::schema::ObSchemaServiceSQLImpl, ObModIds::OB_SCHEMA_SERVICE,
+        probe_max_id, ddl_sql_proxy_, *owned_schema))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    }
+    if (OB_SUCC(ret) && OB_ISNULL(probe_scheduler = OB_NEW(
+        ObSchemaRefreshSchedulerAdapter, ObModIds::OB_SCHEMA_SERVICE, ob_service_, *owned_schema))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    }
+    if (OB_SUCC(ret) && OB_FAIL(owned_schema->init(
+        &sql_proxy_, &config_, probe_status_proxy, gctx_.status_, gctx_.in_bootstrap_,
+        OB_MAX_VERSION_COUNT, *probe_backend, *probe_scheduler, probe_signal,
+        namespace_fork_runtime_.get_schema_service_instance_tag()))) {
+    } else if (FALSE_IT(namespace_fork_runtime_.set_service_inited())) {
+    } else if (OB_FAIL(schema_service_.get_published_schema_version(singleton_before, false))) {
+    } else if (OB_FAIL(owned_schema->set_published_schema_version(probe_version))) {
+    } else if (OB_FAIL(owned_schema->get_published_schema_version(owned_after, false))) {
+    } else if (OB_FAIL(schema_service_.get_published_schema_version(singleton_after, false))) {
+    } else if (OB_FAIL(shape_registry.init())) {
+    } else if (FALSE_IT(shape_ns = namespace_fork::Namespace(
+                   9, common::ObString::make_string("shape9"), namespace_fork::SYSTEM_NAMESPACE_ID,
+                   0 /* fork scn */))) {
+    } else if (OB_FAIL(shape_registry.register_namespace(shape_ns, shape_runtime))) {
+    } else if (OB_ISNULL(owned_schema =
+                   share::schema::ObMultiVersionSchemaService::alloc_instance())) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (FALSE_IT(shape_runtime.set_owned_schema_service(owned_schema, "_shape9"))) {
+    } else if (FALSE_IT(shape_owns = shape_runtime.owns_schema_service() ? 1 : 0)) {
+    } else if (FALSE_IT(shape_active = shape_runtime.is_active() ? 1 : 0)) {
+    } else if (FALSE_IT(owned_schema->destroy())) {
+    } else if (FALSE_IT(share::schema::ObMultiVersionSchemaService::free_instance(owned_schema))) {
+    } else if (FALSE_IT(owned_schema = nullptr)) {
+    }
   }
   if (OB_FAIL(ret)) {
     FILE *fp = ::fopen("/tmp/ns-runtime-group.result", "w");
@@ -2539,16 +2587,28 @@ void ObServer::probe_namespace_service_group()
   } else {
     FILE *fp = ::fopen("/tmp/ns-runtime-group.result", "w");
     if (nullptr != fp) {
+      namespace_fork::NamespaceRuntime *by_name = nullptr;
+      namespace_fork::NamespaceRuntime *by_id = nullptr;
+      uint64_t resolved_id = OB_INVALID_ID;
+      int resolve_ret = namespace_registry_.resolve_name(
+          common::ObString::make_string("ns2"), resolved_id);
+      int id_ret = namespace_registry_.get_runtime(fork_id, by_id);
+      int name_ret = namespace_registry_.get_runtime(resolved_id, by_name);
       ::fprintf(fp,
-                "group_ok=true runtime_active=%d owns_schema=%d service_inited=%d "
-                "tag=%s singleton_leaked=%d owned_isolation=%d registry_count=%ld\n",
-                probe_runtime.is_active() ? 1 : 0,
-                probe_runtime.owns_schema_service() ? 1 : 0,
-                probe_runtime.is_service_inited() ? 1 : 0,
-                probe_runtime.get_schema_service_instance_tag(),
+                "group_ok=true registry_count=%ld resolve_ret=%d resolved_id=%lu "
+                "runtime_by_id_ok=%d runtime_by_name_ok=%d same_runtime=%d "
+                "owns_schema=%d service_inited=%d tag=%s fork_parent=%lu "
+                "singleton_leaked=%d owned_isolation=%d shape_active=%d shape_owns=%d\n",
+                namespace_registry_.count(), resolve_ret, resolved_id,
+                id_ret == OB_SUCCESS ? 1 : 0, name_ret == OB_SUCCESS ? 1 : 0,
+                (id_ret == OB_SUCCESS && name_ret == OB_SUCCESS && by_id == by_name) ? 1 : 0,
+                namespace_fork_runtime_.owns_schema_service() ? 1 : 0,
+                namespace_fork_runtime_.is_service_inited() ? 1 : 0,
+                namespace_fork_runtime_.get_schema_service_instance_tag(),
+                namespace_fork_runtime_.get_namespace()->get_parent_id(),
                 singleton_after != singleton_before ? 1 : 0,
                 owned_after == probe_version ? 1 : 0,
-                registry.count());
+                shape_active, shape_owns);
       ::fclose(fp);
     }
   }
@@ -2562,10 +2622,9 @@ void ObServer::probe_namespace_service_group()
   if (OB_NOT_NULL(probe_max_id)) {
     OB_DELETE(ObMaxIdCacheAdapter, ObModIds::OB_SCHEMA_SERVICE, probe_max_id);
   }
-  if (OB_NOT_NULL(owned_schema)) {
-    owned_schema->destroy();
-    share::schema::ObMultiVersionSchemaService::free_instance(owned_schema);
-  }
+  // ns2's owned schema service (and its companions) belongs to the registered
+  // runtime and stays alive for the process lifetime, so it is deliberately not
+  // freed here.
 }
 
 int ObServer::init_autoincrement_service()
