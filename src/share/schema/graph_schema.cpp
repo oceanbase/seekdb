@@ -330,8 +330,6 @@ bool graph_endpoint_type_matches(const ObColumnSchemaV2 &endpoint,
   const ObObjType endpoint_type = endpoint.get_data_type();
   const ObObjType vertex_type = vertex_key.get_data_type();
   bool matches = endpoint_type == vertex_type
-      || (ob_is_float_tc(endpoint_type) && ob_is_float_tc(vertex_type))
-      || (ob_is_double_tc(endpoint_type) && ob_is_double_tc(vertex_type))
       || (ob_is_decimal_int_tc(endpoint_type) && ob_is_number_tc(vertex_type))
       || (ob_is_number_tc(endpoint_type) && ob_is_decimal_int_tc(vertex_type));
   if (matches && ob_is_string_type(endpoint_type)) {

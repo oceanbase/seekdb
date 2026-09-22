@@ -119,3 +119,19 @@ CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_generated KEY(id) LABEL 
  SOURCE KEY(src) REFERENCES graph_generated(id)
  DESTINATION KEY(dst) REFERENCES graph_generated(id) LABEL link PROPERTIES(id));
 DROP TABLE graph_endpoint,graph_generated;
+CREATE TABLE graph_float_vertex(id FLOAT PRIMARY KEY);
+CREATE TABLE graph_float_edge(id BIGINT PRIMARY KEY,src FLOAT UNSIGNED,dst FLOAT UNSIGNED);
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_float_vertex KEY(id) LABEL item PROPERTIES(id))
+ EDGE TABLES(graph_float_edge KEY(id)
+ SOURCE KEY(src) REFERENCES graph_float_vertex(id)
+ DESTINATION KEY(dst) REFERENCES graph_float_vertex(id) LABEL link PROPERTIES(id));
+DROP TABLE graph_float_edge,graph_float_vertex;
+CREATE TABLE graph_double_vertex(id DOUBLE PRIMARY KEY);
+CREATE TABLE graph_double_edge(id BIGINT PRIMARY KEY,src DOUBLE UNSIGNED,dst DOUBLE UNSIGNED);
+--error ER_NOT_SUPPORTED_YET
+CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_double_vertex KEY(id) LABEL item PROPERTIES(id))
+ EDGE TABLES(graph_double_edge KEY(id)
+ SOURCE KEY(src) REFERENCES graph_double_vertex(id)
+ DESTINATION KEY(dst) REFERENCES graph_double_vertex(id) LABEL link PROPERTIES(id));
+DROP TABLE graph_double_edge,graph_double_vertex;
