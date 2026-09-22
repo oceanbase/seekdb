@@ -2307,8 +2307,115 @@ int ObServer::init_schema()
       schema_publish_signal_))) {
     LOG_WARN("init schema_service_ fail", KR(ret));
   }
+  if (OB_SUCC(ret) && nullptr != ::getenv("SEEKDB_NAMESPACE_SECOND_SCHEMA_PROBE")) {
+    probe_second_schema_service();
+  }
 
   return ret;
+}
+
+// Phase 1b spike (issue 04). Build a second schema stack next to the primary one
+// to find out whether two ObMultiVersionSchemaService instances can coexist in
+// this process and which per-instance dependencies they really need. Diagnostic
+// only: it writes /tmp/ns-schema2-probe.result and never fails server startup.
+// Enabled by the SEEKDB_NAMESPACE_SECOND_SCHEMA_PROBE environment variable.
+void ObServer::probe_second_schema_service()
+{
+  int ret = OB_SUCCESS;
+  share::schema::ObMultiVersionSchemaService *second_schema = nullptr;
+  share::ObSchemaStatusProxy second_status_proxy(sql_proxy_);
+  share::schema::ObSchemaPublishSignal second_signal;
+  rootserver::ObMaxIdCacheAdapter *second_max_id = nullptr;
+  share::schema::ObSchemaServiceSQLImpl *second_backend = nullptr;
+  ObSchemaRefreshSchedulerAdapter *second_scheduler = nullptr;
+
+  int64_t primary_before = OB_INVALID_VERSION;
+  int64_t primary_after = OB_INVALID_VERSION;
+  int64_t second_before = OB_INVALID_VERSION;
+  int64_t second_after = OB_INVALID_VERSION;
+  const int64_t probe_version = 4000000000LL;
+
+  if (OB_ISNULL(second_schema = share::schema::ObMultiVersionSchemaService::alloc_instance())) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(second_status_proxy.init())) {
+  } else if (OB_FAIL(second_signal.init())) {
+  } else if (OB_ISNULL(second_max_id = OB_NEW(
+      rootserver::ObMaxIdCacheAdapter,
+      ObModIds::OB_SCHEMA_SERVICE,
+      local_management_service_))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_ISNULL(second_backend = OB_NEW(
+      share::schema::ObSchemaServiceSQLImpl,
+      ObModIds::OB_SCHEMA_SERVICE,
+      second_max_id,
+      ddl_sql_proxy_,
+      *second_schema))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_ISNULL(second_scheduler = OB_NEW(
+      ObSchemaRefreshSchedulerAdapter,
+      ObModIds::OB_SCHEMA_SERVICE,
+      ob_service_,
+      *second_schema))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    ret = second_schema->init(
+        &sql_proxy_,
+        &config_,
+        second_status_proxy,
+        gctx_.status_,
+        gctx_.in_bootstrap_,
+        OB_MAX_VERSION_COUNT,
+        *second_backend,
+        *second_scheduler,
+        second_signal);
+  }
+  if (OB_SUCC(ret)) {
+    ret = schema_service_.get_published_schema_version(primary_before, false);
+  }
+  if (OB_SUCC(ret)) {
+    ret = second_schema->get_published_schema_version(second_before, false);
+  }
+  if (OB_SUCC(ret)) {
+    ret = second_schema->set_published_schema_version(probe_version);
+  }
+  if (OB_SUCC(ret)) {
+    ret = second_schema->get_published_schema_version(second_after, false);
+  }
+  if (OB_SUCC(ret)) {
+    ret = schema_service_.get_published_schema_version(primary_after, false);
+  }
+  if (OB_SUCC(ret)) {
+    FILE *probe_fp = ::fopen("/tmp/ns-schema2-probe.result", "w");
+    if (nullptr != probe_fp) {
+      ::fprintf(probe_fp,
+                "coexist=true init_ret=0 primary_before=%ld primary_after=%ld "
+                "second_before=%ld second_after=%ld primary_leaked=%d second_isolation=%d\n",
+                primary_before, primary_after, second_before, second_after,
+                primary_after != primary_before ? 1 : 0, second_after == probe_version ? 1 : 0);
+      ::fclose(probe_fp);
+    }
+  }
+  if (OB_FAIL(ret)) {
+    FILE *probe_fp = ::fopen("/tmp/ns-schema2-probe.result", "w");
+    if (nullptr != probe_fp) {
+      ::fprintf(probe_fp, "coexist=false init_failed_ret=%d\n", ret);
+      ::fclose(probe_fp);
+    }
+  }
+
+  if (OB_NOT_NULL(second_scheduler)) {
+    OB_DELETE(ObSchemaRefreshSchedulerAdapter, ObModIds::OB_SCHEMA_SERVICE, second_scheduler);
+  }
+  if (OB_NOT_NULL(second_backend)) {
+    OB_DELETE(ObSchemaServiceSQLImpl, ObModIds::OB_SCHEMA_SERVICE, second_backend);
+  }
+  if (OB_NOT_NULL(second_max_id)) {
+    OB_DELETE(ObMaxIdCacheAdapter, ObModIds::OB_SCHEMA_SERVICE, second_max_id);
+  }
+  if (OB_NOT_NULL(second_schema)) {
+    second_schema->destroy();
+    share::schema::ObMultiVersionSchemaService::free_instance(second_schema);
+  }
 }
 
 int ObServer::init_autoincrement_service()

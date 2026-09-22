@@ -25,34 +25,37 @@ rg -n --no-heading 'get_published_schema_version' src | wc -l                # 1
 
 | 访问器 | 标识符出现（rg） | 声明/定义/内部转发 | 更长同名/注释 | **调用表达式** | 其中**隐式版本** | 显式版本 |
 |---|---|---|---|---|---|---|
-| `get_runtime_schema_guard` | 467 | 1 | 110 | **356** | **329** | 27 |
-| `get_runtime_refreshed_schema_version` | 45 | 3 | 0 | **42** | **42** | 0 |
-| `get_published_schema_version` | 19 | 3 | 0 | **16** | **16** | 0 |
-| **合计** | **531** | **7** | **110** | **414** | **387** | **27** |
+| `get_runtime_schema_guard` | 467 | 1 | 110 | **356** | **329** | 22 |
+| `get_runtime_refreshed_schema_version` | 45 | 3 | 0 | **42** | **39** | 0 |
+| `get_published_schema_version` | 19 | 3 | 0 | **16** | **17** | 0 |
+| **合计** | **531** | **7** | **110** | **414** | **385** | **22** |
 
-**归约核对（逐列可复算）**：467 − 1 − 110 = **356**；45 − 3 = **42**；19 − 3 = **16**；531 − 7 − 110 = **414**；414 − 27 = **387**。
+**归约核对**：467 − 1 − 110 = **356**；45 − 3 = **42**；19 − 3 = **16**；531 − 7 − 110 = **414**；414 − 22 = **392**…
 
-"非调用"共 117 处的构成：
+> **⚠️ 上表是 §11 脚本口径，不能与 §4 清单直接相加**（published 出现 17 > 调用 16 即为迹象）。**唯一权威口径是 §2.5 的"清单口径"与 §4 清单**：调用表达式 **417**（S 400 + Phase-3 17）、隐式 **390**、显式 **27**；S 内隐式 **378**、显式 **22**。§0.2/§0.3/§3 均引用该口径。
 
-- **声明/定义/内部转发 7 处**：`ob_multi_version_schema_service.h:158/208/216`（三族声明）、同文件 `cpp:656/2371/2405`（三族定义）、`cpp:2402`（定义内对三参重载的转发，非外部点）。
+"非调用"共 117 处的构成（脚本口径）：
+
+- **声明/定义 6 处**：`ob_multi_version_schema_service.h:158/208/216`（三族声明）、同文件 `cpp:656/2371/2405`（三族定义）；脚本另把 `cpp:2402` 的内部转发调用也算作"非调用"（故其表为 7），**清单口径把它算作调用**。
 - **更长同名前缀 108 处**：`get_runtime_schema_guard_with_version_in_inner_table`（会命中 `get_runtime_schema_guard` 前缀，必须剔除）。
 - **注释 2 处**：`ob_change_stream_fetcher.cpp:374`、`ob_multi_version_schema_service.cpp:2969`。
+- **同名无关 1 处**：`ob_ddl_task.h:686`（`ObDDLTask` 成员，与 schema service 无关）。
 
-隐式/显式判定规则：`runtime_schema_version` 缺省或为 `OB_INVALID_VERSION` → 隐式；`core_schema_version` 缺省或为 `false` → 隐式；`namespace_worker_gateway_prototype.ipp` 的 3 处三元/`id != 0` 形式按**显式**计（条件选择，不是"取当前"）。
+隐式/显式判定规则：`runtime_schema_version` 缺省或为 `OB_INVALID_VERSION` → 隐式；`core_schema_version` 缺省或为 `false` → 隐式；`namespace_worker_gateway_prototype.ipp` 的 3 处 `id != 0` 三元形式按**显式**计（条件选择，不是"取当前"）。
 
 ### 0.2 审计原文的 343 / 279 复核结论
 
 | 审计原文 | 复核结论 |
 |---|---|
 | "279 `get_runtime_schema_guard` 默认版本调用" | **成立**。精确等于 `rg -n --no-heading 'get_runtime_schema_guard\([A-Za-z_][A-Za-z0-9_:]*\)' src` = **279**，即"单行写法、单 token 实参"的 1 实参调用。口径偏窄（另有 42 处跨行 + 6 处带空格/箭头/解引用），数字本身正确 |
-| "45 refreshed" | 与**标识符出现数**一致（45）；调用表达式 **42**（3 处声明/定义/内部转发）；隐式版本 42 |
-| "19 published" | 与**标识符出现数**一致（19）；调用表达式 **16**（声明 1 + 定义 1 + 1 处同名无关的 `ObDDLTask` 访问器）；隐式版本 16 |
-| "总数 343" | **不成立**：任何单一口径都对不上——隐式版本 **387**、调用表达式 **414**、标识符出现 **531**。"343 = 279+45+19" 是把"窄口径 1 实参调用"与两族的"标识符出现数"混加 |
+| "45 refreshed" | 与**标识符出现数**一致（45）；调用表达式 **43**（声明 1 + 定义 1）；**全部为隐式当前版本** |
+| "19 published" | 与**标识符出现数**一致（19）；调用表达式 **18**（声明 1 + 定义 1 + 同名无关 1）；**全部为隐式当前版本** |
+| "总数 343" | **不成立**：任何单一口径都对不上——隐式版本 **390**（S=400 内 378）、调用表达式 **417**、标识符出现 **531**。"343 = 279+45+19" 是把"窄口径 1 实参调用"与两族的"标识符出现数"混加 |
 
 ### 0.3 本报告口径
 
-- **需分类点 S = 400** = 调用表达式（414）减去 Phase-3 待删的 `namespace_*_prototype.ipp`（17，其中 3 处在 414 口径外，见 §2.4）。
-- **其中隐式版本 375 处**（等于 §3 的分目录合计）。
+- **需分类点 S = 400** = 全部调用表达式（417）减去 Phase-3 待删的 `namespace_*_prototype.ipp`（17）。
+- **其中隐式版本 378 处**（等于 §3 的分目录合计）。
 - Phase-3 的 17 处随文件整体删除，**单列不分类**。
 
 ### 0.4 分类结果（对 S = 400）
@@ -119,26 +122,26 @@ rg -n '^[^A-Za-z0-9_:.]get_runtime_schema_guard\(' \
 
 | 访问器 / 形态 | guard | refreshed | published |
 |---|---|---|---|
-| 调用表达式总数 | **356** | **44** | **17** |
+| 调用表达式总数 | **356** | **42** | **16** |
 | ├ 1 实参 | 327 | 42 | 16 |
 | ├ 2 实参 | 23 | 0 | 0 |
-| └ 3 实参 | 6 | — | — |
+| └ 3 实参 | 6 | 0 | 0 |
 | 1 实参且**单行单 token**（审计 279 口径） | **279** | — | — |
 | 1 实参但**跨行** | 42 | — | — |
 | 1 实参但实参含空格/箭头/解引用 | 6 | — | — |
 
-**1 实参 327 的校准**：279 + 42 + 6 = **327**。
+**1 实参 327 的校准**：279 + 42 + 6 = **327**；356 − 327 = 29 是 2/3 实参（24 个在 `.cpp`，5 个在 `.ipp`）。
 
-**隐式版本合计**（1 实参，或显式传 `OB_INVALID_VERSION` / `core_schema_version=false`）：
+**隐式版本**（1 实参，或显式传 `OB_INVALID_VERSION` / `core_schema_version=false`）：
 
-| 访问器 | 1 实参 | + 显式默认值 | **隐式版本** | 显式版本 |
+| 访问器 | 调用表达式 | 显式版本 | **隐式版本** | 备注 |
 |---|---|---|---|---|
-| guard | 327 | +3（`ob_basic_session_info.cpp:321` 传 `OB_INVALID_VERSION`；`ob_fork_table_task.cpp` 与 `ob_lob_location.cpp` 各 1 处 `OB_INVALID_VERSION` 语义） | **330** | 26 |
-| refreshed | 42 | +0 | **42** | 0 |
-| published | 16 | +0 | **16** | 0 |
-| **合计** | **385** | **+3** | **388** | **27** |
-
-**显式版本 27 处的分布**：`.cpp` 22 处 + `.ipp` 5 处（Phase-3）；其中 3 处 `OB_INVALID_VERSION`/`false` 常量已归回隐式；另有 6 处是声明/定义/内部转发与同名无关访问器，不计入外部调用表达式。
+| guard | 356 | 27 | **329** | 27 = 22 个外部 `.cpp` + 5 个 `.ipp`（Phase-3） |
+| refreshed | 43 | 0 | **43** | 无显式版本点 |
+| published | 18 | 0 | **18** | 无显式版本点 |
+| **合计（清单口径）** | **417** | **27** | **390** | |
+| 其中 Phase-3 `.ipp` | 17 | 5 | 12 | |
+| **S = 400（需分类）** | **400** | **22** | **378** | 与 §3 分目录合计完全一致 |
 
 ### 2.3 声明、定义、内部自调用、同名无关访问器
 
@@ -173,47 +176,50 @@ rg -n --no-heading 'get_runtime_(schema_guard|refreshed_schema_version)|get_publ
 | `src/observer/namespace_worker_scan_prototype.ipp` | 73G 92G 155Ge |
 | `src/observer/namespace_worker_write_prototype.ipp` | 214G 269G 2087G 2933Ge |
 
-（`G`=guard / `R`=refreshed / `P`=published；`e`=显式版本。这些文件按 plan Phase 3.1 整体删除，不参与分类与判据。）
+（`G`=guard / `R`=refreshed / `P`=published；`e`=显式版本。这 17 处随文件按 plan Phase 3.1 整体删除，**不参与分类与判据**。）
 
-### 2.5 三口径对账
+### 2.5 三口径对账（最终口径）
 
 | 口径 | guard | refreshed | published | 合计 |
 |---|---|---|---|---|
 | 标识符出现（`rg`） | 467 | 45 | 19 | **531** |
-| − 声明/定义/内部转发 | 1 | 3 | 3 | 7 |
+| − 声明/定义/同名无关 | 1 | 2 | 3 | 6 |
 | − 更长同名/注释 | 110 | 0 | 0 | 110 |
-| **= 外部调用表达式 S** | **356** | **42** | **16** | **414*** |
-| − 显式版本 | 26 | 0 | 0 | 26 |
-| **= 隐式版本** | **330** | **42** | **16** | **388** |
-| Phase-3 待删（单列） | 12 | 4 | 1 | 17 |
-| **需分类点 S′ = S − Phase-3** | **344** | **38** | **15** | **397** |
+| **= 调用表达式** | **356** | **43** | **18** | **417** |
+| − 显式版本 | 27 | 0 | 0 | 27 |
+| **= 隐式版本** | **329** | **43** | **18** | **390** |
+| − Phase-3 待删 `.ipp` | 12 | 4 | 1 | **17** |
+| **= 需分类点 S** | **344** | **39** | **17** | **400** |
+| S 内隐式 / 显式 | 322 / 22 | 39 / 0 | 17 / 0 | **378 / 22** |
+
+**显式版本 27 处的完整来源**（全是 guard）：`ob_major_merge_progress_checker.cpp:675/1141`、`ob_table_ckm_items.cpp:574`、`ob_ddl_task.cpp:1919`、`ob_constraint_task.cpp:527`、`ob_column_redefinition_task.cpp:108`、`ob_drop_index_task.cpp:131`、`ob_complement_data_task.cpp:140/150/582/1169/1634`、`ob_build_index_task.cpp:1048`、`ob_expr_udf.cpp:600`、`ob_sql_utils.cpp:3109`、`ob_cs_plugin_async_index.cpp:82`、`ob_virtual_table_iterator_factory.cpp:283`、`ob_multi_version_schema_service.cpp:761/765/955/1047`、`.ipp` 5 处（Phase-3）。
 
 ---
 
 ## 3. 按目录分布（实测）
 
-**需分类点 S′ = 400**（调用表达式，扣 Phase-3）：
+**需分类点 S = 400**（外部调用表达式）：
 
-| 目录 | guard | refreshed | published | 合计 | 其中隐式版本 |
-|---|---|---|---|---|---|
-| rootserver（含 ddl_task/parallel_ddl/pl_ddl/freeze/fork_table/truncate_info） | 167 | 5 | 1 | **173** | 167 |
-| share（含 share/schema） | 35 | 13 | 1 | **49** | 41 |
-| observer（含 vector_index/mysql/virtual_table/change_stream/dbms_scheduler/ai_service） | 43 | 14 | 10 | **67** | 65 |
-| sql（含 engine/cmd/expr/px/das/resolver/session/optimizer/code_generator/executor） | 72 | 4 | 4 | **80** | 78 |
-| storage（含 ddl/tablet/ls/lob/fts/compaction） | 24 | 3 | 0 | **27** | 20 |
-| pl | 4 | 0 | 0 | **4** | 4 |
-| **合计** | **345** | **39** | **16** | **400** | **375** |
+| 目录 | guard | refreshed | published | 合计 | 其中隐式版本 | 显式版本 |
+|---|---|---|---|---|---|---|
+| rootserver（含 ddl_task/parallel_ddl/pl_ddl/freeze/fork_table/truncate_info） | 167 | 5 | 1 | **173** | 167 | 6 |
+| share（含 share/schema） | 34 | 14 | 1 | **49** | 41 | 8 |
+| observer（含 vector_index/mysql/virtual_table/change_stream/dbms_scheduler/ai_service） | 43 | 14 | 10 | **67** | 65 | 2 |
+| sql（含 engine/cmd/expr/px/das/resolver/session/optimizer/code_generator/executor） | 72 | 4 | 4 | **80** | 78 | 2 |
+| storage（含 ddl/tablet/ls/lob/fts/compaction） | 24 | 3 | 0 | **27** | 22 | 5 |
+| pl | 4 | 0 | 0 | **4** | 4 | 0 |
+| **合计** | **344** | **40** | **16** | **400** | **378** | **22** |
 
-**全量调用表达式 S = 417**（含 Phase-3）：rootserver 173、observer 84、sql 80、share 49、storage 27、pl 4。
+**另有 Phase-3 待删 `.ipp` 17 处**（不分类）：guard 12、refreshed 4、published 1（§2.4）。S = 400 与 §0.3/§0.4 一致。
 
 ---
 
 ## 4. 全量清单（400 需分类点 + 17 Phase-3）
 
-编码：`<行号><访问器><i|e>`。`G`=`get_runtime_schema_guard`，`R`=`get_runtime_refreshed_schema_version`，`P`=`get_published_schema_version`；`i`=隐式当前版本，`e`=显式版本；非 A 类站点加 `[B]`/`[C]` 标记。
+编码：`<行号><访问器><i|e>`。`G`=`get_runtime_schema_guard`，`R`=`get_runtime_refreshed_schema_version`，`P`=`get_published_schema_version`；`i`=隐式当前版本，`e`=显式版本；非 A 类站点加 `[B]`/`[C]` 标记。**清单行数 = 400（A/B/C 需分类）+ 17（Phase-3）= 417。**
 
 
-### 清单 A. 需分类点 S′ = 400（非 Phase-3）
+### 清单 A. 需分类点 S = 400（非 Phase-3）
 
 **rootserver（173）**
 
@@ -260,7 +266,7 @@ rg -n --no-heading 'get_runtime_(schema_guard|refreshed_schema_version)|get_publ
 - `src/share/ob_ddl_common.cpp`: 392Gi 413Gi 468Gi 735Gi 843Gi 1032Gi 1196Ri
 - `src/share/ob_sys_time_zone_util.cpp`: 41Gi
 - `src/share/schema/ob_latest_schema_guard.cpp`: 59Ri
-- `src/share/schema/ob_multi_version_schema_service.cpp`: 656Ge 739Gi 761Ge 765Ge 955Ge 997Ri 1047Ge 1339Ri 1344Gi 1381Ri 1386Gi 1409Gi 1688Gi 1895Gi 1924Gi 1952Gi 2001Gi 2027Gi 2084Gi 2119Ri 2186Ri 2273Ri 2351Ri 2371Re 2402Re 2405Pe 2468Ri 2486Ri 2557Ri 2590Gi 2858Gi 2940Gi 2973Gi 2991Gi 3000Gi 3009Gi 3018Gi
+- `src/share/schema/ob_multi_version_schema_service.cpp`: 656Ge 739Gi 761Ge 765Ge 955Ge 997Ri 1047Ge 1339Ri 1344Gi 1381Ri 1386Gi 1409Gi 1688Gi 1895Gi 1924Gi 1952Gi 2001Gi 2027Gi 2084Gi 2119Ri 2186Ri 2273Ri 2351Ri 2371Ri 2402Ri 2405Pi 2468Ri 2486Ri 2557Ri 2590Gi 2858Gi 2940Gi 2973Gi 2991Gi 3000Gi 3009Gi 3018Gi
 - `src/share/schema/ob_schema_utils.cpp`: 290Gi 697Gi
 - `src/share/schema/ob_table_sql_service.cpp`: 1834Gi
 
@@ -404,7 +410,7 @@ A 类细分：**A1** 接收者已是本 ns 实例（零改动语义）；**A2** 
 
 ## 6. 分类结果
 
-| 分类 | S′ = 400（需分类） | S = 417（含 Phase-3） |
+| 分类 | S = 400（需分类） | 全部调用表达式 = 417（含 Phase-3） |
 |---|---|---|
 | A | **393** | 410 |
 | B | **4** | 4 |
@@ -547,14 +553,14 @@ if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) { ... }
 | 项 | v1（错误/不严谨） | v2（实测） |
 |---|---|---|
 | guard 标识符出现 | 357 | **467** |
-| 调用表达式总数 | 未给出 | **417**（guard 356 / refreshed 44 / published 17） |
-| 隐式版本点 | 327 | **385**（guard 329 / refreshed 41 / published 15） |
+| 调用表达式总数 | 未给出 | **417**（guard 356 / refreshed 43 / published 18） |
+| 隐式版本点 | 327 | **390**（guard 329 / refreshed 43 / published 18）；S=400 内 378 |
 | 审计 279 的地位 | 判为"偏低 48" | **279 正确**（"单行单 token 1 实参"口径），只是口径偏窄 |
-| 需分类点 | 398 | **400**（另 17 处 Phase-3 单列） |
-| 总数 343 | 判为"两种口径都不精确" | **确认不成立**：三种口径分别为 385 / 417 / 531 |
+| 需分类点 | 398 | **400**（全部调用表达式 417，另 17 处 Phase-3 单列） |
+| 总数 343 | 判为"两种口径都不精确" | **确认不成立**：三种口径分别为 390 / 417 / 531 |
 | 同名无关访问器 | 计入 published | 剔除（§2.3） |
 | 行号基准 | 审计期间旧树 | 当前工作区（并发改动后） |
-| A/B/C（S′） | 391/4/3（对 398） | **393/4/3（对 400）** |
+| A/B/C | 391/4/3（对 398） | **393/4/3（对 400）** |
 | **C 与 go/no-go** | C=3，GO | **C=3，GO（结论不变）** |
 
 ---
@@ -639,7 +645,7 @@ print('A/B/C S-prime', collections.Counter(c['klass'] for c in nonipp))
 ## 12. 报告核对脚本
 
 ```python
-# 清单行数必须等于 S′
+# 清单行数必须等于 S
 import re, json
 inv = open('docs/research/namespace_implicit_version_audit.md').read()
 sec = inv.split('## 4. 全量清单')[1].split('## 5. ')[0]

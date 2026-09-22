@@ -362,6 +362,7 @@ private:
   int init_sql_proxy();
   int init_io();
   int init_schema();
+  void probe_second_schema_service();
   int init_inner_table_monitor();
   int init_autoincrement_service();
   int init_tablet_autoincrement_service();

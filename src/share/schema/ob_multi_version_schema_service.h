@@ -140,6 +140,14 @@ public:
 public:
   static ObMultiVersionSchemaService &get_instance();
 
+  // Allocate an independently-owned instance instead of the process singleton.
+  // The constructor and destructor stay protected so that the only ways to get
+  // an instance are this factory and get_instance(); callers pair it with
+  // free_instance(). Added for the per-namespace service group
+  // (docs/adr/0002-per-ns-service-group.md); see issue 04 Phase 1b spike.
+  static ObMultiVersionSchemaService *alloc_instance();
+  static void free_instance(ObMultiVersionSchemaService *schema_service);
+
   int init(common::ObMySQLProxy *proxy,
       const common::ObCommonConfig *config,
       ObSchemaStatusProxy &schema_status_proxy,

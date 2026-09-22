@@ -1121,6 +1121,18 @@ ObMultiVersionSchemaService &ObMultiVersionSchemaService::get_instance()
   return THE_ONE;
 }
 
+ObMultiVersionSchemaService *ObMultiVersionSchemaService::alloc_instance()
+{
+  return OB_NEW(ObMultiVersionSchemaService, ObModIds::OB_SCHEMA_SERVICE);
+}
+
+void ObMultiVersionSchemaService::free_instance(ObMultiVersionSchemaService *schema_service)
+{
+  if (OB_NOT_NULL(schema_service)) {
+    OB_DELETE(ObMultiVersionSchemaService, ObModIds::OB_SCHEMA_SERVICE, schema_service);
+  }
+}
+
 // init in main thread
 int ObMultiVersionSchemaService::init(
     ObMySQLProxy *sql_proxy,
