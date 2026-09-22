@@ -716,11 +716,7 @@ int ObMultiVersionSchemaService::get_runtime_schema_guard(
   if (OB_SUCC(ret) && remote) {
     int64_t version = requested_version;
     if (version == OB_INVALID_VERSION) {
-      // Read the worker-local refreshed version instead of probing the shared
-      // process per guard: a namespace's schema only changes through its own
-      // worker's DDL, and that DDL is fenced by the session watermark plus the
-      // background refresh chase, so the local store is authoritative here.
-      version = latest_local_version;
+      ret = observer::namespace_worker_prototype::fetch_schema_version(false, true, version);
     }
     if (!ret) { guard.worker_schema_version_ = version; }
   }
@@ -2381,11 +2377,7 @@ int ObMultiVersionSchemaService::get_runtime_refreshed_schema_version(
       schema_version = observer::namespace_worker_prototype::worker_request_schema_version;
       return OB_SUCCESS;
     }
-    // Remote workers read the local refreshed version exactly like the vanilla
-    // single-process path: schema of this namespace only advances via this
-    // worker's own DDL, which is fenced by the session watermark and chased by
-    // the background refresh scheduler.  Probing the shared process on every
-    // statement would put an IPC roundtrip on the hot query path.
+    return observer::namespace_worker_prototype::fetch_schema_version(false, core_version, schema_version);
   }
   int ret = OB_SUCCESS;
   int64_t refreshed_schema_version = OB_INVALID_VERSION;
@@ -2401,12 +2393,11 @@ int ObMultiVersionSchemaService::get_runtime_refreshed_schema_version(
 
 int ObMultiVersionSchemaService::get_live_runtime_refreshed_schema_version(
     int64_t &schema_version,
-  const bool core_version) const
+    const bool core_version) const
 {
   if (observer::namespace_worker_prototype::uses_remote_schema()) {
-    // Same as vanilla: "live" means the worker-local store, which the refresh
-    // chase loop drives forward with schedule_refresh_at_least.  A live probe
-    // of the shared process here would busy-IPC inside async_refresh_schema.
+    return observer::namespace_worker_prototype::fetch_schema_version(
+        false, core_version, schema_version);
   }
   return get_runtime_refreshed_schema_version(schema_version, core_version);
 }

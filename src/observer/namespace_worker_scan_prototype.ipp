@@ -504,9 +504,7 @@ struct EngineScan {
     reply.number(ret);
     return OB_SUCCESS;
   }
-  // Appends [end][count][cells] to out on success. ended tells the caller the
-  // iterator drained, so the scan can auto-close instead of waiting for 'X'.
-  int fetch_batch(Frame &out, bool &ended) {
+  int fetch(Frame &reply) {
     Frame rows('s'); rows.number(0); rows.number(0); rows.number(0);
     uint64_t count = 0; bool end = false; int ret = OB_SUCCESS;
     for (; count < 32; ++count) {
@@ -546,12 +544,9 @@ struct EngineScan {
       if (ret) { break; }
       if (rows.ret) { ret = rows.ret; break; }
     }
-    if (!ret) {
-      out.number(end); out.number(count);
-      out.data.insert(out.data.end(), rows.data.begin() + Frame::HEADER_SIZE + 24, rows.data.end());
-    }
-    ended = end && !ret;
-    return ret;
+    reply = Frame('s'); reply.number(ret); reply.number(end); reply.number(count);
+    if (!ret) { reply.data.insert(reply.data.end(), rows.data.begin() + Frame::HEADER_SIZE + 24, rows.data.end()); }
+    return OB_SUCCESS;
   }
 };
 struct ReadScans {
@@ -575,26 +570,8 @@ struct ReadScans {
       auto scan = std::make_unique<EngineScan>();
       if (!ret) { ret = scan->open(storage_space, request, tx, session); }
       if (ret) { fprintf(stderr, "PROTOTYPE_V17_SCAN_FAILED ret=%d\n", ret); }
-      if (ret) {
-        reply.number(ret); reply.number(0);
-      } else {
-        // Fuse the first fetch into the open reply: a point read gets its row
-        // in one round trip.  An immediately exhausted scan never enters the
-        // map; the worker learns it from the end flag and skips the close.
-        bool ended = false;
-        Frame body('s');
-        ret = scan->fetch_batch(body, ended);
-        reply.number(ret); reply.number(ret ? 0 : ++sequence);
-        if (!ret) {
-          reply.data.insert(reply.data.end(), body.data.begin() + Frame::HEADER_SIZE, body.data.end());
-          if (ended) {
-            fprintf(stderr, "PROTOTYPE_V13_SCANS_RELEASED ns=%llu remaining=%zu\n",
-                (unsigned long long)ns, scans.size());
-          } else {
-            scans.emplace(sequence, std::move(scan));
-          }
-        }
-      }
+      reply.number(ret); reply.number(ret ? 0 : ++sequence);
+      if (!ret) { scans.emplace(sequence, std::move(scan)); }
     } else {
       const uint64_t id = request.number();
       auto it = scans.find(id);
@@ -606,27 +583,8 @@ struct ReadScans {
         else { it->second->rescan(request, reply); }
       }
       else if (!request.consumed() || it == scans.end()) { reply.number(OB_INVALID_ARGUMENT); }
-      else if (request.type() == 'X') {
-        scans.erase(it); reply.number(0);
-        // Tests observe scan release per close: cancellation closes unfinished
-        // scans, a drained slow client closes exhausted ones.  Both matter.
-        fprintf(stderr, "PROTOTYPE_V13_SCANS_RELEASED ns=%llu remaining=%zu\n",
-            (unsigned long long)ns, scans.size());
-      }
-      else if (request.type() == 'F') {
-        // Auto-close on exhaustion: the last batch releases the scan here, so
-        // a fully consumed read never pays a close round trip.
-        bool ended = false;
-        Frame body('s');
-        ret = it->second->fetch_batch(body, ended);
-        reply.number(ret);
-        if (!ret) { reply.data.insert(reply.data.end(), body.data.begin() + Frame::HEADER_SIZE, body.data.end()); }
-        if (ended) {
-          scans.erase(it);
-          fprintf(stderr, "PROTOTYPE_V13_SCANS_RELEASED ns=%llu remaining=%zu\n",
-              (unsigned long long)ns, scans.size());
-        }
-      }
+      else if (request.type() == 'X') { scans.erase(it); reply.number(0); }
+      else if (request.type() == 'F') { ret = it->second->fetch(reply); }
       else { reply.number(OB_NOT_SUPPORTED); }
     }
     // Storage errors belong in the reply. A sent RPC must receive that reply
@@ -738,28 +696,13 @@ public:
               is_virtual_table(param.index_id_) ? -1
                   : static_cast<const ObTableScanParam &>(param).sample_info_.method_);
     }
-    // The open reply carries the first row batch, so batch owns its cell
-    // bytes just like a fetch reply would.
-    ret = request.ret ? request.ret : exchange(request, batch);
+    Frame reply; ret = request.ret ? request.ret : exchange(request, reply);
     if (ret) {
       fprintf(stderr,
               "PROTOTYPE_V22_SCAN_OPEN stage=exchange ret=%d table=%llu\n",
               ret, static_cast<unsigned long long>(param.index_id_));
     }
-    if (!ret) { handle = batch.number(); if (handle == 0) { ret = OB_INVALID_ARGUMENT; } }
-    if (!ret) {
-      end = batch.number() != 0;
-      const uint64_t rows = batch.number();
-      if (batch.ret || rows > 32 || (!rows && !end)) { ret = OB_INVALID_ARGUMENT; }
-      if (!ret && rows) {
-        cells.resize(rows * param.column_ids_.count()); row_index = 0; rows_left = rows;
-        for (auto &cell : cells) { batch.read_object(cell); }
-      }
-      if (!ret && !batch.consumed()) { ret = OB_INVALID_ARGUMENT; }
-      // An exhausted scan auto-closed shared-side; drop the handle so reset()
-      // never sends a close for it.
-      if (!ret && end) { handle = 0; }
-    }
+    if (!ret) { handle = reply.number(); if (!reply.consumed() || handle == 0) { ret = OB_INVALID_ARGUMENT; } }
     return ret;
   }
   int get_next_row(ObNewRow *&out) override {
@@ -771,7 +714,6 @@ public:
       if ((ret = exchange(request, reply))) { return ret; }
       end = reply.number() != 0; const uint64_t rows = reply.number();
       if (reply.ret || rows > 32 || (!rows && !end)) { return OB_INVALID_ARGUMENT; }
-      if (end) { handle = 0; }
       cells.resize(rows * columns); row_index = 0; rows_left = rows;
       for (auto &cell : cells) { reply.read_object(cell); }
       if (!reply.consumed()) { return OB_INVALID_ARGUMENT; }

@@ -59,15 +59,6 @@
 - 客户端数据通道第一版不依赖端口（无跨机）；内部控制/存储通道保持 fork 管道帧（stdin/stdout，slot 复用），不动。
 - Windows：首选 AF_UNIX（Win10 1803+ 原生支持，与 socket 模型同构）；named pipe 只在"官方客户端直连 Worker"的可选场景才需要——mariadb-c-connect 在 Windows 仅支持 named pipe 的限制不影响两端都是我们自己代码的内部通道。
 
-### 2026-09-22 方向修订：代理下沉到 ns1 Worker（已确认方向）
-
-- 决策：客户端入口代理从共享进程下沉到 ns1 Worker；共享进程删除客户端 NIO，纯化为存储引擎 + fork 控制面。Worker 是唯一 MySQL 端点的定位不变，只是"薄路由"也搬进 Worker。
-- 动机与收益：共享进程零客户端协议表面、零代理连接；ns1 Worker 复用自身已有的 MySQL NIO 事件循环做异步 splice，比共享端"每连接一个 poll 泵线程"更省——事件循环总数从 1+N（共享代理 + N Worker）降为 N。
-- 已确认代价：入口可用性绑死 ns1 Worker（其崩溃/重启 = 全 namespace 客户端断连，影响秒级：共享进程 SIGCHLD 感知后重生再监听）；代理 CPU/每连接缓冲计入 ns1 内存与 CPU 预算。
-- 已否决变体：ns0 专职 gateway Worker（无 namespace、只代理）。它要多一套 NIO + 一个完整进程（约 100MB RSS / 21 线程），资源零节省，仅换入口与数据面故障隔离——留作未来入口 HA 需求出现时的升级位，路由代码两者通用。
-- 实施两步走：第一步只移代理（共享删客户端 NIO，ns1 Worker 加路由模式），supervisor/spawn 留在共享进程；第二步把控制/存储通道从 spawn 继承管道改为 dial-back（共享进程监听内部 UDS，Worker 启动后回连注册），之后 spawn/respawn 移交 ns1 Worker。dial-back 是前置——否则 ns1 spawn 出的子进程管道另一端落在 ns1 手里，到不了共享进程；改成回连后 spawn 与通道建立解耦，谁来拉 Worker 都自由，Windows 上也更干净。Worker 死亡感知届时靠存储通道断开（共享进程天然可见），不再依赖 SIGCHLD 父子关系。
-- TLS 坑位不变：入口移到 ns1 后仍是同一个 greeting → 路由 → 字节流 splice 流水线，TLS upgrade 空钩子、PROXY v2、端到端 TLS 结论全部沿用。
-
 ### 工作清单
 
 - Step 1（已完成）：Worker 客户端接入点从随机 TCP 端口改为 Unix socket；就绪帧发布 endpoint 字符串；删除 `SEEKDB_NAMESPACE_SQL_WORKER_LISTEN` 开关；UDS 直连保留为排障通道。

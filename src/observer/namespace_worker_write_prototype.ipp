@@ -1828,13 +1828,6 @@ struct EngineWrites {
   }
 };
 
-// start_stmt invokes prepare_tx_for_statement twice back-to-back per
-// statement with only local reads in between (ob_sql_trans_control.cpp), and
-// the server-side prepare is an idempotent reset.  tx_rpc records the last
-// prepared tx here so the second consecutive call can skip its RPC.  Any
-// other transaction RPC on the same tx invalidates the record.
-thread_local const transaction::ObTxDesc *last_prepared_tx = nullptr;
-
 // Compatibility view for query's existing descriptor accessors. Constructing
 // and decoding this value does not start a transaction service, register a
 // transaction, or allocate a storage context in the worker. Engine owns all
@@ -1850,10 +1843,6 @@ int tx_rpc(char operation, ObTxDesc &tx, Frame &request, Frame &reply) {
   message.ret = request.ret;
   int ret = write_rpc(message, reply);
   if (!ret) { reply.read(tx); ret = reply.ret; }
-  // Track the last statement-prepared tx per thread; see
-  // RemoteTransactionService::prepare_tx_for_statement.
-  if (!ret && operation == 'S') { last_prepared_tx = &tx; }
-  else if (last_prepared_tx == &tx) { last_prepared_tx = nullptr; }
   return ret;
 }
 
@@ -2263,10 +2252,7 @@ public:
     }
     delete &tx; return ret; }
   int reuse_tx(transaction::ObTxDesc &tx) override { Frame request, reply; return tx_rpc('U', tx, request, reply); }
-  int prepare_tx_for_statement(transaction::ObTxDesc &tx) override {
-    if (last_prepared_tx == &tx) { return OB_SUCCESS; }
-    Frame request, reply; return tx_rpc('S', tx, request, reply);
-  }
+  int prepare_tx_for_statement(transaction::ObTxDesc &tx) override { Frame request, reply; return tx_rpc('S', tx, request, reply); }
   int prepare_tx_for_autocommit_retry(transaction::ObTxDesc &tx) override { Frame request, reply; return tx_rpc('N', tx, request, reply); }
   int register_mds_into_tx(
       transaction::ObTxDesc &tx,
