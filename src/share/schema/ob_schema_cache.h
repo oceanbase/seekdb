@@ -148,7 +148,9 @@ public:
   ObSchemaCache();
   virtual ~ObSchemaCache();
 
-  int init();
+  // name_suffix isolates the globally registered KV cache slots when a
+  // second schema service instance lives in the same process (e.g. "ns2").
+  int init(const char *name_suffix = nullptr);
   void destroy();
   int get_schema(const ObSchemaType schema_type,
                  const uint64_t schema_id,

@@ -148,7 +148,8 @@ public:
       const int64_t init_version_count,
       ObSchemaService &schema_backend,
       ObISchemaRefreshScheduler &schema_refresh_scheduler,
-      ObSchemaPublishSignal &schema_publish_signal);
+      ObSchemaPublishSignal &schema_publish_signal,
+      const char *cache_name_suffix = nullptr);
 
   void dump_schema_statistics();
 

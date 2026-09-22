@@ -15,6 +15,8 @@
 #include "share/ob_autoincrement_service.h"
 #include "rootserver/ddl_task/ob_ddl_scheduler.h"
 #include "rootserver/ob_ddl_service_launcher.h"
+#include "rootserver/ob_max_id_cache_adapter.h"
+#include "observer/schema/ob_schema_service_sql_impl.h"
 #include <memory>
 #include "namespace/namespace.h"
 #include "sql/resolver/cmd/ob_variable_set_stmt.h"
@@ -262,36 +264,6 @@ int ObServer::namespace_sql_worker_prototype(const char *query)
         &remote_tablet_autoincrement_admin);
     worker_catalog_fetch = fetch_catalog;
   }
-  if (OB_SUCC(ret) && worker_namespace > 1) {
-    // A dead Worker may have committed native all_* rows after it marked the
-    // namespace dirty but before it published the matching directory delta.
-    // Reconcile before opening the client listener, then atomically clear the
-    // persistent fork fence. No user session can race this startup repair.
-    IndependentStorageScope storage_scope;
-    int64_t directory_schema_version = OB_INVALID_VERSION;
-    int64_t worker_schema_version = OB_INVALID_VERSION;
-    int64_t published_schema_version = OB_INVALID_VERSION;
-    bool recovery_needed = false;
-    WORKER_STEP(storage_scope.error());
-    WORKER_STEP(begin_namespace_schema_recovery(recovery_needed));
-    if (OB_SUCC(ret) && recovery_needed) {
-      WORKER_STEP(fetch_schema_version(false, false, directory_schema_version));
-      WORKER_STEP(schema_service_.refresh_runtime_schema_from_static_system());
-      WORKER_STEP(schema_service_.get_runtime_refreshed_schema_version(
-          worker_schema_version));
-      if (OB_SUCC(ret) && worker_schema_version < directory_schema_version) {
-        ret = OB_STATE_NOT_MATCH;
-      }
-      if (OB_SUCC(ret) && worker_schema_version > directory_schema_version) {
-        WORKER_STEP(sync_namespace_schema_delta(
-            worker_namespace, directory_schema_version, published_schema_version));
-      } else if (OB_SUCC(ret)) {
-        published_schema_version = worker_schema_version;
-      }
-      WORKER_STEP(finish_namespace_schema_recovery(published_schema_version));
-      namespace_schema_recovered = OB_SUCC(ret);
-    }
-  }
   // Activation happens only after every data-plane service points at the
   // shared-storage gateway.  DDL executor threads therefore run in this
   // namespace worker while all physical reads/writes still cross IPC.
@@ -510,6 +482,83 @@ int ObServer::namespace_sql_worker_prototype(const char *query)
         (unsigned long long)request->tag.slot, (unsigned long long)request->tag.generation, result);
     if (worker_send_wire(std::move(done))) { std::_Exit(1); }
   };
+  // Phase 1b spike (ticket 04): prove a second ObMultiVersionSchemaService
+  // instance can init and refresh inside this process, next to THE_ONE that
+  // the whole composition is wired to. Enabled by SEEKDB_NS_SCHEMA_SPIKE=1;
+  // the prototype never runs it in production. Spike objects intentionally
+  // leak: the process exits when the test finishes.
+  auto run_schema_spike = [&]() {
+    if (nullptr == std::getenv("SEEKDB_NS_SCHEMA_SPIKE")) { return; }
+    // Refresh issues inner SQL whose storage scans must carry this worker's
+    // routing identity; take a direct-request binding like the V19 probe.
+    SessionBinding *spike_binding = nullptr;
+    if (OB_SUCCESS != begin_direct_request(0, spike_binding, true)) { return; }
+    {
+    int spike_ret = OB_SUCCESS;
+    // The ctor is protected to enforce the THE_ONE singleton; per-ns
+    // instances need that opened up (see the spike report).
+    class SpikeSchemaService final : public share::schema::ObMultiVersionSchemaService {};
+    SpikeSchemaService *spike_service = nullptr;
+    share::schema::ObSchemaPublishSignal *spike_signal = nullptr;
+    rootserver::ObMaxIdCacheAdapter *spike_max_id = nullptr;
+    share::schema::ObSchemaServiceSQLImpl *spike_backend = nullptr;
+    ObSchemaRefreshSchedulerAdapter *spike_scheduler = nullptr;
+    int64_t the_one_version = OB_INVALID_VERSION;
+    int64_t spike_version = OB_INVALID_VERSION;
+    const char *stage = "alloc";
+    if (OB_ISNULL(spike_service = OB_NEW(SpikeSchemaService,
+        ObModIds::OB_SCHEMA_SERVICE))
+        || OB_ISNULL(spike_signal = OB_NEW(share::schema::ObSchemaPublishSignal,
+        ObModIds::OB_SCHEMA_SERVICE))
+        || OB_ISNULL(spike_max_id = OB_NEW(rootserver::ObMaxIdCacheAdapter,
+        ObModIds::OB_SCHEMA_SERVICE, local_management_service_))
+        || OB_ISNULL(spike_backend = OB_NEW(share::schema::ObSchemaServiceSQLImpl,
+        ObModIds::OB_SCHEMA_SERVICE, spike_max_id, ddl_sql_proxy_, *spike_service))
+        || OB_ISNULL(spike_scheduler = OB_NEW(ObSchemaRefreshSchedulerAdapter,
+        ObModIds::OB_SCHEMA_SERVICE, ob_service_, *spike_service))) {
+      spike_ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (FALSE_IT(stage = "signal_init")) {
+    } else if (OB_SUCCESS != (spike_ret = spike_signal->init())) {
+    } else if (FALSE_IT(stage = "service_init")) {
+    } else if (OB_SUCCESS != (spike_ret = spike_service->init(
+        &sql_proxy_, &config_, schema_status_proxy_, gctx_.status_,
+        gctx_.in_bootstrap_, OB_MAX_VERSION_COUNT, *spike_backend,
+        *spike_scheduler, *spike_signal, "spike"))) {
+    } else if (FALSE_IT(stage = "broadcast")) {
+    } else if (FALSE_IT([&] {
+        // Inner-SQL refresh needs a session-bound storage routing context
+        // (ticket 08 territory), so the spike pushes versions directly, the
+        // same way this worker seeds its own baseline above.
+        ObArenaAllocator allocator("NsSpike");
+        ObSArray<share::schema::ObTableSchema> system_schemas;
+        if (OB_SUCCESS != (spike_ret = share::schema::ObSchemaUtils::construct_inner_table_schemas(
+            system_schemas, allocator, true))) {
+        } else if (OB_SUCCESS != (spike_ret = share::schema::ObSchemaUtils::generate_hard_code_schema_version(
+            system_schemas))) {
+        } else {
+          const int64_t sys_version =
+              share::schema::ObSchemaUtils::get_inner_table_sys_schema_version(system_schemas);
+          spike_ret = spike_service->broadcast_runtime_schema(system_schemas, sys_version);
+        }
+      }())) {
+    } else if (FALSE_IT(stage = "version_second")) {
+    } else if (OB_SUCCESS != (spike_ret =
+        spike_service->get_runtime_refreshed_schema_version(spike_version))) {
+    } else if (FALSE_IT(stage = "version_the_one")) {
+    } else if (OB_SUCCESS != (spike_ret =
+        schema_service_.get_runtime_refreshed_schema_version(the_one_version))) {
+    } else {
+      stage = "done";
+    }
+    fprintf(stderr,
+        "PROTOTYPE_SCHEMA_SPIKE stage=%s ret=%d the_one_version=%lld second_version=%lld\n",
+        stage, spike_ret, static_cast<long long>(the_one_version),
+        static_cast<long long>(spike_version));
+  }
+    finish_direct_request();
+    close_session(spike_binding);
+  };
+  bool spike_ran = false;
   auto execute_job = [&](Job &job) -> int {
     if (!job.request->call_trace.is_valid()) { job.request->call_trace.init(self_addr_); }
     ObTraceIdGuard trace_guard(job.request->call_trace);
@@ -598,6 +647,7 @@ int ObServer::namespace_sql_worker_prototype(const char *query)
                 (unsigned long long)slots[index].generation, (unsigned long long)active_sessions, slots.size(), slots.capacity());
           }
           result = worker_send(opened);
+          if (!result && !spike_ran) { spike_ran = true; run_schema_spike(); }
         }
       } else if (input.type() == 'I') {
         result = execute_inner(*job.owner, input);
@@ -699,6 +749,36 @@ int ObServer::namespace_sql_worker_prototype(const char *query)
   stop_ = false;
   has_stopped_ = false;
   worker_bootstrapping = false;
+  if (OB_SUCC(ret) && worker_namespace > 1) {
+    // A dead Worker may have committed native all_* rows after it marked the
+    // namespace dirty but before it published the matching directory delta.
+    // Reconcile before opening the client listener, then atomically clear the
+    // persistent fork fence. No user session can race this startup repair.
+    IndependentStorageScope storage_scope;
+    int64_t directory_schema_version = OB_INVALID_VERSION;
+    int64_t worker_schema_version = OB_INVALID_VERSION;
+    int64_t published_schema_version = OB_INVALID_VERSION;
+    bool recovery_needed = false;
+    WORKER_STEP(storage_scope.error());
+    WORKER_STEP(begin_namespace_schema_recovery(recovery_needed));
+    if (OB_SUCC(ret) && recovery_needed) {
+      WORKER_STEP(fetch_schema_version(false, false, directory_schema_version));
+      WORKER_STEP(schema_service_.refresh_runtime_schema_from_static_system());
+      WORKER_STEP(schema_service_.get_runtime_refreshed_schema_version(
+          worker_schema_version));
+      if (OB_SUCC(ret) && worker_schema_version < directory_schema_version) {
+        ret = OB_STATE_NOT_MATCH;
+      }
+      if (OB_SUCC(ret) && worker_schema_version > directory_schema_version) {
+        WORKER_STEP(sync_namespace_schema_delta(
+            worker_namespace, directory_schema_version, published_schema_version));
+      } else if (OB_SUCC(ret)) {
+        published_schema_version = worker_schema_version;
+      }
+      WORKER_STEP(finish_namespace_schema_recovery(published_schema_version));
+      namespace_schema_recovered = OB_SUCC(ret);
+    }
+  }
   ret = worker_send_wire(ready);
   while (!ret) {
     Frame input;

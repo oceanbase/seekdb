@@ -375,13 +375,29 @@ const ObTableSchema *ObSchemaCache::get_all_core_table() const
   return &all_core_table_;
 }
 
-int ObSchemaCache::init()
+int ObSchemaCache::init(const char *name_suffix)
 {
   int ret = OB_SUCCESS;
   // TODO, configurable
-  if (OB_FAIL(cache_.init(OB_SCHEMA_CACHE_NAME))) {
-  } else if (OB_FAIL(history_cache_.init(OB_SCHEMA_HISTORY_CACHE_NAME))) {
-  } else if (OB_FAIL(tablet_cache_.init(OB_TABLET_TABLE_CACHE_NAME))) {
+  char cache_name[64];
+  char history_name[64];
+  char tablet_name[64];
+  if (name_suffix == nullptr || name_suffix[0] == '\0') {
+    STRNCPY(cache_name, OB_SCHEMA_CACHE_NAME, sizeof(cache_name));
+    STRNCPY(history_name, OB_SCHEMA_HISTORY_CACHE_NAME, sizeof(history_name));
+    STRNCPY(tablet_name, OB_TABLET_TABLE_CACHE_NAME, sizeof(tablet_name));
+  } else if (snprintf(cache_name, sizeof(cache_name), "%s@%s",
+                 OB_SCHEMA_CACHE_NAME, name_suffix) >= static_cast<int>(sizeof(cache_name))
+             || snprintf(history_name, sizeof(history_name), "%s@%s",
+                 OB_SCHEMA_HISTORY_CACHE_NAME, name_suffix) >= static_cast<int>(sizeof(history_name))
+             || snprintf(tablet_name, sizeof(tablet_name), "%s@%s",
+                 OB_TABLET_TABLE_CACHE_NAME, name_suffix) >= static_cast<int>(sizeof(tablet_name))) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(cache_.init(cache_name))) {
+  } else if (OB_FAIL(history_cache_.init(history_name))) {
+  } else if (OB_FAIL(tablet_cache_.init(tablet_name))) {
   } else if (OB_FAIL(init_all_core_table())) {
   } else {
     is_inited_ = true;
