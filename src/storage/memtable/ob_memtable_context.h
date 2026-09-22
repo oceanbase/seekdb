@@ -130,92 +130,6 @@ public:
   }
 };
 
-class ObQueryAllocator final : public common::ObIAllocator
-{
-public:
-  explicit ObQueryAllocator()
-    : alloc_count_(0),
-      free_count_(0),
-      alloc_size_(0),
-      is_inited_(false) {}
-  ~ObQueryAllocator()
-  {
-    if (OB_UNLIKELY(ATOMIC_LOAD(&free_count_) != ATOMIC_LOAD(&alloc_count_))) {
-      TRANS_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "query allocator leak found", K(alloc_count_), K(free_count_), K(alloc_size_));
-    }
-    ATOMIC_STORE(&is_inited_, false);
-  }
-  int init()
-  {
-    int ret = OB_SUCCESS;
-    ObMemAttr attr(ObModIds::OB_QUERY_ALLOCATOR);
-    if (OB_UNLIKELY(free_count_ != alloc_count_)) {
-      TRANS_LOG(ERROR, "query allocator leak found", K(alloc_count_), K(free_count_), K(alloc_size_));
-    }
-    if (IS_NOT_INIT) {
-      if (OB_FAIL(allocator_.init(NULL, //use default allocator in fifo_allocator
-                                  common::OB_MALLOC_NORMAL_BLOCK_SIZE,
-                                  attr))) {
-      } else {
-        ATOMIC_STORE(&is_inited_, true);
-      }
-    }
-    if (OB_SUCC(ret)) {
-      allocator_.set_attr(attr);
-    }
-    ATOMIC_STORE(&alloc_count_, 0);
-    ATOMIC_STORE(&free_count_, 0);
-    ATOMIC_STORE(&alloc_size_, 0);
-    return ret;
-  }
-  void reset(bool only_check = false)
-  {
-    if (OB_UNLIKELY(ATOMIC_LOAD(&free_count_) != ATOMIC_LOAD(&alloc_count_))) {
-      TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "query allocator leak found", K(alloc_count_), K(free_count_), K(alloc_size_));
-      OB_SAFE_ABORT();
-    }
-    if (!only_check) {
-      allocator_.reset();
-      ATOMIC_STORE(&alloc_count_, 0);
-      ATOMIC_STORE(&free_count_, 0);
-      ATOMIC_STORE(&alloc_size_, 0);
-      ATOMIC_STORE(&is_inited_, false);
-    }
-  }
-  void *alloc(const int64_t size) override
-  {
-    void *ret = nullptr;
-    if (OB_ISNULL(ret = allocator_.alloc(size))) {
-      TRANS_LOG_RET(ERROR, common::OB_ALLOCATE_MEMORY_FAILED, "query alloc failed",
-        K(alloc_count_), K(free_count_), K(alloc_size_), K(size));
-    } else {
-      ATOMIC_INC(&alloc_count_);
-      ATOMIC_FAA(&alloc_size_, size);
-    }
-    return ret;
-  }
-  void* alloc(const int64_t size, const ObMemAttr &attr) override
-  {
-    UNUSED(attr);
-    return alloc(size);
-  }
-  void free(void *ptr) override
-  {
-    if (OB_ISNULL(ptr)) {
-      // do nothing
-    } else {
-      ATOMIC_INC(&free_count_);
-      allocator_.free(ptr);
-    }
-  }
-private:
-  ObFIFOAllocator allocator_;
-  int64_t alloc_count_;
-  int64_t free_count_;
-  int64_t alloc_size_;
-  bool is_inited_;
-};
-
 // The speciaal allocator for ObMemtableCtx, used to allocate callback.
 // The page size is 8K, support concurrency, but at a poor performance.
 class ObMemtableCtxCbAllocator final : public common::ObIAllocator
@@ -323,7 +237,6 @@ public:
   int init();
   virtual void *old_row_alloc(const int64_t size) override;
   virtual void old_row_free(void *row) override;
-  virtual common::ObIAllocator &get_query_allocator();
   virtual void inc_lock_for_read_retry_count();
   virtual int read_lock_yield()
   {
@@ -547,8 +460,6 @@ private:
   int64_t tx_status_;
   int8_t elr_state_;
   int64_t ref_;
-  // allocate memory for callback when query executing
-  ObQueryAllocator query_allocator_;
   ObMemtableCtxCbAllocator ctx_cb_allocator_;
   ObRedoLogGenerator log_gen_;
   RetryInfo retry_info_;

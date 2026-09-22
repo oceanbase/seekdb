@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include <new>
+#include "lib/rc/context.h"
 #include "ob_access_service.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
 #include "share/rc/ob_server_runtime.h"
@@ -745,7 +746,7 @@ int ObAccessService::prepare_execution(
     dml_param.table_param_ = legacy_table_plan;
     dml_param.prelock_ = write_spec.prelock_;
     dml_param.is_batch_stmt_ = write_spec.is_batch_stmt_;
-    dml_param.dml_allocator_ = &allocator;
+    dml_param.dml_allocator_ = &CURRENT_CONTEXT->get_malloc_allocator();
     dml_param.is_main_table_in_fts_ddl_ = write_spec.is_main_table_in_fts_ddl_;
     dml_param.check_schema_version_ = write_spec.check_schema_version_;
     dml_param.has_async_index_ =

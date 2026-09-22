@@ -38,7 +38,6 @@ ObMemtableCtx::ObMemtableCtx()
       tx_status_(ObTxStatus::NORMAL),
       elr_state_(ELR_STATE_INIT),
       ref_(0),
-      query_allocator_(),
       ctx_cb_allocator_(),
       ctx_(NULL),
       truncate_cnt_(0),
@@ -73,8 +72,7 @@ int ObMemtableCtx::init()
   if (IS_INIT) { // use is_inited_ to prevent memtable ctx from being inited repeatedly
     ret = OB_INIT_TWICE;
   } else {
-    if (OB_FAIL(query_allocator_.init())) {
-    } else if (OB_FAIL(ctx_cb_allocator_.init())) {
+    if (OB_FAIL(ctx_cb_allocator_.init())) {
     } else if (OB_FAIL(reset_log_generator_())) {
     } else {
       // do nothing
@@ -201,7 +199,6 @@ void ObMemtableCtx::reset()
     retry_info_.reset();
     trans_mgr_.reset();
     log_gen_.reset();
-    query_allocator_.reset(/*only_check*/ true);
     ctx_cb_allocator_.reset(/*only_check*/ true);
     ref_ = 0;
     is_master_ = true;
@@ -486,11 +483,6 @@ ObOBJLockCallback *ObMemtableCtx::create_table_lock_callback(ObIMvccCtx &ctx,
     cb = lock_mem_ctx->create_table_lock_callback(ctx, memtable);
   }
   return cb;
-}
-
-ObIAllocator &ObMemtableCtx::get_query_allocator()
-{
-  return query_allocator_;
 }
 
 int ObMemtableCtx::trans_begin()

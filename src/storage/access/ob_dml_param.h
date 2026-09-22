@@ -94,6 +94,8 @@ struct ObDMLBaseParam
   bool is_ignore_;
   bool prelock_;
   bool is_batch_stmt_;
+  // Freeable allocator owned by the current SQL request or background task.
+  // It backs scratch memory whose lifetime does not exceed one DML execution.
   mutable common::ObIAllocator *dml_allocator_;
   mutable ObStoreCtxGuard *store_ctx_guard_;
 
@@ -113,7 +115,11 @@ struct ObDMLBaseParam
   // Propagated to ObTxCtx::has_async_index_redo_ -> ObTxLogBlockHeader::HAS_ASYNC_INDEX
   // for Change Stream fast filtering in the Fetcher.
   bool has_async_index_;
-  bool is_valid() const { return (timeout_ > 0 && schema_version_ >= 0) && nullptr != store_ctx_guard_; }
+  bool is_valid() const
+  {
+    return timeout_ > 0 && schema_version_ >= 0
+        && nullptr != dml_allocator_ && nullptr != store_ctx_guard_;
+  }
   DECLARE_TO_STRING;
 };
 

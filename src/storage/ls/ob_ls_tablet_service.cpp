@@ -1816,7 +1816,7 @@ int ObLSTabletService::insert_rows(
   } else {
     HEAP_VAR(ObDMLRunningCtx, run_ctx, ctx,
                             dml_param,
-                            ctx.mvcc_acc_ctx_.mem_ctx_->get_query_allocator(),
+                            *dml_param.dml_allocator_,
                             ObDmlFlag::DF_INSERT) {
     int64_t row_count = 0;
     int64_t batch_idx = 0;
@@ -1946,7 +1946,7 @@ int ObLSTabletService::insert_rows_with_fetch_dup(
   } else {
     HEAP_VAR(ObDMLRunningCtx, run_ctx, ctx,
                             dml_param,
-                            ctx.mvcc_acc_ctx_.mem_ctx_->get_query_allocator(),
+                            *dml_param.dml_allocator_,
                             ObDmlFlag::DF_INSERT) {
     int64_t row_count = 0;
     ObDatumRow *rows = nullptr;
@@ -2085,7 +2085,7 @@ int ObLSTabletService::update_rows(
   } else {
     HEAP_VAR(ObDMLRunningCtx, run_ctx, ctx,
                             dml_param,
-                            ctx.mvcc_acc_ctx_.mem_ctx_->get_query_allocator(),
+                            *dml_param.dml_allocator_,
                             ObDmlFlag::DF_UPDATE,
                             true /* is_need_check_old_row_ */) {
     ObIAllocator &work_allocator = run_ctx.allocator_;
@@ -2359,7 +2359,7 @@ int ObLSTabletService::put_rows(
   } else {
     HEAP_VAR(ObDMLRunningCtx, run_ctx, ctx,
                             dml_param,
-                            ctx.mvcc_acc_ctx_.mem_ctx_->get_query_allocator(),
+                            *dml_param.dml_allocator_,
                             ObDmlFlag::DF_UPDATE) {
     ObDatumRow *rows = nullptr;
     int64_t row_count = 0;
@@ -2446,7 +2446,7 @@ int ObLSTabletService::delete_rows(
   } else {
     HEAP_VAR(ObDMLRunningCtx, run_ctx, ctx,
                             dml_param,
-                            ctx.mvcc_acc_ctx_.mem_ctx_->get_query_allocator(),
+                            *dml_param.dml_allocator_,
                             ObDmlFlag::DF_DELETE,
                             true /* is_need_check_old_row_ */) {
     int64_t row_count = 0;
@@ -2559,7 +2559,7 @@ int ObLSTabletService::lock_rows(
     timeguard.click("Get");
     HEAP_VAR(ObDMLRunningCtx, run_ctx, ctx,
                             dml_param,
-                            ctx.mvcc_acc_ctx_.mem_ctx_->get_query_allocator(),
+                            *dml_param.dml_allocator_,
                             ObDmlFlag::DF_LOCK) {
     ObDatumRow *row = nullptr;
     if (OB_FAIL(prepare_dml_running_ctx(nullptr, nullptr, tablet_handle, run_ctx))) {
@@ -2631,7 +2631,7 @@ int ObLSTabletService::lock_row(
   } else {
     HEAP_VAR(ObDMLRunningCtx, run_ctx, ctx,
                             dml_param,
-                            ctx.mvcc_acc_ctx_.mem_ctx_->get_query_allocator(),
+                            *dml_param.dml_allocator_,
                             ObDmlFlag::DF_LOCK) {
     if (OB_FAIL(prepare_dml_running_ctx(nullptr, nullptr, tablet_handle, run_ctx))) {
     } else if (OB_FAIL(run_ctx.relative_table_.get_rowkey_column_ids(col_desc))) {
