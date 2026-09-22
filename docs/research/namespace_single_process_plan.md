@@ -25,6 +25,46 @@
 - 代价：活跃 ns 数 × 服务线程数的资源占用。**优化方向是 serverless 式休眠**：冷 ns 停止服务、退出/挂起线程、释放缓存，只保留 `Namespace` 元数据；首次访问唤醒（等价于现 worker 的 respawn，但进程内完成，毫秒级）。fork 后懒激活与之一致：fork 只建元数据，runtime 首次登录才拉起。
 - 审计中的备选（单例服务 + ns 维度、plan cache key 加维度）降级为备选方案保留在 `namespace_single_process_audit.md`，不再推荐。
 
+## 模块归属：Runtime vs 共享（Phase 1 划法，已定）
+
+划分原则（用户拍板）：**默认无脑 per-ns 进 Runtime；明显可公用且改造简单的直接公用；共享线程池优化留待后续阶段**。worker prototype bootstrap（`namespace_sql_worker_prototype.ipp` 的 WORKER_STEP 序列）已经为每个 worker 进程单独实例化过下面 Runtime 列的全部模块——这就是 per-ns 可行性的现成证据，Phase 1 照搬即可。
+
+### Runtime 持有（per-ns，构造绑 ns，内部零感知）
+
+| 模块 | 自带线程 | 备注 |
+| --- | --- | --- |
+| `ObMultiVersionSchemaService` + schema_status_proxy + 刷新 | 是（refresh 定时器） | 1.3 spike 验证第二实例共存 |
+| `ObPlanCache` / `ObPsCache` | 否 | 失效语义天然按本 ns 版本，不动 key |
+| `ObSQLSessionMgr` | 是（清理线程） | session 生命周期归本 ns |
+| `ObPxPools` | 是（动态伸缩） | 见下方 PX 专项 |
+| `dtl::ObDfc` / DTL / `ObDTLIntermResultManager` | 是（dfc 刷新） | PX 数据通道状态 |
+| `ObSqlMemoryManager` / `ObOptStatMonitorManager` | 否 | |
+| `ObDataAccessService` / `ObLobManager`（SQL 侧） | 否 | |
+| `ObDDLServiceLauncher` / `ObDDLScheduler` | 是 | 长事务 DDL 按 ns 归口 |
+| `ObSharedTimer` | 是 | per-ns 定时器；后续可合并为全局一张 |
+| vt_data_service / srs_service / autoincrement | 否 | autoincrement 现为 `get_instance` 单例，需改 per-ns |
+
+### 共享（Phase 1 白名单）
+
+| 模块 | 理由 |
+| --- | --- |
+| 网络/NIO（net_frame、mysql 监听、rpc、sql nio） | session 携带 ns，入口一次绑定后热路径无感知；跨 ns 公用是唯一合理形态 |
+| 存储引擎族：ObLSService / local_storage_meta / ObAccessService / memstore / freezer / checkpoint / tablet GC / compaction 全家 / dag_scheduler / io_service / tmp_file / shared_macro_block_mgr | 不变式 1：ns-blind，全部按 tablet/LS 编码 id 组织（审计 §1 实测读路径 0 感知） |
+| 事务/日志族：trans_service / log_service / timestamp / trans_id / unique_id / table_lock / lock_wait / deadlock | 全局键组织，无 ns 状态；worker 模式下本来也是共享进程独占 |
+| config / tz_info / GMEMCONF / sql factories / expr static | 纯全局常量态，worker bootstrap 中本就是 reload/init 幂等 |
+
+### PX 专项（回答"PX 共享改动大吗"）
+
+`ObPxPool` 本体是 ns-blind 的任务执行器：`submit(RunFuncT)` 只收闭包，任务闭包自带 `ObPxInitTaskArgs`（内含 `ObDesExecContext` → session → ns），池子不读任何 ns 状态。现状 `ObPxPools` 已按 `group_id` lazy 分池，线程动态伸缩 + 空闲回收。
+
+- Phase 1（per-ns）：worker prototype 已经 per-worker new 了 `mods_px_pools_`，照搬，**零新增改动**。
+- 未来共享：因为 ns 全程走任务上下文、不走路由，共享只需把 `get_or_create(group_id)` 的 key 归一成单池，**改动极小**。PX 是线程池共享化最理想的候选，但第一阶段不做。
+
+### 待定/后续阶段再定
+
+- 后台调度类（freeze coordinator、stats、tablet_runtime_meta_updater 等）：Phase 2 按 2.3 统一处理（遍历 registry 派发，任务带 ns）。
+- 共享线程池化（合并 per-ns timer/px/ddl 线程）：待 ns 数上来后按实测资源占用决定，休眠机制（Phase 4）优先于池合并。
+
 ## 阶段拆解
 
 ### Phase 0 准备（不动语义，纯读代码 + 机械删除）
