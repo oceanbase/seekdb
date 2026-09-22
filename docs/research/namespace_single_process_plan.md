@@ -7,7 +7,7 @@
 - 目标：`oltp_point_select` 追平单体（0.13ms/query 量级）；fork→可用保持秒级并向 100ms 收敛；通用负载不退化。
 - 不变式 1：**存储引擎 ns-blind**——只认编码 id，ns 语义由 id 编码承载、翻译层解释（审计 §1 实测：存储读路径 0 处感知）。
 - 不变式 2：**无 ambient 上下文**——ns 只能经由 session/任务显式传入，不引入 thread_local 当前 ns / scoped guard（OB MTL 的老路，漏一次 = 跨 ns 静默读错）。
-- 不变式 3：**NamespaceRuntime 不绑线程/内存池/IO**——per-ns 只有数据对象；运行资源全共享（不要故障/资源隔离换来的红利）。
+- 不变式 3：**SQL 执行线程与 NIO 全局共享**（session 驱动，session 携带 ns）；**后台服务 per-ns 实例化**（构造即绑定 ns，模块内部保持单 ns 逻辑零感知）。多 ns 由"多个实例"承载，不由"实例感知多 ns"承载。
 - 不变式 4：模块边界靠机制——bazel visibility + layering_check 做架构门禁，不靠评审自觉。
 
 ## 核心设计抉择
@@ -19,11 +19,11 @@
 3. 空 ns = fork 内置 `__template__` ns（两条用户路径一套机制）。
 4. MVCC pin：fork 时全局 pin 不动；子物化后渐进下放为 per-tablet pin（记录，后做）。
 
-**待拍板（审计与早期讨论的分歧点）**：schema service / plan cache 的形态。
+**已定（用户拍板）：per-ns 服务组 + serverless 休眠**，即"worker 进程对象化"。
 
-- 方案甲（早期讨论）：per-ns 实例（NamespaceRuntime 持有 ObMultiVersionSchemaService 实例）。隐患：每实例自带刷新调度器 ≈ 每 ns 绑线程，违反不变式 3。
-- 方案乙（审计推荐）：**单例服务 + ns 维度**。table_id 已编码 ns，schema 缓存天然按编码 id 免冲突；真正要加的只是"每 ns 的当前版本"存取（版本存储 + 3 个访问器，单文件）；plan cache key 加 1 个 fork-ns 字段（约 7 行，注意 `ObPlanCacheKey::namespace_` 是库缓存命名空间命名陷阱，别改错）。刷新调度器保持全局一套、遍历 registry。
-- **建议方案乙**：改动量在数百行量级（审计判定小于 500 行），且与 ns-blind 原则同构——ns 以数据形式存在，不以对象复制形式存在。NamespaceRuntime 相应收窄为 { 版本状态、刷新游标、血缘 } 纯数据包。
+- 每个 NamespaceRuntime 持有一组 per-ns 服务实例（schema service + 刷新调度、stats、plan cache 等），构造时绑定 ns。模块内部代码保持单 ns 逻辑，零 ns 感知——这是相对"全局队列 + ns_id 列"方案的关键优势：后者要改动每个模块的枚举与队列结构，太复杂，已否决。
+- 代价：活跃 ns 数 × 服务线程数的资源占用。**优化方向是 serverless 式休眠**：冷 ns 停止服务、退出/挂起线程、释放缓存，只保留 `Namespace` 元数据；首次访问唤醒（等价于现 worker 的 respawn，但进程内完成，毫秒级）。fork 后懒激活与之一致：fork 只建元数据，runtime 首次登录才拉起。
+- 审计中的备选（单例服务 + ns 维度、plan cache key 加维度）降级为备选方案保留在 `namespace_single_process_audit.md`，不再推荐。
 
 ## 阶段拆解
 
@@ -36,11 +36,11 @@
 
 ### Phase 1 单进程骨架（目标：单进程双 ns，点查追平单体）
 
-- 1.1 NamespaceRegistry + Namespace + NamespaceRuntime 骨架（懒创建，首次登录建立）。
+- 1.1 NamespaceRegistry + Namespace + NamespaceRuntime 骨架（懒创建，首次登录激活；Runtime 持有该 ns 的服务组）。
 - 1.2 登录绑定：`root@ns` 用户名解析（复用现有路由代码），session 缓存 runtime 指针。
-- 1.3 schema 版本 per-ns 存取：版本存储 + `get_runtime_schema_guard` / `get_runtime_refreshed` / `get_published` 三访问器加 ns 维度（ob_multi_version_schema_service 单文件）。
+- 1.3 schema service per-ns 实例化：worker bootstrap 的 `init_schema` 序列移植为 Runtime 的服务组初始化；spike 最先验证 `ObMultiVersionSchemaService` 第二实例能否在进程内共存（隐藏全局依赖：refresh 定时器、inner SQL 连接池、publish signal）。
 - 1.4 每语句版本 pin 从 `thread_local worker_request_schema_version` 改 session 级（约 6 处——合并后线程跨 ns 复用，thread_local 必串）。
-- 1.5 plan cache key 加 fork-ns 维度（key 构造 + hash + 相等 + deep_copy）。
+- 1.5 plan cache per-ns 实例（Runtime 持有，失效语义按本 ns schema 版本，无需动 key 结构）。
 - 1.6 热路径 4 入口改造（`obmp_query.cpp:104/515/850`、`ob_sql.cpp:1115`）。
 - 出口验证：单进程 fork 出第二个 ns，`root@ns1` / `root@ns2` 各自读写隔离；fork 到可用小于 1s；**oltp_point_select 1t/8t 达到 vanilla_sysbench 基线**（整个转向的验收点）。
 
@@ -66,13 +66,15 @@
 - 父 ns 可 drop（source snapshot 保留，去掉 prototype 简化）。
 - ns1 纳入编码（审计 §8，8 处依赖点，不动持久化格式）。
 - fork 语法终态（FORK INSTANCE/TABLE 保留，FORK DATABASE 退役评估）。
+- serverless 休眠/唤醒：冷 ns 停服务退线程留元数据，首访问毫秒级唤醒；休眠水位策略（按最近访问/内存压力）。
 
 ## 风险与回退
 
 | 风险 | 兜法 |
 | --- | --- |
 | 分类 3（必须 ambient）数量超预期 | Phase 0 卡点，不进入 Phase 1 |
-| schema service 多 ns 的隐藏全局依赖（refresh 定时器、inner SQL 连接池） | Phase 1 spike 最先验证 1.3 |
+| schema service 多实例的隐藏全局依赖（refresh 定时器、inner SQL 连接池） | Phase 1 spike 最先验证 1.3 |
+| 活跃 ns 数 × 服务线程数的资源占用 | serverless 休眠（Phase 4）；活跃数上限观测 |
 | 无内存隔离：单 ns 膨胀拖全局 | 分配打 ns tag（只观测不隔离），virtual table 暴露 |
 | 过渡期性能无门禁 | Phase 1 出口把 sysbench 对标单体设为硬门槛 |
 
