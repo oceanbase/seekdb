@@ -60,6 +60,40 @@ int close_das_tasks(ObDASRef &das_ref, int ret)
   return ret;
 }
 
+int bind_column_exprs(const ObDASScanCtDef &ctdef,
+                      const uint64_t *column_ids,
+                      int64_t column_count,
+                      ObExpr **exprs)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(column_ids == nullptr || exprs == nullptr
+                  || column_count <= 0
+                  || column_count > GRAPH_IDENTITY_MAX_KEYS)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_UNLIKELY(ctdef.access_column_ids_.count()
+                         != ctdef.pd_expr_spec_.access_exprs_.count())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("graph edge DAS access columns and expressions do not match",
+             K(ret), K(ctdef.access_column_ids_.count()),
+             K(ctdef.pd_expr_spec_.access_exprs_.count()));
+  }
+  for (int64_t key = 0; OB_SUCC(ret) && key < column_count; ++key) {
+    for (int64_t column = 0;
+         exprs[key] == nullptr && column < ctdef.access_column_ids_.count();
+         ++column) {
+      if (ctdef.access_column_ids_.at(column) == column_ids[key]) {
+        exprs[key] = ctdef.pd_expr_spec_.access_exprs_.at(column);
+      }
+    }
+    if (OB_ISNULL(exprs[key])) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("graph edge identity column is absent from DAS output", K(ret),
+               K(key), K(column_ids[key]), K(ctdef.ref_table_id_));
+    }
+  }
+  return ret;
+}
+
 } // namespace
 
 GraphExpandDasAccess::GraphExpandDasAccess(ObExecContext &exec_ctx,
@@ -84,6 +118,36 @@ bool GraphExpandDasAccess::VertexLookupBinding::is_valid() const
   return valid;
 }
 
+bool GraphExpandDasAccess::EdgeScanBinding::is_valid() const
+{
+  bool valid = edge_element_id_ != OB_INVALID_ID
+      && edge_table_id_ != OB_INVALID_ID
+      && access_table_id_ != OB_INVALID_ID
+      && source_key_count_ > 0
+      && source_key_count_ <= GRAPH_IDENTITY_MAX_KEYS
+      && edge_key_count_ > 0
+      && edge_key_count_ <= GRAPH_IDENTITY_MAX_KEYS
+      && target_key_count_ > 0
+      && target_key_count_ <= GRAPH_IDENTITY_MAX_KEYS
+      && scan_spec_ != nullptr
+      && access_ctdef_ != nullptr
+      && output_ctdef_ != nullptr
+      && scan_spec_->ref_table_id_ == edge_table_id_
+      && access_ctdef_->ref_table_id_ == access_table_id_
+      && (output_ctdef_ == access_ctdef_
+          || output_ctdef_->ref_table_id_ == edge_table_id_);
+  for (int64_t i = 0; valid && i < source_key_count_; ++i) {
+    valid = source_columns_[i] != OB_INVALID_ID && source_exprs_[i] != nullptr;
+  }
+  for (int64_t i = 0; valid && i < edge_key_count_; ++i) {
+    valid = edge_columns_[i] != OB_INVALID_ID && edge_exprs_[i] != nullptr;
+  }
+  for (int64_t i = 0; valid && i < target_key_count_; ++i) {
+    valid = target_columns_[i] != OB_INVALID_ID && target_exprs_[i] != nullptr;
+  }
+  return valid;
+}
+
 int GraphExpandDasAccess::init(const GraphPathDesc &path_desc,
                                const GraphExpandAccessDesc &access_desc,
                                const ObTableScanSpec &source_scan,
@@ -96,7 +160,7 @@ int GraphExpandDasAccess::init(const GraphPathDesc &path_desc,
   access_desc_ = GraphExpandAccessDesc();
   source_binding_ = VertexLookupBinding();
   target_binding_ = VertexLookupBinding();
-  edge_scan_spec_ = nullptr;
+  edge_binding_ = EdgeScanBinding();
   if (OB_UNLIKELY(!path_desc.is_valid() || !access_desc.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid graph DAS access descriptor", K(ret), K(path_desc),
@@ -127,10 +191,13 @@ int GraphExpandDasAccess::init(const GraphPathDesc &path_desc,
                  target_scan, target_binding_))) {
     LOG_WARN("failed to bind graph target vertex lookup", K(ret),
              K(path_desc), K(access_desc));
+  } else if (OB_FAIL(init_edge_binding(path_desc, access_desc, edge_scan,
+                                       edge_binding_))) {
+    LOG_WARN("failed to bind graph edge scan", K(ret), K(path_desc),
+             K(access_desc));
   } else {
     path_desc_ = path_desc;
     access_desc_ = access_desc;
-    edge_scan_spec_ = &edge_scan;
     initialized_ = true;
   }
   return ret;
@@ -196,6 +263,68 @@ int GraphExpandDasAccess::init_vertex_binding(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("generated graph vertex lookup binding is invalid", K(ret),
                K(element_id), K(table_id), K(key_count));
+    } else {
+      binding = candidate;
+    }
+  }
+  return ret;
+}
+
+int GraphExpandDasAccess::init_edge_binding(
+    const GraphPathDesc &path_desc,
+    const GraphExpandAccessDesc &access_desc,
+    const ObTableScanSpec &scan_spec,
+    EdgeScanBinding &binding)
+{
+  int ret = OB_SUCCESS;
+  EdgeScanBinding candidate;
+  const ObDASScanCtDef *access_ctdef = &scan_spec.tsc_ctdef_.scan_ctdef_;
+  const ObDASScanCtDef *output_ctdef = scan_spec.tsc_ctdef_.lookup_ctdef_ == nullptr
+      ? access_ctdef : scan_spec.tsc_ctdef_.lookup_ctdef_;
+  if (OB_UNLIKELY(!path_desc.is_valid() || !access_desc.is_valid()
+                  || scan_spec.ref_table_id_ != access_desc.edge_table_id_
+                  || access_ctdef->ref_table_id_
+                         != access_desc.edge_access_table_id_)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_ISNULL(output_ctdef)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    candidate.edge_element_id_ = path_desc.edge_element_id_;
+    candidate.edge_table_id_ = access_desc.edge_table_id_;
+    candidate.access_table_id_ = access_desc.edge_access_table_id_;
+    candidate.source_key_count_ = access_desc.source_key_count_;
+    candidate.edge_key_count_ = access_desc.edge_key_count_;
+    candidate.target_key_count_ = access_desc.target_key_count_;
+    candidate.scan_spec_ = &scan_spec;
+    candidate.access_ctdef_ = access_ctdef;
+    candidate.output_ctdef_ = output_ctdef;
+    for (int64_t i = 0; i < candidate.source_key_count_; ++i) {
+      candidate.source_columns_[i] = access_desc.edge_current_columns_[i];
+    }
+    for (int64_t i = 0; i < candidate.edge_key_count_; ++i) {
+      candidate.edge_columns_[i] = access_desc.edge_key_columns_[i];
+    }
+    for (int64_t i = 0; i < candidate.target_key_count_; ++i) {
+      candidate.target_columns_[i] = access_desc.edge_next_columns_[i];
+    }
+    if (OB_FAIL(bind_column_exprs(*output_ctdef, candidate.source_columns_,
+                                  candidate.source_key_count_,
+                                  candidate.source_exprs_))) {
+    } else if (OB_FAIL(bind_column_exprs(*output_ctdef,
+                                         candidate.edge_columns_,
+                                         candidate.edge_key_count_,
+                                         candidate.edge_exprs_))) {
+    } else if (OB_FAIL(bind_column_exprs(*output_ctdef,
+                                         candidate.target_columns_,
+                                         candidate.target_key_count_,
+                                         candidate.target_exprs_))) {
+    }
+  }
+  if (OB_SUCC(ret)) {
+    if (OB_UNLIKELY(!candidate.is_valid())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("generated graph edge scan binding is invalid", K(ret),
+               K(candidate));
     } else {
       binding = candidate;
     }

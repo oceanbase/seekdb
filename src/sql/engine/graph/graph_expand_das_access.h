@@ -30,10 +30,9 @@ class ObTableScanSpec;
 struct ObDASScanCtDef;
 struct ObDASScanRtDef;
 
-// DAS implementation of the physical one-hop access contract. This first
-// increment implements only batched vertex existence lookup; edge scanning is
-// added separately so neither access path has to be reviewed as a partial
-// mixture of range construction, pagination and path association.
+// DAS implementation of the physical one-hop access contract. Vertex lookup
+// is executable; edge access is introduced in reviewable increments, starting
+// with binding the scan output needed to materialize one adjacency row.
 class GraphExpandDasAccess final : public IGraphExpandAccess
 {
 public:
@@ -79,12 +78,53 @@ private:
                  KP_(scan_spec), KP_(scan_ctdef));
   };
 
+  // Binds the three typed identities carried by one physical edge row. The
+  // output ctdef is the base-table lookup when an adjacency index needs index
+  // back, otherwise it is the access scan itself (including covering indexes).
+  struct EdgeScanBinding
+  {
+    bool is_valid() const;
+
+    uint64_t edge_element_id_{common::OB_INVALID_ID};
+    uint64_t edge_table_id_{common::OB_INVALID_ID};
+    uint64_t access_table_id_{common::OB_INVALID_ID};
+    int64_t source_key_count_{0};
+    int64_t edge_key_count_{0};
+    int64_t target_key_count_{0};
+    uint64_t source_columns_[GRAPH_IDENTITY_MAX_KEYS]{
+        common::OB_INVALID_ID, common::OB_INVALID_ID};
+    uint64_t edge_columns_[GRAPH_IDENTITY_MAX_KEYS]{
+        common::OB_INVALID_ID, common::OB_INVALID_ID};
+    uint64_t target_columns_[GRAPH_IDENTITY_MAX_KEYS]{
+        common::OB_INVALID_ID, common::OB_INVALID_ID};
+    const ObTableScanSpec *scan_spec_{nullptr};
+    const ObDASScanCtDef *access_ctdef_{nullptr};
+    const ObDASScanCtDef *output_ctdef_{nullptr};
+    ObExpr *source_exprs_[GRAPH_IDENTITY_MAX_KEYS]{nullptr, nullptr};
+    ObExpr *edge_exprs_[GRAPH_IDENTITY_MAX_KEYS]{nullptr, nullptr};
+    ObExpr *target_exprs_[GRAPH_IDENTITY_MAX_KEYS]{nullptr, nullptr};
+    TO_STRING_KV(K_(edge_element_id), K_(edge_table_id), K_(access_table_id),
+                 K_(source_key_count), K_(edge_key_count),
+                 K_(target_key_count),
+                 "source_column_0", source_columns_[0],
+                 "source_column_1", source_columns_[1],
+                 "edge_column_0", edge_columns_[0],
+                 "edge_column_1", edge_columns_[1],
+                 "target_column_0", target_columns_[0],
+                 "target_column_1", target_columns_[1],
+                 KP_(scan_spec), KP_(access_ctdef), KP_(output_ctdef));
+  };
+
   int init_vertex_binding(uint64_t element_id,
                           uint64_t table_id,
                           int64_t key_count,
                           const uint64_t *key_columns,
                           const ObTableScanSpec &scan_spec,
                           VertexLookupBinding &binding);
+  int init_edge_binding(const GraphPathDesc &path_desc,
+                        const GraphExpandAccessDesc &access_desc,
+                        const ObTableScanSpec &scan_spec,
+                        EdgeScanBinding &binding);
   const VertexLookupBinding *find_vertex_binding(uint64_t element_id) const;
   int validate_requested(
       const common::ObIArray<GraphElementIdentity> &requested,
@@ -110,7 +150,7 @@ private:
   GraphExpandAccessDesc access_desc_{};
   VertexLookupBinding source_binding_{};
   VertexLookupBinding target_binding_{};
-  const ObTableScanSpec *edge_scan_spec_{nullptr};
+  EdgeScanBinding edge_binding_{};
   bool initialized_{false};
 };
 
