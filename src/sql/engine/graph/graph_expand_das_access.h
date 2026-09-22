@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "sql/das/ob_das_ref.h"
 #include "sql/engine/graph/graph_expand.h"
 
 namespace oceanbase
@@ -30,14 +31,14 @@ class ObTableScanSpec;
 struct ObDASScanCtDef;
 struct ObDASScanRtDef;
 
-// DAS implementation of the physical one-hop access contract. Vertex lookup
-// is executable; edge access is introduced in reviewable increments, starting
-// with binding the scan output needed to materialize one adjacency row.
+// DAS implementation of the physical one-hop access contract. It supports
+// batched vertex lookup and a stateful single-tablet edge-table fallback scan;
+// adjacency-index and partitioned edge scans are added separately.
 class GraphExpandDasAccess final : public IGraphExpandAccess
 {
 public:
   GraphExpandDasAccess(ObExecContext &exec_ctx, ObEvalCtx &eval_ctx);
-  ~GraphExpandDasAccess() override = default;
+  ~GraphExpandDasAccess() override;
 
   int init(const GraphPathDesc &path_desc,
            const GraphExpandAccessDesc &access_desc,
@@ -45,6 +46,7 @@ public:
            const ObTableScanSpec &edge_scan,
            const ObTableScanSpec &target_scan);
 
+  void release() override;
   int check_status() override;
   int lookup_vertices(
       const common::ObIArray<GraphElementIdentity> &requested,
@@ -145,6 +147,18 @@ private:
                            GraphElementIdentity &identity) const;
   int edge_row_has_null_endpoint(bool &has_null) const;
   int materialize_edge(GraphExpandEdge &edge, bool &matches) const;
+  int validate_edge_scan_request(
+      const common::ObIArray<GraphElementIdentity> &sources,
+      GraphPathDirection direction,
+      const GraphElementIdentity *after_edge,
+      int64_t limit) const;
+  int start_full_edge_scan(bool &empty);
+  int get_full_edge_page(
+      const common::ObIArray<GraphElementIdentity> &sources,
+      int64_t limit,
+      common::ObIArray<GraphExpandEdge> &edges,
+      bool &end);
+  int reset_edge_scan(int ret);
   int64_t find_requested(
       const common::ObIArray<GraphElementIdentity> &requested,
       const GraphElementIdentity &identity) const;
@@ -154,11 +168,18 @@ private:
 private:
   ObExecContext &exec_ctx_;
   ObEvalCtx &eval_ctx_;
+  ObDASRef edge_das_ref_;
   GraphPathDesc path_desc_{};
   GraphExpandAccessDesc access_desc_{};
   VertexLookupBinding source_binding_{};
   VertexLookupBinding target_binding_{};
   EdgeScanBinding edge_binding_{};
+  ObDASScanRtDef *edge_scan_rtdef_{nullptr};
+  DASOpResultIter edge_result_iter_{};
+  GraphElementIdentity edge_cursor_{};
+  uint64_t edge_sources_hash_{0};
+  bool has_edge_cursor_{false};
+  bool edge_scan_active_{false};
   bool initialized_{false};
 };
 

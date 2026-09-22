@@ -21,6 +21,7 @@
 #include "sql/das/ob_das_ref.h"
 #include "sql/das/ob_das_scan_op.h"
 #include "sql/engine/ob_exec_context.h"
+#include "sql/engine/ob_operator.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
 #include "sql/engine/table/ob_table_scan_op.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -51,11 +52,78 @@ int close_das_tasks(ObDASRef &das_ref, int ret)
 {
   const int close_ret = das_ref.close_all_task();
   if (OB_SUCCESS != close_ret) {
-    LOG_WARN("failed to close graph vertex lookup DAS tasks", K(close_ret),
-             K(ret));
+    LOG_WARN("failed to close graph DAS tasks", K(close_ret), K(ret));
     if (OB_SUCCESS == ret) {
       ret = close_ret;
     }
+  }
+  return ret;
+}
+
+bool identity_matches(const GraphElementIdentity &identity,
+                      uint64_t graph_id,
+                      uint64_t element_id,
+                      int64_t key_count)
+{
+  bool matches = identity.is_valid()
+      && identity.graph_id_ == graph_id
+      && identity.element_id_ == element_id
+      && identity.key_count_ == key_count;
+  for (int64_t key = 0; matches && key < key_count; ++key) {
+    matches = identity.keys_[key].get_type() == ObIntType;
+  }
+  return matches;
+}
+
+int compare_identities(const GraphElementIdentity &left,
+                       const GraphElementIdentity &right,
+                       int &comparison)
+{
+  int ret = OB_SUCCESS;
+  comparison = 0;
+  if (OB_UNLIKELY(!left.is_valid() || !right.is_valid()
+                  || left.graph_id_ != right.graph_id_
+                  || left.element_id_ != right.element_id_
+                  || left.key_count_ != right.key_count_)) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  for (int64_t key = 0; OB_SUCC(ret) && comparison == 0
+       && key < left.key_count_; ++key) {
+    if (OB_UNLIKELY(left.keys_[key].get_type() != ObIntType
+                    || right.keys_[key].get_type() != ObIntType)) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (left.keys_[key].get_int() < right.keys_[key].get_int()) {
+      comparison = -1;
+    } else if (left.keys_[key].get_int() > right.keys_[key].get_int()) {
+      comparison = 1;
+    }
+  }
+  return ret;
+}
+
+uint64_t identity_array_hash(const ObIArray<GraphElementIdentity> &identities)
+{
+  uint64_t hash = do_hash(identities.count(), 0);
+  for (int64_t i = 0; i < identities.count(); ++i) {
+    hash = identities.at(i).hash(hash);
+  }
+  return hash;
+}
+
+int evaluate_filters(ObEvalCtx &eval_ctx,
+                     const ObIArray<ObExpr *> &filters,
+                     bool &filtered)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < filters.count(); ++i) {
+    if (OB_ISNULL(filters.at(i))) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      filters.at(i)->clear_evaluated_flag(eval_ctx);
+    }
+  }
+  if (OB_SUCC(ret)) {
+    ret = ObOperator::filter_row(eval_ctx, filters, filtered);
   }
   return ret;
 }
@@ -99,8 +167,14 @@ int bind_column_exprs(const ObDASScanCtDef &ctdef,
 GraphExpandDasAccess::GraphExpandDasAccess(ObExecContext &exec_ctx,
                                            ObEvalCtx &eval_ctx)
     : exec_ctx_(exec_ctx),
-      eval_ctx_(eval_ctx)
+      eval_ctx_(eval_ctx),
+      edge_das_ref_(eval_ctx, exec_ctx)
 {
+}
+
+GraphExpandDasAccess::~GraphExpandDasAccess()
+{
+  release();
 }
 
 bool GraphExpandDasAccess::VertexLookupBinding::is_valid() const
@@ -154,14 +228,16 @@ int GraphExpandDasAccess::init(const GraphPathDesc &path_desc,
                                const ObTableScanSpec &edge_scan,
                                const ObTableScanSpec &target_scan)
 {
-  int ret = OB_SUCCESS;
+  int ret = reset_edge_scan(OB_SUCCESS);
   initialized_ = false;
   path_desc_ = GraphPathDesc();
   access_desc_ = GraphExpandAccessDesc();
   source_binding_ = VertexLookupBinding();
   target_binding_ = VertexLookupBinding();
   edge_binding_ = EdgeScanBinding();
-  if (OB_UNLIKELY(!path_desc.is_valid() || !access_desc.is_valid())) {
+  if (OB_SUCCESS != ret) {
+    LOG_WARN("failed to release the previous graph edge scan", K(ret));
+  } else if (OB_UNLIKELY(!path_desc.is_valid() || !access_desc.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid graph DAS access descriptor", K(ret), K(path_desc),
              K(access_desc));
@@ -200,6 +276,32 @@ int GraphExpandDasAccess::init(const GraphPathDesc &path_desc,
     access_desc_ = access_desc;
     initialized_ = true;
   }
+  return ret;
+}
+
+void GraphExpandDasAccess::release()
+{
+  const int ret = reset_edge_scan(OB_SUCCESS);
+  if (OB_SUCCESS != ret) {
+    LOG_WARN("failed to release graph edge scan", K(ret));
+  }
+}
+
+int GraphExpandDasAccess::reset_edge_scan(int ret)
+{
+  if (edge_das_ref_.has_task()) {
+    ret = close_das_tasks(edge_das_ref_, ret);
+  }
+  if (edge_scan_rtdef_ != nullptr) {
+    edge_scan_rtdef_->~ObDASScanRtDef();
+    edge_scan_rtdef_ = nullptr;
+  }
+  edge_das_ref_.reuse();
+  edge_result_iter_ = DASOpResultIter();
+  edge_cursor_.reset();
+  edge_sources_hash_ = 0;
+  has_edge_cursor_ = false;
+  edge_scan_active_ = false;
   return ret;
 }
 
@@ -701,6 +803,176 @@ bool GraphExpandDasAccess::contains(
   return found;
 }
 
+int GraphExpandDasAccess::validate_edge_scan_request(
+    const ObIArray<GraphElementIdentity> &sources,
+    GraphPathDirection direction,
+    const GraphElementIdentity *after_edge,
+    int64_t limit) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(direction != path_desc_.direction_ || limit <= 0
+                  || sources.count() > GRAPH_EXPAND_MAX_INPUT_STATE_COUNT)) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < sources.count(); ++i) {
+    if (!identity_matches(sources.at(i), path_desc_.graph_id_,
+                          path_desc_.source_element_id_,
+                          edge_binding_.source_key_count_)) {
+      ret = OB_INVALID_ARGUMENT;
+    }
+  }
+  if (OB_SUCC(ret) && after_edge != nullptr
+      && !identity_matches(*after_edge, path_desc_.graph_id_,
+                           path_desc_.edge_element_id_,
+                           edge_binding_.edge_key_count_)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_SUCC(ret) && after_edge != nullptr
+             && (!edge_scan_active_ || !has_edge_cursor_
+                 || edge_sources_hash_ != identity_array_hash(sources)
+                 || !(*after_edge == edge_cursor_))) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  return ret;
+}
+
+int GraphExpandDasAccess::start_full_edge_scan(bool &empty)
+{
+  int ret = OB_SUCCESS;
+  bool startup_filtered = false;
+  empty = false;
+  const ObTableScanSpec *scan_spec = edge_binding_.scan_spec_;
+  const ObDASScanCtDef *scan_ctdef = edge_binding_.access_ctdef_;
+  if (OB_ISNULL(scan_spec) || OB_ISNULL(scan_ctdef)) {
+    ret = OB_NOT_INIT;
+  } else if (access_desc_.uses_adjacency_index()
+             || edge_binding_.output_ctdef_ != scan_ctdef) {
+    ret = OB_NOT_SUPPORTED;
+  } else if (OB_FAIL(evaluate_filters(eval_ctx_, scan_spec->startup_filters_,
+                                      startup_filtered))) {
+  } else if (startup_filtered) {
+    empty = true;
+  } else {
+    edge_das_ref_.set_mem_attr(ObMemAttr("GraphEdgeScan"));
+    void *buffer = edge_das_ref_.get_das_alloc().alloc(
+        sizeof(ObDASScanRtDef));
+    if (OB_ISNULL(buffer)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      edge_scan_rtdef_ = new(buffer) ObDASScanRtDef();
+      if (OB_FAIL(init_scan_rtdef(*scan_spec, *scan_ctdef, false,
+                                  edge_das_ref_.get_das_alloc(),
+                                  *edge_scan_rtdef_))) {
+      } else {
+        edge_scan_rtdef_->scan_flag_.scan_order_ = ObQueryFlag::Forward;
+      }
+    }
+  }
+  ObDASTableLoc *table_loc = edge_scan_rtdef_ == nullptr
+      ? nullptr : edge_scan_rtdef_->table_loc_;
+  if (OB_SUCC(ret) && !empty
+      && (OB_ISNULL(table_loc) || table_loc->get_tablet_locs().empty())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("graph edge full scan has no tablet location", K(ret),
+             KPC(table_loc));
+  } else if (OB_SUCC(ret) && !empty
+             && table_loc->get_tablet_locs().size() != 1) {
+    // Global identity ordering across tablet streams needs an explicit merge
+    // cursor. Keep that separate from the single-tablet full-scan increment.
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("partitioned graph edge full scan is not implemented", K(ret),
+             "tablet_count", table_loc->get_tablet_locs().size());
+  }
+  if (OB_SUCC(ret) && !empty) {
+    ObDASScanOp *scan_op = nullptr;
+    ObNewRange whole_range;
+    whole_range.set_whole_range();
+    whole_range.table_id_ = edge_binding_.access_table_id_;
+    if (OB_FAIL(edge_das_ref_.prepare_das_task(
+            table_loc->get_first_tablet_loc(), scan_op))) {
+    } else if (OB_ISNULL(scan_op)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      scan_op->set_scan_ctdef(scan_ctdef);
+      scan_op->set_scan_rtdef(edge_scan_rtdef_);
+      scan_op->set_can_part_retry(false);
+      if (OB_FAIL(scan_op->get_scan_param().key_ranges_.push_back(
+              whole_range))) {
+      } else {
+        table_loc->is_reading_ = true;
+      }
+    }
+  }
+  if (OB_SUCC(ret) && !empty
+      && OB_FAIL(edge_das_ref_.execute_all_task())) {
+    LOG_WARN("failed to execute graph edge full scan DAS task", K(ret));
+  }
+  if (OB_SUCC(ret) && !empty) {
+    edge_result_iter_ = edge_das_ref_.begin_result_iter();
+    edge_scan_active_ = true;
+  }
+  return ret;
+}
+
+int GraphExpandDasAccess::get_full_edge_page(
+    const ObIArray<GraphElementIdentity> &sources,
+    int64_t limit,
+    ObIArray<GraphExpandEdge> &edges,
+    bool &end)
+{
+  int ret = OB_SUCCESS;
+  bool finished = false;
+  const ObTableScanSpec *scan_spec = edge_binding_.scan_spec_;
+  if (OB_UNLIKELY(!edge_scan_active_ || edge_scan_rtdef_ == nullptr
+                  || scan_spec == nullptr)) {
+    ret = OB_NOT_INIT;
+  }
+  while (OB_SUCC(ret) && !finished && edges.count() < limit) {
+    if (OB_FAIL(check_status())) {
+    } else if (OB_ISNULL(edge_scan_rtdef_->p_pd_expr_op_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("graph edge full scan pushdown operator is missing", K(ret));
+    } else {
+      edge_scan_rtdef_->p_pd_expr_op_->clear_datum_eval_flag();
+    }
+    if (OB_SUCC(ret) && OB_FAIL(edge_result_iter_.get_next_row())) {
+      if (ret == OB_ITER_END) {
+        ret = edge_result_iter_.next_result();
+        if (ret == OB_ITER_END) {
+          ret = OB_SUCCESS;
+          finished = true;
+        }
+      }
+    } else if (OB_SUCC(ret)) {
+      bool filtered = false;
+      bool matches = false;
+      GraphExpandEdge edge;
+      if (OB_FAIL(evaluate_filters(eval_ctx_, scan_spec->filters_, filtered))) {
+      } else if (!filtered && OB_FAIL(materialize_edge(edge, matches))) {
+      } else if (!filtered && matches
+                 && contains(sources, edge.source_identity_)) {
+        int comparison = 1;
+        if (has_edge_cursor_
+            && OB_FAIL(compare_identities(edge.edge_identity_, edge_cursor_,
+                                          comparison))) {
+        } else if (OB_UNLIKELY(has_edge_cursor_ && comparison <= 0)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("graph edge full scan order is not stable", K(ret),
+                   K(edge), K_(edge_cursor));
+        } else if (OB_FAIL(edges.push_back(edge))) {
+        } else {
+          edge_cursor_ = edge.edge_identity_;
+          has_edge_cursor_ = true;
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret) && finished) {
+    ret = reset_edge_scan(ret);
+    end = OB_SUCC(ret);
+  }
+  return ret;
+}
+
 int GraphExpandDasAccess::scan_edges(
     const ObIArray<GraphElementIdentity> &sources,
     GraphPathDirection direction,
@@ -709,10 +981,40 @@ int GraphExpandDasAccess::scan_edges(
     ObIArray<GraphExpandEdge> &edges,
     bool &end)
 {
-  UNUSEDx(sources, direction, after_edge, limit);
+  int ret = OB_SUCCESS;
+  bool empty = false;
   edges.reset();
   end = false;
-  return OB_NOT_SUPPORTED;
+  if (OB_UNLIKELY(!initialized_)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(check_status())) {
+  } else if (OB_FAIL(validate_edge_scan_request(sources, direction,
+                                                after_edge, limit))) {
+    LOG_WARN("invalid graph edge scan request", K(ret), K(sources),
+             K(direction), KPC(after_edge), K(limit));
+  } else if (after_edge == nullptr
+             && OB_FAIL(reset_edge_scan(OB_SUCCESS))) {
+    LOG_WARN("failed to reset graph edge scan", K(ret));
+  } else if (sources.empty()) {
+    end = true;
+  } else if (after_edge == nullptr) {
+    edge_sources_hash_ = identity_array_hash(sources);
+    if (OB_FAIL(start_full_edge_scan(empty))) {
+      LOG_WARN("failed to start graph edge full scan", K(ret));
+    } else if (empty) {
+      end = true;
+    }
+  }
+  if (OB_SUCC(ret) && !end
+      && OB_FAIL(get_full_edge_page(sources, limit, edges, end))) {
+    LOG_WARN("failed to read graph edge full-scan page", K(ret));
+  }
+  if (OB_SUCCESS != ret) {
+    ret = reset_edge_scan(ret);
+    edges.reset();
+    end = false;
+  }
+  return ret;
 }
 
 } // namespace sql

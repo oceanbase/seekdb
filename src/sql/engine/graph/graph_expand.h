@@ -100,6 +100,7 @@ class IGraphExpandAccess
 public:
   virtual ~IGraphExpandAccess() = default;
 
+  virtual void release() {}
   virtual int check_status() = 0;
 
   virtual int lookup_vertices(

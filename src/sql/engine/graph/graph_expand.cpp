@@ -627,6 +627,7 @@ int GraphExpand::fail(int error)
 
 void GraphExpand::release()
 {
+  access_.release();
   inputs_.reset();
   source_identities_.reset();
   existing_sources_.reset();
