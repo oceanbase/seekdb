@@ -94,4 +94,32 @@ grep -n "ControlSqlNamespaceScope\|ExplicitSqlNamespaceScope" \
 
 - 本次是**静态判定**：我核对了每个函数的 ns 来源，但**没有**逐个验证 B 类 10 个函数的**全部调用点**是否真的传入编码 id。`gap §6 未知 #2` 列出的 3 处（`ob_drop_table_helper.cpp:62`、`ob_table_sql_service.cpp:704,2203`）仍需插桩确认。
 - `collect_metadata()` 的 ns 已按"全局 GC ⇒ 系统 ns"归为 C'，但它与 `control_namespace` 的 `__gc__` 分支耦合，实现时应一起改。
+
+---
+
+## 5. 机制补充：ambient 载体不止一个（这会改变工作量估计）
+
+上一节判定的是"**ns 能否从数据/入参推出**"——结论是能。但"身份显式化"还要**拆掉 ambient 载体**，而载体的实际形态比 `gap` 文档描述的更重。实测 `resolve_shared_inner_sql_namespace()`（`namespace_worker_gateway_prototype.ipp:65-80`，即 kernel `current_namespace_id()` 的实现）有**三条解析路径**：
+
+| # | 载体 | 位置 | 生命周期 | Phase 3 处置 |
+|---|---|---|---|---|
+| 1 | `worker_process` / `worker_namespace` 进程全局 | `protocol.h` | 进程 | 随 worker 模式删除 |
+| 2 | `thread_local std::vector<uint64_t> inner_sql_namespace_overrides` | `gateway.ipp:34/57-63` | 线程（RAII push/pop） | **需替换为显式参数** |
+| 3 | `shared_inner_sql_namespaces`：**进程级 map，键是 trace id 的 seq** | `gateway.ipp:65-80` | 跨线程，靠 trace 传播 | **需替换为显式参数** |
+| — | 三条都不命中 → **兜底返回 ns 1** | `:76` | — | 这是"静默跨 ns 读错"的来源 |
+
+第 3 条尤其值得注意：它把 ns 绑定挂在 **trace id** 上，靠"同一个 trace 在同一进程内传播"来跨线程传递上下文——这正是 ADR-0003 要刻意背离的 MTL 式做法，而且比 thread_local 更隐蔽（跨线程存活、靠 trace 巧合命中、miss 即静默落到 ns 1）。
+
+**因此 Step 1 的完整工作量 = 身份分类（已判定，25 个函数）+ 把 ns 参数化到 inner SQL 入口**：
+
+- 三条载体的全部读写点要改成显式传参；
+- 关键是 inner SQL 的入口接口：`ObInnerSQLConnection::execute(...)` 一族目前不带 ns，ns 是从上面的载体里"捡"的。要让"共享层显式指定目标 ns"（`plan.md` inner SQL 规则），这个接口必须接收 ns 参数，并逐层传给它的一般调用者；
+- 调用面实测：`current_namespace_id()` / `resolve_shared_inner_sql_namespace` 在 gateway 文件之外共 **13 处出现**：`ob_drop_table_helper.cpp` 5、`namespace_fork_kernel_prototype.cpp` 4、`ob_table_sql_service.cpp` 2、`namespace_worker_protocol_prototype.h` 的声明 1、kernel 头 1。
+
+**这修正了 `gap §4` 的 Step 1 描述**：Step 1 不只是"24 个 kernel 函数拿 ns"，还包括"inner SQL 入口接收 ns"。前者是本文件 §1 的静态分类（已完成），后者是一个接口改造 + 调用链参数化，工作量与风险都更高。Step 1 的验收件也因此必须包括：**两 ns 并发探针**（证明两条 ambient 路径拆掉后不会静默落到 ns 1）。
+
+## 6. 本次结论的边界
+
+- §1 是静态判定，成立；§5 是机制补充，说明"显式化"的实现面比原估计宽。
+- 二者都不改变总体判断（不变式 2 可成立），但**把 Step 1 从"分类问题"升级为"接口改造问题"**。若要在下一阶段开工，应先做 §5 的接口设计（inner SQL 入口带 ns），因为它决定 §1 中 B 类 10 个函数的 ns 从哪条链传进来。
 - 判定结论不依赖运行时行为，因此**不需要新探针即可成立**；但若要进入实现，两 ns 并发探针是 Step 1 的必备验收件。
