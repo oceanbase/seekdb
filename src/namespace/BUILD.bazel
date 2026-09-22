@@ -11,6 +11,7 @@ package(default_visibility = ["//visibility:private"])
 cc_library(
     name = "namespace",
     hdrs = ["namespace.h"],
+    srcs = ["namespace.cpp"],
     features = ["layering_check"],
     visibility = [
         "//src/observer:__pkg__",

@@ -32,7 +32,7 @@ namespace observer
 {
 struct ObSMConnection;
 
-ObString extract_user_name(const ObString &in);
+ObString extract_user_name(const ObString &in, ObString &ns_name);
 
 class AuthSwitchResonseMemPool : public obmysql::ObICSMemPool
 {
@@ -79,6 +79,7 @@ private:
   int verify_connection() const;
   int verify_identify(ObSMConnection &conn, sql::ObSQLSessionInfo &session);
   int verify_ip_white_list() const;
+  int bind_session_namespace(sql::ObSQLSessionInfo &session);
 
   int check_password_expired(share::schema::ObSchemaGetterGuard &schema_guard,
                              sql::ObSQLSessionInfo &session);
@@ -87,6 +88,7 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObMPConnect);
   obmysql::ObHandshakeResponse hsr_;
   common::ObString user_name_;
+  common::ObString login_ns_name_;
   common::ObString client_ip_;
   common::ObString db_name_;
   char client_ip_buf_[common::MAX_IP_ADDR_LENGTH + 1];

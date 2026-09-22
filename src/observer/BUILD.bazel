@@ -90,6 +90,7 @@ filegroup(
 
 _OBSERVER_NATIVE_DEPS = [
     "//rust:sql_nio_headers",
+    "//src/namespace",
     "//src/oblib/easy:easy",
     "//src/oblib:common_sql_mode",
     "//src/oblib:oblib_foundation",

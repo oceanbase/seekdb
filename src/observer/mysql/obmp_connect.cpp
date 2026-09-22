@@ -20,6 +20,7 @@
 #include "share/rc/ob_server_runtime.h"
 #include "util/easy_mod_stat.h"
 #include "observer/mysql/obmp_connect.h"
+#include "namespace/namespace.h"
 #include "observer/namespace_worker_protocol_prototype.h"
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 #include "rpc/ob_sql_request_operator.h"
@@ -44,9 +45,10 @@ namespace oceanbase
 {
 namespace observer
 {
-ObString extract_user_name(const ObString &in)
+ObString extract_user_name(const ObString &in, ObString &ns_name)
 {
   ObString user_name = in;
+  ns_name.reset();
   // Keep the historical @sys spelling as a login alias while tenant routing
   // is no longer supported. Other suffixes are authenticated as-is.
   static const char *const SYS_TENANT_SUFFIX = "@sys";
@@ -56,6 +58,16 @@ ObString extract_user_name(const ObString &in)
   }
   if (user_name.length() > 1 && '\'' == user_name[0] && '\'' == user_name[user_name.length() - 1]) {
     user_name.assign_ptr(user_name.ptr() + 1, user_name.length() - 2);
+  }
+  // "user@ns" routes the login to a namespace; the byte-proxy entry applies
+  // the same first-'@' split. The suffix is a view into the login packet and
+  // stays valid for the whole login round, like user_name itself.
+  const char *at = static_cast<const char *>(
+      memchr(user_name.ptr(), '@', user_name.length()));
+  if (at != nullptr) {
+    ns_name.assign_ptr(at + 1,
+        static_cast<int32_t>(user_name.ptr() + user_name.length() - at - 1));
+    user_name.assign_ptr(user_name.ptr(), static_cast<int32_t>(at - user_name.ptr()));
   }
   return user_name;
 }
@@ -95,6 +107,7 @@ int refresh_namespace_worker_login_state(
 ObMPConnect::ObMPConnect(const oceanbase::share::ObGlobalContext &gctx)
     : ObMPBase(gctx),
       user_name_(),
+      login_ns_name_(),
       client_ip_(),
       db_name_(),
       deser_ret_(OB_SUCCESS),
@@ -136,7 +149,7 @@ int ObMPConnect::deserialize()
       conn->cap_flags_ = hsr_.get_capability_flags();
       conn->client_cs_type_ = hsr_.get_char_set();
       db_name_ = hsr_.get_database();
-      user_name_ = extract_user_name(hsr_.get_username());
+      user_name_ = extract_user_name(hsr_.get_username(), login_ns_name_);
       LOG_DEBUG("database name", K(hsr_.get_database()));
     }
     // get_user_tenant() is an earlier consumer of the same Rust login view and
@@ -275,6 +288,7 @@ int ObMPConnect::process()
     } else if (OB_ISNULL(session)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("null session", K(ret), K(session));
+    } else if (OB_FAIL(bind_session_namespace(*session))) {
     } else if (OB_FAIL(verify_identify(*conn, *session))) {
     } else if (OB_FAIL(update_charset_sys_vars(*conn, *session))) {
     }
@@ -699,6 +713,42 @@ int ObMPConnect::verify_connection() const
       LOG_INFO("server is initializing, ignore verify_ip_white_list", "status", GCTX.status_, K(ret));
     } else if (OB_FAIL(verify_ip_white_list())) {
     }
+  }
+  return ret;
+}
+
+int ObMPConnect::bind_session_namespace(ObSQLSessionInfo &session)
+{
+  int ret = OB_SUCCESS;
+  ns::NamespaceRuntime *runtime = nullptr;
+  if (login_ns_name_.empty()) {
+    // No '@' suffix lands on this process's home namespace: the namespace a
+    // worker serves, or the system namespace 1 everywhere else. This matches
+    // single-image behaviour for namespace-agnostic clients.
+    const uint64_t home_ns = namespace_worker_prototype::worker_namespace != 0
+        ? namespace_worker_prototype::worker_namespace : 1;
+    if (!ns::namespace_registry().get(home_ns, runtime)) {
+      ret = OB_SERVER_IS_INIT;
+      LOG_WARN("home namespace is not registered yet", K(ret), K(home_ns));
+    }
+  } else {
+    char ns_name[ns::Namespace::MAX_NAME_LEN];
+    if (login_ns_name_.length() >= ns::Namespace::MAX_NAME_LEN) {
+      ret = OB_ERR_BAD_DATABASE;
+      LOG_WARN("namespace name too long", K(ret), K_(login_ns_name));
+    } else {
+      MEMCPY(ns_name, login_ns_name_.ptr(), login_ns_name_.length());
+      ns_name[login_ns_name_.length()] = '\0';
+      if (!ns::namespace_registry().find(ns_name, runtime)) {
+        // Same client-visible error code as the byte-proxy entry's
+        // "Unknown namespace".
+        ret = OB_ERR_BAD_DATABASE;
+        LOG_WARN("unknown namespace", K(ret), K_(login_ns_name));
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
+    session.set_ns_runtime(runtime);
   }
   return ret;
 }

@@ -58,6 +58,10 @@ namespace observer
 class ObSqlEndTransCb;
 namespace namespace_worker_prototype { struct SessionBinding; }
 }
+namespace ns
+{
+class NamespaceRuntime;
+}
 namespace dbms_scheduler
 {
 class ObDBMSSchedJobInfo;
@@ -414,6 +418,10 @@ public:
   void destroy(bool skip_sys_var = false);
   observer::namespace_worker_prototype::SessionBinding *&namespace_storage_binding()
   { return namespace_storage_binding_; }
+  // Bound once at login by the namespace entry layer; the hot path never
+  // re-resolves through the registry.
+  ns::NamespaceRuntime *ns_runtime() const { return ns_runtime_; }
+  void set_ns_runtime(ns::NamespaceRuntime *runtime) { ns_runtime_ = runtime; }
   void reset(bool skip_sys_var);
   void clean_status();
   const common::ObWarningBuffer &get_show_warnings_buffer() const { return show_warnings_buf_; }
@@ -1030,6 +1038,7 @@ private:
   dbms_scheduler::ObDBMSSchedJobInfo *job_info_; // dbms_scheduler related.
   void *btree_iter_cache_;
   observer::namespace_worker_prototype::SessionBinding *namespace_storage_binding_ = nullptr;
+  ns::NamespaceRuntime *ns_runtime_ = nullptr;
   common::ObString audit_filter_name_;
   ObExecutingSqlStatRecord executing_sql_stat_record_;
 };

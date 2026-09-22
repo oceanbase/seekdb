@@ -16,6 +16,7 @@
 #include "rootserver/ddl_task/ob_ddl_scheduler.h"
 #include "rootserver/ob_ddl_service_launcher.h"
 #include <memory>
+#include "namespace/namespace.h"
 #include "sql/resolver/cmd/ob_variable_set_stmt.h"
 #include "sql/resolver/ddl/ob_use_database_stmt.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
@@ -62,6 +63,12 @@ int ObServer::namespace_sql_worker_prototype(const char *query)
   namespace_worker_prototype::worker_namespace = std::strtoull(query + 1, &namespace_end, 10);
   if (!namespace_end || *namespace_end || namespace_worker_prototype::worker_namespace == 0
       || namespace_worker_prototype::worker_namespace >= (1ULL << 30)) { return OB_INVALID_ARGUMENT; }
+  // Boundary-layer skeleton (Phase 1a): this worker process owns exactly one
+  // Namespace/Runtime pair. The name stays empty until the spawn protocol
+  // carries it; name-routed logins arrive pre-validated via the proxy entry.
+  if (0 != ns::namespace_registry().add(namespace_worker_prototype::worker_namespace, "")) {
+    return OB_ERR_UNEXPECTED;
+  }
   namespace_worker_prototype::RemoteTabletScan remote_scan;
   namespace_worker_prototype::RemoteLobReadService remote_lob_read;
   int64_t concurrency = 2;
