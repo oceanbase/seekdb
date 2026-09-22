@@ -148,6 +148,10 @@ public:
   static ObMultiVersionSchemaService *alloc_instance();
   static void free_instance(ObMultiVersionSchemaService *schema_service);
 
+  // instance_tag namespaces the per-instance KV caches in the process-global
+  // ObKVGlobalCache registry, so that a second instance (per-namespace service
+  // group) can coexist with the singleton. The primary instance passes nullptr
+  // and keeps the historical cache names.
   int init(common::ObMySQLProxy *proxy,
       const common::ObCommonConfig *config,
       ObSchemaStatusProxy &schema_status_proxy,
@@ -156,7 +160,8 @@ public:
       const int64_t init_version_count,
       ObSchemaService &schema_backend,
       ObISchemaRefreshScheduler &schema_refresh_scheduler,
-      ObSchemaPublishSignal &schema_publish_signal);
+      ObSchemaPublishSignal &schema_publish_signal,
+      const char *instance_tag = nullptr);
 
   void dump_schema_statistics();
 

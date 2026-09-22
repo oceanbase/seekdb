@@ -1143,7 +1143,8 @@ int ObMultiVersionSchemaService::init(
     const int64_t init_version_count,
     ObSchemaService &schema_backend,
     ObISchemaRefreshScheduler &schema_refresh_scheduler,
-    ObSchemaPublishSignal &schema_publish_signal)
+    ObSchemaPublishSignal &schema_publish_signal,
+    const char *instance_tag)
 {
   int ret = OB_SUCCESS;
 
@@ -1156,7 +1157,7 @@ int ObMultiVersionSchemaService::init(
       sql_proxy, config, schema_status_proxy, service_status,
       in_bootstrap, schema_backend))) {
   } else if (OB_FAIL(schema_fetcher_.init(schema_service_, sql_proxy))) {
-  } else if (OB_FAIL(schema_cache_.init())) {
+  } else if (OB_FAIL(schema_cache_.init(instance_tag))) {
   } else if (OB_FAIL(schema_mgr_cache_.init(init_version_count))) {
   } else if (OB_FAIL(ddl_trans_controller_.init(this))) {
   } else if (OB_FAIL(ddl_epoch_mgr_.init(sql_proxy, this))) {

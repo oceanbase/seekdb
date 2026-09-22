@@ -375,13 +375,24 @@ const ObTableSchema *ObSchemaCache::get_all_core_table() const
   return &all_core_table_;
 }
 
-int ObSchemaCache::init()
+int ObSchemaCache::init(const char *instance_tag)
 {
   int ret = OB_SUCCESS;
-  // TODO, configurable
-  if (OB_FAIL(cache_.init(OB_SCHEMA_CACHE_NAME))) {
-  } else if (OB_FAIL(history_cache_.init(OB_SCHEMA_HISTORY_CACHE_NAME))) {
-  } else if (OB_FAIL(tablet_cache_.init(OB_TABLET_TABLE_CACHE_NAME))) {
+  // KV cache names are process-global, so a second schema service instance must
+  // register under its own names. The primary instance passes no tag and keeps
+  // the historical names.
+  char cache_name[MAX_CACHE_NAME_LENGTH];
+  char history_cache_name[MAX_CACHE_NAME_LENGTH];
+  char tablet_cache_name[MAX_CACHE_NAME_LENGTH];
+  const char *const tag = (nullptr == instance_tag) ? "" : instance_tag;
+  if (OB_UNLIKELY(0 > snprintf(cache_name, sizeof(cache_name), "%s%s", OB_SCHEMA_CACHE_NAME, tag)
+                  || 0 > snprintf(history_cache_name, sizeof(history_cache_name), "%s%s", OB_SCHEMA_HISTORY_CACHE_NAME, tag)
+                  || 0 > snprintf(tablet_cache_name, sizeof(tablet_cache_name), "%s%s", OB_TABLET_TABLE_CACHE_NAME, tag))) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("build schema cache name failed", KR(ret), K(instance_tag));
+  } else if (OB_FAIL(cache_.init(cache_name))) {
+  } else if (OB_FAIL(history_cache_.init(history_cache_name))) {
+  } else if (OB_FAIL(tablet_cache_.init(tablet_cache_name))) {
   } else if (OB_FAIL(init_all_core_table())) {
   } else {
     is_inited_ = true;

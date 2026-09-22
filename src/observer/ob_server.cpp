@@ -2367,7 +2367,8 @@ void ObServer::probe_second_schema_service()
         OB_MAX_VERSION_COUNT,
         *second_backend,
         *second_scheduler,
-        second_signal);
+        second_signal,
+        "_ns2_probe");
   }
   if (OB_SUCC(ret)) {
     ret = schema_service_.get_published_schema_version(primary_before, false);

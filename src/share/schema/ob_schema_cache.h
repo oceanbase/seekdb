@@ -148,7 +148,11 @@ public:
   ObSchemaCache();
   virtual ~ObSchemaCache();
 
-  int init();
+  // instance_tag is appended to the KV cache names so that a second schema
+  // service instance (per-namespace service group) does not collide with the
+  // primary one in the process-global ObKVGlobalCache registry. Pass nullptr or
+  // "" for the primary instance so cache names stay unchanged.
+  int init(const char *instance_tag = nullptr);
   void destroy();
   int get_schema(const ObSchemaType schema_type,
                  const uint64_t schema_id,
