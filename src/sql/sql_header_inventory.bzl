@@ -955,6 +955,7 @@ SQL_PRIVATE_HEADERS = [
     "engine/expr/ob_rt_datum_arith.h",
     "engine/expr/ob_wide_integer_partition_hash.h",
     "engine/graph/graph_expand.h",
+    "engine/graph/graph_expand_das_access.h",
     "engine/graph/graph_feedback_loop_op.h",
     "engine/graph/graph_path_spec.h",
     "engine/graph/graph_path_state_store.h",
