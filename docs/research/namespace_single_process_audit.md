@@ -302,3 +302,76 @@ ob_server.h:446,566,729
 ob_sql_session_info.h:415,1032   ob_sql_session_mgr.cpp:213,249
 namespace_fork_kernel_prototype.cpp:217-248（ControlSqlNamespaceScope）
 ```
+
+## 10. 2026-09-22 实测复核：table_id 编码没有活的靶子（结论：不改）
+
+在动手改 `table_id` 编码之前做了一轮实测，结论是**这个改造没有活的靶子，应该停**。
+
+### 10.1 已落地并回归通过的一步：标记位单点化
+
+标记位 `1ULL << 62` 此前在 kernel 外被手写了 5 次。现新增两个唯一入口：
+
+```cpp
+static uint64_t encode_id(uint64_t namespace_id, uint64_t local_id);  // NamespaceObjectKey{ns,local}.storage_id()
+static uint64_t namespace_of(uint64_t id);   // is_encoded_id(id) ? database_of(id) : 1
+```
+
+替换掉 kernel 外的全部手写位运算：
+
+```
+ob_schema_getter_guard.cpp:1048,1082,1133,1339   ← 4 处手写"补编码"
+namespace_worker_gateway_prototype.ipp:522       ← 1 处手写"解码"
+```
+
+现在全仓只有 `ID_MARK` 定义与 `NamespaceObjectKey::storage_id()` 提到标记位。改动 4 文件 +28/-13，
+门禁四件套 PASS：bootstrap `y27heweo` / sql_worker `l5djxvzu` / direct full `cy774wct` / direct tls `z7msaj2h`。
+
+### 10.2 `bind_shared_inner_sql_namespace` 是死代码
+
+```
+$ grep -rn "bind_shared_inner_sql_namespace" src/
+...h:203   声明
+...ipp:35  定义
+（无调用者）
+```
+
+门禁日志佐证：`PROTOTYPE_NATIVE_NAMESPACE_BIND = 0`，619 条 `PROTOTYPE_NATIVE_NAMESPACE_RESOLVE` 全是
+`trace=1 ns=1 found=0`。即"共享进程在收发阶段拼 namespace"这个机制**只有 API 壳子，没接线**。
+
+推论：ns 的传输载体**就是编码 id 本身**——它从 worker 一路带到共享进程，每层解一次。不是缺口，是设计。
+
+### 10.3 `ObSchemaGetterGuard` 的路由分支从不触发
+
+`worker_namespace` 只在 worker 进程被赋值（`namespace_sql_worker_prototype.ipp:62`），共享进程恒为 0。代入
+`owns_namespace_schema() = worker_process && worker_namespace != 0`：
+
+| 分支 | 条件 | 判定 |
+|---|---|---|
+| 第一支（"补编码"） | `!owns && worker_namespace > 1 && !is_encoded_id(X)` | 共享进程 `worker_namespace > 1` 恒 false；worker 里 `owns` 为 true → **证明为死代码** |
+| 第二支（"按编码 id 路由 fork catalog"） | `!owns && namespace_mode() && is_encoded_id(X)` | 只在共享进程可达 |
+
+第二支加正向计数后跑门禁：
+
+| 套件 | `guard` 路由到 fork catalog | `catalog()` 帧路径 |
+|---|---|---|
+| bootstrap | **0** | 0 |
+| sql_worker full | **0** | 2 |
+| direct full | **0** | 1 |
+| direct tls | **0** | 0 |
+
+**共享进程真正查 schema 的路径是 `catalog()` 帧处理（`gateway:502` 起），用帧里带来的编码 id，不经过 guard。**
+
+### 10.4 结论与对前面计划的更正
+
+| 原计划 | 更正 |
+|---|---|
+| "去掉 table_id 编码，ns 改由 guard 携带 / 句柄显式传"（估 200–400 行） | **不做**。没有活的靶子 |
+| "接线 trace 绑定让 ns 从上下文来" | 不做。它是为上面那个改造服务的 |
+| 给存储层引 `NsTabletID` 强类型 | 不做。名字带 ns 就是让存储层感知 ns，方向反了 |
+| 标记位单点化 | **已做**，门禁 PASS |
+
+语义上"table_id 不该带 ns"成立；但在这份代码里，编码 id 只活在**传输层 + kernel 边界函数 + 进程级缓存 key**
+里，从未漏到业务模块。因此现状无需改动。
+
+若将来真要让 schema 对象脱离编码 id，前置条件是先决定 ns 的替代传输方式（显式句柄参数 优于
+线程上下文），而**当前没有任何调用路径要求这么做**。
