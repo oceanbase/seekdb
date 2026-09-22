@@ -36,19 +36,6 @@ namespace sql
 namespace
 {
 
-const ObDASScanCtDef *find_base_table_scan_ctdef(
-    const ObTableScanSpec &scan_spec, uint64_t table_id)
-{
-  const ObDASScanCtDef *scan_ctdef = nullptr;
-  if (scan_spec.tsc_ctdef_.scan_ctdef_.ref_table_id_ == table_id) {
-    scan_ctdef = &scan_spec.tsc_ctdef_.scan_ctdef_;
-  } else if (scan_spec.tsc_ctdef_.lookup_ctdef_ != nullptr
-             && scan_spec.tsc_ctdef_.lookup_ctdef_->ref_table_id_ == table_id) {
-    scan_ctdef = scan_spec.tsc_ctdef_.lookup_ctdef_;
-  }
-  return scan_ctdef;
-}
-
 int close_das_tasks(ObDASRef &das_ref, int ret)
 {
   const int close_ret = das_ref.close_all_task();
@@ -71,23 +58,6 @@ bool identity_matches(const GraphElementIdentity &identity,
       && identity.element_id_ == element_id
       && identity.rowkey_.get_obj_cnt() == key_count;
   return matches;
-}
-
-int compare_identities(const GraphElementIdentity &left,
-                       const GraphElementIdentity &right,
-                       int &comparison)
-{
-  int ret = OB_SUCCESS;
-  comparison = 0;
-  if (OB_UNLIKELY(!left.is_valid() || !right.is_valid()
-                  || left.graph_id_ != right.graph_id_
-                  || left.element_id_ != right.element_id_
-                  || left.rowkey_.get_obj_cnt()
-                         != right.rowkey_.get_obj_cnt())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(left.rowkey_.compare(right.rowkey_, comparison))) {
-  }
-  return ret;
 }
 
 uint64_t identity_array_hash(const ObIArray<GraphElementIdentity> &identities)
@@ -176,7 +146,10 @@ bool GraphExpandDasAccess::VertexLookupBinding::is_valid() const
       && key_count_ <= OB_USER_MAX_ROWKEY_COLUMN_NUMBER
       && scan_spec_ != nullptr
       && scan_ctdef_ != nullptr
-      && scan_ctdef_->ref_table_id_ == table_id_;
+      && loc_meta_ != nullptr
+      && scan_ctdef_->ref_table_id_ == table_id_
+      && loc_meta_->table_loc_id_ == scan_spec_->get_table_loc_id()
+      && loc_meta_->ref_table_id_ == table_id_;
   for (int64_t i = 0; valid && i < key_count_; ++i) {
     valid = key_columns_[i] != OB_INVALID_ID && key_exprs_[i] != nullptr;
   }
@@ -276,6 +249,7 @@ void GraphExpandDasAccess::release()
   const int ret = reset_edge_scan(OB_SUCCESS);
   identity_page_allocator_.reset();
   edge_cursor_allocator_.reset();
+  vertex_lookup_memory_bytes_ = 0;
   if (OB_SUCCESS != ret) {
     LOG_WARN("failed to release graph edge scan", K(ret));
   }
@@ -285,8 +259,21 @@ int64_t GraphExpandDasAccess::used_memory() const
 {
   const int64_t page_bytes = identity_page_allocator_.total();
   const int64_t cursor_bytes = edge_cursor_allocator_.total();
-  return page_bytes > INT64_MAX - cursor_bytes
-      ? INT64_MAX : page_bytes + cursor_bytes;
+  const int64_t edge_das_used = edge_das_ref_.get_das_mem_used();
+  const int64_t edge_das_bytes = edge_das_used > 0 ? edge_das_used : 0;
+  const int64_t vertex_lookup_bytes = vertex_lookup_memory_bytes_ > 0
+      ? vertex_lookup_memory_bytes_ : 0;
+  int64_t used = page_bytes;
+  const int64_t memory_parts[] = {
+      cursor_bytes, edge_das_bytes, vertex_lookup_bytes};
+  for (int64_t i = 0; i < ARRAYSIZEOF(memory_parts); ++i) {
+    if (used > INT64_MAX - memory_parts[i]) {
+      used = INT64_MAX;
+    } else {
+      used += memory_parts[i];
+    }
+  }
+  return used;
 }
 
 int GraphExpandDasAccess::reset_edge_scan(int ret)
@@ -321,23 +308,30 @@ int GraphExpandDasAccess::init_vertex_binding(
     VertexLookupBinding &binding)
 {
   int ret = OB_SUCCESS;
-  const ObDASScanCtDef *scan_ctdef = find_base_table_scan_ctdef(scan_spec,
-                                                               table_id);
+  const ObDASScanCtDef *scan_ctdef
+      = scan_spec.tsc_ctdef_.graph_lookup_ctdef_;
+  const ObDASTableLocMeta *loc_meta
+      = scan_spec.tsc_ctdef_.graph_lookup_loc_meta_;
   VertexLookupBinding candidate;
   if (OB_UNLIKELY(element_id == OB_INVALID_ID || table_id == OB_INVALID_ID
                   || key_count <= 0
                   || key_count > OB_USER_MAX_ROWKEY_COLUMN_NUMBER
                   || key_columns == nullptr)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(scan_ctdef)) {
-    // A covering secondary-index scan cannot accept a base-table primary-key
-    // range. Keep the legacy recursive plan available instead of silently
-    // probing the wrong key layout.
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("graph vertex scan has no base-table DAS ctdef", K(ret),
+  } else if (OB_ISNULL(scan_ctdef) || OB_ISNULL(loc_meta)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("graph vertex scan has no dedicated base-table DAS ctdef", K(ret),
              K(table_id), K(scan_spec.ref_table_id_),
              "access_table_id",
              scan_spec.tsc_ctdef_.scan_ctdef_.ref_table_id_);
+  } else if (OB_UNLIKELY(scan_ctdef->ref_table_id_ != table_id
+                         || loc_meta->ref_table_id_ != table_id
+                         || loc_meta->table_loc_id_
+                                != scan_spec.get_table_loc_id())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("graph vertex lookup definition does not match table scan", K(ret),
+             K(table_id), K(scan_ctdef->ref_table_id_), KPC(loc_meta),
+             K(scan_spec.get_table_loc_id()));
   } else if (OB_UNLIKELY(scan_ctdef->access_column_ids_.count()
                          != scan_ctdef->pd_expr_spec_.access_exprs_.count())) {
     ret = OB_ERR_UNEXPECTED;
@@ -350,6 +344,7 @@ int GraphExpandDasAccess::init_vertex_binding(
     candidate.key_count_ = key_count;
     candidate.scan_spec_ = &scan_spec;
     candidate.scan_ctdef_ = scan_ctdef;
+    candidate.loc_meta_ = loc_meta;
     for (int64_t key = 0; OB_SUCC(ret) && key < key_count; ++key) {
       candidate.key_columns_[key] = key_columns[key];
       for (int64_t column = 0;
@@ -491,6 +486,7 @@ int GraphExpandDasAccess::lookup_vertices(
 {
   int ret = OB_SUCCESS;
   const VertexLookupBinding *binding = nullptr;
+  vertex_lookup_memory_bytes_ = 0;
   existing.reset();
   if (OB_UNLIKELY(!initialized_)) {
     ret = OB_NOT_INIT;
@@ -514,6 +510,7 @@ int GraphExpandDasAccess::lookup_vertices(
 int GraphExpandDasAccess::init_scan_rtdef(
     const ObTableScanSpec &scan_spec,
     const ObDASScanCtDef &scan_ctdef,
+    const ObDASTableLocMeta *loc_meta,
     bool uses_index_back,
     ObIAllocator &scan_allocator,
     ObDASScanRtDef &scan_rtdef) const
@@ -556,8 +553,12 @@ int GraphExpandDasAccess::init_scan_rtdef(
       scan_rtdef.table_loc_ = DAS_CTX(exec_ctx_).get_table_loc_by_id(
           scan_spec.get_table_loc_id(), scan_ctdef.ref_table_id_);
       if (scan_rtdef.table_loc_ == nullptr
-          && &scan_ctdef == scan_spec.tsc_ctdef_.lookup_ctdef_
-          && scan_spec.tsc_ctdef_.lookup_loc_meta_ != nullptr) {
+          && loc_meta != nullptr) {
+        ret = DAS_CTX(exec_ctx_).extended_table_loc(
+            *loc_meta, scan_rtdef.table_loc_);
+      } else if (scan_rtdef.table_loc_ == nullptr
+                 && &scan_ctdef == scan_spec.tsc_ctdef_.lookup_ctdef_
+                 && scan_spec.tsc_ctdef_.lookup_loc_meta_ != nullptr) {
         ret = DAS_CTX(exec_ctx_).extended_table_loc(
             *scan_spec.tsc_ctdef_.lookup_loc_meta_, scan_rtdef.table_loc_);
       }
@@ -591,7 +592,8 @@ int GraphExpandDasAccess::lookup_vertices(
       OB_MALLOC_NORMAL_BLOCK_SIZE,
       ModulePageAllocator(das_ref.get_das_alloc(), "GraphVtxRange"));
   das_ref.set_mem_attr(ObMemAttr("GraphVtxLookup"));
-  if (OB_FAIL(init_scan_rtdef(*binding.scan_spec_, *binding.scan_ctdef_, false,
+  if (OB_FAIL(init_scan_rtdef(*binding.scan_spec_, *binding.scan_ctdef_,
+                              binding.loc_meta_, false,
                               das_ref.get_das_alloc(), scan_rtdef))) {
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < requested.count(); ++i) {
@@ -687,6 +689,7 @@ int GraphExpandDasAccess::lookup_vertices(
       }
     }
   }
+  vertex_lookup_memory_bytes_ = das_ref.get_das_mem_used();
   ret = close_das_tasks(das_ref, ret);
   return ret;
 }
@@ -889,7 +892,8 @@ int GraphExpandDasAccess::init_edge_scan_rtdefs(bool uses_index_back)
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     edge_scan_rtdef_ = new(scan_buffer) ObDASScanRtDef();
-    if (OB_FAIL(init_scan_rtdef(*scan_spec, *scan_ctdef, uses_index_back,
+    if (OB_FAIL(init_scan_rtdef(*scan_spec, *scan_ctdef, nullptr,
+                                uses_index_back,
                                 edge_das_ref_.get_das_alloc(),
                                 *edge_scan_rtdef_))) {
     } else {
@@ -904,7 +908,7 @@ int GraphExpandDasAccess::init_edge_scan_rtdefs(bool uses_index_back)
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
       edge_lookup_rtdef_ = new(lookup_buffer) ObDASScanRtDef();
-      if (OB_FAIL(init_scan_rtdef(*scan_spec, *lookup_ctdef, true,
+      if (OB_FAIL(init_scan_rtdef(*scan_spec, *lookup_ctdef, nullptr, true,
                                   edge_das_ref_.get_das_alloc(),
                                   *edge_lookup_rtdef_))) {
       }
@@ -1023,32 +1027,31 @@ int GraphExpandDasAccess::start_full_edge_scan(bool &empty)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("graph edge full scan has no tablet location", K(ret),
              KPC(table_loc));
-  } else if (OB_SUCC(ret) && !empty
-             && table_loc->get_tablet_locs().size() != 1) {
-    // Global identity ordering across tablet streams needs an explicit merge
-    // cursor. Keep that separate from the single-tablet full-scan increment.
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("partitioned graph edge full scan is not implemented", K(ret),
-             "tablet_count", table_loc->get_tablet_locs().size());
   }
   if (OB_SUCC(ret) && !empty) {
-    ObDASScanOp *scan_op = nullptr;
     ObNewRange whole_range;
     whole_range.set_whole_range();
     whole_range.table_id_ = edge_binding_.access_table_id_;
-    if (OB_FAIL(edge_das_ref_.prepare_das_task(
-            table_loc->get_first_tablet_loc(), scan_op))) {
-    } else if (OB_ISNULL(scan_op)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      scan_op->set_scan_ctdef(scan_ctdef);
-      scan_op->set_scan_rtdef(edge_scan_rtdef_);
-      scan_op->set_can_part_retry(false);
-      if (OB_FAIL(scan_op->get_scan_param().key_ranges_.push_back(
-              whole_range))) {
+    // DASOpResultIter keeps its current task and row iterator between calls,
+    // so a page can end in one tablet and resume there before advancing to the
+    // next tablet. SQL does not promise a global row order without ORDER BY.
+    for (DASTabletLocListIter node = table_loc->tablet_locs_begin();
+         OB_SUCC(ret) && node != table_loc->tablet_locs_end(); ++node) {
+      ObDASScanOp *scan_op = nullptr;
+      if (OB_FAIL(edge_das_ref_.prepare_das_task(*node, scan_op))) {
+      } else if (OB_ISNULL(scan_op)) {
+        ret = OB_ERR_UNEXPECTED;
       } else {
-        table_loc->is_reading_ = true;
+        scan_op->set_scan_ctdef(scan_ctdef);
+        scan_op->set_scan_rtdef(edge_scan_rtdef_);
+        scan_op->set_can_part_retry(false);
+        if (OB_FAIL(scan_op->get_scan_param().key_ranges_.push_back(
+                whole_range))) {
+        }
       }
+    }
+    if (OB_SUCC(ret)) {
+      table_loc->is_reading_ = true;
     }
   }
   if (OB_SUCC(ret) && !empty
@@ -1194,16 +1197,10 @@ int GraphExpandDasAccess::get_edge_page(
                  K(edge), K(sources));
       } else if (!filtered && matches
                  && contains(sources, edge.source_identity_)) {
-        int comparison = 1;
-        if (!access_desc_.uses_adjacency_index() && has_edge_cursor_
-            && OB_FAIL(compare_identities(edge.edge_identity_, edge_cursor_,
-                                          comparison))) {
-        } else if (OB_UNLIKELY(!access_desc_.uses_adjacency_index()
-                               && has_edge_cursor_ && comparison <= 0)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("graph edge full scan order is not stable", K(ret),
-                   K(edge), K_(edge_cursor));
-        } else if (OB_FAIL(edges.push_back(edge))) {
+        // edge_cursor_ is a continuity token for this stateful result iterator,
+        // not a global seek key. Tablet task order need not match edge rowkey
+        // order, and no output ordering is exposed without an outer ORDER BY.
+        if (OB_FAIL(edges.push_back(edge))) {
         } else if (OB_FAIL(save_edge_cursor(edge.edge_identity_))) {
         }
       }
@@ -1226,6 +1223,7 @@ int GraphExpandDasAccess::scan_edges(
 {
   int ret = OB_SUCCESS;
   bool empty = false;
+  vertex_lookup_memory_bytes_ = 0;
   edges.reset();
   end = false;
   if (OB_UNLIKELY(!initialized_)) {

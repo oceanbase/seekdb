@@ -346,18 +346,16 @@ int GraphFeedbackLoopSpec::resolve_expand_scan_specs(
 int GraphFeedbackLoopOp::inner_open()
 {
   int ret = OB_SUCCESS;
-  const ObTableScanSpec *source_scan = nullptr;
-  const ObTableScanSpec *edge_scan = nullptr;
-  const ObTableScanSpec *target_scan = nullptr;
   if (OB_UNLIKELY(!get_graph_spec().get_path_desc().is_valid()
                   || !get_graph_spec().get_expand_access_desc().is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid graph feedback physical descriptor", K(ret),
              K(get_graph_spec().get_path_desc()),
              K(get_graph_spec().get_expand_access_desc()));
-  } else if (OB_FAIL(get_graph_spec().resolve_expand_scan_specs(
-                 source_scan, edge_scan, target_scan))) {
-    LOG_WARN("failed to resolve graph expand table scan specs", K(ret));
+  // The recursive implementation can place a child scan below a PX boundary,
+  // where that scan spec is owned by another DFO and is not a descendant of
+  // this runtime spec. Resolve the three scan specs only when constructing the
+  // native GraphExpand adapter; the current row pump does not consume them.
   } else if (OB_FAIL(RecursivePumpOp::inner_open())) {
   }
   return ret;

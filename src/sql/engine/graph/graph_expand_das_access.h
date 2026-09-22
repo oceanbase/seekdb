@@ -30,11 +30,11 @@ class ObExpr;
 class ObTableScanSpec;
 struct ObDASScanCtDef;
 struct ObDASScanRtDef;
+struct ObDASTableLocMeta;
 
 // DAS implementation of the physical one-hop access contract. It supports
-// batched vertex lookup, adjacency-index range scans and a stateful
-// single-tablet edge-table fallback scan. Partitioned fallback scans are added
-// separately.
+// batched vertex lookup, adjacency-index range scans and a stateful edge-table
+// fallback scan across every tablet selected by the statement snapshot.
 class GraphExpandDasAccess final : public IGraphExpandAccess
 {
 public:
@@ -74,10 +74,11 @@ private:
     uint64_t key_columns_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
     const ObTableScanSpec *scan_spec_{nullptr};
     const ObDASScanCtDef *scan_ctdef_{nullptr};
+    const ObDASTableLocMeta *loc_meta_{nullptr};
     ObExpr *key_exprs_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
     TO_STRING_KV(K_(element_id), K_(table_id), K_(key_count),
                  "key_columns", common::ObArrayWrap<uint64_t>(key_columns_, key_count_),
-                 KP_(scan_spec), KP_(scan_ctdef));
+                 KP_(scan_spec), KP_(scan_ctdef), KP_(loc_meta));
   };
 
   // Binds the three typed identities carried by one physical edge row. The
@@ -130,6 +131,7 @@ private:
                       common::ObIArray<GraphElementIdentity> &existing);
   int init_scan_rtdef(const ObTableScanSpec &scan_spec,
                       const ObDASScanCtDef &scan_ctdef,
+                      const ObDASTableLocMeta *loc_meta,
                       bool uses_index_back,
                       common::ObIAllocator &scan_allocator,
                       ObDASScanRtDef &scan_rtdef) const;
@@ -189,6 +191,9 @@ private:
   ObDASScanRtDef *edge_lookup_rtdef_{nullptr};
   DASOpResultIter edge_result_iter_{};
   GraphElementIdentity edge_cursor_{};
+  // Retain the last vertex multi-get's transient DAS footprint until the
+  // caller performs its post-access query-memory check.
+  int64_t vertex_lookup_memory_bytes_{0};
   uint64_t edge_sources_hash_{0};
   bool has_edge_cursor_{false};
   bool edge_scan_active_{false};

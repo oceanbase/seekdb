@@ -232,6 +232,61 @@ int ObTscCgService::generate_tsc_ctdef(ObLogTableScan &op, ObTableScanCtDef &tsc
     tsc_ctdef.attach_spec_.attach_ctdef_ = root_ctdef;
   }
 
+  if (OB_SUCC(ret) && op.needs_graph_vertex_lookup()
+      && OB_FAIL(generate_graph_lookup_ctdef(op, tsc_ctdef))) {
+    LOG_WARN("failed to generate graph vertex lookup ctdef", K(ret),
+             K(op.get_table_id()), K(op.get_real_ref_table_id()),
+             K(op.get_real_index_table_id()));
+  }
+
+  return ret;
+}
+
+int ObTscCgService::generate_graph_lookup_ctdef(
+    const ObLogTableScan &op,
+    ObTableScanCtDef &tsc_ctdef)
+{
+  int ret = OB_SUCCESS;
+  bool has_rowscn = false;
+  const ObTableSchema *table_schema = nullptr;
+  ObSqlSchemaGuard *schema_guard = nullptr;
+  DASScanCGCtx cg_ctx;
+  if (OB_ISNULL(cg_.opt_ctx_)
+      || OB_ISNULL(schema_guard = cg_.opt_ctx_->get_sql_schema_guard())
+      || OB_ISNULL(op.get_stmt())
+      || OB_ISNULL(cg_.opt_ctx_->get_session_info())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("graph vertex lookup codegen context is incomplete", K(ret),
+             K(cg_.opt_ctx_), K(schema_guard), K(op.get_stmt()));
+  } else if (OB_FAIL(tsc_ctdef.allocate_graph_lookup_ctdef())) {
+    LOG_WARN("failed to allocate graph vertex lookup definitions", K(ret));
+  } else {
+    ObDASScanCtDef &lookup_ctdef = *tsc_ctdef.graph_lookup_ctdef_;
+    lookup_ctdef.ref_table_id_ = op.get_real_ref_table_id();
+    if (OB_FAIL(generate_das_scan_ctdef(op, cg_ctx, lookup_ctdef,
+                                       has_rowscn))) {
+      LOG_WARN("failed to generate graph base-table scan ctdef", K(ret),
+               K(lookup_ctdef.ref_table_id_));
+    } else if (OB_FAIL(schema_guard->get_table_schema(
+                           op.get_table_id(), op.get_ref_table_id(),
+                           op.get_stmt(), table_schema))) {
+    } else if (OB_ISNULL(table_schema)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("graph vertex base table schema is missing", K(ret),
+               K(op.get_table_id()), K(op.get_ref_table_id()));
+    } else if (OB_FAIL(generate_table_loc_meta(
+                           op.get_table_id(), *op.get_stmt(), *table_schema,
+                           *cg_.opt_ctx_->get_session_info(),
+                           *tsc_ctdef.graph_lookup_loc_meta_))) {
+      LOG_WARN("failed to generate graph vertex lookup location", K(ret),
+               K(op.get_table_id()), K(table_schema->get_table_id()));
+    } else {
+      // The caller supplies exact graph keys, so this DAS operation is always
+      // a get. It intentionally has no source/terminal predicate attached.
+      lookup_ctdef.is_get_ = true;
+      tsc_ctdef.snapshot_item_.need_scn_ |= has_rowscn;
+    }
+  }
   return ret;
 }
 

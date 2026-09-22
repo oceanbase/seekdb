@@ -125,7 +125,7 @@ typedef common::ObFixedArray<GroupRescanParamInfo, common::ObIAllocator> GroupRe
 
 struct ObTableScanCtDef
 {
-  OB_UNIS_VERSION(1);
+  OB_UNIS_VERSION(2);
 public:
   ObTableScanCtDef(common::ObIAllocator &allocator)
     : snapshot_item_(),
@@ -159,6 +159,7 @@ public:
     return static_cast<const ObQueryRangeProvider&>(pre_range_graph_);
   }
   int allocate_dppr_table_loc();
+  int allocate_graph_lookup_ctdef();
   ObDASScanCtDef *get_lookup_ctdef();
   const ObDASScanCtDef *get_lookup_ctdef() const;
   TO_STRING_KV(K_(snapshot_item),
@@ -167,6 +168,8 @@ public:
                K_(scan_ctdef),
                KPC_(lookup_ctdef),
                KPC_(lookup_loc_meta),
+               KPC_(graph_lookup_ctdef),
+               KPC_(graph_lookup_loc_meta),
                KPC_(das_dppr_tbl),
                KPC_(calc_part_id_expr),
                K_(global_index_rowkey_exprs),
@@ -191,6 +194,11 @@ public:
   //lookup_loc_meta_ used to calc the main table tablet location
   //when query access the global index and lookup the main table
   ObDASTableLocMeta *lookup_loc_meta_;
+  // Graph expansion performs endpoint existence checks independently of the
+  // relational scan's chosen index and filters. These definitions always
+  // describe an unfiltered primary-table get.
+  ObDASScanCtDef *graph_lookup_ctdef_{nullptr};
+  ObDASTableLocMeta *graph_lookup_loc_meta_{nullptr};
   //used for dynamic partition pruning
   ObTableLocation *das_dppr_tbl_;
   common::ObIAllocator &allocator_;

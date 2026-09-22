@@ -35,6 +35,37 @@ const char *GRAPH_SEED_VERTEX_ALIAS = "__g_seed_vertex";
 const char *GRAPH_STEP_EDGE_ALIAS = "__g_step_edge";
 const char *GRAPH_STEP_VERTEX_ALIAS = "__g_step_vertex";
 
+const ObLogTableScan *find_internal_scan(const ObLogicalOperator *root,
+                                         const char *table_alias);
+
+ObLogTableScan *find_internal_scan(ObLogicalOperator *root,
+                                   const char *table_alias)
+{
+  return const_cast<ObLogTableScan *>(find_internal_scan(
+      static_cast<const ObLogicalOperator *>(root), table_alias));
+}
+
+int enable_graph_vertex_lookup(ObLogTableScan &scan)
+{
+  int ret = OB_SUCCESS;
+  scan.set_needs_graph_vertex_lookup(true);
+  if (scan.get_is_index_global()
+      && scan.get_global_index_back_table_partition_info() == nullptr) {
+    const AccessPath *access_path = scan.get_access_path();
+    if (OB_ISNULL(access_path) || OB_ISNULL(access_path->parent_)
+        || OB_ISNULL(access_path->parent_->get_table_partition_info())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("graph vertex base table location is missing", K(ret),
+               K(scan.get_table_id()), K(scan.get_real_ref_table_id()),
+               K(scan.get_real_index_table_id()), KP(access_path));
+    } else {
+      scan.set_global_index_back_table_partition_info(
+          access_path->parent_->get_table_partition_info());
+    }
+  }
+  return ret;
+}
+
 double bounded_graph_estimate_add(double left, double right)
 {
   return left >= GRAPH_FEEDBACK_ESTIMATE_LIMIT - right
@@ -113,7 +144,9 @@ const ObLogTableScan *find_internal_scan(const ObLogicalOperator *root,
   }
   for (int64_t i = 0; result == nullptr && root != nullptr
                       && i < root->get_num_of_child(); ++i) {
-    result = find_internal_scan(root->get_child(i), table_alias);
+    result = find_internal_scan(
+        static_cast<const ObLogicalOperator *>(root->get_child(i)),
+        table_alias);
   }
   return result;
 }
@@ -150,11 +183,11 @@ const char *path_mode_name(GraphPathMode path_mode)
 int GraphFeedbackLoopLogOp::initialize_expand_access()
 {
   int ret = OB_SUCCESS;
-  const ObLogicalOperator *anchor = get_child(first_child);
-  const ObLogicalOperator *step = get_child(second_child);
-  const ObLogTableScan *source_scan = nullptr;
+  ObLogicalOperator *anchor = get_child(first_child);
+  ObLogicalOperator *step = get_child(second_child);
+  ObLogTableScan *source_scan = nullptr;
   const ObLogTableScan *edge_scan = nullptr;
-  const ObLogTableScan *target_scan = nullptr;
+  ObLogTableScan *target_scan = nullptr;
   share::schema::ObSchemaGetterGuard *schema_guard = nullptr;
   if (OB_ISNULL(get_plan())
       || OB_ISNULL(schema_guard = get_plan()->get_optimizer_context().get_schema_guard())
@@ -176,7 +209,12 @@ int GraphFeedbackLoopLogOp::initialize_expand_access()
                  path_desc_, edge_scan->get_index_table_id(), *schema_guard))) {
     LOG_WARN("failed to initialize graph expand access", K(ret), K_(path_desc),
              "edge_access_table_id", edge_scan->get_index_table_id());
+  } else if (OB_FAIL(enable_graph_vertex_lookup(*source_scan))) {
+  } else if (OB_FAIL(enable_graph_vertex_lookup(*target_scan))) {
   } else {
+    // These scans may use a covering secondary index for their relational
+    // child plan. GraphExpand still needs an unfiltered base-table ctdef to
+    // validate each endpoint by its declared graph key.
     step_access_method_ = expand_access_desc_.uses_adjacency_index()
         ? GraphFeedbackAccessMethod::INDEX_SCAN
         : GraphFeedbackAccessMethod::FULL_SCAN;

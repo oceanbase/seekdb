@@ -287,9 +287,7 @@ private:
 };
 
 // Pick only a readable, visible ordinary index whose user-declared key starts
-// with every typed source/destination column in graph-mapping order. The
-// generated USE INDEX is a correctness-neutral preference: absence of such an
-// index leaves the recursive member on its one-scan-per-hop fallback.
+// with every typed source/destination column in graph-mapping order.
 int find_adjacency_index(const GraphBinding &edge,
                          GraphPathDirection direction,
                          ObSchemaGetterGuard &schema_guard,
@@ -2098,10 +2096,17 @@ int ObDMLResolver::resolve_graph_table(const ParseNode &node, TableItem *&table_
               *schema_checker_->get_schema_guard(), adjacency_index))) {
         LOG_WARN("failed to select graph adjacency index", K(ret), K(path_desc));
       }
-      const ObString *adjacency_index_ptr = adjacency_index.empty()
-          ? nullptr : &adjacency_index;
       const bool use_feedback_loop = path_desc.row_shape_ == GraphPathRowShape::PER_MATCH
           && bindings.at(0).element_->id_ == bindings.at(2).element_->id_;
+      if (OB_SUCC(ret) && use_feedback_loop && adjacency_index.empty()) {
+        // The native fallback requires a base-table scan. Graph element keys
+        // are the complete base-table primary key, so PRIMARY is always valid.
+        // Do not force this hint on unrolled plans, where a selective ordinary
+        // index remains a legitimate access path.
+        adjacency_index = ObString::make_string("PRIMARY");
+      }
+      const ObString *adjacency_index_ptr = adjacency_index.empty()
+          ? nullptr : &adjacency_index;
       if (OB_SUCC(ret) && use_feedback_loop) {
         ret = build_recursive_graph_match(builder, *graph, database_name, path_desc,
                                            adjacency_index_ptr,

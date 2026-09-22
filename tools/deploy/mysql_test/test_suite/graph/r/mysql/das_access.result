@@ -1,0 +1,164 @@
+CREATE TABLE graph_das_vertex (
+tenant INT NOT NULL,
+id INT NOT NULL,
+kind VARCHAR(16) NOT NULL,
+payload VARCHAR(64),
+PRIMARY KEY (tenant,id)
+) PARTITION BY HASH(tenant) PARTITIONS 4;
+CREATE INDEX graph_das_vertex_cover
+ON graph_das_vertex(kind,tenant,id)
+GLOBAL PARTITION BY HASH(tenant) PARTITIONS 3;
+CREATE TABLE graph_das_edge (
+tenant INT NOT NULL,
+id INT NOT NULL,
+src_tenant INT,
+src INT,
+dst_tenant INT,
+dst INT,
+enabled INT,
+PRIMARY KEY (tenant,id)
+) PARTITION BY HASH(tenant) PARTITIONS 4;
+CREATE INDEX graph_das_edge_filter ON graph_das_edge(enabled);
+INSERT INTO graph_das_vertex VALUES
+(1,1,'seed','A'),
+(1,2,'bridge','B'),
+(2,3,'node','C'),
+(3,4,'node','D'),
+(4,5,'node','E');
+INSERT INTO graph_das_edge VALUES
+(1,10,1,1,1,2,1),
+(2,20,1,2,2,3,1),
+(3,30,2,3,3,4,1),
+(4,40,3,4,4,5,1),
+(4,41,1,1,2,3,1);
+CREATE PROPERTY GRAPH graph_das_access
+VERTEX TABLES (
+graph_das_vertex KEY (tenant,id)
+LABEL item PROPERTIES (tenant,id,kind,payload)
+)
+EDGE TABLES (
+graph_das_edge KEY (tenant,id)
+SOURCE KEY (src_tenant,src)
+REFERENCES graph_das_vertex (tenant,id)
+DESTINATION KEY (dst_tenant,dst)
+REFERENCES graph_das_vertex (tenant,id)
+LABEL link PROPERTIES (tenant,id,enabled)
+);
+partitioned_graph_plan_with_covering_global_vertex_index
+SELECT * FROM GRAPH_TABLE(graph_das_access MATCH
+(a IS item WHERE a.kind='seed')-[e IS link WHERE e.enabled=1]->{1,3}
+(b IS item WHERE b.kind='node')
+COLUMNS(a.id AS source,b.id AS destination,COUNT(e.id) AS hops,
+JSON_ARRAYAGG(e.id) AS edge_ids)) g
+ORDER BY hops,destination,edge_ids;
+source	destination	hops	edge_ids
+1	3	1	[41]
+1	3	2	[10, 20]
+1	4	2	[41, 30]
+1	4	3	[10, 20, 30]
+1	5	3	[41, 30, 40]
+drop table if exists plan_table;
+create table plan_table (
+statement_id varchar(30),
+plan_id int,
+gmt_create timestamp,
+remarks varchar(4000),
+operator varchar(255),
+options varchar(255),
+object_node varchar(40),
+object_owner varchar(128),
+object_name varchar(128),
+object_alias varchar(261),
+object_instance int,
+object_type varchar(30),
+optimizer varchar(4000),
+search_columns int,
+id int,
+parent_id int,
+depth int,
+position int,
+is_last_child int,
+cost int,
+cardinality int,
+bytes int,
+rowset int,
+other_tag varchar(4000),
+partition_start varchar(4000),
+partition_stop varchar(4000),
+partition_id int,
+other varchar(4000),
+distribution varchar(64),
+cpu_cost int,
+io_cost int,
+temp_space int,
+access_predicates varchar(4000),
+filter_predicates varchar(4000),
+startup_predicates varchar(4000),
+projection varchar(4000),
+special_predicates longtext,
+time int,
+qblock_name varchar(128),
+other_xml varchar(4000)
+);
+EXPLAIN INTO plan_table SET statement_id='graph_das_access'
+SELECT * FROM GRAPH_TABLE(graph_das_access MATCH
+(a IS item WHERE a.kind='seed')-[e IS link WHERE e.enabled=1]->{1,3}
+(b IS item WHERE b.kind='node')
+COLUMNS(a.id AS source,b.id AS destination,COUNT(e.id) AS hops)) g;
+SELECT COUNT(*)=1 AS has_partitioned_edge_full_scan
+FROM plan_table
+WHERE statement_id='graph_das_access'
+  AND operator='TABLE FULL SCAN'
+  AND object_alias='__g_step_edge';
+has_partitioned_edge_full_scan
+1
+SELECT COUNT(*)=1 AS has_covering_source_index
+FROM plan_table
+WHERE statement_id='graph_das_access'
+  AND operator='TABLE RANGE SCAN'
+  AND object_alias='__g_seed_vertex(graph_das_vertex_cover)';
+has_covering_source_index
+1
+SELECT COUNT(*)=1 AS has_covering_target_index
+FROM plan_table
+WHERE statement_id='graph_das_access'
+  AND operator='TABLE FULL SCAN'
+  AND object_alias='__g_step_vertex(graph_das_vertex_cover)';
+has_covering_target_index
+1
+EXPLAIN INTO plan_table SET statement_id='graph_das_unrolled'
+SELECT * FROM GRAPH_TABLE(graph_das_access MATCH
+(a IS item WHERE a.kind='seed')-[e IS link WHERE e.enabled=1]->{1,2}
+(b IS item WHERE b.kind='node')
+ONE ROW PER STEP (v1,step_e,v2)
+COLUMNS(step_e.id AS edge_id)) g;
+SELECT COUNT(*)=3 AS unrolled_plan_keeps_selective_edge_index
+FROM plan_table
+WHERE statement_id='graph_das_unrolled'
+  AND operator='TABLE RANGE SCAN'
+  AND object_alias LIKE '__g_walk_out_e_%(graph_das_edge_filter)';
+unrolled_plan_keeps_selective_edge_index
+1
+DROP TABLE plan_table;
+prepared_graph_plan_parameter_rebinding
+PREPARE graph_das_cached FROM
+'SELECT COUNT(*) AS paths FROM GRAPH_TABLE(graph_das_access MATCH (a IS item WHERE a.tenant=? AND a.id=?)-[e IS link]->{0,3}(b IS item WHERE b.kind=?) COLUMNS(b.id AS destination,COUNT(e.id) AS hops)) g';
+SET @graph_tenant=1,@graph_id=1,@graph_kind='node';
+EXECUTE graph_das_cached USING @graph_tenant,@graph_id,@graph_kind;
+paths
+5
+SET @graph_tenant=2,@graph_id=3;
+EXECUTE graph_das_cached USING @graph_tenant,@graph_id,@graph_kind;
+paths
+3
+SET @graph_tenant=1,@graph_id=1,@graph_kind='bridge';
+EXECUTE graph_das_cached USING @graph_tenant,@graph_id,@graph_kind;
+paths
+1
+SET @graph_kind='node';
+EXECUTE graph_das_cached USING @graph_tenant,@graph_id,@graph_kind;
+paths
+5
+DEALLOCATE PREPARE graph_das_cached;
+DROP PROPERTY GRAPH graph_das_access;
+DROP TABLE graph_das_edge,graph_das_vertex;

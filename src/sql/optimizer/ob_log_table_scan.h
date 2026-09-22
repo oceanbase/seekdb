@@ -1026,6 +1026,9 @@ public:
 
   bool is_scan_resumable() { return is_scan_resumable_; }
   void set_scan_resumable(bool value) { is_scan_resumable_ = value; }
+  bool needs_graph_vertex_lookup() const { return needs_graph_vertex_lookup_; }
+  void set_needs_graph_vertex_lookup(bool value)
+  { needs_graph_vertex_lookup_ = value; }
 private: // member functions
   //called when index_back_ set
   int pick_out_query_range_exprs();
@@ -1236,6 +1239,9 @@ protected: // memeber variables
 
   int64_t index_prefix_;
   bool is_scan_resumable_;
+  // Graph expansion validates endpoint existence with a primary-key lookup
+  // that is independent of the access path selected for this relational scan.
+  bool needs_graph_vertex_lookup_{false};
   // disallow copy and assign
   DISALLOW_COPY_AND_ASSIGN(ObLogTableScan);
 };
