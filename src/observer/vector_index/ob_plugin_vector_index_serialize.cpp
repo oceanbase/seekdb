@@ -289,22 +289,15 @@ int ObHNSWDeserializeCallback::CbParam::prepare_stream_size()
 {
   int ret = OB_SUCCESS;
   if (stream_size_valid_) {
-  } else if (OB_ISNULL(scan_param_) || OB_ISNULL(iter_) || OB_ISNULL(allocator_)
+  } else if (OB_ISNULL(size_iter_) || OB_ISNULL(iter_) || OB_ISNULL(allocator_)
              || OB_ISNULL(lob_read_options_)) {
     ret = OB_NOT_SUPPORTED;
   } else {
-    ObAccessService *access_service =
-        ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
-    ObNewRowIterator *size_iter = nullptr;
+    ObTableScanIterator *size_scan_iter = dynamic_cast<ObTableScanIterator *>(size_iter_);
     int64_t total_size = 0;
-    if (OB_ISNULL(access_service)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(access_service->table_scan(*scan_param_, size_iter))) {
+    if (OB_ISNULL(size_scan_iter)) {
+      ret = OB_NOT_SUPPORTED;
     } else {
-      ObTableScanIterator *size_scan_iter = dynamic_cast<ObTableScanIterator *>(size_iter);
-      if (OB_ISNULL(size_scan_iter)) {
-        ret = OB_NOT_SUPPORTED;
-      }
       int scan_ret = OB_SUCCESS;
       blocksstable::ObDatumRow *row = nullptr;
       while (OB_SUCC(ret) && OB_SUCC(scan_ret)
@@ -337,13 +330,6 @@ int ObHNSWDeserializeCallback::CbParam::prepare_stream_size()
       if (OB_SUCC(ret) && OB_FAIL(scan_ret)) {
         ret = scan_ret;
       }
-    }
-    if (OB_NOT_NULL(size_iter) && OB_NOT_NULL(access_service)) {
-      int tmp_ret = access_service->revert_scan_iter(size_iter);
-      if (OB_SUCCESS != tmp_ret && OB_SUCC(ret)) {
-        ret = tmp_ret;
-      }
-      size_iter = nullptr;
     }
     if (OB_SUCC(ret)) {
       stream_size_ = total_size;

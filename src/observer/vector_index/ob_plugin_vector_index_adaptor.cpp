@@ -3999,19 +3999,36 @@ int ObPluginVectorIndexAdaptor::deserialize_snap_data(ObVectorQueryConditions *q
   int ret = OB_SUCCESS;
   ObVectorIndexAlgorithmType index_type;
   ObString key_prefix;
-  ObTableScanIterator *table_scan_iter = static_cast<ObTableScanIterator *>(query_cond->row_iter_);
+  ObTableScanIterator *table_scan_iter = nullptr;
+  ObAccessService *tsc_service = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
+  common::ObNewRowIterator *snapshot_size_iter = nullptr;
+  storage::ObTableScanParam snapshot_size_scan_param;
   ObArenaAllocator tmp_allocator("VectorAdaptor", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObArenaAllocator allocator;
-  ObHNSWDeserializeCallback::CbParam param(
-      query_cond->row_iter_, &tmp_allocator, *query_cond->lob_read_options_, query_cond->scan_param_);
-  if (OB_ISNULL(table_scan_iter) || OB_ISNULL(query_cond)) {
+  ObArenaAllocator snapshot_size_allocator("VecSnapSize", OB_MALLOC_NORMAL_BLOCK_SIZE);
+  schema::ObTableParam snapshot_size_table_param(snapshot_size_allocator);
+  if (OB_ISNULL(query_cond)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FALSE_IT(table_scan_iter = static_cast<ObTableScanIterator *>(query_cond->row_iter_))) {
+  } else if (OB_ISNULL(table_scan_iter) || OB_ISNULL(query_cond->lob_read_options_)
+             || OB_ISNULL(query_cond->scan_param_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_ISNULL(row) || row->get_column_count() < 2) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ob_write_string(allocator, row->storage_datums_[0].get_string(), key_prefix))) {
-  } else if (OB_FAIL(param.prepare_stream_size())) {
+  } else if (OB_FAIL(ObPluginVectorIndexUtils::read_local_tablet(
+                         this,
+                         query_cond->query_scn_,
+                         INDEX_TYPE_VEC_INDEX_SNAPSHOT_DATA_LOCAL,
+                         snapshot_size_allocator,
+                         snapshot_size_allocator,
+                         snapshot_size_scan_param,
+                         snapshot_size_table_param,
+                         snapshot_size_iter))) {
   } else if (OB_FAIL(ObPluginVectorIndexUtils::iter_table_rescan(*query_cond->scan_param_, table_scan_iter))) {
   } else {
+    ObHNSWDeserializeCallback::CbParam param(
+        query_cond->row_iter_, &tmp_allocator, *query_cond->lob_read_options_, snapshot_size_iter);
     ObHNSWDeserializeCallback callback(static_cast<void*>(this));
     ObIStreamBuf::Callback cb = callback;
     ObVectorIndexSerializer index_seri(tmp_allocator);
@@ -4019,12 +4036,20 @@ int ObPluginVectorIndexAdaptor::deserialize_snap_data(ObVectorQueryConditions *q
     ObString target_prefix;
     if (!get_snapshot_key_prefix().empty() && key_prefix.prefix_match(get_snapshot_key_prefix()) && !snap_data_->rb_flag_) {
       // skip deserialize, already been deserialized by other concurrent thread
+    } else if (OB_FAIL(param.prepare_stream_size())) {
     } else if (OB_FAIL(index_seri.deserialize(snap_data_->index_, param, cb))) {
     } else if (OB_FAIL(obvectorutil::immutable_optimize(snap_data_->index_))) {
     } else if (OB_FALSE_IT(index_type = get_snap_index_type())) {
     } else if (OB_FAIL(ObPluginVectorIndexUtils::get_split_snapshot_prefix(index_type, key_prefix, target_prefix))) {
     } else if (OB_FAIL(set_snapshot_key_prefix(target_prefix))) {
     }
+  }
+  if (OB_NOT_NULL(snapshot_size_iter) && OB_NOT_NULL(tsc_service)) {
+    int tmp_ret = tsc_service->revert_scan_iter(snapshot_size_iter);
+    if (tmp_ret != OB_SUCCESS && OB_SUCC(ret)) {
+      ret = tmp_ret;
+    }
+    snapshot_size_iter = nullptr;
   }
   return ret;
 }

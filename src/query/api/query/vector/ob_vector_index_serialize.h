@@ -141,12 +141,12 @@ public:
     CbParam(ObNewRowIterator *iter,
             ObIAllocator *allocator,
             const common::ObLobReadOptions &lob_read_options,
-            storage::ObTableScanParam *scan_param = nullptr)
+            ObNewRowIterator *size_iter = nullptr)
       : iter_(iter),
         allocator_(allocator),
         lob_read_options_(&lob_read_options),
         str_iter_(nullptr),
-        scan_param_(scan_param),
+        size_iter_(size_iter),
         stream_size_(0),
         stream_size_valid_(false)
     {}
@@ -177,7 +177,7 @@ public:
     ObIAllocator *allocator_;
     const common::ObLobReadOptions *lob_read_options_;
     ObTextStringIter *str_iter_;
-    storage::ObTableScanParam *scan_param_;
+    ObNewRowIterator *size_iter_;
     int64_t stream_size_;
     bool stream_size_valid_;
   };

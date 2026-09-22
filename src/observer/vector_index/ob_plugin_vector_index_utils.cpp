@@ -643,8 +643,12 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
   ObAccessService *tsc_service = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   ObPluginVectorIndexService *vector_index_service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
   common::ObNewRowIterator *snapshot_idx_iter = nullptr;
+  common::ObNewRowIterator *snapshot_size_iter = nullptr;
   storage::ObTableScanParam snapshot_scan_param;
+  storage::ObTableScanParam snapshot_size_scan_param;
   schema::ObTableParam snapshot_table_param(allocator);
+  ObArenaAllocator snapshot_size_allocator("VecSnapSize", OB_MALLOC_NORMAL_BLOCK_SIZE);
+  schema::ObTableParam snapshot_size_table_param(snapshot_size_allocator);
   ObPluginVectorIndexAdaptor *new_adapter = nullptr;
   ObPluginVectorIndexMgr *vec_idx_mgr = nullptr;
   int64_t index_count = 0;
@@ -696,9 +700,18 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
       }
       ObArenaAllocator tmp_allocator("VectorAdaptor", OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObHNSWDeserializeCallback::CbParam param(
-          snapshot_idx_iter, &tmp_allocator, lob_read_options, &snapshot_scan_param);
+          snapshot_idx_iter, &tmp_allocator, lob_read_options, snapshot_size_iter);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ob_write_string(allocator, row->storage_datums_[0].get_string(), key_prefix))) {
+      } else if (OB_FAIL(read_local_tablet(new_adapter,
+                                          target_scn,
+                                          index_type,
+                                          snapshot_size_allocator,
+                                          snapshot_size_allocator,
+                                          snapshot_size_scan_param,
+                                          snapshot_size_table_param,
+                                          snapshot_size_iter))) {
+      } else if (OB_FALSE_IT(param.size_iter_ = snapshot_size_iter)) {
       } else if (OB_FAIL(param.prepare_stream_size())) {
       } else if (OB_FAIL(iter_table_rescan(snapshot_scan_param, table_scan_iter))) {
       } else {
@@ -753,6 +766,13 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
     if (tmp_ret != OB_SUCCESS) {
     }
     snapshot_idx_iter = nullptr;
+  }
+  if (OB_NOT_NULL(snapshot_size_iter) && OB_NOT_NULL(tsc_service)) {
+    int tmp_ret = tsc_service->revert_scan_iter(snapshot_size_iter);
+    if (tmp_ret != OB_SUCCESS && OB_SUCC(ret)) {
+      ret = tmp_ret;
+    }
+    snapshot_size_iter = nullptr;
   }
   return ret;
 }
