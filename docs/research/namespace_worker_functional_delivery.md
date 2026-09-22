@@ -292,3 +292,10 @@
   3. 判断：当前差距主体是原型开销（每查询版本探测、插桩、代理 TCP 参数、IPC 通道地板未调优），不是架构定论；但即使全部修掉，点查类负载的结构地板 = 每查询一次存储 IPC（优化到位估 50~100μs），对单体 130μs 的整语句耗时，最好情况约 1.5~2 倍差；扫描/批量类负载差距应显著更小。写路径（事务+redo 跨进程）是最大风险项，与此前设计判断一致。
   4. 待办（性能方向）：杀每查询版本探测（缓存+控制通道推送失效）、代理 TCP_NODELAY、IPC 地板排查（poll 超时/线程唤醒）、写路径批量化、并发串行点排查（8 线程仅 600 QPS，疑 session 池/通道锁）。sysbench 需 --db-ps-mode=disable，COM_STMT_EXECUTE 在代理/worker 路径报错（errno=0 空错）待修。
   5. 注意：vanilla_sysbench 是独立单体实例；a0_measure 继续跑 worker 模式；两者数据独立可反复对比。
+- 2026-09-22 每查询版本探测消除（四套件 PASS；a0_measure 实测）：
+  1. 语义拍板：会话内 read-your-own-DDL（session 水位 + 提交后同步追赶），会话间不强一致；worker 不追其他 worker 的 DDL（ns 的 schema 只被自己的 worker 改，`__all_ddl_operation` 按 ns 隔离）。
+  2. 改动三处：`ObMPBase::before_process` 删掉每查询 `refresh_and_add_schema(false)`（真凶：带全局 `schema_refresh_mutex_`，每查询全量刷新探测+串行化）；`ob_multi_version_schema_service` 三个版本访问器改本地读（guard stamp / runtime refreshed 去掉 remote IPC 分支），`get_published_schema_version` 故意保留 live probe（DDL 栅栏 `update_session_last_schema_version` 需要真实共享版本）；`process_schema_version_changes` 在 DDL 成功后 `async_refresh_schema(last_ddl_schema_version)` 同步追赶。
+  3. 实测（oltp_point_select 4×100k，ps-mode=disable）：worker 直连 1t 317→**1096 QPS**（3.15→0.91ms）、8t 600→**5472**（13.3→1.46ms），经代理 8t 280→**5000**（28.5→1.60ms），代理与直连已持平。对比单体基线 1t 7868/0.13ms、8t 53231/0.15ms：点查还差 7~10 倍，剩余是 IPC 通道结构地板。
+  4. DDL 栅栏实测通过：单会话 CREATE→INSERT→ALTER→SELECT 立即见新列；跨会话建表立即可见。
+  5. 测试锚点修复：探测消除后 sql_worker 套件 `run_timeouts` 失去 SCANS_RELEASED 打印来源（原来靠探测会话短命 ReadScans 析构）。改为 `ReadScans::process` 的 'X' close 分支每次关闭打印 `remaining=<关闭后剩余>`——取消关闭未耗尽 scan、慢客户端排空后关闭耗尽 scan 都能观测，与 V10_SCAN_OPEN 每 open 打印对称（均属插桩去留 TODO）。
+  6. obperf 采样（worker pid）：IPC 同步原语主导——cond_wait/broadcast 乒乓、malloc churn、gettimeofday 插桩、`PendingRequest::take`、`ObTxDesc` 每请求序列化。后续结构优化方向：通道批化/唤醒模型、事务描述复用、插桩剥离。

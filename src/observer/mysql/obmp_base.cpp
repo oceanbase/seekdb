@@ -97,11 +97,11 @@ int ObMPBase::before_process()
     THIS_WORKER.set_timeout_ts(INT64_MAX);
     ret = namespace_worker_prototype::begin_direct_request(get_conn()->sessid_, get_conn()->namespace_worker_binding_);
     if (ret) { send_error_packet(ret, nullptr); return ret; }
-    // Direct MySQL commands do not pass through the gateway executor's schema
-    // refresh. Advance this worker's one namespace cache before pinning the
-    // command guard, so a DDL is visible to the following command/session.
-    ret = gctx_.schema_service_->refresh_and_add_schema(false);
-    if (ret) { send_error_packet(ret, nullptr); return ret; }
+    // No per-command schema refresh here: a namespace's schema only advances
+    // through this worker's own DDL, which synchronously chases the committed
+    // version before replying (process_schema_version_changes), and each
+    // session is additionally fenced by its own DDL watermark.  Refreshing on
+    // every command put a full refresh probe on the hot query path.
   }
   process_timestamp_ = common::ObTimeUtility::current_time();
   return ret;

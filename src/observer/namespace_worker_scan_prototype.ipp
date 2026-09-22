@@ -583,7 +583,13 @@ struct ReadScans {
         else { it->second->rescan(request, reply); }
       }
       else if (!request.consumed() || it == scans.end()) { reply.number(OB_INVALID_ARGUMENT); }
-      else if (request.type() == 'X') { scans.erase(it); reply.number(0); }
+      else if (request.type() == 'X') {
+        scans.erase(it); reply.number(0);
+        // Tests observe scan release per close: cancellation closes unfinished
+        // scans, a drained slow client closes exhausted ones.  Both matter.
+        fprintf(stderr, "PROTOTYPE_V13_SCANS_RELEASED ns=%llu remaining=%zu\n",
+            (unsigned long long)ns, scans.size());
+      }
       else if (request.type() == 'F') { ret = it->second->fetch(reply); }
       else { reply.number(OB_NOT_SUPPORTED); }
     }

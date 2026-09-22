@@ -23,6 +23,7 @@
 #include "observer/mysql/obmp_query.h"
 #include "rpc/obmysql/packet/ompk_row.h"
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 
 namespace oceanbase
 {
@@ -211,6 +212,15 @@ int ObSyncCmdDriver::process_schema_version_changes(
     if (ObStmt::is_ddl_stmt(result.get_stmt_type(), result.has_global_variable())) {
       if (OB_FAIL(ObSQLUtils::update_session_last_schema_version(*gctx_.schema_service_,
                                                                  session_))) {
+      } else if (observer::namespace_worker_prototype::uses_remote_schema()
+                 && session_.get_last_ddl_schema_version() > 0) {
+        // The DDL already committed its metadata to shared storage.  Chase the
+        // version in this worker's local schema store before replying, so the
+        // next statement of any session on this worker observes the change.
+        if (OB_FAIL(gctx_.schema_service_->async_refresh_schema(
+                session_.get_last_ddl_schema_version()))) {
+          LOG_WARN("failed to chase the committed DDL schema version", KR(ret));
+        }
       }
     }
   }
