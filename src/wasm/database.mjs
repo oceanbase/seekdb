@@ -16,7 +16,9 @@ let cachedWasm;
 // WasmFS does not enforce file locks, so a Web Lock keeps the persistent
 // database to one instance per origin across tabs and windows.
 async function acquirePersistentLock() {
-  if (typeof navigator === 'undefined' || !navigator.locks) return () => {};
+  if (typeof navigator === 'undefined' || !navigator.locks) {
+    throw new Error('Persistent storage requires Web Locks support');
+  }
   let release;
   const held = new Promise(resolve => { release = resolve; });
   const granted = await new Promise((resolve, reject) => {
@@ -27,6 +29,25 @@ async function acquirePersistentLock() {
   });
   if (!granted) throw new Error('The persistent database is already open in another tab or window');
   return release;
+}
+
+async function clearStorageInWorker() {
+  const worker = new Worker(new URL('./storage-cleanup-worker.mjs', import.meta.url), {type: 'module'});
+  try {
+    await new Promise((resolve, reject) => {
+      worker.addEventListener('message', ({data}) => {
+        if (data.error) reject(restoreError(data.error));
+        else if (data.cleared) resolve();
+        else reject(new Error('The storage cleanup Worker returned an invalid response'));
+      });
+      const fail = event => reject(new Error(event.message ?? 'The storage cleanup Worker failed'));
+      worker.addEventListener('error', fail);
+      worker.addEventListener('messageerror', fail);
+      worker.postMessage({op: 'clear'});
+    });
+  } finally {
+    worker.terminate();
+  }
 }
 
 // Each open owns a fresh Worker/module; close awaits native destruction before
@@ -40,6 +61,11 @@ export class Database {
   #failure;
   #closing;
   #terminating;
+  #persistent;
+  #disposal;
+  #disposalPending = false;
+  #discarded = false;
+  #cleared = false;
 
   static async open({moduleURL, wasmURL, budgets, storage = 'memory', workerURL = new URL('./database-worker.mjs', import.meta.url),
     workerFactory = url => new Worker(url, {type: 'module'})} = {}) {
@@ -65,7 +91,7 @@ export class Database {
       }
       return db;
     } catch (error) {
-      if (db) await db.#terminate();
+      if (db) await db.#dispose();
       else release?.();
       throw error;
     }
@@ -77,16 +103,14 @@ export class Database {
     if (!persistentStorageAvailable()) throw new Error('This browser does not offer persistent storage (OPFS)');
     const release = await acquirePersistentLock();
     try {
-      const root = await navigator.storage.getDirectory();
-      const names = [];
-      for await (const name of root.keys()) names.push(name);
-      for (const name of names) await root.removeEntry(name, {recursive: true});
+      await clearStorageInWorker();
     } finally { release(); }
   }
 
   constructor(worker, release) {
     this.#worker = worker;
     this.#release = release;
+    this.#persistent = release !== undefined;
     const message = data => {
       if (data.fatal) { this.#fatal(restoreError(data.fatal)); return; }
       const pending = this.#requests.get(data.id);
@@ -116,13 +140,34 @@ export class Database {
   }
 
   #terminate() {
-    this.#terminating ??= Promise.resolve().then(() => this.#worker.terminate()).finally(() => this.#release?.());
+    this.#terminating ??= Promise.resolve().then(() => this.#worker.terminate());
     return this.#terminating;
+  }
+
+  #dispose() {
+    if (!this.#disposal) {
+      this.#disposalPending = true;
+      this.#disposal = (async () => {
+        try {
+          await this.#terminate();
+          if (this.#discarded && this.#persistent && !this.#cleared) {
+            this.#release ??= await acquirePersistentLock();
+            await clearStorageInWorker();
+          }
+          if (this.#discarded) this.#cleared = true;
+          this.#release?.();
+          this.#release = undefined;
+        } finally {
+          this.#disposalPending = false;
+        }
+      })();
+    }
+    return this.#disposal;
   }
 
   #fatal(error) {
     this.#fail(error);
-    void this.#terminate().catch(() => {});
+    void this.#dispose().catch(() => {});
   }
 
   #request(op, body = {}) {
@@ -138,6 +183,8 @@ export class Database {
   async connect(options) {
     if (this.#closing) throw new Error('Database is closing');
     const session = await this.#request('connect', {options});
+    if (this.#failure) throw this.#failure;
+    if (this.#closing) throw new Error('Database is closing');
     let closed = false;
     let busy = false;
     let disconnecting;
@@ -150,7 +197,7 @@ export class Database {
       // Events contain owned Uint8Array fields and BigInt counters, preserved by
       // structured clone. One pull yields a bounded batch of events.
       async *query(sql, {signal, preview} = {}) {
-        if (closed) throw new Error('Session is closed');
+        checkOpen();
         if (busy) throw new Error('Session already has an active query');
         if (typeof sql !== 'string') throw new TypeError('SQL must be a string');
         signal?.throwIfAborted();
@@ -174,6 +221,7 @@ export class Database {
               checkOpen();
               yield event;
             }
+            checkOpen();
             if (result.done) { done = true; return; }
           }
         } catch (error) {
@@ -199,13 +247,21 @@ export class Database {
   }
 
   close() {
+    if (this.#discarded) return this.#dispose();
     if (!this.#closing) this.#closing = (async () => {
       try { await this.#request('close'); }
       finally {
         this.#fail(new Error('Database is closed'));
-        await this.#terminate();
+        await this.#dispose();
       }
     })();
     return this.#closing;
+  }
+
+  discard() {
+    this.#discarded = true;
+    this.#fail(new Error('Database was discarded'));
+    if (!this.#disposalPending && !this.#cleared) this.#disposal = undefined;
+    return this.#dispose();
   }
 }

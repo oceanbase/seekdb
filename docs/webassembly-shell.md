@@ -103,13 +103,16 @@ whether its data survives depends on the storage mode below.
 
 ### Storage
 
+The shell opens the `test` database by default, creating it if it is missing.
+
 The shell remembers the last successfully opened storage mode for this origin.
 Reloading or reopening the page restores that mode. OPFS reopens its existing
 database; Memory starts empty. If no mode has been saved, the shell checks for
 an existing OPFS database and reopens it, or starts in Memory when none exists.
 OPFS can be selected when the browser supports both OPFS and Web Locks.
 Choose **Memory** or **OPFS** from **New Instance** to clear terminal output,
-close the current engine, discard its data, and start an empty database in that mode.
+terminate the current engine's Worker, discard its data, and start an empty
+database in that mode. This action does not wait for native graceful shutdown.
 SQL input stays disabled until the new instance is ready.
 Selecting the current mode also creates a new instance. Creating an OPFS instance
 clears any previously stored database; leaving a running OPFS instance for Memory
@@ -254,6 +257,14 @@ owns the database runtime. Emscripten pthreads run engine work, while the existi
 JavaScript API streams column, row, and completion events back to the shell.
 The shell uses the real engine; startup failures are displayed as errors.
 
+During Wasm startup, internal SQL on the main thread and the bootstrap partition
+thread uses a five-minute deadline for each startup scope instead of the default
+30-second internal SQL timeout. An existing shorter deadline is preserved.
+These contexts are released before the shell accepts SQL; normal session and
+internal SQL timeout settings are unchanged. This accommodates slower browser
+scheduling, but is not a five-minute limit on the entire startup or a guarantee
+against failures after a long browser suspension.
+
 Worker responses batch up to 64 events and 256 KiB of field bytes, with a 4 ms
 flush deadline after the first available event. An indivisible event can exceed
 the byte limit, subject to the existing protocol packet limits. The public
@@ -266,7 +277,7 @@ The shell uses this option while the Worker drains undisplayed rows.
 The shell supplies both `moduleURL` and `wasmURL` to `Database.open()`. This keeps
 one compiled `WebAssembly.Module` in the page, keyed by both URLs, for later
 instances. New Instance still creates fresh memory, Workers, and an engine after
-closing the previous one and clearing its data. Reloading the page clears this
+discarding the previous one and clearing its data. Reloading the page clears this
 in-page reference; release HTTP caching applies independently. API callers that
 omit `wasmURL` retain the generated loader's default behavior.
 
@@ -282,6 +293,29 @@ Chrome; a durable commit contract on OPFS is not established yet.
 server, TCP connection, or SQL API service is required. The adapter that lets
 the engine run on OPFS, and what it does not cover, is described in
 [webassembly.md](webassembly.md#storage-modes-and-the-wasmfs-adapter).
+
+`Database.close()` waits for native shutdown and keeps OPFS data.
+`Database.discard()` rejects pending requests and asks the browser to terminate
+the runtime Worker and its nested pthread Workers. For OPFS, it holds the Web Lock while a separate
+cleanup Worker waits for file handles to be released and removes the stored
+files. New Instance uses this destructive operation because its data is being
+discarded. Cleanup errors prevent a replacement instance from starting and can
+be retried through New Instance. A successful discard is not a native graceful
+shutdown or an `onExit(0)` acknowledgement, and the browser does not provide a
+Worker termination completion event. The cleanup Worker's 15-second limit
+applies to retries for locked files, not to browser suspension or the total
+duration of storage operations.
+
+The Wasm build splits positive and `INFINITY` Emscripten futex waits into waits
+of at most one second, calling an empty JavaScript import after each timeout. Safari 27.0
+(22625.1.29.11.27) can otherwise leave a terminated Worker blocked in Wasm
+`atomic.wait`, including loops that retry finite waits. The JavaScript call
+allows Safari to process the termination request. Finite waits retain their
+original total timeout; normal wake and value-mismatch results are returned
+unchanged. This covers the SDK futex path, not the linker's shared-memory
+initialization wait, and is not an event-loop yield. File-handle probes accept
+both `NoModificationAllowedError` and Safari's `InvalidStateError` while waiting
+for exclusive OPFS access, with bounded retries that preserve the final error.
 
 The current engine uses a 512 MiB initial Wasm memory, can grow to 2 GiB, and
 prewarms 64 pthread workers. These build settings make the shell most suitable

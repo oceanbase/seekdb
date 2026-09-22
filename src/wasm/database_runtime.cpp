@@ -3,6 +3,7 @@
 // main runs on an Emscripten pthread so filesystem proxies can make progress.
 #include "observer/ob_server.h"
 #include "observer/ob_server_options.h"
+#include "common/ob_timeout_ctx.h"
 #include "lib/oblog/ob_warning_buffer.h"
 #include "lib/resource/achunk_mgr.h"
 #include "lib/worker.h"
@@ -122,8 +123,15 @@ int main(int argc, char **argv)
   lib::Worker worker;
   lib::Worker::set_worker_to_thread_local(&worker);
   auto &server = observer::ObServer::get_instance();
-  int ret = server.init(options, log_config);
-  if (ret == OB_SUCCESS) ret = server.start();
+  int ret = OB_SUCCESS;
+  {
+    ObTimeoutCtx startup_timeout;
+    if (!startup_timeout.is_timeout_set()) {
+      ret = startup_timeout.set_timeout(5LL * 60 * 1000000);
+    }
+    if (ret == OB_SUCCESS) ret = server.init(options, log_config);
+    if (ret == OB_SUCCESS) ret = server.start();
+  }
   const bool started = ret == OB_SUCCESS;
   if (started) {
     state.store(closing.load(std::memory_order_acquire) ? CLOSING : READY, std::memory_order_release);

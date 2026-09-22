@@ -42,16 +42,19 @@ async function waitForUnlockedFiles(deadline = 3000) {
   const until = Date.now() + deadline;
   for (const file of files) {
     for (;;) {
+      let access;
       try {
-        (await file.createSyncAccessHandle()).close();
-        break;
+        access = await file.createSyncAccessHandle();
       } catch (error) {
-        if (error?.name !== 'NoModificationAllowedError') {
+        if (!['NoModificationAllowedError', 'InvalidStateError'].includes(error?.name)) {
           throw new Error(`Stored database file ${file.name} cannot be opened: ${error?.message ?? error}`);
         }
-        if (Date.now() >= until) throw new Error(`Stored database file ${file.name} is locked by another page`);
+        if (Date.now() >= until) throw new Error(`Stored database file ${file.name} did not become available: ${error.name}: ${error.message}`);
         await new Promise(resolve => setTimeout(resolve, 100));
+        continue;
       }
+      access.close();
+      break;
     }
   }
 }

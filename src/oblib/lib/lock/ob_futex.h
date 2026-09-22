@@ -81,13 +81,15 @@ inline int futex_wait(volatile int *p, int val, const timespec *timeout)
   double milliseconds = std::numeric_limits<double>::infinity();
   if (timeout != nullptr) {
     // The SDK converts milliseconds to signed 64-bit nanoseconds. Reject
-    // invalid or unrepresentable intervals instead of turning them infinite.
-    if (timeout->tv_sec < 0 || timeout->tv_nsec < 0 || timeout->tv_nsec >= 1000000000
-        || timeout->tv_sec >= INT64_MAX / 1000000000) {
+    // invalid intervals before converting them.
+    if (timeout->tv_sec < 0 || timeout->tv_nsec < 0 || timeout->tv_nsec >= 1000000000) {
       return EINVAL;
     }
     milliseconds = static_cast<double>(timeout->tv_sec) * 1000.0
                  + static_cast<double>(timeout->tv_nsec) / 1000000.0;
+    if (milliseconds * 1000.0 * 1000.0 >= static_cast<double>(INT64_MAX)) {
+      milliseconds = std::numeric_limits<double>::infinity();
+    }
   }
   // Emscripten returns negative errno; seekdb's wait wrapper uses positive errno.
   return -emscripten_futex_wait(p, static_cast<uint32_t>(val), milliseconds);

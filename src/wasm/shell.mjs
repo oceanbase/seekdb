@@ -39,7 +39,7 @@ let database;
 let session;
 let SqlError;
 let state = 'loading';
-let currentDatabase = 'oceanbase';
+let currentDatabase = 'test';
 let sqlOptions = {};
 let controller;
 let operationStarted;
@@ -303,17 +303,34 @@ async function executeStatement(sql, signal, {entry = commandOutput(sql), vertic
   }
 }
 
+async function connectDefaultSession() {
+  try {
+    return await database.connect({database: 'test'});
+  } catch (error) {
+    if (!(error instanceof SqlError) || error.code !== 1049) throw error;
+  }
+  const connection = await database.connect();
+  try {
+    for await (const event of connection.query('CREATE DATABASE IF NOT EXISTS `test`')) {}
+    for await (const event of connection.query('USE `test`')) {}
+    return connection;
+  } catch (error) {
+    await connection.close().catch(() => {});
+    throw error;
+  }
+}
+
 async function reconnectSession() {
   await session?.close().catch(() => {});
   session = undefined;
   try {
-    session = await database.connect(currentDatabase ? {database: currentDatabase} : undefined);
+    session = await (currentDatabase ? database.connect({database: currentDatabase}) : connectDefaultSession());
   } catch (error) {
     if (!(error instanceof SqlError) || error.code !== 1049) throw error;
-    currentDatabase = 'oceanbase';
-    session = await database.connect();
+    currentDatabase = 'test';
+    session = await connectDefaultSession();
   }
-  if (currentDatabase === null) currentDatabase = 'oceanbase';
+  if (currentDatabase === null) currentDatabase = 'test';
   sqlOptions = {};
   await updateVersion();
 }
@@ -499,8 +516,8 @@ async function openDatabase() {
     const module = await import('./database.mjs');
     SqlError = module.SqlError;
     database = await module.Database.open({moduleURL: new URL('./seekdb_wasm_database.mjs', import.meta.url), wasmURL: new URL('./seekdb_wasm_database.wasm', import.meta.url), storage});
-    currentDatabase = 'oceanbase';
-    session = await database.connect({database: currentDatabase});
+    currentDatabase = 'test';
+    session = await connectDefaultSession();
     await updateVersion();
     sqlOptions = {};
     try { localStorage.setItem(STORAGE_KEY, storage); } catch {}
@@ -518,19 +535,6 @@ async function openDatabase() {
     notice(`Could not start seekdb: ${error.message}\n${hint}`, true);
     setState('error', 'Startup failed');
     return false;
-  }
-}
-
-async function closeDatabase() {
-  const persistent = storage === 'opfs';
-  setState('closing', persistent ? 'Closing the database…' : 'Closing the in-memory database…');
-  try {
-    await database.close();
-  } catch (error) {
-    notice(`Database closed with an error: ${error.message}`, true);
-  } finally {
-    database = undefined;
-    session = undefined;
   }
 }
 
@@ -570,14 +574,22 @@ async function createInstance(mode) {
   pendingStorage = mode;
   resetInputBuffer();
   delimiter = ';';
-  persistentClearPending ||= mode === 'opfs' || Boolean(database && storage === 'opfs');
+  persistentClearPending ||= Boolean(database && storage === 'opfs');
   replaceOutput();
   followOutput = true;
   setInput('');
-  if (database) await closeDatabase();
-  setState('loading', 'Clearing data and creating a new instance…');
   try {
-    if (persistentClearPending) {
+    let clearedPersistent = false;
+    if (database) {
+      setState('closing', 'Discarding the previous database…');
+      session = undefined;
+      await database.discard();
+      database = undefined;
+      clearedPersistent = storage === 'opfs';
+      if (clearedPersistent) persistentClearPending = false;
+    }
+    setState('loading', 'Clearing data and creating a new instance…');
+    if ((mode === 'opfs' || persistentClearPending) && !clearedPersistent) {
       const {Database} = await import('./database.mjs');
       await Database.clearPersistentStorage();
       persistentClearPending = false;

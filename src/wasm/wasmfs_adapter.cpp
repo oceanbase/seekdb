@@ -11,6 +11,7 @@
 #include <cstring>
 #include <dirent.h>
 #include <fcntl.h>
+#include <mutex>
 #include <string>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -27,6 +28,7 @@ constexpr const char *MOVE_JOURNAL = "/seekdb/.move";
 std::atomic<int> reported{0};
 char working_directory[4096] = {0};
 std::atomic<bool> working_directory_known{false};
+std::mutex directory_move_mutex;
 
 void report(const char *name, long ret, const char *path, long fd)
 {
@@ -49,6 +51,9 @@ bool wal_index_file(const char *path)
 int move_directory_tree(const std::string &from, const std::string &to)
 {
   if (mkdir(to.c_str(), 0755) != 0 && errno != EEXIST) return -errno;
+  struct stat destination;
+  if (stat(to.c_str(), &destination) != 0) return -errno;
+  if (!S_ISDIR(destination.st_mode)) return -ENOTDIR;
   std::vector<std::string> names;
   DIR *dir = opendir(from.c_str());
   if (dir == nullptr) return -errno;
@@ -65,8 +70,10 @@ int move_directory_tree(const std::string &from, const std::string &to)
     if (S_ISDIR(info.st_mode)) {
       const int ret = move_directory_tree(source, target);
       if (ret != 0) return ret;
-    } else if (rename(source.c_str(), target.c_str()) != 0) {
-      return -errno;
+    } else {
+      if (lstat(target.c_str(), &info) == 0) return -EEXIST;
+      if (errno != ENOENT) return -errno;
+      if (rename(source.c_str(), target.c_str()) != 0) return -errno;
     }
   }
   return rmdir(from.c_str()) == 0 ? 0 : -errno;
@@ -74,33 +81,59 @@ int move_directory_tree(const std::string &from, const std::string &to)
 
 bool record_move(const char *from, const char *to)
 {
-  const int fd = open(MOVE_JOURNAL, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  const int fd = open(MOVE_JOURNAL, O_WRONLY | O_CREAT | O_EXCL, 0644);
   if (fd < 0) return false;
   const std::string record = std::string(from) + "\n" + to + "\n";
   const bool written = write(fd, record.data(), record.size()) == static_cast<ssize_t>(record.size()) && fsync(fd) == 0;
   close(fd);
+  if (!written) unlink(MOVE_JOURNAL);
   return written;
 }
 
-void finish_recorded_move()
+int read_recorded_move(std::string &from, std::string &to)
 {
   const int fd = open(MOVE_JOURNAL, O_RDONLY);
-  if (fd < 0) return;
+  if (fd < 0) return -errno;
   char buffer[8192];
-  const ssize_t length = read(fd, buffer, sizeof(buffer) - 1);
+  ssize_t length;
+  do {
+    length = read(fd, buffer, sizeof(buffer));
+  } while (length < 0 && errno == EINTR);
+  const int error = length < 0 ? errno : 0;
   close(fd);
-  std::string record(buffer, length > 0 ? static_cast<size_t>(length) : 0);
+  if (error != 0) return -error;
+  if (length == sizeof(buffer)) return -EOVERFLOW;
+  const std::string record(buffer, static_cast<size_t>(length));
   const size_t first = record.find('\n');
   const size_t second = first == std::string::npos ? std::string::npos : record.find('\n', first + 1);
-  int ret = 0;
-  if (first != std::string::npos && second != std::string::npos) {
-    const std::string from = record.substr(0, first);
-    const std::string to = record.substr(first + 1, second - first - 1);
-    struct stat info;
-    if (stat(from.c_str(), &info) == 0 && S_ISDIR(info.st_mode)) ret = move_directory_tree(from, to);
-    std::fprintf(stderr, "seekdb-runtime: finished recorded directory move %s -> %s: %d\n", from.c_str(), to.c_str(), ret);
+  if (first == std::string::npos || first == 0 || second == std::string::npos
+      || second == first + 1 || second + 1 != record.size()) return -EINVAL;
+  from = record.substr(0, first);
+  to = record.substr(first + 1, second - first - 1);
+  return 0;
+}
+
+int finish_recorded_move()
+{
+  std::lock_guard<std::mutex> lock(directory_move_mutex);
+  std::string from;
+  std::string to;
+  int ret = read_recorded_move(from, to);
+  if (ret == -ENOENT) return 0;
+  if (ret != 0) return ret;
+  struct stat info;
+  if (lstat(from.c_str(), &info) == 0) {
+    ret = S_ISDIR(info.st_mode) ? move_directory_tree(from, to) : -ENOTDIR;
+  } else if (errno != ENOENT) {
+    ret = -errno;
+  } else if (lstat(to.c_str(), &info) != 0) {
+    ret = -errno;
+  } else if (!S_ISDIR(info.st_mode)) {
+    ret = -ENOTDIR;
   }
-  if (ret == 0) unlink(MOVE_JOURNAL);
+  if (ret == 0 && unlink(MOVE_JOURNAL) != 0) ret = -errno;
+  std::fprintf(stderr, "seekdb-runtime: finished recorded directory move %s -> %s: %d\n", from.c_str(), to.c_str(), ret);
+  return ret;
 }
 }
 
@@ -126,8 +159,7 @@ bool seekdb_mount_storage(bool persistent)
   const int ret = wasmfs_create_directory("/seekdb", 0777, backend);
   std::fprintf(stderr, "seekdb-runtime: OPFS mounted at /seekdb, status %d\n", ret);
   if (ret != 0) return false;
-  finish_recorded_move();
-  return true;
+  return finish_recorded_move() == 0;
 }
 
 extern "C" {
@@ -244,13 +276,27 @@ int __wrap___syscall_fcntl64(int fd, int cmd, ...)
 int __wrap___syscall_renameat(int olddirfd, intptr_t oldpath, int newdirfd, intptr_t newpath)
 {
   int ret = __real___syscall_renameat(olddirfd, oldpath, newdirfd, newpath);
-  if (ret == -EBUSY && text(oldpath)[0] == '/' && text(newpath)[0] == '/') {
+  if ((ret == -EBUSY || ret == -ENOTEMPTY) && text(oldpath)[0] == '/' && text(newpath)[0] == '/') {
     struct stat info;
     if (stat(text(oldpath), &info) == 0 && S_ISDIR(info.st_mode)) {
-      const bool recorded = record_move(text(oldpath), text(newpath));
-      ret = move_directory_tree(text(oldpath), text(newpath));
-      if (recorded && ret == 0) unlink(MOVE_JOURNAL);
-      std::fprintf(stderr, "seekdb-runtime: emulated directory move %s -> %s: %d\n", text(oldpath), text(newpath), ret);
+      std::lock_guard<std::mutex> lock(directory_move_mutex);
+      std::string from;
+      std::string to;
+      int journal_ret = read_recorded_move(from, to);
+      if (journal_ret == 0 && lstat(from.c_str(), &info) != 0 && errno == ENOENT
+          && lstat(to.c_str(), &info) == 0 && S_ISDIR(info.st_mode)
+          && unlink(MOVE_JOURNAL) == 0) {
+        journal_ret = -ENOENT;
+      }
+      bool recorded = journal_ret == 0 && from == text(oldpath) && to == text(newpath);
+      if (!recorded && ret == -EBUSY && journal_ret == -ENOENT) {
+        recorded = record_move(text(oldpath), text(newpath));
+      }
+      if (recorded) {
+        ret = move_directory_tree(text(oldpath), text(newpath));
+        if (ret == 0) unlink(MOVE_JOURNAL);
+        std::fprintf(stderr, "seekdb-runtime: emulated directory move %s -> %s: %d\n", text(oldpath), text(newpath), ret);
+      }
     }
   }
   if (ret < 0) {

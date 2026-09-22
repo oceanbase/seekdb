@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[2]
 GENERATED_ASSETS = ("seekdb_wasm_database.mjs", "seekdb_wasm_database.wasm", "engine-version.mjs")
 SOURCE_ASSETS = (
     "shell.html", "shell.css", "shell.mjs", "shell-sql.mjs", "shell-examples.mjs", "shell-format.mjs", "database.mjs",
-    "database-worker.mjs", "worker-server.mjs", "runtime-host.mjs",
+    "database-worker.mjs", "storage-cleanup-worker.mjs", "worker-server.mjs", "runtime-host.mjs",
     "mysql-client.mjs", "mysql-transport.mjs", "mysql-wire.mjs", "mysql-auth.mjs",
 )
 

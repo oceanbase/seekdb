@@ -51,6 +51,18 @@ if(EMSCRIPTEN)
   add_test(NAME wasm_chunked_memory_backend COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR}
     "$<TARGET_FILE:test_chunked_memory_backend>")
   set_tests_properties(wasm_chunked_memory_backend PROPERTIES TIMEOUT 30)
+
+  add_executable(test_wasmfs_directory_move test_wasmfs_directory_move.cpp)
+  target_compile_features(test_wasmfs_directory_move PRIVATE cxx_std_20)
+  target_include_directories(test_wasmfs_directory_move PRIVATE
+    "${EMSCRIPTEN_ROOT_PATH}/system/lib/wasmfs")
+  target_compile_options(test_wasmfs_directory_move PRIVATE -pthread -UNDEBUG)
+  target_link_options(test_wasmfs_directory_move PRIVATE
+    -pthread -sWASMFS -sENVIRONMENT=node -sEXIT_RUNTIME=1 -sASSERTIONS=2
+    -Wl,--wrap=__syscall_renameat -Wl,--wrap=write -Wl,--wrap=fsync -Wl,--wrap=unlink)
+  add_test(NAME wasmfs_directory_move COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR}
+    "$<TARGET_FILE:test_wasmfs_directory_move>")
+  set_tests_properties(wasmfs_directory_move PROPERTIES TIMEOUT 20)
 endif()
 
 add_executable(test_wasm_charset_integer test_wasm_charset_integer.cpp
@@ -201,17 +213,31 @@ add_test(NAME wasm_stack COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR}
 set_tests_properties(wasm_stack PROPERTIES TIMEOUT 60)
 
 add_executable(test_wasm_futex test_wasm_futex.cpp
-  "${SEEKDB_ROOT}/src/oblib/lib/lock/ob_futex.cpp")
+  "${SEEKDB_ROOT}/src/oblib/lib/lock/ob_futex.cpp"
+  "${SEEKDB_ROOT}/src/wasm/futex_wait_adapter.cpp")
 target_compile_features(test_wasm_futex PRIVATE cxx_std_20)
 target_compile_options(test_wasm_futex PRIVATE -pthread -UNDEBUG)
 target_include_directories(test_wasm_futex PRIVATE
   "${SEEKDB_ROOT}/src/oblib" "${SEEKDB_ROOT}/src/oblib/easy/include")
 target_link_options(test_wasm_futex PRIVATE
   -pthread -sPTHREAD_POOL_SIZE=3 -sPTHREAD_POOL_SIZE_STRICT=2
-  -sEXIT_RUNTIME=1 -sASSERTIONS=2 -sSTACK_SIZE=1048576)
+  -sEXIT_RUNTIME=1 -sASSERTIONS=2 -sSTACK_SIZE=1048576
+  -Wl,--wrap=emscripten_futex_wait)
 add_test(NAME wasm_futex COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR}
   "$<TARGET_FILE:test_wasm_futex>")
 set_tests_properties(wasm_futex PROPERTIES TIMEOUT 30)
+
+add_executable(test_wasm_futex_wait test_wasm_futex_wait.cpp
+  "${SEEKDB_ROOT}/src/wasm/futex_wait_adapter.cpp")
+target_compile_features(test_wasm_futex_wait PRIVATE cxx_std_20)
+target_compile_options(test_wasm_futex_wait PRIVATE -pthread -UNDEBUG)
+target_link_options(test_wasm_futex_wait PRIVATE
+  -pthread -sPTHREAD_POOL_SIZE=4 -sPTHREAD_POOL_SIZE_STRICT=2
+  -sEXIT_RUNTIME=1 -sASSERTIONS=2 -sSTACK_SIZE=1048576
+  -Wl,--wrap=emscripten_futex_wait -Wl,--wrap=seekdb_wasm_wait_checkpoint)
+add_test(NAME wasm_futex_wait COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR}
+  "$<TARGET_FILE:test_wasm_futex_wait>")
+set_tests_properties(wasm_futex_wait PROPERTIES TIMEOUT 30)
 
 add_library(test_wasm_allocator_compile OBJECT
   "${SEEKDB_ROOT}/src/oblib/lib/resource/achunk_mgr.cpp"

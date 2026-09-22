@@ -3,6 +3,7 @@
 # WasmFS provides both storage modes: its memory backend by default, and the
 # origin private file system mounted at the data directory on request.
 add_executable(seekdb_wasm_database EXCLUDE_FROM_ALL "${SEEKDB_ROOT}/src/wasm/database_runtime.cpp"
+  "${SEEKDB_ROOT}/src/wasm/futex_wait_adapter.cpp"
   "${SEEKDB_ROOT}/src/wasm/wasmfs_adapter.cpp"
   "${SEEKDB_ROOT}/src/wasm/wasmfs_fd_adapter.cpp"
   "${SEEKDB_ROOT}/src/wasm/chunked_memory_backend.cpp")
@@ -13,7 +14,7 @@ target_compile_definitions(seekdb_wasm_database PRIVATE SEEKDB_WASMFS=1)
 set_target_properties(seekdb_wasm_database PROPERTIES SUFFIX ".mjs")
 # Keep the deployable JS facade and Worker next to the generated module/Wasm.
 # configure_file also makes source updates trigger CMake regeneration.
-set(seekdb_wasm_modules database database-worker worker-server runtime-host mysql-client mysql-transport
+set(seekdb_wasm_modules database database-worker storage-cleanup-worker worker-server runtime-host mysql-client mysql-transport
   mysql-wire mysql-auth shell shell-sql shell-examples shell-format)
 foreach(module ${seekdb_wasm_modules})
   configure_file("${SEEKDB_ROOT}/src/wasm/${module}.mjs" "${CMAKE_CURRENT_BINARY_DIR}/${module}.mjs" COPYONLY)
@@ -35,6 +36,7 @@ set(seekdb_wasm_database_link_options
   -sPTHREAD_POOL_SIZE=64 -sPTHREAD_POOL_SIZE_STRICT=2 -sDEFAULT_PTHREAD_STACK_SIZE=1048576
   -sINITIAL_MEMORY=536870912 -sALLOW_MEMORY_GROWTH=1 -sMAXIMUM_MEMORY=2147483648
   -sSTACK_SIZE=2097152 -sASSERTIONS=2 -sEXIT_RUNTIME=1 -Wl,--error-limit=0
+  -Wl,--wrap=emscripten_futex_wait
   "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_nio_memory_read','_nio_memory_write','_nio_memory_close']"
   "-sEXPORTED_RUNTIME_METHODS=['HEAPU8','getValue']")
 # wasmfs_adapter.cpp wraps these calls to adjust WasmFS behavior and report failures.
@@ -64,7 +66,8 @@ set_tests_properties(wasmfs_fd_adapter PROPERTIES TIMEOUT 20)
 
 # The same engine on the legacy JavaScript file system, in-memory mode only,
 # kept for comparison. Serve it with --build-dir build_wasm_engine/memfs.
-add_executable(seekdb_wasm_database_memfs EXCLUDE_FROM_ALL "${SEEKDB_ROOT}/src/wasm/database_runtime.cpp")
+add_executable(seekdb_wasm_database_memfs EXCLUDE_FROM_ALL "${SEEKDB_ROOT}/src/wasm/database_runtime.cpp"
+  "${SEEKDB_ROOT}/src/wasm/futex_wait_adapter.cpp")
 target_link_libraries(seekdb_wasm_database_memfs PRIVATE ${seekdb_wasm_database_libraries})
 set_target_properties(seekdb_wasm_database_memfs PROPERTIES SUFFIX ".mjs" OUTPUT_NAME seekdb_wasm_database
   RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/memfs")
