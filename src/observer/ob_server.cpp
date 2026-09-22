@@ -820,6 +820,9 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
     if (OB_SUCC(ret) && OB_FAIL(init_local_management_service(need_initialize))) {
       LOG_ERROR("init local management service failed", KR(ret));
     }
+    if (OB_SUCC(ret) && OB_FAIL(init_namespace_registry())) {
+      LOG_ERROR("init namespace registry failed", KR(ret));
+    }
     if (OB_SUCC(ret) && OB_FAIL(init_sql())) {
       LOG_ERROR("init sql failed", KR(ret));
     }
@@ -2311,6 +2314,54 @@ int ObServer::init_schema()
     probe_second_schema_service();
   }
 
+  return ret;
+}
+
+// Issue 03 (Phase 1a): create the namespace boundary objects. The system
+// namespace (ns 1) is the bootstrap namespace, so it exists as soon as the
+// schema service does; there is no forked namespace yet. The runtime carries the
+// injected schema service until issue 04 gives it the per-namespace instance.
+int ObServer::init_namespace_registry()
+{
+  int ret = OB_SUCCESS;
+  const common::ObString sys_name = common::ObString::make_string("sys");
+  if (OB_FAIL(namespace_registry_.init())) {
+    LOG_WARN("init namespace registry failed", KR(ret));
+  } else if (FALSE_IT(namespace_system_ = namespace_fork::Namespace(
+                 namespace_fork::SYSTEM_NAMESPACE_ID, sys_name, 0 /* parent */, 0 /* fork scn */))) {
+  } else if (OB_FAIL(namespace_registry_.register_namespace(namespace_system_, namespace_system_runtime_))) {
+    LOG_WARN("register system namespace failed", KR(ret));
+  } else {
+    namespace_system_runtime_.set_schema_service(&schema_service_);
+    LOG_INFO("namespace registry initialized",
+             "namespace_count", namespace_registry_.count(),
+             "system_namespace_id", namespace_system_.get_id());
+  }
+  return ret;
+}
+
+// A worker process serves one namespace for its whole life. Register it so that
+// every session created in this process binds to the same runtime; the
+// authoritative namespace name lives in the system namespace's control
+// metadata, so a non-default namespace registers by id only. The default (system)
+// namespace is already registered by init_namespace_registry, so this is a no-op
+// for it.
+int ObServer::register_worker_namespace(const uint64_t ns_id)
+{
+  int ret = OB_SUCCESS;
+  namespace_fork::NamespaceRuntime *existing = nullptr;
+  if (OB_SUCC(namespace_registry_.get_runtime(ns_id, existing)) && OB_NOT_NULL(existing)) {
+    namespace_worker_runtime_.set_schema_service(&schema_service_);
+  } else {
+    ret = OB_SUCCESS;
+    if (OB_FAIL(namespace_registry_.register_namespace(
+            ns_id, common::ObString(), 0 /* parent */, namespace_worker_runtime_))) {
+      LOG_WARN("register worker namespace failed", KR(ret), K(ns_id));
+    } else {
+      namespace_worker_runtime_.set_schema_service(&schema_service_);
+      LOG_INFO("PROTOTYPE_NAMESPACE_WORKER_REGISTERED", K(ns_id));
+    }
+  }
   return ret;
 }
 

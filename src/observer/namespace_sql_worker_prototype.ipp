@@ -137,6 +137,10 @@ int ObServer::namespace_sql_worker_prototype(const char *query)
   WORKER_STEP(ObAutoincrementService::get_instance().init(&sql_proxy_));
   WORKER_STEP(schema_status_proxy_.init());
   WORKER_STEP(init_schema());
+  // Single-process namespace boundary (issue 03): the worker binds every session
+  // it serves to its own namespace runtime.
+  WORKER_STEP(init_namespace_registry());
+  WORKER_STEP(register_worker_namespace(namespace_worker_prototype::worker_namespace));
   if (OB_SUCC(ret) && namespace_worker_prototype::worker_namespace != 0) {
     // Static system-table definitions are identical in every namespace. Seed
     // them locally so incremental refresh can query this namespace's

@@ -57,6 +57,7 @@
 #include "query/virtual_table/ob_virtual_table_factory_provider.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/schema/ob_schema_publish_signal.h"
+#include "namespace/namespace_registry_prototype.h"
 
 #include "observer/virtual_table/ob_virtual_data_access_service.h"
 
@@ -337,6 +338,9 @@ public:
   sql::ObSQLSessionMgr &get_sql_session_mgr() { return session_mgr_; }
   sql::ObSql &get_sql_engine() { return sql_engine_; }
   rootserver::ObLocalManagementService &get_local_management_service() { return local_management_service_; }
+  // Single-process namespace boundary (issue 03): the process-wide registry and
+  // the system namespace runtime it owns. Login routing resolves through this.
+  namespace_fork::NamespaceRegistry &get_namespace_registry() { return namespace_registry_; }
   common::ObMySQLProxy &get_mysql_proxy() { return sql_proxy_; }
   int64_t get_start_time() const { return start_time_; }
   sql::ObConnectResourceMgr& get_conn_res_mgr() { return conn_res_mgr_; }
@@ -362,6 +366,8 @@ private:
   int init_sql_proxy();
   int init_io();
   int init_schema();
+  int init_namespace_registry();
+  int register_worker_namespace(const uint64_t ns_id);
   void probe_second_schema_service();
   int init_inner_table_monitor();
   int init_autoincrement_service();
@@ -466,6 +472,16 @@ private:
 
   // Process-local schema, DDL, job, freeze and recycle-bin management.
   rootserver::ObLocalManagementService local_management_service_;
+  // Single-process namespace boundary: registry plus the system namespace and
+  // its runtime. The registry outlives every session, so the runtime pointers
+  // sessions cache stay valid for the session's life.
+  namespace_fork::NamespaceRegistry namespace_registry_;
+  namespace_fork::Namespace namespace_system_;
+  namespace_fork::NamespaceRuntime namespace_system_runtime_;
+  // A worker process serves exactly one namespace. Its runtime is a distinct
+  // object from the system one, registered by id only (the name lives in the
+  // system namespace's control metadata).
+  namespace_fork::NamespaceRuntime namespace_worker_runtime_;
   StandbyHostAdapter *standby_host_;
   standby::StandbyModule *standby_module_;
   // All operations and processing logic relating to ob server is

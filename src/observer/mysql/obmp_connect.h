@@ -77,6 +77,7 @@ private:
   int init_connect_process(common::ObString &init_sql,
                            sql::ObSQLSessionInfo &session) const;
   int verify_connection() const;
+  int bind_login_namespace(sql::ObSQLSessionInfo &session);
   int verify_identify(ObSMConnection &conn, sql::ObSQLSessionInfo &session);
   int verify_ip_white_list() const;
 

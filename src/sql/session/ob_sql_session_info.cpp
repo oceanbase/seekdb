@@ -221,6 +221,9 @@ int ObSQLSessionInfo::test_init(uint32_t version, uint32_t sessid,
 void ObSQLSessionInfo::reset(bool skip_sys_var)
 {
   if (is_inited_) {
+    // A pooled session object may be reused by the next login, which resolves
+    // its own namespace; never keep the previous login's runtime pointer.
+    namespace_runtime_ = nullptr;
     // ObVersionProvider::reset();
     warnings_buf_.reset();
     show_warnings_buf_.reset();

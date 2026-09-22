@@ -275,6 +275,7 @@ int ObMPConnect::process()
     } else if (OB_ISNULL(session)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("null session", K(ret), K(session));
+    } else if (OB_FAIL(bind_login_namespace(*session))) {
     } else if (OB_FAIL(verify_identify(*conn, *session))) {
     } else if (OB_FAIL(update_charset_sys_vars(*conn, *session))) {
     }
@@ -680,6 +681,70 @@ int ObMPConnect::check_client_property(ObSMConnection &conn)
     }
     hsr_.set_capability_flags(client_cap);
     conn.cap_flags_ = client_cap;
+  }
+  return ret;
+}
+
+// Issue 03 (Phase 1a): login routing. A login name of "account@ns" binds the
+// session to that namespace's runtime; a bare account name keeps landing in the
+// default (system) namespace, so existing clients and muscle memory are
+// unaffected. Once bound, the session never switches namespace: changing
+// namespace means reconnecting.
+int ObMPConnect::bind_login_namespace(ObSQLSessionInfo &session)
+{
+  int ret = OB_SUCCESS;
+  common::ObString account_name;
+  common::ObString ns_name;
+  namespace_fork::NamespaceRuntime *runtime = nullptr;
+  // A worker process serves exactly one namespace and cannot switch, so its
+  // sessions bind there regardless of the login spelling. The shared process
+  // routes by the "account@ns" suffix, defaulting to the system namespace.
+  const uint64_t requested_id = observer::namespace_worker_prototype::worker_process
+      ? observer::namespace_worker_prototype::worker_namespace
+      : namespace_fork::SYSTEM_NAMESPACE_ID;
+  uint64_t ns_id = requested_id;
+  if (OB_FAIL(namespace_fork::split_login_namespace(user_name_, account_name, ns_name))) {
+    LOG_WARN("invalid namespace-qualified login name", KR(ret), K_(user_name));
+  } else if (!observer::namespace_worker_prototype::worker_process
+             && !ns_name.empty()) {
+    if (OB_FAIL(OBSERVER.get_namespace_registry().resolve_name(ns_name, ns_id))) {
+      LOG_WARN("unknown namespace in login name", KR(ret), K(ns_name));
+    }
+  }
+  if (OB_SUCC(ret)
+      && OB_FAIL(OBSERVER.get_namespace_registry().get_runtime(ns_id, runtime))) {
+    LOG_WARN("namespace runtime not found", KR(ret), K(ns_id));
+  } else if (OB_SUCC(ret) && OB_ISNULL(runtime)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("null namespace runtime", KR(ret), K(ns_id));
+  } else if (OB_SUCC(ret)) {
+    // The account name is what authentication sees; the namespace suffix is
+    // routing information, not part of the user identity. Verify the buffer
+    // bound here: load_privilege_info checks it only after this point, and the
+    // copy below must never write past user_name_var_.
+    if (account_name.length() + 1 > static_cast<int32_t>(sizeof(user_name_var_))) {
+      ret = OB_PASSWORD_WRONG;
+      LOG_WARN("user name is too long", KR(ret), K_(user_name));
+    } else {
+      MEMCPY(user_name_var_, account_name.ptr(), account_name.length());
+      user_name_var_[account_name.length()] = '\0';
+      user_name_.assign_ptr(user_name_var_, account_name.length());
+    }
+  }
+  if (OB_SUCC(ret)) {
+    session.set_namespace_runtime(runtime);
+    // Diagnostic for the Phase 1a login-binding acceptance check; the worker log
+    // level filters out ordinary markers, so record the bind to a file.
+    if (nullptr != ::getenv("SEEKDB_NAMESPACE_LOGIN_BIND_PROBE")) {
+      FILE *bind_fp = ::fopen("/tmp/ns-login-bind.result", "a");
+      if (nullptr != bind_fp) {
+        ::fprintf(bind_fp, "ns_id=%lu account=%.*s\n", ns_id,
+                  account_name.length(), account_name.ptr());
+        ::fclose(bind_fp);
+      }
+    }
+    LOG_INFO("PROTOTYPE_NAMESPACE_LOGIN_BIND",
+             "namespace_id", ns_id, "namespace_name", ns_name);
   }
   return ret;
 }

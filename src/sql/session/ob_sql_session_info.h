@@ -40,6 +40,7 @@
 #include "share/rc/ob_context.h"
 #include "sql/ob_optimizer_trace_impl.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
+#include "namespace/namespace_registry_prototype.h"
 
 namespace oceanbase
 {
@@ -414,6 +415,14 @@ public:
   void destroy(bool skip_sys_var = false);
   observer::namespace_worker_prototype::SessionBinding *&namespace_storage_binding()
   { return namespace_storage_binding_; }
+  // Single-process namespace binding (issue 03): the runtime the session logged
+  // into. Resolved once from the registry at login, cached here so that no
+  // request-path code needs to consult the registry, and never switched for the
+  // life of the session (switching namespaces means reconnecting).
+  namespace_fork::NamespaceRuntime *get_namespace_runtime() const
+  { return namespace_runtime_; }
+  void set_namespace_runtime(namespace_fork::NamespaceRuntime *runtime)
+  { namespace_runtime_ = runtime; }
   void reset(bool skip_sys_var);
   void clean_status();
   const common::ObWarningBuffer &get_show_warnings_buffer() const { return show_warnings_buf_; }
@@ -1030,6 +1039,7 @@ private:
   dbms_scheduler::ObDBMSSchedJobInfo *job_info_; // dbms_scheduler related.
   void *btree_iter_cache_;
   observer::namespace_worker_prototype::SessionBinding *namespace_storage_binding_ = nullptr;
+  namespace_fork::NamespaceRuntime *namespace_runtime_ = nullptr;
   common::ObString audit_filter_name_;
   ObExecutingSqlStatRecord executing_sql_stat_record_;
 };
