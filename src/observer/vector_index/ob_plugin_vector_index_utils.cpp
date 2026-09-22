@@ -699,8 +699,11 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
           snapshot_idx_iter, &tmp_allocator, lob_read_options);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ob_write_string(allocator, row->storage_datums_[0].get_string(), key_prefix))) {
+        LOG_WARN("copy snapshot key failed", K(ret));
       } else if (OB_FAIL(param.set_first_row(*row))) {
+        LOG_WARN("stage first snapshot row failed", K(ret), K(key_prefix));
       } else if (OB_FAIL(param.prepare_stream_size())) {
+        LOG_WARN("stage remaining snapshot rows failed", K(ret), K(key_prefix));
       } else {
         ObHNSWDeserializeCallback callback(static_cast<void*>(new_adapter));
         ObIStreamBuf::Callback cb = callback;
@@ -716,12 +719,17 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
         } else {
           TCWLockGuard lock_guard(snap_memdata->mem_data_rwlock_);
           if (OB_FAIL(index_seri.deserialize(snap_memdata->index_, param, cb))) {
+            LOG_WARN("deserialize staged snapshot failed", K(ret), K(key_prefix));
           } else if (OB_FAIL(obvectorutil::immutable_optimize(snap_memdata->index_))) {
+            LOG_WARN("optimize deserialized snapshot failed", K(ret), K(key_prefix));
           } else if (OB_FALSE_IT(index_type = new_adapter->get_snap_index_type())) {
           } else if (OB_FAIL(get_split_snapshot_prefix(index_type, key_prefix, target_prefix))) {
+            LOG_WARN("split snapshot prefix failed", K(ret), K(index_type), K(key_prefix));
           } else if (OB_FAIL(new_adapter->set_snapshot_key_prefix(target_prefix))) {
+            LOG_WARN("set snapshot prefix failed", K(ret), K(target_prefix));
           } else if (OB_FAIL(obvectorutil::get_index_number(snap_memdata->index_, index_count))) {
             ret = OB_ERR_VSAG_RETURN_ERROR;
+            LOG_WARN("read deserialized snapshot index count failed", K(ret), K(key_prefix));
           } else if (index_count == 0) {
             free_memdata_resource(VIRT_SNAP, snap_memdata, new_adapter->get_allocator());
             //should not release mem_ctx here, create by init_mem, not init_memdata
