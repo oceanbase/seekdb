@@ -147,6 +147,7 @@ public:
     struct SnapshotRow {
       blocksstable::ObStorageDatum key_datum_;
       blocksstable::ObStorageDatum data_datum_;
+      TO_STRING_KV(K_(key_datum), K_(data_datum));
     };
     CbParam(ObNewRowIterator *iter,
             ObIAllocator *allocator,
