@@ -22,6 +22,8 @@
 #include "storage/access/ob_table_scan_iterator.h"
 #include "storage/tx_storage/ob_access_service.h"
 #include "query/vector/ob_vector_index_adaptor.h"
+#include <cstdio>
+#include <cstdlib>
 
 namespace oceanbase
 {
@@ -456,6 +458,16 @@ int ObHNSWDeserializeCallback::operator()(char*& data, const int64_t data_size, 
         }
       } else {
         ret = OB_ITER_END;
+      }
+    }
+    if (OB_SUCC(ret) && OB_NOT_NULL(data) && read_size > 0) {
+      const char *dump_path = std::getenv("SEEKDB_VECTOR_SNAPSHOT_DUMP");
+      if (OB_NOT_NULL(dump_path)) {
+        FILE *dump_file = std::fopen(dump_path, "ab");
+        if (OB_NOT_NULL(dump_file)) {
+          std::fwrite(data, 1, static_cast<size_t>(read_size), dump_file);
+          std::fclose(dump_file);
+        }
       }
     }
   }
