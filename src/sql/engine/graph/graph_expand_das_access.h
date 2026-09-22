@@ -48,6 +48,7 @@ public:
            const ObTableScanSpec &target_scan);
 
   void release() override;
+  int64_t used_memory() const override;
   int check_status() override;
   int lookup_vertices(
       const common::ObIArray<GraphElementIdentity> &requested,
@@ -70,14 +71,12 @@ private:
     uint64_t element_id_{common::OB_INVALID_ID};
     uint64_t table_id_{common::OB_INVALID_ID};
     int64_t key_count_{0};
-    uint64_t key_columns_[GRAPH_IDENTITY_MAX_KEYS]{
-        common::OB_INVALID_ID, common::OB_INVALID_ID};
+    uint64_t key_columns_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
     const ObTableScanSpec *scan_spec_{nullptr};
     const ObDASScanCtDef *scan_ctdef_{nullptr};
-    ObExpr *key_exprs_[GRAPH_IDENTITY_MAX_KEYS]{nullptr, nullptr};
+    ObExpr *key_exprs_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
     TO_STRING_KV(K_(element_id), K_(table_id), K_(key_count),
-                 "key_column_0", key_columns_[0],
-                 "key_column_1", key_columns_[1],
+                 "key_columns", common::ObArrayWrap<uint64_t>(key_columns_, key_count_),
                  KP_(scan_spec), KP_(scan_ctdef));
   };
 
@@ -94,27 +93,21 @@ private:
     int64_t source_key_count_{0};
     int64_t edge_key_count_{0};
     int64_t target_key_count_{0};
-    uint64_t source_columns_[GRAPH_IDENTITY_MAX_KEYS]{
-        common::OB_INVALID_ID, common::OB_INVALID_ID};
-    uint64_t edge_columns_[GRAPH_IDENTITY_MAX_KEYS]{
-        common::OB_INVALID_ID, common::OB_INVALID_ID};
-    uint64_t target_columns_[GRAPH_IDENTITY_MAX_KEYS]{
-        common::OB_INVALID_ID, common::OB_INVALID_ID};
+    uint64_t source_columns_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
+    uint64_t edge_columns_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
+    uint64_t target_columns_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
     const ObTableScanSpec *scan_spec_{nullptr};
     const ObDASScanCtDef *access_ctdef_{nullptr};
     const ObDASScanCtDef *output_ctdef_{nullptr};
-    ObExpr *source_exprs_[GRAPH_IDENTITY_MAX_KEYS]{nullptr, nullptr};
-    ObExpr *edge_exprs_[GRAPH_IDENTITY_MAX_KEYS]{nullptr, nullptr};
-    ObExpr *target_exprs_[GRAPH_IDENTITY_MAX_KEYS]{nullptr, nullptr};
+    ObExpr *source_exprs_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
+    ObExpr *edge_exprs_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
+    ObExpr *target_exprs_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
     TO_STRING_KV(K_(edge_element_id), K_(edge_table_id), K_(access_table_id),
                  K_(source_key_count), K_(edge_key_count),
                  K_(target_key_count),
-                 "source_column_0", source_columns_[0],
-                 "source_column_1", source_columns_[1],
-                 "edge_column_0", edge_columns_[0],
-                 "edge_column_1", edge_columns_[1],
-                 "target_column_0", target_columns_[0],
-                 "target_column_1", target_columns_[1],
+                 "source_columns", common::ObArrayWrap<uint64_t>(source_columns_, source_key_count_),
+                 "edge_columns", common::ObArrayWrap<uint64_t>(edge_columns_, edge_key_count_),
+                 "target_columns", common::ObArrayWrap<uint64_t>(target_columns_, target_key_count_),
                  KP_(scan_spec), KP_(access_ctdef), KP_(output_ctdef));
   };
 
@@ -143,11 +136,12 @@ private:
   int materialize_identity(uint64_t element_id,
                            int64_t key_count,
                            ObExpr *const *key_exprs,
-                           GraphElementIdentity &identity) const;
+                           GraphElementIdentity &identity);
   int materialize_identity(const VertexLookupBinding &binding,
-                           GraphElementIdentity &identity) const;
+                           GraphElementIdentity &identity);
+  int save_edge_cursor(const GraphElementIdentity &identity);
   int edge_row_has_null_endpoint(bool &has_null) const;
-  int materialize_edge(GraphExpandEdge &edge, bool &matches) const;
+  int materialize_edge(GraphExpandEdge &edge, bool &matches);
   int validate_edge_scan_request(
       const common::ObIArray<GraphElementIdentity> &sources,
       GraphPathDirection direction,
@@ -180,6 +174,12 @@ private:
   ObExecContext &exec_ctx_;
   ObEvalCtx &eval_ctx_;
   ObDASRef edge_das_ref_;
+  // Materialized edge identities are page-local views. The caller stabilizes
+  // them before the next scan_edges() call, when this arena can be reused.
+  common::ObArenaAllocator identity_page_allocator_;
+  // The scan cursor must outlive page identities and the vertex lookup between
+  // two edge pages, so it owns a separate deep copy of the last edge rowkey.
+  common::ObArenaAllocator edge_cursor_allocator_;
   GraphPathDesc path_desc_{};
   GraphExpandAccessDesc access_desc_{};
   VertexLookupBinding source_binding_{};

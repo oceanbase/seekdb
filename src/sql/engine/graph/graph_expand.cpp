@@ -40,7 +40,7 @@ namespace
 
 bool valid_graph_key_count(int64_t count)
 {
-  return count > 0 && count <= GRAPH_IDENTITY_MAX_KEYS;
+  return count > 0 && count <= OB_USER_MAX_ROWKEY_COLUMN_NUMBER;
 }
 
 bool valid_graph_columns(const uint64_t *columns, int64_t count)
@@ -236,41 +236,94 @@ uint64_t GraphExpandAccessDesc::hash(uint64_t seed) const
   seed = do_hash(source_key_count_, seed);
   seed = do_hash(edge_key_count_, seed);
   seed = do_hash(target_key_count_, seed);
-  for (int64_t i = 0; i < GRAPH_IDENTITY_MAX_KEYS; ++i) {
+  for (int64_t i = 0; i < source_key_count_; ++i) {
     seed = do_hash(source_key_columns_[i], seed);
-    seed = do_hash(edge_key_columns_[i], seed);
-    seed = do_hash(target_key_columns_[i], seed);
     seed = do_hash(edge_current_columns_[i], seed);
+  }
+  for (int64_t i = 0; i < edge_key_count_; ++i) {
+    seed = do_hash(edge_key_columns_[i], seed);
+  }
+  for (int64_t i = 0; i < target_key_count_; ++i) {
+    seed = do_hash(target_key_columns_[i], seed);
     seed = do_hash(edge_next_columns_[i], seed);
   }
   return seed;
 }
 
-static_assert(GRAPH_IDENTITY_MAX_KEYS == 2,
-              "update GraphExpandAccessDesc serialization for a new key limit");
+OB_DEF_SERIALIZE(GraphExpandAccessDesc)
+{
+  int ret = OB_SUCCESS;
+  LST_DO_CODE(OB_UNIS_ENCODE,
+              source_table_id_, source_table_version_,
+              edge_table_id_, edge_table_version_,
+              target_table_id_, target_table_version_,
+              edge_access_table_id_, edge_access_table_version_,
+              source_key_count_, edge_key_count_, target_key_count_);
+  for (int64_t i = 0; OB_SUCC(ret) && i < source_key_count_; ++i) {
+    OB_UNIS_ENCODE(source_key_columns_[i]);
+    OB_UNIS_ENCODE(edge_current_columns_[i]);
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < edge_key_count_; ++i) {
+    OB_UNIS_ENCODE(edge_key_columns_[i]);
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < target_key_count_; ++i) {
+    OB_UNIS_ENCODE(target_key_columns_[i]);
+    OB_UNIS_ENCODE(edge_next_columns_[i]);
+  }
+  return ret;
+}
 
-OB_SERIALIZE_MEMBER(GraphExpandAccessDesc,
-                    source_table_id_,
-                    source_table_version_,
-                    edge_table_id_,
-                    edge_table_version_,
-                    target_table_id_,
-                    target_table_version_,
-                    edge_access_table_id_,
-                    edge_access_table_version_,
-                    source_key_count_,
-                    edge_key_count_,
-                    target_key_count_,
-                    source_key_columns_[0],
-                    source_key_columns_[1],
-                    edge_key_columns_[0],
-                    edge_key_columns_[1],
-                    target_key_columns_[0],
-                    target_key_columns_[1],
-                    edge_current_columns_[0],
-                    edge_current_columns_[1],
-                    edge_next_columns_[0],
-                    edge_next_columns_[1]);
+OB_DEF_DESERIALIZE(GraphExpandAccessDesc)
+{
+  int ret = OB_SUCCESS;
+  LST_DO_CODE(OB_UNIS_DECODE,
+              source_table_id_, source_table_version_,
+              edge_table_id_, edge_table_version_,
+              target_table_id_, target_table_version_,
+              edge_access_table_id_, edge_access_table_version_,
+              source_key_count_, edge_key_count_, target_key_count_);
+  if (OB_SUCC(ret)
+      && (!valid_graph_key_count(source_key_count_)
+          || !valid_graph_key_count(edge_key_count_)
+          || !valid_graph_key_count(target_key_count_))) {
+    ret = OB_DESERIALIZE_ERROR;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < source_key_count_; ++i) {
+    OB_UNIS_DECODE(source_key_columns_[i]);
+    OB_UNIS_DECODE(edge_current_columns_[i]);
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < edge_key_count_; ++i) {
+    OB_UNIS_DECODE(edge_key_columns_[i]);
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < target_key_count_; ++i) {
+    OB_UNIS_DECODE(target_key_columns_[i]);
+    OB_UNIS_DECODE(edge_next_columns_[i]);
+  }
+  return ret;
+}
+
+OB_DEF_SERIALIZE_SIZE(GraphExpandAccessDesc)
+{
+  int64_t len = 0;
+  LST_DO_CODE(OB_UNIS_ADD_LEN,
+              source_table_id_, source_table_version_,
+              edge_table_id_, edge_table_version_,
+              target_table_id_, target_table_version_,
+              edge_access_table_id_, edge_access_table_version_,
+              source_key_count_, edge_key_count_, target_key_count_);
+  for (int64_t i = 0; i < source_key_count_; ++i) {
+    OB_UNIS_ADD_LEN(source_key_columns_[i]);
+    OB_UNIS_ADD_LEN(edge_current_columns_[i]);
+  }
+  for (int64_t i = 0; i < edge_key_count_; ++i) {
+    OB_UNIS_ADD_LEN(edge_key_columns_[i]);
+  }
+  for (int64_t i = 0; i < target_key_count_; ++i) {
+    OB_UNIS_ADD_LEN(target_key_columns_[i]);
+    OB_UNIS_ADD_LEN(edge_next_columns_[i]);
+  }
+  return len;
+}
 
 GraphExpand::GraphExpand(ObIAllocator &allocator,
                          IGraphExpandAccess &access,
@@ -306,11 +359,8 @@ int GraphExpand::deep_copy_identity(const GraphElementIdentity &source,
   } else {
     destination.graph_id_ = source.graph_id_;
     destination.element_id_ = source.element_id_;
-    destination.key_count_ = source.key_count_;
-    for (int64_t i = 0; OB_SUCC(ret) && i < source.key_count_; ++i) {
-      if (OB_FAIL(deep_copy_obj(identity_allocator_, source.keys_[i],
-                                destination.keys_[i]))) {
-      }
+    if (OB_FAIL(source.rowkey_.deep_copy(destination.rowkey_,
+                                         identity_allocator_))) {
     }
   }
   return ret;
@@ -380,9 +430,12 @@ int64_t GraphExpand::used_memory() const
   // reuse() keeps arena pages for the following batch, so report resident
   // capacity rather than only bytes populated by the current scanner call.
   const int64_t identity_bytes = identity_allocator_.total();
-  return fixed_memory_bytes_ > INT64_MAX - identity_bytes
+  const int64_t access_bytes = access_.used_memory();
+  const int64_t variable_bytes = identity_bytes > INT64_MAX - access_bytes
+      ? INT64_MAX : identity_bytes + access_bytes;
+  return fixed_memory_bytes_ > INT64_MAX - variable_bytes
       ? INT64_MAX
-      : fixed_memory_bytes_ + identity_bytes;
+      : fixed_memory_bytes_ + variable_bytes;
 }
 
 bool GraphExpand::contains(const ObIArray<GraphElementIdentity> &identities,

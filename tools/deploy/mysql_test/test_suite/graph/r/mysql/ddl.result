@@ -22,7 +22,7 @@ CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES (
 graph_person KEY(id) LABEL first PROPERTIES(id),graph_person KEY(id) LABEL second PROPERTIES(id));
 ERROR 0A000: duplicate graph labels, properties or base table mappings not supported
 CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES (graph_person KEY(age) LABEL person PROPERTIES(id));
-ERROR 0A000: graph element keys other than direct, non-null signed BIGINT primary-key columns in primary-key order not supported
+ERROR 0A000: graph element keys other than direct, non-null primary-key columns in primary-key order not supported
 DROP TABLE graph_person;
 ERROR 0A000: DDL that changes a property graph's mapped table, column or primary key; drop the graph first not supported
 RENAME TABLE graph_person TO graph_renamed;
@@ -52,12 +52,12 @@ ERROR 42S02: Table 'test.graph_social' doesn't exist
 ALTER TABLE graph_person MODIFY COLUMN age VARCHAR(40);
 DROP TABLE graph_works,graph_knows,graph_company,graph_person;
 CREATE TABLE graph_bad_key(id INT PRIMARY KEY);
-CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_bad_key KEY(id) LABEL bad PROPERTIES(id));
-ERROR 0A000: graph element keys other than direct, non-null signed BIGINT primary-key columns in primary-key order not supported
+CREATE PROPERTY GRAPH graph_key_type VERTEX TABLES(graph_bad_key KEY(id) LABEL item PROPERTIES(id));
+DROP PROPERTY GRAPH graph_key_type;
 DROP TABLE graph_bad_key;
 CREATE TABLE graph_bad_key(id BIGINT UNSIGNED PRIMARY KEY);
-CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_bad_key KEY(id) LABEL bad PROPERTIES(id));
-ERROR 0A000: graph element keys other than direct, non-null signed BIGINT primary-key columns in primary-key order not supported
+CREATE PROPERTY GRAPH graph_key_type VERTEX TABLES(graph_bad_key KEY(id) LABEL item PROPERTIES(id));
+DROP PROPERTY GRAPH graph_key_type;
 DROP TABLE graph_bad_key;
 CREATE TABLE graph_failed(id BIGINT PRIMARY KEY);
 CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_failed KEY(id) LABEL item PROPERTIES(missing));
@@ -121,5 +121,5 @@ CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_generated KEY(id) LABEL 
 EDGE TABLES(graph_endpoint KEY(id)
 SOURCE KEY(src) REFERENCES graph_generated(id)
 DESTINATION KEY(dst) REFERENCES graph_generated(id) LABEL link PROPERTIES(id));
-ERROR 0A000: graph endpoint keys other than direct signed BIGINT columns not supported
+ERROR 0A000: graph endpoint key columns whose SQL types do not match the referenced vertex key not supported
 DROP TABLE graph_endpoint,graph_generated;

@@ -28,20 +28,84 @@ namespace schema
 {
 using namespace common;
 
-OB_SERIALIZE_MEMBER(GraphElement, id_, table_id_, label_, key_count_,
-                    key_columns_[0], key_columns_[1], source_id_, destination_id_,
-                    source_key_count_, destination_key_count_,
-                    source_columns_[0], source_columns_[1],
-                    destination_columns_[0], destination_columns_[1]);
 OB_SERIALIZE_MEMBER(GraphProperty, element_id_, column_id_, name_);
+
+OB_DEF_SERIALIZE(GraphElement)
+{
+  int ret = OB_SUCCESS;
+  LST_DO_CODE(OB_UNIS_ENCODE, id_, table_id_, label_, key_count_);
+  for (int64_t i = 0; OB_SUCC(ret) && i < key_count_; ++i) {
+    OB_UNIS_ENCODE(key_columns_[i]);
+  }
+  LST_DO_CODE(OB_UNIS_ENCODE, source_id_, destination_id_,
+              source_key_count_, destination_key_count_);
+  for (int64_t i = 0; OB_SUCC(ret) && i < source_key_count_; ++i) {
+    OB_UNIS_ENCODE(source_columns_[i]);
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < destination_key_count_; ++i) {
+    OB_UNIS_ENCODE(destination_columns_[i]);
+  }
+  return ret;
+}
+
+OB_DEF_DESERIALIZE(GraphElement)
+{
+  int ret = OB_SUCCESS;
+  LST_DO_CODE(OB_UNIS_DECODE, id_, table_id_, label_, key_count_);
+  if (OB_SUCC(ret) && (key_count_ <= 0
+      || key_count_ > OB_USER_MAX_ROWKEY_COLUMN_NUMBER)) {
+    ret = OB_DESERIALIZE_ERROR;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < key_count_; ++i) {
+    OB_UNIS_DECODE(key_columns_[i]);
+  }
+  LST_DO_CODE(OB_UNIS_DECODE, source_id_, destination_id_,
+              source_key_count_, destination_key_count_);
+  if (OB_SUCC(ret)
+      && (source_key_count_ < 0
+          || source_key_count_ > OB_USER_MAX_ROWKEY_COLUMN_NUMBER
+          || destination_key_count_ < 0
+          || destination_key_count_ > OB_USER_MAX_ROWKEY_COLUMN_NUMBER)) {
+    ret = OB_DESERIALIZE_ERROR;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < source_key_count_; ++i) {
+    OB_UNIS_DECODE(source_columns_[i]);
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < destination_key_count_; ++i) {
+    OB_UNIS_DECODE(destination_columns_[i]);
+  }
+  return ret;
+}
+
+OB_DEF_SERIALIZE_SIZE(GraphElement)
+{
+  int64_t len = 0;
+  LST_DO_CODE(OB_UNIS_ADD_LEN, id_, table_id_, label_, key_count_);
+  for (int64_t i = 0; i < key_count_; ++i) {
+    OB_UNIS_ADD_LEN(key_columns_[i]);
+  }
+  LST_DO_CODE(OB_UNIS_ADD_LEN, source_id_, destination_id_,
+              source_key_count_, destination_key_count_);
+  for (int64_t i = 0; i < source_key_count_; ++i) {
+    OB_UNIS_ADD_LEN(source_columns_[i]);
+  }
+  for (int64_t i = 0; i < destination_key_count_; ++i) {
+    OB_UNIS_ADD_LEN(destination_columns_[i]);
+  }
+  return len;
+}
 
 bool GraphElement::references_column(uint64_t column_id) const
 {
   bool found = false;
-  for (int64_t i = 0; i < 2; ++i) {
-    found |= (i < key_count_ && key_columns_[i] == column_id)
-          || (i < source_key_count_ && source_columns_[i] == column_id)
-          || (i < destination_key_count_ && destination_columns_[i] == column_id);
+  for (int64_t i = 0; !found && i < key_count_; ++i) {
+    found = key_columns_[i] == column_id;
+  }
+  for (int64_t i = 0; !found && i < source_key_count_; ++i) {
+    found = source_columns_[i] == column_id;
+  }
+  for (int64_t i = 0; !found && i < destination_key_count_; ++i) {
+    found = destination_columns_[i] == column_id;
   }
   return found;
 }
@@ -94,15 +158,18 @@ bool GraphSchema::is_valid_definition() const
   for (int64_t i = 0; valid && i < elements_.count(); ++i) {
     const GraphElement &e = elements_.at(i);
     valid = e.id_ != OB_INVALID_ID && e.table_id_ != OB_INVALID_ID
-        && !e.label_.empty() && e.key_count_ >= 1 && e.key_count_ <= 2;
+        && !e.label_.empty() && e.key_count_ >= 1
+        && e.key_count_ <= OB_USER_MAX_ROWKEY_COLUMN_NUMBER;
     for (int64_t j = 0; valid && j < i; ++j) {
       const GraphElement &prev = elements_.at(j);
       valid = e.id_ != prev.id_ && e.table_id_ != prev.table_id_
           && ObSchemaNameComparator().compare(e.label_, prev.label_) != 0;
     }
     for (int64_t k = 0; valid && k < e.key_count_; ++k) {
-      valid = e.key_columns_[k] != OB_INVALID_ID
-          && (k == 0 || e.key_columns_[k] != e.key_columns_[0]);
+      valid = e.key_columns_[k] != OB_INVALID_ID;
+      for (int64_t previous = 0; valid && previous < k; ++previous) {
+        valid = e.key_columns_[k] != e.key_columns_[previous];
+      }
     }
     if (e.is_vertex()) {
       has_vertex = true;
@@ -113,17 +180,23 @@ bool GraphSchema::is_valid_definition() const
       const GraphElement *dest = get_element(e.destination_id_);
       valid = valid && source != nullptr && dest != nullptr
           && source->is_vertex() && dest->is_vertex()
-          && e.source_key_count_ >= 1 && e.source_key_count_ <= 2
-          && e.destination_key_count_ >= 1 && e.destination_key_count_ <= 2
+          && e.source_key_count_ >= 1
+          && e.source_key_count_ <= OB_USER_MAX_ROWKEY_COLUMN_NUMBER
+          && e.destination_key_count_ >= 1
+          && e.destination_key_count_ <= OB_USER_MAX_ROWKEY_COLUMN_NUMBER
           && e.source_key_count_ == source->key_count_
           && e.destination_key_count_ == dest->key_count_;
       for (int64_t k = 0; valid && k < e.source_key_count_; ++k) {
-        valid = e.source_columns_[k] != OB_INVALID_ID
-            && (k == 0 || e.source_columns_[k] != e.source_columns_[0]);
+        valid = e.source_columns_[k] != OB_INVALID_ID;
+        for (int64_t previous = 0; valid && previous < k; ++previous) {
+          valid = e.source_columns_[k] != e.source_columns_[previous];
+        }
       }
       for (int64_t k = 0; valid && k < e.destination_key_count_; ++k) {
-        valid = e.destination_columns_[k] != OB_INVALID_ID
-            && (k == 0 || e.destination_columns_[k] != e.destination_columns_[0]);
+        valid = e.destination_columns_[k] != OB_INVALID_ID;
+        for (int64_t previous = 0; valid && previous < k; ++previous) {
+          valid = e.destination_columns_[k] != e.destination_columns_[previous];
+        }
       }
     }
   }
@@ -246,6 +319,35 @@ const ObTableSchema *find_graph_base_table(
   }
   return result;
 }
+
+// Endpoint columns play the same role as child columns of a foreign key. Keep
+// their compatibility rules aligned with ordinary SQL keys: types must match
+// (including signedness), and character keys must use the same collation with
+// enough width to represent the referenced vertex key.
+bool graph_endpoint_type_matches(const ObColumnSchemaV2 &endpoint,
+                                 const ObColumnSchemaV2 &vertex_key)
+{
+  const ObObjType endpoint_type = endpoint.get_data_type();
+  const ObObjType vertex_type = vertex_key.get_data_type();
+  bool matches = endpoint_type == vertex_type
+      || (ob_is_float_tc(endpoint_type) && ob_is_float_tc(vertex_type))
+      || (ob_is_double_tc(endpoint_type) && ob_is_double_tc(vertex_type))
+      || (ob_is_decimal_int_tc(endpoint_type) && ob_is_number_tc(vertex_type))
+      || (ob_is_number_tc(endpoint_type) && ob_is_decimal_int_tc(vertex_type));
+  if (matches && ob_is_string_type(endpoint_type)) {
+    matches = endpoint.get_collation_type() == vertex_key.get_collation_type()
+        && endpoint.get_data_length() >= vertex_key.get_data_length();
+  }
+  if (matches) {
+    const ObIArray<ObString> &endpoint_values = endpoint.get_extended_type_info();
+    const ObIArray<ObString> &vertex_values = vertex_key.get_extended_type_info();
+    matches = endpoint_values.count() == vertex_values.count();
+    for (int64_t i = 0; matches && i < endpoint_values.count(); ++i) {
+      matches = endpoint_values.at(i) == vertex_values.at(i);
+    }
+  }
+  return matches;
+}
 }
 
 int GraphSchema::validate_tables(const ObIArray<const ObTableSchema *> &tables) const
@@ -268,21 +370,35 @@ int GraphSchema::validate_tables(const ObIArray<const ObTableSchema *> &tables) 
         const ObColumnSchemaV2 *col = table->get_column_schema(e.key_columns_[k]);
         if (OB_FAIL(table->get_rowkey_info().get_column_id(k, pk))) {
         } else if (pk != e.key_columns_[k] || col == nullptr || col->is_hidden()
-                   || col->is_generated_column() || col->is_nullable()
-                   || col->get_data_type() != ObIntType) {
+                   || col->is_generated_column() || col->is_nullable()) {
           ret = OB_NOT_SUPPORTED;
-          LOG_USER_ERROR(OB_NOT_SUPPORTED, "graph element keys other than direct, non-null signed BIGINT primary-key columns in primary-key order");
+          LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                         "graph element keys other than direct, non-null primary-key columns in primary-key order");
         }
       }
       for (int direction = 0; OB_SUCC(ret) && !e.is_vertex() && direction < 2; ++direction) {
         const int64_t count = direction == 0 ? e.source_key_count_ : e.destination_key_count_;
         const uint64_t *cols = direction == 0 ? e.source_columns_ : e.destination_columns_;
+        const GraphElement *vertex = get_element(
+            direction == 0 ? e.source_id_ : e.destination_id_);
+        const ObTableSchema *vertex_table = vertex == nullptr
+            ? nullptr : find_graph_base_table(tables, vertex->table_id_);
+        if (OB_ISNULL(vertex) || OB_ISNULL(vertex_table)
+            || vertex->key_count_ != count) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("graph endpoint vertex metadata is inconsistent", K(ret),
+                   K(e), K(direction), KPC(vertex), KPC(vertex_table));
+        }
         for (int64_t k = 0; OB_SUCC(ret) && k < count; ++k) {
           const ObColumnSchemaV2 *col = table->get_column_schema(cols[k]);
-          if (col == nullptr || col->is_hidden() || col->is_generated_column()
-              || col->get_data_type() != ObIntType) {
+          const ObColumnSchemaV2 *vertex_col = vertex_table->get_column_schema(
+              vertex->key_columns_[k]);
+          if (col == nullptr || vertex_col == nullptr || col->is_hidden()
+              || col->is_generated_column()
+              || !graph_endpoint_type_matches(*col, *vertex_col)) {
             ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "graph endpoint keys other than direct signed BIGINT columns");
+            LOG_USER_ERROR(OB_NOT_SUPPORTED,
+                           "graph endpoint key columns whose SQL types do not match the referenced vertex key");
           }
         }
       }

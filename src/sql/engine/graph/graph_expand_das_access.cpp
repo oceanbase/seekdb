@@ -69,10 +69,7 @@ bool identity_matches(const GraphElementIdentity &identity,
   bool matches = identity.is_valid()
       && identity.graph_id_ == graph_id
       && identity.element_id_ == element_id
-      && identity.key_count_ == key_count;
-  for (int64_t key = 0; matches && key < key_count; ++key) {
-    matches = identity.keys_[key].get_type() == ObIntType;
-  }
+      && identity.rowkey_.get_obj_cnt() == key_count;
   return matches;
 }
 
@@ -85,19 +82,10 @@ int compare_identities(const GraphElementIdentity &left,
   if (OB_UNLIKELY(!left.is_valid() || !right.is_valid()
                   || left.graph_id_ != right.graph_id_
                   || left.element_id_ != right.element_id_
-                  || left.key_count_ != right.key_count_)) {
+                  || left.rowkey_.get_obj_cnt()
+                         != right.rowkey_.get_obj_cnt())) {
     ret = OB_INVALID_ARGUMENT;
-  }
-  for (int64_t key = 0; OB_SUCC(ret) && comparison == 0
-       && key < left.key_count_; ++key) {
-    if (OB_UNLIKELY(left.keys_[key].get_type() != ObIntType
-                    || right.keys_[key].get_type() != ObIntType)) {
-      ret = OB_INVALID_ARGUMENT;
-    } else if (left.keys_[key].get_int() < right.keys_[key].get_int()) {
-      comparison = -1;
-    } else if (left.keys_[key].get_int() > right.keys_[key].get_int()) {
-      comparison = 1;
-    }
+  } else if (OB_FAIL(left.rowkey_.compare(right.rowkey_, comparison))) {
   }
   return ret;
 }
@@ -137,7 +125,7 @@ int bind_column_exprs(const ObDASScanCtDef &ctdef,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(column_ids == nullptr || exprs == nullptr
                   || column_count <= 0
-                  || column_count > GRAPH_IDENTITY_MAX_KEYS)) {
+                  || column_count > OB_USER_MAX_ROWKEY_COLUMN_NUMBER)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_UNLIKELY(ctdef.access_column_ids_.count()
                          != ctdef.pd_expr_spec_.access_exprs_.count())) {
@@ -169,7 +157,9 @@ GraphExpandDasAccess::GraphExpandDasAccess(ObExecContext &exec_ctx,
                                            ObEvalCtx &eval_ctx)
     : exec_ctx_(exec_ctx),
       eval_ctx_(eval_ctx),
-      edge_das_ref_(eval_ctx, exec_ctx)
+      edge_das_ref_(eval_ctx, exec_ctx),
+      identity_page_allocator_(exec_ctx.get_allocator()),
+      edge_cursor_allocator_(exec_ctx.get_allocator())
 {
 }
 
@@ -183,7 +173,7 @@ bool GraphExpandDasAccess::VertexLookupBinding::is_valid() const
   bool valid = element_id_ != OB_INVALID_ID
       && table_id_ != OB_INVALID_ID
       && key_count_ > 0
-      && key_count_ <= GRAPH_IDENTITY_MAX_KEYS
+      && key_count_ <= OB_USER_MAX_ROWKEY_COLUMN_NUMBER
       && scan_spec_ != nullptr
       && scan_ctdef_ != nullptr
       && scan_ctdef_->ref_table_id_ == table_id_;
@@ -199,11 +189,11 @@ bool GraphExpandDasAccess::EdgeScanBinding::is_valid() const
       && edge_table_id_ != OB_INVALID_ID
       && access_table_id_ != OB_INVALID_ID
       && source_key_count_ > 0
-      && source_key_count_ <= GRAPH_IDENTITY_MAX_KEYS
+      && source_key_count_ <= OB_USER_MAX_ROWKEY_COLUMN_NUMBER
       && edge_key_count_ > 0
-      && edge_key_count_ <= GRAPH_IDENTITY_MAX_KEYS
+      && edge_key_count_ <= OB_USER_MAX_ROWKEY_COLUMN_NUMBER
       && target_key_count_ > 0
-      && target_key_count_ <= GRAPH_IDENTITY_MAX_KEYS
+      && target_key_count_ <= OB_USER_MAX_ROWKEY_COLUMN_NUMBER
       && scan_spec_ != nullptr
       && access_ctdef_ != nullptr
       && output_ctdef_ != nullptr
@@ -236,6 +226,7 @@ int GraphExpandDasAccess::init(const GraphPathDesc &path_desc,
   source_binding_ = VertexLookupBinding();
   target_binding_ = VertexLookupBinding();
   edge_binding_ = EdgeScanBinding();
+  identity_page_allocator_.reuse();
   if (OB_SUCCESS != ret) {
     LOG_WARN("failed to release the previous graph edge scan", K(ret));
   } else if (OB_UNLIKELY(!path_desc.is_valid() || !access_desc.is_valid())) {
@@ -283,9 +274,19 @@ int GraphExpandDasAccess::init(const GraphPathDesc &path_desc,
 void GraphExpandDasAccess::release()
 {
   const int ret = reset_edge_scan(OB_SUCCESS);
+  identity_page_allocator_.reset();
+  edge_cursor_allocator_.reset();
   if (OB_SUCCESS != ret) {
     LOG_WARN("failed to release graph edge scan", K(ret));
   }
+}
+
+int64_t GraphExpandDasAccess::used_memory() const
+{
+  const int64_t page_bytes = identity_page_allocator_.total();
+  const int64_t cursor_bytes = edge_cursor_allocator_.total();
+  return page_bytes > INT64_MAX - cursor_bytes
+      ? INT64_MAX : page_bytes + cursor_bytes;
 }
 
 int GraphExpandDasAccess::reset_edge_scan(int ret)
@@ -303,6 +304,7 @@ int GraphExpandDasAccess::reset_edge_scan(int ret)
   }
   edge_das_ref_.reuse();
   edge_result_iter_ = DASOpResultIter();
+  edge_cursor_allocator_.reuse();
   edge_cursor_.reset();
   edge_sources_hash_ = 0;
   has_edge_cursor_ = false;
@@ -323,7 +325,8 @@ int GraphExpandDasAccess::init_vertex_binding(
                                                                table_id);
   VertexLookupBinding candidate;
   if (OB_UNLIKELY(element_id == OB_INVALID_ID || table_id == OB_INVALID_ID
-                  || key_count <= 0 || key_count > GRAPH_IDENTITY_MAX_KEYS
+                  || key_count <= 0
+                  || key_count > OB_USER_MAX_ROWKEY_COLUMN_NUMBER
                   || key_columns == nullptr)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(scan_ctdef)) {
@@ -475,13 +478,8 @@ int GraphExpandDasAccess::validate_requested(
     const GraphElementIdentity &identity = requested.at(i);
     if (!identity.is_valid() || identity.graph_id_ != path_desc_.graph_id_
         || binding == nullptr || identity.element_id_ != binding->element_id_
-        || identity.key_count_ != binding->key_count_) {
+        || identity.rowkey_.get_obj_cnt() != binding->key_count_) {
       ret = OB_INVALID_ARGUMENT;
-    }
-    for (int64_t key = 0; OB_SUCC(ret) && key < identity.key_count_; ++key) {
-      if (identity.keys_[key].get_type() != ObIntType) {
-        ret = OB_INVALID_ARGUMENT;
-      }
     }
   }
   return ret;
@@ -500,9 +498,12 @@ int GraphExpandDasAccess::lookup_vertices(
   } else if (OB_FAIL(validate_requested(requested, binding))) {
     LOG_WARN("invalid graph vertex lookup request", K(ret), K(requested));
   } else if (requested.empty()) {
-  } else if (OB_FAIL(lookup_vertices(*binding, requested, existing))) {
-    LOG_WARN("failed to look up graph vertices", K(ret), K(requested),
-             KPC(binding));
+  } else {
+    identity_page_allocator_.reuse();
+    if (OB_FAIL(lookup_vertices(*binding, requested, existing))) {
+      LOG_WARN("failed to look up graph vertices", K(ret), K(requested),
+               KPC(binding));
+    }
   }
   if (OB_FAIL(ret)) {
     existing.reset();
@@ -608,7 +609,8 @@ int GraphExpandDasAccess::lookup_vertices(
         new(keys) ObObj[binding.key_count_];
         for (int64_t key = 0; OB_SUCC(ret) && key < binding.key_count_; ++key) {
           ret = ob_write_obj(das_ref.get_das_alloc(),
-                             requested.at(i).keys_[key], keys[key]);
+                             requested.at(i).rowkey_.get_obj_ptr()[key],
+                             keys[key]);
         }
         if (OB_SUCC(ret)) {
           ObRowkey rowkey(keys, binding.key_count_);
@@ -693,31 +695,39 @@ int GraphExpandDasAccess::materialize_identity(
     uint64_t element_id,
     int64_t key_count,
     ObExpr *const *key_exprs,
-    GraphElementIdentity &identity) const
+    GraphElementIdentity &identity)
 {
   int ret = OB_SUCCESS;
   identity.reset();
   if (OB_UNLIKELY(element_id == OB_INVALID_ID || key_count <= 0
-                  || key_count > GRAPH_IDENTITY_MAX_KEYS
+                  || key_count > OB_USER_MAX_ROWKEY_COLUMN_NUMBER
                   || key_exprs == nullptr)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     identity.graph_id_ = path_desc_.graph_id_;
     identity.element_id_ = element_id;
-    identity.key_count_ = key_count;
+    ObObj *keys = static_cast<ObObj *>(
+        identity_page_allocator_.alloc(sizeof(ObObj) * key_count));
+    if (OB_ISNULL(keys)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      new(keys) ObObj[key_count];
+      identity.rowkey_.assign(keys, key_count);
+    }
   }
   for (int64_t key = 0; OB_SUCC(ret) && key < key_count; ++key) {
     ObDatum *datum = nullptr;
+    ObObj value;
     ObExpr *expr = key_exprs[key];
     if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
     } else if (OB_ISNULL(datum) || datum->is_null()) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(datum->to_obj(identity.keys_[key], expr->obj_meta_,
+    } else if (OB_FAIL(datum->to_obj(value, expr->obj_meta_,
                                      expr->obj_datum_map_))) {
-    } else if (OB_UNLIKELY(identity.keys_[key].get_type() != ObIntType)) {
-      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(ob_write_obj(identity_page_allocator_, value,
+                                    identity.rowkey_.get_obj_ptr()[key]))) {
     }
   }
   return ret;
@@ -725,10 +735,32 @@ int GraphExpandDasAccess::materialize_identity(
 
 int GraphExpandDasAccess::materialize_identity(
     const VertexLookupBinding &binding,
-    GraphElementIdentity &identity) const
+    GraphElementIdentity &identity)
 {
   return materialize_identity(binding.element_id_, binding.key_count_,
                               binding.key_exprs_, identity);
+}
+
+int GraphExpandDasAccess::save_edge_cursor(
+    const GraphElementIdentity &identity)
+{
+  int ret = OB_SUCCESS;
+  edge_cursor_allocator_.reuse();
+  edge_cursor_.reset();
+  has_edge_cursor_ = false;
+  if (OB_UNLIKELY(!identity.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    edge_cursor_.graph_id_ = identity.graph_id_;
+    edge_cursor_.element_id_ = identity.element_id_;
+    if (OB_FAIL(identity.rowkey_.deep_copy(edge_cursor_.rowkey_,
+                                           edge_cursor_allocator_))) {
+      edge_cursor_.reset();
+    } else {
+      has_edge_cursor_ = true;
+    }
+  }
+  return ret;
 }
 
 int GraphExpandDasAccess::edge_row_has_null_endpoint(bool &has_null) const
@@ -757,7 +789,7 @@ int GraphExpandDasAccess::edge_row_has_null_endpoint(bool &has_null) const
 }
 
 int GraphExpandDasAccess::materialize_edge(GraphExpandEdge &edge,
-                                           bool &matches) const
+                                           bool &matches)
 {
   int ret = OB_SUCCESS;
   bool has_null_endpoint = false;
@@ -913,10 +945,10 @@ int GraphExpandDasAccess::build_adjacency_ranges(
         ObObj *end_keys = keys + rowkey_count;
         for (int64_t key = 0; OB_SUCC(ret) && key < prefix_count; ++key) {
           if (OB_FAIL(ob_write_obj(edge_das_ref_.get_das_alloc(),
-                                   sources.at(i).keys_[key],
+                                   sources.at(i).rowkey_.get_obj_ptr()[key],
                                    start_keys[key]))) {
           } else if (OB_FAIL(ob_write_obj(edge_das_ref_.get_das_alloc(),
-                                          sources.at(i).keys_[key],
+                                          sources.at(i).rowkey_.get_obj_ptr()[key],
                                           end_keys[key]))) {
           }
         }
@@ -1172,9 +1204,7 @@ int GraphExpandDasAccess::get_edge_page(
           LOG_WARN("graph edge full scan order is not stable", K(ret),
                    K(edge), K_(edge_cursor));
         } else if (OB_FAIL(edges.push_back(edge))) {
-        } else {
-          edge_cursor_ = edge.edge_identity_;
-          has_edge_cursor_ = true;
+        } else if (OB_FAIL(save_edge_cursor(edge.edge_identity_))) {
         }
       }
     }
@@ -1205,12 +1235,17 @@ int GraphExpandDasAccess::scan_edges(
                                                 after_edge, limit))) {
     LOG_WARN("invalid graph edge scan request", K(ret), K(sources),
              K(direction), KPC(after_edge), K(limit));
-  } else if (after_edge == nullptr
-             && OB_FAIL(reset_edge_scan(OB_SUCCESS))) {
+  } else {
+    // Validation above still sees the previous page's cursor. The caller owns
+    // a stable copy in after_edge, so the page arena can now be reused.
+    identity_page_allocator_.reuse();
+  }
+  if (OB_SUCC(ret) && after_edge == nullptr
+      && OB_FAIL(reset_edge_scan(OB_SUCCESS))) {
     LOG_WARN("failed to reset graph edge scan", K(ret));
-  } else if (sources.empty()) {
+  } else if (OB_SUCC(ret) && sources.empty()) {
     end = true;
-  } else if (after_edge == nullptr) {
+  } else if (OB_SUCC(ret) && after_edge == nullptr) {
     edge_sources_hash_ = identity_array_hash(sources);
     if (access_desc_.uses_adjacency_index()
         && OB_FAIL(start_adjacency_edge_scan(sources, empty))) {

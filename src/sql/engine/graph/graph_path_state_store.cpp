@@ -46,12 +46,9 @@ int GraphPathStateStore::deep_copy_identity(
   } else {
     destination.graph_id_ = source.graph_id_;
     destination.element_id_ = source.element_id_;
-    destination.key_count_ = source.key_count_;
-    for (int64_t i = 0; OB_SUCC(ret) && i < source.key_count_; ++i) {
-      if (OB_FAIL(deep_copy_obj(identity_allocator_, source.keys_[i],
-                                destination.keys_[i]))) {
-        LOG_WARN("failed to copy graph identity key", K(ret), K(i));
-      }
+    if (OB_FAIL(source.rowkey_.deep_copy(destination.rowkey_,
+                                         identity_allocator_))) {
+      LOG_WARN("failed to copy graph identity rowkey", K(ret), K(source));
     }
   }
   return ret;

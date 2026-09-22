@@ -49,12 +49,12 @@ SELECT * FROM GRAPH_TABLE(graph_social MATCH(p IS person) COLUMNS(p.id AS id)) g
 ALTER TABLE graph_person MODIFY COLUMN age VARCHAR(40);
 DROP TABLE graph_works,graph_knows,graph_company,graph_person;
 CREATE TABLE graph_bad_key(id INT PRIMARY KEY);
---error ER_NOT_SUPPORTED_YET
-CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_bad_key KEY(id) LABEL bad PROPERTIES(id));
+CREATE PROPERTY GRAPH graph_key_type VERTEX TABLES(graph_bad_key KEY(id) LABEL item PROPERTIES(id));
+DROP PROPERTY GRAPH graph_key_type;
 DROP TABLE graph_bad_key;
 CREATE TABLE graph_bad_key(id BIGINT UNSIGNED PRIMARY KEY);
---error ER_NOT_SUPPORTED_YET
-CREATE PROPERTY GRAPH graph_invalid VERTEX TABLES(graph_bad_key KEY(id) LABEL bad PROPERTIES(id));
+CREATE PROPERTY GRAPH graph_key_type VERTEX TABLES(graph_bad_key KEY(id) LABEL item PROPERTIES(id));
+DROP PROPERTY GRAPH graph_key_type;
 DROP TABLE graph_bad_key;
 CREATE TABLE graph_failed(id BIGINT PRIMARY KEY);
 --error ER_BAD_FIELD_ERROR

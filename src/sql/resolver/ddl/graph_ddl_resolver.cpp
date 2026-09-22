@@ -65,9 +65,13 @@ int GraphDDLResolver::resolve_keys(const ParseNode &node, const ObTableSchema &t
 {
   int ret = OB_SUCCESS;
   count = node.num_child_;
-  if (count < 1 || count > 2) {
+  if (count < 1) {
     ret = OB_NOT_SUPPORTED;
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "property graph keys with other than one or two BIGINT columns");
+    LOG_USER_ERROR(OB_NOT_SUPPORTED, "empty property graph keys");
+  } else if (count > OB_USER_MAX_ROWKEY_COLUMN_NUMBER) {
+    ret = OB_ERR_TOO_MANY_ROWKEY_COLUMNS;
+    LOG_USER_ERROR(OB_ERR_TOO_MANY_ROWKEY_COLUMNS,
+                   OB_USER_MAX_ROWKEY_COLUMN_NUMBER);
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
     const ObColumnSchemaV2 *column = table.get_column_schema(graph_identifier(*node.children_[i]));
@@ -104,7 +108,7 @@ int GraphDDLResolver::resolve_elements(const ParseNode &node, GraphDDLStmt &stmt
       for (int direction = 0; OB_SUCC(ret) && !vertex && direction < 2; ++direction) {
         const int offset = direction == 0 ? 2 : 5;
         const ObTableSchema *endpoint = nullptr;
-        uint64_t refs[2] = {OB_INVALID_ID, OB_INVALID_ID};
+        uint64_t refs[OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
         int64_t refs_count = 0;
         int64_t &key_count = direction == 0 ? element.source_key_count_ : element.destination_key_count_;
         uint64_t *keys = direction == 0 ? element.source_columns_ : element.destination_columns_;
@@ -117,9 +121,12 @@ int GraphDDLResolver::resolve_elements(const ParseNode &node, GraphDDLStmt &stmt
             const GraphElement &candidate = elements.at(k);
             if (candidate.is_vertex() && candidate.table_id_ == endpoint->get_table_id()) {
               endpoint_id = candidate.id_;
-              if (refs_count != candidate.key_count_ || key_count != refs_count
-                  || refs[0] != candidate.key_columns_[0]
-                  || (refs_count == 2 && refs[1] != candidate.key_columns_[1])) {
+              bool matches = refs_count == candidate.key_count_
+                  && key_count == refs_count;
+              for (int64_t ref = 0; matches && ref < refs_count; ++ref) {
+                matches = refs[ref] == candidate.key_columns_[ref];
+              }
+              if (!matches) {
                 ret = OB_NOT_SUPPORTED;
                 LOG_USER_ERROR(OB_NOT_SUPPORTED, "graph endpoint references that do not match the complete vertex key in order");
               }

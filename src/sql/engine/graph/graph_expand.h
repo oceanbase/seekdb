@@ -44,7 +44,7 @@ static const int64_t GRAPH_EXPAND_MAX_INPUT_STATE_COUNT = 4096;
 // local index whose leading columns are edge_current_columns_.
 struct GraphExpandAccessDesc
 {
-  OB_UNIS_VERSION(1);
+  OB_UNIS_VERSION(2);
 public:
   int init(const GraphPathDesc &path_desc,
            uint64_t edge_access_table_id,
@@ -65,31 +65,21 @@ public:
   int64_t source_key_count_{0};
   int64_t edge_key_count_{0};
   int64_t target_key_count_{0};
-  uint64_t source_key_columns_[GRAPH_IDENTITY_MAX_KEYS]{
-      common::OB_INVALID_ID, common::OB_INVALID_ID};
-  uint64_t edge_key_columns_[GRAPH_IDENTITY_MAX_KEYS]{
-      common::OB_INVALID_ID, common::OB_INVALID_ID};
-  uint64_t target_key_columns_[GRAPH_IDENTITY_MAX_KEYS]{
-      common::OB_INVALID_ID, common::OB_INVALID_ID};
-  uint64_t edge_current_columns_[GRAPH_IDENTITY_MAX_KEYS]{
-      common::OB_INVALID_ID, common::OB_INVALID_ID};
-  uint64_t edge_next_columns_[GRAPH_IDENTITY_MAX_KEYS]{
-      common::OB_INVALID_ID, common::OB_INVALID_ID};
+  uint64_t source_key_columns_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
+  uint64_t edge_key_columns_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
+  uint64_t target_key_columns_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
+  uint64_t edge_current_columns_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
+  uint64_t edge_next_columns_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
   TO_STRING_KV(K_(source_table_id), K_(source_table_version),
                K_(edge_table_id), K_(edge_table_version),
                K_(target_table_id), K_(target_table_version),
                K_(edge_access_table_id), K_(edge_access_table_version),
                K_(source_key_count), K_(edge_key_count), K_(target_key_count),
-               "source_key_0", source_key_columns_[0],
-               "source_key_1", source_key_columns_[1],
-               "edge_key_0", edge_key_columns_[0],
-               "edge_key_1", edge_key_columns_[1],
-               "target_key_0", target_key_columns_[0],
-               "target_key_1", target_key_columns_[1],
-               "edge_current_0", edge_current_columns_[0],
-               "edge_current_1", edge_current_columns_[1],
-               "edge_next_0", edge_next_columns_[0],
-               "edge_next_1", edge_next_columns_[1]);
+               "source_keys", common::ObArrayWrap<uint64_t>(source_key_columns_, source_key_count_),
+               "edge_keys", common::ObArrayWrap<uint64_t>(edge_key_columns_, edge_key_count_),
+               "target_keys", common::ObArrayWrap<uint64_t>(target_key_columns_, target_key_count_),
+               "edge_current", common::ObArrayWrap<uint64_t>(edge_current_columns_, source_key_count_),
+               "edge_next", common::ObArrayWrap<uint64_t>(edge_next_columns_, target_key_count_));
 };
 
 // The DAS-facing access adapter owns the transaction descriptor, statement
@@ -101,6 +91,7 @@ public:
   virtual ~IGraphExpandAccess() = default;
 
   virtual void release() {}
+  virtual int64_t used_memory() const { return 0; }
   virtual int check_status() = 0;
 
   virtual int lookup_vertices(

@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "common/object/ob_object.h"
+#include "common/rowkey/ob_rowkey.h"
 #include "lib/ob_define.h"
 #include "lib/utility/utility.h"
 
@@ -26,7 +26,6 @@ namespace sql
 {
 
 static const int64_t GRAPH_PATH_MAX_HOPS = 16;
-static const int64_t GRAPH_IDENTITY_MAX_KEYS = 2;
 static const int64_t GRAPH_INVALID_PATH_STATE_ID = -1;
 
 // Controls which repeated graph elements are legal inside one matched path.
@@ -99,7 +98,7 @@ struct GraphPathDesc
 };
 
 // Internal typed identity of one mapped vertex or edge. graph_id_ and
-// element_id_ select the graph element mapping; keys_ contains that mapping's
+// element_id_ select the graph element mapping; rowkey_ contains that mapping's
 // complete base-table primary key in declaration order. The Oracle-compatible
 // VERTEX_ID() and EDGE_ID() SQL functions expose equivalent identity
 // information as JSON; execution compares these typed fields, never the
@@ -110,19 +109,17 @@ struct GraphElementIdentity
   {
     graph_id_ = common::OB_INVALID_ID;
     element_id_ = common::OB_INVALID_ID;
-    key_count_ = 0;
-    keys_[0].reset();
-    keys_[1].reset();
+    rowkey_.reset();
   }
 
   bool is_valid() const
   {
     bool valid = graph_id_ != common::OB_INVALID_ID
         && element_id_ != common::OB_INVALID_ID
-        && key_count_ > 0
-        && key_count_ <= GRAPH_IDENTITY_MAX_KEYS;
-    for (int64_t i = 0; valid && i < key_count_; ++i) {
-      valid = !keys_[i].is_null();
+        && rowkey_.is_valid()
+        && rowkey_.get_obj_cnt() <= common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER;
+    for (int64_t i = 0; valid && i < rowkey_.get_obj_cnt(); ++i) {
+      valid = !rowkey_.get_obj_ptr()[i].is_null();
     }
     return valid;
   }
@@ -131,10 +128,7 @@ struct GraphElementIdentity
   {
     bool equal = graph_id_ == other.graph_id_
               && element_id_ == other.element_id_
-              && key_count_ == other.key_count_;
-    for (int64_t i = 0; equal && i < key_count_; ++i) {
-      equal = keys_[i] == other.keys_[i];
-    }
+              && rowkey_ == other.rowkey_;
     return equal;
   }
 
@@ -142,19 +136,15 @@ struct GraphElementIdentity
   {
     uint64_t value = common::do_hash(graph_id_, seed);
     value = common::do_hash(element_id_, value);
-    value = common::do_hash(key_count_, value);
-    for (int64_t i = 0; i < key_count_; ++i) {
-      (void)keys_[i].hash(value, value);
-    }
-    return value;
+    return rowkey_.murmurhash(value);
   }
 
   uint64_t graph_id_ = common::OB_INVALID_ID;
   uint64_t element_id_ = common::OB_INVALID_ID;
-  int64_t key_count_ = 0;
-  common::ObObj keys_[GRAPH_IDENTITY_MAX_KEYS]{};
-  TO_STRING_KV(K_(graph_id), K_(element_id), K_(key_count),
-               "key0", keys_[0], "key1", keys_[1]);
+  // ObRowkey is a non-owning typed key view. The DAS page, GraphExpand, or
+  // GraphPathStateStore that produces an identity owns its backing objects.
+  common::ObRowkey rowkey_{};
+  TO_STRING_KV(K_(graph_id), K_(element_id), K_(rowkey));
 };
 
 // Represents one node in a query-local, parent-linked path-state store.

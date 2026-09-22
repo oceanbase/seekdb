@@ -31,7 +31,7 @@ class ObTableSchema;
 // property names describe the graph interface; they are not element identities.
 struct GraphElement
 {
-  OB_UNIS_VERSION(1);
+  OB_UNIS_VERSION(2);
 public:
   friend int copy_assign(GraphElement &destination, const GraphElement &source)
   { destination = source; return common::OB_SUCCESS; }
@@ -41,15 +41,21 @@ public:
   uint64_t table_id_ = common::OB_INVALID_ID;
   common::ObString label_;
   int64_t key_count_ = 0;
-  uint64_t key_columns_[2] = {common::OB_INVALID_ID, common::OB_INVALID_ID};
+  // Graph element keys are the complete base-table primary key. Use the same
+  // capacity as an ordinary user-table rowkey instead of defining a separate
+  // graph-only key-count limit.
+  uint64_t key_columns_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
   uint64_t source_id_ = common::OB_INVALID_ID;
   uint64_t destination_id_ = common::OB_INVALID_ID;
   int64_t source_key_count_ = 0;
   int64_t destination_key_count_ = 0;
-  uint64_t source_columns_[2] = {common::OB_INVALID_ID, common::OB_INVALID_ID};
-  uint64_t destination_columns_[2] = {common::OB_INVALID_ID, common::OB_INVALID_ID};
+  uint64_t source_columns_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
+  uint64_t destination_columns_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
   TO_STRING_KV(K_(id), K_(table_id), K_(label), K_(key_count),
-               K_(source_id), K_(destination_id));
+               "key_columns", common::ObArrayWrap<uint64_t>(key_columns_, key_count_),
+               K_(source_id), K_(destination_id),
+               "source_columns", common::ObArrayWrap<uint64_t>(source_columns_, source_key_count_),
+               "destination_columns", common::ObArrayWrap<uint64_t>(destination_columns_, destination_key_count_));
 };
 
 // Maps one graph property name to a direct column of an element mapping.

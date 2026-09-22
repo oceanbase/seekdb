@@ -356,6 +356,62 @@ source_tenant	source_id	target_tenant	target_id	hops	edge_ids
 1	1	1	1	2	[2, 7]
 1	1	1	3	2	[1, 4]
 1	1	1	3	2	[2, 4]
+ordinary_rowkey_count_and_types
+CREATE TABLE gk_vertex (
+tenant INT NOT NULL,
+account BIGINT UNSIGNED NOT NULL,
+code VARCHAR(16) COLLATE utf8mb4_bin NOT NULL,
+name VARCHAR(32),
+PRIMARY KEY (tenant,account,code)
+);
+CREATE TABLE gk_edge (
+edge_tenant INT NOT NULL,
+edge_id BIGINT UNSIGNED NOT NULL,
+edge_code VARCHAR(16) COLLATE utf8mb4_bin NOT NULL,
+src_tenant INT,
+src_account BIGINT UNSIGNED,
+src_code VARCHAR(16) COLLATE utf8mb4_bin,
+dst_tenant INT,
+dst_account BIGINT UNSIGNED,
+dst_code VARCHAR(16) COLLATE utf8mb4_bin,
+PRIMARY KEY (edge_tenant,edge_id,edge_code),
+KEY gk_out (src_tenant,src_account,src_code,edge_tenant,edge_id,edge_code),
+KEY gk_in (dst_tenant,dst_account,dst_code,edge_tenant,edge_id,edge_code)
+);
+INSERT INTO gk_vertex VALUES
+(1,10,'alpha','A'),(1,20,'beta','B'),(2,30,'gamma','C');
+INSERT INTO gk_edge VALUES
+(7,100,'ab',1,10,'alpha',1,20,'beta'),
+(7,200,'bc',1,20,'beta',2,30,'gamma');
+CREATE PROPERTY GRAPH graph_mixed_keys
+VERTEX TABLES (
+gk_vertex KEY (tenant,account,code)
+LABEL item PROPERTIES (tenant,account,code,name)
+)
+EDGE TABLES (
+gk_edge KEY (edge_tenant,edge_id,edge_code)
+SOURCE KEY (src_tenant,src_account,src_code)
+REFERENCES gk_vertex (tenant,account,code)
+DESTINATION KEY (dst_tenant,dst_account,dst_code)
+REFERENCES gk_vertex (tenant,account,code)
+LABEL link PROPERTIES (edge_tenant,edge_id,edge_code)
+);
+SELECT tenant,account,code,
+JSON_VALUE(b,'$.KEY_VALUE.code') AS identity_code,
+hops,edge_codes
+FROM GRAPH_TABLE(graph_mixed_keys MATCH
+(a IS item WHERE a.tenant=1 AND a.account=10 AND a.code='alpha')
+-[e IS link]->{0,2}(b IS item)
+COLUMNS(b.tenant AS tenant,b.account AS account,b.code AS code,
+VERTEX_ID(b) AS b,COUNT(e.edge_id) AS hops,
+JSON_ARRAYAGG(e.edge_code) AS edge_codes)) g
+ORDER BY hops,tenant,account,code;
+tenant	account	code	identity_code	hops	edge_codes
+1	10	alpha	alpha	0	NULL
+1	20	beta	beta	1	["ab"]
+2	30	gamma	gamma	2	["ab", "bc"]
+DROP PROPERTY GRAPH graph_mixed_keys;
+DROP TABLE gk_edge,gk_vertex;
 transaction_reads_own_writes_and_orphans_are_excluded
 START TRANSACTION;
 INSERT INTO graph_person VALUES (6,'Txn',20);
