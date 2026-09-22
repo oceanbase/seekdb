@@ -18,24 +18,21 @@
 #include "share/rc/ob_server_runtime.h"
 
 #include "query/vector/ob_vector_embedding_handler.h"
+#include "query/vector/embedding_response_parser.h"
 #include "share/json/ob_json_helper.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/json/ob_json.h"
-#include "common/json_type/ob_json_parse.h"
-#include "common/json_type/ob_json_tree.h"
 #include "share/ob_server_struct.h"
 #include "common/mysqlclient/ob_mysql_transaction.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/atomic/ob_atomic.h"
-#include "lib/encode/ob_base64_encode.h"
 
 #include <curl/curl.h>
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
 using namespace oceanbase::sql;
-using namespace oceanbase::json;
 
 #define HANDLE_TASK_FAILURE_AND_CLEANUP(task, thread_pool, ret, error_msg) \
   do { \
@@ -58,72 +55,6 @@ using namespace oceanbase::json;
     continue_processing = false; \
   } while(0)
 
-namespace
-{
-
-int decode_base64_embedding_array(const ObIJsonBase &embedding_jbase,
-                                  ObIAllocator &allocator,
-                                  const int64_t dimension,
-                                  float *&vector)
-{
-  int ret = OB_SUCCESS;
-  if (embedding_jbase.json_type() != ObJsonNodeType::J_STRING) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    const char *encoded_embedding = embedding_jbase.get_data();
-    const uint64_t encoded_embedding_len = embedding_jbase.get_data_length();
-    const uint64_t decoded_buf_len = ObBase64Encoder::needed_decoded_length(encoded_embedding_len);
-    uint8_t *decoded_buf = nullptr;
-    int64_t pos = 0;
-    if (decoded_buf_len <= 0) {
-      ret = OB_INVALID_ARGUMENT;
-    } else if (OB_ISNULL(decoded_buf = static_cast<uint8_t *>(allocator.alloc(decoded_buf_len)))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_FAIL(ObBase64Encoder::decode(encoded_embedding, encoded_embedding_len,
-                                               decoded_buf, decoded_buf_len, pos))) {
-    } else if (pos != dimension * sizeof(float)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      vector = reinterpret_cast<float *>(decoded_buf);
-    }
-  }
-  return ret;
-}
-
-int decode_float_embedding_array(const ObIJsonBase &embedding_jbase,
-                                 ObIAllocator &allocator,
-                                 ObJsonReaderHelper &json_reader,
-                                 const int64_t dimension,
-                                 float *&vector)
-{
-  int ret = OB_SUCCESS;
-  float *tmp_vector = nullptr;
-  if (!ObJsonHelper::is_array_type(&embedding_jbase)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    const uint64_t embedding_size = json_reader.get_array_size(&embedding_jbase);
-    if (embedding_size != dimension) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_ISNULL(tmp_vector = static_cast<float *>(allocator.alloc(dimension * sizeof(float))))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      for (uint64_t i = 0; i < dimension && OB_SUCC(ret); ++i) {
-        ObIJsonBase *value = nullptr;
-        if (OB_FAIL(json_reader.get_array_element(&embedding_jbase, i, value))) {
-        } else if (!ObJsonHelper::is_number_type(value)) {
-          ret = OB_INVALID_ARGUMENT;
-        } else if (OB_FAIL(json_reader.get_float_value(value, tmp_vector[i]))) {
-        }
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    vector = tmp_vector;
-  }
-  return ret;
-}
-
-} // namespace
 
 //=============================================== ObEmbeddingTask ================================================
 const ObString ObEmbeddingTask::MODEL_URL_NAME = "model_url";
@@ -386,52 +317,8 @@ int ObEmbeddingTask::init(const ObString &model_url,
 
 int ObEmbeddingTask::parse_embedding_response(const char *response_data, size_t response_size)
 {
-  int ret = OB_SUCCESS;
-  ObJsonReaderHelper json_reader(allocator_);
-  ObJsonNode *root = nullptr;
-
-  if (OB_ISNULL(response_data) || response_size == 0) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    if (OB_FAIL(json_reader.parse(response_data, response_size, root))) {
-    } else if (OB_ISNULL(root)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (!ObJsonHelper::is_object_type(root)) {
-      ret = OB_INVALID_ARGUMENT;
-    } else {
-      ObIJsonBase *data_array = nullptr;
-      if (OB_FAIL(json_reader.get_object_value(root, DATA_NAME, data_array))) {
-      } else if (!ObJsonHelper::is_array_type(data_array)) {
-        ret = OB_INVALID_ARGUMENT;
-      } else {
-        uint64_t data_array_size = json_reader.get_array_size(data_array);
-        for (uint64_t data_idx = 0; data_idx < data_array_size && OB_SUCC(ret); data_idx++) {
-          ObIJsonBase *data_item = nullptr;
-          if (OB_FAIL(json_reader.get_array_element(data_array, data_idx, data_item))) {
-          } else if (!ObJsonHelper::is_object_type(data_item)) {
-            ret = OB_INVALID_ARGUMENT;
-          } else {
-            ObIJsonBase *embedding_jbase = nullptr;
-            float *vector = nullptr;
-            if (OB_FAIL(json_reader.get_object_value(data_item, EMBEDDING_NAME, embedding_jbase))) {
-            } else if (OB_ISNULL(embedding_jbase)) {
-              ret = OB_ERR_UNEXPECTED;
-            } else if (use_base64_format_ && OB_FAIL(decode_base64_embedding_array(
-                                                      *embedding_jbase, allocator_, dimension_, vector))) {
-            } else if (!use_base64_format_ && OB_FAIL(decode_float_embedding_array(
-                                                        *embedding_jbase, allocator_, json_reader, dimension_, vector))) {
-            } else {
-              // no need to lock here, only access by other thread when task is done
-              if (OB_FAIL(output_vectors_.push_back(vector))) {
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  
-  return ret;
+  return EmbeddingResponseParser::parse(response_data, response_size, dimension_,
+                                        use_base64_format_, allocator_, output_vectors_);
 }
 
 

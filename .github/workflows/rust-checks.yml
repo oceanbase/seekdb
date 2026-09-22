@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Static analysis for the Rust transport crate: clippy as a hard gate and a
+# Static analysis for the Rust crates: clippy as a hard gate and a
 # RustSec advisory audit of the locked dependency tree. Unit tests run in
 # buildbase alongside the C++ build; this job exists to give rust-only PRs a
 # fast signal without a full server build.
@@ -42,7 +42,14 @@ jobs:
 
       - name: clippy (deny warnings)
         working-directory: rust
-        run: cargo clippy -p sql-nio --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Embedding parser tests
+        working-directory: rust
+        run: cargo test --locked -p embedding-response -p embedding-response-ffi
+
+      - name: Embedding C ABI
+        run: python3 rust/embedding-response-ffi/tests/check_c_abi.py
 
       # No Windows runner: a cross `cargo check` is the cheapest signal that
       # the cfg(windows) transport code still compiles. It would have caught
@@ -54,7 +61,7 @@ jobs:
         working-directory: rust
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq gcc-mingw-w64-x86-64
-          cargo check -p sql-nio --target x86_64-pc-windows-gnu
+          cargo check --workspace --target x86_64-pc-windows-gnu
 
       - name: cargo audit
         working-directory: rust

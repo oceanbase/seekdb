@@ -287,7 +287,8 @@ if(EXISTS "${STDC_SHARED_LIB_SYMLINK}")
   message(STATUS "STDC_SHARED_LIB: ${STDC_SHARED_LIB}")
 endif()
 
-# Rust owns the MySQL protocol/NIO engine.  Keep Cargo's artifact inside the
+# Rust owns the MySQL protocol/NIO engine and embedding response parsing.
+# Keep Cargo's artifact inside the
 # selected CMake build directory and expose its C ABI header to the migrated
 # src/oblib and Observer sources.
 include(cmake/Rust.cmake)

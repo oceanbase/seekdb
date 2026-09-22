@@ -5,3 +5,5 @@ ob_set_subtarget(ob_query runtime
   ${SEEKDB_QUERY_VECTOR_EMBEDDING}
 )
 ob_server_add_target(ob_query)
+target_include_directories(ob_query PRIVATE
+  "${CMAKE_SOURCE_DIR}/rust/embedding-response-ffi/include")

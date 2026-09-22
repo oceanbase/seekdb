@@ -1,0 +1,15 @@
+[package]
+name = "embedding-response-ffi"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "Apache-2.0"
+description = "Synchronous C ABI for the safe embedding response parser."
+
+[lib]
+# The server includes the rlib in its existing sql-nio static archive, so there
+# is only one Rust runtime. The standalone staticlib is used by C ABI tests.
+crate-type = ["rlib", "staticlib"]
+
+[dependencies]
+embedding-response = { path = "../embedding-response" }

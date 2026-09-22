@@ -30,7 +30,13 @@ _SQL_NIO_INPUTS = [
     "Cargo.toml",
     "rust-toolchain.toml",
     "sql-nio/Cargo.toml",
-] + glob(["sql-nio/src/*.rs"])
+    "embedding-response/Cargo.toml",
+    "embedding-response-ffi/Cargo.toml",
+] + glob([
+    "sql-nio/src/*.rs",
+    "embedding-response/src/**/*.rs",
+    "embedding-response-ffi/src/**/*.rs",
+])
 
 # Cargo remains the authoritative Rust dependency resolver used by the
 # upstream CMake build.  Keep the action local and outside the sandbox until
@@ -82,6 +88,13 @@ filegroup(
         "//conditions:default": [":_sql_nio_static_unix"],
     }),
     visibility = ["//src/observer:__pkg__"],
+)
+
+cc_library(
+    name = "embedding_response_headers",
+    hdrs = ["embedding-response-ffi/include/embedding_response.h"],
+    includes = ["embedding-response-ffi/include"],
+    visibility = ["//src/query:__pkg__"],
 )
 
 cc_library(

@@ -9,6 +9,7 @@ QUERY_SCHEDULER_SOURCES = [
 ]
 
 QUERY_VECTOR_EMBEDDING_SOURCES = [
+    "vector/embedding_response_parser.cpp",
     "vector/ob_vector_embedding_handler.cpp",
 ]
 
