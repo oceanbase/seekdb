@@ -697,10 +697,12 @@ int construct_vsag_sindi_create_param(uint8_t create_type, const char *dtype, co
   int64_t pos = 0;
   int64_t buff_size = 0;
   // ObIStreamBuf exposes the serialized index through callback-backed chunks.
-  // Skip seek-based footer handling and let SINDI read from that stream directly;
-  // BufferStreamReader otherwise treats the current chunk length as the full stream.
+  // Skip seek-based footer handling.  Keep VSAG's buffering enabled so SINDI
+  // reads the callback chunks as one logical stream.  ObIStreamBuf reports the
+  // complete serialized length, which lets BufferStreamReader size its final
+  // read without crossing the true end of the stream.
   const bool deserialize_without_footer = true;
-  const bool deserialize_without_buffer = true;
+  const bool deserialize_without_buffer = false;
   if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos, "{\"dtype\":\"%s\"", dtype))) {
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos, ",\"metric_type\":\"%s\"", metric))) {
   } else if (OB_FAIL(databuff_printf(result_param_str, buf_len, pos, ",\"dim\": 1024"))) {
