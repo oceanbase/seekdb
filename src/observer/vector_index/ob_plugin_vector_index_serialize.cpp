@@ -384,10 +384,16 @@ int ObHNSWDeserializeCallback::operator()(char*& data, const int64_t data_size, 
       }
       if (OB_SUCC(ret) && OB_ISNULL(str_iter)) {
         // we should get next str_iter
-        if (OB_FAIL(row_iter->get_next_row(row))) {
-        } else if (OB_ISNULL(row) || row->get_column_count() < 2) {
-          ret = OB_ERR_UNEXPECTED;
+        if (OB_NOT_NULL(param.first_row_)) {
+          row = param.first_row_;
+          param.first_row_ = nullptr;
+        } else if (OB_FAIL(row_iter->get_next_row(row))) {
         } else {
+        }
+        if (OB_SUCC(ret) && (OB_ISNULL(row) || row->get_column_count() < 2)) {
+          ret = OB_ERR_UNEXPECTED;
+        }
+        if (OB_SUCC(ret)) {
           key_datum = row->storage_datums_[0];
           data_datum = row->storage_datums_[1];
           LOG_INFO("[vec index debug] show key and data for vsag deserialize", K(key_datum), K(data_datum));

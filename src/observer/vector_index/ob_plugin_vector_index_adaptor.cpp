@@ -4025,10 +4025,9 @@ int ObPluginVectorIndexAdaptor::deserialize_snap_data(ObVectorQueryConditions *q
                          snapshot_size_scan_param,
                          snapshot_size_table_param,
                          snapshot_size_iter))) {
-  } else if (OB_FAIL(ObPluginVectorIndexUtils::iter_table_rescan(*query_cond->scan_param_, table_scan_iter))) {
   } else {
     ObHNSWDeserializeCallback::CbParam param(
-        query_cond->row_iter_, &tmp_allocator, *query_cond->lob_read_options_, snapshot_size_iter);
+        query_cond->row_iter_, &tmp_allocator, *query_cond->lob_read_options_, row, snapshot_size_iter);
     ObHNSWDeserializeCallback callback(static_cast<void*>(this));
     ObIStreamBuf::Callback cb = callback;
     ObVectorIndexSerializer index_seri(tmp_allocator);

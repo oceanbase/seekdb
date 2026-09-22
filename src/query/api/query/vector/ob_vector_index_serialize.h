@@ -26,6 +26,10 @@
 
 namespace oceanbase
 {
+namespace blocksstable
+{
+class ObDatumRow;
+}
 namespace storage
 {
 class ObTableScanParam;
@@ -141,11 +145,13 @@ public:
     CbParam(ObNewRowIterator *iter,
             ObIAllocator *allocator,
             const common::ObLobReadOptions &lob_read_options,
+            blocksstable::ObDatumRow *first_row = nullptr,
             ObNewRowIterator *size_iter = nullptr)
       : iter_(iter),
         allocator_(allocator),
         lob_read_options_(&lob_read_options),
         str_iter_(nullptr),
+        first_row_(first_row),
         size_iter_(size_iter),
         stream_size_(0),
         stream_size_valid_(false)
@@ -177,6 +183,7 @@ public:
     ObIAllocator *allocator_;
     const common::ObLobReadOptions *lob_read_options_;
     ObTextStringIter *str_iter_;
+    blocksstable::ObDatumRow *first_row_;
     ObNewRowIterator *size_iter_;
     int64_t stream_size_;
     bool stream_size_valid_;
