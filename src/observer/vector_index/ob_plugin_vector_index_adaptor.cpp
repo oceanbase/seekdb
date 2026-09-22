@@ -4003,13 +4003,13 @@ int ObPluginVectorIndexAdaptor::deserialize_snap_data(ObVectorQueryConditions *q
   ObArenaAllocator tmp_allocator("VectorAdaptor", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObArenaAllocator allocator;
   ObHNSWDeserializeCallback::CbParam param(
-      query_cond->row_iter_, &tmp_allocator, *query_cond->lob_read_options_);
+      query_cond->row_iter_, &tmp_allocator, *query_cond->lob_read_options_, query_cond->scan_param_);
   if (OB_ISNULL(table_scan_iter) || OB_ISNULL(query_cond)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_ISNULL(row) || row->get_column_count() < 2) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ob_write_string(allocator, row->storage_datums_[0].get_string(), key_prefix))) {
-  } else if (OB_FAIL(param.prepare_stream_size(row))) {
+  } else if (OB_FAIL(param.prepare_stream_size())) {
   } else if (OB_FAIL(ObPluginVectorIndexUtils::iter_table_rescan(*query_cond->scan_param_, table_scan_iter))) {
   } else {
     ObHNSWDeserializeCallback callback(static_cast<void*>(this));

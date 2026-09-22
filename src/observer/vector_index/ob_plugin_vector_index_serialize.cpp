@@ -20,6 +20,7 @@
 #include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_vector_index_util.h"
 #include "storage/access/ob_table_scan_iterator.h"
+#include "storage/tx_storage/ob_access_service.h"
 #include "query/vector/ob_vector_index_adaptor.h"
 
 namespace oceanbase
@@ -286,44 +287,63 @@ int ObVectorIndexSerializer::deserialize(void *&index, ObIStreamBuf::CbParam &cb
 
 int ObHNSWDeserializeCallback::CbParam::prepare_stream_size()
 {
-  return stream_size_valid_ ? OB_SUCCESS : OB_NOT_SUPPORTED;
-}
-
-int ObHNSWDeserializeCallback::CbParam::prepare_stream_size(blocksstable::ObDatumRow *first_row)
-{
   int ret = OB_SUCCESS;
-  ObTableScanIterator *scan_iter = dynamic_cast<ObTableScanIterator *>(iter_);
-  int64_t total_size = 0;
-  blocksstable::ObDatumRow *row = first_row;
   if (stream_size_valid_) {
-  } else if (OB_ISNULL(scan_iter) || OB_ISNULL(row) || OB_ISNULL(allocator_)
+  } else if (OB_ISNULL(scan_param_) || OB_ISNULL(iter_) || OB_ISNULL(allocator_)
              || OB_ISNULL(lob_read_options_)) {
     ret = OB_NOT_SUPPORTED;
   } else {
-    while (OB_SUCC(ret) && OB_NOT_NULL(row)) {
-      if (row->get_column_count() < 2) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        ObTextStringIter str_iter(
-            ObLongTextType, CS_TYPE_BINARY, row->storage_datums_[1].get_string(), true);
-        int64_t lob_size = 0;
-        if (OB_FAIL(str_iter.init(0, lob_read_options_, allocator_))) {
-        } else if (OB_FAIL(str_iter.get_byte_len(lob_size))) {
-        } else if (lob_size < 0
-                   || total_size > std::numeric_limits<int64_t>::max() - lob_size) {
-          ret = OB_SIZE_OVERFLOW;
+    ObAccessService *access_service =
+        ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
+    ObNewRowIterator *size_iter = nullptr;
+    int64_t total_size = 0;
+    if (OB_ISNULL(access_service)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(access_service->table_scan(*scan_param_, size_iter))) {
+    } else {
+      ObTableScanIterator *size_scan_iter = dynamic_cast<ObTableScanIterator *>(size_iter);
+      if (OB_ISNULL(size_scan_iter)) {
+        ret = OB_NOT_SUPPORTED;
+      }
+      int scan_ret = OB_SUCCESS;
+      blocksstable::ObDatumRow *row = nullptr;
+      while (OB_SUCC(ret) && OB_SUCC(scan_ret)
+             && OB_SUCC(scan_ret = size_scan_iter->get_next_row(row))) {
+        if (OB_ISNULL(row) || row->get_column_count() < 2) {
+          scan_ret = OB_ERR_UNEXPECTED;
         } else {
-          total_size += lob_size;
+          ObTextStringIter str_iter(
+              ObLongTextType, CS_TYPE_BINARY, row->storage_datums_[1].get_string(), true);
+          int64_t lob_size = 0;
+          int tmp_ret = str_iter.init(0, lob_read_options_, allocator_);
+          if (OB_FAIL(tmp_ret)) {
+            scan_ret = tmp_ret;
+          } else {
+            tmp_ret = str_iter.get_byte_len(lob_size);
+            if (OB_FAIL(tmp_ret)) {
+              scan_ret = tmp_ret;
+            } else if (lob_size < 0
+                       || total_size > std::numeric_limits<int64_t>::max() - lob_size) {
+              scan_ret = OB_SIZE_OVERFLOW;
+            } else {
+              total_size += lob_size;
+            }
+          }
         }
       }
-      if (OB_SUCC(ret)) {
-        int tmp_ret = scan_iter->get_next_row(row);
-        if (OB_ITER_END == tmp_ret) {
-          row = nullptr;
-        } else if (OB_SUCCESS != tmp_ret) {
-          ret = tmp_ret;
-        }
+      if (scan_ret == OB_ITER_END) {
+        scan_ret = OB_SUCCESS;
       }
+      if (OB_SUCC(ret) && OB_FAIL(scan_ret)) {
+        ret = scan_ret;
+      }
+    }
+    if (OB_NOT_NULL(size_iter) && OB_NOT_NULL(access_service)) {
+      int tmp_ret = access_service->revert_scan_iter(size_iter);
+      if (OB_SUCCESS != tmp_ret && OB_SUCC(ret)) {
+        ret = tmp_ret;
+      }
+      size_iter = nullptr;
     }
     if (OB_SUCC(ret)) {
       stream_size_ = total_size;
