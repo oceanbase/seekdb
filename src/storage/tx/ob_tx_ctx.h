@@ -117,7 +117,7 @@ public:
         common::ObLink(),
         is_inited_(false), mt_ctx_(), tx_module_allocator_("PartCtx"),
         exec_info_(tx_module_allocator_),
-        mds_cache_(tx_module_allocator_),
+        mds_cache_(nullptr),
         has_async_index_redo_(false),
         allocated_log_cb_count_(0),
         big_segment_info_(nullptr)
@@ -403,6 +403,13 @@ private:
   int ensure_big_segment_info_();
   void destroy_big_segment_info_();
   bool is_big_segment_active_() const;
+  int ensure_mds_cache_();
+  void destroy_mds_cache_();
+  int prepare_mds_final_notify_array_(const bool need_reserve,
+                                      const bool need_merge_cache,
+                                      const bool allow_log_overflow);
+  ObTxBufferNodeArray &get_mds_final_notify_array_();
+  int64_t get_mds_cache_count_() const;
   int init_log_block_(ObTxLogBlock &log_block,
                       const int64_t suggested_buf_size = ObTxAdaptiveLogBuf::NORMAL_LOG_BUF_SIZE,
                       const bool serial_final = false);
@@ -628,7 +635,7 @@ private:
   // when multi source data is registered, it is stored in the array below,
   // it is moved to exec_info_.multi_source_data_ when corresponding
   // redo log callbacked.
-  ObTxMDSCache mds_cache_;
+  std::unique_ptr<ObTxMDSCache> mds_cache_;
   // runtime_state_ is volatile
   ObTxRuntimeState runtime_state_;
 

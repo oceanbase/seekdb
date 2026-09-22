@@ -83,7 +83,6 @@ int ObTxCtx::init(const uint32_t session_id,
     } else if (OB_FAIL(timeout_task_.init(this))) {
     } else if (OB_FAIL(init_memtable_ctx_())) {
     } else if (OB_FAIL(ctx_tx_data_.init(trans_expired_time, ls_ctx_mgr, trans_id))) {
-    } else if (OB_FAIL(mds_cache_.init(trans_id))) {
     }
   }
 
@@ -173,14 +172,7 @@ void ObTxCtx::destroy()
       trans_service_->handle_tx_commit_result(trans_id_, tx_result, SCN());
     }
 
-    exec_info_.destroy(mds_cache_);
-
-    mds_cache_.destroy();
-
-    if (mds_cache_.is_mem_leak()) {
-      TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "mds memory leak!", K(trans_id_), K(mds_cache_), K(exec_info_), K(ctx_tx_data_), K(create_ctx_scn_),
-                    K(ctx_source_), K(ctx_create_time_));
-    }
+    destroy_mds_cache_();
 
     ctx_tx_data_.destroy();
 
@@ -374,10 +366,10 @@ int ObTxCtx::handle_timeout(const int64_t delay)
         }
       }
 
-      if (mds_cache_.need_retry_submit_mds()) {
+      if (mds_cache_ && mds_cache_->need_retry_submit_mds()) {
         if (OB_TMP_FAIL(submit_log_impl_(ObTxLogType::TX_MULTI_DATA_SOURCE_LOG))) {
         } else {
-          mds_cache_.set_need_retry_submit_mds(false);
+          mds_cache_->set_need_retry_submit_mds(false);
         }
       }
 
@@ -1799,9 +1791,12 @@ int ObTxCtx::on_success_ops_(ObTxLogCb *log_cb)
     }  else if (ObTxLogType::TX_MULTI_DATA_SOURCE_LOG == log_type) {
       share::SCN notify_redo_scn =
         log_cb->get_first_part_scn().is_valid() ? log_cb->get_first_part_scn() : log_ts;
-      if (OB_FAIL(log_cb->get_mds_range().move_from_cache_to_arr(mds_cache_,
-                                                                 exec_info_.multi_data_source_))) {
-      } else if (FALSE_IT(mds_cache_.clear_submitted_iterator())) {
+      if (!mds_cache_) {
+        ret = OB_ERR_UNEXPECTED;
+        TRANS_LOG(ERROR, "mds cache is null for mds log callback", K(ret), KPC(log_cb));
+      } else if (OB_FAIL(log_cb->get_mds_range().move_from_cache_to_arr(*mds_cache_,
+                                                                        exec_info_.multi_data_source_))) {
+      } else if (FALSE_IT(mds_cache_->clear_submitted_iterator())) {
         // do nothing
       } else if (OB_FAIL(notify_data_source_(NotifyType::ON_REDO,
                                              notify_redo_scn,
@@ -1963,7 +1958,9 @@ int ObTxCtx::on_failure(ObTxLogCb *log_cb)
       const ObTxLogType log_type = log_cb->get_last_log_type();
       const SCN log_ts = log_cb->get_log_ts();
       mt_ctx_.sync_log_fail(log_cb->get_callbacks(), max_committed_scn);
-      log_cb->get_mds_range().range_sync_failed(mds_cache_);
+      if (mds_cache_) {
+        log_cb->get_mds_range().range_sync_failed(*mds_cache_);
+      }
       if (log_ts == ctx_tx_data_.get_start_log_ts()) {
         ctx_tx_data_.set_start_log_ts(SCN());
       }
@@ -2410,14 +2407,13 @@ int ObTxCtx::submit_commit_log_()
       || get_downstream_state() == ObTxState::ABORT) {
     ret = OB_TRANS_KILLED;
     TRANS_LOG(ERROR, "tx has been aborting, can not submit commit log", K(ret));
-  } else if (OB_FAIL(mds_cache_.reserve_final_notify_array(exec_info_.multi_data_source_))) {
-  } else if (OB_FAIL(mds_cache_.generate_final_notify_array(exec_info_.multi_data_source_,
-                                                             true /*need_merge_cache*/,
-                                                             false /*allow_log_overflow*/))) {
+  } else if (OB_FAIL(prepare_mds_final_notify_array_(true /*need_reserve*/,
+                                                     true /*need_merge_cache*/,
+                                                     false /*allow_log_overflow*/))) {
   } else {
     bool log_block_inited = false;
     int64_t suggested_buf_size = ObTxAdaptiveLogBuf::NORMAL_LOG_BUF_SIZE;
-    if (mds_cache_.get_final_notify_array().count() == 0 &&
+    if (get_mds_final_notify_array_().count() == 0 &&
         // 512B
         ((mt_ctx_.get_pending_log_size() < ObTxAdaptiveLogBuf::MIN_LOG_BUF_SIZE / 4) ||
          // for corner case test
@@ -2463,7 +2459,7 @@ int ObTxCtx::submit_commit_log_()
     ObTxCommitLog commit_log(log_commit_version,
                              collapsed_checksum,
                              checksum_sig,
-                             mds_cache_.get_final_notify_array(), prev_lsn,
+                             get_mds_final_notify_array_(), prev_lsn,
                              prev_log_type);
     ObTxLogCb *log_cb = NULL;
     bool redo_log_submitted = false;
@@ -2609,13 +2605,12 @@ int ObTxCtx::submit_abort_log_()
 
   logservice::ObReplayBarrierType abort_log_barrier_type =
       logservice::ObReplayBarrierType::NO_NEED_BARRIER;
-  if (OB_FAIL(mds_cache_.reserve_final_notify_array(exec_info_.multi_data_source_))) {
-  } else if (OB_FAIL(mds_cache_.generate_final_notify_array(exec_info_.multi_data_source_,
-                                                            true /*need_merge_cache*/,
-                                                            false /*allow_log_overflow*/))) {
+  if (OB_FAIL(prepare_mds_final_notify_array_(true /*need_reserve*/,
+                                              true /*need_merge_cache*/,
+                                              false /*allow_log_overflow*/))) {
   }
 
-  ObTxAbortLog abort_log(mds_cache_.get_final_notify_array());
+  ObTxAbortLog abort_log(get_mds_final_notify_array_());
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ret)) {
@@ -2643,7 +2638,8 @@ int ObTxCtx::submit_abort_log_()
     if (OB_UNLIKELY(OB_TX_NOLOGCB != ret)) {
       TRANS_LOG(WARN, "get log cb failed", KR(ret), K(*this));
     }
-  } else if (OB_FAIL(ctx_tx_data_.reserve_tx_op_space(mds_cache_.count() + 1/*promise tx_op pre_alloc safe*/))) {
+  } else if (OB_FAIL(ctx_tx_data_.reserve_tx_op_space(
+                 get_mds_cache_count_() + 1/*promise tx_op pre_alloc safe*/))) {
     TRANS_LOG(WARN, "reserve tx_op space failed", KR(ret), KPC(this));
     return_log_cb_(log_cb);
     log_cb = NULL;
@@ -2940,6 +2936,75 @@ bool ObTxCtx::is_big_segment_active_() const
   return big_segment_info_ && big_segment_info_->segment_buf_.is_active();
 }
 
+int ObTxCtx::ensure_mds_cache_()
+{
+  int ret = OB_SUCCESS;
+  if (mds_cache_) {
+  } else {
+    ObTxMDSCache *cache = new (std::nothrow) ObTxMDSCache(tx_module_allocator_);
+    if (OB_ISNULL(cache)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      TRANS_LOG(WARN, "alloc mds cache failed", K(ret), KPC(this));
+    } else if (OB_FAIL(cache->init(trans_id_))) {
+      TRANS_LOG(WARN, "init mds cache failed", K(ret), K_(trans_id));
+      delete cache;
+    } else {
+      mds_cache_.reset(cache);
+    }
+  }
+  return ret;
+}
+
+void ObTxCtx::destroy_mds_cache_()
+{
+  if (!mds_cache_ && (!exec_info_.multi_data_source_.empty() ||
+                      !exec_info_.mds_buffer_ctx_array_.empty())) {
+    TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "mds data exists without cache",
+                  K_(trans_id), K_(exec_info));
+  }
+
+  if (mds_cache_) {
+    exec_info_.destroy(*mds_cache_);
+    mds_cache_->destroy();
+    if (mds_cache_->is_mem_leak()) {
+      TRANS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "mds memory leak!", K(trans_id_),
+                    KPC(mds_cache_.get()), K(exec_info_), K(ctx_tx_data_),
+                    K(create_ctx_scn_), K(ctx_source_), K(ctx_create_time_));
+    }
+    mds_cache_.reset();
+  } else {
+    exec_info_.reset();
+  }
+}
+
+int ObTxCtx::prepare_mds_final_notify_array_(const bool need_reserve,
+                                             const bool need_merge_cache,
+                                             const bool allow_log_overflow)
+{
+  int ret = OB_SUCCESS;
+  if (mds_cache_ || !exec_info_.multi_data_source_.empty()) {
+    if (OB_FAIL(ensure_mds_cache_())) {
+    } else if (need_reserve && OB_FAIL(mds_cache_->reserve_final_notify_array(
+                                   exec_info_.multi_data_source_))) {
+    } else if (OB_FAIL(mds_cache_->generate_final_notify_array(
+                   exec_info_.multi_data_source_, need_merge_cache,
+                   allow_log_overflow))) {
+    }
+  }
+  return ret;
+}
+
+ObTxBufferNodeArray &ObTxCtx::get_mds_final_notify_array_()
+{
+  return mds_cache_ ? mds_cache_->get_final_notify_array()
+                    : exec_info_.multi_data_source_;
+}
+
+int64_t ObTxCtx::get_mds_cache_count_() const
+{
+  return mds_cache_ ? mds_cache_->count() : 0;
+}
+
 inline
 int ObTxCtx::submit_log_block_out_(ObTxLogBlock &log_block,
                                           const share::SCN &base_scn,
@@ -3141,8 +3206,13 @@ int ObTxCtx::after_submit_log_(ObTxLogBlock &log_block,
     // do nothing
   }
   if (OB_SUCC(ret) && bitmap_is_contain(ObTxLogType::TX_MULTI_DATA_SOURCE_LOG)) {
-    // do nothing
-    log_cb->get_mds_range().range_submitted(mds_cache_);
+    if (!mds_cache_) {
+      ret = OB_ERR_UNEXPECTED;
+      TRANS_LOG(ERROR, "mds cache is null after submitting mds log", K(ret),
+                KPC(log_cb));
+    } else {
+      log_cb->get_mds_range().range_submitted(*mds_cache_);
+    }
   }
   if(OB_SUCC(ret) && bitmap_is_contain(ObTxLogType::TX_BIG_SEGMENT_LOG))
   {
@@ -4017,8 +4087,9 @@ int ObTxCtx::replay_abort(const ObTxAbortLog &abort_log,
   }
   if (OB_SUCC(ret)) {
     // we must notify mds tx_end before invoking trans_replay_abort_ for clearing tablet lock
-    if (OB_FAIL(mds_cache_.generate_final_notify_array(
-            exec_info_.multi_data_source_, true /*need_merge_cache*/, true /*allow_log_overflow*/))) {
+    if (OB_FAIL(prepare_mds_final_notify_array_(false /*need_reserve*/,
+                                               true /*need_merge_cache*/,
+                                               true /*allow_log_overflow*/))) {
     } else if (OB_FAIL(TX_REPLAY_ABORT_FAIL_BEFORE_NOTIFY_TX_END)) {
     } else if (OB_FAIL(notify_data_source_(NotifyType::TX_END, timestamp, true,
                                            exec_info_.multi_data_source_,  false/*willing_to_commit*/))) {
@@ -4028,7 +4099,7 @@ int ObTxCtx::replay_abort(const ObTxAbortLog &abort_log,
     } else if (OB_FAIL(trans_clear_(timestamp))) {
     } else if (OB_FAIL(TX_REPLAY_ABORT_FAIL_AFTER_CLEAR)) {
     } else if (OB_FAIL(notify_data_source_(NotifyType::ON_ABORT, timestamp, true,
-                                           mds_cache_.get_final_notify_array(),
+                                           get_mds_final_notify_array_(),
                                            false/*willing_to_commit*/))) {
     } else if (OB_FAIL(TX_REPLAY_ABORT_FAIL_AFTER_NOTIFY_ON_ABORT)) {
     } else if (!ctx_tx_data_.is_read_only() && OB_FAIL(ctx_tx_data_.add_abort_op(timestamp))) {
@@ -4117,7 +4188,7 @@ int ObTxCtx::replay_multi_data_source(const ObTxMultiDataSourceLog &log,
 
       ObTxBufferNode &node = exec_info_.multi_data_source_.at(i);
       if (nullptr != node.data_.ptr()) {
-        mds_cache_.free_mds_node(node.data_, node.get_register_no());
+        mds_cache_->free_mds_node(node.data_, node.get_register_no());
         node.get_buffer_ctx_node().destroy_ctx();
       }
     }
@@ -4352,9 +4423,10 @@ int ObTxCtx::gen_total_mds_array_(ObTxBufferNodeArray &mds_array)
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(mds_cache_.generate_final_notify_array(
-          exec_info_.multi_data_source_, true /*need_merge_cache*/, true /*allow_log_overflow*/))) {
-  } else if (OB_FAIL(mds_array.assign(mds_cache_.get_final_notify_array()))) {
+  if (OB_FAIL(prepare_mds_final_notify_array_(false /*need_reserve*/,
+                                              true /*need_merge_cache*/,
+                                              true /*allow_log_overflow*/))) {
+  } else if (OB_FAIL(mds_array.assign(get_mds_final_notify_array_()))) {
   }
   return ret;
 }
@@ -4396,8 +4468,9 @@ int ObTxCtx::deep_copy_mds_array_(const ObTxBufferNodeArray &mds_array,
   // void *ptr = nullptr;
   int64_t len = 0;
 
-  if (OB_FAIL(tmp_buf_arr.reserve(additional_count))) {
-  } else if(OB_FAIL(incremental_array.reserve(additional_count))) {
+  if (additional_count > 0 && OB_FAIL(ensure_mds_cache_())) {
+  } else if (OB_FAIL(tmp_buf_arr.reserve(additional_count))) {
+  } else if (OB_FAIL(incremental_array.reserve(additional_count))) {
   } else if (need_replace) {
     ret = exec_info_.multi_data_source_.reserve(additional_count);
   } else {
@@ -4412,7 +4485,7 @@ int ObTxCtx::deep_copy_mds_array_(const ObTxBufferNodeArray &mds_array,
       const ObTxBufferNode &node = mds_array.at(i);
       len = node.data_.length();
       ObString tmp_data;
-      if (OB_FAIL(mds_cache_.alloc_mds_node(this, node.data_.ptr(), len, tmp_data, node.get_register_no()))) {
+      if (OB_FAIL(mds_cache_->alloc_mds_node(this, node.data_.ptr(), len, tmp_data, node.get_register_no()))) {
       } else {
       // if (OB_ISNULL(ptr = mtl_malloc(len, ""))) {
       //   ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -4424,7 +4497,7 @@ int ObTxCtx::deep_copy_mds_array_(const ObTxBufferNodeArray &mds_array,
         // data.assign_ptr(reinterpret_cast<char *>(ptr), len);
         mds::BufferCtx *new_ctx = nullptr;
         if (OB_FAIL(process_with_buffer_ctx(node, new_ctx))) {
-          mds_cache_.free_mds_node(tmp_data, node.get_register_no());
+          mds_cache_->free_mds_node(tmp_data, node.get_register_no());
           // mtl_free(tmp_data.ptr());
           if (OB_NOT_NULL(new_ctx)) {
             ::oceanbase::share::server_service<::oceanbase::storage::mds::ObMdsService>()->get_buffer_ctx_allocator().free(new_ctx);
@@ -4433,7 +4506,7 @@ int ObTxCtx::deep_copy_mds_array_(const ObTxBufferNodeArray &mds_array,
           TRANS_LOG(WARN, "process_with_buffer_ctx failed", KR(ret), K(*this));
         } else if (OB_FAIL(new_node.init(node.get_data_source_type(), tmp_data, node.mds_base_scn_,
                                          node.seq_no_, new_ctx))) {
-          mds_cache_.free_mds_node(tmp_data, node.get_register_no());
+          mds_cache_->free_mds_node(tmp_data, node.get_register_no());
           if (OB_NOT_NULL(new_ctx)) {
             ::oceanbase::share::server_service<::oceanbase::storage::mds::ObMdsService>()->get_buffer_ctx_allocator().free(new_ctx);
             new_ctx = nullptr;
@@ -4441,7 +4514,7 @@ int ObTxCtx::deep_copy_mds_array_(const ObTxBufferNodeArray &mds_array,
           TRANS_LOG(WARN, "init new node failed", KR(ret), K(*this));
         } else if (ObTxBufferNode::is_valid_register_no(node.get_register_no())
                    && OB_FAIL(new_node.set_mds_register_no(node.get_register_no()))) {
-          mds_cache_.free_mds_node(tmp_data, node.get_register_no());
+          mds_cache_->free_mds_node(tmp_data, node.get_register_no());
           // mtl_free(tmp_data.ptr());
           if (OB_NOT_NULL(new_ctx)) {
             ::oceanbase::share::server_service<::oceanbase::storage::mds::ObMdsService>()->get_buffer_ctx_allocator().free(new_ctx);
@@ -4449,7 +4522,7 @@ int ObTxCtx::deep_copy_mds_array_(const ObTxBufferNodeArray &mds_array,
           }
           TRANS_LOG(WARN, "set mds register_no failed", KR(ret), K(*this));
         } else if (OB_FAIL(tmp_buf_arr.push_back(new_node))) {
-          mds_cache_.free_mds_node(tmp_data, node.get_register_no());
+          mds_cache_->free_mds_node(tmp_data, node.get_register_no());
           if (OB_NOT_NULL(new_ctx)) {
             ::oceanbase::share::server_service<::oceanbase::storage::mds::ObMdsService>()->get_buffer_ctx_allocator().free(new_ctx);
             new_ctx = nullptr;
@@ -4461,7 +4534,7 @@ int ObTxCtx::deep_copy_mds_array_(const ObTxBufferNodeArray &mds_array,
 
     if (OB_FAIL(ret)) {
       for (int64_t i = 0; i < tmp_buf_arr.count(); ++i) {
-        mds_cache_.free_mds_node(tmp_buf_arr[i].data_, tmp_buf_arr[i].get_register_no());
+        mds_cache_->free_mds_node(tmp_buf_arr[i].data_, tmp_buf_arr[i].get_register_no());
         tmp_buf_arr[i].buffer_ctx_node_.destroy_ctx();
       }
       tmp_buf_arr.reset();
@@ -4474,8 +4547,8 @@ int ObTxCtx::deep_copy_mds_array_(const ObTxBufferNodeArray &mds_array,
 
     for (int64_t i = 0; i < exec_info_.multi_data_source_.count(); ++i) {
       if (nullptr != exec_info_.multi_data_source_[i].data_.ptr()) {
-        mds_cache_.free_mds_node(exec_info_.multi_data_source_[i].data_,
-                                 exec_info_.multi_data_source_[i].get_register_no());
+        mds_cache_->free_mds_node(exec_info_.multi_data_source_[i].data_,
+                                  exec_info_.multi_data_source_[i].get_register_no());
       }
       exec_info_.multi_data_source_[i].buffer_ctx_node_.destroy_ctx();
     }
@@ -4512,7 +4585,7 @@ int ObTxCtx::deep_copy_mds_array_(const ObTxBufferNodeArray &mds_array,
         }
         if (tmp_buf_arr[i].get_register_no()
             == exec_info_.multi_data_source_[ctx_array_start_index].get_register_no()) {
-          mds_cache_.free_mds_node(tmp_buf_arr[i].data_, tmp_buf_arr[i].get_register_no());
+          mds_cache_->free_mds_node(tmp_buf_arr[i].data_, tmp_buf_arr[i].get_register_no());
           // mtl_free(tmp_buf_arr[i].data_.ptr());
           tmp_buf_arr[i].buffer_ctx_node_.destroy_ctx();
           if (OB_FAIL(incremental_array.push_back(
@@ -4585,8 +4658,8 @@ int ObTxCtx::decide_state_log_barrier_type_(
   logservice::ObReplayBarrierType tmp_state_log_barrier_type =
       logservice::ObReplayBarrierType::NO_NEED_BARRIER;
 
-  if (OB_SUCC(ret)) {
-    if (OB_FAIL(mds_cache_.decide_cache_state_log_mds_barrier_type(
+  if (OB_SUCC(ret) && mds_cache_) {
+    if (OB_FAIL(mds_cache_->decide_cache_state_log_mds_barrier_type(
             state_log_type, mds_cache_final_log_barrier_type))) {
     } else {
       final_barrier_type = mds_cache_final_log_barrier_type;
@@ -4644,8 +4717,8 @@ bool ObTxCtx::is_contain_mds_type_(const ObTxDataSourceType target_type)
     }
   }
 
-  if (!is_contain) {
-    is_contain = mds_cache_.is_contain(target_type);
+  if (!is_contain && mds_cache_) {
+    is_contain = mds_cache_->is_contain(target_type);
   }
 
   return is_contain;
@@ -4693,7 +4766,7 @@ int ObTxCtx::submit_multi_data_source_(ObTxLogBlock &log_block)
     TRANS_LOG(WARN, "tx has been aborting, can not submit multi data source log", K(ret));
   } else if (runtime_state_.is_info_log_submitted()) {
     // state log already submitted, do nothing
-  } else if (mds_cache_.count() > 0) {
+  } else if (get_mds_cache_count_() > 0) {
     ObTxMultiDataSourceLog log;
     ObTxMDSRange range;
     while (OB_SUCC(ret)) {
@@ -4706,7 +4779,7 @@ int ObTxCtx::submit_multi_data_source_(ObTxLogBlock &log_block)
           TRANS_LOG(WARN, "get log cb failed", KR(ret), K(*this));
         }
       } else {
-        ret = mds_cache_.fill_mds_log(this, log, log_cb->get_mds_range(), barrier_type, mds_base_scn);
+        ret = mds_cache_->fill_mds_log(this, log, log_cb->get_mds_range(), barrier_type, mds_base_scn);
       }
 
       // TRANS_LOG(INFO, "after fill mds log", K(ret), K(trans_id_));
@@ -4716,7 +4789,7 @@ int ObTxCtx::submit_multi_data_source_(ObTxLogBlock &log_block)
       } else if (OB_SUCCESS != ret && OB_EAGAIN != ret) {
         TRANS_LOG(WARN, "fill MDS log failed", K(ret));
       } else if (OB_FAIL(exec_info_.multi_data_source_.reserve(
-                     exec_info_.multi_data_source_.count() + mds_cache_.count()))) {
+                     exec_info_.multi_data_source_.count() + get_mds_cache_count_()))) {
       } else if (OB_FAIL(add_multi_data_source_log_(log_block, log))) {
         // do not handle ret code OB_BUF_NOT_ENOUGH, one log entry should be
         // enough to hold multi source data, if not, take it as an error.
@@ -4740,7 +4813,7 @@ int ObTxCtx::submit_multi_data_source_(ObTxLogBlock &log_block)
       // we need pre_alloc tx_op_count=60 for log_cb apply not to alloc memory
       // reserve tx_op count equals unsubmit log mds_op (mds_cache)
       // this depend insert tx op and move from mds_cache process when mds redo log callback
-      } else if (OB_FAIL(ctx_tx_data_.reserve_tx_op_space(mds_cache_.count()))) {
+      } else if (OB_FAIL(ctx_tx_data_.reserve_tx_op_space(get_mds_cache_count_()))) {
       } else if (OB_FAIL(ls_tx_ctx_mgr_->get_tx_table()->alloc_tx_data(log_cb->get_tx_data_guard(), true, INT64_MAX))) {
       } else if (OB_ISNULL(tmp_buf = server_malloc(sizeof(ObTxOpArray), "ObTxOpArray"))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -4765,7 +4838,7 @@ int ObTxCtx::submit_multi_data_source_(ObTxLogBlock &log_block)
       } else {
         if (barrier_type != logservice::ObReplayBarrierType::NO_NEED_BARRIER || !mds_base_scn.is_min()) {
           TRANS_LOG(INFO, "submit MDS redo with barrier or base_scn successfully", K(ret), K(trans_id_),
-                    KPC(log_cb), K(mds_cache_), K(exec_info_.multi_data_source_),
+                    KPC(log_cb), KPC(mds_cache_.get()), K(exec_info_.multi_data_source_),
                     K(mds_base_scn), K(barrier_type));
         }
         log_cb = nullptr;
@@ -4791,17 +4864,17 @@ int ObTxCtx::prepare_mul_data_source_tx_end_(bool is_commit)
 
   if (OB_SUCC(ret)) {
 
-    if (is_commit && mds_cache_.count() > 0
+    if (is_commit && get_mds_cache_count_() > 0
         && OB_FAIL(submit_log_impl_(ObTxLogType::TX_MULTI_DATA_SOURCE_LOG))) {
       TRANS_LOG(WARN, "submit multi data souce log failed", K(ret));
 
       if (OB_TMP_FAIL(restart_commit_retry_timer_())) {
       }
-    } else if (OB_FAIL(mds_cache_.generate_final_notify_array(exec_info_.multi_data_source_,
-                                                               true /*need_merge_cache*/,
-                                                               true /*allow_log_overflo*/))) {
+    } else if (OB_FAIL(prepare_mds_final_notify_array_(false /*need_reserve*/,
+                                                       true /*need_merge_cache*/,
+                                                       true /*allow_log_overflow*/))) {
     } else if (OB_FAIL(notify_data_source_(NotifyType::TX_END, SCN(), false,
-                                           mds_cache_.get_final_notify_array(),
+                                           get_mds_final_notify_array_(),
                                            is_commit/*willing_to_commit*/))) {
     }
   }
@@ -4956,10 +5029,11 @@ int ObTxCtx::register_multi_data_source(const ObTxDataSourceType data_source_typ
     } else if (is_committing_()) {
       ret = OB_TRANS_HAS_DECIDED;
       TRANS_LOG(ERROR, "can not register mds in committing part_ctx", K(ret), KPC(this));
-    } else if (OB_FAIL(mds_cache_.try_recover_max_register_no(exec_info_.multi_data_source_))) {
+    } else if (OB_FAIL(ensure_mds_cache_())) {
+    } else if (OB_FAIL(mds_cache_->try_recover_max_register_no(exec_info_.multi_data_source_))) {
     } else if (OB_FALSE_IT(tx_print_guard.click_start("register_mds", 1))) {
       // do nothing
-    } else if (OB_FAIL(mds_cache_.alloc_mds_node(this, buf, len, data))) {
+    } else if (OB_FAIL(mds_cache_->alloc_mds_node(this, buf, len, data))) {
     } else {
       mds::BufferCtx *buffer_ctx = nullptr;
       if (!uses_builtin_mds_notifier(data_source_type)) {
@@ -4971,18 +5045,18 @@ int ObTxCtx::register_multi_data_source(const ObTxDataSourceType data_source_typ
       } else if (tmp_array.get_serialize_size() > ObTxMultiDataSourceLog::MAX_MDS_LOG_SIZE) {
         ret = OB_LOG_TOO_LARGE;
         TRANS_LOG(WARN, "too large mds buf node", K(ret), K(tmp_array.get_serialize_size()));
-      } else if (OB_FAIL(mds_cache_.insert_mds_node(node))) {
+      } else if (OB_FAIL(mds_cache_->insert_mds_node(node))) {
       } else if (OB_FALSE_IT(tx_print_guard.click_end(1))) {
         // do nothing
       }
 
       if (OB_FAIL(ret)) {
-        mds_cache_.free_mds_node(data, node.get_register_no());
+        mds_cache_->free_mds_node(data, node.get_register_no());
         if (OB_NOT_NULL(buffer_ctx)) {
           ::oceanbase::share::server_service<::oceanbase::storage::mds::ObMdsService>()->get_buffer_ctx_allocator().free(buffer_ctx);
         }
       } else if (OB_FAIL(notify_data_source_(NotifyType::REGISTER_SUCC, SCN(), false, tmp_array))) {
-        if (OB_SUCCESS != (tmp_ret = mds_cache_.rollback_last_mds_node())) {
+        if (OB_SUCCESS != (tmp_ret = mds_cache_->rollback_last_mds_node())) {
           ret = OB_ERR_UNEXPECTED;
           TRANS_LOG(ERROR, "rollback last mds node failed", K(tmp_ret), K(ret));
         }
@@ -4990,7 +5064,7 @@ int ObTxCtx::register_multi_data_source(const ObTxDataSourceType data_source_typ
         TRANS_LOG(WARN, "notify data source for register_succ failed", K(tmp_ret));
       } else if (OB_FALSE_IT(tx_print_guard.click_start("submit_mds", 2))) {
         // do nothing
-      } else if (mds_cache_.get_unsubmitted_size() < ObTxMultiDataSourceLog::MAX_PENDING_BUF_SIZE
+      } else if (mds_cache_->get_unsubmitted_size() < ObTxMultiDataSourceLog::MAX_PENDING_BUF_SIZE
                  && !register_flag.need_flush_redo_instantly_
                  && (OB_SUCCESS == TX_FORCE_WRITE_CLOG)) {
         // do nothing
@@ -4999,7 +5073,7 @@ int ObTxCtx::register_multi_data_source(const ObTxDataSourceType data_source_typ
         if (tmp_ret == OB_TX_NOLOGCB || tmp_ret == OB_EAGAIN) {
           ret = OB_SUCCESS;
           if (register_flag.need_flush_redo_instantly_) {
-            mds_cache_.set_need_retry_submit_mds(true);
+            mds_cache_->set_need_retry_submit_mds(true);
           }
         } else {
           ret = tmp_ret;
@@ -5015,7 +5089,8 @@ int ObTxCtx::register_multi_data_source(const ObTxDataSourceType data_source_typ
 
   if (OB_FAIL(ret)) {
     tx_print_guard.get_diff();
-    TRANS_LOG(WARN, "register MDS redo in part_ctx failed", K(ret), K(trans_id_), K(data_source_type), K(len), K(register_flag), K(mds_cache_), K(*this),
+    TRANS_LOG(WARN, "register MDS redo in part_ctx failed", K(ret), K(trans_id_),
+              K(data_source_type), K(len), K(register_flag), KPC(mds_cache_.get()), K(*this),
               K(tx_print_guard), K(lbt()));
   } else if (tx_print_guard.get_diff() > 1 * 1000 * 1000) {
     TRANS_LOG(INFO, "register MDS redo in ctx", K(ret), K(trans_id_), K(data_source_type),
@@ -5680,11 +5755,11 @@ int ObTxCtx::on_local_abort_tx_()
 
   if (OB_FAIL(tx_end_(false /*commit*/))) {
   } else if (OB_FAIL(trans_clear_(ctx_tx_data_.get_end_log_ts()))) {
-  } else if (OB_FAIL(mds_cache_.generate_final_notify_array(exec_info_.multi_data_source_,
-                                                             true /*need_merge_cache*/,
-                                                             true /*allow_log_overflow*/))) {
+  } else if (OB_FAIL(prepare_mds_final_notify_array_(false /*need_reserve*/,
+                                                     true /*need_merge_cache*/,
+                                                     true /*allow_log_overflow*/))) {
   } else if (OB_FAIL(notify_data_source_(NotifyType::ON_ABORT, ctx_tx_data_.get_end_log_ts(), false,
-                                         mds_cache_.get_final_notify_array(),
+                                         get_mds_final_notify_array_(),
                                          false /*willing_to_commit*/))) {
   } else if (FALSE_IT(set_durable_state_(ObTxState::ABORT))) {
 
