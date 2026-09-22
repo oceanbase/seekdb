@@ -136,6 +136,7 @@ Phase 3 对现 prototype 机械的落位：`src/rootserver/fork_table/` 拆解�
 
 ### Phase 1 单进程骨架（目标：单进程双 ns，点查追平单体）
 
+- 1.0 Phase 0 已清零风险：343 处三分类 = 0 处必须 ambient（`namespace_implicit_version_callsite_classification.md`）；schema service 第二实例进程内共存 spike 通过，唯一 init 阻断点（KV cache 具名注册）已加 `cache_name_suffix` 解决（`namespace_schema_service_spike.md`）；`src/namespace/` 骨架 + 登录绑定已入库（`Namespace`/`NamespaceRuntime`/`NamespaceRegistry`，session 登录一次绑定）。
 - 1.1 NamespaceRegistry + Namespace + NamespaceRuntime 骨架（懒创建，首次登录激活；Runtime 持有该 ns 的服务组）。
 - 1.2 登录绑定：`root@ns` 用户名解析（复用现有路由代码），session 缓存 runtime 指针。
 - 1.3 schema service per-ns 实例化：worker bootstrap 的 `init_schema` 序列移植为 Runtime 的服务组初始化；spike 最先验证 `ObMultiVersionSchemaService` 第二实例能否在进程内共存（隐藏全局依赖：refresh 定时器、inner SQL 连接池、publish signal）。
