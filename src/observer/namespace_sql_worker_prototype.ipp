@@ -748,7 +748,6 @@ int ObServer::namespace_sql_worker_prototype(const char *query)
   prepare_stop_ = false;
   stop_ = false;
   has_stopped_ = false;
-  worker_bootstrapping = false;
   if (OB_SUCC(ret) && worker_namespace > 1) {
     // A dead Worker may have committed native all_* rows after it marked the
     // namespace dirty but before it published the matching directory delta.
@@ -779,6 +778,10 @@ int ObServer::namespace_sql_worker_prototype(const char *query)
       namespace_schema_recovered = OB_SUCC(ret);
     }
   }
+  // worker_read keeps its bootstrap wire-pump until the recovery round trips
+  // above are done; the posted-reply path needs the main read loop, which
+  // starts only after the ready frame goes out below.
+  worker_bootstrapping = false;
   ret = worker_send_wire(ready);
   while (!ret) {
     Frame input;
