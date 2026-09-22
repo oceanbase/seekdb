@@ -66,6 +66,21 @@ int LogChecksum::acquire_accum_checksum(const int64_t data_checksum,
   return ret;
 }
 
+int LogChecksum::verify_next_accum_checksum(
+    const int64_t data_checksum,
+    const int64_t expected_accum_checksum) const
+{
+  int ret = OB_SUCCESS;
+  int64_t new_accum_checksum = 0;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(verify_accum_checksum(
+                 accum_checksum_, data_checksum, expected_accum_checksum,
+                 new_accum_checksum))) {
+  }
+  return ret;
+}
+
 int LogChecksum::verify_accum_checksum(const int64_t data_checksum,
                                        const int64_t accum_checksum)
 {

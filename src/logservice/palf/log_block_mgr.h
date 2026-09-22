@@ -77,6 +77,8 @@ public:
   int load_block_handler(const block_id_t block_id,
                          const offset_t offset);
 
+  void release_dio_aligned_buf_if_idle(const int64_t now, const int64_t idle_timeout_us);
+
   TO_STRING_KV(K_(log_dir), K_(dir_fd), K_(min_block_id), K_(max_block_id), K_(curr_writable_block_id));
 private:
   // @brief this function used to reconstruct 'blocks_'

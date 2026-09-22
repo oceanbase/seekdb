@@ -27,6 +27,9 @@ namespace oceanbase
 {
 namespace palf
 {
+class LogBufferSegment;
+class LogPendingBufferLimiter;
+
 class LSNAllocator
 {
 public:
@@ -69,6 +72,18 @@ public:
                     bool &is_new_log,
                     bool &need_gen_padding_entry,
                     int64_t &padding_len);
+  int alloc_lsn_scn(const share::SCN &base_scn,
+                    const int64_t size,
+                    const int64_t log_id_upper_bound,
+                    const LSN &lsn_upper_bound,
+                    LSN &lsn,
+                    int64_t &log_id,
+                    share::SCN &scn,
+                    bool &is_new_log,
+                    bool &need_gen_padding_entry,
+                    int64_t &padding_len,
+                    LogPendingBufferLimiter *pending_buffer_limiter,
+                    LogBufferSegment **padding_segment);
   // Update last_lsn and log_timestamp
   // called when receive_log/append_disk_log is invoked
   int inc_update_last_log_info(const LSN &lsn, const int64_t log_id, const share::SCN &scn);

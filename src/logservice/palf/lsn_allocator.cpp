@@ -16,6 +16,7 @@
 
 #include "lsn_allocator.h"
 #include "log_group_entry_header.h"
+#include "palf_log_buffer.h"
 
 namespace oceanbase
 {
@@ -319,7 +320,7 @@ int LSNAllocator::try_freeze(LSN &last_lsn, int64_t &last_log_id)
 }
 
 int LSNAllocator::alloc_lsn_scn(const SCN &base_scn,
-                                const int64_t size, // already includes LogHeader size
+                                const int64_t size,
                                 const int64_t log_id_upper_bound,
                                 const LSN &lsn_upper_bound,
                                 LSN &lsn,
@@ -329,10 +330,31 @@ int LSNAllocator::alloc_lsn_scn(const SCN &base_scn,
                                 bool &need_gen_padding_entry,
                                 int64_t &padding_len)
 {
+  return alloc_lsn_scn(base_scn, size, log_id_upper_bound, lsn_upper_bound,
+      lsn, log_id, scn, is_new_group_log, need_gen_padding_entry, padding_len,
+      NULL, NULL);
+}
+
+int LSNAllocator::alloc_lsn_scn(const SCN &base_scn,
+                                const int64_t size, // already includes LogHeader size
+                                const int64_t log_id_upper_bound,
+                                const LSN &lsn_upper_bound,
+                                LSN &lsn,
+                                int64_t &log_id,
+                                SCN &scn,
+                                bool &is_new_group_log,
+                                bool &need_gen_padding_entry,
+                                int64_t &padding_len,
+                                LogPendingBufferLimiter *pending_buffer_limiter,
+                                LogBufferSegment **padding_segment)
+{
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-  } else if (size <= 0 || !base_scn.is_valid() || log_id_upper_bound <= 0 || !lsn_upper_bound.is_valid()) {
+  } else if (size <= 0 || !base_scn.is_valid() || log_id_upper_bound <= 0
+      || !lsn_upper_bound.is_valid()
+      || ((NULL == pending_buffer_limiter) != (NULL == padding_segment))
+      || (NULL != padding_segment && NULL != *padding_segment)) {
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid arguments", K(ret), K(base_scn), K(size), K(log_id_upper_bound), K(lsn_upper_bound));
   } else {
@@ -495,6 +517,15 @@ int LSNAllocator::alloc_lsn_scn(const SCN &base_scn,
             PALF_LOG(INFO, "log_id or lsn will exceed upper bound, need retry", K(ret), K(size),
                 K(new_log_id), K(new_max_lsn), K(is_new_group_log), K(need_gen_padding_entry),
                 K(log_id_upper_bound), K(lsn_upper_bound));
+          }
+          break;
+        } else if (need_gen_padding_entry && NULL != padding_segment
+            && NULL == *padding_segment
+            && OB_FAIL(LogBufferSegment::prepare_padding(
+                pending_buffer_limiter, *padding_segment))) {
+          if (OB_EAGAIN != ret) {
+            PALF_LOG(WARN, "prepare padding resource before assigning lsn failed", K(ret),
+                K(size), K(new_log_id), K(new_max_lsn), K(padding_len));
           }
           break;
         } else if (CAS128(&lsn_ts_meta_, last, next)) {
