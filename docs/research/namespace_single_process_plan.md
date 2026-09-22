@@ -28,6 +28,15 @@ Phase 3 对现 prototype 机械的落位：`src/rootserver/fork_table/` 拆解�
 
 ## 核心设计抉择
 
+### 语义决策（grilling round 1，已定）
+
+1. **ns 身份**：名字存系统 ns 的 `__all_namespace`（name、ns_id、parent、fork scn），全局唯一，ns_id 创建时分配；v1 不支持 rename；命名规则同 MySQL 库名，`__` 前缀保留。
+2. **认证**：`root@ns` = 该 ns 的 root 用户；权限表 fork 继承后独立演化（fork 后改 ns1 密码不影响 ns2）。FORK/DROP NAMESPACE 是全局管理操作，仅系统 ns（ns 1）内 SUPER 权限用户可执行。
+3. **ns 1 双重身份**：系统 ns + 默认用户 ns 合一；无 `@` 登录落 ns 1，行为与单体一致；全局元数据表仅 internal inner SQL 可访问。
+4. **fork 返回与激活**：fork 同步完成元数据登记（目标 < 1s），返回即可登录；Runtime 懒激活，首连接阻塞等待拉起。激活失败 = 本次连接报错，**不持久化任何状态**——重试登录自然重新触发激活。
+5. **DROP NAMESPACE**：有活跃连接时拒绝（fail-fast）；允许 drop 源 ns（Phase 4，子 ns 例外表回源指针改指 snapshot 根）；回收走异步 GC，drop 只删元数据 + 注销 Registry。
+6. **系统变量**：per-ns，fork 时随 mysql 系统库自然复制，**无特殊处理**。
+
 已定：
 
 1. 命名三件套：`Namespace`（身份/血缘/存储根）/ `NamespaceRuntime`（per-ns 运行时数据：schema 版本状态、刷新状态）/ `NamespaceRegistry`（唯一新全局）。
