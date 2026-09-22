@@ -293,14 +293,22 @@ int ObHNSWDeserializeCallback::CbParam::prepare_stream_size()
              || OB_ISNULL(lob_read_options_)) {
     ret = OB_NOT_SUPPORTED;
   } else {
-    ObTableScanIterator *scan_iter = dynamic_cast<ObTableScanIterator *>(iter_);
-    if (OB_ISNULL(scan_iter)) {
-      ret = OB_NOT_SUPPORTED;
+    ObAccessService *access_service =
+        ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
+    ObNewRowIterator *size_iter = nullptr;
+    int64_t total_size = 0;
+    if (OB_ISNULL(access_service)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(access_service->table_scan(*scan_param_, size_iter))) {
     } else {
-      int64_t total_size = 0;
+      ObTableScanIterator *size_scan_iter = dynamic_cast<ObTableScanIterator *>(size_iter);
+      if (OB_ISNULL(size_scan_iter)) {
+        ret = OB_NOT_SUPPORTED;
+      }
       int scan_ret = OB_SUCCESS;
       blocksstable::ObDatumRow *row = nullptr;
-      while (OB_SUCC(scan_ret) && OB_SUCC(scan_ret = scan_iter->get_next_row(row))) {
+      while (OB_SUCC(ret) && OB_SUCC(scan_ret)
+             && OB_SUCC(scan_ret = size_scan_iter->get_next_row(row))) {
         if (OB_ISNULL(row) || row->get_column_count() < 2) {
           scan_ret = OB_ERR_UNEXPECTED;
         } else {
@@ -326,24 +334,20 @@ int ObHNSWDeserializeCallback::CbParam::prepare_stream_size()
       if (scan_ret == OB_ITER_END) {
         scan_ret = OB_SUCCESS;
       }
-      int rescan_ret = OB_SUCCESS;
-      ObAccessService *access_service =
-          ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
-      if (OB_ISNULL(access_service)) {
-        rescan_ret = OB_ERR_UNEXPECTED;
-      } else if (OB_SUCCESS !=
-                 (rescan_ret = access_service->reuse_scan_iter(false, iter_))) {
-      } else {
-        rescan_ret = access_service->table_rescan(*scan_param_, iter_);
-      }
-      if (OB_FAIL(scan_ret)) {
+      if (OB_SUCC(ret) && OB_FAIL(scan_ret)) {
         ret = scan_ret;
-      } else if (OB_FAIL(rescan_ret)) {
-        ret = rescan_ret;
-      } else {
-        stream_size_ = total_size;
-        stream_size_valid_ = true;
       }
+    }
+    if (OB_NOT_NULL(size_iter) && OB_NOT_NULL(access_service)) {
+      int tmp_ret = access_service->revert_scan_iter(size_iter);
+      if (OB_SUCCESS != tmp_ret && OB_SUCC(ret)) {
+        ret = tmp_ret;
+      }
+      size_iter = nullptr;
+    }
+    if (OB_SUCC(ret)) {
+      stream_size_ = total_size;
+      stream_size_valid_ = true;
     }
   }
   return ret;
