@@ -37,6 +37,15 @@ Phase 3 对现 prototype 机械的落位：`src/rootserver/fork_table/` 拆解�
 5. **DROP NAMESPACE**：有活跃连接时拒绝（fail-fast）；允许 drop 源 ns（Phase 4，子 ns 例外表回源指针改指 snapshot 根）；回收走异步 GC，drop 只删元数据 + 注销 Registry。
 6. **系统变量**：per-ns，fork 时随 mysql 系统库自然复制，**无特殊处理**。
 
+### 语义决策（grilling round 2，已定）
+
+7. **fork 语法终态**：`FORK NAMESPACE ns2 FROM ns1`（主路径，INSTANCE 改名 NAMESPACE）+ `CREATE NAMESPACE ns3`（语法糖 = FORK FROM `__template__`，对用户隐藏模板概念）+ FORK TABLE 保留现状语法；FORK DATABASE 退役（语义被 NAMESPACE 完全覆盖）。
+8. **快照点与并发写**：fork 取执行时刻的全局一致快照（MVCC pin 天然支持），**源 ns 写入不阻塞**；fork 后两 ns 完全独立演化，互不可见对方新写入。此语义为 fork 核心卖点，文档写死。
+9. **血缘链**：允许嵌套 fork，不限制深度；例外表回源是否扁平化**取决于实现简单性**，现阶段不考虑极端性能；血缘仅记录在 `__all_namespace.parent`，供展示/GC 决策。
+10. **跨 ns 数据访问**：禁止，无语法。跨 ns = fork 新 ns 或导出导入。
+11. **session 内切换 ns**：不能。session↔Runtime 绑定登录时一次完成，换 ns = 断开重连。
+12. **监控可见性**：普通 ns 只见本 ns 对象；系统 ns（ns 1）提供全局视图（全部 ns 的 processlist/tablet 统计），与管理操作收口一致。
+
 已定：
 
 1. 命名三件套：`Namespace`（身份/血缘/存储根）/ `NamespaceRuntime`（per-ns 运行时数据：schema 版本状态、刷新状态）/ `NamespaceRegistry`（唯一新全局）。
@@ -156,7 +165,7 @@ Phase 3 对现 prototype 机械的落位：`src/rootserver/fork_table/` 拆解�
 - MVCC pin 渐进松绑（全局先行 + 物化下放 per-tablet）。
 - 父 ns 可 drop（source snapshot 保留，去掉 prototype 简化）。
 - ns1 纳入编码（审计 §8，8 处依赖点，不动持久化格式）。
-- fork 语法终态（FORK INSTANCE/TABLE 保留，FORK DATABASE 退役评估）。
+- fork 语法落地（语义决策 7：FORK NAMESPACE 主路径 + CREATE NAMESPACE 语法糖，FORK DATABASE 退役）。
 - serverless 休眠/唤醒：冷 ns 停服务退线程留元数据，首访问毫秒级唤醒；休眠水位策略（按最近访问/内存压力）。
 
 ## 风险与回退
