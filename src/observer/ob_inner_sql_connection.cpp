@@ -988,7 +988,7 @@ int ObInnerSQLConnection::start_transaction(
 int ObInnerSQLConnection::start_transaction_inner(
     bool with_snap_shot /* = false */)
 {
-  if (!namespace_worker_prototype::worker_process) {
+  if (namespace_worker_prototype::shared_inner_sql_bounces()) {
     namespace_worker_prototype::Frame payload; payload.number('B'); payload.number(with_snap_shot);
     int64_t affected = 0;
     int ret = namespace_worker_prototype::inner_call(worker_binding_, *this, std::move(payload), affected);
@@ -1097,7 +1097,7 @@ int ObInnerSQLConnection::register_multi_data_source(
 
 int ObInnerSQLConnection::rollback()
 {
-  if (!namespace_worker_prototype::worker_process) {
+  if (namespace_worker_prototype::shared_inner_sql_bounces()) {
     namespace_worker_prototype::Frame payload; payload.number('X'); int64_t affected = 0;
     int ret = namespace_worker_prototype::inner_call(worker_binding_, *this, std::move(payload), affected);
     set_is_in_trans(false); return ret;
@@ -1127,7 +1127,7 @@ int ObInnerSQLConnection::rollback()
 
 int ObInnerSQLConnection::commit()
 {
-  if (!namespace_worker_prototype::worker_process) {
+  if (namespace_worker_prototype::shared_inner_sql_bounces()) {
     namespace_worker_prototype::Frame payload; payload.number('C'); int64_t affected = 0;
     int ret = namespace_worker_prototype::inner_call(worker_binding_, *this, std::move(payload), affected);
     set_is_in_trans(false); return ret;
@@ -1183,7 +1183,7 @@ int ObInnerSQLConnection::execute_proc(ObIAllocator &allocator,
 int ObInnerSQLConnection::execute_write_inner(const ObString &sql,
     int64_t &affected_rows, bool is_user_sql)
 {
-  if (!namespace_worker_prototype::worker_process) {
+  if (namespace_worker_prototype::shared_inner_sql_bounces()) {
     namespace_worker_prototype::Frame payload('?', namespace_worker_prototype::MAX_SQL_MESSAGE);
     payload.number('W'); payload.number(is_user_sql); payload.string(sql);
     return namespace_worker_prototype::inner_call(worker_binding_, *this, std::move(payload), affected_rows);
@@ -1262,7 +1262,7 @@ int ObInnerSQLConnection::execute_read_inner(const ObString &sql,
                                              ObISQLClient::ReadResult &res,
                                              bool is_user_sql)
 {
-  if (!namespace_worker_prototype::worker_process) {
+  if (namespace_worker_prototype::shared_inner_sql_bounces()) {
     return namespace_worker_prototype::inner_read(worker_binding_, *this, sql, res, is_user_sql);
   }
   int ret = OB_SUCCESS;
@@ -1453,7 +1453,7 @@ int ObInnerSQLConnection::set_session_variable(const ObString &name, int64_t val
   } else if (0 == name.case_compare("ob_read_consistency")) {
     LOG_INFO("inner session use weak consitency", K(val), "inner_connection_p", this);
   }
-  if (!ret && !namespace_worker_prototype::worker_process) {
+  if (!ret && namespace_worker_prototype::shared_inner_sql_bounces()) {
     namespace_worker_prototype::Frame payload; payload.number('S'); payload.string(name);
     ObObj value; value.set_int(val); payload.append(value); int64_t affected = 0;
     ret = namespace_worker_prototype::inner_call(worker_binding_, *this, std::move(payload), affected);
@@ -1469,7 +1469,7 @@ int ObInnerSQLConnection::set_session_variable(const ObString &name, const ObStr
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(get_session().update_sys_variable(name, val))) {
   }
-  if (!ret && !namespace_worker_prototype::worker_process) {
+  if (!ret && namespace_worker_prototype::shared_inner_sql_bounces()) {
     namespace_worker_prototype::Frame payload; payload.number('S'); payload.string(name);
     ObObj value; value.set_varchar(val); payload.append(value); int64_t affected = 0;
     ret = namespace_worker_prototype::inner_call(worker_binding_, *this, std::move(payload), affected);

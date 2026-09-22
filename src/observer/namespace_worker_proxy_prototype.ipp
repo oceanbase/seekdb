@@ -8,6 +8,7 @@
 #include <poll.h>
 #include <sys/socket.h>
 #include <sys/un.h>
+#include "namespace/namespace.h"
 #include <algorithm>
 #include <condition_variable>
 #include <cstring>
@@ -178,9 +179,15 @@ int resolve_branch(const std::string &branch, uint64_t &namespace_id,
     if (!override_ret) { pop_inner_sql_namespace_override(); }
   }
   if (!ret) {
-    std::shared_ptr<Channel> channel;
-    ret = ensure_channel(namespace_id, channel);
-    if (!ret) { endpoint = channel->client_endpoint; }
+    if (namespace_id == 1 && ns1_in_process()) {
+      // In-process ns1 (ticket 05a): the shared process's own NIO Unix
+      // endpoint serves the connection; no worker is spawned for ns 1.
+      endpoint = "run/sql.sock";
+    } else {
+      std::shared_ptr<Channel> channel;
+      ret = ensure_channel(namespace_id, channel);
+      if (!ret) { endpoint = channel->client_endpoint; }
+    }
   }
   return ret;
 }
@@ -387,6 +394,12 @@ void accept_loop() {
 int start() {
   if (worker_process) { return OB_SUCCESS; }
   int ret = OB_SUCCESS;
+  // The shared process owns the system namespace. Register it so logins on
+  // the local Unix endpoint bind a runtime (in-process ns1 dispatch and
+  // direct socket logins); name routing happens on this proxy entry.
+  if (0 != ns::namespace_registry().add(1, "")) {
+    return OB_ERR_UNEXPECTED;
+  }
   const int64_t port = GCONF.mysql_port;
   const bool ipv6 = lib::use_ipv6();
   const int fd = ::socket(ipv6 ? AF_INET6 : AF_INET, SOCK_STREAM, 0);

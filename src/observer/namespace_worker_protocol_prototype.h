@@ -5,6 +5,7 @@
 #include "lib/string/ob_string.h"
 #include "common/object/ob_object.h"
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <string>
@@ -142,6 +143,16 @@ inline CatalogFetch worker_catalog_fetch = nullptr;
 inline uint64_t worker_namespace = 0;
 inline bool worker_process = false;
 inline bool worker_bootstrapping = false;
+// Phase 1 transition gate (ticket 05a): with SEEKDB_NAMESPACE_NS1_IN_PROCESS
+// set, the shared process executes namespace-1 SQL in process and the proxy
+// dispatches those logins to its own local NIO endpoint instead of spawning a
+// worker. ns>1 still resolves to worker processes. Removed in Phase 3
+// together with the worker process mode.
+inline bool ns1_in_process()
+{
+  static const bool enabled = std::getenv("SEEKDB_NAMESPACE_NS1_IN_PROCESS") != nullptr;
+  return enabled && !worker_process;
+}
 // Defined in namespace_worker_scan_prototype.ipp. Dumps and resets cumulative
 // storage-frame exchange timing (count, send, wait per frame type).
 void scan_exchange_stats_dump(FILE *out);
@@ -206,6 +217,14 @@ int push_inner_sql_namespace_override(uint64_t namespace_id);
 void pop_inner_sql_namespace_override();
 uint64_t resolve_shared_inner_sql_namespace();
 int check_sql_execution_role();
+// Shared-process inner SQL normally bounces to the target namespace worker
+// over IPC. With the ticket-05a gate, ns-1-bound inner SQL instead executes
+// on the vanilla local path inside the shared process; ns>1 still bounces.
+inline bool shared_inner_sql_bounces()
+{
+  return !worker_process
+      && !(ns1_in_process() && resolve_shared_inner_sql_namespace() == 1);
+}
 // A worker owns the decision to create a fork snapshot, while the storage
 // process owns the transaction clock used to produce its SCN.
 int acquire_storage_snapshot(int64_t &snapshot);

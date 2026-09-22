@@ -261,16 +261,15 @@ int ObMPConnect::process()
     LOG_ERROR("session mgr is NULL", K(ret));
   } else if (OB_FAIL(conn->ret_)) {
   } else {
-    if (namespace_worker_prototype::worker_process) {
-      // The PROXY v2 preamble was consumed when Rust parsed this login. A
-      // proxied connection adopts the client-visible id the namespace entry
-      // allocated; CONNECTION_ID() then matches the greeting the client saw.
-      ObSqlSockDesc desc;
-      SQL_REQ_OP.get_sock_desc(req_, desc);
-      const int64_t proxy_conn_id = nio_get_proxy_conn_id(desc.sock_desc_);
-      if (proxy_conn_id > 0) {
-        conn->sessid_ = static_cast<uint32_t>(proxy_conn_id);
-      }
+    // The PROXY v2 preamble was consumed when Rust parsed this login (local
+    // sockets only). A proxied connection adopts the client-visible id the
+    // namespace entry allocated; CONNECTION_ID() then matches the greeting
+    // the client saw. Applies to any process the proxy dispatches to.
+    ObSqlSockDesc proxy_desc;
+    SQL_REQ_OP.get_sock_desc(req_, proxy_desc);
+    const int64_t proxy_conn_id = nio_get_proxy_conn_id(proxy_desc.sock_desc_);
+    if (proxy_conn_id > 0) {
+      conn->sessid_ = static_cast<uint32_t>(proxy_conn_id);
     }
     if (SS_STOPPING == GCTX.status_) {
       ret = OB_SERVER_IS_STOPPING;
@@ -677,10 +676,11 @@ int ObMPConnect::check_client_property(ObSMConnection &conn)
     const char *peer_ip = client_ip_buf_;
     client_ip_.assign_ptr(peer_ip, static_cast<int32_t>(STRLEN(peer_ip)));
     client_port_ = get_peer().get_port();
-    if (namespace_worker_prototype::worker_process) {
-      // Behind the namespace proxy the Unix socket peer is the shared
-      // process; the PROXY v2 preamble carries the real client address.
-      // Privilege host matching and host_name derive from client_ip_.
+    // Behind the namespace proxy the Unix socket peer is the dispatching
+    // process; the PROXY v2 preamble carries the real client address.
+    // Privilege host matching and host_name derive from client_ip_. The
+    // preamble is present on any proxied connection, in any process role.
+    {
       char proxy_ip[common::MAX_IP_ADDR_LENGTH] = {};
       int proxy_port = 0;
       ObSqlSockDesc desc;
@@ -773,10 +773,10 @@ int ObMPConnect::verify_identify(ObSMConnection &conn, ObSQLSessionInfo &session
     SQL_REQ_OP.bind_sql_session(req_);
     session.set_peer_addr(get_peer());
     session.set_client_addr(get_peer());
-    if (namespace_worker_prototype::worker_process) {
-      // Behind the namespace proxy the Unix socket peer is the shared
-      // process; the PROXY v2 preamble carries the real client address for
-      // host-based privileges, audit and processlist.
+    // Behind the namespace proxy the Unix socket peer is the dispatching
+    // process; the PROXY v2 preamble carries the real client address for
+    // host-based privileges, audit and processlist.
+    {
       char proxy_ip[OB_IP_STR_BUFF] = {};
       int proxy_port = 0;
       common::ObAddr proxy_addr;

@@ -83,7 +83,9 @@ uint64_t resolve_shared_inner_sql_namespace() {
 int check_sql_execution_role() {
   // User SQL executes only in namespace workers; the shared process owns
   // storage, fork control and the thin TCP router.
-  if (!worker_process) {
+  // Ticket 05a gate: with SEEKDB_NAMESPACE_NS1_IN_PROCESS the shared process
+  // also executes namespace-1 SQL in process (single-process Phase 1).
+  if (!worker_process && !ns1_in_process()) {
     fprintf(stderr, "PROTOTYPE_V18_SHARED_SQL_REJECT\n");
     return OB_NOT_SUPPORTED;
   }
@@ -1304,7 +1306,9 @@ int deactivate_namespace(uint64_t namespace_id) {
 }
 int reconcile_namespace_workers() {
   if (worker_process || !GCTX.sql_proxy_) { return OB_NOT_SUPPORTED; }
-  std::vector<uint64_t> namespaces{1};
+  std::vector<uint64_t> namespaces;
+  // In-process ns1 (ticket 05a) spawns no worker for the system namespace.
+  if (!ns1_in_process()) { namespaces.push_back(1); }
   int ret = push_inner_sql_namespace_override(1);
   if (!ret) {
     struct OverrideGuard {
