@@ -118,6 +118,8 @@ coexist=true init_ret=0 primary_leaked=0 second_isolation=1
 
 也就是说它只服务 **worker 进程的远程 schema 路径**，而 worker 进程模式在 ADR-0001 里已被判死刑、Phase 3 整体删除。现在把它改成 session 级，等于给一条即将删除的路径重做载体，且 `bind_login_namespace` 之后的 session 与 schema service 之间没有现成通道。**结论：本阶段不转换，随 Phase 3 删除该路径时一并消失**；单进程下的等价机制是"runtime 拥有自己的 schema service 实例"（§7 已完成），版本自然按 runtime 归属，不需要 thread_local。
 
+> **结论不变，前提需更正**（见 `namespace_kernel_single_process_gap.md` §5）：那个"worker 远程 schema 路径"其实**今天就不可达**——`uses_remote_schema()` 在 `namespace_worker_protocol_prototype.h:196` 是 `worker_process && worker_namespace != 0 && !owns_namespace_schema()`，而 `owns_namespace_schema()`（`:192`）就是前两个合取项，故恒为 false。所以 `worker_request_schema_version` 及其 4 个读写点是**当下的死代码**，而不是"以后随 Phase 3 删除"。不转换的结论不受影响（死代码更不该为它重做载体），但正确说法是"应随 Phase 3 直接删除"，而不是"它服务于即将删除的路径"。
+
 如果 reviewer 认为仍需在 worker 路径上消除 thread_local，应作为 Phase 3 之前的一次独立清理，而不是混在 issue 05 里。
 
 ## 9. issue 05 剩余工作
