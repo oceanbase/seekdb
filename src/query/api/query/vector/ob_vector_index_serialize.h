@@ -21,7 +21,6 @@
 #include "lib/allocator/page_arena.h"
 #include "lib/container/ob_se_array.h"
 #include "common/row/ob_row_iterator.h"
-#include "data_plane/blocksstable/ob_storage_datum.h"
 #include "share/ob_lob_access_utils.h"
 #include "query/vector/ob_vector_query_result.h"
 #include "query/vector/ob_vector_index_util.h"
@@ -144,32 +143,18 @@ private:
 class ObHNSWDeserializeCallback {
 public:
   struct CbParam : public ObIStreamBuf::CbParam {
-    struct SnapshotRow {
-      blocksstable::ObStorageDatum key_datum_;
-      blocksstable::ObStorageDatum data_datum_;
-      TO_STRING_KV(K_(key_datum), K_(data_datum));
-    };
     CbParam(ObNewRowIterator *iter,
             ObIAllocator *allocator,
             const common::ObLobReadOptions &lob_read_options)
       : iter_(iter),
         allocator_(allocator),
         lob_read_options_(&lob_read_options),
-        str_iter_(nullptr),
-        snapshot_row_allocator_("VecSnapRows", OB_MALLOC_NORMAL_BLOCK_SIZE),
-        snapshot_row_idx_(0),
+        snapshot_data_allocator_("VecSnapData", OB_MALLOC_NORMAL_BLOCK_SIZE),
+        snapshot_block_idx_(0),
         stream_size_(0),
         stream_size_valid_(false)
     {}
-    virtual ~CbParam() {
-      if (str_iter_ != nullptr) {
-        str_iter_->~ObTextStringIter();
-        if (allocator_ != nullptr) {
-          allocator_->free(str_iter_);
-        }
-        str_iter_ = nullptr;
-      }
-    }
+    virtual ~CbParam() = default;
     bool is_valid() const
     {
       return nullptr != iter_
@@ -178,6 +163,7 @@ public:
              && nullptr != lob_read_options_->read_service_;
     }
     int set_first_row(const blocksstable::ObDatumRow &row);
+    int stage_snapshot_row(const blocksstable::ObDatumRow &row, const bool save_key);
     virtual int prepare_stream_size() override;
     virtual int get_stream_size(int64_t &size) const override
     {
@@ -188,10 +174,13 @@ public:
     ObNewRowIterator *iter_;
     ObIAllocator *allocator_;
     const common::ObLobReadOptions *lob_read_options_;
-    ObTextStringIter *str_iter_;
-    ObArenaAllocator snapshot_row_allocator_;
-    ObSEArray<SnapshotRow, 4> snapshot_rows_;
-    int64_t snapshot_row_idx_;
+    // LOB locators returned by a table scan are tied to the scan row/access
+    // context.  Keep the actual snapshot bytes while that row is valid, then
+    // let VSAG consume this stable, single-scan image.
+    ObArenaAllocator snapshot_data_allocator_;
+    ObString snapshot_key_;
+    ObSEArray<ObString, 8> snapshot_blocks_;
+    int64_t snapshot_block_idx_;
     int64_t stream_size_;
     bool stream_size_valid_;
   };
