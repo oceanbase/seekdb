@@ -19,6 +19,7 @@
 #include <limits>
 #include "lib/function/ob_function.h"
 #include "lib/allocator/page_arena.h"
+#include "lib/container/ob_se_array.h"
 #include "common/row/ob_row_iterator.h"
 #include "data_plane/blocksstable/ob_storage_datum.h"
 #include "share/ob_lob_access_utils.h"
@@ -143,17 +144,19 @@ private:
 class ObHNSWDeserializeCallback {
 public:
   struct CbParam : public ObIStreamBuf::CbParam {
+    struct SnapshotRow {
+      blocksstable::ObStorageDatum key_datum_;
+      blocksstable::ObStorageDatum data_datum_;
+    };
     CbParam(ObNewRowIterator *iter,
             ObIAllocator *allocator,
-            const common::ObLobReadOptions &lob_read_options,
-            ObNewRowIterator *size_iter = nullptr)
+            const common::ObLobReadOptions &lob_read_options)
       : iter_(iter),
         allocator_(allocator),
         lob_read_options_(&lob_read_options),
         str_iter_(nullptr),
-        first_row_allocator_("VecFirstRow", OB_MALLOC_NORMAL_BLOCK_SIZE),
-        first_row_valid_(false),
-        size_iter_(size_iter),
+        snapshot_row_allocator_("VecSnapRows", OB_MALLOC_NORMAL_BLOCK_SIZE),
+        snapshot_row_idx_(0),
         stream_size_(0),
         stream_size_valid_(false)
     {}
@@ -185,11 +188,9 @@ public:
     ObIAllocator *allocator_;
     const common::ObLobReadOptions *lob_read_options_;
     ObTextStringIter *str_iter_;
-    ObArenaAllocator first_row_allocator_;
-    blocksstable::ObStorageDatum first_key_datum_;
-    blocksstable::ObStorageDatum first_data_datum_;
-    bool first_row_valid_;
-    ObNewRowIterator *size_iter_;
+    ObArenaAllocator snapshot_row_allocator_;
+    ObSEArray<SnapshotRow, 4> snapshot_rows_;
+    int64_t snapshot_row_idx_;
     int64_t stream_size_;
     bool stream_size_valid_;
   };

@@ -289,31 +289,51 @@ int ObHNSWDeserializeCallback::CbParam::prepare_stream_size()
 {
   int ret = OB_SUCCESS;
   if (stream_size_valid_) {
-  } else if (OB_ISNULL(size_iter_) || OB_ISNULL(iter_) || OB_ISNULL(allocator_)
+  } else if (OB_ISNULL(iter_) || OB_ISNULL(allocator_)
              || OB_ISNULL(lob_read_options_)) {
     ret = OB_NOT_SUPPORTED;
   } else {
-    ObTableScanIterator *size_scan_iter = dynamic_cast<ObTableScanIterator *>(size_iter_);
+    ObTableScanIterator *scan_iter = dynamic_cast<ObTableScanIterator *>(iter_);
     int64_t total_size = 0;
-    if (OB_ISNULL(size_scan_iter)) {
+    if (OB_ISNULL(scan_iter)) {
       ret = OB_NOT_SUPPORTED;
     } else {
       int scan_ret = OB_SUCCESS;
       blocksstable::ObDatumRow *row = nullptr;
+      for (int64_t i = 0; OB_SUCC(ret) && i < snapshot_rows_.count(); ++i) {
+        ObTextStringIter str_iter(
+            ObLongTextType, CS_TYPE_BINARY, snapshot_rows_.at(i).data_datum_.get_string(), true);
+        int64_t lob_size = 0;
+        if (OB_FAIL(str_iter.init(0, lob_read_options_, allocator_))) {
+        } else if (OB_FAIL(str_iter.get_byte_len(lob_size))) {
+        } else if (lob_size < 0 || total_size > std::numeric_limits<int64_t>::max() - lob_size) {
+          ret = OB_SIZE_OVERFLOW;
+        } else {
+          total_size += lob_size;
+        }
+      }
       while (OB_SUCC(ret) && OB_SUCC(scan_ret)
-             && OB_SUCC(scan_ret = size_scan_iter->get_next_row(row))) {
+             && OB_SUCC(scan_ret = scan_iter->get_next_row(row))) {
         if (OB_ISNULL(row) || row->get_column_count() < 2) {
           scan_ret = OB_ERR_UNEXPECTED;
         } else {
-          ObTextStringIter str_iter(
-              ObLongTextType, CS_TYPE_BINARY, row->storage_datums_[1].get_string(), true);
-          int64_t lob_size = 0;
-          int tmp_ret = str_iter.init(0, lob_read_options_, allocator_);
-          if (OB_FAIL(tmp_ret)) {
-            scan_ret = tmp_ret;
+          SnapshotRow snapshot_row;
+          if (OB_FAIL(snapshot_row.key_datum_.deep_copy(
+                  row->storage_datums_[0], snapshot_row_allocator_))) {
+            scan_ret = ret;
+          } else if (OB_FAIL(snapshot_row.data_datum_.deep_copy(
+                         row->storage_datums_[1], snapshot_row_allocator_))) {
+            scan_ret = ret;
+          } else if (OB_FAIL(snapshot_rows_.push_back(snapshot_row))) {
+            scan_ret = ret;
           } else {
-            tmp_ret = str_iter.get_byte_len(lob_size);
+            ObTextStringIter str_iter(
+                ObLongTextType, CS_TYPE_BINARY, snapshot_rows_.at(snapshot_rows_.count() - 1).data_datum_.get_string(), true);
+            int64_t lob_size = 0;
+            int tmp_ret = str_iter.init(0, lob_read_options_, allocator_);
             if (OB_FAIL(tmp_ret)) {
+              scan_ret = tmp_ret;
+            } else if (OB_FAIL(tmp_ret = str_iter.get_byte_len(lob_size))) {
               scan_ret = tmp_ret;
             } else if (lob_size < 0
                        || total_size > std::numeric_limits<int64_t>::max() - lob_size) {
@@ -342,14 +362,19 @@ int ObHNSWDeserializeCallback::CbParam::prepare_stream_size()
 int ObHNSWDeserializeCallback::CbParam::set_first_row(const blocksstable::ObDatumRow &row)
 {
   int ret = OB_SUCCESS;
-  first_row_valid_ = false;
-  first_row_allocator_.reuse();
+  snapshot_rows_.reuse();
+  snapshot_row_allocator_.reuse();
+  snapshot_row_idx_ = 0;
   if (row.get_column_count() < 2) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(first_key_datum_.deep_copy(row.storage_datums_[0], first_row_allocator_))) {
-  } else if (OB_FAIL(first_data_datum_.deep_copy(row.storage_datums_[1], first_row_allocator_))) {
   } else {
-    first_row_valid_ = true;
+    SnapshotRow snapshot_row;
+    if (OB_FAIL(snapshot_row.key_datum_.deep_copy(
+            row.storage_datums_[0], snapshot_row_allocator_))) {
+    } else if (OB_FAIL(snapshot_row.data_datum_.deep_copy(
+                   row.storage_datums_[1], snapshot_row_allocator_))) {
+    } else if (OB_FAIL(snapshot_rows_.push_back(snapshot_row))) {
+    }
   }
   return ret;
 }
@@ -358,11 +383,9 @@ int ObHNSWDeserializeCallback::operator()(char*& data, const int64_t data_size, 
 {
   UNUSED(data_size);
   int ret = OB_SUCCESS;
-  blocksstable::ObDatumRow *row = nullptr;
   ObDatum key_datum;
   ObDatum data_datum;
   ObHNSWDeserializeCallback::CbParam &param = static_cast<ObHNSWDeserializeCallback::CbParam&>(cb_param);
-  ObTableScanIterator *row_iter = static_cast<ObTableScanIterator *>(param.iter_);
   ObIAllocator *allocator = param.allocator_;
   ObTextStringIter *&str_iter = param.str_iter_;
   ObTextStringIterState state;
@@ -399,16 +422,13 @@ int ObHNSWDeserializeCallback::operator()(char*& data, const int64_t data_size, 
       }
       if (OB_SUCC(ret) && OB_ISNULL(str_iter)) {
         // we should get next str_iter
-        if (param.first_row_valid_) {
-          key_datum = param.first_key_datum_;
-          data_datum = param.first_data_datum_;
-          param.first_row_valid_ = false;
-        } else if (OB_FAIL(row_iter->get_next_row(row))) {
-        } else if (OB_ISNULL(row) || row->get_column_count() < 2) {
-          ret = OB_ERR_UNEXPECTED;
+        if (param.snapshot_row_idx_ >= param.snapshot_rows_.count()) {
+          ret = OB_ITER_END;
         } else {
-          key_datum = row->storage_datums_[0];
-          data_datum = row->storage_datums_[1];
+          const ObHNSWDeserializeCallback::CbParam::SnapshotRow &snapshot_row =
+              param.snapshot_rows_.at(param.snapshot_row_idx_++);
+          key_datum = snapshot_row.key_datum_;
+          data_datum = snapshot_row.data_datum_;
         }
         if (OB_SUCC(ret)) {
           LOG_INFO("[vec index debug] show key and data for vsag deserialize", K(key_datum), K(data_datum));
