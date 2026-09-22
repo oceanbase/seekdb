@@ -13,6 +13,19 @@
 
 **终态分层（验收标准）**：**入口层感知 ns**（登录路由、registry、id 编码翻译——ns 语义的唯一合法解释点）；**SQL 层基本不感知**（模块构造注入本 ns 服务实例后按单 ns 逻辑运行，仅登录绑定、DDL 任务派发等少数入口点经手 ns）；**共享存储层完全不感知**（只认编码 id，连"ns 存在"这件事都不知道）。Phase 3 完成时的代码结构必须满足这三档分布，bazel 门禁按此分层设 visibility 规则。
 
+**源码布局（与逻辑分层同构）**：
+
+| 目录 | 层 | ns 感知 | 内容 |
+| --- | --- | --- | --- |
+| `src/namespace/`（新建） | 边界层 | 唯一感知 | `Namespace`（身份/血缘/存储根）、`NamespaceRuntime`（per-ns 服务组持有者）、`NamespaceRegistry`、登录路由（`root@ns` 解析）、tablet id 编码翻译 |
+| `src/observer/` | 入口层 | 经手不解释 | 进程入口、网络/NIO、认证；登录成功后把 session 绑定到 Registry 解析出的 Runtime |
+| `src/sql/` | 计算层 | 基本不感知 | 现状不动；禁 include `src/namespace/` |
+| `src/storage/` `src/share/`（存储侧） | 存储层 | 完全不感知 | 现状不动；禁 include `src/namespace/`、`src/sql/`、`src/observer/` |
+
+依赖方向单向不可逆：`namespace → observer → sql → storage`（上层可见下层，下层禁见上层）。bazel 每层 BUILD.bazel 按此设 visibility + layering_check，编译期强制；违反=编译错，不靠 review。
+
+Phase 3 对现 prototype 机械的落位：`src/rootserver/fork_table/` 拆解——ns-blind 部分（tablet 注册、exceptions、GC pin）下沉 `src/storage/`；控制面（fork 语法、血缘管理、目录登记）进 `src/namespace/`；`src/observer/` 下的 worker prototype ipp 随进程模式删除。
+
 ## 核心设计抉择
 
 已定：
