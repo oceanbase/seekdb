@@ -110,6 +110,28 @@ ObIStreamBuf::pos_type ObIStreamBuf::seekoff(off_type off, std::ios_base::seekdi
       const off_type block_begin = static_cast<off_type>(stream_pos_);
       const off_type block_end = block_begin + static_cast<off_type>(egptr() - eback());
       const off_type current = block_begin + static_cast<off_type>(gptr() - eback());
+      auto seek_absolute = [this, &ret, block_begin, block_end](const off_type target) {
+        if (target >= block_begin && target <= block_end) {
+          synthetic_pos_ = -1;
+          setg(eback(), eback() + (target - block_begin), egptr());
+          ret = pos_type(target);
+        } else if (target >= 0) {
+          char *target_data = nullptr;
+          int64_t target_size = 0;
+          int64_t target_begin = 0;
+          int seek_ret = cb_param_.seek_to(
+              static_cast<int64_t>(target), target_data, target_size, target_begin);
+          if (OB_SUCCESS == seek_ret && target_begin <= target
+              && target <= target_begin + target_size
+              && (target_size == 0 || OB_NOT_NULL(target_data))) {
+            data_ = target_data;
+            stream_pos_ = target_begin;
+            synthetic_pos_ = -1;
+            setg(data_, data_ + (target - target_begin), data_ + target_size);
+            ret = pos_type(target);
+          }
+        }
+      };
       if (std::ios_base::cur == dir) {
         const off_type origin = synthetic_pos_ >= 0
                                     ? static_cast<off_type>(synthetic_pos_)
@@ -117,9 +139,8 @@ ObIStreamBuf::pos_type ObIStreamBuf::seekoff(off_type off, std::ios_base::seekdi
         const off_type target = origin + off;
         if (synthetic_pos_ >= 0 && off == 0) {
           ret = pos_type(origin);
-        } else if (synthetic_pos_ < 0 && target >= block_begin && target <= block_end) {
-          setg(eback(), eback() + (target - block_begin), egptr());
-          ret = pos_type(target);
+        } else {
+          seek_absolute(target);
         }
       } else if (std::ios_base::end == dir) {
         // IOStreamReader probes the stream length before deserializing.  The
@@ -130,15 +151,16 @@ ObIStreamBuf::pos_type ObIStreamBuf::seekoff(off_type off, std::ios_base::seekdi
         int64_t stream_size = 0;
         if (OB_SUCC(cb_param_.get_stream_size(stream_size)) && off <= 0
             && off >= -static_cast<off_type>(stream_size)) {
-          synthetic_pos_ = stream_size + static_cast<int64_t>(off);
-          ret = pos_type(static_cast<off_type>(synthetic_pos_));
+          const off_type target = static_cast<off_type>(stream_size) + off;
+          if (off == 0) {
+            synthetic_pos_ = static_cast<int64_t>(target);
+            ret = pos_type(target);
+          } else {
+            seek_absolute(target);
+          }
         }
       } else if (std::ios_base::beg == dir) {
-        if (off >= block_begin && off <= block_end) {
-          synthetic_pos_ = -1;
-          setg(eback(), eback() + (off - block_begin), egptr());
-          ret = pos_type(off);
-        }
+        seek_absolute(off);
       }
     }
   }
@@ -356,6 +378,44 @@ int ObHNSWDeserializeCallback::CbParam::set_first_row(const blocksstable::ObDatu
   if (row.get_column_count() < 2) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(stage_snapshot_row(row, true))) {
+  }
+  return ret;
+}
+
+int ObHNSWDeserializeCallback::CbParam::seek_to(
+    const int64_t position, char *&data, int64_t &data_size, int64_t &block_begin)
+{
+  int ret = OB_SUCCESS;
+  data = nullptr;
+  data_size = 0;
+  block_begin = 0;
+  if (!stream_size_valid_ || position < 0 || position > stream_size_) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (snapshot_blocks_.count() == 0) {
+    if (position != 0) {
+      ret = OB_INVALID_ARGUMENT;
+    }
+    snapshot_block_idx_ = 0;
+  } else {
+    int64_t cursor = 0;
+    bool found = false;
+    for (int64_t i = 0; !found && i < snapshot_blocks_.count(); ++i) {
+      ObString &block = snapshot_blocks_.at(i);
+      const int64_t block_end = cursor + block.length();
+      if (position < block_end
+          || (position == stream_size_ && i == snapshot_blocks_.count() - 1)) {
+        data = block.ptr();
+        data_size = block.length();
+        block_begin = cursor;
+        snapshot_block_idx_ = i + 1;
+        found = true;
+      } else {
+        cursor = block_end;
+      }
+    }
+    if (!found) {
+      ret = OB_ERR_UNEXPECTED;
+    }
   }
   return ret;
 }

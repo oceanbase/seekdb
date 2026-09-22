@@ -102,6 +102,14 @@ public:
       size = 0;
       return OB_NOT_SUPPORTED;
     }
+    virtual int seek_to(const int64_t position,
+                        char *&data,
+                        int64_t &data_size,
+                        int64_t &block_begin)
+    {
+      UNUSEDx(position, data, data_size, block_begin);
+      return OB_NOT_SUPPORTED;
+    }
   };
   using Callback = ObFunction<int(char *&, const int64_t, int64_t &, CbParam &)>;
   explicit ObIStreamBuf(char *data, const int64_t capacity, CbParam &cb_param, Callback &cb) 
@@ -171,6 +179,10 @@ public:
       size = stream_size_;
       return ret;
     }
+    virtual int seek_to(const int64_t position,
+                        char *&data,
+                        int64_t &data_size,
+                        int64_t &block_begin) override;
     ObNewRowIterator *iter_;
     ObIAllocator *allocator_;
     const common::ObLobReadOptions *lob_read_options_;
