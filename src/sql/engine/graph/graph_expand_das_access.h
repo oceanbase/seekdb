@@ -32,8 +32,9 @@ struct ObDASScanCtDef;
 struct ObDASScanRtDef;
 
 // DAS implementation of the physical one-hop access contract. It supports
-// batched vertex lookup and a stateful single-tablet edge-table fallback scan;
-// adjacency-index and partitioned edge scans are added separately.
+// batched vertex lookup, adjacency-index range scans and a stateful
+// single-tablet edge-table fallback scan. Partitioned fallback scans are added
+// separately.
 class GraphExpandDasAccess final : public IGraphExpandAccess
 {
 public:
@@ -152,8 +153,18 @@ private:
       GraphPathDirection direction,
       const GraphElementIdentity *after_edge,
       int64_t limit) const;
+  int init_edge_scan_rtdefs(bool uses_index_back);
+  int build_adjacency_ranges(
+      const common::ObIArray<GraphElementIdentity> &sources,
+      common::ObIArray<common::ObNewRange> &ranges);
+  int attach_edge_lookup(ObDASScanOp &scan_op,
+                         const ObDASTabletLoc &index_tablet_loc);
   int start_full_edge_scan(bool &empty);
-  int get_full_edge_page(
+  int start_adjacency_edge_scan(
+      const common::ObIArray<GraphElementIdentity> &sources,
+      bool &empty);
+  int clear_edge_eval_flags();
+  int get_edge_page(
       const common::ObIArray<GraphElementIdentity> &sources,
       int64_t limit,
       common::ObIArray<GraphExpandEdge> &edges,
@@ -175,6 +186,7 @@ private:
   VertexLookupBinding target_binding_{};
   EdgeScanBinding edge_binding_{};
   ObDASScanRtDef *edge_scan_rtdef_{nullptr};
+  ObDASScanRtDef *edge_lookup_rtdef_{nullptr};
   DASOpResultIter edge_result_iter_{};
   GraphElementIdentity edge_cursor_{};
   uint64_t edge_sources_hash_{0};

@@ -20,6 +20,7 @@
 #include "common/ob_range.h"
 #include "sql/das/ob_das_ref.h"
 #include "sql/das/ob_das_scan_op.h"
+#include "sql/das/ob_das_utils.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_operator.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
@@ -291,6 +292,10 @@ int GraphExpandDasAccess::reset_edge_scan(int ret)
 {
   if (edge_das_ref_.has_task()) {
     ret = close_das_tasks(edge_das_ref_, ret);
+  }
+  if (edge_lookup_rtdef_ != nullptr) {
+    edge_lookup_rtdef_->~ObDASScanRtDef();
+    edge_lookup_rtdef_ = nullptr;
   }
   if (edge_scan_rtdef_ != nullptr) {
     edge_scan_rtdef_->~ObDASScanRtDef();
@@ -835,6 +840,132 @@ int GraphExpandDasAccess::validate_edge_scan_request(
   return ret;
 }
 
+int GraphExpandDasAccess::init_edge_scan_rtdefs(bool uses_index_back)
+{
+  int ret = OB_SUCCESS;
+  const ObTableScanSpec *scan_spec = edge_binding_.scan_spec_;
+  const ObDASScanCtDef *scan_ctdef = edge_binding_.access_ctdef_;
+  const ObDASScanCtDef *lookup_ctdef = edge_binding_.output_ctdef_;
+  edge_das_ref_.set_mem_attr(ObMemAttr("GraphEdgeScan"));
+  void *scan_buffer = nullptr;
+  void *lookup_buffer = nullptr;
+  if (OB_ISNULL(scan_spec) || OB_ISNULL(scan_ctdef)
+      || OB_ISNULL(lookup_ctdef)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_ISNULL(scan_buffer = edge_das_ref_.get_das_alloc().alloc(
+                           sizeof(ObDASScanRtDef)))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else {
+    edge_scan_rtdef_ = new(scan_buffer) ObDASScanRtDef();
+    if (OB_FAIL(init_scan_rtdef(*scan_spec, *scan_ctdef, uses_index_back,
+                                edge_das_ref_.get_das_alloc(),
+                                *edge_scan_rtdef_))) {
+    } else {
+      edge_scan_rtdef_->scan_flag_.scan_order_ = ObQueryFlag::Forward;
+    }
+  }
+  if (OB_SUCC(ret) && uses_index_back) {
+    if (OB_UNLIKELY(lookup_ctdef == scan_ctdef)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_ISNULL(lookup_buffer = edge_das_ref_.get_das_alloc().alloc(
+                              sizeof(ObDASScanRtDef)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      edge_lookup_rtdef_ = new(lookup_buffer) ObDASScanRtDef();
+      if (OB_FAIL(init_scan_rtdef(*scan_spec, *lookup_ctdef, true,
+                                  edge_das_ref_.get_das_alloc(),
+                                  *edge_lookup_rtdef_))) {
+      }
+    }
+  }
+  return ret;
+}
+
+int GraphExpandDasAccess::build_adjacency_ranges(
+    const ObIArray<GraphElementIdentity> &sources,
+    ObIArray<ObNewRange> &ranges)
+{
+  int ret = OB_SUCCESS;
+  const ObDASScanCtDef *scan_ctdef = edge_binding_.access_ctdef_;
+  const int64_t prefix_count = edge_binding_.source_key_count_;
+  const int64_t rowkey_count = scan_ctdef == nullptr
+      ? 0 : scan_ctdef->table_param_.get_read_info().get_schema_rowkey_count();
+  if (OB_UNLIKELY(!access_desc_.uses_adjacency_index()
+                  || scan_ctdef == nullptr || prefix_count <= 0
+                  || rowkey_count < prefix_count)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid graph adjacency rowkey layout", K(ret), K(prefix_count),
+             K(rowkey_count), K_(edge_binding));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < sources.count(); ++i) {
+    bool duplicate = false;
+    for (int64_t j = 0; !duplicate && j < i; ++j) {
+      duplicate = sources.at(i) == sources.at(j);
+    }
+    if (!duplicate) {
+      ObObj *keys = static_cast<ObObj *>(edge_das_ref_.get_das_alloc().alloc(
+          sizeof(ObObj) * rowkey_count * 2));
+      if (OB_ISNULL(keys)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else {
+        new(keys) ObObj[rowkey_count * 2];
+        ObObj *start_keys = keys;
+        ObObj *end_keys = keys + rowkey_count;
+        for (int64_t key = 0; OB_SUCC(ret) && key < prefix_count; ++key) {
+          if (OB_FAIL(ob_write_obj(edge_das_ref_.get_das_alloc(),
+                                   sources.at(i).keys_[key],
+                                   start_keys[key]))) {
+          } else if (OB_FAIL(ob_write_obj(edge_das_ref_.get_das_alloc(),
+                                          sources.at(i).keys_[key],
+                                          end_keys[key]))) {
+          }
+        }
+        for (int64_t key = prefix_count; key < rowkey_count; ++key) {
+          start_keys[key].set_min_value();
+          end_keys[key].set_max_value();
+        }
+        if (OB_SUCC(ret)) {
+          ObNewRange range;
+          range.table_id_ = edge_binding_.access_table_id_;
+          range.start_key_.assign(start_keys, rowkey_count);
+          range.end_key_.assign(end_keys, rowkey_count);
+          range.border_flag_.set_inclusive_start();
+          range.border_flag_.set_inclusive_end();
+          if (OB_FAIL(ranges.push_back(range))) {
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
+int GraphExpandDasAccess::attach_edge_lookup(
+    ObDASScanOp &scan_op, const ObDASTabletLoc &index_tablet_loc)
+{
+  int ret = OB_SUCCESS;
+  ObDASTableLoc *lookup_table_loc = edge_lookup_rtdef_ == nullptr
+      ? nullptr : edge_lookup_rtdef_->table_loc_;
+  ObDASTabletLoc *lookup_tablet_loc = nullptr;
+  if (OB_ISNULL(lookup_table_loc) || OB_ISNULL(lookup_table_loc->loc_meta_)
+      || OB_ISNULL(edge_binding_.output_ctdef_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_ISNULL(lookup_tablet_loc = ObDASUtils::get_related_tablet_loc(
+                           index_tablet_loc,
+                           lookup_table_loc->loc_meta_->ref_table_id_))) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("graph edge lookup tablet is missing", K(ret),
+             K(index_tablet_loc), KPC(lookup_table_loc));
+  } else if (OB_FAIL(scan_op.reserve_related_buffer(1))) {
+  } else if (OB_FAIL(scan_op.set_related_task_info(
+                 edge_binding_.output_ctdef_, edge_lookup_rtdef_,
+                 lookup_tablet_loc->tablet_id_))) {
+  } else {
+    lookup_table_loc->is_reading_ = true;
+  }
+  return ret;
+}
+
 int GraphExpandDasAccess::start_full_edge_scan(bool &empty)
 {
   int ret = OB_SUCCESS;
@@ -851,21 +982,7 @@ int GraphExpandDasAccess::start_full_edge_scan(bool &empty)
                                       startup_filtered))) {
   } else if (startup_filtered) {
     empty = true;
-  } else {
-    edge_das_ref_.set_mem_attr(ObMemAttr("GraphEdgeScan"));
-    void *buffer = edge_das_ref_.get_das_alloc().alloc(
-        sizeof(ObDASScanRtDef));
-    if (OB_ISNULL(buffer)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else {
-      edge_scan_rtdef_ = new(buffer) ObDASScanRtDef();
-      if (OB_FAIL(init_scan_rtdef(*scan_spec, *scan_ctdef, false,
-                                  edge_das_ref_.get_das_alloc(),
-                                  *edge_scan_rtdef_))) {
-      } else {
-        edge_scan_rtdef_->scan_flag_.scan_order_ = ObQueryFlag::Forward;
-      }
-    }
+  } else if (OB_FAIL(init_edge_scan_rtdefs(false))) {
   }
   ObDASTableLoc *table_loc = edge_scan_rtdef_ == nullptr
       ? nullptr : edge_scan_rtdef_->table_loc_;
@@ -913,7 +1030,100 @@ int GraphExpandDasAccess::start_full_edge_scan(bool &empty)
   return ret;
 }
 
-int GraphExpandDasAccess::get_full_edge_page(
+int GraphExpandDasAccess::start_adjacency_edge_scan(
+    const ObIArray<GraphElementIdentity> &sources,
+    bool &empty)
+{
+  int ret = OB_SUCCESS;
+  bool startup_filtered = false;
+  const ObTableScanSpec *scan_spec = edge_binding_.scan_spec_;
+  const ObDASScanCtDef *scan_ctdef = edge_binding_.access_ctdef_;
+  const bool uses_index_back = edge_binding_.output_ctdef_ != scan_ctdef;
+  ObArray<ObNewRange> ranges(
+      OB_MALLOC_NORMAL_BLOCK_SIZE,
+      ModulePageAllocator(edge_das_ref_.get_das_alloc(), "GraphEdgeRange"));
+  empty = false;
+  if (OB_ISNULL(scan_spec) || OB_ISNULL(scan_ctdef)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_UNLIKELY(!access_desc_.uses_adjacency_index())) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(evaluate_filters(eval_ctx_, scan_spec->startup_filters_,
+                                      startup_filtered))) {
+  } else if (startup_filtered) {
+    empty = true;
+  } else if (OB_FAIL(init_edge_scan_rtdefs(uses_index_back))) {
+  } else if (OB_FAIL(build_adjacency_ranges(sources, ranges))) {
+    LOG_WARN("failed to build graph adjacency ranges", K(ret), K(sources));
+  } else if (ranges.empty()) {
+    empty = true;
+  }
+  ObDASTableLoc *table_loc = edge_scan_rtdef_ == nullptr
+      ? nullptr : edge_scan_rtdef_->table_loc_;
+  if (OB_SUCC(ret) && !empty
+      && (OB_ISNULL(table_loc) || table_loc->get_tablet_locs().empty())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("graph adjacency scan has no tablet location", K(ret),
+             KPC(table_loc));
+  }
+  if (OB_SUCC(ret) && !empty) {
+    // Local secondary indexes have one related index tablet per base-table
+    // tablet. Fan the prefix ranges to each local tablet; only the owning
+    // tablet can return a row, so this preserves correctness before range
+    // routing is optimized.
+    for (DASTabletLocListIter node = table_loc->tablet_locs_begin();
+         OB_SUCC(ret) && node != table_loc->tablet_locs_end(); ++node) {
+      ObDASScanOp *scan_op = nullptr;
+      if (OB_FAIL(edge_das_ref_.prepare_das_task(*node, scan_op))) {
+      } else if (OB_ISNULL(scan_op)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        scan_op->set_scan_ctdef(scan_ctdef);
+        scan_op->set_scan_rtdef(edge_scan_rtdef_);
+        scan_op->set_can_part_retry(false);
+        for (int64_t i = 0; OB_SUCC(ret) && i < ranges.count(); ++i) {
+          ret = scan_op->get_scan_param().key_ranges_.push_back(ranges.at(i));
+        }
+        if (OB_SUCC(ret) && uses_index_back
+            && OB_FAIL(attach_edge_lookup(*scan_op, **node))) {
+          LOG_WARN("failed to attach graph edge index lookup", K(ret));
+        }
+      }
+    }
+    table_loc->is_reading_ = true;
+  }
+  if (OB_SUCC(ret) && !empty
+      && OB_FAIL(edge_das_ref_.execute_all_task())) {
+    LOG_WARN("failed to execute graph adjacency scan DAS tasks", K(ret));
+  }
+  if (OB_SUCC(ret) && !empty) {
+    edge_result_iter_ = edge_das_ref_.begin_result_iter();
+    edge_scan_active_ = true;
+  }
+  return ret;
+}
+
+int GraphExpandDasAccess::clear_edge_eval_flags()
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(edge_scan_rtdef_)
+      || OB_ISNULL(edge_scan_rtdef_->p_pd_expr_op_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("graph edge scan pushdown operator is missing", K(ret));
+  } else {
+    edge_scan_rtdef_->p_pd_expr_op_->clear_datum_eval_flag();
+  }
+  if (OB_SUCC(ret) && edge_lookup_rtdef_ != nullptr) {
+    if (OB_ISNULL(edge_lookup_rtdef_->p_pd_expr_op_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("graph edge lookup pushdown operator is missing", K(ret));
+    } else {
+      edge_lookup_rtdef_->p_pd_expr_op_->clear_datum_eval_flag();
+    }
+  }
+  return ret;
+}
+
+int GraphExpandDasAccess::get_edge_page(
     const ObIArray<GraphElementIdentity> &sources,
     int64_t limit,
     ObIArray<GraphExpandEdge> &edges,
@@ -928,11 +1138,7 @@ int GraphExpandDasAccess::get_full_edge_page(
   }
   while (OB_SUCC(ret) && !finished && edges.count() < limit) {
     if (OB_FAIL(check_status())) {
-    } else if (OB_ISNULL(edge_scan_rtdef_->p_pd_expr_op_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("graph edge full scan pushdown operator is missing", K(ret));
-    } else {
-      edge_scan_rtdef_->p_pd_expr_op_->clear_datum_eval_flag();
+    } else if (OB_FAIL(clear_edge_eval_flags())) {
     }
     if (OB_SUCC(ret) && OB_FAIL(edge_result_iter_.get_next_row())) {
       if (ret == OB_ITER_END) {
@@ -949,12 +1155,19 @@ int GraphExpandDasAccess::get_full_edge_page(
       if (OB_FAIL(evaluate_filters(eval_ctx_, scan_spec->filters_, filtered))) {
       } else if (!filtered && OB_FAIL(materialize_edge(edge, matches))) {
       } else if (!filtered && matches
+                 && access_desc_.uses_adjacency_index()
+                 && !contains(sources, edge.source_identity_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("graph adjacency scan returned a non-frontier edge", K(ret),
+                 K(edge), K(sources));
+      } else if (!filtered && matches
                  && contains(sources, edge.source_identity_)) {
         int comparison = 1;
-        if (has_edge_cursor_
+        if (!access_desc_.uses_adjacency_index() && has_edge_cursor_
             && OB_FAIL(compare_identities(edge.edge_identity_, edge_cursor_,
                                           comparison))) {
-        } else if (OB_UNLIKELY(has_edge_cursor_ && comparison <= 0)) {
+        } else if (OB_UNLIKELY(!access_desc_.uses_adjacency_index()
+                               && has_edge_cursor_ && comparison <= 0)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("graph edge full scan order is not stable", K(ret),
                    K(edge), K_(edge_cursor));
@@ -999,15 +1212,19 @@ int GraphExpandDasAccess::scan_edges(
     end = true;
   } else if (after_edge == nullptr) {
     edge_sources_hash_ = identity_array_hash(sources);
-    if (OB_FAIL(start_full_edge_scan(empty))) {
+    if (access_desc_.uses_adjacency_index()
+        && OB_FAIL(start_adjacency_edge_scan(sources, empty))) {
+      LOG_WARN("failed to start graph adjacency scan", K(ret));
+    } else if (!access_desc_.uses_adjacency_index()
+               && OB_FAIL(start_full_edge_scan(empty))) {
       LOG_WARN("failed to start graph edge full scan", K(ret));
     } else if (empty) {
       end = true;
     }
   }
   if (OB_SUCC(ret) && !end
-      && OB_FAIL(get_full_edge_page(sources, limit, edges, end))) {
-    LOG_WARN("failed to read graph edge full-scan page", K(ret));
+      && OB_FAIL(get_edge_page(sources, limit, edges, end))) {
+    LOG_WARN("failed to read graph edge page", K(ret));
   }
   if (OB_SUCCESS != ret) {
     ret = reset_edge_scan(ret);
