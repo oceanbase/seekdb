@@ -60,6 +60,16 @@ enum class ObReplayServiceTaskType
   SUBMIT_LOG_TASK = 1,
   REPLAY_LOG_TASK = 2,
 };
+
+enum class SubmitIteratorReleaseState
+{
+  RELEASED = 0,
+  RWLOCK_BUSY,
+  TASK_BUSY,
+  LOCAL_REPLAY_ENABLED,
+};
+
+const char *submit_iterator_release_state_str(const SubmitIteratorReleaseState state);
 //Virtual table statistics
 struct LSReplayStat
 {
@@ -252,6 +262,9 @@ protected:
 // need be protected by lock
 class ObReplayServiceSubmitTask : public ObReplayServiceTask
 {
+  friend class ObReplayStatus;
+private:
+  typedef common::ObFunction<int(const palf::LSN &, palf::PalfBufferIterator &)> IteratorOpener;
 public:
   ObReplayServiceSubmitTask(): ObReplayServiceTask(),
     next_to_submit_lsn_(),
@@ -286,9 +299,7 @@ public:
   int get_log(const char *&buffer, int64_t &nbytes, share::SCN &scn, palf::LSN &offset);
   int next_log(const share::SCN &replayable_point,
                bool &iterate_end_by_replayable_point);
-  // Reset the iterator with the current endpoint as the new starting point
-  int reset_iterator(const palf::LSN &begin_lsn,
-                     const share::SCN &base_scn);
+  void release_iterator();
 
   INHERIT_TO_STRING_KV("ObReplayServiceSubmitTask", ObReplayServiceTask,
                        K(next_to_submit_lsn_),
@@ -297,6 +308,12 @@ public:
                        K(base_scn_),
                        K(iterator_));
 private:
+  int init_(const palf::LSN &base_lsn,
+            const share::SCN &base_scn,
+            ObReplayStatus *replay_status,
+            const IteratorOpener &iterator_opener);
+  int prepare_iterator_(const palf::LSN &base_lsn,
+                        const IteratorOpener &iterator_opener);
   int update_next_to_submit_lsn_(const palf::LSN &lsn);
   int update_next_to_submit_scn_(const share::SCN &scn);
   void set_next_to_submit_log_info_(const palf::LSN &lsn, const share::SCN &scn);
@@ -313,7 +330,7 @@ private:
   //initial log scn when enable replay, logs which scn small than this value should skip replay
   share::SCN base_scn_;
   //for unittest, should be a member not pointer
-  palf::PalfBufferIterator iterator_; 
+  palf::PalfBufferIterator iterator_;
 };
 
 class ObReplayServiceReplayTask : public ObReplayServiceTask
@@ -396,7 +413,6 @@ public:
   typedef common::RWLock RWLock;
   typedef RWLock::RLockGuard RLockGuard;
   typedef RWLock::WLockGuard WLockGuard;
-  typedef RWLock::WLockGuardWithRetryInterval WLockGuardWithRetryInterval;
 public:
   struct LSErrInfo
   {
@@ -461,8 +477,7 @@ public:
   }
 
   void disable_local_replay();
-  int enable_local_replay(const palf::LSN &begin_lsn,
-                          const share::SCN &base_scn);
+  int try_release_submit_iterator(SubmitIteratorReleaseState &state);
   // check whether all logs has finished replaying
   //
   // Before enabling local append, there must be no remaining log to replay.
@@ -568,6 +583,9 @@ private:
   // Register callback and submit the currently initialized submit_log_task
   int enable_(const palf::LSN &base_lsn,
               const share::SCN &base_scn);
+  int enable_(const palf::LSN &base_lsn,
+              const share::SCN &base_scn,
+              const ObReplayServiceSubmitTask::IteratorOpener &iterator_opener);
   // Unregister callback and clear task
   int disable_();
   bool is_replay_enabled_() const;
@@ -581,12 +599,13 @@ private:
   static const int64_t LS_CHECK_MEMSTORE_INTERVAL_THRESHOLD = 16 * (1LL << 20);
   //Expect that the replay of a log will not exceed 1s
   static const int64_t WRLOCK_TRY_THRESHOLD = 1000 * 1000;
-  static const int64_t WRLOCK_RETRY_INTERVAL = 20 * 1000; //20ms
 
   bool is_inited_;
   bool is_enabled_;  // forbidden replay and fetch log if false
   bool is_submit_blocked_; // allow replay log if true
   bool local_replay_enabled_;
+  // Releasing the submit iterator is terminal for this replay status lifecycle.
+  bool submit_iterator_released_;
   // guarantee the effectiveness of self memory:
   // inc_ref() before push task into replay_service, dec_ref() after replay_service finished handling task
   int64_t ref_cnt_;
