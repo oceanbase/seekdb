@@ -52,6 +52,12 @@ public:
                               common::ObISQLClient &sql_client,
                               const common::ObString *ddl_stmt_str = NULL);
 
+  // Core-only whole-database teardown, not a member-removal escape hatch.
+  // Caller holds the database/DDL locks and MUST delete all database objects
+  // in this same transaction or roll it back. Never used for recycle-bin entry.
+  int delete_extensions_before_database_drop(uint64_t database_id,
+                                              common::ObISQLClient &sql_client);
+
 
   DISALLOW_COPY_AND_ASSIGN(ObDatabaseSqlService);
 };

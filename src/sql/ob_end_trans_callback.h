@@ -82,14 +82,18 @@ public:
   virtual const char *get_type() const { return "ObEndTransAsyncCallback"; }
   virtual ObEndTransCallbackType get_callback_type() const { return ASYNC_CALLBACK_TYPE; }
   observer::ObSqlEndTransCb &get_mysql_end_trans_cb() { return mysql_end_trans_cb_; }
+  void set_transaction_id(int64_t id) { transaction_id_ = id; }
   void reset()
   {
     ObExclusiveEndTransCallback::reset();
     mysql_end_trans_cb_.reset();
+    transaction_id_ = 0;
   }
 private:
   /* macro */
   observer::ObSqlEndTransCb mysql_end_trans_cb_;
+  int64_t transaction_id_ = 0;
+  void callback_with_transaction(int cb_param, int64_t transaction_id);
   DISALLOW_COPY_AND_ASSIGN(ObEndTransAsyncCallback);
 };
 

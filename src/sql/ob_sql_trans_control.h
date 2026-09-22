@@ -184,6 +184,9 @@ public:
                                    data_plane::ObITransactionService* txs,
                                    const int64_t nested_level);
   static int end_stmt(ObExecContext &exec_ctx, const bool is_rollback, const bool will_retry);
+  // Extend existing statement transaction ownership to SELECTs which invoke
+  // plugin SQL. Initializes ancestors before descendants, once per result set.
+  static int prepare_plugin_sql(ObExecContext &caller);
   static int alloc_branch_id(ObExecContext &exec_ctx, const int64_t count, int16_t &branch_id);
   static int kill_query_session(ObSQLSessionInfo &session, const ObSQLSessionState &status);
   static int kill_tx(ObSQLSessionInfo *session, int cause);

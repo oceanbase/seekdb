@@ -17,6 +17,7 @@
 #ifndef OB_OCEANBASE_SCHEMA_OB_SCHEMA_GETTER_GUARD_H_
 #define OB_OCEANBASE_SCHEMA_OB_SCHEMA_GETTER_GUARD_H_
 #include <stdint.h>
+#include <memory>
 #include "share/ob_define.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/utility/ob_mod_define.h"
@@ -68,6 +69,7 @@ class ObTableSchema;
 class ObServerRuntimeSchema;
 class ObTriggerInfo;
 class ObUserInfo;
+class RoutineSchemaOverlay;
 class SchemaName;
 struct ObNeedPriv;
 struct ObSessionPrivInfo;
@@ -141,6 +143,19 @@ public:
   explicit ObSchemaGetterGuard(const ObSchemaMgrItem::Mod mod);
 	virtual ~ObSchemaGetterGuard();
   int reset();
+
+  // Host-only provisional point lookup view. Attach once to a dedicated guard;
+  // reset releases it along with all other borrowed schema pointers. No global
+  // cache publication, permission bypass, or runtime enumeration overlay.
+  // Compilers using this view must isolate their provisional PL/plan caches;
+  // attachment alone does not implement that cache policy or reserve IDs.
+  int attach_routine_overlay(std::shared_ptr<const RoutineSchemaOverlay> overlay);
+  // The child keeps its own base guard and shares only the owned provisional
+  // view. This does not copy permissions, schema locks, or the parent's snapshot.
+  int inherit_routine_overlay(const ObSchemaGetterGuard &parent);
+  int capture_routine_overlay(std::shared_ptr<const RoutineSchemaOverlay> &overlay) const;
+  bool has_routine_overlay() const { return routine_overlay_ != nullptr; }
+  bool has_retired_routine_overlay() const;
 	OB_INLINE bool is_inited() const { return is_inited_; }
 
 	int get_schema_version(int64_t &schema_version) const;
@@ -680,6 +695,7 @@ private:
 
   // TODO: add this to all member functions
   bool check_inner_stat() const;
+  int get_routine_priv_override(const ObRoutinePrivSortKey &key, bool &handled, ObPrivSet &priv_set);
 
   // SERVER_RUNTIME_SCHEMA and SYS_VARIABLE_SCHEMA use the server runtime key.
   // specified_version should be invalid for lazy mode.
@@ -746,6 +762,7 @@ private:
   SchemaGuardType schema_guard_type_;
   bool is_inited_;
   int64_t pin_cache_size_;
+  std::shared_ptr<const RoutineSchemaOverlay> routine_overlay_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSchemaGetterGuard);
 };

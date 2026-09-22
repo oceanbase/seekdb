@@ -1758,6 +1758,8 @@ struct ObRawExprExtraInfo
 };
 static_assert(8 == sizeof(ObRawExprExtraInfo), "sizeof extra info must be 8 bytes");
 
+struct PluginExprType;
+
 class ObRawExpr
 {
 public:
@@ -1834,6 +1836,11 @@ public:
     set_data_type(common::ObMaxType);
   }
   virtual ~ObRawExpr();
+
+  const PluginExprType *get_plugin_type() const { return plugin_type_; }
+  int set_plugin_type(const PluginExprType &type);
+  int copy_plugin_type_from(const ObRawExpr &source);
+  void clear_plugin_type() { plugin_type_ = nullptr; expr_hash_ = 0; }
 
   inline void set_expr_class(ExprClass expr_class) { expr_class_ = expr_class; }
   inline ExprClass get_expr_class() const { return expr_class_; }
@@ -2246,6 +2253,7 @@ protected:
     };
   };
   uint64_t expr_hash_;
+  const PluginExprType *plugin_type_ = nullptr;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObRawExpr);
 };

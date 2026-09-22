@@ -1007,6 +1007,7 @@ int ObMultiVersionSchemaService::retry_get_schema_guard(const int64_t schema_ver
 ObMultiVersionSchemaService::ObMultiVersionSchemaService() :
     init_(false),
     schema_refresh_scheduler_(NULL),
+    plugin_catalog_commit_version_(0),
     schema_publish_signal_(NULL),
     schema_refresh_mutex_(common::ObLatchIds::REFRESH_SCHEMA_LOCK),
     schema_cache_(),
@@ -1040,6 +1041,7 @@ int ObMultiVersionSchemaService::destroy()
   schema_cache_.destroy();
   schema_service_ = NULL;
   schema_refresh_scheduler_ = NULL;
+  ATOMIC_STORE(&plugin_catalog_commit_version_, 0);
   schema_publish_signal_ = NULL;
   init_ = false;
   return ret;
@@ -1489,6 +1491,39 @@ int ObMultiVersionSchemaService::switch_allocator_(
     LOG_INFO("finish switch allocator", KR(ret), K(schema_version), "cost_ts", end_time - start_time);
   }
   return ret;
+}
+
+int ObMultiVersionSchemaService::publish_plugin_catalog_commit(const int64_t schema_version)
+{
+  if (schema_version <= 0) return OB_INVALID_ARGUMENT;
+  common::inc_update(&plugin_catalog_commit_version_, schema_version);
+  return request_schema_refresh(schema_version);
+}
+
+int64_t ObMultiVersionSchemaService::get_plugin_catalog_commit_version() const
+{
+  return ATOMIC_LOAD(&plugin_catalog_commit_version_);
+}
+
+int ObMultiVersionSchemaService::refresh_schema_for_client(const int64_t session_ddl_version)
+{
+  // Sample once: commits concurrent with this request may belong to its next
+  // statement. Commits acknowledged before it starts must already be visible.
+  const int64_t required_version = std::max(session_ddl_version, get_plugin_catalog_commit_version());
+  int64_t local_version = 0;
+  int ret = get_runtime_refreshed_schema_version(local_version);
+  if (ret == OB_SUCCESS && local_version < required_version) {
+    ret = async_refresh_schema(required_version);
+  }
+  return ret;
+}
+
+int ObMultiVersionSchemaService::request_schema_refresh(const int64_t schema_version)
+{
+  if (schema_version <= 0) return OB_INVALID_ARGUMENT;
+  if (!check_inner_stat()) return OB_INNER_STAT_ERROR;
+  if (schema_refresh_scheduler_ == nullptr) return OB_ERR_UNEXPECTED;
+  return schema_refresh_scheduler_->schedule_refresh_at_least(schema_version);
 }
 
 int ObMultiVersionSchemaService::async_refresh_schema(const int64_t schema_version)

@@ -259,8 +259,8 @@ int ObGlobalStatProxy::inner_get_snapshot_gc_scn_(
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     if (OB_FAIL(sql.assign_fmt(
-                "SELECT column_value FROM %s WHERE TABLE_NAME = '__all_global_stat' AND COLUMN_NAME"
-                " = 'snapshot_gc_scn' %s", OB_ALL_CORE_TABLE_TNAME, for_update_str))) {
+                "SELECT column_value FROM %s.%s WHERE TABLE_NAME = '__all_global_stat' AND COLUMN_NAME"
+                " = 'snapshot_gc_scn' %s", OB_SYS_DATABASE_NAME, OB_ALL_CORE_TABLE_TNAME, for_update_str))) {
     } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
     } else if (NULL == (result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
@@ -315,8 +315,8 @@ int ObGlobalStatProxy::update_snapshot_gc_scn(
   {
     ObSqlString sql;
     const uint64_t snapshot_gc_scn_val = snapshot_gc_scn.get_val_for_inner_table_field();
-    if (OB_FAIL(sql.assign_fmt("UPDATE %s SET column_value = %lu WHERE table_name = '%s' AND "
-        "column_name = '%s' AND column_value < %lu", OB_ALL_CORE_TABLE_TNAME, snapshot_gc_scn_val,
+    if (OB_FAIL(sql.assign_fmt("UPDATE %s.%s SET column_value = %lu WHERE table_name = '%s' AND "
+        "column_name = '%s' AND column_value < %lu", OB_SYS_DATABASE_NAME, OB_ALL_CORE_TABLE_TNAME, snapshot_gc_scn_val,
         "__all_global_stat", "snapshot_gc_scn", snapshot_gc_scn_val))) {
     } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
     }
@@ -334,8 +334,8 @@ int ObGlobalStatProxy::select_ddl_epoch_for_update(
     ObMySQLResult *result = NULL;
     ObSqlString sql;
     if (OB_FAIL(sql.assign_fmt(
-                "SELECT column_value FROM %s WHERE TABLE_NAME = '__all_global_stat' AND COLUMN_NAME"
-                " = 'ddl_epoch' FOR UPDATE", OB_ALL_CORE_TABLE_TNAME))) {
+                "SELECT column_value FROM %s.%s WHERE TABLE_NAME = '__all_global_stat' AND COLUMN_NAME"
+                " = 'ddl_epoch' FOR UPDATE", OB_SYS_DATABASE_NAME, OB_ALL_CORE_TABLE_TNAME))) {
     } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
     } else if (NULL == (result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
@@ -394,9 +394,9 @@ int ObGlobalStatProxy::advance_change_stream_refresh_scn(
     ObSqlString sql;
     const uint64_t scn_val = refresh_scn.get_val_for_inner_table_field();
     if (OB_FAIL(sql.assign_fmt(
-        "UPDATE %s SET column_value = %lu WHERE table_name = '%s' AND "
+        "UPDATE %s.%s SET column_value = %lu WHERE table_name = '%s' AND "
         "column_name = '%s' AND column_value < %lu",
-        OB_ALL_CORE_TABLE_TNAME, scn_val,
+        OB_SYS_DATABASE_NAME, OB_ALL_CORE_TABLE_TNAME, scn_val,
         "__all_global_stat", "change_stream_refresh_scn", scn_val))) {
     } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
     }
@@ -417,8 +417,8 @@ int ObGlobalStatProxy::get_change_stream_refresh_scn(
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       common::sqlclient::ObMySQLResult *result = nullptr;
       if (OB_FAIL(sql.assign_fmt(
-          "SELECT column_value FROM %s WHERE table_name = '%s' AND column_name = '%s' %s",
-          OB_ALL_CORE_TABLE_TNAME,
+          "SELECT column_value FROM %s.%s WHERE table_name = '%s' AND column_name = '%s' %s",
+          OB_SYS_DATABASE_NAME, OB_ALL_CORE_TABLE_TNAME,
           "__all_global_stat", "change_stream_refresh_scn", for_update_str))) {
       } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
       } else if (OB_ISNULL(result = res.get_result())) {
@@ -468,9 +468,9 @@ int ObGlobalStatProxy::advance_change_stream_min_dep_lsn(
   } else {
     ObSqlString sql;
     if (OB_FAIL(sql.assign_fmt(
-        "UPDATE %s SET column_value = %ld WHERE table_name = '%s' AND "
+        "UPDATE %s.%s SET column_value = %ld WHERE table_name = '%s' AND "
         "column_name = '%s' AND column_value < %ld",
-        OB_ALL_CORE_TABLE_TNAME, min_dep_lsn,
+        OB_SYS_DATABASE_NAME, OB_ALL_CORE_TABLE_TNAME, min_dep_lsn,
         "__all_global_stat", "change_stream_min_dep_lsn", min_dep_lsn))) {
     } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
     }
@@ -491,8 +491,8 @@ int ObGlobalStatProxy::get_change_stream_min_dep_lsn(
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       common::sqlclient::ObMySQLResult *result = nullptr;
       if (OB_FAIL(sql.assign_fmt(
-          "SELECT column_value FROM %s WHERE table_name = '%s' AND column_name = '%s' %s",
-          OB_ALL_CORE_TABLE_TNAME,
+          "SELECT column_value FROM %s.%s WHERE table_name = '%s' AND column_name = '%s' %s",
+          OB_SYS_DATABASE_NAME, OB_ALL_CORE_TABLE_TNAME,
           "__all_global_stat", "change_stream_min_dep_lsn", for_update_str))) {
       } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
       } else if (OB_ISNULL(result = res.get_result())) {

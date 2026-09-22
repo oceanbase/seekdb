@@ -311,7 +311,7 @@ int ObPLBuilder::compile(
           OZ (func.set_types(func_ast.get_user_type_table()));
           OZ (func.get_dependency_table().assign(func_ast.get_dependency_table()));
           OZ (func.add_members(func_ast.get_flag()));
-          OX (func.set_can_cached(func_ast.get_can_cached()));
+          OX (func.set_can_cached(func_ast.get_can_cached() && !schema_guard_.has_routine_overlay()));
           OX (func.set_has_incomplete_rt_dep_error(func_ast.has_incomplete_rt_dep_error()));
           OX (func.set_is_all_sql_stmt(func_ast.get_is_all_sql_stmt()));
           OX (func.set_has_parallel_affect_factor(func_ast.has_parallel_affect_factor()));
@@ -483,14 +483,14 @@ int ObPLBuilder::compile(
     
     if (OB_SUCC(ret)) {
       OZ (error_info.delete_error(
-          sql_proxy_, &routine, share::server_is_write_enabled()));
+          sql_proxy_, &routine, share::server_is_write_enabled() && !schema_guard_.has_routine_overlay()));
     } else {
       int tmp_ret = OB_SUCCESS;
       LOG_USER_WARN(OB_ERR_PACKAGE_COMPILE_ERROR, "ROUTINE",
                     func_ast.get_db_name().length(), func_ast.get_db_name().ptr(),
                     func_ast.get_name().length(), func_ast.get_name().ptr());
       if (OB_SUCCESS != (tmp_ret = error_info.handle_error_info(
-          sql_proxy_, &routine, share::server_is_write_enabled()))) {
+          sql_proxy_, &routine, share::server_is_write_enabled() && !schema_guard_.has_routine_overlay()))) {
       }
     }
   }
@@ -509,7 +509,7 @@ int ObPLBuilder::compile(
       OZ (func.set_types(func_ast.get_user_type_table()));
       OZ (func.get_dependency_table().assign(func_ast.get_dependency_table()));
       OZ (func.add_members(func_ast.get_flag()));
-      OX (func.set_can_cached(func_ast.get_can_cached()));
+      OX (func.set_can_cached(func_ast.get_can_cached() && !schema_guard_.has_routine_overlay()));
       OX (func.set_has_incomplete_rt_dep_error(func_ast.has_incomplete_rt_dep_error()));
       OX (func.set_is_all_sql_stmt(func_ast.get_is_all_sql_stmt()));
       OX (func.set_has_parallel_affect_factor(func_ast.has_parallel_affect_factor()));
@@ -534,7 +534,7 @@ int ObPLBuilder::compile(
   
   if (OB_SUCC(ret)) {
     OZ (error_info.delete_error(
-        sql_proxy_, &routine, share::server_is_write_enabled()));
+        sql_proxy_, &routine, share::server_is_write_enabled() && !schema_guard_.has_routine_overlay()));
   } else {
     int tmp_ret = OB_SUCCESS;
     if (NULL != db_schema) {
@@ -545,7 +545,7 @@ int ObPLBuilder::compile(
                     routine.get_routine_name().ptr());
     }
     if (OB_SUCCESS != (tmp_ret = error_info.handle_error_info(
-        sql_proxy_, &routine, share::server_is_write_enabled()))) {
+        sql_proxy_, &routine, share::server_is_write_enabled() && !schema_guard_.has_routine_overlay()))) {
     }
   }
 
@@ -806,11 +806,13 @@ int ObPLBuilder::build_package(const ObPackageInfo &package_info,
   }
 
   OZ (generate_package(copy_exec_env, package_ast, package));
-  OX (package.set_can_cached(package_ast.get_can_cached()));
+  OX (package.set_can_cached(package_ast.get_can_cached() && !schema_guard_.has_routine_overlay()));
   session_info_.set_for_trigger_package(saved_trigger_flag);
   OZ (check_dep_schema(schema_guard_, package.get_dependency_table()));
 
-  if (OB_SUCC(ret)) {
+  // Dependencies remain on the private AST/object. Publishing them here would
+  // open a separate transaction outside the Extension installation/update.
+  if (OB_SUCC(ret) && !schema_guard_.has_routine_overlay()) {
     lib::ObMutexGuard guard(package_dep_info_lock_);
     {
       OZ (update_schema_object_dep_info(package_ast.get_dependency_table(),
@@ -827,10 +829,10 @@ int ObPLBuilder::build_package(const ObPackageInfo &package_info,
     if (package_info.is_for_trigger()) {
       CK (OB_NOT_NULL(trigger_info));
       OZ (error_info.delete_error(
-          sql_proxy_, trigger_info, share::server_is_write_enabled()));
+          sql_proxy_, trigger_info, share::server_is_write_enabled() && !schema_guard_.has_routine_overlay()));
     } else {
       OZ (error_info.delete_error(
-          sql_proxy_, &package_info, share::server_is_write_enabled()));
+          sql_proxy_, &package_info, share::server_is_write_enabled() && !schema_guard_.has_routine_overlay()));
     }
   } else {
     int tmp_ret = ret;
@@ -845,13 +847,13 @@ int ObPLBuilder::build_package(const ObPackageInfo &package_info,
                       package_info.get_package_name().length(), package_info.get_package_name().ptr());
         CK (OB_NOT_NULL(trigger_info));
         OZ (error_info.handle_error_info(
-            sql_proxy_, trigger_info, share::server_is_write_enabled()));
+            sql_proxy_, trigger_info, share::server_is_write_enabled() && !schema_guard_.has_routine_overlay()));
       } else {
         LOG_USER_WARN(OB_ERR_PACKAGE_COMPILE_ERROR, "PACKAGE",
                       db_schema->get_database_name_str().length(), db_schema->get_database_name_str().ptr(),
                       package_info.get_package_name().length(), package_info.get_package_name().ptr());
         OZ (error_info.handle_error_info(
-            sql_proxy_, &package_info, share::server_is_write_enabled()));
+            sql_proxy_, &package_info, share::server_is_write_enabled() && !schema_guard_.has_routine_overlay()));
       }
     }
     ret = tmp_ret;
@@ -1211,7 +1213,7 @@ int ObPLBuilder::compile_subprogram_table(common::ObIAllocator &allocator,
           OZ (routine->set_types(routine_ast->get_user_type_table()));
           OZ (routine->get_dependency_table().assign(routine_ast->get_dependency_table()));
           OZ (routine->add_members(routine_ast->get_flag()));
-          OX (routine->set_can_cached(routine_ast->get_can_cached()));
+          OX (routine->set_can_cached(routine_ast->get_can_cached() && !schema_guard.has_routine_overlay()));
           OX (routine->set_has_incomplete_rt_dep_error(routine_ast->has_incomplete_rt_dep_error()));
           OX (routine->set_is_all_sql_stmt(routine_ast->get_is_all_sql_stmt()));
           OX (routine->set_has_parallel_affect_factor(routine_ast->has_parallel_affect_factor()));

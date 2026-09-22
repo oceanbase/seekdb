@@ -351,7 +351,7 @@ int ObCoreTableProxy::load(const bool for_update)
     if (!is_valid()) {
       ret = OB_INVALID_ARGUMENT;
     } else if (OB_FAIL(sql.assign_fmt("SELECT row_id, column_name, column_value "
-        "FROM %s WHERE table_name = '%s' ORDER BY row_id, column_name%s",
+        "FROM oceanbase.%s WHERE table_name = '%s' ORDER BY row_id, column_name%s",
         OB_ALL_CORE_TABLE_TNAME, table_name_, for_update ? " FOR UPDATE" : ""))) {
     } else if (OB_FAIL(sql_client_->read(res, sql.ptr()))) {
     } else if (NULL == (result = res.get_result())) {
@@ -740,7 +740,7 @@ int ObCoreTableProxy::execute_delete_sql(const int64_t row_id)
   } else {
     int64_t affected_rows = 0;
     ObSqlString sql;
-    if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE table_name = '%s' AND row_id = %ld",
+    if (OB_FAIL(sql.assign_fmt("DELETE FROM oceanbase.%s WHERE table_name = '%s' AND row_id = %ld",
         OB_ALL_CORE_TABLE_TNAME, table_name_, row_id))) {
     } else if (OB_FAIL(sql_client_->write(sql.ptr(), affected_rows))) {
     } else {
@@ -881,7 +881,7 @@ int ObCoreTableProxy::execute_incremental_update_sql(const Row &row, const ObIAr
       //skip
     } else if (insert_sql.empty()) {
       //skip
-    } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s (table_name, row_id, column_name, column_value) VALUES %s ",
+    } else if (OB_FAIL(sql.assign_fmt("INSERT INTO oceanbase.%s (table_name, row_id, column_name, column_value) VALUES %s ",
                                       OB_ALL_CORE_TABLE_TNAME, insert_sql.ptr()))) {
     } else if (OB_FAIL(sql_client_->write(sql.ptr(), affected))) {
     } else {
@@ -892,7 +892,7 @@ int ObCoreTableProxy::execute_incremental_update_sql(const Row &row, const ObIAr
       //skip
     } else if (update_sql.empty()) {
       //skip
-    } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s (table_name, row_id, column_name, column_value) VALUES %s "
+    } else if (OB_FAIL(sql.assign_fmt("INSERT INTO oceanbase.%s (table_name, row_id, column_name, column_value) VALUES %s "
                                       "ON DUPLICATE KEY UPDATE column_value = if ((cast(column_value as signed) > values(column_value)) "
                                       "and (values(column_value) != %ld), "
                                       "column_value, values(column_value))",
@@ -972,7 +972,7 @@ int ObCoreTableProxy::execute_update_sql(const Row &row, const ObIArray<UpdateCe
       //skip
     } else if (insert_sql.empty()) {
       //skip
-    } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s (table_name, row_id, column_name, column_value) VALUES %s ",
+    } else if (OB_FAIL(sql.assign_fmt("INSERT INTO oceanbase.%s (table_name, row_id, column_name, column_value) VALUES %s ",
                                       OB_ALL_CORE_TABLE_TNAME, insert_sql.ptr()))) {
     } else if (OB_FAIL(sql_client_->write(sql.ptr(), affected))) {
     } else {
@@ -983,7 +983,7 @@ int ObCoreTableProxy::execute_update_sql(const Row &row, const ObIArray<UpdateCe
       //skip
     } else if (update_sql.empty()) {
       //skip
-    } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s (table_name, row_id, column_name, column_value) VALUES %s "
+    } else if (OB_FAIL(sql.assign_fmt("INSERT INTO oceanbase.%s (table_name, row_id, column_name, column_value) VALUES %s "
                                       "ON DUPLICATE KEY UPDATE column_value = values(column_value)",
                                       OB_ALL_CORE_TABLE_TNAME, update_sql.ptr()))) {
     } else if (OB_FAIL(sql_client_->write(sql.ptr(), affected))) {

@@ -1,0 +1,15 @@
+[package]
+name = "seekdb-extension"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Public C ABI-based seekdb Rust extension SDK"
+
+# Plugin panic recovery is separate from the host's panic=abort workspace.
+[workspace]
+
+[profile.release]
+panic = "unwind"
+
+[lib]
+path = "src/lib.rs"

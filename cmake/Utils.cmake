@@ -81,10 +81,32 @@ endfunction()
 # Apply the exact Unity groups frozen by the Bazel production inventory.  This
 # avoids a second source list and prevents CMake's grouping from drifting away
 # from the action boundaries already validated by Bazel.
+function(seekdb_filter_core_gis_sql_sources output_var)
+  set(filtered_sources)
+  foreach(source IN LISTS ARGN)
+    list(FIND SEEKDB_SQL_CORE_GIS_REPLACED_SOURCES "${source}" replacement_index)
+    if (replacement_index EQUAL -1 OR SEEKDB_ENABLE_CORE_GIS)
+      list(APPEND filtered_sources "${source}")
+    endif()
+  endforeach()
+  set("${output_var}" "${filtered_sources}" PARENT_SCOPE)
+endfunction()
+
 function(seekdb_apply_unity_inventory target prefix)
   set(all_sources "${${target}_cache_objects_}")
   foreach(group IN LISTS ${prefix}_GROUPS)
+    # The Bazel inventory intentionally records the complete production
+    # surface, including legacy GIS groups.  CMake's lightweight core profile
+    # must prune those groups before they become Unity translation units; the
+    # GIS plugin owns their implementation when core GIS is disabled.
+    if (NOT SEEKDB_ENABLE_CORE_GIS AND target STREQUAL "ob_share" AND
+        group MATCHES "^ob_share_geo(_|$)")
+      continue()
+    endif()
     set(group_sources "${${prefix}_GROUP_${group}}")
+    if (NOT SEEKDB_ENABLE_CORE_GIS AND target STREQUAL "ob_sql")
+      seekdb_filter_core_gis_sql_sources(group_sources ${group_sources})
+    endif()
     if(NOT group_sources)
       message(FATAL_ERROR "Empty Unity group ${prefix}:${group}")
     endif()
@@ -97,12 +119,30 @@ endfunction()
 
 function(seekdb_apply_standalone_inventory target variable)
   set(standalone_sources "${${variable}}")
+  if (NOT SEEKDB_ENABLE_CORE_GIS AND target STREQUAL "ob_share")
+    list(FILTER standalone_sources EXCLUDE REGEX "/src/share/geo/")
+  elseif (NOT SEEKDB_ENABLE_CORE_GIS AND target STREQUAL "ob_sql")
+    seekdb_filter_core_gis_sql_sources(standalone_sources ${standalone_sources})
+  endif()
   if(standalone_sources)
     set(all_sources "${${target}_cache_objects_}")
     list(APPEND all_sources ${standalone_sources})
     set_source_files_properties(${standalone_sources}
       PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
     set("${target}_cache_objects_" "${all_sources}" PARENT_SCOPE)
+  endif()
+endfunction()
+
+function(seekdb_apply_sql_plugin_profile target)
+  # Baseline GIS implementations were pruned by apply_*_inventory above. These
+  # adapters replace their registrations without linking the geometry engine.
+  if (NOT SEEKDB_ENABLE_CORE_GIS)
+    target_sources(${target} PRIVATE ${SEEKDB_SQL_GIS_PLUGIN_ADAPTER_SOURCES})
+  endif()
+  if (SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS)
+    # SQL executors must enter the real host paths, not their disabled stubs.
+    target_compile_definitions(${target} PRIVATE SEEKDB_WITH_EXPERIMENTAL_PLUGINS=1)
+    target_sources(${target} PRIVATE ${SEEKDB_SQL_EXTENSION_RUNTIME_SOURCES})
   endif()
 endfunction()
 

@@ -18,9 +18,18 @@
 #define OCEANBASE_QUERY_COMMAND_OB_ROOT_COMMAND_SERVICE_H_
 
 #include "share/ob_rpc_struct.h"
+#include <string>
 
 namespace oceanbase
 {
+namespace share { namespace plugin {
+struct ExtensionInstallSpec;
+struct ExtensionDropRequest;
+struct ExtensionUpdateRequest;
+struct ExtensionRoutineUpdateOperation;
+class IExtensionRoutineScript;
+struct ExtensionVersionSnapshot;
+} }
 namespace sql
 {
 class ObSQLSessionInfo;
@@ -93,6 +102,37 @@ public:
   virtual int alter_outline(const obcall::ObAlterOutlineArg &arg) = 0;
   virtual int drop_outline(const obcall::ObDropOutlineArg &arg) = 0;
   virtual int create_routine(const obcall::ObCreateRoutineArg &arg) = 0;
+  // Core-only autocommit Extension command. This entry serializes internally;
+  // do NOT wrap it in serialize_root_service_call again. Arguments must come
+  // from ordinary SQL resolution under this authenticated session.
+  virtual int install_extension_routines(
+      const share::plugin::ExtensionInstallSpec &spec,
+      const common::ObIArray<const obcall::ObCreateRoutineArg *> &args,
+      sql::ObSQLSessionInfo &session,
+      uint64_t &extension_id, int &publication_status, std::string &error,
+      share::plugin::IExtensionRoutineScript *script = nullptr) = 0;
+  // Same serialization and authenticated-session contract as installation.
+  // Drops catalog-owned members without requiring package files or loading code.
+  virtual int drop_extension_routines(
+      const share::plugin::ExtensionDropRequest &request, sql::ObSQLSessionInfo &session,
+      uint64_t &extension_id, int &publication_status, std::string &error) = 0;
+  // Ordered, fully resolved UPDATE plan. Same internal serialization contract;
+  // caller releases its old schema guard before entry. The locked installation
+  // ID/source version are fenced again by the catalog; commit preserves the ID.
+  // changed distinguishes a confirmed version change from a same-version no-op.
+  // Alternatively supply a host-bound script callback and an EMPTY operations
+  // array: Root resolves/adopts each operation against its evolving view.
+  virtual int update_extension_routines(
+      const share::plugin::ExtensionUpdateRequest &request,
+      const common::ObIArray<share::plugin::ExtensionRoutineUpdateOperation> &operations,
+      sql::ObSQLSessionInfo &session, uint64_t &extension_id, bool &changed,
+      int &publication_status, std::string &error,
+      share::plugin::IExtensionRoutineScript *script = nullptr) = 0;
+  // Read-only update planning under the same authenticated command boundary.
+  // The observation is not locked after return; execution must fence ID/version.
+  virtual int read_extension_update_source(uint64_t tenant_id, uint64_t database_id,
+      const std::string &name, sql::ObSQLSessionInfo &session,
+      share::plugin::ExtensionVersionSnapshot &snapshot, std::string &error) = 0;
   virtual int drop_routine(const obcall::ObDropRoutineArg &arg) = 0;
   virtual int alter_routine(const obcall::ObCreateRoutineArg &arg) = 0;
   virtual int create_package(const obcall::ObCreatePackageArg &arg) = 0;

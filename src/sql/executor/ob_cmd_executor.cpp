@@ -72,6 +72,12 @@
 #include "sql/resolver/ddl/ob_optimize_stmt.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/cmd/ob_empty_query_executor.h"
+#include "sql/engine/cmd/create_extension_executor.h"
+#include "sql/resolver/cmd/create_extension_stmt.h"
+#include "sql/engine/cmd/alter_extension_executor.h"
+#include "sql/resolver/cmd/alter_extension_stmt.h"
+#include "sql/engine/cmd/drop_extension_executor.h"
+#include "sql/resolver/cmd/drop_extension_stmt.h"
 #include "sql/engine/cmd/ob_dcl_executor.h"
 #include "sql/engine/cmd/ob_tcl_executor.h"
 #include "sql/engine/cmd/ob_recyclebin_executor.h"
@@ -99,6 +105,9 @@
 #include "sql/resolver/dcl/ob_alter_role_stmt.h"
 #include "sql/resolver/cmd/ob_merge_table_stmt.h"
 #include "sql/engine/cmd/ob_merge_table_executor.h"
+#include "sql/resolver/cmd/ob_empty_query_stmt.h"
+#include "observer/ob_server_plugin_runtime.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -151,6 +160,12 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         // DDL release the specific version of schema_mgr held before sending rpc to RS
         // Avoid the DDL in the queue always occupying slots causing the DDL being processed by RS to have no new slots available and resulting in a deadlock issue
         if (stmt::T_CREATE_OUTLINE == static_cast<stmt::StmtType>(cmd.get_cmd_type())
+            // Extension scripts still need the outer snapshot for resolution;
+            // the installer releases it after taking owned DDL argument copies.
+            || stmt::T_CREATE_EXTENSION == static_cast<stmt::StmtType>(cmd.get_cmd_type())
+            || stmt::T_ALTER_EXTENSION == static_cast<stmt::StmtType>(cmd.get_cmd_type())
+            // DROP rechecks session privileges before releasing this snapshot.
+            || stmt::T_DROP_EXTENSION == static_cast<stmt::StmtType>(cmd.get_cmd_type())
             || stmt::T_ALTER_OUTLINE == static_cast<stmt::StmtType>(cmd.get_cmd_type())
           // create outline and alter outline will continue to use schema guard to generate logical plan at execute
           // reset delay to ObCreateOutlineExecutor::execute and ObAlterOutlineExecutor::execute
@@ -232,6 +247,58 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       case stmt::T_VARIABLE_SET: {
         DEFINE_EXECUTE_CMD(ObVariableSetStmt, ObVariableSetExecutor);
         sql_text = ObString::make_empty_string();  // do not record
+        break;
+      }
+      case stmt::T_INSTALL_PLUGIN:
+      case stmt::T_UNINSTALL_PLUGIN: {
+        LOG_ERROR("plugin command executor entered", K(cmd.get_cmd_type()), KP(&cmd));
+        // Plugin commands are represented by the existing ObEmptyQueryStmt
+        // command object.  This follows the same static dispatch convention
+        // as the other command executors and avoids an additional RTTI/object
+        // layout dependency on the request-worker path.
+        ObEmptyQueryStmt *plugin_stmt = static_cast<ObEmptyQueryStmt*>(&cmd);
+        if (OB_ISNULL(GCTX.plugin_runtime_)) {
+          ret = OB_NOT_SUPPORTED;
+        } else {
+          std::string error;
+          const ObString &name = plugin_stmt->get_plugin_name();
+          const ObString &soname = plugin_stmt->get_plugin_soname();
+          if (name.length() < 0 || (name.length() > 0 && OB_ISNULL(name.ptr())) ||
+              soname.length() < 0 || (soname.length() > 0 && OB_ISNULL(soname.ptr()))) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_WARN("plugin command contains an invalid string", K(name), K(soname), K(ret));
+          } else if (plugin_stmt->get_plugin_operation() !=
+                         ObEmptyQueryStmt::PLUGIN_INSTALL &&
+                     plugin_stmt->get_plugin_operation() !=
+                         ObEmptyQueryStmt::PLUGIN_UNINSTALL) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_WARN("plugin command has an invalid operation", K(ret));
+          } else if (plugin_stmt->get_plugin_operation() ==
+                     ObEmptyQueryStmt::PLUGIN_INSTALL) {
+            ret = GCTX.plugin_runtime_->install_plugin(
+                std::string(name.ptr(), name.length()),
+                std::string(soname.ptr(), soname.length()), error);
+          } else {
+            ret = GCTX.plugin_runtime_->uninstall_plugin(
+                std::string(name.ptr(), name.length()), error);
+          }
+          if (OB_FAIL(ret) && !error.empty()) {
+            LOG_WARN("plugin SQL command failed", K(ret), KCSTRING(error.c_str()));
+          }
+        }
+        sql_text = ObString::make_empty_string();
+        break;
+      }
+      case stmt::T_CREATE_EXTENSION: {
+        DEFINE_EXECUTE_CMD(CreateExtensionStmt, CreateExtensionExecutor);
+        break;
+      }
+      case stmt::T_ALTER_EXTENSION: {
+        DEFINE_EXECUTE_CMD(AlterExtensionStmt, AlterExtensionExecutor);
+        break;
+      }
+      case stmt::T_DROP_EXTENSION: {
+        DEFINE_EXECUTE_CMD(DropExtensionStmt, DropExtensionExecutor);
         break;
       }
       case stmt::T_DIAGNOSTICS: {

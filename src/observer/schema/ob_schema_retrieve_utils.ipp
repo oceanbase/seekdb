@@ -15,6 +15,7 @@
  */
 
 #include "lib/worker.h"
+#include "share/plugin/plugin_sql_type.h"
 #include "share/schema/ob_schema_mgr.h"
 
 
@@ -1045,14 +1046,29 @@ int ObSchemaRetrieveUtils::fill_column_schema(const bool check_deleted, T &resul
       ret = fill_column_schema_default_value<T>(result, column, default_type);
     }
 
-    if (OB_SUCC(ret) && (column.is_enum_or_set() || column.is_collection())) {
+    const bool requires_extended_type_info =
+        column.is_enum_or_set() || column.is_collection();
+    if (OB_SUCC(ret) &&
+        (requires_extended_type_info || column.get_meta_type().is_lob())) {
       ObString extend_type_info;
-      EXTRACT_VARCHAR_FIELD_MYSQL(result, "extended_type_info", extend_type_info);
+      if (requires_extended_type_info) {
+        EXTRACT_VARCHAR_FIELD_MYSQL(result, "extended_type_info",
+                                    extend_type_info);
+      } else {
+        EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(result, "extended_type_info",
+                                             extend_type_info);
+      }
       int64_t pos = 0;
       if (extend_type_info.empty()) {
-        ret = OB_ERR_UNEXPECTED;
-        SHARE_SCHEMA_LOG(WARN, "extend_type_info is empty", K(ret));
+        if (requires_extended_type_info) {
+          ret = OB_ERR_UNEXPECTED;
+          SHARE_SCHEMA_LOG(WARN, "extend_type_info is empty", K(ret));
+        }
       } else if (OB_FAIL(column.deserialize_extended_type_info(extend_type_info.ptr(), extend_type_info.length(), pos))) {
+      } else if (!requires_extended_type_info &&
+                 !plugin::is_plugin_sql_type(column.get_extended_type_info())) {
+        ret = OB_ERR_UNEXPECTED;
+        SHARE_SCHEMA_LOG(WARN, "invalid plugin SQL type metadata", K(ret));
       } else {}
     }
 

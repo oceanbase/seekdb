@@ -280,9 +280,31 @@ int ObReceiveRowReader::attach_rows(const common::ObIArray<ObExpr*> &exprs,
                                     const int64_t read_rows)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(srows)) {
+  if (OB_ISNULL(srows) || read_rows <= 0 || read_rows > eval_ctx.max_batch_size_) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid receive rows", K(ret), KP(srows), K(read_rows), K(eval_ctx.max_batch_size_));
   } else {
+    // Validate the entire batch before attaching any borrowed datum to a frame.
+    // Scalar receive already checks the row width; batch receive must not silently
+    // truncate a wider row or read beyond a shorter row's datum array.
+    for (int64_t i = 0; OB_SUCC(ret) && i < read_rows; ++i) {
+      if (OB_ISNULL(srows[i])) {
+        ret = OB_INVALID_ARGUMENT;
+      } else if (srows[i]->cnt_ != exprs.count()) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("received row width does not match expressions", K(ret), K(i), K(srows[i]->cnt_), K(exprs.count()));
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
+      if (OB_ISNULL(exprs.at(i))) ret = OB_INVALID_ARGUMENT;
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < dynamic_const_exprs.count(); ++i) {
+      if (OB_ISNULL(dynamic_const_exprs.at(i)) || dynamic_const_exprs.at(i)->is_batch_result()) {
+        ret = OB_INVALID_ARGUMENT;
+      }
+    }
+  }
+  if (OB_SUCC(ret)) {
     for (int64_t col_idx = 0; col_idx < exprs.count(); col_idx++) {
       if (exprs.at(col_idx)->is_static_const_) {
         continue;
@@ -329,12 +351,12 @@ int ObReceiveRowReader::get_next_batch(const ObIArray<ObExpr*> &exprs,
 {
   int ret = OB_SUCCESS;
   typedef ObChunkDatumStore Store;
-  if (NULL == srows) {
+  read_rows = 0;
+  if (NULL == srows || max_rows <= 0 || max_rows > eval_ctx.max_batch_size_) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid receive batch request", K(ret), KP(srows), K(max_rows), K(eval_ctx.max_batch_size_));
   } else if (NULL != datum_iter_) {
-    if (max_rows > eval_ctx.max_batch_size_) {
-      ret = OB_INVALID_ARGUMENT;
-    } else if (!datum_iter_->is_valid()) {
+    if (!datum_iter_->is_valid()) {
       // If invalid , it is a mocked empty buffer.
       ret = OB_ITER_END;
     } else if (OB_FAIL(datum_iter_->get_next_batch(srows, max_rows, read_rows))) {
@@ -359,6 +381,7 @@ int ObReceiveRowReader::get_next_batch(const ObIArray<ObExpr*> &exprs,
       OZ(attach_rows(exprs, dynamic_const_exprs, eval_ctx, srows, read_rows));
     }
   }
+  if (OB_FAIL(ret)) read_rows = 0;
   return ret;
 }
 

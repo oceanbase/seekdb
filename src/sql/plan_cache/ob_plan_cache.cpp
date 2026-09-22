@@ -22,6 +22,10 @@
 #include "sql/plan_cache/ob_values_table_compression.h"
 #include "query/plan_cache/ob_plan_cache_access_service.h"
 #include "share/rc/ob_server_runtime.h"
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+#include "share/schema/routine_catalog_transaction.h"
+#include "share/schema/ob_multi_version_schema_service.h"
+#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::common::hash;
@@ -291,6 +295,18 @@ struct ObIdleEvictOp
   }
 };
 
+void ObPlanCache::PluginInvalidationQueueDeleter::operator()(RoutineInvalidationQueue *queue) const noexcept
+{
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  delete queue;
+#else
+  // No queue can be constructed in this profile. Do not link its Rust-backed
+  // destructor merely to hold an always-empty, layout-stable owner.
+  OB_ASSERT(nullptr == queue);
+  UNUSED(queue);
+#endif
+}
+
 ObPlanCache::ObPlanCache()
   :inited_(false),
    access_service_(nullptr),
@@ -314,9 +330,11 @@ ObPlanCache::~ObPlanCache()
 
 void ObPlanCache::destroy()
 {
+  // Also join a timer created by a partially failed init before retiring the
+  // queue that timer can access.
+  evict_timer_.destroy();
   if (inited_) {
     query::ObPlanCacheAccessGuard req_timeinfo_guard(access_service());
-    evict_timer_.destroy();
     if (OB_SUCCESS != (cache_evict_all_obj())) {
       SQL_PC_LOG_RET(WARN, OB_ERROR, "fail to evict all lib cache cache");
     }
@@ -327,6 +345,21 @@ void ObPlanCache::destroy()
     inited_ = false;
     access_service_ = nullptr;
   }
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  // Timer is joined and this cache is inaccessible. Later transaction outcomes
+  // can safely retire their scalar requests; no code from this cache can run.
+  plugin_invalidations_.reset();
+#endif
+}
+
+int ObPlanCache::reserve_plugin_invalidations(RoutineCatalogTransaction &journal, uint64_t transaction_id)
+{
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  return inited_ && plugin_invalidations_ ? plugin_invalidations_->reserve(journal, transaction_id) : OB_NOT_INIT;
+#else
+  UNUSEDx(journal, transaction_id);
+  return OB_NOT_SUPPORTED;
+#endif
 }
 
 int ObPlanCache::init(
@@ -335,6 +368,10 @@ int ObPlanCache::init(
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+    plugin_invalidations_.reset(new (std::nothrow) RoutineInvalidationQueue());
+    if (!plugin_invalidations_ || !plugin_invalidations_->valid()) return OB_ALLOCATE_MEMORY_FAILED;
+#endif
     access_service_ = &access_service;
     ObPCMemPctConf default_conf;
     ObMemAttr attr("PlanCache", ObCtxIds::PLAN_CACHE_CTX_ID);
@@ -436,6 +473,13 @@ int ObPlanCache::get_plan(common::ObIAllocator &allocator,
                           ObCacheObjGuard& guard)
 {
   int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(pc_ctx.sql_ctx_.schema_guard_)
+      && pc_ctx.sql_ctx_.schema_guard_->has_routine_overlay()) {
+    // An Extension-private view is not represented by the shared cache key.
+    // Do not parse/mutate keys, access shared entries, or release an existing
+    // caller-owned object while reporting a miss.
+    return OB_ISNULL(guard.get_cache_obj()) ? OB_SQL_PC_NOT_EXIST : OB_ERR_UNEXPECTED;
+  }
   query::check_plan_cache_access(access_service());
   if (OB_ISNULL(pc_ctx.sql_ctx_.session_info_)
       || OB_ISNULL(pc_ctx.sql_ctx_.schema_guard_)) {
@@ -878,6 +922,11 @@ int ObPlanCache::check_can_do_insert_opt(common::ObIAllocator &allocator,
 int ObPlanCache::add_plan(ObPhysicalPlan *plan, ObPlanCacheCtx &pc_ctx)
 {
   int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(pc_ctx.sql_ctx_.schema_guard_)
+      && pc_ctx.sql_ctx_.schema_guard_->has_routine_overlay()) {
+    // A rejected publication must not look like a successful cache insertion.
+    return OB_ISNULL(plan) ? OB_INVALID_ARGUMENT : OB_NOT_SUPPORTED;
+  }
   query::check_plan_cache_access(access_service());
   if (OB_ISNULL(plan)) {
     ret = OB_INVALID_ARGUMENT;
@@ -1157,15 +1206,21 @@ int ObPlanCache::foreach_cache_evict(CallBack &cb)
   const LCKeyValueArray *to_evict_list = NULL;
   query::check_plan_cache_access(access_service());
   if (OB_FAIL(cache_key_node_map_.foreach_refactored(cb))) {
-  } else if (OB_ISNULL(to_evict_list = cb.get_key_value_list())) {
-    ret = OB_ERR_UNEXPECTED;
-    SQL_PC_LOG(WARN, "to_evict_list is null", K(ret));
-  } else if (OB_FAIL(batch_remove_cache_node(*to_evict_list))) {
+  }
+  // Traversal may have pinned a partial list before returning an error. Always
+  // acquire that list for cleanup; do not remove entries after failed traversal.
+  to_evict_list = cb.get_key_value_list();
+  if (OB_SUCC(ret)) {
+    if (OB_ISNULL(to_evict_list)) {
+      ret = OB_ERR_UNEXPECTED;
+      SQL_PC_LOG(WARN, "to_evict_list is null", K(ret));
+    } else if (OB_FAIL(batch_remove_cache_node(*to_evict_list))) {
+    }
   }
   if (OB_NOT_NULL(to_evict_list)) {
     //decrement reference count
     int64_t N = to_evict_list->count();
-    for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
+    for (int64_t i = 0; i < N; i++) {
       if (NULL != to_evict_list->at(i).node_) {
         to_evict_list->at(i).node_->dec_ref_count();
       }
@@ -1737,6 +1792,10 @@ template<class T>
 int ObPlanCache::add_ps_plan(T *plan, ObPlanCacheCtx &pc_ctx)
 {
   int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(pc_ctx.sql_ctx_.schema_guard_)
+      && pc_ctx.sql_ctx_.schema_guard_->has_routine_overlay()) {
+    return OB_ISNULL(plan) ? OB_INVALID_ARGUMENT : OB_NOT_SUPPORTED;
+  }
   query::check_plan_cache_access(access_service());
   if (OB_ISNULL(plan)) {
     ret = OB_INVALID_ARGUMENT;
@@ -1866,6 +1925,10 @@ int ObPlanCache::get_ps_plan(ObCacheObjGuard& guard,
                              ObPlanCacheCtx &pc_ctx)
 {
   int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(pc_ctx.sql_ctx_.schema_guard_)
+      && pc_ctx.sql_ctx_.schema_guard_->has_routine_overlay()) {
+    return OB_ISNULL(guard.get_cache_obj()) ? OB_SQL_PC_NOT_EXIST : OB_ERR_UNEXPECTED;
+  }
   query::check_plan_cache_access(access_service());
   UNUSED(stmt_id);
   int64_t original_param_cnt = 0;
@@ -2045,6 +2108,9 @@ int ObPlanCache::server_module_init(
 void ObPlanCache::server_module_stop(ObPlanCache * &plan_cache)
 {
   if (OB_LIKELY(nullptr != plan_cache)) {
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+    if (plan_cache->plugin_invalidations_) plan_cache->plugin_invalidations_->close();
+#endif
     plan_cache->evict_timer_.cancel(plan_cache->evict_task_);
     plan_cache->evict_timer_.stop();
   }
@@ -2233,6 +2299,39 @@ void ObPlanCacheEliminationTask::runTimerTask()
     // Before calling the plan cache interface and referencing the plan resource, a guard must be defined
     query::ObPlanCacheAccessGuard req_timeinfo_guard(
         plan_cache_->access_service());
+
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+    if (plan_cache_->plugin_invalidations_) {
+      struct Evictor final : IRoutineCacheEvictor {
+        ObPlanCache &cache;
+        explicit Evictor(ObPlanCache &cache) : cache(cache) {}
+        int check_schema_version(int64_t required_version) override {
+          if (GCTX.schema_service_ == nullptr) return OB_NOT_INIT;
+          int64_t current = 0;
+          const int ret = GCTX.schema_service_->get_runtime_refreshed_schema_version(current);
+          if (ret != OB_SUCCESS) return ret;
+          if (current < required_version) {
+            // Non-blocking scheduling; keep the request until the schema is
+            // actually refreshed. Unknown/aborted outcomes may wait for a later
+            // version or cache retirement; never fabricate schema publication.
+            (void)GCTX.schema_service_->request_schema_refresh(required_version);
+            return OB_EAGAIN;
+          }
+          return OB_SUCCESS;
+        }
+        int evict(uint64_t database, uint64_t routine) override {
+          // Use normal local PL-cache eviction, not global SQL or schema refresh.
+          return ObPLCacheMgr::cache_evict_pl_cache_single<ObGetPLKVEntryBySchemaIdOp>(
+              &cache, database, routine);
+        }
+      } evictor(*plan_cache_);
+      uint32_t processed = 0;
+      const int invalidation_ret = plan_cache_->plugin_invalidations_->process(evictor, 8, processed);
+      if (invalidation_ret != OB_SUCCESS) {
+        SQL_PC_LOG(WARN, "plugin routine cache invalidation retained for retry", K(invalidation_ret), K(processed));
+      }
+    }
+#endif
 
     run_plan_cache_task();
     if (0 != auto_flush_pc_interval

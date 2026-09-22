@@ -12,6 +12,28 @@ project("OceanBase"
   HOMEPAGE_URL "https://www.oceanbase.ai"
   LANGUAGES CXX C ASM)
 
+include(cmake/Plugin.cmake)
+
+# The plugin runtime is the default execution path for optional extensions.
+# Phase 1 intentionally uses the local trusted verifier/loader without
+# signature trust; the runtime remains independently switchable for minimal
+# embedders that do not load any plugins.
+option(SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS
+  "Build the in-process plugin runtime" ON)
+
+# GIS algorithms and codecs live in plugins/gis by default.  Enabling this
+# option is a compatibility profile for deployments that still need the old
+# in-core implementation; it must not be used by the lightweight default.
+option(SEEKDB_ENABLE_CORE_GIS
+  "Build the legacy GIS algorithms and codecs inside the core" OFF)
+
+if(WIN32)
+  find_program(LLVM_LIB_PROGRAM llvm-lib)
+  if(LLVM_LIB_PROGRAM)
+    set(CMAKE_AR "${LLVM_LIB_PROGRAM}" CACHE FILEPATH "Archiver" FORCE)
+  endif()
+endif()
+
 option(OB_ENABLE_STANDBY "Build physical standby support" ON)
 option(ENABLE_SANITY "Build with seekdb memory Sanity instrumentation" OFF)
 
@@ -90,6 +112,7 @@ execute_process(
     "${CMAKE_SOURCE_DIR}/tools/cmake/emit_bazel_source_inventory.py"
     --repo "${CMAKE_SOURCE_DIR}"
     --output "${SEEKDB_CMAKE_INVENTORY}"
+    --generated-root "${SEEKDB_GENERATED_ROOT}"
   RESULT_VARIABLE SEEKDB_CMAKE_INVENTORY_RESULT)
 if(NOT SEEKDB_CMAKE_INVENTORY_RESULT EQUAL 0)
   message(FATAL_ERROR "Failed to translate Bazel production source inventories")
@@ -291,8 +314,12 @@ endif()
 # selected CMake build directory and expose its C ABI header to the migrated
 # src/oblib and Observer sources.
 include(cmake/Rust.cmake)
-include_directories("${CMAKE_SOURCE_DIR}/rust/sql-nio/include")
 
+add_subdirectory(plugins EXCLUDE_FROM_ALL)
+if(SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS)
+  # SQL-only delivery must not inherit the native plugins' excluded install.
+  add_subdirectory(plugins/sql_packages)
+endif()
 add_subdirectory(src)
 
 # Farm compile and pretest still publish and consume liboberror.so.  Keep the
@@ -327,4 +354,15 @@ elseif(SEEKDB_CMAKE_PACKAGE_FORMAT STREQUAL "TGZ")
   include(cmake/TGZ.cmake)
 elseif(SEEKDB_CMAKE_PACKAGE_FORMAT STREQUAL "WIX")
   include(cmake/WIX.cmake)
+endif()
+
+# Keep the plugin dependency boundary available independently of the legacy
+# module-layer checker, which is no longer part of the compatibility build.
+add_custom_target(plugin_boundary_check
+  COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/cmake/plugin_boundary_check.py
+          ${CMAKE_SOURCE_DIR}
+  COMMENT "Checking seekdb core/SPI/plugin dependency boundary"
+  VERBATIM)
+if(TARGET seekdb)
+  add_dependencies(seekdb plugin_boundary_check)
 endif()

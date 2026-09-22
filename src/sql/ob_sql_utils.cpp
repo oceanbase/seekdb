@@ -20,6 +20,7 @@
 #include "sql/executor/ob_maintain_dependency_info_task.h"
 #include "share/rc/ob_server_runtime.h"
 #include "sql/ob_sql.h"
+#include "sql/engine/ob_physical_plan.h"
 #include "sql/engine/expr/ob_expr_func_part_hash.h"
 #include "sql/printer/ob_select_stmt_printer.h"
 #include "sql/printer/ob_insert_stmt_printer.h"
@@ -1027,6 +1028,9 @@ bool ObSQLUtils::is_mysql_ps_not_support_stmt(const ParseResult &result)
     ParseNode *root = result.result_tree_->children_[0];
     ObItemType type = root->type_;
     switch (type) {
+      case T_CREATE_EXTENSION:
+      case T_ALTER_EXTENSION:
+      case T_DROP_EXTENSION:
       case T_SP_CREATE:
       case T_SP_DROP: {
         ret = true;
@@ -1992,6 +1996,15 @@ int ObSQLUtils::extract_geo_query_range(const ObQueryRangeProvider &query_range_
                                         ObMbrFilterArray &mbr_filters,
                                         const ObDataTypeCastParams &dtc_params)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  UNUSED(query_range_provider);
+  UNUSED(allocator);
+  UNUSED(exec_ctx);
+  UNUSED(key_ranges);
+  UNUSED(mbr_filters);
+  UNUSED(dtc_params);
+  return OB_NOT_SUPPORTED;
+#else
   int ret = OB_SUCCESS;
   bool dummy_all_single_value_ranges = false;
   if (OB_FAIL(query_range_provider.get_tablet_ranges(allocator, exec_ctx, key_ranges,
@@ -2000,6 +2013,7 @@ int ObSQLUtils::extract_geo_query_range(const ObQueryRangeProvider &query_range_
                                                      mbr_filters))) {
   }
   return ret;
+#endif
 }
 
 
@@ -3180,6 +3194,10 @@ int ObSqlGeoUtils::check_srid_by_srs(
     common::ObISrsProvider &srs_provider,
     uint64_t srid)
 {
+#if !SEEKDB_ENABLE_CORE_GIS
+  UNUSED(srid);
+  return OB_SUCCESS;
+#else
   int ret = OB_SUCCESS;
   common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = NULL;
@@ -3195,6 +3213,7 @@ int ObSqlGeoUtils::check_srid_by_srs(
   }
 
   return ret;
+#endif
 }
 
 int ObSqlGeoUtils::check_srid(
@@ -3373,7 +3392,11 @@ bool ObSQLUtils::is_iter_uncommitted_row(ObExecContext *cur_ctx)
 
 bool ObSQLUtils::is_nested_sql(ObExecContext *cur_ctx)
 {
-  return is_pl_nested_sql(cur_ctx) || is_fk_nested_sql(cur_ctx) || is_online_stat_gathering_nested_sql(cur_ctx);
+  return (cur_ctx != nullptr && cur_ctx->is_plugin_sql()
+          && (cur_ctx->get_parent_ctx() != nullptr
+              || (cur_ctx->get_my_session() != nullptr
+                  && cur_ctx->get_my_session()->get_nested_count() > 0)))
+      || is_pl_nested_sql(cur_ctx) || is_fk_nested_sql(cur_ctx) || is_online_stat_gathering_nested_sql(cur_ctx);
 }
 
 //bind current execute context to my session,
@@ -3391,6 +3414,10 @@ void LinkExecCtxGuard::link_current_context()
     if (parent_ctx != nullptr) {
       //mark the recursive sql levels
       exec_ctx_.set_nested_level(parent_ctx->get_nested_level() + 1);
+    } else if (exec_ctx_.is_plugin_sql() && session_.get_nested_count() > 0) {
+      // Catalog COMMIT preparation may have no parent execution context, but
+      // still owns a nested session frame and a nested statement savepoint.
+      exec_ctx_.set_nested_level(session_.get_nested_count());
     }
     //switch the exec ctx reference in sql session
     session_.set_cur_exec_ctx(&exec_ctx_);

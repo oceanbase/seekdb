@@ -1,0 +1,2 @@
+default_version = '1.0'
+native_module = 'org.seekdb.rust-text'

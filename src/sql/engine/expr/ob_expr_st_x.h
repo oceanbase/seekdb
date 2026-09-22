@@ -38,6 +38,9 @@ public:
                                 ObExprResType *texts,
                                 int64_t param_num,
                                 common::ObExprTypeCtx &type_ctx) const;
+  virtual int calc_result1(common::ObObj &result,
+                           const common::ObObj &obj,
+                           common::ObExprCtx &expr_ctx) const override;
   int calc_common(common::ObObj &result,
                   const common::ObObj *params,
                   int64_t param_num,

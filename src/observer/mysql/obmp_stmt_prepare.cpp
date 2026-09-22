@@ -277,19 +277,15 @@ int ObMPStmtPrepare::process_prepare_stmt(const ObMultiStmtItem &multi_stmt_item
 int ObMPStmtPrepare::check_and_refresh_schema()
 {
   int ret = OB_SUCCESS;
-  int64_t local_version = 0;
-  int64_t last_version = 0;
 
   if (OB_ISNULL(gctx_.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     if (OB_ISNULL(ctx_.session_info_)) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (OB_FAIL(gctx_.schema_service_->get_runtime_refreshed_schema_version(local_version))) {
-    } else if (FALSE_IT(last_version = ctx_.session_info_->get_last_ddl_schema_version())) {
-    } else if (local_version >= last_version) {
-      // skip
-    } else if (OB_FAIL(gctx_.schema_service_->async_refresh_schema(last_version))) {
+      LOG_WARN("invalid session info", K(ret), K(ctx_.session_info_));
+    } else {
+      ret = gctx_.schema_service_->refresh_schema_for_client(ctx_.session_info_->get_last_ddl_schema_version());
     }
   }
   return ret;

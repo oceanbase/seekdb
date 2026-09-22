@@ -279,6 +279,16 @@ public:
                              common::ObIArray<share::schema::ObTableSchema> *table_schemas = nullptr);
   // Trigger an asynchronous refresh task and wait for the refresh result
   int async_refresh_schema(const int64_t schema_version);
+  // Enqueue only: no SQL, schema wait, or retry loop. Safe for commit completion
+  // while the service/scheduler are alive; success does NOT mean cache visibility.
+  int request_schema_refresh(const int64_t schema_version);
+  // Commit completion only: publish a process-local, monotonic visibility fence
+  // BEFORE enqueueing refresh. A queue failure must not lose the durable commit.
+  int publish_plugin_catalog_commit(const int64_t schema_version);
+  int64_t get_plugin_catalog_commit_version() const;
+  // Client request boundary only, before acquiring the statement schema guard.
+  // Never use from commit callbacks or internal schema-refresh SQL.
+  int refresh_schema_for_client(const int64_t session_ddl_version);
   int add_schema(const bool force_add = false);
 
   int try_eliminate_schema_mgr();
@@ -392,6 +402,7 @@ private:
 
   bool init_;
   ObISchemaRefreshScheduler *schema_refresh_scheduler_;
+  int64_t plugin_catalog_commit_version_;
   ObSchemaPublishSignal *schema_publish_signal_;
   mutable lib::ObMutex schema_refresh_mutex_;//assert only one thread can refresh schema
   ObSchemaCache schema_cache_;

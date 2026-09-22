@@ -480,11 +480,15 @@ int ObExprColumnConv::column_convert(const ObExpr &expr,
                   nullptr))) {
           } else if (OB_FAIL(striter.get_full_data(str))) {
           } else if (ob_is_geometry(out_type)) {
+#if SEEKDB_ENABLE_CORE_GIS
             ObGeoType geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
             if (OB_FAIL(ObGeoTypeUtil::check_geo_type(geo_type, str))) {
               ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
               LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
             }
+#else
+            ret = OB_NOT_SUPPORTED;
+#endif
           } else if (OB_FAIL(string_collation_check(is_strict, out_cs_type, out_type, str))) {
           }
           if (OB_SUCC(ret)) {
@@ -629,11 +633,15 @@ int ObExprColumnConv::column_convert_batch(const ObExpr &expr,
                       nullptr))) {
               } else if (OB_FAIL(striter.get_full_data(str))) {
               } else if (ob_is_geometry(out_type)) {
+#if SEEKDB_ENABLE_CORE_GIS
                 ObGeoType geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
                 if (OB_FAIL(ObGeoTypeUtil::check_geo_type(geo_type, str))) {
                   ret = OB_ERR_CANT_CREATE_GEOMETRY_OBJECT;
                   LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
                 }
+#else
+                ret = OB_NOT_SUPPORTED;
+#endif
               }
             }
            int64_t ori_len = str.length();

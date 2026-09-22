@@ -37,6 +37,7 @@
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/resolver/dml/ob_inlist_resolver.h"
 #include "sql/engine/expr/ob_expr_cast.h"
+#include "sql/engine/expr/plugin_function_expr.h"
 #include "sql/pl/ob_pl_dependency_util.h"
 #include "data_plane/transaction/ob_xa_id.h"
 
@@ -120,6 +121,28 @@ int ObResolverUtils::get_all_function_table_column_names(const TableItem &table_
 {
   int ret = OB_SUCCESS;
   ObRawExpr *table_expr = NULL;
+  // GENERATOR is a built-in row stream, not a PL collection. Its resolver
+  // declares COLUMN_VALUE without a UDT, including when selecting it by name.
+  if (table_item.is_function_table() && table_item.function_table_expr_ &&
+      table_item.function_table_expr_->get_expr_type() == T_FUN_SYS_GENERATOR) {
+    return column_names.push_back(ObString::make_string("COLUMN_VALUE"));
+  }
+  // Native plugin streams declare their columns in the fixed SQL binding;
+  // they are not PL collections and do not have a PL user-type identifier.
+  if (table_item.is_function_table() && table_item.function_table_expr_ &&
+      table_item.function_table_expr_->get_expr_type() == T_FUN_SYS_PLUGIN_TABLE_FUNCTION) {
+    if (!params.allocator_) return OB_INVALID_ARGUMENT;
+    ObArenaAllocator temporary;
+    PluginTableFunctionExtraInfo info(temporary, T_FUN_SYS_PLUGIN_TABLE_FUNCTION);
+    if (OB_FAIL(PluginTableFunctionExpr::read_binding(*table_item.function_table_expr_, info))) return ret;
+    for (int64_t i = 0; OB_SUCC(ret) && i < info.columns_.count(); ++i) {
+      ObString owned_name;
+      if (OB_FAIL(ob_write_string(*params.allocator_, ObString::make_string(info.columns_.at(i).sql_name), owned_name))) {
+      } else if (OB_FAIL(column_names.push_back(owned_name))) {
+      }
+    }
+    return ret;
+  }
   ObPLPackageGuard *package_guard = nullptr;
   const ObUserDefinedType *user_type = NULL;
   ObExecContext *exec_ctx = params.session_info_->get_cur_exec_ctx();
@@ -202,7 +225,7 @@ int ObResolverUtils::check_function_table_column_exist(const TableItem &table_it
       break;
     }
   }
-  if (!exist) {
+  if (OB_SUCC(ret) && !exist) {
     ret = OB_ERR_BAD_FIELD_ERROR;
   }
   return ret;
@@ -1773,6 +1796,12 @@ stmt::StmtType ObResolverUtils::get_stmt_type_by_item_type(const ObItemType item
       SET_STMT_TYPE(T_SWITCHOVER_TO_PRIMARY);
       SET_STMT_TYPE(T_ACTIVATE_STANDBY);
       SET_STMT_TYPE(T_SHOW_CREATE_USER);
+      SET_STMT_TYPE(T_SHOW_PLUGINS);
+      SET_STMT_TYPE(T_INSTALL_PLUGIN);
+      SET_STMT_TYPE(T_UNINSTALL_PLUGIN);
+      SET_STMT_TYPE(T_CREATE_EXTENSION);
+      SET_STMT_TYPE(T_ALTER_EXTENSION);
+      SET_STMT_TYPE(T_DROP_EXTENSION);
 #undef SET_STMT_TYPE
       case T_ROLLBACK:
       case T_COMMIT: {
@@ -2650,7 +2679,8 @@ bool ObResolverUtils::is_expr_can_be_used_in_table_function(const ObRawExpr &exp
   if (expr.get_result_type().is_ext()) {
     // for UDF
     bret = true;
-  } else if (T_FUN_SYS_GENERATOR == expr.get_expr_type()) {
+  } else if (T_FUN_SYS_GENERATOR == expr.get_expr_type() ||
+             T_FUN_SYS_PLUGIN_TABLE_FUNCTION == expr.get_expr_type()) {
     // for generator(N) stream function
     bret = true;
   }

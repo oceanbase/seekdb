@@ -154,6 +154,10 @@ REGISTER_OPERATOR(ObLogDistinct, PHY_HASH_DISTINCT, ObHashDistinctSpec,
                   ObHashDistinctOp, NOINPUT, VECTORIZED_OP);
 
 class ObLogMaterial;
+class LogPluginCustom;
+class PluginCustomSpec;
+class PluginCustomOp;
+REGISTER_OPERATOR(LogPluginCustom, PHY_PLUGIN_CUSTOM, PluginCustomSpec, PluginCustomOp, NOINPUT);
 class ObMaterialSpec;
 class ObMaterialOp;
 class ObMaterialOpInput;
@@ -511,7 +515,7 @@ class ObLogFunctionTable;
 class ObFunctionTableSpec;
 class ObFunctionTableOp;
 REGISTER_OPERATOR(ObLogFunctionTable, PHY_FUNCTION_TABLE, ObFunctionTableSpec,
-                  ObFunctionTableOp, NOINPUT);
+                  ObFunctionTableOp, NOINPUT, VECTORIZED_OP);
 
 class ObLogStatCollector;
 class ObStatCollectorSpec;

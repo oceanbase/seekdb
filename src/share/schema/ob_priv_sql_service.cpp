@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
+#include "share/schema/catalog_dml_sql_helper.h"
 #include "ob_priv_sql_service.h"
 
 #include <stddef.h>
@@ -37,6 +38,7 @@
 #include "mysqlclient/ob_isql_client.h"
 #include "mysqlclient/ob_mysql_proxy.h"
 #include "mysqlclient/ob_mysql_result.h"
+#include "mysqlclient/ob_mysql_transaction.h"
 #include "object/ob_object.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_version_parser.h"
@@ -323,7 +325,7 @@ int ObPrivSqlService::gen_delete_routine_priv_sql(
 
   ObSqlString sql;
 
-  if (OB_FAIL(sql.append_fmt("SELECT routine_name FROM %s WHERE user_id=%lu AND database_name=",
+  if (OB_FAIL(sql.append_fmt("SELECT routine_name FROM oceanbase.%s WHERE user_id=%lu AND database_name=",
                              OB_ALL_ROUTINE_PRIVILEGE_TNAME,
                              routine_priv_key.user_id_))) {
   } else if (OB_FAIL(sql_append_hex_escape_str(routine_priv_key.db_, sql))) {
@@ -365,6 +367,50 @@ int ObPrivSqlService::gen_delete_routine_priv_sql(
   return ret;
 }
 
+int ObPrivSqlService::get_routine_priv_in_transaction(
+    const ObRoutinePrivSortKey &key, ObMySQLTransaction &transaction, ObPrivSet &privileges)
+{
+  privileges = OB_PRIV_SET_EMPTY;
+  int ret = OB_SUCCESS;
+  ObSqlString sql;
+  ObISQLClient::ReadResult result;
+  common::sqlclient::ObMySQLResult *rows = nullptr;
+  int64_t bits = 0;
+  if (!key.is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!transaction.is_started()) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (OB_FAIL(sql.append_fmt("SELECT all_priv FROM oceanbase.%s WHERE user_id=%lu AND database_name=",
+                                    OB_ALL_ROUTINE_PRIVILEGE_TNAME, key.user_id_))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(key.db_, sql))) {
+  } else if (OB_FAIL(sql.append(" AND CAST(routine_name AS CHAR)="))) {
+  } else if (OB_FAIL(sql_append_hex_escape_str(key.routine_, sql))) {
+  } else if (OB_FAIL(sql.append_fmt(" AND routine_type=%ld FOR UPDATE", key.routine_type_))) {
+  } else if (OB_FAIL(transaction.read(result, sql.ptr()))) {
+  } else if (nullptr == (rows = result.get_result())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_ITER_END == (ret = rows->next())) {
+    ret = OB_SUCCESS;
+  } else if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(rows->get_int(static_cast<int64_t>(0), bits))) {
+  } else if (bits < 0 || (bits & ~7) != 0) {
+    ret = OB_INVALID_DATA;
+  } else if (OB_ITER_END == (ret = rows->next())) {
+    ret = OB_SUCCESS;
+  } else if (OB_SUCC(ret)) {
+    // Ambiguous case variants cannot be treated as one grant or silently ORed.
+    ret = OB_INVALID_DATA;
+  }
+  const int close_ret = result.close();
+  if (OB_SUCC(ret) && OB_SUCCESS != close_ret) ret = close_ret;
+  if (OB_SUCC(ret)) {
+    if ((bits & 1) != 0) privileges |= OB_PRIV_EXECUTE;
+    if ((bits & 2) != 0) privileges |= OB_PRIV_ALTER_ROUTINE;
+    if ((bits & 4) != 0) privileges |= OB_PRIV_GRANT;
+  }
+  return ret;
+}
+
 int ObPrivSqlService::grant_routine(
     const ObRoutinePrivSortKey &routine_priv_key,
     const ObPrivSet priv_set,
@@ -384,7 +430,7 @@ int ObPrivSqlService::grant_routine(
     ret = OB_INVALID_ARGUMENT;
   } else {
     int64_t affected_rows = 0;
-    ObDMLExecHelper exec(sql_client);
+    CatalogDMLSqlHelper exec(sql_client);
     ObDMLSqlSplicer dml;
     if (OB_FAIL(gen_routine_priv_dml(routine_priv_key, priv_set, dml, grantor, grantor_host))) {
     }

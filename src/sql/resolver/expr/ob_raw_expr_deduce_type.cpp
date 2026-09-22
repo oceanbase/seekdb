@@ -21,6 +21,8 @@
 #include "sql/engine/aggregate/ob_aggregate_processor.h"
 #include "sql/engine/expr/ob_expr_between.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
+#include "sql/engine/expr/plugin_function_expr.h"
+#include "sql/resolver/expr/plugin_expr_type.h"
 #include "sql/parser/ob_parser.h"
 #include "rpc/obmysql/ob_mysql_util.h"
 
@@ -33,6 +35,54 @@ namespace sql
 int ObRawExprDeduceType::deduce(ObRawExpr &expr)
 {
   return expr.postorder_accept(*this);
+}
+
+bool ObRawExprDeduceType::skip_child(ObRawExpr &expr)
+{
+  return PluginTypeComparisonExpr::has_nested_row_operands(expr);
+}
+
+int ObRawExprDeduceType::prepare_nested_plugin_rows(ObOpRawExpr &expr)
+{
+  if (!PluginTypeComparisonExpr::has_nested_row_operands(expr)) return OB_SUCCESS;
+  // Ordinary postorder visits reject mixed row/scalar constructors before
+  // their consuming comparison can see the leaf logical types. Deduce those
+  // leaves with this same visitor (including local-variable state) instead.
+  const auto deduce_leaves = [&](auto &&self, ObRawExpr &value, uint32_t depth) -> int {
+    if (depth >= 64) return OB_SIZE_OVERFLOW;
+    if (value.get_expr_type() != T_OP_ROW) return value.postorder_accept(*this);
+    for (int64_t i = 0; i < value.get_param_count(); ++i) {
+      if (!value.get_param_expr(i)) return OB_INVALID_DATA;
+      const int ret = self(self, *value.get_param_expr(i), depth + 1);
+      if (ret != OB_SUCCESS) return ret;
+    }
+    value.set_data_type(ObNullType);
+    return OB_SUCCESS;
+  };
+  for (int64_t i = 0; i < expr.get_param_count(); ++i) {
+    if (!expr.get_param_expr(i)) return OB_INVALID_DATA;
+    const int ret = deduce_leaves(deduce_leaves, *expr.get_param_expr(i), 0);
+    if (ret != OB_SUCCESS) return ret;
+  }
+  int ret = PluginTypeComparisonExpr::prepare(expr_factory_, expr, my_session_);
+  if (ret != OB_SUCCESS) return ret;
+  // Native-only expressions have not been lowered. Preserve their original
+  // postorder shape checks rather than enabling native nested row semantics.
+  if (PluginTypeComparisonExpr::has_nested_row_operands(expr)) {
+    const auto check_rows = [&](auto &&self, ObRawExpr &value, uint32_t depth) -> int {
+      if (depth >= 64) return OB_SIZE_OVERFLOW;
+      if (value.get_expr_type() != T_OP_ROW) return OB_SUCCESS;
+      for (int64_t i = 0; i < value.get_param_count(); ++i) {
+        const int status = self(self, *value.get_param_expr(i), depth + 1);
+        if (status != OB_SUCCESS) return status;
+      }
+      return check_row_param(static_cast<ObOpRawExpr &>(value));
+    };
+    for (int64_t i = 0; i < expr.get_param_count(); ++i) {
+      if (OB_FAIL(check_rows(check_rows, *expr.get_param_expr(i), 0))) return ret;
+    }
+  }
+  return OB_SUCCESS;
 }
 
 int ObRawExprDeduceType::visit(ObConstRawExpr &expr)
@@ -125,11 +175,33 @@ int ObRawExprDeduceType::visit(ObQueryRefRawExpr &expr)
 {
   int ret = OB_SUCCESS;
   if (expr.is_scalar()) {
-    expr.set_result_type(expr.get_column_types().at(0));
+    if (expr.get_column_types().count() != 1) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      expr.set_result_type(expr.get_column_types().at(0));
+      const auto *statement = expr.get_ref_stmt();
+      if (statement != nullptr) {
+        const ObRawExpr *output = statement->get_select_item_size() == 1
+            ? statement->get_select_item(0).expr_ : nullptr;
+        if (output == nullptr) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (output->get_plugin_type() != nullptr &&
+                   output->get_plugin_type()->physical_type_ != expr.get_data_type()) {
+          ret = OB_STATE_NOT_MATCH;
+        } else {
+          // A scalar subquery transports its selected datum, including the
+          // plugin identity/representation and query epoch, not just varchar.
+          ret = expr.copy_plugin_type_from(*output);
+        }
+      } else if (expr.get_plugin_type() != nullptr) {
+        ret = OB_STATE_NOT_MATCH;
+      }
+    }
   } else {
     // for enumset query ref `is_set`, need warp enum_to_str/set_to_str expr at
     // `ObRawExprWrapEnumSet::visit_query_ref_expr`
     expr.set_data_type(ObIntType);
+    expr.clear_plugin_type(); // A set/row reference is not one logical datum.
   }
   return ret;
 }
@@ -150,6 +222,7 @@ int ObRawExprDeduceType::visit(ObExecParamRawExpr &expr)
   } else if (OB_FAIL(expr.get_ref_expr()->postorder_accept(*this))) {
   } else {
     expr.set_result_type(expr.get_ref_expr()->get_result_type());
+    ret = expr.copy_plugin_type_from(*expr.get_ref_expr());
   }
   return ret;
 }
@@ -661,6 +734,8 @@ int ObRawExprDeduceType::visit(ObOpRawExpr &expr)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(my_session_)) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("my_session_ is NULL", K(ret));
+  } else if (OB_FAIL(prepare_nested_plugin_rows(expr))) {
   } else if (OB_FAIL(check_expr_param(expr))) {
   } else if (OB_UNLIKELY(expr.get_expr_type() == T_OBJ_ACCESS_REF)) {
     ObObjAccessRawExpr &obj_access_expr = static_cast<ObObjAccessRawExpr &>(expr);
@@ -706,6 +781,7 @@ int ObRawExprDeduceType::visit(ObOpRawExpr &expr)
     result_type.set_precision(DEFAULT_PRECISION_FOR_BOOL);
     result_type.set_scale(DEFAULT_SCALE_FOR_INTEGER);
     expr.set_result_type(result_type);
+  } else if (OB_FAIL(PluginTypeComparisonExpr::prepare(expr_factory_, expr, my_session_))) {
   } else if (OB_FAIL(type_demotion_.demote_type(expr))) {
   } else {
     ObExprOperator *op = expr.get_op();
@@ -1054,12 +1130,16 @@ int64_t ObRawExprDeduceType::get_expr_output_column(const ObRawExpr &expr)
 int ObRawExprDeduceType::visit(ObCaseOpRawExpr &expr)
 {
   int ret = OB_SUCCESS;
+  std::string plugin_type;
+  uint64_t plugin_epoch = 0;
   ObExprOperator *op = expr.get_op();
   if (OB_ISNULL(my_session_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (NULL == op) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("Get expression operator failed", "expr type", expr.get_expr_type());
+  } else if (OB_FAIL(PluginBranchType::prepare_case(expr_factory_, expr, my_session_, plugin_type, plugin_epoch))) {
+    LOG_WARN("failed to reconcile plugin CASE branches", K(ret));
   } else {
     ObExprResTypes types;
     ObRawExpr *arg_param = expr.get_arg_param_expr();
@@ -1115,6 +1195,7 @@ int ObRawExprDeduceType::visit(ObCaseOpRawExpr &expr)
       }
     }
   }
+  if (OB_SUCC(ret)) ret = PluginBranchType::finish(expr, plugin_type, plugin_epoch);
   return ret;
 }
 
@@ -1974,6 +2055,10 @@ int ObRawExprDeduceType::visit(ObSysFunRawExpr &expr)
     LOG_ERROR("Get expression operator failed", "expr type", expr.get_expr_type());
   } else if (T_FUN_SYS_CAST == expr.get_expr_type() &&
              OB_FAIL(adjust_cast_as_signed_unsigned(expr))) {
+    LOG_WARN("failed to adjust cast as signed unsigned", K(ret), K(expr));
+  } else if (T_FUN_SYS_CAST == expr.get_expr_type() &&
+             OB_FAIL(PluginCastExpr::coerce_sql_cast(expr_factory_, expr, my_session_))) {
+    LOG_WARN("failed to resolve plugin explicit cast", K(ret));
   } else {
     ObExprResTypes types;
     ObCastMode expr_cast_mode = CM_NONE;
@@ -2075,6 +2160,7 @@ int ObRawExprDeduceType::visit(ObAliasRefRawExpr &expr)
     ret = OB_ERR_UNEXPECTED;
   } else {
     expr.set_result_type(ref_expr->get_result_type());
+    ret = expr.copy_plugin_type_from(*ref_expr);
   }
   return ret;
 }
@@ -2547,8 +2633,28 @@ int ObRawExprDeduceType::set_agg_min_max_result_type(ObAggFunRawExpr &expr,
                                                      bool &need_add_cast)
 {
   int ret = OB_SUCCESS;
-  ObRawExpr *child_expr = NULL;
-  if (OB_ISNULL(child_expr = expr.get_param_expr(0))) {
+  ObRawExpr *child_expr = expr.get_param_expr(0);
+  if (child_expr && child_expr->get_plugin_type()) {
+    if (!expr_factory_) return OB_INVALID_ARGUMENT;
+    ObRawExpr *ordered = child_expr;
+    if (OB_FAIL(PluginTypeValueExpr::prepare_ordering(*expr_factory_, ordered, my_session_))) return ret;
+    if (ordered->get_expr_type() == T_FUN_SYS_PLUGIN_TYPE_VALUE) {
+      PluginTypeValueExtraInfo info(expr_factory_->get_allocator(), T_FUN_SYS_PLUGIN_TYPE_VALUE);
+      if (OB_FAIL(PluginTypeValueExpr::read_binding(*ordered, info))) return ret;
+      if (info.mode_ == PluginTypeValueExtraInfo::ORDERED) {
+        if (OB_FAIL(expr.copy_plugin_type_from(*ordered))) return ret;
+        expr.get_param_expr(0) = ordered;
+        expr.set_result_type(ordered->get_result_type());
+        expr.unset_result_flag(NOT_NULL_FLAG); expr.unset_result_flag(ZEROFILL_FLAG);
+        // Duplicates cannot change an extremum. Avoid an unrelated native
+        // carrier hash/equality phase for MIN/MAX(DISTINCT custom_value).
+        expr.set_param_distinct(false);
+        need_add_cast = false;
+        return OB_SUCCESS;
+      }
+    }
+  }
+  if (OB_ISNULL(child_expr)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_UNLIKELY(ob_is_geometry(child_expr->get_data_type()))) {
     ret = OB_INVALID_ARGUMENT;

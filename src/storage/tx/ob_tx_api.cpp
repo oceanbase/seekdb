@@ -1254,6 +1254,16 @@ int ObTransService::rollback_to_explicit_savepoint(ObTxDesc &tx,
                                                    const ObString &savepoint,
                                                    const int64_t expire_ts)
 {
+  ObTxSEQ resolved;
+  return rollback_to_explicit_savepoint(tx, savepoint, expire_ts, resolved);
+}
+
+int ObTransService::rollback_to_explicit_savepoint(ObTxDesc &tx,
+                                                   const ObString &savepoint,
+                                                   const int64_t expire_ts,
+                                                   ObTxSEQ &resolved)
+{
+  resolved.reset();
   int ret = OB_SUCCESS;
   int64_t start_ts = ObTimeUtility::current_time();
   ObTxSEQ sp_scn;
@@ -1302,6 +1312,7 @@ int ObTransService::rollback_to_explicit_savepoint(ObTxDesc &tx,
   }
   int64_t elapsed_us = ObTimeUtility::current_time() - start_ts;
   ObTransTraceLog &tlog = tx.get_tlog();
+  if (OB_SUCC(ret)) resolved = sp_scn;
   REC_TRANS_TRACE_EXT(&tlog, rollback_explicit_savepoint, OB_Y(ret),
                       OB_ID(id), savepoint,
                       OB_ID(savepoint), sp_scn.cast_to_int(),
@@ -1673,6 +1684,16 @@ bool tx_desc_is_explicit(const transaction::ObTxDesc *desc)
 bool tx_desc_is_in_tx(const transaction::ObTxDesc *desc)
 {
   return OB_NOT_NULL(desc) && desc->is_in_tx();
+}
+
+bool tx_desc_is_active(const transaction::ObTxDesc *desc)
+{
+  return desc != nullptr && desc->is_tx_active();
+}
+
+bool tx_desc_is_statement_ready(const transaction::ObTxDesc *desc)
+{
+  return desc != nullptr && desc->is_statement_ready();
 }
 
 bool tx_desc_has_temporary_tables(const transaction::ObTxDesc *desc)

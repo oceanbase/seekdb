@@ -38,6 +38,12 @@ namespace data_plane
 // observations expose only the session decisions query needs to make.
 bool tx_desc_is_explicit(const transaction::ObTxDesc *desc);
 bool tx_desc_is_in_tx(const transaction::ObTxDesc *desc);
+// Unlike is_in_tx, excludes terminal/aborted/committing descriptor states.
+bool tx_desc_is_active(const transaction::ObTxDesc *desc);
+// Borrowable by a statement before its first storage write as well as while
+// active. IDLE is admitted only with an assigned identity and an implicit
+// savepoint; allocation alone is insufficient. Does not activate a transaction.
+bool tx_desc_is_statement_ready(const transaction::ObTxDesc *desc);
 bool tx_desc_has_temporary_tables(const transaction::ObTxDesc *desc);
 transaction::ObTransID tx_desc_id(const transaction::ObTxDesc *desc);
 bool tx_desc_in_tx_for_free_route(transaction::ObTxDesc *desc);

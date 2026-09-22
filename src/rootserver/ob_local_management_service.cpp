@@ -21,6 +21,10 @@
 #include "data_plane/ddl/ob_ddl_coordinator.h"
 #include "data_plane/ddl/ob_ddl_schedule.h"
 #include "query/command/ob_local_command_service.h"
+#include "query/command/ob_root_service_serialization.h"
+#include "share/plugin/extension_install.h"
+#include <new>
+#include "sql/session/ob_sql_session_info.h"
 #include "share/ob_server_struct.h"
 #include "share/rc/ob_server_runtime.h"
 
@@ -94,6 +98,9 @@ ObLocalManagementService::ObLocalManagementService()
     sql_proxy_(),
     schema_service_(NULL),
     local_command_service_(NULL),
+    extension_catalog_installer_(),
+    extension_catalog_dropper_(),
+    extension_catalog_updater_(),
     root_minor_freeze_(),
     ddl_service_(),
     bootstrap_lock_(),
@@ -2197,6 +2204,155 @@ int ObLocalManagementService::create_routine(const ObCreateRoutineArg &arg)
   OV (inited_, OB_NOT_INIT);
   OZ (ObPLDDLService::create_routine(arg, ddl_service_));
   return ret;
+}
+
+int ObLocalManagementService::install_extension_routines(
+    const share::plugin::ExtensionInstallSpec &spec,
+    const ObIArray<const ObCreateRoutineArg *> &args, sql::ObSQLSessionInfo &session,
+    uint64_t &extension_id, int &publication_status, std::string &error,
+    share::plugin::IExtensionRoutineScript *script)
+{
+  extension_id = 0;
+  publication_status = OB_NOT_INIT;
+  error.clear();
+  if (!inited_) return OB_NOT_INIT;
+  if (script != nullptr && !args.empty()) return OB_INVALID_ARGUMENT;
+  const auto installer = std::atomic_load(&extension_catalog_installer_);
+  if (!installer) return OB_NOT_SUPPORTED;
+  // This operation may not commit or roll back a user's pre-existing transaction.
+  if (session.is_in_transaction() || session.is_inner() || session.is_nested_session()) return OB_NOT_SUPPORTED;
+  if (spec.tenant_id_ != 1 || spec.database_id_ == 0 || spec.database_id_ == OB_INVALID_ID ||
+      spec.database_id_ != session.get_database_id()) return OB_INVALID_ARGUMENT;
+  // Capture provider ownership for the whole synchronous command. Composition
+  // changes themselves require quiescence, just like other runtime injection.
+  return query::serialize_root_service_call([&]() {
+    int ret = check_ddl_allowed();
+    share::schema::ObSessionPrivInfo privileges;
+    if (OB_SUCC(ret)) ret = session.get_session_priv_info(privileges);
+    if (OB_SUCC(ret)) {
+      ret = ObPLDDLService::install_routines_extension(spec, args, privileges,
+          session.get_enable_role_array(), *installer, ddl_service_,
+          extension_id, publication_status, error, script);
+    }
+    return ret;
+  });
+}
+
+int ObLocalManagementService::drop_extension_routines(
+    const share::plugin::ExtensionDropRequest &request, sql::ObSQLSessionInfo &session,
+    uint64_t &extension_id, int &publication_status, std::string &error)
+{
+  extension_id = 0;
+  publication_status = OB_NOT_INIT;
+  error.clear();
+  if (!inited_) return OB_NOT_INIT;
+  const auto dropper = std::atomic_load(&extension_catalog_dropper_);
+  if (!dropper) return OB_NOT_SUPPORTED;
+  if (session.is_in_transaction() || session.is_inner() || session.is_nested_session()) {
+    return OB_NOT_SUPPORTED;
+  }
+  if (request.tenant_id_ != 1 || request.database_id_ == OB_INVALID_ID ||
+      request.database_id_ != session.get_database_id()) return OB_INVALID_ARGUMENT;
+  // Keep the sole catalog alive through commit and schema publication. Injection
+  // changes are performed only before admission or after requests have drained.
+  return query::serialize_root_service_call([&]() {
+    int ret = check_ddl_allowed();
+    share::schema::ObSessionPrivInfo privileges;
+    if (OB_SUCC(ret)) ret = session.get_session_priv_info(privileges);
+    if (OB_SUCC(ret)) {
+      ret = ObPLDDLService::drop_routines_extension(request, privileges,
+          session.get_enable_role_array(), *dropper, ddl_service_,
+          extension_id, publication_status, error);
+    }
+    return ret;
+  });
+}
+
+int ObLocalManagementService::read_extension_update_source(
+    uint64_t tenant_id, uint64_t database_id, const std::string &name,
+    sql::ObSQLSessionInfo &session, share::plugin::ExtensionVersionSnapshot &snapshot, std::string &error)
+{
+  snapshot = share::plugin::ExtensionVersionSnapshot{};
+  error.clear();
+  if (!inited_) return OB_NOT_INIT;
+  const auto updater = std::atomic_load(&extension_catalog_updater_);
+  if (!updater) return OB_NOT_SUPPORTED;
+  if (session.is_in_transaction() || session.is_inner() || session.is_nested_session()) return OB_NOT_SUPPORTED;
+  if (tenant_id != 1 || database_id == 0 || database_id == OB_INVALID_ID ||
+      database_id != session.get_database_id()) return OB_INVALID_ARGUMENT;
+  try {
+    share::plugin::ExtensionVersionSnapshot staged;
+    int ret = query::serialize_root_service_call([&]() {
+      int code = check_ddl_allowed();
+      share::schema::ObSessionPrivInfo privileges;
+      if (OB_SUCCESS == code) code = session.get_session_priv_info(privileges);
+      if (OB_SUCCESS == code && !privileges.is_valid()) code = OB_ERR_NO_PRIVILEGE;
+      if (OB_SUCCESS == code) code = updater->read_update_source(tenant_id, database_id, name, staged, error);
+      if (OB_SUCCESS == code && (staged.extension_id_ == 0 || staged.extension_id_ == OB_INVALID_ID ||
+          staged.owner_id_ == 0 || staged.owner_id_ == OB_INVALID_ID || staged.version_.empty())) code = OB_INVALID_DATA;
+      if (OB_SUCCESS == code && staged.owner_id_ != privileges.user_id_ &&
+          !(privileges.user_priv_set_ & OB_PRIV_SUPER)) code = OB_ERR_NO_PRIVILEGE;
+      return code;
+    });
+    // No member snapshot, package read, transaction or persistent lock is held
+    // across this return. A later update can reject a stale planning observation.
+    if (OB_SUCC(ret)) snapshot = std::move(staged);
+    return ret;
+  } catch (const std::bad_alloc &) {
+    return OB_ALLOCATE_MEMORY_FAILED;
+  } catch (...) {
+    return OB_ERR_UNEXPECTED;
+  }
+}
+
+int ObLocalManagementService::update_extension_routines(
+    const share::plugin::ExtensionUpdateRequest &request,
+    const ObIArray<share::plugin::ExtensionRoutineUpdateOperation> &operations,
+    sql::ObSQLSessionInfo &session, uint64_t &extension_id, bool &changed,
+    int &publication_status, std::string &error, share::plugin::IExtensionRoutineScript *script)
+{
+  extension_id = 0;
+  changed = false;
+  publication_status = OB_NOT_INIT;
+  error.clear();
+  if (!inited_) return OB_NOT_INIT;
+  if (script != nullptr && !operations.empty()) return OB_INVALID_ARGUMENT;
+  const auto updater = std::atomic_load(&extension_catalog_updater_);
+  if (!updater) return OB_NOT_SUPPORTED;
+  if (session.is_in_transaction() || session.is_inner() || session.is_nested_session()) {
+    return OB_NOT_SUPPORTED;
+  }
+  if (request.tenant_id_ != 1 || request.database_id_ == 0 || request.database_id_ == OB_INVALID_ID ||
+      request.database_id_ != session.get_database_id() || request.expected_extension_id_ == 0 ||
+      request.expected_extension_id_ == OB_INVALID_ID) return OB_INVALID_ARGUMENT;
+  try {
+    // Do not nest this under another Root serialization call. Keep ownership of
+    // the one catalog through transaction completion AND schema publication.
+    // Composition revocation alone does not cancel/drain an admitted command.
+    return query::serialize_root_service_call([&]() {
+      int ret = check_ddl_allowed();
+      share::schema::ObSessionPrivInfo privileges;
+      if (OB_SUCC(ret)) ret = session.get_session_priv_info(privileges);
+      if (OB_SUCC(ret)) {
+        ret = ObPLDDLService::update_routines_extension(request, operations, privileges,
+            session.get_enable_role_array(), *updater, ddl_service_,
+            extension_id, changed, publication_status, error, script);
+      }
+      return ret;
+    });
+  } catch (const std::bad_alloc &) {
+    if (extension_id != 0) {
+      publication_status = OB_ALLOCATE_MEMORY_FAILED;
+      return OB_SUCCESS;
+    }
+    return OB_ALLOCATE_MEMORY_FAILED;
+  } catch (...) {
+    if (extension_id != 0) {
+      publication_status = OB_ERR_UNEXPECTED;
+      return OB_SUCCESS;
+    }
+    return OB_ERR_UNEXPECTED;
+  }
 }
 
 int ObLocalManagementService::alter_routine(const ObCreateRoutineArg &arg)

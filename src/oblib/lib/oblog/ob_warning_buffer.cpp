@@ -60,5 +60,37 @@ ObWarningBuffer::WarningItem &ObWarningBuffer::WarningItem::operator= (const War
   return *this;
 }
 
+int ObWarningBuffer::append_warnings(const ObWarningBuffer &other)
+{
+  int ret = OB_SUCCESS;
+  if (this == &other) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_SUCCESS != error_ret_) {
+    ret = error_ret_;
+  } else {
+    const uint32_t readable = other.get_readable_warning_count();
+    for (uint32_t i = 0; OB_SUCC(ret) && i < readable; ++i) {
+      WarningItem *item = append_idx_ < item_.count()
+          ? &item_[append_idx_] : item_.alloc_place_holder();
+      if (nullptr == item) {
+        ret = error_ret_ = OB_ALLOCATE_MEMORY_FAILED;
+      } else {
+        *item = *other.get_warning_item(i);
+        append_idx_ = (append_idx_ + 1) % MAX_BUFFER_SIZE;
+        if (total_warning_count_ < UINT32_MAX) ++total_warning_count_;
+      }
+    }
+    if (OB_SUCC(ret)) {
+      const uint64_t total = static_cast<uint64_t>(total_warning_count_)
+          + other.total_warning_count_ - readable;
+      total_warning_count_ = static_cast<uint32_t>(total > UINT32_MAX ? UINT32_MAX : total);
+      // A source allocation failure must not become an apparently complete
+      // diagnostic set merely because the retained prefix could be copied.
+      ret = other.error_ret_;
+    }
+  }
+  return ret;
+}
+
 }
 }

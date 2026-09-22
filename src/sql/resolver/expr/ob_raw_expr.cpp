@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX SQL_RESV
 
 #include "ob_raw_expr.h"
+#include "sql/resolver/expr/plugin_expr_type.h"
+#include "seekdb/plugin/seekdb_plugin_abi.h"
 #include "query/resolver/ob_raw_expr_traits.h"
 #include "sql/resolver/expr/ob_raw_expr_info_extractor.h"
 #include "sql/resolver/expr/ob_raw_expr_deduce_type.h"
@@ -238,6 +240,41 @@ bool ObRawExpr::is_vectorize_result() const
   return not_pre_calc && !is_const;
 }
 
+int ObRawExpr::set_plugin_type(const PluginExprType &type)
+{
+  const auto valid = [](const ObString &id) {
+    return id.length() >= 0 && id.length() <= SEEKDB_PLUGIN_MAX_IDENTIFIER_BYTES &&
+        (id.empty() || (id.ptr() && !std::memchr(id.ptr(), 0, id.length())));
+  };
+  if (type.logical_id_.empty() || !valid(type.logical_id_) || !valid(type.sql_name_) ||
+      !valid(type.owner_) || !valid(type.format_) ||
+      static_cast<uint32_t>(type.physical_type_) >= static_cast<uint32_t>(ObMaxType) ||
+      (!type.stored_ && !type.catalog_epoch_) ||
+      (type.stored_ && (type.sql_name_.empty() || type.owner_.empty() || type.format_.empty() ||
+                        type.format_version_ == 0))) return OB_INVALID_ARGUMENT;
+  if (plugin_type_ && *plugin_type_ == type) return OB_SUCCESS;
+  if (!inner_alloc_) return OB_NOT_INIT;
+  void *memory = inner_alloc_->alloc(sizeof(PluginExprType));
+  if (!memory) return OB_ALLOCATE_MEMORY_FAILED;
+  auto *owned = new(memory) PluginExprType(type);
+  const ObString *sources[] = {&type.logical_id_, &type.sql_name_, &type.owner_, &type.format_};
+  ObString *targets[] = {&owned->logical_id_, &owned->sql_name_, &owned->owner_, &owned->format_};
+  int ret = OB_SUCCESS;
+  for (uint32_t i = 0; OB_SUCC(ret) && i < 4; ++i) {
+    ret = ob_write_string(*inner_alloc_, *sources[i], *targets[i], true);
+  }
+  if (OB_SUCC(ret)) { plugin_type_ = owned; expr_hash_ = 0; }
+  return ret;
+}
+
+int ObRawExpr::copy_plugin_type_from(const ObRawExpr &source)
+{
+  if (this == &source) return OB_SUCCESS;
+  if (source.plugin_type_) return set_plugin_type(*source.plugin_type_);
+  clear_plugin_type();
+  return OB_SUCCESS;
+}
+
 int ObRawExpr::assign(const ObRawExpr &other)
 {
   int ret = OB_SUCCESS;
@@ -262,6 +299,12 @@ int ObRawExpr::assign(const ObRawExpr &other)
       is_deterministic_ = other.is_deterministic_;
       local_session_var_id_ = other.local_session_var_id_;
       expr_hash_ = other.expr_hash_;
+      // Unlike shallow attribute views, type identity must not depend on a
+      // source expression/schema arena surviving a copied statement.
+      ret = copy_plugin_type_from(other);
+      // All identity-bearing attributes now match the source. Preserve the
+      // existing cached-hash behavior for ordinary expressions as well.
+      if (OB_SUCC(ret)) expr_hash_ = other.expr_hash_;
     }
   }
   return ret;
@@ -306,6 +349,7 @@ int ObRawExpr::replace_expr(const ObIArray<ObRawExpr *> &other_exprs,
 
 void ObRawExpr::reset()
 {
+  clear_plugin_type();
   type_ = T_INVALID;
   info_.reset();
   rel_ids_.reset();
@@ -736,7 +780,12 @@ bool ObRawExpr::same_as(const ObRawExpr &expr,
     }
     const ObRawExpr *l = get_same_identify(this, check_context);
     const ObRawExpr *r = get_same_identify(&expr, check_context);
-    ret = SMART_CALL(bret = l->inner_same_as(*r, check_context));
+    if ((l->plugin_type_ == nullptr) != (r->plugin_type_ == nullptr) ||
+        (l->plugin_type_ && !(*l->plugin_type_ == *r->plugin_type_))) {
+      bret = false;
+    } else {
+      ret = SMART_CALL(bret = l->inner_same_as(*r, check_context));
+    }
     if (NULL != check_context) {
       if (OB_SIZE_OVERFLOW == ret) {
         bret = false;
@@ -898,6 +947,17 @@ int ObRawExpr::is_const_inherit_expr(bool &is_const_inherit,
   if (T_FUN_SYS_RAND == type_
       || T_FUN_SYS_RANDOM == type_
       || T_FUN_SYS_GENERATOR == type_
+      // add_const() runs before IS_STATE_FUNC is restored by info extraction.
+      // Plugin callbacks must not inherit constness just from literal inputs:
+      // a scalar batch dry-run can invoke them even when every row is skipped.
+      || T_FUN_SYS_PLUGIN_FUNCTION == type_
+      || T_FUN_SYS_PLUGIN_TABLE_FUNCTION == type_
+      || T_FUN_SYS_PLUGIN_TYPE_ENCODE == type_
+      || T_FUN_SYS_PLUGIN_CAST == type_
+      || T_FUN_SYS_PLUGIN_TYPE_VALUE == type_
+      || T_FUN_SYS_PLUGIN_TYPE_COMPARE == type_
+      || T_FUN_SYS_PLUGIN_TYPE_BETWEEN == type_
+      || T_FUN_SYS_PLUGIN_TYPE_IN == type_
       || T_FUN_SYS_UUID == type_
       || T_FUN_SYS_UUID_SHORT == type_
       || T_FUN_SYS_AUTOINC_NEXTVAL == type_
@@ -3933,7 +3993,9 @@ bool ObSysFunRawExpr::inner_same_as(
            T_FUN_SYS_JSON_REMOVE == get_expr_type())) {
         bool_ret = false;
       }
-      if (bool_ret && T_FUN_SYS_CALC_PARTITION_ID == get_expr_type()) {
+      if (bool_ret && (T_FUN_SYS_CALC_PARTITION_ID == get_expr_type() ||
+                       T_FUN_SYS_CALC_TABLET_ID == get_expr_type() ||
+                       T_FUN_SYS_CALC_PARTITION_TABLET_ID == get_expr_type())) {
         bool_ret = get_partition_id_calc_type() == s_expr->get_partition_id_calc_type();
       }
     }

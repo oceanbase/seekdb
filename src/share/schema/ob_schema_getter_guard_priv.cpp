@@ -726,6 +726,7 @@ int ObSchemaGetterGuard::check_routine_priv(const ObSessionPrivInfo &session_pri
         //1. fetch routine priv
         const ObRoutinePriv *routine_priv = NULL;
         ObPrivSet routine_priv_set = 0;
+        bool override_handled = false;
         bool is_routine_priv_empty = true;
         ObRoutinePrivSortKey routine_priv_key(session_priv.user_id_,
                                           routine_need_priv.db_,
@@ -733,7 +734,10 @@ int ObSchemaGetterGuard::check_routine_priv(const ObSessionPrivInfo &session_pri
                                           routine_need_priv.obj_type_ == ObObjectType::PROCEDURE ? ObRoutineType::ROUTINE_PROCEDURE_TYPE :
                                           routine_need_priv.obj_type_ == ObObjectType::FUNCTION ? ObRoutineType::ROUTINE_FUNCTION_TYPE : 
                                                                                                      ObRoutineType::INVALID_ROUTINE_TYPE);
-        if (OB_FAIL(priv_mgr.get_routine_priv(routine_priv_key, routine_priv))) {
+        if (OB_FAIL(get_routine_priv_override(routine_priv_key, override_handled, routine_priv_set))) {
+        } else if (override_handled) {
+          is_routine_priv_empty = routine_priv_set == 0;
+        } else if (OB_FAIL(priv_mgr.get_routine_priv(routine_priv_key, routine_priv))) {
         } else if (NULL != routine_priv) {
           routine_priv_set = routine_priv->get_priv_set();
           is_routine_priv_empty = false;
@@ -747,7 +751,7 @@ int ObSchemaGetterGuard::check_routine_priv(const ObSessionPrivInfo &session_pri
             ret = OB_USER_NOT_EXIST;
           } else {
             const ObSEArray<uint64_t, 8> &role_id_array = user_info->get_role_id_array();
-            for (int i = 0; OB_SUCC(ret) && i < role_id_array.count(); ++i) {
+            for (int i = 0; OB_SUCC(ret) && !override_handled && i < role_id_array.count(); ++i) {
               const ObUserInfo *role_info = NULL;
               const ObRoutinePriv *role_routine_priv = NULL;
               if (OB_FAIL(get_user_info(role_id_array.at(i), role_info))) {

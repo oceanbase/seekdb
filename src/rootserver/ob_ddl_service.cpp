@@ -21,6 +21,7 @@
 #include "share/ob_sys_time_zone_util.h"
 
 #include "ob_ddl_service.h"
+#include "rootserver/catalog_commit_preparation.h"
 #include "rootserver/ob_runtime_ddl_service.h"
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "share/ob_ddl_common.h"
@@ -22010,51 +22011,14 @@ int ObDDLSQLTransaction::end(const bool commit)
     ret = OB_INVALID_ARGUMENT;
   } else if (commit && enable_check_ddl_epoch_ && OB_FAIL(lock_ddl_epoch_(*this))) {
     // compare ddl_epoch promise execute on master
-  } else if (commit && need_end_signal_) {
-    share::schema::ObSchemaService *schema_service_impl = schema_service_->get_schema_service();
-    if (OB_ISNULL(schema_service_impl)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (start_operation_schema_version_ == tsi_oper->last_operation_schema_version_
-               && 1UL == 1UL) {
-      LOG_INFO("ddl operation is same, just skip", K(ret),
-               K_(start_operation_schema_version));
-    } else {
-      int64_t new_schema_version = OB_INVALID_VERSION;
-      obcall::ObDDLNopOpreatorArg arg;
-      arg.schema_operation_.op_type_ = OB_DDL_END_SIGN;
-      share::schema::ObDDLSqlService ddl_sql_service(*schema_service_impl);
-      
-      if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
-      } else if (OB_FAIL(ddl_sql_service.log_nop_operation(arg.schema_operation_,
-                                                           new_schema_version,
-                                                           arg.ddl_stmt_str_,
-                                                           *this))) {
-      }
-    }
-  }
-
-  if (OB_SUCC(ret) && commit) {
-    if (FAILEDx(register_ddl_trans_signal())) {
-    }
-  }
-
-  // Set the normal schema watermark only after all schema operations have
-  // finished and, for parallel DDL, wait_task_ready() has granted this
-  // transaction permission to commit. Updating the shared core-table row in
-  // log_operation() lets a later DDL task hold the row lock while it waits for
-  // an earlier task, forming a lock-order cycle. Keeping the update in this
-  // transaction preserves atomic visibility with the schema records. The
-  // incremental set only moves the watermark forward.
-  if (OB_SUCC(ret)
-      && commit
-      && start_operation_schema_version_ != tsi_oper->last_operation_schema_version_) {
-    const int64_t final_schema_version = tsi_oper->last_operation_schema_version_;
-    if (OB_UNLIKELY(final_schema_version <= 0)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      ObGlobalStatProxy proxy(*this);
-      if (OB_FAIL(proxy.set_normal_schema_version(final_schema_version))) {
-      }
+    LOG_WARN("lock_ddl_epoch fail", K(ret));
+  } else if (commit) {
+    CatalogCommitPreparation preparation(*schema_service_, *this);
+    int64_t prepared_version = 0;
+    if (OB_FAIL(preparation.prepare(tsi_oper->last_operation_schema_version_,
+        start_operation_schema_version_ != tsi_oper->last_operation_schema_version_,
+        need_end_signal_, prepared_version))) {
+      LOG_WARN("failed to prepare schema transaction commit", KR(ret));
     }
   }
 
@@ -22069,17 +22033,134 @@ int ObDDLSQLTransaction::end(const bool commit)
 
 int ObDDLSQLTransaction::register_ddl_trans_signal()
 {
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_started())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    const char signal = '\0';
-    if (OB_FAIL(register_tx_data(transaction::ObTxDataSourceType::DDL_TRANS,
-                                &signal,
-                                sizeof(signal)))) {
+  return CatalogCommitPreparation::register_transaction_signal(*this);
+}
+
+CatalogDDLAdmission::CatalogDDLAdmission(ObMultiVersionSchemaService &schema_service,
+    ObMySQLTransaction &transaction, ObISQLClient &fresh_reader)
+    : schema_service_(schema_service), transaction_(transaction), fresh_reader_(fresh_reader)
+{}
+
+int CatalogDDLAdmission::acquire(int64_t refreshed_schema_version, int64_t absolute_deadline, int64_t &epoch)
+{
+  epoch = 0;
+  if (attempted_) return OB_INIT_TWICE;
+  attempted_ = true;
+  if (refreshed_schema_version <= 0 || absolute_deadline <= 0 || &fresh_reader_ == &transaction_)
+    return OB_INVALID_ARGUMENT;
+  try {
+    if (!transaction_.is_started()) return OB_STATE_NOT_MATCH;
+    ObTimeoutCtx timeout;
+    const int64_t deadline = std::min(absolute_deadline, timeout.get_abs_timeout(absolute_deadline));
+    int ret = timeout.set_abs_timeout(deadline);
+    int64_t captured = 0, current = 0;
+    if (OB_SUCC(ret) && timeout.is_timeouted()) ret = OB_TIMEOUT;
+    if (OB_SUCC(ret)) ret = capture_epoch(captured);
+    if (OB_SUCC(ret) && captured <= 0) ret = OB_ERR_UNEXPECTED;
+    if (OB_SUCC(ret) && timeout.is_timeouted()) ret = OB_TIMEOUT;
+    if (OB_SUCC(ret)) ret = lock(timeout.get_timeout());
+    // Compare against a fresh committed version AFTER holding the same global
+    // DDL lock as Root. Using the caller's RR snapshot could accept stale schema.
+    // Do not lock the core-table watermark here; epoch is rechecked at commit.
+    if (OB_SUCC(ret)) ret = read_version(current);
+    if (OB_SUCC(ret) && current != refreshed_schema_version) ret = OB_EAGAIN;
+    if (OB_SUCC(ret) && (!transaction_.is_started() || timeout.is_timeouted()))
+      ret = timeout.is_timeouted() ? OB_TIMEOUT : OB_STATE_NOT_MATCH;
+    if (OB_SUCC(ret)) epoch = captured;
+    return ret;
+  } catch (const std::bad_alloc &) { return OB_ALLOCATE_MEMORY_FAILED; }
+  catch (...) { return OB_ERR_UNEXPECTED; }
+}
+
+int CatalogDDLAdmission::capture_epoch(int64_t &epoch)
+{ return schema_service_.get_ddl_epoch_mgr().get_ddl_epoch(epoch); }
+
+int CatalogDDLAdmission::lock(int64_t timeout_us)
+{ return lock_transaction(transaction_, false, timeout_us); }
+
+int CatalogDDLAdmission::read_version(int64_t &version)
+{
+  ObRefreshSchemaStatus status;
+  return schema_service_.get_schema_version_in_inner_table(fresh_reader_, status, version);
+}
+
+int CatalogDDLAdmission::lock_transaction(ObMySQLTransaction &transaction, bool parallel, int64_t timeout_us)
+{
+  if (timeout_us <= 0) return OB_TIMEOUT;
+  auto *connection = transaction.get_connection();
+  if (connection == nullptr) return OB_ERR_UNEXPECTED;
+  ObLockObjRequest request;
+  request.obj_type_ = ObLockOBJType::OBJ_TYPE_RUNTIME;
+  request.obj_id_ = 1UL;
+  request.owner_id_.set_default();
+  request.lock_mode_ = parallel ? SHARE : EXCLUSIVE;
+  request.op_type_ = ObTableLockOpType::IN_TRANS_COMMON_LOCK;
+  request.timeout_us_ = timeout_us;
+  return query::ObInnerSQLConnectionAccess::lock_obj(request, connection);
+}
+
+CatalogCommitPreparation::CatalogCommitPreparation(ObMultiVersionSchemaService &schema_service,
+    common::ObMySQLTransaction &transaction)
+    : schema_service_(schema_service), transaction_(transaction)
+{}
+
+int CatalogCommitPreparation::prepare(int64_t last_schema_version, bool schema_changed,
+    bool need_end_signal, int64_t &prepared_schema_version)
+{
+  prepared_schema_version = 0;
+  if (attempted_) return OB_INIT_TWICE;
+  attempted_ = true;
+  try {
+    int ret = OB_SUCCESS;
+    int64_t final_version = schema_changed ? last_schema_version : 0;
+    auto *schema_impl = schema_service_.get_schema_service();
+    if (!transaction_.is_started()) {
+      ret = OB_STATE_NOT_MATCH;
+    } else if (schema_changed && (last_schema_version < 0 || (!need_end_signal && last_schema_version == 0))) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (need_end_signal && schema_impl == nullptr) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (schema_changed && need_end_signal) {
+      int64_t end_version = OB_INVALID_VERSION;
+      ObSchemaOperation end;
+      end.op_type_ = OB_DDL_END_SIGN;
+      ObDDLSqlService sql(*schema_impl);
+      if (OB_FAIL(schema_service_.gen_new_schema_version(end_version))) {
+      } else if (end_version <= last_schema_version) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(sql.log_nop_operation(end, end_version, ObString(), transaction_))) {
+      } else {
+        final_version = end_version;
+      }
     }
-  }
-  return ret;
+    if (OB_SUCC(ret)) ret = register_signal();
+    // Only after all operations and the caller's parallel-DDL ordering barrier:
+    // taking the core-table watermark lock earlier can deadlock later DDL tasks
+    // against predecessors. The write is atomic with this transaction's schemas.
+    if (OB_SUCC(ret) && schema_changed) ret = write_watermark(final_version);
+    if (OB_SUCC(ret)) prepared_schema_version = final_version;
+    return ret;
+  } catch (const std::bad_alloc &) { return OB_ALLOCATE_MEMORY_FAILED; }
+  catch (...) { return OB_ERR_UNEXPECTED; }
+}
+
+int CatalogCommitPreparation::register_transaction_signal(common::ObMySQLTransaction &sql_transaction)
+{
+  if (!sql_transaction.is_started()) return OB_INVALID_ARGUMENT;
+  auto *connection = sql_transaction.get_connection();
+  if (connection == nullptr) return OB_ERR_UNEXPECTED;
+  const char signal = '\0';
+  return query::ObInnerSQLConnectionAccess::register_multi_data_source(
+      connection, transaction::ObTxDataSourceType::DDL_TRANS, &signal, sizeof(signal));
+}
+
+int CatalogCommitPreparation::register_signal()
+{ return register_transaction_signal(transaction_); }
+
+int CatalogCommitPreparation::write_watermark(int64_t version)
+{
+  ObGlobalStatProxy proxy(transaction_);
+  return proxy.set_normal_schema_version(version);
 }
 
 int ObDDLService::do_schema_revise(const obcall::ObSchemaReviseArg &arg)
@@ -22185,22 +22266,7 @@ int ObDDLSQLTransaction::lock_all_ddl_operation(
    */
 
   if (OB_SUCC(ret)) {
-    bool enable_ddl_trans_new_lock = false;
-    common::sqlclient::ObISQLConnection *conn = trans.get_connection();
-    if (OB_ISNULL(conn)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      ObLockObjRequest lock_arg;
-      lock_arg.obj_type_ = ObLockOBJType::OBJ_TYPE_RUNTIME;
-      lock_arg.obj_id_ = 1UL;
-      lock_arg.owner_id_.set_default();
-      lock_arg.lock_mode_ = !enable_parallel ? EXCLUSIVE : SHARE;
-      lock_arg.op_type_ = ObTableLockOpType::IN_TRANS_COMMON_LOCK;
-      lock_arg.timeout_us_ = ctx.get_timeout();
-      if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(lock_arg,
-                                                      conn))) {
-      }
-    }
+    ret = CatalogDDLAdmission::lock_transaction(trans, enable_parallel, ctx.get_timeout());
   }
   return ret;
 }

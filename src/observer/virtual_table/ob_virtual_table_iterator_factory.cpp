@@ -150,6 +150,7 @@
 #include "observer/virtual_table/ob_all_virtual_resource_limit.h"
 #include "observer/virtual_table/ob_all_virtual_resource_limit_detail.h"
 #include "observer/virtual_table/ob_all_virtual_tracepoint_info.h"
+#include "observer/virtual_table/plugin_memory_table.h"
 #include "observer/virtual_table/ob_all_virtual_nic_info.h"
 #include "observer/virtual_table/ob_all_virtual_sys_variable_default_value.h"
 #include "observer/virtual_table/ob_all_virtual_session_ps_info.h"
@@ -1532,6 +1533,13 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
                                           ctx_memory_info))) {
               ctx_memory_info->set_allocator(&allocator);
               vt_iter = static_cast<ObVirtualTableIterator *>(ctx_memory_info);
+            }
+            break;
+          }
+          case OB_ALL_VIRTUAL_PLUGIN_MEMORY_TID: {
+            PluginMemoryTable *plugin_memory = nullptr;
+            if (OB_SUCC(NEW_VIRTUAL_TABLE(PluginMemoryTable, plugin_memory))) {
+              plugin_memory->set_allocator(&allocator);
             }
             break;
           }

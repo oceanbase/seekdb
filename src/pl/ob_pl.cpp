@@ -155,8 +155,13 @@ int ObPL::execute_proc(ObPLExecCtx &ctx,
     if (OB_FAIL(ret)) {
     } else {
       share::schema::ObSchemaGetterGuard schema_guard;
-      
-      if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+      const ObSqlCtx *parent_sql_ctx = ctx.exec_ctx_->get_sql_ctx();
+      const auto *parent_guard = parent_sql_ctx == nullptr ? nullptr : parent_sql_ctx->schema_guard_;
+      if (OB_ISNULL(parent_sql_ctx)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+      } else if (parent_guard != nullptr && parent_guard->has_routine_overlay()
+                 && OB_FAIL(schema_guard.inherit_routine_overlay(*parent_guard))) {
       } else {
         ObPL pl;
         share::schema::ObSchemaGetterGuard *old_schema_guard = ctx.exec_ctx_->get_sql_ctx()->schema_guard_;
@@ -1617,9 +1622,12 @@ int ObPL::get_pl_function(ObExecContext &ctx,
         if (OB_SUCC(ret) && OB_ISNULL(routine_info)) {
           ret = OB_ERR_SP_DOES_NOT_EXIST;
         }
+        const bool provisional = ctx.get_sql_ctx()->schema_guard_->has_routine_overlay();
+        // Compilation against an Extension-private view must not alter the
+        // ordinary error/dependency catalog through an independent transaction.
         OZ (error_info.delete_error(
-            *ctx.get_sql_proxy(), routine_info, share::server_is_write_enabled()));
-        if (need_update_schema) {
+            *ctx.get_sql_proxy(), routine_info, share::server_is_write_enabled() && !provisional));
+        if (need_update_schema && !provisional) {
           OZ (ObPLBuilder::update_schema_object_dep_info(routine->get_dependency_table(),
                                                           routine->get_owner(),
                                                           routine_id,

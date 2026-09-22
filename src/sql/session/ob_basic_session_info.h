@@ -399,7 +399,9 @@ public:
     sys_vars_cache_.set_sql_mode(sql_mode);
   }
   void set_global_vars_version(const int64_t modify_time) { global_vars_version_ = modify_time; }
-  void set_last_ddl_schema_version(const int64_t version) { last_ddl_schema_version_ = version; }
+  void set_last_ddl_schema_version(const int64_t version) {
+    if (version > last_ddl_schema_version_) last_ddl_schema_version_ = version;
+  }
   int64_t get_last_ddl_schema_version() const { return last_ddl_schema_version_; }
   void set_is_deserialized() { is_deserialized_ = true; }
   bool get_is_deserialized() { return is_deserialized_; }

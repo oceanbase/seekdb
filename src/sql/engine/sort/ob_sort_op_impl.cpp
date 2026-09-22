@@ -20,6 +20,7 @@
 #include "query/engine/basic/ob_encoded_sort_row.h"
 #include "data_plane/encoding/ob_cpu_features.h"
 #include "sql/engine/px/p2p_datahub/ob_pushdown_topn_filter_msg.h"
+#include "sql/engine/expr/plugin_function_expr.h"
 
 namespace oceanbase
 {
@@ -355,7 +356,8 @@ int ObSortOpImpl::ObAdaptiveQS::compare_vals(int64_t l, int64_t r,
 
 ObSortOpImpl::Compare::Compare()
   : ret_(OB_SUCCESS), sort_collations_(nullptr), sort_cmp_funs_(nullptr),
-    exec_ctx_(nullptr), access_ctx_(nullptr), cmp_count_(0), cmp_start_(0), cmp_end_(0)
+    exec_ctx_(nullptr), access_ctx_(nullptr), comparison_exprs_(nullptr), eval_ctx_(nullptr),
+    enable_encode_sortkey_(false), cmp_count_(0), cmp_start_(0), cmp_end_(0), cnt_(0)
 {
 }
 
@@ -363,18 +365,25 @@ int ObSortOpImpl::Compare::init(
     const ObIArray<ObSortFieldCollation> *sort_collations,
     const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
     ObExecContext *exec_ctx,
-    bool enable_encode_sortkey)
+    bool enable_encode_sortkey,
+    const ObIArray<ObExpr *> *comparison_exprs,
+    ObEvalCtx *eval_ctx)
 {
   int ret = OB_SUCCESS;
   if (nullptr == sort_collations || nullptr == sort_cmp_funs || nullptr == exec_ctx) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (sort_cmp_funs->count() != sort_cmp_funs->count()) {
+    LOG_WARN("invalid argument", K(ret), KP(sort_collations), KP(sort_cmp_funs));
+  } else if (sort_collations->count() != sort_cmp_funs->count()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("column count miss match", K(ret),
+      K(sort_collations->count()), K(sort_cmp_funs->count()));
   } else if (OB_FAIL(exec_ctx->get_datum_access_ctx(access_ctx_))) {
   } else {
     sort_collations_ = sort_collations;
     sort_cmp_funs_ = sort_cmp_funs;
     exec_ctx_ = exec_ctx;
+    comparison_exprs_ = comparison_exprs;
+    eval_ctx_ = eval_ctx;
     cnt_ = sort_cmp_funs_->count();
     cmp_start_ = 0;
     cmp_end_ = sort_cmp_funs_->count();
@@ -419,8 +428,8 @@ bool ObSortOpImpl::Compare::operator()(
     for (int64_t i = cmp_start_; 0 == cmp && i < cmp_end_ && OB_SUCC(ret); i++) {
       const ObSortFieldCollation& sort_collation = sort_collations_->at(i);
       const int64_t idx = sort_collation.field_idx_;
-      if (OB_FAIL(
-              sort_cmp_funs_->at(i).cmp_func_(lcells[idx], rcells[idx], cmp, access_ctx_))) {
+      if (OB_FAIL(compare_sort_datums(sort_collations_->at(i), sort_cmp_funs_->at(i),
+              comparison_exprs_, eval_ctx_, lcells[idx], rcells[idx], cmp, access_ctx_))) {
       } else if (cmp < 0) {
         less = sort_collation.is_ascending_;
       } else if (cmp > 0) {
@@ -451,8 +460,8 @@ bool ObSortOpImpl::Compare::operator()(
     for (int64_t i = 0; 0 == cmp && i < cnt && OB_SUCC(ret); i++) {
       const int64_t idx = sort_collations_->at(i).field_idx_;
       if (OB_FAIL(l->at(idx)->eval(eval_ctx, other_datum))) {
-      } else if (OB_FAIL(
-                     sort_cmp_funs_->at(i).cmp_func_(*other_datum, rcells[idx], cmp, access_ctx_))) {
+      } else if (OB_FAIL(compare_sort_datums(sort_collations_->at(i), sort_cmp_funs_->at(i),
+                     comparison_exprs_, eval_ctx_, *other_datum, rcells[idx], cmp, access_ctx_))) {
       } else {
         if (cmp < 0) {
           less = sort_collations_->at(i).is_ascending_;
@@ -483,8 +492,8 @@ int ObSortOpImpl::Compare::with_ties_cmp(const common::ObIArray<ObExpr*> *l,
     for (int64_t i = 0; 0 == cmp && i < cnt && OB_SUCC(ret); i++) {
       const int64_t idx = sort_collations_->at(i).field_idx_;
       if (OB_FAIL(l->at(idx)->eval(eval_ctx, other_datum))) {
-      } else if (OB_FAIL(
-                     sort_cmp_funs_->at(i).cmp_func_(*other_datum, rcells[idx], cmp, access_ctx_))) {
+      } else if (OB_FAIL(compare_sort_datums(sort_collations_->at(i), sort_cmp_funs_->at(i),
+                     comparison_exprs_, eval_ctx_, *other_datum, rcells[idx], cmp, access_ctx_))) {
       } else {
         cmp = sort_collations_->at(i).is_ascending_ ? -cmp : cmp;
       }
@@ -508,8 +517,8 @@ int ObSortOpImpl::Compare::with_ties_cmp(const ObChunkDatumStore::StoredRow *l,
     const int64_t cnt = sort_cmp_funs_->count();
     for (int64_t i = 0; 0 == cmp && i < cnt && OB_SUCC(ret); i++) {
       const int64_t idx = sort_collations_->at(i).field_idx_;
-      if (OB_FAIL(
-              sort_cmp_funs_->at(i).cmp_func_(lcells[idx], rcells[idx], cmp, access_ctx_))) {
+      if (OB_FAIL(compare_sort_datums(sort_collations_->at(i), sort_cmp_funs_->at(i),
+              comparison_exprs_, eval_ctx_, lcells[idx], rcells[idx], cmp, access_ctx_))) {
       } else {
         cmp = sort_collations_->at(i).is_ascending_ ? -cmp : cmp;
       }
@@ -572,7 +581,7 @@ ObSortOpImpl::ObSortOpImpl() :
   max_node_cnt_(0), part_cnt_(0), topn_cnt_(INT64_MAX), outputted_rows_cnt_(0),
   is_fetch_with_ties_(false), topn_heap_(NULL), ties_array_pos_(0), last_ties_row_(NULL),
   pt_buckets_(NULL), use_partition_topn_sort_(false), heap_nodes_(), cur_heap_idx_(0), rows_(NULL),
-  sort_exprs_(nullptr), compress_type_(NONE_COMPRESSOR)
+  sort_exprs_(nullptr), comparison_exprs_(nullptr), compress_type_(NONE_COMPRESSOR)
 {}
 
 ObSortOpImpl::ObSortOpImpl(ObMonitorNode &op_monitor_info)
@@ -592,7 +601,7 @@ ObSortOpImpl::ObSortOpImpl(ObMonitorNode &op_monitor_info)
     max_node_cnt_(0), part_cnt_(0), topn_cnt_(INT64_MAX), outputted_rows_cnt_(0),
     is_fetch_with_ties_(false), topn_heap_(NULL), ties_array_pos_(0),
     last_ties_row_(NULL), pt_buckets_(NULL), use_partition_topn_sort_(false), heap_nodes_(), cur_heap_idx_(0), part_group_cnt_(0),
-    rows_(NULL), sort_exprs_(nullptr),
+    rows_(NULL), sort_exprs_(nullptr), comparison_exprs_(nullptr),
     compress_type_(NONE_COMPRESSOR), use_compact_format_(false)
 {
 }
@@ -706,9 +715,29 @@ int ObSortOpImpl::init(
   const ExprFixedArray *exprs /* =nullptr */,
   const int64_t est_rows /* = 0 */,
   const bool use_compact_format /* =false */,
-  const ObPushDownTopNFilterInfo *pd_topn_filter_info /* =nullptr */)
+  const ObPushDownTopNFilterInfo *pd_topn_filter_info /* =nullptr */,
+  const ObIArray<ObExpr *> *comparison_exprs /* =nullptr */)
 {
   int ret = OB_SUCCESS;
+  if (!comparison_exprs) comparison_exprs = exprs;
+  if (sort_collations && comparison_exprs) {
+    for (int64_t i = 0; i < sort_collations->count(); ++i) {
+      const auto index = sort_collations->at(i).field_idx_;
+      if (index >= comparison_exprs->count() || !comparison_exprs->at(index)) return OB_INVALID_ARGUMENT;
+      const auto *expression = comparison_exprs->at(index);
+      if (expression->type_ == T_FUN_SYS_PLUGIN_TYPE_VALUE) {
+        const auto *info = dynamic_cast<const PluginTypeValueExtraInfo *>(expression->extra_info_);
+        if (!info || !info->valid()) return OB_INVALID_DATA;
+        if (info->mode_ == PluginTypeValueExtraInfo::ORDERED &&
+            (enable_encode_sortkey || (pd_topn_filter_info && pd_topn_filter_info->enabled_) ||
+             (part_cnt > 0 && i <= part_cnt))) {
+          // Encoders, storage runtime filters and partition hashes do not yet
+          // carry this ordering contract. Never silently fall back to bytes.
+          return OB_NOT_SUPPORTED;
+        }
+      }
+    }
+  }
   if (is_inited()) {
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(sort_collations) || OB_ISNULL(sort_cmp_funs)
@@ -716,7 +745,7 @@ int ObSortOpImpl::init(
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(exec_ctx->get_datum_access_ctx(datum_access_ctx_))) {
   } else if (OB_FAIL(comp_.init(sort_collations, sort_cmp_funs,
-                      exec_ctx, enable_encode_sortkey && !(part_cnt > 0)))) {
+                      exec_ctx, enable_encode_sortkey && !(part_cnt > 0), comparison_exprs, eval_ctx))) {
   } else {
     local_merge_sort_ = in_local_order;
     need_rewind_ = need_rewind;
@@ -731,6 +760,7 @@ int ObSortOpImpl::init(
     compress_type_ = compress_type;
     use_compact_format_ = use_compact_format;
     sort_exprs_ = exprs;
+    comparison_exprs_ = comparison_exprs;
     use_heap_sort_ = is_topn_sort() && part_cnt_ == 0;
     use_partition_topn_sort_ = is_topn_sort() && part_cnt_ > 0;
     is_fetch_with_ties_ = is_fetch_with_ties;
@@ -873,6 +903,7 @@ void ObSortOpImpl::reset()
   compress_type_ = NONE_COMPRESSOR;
   use_compact_format_ = false;
   sort_exprs_ = nullptr;
+  comparison_exprs_ = nullptr;
   // for partition topn sort
   cur_heap_idx_ = 0;
   part_group_cnt_ = 0;
@@ -1078,7 +1109,8 @@ int ObSortOpImpl::before_add_row()
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!got_first_row_)) {
     if (!comp_.is_inited() && OB_FAIL(comp_.init(sort_collations_, sort_cmp_funs_,
-                              exec_ctx_, enable_encode_sortkey_ && !(part_cnt_ > 0)))) {
+                              exec_ctx_, enable_encode_sortkey_ && !(part_cnt_ > 0), comparison_exprs_, eval_ctx_))) {
+      LOG_WARN("init compare failed", K(ret));
     } else {
       got_first_row_ = true;
       int64_t size = OB_INVALID_ID == input_rows_ ? 0 : input_rows_ * input_width_;
@@ -1327,7 +1359,7 @@ int ObSortOpImpl::is_equal_part(const ObChunkDatumStore::StoredRow *l,
       const ObDatum &rd = r->cells()[idx];
       if (ld.pack_ == rd.pack_ && 0 == memcmp(ld.ptr_, rd.ptr_, ld.len_)) {
         // do nothing
-      } else if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(
+      } else if (OB_FAIL(compare_sort_datums(sort_collations_->at(i), sort_cmp_funs_->at(i), comparison_exprs_, eval_ctx_,
                      ld, rd, cmp_ret, datum_access_ctx_))) {
       } else {
         is_equal = (0 == cmp_ret);
@@ -2094,7 +2126,8 @@ int ObSortOpImpl::locate_current_heap_in_bucket(PartHeapNode *first_node,
         int cmp_ret = 0;
         if (OB_ISNULL(part_datums.at(i))) {
           find_same_heap = top_row->cells()[idx].is_null();
-        } else if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(*part_datums.at(i),
+        } else if (OB_FAIL(compare_sort_datums(sort_collations_->at(i), sort_cmp_funs_->at(i),
+                comparison_exprs_, eval_ctx_, *part_datums.at(i),
                                                             top_row->cells()[idx],
                                                             cmp_ret,
                                                             datum_access_ctx_))) {
@@ -2770,7 +2803,9 @@ int ObPrefixSortImpl::init(const int64_t prefix_pos,
     sort_row_count_ = &sort_row_cnt;
     if (OB_FAIL(ObSortOpImpl::init(&base_sort_collations_, &base_sort_cmp_funs_,
                                    eval_ctx, &exec_ctx, enable_encode_sortkey, false, false,
-                                   0, topn_cnt, is_fetch_with_ties))) {
+                                   0, topn_cnt, is_fetch_with_ties,
+                                   ObChunkDatumStore::BLOCK_SIZE, NONE_COMPRESSOR,
+                                   nullptr, 0, false, nullptr, &all_exprs))) {
     } else if (batch_size <= 0) {
       if (OB_FAIL(next_prefix_row_store_.init(mem_context_->get_malloc_allocator(),
                                               all_exprs.count()))) {
@@ -2839,7 +2874,7 @@ int ObPrefixSortImpl::fetch_rows(const common::ObIArray<ObExpr *> &all_exprs)
           for (int64_t i = 0; same_prefix && i < prefix_pos_ && OB_SUCC(ret); i++) {
             const int64_t idx = full_sort_collations_->at(i).field_idx_;
             if (OB_FAIL(all_exprs.at(idx)->eval(*eval_ctx_, l_datum))) {
-            } else if (OB_FAIL(full_sort_cmp_funs_->at(i).cmp_func_(
+            } else if (OB_FAIL(compare_sort_datums(full_sort_collations_->at(i), full_sort_cmp_funs_->at(i), comparison_exprs_, eval_ctx_,
                            *l_datum, rcells[idx], cmp_ret, datum_access_ctx_))) {
             } else {
               same_prefix = (0 == cmp_ret);
@@ -2904,7 +2939,8 @@ int ObPrefixSortImpl::is_same_prefix(const ObChunkDatumStore::StoredRow *store_r
     ObExpr *e = all_exprs.at(idx);
     // for non batch result expression, datum should always be the same.
     if (e->is_batch_result()) {
-      if (OB_FAIL(full_sort_cmp_funs_->at(i).cmp_func_(store_row->cells()[idx],
+      if (OB_FAIL(compare_sort_datums(full_sort_collations_->at(i), full_sort_cmp_funs_->at(i),
+              comparison_exprs_, eval_ctx_, store_row->cells()[idx],
                                                        e->locate_batch_datums(*eval_ctx_)[datum_idx],
                                                        cmp_ret,
                                                        datum_access_ctx_))) {
@@ -2928,7 +2964,7 @@ int ObPrefixSortImpl::is_same_prefix(const common::ObIArray<ObExpr *> &all_exprs
     const int64_t idx = full_sort_collations_->at(i).field_idx_;
     ObExpr *e = all_exprs.at(idx);
     if (e->is_batch_result()) {
-      if (OB_FAIL(full_sort_cmp_funs_->at(i).cmp_func_(
+      if (OB_FAIL(compare_sort_datums(full_sort_collations_->at(i), full_sort_cmp_funs_->at(i), comparison_exprs_, eval_ctx_,
               e->locate_batch_datums(*eval_ctx_)[datum_idx1],
               e->locate_batch_datums(*eval_ctx_)[datum_idx2],
               cmp_ret,
@@ -2950,7 +2986,8 @@ int ObPrefixSortImpl::add_immediate_prefix(const common::ObIArray<ObExpr *> &all
               immediate_prefix_rows_ + pos))) {
   } else if (!comp_.is_inited()
              && OB_FAIL(comp_.init(sort_collations_, sort_cmp_funs_,
-                 exec_ctx_, enable_encode_sortkey_ && !(part_cnt_ > 0)))) {
+                 exec_ctx_, enable_encode_sortkey_ && !(part_cnt_ > 0), comparison_exprs_, eval_ctx_))) {
+    LOG_WARN("init compare failed", K(ret));
   } else {
     lib::ob_sort(immediate_prefix_rows_ + pos, immediate_prefix_rows_ + pos + selector_size_,
               CopyableComparer(comp_));
@@ -3174,7 +3211,7 @@ int ObUniqueSortImpl::get_next_batch(const common::ObIArray<ObExpr*> &exprs,
           int cmp = 0;
           for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < sort_cmp_funs_->count(); i++) {
             const int64_t idx = sort_collations_->at(i).field_idx_;
-            if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(
+            if (OB_FAIL(compare_sort_datums(sort_collations_->at(i), sort_cmp_funs_->at(i), comparison_exprs_, eval_ctx_,
                     lcells[idx], rcells[idx], cmp, datum_access_ctx_))) {
             }
           }
@@ -3229,7 +3266,7 @@ int ObUniqueSortImpl::get_next_row(const common::ObIArray<ObExpr*> &exprs)
         int cmp = 0;
         for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < sort_cmp_funs_->count(); i++) {
           const int64_t idx = sort_collations_->at(i).field_idx_;
-          if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(
+          if (OB_FAIL(compare_sort_datums(sort_collations_->at(i), sort_cmp_funs_->at(i), comparison_exprs_, eval_ctx_,
                   lcells[idx], rcells[idx], cmp, datum_access_ctx_))) {
           }
         }
@@ -3263,7 +3300,7 @@ int ObUniqueSortImpl::get_next_stored_row(const ObChunkDatumStore::StoredRow *&s
         int cmp = 0;
         for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < sort_cmp_funs_->count(); i++) {
           const int64_t idx = sort_collations_->at(i).field_idx_;
-          if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(
+          if (OB_FAIL(compare_sort_datums(sort_collations_->at(i), sort_cmp_funs_->at(i), comparison_exprs_, eval_ctx_,
                   lcells[idx], rcells[idx], cmp, datum_access_ctx_))) {
           }
         }

@@ -4,6 +4,13 @@ seekdb_apply_standalone_inventory(
   ob_server SEEKDB_OBSERVER_RETRIEVAL_COMPOSITION)
 ob_server_add_target(ob_server)
 
+if (SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS)
+  target_sources(ob_server PRIVATE ob_server_plugin_runtime.cpp)
+  target_compile_definitions(ob_server PRIVATE
+    SEEKDB_WITH_EXPERIMENTAL_PLUGINS=1)
+  target_link_libraries(ob_server PRIVATE seekdb_plugin_sdk)
+endif()
+
 add_library(oceanbase_static STATIC EXCLUDE_FROM_ALL
   ${CMAKE_CURRENT_BINARY_DIR}/ob_version.cpp)
 target_link_libraries(oceanbase_static PUBLIC
@@ -70,6 +77,12 @@ if(WIN32)
   target_sources(ob_main PRIVATE ob_win_service.cpp)
 endif()
 target_link_libraries(ob_main PUBLIC ob_base)
+if (SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS)
+  # CLI limit parsing is implemented by the same Rust host as the runtime.
+  # ob_main is a separate object target: ob_server's PRIVATE flags do not reach it.
+  target_compile_definitions(ob_main PRIVATE SEEKDB_WITH_EXPERIMENTAL_PLUGINS=1)
+  target_link_libraries(ob_main PRIVATE seekdb_rust_host)
+endif()
 
 add_executable(seekdb)
 if(WIN32)

@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX RS
+#include "sql/resolver/ob_resolver_utils.h"
 
 #include "ob_ddl_operator.h"
 #include "share/ob_autoincrement_service.h"
@@ -208,6 +209,9 @@ int ObDDLOperator::drop_database(const ObDatabaseSchema &db_schema,
     ret = OB_ERR_SYS;
     LOG_ERROR("schama service_impl and schema manage must not null",
         "schema_service_impl", OB_P(schema_service_impl), K(ret));
+  } else if (OB_FAIL(schema_service_impl->get_database_sql_service()
+      .delete_extensions_before_database_drop(database_id, trans))) {
+    LOG_WARN("failed to prepare extension ownership for database teardown", KR(ret), K(database_id));
   }
   //drop tables in recyclebin
   if (OB_SUCC(ret)) {
@@ -4543,7 +4547,8 @@ int ObDDLOperator::grant_routine(
     const uint64_t option,
     const bool gen_ddl_stmt,
     const common::ObString &grantor,
-    const common::ObString &grantor_host)
+    const common::ObString &grantor_host,
+    const bool read_transaction_privileges)
 {
   int ret = OB_SUCCESS;
   ObRawObjPrivArray new_obj_priv_array;
@@ -4560,7 +4565,10 @@ int ObDDLOperator::grant_routine(
   } else {
     ObPrivSet new_priv = priv_set;
     ObPrivSet routine_priv_set = OB_PRIV_SET_EMPTY;
-    if (OB_FAIL(schema_guard.get_routine_priv_set(routine_priv_key, routine_priv_set))) {
+    ret = read_transaction_privileges
+        ? ObPrivSqlService::get_routine_priv_in_transaction(routine_priv_key, trans, routine_priv_set)
+        : schema_guard.get_routine_priv_set(routine_priv_key, routine_priv_set);
+    if (OB_FAIL(ret)) {
     } else {
       bool need_flush = true;
       new_priv |= routine_priv_set;
@@ -5024,7 +5032,8 @@ int ObDDLOperator::revoke_routine(
     bool report_error,
     const bool gen_ddl_stmt,
     const common::ObString &grantor,
-    const common::ObString &grantor_host)
+    const common::ObString &grantor_host,
+    const bool read_transaction_privileges)
 {
   int ret = OB_SUCCESS;
 
@@ -5040,7 +5049,10 @@ int ObDDLOperator::revoke_routine(
   } else if (OB_FAIL(schema_service_.get_runtime_schema_guard(schema_guard))) {
   } else {
     ObPrivSet routine_priv_set = OB_PRIV_SET_EMPTY;
-    if (OB_FAIL(schema_guard.get_routine_priv_set(routine_priv_key, routine_priv_set))) {
+    ret = read_transaction_privileges
+        ? ObPrivSqlService::get_routine_priv_in_transaction(routine_priv_key, trans, routine_priv_set)
+        : schema_guard.get_routine_priv_set(routine_priv_key, routine_priv_set);
+    if (OB_FAIL(ret)) {
     } else if (OB_PRIV_SET_EMPTY == routine_priv_set) {
       if (report_error) {
         ret = OB_ERR_CANNOT_REVOKE_PRIVILEGES_YOU_DID_NOT_GRANT;

@@ -14,9 +14,8 @@ too_many_arguments = "allow"
 
 [lib]
 name = "sql_nio"
-# staticlib -> libsql_nio.a for linking into C++ (the future ObSqlNio shell);
-# rlib      -> cargo test / Rust consumers.
-crate-type = ["staticlib", "rlib"]
+# Linked into C++ through the single seekdb-host staticlib.
+crate-type = ["rlib"]
 
 [dependencies]
 # mio = epoll (Linux) / kqueue (macOS) / IOCP (Windows), no async runtime.

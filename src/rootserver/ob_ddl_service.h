@@ -1650,7 +1650,7 @@ public:
       const ObTableSchema *data_schema,
       bool &is_exist,
       const ObTableSchema *&index_schema) override;
-  int check_parallel_ddl_conflict(
+  static int check_parallel_ddl_conflict(
     share::schema::ObSchemaGetterGuard &schema_guard,
     const obcall::ObDDLArg &arg);
   int construct_drop_sql(const obcall::ObTableItem &table_item,

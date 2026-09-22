@@ -1,0 +1,3 @@
+default_version = '1.0'
+comment = 'Pure SQL text functions; no native module'
+relocatable = true

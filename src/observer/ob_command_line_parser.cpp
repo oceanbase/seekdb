@@ -17,6 +17,9 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/ob_command_line_parser.h"
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+#include "plugin_runtime.h"
+#endif
 
 #ifdef _WIN32
 #include <windows.h>
@@ -176,6 +179,9 @@ enum ObCommandOption {
   COMMAND_OPTION_LOG_LEVEL,
   COMMAND_OPTION_PARAMETER,
   COMMAND_OPTION_ROLE,
+  COMMAND_OPTION_EXTENSION_DIR,
+  COMMAND_OPTION_PLUGIN_MEMORY_LIMIT,
+  COMMAND_OPTION_PLUGIN_ALLOCATION_LIMIT,
 #ifdef _WIN32
   COMMAND_OPTION_INSTALL_SERVICE,
   COMMAND_OPTION_REMOVE_SERVICE,
@@ -191,6 +197,9 @@ static struct option long_options[] = {
   {"nodaemon",   no_argument,       0, COMMAND_OPTION_NODAEMON},
   {"use-ipv6",   no_argument,       0, '6'},
   {"base-dir",   required_argument, 0, COMMAND_OPTION_BASE_DIR},
+  {"extension-dir", required_argument, 0, COMMAND_OPTION_EXTENSION_DIR},
+  {"plugin-memory-limit", required_argument, 0, COMMAND_OPTION_PLUGIN_MEMORY_LIMIT},
+  {"plugin-allocation-limit", required_argument, 0, COMMAND_OPTION_PLUGIN_ALLOCATION_LIMIT},
   {"data-dir",   required_argument, 0, COMMAND_OPTION_DATA_DIR},
   {"redo-dir",   required_argument, 0, COMMAND_OPTION_REDO_DIR},
   {"log-level",  required_argument, 0, COMMAND_OPTION_LOG_LEVEL},
@@ -326,6 +335,37 @@ int ObCommandLineParser::handle_option(int option, const char* value, ObServerOp
       opts.data_dir_.assign(value);
       break;
     }
+    case COMMAND_OPTION_EXTENSION_DIR: {
+      if (nullptr == value || '\0' == value[0]) ret = OB_INVALID_ARGUMENT;
+      else ret = opts.extension_dir_.assign(value);
+      break;
+    }
+    case COMMAND_OPTION_PLUGIN_MEMORY_LIMIT:
+    case COMMAND_OPTION_PLUGIN_ALLOCATION_LIMIT: {
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+      uint32_t length = 0;
+      if (nullptr != value) {
+        while (length <= 64 && value[length] != '\0') ++length;
+      }
+      uint64_t limit = 0;
+      const bool bytes = option == COMMAND_OPTION_PLUGIN_MEMORY_LIMIT;
+      const uint32_t kind = bytes ? SEEKDB_RUNTIME_MEMORY_LIMIT_BYTES :
+                                   SEEKDB_RUNTIME_MEMORY_LIMIT_ALLOCATIONS;
+      if (SEEKDB_RUNTIME_OK != seekdb_runtime_memory_parse_limit(
+              reinterpret_cast<const uint8_t *>(value), length, kind, &limit)) {
+        ret = OB_INVALID_ARGUMENT;
+        MPRINT("Invalid plugin limit: use unsigned decimal or unlimited; bytes also accept KiB/MiB/GiB/TiB.");
+      } else if (bytes) {
+        opts.plugin_memory_limit_ = limit;
+      } else {
+        opts.plugin_allocation_limit_ = limit;
+      }
+#else
+      ret = OB_NOT_SUPPORTED;
+      MPRINT("Plugin limits require a build with experimental plugins enabled.");
+#endif
+      break;
+    }
     case COMMAND_OPTION_REDO_DIR: { // redo-dir
       opts.redo_dir_.assign(value);
       break;
@@ -445,6 +485,15 @@ int ObCommandLineParser::parse_args(int argc, char* argv[], ObServerOptions& opt
     MPRINT("Failed to handle tilde in data directory, ret=%d", ret);
   } else if (OB_FAIL(handle_tilde(opts.redo_dir_))) {
     MPRINT("Failed to handle tilde in redo directory, ret=%d", ret);
+  } else if (OB_FAIL(handle_tilde(opts.extension_dir_))) {
+    MPRINT("Failed to handle tilde in extension directory, ret=%d", ret);
+  }
+
+  // Resolve before main changes cwd to base-dir. Package deployment is an
+  // administrator action: never create the package directory here.
+  if (OB_SUCC(ret) && !opts.extension_dir_.empty()) {
+    ret = FileDirectoryUtils::to_absolute_path(opts.extension_dir_);
+    if (OB_FAIL(ret)) MPRINT("Failed to resolve extension directory, ret=%d", ret);
   }
 
   // handle absolute path
@@ -504,7 +553,11 @@ void ObCommandLineParser::print_help() const
   MPRINT("  --port, -P <port>               the port, default is 2881");
   MPRINT("  --use-ipv6, -6                  whether to use ipv6");
   MPRINT("  --base-dir <dir>                The base/work directory which seekdb process will run in(default: current directory). ");
+  MPRINT("  --extension-dir <dir>           Administrator-owned SQL Extension packages (disabled when omitted).");
   MPRINT("                                  NOTE: You must specify this option if you will start seekdb at other directory.");
+  MPRINT("  --plugin-memory-limit <limit>   Per-module generation host payload bytes (default: unlimited); accepts KiB/MiB/GiB/TiB.");
+  MPRINT("  --plugin-allocation-limit <n>   Per-module generation live host allocations (default: unlimited). Zero denies allocations.");
+  MPRINT("                                  Plugin limits require experimental plugins; not a process/tenant/GPU memory limit.");
   MPRINT("  --data-dir <dir>                The data directory which seekdb will store data in. Default is ${base-dir}/store in initialize mode.");
   MPRINT("  --redo-dir <dir>                The redo log directory which seekdb will store redo log in. Default is ${data-dir}/redo in initialize mode.");
   MPRINT("  --log-level <level>             The server log level. Can be one of [ERROR, WARN, INFO, EDIAG, WDIAG, TRACE, DEBUG]");

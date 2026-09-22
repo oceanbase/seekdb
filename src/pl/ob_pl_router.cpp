@@ -101,10 +101,18 @@ int ObPLRouter::analyze(ObString &route_sql, ObIArray<ObDependencyInfo> &dep_inf
   HEAP_VAR(ObPLFunctionAST, func_ast, inner_allocator_) {
     if (OB_FAIL(simple_resolve(func_ast))) {
       // Compatible with MySQL, some resolve stage errors need to be thrown at creation time
-      if (OB_FAIL(check_error_in_resolve(ret))) {
+      if (require_complete_dependencies_) {
+        // Preserve the actual failure; no provisional object may depend on an
+        // incomplete body. The caller discards this statement and aborts DDL.
+      } else if (OB_FAIL(check_error_in_resolve(ret))) {
       } else {
         LOG_USER_WARN(OB_ERR_RESOLVE_SQL);
       }
+    } else if (require_complete_dependencies_ && func_ast.has_incomplete_rt_dep_error()) {
+      // MySQL can turn a missing/ill-typed reference into a runtime SIGNAL and
+      // still return success. That is not a complete Extension dependency set.
+      ret = OB_ERR_RESOLVE_SQL;
+      LOG_USER_ERROR(OB_ERR_RESOLVE_SQL);
     } else if (OB_FAIL(analyze_stmt(func_ast.get_body(), route_sql))) {
     } else {
       ObString dep_attr;

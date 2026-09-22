@@ -19,6 +19,7 @@
 #include <new>
 #include "data_plane/ob_iter_cache_api.h"
 #include "data_plane/transaction/ob_i_read_timestamp_service.h"
+#include "data_plane/transaction/ob_tx_control.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "query/command/ob_root_command_service.h"
 #include "query/session/ob_session_access.h"
@@ -32,6 +33,15 @@
 #include "sql/plan_cache/ob_ps_cache.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h" // for ObOptStatManager
 #include "sql/session/ob_user_resource_mgr.h"
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+#include "share/schema/routine_catalog_transaction.h"
+#include "share/schema/routine_schema_overlay.h"
+#include "sql/engine/expr/caller_catalog_transaction.h"
+#include "sql/engine/ob_exec_context.h"
+#include "rootserver/catalog_commit_preparation.h"
+#include "share/rc/ob_server_runtime.h"
+#include "sql/plan_cache/ob_plan_cache.h"
+#endif
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -217,6 +227,7 @@ int ObSQLSessionInfo::test_init(uint32_t version, uint32_t sessid,
 
 void ObSQLSessionInfo::reset(bool skip_sys_var)
 {
+  discard_plugin_catalog_transaction();
   if (is_inited_) {
     // ObVersionProvider::reset();
     warnings_buf_.reset();
@@ -1448,6 +1459,9 @@ int ObSQLSessionInfo::set_client_id(const common::ObString &client_identifier)
 int ObSQLSessionInfo::save_session(StmtSavedValue &saved_value)
 {
   int ret = OB_SUCCESS;
+  // save_sql_session must not allocate after the basic snapshot has consumed
+  // the caller's statement state. assign() reuses this reserved buffer.
+  OZ (saved_value.db_name_.reserve(get_database_name().length()));
   OZ (save_basic_session(saved_value));
   OZ (save_sql_session(saved_value));
   return ret;
@@ -1456,6 +1470,8 @@ int ObSQLSessionInfo::save_session(StmtSavedValue &saved_value)
 int ObSQLSessionInfo::save_sql_session(StmtSavedValue &saved_value)
 {
   int ret = OB_SUCCESS;
+  // Also keep direct callers unchanged if the database-name copy fails.
+  OZ (saved_value.db_name_.assign(get_database_name()));
   OX (saved_value.audit_record_.assign(audit_record_));
   OX (audit_record_.reset());
   OX (saved_value.inner_flag_ = inner_flag_);
@@ -1464,7 +1480,6 @@ int ObSQLSessionInfo::save_sql_session(StmtSavedValue &saved_value)
   OX (saved_value.is_ignore_stmt_ = is_ignore_stmt_);
   OX (inner_flag_ = true);
   OX (saved_value.db_id_ = get_database_id());
-  OZ (saved_value.db_name_.assign(get_database_name()));
   return ret;
 }
 
@@ -1493,6 +1508,7 @@ int ObSQLSessionInfo::begin_nested_session(StmtSavedValue &saved_value, bool ski
 {
   int ret = OB_SUCCESS;
   OV (nested_count_ >= 0, OB_ERR_UNEXPECTED, nested_count_);
+  OZ (saved_value.db_name_.reserve(get_database_name().length()));
   OZ (ObBasicSessionInfo::begin_nested_session(saved_value, skip_cur_stmt_tables));
   OZ (save_sql_session(saved_value));
   OX (nested_count_++);
@@ -1698,7 +1714,301 @@ int ObSQLSessionInfo::on_user_disconnect()
 
 void ObSQLSessionInfo::reset_tx_variable(bool reset_next_scope)
 {
+  discard_plugin_catalog_transaction();
   ObBasicSessionInfo::reset_tx_variable(reset_next_scope);
+}
+
+void ObSQLSessionInfo::discard_plugin_catalog_transaction()
+{
+  // Also handles unknown data outcomes: private view cleanup is not DB abort.
+  // Cached guards and external journal leases can outlive this owner. Revoke
+  // new lookups immediately without freeing schema borrowed by result cleanup.
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  if (plugin_catalog_schema_) plugin_catalog_schema_->retire();
+  if (plugin_catalog_privileges_) plugin_catalog_privileges_->retire();
+#endif
+  plugin_catalog_transaction_.reset();
+  plugin_catalog_schema_.reset();
+  plugin_catalog_privileges_.reset();
+  plugin_catalog_tx_id_ = 0;
+  plugin_catalog_seq_base_ = 0;
+}
+
+int ObSQLSessionInfo::check_plugin_catalog_transaction_context()
+{
+  const int64_t id = data_plane::tx_desc_id(get_tx_desc()).get_id();
+  const int64_t base = data_plane::tx_desc_seq_base(get_tx_desc());
+  // Creating the paired view precedes the first catalog read/write. An
+  // identity-pinned IDLE descriptor with a statement savepoint is valid here;
+  // schema-write recording and commit preparation retain their active checks.
+  if (get_is_deserialized() || !data_plane::tx_desc_is_statement_ready(get_tx_desc()) || id <= 0 || base <= 0)
+    return OB_TRANS_INVALID_STATE;
+  if (plugin_catalog_transaction_ && (id != plugin_catalog_tx_id_ || base != plugin_catalog_seq_base_))
+    return OB_TRANS_INVALID_STATE;
+  if (static_cast<bool>(plugin_catalog_transaction_) != static_cast<bool>(plugin_catalog_schema_) ||
+      static_cast<bool>(plugin_catalog_transaction_) != static_cast<bool>(plugin_catalog_privileges_))
+    return OB_STATE_NOT_MATCH;
+  return OB_SUCCESS;
+}
+
+int ObSQLSessionInfo::record_plugin_catalog_view(const transaction::ObTxSEQ &barrier,
+    std::shared_ptr<RoutineSchemaOverlay> schema,
+    std::shared_ptr<RoutinePrivilegeOverlay> privileges)
+{
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  const int64_t id = data_plane::tx_desc_id(get_tx_desc()).get_id();
+  const int64_t seq_base = data_plane::tx_desc_seq_base(get_tx_desc());
+  int ret = check_plugin_catalog_transaction_context();
+  if (ret != OB_SUCCESS) return ret;
+  if (data_plane::tx_desc_is_read_only(get_tx_desc())) return OB_ERR_READ_ONLY_TRANSACTION;
+  if (!schema || !privileges || schema->privileges() != privileges.get()) return OB_INVALID_ARGUMENT;
+  if (schema->is_retired() || privileges->is_retired()) return OB_STATE_NOT_MATCH;
+  if (plugin_catalog_transaction_ &&
+      (schema != plugin_catalog_schema_ || privileges != plugin_catalog_privileges_)) return OB_STATE_NOT_MATCH;
+  try {
+    if (!plugin_catalog_transaction_) {
+      auto candidate = std::make_shared<RoutineCatalogTransaction>(id);
+      if (!candidate->valid()) return OB_ALLOCATE_MEMORY_FAILED;
+      ret = candidate->record(id, barrier, schema, privileges);
+      if (ret != OB_SUCCESS) return ret;
+      plugin_catalog_transaction_ = std::move(candidate);
+      plugin_catalog_schema_ = std::move(schema);
+      plugin_catalog_privileges_ = std::move(privileges);
+      plugin_catalog_tx_id_ = id;
+      plugin_catalog_seq_base_ = seq_base;
+      return OB_SUCCESS;
+    }
+    return plugin_catalog_transaction_->record(id, barrier, std::move(schema), std::move(privileges));
+  } catch (const std::bad_alloc &) { return OB_ALLOCATE_MEMORY_FAILED; }
+#else
+  return OB_NOT_SUPPORTED;
+#endif
+}
+
+int ObSQLSessionInfo::prepare_plugin_catalog_view(const transaction::ObTxSEQ &barrier,
+    std::shared_ptr<RoutineSchemaOverlay> &schema,
+    std::shared_ptr<RoutinePrivilegeOverlay> &privileges,
+    std::shared_ptr<RoutineCatalogTransaction> &journal)
+{
+  schema.reset(); privileges.reset(); journal.reset();
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  int ret = check_plugin_catalog_transaction_context();
+  if (ret != OB_SUCCESS) return ret;
+  if (data_plane::tx_desc_is_read_only(get_tx_desc())) return OB_ERR_READ_ONLY_TRANSACTION;
+  try {
+    auto next_privileges = plugin_catalog_privileges_;
+    auto next_schema = plugin_catalog_schema_;
+    if (!plugin_catalog_transaction_) {
+      next_privileges = std::make_shared<RoutinePrivilegeOverlay>();
+      next_schema = std::make_shared<RoutineSchemaOverlay>(next_privileges);
+    }
+    ret = record_plugin_catalog_view(barrier, next_schema, next_privileges);
+    if (ret == OB_SUCCESS) {
+      schema = std::move(next_schema);
+      privileges = std::move(next_privileges);
+      journal = plugin_catalog_transaction_;
+    }
+    return ret;
+  } catch (const std::bad_alloc &) { return OB_ALLOCATE_MEMORY_FAILED; }
+#else
+  return OB_NOT_SUPPORTED;
+#endif
+}
+
+int ObSQLSessionInfo::bind_plugin_catalog_view(ObSchemaGetterGuard &guard)
+{
+  if (guard.has_retired_routine_overlay()) return OB_STATE_NOT_MATCH;
+  if (!plugin_catalog_transaction_) return OB_SUCCESS;
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  int ret = check_plugin_catalog_transaction_context();
+  if (ret != OB_SUCCESS) return ret;
+  // Reject failed/finished journals, but allow frozen preparation SQL to read
+  // the same view. No Rust borrow spans guard attachment or nested SQL.
+  uint64_t version = 0, operations = 0;
+  ret = plugin_catalog_transaction_->schema_state(plugin_catalog_tx_id_, version, operations);
+  if (ret != OB_SUCCESS) return ret;
+  std::shared_ptr<const RoutineSchemaOverlay> existing;
+  ret = guard.capture_routine_overlay(existing);
+  if (ret != OB_SUCCESS) return ret;
+  if (existing) return existing.get() == plugin_catalog_schema_.get() ? OB_SUCCESS : OB_STATE_NOT_MATCH;
+  return guard.attach_routine_overlay(plugin_catalog_schema_);
+#else
+  return OB_NOT_SUPPORTED;
+#endif
+}
+
+int ObSQLSessionInfo::rollback_plugin_catalog_view(int64_t transaction_id, const transaction::ObTxSEQ &resolved)
+{
+  if (!plugin_catalog_transaction_) return OB_SUCCESS;
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  if (transaction_id != plugin_catalog_tx_id_ ||
+      data_plane::tx_desc_id(get_tx_desc()).get_id() != transaction_id ||
+      data_plane::tx_desc_seq_base(get_tx_desc()) != plugin_catalog_seq_base_) {
+    discard_plugin_catalog_transaction();
+    return OB_TRANS_INVALID_STATE;
+  }
+  ObExecContext *context = get_cur_exec_ctx();
+  if (context != nullptr && context->get_my_session() == this
+      && context->is_plugin_sql() && get_nested_count() > 0
+      && data_plane::tx_desc_is_statement_ready(get_tx_desc())
+      && data_plane::tx_desc_is_active(get_tx_desc())
+      && !data_plane::tx_desc_is_committing(get_tx_desc())
+      && plugin_catalog_transaction_->check_preparing(transaction_id) == OB_SUCCESS) {
+    const auto statement_barrier = context->get_das_ctx().get_savepoint();
+    if (resolved.is_valid() && statement_barrier.is_valid()
+        && resolved.get_branch() == 0 && statement_barrier.get_branch() == 0
+        && resolved > statement_barrier) {
+      // Commit preparation runs host SQL only, with the catalog view frozen.
+      // UPSERT may undo its speculative insert before updating an existing row.
+      // A barrier strictly inside this child statement cannot undo earlier
+      // catalog writes/end-signs, and no view marks are made by preparation SQL.
+      // The data rollback has already succeeded; leave the frozen view intact.
+      // Outer/statement-boundary/foreign-branch rollback still fails closed.
+      return OB_SUCCESS;
+    }
+  }
+  const int ret = plugin_catalog_transaction_->rollback(transaction_id, resolved);
+  if (ret != OB_SUCCESS && get_tx_desc() != nullptr) {
+    // Data already rolled back. A failed paired-view restore must not leave a
+    // committable transaction with a contradictory catalog/privilege view.
+    if (data_plane::abort_transaction_for_error(*get_tx_desc(), ret) == OB_SUCCESS)
+      discard_plugin_catalog_transaction();
+  }
+  return ret;
+#else
+  return OB_NOT_SUPPORTED;
+#endif
+}
+
+int ObSQLSessionInfo::fail_plugin_catalog_transaction(int64_t transaction_id, int64_t sequence_base, int cause)
+{
+  if (transaction_id <= 0 || sequence_base <= 0 || cause == OB_SUCCESS) return OB_INVALID_ARGUMENT;
+  if (!plugin_catalog_transaction_) return OB_SUCCESS;
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  if (transaction_id != plugin_catalog_tx_id_ || sequence_base != plugin_catalog_seq_base_)
+    return OB_TRANS_INVALID_STATE;
+  // The descriptor may already have changed: revoke only this captured owner,
+  // not the replacement descriptor. Its real data outcome remains unknown here.
+  const int ret = plugin_catalog_transaction_->fail(transaction_id, cause);
+  if (plugin_catalog_schema_) plugin_catalog_schema_->retire();
+  if (plugin_catalog_privileges_) plugin_catalog_privileges_->retire();
+  return ret;
+#else
+  return OB_NOT_SUPPORTED;
+#endif
+}
+
+int ObSQLSessionInfo::prepare_plugin_catalog_commit(int64_t absolute_deadline)
+{
+  if (!plugin_catalog_transaction_) return OB_SUCCESS;
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  if (get_is_deserialized() || !data_plane::tx_desc_is_active(get_tx_desc()) ||
+      data_plane::tx_desc_id(get_tx_desc()).get_id() != plugin_catalog_tx_id_ ||
+      data_plane::tx_desc_seq_base(get_tx_desc()) != plugin_catalog_seq_base_) return OB_TRANS_INVALID_STATE;
+  // Nested SQL can reset session state. Keep the journal alive, but never use
+  // that lifetime extension as evidence that the session still owns this tx.
+  auto participant = plugin_catalog_transaction_;
+  struct CommitHost final : ICatalogCommitHost {
+    ObSQLSessionInfo &session;
+    RoutineCatalogTransaction &journal;
+    const int64_t id, base, deadline;
+    CallerCatalogTransaction transport;
+    CommitHost(ObSQLSessionInfo &session, RoutineCatalogTransaction &journal,
+        int64_t id, int64_t base, int64_t deadline)
+        : session(session), journal(journal), id(id), base(base), deadline(deadline) {}
+    int check_transaction() override {
+      if (!session.owns_plugin_catalog_transaction(&journal, id, base) ||
+          session.get_is_deserialized() || !data_plane::tx_desc_is_active(session.get_tx_desc()) ||
+          data_plane::tx_desc_id(session.get_tx_desc()).get_id() != id ||
+          data_plane::tx_desc_seq_base(session.get_tx_desc()) != base) return OB_TRANS_INVALID_STATE;
+      if (deadline <= 0) return OB_INVALID_ARGUMENT;
+      if (ObTimeUtility::current_time() >= deadline || THIS_WORKER.is_timeout()) return OB_TIMEOUT;
+      return session.check_session_status();
+    }
+    int prepare(int64_t version, int64_t epoch, int64_t &prepared) override {
+      if (GCTX.schema_service_ == nullptr) return OB_ERR_UNEXPECTED;
+      uint64_t pending = 0;
+      int ret = journal.invalidation_count(id, pending);
+      if (ret != OB_SUCCESS) return ret;
+      if (pending != 0) {
+        auto *cache = share::server_service<ObPlanCache>();
+        if (cache == nullptr) return OB_NOT_INIT;
+        // Frozen journal: preallocate queue capacity/snapshot before database
+        // commit. Queue owns only scalar IDs, never the session or private views.
+        ret = cache->reserve_plugin_invalidations(journal, id);
+        if (ret != OB_SUCCESS) return ret;
+      }
+      ret = transport.open_for_commit(session, journal, id, base, deadline);
+      if (ret != OB_SUCCESS) return ret;
+      auto *transaction = transport.transaction();
+      if (transaction == nullptr) return OB_TRANS_INVALID_STATE;
+      // Recheck the PRE-WRITE epoch; never capture a newer epoch here. Caller
+      // admission holds the exclusive Root DDL lock, excluding parallel DDL.
+      ret = GCTX.schema_service_->get_ddl_epoch_mgr().check_and_lock_ddl_epoch(*transaction, epoch);
+      if (ret == OB_SUCCESS) {
+        rootserver::CatalogCommitPreparation preparation(*GCTX.schema_service_, *transaction);
+        ret = preparation.prepare(version, true, true, prepared);
+      }
+      return ret;
+    }
+    int close() override { return transport.close(); }
+  } host(*this, *participant, plugin_catalog_tx_id_, plugin_catalog_seq_base_, absolute_deadline);
+  return participant->prepare_commit(plugin_catalog_tx_id_, host);
+#else
+  return OB_NOT_SUPPORTED;
+#endif
+}
+
+int ObSQLSessionInfo::record_plugin_catalog_schema_version(const transaction::ObTxSEQ &barrier, int64_t version)
+{
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  // Admission/paired view mark must already belong to this actual transaction.
+  // Merely writing catalog SQL cannot create a new journal/authority here.
+  if (!plugin_catalog_transaction_ || get_is_deserialized() ||
+      !data_plane::tx_desc_is_active(get_tx_desc()) ||
+      data_plane::tx_desc_is_committing(get_tx_desc()) ||
+      data_plane::tx_desc_id(get_tx_desc()).get_id() != plugin_catalog_tx_id_ ||
+      data_plane::tx_desc_seq_base(get_tx_desc()) != plugin_catalog_seq_base_)
+    return OB_TRANS_INVALID_STATE;
+  return plugin_catalog_transaction_->record_schema_version(plugin_catalog_tx_id_, barrier, version);
+#else
+  return OB_NOT_SUPPORTED;
+#endif
+}
+
+int ObSQLSessionInfo::complete_plugin_catalog_transaction(int64_t transaction_id, int data_result, bool rollback)
+{
+  if (!plugin_catalog_transaction_) return OB_SUCCESS;
+  int ret = OB_SUCCESS;
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  if (transaction_id != plugin_catalog_tx_id_ ||
+      data_plane::tx_desc_id(get_tx_desc()).get_id() != transaction_id ||
+      data_plane::tx_desc_seq_base(get_tx_desc()) != plugin_catalog_seq_base_) {
+    ret = OB_TRANS_INVALID_STATE;
+  } else if (data_result == OB_SUCCESS || data_result == OB_TRANS_COMMITED || data_result == OB_TRANS_ROLLBACKED) {
+    const bool committed = data_result == OB_TRANS_COMMITED || (data_result == OB_SUCCESS && !rollback);
+    uint64_t version = 0, operations = 0;
+    if (committed) ret = plugin_catalog_transaction_->schema_state(transaction_id, version, operations);
+    if (ret == OB_SUCCESS) ret = plugin_catalog_transaction_->finish(transaction_id, committed);
+    if (ret == OB_SUCCESS && committed && operations != 0) {
+      // This runs on either a query worker or an async data callback with the
+      // session lock. NEVER wait for schema here. Publish the shared fence before
+      // acknowledging commit so requests on OTHER sessions also wait for schema.
+      set_last_ddl_schema_version(static_cast<int64_t>(version));
+      const int refresh_ret = GCTX.schema_service_ == nullptr ? OB_ERR_UNEXPECTED
+          : GCTX.schema_service_->publish_plugin_catalog_commit(static_cast<int64_t>(version));
+      if (refresh_ret != OB_SUCCESS) {
+        // Durable commit cannot be undone by a scheduling error. Keep the fence
+        // for retry on the next request; do not report a retryable commit error.
+        LOG_WARN("committed plugin catalog refresh enqueue failed", K(refresh_ret), K(version));
+      }
+    }
+  }
+#else
+  ret = OB_NOT_SUPPORTED;
+#endif
+  discard_plugin_catalog_transaction();
+  return ret;
 }
 int ObSQLSessionInfo::set_module_name(const common::ObString &mod) {
   int ret = OB_SUCCESS;

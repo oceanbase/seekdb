@@ -94,6 +94,10 @@
 #include "sql/engine/pdml/static/ob_px_sstable_insert_op.h"
 #include "sql/engine/basic/ob_select_into_op.h"
 #include "sql/engine/basic/ob_function_table_op.h"
+#include "sql/engine/expr/plugin_function_expr.h"
+#include "sql/engine/basic/plugin_custom_op.h"
+#include "sql/optimizer/log_plugin_custom.h"
+#include "sql/resolver/expr/plugin_expr_type.h"
 #include "sql/engine/basic/ob_json_table_op.h"
 #include "sql/engine/dml/ob_table_insert_op.h"
 #include "sql/engine/basic/ob_stat_collector_op.h"
@@ -612,6 +616,14 @@ int ObStaticEngineCG::generate_spec_basic(ObLogicalOperator &op,
       } else if (OB_FAIL(append(child_outputs, child_op->get_output_exprs()))) {
       }
     } // for end
+    if (OB_SUCC(ret) && op.get_type() == log_op_def::LOG_PLUGIN_CUSTOM) {
+      const auto &custom = static_cast<const LogPluginCustom &>(op);
+      if (custom.explicit_layout()) {
+        // These are delivered by plugin emit, not evaluated by SQL from their
+        // original arguments (which need not be in the declared input list).
+        OZ(append_array_no_dup(child_outputs, custom.result_exprs()));
+      }
+    }
     // when non primary key table partition with generate column;
     // main table and index table in table lookup operator has
     // common generate expr as output expr,
@@ -997,6 +1009,66 @@ int ObStaticEngineCG::generate_spec(ObLogMaterial &op, ObMaterialSpec &spec, con
   return ret;
 }
 
+int ObStaticEngineCG::generate_spec(LogPluginCustom &op, PluginCustomSpec &spec, const bool in_root_job)
+{
+  UNUSED(in_root_job);
+  if (!phy_plan_ || (!op.fragment() && op.get_num_of_child() != 1) ||
+      op.get_num_of_child() != spec.get_child_cnt()) return OB_INVALID_ARGUMENT;
+  for (int64_t i = 0; i < op.get_num_of_child(); ++i)
+    if (!op.get_child(i) || !spec.get_child(i)) return OB_INVALID_ARGUMENT;
+  auto &allocator = phy_plan_->get_allocator();
+  const auto &outputs = op.explicit_layout() ? op.result_exprs() : op.get_child(0)->get_output_exprs();
+  if (outputs.count() > SEEKDB_PLUGIN_CUSTOM_MAX_COLUMNS) return OB_SIZE_OVERFLOW;
+  int ret = spec.set_binding(allocator, op.binding(), op.parameters());
+  if (ret != OB_SUCCESS) return ret;
+  if (OB_FAIL(op.validate_layout())) return ret;
+  if (op.explicit_layout()) {
+    spec.explicit_input_ = true;
+    if (OB_FAIL(generate_rt_exprs(outputs, spec.columns_))) return ret;
+    if (OB_FAIL(generate_rt_exprs(op.input_exprs(), spec.input_columns_))) return ret;
+    if (op.fragment() && OB_FAIL(spec.input_offsets_.assign(op.input_offsets()))) return ret;
+    if (!op.input_bindings().empty()) {
+      if (OB_FAIL(generate_param_spec(op.input_bindings(), spec.input_bindings_))) return ret;
+      if (OB_FAIL(spec.binding_sources_.assign(op.binding_sources()))) return ret;
+      if (OB_FAIL(spec.binding_inputs_.assign(op.binding_inputs()))) return ret;
+      if (OB_FAIL(spec.binding_targets_.assign(op.binding_targets()))) return ret;
+    }
+    if (OB_FAIL(mark_expr_self_produced(outputs))) return ret;
+  } else if (OB_FAIL(spec.columns_.assign(spec.get_child(0)->output_))) return ret;
+  if (spec.columns_.count() != outputs.count()) return OB_ERR_UNEXPECTED;
+  const auto describe = [&](const ObIArray<ObRawExpr *> &raws, const ExprFixedArray &exprs,
+      ObFixedArray<ObString, ObIAllocator> &ids, ObFixedArray<uint8_t, ObIAllocator> &nullable, bool input) -> int {
+    int ret = OB_SUCCESS;
+    if (OB_FAIL(ids.prepare_allocate(raws.count()))) return ret;
+    if (OB_FAIL(nullable.prepare_allocate(raws.count()))) return ret;
+    for (int64_t i = 0; i < raws.count(); ++i) {
+      const auto *raw = raws.at(i); const auto *expr = exprs.at(i);
+      if (!raw || !expr || !PluginCustomOp::supported_column(*expr)) return OB_NOT_SUPPORTED;
+      nullable.at(i) = !raw->is_not_null_for_read();
+      ObString id;
+      if (const auto *type = raw->get_plugin_type()) {
+        if (type->physical_type_ != raw->get_data_type()) return OB_NOT_SUPPORTED;
+        if (type->stored_) {
+          ret = input ? spec.bind_stored_input(allocator, i, *type) : spec.bind_stored_column(allocator, i, *type);
+          if (ret != OB_SUCCESS) return ret;
+        }
+        id = type->logical_id_;
+      } else {
+        const auto physical_type = expr->datum_meta_.type_;
+        id = ObString::make_string(ob_is_int_tc(physical_type) ? "core.type.int64" : ob_is_uint_tc(physical_type) ? "core.type.uint64" :
+            (ob_is_float_type(physical_type) || ob_is_double_type(physical_type)) ? "core.type.float64" :
+            physical_type == ObNullType ? "core.type.null" : "core.type.bytes");
+      }
+      if (OB_FAIL(ob_write_string(allocator, id, ids.at(i)))) return ret;
+    }
+    return OB_SUCCESS;
+  };
+  ret = describe(outputs, spec.columns_, spec.type_ids_, spec.nullable_, false);
+  if (OB_SUCC(ret) && op.explicit_layout())
+    ret = describe(op.input_exprs(), spec.input_columns_, spec.input_type_ids_, spec.input_nullable_, true);
+  return ret;
+}
+
 int ObStaticEngineCG::generate_spec(ObLogOptimizerStatsGathering &op, ObOptimizerStatsGatheringSpec &spec, const bool in_root_job)
 {
   int ret = OB_SUCCESS;
@@ -1353,7 +1425,8 @@ int ObStaticEngineCG::check_not_support_cmp_type(
 int ObStaticEngineCG::fill_sort_funcs(
   const ObSortCollations &collations,
   ObSortFuncs &sort_funcs,
-  const ObIArray<ObExpr*> &sort_exprs)
+  const ObIArray<ObExpr*> &sort_exprs,
+  bool supports_plugin_ordering)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(sort_funcs.init(collations.count()))) {
@@ -1363,7 +1436,18 @@ int ObStaticEngineCG::fill_sort_funcs(
       ObExpr* expr = nullptr;
       if (OB_FAIL(sort_exprs.at(sort_collation.field_idx_, expr))) {
       } else if (OB_FAIL(check_not_support_cmp_type(expr))) {
-      } else {
+      } else if (!supports_plugin_ordering && expr->type_ == T_FUN_SYS_PLUGIN_TYPE_VALUE) {
+        const auto *info = dynamic_cast<const PluginTypeValueExtraInfo *>(expr->extra_info_);
+        if (OB_ISNULL(info) || !info->valid()) {
+          ret = OB_INVALID_DATA;
+        } else if (info->mode_ == PluginTypeValueExtraInfo::ORDERED) {
+          // Native-only consumers must not compare the carrier
+          // bytes of a logical ordering key. Opt in only with a contextful path.
+          ret = OB_NOT_SUPPORTED;
+          LOG_WARN("sort consumer does not support plugin ordering", K(ret));
+        }
+      }
+      if (OB_SUCC(ret)) {
         ObSortCmpFunc cmp_func;
         cmp_func.cmp_func_ = ObDatumFuncs::get_nullsafe_cmp_func(expr->datum_meta_.type_,
                                                                 expr->datum_meta_.type_,
@@ -1448,7 +1532,7 @@ int ObStaticEngineCG::generate_spec(ObLogSort &op, ObSortSpec &spec, const bool 
       } else if (OB_FAIL(fill_sort_info(sortkeys,
           spec.sort_collations_, spec.all_exprs_))) {
       } else if (OB_FAIL(fill_sort_funcs(
-          spec.sort_collations_, spec.sort_cmp_funs_, spec.all_exprs_))) {
+          spec.sort_collations_, spec.sort_cmp_funs_, spec.all_exprs_, true))) {
       } else if (OB_FAIL(append_array_no_dup(spec.all_exprs_, spec.get_child()->output_))) {
       } else if (opt_ctx_->is_online_ddl() && OB_FAIL(fill_compress_type(op, spec.compress_type_))) {
       } else {
@@ -2857,7 +2941,7 @@ int ObStaticEngineCG::generate_spec(ObLogExchange &op, ObPxMSCoordSpec &spec, co
   } else if (OB_FAIL(fill_sort_info(op.get_sort_keys(),
       spec.sort_collations_, spec.all_exprs_))) {
   } else if (OB_FAIL(fill_sort_funcs(
-      spec.sort_collations_, spec.sort_cmp_funs_, spec.all_exprs_))) {
+      spec.sort_collations_, spec.sort_cmp_funs_, spec.all_exprs_, true))) {
   } else if (OB_FAIL(append_array_no_dup(spec.all_exprs_, spec.child_exprs_))) {
   }
   return ret;
@@ -2871,7 +2955,7 @@ int ObStaticEngineCG::generate_spec(ObLogExchange &op, ObPxMSReceiveSpec &spec, 
   } else if (OB_FAIL(fill_sort_info(op.get_sort_keys(),
       spec.sort_collations_, spec.all_exprs_))) {
   } else if (OB_FAIL(fill_sort_funcs(
-      spec.sort_collations_, spec.sort_cmp_funs_, spec.all_exprs_))) {
+      spec.sort_collations_, spec.sort_cmp_funs_, spec.all_exprs_, true))) {
   } else if (OB_FAIL(append_array_no_dup(spec.all_exprs_, spec.child_exprs_))) {
   } else {
     spec.local_order_ = op.is_sort_local_order();
@@ -2945,7 +3029,7 @@ int ObStaticEngineCG::generate_range_dist_spec(
   } else if (OB_FAIL(fill_sort_info(new_sort_keys,
       spec.sort_collations_, spec.dist_exprs_))) {
   } else if (OB_FAIL(fill_sort_funcs(spec.sort_collations_,
-      spec.sort_cmp_funs_, spec.dist_exprs_))) {
+      spec.sort_cmp_funs_, spec.dist_exprs_, true))) {
   }
   return ret;
 }
@@ -3044,7 +3128,7 @@ int ObStaticEngineCG::generate_spec(ObLogExchange &op, ObPxRepartTransmitSpec &s
     if (OB_FAIL(filter_sort_keys(op, op.get_sort_keys(), sort_keys))) {
     } else if (OB_FAIL(spec.dist_exprs_.reserve(sort_keys.count()))) {
     } else if (OB_FAIL(fill_sort_info(sort_keys, spec.sort_collations_, spec.dist_exprs_))) {
-    } else if (OB_FAIL(fill_sort_funcs(spec.sort_collations_, spec.sort_cmp_funs_, spec.dist_exprs_))) {
+    } else if (OB_FAIL(fill_sort_funcs(spec.sort_collations_, spec.sort_cmp_funs_, spec.dist_exprs_, true))) {
     } else if (OB_UNLIKELY(op.get_repart_all_tablet_ids().count() <= 0)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(spec.ds_tablet_ids_.assign(op.get_repart_all_tablet_ids()))) {
@@ -5488,13 +5572,12 @@ int ObStaticEngineCG::generate_spec(ObLogFunctionTable &op, ObFunctionTableSpec 
     const bool in_root_job)
 {
   UNUSED(in_root_job);
-  ObIAllocator &alloc = phy_plan_->get_allocator();
   ObRawExpr *value_raw_expr = nullptr;
   ObExpr *value_expr = nullptr;
   int ret = OB_SUCCESS;
   if (OB_ISNULL(op.get_stmt())) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(spec.column_exprs_.init(op.get_stmt()->get_column_size()))) {
+    LOG_WARN("failed to get stmt", K(ret));
   } else if (OB_UNLIKELY(op.get_num_of_child() > 1)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_ISNULL(value_raw_expr = op.get_value_expr())) {
@@ -5503,6 +5586,17 @@ int ObStaticEngineCG::generate_spec(ObLogFunctionTable &op, ObFunctionTableSpec 
   } else {
     spec.has_correlated_expr_ = value_raw_expr->has_flag(CNT_DYNAMIC_PARAM);
     spec.value_expr_ = value_expr;
+    const bool plugin_table = value_raw_expr->get_expr_type() == T_FUN_SYS_PLUGIN_TABLE_FUNCTION;
+    seekdb_plugin_sql_binding_v1_t binding{};
+    if (plugin_table) {
+      OZ (PluginTableFunctionExpr::resolve_binding(*value_raw_expr, binding));
+    }
+    OZ (spec.column_exprs_.init(plugin_table ? binding.column_count : op.get_stmt()->get_column_size()));
+    // Keep descriptor ordinals even for SELECT ordinal or COUNT(*). Unused
+    // columns have no generated expression and must not compact this mapping.
+    for (uint32_t i = 0; OB_SUCC(ret) && plugin_table && i < binding.column_count; ++i) {
+      OZ (spec.column_exprs_.push_back(nullptr));
+    }
     for (int64_t i = 0; OB_SUCC(ret) && i < op.get_output_exprs().count(); ++i) {
       if (OB_FAIL(mark_expr_self_produced(op.get_output_exprs().at(i)))) {
       }
@@ -5517,7 +5611,17 @@ int ObStaticEngineCG::generate_spec(ObLogFunctionTable &op, ObFunctionTableSpec 
           && col_item->expr_->is_explicited_reference()) {
         OZ (mark_expr_self_produced(col_item->expr_));
         OZ (generate_rt_expr(*col_item->expr_, rt_expr));
-        OZ (spec.column_exprs_.push_back(rt_expr));
+        if (OB_SUCC(ret) && plugin_table) {
+          const uint64_t index = col_item->column_id_ - OB_APP_MIN_COLUMN_ID;
+          if (index >= binding.column_count || nullptr != spec.column_exprs_.at(index)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("invalid plugin table column ordinal", K(ret), K(index), K(binding.column_count));
+          } else {
+            spec.column_exprs_.at(index) = rt_expr;
+          }
+        } else if (OB_SUCC(ret)) {
+          OZ (spec.column_exprs_.push_back(rt_expr));
+        }
       }
     }
   }
@@ -6089,6 +6193,10 @@ int ObStaticEngineCG::get_phy_op_type(ObLogicalOperator &log_op,
     }
     case log_op_def::LOG_MATERIAL: {
       type = PHY_MATERIAL;
+      break;
+    }
+    case log_op_def::LOG_PLUGIN_CUSTOM: {
+      type = PHY_PLUGIN_CUSTOM;
       break;
     }
     case log_op_def::LOG_WINDOW_FUNCTION: {

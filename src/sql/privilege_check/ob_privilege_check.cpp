@@ -48,6 +48,9 @@
 #include "sql/resolver/dcl/ob_alter_user_role_stmt.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/cmd/ob_merge_table_stmt.h"
+#include "sql/resolver/cmd/create_extension_stmt.h"
+#include "sql/resolver/cmd/alter_extension_stmt.h"
+#include "sql/resolver/cmd/drop_extension_stmt.h"
 
 namespace oceanbase {
 using namespace share;
@@ -85,6 +88,55 @@ int no_priv_needed(
   UNUSED(session_priv);
   UNUSED(basic_stmt);
   UNUSED(need_privs);
+  return OB_SUCCESS;
+}
+
+// Package removal defers object-level authorization until the locked snapshot.
+int get_drop_extension_stmt_need_privs(
+    const ObSessionPrivInfo &session_priv, const ObStmt *basic_stmt, ObIArray<ObNeedPriv> &need_privs)
+{
+  UNUSED(need_privs);
+  if (nullptr == basic_stmt || basic_stmt->get_stmt_type() != stmt::T_DROP_EXTENSION) return OB_INVALID_ARGUMENT;
+  if (!session_priv.is_valid()) return OB_ERR_NO_PRIVILEGE;
+  const auto &statement = *static_cast<const DropExtensionStmt *>(basic_stmt);
+  if (statement.database_name().empty() || statement.database_id() == OB_INVALID_ID) return OB_INVALID_ARGUMENT;
+  // Extension ownership and per-member ALTER ROUTINE grants cannot be inferred
+  // from a name alone. Root MUST check both using its locked catalog snapshot;
+  // a blanket database DROP/ALTER grant would reject valid object-level owners.
+  return OB_SUCCESS;
+}
+
+// Initial installation support is pure SQL routines. Every member still passes
+// normal resolution and DDL privilege checks; this is only package admission.
+int get_create_extension_stmt_need_privs(
+    const ObSessionPrivInfo &session_priv, const ObStmt *basic_stmt, ObIArray<ObNeedPriv> &need_privs)
+{
+  UNUSED(session_priv);
+  if (nullptr == basic_stmt || basic_stmt->get_stmt_type() != stmt::T_CREATE_EXTENSION) {
+    return OB_INVALID_ARGUMENT;
+  }
+  const auto &statement = *static_cast<const CreateExtensionStmt *>(basic_stmt);
+  if (statement.database_name().empty() || statement.database_id() == OB_INVALID_ID) return OB_INVALID_ARGUMENT;
+  ObNeedPriv privilege;
+  privilege.db_ = statement.database_name();
+  privilege.priv_level_ = OB_PRIV_DB_LEVEL;
+  privilege.priv_set_ = OB_PRIV_CREATE_ROUTINE;
+  return need_privs.push_back(privilege);
+}
+
+int get_alter_extension_stmt_need_privs(
+    const ObSessionPrivInfo &session_priv, const ObStmt *basic_stmt, ObIArray<ObNeedPriv> &need_privs)
+{
+  UNUSED(need_privs);
+  if (basic_stmt == nullptr || basic_stmt->get_stmt_type() != stmt::T_ALTER_EXTENSION) return OB_INVALID_ARGUMENT;
+  if (!session_priv.is_valid()) return OB_ERR_NO_PRIVILEGE;
+  const auto &statement = *static_cast<const AlterExtensionStmt *>(basic_stmt);
+  if (statement.database_name().empty() || statement.database_id() == 0 ||
+      statement.database_id() == OB_INVALID_ID) return OB_INVALID_ARGUMENT;
+  // Root checks the installed owner on observation AND under the update lock;
+  // each resolved operation then checks its real object privileges. Requiring
+  // blanket database CREATE/ALTER rights here would reject attribute-only or
+  // empty updates by an owner with sufficient object-level grants.
   return OB_SUCCESS;
 }
 

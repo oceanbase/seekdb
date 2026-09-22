@@ -1,0 +1,17 @@
+[package]
+name = "seekdb-host"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Single Rust static library linked into the seekdb C++ host"
+
+[lib]
+name = "seekdb_host"
+crate-type = ["staticlib"]
+
+[features]
+plugins = ["dep:seekdb-plugin-runtime"]
+
+[dependencies]
+sql-nio = { path = "../sql-nio" }
+seekdb-plugin-runtime = { path = "../plugin-runtime", optional = true }

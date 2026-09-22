@@ -23,9 +23,20 @@
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_dependency_info.h"
+#include <string>
 
 namespace oceanbase
 {
+namespace share { namespace plugin {
+class IExtensionCatalogInstaller;
+struct ExtensionInstallSpec;
+class IExtensionCatalogDropper;
+struct ExtensionDropRequest;
+class IExtensionCatalogUpdater;
+struct ExtensionUpdateRequest;
+struct ExtensionRoutineUpdateOperation;
+class IExtensionRoutineScript;
+} }
 using namespace obcall;
 using namespace share;
 
@@ -34,15 +45,70 @@ namespace rootserver
 class ObDDLSQLTransaction;
 class ObDDLService;
 class ObDDLOperator;
+class RoutineIdReservation;
 
 class ObPLDDLService
 {
 public:
   //----Functions for managing routine----
+  // With external_trans, only writes schema/dependencies/automatic privileges;
+  // never starts, ends, or publishes that transaction. Returned ID is provisional.
   static int create_routine(const obcall::ObCreateRoutineArg &arg,
-                            rootserver::ObDDLService &ddl_service);
+                            rootserver::ObDDLService &ddl_service,
+                            ObDDLSQLTransaction *external_trans = nullptr,
+                            uint64_t *created_routine_id = nullptr);
+  // Core bridge for a resolved pure-SQL routine package. Not a SQL parser or
+  // native-plugin entry point. session_priv/roles MUST come from the authenticated
+  // session, and arg must have passed the ordinary SQL resolver/definer checks.
+  // Installation success and post-commit publication status are separate: a
+  // failed publication must never cause retry of an already committed install.
+  static int install_routine_extension(
+      const share::plugin::ExtensionInstallSpec &spec,
+      const obcall::ObCreateRoutineArg &arg,
+      const share::schema::ObSessionPrivInfo &session_priv,
+      const common::ObIArray<uint64_t> &enabled_roles,
+      share::plugin::IExtensionCatalogInstaller &catalog,
+      ObDDLService &ddl_service,
+      uint64_t &extension_id, int &publication_status, std::string &error);
+  // All resolved routines share ONE installation/DDL transaction and schema
+  // publication. Input pointers remain live throughout the synchronous call.
+  // Alternatively a script and empty args use the evolving transaction view.
+  static int install_routines_extension(
+      const share::plugin::ExtensionInstallSpec &spec,
+      const common::ObIArray<const obcall::ObCreateRoutineArg *> &args,
+      const share::schema::ObSessionPrivInfo &session_priv,
+      const common::ObIArray<uint64_t> &enabled_roles,
+      share::plugin::IExtensionCatalogInstaller &catalog,
+      ObDDLService &ddl_service,
+      uint64_t &extension_id, int &publication_status, std::string &error,
+      share::plugin::IExtensionRoutineScript *script = nullptr);
+  // Same external-transaction ownership as create_routine, including the MySQL
+  // alter-via-replacement branch. This entry resolves existing published objects;
+  // an update adapter must separately handle provisional script objects.
   static int alter_routine(const obcall::ObCreateRoutineArg &arg,
-                           rootserver::ObDDLService &ddl_service);
+                           rootserver::ObDDLService &ddl_service,
+                           ObDDLSQLTransaction *external_trans = nullptr);
+  // Core-only resolved script bridge. Caller holds Root serialization, supplies
+  // authenticated privileges and keeps the complete ordered arguments alive.
+  // A host-bound script alternatively supplies sequential semantic callbacks;
+  // operations must then be empty. No public plugin authority or second catalog.
+  static int update_routines_extension(
+      const share::plugin::ExtensionUpdateRequest &request,
+      const common::ObIArray<share::plugin::ExtensionRoutineUpdateOperation> &operations,
+      const share::schema::ObSessionPrivInfo &session_priv,
+      const common::ObIArray<uint64_t> &enabled_roles,
+      share::plugin::IExtensionCatalogUpdater &catalog, ObDDLService &ddl_service,
+      uint64_t &extension_id, bool &changed, int &publication_status, std::string &error,
+      share::plugin::IExtensionRoutineScript *script = nullptr);
+  // Caller holds Root DDL serialization and supplies authenticated privileges.
+  // This initial schema adapter supports pure-SQL routine members and RESTRICT.
+  // No source files/native module are needed to remove an installed package.
+  static int drop_routines_extension(
+      const share::plugin::ExtensionDropRequest &request,
+      const share::schema::ObSessionPrivInfo &session_priv,
+      const common::ObIArray<uint64_t> &enabled_roles,
+      share::plugin::IExtensionCatalogDropper &catalog, ObDDLService &ddl_service,
+      uint64_t &dropped_extension_id, int &publication_status, std::string &error);
   static int drop_routine(const ObDropRoutineArg &arg,
                           rootserver::ObDDLService &ddl_service);
   //----End of functions for managing routine----
@@ -112,17 +178,23 @@ private:
                             ObIArray<ObDependencyInfo> &dep_infos,
                             const ObString *ddl_stmt_str,
                             share::schema::ObSchemaGetterGuard &schema_guard,
-                            rootserver::ObDDLService &ddl_service);
+                            rootserver::ObDDLService &ddl_service,
+                            ObDDLSQLTransaction *external_trans = nullptr,
+                            RoutineIdReservation *reservation = nullptr,
+                            RoutineVersionReservation *version_reservation = nullptr);
   static int alter_routine(const ObRoutineInfo &routine_info,
                            ObErrorInfo &error_info,
                            const ObString *ddl_stmt_str,
                            share::schema::ObSchemaGetterGuard &schema_guard,
-                           rootserver::ObDDLService &ddl_service);
+                           rootserver::ObDDLService &ddl_service,
+                           ObDDLSQLTransaction *external_trans = nullptr);
   static int drop_routine(const ObRoutineInfo &routine_info,
                           ObErrorInfo &error_info,
                           const ObString *ddl_stmt_str,
                           share::schema::ObSchemaGetterGuard &schema_guard,
-                          rootserver::ObDDLService &ddl_service);
+                          rootserver::ObDDLService &ddl_service,
+                          ObDDLSQLTransaction *external_trans = nullptr,
+                          RoutineVersionReservation *version_reservation = nullptr);
   //----End of functions for managing routine----
 
   //----Functions for managing package----

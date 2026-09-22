@@ -18,6 +18,7 @@
 
 
 #include "ob_schema_getter_guard.h"
+#include "routine_schema_overlay.h"
 #include "ob_ai_model_schema_getter_guard.ipp"
 
 #include <string.h>
@@ -152,6 +153,7 @@ int ObSchemaGetterGuard::init()
 int ObSchemaGetterGuard::reset()
 {
   int ret = OB_SUCCESS;
+  routine_overlay_.reset();
   schema_service_ = NULL;
   schema_objs_.reset();
 
@@ -171,6 +173,45 @@ int ObSchemaGetterGuard::reset()
 
   is_inited_ = false;
   return ret;
+}
+
+int ObSchemaGetterGuard::attach_routine_overlay(std::shared_ptr<const RoutineSchemaOverlay> overlay)
+{
+  int ret = OB_SUCCESS;
+  if (!check_inner_stat()) ret = OB_INNER_STAT_ERROR;
+  else if (schema_guard_type_ != RUNTIME_SCHEMA_GUARD) ret = OB_NOT_SUPPORTED;
+  else if (overlay == nullptr) ret = OB_INVALID_ARGUMENT;
+  else if (overlay->is_retired()) ret = OB_STATE_NOT_MATCH;
+  else if (routine_overlay_ != nullptr) ret = OB_INIT_TWICE;
+  else routine_overlay_ = std::move(overlay);
+  return ret;
+}
+
+int ObSchemaGetterGuard::inherit_routine_overlay(const ObSchemaGetterGuard &parent)
+{
+  int ret = OB_SUCCESS;
+  if (!check_inner_stat() || !parent.check_inner_stat()) ret = OB_INNER_STAT_ERROR;
+  else if (schema_guard_type_ != RUNTIME_SCHEMA_GUARD
+           || parent.schema_guard_type_ != RUNTIME_SCHEMA_GUARD) ret = OB_NOT_SUPPORTED;
+  else if (this == &parent || routine_overlay_ != nullptr) ret = OB_INIT_TWICE;
+  else if (schema_service_ != parent.schema_service_) ret = OB_STATE_NOT_MATCH;
+  else if (parent.routine_overlay_ != nullptr) ret = attach_routine_overlay(parent.routine_overlay_);
+  return ret;
+}
+
+int ObSchemaGetterGuard::capture_routine_overlay(std::shared_ptr<const RoutineSchemaOverlay> &overlay) const
+{
+  overlay.reset();
+  if (!check_inner_stat()) return OB_INNER_STAT_ERROR;
+  if (schema_guard_type_ != RUNTIME_SCHEMA_GUARD) return OB_NOT_SUPPORTED;
+  if (has_retired_routine_overlay()) return OB_STATE_NOT_MATCH;
+  overlay = routine_overlay_;
+  return OB_SUCCESS;
+}
+
+bool ObSchemaGetterGuard::has_retired_routine_overlay() const
+{
+  return routine_overlay_ && routine_overlay_->is_retired();
 }
 
 
@@ -1786,9 +1827,34 @@ int ObSchemaGetterGuard::get_routine_priv_set(const ObRoutinePrivSortKey &routin
 {
   int ret = OB_SUCCESS;
   const ObSchemaMgr *mgr = NULL;
-  
+  bool handled = false;
   if (OB_FAIL(check_lazy_guard( mgr))) {
-  } else if (OB_FAIL(mgr->priv_mgr_.get_routine_priv_set(routine_priv_key, priv_set))) {
+  } else if (OB_FAIL(get_routine_priv_override(routine_priv_key, handled, priv_set))) {
+  } else if (!handled && OB_FAIL(mgr->priv_mgr_.get_routine_priv_set(routine_priv_key, priv_set))) {
+  }
+  return ret;
+}
+
+int ObSchemaGetterGuard::get_routine_priv_override(const ObRoutinePrivSortKey &key,
+                                                  bool &handled, ObPrivSet &priv_set)
+{
+  int ret = OB_SUCCESS;
+  handled = false;
+  priv_set = 0;
+  if (routine_overlay_ && routine_overlay_->privileges()) {
+    uint64_t database = OB_INVALID_ID;
+    bool schema_handled = false;
+    const ObRoutineInfo *routine = nullptr;
+    const auto type = static_cast<ObRoutineType>(key.routine_type_);
+    if (OB_FAIL(get_database_id(key.db_, database))) {
+    } else if (database == OB_INVALID_ID) {
+      // Preserve normal missing-database diagnostics, never manufacture grants.
+    } else if (OB_FAIL(routine_overlay_->lookup(database, OB_INVALID_ID, key.routine_, 0,
+                                               type, schema_handled, routine))) {
+    } else {
+      ret = routine_overlay_->privileges()->lookup(database, key.routine_, type, key.user_id_,
+                                                   schema_handled, routine, handled, priv_set);
+    }
   }
   return ret;
 }
@@ -2178,8 +2244,18 @@ int ObSchemaGetterGuard::get_schema_version(
         break;
       }
     case ROUTINE_SCHEMA : {
-        GET_SCHEMA_VERSION_NT(routine, ObSimpleRoutineSchema);
-        GET_DATABASE_ID();
+        bool handled = false;
+        const ObRoutineInfo *overlay_routine = nullptr;
+        if (routine_overlay_ != nullptr && OB_FAIL(routine_overlay_->lookup(schema_id, handled, overlay_routine))) {
+        } else if (handled) {
+          if (overlay_routine != nullptr) {
+            schema_version = overlay_routine->get_schema_version();
+            if (schema_belong_db_id != nullptr) *schema_belong_db_id = overlay_routine->get_database_id();
+          }
+        } else {
+          GET_SCHEMA_VERSION_NT(routine, ObSimpleRoutineSchema);
+          GET_DATABASE_ID();
+        }
         break;
       }
     case SYS_VARIABLE_SCHEMA : {
@@ -2944,11 +3020,18 @@ int ObSchemaGetterGuard::check_routine_exist(uint64_t database_id, uint64_t pack
   int ret = OB_SUCCESS;
   const ObSchemaMgr *mgr = NULL;
   exist = false;
+  bool handled = false;
+  const ObRoutineInfo *overlay_routine = nullptr;
 
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
   } else if (OB_INVALID_ID == database_id || routine_name.empty()) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(database_id), K(routine_name));
+  } else if (routine_overlay_ != nullptr && OB_FAIL(routine_overlay_->lookup(
+      database_id, package_id, routine_name, overload, routine_type, handled, overlay_routine))) {
+  } else if (handled) {
+    exist = overlay_routine != nullptr;
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
   } else {
     const ObSimpleRoutineSchema *schema = NULL;
@@ -3010,6 +3093,8 @@ int ObSchemaGetterGuard::get_routine_id(uint64_t database_id, uint64_t package_i
   int ret = OB_SUCCESS;
   const ObSchemaMgr *mgr = NULL;
   routine_id = OB_INVALID_ID;
+  bool handled = false;
+  const ObRoutineInfo *overlay_routine = nullptr;
 
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
@@ -3018,6 +3103,11 @@ int ObSchemaGetterGuard::get_routine_id(uint64_t database_id, uint64_t package_i
              || (overload == OB_INVALID_INDEX)
              || (INVALID_ROUTINE_TYPE == routine_type)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), K(database_id), K(routine_name));
+  } else if (routine_overlay_ != nullptr && OB_FAIL(routine_overlay_->lookup(
+      database_id, package_id, routine_name, overload, routine_type, handled, overlay_routine))) {
+  } else if (handled) {
+    if (overlay_routine != nullptr) routine_id = overlay_routine->get_routine_id();
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
   } else {
     const ObSimpleRoutineSchema *schema = NULL;
@@ -3052,6 +3142,7 @@ int ObSchemaGetterGuard::get_routine_info( const uint64_t database_id, const uin
   int ret = OB_SUCCESS;
   const ObSchemaMgr *mgr = NULL;
   routine_info = NULL;
+  bool handled = false;
 
   const ObSimpleRoutineSchema *simple_routine = NULL;
   if (!check_inner_stat()) {
@@ -3061,6 +3152,12 @@ int ObSchemaGetterGuard::get_routine_info( const uint64_t database_id, const uin
       || (overload == OB_INVALID_INDEX)
       || (INVALID_ROUTINE_TYPE == routine_type)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(database_id), K(package_id), K(routine_name),
+             K(overload), K(routine_type), KR(ret));
+  } else if (routine_overlay_ != nullptr && OB_FAIL(routine_overlay_->lookup(
+      database_id, package_id, routine_name, overload, routine_type, handled, routine_info))) {
+  } else if (handled) {
+    // Includes tombstones: never resurrect a deleted object from the base.
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
   } else if (OB_FAIL(mgr->routine_mgr_.get_routine_schema( database_id, package_id,
                                                            routine_name, overload, routine_type, simple_routine))) {
@@ -3083,10 +3180,14 @@ int ObSchemaGetterGuard::get_routine_info(
   const ObSchemaMgr *mgr = NULL;
   const ObSimpleRoutineSchema *simple_routine = NULL;
   routine_info = NULL;
+  bool handled = false;
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
   } else if (OB_UNLIKELY(routine_id == OB_INVALID_ID)) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(routine_id), KR(ret));
+  } else if (routine_overlay_ != nullptr && OB_FAIL(routine_overlay_->lookup(routine_id, handled, routine_info))) {
+  } else if (handled) {
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
   } else if (OB_FAIL(mgr->get_routine_schema( routine_id, simple_routine))) {
   } else if (NULL == simple_routine) {
