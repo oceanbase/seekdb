@@ -48,6 +48,8 @@
 
 ## 终态设计：共享入口薄路由（已确认方向）
 
+> **2026-09-22 注意**：本节与下一节（代理下沉 ns1 Worker）属于 IPC 多进程路线，已被文末"2026-09-22 方向修订：单进程 + NamespaceRegistry"取代；保留作历史记录。
+
 - 终态形态：共享进程 = 存储引擎 + fork 控制面 + 薄 TCP 路由器；Worker 是唯一 MySQL 端点。不再保留单体进程兼容。
 - 登录方式：`root@分支名`（不带 `@` 默认 ns1）。分支名由登录者自己管理（fork 时给定，登录时按名字路由）。
 - 2881 共享入口的代理流水线：`发 greeting →（TLS upgrade 钩子，v1 空实现）→ 读用户名路由 → 字节流代理到目标 Worker 的 UDS`。代理不懂协议内容：TLS 端到端、协议特性全通、无 session 影子状态。
@@ -314,3 +316,60 @@
   3. 事务 RPC 去重：`start_stmt` 对 `prepare_tx_for_statement` 相邻调用两次（ob_sql_trans_control 上游固有），服务端 prepare 幂等，worker shim 层用 thread_local 记录上次 prepared 的 tx，同 tx 任何其他 RPC 或失败即失效——第二个 S 跳过。修过一个错位 bug：fetch_batch 多写一个 ret 号导致 'O' 回包错位，bootstrap 全崩 -4002。
   4. 实测（oltp_point_select 4×100k，ps-mode=disable）：直连 1t 1096→**1412 QPS**（0.91→0.71ms）、8t 5472→**7384**（1.46→1.08ms）；代理 8t **7243**/1.10ms（代理开销≈0）。帧数降到 S+G+U+O+e = 5 往返/查询。
   5. 剩余结构（按火焰图）：ObTxDesc 相关栈 56.6%——每次 tx RPC 回包携带完整 ObTxDesc 序列化（S/G/U 各一次），prepare/snapshot/reuse 本身也是远程调用；PendingRequest condvar 机制 16%。下一步候选：autocommit 只读语句无状态读（S/G/U 全省，复用 reserved_snapshot_version 钉住）、'e' 惰性释放、回包 desc 裁剪。
+
+## 2026-09-22 方向修订：单进程 + NamespaceRegistry（讨论结论，先不做）
+
+### 动因与前提
+
+- IPC 通信优化已到基线：点查帧数从 7~8 往返压到 5 往返（S+G+U+O+e），单板 RTT ~55μs，8t 直连 7384 QPS vs 单体 53231。剩余差距主体是结构性的：每查询多次同步往返 + tx 镜像每 RPC 全量序列化（火焰图 56.6% CPU）。shm ringbuffer 通道估到顶仍差单体 1.5~2 倍。**结论：SQL↔存储的进程边界本身是性能根因，消息模型优化到顶也追不平单体。**
+- 前提变化（用户拍板）：不需要故障隔离；不需要资源隔离（挤爆可接受）；v1 不跨机。
+- 关键洞察：fork 能力全部在存储层（目录树/COW/例外表），与进程边界无关。worker 进程里真正 per-ns 的只有 3 样（schema service、到存储的连接、生命周期管理），bootstrap 15 步里其余 12 步（SQL factories、executor 单例、tz、kvcache 等）全是全局初始化、只因多进程才被重复 N 份。
+
+### 终态形态
+
+- 回到单进程：SQL+存储同进程（热路径回到原生函数调用，单体性能天然持平）；namespace = 进程内轻量对象。
+- 命名三件套（已定）：
+  - `Namespace`：身份与持久元数据（ns_id、名字、fork 血缘、存储根引用）。长久存在，crate/fork/drop 才变。
+  - `NamespaceRuntime`：ns 在进程内的运行时持有物（schema service 实例、plan cache 实例、刷新状态）。**纯数据对象，不绑线程**；懒创建（首次登录）、可销毁。等价于原 worker 进程的内核。
+  - `NamespaceRegistry`：唯一新全局，`ns_id → (Namespace, NamespaceRuntime*)`，生命周期归它管。
+  - 不叫 NsContext：`Context` 在库内已是 per-查询/执行语义（ObSqlContext/ObExecContext），会误导生命周期判断。`Ns` 只做局部变量缩写。
+- 为什么不是 OB 多租户 2.0：OB MTL 的痛苦来自 per-tenant 复制运行时资源（线程/内存/IO/事务服务）；这里只复制元数据缓存，运行资源全共享（正是"不要故障/资源隔离"换来的架构红利）。
+
+### ns 感知最小化
+
+- ns 边界只存在于 catalog 层。存储引擎/事务/执行器/block cache 全部 tablet_id 寻址，零 ns 感知（"存储只认 tablet"原则的兑现）；存储层看不到表名、SQL、会话。
+- ns 上下文注入点只有两处：登录 session 绑定（`root@ns` → registry 查一次 → session 缓存 `NamespaceRuntime*`）、后台任务派发（DDL 任务元数据表本来就 per-ns）。
+- 查询热路径改动 ~5-10 个入口（`ob_sql.cpp:1115` 类）：schema guard 从 session 的 ns 取，下游经 `ObSqlSchemaGuard` 传递的现状不动。
+- `GCTX.schema_service_` 381 处引用：一次性改完（149 处在 rootserver/ddl_task，任务上下文自带 ns），**不留线程局部当前 ns 之类的过渡机制**（过渡机制容易留下来变成第二类全局）。
+- 建议倾向（待最终确认）：plan cache per-ns 实例（失效语义干净）；ns 懒建（boot 不随 ns 数膨胀）；IPC 层代码在单进程跑通后删除（删除即验证无隐藏依赖）；内存分配打 ns tag 只观测不隔离。
+
+### 模块边界：靠机制不靠纪律
+
+- 双缝设计：
+  1. SQL↔存储缝 = `INamespaceStorage` 接口（~15 方法：数据面 get_row/open_scan 融合首批/fetch_batch/put、事务面 prepare/commit/abort/resolve_snapshot、namespace 面 fork/create/drop/directory/exceptions）。**v20 IPC 协议的帧语义直接沉淀为进程内接口**——融合 scan、自动关闭、游标不变式、tx 去重全部保留为接口语义，只删序列化。接口按值语义、无共享指针跨界、显式版本号设计，未来跨机可在同一条缝补 remote adapter。
+  2. per-ns 状态缝 = `NamespaceRuntime*`，唯一入口 session/task，registry 是唯一新全局；`GCTX.schema_service_` 彻底删除。
+- bazel 可见性门禁（仓库已有地基）：`MODULE.bazel`（8.2.1）+ 20 个 BUILD.bazel + `src/storage` 已有 `default_visibility=private` 和 `STORAGE_PUBLIC_HEADER_ROOTS/PRIVATE_HEADERS` 公私划分。缝做成独立 target 显式授 visibility，未声明依赖的包编译期就 include 不到；`layering_check` 掐"include 了但没声明 deps"。若 bazel 尚非完整出货链路，先作为 CI 架构门禁目标，不影响 CMake 出货。
+- 实例化生命周期：存储引擎改成实例对象（进程内单实例，boot 建/shutdown 销；构造时向 SQL 层注入 `INamespaceStorage*`，测试注入 fake）。ns 可创建销毁 = fork/drop 的产品语义本身。不搞"所有代码不许碰全局"的原教旨改造，保留少数根全局（registry、config），访问收敛到构造注入+显式传递。
+
+### 空 namespace：模板 ns（已确认方向）
+
+- `CREATE NAMESPACE db1` = fork 内置 `__template__` ns；`FORK INSTANCE db2 FROM db1` = fork db1。**两条用户路径收敛为一套机制**（目录树 fork + 例外表 + 懒物化全部复用）。
+- `__template__`：boot 时建好（或首次需要时建），物理持有全部系统表，永不对外服务；registry 标 internal，登录/DDL 路由直接拒绝（机制保证"只放系统表"，锚点大小才有上界）。
+- 锚点有界性：模板永不写，钉住的只是创建时刻一个版本的系统表（MB 级固定锚点，不随时间增长）；子 ns 写系统表走已验证的 COW 物化逐页释放；系统升级时重建模板、原子换、旧锚点等引用清零回收。
+- 附带收益：系统表结构升级时模板是天然参照物。
+
+### GC/回收语义（代码核实结论）
+
+- 元数据树页：mark-and-sweep（`PROTOTYPE_V9_METADATA_GC`），页粒度，引用只钉可达路径，不整树连坐。
+- 物理 tablet：`encoded(ns_id, tablet_id)` 恰好归属一个 ns（最近物化它的祖先），后代沿链解析（`resolve_inherited_tablet`，cap 逐跳取 min）。父删表 = 例外表 tombstone（带 drop_scn），物理 tablet 按 tablet 粒度逐个回收——无"引用一行钉住整个快照"的连坐。
+- **MVCC 版本面是粗的（已知限制）**：fork 注册 `tablet_id_=0`（=全部本地 tablet）的全局 `SNAPSHOT_FOR_MULTI_VERSION` pin（`namespace_fork_kernel_prototype.cpp:2110`），fork SCN 之后所有 pre-fork tablet 的行版本全部保留到引用清零；fork 后新建的表不受影响（其版本本就在水位之上）。
+- 历史对照：fork database/table v1 逐 tablet `batch_acquire_snapshot`（`ob_fork_table_util.cpp:445`），粒度细但 O(表数×tablet数) 慢；namespace fork v1 在 worker 启动时逐 tablet 物化（3000 表 bootstrap 3.5 分钟的元凶）；当前全局 pin 是 O(1) fork 换来的。**共识：任何 O(tablet 数) 的工作不回 fork 关键路径。**
+- pin 粒度收敛方案（记录，先不做）：fork 时全局 pin 不动；子首次物化后/定期评估，对剩余未物化的继承 tablet 批量注册 per-tablet pin（`batch_acquire_snapshot` 现成），撤全局 pin；之后每次物化单独释放一个 pin。只读子认语义地板（全局 pin 挂到 drop——它可能读任何继承表的 fork 时刻数据，这部分保留任何方案省不掉）；写入子渐进松绑，父的热点表逐个解套。
+
+### 已知限制与 TODO（记录，先不做）
+
+- 父 ns 有活子代时拒绝 drop 父（`namespace_fork_kernel_prototype.cpp` 注释自承 prototype 简化；目录模型本意是 source snapshot 保留支持父先删）。
+- tablet 级行版本钉住的观测：每血缘共享字节数/最老 pin SCN 视图，让钉子可见。
+- 后台 detach 作业（长命只读子的主动物化解套）：TODO，v1 不做。
+- `check_sys_schema_change` 81ms 全表扫（用户明确先不做）。
+- fork→可用当前 ~1.2s；单进程化后无进程 spawn/bootstrap，预计进入 100ms 量级。
