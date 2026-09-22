@@ -57,6 +57,15 @@
 - 客户端数据通道第一版不依赖端口（无跨机）；内部控制/存储通道保持 fork 管道帧（stdin/stdout，slot 复用），不动。
 - Windows：首选 AF_UNIX（Win10 1803+ 原生支持，与 socket 模型同构）；named pipe 只在"官方客户端直连 Worker"的可选场景才需要——mariadb-c-connect 在 Windows 仅支持 named pipe 的限制不影响两端都是我们自己代码的内部通道。
 
+### 2026-09-22 方向修订：代理下沉到 ns1 Worker（已确认方向）
+
+- 决策：客户端入口代理从共享进程下沉到 ns1 Worker；共享进程删除客户端 NIO，纯化为存储引擎 + fork 控制面。Worker 是唯一 MySQL 端点的定位不变，只是"薄路由"也搬进 Worker。
+- 动机与收益：共享进程零客户端协议表面、零代理连接；ns1 Worker 复用自身已有的 MySQL NIO 事件循环做异步 splice，比共享端"每连接一个 poll 泵线程"更省——事件循环总数从 1+N（共享代理 + N Worker）降为 N。
+- 已确认代价：入口可用性绑死 ns1 Worker（其崩溃/重启 = 全 namespace 客户端断连，影响秒级：共享进程 SIGCHLD 感知后重生再监听）；代理 CPU/每连接缓冲计入 ns1 内存与 CPU 预算。
+- 已否决变体：ns0 专职 gateway Worker（无 namespace、只代理）。它要多一套 NIO + 一个完整进程（约 100MB RSS / 21 线程），资源零节省，仅换入口与数据面故障隔离——留作未来入口 HA 需求出现时的升级位，路由代码两者通用。
+- 实施两步走：第一步只移代理（共享删客户端 NIO，ns1 Worker 加路由模式），supervisor/spawn 留在共享进程；第二步把控制/存储通道从 spawn 继承管道改为 dial-back（共享进程监听内部 UDS，Worker 启动后回连注册），之后 spawn/respawn 移交 ns1 Worker。dial-back 是前置——否则 ns1 spawn 出的子进程管道另一端落在 ns1 手里，到不了共享进程；改成回连后 spawn 与通道建立解耦，谁来拉 Worker 都自由，Windows 上也更干净。Worker 死亡感知届时靠存储通道断开（共享进程天然可见），不再依赖 SIGCHLD 父子关系。
+- TLS 坑位不变：入口移到 ns1 后仍是同一个 greeting → 路由 → 字节流 splice 流水线，TLS upgrade 空钩子、PROXY v2、端到端 TLS 结论全部沿用。
+
 ### 工作清单
 
 - Step 1（已完成）：Worker 客户端接入点从随机 TCP 端口改为 Unix socket；就绪帧发布 endpoint 字符串；删除 `SEEKDB_NAMESPACE_SQL_WORKER_LISTEN` 开关；UDS 直连保留为排障通道。
@@ -299,3 +308,9 @@
   4. DDL 栅栏实测通过：单会话 CREATE→INSERT→ALTER→SELECT 立即见新列；跨会话建表立即可见。
   5. 测试锚点修复：探测消除后 sql_worker 套件 `run_timeouts` 失去 SCANS_RELEASED 打印来源（原来靠探测会话短命 ReadScans 析构）。改为 `ReadScans::process` 的 'X' close 分支每次关闭打印 `remaining=<关闭后剩余>`——取消关闭未耗尽 scan、慢客户端排空后关闭耗尽 scan 都能观测，与 V10_SCAN_OPEN 每 open 打印对称（均属插桩去留 TODO）。
   6. obperf 采样（worker pid）：IPC 同步原语主导——cond_wait/broadcast 乒乓、malloc churn、gettimeofday 插桩、`PendingRequest::take`、`ObTxDesc` 每请求序列化。后续结构优化方向：通道批化/唤醒模型、事务描述复用、插桩剥离。
+- 2026-09-22 通信协议优化第一轮（sql_worker full / direct full PASS；a0_measure 实测）：
+  1. 帧级核算（1t sysbench，按日志计数）：优化前每条点查 = 'O'+'F'+'X'+'e' + 事务 RPC S×2/G/U ≈ 7~8 次同步往返。单板 RTT ~55μs。
+  2. scan 协议改造：'O' open 融合首批 fetch（点查一次往返拿到行）；耗尽即自动关闭（共享端 fetch 到 end 直接erase，worker 端 end 即弃 handle 不再发 'X'）。取消路径仍走 'X'，慢客户端排空走自动关闭，SCANS_RELEASED 两个观测点都保留。不变式：handle>0 ⟺ 共享端 scan 存活。
+  3. 事务 RPC 去重：`start_stmt` 对 `prepare_tx_for_statement` 相邻调用两次（ob_sql_trans_control 上游固有），服务端 prepare 幂等，worker shim 层用 thread_local 记录上次 prepared 的 tx，同 tx 任何其他 RPC 或失败即失效——第二个 S 跳过。修过一个错位 bug：fetch_batch 多写一个 ret 号导致 'O' 回包错位，bootstrap 全崩 -4002。
+  4. 实测（oltp_point_select 4×100k，ps-mode=disable）：直连 1t 1096→**1412 QPS**（0.91→0.71ms）、8t 5472→**7384**（1.46→1.08ms）；代理 8t **7243**/1.10ms（代理开销≈0）。帧数降到 S+G+U+O+e = 5 往返/查询。
+  5. 剩余结构（按火焰图）：ObTxDesc 相关栈 56.6%——每次 tx RPC 回包携带完整 ObTxDesc 序列化（S/G/U 各一次），prepare/snapshot/reuse 本身也是远程调用；PendingRequest condvar 机制 16%。下一步候选：autocommit 只读语句无状态读（S/G/U 全省，复用 reserved_snapshot_version 钉住）、'e' 惰性释放、回包 desc 裁剪。
