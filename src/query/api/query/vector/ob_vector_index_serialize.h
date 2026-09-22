@@ -26,10 +26,6 @@
 
 namespace oceanbase
 {
-namespace storage
-{
-class ObTableScanParam;
-}
 namespace share
 {
 
@@ -140,13 +136,11 @@ public:
   struct CbParam : public ObIStreamBuf::CbParam {
     CbParam(ObNewRowIterator *iter,
             ObIAllocator *allocator,
-            const common::ObLobReadOptions &lob_read_options,
-            storage::ObTableScanParam *scan_param = nullptr)
+            const common::ObLobReadOptions &lob_read_options)
       : iter_(iter),
         allocator_(allocator),
         lob_read_options_(&lob_read_options),
         str_iter_(nullptr),
-        scan_param_(scan_param),
         stream_size_(0),
         stream_size_valid_(false)
     {}
@@ -167,6 +161,7 @@ public:
              && nullptr != lob_read_options_->read_service_;
     }
     virtual int prepare_stream_size() override;
+    int prepare_stream_size(blocksstable::ObDatumRow *first_row);
     virtual int get_stream_size(int64_t &size) const override
     {
       int ret = stream_size_valid_ ? OB_SUCCESS : OB_NOT_SUPPORTED;
@@ -177,7 +172,6 @@ public:
     ObIAllocator *allocator_;
     const common::ObLobReadOptions *lob_read_options_;
     ObTextStringIter *str_iter_;
-    storage::ObTableScanParam *scan_param_;
     int64_t stream_size_;
     bool stream_size_valid_;
   };

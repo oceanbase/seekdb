@@ -694,15 +694,14 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
           new_adapter = adapter;
         }
       }
+      ObArenaAllocator tmp_allocator("VectorAdaptor", OB_MALLOC_NORMAL_BLOCK_SIZE);
+      ObHNSWDeserializeCallback::CbParam param(
+          snapshot_idx_iter, &tmp_allocator, lob_read_options);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ob_write_string(allocator, row->storage_datums_[0].get_string(), key_prefix))) {
+      } else if (OB_FAIL(param.prepare_stream_size(row))) {
       } else if (OB_FAIL(iter_table_rescan(snapshot_scan_param, table_scan_iter))) {
       } else {
-  
-        ObArenaAllocator tmp_allocator("VectorAdaptor", OB_MALLOC_NORMAL_BLOCK_SIZE);
-        ObHNSWDeserializeCallback::CbParam param(
-            snapshot_idx_iter, &tmp_allocator, lob_read_options, &snapshot_scan_param);
-    
         ObHNSWDeserializeCallback callback(static_cast<void*>(new_adapter));
         ObIStreamBuf::Callback cb = callback;
         // ToDo: concurrency with weakread
