@@ -55,6 +55,9 @@ public:
   }
 
   int initialize_expand_access();
+  int get_expand_scan_op_ids(uint64_t &source_scan_op_id,
+                             uint64_t &edge_scan_op_id,
+                             uint64_t &target_scan_op_id) const;
   const GraphPathDesc &get_path_desc() const { return path_desc_; }
   const GraphExpandAccessDesc &get_expand_access_desc() const
   { return expand_access_desc_; }

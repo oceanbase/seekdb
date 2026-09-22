@@ -1179,11 +1179,19 @@ int ObStaticEngineCG::generate_spec(GraphFeedbackLoopLogOp &op,
                                     const bool in_root_job)
 {
   int ret = OB_SUCCESS;
+  uint64_t source_scan_op_id = OB_INVALID_ID;
+  uint64_t edge_scan_op_id = OB_INVALID_ID;
+  uint64_t target_scan_op_id = OB_INVALID_ID;
   UNUSED(in_root_job);
   if (OB_FAIL(generate_recursive_pump_spec(op, spec))) {
+  } else if (OB_FAIL(op.get_expand_scan_op_ids(
+                 source_scan_op_id, edge_scan_op_id, target_scan_op_id))) {
+    LOG_WARN("failed to get graph expand scan operator ids", K(ret));
   } else {
     spec.set_graph_path(op.get_path_desc());
     spec.set_expand_access(op.get_expand_access_desc());
+    spec.set_expand_scan_ops(source_scan_op_id, edge_scan_op_id,
+                             target_scan_op_id);
   }
   return ret;
 }

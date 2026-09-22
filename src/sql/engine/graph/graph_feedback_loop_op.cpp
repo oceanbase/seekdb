@@ -18,6 +18,7 @@
 #include "sql/engine/graph/graph_feedback_loop_op.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "share/ob_errno.h"
+#include "sql/engine/table/ob_table_scan_op.h"
 
 #include <algorithm>
 #include <utility>
@@ -27,6 +28,25 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
+
+namespace
+{
+
+const ObTableScanSpec *find_table_scan_spec(const ObOpSpec *root,
+                                            uint64_t op_id)
+{
+  const ObTableScanSpec *result = nullptr;
+  if (root != nullptr && root->get_id() == op_id && root->is_table_scan()) {
+    result = static_cast<const ObTableScanSpec *>(root);
+  }
+  for (uint32_t i = 0; result == nullptr && root != nullptr
+                         && i < root->get_child_cnt(); ++i) {
+    result = find_table_scan_spec(root->get_child(i), op_id);
+  }
+  return result;
+}
+
+} // namespace
 
 GraphFeedbackFrontier::GraphFeedbackFrontier(ObIAllocator &allocator,
                                              GraphExpand &expand,
@@ -278,15 +298,66 @@ GraphFeedbackLoopSpec::GraphFeedbackLoopSpec(common::ObIAllocator &allocator,
 {
 }
 
+int GraphFeedbackLoopSpec::resolve_expand_scan_specs(
+    const ObTableScanSpec *&source_scan,
+    const ObTableScanSpec *&edge_scan,
+    const ObTableScanSpec *&target_scan) const
+{
+  int ret = OB_SUCCESS;
+  source_scan = find_table_scan_spec(get_left(), source_scan_op_id_);
+  edge_scan = find_table_scan_spec(get_right(), edge_scan_op_id_);
+  target_scan = find_table_scan_spec(get_right(), target_scan_op_id_);
+  if (OB_UNLIKELY(!expand_access_desc_.is_valid())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid graph expand access descriptor", K(ret),
+             K_(expand_access_desc));
+  } else if (OB_UNLIKELY(source_scan_op_id_ == OB_INVALID_ID
+                         || edge_scan_op_id_ == OB_INVALID_ID
+                         || target_scan_op_id_ == OB_INVALID_ID
+                         || source_scan_op_id_ == edge_scan_op_id_
+                         || source_scan_op_id_ == target_scan_op_id_
+                         || edge_scan_op_id_ == target_scan_op_id_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("graph expand table scan binding is invalid", K(ret),
+             K_(source_scan_op_id), K_(edge_scan_op_id),
+             K_(target_scan_op_id));
+  } else if (OB_ISNULL(source_scan) || OB_ISNULL(edge_scan)
+             || OB_ISNULL(target_scan)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("graph expand table scan spec is missing", K(ret),
+             K_(expand_access_desc), K(source_scan), K(edge_scan),
+             K(target_scan));
+  } else if (OB_UNLIKELY(source_scan->ref_table_id_
+                             != expand_access_desc_.source_table_id_
+                         || edge_scan->ref_table_id_
+                             != expand_access_desc_.edge_table_id_
+                         || edge_scan->tsc_ctdef_.scan_ctdef_.ref_table_id_
+                             != expand_access_desc_.edge_access_table_id_
+                         || target_scan->ref_table_id_
+                             != expand_access_desc_.target_table_id_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("graph expand table scan spec does not match its descriptor",
+             K(ret), K_(expand_access_desc), KPC(source_scan), KPC(edge_scan),
+             KPC(target_scan));
+  }
+  return ret;
+}
+
 int GraphFeedbackLoopOp::inner_open()
 {
   int ret = OB_SUCCESS;
+  const ObTableScanSpec *source_scan = nullptr;
+  const ObTableScanSpec *edge_scan = nullptr;
+  const ObTableScanSpec *target_scan = nullptr;
   if (OB_UNLIKELY(!get_graph_spec().get_path_desc().is_valid()
                   || !get_graph_spec().get_expand_access_desc().is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid graph feedback physical descriptor", K(ret),
              K(get_graph_spec().get_path_desc()),
              K(get_graph_spec().get_expand_access_desc()));
+  } else if (OB_FAIL(get_graph_spec().resolve_expand_scan_specs(
+                 source_scan, edge_scan, target_scan))) {
+    LOG_WARN("failed to resolve graph expand table scan specs", K(ret));
   } else if (OB_FAIL(RecursivePumpOp::inner_open())) {
   }
   return ret;
@@ -307,7 +378,10 @@ OB_SERIALIZE_MEMBER((GraphFeedbackLoopSpec, RecursivePumpSpec),
                     path_desc_.path_mode_,
                     path_desc_.row_shape_,
                     path_desc_.need_path_,
-                    expand_access_desc_);
+                    expand_access_desc_,
+                    source_scan_op_id_,
+                    edge_scan_op_id_,
+                    target_scan_op_id_);
 
 } // namespace sql
 } // namespace oceanbase

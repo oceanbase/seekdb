@@ -31,7 +31,9 @@ namespace
 {
 
 const double GRAPH_FEEDBACK_ESTIMATE_LIMIT = 1.0e15;
+const char *GRAPH_SEED_VERTEX_ALIAS = "__g_seed_vertex";
 const char *GRAPH_STEP_EDGE_ALIAS = "__g_step_edge";
+const char *GRAPH_STEP_VERTEX_ALIAS = "__g_step_vertex";
 
 double bounded_graph_estimate_add(double left, double right)
 {
@@ -99,18 +101,19 @@ void estimate_bounded_graph_feedback(double seed_rows,
   }
 }
 
-const ObLogTableScan *find_step_edge_scan(const ObLogicalOperator *root)
+const ObLogTableScan *find_internal_scan(const ObLogicalOperator *root,
+                                         const char *table_alias)
 {
   const ObLogTableScan *result = nullptr;
   if (root != nullptr && root->get_type() == LOG_TABLE_SCAN) {
     const ObLogTableScan *scan = static_cast<const ObLogTableScan *>(root);
-    if (scan->get_table_name().case_compare(GRAPH_STEP_EDGE_ALIAS) == 0) {
+    if (scan->get_table_name().case_compare(table_alias) == 0) {
       result = scan;
     }
   }
   for (int64_t i = 0; result == nullptr && root != nullptr
                       && i < root->get_num_of_child(); ++i) {
-    result = find_step_edge_scan(root->get_child(i));
+    result = find_internal_scan(root->get_child(i), table_alias);
   }
   return result;
 }
@@ -147,18 +150,28 @@ const char *path_mode_name(GraphPathMode path_mode)
 int GraphFeedbackLoopLogOp::initialize_expand_access()
 {
   int ret = OB_SUCCESS;
+  const ObLogicalOperator *anchor = get_child(first_child);
   const ObLogicalOperator *step = get_child(second_child);
+  const ObLogTableScan *source_scan = nullptr;
   const ObLogTableScan *edge_scan = nullptr;
+  const ObLogTableScan *target_scan = nullptr;
   share::schema::ObSchemaGetterGuard *schema_guard = nullptr;
   if (OB_ISNULL(get_plan())
       || OB_ISNULL(schema_guard = get_plan()->get_optimizer_context().get_schema_guard())
-      || OB_ISNULL(step)) {
+      || OB_ISNULL(anchor) || OB_ISNULL(step)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("graph feedback access dependencies are missing", K(ret),
-             K(get_plan()), K(schema_guard), K(step));
-  } else if (OB_ISNULL(edge_scan = find_step_edge_scan(step))) {
+             K(get_plan()), K(schema_guard), K(anchor), K(step));
+  } else if (OB_ISNULL(source_scan = find_internal_scan(
+                           anchor, GRAPH_SEED_VERTEX_ALIAS))
+             || OB_ISNULL(edge_scan = find_internal_scan(
+                              step, GRAPH_STEP_EDGE_ALIAS))
+             || OB_ISNULL(target_scan = find_internal_scan(
+                                step, GRAPH_STEP_VERTEX_ALIAS))) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("graph feedback edge scan is missing", K(ret), KPC(step));
+    LOG_WARN("graph feedback internal scan is missing", K(ret),
+             K(source_scan), K(edge_scan), K(target_scan), KPC(anchor),
+             KPC(step));
   } else if (OB_FAIL(expand_access_desc_.init(
                  path_desc_, edge_scan->get_index_table_id(), *schema_guard))) {
     LOG_WARN("failed to initialize graph expand access", K(ret), K_(path_desc),
@@ -167,6 +180,33 @@ int GraphFeedbackLoopLogOp::initialize_expand_access()
     step_access_method_ = expand_access_desc_.uses_adjacency_index()
         ? GraphFeedbackAccessMethod::INDEX_SCAN
         : GraphFeedbackAccessMethod::FULL_SCAN;
+  }
+  return ret;
+}
+
+int GraphFeedbackLoopLogOp::get_expand_scan_op_ids(
+    uint64_t &source_scan_op_id,
+    uint64_t &edge_scan_op_id,
+    uint64_t &target_scan_op_id) const
+{
+  int ret = OB_SUCCESS;
+  const ObLogTableScan *source_scan = find_internal_scan(
+      get_child(first_child), GRAPH_SEED_VERTEX_ALIAS);
+  const ObLogTableScan *edge_scan = find_internal_scan(
+      get_child(second_child), GRAPH_STEP_EDGE_ALIAS);
+  const ObLogTableScan *target_scan = find_internal_scan(
+      get_child(second_child), GRAPH_STEP_VERTEX_ALIAS);
+  if (OB_ISNULL(source_scan) || OB_ISNULL(edge_scan) || OB_ISNULL(target_scan)
+      || source_scan->get_op_id() == OB_INVALID_ID
+      || edge_scan->get_op_id() == OB_INVALID_ID
+      || target_scan->get_op_id() == OB_INVALID_ID) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("graph expand scans are not numbered", K(ret), K(source_scan),
+             K(edge_scan), K(target_scan));
+  } else {
+    source_scan_op_id = source_scan->get_op_id();
+    edge_scan_op_id = edge_scan->get_op_id();
+    target_scan_op_id = target_scan->get_op_id();
   }
   return ret;
 }
