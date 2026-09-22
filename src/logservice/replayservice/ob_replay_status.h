@@ -262,6 +262,9 @@ protected:
 // need be protected by lock
 class ObReplayServiceSubmitTask : public ObReplayServiceTask
 {
+  friend class ObReplayStatus;
+private:
+  typedef common::ObFunction<int(const palf::LSN &, palf::PalfBufferIterator &)> IteratorOpener;
 public:
   ObReplayServiceSubmitTask(): ObReplayServiceTask(),
     next_to_submit_lsn_(),
@@ -305,6 +308,12 @@ public:
                        K(base_scn_),
                        K(iterator_));
 private:
+  int init_(const palf::LSN &base_lsn,
+            const share::SCN &base_scn,
+            ObReplayStatus *replay_status,
+            const IteratorOpener &iterator_opener);
+  int prepare_iterator_(const palf::LSN &base_lsn,
+                        const IteratorOpener &iterator_opener);
   int update_next_to_submit_lsn_(const palf::LSN &lsn);
   int update_next_to_submit_scn_(const share::SCN &scn);
   void set_next_to_submit_log_info_(const palf::LSN &lsn, const share::SCN &scn);
@@ -574,6 +583,9 @@ private:
   // Register callback and submit the currently initialized submit_log_task
   int enable_(const palf::LSN &base_lsn,
               const share::SCN &base_scn);
+  int enable_(const palf::LSN &base_lsn,
+              const share::SCN &base_scn,
+              const ObReplayServiceSubmitTask::IteratorOpener &iterator_opener);
   // Unregister callback and clear task
   int disable_();
   bool is_replay_enabled_() const;

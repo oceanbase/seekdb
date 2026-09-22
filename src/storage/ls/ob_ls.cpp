@@ -468,6 +468,11 @@ int ObLS::start_local_log_(const int64_t deadline_us, const bool activate_handle
                "state", logservice::submit_iterator_release_state_str(release_state),
                K(release_retry_count), K(deadline_us));
     } else {
+      if (0 == release_retry_count) {
+        LOG_INFO("replay submit iterator release blocked",
+                 "state", logservice::submit_iterator_release_state_str(release_state),
+                 K(deadline_us));
+      }
       ++release_retry_count;
       ob_usleep(1000);
     }
