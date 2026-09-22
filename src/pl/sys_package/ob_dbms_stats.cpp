@@ -3973,8 +3973,8 @@ int ObDbmsStats::parser_for_all_clause(const ParseNode *for_all_node,
         // do nothing
       } else if (!col_param.is_valid_opt_col() || col_param.is_text_column()) {
         // do nothing
-      } else
-        OB_ASSERT_SUCC(ret = compute_bucket_num(column_params.at(i), size_conf));
+      } else if (OB_FAIL(compute_bucket_num(column_params.at(i), size_conf))) {
+      }
     }
   }
   return ret;
@@ -4035,8 +4035,8 @@ int ObDbmsStats::parser_for_columns_clause(const ParseNode *for_col_node,
           // do nothing
         } else if (!col_param.is_valid_opt_col()) {
           // do nothing
-        } else
-          OB_ASSERT_SUCC(ret = compute_bucket_num(column_params.at(j), size_conf));
+        } else if (OB_FAIL(compute_bucket_num(column_params.at(j), size_conf))) {
+        }
       }
     }
   }

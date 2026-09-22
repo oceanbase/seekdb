@@ -91,13 +91,13 @@ int ObForkDatabaseResolver::resolve(const ParseNode &parse_tree)
       } else {
         bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
         ObCollationType cs_type = CS_TYPE_INVALID;
-        {
-          OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(cs_type));
-          if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(cs_type, perserve_lettercase, dst_database_name))) {
-          } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(cs_type, perserve_lettercase, src_database_name))) {
-          } else if (OB_FAIL(deep_copy_str(dst_database_name, fork_database_arg.dst_database_name_))) {
-          } else if (OB_FAIL(deep_copy_str(src_database_name, fork_database_arg.src_database_name_))) {
-          }
+        if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
+        } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
+                    cs_type, perserve_lettercase, dst_database_name))) {
+        } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
+                    cs_type, perserve_lettercase, src_database_name))) {
+        } else if (OB_FAIL(deep_copy_str(dst_database_name, fork_database_arg.dst_database_name_))) {
+        } else if (OB_FAIL(deep_copy_str(src_database_name, fork_database_arg.src_database_name_))) {
         }
       }
     }

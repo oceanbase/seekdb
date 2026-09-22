@@ -325,13 +325,9 @@ int ObExprDateAdd::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, Ob
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 3) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(rt_expr.args_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(rt_expr.args_[0]) ||
-              OB_ISNULL(rt_expr.args_[1]) ||
-              OB_ISNULL(rt_expr.args_[2])) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
+    ASSERT_COND(rt_expr.args_ != nullptr);
+    ASSERT_COND(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr && rt_expr.args_[2] != nullptr);
     rt_expr.eval_func_ = ObExprDateAdd::calc_date_add;
   }
   return ret;
@@ -353,13 +349,9 @@ int ObExprDateSub::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, Ob
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 3) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(rt_expr.args_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(rt_expr.args_[0]) ||
-              OB_ISNULL(rt_expr.args_[1]) ||
-              OB_ISNULL(rt_expr.args_[2])) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
+    ASSERT_COND(rt_expr.args_ != nullptr);
+    ASSERT_COND(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr && rt_expr.args_[2] != nullptr);
     rt_expr.eval_func_ = ObExprDateSub::calc_date_sub;
   }
   return ret;
@@ -402,9 +394,8 @@ int ObExprLastDay::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, Ob
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
+    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
     rt_expr.eval_func_ = ObExprLastDay::calc_last_day;
   }
   return ret;

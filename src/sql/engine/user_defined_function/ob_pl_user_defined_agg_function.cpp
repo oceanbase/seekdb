@@ -95,8 +95,8 @@ int ObPlAggUdfFunction::init(ObSQLSessionInfo *session_info,
     exec_ctx_ = exec_ctx;
     type_id_ = type_id;
     result_type_ = result_type;
-    {
-      OB_ASSERT_SUCC(ret = process_init_pl_agg_udf(pl_obj));
+    if (OB_FAIL(process_init_pl_agg_udf(pl_obj))) {
+    } else {
     }
   }
   return ret;
@@ -234,14 +234,12 @@ int ObPlAggUdfFunction::process_calc_pl_agg_udf(ObObjParam &pl_obj,
                                           params_type, udf_params))) {
         } else if (OB_ISNULL(udf_params)) {
           ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(get_package_routine_info(routine_name, routine_info, all_params_type))) {
+        } else if (OB_FAIL(call_pl_engine_exectue_udf(*udf_params, routine_info, tmp_result))) {
+        } else if (OB_UNLIKELY(udf_params->count() < 1)) {
+          ret = OB_ERR_UNEXPECTED;
         } else {
-          OB_ASSERT_SUCC(ret = get_package_routine_info(routine_name, routine_info, all_params_type));
-          if (OB_FAIL(call_pl_engine_exectue_udf(*udf_params, routine_info, tmp_result))) {
-          } else if (OB_UNLIKELY(udf_params->count() < 1)) {
-            ret = OB_ERR_UNEXPECTED;
-          } else {
-            udf_params->at(0).copy_value_or_obj(pl_obj, true);
-          }
+          udf_params->at(0).copy_value_or_obj(pl_obj, true);
         }
       }
     }
@@ -304,24 +302,23 @@ int ObPlAggUdfFunction::process_get_pl_agg_udf_result(ObObjParam &pl_obj,
         ObUDFParamDesc(ObUDFParamDesc::LOCAL_OUT, 1)))) {
     } else if (OB_FAIL(all_params_type.push_back(flags_type))) {
     } else if (OB_FAIL(all_params_desc.push_back(ObUDFParamDesc()))) {
+    } else if (OB_FAIL(get_package_routine_info(routine_name, routine_info, all_params_type))) {
+    } else if (OB_FAIL(call_pl_engine_exectue_udf(*udf_params, routine_info, tmp_result))) {
+    } else if (OB_UNLIKELY(udf_params->count() < 2)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(ObDatumCast::check_can_cast(udf_params->at(1).get_type(),
+                                            udf_params->at(1).get_collation_type(),
+                                            result_type_.get_type(),
+                                            result_type_.get_collation_type()))) {
     } else {
-      OB_ASSERT_SUCC(ret = get_package_routine_info(routine_name, routine_info, all_params_type));
-      if (OB_FAIL(call_pl_engine_exectue_udf(*udf_params, routine_info, tmp_result))) {
-      } else if (OB_UNLIKELY(udf_params->count() < 2)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(ObDatumCast::check_can_cast(udf_params->at(1).get_type(),
-                                                     udf_params->at(1).get_collation_type(), result_type_.get_type(),
-                                                     result_type_.get_collation_type()))) {
+      ObObj src_obj;
+      udf_params->at(1).copy_value_or_obj(src_obj, true);
+      ObCastMode cast_mode = CM_NONE;
+      if (OB_FAIL(ObSQLUtils::get_default_cast_mode(session_info_, cast_mode))) {
       } else {
-        ObObj src_obj;
-        udf_params->at(1).copy_value_or_obj(src_obj, true);
-        ObCastMode cast_mode = CM_NONE;
-        if (OB_FAIL(ObSQLUtils::get_default_cast_mode(session_info_, cast_mode))) {
+        ObCastCtx cast_ctx(allocator_, NULL, cast_mode, result_type_.get_collation_type(), NULL);
+        if (OB_FAIL(ObObjCaster::to_type(result_type_.get_type(), cast_ctx, src_obj, result))) {
         } else {
-          ObCastCtx cast_ctx(allocator_, NULL, cast_mode, result_type_.get_collation_type(), NULL);
-          if (OB_FAIL(ObObjCaster::to_type(result_type_.get_type(), cast_ctx, src_obj, result))) {
-          } else {
-          }
         }
       }
     }

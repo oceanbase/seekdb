@@ -402,8 +402,8 @@ int ObDMLService::check_lob_column_changed(ObEvalCtx &eval_ctx,
   INIT_SUCC(ret);
   int64_t timeout = 0;
   int64_t query_st = eval_ctx.exec_ctx_.get_my_session()->get_query_start_time();
-  {
-    OB_ASSERT_SUCC(ret = eval_ctx.exec_ctx_.get_my_session()->get_query_timeout(timeout));
+  if (OB_FAIL(eval_ctx.exec_ctx_.get_my_session()->get_query_timeout(timeout))) {
+  } else {
     timeout += query_st;
     ObString old_str = old_datum.get_string();
     ObString new_str = new_datum.get_string();
@@ -1375,8 +1375,8 @@ int ObDMLService::init_del_rtdef(ObDMLRtCtx &dml_rtctx,
           DASDelCtxList& del_ctx_list = root_ctx->get_das_ctx().get_das_del_ctx_list();
           if (ObDMLService::has_nested_delete_ctx(del_table_id, del_ctx_list)) {
             // for table deleted at parent session too, no need to create a new hash set
-            OB_ASSERT_SUCC(
-                ret = ObDMLService::get_nested_delete_ctx(del_table_id, del_ctx_list, del_rtdef.se_rowkey_dist_ctx_));
+            if (OB_FAIL(ObDMLService::get_nested_delete_ctx(del_table_id, del_ctx_list, del_rtdef.se_rowkey_dist_ctx_))) {
+            }
           } else {
             // for table not deleted at parent session, create a new hash set and add to the list at root ctx
             DmlRowkeyDistCtx del_ctx;
@@ -1419,8 +1419,8 @@ int ObDMLService::init_del_rtdef(ObDMLRtCtx &dml_rtctx,
           DASDelCtxList& del_ctx_list = root_ctx->get_das_ctx().get_das_del_ctx_list();
           if (ObDMLService::has_nested_delete_ctx(del_table_id, del_ctx_list)) {
             // Reuse the root context when an outer cascade already deletes this table.
-            OB_ASSERT_SUCC(
-                ret = ObDMLService::get_nested_delete_ctx(del_table_id, del_ctx_list, del_rtdef.se_rowkey_dist_ctx_));
+            if (OB_FAIL(ObDMLService::get_nested_delete_ctx(del_table_id, del_ctx_list, del_rtdef.se_rowkey_dist_ctx_))) {
+            }
           }
         }
       }

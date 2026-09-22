@@ -44,9 +44,8 @@ int ObExprWeekOfYear::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
+    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
     rt_expr.eval_func_ = ObExprWeekOfYear::calc_weekofyear;
   }
   return ret;
@@ -121,9 +120,8 @@ int ObExprWeekDay::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
+    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
     rt_expr.eval_func_ = ObExprWeekDay::calc_weekday;
   }
   return ret;
@@ -284,12 +282,13 @@ int ObExprYearWeek::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1 && rt_expr.arg_cnt_ != 2) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (2 == rt_expr.arg_cnt_ && OB_ISNULL(rt_expr.args_[1])) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
-    rt_expr.eval_func_ = ObExprYearWeek::calc_yearweek;
+    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
+    if (2 == rt_expr.arg_cnt_ && OB_ISNULL(rt_expr.args_[1])) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      rt_expr.eval_func_ = ObExprYearWeek::calc_yearweek;
+    }
   }
   return ret;
 }
@@ -401,12 +400,13 @@ int ObExprWeek::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1 && rt_expr.arg_cnt_ != 2) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (2 == rt_expr.arg_cnt_ && OB_ISNULL(rt_expr.args_[1])) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
-    rt_expr.eval_func_ = ObExprWeek::calc_week;
+    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
+    if (2 == rt_expr.arg_cnt_ && OB_ISNULL(rt_expr.args_[1])) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      rt_expr.eval_func_ = ObExprWeek::calc_week;
+    }
   }
   return ret;
 }

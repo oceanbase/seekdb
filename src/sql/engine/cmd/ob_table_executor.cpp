@@ -354,28 +354,30 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
           common::sqlclient::ObISQLConnection *conn = NULL;
           common::sqlclient::ObISQLConnectionGuard conn_guard;
 
-          {
-            OB_ASSERT_SUCC(ret = my_session->get_autocommit(original_autocommit));
-            if (need_set_autocommit && !original_autocommit && OB_FAIL(my_session->set_autocommit(true))) {
-              LOG_WARN("failed to set autocommit", K(ret));
-            } else {
-              if (OB_FAIL(query::ObInnerSQLConnectionAccess::create_connection_with_external_session(my_session,
-                                                                                                     conn_guard))) {
-              } else if (OB_ISNULL(conn = conn_guard.get_ptr())) {
-                ret = OB_INNER_STAT_ERROR;
-              } else if (OB_FAIL(conn->execute_write(ins_sql.ptr(), affected_rows, true))) {
-              }
-
-              if (need_set_autocommit && !original_autocommit) {
-                int tmp_ret = OB_SUCCESS;
-                if (OB_TMP_FAIL(my_session->set_autocommit(original_autocommit))) {
-                  ret = (OB_SUCCESS == ret) ? tmp_ret : ret;
-                  LOG_WARN("failed to set autocommit", K(ret), K(tmp_ret), K(original_autocommit));
-                }
-              }
-              conn = NULL;
-              conn_guard.reset();
+          if (OB_FAIL(my_session->get_autocommit(original_autocommit))) {
+          } else if (need_set_autocommit &&
+                     !original_autocommit && OB_FAIL(my_session->set_autocommit(true))) {
+            LOG_WARN("failed to set autocommit", K(ret));
+          } else {
+            if (OB_FAIL(
+                    query::ObInnerSQLConnectionAccess::
+                        create_connection_with_external_session(
+                            my_session, conn_guard))) {
+            } else if (OB_ISNULL(conn = conn_guard.get_ptr())) {
+              ret = OB_INNER_STAT_ERROR;
+            } else if (OB_FAIL(
+                           conn->execute_write(ins_sql.ptr(), affected_rows, true))) {
             }
+
+            if (need_set_autocommit && !original_autocommit) {
+              int tmp_ret = OB_SUCCESS;
+              if (OB_TMP_FAIL(my_session->set_autocommit(original_autocommit))) {
+                ret = (OB_SUCCESS == ret) ? tmp_ret : ret;
+                LOG_WARN("failed to set autocommit", K(ret), K(tmp_ret), K(original_autocommit));
+              }
+            }
+            conn = NULL;
+            conn_guard.reset();
           }
         }
 

@@ -142,8 +142,8 @@ int ObExprUniform::eval_next_int_value(const ObExpr &expr,
     } else {
       int64_t	seed = rand_val.get_int();
       int64_t res = 0;
-      {
-        OB_ASSERT_SUCC(ret = uniform_ctx->generate_next_value(seed, res));
+      if (OB_FAIL(uniform_ctx->generate_next_value(seed, res))) {
+      } else {
         res_datum.set_int(res);
       }
     }
@@ -177,8 +177,8 @@ int ObExprUniform::eval_next_real_value(const ObExpr &expr,
     } else {
       int64_t	seed = rand_val.get_int();
       double res = 0.0;
-      {
-        OB_ASSERT_SUCC(ret = uniform_ctx->generate_next_value(seed, res));
+      if (OB_FAIL(uniform_ctx->generate_next_value(seed, res))) {
+      } else {
         res_datum.set_double(res);
       }
     }
@@ -217,12 +217,10 @@ int ObExprUniform::eval_next_number_value(const ObExpr &expr,
       number::ObNumber res;
       char local_buff[number::ObNumber::MAX_BYTE_LEN];
       ObDataBuffer local_alloc(local_buff, number::ObNumber::MAX_BYTE_LEN);
-      {
-        OB_ASSERT_SUCC(ret = uniform_ctx->generate_next_value(seed, d));
-        if (OB_FAIL(ObJsonBaseUtil::double_to_number(d, local_alloc, res))) {
-        } else {
-          res_datum.set_number(res);
-        }
+      if (OB_FAIL(uniform_ctx->generate_next_value(seed, d))) {
+      } else if (OB_FAIL(ObJsonBaseUtil::double_to_number(d, local_alloc, res))) {
+      } else {
+        res_datum.set_number(res);
       }
     }
   }

@@ -1540,17 +1540,17 @@ int ObSharedNothingTmpFile::generate_data_flush_info_(
     ret = OB_ITER_END;
   } else if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_VIRTUAL_PAGE_ID == copy_begin_page_virtual_id)) {
     ret = OB_ERR_UNEXPECTED;
-  } else {
-    OB_ASSERT_SUCC(ret = get_flush_end_page_id_(copy_end_page_id, need_flush_tail));
-    if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_FLUSH_SEQUENCE != inner_flush_ctx_.flush_seq_ &&
-                    flush_sequence != inner_flush_ctx_.flush_seq_ && flush_sequence != flush_task.get_flush_seq())) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (ObTmpFileFlushTask::TaskType::META == flush_task.get_type()) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(collect_flush_data_page_id_(flush_task, info, data_flush_context, copy_begin_page_id,
-                                                   copy_begin_page_virtual_id, copy_end_page_id, flush_sequence,
-                                                   need_flush_tail))) {
-    }
+  } else if (OB_FAIL(get_flush_end_page_id_(copy_end_page_id, need_flush_tail))) {
+  } else if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_FLUSH_SEQUENCE != inner_flush_ctx_.flush_seq_
+              && flush_sequence != inner_flush_ctx_.flush_seq_
+              && flush_sequence != flush_task.get_flush_seq())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (ObTmpFileFlushTask::TaskType::META == flush_task.get_type()) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(collect_flush_data_page_id_(flush_task, info, data_flush_context,
+                                                 copy_begin_page_id, copy_begin_page_virtual_id,
+                                                 copy_end_page_id,
+                                                 flush_sequence, need_flush_tail))) {
   }
 
   return ret;
@@ -1669,8 +1669,8 @@ int ObSharedNothingTmpFile::collect_flush_data_page_id_(
     info.fd_ = fd_;
     // set flush_info in file inner_flush_ctx
     if (OB_FAIL(info.file_handle_.init(this))) {
-    } else
-      OB_ASSERT_SUCC(ret = inner_flush_ctx_.data_flush_infos_.at(flush_info_idx).init_by_tmp_file_flush_info(info));
+    } else if (OB_FAIL(inner_flush_ctx_.data_flush_infos_.at(flush_info_idx).init_by_tmp_file_flush_info(info))) {
+    }
   }
 
   // override error code, we will handle OB_ITER_END in flush mgr
@@ -1750,8 +1750,8 @@ int ObSharedNothingTmpFile::generate_meta_flush_info_(
     info.type_ = ObTmpFileFlushInfo::Type::META;
     // set flush_info in flush_task
     if (OB_FAIL(info.file_handle_.init(this))) {
-    } else
-      OB_ASSERT_SUCC(ret = flush_infos.at(flush_info_idx).init_by_tmp_file_flush_info(info));
+    } else if (OB_FAIL(flush_infos.at(flush_info_idx).init_by_tmp_file_flush_info(info))) {
+    }
   }
 
   // override error code, we will handle OB_ITER_END in flush mgr

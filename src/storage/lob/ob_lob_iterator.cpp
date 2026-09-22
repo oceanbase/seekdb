@@ -230,22 +230,26 @@ int ObLobPartialUpdateRowIter::get_next_row(int64_t &offset, ObLobMetaInfo *&old
         old_data = partial_data_.old_data_[idx.old_data_idx_].data_;
       }
       if (! idx.is_add_) {
-        {
-          OB_ASSERT_SUCC(ret = ObLobMetaUtil::construct(*param_, param_->lob_data_->id_, idx.seq_id_, old_data.length(),
-                                                        old_data.length(), old_data, old_meta_info_));
-          {
-            OB_ASSERT_SUCC(ret = ObLobMetaUtil::construct(
-                               *param_, param_->lob_data_->id_, idx.seq_id_, idx.byte_len_, idx.byte_len_,
-                               ObString(idx.byte_len_, chunk_data.data_.ptr() + idx.pos_), new_meta_info_));
-            offset = idx.offset_;
-            old_info = &old_meta_info_;
-            new_info = &new_meta_info_;
-          }
+        if (OB_FAIL(ObLobMetaUtil::construct(
+            *param_, param_->lob_data_->id_, idx.seq_id_,
+            old_data.length(), old_data.length(), old_data,
+            old_meta_info_))) {
+        } else if (OB_FAIL(ObLobMetaUtil::construct(
+            *param_, param_->lob_data_->id_, idx.seq_id_,
+            idx.byte_len_, idx.byte_len_,
+            ObString(idx.byte_len_, chunk_data.data_.ptr() + idx.pos_),
+            new_meta_info_))) {
+        } else {
+          offset = idx.offset_;
+          old_info = &old_meta_info_;
+          new_info = &new_meta_info_;
         }
+      } else if (OB_FAIL(ObLobMetaUtil::construct(
+          *param_, param_->lob_data_->id_, ObString(),
+          idx.byte_len_, idx.byte_len_,
+          ObString(idx.byte_len_, chunk_data.data_.ptr() + idx.pos_),
+          new_meta_info_))) {
       } else {
-        OB_ASSERT_SUCC(
-            ret = ObLobMetaUtil::construct(*param_, param_->lob_data_->id_, ObString(), idx.byte_len_, idx.byte_len_,
-                                           ObString(idx.byte_len_, chunk_data.data_.ptr() + idx.pos_), new_meta_info_));
         offset = idx.offset_;
         new_info = &new_meta_info_;
       }

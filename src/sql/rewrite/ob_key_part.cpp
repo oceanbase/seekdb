@@ -489,8 +489,8 @@ int ObInKeyPart::get_obj_cmp_funcs(ObIArray<obj_cmp_func> &cmp_funcs)
       ret = OB_ERR_UNEXPECTED;
     } else {
       const ObObjTypeClass obj_tc = cur_param->vals_.at(0).get_meta().get_type_class();
-      {
-        OB_ASSERT_SUCC(ret = ObObjCmpFuncs::get_cmp_func(obj_tc, obj_tc, CO_EQ, cmp_op_func));
+      if (OB_FAIL(ObObjCmpFuncs::get_cmp_func(obj_tc, obj_tc, CO_EQ, cmp_op_func))) {
+      } else {
         OB_ASSERT(cmp_op_func != NULL);
         ret = cmp_funcs.push_back(cmp_op_func);
       }

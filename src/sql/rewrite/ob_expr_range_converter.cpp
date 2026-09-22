@@ -351,10 +351,8 @@ int ObExprRangeConverter::gen_column_cmp_node(const ObRawExpr &l_expr,
     if (null_safe && OB_FAIL(ctx_.null_safe_value_idxs_.push_back(const_val))) {
     //if current expr can be extracted to range, just store the expr
     } else if (OB_FAIL(fill_range_node_for_basic_cmp(cmp_type, key_idx, const_val, *range_node))) {
-    } else {
-      OB_ASSERT_SUCC(ret = check_expr_precise(*const_expr, result_type, column_meta->column_type_));
-      if (expr_depth == 0 && OB_FAIL(set_column_flags(key_idx, cmp_type))) {
-      }
+    } else if (OB_FAIL(check_expr_precise(*const_expr, result_type, column_meta->column_type_))) {
+    } else if (expr_depth == 0 && OB_FAIL(set_column_flags(key_idx, cmp_type))) {
     }
   }
   if (OB_SUCC(ret) && nullptr == range_node) {
@@ -411,14 +409,12 @@ int ObExprRangeConverter::gen_row_column_cmp_node(const ObIArray<const ObColumnR
         } else if (OB_FAIL(check_calculable_expr_valid(const_expr, is_valid))) {
         } else if (!is_valid) {
           // do nothing
-        } else {
-          OB_ASSERT_SUCC(ret = check_expr_precise(*const_expr, *calc_type, column_meta->column_type_));
-          if (OB_FAIL(key_idxs.push_back(key_idx))) {
-          } else if (OB_FAIL(const_exprs.push_back(const_expr))) {
-          } else if (OB_FAIL(column_metas.push_back(column_meta))) {
-          } else if (key_idx < min_offset) {
-            min_offset = key_idx;
-          }
+        } else if (OB_FAIL(check_expr_precise(*const_expr, *calc_type, column_meta->column_type_))) {
+        } else if (OB_FAIL(key_idxs.push_back(key_idx))) {
+        } else if (OB_FAIL(const_exprs.push_back(const_expr))) {
+        } else if (OB_FAIL(column_metas.push_back(column_meta))) {
+        } else if (key_idx < min_offset) {
+          min_offset = key_idx;
         }
       }
     }
@@ -482,25 +478,24 @@ int ObExprRangeConverter::gen_row_column_cmp_node(const ObIArray<const ObColumnR
         } else if (OB_FAIL(check_calculable_expr_valid(const_expr, is_valid))) {
         } else if (!is_valid) {
           // do nothing
+        } else if (OB_FAIL(check_expr_precise(*const_expr, *calc_type, column_meta->column_type_))) {
+        } else if (OB_FAIL(get_final_expr_idx(const_expr, column_meta, const_val))) {
+        } else if (OB_FAIL(key_idxs.push_back(key_idx))) {
+        } else if (OB_FAIL(val_idxs.push_back(const_val))) {
+        } else if (null_safe && OB_FAIL(ctx_.null_safe_value_idxs_.push_back(const_val))) {
+        } else if (expr_depth == 0 && OB_FAIL(set_column_flags(key_idx, cmp_type))) {
+        } else if (i > 0 && OB_FAIL(ctx_.non_first_in_row_value_idxs_.push_back(const_val))) {
+          LOG_WARN("failed to push back value idx", K(const_val));
+        } else if (i < l_column_exprs.count() - 1 &&
+                   OB_NOT_NULL(r_const_exprs.at(i+1)) &&
+                   OB_FAIL(check_decimal_int_range_cmp_valid(r_const_exprs.at(i+1), is_valid_decimal_int_range_cmp))) {
         } else {
-          OB_ASSERT_SUCC(ret = check_expr_precise(*const_expr, *calc_type, column_meta->column_type_));
-          if (OB_FAIL(get_final_expr_idx(const_expr, column_meta, const_val))) {
-          } else if (OB_FAIL(key_idxs.push_back(key_idx))) {
-          } else if (OB_FAIL(val_idxs.push_back(const_val))) {
-          } else if (null_safe && OB_FAIL(ctx_.null_safe_value_idxs_.push_back(const_val))) {
-          } else if (expr_depth == 0 && OB_FAIL(set_column_flags(key_idx, cmp_type))) {
-          } else if (i > 0 && OB_FAIL(ctx_.non_first_in_row_value_idxs_.push_back(const_val))) {
-            LOG_WARN("failed to push back value idx", K(const_val));
-          } else if (i < l_column_exprs.count() - 1 && OB_NOT_NULL(r_const_exprs.at(i + 1)) &&
-                     OB_FAIL(
-                         check_decimal_int_range_cmp_valid(r_const_exprs.at(i + 1), is_valid_decimal_int_range_cmp))) {
-          } else {
-            bool is_lt_with_lob = (cmp_type == T_OP_LT || cmp_type == T_OP_LE) &&
-                                  (ctx_.final_exprs_flag_.at(const_val) & OB_FINAL_EXPR_WITH_LOB_TRUNCATE) ==
-                                      OB_FINAL_EXPR_WITH_LOB_TRUNCATE;
-            last_key_idx = key_idx;
-            check_next = !is_lt_with_lob && is_valid_decimal_int_range_cmp;
-          }
+          bool is_lt_with_lob = (cmp_type == T_OP_LT || cmp_type == T_OP_LE) &&
+                                (ctx_.final_exprs_flag_.at(const_val)
+                                     & OB_FINAL_EXPR_WITH_LOB_TRUNCATE)
+                                     == OB_FINAL_EXPR_WITH_LOB_TRUNCATE;
+          last_key_idx = key_idx;
+          check_next = !is_lt_with_lob && is_valid_decimal_int_range_cmp;
         }
       }
     }
@@ -735,11 +730,9 @@ int ObExprRangeConverter::convert_like_expr(const ObRawExpr *expr, int64_t expr_
                                               escape_ch, column_meta, start_val_idx, end_val_idx))) {
     } else if (OB_FAIL(alloc_range_node(range_node))) {
     } else if (OB_FAIL(fill_range_node_for_like(key_idx, start_val_idx, end_val_idx, *range_node))) {
-    } else {
-      OB_ASSERT_SUCC(ret =
-                         check_expr_precise(*pattern_expr, pattern_expr->get_result_type(), column_meta->column_type_));
-      if (expr_depth == 0 && OB_FAIL(set_column_flags(key_idx, T_OP_LIKE))) {
-      }
+    } else if (OB_FAIL(check_expr_precise(*pattern_expr, pattern_expr->get_result_type(),
+                                          column_meta->column_type_))) {
+    } else if (expr_depth == 0 && OB_FAIL(set_column_flags(key_idx, T_OP_LIKE))) {
     }
   }
   if (OB_SUCC(ret) && nullptr == range_node) {
@@ -945,10 +938,9 @@ int ObExprRangeConverter::get_single_in_range_node(const ObColumnRefRawExpr *col
         cur_can_be_extract = false;
         cur_always_true = true;
       } else if (OB_FAIL(get_final_expr_idx(const_expr, column_meta, val_idx))) {
-      } else {
-        OB_ASSERT_SUCC(ret = check_expr_precise(*const_expr, const_expr->get_result_type(), column_meta->column_type_));
-        if (OB_FAIL(val_idxs.push_back(val_idx))) {
-        }
+      } else if (OB_FAIL(check_expr_precise(*const_expr, const_expr->get_result_type(),
+                                            column_meta->column_type_))) {
+      } else if (OB_FAIL(val_idxs.push_back(val_idx))) {
       }
 
       if (OB_SUCC(ret) && !cur_can_be_extract && cur_always_true) {
@@ -1102,9 +1094,9 @@ int ObExprRangeConverter::get_row_in_range_ndoe(const ObRawExpr &l_expr,
           cur_can_be_extract = false;
           cur_always_true = true;
         } else if (OB_FAIL(OB_FAIL(cur_val_exprs.push_back(const_expr)))) {
-        } else
-          OB_ASSERT_SUCC(ret =
-                             check_expr_precise(*const_expr, const_expr->get_result_type(), column_meta->column_type_));
+        } else if (OB_FAIL(check_expr_precise(*const_expr, const_expr->get_result_type(),
+                                              column_meta->column_type_))) {
+        }
 
         if (OB_SUCC(ret) && !cur_can_be_extract) {
           if (cur_always_true) {
@@ -1279,11 +1271,10 @@ int ObExprRangeConverter::get_single_not_in_range_node(const ObColumnRefRawExpr 
       } else if (!is_valid) {
         is_precise = false;
       } else if (OB_FAIL(get_final_expr_idx(const_expr, column_meta, val_idx))) {
-      } else {
-        OB_ASSERT_SUCC(ret = check_expr_precise(*const_expr, const_expr->get_result_type(), column_meta->column_type_));
-        if (OB_FALSE_IT(is_precise &= ctx_.cur_is_precise_)) {
-        } else if (OB_FAIL(val_idxs.push_back(val_idx))) {
-        }
+      } else if (OB_FAIL(check_expr_precise(*const_expr, const_expr->get_result_type(),
+                                            column_meta->column_type_))) {
+      } else if (OB_FALSE_IT(is_precise &= ctx_.cur_is_precise_)) {
+      } else if (OB_FAIL(val_idxs.push_back(val_idx))) {
       }
     }
     if (OB_FAIL(ret)) {
@@ -1337,14 +1328,16 @@ int ObExprRangeConverter::check_calculable_expr_valid(const ObRawExpr *expr,
   bool can_ignore_check = false;
   if (expr->has_flag(CNT_DYNAMIC_PARAM)) {
     is_valid = true;
-  } else {
-    OB_ASSERT_SUCC(ret = ignore_inner_generate_expr(expr, can_ignore_check));
-    if (can_ignore_check) {
-      is_valid = true;
-    } else if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx_.exec_ctx_, expr, val, is_valid, allocator_,
-                                                                 ignore_error && ctx_.ignore_calc_failure_,
-                                                                 ctx_.expr_constraints_))) {
-    }
+  } else if (OB_FAIL(ignore_inner_generate_expr(expr, can_ignore_check))) {
+  } else if (can_ignore_check) {
+    is_valid = true;
+  } else if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx_.exec_ctx_,
+                                                               expr,
+                                                               val,
+                                                               is_valid,
+                                                               allocator_,
+                                                               ignore_error && ctx_.ignore_calc_failure_,
+                                                               ctx_.expr_constraints_))) {
   }
   return ret;
 }
@@ -2200,11 +2193,12 @@ int ObExprRangeConverter::gen_implicit_cast_range(const ObColumnRefRawExpr *colu
                                            end_range))) {
     } else if (OB_FAIL(range_nodes.push_back(end_range))) {
     } else if (OB_FAIL(ObRangeGraphGenerator::and_range_nodes(range_nodes, ctx_, range_node))) {
-    } else {
-      OB_ASSERT_SUCC(ret = set_extract_implicit_is_precise(*column_expr, *const_expr, cmp_type, is_precise));
-      if (!is_precise) {
-        ctx_.cur_is_precise_ = false;
-      }
+    } else if (OB_FAIL(set_extract_implicit_is_precise(*column_expr,
+                                                       *const_expr,
+                                                       cmp_type,
+                                                       is_precise))) {
+    } else if (!is_precise) {
+      ctx_.cur_is_precise_ = false;
     }
   } else if (T_OP_GT == cmp_type ||
              T_OP_GE == cmp_type ||
@@ -2475,14 +2469,14 @@ int ObExprRangeConverter::gen_row_implicit_cast_range(const ObIArray<const ObCol
         } else if (OB_FAIL(ordered_calc_types.push_back(calc_types.at(val_idx)))) {
         } else if (ObOptimizerUtil::find_item(implicit_cast_idxs, val_idx)) {
           ObRawExprResType *res_type = nullptr;
-          {
-            OB_ASSERT_SUCC(ret = set_extract_implicit_is_precise(*column_exprs.at(val_idx), *const_exprs.at(val_idx),
-                                                                 cmp_type, is_precise));
-            if (OB_FAIL(cast_idxs.push_back(ordered_const_exprs.count() - 1))) {
-            } else if (OB_FAIL(cast_origin_const_exprs.push_back(const_exprs.at(val_idx)))) {
-            } else if (!is_precise) {
-              cur_is_precise = false;
-            }
+          if (OB_FAIL(set_extract_implicit_is_precise(*column_exprs.at(val_idx),
+                                                      *const_exprs.at(val_idx),
+                                                      cmp_type,
+                                                      is_precise))) {
+          } else if (OB_FAIL(cast_idxs.push_back(ordered_const_exprs.count() - 1))) {
+          } else if (OB_FAIL(cast_origin_const_exprs.push_back(const_exprs.at(val_idx)))) {
+          } else if (!is_precise) {
+            cur_is_precise = false;
           }
         }
       } else {

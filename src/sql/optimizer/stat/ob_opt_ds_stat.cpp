@@ -36,7 +36,8 @@ int ObOptDSStat::assign(const ObOptDSStat& other)
   sample_block_ratio_ = other.sample_block_ratio_;
   ds_degree_ = other.ds_degree_;
   stat_expired_time_ = other.stat_expired_time_;
-  OB_ASSERT_SUCC(ret = col_stats_.assign(other.col_stats_));
+  if (OB_FAIL(col_stats_.assign(other.col_stats_))) {
+  }
   return ret;
 }
 

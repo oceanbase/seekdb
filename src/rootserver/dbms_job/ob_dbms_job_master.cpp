@@ -226,15 +226,13 @@ int ObDBMSJobMaster::init(ObISQLClient *sql_client,
     // do-nothing
   } else if (OB_FAIL(scheduler_task_.init(&ready_queue_))) {
   } else if (OB_FAIL(scheduler_thread_.init(1, 1))) {
+  } else if (OB_FAIL(job_utils_.init(sql_client))) {
+  } else if (OB_FAIL(alive_jobs_.create(1024))) {
+  } else if (OB_ISNULL(ObCurTraceId::get())) {
+    ret = OB_ERR_UNEXPECTED;
   } else {
-    OB_ASSERT_SUCC(ret = job_utils_.init(sql_client));
-    if (OB_FAIL(alive_jobs_.create(1024))) {
-    } else if (OB_ISNULL(ObCurTraceId::get())) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      trace_id_ = ObCurTraceId::get();
-      inited_ = true;
-    }
+    trace_id_ = ObCurTraceId::get();
+    inited_ = true;
   }
   LOG_INFO("dbms job master inited!", K(ret));
   return ret;

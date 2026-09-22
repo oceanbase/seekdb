@@ -266,7 +266,9 @@ int ObOptEstCost::cost_union_all(const ObCostMergeSetInfo &info,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  OB_ASSERT_SUCC(ret = vector_model.cost_union_all(info, cost));
+  if (OB_FAIL(vector_model.cost_union_all(info,
+                                   cost))) {
+  }
   return ret;
 }
 
@@ -276,7 +278,9 @@ int ObOptEstCost::cost_merge_set(const ObCostMergeSetInfo &info,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  OB_ASSERT_SUCC(ret = vector_model.cost_merge_set(info, cost));
+  if (OB_FAIL(vector_model.cost_merge_set(info,
+                                   cost))) {
+  }
   return ret;
 }
 
@@ -286,7 +290,9 @@ int ObOptEstCost::cost_hash_set(const ObCostHashSetInfo &info,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  OB_ASSERT_SUCC(ret = vector_model.cost_hash_set(info, cost));
+  if (OB_FAIL(vector_model.cost_hash_set(info,
+                                  cost))) {
+  }
   return ret;
 }
 
@@ -402,7 +408,11 @@ int ObOptEstCost::cost_window_function(double rows,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  OB_ASSERT_SUCC(ret = vector_model.cost_window_function(rows, width, win_func_cnt, cost));
+  if (OB_FAIL(vector_model.cost_window_function(rows,
+                                        width,
+                                        win_func_cnt,
+                                        cost))) {
+  }
   return ret;
 }
 
@@ -412,7 +422,9 @@ int ObOptEstCost::cost_insert(ObDelUpCostInfo& cost_info,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  OB_ASSERT_SUCC(ret = vector_model.cost_insert(cost_info, cost));
+  if (OB_FAIL(vector_model.cost_insert(cost_info,
+                                cost))) {
+  }
   return ret;
 }
 
@@ -422,7 +434,9 @@ int ObOptEstCost::cost_update(ObDelUpCostInfo& cost_info,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  OB_ASSERT_SUCC(ret = vector_model.cost_update(cost_info, cost));
+  if (OB_FAIL(vector_model.cost_update(cost_info,
+                                cost))) {
+  }
   return ret;
 }
 
@@ -432,7 +446,9 @@ int ObOptEstCost::cost_delete(ObDelUpCostInfo& cost_info,
 {
   int ret = OB_SUCCESS;
   GET_COST_MODEL();
-  OB_ASSERT_SUCC(ret = vector_model.cost_delete(cost_info, cost));
+  if (OB_FAIL(vector_model.cost_delete(cost_info,
+                                cost))) {
+  }
   return ret;
 }
 

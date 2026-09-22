@@ -539,8 +539,8 @@ int ObLogTableScan::generate_access_exprs()
     }
 
     if (OB_SUCC(ret)) {
-      {
-        OB_ASSERT_SUCC(ret = add_mapping_columns_for_vt(access_exprs_));
+      if (OB_FAIL(add_mapping_columns_for_vt(access_exprs_))) {
+      } else {
       }
     }
   }

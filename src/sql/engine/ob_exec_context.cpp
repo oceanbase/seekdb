@@ -873,8 +873,8 @@ int ObExecContext::init_physical_plan_ctx(const ObPhysicalPlan &plan)
   bool supprt_check_pdml_affected_row = false;
   if (OB_ISNULL(phy_plan_ctx_) || OB_ISNULL(my_session_) || OB_ISNULL(sql_ctx_)) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(my_session_->get_foreign_key_checks(foreign_key_checks))) {
   } else {
-    OB_ASSERT_SUCC(ret = my_session_->get_foreign_key_checks(foreign_key_checks));
     int64_t start_time = my_session_->get_query_start_time();
     int64_t plan_timeout = 0;
     const ObPhyPlanHint &phy_plan_hint = plan.get_phy_plan_hint();
@@ -885,7 +885,8 @@ int ObExecContext::init_physical_plan_ctx(const ObPhysicalPlan &plan)
     if (OB_UNLIKELY(phy_plan_hint.query_timeout_ > 0)) {
       plan_timeout = phy_plan_hint.query_timeout_;
     } else {
-      OB_ASSERT_SUCC(ret = my_session_->get_query_timeout(plan_timeout));
+      if (OB_FAIL(my_session_->get_query_timeout(plan_timeout))) {
+      }
     }
     if (OB_SUCC(ret) && OB_FAIL(phy_plan_ctx_->reserve_param_space(plan.get_param_count()))) {
     }

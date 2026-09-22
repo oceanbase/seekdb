@@ -1140,8 +1140,8 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
         const ObPackageInfo *package_info = nullptr;
         if (parent_id != OB_INVALID_INDEX) {
           db_id = parent_id;
-        } else
-          OB_ASSERT_SUCC(ret = session_info.get_database_id(db_id));
+        } else if (OB_FAIL(session_info.get_database_id(db_id))) {
+        }
 
         if (OB_SUCC(ret)) {
           // db_id == OB_INVALID_ID searches the system namespace.
@@ -1448,11 +1448,9 @@ int ObPLExternalNS::resolve_external_type_by_name(const ObString &db_name, const
     ObString package_name = org_package_name;
     ObString type_name = org_type_name;
     if (db_name.empty()) {
-      {
-        OB_ASSERT_SUCC(ret = resolve_ctx_.session_info_.get_database_id(db_id));
-        if (OB_INVALID_ID == db_id) {
-          ret = OB_ERR_BAD_DATABASE;
-        }
+      if (OB_FAIL(resolve_ctx_.session_info_.get_database_id(db_id))) {
+      } else if (OB_INVALID_ID == db_id) {
+        ret = OB_ERR_BAD_DATABASE;
       }
     } else {
       if (OB_FAIL(resolve_ctx_.schema_guard_.get_database_id(db_name, db_id))) {

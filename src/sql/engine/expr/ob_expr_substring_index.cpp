@@ -97,10 +97,8 @@ int ObExprSubstringIndex::cg_expr(ObExprCGCtx &, const ObRawExpr &raw_expr, ObEx
     ret = OB_ERR_UNEXPECTED;
   } else if (rt_expr.arg_cnt_ != 3 || OB_ISNULL(rt_expr.args_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(rt_expr.args_[0]) || OB_ISNULL(rt_expr.args_[1]) ||
-               OB_ISNULL(rt_expr.args_[2])) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
+    ASSERT_COND(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr && rt_expr.args_[2] != nullptr);
     rt_expr.eval_func_ = eval_substring_index;
     rt_expr.eval_batch_func_ = ObExprSubstringIndex::eval_substring_index_batch;
   }

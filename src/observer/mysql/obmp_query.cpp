@@ -95,131 +95,147 @@ int ObMPQuery::process()
         //session has been killed some moment ago
         ret = OB_ERR_SESSION_INTERRUPTED;
       } else if (OB_FAIL(session.check_and_init_retry_info(*cur_trace_id, sql_))) {
+      } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
+      } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(
+                  database_schema_version))) {
+      } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
+        //packet size check with session variable max_allowd_packet or net_buffer_length
+        need_disconnect = false;
+        ret = OB_ERR_NET_PACKET_TOO_LARGE;
+      } else if (OB_FAIL(session.gen_configs_in_pc_str())) {
       } else {
-        OB_ASSERT_SUCC(ret = session.get_query_timeout(query_timeout));
-        if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(database_schema_version))) {
-        } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
-          // packet size check with session variable max_allowd_packet or net_buffer_length
-          need_disconnect = false;
-          ret = OB_ERR_NET_PACKET_TOO_LARGE;
-        } else if (OB_FAIL(session.gen_configs_in_pc_str())) {
-        } else {
-          THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
-          retry_ctrl_.set_current_global_schema_version(database_schema_version);
-          session.set_pl_can_retry(true);
-          session.set_enable_mysql_compatible_dates(session.get_enable_mysql_compatible_dates_from_config());
+        THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
+        retry_ctrl_.set_current_global_schema_version(database_schema_version);
+        session.set_pl_can_retry(true);
+        session.set_enable_mysql_compatible_dates(
+          session.get_enable_mysql_compatible_dates_from_config());
 
-          bool has_more = false;
-          bool force_sync_resp = false;
-          need_response_error = false;
-          ObParser parser(THIS_WORKER.get_sql_arena_allocator(), session.get_sql_mode(), session.get_charsets4parser());
-          // For performance optimization, reduce the array length to lower the construction and destruction overhead of
-          // unused elements
-          ObSEArray<ObString, 1> queries;
-          ObMPParseStat parse_stat;
-          if (GCONF.enable_record_trace_id) {
-            PreParseResult pre_parse_result;
-            if (OB_FAIL(ObParser::pre_parse(sql_, pre_parse_result))) {
-            } else {
-              session.set_app_trace_id(pre_parse_result.trace_id_);
-              LOG_DEBUG("app trace id", "app_trace_id", pre_parse_result.trace_id_, "sessid", session.get_server_sid(),
-                        K_(sql));
-            }
+        bool has_more = false;
+        bool force_sync_resp = false;
+        need_response_error = false;
+        ObParser parser(THIS_WORKER.get_sql_arena_allocator(),
+                        session.get_sql_mode(), session.get_charsets4parser());
+        //For performance optimization, reduce the array length to lower the construction and destruction overhead of unused elements
+        ObSEArray<ObString, 1> queries;
+        ObMPParseStat parse_stat;
+        if (GCONF.enable_record_trace_id) {
+          PreParseResult pre_parse_result;
+          if (OB_FAIL(ObParser::pre_parse(sql_, pre_parse_result))) {
+          } else {
+            session.set_app_trace_id(pre_parse_result.trace_id_);
+            LOG_DEBUG("app trace id", "app_trace_id", pre_parse_result.trace_id_,
+                                      "sessid", session.get_server_sid(), K_(sql));
           }
+        }
 
-          if (OB_FAIL(ret)) {
-            // do nothing
-          } else if (OB_FAIL(parser.split_multiple_stmt(sql_, queries, parse_stat))) {
-            // Enter this branch, indicating that push_back failed due to OOM, delegate the outer code to return an
-            // error code and after entering this branch, the connection should be terminated
+        if (OB_FAIL(ret)) {
+          //do nothing
+        } else if (OB_FAIL(parser.split_multiple_stmt(sql_, queries, parse_stat))) {
+          // Enter this branch, indicating that push_back failed due to OOM, delegate the outer code to return an error code
+          // and after entering this branch, the connection should be terminated
+          need_response_error = true;
+          if (OB_ERR_PARSE_SQL == ret) {
+            need_disconnect = false;
+          }
+        } else if (OB_UNLIKELY(queries.count() <= 0)) {
+          ret = OB_ERR_UNEXPECTED;
+          need_response_error = true;//Enter this branch, the connection must be terminated, it is a critical error
+          LOG_ERROR("emtpy query count. client would have suspended. never be here!", K_(sql), K(ret));
+        } else if (OB_UNLIKELY(1 == session.get_capability().cap_flags_.OB_CLIENT_MULTI_STATEMENTS)) {
+          // Handle Multiple Statement
+          /* MySQL behavior when handling Multi-Stmt errors:
+          * After encountering the first failed SQL (including parsing or execution), stop reading subsequent data
+            *  For example:
+            *  (1) select 1; selct 2; select 3;
+            *  select 1 executes successfully, selct 2 reports a syntax error, select 3 is not executed
+            *  (2) select 1; drop table not_exists_table; select 3;
+            *  select 1 executes successfully, drop table not_exists_table reports a table does not exist error, select 3 is not executed
+            *
+            * Special note:
+            * split_multiple_stmt splits statements based on semicolons, but there might be "syntax errors",
+            * here "syntax error" does not mean select is written as selct, but "token" level syntax errors, for example the statement
+            * select 1;`select 2; select 3;
+            * In the above example, ` and ' do not form closed string tokens, the token parser will report a syntax error
+            * In the above example, queries.count() equals 2, which are select 1 and `select 2; select 3;
+          */
+          bool optimization_done = false;
+          const char *p_normal_start = nullptr;
+          if (queries.count() > 1
+            && OB_FAIL(try_batched_multi_stmt_optimization(session,
+                                                          conn,
+                                                          queries,
+                                                          parse_stat,
+                                                          optimization_done,
+                                                          async_resp_used,
+                                                          need_disconnect,
+                                                          false))) {
+          } else if (!optimization_done
+                     && session.is_enable_batched_multi_statement()
+                     && ObSQLUtils::is_enable_explain_batched_multi_statement()
+                     && ObParser::is_explain_stmt(queries.at(0), p_normal_start)) {
+            ret = OB_SUCC(ret) ? OB_NOT_SUPPORTED : ret;
+            need_disconnect = false;
             need_response_error = true;
-            if (OB_ERR_PARSE_SQL == ret) {
-              need_disconnect = false;
-            }
-          } else if (OB_UNLIKELY(queries.count() <= 0)) {
-            ret = OB_ERR_UNEXPECTED;
-            need_response_error = true; // Enter this branch, the connection must be terminated, it is a critical error
-            LOG_ERROR("emtpy query count. client would have suspended. never be here!", K_(sql), K(ret));
-          } else if (OB_UNLIKELY(1 == session.get_capability().cap_flags_.OB_CLIENT_MULTI_STATEMENTS)) {
-            // Handle Multiple Statement
-            /* MySQL behavior when handling Multi-Stmt errors:
-             * After encountering the first failed SQL (including parsing or execution), stop reading subsequent data
-             *  For example:
-             *  (1) select 1; selct 2; select 3;
-             *  select 1 executes successfully, selct 2 reports a syntax error, select 3 is not executed
-             *  (2) select 1; drop table not_exists_table; select 3;
-             *  select 1 executes successfully, drop table not_exists_table reports a table does not exist error, select
-             * 3 is not executed
-             *
-             * Special note:
-             * split_multiple_stmt splits statements based on semicolons, but there might be "syntax errors",
-             * here "syntax error" does not mean select is written as selct, but "token" level syntax errors, for
-             * example the statement select 1;`select 2; select 3; In the above example, ` and ' do not form closed
-             * string tokens, the token parser will report a syntax error In the above example, queries.count() equals
-             * 2, which are select 1 and `select 2; select 3;
-             */
-            bool optimization_done = false;
-            const char *p_normal_start = nullptr;
-            if (queries.count() > 1 &&
-                OB_FAIL(try_batched_multi_stmt_optimization(session, conn, queries, parse_stat, optimization_done,
-                                                            async_resp_used, need_disconnect, false))) {
-            } else if (!optimization_done && session.is_enable_batched_multi_statement() &&
-                       ObSQLUtils::is_enable_explain_batched_multi_statement() &&
-                       ObParser::is_explain_stmt(queries.at(0), p_normal_start)) {
-              ret = OB_SUCC(ret) ? OB_NOT_SUPPORTED : ret;
-              need_disconnect = false;
-              need_response_error = true;
-            } else if (!optimization_done) {
-              ARRAY_FOREACH(queries, i)
-              {
-                // in multistmt sql, audit_record will record multistmt_start_ts_ when count over 1
-                // queries.count()>1 -> batch,(m)sql1,(m)sql2,...    |    queries.count()=1 -> sql1
-                if (i > 0) {
-                  session.get_raw_audit_record().exec_timestamp_.multistmt_start_ts_ = ObTimeUtility::current_time();
-                }
-                need_disconnect = true;
-                // FIXME qianfu NG_TRACE_EXT(set_disconnect, OB_ID(disconnect), true, OB_ID(pos), "multi stmt begin");
-                if (OB_UNLIKELY(parse_stat.parse_fail_ && (i == parse_stat.fail_query_idx_) &&
-                                ObSQLUtils::check_need_disconnect_parser_err(parse_stat.fail_ret_))) {
-                  // Enter this branch, indicating that parsing of a query in multi_query failed, if not due to a syntax
-                  // error, then enter this branch If the current query_count is 1, then keep connecting; if greater
-                  // than 1, then it is necessary to disconnect after sending the error packet to prevent the client
-                  // from waiting indefinitely for the next response This change is to solve
-                  ret = parse_stat.fail_ret_;
-                  need_response_error = true;
-                  break;
-                } else {
-                  has_more = (queries.count() > i + 1);
-                  // Originally, it could have been designed so that the last query can always respond asynchronously
-                  // regardless of queries.count(), However, the current code implementation struggles to handle the
-                  // response packets of the same request in different threads, Therefore, only one query is allowed in
-                  // an asynchronous response for a multi-query request here.
-                  force_sync_resp = queries.count() <= 1 ? false : true;
-                  // is_part_of_multi indicates that the current SQL is one of the
-                  // statements in a multi-statement request.
-                  bool is_part_of_multi = queries.count() > 1 ? true : false;
-                  ret = process_single_stmt(ObMultiStmtItem(is_part_of_multi, i, queries.at(i)), conn, session,
-                                            has_more, force_sync_resp, async_resp_used, need_disconnect);
-                }
+          } else if (!optimization_done) {
+            ARRAY_FOREACH(queries, i) {
+              // in multistmt sql, audit_record will record multistmt_start_ts_ when count over 1
+              // queries.count()>1 -> batch,(m)sql1,(m)sql2,...    |    queries.count()=1 -> sql1
+              if (i > 0) {
+                session.get_raw_audit_record().exec_timestamp_.multistmt_start_ts_
+                                                              = ObTimeUtility::current_time();
+              }
+              need_disconnect = true;
+              //FIXME qianfu NG_TRACE_EXT(set_disconnect, OB_ID(disconnect), true, OB_ID(pos), "multi stmt begin");
+              if (OB_UNLIKELY(parse_stat.parse_fail_
+                  && (i == parse_stat.fail_query_idx_)
+                  && ObSQLUtils::check_need_disconnect_parser_err(parse_stat.fail_ret_))) {
+                // Enter this branch, indicating that parsing of a query in multi_query failed, if not due to a syntax error, then enter this branch
+                // If the current query_count is 1, then keep connecting; if greater than 1,
+                // then it is necessary to disconnect after sending the error packet to prevent the client from waiting indefinitely for the next response
+                // This change is to solve
+                ret = parse_stat.fail_ret_;
+                need_response_error = true;
+                break;
+              } else {
+                has_more = (queries.count() > i + 1);
+                // Originally, it could have been designed so that the last query can always respond asynchronously regardless of queries.count(),
+                // However, the current code implementation struggles to handle the response packets of the same request in different threads,
+                // Therefore, only one query is allowed in an asynchronous response for a multi-query request here.
+                force_sync_resp = queries.count() <= 1? false : true;
+                // is_part_of_multi indicates that the current SQL is one of the
+                // statements in a multi-statement request.
+                bool is_part_of_multi = queries.count() > 1 ? true : false;
+                ret = process_single_stmt(ObMultiStmtItem(is_part_of_multi, i, queries.at(i)),
+                                          conn,
+                                          session,
+                                          has_more,
+                                          force_sync_resp,
+                                          async_resp_used,
+                                          need_disconnect);
               }
             }
-            // The total number of statements sent over the multiple query protocol
-            EVENT_INC(SQL_MULTI_QUERY_COUNT);
-            // Sent using the multiple query protocol, but actually contains only one SQL statement count
-            if (queries.count() <= 1) {
-              EVENT_INC(SQL_MULTI_ONE_QUERY_COUNT);
-            }
-          } else { // OB_CLIENT_MULTI_STATEMENTS not enabled
-            if (OB_UNLIKELY(queries.count() != 1)) {
-              ret = OB_ERR_PARSER_SYNTAX;
-              need_disconnect = false;
-              need_response_error = true;
-            } else {
-              EVENT_INC(SQL_SINGLE_QUERY_COUNT);
-              // Handle ordinary Single Statement
-              ret = process_single_stmt(ObMultiStmtItem(false, 0, sql_), conn, session, has_more, force_sync_resp,
-                                        async_resp_used, need_disconnect);
-            }
+          }
+          // The total number of statements sent over the multiple query protocol
+          EVENT_INC(SQL_MULTI_QUERY_COUNT);
+          // Sent using the multiple query protocol, but actually contains only one SQL statement count
+          if (queries.count() <= 1) {
+            EVENT_INC(SQL_MULTI_ONE_QUERY_COUNT);
+          }
+        } else { // OB_CLIENT_MULTI_STATEMENTS not enabled
+          if (OB_UNLIKELY(queries.count() != 1)) {
+            ret = OB_ERR_PARSER_SYNTAX;
+            need_disconnect = false;
+            need_response_error = true;
+          } else {
+            EVENT_INC(SQL_SINGLE_QUERY_COUNT);
+            // Handle ordinary Single Statement
+            ret = process_single_stmt(ObMultiStmtItem(false, 0, sql_),
+                                      conn,
+                                      session,
+                                      has_more,
+                                      force_sync_resp,
+                                      async_resp_used,
+                                      need_disconnect);
           }
         }
       }

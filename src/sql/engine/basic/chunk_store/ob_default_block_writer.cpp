@@ -30,12 +30,10 @@ int ObDefaultBlockWriter::add_row(const common::ObIArray<ObExpr*> &exprs, ObEval
 {
   int ret = OB_SUCCESS;
 
-  {
-    OB_ASSERT_SUCC(ret = ensure_init());
-    if (OB_FAIL(ensure_write(exprs, ctx))) {
-    } else {
-      if (OB_FAIL(inner_add_row(exprs, ctx, stored_row))) {
-      }
+  if (OB_FAIL(ensure_init())) {
+  } else if (OB_FAIL(ensure_write(exprs, ctx))) {
+  } else {
+    if (OB_FAIL(inner_add_row(exprs, ctx, stored_row))) {
     }
   }
 
@@ -45,17 +43,15 @@ int ObDefaultBlockWriter::add_row(const common::ObIArray<ObExpr*> &exprs, ObEval
 int ObDefaultBlockWriter::add_row(const ObChunkDatumStore::StoredRow &src_sr, ObChunkDatumStore::StoredRow **dst_sr)
 {
   int ret = OB_SUCCESS;
-  {
-    OB_ASSERT_SUCC(ret = ensure_init());
-    if (OB_FAIL(ensure_write(src_sr))) {
+  if (OB_FAIL(ensure_init())) {
+  } else if (OB_FAIL(ensure_write(src_sr))) {
+  } else {
+    ObChunkDatumStore::StoredRow *sr = new (get_cur_buf())ObChunkDatumStore::StoredRow;
+    sr->assign(&src_sr);
+    if (OB_FAIL(advance(sr->row_size_))) {
     } else {
-      ObChunkDatumStore::StoredRow *sr = new (get_cur_buf()) ObChunkDatumStore::StoredRow;
-      sr->assign(&src_sr);
-      if (OB_FAIL(advance(sr->row_size_))) {
-      } else {
-        if (nullptr != dst_sr) {
-          *dst_sr = sr;
-        }
+      if (nullptr != dst_sr) {
+        *dst_sr = sr;
       }
     }
   }
@@ -67,11 +63,9 @@ int ObDefaultBlockWriter::add_row(const blocksstable::ObStorageDatum *storage_da
                                const int64_t extra_size, ObChunkDatumStore::StoredRow **stored_row)
 {
   int ret = OB_SUCCESS;
-  {
-    OB_ASSERT_SUCC(ret = ensure_init());
-    if (OB_FAIL(ensure_write(storage_datums, column_count, extra_size))) {
-    } else if (OB_FAIL(inner_add_row(storage_datums, column_count, extra_size, stored_row))) {
-    }
+  if (OB_FAIL(ensure_init())) {
+  } else if (OB_FAIL(ensure_write(storage_datums, column_count, extra_size))) {
+  } else if (OB_FAIL(inner_add_row(storage_datums, column_count, extra_size, stored_row))) {
   }
   return ret;
 }
@@ -354,10 +348,8 @@ int ObDefaultBlockWriter::ensure_write(const blocksstable::ObStorageDatum *stora
 {
   int ret = OB_SUCCESS;
   uint64_t row_size;
-  {
-    OB_ASSERT_SUCC(ret = get_row_stored_size(storage_datums, column_count, extra_size, row_size));
-    if (OB_FAIL(ensure_write(row_size))) {
-    }
+  if (OB_FAIL(get_row_stored_size(storage_datums, column_count, extra_size, row_size))) {
+  } else if (OB_FAIL(ensure_write(row_size))) {
   }
 
   return ret;

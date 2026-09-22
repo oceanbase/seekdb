@@ -242,8 +242,8 @@ int ObTransCtx::register_timeout_task_(const int64_t interval_us)
   } else if (OB_ISNULL(ls_tx_ctx_mgr_)) {
     TRANS_LOG(ERROR, "ls_tx_ctx_mgr_ is null, unexpected error", KP(ls_tx_ctx_mgr_), K_(trans_id));
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(acquire_ctx_ref_())) {
   } else {
-    OB_ASSERT_SUCC(ret = acquire_ctx_ref_());
     if (OB_FAIL(timer_->register_timeout_task(timeout_task_, interval_us))) {
       TRANS_LOG(WARN, "register timeout task error", KR(ret), K(interval_us), K_(trans_id));
       // in case of registration failure, you need to cancel ref

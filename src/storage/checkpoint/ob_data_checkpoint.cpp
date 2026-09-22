@@ -567,15 +567,14 @@ int ObDataCheckpoint::get_freezecheckpoint_info(
   int ret = OB_SUCCESS;
   freeze_checkpoint_array.reset();
   RLOCK(LS_FROZEN | NEW_CREATE | ACTIVE | PREPARE);
-  {
-    OB_ASSERT_SUCC(ret = new_create_list_.get_freezecheckpoint_info(freeze_checkpoint_array));
-    {
-      OB_ASSERT_SUCC(ret = active_list_.get_freezecheckpoint_info(freeze_checkpoint_array));
-      {
-        OB_ASSERT_SUCC(ret = prepare_list_.get_freezecheckpoint_info(freeze_checkpoint_array));
-        OB_ASSERT_SUCC(ret = ls_frozen_list_.get_freezecheckpoint_info(freeze_checkpoint_array));
-      }
-    }
+  if (OB_FAIL(new_create_list_.get_freezecheckpoint_info(
+    freeze_checkpoint_array))) {
+  } else if (OB_FAIL(active_list_.get_freezecheckpoint_info(
+    freeze_checkpoint_array))) {
+  } else if (OB_FAIL(prepare_list_.get_freezecheckpoint_info(
+    freeze_checkpoint_array))) {
+  } else if (OB_FAIL(ls_frozen_list_.get_freezecheckpoint_info(
+    freeze_checkpoint_array))) {
   }
 
   return ret;

@@ -1579,8 +1579,8 @@ int ObDelUpdLogPlan::generate_index_column_exprs(const uint64_t table_id,
   uint64_t column_id = 0;
   if (OB_ISNULL(stmt) || OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(session_info->get_binlog_row_image(binlog_row_image))) {
   } else {
-    OB_ASSERT_SUCC(ret = session_info->get_binlog_row_image(binlog_row_image));
     // 1. Firstly, add all rowkey columns
     ObSEArray<ObColumnRefRawExpr*, 4> spk_related_columns;
     ObArray<uint64_t> key_ids; //key ids: contain rowkey id, part key id

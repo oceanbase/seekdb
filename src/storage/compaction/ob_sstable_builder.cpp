@@ -302,44 +302,41 @@ int ObSSTableRebuilder::check_need_rebuild(const ObStaticMergeParam &merge_param
   bool last_macro_is_first = false;
   bool need_check_rebuild = true;
 
-  {
-    OB_ASSERT_SUCC(ret = pre_check_rebuild(merge_param, iter, need_check_rebuild));
-    if (need_check_rebuild) {
-      // find continues macro to rewrite
-      while (OB_SUCC(ret) && OB_SUCC(iter.get_next_macro_block(macro_meta))) {
-        if (check_macro_block_could_merge(macro_meta)) {
-          const int64_t macro_block_sum = macro_meta.val_.occupy_size_ + macro_meta.val_.block_size_;
-          bool need_merge = false;
-          // check last_macro_block_sum + cur_macro can be merged into one
-          if (OB_FAIL(check_cur_macro_need_merge(last_macro_block_sum, macro_meta, need_merge))) {
-          } else if (!need_merge) { // found first can't merge macro, reset collect info
-            last_macro_id = macro_meta.get_macro_id();
-            last_macro_is_first = true;
-            last_macro_block_sum = macro_block_sum;
-            multiplexed_macro_block_count = snapshot_version != macro_meta.val_.snapshot_version_
-                                                ? multiplexed_macro_block_count + 1
-                                                : multiplexed_macro_block_count;
-          } else {
-            if (last_macro_is_first && OB_FAIL(macro_id_array.push_back(last_macro_id))) {
-              STORAGE_LOG(WARN, "failed to push back macro id", K(ret), K(last_macro_id));
-            } else if (OB_FAIL(macro_id_array.push_back(macro_meta.get_macro_id()))) {
-            } else {
-              reduce_macro_block_cnt++;
-              last_macro_block_sum += macro_block_sum;
-              last_macro_is_first = false;
-            }
-          }
+  if (OB_FAIL(pre_check_rebuild(merge_param, iter, need_check_rebuild))) {
+  } else if (need_check_rebuild) {
+    // find continues macro to rewrite
+    while (OB_SUCC(ret) && OB_SUCC(iter.get_next_macro_block(macro_meta))) {
+      if (check_macro_block_could_merge(macro_meta)) {
+        const int64_t macro_block_sum = macro_meta.val_.occupy_size_ + macro_meta.val_.block_size_;
+        bool need_merge = false;
+        // check last_macro_block_sum + cur_macro can be merged into one
+        if (OB_FAIL(check_cur_macro_need_merge(last_macro_block_sum, macro_meta, need_merge))) {
+        } else if (!need_merge) { // found first can't merge macro, reset collect info
+          last_macro_id = macro_meta.get_macro_id();
+          last_macro_is_first = true;
+          last_macro_block_sum = macro_block_sum;
+          multiplexed_macro_block_count = snapshot_version != macro_meta.val_.snapshot_version_ ?
+            multiplexed_macro_block_count + 1 : multiplexed_macro_block_count;
         } else {
-          last_macro_is_first = false;
-          last_macro_block_sum = 0;
+          if (last_macro_is_first && OB_FAIL(macro_id_array.push_back(last_macro_id))) {
+            STORAGE_LOG(WARN, "failed to push back macro id", K(ret), K(last_macro_id));
+          } else if (OB_FAIL(macro_id_array.push_back(macro_meta.get_macro_id()))) {
+          } else {
+            reduce_macro_block_cnt++;
+            last_macro_block_sum += macro_block_sum;
+            last_macro_is_first = false;
+          }
         }
+      } else {
+        last_macro_is_first = false;
+        last_macro_block_sum = 0;
       }
+    }
 
-      if (OB_LIKELY(ret == OB_ITER_END)) {
-        ret = OB_SUCCESS;
-        if (iter.get_macro_block_count() * REBUILD_MACRO_BLOCK_THRESOLD / 100 >= reduce_macro_block_cnt) {
-          macro_id_array.reset();
-        }
+    if (OB_LIKELY(ret == OB_ITER_END)) {
+      ret = OB_SUCCESS;
+      if (iter.get_macro_block_count() * REBUILD_MACRO_BLOCK_THRESOLD / 100 >= reduce_macro_block_cnt) {
+        macro_id_array.reset();
       }
     }
   }

@@ -739,13 +739,11 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
       }
     };
     struct Functor handle_one_line;
-    {
-      OB_ASSERT_SUCC(ret = handle->generator.init(*(handle->exec_ctx.get_my_session()), expr_buffer,
-                                                  handle->exec_ctx.get_sql_ctx()->schema_guard_));
-      if (OB_FAIL(parse_result.prepare_allocate(handle->generator.get_field_exprs().count()))) {
-      } else {
-        handle->exec_ctx.set_use_temp_expr_ctx_cache(true);
-      }
+    if (OB_FAIL(handle->generator.init(*(handle->exec_ctx.get_my_session()), expr_buffer,
+                                       handle->exec_ctx.get_sql_ctx()->schema_guard_))) {
+    } else if (OB_FAIL(parse_result.prepare_allocate(handle->generator.get_field_exprs().count()))) {
+    } else {
+      handle->exec_ctx.set_use_temp_expr_ctx_cache(true);
     }
 
     while (OB_SUCC(ret) && ptr < end) {
@@ -1505,8 +1503,8 @@ int ObDataFragMgr::free_unused_datafrag()
     if (OB_FAIL(get_part_datafrag(tablet_id, part_data_frag))) {
     } else if (OB_ISNULL(part_data_frag)) {
       ret = OB_ERR_UNEXPECTED;
-    } else
-      OB_ASSERT_SUCC(ret = part_data_frag->free_frags());
+    } else if (OB_FAIL(part_data_frag->free_frags())) {
+    }
   }
 
   return ret;
@@ -1973,8 +1971,8 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
     int64_t query_timeout = 0;
     if (OB_FAIL(hint.get_value(ObLoadDataHint::QUERY_TIMEOUT, query_timeout))) {
     } else if (0 == query_timeout) {
-      {
-        OB_ASSERT_SUCC(ret = ctx.get_my_session()->get_query_timeout(query_timeout));
+      if (OB_FAIL(ctx.get_my_session()->get_query_timeout(query_timeout))) {
+      } else {
         THIS_WORKER.set_timeout_ts(ctx.get_my_session()->get_query_start_time() + query_timeout);
       }
     } else if (query_timeout > 0) {
@@ -1996,24 +1994,25 @@ int ObLoadDataSPImpl::ToolBox::init(ObExecContext &ctx, ObLoadDataStmt &load_stm
     } else if (OB_FAIL(shuffle_handle->parser.init(file_formats,
                                                    num_of_file_column,
                                                    load_args.file_cs_type_))) {
+    } else if (OB_FAIL(shuffle_handle->generator.set_params(insert_stmt_head_buff,
+                                                             load_args.file_cs_type_,
+                                                             session->get_sql_mode()))) {
+    } else if (OB_FAIL(copy_exprs_for_shuffle_task(ctx, load_stmt, insert_infos,
+                                                   shuffle_handle->generator.get_field_exprs(),
+                                                   shuffle_handle->generator.get_insert_exprs()))) {
     } else {
-      OB_ASSERT_SUCC(ret = shuffle_handle->generator.set_params(insert_stmt_head_buff, load_args.file_cs_type_,
-                                                                session->get_sql_mode()));
-      if (OB_FAIL(copy_exprs_for_shuffle_task(ctx, load_stmt, insert_infos, shuffle_handle->generator.get_field_exprs(),
-                                              shuffle_handle->generator.get_insert_exprs()))) {
+      shuffle_handle->calc_tablet_id_expr = calc_tablet_id_expr;
+      ObObj *obj_array = static_cast<ObObj *>(
+          shuffle_handle->allocator.alloc(sizeof(ObObj) * num_of_file_column));
+      if (OB_ISNULL(obj_array)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
-        shuffle_handle->calc_tablet_id_expr = calc_tablet_id_expr;
-        ObObj *obj_array = static_cast<ObObj *>(shuffle_handle->allocator.alloc(sizeof(ObObj) * num_of_file_column));
-        if (OB_ISNULL(obj_array)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else {
-          for (ObObj *ptr = obj_array; ptr < obj_array + num_of_file_column; ++ptr) {
-            new (ptr) ObObj();
-            ptr->set_type(ObVarcharType);
-            ptr->set_collation_type(load_args.file_cs_type_);
-          }
-          shuffle_handle->row_in_file.assign(obj_array, num_of_file_column);
+        for (ObObj *ptr = obj_array; ptr < obj_array + num_of_file_column; ++ptr) {
+          new(ptr) ObObj();
+          ptr->set_type(ObVarcharType);
+          ptr->set_collation_type(load_args.file_cs_type_);
         }
+        shuffle_handle->row_in_file.assign(obj_array, num_of_file_column);
       }
     }
   }

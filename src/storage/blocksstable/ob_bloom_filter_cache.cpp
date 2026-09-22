@@ -610,16 +610,14 @@ int ObBloomFilterCache::inc_empty_read(
     } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObEmptyReadBucket>()->get_cell(key_hash, cell))) {
     } else if (OB_ISNULL(cell)) {
       ret = OB_ERR_UNEXPECTED;
-    } else {
-      OB_ASSERT_SUCC(ret = cell->inc_and_fetch(key_hash, empty_read_cnt, cur_cnt));
-      if (cell->check_timeout()) {
-        // do nothing
-      } else if (cur_cnt > bf_cache_miss_count_threshold_) {
-        if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObTabletScheduler>()
-                        ->schedule_build_bloomfilter(table_id, macro_id, empty_read_prefix))) {
-        } else {
-          cell->reset();
-        }
+    } else if (OB_FAIL(cell->inc_and_fetch(key_hash, empty_read_cnt, cur_cnt))) {
+    } else if (cell->check_timeout()) {
+      // do nothing
+    } else if (cur_cnt > bf_cache_miss_count_threshold_) {
+      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::compaction::ObTabletScheduler>()
+                      ->schedule_build_bloomfilter(table_id, macro_id, empty_read_prefix))) {
+      } else {
+        cell->reset();
       }
     }
   }

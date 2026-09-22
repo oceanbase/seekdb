@@ -1826,8 +1826,8 @@ int ObBandwidthThrottle::limit_and_sleep(const int64_t bytes, const int64_t last
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "throttle is not initialized.", K(ret));
   } else if (OB_FAIL(cal_limit(bytes, avaliable_timestamp))) {
+  } else if (OB_FAIL(do_sleep(avaliable_timestamp, last_active_time, max_idle_time, sleep_us))) {
   } else {
-    OB_ASSERT_SUCC(ret = do_sleep(avaliable_timestamp, last_active_time, max_idle_time, sleep_us));
     ObSpinLockGuard guard(lock_);
     const int64_t cur_time = ObTimeUtility::current_time();
     const int64_t print_interval_ms = (cur_time - last_printed_ts_) / 1000;

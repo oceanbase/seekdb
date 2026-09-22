@@ -2565,8 +2565,8 @@ int ObCharset::init_charset_by_collation_type(const ObCollationType collation_ty
 int ObCharset::init_charset()
 {
   int ret = OB_SUCCESS;
-  {
-    OB_ASSERT_SUCC(ret = init_charset_and_arr());
+  if (OB_FAIL(init_charset_and_arr())) {
+  } else {
     // charset name does not depend on initialization
     for (int i = CS_TYPE_INVALID + 1; i < CS_TYPE_MAX; ++i) {
       ObCharsetType ctype = CHARSET_INVALID;

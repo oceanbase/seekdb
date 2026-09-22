@@ -75,15 +75,16 @@ int ObAlterDatabaseResolver::resolve(const ParseNode &parse_tree)
           } else {
             bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
             ObCollationType cs_type = CS_TYPE_INVALID;
-            {
-              OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(cs_type));
-              if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(cs_type, perserve_lettercase, database_name))) {
-              } else {
-                CK(OB_NOT_NULL(schema_checker_));
-                CK(OB_NOT_NULL(schema_checker_->get_schema_guard()));
-                OZ(ObSQLUtils::cvt_db_name_to_org(*schema_checker_->get_schema_guard(), session_info_, database_name,
-                                                  allocator_));
-              }
+            if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
+            } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
+                        cs_type, perserve_lettercase, database_name))) {
+            } else {
+              CK (OB_NOT_NULL(schema_checker_));
+              CK (OB_NOT_NULL(schema_checker_->get_schema_guard()));
+              OZ (ObSQLUtils::cvt_db_name_to_org(*schema_checker_->get_schema_guard(),
+                                                 session_info_,
+                                                 database_name,
+                                                 allocator_));
             }
           }
         }

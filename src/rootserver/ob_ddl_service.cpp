@@ -2233,7 +2233,8 @@ int ObDDLService::check_is_add_column_online_(const AlterTableSchema &alter_tabl
   if (OB_DDL_ADD_COLUMN != alter_column_schema.alter_type_) {
     ret = OB_ERR_UNEXPECTED;
   } else if (algorithm == obcall::ObAlterTableArg::AlterAlgorithm::INSTANT) {
-    OB_ASSERT_SUCC(ret = check_can_add_column_use_instant_(can_add_column_instant));
+    if (OB_FAIL(check_can_add_column_use_instant_(can_add_column_instant))) {
+    }
   }
 
   if (OB_SUCC(ret)) {
@@ -11373,8 +11374,8 @@ int ObDDLService::do_offline_ddl_in_trans(obcall::ObAlterTableArg &alter_table_a
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(check_inner_stat())) {
   } else if (OB_FAIL(get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
+  } else if (OB_FAIL(check_can_bind_tablets(ddl_type, bind_tablets))) {
   } else {
-    OB_ASSERT_SUCC(ret = check_can_bind_tablets(ddl_type, bind_tablets));
     ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
     ObTableSchema new_table_schema;
     const ObTableSchema *orig_table_schema = NULL;

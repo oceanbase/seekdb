@@ -307,7 +307,8 @@ int ObStringDiffEncoder::store_data(
       }
     } else {
       FixedDataFiller filler(*this);
-      OB_ASSERT_SUCC(ret = filler(row_id, datum, buf, len));
+      if (OB_FAIL(filler(row_id, datum, buf, len))) {
+      }
     }
   }
   return ret;

@@ -294,8 +294,10 @@ int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
           break;
         }
         case LOCK_MODE: {
-          {
-            OB_ASSERT_SUCC(ret = lock_mode_to_string(lock_op.lock_mode_, lock_mode_buf_, sizeof(lock_mode_buf_)));
+          if (OB_FAIL(lock_mode_to_string(lock_op.lock_mode_,
+                                          lock_mode_buf_,
+                                          sizeof(lock_mode_buf_)))) {
+          } else {
             lock_mode_buf_[MAX_LOCK_MODE_BUF_LENGTH - 1] = '\0';
             cur_row_.cells_[i].set_varchar(lock_mode_buf_);
             cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -309,9 +311,10 @@ int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
           cur_row_.cells_[i].set_int(lock_op.create_trans_id_.get_id());
           break;
         case OP_TYPE: {
-          {
-            OB_ASSERT_SUCC(ret =
-                               lock_op_type_to_string(lock_op.op_type_, lock_op_type_buf_, sizeof(lock_op_type_buf_)));
+          if (OB_FAIL(lock_op_type_to_string(lock_op.op_type_,
+                                             lock_op_type_buf_,
+                                             sizeof(lock_op_type_buf_)))) {
+          } else {
             lock_op_type_buf_[MAX_LOCK_OP_TYPE_BUF_LENGTH - 1] = '\0';
             cur_row_.cells_[i].set_varchar(lock_op_type_buf_);
             cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -319,9 +322,10 @@ int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
           break;
         }
         case OP_STATUS: {
-          {
-            OB_ASSERT_SUCC(ret = lock_op_status_to_string(lock_op.lock_op_status_, lock_op_status_buf_,
-                                                          sizeof(lock_op_status_buf_)));
+          if (OB_FAIL(lock_op_status_to_string(lock_op.lock_op_status_,
+                                               lock_op_status_buf_,
+                                               sizeof(lock_op_status_buf_)))) {
+          } else {
             lock_op_status_buf_[MAX_LOCK_OP_STATUS_BUF_LENGTH - 1] = '\0';
             cur_row_.cells_[i].set_varchar(lock_op_status_buf_);
             cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -354,9 +358,10 @@ int ObAllVirtualObjLock::inner_get_next_row(ObNewRow *&row)
           break;
         }
         case OBJ_TYPE: {
-          {
-            OB_ASSERT_SUCC(ret = lock_obj_type_to_string(lock_op.lock_id_.obj_type_, lock_obj_type_buf_,
-                                                         sizeof(lock_obj_type_buf_)));
+          if (OB_FAIL(lock_obj_type_to_string(lock_op.lock_id_.obj_type_,
+                                              lock_obj_type_buf_,
+                                              sizeof(lock_obj_type_buf_)))) {
+          } else {
             lock_obj_type_buf_[MAX_LOCK_OBJ_TYPE_BUF_LENGTH - 1] = '\0';
             cur_row_.cells_[i].set_varchar(lock_obj_type_buf_);
             cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));

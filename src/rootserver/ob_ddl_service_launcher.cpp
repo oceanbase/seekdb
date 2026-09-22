@@ -137,19 +137,14 @@ int ObDDLServiceLauncher::inner_start_ddl_service_with_lock_()
   common::ObRole role = FOLLOWER;
   int64_t proposal_id = 0;
   SpinWLockGuard guard(rw_lock_);
-  {
-    OB_ASSERT_SUCC(ret = get_sys_palf_role_and_epoch(role, proposal_id));
-    if (!is_leader_like(role)) {
-      // DO NOT use is_strong_leader(), because standby cluster's role is STANDBY_LEADER
-      ret = OB_LS_NOT_LEADER;
-    } else if (OB_FAIL(init_sequence_id_(proposal_id))) {
-    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()
-                           ->get_schema_service()
-                           .get_ddl_epoch_mgr()
-                           .remove_all_ddl_epoch())) {
-    } else {
-      ATOMIC_SET(&is_ddl_service_started_, true);
-    }
+  if (OB_FAIL(get_sys_palf_role_and_epoch(role, proposal_id))) {
+  } else if (!is_leader_like(role)) {
+    // DO NOT use is_strong_leader(), because standby cluster's role is STANDBY_LEADER
+    ret = OB_LS_NOT_LEADER;
+  } else if (OB_FAIL(init_sequence_id_(proposal_id))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->get_schema_service().get_ddl_epoch_mgr().remove_all_ddl_epoch())) {
+  } else {
+    ATOMIC_SET(&is_ddl_service_started_, true);
   }
   return ret;
 }

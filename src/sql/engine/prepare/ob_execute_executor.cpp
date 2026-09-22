@@ -79,96 +79,87 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
           task_ctx->set_query_begin_schema_version(database_schema_version);
           if(OB_FAIL(ctx.get_my_session()->add_ps_stmt_id_in_use(stmt.get_prepare_id()))) {
           } else {
-            {
-              OB_ASSERT_SUCC(ret = result_set.init());
-              if (OB_FAIL(ctx.get_prepared_statement_runtime()->stmt_execute(
-                      stmt.get_prepare_id(), stmt.get_prepare_type(), params_array, sql_ctx, result_set,
-                      false /* is_inner_sql */))) {
-              } else {
-                if (OB_ISNULL(ctx.get_sql_ctx()->schema_guard_)) {
+            if (OB_FAIL(result_set.init())) {
+            } else if (OB_FAIL(ctx.get_prepared_statement_runtime()->stmt_execute(
+                stmt.get_prepare_id(),
+                stmt.get_prepare_type(),
+                params_array,
+                sql_ctx,
+                result_set,
+                false/* is_inner_sql */))) {
+            } else {
+              if (OB_ISNULL(ctx.get_sql_ctx()->schema_guard_)) {
+                ret = OB_ERR_UNEXPECTED;
+              } else if (OB_FAIL(ctx.get_my_session()->update_query_sensitive_system_variable(*(ctx.get_sql_ctx()->schema_guard_)))) {
+              } else if (OB_FAIL(result_set.open())) {
+              }
+              if (OB_SUCC(ret)) {
+                ObPsStmtInfoGuard guard;
+                ObPsStmtInfo *ps_info = NULL;
+                ObPsStmtId inner_stmt_id = stmt.get_prepare_id();
+                ObCallProcedureInfo *call_proc_info = NULL;
+                ObCallProcedureStmt *call_stmt = static_cast<ObCallProcedureStmt*>(result_set.get_cmd());
+                if (OB_ISNULL(call_proc_info = call_stmt->get_call_proc_info())) {
                   ret = OB_ERR_UNEXPECTED;
-                } else if (OB_FAIL(ctx.get_my_session()->update_query_sensitive_system_variable(
-                               *(ctx.get_sql_ctx()->schema_guard_)))) {
-                } else if (OB_FAIL(result_set.open())) {
-                }
-                if (OB_SUCC(ret)) {
-                  ObPsStmtInfoGuard guard;
-                  ObPsStmtInfo *ps_info = NULL;
-                  ObPsStmtId inner_stmt_id = stmt.get_prepare_id();
-                  ObCallProcedureInfo *call_proc_info = NULL;
-                  ObCallProcedureStmt *call_stmt = static_cast<ObCallProcedureStmt *>(result_set.get_cmd());
-                  if (OB_ISNULL(call_proc_info = call_stmt->get_call_proc_info())) {
-                    ret = OB_ERR_UNEXPECTED;
-                  } else if (OB_ISNULL(ctx.get_ps_cache())) {
-                    ret = OB_ERR_UNEXPECTED;
-                  } else if (OB_FAIL(
-                                 ctx.get_my_session()->get_inner_ps_stmt_id(stmt.get_prepare_id(), inner_stmt_id))) {
-                  } else if (OB_FAIL(ctx.get_ps_cache()->get_stmt_info_guard(inner_stmt_id, guard))) {
-                  } else if (OB_ISNULL(ps_info = guard.get_stmt_info())) {
-                    ret = OB_ERR_UNEXPECTED;
-                  } else {
-                    const ObIArray<int64_t> &fixed_params_idx = ps_info->get_raw_params_idx();
-                    for (int64_t i = 0; OB_SUCC(ret) && i < call_proc_info->get_expressions().count(); ++i) {
-                      if (call_proc_info->is_out_param(i)) {
-                        const ObSqlExpression *call_param_expr = call_proc_info->get_expressions().at(i);
-                        ObItemType expr_type = call_param_expr->get_expr_items().at(0).get_item_type();
-                        if (OB_LIKELY(IS_CONST_TYPE(expr_type))) {
-                          if (T_QUESTIONMARK == expr_type) {
-                            const ObObj &value = call_param_expr->get_expr_items().at(0).get_obj();
-                            int64_t idx = value.get_unknown();
-                            int64_t origin_param_cnt = 0;
-                            for (int64_t n = 0; n < idx; ++n) {
-                              if (ObSql::is_exist_in_fixed_param_idx(n, fixed_params_idx)) {
-                                origin_param_cnt++;
-                              }
+                } else if (OB_ISNULL(ctx.get_ps_cache())) {
+                  ret = OB_ERR_UNEXPECTED;
+                } else if (OB_FAIL(ctx.get_my_session()->get_inner_ps_stmt_id(stmt.get_prepare_id(), inner_stmt_id))) {
+                } else if (OB_FAIL(ctx.get_ps_cache()->get_stmt_info_guard(inner_stmt_id, guard))) {
+                } else if (OB_ISNULL(ps_info = guard.get_stmt_info())) {
+                  ret = OB_ERR_UNEXPECTED;
+                } else {
+                  const ObIArray<int64_t> &fixed_params_idx = ps_info->get_raw_params_idx();
+                  for (int64_t i = 0; OB_SUCC(ret) && i < call_proc_info->get_expressions().count(); ++i) {
+                    if (call_proc_info->is_out_param(i)) {
+                      const ObSqlExpression *call_param_expr = call_proc_info->get_expressions().at(i);
+                      ObItemType expr_type = call_param_expr->get_expr_items().at(0).get_item_type();
+                      if (OB_LIKELY(IS_CONST_TYPE(expr_type))) {
+                        if (T_QUESTIONMARK == expr_type) {
+                          const ObObj &value = call_param_expr->get_expr_items().at(0).get_obj();
+                          int64_t idx = value.get_unknown();
+                          int64_t origin_param_cnt = 0;
+                          for (int64_t n = 0; n < idx; ++n) {
+                            if (ObSql::is_exist_in_fixed_param_idx(n, fixed_params_idx)) {
+                              origin_param_cnt++;
                             }
-                            int64_t using_idx = idx - origin_param_cnt;
-                            if (using_idx >= stmt.get_params().count()) {
+                          }
+                          int64_t using_idx = idx - origin_param_cnt;
+                          if (using_idx >= stmt.get_params().count()) {
+                            ret = OB_ERR_UNEXPECTED;
+                          } else {
+                            const ObRawExpr *expr = stmt.get_params().at(using_idx);
+                            if (OB_ISNULL(expr)) {
+                              ret = OB_ERR_UNEXPECTED;
+                            } else if (T_OP_GET_USER_VAR != expr->get_expr_type()) {
                               ret = OB_ERR_UNEXPECTED;
                             } else {
-                              const ObRawExpr *expr = stmt.get_params().at(using_idx);
-                              if (OB_ISNULL(expr)) {
+                              ObExprCtx expr_ctx;
+                              if (OB_ISNULL(expr->get_param_expr(0))) {
                                 ret = OB_ERR_UNEXPECTED;
-                              } else if (T_OP_GET_USER_VAR != expr->get_expr_type()) {
+                              } else if (OB_UNLIKELY(!expr->get_param_expr(0)->is_const_raw_expr()
+                                || !static_cast<const ObConstRawExpr*>(expr->get_param_expr(0))->get_value().is_varchar())) {
                                 ret = OB_ERR_UNEXPECTED;
+                              } else if (OB_FAIL(ObSQLUtils::wrap_expr_ctx(stmt::T_CALL_PROCEDURE, ctx, ctx.get_allocator(), expr_ctx))) {
                               } else {
-                                ObExprCtx expr_ctx;
-                                if (OB_ISNULL(expr->get_param_expr(0))) {
-                                  ret = OB_ERR_UNEXPECTED;
-                                } else if (OB_UNLIKELY(!expr->get_param_expr(0)->is_const_raw_expr() ||
-                                                       !static_cast<const ObConstRawExpr *>(expr->get_param_expr(0))
-                                                            ->get_value()
-                                                            .is_varchar())) {
-                                  ret = OB_ERR_UNEXPECTED;
-                                } else if (OB_FAIL(ObSQLUtils::wrap_expr_ctx(stmt::T_CALL_PROCEDURE, ctx,
-                                                                             ctx.get_allocator(), expr_ctx))) {
-                                } else {
-                                  const ObString var_name = static_cast<const ObConstRawExpr *>(expr->get_param_expr(0))
-                                                                ->get_value()
-                                                                .get_varchar();
-                                  if (OB_FAIL(
-                                          ObVariableSetExecutor::set_user_variable(result_set.get_exec_context()
-                                                                                       .get_physical_plan_ctx()
-                                                                                       ->get_param_store_for_update()
-                                                                                       .at(idx),
-                                                                                   var_name, expr_ctx))) {
-                                  }
+                                const ObString var_name = static_cast<const ObConstRawExpr*>(expr->get_param_expr(0))->get_value().get_varchar();
+                                if (OB_FAIL(ObVariableSetExecutor::set_user_variable(result_set.get_exec_context().get_physical_plan_ctx()->get_param_store_for_update().at(idx),
+                                                                                      var_name, expr_ctx))) {
                                 }
                               }
                             }
-                          } else {
-                            /* do nothing */
                           }
+                        } else {
+                          /* do nothing */
                         }
                       }
-                    } // for end
-                  }
+                    }
+                  } // for end
                 }
+              }
 
-                int tmp_ret = OB_SUCCESS;
-                if ((tmp_ret = result_set.close()) != OB_SUCCESS) {
-                  ret = OB_SUCCESS == ret ? tmp_ret : ret;
-                }
+              int tmp_ret = OB_SUCCESS;
+              if ((tmp_ret = result_set.close()) != OB_SUCCESS) {
+                ret = OB_SUCCESS == ret ? tmp_ret : ret;
               }
             }
           }

@@ -52,10 +52,8 @@ OB_SERIALIZE_MEMBER((ObRecursiveUnionAllSpec, ObOpSpec),
 int ObRecursiveUnionAllOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
-  {
-    OB_ASSERT_SUCC(ret = inner_data_.rescan());
-    if (OB_FAIL(ObOperator::inner_rescan())) {
-    }
+  if (OB_FAIL(inner_data_.rescan())){
+  } else if (OB_FAIL(ObOperator::inner_rescan())) {
   }
   return ret;
 }

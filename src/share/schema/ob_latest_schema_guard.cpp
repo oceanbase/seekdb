@@ -375,7 +375,8 @@ int ObLatestSchemaGuard::get_coded_index_name_info_mysql(
                                                   true/*case_compare*/,
                                                   true/*collation*/)) {
       if (is_built_in == schema::is_built_in_index(index_infos.at(i).get_index_type())) {
-        OB_ASSERT_SUCC(ret = index_info.assign(index_infos.at(i)));
+        if (OB_FAIL(index_info.assign(index_infos.at(i)))) {
+        }
         break;
       }
     }

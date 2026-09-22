@@ -903,14 +903,12 @@ int ObLSTxCtxMgr::get_rec_scn(SCN &rec_scn)
     ret = OB_STATE_NOT_MATCH;
   } else {
     GetRecLogTSFunctor fn;
-    {
-      OB_ASSERT_SUCC(ret = fn.init());
-      if (OB_FAIL(ls_tx_ctx_map_.for_each(fn))) {
-      } else {
-        SCN aggre_rec_scn = get_aggre_rec_scn_();
-        rec_scn = SCN::min(fn.get_rec_log_ts(), aggre_rec_scn);
-        TRANS_LOG(INFO, "succ to get rec scn", K(*this), K(aggre_rec_scn));
-      }
+    if (OB_FAIL(fn.init())) {
+    } else if (OB_FAIL(ls_tx_ctx_map_.for_each(fn))) {
+    } else {
+      SCN aggre_rec_scn = get_aggre_rec_scn_();
+      rec_scn = SCN::min(fn.get_rec_log_ts(), aggre_rec_scn);
+      TRANS_LOG(INFO, "succ to get rec scn", K(*this), K(aggre_rec_scn));
     }
   }
 
@@ -931,14 +929,12 @@ int ObLSTxCtxMgr::on_tx_ctx_table_flushed()
     ret = OB_STATE_NOT_MATCH;
   } else {
     OnTxCtxTableFlushedFunctor fn;
-    {
-      OB_ASSERT_SUCC(ret = fn.init());
-      if (OB_FAIL(ls_tx_ctx_map_.for_each(fn))) {
-      } else {
-        // To mark the checkpoint is succeed, we reset the prev_aggre_rec_scn
-        prev_aggre_rec_scn_.reset();
-        TRANS_LOG(INFO, "succ to on tx ctx table flushed", K(*this));
-      }
+    if (OB_FAIL(fn.init())) {
+    } else if (OB_FAIL(ls_tx_ctx_map_.for_each(fn))) {
+    } else {
+      // To mark the checkpoint is succeed, we reset the prev_aggre_rec_scn
+      prev_aggre_rec_scn_.reset();
+      TRANS_LOG(INFO, "succ to on tx ctx table flushed", K(*this));
     }
   }
   return ret;

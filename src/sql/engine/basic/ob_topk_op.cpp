@@ -110,7 +110,8 @@ int ObTopKOp::get_topk_final_count()
       }
       case PHY_MATERIAL: {
         ObMaterialOp *mtrl_op = static_cast<ObMaterialOp *>(child_);
-        OB_ASSERT_SUCC(ret = mtrl_op->get_material_row_count(row_count));
+        if (OB_FAIL(mtrl_op->get_material_row_count(row_count))) {
+        }
         break;
       }
       case PHY_HASH_GROUP_BY: {

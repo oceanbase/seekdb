@@ -1417,8 +1417,8 @@ static int common_string_bit(const ObExpr &expr,
   UNUSED(ctx);
   int warning = OB_SUCCESS;
   int32_t bit_len = 0;
-  {
-    OB_ASSERT_SUCC(ret = common_get_bit_len(in_str, bit_len));
+  if (OB_FAIL(common_get_bit_len(in_str, bit_len))) {
+  } else {
     ObObjType in_type = expr.args_[0]->datum_meta_.type_;
     uint64_t out_val = 0;
     if (ObHexStringType == in_type && in_str.empty()) {
@@ -4091,10 +4091,8 @@ CAST_FUNC_NAME(float, date)
   EVAL_ARG()
   {
     DEF_IN_OUT_VAL(float, int64_t, 0);
-    {
-      OB_ASSERT_SUCC(ret = common_floating_int(in_val, out_val));
-      if (OB_FAIL(common_int_date(expr, out_val, res_datum))) {
-      }
+    if (OB_FAIL(common_floating_int(in_val, out_val))) {
+    } else if (OB_FAIL(common_int_date(expr, out_val, res_datum))) {
     }
   }
   return ret;
@@ -4105,10 +4103,8 @@ CAST_FUNC_NAME(float, mdate)
   EVAL_ARG()
   {
     DEF_IN_OUT_VAL(float, int64_t, 0);
-    {
-      OB_ASSERT_SUCC(ret = common_floating_int(in_val, out_val));
-      if (OB_FAIL(common_int_mdate(expr, out_val, res_datum))) {
-      }
+    if (OB_FAIL(common_floating_int(in_val, out_val))) {
+    } else if (OB_FAIL(common_int_mdate(expr, out_val, res_datum))) {
     }
   }
   return ret;
@@ -4405,10 +4401,8 @@ CAST_FUNC_NAME(double, date)
   EVAL_ARG()
   {
     DEF_IN_OUT_VAL(double, int64_t, 0);
-    {
-      OB_ASSERT_SUCC(ret = common_floating_int(in_val, out_val));
-      if (OB_FAIL(common_int_date(expr, out_val, res_datum))) {
-      }
+    if (OB_FAIL(common_floating_int(in_val, out_val))) {
+    } else if (OB_FAIL(common_int_date(expr, out_val, res_datum))) {
     }
   }
   return ret;
@@ -4419,10 +4413,8 @@ CAST_FUNC_NAME(double, mdate)
   EVAL_ARG()
   {
     DEF_IN_OUT_VAL(double, int64_t, 0);
-    {
-      OB_ASSERT_SUCC(ret = common_floating_int(in_val, out_val));
-      if (OB_FAIL(common_int_mdate(expr, out_val, res_datum))) {
-      }
+    if (OB_FAIL(common_floating_int(in_val, out_val))) {
+    } else if (OB_FAIL(common_int_mdate(expr, out_val, res_datum))) {
     }
   }
   return ret;
@@ -8226,8 +8218,9 @@ CAST_FUNC_NAME(json, decimalint)
     ObDecimalIntBuilder res_val;
     if (OB_FAIL(common_json_number(*child_res, expr, ObNumberType, ctx, temp_allocator, out_nmb))) {
     } else if (OB_FAIL(wide::from_number(out_nmb, temp_allocator, out_scale, decint, int_bytes))) {
+    } else if (OB_FAIL(ObDatumCast::align_decint_precision_unsafe(decint, int_bytes,
+                                                                  expected_int_bytes, res_val))) {
     } else {
-      OB_ASSERT_SUCC(ret = ObDatumCast::align_decint_precision_unsafe(decint, int_bytes, expected_int_bytes, res_val));
       res_datum.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());
     }
   }
@@ -12718,16 +12711,15 @@ int ObDatumCast::get_implicit_cast_function(const ObObjType in_type,
 {
   int ret = OB_SUCCESS;
   bool pass_cast = false;
-  {
-    OB_ASSERT_SUCC(ret = check_can_cast(in_type, in_cs_type, out_type, out_cs_type));
-    if (OB_FAIL(is_trivial_cast(in_type, in_cs_type, out_type, out_cs_type, cast_mode, pass_cast))) {
-    } else if (pass_cast) {
-      eval_func = cast_eval_arg;
-    } else {
-      ObObjTypeClass in_tc = ob_obj_type_class(in_type);
-      ObObjTypeClass out_tc = ob_obj_type_class(out_type);
-      eval_func = OB_DATUM_CAST_MYSQL_IMPLICIT[in_tc][out_tc];
-    }
+  if (OB_FAIL(check_can_cast(in_type, in_cs_type, out_type, out_cs_type))) {
+  } else if (OB_FAIL(is_trivial_cast(in_type, in_cs_type, out_type,
+                                     out_cs_type, cast_mode, pass_cast))) {
+  } else if (pass_cast) {
+    eval_func = cast_eval_arg;
+  } else {
+    ObObjTypeClass in_tc = ob_obj_type_class(in_type);
+    ObObjTypeClass out_tc = ob_obj_type_class(out_type);
+    eval_func = OB_DATUM_CAST_MYSQL_IMPLICIT[in_tc][out_tc];
   }
 
   return ret;
@@ -12746,32 +12738,34 @@ int ObDatumCast::choose_cast_function(const ObObjType in_type,
   just_eval_arg = false;
   ObObjTypeClass in_tc = ob_obj_type_class(in_type);
   ObObjTypeClass out_tc = ob_obj_type_class(out_type);
-  {
-    OB_ASSERT_SUCC(ret = check_can_cast(in_type, in_cs_type, out_type, out_cs_type));
-    if (OB_FAIL(is_trivial_cast(in_type, in_cs_type, out_type, out_cs_type, cast_mode, just_eval_arg))) {
-    } else if (just_eval_arg && !CM_IS_EXPLICIT_CAST(cast_mode)) {
-      // Even if it is the same type, explicit cast also needs to be accuracy checked
-      rt_expr.eval_func_ = cast_eval_arg;
-    } else {
-      if (CM_IS_EXPLICIT_CAST(cast_mode)) {
-        if (OB_ISNULL(rt_expr.inner_functions_ = reinterpret_cast<void **>(allocator.alloc(sizeof(void *))))) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else {
-          rt_expr.inner_func_cnt_ = 1;
-          if (just_eval_arg) {
-            rt_expr.inner_functions_[0] = reinterpret_cast<void *>(cast_eval_arg);
-          } else {
-            rt_expr.inner_functions_[0] = reinterpret_cast<void *>(OB_DATUM_CAST_MYSQL_IMPLICIT[in_tc][out_tc]);
-          }
-          if (ob_is_character_type(out_type, out_cs_type) || ob_is_varbinary_or_binary(out_type, out_cs_type)) {
-            rt_expr.eval_func_ = anytype_to_varchar_char_explicit;
-          } else {
-            rt_expr.eval_func_ = anytype_anytype_explicit;
-          }
-        }
+  if (OB_FAIL(check_can_cast(in_type, in_cs_type, out_type, out_cs_type))) {
+  } else if (OB_FAIL(is_trivial_cast(in_type, in_cs_type, out_type,
+                                     out_cs_type, cast_mode, just_eval_arg))) {
+  } else if (just_eval_arg && !CM_IS_EXPLICIT_CAST(cast_mode)) {
+    // Even if it is the same type, explicit cast also needs to be accuracy checked
+    rt_expr.eval_func_ = cast_eval_arg;
+  } else {
+    if (CM_IS_EXPLICIT_CAST(cast_mode)) {
+      if (OB_ISNULL(rt_expr.inner_functions_ =
+            reinterpret_cast<void**>(allocator.alloc(sizeof(void*))))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
       } else {
-        rt_expr.eval_func_ = OB_DATUM_CAST_MYSQL_IMPLICIT[in_tc][out_tc];
+        rt_expr.inner_func_cnt_ = 1;
+        if (just_eval_arg) {
+          rt_expr.inner_functions_[0] = reinterpret_cast<void*>(cast_eval_arg);
+        } else {
+          rt_expr.inner_functions_[0] =
+            reinterpret_cast<void*>(OB_DATUM_CAST_MYSQL_IMPLICIT[in_tc][out_tc]);
+        }
+        if (ob_is_character_type(out_type, out_cs_type) ||
+            ob_is_varbinary_or_binary(out_type, out_cs_type)) {
+          rt_expr.eval_func_ = anytype_to_varchar_char_explicit;
+        } else {
+          rt_expr.eval_func_ = anytype_anytype_explicit;
+        }
       }
+    } else {
+      rt_expr.eval_func_ = OB_DATUM_CAST_MYSQL_IMPLICIT[in_tc][out_tc];
     }
   }
   if (OB_SUCC(ret)) {

@@ -119,7 +119,8 @@ int ObLocalMajorFreeze::destroy()
   int ret = OB_SUCCESS;
   if (is_primary_service()) {
     LOG_INFO("daily_launcher start to destroy", K_(is_primary_service));
-    OB_ASSERT_SUCC(ret = daily_launcher_.destroy());
+    if (OB_FAIL(daily_launcher_.destroy())) {
+    }
   }
   if (OB_SUCC(ret)) {
     LOG_INFO("freeze_info_detector start to destroy", K_(is_primary_service));

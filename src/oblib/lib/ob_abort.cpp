@@ -47,11 +47,11 @@ namespace oceanbase
 {
 namespace common
 {
-void assert_success_failed(int code, const char *expr, const char *file, int line)
+void assert_cond_failed(const char *condition, const char *file, int line)
 {
   // Do not depend on the configured log level or expand logging at call sites.
-  fprintf(stderr, "OB_ASSERT_SUCC failed: expr=%s, code=%d, file=%s, line=%d\n",
-          expr, code, file, line);
+  fprintf(stderr, "ASSERT_COND failed: condition=%s, file=%s, line=%d\n",
+          condition, file, line);
   ob_abort();
 }
 }

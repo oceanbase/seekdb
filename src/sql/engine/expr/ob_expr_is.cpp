@@ -411,17 +411,17 @@ int ObExprInnerIsTrue::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr
   ObObjType param1_type = ObMaxType;
   if (rt_expr.arg_cnt_ != 2) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0]) || OB_ISNULL(rt_expr.args_[1])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(param2 = static_cast<const ObConstRawExpr *>(raw_expr.get_param_expr(1)))) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_UNLIKELY(!param2->get_value().is_int())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("const value is not int type", KPC(param2));
   } else {
-    param1_type = rt_expr.args_[0]->datum_meta_.type_;
-    bool is_start = param2->get_value().get_int() > 0;
-    switch (param1_type) {
+    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
+    if (OB_ISNULL(param2 = static_cast<const ObConstRawExpr *>(raw_expr.get_param_expr(1)))) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_UNLIKELY(!param2->get_value().is_int())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("const value is not int type", KPC(param2));
+    } else {
+      param1_type = rt_expr.args_[0]->datum_meta_.type_;
+      bool is_start = param2->get_value().get_int() > 0;
+      switch (param1_type) {
       case ObTinyIntType:
       case ObSmallIntType:
       case ObMediumIntType:
@@ -468,6 +468,7 @@ int ObExprInnerIsTrue::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr
                                         : ObExprInnerIsTrue::number_is_true_end;
           break;
       }
+    }
     }
   }
   return ret;

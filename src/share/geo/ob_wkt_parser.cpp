@@ -78,11 +78,9 @@ int ObWktParser::check_next_token_with_val(ObWktTokenType tkn_type, ObWktTokenVa
       case ObWktTokenType::W_WORD: {
         if (!is_word_beginning(ch)) {
           ret = OB_ERR_PARSER_SYNTAX;
-        } else {
-          OB_ASSERT_SUCC(ret = process_word(tkn_val));
-          if (ObWktTokenType::W_EMPTY == tkn_type && tkn_val.string_val_.case_compare("empty")) {
-            ret = OB_ERR_PARSER_SYNTAX;
-          }
+        } else if (OB_FAIL(process_word(tkn_val))) {
+        } else if (ObWktTokenType::W_EMPTY == tkn_type && tkn_val.string_val_.case_compare("empty")){
+          ret = OB_ERR_PARSER_SYNTAX;
         }
         break;
       }
@@ -119,8 +117,8 @@ int ObWktParser::get_next_token(ObWktTokenType &tkn_type, ObWktTokenVal &tkn_val
         tkn_type = ObWktTokenType::W_NUMBER;
       }
     } else if (is_word_beginning(ch)) {
-      {
-        OB_ASSERT_SUCC(ret = process_word(tkn_val));
+      if (OB_FAIL(process_word(tkn_val))) {
+      } else {
         if (tkn_val.string_val_.case_compare("empty")) {
           tkn_type = ObWktTokenType::W_WORD;
         } else {

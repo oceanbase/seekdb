@@ -604,8 +604,8 @@ int ObInsertResolver::check_table_and_column_name(const ObIArray<ObColumnRefRawE
     bool perserve_lettercase = true;
     ObCollationType cs_type = CS_TYPE_INVALID;
     if (OB_FAIL(session_info_->get_name_case_mode(mode))) {
+    } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
     } else {
-      OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(cs_type));
       perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
     }
     if (OB_FAIL(ret)) {

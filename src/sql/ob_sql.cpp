@@ -1007,8 +1007,9 @@ int ObSql::set_timeout_for_pl(ObSQLSessionInfo &session_info, int64_t &abs_timeo
   int64_t query_timeout;
   if (THIS_WORKER.is_timeout()) {
     ret = OB_TIMEOUT;
+  } else if (OB_FAIL(session_info.get_query_timeout(query_timeout))) {
+    // do nothing
   } else {
-    OB_ASSERT_SUCC(ret = session_info.get_query_timeout(query_timeout));
     OX (abs_timeout_us = session_info.get_query_start_time() > 0
                          ? session_info.get_query_start_time() + query_timeout
                            : ObTimeUtility::current_time() + query_timeout);
@@ -1271,24 +1272,22 @@ int ObSql::execute_pl_sql(const ObString &sql,
   ObPhysicalPlanCtx *pctx = NULL;
 
   if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(result.init())) {
+  } else if (OB_FAIL(init_result_set(context, result))) {
   } else {
-    OB_ASSERT_SUCC(ret = result.init());
-    if (OB_FAIL(init_result_set(context, result))) {
+    context.cur_sql_ = sql;
+    context.is_from_pl_ = true;
+    context.is_dynamic_sql_ = is_dynamic_sql;
+    context.is_prepare_protocol_ = is_prepare_protocol;
+    context.plan_key_.db_id_ = session.get_database_id();
+    context.disable_privilege_check_ = PRIV_CHECK_FLAG_IN_PL;
+    pctx = ectx.get_physical_plan_ctx();
+    int64_t local_database_schema_version = -1;
+    if (OB_ISNULL(context.schema_guard_)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(context.schema_guard_->get_schema_version(local_database_schema_version))) {
     } else {
-      context.cur_sql_ = sql;
-      context.is_from_pl_ = true;
-      context.is_dynamic_sql_ = is_dynamic_sql;
-      context.is_prepare_protocol_ = is_prepare_protocol;
-      context.plan_key_.db_id_ = session.get_database_id();
-      context.disable_privilege_check_ = PRIV_CHECK_FLAG_IN_PL;
-      pctx = ectx.get_physical_plan_ctx();
-      int64_t local_database_schema_version = -1;
-      if (OB_ISNULL(context.schema_guard_)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(context.schema_guard_->get_schema_version(local_database_schema_version))) {
-      } else {
-        result.get_exec_context().get_sql_exec_ctx().set_query_begin_schema_version(local_database_schema_version);
-      }
+      result.get_exec_context().get_sql_exec_ctx().set_query_begin_schema_version(local_database_schema_version);
     }
   }
   if (OB_SUCC(ret) && is_prepare_protocol && !is_dynamic_sql) {
@@ -1977,20 +1976,21 @@ OB_INLINE int ObSql::handle_text_query(const ObString &stmt, ObSqlCtx &context, 
     }
     uint64_t database_id = OB_INVALID_ID;
 
-    {
-      OB_ASSERT_SUCC(ret = session.get_database_id(database_id));
-      if (FALSE_IT(context.plan_key_.db_id_ =
-                       (database_id == OB_INVALID_ID) ? OB_MOCK_DEFAULT_DATABASE_ID : database_id)) {
-        // do nothing
-      } else if (!use_plan_cache) {
-        if (context.multi_stmt_item_.is_batched_multi_stmt()) {
-          ret = OB_BATCHED_MULTI_STMT_ROLLBACK;
-          LOG_WARN("batched multi_stmt needs rollback");
-        }
-        // If it is a begin/commit statement, do not get the plan from the plan cache
-      } else if (!is_begin_commit_stmt && OB_FAIL(pc_get_plan_and_fill_result(*pc_ctx, result, get_plan_err,
-                                                                              ectx.get_need_disconnect_for_update()))) {
+    if (OB_FAIL(session.get_database_id(database_id))) {
+    } else if (FALSE_IT(context.plan_key_.db_id_ =
+                                  (database_id == OB_INVALID_ID) ?
+                                      OB_MOCK_DEFAULT_DATABASE_ID:
+                                      database_id)) {
+      // do nothing
+    } else if (!use_plan_cache) {
+      if (context.multi_stmt_item_.is_batched_multi_stmt()) {
+        ret = OB_BATCHED_MULTI_STMT_ROLLBACK;
+        LOG_WARN("batched multi_stmt needs rollback");
       }
+      // If it is a begin/commit statement, do not get the plan from the plan cache
+    } else if (!is_begin_commit_stmt
+        && OB_FAIL(pc_get_plan_and_fill_result(*pc_ctx, result, get_plan_err,
+                                               ectx.get_need_disconnect_for_update()))) {
     }
   }
 

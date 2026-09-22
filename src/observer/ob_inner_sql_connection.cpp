@@ -474,13 +474,12 @@ int ObInnerSQLConnection::init_result(ObInnerSQLResult &res,
   res.sql_ctx().is_dynamic_sql_ = is_dynamic_sql;
   res.sql_ctx().is_cursor_ = is_cursor;
   res.sql_ctx().schema_guard_ = &schema_guard;
-  {
-    OB_ASSERT_SUCC(ret = res.result_set().init());
-    if (is_prepare_protocol && NULL == secondary_namespace && !is_dynamic_sql) {
-      result_set.set_simple_ps_protocol();
-    } else { /*do nothing*/
-    }
-  }
+  if (OB_FAIL(res.result_set().init())) {
+  } else if (is_prepare_protocol
+             && NULL == secondary_namespace
+             && !is_dynamic_sql) {
+    result_set.set_simple_ps_protocol();
+  } else { /*do nothing*/ }
   return ret;
 }
 
@@ -1144,13 +1143,12 @@ int ObInnerSQLConnection::execute_read_inner(const ObString &sql,
     ret = OB_INVALID_ARGUMENT;
   }
   if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(res.create_handler(read_ctx, *this))) {
+  } else if (OB_FAIL(read_ctx->get_result().init())) {
   } else {
-    OB_ASSERT_SUCC(ret = res.create_handler(read_ctx, *this));
-    if (OB_FAIL(read_ctx->get_result().init())) {
-    } else {
-      read_ctx->get_result().result_set().set_user_sql(is_user_sql);
-      if (OB_FAIL(query(executor, read_ctx->get_result(), &read_ctx->get_vt_iter_factory()))) {
-      }
+    read_ctx->get_result().result_set().set_user_sql(is_user_sql);
+    if (OB_FAIL(query(executor, read_ctx->get_result(),
+                      &read_ctx->get_vt_iter_factory()))) {
     }
   }
   if (OB_SUCC(ret)) {

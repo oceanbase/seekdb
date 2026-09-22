@@ -122,13 +122,13 @@ int ObSnapshotTableProxy::fill_snapshot_item(
   int64_t event_ts = 0;
   const uint64_t snapshot_scn_val = info.snapshot_scn_.get_val_for_inner_table_field();
 
-  {
-    OB_ASSERT_SUCC(ret = gen_event_ts(event_ts));
-    if (OB_FAIL(dml.add_gmt_create(event_ts)) || OB_FAIL(dml.add_column("snapshot_type", info.snapshot_type_)) ||
-        OB_FAIL(dml.add_uint64_column("snapshot_scn", snapshot_scn_val)) ||
-        OB_FAIL(dml.add_column("schema_version", info.schema_version_)) ||
-        OB_FAIL(dml.add_column("tablet_id", info.tablet_id_)) || OB_FAIL(dml.add_column("extra_info", info.comment_))) {
-    }
+  if (OB_FAIL(gen_event_ts(event_ts))) {
+  } else if (OB_FAIL(dml.add_gmt_create(event_ts))
+             || OB_FAIL(dml.add_column("snapshot_type", info.snapshot_type_))
+             || OB_FAIL(dml.add_uint64_column("snapshot_scn", snapshot_scn_val))
+             || OB_FAIL(dml.add_column("schema_version", info.schema_version_))
+             || OB_FAIL(dml.add_column("tablet_id", info.tablet_id_))
+             || OB_FAIL(dml.add_column("extra_info", info.comment_))) {
   }
   return ret;
 }

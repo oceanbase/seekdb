@@ -1219,13 +1219,13 @@ int ObDbmsStatsUtils::check_all_cols_range_skew(const ObIArray<ObColumnStatParam
                 int64_t standard_cnt = hist.get_type() == ObHistType::FREQUENCY ?
                                          hist.get_buckets().at(0).endpoint_num_ :
                                          hist.get_sample_size() / col_param.bucket_num_;
-                {
-                  OB_ASSERT_SUCC(ret = ObDbmsStatsUtils::check_range_skew(hist.get_type(), hist.get_buckets(),
-                                                                          standard_cnt, is_even_dist));
-                  if (is_even_dist) { // Evenly distributed, no need to build a histogram.
-                    LOG_TRACE("check hist range skew is evenly distributed", K(hist.get_type()));
-                    hist.reset();
-                  }
+                if (OB_FAIL(ObDbmsStatsUtils::check_range_skew(hist.get_type(),
+                                                               hist.get_buckets(),
+                                                               standard_cnt,
+                                                               is_even_dist))) {
+                } else if (is_even_dist) {//Evenly distributed, no need to build a histogram.
+                  LOG_TRACE("check hist range skew is evenly distributed", K(hist.get_type()));
+                  hist.reset();
                 }
               }
             } else {/*do nothing*/}
@@ -1636,25 +1636,23 @@ int ObDbmsStatsUtils::get_all_prefix_index_text_pairs(const share::schema::ObTab
         // do nothing
       } else if (OB_ISNULL(ref_col = table_schema.get_column_schema(ref_column_ids.at(0)))) {
         ret = OB_ERR_UNEXPECTED;
-      } else {
-        OB_ASSERT_SUCC(ret = ObDbmsStatsUtils::get_prefix_index_substr_length(*col, prefix_length));
-        if (OB_FAIL(prefix_columns.get_refactored(ref_col->get_column_id(), pair_index))) {
-          if (OB_HASH_NOT_EXIST == ret) {
-            ret = OB_SUCCESS;
-            PrefixColumnPair new_pair(col->get_column_id(), ref_col->get_column_id(), prefix_length);
-            new_pair.related_column_meta_ = ref_col->get_meta_type();
-            if (OB_FAIL(pairs.push_back(new_pair))) {
-            } else if (OB_FAIL(prefix_columns.set_refactored(ref_col->get_column_id(), pairs.count() - 1))) {
-            }
+      } else if (OB_FAIL(ObDbmsStatsUtils::get_prefix_index_substr_length(*col, prefix_length))) {
+      } else if (OB_FAIL(prefix_columns.get_refactored(ref_col->get_column_id(), pair_index))) {
+        if (OB_HASH_NOT_EXIST == ret) {
+          ret = OB_SUCCESS;
+          PrefixColumnPair new_pair(col->get_column_id(), ref_col->get_column_id(), prefix_length);
+          new_pair.related_column_meta_ = ref_col->get_meta_type();
+          if (OB_FAIL(pairs.push_back(new_pair))) {
+          } else if (OB_FAIL(prefix_columns.set_refactored(ref_col->get_column_id(), pairs.count() - 1))) {
           }
-        } else if (pairs.at(pair_index).prefix_length_ >= prefix_length) {
-          // do nothing
-        } else {
-          pairs.at(pair_index).prefix_column_id_ = col->get_column_id();
-          pairs.at(pair_index).related_column_id_ = ref_col->get_column_id();
-          pairs.at(pair_index).prefix_length_ = prefix_length;
-          pairs.at(pair_index).related_column_meta_ = ref_col->get_meta_type();
         }
+      } else if (pairs.at(pair_index).prefix_length_ >= prefix_length) {
+        // do nothing
+      } else {
+        pairs.at(pair_index).prefix_column_id_ = col->get_column_id();
+        pairs.at(pair_index).related_column_id_ = ref_col->get_column_id();
+        pairs.at(pair_index).prefix_length_ = prefix_length;
+        pairs.at(pair_index).related_column_meta_ = ref_col->get_meta_type();
       }
     }
   }

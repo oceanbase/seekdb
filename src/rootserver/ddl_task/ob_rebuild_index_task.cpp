@@ -165,9 +165,8 @@ int ObRebuildIndexTask::drop_index_impl()
   } else if (OB_FAIL(schema_guard.get_table_schema( index_schema->get_data_table_id(), data_table_schema))) {
   } else if (OB_UNLIKELY(nullptr == database_schema || nullptr == data_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(prepare_drop_index_arg(schema_guard, index_schema, database_schema, data_table_schema, drop_index_arg))) {
   } else {
-    OB_ASSERT_SUCC(
-        ret = prepare_drop_index_arg(schema_guard, index_schema, database_schema, data_table_schema, drop_index_arg));
     int64_t ddl_rpc_timeout = 0;
     obcall::ObDropIndexRes drop_index_res;
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(index_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout))) {

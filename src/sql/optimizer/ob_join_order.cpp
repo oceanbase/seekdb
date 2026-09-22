@@ -8414,17 +8414,18 @@ int ObJoinOrder::generate_json_table_paths()
     output_rows_ = 199;
     output_row_size_ = 199;
     json_path->strong_sharding_ = get_plan()->get_optimizer_context().get_match_all_sharding();
-    {
-      OB_ASSERT_SUCC(ret = json_path->set_parallel_info_for_match_all());
-      if (OB_FAIL(ObOptimizerUtil::classify_subquery_exprs(get_restrict_infos(), json_path->subquery_exprs_,
-                                                           json_path->filter_, false /* with_onetime */))) {
-      } else if (table_item->json_table_def_->doc_exprs_.empty()) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(param_json_table_expr(table_item->json_table_def_->doc_exprs_, nl_params,
-                                               json_path->subquery_exprs_))) {
-      } else if (OB_FAIL(json_path->nl_params_.assign(nl_params))) {
-      } else if (OB_FAIL(append(json_path->value_exprs_, table_item->json_table_def_->doc_exprs_))) {
-      }
+    if (OB_FAIL(json_path->set_parallel_info_for_match_all())) {
+    } else if (OB_FAIL(ObOptimizerUtil::classify_subquery_exprs(get_restrict_infos(),
+                                                                json_path->subquery_exprs_,
+                                                                json_path->filter_,
+                                                                false /* with_onetime */ ))) {
+    } else if (table_item->json_table_def_->doc_exprs_.empty()) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(param_json_table_expr(table_item->json_table_def_->doc_exprs_,
+                                             nl_params,
+                                             json_path->subquery_exprs_))) {
+    } else if (OB_FAIL(json_path->nl_params_.assign(nl_params))) {
+    } else if (OB_FAIL(append(json_path->value_exprs_, table_item->json_table_def_->doc_exprs_))) {
     }
     // deal non_const default value
     if (OB_FAIL(ret)) {
@@ -8520,17 +8521,19 @@ int ObJoinOrder::generate_function_table_paths()
     output_rows_ = 199;
     output_row_size_ = 199;
     func_path->strong_sharding_ = get_plan()->get_optimizer_context().get_match_all_sharding();
-    {
-      OB_ASSERT_SUCC(ret = func_path->set_parallel_info_for_match_all());
-      if (OB_FAIL(ObOptimizerUtil::classify_subquery_exprs(get_restrict_infos(), func_path->subquery_exprs_,
-                                                           func_path->filter_, false /* with_onetime */))) {
-      } else if (OB_ISNULL(function_table_expr = table_item->function_table_expr_)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(param_funct_table_expr(function_table_expr, nl_params, func_path->subquery_exprs_))) {
-      } else if (OB_FAIL(func_path->nl_params_.assign(nl_params))) {
-      } else {
-        func_path->value_expr_ = function_table_expr;
-      }
+    if (OB_FAIL(func_path->set_parallel_info_for_match_all())) {
+    } else if (OB_FAIL(ObOptimizerUtil::classify_subquery_exprs(get_restrict_infos(),
+                                                                func_path->subquery_exprs_,
+                                                                func_path->filter_,
+                                                                false /* with_onetime */ ))) {
+    } else if (OB_ISNULL(function_table_expr = table_item->function_table_expr_)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(param_funct_table_expr(function_table_expr,
+                                              nl_params,
+                                              func_path->subquery_exprs_))) {
+    } else if (OB_FAIL(func_path->nl_params_.assign(nl_params))) {
+    } else {
+      func_path->value_expr_ = function_table_expr;
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(func_path->estimate_cost())) {
@@ -8613,17 +8616,17 @@ int ObJoinOrder::create_one_cte_table_path(const TableItem* table_item,
     ap->parent_ = this;
     ap->contain_fake_cte_ = true;
     ap->strong_sharding_ = sharding;
-    {
-      OB_ASSERT_SUCC(ret = ap->set_parallel_info_for_match_all());
-      if (OB_FAIL(ObOptimizerUtil::classify_subquery_exprs(get_restrict_infos(), ap->subquery_exprs_, ap->filter_,
-                                                           false /* with_onetime */))) {
-      } else if (OB_FAIL(ap->estimate_cost())) {
-      } else if (OB_FAIL(ap->compute_pipeline_info())) {
-      } else if (OB_FAIL(create_plan_for_path_with_subq(ap))) {
-      } else if (OB_FAIL(add_path(ap))) {
-      } else {
-        /* do nothing */
-      }
+    if (OB_FAIL(ap->set_parallel_info_for_match_all())) {
+    } else if (OB_FAIL(ObOptimizerUtil::classify_subquery_exprs(get_restrict_infos(),
+                                                                ap->subquery_exprs_,
+                                                                ap->filter_,
+                                                                false /* with_onetime */ ))) {
+    } else if (OB_FAIL(ap->estimate_cost())) {
+    } else if (OB_FAIL(ap->compute_pipeline_info())) {
+    } else if (OB_FAIL(create_plan_for_path_with_subq(ap))) {
+    } else if (OB_FAIL(add_path(ap))) {
+    } else {
+      /* do nothing */
     }
   }
 
@@ -8935,13 +8938,11 @@ int ObJoinOrder::generate_temp_table_paths()
                                                       temp_table_path,
                                                       /*is_temp_table_path = */true))) {
     } else if (OB_FAIL(temp_table_path->compute_sharding_info())) {
-    } else {
-      OB_ASSERT_SUCC(ret = temp_table_path->compute_path_ordering());
-      if (OB_FAIL(temp_table_path->estimate_cost())) {
-      } else if (OB_FAIL(temp_table_path->compute_pipeline_info())) {
-      } else if (OB_FAIL(create_plan_for_path_with_subq(temp_table_path))) {
-      } else if (OB_FAIL(add_path(temp_table_path))) {
-      }
+    } else if (OB_FAIL(temp_table_path->compute_path_ordering())) {
+    } else if (OB_FAIL(temp_table_path->estimate_cost())) {
+    } else if (OB_FAIL(temp_table_path->compute_pipeline_info())) {
+    } else if (OB_FAIL(create_plan_for_path_with_subq(temp_table_path))) {
+    } else if (OB_FAIL(add_path(temp_table_path))) {
     }
   }
   return ret;
@@ -9046,9 +9047,10 @@ int ObJoinOrder::generate_subquery_paths(PathHelper &helper)
   } else if (OB_FAIL(log_plan->add_exec_params_meta(helper.exec_params_,
                                                     get_plan()->get_basic_table_metas(),
                                                     get_plan()->get_selectivity_ctx()))) {
+  } else if (OB_FAIL(log_plan->init_rescan_info_for_subquery_paths(*get_plan(),
+                                                                   helper.is_inner_path_,
+                                                                   helper.is_semi_anti_join_))) {
   } else {
-    OB_ASSERT_SUCC(ret = log_plan->init_rescan_info_for_subquery_paths(*get_plan(), helper.is_inner_path_,
-                                                                       helper.is_semi_anti_join_));
     log_plan->set_is_subplan_scan(true);
     log_plan->set_nonrecursive_plan_for_fake_cte(get_plan()->get_nonrecursive_plan_for_fake_cte());
     if (OB_FAIL(log_plan->generate_raw_plan())) {
@@ -16001,26 +16003,28 @@ int ObJoinOrder::generate_values_table_paths()
     values_path->table_def_ = values_table;
     ObSEArray<ObExecParamRawExpr *, 4> nl_params;
     values_path->strong_sharding_ = get_plan()->get_optimizer_context().get_match_all_sharding();
-    {
-      OB_ASSERT_SUCC(ret = values_path->set_parallel_info_for_match_all());
-      if (OB_FAIL(ObOptimizerUtil::classify_subquery_exprs(get_restrict_infos(), values_path->subquery_exprs_,
-                                                           values_path->filter_, false /* with_onetime */))) {
-      } else if (OB_FAIL(get_plan()->get_basic_table_metas().add_values_table_meta_info(
-                     stmt, table_id_, get_plan()->get_selectivity_ctx(), values_table))) {
-      } else if (OB_FAIL(ObOptEstCost::estimate_width_for_table(
-                     get_plan()->get_basic_table_metas(), get_plan()->get_selectivity_ctx(), stmt->get_column_items(),
-                     table_id_, output_row_size_))) {
-      } else if (OB_FAIL(values_path->estimate_row_count())) {
-      } else if (OB_FAIL(values_path->estimate_cost())) {
-      } else if (OB_FAIL(
-                     param_values_table_expr(values_table->access_exprs_, nl_params, values_path->subquery_exprs_))) {
-      } else if (OB_FAIL(values_path->nl_params_.assign(nl_params))) {
-      } else if (OB_FAIL(values_path->compute_pipeline_info())) {
-      } else if (OB_FAIL(create_plan_for_path_with_subq(values_path))) {
-      } else if (OB_FAIL(add_path(values_path))) {
-      } else { /*do nothing*/
-      }
-    }
+    if (OB_FAIL(values_path->set_parallel_info_for_match_all())) {
+    } else if (OB_FAIL(ObOptimizerUtil::classify_subquery_exprs(get_restrict_infos(),
+                                                                values_path->subquery_exprs_,
+                                                                values_path->filter_,
+                                                                false /* with_onetime */ ))) {
+    } else if (OB_FAIL(get_plan()->get_basic_table_metas().add_values_table_meta_info(stmt,
+                       table_id_, get_plan()->get_selectivity_ctx(), values_table))) {
+    } else if (OB_FAIL(ObOptEstCost::estimate_width_for_table(get_plan()->get_basic_table_metas(),
+                                                              get_plan()->get_selectivity_ctx(),
+                                                              stmt->get_column_items(),
+                                                              table_id_,
+                                                              output_row_size_))) {
+    } else if (OB_FAIL(values_path->estimate_row_count())) {
+    } else if (OB_FAIL(values_path->estimate_cost())) {
+    } else if (OB_FAIL(param_values_table_expr(values_table->access_exprs_,
+                                               nl_params,
+                                               values_path->subquery_exprs_))) {
+    } else if (OB_FAIL(values_path->nl_params_.assign(nl_params))) {
+    } else if (OB_FAIL(values_path->compute_pipeline_info())) {
+    } else if (OB_FAIL(create_plan_for_path_with_subq(values_path))) {
+    } else if (OB_FAIL(add_path(values_path))) {
+    } else { /*do nothing*/ }
   }
   return ret;
 }

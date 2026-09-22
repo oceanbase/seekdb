@@ -221,10 +221,10 @@ int ObPwjComparer::is_row_equal(const ObRowkey &first_row,
   } else {
     is_equal = true;
     for (int i = 0; OB_SUCC(ret) && is_equal && i < first_row.get_obj_cnt(); i++) {
-      {
-        OB_ASSERT_SUCC(
-            ret = is_obj_equal(first_row.get_obj_ptr()[i], second_row.get_obj_ptr()[i], is_equal)); /*do nothing*/
-      }
+      if (OB_FAIL(is_obj_equal(first_row.get_obj_ptr()[i],
+                               second_row.get_obj_ptr()[i],
+                               is_equal))) {
+      } else { /*do nothing*/ }
     }
   }
   return ret;
@@ -271,9 +271,8 @@ int ObPwjComparer::is_row_equal(const common::ObNewRow &first_row,
   } else {
     is_equal = true;
     for (int64_t i = 0; OB_SUCC(ret) && is_equal && i < first_row.count_; i++) {
-      {
-        OB_ASSERT_SUCC(ret = is_obj_equal(first_row.cells_[i], second_row.cells_[i], is_equal)); /*do nothing*/
-      }
+      if (OB_FAIL(is_obj_equal(first_row.cells_[i], second_row.cells_[i], is_equal))) {
+      } else { /*do nothing*/ }
     }
   }
   return ret;

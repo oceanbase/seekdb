@@ -167,19 +167,17 @@ int ObTableScanWithIndexBackOp::do_table_scan_with_index()
 int ObTableScanWithIndexBackOp::do_table_rescan_with_index()
 {
   int ret = OB_SUCCESS;
-  {
-    OB_ASSERT_SUCC(ret = extract_range_from_index());
-    if (scan_param_.key_ranges_.count() <= 0) {
-      // do nothing
-      read_action_ = READ_ITER_END;
-    } else if (OB_ISNULL(result_)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(data_plane::table_scan_rescan(result_, scan_param_))) {
-      if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-      }
-    } else {
-      read_action_ = READ_ITERATOR;
+  if (OB_FAIL(extract_range_from_index())) {
+  } else if (scan_param_.key_ranges_.count() <= 0) {
+    //do nothing
+    read_action_ = READ_ITER_END;
+  } else if (OB_ISNULL(result_)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(data_plane::table_scan_rescan(result_, scan_param_))) {
+    if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
     }
+  } else {
+    read_action_ = READ_ITERATOR;
   }
   return ret;
 }

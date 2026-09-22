@@ -489,17 +489,15 @@ int ObCreateTableResolver::check_column_name_duplicate(const ParseNode *node)
           } else {
             ObString name(name_node->str_len_, name_node->str_value_);
             ObCollationType cs_type = CS_TYPE_INVALID;
-            {
-              OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(cs_type));
-              if (OB_FAIL(ObSQLUtils::check_column_name(cs_type, name))) {
+            if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
+            } else if (OB_FAIL(ObSQLUtils::check_column_name(cs_type, name))) {
+            } else {
+              ObColumnNameHashWrapper column_name_key(name);
+              if (OB_HASH_EXIST  == column_name_set_.exist_refactored(column_name_key)) {
+                ret = OB_ERR_COLUMN_DUPLICATE;
+                LOG_USER_ERROR(OB_ERR_COLUMN_DUPLICATE, name.length(), name.ptr());
               } else {
-                ObColumnNameHashWrapper column_name_key(name);
-                if (OB_HASH_EXIST == column_name_set_.exist_refactored(column_name_key)) {
-                  ret = OB_ERR_COLUMN_DUPLICATE;
-                  LOG_USER_ERROR(OB_ERR_COLUMN_DUPLICATE, name.length(), name.ptr());
-                } else {
-                  if (OB_FAIL(column_name_set_.set_refactored(column_name_key))) {
-                  }
+                if (OB_FAIL(column_name_set_.set_refactored(column_name_key))) {
                 }
               }
             }
@@ -2015,10 +2013,8 @@ int ObCreateTableResolver::resolve_index_name(
     ObCollationType cs_type = CS_TYPE_INVALID;
     if (OB_UNLIKELY(NULL == session_info_)) {
       ret = OB_ERR_UNEXPECTED;
-    } else {
-      OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(cs_type));
-      if (OB_FAIL(ObSQLUtils::check_index_name(cs_type, index_name_))) {
-      }
+    } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
+    } else if (OB_FAIL(ObSQLUtils::check_index_name(cs_type, index_name_))) {
     }
   }
 

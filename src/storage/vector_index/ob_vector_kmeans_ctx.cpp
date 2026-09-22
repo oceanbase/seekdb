@@ -285,8 +285,8 @@ int ObKmeansAlgo::init_centers(const ObIArray<float*> &input_vectors)
       int64_t i = 0;
       for (i = 0; OB_SUCC(ret) && i < sample_cnt; ++i) {
         float *sample_vector = input_vectors.at(i);
-        {
-          OB_ASSERT_SUCC(ret = calc_kmeans_distance(sample_vector, current_center, kmeans_ctx_->dim_, distance));
+        if (OB_FAIL(calc_kmeans_distance(sample_vector, current_center, kmeans_ctx_->dim_, distance))) {
+        } else {
           distance *= distance;
           if (distance < weight_[i]) {
             weight_[i] = distance;
@@ -771,8 +771,8 @@ int ObElkanKmeansAlgo::search_nearest_center(const ObIArray<float*> &input_vecto
     for (int64_t i = 0; OB_SUCC(ret) && i < center_count; ++i) {
       for (int64_t j = i + 1; OB_SUCC(ret) && j < center_count; ++j) {
         calc_dis_cnt++;
-        {
-          OB_ASSERT_SUCC(ret = calc_kmeans_distance(centers_[cur_idx_].at(i), centers_[cur_idx_].at(j), dim, distance));
+        if (OB_FAIL(calc_kmeans_distance(centers_[cur_idx_].at(i), centers_[cur_idx_].at(j), dim, distance))) {
+        } else {
           set_centers_distance(centers_distance, i, j, distance);
         }
       }
@@ -784,9 +784,8 @@ int ObElkanKmeansAlgo::search_nearest_center(const ObIArray<float*> &input_vecto
       float min_distance = FLT_MAX;
       float gate_distance = FLT_MAX;
       calc_dis_cnt++;
-      {
-        OB_ASSERT_SUCC(
-            ret = calc_kmeans_distance(sample_vector, centers_[cur_idx_].at(0), kmeans_ctx_->dim_, min_distance));
+      if (OB_FAIL(calc_kmeans_distance(sample_vector, centers_[cur_idx_].at(0), kmeans_ctx_->dim_, min_distance))) {
+      } else {
         nearest_center_idx = 0;
         gate_distance = min_distance * GATE_DISTANCE_FACTOR;
       }
@@ -795,21 +794,16 @@ int ObElkanKmeansAlgo::search_nearest_center(const ObIArray<float*> &input_vecto
         if (dis_near_cur < gate_distance) {
           float dis_half_dim = 0.0;
           calc_half_dis_cnt++;
-          {
-            OB_ASSERT_SUCC(ret = calc_kmeans_distance(sample_vector, centers_[cur_idx_].at(j), dim / 2, dis_half_dim));
-            if (dis_half_dim < min_distance) {
-              float full_distance = 0.0;
-              calc_half_dis_cnt++;
-              {
-                OB_ASSERT_SUCC(ret = calc_kmeans_distance(sample_vector + dim / 2, centers_[cur_idx_].at(j) + dim / 2,
-                                                          dim - dim / 2, full_distance));
-                if (OB_FALSE_IT(full_distance += dis_half_dim)) {
-                } else if (full_distance < min_distance) {
-                  min_distance = full_distance;
-                  gate_distance = min_distance * GATE_DISTANCE_FACTOR;
-                  nearest_center_idx = j;
-                }
-              }
+          if (OB_FAIL(calc_kmeans_distance(sample_vector, centers_[cur_idx_].at(j), dim / 2, dis_half_dim))) {
+          } else if (dis_half_dim < min_distance) {
+            float full_distance = 0.0;
+            calc_half_dis_cnt++;
+            if (OB_FAIL(calc_kmeans_distance(sample_vector + dim / 2, centers_[cur_idx_].at(j) + dim / 2, dim - dim / 2, full_distance))) {
+            } else if (OB_FALSE_IT(full_distance += dis_half_dim)) {
+            } else if (full_distance < min_distance) {
+              min_distance = full_distance;
+              gate_distance = min_distance * GATE_DISTANCE_FACTOR;
+              nearest_center_idx = j;
             }
           }
         }

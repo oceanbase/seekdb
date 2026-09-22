@@ -57,22 +57,22 @@ int ObSetTransactionResolver::resolve(const ParseNode &parse_tree)
     if (OB_ISNULL(scope_node) || OB_ISNULL(characteristics_node)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("inalid scope node", K(scope_node), K(characteristics_node));
+    } else if (OB_FAIL(scope_resolve(*scope_node, scope))) {
+    } else if (OB_ISNULL(allocator_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_ERROR("invalid allocator in resolver", K(allocator_));
     } else {
-      OB_ASSERT_SUCC(ret = scope_resolve(*scope_node, scope));
-      if (OB_ISNULL(allocator_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_ERROR("invalid allocator in resolver", K(allocator_));
+      access_var_node.set_scope_ = scope;
+      access_var_node.is_system_variable_ = true;
+      isolation_var_node.set_scope_ = scope;
+      isolation_var_node.is_system_variable_ = true;
+      if (OB_FAIL(ob_write_string(
+                  *allocator_, OB_SV_TX_ISOLATION, isolation_var_node.variable_name_))) {
+      } else if (OB_FAIL(ob_write_string(
+                  *allocator_, OB_SV_TX_READ_ONLY, access_var_node.variable_name_))) {
       } else {
-        access_var_node.set_scope_ = scope;
-        access_var_node.is_system_variable_ = true;
-        isolation_var_node.set_scope_ = scope;
-        isolation_var_node.is_system_variable_ = true;
-        if (OB_FAIL(ob_write_string(*allocator_, OB_SV_TX_ISOLATION, isolation_var_node.variable_name_))) {
-        } else if (OB_FAIL(ob_write_string(*allocator_, OB_SV_TX_READ_ONLY, access_var_node.variable_name_))) {
-        } else {
-          ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, isolation_var_node.variable_name_);
-          ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, access_var_node.variable_name_);
-        }
+        ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, isolation_var_node.variable_name_);
+        ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, access_var_node.variable_name_);
       }
     }
     bool set_access_mode = false;

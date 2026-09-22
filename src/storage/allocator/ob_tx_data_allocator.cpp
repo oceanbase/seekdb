@@ -101,8 +101,8 @@ int ObTxDataOpAllocator::init()
   } else if (OB_ISNULL(throttle_tool_)) {
     ret = OB_ERR_UNEXPECTED;
     SHARE_LOG(WARN, "throttle tool is unexpected null", KP(throttle_tool_), KP(share_mem_alloc_mgr));
+  } else if (OB_FAIL(allocator_.init(OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_, mem_attr))) {
   } else {
-    OB_ASSERT_SUCC(ret = allocator_.init(OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_, mem_attr));
     allocator_.set_nway(MDS_ALLOC_CONCURRENCY);
     is_inited_ = true;
   }

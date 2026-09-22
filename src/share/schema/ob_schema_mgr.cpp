@@ -2532,19 +2532,20 @@ int ObSchemaMgr::get_schema_count(int64_t &schema_count) const
     int64_t ai_model_schema_count = 0;
     if (OB_FAIL(outline_mgr_.get_outline_schema_count(outline_schema_count))) {
     } else if (OB_FAIL(routine_mgr_.get_routine_schema_count(routine_schema_count))) {
+    } else if (OB_FAIL(priv_mgr_.get_priv_schema_count(priv_schema_count))) {
+    } else if (OB_FAIL(package_mgr_.get_package_schema_count(package_schema_count))) {
+    } else if (OB_FAIL(trigger_mgr_.get_trigger_schema_count(trigger_schema_count))) {
+    } else if (OB_FAIL(sys_variable_mgr_.get_sys_variable_schema_count(sys_variable_schema_count))) {
+    } else if (OB_FAIL(mock_fk_parent_table_mgr_.get_mock_fk_parent_table_schema_count(mock_fk_parent_table_schema_count))) {
+    } else if (OB_FAIL(ai_model_mgr_.get_ai_model_schema_count(ai_model_schema_count))) {
     } else {
-      OB_ASSERT_SUCC(ret = priv_mgr_.get_priv_schema_count(priv_schema_count));
-      if (OB_FAIL(package_mgr_.get_package_schema_count(package_schema_count))) {
-      } else if (OB_FAIL(trigger_mgr_.get_trigger_schema_count(trigger_schema_count))) {
-      } else if (OB_FAIL(sys_variable_mgr_.get_sys_variable_schema_count(sys_variable_schema_count))) {
-      } else if (OB_FAIL(mock_fk_parent_table_mgr_.get_mock_fk_parent_table_schema_count(
-                     mock_fk_parent_table_schema_count))) {
-      } else if (OB_FAIL(ai_model_mgr_.get_ai_model_schema_count(ai_model_schema_count))) {
-      } else {
-        schema_count += (outline_schema_count + routine_schema_count + priv_schema_count + package_schema_count +
-                         sys_variable_schema_count + trigger_schema_count + mock_fk_parent_table_schema_count +
-                         ai_model_schema_count);
-      }
+      schema_count += (outline_schema_count + routine_schema_count + priv_schema_count
+                       + package_schema_count
+                       + sys_variable_schema_count
+                       + trigger_schema_count
+                       + mock_fk_parent_table_schema_count
+                       + ai_model_schema_count
+                      );
     }
   }
   return ret;

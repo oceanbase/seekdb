@@ -224,8 +224,8 @@ int LogGroupBuffer::fill(const LSN &lsn,
   } else if (FALSE_IT(gen_readable_begin_lsn_for_filling_(end_lsn, new_readable_begin_lsn))) {
   } else if (FALSE_IT(inc_update_readable_begin_lsn_(new_readable_begin_lsn))) {
     PALF_LOG(WARN, "inc_update_readable_begin_lsn_ failed", K(ret), K(lsn), K(end_lsn), K(new_readable_begin_lsn));
+  } else if (OB_FAIL(fill_(lsn, start_pos, data, data_len))) {
   } else {
-    OB_ASSERT_SUCC(ret = fill_(lsn, start_pos, data, data_len));
   }
   return ret;
 }
@@ -274,11 +274,12 @@ int LogGroupBuffer::fill_padding_body(const LSN &lsn,
       memset(data_buf_, PADDING_LOG_CONTENT_CHAR, log_body_size - first_part_len);
     }
     // fill valid padding data.
-    {
-      OB_ASSERT_SUCC(ret = fill_(lsn, start_pos, data, data_len));
+    if (OB_FAIL(fill_(lsn, start_pos, data, data_len))) {
+    } else {
       PALF_LOG(INFO, "fill padding log success", K(ret), K(lsn), K(log_body_size), K(start_pos), K(data_len),
           K(group_buf_tail_len), K(first_part_len), "second_part_len", data_len - first_part_len);
     }
+
   }
   return ret;
 }

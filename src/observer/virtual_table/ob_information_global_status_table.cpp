@@ -67,8 +67,8 @@ int ObInfoSchemaGlobalStatusTable::fetch_all_global_status(
       switch (i) {
       case THREADS_CONNECTED: {
           int64_t session_cnt = 0;
-          {
-            OB_ASSERT_SUCC(ret = get_observer_sql_session_mgr()->get_session_count(session_cnt));
+          if (OB_FAIL(get_observer_sql_session_mgr()->get_session_count(session_cnt))) {
+          } else {
             obj.set_int(session_cnt);
           }
           break;

@@ -597,7 +597,8 @@ int ObNestedLoopJoinOp::read_right_func_end()
   int ret = OB_SUCCESS;
   if (need_left_join() && !left_row_joined_) {
     output_row_produced_ = true;
-    OB_ASSERT_SUCC(ret = blank_row(right_->get_spec().output_));
+    if (OB_FAIL(blank_row(right_->get_spec().output_))) {
+    }
   }
   state_ = JS_READ_LEFT;
 

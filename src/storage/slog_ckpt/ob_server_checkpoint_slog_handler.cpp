@@ -175,8 +175,9 @@ int ObServerCheckpointSlogHandler::read_checkpoint(const ObServerSuperBlock &sup
 
   if (OB_FAIL(server_ckpt_reader.read_checkpoint(super_block))) {
   } else if (OB_FAIL(set_meta_block_list(server_ckpt_reader.get_meta_block_list()))) {
-  } else
-    OB_ASSERT_SUCC(ret = server_ckpt_reader.get_runtime_meta(runtime_meta_for_replay_, runtime_meta_valid_for_replay_));
+  } else if (OB_FAIL(server_ckpt_reader.get_runtime_meta(
+                 runtime_meta_for_replay_, runtime_meta_valid_for_replay_))) {
+  }
   return ret;
 }
 
@@ -321,8 +322,8 @@ int ObServerCheckpointSlogHandler::replay_update_server_resources(const char *bu
     } else if (OB_FAIL(log_entry.deserialize(buf, buf_len, pos))) {
     } else if (OB_FAIL(get_replay_runtime_meta_(runtime_meta))) {
     } else if (FALSE_IT(runtime_meta.runtime_config_ = runtime_config)) {
-    } else
-      OB_ASSERT_SUCC(ret = set_replay_runtime_meta_(runtime_meta));
+    } else if (OB_FAIL(set_replay_runtime_meta_(runtime_meta))) {
+    }
   }
 
   return ret;
@@ -344,8 +345,8 @@ int ObServerCheckpointSlogHandler::replay_update_runtime_super_block(const char 
     } else if (OB_FAIL(log_entry.deserialize(buf, buf_len, pos))) {
     } else if (OB_FAIL(get_replay_runtime_meta_(runtime_meta))) {
     } else if (FALSE_IT(runtime_meta.super_block_ = super_block)) {
-    } else
-      OB_ASSERT_SUCC(ret = set_replay_runtime_meta_(runtime_meta));
+    } else if (OB_FAIL(set_replay_runtime_meta_(runtime_meta))) {
+    }
   }
   return ret;
 }

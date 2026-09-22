@@ -50,7 +50,8 @@ int ObSelectIntoOp::inner_open()
   } else {
     // since we call get_next_row in inner_open, we have to set opened_ first in avoid to a infinite loop.
     opened_ = true;
-    OB_ASSERT_SUCC(ret = session->get_sql_select_limit(top_limit_cnt_));
+    if (OB_FAIL(session->get_sql_select_limit(top_limit_cnt_))) {
+    }
   }
   if (OB_SUCC(ret) && !MY_SPEC.external_properties_.str_.empty()) {
     if (OB_FAIL(external_properties_.load_from_string(MY_SPEC.external_properties_.str_,

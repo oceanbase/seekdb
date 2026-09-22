@@ -1769,8 +1769,8 @@ int ObSemiToInnerHint::assign(const ObSemiToInnerHint &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(tables_.assign(other.tables_))) {
-  } else
-    OB_ASSERT_SUCC(ret = ObHint::assign(other));
+  } else if (OB_FAIL(ObHint::assign(other))) {
+  }
   return ret;
 }
 
@@ -1868,12 +1868,10 @@ bool ObCoalesceSqHint::has_qb_name_list(const ObIArray<ObString> & qb_names) con
 int ObTableParallelHint::assign(const ObTableParallelHint &other)
 {
   int ret = OB_SUCCESS;
-  {
-    OB_ASSERT_SUCC(ret = table_.assign(other.table_));
-    if (OB_FAIL(ObOptHint::assign(other))) {
-    } else {
-      parallel_ = other.parallel_;
-    }
+  if (OB_FAIL(table_.assign(other.table_))) {
+  } else if (OB_FAIL(ObOptHint::assign(other))) {
+  } else {
+    parallel_ = other.parallel_;
   }
   return ret;
 }
@@ -1897,10 +1895,8 @@ int ObIndexHint::assign(const ObIndexHint &other)
   int ret = OB_SUCCESS;
   index_name_ = other.index_name_;
   index_prefix_ = other.index_prefix_;
-  {
-    OB_ASSERT_SUCC(ret = table_.assign(other.table_));
-    if (OB_FAIL(ObOptHint::assign(other))) {
-    }
+  if (OB_FAIL(table_.assign(other.table_))) {
+  } else if (OB_FAIL(ObOptHint::assign(other))) {
   }
   return ret;
 }
@@ -1927,11 +1923,9 @@ int ObIndexHint::print_hint_desc(PlanText &plan_text) const
 int ObUnionMergeHint::assign(const ObUnionMergeHint &other)
 {
   int ret = OB_SUCCESS;
-  {
-    OB_ASSERT_SUCC(ret = table_.assign(other.table_));
-    if (OB_FAIL(index_name_list_.assign(other.index_name_list_))) {
-    } else if (OB_FAIL(ObOptHint::assign(other))) {
-    }
+  if (OB_FAIL(table_.assign(other.table_))) {
+  } else if (OB_FAIL(index_name_list_.assign(other.index_name_list_))) {
+  } else if  (OB_FAIL(ObOptHint::assign(other))) {
   }
   return ret;
 }
@@ -2354,10 +2348,8 @@ int ObJoinOrderHint::print_hint_desc(PlanText &plan_text) const
 int ObJoinOrderHint::assign(const ObJoinOrderHint &other)
 {
   int ret = OB_SUCCESS;
-  {
-    OB_ASSERT_SUCC(ret = table_.assign(other.table_));
-    if (OB_FAIL(ObOptHint::assign(other))) {
-    }
+  if (OB_FAIL(table_.assign(other.table_))) {
+  } else if (OB_FAIL(ObOptHint::assign(other))) {
   }
   return ret;
 }
@@ -2479,8 +2471,8 @@ int ObLeadingTable::deep_copy(ObIAllocator *allocator, const ObLeadingTable &oth
   reset();
   if (NULL != other.table_) {
     if (OB_FAIL(ObQueryHint::create_hint_table(allocator, table_))) {
-    } else
-      OB_ASSERT_SUCC(ret = table_->assign(*other.table_));
+    } else if (OB_FAIL(table_->assign(*other.table_))) {
+    }
   } else if (OB_FAIL(ObQueryHint::create_leading_table(allocator, left_table_))) {
   } else if (OB_FAIL(SMART_CALL(left_table_->deep_copy(allocator, *other.left_table_)))) {
   } else if (OB_FAIL(ObQueryHint::create_leading_table(allocator, right_table_))) {

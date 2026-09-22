@@ -446,7 +446,8 @@ int ObMvccEngine::create_btree_kv_(const ObMemtableKey *key,
                                                                            ObMvccRow *&new_row) {
     int ret = OB_SUCCESS;
     if (is_exist_key) {
-      OB_ASSERT_SUCC(ret = stored_key->encode(new_or_exist_key.get_rowkey()));
+      if (OB_FAIL(stored_key->encode(new_or_exist_key.get_rowkey()))) {
+      }
     } else {
       // Memstore allocator has no per-object free, so reuse one candidate across btree EAGAIN retries.
       if (OB_ISNULL(candidate_key) &&
@@ -457,8 +458,8 @@ int ObMvccEngine::create_btree_kv_(const ObMemtableKey *key,
                  OB_ISNULL(candidate_row = (ObMvccRow *)engine_allocator_->alloc(sizeof(*candidate_row)))) {
         TRANS_LOG(WARN, "alloc ObMvccRow fail", K(ret));
         ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else if (OB_FAIL(stored_key->encode(candidate_key))) {
       } else {
-        OB_ASSERT_SUCC(ret = stored_key->encode(candidate_key));
         new_or_exist_key = ObStoreRowkeyWrapper(candidate_key);
         if (!is_candidate_row_inited) {
           candidate_row = new(candidate_row) ObMvccRow();

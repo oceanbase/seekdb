@@ -121,37 +121,35 @@ int ObPxSqcMeta::assign(const ObPxSqcMeta &other)
   } else if (OB_FAIL(temp_table_ctx_.assign(other.temp_table_ctx_))) {
   } else if (OB_FAIL(access_table_location_keys_.assign(other.access_table_location_keys_))) {
   } else if (OB_FAIL(access_table_location_indexes_.assign(other.access_table_location_indexes_))) {
+  } else if (OB_FAIL(monitoring_info_.assign(other.monitoring_info_))) {
+  } else if (OB_FAIL(locations_order_.assign(other.locations_order_))) {
   } else {
-    OB_ASSERT_SUCC(ret = monitoring_info_.assign(other.monitoring_info_));
-    if (OB_FAIL(locations_order_.assign(other.locations_order_))) {
-    } else {
-      execution_id_ = other.execution_id_;
-      qc_id_ = other.qc_id_;
-      dfo_id_ = other.dfo_id_;
-      sqc_id_ = other.sqc_id_;
-      branch_id_base_ = other.branch_id_base_;
-      thread_inited_ = other.thread_inited_;
-      thread_finish_ = other.thread_finish_;
-      qc_ch_info_ = other.qc_ch_info_;
-      sqc_ch_info_ = other.sqc_ch_info_;
-      task_count_ = other.task_count_;
-      max_task_count_ = other.max_task_count_;
-      min_task_count_ = other.min_task_count_;
-      qc_channel_ = NULL;
-      px_int_id_ = other.px_int_id_;
-      is_fulltree_ = other.is_fulltree_;
-      parent_dfo_id_ = other.parent_dfo_id_;
-      total_task_count_ = other.total_task_count_;
-      total_part_count_ = other.total_part_count_;
-      px_sequence_id_ = other.px_sequence_id_;
-      transmit_use_interm_result_ = other.transmit_use_interm_result_;
-      recieve_use_interm_result_ = other.recieve_use_interm_result_;
-      ignore_vtable_error_ = other.ignore_vtable_error_;
-      adjoining_root_dfo_ = other.adjoining_root_dfo_;
-      is_single_tsc_leaf_dfo_ = other.is_single_tsc_leaf_dfo_;
-      sqc_count_ = other.sqc_count_;
-      partition_random_affinitize_ = other.partition_random_affinitize_;
-    }
+    execution_id_ = other.execution_id_;
+    qc_id_ = other.qc_id_;
+    dfo_id_ = other.dfo_id_;
+    sqc_id_ = other.sqc_id_;
+    branch_id_base_ = other.branch_id_base_;
+    thread_inited_ = other.thread_inited_;
+    thread_finish_ = other.thread_finish_;
+    qc_ch_info_ = other.qc_ch_info_;
+    sqc_ch_info_ = other.sqc_ch_info_;
+    task_count_ = other.task_count_;
+    max_task_count_ = other.max_task_count_;
+    min_task_count_ = other.min_task_count_;
+    qc_channel_ = NULL;
+    px_int_id_ = other.px_int_id_;
+    is_fulltree_ = other.is_fulltree_;
+    parent_dfo_id_ = other.parent_dfo_id_;
+    total_task_count_ = other.total_task_count_;
+    total_part_count_ = other.total_part_count_;
+    px_sequence_id_ = other.px_sequence_id_;
+    transmit_use_interm_result_ = other.transmit_use_interm_result_;
+    recieve_use_interm_result_ = other.recieve_use_interm_result_;
+    ignore_vtable_error_ = other.ignore_vtable_error_;
+    adjoining_root_dfo_ = other.adjoining_root_dfo_;
+    is_single_tsc_leaf_dfo_ = other.is_single_tsc_leaf_dfo_;
+    sqc_count_ = other.sqc_count_;
+    partition_random_affinitize_ = other.partition_random_affinitize_;
   }
   return ret;
 }

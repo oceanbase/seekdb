@@ -743,16 +743,20 @@ int ObDASLegacyTRMergeIter::inner_reuse()
     ret = OB_ERR_UNEXPECTED;
   } else if (query_tokens_.count() > 0) {
     if (OB_NOT_NULL(total_doc_cnt_scan_param_)) {
-      OB_ASSERT_SUCC(ret = reuse_das_iter_scan_param(total_doc_cnt_tablet_id_, *total_doc_cnt_scan_param_));
+      if (OB_FAIL(reuse_das_iter_scan_param(total_doc_cnt_tablet_id_, *total_doc_cnt_scan_param_))) {
+      }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < inv_scan_params_.count(); ++i) {
-      OB_ASSERT_SUCC(ret = reuse_das_iter_scan_param(inv_idx_tablet_id_, *inv_scan_params_[i]));
+      if (OB_FAIL(reuse_das_iter_scan_param(inv_idx_tablet_id_, *inv_scan_params_[i]))) {
+      }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < inv_agg_params_.count(); ++i) {
-      OB_ASSERT_SUCC(ret = reuse_das_iter_scan_param(inv_idx_tablet_id_, *inv_agg_params_[i]));
+      if (OB_FAIL(reuse_das_iter_scan_param(inv_idx_tablet_id_, *inv_agg_params_[i]))) {
+      }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < block_max_scan_params_.count(); ++i) {
-      OB_ASSERT_SUCC(ret = reuse_das_iter_scan_param(inv_idx_tablet_id_, *block_max_scan_params_[i]));
+      if (OB_FAIL(reuse_das_iter_scan_param(inv_idx_tablet_id_, *block_max_scan_params_[i]))) {
+      }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < children_cnt_; ++i) {
       if (OB_FAIL(children_[i]->reuse())) {

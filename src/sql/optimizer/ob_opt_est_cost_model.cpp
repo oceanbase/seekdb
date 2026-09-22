@@ -1162,8 +1162,8 @@ int ObOptEstCostModel::cost_table_for_parallel(const ObCostTableScanInfo &est_co
   } else if (OB_FAIL(cost_basic_table(est_cost_info,
                                       part_cnt_per_dop,
                                       table_cost))) {
+  } else if (OB_FAIL(ObOptEstCostModel::cost_px(parallel, px_cost))) {
   } else {
-    OB_ASSERT_SUCC(ret = ObOptEstCostModel::cost_px(parallel, px_cost));
     cost = table_cost + px_cost;
   }
   return ret;

@@ -1614,8 +1614,8 @@ int ObTableLockService::fill_lock_set_(ObTableLockCtx &ctx,
 {
   int ret = OB_SUCCESS;
   UNUSED(ctx);
-  {
-    OB_ASSERT_SUCC(ret = lock_set.reuse());
+  if (OB_FAIL(lock_set.reuse())) {
+  } else {
     for (int64_t i = 0; i < lock_ids.count() && OB_SUCC(ret); ++i) {
       const ObLockID &lock_id = lock_ids.at(i);
       if (OB_FAIL(lock_set.push_back(lock_id))) {
@@ -1632,8 +1632,8 @@ int ObTableLockService::fill_lock_set_(ObTableLockCtx &ctx,
 {
   int ret = OB_SUCCESS;
   ObLockID lock_id;
-  {
-    OB_ASSERT_SUCC(ret = lock_set.reuse());
+  if (OB_FAIL(lock_set.reuse())) {
+  } else {
     for (int64_t i = 0; i < tablets.count() && OB_SUCC(ret); ++i) {
       lock_id.reset();
       const ObTabletID &tablet_id = tablets.at(i);
@@ -1673,10 +1673,8 @@ int ObTableLockService::get_lock_set_(ObTableLockCtx &ctx,
 {
   int ret = OB_SUCCESS;
 
-  {
-    OB_ASSERT_SUCC(ret = lock_set.reuse());
-    if (OB_FAIL(lock_set.push_back(lock_id))) {
-    }
+  if (OB_FAIL(lock_set.reuse())) {
+  } else if (OB_FAIL(lock_set.push_back(lock_id))) {
   }
   return ret;
 }
@@ -1687,10 +1685,8 @@ int ObTableLockService::get_lock_set_(ObTableLockCtx &ctx,
 {
   int ret = OB_SUCCESS;
 
-  {
-    OB_ASSERT_SUCC(ret = lock_set.reuse());
-    if (OB_FAIL(lock_set.assign(lock_ids))) {
-    }
+  if (OB_FAIL(lock_set.reuse())) {
+  } else if (OB_FAIL(lock_set.assign(lock_ids))) {
   }
   return ret;
 }

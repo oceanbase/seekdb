@@ -151,7 +151,8 @@ int ObTmpRange::intersect(ObTmpRange &other, bool &not_consistent)
   } else if (other.always_true_ || always_false_) {
     // do nothing
   } else if (always_true_) {
-    OB_ASSERT_SUCC(ret = copy(other));
+    if (OB_FAIL(copy(other))) {
+    }
   } else if (min_offset_ <= other.min_offset_) {
     if (max_offset_ < other.min_offset_ - 1) {
       not_consistent = true;
@@ -2288,8 +2289,8 @@ int ObRangeGenerator::false_range(const ObNewRange &range, bool &is_false)
 {
   int ret = OB_SUCCESS;
   int cmp = 0;
-  {
-    OB_ASSERT_SUCC(ret = range.get_start_key().compare(range.get_end_key(), cmp));
+  if (OB_FAIL(range.get_start_key().compare(range.get_end_key(), cmp))) {
+  } else {
     is_false = (cmp > 0) || (0 == cmp && (!range.border_flag_.inclusive_start()
                                           || !range.border_flag_.inclusive_end()));
   }

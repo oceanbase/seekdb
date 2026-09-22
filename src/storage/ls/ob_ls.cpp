@@ -891,26 +891,23 @@ int ObLS::online_without_lock_(const LocalLogMode log_mode)
     ret = OB_NOT_INIT;
   } else if (running_state_.is_running()) {
     LOG_INFO("ls is running state, do nothing", K(ret));
+  } else if (OB_FAIL(ls_tablet_svr_.online())) {
+  } else if (OB_FAIL(lock_table_.online())) {
+  } else if (OB_FAIL(online_tx_())) {
+  } else if (!is_append_mode && OB_FAIL(ls_tx_svr_.block_tx())) {
+  } else if (OB_FAIL(ls_ddl_log_handler_.online())) {
+  } else if (OB_FAIL(log_handler_.online(ls_meta_.get_clog_base_lsn(),
+                                         ls_meta_.get_clog_checkpoint_scn()))) {
+  } else if (OB_FAIL(ls_wrs_handler_.online())) {
+  } else if (OB_FAIL(online_compaction_())) {
+  } else if (OB_FAIL(online_local_log_(log_mode))) {
+  } else if (FALSE_IT(checkpoint_executor_.online())) {
+  } else if (FALSE_IT(tablet_gc_handler_.online())) {
+  } else if (FALSE_IT(tablet_empty_shell_handler_.online())) {
+  } else if (OB_FAIL(online_advance_epoch_())) {
+  } else if (OB_FAIL(running_state_.online())) {
   } else {
-    OB_ASSERT_SUCC(ret = ls_tablet_svr_.online());
-    if (OB_FAIL(lock_table_.online())) {
-    } else if (OB_FAIL(online_tx_())) {
-    } else if (!is_append_mode && OB_FAIL(ls_tx_svr_.block_tx())) {
-    } else if (OB_FAIL(ls_ddl_log_handler_.online())) {
-    } else if (OB_FAIL(log_handler_.online(ls_meta_.get_clog_base_lsn(), ls_meta_.get_clog_checkpoint_scn()))) {
-    } else if (OB_FAIL(ls_wrs_handler_.online())) {
-    } else {
-      OB_ASSERT_SUCC(ret = online_compaction_());
-      if (OB_FAIL(online_local_log_(log_mode))) {
-      } else if (FALSE_IT(checkpoint_executor_.online())) {
-      } else if (FALSE_IT(tablet_gc_handler_.online())) {
-      } else if (FALSE_IT(tablet_empty_shell_handler_.online())) {
-      } else if (OB_FAIL(online_advance_epoch_())) {
-      } else if (OB_FAIL(running_state_.online())) {
-      } else {
-        update_state_seq_();
-      }
-    }
+    update_state_seq_();
   }
 
   FLOG_INFO("ls online end", KR(ret));
@@ -925,10 +922,8 @@ int ObLS::set_ls_meta(const ObLSMeta &ls_meta)
   } else {
     ls_meta_ = ls_meta;
     ObAllIDMeta all_id_meta;
-    {
-      OB_ASSERT_SUCC(ret = ls_meta_.get_all_id_meta(all_id_meta));
-      if (OB_FAIL(ObIDService::update_id_service(all_id_meta))) {
-      }
+    if (OB_FAIL(ls_meta_.get_all_id_meta(all_id_meta))) {
+    } else if (OB_FAIL(ObIDService::update_id_service(all_id_meta))) {
     }
   }
   return ret;

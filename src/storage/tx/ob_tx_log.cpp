@@ -714,7 +714,8 @@ int ObTxCommitLog::init_tx_data_backup(const share::SCN &start_scn)
 {
   int ret = OB_SUCCESS;
 
-  OB_ASSERT_SUCC(ret = tx_data_backup_.init(start_scn));
+  if (OB_FAIL(tx_data_backup_.init(start_scn))) {
+  }
 
   // TRANS_LOG(INFO, "init tx_data_backup_", K(ret), K(tx_data_backup_));
   return ret;
@@ -724,7 +725,8 @@ int ObTxAbortLog::init_tx_data_backup(const share::SCN &start_scn)
 {
   int ret = OB_SUCCESS;
 
-  OB_ASSERT_SUCC(ret = tx_data_backup_.init(start_scn));
+  if (OB_FAIL(tx_data_backup_.init(start_scn))) {
+  }
 
   // TRANS_LOG(INFO, "init tx_data_backup_", K(ret), K(tx_data_backup_));
   return ret;
@@ -886,22 +888,20 @@ int ObTxLogBlock::acquire_segment_log_buf(const ObTxLogType big_segment_log_type
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(WARN, " big segment_buf", K(ret), KPC(this));
   } else if (OB_FALSE_IT(tmp_segment_buf = big_segment_buf_)) {
+  } else if (OB_FAIL(reuse_for_fill())) {
+  } else if (OB_FAIL(log_type_header.serialize(fill_buf_.get_buf(), len_, pos_))) {
+  } else if (OB_FAIL(cb_arg_array_.push_back(ObTxCbArg(ObTxLogType::TX_BIG_SEGMENT_LOG, NULL)))) {
+  } else if (OB_FAIL(cb_arg_array_.push_back(ObTxCbArg(big_segment_log_type, NULL)))) {
+  } else if (OB_FAIL(tmp_segment_buf->split_one_part(fill_buf_.get_buf(), BIG_SEGMENT_SPILT_SIZE, pos_,
+                                                     need_fill_part_scn))) {
+  } else if (tmp_segment_buf->is_completed()) {
+    // tmp_segment_buf->reset();
+    // reset big_segment buf after set prev scn
+    ret = OB_ITER_END;
   } else {
-    OB_ASSERT_SUCC(ret = reuse_for_fill());
-    if (OB_FAIL(log_type_header.serialize(fill_buf_.get_buf(), len_, pos_))) {
-    } else if (OB_FAIL(cb_arg_array_.push_back(ObTxCbArg(ObTxLogType::TX_BIG_SEGMENT_LOG, NULL)))) {
-    } else if (OB_FAIL(cb_arg_array_.push_back(ObTxCbArg(big_segment_log_type, NULL)))) {
-    } else if (OB_FAIL(tmp_segment_buf->split_one_part(fill_buf_.get_buf(), BIG_SEGMENT_SPILT_SIZE, pos_,
-                                                       need_fill_part_scn))) {
-    } else if (tmp_segment_buf->is_completed()) {
-      // tmp_segment_buf->reset();
-      // reset big_segment buf after set prev scn
-      ret = OB_ITER_END;
-    } else {
-      big_segment_buf_ = tmp_segment_buf;
-      cb_arg_array_.pop_back();
-      ret = OB_EAGAIN;
-    }
+    big_segment_buf_ = tmp_segment_buf;
+    cb_arg_array_.pop_back();
+    ret = OB_EAGAIN;
   }
 
   return ret;

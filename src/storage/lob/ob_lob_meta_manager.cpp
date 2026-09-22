@@ -70,7 +70,8 @@ int ObLobMetaManager::scan(ObLobAccessParam& param, ObLobMetaScanIter &iter)
 int ObLobMetaManager::open(ObLobAccessParam &param, ObLobMetaSingleGetter* getter)
 {
   int ret = OB_SUCCESS;
-  OB_ASSERT_SUCC(ret = getter->open(param, &persistent_lob_adapter_));
+  if (OB_FAIL(getter->open(param, &persistent_lob_adapter_))) {
+  }
   return ret;
 }
 

@@ -752,12 +752,10 @@ int DASParallelContext::refresh_tx_desc_bak(ObIAllocator &alloc, transaction::Ob
   } else if (data_plane::tx_desc_operation_sequence(tx_desc_bak_)
              != data_plane::tx_desc_operation_sequence(src_tx_desc)) {
     if (!has_refreshed_tx_desc_scn_) {
-      {
-        OB_ASSERT_SUCC(ret = release_tx_desc());
-        if (OB_FAIL(deep_copy_tx_desc(alloc, src_tx_desc))) {
-        } else {
-          has_refreshed_tx_desc_scn_ = true;
-        }
+      if (OB_FAIL(release_tx_desc())) {
+      } else if (OB_FAIL(deep_copy_tx_desc(alloc, src_tx_desc))) {
+      } else {
+        has_refreshed_tx_desc_scn_ = true;
       }
     } else {
       ret = OB_ERR_UNEXPECTED;

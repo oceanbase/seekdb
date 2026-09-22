@@ -346,9 +346,8 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
 
           if (OB_SUCC(ret)) {
             if (OB_FAIL(check_and_convert_name(db, table))) {
-            } else {
-              OB_ASSERT_SUCC(ret = grant_stmt->set_database_name(db));
-              OB_ASSERT_SUCC(ret = grant_stmt->set_table_name(table));
+            } else if (OB_FAIL(grant_stmt->set_database_name(db))) {
+            } else if (OB_FAIL(grant_stmt->set_table_name(table))) {
             }
           }
 

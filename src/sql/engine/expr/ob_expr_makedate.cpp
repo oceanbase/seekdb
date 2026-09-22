@@ -54,10 +54,8 @@ int ObExprMakedate::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 2) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])
-             || OB_ISNULL(rt_expr.args_[1])) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
+    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
     rt_expr.eval_func_ = ObExprMakedate::calc_makedate;
   }
   return ret;
@@ -71,8 +69,8 @@ int ObExprMakedate::calc_makedate(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
   if (OB_FAIL(expr.eval_param_value(ctx, year, day))) {
   } else if (year->is_null() || day->is_null()) {
     expr_datum.set_null();
-  } else
-    OB_ASSERT_SUCC(ret = calc(expr_datum, year->get_int(), day->get_int()));
+  } else if (OB_FAIL(calc(expr_datum, year->get_int(), day->get_int()))) {
+  }
   return ret;
 }
 

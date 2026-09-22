@@ -109,10 +109,8 @@ int ObColumnEqualEncoder::traverse(bool &suitable)
       const ObDatum &datum = ctx_->col_datums_->at(row_id);
       const ObDatum &ref_datum = ref_ctx_->col_datums_->at(row_id);
       bool equal = false;
-      {
-        OB_ASSERT_SUCC(ret = is_datum_equal(datum, ref_datum, equal));
-        if (!equal && OB_FAIL(exc_row_ids_.push_back(row_id))) {
-        }
+      if (OB_FAIL(is_datum_equal(datum, ref_datum, equal))) {
+      } else if (!equal && OB_FAIL(exc_row_ids_.push_back(row_id))) {
       }
     }
 

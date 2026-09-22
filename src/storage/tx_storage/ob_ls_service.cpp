@@ -809,9 +809,9 @@ OB_WEAK_SYMBOL int ObTxDataAllocator::init(const char *label)
   } else if (OB_ISNULL(throttle_tool_)) {
     ret = OB_ERR_UNEXPECTED;
     SHARE_LOG(WARN, "throttle tool is unexpected null", KP(throttle_tool_), KP(share_mem_alloc_mgr));
+  } else if (OB_FAIL(slice_allocator_.init(
+                 storage::TX_DATA_SLICE_SIZE, OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_, mem_attr))) {
   } else {
-    OB_ASSERT_SUCC(
-        ret = slice_allocator_.init(storage::TX_DATA_SLICE_SIZE, OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_, mem_attr));
     slice_allocator_.set_nway(ObTxDataAllocator::ALLOC_TX_DATA_MAX_CONCURRENCY);
     is_inited_ = true;
   }

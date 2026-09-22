@@ -961,8 +961,8 @@ int ObDDLUtil::get_ddl_rpc_timeout_by_table(ObMultiVersionSchemaService &schema_
     tablet_count = 0;
   }
   if (OB_FAIL(ret)) {
-  } else
-    OB_ASSERT_SUCC(ret = get_ddl_rpc_timeout(tablet_count, ddl_rpc_timeout_us));
+  } else if (OB_FAIL(get_ddl_rpc_timeout(tablet_count, ddl_rpc_timeout_us))) {
+  }
   return ret;
 }
 
@@ -995,7 +995,8 @@ void ObDDLUtil::get_ddl_rpc_timeout_for_database(ObMultiVersionSchemaService &sc
 int ObDDLUtil::get_ddl_tx_timeout(const int64_t tablet_count, int64_t &ddl_tx_timeout_us)
 {
   int ret = OB_SUCCESS;
-  OB_ASSERT_SUCC(ret = get_ddl_rpc_timeout(tablet_count, ddl_tx_timeout_us));
+  if (OB_FAIL(get_ddl_rpc_timeout(tablet_count, ddl_tx_timeout_us))) {
+  }
   return ret;
 }
 

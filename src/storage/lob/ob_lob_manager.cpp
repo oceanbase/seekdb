@@ -270,8 +270,8 @@ int ObLobManager::query_inrow_get_iter(
     ObLobInRowQueryIter* iter = OB_NEW(ObLobInRowQueryIter, ObMemAttr("LobQueryIter"));
     if (OB_ISNULL(iter)) {
       ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(iter->open(data, byte_offset, byte_len, param.coll_type_, scan_backward))) {
     } else {
-      OB_ASSERT_SUCC(ret = iter->open(data, byte_offset, byte_len, param.coll_type_, scan_backward));
       result = iter;
     }
   }
@@ -330,8 +330,8 @@ int ObLobManager::query(ObString& data, ObLobQueryIter *&result)
   ObLobInRowQueryIter* iter = OB_NEW(ObLobInRowQueryIter, ObMemAttr("LobQueryIter"));
   if (OB_ISNULL(iter)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(iter->open(data, 0, data.length(), CS_TYPE_BINARY, false))) {
   } else {
-    OB_ASSERT_SUCC(ret = iter->open(data, 0, data.length(), CS_TYPE_BINARY, false));
     result = iter;
   }
   return ret;  
@@ -677,8 +677,8 @@ int ObLobManager::check_need_out_row(
       char *buf = static_cast<char*>(param.allocator_->alloc(ObLobConstants::LOB_OUTROW_FULL_SIZE));
       if (OB_ISNULL(buf)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else if (OB_FAIL(is_store_char_len(param, param.get_schema_chunk_size(), add_len))) {
       } else {
-        OB_ASSERT_SUCC(ret = is_store_char_len(param, param.get_schema_chunk_size(), add_len));
         MEMCPY(buf, param.lob_common_, sizeof(ObLobCommon));
         ObLobCommon *new_lob_common = reinterpret_cast<ObLobCommon*>(buf);
         if (new_lob_common->is_init_) {
@@ -723,52 +723,50 @@ int ObLobManager::check_need_out_row(
       // no data add, keep char_len state
       param.is_store_char_len_ = has_char_len;
     } else if (OB_FAIL(param.get_store_chunk_size(store_chunk_size))) {
-    } else {
-      OB_ASSERT_SUCC(ret = is_store_char_len(param, store_chunk_size, add_len));
-      if (param.op_type_ != ObLobDataOutRowCtx::OpType::SQL) {
-        if (!param.is_store_char_len_) {
-          ret = OB_ERR_UNEXPECTED;
-        }
-      } else if (0 != param.offset_ || 0 != param.byte_size_) {
-        if (!param.is_store_char_len_) {
-          ret = OB_ERR_UNEXPECTED;
-        }
-      } else if (has_char_len && param.is_store_char_len_) {
-        // keep char_len
-      } else if (!has_char_len && !param.is_store_char_len_) {
-        // keep no char_len
-      } else if (has_char_len && !param.is_store_char_len_) {
-        // old data has char , but new data no char_len
-        // reset char_len to UINT64_MAX from 0
+    } else if (OB_FAIL(is_store_char_len(param, store_chunk_size, add_len))) {
+    } else if (param.op_type_ != ObLobDataOutRowCtx::OpType::SQL) {
+      if (! param.is_store_char_len_) {
+        ret = OB_ERR_UNEXPECTED;
+      }
+    } else if (0 != param.offset_ || 0 != param.byte_size_) {
+      if (! param.is_store_char_len_) {
+        ret = OB_ERR_UNEXPECTED;
+      }
+    } else if (has_char_len && param.is_store_char_len_) {
+      // keep char_len
+    } else if (! has_char_len && ! param.is_store_char_len_) {
+      // keep no char_len
+    } else if (has_char_len && ! param.is_store_char_len_) {
+      // old data has char , but new data no char_len
+      // reset char_len to UINT64_MAX from 0
+      int64_t *char_len = param.get_char_len_ptr();
+      if (OB_ISNULL(char_len)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (*char_len != 0) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        *char_len = UINT64_MAX;
+      }
+    } else if (! has_char_len && param.is_store_char_len_) {
+      if (param.handle_size_ < ObLobConstants::LOB_OUTROW_FULL_SIZE) {
+        LOG_INFO("old old data", K(param));
+        param.is_store_char_len_ = true;
+      } else if (param.is_full_insert()) {
+        // reset char_len to 0 from UINT64_MAX
         int64_t *char_len = param.get_char_len_ptr();
         if (OB_ISNULL(char_len)) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (*char_len != 0) {
+        } else if (*char_len != UINT64_MAX) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          *char_len = UINT64_MAX;
-        }
-      } else if (!has_char_len && param.is_store_char_len_) {
-        if (param.handle_size_ < ObLobConstants::LOB_OUTROW_FULL_SIZE) {
-          LOG_INFO("old old data", K(param));
-          param.is_store_char_len_ = true;
-        } else if (param.is_full_insert()) {
-          // reset char_len to 0 from UINT64_MAX
-          int64_t *char_len = param.get_char_len_ptr();
-          if (OB_ISNULL(char_len)) {
-            ret = OB_ERR_UNEXPECTED;
-          } else if (*char_len != UINT64_MAX) {
-            ret = OB_ERR_UNEXPECTED;
-          } else {
-            *char_len = 0;
-          }
-        } else {
-          // Partial update always stores char_len in MySQL-only mode.
-          ret = OB_ERR_UNEXPECTED;
+          *char_len = 0;
         }
       } else {
+        // Partial update always stores char_len in MySQL-only mode.
         ret = OB_ERR_UNEXPECTED;
       }
+    } else {
+      ret = OB_ERR_UNEXPECTED;
     }
   }
   return ret;
@@ -1833,14 +1831,12 @@ int ObLobManager::prepare_outrow_locator(ObLobAccessParam& param, ObLobDataInser
   if (OB_FAIL(src_data_locator.get_lob_data_byte_len(new_byte_len))) {
   } else if (OB_FAIL(locator_builder.init(*param.allocator_))) {
   } else if (OB_FAIL(prepare_lob_id(param, locator_builder))) {
+  } else if (OB_FAIL(locator_builder.set_chunk_size(lob_chunk_size))) {
+  } else if (OB_FAIL(locator_builder.set_byte_len(new_byte_len))) {
+  } else if (OB_FAIL(prepare_char_len(param, locator_builder, task))) {
+  } else if (OB_FAIL(prepare_seq_no(param, locator_builder, task))) {
+  } else if (OB_FAIL(locator_builder.to_locator(task.cur_data_locator_))) {
   } else {
-    OB_ASSERT_SUCC(ret = locator_builder.set_chunk_size(lob_chunk_size));
-    if (OB_FAIL(locator_builder.set_byte_len(new_byte_len))) {
-    } else if (OB_FAIL(prepare_char_len(param, locator_builder, task))) {
-    } else if (OB_FAIL(prepare_seq_no(param, locator_builder, task))) {
-    } else if (OB_FAIL(locator_builder.to_locator(task.cur_data_locator_))) {
-    } else {
-    }
   }
   return ret;
 }
@@ -1853,33 +1849,31 @@ int ObLobManager::prepare_char_len(ObLobAccessParam& param, ObLobDiskLocatorBuil
   uint64_t char_len = 0;
   const int64_t lob_chunk_size = param.get_schema_chunk_size();
   if (OB_FAIL(src_data_locator.get_lob_data_byte_len(new_byte_len))) {
+  } else if (OB_FAIL(is_store_char_len(param, lob_chunk_size, new_byte_len))) {
+  } else if (! param.is_store_char_len_) {
+    char_len = UINT64_MAX;
+  } else if (param.is_blob()) {
+    // blob char_len is equal byte_len
+    char_len = new_byte_len;
   } else {
-    OB_ASSERT_SUCC(ret = is_store_char_len(param, lob_chunk_size, new_byte_len));
-    if (!param.is_store_char_len_) {
-      char_len = UINT64_MAX;
-    } else if (param.is_blob()) {
-      // blob char_len is equal byte_len
-      char_len = new_byte_len;
-    } else {
-      ObString inrow_data;
-      ObInRowLobDataSpliter spilter(task.lob_meta_list_);
-      if (!src_data_locator.has_inrow_data()) {
-        if (OB_FAIL(ObLobDiskLocatorWrapper::get_char_len(src_data_locator, char_len))) {
-        }
-      } else if (OB_FAIL(src_data_locator.get_inrow_data(inrow_data))) {
-      } else if (inrow_data.length() != new_byte_len) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("byte len is not match", K(ret), K(new_byte_len), "inrow_data_length", inrow_data.length());
-      } else if (OB_FAIL(spilter.split(param.coll_type_, param.get_schema_chunk_size(), inrow_data))) {
-      } else {
-        char_len = spilter.char_pos();
+    ObString inrow_data;
+    ObInRowLobDataSpliter spilter(task.lob_meta_list_);
+    if (! src_data_locator.has_inrow_data()) {
+      if (OB_FAIL(ObLobDiskLocatorWrapper::get_char_len(src_data_locator, char_len))) {
       }
+    } else if (OB_FAIL(src_data_locator.get_inrow_data(inrow_data))) {
+    } else if (inrow_data.length() != new_byte_len) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("byte len is not match", K(ret), K(new_byte_len), "inrow_data_length", inrow_data.length());
+    } else if (OB_FAIL(spilter.split(param.coll_type_, param.get_schema_chunk_size(), inrow_data))) {
+    } else {
+      char_len = spilter.char_pos();
     }
   }
 
   if (OB_FAIL(ret)) {
-  } else
-    OB_ASSERT_SUCC(ret = locator_builder.set_char_len(char_len));
+  } else if (OB_FAIL(locator_builder.set_char_len(char_len))) {
+  }
   return ret;
 }
 
@@ -1904,8 +1898,8 @@ int ObLobManager::prepare_lob_id(ObLobAccessParam& param, ObLobDiskLocatorBuilde
   if (OB_FAIL(ret)) {
   } else if (! lob_id.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-  } else
-    OB_ASSERT_SUCC(ret = locator_builder.set_lob_id(lob_id));
+  } else if (OB_FAIL(locator_builder.set_lob_id(lob_id))) {
+  }
   return ret;
 }
 
@@ -1936,14 +1930,13 @@ int ObLobManager::prepare_seq_no(ObLobAccessParam& param, ObLobDiskLocatorBuilde
   } else if (new_byte_len < lob_chunk_size && (OB_ISNULL(param.lob_common_) || param.lob_common_->in_row_)) {
     // means insert, not update
     type = ObLobDataOutRowCtx::OpType::SQL;
-  } else
-    OB_ASSERT_SUCC(
-        ret = locator_builder.set_ext_info_log_length(ObLobManager::LOB_OUTROW_FULL_SIZE + 1 /*ext info log type*/));
+  } else if (OB_FAIL(locator_builder.set_ext_info_log_length(ObLobManager::LOB_OUTROW_FULL_SIZE + 1 /*ext info log type*/))) {
+  }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(param.tx_desc_->get_and_inc_tx_seq(param.parent_seq_no_.get_branch(), seq_no_cnt, seq_no_st))) {
-  } else
-    OB_ASSERT_SUCC(ret = locator_builder.set_seq_no(type, seq_no_st, seq_no_cnt));
+  } else if (OB_FAIL(locator_builder.set_seq_no(type, seq_no_st, seq_no_cnt))) {
+  }
   return ret;
 }
 

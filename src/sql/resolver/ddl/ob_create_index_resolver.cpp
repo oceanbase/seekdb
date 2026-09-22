@@ -71,13 +71,11 @@ int ObCreateIndexResolver::resolve_index_name_node(
     ObCollationType cs_type = CS_TYPE_INVALID;
     if (OB_UNLIKELY(NULL == session_info_)) {
       ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
+    } else if (OB_FAIL(ObSQLUtils::check_index_name(cs_type, index_name))) {
     } else {
-      OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(cs_type));
-      if (OB_FAIL(ObSQLUtils::check_index_name(cs_type, index_name))) {
-      } else {
-        crt_idx_stmt->set_index_name(index_name);
-        index_keyname_ = static_cast<INDEX_KEYNAME>(index_name_node->value_);
-      }
+      crt_idx_stmt->set_index_name(index_name);
+      index_keyname_ = static_cast<INDEX_KEYNAME>(index_name_node->value_);
     }
   }
   return ret;

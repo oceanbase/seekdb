@@ -527,12 +527,11 @@ int ObDDLOperator::create_user(ObUserInfo &user,
   if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_SYS;
     LOG_ERROR("schema_service must not null");
+  } else if (OB_FAIL(get_user_id_for_inner_ur(user, is_inner_ur, new_user_id))) {
+  } else if (!is_inner_ur &&
+             OB_FAIL(schema_service->fetch_new_user_id(new_user_id))) {
   } else {
-    OB_ASSERT_SUCC(ret = get_user_id_for_inner_ur(user, is_inner_ur, new_user_id));
-    if (!is_inner_ur && OB_FAIL(schema_service->fetch_new_user_id(new_user_id))) {
-    } else {
-      user.set_user_id(new_user_id);
-    }
+    user.set_user_id(new_user_id);
   }
   if (OB_SUCC(ret)) {
 

@@ -259,14 +259,14 @@ int ObExprInnerDoubleToInt::eval_inner_double_to_int(const ObExpr &expr, ObEvalC
       // do nothing
     } else if ((val > 0. && !is_start) ||
         (val < 0. && is_start)) {
-      {
-        OB_ASSERT_SUCC(ret = add_double_bit_1(val, tmp_d));
+      if (OB_FAIL(add_double_bit_1(val, tmp_d))) {
+      } else {
         val = tmp_d;
       }
     } else if ((val > 0. && is_start) ||
                (val < 0. && !is_start)) {
-      {
-        OB_ASSERT_SUCC(ret = sub_double_bit_1(val, tmp_d));
+      if (OB_FAIL(sub_double_bit_1(val, tmp_d))) {
+      } else {
         val = tmp_d;
       }
     }
@@ -302,13 +302,11 @@ int ObExprInnerDoubleToInt::eval_inner_double_to_int(const ObExpr &expr, ObEvalC
         expr_datum.set_int(INT64_MIN);
       }
     } else {
-      {
-        OB_ASSERT_SUCC(ret = convert_double_to_int64_range(val, start, end));
-        if (is_start) {
-          expr_datum.set_int(start);
-        } else {
-          expr_datum.set_int(end);
-        }
+      if (OB_FAIL(convert_double_to_int64_range(val, start, end))) {
+      } else if (is_start) {
+        expr_datum.set_int(start);
+      } else {
+        expr_datum.set_int(end);
       }
     }
   } else {
@@ -338,13 +336,11 @@ int ObExprInnerDoubleToInt::eval_inner_double_to_int(const ObExpr &expr, ObEvalC
         expr_datum.set_uint(0);
       }
     } else {
-      {
-        OB_ASSERT_SUCC(ret = convert_double_to_uint64_range(val, start, end));
-        if (is_start) {
-          expr_datum.set_uint(start);
-        } else {
-          expr_datum.set_uint(end);
-        }
+      if (OB_FAIL(convert_double_to_uint64_range(val, start, end))) {
+      } else if (is_start) {
+        expr_datum.set_uint(start);
+      } else {
+        expr_datum.set_uint(end);
       }
     }
   }
@@ -385,9 +381,8 @@ int ObExprInnerDoubleToInt::cg_expr(ObExprCGCtx &expr_cg_ctx,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(1 != rt_expr.arg_cnt_)) {
     ret = OB_ERR_PARAM_SIZE;
-  } else if (OB_ISNULL(rt_expr.args_[0])) {
-    ret = OB_INVALID_ARGUMENT;
   } else {
+    ASSERT_COND(rt_expr.args_[0] != nullptr);
     rt_expr.eval_func_ = ObExprInnerDoubleToInt::eval_inner_double_to_int;
     rt_expr.extra_ = raw_expr.get_range_flag();
   }

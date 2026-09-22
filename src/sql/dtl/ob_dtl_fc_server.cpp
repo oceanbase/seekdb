@@ -268,7 +268,8 @@ int ObDfc::block_dfc(ObDtlFlowControl *dfc, int64_t ch_idx, int64_t size)
   increase(size);
   //LOG_TRACE("DFC manager size", K(dfc->get_used()), K(dfc->get_total_buffer_cnt()), K(aggregate_dfc_.get_used()), K(aggregate_dfc_.get_total_buffer_cnt()), K(need_block(dfc)));
   if (need_block(dfc)) {
-    OB_ASSERT_SUCC(ret = enforce_block(dfc, ch_idx));
+    if (OB_FAIL(enforce_block(dfc, ch_idx))) {
+    }
   }
   return ret;
 }

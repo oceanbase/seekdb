@@ -1184,8 +1184,8 @@ int ObTransCallbackMgr::log_sync_succ(const ObCallbackScopeArray &callbacks,
   ARRAY_FOREACH(callbacks, i) {
     const ObCallbackScope &scope = callbacks.at(i);
     if (!scope.is_empty()) {
-      {
-        OB_ASSERT_SUCC(ret = scope.host_->sync_log_succ(scn, scope.cnt_));
+      if (OB_FAIL(scope.host_->sync_log_succ(scn, scope.cnt_))) {
+      } else {
         sync_cnt += scope.cnt_;
       }
     } else {

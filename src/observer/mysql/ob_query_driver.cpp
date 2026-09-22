@@ -67,10 +67,8 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
     ret = OB_ERR_UNEXPECTED;
   } else if (fields.count() <= 0) {
     ret = OB_ERR_BAD_FIELD_ERROR;
-  } else {
-    OB_ASSERT_SUCC(ret = session_.get_autocommit(ac));
-    if (OB_FAIL(mysql_fields.reserve(fields.count()))) {
-    }
+  } else if (OB_FAIL(session_.get_autocommit(ac))) {
+  } else if (OB_FAIL(mysql_fields.reserve(fields.count()))) {
   }
 
   // Complete wildcard filtering and every ObField conversion before entering

@@ -1285,8 +1285,8 @@ int ObTimeZoneSysVar::find_pos_time_zone(ObExecContext &ctx, const ObString &str
   ObTimeZoneInfoPos tz_info;
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(session->get_collation_connection(coll_type))) {
   } else {
-    OB_ASSERT_SUCC(ret = session->get_collation_connection(coll_type));
 
     int32_t no_sp_len = static_cast<int32_t>(ObCharset::strlen_byte_no_sp(coll_type,
                                                                           str_val.ptr(),

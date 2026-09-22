@@ -262,51 +262,53 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
     } else if (OB_ISNULL(schema_guard = exec_ctx->get_virtual_table_ctx().schema_guard_)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(session_info->get_name_case_mode(case_mode))) {
+    } else if (OB_FAIL(session_info->get_collation_connection(cs_type))) {
+    } else if (OB_FAIL(ObVectorRefreshIndexExecutor::resolve_table_name(
+                  cs_type, case_mode, param_table_name,
+                  database_name, table_name))) {
+    } else if (database_name.empty() && FALSE_IT(database_name = session_info->get_database_name())) {
+    } else if (OB_UNLIKELY(database_name.empty())) {
+      ret = OB_ERR_NO_DB_SELECTED;
+    } else if (OB_FAIL(schema_guard->get_table_id(
+                  database_name,
+                  table_name,
+                  false, /*is_index*/
+                  ObSchemaGetterGuard::ALL_NON_HIDDEN_TYPES,
+                  table_id))) {
+    } else if (table_id == OB_INVALID_ID) {
+      ret = OB_TABLE_NOT_EXIST;
+      ObCStringHelper helper;
+      LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(database_name), helper.convert(table_name));
+    } else if (OB_FAIL(schema_guard->get_column_schema(
+                   table_id,
+                   column_name,
+                   col_schema))) {
+    } else if (OB_ISNULL(col_schema)) {
+      ret = OB_ERR_COLUMN_NOT_FOUND;
+    } else if (OB_FAIL(ObVectorIndexUtil::get_vector_dim_from_extend_type_info(col_schema->get_extended_type_info(), dim_count))) {
     } else {
-      OB_ASSERT_SUCC(ret = session_info->get_collation_connection(cs_type));
-      if (OB_FAIL(ObVectorRefreshIndexExecutor::resolve_table_name(cs_type, case_mode, param_table_name, database_name,
-                                                                   table_name))) {
-      } else if (database_name.empty() && FALSE_IT(database_name = session_info->get_database_name())) {
-      } else if (OB_UNLIKELY(database_name.empty())) {
-        ret = OB_ERR_NO_DB_SELECTED;
-      } else if (OB_FAIL(schema_guard->get_table_id(database_name, table_name, false, /*is_index*/
-                                                    ObSchemaGetterGuard::ALL_NON_HIDDEN_TYPES, table_id))) {
-      } else if (table_id == OB_INVALID_ID) {
-        ret = OB_TABLE_NOT_EXIST;
-        ObCStringHelper helper;
-        LOG_USER_ERROR(OB_TABLE_NOT_EXIST, helper.convert(database_name), helper.convert(table_name));
-      } else if (OB_FAIL(schema_guard->get_column_schema(table_id, column_name, col_schema))) {
-      } else if (OB_ISNULL(col_schema)) {
-        ret = OB_ERR_COLUMN_NOT_FOUND;
-      } else if (OB_FAIL(ObVectorIndexUtil::get_vector_dim_from_extend_type_info(col_schema->get_extended_type_info(),
-                                                                                 dim_count))) {
-      } else {
-        // get row count of the target table
-        const int64_t sum_pos = 0;
-        const int64_t max_pos = 1;
-        ObObj sum_result_obj;
-        ObObj max_result_obj;
+      // get row count of the target table
+      const int64_t sum_pos = 0;
+      const int64_t max_pos = 1;
+      ObObj sum_result_obj;
+      ObObj max_result_obj;
 
-        SMART_VAR(ObMySQLProxy::MySQLResult, res)
-        {
-          ObSqlString query_string;
-          sqlclient::ObMySQLResult *result = NULL;
-          if (OB_FAIL(query_string.assign_fmt(
-                  "SELECT cast(sum(table_rows) as unsigned) as sum, max(table_rows) as max from "
-                  "information_schema.PARTITIONS WHERE table_schema='%.*s' and table_name='%.*s'",
-                  database_name.length(), database_name.ptr(), table_name.length(), table_name.ptr()))) {
-          } else if (OB_FAIL(GCTX.sql_proxy_->read(res, query_string.ptr()))) {
-          } else if (OB_ISNULL(result = res.get_result())) {
-            ret = OB_ERR_UNEXPECTED;
-          } else if (OB_FAIL(result->next())) {
-          } else if (OB_FAIL(result->get_obj(sum_pos, sum_result_obj))) {
-          } else if (OB_FAIL(result->get_obj(max_pos, max_result_obj))) {
-          } else if ((!sum_result_obj.is_null() && OB_UNLIKELY(!sum_result_obj.is_integer_type())) ||
-                     (!max_result_obj.is_null() && OB_UNLIKELY(!max_result_obj.is_integer_type()))) {
-            ret = OB_ERR_UNEXPECTED;
-          } else if (!sum_result_obj.is_null() && OB_FALSE_IT(num_vectors = sum_result_obj.get_int())) {
-          } else if (!max_result_obj.is_null() && OB_FALSE_IT(tablet_max_num_vectors = max_result_obj.get_int())) {
-          }
+      SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+        ObSqlString query_string;
+        sqlclient::ObMySQLResult *result = NULL;
+        if (OB_FAIL(query_string.assign_fmt("SELECT cast(sum(table_rows) as unsigned) as sum, max(table_rows) as max from information_schema.PARTITIONS WHERE table_schema='%.*s' and table_name='%.*s'",
+                database_name.length(), database_name.ptr(), table_name.length(), table_name.ptr()))) {
+        } else if (OB_FAIL(GCTX.sql_proxy_->read(res, query_string.ptr()))) {
+        } else if (OB_ISNULL(result = res.get_result())) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(result->next())) {
+        } else if (OB_FAIL(result->get_obj(sum_pos, sum_result_obj))) {
+        } else if (OB_FAIL(result->get_obj(max_pos, max_result_obj))) {
+        } else if ((!sum_result_obj.is_null() && OB_UNLIKELY(!sum_result_obj.is_integer_type())) ||
+                   (!max_result_obj.is_null() && OB_UNLIKELY(!max_result_obj.is_integer_type()))) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (!sum_result_obj.is_null() && OB_FALSE_IT(num_vectors = sum_result_obj.get_int())) {
+        } else if (!max_result_obj.is_null() && OB_FALSE_IT(tablet_max_num_vectors = max_result_obj.get_int())) {
         }
       }
     }

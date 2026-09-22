@@ -1338,8 +1338,8 @@ static int int_bit(const ObObjType expect_type, ObObjCastParams &params,
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
   } else if (CM_NEED_RANGE_CHECK(cast_mode)
              && CAST_FAIL(uint_range_check(ObUInt64Type, in.get_int(), value))) {
+  } else if (OB_FAIL(get_bit_len(value, bit_len))) {
   } else {
-    OB_ASSERT_SUCC(ret = get_bit_len(value, bit_len));
     SET_RES_BIT(out);
     SET_RES_ACCURACY(static_cast<ObPrecision>(bit_len), DEFAULT_SCALE_FOR_BIT, DEFAULT_LENGTH_FOR_NUMERIC);
   }
@@ -1784,8 +1784,8 @@ static int uint_bit(const ObObjType expect_type, ObObjCastParams &params,
                   || ObBitTC != ob_obj_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
+  } else if (OB_FAIL(get_bit_len(value, bit_len))) {
   } else {
-    OB_ASSERT_SUCC(ret = get_bit_len(value, bit_len));
     SET_RES_BIT(out);
     SET_RES_ACCURACY(static_cast<ObPrecision>(bit_len), DEFAULT_SCALE_FOR_BIT, DEFAULT_LENGTH_FOR_NUMERIC);
   }
@@ -2257,8 +2257,8 @@ static int float_bit(const ObObjType expect_type, ObObjCastParams &params,
                   || ObBitTC != ob_obj_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
+  } else if (OB_FAIL(get_bit_len(value, bit_len))) {
   } else {
-    OB_ASSERT_SUCC(ret = get_bit_len(value, bit_len));
     SET_RES_BIT(out);
     SET_RES_ACCURACY(static_cast<ObPrecision>(bit_len), DEFAULT_SCALE_FOR_BIT, DEFAULT_LENGTH_FOR_NUMERIC);
   }
@@ -2745,8 +2745,8 @@ static int double_bit(const ObObjType expect_type, ObObjCastParams &params,
                   || ObBitTC != ob_obj_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
+  } else if (OB_FAIL(get_bit_len(value, bit_len))) {
   } else {
-    OB_ASSERT_SUCC(ret = get_bit_len(value, bit_len));
     SET_RES_BIT(out);
     SET_RES_ACCURACY(static_cast<ObPrecision>(bit_len), DEFAULT_SCALE_FOR_BIT, DEFAULT_LENGTH_FOR_NUMERIC);
   }
@@ -6114,14 +6114,12 @@ static int string_string(const ObObjType expect_type, ObObjCastParams &params,
       }
       ObObj tmp_out;
       ObString str;
-      {
-        OB_ASSERT_SUCC(ret = check_convert_string(expect_type, params, in, tmp_out));
-        if (tmp_out.is_string_or_lob_locator_type()) { // may has locator header if it is text types
-          if (OB_FAIL(tmp_out.get_string(str))) {
-          }
-        } else { // other types, e.g. raw
-          str = tmp_out.get_string();
+      if (OB_FAIL(check_convert_string(expect_type, params, in, tmp_out))) {
+      } else if (tmp_out.is_string_or_lob_locator_type()) { // may has locator header if it is text types
+        if (OB_FAIL(tmp_out.get_string(str))) {
         }
+      } else { // other types, e.g. raw
+        str = tmp_out.get_string();
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(copy_string(params, expect_type, str, out, align_offset))) {
@@ -6157,29 +6155,27 @@ static int string_bit(const ObObjType expect_type, ObObjCastParams &params,
   } else {
     int32_t bit_len = 0;
     const ObString &str = in.get_string();
-    {
-      OB_ASSERT_SUCC(ret = get_bit_len(str, bit_len));
-      if (OB_UNLIKELY(bit_len <= 0)) {
-        ret = OB_ERR_UNEXPECTED;
+    if (OB_FAIL(get_bit_len(str, bit_len))) {
+    } else if (OB_UNLIKELY(bit_len <= 0)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      if (ObHexStringType == in.get_type() && str.empty()) {
+        value = 0;
+        ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD;
+      } else if (OB_UNLIKELY(bit_len > OB_MAX_BIT_LENGTH)) {
+        value = UINT64_MAX;
+        ret = OB_ERR_DATA_TOO_LONG;
       } else {
-        if (ObHexStringType == in.get_type() && str.empty()) {
-          value = 0;
-          ret = OB_ERR_TRUNCATED_WRONG_VALUE_FOR_FIELD;
-        } else if (OB_UNLIKELY(bit_len > OB_MAX_BIT_LENGTH)) {
-          value = UINT64_MAX;
-          ret = OB_ERR_DATA_TOO_LONG;
-        } else {
-          // Convert str to the corresponding uint64 based on its binary value
-          value = hex_to_uint64(str);
-        }
-        if (OB_FAIL(ret) && CM_IS_WARN_ON_FAIL(cast_mode)) {
-          params.warning_ = OB_DATA_OUT_OF_RANGE;
-          ret = OB_SUCCESS;
-        }
-        if (OB_SUCC(ret)) {
-          SET_RES_BIT(out);
-          SET_RES_ACCURACY(static_cast<ObPrecision>(bit_len), DEFAULT_SCALE_FOR_BIT, DEFAULT_LENGTH_FOR_NUMERIC);
-        }
+        //Convert str to the corresponding uint64 based on its binary value
+        value = hex_to_uint64(str);
+      }
+      if (OB_FAIL(ret) && CM_IS_WARN_ON_FAIL(cast_mode)) {
+        params.warning_ = OB_DATA_OUT_OF_RANGE;
+        ret = OB_SUCCESS;
+      }
+      if (OB_SUCC(ret)) {
+        SET_RES_BIT(out);
+        SET_RES_ACCURACY(static_cast<ObPrecision>(bit_len), DEFAULT_SCALE_FOR_BIT, DEFAULT_LENGTH_FOR_NUMERIC);
       }
     }
   }
@@ -6986,8 +6982,8 @@ static int bit_bit(const ObObjType expect_type, ObObjCastParams &params,
                   || ObBitTC != ob_obj_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
+  } else if (OB_FAIL(get_bit_len(value, bit_len))) {
   } else {
-    OB_ASSERT_SUCC(ret = get_bit_len(value, bit_len));
     SET_RES_BIT(out);
     SET_RES_ACCURACY(static_cast<ObPrecision>(bit_len), DEFAULT_SCALE_FOR_BIT, DEFAULT_LENGTH_FOR_NUMERIC);
   }
@@ -7666,8 +7662,8 @@ static int enumset_bit(const ObObjType expect_type, ObObjCastParams &params,
                   || ObBitTC != ob_obj_type_class(expect_type))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid input type", K(ret), K(in), K(expect_type));
+  } else if (OB_FAIL(get_bit_len(value, bit_len))) {
   } else {
-    OB_ASSERT_SUCC(ret = get_bit_len(value, bit_len));
     SET_RES_BIT(out);
     SET_RES_ACCURACY(static_cast<ObPrecision>(bit_len), DEFAULT_SCALE_FOR_BIT, DEFAULT_LENGTH_FOR_NUMERIC);
   }
@@ -8645,8 +8641,8 @@ static int json_bit(const ObObjType expect_type, ObObjCastParams &params,
       } else if (CAST_FAIL(j_base->to_bit(value))) {
         ret = OB_ERR_INVALID_JSON_VALUE_FOR_CAST;
         LOG_USER_ERROR(OB_ERR_INVALID_JSON_VALUE_FOR_CAST);
+      } else if (OB_FAIL(get_bit_len(value, bit_len))) {
       } else {
-        OB_ASSERT_SUCC(ret = get_bit_len(value, bit_len));
         SET_RES_BIT(out);
         SET_RES_ACCURACY(static_cast<ObPrecision>(bit_len), DEFAULT_SCALE_FOR_BIT, DEFAULT_LENGTH_FOR_NUMERIC);
       }
@@ -11603,25 +11599,23 @@ int bit_length_check(ObObjCastParams &params, const ObAccuracy &accuracy,
   uint64_t value = obj.get_bit();
   int32_t bit_len = 0;
   int32_t dst_bit_len = accuracy.get_precision();
-  {
-    OB_ASSERT_SUCC(ret = get_bit_len(value, bit_len));
-    if (OB_UNLIKELY(bit_len <= 0)) {
-      ret = OB_ERR_UNEXPECTED;
+  if (OB_FAIL(get_bit_len(value, bit_len))) {
+  } else if(OB_UNLIKELY(bit_len <= 0)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    if (OB_UNLIKELY(bit_len > dst_bit_len)) {
+      ret = OB_ERR_DATA_TOO_LONG;
     } else {
-      if (OB_UNLIKELY(bit_len > dst_bit_len)) {
-        ret = OB_ERR_DATA_TOO_LONG;
-      } else {
-        buf_obj.set_bit(value);
-      }
-      if (OB_FAIL(ret) && CM_IS_WARN_ON_FAIL(cast_mode)) {
-        params.warning_ = OB_DATA_OUT_OF_RANGE;
-        ret = OB_SUCCESS;
-        uint64_t max_value = (1ULL << dst_bit_len) - 1;
-        buf_obj.set_bit(max_value);
-      }
-      if (OB_SUCC(ret)) {
-        res_obj = &buf_obj;
-      }
+      buf_obj.set_bit(value);
+    }
+    if (OB_FAIL(ret) && CM_IS_WARN_ON_FAIL(cast_mode)) {
+      params.warning_ = OB_DATA_OUT_OF_RANGE;
+      ret = OB_SUCCESS;
+      uint64_t max_value = (1ULL<<dst_bit_len) - 1;
+      buf_obj.set_bit(max_value);
+    }
+    if (OB_SUCC(ret)) {
+      res_obj = &buf_obj;
     }
   }
   return ret;
@@ -11633,14 +11627,12 @@ int bit_length_check_only(const ObAccuracy &accuracy, const ObObj &obj)
   uint64_t value = obj.get_bit();
   int32_t bit_len = 0;
   int32_t dst_bit_len = accuracy.get_precision();
-  {
-    OB_ASSERT_SUCC(ret = get_bit_len(value, bit_len));
-    if (OB_UNLIKELY(bit_len <= 0)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      if (OB_UNLIKELY(bit_len > dst_bit_len)) {
-        ret = OB_ERR_DATA_TOO_LONG;
-      }
+  if (OB_FAIL(get_bit_len(value, bit_len))) {
+  } else if(OB_UNLIKELY(bit_len <= 0)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    if (OB_UNLIKELY(bit_len > dst_bit_len)) {
+      ret = OB_ERR_DATA_TOO_LONG;
     }
   }
   return ret;

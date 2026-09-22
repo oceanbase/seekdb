@@ -377,36 +377,37 @@ int ObOptimizer::check_parallel_das_dml_enabled(const ObDMLStmt &stmt,
     can_use_parallel_das_dml = false;
   } else if (!is_strict_mode(session.get_sql_mode())) {
     can_use_parallel_das_dml = false;
+  } else if (OB_FAIL(check_parallel_das_dml_supported_feature(static_cast<const ObDelUpdStmt&>(stmt),
+                                                              session,
+                                                              can_use_parallel_das_dml))) {
+
+  } else if (!can_use_parallel_das_dml) {
+  } else if (ctx_.get_global_hint().get_parallel_das_dml_option() == ObParallelDASOption::DISABLE) {
+    can_use_parallel_das_dml = false;
+  } else if (query_ctx->get_query_hint().has_outline_data() &&
+      ctx_.get_global_hint().get_parallel_das_dml_option() != ObParallelDASOption::ENABLE) {
+    can_use_parallel_das_dml = false;
+    LOG_TRACE("has outline data and hint disable, can't support parallel_das_dml",
+            K(ctx_.get_global_hint().get_parallel_das_dml_option()),
+            K(query_ctx->get_query_hint().has_outline_data()));
+  } else if (ctx_.can_use_pdml()) {
+    // can use pdml must can use parallel_das_dml
+  } else if (ctx_.get_global_hint().get_pdml_option() == ObPDMLOption::ENABLE ||
+      ctx_.get_global_hint().get_parallel_das_dml_option() == ObParallelDASOption::ENABLE) {
+    LOG_TRACE("can use parallel_das_dml by pdml hint",
+        K(ctx_.get_global_hint().get_pdml_option()),
+        K(ctx_.get_global_hint().get_parallel_das_dml_option()));
+  } else if (ctx_.get_global_hint().enable_auto_dop()) {
+    // enable parallel das dml by auto dop hint
+  } else if (OB_FAIL(session.get_parallel_degree_policy_enable_auto_dop(session_enable_auto_dop))) {
+  } else if (session_enable_auto_dop && !ctx_.get_global_hint().has_parallel_hint()) {
+    // session enable parallel dml by auto dop
+  } else if (OB_FAIL(session.get_enable_parallel_dml(session_enable_pdml))
+      || OB_FAIL(session.get_force_parallel_dml_dop(session_pdml_dop))) {
+  } else if (session_enable_pdml || ObGlobalHint::DEFAULT_PARALLEL < session_pdml_dop) {
+    // enable parallel das dml by session
   } else {
-    OB_ASSERT_SUCC(ret = check_parallel_das_dml_supported_feature(static_cast<const ObDelUpdStmt &>(stmt), session,
-                                                                  can_use_parallel_das_dml));
-    if (!can_use_parallel_das_dml) {
-    } else if (ctx_.get_global_hint().get_parallel_das_dml_option() == ObParallelDASOption::DISABLE) {
-      can_use_parallel_das_dml = false;
-    } else if (query_ctx->get_query_hint().has_outline_data() &&
-               ctx_.get_global_hint().get_parallel_das_dml_option() != ObParallelDASOption::ENABLE) {
-      can_use_parallel_das_dml = false;
-      LOG_TRACE("has outline data and hint disable, can't support parallel_das_dml",
-                K(ctx_.get_global_hint().get_parallel_das_dml_option()),
-                K(query_ctx->get_query_hint().has_outline_data()));
-    } else if (ctx_.can_use_pdml()) {
-      // can use pdml must can use parallel_das_dml
-    } else if (ctx_.get_global_hint().get_pdml_option() == ObPDMLOption::ENABLE ||
-               ctx_.get_global_hint().get_parallel_das_dml_option() == ObParallelDASOption::ENABLE) {
-      LOG_TRACE("can use parallel_das_dml by pdml hint", K(ctx_.get_global_hint().get_pdml_option()),
-                K(ctx_.get_global_hint().get_parallel_das_dml_option()));
-    } else if (ctx_.get_global_hint().enable_auto_dop()) {
-      // enable parallel das dml by auto dop hint
-    } else if (OB_FAIL(session.get_parallel_degree_policy_enable_auto_dop(session_enable_auto_dop))) {
-    } else if (session_enable_auto_dop && !ctx_.get_global_hint().has_parallel_hint()) {
-      // session enable parallel dml by auto dop
-    } else if (OB_FAIL(session.get_enable_parallel_dml(session_enable_pdml)) ||
-               OB_FAIL(session.get_force_parallel_dml_dop(session_pdml_dop))) {
-    } else if (session_enable_pdml || ObGlobalHint::DEFAULT_PARALLEL < session_pdml_dop) {
-      // enable parallel das dml by session
-    } else {
-      can_use_parallel_das_dml = false;
-    }
+    can_use_parallel_das_dml = false;
   }
 
   if (OB_SUCC(ret)) {
@@ -694,17 +695,16 @@ int ObOptimizer::init_env_info(ObDMLStmt &stmt)
   } else if (OB_FAIL(extract_opt_ctx_basic_flags(stmt, *session_info))) {
   } else if (OB_FAIL(check_pdml_enabled(stmt, *session_info))) {
   } else if (OB_FAIL(check_parallel_das_dml_enabled(stmt, *session_info))) {
-  } else {
-    OB_ASSERT_SUCC(ret = check_dml_parallel_mode());
-    if (OB_FAIL(init_parallel_policy(stmt, *session_info))) {
-    } else if (OB_FAIL(init_correlation_model(*session_info))) {
-    } else if (OB_FAIL(opt_params.get_enum_sys_var(ObOptParamHint::ENABLE_OPTIMIZER_ROWGOAL, session_info,
-                                                   share::SYS_VAR_ENABLE_OPTIMIZER_ROWGOAL, rowgoal_type))) {
-    } else if (FALSE_IT(ctx_.set_enable_opt_row_goal(rowgoal_type))) {
-    } else if (OB_FAIL(check_enable_topn_runtime_filter())) {
-    } else { /*do nothing*/
-    }
-  }
+  } else if (OB_FAIL(check_dml_parallel_mode())) {
+  } else if (OB_FAIL(init_parallel_policy(stmt, *session_info))) {
+  } else if (OB_FAIL(init_correlation_model(*session_info))) {
+  } else if (OB_FAIL(opt_params.get_enum_sys_var(ObOptParamHint::ENABLE_OPTIMIZER_ROWGOAL,
+                                                 session_info,
+                                                 share::SYS_VAR_ENABLE_OPTIMIZER_ROWGOAL,
+                                                 rowgoal_type))) {
+  } else if (FALSE_IT(ctx_.set_enable_opt_row_goal(rowgoal_type))) {
+  } else if (OB_FAIL(check_enable_topn_runtime_filter())) {
+  } else { /*do nothing*/ }
   return ret;
 }
 

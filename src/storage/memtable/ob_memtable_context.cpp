@@ -593,8 +593,8 @@ int ObMemtableCtx::replay_to_commit(const bool is_resume)
   if (!is_resume) {
     trans_mgr_.clear_pending_log_size();
   }
-  {
-    OB_ASSERT_SUCC(ret = reuse_log_generator_());
+  if (OB_FAIL(reuse_log_generator_())) {
+  } else {
     // do nothing
   }
   if (OB_FAIL(ret)) {
@@ -647,8 +647,8 @@ void ObMemtableCtx::sync_log_fail(const ObCallbackScopeArray &callbacks,
     set_partial_rollbacked();
   }
   if (OB_SUCCESS == ATOMIC_LOAD(&end_code_)) {
-    {
-      OB_ASSERT_SUCC(ret = reuse_log_generator_());
+    if (OB_FAIL(reuse_log_generator_())) {
+    } else {
       log_gen_.sync_log_fail(callbacks, max_applied_scn);
     }
   } else {
@@ -729,15 +729,12 @@ int ObMemtableCtx::rollback(const transaction::ObTxSEQ to_seq_no,
   } else if (OB_ISNULL(ATOMIC_LOAD(&ctx_))) {
     ret = OB_NOT_SUPPORTED;
     TRANS_LOG(WARN, "ctx is NULL", K(ret));
+  } else if (OB_FAIL(reuse_log_generator_())) {
+  } else if (OB_FAIL(trans_mgr_.rollback_to(to_seq_no, from_seq_no, replay_scn, remove_cnt))) {
+  } else if (OB_FAIL(rollback_table_lock_(to_seq_no, from_seq_no))) {
   } else {
-    OB_ASSERT_SUCC(ret = reuse_log_generator_());
-    if (OB_FAIL(trans_mgr_.rollback_to(to_seq_no, from_seq_no, replay_scn, remove_cnt))) {
-    } else if (OB_FAIL(rollback_table_lock_(to_seq_no, from_seq_no))) {
-    } else {
-      const int64_t elapsed = common::ObClockGenerator::getClock() - start_ts;
-      TRANS_LOG(INFO, "memtable handle rollback to successfuly", K(from_seq_no), K(to_seq_no), K(remove_cnt),
-                K(elapsed), KPC(this));
-    }
+    const int64_t elapsed = common::ObClockGenerator::getClock() - start_ts;
+    TRANS_LOG(INFO, "memtable handle rollback to successfuly", K(from_seq_no), K(to_seq_no), K(remove_cnt), K(elapsed), KPC(this));
   }
   return ret;
 }
@@ -769,10 +766,8 @@ int ObMemtableCtx::remove_callback_for_uncommited_txn(const memtable::ObMemtable
   if (OB_ISNULL(memtable_set)) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "memtable is NULL", K(memtable_set));
-  } else {
-    OB_ASSERT_SUCC(ret = reuse_log_generator_());
-    if (OB_FAIL(trans_mgr_.remove_callback_for_uncommited_txn(memtable_set))) {
-    }
+  } else if (OB_FAIL(reuse_log_generator_())) {
+  } else if (OB_FAIL(trans_mgr_.remove_callback_for_uncommited_txn(memtable_set))) {
   }
 
   return ret;
@@ -804,7 +799,8 @@ int ObMemtableCtx::reset_log_generator_()
 {
   int ret = OB_SUCCESS;
 
-  OB_ASSERT_SUCC(ret = log_gen_.set(&trans_mgr_, this));
+  if (OB_FAIL(log_gen_.set(&trans_mgr_, this))) {
+  }
 
   return ret;
 }

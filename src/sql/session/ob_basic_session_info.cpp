@@ -182,16 +182,14 @@ int ObBasicSessionInfo::test_init(uint32_t sessid,
                                256, // # of user variables
                                (NULL == bucket_allocator ? NULL : &bucket_allocator_wrapper_));
   if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(load_default_configs_in_pc())) {
+  } else if (OB_FAIL(debug_sync_actions_.init(SMALL_BLOCK_SIZE, bucket_allocator_wrapper_))) {
+  } else if (OB_FAIL(set_session_state(SESSION_INIT))) {
+  } else if (OB_FAIL(set_time_zone(ObString("+8:00"), false/*trim_timezone_name*/,
+                                   true/* check_timezone_valid */))) {
   } else {
-    OB_ASSERT_SUCC(ret = load_default_configs_in_pc());
-    if (OB_FAIL(debug_sync_actions_.init(SMALL_BLOCK_SIZE, bucket_allocator_wrapper_))) {
-    } else if (OB_FAIL(set_session_state(SESSION_INIT))) {
-    } else if (OB_FAIL(
-                   set_time_zone(ObString("+8:00"), false /*trim_timezone_name*/, true /* check_timezone_valid */))) {
-    } else {
-      // tz_info_wrap_.set_tz_info_map(GCTX.tz_info_mgr_->get_tz_info_map());
-      sessid_ = sessid;
-    }
+    // tz_info_wrap_.set_tz_info_map(GCTX.tz_info_mgr_->get_tz_info_map());
+    sessid_ = sessid;
   }
   return ret;
 }
@@ -848,7 +846,8 @@ int ObBasicSessionInfo::init_system_variables(const bool print_info_log, const b
       max_val.set_collation_type(ObCharset::get_system_collation());
       type.set_type(var_type);
       if (use_server_defaults) {
-        OB_ASSERT_SUCC(ret = apply_server_runtime_default(name, value));
+        if (OB_FAIL(apply_server_runtime_default(name, value))) {
+        }
       }
       if (OB_SUCC(ret)) {
         int64_t store_idx = -1;
@@ -999,7 +998,8 @@ int ObBasicSessionInfo::init_essential_system_variables_by_id(const bool print_i
       type.set_type(var_type);
 
       if (use_server_defaults) {
-        OB_ASSERT_SUCC(ret = apply_server_runtime_default(sys_var_id, value));
+        if (OB_FAIL(apply_server_runtime_default(sys_var_id, value))) {
+        }
       }
 
       if (OB_SUCC(ret)) {
@@ -5120,11 +5120,9 @@ int ObBasicSessionInfo::ensure_sys_var_loaded(const ObSysVarClassType sys_var_id
     max_val.set_collation_type(ObCharset::get_system_collation());
     type.set_type(var_type);
 
-    {
-      OB_ASSERT_SUCC(ret = mutable_this->apply_server_runtime_default(sys_var_id, value));
-      if (OB_FAIL(mutable_this->load_sys_variable_fast(calc_buf, sys_var_id, type, value, min_val, max_val, var_flag,
-                                                       false))) {
-      }
+    if (OB_FAIL(mutable_this->apply_server_runtime_default(sys_var_id, value))) {
+    } else if (OB_FAIL(mutable_this->load_sys_variable_fast(calc_buf, sys_var_id,
+                                                            type, value, min_val, max_val, var_flag, false))) {
     }
 
     if (OB_NOT_NULL(mutable_this->sys_vars_[store_idx]) &&

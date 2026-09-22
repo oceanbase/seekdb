@@ -96,9 +96,8 @@ int ObExprInt2ip::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
+    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
     CK(ObIntType == rt_expr.args_[0]->datum_meta_.type_);
     rt_expr.eval_func_ = ObExprInt2ip::int2ip_varchar;
   }

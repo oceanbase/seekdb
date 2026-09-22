@@ -105,7 +105,8 @@ ObCandiTabletLoc::~ObCandiTabletLoc()
 int ObCandiTabletLoc::assign(const ObCandiTabletLoc &other)
 {
   int ret = OB_SUCCESS;
-  OB_ASSERT_SUCC(ret = opt_tablet_loc_.assign(other.opt_tablet_loc_));
+  if (OB_FAIL(opt_tablet_loc_.assign(other.opt_tablet_loc_))) {
+  }
   return ret;
 }
 

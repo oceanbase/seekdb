@@ -616,19 +616,17 @@ int ObTxCtx::commit(const MonotonicTs &commit_time,
   } else if (OB_UNLIKELY(pending_write_)) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(WARN, "access in progress", K(ret), K_(pending_write), KPC(this));
+  } else if (OB_FAIL(set_commit_request_id_(request_id))) {
+  } else if (FALSE_IT(stmt_expired_time_ = expire_ts)) {
   } else {
-    OB_ASSERT_SUCC(ret = set_commit_request_id_(request_id));
-    if (FALSE_IT(stmt_expired_time_ = expire_ts)) {
+    exec_info_.mark_write_state();
+    if (commit_time.is_valid()) {
+      set_stc_(commit_time);
     } else {
-      exec_info_.mark_write_state();
-      if (commit_time.is_valid()) {
-        set_stc_(commit_time);
-      } else {
-        set_stc_by_now_();
-      }
-      can_elr_ = trans_service_->get_tx_elr_util().is_can_elr();
-      if (OB_FAIL(one_phase_commit_())) {
-      }
+      set_stc_by_now_();
+    }
+    can_elr_ = trans_service_->get_tx_elr_util().is_can_elr();
+    if (OB_FAIL(one_phase_commit_())) {
     }
   }
   if (OB_SUCC(ret)) {
@@ -2017,7 +2015,8 @@ int ObTxCtx::on_failure(ObTxLogCb *log_cb)
       if (ObTxLogTypeChecker::is_state_log(log_type)) {
         runtime_state_.clear_state_log_submitting();
       }
-      OB_ASSERT_SUCC(ret = fix_redo_lsns_(log_cb));
+      if (OB_FAIL(fix_redo_lsns_(log_cb))) {
+      }
       if (is_contain(log_cb->get_cb_arg_array(), ObTxLogType::TX_BIG_SEGMENT_LOG)) {
         remove_unsynced_segment_cb_(log_cb->get_log_ts());
       }
@@ -2183,7 +2182,8 @@ int ObTxCtx::wait_gts_elapse_commit_version_(bool &need_wait)
           ctx_tx_data_.get_commit_version(), this, need_wait))) {
   } else if (need_wait) {
     runtime_state_.set_gts_waiting();
-    OB_ASSERT_SUCC(ret = acquire_ctx_ref_());
+    if (OB_FAIL(acquire_ctx_ref_())) {
+    }
     TRANS_LOG(INFO, "need wait gts elapse", KR(ret), KPC(this));
     REC_TRANS_TRACE_EXT2(tlog_, wait_gts_elapse, OB_ID(ref), get_ref());
   }
@@ -2355,19 +2355,17 @@ int ObTxCtx::submit_redo_commit_info_log_()
     TRANS_LOG(WARN, "resolve callbacks failed", K(ret), KPC(this));
     return_log_cb_(log_cb);
     log_cb = NULL;
+  } else if (OB_FAIL(acquire_ctx_ref_())) {
+  } else if (OB_FAIL(submit_log_block_out_(log_block, SCN::min_scn(), log_cb, replay_hint, barrier))) {
+    TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
+    return_log_cb_(log_cb);
+    log_cb = NULL;
+    release_ctx_ref_();
+  } else if (OB_FAIL(after_submit_log_(log_block, log_cb, &helper))) {
   } else {
-    OB_ASSERT_SUCC(ret = acquire_ctx_ref_());
-    if (OB_FAIL(submit_log_block_out_(log_block, SCN::min_scn(), log_cb, replay_hint, barrier))) {
-      TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
-      return_log_cb_(log_cb);
-      log_cb = NULL;
-      release_ctx_ref_();
-    } else if (OB_FAIL(after_submit_log_(log_block, log_cb, &helper))) {
-    } else {
-      // TRANS_LOG(INFO, "submit redo and commit_info log in clog adapter success", K(*log_cb));
-      reset_redo_lsns_();
-      log_cb = NULL;
-    }
+    // TRANS_LOG(INFO, "submit redo and commit_info log in clog adapter success", K(*log_cb));
+    reset_redo_lsns_();
+    log_cb = NULL;
   }
 
   return ret;
@@ -2421,21 +2419,19 @@ int ObTxCtx::submit_redo_commit_info_log_(ObTxLogBlock &log_block,
             TRANS_LOG(WARN, "resolve callbacks failed", K(ret), KPC(this));
             return_log_cb_(log_cb);
             log_cb = NULL;
+          } else if (OB_FAIL(acquire_ctx_ref_())) {
+          } else if (OB_FAIL(submit_log_block_out_(log_block, SCN::min_scn(), log_cb))) {
+            TRANS_LOG(ERROR, "submit log failed", KR(ret), K(*this));
+            return_log_cb_(log_cb);
+            log_cb = NULL;
+            release_ctx_ref_();
+          } else if (OB_FAIL(after_submit_log_(log_block, log_cb, &helper))) {
           } else {
-            OB_ASSERT_SUCC(ret = acquire_ctx_ref_());
-            if (OB_FAIL(submit_log_block_out_(log_block, SCN::min_scn(), log_cb))) {
-              TRANS_LOG(ERROR, "submit log failed", KR(ret), K(*this));
-              return_log_cb_(log_cb);
-              log_cb = NULL;
-              release_ctx_ref_();
-            } else if (OB_FAIL(after_submit_log_(log_block, log_cb, &helper))) {
-            } else {
-              log_cb = NULL;
-              if (OB_FAIL(validate_commit_info_log_(commit_info_log))) {
-              } else if (OB_FAIL(log_block.add_new_log(commit_info_log))) {
-              }
-              has_redo = false;
+            log_cb = NULL;
+            if (OB_FAIL(validate_commit_info_log_(commit_info_log))) {
+            } else if (OB_FAIL(log_block.add_new_log(commit_info_log))) {
             }
+            has_redo = false;
           }
         } else {
           TRANS_LOG(WARN, "add new log failed", KR(ret), K(this));
@@ -2551,59 +2547,60 @@ int ObTxCtx::submit_commit_log_()
           TRANS_LOG(WARN, "resolve callbacks failed", K(ret), KPC(this));
           return_log_cb_(log_cb);
           log_cb = NULL;
+        } else if (OB_FAIL(acquire_ctx_ref_())) {
+        } else if (OB_FAIL(submit_log_block_out_(log_block, SCN::min_scn(), log_cb, replay_hint,
+                                                 commit_info_log_barrier))) {
+          TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
+          return_log_cb_(log_cb);
+          log_cb = NULL;
+          release_ctx_ref_();
+        } else if (OB_FAIL(after_submit_log_(log_block, log_cb, &helper))) {
         } else {
-          OB_ASSERT_SUCC(ret = acquire_ctx_ref_());
-          if (OB_FAIL(submit_log_block_out_(log_block, SCN::min_scn(), log_cb, replay_hint, commit_info_log_barrier))) {
+          redo_log_submitted = true;
+          commit_log.set_prev_lsn(log_cb->get_lsn());
+          // TRANS_LOG(INFO, "submit redo and commit_info log in clog adapter success", K(*log_cb));
+          if (OB_SUCC(ret)) {
+            if (OB_FAIL(set_start_scn_in_commit_log_(commit_log))) {
+            }
+          }
+
+          log_cb = NULL;
+
+          if(OB_FAIL(ret)) {
+            // do nothing
+          } else if (OB_FAIL(prepare_log_cb_(log_cb))) {
+            if (OB_UNLIKELY(OB_TX_NOLOGCB != ret)) {
+              TRANS_LOG(WARN, "get log cb failed", KR(ret), K(*this));
+            }
+          } else if (OB_FAIL(log_block.add_new_log(commit_log))) {
+            TRANS_LOG(WARN, "add new log failed", KR(ret), K(*this));
+            return_log_cb_(log_cb);
+            log_cb = NULL;
+          } else if (log_block.get_cb_arg_array().count() == 0) {
+            ret = OB_ERR_UNEXPECTED;
+            TRANS_LOG(ERROR, "cb arg array is empty", K(ret), K(log_block));
+            return_log_cb_(log_cb);
+            log_cb = NULL;
+          } else if (OB_FAIL(acquire_ctx_ref_())) {
+          } else if (OB_FAIL(submit_log_block_out_(log_block,
+                                                   ctx_tx_data_.get_commit_version(),
+                                                   log_cb,
+                                                   replay_hint,
+                                                   commit_log_barrier_type))) {
             TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
             return_log_cb_(log_cb);
             log_cb = NULL;
             release_ctx_ref_();
-          } else if (OB_FAIL(after_submit_log_(log_block, log_cb, &helper))) {
           } else {
-            redo_log_submitted = true;
-            commit_log.set_prev_lsn(log_cb->get_lsn());
-            // TRANS_LOG(INFO, "submit redo and commit_info log in clog adapter success", K(*log_cb));
+            // The transaction updates its commit version from the commit log.
             if (OB_SUCC(ret)) {
-              if (OB_FAIL(set_start_scn_in_commit_log_(commit_log))) {
+              int tmp_ret = OB_SUCCESS;
+              if (OB_SUCCESS
+                  != (tmp_ret = ctx_tx_data_.set_commit_version(log_cb->get_log_ts()))) {
               }
             }
-
-            log_cb = NULL;
-
-            if (OB_FAIL(ret)) {
+            if (OB_FAIL(after_submit_log_(log_block, log_cb, NULL))) {
               // do nothing
-            } else if (OB_FAIL(prepare_log_cb_(log_cb))) {
-              if (OB_UNLIKELY(OB_TX_NOLOGCB != ret)) {
-                TRANS_LOG(WARN, "get log cb failed", KR(ret), K(*this));
-              }
-            } else if (OB_FAIL(log_block.add_new_log(commit_log))) {
-              TRANS_LOG(WARN, "add new log failed", KR(ret), K(*this));
-              return_log_cb_(log_cb);
-              log_cb = NULL;
-            } else if (log_block.get_cb_arg_array().count() == 0) {
-              ret = OB_ERR_UNEXPECTED;
-              TRANS_LOG(ERROR, "cb arg array is empty", K(ret), K(log_block));
-              return_log_cb_(log_cb);
-              log_cb = NULL;
-            } else {
-              OB_ASSERT_SUCC(ret = acquire_ctx_ref_());
-              if (OB_FAIL(submit_log_block_out_(log_block, ctx_tx_data_.get_commit_version(), log_cb, replay_hint,
-                                                commit_log_barrier_type))) {
-                TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
-                return_log_cb_(log_cb);
-                log_cb = NULL;
-                release_ctx_ref_();
-              } else {
-                // The transaction updates its commit version from the commit log.
-                if (OB_SUCC(ret)) {
-                  int tmp_ret = OB_SUCCESS;
-                  if (OB_SUCCESS != (tmp_ret = ctx_tx_data_.set_commit_version(log_cb->get_log_ts()))) {
-                  }
-                }
-                if (OB_FAIL(after_submit_log_(log_block, log_cb, NULL))) {
-                  // do nothing
-                }
-              }
             }
           }
         }
@@ -2625,25 +2622,26 @@ int ObTxCtx::submit_commit_log_()
       TRANS_LOG(WARN, "resolve callbacks failed", K(ret), KPC(this));
       return_log_cb_(log_cb);
       log_cb = NULL;
+    } else if (OB_FAIL(acquire_ctx_ref_())) {
+    } else if (OB_FAIL(submit_log_block_out_(log_block,
+                                             ctx_tx_data_.get_commit_version(),
+                                             log_cb,
+                                             replay_hint,
+                                             compound_log_barrier_type))) {
+      TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
+      release_ctx_ref_();
+      return_log_cb_(log_cb);
+      log_cb = NULL;
     } else {
-      OB_ASSERT_SUCC(ret = acquire_ctx_ref_());
-      if (OB_FAIL(submit_log_block_out_(log_block, ctx_tx_data_.get_commit_version(), log_cb, replay_hint,
-                                        compound_log_barrier_type))) {
-        TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
-        release_ctx_ref_();
-        return_log_cb_(log_cb);
-        log_cb = NULL;
+      // The transaction updates its commit version from the commit log.
+      if (OB_SUCC(ret)) {
+        int tmp_ret = OB_SUCCESS;
+        if (OB_SUCCESS != (tmp_ret = ctx_tx_data_.set_commit_version(log_cb->get_log_ts()))) {
+        }
+      }
+      if (OB_FAIL(after_submit_log_(log_block, log_cb, &helper))) {
       } else {
-        // The transaction updates its commit version from the commit log.
-        if (OB_SUCC(ret)) {
-          int tmp_ret = OB_SUCCESS;
-          if (OB_SUCCESS != (tmp_ret = ctx_tx_data_.set_commit_version(log_cb->get_log_ts()))) {
-          }
-        }
-        if (OB_FAIL(after_submit_log_(log_block, log_cb, &helper))) {
-        } else {
-          redo_log_submitted = true;
-        }
+        redo_log_submitted = true;
       }
     }
   }
@@ -2701,19 +2699,16 @@ int ObTxCtx::submit_abort_log_()
     TRANS_LOG(WARN, "reserve tx_op space failed", KR(ret), KPC(this));
     return_log_cb_(log_cb);
     log_cb = NULL;
+  } else if (OB_FAIL(acquire_ctx_ref_())) {
+  } else if (OB_FAIL(submit_log_block_out_(log_block, SCN::min_scn(), log_cb, replay_hint, abort_log_barrier_type, 50 * 1000))) {
+    TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
+    return_log_cb_(log_cb);
+    log_cb = NULL;
+    release_ctx_ref_();
+  } else if (OB_FAIL(after_submit_log_(log_block, log_cb, NULL))) {
   } else {
-    OB_ASSERT_SUCC(ret = acquire_ctx_ref_());
-    if (OB_FAIL(
-            submit_log_block_out_(log_block, SCN::min_scn(), log_cb, replay_hint, abort_log_barrier_type, 50 * 1000))) {
-      TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
-      return_log_cb_(log_cb);
-      log_cb = NULL;
-      release_ctx_ref_();
-    } else if (OB_FAIL(after_submit_log_(log_block, log_cb, NULL))) {
-    } else {
-      // TRANS_LOG(INFO, "submit abort log in clog adapter success", K(*log_cb));
-      reset_redo_lsns_();
-    }
+    // TRANS_LOG(INFO, "submit abort log in clog adapter success", K(*log_cb));
+    reset_redo_lsns_();
   }
 
   return ret;
@@ -2742,18 +2737,16 @@ int ObTxCtx::submit_clear_log_()
     TRANS_LOG(ERROR, "cb arg array is empty", K(ret), K(log_block));
     return_log_cb_(log_cb);
     log_cb = NULL;
+  } else if (OB_FAIL(acquire_ctx_ref_())) {
+  } else if (OB_FAIL(submit_log_block_out_(log_block, ctx_tx_data_.get_end_log_ts(), log_cb))) {
+    TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
+    return_log_cb_(log_cb);
+    log_cb = NULL;
+    release_ctx_ref_();
+  } else if (OB_FAIL(after_submit_log_(log_block, log_cb, NULL))) {
   } else {
-    OB_ASSERT_SUCC(ret = acquire_ctx_ref_());
-    if (OB_FAIL(submit_log_block_out_(log_block, ctx_tx_data_.get_end_log_ts(), log_cb))) {
-      TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
-      return_log_cb_(log_cb);
-      log_cb = NULL;
-      release_ctx_ref_();
-    } else if (OB_FAIL(after_submit_log_(log_block, log_cb, NULL))) {
-    } else {
-      // TRANS_LOG(INFO, "submit clear log in clog adapter success", K(*log_cb));
-      log_cb = NULL;
-    }
+    // TRANS_LOG(INFO, "submit clear log in clog adapter success", K(*log_cb));
+    log_cb = NULL;
   }
 
   return ret;
@@ -2780,20 +2773,18 @@ int ObTxCtx::submit_record_log_()
     TRANS_LOG(ERROR, "cb arg array is empty", K(ret), K(log_block));
     return_log_cb_(log_cb);
     log_cb = NULL;
+  } else if (OB_FAIL(acquire_ctx_ref_())) {
+  } else if (OB_FAIL(submit_log_block_out_(log_block, SCN::min_scn(), log_cb))) {
+    TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
+    return_log_cb_(log_cb);
+    log_cb = NULL;
+    release_ctx_ref_();
+  } else if (OB_FAIL(after_submit_log_(log_block, log_cb, NULL))) {
   } else {
-    OB_ASSERT_SUCC(ret = acquire_ctx_ref_());
-    if (OB_FAIL(submit_log_block_out_(log_block, SCN::min_scn(), log_cb))) {
-      TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
-      return_log_cb_(log_cb);
-      log_cb = NULL;
-      release_ctx_ref_();
-    } else if (OB_FAIL(after_submit_log_(log_block, log_cb, NULL))) {
-    } else {
-      TRANS_LOG(INFO, "submit record log", K(*this));
-      reset_redo_lsns_();
-      set_prev_record_lsn_(log_cb->get_lsn());
-      log_cb = NULL;
-    }
+    TRANS_LOG(INFO, "submit record log", K(*this));
+    reset_redo_lsns_();
+    set_prev_record_lsn_(log_cb->get_lsn());
+    log_cb = NULL;
   }
 
   return ret;
@@ -2837,18 +2828,20 @@ int ObTxCtx::submit_big_segment_log_()
       TRANS_LOG(ERROR, "cb arg array is empty", K(ret), K(log_block));
       return_log_cb_(log_cb);
       log_cb = NULL;
+    } else if (OB_FAIL(acquire_ctx_ref_())) {
+    } else if (OB_FAIL(submit_log_block_out_(log_block,
+                                             big_segment_info_.submit_base_scn_,
+                                             log_cb,
+                                             0,
+                                             ObReplayBarrierType::NO_NEED_BARRIER,
+                                             INT64_MAX))) {
+      TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
+      return_log_cb_(log_cb);
+      log_cb = NULL;
+      release_ctx_ref_();
+    } else if (OB_FAIL(after_submit_log_(log_block, log_cb, NULL))) {
     } else {
-      OB_ASSERT_SUCC(ret = acquire_ctx_ref_());
-      if (OB_FAIL(submit_log_block_out_(log_block, big_segment_info_.submit_base_scn_, log_cb, 0,
-                                        ObReplayBarrierType::NO_NEED_BARRIER, INT64_MAX))) {
-        TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
-        return_log_cb_(log_cb);
-        log_cb = NULL;
-        release_ctx_ref_();
-      } else if (OB_FAIL(after_submit_log_(log_block, log_cb, NULL))) {
-      } else {
-        log_cb = NULL;
-      }
+      log_cb = NULL;
     }
   }
 
@@ -5076,18 +5069,16 @@ int ObTxCtx::submit_pending_log_block_(ObTxLogBlock &log_block,
       TRANS_LOG(WARN, "resolve callbacks failed", K(ret), KPC(this));
       return_log_cb_(log_cb);
       log_cb = NULL;
+    } else if (OB_FAIL(acquire_ctx_ref_())) {
+    } else if (OB_FAIL(submit_log_block_out_(log_block, share::SCN::min_scn(), log_cb, replay_hint, barrier))) {
+      TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
+      return_log_cb_(log_cb);
+      log_cb = NULL;
+      release_ctx_ref_();
+    } else if (OB_FAIL(after_submit_log_(log_block, log_cb, &helper))) {
     } else {
-      OB_ASSERT_SUCC(ret = acquire_ctx_ref_());
-      if (OB_FAIL(submit_log_block_out_(log_block, share::SCN::min_scn(), log_cb, replay_hint, barrier))) {
-        TRANS_LOG(ERROR, "submit log to clog adapter failed", KR(ret), K(*this));
-        return_log_cb_(log_cb);
-        log_cb = NULL;
-        release_ctx_ref_();
-      } else if (OB_FAIL(after_submit_log_(log_block, log_cb, &helper))) {
-      } else {
-        // TRANS_LOG(INFO, "submit pending log block in clog adapter success", K(*log_cb));
-        log_cb = NULL;
-      }
+      // TRANS_LOG(INFO, "submit pending log block in clog adapter success", K(*log_cb));
+      log_cb = NULL;
     }
   }
 
@@ -5720,8 +5711,8 @@ int ObTxCtx::after_local_commit_succ_()
 {
   int ret = OB_SUCCESS;
 
-  {
-    OB_ASSERT_SUCC(ret = update_max_commit_version_());
+  if (OB_FAIL(update_max_commit_version_())) {
+  } else {
     (void)post_tx_commit_resp_(OB_SUCCESS);
     set_exiting_();
   }
@@ -5863,19 +5854,17 @@ int ObTxCtx::submit_redo_log_out(ObTxLogBlock &log_block,
   } else if (alloc_cb && OB_FAIL(log_cb->reserve_callbacks(helper.callbacks_.count()))) {
     TRANS_LOG(WARN, "log cb reserve callbacks space fail", K(ret));
   } else if (OB_FAIL(exec_info_.redo_lsns_.reserve(exec_info_.redo_lsns_.count() + 1))) {
+  } else if (OB_FAIL(acquire_ctx_ref_())) {
+  } else if (FALSE_IT(with_ref = true)) {
+  } else if (FALSE_IT(time_guard.click("before_submit_log_block"))) {
+  } else if (OB_FAIL(submit_log_block_out_(log_block, share::SCN::min_scn(), log_cb, replay_hint))) {
   } else {
-    OB_ASSERT_SUCC(ret = acquire_ctx_ref_());
-    if (FALSE_IT(with_ref = true)) {
-    } else if (FALSE_IT(time_guard.click("before_submit_log_block"))) {
-    } else if (OB_FAIL(submit_log_block_out_(log_block, share::SCN::min_scn(), log_cb, replay_hint))) {
-    } else {
-      time_guard.click("submit_out_to_palf");
-      submitted_scn = log_cb->get_log_ts();
-      ret = after_submit_log_(log_block, log_cb, &helper);
-      time_guard.click("after_submit");
-      log_cb = NULL;    // moved
-      with_ref = false; // moved
-    }
+    time_guard.click("submit_out_to_palf");
+    submitted_scn = log_cb->get_log_ts();
+    ret = after_submit_log_(log_block, log_cb, &helper);
+    time_guard.click("after_submit");
+    log_cb = NULL;    // moved
+    with_ref = false; // moved
   }
   if (log_cb) {
     return_log_cb_(log_cb);

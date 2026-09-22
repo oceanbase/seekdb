@@ -1169,12 +1169,10 @@ int ObAlterTableResolver::resolve_add_index(const ParseNode &node)
                 ObCollationType cs_type = CS_TYPE_INVALID;
                 if (OB_UNLIKELY(NULL == session_info_)) {
                   ret = OB_ERR_UNEXPECTED;
+                } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
+                } else if (OB_FAIL(ObSQLUtils::check_index_name(cs_type, create_index_arg->index_name_))) {
                 } else {
-                  OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(cs_type));
-                  if (OB_FAIL(ObSQLUtils::check_index_name(cs_type, create_index_arg->index_name_))) {
-                  } else {
-                    create_index_arg->index_schema_.set_name_generated_type(GENERATED_TYPE_USER);
-                  }
+                  create_index_arg->index_schema_.set_name_generated_type(GENERATED_TYPE_USER);
                 }
               }
             }
@@ -2435,27 +2433,25 @@ int ObAlterTableResolver::resolve_rename_index(const ParseNode &node)
       ObRenameIndexArg *rename_index_arg = NULL;
       if (OB_ISNULL(session_info_)) {
         ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
+      } else if (OB_FAIL(ObSQLUtils::check_index_name(cs_type, tmp_new_index_name))) {
       } else {
-        OB_ASSERT_SUCC(ret = session_info_->get_collation_connection(cs_type));
-        if (OB_FAIL(ObSQLUtils::check_index_name(cs_type, tmp_new_index_name))) {
+        ObString tmp_index_name;
+        ObString ori_index_name;
+        ObString new_index_name;
+        ori_index_name.assign_ptr(index_node->str_value_,
+                                  static_cast<int32_t>(index_node->str_len_));
+        new_index_name.assign_ptr(new_name_node->str_value_, static_cast<int32_t>(new_name_node->str_len_));
+        void *tmp_ptr = NULL;
+
+        if (OB_UNLIKELY(NULL == (tmp_ptr = (ObRenameIndexArg *)allocator_->alloc(sizeof(obcall::ObRenameIndexArg))))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          SQL_RESV_LOG(ERROR, "failed to allocate memory", K(ret));
         } else {
-          ObString tmp_index_name;
-          ObString ori_index_name;
-          ObString new_index_name;
-          ori_index_name.assign_ptr(index_node->str_value_, static_cast<int32_t>(index_node->str_len_));
-          new_index_name.assign_ptr(new_name_node->str_value_, static_cast<int32_t>(new_name_node->str_len_));
-          void *tmp_ptr = NULL;
+          rename_index_arg = new (tmp_ptr)ObRenameIndexArg();
 
-          if (OB_UNLIKELY(NULL ==
-                          (tmp_ptr = (ObRenameIndexArg *)allocator_->alloc(sizeof(obcall::ObRenameIndexArg))))) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-            SQL_RESV_LOG(ERROR, "failed to allocate memory", K(ret));
-          } else {
-            rename_index_arg = new (tmp_ptr) ObRenameIndexArg();
-
-            rename_index_arg->origin_index_name_ = ori_index_name;
-            rename_index_arg->new_index_name_ = new_index_name;
-          }
+          rename_index_arg->origin_index_name_ = ori_index_name;
+          rename_index_arg->new_index_name_= new_index_name;
         }
       }
 

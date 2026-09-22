@@ -413,13 +413,11 @@ int ObMemstoreFreezer::check_and_freeze_normal_data_(ObMemstoreFreezeCtx &ctx)
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   bool need_freeze = false;
-  {
-    OB_ASSERT_SUCC(ret = get_freeze_trigger_(ctx));
-    {
-      OB_ASSERT_SUCC(ret = get_memory_usage_(ctx));
-      need_freeze = need_freeze_(ctx);
-      log_frozen_memstore_info_if_need_(ctx);
-    }
+  if (OB_FAIL(get_freeze_trigger_(ctx))) {
+  } else if (OB_FAIL(get_memory_usage_(ctx))) {
+  } else {
+    need_freeze = need_freeze_(ctx);
+    log_frozen_memstore_info_if_need_(ctx);
   }
   // must out of the lock, to make sure there is no deadlock, just because of global freeze hung.
   if (OB_TMP_FAIL(do_major_if_need_(need_freeze))) {
@@ -827,7 +825,8 @@ int ObMemstoreFreezer::set_memory_limit(const int64_t lower_limit,
       memstore_info_.update_memstore_limit(memstore_limit);
       memstore_info_.is_loaded_ = true;
       memstore_info_.get_freeze_ctx(ctx);
-      OB_ASSERT_SUCC(ret = get_freeze_trigger_(ctx));
+      if (OB_FAIL(get_freeze_trigger_(ctx))) {
+      }
       if (OB_SUCC(ret)) {
         LOG_INFO("[MemstoreFreezer] set memory limit",
                  "mem_lower_limit", lower_limit,
@@ -947,24 +946,22 @@ int ObMemstoreFreezer::get_memstore_condition_(
       ret = OB_ENTRY_NOT_EXIST;
       LOG_INFO("[MemstoreFreezer] runtime is unavailable", KR(ret));
     } else if (FALSE_IT(memstore_info_.get_freeze_ctx(ctx))) {
+    } else if (OB_FAIL(get_memory_usage_(ctx))) {
+    } else if (OB_FAIL(get_freeze_trigger_(ctx))) {
     } else {
-      OB_ASSERT_SUCC(ret = get_memory_usage_(ctx));
-      {
-        OB_ASSERT_SUCC(ret = get_freeze_trigger_(ctx));
-        memstore_limit = ctx.mem_memstore_limit_;
-        active_memstore_used = ctx.active_memstore_used_;
-        total_memstore_used = ctx.memstore_quota_used_;
-        memstore_freeze_trigger = ctx.memstore_freeze_trigger_ + ctx.max_cached_memstore_size_;
-        freeze_cnt = memstore_info_.freeze_cnt_;
+      memstore_limit = ctx.mem_memstore_limit_;
+      active_memstore_used = ctx.active_memstore_used_;
+      total_memstore_used = ctx.memstore_quota_used_;
+      memstore_freeze_trigger = ctx.memstore_freeze_trigger_ + ctx.max_cached_memstore_size_;
+      freeze_cnt = memstore_info_.freeze_cnt_;
 
-        // cache the result
-        last_refresh_timestamp = current_time;
-        last_active_memstore_used = active_memstore_used;
-        last_total_memstore_used = total_memstore_used;
-        last_memstore_freeze_trigger = memstore_freeze_trigger;
-        last_memstore_limit = memstore_limit;
-        last_freeze_cnt = freeze_cnt;
-      }
+      // cache the result
+      last_refresh_timestamp = current_time;
+      last_active_memstore_used = active_memstore_used;
+      last_total_memstore_used = total_memstore_used;
+      last_memstore_freeze_trigger = memstore_freeze_trigger;
+      last_memstore_limit = memstore_limit;
+      last_freeze_cnt = freeze_cnt;
     }
   }
   return ret;
@@ -1026,8 +1023,8 @@ int ObMemstoreFreezer::get_memory_stat_(ObMemstoreStatistic &stat)
 
   ObMemstoreFreezeCtx ctx;
   memstore_info_.get_freeze_ctx(ctx);
-  {
-    OB_ASSERT_SUCC(ret = get_freeze_trigger_(ctx));
+  if (OB_FAIL(get_freeze_trigger_(ctx))) {
+  } else {
     active_memstore_used = memstore_allocator.get_active_memstore_used();
     memstore_quota_used = memstore_allocator.get_memstore_quota_used();
     max_cached_memstore_size = memstore_allocator.get_max_cached_memstore_size();
@@ -1081,8 +1078,8 @@ int ObMemstoreFreezer::check_memstore_full_(bool &last_result,
         is_out_of_mem = false;
         LOG_INFO("[MemstoreFreezer] runtime is unavailable", KR(ret));
       } else if (FALSE_IT(memstore_info_.get_freeze_ctx(ctx))) {
+      } else if (OB_FAIL(get_memory_usage_(ctx))) {
       } else {
-        OB_ASSERT_SUCC(ret = get_memory_usage_(ctx));
         is_out_of_mem = (ctx.memstore_quota_used_ > ctx.mem_memstore_limit_ - reserved_memstore);
       }
       last_check_timestamp = current_time;
@@ -1132,15 +1129,16 @@ bool ObMemstoreFreezer::need_major_freeze()
     if (!memstore_info_.is_loaded_) {
       // do nothing
     } else if (FALSE_IT(memstore_info_.get_freeze_ctx(ctx))) {
+    } else if (OB_FAIL(get_freeze_trigger_(ctx))) {
+    } else if (OB_FAIL(get_memory_usage_(ctx))) {
     } else {
-      OB_ASSERT_SUCC(ret = get_freeze_trigger_(ctx));
-      {
-        OB_ASSERT_SUCC(ret = get_memory_usage_(ctx));
-        bool_ret = need_freeze_(ctx);
-        if (bool_ret) {
-          LOG_INFO("A major freeze is needed", "active_memstore_used_", ctx.freezable_active_memstore_used_,
-                   "memstore_freeze_trigger_limit_", ctx.memstore_freeze_trigger_);
-        }
+      bool_ret = need_freeze_(ctx);
+      if (bool_ret) {
+        LOG_INFO("A major freeze is needed",
+                 "active_memstore_used_",
+                 ctx.freezable_active_memstore_used_,
+                 "memstore_freeze_trigger_limit_",
+                 ctx.memstore_freeze_trigger_);
       }
     }
   }
@@ -1455,8 +1453,8 @@ int ObMemstoreFreezer::update_frozen_scn(const int64_t frozen_scn)
   int ret = OB_SUCCESS;
   if (!memstore_info_.is_loaded_) {
     // do nothing
-  } else
-    OB_ASSERT_SUCC(ret = memstore_info_.update_frozen_scn(frozen_scn));
+  } else if (OB_FAIL(memstore_info_.update_frozen_scn(frozen_scn))) {
+  }
   return ret;
 }
 

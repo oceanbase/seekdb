@@ -607,15 +607,16 @@ int ObDASMergeIter::get_next_sorted_row()
           if (OB_FAIL(merge_store_rows_arr_[i].save(false, 1))) {
           } else {
             merge_state_arr_[i].row_store_have_data_ = true;
-            OB_ASSERT_SUCC(ret = compare(i, output_idx));
+            if (OB_FAIL(compare(i, output_idx))) {
+            }
           }
         } else if (OB_ITER_END == ret) {
           ret = OB_SUCCESS;
           merge_state_arr_[i].das_task_iter_end_ = true;
         } else {
         }
-      } else
-        OB_ASSERT_SUCC(ret = compare(i, output_idx));
+      } else if (OB_FAIL(compare(i, output_idx))) {
+      }
     }
   } // for end
 
@@ -692,7 +693,8 @@ int ObDASMergeIter::get_next_sorted_rows(int64_t &count, int64_t capacity)
               if (OB_FAIL(merge_store_rows_arr_[i].save(true, count))) {
               } else {
                 merge_state_arr_[i].row_store_have_data_ = true;
-                OB_ASSERT_SUCC(ret = compare(i, output_idx));
+                if (OB_FAIL(compare(i, output_idx))) {
+                }
               }
             } else if (OB_ITER_END == ret) {
               ret = OB_SUCCESS;
@@ -701,7 +703,8 @@ int ObDASMergeIter::get_next_sorted_rows(int64_t &count, int64_t capacity)
             }
           }
         } else {
-          OB_ASSERT_SUCC(ret = compare(i, output_idx));
+          if (OB_FAIL(compare(i, output_idx))) {
+          }
         }
       }
     }

@@ -47,7 +47,7 @@ int set_params(ObOpRawExpr &expr, int count, ObRawExpr *first,
 }
 }
 
-TEST(RawExprAssertSucc, inserts_and_reuses_reserved_pointer_slots)
+TEST(RawExprParamValidation, inserts_and_reuses_reserved_pointer_slots)
 {
   ObConstRawExpr first, second, third;
   ObRawExpr *params[] = {&first, &second, &third};
@@ -76,7 +76,7 @@ TEST(RawExprAssertSucc, inserts_and_reuses_reserved_pointer_slots)
   }
 }
 
-TEST(RawExprAssertSucc, propagates_allocation_failure_before_writing_params)
+TEST(RawExprParamValidation, propagates_allocation_failure_before_writing_params)
 {
   ObConstRawExpr first, second, third;
   for (int count = 1; count <= 3; ++count) {
@@ -92,7 +92,7 @@ TEST(RawExprAssertSucc, propagates_allocation_failure_before_writing_params)
   }
 }
 
-TEST(RawExprAssertSucc, preserves_invalid_argument_and_capacity_errors)
+TEST(RawExprParamValidation, preserves_invalid_argument_and_capacity_errors)
 {
   ParamExprAllocator allocator;
   ObOpRawExpr expr(allocator);

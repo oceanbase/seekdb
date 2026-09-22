@@ -100,11 +100,9 @@ int calc_or_exprN(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
       if (OB_FAIL(expr.args_[i]->eval(ctx, child_res))) {
       }
       if (OB_SUCC(ret)) {
-        {
-          OB_ASSERT_SUCC(ret = calc_or_expr2(res_datum, *child_res, res_datum));
-          if (res_datum.is_true()) {
-            break;
-          }
+        if (OB_FAIL(calc_or_expr2(res_datum, *child_res, res_datum))) {
+        } else if (res_datum.is_true()) {
+          break;
         }
       }
     }

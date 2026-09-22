@@ -48,36 +48,37 @@ int ObIKArbitrator::process(TokenizeContext &ctx)
       ObIKToken token = tokens.get_first();
       bool is_add = false;
       if (OB_FAIL(tokens.pop_front())) {
-      } else {
-        OB_ASSERT_SUCC(ret = chain_need_arbitrate->add_token_if_conflict(token, is_add));
-        if (!is_add) {
-          ObFTSortList::CellIter iter = chain_need_arbitrate->list().tokens().begin();
-          ObIKTokenChain *judge_result = nullptr;
-          if (chain_need_arbitrate->list().tokens().size() == 1 || !use_smart) {
-            if (OB_FAIL(add_chain(chain_need_arbitrate))) {
-            } else {
-              // add ok
-            }
-          } else if (OB_FAIL(
-                         optimize(ctx, chain_need_arbitrate, iter, chain_need_arbitrate->offset_len(), judge_result))) {
-          } else if (OB_FAIL(add_chain(judge_result))) {
+      } else if (OB_FAIL(chain_need_arbitrate->add_token_if_conflict(token, is_add))) {
+      } else if (!is_add) {
+        ObFTSortList::CellIter iter = chain_need_arbitrate->list().tokens().begin();
+        ObIKTokenChain *judge_result = nullptr;
+        if (chain_need_arbitrate->list().tokens().size() == 1 || !use_smart) {
+          if (OB_FAIL(add_chain(chain_need_arbitrate))) {
           } else {
-            // add best chain and delete origin chain
-            OB_DELETEx(ObIKTokenChain, &alloc_, chain_need_arbitrate);
+            // add ok
           }
-
-          // start a new chain
-          if (OB_FAIL(ret)) {
-          } else if (OB_ISNULL(chain_need_arbitrate = OB_NEWx(ObIKTokenChain, &alloc_, alloc_))) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-            LOG_WARN("alloc memory failed");
-          } else {
-            OB_ASSERT_SUCC(ret = chain_need_arbitrate->add_token_if_conflict(token, is_add));
-            // Add first, it should be added.
-          }
+        } else if (OB_FAIL(optimize(ctx,
+                                    chain_need_arbitrate,
+                                    iter,
+                                    chain_need_arbitrate->offset_len(),
+                                    judge_result))) {
+        } else if (OB_FAIL(add_chain(judge_result))) {
         } else {
-          // still use same cross chain
+          // add best chain and delete origin chain
+          OB_DELETEx(ObIKTokenChain, &alloc_, chain_need_arbitrate);
         }
+
+        // start a new chain
+        if (OB_FAIL(ret)) {
+        } else if (OB_ISNULL(chain_need_arbitrate = OB_NEWx(ObIKTokenChain, &alloc_, alloc_))) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+          LOG_WARN("alloc memory failed");
+        } else if (OB_FAIL(chain_need_arbitrate->add_token_if_conflict(token, is_add))) {
+        } else {
+          // Add first, it should be added.
+        }
+      } else {
+        // still use same cross chain
       }
     }
 
@@ -275,13 +276,11 @@ int ObIKArbitrator::try_add_next_words(ObIKTokenChain *chain,
 
   while (OB_SUCC(ret) && iter != chain->list().tokens().end()) {
     bool is_add = false;
-    {
-      OB_ASSERT_SUCC(ret = option->add_token_if_no_conflict(*iter, is_add));
-      if (!is_add && need_conflict && OB_FAIL(conflict_stack.push_back(iter))) {
-      } else {
-        // no add or push back over
-        iter++;
-      }
+    if (OB_FAIL(option->add_token_if_no_conflict(*iter, is_add))) {
+    } else if (!is_add && need_conflict && OB_FAIL(conflict_stack.push_back(iter))) {
+    } else {
+      // no add or push back over
+      iter++;
     }
   }
 

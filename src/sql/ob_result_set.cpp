@@ -590,8 +590,8 @@ int ObResultSet::update_is_result_accurate()
     if (OB_ISNULL(plan_ctx)) {
       ret = OB_ERR_UNEXPECTED;
       SQL_LOG(WARN, "get plan ctx is NULL", K(ret));
+    } else if (OB_FAIL(my_session_.get_is_result_accurate(old_is_result_accurate))) {
     } else {
-      OB_ASSERT_SUCC(ret = my_session_.get_is_result_accurate(old_is_result_accurate));
       bool is_result_accurate = plan_ctx->is_result_accurate();
       if (is_result_accurate != old_is_result_accurate) {
         // FIXME @qianfu temporarily written as update_sys_variable function, to be implemented with an additional one that can accept ObSysVarClassType and
@@ -1041,8 +1041,8 @@ int ObResultSet::init_cmd_exec_context(ObExecContext &exec_ctx)
     exec_ctx.set_output_row(new(buf)ObNewRow());
     exec_ctx.set_field_columns(&field_columns_);
     int64_t plan_timeout = 0;
-    {
-      OB_ASSERT_SUCC(ret = my_session_.get_query_timeout(plan_timeout));
+    if (OB_FAIL(my_session_.get_query_timeout(plan_timeout))) {
+    } else {
       int64_t start_time = my_session_.get_query_start_time();
       plan_ctx->set_timeout_timestamp(start_time + plan_timeout);
       THIS_WORKER.set_timeout_ts(plan_ctx->get_timeout_timestamp());
@@ -1074,9 +1074,8 @@ bool ObResultSet::need_end_trans_callback() const
   } else {
     bool explicit_start_trans = my_session_.has_explicit_start_trans();
     bool ac = true;
-    {
-      OB_ASSERT_SUCC(ret = my_session_.get_autocommit(ac));
-    }
+    if (OB_FAIL(my_session_.get_autocommit(ac))) {
+    } else {}
     if (OB_LIKELY(NULL != physical_plan_) && 
                OB_LIKELY(physical_plan_->is_need_trans())) {
       need = ObSqlTransUtil::plan_can_end_trans(ac, explicit_start_trans);
@@ -1450,8 +1449,8 @@ int ObResultSet::make_final_field_name(char *buf, int64_t len, common::ObString 
   ObCollationType cs_type = common::CS_TYPE_INVALID;
   if (OB_ISNULL(buf) || 0 == len) {
     field_name.assign(buf, static_cast<int32_t>(len));
+  } else if (OB_FAIL(my_session_.get_collation_connection(cs_type))) {
   } else {
-    OB_ASSERT_SUCC(ret = my_session_.get_collation_connection(cs_type));
     while (len && !ObCharset::is_graph(cs_type, *buf)) {
       buf++;
       len--;

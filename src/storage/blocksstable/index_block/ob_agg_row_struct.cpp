@@ -352,11 +352,9 @@ int ObAggRowReader::read(const ObSkipIndexColMeta &meta, ObDatum &datum, bool &i
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!meta.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-  } else {
-    OB_ASSERT_SUCC(ret = binary_search_col(meta.col_idx_, pos));
-    if (!pos) {
-    } else if (OB_FAIL(find_col(pos, meta.col_type_, datum, is_prefix))) {
-    }
+  } else if (OB_FAIL(binary_search_col(meta.col_idx_, pos))) {
+  } else if (!pos) {
+  } else if (OB_FAIL(find_col(pos, meta.col_type_, datum, is_prefix))) {
   }
   return ret;
 }

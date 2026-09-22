@@ -326,28 +326,30 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
     if (OB_UNLIKELY(row_cnt <= 0 || column_cnt <= 0) || OB_ISNULL(in_list.children_[0]) ||
         OB_UNLIKELY(column_cnt > 1 && in_list.children_[0]->num_child_ != column_cnt)) {
       is_enable = false;  /* delay return error code */
+    } else if (OB_FAIL(session_info->get_collation_connection(connect_collation))) {
+    } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session_info, enable_decimal_int))) {
     } else {
-      OB_ASSERT_SUCC(ret = session_info->get_collation_connection(connect_collation));
-      if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session_info, enable_decimal_int))) {
-      } else {
-        ObInListsResolverHelper helper(alloc, param_store, connect_collation, nchar_collation,
-                                       static_cast<ObCollationType>(server_collation), enable_decimal_int,
-                                       is_prepare_stmt);
-        InListRewriteInfo rewrite_info;
-        for (int64_t j = 0; OB_SUCC(ret) && is_enable && j < column_cnt; ++j) {
-          if (OB_FAIL(get_inlist_rewrite_info(in_list, column_cnt, j, helper, rewrite_info))) {
-          } else if (!rewrite_info.is_valid_as_values_table_) {
-            is_enable = false;
-          } else if (helper.is_prepare_stmt_ && rewrite_info.is_question_mark_) {
-            // skip additional check for prepare stmt with question mark
-          } else if (rewrite_info.param_types_.count() <= j) {
-            ret = OB_ERR_UNEXPECTED;
-          } else if (ob_is_enum_or_set_type(rewrite_info.param_types_.at(j).obj_type_)) {
-            is_enable = false;
-          }
+      ObInListsResolverHelper helper(alloc,
+                                     param_store,
+                                     connect_collation,
+                                     nchar_collation,
+                                     static_cast<ObCollationType>(server_collation),
+                                     enable_decimal_int,
+                                     is_prepare_stmt);
+      InListRewriteInfo rewrite_info;
+      for (int64_t j = 0; OB_SUCC(ret) && is_enable && j < column_cnt; ++j) {
+        if (OB_FAIL(get_inlist_rewrite_info(in_list, column_cnt, j, helper, rewrite_info))) {
+        } else if (!rewrite_info.is_valid_as_values_table_) {
+          is_enable = false;
+        } else if (helper.is_prepare_stmt_ && rewrite_info.is_question_mark_) {
+          // skip additional check for prepare stmt with question mark
+        } else if (rewrite_info.param_types_.count() <= j) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (ob_is_enum_or_set_type(rewrite_info.param_types_.at(j).obj_type_)) {
+          is_enable = false;
         }
-        is_question_mark = rewrite_info.is_question_mark_;
       }
+      is_question_mark = rewrite_info.is_question_mark_;
     }
   }
   return ret;
@@ -368,8 +370,8 @@ int ObInListResolver::resolve_access_param_values_table(const ParseNode &in_list
   ObLengthSemantics length_semantics = LS_DEFAULT;
   if (OB_ISNULL(allocator) || OB_ISNULL(session_info) || OB_ISNULL(param_store)) {
     ret = OB_ERR_UNEXPECTED;
-  } else
-    OB_ASSERT_SUCC(ret = session_info->get_collation_connection(coll_type));
+  } else if (OB_FAIL(session_info->get_collation_connection(coll_type))) {
+  }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < row_cnt; i++) {
     row_node = in_list.children_[i];
@@ -439,17 +441,15 @@ int ObInListResolver::resolve_access_obj_values_table(const ParseNode &in_list,
   bool enable_mysql_compatible_dates = false;
   if (OB_ISNULL(allocator) || OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(session_info->get_collation_connection(coll_type))) {
+  } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session_info, enable_decimal_int))) {
+  } else if (OB_FAIL(ObSQLUtils::check_enable_mysql_compatible_dates(session_info, false,
+                       enable_mysql_compatible_dates))) {
   } else {
-    OB_ASSERT_SUCC(ret = session_info->get_collation_connection(coll_type));
-    if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session_info, enable_decimal_int))) {
-    } else if (OB_FAIL(ObSQLUtils::check_enable_mysql_compatible_dates(session_info, false,
-                                                                       enable_mysql_compatible_dates))) {
-    } else {
-      length_semantics = session_info->get_actual_length_semantics();
-      timezone_info = session_info->get_timezone_info();
-      stmt_type = stmt::T_NONE;
-      nchar_collation = session_info->get_nls_collation_nation();
-    }
+    length_semantics = session_info->get_actual_length_semantics();
+    timezone_info = session_info->get_timezone_info();
+    stmt_type = stmt::T_NONE;
+    nchar_collation = session_info->get_nls_collation_nation();
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < row_cnt; i++) {
@@ -778,15 +778,17 @@ int ObInListResolver::try_merge_inlists(ObExprResolveContext &resolve_ctx,
   }
   if (OB_FAIL(ret) || !is_enable) {
   } else if (FALSE_IT(nchar_collation = session_info->get_nls_collation_nation())) {
+  } else if (OB_FAIL(session_info->get_collation_connection(connect_collation))) {
+  } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session_info, enable_decimal_int))) {
   } else {
-    OB_ASSERT_SUCC(ret = session_info->get_collation_connection(connect_collation));
-    if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session_info, enable_decimal_int))) {
-    } else {
-      ObInListsResolverHelper helper(alloc, resolve_ctx.param_list_, connect_collation, nchar_collation,
-                                     static_cast<ObCollationType>(server_collation), enable_decimal_int,
-                                     is_prepare_stmt);
-      if (OB_FAIL(do_merge_inlists(alloc, helper, root_node, ret_node))) {
-      }
+    ObInListsResolverHelper helper(alloc,
+                                   resolve_ctx.param_list_,
+                                   connect_collation,
+                                   nchar_collation,
+                                   static_cast<ObCollationType>(server_collation),
+                                   enable_decimal_int,
+                                   is_prepare_stmt);
+    if (OB_FAIL(do_merge_inlists(alloc, helper, root_node, ret_node))) {
     }
   }
   return ret;

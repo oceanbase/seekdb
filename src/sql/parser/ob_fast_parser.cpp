@@ -299,54 +299,64 @@ int ObFastParserBase::parser_insert_str(common::ObIAllocator &allocator,
         cur_str.reset();
         if (is_insert_up) {
           is_valid = false;
-        } else {
-          OB_ASSERT_SUCC(ret = get_one_insert_row_str(raw_sql, cur_str, is_valid, params_count, is_insert_up,
-                                                      upd_params_count, end_pos));
-          if (!is_valid) {
-            LOG_WARN("get insert row failed", K(raw_sql.to_string()));
-          } else if (is_first) {
-            is_first = false;
-            first_str.assign_ptr(cur_str.ptr(), cur_str.length());
-            new_truncated_sql.assign_ptr(old_no_param_sql.ptr(), end_pos + 1);
-            first_end_pos = end_pos;
-            row_count++;
-          } else if (first_str != cur_str) {
-            is_valid = false;
-            row_count++;
-            bool trimed_succ = false;
-            if (first_str_buf == nullptr) {
-              first_str_buf_len =
-                  first_str.length() +
-                  1; // copy function requires that there must be one position at the end filled with '\0'
-              if (OB_ISNULL(first_str_buf = static_cast<char *>(allocator.alloc(first_str_buf_len)))) {
-                ret = OB_ALLOCATE_MEMORY_FAILED;
-              } else if (OB_ISNULL(other_str_buf = static_cast<char *>(allocator.alloc(first_str_buf_len)))) {
-                ret = OB_ALLOCATE_MEMORY_FAILED;
-              } else if (OB_FAIL(do_trim_for_insert(first_str_buf, first_str_buf_len, first_str, first_trimed_str,
-                                                    trimed_succ))) {
-              } else if (!trimed_succ) {
-                // trim failed
-              } else if (OB_FAIL(do_trim_for_insert(other_str_buf, first_str_buf_len, cur_str, cur_trimed_str,
-                                                    trimed_succ))) {
-              } else if (!trimed_succ) {
-                // trim failed
-              } else if (first_trimed_str == cur_trimed_str) {
-                is_valid = true;
-              }
-            } else if (FALSE_IT(cur_trimed_str.reset())) {
-              // cur_trimed_str will be reused，need do reset, other_str_buf also will be reuse
-            } else if (OB_ISNULL(other_str_buf)) {
-              ret = OB_ERR_UNEXPECTED;
-            } else if (OB_FAIL(do_trim_for_insert(other_str_buf, first_str_buf_len, cur_str, cur_trimed_str,
+        } else if (OB_FAIL(get_one_insert_row_str(raw_sql,
+                                                  cur_str,
+                                                  is_valid,
+                                                  params_count,
+                                                  is_insert_up,
+                                                  upd_params_count,
+                                                  end_pos))) {
+        } else if (!is_valid) {
+          LOG_WARN("get insert row failed", K(raw_sql.to_string()));
+        } else if (is_first) {
+          is_first = false;
+          first_str.assign_ptr(cur_str.ptr(), cur_str.length());
+          new_truncated_sql.assign_ptr(old_no_param_sql.ptr(), end_pos + 1);
+          first_end_pos = end_pos;
+          row_count++;
+        } else if (first_str != cur_str) {
+          is_valid = false;
+          row_count++;
+          bool trimed_succ = false;
+          if (first_str_buf == nullptr) {
+            first_str_buf_len = first_str.length() + 1; // copy function requires that there must be one position at the end filled with '\0'
+            if (OB_ISNULL(first_str_buf = static_cast<char*>(allocator.alloc(first_str_buf_len)))) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+            } else if (OB_ISNULL(other_str_buf = static_cast<char*>(allocator.alloc(first_str_buf_len)))) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+            } else if (OB_FAIL(do_trim_for_insert(first_str_buf,
+                                                  first_str_buf_len,
+                                                  first_str,
+                                                  first_trimed_str,
+                                                  trimed_succ))) {
+            } else if (!trimed_succ) {
+              // trim failed
+            } else if (OB_FAIL(do_trim_for_insert(other_str_buf,
+                                                  first_str_buf_len,
+                                                  cur_str,
+                                                  cur_trimed_str,
                                                   trimed_succ))) {
             } else if (!trimed_succ) {
               // trim failed
             } else if (first_trimed_str == cur_trimed_str) {
               is_valid = true;
             }
-          } else {
-            row_count++;
+          } else if (FALSE_IT(cur_trimed_str.reset())) {
+            // cur_trimed_str will be reused，need do reset, other_str_buf also will be reuse
+          } else if (OB_ISNULL(other_str_buf)) {
+            ret = OB_ERR_UNEXPECTED;
+          } else if (OB_FAIL(do_trim_for_insert(other_str_buf,
+                                                first_str_buf_len,
+                                                cur_str,
+                                                cur_trimed_str,
+                                                trimed_succ))) {
+          } else if (!trimed_succ) {
+            // trim failed
+          } else if (first_trimed_str == cur_trimed_str) {
+            is_valid = true;
           }
+        } else {
+          row_count++;
         }
 
         if (OB_FAIL(ret)) {

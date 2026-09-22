@@ -126,8 +126,8 @@ int ObExprZipf::eval_next_value(const ObExpr &expr,
     } else {
       int64_t	seed = rand_val.get_int();
       int64_t next_value_res = 0;
-      {
-        OB_ASSERT_SUCC(ret = zipf_ctx->generate_next_value(seed, next_value_res));
+      if (OB_FAIL(zipf_ctx->generate_next_value(seed, next_value_res))) {
+      } else {
         res_datum.set_int(next_value_res);
       }
     }

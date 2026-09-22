@@ -2445,62 +2445,60 @@ int ObRelationalExprOperator::get_cmp_result_type3(ObExprResType &type, bool &ne
     need_no_cast = true;
   } else {
     ObCollationType coll_type = CS_TYPE_INVALID;
-    {
-      OB_ASSERT_SUCC(ret = my_session->get_collation_connection(coll_type));
-      if (2 == param_num) {
-        need_no_cast = can_cmp_without_cast(types[1], types[0], CO_CMP);
-        if (!need_no_cast) {
-          if (OB_FAIL(calc_cmp_type2(type, types[0], types[1], type_ctx))) {
-          } else if (type.get_calc_type() == ObDecimalIntType) {
-            if (types[0].is_decimal_int()) {
-              types[0].set_calc_type(types[0].get_type());
-              types[0].set_calc_accuracy(types[0].get_accuracy());
-              // cast to order type
-              types[1].set_calc_type(ObDecimalIntType);
-              types[1].set_calc_accuracy(types[0].get_accuracy());
-              if (has_lower) { // order_expr >= low_expr
-                types[1].add_decimal_int_cast_mode(get_const_cast_mode(T_OP_GE, true));
-              } else { // order_expr <= upper_expr
-                types[1].add_decimal_int_cast_mode(get_const_cast_mode(T_OP_LE, true));
-              }
-            } else {
-              types[0].set_calc_type(ObNumberType);
-              types[1].set_calc_type(ObNumberType);
+    if (OB_FAIL(my_session->get_collation_connection(coll_type))) {
+    } else if (2 == param_num) {
+      need_no_cast = can_cmp_without_cast(types[1], types[0], CO_CMP);
+      if (!need_no_cast) {
+        if (OB_FAIL(calc_cmp_type2(type, types[0], types[1], type_ctx))) {
+        } else if (type.get_calc_type() == ObDecimalIntType) {
+          if (types[0].is_decimal_int()) {
+            types[0].set_calc_type(types[0].get_type());
+            types[0].set_calc_accuracy(types[0].get_accuracy());
+            // cast to order type
+            types[1].set_calc_type(ObDecimalIntType);
+            types[1].set_calc_accuracy(types[0].get_accuracy());
+            if (has_lower) { // order_expr >= low_expr
+              types[1].add_decimal_int_cast_mode(get_const_cast_mode(T_OP_GE, true));
+            } else { // order_expr <= upper_expr
+              types[1].add_decimal_int_cast_mode(get_const_cast_mode(T_OP_LE, true));
             }
           } else {
-            types[0].set_calc_meta(type.get_calc_meta());
-            types[1].set_calc_meta(type.get_calc_meta());
+            types[0].set_calc_type(ObNumberType);
+            types[1].set_calc_type(ObNumberType);
           }
         } else {
-          types[0].set_calc_type(types[0].get_type());
-          types[0].set_calc_accuracy(types[0].get_accuracy());
-          types[1].set_calc_type(types[0].get_type());
-          types[1].set_calc_accuracy(types[1].get_accuracy());
+          types[0].set_calc_meta(type.get_calc_meta());
+          types[1].set_calc_meta(type.get_calc_meta());
         }
       } else {
-        ObExprResType &type1 = types[0];
-        ObExprResType &type2 = types[1];
-        ObExprResType &type3 = types[2];
-        // a(type1) between b(type2) and c(type3) <==> b<=a && a <=c
-        ObExprResType cmp_type21; // b <= a
-        ObExprResType cmp_type13; // a <= c
-        if (OB_FAIL(calc_cmp_type3(type, type1, type2, type3, type_ctx))) {
-        } else if (OB_FAIL(calc_cmp_type2(cmp_type21, type2, type1, type_ctx))) {
-        } else if (OB_FAIL(calc_cmp_type2(cmp_type13, type1, type3, type_ctx))) {
-        } else if (cmp_type21.get_calc_type() == cmp_type13.get_calc_type() &&
-                   cmp_type13.get_calc_type() == type.get_calc_type()) {
-          // type21 == type13 == cmp_type
-          bool need_no_cast_21 = can_cmp_without_cast(type2, type1, CO_CMP);
-          bool need_no_cast_13 = can_cmp_without_cast(type1, type3, CO_CMP);
-          need_no_cast = need_no_cast_21 && need_no_cast_13;
-        }
-        if (OB_SUCC(ret)) {
-          ObExprTypeCtx dummy_ctx;
-          dummy_ctx.set_raw_expr(raw_expr_);
-          ObSQLUtils::init_type_ctx(my_session, dummy_ctx);
-          ObExprResType dummy_res;
-          if (OB_FAIL(calc_result_type3(dummy_res, type1, type2, type3, dummy_ctx))) {
-          }
+        types[0].set_calc_type(types[0].get_type());
+        types[0].set_calc_accuracy(types[0].get_accuracy());
+        types[1].set_calc_type(types[0].get_type());
+        types[1].set_calc_accuracy(types[1].get_accuracy());
+      }
+    } else {
+      ObExprResType &type1 = types[0];
+      ObExprResType &type2 = types[1];
+      ObExprResType &type3 = types[2];
+      //a(type1) between b(type2) and c(type3) <==> b<=a && a <=c
+      ObExprResType cmp_type21; // b <= a
+      ObExprResType cmp_type13; // a <= c
+      if (OB_FAIL(calc_cmp_type3(type, type1, type2, type3, type_ctx))) {
+      } else if (OB_FAIL(calc_cmp_type2(cmp_type21, type2, type1, type_ctx))) {
+      } else if (OB_FAIL(calc_cmp_type2(cmp_type13, type1, type3, type_ctx))) {
+      } else if (cmp_type21.get_calc_type() == cmp_type13.get_calc_type()
+                 && cmp_type13.get_calc_type() == type.get_calc_type()) {
+        //type21 == type13 == cmp_type
+        bool need_no_cast_21 = can_cmp_without_cast(type2, type1, CO_CMP);
+        bool need_no_cast_13 = can_cmp_without_cast(type1, type3, CO_CMP);
+        need_no_cast = need_no_cast_21 && need_no_cast_13;
+      }
+      if (OB_SUCC(ret)) {
+        ObExprTypeCtx dummy_ctx;
+        dummy_ctx.set_raw_expr(raw_expr_);
+        ObSQLUtils::init_type_ctx(my_session, dummy_ctx);
+        ObExprResType dummy_res;
+        if (OB_FAIL(calc_result_type3(dummy_res, type1, type2, type3, dummy_ctx))) {
         }
       }
     }
@@ -2558,7 +2556,8 @@ int ObRelationalExprOperator::set_cmp_func(const ObObjType type1,
   ObCmpOp cmp_op = get_cmp_op(type_);
   ObObjTypeClass tc1 = ob_obj_type_class(type1);
   ObObjTypeClass tc2 = ob_obj_type_class(type2);
-  OB_ASSERT_SUCC(ret = ObObjCmpFuncs::get_cmp_func(tc1, tc2, cmp_op, cmp_op_func2_));
+  if (OB_FAIL(ObObjCmpFuncs::get_cmp_func(tc1, tc2, cmp_op, cmp_op_func2_))) {
+  }
   return ret;
 }
 
@@ -2607,8 +2606,8 @@ int ObRelationalExprOperator::pl_udt_compare2(CollectionPredRes &cmp_result,
   } else if (c1->is_of_composite()) {
     if (c1->is_collection_null() || c2->is_collection_null()) {
       cmp_result = CollectionPredRes::COLL_PRED_NULL;
-    } else
-      OB_ASSERT_SUCC(ret = eval_compare_composite(cmp_result, obj1, obj2, exec_ctx, cmp_op));
+    } else if (OB_FAIL(eval_compare_composite(cmp_result, obj1, obj2, exec_ctx, cmp_op))) {
+    }
   } else if (!c1->is_inited() || !c2->is_inited()) {
     cmp_result = CollectionPredRes::COLL_PRED_NULL;
   } else if ((c1->get_actual_count() != c2->get_actual_count())) {
@@ -4178,8 +4177,8 @@ int ObBitwiseExprOperator::calc_result_type1(ObExprResType &type,
     ObExprOperator::calc_result_flag1(type, type1);
     if (type1.is_geometry()) {
       ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(set_calc_type(type1))) {
     } else {
-      OB_ASSERT_SUCC(ret = set_calc_type(type1));
       ObCastMode cm = CM_STRING_INTEGER_TRUNC;
       type_ctx.set_cast_mode(type_ctx.get_cast_mode() | CM_NO_RANGE_CHECK | cm);
     }
@@ -4202,13 +4201,11 @@ int ObBitwiseExprOperator::calc_result_type2(ObExprResType &type,
     ObExprOperator::calc_result_flag2(type, type1, type2);
     if (type1.is_geometry() || type2.is_geometry()) {
       ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(set_calc_type(type1))) {
+    } else if (OB_FAIL(set_calc_type(type2))) {
     } else {
-      OB_ASSERT_SUCC(ret = set_calc_type(type1));
-      {
-        OB_ASSERT_SUCC(ret = set_calc_type(type2));
-        ObCastMode cm = CM_STRING_INTEGER_TRUNC;
-        type_ctx.set_cast_mode(type_ctx.get_cast_mode() | CM_NO_RANGE_CHECK | cm);
-      }
+      ObCastMode cm = CM_STRING_INTEGER_TRUNC;
+      type_ctx.set_cast_mode(type_ctx.get_cast_mode() | CM_NO_RANGE_CHECK | cm);
     }
   } else {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
@@ -4302,22 +4299,24 @@ int ObBitwiseExprOperator::calc_result2_mysql(const ObExpr &expr, ObEvalCtx &ctx
                                   sql_mode, cast_mode);
     // choose_get_int_func can find a way to put it into the cg stage, but bitwise expression
     // Should not be a performance sensitive place
-    {
-      OB_ASSERT_SUCC(ret = choose_get_int_func(left_meta, get_uint_func0));
-      if (OB_FAIL((reinterpret_cast<GetUIntFunc>(get_uint_func0)(left_meta, *left, true, left_uint, cast_mode)))) {
-      } else {
-        OB_ASSERT_SUCC(ret = choose_get_int_func(right_meta, get_uint_func1));
-        if (OB_FAIL((reinterpret_cast<GetUIntFunc>(get_uint_func1)(right_meta, *right, true, right_uint, cast_mode)))) {
-        } else {
-          // Do not worry too much about the efficiency
-          // although we calc 5 results while only one is used here.
-          // Bit operations take little time
-          uint64_t bit_op_res[BIT_MAX] = {left_uint & right_uint, left_uint | right_uint, left_uint ^ right_uint,
-                                          right_uint < sizeof(uint64_t) * 8 ? left_uint << right_uint : 0,
-                                          right_uint < sizeof(uint64_t) * 8 ? left_uint >> right_uint : 0};
-          res_datum.set_uint(bit_op_res[op]);
-        }
-      }
+    if (OB_FAIL(choose_get_int_func(left_meta, get_uint_func0))) {
+    } else if (OB_FAIL((reinterpret_cast<GetUIntFunc>(get_uint_func0)(left_meta, *left, true,
+                                                        left_uint, cast_mode)))) {
+    } else if (OB_FAIL(choose_get_int_func(right_meta, get_uint_func1))) {
+    } else if (OB_FAIL((reinterpret_cast<GetUIntFunc>(get_uint_func1)(right_meta, *right, true,
+                                                        right_uint, cast_mode)))) {
+    } else {
+      //Do not worry too much about the efficiency
+      //although we calc 5 results while only one is used here.
+      //Bit operations take little time
+      uint64_t bit_op_res[BIT_MAX] = { left_uint & right_uint,
+                                       left_uint | right_uint,
+                                       left_uint ^ right_uint,
+                                       right_uint < sizeof(uint64_t) * 8 ?
+                                         left_uint << right_uint : 0,
+                                       right_uint < sizeof(uint64_t) * 8 ?
+                                         left_uint >> right_uint : 0};
+      res_datum.set_uint(bit_op_res[op]);
     }
   }
   return ret;

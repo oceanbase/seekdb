@@ -450,8 +450,8 @@ int ObTablet::init_for_merge(
   if (FAILEDx(table_store_cache_.init(table_store_addr_.get_ptr()->get_major_sstables(),
                                       table_store_addr_.get_ptr()->get_minor_sstables()))) {
   } else if (OB_FAIL(try_update_start_scn())) {
+  } else if (OB_FAIL(try_update_table_store_flag(param.get_update_with_major_flag()))) {
   } else {
-    OB_ASSERT_SUCC(ret = try_update_table_store_flag(param.get_update_with_major_flag()));
     int64_t finish_medium_scn = 0;
     finish_medium_scn = get_last_major_snapshot_version();
     tablet_meta_.update_extra_medium_info(param.compaction_info_.merge_type_, finish_medium_scn);
@@ -1047,9 +1047,9 @@ int ObTablet::update_meta_last_persisted_committed_tablet_status_from_sstable(
 {
   int ret = OB_SUCCESS;
   if (is_mds_minor_merge(param.compaction_info_.merge_type_)) {
-    {
-      OB_ASSERT_SUCC(ret = tablet_meta_.last_persisted_committed_tablet_status_.assign(
-                         old_last_persisted_committed_tablet_status));
+    if (OB_FAIL(tablet_meta_.last_persisted_committed_tablet_status_.assign(
+        old_last_persisted_committed_tablet_status))) {
+    } else {
     }
   } else if (OB_FAIL(update_tablet_status_from_sstable(true/*expect_persist_status*/))) {
   }
@@ -1079,8 +1079,8 @@ int ObTablet::update_tablet_status_from_sstable(const bool expect_persist_status
         }
       } else {
       }
+    } else if (OB_FAIL(tablet_meta_.last_persisted_committed_tablet_status_.assign(last_tablet_status))) {
     } else {
-      OB_ASSERT_SUCC(ret = tablet_meta_.last_persisted_committed_tablet_status_.assign(last_tablet_status));
       LOG_INFO("succeed to read last tablet status from sstable", K(ret),
           "tablet_id", tablet_meta_.tablet_id_, "local_status", tablet_meta_.local_status_,
           "last_tablet_status", last_tablet_status,
@@ -1229,26 +1229,23 @@ int ObTablet::init_empty_shell(
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(pre_check_empty_shell(old_tablet, user_data))) {
   } else if (OB_FAIL(tablet_meta_.assign(old_tablet.tablet_meta_))) {
+  } else if (OB_FAIL(tablet_meta_.last_persisted_committed_tablet_status_.assign(user_data))) {
+  } else if (OB_FAIL(wait_release_memtables_())) {
+  } else if (OB_FAIL(mark_mds_table_switched_to_empty_shell_())) {
+  } else if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, table_store_addr_.ptr_))) {
+  } else if (OB_FAIL(table_store_addr_.ptr_->init(allocator, *this))) {
+  } else if (OB_FAIL(try_update_start_scn())) {
   } else {
-    OB_ASSERT_SUCC(ret = tablet_meta_.last_persisted_committed_tablet_status_.assign(user_data));
-    if (OB_FAIL(wait_release_memtables_())) {
-    } else if (OB_FAIL(mark_mds_table_switched_to_empty_shell_())) {
-    } else if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, table_store_addr_.ptr_))) {
-    } else if (OB_FAIL(table_store_addr_.ptr_->init(allocator, *this))) {
-    } else if (OB_FAIL(try_update_start_scn())) {
-    } else {
-      tablet_meta_.extra_medium_info_.reset();
-      table_store_addr_.addr_.set_none_addr();
-      storage_schema_addr_.addr_.set_none_addr();
-      macro_info_addr_.addr_.set_none_addr();
-      tablet_meta_.clog_checkpoint_scn_ = user_data.delete_commit_scn_ > tablet_meta_.clog_checkpoint_scn_
-                                              ? user_data.delete_commit_scn_
-                                              : tablet_meta_.clog_checkpoint_scn_;
-      tablet_meta_.mds_checkpoint_scn_ = user_data.delete_commit_scn_;
-      tablet_meta_.is_empty_shell_ = true;
-      is_inited_ = true;
-      LOG_INFO("init empty shell", K(ret), K(old_tablet), KPC(this));
-    }
+    tablet_meta_.extra_medium_info_.reset();
+    table_store_addr_.addr_.set_none_addr();
+    storage_schema_addr_.addr_.set_none_addr();
+    macro_info_addr_.addr_.set_none_addr();
+    tablet_meta_.clog_checkpoint_scn_ = user_data.delete_commit_scn_ > tablet_meta_.clog_checkpoint_scn_ ?
+                                          user_data.delete_commit_scn_ : tablet_meta_.clog_checkpoint_scn_;
+    tablet_meta_.mds_checkpoint_scn_ = user_data.delete_commit_scn_;
+    tablet_meta_.is_empty_shell_ = true;
+    is_inited_ = true;
+    LOG_INFO("init empty shell", K(ret), K(old_tablet), KPC(this));
   }
 
   if (OB_UNLIKELY(!is_inited_)) {
@@ -3004,13 +3001,11 @@ int ObTablet::update_rows(
                            old_rows,
                            row_count,
                            false/*check_exist*/);
-      {
-        OB_ASSERT_SUCC(ret = prepare_param(relative_table, param));
-        if (1 == row_count) {
-          if (OB_FAIL(write_memtable->set(param, context, arg))) {
-          }
-        } else if (OB_FAIL(write_memtable->multi_set(param, context, arg, rows_info))) {
+      if (OB_FAIL(prepare_param(relative_table, param))) {
+      } else if (1 == row_count) {
+        if (OB_FAIL(write_memtable->set(param, context, arg))) {
         }
+      } else if (OB_FAIL(write_memtable->multi_set(param, context, arg, rows_info))) {
       }
     }
   }
@@ -3049,14 +3044,12 @@ int ObTablet::insert_rows(
                                  nullptr, /*old_row*/
                                  row_count,
                                  check_exist);
-      {
-        OB_ASSERT_SUCC(ret = prepare_param(relative_table, param));
-        if (1 == row_count) {
-          if (OB_FAIL(write_memtable->set(param, context, arg))) {
-            rows_info.set_row_conflict_error(0, ret);
-          }
-        } else if (OB_FAIL(write_memtable->multi_set(param, context, arg, rows_info))) {
+      if (OB_FAIL(prepare_param(relative_table, param))) {
+      } else if (1 == row_count) {
+        if (OB_FAIL(write_memtable->set(param, context, arg))) {
+          rows_info.set_row_conflict_error(0, ret);
         }
+      } else if (OB_FAIL(write_memtable->multi_set(param, context, arg, rows_info))) {
       }
     }
   }
@@ -4519,8 +4512,8 @@ int ObTablet::pre_check_empty_shell(const ObTablet &old_tablet, ObTabletCreateDe
       } else if (OB_FAIL(mds_table.get_rec_scn(rec_scn))) {
       } else if (OB_UNLIKELY(rec_scn.is_max())) {
         ret = OB_STATE_NOT_MATCH;
-      } else
-        OB_ASSERT_SUCC(ret = build_user_data_for_aborted_tx_tablet(rec_scn, user_data));
+      } else if (OB_FAIL(build_user_data_for_aborted_tx_tablet(rec_scn, user_data))) {
+      }
     } else {
     }
   } else if (mds::TwoPhaseCommitState::ON_COMMIT != trans_stat || !user_data.tablet_status_.is_deleted_for_gc()) {
@@ -4565,8 +4558,8 @@ int ObTablet::prepare_param_ctx(
   mds_filter.truncate_part_filter_ = relative_table.get_truncate_part_filter();
   mds_filter.read_info_ = rowkey_read_info_;
   if (OB_FAIL(context.init(query_flag, ctx, allocator, trans_version_range, &mds_filter))) {
-  } else
-    OB_ASSERT_SUCC(ret = prepare_param(relative_table, param));
+  } else if (OB_FAIL(prepare_param(relative_table, param))) {
+  }
   return ret;
 }
 

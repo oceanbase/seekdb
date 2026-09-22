@@ -112,8 +112,8 @@ int ObSchemaPrinter::print_table_definition(const uint64_t table_id,
     } else if (OB_FAIL(print_table_definition_table_options(
                    *table_schema, buf, buf_len, pos, false, agent_mode, sql_mode))) {
     } else if (OB_FAIL(print_table_definition_partition_options(*table_schema, buf, buf_len, pos, tz_info))) {
-    } else
-      OB_ASSERT_SUCC(ret = print_table_definition_on_commit_options(*table_schema, buf, buf_len, pos));
+    } else if (OB_FAIL(print_table_definition_on_commit_options(*table_schema, buf, buf_len, pos))) {
+    }
   }
   return ret;
 }

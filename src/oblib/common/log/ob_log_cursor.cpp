@@ -92,11 +92,9 @@ int ObLogCursor::next_entry(ObLogEntry &entry, const LogCommand cmd, const char 
                             const int64_t data_len) const
 {
   int ret = OB_SUCCESS;
-  {
-    OB_ASSERT_SUCC(ret = entry.set_log_seq(log_id_));
-    if (OB_FAIL(entry.set_log_command(cmd))) {
-    } else if (OB_FAIL(entry.fill_header(log_data, data_len, 0))) {
-    }
+  if (OB_FAIL(entry.set_log_seq(log_id_))) {
+  } else if (OB_FAIL(entry.set_log_command(cmd))) {
+  } else if (OB_FAIL(entry.fill_header(log_data, data_len, 0))) {
   }
   return ret;
 }

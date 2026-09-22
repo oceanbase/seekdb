@@ -114,8 +114,9 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
     if (FALSE_IT(res_len = ObVecIVFPQCenterIDS::get_total_size(pq_m, nbits))) {
     } else if (OB_ISNULL(vb_buf = expr.get_str_res_mem(eval_ctx, res_len))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else
-      OB_ASSERT_SUCC(ret = generate_empty_pq_ids(vb_buf, pq_m, nbits, center_prefix));
+    } else if (OB_FAIL(generate_empty_pq_ids(vb_buf, pq_m, nbits,
+                                             center_prefix))) {
+    }
     if (OB_SUCC(ret)) {
       ObString res_str;
       res_str.assign_ptr(vb_buf, res_len);
@@ -192,8 +193,8 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
       if (OB_FAIL(ObVectorIndexUtil::get_ivf_aux_info(service, pq_cache, pq_cent_table_id, pq_cent_tablet_id,
                                                       cent_tablet_id, true /* is_pq_cache */, tmp_allocator,
                                                       pq_centers, center_prefix, pq_m))) {
-      } else
-        OB_ASSERT_SUCC(ret = generate_empty_pq_ids(vb_buf, pq_m, nbits, center_prefix));
+      } else if (OB_FAIL(generate_empty_pq_ids(vb_buf, pq_m, nbits, center_prefix))) {
+      }
     } else if (OB_ISNULL(arr) || pq_m > arr->size()) {
       ret = OB_ERR_UNEXPECTED;
     }
@@ -225,7 +226,8 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
       if (OB_FAIL(ObVectorIndexUtil::get_ivf_aux_info(service, cache, cent_table_id, cent_tablet_id, cent_tablet_id, false /* is_pq_cache */, tmp_allocator, centers, center_prefix, 0))) {
       } else if (centers.empty()) {
         is_empty_pq_ids = true;
-        OB_ASSERT_SUCC(ret = generate_empty_pq_ids(vb_buf, pq_m, nbits, center_prefix));
+        if (OB_FAIL(generate_empty_pq_ids(vb_buf, pq_m, nbits, center_prefix))) {
+        }
       } else if (OB_FAIL(ObVectorIndexUtil::calc_residual_vector(
           tmp_allocator, arr->size(), centers, reinterpret_cast<float*>(arr->get_data()), 
           VIDA_COS != dis_algo ? nullptr: &norm_info, residual_vec))) {

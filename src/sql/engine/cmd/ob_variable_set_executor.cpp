@@ -718,26 +718,24 @@ int ObVariableSetExecutor::process_session_autocommit_hook(ObExecContext &exec_c
   } else {
     auto tx_desc = my_session->get_tx_desc();
     bool in_trans = data_plane::tx_desc_in_tx_or_has_extra_state(tx_desc);
-    {
-      OB_ASSERT_SUCC(ret = my_session->get_autocommit(orig_ac));
-      if (OB_FAIL(val.get_int(autocommit))) {
-      } else if (0 != autocommit && 1 != autocommit) {
-        char autocommit_str[32] = {'\0'};
-        int64_t pos = 0;
-        (void)databuff_printf(autocommit_str, sizeof(autocommit_str), pos, "%ld", autocommit);
-        ret = OB_ERR_WRONG_VALUE_FOR_VAR;
-        LOG_USER_ERROR(OB_ERR_WRONG_VALUE_FOR_VAR, (int)strlen(OB_SV_AUTOCOMMIT), OB_SV_AUTOCOMMIT,
-                       (int)strlen(autocommit_str), autocommit_str);
-      } else {
-        if (false == orig_ac && true == in_trans && 1 == autocommit) {
-          // set autocommit = 1 won't clear next scope transaction settings:
-          // `set transaction read only`
-          // `set transaction isolation level`
-          if (OB_FAIL(ObSqlTransControl::implicit_end_trans(exec_ctx, false, NULL, false))) {
-          }
-        } else {
-          // Other only affects the AC flag bit, but no commit operation is needed
+    if (OB_FAIL(my_session->get_autocommit(orig_ac))) {
+    } else if (OB_FAIL(val.get_int(autocommit))) {
+    } else if (0 != autocommit && 1 != autocommit) {
+      char autocommit_str[32] = {'\0'};
+      int64_t pos = 0;
+      (void)databuff_printf(autocommit_str, sizeof(autocommit_str), pos, "%ld", autocommit);
+      ret = OB_ERR_WRONG_VALUE_FOR_VAR;
+      LOG_USER_ERROR(OB_ERR_WRONG_VALUE_FOR_VAR, (int)strlen(OB_SV_AUTOCOMMIT), OB_SV_AUTOCOMMIT,
+                     (int)strlen(autocommit_str), autocommit_str);
+    } else {
+      if (false == orig_ac && true == in_trans && 1 == autocommit) {
+        // set autocommit = 1 won't clear next scope transaction settings:
+        // `set transaction read only`
+        // `set transaction isolation level`
+        if (OB_FAIL(ObSqlTransControl::implicit_end_trans(exec_ctx, false, NULL, false))) {
         }
+      } else {
+        // Other only affects the AC flag bit, but no commit operation is needed
       }
     }
   }

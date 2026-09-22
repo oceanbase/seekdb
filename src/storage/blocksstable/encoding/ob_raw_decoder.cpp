@@ -349,7 +349,8 @@ int ObRawDecoder::batch_decode(
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
   } else if (fast_decode_valid(ctx)) {
-    OB_ASSERT_SUCC(ret = batch_decode_fast(ctx, row_index, row_ids, row_cap, datums));
+    if (OB_FAIL(batch_decode_fast(ctx, row_index, row_ids, row_cap, datums))) {
+    }
   } else if (OB_FAIL(batch_decode_general(ctx, row_index, row_ids, cell_datas, row_cap, datums))) {
   }
   return ret;
@@ -820,18 +821,20 @@ int ObRawDecoder::fast_datum_comparison_operator(
       for (int64_t i = 0; i < curr_batch_size; ++i) {
         row_ids[i] = first_row_id + i;
       }
-      {
-        OB_ASSERT_SUCC(ret = batch_decode_fast(col_ctx, row_index, row_ids, curr_batch_size, datums));
-        if (need_padding(filter.is_padding_mode(), col_ctx.obj_meta_) &&
-            OB_FAIL(storage::pad_on_datums(col_ctx.col_param_->get_accuracy(), col_ctx.obj_meta_.get_collation_type(),
-                                           *col_ctx.allocator_, curr_batch_size, datums))) {
-        } else {
-          int cmp_res = 0;
-          for (int64_t i = 0; OB_SUCC(ret) && i < curr_batch_size; ++i) {
-            if (OB_FAIL(cmp_func(datums[i], filter.get_datums().at(0), cmp_res, nullptr))) {
-            } else if (get_cmp_ret(cmp_res)) {
-              if (OB_FAIL(result_bitmap.set(evaluated_row_cnt + i))) {
-              }
+      if (OB_FAIL(batch_decode_fast(col_ctx, row_index, row_ids, curr_batch_size, datums))) {
+      } else if (need_padding(filter.is_padding_mode(), col_ctx.obj_meta_)
+          && OB_FAIL(storage::pad_on_datums(
+              col_ctx.col_param_->get_accuracy(),
+              col_ctx.obj_meta_.get_collation_type(),
+              *col_ctx.allocator_,
+              curr_batch_size,
+              datums))) {
+      } else {
+        int cmp_res = 0;
+        for (int64_t i = 0; OB_SUCC(ret) && i < curr_batch_size; ++i) {
+          if (OB_FAIL(cmp_func(datums[i], filter.get_datums().at(0), cmp_res, nullptr))) {
+          } else if (get_cmp_ret(cmp_res)) {
+            if (OB_FAIL(result_bitmap.set(evaluated_row_cnt + i))) {
             }
           }
         }

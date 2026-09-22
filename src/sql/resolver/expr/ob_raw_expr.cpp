@@ -2251,9 +2251,7 @@ int ObOpRawExpr::set_param_expr(ObRawExpr *expr)
   int ret = OB_SUCCESS;
   if (OB_LIKELY(0 == exprs_.count())) {
     if (OB_FAIL(init_param_exprs(1))) {
-    } else {
-      // reserve() succeeded; inserting a pointer cannot allocate or fail to copy.
-      OB_ASSERT_SUCC(exprs_.push_back(expr));
+    } else if (OB_FAIL(exprs_.push_back(expr))) {
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -2266,12 +2264,10 @@ int ObOpRawExpr::set_param_exprs(ObRawExpr *first_expr, ObRawExpr *second_expr, 
   int ret = OB_SUCCESS;
   if (OB_LIKELY(0 == exprs_.count())) {
     if (OB_FAIL(init_param_exprs(3))) {
-    } else {
-      // Empty fixed array with capacity for all three pointer arguments.
-      OB_ASSERT_SUCC(exprs_.push_back(first_expr));
-      OB_ASSERT_SUCC(exprs_.push_back(second_expr));
-      OB_ASSERT_SUCC(exprs_.push_back(third_expr));
-    }
+    } else if (OB_FAIL(exprs_.push_back(first_expr))) {
+    } else if (OB_FAIL(exprs_.push_back(second_expr))) {
+    } else if (OB_FAIL(exprs_.push_back(third_expr))) {
+    } else {}
   } else {
     ret = OB_ERR_UNEXPECTED;
   }
@@ -2316,11 +2312,9 @@ int ObOpRawExpr::set_param_exprs(ObRawExpr *first_expr, ObRawExpr *second_expr)
     if (OB_ISNULL(first_expr) || OB_ISNULL(second_expr)) {
       ret = OB_INVALID_ARGUMENT;
     } else if (OB_FAIL(init_param_exprs(2))) {
-    } else {
-      // Empty fixed array with capacity for both pointer arguments.
-      OB_ASSERT_SUCC(exprs_.push_back(first_expr));
-      OB_ASSERT_SUCC(exprs_.push_back(second_expr));
-    }
+    } else if (OB_FAIL(exprs_.push_back(first_expr))) {
+    } else if (OB_FAIL(exprs_.push_back(second_expr))) {
+    } else {}
   } else {
     ret = OB_ERR_UNEXPECTED;
   }
@@ -5114,17 +5108,15 @@ int ObWinFunRawExpr::assign(const ObRawExpr &other)
           static_cast<const ObWinFunRawExpr &>(other);
       if (OB_FAIL(ObWindow::assign(tmp))) {
       } else if (OB_FAIL(func_params_.assign(tmp.func_params_))) {
+      } else if (OB_FAIL(upper_.assign(tmp.upper_))) {
+      } else if (OB_FAIL(lower_.assign(tmp.lower_))) {
       } else {
-        OB_ASSERT_SUCC(ret = upper_.assign(tmp.upper_));
-        {
-          OB_ASSERT_SUCC(ret = lower_.assign(tmp.lower_));
-          func_type_ = tmp.func_type_;
-          is_ignore_null_ = tmp.is_ignore_null_;
-          is_from_first_ = tmp.is_from_first_;
-          agg_expr_ = tmp.agg_expr_;
-          sort_str_ = tmp.sort_str_;
-          pl_agg_udf_expr_ = tmp.pl_agg_udf_expr_;
-        }
+        func_type_ = tmp.func_type_;
+        is_ignore_null_ = tmp.is_ignore_null_;
+        is_from_first_ = tmp.is_from_first_;
+        agg_expr_ = tmp.agg_expr_;
+        sort_str_ = tmp.sort_str_;
+        pl_agg_udf_expr_ = tmp.pl_agg_udf_expr_;
       }
     }
   }

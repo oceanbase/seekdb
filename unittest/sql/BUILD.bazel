@@ -2,7 +2,10 @@ load("//bazel:defs.bzl", "seekdb_module_cc_test")
 
 seekdb_module_cc_test(
     name = "sql_tests",
-    srcs = ["resolver/test_raw_expr_assert_succ.cpp"],
+    srcs = [
+        "engine/expr/test_expr_assert_cond.cpp",
+        "resolver/test_raw_expr_param_validation.cpp",
+    ],
     test_hdrs = [],
     module_interface = "//src/sql:sql_unit_test_interface",
     shard_count = 1,

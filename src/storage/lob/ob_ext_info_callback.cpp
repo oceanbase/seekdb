@@ -155,22 +155,19 @@ int ObExtInfoCallback::set(
   SMART_VAR(blocksstable::ObRowWriter, row_writer) {
     if (data.empty()) {
       ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(key_.encode(&rowkey_))) {
+    } else if (OB_NOT_NULL(mutator_row_buf_)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(datum_row.init(allocator, OB_EXT_INFO_MUTATOR_ROW_COUNT))) {
+    } else if (OB_FAIL(datum_row.storage_datums_[OB_EXT_INFO_MUTATOR_ROW_KEY_IDX].from_obj_enhance(key_obj_))) {
+    } else if (OB_FALSE_IT(datum_row.storage_datums_[OB_EXT_INFO_MUTATOR_ROW_VALUE_IDX].set_string(data))) {
+    } else if (OB_FALSE_IT(datum_row.storage_datums_[OB_EXT_INFO_MUTATOR_ROW_LOB_ID_IDX].set_string(reinterpret_cast<char*>(&lob_id_), sizeof(lob_id_)))) {
+    } else if (OB_FAIL(row_writer.write(OB_EXT_INFO_MUTATOR_ROW_KEY_CNT, datum_row, buf, len))) {
+    } else if (OB_ISNULL(mutator_row_buf_ = static_cast<char*>(allocator_->alloc(len)))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      OB_ASSERT_SUCC(ret = key_.encode(&rowkey_));
-      if (OB_NOT_NULL(mutator_row_buf_)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(datum_row.init(allocator, OB_EXT_INFO_MUTATOR_ROW_COUNT))) {
-      } else if (OB_FAIL(datum_row.storage_datums_[OB_EXT_INFO_MUTATOR_ROW_KEY_IDX].from_obj_enhance(key_obj_))) {
-      } else if (OB_FALSE_IT(datum_row.storage_datums_[OB_EXT_INFO_MUTATOR_ROW_VALUE_IDX].set_string(data))) {
-      } else if (OB_FALSE_IT(datum_row.storage_datums_[OB_EXT_INFO_MUTATOR_ROW_LOB_ID_IDX].set_string(
-                     reinterpret_cast<char *>(&lob_id_), sizeof(lob_id_)))) {
-      } else if (OB_FAIL(row_writer.write(OB_EXT_INFO_MUTATOR_ROW_KEY_CNT, datum_row, buf, len))) {
-      } else if (OB_ISNULL(mutator_row_buf_ = static_cast<char *>(allocator_->alloc(len)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        MEMCPY(mutator_row_buf_, buf, len);
-        mutator_row_len_ = len;
-      }
+      MEMCPY(mutator_row_buf_, buf, len);
+      mutator_row_len_ = len;
     }
   } // end row_writer
   return ret;

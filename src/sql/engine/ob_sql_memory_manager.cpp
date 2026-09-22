@@ -542,8 +542,8 @@ int ObSqlMemoryManager::register_work_area_profile(ObSqlWorkAreaProfile &profile
       if (hash_val < 0 || hash_val >= HASH_CNT) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpect hash val", K(hash_val), K(profile));
+      } else if (OB_FAIL(profile_lists_[hash_val].register_work_area_profile(profile))) {
       } else {
-        OB_ASSERT_SUCC(ret = profile_lists_[hash_val].register_work_area_profile(profile));
         increase_profile_cnt();
         adjust_active_profile_used(profile.get_profile_total_used());
         profile.active_time_ = ObTimeUtility::current_time();
@@ -768,8 +768,8 @@ int ObSqlMemoryManager::unregister_work_area_profile(ObSqlWorkAreaProfile &profi
     if (hash_val < 0 || hash_val >= HASH_CNT) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpect hash val", K(hash_val), K(profile));
+    } else if (OB_FAIL(profile_lists_[hash_val].unregister_work_area_profile(profile))) {
     } else {
-      OB_ASSERT_SUCC(ret = profile_lists_[hash_val].unregister_work_area_profile(profile));
       decrease_profile_cnt();
       adjust_active_profile_used(-profile.get_profile_total_used());
       if (enable_auto_memory_mgr_ && profile.get_auto_policy()) {

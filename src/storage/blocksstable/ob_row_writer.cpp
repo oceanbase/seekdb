@@ -679,22 +679,20 @@ int ObRowWriter::append_8_bytes_column(const ObStorageDatum &datum)
   int ret = OB_SUCCESS;
   int64_t bytes = 0;
   uint64_t value = datum.get_uint64();
-  {
-    OB_ASSERT_SUCC(ret = get_uint_byte(value, bytes));
-    if (OB_UNLIKELY(bytes <= 0 || bytes > sizeof(uint64_t))) {
-      ret = OB_ERR_UNEXPECTED;
+  if (OB_FAIL(get_uint_byte(value, bytes))) {
+  } else if (OB_UNLIKELY(bytes <= 0 || bytes > sizeof(uint64_t))) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    if (bytes == sizeof(uint64_t)) {
+      MEMCPY(buf_ + pos_, datum.ptr_, datum.len_);
+      pos_ += datum.len_;
+    } else if (OB_FAIL(write_uint(value, bytes))) {
     } else {
-      if (bytes == sizeof(uint64_t)) {
-        MEMCPY(buf_ + pos_, datum.ptr_, datum.len_);
-        pos_ += datum.len_;
-      } else if (OB_FAIL(write_uint(value, bytes))) {
+      if (OB_UNLIKELY(ObRowHeader::VAL_NORMAL != special_vals_[column_index_count_])) {
+        ret = OB_ERR_UNEXPECTED;
+        uint32_t print_special_value = special_vals_[column_index_count_];
       } else {
-        if (OB_UNLIKELY(ObRowHeader::VAL_NORMAL != special_vals_[column_index_count_])) {
-          ret = OB_ERR_UNEXPECTED;
-          uint32_t print_special_value = special_vals_[column_index_count_];
-        } else {
-          special_vals_[column_index_count_] = ObRowHeader::VAL_ENCODING_NORMAL;
-        }
+        special_vals_[column_index_count_] = ObRowHeader::VAL_ENCODING_NORMAL;
       }
     }
   }

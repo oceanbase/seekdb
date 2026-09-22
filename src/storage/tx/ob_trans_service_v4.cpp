@@ -589,7 +589,8 @@ int ObTransService::find_write_state_after_savepoint_(ObTxDesc &tx,
                                         const ObTxSEQ scn)
 {
   int ret = OB_SUCCESS;
-  OB_ASSERT_SUCC(ret = tx.find_write_state_after(part, scn));
+  if (OB_FAIL(tx.find_write_state_after(part, scn))) {
+  }
   return ret;
 }
 
@@ -989,11 +990,9 @@ int ObTransService::abort_write_state_(const ObTxDesc &tx_desc)
 {
   int ret = OB_SUCCESS;
   const ObTxWriteState *part = NULL;
-  {
-    OB_ASSERT_SUCC(ret = tx_desc.get_abort_write_state(part));
-    if (OB_NOT_NULL(part) && OB_FAIL(abort_write_ctx_(tx_desc))) {
-      TRANS_LOG(WARN, "abort write context failed", K(ret), K(tx_desc), KPC(part));
-    }
+  if (OB_FAIL(tx_desc.get_abort_write_state(part))) {
+  } else if (OB_NOT_NULL(part) && OB_FAIL(abort_write_ctx_(tx_desc))) {
+    TRANS_LOG(WARN, "abort write context failed", K(ret), K(tx_desc), KPC(part));
   }
   return ret;
 }

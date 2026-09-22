@@ -220,8 +220,8 @@ int ObCompactionProgressMgr::finish_progress(const int64_t major_snapshot_versio
     int64_t pos = -1;
     SpinWLockGuard guard(lock_);
     if (OB_FAIL(get_pos_(major_snapshot_version, pos))) {
+    } else if (OB_FAIL(finish_progress_(array_[pos]))) {
     } else {
-      OB_ASSERT_SUCC(ret = finish_progress_(array_[pos]));
     }
   }
   return ret;

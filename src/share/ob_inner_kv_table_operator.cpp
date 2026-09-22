@@ -73,8 +73,8 @@ int ObInnerKVItemIntValue::parse_value_from(sqlclient::ObMySQLResult &result)
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(bak_value_str.assign(value_str))) {
   } else if (OB_FAIL(ob_atoll(bak_value_str.ptr(), value))) {
-  } else
-    OB_ASSERT_SUCC(ret = set_value(value));
+  } else if (OB_FAIL(set_value(value))) {
+  }
 
   return ret;
 }

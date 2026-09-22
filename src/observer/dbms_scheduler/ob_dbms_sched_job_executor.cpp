@@ -57,8 +57,8 @@ int ObDBMSSchedJobExecutor::init(
   } else if (OB_ISNULL(sql_proxy_ = sql_proxy)
           || OB_ISNULL(schema_service_ = schema_service)) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(table_operator_.init(sql_proxy_))) {
   } else {
-    OB_ASSERT_SUCC(ret = table_operator_.init(sql_proxy_));
     inited_ = true;
   }
   return ret;

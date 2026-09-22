@@ -101,8 +101,8 @@ int ObMajorMergeScheduler::init(
                                       sql_proxy,
                                       schema_service,
                                       merge_info_mgr))) {
+  } else if (OB_FAIL(idling_.init())) {
   } else {
-    OB_ASSERT_SUCC(ret = idling_.init());
     first_check_merge_us_ = 0;
     is_primary_service_ = is_primary_service;
     merge_info_mgr_ = &merge_info_mgr;

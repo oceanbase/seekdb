@@ -1817,15 +1817,13 @@ DistAlgo ObLogPlanHint::get_valid_pq_subquery_dist_algo(const ObIArray<ObString>
   DistAlgo dist_algo = DistAlgo::DIST_INVALID_METHOD;
   const ObPQSubqueryHint *explicit_hint = NULL;
   const ObPQSubqueryHint *implicit_hint = NULL;
-  {
-    OB_ASSERT_SUCC(ret = get_valid_pq_subquery_hint(sub_qb_names, explicit_hint, implicit_hint));
-    if (NULL != explicit_hint) {
-      dist_algo = explicit_hint->get_dist_algo();
-    } else if (is_outline_data_) {
-      dist_algo = DistAlgo::DIST_BASIC_METHOD;
-    } else if (NULL != implicit_hint && implicit_allowed) {
-      dist_algo = implicit_hint->get_dist_algo();
-    }
+  if (OB_FAIL(get_valid_pq_subquery_hint(sub_qb_names, explicit_hint, implicit_hint))) {
+  } else if (NULL != explicit_hint) {
+    dist_algo = explicit_hint->get_dist_algo();
+  } else if (is_outline_data_) {
+    dist_algo = DistAlgo::DIST_BASIC_METHOD;
+  } else if (NULL != implicit_hint && implicit_allowed) {
+    dist_algo = implicit_hint->get_dist_algo();
   }
   return dist_algo;
 }

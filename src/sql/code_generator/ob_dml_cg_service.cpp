@@ -1344,32 +1344,31 @@ int ObDmlCgService::check_upd_need_all_columns(ObLogDelUpd &op,
   ObSQLSessionInfo *session = cg_.opt_ctx_->get_session_info();
   if (OB_ISNULL(session) || OB_ISNULL(schema_guard) || OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-  } else {
-    OB_ASSERT_SUCC(ret = session->get_binlog_row_image(binlog_row_image));
-    if (binlog_row_image == ObBinlogRowImage::FULL) {
-      // full mode
-      need_all_columns = true;
-    } else if (!is_primary_index) {
-      // index_table if update PK, also need record all_columns
-      if (OB_FAIL(check_has_upd_rowkey(op, table_schema, upd_cids, is_update_pk))) {
-      } else if (is_update_pk) {
-        need_all_columns = true;
-        LOG_TRACE("is update pk, need all columns", K(table_schema->get_table_id()));
-      }
-    } else if (OB_FAIL(is_table_has_unique_key(schema_guard, table_schema, has_uk))) {
-    } else if (has_uk && OB_FAIL(check_unique_key_is_updated(schema_guard, table_schema, upd_cids, is_uk_updated))) {
-    } else if (is_uk_updated) {
-      // need all columns
-      need_all_columns = true;
-    } else if (OB_FAIL(heap_table_has_not_null_uk(schema_guard, table_schema, need_all_columns))) {
-    } else if (need_all_columns) {
-      // need all columns
-    } else if (OB_FAIL(check_has_upd_rowkey(op, table_schema, upd_cids, is_update_pk))) {
+  } else if (OB_FAIL(session->get_binlog_row_image(binlog_row_image))) {
+  } else if (binlog_row_image == ObBinlogRowImage::FULL) {
+    // full mode
+    need_all_columns = true;
+  } else if (!is_primary_index) {
+    // index_table if update PK, also need record all_columns
+    if (OB_FAIL(check_has_upd_rowkey(op, table_schema, upd_cids, is_update_pk))) {
     } else if (is_update_pk) {
-      // rowkey is changed, need all columns
       need_all_columns = true;
-      LOG_TRACE("update primary_table primary key, need all columns", K(table_schema->get_table_name_str()));
+      LOG_TRACE("is update pk, need all columns", K(table_schema->get_table_id()));
     }
+  } else if (OB_FAIL(is_table_has_unique_key(schema_guard, table_schema, has_uk))) {
+  } else if (has_uk &&
+      OB_FAIL(check_unique_key_is_updated(schema_guard, table_schema, upd_cids, is_uk_updated))) {
+  } else if (is_uk_updated) {
+    // need all columns
+    need_all_columns = true;
+  } else if (OB_FAIL(heap_table_has_not_null_uk(schema_guard, table_schema, need_all_columns))) {
+  } else if (need_all_columns) {
+    // need all columns
+  } else if (OB_FAIL(check_has_upd_rowkey(op, table_schema, upd_cids, is_update_pk))) {
+  } else if (is_update_pk) {
+    // rowkey is changed, need all columns
+    need_all_columns = true;
+    LOG_TRACE("update primary_table primary key, need all columns", K(table_schema->get_table_name_str()));
   }
 
   return ret;
@@ -1467,24 +1466,22 @@ int ObDmlCgService::check_del_need_all_columns(ObLogDelUpd &op,
   ObSQLSessionInfo *session = cg_.opt_ctx_->get_session_info();
   if (OB_ISNULL(session) || OB_ISNULL(schema_guard) || OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
-  } else {
-    OB_ASSERT_SUCC(ret = session->get_binlog_row_image(binlog_row_image));
-    if (binlog_row_image == ObBinlogRowImage::FULL) {
-      // full mode
+  } else if (OB_FAIL(session->get_binlog_row_image(binlog_row_image))) {
+  } else if (binlog_row_image == ObBinlogRowImage::FULL) {
+    // full mode
+    need_all_columns = true;
+  } else if (table_schema->is_multivalue_index_aux()) {
+    // as multivalue need calc is need save rowkey, the save-rowkey policy is dynamic made, need project all columns
+    need_all_columns = true;
+    LOG_TRACE("delete from multivalue index table, need all columns", K(table_schema->is_multivalue_index_aux()));
+  } else if (table_schema->is_vec_index()) {
+    need_all_columns = true;
+    LOG_TRACE("delete from vector index table, need all columns", K(table_schema->get_index_type()));
+  } else if (table_schema->is_table_without_pk()) {
+    if (OB_FAIL(table_schema->has_not_null_unique_key(*schema_guard, has_not_null_uk))) {
+    } else if (!has_not_null_uk) {
       need_all_columns = true;
-    } else if (table_schema->is_multivalue_index_aux()) {
-      // as multivalue need calc is need save rowkey, the save-rowkey policy is dynamic made, need project all columns
-      need_all_columns = true;
-      LOG_TRACE("delete from multivalue index table, need all columns", K(table_schema->is_multivalue_index_aux()));
-    } else if (table_schema->is_vec_index()) {
-      need_all_columns = true;
-      LOG_TRACE("delete from vector index table, need all columns", K(table_schema->get_index_type()));
-    } else if (table_schema->is_table_without_pk()) {
-      if (OB_FAIL(table_schema->has_not_null_unique_key(*schema_guard, has_not_null_uk))) {
-      } else if (!has_not_null_uk) {
-        need_all_columns = true;
-        LOG_TRACE("is heap_table and don't has not_null uk", K(table_schema->get_table_name_str()));
-      }
+      LOG_TRACE("is heap_table and don't has not_null uk", K(table_schema->get_table_name_str()));
     }
   }
   return ret;
@@ -1734,18 +1731,16 @@ int ObDmlCgService::generate_das_dml_ctdef(ObLogDelUpd &op,
       || OB_ISNULL(session = op.get_plan()->get_optimizer_context().get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is invalid", K(op.get_plan()), K(session));
+  } else if (OB_FAIL(session->get_binlog_row_image(binlog_row_image))) {
+  } else if (OB_FAIL(op.op_is_update_pk_with_dop(is_update_uk_parallel))) {
+  } else if (OB_FAIL(check_is_main_table_in_fts_ddl(op, index_tid, index_dml_info, das_dml_ctdef))) {
   } else {
-    OB_ASSERT_SUCC(ret = session->get_binlog_row_image(binlog_row_image));
-    if (OB_FAIL(op.op_is_update_pk_with_dop(is_update_uk_parallel))) {
-    } else if (OB_FAIL(check_is_main_table_in_fts_ddl(op, index_tid, index_dml_info, das_dml_ctdef))) {
-    } else {
-      das_dml_ctdef.tz_info_ = *session->get_tz_info_wrap().get_time_zone_info();
-      das_dml_ctdef.is_total_quantity_log_ = (ObBinlogRowImage::FULL == binlog_row_image);
-      das_dml_ctdef.is_update_partition_key_ = index_dml_info.is_update_part_key_;
-      das_dml_ctdef.is_update_pk_with_dop_ = is_update_uk_parallel;
-      das_dml_ctdef.is_update_pk_ = index_dml_info.is_update_primary_key_;
-      das_dml_ctdef.is_vec_hnsw_index_vid_opt_ = index_dml_info.is_vec_hnsw_index_vid_opt_;
-    }
+    das_dml_ctdef.tz_info_ = *session->get_tz_info_wrap().get_time_zone_info();
+    das_dml_ctdef.is_total_quantity_log_ = (ObBinlogRowImage::FULL == binlog_row_image);
+    das_dml_ctdef.is_update_partition_key_ = index_dml_info.is_update_part_key_;
+    das_dml_ctdef.is_update_pk_with_dop_ = is_update_uk_parallel;
+    das_dml_ctdef.is_update_pk_ = index_dml_info.is_update_primary_key_;
+    das_dml_ctdef.is_vec_hnsw_index_vid_opt_ = index_dml_info.is_vec_hnsw_index_vid_opt_;
   }
   if (OB_FAIL(ret)) {
   } else if (das_dml_ctdef.table_param_.get_data_table().is_vector_index() &&
@@ -1975,8 +1970,8 @@ int ObDmlCgService::generate_das_lock_ctdef(ObLogicalOperator &op,
       || OB_ISNULL(session = op.get_plan()->get_optimizer_context().get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is invalid", K(op.get_plan()), K(session));
+  } else if (OB_FAIL(session->get_binlog_row_image(binlog_row_image))) {
   } else {
-    OB_ASSERT_SUCC(ret = session->get_binlog_row_image(binlog_row_image));
     das_lock_ctdef.tz_info_ = *session->get_tz_info_wrap().get_time_zone_info();
     das_lock_ctdef.is_total_quantity_log_ = (ObBinlogRowImage::FULL == binlog_row_image);
   }
@@ -2718,21 +2713,26 @@ int ObDmlCgService::generate_fk_arg(ObForeignKeyArg &fk_arg,
 
   if (OB_FAIL(generate_dml_column_ids(op, index_dml_info.column_exprs_, column_ids))) {
   } else if (OB_FAIL(generate_updated_column_ids(op, index_dml_info.assignments_, column_ids, updated_column_ids))) {
-  } else {
-    OB_ASSERT_SUCC(
-        ret = need_foreign_key_handle(fk_arg, updated_column_ids, value_column_ids, das_ctdef.op_type_, need_handle));
-    if (!need_handle) {
-    } else if (OB_FAIL(schema_guard.get_table_schema(name_table_id, table_schema))) {
-    } else if (OB_ISNULL(table_schema)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(schema_guard.get_database_schema(table_schema->get_database_id(), database_schema))) {
-    } else if (OB_ISNULL(database_schema)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(deep_copy_ob_string(allocator, database_schema->get_database_name(), fk_arg.database_name_))) {
-    } else if (OB_FAIL(deep_copy_ob_string(allocator, table_schema->get_table_name(), fk_arg.table_name_))) {
-    } else if (FALSE_IT(fk_arg.columns_.reset())) {
-    } else if (OB_FAIL(fk_arg.columns_.reserve(name_column_ids.count()))) {
-    }
+  } else if (OB_FAIL(need_foreign_key_handle(fk_arg, updated_column_ids,
+                                      value_column_ids, das_ctdef.op_type_,
+                                      need_handle))) {
+  } else if (!need_handle) {
+  } else if (OB_FAIL(schema_guard.get_table_schema( name_table_id, table_schema))) {
+  } else if (OB_ISNULL(table_schema)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(schema_guard.get_database_schema(
+                                                      table_schema->get_database_id(),
+                                                      database_schema))) {
+  } else if (OB_ISNULL(database_schema)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(deep_copy_ob_string(allocator,
+                                         database_schema->get_database_name(),
+                                         fk_arg.database_name_))) {
+  } else if (OB_FAIL(deep_copy_ob_string(allocator,
+                                         table_schema->get_table_name(),
+                                         fk_arg.table_name_))) {
+  } else if (FALSE_IT(fk_arg.columns_.reset())) {
+  } else if (OB_FAIL(fk_arg.columns_.reserve(name_column_ids.count()))) {
   }
   if ( OB_SUCC(ret) && need_handle) {
     fk_arg.table_id_ = name_table_id;
@@ -2980,13 +2980,11 @@ int ObDmlCgService::convert_foreign_keys(ObLogDelUpd &op,
                 || OB_ISNULL(session = op.get_plan()->get_optimizer_context().get_session_info())) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("session is invalid", K(op.get_plan()), K(session));
-            } else {
-              OB_ASSERT_SUCC(ret = session->get_foreign_key_checks(foreign_key_checks));
-              if (1 == foreign_key_checks) {
-                ret = OB_ERR_NO_REFERENCED_ROW;
-              } else { // skip fk check while foreign_key_checks if off
-                fk_arg.ref_action_ = ACTION_INVALID;
-              }
+            } else if (OB_FAIL(session->get_foreign_key_checks(foreign_key_checks))) {
+            } else if (1 == foreign_key_checks) {
+              ret = OB_ERR_NO_REFERENCED_ROW;
+            } else { // skip fk check while foreign_key_checks if off
+              fk_arg.ref_action_ = ACTION_INVALID;
             }
           } else {
             fk_arg.ref_action_ = ACTION_CHECK_EXIST;

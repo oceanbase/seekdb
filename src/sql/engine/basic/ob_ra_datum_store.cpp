@@ -288,7 +288,8 @@ int ObRADatumStore::Block::get_store_row(const int64_t row_id, const StoredRow *
     StoredRow *row = reinterpret_cast<StoredRow *>(
         &payload_[indexes()[rows_ - (row_id - row_id_) - 1]]);
     if (0 == row->readable_) {
-      OB_ASSERT_SUCC(ret = row->to_readable());
+      if (OB_FAIL(row->to_readable())) {
+      }
     }
     if (OB_SUCC(ret)) {
       sr = row;
@@ -313,7 +314,8 @@ int ObRADatumStore::Block::to_copyable()
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < rows_; ++i) {
     StoredRow *sr = reinterpret_cast<StoredRow *>(&payload_[indexes()[i]]);
-    OB_ASSERT_SUCC(ret = sr->to_copyable());
+    if (OB_FAIL(sr->to_copyable())) {
+    }
   }
   return ret;
 }

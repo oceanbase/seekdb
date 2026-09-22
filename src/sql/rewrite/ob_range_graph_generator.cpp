@@ -645,7 +645,8 @@ int ObRangeGraphGenerator::formalize_final_range_node(ObRangeNode *&range_node)
     }
     if (OB_SUCC(ret)) {
       if (is_standard_range(range_node)) {
-        OB_ASSERT_SUCC(ret = remove_useless_range_node(range_node));
+        if (OB_FAIL(remove_useless_range_node(range_node))) {
+        }
       }
     }
     if (OB_SUCC(ret) && !start_from_zero) {

@@ -439,25 +439,24 @@ int ObMPStmtFetch::process()
     } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
       //packet size check with session variable max_allowd_packet or net_buffer_length
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
+    } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
+    } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(
+                runtime_version))) {
     } else {
-      OB_ASSERT_SUCC(ret = session.get_query_timeout(query_timeout));
-      if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(runtime_version))) {
-      } else {
-        need_disconnect = false;
-        ObPLCursorInfo *cursor = NULL;
-        THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
-        ret = process_fetch_stmt(session, need_response_error);
-        // set cursor fetched info. if cursor has be fetched, we need to disconnect
-        cursor = session.get_cursor(cursor_id_);
-        if (OB_NOT_NULL(cursor) && cursor->get_fetched()) {
-          cursor_fetched = true;
-        }
-        if (need_close_cursor()) {
-          // close at here because after do_process, need read some cursor info for log in process_fetch_stmt
-          int tmp_ret = session.close_cursor(cursor_id_);
-          ret = ret == OB_SUCCESS ? tmp_ret : ret;
-          if (OB_SUCCESS != tmp_ret) {
-          }
+      need_disconnect = false;
+      ObPLCursorInfo *cursor = NULL;
+      THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
+      ret = process_fetch_stmt(session, need_response_error);
+      // set cursor fetched info. if cursor has be fetched, we need to disconnect
+      cursor = session.get_cursor(cursor_id_);
+      if (OB_NOT_NULL(cursor) && cursor->get_fetched()) {
+        cursor_fetched = true;
+      }
+      if (need_close_cursor()) {
+        // close at here because after do_process, need read some cursor info for log in process_fetch_stmt
+        int tmp_ret = session.close_cursor(cursor_id_);
+        ret = ret == OB_SUCCESS ? tmp_ret : ret;
+        if (OB_SUCCESS != tmp_ret) {
         }
       }
     }

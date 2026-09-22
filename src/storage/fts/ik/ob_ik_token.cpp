@@ -164,7 +164,8 @@ int ObIKTokenChain::copy(ObIKTokenChain *other)
 
     for (; OB_SUCC(ret) && iter != other->list().tokens().end(); ++iter) {
       bool added = false;
-      OB_ASSERT_SUCC(ret = add_token_if_no_conflict(*iter, added));
+      if (OB_FAIL(add_token_if_no_conflict(*iter, added))) {
+      }
     }
   }
   return ret;

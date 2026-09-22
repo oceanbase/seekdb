@@ -882,10 +882,8 @@ int ObReferenceObjTable::DependencyObjKeyItemPair::assign(
   int ret = OB_SUCCESS;
   if (this != &other) {
     reset();
-    {
-      OB_ASSERT_SUCC(ret = dep_obj_key_.assign(other.dep_obj_key_));
-      if (OB_FAIL(dep_obj_item_.assign(other.dep_obj_item_))) {
-      }
+    if (OB_FAIL(dep_obj_key_.assign(other.dep_obj_key_))) {
+    } else if (OB_FAIL(dep_obj_item_.assign(other.dep_obj_item_))) {
     }
   }
   return ret;

@@ -384,9 +384,8 @@ int ObExprInetAton::cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_expr, O
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 1) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0]))) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
+    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
     rt_expr.eval_func_ = ObExprInetAton::calc_inet_aton;
   }
   return ret;
@@ -469,9 +468,8 @@ int ObExprInet6Ntoa::cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_expr, 
   int ret = OB_SUCCESS;
   if (1 != rt_expr.arg_cnt_) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0]))) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
+    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
     rt_expr.eval_func_ = ObExprInet6Ntoa::calc_inet6_ntoa;
   }
   return ret;
@@ -553,9 +551,8 @@ int ObExprInet6Aton::cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_expr, 
   int ret = OB_SUCCESS;
   if (1 != rt_expr.arg_cnt_) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0]))) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
+    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
     rt_expr.eval_func_ = ObExprInet6Aton::calc_inet6_aton;
   }
   return ret;
@@ -693,9 +690,8 @@ int ObExprIsIpv4::cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_expr, ObE
   int ret = OB_SUCCESS;
   if (1 != rt_expr.arg_cnt_) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(OB_UNLIKELY(OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])))) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
+    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
     rt_expr.eval_func_ = ObExprIsIpv4::calc_is_ipv4;
   }
   return ret;
@@ -732,9 +728,8 @@ int ObExprIsIpv4Mapped::cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_exp
   int ret = OB_SUCCESS;
   if (1 != rt_expr.arg_cnt_) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0]))) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
+    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
     rt_expr.eval_func_ = ObExprIsIpv4Mapped::calc_is_ipv4_mapped;
   }
   return ret;
@@ -787,9 +782,8 @@ int ObExprIsIpv4Compat::cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_exp
   int ret = OB_SUCCESS;
   if (1 != rt_expr.arg_cnt_) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0]))) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
+    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
     rt_expr.eval_func_ = ObExprIsIpv4Compat::calc_is_ipv4_compat;
   }
   return ret;
@@ -842,9 +836,8 @@ int ObExprIsIpv6::cg_expr(ObExprCGCtx& op_cg_ctx, const ObRawExpr& raw_expr, ObE
   int ret = OB_SUCCESS;
   if (1 != rt_expr.arg_cnt_) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0]))) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
+    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
     rt_expr.eval_func_ = ObExprIsIpv6::calc_is_ipv6;
   }
   return ret;

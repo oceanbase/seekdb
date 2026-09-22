@@ -171,8 +171,8 @@ int ObRbMemMgr::init()
   lib::ObMemAttr mem_attr("RoaringBitmap");
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
+  } else if (OB_FAIL(allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, block_alloc_, mem_attr))) {
   } else {
-    OB_ASSERT_SUCC(ret = allocator_.init(OB_MALLOC_BIG_BLOCK_SIZE, block_alloc_, mem_attr));
     allocator_.set_nway(RB_ALLOC_CONCURRENCY);
     vec_idx_used_ = 0;
     is_inited_ = true;

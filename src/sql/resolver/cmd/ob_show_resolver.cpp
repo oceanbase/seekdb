@@ -1153,10 +1153,8 @@ int ObShowResolver::resolve(const ParseNode &parse_tree)
       if (OB_NOT_NULL(select_stmt->get_query_ctx())) {
         select_stmt->get_query_ctx()->set_literal_stmt_type(show_resv_ctx.stmt_type_);
       }
-      {
-        OB_ASSERT_SUCC(ret = process_select_type(select_stmt, show_resv_ctx.stmt_type_, parse_tree));
-        if (OB_FAIL(select_stmt->formalize_stmt(session_info_))) {
-        }
+      if (OB_FAIL(process_select_type(select_stmt, show_resv_ctx.stmt_type_, parse_tree))) {
+      } else if (OB_FAIL(select_stmt->formalize_stmt(session_info_))) {
       }
     }
   }

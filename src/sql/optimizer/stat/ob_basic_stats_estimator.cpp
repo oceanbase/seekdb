@@ -155,26 +155,39 @@ int ObBasicStatsEstimator::estimate_block_count(ObExecContext &ctx,
         int64_t partition_id = static_cast<int64_t>(estimate_result.at(i).part_id_);
         if (OB_FAIL(id_block_map.set_refactored(partition_id, block_num_stat))) {
         } else if (param.part_level_ == share::schema::PARTITION_LEVEL_ONE) {
-          OB_ASSERT_SUCC(ret = global_tab_stat.add(1, 0, 0, block_num_stat->tab_macro_cnt_,
-                                                   block_num_stat->tab_micro_cnt_, block_num_stat->sstable_row_cnt_,
-                                                   block_num_stat->memtable_row_cnt_));
+          if (OB_FAIL(global_tab_stat.add(1,
+                                          0,
+                                          0,
+                                          block_num_stat->tab_macro_cnt_,
+                                          block_num_stat->tab_micro_cnt_,
+                                          block_num_stat->sstable_row_cnt_,
+                                          block_num_stat->memtable_row_cnt_))) {
+          }
         } else if (param.part_level_ == share::schema::PARTITION_LEVEL_TWO) {
           int64_t cur_part_id = -1;
           if (OB_UNLIKELY(!ObDbmsStatsUtils::is_subpart_id(param.all_subpart_infos_, partition_id, cur_part_id))) {
             ret = OB_ERR_UNEXPECTED;
           } else {
-            {
-              OB_ASSERT_SUCC(ret = global_tab_stat.add(1, 0, 0, block_num_stat->tab_macro_cnt_,
-                                                       block_num_stat->tab_micro_cnt_, block_num_stat->sstable_row_cnt_,
-                                                       block_num_stat->memtable_row_cnt_));
+            if (OB_FAIL(global_tab_stat.add(1,
+                                            0,
+                                            0,
+                                            block_num_stat->tab_macro_cnt_,
+                                            block_num_stat->tab_micro_cnt_,
+                                            block_num_stat->sstable_row_cnt_,
+                                            block_num_stat->memtable_row_cnt_))) {
+            } else {
               int64_t idx = 0;
               if (OB_FAIL(first_part_idx_map.get_refactored(cur_part_id, idx))) {
               } else if (OB_UNLIKELY(idx < 0 || idx >= first_part_tab_stats.count())) {
                 ret = OB_ERR_UNEXPECTED;
-              } else
-                OB_ASSERT_SUCC(ret = first_part_tab_stats.at(idx).add(
-                                   1, 0, 0, block_num_stat->tab_macro_cnt_, block_num_stat->tab_micro_cnt_,
-                                   block_num_stat->sstable_row_cnt_, block_num_stat->memtable_row_cnt_));
+              } else if (OB_FAIL(first_part_tab_stats.at(idx).add(1,
+                                                                  0,
+                                                                  0,
+                                                                  block_num_stat->tab_macro_cnt_,
+                                                                  block_num_stat->tab_micro_cnt_,
+                                                                  block_num_stat->sstable_row_cnt_,
+                                                                  block_num_stat->memtable_row_cnt_))) {
+              }
             }
           }
         }

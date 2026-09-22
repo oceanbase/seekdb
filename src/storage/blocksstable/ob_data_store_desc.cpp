@@ -592,15 +592,13 @@ int ObWholeDataStoreDesc::assign(const ObDataStoreDesc &desc)
   if (OB_UNLIKELY(!desc.is_valid())) {
     STORAGE_LOG(WARN, "desc is invalid", KR(ret), K(desc));
   } else if (FALSE_IT(reset())) {
+  } else if (OB_FAIL(static_desc_.assign(*desc.static_desc_))) {
+  } else if (OB_FAIL(col_desc_.assign(*desc.col_desc_))) {
+  } else if (OB_FAIL(desc_.shallow_copy(desc))) {
   } else {
-    OB_ASSERT_SUCC(ret = static_desc_.assign(*desc.static_desc_));
-    if (OB_FAIL(col_desc_.assign(*desc.col_desc_))) {
-    } else {
-      OB_ASSERT_SUCC(ret = desc_.shallow_copy(desc));
-      // update all ptr to local variables
-      desc_.static_desc_ = &static_desc_;
-      desc_.col_desc_ = &col_desc_;
-    }
+    // update all ptr to local variables
+    desc_.static_desc_ = &static_desc_;
+    desc_.col_desc_ = &col_desc_;
   }
   return ret;
 }
@@ -622,12 +620,10 @@ int ObWholeDataStoreDesc::init(
   if (OB_UNLIKELY(!static_desc.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid argument", KR(ret), K(static_desc));
+  } else if (OB_FAIL(static_desc_.assign(static_desc))) {
+  } else if (OB_FAIL(inner_init(merge_schema))) {
   } else {
-    OB_ASSERT_SUCC(ret = static_desc_.assign(static_desc));
-    if (OB_FAIL(inner_init(merge_schema))) {
-    } else {
-      STORAGE_LOG(INFO, "success to init data store desc", KR(ret), KPC(this));
-    }
+    STORAGE_LOG(INFO, "success to init data store desc", KR(ret), KPC(this));
   }
   return ret;
 }

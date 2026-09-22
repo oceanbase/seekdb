@@ -17,10 +17,6 @@
 #ifndef _OB_MACRO_UTILS_H_
 #define _OB_MACRO_UTILS_H_
 
-#ifdef __cplusplus
-#include "lib/ob_errno.h"
-#endif
-
 #ifdef _WIN32
 #define OB_WEAK_SYMBOL
 #else
@@ -702,24 +698,27 @@ __declspec(noinline)
 #else
 __attribute__((cold, noinline))
 #endif
-void assert_success_failed(int code, const char *expr, const char *file, int line);
+void assert_cond_failed(const char *condition, const char *file, int line);
 
-inline void assert_success(int code, const char *expr, const char *file, int line)
+inline void assert_cond(bool condition, const char *expr, const char *file, int line)
 {
-  if (OB_UNLIKELY(OB_SUCCESS != code)) {
-    assert_success_failed(code, expr, file, line);
+  if (OB_UNLIKELY(!condition)) {
+    assert_cond_failed(expr, file, line);
   }
 }
+
+// Reject error codes and pointers: callers must spell out a boolean condition.
+template <typename T>
+void assert_cond(T, const char *, const char *, int) = delete;
 }
 }
 
-// expr must return an int error code, not a boolean success/failure predicate.
-// Only for calls proven successful by an internal contract. Evaluate once,
-// without reading or writing the caller's ret/tmp_ret. Never use for OOM,
-// external input validation, or other recoverable runtime failures.
-#define OB_ASSERT_SUCC(expr) \
+// Assert a side-effect-free internal invariant, not a business operation's
+// return value. Evaluate once, without changing ret/tmp_ret. External input
+// validation, allocation failures and other recoverable errors must propagate.
+#define ASSERT_COND(condition) \
   do { \
-    ::oceanbase::common::assert_success((expr), #expr, __FILE__, __LINE__); \
+    ::oceanbase::common::assert_cond((condition), #condition, __FILE__, __LINE__); \
   } while (false)
 #endif
 

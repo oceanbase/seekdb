@@ -364,12 +364,10 @@ int ObSimpleThreadPoolDynamicMgr::init()
   if (is_inited_) {
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "cannot init twice", K(ret));
+  } else if (OB_FAIL(lib::ThreadPool::init())) {
+  } else if (OB_FAIL(lib::ThreadPool::start())) {
   } else {
-    OB_ASSERT_SUCC(ret = lib::ThreadPool::init());
-    if (OB_FAIL(lib::ThreadPool::start())) {
-    } else {
-      is_inited_ = true;
-    }
+    is_inited_ = true;
   }
   return ret;
 }

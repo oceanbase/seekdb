@@ -257,8 +257,8 @@ ObDtl::~ObDtl()
 int ObDtl::init()
 {
   int ret = OB_SUCCESS;
-  {
-    OB_ASSERT_SUCC(ret = dfc_server_.init());
+  if (OB_FAIL(dfc_server_.init())) {
+  } else {
     ch_mgrs_ = reinterpret_cast<ObDtlChannelManager*>(allocator_.alloc(sizeof(ObDtlChannelManager) * HASH_CNT));
     if (OB_ISNULL(ch_mgrs_)) {
       ret = OB_ERR_UNEXPECTED;

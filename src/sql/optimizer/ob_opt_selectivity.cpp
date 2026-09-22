@@ -438,7 +438,8 @@ int OptTableMeta::init_column_meta(const OptSelectivityCtx &ctx,
       ret = OB_ERR_UNEXPECTED;
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < column_ids.count(); ++i) {
-        OB_ASSERT_SUCC(ret = refine_column_stat(col_stats.at(i), rows_, column_metas.at(i)));
+        if (OB_FAIL(refine_column_stat(col_stats.at(i), rows_, column_metas.at(i)))) {
+        }
       }
     }
   }

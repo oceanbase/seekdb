@@ -143,11 +143,13 @@ int ObConstDecoder::batch_decode(
   } else if (0 == meta_header_->count_) {
     if (OB_FAIL(batch_decode_without_dict(ctx, row_cap, datums))) {
     }
-  } else {
-    OB_ASSERT_SUCC(ret = extract_ref_and_null_count(row_ids, row_cap, datums, unused_null_cnt));
-    if (OB_FAIL(dict_decoder_.batch_decode_dict(ctx.col_header_->get_store_obj_type(), cell_datas, row_cap,
-                                                ctx.col_header_->length_ - meta_header_->offset_, datums))) {
-    }
+  } else if (OB_FAIL(extract_ref_and_null_count(row_ids, row_cap, datums, unused_null_cnt))) {
+  } else if (OB_FAIL(dict_decoder_.batch_decode_dict(
+      ctx.col_header_->get_store_obj_type(),
+      cell_datas,
+      row_cap,
+      ctx.col_header_->length_ - meta_header_->offset_,
+      datums))) {
   }
   return ret;
 }
@@ -843,8 +845,8 @@ int ObConstDecoder::read_reference(
   uint32_t *ref_buf = group_by_cell.get_refs_buf();
   MEMSET(ref_buf, 0, sizeof(uint32_t) * row_cap);
   if (0 == meta_header_->count_) {
-  } else
-    OB_ASSERT_SUCC(ret = extract_ref_and_null_count(row_ids, row_cap, nullptr, null_cnt, ref_buf));
+  } else if (OB_FAIL(extract_ref_and_null_count(row_ids, row_cap, nullptr, null_cnt,ref_buf))) {
+  }
   return ret;
 }
 

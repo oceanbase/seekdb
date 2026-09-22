@@ -251,8 +251,8 @@ int ObIMvccCtx::register_table_lock_cb_(
   if (OB_ISNULL(cb = create_table_lock_callback(*this, memtable))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     TRANS_LOG(WARN, "alloc row callback failed", K(ret));
+  } else if (OB_FAIL(mt_key.encode(&rowkey))) {
   } else {
-    OB_ASSERT_SUCC(ret = mt_key.encode(&rowkey));
     cb->set(mt_key, lock_op);
     if (replay_scn.is_valid()) {
       cb->set_scn(replay_scn);

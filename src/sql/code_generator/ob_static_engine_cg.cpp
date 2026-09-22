@@ -140,19 +140,17 @@ int ObStaticEngineCG::generate(const ObLogPlan &log_plan, ObPhysicalPlan &phy_pl
   PartialExprFrameInfoGen partial_frame_gen;
   if (OB_ISNULL(log_plan.get_plan_root())) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(set_properties_pre(log_plan, phy_plan))) {
+  } else if (OB_FAIL(get_query_compress_type(log_plan, compress_type))) {
+  } else if (OB_FAIL(postorder_generate_op(
+              *log_plan.get_plan_root(), root_spec, in_root_job, is_subplan,
+              check_eval_once, need_check_output_datum, compress_type, partial_frame_gen))) {
+  } else if (OB_ISNULL(root_spec)) {
+    ret = OB_ERR_UNEXPECTED;
   } else {
-    OB_ASSERT_SUCC(ret = set_properties_pre(log_plan, phy_plan));
-    if (OB_FAIL(get_query_compress_type(log_plan, compress_type))) {
-    } else if (OB_FAIL(postorder_generate_op(*log_plan.get_plan_root(), root_spec, in_root_job, is_subplan,
-                                             check_eval_once, need_check_output_datum, compress_type,
-                                             partial_frame_gen))) {
-    } else if (OB_ISNULL(root_spec)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      phy_plan.set_root_op_spec(root_spec);
-      phy_plan.set_is_use_auto_dop(opt_ctx_->is_use_auto_dop());
-      if (OB_FAIL(set_properties_post(log_plan, phy_plan))) {
-      }
+    phy_plan.set_root_op_spec(root_spec);
+    phy_plan.set_is_use_auto_dop(opt_ctx_->is_use_auto_dop());
+    if (OB_FAIL(set_properties_post(log_plan, phy_plan))) {
     }
   }
   return ret;
@@ -4514,12 +4512,10 @@ int ObStaticEngineCG::generate_spec(ObLogDelete &op,
     spec.is_pdml_update_split_ = op.is_pdml_update_split();
 
     int64_t partition_expr_idx = OB_INVALID_INDEX;
-    {
-      OB_ASSERT_SUCC(ret = get_pdml_partition_id_column_idx(spec.get_child(0)->output_, partition_expr_idx));
-      if (OB_FAIL(dml_cg_service_.generate_delete_ctdef(op, index_dml_info, spec.del_ctdef_))) {
-      } else {
-        spec.row_desc_.set_part_id_index(partition_expr_idx);
-      }
+    if (OB_FAIL(get_pdml_partition_id_column_idx(spec.get_child(0)->output_, partition_expr_idx))) {
+    } else if (OB_FAIL(dml_cg_service_.generate_delete_ctdef(op, index_dml_info, spec.del_ctdef_))) {
+    } else {
+      spec.row_desc_.set_part_id_index(partition_expr_idx);
     }
   }
   return ret;
@@ -4546,8 +4542,8 @@ int ObStaticEngineCG::generate_spec(ObLogInsert &op,
     int64_t partition_expr_idx = OB_INVALID_INDEX;
     if (OB_FAIL(ret)) {
       // do nothing
+    } else if (OB_FAIL(get_pdml_partition_id_column_idx(spec.get_child(0)->output_, partition_expr_idx))) {
     } else {
-      OB_ASSERT_SUCC(ret = get_pdml_partition_id_column_idx(spec.get_child(0)->output_, partition_expr_idx));
       spec.row_desc_.set_part_id_index(partition_expr_idx);
     }
     // Process insert_row_exprs in pdml-insert
@@ -4595,12 +4591,10 @@ int ObStaticEngineCG::generate_spec(ObLogUpdate &op,
     spec.is_ignore_ = op.is_ignore();
     phy_plan_->set_ignore(op.is_ignore());
     int64_t partition_expr_idx = OB_INVALID_INDEX;
-    {
-      OB_ASSERT_SUCC(ret = get_pdml_partition_id_column_idx(spec.get_child(0)->output_, partition_expr_idx));
-      if (OB_FAIL(dml_cg_service_.generate_update_ctdef(op, index_dml_info, spec.upd_ctdef_))) {
-      } else {
-        spec.row_desc_.set_part_id_index(partition_expr_idx);
-      }
+    if (OB_FAIL(get_pdml_partition_id_column_idx(spec.get_child(0)->output_, partition_expr_idx))) {
+    } else if (OB_FAIL(dml_cg_service_.generate_update_ctdef(op, index_dml_info, spec.upd_ctdef_))) {
+    } else {
+      spec.row_desc_.set_part_id_index(partition_expr_idx);
     }
     // table columns exprs in dml need to set IS_COLUMNLIZED flag
     OZ(mark_expr_self_produced(index_dml_info.column_exprs_));

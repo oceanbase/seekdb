@@ -76,8 +76,8 @@ int ObPxSQCProxy::setup_loop_proc(ObSqcCtx &sqc_ctx)
   int ret = OB_SUCCESS;
   if (OB_FAIL(msg_ready_cond_.init(ObWaitEventIds::DEFAULT_COND_WAIT))) {
   } else if (OB_FAIL(sqc_ctx.receive_data_ch_provider_.init())) {
+  } else if (OB_FAIL(sqc_ctx.transmit_data_ch_provider_.init())) {
   } else {
-    OB_ASSERT_SUCC(ret = sqc_ctx.transmit_data_ch_provider_.init());
     (void)sqc_ctx.msg_loop_
         .register_processor(sqc_ctx.receive_data_ch_msg_proc_)
         .register_processor(sqc_ctx.transmit_data_ch_msg_proc_)

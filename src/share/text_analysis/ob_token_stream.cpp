@@ -194,11 +194,9 @@ int ObTokenStopWordNormalizer::get_next(ObDatum &next_token, int64_t &token_freq
     if (OB_FAIL(in_stream_->get_next(next_token, token_freq))) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
       }
-    } else {
-      OB_ASSERT_SUCC(ret = filter_special_marks(next_token, found_next_valid_token));
-      if (!found_next_valid_token) {
-        next_token.reset();
-      }
+    } else if (OB_FAIL(filter_special_marks(next_token, found_next_valid_token))) {
+    } else if (!found_next_valid_token) {
+      next_token.reset();
     }
   }
   return ret;

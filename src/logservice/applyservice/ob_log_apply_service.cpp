@@ -664,7 +664,8 @@ int ObApplyStatus::get_max_applied_scn(SCN &scn)
     // Check if last_check_scn_ has already been callback completed
     bool is_done = true;
     for (int64_t i = 0; OB_SUCC(ret) && is_done && i < APPLY_TASK_QUEUE_SIZE; ++i) {
-      OB_ASSERT_SUCC(ret = cb_queues_[i].is_snapshot_apply_done(is_done));
+      if (OB_FAIL(cb_queues_[i].is_snapshot_apply_done(is_done))) {
+      }
     }
     if (OB_SUCC(ret) && is_done) {
       max_applied_cb_scn_ = last_check_scn;

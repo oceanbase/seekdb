@@ -105,8 +105,10 @@ int ObAllVirtualLockWaitStat::inner_get_next_row(ObNewRow *&row)
             cur_row_.cells_[i].set_varchar("X");
           } else if (type == 3) {
             char lock_mode_tmp[MAX_LOCK_MODE_BUF_LENGTH];
-            {
-              OB_ASSERT_SUCC(ret = lock_mode_to_string(node_iter_->lock_mode_, lock_mode_tmp, sizeof(lock_mode_tmp)));
+            if (OB_FAIL(lock_mode_to_string(node_iter_->lock_mode_,
+                                            lock_mode_tmp,
+                                            sizeof(lock_mode_tmp)))) {
+            } else {
               snprintf(lock_mode_, sizeof(lock_mode_), "%s", lock_mode_tmp);
               cur_row_.cells_[i].set_varchar(lock_mode_);
             }
