@@ -104,7 +104,7 @@ public:
       cb_param_(cb_param),
       cb_(cb),
       stream_pos_(0),
-      synthetic_end_(false)
+      synthetic_pos_(-1)
   {
     setg(data_, data_, data_);
   }
@@ -129,10 +129,10 @@ private:
   Callback cb_;
   // Position of the current callback buffer in the logical input stream.
   int64_t stream_pos_;
-  // IOStreamReader probes the stream length with seekg(0, end).  The input
-  // is callback-backed and has no seekable end, so retain a synthetic end
-  // position until the caller seeks back to the saved cursor.
-  bool synthetic_end_;
+  // IOStreamReader probes the stream length with seekg(0, end) followed by
+  // tellg().  The input is callback-backed and has no physical end pointer,
+  // so retain that logical position until the caller seeks back to data.
+  int64_t synthetic_pos_;
 };
 
 class ObHNSWDeserializeCallback {

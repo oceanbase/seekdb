@@ -111,8 +111,13 @@ ObIStreamBuf::pos_type ObIStreamBuf::seekoff(off_type off, std::ios_base::seekdi
       const off_type block_end = block_begin + static_cast<off_type>(egptr() - eback());
       const off_type current = block_begin + static_cast<off_type>(gptr() - eback());
       if (std::ios_base::cur == dir) {
-        const off_type target = current + off;
-        if (!synthetic_end_ && target >= block_begin && target <= block_end) {
+        const off_type origin = synthetic_pos_ >= 0
+                                    ? static_cast<off_type>(synthetic_pos_)
+                                    : current;
+        const off_type target = origin + off;
+        if (synthetic_pos_ >= 0 && off == 0) {
+          ret = pos_type(origin);
+        } else if (synthetic_pos_ < 0 && target >= block_begin && target <= block_end) {
           setg(eback(), eback() + (target - block_begin), egptr());
           ret = pos_type(target);
         }
@@ -125,12 +130,12 @@ ObIStreamBuf::pos_type ObIStreamBuf::seekoff(off_type off, std::ios_base::seekdi
         int64_t stream_size = 0;
         if (OB_SUCC(cb_param_.get_stream_size(stream_size)) && off <= 0
             && off >= -static_cast<off_type>(stream_size)) {
-          synthetic_end_ = true;
-          ret = pos_type(static_cast<off_type>(stream_size) + off);
+          synthetic_pos_ = stream_size + static_cast<int64_t>(off);
+          ret = pos_type(static_cast<off_type>(synthetic_pos_));
         }
       } else if (std::ios_base::beg == dir) {
         if (off >= block_begin && off <= block_end) {
-          synthetic_end_ = false;
+          synthetic_pos_ = -1;
           setg(eback(), eback() + (off - block_begin), egptr());
           ret = pos_type(off);
         }
