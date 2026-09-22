@@ -43,13 +43,14 @@
 | `ObDDLServiceLauncher` / `ObDDLScheduler` | 是 | 长事务 DDL 按 ns 归口 |
 | `ObSharedTimer` | 是 | per-ns 定时器；后续可合并为全局一张 |
 | vt_data_service / srs_service / autoincrement | 否 | autoincrement 现为 `get_instance` 单例，需改 per-ns |
+| 统计信息（stats 收集/监控） | 是 | per-table 语义，schema 耦合，天然 per-ns |
 
 ### 共享（Phase 1 白名单）
 
 | 模块 | 理由 |
 | --- | --- |
 | 网络/NIO（net_frame、mysql 监听、rpc、sql nio） | session 携带 ns，入口一次绑定后热路径无感知；跨 ns 公用是唯一合理形态 |
-| 存储引擎族：ObLSService / local_storage_meta / ObAccessService / memstore / freezer / checkpoint / tablet GC / compaction 全家 / dag_scheduler / io_service / tmp_file / shared_macro_block_mgr | 不变式 1：ns-blind，全部按 tablet/LS 编码 id 组织（审计 §1 实测读路径 0 感知） |
+| 存储引擎族：ObLSService / local_storage_meta / ObAccessService / memstore / freezer / checkpoint / tablet GC / compaction 全家 / dag_scheduler / io_service / tmp_file / shared_macro_block_mgr / tablet_runtime_meta_updater | 不变式 1：ns-blind，全部按 tablet/LS 编码 id 组织（审计 §1 实测读路径 0 感知；tablet_runtime_meta_updater 实测 tablet_id 键） |
 | 事务/日志族：trans_service / log_service / timestamp / trans_id / unique_id / table_lock / lock_wait / deadlock | 全局键组织，无 ns 状态；worker 模式下本来也是共享进程独占 |
 | config / tz_info / GMEMCONF / sql factories / expr static | 纯全局常量态，worker bootstrap 中本就是 reload/init 幂等 |
 
@@ -60,9 +61,24 @@
 - Phase 1（per-ns）：worker prototype 已经 per-worker new 了 `mods_px_pools_`，照搬，**零新增改动**。
 - 未来共享：因为 ns 全程走任务上下文、不走路由，共享只需把 `get_or_create(group_id)` 的 key 归一成单池，**改动极小**。PX 是线程池共享化最理想的候选，但第一阶段不做。
 
+### freeze 家族专项：执行层共享、调度层 per-ns（推荐）
+
+实测拆分：
+
+- **执行层（共享，ns-blind）**：memstore freezer、checkpoint、compaction 执行、dag、tablet GC——全部 tablet 键组织，不读 schema。
+- **调度/进度层（schema 耦合，是唯一的 ns 感知点）**：`ObMajorMergeScheduler` init 绑定单个 `ObMultiVersionSchemaService&`（`ob_major_merge_scheduler.h:64`），`ObMajorMergeProgressChecker` 经 `schema_guard.get_simple_table_schema` 逐表枚举 tablet、按 table_id 做 checksum 校验（`ob_major_merge_progress_checker.cpp:250`），`ObDailyMajorFreezeLauncher` 经 sql_proxy 写 freeze info 内部表。单进程化后没有"覆盖所有 ns 的单一 schema service"，这个引用拿谁的就是问题。
+
+三条路：
+
+| 方案 | 做法 | 评价 |
+| --- | --- | --- |
+| A（推荐） | 调度层 per-ns 进 Runtime，每 ns 独立调度本 ns 表的合并轮次；执行层照旧共享 | 模块内部零改动（本来就只认一个 schema_service）；语义变化=major merge 从全局一轮变每 ns 一轮，需确认 broadcast scn / freeze info / GC pin 语义（GC pin 全局不动，各 ns 推进互不影响，等价于"最慢 ns 卡住全局 gc scn"，与现状同构） |
+| B | 调度层保持全局单例，枚举源从 schema 改为存储层 tablet 元信息（`ObTabletRuntimeInfo` 全局视图现成），checksum 经 registry 按需懒取各 ns schema | 保持全局一轮合并；中等改动，checksum 路径变异步 |
+| C | 保留覆盖全 ns 的全局 schema 视图专供调度 | 内存 double，已否决 |
+
 ### 待定/后续阶段再定
 
-- 后台调度类（freeze coordinator、stats、tablet_runtime_meta_updater 等）：Phase 2 按 2.3 统一处理（遍历 registry 派发，任务带 ns）。
+- freeze 调度层方案 A/B 最终拍板（倾向 A，Phase 2 验证语义）。
 - 共享线程池化（合并 per-ns timer/px/ddl 线程）：待 ns 数上来后按实测资源占用决定，休眠机制（Phase 4）优先于池合并。
 
 ## 阶段拆解
