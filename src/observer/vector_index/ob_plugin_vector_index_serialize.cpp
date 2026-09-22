@@ -320,7 +320,6 @@ int ObHNSWDeserializeCallback::CbParam::prepare_stream_size()
     if (OB_ISNULL(scan_iter)) {
       ret = OB_NOT_SUPPORTED;
     } else {
-      int scan_ret = OB_SUCCESS;
       blocksstable::ObDatumRow *row = nullptr;
       for (int64_t i = 0; OB_SUCC(ret) && i < snapshot_blocks_.count(); ++i) {
         const int64_t block_size = snapshot_blocks_.at(i).length();
@@ -330,14 +329,17 @@ int ObHNSWDeserializeCallback::CbParam::prepare_stream_size()
           total_size += block_size;
         }
       }
-      while (OB_SUCC(ret) && OB_SUCC(scan_ret)
-             && OB_SUCC(scan_ret = scan_iter->get_next_row(row))) {
-        if (OB_ISNULL(row) || row->get_column_count() < 2) {
-          scan_ret = OB_ERR_UNEXPECTED;
+      while (OB_SUCC(ret)) {
+        const int next_ret = scan_iter->get_next_row(row);
+        if (next_ret == OB_ITER_END) {
+          break;
+        } else if (next_ret != OB_SUCCESS) {
+          ret = next_ret;
+        } else if (OB_ISNULL(row) || row->get_column_count() < 2) {
+          ret = OB_ERR_UNEXPECTED;
         } else {
           const int64_t first_new_block = snapshot_blocks_.count();
           if (OB_FAIL(stage_snapshot_row(*row, false))) {
-            scan_ret = ret;
           }
           for (int64_t i = first_new_block;
                OB_SUCC(ret) && i < snapshot_blocks_.count(); ++i) {
@@ -350,12 +352,6 @@ int ObHNSWDeserializeCallback::CbParam::prepare_stream_size()
             }
           }
         }
-      }
-      if (scan_ret == OB_ITER_END) {
-        scan_ret = OB_SUCCESS;
-      }
-      if (OB_SUCC(ret) && OB_FAIL(scan_ret)) {
-        ret = scan_ret;
       }
     }
     if (OB_SUCC(ret)) {
