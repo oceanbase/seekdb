@@ -20,6 +20,7 @@
 #include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_vector_index_util.h"
 #include "storage/access/ob_table_scan_iterator.h"
+#include "storage/tx_storage/ob_access_service.h"
 #include "query/vector/ob_vector_index_adaptor.h"
 
 namespace oceanbase
@@ -320,7 +321,16 @@ int ObHNSWDeserializeCallback::CbParam::prepare_stream_size()
       if (scan_ret == OB_ITER_END) {
         scan_ret = OB_SUCCESS;
       }
-      int rescan_ret = scan_iter->rescan(*scan_param_);
+      int rescan_ret = OB_SUCCESS;
+      ObAccessService *access_service =
+          ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
+      if (OB_ISNULL(access_service)) {
+        rescan_ret = OB_ERR_UNEXPECTED;
+      } else if (OB_SUCCESS !=
+                 (rescan_ret = access_service->reuse_scan_iter(false, iter_))) {
+      } else {
+        rescan_ret = access_service->table_rescan(*scan_param_, iter_);
+      }
       if (OB_FAIL(scan_ret)) {
         ret = scan_ret;
       } else if (OB_FAIL(rescan_ret)) {
