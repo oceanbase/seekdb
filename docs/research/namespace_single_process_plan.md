@@ -72,7 +72,14 @@
 
 **已定做法：调度器全局单例 + registry 遍历**。关键实测便利点：`ObMajorMergeProgressChecker` 的各方法本来就把 `ObSchemaGetterGuard&` 当参数传（`ob_major_merge_progress_checker.cpp:170/221`），不持有 schema_service。因此只需把 scheduler 的"持有一个 schema_service 引用"改为"持有 `NamespaceRegistry&`，每轮调度遍历所有活跃 ns、逐个取 guard 传入"——checker 内部零改动，合并语义保持全局一轮（broadcast scn / freeze info 不变）。这正是不变式 2 的形态：ns 由调度任务显式传入，模块内部无感知。
 
-待解细节（Phase 2）：`__all_freeze_info` 等全局元数据内部表的归属——指定一个系统 ns（候选 `__template__` 或独立 system ns）承载全局调度元数据，调度器的 sql_proxy 操作定向到该 ns。
+已定细节：`__all_freeze_info` 等全局调度元数据由系统 ns 承载（`__template__`，internal 标记保证永久存在、拒绝登录/DDL/drop），调度器与存储层的相关 inner SQL 统一定向该系统 ns。
+
+### inner SQL 规则（已定）：永远有宿主 ns，共享层不自带 SQL 能力
+
+- Runtime 内发起：默认本 ns，零改动。
+- 共享层发起（存储引擎、全局调度器）：显式指定目标 ns，交给该 ns 的 Runtime 执行——进程内函数调用，worker 模式的跨进程 inner SQL 重定向机械全部作废。全局调度元数据一律指定系统 ns。
+- 载体：`ControlSqlNamespaceScope` 从 prototype hack 升格为正式机制——inner SQL 入口强制带目标 ns，共享层调用点显式给出（不变式 2）。
+- 层级：存储→SQL 上向调用 vanilla 单体本已存在（tablet_scheduler 读 freeze info），单进程化只是恢复该形态，增量仅是"在哪个 ns 的命名空间执行"。
 
 已否决：
 
@@ -107,7 +114,7 @@
 - 2.1 152 处 DDL/rootserver 调用点显式 ns（DDL 任务上下文自带目标 ns）。
 - 2.2 其余分类 1/2 调用点机械改造；分类 3 个位数逐个定点处理。
 - 2.3 后台调度遍历 registry：schema refresh / stats / freeze / DDL scheduler——线程保持通用，任务对象带 ns。
-- 2.4 inner SQL ns override（`ControlSqlNamespaceScope`）收敛到 Phase 2 新机制。
+- 2.4 inner SQL ns override（`ControlSqlNamespaceScope`）升格为正式机制：入口强制带目标 ns，共享层调用点显式指定（全局调度元数据 → 系统 ns）。
 - 出口：四 prototype 套件适配单进程形态后 PASS；mysqltest 基础套件绿。
 
 ### Phase 3 删 IPC 层
