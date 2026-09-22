@@ -1415,7 +1415,7 @@ int NamespaceForkKernelPrototype::check_table_access(uint64_t table_id, const Ob
   if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   // Classify encoded storage by its actual tablet, including old plans and DML callers
   // without a schema parameter. Internal LOB scans must still bypass by owning tablet.
-  const uint64_t id = is_encoded_id(tablet_id.id()) ? database_of(tablet_id.id()) : 1;
+  const uint64_t id = namespace_of(tablet_id.id());
   int ret = OB_SUCCESS;
   if (id == 1) {
     // Namespace 1 is the undeletable physical root and also owns global control
@@ -1510,7 +1510,7 @@ int NamespaceForkKernelPrototype::protect_snapshot_tablets(ObIArray<ObTabletID> 
   ObArray<ObTabletID> unreferenced;
   for (int64_t i = 0; OB_SUCC(ret) && i < candidates.count(); ++i) {
     const uint64_t id = candidates.at(i).id();
-    const uint64_t owner = is_encoded_id(id) ? database_of(id) : 1;
+    const uint64_t owner = namespace_of(id);
     const uint64_t local = local_of(id);
     bool retained = false;
     for (const auto &live : live_parents) {
@@ -1543,6 +1543,12 @@ int NamespaceForkKernelPrototype::protect_snapshot_tablets(ObIArray<ObTabletID> 
 }
 bool NamespaceForkKernelPrototype::is_encoded_id(uint64_t id) {
   return enabled() && id != OB_INVALID_ID && (id & (3ULL << 62)) == ID_MARK;
+}
+uint64_t NamespaceForkKernelPrototype::encode_id(uint64_t namespace_id, uint64_t local_id) {
+  return NamespaceObjectKey{namespace_id, local_id}.storage_id();
+}
+uint64_t NamespaceForkKernelPrototype::namespace_of(uint64_t id) {
+  return is_encoded_id(id) ? database_of(id) : 1;
 }
 uint64_t NamespaceForkKernelPrototype::current_namespace_id() {
   return observer::namespace_worker_prototype::resolve_shared_inner_sql_namespace();
@@ -3110,7 +3116,7 @@ int NamespaceForkKernelPrototype::schema_by_name(uint64_t db, const ObString &na
   ControlSqlNamespaceScope control_sql;
   if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
-  const uint64_t owner = namespace_mode() ? (is_encoded_id(db) ? database_of(db) : 1) : db;
+  const uint64_t owner = namespace_mode() ? namespace_of(db) : db;
   Roots root; Value value; int ret = roots(*GCTX.sql_proxy_, owner, root);
   if (ret == OB_ITER_END) { return OB_SUCCESS; }
   if (ret != OB_SUCCESS) { return ret; }
@@ -3167,7 +3173,7 @@ int NamespaceForkKernelPrototype::list_schemas(uint64_t db, ObIArray<const ObTab
   ControlSqlNamespaceScope control_sql;
   if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
-  const uint64_t owner = namespace_mode() ? (is_encoded_id(db) ? database_of(db) : 1) : db;
+  const uint64_t owner = namespace_mode() ? namespace_of(db) : db;
   Roots root; int ret = roots(*GCTX.sql_proxy_, owner, root);
   if (ret == OB_ITER_END) { return OB_SUCCESS; }
   if (ret != OB_SUCCESS || !root.snapshot) { return ret; }

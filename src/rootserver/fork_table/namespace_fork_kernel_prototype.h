@@ -64,6 +64,13 @@ public:
   static int database_by_id(uint64_t id, const share::schema::ObDatabaseSchema *&schema);
   static int database_by_id(uint64_t id, const share::schema::ObSimpleDatabaseSchema *&schema);
   static bool is_encoded_id(uint64_t id);
+  // Single source of truth for the namespace-scoped id encoding. Code outside
+  // this file must never hand-roll the marker bit; use these instead of
+  // `(1ULL << 62) | (ns << 32) | local` or `(id & ~(1ULL << 62)) >> 32`.
+  static uint64_t encode_id(uint64_t namespace_id, uint64_t local_id);
+  // Owner namespace of an id: the encoded namespace, or 1 for a raw (unscoped)
+  // id, which is only namespace 1's original engine objects.
+  static uint64_t namespace_of(uint64_t id);
   static uint64_t current_namespace_id();
   static int local_object_id(uint64_t namespace_id, uint64_t object_id, uint64_t &local_id);
   static int storage_object_id(uint64_t namespace_id, uint64_t object_id, uint64_t &storage_id);

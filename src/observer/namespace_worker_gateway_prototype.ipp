@@ -519,7 +519,9 @@ int catalog(uint64_t ns, Frame &request, Frame &reply) {
   const ObTableSchema *table = nullptr;
   const ObUserInfo *user = nullptr;
   const ObSysVariableSchema *variables = nullptr;
-  const uint64_t owner = (id & ~(1ULL << 62)) >> 32;
+  // Owner of the requested id, used below to reject ids that do not belong to
+  // this channel's namespace. Raw ids only exist inside namespace 1.
+  const uint64_t owner = NamespaceForkKernelPrototype::namespace_of(id);
   int64_t namespace_schema_version = OB_INVALID_VERSION;
   ObSchemaGetterGuard guard;
   if (ns == 1 && request.consumed() && (request.type() == 'd' || owns_table(ns, id))) {
