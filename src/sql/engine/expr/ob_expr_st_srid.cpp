@@ -165,7 +165,10 @@ int ObExprSTSRID::eval_st_srid_common(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
   } else if (nullptr == share::g_mp) {
     return OB_NOT_SUPPORTED;
   }
-  ObString wkb = datum->get_string();
+  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
+  ObString wkb;
+  if (OB_FAIL(read_plugin_expr_bytes(*expr.args_[0], ctx, *datum,
+                                    tmp_alloc_g.get_allocator(), wkb))) return ret;
   const char *service_id = "st_srid";
   seekdb_plugin_execution_value_v1_t arguments[2] = {};
   uint32_t srid = 0;

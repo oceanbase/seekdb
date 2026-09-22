@@ -97,7 +97,10 @@ int ObExprSTLength::eval_st_length(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   } else if (expr.arg_cnt_ != 1 || nullptr == share::g_mp) {
     ret = OB_NOT_SUPPORTED;
   } else {
-    const ObString geometry = datum->get_string();
+    ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
+    ObString geometry;
+    if (OB_FAIL(read_plugin_expr_bytes(*expr.args_[0], ctx, *datum,
+                                      tmp_alloc_g.get_allocator(), geometry))) return ret;
     LengthPluginSink sink{&res};
     seekdb_plugin_execution_context_v1_t plugin_ctx = {};
     plugin_ctx.struct_size = sizeof(plugin_ctx);

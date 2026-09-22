@@ -21,6 +21,21 @@ namespace oceanbase
 namespace sql
 {
 
+// SQL geometry/text datums may contain a LOB locator/header. Only the payload
+// belongs to the plugin ABI. The caller must keep allocator alive through the
+// synchronous plugin invocation (including all arguments and result emission).
+inline int read_plugin_expr_bytes(const ObExpr &argument,
+                                  ObEvalCtx &ctx,
+                                  const ObDatum &datum,
+                                  ObIAllocator &allocator,
+                                  ObString &bytes)
+{
+  bytes = datum.get_string();
+  return ObTextStringHelper::read_real_string_data_with_copy(
+      ctx.exec_ctx_, allocator, datum, argument.datum_meta_,
+      argument.obj_meta_.has_lob_header(), bytes);
+}
+
 // Copy a byte-oriented plugin result into the normal SQL string/geometry
 // datum without depending on the legacy GIS object model.  This is the small
 // host-side bridge retained by the core-only profile.
@@ -89,12 +104,15 @@ inline int execute_plugin_geometry_relation(const char *service_name,
       }
     }
     if (OB_SUCC(ret)) {
+      ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       seekdb_plugin_execution_value_v1_t arguments[3] = {};
       double distance = 0.0;
       for (uint32_t i = 0; i < argument_count; ++i) {
         arguments[i].struct_size = sizeof(arguments[i]);
         if (i < 2) {
-          const ObString geometry = datums[i]->get_string();
+          ObString geometry;
+          if (OB_FAIL(read_plugin_expr_bytes(*expr.args_[i], ctx, *datums[i],
+                                            tmp_alloc_g.get_allocator(), geometry))) return ret;
           arguments[i].type_id = "org.seekdb.gis.geometry";
           arguments[i].data = reinterpret_cast<const uint8_t *>(geometry.ptr());
           arguments[i].data_size = static_cast<uint64_t>(geometry.length());
@@ -166,14 +184,18 @@ inline int execute_plugin_geometry_bytes(const char *service_name,
       }
     }
     if (OB_SUCC(ret)) {
+      ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       seekdb_plugin_execution_value_v1_t arguments[2] = {};
-      const ObString first = datums[0]->get_string();
+      ObString first;
+      if (OB_FAIL(read_plugin_expr_bytes(*expr.args_[0], ctx, *datums[0],
+                                        tmp_alloc_g.get_allocator(), first))) return ret;
       arguments[0].struct_size = sizeof(arguments[0]);
       arguments[0].type_id = geometry_input ? "org.seekdb.gis.geometry" : "org.seekdb.gis.scalar.bytes";
       arguments[0].data = reinterpret_cast<const uint8_t *>(first.ptr());
       arguments[0].data_size = static_cast<uint64_t>(first.length());
+      uint32_t srid = 0;
       if (argument_count == 2) {
-        const uint32_t srid = datums[1]->get_uint32();
+        srid = datums[1]->get_uint32();
         arguments[1].struct_size = sizeof(arguments[1]);
         arguments[1].type_id = "org.seekdb.gis.scalar.uint32";
         arguments[1].data = reinterpret_cast<const uint8_t *>(&srid);
@@ -206,6 +228,7 @@ inline int execute_plugin_geometry_variadic(const char *service_name,
   if (argument_count == 0 || argument_count > 64 || nullptr == share::g_mp) {
     ret = OB_NOT_SUPPORTED;
   } else {
+    ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     ObDatum *datums[64] = {nullptr};
     seekdb_plugin_execution_value_v1_t arguments[64] = {};
     for (uint32_t i = 0; OB_SUCC(ret) && i < argument_count; ++i) {
@@ -214,7 +237,9 @@ inline int execute_plugin_geometry_variadic(const char *service_name,
         result.set_null();
         return OB_SUCCESS;
       } else {
-        const ObString geometry = datums[i]->get_string();
+        ObString geometry;
+        if (OB_FAIL(read_plugin_expr_bytes(*expr.args_[i], ctx, *datums[i],
+                                          tmp_alloc_g.get_allocator(), geometry))) return ret;
         arguments[i].struct_size = sizeof(arguments[i]);
         arguments[i].type_id = "org.seekdb.gis.geometry";
         arguments[i].data = reinterpret_cast<const uint8_t *>(geometry.ptr());
@@ -249,6 +274,7 @@ inline int execute_plugin_gis_values(const char *service_name,
   if (argument_count == 0 || argument_count > 8 || nullptr == share::g_mp) {
     return OB_NOT_SUPPORTED;
   }
+  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   ObDatum *datums[8] = {nullptr};
   seekdb_plugin_execution_value_v1_t arguments[8] = {};
   uint64_t unsigned_values[8] = {};
@@ -262,12 +288,16 @@ inline int execute_plugin_gis_values(const char *service_name,
       arguments[i].struct_size = sizeof(arguments[i]);
       const ObObjType type = expr.args_[i]->datum_meta_.type_;
       if (ob_is_geometry(type)) {
-        const ObString value = datums[i]->get_string();
+        ObString value;
+        if (OB_FAIL(read_plugin_expr_bytes(*expr.args_[i], ctx, *datums[i],
+                                          tmp_alloc_g.get_allocator(), value))) return ret;
         arguments[i].type_id = "org.seekdb.gis.geometry";
         arguments[i].data = reinterpret_cast<const uint8_t *>(value.ptr());
         arguments[i].data_size = static_cast<uint64_t>(value.length());
       } else if (ob_is_string_type(type)) {
-        const ObString value = datums[i]->get_string();
+        ObString value;
+        if (OB_FAIL(read_plugin_expr_bytes(*expr.args_[i], ctx, *datums[i],
+                                          tmp_alloc_g.get_allocator(), value))) return ret;
         arguments[i].type_id = "org.seekdb.gis.scalar.bytes";
         arguments[i].data = reinterpret_cast<const uint8_t *>(value.ptr());
         arguments[i].data_size = static_cast<uint64_t>(value.length());
@@ -310,14 +340,17 @@ inline int execute_plugin_geometry_transform(const char *service_name,
   ObDatum *geometry = nullptr;
   ObDatum *srid = nullptr;
   if (OB_FAIL(expr.args_[0]->eval(ctx, geometry)) || OB_FAIL(expr.args_[1]->eval(ctx, srid))) {
-    return OB_NOT_SUPPORTED;
+    return ret;
   }
   if (geometry->is_null() || srid->is_null()) {
     result.set_null();
     return OB_SUCCESS;
   }
   const uint32_t target_srid = static_cast<uint32_t>(srid->get_int());
-  const ObString wkb = geometry->get_string();
+  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
+  ObString wkb;
+  if (OB_FAIL(read_plugin_expr_bytes(*expr.args_[0], ctx, *geometry,
+                                    tmp_alloc_g.get_allocator(), wkb))) return ret;
   seekdb_plugin_execution_value_v1_t arguments[2] = {};
   arguments[0].struct_size = sizeof(arguments[0]);
   arguments[0].type_id = "org.seekdb.gis.geometry";
@@ -374,9 +407,12 @@ inline int execute_plugin_geometry_uint64(const char *service_name,
   int ret = OB_SUCCESS;
   if (expr.arg_cnt_ != 1 || nullptr == share::g_mp) return OB_NOT_SUPPORTED;
   ObDatum *datum = nullptr;
-  if (OB_FAIL(expr.args_[0]->eval(ctx, datum))) return OB_NOT_SUPPORTED;
+  if (OB_FAIL(expr.args_[0]->eval(ctx, datum))) return ret;
   if (datum->is_null()) { result.set_null(); return OB_SUCCESS; }
-  const ObString geometry = datum->get_string();
+  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
+  ObString geometry;
+  if (OB_FAIL(read_plugin_expr_bytes(*expr.args_[0], ctx, *datum,
+                                    tmp_alloc_g.get_allocator(), geometry))) return ret;
   seekdb_plugin_execution_value_v1_t argument = {};
   argument.struct_size = sizeof(argument);
   argument.type_id = "org.seekdb.gis.geometry";
@@ -432,7 +468,10 @@ inline int execute_plugin_geometry_scalar(const char *service_name,
     } else if (datum->is_null()) {
       result.set_null();
     } else {
-      const ObString geometry = datum->get_string();
+      ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
+      ObString geometry;
+      if (OB_FAIL(read_plugin_expr_bytes(*expr.args_[0], ctx, *datum,
+                                        tmp_alloc_g.get_allocator(), geometry))) return ret;
       seekdb_plugin_execution_value_v1_t argument = {};
       argument.struct_size = sizeof(argument);
       argument.type_id = "org.seekdb.gis.geometry";
@@ -458,6 +497,7 @@ inline int execute_plugin_geometry_int32(const char *service_name,
   int ret = OB_SUCCESS;
   const uint32_t count = static_cast<uint32_t>(expr.arg_cnt_);
   if ((count != 1 && count != 2) || nullptr == share::g_mp) return OB_NOT_SUPPORTED;
+  ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
   ObDatum *datums[2] = {nullptr, nullptr};
   seekdb_plugin_execution_value_v1_t arguments[2] = {};
   for (uint32_t i = 0; OB_SUCC(ret) && i < count; ++i) {
@@ -466,7 +506,9 @@ inline int execute_plugin_geometry_int32(const char *service_name,
       result.set_null();
       return OB_SUCCESS;
     } else {
-      const ObString geometry = datums[i]->get_string();
+      ObString geometry;
+      if (OB_FAIL(read_plugin_expr_bytes(*expr.args_[i], ctx, *datums[i],
+                                        tmp_alloc_g.get_allocator(), geometry))) return ret;
       arguments[i].struct_size = sizeof(arguments[i]);
       arguments[i].type_id = "org.seekdb.gis.geometry";
       arguments[i].data = reinterpret_cast<const uint8_t *>(geometry.ptr());
@@ -530,16 +572,20 @@ inline int execute_plugin_geometry_double(const char *service_name,
       }
     }
     if (OB_SUCC(ret)) {
+      ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
       seekdb_plugin_execution_value_v1_t arguments[3] = {};
       for (uint32_t i = 0; i < 2; ++i) {
-        const ObString geometry = datums[i]->get_string();
+        ObString geometry;
+        if (OB_FAIL(read_plugin_expr_bytes(*expr.args_[i], ctx, *datums[i],
+                                          tmp_alloc_g.get_allocator(), geometry))) return ret;
         arguments[i].struct_size = sizeof(arguments[i]);
         arguments[i].type_id = "org.seekdb.gis.geometry";
         arguments[i].data = reinterpret_cast<const uint8_t *>(geometry.ptr());
         arguments[i].data_size = static_cast<uint64_t>(geometry.length());
       }
+      double radius = 0.0;
       if (argument_count == 3) {
-        const double radius = datums[2]->get_double();
+        radius = datums[2]->get_double();
         arguments[2].struct_size = sizeof(arguments[2]);
         arguments[2].type_id = "org.seekdb.gis.scalar.float64";
         arguments[2].data = reinterpret_cast<const uint8_t *>(&radius);

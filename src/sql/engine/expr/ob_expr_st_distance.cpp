@@ -116,6 +116,7 @@ int ObExprSTDistance::eval_st_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     ret = OB_NOT_SUPPORTED;
   } else {
     DistancePluginSink sink{&res};
+    ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     seekdb_plugin_execution_context_v1_t plugin_ctx = {};
     plugin_ctx.struct_size = sizeof(plugin_ctx);
     plugin_ctx.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&sink);
@@ -123,7 +124,9 @@ int ObExprSTDistance::eval_st_distance(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     seekdb_plugin_execution_value_v1_t arguments[2] = {};
     const ObDatum *datums[2] = {first, second};
     for (int i = 0; i < 2; ++i) {
-      const ObString geometry = datums[i]->get_string();
+      ObString geometry;
+      if (OB_FAIL(read_plugin_expr_bytes(*expr.args_[i], ctx, *datums[i],
+                                        tmp_alloc_g.get_allocator(), geometry))) return ret;
       arguments[i].struct_size = sizeof(arguments[i]);
       arguments[i].type_id = "org.seekdb.gis.geometry";
       arguments[i].data = reinterpret_cast<const uint8_t *>(geometry.ptr());

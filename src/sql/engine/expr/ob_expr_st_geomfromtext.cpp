@@ -142,7 +142,10 @@ int ObExprSTGeomFromText::eval_st_geomfromtext_common(const ObExpr &expr,
   } else if (nullptr == share::g_mp) {
     ret = OB_NOT_SUPPORTED;
   } else {
-    ObString wkt = datum->get_string();
+    ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
+    ObString wkt;
+    if (OB_FAIL(read_plugin_expr_bytes(*expr.args_[0], ctx, *datum,
+                                      tmp_alloc_g.get_allocator(), wkt))) return ret;
     seekdb_plugin_execution_value_v1_t arguments[2] = {};
     arguments[0].struct_size = sizeof(arguments[0]);
     arguments[0].type_id = "org.seekdb.gis.scalar.bytes";

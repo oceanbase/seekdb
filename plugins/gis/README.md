@@ -70,3 +70,27 @@ SELECT ST_X(POINT(1, 2)), ST_Y(POINT(1, 2));
 Plugin discovery and loading happen during startup, so restart seekdb after
 replacing a package.  Phase 1 uses local identity pinning only; signatures
 and content-hash trust are intentionally deferred.
+
+## SQL/LOB regression
+
+After completing a plugin-enabled, core-GIS-disabled production build, run:
+
+```bash
+python3 rust/plugin-runtime/tests/gis_sql.py --build-dir build_plugin_overlay_verify
+```
+
+This builds/audits the GIS DSO and links a private test executable using the
+production kernel objects. It exercises real SQL parsing, type inference,
+codegen, LOB materialization and plugin callbacks for distance, area, length,
+WKT/WKB round trips, SRID, predicates, collections and NULLs. Separate payload
+checks cover raw/in-row geometry and text, embedded NUL and copied ownership.
+Geometry collections retain child type names when serialized to WKT.
+
+The host must materialize SQL LOB datums before passing bytes to the plugin;
+an internal LOB header/locator is not part of the GIS payload ABI. Temporary
+input buffers and scalar controls must survive through result emission.
+
+The test does not start or change a server. Activation catalog metadata and
+LOB storage services are controlled fixtures; it does not verify out-of-row
+storage, spatial indexes, recovery or all GIS semantics. After deploying both
+the rebuilt host and GIS DSO, rerun SQL smoke tests on the real server.

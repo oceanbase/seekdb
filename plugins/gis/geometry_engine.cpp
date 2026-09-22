@@ -815,7 +815,10 @@ static void geometry_to_wkt(const Geometry &geometry, std::ostringstream &stream
         geometry_to_wkt(geometry.children[i], child);
         std::string value = child.str();
         const size_t first_space = value.find(' ');
-        stream << (first_space == std::string::npos ? value : value.substr(first_space + 1));
+        // Collections contain complete typed WKT geometries; only homogeneous
+        // multi-geometries omit their children's type names.
+        stream << (geometry.type == 7 || first_space == std::string::npos
+            ? value : value.substr(first_space + 1));
       }
     }
     stream << ')';

@@ -391,7 +391,7 @@ fn parse(
         let type_bytes = param_count.checked_mul(2).ok_or(ParseError::Capacity)?;
         let type_end = pos.checked_add(type_bytes).ok_or(ParseError::Capacity)?;
         let table = tail.get(pos..type_end).ok_or(ParseError::Malformed)?;
-        for pair in table.chunks_exact(2) {
+        for pair in table.as_chunks::<2>().0 {
             metas.push(NioMysqlExecuteParamMeta {
                 mysql_type: u16::from(pair[0]),
                 type_flags: pair[1],

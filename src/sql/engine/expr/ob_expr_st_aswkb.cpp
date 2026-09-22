@@ -155,7 +155,10 @@ int ObExprGeomWkb::eval_geom_wkb(const ObExpr &expr,
   } else if (nullptr == share::g_mp) {
     ret = OB_NOT_SUPPORTED;
   } else {
-    const ObString geometry = datum->get_string();
+    ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
+    ObString geometry;
+    if (OB_FAIL(read_plugin_expr_bytes(*expr.args_[0], ctx, *datum,
+                                      tmp_alloc_g.get_allocator(), geometry))) return ret;
     WkbPluginSink sink{&expr, &ctx, &res};
     seekdb_plugin_execution_context_v1_t plugin_ctx = {};
     plugin_ctx.struct_size = sizeof(plugin_ctx);
