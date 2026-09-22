@@ -339,6 +339,21 @@ int ObHNSWDeserializeCallback::CbParam::prepare_stream_size()
   return ret;
 }
 
+int ObHNSWDeserializeCallback::CbParam::set_first_row(const blocksstable::ObDatumRow &row)
+{
+  int ret = OB_SUCCESS;
+  first_row_valid_ = false;
+  first_row_allocator_.reuse();
+  if (row.get_column_count() < 2) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(first_key_datum_.deep_copy(row.storage_datums_[0], first_row_allocator_))) {
+  } else if (OB_FAIL(first_data_datum_.deep_copy(row.storage_datums_[1], first_row_allocator_))) {
+  } else {
+    first_row_valid_ = true;
+  }
+  return ret;
+}
+
 int ObHNSWDeserializeCallback::operator()(char*& data, const int64_t data_size, int64_t &read_size, share::ObIStreamBuf::CbParam &cb_param)
 {
   UNUSED(data_size);
@@ -384,18 +399,18 @@ int ObHNSWDeserializeCallback::operator()(char*& data, const int64_t data_size, 
       }
       if (OB_SUCC(ret) && OB_ISNULL(str_iter)) {
         // we should get next str_iter
-        if (OB_NOT_NULL(param.first_row_)) {
-          row = param.first_row_;
-          param.first_row_ = nullptr;
+        if (param.first_row_valid_) {
+          key_datum = param.first_key_datum_;
+          data_datum = param.first_data_datum_;
+          param.first_row_valid_ = false;
         } else if (OB_FAIL(row_iter->get_next_row(row))) {
-        } else {
-        }
-        if (OB_SUCC(ret) && (OB_ISNULL(row) || row->get_column_count() < 2)) {
+        } else if (OB_ISNULL(row) || row->get_column_count() < 2) {
           ret = OB_ERR_UNEXPECTED;
-        }
-        if (OB_SUCC(ret)) {
+        } else {
           key_datum = row->storage_datums_[0];
           data_datum = row->storage_datums_[1];
+        }
+        if (OB_SUCC(ret)) {
           LOG_INFO("[vec index debug] show key and data for vsag deserialize", K(key_datum), K(data_datum));
           if (OB_ISNULL(str_iter = OB_NEWx(ObTextStringIter, allocator, ObLongTextType, CS_TYPE_BINARY, data_datum.get_string(), true))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;

@@ -700,9 +700,10 @@ int ObPluginVectorIndexUtils::try_sync_snapshot_memdata(ObPluginVectorIndexAdapt
       }
       ObArenaAllocator tmp_allocator("VectorAdaptor", OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObHNSWDeserializeCallback::CbParam param(
-          snapshot_idx_iter, &tmp_allocator, lob_read_options, row, snapshot_size_iter);
+          snapshot_idx_iter, &tmp_allocator, lob_read_options, snapshot_size_iter);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ob_write_string(allocator, row->storage_datums_[0].get_string(), key_prefix))) {
+      } else if (OB_FAIL(param.set_first_row(*row))) {
       } else if (OB_FAIL(read_local_tablet(new_adapter,
                                           target_scn,
                                           index_type,

@@ -20,6 +20,7 @@
 #include "lib/function/ob_function.h"
 #include "lib/allocator/page_arena.h"
 #include "common/row/ob_row_iterator.h"
+#include "data_plane/blocksstable/ob_storage_datum.h"
 #include "share/ob_lob_access_utils.h"
 #include "query/vector/ob_vector_query_result.h"
 #include "query/vector/ob_vector_index_util.h"
@@ -145,13 +146,13 @@ public:
     CbParam(ObNewRowIterator *iter,
             ObIAllocator *allocator,
             const common::ObLobReadOptions &lob_read_options,
-            blocksstable::ObDatumRow *first_row = nullptr,
             ObNewRowIterator *size_iter = nullptr)
       : iter_(iter),
         allocator_(allocator),
         lob_read_options_(&lob_read_options),
         str_iter_(nullptr),
-        first_row_(first_row),
+        first_row_allocator_("VecFirstRow", OB_MALLOC_NORMAL_BLOCK_SIZE),
+        first_row_valid_(false),
         size_iter_(size_iter),
         stream_size_(0),
         stream_size_valid_(false)
@@ -172,6 +173,7 @@ public:
              && nullptr != lob_read_options_
              && nullptr != lob_read_options_->read_service_;
     }
+    int set_first_row(const blocksstable::ObDatumRow &row);
     virtual int prepare_stream_size() override;
     virtual int get_stream_size(int64_t &size) const override
     {
@@ -183,7 +185,10 @@ public:
     ObIAllocator *allocator_;
     const common::ObLobReadOptions *lob_read_options_;
     ObTextStringIter *str_iter_;
-    blocksstable::ObDatumRow *first_row_;
+    ObArenaAllocator first_row_allocator_;
+    blocksstable::ObStorageDatum first_key_datum_;
+    blocksstable::ObStorageDatum first_data_datum_;
+    bool first_row_valid_;
     ObNewRowIterator *size_iter_;
     int64_t stream_size_;
     bool stream_size_valid_;

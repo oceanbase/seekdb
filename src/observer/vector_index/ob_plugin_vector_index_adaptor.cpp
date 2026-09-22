@@ -4027,7 +4027,7 @@ int ObPluginVectorIndexAdaptor::deserialize_snap_data(ObVectorQueryConditions *q
                          snapshot_size_iter))) {
   } else {
     ObHNSWDeserializeCallback::CbParam param(
-        query_cond->row_iter_, &tmp_allocator, *query_cond->lob_read_options_, row, snapshot_size_iter);
+        query_cond->row_iter_, &tmp_allocator, *query_cond->lob_read_options_, snapshot_size_iter);
     ObHNSWDeserializeCallback callback(static_cast<void*>(this));
     ObIStreamBuf::Callback cb = callback;
     ObVectorIndexSerializer index_seri(tmp_allocator);
@@ -4035,6 +4035,7 @@ int ObPluginVectorIndexAdaptor::deserialize_snap_data(ObVectorQueryConditions *q
     ObString target_prefix;
     if (!get_snapshot_key_prefix().empty() && key_prefix.prefix_match(get_snapshot_key_prefix()) && !snap_data_->rb_flag_) {
       // skip deserialize, already been deserialized by other concurrent thread
+    } else if (OB_FAIL(param.set_first_row(*row))) {
     } else if (OB_FAIL(param.prepare_stream_size())) {
     } else if (OB_FAIL(index_seri.deserialize(snap_data_->index_, param, cb))) {
     } else if (OB_FAIL(obvectorutil::immutable_optimize(snap_data_->index_))) {
