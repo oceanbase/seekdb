@@ -438,8 +438,7 @@ int ObTabletForkCtx::init(const ObTabletForkParam &param)
   } else if (NamespaceForkKernelPrototype::is_encoded_id(param.dest_tablet_id_.id())
       && OB_FAIL(NamespaceForkKernelPrototype::check_baseline_access(param.dest_tablet_id_, prototype_access_))) {
   } else if (FALSE_IT([&] {
-      if (NamespaceForkKernelPrototype::lifetime_mode()
-          && NamespaceForkKernelPrototype::is_encoded_id(param.dest_tablet_id_.id())) {
+      if (NamespaceForkKernelPrototype::is_encoded_id(param.dest_tablet_id_.id())) {
         DEBUG_SYNC(FORK_TABLE_BUILD_DATA);
       }
     }())) {

@@ -673,7 +673,7 @@ int ObAccessService::check_read_allowed_(
       }
     }
   }
-  if (OB_SUCC(ret) && NamespaceForkKernelPrototype::lifetime_mode()
+  if (OB_SUCC(ret)
       && NamespaceForkKernelPrototype::is_encoded_id(tablet_id.id())) {
     // Existing sync point: admitted scan has not fetched its inherited inputs yet.
     DEBUG_SYNC(AFTER_TABLE_SCAN);

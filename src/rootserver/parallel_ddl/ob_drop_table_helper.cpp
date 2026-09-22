@@ -143,8 +143,7 @@ int ObDropTableHelper::lock_tables_()
   common::sqlclient::ObISQLConnection *conn = NULL;
   const int64_t timeout = 0;
   const bool namespace_scoped =
-      storage::NamespaceForkKernelPrototype::namespace_mode()
-      && storage::NamespaceForkKernelPrototype::current_namespace_id() > 1;
+      storage::NamespaceForkKernelPrototype::current_namespace_id() > 1;
   if (OB_FAIL(check_inner_stat_())) {
   } else if (OB_ISNULL(conn = get_trans_().get_connection())) {
     ret = OB_ERR_UNEXPECTED;
@@ -1085,8 +1084,7 @@ int ObDropTableHelper::calc_schema_version_cnt_for_table_(
   int ret = OB_SUCCESS;
   const uint64_t table_id = table_schema.get_table_id();
   const bool namespace_scoped =
-      storage::NamespaceForkKernelPrototype::namespace_mode()
-      && storage::NamespaceForkKernelPrototype::current_namespace_id() > 1;
+      storage::NamespaceForkKernelPrototype::current_namespace_id() > 1;
   if (OB_FAIL(check_inner_stat_())) {
   } else {
     // table
@@ -1292,7 +1290,7 @@ int ObDropTableHelper::drop_table_(const ObTableSchema &table_schema, const ObSt
   const uint64_t namespace_id =
       storage::NamespaceForkKernelPrototype::current_namespace_id();
   const bool namespace_scoped =
-      storage::NamespaceForkKernelPrototype::namespace_mode() && namespace_id > 1;
+      namespace_id > 1;
   if (OB_FAIL(check_inner_stat_())) {
   } else if (OB_ISNULL(schema_service_impl = schema_service_->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
