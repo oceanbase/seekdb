@@ -375,3 +375,91 @@ $ grep -rn "bind_shared_inner_sql_namespace" src/
 
 若将来真要让 schema 对象脱离编码 id，前置条件是先决定 ns 的替代传输方式（显式句柄参数 优于
 线程上下文），而**当前没有任何调用路径要求这么做**。
+
+## 11. 合并为单进程后的目标状态（验收标准）
+
+不列"输入约束"，而是描述**合并完成后系统应该处于什么状态**。每条都是可检查的断言。
+
+### 11.0 一句话
+
+> 一个进程 = 一个完整数据库实例，进程内同时承载 N 个 namespace；
+> namespace 的差异只体现在**数据**（id / 版本 / 句柄 / 各自的元数据键空间）上，
+> 不体现在进程、线程、模块签名或任何需要维护的上下文里。
+
+### 11.1 身份与上下文状态
+
+| 断言 | 检查方式 |
+|---|---|
+| 不存在"一 namespace 一进程"的结构 | 系统中无 per-ns 子进程、无 spawn、无 endpoint 注册表 |
+| 不存在 per-ns 线程/线程池 | 只有一套 OMT 池，所有 ns 共用 |
+| **不存在任何可变 ns 上下文**：无 thread_local ns、无 scoped guard 作为唯一防线 | 全仓搜不到"进请求设置 / 出请求恢复"式的 ns 保存恢复代码 |
+| ns 只有三种载体，且都是数据：编码 id、显式句柄/参数、该 ns 自己的元数据键空间 | 新增代码若需要 ns，只能从这三处取 |
+| 模块无法"忘记"ns——因为它不需要知道 ns | 除翻译层外，模块签名里不出现 ns 参数 |
+
+### 11.2 进程与角色状态
+
+| 断言 |
+|---|
+| `worker_process` / `worker_namespace` 这类**进程角色开关不存在** |
+| 不存在 IPC 通道：无帧协议、无 `RequestRoutes`/`PendingRequest`、无 credit、无管道读写线程 |
+| 不存在 proxy 转发（公共 MySQL 端口由本进程直接服务） |
+| 不存在 worker 激活 / 换代 / endpoint 发布 / `generation` 重建这套机制 |
+| 只有一套 schema 缓存、plan cache、存储引擎（ns 维度体现在 id 与版本上） |
+
+### 11.3 fork 状态（不得退化）
+
+| 断言 | 当前基线 |
+|---|---|
+| `FORK` 语句仍是 **O(1)**：耗时与对象数无关 | 0.29s（pages 0 行） |
+| **fork 后没有"激活"阶段**：不需要 spawn、不需要 schema 全量刷新、不需要 endpoint 发布 | 现在 1.19s = fork 语句 0.29 + spawn/init 0.2 + refresh 0.5 + 首查询懒加载 0.25 |
+| 因此 **fork→可服务 ≈ fork 语句耗时** | 目标：≤ 0.3s 量级 |
+| COW 语义完整保留：cap 钳制、沿父链探测、例外表（owned/tombstone）、DROP 保护 | 已有 |
+| 读写隔离语义不变：子看不到父 fork 后的写；子写后物化且对父不可见；多级链 cap 累积 | 已有 |
+| fork 延迟不随 namespace 总数线性增长 | 已有（懒激活），合并后进一步消除 |
+
+### 11.4 性能状态
+
+| 断言 | 参考 |
+|---|---|
+| 点查延迟与吞吐达到**单进程单体水平** | 0.13ms / 8t 53231 QPS |
+| 热路径跨界次数 = **0**（因为不存在边界） | 现状 6–8 次 |
+| **不靠常驻自旋核换延迟** | 不需要 busy-poll、不需要 isolcpus |
+| `FORK` 与查询延迟都不随 namespace 数量退化 | — |
+
+### 11.5 代码状态
+
+| 删除 | 约 |
+|---|---|
+| 传输/控制层：`gateway` / `multiplex` / `protocol` / `proxy` / `sql_worker` 主循环 | ~2940 行 |
+| 15 个 `Remote*` 适配器（换成直接调用；native 实现本来就在） | — |
+| 进程角色开关及其分支 | 当前 93 处恒真判断 |
+
+| 保留 | 理由 |
+|---|---|
+| `NamespaceForkKernelPrototype`（编码、链探测、例外表、cap） | 这是 fork 的实质，与进程模型无关 |
+| 端口/适配器接口（`ObITransactionService` / `ObITabletScan` / `ObIDmlService` / `ObILobReadService` / `ObIRangeService` / `ObIPrivMgr`） | **可逆性**：将来若需要隔离，仍可在工厂层换回 `Remote*` |
+
+### 11.6 每 namespace 的状态边界
+
+| 必须 per-ns | 明确不 per-ns |
+|---|---|
+| schema 版本（`roots.schema_version`） | 内存配额 |
+| plan cache（key 带 ns，或 per-ns 实例） | CPU 配额 / 线程池 |
+| session 归属（已有 `namespace_storage_binding_`） | 故障域 |
+| 事务/快照（已由 session 携带） | 存储引擎（完全共享） |
+
+### 11.7 明确不在目标状态内
+
+- 不做多租户**故障隔离**（一个 ns 出错不影响其他）
+- 不做多租户**资源隔离**（per-ns 内存/CPU 配额）
+- 不支持 **vanilla 单 namespace 模式**
+
+### 11.8 唯一未定的实现选择（不影响上述状态）
+
+点查达成"零跨界"有两种实现，**目标状态相同，只是实现不同**：
+
+1. **进程内直读**：SQL 与存储同进程，读路径就是普通函数调用
+2. **共享内存直读**（仅当 D1 选择"worker 持只读副本"时才相关）：把只读数据 mmap 给 SQL 侧
+
+合并方案下自然落到 (1)，(2) 只有在"保留进程拆分但去掉 IPC"的备选路线上才需要。
+状态 11.4 只要求结果，不规定实现。
