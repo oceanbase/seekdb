@@ -184,5 +184,27 @@ fork_routes_to_owned=1         # 已激活 ns2 session → ns2 自己的实例�
 
 **仍未完成**：这条路由要真正被"用户可见地"验证，需要 ns2 上跑一条真实查询并观察它读 ns2 的 schema；那仍要等 §9.1 的 fork 数据语义在单进程内落位。本轮的证据是路由契约本身（指针相等性）而非端到端查询。
 
+---
+
+# 附二：Issue 02 的 bazel 门禁（本轮）
+
+## 12. 门禁落地 + 一个仓库级前置修复
+
+`src/namespace/BUILD.bazel` 落地了方向门禁：`package(default_visibility = ["//visibility:private"])`，目标只对 `//src/observer:__subpackages__` 可见，并开启 `layering_check`。即 `sql/`、`storage/`、`share/` 既不能声明依赖、也不能包含本层头文件——方向 `namespace → observer → sql → storage` 由编译期强制。该头文件只依赖 oblib（`lib/ob_define.h`、`ob_string.h`、`ob_print_utils.h`），所以 `deps = []` 是准确的，不需要引入任何上层包。
+
+**前置修复（仓库级、与本次改动无关的既有破损）**：`src/observer/BUILD.bazel` 的 `observer_validate_header_inventory` 在**包加载期**就失败——`src/observer/observer_header_inventory.bzl` 手工清单缺了 14 个 worker 原型头文件（`namespace_worker_*.ipp`、`namespace_sql_worker_prototype.ipp` 等）。这些文件是随 `bd1a46a57` 一起进树的，但该清单从没同步过（`git log -S` 查无更新），也就是说 **bazel 在这条分支上从那时起就完全不可用**（cmake 路线不受影响，所以门禁一直在跑）。已把这 14 项补进清单，`bazel query //src/observer:all` 与 `//src/observer:seekdb_source_ownership` 均可正常加载。
+
+## 13. 本环境无法实证门禁会拦下违规
+
+按 issue 02 的验收标准（"下层 include 上层 = 编译错"），我尝试用两个临时目标做正反验证：
+
+- 反例目标（下层 include 上层）：分析阶段 300s 未能完成，被超时取消；
+- 正例/反例目标（同包内未声明依赖）：同样卡在分析阶段 240s+。
+
+结论：**这个环境里 bazel 连 `//src/namespace:namespace_registry_prototype` 这类纯头文件目标都无法在可接受时间内完成分析**（工具链/依赖图配置即超时）。因此门禁只能落地为**声明式规则**（package 可见性 + layering_check），无法在本会话内取得"违规被拦下"的实证。`bazel query` 能证明包与目标定义可用，不等于门禁生效。
+
+这一点必须如实标注：issue 02 的 bazel 门禁**代码已就位、未实证**。要真正验证，需要在 CI 或一台能完成 bazel 分析的机器上跑一次故意的违规编译。
+
+
 
 

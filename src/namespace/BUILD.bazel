@@ -1,0 +1,24 @@
+"""Single-process namespace boundary layer.
+
+Architecture gate (docs/research/namespace_single_process_plan.md section
+"终态分层"): the dependency direction is one-way,
+
+    namespace -> observer -> sql -> storage
+
+so this package is visible only to the entry layer. It never becomes visible to
+sql/ or storage/: those layers must not include src/namespace/, and
+layering_check fails the build if a compile of any other package reaches one of
+this package's headers without declaring the dependency.
+"""
+
+package(default_visibility = ["//visibility:private"])
+
+cc_library(
+    name = "namespace_registry_prototype",
+    hdrs = ["namespace_registry_prototype.h"],
+    features = ["layering_check"],
+    visibility = [
+        "//src/observer:__subpackages__",
+    ],
+    deps = [],
+)
