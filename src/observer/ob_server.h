@@ -252,7 +252,6 @@ public:
 public:
   int init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg);
   // Throwaway V10 entry: only SQL state is initialized, without local storage.
-  int namespace_sql_worker_prototype(const char *query);
   void destroy();
 
   // Start OceanBase server, this function is blocked after invoking

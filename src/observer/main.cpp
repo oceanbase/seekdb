@@ -662,12 +662,6 @@ int inner_main(int argc, char *argv[])
   }
 #endif
   ObStackHeaderGuard stack_header_guard;
-  if (argc == 3 && 0 == strcmp(argv[1], "--namespace-sql-worker-prototype")) {
-    const int worker_ret = OBSERVER.namespace_sql_worker_prototype(argv[2]);
-    fflush(nullptr);
-    // This dedicated process owns all prototype SQL state; no Observer was started.
-    std::_Exit(worker_ret == OB_SUCCESS ? 0 : 1);
-  }
   int64_t memory_used = get_virtual_memory_used();
 
   ObCurTraceId::SeqGenerator::seq_generator_  = ObTimeUtility::current_time();

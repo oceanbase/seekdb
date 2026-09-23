@@ -157,26 +157,13 @@ inline CatalogFetch worker_catalog_fetch = nullptr;
 inline uint64_t worker_namespace = 0;
 inline bool worker_process = false;
 inline bool worker_bootstrapping = false;
-// Phase 1 transition gate (ticket 05a): with SEEKDB_NAMESPACE_NS1_IN_PROCESS
-// set, the shared process executes namespace-1 SQL in process and the proxy
-// dispatches those logins to its own local NIO endpoint instead of spawning a
-// worker. ns>1 still resolves to worker processes. Removed in Phase 3
-// together with the worker process mode.
 inline bool ns1_in_process()
 {
-  static const bool enabled = std::getenv("SEEKDB_NAMESPACE_NS1_IN_PROCESS") != nullptr;
-  return enabled && !worker_process;
+  return !worker_process;
 }
-// Phase 1c transition gate (ticket 05c): with SEEKDB_NAMESPACE_FORKED_IN_PROCESS
-// set, forked namespaces (ns>1) are also served inside the shared process.
-// The proxy dispatches their logins to the local NIO endpoint keeping the
-// "@ns" suffix, sessions bind a per-ns runtime, and storage access crosses a
-// direct in-process call instead of the worker IPC socket. Removed in Phase 3
-// when every namespace is served in process unconditionally.
 inline bool forked_in_process()
 {
-  static const bool enabled = std::getenv("SEEKDB_NAMESPACE_FORKED_IN_PROCESS") != nullptr;
-  return enabled && !worker_process;
+  return !worker_process;
 }
 inline bool in_process_namespace_enabled(uint64_t namespace_id)
 {
@@ -278,7 +265,6 @@ inline bool uses_remote_schema()
 }
 // Shared management code can move across runtime threads before it starts
 // Native inner SQL uses the target namespace carried by its SQL client.
-int check_sql_execution_role();
 // Shared-process inner SQL normally bounces to the target namespace worker
 // over IPC. With the ticket-05a gate, ns-1-bound inner SQL instead executes
 // on the vanilla local path inside the shared process; ns>1 still bounces.

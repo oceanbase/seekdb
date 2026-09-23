@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Single-process paths for the four namespace prototype gates."""
-import os
 from pathlib import Path
 import statistics
 import subprocess
@@ -137,8 +136,6 @@ def tls_probe(experiment):
 
 
 def run_case(binary, case):
-    os.environ["SEEKDB_NAMESPACE_NS1_IN_PROCESS"] = "1"
-    os.environ["SEEKDB_NAMESPACE_FORKED_IN_PROCESS"] = "1"
     experiment = BootstrapExperiment(binary, "inprocess_" + case, prototype=6)
     try:
         if case == "tls":

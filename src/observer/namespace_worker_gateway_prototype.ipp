@@ -30,19 +30,6 @@ namespace oceanbase { namespace observer { namespace namespace_worker_prototype 
 using namespace common;
 using namespace share::schema;
 using storage::NamespaceForkKernelPrototype;
-int check_sql_execution_role() {
-  // User SQL executes only in namespace workers; the shared process owns
-  // storage, fork control and the thin TCP router.
-  // Ticket 05a gate: with SEEKDB_NAMESPACE_NS1_IN_PROCESS the shared process
-  // also executes namespace-1 SQL in process (single-process Phase 1).
-  // Ticket 05c gate: SEEKDB_NAMESPACE_FORKED_IN_PROCESS extends that to
-  // forked namespaces.
-  if (!worker_process && !ns1_in_process() && !forked_in_process()) {
-    fprintf(stderr, "PROTOTYPE_V18_SHARED_SQL_REJECT\n");
-    return OB_NOT_SUPPORTED;
-  }
-  return OB_SUCCESS;
-}
 int acquire_storage_snapshot(int64_t &snapshot) {
   snapshot = 0;
   // Freeze metadata remains SQL/schema state in the namespace worker. The
@@ -1386,7 +1373,39 @@ int deactivate_namespace(uint64_t namespace_id) {
 }
 int reconcile_namespace_workers() {
   if (worker_process || !GCTX.sql_proxy_) { return OB_NOT_SUPPORTED; }
-  if (forked_in_process()) { return reset_endpoint_registry(); }
+  if (forked_in_process()) {
+    int ret = OB_SUCCESS;
+    ObMySQLProxy::MySQLResult result;
+    sqlclient::ObMySQLResult *rows = nullptr;
+    if (OB_SUCC(ret)) {
+      ret = GCTX.sql_proxy_->read(result,
+          "SELECT namespace_id,name FROM __fork_proto_meta.namespaces "
+          "WHERE state=0 ORDER BY namespace_id");
+    }
+    if (OB_SUCC(ret) && OB_ISNULL(rows = result.get_result())) {
+      ret = OB_ERR_UNEXPECTED;
+    }
+    while (OB_SUCC(ret)) {
+      ret = rows->next();
+      if (ret == OB_ITER_END) { ret = OB_SUCCESS; break; }
+      uint64_t namespace_id = 0;
+      ObString name;
+      char name_buf[ns::Namespace::MAX_NAME_LEN];
+      if (OB_FAIL(rows->get_uint(0L, namespace_id))) {
+      } else if (OB_FAIL(rows->get_varchar(1L, name))) {
+      } else if (namespace_id == 0 || namespace_id >= (1ULL << 30)
+                 || name.empty() || name.length() >= sizeof(name_buf)) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        MEMCPY(name_buf, name.ptr(), name.length());
+        name_buf[name.length()] = '\0';
+        if (ns::namespace_registry().add(namespace_id, name_buf) != 0) {
+          ret = OB_ERR_UNEXPECTED;
+        }
+      }
+    }
+    return ret;
+  }
   std::vector<uint64_t> namespaces;
   // In-process ns1 (ticket 05a) spawns no worker for the system namespace.
   if (!ns1_in_process()) { namespaces.push_back(1); }

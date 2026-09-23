@@ -32,6 +32,7 @@ public:
   Namespace(uint64_t id, const char *name);
   uint64_t id() const { return id_; }
   const char *name() const { return name_; }
+  bool bind_name_if_empty(const char *name);
 private:
   uint64_t id_;
   char name_[MAX_NAME_LEN];
@@ -78,7 +79,7 @@ class NamespaceRegistry final
 public:
   NamespaceRegistry();
   ~NamespaceRegistry();
-  // 0 on success, -1 duplicate/invalid argument, -2 allocation failure.
+  // 0 on success (also for the same id/name), -1 conflicting/invalid, -2 allocation failure.
   int add(uint64_t id, const char *name);
   // Returns true when found. Entries with an empty name never match find().
   bool get(uint64_t id, NamespaceRuntime *&runtime);

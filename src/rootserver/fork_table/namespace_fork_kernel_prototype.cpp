@@ -1122,9 +1122,6 @@ int NamespaceForkKernelPrototype::ensure_control_schema() {
       "snapshot_ref BIGINT UNSIGNED DEFAULT 0,state BIGINT DEFAULT 0,"
       "active_schema_changes BIGINT DEFAULT 0,pending_schema_version BIGINT DEFAULT 0,"
       "parent_namespace BIGINT UNSIGNED DEFAULT 0,fork_cap BIGINT UNSIGNED DEFAULT 0)",
-    "CREATE TABLE IF NOT EXISTS __fork_proto_meta.endpoints("
-      "namespace_id BIGINT UNSIGNED PRIMARY KEY,generation BIGINT UNSIGNED,"
-      "worker_pid BIGINT UNSIGNED,endpoint VARCHAR(512))",
     "CREATE TABLE IF NOT EXISTS __fork_proto_meta.exceptions("
       "namespace_id BIGINT UNSIGNED,tablet_id BIGINT UNSIGNED,"
       "table_id BIGINT UNSIGNED,kind BIGINT,drop_scn BIGINT DEFAULT 0,"
@@ -2033,8 +2030,7 @@ int NamespaceForkKernelPrototype::control_namespace(const ObString &source, cons
           K(endpoint_ret), K(id));
     }
   }
-  if (ret == OB_SUCCESS && !bootstrap
-      && !observer::namespace_worker_prototype::worker_process
+  if (ret == OB_SUCCESS && !observer::namespace_worker_prototype::worker_process
       && observer::namespace_worker_prototype::forked_in_process()) {
     // In-process forked namespaces need no worker endpoint. Registering the
     // name lets later logins bind the runtime directly; per-namespace

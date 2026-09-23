@@ -20,6 +20,7 @@
 #include "rpc/obmysql/ob_sql_sock_session.h"
 #include "lib/random/ob_mysql_random.h"
 #include "observer/omt/ob_server_runtime.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "observer/ob_srv_task.h"
 #include "share/schema/ob_schema_utils.h"
 
@@ -76,7 +77,11 @@ int ObSMConnectionCallback::init(ObSqlSockSession& sess, ObSMConnection& conn)
   // the session id and the scramble the later auth check verifies against.
   RLOCAL(common::ObMysqlRandom, thread_scramble_rand);
   int64_t autocommit = 0;
-  if (OB_FAIL(sm_conn_init(conn))) {
+  if (namespace_worker_prototype::forked_in_process()
+      && !sess.client_addr_.using_unix()
+      && !ATOMIC_LOAD(&GCTX.sys_package_ready_)) {
+    ret = OB_SERVER_IS_INIT;
+  } else if (OB_FAIL(sm_conn_init(conn))) {
   } else if (OB_FAIL(share::schema::ObSchemaUtils::get_runtime_int_variable(
                  *GCTX.schema_service_, share::SYS_VAR_AUTOCOMMIT, autocommit))) {
   } else if (OB_UNLIKELY(0 != autocommit && 1 != autocommit)) {

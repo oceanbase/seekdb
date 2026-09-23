@@ -18,6 +18,14 @@ Namespace::Namespace(uint64_t id, const char *name) : id_(id), name_()
   }
 }
 
+bool Namespace::bind_name_if_empty(const char *name)
+{
+  if (name == nullptr || name[0] == '\0' || name_[0] != '\0'
+      || std::strlen(name) >= MAX_NAME_LEN) { return false; }
+  std::strcpy(name_, name);
+  return true;
+}
+
 struct NamespaceRegistry::Impl
 {
   struct Entry
@@ -46,10 +54,15 @@ int NamespaceRegistry::add(uint64_t id, const char *name)
   Impl::Entry *entry = new (std::nothrow) Impl::Entry(id, name);
   if (entry == nullptr) { return -2; }
   std::lock_guard<std::mutex> guard(impl_->mutex);
-  if (!impl_->entries.emplace(id, entry).second) {
+  const auto existing = impl_->entries.find(id);
+  if (existing != impl_->entries.end()) {
+    const bool same_name = name != nullptr
+        && std::strcmp(existing->second->ns.name(), name) == 0;
+    const bool bound = existing->second->ns.bind_name_if_empty(name);
     delete entry;
-    return -1;
+    return same_name || bound ? 0 : -1;
   }
+  impl_->entries.emplace(id, entry);
   return 0;
 }
 
