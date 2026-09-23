@@ -193,6 +193,7 @@ struct ScanBatch {
   }
 };
 int fetch_in_process_scan(uint64_t handle, ScanBatch &batch);
+int close_in_process_scan(uint64_t handle);
 inline uint64_t engine_schema_hash(uint64_t ns, const ObString &blob) {
   uint64_t h = 1469598103934665603ULL ^ (ns * 1099511628211ULL);
   const char *p = blob.ptr();
@@ -553,6 +554,12 @@ struct ReadScans {
     auto it = scans.find(id);
     return it == scans.end() ? OB_INVALID_ARGUMENT : it->second->fetch(batch);
   }
+  int close(uint64_t id) {
+    auto it = scans.find(id);
+    if (it == scans.end()) { return OB_INVALID_ARGUMENT; }
+    scans.erase(it);
+    return OB_SUCCESS;
+  }
   int process(Frame &request, Frame &reply, transaction::ObTxDesc *tx = nullptr, sql::ObSQLSessionInfo *session = nullptr) {
     const uint64_t ns = storage_space.namespace_id();
     int ret = OB_SUCCESS;
@@ -576,7 +583,6 @@ struct ReadScans {
         else { it->second->rescan(request, reply); }
       }
       else if (!request.consumed() || it == scans.end()) { reply.number(OB_INVALID_ARGUMENT); }
-      else if (request.type() == 'X') { scans.erase(it); reply.number(0); }
       else { reply.number(OB_NOT_SUPPORTED); }
     }
     // Storage errors belong in the reply. A sent RPC must receive that reply
@@ -771,7 +777,11 @@ public:
     return ret == OB_ITER_END && count ? OB_SUCCESS : ret;
   }
   void reset() override {
-    if (handle) { Frame request('X'), reply; request.number(handle); exchange(request, reply); handle = 0; }
+    if (handle) {
+      StorageSessionScope scope(param.op_ ? param.op_->get_eval_ctx().exec_ctx_.get_my_session() : nullptr);
+      if (!scope.error()) { close_in_process_scan(handle); }
+      handle = 0;
+    }
     batch.reset(); row_index = 0; rows_left = 0; end = false; qualified = 0; returned = 0;
   }
   // NLJ rescan: same table, same columns, only the key ranges changed. Reuse
@@ -807,7 +817,7 @@ public:
 private:
   int exchange(const Frame &request, Frame &reply) {
     StorageSessionScope scope(param.op_ ? param.op_->get_eval_ctx().exec_ctx_.get_my_session() : nullptr);
-    int ret = scope.error() ? scope.error() : worker_send(request, request.type() == 'X');
+    int ret = scope.error() ? scope.error() : worker_send(request);
     if (!ret) { ret = worker_read(reply); }
     if (!ret && reply.type() != 's') { ret = OB_INVALID_ARGUMENT; }
     if (!ret) { ret = static_cast<int>(reply.number()); }
