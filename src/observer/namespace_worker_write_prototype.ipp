@@ -562,11 +562,6 @@ int process_rootserver_local_runtime(
   Frame values;
   if (OB_SUCC(ret) && OB_ISNULL(runtime)) {
     ret = OB_NOT_INIT;
-  } else if (OB_SUCC(ret) && operation == 'D') {
-    obcall::ObDebugSyncActionArg arg;
-    request.read(arg);
-    if (!request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-    else { ret = runtime->set_ds_action(arg); }
   } else if (OB_SUCC(ret) && operation == 'C') {
     obcall::ObCalcColumnChecksumRequestArg arg;
     obcall::ObCalcColumnChecksumRequestRes result;
@@ -710,73 +705,6 @@ int process_rootserver_local_runtime(
           : runtime->check_and_cancel_delete_lob_meta_row_dag(arg, exists);
       if (OB_SUCC(ret)) { values.number(exists); }
     }
-  } else if (OB_SUCC(ret) && operation == 'F') {
-    obcall::ObMinorFreezeArg arg;
-    obcall::Int64 result;
-    request.read(arg);
-    if (OB_SUCC(ret) && arg.tablet_id_.is_valid()) {
-      ret = route_tablet_id(storage_space, arg.tablet_id_);
-    }
-    if (OB_SUCC(ret) && !request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-    if (OB_SUCC(ret)) { ret = runtime->minor_freeze(arg, result); }
-    if (OB_SUCC(ret)) { values.append(result); }
-  } else if (OB_SUCC(ret) && operation == 'S') {
-    obcall::ObCheckSchemaVersionElapsedArg arg;
-    obcall::ObCheckSchemaVersionElapsedResult result;
-    request.read(arg);
-    arg.schema_version_refreshed_by_caller_ = true;
-    if (OB_SUCC(ret) && !request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-    if (OB_SUCC(ret)) {
-      ret = check_namespace_tablet_elapsed(
-          storage_space, arg, result,
-          [runtime](const obcall::ObCheckSchemaVersionElapsedArg &storage_arg,
-                    obcall::ObCheckSchemaVersionElapsedResult &storage_result) {
-            return runtime->check_schema_version_elapsed(
-                storage_arg, storage_result);
-          });
-    }
-    if (OB_SUCC(ret)) {
-      const obcall::ObCheckTransElapsedResult *first =
-          result.results_.empty() ? nullptr : &result.results_.at(0);
-      fprintf(stderr,
-          "PROTOTYPE_V21_SCHEMA_ELAPSED count=%lld first_ret=%d snapshot=%lld pending_tx=%lld wait=%d\n",
-          (long long)result.results_.count(),
-          first ? first->ret_code_ : OB_ERR_UNEXPECTED,
-          (long long)(first ? first->snapshot_ : 0),
-          (long long)(first ? first->pending_tx_id_.get_id() : 0),
-          arg.need_wait_trans_end_);
-    }
-    if (OB_SUCC(ret)) { values.append(result); }
-  } else if (OB_SUCC(ret) && operation == 'M') {
-    obcall::ObCheckModifyTimeElapsedArg arg;
-    obcall::ObCheckModifyTimeElapsedResult result;
-    request.read(arg);
-    if (OB_SUCC(ret) && !request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-    if (OB_SUCC(ret)) {
-      ret = check_namespace_tablet_elapsed(
-          storage_space, arg, result,
-          [runtime](const obcall::ObCheckModifyTimeElapsedArg &storage_arg,
-                    obcall::ObCheckModifyTimeElapsedResult &storage_result) {
-            return runtime->check_modify_time_elapsed(
-                storage_arg, storage_result);
-          });
-    }
-    if (OB_SUCC(ret)) { values.append(result); }
-  } else if (OB_SUCC(ret) && operation == 'G') {
-    obcall::ObDDLCheckTabletMergeStatusArg arg;
-    obcall::ObDDLCheckTabletMergeStatusResult result;
-    request.read(arg);
-    for (int64_t i = 0; OB_SUCC(ret) && i < arg.tablet_ids_.count(); ++i) {
-      ret = route_tablet_id(storage_space, arg.tablet_ids_.at(i));
-    }
-    if (OB_SUCC(ret) && !request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-    if (OB_SUCC(ret)) { ret = runtime->check_ddl_tablet_merge_status(arg, result); }
-    if (OB_SUCC(ret)) { values.append(result); }
-  } else if (OB_SUCC(ret) && operation == 'E') {
-    bool empty = false;
-    if (!request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-    else { ret = runtime->check_server_empty(empty); }
-    if (OB_SUCC(ret)) { values.number(empty); }
   } else {
     ret = OB_NOT_SUPPORTED;
   }
@@ -2329,6 +2257,11 @@ public:
   bool can_elr() const override { return false; }
 };
 
+int call_in_process_rootserver_runtime(
+    uint64_t namespace_id,
+    const std::function<int(rootserver::ObIRootserverLocalRuntime &,
+                            StorageSpaceHandle)> &call);
+
 class RemoteRootserverLocalRuntime final
     : public rootserver::ObIRootserverLocalRuntime
 {
@@ -2336,7 +2269,10 @@ public:
   explicit RemoteRootserverLocalRuntime(uint64_t namespace_id = 0)
       : namespace_id_(namespace_id) {}
   int set_ds_action(const obcall::ObDebugSyncActionArg &arg) override {
-    return call_without_result_('D', arg);
+    return call_in_process_rootserver_runtime(namespace_id_,
+        [&](rootserver::ObIRootserverLocalRuntime &runtime, StorageSpaceHandle) {
+          return runtime.set_ds_action(arg);
+        });
   }
   int calc_column_checksum_request(
       const obcall::ObCalcColumnChecksumRequestArg &arg,
@@ -2361,33 +2297,61 @@ public:
   int minor_freeze(
       const obcall::ObMinorFreezeArg &arg,
       obcall::Int64 &result) override {
-    return call_('F', arg, result);
+    return call_in_process_rootserver_runtime(namespace_id_,
+        [&](rootserver::ObIRootserverLocalRuntime &runtime, StorageSpaceHandle space) {
+          obcall::ObMinorFreezeArg routed = arg;
+          int ret = routed.tablet_id_.is_valid()
+              ? route_tablet_id(space, routed.tablet_id_) : OB_SUCCESS;
+          return ret ? ret : runtime.minor_freeze(routed, result);
+        });
   }
   int check_schema_version_elapsed(
       const obcall::ObCheckSchemaVersionElapsedArg &arg,
       obcall::ObCheckSchemaVersionElapsedResult &result) override {
-    return call_('S', arg, result);
+    return call_in_process_rootserver_runtime(namespace_id_,
+        [&](rootserver::ObIRootserverLocalRuntime &runtime, StorageSpaceHandle space) {
+          obcall::ObCheckSchemaVersionElapsedArg routed = arg;
+          routed.schema_version_refreshed_by_caller_ = true;
+          return check_namespace_tablet_elapsed(
+              space, routed, result,
+              [&runtime](const obcall::ObCheckSchemaVersionElapsedArg &storage_arg,
+                         obcall::ObCheckSchemaVersionElapsedResult &storage_result) {
+                return runtime.check_schema_version_elapsed(storage_arg, storage_result);
+              });
+        });
   }
   int check_modify_time_elapsed(
       const obcall::ObCheckModifyTimeElapsedArg &arg,
       obcall::ObCheckModifyTimeElapsedResult &result) override {
-    return call_('M', arg, result);
+    return call_in_process_rootserver_runtime(namespace_id_,
+        [&](rootserver::ObIRootserverLocalRuntime &runtime, StorageSpaceHandle space) {
+          obcall::ObCheckModifyTimeElapsedArg routed = arg;
+          return check_namespace_tablet_elapsed(
+              space, routed, result,
+              [&runtime](const obcall::ObCheckModifyTimeElapsedArg &storage_arg,
+                         obcall::ObCheckModifyTimeElapsedResult &storage_result) {
+                return runtime.check_modify_time_elapsed(storage_arg, storage_result);
+              });
+        });
   }
   int check_ddl_tablet_merge_status(
       const obcall::ObDDLCheckTabletMergeStatusArg &arg,
       obcall::ObDDLCheckTabletMergeStatusResult &result) override {
-    return call_('G', arg, result);
+    return call_in_process_rootserver_runtime(namespace_id_,
+        [&](rootserver::ObIRootserverLocalRuntime &runtime, StorageSpaceHandle space) {
+          obcall::ObDDLCheckTabletMergeStatusArg routed = arg;
+          int ret = OB_SUCCESS;
+          for (int64_t i = 0; !ret && i < routed.tablet_ids_.count(); ++i) {
+            ret = route_tablet_id(space, routed.tablet_ids_.at(i));
+          }
+          return ret ? ret : runtime.check_ddl_tablet_merge_status(routed, result);
+        });
   }
   int check_server_empty(bool &is_empty) override {
-    Frame request('Y'), reply;
-    request.number('E');
-    write_storage_space(request, storage_space_());
-    int ret = call_storage_(request, reply);
-    if (OB_SUCC(ret)) {
-      is_empty = reply.number() != 0;
-      if (!reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
-    }
-    return ret;
+    return call_in_process_rootserver_runtime(namespace_id_,
+        [&](rootserver::ObIRootserverLocalRuntime &runtime, StorageSpaceHandle) {
+          return runtime.check_server_empty(is_empty);
+        });
   }
   int modify_tablet_binding_for_rw_defensive(
       common::ObMySQLTransaction &trans,
@@ -2495,17 +2459,6 @@ private:
       reply.read(result);
       if (!reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
     }
-    return ret;
-  }
-
-  template <typename Arg>
-  int call_without_result_(char operation, const Arg &arg) {
-    Frame request('Y'), reply;
-    request.number(operation);
-    write_storage_space(request, storage_space_());
-    request.append(arg);
-    int ret = request.ret ? request.ret : call_storage_(request, reply);
-    if (OB_SUCC(ret) && !reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
     return ret;
   }
 

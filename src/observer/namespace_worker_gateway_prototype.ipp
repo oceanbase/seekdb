@@ -96,6 +96,33 @@ struct InProcessStorage {
   InProcessStorage(const InProcessStorage &) = delete;
   InProcessStorage &operator=(const InProcessStorage &) = delete;
 };
+int call_in_process_rootserver_runtime(
+    uint64_t namespace_id,
+    const std::function<int(rootserver::ObIRootserverLocalRuntime &,
+                            StorageSpaceHandle)> &call)
+{
+  InProcessServingScope serving(namespace_id);
+  IndependentStorageScope scope;
+  if (scope.error()) { return scope.error(); }
+  InProcessStorage *storage = in_process_storage;
+  auto *runtime = share::server_service<rootserver::ObIRootserverLocalRuntime>();
+  if (storage == nullptr || !storage->initialized || runtime == nullptr) {
+    return OB_NOT_INIT;
+  }
+  const StorageSpaceHandle space = namespace_id == 0
+      ? active_worker_storage_space()
+      : StorageSpaceHandle::namespace_space(namespace_id);
+  if (!space.is_namespace() || storage->ns != space.namespace_id()) {
+    return OB_INVALID_ARGUMENT;
+  }
+  auto *old_session = THIS_WORKER.get_session();
+  const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
+  THIS_WORKER.set_session(&storage->session);
+  const int ret = call(*runtime, space);
+  THIS_WORKER.set_session(old_session);
+  THIS_WORKER.set_timeout_ts(old_timeout);
+  return ret;
+}
 int read_in_process_lob(ObLobLocatorV2 &locator, int64_t timeout,
                         ObIAllocator &allocator, ObString &output)
 {
