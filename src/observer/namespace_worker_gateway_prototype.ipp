@@ -349,6 +349,26 @@ int close_in_process_write(transaction::ObTxDesc &view, uint64_t handle)
   THIS_WORKER.set_timeout_ts(old_timeout);
   return ret;
 }
+int prepare_in_process_write(const WritePrepareRequest &request,
+                             const ObTxDesc &view, uint64_t &handle)
+{
+  handle = 0;
+  InProcessStorage *ctx = in_process_storage;
+  if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
+  const StorageSpaceHandle space = request.storage_space;
+  if (ctx->ns != serving_namespace()
+      || (!(space.is_namespace() && space.namespace_id() == ctx->ns)
+          && !(space.is_global() && ctx->ns == 1))) {
+    return OB_INVALID_ARGUMENT;
+  }
+  const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
+  auto *old_session = THIS_WORKER.get_session();
+  THIS_WORKER.set_session(&ctx->session);
+  const int ret = ctx->writes->prepare(request, view, handle);
+  THIS_WORKER.set_session(old_session);
+  THIS_WORKER.set_timeout_ts(old_timeout);
+  return ret;
+}
 int fetch_in_process_scan(uint64_t handle, ScanBatch &batch)
 {
   InProcessStorage *ctx = in_process_storage;

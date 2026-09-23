@@ -31,6 +31,18 @@ using namespace transaction::tablelock;
 using namespace blocksstable;
 int worker_send(const Frame &, bool cleanup = false);
 int worker_read(Frame &);
+struct WritePrepareRequest {
+  StorageSpaceHandle storage_space;
+  uint64_t table_id;
+  const ObDmlWriteSpec &spec;
+  const ObTableSchema &logical_schema;
+  const ObIArray<const ObTableSchema *> &materialization_schemas;
+  const ObTxReadSnapshot &snapshot;
+  const concurrent_control::ObWriteFlag &write_flag;
+  const std::vector<uint64_t> &columns;
+};
+int prepare_in_process_write(const WritePrepareRequest &request,
+                             const ObTxDesc &view, uint64_t &handle);
 
 bool cleanup_write(Frame &request) {
   const int64_t position = request.pos;
@@ -903,24 +915,40 @@ struct EngineWrite {
   StorageSpaceHandle storage_space;
   const ObTableSchema *schema = nullptr;
 
-  int prepare(StorageSpaceHandle channel_space, ObTxDesc &tx, Frame &request) {
-    const uint64_t table = request.number();
-    spec.schema_version_ = request.number();
-    const bool has_logical_schema = request.number() != 0;
-    int ret = read_storage_space(request, channel_space, storage_space);
+  int prepare(const WritePrepareRequest &request, ObTxDesc &tx) {
+    const uint64_t table = request.table_id;
+    if (request.spec.tz_info_ == nullptr) { return OB_INVALID_ARGUMENT; }
+    int64_t request_bytes = 137; // Former opcode and seventeen number fields.
+    auto add_bytes = [&](int64_t size) {
+      if (size < 0 || size > static_cast<int64_t>(MAX_SQL_MESSAGE) - request_bytes) {
+        return OB_SIZE_OVERFLOW;
+      }
+      request_bytes += size;
+      return OB_SUCCESS;
+    };
+    int ret = add_bytes(request.logical_schema.get_serialize_size());
+    for (int64_t i = 0; !ret && i < request.materialization_schemas.count(); ++i) {
+      const ObTableSchema *schema = request.materialization_schemas.at(i);
+      ret = schema ? add_bytes(schema->get_serialize_size()) : OB_INVALID_ARGUMENT;
+    }
+    if (ret || OB_FAIL(add_bytes(request.spec.tz_info_->get_serialize_size()))
+        || OB_FAIL(add_bytes(request.snapshot.get_serialize_size()))
+        || OB_FAIL(add_bytes(request.write_flag.get_serialize_size()))
+        || OB_FAIL(add_bytes(request.columns.size() * 8))) { return ret; }
+    storage_space = request.storage_space;
+    spec = request.spec;
+    ret = logical_schema.assign(request.logical_schema);
     if (OB_FAIL(ret)) { return ret; }
     const bool namespace_local = storage_space.is_namespace();
     const uint64_t ns = storage_space.namespace_id();
-    if (has_logical_schema) { request.read(logical_schema); }
-    const uint64_t materialization_schema_count = request.number();
+    const int64_t materialization_schema_count = request.materialization_schemas.count();
     if (materialization_schema_count > 3
         || (!namespace_local && materialization_schema_count != 0)) {
       return OB_INVALID_ARGUMENT;
     }
-    for (uint64_t i = 0; !request.ret && i < materialization_schema_count; ++i) {
+    for (int64_t i = 0; i < materialization_schema_count; ++i) {
       auto logical = std::make_unique<ObTableSchema>(&allocator);
-      request.read(*logical);
-      if (request.ret) { break; }
+      if (OB_FAIL(logical->assign(*request.materialization_schemas.at(i)))) { return ret; }
       auto routed = std::make_unique<ObTableSchema>(&allocator);
       int schema_ret = !namespace_local || ns == 1
           ? routed->assign(*logical)
@@ -930,33 +958,25 @@ struct EngineWrite {
       logical_materialization_schemas.push_back(std::move(logical));
       routed_materialization_schemas.push_back(std::move(routed));
     }
-    spec.timeout_ = std::min<int64_t>(request.number(), THIS_WORKER.get_timeout_ts());
-    spec.sql_mode_ = request.number();
-    spec.branch_id_ = request.number();
-    spec.is_total_quantity_log_ = request.number() != 0;
-    spec.prelock_ = request.number() != 0;
-    spec.is_batch_stmt_ = request.number() != 0;
-    spec.is_main_table_in_fts_ddl_ = request.number() != 0;
-    spec.check_schema_version_ = request.number() != 0;
-    spec.access_vector_id_as_master_table_ = request.number() != 0;
-    request.read(timezone); spec.tz_info_ = &timezone;
-    request.read(snapshot); request.read(write_flag);
-    const uint64_t count = request.number();
-    if (request.ret || count == 0 || count > OB_MAX_COLUMN_NUMBER) {
+    spec.timeout_ = std::min<int64_t>(spec.timeout_, THIS_WORKER.get_timeout_ts());
+    if (OB_FAIL(timezone.assign(*request.spec.tz_info_))) { return ret; }
+    spec.tz_info_ = &timezone;
+    if (OB_FAIL(snapshot.assign(request.snapshot))) { return ret; }
+    write_flag = request.write_flag;
+    const int64_t count = request.columns.size();
+    if (count == 0 || count > OB_MAX_COLUMN_NUMBER) {
       fprintf(stderr, "PROTOTYPE_V17_WRITE_PREPARE ns=%llu table=%llu columns=%llu stage=validate ret=%d\n",
           (unsigned long long)ns, (unsigned long long)table, (unsigned long long)count,
-          request.ret);
+          ret);
       return OB_NOT_SUPPORTED;
     }
-    if (request.ret || (!has_logical_schema && namespace_local && ns > 1)
-        || (has_logical_schema && ((!is_inner_table(table)
-                && spec.schema_version_ <= 0)
+    if ((!is_inner_table(table) && spec.schema_version_ <= 0)
             || logical_schema.get_table_id() != table
             || logical_schema.get_schema_version() < 0
             || (spec.schema_version_ > 0
-                && logical_schema.get_schema_version() != spec.schema_version_)))) {
+                && logical_schema.get_schema_version() != spec.schema_version_)) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (has_logical_schema) {
+    } else {
       if (!namespace_local || ns == 1) {
         schema = &logical_schema;
       } else {
@@ -964,13 +984,8 @@ struct EngineWrite {
             ns, logical_schema, routed_schema);
         if (!ret) { schema = &routed_schema; }
       }
-    } else {
-      // Same rule as the scan path: no SchemaService fallback here.  Lazy
-      // loading would route inner SQL back to the requesting Worker and can
-      // deadlock Worker activation, so requests must carry their schema.
-      ret = OB_NOT_SUPPORTED;
     }
-    if (!ret && has_logical_schema) {
+    if (!ret) {
       // The request carries the exact schema pinned by the worker's SchemaGuard.
       // Asking storage to validate it against the shared process SchemaService
       // would reintroduce a second, stale namespace schema authority.
@@ -1002,14 +1017,13 @@ struct EngineWrite {
       if (OB_SUCC(ret)) { logical_tablets.push_back(logical_tablet_id); }
     }
     if (OB_FAIL(ret)) { return ret; }
-    for (uint64_t i = 0; !ret && i < count; ++i) {
-      const uint64_t id = request.number();
+    for (int64_t i = 0; !ret && i < count; ++i) {
+      const uint64_t id = request.columns[i];
       const auto *column = schema->get_column_schema(id);
       if (!column || has_exist_in_array(columns, id)) { ret = OB_INVALID_ARGUMENT; }
       else { ret = columns.push_back(id); }
     }
-    if (ret || !request.consumed()) {
-      ret = ret ? ret : OB_INVALID_ARGUMENT;
+    if (ret) {
       fprintf(stderr, "PROTOTYPE_V17_WRITE_PREPARE ns=%llu table=%llu stage=columns ret=%d\n",
           (unsigned long long)ns, (unsigned long long)table, ret);
       return ret;
@@ -1201,6 +1215,19 @@ struct EngineWrites {
     if (it == writes.end()) { return OB_INVALID_ARGUMENT; }
     writes.erase(it);
     return query_transaction_service()->merge_tx_state(view, *tx);
+  }
+  int prepare(const WritePrepareRequest &request, const ObTxDesc &view,
+              uint64_t &handle) {
+    handle = 0;
+    if (!tx || tx->get_tx_id() != view.get_tx_id()) { return OB_INVALID_ARGUMENT; }
+    if (writes.size() >= 32) { return OB_SIZE_OVERFLOW; }
+    auto prepared = std::make_unique<EngineWrite>();
+    int ret = prepared->prepare(request, *tx);
+    if (!ret) {
+      handle = ++sequence;
+      writes.emplace(handle, std::move(prepared));
+    }
+    return ret;
   }
   int process(Frame &request, Frame &reply) {
     const uint64_t ns = storage_space.namespace_id();
@@ -1468,12 +1495,6 @@ struct EngineWrites {
         values.append(result);
       } else { ret = OB_NOT_SUPPORTED; }
     } else if (!ret && request.type() == 'W') {
-      if (operation == 'P') {
-        if (writes.size() >= 32) { ret = OB_SIZE_OVERFLOW; }
-        auto prepared = std::make_unique<EngineWrite>();
-        if (!ret) { ret = prepared->prepare(storage_space, *tx, request); }
-        if (!ret) { writes.emplace(++sequence, std::move(prepared)); values.number(sequence); }
-      } else {
         const uint64_t handle = request.number();
         auto it = writes.find(handle);
         if (request.ret || it == writes.end()) { ret = OB_INVALID_ARGUMENT; }
@@ -1483,7 +1504,6 @@ struct EngineWrites {
           values.number(affected);
           values.data.insert(values.data.end(), returned.data.begin() + Frame::HEADER_SIZE, returned.data.end());
         } else { ret = OB_INVALID_ARGUMENT; }
-      }
     }
     reply = Frame('w'); reply.number(ret);
     if (!ret || (request.type() == 'W' && operation == 'f' && ret == OB_ERR_PRIMARY_KEY_DUPLICATE)) {
@@ -2498,24 +2518,9 @@ public:
     auto &tx = *static_cast<ObTxDesc *>(write_context.native_handle());
     prepared->tx = &tx;
     prepared->txid = tx.get_tx_id().get_id(); prepared->deadline = write_spec.timeout_;
-    Frame request('W'), reply; request.number('P'); request.number(prepared->txid);
-    request.number(table_id); request.number(write_spec.schema_version_);
-    request.number(send_logical_schema);
-    write_storage_space(request, storage_space);
-    if (send_logical_schema) { request.append(*logical_schema); }
-    request.number(materialization_schemas.count());
-    for (const ObTableSchema *schema : materialization_schemas) {
-      request.append(*schema);
-    }
-    request.number(write_spec.timeout_); request.number(write_spec.sql_mode_); request.number(write_spec.branch_id_);
-    request.number(write_spec.is_total_quantity_log_); request.number(write_spec.prelock_);
-    request.number(write_spec.is_batch_stmt_); request.number(write_spec.is_main_table_in_fts_ddl_);
-    request.number(write_spec.check_schema_version_); request.number(write_spec.access_vector_id_as_master_table_);
-    request.append(*write_spec.tz_info_);
-    request.append(snapshot); request.append(write_flag); request.number(column_count);
     for (int64_t i = 0; i < column_count; ++i) {
       const uint64_t column_id = columns.empty() ? effective_columns.at(i) : columns.at(i).col_id_;
-      request.number(column_id); prepared->columns.push_back(column_id);
+      prepared->columns.push_back(column_id);
       if (!columns.empty()) { prepared->types.push_back(columns.at(i).col_type_); }
       else {
         if (logical_schema == nullptr || logical_schema->get_column_schema(column_id) == nullptr) { return OB_INVALID_ARGUMENT; }
@@ -2523,10 +2528,12 @@ public:
       }
     }
     execution.reset();
-    ret = request.ret ? request.ret : write_rpc(request, reply);
+    if (!send_logical_schema || logical_schema == nullptr) { return OB_NOT_SUPPORTED; }
+    const WritePrepareRequest request{storage_space, table_id, write_spec, *logical_schema,
+        materialization_schemas, snapshot, write_flag, prepared->columns};
+    ret = prepare_in_process_write(request, tx, prepared->handle);
     if (!ret) {
-      prepared->handle = reply.number();
-      if (!reply.consumed() || !prepared->handle) { ret = OB_INVALID_ARGUMENT; }
+      if (!prepared->handle) { ret = OB_INVALID_ARGUMENT; }
       else { bind_execution(execution, prepared.release()); }
     }
     return ret; }
