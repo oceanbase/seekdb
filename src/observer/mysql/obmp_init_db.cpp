@@ -63,7 +63,7 @@ int ObMPInitDB::process()
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("null pointer");
   } else if (OB_FAIL(session->get_query_timeout(query_timeout))) {
-  } else if (OB_ISNULL(gctx_.schema_service_)) {
+  } else if (OB_ISNULL(session->effective_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema_service is null", K(ret));
   } else {
@@ -83,8 +83,8 @@ int ObMPInitDB::process()
     if (OB_UNLIKELY(session->is_zombie())) {
       ret = OB_ERR_SESSION_INTERRUPTED;
       LOG_WARN("session has been killed", K(ret), KPC(session));
-    } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(global_version))) {
-    } else if (OB_FAIL(gctx_.schema_service_->get_runtime_refreshed_schema_version(local_version))) {
+    } else if (OB_FAIL(session->effective_schema_service()->get_published_schema_version(global_version))) {
+    } else if (OB_FAIL(session->effective_schema_service()->get_runtime_refreshed_schema_version(local_version))) {
     } else if (OB_FAIL(session->get_collation_database(old_db_coll_type))) {
     } else if (OB_FAIL(session->get_collation_connection(collation_connection))) {
     } else if (OB_FAIL(session->get_name_case_mode(mode))) {
@@ -115,7 +115,7 @@ int ObMPInitDB::process()
                   ob_usleep(ObQueryRetryCtrl::WAIT_LOCAL_SCHEMA_REFRESHED_US
                          * ObQueryRetryCtrl::linear_timeout_factor(retry_times));
                 }
-                int tmp_ret = gctx_.schema_service_->get_runtime_refreshed_schema_version(local_version);
+                int tmp_ret = session->effective_schema_service()->get_runtime_refreshed_schema_version(local_version);
                 if (OB_SUCCESS != tmp_ret) {
                 }
               }
@@ -187,10 +187,10 @@ int ObMPInitDB::do_process(sql::ObSQLSessionInfo *session)
   share::schema::ObSessionPrivInfo session_priv;
   ObSchemaGetterGuard schema_guard;
 
-  if (OB_ISNULL(session) || OB_ISNULL(gctx_.schema_service_)) {
+  if (OB_ISNULL(session) || OB_ISNULL(session->effective_schema_service())) {
     ret = OB_NOT_INIT;
-    LOG_WARN("session not init", K(ret), K(session), K(gctx_.schema_service_));
-  } else if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("session not init", K(ret), K(session));
+  } else if (OB_FAIL(session->effective_schema_service()->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(session->get_session_priv_info(session_priv))) {
   } else if (OB_FAIL(ObSQLUtils::cvt_db_name_to_org(schema_guard, session, db_name_, NULL /*allocator*/))) {
   } else if (OB_FAIL(schema_guard.check_db_access(session_priv, session->get_enable_role_array(), db_name_))) {

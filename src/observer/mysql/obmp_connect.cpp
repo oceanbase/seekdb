@@ -150,7 +150,7 @@ int ObMPConnect::init_process_single_stmt(const ObMultiStmtItem &multi_stmt_item
   ObSqlCtx ctx;
   ctx.exec_type_ = MpQuery;
   if (OB_FAIL(init_process_var(ctx, multi_stmt_item, session))) {
-  } else if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(
+  } else if (OB_FAIL(session.effective_schema_service()->get_runtime_schema_guard(
                                   schema_guard))) {
   } else if (OB_FAIL(set_session_active(sql, session, ObTimeUtil::current_time()))) {
   } else {
@@ -342,10 +342,11 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
   int ret = OB_SUCCESS;
   ObSMConnection *conn = get_conn();
   ObSchemaGetterGuard schema_guard;
-  if (OB_ISNULL(gctx_.schema_service_) || OB_ISNULL(conn)) {
+  ObMultiVersionSchemaService *schema_service = session.effective_schema_service();
+  if (OB_ISNULL(schema_service) || OB_ISNULL(conn)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(gctx_.schema_service_));
-  } else if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("invalid argument", K(schema_service));
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
   } else {
     ObString host_name;
 
@@ -494,15 +495,14 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
                      login_info, session_priv, enable_role_id_array,
                      &tls_info, user_info))) {
         int tmp_ret = OB_SUCCESS;
-        ObMultiVersionSchemaService *schema_service = gctx_.schema_service_;
         int64_t local_version = OB_INVALID_VERSION;
         int64_t global_version = OB_INVALID_VERSION;
         if (OB_SUCCESS != (tmp_ret = schema_service->get_runtime_refreshed_schema_version(local_version))) {
         } else if (OB_SUCCESS != (tmp_ret = schema_service->get_published_schema_version(global_version))) {
         } else if (local_version < global_version) {
           LOG_INFO("try to refresh schema", K(local_version), K(global_version));
-          if (OB_SUCCESS != (tmp_ret = gctx_.schema_service_->async_refresh_schema(global_version))) {
-          } else if (OB_SUCCESS != (tmp_ret = gctx_.schema_service_->get_runtime_schema_guard(
+          if (OB_SUCCESS != (tmp_ret = schema_service->async_refresh_schema(global_version))) {
+          } else if (OB_SUCCESS != (tmp_ret = schema_service->get_runtime_schema_guard(
                                     schema_guard))) {
           } else if (OB_FAIL(schema_guard.check_user_access(login_info, session_priv,
                      enable_role_id_array, &tls_info, user_info))) {
@@ -543,7 +543,6 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
                                                  db_id))) {
           int tmp_ret = OB_SUCCESS;
           LOG_WARN("failed to get database id", K(ret), K(session.get_database_name()));
-          ObMultiVersionSchemaService *schema_service = gctx_.schema_service_;
           int64_t local_version = OB_INVALID_VERSION;
           int64_t global_version = OB_INVALID_VERSION;
           
@@ -552,8 +551,8 @@ int ObMPConnect::load_privilege_info(ObSQLSessionInfo &session)
           } else if (local_version < global_version) {
             LOG_INFO("try to refresh schema", K(1UL),
                      K(local_version), K(global_version));
-            if (OB_SUCCESS != (tmp_ret = gctx_.schema_service_->async_refresh_schema(global_version))) {
-            } else if (OB_SUCCESS != (tmp_ret = gctx_.schema_service_->get_runtime_schema_guard(schema_guard))) {
+            if (OB_SUCCESS != (tmp_ret = schema_service->async_refresh_schema(global_version))) {
+            } else if (OB_SUCCESS != (tmp_ret = schema_service->get_runtime_schema_guard(schema_guard))) {
             } else if (OB_SUCCESS != (tmp_ret = schema_guard.get_database_id(session.get_database_name(), db_id))) {
             } else {
               // Only reset the error code when schema is successfully refreshed

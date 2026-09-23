@@ -511,13 +511,13 @@ int ObMPBase::load_privilege_info_for_change_user(sql::ObSQLSessionInfo *session
 
   ObSchemaGetterGuard schema_guard;
   ObSMConnection *conn = NULL;
-  if (OB_ISNULL(session) || OB_ISNULL(gctx_.schema_service_)) {
+  if (OB_ISNULL(session) || OB_ISNULL(session->effective_schema_service())) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN,"invalid argument", K(session), K(gctx_.schema_service_));
+    OB_LOG(WARN,"invalid argument", K(session));
   } else if (OB_ISNULL(conn = get_conn())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("null conn", K(ret));
-  } else if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(
+  } else if (OB_FAIL(session->effective_schema_service()->get_runtime_schema_guard(
                                   schema_guard))) {
   } else {
     share::schema::ObUserLoginInfo login_info = session->get_login_info();

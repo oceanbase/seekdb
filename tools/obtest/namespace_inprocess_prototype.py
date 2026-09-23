@@ -66,6 +66,19 @@ def bootstrap_probe(experiment):
         experiment.sql("CREATE TABLE fresh.t(id INT PRIMARY KEY)", empty)
         experiment.sql("INSERT INTO fresh.t VALUES(1)", empty)
         assert experiment.sql("SELECT id FROM fresh.t", empty) == ((1,),)
+    with connect(experiment, "root@phase10_empty", database="fresh") as selected:
+        assert experiment.sql("SELECT DATABASE()", selected) == (("fresh",),)
+        assert experiment.sql("SELECT id FROM t", selected) == ((1,),)
+        selected.select_db("mysql")
+        assert experiment.sql("SELECT DATABASE()", selected) == (("mysql",),)
+        selected.select_db("fresh")
+        assert experiment.sql("SELECT id FROM t", selected) == ((1,),)
+    try:
+        connect(experiment, "root@phase10_empty", database="missing_db").close()
+    except pymysql.MySQLError:
+        pass
+    else:
+        raise AssertionError("child namespace accepted a missing login database")
     try:
         connect(experiment, "root@__template__").close()
     except pymysql.MySQLError:
