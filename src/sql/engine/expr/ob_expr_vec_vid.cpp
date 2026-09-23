@@ -86,8 +86,10 @@ int ObExprVecVid::cg_expr(
     ObTabletID tablet_id;
     if (OB_FAIL(ObExprCalcPartitionBase::calc_part_and_tablet_id(calc_part_id_expr, eval_ctx, partition_id, tablet_id))) {
     } else {
-      share::ObITabletAutoincrementService *auto_inc =
-          ::oceanbase::share::server_service<::oceanbase::share::ObITabletAutoincrementService>();
+      ObSQLSessionInfo *session = eval_ctx.exec_ctx_.get_my_session();
+      share::ObITabletAutoincrementService *auto_inc = session != nullptr
+          ? session->effective_tablet_autoincrement_service()
+          : ::oceanbase::share::server_service<share::ObITabletAutoincrementService>();
       uint64_t seq_id = 0;
       if (OB_ISNULL(auto_inc)) {
         ret = OB_ERR_UNEXPECTED;

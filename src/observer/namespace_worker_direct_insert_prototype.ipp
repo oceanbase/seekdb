@@ -1,6 +1,7 @@
 // Native direct-insert DAGs and slice writers stay beside shared tablets.
 #include "data_plane/ddl/ob_direct_insert.h"
 #include "data_plane/ddl/ob_ddl_schedule.h"
+#include "sql/engine/basic/ob_temp_column_spill_spool.h"
 #include "query/engine/vector/ob_i_vector.h"
 #include "share/ob_ddl_checksum.h"
 #include <shared_mutex>
@@ -342,8 +343,9 @@ struct DirectInsertRoute {
           param.tablet_id_ = ObTabletID(request.number()); param.slice_index_ = request.number();
           param.parallel_count_ = request.number(); param.autoinc_column_index_ = request.number();
           const uint64_t idempotent = request.number(); param.idempotent_tablet_autoinc_ = idempotent;
-          // Input vectors are sent as bounded row batches; storage uses its
-          // native row writer and never receives a query spool-factory pointer.
+          // Both sides execute in one process; the native vector writer needs
+          // the same spill factory that the SQL writer uses.
+          param.spool_factory_ = &sql::get_temp_column_spill_spool_factory();
           if (!request.consumed() || layout > DIRECT_INSERT_ORDERED_WRITER || idempotent > 1
               || !param.is_valid() || writer_generation == UINT64_MAX) { ret = OB_INVALID_ARGUMENT; }
           if (!ret && ns > 1) { ret = route_tablet_id(ns, param.tablet_id_); }

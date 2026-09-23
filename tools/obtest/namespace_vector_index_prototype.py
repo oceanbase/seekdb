@@ -28,6 +28,9 @@ def run(binary, nonempty=False):
         experiment.start()
         with connect(experiment, "root@vec_child") as child:
             assert experiment.sql("SELECT COUNT(*) FROM vec.t", child) == ((2 if nonempty else 0,),)
+            if nonempty:
+                assert experiment.sql("SELECT id FROM vec.t ORDER BY "
+                                      "l2_distance(embedding,[0,0,0]) APPROXIMATE LIMIT 1", child) == ((1,),)
         experiment.record("PASS", case="inprocess_vector_index", nonempty=nonempty, restart=True)
     finally:
         experiment.close()

@@ -21,6 +21,7 @@
 #include "data_plane/access/ob_tablet_scan.h"
 #include "src/sql/engine/ob_exec_context.h"
 #include "observer/namespace_worker_protocol_prototype.h"
+#include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 
 namespace oceanbase
 {
@@ -85,6 +86,27 @@ int ObDASScanIter::do_table_scan()
   } else if (OB_UNLIKELY(nullptr != result_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected not null result iter ptr before do table scan", K(ret), KP_(result));
+  } else if (scan_param_->op_ == nullptr && scan_param_->output_exprs_ == nullptr
+             && observer::namespace_worker_prototype::in_process_session_ns(
+                    THIS_WORKER.get_session()) > 1) {
+    const uint64_t ns = observer::namespace_worker_prototype::in_process_session_ns(
+        THIS_WORKER.get_session());
+    uint64_t physical_table = OB_INVALID_ID;
+    uint64_t physical_tablet = OB_INVALID_ID;
+    if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
+            ns, scan_param_->index_id_, physical_table))) {
+    } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
+                   ns, scan_param_->tablet_id_.id(), physical_tablet))) {
+    } else {
+      scan_param_->index_id_ = physical_table;
+      scan_param_->tablet_id_ = ObTabletID(physical_tablet);
+      for (int64_t i = 0; i < scan_param_->key_ranges_.count(); ++i) {
+        scan_param_->key_ranges_.at(i).table_id_ = physical_table;
+      }
+      tsc_service_ = share::server_service<common::ObITabletScan>();
+      ret = OB_ISNULL(tsc_service_) ? OB_NOT_INIT
+          : tsc_service_->table_scan(*scan_param_, result_);
+    }
   } else if (OB_FAIL(tsc_service_->table_scan(*scan_param_, result_))) {
     if (OB_SNAPSHOT_DISCARDED == ret && scan_param_->fb_snapshot_.is_valid()) {
       ret = OB_INVALID_QUERY_TIMESTAMP;
