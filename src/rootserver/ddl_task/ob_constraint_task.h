@@ -35,7 +35,8 @@ public:
       const common::ObCurTraceId::TraceId &trace_id,
       const int64_t task_id,
       const bool check_table_empty,
-      const obcall::ObAlterTableArg::AlterConstraintType alter_constraint_type);
+      const obcall::ObAlterTableArg::AlterConstraintType alter_constraint_type,
+      ObLocalManagementService *local_management_service = nullptr);
   virtual ~ObCheckConstraintValidationTask() = default;
   virtual int process() override;
   virtual int64_t get_deep_copy_size() const override { return sizeof(*this); }
@@ -49,6 +50,7 @@ private:
   int64_t task_id_;
   const bool check_table_empty_;
   obcall::ObAlterTableArg::AlterConstraintType alter_constraint_type_;
+  ObLocalManagementService *local_management_service_;
 };
 
 class ObForeignKeyConstraintValidationTask : public share::ObAsyncTask
@@ -59,7 +61,8 @@ public:
       const int64_t foregin_key_id,
       const int64_t schema_version,
       const common::ObCurTraceId::TraceId &trace_id,
-      const int64_t task_id);
+      const int64_t task_id,
+      ObLocalManagementService *local_management_service = nullptr);
   virtual ~ObForeignKeyConstraintValidationTask() = default;
   virtual int process() override;
   virtual int64_t get_deep_copy_size() const override { return sizeof(*this); }
@@ -82,6 +85,7 @@ private:
   int64_t schema_version_;
   common::ObCurTraceId::TraceId trace_id_;
   int64_t task_id_;
+  ObLocalManagementService *local_management_service_;
 };
 
 class ObConstraintTask : public ObDDLTask
@@ -156,4 +160,3 @@ private:
 }  // end namespace oceanbase
 
 #endif  // OCEANBASE_ROOTSERVER_OB_CHECK_CONSTRAINT_TASK_H
-

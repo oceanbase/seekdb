@@ -317,7 +317,8 @@ int ObDDLRedefinitionTask::check_table_empty(const ObDDLTaskStatus next_task_sta
   int ret = OB_SUCCESS;
   bool need_check_table_empty = false;
   bool is_local_check_end = false;
-  ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
+      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableRedefinitionTask has not been inited", K(ret));
@@ -332,7 +333,8 @@ int ObDDLRedefinitionTask::check_table_empty(const ObDDLTaskStatus next_task_sta
     } else if (!is_local_check_end && 0 == check_table_empty_job_time_) {
       ObCheckConstraintValidationTask task(object_id_, -1/*constraint id*/, target_object_id_,
                                            schema_version_, trace_id_, task_id_, true/*check_table_empty*/,
-                                           obcall::ObAlterTableArg::AlterConstraintType::ADD_CONSTRAINT);
+                                           obcall::ObAlterTableArg::AlterConstraintType::ADD_CONSTRAINT,
+                                           context_.namespace_id_ > 1 ? local_management_service : nullptr);
       if (OB_FAIL(local_management_service->submit_ddl_local_build_task(task))) {
         LOG_WARN("submit ddl single local build task failed", K(ret));
       } else {

@@ -2494,6 +2494,9 @@ int ObDDLScheduler::recover_task(const ObDDLTaskContext &context)
             && cur_record.ddl_type_ != DDL_ALTER_PARTITION_BY
             && cur_record.ddl_type_ != DDL_CONVERT_TO_CHARACTER
             && cur_record.ddl_type_ != DDL_MODIFY_AUTO_INCREMENT_WITH_REDEFINITION
+            && cur_record.ddl_type_ != DDL_CHECK_CONSTRAINT
+            && cur_record.ddl_type_ != DDL_FOREIGN_KEY_CONSTRAINT
+            && cur_record.ddl_type_ != DDL_ADD_NOT_NULL_COLUMN
             && cur_record.ddl_type_ != DDL_DROP_COLUMN
             && cur_record.ddl_type_ != DDL_ADD_COLUMN_OFFLINE
             && cur_record.ddl_type_ != DDL_COLUMN_REDEFINITION) {

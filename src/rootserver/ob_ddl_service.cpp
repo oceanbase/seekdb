@@ -12420,6 +12420,7 @@ int ObDDLService::alter_table_in_trans(obcall::ObAlterTableArg &alter_table_arg,
           } else {
             for (int64_t i = 0; OB_SUCCESS == tmp_ret && i < ddl_tasks.count(); i++) {
               ObDDLTaskRecord &task_record = ddl_tasks.at(i);
+              task_record.context_ = task_context_;
               if (OB_TMP_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
                 LOG_WARN("fail to schedule ddl task", K(tmp_ret), K(task_record));
               }
