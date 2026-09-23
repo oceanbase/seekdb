@@ -13,6 +13,7 @@
 #include "observer/schema/ob_schema_service_sql_impl.h"
 #include "rootserver/ob_max_id_cache_adapter.h"
 #include "rootserver/ob_local_management_service.h"
+#include "rootserver/ddl_task/ob_sys_ddl_util.h"
 #include "sql/plan_cache/ob_plan_cache.h"
 #include <map>
 #include <memory>
@@ -179,7 +180,11 @@ struct InProcessNamespaceServices {
   InProcessSchemaRefreshScheduler *scheduler = nullptr;
   sql::ObPlanCache *plan_cache = nullptr;
   rootserver::ObLocalManagementService *root_commands = nullptr;
+  RemoteRootserverLocalRuntime *local_runtime = nullptr;
+  RemoteDirectInsertService direct_insert;
+  RequestRoutes direct_insert_routes{WORKER_REQUEST};
   std::atomic<bool> schema_loaded{false};
+  std::atomic<bool> recovery_loaded{false};
 };
 std::shared_mutex inprocess_services_mutex;
 std::map<uint64_t, std::unique_ptr<InProcessNamespaceServices>> inprocess_services;
@@ -286,9 +291,16 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
   } else if (OB_FAIL(services->plan_cache->init(common::OB_PLAN_CACHE_BUCKET_NUMBER,
           server))) {
   } else if (FALSE_IT(stage = "root_commands")) {
+  } else if (OB_ISNULL(services->local_runtime = OB_NEW(
+          RemoteRootserverLocalRuntime, ObModIds::OB_SCHEMA_SERVICE, ns))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_ISNULL(services->root_commands = OB_NEW(
           rootserver::ObLocalManagementService, ObModIds::OB_SCHEMA_SERVICE))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (FALSE_IT(services->root_commands->set_ddl_local_runtime(
+          services->local_runtime))) {
+  } else if (FALSE_IT(services->root_commands->set_ddl_sql_proxy(
+          services->ddl_proxy))) {
   } else if (FALSE_IT(services->root_commands->set_local_command_service(
           server.get_ob_service()))) {
   } else if (OB_FAIL(services->root_commands->init_sql_worker(
@@ -304,6 +316,9 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
     runtime.set_service(ns::NamespaceRuntime::SCHEMA_SERVICE, services->schema_service);
     runtime.set_service(ns::NamespaceRuntime::PLAN_CACHE, services->plan_cache);
     runtime.set_service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE, services->root_commands);
+    runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_SERVICE, &services->direct_insert);
+    runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_ROUTES, &services->direct_insert_routes);
+    runtime.set_service(ns::NamespaceRuntime::SQL_PROXY, services->sql_proxy);
     inprocess_services.emplace(ns, std::move(services));
   }
   return ret;
@@ -334,16 +349,35 @@ int inprocess_refresh_schema(uint64_t ns)
   auto it = inprocess_services.find(ns);
   if (it == inprocess_services.end()) { return OB_NOT_INIT; }
   InProcessNamespaceServices &services = *it->second;
+  int ret = OB_SUCCESS;
   if (!services.schema_loaded.load(std::memory_order_acquire)) {
     bool expected = false;
     if (!services.schema_loaded.compare_exchange_strong(expected, true)) {
       return OB_SUCCESS; // A concurrent first refresh drives the full load.
     }
-    const int ret = services.schema_service->refresh_runtime_schema_from_static_system();
+    ret = services.schema_service->refresh_runtime_schema_from_static_system();
     if (ret) { services.schema_loaded.store(false, std::memory_order_release); }
-    return ret;
+  } else {
+    ret = services.schema_service->refresh_and_add_schema(false);
   }
-  return services.schema_service->refresh_and_add_schema(false);
+  guard.unlock();
+  bool expected = false;
+  if (!ret && services.recovery_loaded.compare_exchange_strong(expected, true)) {
+    rootserver::ObDDLTaskContext context;
+    context.namespace_id_ = ns;
+    context.sql_proxy_ = services.sql_proxy;
+    context.ddl_proxy_ = services.ddl_proxy;
+    context.schema_service_ = services.schema_service;
+    context.root_service_ = services.root_commands;
+    context.local_runtime_ = services.local_runtime;
+    int recover_ret = rootserver::ObSysDDLSchedulerUtil::recover_task(context);
+    if (recover_ret) {
+      services.recovery_loaded.store(false, std::memory_order_release);
+      fprintf(stderr, "PROTOTYPE_INPROCESS_DDL_RECOVERY ns=%llu ret=%d\n",
+          static_cast<unsigned long long>(ns), recover_ret);
+    }
+  }
+  return ret;
 }
 share::schema::ObMultiVersionSchemaService *namespace_schema_service(uint64_t ns)
 {

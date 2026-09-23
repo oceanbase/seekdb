@@ -37,6 +37,7 @@ using namespace oceanbase::rootserver;
 ObCreateIndexHelper::ObCreateIndexHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
     rootserver::ObDDLService &ddl_service,
+    ObLocalManagementService &root_service,
     const obcall::ObCreateIndexArg &arg,
     obcall::ObAlterTableRes &res)
   : ObDDLHelper(schema_service, "[parallel create index]"),
@@ -49,6 +50,7 @@ ObCreateIndexHelper::ObCreateIndexHelper(
     gen_columns_(),
     index_builder_(ddl_service),
     task_record_(),
+    root_service_(root_service),
     create_index_on_empty_table_opt_(false)
 {
 }
@@ -102,6 +104,9 @@ int ObCreateIndexHelper::lock_objects_()
                                                                                             arg_.data_version_,
                                                                                             arg_.sql_mode_,
                                                                                             create_index_on_empty_table_opt_))) {
+  } else if (sql_proxy_->target_namespace() > 1) {
+    // The shortcut registers tablet MDS outside the namespace storage route.
+    create_index_on_empty_table_opt_ = false;
   }
   DEBUG_SYNC(AFTER_PARALLEL_DDL_LOCK);
   RS_TRACE(lock_objects);
@@ -658,7 +663,15 @@ int ObCreateIndexHelper::construct_and_adjust_result_(int &return_ret) {
       res_.task_id_ = task_record_.task_id_;
       if (create_index_on_empty_table_opt_) {
         res_.task_id_ = 0;
-      } else if (OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record_))) {
+      } else {
+        task_record_.context_.namespace_id_ = sql_proxy_->target_namespace();
+        task_record_.context_.sql_proxy_ = sql_proxy_;
+        task_record_.context_.ddl_proxy_ = root_service_.ddl_sql_proxy();
+        task_record_.context_.schema_service_ = schema_service_;
+        task_record_.context_.root_service_ = &root_service_;
+        task_record_.context_.local_runtime_ = root_service_.ddl_local_runtime();
+        if (OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record_))) {
+        }
       }
     }
   }

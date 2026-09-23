@@ -525,6 +525,18 @@ bool ObDDLTask::is_ddl_task_can_be_cancelled() const
   return can_be_cancelled;
 }
 
+common::ObMySQLProxy *ObDDLTask::task_sql_proxy() const
+{
+  return context_.sql_proxy_ != nullptr ? context_.sql_proxy_
+      : context_.namespace_id_ == 1 ? GCTX.sql_proxy_ : nullptr;
+}
+
+share::schema::ObMultiVersionSchemaService *ObDDLTask::task_schema_service() const
+{
+  return context_.schema_service_ != nullptr ? context_.schema_service_
+      : context_.namespace_id_ == 1 ? GCTX.schema_service_ : nullptr;
+}
+
 int ObDDLTask::convert_to_record(
     ObDDLTaskRecord &task_record,
     common::ObIAllocator &allocator)
@@ -547,6 +559,7 @@ int ObDDLTask::convert_to_record(
   task_record.published_schema_version_ = get_published_schema_version();
   task_record.ddl_need_retry_at_executor_ = !is_ddl_retryable();
   task_record.snapshot_version_ = get_snapshot_version();
+  task_record.context_ = context_;
   const ObString &ddl_stmt_str = get_ddl_stmt_str();
   if (serialize_param_size > 0) {
     char *buf = nullptr;
@@ -619,11 +632,11 @@ int ObDDLTask::switch_status(const ObDDLTaskStatus new_status, const bool enable
   ret_code_ = OB_SUCCESS == ret_code_ ? real_ret_code : ret_code_;
   real_new_status = OB_SUCCESS != real_ret_code ? FAIL : real_new_status;
   ObMySQLTransaction trans;
-  if (OB_ISNULL(GCTX.sql_proxy_)) {
+  if (OB_ISNULL(task_sql_proxy())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
+    LOG_WARN("invalid argument", KR(ret));
   } else if (OB_FAIL(DDL_SIM(task_id_, CHECK_RUNTIME_STANDBY_FAILED))) {
-  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+  } else if (OB_FAIL(trans.start(task_sql_proxy()))) {
   } else {
     int64_t table_task_status = 0;
     int64_t execution_id = -1;
@@ -677,7 +690,7 @@ int ObDDLTask::switch_status(const ObDDLTaskStatus new_status, const bool enable
     }
 
     if (OB_CANCELED == real_ret_code || ObDDLTaskStatus::FAIL == task_status_) {
-      (void)ObDDLTaskRecordOperator::kill_task_inner_sql(*GCTX.sql_proxy_,
+      (void)ObDDLTaskRecordOperator::kill_task_inner_sql(*task_sql_proxy(),
           trace_id_, task_id_, snapshot_version_); // ignore return code
       LOG_WARN("ddl_task switch_status kill_task_inner_sql");
     }
@@ -700,7 +713,7 @@ int ObDDLTask::refresh_schema_version()
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLTask has not been inited", K(ret));
   } else if (OB_FAIL(DDL_SIM(task_id_, REFRESH_SCHEMA_VERSION_FAILED))) {
-  } else if (OB_FAIL(ObDDLUtil::check_schema_version_refreshed(*GCTX.schema_service_, schema_version_))) {
+  } else if (OB_FAIL(ObDDLUtil::check_schema_version_refreshed(*task_schema_service(), schema_version_))) {
     if (OB_SCHEMA_EAGAIN != ret) {
       LOG_WARN("check schema version refreshed failed", K(ret), K_(schema_version));
     }
@@ -714,10 +727,10 @@ int ObDDLTask::remove_task_record()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLTask has not been inited", K(ret));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+  } else if (OB_ISNULL(task_sql_proxy())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
-  } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*GCTX.sql_proxy_,
+    LOG_WARN("invalid argument", KR(ret));
+  } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*task_sql_proxy(),
                                                             task_id_))) {
   }
   return ret;
@@ -738,11 +751,11 @@ int ObDDLTask::report_error_code(const ObString &forward_user_message, const int
     error_message.affected_rows_ = affected_rows;
     const bool is_ddl_retry_task = is_drop_schema_block_concurrent_trans(task_type_);
     if (OB_SUCCESS != ret_code_) {
-      if (OB_ISNULL(GCTX.sql_proxy_)) {
+      if (OB_ISNULL(task_sql_proxy())) {
         ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
+        LOG_WARN("invalid argument", KR(ret), KP(task_sql_proxy()));
       } else if (OB_FAIL(ObDDLErrorMessageTableOperator::load_ddl_user_error(task_id_, object_id_,
-              *GCTX.sql_proxy_, error_message))) {
+              *task_sql_proxy(), error_message))) {
         LOG_WARN("load ddl user error failed", K(ret), K(task_id_), K(object_id_));
         if (OB_ITER_END == ret) {     // no local build error message found, use ret_code_
           ret = OB_SUCCESS;
@@ -788,7 +801,7 @@ int ObDDLTask::report_error_code(const ObString &forward_user_message, const int
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObDDLErrorMessageTableOperator::report_ddl_error_message(error_message, trace_id_, task_id_, parent_task_id_,
-          target_object_id_, schema_version_, -1/*object id*/, GCTX.self_addr(), *GCTX.sql_proxy_))) {
+          target_object_id_, schema_version_, -1/*object id*/, GCTX.self_addr(), *task_sql_proxy()))) {
       }
     }
   }
@@ -825,7 +838,8 @@ int ObDDLTask::wait_trans_end(
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *data_table_schema = nullptr;
   ObDDLTaskStatus new_status = PREPARE;
-  ObMultiVersionSchemaService &schema_service = ObMultiVersionSchemaService::get_instance();
+  wait_trans_ctx.set_context(context_);
+  ObMultiVersionSchemaService &schema_service = *task_schema_service();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLRedefinitionTask has not been inited", K(ret));
@@ -838,7 +852,8 @@ int ObDDLTask::wait_trans_end(
 
   if (OB_SUCC(ret) && new_status != next_task_status && !wait_trans_ctx.is_inited()) {
     if (OB_FAIL(wait_trans_ctx.init(task_id_, task_status_, object_id_,
-      ObDDLWaitTransEndCtx::WAIT_SCHEMA_TRANS, data_table_schema->get_schema_version()))) {
+      ObDDLWaitTransEndCtx::WAIT_SCHEMA_TRANS, data_table_schema->get_schema_version(),
+      *task_schema_service()))) {
     }
   }
   // try wait transaction end
@@ -878,22 +893,25 @@ int ObDDLTask::batch_release_snapshot(
   SCN snapshot_scn;
   ObTimeoutCtx timeout_ctx;
   int64_t timeout = 0;
-  if (OB_ISNULL(GCTX.sql_proxy_)) {
+  ObLocalManagementService *root_service = context_.root_service_ != nullptr
+      ? context_.root_service_
+      : ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+  if (OB_ISNULL(task_sql_proxy())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
+    LOG_WARN("invalid argument", KR(ret));
   } else if (OB_FAIL(DDL_SIM(task_id_, BATCH_RELEASE_SNAPSHOT_FAILED))) {
   } else if (OB_FAIL(snapshot_scn.convert_for_tx(snapshot_version))) {
   } else if (OB_FAIL(ObDDLUtil::get_ddl_tx_timeout(tablet_ids.count(), timeout))) {
   } else if (OB_FAIL(timeout_ctx.set_trx_timeout_us(timeout))) {
   } else if (OB_FAIL(timeout_ctx.set_timeout(timeout))) {
-  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
-  } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
+  } else if (OB_FAIL(trans.start(task_sql_proxy()))) {
+  } else if (OB_ISNULL(root_service)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()));
-  } else if (OB_UNLIKELY(!::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->get_ddl_service().is_inited())) {
+    LOG_WARN("invalid argument", KR(ret));
+  } else if (OB_UNLIKELY(!root_service->get_ddl_service().is_inited())) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->get_ddl_service().get_snapshot_mgr().batch_release_snapshot_in_trans(
+  } else if (OB_FAIL(root_service->get_ddl_service().get_snapshot_mgr().batch_release_snapshot_in_trans(
           trans, SNAPSHOT_FOR_DDL, schema_version_, snapshot_scn, tablet_ids))) {
   } else if (OB_FAIL(ObDDLTaskRecordOperator::update_snapshot_version(trans,
                                                                       task_id_,
@@ -970,6 +988,14 @@ int ObDDLTask::calc_next_execution_id(int64_t execution_id, const bool ddl_can_r
 
 int ObDDLTask::push_task_execution_id(const int64_t task_id, const ObDDLType ddl_type, const bool ddl_can_retry, int64_t &new_task_execution_id)
 {
+  return GCTX.sql_proxy_ == nullptr ? OB_NOT_INIT
+      : push_task_execution_id(*GCTX.sql_proxy_, task_id, ddl_type,
+          ddl_can_retry, new_task_execution_id);
+}
+
+int ObDDLTask::push_task_execution_id(ObMySQLProxy &sql_proxy, const int64_t task_id,
+    const ObDDLType ddl_type, const bool ddl_can_retry, int64_t &new_task_execution_id)
+{
   int ret = OB_SUCCESS;
   new_task_execution_id = DEFAULT_EXECUTION_ID;
   ObMySQLTransaction trans;
@@ -977,10 +1003,7 @@ int ObDDLTask::push_task_execution_id(const int64_t task_id, const ObDDLType ddl
   int64_t task_execution_id = 0;
   int64_t ret_code = OB_SUCCESS;
   int64_t unused_snapshot_ver = OB_INVALID_VERSION;
-  if (OB_ISNULL(GCTX.sql_proxy_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
-  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+  if (OB_FAIL(trans.start(&sql_proxy))) {
   } else {
     if (OB_FAIL(ObDDLTaskRecordOperator::select_for_update(trans, task_id, task_status, task_execution_id, ret_code, unused_snapshot_ver))) {
     } else {
@@ -1113,6 +1136,18 @@ int ObDDLWaitTransEndCtx::init(
     const WaitTransType wait_trans_type,
     const int64_t wait_version)
 {
+  return init(ddl_task_id, ddl_task_status, table_id, wait_trans_type,
+      wait_version, ObMultiVersionSchemaService::get_instance());
+}
+
+int ObDDLWaitTransEndCtx::init(
+    const int64_t ddl_task_id,
+    const share::ObDDLTaskStatus ddl_task_status,
+    const uint64_t table_id,
+    const WaitTransType wait_trans_type,
+    const int64_t wait_version,
+    ObMultiVersionSchemaService &schema_service)
+{
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
@@ -1124,7 +1159,7 @@ int ObDDLWaitTransEndCtx::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(ddl_task_id), K(table_id), K(wait_trans_type), K(wait_version));
   } else if (OB_FALSE_IT(tablet_ids_.reset())) {
-  } else if (OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, table_id, tablet_ids_))) {
+  } else if (OB_FAIL(ObDDLUtil::get_tablets(schema_service, table_id, tablet_ids_))) {
   } else if (OB_UNLIKELY(tablet_ids_.count() <= 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid partition array or pg array", K(ret), K(table_id), K(tablet_ids_.count()));
@@ -1319,9 +1354,11 @@ int ObDDLWaitTransEndCtx::check_schema_trans_end(
     arg.schema_version_ = schema_version;
     arg.need_wait_trans_end_ = need_wait_trans_end;
     arg.ddl_task_id_ = ddl_task_id_;
-    auto schema_fn = [](const obcall::ObCheckSchemaVersionElapsedArg &a,
+    ObIRootserverLocalRuntime *runtime = context_.local_runtime_ != nullptr
+        ? context_.local_runtime_ : rootserver_local_runtime();
+    auto schema_fn = [runtime](const obcall::ObCheckSchemaVersionElapsedArg &a,
                         obcall::ObCheckSchemaVersionElapsedResult &r) -> int {
-      return rootserver_local_runtime()->check_schema_version_elapsed(a, r);
+      return runtime == nullptr ? OB_NOT_INIT : runtime->check_schema_version_elapsed(a, r);
     };
     if (OB_FAIL((check_trans_end<obcall::ObCheckSchemaVersionElapsedArg,
                     obcall::ObCheckSchemaVersionElapsedResult>(
@@ -1338,7 +1375,13 @@ int ObDDLWaitTransEndCtx::do_write_defensive(const int64_t ddl_task_id,
     const int64_t schema_version)
 {
   int ret = OB_SUCCESS;
-  rootserver::ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+  rootserver::ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
+      ? context_.root_service_
+      : ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+  ObIRootserverLocalRuntime *runtime = context_.local_runtime_ != nullptr
+      ? context_.local_runtime_ : rootserver_local_runtime();
+  ObMySQLProxy *sql_proxy = context_.sql_proxy_ != nullptr
+      ? context_.sql_proxy_ : GCTX.sql_proxy_;
   ObMySQLTransaction trans;
   int64_t timeout_us = 0;
   int64_t cur_task_status = 0;
@@ -1349,17 +1392,17 @@ int ObDDLWaitTransEndCtx::do_write_defensive(const int64_t ddl_task_id,
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, local management service must not be nullptr", K(ret));
   } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(tablet_ids.count(), timeout_us))) {
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+  } else if (OB_ISNULL(sql_proxy)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
-  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+    LOG_WARN("invalid argument", KR(ret));
+  } else if (OB_FAIL(trans.start(sql_proxy))) {
   } else if (OB_FAIL(ObDDLTaskRecordOperator::select_for_update(trans, ddl_task_id, cur_task_status, execution_id, ret_code, snapshot_version))) {
   } else if (OB_UNLIKELY(ddl_task_status != static_cast<share::ObDDLTaskStatus>(cur_task_status))) {
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("task status not match, operation is stale", K(ret), K(ddl_task_id), K(ddl_task_status), K(cur_task_status));
-  } else if (OB_ISNULL(rootserver_local_runtime())) {
+  } else if (OB_ISNULL(runtime)) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(rootserver_local_runtime()->
+  } else if (OB_FAIL(runtime->
              modify_tablet_binding_for_write_defensive(
                  trans,
                  tablet_ids,
@@ -1395,9 +1438,11 @@ int ObDDLWaitTransEndCtx::check_sstable_trans_end(const int64_t sstable_exist_ts
     
     arg.sstable_exist_ts_ = sstable_exist_ts;
     arg.ddl_task_id_ = ddl_task_id_;
-    auto modify_fn = [](const obcall::ObCheckModifyTimeElapsedArg &a,
+    ObIRootserverLocalRuntime *runtime = context_.local_runtime_ != nullptr
+        ? context_.local_runtime_ : rootserver_local_runtime();
+    auto modify_fn = [runtime](const obcall::ObCheckModifyTimeElapsedArg &a,
                         obcall::ObCheckModifyTimeElapsedResult &r) -> int {
-      return rootserver_local_runtime()->check_modify_time_elapsed(a, r);
+      return runtime == nullptr ? OB_NOT_INIT : runtime->check_modify_time_elapsed(a, r);
     };
     if (OB_FAIL((check_trans_end<obcall::ObCheckModifyTimeElapsedArg,
                     obcall::ObCheckModifyTimeElapsedResult>(
@@ -1629,7 +1674,9 @@ int ObDDLWaitColumnChecksumCtx::init(
       if (OB_UNLIKELY(cur_table_id <= 0)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid table id", K(ret), K(i), K(cur_table_id));
-      } else if (OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, cur_table_id, tablet_ids))) {
+      } else if (OB_FAIL(ObDDLUtil::get_tablets(
+              *(context_.schema_service_ != nullptr ? context_.schema_service_ : GCTX.schema_service_),
+              cur_table_id, tablet_ids))) {
       } else if (OB_UNLIKELY(tablet_ids.count() <= 0)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get invalid tablet ids", K(ret), K(tablet_ids.count()));
@@ -1808,11 +1855,13 @@ int send_batch_calc_rpc(const ObCalcColumnChecksumRequestArg &arg,
                         ObCalcColumnChecksumRequestRes &res,
                         ObIArray<SendItem> &send_array,
                         common::SpinRWLock &item_lock,
-                        int64_t &send_succ_count)
+                        int64_t &send_succ_count,
+                        ObIRootserverLocalRuntime &local_runtime,
+                        ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
   const int64_t tablet_count = arg.calc_items_.count();
-  if (OB_FAIL(rootserver_local_runtime()->calc_column_checksum_request(arg, res))) {
+  if (OB_FAIL(local_runtime.calc_column_checksum_request(arg, res))) {
   } else if (res.ret_codes_.count() != tablet_count || send_array.count() != tablet_count) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("return codes count not match the argument", K(ret), K(arg.calc_items_.count()),
@@ -1847,11 +1896,9 @@ int send_batch_calc_rpc(const ObCalcColumnChecksumRequestArg &arg,
         }
       }
       if (OB_SUCC(ret) && !checksum_items.empty()) {
-        if (OB_ISNULL(GCTX.sql_proxy_)) {
-          ret = OB_NOT_INIT;
-        } else if (OB_FAIL(ObDDLChecksumOperator::update_checksum(
+        if (OB_FAIL(ObDDLChecksumOperator::update_checksum(
                        arg.data_format_version_, checksum_items,
-                       *GCTX.sql_proxy_))) {
+                       sql_proxy))) {
           LOG_WARN("failed to persist worker-owned checksum facts", K(ret),
               K(arg.task_id_), K(checksum_items.count()));
         }
@@ -1914,9 +1961,11 @@ int ObDDLWaitColumnChecksumCtx::send_calc_rpc(int64_t &send_succ_count)
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *source_schema = nullptr;
     const ObTableSchema *target_schema = nullptr;
-    if (OB_ISNULL(GCTX.schema_service_)) {
+    ObMultiVersionSchemaService *schema_service = context_.schema_service_ != nullptr
+        ? context_.schema_service_ : GCTX.schema_service_;
+    if (OB_ISNULL(schema_service)) {
       ret = OB_NOT_INIT;
-    } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+    } else if (OB_FAIL(schema_service->get_runtime_schema_guard(
                    schema_guard, schema_version_))) {
     } else if (OB_FAIL(schema_guard.get_table_schema(
                    source_table_id_, source_schema))) {
@@ -1947,8 +1996,16 @@ int ObDDLWaitColumnChecksumCtx::send_calc_rpc(int64_t &send_succ_count)
       }
     }
 
+    ObIRootserverLocalRuntime *local_runtime = context_.local_runtime_ != nullptr
+        ? context_.local_runtime_ : rootserver_local_runtime();
+    ObMySQLProxy *sql_proxy = context_.sql_proxy_ != nullptr
+        ? context_.sql_proxy_ : GCTX.sql_proxy_;
     if (OB_SUCC(ret) && !arg.calc_items_.empty() &&
-        OB_FAIL(send_batch_calc_rpc(arg, res, send_array, lock_, send_succ_count))) {
+        (OB_ISNULL(local_runtime) || OB_ISNULL(sql_proxy))) {
+      ret = OB_NOT_INIT;
+    } else if (OB_SUCC(ret) && !arg.calc_items_.empty() &&
+        OB_FAIL(send_batch_calc_rpc(arg, res, send_array, lock_, send_succ_count,
+                                    *local_runtime, *sql_proxy))) {
       LOG_WARN("calculate column checksum batch failed", K(ret));
     }
   }
@@ -1990,6 +2047,7 @@ void ObDDLTaskRecord::reset()
   execution_id_ = -1;  // -1 is invalid
   published_schema_version_ = OB_INVALID_VERSION;
   ddl_stmt_str_.reset();
+  context_ = ObDDLTaskContext();
 }
 
 
@@ -2554,7 +2612,8 @@ int ObDDLTaskRecordOperator::update_schedule_info(
   return ret;
 }
 
-int ObDDLTaskRecordOperator::get_or_insert_schedule_info(const int64_t task_id,
+int ObDDLTaskRecordOperator::get_or_insert_schedule_info(ObMySQLProxy &sql_proxy,
+    const int64_t task_id,
     ObIAllocator &allocator,
     ObDDLSliceInfo &ddl_slice_info,
     bool &is_idempotent_mode)
@@ -2568,7 +2627,7 @@ int ObDDLTaskRecordOperator::get_or_insert_schedule_info(const int64_t task_id,
   if (OB_UNLIKELY(task_id <= 0 || !ddl_slice_info.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(task_id), K(ddl_slice_info));
-  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+  } else if (OB_FAIL(trans.start(&sql_proxy))) {
     fprintf(stderr, "PROTOTYPE_V22_DDL_SLICE stage=begin ret=%d task=%ld\n",
             ret, task_id);
   } else if (OB_FAIL(get_schedule_info(trans, task_id, arena,

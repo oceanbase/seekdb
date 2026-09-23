@@ -3023,7 +3023,13 @@ int ObTableScanOp::report_ddl_column_checksum()
     ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
     int64_t task_idx = 0;
     const int64_t scan_task_id_base = scan_task_id_;
-    if (OB_FAIL(ensure_ddl_column_checksum_array())) {
+    ObSQLSessionInfo *session = ctx_.get_my_session();
+    ObMySQLProxy *sql_proxy = session != nullptr
+        ? session->effective_sql_proxy() : GCTX.sql_proxy_;
+    if (OB_ISNULL(sql_proxy)) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("ddl checksum sql proxy is null", K(ret));
+    } else if (OB_FAIL(ensure_ddl_column_checksum_array())) {
       fprintf(stderr,
               "PROTOTYPE_V22_DDL_CHECKSUM stage=ensure ret=%d task=%ld\n",
               ret, MY_SPEC.plan_->get_ddl_task_id());
@@ -3077,7 +3083,7 @@ int ObTableScanOp::report_ddl_column_checksum()
           LOG_INFO("report ddl checksum table scan", K(task_idx), K(tablet_loc->tablet_id_), K(checksum_items));
           if (OB_FAIL(ObDDLChecksumOperator::update_checksum(data_format_version,
                                                              checksum_items,
-                                                             *GCTX.sql_proxy_))) {
+                                                             *sql_proxy))) {
             fprintf(stderr,
                     "PROTOTYPE_V22_DDL_CHECKSUM stage=update ret=%d task=%ld tablet=%llu items=%ld\n",
                     ret, MY_SPEC.plan_->get_ddl_task_id(),

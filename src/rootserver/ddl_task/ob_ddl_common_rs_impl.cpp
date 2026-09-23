@@ -343,6 +343,28 @@ int ObDDLTaskUtil::generate_build_replica_sql(const int64_t data_table_id,
     const ObString &partition_names,
     ObSqlString &sql_string)
 {
+  return generate_build_replica_sql(ObMultiVersionSchemaService::get_instance(),
+      data_table_id, dest_table_id, schema_version, snapshot_version,
+      execution_id, task_id, parallelism, use_heap_table_ddl_plan,
+      use_schema_version_hint_for_src_table, col_name_map, partition_names,
+      sql_string);
+}
+
+int ObDDLTaskUtil::generate_build_replica_sql(
+    ObMultiVersionSchemaService &schema_service,
+    const int64_t data_table_id,
+    const int64_t dest_table_id,
+    const int64_t schema_version,
+    const int64_t snapshot_version,
+    const int64_t execution_id,
+    const int64_t task_id,
+    const int64_t parallelism,
+    const bool use_heap_table_ddl_plan,
+    const bool use_schema_version_hint_for_src_table,
+    const ObColumnNameMap *col_name_map,
+    const ObString &partition_names,
+    ObSqlString &sql_string)
+{
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *source_table_schema = nullptr;
@@ -353,7 +375,7 @@ int ObDDLTaskUtil::generate_build_replica_sql(const int64_t data_table_id,
     LOG_WARN("invalid arguments", K(ret), K(data_table_id), K(dest_table_id), K(schema_version),
                                   K(snapshot_version), K(execution_id), K(task_id));
   } else if (OB_FAIL(DDL_SIM(task_id, GENERATE_LOCAL_BUILD_SQL))) {
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
+  } else if (OB_FAIL(schema_service.get_runtime_schema_guard(
       schema_guard))) {
   } else if (OB_FAIL(schema_guard.check_formal_guard())) {
   } else if (OB_FAIL(schema_guard.get_table_schema( data_table_id, source_table_schema))) {

@@ -32,11 +32,24 @@
 
 namespace oceanbase
 {
+namespace common { class ObMySQLProxy; }
+namespace share { namespace schema { class ObMultiVersionSchemaService; } }
 namespace rootserver
 {
 using share::schema::ObTableSchema;
 
 class ObLocalManagementService;
+class ObIRootserverLocalRuntime;
+
+struct ObDDLTaskContext final
+{
+  uint64_t namespace_id_ = 1;
+  common::ObMySQLProxy *sql_proxy_ = nullptr;
+  common::ObMySQLProxy *ddl_proxy_ = nullptr;
+  share::schema::ObMultiVersionSchemaService *schema_service_ = nullptr;
+  ObLocalManagementService *root_service_ = nullptr;
+  ObIRootserverLocalRuntime *local_runtime_ = nullptr;
+};
 
 static constexpr int64_t DEFAULT_EXECUTION_ID = 1;
 
@@ -108,6 +121,8 @@ public:
   ObString ddl_stmt_str_;
   bool ddl_need_retry_at_executor_;
   int64_t published_schema_version_;
+  // Recovered records obtain this context from the namespace catalog reader.
+  ObDDLTaskContext context_;
 };
 
 
@@ -375,7 +390,8 @@ public:
       const int64_t task_id,
       const ObDDLSliceInfo &ddl_slice_info);
 
-  static int get_or_insert_schedule_info(const int64_t task_id,
+  static int get_or_insert_schedule_info(common::ObMySQLProxy &sql_proxy,
+      const int64_t task_id,
       ObIAllocator &allocator,
       ObDDLSliceInfo &ddl_slice_info,
       bool &is_idempotence_mode);
@@ -515,12 +531,20 @@ public:
 public:
   ObDDLWaitTransEndCtx();
   ~ObDDLWaitTransEndCtx();
+  void set_context(const ObDDLTaskContext &context) { context_ = context; }
   int init(
       const int64_t ddl_task_id,
       const share::ObDDLTaskStatus ddl_task_status,
       const uint64_t table_id,
       const WaitTransType wait_trans_type,
       const int64_t wait_version);
+  int init(
+      const int64_t ddl_task_id,
+      const share::ObDDLTaskStatus ddl_task_status,
+      const uint64_t table_id,
+      const WaitTransType wait_trans_type,
+      const int64_t wait_version,
+      share::schema::ObMultiVersionSchemaService &schema_service);
   int init(
       const int64_t ddl_task_id,
       const share::ObDDLTaskStatus ddl_task_status,
@@ -557,7 +581,7 @@ private:
       common::ObIArray<int> &ret_array,
       common::ObIArray<int64_t> &snapshot_array);
 
-  static int do_write_defensive(const int64_t ddl_task_id,
+  int do_write_defensive(const int64_t ddl_task_id,
       const share::ObDDLTaskStatus ddl_task_status,
       const ObIArray<ObTabletID> &tablet_ids,
       const int64_t schema_version);
@@ -574,6 +598,7 @@ private:
   int64_t ddl_task_id_;
   share::ObDDLTaskStatus ddl_task_status_;
   bool is_write_defensive_done_;
+  ObDDLTaskContext context_;
 };
 
 class ObDDLTask : public common::ObDLinkBase<ObDDLTask>
@@ -587,12 +612,16 @@ public:
       allocator_(lib::ObLabel("DdlTask")), err_code_occurence_cnt_(0),
       longops_stat_(nullptr), gmt_create_(0), stat_info_(), delay_schedule_time_(0), next_schedule_ts_(0),
       execution_id_(-1), start_time_(0), data_format_version_(0), is_pre_split_(false), wait_trans_ctx_(), is_unique_index_(false),
-      is_global_index_(false), published_schema_version_(OB_INVALID_VERSION)
+      is_global_index_(false), published_schema_version_(OB_INVALID_VERSION), context_()
   {}
   ObDDLTask():
     ObDDLTask(share::DDL_INVALID)
   {}
   virtual ~ObDDLTask() {}
+  void set_context(const ObDDLTaskContext &context) { context_ = context; }
+  const ObDDLTaskContext &context() const { return context_; }
+  common::ObMySQLProxy *task_sql_proxy() const;
+  share::schema::ObMultiVersionSchemaService *task_schema_service() const;
   virtual int init(const ObDDLTaskRecord &task_record) { return common::OB_NOT_IMPLEMENT; }
   virtual int on_child_task_finish(const uint64_t child_task_key, const int ret_code) { return common::OB_NOT_SUPPORTED; }
   virtual int process() { return OB_NOT_SUPPORTED; }
@@ -677,6 +706,12 @@ public:
       const share::ObDDLType ddl_type,
       const bool ddl_can_retry,
       int64_t &new_execution_id);
+  static int push_task_execution_id(
+      common::ObMySQLProxy &sql_proxy,
+      const int64_t task_id,
+      const share::ObDDLType ddl_type,
+      const bool ddl_can_retry,
+      int64_t &new_execution_id);
   void check_ddl_task_execute_too_long();
   virtual bool support_longops_monitoring() const { return false; }
   int cleanup();
@@ -754,6 +789,7 @@ protected:
   bool is_unique_index_;
   bool is_global_index_;
   int64_t published_schema_version_;
+  ObDDLTaskContext context_;
 };
 
 enum ColChecksumStat
@@ -806,6 +842,7 @@ class ObDDLWaitColumnChecksumCtx final
 public:
   ObDDLWaitColumnChecksumCtx();
   ~ObDDLWaitColumnChecksumCtx();
+  void set_context(const ObDDLTaskContext &context) { context_ = context; }
   int init(
       const int64_t task_id,
       const uint64_t source_table_id,
@@ -842,6 +879,7 @@ private:
   common::SpinRWLock lock_;
   int64_t parallelism_;
   uint64_t data_format_version_;
+  ObDDLTaskContext context_;
 };
 
 } // end namespace rootserver

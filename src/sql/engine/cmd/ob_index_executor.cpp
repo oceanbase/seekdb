@@ -250,7 +250,7 @@ int ObCreateIndexExecutor::sync_check_index_status(sql::ObSQLSessionInfo &my_ses
     // Handle the scenario of leader-follower switch, if a switch occurs during activation, directly return user session_killed;
     // Subsequent standby database will handle this index;
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObDDLExecutorUtil::wait_build_index_finish( res.task_id_, is_finish))) {
+    } else if (OB_FAIL(ObDDLExecutorUtil::wait_build_index_finish( res.task_id_, is_finish, &my_session))) {
     } else if (!is_finish) {
       ob_usleep(CHECK_INTERVAL);
       LOG_INFO("index status is not final", K(index_table_id));

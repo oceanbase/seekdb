@@ -542,6 +542,7 @@ public:
     return net_frame_.get_deliver().repost(request);
   }
   int get_or_insert_schedule_info(
+      sql::ObSQLSessionInfo &session,
       int64_t task_id,
       common::ObIAllocator &allocator,
       common::Ob2DArray<sql::ObPxTabletRange> &part_ranges,

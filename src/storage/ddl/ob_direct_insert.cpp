@@ -665,12 +665,14 @@ int ObDirectInsertOrchestrator::start(
     common::ObIAllocator &allocator,
     const ObDirectInsertStartParam &param,
     ObIDirectInsertWorkerContext &worker_context,
-    ObIDirectInsertSession *&session)
+    ObIDirectInsertSession *&session,
+    IDirectInsertService *service)
 {
   int ret = common::OB_SUCCESS;
   session = nullptr;
-  if (auto *service = share::server_service<IDirectInsertService>()) {
-    return service->start(allocator, param, worker_context, session);
+  if (auto *selected_service = service != nullptr
+          ? service : share::server_service<IDirectInsertService>()) {
+    return selected_service->start(allocator, param, worker_context, session);
   }
   ObDirectInsertSessionImpl *impl = nullptr;
   std::shared_ptr<DirectInsertSchedule> schedule;
@@ -718,13 +720,15 @@ int ObDirectInsertOrchestrator::finish(ObIDirectInsertSession *&session)
 
 int ObDirectInsertOrchestrator::publish_ordered_input(
     const int64_t task_id,
-    const common::ObIArray<ObDDLTabletSliceCount> &slice_counts)
+    const common::ObIArray<ObDDLTabletSliceCount> &slice_counts,
+    IDirectInsertService *service)
 {
   int ret = common::OB_SUCCESS;
   if (OB_UNLIKELY(task_id <= 0 || slice_counts.empty())) {
     ret = common::OB_INVALID_ARGUMENT;
-  } else if (auto *service = share::server_service<IDirectInsertService>()) {
-    ret = service->publish_ordered_input(task_id, slice_counts);
+  } else if (auto *selected_service = service != nullptr
+          ? service : share::server_service<IDirectInsertService>()) {
+    ret = selected_service->publish_ordered_input(task_id, slice_counts);
   } else {
     ret = native_schedule_registry().publish(task_id, slice_counts);
   }

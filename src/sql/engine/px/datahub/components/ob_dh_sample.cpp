@@ -457,6 +457,7 @@ int ObDynamicSamplePieceMsgCtx::build_whole_msg(ObDynamicSampleWholeMsg &whole_m
         ret = OB_NOT_INIT;
         LOG_WARN("DDL slice store is not available", K(ret), K(ddl_task_id));
       } else if (OB_FAIL(slice_store->get_or_insert_schedule_info(
+                     *exec_ctx_.get_my_session(),
                      ddl_task_id,
                      exec_ctx_.get_allocator(),
                      whole_msg.part_ranges_,

@@ -2500,6 +2500,8 @@ class RemoteRootserverLocalRuntime final
     : public rootserver::ObIRootserverLocalRuntime
 {
 public:
+  explicit RemoteRootserverLocalRuntime(uint64_t namespace_id = 0)
+      : namespace_id_(namespace_id) {}
   int set_ds_action(const obcall::ObDebugSyncActionArg &arg) override {
     return call_without_result_('D', arg);
   }
@@ -2546,7 +2548,7 @@ public:
   int check_server_empty(bool &is_empty) override {
     Frame request('Y'), reply;
     request.number('E');
-    write_storage_space(request, active_worker_storage_space());
+    write_storage_space(request, storage_space_());
     int ret = call_storage_(request, reply);
     if (OB_SUCC(ret)) {
       is_empty = reply.number() != 0;
@@ -2586,7 +2588,7 @@ private:
     StorageSessionScope scope(session, false);
     if (!ret && scope.error()) { ret = scope.error(); }
     Frame request, reply;
-    write_storage_space(request, active_worker_storage_space());
+    write_storage_space(request, storage_space_());
     request.number(schema_version);
     request.number(abs_timeout_us);
     request.number(tablet_ids.count());
@@ -2613,7 +2615,7 @@ public:
     StorageSessionScope scope(session, false);
     if (!ret && scope.error()) { ret = scope.error(); }
     Frame request, reply;
-    write_storage_space(request, active_worker_storage_space());
+    write_storage_space(request, storage_space_());
     request.number(schema_version);
     request.number(abs_timeout_us);
     request.number(orig_tablet_ids.count());
@@ -2639,7 +2641,12 @@ public:
   }
 
 private:
+  StorageSpaceHandle storage_space_() const {
+    return namespace_id_ == 0 ? active_worker_storage_space()
+        : StorageSpaceHandle::namespace_space(namespace_id_);
+  }
   int call_storage_(Frame &request, Frame &reply) {
+    InProcessServingScope serving(namespace_id_);
     IndependentStorageScope scope;
     return scope.error() ? scope.error() : write_rpc(request, reply);
   }
@@ -2648,7 +2655,7 @@ private:
   int call_(char operation, const Arg &arg, Result &result) {
     Frame request('Y'), reply;
     request.number(operation);
-    write_storage_space(request, active_worker_storage_space());
+    write_storage_space(request, storage_space_());
     request.append(arg);
     int ret = request.ret ? request.ret : call_storage_(request, reply);
     if (OB_SUCC(ret)) {
@@ -2662,7 +2669,7 @@ private:
   int call_without_result_(char operation, const Arg &arg) {
     Frame request('Y'), reply;
     request.number(operation);
-    write_storage_space(request, active_worker_storage_space());
+    write_storage_space(request, storage_space_());
     request.append(arg);
     int ret = request.ret ? request.ret : call_storage_(request, reply);
     if (OB_SUCC(ret) && !reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
@@ -2673,7 +2680,7 @@ private:
   int call_bool_(char operation, const Arg &arg, bool &value) {
     Frame request('Y'), reply;
     request.number(operation);
-    write_storage_space(request, active_worker_storage_space());
+    write_storage_space(request, storage_space_());
     request.append(arg);
     int ret = request.ret ? request.ret : call_storage_(request, reply);
     if (OB_SUCC(ret)) {
@@ -2682,6 +2689,7 @@ private:
     }
     return ret;
   }
+  uint64_t namespace_id_;
 };
 
 class RemoteWriteContext final : public ObIWriteContextService {

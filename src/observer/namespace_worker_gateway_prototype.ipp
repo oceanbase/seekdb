@@ -806,6 +806,8 @@ struct InProcessStorage {
   std::unique_ptr<EngineWrites> writes;
   ReadScans scans;
   DirectInsertRoute direct_insert;
+  RequestRoutes *direct_insert_routes = nullptr;
+  std::shared_ptr<PendingRequest> direct_insert_request;
   sql::ObSQLSessionInfo *sql_session = nullptr; // switch key, not an owner
   Frame reply;
   bool initialized = false;
@@ -813,7 +815,18 @@ struct InProcessStorage {
       : ns(namespace_id),
         session_state(std::make_shared<StorageSessionState>()),
         session(session_state->session),
-        scans(StorageSpaceHandle::namespace_space(namespace_id)) {}
+        scans(StorageSpaceHandle::namespace_space(namespace_id)) {
+    ::oceanbase::ns::NamespaceRuntime *runtime = nullptr;
+    if (::oceanbase::ns::namespace_registry().get(namespace_id, runtime) && runtime != nullptr) {
+      direct_insert_routes = static_cast<RequestRoutes *>(
+          runtime->service(::oceanbase::ns::NamespaceRuntime::DIRECT_INSERT_ROUTES));
+    }
+  }
+  ~InProcessStorage() {
+    if (direct_insert_routes != nullptr && direct_insert_request) {
+      direct_insert_routes->release(direct_insert_request->tag, true);
+    }
+  }
   InProcessStorage(const InProcessStorage &) = delete;
   InProcessStorage &operator=(const InProcessStorage &) = delete;
 };
@@ -864,9 +877,21 @@ int in_process_send(InProcessStorage &ctx, const Frame &frame, bool)
     }
     result.number(ret);
   } else if (input.type() == 'J') {
-    // Direct insert (DDL index build) stays worker-mode only in ticket 05c.
-    result = Frame('g');
-    result.number(OB_NOT_SUPPORTED);
+    if (ctx.direct_insert_routes == nullptr) {
+      ret = OB_NOT_INIT;
+    } else {
+      if (!ctx.direct_insert_request) {
+        ctx.direct_insert_request = ctx.direct_insert_routes->allocate(false);
+      }
+      if (!ctx.direct_insert_request) {
+        ret = OB_EAGAIN;
+      } else {
+        ret = ctx.direct_insert.process(
+            StorageSpaceHandle::namespace_space(ctx.ns),
+            ctx.direct_insert_request->tag, *ctx.direct_insert_routes,
+            ctx.session_state, input, result);
+      }
+    }
   } else if (!ctx.initialized) {
     ret = OB_NOT_INIT;
   } else {

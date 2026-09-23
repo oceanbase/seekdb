@@ -768,6 +768,9 @@ int ObPxSubCoord::start_ddl()
 {
   int ret = OB_SUCCESS;
   ObExecContext *exec_ctx = sqc_arg_.exec_ctx_;
+  ObSQLSessionInfo *ddl_session = exec_ctx == nullptr ? nullptr : exec_ctx->get_my_session();
+  share::schema::ObMultiVersionSchemaService *schema_service =
+      ddl_session == nullptr ? nullptr : ddl_session->effective_schema_service();
   ObPhysicalPlanCtx *plan_ctx = nullptr;
   const ObPhysicalPlan *phy_plan = nullptr;
   ObIArray<ObSqcTableLocationKey> &location_keys = sqc_arg_.sqc_.get_access_table_location_keys();
@@ -813,10 +816,10 @@ int ObPxSubCoord::start_ddl()
                            plan_ctx->get_direct_insert_schema_version())) {
     } else if (FALSE_IT(start_param.is_offline_index_rebuild_ =
                            plan_ctx->is_direct_insert_offline_index_rebuild())) {
-    } else if (OB_ISNULL(GCTX.schema_service_)) {
+    } else if (OB_ISNULL(schema_service)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema service is null", K(ret));
-    } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+    } else if (OB_FAIL(schema_service->get_runtime_schema_guard(
                    schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_table_schema(
                    ddl_table_id, table_schema))) {
@@ -844,7 +847,7 @@ int ObPxSubCoord::start_ddl()
                                  start_param.participants_))) {
     } else if (OB_FAIL(data_plane::ObDirectInsertOrchestrator::start(
                    exec_ctx->get_allocator(), start_param, *this,
-                   ddl_session_))) {
+                   ddl_session_, ddl_session->effective_direct_insert_service()))) {
     }
     FLOG_INFO("start ddl with direct insert session", K(ret), K(ddl_task_id),
         K(ddl_execution_id), K(ddl_table_id), KP(ddl_session_));

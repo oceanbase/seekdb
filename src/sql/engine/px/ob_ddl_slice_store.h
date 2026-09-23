@@ -24,11 +24,14 @@ namespace oceanbase
 namespace sql
 {
 
+class ObSQLSessionInfo;
+
 class ObIDdlSliceStore
 {
 public:
   virtual ~ObIDdlSliceStore() = default;
   virtual int get_or_insert_schedule_info(
+      ObSQLSessionInfo &session,
       int64_t task_id,
       common::ObIAllocator &allocator,
       common::Ob2DArray<ObPxTabletRange> &part_ranges,

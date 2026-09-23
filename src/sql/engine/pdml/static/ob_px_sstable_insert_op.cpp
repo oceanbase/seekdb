@@ -363,14 +363,24 @@ int ObPxMultiPartSSTableInsertOp::check_need_idempotence()
         KP(direct_insert_session_));
   } else {
     ObSqlCtx *sql_ctx = nullptr;
+    share::schema::ObSchemaGetterGuard runtime_guard;
+    share::schema::ObSchemaGetterGuard *schema_guard = nullptr;
+    ObSQLSessionInfo *session = ctx_.get_my_session();
     const ObTableSchema *ddl_table_schema = nullptr;
     const ObTableSchema *data_table_schema = nullptr;
     data_plane::ObDirectInsertPlanFacts facts;
     data_plane::ObDirectInsertWritePolicy policy;
-    if (OB_ISNULL(sql_ctx = ctx_.get_sql_ctx()) || OB_ISNULL(sql_ctx->schema_guard_)) {
+    if (OB_ISNULL(sql_ctx = ctx_.get_sql_ctx())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("error unexpected, schema guard not be nullptr", K(ret));
-    } else if (OB_FAIL(sql_ctx->schema_guard_->get_table_schema( MY_SPEC.plan_->get_ddl_table_id(), ddl_table_schema))) {
+    } else if (session != nullptr && session->ns_runtime() != nullptr
+        && OB_FAIL(session->effective_schema_service()->get_runtime_schema_guard(runtime_guard))) {
+      LOG_WARN("get namespace schema guard failed", K(ret));
+    } else if (OB_ISNULL(schema_guard = session != nullptr && session->ns_runtime() != nullptr
+        ? &runtime_guard : sql_ctx->schema_guard_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("schema guard is null", K(ret));
+    } else if (OB_FAIL(schema_guard->get_table_schema( MY_SPEC.plan_->get_ddl_table_id(), ddl_table_schema))) {
     } else if (OB_ISNULL(ddl_table_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table schema is null", K(ret), K(MY_SPEC.plan_->get_ddl_table_id()));
@@ -382,7 +392,7 @@ int ObPxMultiPartSSTableInsertOp::check_need_idempotence()
       facts.rowkey_doc_id_ = ddl_table_schema->is_rowkey_doc_id();
       if (OB_FAIL(direct_insert_session_->resolve_write_policy(facts, policy))) {
       } else if (policy.idempotent_doc_id_) {
-        if (OB_FAIL(sql_ctx->schema_guard_->get_table_schema( ddl_table_schema->get_data_table_id(), data_table_schema))) {
+        if (OB_FAIL(schema_guard->get_table_schema( ddl_table_schema->get_data_table_id(), data_table_schema))) {
         } else if (OB_ISNULL(data_table_schema)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("table schema is null", K(ret), K(ddl_table_schema->get_data_table_id()));
@@ -604,17 +614,27 @@ int ObPxMultiPartSSTableInsertOp::get_data_tablet_id(const ObTabletID &tablet_id
 {
   int ret = OB_SUCCESS;
   ObSqlCtx *sql_ctx = nullptr;
+  share::schema::ObSchemaGetterGuard runtime_guard;
+  share::schema::ObSchemaGetterGuard *schema_guard = nullptr;
+  ObSQLSessionInfo *session = ctx_.get_my_session();
   const ObTableSchema *ddl_table_schema = nullptr;
   const ObTableSchema *data_table_schema = nullptr;
   data_tablet_id.reset();
-  if (OB_ISNULL(sql_ctx = ctx_.get_sql_ctx()) || OB_ISNULL(sql_ctx->schema_guard_) || OB_ISNULL(MY_SPEC.plan_)) {
+  if (OB_ISNULL(sql_ctx = ctx_.get_sql_ctx()) || OB_ISNULL(MY_SPEC.plan_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema guard, sql_ctx or plan is null", K(ret));
-  } else if (OB_FAIL(sql_ctx->schema_guard_->get_table_schema( MY_SPEC.plan_->get_ddl_table_id(), ddl_table_schema))) {
+  } else if (session != nullptr && session->ns_runtime() != nullptr
+      && OB_FAIL(session->effective_schema_service()->get_runtime_schema_guard(runtime_guard))) {
+    LOG_WARN("get namespace schema guard failed", K(ret));
+  } else if (OB_ISNULL(schema_guard = session != nullptr && session->ns_runtime() != nullptr
+      ? &runtime_guard : sql_ctx->schema_guard_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("schema guard is null", K(ret));
+  } else if (OB_FAIL(schema_guard->get_table_schema( MY_SPEC.plan_->get_ddl_table_id(), ddl_table_schema))) {
   } else if (OB_ISNULL(ddl_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ddl table schema is null", K(ret), K(MY_SPEC.plan_->get_ddl_table_id()));
-  } else if (OB_FAIL(sql_ctx->schema_guard_->get_table_schema( ddl_table_schema->get_data_table_id(), data_table_schema))) {
+  } else if (OB_FAIL(schema_guard->get_table_schema( ddl_table_schema->get_data_table_id(), data_table_schema))) {
   } else if (OB_ISNULL(data_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("data table schema is null", K(ret), K(ddl_table_schema->get_data_table_id()));

@@ -49,6 +49,9 @@ public:
     SCHEMA_SERVICE = 0,
     PLAN_CACHE = 1,
     ROOT_COMMAND_SERVICE = 2,
+    DIRECT_INSERT_SERVICE = 3,
+    DIRECT_INSERT_ROUTES = 4,
+    SQL_PROXY = 5,
     SLOT_COUNT
   };
   explicit NamespaceRuntime(Namespace &ns) : ns_(ns) {}

@@ -296,6 +296,9 @@ ObExecContext::RuntimeServices ObExecContext::get_runtime_services() const
   services.virtual_table_factory_provider_ = vt_factory_provider_;
   services.srs_provider_ = srs_provider_;
   services.resource_limit_calculator_ = resource_limit_calculator_;
+  if (nullptr != get_my_session()) {
+    services.ns_runtime_ = get_my_session()->ns_runtime();
+  }
   return services;
 }
 
@@ -317,6 +320,9 @@ void ObExecContext::set_runtime_services(const RuntimeServices &services)
   vt_factory_provider_ = services.virtual_table_factory_provider_;
   srs_provider_ = services.srs_provider_;
   resource_limit_calculator_ = services.resource_limit_calculator_;
+  if (nullptr != services.ns_runtime_ && nullptr != get_my_session()) {
+    get_my_session()->set_ns_runtime(services.ns_runtime_);
+  }
 }
 
 ObExecContext::~ObExecContext()

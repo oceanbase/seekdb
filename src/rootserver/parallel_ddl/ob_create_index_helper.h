@@ -34,12 +34,14 @@ class ObAlterTableRes;
 }
 namespace rootserver
 {
+class ObLocalManagementService;
 class ObCreateIndexHelper : public ObDDLHelper
 {
 public:
   ObCreateIndexHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
     rootserver::ObDDLService &ddl_service,
+    ObLocalManagementService &root_service,
     const obcall::ObCreateIndexArg &arg,
     obcall::ObAlterTableRes &res);
   virtual ~ObCreateIndexHelper();
@@ -76,6 +78,7 @@ private:
   ObSEArray<ObColumnSchemaV2*, 1> gen_columns_;
   ObIndexBuilder index_builder_;
   ObDDLTaskRecord task_record_;
+  ObLocalManagementService &root_service_;
   bool create_index_on_empty_table_opt_;
 
 private:

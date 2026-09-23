@@ -27,6 +27,8 @@
 #include <thread>
 #include "observer/ob_server.h"
 #include "observer/namespace_worker_protocol_prototype.h"
+#include "namespace/namespace.h"
+#include "sql/session/ob_sql_session_info.h"
 #include "data_plane/ddl/ob_direct_insert.h"
 #include "data_plane/ddl/ob_ddl_schedule.h"
 #include "share/ob_autoincrement_service.h"
@@ -208,17 +210,23 @@ query::ObISchedulerService *ObServer::scheduler_service()
 }
 
 int ObServer::get_or_insert_schedule_info(
+    sql::ObSQLSessionInfo &session,
     int64_t task_id,
     common::ObIAllocator &allocator,
     common::Ob2DArray<sql::ObPxTabletRange> &part_ranges,
     bool &is_idempotent_mode)
 {
   int ret = OB_SUCCESS;
+  ns::NamespaceRuntime *runtime = session.ns_runtime();
+  common::ObMySQLProxy *sql_proxy = runtime != nullptr
+      ? static_cast<common::ObMySQLProxy *>(
+          runtime->service(ns::NamespaceRuntime::SQL_PROXY)) : nullptr;
+  if (sql_proxy == nullptr) { sql_proxy = GCTX.sql_proxy_; }
   rootserver::ObDDLSliceInfo ddl_slice_info;
   if (OB_FAIL(ddl_slice_info.part_ranges_.assign(part_ranges))) {
     LOG_WARN("assign DDL slice ranges failed", KR(ret), K(task_id));
   } else if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::get_or_insert_schedule_info(
-                 task_id, allocator, ddl_slice_info, is_idempotent_mode))) {
+                 *sql_proxy, task_id, allocator, ddl_slice_info, is_idempotent_mode))) {
     LOG_WARN("get or insert DDL schedule info failed", KR(ret), K(task_id));
   } else if (is_idempotent_mode
              && OB_FAIL(part_ranges.assign(ddl_slice_info.part_ranges_))) {
@@ -234,7 +242,7 @@ int ObServer::get_or_insert_schedule_info(
   }
   if (OB_SUCC(ret) && OB_FAIL(
           data_plane::ObDirectInsertOrchestrator::publish_ordered_input(
-              task_id, slice_counts))) {
+              task_id, slice_counts, session.effective_direct_insert_service()))) {
     LOG_WARN("publish DDL schedule to direct insert task failed", KR(ret),
         K(task_id), K(slice_counts));
   }

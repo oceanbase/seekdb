@@ -377,11 +377,13 @@ public:
   static int start(common::ObIAllocator &allocator,
                    const ObDirectInsertStartParam &param,
                    ObIDirectInsertWorkerContext &worker_context,
-                   ObIDirectInsertSession *&session);
+                   ObIDirectInsertSession *&session,
+                   IDirectInsertService *service = nullptr);
   static int finish(ObIDirectInsertSession *&session);
   static int publish_ordered_input(
       int64_t task_id,
-      const common::ObIArray<ObDDLTabletSliceCount> &slice_counts);
+      const common::ObIArray<ObDDLTabletSliceCount> &slice_counts,
+      IDirectInsertService *service = nullptr);
 };
 
 } // namespace data_plane

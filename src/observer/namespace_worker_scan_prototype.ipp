@@ -628,6 +628,8 @@ public:
           (long long)(param.aggregate_exprs_ ? param.aggregate_exprs_->count() : -1));
       return OB_NOT_SUPPORTED;
     }
+    StorageSessionScope scan_scope(param.op_->get_eval_ctx().exec_ctx_.get_my_session());
+    if (scan_scope.error()) { return scan_scope.error(); }
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *logical_schema = nullptr;
     // Inner tables must carry their schema even for namespace 1: the shared
@@ -679,7 +681,10 @@ public:
       const ObNewRange &range = param.key_ranges_.at(i);
       if (range.start_key_.get_obj_cnt() != width || range.end_key_.get_obj_cnt() != width) { return OB_NOT_SUPPORTED; }
       request.number(range.border_flag_.get_data());
-      for (int64_t j = 0; j < width; ++j) { request.append(range.start_key_.get_obj_ptr()[j]); }
+      for (int64_t j = 0; j < width; ++j) {
+        const ObObj &obj = range.start_key_.get_obj_ptr()[j];
+        request.append(obj);
+      }
       for (int64_t j = 0; j < width; ++j) { request.append(range.end_key_.get_obj_ptr()[j]); }
     }
     if (is_virtual_table(param.index_id_)) { request.number(param.sql_mode_); }

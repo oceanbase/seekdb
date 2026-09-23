@@ -47,6 +47,7 @@ namespace common
 {
 class ObISrsProvider;
 class ObILobReadService;
+class ObMySQLProxy;
 struct ObObjCastParams;
 namespace sqlclient
 {
@@ -61,6 +62,10 @@ namespace namespace_worker_prototype { struct SessionBinding; }
 namespace ns
 {
 class NamespaceRuntime;
+}
+namespace data_plane
+{
+class IDirectInsertService;
 }
 namespace share
 {
@@ -436,6 +441,8 @@ public:
   // instance when the namespace has one, otherwise the process-wide THE_ONE
   // (system namespace 1 and namespace-agnostic paths).
   share::schema::ObMultiVersionSchemaService *effective_schema_service() const;
+  common::ObMySQLProxy *effective_sql_proxy() const;
+  data_plane::IDirectInsertService *effective_direct_insert_service() const;
   void reset(bool skip_sys_var);
   void clean_status();
   const common::ObWarningBuffer &get_show_warnings_buffer() const { return show_warnings_buf_; }

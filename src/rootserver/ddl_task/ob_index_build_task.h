@@ -40,12 +40,14 @@ public:
       const bool is_partitioned_local_index_task,
       const uint64_t data_format_version,
       const bool is_offline_index_rebuild,
-      const bool is_retryable_ddl)
+      const bool is_retryable_ddl,
+      const ObDDLTaskContext &context)
       : task_id_(task_id), data_table_id_(data_table_id), dest_table_id_(dest_table_id),
         schema_version_(schema_version), snapshot_version_(snapshot_version), execution_id_(execution_id),
         trace_id_(trace_id), parallelism_(parallelism), is_partitioned_local_index_task_(is_partitioned_local_index_task),
         allocator_("IdxSSTBuildTask"), data_format_version_(data_format_version),
-        is_offline_index_rebuild_(is_offline_index_rebuild), is_retryable_ddl_(is_retryable_ddl)
+        is_offline_index_rebuild_(is_offline_index_rebuild), is_retryable_ddl_(is_retryable_ddl),
+        context_(context)
   {
     set_retry_times(0);
   }
@@ -77,6 +79,7 @@ private:
   uint64_t data_format_version_;
   bool is_offline_index_rebuild_;
   bool is_retryable_ddl_;
+  ObDDLTaskContext context_;
 
   DISALLOW_COPY_AND_ASSIGN(ObIndexSSTableBuildTask);
 };

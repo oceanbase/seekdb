@@ -741,7 +741,7 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
           uint64_t index_table_id = res.res_arg_array_.at(failed_index_no).schema_id_;
           int64_t schema_version = res.res_arg_array_.at(failed_index_no).schema_version_;
           bool is_finish = false;
-          if (OB_SUCCESS != (tmp_ret = ObDDLExecutorUtil::wait_build_index_finish( res.task_id_, is_finish))) {
+          if (OB_SUCCESS != (tmp_ret = ObDDLExecutorUtil::wait_build_index_finish( res.task_id_, is_finish, my_session))) {
           }
         }
         LOG_INFO("added indexes failed, we rolled back all indexes added in this same alter table sql. But we didn't roll back other actions in this same alter table sql");

@@ -99,9 +99,10 @@ struct Frame {
     common::ObString s(static_cast<int32_t>(n), data.data() + pos); pos += n; return s;
   }
   template<class T> void append(const T &value) {
+    if (ret) { return; }
     const int64_t n = value.get_serialize_size();
     int64_t p = data.size();
-    if (ret || n < 0 || data.size() + n > limit) { ret = common::OB_SIZE_OVERFLOW; return; }
+    if (n < 0 || data.size() + n > limit) { ret = common::OB_SIZE_OVERFLOW; return; }
     data.resize(p + n); ret = value.serialize(data.data(), data.size(), p); data.resize(p);
   }
   template<class T> void read(T &value) {

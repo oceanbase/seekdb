@@ -2453,38 +2453,52 @@ int ObDDLScheduler::insert_task_record(
 
 int ObDDLScheduler::recover_task()
 {
+  return recover_task(ObDDLTaskContext());
+}
+
+int ObDDLScheduler::recover_task(const ObDDLTaskContext &context)
+{
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
+  ObMySQLProxy *sql_proxy = context.sql_proxy_ != nullptr ? context.sql_proxy_ : GCTX.sql_proxy_;
+  ObMultiVersionSchemaService *schema_service = context.schema_service_ != nullptr
+      ? context.schema_service_ : GCTX.schema_service_;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_ISNULL(GCTX.sql_proxy_) || OB_ISNULL(GCTX.schema_service_)) {
+  } else if (OB_ISNULL(sql_proxy) || OB_ISNULL(schema_service)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_), KP(GCTX.schema_service_));
+    LOG_WARN("invalid argument", KR(ret), KP(sql_proxy), KP(schema_service));
   } else {
     ObSqlString sql_string;
     ObArray<ObDDLTaskRecord> task_records;
     ObArenaAllocator allocator(lib::ObLabel("DdlTasRecord"));
     bool write_enabled = true;
-    if (OB_FAIL(ObDDLTaskRecordOperator::get_all_ddl_task_record(*GCTX.sql_proxy_, allocator, task_records))) {
+    if (OB_FAIL(ObDDLTaskRecordOperator::get_all_ddl_task_record(*sql_proxy, allocator, task_records))) {
     } else if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
     } else if (!write_enabled) {
       LOG_INFO("server is read-only, skip schedule ddl task", K(write_enabled));
     } else {
       LOG_INFO("start processing ddl recovery", "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(task_records));
       for (int64_t i = 0; OB_SUCC(ret) && i < task_records.count(); ++i) {
-        const ObDDLTaskRecord &cur_record = task_records.at(i);
+        ObDDLTaskRecord &cur_record = task_records.at(i);
+        cur_record.context_ = context;
+        if (context.namespace_id_ > 1
+            && cur_record.ddl_type_ != DDL_CREATE_INDEX
+            && cur_record.ddl_type_ != DDL_CREATE_PARTITIONED_LOCAL_INDEX) {
+          continue;
+        }
         int64_t runtime_schema_version = 0;
         int64_t table_task_status = 0;
         int64_t execution_id = -1;
         int64_t ret_code = OB_SUCCESS;
         int64_t unused_snapshot_ver = OB_INVALID_VERSION;
         ObMySQLTransaction trans;
-        if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_version(runtime_schema_version))) {
+        if (OB_FAIL(schema_service->get_runtime_schema_version(runtime_schema_version))) {
         } else if (runtime_schema_version < cur_record.schema_version_) {
           // schema has not publish, by pass now
           LOG_INFO("skip schedule ddl task because runtime schema version is too old", K(runtime_schema_version), K(cur_record));
-        } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+        } else if (OB_FAIL(trans.start(sql_proxy))) {
         } else if (OB_FAIL(ObDDLTaskRecordOperator::select_for_update(trans,
                                                                       cur_record.task_id_,
                                                                       table_task_status,

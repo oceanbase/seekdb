@@ -1257,7 +1257,7 @@ int ObLocalManagementService::parallel_create_index(const ObCreateIndexArg &arg,
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not supported", KR(ret), K(arg.index_type_));
   } else {
-    ObCreateIndexHelper create_index_helper(schema_service_, ddl_service_, arg, res);
+    ObCreateIndexHelper create_index_helper(schema_service_, ddl_service_, *this, arg, res);
     if (OB_FAIL(create_index_helper.init(ddl_service_))) {
     } else if (OB_FAIL(create_index_helper.execute())) {
     }

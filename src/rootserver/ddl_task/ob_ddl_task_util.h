@@ -39,6 +39,20 @@ class ObDDLTaskUtil final
 {
 public:
   static int generate_build_replica_sql(
+      share::schema::ObMultiVersionSchemaService &schema_service,
+      const int64_t data_table_id,
+      const int64_t dest_table_id,
+      const int64_t schema_version,
+      const int64_t snapshot_version,
+      const int64_t execution_id,
+      const int64_t task_id,
+      const int64_t parallelism,
+      const bool use_heap_table_ddl_plan,
+      const bool use_schema_version_hint_for_src_table,
+      const share::ObColumnNameMap *col_name_map,
+      const common::ObString &partition_names,
+      common::ObSqlString &sql_string);
+  static int generate_build_replica_sql(
       const int64_t data_table_id,
       const int64_t dest_table_id,
       const int64_t schema_version,

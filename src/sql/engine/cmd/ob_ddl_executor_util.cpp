@@ -68,6 +68,8 @@ int ObDDLExecutorUtil::wait_ddl_finish(const int64_t task_id,
   int64_t unused_user_msg_len = 0;
   THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + OB_MAX_USER_SPECIFIED_TIMEOUT);
   ObDDLErrorMessageTableOperator::ObBuildDDLErrorMessage error_message;
+  ObMySQLProxy *sql_proxy = session != nullptr
+      ? session->effective_sql_proxy() : GCTX.sql_proxy_;
   if (OB_UNLIKELY(task_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(task_id));
@@ -81,7 +83,7 @@ int ObDDLExecutorUtil::wait_ddl_finish(const int64_t task_id,
 
     int tmp_ret = OB_SUCCESS;
     while (OB_SUCC(ret)) {
-      if (OB_SUCCESS == ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id, -1 /* target_object_id */, unused_addr, false /* is_ddl_retry_task */, *GCTX.sql_proxy_, error_message, unused_user_msg_len)) {
+      if (OB_SUCCESS == ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id, -1 /* target_object_id */, unused_addr, false /* is_ddl_retry_task */, *sql_proxy, error_message, unused_user_msg_len)) {
         ret = error_message.ret_code_;
         if (OB_SUCCESS != ret) {
           if (ddl_need_retry_at_executor) {
@@ -139,7 +141,8 @@ int ObDDLExecutorUtil::wait_ddl_finish(const int64_t task_id,
   return ret;
 }
 
-int ObDDLExecutorUtil::wait_build_index_finish(const int64_t task_id, bool &is_finish)
+int ObDDLExecutorUtil::wait_build_index_finish(const int64_t task_id,
+    bool &is_finish, ObSQLSessionInfo *session)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -157,7 +160,7 @@ int ObDDLExecutorUtil::wait_build_index_finish(const int64_t task_id, bool &is_f
   if (OB_UNLIKELY(task_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_id));
-  } else if (OB_SUCCESS == share::ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id, -1 /* target_object_id */, unused_addr, false /* is_ddl_retry_task */, *GCTX.sql_proxy_, error_message, unused_user_msg_len)) {
+  } else if (OB_SUCCESS == share::ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id, -1 /* target_object_id */, unused_addr, false /* is_ddl_retry_task */, *(session != nullptr ? session->effective_sql_proxy() : GCTX.sql_proxy_), error_message, unused_user_msg_len)) {
     ret = error_message.ret_code_;
     if (OB_SUCCESS != ret) {
       FORWARD_USER_ERROR(ret, error_message.user_message_);
@@ -201,7 +204,7 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(const int64_t task_id,
     bool write_enabled = true;
     int tmp_ret = OB_SUCCESS;
     while (OB_SUCC(ret)) {
-      if (OB_SUCCESS == ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id, -1 /* target_object_id */, unused_addr, true /* is_ddl_retry_task */, *GCTX.sql_proxy_, error_message, forward_user_msg_len)) {
+      if (OB_SUCCESS == ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id, -1 /* target_object_id */, unused_addr, true /* is_ddl_retry_task */, *session.effective_sql_proxy(), error_message, forward_user_msg_len)) {
         // Here, `forward_user_msg_len` is the length of serialized hex user message.
         // Forward_user_msg_len is not 0, which means rpc::frame::ObResultCode is not empty. Thus, we need to
         // forward_user_error/ forward_user_warn/ forward_user_note.

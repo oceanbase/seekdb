@@ -75,6 +75,7 @@ namespace obcall
 
 namespace rootserver
 {
+class ObIRootserverLocalRuntime;
 // Process-local management entry point for schema, DDL, jobs, freeze and recycle-bin work.
 class ObLocalManagementService : public query::ObIRootCommandService
 {
@@ -118,6 +119,10 @@ public:
                       const common::ObAddr &self,
                       common::ObMySQLProxy &sql_proxy,
                       share::schema::ObMultiVersionSchemaService &schema_service);
+  void set_ddl_local_runtime(ObIRootserverLocalRuntime *runtime) { ddl_local_runtime_ = runtime; }
+  ObIRootserverLocalRuntime *ddl_local_runtime() const { return ddl_local_runtime_; }
+  void set_ddl_sql_proxy(common::ObMySQLProxy *proxy) { ddl_sql_proxy_ = proxy; }
+  common::ObMySQLProxy *ddl_sql_proxy() const { return ddl_sql_proxy_; }
   inline bool is_inited() const { return inited_; }
   void destroy();
 
@@ -349,6 +354,8 @@ private:
 
   common::ObMySQLProxy *sql_proxy_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
+  ObIRootserverLocalRuntime *ddl_local_runtime_ = nullptr;
+  common::ObMySQLProxy *ddl_sql_proxy_ = nullptr;
   query::ObILocalCommandService *local_command_service_;
 
   // minor freeze

@@ -103,6 +103,11 @@ class ObIChangeStreamService;
 class ObIDdlExecutionLimiter;
 }
 
+namespace ns
+{
+class NamespaceRuntime;
+}
+
 namespace sql
 {
 class ObIPhyOperatorInput;
@@ -241,7 +246,8 @@ public:
         ddl_execution_limiter_(nullptr),
         virtual_table_factory_provider_(nullptr),
         srs_provider_(nullptr),
-        resource_limit_calculator_(nullptr)
+        resource_limit_calculator_(nullptr),
+        ns_runtime_(nullptr)
     {}
 
     common::ObILobReadService *lob_read_service_;
@@ -260,6 +266,7 @@ public:
     ObIVirtualTableFactoryProvider *virtual_table_factory_provider_;
     common::ObISrsProvider *srs_provider_;
     share::ObResourceLimitCalculator *resource_limit_calculator_;
+    ns::NamespaceRuntime *ns_runtime_;
   };
 
   friend struct pl::ExecCtxBak;

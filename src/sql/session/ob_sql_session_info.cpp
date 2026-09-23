@@ -19,6 +19,7 @@
 #include <new>
 #include "observer/namespace_worker_protocol_prototype.h"
 #include "data_plane/memtable/ob_btree_iter_cache_api.h"
+#include "data_plane/ddl/ob_direct_insert.h"
 #include "data_plane/transaction/ob_i_read_timestamp_service.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "query/command/ob_root_command_service.h"
@@ -30,6 +31,7 @@
 #include "sql/pl/ob_pl_package.h"
 #include "sql/pl/ob_pl_server_cursor.h"
 #include "share/ob_server_struct.h"
+#include "share/rc/ob_server_runtime.h"
 #include "sql/plan_cache/ob_ps_cache.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h" // for ObOptStatManager
 #include "sql/session/ob_user_resource_mgr.h"
@@ -192,6 +194,23 @@ share::schema::ObMultiVersionSchemaService *ObSQLSessionInfo::effective_schema_s
   return service != nullptr
       ? static_cast<share::schema::ObMultiVersionSchemaService *>(service)
       : &share::schema::ObMultiVersionSchemaService::get_instance();
+}
+
+common::ObMySQLProxy *ObSQLSessionInfo::effective_sql_proxy() const
+{
+  void *service = ns_runtime_ != nullptr
+      ? ns_runtime_->service(ns::NamespaceRuntime::SQL_PROXY) : nullptr;
+  return service != nullptr
+      ? static_cast<common::ObMySQLProxy *>(service) : GCTX.sql_proxy_;
+}
+
+data_plane::IDirectInsertService *ObSQLSessionInfo::effective_direct_insert_service() const
+{
+  void *service = ns_runtime_ != nullptr
+      ? ns_runtime_->service(ns::NamespaceRuntime::DIRECT_INSERT_SERVICE) : nullptr;
+  return service != nullptr
+      ? static_cast<data_plane::IDirectInsertService *>(service)
+      : share::server_service<data_plane::IDirectInsertService>();
 }
 
 void ObSQLSessionInfo::configure_obj_cast(
