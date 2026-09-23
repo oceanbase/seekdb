@@ -12,58 +12,6 @@ using namespace share::schema;
 using namespace storage;
 int worker_send(const Frame &, bool cleanup = false);
 int worker_read(Frame &);
-// Cumulative exchange timing per frame type, dumped by slow inner queries.
-struct ScanExchangeStats {
-  std::atomic<int64_t> count{0};
-  std::atomic<int64_t> send_us{0};
-  std::atomic<int64_t> wait_us{0};
-};
-static ScanExchangeStats (&scan_exchange_stats())[128] {
-  static ScanExchangeStats per_type[128];
-  return per_type;
-}
-// Per-table open counting for the slow inner-query dump.
-namespace scan_open_counter {
-struct Entry { uint64_t table; int64_t count; };
-inline Entry entries[64];
-inline std::atomic<int> used{0};
-inline lib::ObMutex lock;
-}
-inline void scan_open_count(uint64_t table) {
-  using namespace scan_open_counter;
-  ObMutexGuard guard(lock);
-  int n = used.load();
-  for (int i = 0; i < n; ++i) {
-    if (entries[i].table == table) { ++entries[i].count; return; }
-  }
-  if (n < 64) { entries[n] = Entry{table, 1}; used.store(n + 1); }
-}
-void scan_exchange_stats_dump(FILE *out) {
-  auto &per = scan_exchange_stats();
-  for (int t = 0; t < 128; ++t) {
-    const int64_t n = per[t].count.exchange(0);
-    const int64_t send = per[t].send_us.exchange(0);
-    const int64_t wait = per[t].wait_us.exchange(0);
-    if (n) {
-      fprintf(out, "PROTOTYPE_V23_SCAN_STATS type=%c count=%lld send_us=%lld wait_us=%lld\n",
-              t >= 32 && t < 127 ? t : '?', static_cast<long long>(n),
-              static_cast<long long>(send), static_cast<long long>(wait));
-    }
-  }
-  {
-    using namespace scan_open_counter;
-    ObMutexGuard guard(lock);
-    int n = used.load();
-    for (int i = 0; i < n; ++i) {
-      if (entries[i].count >= 100) {
-        fprintf(out, "PROTOTYPE_V23_SCAN_OPENS table=%llu count=%lld\n",
-                static_cast<unsigned long long>(entries[i].table),
-                static_cast<long long>(entries[i].count));
-      }
-      entries[i].count = 0;
-    }
-  }
-}
 int storage_schema(StorageSpaceHandle storage_space, uint64_t id,
                    ObSchemaGetterGuard &guard, const ObTableSchema *&schema) {
   schema = nullptr;
@@ -608,7 +556,6 @@ public:
   ~RemoteScanIterator() override { reset(); }
   int open() {
     const sql::ObStoragePushdownFlag flags(param.pd_storage_flag_);
-    scan_open_count(param.index_id_);
     // The storage process deliberately does not execute SQL expressions. A
     // pushed filter still has its expression list in op_filters_, so evaluate
     // it in this worker while streaming rows from the physical tablet.
@@ -820,15 +767,8 @@ public:
 private:
   int exchange(const Frame &request, Frame &reply) {
     StorageSessionScope scope(param.op_ ? param.op_->get_eval_ctx().exec_ctx_.get_my_session() : nullptr);
-    const int64_t begin = ObTimeUtility::current_time();
     int ret = scope.error() ? scope.error() : worker_send(request, request.type() == 'X');
-    const int64_t sent = ObTimeUtility::current_time();
     if (!ret) { ret = worker_read(reply); }
-    const int64_t done = ObTimeUtility::current_time();
-    auto &stats = scan_exchange_stats()[static_cast<unsigned char>(request.type()) & 0x7f];
-    stats.count.fetch_add(1);
-    stats.send_us.fetch_add(sent - begin);
-    stats.wait_us.fetch_add(done - sent);
     if (!ret && reply.type() != 's') { ret = OB_INVALID_ARGUMENT; }
     if (!ret) { ret = static_cast<int>(reply.number()); }
     return ret ? ret : reply.ret;

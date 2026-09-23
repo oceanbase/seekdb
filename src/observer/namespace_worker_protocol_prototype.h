@@ -167,18 +167,6 @@ inline bool in_process_namespace_enabled(uint64_t namespace_id)
   return namespace_id == 1 ? ns1_in_process()
       : namespace_id > 1 && namespace_id < (1ULL << 30) && forked_in_process();
 }
-// Defined in namespace_worker_scan_prototype.ipp. Dumps and resets cumulative
-// storage-frame exchange timing (count, send, wait per frame type).
-void scan_exchange_stats_dump(FILE *out);
-// Shared-process inner SQL is executed by this worker as well. While serving
-// that bounced request, schema lookups must use the worker's local cache;
-// fetching the version through IPC again would route the same SQL back here.
-inline thread_local bool worker_inner_sql_execution = false;
-// Shared storage can start periodic SQL callers before bootstrap has created
-// every native system tablet.  Mark those bounced inner-SQL requests so the
-// worker does not occupy an executor retrying a tablet that bootstrap itself
-// still has to create.
-inline thread_local bool worker_shared_bootstrap_request = false;
 // Storage scope is independent from the worker's fixed namespace identity.
 // A narrow global scope lets a native SQL operation address shared control
 // tablets in the same transaction without switching the worker SchemaService.
