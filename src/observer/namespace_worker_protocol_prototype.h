@@ -268,7 +268,6 @@ inline bool uses_remote_schema()
 // Shared-process inner SQL normally bounces to the target namespace worker
 // over IPC. With the ticket-05a gate, ns-1-bound inner SQL instead executes
 // on the vanilla local path inside the shared process; ns>1 still bounces.
-bool shared_inner_sql_bounces(uint64_t target_namespace);
 // A worker owns the decision to create a fork snapshot, while the storage
 // process owns the transaction clock used to produce its SCN.
 int acquire_storage_snapshot(int64_t &snapshot);

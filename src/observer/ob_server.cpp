@@ -3092,4 +3092,3 @@ void set_server_stop()
 
 #include "observer/namespace_worker_gateway_prototype.ipp"
 #include "observer/namespace_worker_inprocess_prototype.ipp"
-#include "observer/namespace_worker_inner_sql_prototype.ipp"

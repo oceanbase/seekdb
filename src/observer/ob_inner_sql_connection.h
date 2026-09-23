@@ -18,7 +18,7 @@
 #define OCEANBASE_OBSERVER_OB_INNER_SQL_CONNECTION_H_
 
 #include "common/mysqlclient/ob_isql_connection.h"
-#include "observer/namespace_worker_inner_sql_prototype.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "lib/guard/ob_weak_guard.h"
 #include "storage/tx/ob_multi_data_source.h"  // ObRegisterMdsFlag complete type(previously hidden behind the rpc_struct include chain)
 #include "lib/container/ob_2d_array.h"
@@ -313,8 +313,6 @@ private:
   void free_self();
 private:
   bool inited_;
-  // The native connection outlives its remote SQL session and streamed results.
-  namespace_worker_prototype::SessionBinding *worker_binding_ = nullptr;
   uint64_t target_namespace_ = 0;
   sql::ObQueryRetryCtrl retry_ctrl_;
   sql::ObSQLSessionInfo *extern_session_;   // nested sql and spi both use it, rename to extern.

@@ -53,8 +53,6 @@ OBSERVER_PRIVATE_HEADERS = [
     "namespace_worker_commands_prototype.ipp",
     "namespace_worker_direct_insert_prototype.ipp",
     "namespace_worker_gateway_prototype.ipp",
-    "namespace_worker_inner_sql_prototype.h",
-    "namespace_worker_inner_sql_prototype.ipp",
     "namespace_worker_multiplex_prototype.ipp",
     "namespace_worker_privileges_prototype.ipp",
     "namespace_worker_protocol_prototype.h",

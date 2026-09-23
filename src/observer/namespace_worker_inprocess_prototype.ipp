@@ -24,10 +24,6 @@
 #include <mutex>
 #include <shared_mutex>
 namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
-bool shared_inner_sql_bounces(uint64_t target_namespace)
-{
-  return !worker_process && !in_process_namespace_enabled(target_namespace);
-}
 // ---------------------------------------------------------------------------
 // In-process storage context: the channel-free twin of DirectStorageContext.
 // Owns the native storage session, open scans and write engine for one SQL
