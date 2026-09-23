@@ -282,13 +282,6 @@ int drain_storage_namespace_access(uint64_t namespace_id);
 int release_storage_namespace_schemas(uint64_t namespace_id,
                                       int64_t &table_count,
                                       int64_t &database_count);
-// A committed namespace owns a Worker endpoint.  The namespace-1 Worker asks
-// the shared process manager to create that endpoint without routing a dummy
-// SQL session through the compatibility listener.
-int activate_namespace(uint64_t namespace_id);
-// Remove the endpoint after namespace deletion has committed. Existing client
-// sessions are disconnected through the same Channel failure path as crashes.
-int deactivate_namespace(uint64_t namespace_id);
 // Recreate endpoints for durable LIVE namespaces after the shared process has
 // completed bootstrap. Sessions are intentionally not recovered.
 int reconcile_namespace_workers();
@@ -308,7 +301,6 @@ int begin_namespace_schema_recovery(bool &needed);
 int finish_namespace_schema_recovery(int64_t reconciled_schema_version);
 int fetch_schema_version(bool published, bool core_version, int64_t &version);
 share::schema::ObPrivMgr *make_remote_priv_mgr(int64_t version);
-int admin_set_config(obcall::ObAdminSetConfigArg &arg);
 struct SessionBinding;
 struct PendingRequest;
 // Native inner SQL can switch sessions while keeping the same execution stack.
@@ -382,7 +374,6 @@ sql::ObSQLSessionInfo *bound_session(SessionBinding *binding);
 int append_session_state(sql::ObSQLSessionInfo &session, Frame &frame, bool identity = false);
 int apply_session_state(sql::ObSQLSessionInfo &session, Frame &frame);
 void close_session(SessionBinding *binding);
-void stop_all();
 // Thin TCP entry (worker mode): routes "user@branch" logins on the public
 // MySQL port to the branch's worker Unix socket and byte-proxies from there.
 namespace proxy {

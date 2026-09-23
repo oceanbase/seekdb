@@ -1576,7 +1576,6 @@ void ObServer::set_stop()
 
 int ObServer::stop()
 {
-  namespace_worker_prototype::stop_all();
   int ret = OB_SUCCESS;
   int fail_ret = OB_SUCCESS;
   FLOG_INFO("[OBSERVER_NOTICE] stop observer begin");
