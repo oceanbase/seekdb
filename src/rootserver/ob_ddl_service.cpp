@@ -14676,7 +14676,8 @@ int ObDDLService::build_single_table_rw_defensive_(const ObArray<ObTabletID> &ta
   } else {
     const int64_t abs_timeout_us = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_ts()
                                                                      : ObTimeUtility::current_time() + GCONF.rpc_timeout;
-    ObIRootserverLocalRuntime *runtime = rootserver_local_runtime();
+    ObIRootserverLocalRuntime *runtime = task_context_.local_runtime_ != nullptr
+        ? task_context_.local_runtime_ : rootserver_local_runtime();
     if (OB_ISNULL(runtime)) {
       ret = OB_NOT_INIT;
     } else if (OB_FAIL(runtime->modify_tablet_binding_for_rw_defensive(

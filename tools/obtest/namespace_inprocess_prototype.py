@@ -75,9 +75,12 @@ def bootstrap_probe(experiment):
         experiment.sql("CREATE TABLE fresh.t(id INT PRIMARY KEY)", empty)
         experiment.sql("INSERT INTO fresh.t VALUES(1)", empty)
         assert experiment.sql("SELECT id FROM fresh.t", empty) == ((1,),)
+        experiment.sql("CREATE VIEW fresh.v AS SELECT id FROM fresh.t", empty)
+        assert experiment.sql("SELECT id FROM fresh.v", empty) == ((1,),)
         assert experiment.sql("SHOW COLUMNS FROM fresh.t", empty)[0][0] == "id"
         assert experiment.sql("SHOW INDEX FROM fresh.t", empty)[0][2] == "PRIMARY"
         assert "CREATE TABLE" in experiment.sql("SHOW CREATE TABLE fresh.t", empty)[0][1]
+        assert ("t",) in experiment.sql("SHOW TABLES FROM fresh", empty)
         assert experiment.sql("SHOW COLLATION LIKE 'utf8mb4_general_ci'", empty)
         assert experiment.sql("SHOW CHARACTER SET LIKE 'utf8mb4'", empty)
     with connect(experiment, "root@phase10_empty", database="fresh") as selected:

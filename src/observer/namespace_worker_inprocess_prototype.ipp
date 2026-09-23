@@ -372,6 +372,18 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
       services->sql_proxy, &GCONF, *GCTX.schema_status_proxy_,
       GCTX.status_, GCTX.in_bootstrap_, OB_MAX_VERSION_COUNT, *services->backend,
       *services->scheduler, *services->signal, suffix))) {
+  } else if (FALSE_IT(stage = "ddl_sequence")) {
+  } else if (OB_FAIL(([&] {
+      // The global launcher initializes only ns1's schema backend. Child DDL
+      // also publishes a sequence id, so seed it from the current leader epoch.
+      auto *root_backend = ObMultiVersionSchemaService::get_instance().get_schema_service();
+      const auto sequence = root_backend != nullptr
+          ? root_backend->get_sequence_id() : ObDDLSequenceID();
+      return root_backend == nullptr || !sequence.is_valid()
+          ? OB_NOT_INIT
+          : services->backend->init_sequence_id_by_sys_leader_epoch(
+                sequence.get_sys_leader_epoch());
+    })())) {
   } else if (FALSE_IT(stage = "baseline")) {
   } else if (FALSE_IT([&] {
       // Static system-table definitions are identical in every namespace;

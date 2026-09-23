@@ -1566,7 +1566,7 @@ int NamespaceForkKernelPrototype::make_namespace_schema(
     ret = set_optional(storage_schema.get_aux_lob_piece_tid(),
         [&](uint64_t id) { namespace_schema.set_aux_lob_piece_tid(id); });
   }
-  if (OB_SUCC(ret)) {
+  if (OB_SUCC(ret) && !namespace_schema.is_view_table()) {
     ret = rewrite_tablet_ids(namespace_schema,
         [&](uint64_t id, uint64_t &rewritten) {
           return local_id(id, rewritten);
@@ -1660,7 +1660,7 @@ int NamespaceForkKernelPrototype::make_storage_schema(
     ret = set_optional(logical_schema.get_aux_lob_piece_tid(),
         [&](uint64_t id) { storage_schema.set_aux_lob_piece_tid(id); });
   }
-  if (OB_SUCC(ret)) {
+  if (OB_SUCC(ret) && !storage_schema.is_view_table()) {
     ret = rewrite_tablet_ids(storage_schema,
         [&](uint64_t id, uint64_t &rewritten) {
           return storage_id(id, rewritten);

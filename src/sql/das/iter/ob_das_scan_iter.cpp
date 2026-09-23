@@ -52,6 +52,7 @@ int ObDASScanIter::inner_init(ObDASIterParam &param)
         || table_id == share::OB_ALL_VIRTUAL_CHARSET_TID
         || table_id == share::OB_ALL_VIRTUAL_SHOW_CREATE_DATABASE_TID
         || table_id == share::OB_ALL_VIRTUAL_SHOW_CREATE_TABLE_TID
+        || table_id == share::OB_ALL_VIRTUAL_SHOW_TABLES_TID
         || table_id == share::OB_ALL_VIRTUAL_CORE_ALL_TABLE_TID
         || table_id == share::OB_ALL_VIRTUAL_CORE_COLUMN_TABLE_TID;
     tsc_service_ = native_virtual
