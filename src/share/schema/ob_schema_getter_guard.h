@@ -31,7 +31,6 @@
 
 namespace oceanbase
 {
-namespace observer { namespace namespace_worker_prototype { struct Frame; } }
 namespace lib
 {
 class Worker;
@@ -120,12 +119,6 @@ friend class MockSchemaService;
 const static int DEFAULT_RESERVE_SIZE = 2;
 typedef common::ObSEArray<SchemaObj, DEFAULT_RESERVE_SIZE> SchemaObjs;
 typedef common::ObSEArray<ObSchemaMgrInfo, DEFAULT_RESERVE_SIZE> SchemaMgrInfos;
-struct WorkerOwnedSchema {
-  explicit WorkerOwnedSchema(ObSchema *schema = nullptr) : schema_(schema) {}
-  TO_STRING_KV(KP_(schema));
-  ObSchema *schema_;
-};
-typedef common::ObSEArray<WorkerOwnedSchema, DEFAULT_RESERVE_SIZE> WorkerOwnedSchemas;
 
 public:
 
@@ -702,16 +695,6 @@ private:
                            const uint64_t schema_id,
                            const T *&schema);
   template<typename T>
-  int worker_schema_prototype(char operation, uint64_t id, const common::ObString &name,
-                              ObSchemaType type, const T *&schema);
-  template<typename T>
-  int decode_worker_schema_prototype(observer::namespace_worker_prototype::Frame &reply,
-                                      ObSchemaType type, const T *&schema);
-  int worker_table_schemas_prototype(
-      uint64_t database_id,
-      common::ObIArray<const ObTableSchema *> &table_schemas);
-  void release_worker_schemas_prototype();
-  template<typename T>
   int put_to_local_cache(
       const ObSchemaType schema_type,
       const uint64_t schema_id,
@@ -760,13 +743,11 @@ private:
   SchemaMgrInfos schema_mgr_infos_;
   // for new lazy logic
   SchemaObjs schema_objs_;
-  WorkerOwnedSchemas worker_owned_schemas_;
 
   ObSchemaMgrItem::Mod mod_;
   SchemaGuardType schema_guard_type_;
   bool is_inited_;
   int64_t pin_cache_size_;
-  ObPrivMgr *worker_priv_mgr_ = nullptr;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSchemaGetterGuard);
 };

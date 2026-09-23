@@ -151,8 +151,6 @@ inline int read_storage_space(Frame &frame,
   }
   return ret;
 }
-using CatalogFetch = int (*)(char, uint64_t, const common::ObString &, int64_t, Frame &);
-inline CatalogFetch worker_catalog_fetch = nullptr;
 inline uint64_t worker_namespace = 0;
 inline bool worker_process = false;
 inline bool worker_bootstrapping = false;
