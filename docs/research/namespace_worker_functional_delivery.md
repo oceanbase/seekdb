@@ -1,6 +1,6 @@
 # Worker 功能交付：独立入口、原生协议、通用 DDL
 
-> 2026-09-20 状态：本节是当前实现基线。后文保留的是 V19 的排障时间线，其中“尚未完成”等中间状态不再代表当前结论。
+> 2026-09-24 状态：下文的 Worker 架构和排障记录是历史原型，已由单进程 namespace 实现取代。下方四条门禁命令运行当前单进程用例；历史 Worker 行为与旧 `--case` 选项不再可执行。
 
 ## 当前架构基线
 
@@ -34,13 +34,13 @@ export SEEKDB_FORK_PROTOTYPE_TEST_ROOT=/data/1/nijia.nj/test                    
 ```
 
 ```bash
-# 1. 冷启动门禁：共享进程禁止执行 SQL、Worker bootstrap、崩溃恢复
+# 1. 冷启动门禁：单进程启动、子空间登录和继承读取
 python3 tools/obtest/namespace_worker_bootstrap_prototype.py --binary build_release/src/observer/seekdb
 
-# 2. SQL Worker 全量：嵌套 SQL、事务、查询超时/取消、DDL、索引（--case 可选 insert/dml/nested/ddl/index 单跑）
+# 2. SQL 门禁：事务、索引、二级 fork 和重启恢复
 python3 tools/obtest/namespace_sql_worker_prototype.py --binary build_release/src/observer/seekdb --case full
 
-# 3. 原生客户端入口全量：UDS 直连、root@ns 登录路由、权限、协议特性（--case 可选 forked/tls）
+# 3. 直连门禁：DDL、DML、分区、索引和 LOB
 python3 tools/obtest/namespace_worker_direct_prototype.py --binary build_release/src/observer/seekdb --case full
 
 # 4. TLS 变体：入口 TLS 端到端
