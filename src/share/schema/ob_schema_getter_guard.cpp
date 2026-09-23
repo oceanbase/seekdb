@@ -188,16 +188,6 @@ void ObSchemaGetterGuard::release_worker_schemas_prototype()
 int ObSchemaGetterGuard::get_priv_mgr(const ObPrivMgr *&priv_mgr)
 {
   priv_mgr = nullptr;
-  if (observer::namespace_worker_prototype::uses_remote_schema()) {
-    if (!worker_priv_mgr_) {
-      int64_t version = OB_INVALID_VERSION;
-      const int ret = get_schema_version(version);
-      if (ret) { return ret; }
-      worker_priv_mgr_ = observer::namespace_worker_prototype::make_remote_priv_mgr(version);
-    }
-    priv_mgr = worker_priv_mgr_;
-    return priv_mgr ? OB_SUCCESS : OB_ALLOCATE_MEMORY_FAILED;
-  }
   const ObSchemaMgr *mgr = nullptr;
   const int ret = check_lazy_guard(mgr);
   if (!ret) { priv_mgr = &mgr->priv_mgr_; }

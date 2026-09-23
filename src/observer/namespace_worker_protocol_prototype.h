@@ -293,7 +293,6 @@ int finish_namespace_schema_change(int64_t committed_schema_version);
 int begin_namespace_schema_recovery(bool &needed);
 int finish_namespace_schema_recovery(int64_t reconciled_schema_version);
 int fetch_schema_version(bool published, bool core_version, int64_t &version);
-share::schema::ObPrivMgr *make_remote_priv_mgr(int64_t version);
 struct SessionBinding;
 // Native inner SQL can switch sessions while keeping the same execution stack.
 // Keep its storage route with that session and restore the caller on return.

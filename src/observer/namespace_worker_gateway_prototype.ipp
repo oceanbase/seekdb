@@ -9,7 +9,6 @@
 #include "observer/namespace_worker_write_prototype.ipp"
 #include "observer/namespace_worker_direct_insert_prototype.ipp"
 #include "observer/namespace_worker_commands_prototype.ipp"
-#include "observer/namespace_worker_privileges_prototype.ipp"
 #include "namespace/namespace.h"
 namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
 using namespace common;
@@ -73,12 +72,6 @@ int catalog(uint64_t ns, Frame &request, Frame &reply) {
   const uint64_t id = request.number();
   const ObString name = request.string();
   const int64_t snapshot_version = static_cast<int64_t>(request.number());
-  if (request.type() == 'p') {
-    if (!request.consumed() || ns != 1 || id != 1) {
-      reply = Frame('c'); reply.number(OB_INVALID_ARGUMENT); return reply.ret;
-    }
-    return process_privilege_read(snapshot_version, name, reply);
-  }
   if (request.type() == 'k') {
     int64_t version = OB_INVALID_VERSION;
     if (!request.consumed() || id > 1 || snapshot_version != OB_INVALID_VERSION
