@@ -18,7 +18,10 @@
 #include "ob_storage_estimator.h"
 #include "data_plane/ob_i_storage_estimator.h"
 #include "data_plane/transaction/ob_i_read_timestamp_service.h"
+#include "observer/namespace_worker_protocol_prototype.h"
+#include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 #include "share/rc/ob_server_runtime.h"
+#include <algorithm>
 
 namespace oceanbase {
 using namespace storage;
@@ -27,9 +30,12 @@ using namespace share;
 namespace sql {
 
 int ObStorageEstimator::estimate_row_count(const obcall::ObEstPartArg &arg,
-                                           obcall::ObEstPartRes &res)
+                                           obcall::ObEstPartRes &res,
+                                           ObSQLSessionInfo *session)
 {
   int ret = OB_SUCCESS;
+  const uint64_t namespace_id =
+      observer::namespace_worker_prototype::in_process_session_ns(session);
   //est path rows
   ObTableScanParam param;
   share::SCN max_readable_scn;
@@ -43,17 +49,70 @@ int ObStorageEstimator::estimate_row_count(const obcall::ObEstPartArg &arg,
     param.frozen_version_ = static_cast<int64_t>(max_readable_scn.get_val_for_sql());
     param.schema_version_ = arg.schema_version_;
   }
+  const int64_t readable_version = param.frozen_version_;
   for (int64_t i = 0; OB_SUCC(ret) && i < arg.index_params_.count(); i++) {
     obcall::ObEstPartResElement est_res;
-    param.index_id_ = arg.index_params_.at(i).index_id_;
-    param.scan_flag_ = arg.index_params_.at(i).scan_flag_;
-    param.tablet_id_ = arg.index_params_.at(i).tablet_id_;
-    param.tx_id_ = arg.index_params_.at(i).tx_id_;
-    if (OB_FAIL(storage_estimate_rowcount(param,
-                  arg.index_params_.at(i).batch_,
-                  est_res))) {
-    } else if (OB_FAIL(res.index_param_res_.push_back(est_res))) {
+    const auto &source = arg.index_params_.at(i);
+    param.index_id_ = source.index_id_;
+    param.frozen_version_ = readable_version;
+    param.scan_flag_ = source.scan_flag_;
+    param.tablet_id_ = source.tablet_id_;
+    param.tx_id_ = source.tx_id_;
+    ObSimpleBatch routed_batch;
+    ObNewRange routed_range;
+    SQLScanRangeArray routed_ranges;
+    const ObSimpleBatch *batch = &source.batch_;
+    bool inherited_with_cap = false;
+    if (namespace_id > 1 && !is_inner_table(param.index_id_)) {
+      uint64_t encoded_tablet_id = OB_INVALID_ID;
+      common::ObTabletID physical_tablet;
+      int64_t fork_cap = 0;
+      uint64_t physical_index_id = OB_INVALID_ID;
+      if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
+              namespace_id, param.tablet_id_.id(), encoded_tablet_id))) {
+      } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::resolve_read_tablet(
+                     common::ObTabletID(encoded_tablet_id), physical_tablet, fork_cap))) {
+      } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
+                     storage::NamespaceForkKernelPrototype::namespace_of(physical_tablet.id()),
+                     param.index_id_, physical_index_id))) {
+      } else {
+        inherited_with_cap = fork_cap > 0 && physical_tablet.id() != encoded_tablet_id;
+        param.tablet_id_ = physical_tablet;
+        param.index_id_ = physical_index_id;
+        if (fork_cap > 0) {
+          param.frozen_version_ = std::min(param.frozen_version_, fork_cap);
+        }
+        if (source.batch_.type_ == ObSimpleBatch::T_SCAN && source.batch_.range_ != nullptr) {
+          routed_range = *source.batch_.range_;
+          routed_range.table_id_ = physical_index_id;
+          routed_batch.type_ = ObSimpleBatch::T_SCAN;
+          routed_batch.range_ = &routed_range;
+          batch = &routed_batch;
+        } else if (source.batch_.type_ == ObSimpleBatch::T_MULTI_SCAN
+                   && source.batch_.ranges_ != nullptr) {
+          if (OB_FAIL(routed_ranges.assign(*source.batch_.ranges_))) {
+          } else {
+            for (int64_t j = 0; j < routed_ranges.count(); ++j) {
+              routed_ranges.at(j).table_id_ = physical_index_id;
+            }
+            routed_batch.type_ = ObSimpleBatch::T_MULTI_SCAN;
+            routed_batch.ranges_ = &routed_ranges;
+            batch = &routed_batch;
+          }
+        }
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (inherited_with_cap) {
+      // The native row-count estimator counts the backing tablet's latest
+      // memtable rows, even when the forked reader is capped at an older SCN.
+      // Return an unreliable estimate instead of exposing parent-only rows.
+      est_res.reset();
     } else {
+      ret = storage_estimate_rowcount(param, *batch, est_res);
+    }
+    if (OB_SUCC(ret)) {
+      ret = res.index_param_res_.push_back(est_res);
     }
   }
 #if !defined(NDEBUG)
@@ -65,12 +124,30 @@ int ObStorageEstimator::estimate_row_count(const obcall::ObEstPartArg &arg,
 }
 
 int ObStorageEstimator::estimate_block_count_and_row_count(const obcall::ObEstBlockArg &arg,
-                                                           obcall::ObEstBlockRes &res)
+                                                           obcall::ObEstBlockRes &res,
+                                                           ObSQLSessionInfo *session,
+                                                           uint64_t table_id)
 {
   int ret = OB_SUCCESS;
+  const uint64_t namespace_id =
+      observer::namespace_worker_prototype::in_process_session_ns(session);
   for (int64_t i = 0; OB_SUCC(ret) && i < arg.tablet_params_arg_.count(); ++i) {
     obcall::ObEstBlockResElement est_res;
-    if (OB_FAIL(storage_estimate_block_count_and_row_count(arg.tablet_params_arg_.at(i), est_res))) {
+    auto routed = arg.tablet_params_arg_.at(i);
+    if (namespace_id > 1 && !is_inner_table(table_id)) {
+      uint64_t encoded_tablet_id = OB_INVALID_ID;
+      common::ObTabletID physical_tablet;
+      int64_t fork_cap = 0;
+      if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
+              namespace_id, routed.tablet_id_.id(), encoded_tablet_id))) {
+      } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::resolve_read_tablet(
+                     common::ObTabletID(encoded_tablet_id), physical_tablet, fork_cap))) {
+      } else {
+        routed.tablet_id_ = physical_tablet;
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(storage_estimate_block_count_and_row_count(routed, est_res))) {
     } else if (OB_FAIL(res.tablet_params_res_.push_back(est_res))) {
     } else {
       LOG_TRACE("[OPT EST]: block count and row count stat", K(est_res), K(i), "param", arg.tablet_params_arg_.at(i));

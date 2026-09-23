@@ -277,7 +277,7 @@ private:
                                                  bool only_ds_basic_stat,
                                                  bool &is_success);
 
-  static int do_storage_estimation(ObBatchEstTasks &tasks);
+  static int do_storage_estimation(ObOptimizerContext &ctx, ObBatchEstTasks &tasks);
 
   static int get_task(ObIArray<ObBatchEstTasks *>& tasks,
                       ObBatchEstTasks *&task);

@@ -320,7 +320,8 @@ int ObBasicStatsEstimator::do_estimate_block_count_and_row_count(ObExecContext &
         }
       }
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(ObStorageEstimator::estimate_block_count_and_row_count(arg, result))) {
+      } else if (OB_FAIL(ObStorageEstimator::estimate_block_count_and_row_count(
+                     arg, result, ctx.get_my_session(), table_id))) {
       } else if (OB_UNLIKELY(result.tablet_params_res_.count() != estimate_res.count())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected local storage estimation result count", K(ret), K(result), K(estimate_res));

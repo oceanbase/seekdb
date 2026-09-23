@@ -313,7 +313,7 @@ int ObAdaptiveAutoDop::do_storage_estimation(ObBatchEstTasks &tasks)
   int ret = OB_SUCCESS;
   const obcall::ObEstPartArg &arg = tasks.arg_;
   obcall::ObEstPartRes &result = tasks.res_;
-  if (OB_FAIL(ObStorageEstimator::estimate_row_count(arg, result))) {
+  if (OB_FAIL(ObStorageEstimator::estimate_row_count(arg, result, ctx_.get_my_session()))) {
   }
   return ret;
 }

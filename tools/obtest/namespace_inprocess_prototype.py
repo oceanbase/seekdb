@@ -161,6 +161,21 @@ def sql_probe(experiment):
         experiment.sql("CALL phase10.sum_owned(@owned_total)", child)
         assert experiment.sql("SELECT @owned_total", child) == ((33,),)
         experiment.sql("COMMIT", child)
+        experiment.sql("CREATE TABLE phase10.ds_left(a INT PRIMARY KEY)", child)
+        experiment.sql("CREATE TABLE phase10.ds_right(a INT PRIMARY KEY)", child)
+        time.sleep(3)
+        sampling_plan = experiment.sql(
+            "EXPLAIN EXTENDED_NOADDR SELECT l.a FROM phase10.ds_left l "
+            "LEFT JOIN phase10.ds_right r ON l.a=r.a "
+            "WHERE r.a IS NOT NULL AND l.a>10", child, log=False)
+        assert sum("dynamic sampling level:1" in str(cell)
+                   for row in sampling_plan for cell in row) == 2, sampling_plan
+        experiment.sql("INSERT INTO phase10.parent VALUES(3,30)")
+        assert experiment.sql("SELECT COUNT(*) FROM phase10.parent", child) == ((2,),)
+        inherited_plan = experiment.sql(
+            "EXPLAIN EXTENDED_NOADDR SELECT * FROM phase10.parent", child, log=False)
+        assert not any("table_rows:3" in str(cell)
+                       for row in inherited_plan for cell in row), inherited_plan
         experiment.sql("UPDATE phase10.parent SET v=30 WHERE id=1", child)
         assert experiment.sql("SELECT v FROM phase10.parent WHERE id=1") == ((10,),)
         experiment.sql("FORK NAMESPACE phase10_grandchild FROM phase10_child")

@@ -701,7 +701,7 @@ int ObAccessPathEstimation::process_storage_estimation(ObOptimizerContext &ctx,
     if (OB_ISNULL(tasks.at(i))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("task is null", K(ret));
-    } else if (OB_FAIL(do_storage_estimation(*tasks.at(i)))) {
+    } else if (OB_FAIL(do_storage_estimation(ctx, *tasks.at(i)))) {
       if (is_retry_ret(ret)) {
         //retry code throw error, and retry
       } else {
@@ -1075,12 +1075,12 @@ int ObAccessPathEstimation::get_result_helper(ObIArray<EstResultHelper> &result_
   return ret;
 }
 
-int ObAccessPathEstimation::do_storage_estimation(ObBatchEstTasks &tasks)
+int ObAccessPathEstimation::do_storage_estimation(ObOptimizerContext &ctx, ObBatchEstTasks &tasks)
 {
   int ret = OB_SUCCESS;
   const obcall::ObEstPartArg &arg = tasks.arg_;
   obcall::ObEstPartRes &result = tasks.res_;
-  if (OB_FAIL(ObStorageEstimator::estimate_row_count(arg, result))) {
+  if (OB_FAIL(ObStorageEstimator::estimate_row_count(arg, result, ctx.get_session_info()))) {
   }
   return ret;
 }
@@ -1609,7 +1609,7 @@ int ObAccessPathEstimation::storage_estimate_full_table_rowcount(ObOptimizerCont
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to generate whole range", K(ret), K(range));
       } else if (OB_FAIL(arg.index_params_.push_back(path_arg))) {
-      } else if (OB_FAIL(do_storage_estimation(task))) {
+      } else if (OB_FAIL(do_storage_estimation(ctx, task))) {
         if (is_retry_ret(ret)) {
           //retry code throw error, and retry
         } else {
@@ -1720,7 +1720,7 @@ int ObAccessPathEstimation::storage_estimate_range_rowcount(ObOptimizerContext &
     if (OB_ISNULL(task = tasks.at(i))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("task is null", K(ret));
-    } else if (OB_FAIL(do_storage_estimation(*tasks.at(i)))) {
+    } else if (OB_FAIL(do_storage_estimation(ctx, *tasks.at(i)))) {
       if (is_retry_ret(ret)) {
         //retry code throw error, and retry
       } else {

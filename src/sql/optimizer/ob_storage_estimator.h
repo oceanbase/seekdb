@@ -36,6 +36,7 @@ struct ObEstPartResElement;
 }
 namespace sql
 {
+class ObSQLSessionInfo;
 
 class ObStorageEstimator
 {
@@ -43,10 +44,13 @@ public:
   ObStorageEstimator() {};
 
   static int estimate_row_count(const obcall::ObEstPartArg &arg,
-                                obcall::ObEstPartRes &res);
+                                obcall::ObEstPartRes &res,
+                                ObSQLSessionInfo *session);
 
   static int estimate_block_count_and_row_count(const obcall::ObEstBlockArg &arg,
-                                                obcall::ObEstBlockRes &res);
+                                                obcall::ObEstBlockRes &res,
+                                                ObSQLSessionInfo *session,
+                                                uint64_t table_id);
 private:
 
   // compute memtable whole range row counts
