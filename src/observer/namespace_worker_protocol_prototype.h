@@ -306,7 +306,6 @@ public:
   int error() const { return error_; }
   void close(SessionBinding *&binding);
 private:
-  PendingRequest *previous_;
   InProcessStorage *previous_in_process_ = nullptr;
   bool switched_ = false;
   int error_ = common::OB_SUCCESS;
@@ -323,7 +322,6 @@ public:
   int error() const { return error_; }
 private:
   SessionBinding *binding_ = nullptr;
-  PendingRequest *previous_ = nullptr;
   InProcessStorage *previous_in_process_ = nullptr;
   int64_t previous_timeout_ = 0;
   int error_ = common::OB_SUCCESS;
