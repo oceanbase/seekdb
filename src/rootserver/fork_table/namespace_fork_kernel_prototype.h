@@ -78,9 +78,7 @@ public:
                                  const share::schema::ObTableSchema &logical_schema,
                                  share::schema::ObTableSchema &storage_schema);
   static int namespace_schema_version(uint64_t namespace_id, int64_t &schema_version);
-  // Persistent lifecycle fence between namespace-local DDL and namespace
-  // fork. The shared storage process invokes these operations; SQL Workers
-  // only use the typed protocol declared in namespace_worker_protocol_prototype.h.
+  // Persistent lifecycle fence between namespace-local DDL and namespace fork.
   static int begin_schema_change(uint64_t namespace_id);
   static int finish_schema_change(uint64_t namespace_id, int64_t schema_version);
   static int begin_schema_recovery(uint64_t namespace_id, bool &needed);
@@ -91,7 +89,6 @@ public:
   static int observe_schema(common::ObISQLClient &trans, const share::schema::ObTableSchema &schema);
   static int observe_schemas(common::ObISQLClient &trans,
                              const common::ObIArray<share::schema::ObTableSchema> &schemas);
-  static int flush_schema_changes(common::ObISQLClient &trans, bool commit);
   static int forget_schema(common::ObISQLClient &trans, const share::schema::ObTableSchema &schema,
                            int64_t schema_version, bool *private_tablet = nullptr);
   static int publish_schema_delta(

@@ -138,55 +138,6 @@ struct SchemaHolder {
   ObTableSchema schema;
   SchemaHolder() : allocator("ForkProtoSchema"), schema(&allocator) {}
 };
-enum class PendingSchemaChangeKind { UPSERT, DELETE };
-struct PendingSchemaChange {
-  const ObISQLClient *transaction = nullptr;
-  uint64_t namespace_id = 0;
-  int64_t schema_version = OB_INVALID_VERSION;
-  PendingSchemaChangeKind kind = PendingSchemaChangeKind::UPSERT;
-  std::string schema;
-};
-std::mutex pending_schema_changes_mutex;
-std::unordered_set<const ObISQLClient *> deferred_schema_transactions;
-std::unordered_set<const ObISQLClient *> active_schema_transactions;
-std::vector<PendingSchemaChange> pending_schema_changes;
-
-bool defer_schema_change(const ObISQLClient &trans)
-{
-  std::lock_guard<std::mutex> lock(pending_schema_changes_mutex);
-  return deferred_schema_transactions.count(&trans) != 0;
-}
-
-int enqueue_schema_change(ObISQLClient &trans,
-                          uint64_t namespace_id,
-                          const ObTableSchema &schema,
-                          PendingSchemaChangeKind kind,
-                          int64_t schema_version)
-{
-  const int64_t size = schema.get_serialize_size();
-  if (size <= 0 || namespace_id >= (1ULL << 30)
-      || (kind == PendingSchemaChangeKind::DELETE && schema_version <= 0)) {
-    return OB_INVALID_ARGUMENT;
-  }
-  PendingSchemaChange change;
-  change.transaction = &trans;
-  change.namespace_id = namespace_id;
-  change.schema_version = schema_version;
-  change.kind = kind;
-  change.schema.resize(size);
-  int64_t pos = 0;
-  int ret = schema.serialize(&change.schema[0], size, pos);
-  if (OB_SUCC(ret) && pos != size) { ret = OB_ERR_UNEXPECTED; }
-  if (OB_SUCC(ret)) {
-    std::lock_guard<std::mutex> lock(pending_schema_changes_mutex);
-    if (deferred_schema_transactions.count(&trans) == 0) {
-      ret = OB_STATE_NOT_MATCH;
-    } else {
-      pending_schema_changes.push_back(std::move(change));
-    }
-  }
-  return ret;
-}
 std::mutex schema_mutex;
 // Immutable schemas remain alive for existing schema guards and cached plans.
 // ponytail: process-lifetime schema cache; bounded by tables opened in this disposable instance.
@@ -1862,44 +1813,13 @@ int NamespaceForkKernelPrototype::finish_schema_recovery(
   }
   return ret;
 }
-int NamespaceForkKernelPrototype::begin_schema_changes(ObISQLClient &trans, uint64_t namespace_id) {
-  if (!observer::namespace_worker_prototype::worker_process) {
-    return namespace_id > 1 ? begin_schema_change(namespace_id) : OB_SUCCESS;
-  }
-  int ret = OB_SUCCESS;
-  {
-    std::lock_guard<std::mutex> lock(pending_schema_changes_mutex);
-    if (!deferred_schema_transactions.insert(&trans).second
-        || !active_schema_transactions.insert(&trans).second) {
-      ret = OB_INIT_TWICE;
-    }
-  }
-  if (OB_SUCC(ret) && namespace_id > 1) {
-    ret = observer::namespace_worker_prototype::begin_namespace_schema_change();
-  }
-  if (OB_FAIL(ret)) {
-    std::lock_guard<std::mutex> lock(pending_schema_changes_mutex);
-    deferred_schema_transactions.erase(&trans);
-    active_schema_transactions.erase(&trans);
-  }
-  return ret;
+int NamespaceForkKernelPrototype::begin_schema_changes(ObISQLClient &, uint64_t namespace_id) {
+  return namespace_id > 1 ? begin_schema_change(namespace_id) : OB_SUCCESS;
 }
 int NamespaceForkKernelPrototype::finish_schema_changes(
-    ObISQLClient &trans, uint64_t namespace_id, int64_t committed_schema_version) {
-  if (!observer::namespace_worker_prototype::worker_process) {
-    return namespace_id > 1
-        ? finish_schema_change(namespace_id, committed_schema_version) : OB_SUCCESS;
-  }
-  bool active = false;
-  {
-    std::lock_guard<std::mutex> lock(pending_schema_changes_mutex);
-    active = active_schema_transactions.erase(&trans) != 0;
-  }
-  if (!active) { return OB_SUCCESS; }
+    ObISQLClient &, uint64_t namespace_id, int64_t committed_schema_version) {
   return namespace_id > 1
-      ? observer::namespace_worker_prototype::finish_namespace_schema_change(
-          committed_schema_version)
-      : OB_SUCCESS;
+      ? finish_schema_change(namespace_id, committed_schema_version) : OB_SUCCESS;
 }
 bool NamespaceForkKernelPrototype::is_namespace_address(const ObString &name) {
   return name.prefix_match("__fork_ns_");
@@ -2166,12 +2086,7 @@ int NamespaceForkKernelPrototype::control_namespace(const ObString &source, cons
 int NamespaceForkKernelPrototype::observe_schema(ObISQLClient &trans, const ObTableSchema &schema) {
   const uint64_t namespace_id = trans.target_namespace();
   const uint64_t schema_namespace = namespace_id > 1 ? namespace_id : 0;
-  const int ret = observer::namespace_worker_prototype::worker_process
-          && defer_schema_change(trans)
-      ? enqueue_schema_change(trans, schema_namespace, schema,
-            PendingSchemaChangeKind::UPSERT, schema.get_schema_version())
-      : observe_schema_in_namespace(trans, schema, schema_namespace);
-  return ret;
+  return observe_schema_in_namespace(trans, schema, schema_namespace);
 }
 
 int NamespaceForkKernelPrototype::observe_schema_in_namespace(
@@ -2449,57 +2364,10 @@ int NamespaceForkKernelPrototype::observe_schemas(ObISQLClient &trans,
   return ret;
 }
 
-int NamespaceForkKernelPrototype::flush_schema_changes(
-    ObISQLClient &trans, bool commit) {
-  std::vector<PendingSchemaChange> changes;
-  {
-    std::lock_guard<std::mutex> lock(pending_schema_changes_mutex);
-    if (deferred_schema_transactions.erase(&trans) == 0) {
-      return OB_SUCCESS;
-    }
-    std::vector<PendingSchemaChange> remaining;
-    changes.reserve(pending_schema_changes.size());
-    remaining.reserve(pending_schema_changes.size());
-    for (auto &change : pending_schema_changes) {
-      if (change.transaction == &trans) { changes.push_back(std::move(change)); }
-      else { remaining.push_back(std::move(change)); }
-    }
-    pending_schema_changes.swap(remaining);
-  }
-  if (!commit) { return OB_SUCCESS; }
-
-  int ret = OB_SUCCESS;
-  for (size_t i = 0; OB_SUCC(ret) && i < changes.size(); ++i) {
-    PendingSchemaChange &change = changes[i];
-    SchemaHolder holder;
-    int64_t pos = 0;
-    if (OB_FAIL(holder.schema.deserialize(
-            change.schema.data(), change.schema.size(), pos))) {
-    } else if (pos != static_cast<int64_t>(change.schema.size())) {
-      ret = OB_CHECKSUM_ERROR;
-    } else if (change.kind == PendingSchemaChangeKind::UPSERT) {
-      ret = observe_schema_in_namespace(
-          trans, holder.schema, change.namespace_id);
-    } else {
-      ret = forget_schema_in_namespace(
-          trans, holder.schema, change.schema_version,
-          change.namespace_id, nullptr);
-    }
-  }
-  LOG_INFO("PROTOTYPE_NAMESPACE_SCHEMA_FLUSH", K(ret), K(commit),
-      "change_count", changes.size());
-  return ret;
-}
 int NamespaceForkKernelPrototype::forget_schema(ObISQLClient &trans, const ObTableSchema &schema,
                                                 int64_t schema_version, bool *private_tablet) {
   const uint64_t namespace_id = trans.target_namespace();
   const uint64_t schema_namespace = namespace_id > 1 ? namespace_id : 0;
-  if (observer::namespace_worker_prototype::worker_process
-      && defer_schema_change(trans)) {
-    if (private_tablet != nullptr) { *private_tablet = false; }
-    return enqueue_schema_change(trans, schema_namespace, schema,
-        PendingSchemaChangeKind::DELETE, schema_version);
-  }
   return forget_schema_in_namespace(
       trans, schema, schema_version, schema_namespace, private_tablet);
 }
