@@ -58,6 +58,7 @@
 #include "sql/engine/aggregate/ob_merge_distinct_op.h"
 #include "sql/engine/aggregate/ob_scalar_aggregate_op.h"
 #include "sql/engine/basic/ob_expr_values_op.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "sql/engine/basic/ob_monitoring_dump_op.h"
 #include "sql/engine/px/exchange/ob_px_ms_receive_op.h"
 #include "sql/engine/px/exchange/ob_px_dist_transmit_op.h"
@@ -3889,6 +3890,13 @@ int ObStaticEngineCG::generate_tsc_flags(ObLogTableScan &op, ObTableScanSpec &sp
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid opt params", K(ret), KP(opt_params));
     } else if (OB_FAIL(get_pushdown_storage_level(log_plan->get_optimizer_context(), GCONF._pushdown_storage_level, pd_level))) {
+    } else if (FALSE_IT(
+        // Ticket 05c: the in-process remote scan stub does not evaluate
+        // storage-pushed filters/aggregates (same restriction as the
+        // worker-mode remote scan); plan forked-namespace scans without
+        // pushdown.
+        pd_level = observer::namespace_worker_prototype::in_process_session_ns(
+            static_cast<sql::ObSQLSessionInfo *>(session_info)) > 1 ? 0 : pd_level)) {
     } else if (OB_FAIL(opt_params->has_opt_param(ObOptParamHint::IO_READ_BATCH_SIZE, has_io_batch_size_hint))) {
     } else if (OB_FAIL(opt_params->has_opt_param(ObOptParamHint::IO_READ_REDUNDANT_LIMIT_PERCENTAGE, has_io_gap_percentage_hint))) {
     }

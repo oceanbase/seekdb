@@ -20,6 +20,7 @@
 #include "share/ob_lob_access_utils.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/datum/ob_datum_funcs.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 
 namespace oceanbase
 {
@@ -303,7 +304,8 @@ OB_INLINE int datum_lob_locator_get_string(const ObDatum &datum,
         ? access_ctx->lob_read_options_ : nullptr;
     ObLobReadOptions *fallback_options = nullptr;
     if (OB_ISNULL(options)) {
-      ObILobReadService *read_service = share::server_service<ObILobReadService>();
+      ObILobReadService *read_service = ::oceanbase::observer::namespace_worker_prototype::effective_lob_read_service(
+          THIS_WORKER.get_session(), share::server_service<ObILobReadService>());
       if (OB_NOT_NULL(read_service)) {
         void *buf = allocator.alloc(sizeof(ObLobReadOptions));
         if (OB_ISNULL(buf)) {

@@ -55,7 +55,14 @@ static int get_tx_service(ObBasicSessionInfo *session,
     
   }
   if (OB_SUCC(ret)) {
-    if (OB_ISNULL(txs = data_plane::query_transaction_service())) {
+    // Ticket 05c: a session of an in-process forked namespace transacts
+    // through the in-process remote stub; every other session keeps the
+    // process-local transaction service. Use the argument, not THIS_WORKER:
+    // SERVER_MODULE_SCOPE callers replace the ambient worker session.
+    txs = observer::namespace_worker_prototype::effective_transaction_service(
+        static_cast<ObSQLSessionInfo *>(session),
+        data_plane::query_transaction_service());
+    if (OB_ISNULL(txs)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("get_tx_service", K(ret));
     }
@@ -499,7 +506,7 @@ int ObSqlTransControl::start_stmt(ObExecContext &exec_ctx)
 {
   int ret = OB_SUCCESS;
   observer::namespace_worker_prototype::StorageSessionScope worker_storage_scope(
-      observer::namespace_worker_prototype::worker_namespace > 1 ? GET_MY_SESSION(exec_ctx) : nullptr);
+      observer::namespace_worker_prototype::serving_namespace() > 1 ? GET_MY_SESSION(exec_ctx) : nullptr);
   if (worker_storage_scope.error()) { return worker_storage_scope.error(); }
   data_plane::begin_lock_wait_request();
   ObSQLSessionInfo *session = GET_MY_SESSION(exec_ctx);

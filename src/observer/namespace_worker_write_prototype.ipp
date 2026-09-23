@@ -1832,17 +1832,48 @@ struct EngineWrites {
 // and decoding this value does not start a transaction service, register a
 // transaction, or allocate a storage context in the worker. Engine owns all
 // authoritative transaction state; this view is refreshed by transaction RPC.
+// Ticket 05c: resolve the transaction's owning session when the ambient
+// worker names another session or none (async end-trans completion runs off
+// the query thread). A session borrowed from the session manager is returned
+// through `borrowed` and must be reverted by the caller.
+sql::ObSQLSessionInfo *tx_owner_session(transaction::ObTxDesc &tx,
+                                        sql::ObSQLSessionInfo *&borrowed)
+{
+  borrowed = nullptr;
+  sql::ObSQLSessionInfo *session = THIS_WORKER.get_session();
+  if (session != nullptr && session->get_tx_desc() == &tx) { return session; }
+  if (worker_process || !forked_in_process()) { return session; }
+  auto *mgr = share::server_service<sql::ObSQLSessionMgr>();
+  sql::ObSQLSessionInfo *resolved = nullptr;
+  if (OB_NOT_NULL(mgr)
+      && OB_SUCCESS == mgr->get_session(tx.get_session_id(), resolved)
+      && OB_NOT_NULL(resolved) && resolved->get_tx_desc() == &tx
+      && in_process_session_ns(resolved) > 1) {
+    borrowed = resolved;
+    return resolved;
+  }
+  if (OB_NOT_NULL(resolved)) { mgr->revert_session(resolved); }
+  return session;
+}
+void revert_tx_owner_session(sql::ObSQLSessionInfo *borrowed)
+{
+  if (OB_NOT_NULL(borrowed)) {
+    share::server_service<sql::ObSQLSessionMgr>()->revert_session(borrowed);
+  }
+}
 int tx_rpc(char operation, ObTxDesc &tx, Frame &request, Frame &reply) {
-  auto *session = THIS_WORKER.get_session();
   // A PX task owns a deserialized session. Explicit inner-SQL scopes can also
   // run while THIS_WORKER still names their caller, so require pointer identity.
+  sql::ObSQLSessionInfo *borrowed = nullptr;
+  auto *session = tx_owner_session(tx, borrowed);
   StorageSessionScope scope(session && session->get_tx_desc() == &tx ? session : nullptr);
-  if (scope.error()) { return scope.error(); }
+  if (scope.error()) { revert_tx_owner_session(borrowed); return scope.error(); }
   Frame message('T'); message.number(operation); message.number(tx.get_tx_id().get_id());
   message.data.insert(message.data.end(), request.data.begin() + Frame::HEADER_SIZE, request.data.end());
   message.ret = request.ret;
   int ret = write_rpc(message, reply);
   if (!ret) { reply.read(tx); ret = reply.ret; }
+  revert_tx_owner_session(borrowed);
   return ret;
 }
 
@@ -2249,6 +2280,19 @@ public:
       Frame request('T'), reply; request.number('V'); request.number(tx.get_tx_id().get_id());
       ret = write_rpc(request, reply);
       if (!ret && !reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
+    } else if (!tx.is_shadow() && !worker_process && forked_in_process()) {
+      // Ticket 05c: same native release as the worker-mode branch above,
+      // through the owning session's in-process storage context.
+      sql::ObSQLSessionInfo *borrowed = nullptr;
+      auto *session = tx_owner_session(tx, borrowed);
+      if (session != nullptr && session->get_tx_desc() == &tx
+          && in_process_session_ns(session) > 1) {
+        StorageSessionScope scope(session, false);
+        Frame request('T'), reply; request.number('V'); request.number(tx.get_tx_id().get_id());
+        ret = scope.error() ? scope.error() : write_rpc(request, reply);
+        if (!ret && !reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
+      }
+      revert_tx_owner_session(borrowed);
     }
     delete &tx; return ret; }
   int reuse_tx(transaction::ObTxDesc &tx) override { Frame request, reply; return tx_rpc('U', tx, request, reply); }
@@ -2908,10 +2952,10 @@ public:
     // Inner tables carry their schema even for namespace 1, matching the scan
     // path: the shared side must not re-resolve them through its own
     // SchemaService, whose lazy load needs inner SQL to this Worker.
-    bool send_logical_schema = owns_namespace_schema()
+    bool send_logical_schema = serves_namespace_schema()
         && !NamespaceForkKernelPrototype::is_encoded_id(table_id);
     StorageSpaceHandle storage_space =
-        StorageSpaceHandle::namespace_space(worker_namespace);
+        StorageSpaceHandle::namespace_space(serving_namespace());
     int ret = OB_SUCCESS;
     if (send_logical_schema) {
       ret = worker_local_table_schema(
@@ -2921,7 +2965,7 @@ public:
         fprintf(stderr,
             "PROTOTYPE_V17_WORKER_WRITE_SCHEMA ns=%llu table=%llu version=%lld "
             "ret=%d found=%d actual_table=%llu actual_version=%lld database=%llu local=%d\n",
-            (unsigned long long)worker_namespace, (unsigned long long)table_id,
+            (unsigned long long)serving_namespace(), (unsigned long long)table_id,
             (long long)write_spec.schema_version_, ret, logical_schema != nullptr,
             (unsigned long long)(logical_schema ? logical_schema->get_table_id() : OB_INVALID_ID),
             (long long)(logical_schema ? logical_schema->get_schema_version() : OB_INVALID_VERSION),
@@ -2936,7 +2980,7 @@ public:
     }
     ObArray<const ObTableSchema *> materialization_schemas;
     if (!ret && send_logical_schema && storage_space.is_namespace()
-        && worker_namespace > 1) {
+        && serving_namespace() > 1) {
       ret = worker_materialization_schemas(
           *logical_schema, schema_guard, materialization_schemas);
     }

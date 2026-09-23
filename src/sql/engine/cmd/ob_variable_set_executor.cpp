@@ -258,8 +258,7 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
                 // 1; a branch worker rejects them like the gateway's
                 // privilege-limited session did.
                 if (OB_SUCC(ret) && set_var.set_scope_ == ObSetVar::SET_SCOPE_GLOBAL
-                    && observer::namespace_worker_prototype::worker_process
-                    && observer::namespace_worker_prototype::worker_namespace > 1) {
+                    && observer::namespace_worker_prototype::serving_namespace() > 1) {
                   ret = OB_ERR_NO_PRIVILEGE;
                   LOG_USER_ERROR(OB_ERR_NO_PRIVILEGE, "SUPER");
                   LOG_WARN("SET GLOBAL rejected in a branch namespace worker", K(ret));

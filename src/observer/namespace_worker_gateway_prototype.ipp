@@ -25,6 +25,7 @@ int namespace_proto_worker_write(const char *, size_t);
 #include "observer/namespace_worker_direct_insert_prototype.ipp"
 #include "observer/namespace_worker_commands_prototype.ipp"
 #include "observer/namespace_worker_privileges_prototype.ipp"
+#include "namespace/namespace.h"
 namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
 using namespace common;
 using namespace share::schema;
@@ -62,6 +63,9 @@ int push_inner_sql_namespace_override(uint64_t namespace_id) {
 void pop_inner_sql_namespace_override() {
   if (!inner_sql_namespace_overrides.empty()) { inner_sql_namespace_overrides.pop_back(); }
 }
+bool has_inner_sql_namespace_override() {
+  return !inner_sql_namespace_overrides.empty();
+}
 uint64_t resolve_shared_inner_sql_namespace() {
   if (worker_process && worker_namespace != 0) {
     return worker_namespace;
@@ -85,7 +89,9 @@ int check_sql_execution_role() {
   // storage, fork control and the thin TCP router.
   // Ticket 05a gate: with SEEKDB_NAMESPACE_NS1_IN_PROCESS the shared process
   // also executes namespace-1 SQL in process (single-process Phase 1).
-  if (!worker_process && !ns1_in_process()) {
+  // Ticket 05c gate: SEEKDB_NAMESPACE_FORKED_IN_PROCESS extends that to
+  // forked namespaces.
+  if (!worker_process && !ns1_in_process() && !forked_in_process()) {
     fprintf(stderr, "PROTOTYPE_V18_SHARED_SQL_REJECT\n");
     return OB_NOT_SUPPORTED;
   }
@@ -366,6 +372,10 @@ struct SessionBinding {
   bool internal = false;
   std::shared_ptr<PendingRequest> direct_request;
   std::unique_ptr<EngineWrites> writes;
+  // In-process (ticket 05c) storage context; owned explicitly by
+  // close_session because InProcessStorage is complete only later in this
+  // unit. Always null on worker-mode channel bindings.
+  InProcessStorage *in_process = nullptr;
   SessionBinding *previous = nullptr, *next = nullptr;
   bool linked = false;
   ~SessionBinding() {
@@ -783,6 +793,108 @@ struct DirectStorageContext {
     return ret;
   }
 };
+// ---------------------------------------------------------------------------
+// Ticket 05c: in-process storage context, the channel-free twin of
+// DirectStorageContext above. Owns the native storage session, open scans
+// and write engine for one SQL session of one in-process namespace. Lives on
+// the session's SessionBinding; frames are delivered synchronously.
+// ---------------------------------------------------------------------------
+struct InProcessStorage {
+  const uint64_t ns;
+  std::shared_ptr<StorageSessionState> session_state;
+  sql::ObSQLSessionInfo &session; // storage-side native session
+  std::unique_ptr<EngineWrites> writes;
+  ReadScans scans;
+  DirectInsertRoute direct_insert;
+  sql::ObSQLSessionInfo *sql_session = nullptr; // switch key, not an owner
+  Frame reply;
+  bool initialized = false;
+  explicit InProcessStorage(uint64_t namespace_id)
+      : ns(namespace_id),
+        session_state(std::make_shared<StorageSessionState>()),
+        session(session_state->session),
+        scans(StorageSpaceHandle::namespace_space(namespace_id)) {}
+  InProcessStorage(const InProcessStorage &) = delete;
+  InProcessStorage &operator=(const InProcessStorage &) = delete;
+};
+int in_process_open(InProcessStorage &ctx, uint32_t sid, bool internal)
+{
+  int ret = OB_SUCCESS;
+  if (ctx.initialized || (!sid && !internal)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(ctx.session.test_init(1, static_cast<uint32_t>(sid),
+             &ctx.session_state->allocator))) {
+  } else if (sid != 0 || !internal) {
+    // A sid-less internal route is a short-lived catalog/background storage
+    // context; loading its variables can recurse into schema refresh.
+    ret = ctx.session.load_default_sys_variable(false, false);
+  }
+  if (!ret) {
+    ctx.writes = std::make_unique<EngineWrites>(
+        StorageSpaceHandle::namespace_space(ctx.ns), ctx.session);
+    ctx.initialized = true;
+  }
+  return ret;
+}
+// Synchronous twin of DirectStorageContext::process minus the channel: the
+// 'L' attach is in_process_open above, credits/tags/trace envelopes do not
+// exist on a function-call boundary, and cancellation is the session's own
+// interrupt check.
+int in_process_send(InProcessStorage &ctx, const Frame &frame, bool)
+{
+  Frame input = frame;
+  Frame result('l');
+  int ret = OB_SUCCESS;
+  const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
+  auto *old_session = THIS_WORKER.get_session();
+  THIS_WORKER.set_session(ctx.initialized ? &ctx.session : nullptr);
+  if (input.type() == 'e' || input.type() == 'v') {
+    const bool closing = input.type() == 'v';
+    ret = input.consumed() ? OB_SUCCESS : OB_INVALID_ARGUMENT;
+    if (!ret) {
+      ctx.direct_insert.reset();
+      ctx.scans.scans.clear();
+      ctx.session.reset_reserved_snapshot_version();
+      if (closing) {
+        ctx.writes.reset();
+        ctx.initialized = false;
+      } else if (ctx.writes) {
+        ret = ctx.writes->check_finished();
+      }
+    }
+    result.number(ret);
+  } else if (input.type() == 'J') {
+    // Direct insert (DDL index build) stays worker-mode only in ticket 05c.
+    result = Frame('g');
+    result.number(OB_NOT_SUPPORTED);
+  } else if (!ctx.initialized) {
+    ret = OB_NOT_INIT;
+  } else {
+    ret = serve_storage(StorageSpaceHandle::namespace_space(ctx.ns),
+        &ctx.scans, ctx.writes.get(), OB_SUCCESS, input, result);
+  }
+  THIS_WORKER.set_session(old_session);
+  THIS_WORKER.set_timeout_ts(old_timeout);
+  if (!ret) { ctx.reply = std::move(result); }
+  return ret;
+}
+int in_process_read(InProcessStorage &ctx, Frame &frame)
+{
+  frame = std::move(ctx.reply);
+  ctx.reply = Frame();
+  return OB_SUCCESS;
+}
+uint64_t in_process_bound_namespace()
+{
+  return in_process_storage ? in_process_storage->ns : 0;
+}
+uint64_t in_process_session_ns(sql::ObSQLSessionInfo *session)
+{
+  ns::NamespaceRuntime *runtime = session ? session->ns_runtime() : nullptr;
+  return !worker_process && forked_in_process()
+      && runtime != nullptr && runtime->ns().id() > 1
+      ? runtime->ns().id() : 0;
+}
 int receive_direct_storage(Channel &channel, Frame input) {
   auto request = channel.storage_routes.find(input.tag());
   if (input.type() == 'L') {
@@ -1411,6 +1523,19 @@ int open_session(uint64_t ns, sql::ObSQLSessionInfo &gateway, SessionBinding *&b
 void close_session(SessionBinding *binding) {
   std::unique_ptr<SessionBinding> owned(binding);
   if (!owned) { return; }
+  if (owned->in_process) {
+    // In-process (ticket 05c): mirror the direct-request 'v' close; engine
+    // destruction rolls back an idle transaction and releases scans inline.
+    InProcessStorage *ctx = owned->in_process;
+    owned->in_process = nullptr;
+    if (in_process_storage == ctx) { in_process_storage = nullptr; }
+    if (ctx->initialized) {
+      Frame request('v');
+      in_process_send(*ctx, request, true);
+    }
+    delete ctx;
+    return;
+  }
   if (owned->direct_request) {
     auto *previous = worker_request;
     worker_request = owned->direct_request.get();
@@ -1462,6 +1587,9 @@ int worker_read_wire(Frame &frame) {
 }
 int worker_send(const Frame &frame, bool cleanup) {
   if (frame.ret) { return frame.ret; }
+  if (in_process_storage) {
+    return in_process_send(*in_process_storage, frame, cleanup);
+  }
   if (!worker_request) {
     return is_storage_request(frame.type()) ? OB_ERR_UNEXPECTED : worker_send_wire(frame);
   }
@@ -1487,6 +1615,7 @@ int worker_send(const Frame &frame, bool cleanup) {
 int worker_read(Frame &frame) {
   // Once an RPC is sent, consume its reply even after cancellation so cleanup
   // cannot mistake an earlier operation's reply for its own.
+  if (in_process_storage) { return in_process_read(*in_process_storage, frame); }
   if (!worker_request) { return OB_ERR_UNEXPECTED; }
   if (worker_bootstrapping) {
     int ret = OB_SUCCESS;
@@ -1549,6 +1678,30 @@ int bind_direct_session(SessionBinding *binding, sql::ObSQLSessionInfo &session)
   binding->direct_request->sql_session = &session;
   return share::server_service<sql::ObSQLSessionMgr>()->get_session(session.get_server_sid(), binding->gateway);
 }
+// Create (or rebind) the in-process storage context for a session served in
+// the shared process (ticket 05c). Mirrors the worker-mode begin_direct_request
+// path: one storage context per SQL session, keyed on the session's binding.
+int open_in_process_storage(sql::ObSQLSessionInfo &session)
+{
+  SessionBinding *&slot = session.namespace_storage_binding();
+  if (slot != nullptr && slot->in_process != nullptr) {
+    in_process_storage = slot->in_process;
+    return OB_SUCCESS;
+  }
+  if (slot != nullptr) { return OB_ERR_UNEXPECTED; }
+  const uint64_t ns = in_process_session_ns(&session);
+  if (ns <= 1) { return OB_INVALID_ARGUMENT; }
+  auto owned = std::make_unique<SessionBinding>();
+  owned->internal = true;
+  owned->in_process = new (std::nothrow) InProcessStorage(ns);
+  int ret = owned->in_process == nullptr ? OB_ALLOCATE_MEMORY_FAILED : OB_SUCCESS;
+  if (!ret) { ret = in_process_open(*owned->in_process, session.get_server_sid(), true); }
+  if (!ret) {
+    slot = owned.release();
+    in_process_storage = slot->in_process;
+  }
+  return ret;
+}
 StorageSessionScope::StorageSessionScope(sql::ObSQLSessionInfo *session, bool create)
     : previous_(worker_request) {
   if (worker_process && worker_namespace && session
@@ -1569,14 +1722,38 @@ StorageSessionScope::StorageSessionScope(sql::ObSQLSessionInfo *session, bool cr
         session->namespace_storage_binding() = nullptr;
       }
     }
+  } else if (!worker_process && session && in_process_session_ns(session) > 1
+      && (!in_process_storage || in_process_storage->sql_session != session)
+      && (create || session->namespace_storage_binding())) {
+    // In-process serving of a forked namespace (ticket 05c): bind the
+    // session's storage context for the duration of the storage call.
+    switched_ = true;
+    previous_in_process_ = in_process_storage;
+    const bool created = !session->namespace_storage_binding();
+    error_ = open_in_process_storage(*session);
+    if (!error_) { in_process_storage->sql_session = session; }
+    if (!error_ && created && session->get_tx_desc() && session->get_tx_desc()->is_shadow()) {
+      // Same shadow-transaction import as the worker-mode branch above.
+      Frame request, reply; request.append(*session->get_tx_desc());
+      error_ = tx_rpc('t', *session->get_tx_desc(), request, reply);
+      if (!error_ && !reply.consumed()) { error_ = OB_INVALID_ARGUMENT; }
+      if (error_) {
+        close_session(session->namespace_storage_binding());
+        session->namespace_storage_binding() = nullptr;
+      }
+    }
   }
 }
 StorageSessionScope::~StorageSessionScope() {
-  if (switched_) { worker_request = previous_; }
+  if (switched_) {
+    worker_request = previous_;
+    in_process_storage = previous_in_process_;
+  }
 }
 void StorageSessionScope::close(SessionBinding *&binding) {
   if (binding) {
-    if (previous_ == binding->direct_request.get()) { previous_ = nullptr; }
+    if (binding->direct_request && previous_ == binding->direct_request.get()) { previous_ = nullptr; }
+    if (binding->in_process && previous_in_process_ == binding->in_process) { previous_in_process_ = nullptr; }
     close_session(binding); binding = nullptr;
   }
 }
@@ -1585,10 +1762,26 @@ IndependentStorageScope::IndependentStorageScope()
   if (worker_process && worker_namespace && !worker_request) {
     if (previous_timeout_ <= 0) { THIS_WORKER.set_timeout_ts(INT64_MAX); }
     error_ = begin_direct_request(0, binding_, true);
+  } else if (!worker_process && forked_in_process() && in_process_serving_ns > 1
+      && !in_process_storage) {
+    // In-process background/native storage call (ticket 05c): a short-lived
+    // internal context for the serving namespace, like the worker's route.
+    if (previous_timeout_ <= 0) { THIS_WORKER.set_timeout_ts(INT64_MAX); }
+    previous_in_process_ = in_process_storage;
+    auto owned = std::make_unique<SessionBinding>();
+    owned->internal = true;
+    owned->in_process = new (std::nothrow) InProcessStorage(in_process_serving_ns);
+    error_ = owned->in_process == nullptr ? OB_ALLOCATE_MEMORY_FAILED : OB_SUCCESS;
+    if (!error_) { error_ = in_process_open(*owned->in_process, 0, true); }
+    if (!error_) {
+      binding_ = owned.release();
+      in_process_storage = binding_->in_process;
+    }
   }
 }
 IndependentStorageScope::~IndependentStorageScope() {
   if (binding_) { close_session(binding_); }
+  in_process_storage = previous_in_process_;
   worker_request = previous_;
   THIS_WORKER.set_timeout_ts(previous_timeout_);
 }
@@ -1598,6 +1791,20 @@ int fetch_catalog(char type, uint64_t id, const ObString &name, int64_t version,
   SessionBinding *temporary = nullptr;
   const int64_t previous_timeout = THIS_WORKER.get_timeout_ts();
   int ret = OB_SUCCESS;
+  if (!worker_request && !in_process_storage
+      && forked_in_process() && serving_namespace() > 1) {
+    // In-process (ticket 05c): the same short-lived internal route, delivered
+    // synchronously to the serving namespace's storage.
+    IndependentStorageScope scope;
+    if (scope.error()) { return scope.error(); }
+    Frame request(type); request.number(id); request.string(name); request.number(version);
+    ret = worker_send(request);
+    if (!ret) { ret = worker_read(reply); }
+    if (!ret && reply.type() != 'c') { ret = OB_INVALID_ARGUMENT; }
+    if (!ret) { ret = static_cast<int>(reply.number()); }
+    THIS_WORKER.set_timeout_ts(previous_timeout);
+    return ret ? ret : reply.ret;
+  }
   if (!worker_request) {
     THIS_WORKER.set_timeout_ts(previous_timeout > 0 ? previous_timeout : INT64_MAX);
     ret = begin_direct_request(0, temporary, true);

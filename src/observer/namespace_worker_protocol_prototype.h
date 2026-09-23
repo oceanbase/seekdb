@@ -11,6 +11,14 @@
 #include <string>
 #include <vector>
 namespace oceanbase { namespace sql { class ObSQLSessionInfo; } }
+namespace oceanbase { namespace sql { class ObBasicSessionInfo; } }
+namespace oceanbase { namespace sql { class ObPlanCache; } }
+namespace oceanbase { namespace common { class ObITabletScan; } }
+namespace oceanbase { namespace common { class ObILobReadService; } }
+namespace oceanbase { namespace data_plane { class ObIRangeService; } }
+namespace oceanbase { namespace data_plane { class ObIDmlService; } }
+namespace oceanbase { namespace data_plane { class ObIWriteContextService; } }
+namespace oceanbase { namespace data_plane { class ObITransactionService; } }
 namespace oceanbase { namespace obcall { struct ObAdminSetConfigArg; } }
 namespace oceanbase { namespace share { namespace schema { class ObPrivMgr; } } }
 namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
@@ -153,6 +161,22 @@ inline bool ns1_in_process()
   static const bool enabled = std::getenv("SEEKDB_NAMESPACE_NS1_IN_PROCESS") != nullptr;
   return enabled && !worker_process;
 }
+// Phase 1c transition gate (ticket 05c): with SEEKDB_NAMESPACE_FORKED_IN_PROCESS
+// set, forked namespaces (ns>1) are also served inside the shared process.
+// The proxy dispatches their logins to the local NIO endpoint keeping the
+// "@ns" suffix, sessions bind a per-ns runtime, and storage access crosses a
+// direct in-process call instead of the worker IPC socket. Removed in Phase 3
+// when every namespace is served in process unconditionally.
+inline bool forked_in_process()
+{
+  static const bool enabled = std::getenv("SEEKDB_NAMESPACE_FORKED_IN_PROCESS") != nullptr;
+  return enabled && !worker_process;
+}
+inline bool in_process_namespace_enabled(uint64_t namespace_id)
+{
+  return namespace_id == 1 ? ns1_in_process()
+      : namespace_id > 1 && namespace_id < (1ULL << 30) && forked_in_process();
+}
 // Defined in namespace_worker_scan_prototype.ipp. Dumps and resets cumulative
 // storage-frame exchange timing (count, send, wait per frame type).
 void scan_exchange_stats_dump(FILE *out);
@@ -186,11 +210,42 @@ inline bool uses_global_storage_scope()
 {
   return worker_global_storage_scope_depth != 0;
 }
+// The namespace this thread currently serves SQL for. Worker mode: the
+// process identity. In-process (ticket 05c): the bound session's namespace,
+// published at command/query entry by InProcessServingScope.
+struct InProcessStorage;
+inline thread_local InProcessStorage *in_process_storage = nullptr;
+inline thread_local uint64_t in_process_serving_ns = 0;
+class InProcessServingScope final
+{
+public:
+  explicit InProcessServingScope(uint64_t ns) : previous_(in_process_serving_ns)
+  { in_process_serving_ns = ns; }
+  ~InProcessServingScope() { in_process_serving_ns = previous_; }
+  InProcessServingScope(const InProcessServingScope &) = delete;
+  InProcessServingScope &operator=(const InProcessServingScope &) = delete;
+private:
+  uint64_t previous_;
+};
+uint64_t in_process_bound_namespace();
+inline uint64_t serving_namespace()
+{
+  return worker_process ? worker_namespace
+      : in_process_serving_ns ? in_process_serving_ns
+      : in_process_bound_namespace();
+}
+// True while this thread serves SQL for a forked namespace, in either hosting
+// mode. Storage stubs use it to ship caller-resolved schema and to pick the
+// namespace storage space; schema refresh uses it for local-id translation.
+inline bool serves_forked_schema()
+{
+  return serving_namespace() > 1;
+}
 inline StorageSpaceHandle active_worker_storage_space()
 {
   return uses_global_storage_scope()
       ? StorageSpaceHandle::global_space()
-      : StorageSpaceHandle::namespace_space(worker_namespace);
+      : StorageSpaceHandle::namespace_space(serving_namespace());
 }
 inline bool is_namespace_control_database(const common::ObString &name)
 {
@@ -204,6 +259,13 @@ inline bool owns_namespace_schema()
 {
   return worker_process && worker_namespace != 0;
 }
+// True while this thread serves SQL for a namespace whose schema it can
+// resolve and ship: any Worker (ns>=1), or in-process serving of a forked
+// namespace (ticket 05c). Plain shared-process threads return false.
+inline bool serves_namespace_schema()
+{
+  return owns_namespace_schema() || serves_forked_schema();
+}
 inline bool uses_remote_schema()
 {
   return worker_process && worker_namespace != 0 && !owns_namespace_schema();
@@ -214,6 +276,7 @@ inline bool uses_remote_schema()
 int bind_shared_inner_sql_namespace(uint64_t trace_seq, uint64_t namespace_id);
 void unbind_shared_inner_sql_namespace(uint64_t trace_seq);
 int push_inner_sql_namespace_override(uint64_t namespace_id);
+bool has_inner_sql_namespace_override();
 void pop_inner_sql_namespace_override();
 uint64_t resolve_shared_inner_sql_namespace();
 int check_sql_execution_role();
@@ -223,7 +286,7 @@ int check_sql_execution_role();
 inline bool shared_inner_sql_bounces()
 {
   return !worker_process
-      && !(ns1_in_process() && resolve_shared_inner_sql_namespace() == 1);
+      && !in_process_namespace_enabled(resolve_shared_inner_sql_namespace());
 }
 // A worker owns the decision to create a fork snapshot, while the storage
 // process owns the transaction clock used to produce its SCN.
@@ -276,6 +339,7 @@ public:
   void close(SessionBinding *&binding);
 private:
   PendingRequest *previous_;
+  InProcessStorage *previous_in_process_ = nullptr;
   bool switched_ = false;
   int error_ = common::OB_SUCCESS;
   StorageSessionScope(const StorageSessionScope &) = delete;
@@ -292,11 +356,37 @@ public:
 private:
   SessionBinding *binding_ = nullptr;
   PendingRequest *previous_ = nullptr;
+  InProcessStorage *previous_in_process_ = nullptr;
   int64_t previous_timeout_ = 0;
   int error_ = common::OB_SUCCESS;
   IndependentStorageScope(const IndependentStorageScope &) = delete;
   IndependentStorageScope &operator=(const IndependentStorageScope &) = delete;
 };
+// Ticket 05c (in-process forked namespaces). in_process_session_ns returns
+// the served forked namespace id for a session bound to an in-process
+// runtime, else 0. ensure_in_process_namespace lazily constructs the
+// namespace's service group (schema service, plan cache) on first use.
+// inprocess_refresh_schema mirrors the worker-mode per-command schema
+// refresh. The effective_* helpers resolve the storage service a session's
+// SQL must use: the in-process remote stub for forked-namespace sessions,
+// the process-local implementation otherwise.
+uint64_t in_process_session_ns(sql::ObSQLSessionInfo *session);
+int ensure_in_process_namespace(uint64_t namespace_id);
+int inprocess_refresh_schema(uint64_t namespace_id);
+common::ObITabletScan *effective_tablet_scan(sql::ObSQLSessionInfo *session,
+                                             common::ObITabletScan *fallback);
+common::ObILobReadService *effective_lob_read_service(sql::ObSQLSessionInfo *session,
+                                                      common::ObILobReadService *fallback);
+data_plane::ObIRangeService *effective_range_service(sql::ObSQLSessionInfo *session,
+                                                     data_plane::ObIRangeService *fallback);
+data_plane::ObIDmlService *effective_dml_service(sql::ObSQLSessionInfo *session,
+                                                 data_plane::ObIDmlService *fallback);
+data_plane::ObIWriteContextService *effective_write_context_service(
+    sql::ObSQLSessionInfo *session, data_plane::ObIWriteContextService *fallback);
+data_plane::ObITransactionService *effective_transaction_service(
+    sql::ObSQLSessionInfo *session, data_plane::ObITransactionService *fallback);
+sql::ObPlanCache *effective_plan_cache(sql::ObSQLSessionInfo *session,
+                                       sql::ObPlanCache *fallback);
 int begin_direct_request(uint32_t sid, SessionBinding *&binding, bool internal = false);
 int finish_direct_request();
 int bind_direct_session(SessionBinding *binding, sql::ObSQLSessionInfo &session);

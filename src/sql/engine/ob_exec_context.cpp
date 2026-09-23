@@ -29,6 +29,7 @@
 #include "query/virtual_table/ob_virtual_table_factory_provider.h"
 #include "sql/executor/ob_memory_tracker.h"
 #include "sql/session/ob_sql_session_info.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 
 namespace oceanbase
 {
@@ -397,7 +398,8 @@ void ObExecContext::set_my_session(ObSQLSessionInfo *session)
 {
   my_session_ = session;
   if (OB_ISNULL(lob_read_service_)) {
-    lob_read_service_ = ::oceanbase::share::server_service<common::ObILobReadService>();
+    lob_read_service_ = ::oceanbase::observer::namespace_worker_prototype::effective_lob_read_service(
+        session, ::oceanbase::share::server_service<common::ObILobReadService>());
   }
   if (OB_NOT_NULL(session)) {
     session_mgr_ = session->get_session_manager();
@@ -1399,7 +1401,8 @@ int ObExecContext::get_lob_read_options(
     // Short-lived execution contexts used by range extraction and operator
     // initialization may be created before request runtime services are
     // copied.  The process service is safe for these read-only conversions.
-    read_service = ::oceanbase::share::server_service<common::ObILobReadService>();
+    read_service = ::oceanbase::observer::namespace_worker_prototype::effective_lob_read_service(
+        get_my_session(), ::oceanbase::share::server_service<common::ObILobReadService>());
     if (OB_NOT_NULL(read_service)) {
       lob_read_service_ = read_service;
     }

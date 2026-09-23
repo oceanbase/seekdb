@@ -125,20 +125,27 @@ void ObSql::destroy() {
 
 void ObSql::bind_resolver_runtime_services(ObResolverParams &resolver_ctx)
 {
-  resolver_ctx.plan_cache_ = plan_cache_;
+  // Ticket 05c: a session of an in-process forked namespace resolves the
+  // namespace-local plan cache / lob stub; every other session keeps the
+  // process-global services.
+  resolver_ctx.plan_cache_ = observer::namespace_worker_prototype::effective_plan_cache(
+      resolver_ctx.session_info_, plan_cache_);
   resolver_ctx.pl_sql_runtime_ = this;
   resolver_ctx.pl_engine_ = pl_engine_;
   resolver_ctx.dependency_info_queue_ = &queue_;
   resolver_ctx.root_command_service_ = root_command_service_;
   resolver_ctx.srs_provider_ = srs_provider_;
-  resolver_ctx.lob_read_service_ = lob_read_service_;
+  resolver_ctx.lob_read_service_ = observer::namespace_worker_prototype::effective_lob_read_service(
+      resolver_ctx.session_info_, lob_read_service_);
 }
 
 void ObSql::bind_exec_context_runtime_services(ObExecContext &exec_ctx)
 {
   ObExecContext::RuntimeServices services = exec_ctx.get_runtime_services();
-  services.lob_read_service_ = lob_read_service_;
-  services.plan_cache_ = plan_cache_;
+  services.lob_read_service_ = observer::namespace_worker_prototype::effective_lob_read_service(
+      exec_ctx.get_my_session(), lob_read_service_);
+  services.plan_cache_ = observer::namespace_worker_prototype::effective_plan_cache(
+      exec_ctx.get_my_session(), plan_cache_);
   services.ps_cache_ = ps_cache_;
   services.plan_cache_access_service_ = plan_cache_access_service_;
   services.pl_sql_runtime_ = this;
@@ -1853,7 +1860,8 @@ int ObSql::handle_ps_execute(const ObPsStmtId client_stmt_id,
   ParamStore fixed_params( (ObWrapperAllocator(allocator)) );
   ParamStore ps_params( (ObWrapperAllocator(allocator)) );
   ObPsCache *ps_cache = ps_cache_;
-  ObPlanCache *plan_cache = plan_cache_;
+  ObPlanCache *plan_cache = observer::namespace_worker_prototype::effective_plan_cache(
+      &session, plan_cache_);
   bool use_plan_cache = session.get_local_ob_enable_plan_cache();
   ObPhysicalPlanCtx *pctx = ectx.get_physical_plan_ctx();
   ObSchemaGetterGuard *schema_guard = context.schema_guard_;
@@ -2338,6 +2346,15 @@ int ObSql::generate_physical_plan(ParseResult &parse_result,
   } else if (OB_ISNULL(basic_stmt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Generate stmt success, but stmt is NULL", K(ret));
+  } else if (ObStmt::is_ddl_stmt(basic_stmt->get_stmt_type(), true)
+             && observer::namespace_worker_prototype::in_process_session_ns(
+                    &result.get_session()) > 1) {
+    // Ticket 05c: DDL execution is rooted in the system namespace's DDL
+    // machinery; a forked-namespace session must never mutate it.
+    // Forked-namespace DDL is ticket 07 territory.
+    ret = OB_NOT_SUPPORTED;
+    LOG_WARN("forked-namespace sessions cannot execute DDL", K(ret),
+             K(basic_stmt->get_stmt_type()));
     // begin/commit statement does not need to check privilege
   } else if (!is_begin_commit_stmt
           && OB_FAIL(ObPrivilegeCheck::check_privilege_new(sql_ctx,
@@ -2393,7 +2410,8 @@ int ObSql::generate_plan(ParseResult &parse_result,
   int ret = OB_SUCCESS;
   uint64_t aggregate_setting = 0;
   ObPhysicalPlanCtx *pctx = result.get_exec_context().get_physical_plan_ctx();
-  ObPlanCache *plan_cache = plan_cache_;
+  ObPlanCache *plan_cache = observer::namespace_worker_prototype::effective_plan_cache(
+      &result.get_session(), plan_cache_);
   bool allow_audit = false;
   if (OB_ISNULL(pctx) || OB_ISNULL(basic_stmt) ||
       OB_ISNULL(result.get_exec_context().get_expr_factory()) ||
@@ -2934,7 +2952,8 @@ int ObSql::code_generate(
 
   if (OB_SUCC(ret)) {
     bool use_plan_cache = sql_ctx.session_info_->get_local_ob_enable_plan_cache();
-    ObPlanCache *plan_cache = plan_cache_;
+    ObPlanCache *plan_cache = observer::namespace_worker_prototype::effective_plan_cache(
+        sql_ctx.session_info_, plan_cache_);
     if (OB_UNLIKELY(NULL == plan_cache)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Invalid plan cache", K(ret));
@@ -2989,7 +3008,8 @@ OB_INLINE int ObSql::init_exec_context(const ObSqlCtx &context, ObExecContext &e
   } else {
     exec_ctx.set_my_session(context.session_info_);
     bind_exec_context_runtime_services(exec_ctx);
-    exec_ctx.set_lob_read_service(lob_read_service_);
+    exec_ctx.set_lob_read_service(observer::namespace_worker_prototype::effective_lob_read_service(
+        context.session_info_, lob_read_service_));
     exec_ctx.set_sql_ctx(const_cast<ObSqlCtx*>(&context));
     if (OB_NOT_NULL(exec_ctx.get_physical_plan_ctx()) && OB_NOT_NULL(context.session_info_)) {
       int64_t query_timeout = 0;
@@ -3073,8 +3093,9 @@ int ObSql::pc_get_plan(ObPlanCacheCtx &pc_ctx,
   ACTIVE_SESSION_FLAG_SETTER_GUARD(in_get_plan_cache);
   int ret = OB_SUCCESS;
   //NG_TRACE(cache_get_plan_begin);
-  ObPlanCache *plan_cache = NULL;
-  if (OB_ISNULL(plan_cache = plan_cache_)) {
+  ObPlanCache *plan_cache = observer::namespace_worker_prototype::effective_plan_cache(
+      pc_ctx.sql_ctx_.session_info_, plan_cache_);
+  if (OB_ISNULL(plan_cache)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Invalid plan cache", K(ret), K(plan_cache));
   } else if (OB_FAIL(execute_get_plan(*plan_cache, pc_ctx, guard))) {
@@ -3380,7 +3401,9 @@ int ObSql::parser_and_check(const ObString &outlined_stmt,
             THIS_WORKER.set_timeout_ts(session->get_query_start_time() + GCONF._ob_ddl_timeout);
           }
           if (IS_DML_STMT(type) || is_show_variables) {
-            if (OB_UNLIKELY(NULL == (plan_cache = plan_cache_))) {
+            if (OB_UNLIKELY(NULL == (plan_cache =
+                    observer::namespace_worker_prototype::effective_plan_cache(
+                        session, plan_cache_)))) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("Invalid plan cache", K(ret));
             } else {
@@ -3692,7 +3715,8 @@ OB_NOINLINE int ObSql::handle_physical_plan(const ObString &trimed_stmt,
   MEMSET(&outline_parse_result, 0, SIZEOF(ParseResult));
   bool add_plan_to_pc = false;
   ObSQLSessionInfo &session = result.get_session();
-  ObPlanCache *plan_cache = plan_cache_;
+  ObPlanCache *plan_cache = observer::namespace_worker_prototype::effective_plan_cache(
+      &session, plan_cache_);
   bool use_plan_cache = session.get_local_ob_enable_plan_cache();
   // record whether needs to do parameterization at this time,
   // if exact mode is on, not do parameterizaiton

@@ -105,7 +105,7 @@ int worker_storage_space_for_schema(const ObTableSchema &schema,
                                     ObSchemaGetterGuard &guard,
                                     StorageSpaceHandle &storage_space) {
   storage_space = StorageSpaceHandle();
-  if (!owns_namespace_schema()
+  if (!serves_namespace_schema()
       || NamespaceForkKernelPrototype::is_encoded_id(schema.get_table_id())) {
     return OB_INVALID_ARGUMENT;
   }
@@ -113,7 +113,7 @@ int worker_storage_space_for_schema(const ObTableSchema &schema,
   // global user table still records its schema in namespace 1's catalog; only
   // the target table's storage belongs to GLOBAL.
   if (is_inner_table(schema.get_table_id())) {
-    storage_space = StorageSpaceHandle::namespace_space(worker_namespace);
+    storage_space = StorageSpaceHandle::namespace_space(serving_namespace());
     return storage_space.is_valid() ? OB_SUCCESS : OB_INVALID_ARGUMENT;
   }
   const ObDatabaseSchema *database = nullptr;
@@ -130,7 +130,7 @@ int worker_storage_space_for_schema(const ObTableSchema &schema,
   if (OB_SUCC(ret)) {
     storage_space = uses_global_storage_scope() || control_database
         ? StorageSpaceHandle::global_space()
-        : StorageSpaceHandle::namespace_space(worker_namespace);
+        : StorageSpaceHandle::namespace_space(serving_namespace());
     if (!storage_space.is_valid()) { ret = OB_INVALID_ARGUMENT; }
   }
   return ret;
@@ -140,7 +140,7 @@ int worker_local_table_schema(uint64_t table_id, int64_t schema_version,
                               StorageSpaceHandle &storage_space) {
   schema = nullptr;
   storage_space = StorageSpaceHandle();
-  if (!owns_namespace_schema()
+  if (!serves_namespace_schema()
       || NamespaceForkKernelPrototype::is_encoded_id(table_id)
       || (!is_inner_table(table_id) && schema_version <= 0)) {
     return OB_INVALID_ARGUMENT;
@@ -632,10 +632,10 @@ public:
     // lazy load needs inner SQL to this namespace's Worker.  During Worker
     // activation (crash recovery) that Worker is busy initialising itself, so
     // the lookup cannot complete and the activation deadlocks or fails.
-    bool send_logical_schema = owns_namespace_schema()
+    bool send_logical_schema = serves_namespace_schema()
         && !NamespaceForkKernelPrototype::is_encoded_id(param.index_id_);
     StorageSpaceHandle storage_space =
-        StorageSpaceHandle::namespace_space(worker_namespace);
+        StorageSpaceHandle::namespace_space(serving_namespace());
     int ret = send_logical_schema
         ? worker_local_table_schema(
               param.index_id_, param.schema_version_, schema_guard, logical_schema,

@@ -2,6 +2,7 @@
 // Fixed two-integer-column schemas; mode 6 adds explicit metadata page reclamation.
 #define USING_LOG_PREFIX STORAGE
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
+#include "namespace/namespace.h"
 #include "observer/namespace_worker_protocol_prototype.h"
 #include "rootserver/ob_tablet_creator.h"
 #include "rootserver/ob_tablet_drop.h"
@@ -2111,6 +2112,19 @@ int NamespaceForkKernelPrototype::control_namespace(const ObString &source, cons
       // client-visible SQL failure.
       LOG_WARN("namespace committed before worker endpoint activation failed",
           K(endpoint_ret), K(id));
+    }
+  }
+  if (ret == OB_SUCCESS && !bootstrap
+      && !observer::namespace_worker_prototype::worker_process
+      && observer::namespace_worker_prototype::forked_in_process()) {
+    // In-process forked namespaces need no worker endpoint. Registering the
+    // name lets later logins bind the runtime directly; per-namespace
+    // services activate lazily on the first login (ticket 05c).
+    char register_name[ns::Namespace::MAX_NAME_LEN];
+    if (target.length() < ns::Namespace::MAX_NAME_LEN) {
+      MEMCPY(register_name, target.ptr(), target.length());
+      register_name[target.length()] = '\0';
+      ns::namespace_registry().add(id, register_name);
     }
   }
   LOG_INFO("PROTOTYPE_V5_NAMESPACE_REGISTER", K(ret), K(id), K(source_id), K(bootstrap),

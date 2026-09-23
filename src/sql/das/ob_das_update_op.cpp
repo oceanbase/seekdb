@@ -23,6 +23,7 @@
 #include "src/sql/engine/px/ob_dfo.h"
 #include "sql/engine/dml/ob_dml_service.h"
 #include "sql/das/ob_das_dml_vec_iter.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 
 namespace oceanbase
 {
@@ -384,7 +385,7 @@ int ObDASIndexDMLAdaptor<DAS_OP_TABLE_UPDATE, ObDASUpdIterator>::write_rows(cons
                                                                             int64_t &affected_rows)
 {
   int ret = OB_SUCCESS;
-  data_plane::ObIDmlService *as = ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDmlService>();
+  data_plane::ObIDmlService *as = observer::namespace_worker_prototype::effective_dml_service(THIS_WORKER.get_session(), ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDmlService>());
   if (OB_UNLIKELY((ctdef.table_param_.get_data_table().is_vector_delta_buffer() ||
                   ctdef.table_param_.get_data_table().is_hybrid_vector_index_log()) &&
                   !ctdef.is_access_main_table_)) {

@@ -20,6 +20,7 @@
 #include "share/rc/ob_server_runtime.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 
 namespace oceanbase
 {
@@ -53,7 +54,8 @@ ObDASSplitRangesOp::ObDASSplitRangesOp(ObIAllocator &op_alloc)
 int ObDASSplitRangesOp::open_op()
 {
   int ret = OB_SUCCESS;
-  data_plane::ObIRangeService *range_service = ::oceanbase::share::server_service<::oceanbase::data_plane::ObIRangeService>();
+  data_plane::ObIRangeService *range_service = observer::namespace_worker_prototype::effective_range_service(THIS_WORKER.get_session(),
+      ::oceanbase::share::server_service<::oceanbase::data_plane::ObIRangeService>());
   if (OB_FAIL(range_service->split_multi_ranges(tablet_id_,
                                                  timeout_us_,
                                                  ranges_,
@@ -85,7 +87,8 @@ ObDASRangesCostOp::ObDASRangesCostOp(common::ObIAllocator &op_alloc)
 int ObDASRangesCostOp::open_op()
 {
   int ret = OB_SUCCESS;
-  data_plane::ObIRangeService *range_service = ::oceanbase::share::server_service<::oceanbase::data_plane::ObIRangeService>();
+  data_plane::ObIRangeService *range_service = observer::namespace_worker_prototype::effective_range_service(THIS_WORKER.get_session(),
+      ::oceanbase::share::server_service<::oceanbase::data_plane::ObIRangeService>());
   if (OB_FAIL(range_service->get_multi_ranges_cost(tablet_id_,
                                                     timeout_us_,
                                                     ranges_,

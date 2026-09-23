@@ -20,6 +20,7 @@
 #include "share/rc/ob_server_runtime.h"
 #include "data_plane/access/ob_tablet_scan.h"
 #include "src/sql/engine/ob_exec_context.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 
 namespace oceanbase
 {
@@ -36,9 +37,10 @@ int ObDASScanIter::inner_init(ObDASIterParam &param)
   } else {
     const ObDASScanCtDef *scan_ctdef = (static_cast<ObDASScanIterParam&>(param)).scan_ctdef_;
     output_ = &scan_ctdef->result_output_;
-    tsc_service_ = is_virtual_table(scan_ctdef->ref_table_id_)
-                       ? share::server_service<common::ObIVirtualTableScan>()
-                       : share::server_service<common::ObITabletScan>();
+    tsc_service_ = observer::namespace_worker_prototype::effective_tablet_scan(THIS_WORKER.get_session(),
+        is_virtual_table(scan_ctdef->ref_table_id_)
+            ? share::server_service<common::ObIVirtualTableScan>()
+            : share::server_service<common::ObITabletScan>());
     if (OB_ISNULL(tsc_service_)) {
       ret = OB_NOT_INIT;
       LOG_WARN("tablet scan service is not bound", K(ret), K(scan_ctdef->ref_table_id_));

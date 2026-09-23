@@ -183,6 +183,20 @@ int resolve_branch(const std::string &branch, uint64_t &namespace_id,
       // In-process ns1 (ticket 05a): the shared process's own NIO Unix
       // endpoint serves the connection; no worker is spawned for ns 1.
       endpoint = "run/sql.sock";
+    } else if (namespace_id > 1 && forked_in_process()) {
+      // In-process forked namespace (ticket 05c): register the resolved
+      // name so the forwarded login binds the runtime on this process's own
+      // NIO endpoint; per-namespace services activate lazily on first login.
+      // The fork commit already registered the id; only a restart needs this.
+      ns::NamespaceRuntime *existing = nullptr;
+      if (ns::namespace_registry().get(namespace_id, existing)
+          && existing != nullptr) {
+        endpoint = "run/sql.sock";
+      } else if (0 == ns::namespace_registry().add(namespace_id, branch.c_str())) {
+        endpoint = "run/sql.sock";
+      } else {
+        ret = OB_ERR_UNEXPECTED;
+      }
     } else {
       std::shared_ptr<Channel> channel;
       ret = ensure_channel(namespace_id, channel);
@@ -364,12 +378,20 @@ void serve_connection(int client_fd, sockaddr_storage peer) {
     uint8_t worker_seq = 0;
     if (!read_packet(worker_fd, worker_seq, discarded)) { break; }
     track_fd(worker_fd);
-    // Forward the login unchanged except for the routed branch suffix.
-    std::vector<uint8_t> rewritten(body.begin(), body.begin() + login.user_off);
-    rewritten.insert(rewritten.end(), user.begin(), user.end());
-    rewritten.push_back(0);
-    rewritten.insert(rewritten.end(), body.begin() + login.suffix_off, body.end());
-    if (!write_packet(worker_fd, 1, rewritten.data(), rewritten.size())) { break; }
+    // In-process forked namespaces resolve the branch name on this
+    // process's own NIO entry, so the login keeps its @branch suffix.
+    // Worker endpoints bind their home namespace instead; strip the suffix.
+    const bool keep_branch = outcome->namespace_id > 1 && forked_in_process();
+    if (keep_branch) {
+      if (!write_packet(worker_fd, 1, body.data(), body.size())) { break; }
+    } else {
+      // Forward the login unchanged except for the routed branch suffix.
+      std::vector<uint8_t> rewritten(body.begin(), body.begin() + login.user_off);
+      rewritten.insert(rewritten.end(), user.begin(), user.end());
+      rewritten.push_back(0);
+      rewritten.insert(rewritten.end(), body.begin() + login.suffix_off, body.end());
+      if (!write_packet(worker_fd, 1, rewritten.data(), rewritten.size())) { break; }
+    }
     pump_bytes(client_fd, worker_fd);
   } while (false);
   if (worker_fd >= 0) {

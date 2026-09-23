@@ -19,6 +19,7 @@
 #include "data_plane/access/ob_tablet_scan.h"
 #include "share/rc/ob_server_runtime.h"
 #include "sql/das/iter/ob_das_iter_utils.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 
 
 namespace oceanbase
@@ -1367,8 +1368,8 @@ int ObLocalIndexLookupOp::check_lookup_row_cnt()
 
 OB_INLINE ObITabletScan &ObLocalIndexLookupOp::get_tsc_service()
 {
-  return is_virtual_table(lookup_ctdef_->ref_table_id_) ?
-      *::oceanbase::share::server_service<::oceanbase::common::ObITabletScan>() : *(::oceanbase::share::server_service<::oceanbase::common::ObITabletScan>());
+  return *observer::namespace_worker_prototype::effective_tablet_scan(THIS_WORKER.get_session(),
+      ::oceanbase::share::server_service<::oceanbase::common::ObITabletScan>());
 }
 
 OB_INLINE int ObLocalIndexLookupOp::init_scan_param()

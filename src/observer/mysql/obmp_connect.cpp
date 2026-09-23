@@ -747,6 +747,17 @@ int ObMPConnect::bind_session_namespace(ObSQLSessionInfo &session)
       }
     }
   }
+  if (OB_SUCC(ret) && runtime != nullptr
+      && namespace_worker_prototype::forked_in_process()
+      && runtime->ns().id() > 1) {
+    // Ticket 05c: the first login to an in-process forked namespace blocks
+    // while its service group (schema service, plan cache) is constructed.
+    ret = namespace_worker_prototype::ensure_in_process_namespace(runtime->ns().id());
+    if (OB_FAIL(ret)) {
+      LOG_WARN("failed to activate in-process namespace", K(ret),
+               "namespace_id", runtime->ns().id());
+    }
+  }
   if (OB_SUCC(ret)) {
     session.set_ns_runtime(runtime);
   }

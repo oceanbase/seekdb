@@ -1776,7 +1776,7 @@ int ObDmlCgService::get_table_schema_version(const ObLogicalOperator &op,
       }
     }
   }
-  if (OB_SUCC(ret) && observer::namespace_worker_prototype::worker_namespace > 1 &&
+  if (OB_SUCC(ret) && observer::namespace_worker_prototype::serving_namespace() > 1 &&
       schema_version == OB_INVALID_VERSION) {
     ret = observer::namespace_worker_prototype::fetch_schema_version(false, false, schema_version);
   }
@@ -2116,14 +2116,14 @@ int ObDmlCgService::fill_table_dml_param(share::schema::ObSchemaGetterGuard *gua
     LOG_WARN("table schema is NULL", K(ret));
   } else {
     ret = guard->get_schema_version(t_version);
-    if (ret != OB_SUCCESS && observer::namespace_worker_prototype::worker_namespace > 1) {
+    if (ret != OB_SUCCESS && observer::namespace_worker_prototype::serving_namespace() > 1) {
       // The table schema version was already resolved from the shared catalog
       // by generate_das_dml_ctdef(). Reuse it when the worker-local guard has
       // no materialized schema-version table.
       t_version = das_dml_ctdef.schema_version_;
       ret = (t_version == OB_INVALID_VERSION) ? ret : OB_SUCCESS;
     }
-    if (OB_SUCC(ret) && observer::namespace_worker_prototype::worker_namespace > 1 &&
+    if (OB_SUCC(ret) && observer::namespace_worker_prototype::serving_namespace() > 1 &&
         t_version == OB_INVALID_VERSION) {
       t_version = das_dml_ctdef.schema_version_;
     }

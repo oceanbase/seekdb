@@ -22,6 +22,7 @@
 #include "data_plane/ob_i_write_context_service.h"
 #include "sql/das/ob_das_context.h"
 #include "ob_table_modify_op.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 
 namespace oceanbase
 {
@@ -353,7 +354,8 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet(DMLIterator &iter, int64_
     }
   } else {
     data_plane::ObIWriteContextService *as =
-        ::oceanbase::share::server_service<::oceanbase::data_plane::ObIWriteContextService>();
+        observer::namespace_worker_prototype::effective_write_context_service(THIS_WORKER.get_session(),
+            ::oceanbase::share::server_service<::oceanbase::data_plane::ObIWriteContextService>());
     data_plane::ObWriteContext write_context;
     concurrent_control::ObWriteFlag write_flag;
 
@@ -412,7 +414,8 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet_with_ignore(DMLIterator &
   const ObDASWriteBuffer::DmlRow *dml_row = nullptr;
   ObDASWriteBuffer::Iterator write_iter;
   data_plane::ObIWriteContextService *as =
-      ::oceanbase::share::server_service<::oceanbase::data_plane::ObIWriteContextService>();
+      observer::namespace_worker_prototype::effective_write_context_service(THIS_WORKER.get_session(),
+          ::oceanbase::share::server_service<::oceanbase::data_plane::ObIWriteContextService>());
   const bool with_local_index = related_ctdefs_ != nullptr && !related_ctdefs_->empty();
   if (OB_FAIL(iter.get_write_buffer().begin(write_iter))) {
   }

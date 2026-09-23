@@ -114,9 +114,9 @@ public:
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *logical_schema = nullptr;
     StorageSpaceHandle storage_space = active_worker_storage_space();
-    bool send_logical_schema = owns_namespace_schema()
+    bool send_logical_schema = serves_namespace_schema()
         && !NamespaceForkKernelPrototype::is_encoded_id(table_id)
-        && (!is_inner_table(table_id) || worker_namespace > 1);
+        && (!is_inner_table(table_id) || serving_namespace() > 1);
     if (!ret && send_logical_schema) {
       ret = ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
           schema_guard);

@@ -22,6 +22,7 @@
 #include "share/rc/ob_server_runtime.h"
 #include "sql/engine/dml/ob_dml_service.h"
 #include "sql/das/ob_das_domain_utils.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 
 namespace oceanbase
 {
@@ -54,7 +55,7 @@ int ObDASIndexDMLAdaptor<DAS_OP_TABLE_INSERT, ObDASDMLIterator>::write_rows(cons
                                                                             int64_t &affected_rows)
 {
   int ret = OB_SUCCESS;
-  data_plane::ObIDmlService *as = ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDmlService>();
+  data_plane::ObIDmlService *as = observer::namespace_worker_prototype::effective_dml_service(THIS_WORKER.get_session(), ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDmlService>());
   if (rtdef.use_put_) {
     ret = as->put_rows(tablet_id,
                        *tx_desc_,
@@ -194,7 +195,7 @@ int ObDASInsertOp::insert_row_with_fetch()
   int64_t affected_rows = 0;
   ObDASConflictIterator *result_iter = nullptr;
   void *buf = nullptr;
-  data_plane::ObIDmlService *as = ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDmlService>();
+  data_plane::ObIDmlService *as = observer::namespace_worker_prototype::effective_dml_service(THIS_WORKER.get_session(), ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDmlService>());
   data_plane::ObDmlExecution execution;
   ObDASDMLIterator dml_iter(
       ins_ctdef_, insert_buffer_, op_alloc_, srs_provider_,
@@ -227,7 +228,7 @@ int ObDASInsertOp::insert_row_with_fetch()
   } else if (ins_ctdef_->table_rowkey_types_.empty()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table_rowkey_types is invalid", K(ret));
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::data_plane::ObIWriteContextService>()->acquire_write_context(
+  } else if (OB_FAIL(observer::namespace_worker_prototype::effective_write_context_service(THIS_WORKER.get_session(), ::oceanbase::share::server_service<::oceanbase::data_plane::ObIWriteContextService>())->acquire_write_context(
           ins_rtdef_->timeout_ts_,
           *trans_desc_,
           *snapshot,
@@ -377,7 +378,7 @@ void ObDASConflictIterator::reset()
 {
   ObDuplicatedIterList::iterator iter = duplicated_iter_list_.begin();
   for (; iter != duplicated_iter_list_.end(); ++iter) {
-    ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDmlService>()->free_duplicate_rows_iterator(*iter);
+    observer::namespace_worker_prototype::effective_dml_service(THIS_WORKER.get_session(), ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDmlService>())->free_duplicate_rows_iterator(*iter);
   }
   duplicated_iter_list_.reset();
 }

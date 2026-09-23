@@ -1509,7 +1509,7 @@ bool ObChunkRowStore::need_dump(int64_t extra_size)
 
 int ObChunkStoreUtil::alloc_dir_id(int64_t &dir_id)
 {
-  if (observer::namespace_worker_prototype::worker_namespace != 0) {
+  if (observer::namespace_worker_prototype::serving_namespace() != 0) {
     // The real tmp-file alloc_dir also only allocates an identity. V10 keeps
     // SQL work areas in memory and disables spill; no file is created here.
     static std::atomic<int64_t> sequence{0};

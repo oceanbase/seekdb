@@ -1767,8 +1767,8 @@ int ObServerSchemaService::fetch_increment_schemas(
     }
   }
 
-  if (OB_SUCC(ret) && observer::namespace_worker_prototype::owns_namespace_schema()) {
-    const uint64_t namespace_id = observer::namespace_worker_prototype::worker_namespace;
+  if (OB_SUCC(ret) && observer::namespace_worker_prototype::serves_namespace_schema()) {
+    const uint64_t namespace_id = observer::namespace_worker_prototype::serving_namespace();
     for (ObSimpleTableSchemaV2 *schema : simple_incre_schemas.simple_table_schemas_) {
       uint64_t database_id = OB_INVALID_ID;
       if (schema == nullptr) {
@@ -2878,7 +2878,7 @@ int ObServerSchemaService::refresh_increment_schema(
       } else {
         break;
       }
-      if (observer::namespace_worker_prototype::owns_namespace_schema()) {
+      if (observer::namespace_worker_prototype::serves_namespace_schema()) {
         fprintf(stderr,
             "PROTOTYPE_NATIVE_REFRESH_RETRY ret=%d local=%lld core=%lld schema=%lld core_change=%d sys_change=%d retry=%lld\n",
             ret, (long long)local_schema_version, (long long)core_schema_version,
@@ -3231,8 +3231,8 @@ int ObServerSchemaService::refresh_runtime_full_schema(
       // child's SchemaService. This keeps SHOW/resolution and storage routing
       // consistent without teaching every schema consumer about global scope.
       if (OB_SUCC(ret)
-          && observer::namespace_worker_prototype::owns_namespace_schema()
-          && observer::namespace_worker_prototype::worker_namespace > 1) {
+          && observer::namespace_worker_prototype::serves_forked_schema()
+          && observer::namespace_worker_prototype::serving_namespace() > 1) {
         uint64_t control_database_id = OB_INVALID_ID;
         for (int64_t i = simple_databases.count() - 1; OB_SUCC(ret) && i >= 0; --i) {
           if (observer::namespace_worker_prototype::is_namespace_control_database(

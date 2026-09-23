@@ -31,6 +31,7 @@
 #include "sql/engine/expr/ob_expr_regexp_context.h"
 #include "sql/engine/ob_physical_plan.h"
 #include "share/ob_server_struct.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "common/number/ob_number_v2.h"
 
 
@@ -269,17 +270,33 @@ void ObBasicSessionInfo::destroy()
   destroy_show_trace_buffer();
 }
 
+// Ticket 05c: release this session's transaction shell through the service
+// its namespace serves with (the in-process remote stub for forked
+// namespaces), so the native storage-side transaction is released too.
+static void release_session_tx_desc(sql::ObSQLSessionInfo *self,
+                                    transaction::ObTxDesc *tx_desc)
+{
+  namespace nwp = ::oceanbase::observer::namespace_worker_prototype;
+  data_plane::ObITransactionService *txs = nwp::effective_transaction_service(
+      self, data_plane::query_transaction_service());
+  if (OB_NOT_NULL(txs)) {
+    if (nwp::in_process_session_ns(self) > 1) {
+      nwp::StorageSessionScope scope(self, false);
+      txs->release_tx(*tx_desc);
+    } else {
+      txs->release_tx(*tx_desc);
+    }
+  }
+}
+
 void ObBasicSessionInfo::clean_status()
 {
   trans_flags_.reset();
   sql_scope_flags_.reset();
   if (OB_NOT_NULL(tx_desc_)) {
     LockGuard lock_guard(thread_data_mutex_);
-    data_plane::ObITransactionService *txs =
-        data_plane::query_transaction_service();
-    if (OB_SUCCESS == share::check_server_runtime_ready()
-        && OB_NOT_NULL(txs)) {
-      txs->release_tx(*tx_desc_);
+    if (OB_SUCCESS == share::check_server_runtime_ready()) {
+      release_session_tx_desc(static_cast<ObSQLSessionInfo *>(this), tx_desc_);
     }
     tx_desc_ = NULL;
   }
@@ -333,10 +350,8 @@ void ObBasicSessionInfo::reset(bool skip_sys_var)
 
   if (OB_NOT_NULL(tx_desc_)) {
     const int runtime_ret = share::check_server_runtime_ready();
-    data_plane::ObITransactionService *txs =
-        data_plane::query_transaction_service();
-    if (OB_SUCCESS == runtime_ret && OB_NOT_NULL(txs)) {
-      txs->release_tx(*tx_desc_);
+    if (OB_SUCCESS == runtime_ret) {
+      release_session_tx_desc(static_cast<ObSQLSessionInfo *>(this), tx_desc_);
     } else {
       LOG_WARN_RET(runtime_ret, "server runtime is unavailable, force release tx",
                    KP(tx_desc_), "tx_id", data_plane::tx_desc_id(tx_desc_));
@@ -4790,11 +4805,7 @@ int ObBasicSessionInfo::trans_restore_session(TransSavedValue &saved_value)
     ret = COVER_SUCC(tmp_ret);
   }
   if (OB_NOT_NULL(tx_desc_)) {
-    data_plane::ObITransactionService *txs =
-        data_plane::query_transaction_service();
-    if (OB_NOT_NULL(txs)) {
-      txs->release_tx(*tx_desc_);
-    }
+    release_session_tx_desc(static_cast<ObSQLSessionInfo *>(this), tx_desc_);
   }
   tx_desc_ = saved_value.tx_desc_;
   if (OB_TMP_FAIL(base_restore_session(saved_value))) {

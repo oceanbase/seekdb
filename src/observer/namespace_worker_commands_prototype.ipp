@@ -33,19 +33,19 @@ int namespace_schema_fence_roundtrip(uint64_t operation, int64_t schema_version 
 }
 
 int begin_namespace_schema_change() {
-  return worker_namespace > 1
+  return serving_namespace() > 1
       ? namespace_schema_fence_roundtrip(2) : common::OB_SUCCESS;
 }
 
 int finish_namespace_schema_change(int64_t committed_schema_version) {
-  return worker_namespace > 1 && committed_schema_version >= 0
+  return serving_namespace() > 1 && committed_schema_version >= 0
       ? namespace_schema_fence_roundtrip(4, committed_schema_version)
-      : worker_namespace <= 1 ? common::OB_SUCCESS : common::OB_INVALID_ARGUMENT;
+      : serving_namespace() <= 1 ? common::OB_SUCCESS : common::OB_INVALID_ARGUMENT;
 }
 
 int begin_namespace_schema_recovery(bool &needed) {
   needed = false;
-  if (worker_namespace <= 1) { return common::OB_SUCCESS; }
+  if (serving_namespace() <= 1) { return common::OB_SUCCESS; }
   Frame request('M'), reply;
   request.number(5);
   int command_ret = common::OB_SUCCESS;
@@ -55,9 +55,9 @@ int begin_namespace_schema_recovery(bool &needed) {
 }
 
 int finish_namespace_schema_recovery(int64_t reconciled_schema_version) {
-  return worker_namespace > 1 && reconciled_schema_version > 0
+  return serving_namespace() > 1 && reconciled_schema_version > 0
       ? namespace_schema_fence_roundtrip(6, reconciled_schema_version)
-      : worker_namespace <= 1 ? common::OB_SUCCESS : common::OB_INVALID_ARGUMENT;
+      : serving_namespace() <= 1 ? common::OB_SUCCESS : common::OB_INVALID_ARGUMENT;
 }
 
 int sync_namespace_schema_delta(uint64_t ns, int64_t base_schema_version,

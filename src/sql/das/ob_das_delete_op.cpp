@@ -21,6 +21,7 @@
 #include "sql/das/ob_das_domain_utils.h"
 #include "sql/engine/dml/ob_dml_service.h"
 #include "share/schema/ob_schema_struct.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 namespace oceanbase
 {
 namespace common
@@ -52,7 +53,7 @@ int ObDASIndexDMLAdaptor<DAS_OP_TABLE_DELETE, ObDASDMLIterator>::write_rows(cons
                                                                             int64_t &affected_rows)
 {
   int ret = OB_SUCCESS;
-  data_plane::ObIDmlService *as = ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDmlService>();
+  data_plane::ObIDmlService *as = observer::namespace_worker_prototype::effective_dml_service(THIS_WORKER.get_session(), ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDmlService>());
   if (OB_UNLIKELY(ctdef.table_param_.get_data_table().is_vector_delta_buffer() &&
                   !ctdef.is_access_main_table_)) {
     // for vector delta buffer, only do insert when DML with main table

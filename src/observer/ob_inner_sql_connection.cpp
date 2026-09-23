@@ -32,6 +32,7 @@
 #include "observer/mysql/obmp_base.h"
 #include "ob_inner_sql_read_context.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
+#include "namespace/namespace.h"
 #include "observer/namespace_worker_protocol_prototype.h"
 #include <algorithm>
 
@@ -725,6 +726,24 @@ int ObInnerSQLConnection::do_query(sqlclient::ObIExecutor &executor, ObInnerSQLR
     bool is_restore = NULL != sql_modifier_;
     res.sql_ctx().is_restore_ = is_restore;
     get_session().set_process_query_time(ObTimeUtility::current_time());
+    // Ticket 05c: inner SQL issued through a namespace-routing proxy carries
+    // an explicit namespace override; bind the (possibly pooled) inner
+    // session to that namespace's runtime so schema and storage services
+    // resolve per namespace for this execution.
+    if (!namespace_worker_prototype::worker_process
+        && namespace_worker_prototype::forked_in_process()
+        && namespace_worker_prototype::has_inner_sql_namespace_override()) {
+      const uint64_t override_ns =
+          namespace_worker_prototype::resolve_shared_inner_sql_namespace();
+      ns::NamespaceRuntime *override_runtime = nullptr;
+      if (override_ns > 1
+          && ns::namespace_registry().get(override_ns, override_runtime)
+          && OB_NOT_NULL(override_runtime)) {
+        get_session().set_ns_runtime(override_runtime);
+      } else {
+        get_session().set_ns_runtime(nullptr);
+      }
+    }
     if (!inited_) {
       ret = OB_NOT_INIT;
       LOG_WARN("not init", K(ret));

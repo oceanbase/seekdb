@@ -48,6 +48,7 @@
 #include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/optimizer/ob_log_insert.h"
 #include "sql/ob_sql_trans_control.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 
 using namespace oceanbase;
 using namespace sql;
@@ -5357,6 +5358,12 @@ int ObLogPlan::check_aggr_pushdown_enabled(ObSQLSessionInfo &session_info,
   
   enable_aggr_push_down = false;
   enable_groupby_push_down = false;
+  // Ticket 05c: forked-namespace sessions scan through the in-process remote
+  // stub, which (like the worker-mode remote scan) cannot evaluate pushed
+  // aggregates; plan without aggregate/groupby pushdown for them.
+  if (observer::namespace_worker_prototype::in_process_session_ns(&session_info) > 1) {
+    return ret;
+  }
   int64_t hint_level = INT64_MAX;
   const ObGlobalHint &global_hint = optimizer_context_.get_global_hint();
   if (OB_FAIL(global_hint.opt_params_.get_integer_opt_param(ObOptParamHint::PUSHDOWN_STORAGE_LEVEL, hint_level))) {
