@@ -1293,9 +1293,6 @@ struct EngineWrites {
   std::vector<RegisteredSnapshot> registered_snapshots;
   explicit EngineWrites(StorageSpaceHandle space, sql::ObSQLSessionInfo &s)
       : storage_space(space), session(s), sid(s.get_server_sid()), tx(s.get_tx_desc()) {}
-  int check_finished() const {
-    return writes.empty() ? OB_SUCCESS : OB_ERR_UNEXPECTED;
-  }
   void reset() {
     session.reset_reserved_snapshot_version();
     writes.clear();

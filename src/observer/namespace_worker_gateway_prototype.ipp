@@ -157,22 +157,7 @@ int in_process_send(InProcessStorage &ctx, const Frame &frame, bool)
   const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
   auto *old_session = THIS_WORKER.get_session();
   THIS_WORKER.set_session(ctx.initialized ? &ctx.session : nullptr);
-  if (input.type() == 'e' || input.type() == 'v') {
-    const bool closing = input.type() == 'v';
-    ret = input.consumed() ? OB_SUCCESS : OB_INVALID_ARGUMENT;
-    if (!ret) {
-      ctx.direct_insert.reset();
-      ctx.scans.scans.clear();
-      ctx.session.reset_reserved_snapshot_version();
-      if (closing) {
-        ctx.writes.reset();
-        ctx.initialized = false;
-      } else if (ctx.writes) {
-        ret = ctx.writes->check_finished();
-      }
-    }
-    result.number(ret);
-  } else if (input.type() == 'J') {
+  if (input.type() == 'J') {
     if (ctx.direct_insert_registry == nullptr) {
       ret = OB_NOT_INIT;
     } else {
@@ -253,8 +238,16 @@ void close_session(SessionBinding *binding) {
   owned->in_process = nullptr;
   if (in_process_storage == ctx) { in_process_storage = nullptr; }
   if (ctx->initialized) {
-    Frame request('v');
-    in_process_send(*ctx, request, true);
+    const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
+    auto *old_session = THIS_WORKER.get_session();
+    THIS_WORKER.set_session(&ctx->session);
+    ctx->direct_insert.reset();
+    ctx->scans.scans.clear();
+    ctx->session.reset_reserved_snapshot_version();
+    ctx->writes.reset();
+    ctx->initialized = false;
+    THIS_WORKER.set_session(old_session);
+    THIS_WORKER.set_timeout_ts(old_timeout);
   }
   delete ctx;
 }
