@@ -933,7 +933,6 @@ pub(crate) fn drain_blocking_response(conn: &Arc<Conn>, generation: u64) -> c_in
         && valid_request_generation(conn, generation)
         && !g.transport_is_idle()
         && !conn.err.load(Ordering::Acquire)
-        && !namespace_worker_prototype::response_expired()
     {
         let (next, _timeout) = conn
             .write_done
@@ -947,7 +946,6 @@ pub(crate) fn drain_blocking_response(conn: &Arc<Conn>, generation: u64) -> c_in
     }
     if conn.err.load(Ordering::Acquire)
         || !valid_request_generation(conn, generation)
-        || (!g.transport_is_idle() && namespace_worker_prototype::response_expired())
     {
         -1
     } else {

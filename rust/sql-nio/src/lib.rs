@@ -45,7 +45,6 @@ mod ffi_check;
 mod ffi_types;
 mod handshake;
 mod login;
-mod namespace_worker_prototype;
 mod packet;
 mod pump;
 mod reactor;
