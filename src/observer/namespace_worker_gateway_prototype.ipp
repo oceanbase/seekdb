@@ -158,7 +158,7 @@ bool is_storage_request(char type) {
       || type == 'u' || type == 'n' || type == 'p'
       || type == 'O' || type == 'F' || type == 'X' || type == 'M' || type == 'T' || type == 'W' || type == 'J' || type == 'Y'
       || type == 'R'
-      || type == 'h' || type == 'A';
+      || type == 'h';
 }
 // One admitted storage RPC at a time per SQL request. Native request workers
 // execute it; the pipe reader only submits the task. No per-session thread.
@@ -582,11 +582,6 @@ int serve_storage(StorageSpaceHandle storage_space, ReadScans *scans,
       if (state) { result.number(state); }
       else { ret = process_lob_read(
           storage_space, input, result, writes ? writes->tx : nullptr); }
-    } else if (input.type() == 'A') {
-      result = Frame('g');
-      if (state) { result.number(state); }
-      else { ret = process_tablet_autoincrement_cache_invalidation(
-          storage_space, input, result); }
     } else if (input.type() == 'Y') {
       result = Frame('w');
       if (state) { result.number(state); }

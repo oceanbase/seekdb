@@ -13,9 +13,7 @@
 #include "rootserver/ob_rootserver_local_runtime.h"
 #include "share/lob/ob_lob_text_iter_context.h"
 #include "share/ob_lob_access_utils.h"
-#include "share/autoincrement/ob_i_tablet_autoincrement_admin.h"
 #include "share/autoincrement/ob_i_tablet_autoincrement_service.h"
-#include "share/schema/ob_schema_guard_wrapper.h"
 #include "lib/charset/ob_charset.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 #include "storage/tablelock/ob_lock_utils.h"
@@ -1027,39 +1025,6 @@ int process_lob_read(StorageSpaceHandle channel_space,
   reply = Frame('r');
   reply.number(ret);
   if (!ret) { reply.string(output); }
-  return reply.ret;
-}
-
-int process_tablet_autoincrement_cache_invalidation(
-    StorageSpaceHandle channel_space, Frame &request, Frame &reply)
-{
-  StorageSpaceHandle storage_space;
-  int ret = read_storage_space(request, channel_space, storage_space);
-  const uint64_t count = request.number();
-  ObArray<ObTabletID> tablet_ids;
-  if (OB_SUCC(ret) && request.ret) { ret = request.ret; }
-  if (OB_SUCC(ret)
-      && (count > (MAX_FRAME - Frame::HEADER_SIZE - 16) / sizeof(uint64_t))) {
-    ret = OB_SIZE_OVERFLOW;
-  }
-  for (uint64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-    ObTabletID tablet_id(request.number());
-    if (OB_FAIL(request.ret)) {
-    } else if (!tablet_id.is_valid()) {
-      ret = OB_INVALID_ARGUMENT;
-    } else if (OB_FAIL(route_tablet_id(storage_space, tablet_id))) {
-    } else if (OB_FAIL(tablet_ids.push_back(tablet_id))) {
-    }
-  }
-  if (OB_SUCC(ret) && !request.consumed()) {
-    ret = OB_INVALID_ARGUMENT;
-  }
-  if (OB_SUCC(ret)) {
-    auto *admin = share::server_service<share::ObITabletAutoincrementAdmin>();
-    ret = admin == nullptr ? OB_NOT_INIT : admin->invalidate_caches(tablet_ids);
-  }
-  reply = Frame('g');
-  reply.number(ret);
   return reply.ret;
 }
 
@@ -2126,137 +2091,6 @@ private:
     if (!ret && pos != size) { ret = OB_ERR_UNEXPECTED; }
     return ret ? ret : invoke_raw(
         operation, ObString(static_cast<int32_t>(pos), buffer.data()), conn);
-  }
-};
-
-// Schema inspection stays in the namespace worker. Only the resulting tablet
-// cache invalidation crosses the storage gateway, after the DDL transaction
-// has committed, so the shared process never needs a SchemaService.
-class RemoteTabletAutoincrementAdmin final : public share::ObITabletAutoincrementAdmin
-{
-public:
-  int copy_sequences_for_fork(
-      const ObIArray<ObTabletID> &,
-      const ObIArray<ObTabletID> &,
-      const ObIArray<int64_t> &,
-      ObMySQLTransaction &) override
-  {
-    return OB_NOT_SUPPORTED;
-  }
-
-  int collect_table_cache_invalidation(
-      ObSchemaGetterGuard &schema_guard,
-      const ObTableSchema &table_schema,
-      ObIArray<ObTabletID> &cache_tablet_ids) override
-  {
-    return collect_table_(schema_guard, table_schema, cache_tablet_ids);
-  }
-
-  int collect_table_cache_invalidation(
-      ObSchemaGuardWrapper &schema_guard,
-      const ObTableSchema &table_schema,
-      ObIArray<ObTabletID> &cache_tablet_ids) override
-  {
-    return collect_table_(schema_guard, table_schema, cache_tablet_ids);
-  }
-
-  int collect_database_cache_invalidation(
-      const ObDatabaseSchema &database_schema,
-      ObIArray<ObTabletID> &cache_tablet_ids) override
-  {
-    ObSchemaGetterGuard guard;
-    ObArray<const ObSimpleTableSchemaV2 *> tables;
-    ObMultiVersionSchemaService *service = namespace_schema_service(serving_namespace());
-    int ret = service == nullptr ? OB_NOT_INIT : service->get_runtime_schema_guard(guard);
-    if (OB_SUCC(ret)) {
-      ret = guard.get_table_schemas_in_database(database_schema.get_database_id(), tables);
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); ++i) {
-      if (OB_ISNULL(tables.at(i))) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        ret = collect_single_(*tables.at(i), cache_tablet_ids);
-      }
-    }
-    return ret;
-  }
-
-  int invalidate_caches(const ObIArray<ObTabletID> &cache_tablet_ids) override
-  {
-    if (cache_tablet_ids.count() < 0
-        || static_cast<uint64_t>(cache_tablet_ids.count())
-            > (MAX_FRAME - Frame::HEADER_SIZE - 16) / sizeof(uint64_t)) {
-      return OB_SIZE_OVERFLOW;
-    }
-    if (cache_tablet_ids.empty()) { return OB_SUCCESS; }
-    StorageSessionScope scope(THIS_WORKER.get_session());
-    if (scope.error()) { return scope.error(); }
-    Frame request('A'), reply;
-    write_storage_space(request, active_worker_storage_space());
-    request.number(cache_tablet_ids.count());
-    for (int64_t i = 0; !request.ret && i < cache_tablet_ids.count(); ++i) {
-      if (!cache_tablet_ids.at(i).is_valid()) { return OB_INVALID_ARGUMENT; }
-      request.number(cache_tablet_ids.at(i).id());
-    }
-    int ret = request.ret ? request.ret : worker_send(request);
-    if (OB_SUCC(ret)) { ret = worker_read(reply); }
-    if (OB_SUCC(ret) && reply.type() != 'g') { ret = OB_INVALID_ARGUMENT; }
-    if (OB_SUCC(ret)) { ret = static_cast<int>(reply.number()); }
-    if (OB_SUCC(ret) && !reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
-    return ret ? ret : reply.ret;
-  }
-
-  int read_migration_sequences(
-      const ObIArray<share::ObTabletAutoincSeqCopyParam> &,
-      ObIArray<share::ObTabletAutoincSeqCopyParam> &) override
-  {
-    return OB_NOT_SUPPORTED;
-  }
-
-  int write_migration_sequences(
-      const ObIArray<share::ObTabletAutoincSeqCopyParam> &,
-      ObIArray<share::ObTabletAutoincSeqCopyParam> &) override
-  {
-    return OB_NOT_SUPPORTED;
-  }
-
-private:
-  static int collect_single_(
-      const ObSimpleTableSchemaV2 &table_schema,
-      ObIArray<ObTabletID> &cache_tablet_ids)
-  {
-    int ret = OB_SUCCESS;
-    if (table_schema.is_table_with_hidden_pk_column()
-        || table_schema.is_aux_lob_meta_table()) {
-      ObArray<ObTabletID> tablet_ids;
-      if (OB_FAIL(table_schema.get_tablet_ids(tablet_ids))) {
-      } else {
-        for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
-          ret = cache_tablet_ids.push_back(tablet_ids.at(i));
-        }
-      }
-    }
-    return ret;
-  }
-
-  template <typename SchemaGuard>
-  static int collect_table_(
-      SchemaGuard &schema_guard,
-      const ObTableSchema &table_schema,
-      ObIArray<ObTabletID> &cache_tablet_ids)
-  {
-    int ret = collect_single_(table_schema, cache_tablet_ids);
-    const uint64_t lob_meta_table_id = table_schema.get_aux_lob_meta_tid();
-    if (OB_SUCC(ret) && lob_meta_table_id != OB_INVALID_ID) {
-      const ObTableSchema *lob_meta_table = nullptr;
-      if (OB_FAIL(schema_guard.get_table_schema(lob_meta_table_id, lob_meta_table))) {
-      } else if (OB_ISNULL(lob_meta_table)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        ret = collect_single_(*lob_meta_table, cache_tablet_ids);
-      }
-    }
-    return ret;
   }
 };
 
