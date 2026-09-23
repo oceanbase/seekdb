@@ -67,6 +67,8 @@ public:
   ObDASCtx(common::ObIAllocator &allocator)
     : table_locs_(allocator),
       sql_ctx_(nullptr),
+      namespace_schema_guard_(),
+      namespace_schema_guard_ready_(false),
       last_location_errno_(OB_SUCCESS),
       history_retry_cnt_(0),
       cur_retry_cnt_(0),
@@ -167,7 +169,14 @@ public:
     related_tablet_map_.clear();
   }
   ObDASTaskFactory &get_das_factory() { return das_factory_; }
-  void set_sql_ctx(ObSqlCtx *sql_ctx) { sql_ctx_ = sql_ctx; }
+  void set_sql_ctx(ObSqlCtx *sql_ctx)
+  {
+    if (sql_ctx_ != sql_ctx) {
+      namespace_schema_guard_.reset();
+      namespace_schema_guard_ready_ = false;
+    }
+    sql_ctx_ = sql_ctx;
+  }
   DASRelatedTabletMap &get_related_tablet_map() { return related_tablet_map_; }
   int build_related_tablet_map(const ObDASTableLocMeta &loc_meta);
 
@@ -190,6 +199,8 @@ public:
 private:
   DASTableLocList table_locs_;
   ObSqlCtx *sql_ctx_;
+  share::schema::ObSchemaGetterGuard namespace_schema_guard_;
+  bool namespace_schema_guard_ready_;
   int last_location_errno_;
   int64_t history_retry_cnt_; // Total retries before the current retry round.
   int64_t cur_retry_cnt_; // Continuous retries in the current round.

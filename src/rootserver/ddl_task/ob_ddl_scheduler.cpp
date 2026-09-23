@@ -2485,7 +2485,9 @@ int ObDDLScheduler::recover_task(const ObDDLTaskContext &context)
         cur_record.context_ = context;
         if (context.namespace_id_ > 1
             && cur_record.ddl_type_ != DDL_CREATE_INDEX
-            && cur_record.ddl_type_ != DDL_CREATE_PARTITIONED_LOCAL_INDEX) {
+            && cur_record.ddl_type_ != DDL_CREATE_PARTITIONED_LOCAL_INDEX
+            && cur_record.ddl_type_ != DDL_TABLE_REDEFINITION
+            && cur_record.ddl_type_ != DDL_ALTER_PARTITION_BY) {
           continue;
         }
         int64_t runtime_schema_version = 0;
@@ -2857,6 +2859,7 @@ int ObDDLScheduler::schedule_table_redefinition_task(const ObDDLTaskRecord &task
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLScheduler has not been inited", K(ret));
   } else if (OB_FAIL(alloc_ddl_task(redefinition_task))) {
+  } else if (FALSE_IT(redefinition_task->set_context(task_record.context_))) {
   } else if (OB_FAIL(redefinition_task->init(task_record))) {
   } else if (OB_FAIL(redefinition_task->set_trace_id(task_record.trace_id_))) {
   } else if (OB_FAIL(inner_schedule_ddl_task(redefinition_task, task_record))) {

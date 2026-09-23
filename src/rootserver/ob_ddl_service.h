@@ -100,6 +100,7 @@ public:
   // these functions should be called after ddl_service has been inited
   share::schema::ObMultiVersionSchemaService &get_schema_service() { return *schema_service_; }
   common::ObMySQLProxy &get_sql_proxy() { return *sql_proxy_; }
+  void set_task_context(const ObDDLTaskContext &context) { task_context_ = context; }
   ObSnapshotInfoManager &get_snapshot_mgr() { return *snapshot_mgr_; }
 
   // create_index_table will fill table_id and frozen_version to table_schema
@@ -2042,6 +2043,7 @@ private:
   bool inited_;
   common::ObMySQLProxy *sql_proxy_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
+  ObDDLTaskContext task_context_;
   //TODO(jingqian): used to choose partition server, use load balancer finnally
   ObSnapshotInfoManager *snapshot_mgr_;
   ObRuntimeDDLService *runtime_ddl_service_;

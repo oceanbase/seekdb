@@ -116,7 +116,10 @@ int ObPxRepartTransmitOp::do_transmit()
   } else {
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *table_schema = NULL;
-    if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+    ObSQLSessionInfo *session = ctx_.get_my_session();
+    ObMultiVersionSchemaService *schema_service = session != nullptr && session->ns_runtime() != nullptr
+        ? session->effective_schema_service() : GCTX.schema_service_;
+    if (OB_FAIL(schema_service->get_runtime_schema_guard(
                 schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_table_schema(
                MY_SPEC.repartition_ref_table_id_, table_schema))) {

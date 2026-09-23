@@ -24,6 +24,7 @@
 #include "sql/optimizer/ob_phy_table_location_info.h"
 #include "sql/optimizer/ob_table_location.h"
 #include "sql/session/ob_basic_session_info.h"
+#include "sql/session/ob_sql_session_info.h"
 namespace oceanbase
 {
 using namespace common;
@@ -141,7 +142,17 @@ int ObDASCtx::get_das_tablet_mapper(const uint64_t ref_table_id,
     //record the ObTableSchema into tablet_mapper
     //the tablet and partition info come from ObTableSchema in the real table
     ObSchemaGetterGuard *schema_guard = nullptr;
-    if (OB_ISNULL(sql_ctx_) || OB_ISNULL(schema_guard = sql_ctx_->schema_guard_)) {
+    ObSQLSessionInfo *session = sql_ctx_ == nullptr ? nullptr : sql_ctx_->session_info_;
+    if (session != nullptr && session->ns_runtime() != nullptr && !namespace_schema_guard_ready_) {
+      if (OB_FAIL(session->effective_schema_service()->get_runtime_schema_guard(namespace_schema_guard_))) {
+        LOG_WARN("get namespace schema guard failed", K(ret));
+      } else {
+        namespace_schema_guard_ready_ = true;
+      }
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_ISNULL(sql_ctx_) || OB_ISNULL(schema_guard = session != nullptr && session->ns_runtime() != nullptr
+        ? &namespace_schema_guard_ : sql_ctx_->schema_guard_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema guard is nullptr", K(ret), K(sql_ctx_), K(schema_guard));
     } else if (OB_ISNULL(tablet_mapper.table_schema_)

@@ -79,7 +79,7 @@ int ObDDLTaskUtil::hold_snapshot(
     const ObTableSchema *dest_table_schema = nullptr;
 
     int64_t schema_version = task->get_src_schema_version();
-    ObMultiVersionSchemaService &schema_service = ObMultiVersionSchemaService::get_instance();
+    ObMultiVersionSchemaService &schema_service = *task->task_schema_service();
     if (OB_UNLIKELY(snapshot_version < 0)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid arguments", K(ret), K(snapshot_version));
@@ -91,19 +91,19 @@ int ObDDLTaskUtil::hold_snapshot(
     } else if (OB_ISNULL(data_table_schema) || OB_ISNULL(dest_table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("table not exist", K(ret), K(table_id), K(target_table_id), KP(data_table_schema), KP(dest_table_schema));
-    } else if (OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, table_id, tablet_ids))) {
-    } else if (OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, target_table_id, tablet_ids))) {
+    } else if (OB_FAIL(ObDDLUtil::get_tablets(schema_service, table_id, tablet_ids))) {
+    } else if (OB_FAIL(ObDDLUtil::get_tablets(schema_service, target_table_id, tablet_ids))) {
     } else if (data_table_schema->get_aux_lob_meta_tid() != OB_INVALID_ID &&
-              OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, data_table_schema->get_aux_lob_meta_tid(), tablet_ids))) {
+              OB_FAIL(ObDDLUtil::get_tablets(schema_service, data_table_schema->get_aux_lob_meta_tid(), tablet_ids))) {
       LOG_WARN("failed to get data lob meta table snapshot", K(ret));
     } else if (data_table_schema->get_aux_lob_piece_tid() != OB_INVALID_ID &&
-              OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, data_table_schema->get_aux_lob_piece_tid(), tablet_ids))) {
+              OB_FAIL(ObDDLUtil::get_tablets(schema_service, data_table_schema->get_aux_lob_piece_tid(), tablet_ids))) {
       LOG_WARN("failed to get data lob piece table snapshot", K(ret));
     } else if (dest_table_schema->get_aux_lob_meta_tid() != OB_INVALID_ID &&
-              OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, dest_table_schema->get_aux_lob_meta_tid(), tablet_ids))) {
+              OB_FAIL(ObDDLUtil::get_tablets(schema_service, dest_table_schema->get_aux_lob_meta_tid(), tablet_ids))) {
       LOG_WARN("failed to get dest lob meta table snapshot", K(ret));
     } else if (dest_table_schema->get_aux_lob_piece_tid() != OB_INVALID_ID &&
-              OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, dest_table_schema->get_aux_lob_piece_tid(), tablet_ids))) {
+              OB_FAIL(ObDDLUtil::get_tablets(schema_service, dest_table_schema->get_aux_lob_piece_tid(), tablet_ids))) {
       LOG_WARN("failed to get dest lob piece table snapshot", K(ret));
     } else {
       rootserver::ObDDLService &ddl_service = local_management_service->get_ddl_service();
@@ -624,9 +624,9 @@ int ObDDLTaskUtil::obtain_snapshot(
 {
   int ret = OB_SUCCESS;
   rootserver::ObDDLWaitTransEndCtx* wait_trans_ctx = nullptr;
-  if (OB_ISNULL(GCTX.sql_proxy_)) {
+  if (OB_ISNULL(task) || OB_ISNULL(task->task_sql_proxy())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
+    LOG_WARN("invalid argument", KR(ret), KP(task));
   } else if (OB_UNLIKELY(nullptr == task || snapshot_version != 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(task), K(snapshot_version));
@@ -642,7 +642,7 @@ int ObDDLTaskUtil::obtain_snapshot(
     int64_t new_fetched_snapshot = 0;
     int64_t persisted_snapshot = 0;
     if (!wait_trans_ctx->is_inited()) {
-      if (OB_FAIL(wait_trans_ctx->init(task->get_task_id(), static_cast<ObDDLTaskStatus>(task->get_task_status()), task->get_object_id(), rootserver::ObDDLWaitTransEndCtx::WAIT_SCHEMA_TRANS, task->get_src_schema_version()))) {
+      if (OB_FAIL(wait_trans_ctx->init(task->get_task_id(), static_cast<ObDDLTaskStatus>(task->get_task_status()), task->get_object_id(), rootserver::ObDDLWaitTransEndCtx::WAIT_SCHEMA_TRANS, task->get_src_schema_version(), *task->task_schema_service()))) {
       }
     } else {
       // to get snapshot version.
@@ -659,7 +659,7 @@ int ObDDLTaskUtil::obtain_snapshot(
         LOG_WARN("snapshot version is invalid", K(ret), K(new_fetched_snapshot), KPC(wait_trans_ctx));
       } else {
         ObMySQLTransaction trans;
-        if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+        if (OB_FAIL(trans.start(task->task_sql_proxy()))) {
         } else if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::update_snapshot_version_if_not_exist(trans,
                                                                     task->get_task_id(),
                                                                     new_fetched_snapshot,
@@ -668,7 +668,9 @@ int ObDDLTaskUtil::obtain_snapshot(
           // found a persisted snapshot, do not hold it again.
           FLOG_INFO("found a persisted snapshot in inner table", "task_id", task->get_task_id(), K(persisted_snapshot), K(new_fetched_snapshot));
         } else if (OB_FAIL(hold_snapshot(trans, task, table_id, target_table_id,
-                                         ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>(), new_fetched_snapshot))) {
+                                         task->context().root_service_ != nullptr ? task->context().root_service_ :
+                                             ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>(),
+                                         new_fetched_snapshot))) {
           if (OB_SNAPSHOT_DISCARDED == ret) {
             wait_trans_ctx->reset();
           } else {
@@ -726,7 +728,7 @@ int ObDDLTaskUtil::release_snapshot(
 
     int64_t schema_version = task->get_src_schema_version();
     if (OB_FAIL(DDL_SIM(task->get_task_id(), DDL_TASK_RELEASE_SNAPSHOT_FAILED))) {
-    } else if (OB_FAIL(ObDDLUtil::get_tablet_ids(*GCTX.schema_service_, table_id, target_table_id, tablet_ids))) {
+    } else if (OB_FAIL(ObDDLUtil::get_tablet_ids(*task->task_schema_service(), table_id, target_table_id, tablet_ids))) {
     }
     if (OB_FAIL(ret)) {
     } else if (tablet_ids.count() <= 0) {

@@ -13141,6 +13141,7 @@ int ObDDLService::do_offline_ddl_in_trans(obcall::ObAlterTableArg &alter_table_a
         int tmp_ret = OB_SUCCESS;
         if (OB_FAIL(publish_schema())) {
           LOG_WARN("publish_schema failed", K(ret));
+        } else if (FALSE_IT(task_record.context_ = task_context_)) {
         } else if (OB_TMP_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
           LOG_WARN("fail to schedule ddl task", K(tmp_ret), K(task_record));
         }
@@ -17364,7 +17365,8 @@ int ObDDLService::unbind_hidden_tablets(
   } else {
     const int64_t abs_timeout_us = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_ts()
                                                                      : ObTimeUtility::current_time() + GCONF.rpc_timeout;
-    rootserver::ObIRootserverLocalRuntime *runtime = rootserver_local_runtime();
+    rootserver::ObIRootserverLocalRuntime *runtime = task_context_.local_runtime_ != nullptr
+        ? task_context_.local_runtime_ : rootserver_local_runtime();
     if (OB_ISNULL(runtime)) {
       ret = OB_NOT_INIT;
       LOG_WARN("rootserver local runtime is not initialized", K(ret));

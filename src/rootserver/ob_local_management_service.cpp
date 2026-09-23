@@ -220,6 +220,14 @@ int ObLocalManagementService::init_sql_worker(
     LOG_WARN("init SQL worker snapshot manager failed", KR(ret));
   }
   if (OB_SUCC(ret)) {
+    ObDDLTaskContext context;
+    context.namespace_id_ = sql_proxy.target_namespace();
+    context.sql_proxy_ = &sql_proxy;
+    context.ddl_proxy_ = ddl_sql_proxy_;
+    context.schema_service_ = &schema_service;
+    context.root_service_ = this;
+    context.local_runtime_ = ddl_local_runtime_;
+    ddl_service_.set_task_context(context);
     inited_ = true;
     local_services_ready_ = true;
   }
