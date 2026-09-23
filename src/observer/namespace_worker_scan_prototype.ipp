@@ -163,6 +163,36 @@ struct EngineSchemaCacheEntry {
   ObArray<ObTabletID> logical_tablets;
   ObArray<ObTabletID> storage_tablets;
 };
+struct ScanBatch {
+  ObArenaAllocator allocator{ObMemAttr("NsScanBatch")};
+  std::vector<ObObj> cells;
+  uint64_t rows = 0;
+  size_t bytes = 25; // Former batch header plus result, end, and row count.
+  bool end = false;
+  void reset() {
+    cells.clear();
+    allocator.reset();
+    rows = 0;
+    bytes = 25;
+    end = false;
+  }
+  int push(const ObObj &value, bool has_lob_header) {
+    const int64_t encoded_size = value.get_serialize_size();
+    if (encoded_size < 0 || bytes > MAX_SQL_MESSAGE - 8
+        || static_cast<size_t>(encoded_size) > MAX_SQL_MESSAGE - bytes - 8) {
+      return OB_SIZE_OVERFLOW;
+    }
+    ObObj copied;
+    int ret = ob_write_obj(allocator, value, copied);
+    if (!ret) {
+      if (has_lob_header) { copied.set_has_lob_header(); }
+      cells.push_back(copied);
+      bytes += static_cast<size_t>(encoded_size) + 8;
+    }
+    return ret;
+  }
+};
+int fetch_in_process_scan(uint64_t handle, ScanBatch &batch);
 inline uint64_t engine_schema_hash(uint64_t ns, const ObString &blob) {
   uint64_t h = 1469598103934665603ULL ^ (ns * 1099511628211ULL);
   const char *p = blob.ptr();
@@ -340,7 +370,7 @@ struct EngineScan {
     }
     const uint64_t ranges = request.number();
     // Must cover MAX_IN_QUERY_PER_TIME (1000): IN-batch refreshes arrive as
-    // one range per element over a single IPC roundtrip.
+    // one range per element in a single scan request.
     if (ret || request.ret || ranges > 8192) { return ret ? ret : OB_NOT_SUPPORTED; }
     const uint64_t width = request.number();
     if (request.ret || width == 0 || width > OB_MAX_ROWKEY_COLUMN_NUMBER) {
@@ -460,8 +490,8 @@ struct EngineScan {
     reply.number(ret);
     return OB_SUCCESS;
   }
-  int fetch(Frame &reply) {
-    Frame rows('s'); rows.number(0); rows.number(0); rows.number(0);
+  int fetch(ScanBatch &batch) {
+    batch.reset();
     uint64_t count = 0; bool end = false; int ret = OB_SUCCESS;
     for (; count < 32; ++count) {
       if (virtual_context) {
@@ -470,8 +500,10 @@ struct EngineScan {
         if (ret == OB_ITER_END) { ret = OB_SUCCESS; end = true; break; }
         if (ret) { break; }
         if (!row || row->get_count() != param.column_ids_.count()) { ret = OB_ERR_UNEXPECTED; break; }
-        for (int64_t i = 0; i < row->get_count(); ++i) { rows.write_object(row->get_cell(i), false); }
-        if ((ret = rows.ret)) { break; }
+        for (int64_t i = 0; !ret && i < row->get_count(); ++i) {
+          ret = batch.push(row->get_cell(i), false);
+        }
+        if (ret) { break; }
         continue;
       }
       blocksstable::ObDatumRow *row = nullptr;
@@ -494,15 +526,16 @@ struct EngineScan {
         if (!ret) {
           const bool has_lob_header = table.enable_lob_locator_v2() && value.is_lob_storage()
               && !value.is_null() && value.has_lob_header();
-          rows.write_object(value, has_lob_header);
+          ret = batch.push(value, has_lob_header);
         }
       }
       if (ret) { break; }
-      if (rows.ret) { ret = rows.ret; break; }
     }
-    reply = Frame('s'); reply.number(ret); reply.number(end); reply.number(count);
-    if (!ret) { reply.data.insert(reply.data.end(), rows.data.begin() + Frame::HEADER_SIZE + 24, rows.data.end()); }
-    return OB_SUCCESS;
+    if (!ret) {
+      batch.rows = count;
+      batch.end = end;
+    }
+    return ret;
   }
 };
 struct ReadScans {
@@ -515,6 +548,10 @@ struct ReadScans {
     scans.clear();
     fprintf(stderr, "PROTOTYPE_V13_SCANS_RELEASED ns=%llu remaining=%zu\n",
         (unsigned long long)storage_space.namespace_id(), remaining);
+  }
+  int fetch(uint64_t id, ScanBatch &batch) {
+    auto it = scans.find(id);
+    return it == scans.end() ? OB_INVALID_ARGUMENT : it->second->fetch(batch);
   }
   int process(Frame &request, Frame &reply, transaction::ObTxDesc *tx = nullptr, sql::ObSQLSessionInfo *session = nullptr) {
     const uint64_t ns = storage_space.namespace_id();
@@ -540,7 +577,6 @@ struct ReadScans {
       }
       else if (!request.consumed() || it == scans.end()) { reply.number(OB_INVALID_ARGUMENT); }
       else if (request.type() == 'X') { scans.erase(it); reply.number(0); }
-      else if (request.type() == 'F') { ret = it->second->fetch(reply); }
       else { reply.number(OB_NOT_SUPPORTED); }
     }
     // Storage errors belong in the reply. A sent RPC must receive that reply
@@ -554,8 +590,7 @@ public:
   uint64_t handle = 0, row_index = 0, rows_left = 0;
   int64_t qualified = 0, returned = 0;
   bool end = false;
-  std::vector<ObObj> cells;
-  Frame batch; // Own variable-length cell bytes until the next batch.
+  ScanBatch batch; // Own variable-length cell bytes until the next batch.
   ObNewRow row;
   explicit RemoteScanIterator(ObVTableScanParam &p) : param(p) {}
   ~RemoteScanIterator() override { reset(); }
@@ -670,16 +705,16 @@ public:
     const size_t columns = param.column_ids_.count();
     if (!rows_left) {
       if (end) { return OB_ITER_END; }
-      Frame request('F'); Frame &reply = batch; request.number(handle);
-      if ((ret = exchange(request, reply))) { return ret; }
-      end = reply.number() != 0; const uint64_t rows = reply.number();
-      if (reply.ret || rows > 32 || (!rows && !end)) { return OB_INVALID_ARGUMENT; }
-      cells.resize(rows * columns); row_index = 0; rows_left = rows;
-      for (auto &cell : cells) { reply.read_object(cell); }
-      if (!reply.consumed()) { return OB_INVALID_ARGUMENT; }
-      if (!rows) { return OB_ITER_END; }
+      StorageSessionScope scope(param.op_->get_eval_ctx().exec_ctx_.get_my_session());
+      ret = scope.error() ? scope.error() : fetch_in_process_scan(handle, batch);
+      if (ret) { return ret; }
+      end = batch.end;
+      if (batch.rows > 32 || (!batch.rows && !end)
+          || batch.cells.size() != batch.rows * columns) { return OB_INVALID_ARGUMENT; }
+      row_index = 0; rows_left = batch.rows;
+      if (!rows_left) { return OB_ITER_END; }
     }
-    row.cells_ = columns ? cells.data() + row_index : nullptr;
+    row.cells_ = columns ? batch.cells.data() + row_index : nullptr;
     row.count_ = columns; row_index += columns; --rows_left; out = &row;
     return ret;
   }
@@ -691,7 +726,7 @@ public:
     int ret = OB_SUCCESS;
     for (;;) {
       if ((ret = THIS_WORKER.check_status())) { return ret; }
-      // A vector batch must keep all returned string pointers in one wire frame.
+      // A vector batch keeps all returned string pointers in one owned batch.
       if (stop_before_fetch && !rows_left) { return OB_ITER_END; }
       ObNewRow *row = nullptr;
       if ((ret = get_next_row(row))) { return ret; }
@@ -737,13 +772,13 @@ public:
   }
   void reset() override {
     if (handle) { Frame request('X'), reply; request.number(handle); exchange(request, reply); handle = 0; }
-    cells.clear(); row_index = 0; rows_left = 0; end = false; qualified = 0; returned = 0;
+    batch.reset(); row_index = 0; rows_left = 0; end = false; qualified = 0; returned = 0;
   }
   // NLJ rescan: same table, same columns, only the key ranges changed. Reuse
   // the shared-side scan instead of re-shipping the schema per row. Falls
   // back to a full close+open when the shared side cannot rescan.
   int rescan() {
-    cells.clear(); row_index = 0; rows_left = 0; end = false; qualified = 0; returned = 0;
+    batch.reset(); row_index = 0; rows_left = 0; end = false; qualified = 0; returned = 0;
     if (!handle || is_virtual_table(param.index_id_)) { reset(); return open(); }
     Frame request('R'); request.number(handle);
     request.number(param.scan_flag_.flag_); request.number(param.is_get_);

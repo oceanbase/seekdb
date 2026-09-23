@@ -49,7 +49,7 @@ int serve_storage(StorageSpaceHandle storage_space, ReadScans *scans,
     const uint64_t ns = storage_space.namespace_id();
     int ret = OB_SUCCESS;
     if (!storage_space.is_namespace()) { return OB_INVALID_ARGUMENT; }
-    if (scans && (input.type() == 'O' || input.type() == 'F' || input.type() == 'X' || input.type() == 'R')) {
+    if (scans && (input.type() == 'O' || input.type() == 'X' || input.type() == 'R')) {
       result = Frame('s');
       if (state && input.type() != 'X') { result.number(state); }
       else { ret = scans->process(input, result, writes ? writes->tx : nullptr, writes ? &writes->session : nullptr); }
@@ -302,6 +302,22 @@ int in_process_read(InProcessStorage &ctx, Frame &frame)
   frame = std::move(ctx.reply);
   ctx.reply = Frame();
   return OB_SUCCESS;
+}
+int fetch_in_process_scan(uint64_t handle, ScanBatch &batch)
+{
+  InProcessStorage *ctx = in_process_storage;
+  const StorageSpaceHandle space = active_worker_storage_space();
+  if (ctx == nullptr || !ctx->initialized) { return OB_NOT_INIT; }
+  if (!space.is_namespace() || ctx->ns != space.namespace_id() || handle == 0) {
+    return OB_INVALID_ARGUMENT;
+  }
+  const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
+  auto *old_session = THIS_WORKER.get_session();
+  THIS_WORKER.set_session(&ctx->session);
+  const int ret = ctx->scans.fetch(handle, batch);
+  THIS_WORKER.set_session(old_session);
+  THIS_WORKER.set_timeout_ts(old_timeout);
+  return ret;
 }
 uint64_t in_process_bound_namespace()
 {
