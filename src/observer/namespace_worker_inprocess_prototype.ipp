@@ -34,7 +34,7 @@ namespace oceanbase { namespace observer { namespace namespace_worker_prototype 
 // namespace; the serving namespace travels with the bound session context.
 // ---------------------------------------------------------------------------
 RemoteTabletScan inprocess_scan;
-RemoteLobReadService inprocess_lob_read;
+InProcessLobReadService inprocess_lob_read;
 RemoteDmlService inprocess_dml;
 RemoteWriteContext inprocess_write_context;
 RemoteTransactionService inprocess_transactions;

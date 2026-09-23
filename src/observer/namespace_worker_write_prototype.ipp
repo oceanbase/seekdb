@@ -990,44 +990,6 @@ int process_table_lock(StorageSpaceHandle channel_space,
   return ret;
 }
 
-int process_lob_read(StorageSpaceHandle channel_space,
-                     Frame &request,
-                     Frame &reply,
-                     ObTxDesc *tx)
-{
-  StorageSpaceHandle storage_space;
-  int ret = read_storage_space(request, channel_space, storage_space);
-  const int64_t timeout = request.number();
-  const bool has_lob_header = request.number() != 0;
-  const ObString wire_locator = request.string();
-  if (OB_SUCC(ret) && request.ret) { ret = request.ret; }
-  ObArenaAllocator allocator(ObMemAttr("NsLobRead"));
-  ObString output;
-  if (!ret && (!request.consumed() || !has_lob_header || wire_locator.empty())) {
-    ret = OB_INVALID_ARGUMENT;
-  }
-  ObLobLocatorV2 locator(wire_locator, has_lob_header);
-  int64_t length = 0;
-  if (!ret && (!locator.is_valid() || !locator.is_persist_lob())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (!ret && OB_FAIL(locator.get_lob_data_byte_len(length))) {
-  } else if (!ret && (length < 0 || length > static_cast<int64_t>(MAX_SQL_MESSAGE - 64))) {
-    ret = OB_SIZE_OVERFLOW;
-  } else if (!ret && length > 0) {
-    char *buffer = static_cast<char *>(allocator.alloc(length));
-    if (!buffer) { ret = OB_ALLOCATE_MEMORY_FAILED; }
-    else { output.assign_buffer(buffer, static_cast<int32_t>(length)); }
-  }
-  if (!ret) {
-    ret = data_plane::read_lob_to_buffer(
-        allocator, locator, std::min(timeout, THIS_WORKER.get_timeout_ts()), tx, output);
-  }
-  reply = Frame('r');
-  reply.number(ret);
-  if (!ret) { reply.string(output); }
-  return reply.ret;
-}
-
 struct EngineWrite {
   ObArenaAllocator allocator{ObMemAttr("NsRemoteWrite")};
   ObSchemaGetterGuard guard;
@@ -2634,7 +2596,10 @@ public:
   void reset() override {}
 };
 
-class RemoteLobReadService final : public common::ObILobReadService {
+int read_in_process_lob(common::ObLobLocatorV2 &locator, int64_t timeout,
+                        common::ObIAllocator &allocator, common::ObString &output);
+
+class InProcessLobReadService final : public common::ObILobReadService {
 public:
   void set_local(common::ObILobReadService *service) { local_ = service; }
 
@@ -2768,31 +2733,16 @@ private:
     StorageSessionScope scope(session);
     if (scope.error()) { return scope.error(); }
     const int64_t timeout = ctx.timeout_ts_ > 0 ? ctx.timeout_ts_ : THIS_WORKER.get_timeout_ts();
-    Frame request('h'), reply;
-    write_storage_space(request, active_worker_storage_space());
-    request.number(timeout);
-    request.number(locator.has_lob_header());
-    request.string(ObString(locator.size_, locator.ptr_));
-    int ret = request.ret ? request.ret : worker_send(request);
-    if (!ret) { ret = worker_read(reply); }
-    if (!ret && reply.type() != 'r') { ret = OB_INVALID_ARGUMENT; }
-    if (!ret) { ret = static_cast<int>(reply.number()); }
     ObString data;
-    if (!ret) { data = reply.string(); }
-    if (!ret && (!reply.consumed() || data.length() > UINT32_MAX)) { ret = OB_INVALID_ARGUMENT; }
+    int ret = read_in_process_lob(locator, timeout, *ctx.alloc_, data);
+    if (!ret && data.length() > UINT32_MAX) { ret = OB_INVALID_ARGUMENT; }
     if (!ret) {
-      char *buffer = data.empty() ? nullptr : static_cast<char *>(ctx.alloc_->alloc(data.length()));
-      if (!data.empty() && !buffer) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else {
-        if (!data.empty()) { MEMCPY(buffer, data.ptr(), data.length()); }
-        ctx.buff_ = buffer;
-        ctx.buff_byte_len_ = static_cast<uint32_t>(data.length());
-        ctx.content_byte_len_ = static_cast<uint32_t>(data.length());
-        ctx.total_byte_len_ = data.length();
-      }
+      ctx.buff_ = data.empty() ? nullptr : data.ptr();
+      ctx.buff_byte_len_ = static_cast<uint32_t>(data.length());
+      ctx.content_byte_len_ = static_cast<uint32_t>(data.length());
+      ctx.total_byte_len_ = data.length();
     }
-    return ret ? ret : reply.ret;
+    return ret;
   }
 
   common::ObILobReadService *local_ = nullptr;

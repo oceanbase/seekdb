@@ -49,12 +49,7 @@ int serve_storage(StorageSpaceHandle storage_space, ReadScans *scans,
     const uint64_t ns = storage_space.namespace_id();
     int ret = OB_SUCCESS;
     if (!storage_space.is_namespace()) { return OB_INVALID_ARGUMENT; }
-    if (input.type() == 'h') {
-      result = Frame('r');
-      if (state) { result.number(state); }
-      else { ret = process_lob_read(
-          storage_space, input, result, writes ? writes->tx : nullptr); }
-    } else if (input.type() == 'Y') {
+    if (input.type() == 'Y') {
       result = Frame('w');
       if (state) { result.number(state); }
       else { ret = process_rootserver_local_runtime(storage_space, input, result); }
@@ -101,6 +96,39 @@ struct InProcessStorage {
   InProcessStorage(const InProcessStorage &) = delete;
   InProcessStorage &operator=(const InProcessStorage &) = delete;
 };
+int read_in_process_lob(ObLobLocatorV2 &locator, int64_t timeout,
+                        ObIAllocator &allocator, ObString &output)
+{
+  output.reset();
+  InProcessStorage *storage = in_process_storage;
+  if (storage == nullptr || !storage->initialized || !storage->writes) {
+    return OB_NOT_INIT;
+  }
+  const StorageSpaceHandle space = active_worker_storage_space();
+  if (!space.is_namespace() || !locator.is_valid() || !locator.has_lob_header()
+      || !locator.is_persist_lob()) {
+    return OB_INVALID_ARGUMENT;
+  }
+  int64_t length = 0;
+  int ret = locator.get_lob_data_byte_len(length);
+  if (!ret && (length < 0 || length > static_cast<int64_t>(MAX_SQL_MESSAGE - 64))) {
+    ret = OB_SIZE_OVERFLOW;
+  } else if (!ret && length > 0) {
+    char *buffer = static_cast<char *>(allocator.alloc(length));
+    if (buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+    else { output.assign_buffer(buffer, static_cast<int32_t>(length)); }
+  }
+  if (!ret) {
+    auto *old_session = THIS_WORKER.get_session();
+    const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
+    THIS_WORKER.set_session(&storage->session);
+    ret = data_plane::read_lob_to_buffer(allocator, locator,
+        std::min(timeout, old_timeout), storage->writes->tx, output);
+    THIS_WORKER.set_session(old_session);
+    THIS_WORKER.set_timeout_ts(old_timeout);
+  }
+  return ret;
+}
 int in_process_open(InProcessStorage &ctx, uint32_t sid, bool internal)
 {
   int ret = OB_SUCCESS;
