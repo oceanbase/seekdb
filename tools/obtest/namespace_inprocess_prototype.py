@@ -152,6 +152,13 @@ def direct_probe(experiment):
         assert experiment.sql(
             "SELECT LENGTH(payload),SUBSTR(payload,7999,4),SUBSTR(payload,-1,1) "
             "FROM phase10.blobs WHERE id=2", child) == ((16000, b"AABB", b"B"),)
+        experiment.sql("CREATE TABLE phase10.runtime_ddl(id INT PRIMARY KEY, v INT)", child)
+        with child.cursor() as cursor:
+            cursor.executemany("INSERT INTO phase10.runtime_ddl VALUES(%s,%s)",
+                               [(i, i + 1000) for i in range(1, 201)])
+        experiment.sql("CREATE UNIQUE INDEX runtime_v ON phase10.runtime_ddl(v)", child)
+        experiment.sql("ALTER TABLE phase10.runtime_ddl MODIFY COLUMN v BIGINT", child)
+        assert experiment.sql("SELECT COUNT(*),SUM(v) FROM phase10.runtime_ddl", child) == ((200, 220100),)
         experiment.sql("ALTER TABLE phase10.records ADD COLUMN revision INT DEFAULT 7", child)
         assert experiment.sql("SELECT revision FROM phase10.records WHERE id=1", child) == ((7,),)
         experiment.sql("DROP INDEX records_v ON phase10.records", child)

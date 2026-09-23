@@ -544,181 +544,145 @@ int check_namespace_tablet_elapsed(
   return ret;
 }
 
-// Rootserver owns DDL task orchestration in the SQL worker, while these calls
-// are physical tablet/DAG operations. Route their logical ids once here and
-// invoke the existing storage-process implementation.
-int process_rootserver_local_runtime(
-    StorageSpaceHandle channel_space,
-    Frame &request,
-    Frame &reply)
+// Rootserver owns DDL task orchestration; these operations touch physical
+// tablets and DAGs. Route logical ids before calling the native runtime.
+int route_rootserver_build_arg(
+    StorageSpaceHandle storage_space,
+    const obcall::ObDDLLocalBuildArg &arg,
+    obcall::ObDDLLocalBuildArg &routed)
 {
-  using rootserver::ObIRootserverLocalRuntime;
-  ObIRootserverLocalRuntime *runtime =
-      share::server_service<ObIRootserverLocalRuntime>();
-  const uint64_t operation = request.number();
-  StorageSpaceHandle storage_space;
-  int ret = read_storage_space(request, channel_space, storage_space);
+  int ret = routed.assign(arg);
+  uint64_t source_table_id = routed.source_table_id_;
+  uint64_t dest_table_id = routed.dest_schema_id_;
+  if (!ret && OB_FAIL(route_tablet_id(storage_space, routed.source_tablet_id_))) {
+  } else if (!ret && OB_FAIL(route_tablet_id(storage_space, routed.dest_tablet_id_))) {
+  } else if (!ret && OB_FAIL(route_table_lock_id(storage_space, source_table_id))) {
+  } else if (!ret && OB_FAIL(route_table_lock_id(storage_space, dest_table_id))) {
+  } else if (!ret) {
+    routed.source_table_id_ = source_table_id;
+    routed.dest_schema_id_ = dest_table_id;
+  }
+  return ret;
+}
+
+int calc_namespace_column_checksum(
+    StorageSpaceHandle storage_space,
+    rootserver::ObIRootserverLocalRuntime &runtime,
+    const obcall::ObCalcColumnChecksumRequestArg &input,
+    obcall::ObCalcColumnChecksumRequestRes &result)
+{
   const uint64_t ns = storage_space.namespace_id();
-  Frame values;
-  if (OB_SUCC(ret) && OB_ISNULL(runtime)) {
-    ret = OB_NOT_INIT;
-  } else if (OB_SUCC(ret) && operation == 'C') {
-    obcall::ObCalcColumnChecksumRequestArg arg;
-    obcall::ObCalcColumnChecksumRequestRes result;
-    request.read(arg);
-    ObTableSchema storage_source_schema;
-    ObTableSchema storage_target_schema;
-    if (OB_SUCC(ret) && storage_space.is_namespace() && ns > 1 && OB_FAIL(
-            storage::NamespaceForkKernelPrototype::make_storage_schema(
-                ns, arg.source_schema_, storage_source_schema))) {
-    } else if (OB_SUCC(ret) && storage_space.is_namespace() && ns > 1 && OB_FAIL(
-            storage::NamespaceForkKernelPrototype::make_storage_schema(
-                ns, arg.target_schema_, storage_target_schema))) {
-    } else if (OB_SUCC(ret) && storage_space.is_namespace() && ns > 1 && OB_FAIL(
-            arg.source_schema_.assign(storage_source_schema))) {
-    } else if (OB_SUCC(ret) && storage_space.is_namespace() && ns > 1 && OB_FAIL(
-            arg.target_schema_.assign(storage_target_schema))) {
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < arg.calc_items_.count(); ++i) {
-      ret = route_tablet_id(storage_space, arg.calc_items_.at(i).tablet_id_);
-      if (OB_SUCC(ret)) {
-        uint64_t table_id = arg.calc_items_.at(i).calc_table_id_;
-        if (OB_FAIL(route_table_lock_id(storage_space, table_id))) {
-        } else {
-          arg.calc_items_.at(i).calc_table_id_ = table_id;
-        }
-      }
-    }
-    uint64_t target_table_id = arg.target_table_id_;
-    uint64_t source_table_id = arg.source_table_id_;
-    if (OB_SUCC(ret) && OB_FAIL(route_table_lock_id(storage_space, target_table_id))) {
-    } else if (OB_SUCC(ret) && OB_FAIL(route_table_lock_id(storage_space, source_table_id))) {
-    } else if (OB_SUCC(ret)) {
-      arg.target_table_id_ = target_table_id;
-      arg.source_table_id_ = source_table_id;
-    }
-    if (OB_SUCC(ret) && !request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-    obcall::ObCalcColumnChecksumRequestArg submit_arg;
-    ObSEArray<int64_t, 10> submit_positions;
-    if (OB_SUCC(ret) && OB_FAIL(submit_arg.assign(arg))) {
-    } else if (OB_SUCC(ret)) {
-      submit_arg.calc_items_.reset();
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < arg.calc_items_.count(); ++i) {
-      obcall::ObCalcColumnChecksumResponseArg key;
-      key.tablet_id_ = arg.calc_items_.at(i).tablet_id_;
-      key.target_table_id_ = arg.target_table_id_;
-      key.source_table_id_ = arg.source_table_id_;
-      key.schema_version_ = arg.schema_version_;
-      key.task_id_ = arg.task_id_;
-      bool should_submit = false;
-      bool is_finished = false;
-      obcall::ObCalcColumnChecksumResponseArg completion;
-      obcall::ObCalcColumnChecksumCompletion wire_completion;
-      int item_ret = OB_EAGAIN;
-      if (OB_FAIL(data_plane::prepare_column_checksum_poll(
-              key, should_submit, is_finished, completion))) {
-      } else if (is_finished) {
-        wire_completion.finished_ = true;
-        wire_completion.ret_code_ = completion.ret_code_;
-        item_ret = completion.ret_code_;
-        if (OB_FAIL(wire_completion.column_ids_.assign(
-                completion.column_ids_))) {
-        } else if (OB_FAIL(wire_completion.column_checksums_.assign(
-                       completion.column_checksums_))) {
-        }
-      } else if (should_submit) {
-        if (OB_FAIL(submit_arg.calc_items_.push_back(arg.calc_items_.at(i)))) {
-        } else if (OB_FAIL(submit_positions.push_back(i))) {
-        }
-      }
-      if (OB_SUCC(ret) && OB_FAIL(result.ret_codes_.push_back(item_ret))) {
-      } else if (OB_SUCC(ret)
-                 && OB_FAIL(result.completions_.push_back(wire_completion))) {
-      }
-    }
-    if (OB_SUCC(ret) && !submit_arg.calc_items_.empty()) {
-      obcall::ObCalcColumnChecksumRequestRes submit_result;
-      if (OB_FAIL(runtime->calc_column_checksum_request(
-              submit_arg, submit_result))) {
-      } else if (submit_result.ret_codes_.count()
-                 != submit_positions.count()) {
-        ret = OB_ERR_UNEXPECTED;
+  obcall::ObCalcColumnChecksumRequestArg arg;
+  int ret = arg.assign(input);
+  ObTableSchema storage_source_schema;
+  ObTableSchema storage_target_schema;
+  if (!ret && storage_space.is_namespace() && ns > 1 && OB_FAIL(
+          storage::NamespaceForkKernelPrototype::make_storage_schema(
+              ns, arg.source_schema_, storage_source_schema))) {
+  } else if (!ret && storage_space.is_namespace() && ns > 1 && OB_FAIL(
+          storage::NamespaceForkKernelPrototype::make_storage_schema(
+              ns, arg.target_schema_, storage_target_schema))) {
+  } else if (!ret && storage_space.is_namespace() && ns > 1 && OB_FAIL(
+          arg.source_schema_.assign(storage_source_schema))) {
+  } else if (!ret && storage_space.is_namespace() && ns > 1 && OB_FAIL(
+          arg.target_schema_.assign(storage_target_schema))) {
+  }
+  for (int64_t i = 0; !ret && i < arg.calc_items_.count(); ++i) {
+    ret = route_tablet_id(storage_space, arg.calc_items_.at(i).tablet_id_);
+    if (!ret) {
+      uint64_t table_id = arg.calc_items_.at(i).calc_table_id_;
+      if (OB_FAIL(route_table_lock_id(storage_space, table_id))) {
       } else {
-        for (int64_t i = 0; OB_SUCC(ret) && i < submit_positions.count(); ++i) {
-          const int64_t pos = submit_positions.at(i);
-          const int schedule_ret = submit_result.ret_codes_.at(i);
-          if (schedule_ret == OB_SUCCESS
-              || schedule_ret == OB_EAGAIN
-              || schedule_ret == OB_HASH_EXIST) {
-            result.ret_codes_.at(pos) = OB_EAGAIN;
-          } else {
-            obcall::ObCalcColumnChecksumResponseArg key;
-            key.tablet_id_ = arg.calc_items_.at(pos).tablet_id_;
-            key.target_table_id_ = arg.target_table_id_;
-            key.source_table_id_ = arg.source_table_id_;
-            key.schema_version_ = arg.schema_version_;
-            key.task_id_ = arg.task_id_;
-            result.ret_codes_.at(pos) = schedule_ret;
-            if (OB_FAIL(data_plane::cancel_column_checksum_poll(key))) {
-            }
-          }
-        }
+        arg.calc_items_.at(i).calc_table_id_ = table_id;
       }
-      if (OB_FAIL(ret)) {
-        for (int64_t i = 0; i < submit_positions.count(); ++i) {
-          const int64_t pos = submit_positions.at(i);
+    }
+  }
+  uint64_t target_table_id = arg.target_table_id_;
+  uint64_t source_table_id = arg.source_table_id_;
+  if (!ret && OB_FAIL(route_table_lock_id(storage_space, target_table_id))) {
+  } else if (!ret && OB_FAIL(route_table_lock_id(storage_space, source_table_id))) {
+  } else if (!ret) {
+    arg.target_table_id_ = target_table_id;
+    arg.source_table_id_ = source_table_id;
+  }
+  obcall::ObCalcColumnChecksumRequestArg submit_arg;
+  ObSEArray<int64_t, 10> submit_positions;
+  if (!ret && OB_FAIL(submit_arg.assign(arg))) {
+  } else if (!ret) {
+    submit_arg.calc_items_.reset();
+  }
+  result.ret_codes_.reset();
+  result.completions_.reset();
+  for (int64_t i = 0; !ret && i < arg.calc_items_.count(); ++i) {
+    obcall::ObCalcColumnChecksumResponseArg key;
+    key.tablet_id_ = arg.calc_items_.at(i).tablet_id_;
+    key.target_table_id_ = arg.target_table_id_;
+    key.source_table_id_ = arg.source_table_id_;
+    key.schema_version_ = arg.schema_version_;
+    key.task_id_ = arg.task_id_;
+    bool should_submit = false;
+    bool is_finished = false;
+    obcall::ObCalcColumnChecksumResponseArg completion;
+    obcall::ObCalcColumnChecksumCompletion wire_completion;
+    int item_ret = OB_EAGAIN;
+    if (OB_FAIL(data_plane::prepare_column_checksum_poll(
+            key, should_submit, is_finished, completion))) {
+    } else if (is_finished) {
+      wire_completion.finished_ = true;
+      wire_completion.ret_code_ = completion.ret_code_;
+      item_ret = completion.ret_code_;
+      if (OB_FAIL(wire_completion.column_ids_.assign(completion.column_ids_))) {
+      } else if (OB_FAIL(wire_completion.column_checksums_.assign(
+                     completion.column_checksums_))) {
+      }
+    } else if (should_submit) {
+      if (OB_FAIL(submit_arg.calc_items_.push_back(arg.calc_items_.at(i)))) {
+      } else if (OB_FAIL(submit_positions.push_back(i))) {
+      }
+    }
+    if (!ret && OB_FAIL(result.ret_codes_.push_back(item_ret))) {
+    } else if (!ret && OB_FAIL(result.completions_.push_back(wire_completion))) {
+    }
+  }
+  if (!ret && !submit_arg.calc_items_.empty()) {
+    obcall::ObCalcColumnChecksumRequestRes submit_result;
+    if (OB_FAIL(runtime.calc_column_checksum_request(submit_arg, submit_result))) {
+    } else if (submit_result.ret_codes_.count() != submit_positions.count()) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      for (int64_t i = 0; !ret && i < submit_positions.count(); ++i) {
+        const int64_t pos = submit_positions.at(i);
+        const int schedule_ret = submit_result.ret_codes_.at(i);
+        if (schedule_ret == OB_SUCCESS || schedule_ret == OB_EAGAIN
+            || schedule_ret == OB_HASH_EXIST) {
+          result.ret_codes_.at(pos) = OB_EAGAIN;
+        } else {
           obcall::ObCalcColumnChecksumResponseArg key;
           key.tablet_id_ = arg.calc_items_.at(pos).tablet_id_;
           key.target_table_id_ = arg.target_table_id_;
           key.source_table_id_ = arg.source_table_id_;
           key.schema_version_ = arg.schema_version_;
           key.task_id_ = arg.task_id_;
-          (void)data_plane::cancel_column_checksum_poll(key);
+          result.ret_codes_.at(pos) = schedule_ret;
+          if (OB_FAIL(data_plane::cancel_column_checksum_poll(key))) {
+          }
         }
       }
     }
-    if (OB_SUCC(ret)) { values.append(result); }
-  } else if (OB_SUCC(ret)
-             && (operation == 'B' || operation == 'X' || operation == 'L')) {
-    obcall::ObDDLLocalBuildArg arg;
-    request.read(arg);
-    uint64_t source_table_id = arg.source_table_id_;
-    uint64_t dest_table_id = arg.dest_schema_id_;
-    if (OB_SUCC(ret) && OB_FAIL(route_tablet_id(storage_space, arg.source_tablet_id_))) {
-    } else if (OB_SUCC(ret) && OB_FAIL(route_tablet_id(storage_space, arg.dest_tablet_id_))) {
-    } else if (OB_SUCC(ret) && OB_FAIL(route_table_lock_id(storage_space, source_table_id))) {
-    } else if (OB_SUCC(ret) && OB_FAIL(route_table_lock_id(storage_space, dest_table_id))) {
-    } else if (OB_SUCC(ret)) {
-      arg.source_table_id_ = source_table_id;
-      arg.dest_schema_id_ = dest_table_id;
+    if (ret) {
+      for (int64_t i = 0; i < submit_positions.count(); ++i) {
+        const int64_t pos = submit_positions.at(i);
+        obcall::ObCalcColumnChecksumResponseArg key;
+        key.tablet_id_ = arg.calc_items_.at(pos).tablet_id_;
+        key.target_table_id_ = arg.target_table_id_;
+        key.source_table_id_ = arg.source_table_id_;
+        key.schema_version_ = arg.schema_version_;
+        key.task_id_ = arg.task_id_;
+        (void)data_plane::cancel_column_checksum_poll(key);
+      }
     }
-    if (OB_SUCC(ret) && !request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-    if (OB_SUCC(ret) && operation == 'B') {
-      obcall::ObDDLLocalBuildResult result;
-      ret = runtime->build_ddl_local(arg, result);
-      if (OB_SUCC(ret)) { values.append(result); }
-    } else if (OB_SUCC(ret)) {
-      bool exists = false;
-      ret = operation == 'X'
-          ? runtime->check_and_cancel_ddl_complement_data_dag(arg, exists)
-          : runtime->check_and_cancel_delete_lob_meta_row_dag(arg, exists);
-      if (OB_SUCC(ret)) { values.number(exists); }
-    }
-  } else {
-    ret = OB_NOT_SUPPORTED;
   }
-  reply = Frame('w');
-  reply.number(ret);
-  if (OB_SUCC(ret)) {
-    reply.data.insert(reply.data.end(),
-        values.data.begin() + Frame::HEADER_SIZE, values.data.end());
-    if (values.ret) { reply.ret = values.ret; }
-  }
-  fprintf(stderr,
-      "PROTOTYPE_V20_ROOTSERVER_RUNTIME ns=%llu op=%c ret=%d\n",
-      (unsigned long long)ns, static_cast<char>(operation), ret);
-  return reply.ret;
+  return ret;
 }
 
 // A lock is storage state attached to the same native transaction as the DDL
@@ -2277,22 +2241,42 @@ public:
   int calc_column_checksum_request(
       const obcall::ObCalcColumnChecksumRequestArg &arg,
       obcall::ObCalcColumnChecksumRequestRes &result) override {
-    return call_('C', arg, result);
+    return call_in_process_rootserver_runtime(namespace_id_,
+        [&](rootserver::ObIRootserverLocalRuntime &runtime, StorageSpaceHandle space) {
+          return calc_namespace_column_checksum(space, runtime, arg, result);
+        });
   }
   int build_ddl_local(
       const obcall::ObDDLLocalBuildArg &arg,
       obcall::ObDDLLocalBuildResult &result) override {
-    return call_('B', arg, result);
+    return call_in_process_rootserver_runtime(namespace_id_,
+        [&](rootserver::ObIRootserverLocalRuntime &runtime, StorageSpaceHandle space) {
+          obcall::ObDDLLocalBuildArg routed;
+          const int ret = route_rootserver_build_arg(space, arg, routed);
+          return ret ? ret : runtime.build_ddl_local(routed, result);
+        });
   }
   int check_and_cancel_ddl_complement_data_dag(
       const obcall::ObDDLLocalBuildArg &arg,
       bool &is_dag_exist) override {
-    return call_bool_('X', arg, is_dag_exist);
+    return call_in_process_rootserver_runtime(namespace_id_,
+        [&](rootserver::ObIRootserverLocalRuntime &runtime, StorageSpaceHandle space) {
+          obcall::ObDDLLocalBuildArg routed;
+          const int ret = route_rootserver_build_arg(space, arg, routed);
+          return ret ? ret : runtime.check_and_cancel_ddl_complement_data_dag(
+              routed, is_dag_exist);
+        });
   }
   int check_and_cancel_delete_lob_meta_row_dag(
       const obcall::ObDDLLocalBuildArg &arg,
       bool &is_dag_exist) override {
-    return call_bool_('L', arg, is_dag_exist);
+    return call_in_process_rootserver_runtime(namespace_id_,
+        [&](rootserver::ObIRootserverLocalRuntime &runtime, StorageSpaceHandle space) {
+          obcall::ObDDLLocalBuildArg routed;
+          const int ret = route_rootserver_build_arg(space, arg, routed);
+          return ret ? ret : runtime.check_and_cancel_delete_lob_meta_row_dag(
+              routed, is_dag_exist);
+        });
   }
   int minor_freeze(
       const obcall::ObMinorFreezeArg &arg,
@@ -2441,39 +2425,6 @@ private:
   StorageSpaceHandle storage_space_() const {
     return namespace_id_ == 0 ? active_worker_storage_space()
         : StorageSpaceHandle::namespace_space(namespace_id_);
-  }
-  int call_storage_(Frame &request, Frame &reply) {
-    InProcessServingScope serving(namespace_id_);
-    IndependentStorageScope scope;
-    return scope.error() ? scope.error() : write_rpc(request, reply);
-  }
-
-  template <typename Arg, typename Result>
-  int call_(char operation, const Arg &arg, Result &result) {
-    Frame request('Y'), reply;
-    request.number(operation);
-    write_storage_space(request, storage_space_());
-    request.append(arg);
-    int ret = request.ret ? request.ret : call_storage_(request, reply);
-    if (OB_SUCC(ret)) {
-      reply.read(result);
-      if (!reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
-    }
-    return ret;
-  }
-
-  template <typename Arg>
-  int call_bool_(char operation, const Arg &arg, bool &value) {
-    Frame request('Y'), reply;
-    request.number(operation);
-    write_storage_space(request, storage_space_());
-    request.append(arg);
-    int ret = request.ret ? request.ret : call_storage_(request, reply);
-    if (OB_SUCC(ret)) {
-      value = reply.number() != 0;
-      if (!reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
-    }
-    return ret;
   }
   uint64_t namespace_id_;
 };

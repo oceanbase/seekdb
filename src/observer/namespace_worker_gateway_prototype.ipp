@@ -49,11 +49,7 @@ int serve_storage(StorageSpaceHandle storage_space, ReadScans *scans,
     const uint64_t ns = storage_space.namespace_id();
     int ret = OB_SUCCESS;
     if (!storage_space.is_namespace()) { return OB_INVALID_ARGUMENT; }
-    if (input.type() == 'Y') {
-      result = Frame('w');
-      if (state) { result.number(state); }
-      else { ret = process_rootserver_local_runtime(storage_space, input, result); }
-    } else if (scans && (input.type() == 'O' || input.type() == 'F' || input.type() == 'X' || input.type() == 'R')) {
+    if (scans && (input.type() == 'O' || input.type() == 'F' || input.type() == 'X' || input.type() == 'R')) {
       result = Frame('s');
       if (state && input.type() != 'X') { result.number(state); }
       else { ret = scans->process(input, result, writes ? writes->tx : nullptr, writes ? &writes->session : nullptr); }
