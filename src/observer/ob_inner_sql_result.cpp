@@ -80,7 +80,7 @@ int ObInnerSQLResult::init()
     .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
     .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
   if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
-  } else if (namespace_worker_prototype::worker_namespace == 0) {
+  } else {
     auto *controller = share::server_service<omt::ObServerRuntimeController>();
     if (OB_ISNULL(controller)) { ret = OB_SERVER_RUNTIME_NOT_READY; }
     else { ret = controller->lock_runtime(runtime_); }
@@ -89,8 +89,6 @@ int ObInnerSQLResult::init()
       LOG_WARN("failed to lock server runtime", K(ret));
     }
   }
-  // The SQL worker owns one process-lifetime module graph. Its executors are
-  // joined before teardown, so an inner result needs no OMT runtime lease.
   if (OB_SUCC(ret)) {
     {
       // Inner SQL executes in the server runtime that owns this result.

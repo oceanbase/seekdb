@@ -353,11 +353,9 @@ int ObTabletCreator::execute()
         int64_t end_time = ObTimeUtility::current_time();
         LOG_INFO("generate create arg", KR(ret), K(buf_len), K(batch_arg->batch_arg_.tablets_.count()),
                                         K(batch_arg->batch_arg_), "cost_ts", end_time - start_time);
-        // Namespace workers do not own an LS.  Their storage gateway performs
-        // the binding immediately after registering CREATE_TABLET_NEW_MDS in
-        // the shared transaction, using the already-routed physical tablets.
+        // Child namespace storage performs the binding after registering
+        // CREATE_TABLET_NEW_MDS with the routed physical tablets.
         if (OB_SUCC(ret) && batch_arg->batch_arg_.set_binding_info_outside_create()
-            && !observer::namespace_worker_prototype::worker_process
             && observer::namespace_worker_prototype::in_process_session_ns(
                 query::ObInnerSQLConnectionAccess::get_session(conn)) <= 1) {
           const int64_t start_time = ObTimeUtility::current_time();

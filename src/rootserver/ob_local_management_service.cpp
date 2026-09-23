@@ -2493,9 +2493,6 @@ int ObLocalManagementService::init_sys_admin_ctx(ObSystemAdminCtx &ctx)
 
 int ObLocalManagementService::admin_set_config(obcall::ObAdminSetConfigArg &arg)
 {
-  if (observer::namespace_worker_prototype::worker_process) {
-    return observer::namespace_worker_prototype::admin_set_config(arg);
-  }
   int ret = OB_SUCCESS;
   if (!inited_) {
     ret = OB_NOT_INIT;

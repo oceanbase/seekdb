@@ -25171,9 +25171,7 @@ int ObDDLSQLTransaction::start(ObISQLClient *proxy,
              KP(schema_service_), KP(schema_service_->get_schema_service()));
   } else {
     namespace_base_schema_version_ = runtime_refreshed_schema_version;
-    namespace_id_ = observer::namespace_worker_prototype::worker_process
-        ? observer::namespace_worker_prototype::worker_namespace
-        : proxy->target_namespace();
+    namespace_id_ = proxy->target_namespace();
     
     auto *tsi_oper = GET_TSI(share::schema::TSILastOper);
     if (OB_ISNULL(tsi_oper)) {
@@ -25314,17 +25312,6 @@ int ObDDLSQLTransaction::end(const bool commit)
         committed_schema_version = final_schema_version;
       }
     }
-  }
-
-  // Namespace directory mutations are part of the DDL transaction, but they
-  // must run after all native schema-table writes.  Publishing them earlier
-  // locks the namespace root and can deadlock a later first-write COW of an
-  // inherited __all_* tablet against this same transaction.
-  if (observer::namespace_worker_prototype::worker_process) {
-    const int flush_ret = storage::NamespaceForkKernelPrototype::flush_schema_changes(
-        *this, commit && OB_SUCC(ret)
-            && observer::namespace_worker_prototype::worker_namespace <= 1);
-    if (OB_SUCC(ret)) { ret = flush_ret; }
   }
 
   if (OB_SUCCESS != (tmp_ret = common::ObMySQLTransaction::end(commit && OB_SUCC(ret)))) {
