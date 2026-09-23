@@ -36,8 +36,7 @@ bool cleanup_write(Frame &request) {
   const int64_t position = request.pos;
   const uint64_t op = request.number();
   request.pos = position;
-  return (request.type() == 'W' && op == 'X')
-      || (request.type() == 'T' && (op == 'B' || op == 'R' || op == 'U' || op == 'E'));
+  return request.type() == 'T' && (op == 'B' || op == 'R' || op == 'U' || op == 'E');
 }
 int write_rpc(Frame &request, Frame &reply) {
   int ret = worker_send(request, cleanup_write(request));
@@ -1193,6 +1192,16 @@ struct EngineWrites {
     reset();
     return OB_SUCCESS;
   }
+  int close(uint64_t txid, uint64_t handle, ObTxDesc &view) {
+    if (!tx || static_cast<uint64_t>(tx->get_tx_id().get_id()) != txid
+        || static_cast<uint64_t>(view.get_tx_id().get_id()) != txid) {
+      return OB_INVALID_ARGUMENT;
+    }
+    auto it = writes.find(handle);
+    if (it == writes.end()) { return OB_INVALID_ARGUMENT; }
+    writes.erase(it);
+    return query_transaction_service()->merge_tx_state(view, *tx);
+  }
   int process(Frame &request, Frame &reply) {
     const uint64_t ns = storage_space.namespace_id();
     auto *service = query_transaction_service();
@@ -1468,7 +1477,6 @@ struct EngineWrites {
         const uint64_t handle = request.number();
         auto it = writes.find(handle);
         if (request.ret || it == writes.end()) { ret = OB_INVALID_ARGUMENT; }
-        else if (operation == 'X' && request.consumed()) { writes.erase(it); }
         else if (operation == 'I' || operation == 'U' || operation == 'D' || operation == 'L' || operation == 'p' || operation == 'f') {
           int64_t affected = 0; Frame returned;
           ret = it->second->batch(operation, *tx, request, affected, returned);
@@ -1479,7 +1487,7 @@ struct EngineWrites {
     }
     reply = Frame('w'); reply.number(ret);
     if (!ret || (request.type() == 'W' && operation == 'f' && ret == OB_ERR_PRIMARY_KEY_DUPLICATE)) {
-      if (request.type() == 'T' || (request.type() == 'W' && operation == 'X')) { reply.append(*tx); }
+      if (request.type() == 'T') { reply.append(*tx); }
       reply.data.insert(reply.data.end(), values.data.begin() + Frame::HEADER_SIZE, values.data.end());
       if (values.ret) { reply.ret = values.ret; }
     }
@@ -1744,6 +1752,7 @@ int call_in_process_tx_interrupt(const transaction::ObTxDesc &tx, int cause);
 int call_in_process_tx_snapshot(char operation,
                                 transaction::ObTxReadSnapshot &snapshot);
 int release_in_process_tx(const transaction::ObTxDesc &tx);
+int close_in_process_write(transaction::ObTxDesc &view, uint64_t handle);
 
 class RemoteTransactionService final : public ObITransactionService {
 public:
@@ -2184,12 +2193,7 @@ struct RemoteExecution final : public ObIDmlExecutionState {
   void destroy() override {
     if (handle) {
       StorageSessionScope scope(session);
-      Frame request('W'), reply; request.number('X'); request.number(txid); request.number(handle);
-      int ret = scope.error() ? scope.error() : write_rpc(request, reply);
-      // Native revert_store_ctx merges write state into the engine descriptor
-      // only when its write context is released. Refresh after that point so
-      // SQL autocommit sees the completed write, including partial failures.
-      if (!ret) { reply.read(*tx); if (!reply.consumed()) { ret = OB_INVALID_ARGUMENT; } }
+      if (!scope.error() && tx) { close_in_process_write(*tx, handle); }
     }
     delete this;
   }
