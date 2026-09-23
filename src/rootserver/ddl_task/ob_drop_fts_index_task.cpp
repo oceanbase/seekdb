@@ -98,11 +98,13 @@ int ObDropFTSIndexTask::init(
 int ObDropFTSIndexTask::init(const ObDDLTaskRecord &task_record)
 {
   int ret = OB_SUCCESS;
+  set_context(task_record.context_);
   int64_t pos = 0;
   if (OB_UNLIKELY(!task_record.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_record));
-  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
+  } else if (OB_ISNULL(local_management_service_ = context_.root_service_ != nullptr
+      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, local management service is nullptr", K(ret));
   } else {
@@ -306,11 +308,11 @@ int ObDropFTSIndexTask::check_switch_succ()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("hasn't initialized", K(ret));
-  } else if (OB_ISNULL(GCTX.schema_service_) || OB_ISNULL(GCTX.sql_proxy_)) {
+  } else if (OB_ISNULL(task_schema_service()) || OB_ISNULL(task_sql_proxy())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("there are invalid arguments", KR(ret), KP(GCTX.schema_service_), KP(GCTX.sql_proxy_));
+    LOG_WARN("there are invalid arguments", KR(ret), KP(task_schema_service()), KP(task_sql_proxy()));
   } else if (OB_FAIL(refresh_schema_version())) {
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(task_schema_service()->get_runtime_schema_guard(schema_guard))) {
   } else if (domain_index_.is_valid()
           && OB_FAIL(schema_guard.check_table_exist(domain_index_.table_id_, is_domain_index_exist))) {
     LOG_WARN("fail to check table exist", K(ret), K(domain_index_));
@@ -388,7 +390,7 @@ int ObDropFTSIndexTask::check_and_wait_finish(const share::ObDDLTaskStatus &new_
   } else if (ObDDLTaskStatus::WAIT_CHILD_TASK_FINISH != task_status_) {
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("task status not match", K(ret), K(task_status_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(task_schema_service()->get_runtime_schema_guard(schema_guard))) {
   }
   if (OB_SUCC(ret)) {
     if (!drop_domain_index_finish_) {
@@ -432,7 +434,7 @@ int ObDropFTSIndexTask::check_drop_index_finish(const int64_t task_id,
   } else if (OB_FAIL(share::ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id,
                                                                                   -1/*target_object_id*/,
                                                                                   table_id,
-                                                                                  *GCTX.sql_proxy_,
+                                                                                  *task_sql_proxy(),
                                                                                   error_message,
                                                                                   unused_user_msg_len))) {
 
@@ -445,7 +447,7 @@ int ObDropFTSIndexTask::check_drop_index_finish(const int64_t task_id,
   } else {
     ret = error_message.ret_code_;
     has_finished = true;
-    if (OB_SUCCESS == ret && OB_FAIL(update_task_message(*GCTX.sql_proxy_))) {
+    if (OB_SUCCESS == ret && OB_FAIL(update_task_message(*task_sql_proxy()))) {
       LOG_WARN("fail to update drop fulltext index task message", K(ret));
     }
     LOG_INFO("wait drop index finish", K(ret), K(task_id), K(table_id), K(has_finished));
@@ -546,7 +548,7 @@ int ObDropFTSIndexTask::create_drop_index_task(
     }
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(
             index_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout_us))) {
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index(arg, res); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return local_management_service_->drop_index(arg, res); }))) {
     } else {
       task_id = res.task_id_;
     }
@@ -585,22 +587,22 @@ int ObDropFTSIndexTask::cleanup_impl()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(report_error_code(unused_str))) {
-  } else if (OB_ISNULL(GCTX.sql_proxy_) || OB_ISNULL(GCTX.schema_service_)) {
+  } else if (OB_ISNULL(task_sql_proxy()) || OB_ISNULL(task_schema_service())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_), KP(GCTX.schema_service_));
+    LOG_WARN("invalid argument", KR(ret), KP(task_sql_proxy()), KP(task_schema_service()));
   } else {
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *data_table_schema = nullptr;
     ObTableLockOwnerID owner_id;
     ObMySQLTransaction trans;
-    if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    if (OB_FAIL(task_schema_service()->get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_table_schema(
                                                      object_id_,
                                                      data_table_schema))) {
     } else if (OB_UNLIKELY(nullptr == data_table_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("data table schema is nullptr", K(ret), KP(data_table_schema));
-    } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+    } else if (OB_FAIL(trans.start(task_sql_proxy()))) {
     } else if (OB_FAIL(owner_id.convert_from_value(ObLockOwnerType::DEFAULT_OWNER_TYPE, task_id_))) {
     } else if (OB_FAIL(ObDDLLock::unlock_for_add_drop_index(*data_table_schema,
                                                             0 /* index_table_id */, // not support global fulltext index
@@ -616,7 +618,7 @@ int ObDropFTSIndexTask::cleanup_impl()
       }
     }
   }
-  if (FAILEDx(ObDDLTaskRecordOperator::delete_record(*GCTX.sql_proxy_, task_id_))) {
+  if (FAILEDx(ObDDLTaskRecordOperator::delete_record(*task_sql_proxy(), task_id_))) {
     LOG_WARN("delete task record failed", K(ret), K(task_id_), K(schema_version_));
   } else {
     need_retry_ = false;      // clean succ, stop the task
