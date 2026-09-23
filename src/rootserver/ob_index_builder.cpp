@@ -301,7 +301,7 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
           LOG_INFO("there are some other none share index table, and don't need to drop share index table",
               K(index_table_schema->get_index_type()), KPC(index_table_schema));
         } else if (OB_FAIL(trans.start(&ddl_service_.get_sql_proxy(), refreshed_schema_version))) {
-        } else if (!arg.is_inner_ &&
+        } else if (!arg.is_inner_ && !index_table_schema->can_read_index() &&
                    OB_FAIL(ObDDLTaskRecordOperator::check_has_index_task(trans, *index_table_schema, data_table_id, has_index_task))) {
         } else if (has_index_task) {
           ret = OB_NOT_SUPPORTED;
