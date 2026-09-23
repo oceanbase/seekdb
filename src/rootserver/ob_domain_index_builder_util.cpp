@@ -71,7 +71,7 @@ int ObDomainIndexBuilderUtil::prepare_aux_table(bool &task_submitted,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("local_management_service is nullptr", K(ret));
     } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
-                   *GCTX.schema_service_, data_table_id,
+                   local_management_service->get_schema_service(), data_table_id,
                                                       ddl_rpc_timeout))) {
     } else {
       SMART_VARS_2((obcall::ObCreateAuxIndexArg, arg),
@@ -87,7 +87,7 @@ int ObDomainIndexBuilderUtil::prepare_aux_table(bool &task_submitted,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("failed to assign create index arg", K(ret));
       } else if (OB_FALSE_IT(arg.snapshot_version_ = snapshot_version)) {
-      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->create_aux_index(arg, res); }))) {
+      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return local_management_service->create_aux_index(arg, res); }))) {
       } else if (res.schema_generated_) {
         task_submitted = true;
         aux_table_id = res.aux_table_id_;

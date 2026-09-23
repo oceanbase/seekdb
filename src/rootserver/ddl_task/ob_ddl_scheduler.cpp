@@ -2495,6 +2495,9 @@ int ObDDLScheduler::recover_task(const ObDDLTaskContext &context)
             && cur_record.ddl_type_ != DDL_DROP_MULVALUE_INDEX
             && cur_record.ddl_type_ != DDL_DROP_VEC_SPIV_INDEX
             && cur_record.ddl_type_ != DDL_DROP_LOB
+            && cur_record.ddl_type_ != DDL_REBUILD_INDEX
+            && cur_record.ddl_type_ != DDL_CREATE_VEC_INDEX
+            && cur_record.ddl_type_ != DDL_DROP_VEC_INDEX
             && cur_record.ddl_type_ != DDL_DROP_DATABASE
             && cur_record.ddl_type_ != DDL_DROP_TABLE
             && cur_record.ddl_type_ != DDL_TRUNCATE_TABLE

@@ -131,10 +131,12 @@ int ObDropVecIndexTask::init(const ObDDLTaskRecord &task_record)
 {
   int ret = OB_SUCCESS;
   int64_t pos = 0;
+  set_context(task_record.context_);
   if (OB_UNLIKELY(!task_record.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_record));
-  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
+  } else if (OB_ISNULL(local_management_service_ = context_.root_service_ != nullptr
+      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, local management service is nullptr", K(ret));
   } else {
@@ -474,12 +476,12 @@ int ObDropVecIndexTask::update_task_message()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate memory", KR(ret), K(serialize_param_size));
   } else if (OB_FAIL(serialize_params_to_message(buf, serialize_param_size, pos))) {
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+  } else if (OB_ISNULL(task_sql_proxy())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
+    LOG_WARN("invalid argument", KR(ret), KP(task_sql_proxy()));
   } else {
     msg.assign(buf, serialize_param_size);
-    if (OB_FAIL(ObDDLTaskRecordOperator::update_message(*GCTX.sql_proxy_, task_id_, msg))) {
+    if (OB_FAIL(ObDDLTaskRecordOperator::update_message(*task_sql_proxy(), task_id_, msg))) {
     }
   }
   return ret;
@@ -498,11 +500,11 @@ int ObDropVecIndexTask::check_switch_succ()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("hasn't initialized", K(ret));
-  } else if (OB_ISNULL(GCTX.schema_service_)) {
+  } else if (OB_ISNULL(task_schema_service())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
+    LOG_WARN("invalid argument", KR(ret), KP(task_schema_service()));
   } else if (OB_FAIL(refresh_schema_version())) {
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(task_schema_service()->get_runtime_schema_guard(schema_guard))) {
   } else if (domain_index_.is_valid() 
           && OB_FAIL(schema_guard.check_table_exist(domain_index_.table_id_, is_domain_index_exist))) {
     LOG_WARN("fail to check table exist", K(ret), K(domain_index_));
@@ -575,10 +577,10 @@ int ObDropVecIndexTask::drop_aux_index_table(const share::ObDDLTaskStatus &new_s
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObDropVecIndexTask has not been inited", K(ret));
-  } else if (OB_ISNULL(GCTX.schema_service_)) {
+  } else if (OB_ISNULL(task_schema_service())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("invalid argument", KR(ret), KP(task_schema_service()));
+  } else if (OB_FAIL(task_schema_service()->get_runtime_schema_guard(schema_guard))) {
   } else if (0 == domain_index_.task_id_ && domain_index_.is_valid()
       && OB_FAIL(create_drop_index_task(schema_guard, domain_index_.table_id_, domain_index_.index_name_, domain_index_.task_id_, true/* is_domain_index */))) {
       LOG_WARN("fail to create drop index task", K(ret), K(domain_index_));
@@ -659,7 +661,7 @@ int ObDropVecIndexTask::check_drop_index_finish(const int64_t task_id,
   } else if (OB_FAIL(share::ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id,
                                                        -1/*target_object_id*/,
                                                        table_id,
-                                                       *GCTX.sql_proxy_,
+                                                       *task_sql_proxy(),
                                                        error_message,
                                                        unused_user_msg_len))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
@@ -790,7 +792,7 @@ int ObDropVecIndexTask::create_drop_index_task(
             index_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout_us))) {
       LOG_WARN("fail to get ddl rpc timeout", K(ret));
       ret = OB_INVALID_ARGUMENT;
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index(arg, res); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return local_management_service_->drop_index(arg, res); }))) {
     } else {
       task_id = res.task_id_;
     }
@@ -808,10 +810,10 @@ int ObDropVecIndexTask::create_drop_share_index_task()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_ISNULL(GCTX.schema_service_)) {
+  } else if (OB_ISNULL(task_schema_service())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("invalid argument", KR(ret), KP(task_schema_service()));
+  } else if (OB_FAIL(task_schema_service()->get_runtime_schema_guard(schema_guard))) {
   } else if (0 == rowkey_vid_.task_id_ && rowkey_vid_.is_valid()
       && OB_FAIL(create_drop_index_task(schema_guard, rowkey_vid_.table_id_, rowkey_vid_.index_name_, rowkey_vid_.task_id_))) {
     LOG_WARN("fail to create drop index task", K(ret), K(rowkey_vid_));
@@ -901,12 +903,12 @@ int ObDropVecIndexTask::cleanup_impl()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+  } else if (OB_ISNULL(task_sql_proxy())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
+    LOG_WARN("invalid argument", KR(ret), KP(task_sql_proxy()));
   } else if (OB_FAIL(finish())) {
   } else if (OB_FAIL(report_error_code(unused_str))) {
-  } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*GCTX.sql_proxy_, task_id_))) {
+  } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*task_sql_proxy(), task_id_))) {
   } else {
     need_retry_ = false;
   }
@@ -932,10 +934,10 @@ int ObDropVecIndexTask::send_local_build_request()
     param.data_format_version_ = data_format_version_; // should > 0
 
     if (OB_FAIL(ObDDLUtil::get_tablets(
-            *GCTX.schema_service_, vec_index_snapshot_data_.table_id_,
+            *task_schema_service(), vec_index_snapshot_data_.table_id_,
             param.source_tablet_ids_))) {
     } else if (OB_FAIL(ObDDLUtil::get_tablets(
-                   *GCTX.schema_service_, vec_index_snapshot_data_.table_id_,
+                   *task_schema_service(), vec_index_snapshot_data_.table_id_,
                    param.dest_tablet_ids_))) {
     }
 
@@ -987,10 +989,10 @@ int ObDropVecIndexTask::check_snapshot_table_exist(bool &is_exist)
   const ObTableSchema *snapshot_table_schema = nullptr;
   const int64_t table_id = vec_index_snapshot_data_.table_id_;
   ObSchemaGetterGuard schema_guard;
-  if (OB_ISNULL(GCTX.schema_service_)) {
+  if (OB_ISNULL(task_schema_service())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("invalid argument", KR(ret), KP(task_schema_service()));
+  } else if (OB_FAIL(task_schema_service()->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, snapshot_table_schema))) {
   } else if (OB_ISNULL(snapshot_table_schema)) {
     is_exist = false;

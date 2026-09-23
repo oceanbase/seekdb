@@ -163,8 +163,10 @@ private:
   {
   public:
     CheckTaskStatusFn(common::hash::ObHashMap<uint64_t, rootserver::ObDomainDependTaskStatus> &dependent_task_result_map,
-                      int64_t &finished_task_cnt, bool &child_task_failed, bool &state_finished) :
+                      common::ObMySQLProxy &sql_proxy, int64_t &finished_task_cnt,
+                      bool &child_task_failed, bool &state_finished) :
       dependent_task_result_map_(dependent_task_result_map),
+      sql_proxy_(sql_proxy),
       finished_task_cnt_(finished_task_cnt),
       child_task_failed_(child_task_failed),
       state_finished_(state_finished)
@@ -174,6 +176,7 @@ private:
     int operator() (common::hash::HashMapPair<uint64_t, rootserver::ObDomainDependTaskStatus> &entry);
   public:
     common::hash::ObHashMap<uint64_t, rootserver::ObDomainDependTaskStatus> &dependent_task_result_map_;
+    common::ObMySQLProxy &sql_proxy_;
     int64_t &finished_task_cnt_;
     bool &child_task_failed_;
     bool &state_finished_;

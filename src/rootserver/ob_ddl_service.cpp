@@ -21125,9 +21125,9 @@ int ObDDLService::rebuild_vec_index(const ObRebuildIndexArg &arg, obcall::ObAlte
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(arg));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+  } else if (OB_ISNULL(sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
+    LOG_WARN("invalid argument", KR(ret), KP(sql_proxy_));
   } else {
     ObSchemaGetterGuard schema_guard;
     schema_guard.set_session_id(arg.session_id_);
@@ -21190,7 +21190,7 @@ int ObDDLService::rebuild_vec_index(const ObRebuildIndexArg &arg, obcall::ObAlte
             LOG_WARN("fail to assign rebuild index arg", K(ret));
           } else if (OB_FAIL(ObVectorIndexUtil::generate_new_index_name(allocator, rebuild_index_arg.index_name_))) {
             LOG_WARN("fail to generate new index name", K(ret));
-          } else if (OB_FAIL(trans.start(GCTX.sql_proxy_, refreshed_schema_version))) {
+          } else if (OB_FAIL(trans.start(sql_proxy_, refreshed_schema_version))) {
             LOG_WARN("fail to start trans", K(ret));
           } else if (OB_FAIL(index_builder.submit_rebuild_index_task(trans,
                                                                     rebuild_index_arg,
@@ -21218,6 +21218,7 @@ int ObDDLService::rebuild_vec_index(const ObRebuildIndexArg &arg, obcall::ObAlte
             int tmp_ret = OB_SUCCESS;
             if (OB_FAIL(publish_schema())) {
               LOG_WARN("fail to publish schema", K(ret));
+            } else if (FALSE_IT(task_record.context_ = task_context_)) {
             } else if (OB_TMP_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
               LOG_WARN("fail to schedule ddl task", K(tmp_ret), K(task_record));
             }
@@ -21309,10 +21310,10 @@ int ObDDLService::rebuild_index(const ObRebuildIndexArg &arg, obcall::ObAlterTab
       SMART_VAR(ObCreateIndexArg, create_index_arg) {
         ObDDLTaskRecord task_record;
         ObDDLSQLTransaction trans(schema_service_);
-        if (OB_ISNULL(GCTX.sql_proxy_)) {
+        if (OB_ISNULL(sql_proxy_)) {
           ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
-        } else if (OB_FAIL(trans.start(GCTX.sql_proxy_, refreshed_schema_version))) {
+          LOG_WARN("invalid argument", KR(ret), KP(sql_proxy_));
+        } else if (OB_FAIL(trans.start(sql_proxy_, refreshed_schema_version))) {
           LOG_WARN("fail to start trans", K(ret));
         } else if (OB_FAIL(new_table_schema.assign(*index_table_schema))) {
           LOG_WARN("fail to assign schema", KR(ret));
@@ -21349,6 +21350,7 @@ int ObDDLService::rebuild_index(const ObRebuildIndexArg &arg, obcall::ObAlterTab
           int tmp_ret = OB_SUCCESS;
           if (OB_FAIL(publish_schema())) {
             LOG_WARN("fail to publish schema", K(ret));
+          } else if (FALSE_IT(task_record.context_ = task_context_)) {
           } else if (OB_TMP_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
             LOG_WARN("fail to schedule ddl task", K(tmp_ret), K(task_record));
           }

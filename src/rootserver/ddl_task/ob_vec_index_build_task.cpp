@@ -168,6 +168,7 @@ int ObVecIndexBuildTask::init(
 int ObVecIndexBuildTask::init(const ObDDLTaskRecord &task_record)
 {
   int ret = OB_SUCCESS;
+  set_context(task_record.context_);
   const uint64_t data_table_id = task_record.object_id_;
   const uint64_t index_table_id = task_record.target_object_id_;
   const int64_t schema_version = task_record.schema_version_;
@@ -177,7 +178,8 @@ int ObVecIndexBuildTask::init(const ObDDLTaskRecord &task_record)
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
+  } else if (OB_ISNULL(local_management_service_ = context_.root_service_ != nullptr
+      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
     LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
@@ -335,9 +337,9 @@ int ObVecIndexBuildTask::check_health()
   } else if (OB_FAIL(refresh_schema_version())) {
   } else if (static_cast<ObDDLTaskStatus>(task_status_) == ObDDLTaskStatus::FAIL) {
     /*already failed, and have submitted drop index task, do nothing*/
-  } else if (OB_ISNULL(GCTX.schema_service_)) {
+  } else if (OB_ISNULL(task_schema_service())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
+    LOG_WARN("invalid argument", KR(ret), KP(task_schema_service()));
   } else {
     const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
     const bool is_waiting_for_aux_table =
@@ -348,7 +350,7 @@ int ObVecIndexBuildTask::check_health()
     const ObTableSchema *index_schema = nullptr;
     bool is_data_table_exist = false;
     bool is_all_indexes_exist = false;
-    if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    if (OB_FAIL(task_schema_service()->get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.check_table_exist(object_id_,
                                                       is_data_table_exist))) {
     } else if (!is_data_table_exist) {
@@ -404,10 +406,10 @@ int ObVecIndexBuildTask::check_aux_table_schemas_exist(bool &is_all_exist)
   ObMultiVersionSchemaService &schema_service = local_management_service_->get_schema_service();
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *index_schema = nullptr;
-  if (OB_ISNULL(GCTX.schema_service_)) {
+  if (OB_ISNULL(task_schema_service())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("invalid argument", KR(ret), KP(task_schema_service()));
+  } else if (OB_FAIL(task_schema_service()->get_runtime_schema_guard(schema_guard))) {
   } else {
     bool rowkey_vid_exist = true;
     bool vid_rowkey_exist = true;
@@ -902,7 +904,7 @@ int ObVecIndexBuildTask::CheckTaskStatusFn::operator()(common::hash::HashMapPair
                                                     target_object_id,
                                                     unused_addr,
                                                     false, //is_ddl_retry_task
-                                                    *GCTX.sql_proxy_,
+                                                    sql_proxy_,
                                                     error_message,
                                                     unused_user_msg_len))) {
           if (OB_ENTRY_NOT_EXIST == ret) {
@@ -955,7 +957,8 @@ int ObVecIndexBuildTask::wait_aux_table_complement()
     state_finished = true;
   } else {
     int64_t finished_task_cnt = 0;
-    CheckTaskStatusFn check_task_status_fn(dependent_task_result_map_, finished_task_cnt, child_task_failed, state_finished);
+    CheckTaskStatusFn check_task_status_fn(dependent_task_result_map_, *task_sql_proxy(),
+                                           finished_task_cnt, child_task_failed, state_finished);
     if (OB_FAIL(dependent_task_result_map_.foreach_refactored(check_task_status_fn))) {
       if (OB_ITER_END != ret) {
         LOG_WARN("foreach refactored failed", K(ret), K(child_task_failed));
@@ -1569,7 +1572,7 @@ int ObVecIndexBuildTask::ChangeTaskStatusFn::operator()(common::hash::HashMapPai
                                                   target_object_id,
                                                   unused_addr,
                                                   false /* is_ddl_retry_task */,
-                                                  *GCTX.sql_proxy_,
+                                                  local_management_service_->get_sql_proxy(),
                                                   error_message,
                                                   unused_user_msg_len))) {
         if (OB_ENTRY_NOT_EXIST == ret) {
@@ -1659,9 +1662,9 @@ int ObVecIndexBuildTask::submit_drop_vec_index_task()
   bool is_index_exist = true;
   bool has_aux_table = (delta_buffer_table_id_ != OB_INVALID_ID);
   uint64_t index_table_id = has_aux_table ? delta_buffer_table_id_ : index_table_id_;
-  if (OB_ISNULL(GCTX.schema_service_) ) {
+  if (OB_ISNULL(task_schema_service()) ) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(task_schema_service()->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_INVALID_ID != rowkey_vid_aux_table_id_ &&
              OB_FAIL(drop_index_arg.index_ids_.push_back(rowkey_vid_aux_table_id_))) {
     LOG_WARN("fail to push back rowkey_vid_aux_table_id_", K(ret));
@@ -1681,6 +1684,8 @@ int ObVecIndexBuildTask::submit_drop_vec_index_task()
              OB_FAIL(drop_index_arg.index_ids_.push_back(hybrid_vector_embedded_vec_table_id_))) {
     LOG_WARN("fail to push back index_snapshot_data_table_id_", K(ret));
   } else if (drop_index_arg.index_ids_.count() <= 0) {
+    drop_index_task_submitted_ = true;
+    drop_index_task_id_ = -1;
     LOG_INFO("no table need to be drop, skip", K(ret)); // no table exist, skip drop
   } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, data_table_schema))) {
   } else if (OB_ISNULL(data_table_schema)) {
@@ -1712,7 +1717,7 @@ int ObVecIndexBuildTask::submit_drop_vec_index_task()
     drop_index_arg.is_hidden_         = is_offline_rebuild_;
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(data_table_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout))) {
     } else if (OB_FAIL(DDL_SIM(task_id_, DROP_INDEX_RPC_FAILED))) {
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index_on_failed(drop_index_arg, drop_index_res); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return local_management_service_->drop_index_on_failed(drop_index_arg, drop_index_res); }))) {
     } else {
       drop_index_task_submitted_ = true;
       drop_index_task_id_ = drop_index_res.task_id_;
@@ -1742,7 +1747,7 @@ int ObVecIndexBuildTask::wait_drop_index_finish(bool &is_finish)
                                                   target_object_id,
                                                   unused_addr,
                                                   false /* is_ddl_retry_task */,
-                                                  *GCTX.sql_proxy_,
+                                                  *task_sql_proxy(),
                                                   error_message,
                                                   unused_user_msg_len))) {
         if (OB_ENTRY_NOT_EXIST == ret) {
@@ -1817,9 +1822,9 @@ int ObVecIndexBuildTask::cleanup_impl()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(report_error_code(unused_str))) {
-  } else if (OB_ISNULL(GCTX.sql_proxy_) || OB_ISNULL(GCTX.schema_service_)) {
+  } else if (OB_ISNULL(task_sql_proxy()) || OB_ISNULL(task_schema_service())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_), KP(GCTX.schema_service_));
+    LOG_WARN("invalid argument", KR(ret), KP(task_sql_proxy()), KP(task_schema_service()));
   } else {
     const uint64_t data_table_id = object_id_;
     const uint64_t index_table_id = index_table_id_;
@@ -1829,7 +1834,7 @@ int ObVecIndexBuildTask::cleanup_impl()
     ObTableLockOwnerID owner_id;
     ObMySQLTransaction trans;
     bool is_skip_unlock = false;
-    if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    if (OB_FAIL(task_schema_service()->get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_table_schema(
                                                      data_table_id,
                                                      data_schema))) {
@@ -1839,7 +1844,7 @@ int ObVecIndexBuildTask::cleanup_impl()
     } else if (OB_ISNULL(data_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("fail to get table schema", K(ret), KP(data_schema));
-    } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+    } else if (OB_FAIL(trans.start(task_sql_proxy()))) {
     } else if (OB_FAIL(owner_id.convert_from_value(ObLockOwnerType::DEFAULT_OWNER_TYPE,
                                                    task_id_))) {
     } else if (!is_skip_unlock && 
@@ -1862,7 +1867,7 @@ int ObVecIndexBuildTask::cleanup_impl()
   DEBUG_SYNC(CREATE_INDEX_SUCCESS);
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*GCTX.sql_proxy_,
+  } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*task_sql_proxy(),
                                                             task_id_))) {
   } else {
     need_retry_ = false;      // clean succ, stop the task
