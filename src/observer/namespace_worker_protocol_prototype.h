@@ -281,13 +281,8 @@ int drain_storage_namespace_access(uint64_t namespace_id);
 int release_storage_namespace_schemas(uint64_t namespace_id,
                                       int64_t &table_count,
                                       int64_t &database_count);
-// Recreate endpoints for durable LIVE namespaces after the shared process has
-// completed bootstrap. Sessions are intentionally not recovered.
-int reconcile_namespace_workers();
-// The package loader runs once in the shared process, while CALL resolution
-// waits on process-local GCTX state. Publish the completed durable state to
-// every live SQL Worker; workers spawned later receive it in their bootstrap.
-int broadcast_system_package_ready(bool ready);
+// Restore committed namespace names after the system package load completes.
+int restore_namespace_registry();
 // Publish the table-schema delta committed by a namespace-local DDL into the
 // shared namespace directory before the SQL command is acknowledged.
 int sync_namespace_schema_delta(uint64_t namespace_id,

@@ -837,40 +837,6 @@ int exchange(Channel &channel, Frame request, ReadScans *scans,
   }
   return ret;
 }
-int send_system_package_ready(Channel &channel, const bool ready)
-{
-  Frame request('E');
-  request.number(ready ? 1 : 0);
-  return exchange(channel, std::move(request), nullptr,
-                  [](Frame &) { return OB_INVALID_ARGUMENT; });
-}
-int broadcast_system_package_ready(const bool ready)
-{
-  if (worker_process) { return OB_NOT_SUPPORTED; }
-  std::vector<std::shared_ptr<Child>> snapshot;
-  {
-    std::lock_guard<std::mutex> guard(children_mutex);
-    for (const auto &entry : children) { snapshot.push_back(entry.second); }
-  }
-  int ret = OB_SUCCESS;
-  int64_t delivered = 0;
-  for (const auto &child : snapshot) {
-    std::shared_ptr<Channel> channel;
-    {
-      std::lock_guard<std::mutex> guard(child->mutex);
-      channel = child->current;
-    }
-    if (channel && !channel->closed) {
-      const int send_ret = send_system_package_ready(*channel, ready);
-      if (!send_ret) { ++delivered; }
-      else if (!ret) { ret = send_ret; }
-    }
-  }
-  fprintf(stderr,
-      "PROTOTYPE_NAMESPACE_SYSTEM_PACKAGE_READY ready=%d delivered=%lld ret=%d\n",
-      ready, static_cast<long long>(delivered), ret);
-  return ret;
-}
 int ensure_channel(uint64_t ns, std::shared_ptr<Channel> &channel) {
   channel.reset();
   std::shared_ptr<Child> child;
@@ -1015,82 +981,33 @@ int recover_channel(uint64_t namespace_id, uint64_t failed_generation) {
       static_cast<long long>(schema_version), ret);
   return ret;
 }
-int reset_endpoint_registry() {
-  ObSqlString statement;
-  int ret = statement.assign("DELETE FROM __fork_proto_meta.endpoints");
-  return ret ? ret : write_endpoint_registry(statement);
-}
-int reconcile_namespace_workers() {
-  if (worker_process || !GCTX.sql_proxy_) { return OB_NOT_SUPPORTED; }
-  if (forked_in_process()) {
-    int ret = OB_SUCCESS;
-    ObMySQLProxy::MySQLResult result;
-    sqlclient::ObMySQLResult *rows = nullptr;
-    if (OB_SUCC(ret)) {
-      ret = GCTX.sql_proxy_->read(result,
-          "SELECT namespace_id,name FROM __fork_proto_meta.namespaces "
-          "WHERE state=0 AND name!='__template__' ORDER BY namespace_id");
-    }
-    if (OB_SUCC(ret) && OB_ISNULL(rows = result.get_result())) {
-      ret = OB_ERR_UNEXPECTED;
-    }
-    while (OB_SUCC(ret)) {
-      ret = rows->next();
-      if (ret == OB_ITER_END) { ret = OB_SUCCESS; break; }
-      uint64_t namespace_id = 0;
-      ObString name;
-      char name_buf[ns::Namespace::MAX_NAME_LEN];
-      if (OB_FAIL(rows->get_uint(0L, namespace_id))) {
-      } else if (OB_FAIL(rows->get_varchar(1L, name))) {
-      } else if (namespace_id == 0 || namespace_id >= (1ULL << 30)
-                 || name.empty() || name.length() >= sizeof(name_buf)) {
-        ret = OB_INVALID_ARGUMENT;
-      } else {
-        MEMCPY(name_buf, name.ptr(), name.length());
-        name_buf[name.length()] = '\0';
-        if (ns::namespace_registry().add(namespace_id, name_buf) != 0) {
-          ret = OB_ERR_UNEXPECTED;
-        }
-      }
-    }
-    return ret;
+int restore_namespace_registry() {
+  if (!GCTX.sql_proxy_) { return OB_NOT_INIT; }
+  ObMySQLProxy::MySQLResult result;
+  sqlclient::ObMySQLResult *rows = nullptr;
+  int ret = GCTX.sql_proxy_->read(result,
+      "SELECT namespace_id,name FROM __fork_proto_meta.namespaces "
+      "WHERE state=0 AND name!='__template__' ORDER BY namespace_id");
+  if (OB_SUCC(ret) && OB_ISNULL(rows = result.get_result())) {
+    ret = OB_ERR_UNEXPECTED;
   }
-  std::vector<uint64_t> namespaces;
-  // In-process ns1 (ticket 05a) spawns no worker for the system namespace.
-  if (!ns1_in_process()) { namespaces.push_back(1); }
-  int ret = OB_SUCCESS;
-  if (!ret) {
-    ObMySQLProxy::MySQLResult result;
-    sqlclient::ObMySQLResult *rows = nullptr;
-    ret = GCTX.sql_proxy_->read(result,
-        "SELECT namespace_id FROM __fork_proto_meta.namespaces "
-        "WHERE namespace_id>1 AND state=0 ORDER BY namespace_id");
-    if (!ret && !(rows = result.get_result())) { ret = OB_ERR_UNEXPECTED; }
-    while (!ret) {
-      ret = rows->next();
-      if (ret == OB_ITER_END) { ret = OB_SUCCESS; break; }
-      uint64_t namespace_id = 0;
-      if (!ret) { ret = rows->get_uint(0L, namespace_id); }
-      if (!ret && (namespace_id <= 1 || namespace_id >= (1ULL << 30))) {
-        ret = OB_INVALID_ARGUMENT;
+  while (OB_SUCC(ret)) {
+    ret = rows->next();
+    if (ret == OB_ITER_END) { ret = OB_SUCCESS; break; }
+    uint64_t namespace_id = 0;
+    ObString name;
+    char name_buf[ns::Namespace::MAX_NAME_LEN];
+    if (OB_FAIL(rows->get_uint(0L, namespace_id))) {
+    } else if (OB_FAIL(rows->get_varchar(1L, name))) {
+    } else if (namespace_id == 0 || namespace_id >= (1ULL << 30)
+               || name.empty() || name.length() >= sizeof(name_buf)) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      MEMCPY(name_buf, name.ptr(), name.length());
+      name_buf[name.length()] = '\0';
+      if (ns::namespace_registry().add(namespace_id, name_buf) != 0) {
+        ret = OB_ERR_UNEXPECTED;
       }
-      if (!ret) { namespaces.push_back(namespace_id); }
-    }
-  }
-  if (!ret) { ret = reset_endpoint_registry(); }
-  for (uint64_t namespace_id : namespaces) {
-    std::shared_ptr<Channel> endpoint;
-    if (OB_SUCC(ret)) { ret = ensure_channel(namespace_id, endpoint); }
-    if (OB_SUCC(ret)) {
-      ret = publish_endpoint(namespace_id, endpoint->generation,
-          endpoint->pid, endpoint->client_endpoint);
-    }
-    if (OB_SUCC(ret)) {
-      fprintf(stderr,
-          "PROTOTYPE_NAMESPACE_ENDPOINT_RECONCILED ns=%llu generation=%llu pid=%u endpoint=%s\n",
-          (unsigned long long)namespace_id,
-          (unsigned long long)endpoint->generation,
-          endpoint->pid, endpoint->client_endpoint.c_str());
     }
   }
   return ret;

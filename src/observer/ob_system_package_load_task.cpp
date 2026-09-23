@@ -102,15 +102,9 @@ int ObSystemPackageLoadTask::load_system_package_()
     if (ret == OB_ENTRY_NOT_EXIST) {
       ret = OB_SUCCESS;
       if (OB_FAIL(storage::NamespaceForkKernelPrototype::ensure_control_schema())) {
-      } else if (OB_FAIL(observer::namespace_worker_prototype::reconcile_namespace_workers())) {
+      } else if (OB_FAIL(observer::namespace_worker_prototype::restore_namespace_registry())) {
       } else {
         ATOMIC_STORE(&GCTX.sys_package_ready_, true);
-        const int notify_ret =
-            observer::namespace_worker_prototype::broadcast_system_package_ready(true);
-        if (OB_SUCCESS != notify_ret) {
-          LOG_WARN("failed to notify a namespace worker that system packages are ready",
-                   K(notify_ret));
-        }
       }
       LOG_INFO("find a success job or job_id not exist", KR(ret), K(job_id));
     } else {
@@ -121,15 +115,9 @@ int ObSystemPackageLoadTask::load_system_package_()
                          false/*from_file*/))) {
   } else if (OB_FAIL(ADMIN_JOB_COMPLETE(job_id, 0/*result_code*/))) {
   } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::ensure_control_schema())) {
-  } else if (OB_FAIL(observer::namespace_worker_prototype::reconcile_namespace_workers())) {
+  } else if (OB_FAIL(observer::namespace_worker_prototype::restore_namespace_registry())) {
   } else {
     ATOMIC_STORE(&GCTX.sys_package_ready_, true);
-    const int notify_ret =
-        observer::namespace_worker_prototype::broadcast_system_package_ready(true);
-    if (OB_SUCCESS != notify_ret) {
-      LOG_WARN("failed to notify a namespace worker that system packages are ready",
-               K(notify_ret));
-    }
   }
   return ret;
 }
