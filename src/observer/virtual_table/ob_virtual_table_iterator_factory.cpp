@@ -465,10 +465,9 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             const char *table_name = NULL;
             if (OB_FAIL(ObSchemaUtils::get_all_table_history_name(table_name))) {
             } else if (OB_FAIL(NEW_VIRTUAL_TABLE(ObVritualCoreInnerTable, core_all_table))) {
-            } else if (OB_FAIL(core_all_table->init(*GCTX.sql_proxy_,
-                                                    table_name,
-                                                    pure_tid,
-                                                    &schema_guard))) {
+            } else if (OB_FAIL(core_all_table->init(
+                session == NULL ? *GCTX.sql_proxy_ : *session->effective_sql_proxy(),
+                table_name, pure_tid, &schema_guard))) {
             } else {
               vt_iter = static_cast<ObVirtualTableIterator *>(core_all_table);
             }
@@ -477,10 +476,9 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           case OB_ALL_VIRTUAL_CORE_COLUMN_TABLE_TID: {
             ObVritualCoreInnerTable *core_column_table = NULL;
             if (OB_FAIL(NEW_VIRTUAL_TABLE(ObVritualCoreInnerTable, core_column_table))) {
-            } else if (OB_FAIL(core_column_table->init(*GCTX.sql_proxy_,
-                                                       OB_ALL_COLUMN_HISTORY_TNAME,
-                                                       pure_tid,
-                                                       &schema_guard))) {
+            } else if (OB_FAIL(core_column_table->init(
+                session == NULL ? *GCTX.sql_proxy_ : *session->effective_sql_proxy(),
+                OB_ALL_COLUMN_HISTORY_TNAME, pure_tid, &schema_guard))) {
             } else {
               vt_iter = static_cast<ObVirtualTableIterator *>(core_column_table);
             }

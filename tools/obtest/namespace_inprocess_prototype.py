@@ -75,6 +75,11 @@ def bootstrap_probe(experiment):
         experiment.sql("CREATE TABLE fresh.t(id INT PRIMARY KEY)", empty)
         experiment.sql("INSERT INTO fresh.t VALUES(1)", empty)
         assert experiment.sql("SELECT id FROM fresh.t", empty) == ((1,),)
+        assert experiment.sql("SHOW COLUMNS FROM fresh.t", empty)[0][0] == "id"
+        assert experiment.sql("SHOW INDEX FROM fresh.t", empty)[0][2] == "PRIMARY"
+        assert "CREATE TABLE" in experiment.sql("SHOW CREATE TABLE fresh.t", empty)[0][1]
+        assert experiment.sql("SHOW COLLATION LIKE 'utf8mb4_general_ci'", empty)
+        assert experiment.sql("SHOW CHARACTER SET LIKE 'utf8mb4'", empty)
     with connect(experiment, "root@phase10_empty", database="fresh") as selected:
         assert experiment.sql("SELECT DATABASE()", selected) == (("fresh",),)
         assert experiment.sql("SELECT id FROM t", selected) == ((1,),)
@@ -157,6 +162,11 @@ def sql_probe(experiment):
 
 def direct_probe(experiment):
     with setup_branch(experiment) as child:
+        experiment.sql("TRUNCATE TABLE phase10.parent", child)
+        assert experiment.sql("SELECT COUNT(*) FROM phase10.parent", child) == ((0,),)
+        assert experiment.sql("SELECT COUNT(*) FROM phase10.parent") == ((2,),)
+        experiment.sql("INSERT INTO phase10.parent VALUES(3,30)", child)
+        assert experiment.sql("SELECT id FROM phase10.parent", child) == ((3,),)
         experiment.sql("CREATE TABLE phase10.records(id INT PRIMARY KEY, v VARCHAR(64), amount DECIMAL(12,2))", child)
         experiment.sql("INSERT INTO phase10.records VALUES(1,'first',12.34),(2,'second',56.78)", child)
         experiment.sql("CREATE TABLE phase10.heap_rows(d DATE)", child)

@@ -42,9 +42,19 @@ int ObDASScanIter::inner_init(ObDASIterParam &param)
     common::ObITabletScan *native_scan = is_virtual_table(scan_ctdef->ref_table_id_)
         ? share::server_service<common::ObIVirtualTableScan>()
         : share::server_service<common::ObITabletScan>();
-    // Warnings are stored in the current SQL session. The namespace scan
-    // adapter cannot serialize that session-local virtual table.
-    tsc_service_ = scan_ctdef->ref_table_id_ == share::OB_ALL_VIRTUAL_WARNING_TID
+    // Session warnings and schema-description virtual tables need the live
+    // session or its namespace schema guard in this process.
+    const uint64_t table_id = scan_ctdef->ref_table_id_;
+    const bool native_virtual = table_id == share::OB_ALL_VIRTUAL_WARNING_TID
+        || table_id == share::OB_ALL_VIRTUAL_TABLE_COLUMN_TID
+        || table_id == share::OB_ALL_VIRTUAL_TABLE_INDEX_TID
+        || table_id == share::OB_ALL_VIRTUAL_COLLATION_TID
+        || table_id == share::OB_ALL_VIRTUAL_CHARSET_TID
+        || table_id == share::OB_ALL_VIRTUAL_SHOW_CREATE_DATABASE_TID
+        || table_id == share::OB_ALL_VIRTUAL_SHOW_CREATE_TABLE_TID
+        || table_id == share::OB_ALL_VIRTUAL_CORE_ALL_TABLE_TID
+        || table_id == share::OB_ALL_VIRTUAL_CORE_COLUMN_TABLE_TID;
+    tsc_service_ = native_virtual
         ? native_scan
         : observer::namespace_worker_prototype::effective_tablet_scan(
               THIS_WORKER.get_session(), native_scan);
