@@ -768,7 +768,8 @@ int ObIndexBuildTask::reap_old_local_build_task(bool &need_exec_new_inner_sql)
     const ObTabletID unused_tablet_id;
     const ObDDLTaskInfo unused_addition_info;
     const int old_ret_code = OB_SUCCESS;
-    if (old_execution_id < 0) {
+    if (old_execution_id < 0 || context_.namespace_id_ > 1) {
+      // In-process jobs have no worker-local SQL session to reap after a restart.
       need_exec_new_inner_sql = true;
     } else if (OB_FAIL(ObCheckTabletDataComplementOp::check_and_wait_old_complement_task(
         *task_schema_service(), *task_sql_proxy(), dest_table_id,

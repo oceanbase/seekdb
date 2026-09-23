@@ -690,8 +690,12 @@ int ObDDLTask::switch_status(const ObDDLTaskStatus new_status, const bool enable
     }
 
     if (OB_CANCELED == real_ret_code || ObDDLTaskStatus::FAIL == task_status_) {
-      (void)ObDDLTaskRecordOperator::kill_task_inner_sql(*task_sql_proxy(),
-          trace_id_, task_id_, snapshot_version_); // ignore return code
+      // Session info is process-wide and served by the system namespace.
+      ObMySQLProxy *session_proxy = context_.namespace_id_ > 1 ? GCTX.sql_proxy_ : task_sql_proxy();
+      if (session_proxy != nullptr) {
+        (void)ObDDLTaskRecordOperator::kill_task_inner_sql(*session_proxy,
+            trace_id_, task_id_, snapshot_version_); // ignore return code
+      }
       LOG_WARN("ddl_task switch_status kill_task_inner_sql");
     }
   }
