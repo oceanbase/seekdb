@@ -2,33 +2,6 @@
 #include "share/schema/ob_multi_version_schema_service.h"
 #include <set>
 namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
-int begin_namespace_schema_change() {
-  return serving_namespace() > 1
-      ? storage::NamespaceForkKernelPrototype::begin_schema_change(serving_namespace())
-      : common::OB_SUCCESS;
-}
-
-int finish_namespace_schema_change(int64_t committed_schema_version) {
-  return serving_namespace() > 1 && committed_schema_version >= 0
-      ? storage::NamespaceForkKernelPrototype::finish_schema_change(
-          serving_namespace(), committed_schema_version)
-      : serving_namespace() <= 1 ? common::OB_SUCCESS : common::OB_INVALID_ARGUMENT;
-}
-
-int begin_namespace_schema_recovery(bool &needed) {
-  needed = false;
-  return serving_namespace() > 1
-      ? storage::NamespaceForkKernelPrototype::begin_schema_recovery(serving_namespace(), needed)
-      : common::OB_SUCCESS;
-}
-
-int finish_namespace_schema_recovery(int64_t reconciled_schema_version) {
-  return serving_namespace() > 1 && reconciled_schema_version > 0
-      ? storage::NamespaceForkKernelPrototype::finish_schema_recovery(
-          serving_namespace(), reconciled_schema_version)
-      : serving_namespace() <= 1 ? common::OB_SUCCESS : common::OB_INVALID_ARGUMENT;
-}
-
 int sync_namespace_schema_delta(uint64_t ns, ObMultiVersionSchemaService &service,
                                 int64_t base_schema_version,
                                 int64_t &published_schema_version) {

@@ -417,7 +417,8 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
       int64_t published_schema_version = OB_INVALID_VERSION;
       bool recovery_needed = false;
       if (!recovery_ret) {
-        recovery_ret = begin_namespace_schema_recovery(recovery_needed);
+        recovery_ret = storage::NamespaceForkKernelPrototype::begin_schema_recovery(
+            ns, recovery_needed);
       }
       if (!recovery_ret && recovery_needed) {
         if (OB_SUCCESS != (recovery_ret = fetch_schema_version(
@@ -437,7 +438,8 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
           published_schema_version = local_schema_version;
         }
         if (!recovery_ret) {
-          recovery_ret = finish_namespace_schema_recovery(published_schema_version);
+          recovery_ret = storage::NamespaceForkKernelPrototype::finish_schema_recovery(
+              ns, published_schema_version);
         }
         services->schema_loaded.store(recovery_ret == OB_SUCCESS,
             std::memory_order_release);

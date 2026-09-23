@@ -231,10 +231,6 @@ int sync_namespace_schema_delta(uint64_t namespace_id,
                                 share::schema::ObMultiVersionSchemaService &schema_service,
                                 int64_t base_schema_version,
                                 int64_t &published_schema_version);
-int begin_namespace_schema_change();
-int finish_namespace_schema_change(int64_t committed_schema_version);
-int begin_namespace_schema_recovery(bool &needed);
-int finish_namespace_schema_recovery(int64_t reconciled_schema_version);
 int fetch_schema_version(bool published, bool core_version, int64_t &version);
 struct SessionBinding;
 // Native inner SQL can switch sessions while keeping the same execution stack.
