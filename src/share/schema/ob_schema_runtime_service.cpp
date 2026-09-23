@@ -43,7 +43,19 @@ int ObSchemaRuntimeService::server_module_init(
 
 void ObSchemaRuntimeService::destroy()
 {
+  tablet_schema_resolver_.store(nullptr, std::memory_order_release);
   schema_service_ = nullptr;
+}
+
+int ObSchemaRuntimeService::resolve_tablet_schema(
+    uint64_t tablet_id, ObMultiVersionSchemaService *&schema_service,
+    uint64_t &schema_tablet_id)
+{
+  schema_service = schema_service_;
+  schema_tablet_id = tablet_id;
+  TabletSchemaResolver resolver = tablet_schema_resolver_.load(std::memory_order_acquire);
+  return resolver == nullptr ? OB_SUCCESS
+      : resolver(tablet_id, schema_service, schema_tablet_id);
 }
 
 }

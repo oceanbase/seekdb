@@ -14,6 +14,8 @@
 #include "rootserver/ob_max_id_cache_adapter.h"
 #include "rootserver/ob_local_management_service.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h"
+#include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
+#include "share/schema/ob_schema_runtime_service.h"
 #include "sql/plan_cache/ob_plan_cache.h"
 #include <map>
 #include <memory>
@@ -171,6 +173,31 @@ struct InProcessNamespaceServices {
 };
 std::shared_mutex inprocess_services_mutex;
 std::map<uint64_t, std::unique_ptr<InProcessNamespaceServices>> inprocess_services;
+int resolve_inprocess_tablet_schema(uint64_t physical_tablet_id,
+    share::schema::ObMultiVersionSchemaService *&schema_service,
+    uint64_t &logical_tablet_id)
+{
+  const uint64_t ns = storage::NamespaceForkKernelPrototype::namespace_of(physical_tablet_id);
+  int ret = OB_SUCCESS;
+  if (ns > 1) {
+    if (OB_FAIL(ensure_in_process_namespace(ns))) {
+    } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::local_object_id(
+                   ns, physical_tablet_id, logical_tablet_id))) {
+    } else if (OB_ISNULL(schema_service = namespace_schema_service(ns))) {
+      ret = OB_NOT_INIT;
+    } else {
+      std::shared_lock<std::shared_mutex> guard(inprocess_services_mutex);
+      const auto it = inprocess_services.find(ns);
+      if (it == inprocess_services.end()) {
+        ret = OB_NOT_INIT;
+      } else if (!it->second->schema_loaded.load(std::memory_order_acquire)) {
+        guard.unlock();
+        ret = inprocess_refresh_schema(ns);
+      }
+    }
+  }
+  return ret;
+}
 int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
 {
   int ret = OB_SUCCESS;
@@ -305,6 +332,8 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
     runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_ROUTES, &services->direct_insert_routes);
     runtime.set_service(ns::NamespaceRuntime::SQL_PROXY, services->sql_proxy);
     inprocess_services.emplace(ns, std::move(services));
+    server.schema_runtime_service()->set_tablet_schema_resolver(
+        resolve_inprocess_tablet_schema);
   }
   return ret;
 }

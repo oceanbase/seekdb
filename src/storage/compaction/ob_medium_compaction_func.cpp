@@ -942,17 +942,36 @@ int ObMediumCompactionScheduleFunc::get_table_schema_to_merge(
   int ret = OB_SUCCESS;
   
   const ObTabletID &tablet_id = tablet.get_tablet_meta().tablet_id_;
+  ObMultiVersionSchemaService *resolved_schema_service = &schema_service;
+  uint64_t schema_tablet_id = tablet_id.id();
+  auto *schema_runtime = share::server_service<schema::ObSchemaRuntimeService>();
+  int64_t effective_schema_version = schema_version;
   uint64_t table_id = OB_INVALID_ID;
   schema::ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = nullptr;
   int64_t save_schema_version = schema_version;
   is_skip_merge_index = false;
 
-  if (OB_FAIL(get_table_id(schema_service, tablet_id, schema_version, table_id))) {
+  if (OB_ISNULL(schema_runtime)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(schema_runtime->resolve_tablet_schema(
+                 tablet_id.id(), resolved_schema_service, schema_tablet_id))) {
+    LOG_WARN("failed to resolve tablet schema", K(ret), K(tablet_id));
+  } else if (OB_ISNULL(resolved_schema_service)) {
+    ret = OB_NOT_INIT;
+  } else if (resolved_schema_service != &schema_service &&
+             OB_FAIL(resolved_schema_service->get_live_runtime_refreshed_schema_version(
+                 save_schema_version))) {
+    LOG_WARN("failed to get namespace schema version", K(ret), K(tablet_id));
+  } else if (FALSE_IT(effective_schema_version =
+                         resolved_schema_service == &schema_service
+                             ? schema_version : MIN(schema_version, save_schema_version))) {
+  } else if (OB_FAIL(get_table_id(*resolved_schema_service,
+                                 ObTabletID(schema_tablet_id), effective_schema_version, table_id))) {
     if (OB_TABLE_IS_DELETED != ret) {
       LOG_WARN("failed to get table id", K(ret), K(tablet_id));
     }
-  } else if (OB_FAIL(schema_service.retry_get_schema_guard(schema_version,
+  } else if (OB_FAIL(resolved_schema_service->retry_get_schema_guard(effective_schema_version,
                                                             table_id,
                                                             schema_guard,
                                                             save_schema_version))) {
@@ -963,7 +982,7 @@ int ObMediumCompactionScheduleFunc::get_table_schema_to_merge(
     } else {
       LOG_WARN("Fail to get schema", K(ret), K(schema_version), K(table_id));
     }
-  } else if (OB_UNLIKELY(save_schema_version < schema_version)) {
+  } else if (OB_UNLIKELY(save_schema_version < effective_schema_version)) {
     ret = OB_SCHEMA_ERROR;
     LOG_WARN("can not use older schema version", K(ret), K(schema_version), K(save_schema_version), K(table_id));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {

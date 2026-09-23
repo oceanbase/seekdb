@@ -78,6 +78,16 @@ bool NamespaceRegistry::find(const char *name, NamespaceRuntime *&runtime)
   return false;
 }
 
+void NamespaceRegistry::list_ids(std::vector<uint64_t> &ids)
+{
+  ids.clear();
+  if (impl_ != nullptr) {
+    std::lock_guard<std::mutex> guard(impl_->mutex);
+    ids.reserve(impl_->entries.size());
+    for (const auto &entry : impl_->entries) { ids.push_back(entry.first); }
+  }
+}
+
 NamespaceRegistry &namespace_registry()
 {
   // The single sanctioned new global; every other service stays ns-blind.

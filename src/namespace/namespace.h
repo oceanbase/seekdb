@@ -17,6 +17,7 @@
 // to OB error codes.
 
 #include <cstdint>
+#include <vector>
 
 namespace oceanbase
 {
@@ -82,6 +83,7 @@ public:
   // Returns true when found. Entries with an empty name never match find().
   bool get(uint64_t id, NamespaceRuntime *&runtime);
   bool find(const char *name, NamespaceRuntime *&runtime);
+  void list_ids(std::vector<uint64_t> &ids);
 private:
   struct Impl;
   Impl *impl_;

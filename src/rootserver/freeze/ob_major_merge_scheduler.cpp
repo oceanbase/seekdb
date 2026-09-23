@@ -26,6 +26,12 @@
 #include "share/ob_global_merge_table_operator.h"
 #include "share/ob_column_checksum_error_operator.h"
 #include "rootserver/freeze/ob_major_merge_info_manager.h"
+#include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
+#include "observer/namespace_worker_protocol_prototype.h"
+#include "namespace/namespace.h"
+#include "share/schema/ob_multi_version_schema_service.h"
+#include "share/schema/ob_schema_getter_guard.h"
+#include "share/tablet/ob_tablet_meta_table_storage.h"
 
 namespace oceanbase
 {
@@ -362,6 +368,7 @@ int ObMajorMergeScheduler::update_merge_status(
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
+  bool namespaces_compacted = true;
 
   DEBUG_SYNC(RS_VALIDATE_CHECKSUM);
   if (IS_NOT_INIT) {
@@ -373,6 +380,16 @@ int ObMajorMergeScheduler::update_merge_status(
       if (OB_TMP_FAIL(merge_info_mgr_->get_global_merge_mgr().set_merge_status(ObGlobalMergeInfo::CHECKSUM_ERROR))) {
       }
     }
+  } else if (OB_FAIL(check_namespace_progress(
+                 global_broadcast_scn, namespaces_compacted))) {
+    LOG_WARN("fail to check namespace merge progress", KR(ret));
+    if (OB_CHECKSUM_ERROR == ret) {
+      if (OB_TMP_FAIL(merge_info_mgr_->get_global_merge_mgr().set_merge_status(
+              ObGlobalMergeInfo::CHECKSUM_ERROR))) {
+      }
+    }
+  } else if (!namespaces_compacted) {
+    LOG_INFO("namespace tablets are still merging", K(global_broadcast_scn));
   } else {
     const compaction::ObBasicMergeProgress &progress = progress_checker_->get_merge_progress();
     LOG_INFO("succcess to update merge status", K(ret), K(global_broadcast_scn), K(progress));
@@ -380,6 +397,62 @@ int ObMajorMergeScheduler::update_merge_status(
     }
   }
 
+  return ret;
+}
+
+int ObMajorMergeScheduler::check_namespace_progress(
+    const SCN &global_broadcast_scn, bool &all_compacted)
+{
+  using observer::namespace_worker_prototype::ensure_in_process_namespace;
+  using observer::namespace_worker_prototype::inprocess_refresh_schema;
+  using observer::namespace_worker_prototype::namespace_schema_service;
+  all_compacted = true;
+  if (!observer::namespace_worker_prototype::forked_in_process()) {
+    return OB_SUCCESS;
+  }
+  std::vector<uint64_t> namespace_ids;
+  ns::namespace_registry().list_ids(namespace_ids);
+  share::ObTabletMetaTableStorage tablet_storage;
+  int ret = GCTX.meta_db_pool_ == nullptr ? OB_NOT_INIT
+      : tablet_storage.init(GCTX.meta_db_pool_);
+  for (uint64_t namespace_id : namespace_ids) {
+    if (ret != OB_SUCCESS || !all_compacted || namespace_id <= 1) { continue; }
+    share::schema::ObMultiVersionSchemaService *schema_service = nullptr;
+    share::schema::ObSchemaGetterGuard guard;
+    ObArray<uint64_t> table_ids;
+    if (OB_FAIL(ensure_in_process_namespace(namespace_id))) {
+    } else if (OB_FAIL(inprocess_refresh_schema(namespace_id))) {
+    } else if (OB_ISNULL(schema_service = namespace_schema_service(namespace_id))) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(schema_service->get_runtime_schema_guard(guard))) {
+    } else if (OB_FAIL(guard.get_table_ids_in_runtime(table_ids))) {
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && all_compacted && i < table_ids.count(); ++i) {
+      const share::schema::ObSimpleTableSchemaV2 *table = nullptr;
+      ObArray<ObTabletID> logical_tablets;
+      ObArray<ObTabletID> owned_tablets;
+      ObArray<ObTabletRuntimeInfo> tablet_infos;
+      if (OB_FAIL(guard.get_simple_table_schema(table_ids.at(i), table))) {
+      } else if (table == nullptr || !table->has_tablet()) {
+      } else if (OB_FAIL(table->get_tablet_ids(logical_tablets))) {
+      } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::owned_storage_tablets(
+                     namespace_id, logical_tablets, owned_tablets))) {
+      } else if (owned_tablets.empty()) {
+      } else if (OB_FAIL(tablet_storage.batch_get(owned_tablets, tablet_infos))) {
+      } else {
+        // A dropped DDL tablet can remain in a schema snapshot after its
+        // physical tablet is gone; only existing tablets can join a merge.
+        for (int64_t j = 0; OB_SUCC(ret) && all_compacted && j < tablet_infos.count(); ++j) {
+          const ObTabletRuntimeInfo &info = tablet_infos.at(j);
+          if (info.get_status() == ObTabletRuntimeInfo::SCN_STATUS_ERROR) {
+            ret = OB_CHECKSUM_ERROR;
+          } else if (info.get_snapshot_version() < global_broadcast_scn.get_val_for_tx()) {
+            all_compacted = false;
+          }
+        }
+      }
+    }
+  }
   return ret;
 }
 

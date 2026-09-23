@@ -95,6 +95,8 @@ private:
 
   int update_merge_status(
     const share::SCN &global_broadcast_scn);
+  int check_namespace_progress(const share::SCN &global_broadcast_scn,
+                               bool &all_compacted);
   int handle_merge_progress(const compaction::ObBasicMergeProgress &progress,
                             const share::SCN &global_broadcast_scn);
   int try_update_global_merged_scn();
