@@ -154,6 +154,8 @@ ObBlockStatIterator::ObBlockStatIterator()
   : scan_param_(nullptr),
     allocator_(ObMemAttr("BlkStatIter")),
     merged_endkey_allocator_(ObMemAttr("BlkStatKeyIter")),
+    scan_start_key_allocator_(ObMemAttr("BlkStatStart")),
+    memtable_scan_start_key_allocator_(ObMemAttr("BlkStatMemStart")),
     stat_collector_(),
     scan_range_(),
     get_table_param_(),
@@ -172,6 +174,8 @@ ObBlockStatIterator::ObBlockStatIterator()
     curr_merged_endkey_(),
     curr_scan_range_(),
     curr_scan_start_key_(),
+    memtable_scan_range_(),
+    memtable_scan_start_key_(),
     iter_allocator_(nullptr),
     is_baseline_merged_endkey_(false),
     iter_end_(false),
@@ -184,6 +188,8 @@ void ObBlockStatIterator::reset()
   is_inited_ = false;
   iter_end_ = false;
   is_baseline_merged_endkey_ = false;
+  memtable_scan_start_key_.reset();
+  memtable_scan_range_.reset();
   curr_scan_start_key_.reset();
   curr_scan_range_.reset();
   curr_endkey_ = nullptr;
@@ -204,6 +210,8 @@ void ObBlockStatIterator::reset()
   iter_allocator_ = nullptr;
   allocator_.reset();
   merged_endkey_allocator_.reset();
+  scan_start_key_allocator_.reset();
+  memtable_scan_start_key_allocator_.reset();
   scan_param_ = nullptr;
 }
 
@@ -223,6 +231,8 @@ int ObBlockStatIterator::init(const ObTabletHandle &tablet_handle, ObBlockStatSc
   } else if (OB_FAIL(init_scan_range(tablet_handle, scan_param))) {
   } else if (OB_FAIL(get_table_param_.tablet_iter_.set_tablet_handle(tablet_handle))) {
   } else if (OB_FAIL(init_memtable_access_param(tablet_handle, *table_scan_param))) {
+  } else if (FALSE_IT(rowkey_read_info_ = &tablet_handle.get_obj()->get_rowkey_read_info())) {
+  } else if (OB_FAIL(prepare_memtable_scan_range(curr_scan_range_.get_start_key()))) {
   } else if (OB_FAIL(sstable_idx_scan_param_.init(
       *scan_param.get_stat_cols(),
       tablet_handle.get_obj()->get_rowkey_read_info(),
@@ -334,6 +344,7 @@ int ObBlockStatIterator::refresh_scan_table_on_demand()
     if (nullptr != curr_endkey_ && OB_FAIL(shrink_scan_range(*curr_endkey_))) {
     } else if (FALSE_IT(reset_iters())) {
     } else if (OB_FAIL(refresh_tablet_iter())) {
+    } else if (OB_FAIL(prepare_memtable_scan_range(curr_scan_range_.get_start_key()))) {
     } else if (OB_FAIL(prepare_scan_tables())) {
     } else if (OB_FAIL(construct_iters())) {
     } else if (use_merged_range()) {
@@ -443,7 +454,7 @@ int ObBlockStatIterator::construct_iters()
       ret = OB_ERR_UNEXPECTED;
     } else if (table->is_memtable()) {
       ObStoreRowIterator *iter = nullptr;
-      if (OB_FAIL(table->scan(main_table_param_.iter_param_, main_table_ctx_, curr_scan_range_, iter))) {
+      if (OB_FAIL(table->scan(main_table_param_.iter_param_, main_table_ctx_, memtable_scan_range_, iter))) {
       } else if (OB_FAIL(memtable_iters_.push_back(MemTableIter(iter)))) {
       }
     } else if (table->is_sstable()) {
@@ -810,21 +821,47 @@ int ObBlockStatIterator::check_rowkey_in_range(const ObDatumRowkey &rowkey, bool
 int ObBlockStatIterator::shrink_scan_range(const ObDatumRowkey &start_key)
 {
   int ret = OB_SUCCESS;
+  scan_start_key_allocator_.reuse();
+  curr_scan_start_key_.reset();
+  if (OB_FAIL(start_key.deep_copy(curr_scan_start_key_, scan_start_key_allocator_))) {
+    LOG_WARN("failed to deep copy physical scan start key", K(ret), K(start_key));
+  } else {
+    curr_scan_range_.start_key_ = curr_scan_start_key_;
+  }
+  return ret;
+}
+
+int ObBlockStatIterator::prepare_memtable_scan_range(const ObDatumRowkey &start_key)
+{
+  int ret = OB_SUCCESS;
+  memtable_scan_start_key_allocator_.reuse();
+  memtable_scan_start_key_.reset();
+  memtable_scan_range_ = curr_scan_range_;
   if (OB_ISNULL(rowkey_read_info_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr to rowkey read info", K(ret), KP_(rowkey_read_info));
   } else {
-    // Strip multi-version extra rowkey columns
-    int64_t schema_rowkey_cnt = rowkey_read_info_->get_schema_rowkey_count();
+    const int64_t schema_rowkey_cnt = rowkey_read_info_->get_schema_rowkey_count();
     ObDatumRowkey new_start_key = start_key;
-    new_start_key.datum_cnt_ = MIN(schema_rowkey_cnt, start_key.get_datum_cnt());
-    if (OB_FAIL(new_start_key.deep_copy(curr_scan_start_key_, allocator_))) {
-      LOG_WARN("failed to deep copy start key", K(ret), K(start_key));
-    } else if (OB_FAIL(curr_scan_start_key_.prepare_memtable_readable(
-        rowkey_read_info_->get_columns_desc(), allocator_))) {
-      LOG_WARN("failed to prepare memtable readable", K(ret), K(curr_scan_start_key_));
-    } else {
-      curr_scan_range_.start_key_ = curr_scan_start_key_;
+    const bool is_ext_rowkey = start_key.is_min_rowkey() || start_key.is_max_rowkey();
+    if (OB_UNLIKELY(!is_ext_rowkey && start_key.get_datum_cnt() < schema_rowkey_cnt)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("physical scan start key has fewer datums than schema rowkey",
+          K(ret), K(start_key), K(schema_rowkey_cnt));
+    } else if (!is_ext_rowkey) {
+      // A memtable range only accepts the logical schema rowkey.  SSTable
+      // block boundaries may additionally carry multi-version columns.
+      new_start_key.datum_cnt_ = schema_rowkey_cnt;
+    }
+    if (OB_SUCC(ret)
+        && OB_FAIL(new_start_key.deep_copy(memtable_scan_start_key_, memtable_scan_start_key_allocator_))) {
+      LOG_WARN("failed to deep copy memtable scan start key", K(ret), K(start_key));
+    } else if (OB_SUCC(ret) && !is_ext_rowkey
+        && OB_FAIL(memtable_scan_start_key_.prepare_memtable_readable(
+            rowkey_read_info_->get_columns_desc(), memtable_scan_start_key_allocator_))) {
+      LOG_WARN("failed to prepare memtable readable", K(ret), K(memtable_scan_start_key_));
+    } else if (OB_SUCC(ret)) {
+      memtable_scan_range_.start_key_ = memtable_scan_start_key_;
     }
   }
   return ret;
