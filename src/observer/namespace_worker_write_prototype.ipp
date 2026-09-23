@@ -22,6 +22,7 @@
 #include "storage/tablelock/ob_table_lock_service.h"
 #include "storage/tablet/ob_batch_create_tablet_arg.h"
 #include "storage/tablet/ob_tablet_binding_helper.h"
+#include "storage/tablet/ob_tablet_fork_mds_helper.h"
 #include "storage/tablet/ob_tablet_create_delete_helper.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx/ob_trans_define_v4.h"
@@ -135,8 +136,30 @@ int route_tablet_mds(StorageSpaceHandle storage_space,
       for (int64_t j = 0; OB_SUCC(ret) && j < info.tablet_ids_.count(); ++j) {
         ret = route_tablet_id(ns, info.tablet_ids_.at(j));
       }
-      // A fork source is already a physical backing object chosen by the
-      // namespace directory. New namespace-local DDL normally has no fork info.
+      for (int64_t j = 0; OB_SUCC(ret) && j < info.fork_tablet_infos_.count(); ++j) {
+        share::ObForkTabletInfo &fork = info.fork_tablet_infos_.at(j);
+        ObTabletID logical = fork.get_fork_src_tablet_id();
+        if (!fork.is_valid()) {
+          ret = OB_INVALID_ARGUMENT;
+        } else if (!storage::NamespaceForkKernelPrototype::is_encoded_id(logical.id())) {
+          uint64_t storage_id = OB_INVALID_ID;
+          if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
+                  ns, logical.id(), storage_id))) {
+          } else { logical = ObTabletID(storage_id); }
+        }
+        if (OB_SUCC(ret) && storage::NamespaceForkKernelPrototype::namespace_of(logical.id()) == ns) {
+          ObTabletID physical;
+          int64_t inherited_cap = 0;
+          if (OB_FAIL(storage::NamespaceForkKernelPrototype::resolve_read_tablet(
+                  logical, physical, inherited_cap))) {
+          } else {
+            fork.set_fork_src_tablet_id(physical);
+            if (inherited_cap > 0 && inherited_cap < fork.get_fork_snapshot_version()) {
+              fork.set_fork_snapshot_version(inherited_cap);
+            }
+          }
+        }
+      }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < arg.table_schemas_.count(); ++i) {
       share::schema::ObTableSchema storage_schema;
@@ -157,6 +180,28 @@ int route_tablet_mds(StorageSpaceHandle storage_space,
       } else if (schema->get_table_type() != share::schema::SYSTEM_TABLE) {
         schema->set_table_id(storage_id);
       }
+    }
+    if (OB_SUCC(ret)) {
+      storage_buffer.resize(arg.get_serialize_size());
+      pos = 0;
+      if (OB_FAIL(arg.serialize(storage_buffer.data(), storage_buffer.size(), pos))) {
+      } else if (pos != static_cast<int64_t>(storage_buffer.size())) {
+        ret = OB_ERR_UNEXPECTED;
+      }
+    }
+  } else if (type == transaction::ObTxDataSourceType::TABLET_FORK) {
+    storage::ObTabletForkMdsArg arg;
+    if (OB_FAIL(arg.deserialize(input.ptr(), input.length(), pos))) {
+    } else if (pos != input.length() || !arg.is_valid()) {
+      ret = OB_INVALID_ARGUMENT;
+    }
+    for (int64_t i = 0; OB_SUCC(ret)
+         && i < arg.autoinc_seq_arg_.autoinc_params_.count(); ++i) {
+      ret = route_tablet_id(ns,
+          arg.autoinc_seq_arg_.autoinc_params_.at(i).dest_tablet_id_);
+    }
+    if (OB_SUCC(ret) && arg.truncate_arg_.is_valid()) {
+      ret = route_tablet_id(ns, arg.truncate_arg_.index_tablet_id_);
     }
     if (OB_SUCC(ret)) {
       storage_buffer.resize(arg.get_serialize_size());

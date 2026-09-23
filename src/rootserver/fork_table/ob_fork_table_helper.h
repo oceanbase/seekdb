@@ -67,7 +67,9 @@ private:
                       const int64_t dst_part_id);
   const char *get_table_schema_(const char *table_name);
   int get_tablet_handle_(const common::ObTabletID &tablet_id,
-                         storage::ObTabletHandle &tablet_handle) const;
+                         storage::ObTabletHandle &tablet_handle,
+                         common::ObTabletID &physical_tablet_id,
+                         int64_t &inherited_cap) const;
   share::schema::ObMultiVersionSchemaService &schema_service_;
   common::ObMySQLProxy &sql_proxy_;
   common::ObMySQLTransaction &trans_;
