@@ -36,6 +36,7 @@ class ObMySQLTransaction;
 namespace rootserver
 {
 class ObDDLTask;
+class ObDDLService;
 }
 namespace share
 {
@@ -89,6 +90,7 @@ public:
 
   // Obtain snapshot for multiple tables at once to ensure consistency
   static int obtain_snapshot(
+      ObDDLService &ddl_service,
       common::ObMySQLTransaction &trans,
       share::schema::ObSchemaGetterGuard &schema_guard,
       const common::ObIArray<const share::schema::ObTableSchema*> &data_table_schemas,

@@ -403,13 +403,13 @@ int ObForkTableUtil::get_tablet_ids(
 
 // Obtain snapshot for multiple tables at once to ensure consistency
 int ObForkTableUtil::obtain_snapshot(
+    ObDDLService &ddl_service,
     common::ObMySQLTransaction &trans,
     schema::ObSchemaGetterGuard &schema_guard,
     const common::ObIArray<const ObTableSchema*> &data_table_schemas,
     int64_t &new_fetched_snapshot)
 {
   int ret = OB_SUCCESS;
-  rootserver::ObDDLService &ddl_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->get_ddl_service();
   new_fetched_snapshot = 0;
   ObSEArray<ObTabletID, 16> tablet_ids;
   SCN snapshot_scn;

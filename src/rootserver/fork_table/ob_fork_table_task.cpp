@@ -127,10 +127,12 @@ int ObForkTableTask::init(const ObDDLTaskRecord &task_record)
 {
   int ret = OB_SUCCESS;
   int64_t pos = 0;
+  set_context(task_record.context_);
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("ObForkTableTask has already been inited", K(ret));
-  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
+  } else if (OB_ISNULL(local_management_service_ = context_.root_service_ != nullptr
+      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
     LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
   } else if (!task_record.is_valid()) {
@@ -528,9 +530,9 @@ int ObForkTableTask::cleanup_impl()
   }
 
   if (OB_SUCC(ret) && OB_INVALID_ID != object_id_) {
-    if (OB_ISNULL(GCTX.sql_proxy_) || OB_ISNULL(GCTX.schema_service_)) {
+    if (OB_ISNULL(task_sql_proxy()) || OB_ISNULL(task_schema_service())) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_), KP(GCTX.schema_service_));
+      LOG_WARN("invalid argument", KR(ret), KP(task_sql_proxy()), KP(task_schema_service()));
     } else {
       ObSchemaGetterGuard schema_guard;
       const ObTableSchema *src_table_schema = nullptr;
@@ -540,7 +542,7 @@ int ObForkTableTask::cleanup_impl()
       ObMySQLTransaction trans;
       ObTimeoutCtx ctx;
       
-      if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+      if (OB_FAIL(task_schema_service()->get_runtime_schema_guard(schema_guard))) {
       } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, src_table_schema))) {
       } else if (OB_ISNULL(src_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
@@ -549,7 +551,7 @@ int ObForkTableTask::cleanup_impl()
       } else if (OB_ISNULL(dst_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("destination table not exist", K(ret), K_(target_object_id));
-      } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+      } else if (OB_FAIL(trans.start(task_sql_proxy()))) {
       } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, GCONF.rpc_timeout))) {
       } else if (OB_ISNULL(conn = trans.get_connection())) {
         ret = OB_ERR_UNEXPECTED;

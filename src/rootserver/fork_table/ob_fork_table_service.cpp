@@ -374,7 +374,7 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObForkTableUtil::obtain_snapshot(
-                     trans, schema_guard, src_table_schemas,
+                     *this, trans, schema_guard, src_table_schemas,
                      fork_snapshot_version))) {
       }
       if (OB_FAIL(ret)) {
@@ -413,6 +413,7 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
       }
 
       if (OB_SUCC(ret)) {
+        task_record.context_ = task_context_;
         if (OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
         } else {
         
