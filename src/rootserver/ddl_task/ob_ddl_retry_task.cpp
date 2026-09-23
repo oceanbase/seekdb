@@ -173,11 +173,13 @@ int ObDDLRetryTask::init(const int64_t task_id,
 int ObDDLRetryTask::init(const ObDDLTaskRecord &task_record)
 {
   int ret = OB_SUCCESS;
+  set_context(task_record.context_);
   if (OB_UNLIKELY(!task_record.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(task_record));
   } else if (OB_FAIL(DDL_SIM(task_record.task_id_, DDL_TASK_INIT_BY_RECORD_FAILED))) {
-  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
+  } else if (OB_ISNULL(local_management_service_ = context_.root_service_ != nullptr
+      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, local management service is null", K(ret));
   } else {
@@ -266,12 +268,12 @@ int ObDDLRetryTask::check_schema_change_done()
     LOG_WARN("not init", K(ret));
   } else if (is_schema_change_done_) {
     // do nothing.
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+  } else if (OB_ISNULL(task_sql_proxy())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
+    LOG_WARN("invalid argument", KR(ret), KP(task_sql_proxy()));
   } else if (OB_FAIL(DDL_SIM(task_id_, RETRY_TASK_CHECK_SCHEMA_CHANGED_FAILED))) {
   } else {
-    common::ObMySQLProxy &proxy = *GCTX.sql_proxy_;
+    common::ObMySQLProxy &proxy = *task_sql_proxy();
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObSqlString query_string;
       sqlclient::ObMySQLResult *result = NULL;
@@ -322,8 +324,8 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
         arg->is_add_to_scheduler_ = false;
         arg->task_id_ = task_id_;
         ObDDLUtil::get_ddl_rpc_timeout_for_database(
-            *GCTX.schema_service_, object_id_, timeout_us);
-        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_database(*arg, drop_database_res); }))) {
+            *task_schema_service(), object_id_, timeout_us);
+        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return local_management_service_->drop_database(*arg, drop_database_res); }))) {
         } else {
           affected_rows_ = drop_database_res.affected_row_;
         }
@@ -334,7 +336,7 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
         obcall::ObDropTableArg *arg = static_cast<obcall::ObDropTableArg *>(ddl_arg_);
         arg->is_add_to_scheduler_ = false;
         arg->task_id_ = task_id_;
-        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_table(*arg, res); }))) {
+        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return local_management_service_->drop_table(*arg, res); }))) {
         }
         break;
       }
@@ -343,7 +345,7 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
         obcall::ObTruncateTableArg *arg = static_cast<obcall::ObTruncateTableArg *>(ddl_arg_);
         arg->is_add_to_scheduler_ = false;
         arg->task_id_ = task_id_;
-        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->truncate_table(*arg, res); }))) {
+        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return local_management_service_->truncate_table(*arg, res); }))) {
         }
         break;
       }
@@ -356,7 +358,7 @@ int ObDDLRetryTask::drop_schema(const ObDDLTaskStatus next_task_status)
         obcall::ObAlterTableArg *arg = static_cast<obcall::ObAlterTableArg *>(ddl_arg_);
         arg->is_add_to_scheduler_ = false;
         arg->task_id_ = task_id_;
-        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->alter_table(*arg, alter_table_res_); }))) {
+        if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return local_management_service_->alter_table(*arg, alter_table_res_); }))) {
         }
         break;
       }
@@ -418,7 +420,8 @@ int ObDDLRetryTask::wait_alter_table(const ObDDLTaskStatus new_status)
       while (OB_SUCC(ret) && res_array.count() > 0) {
         const int64_t task_id = res_array.at(res_array.count() - 1).task_id_;
         bool is_finish = false;
-        if (OB_FAIL(sql::ObDDLExecutorUtil::wait_build_index_finish( task_id, is_finish))) {
+        if (OB_FAIL(sql::ObDDLExecutorUtil::wait_build_index_finish(
+                task_id, is_finish, nullptr, task_sql_proxy()))) {
         } else if (is_finish) {
           res_array.pop_back();
           LOG_INFO("index status is final", K(ret), K(task_id));
@@ -453,11 +456,11 @@ int ObDDLRetryTask::cleanup_impl()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+  } else if (OB_ISNULL(task_sql_proxy())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
+    LOG_WARN("invalid argument", KR(ret), KP(task_sql_proxy()));
   } else if (OB_FAIL(report_error_code(forward_user_message_, affected_rows_))) {
-  } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*GCTX.sql_proxy_, task_id_))) {
+  } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*task_sql_proxy(), task_id_))) {
   } else {
     need_retry_ = false;
   }

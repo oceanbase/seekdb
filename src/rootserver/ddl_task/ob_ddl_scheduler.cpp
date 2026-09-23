@@ -2494,6 +2494,15 @@ int ObDDLScheduler::recover_task(const ObDDLTaskContext &context)
             && cur_record.ddl_type_ != DDL_DROP_FTS_INDEX
             && cur_record.ddl_type_ != DDL_DROP_MULVALUE_INDEX
             && cur_record.ddl_type_ != DDL_DROP_VEC_SPIV_INDEX
+            && cur_record.ddl_type_ != DDL_DROP_DATABASE
+            && cur_record.ddl_type_ != DDL_DROP_TABLE
+            && cur_record.ddl_type_ != DDL_TRUNCATE_TABLE
+            && cur_record.ddl_type_ != DDL_DROP_PARTITION
+            && cur_record.ddl_type_ != DDL_DROP_SUB_PARTITION
+            && cur_record.ddl_type_ != DDL_RENAME_PARTITION
+            && cur_record.ddl_type_ != DDL_RENAME_SUB_PARTITION
+            && cur_record.ddl_type_ != DDL_TRUNCATE_PARTITION
+            && cur_record.ddl_type_ != DDL_TRUNCATE_SUB_PARTITION
             && cur_record.ddl_type_ != DDL_MODIFY_COLUMN
             && cur_record.ddl_type_ != DDL_ADD_PRIMARY_KEY
             && cur_record.ddl_type_ != DDL_DROP_PRIMARY_KEY

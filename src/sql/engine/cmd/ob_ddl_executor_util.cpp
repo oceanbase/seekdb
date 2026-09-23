@@ -142,7 +142,7 @@ int ObDDLExecutorUtil::wait_ddl_finish(const int64_t task_id,
 }
 
 int ObDDLExecutorUtil::wait_build_index_finish(const int64_t task_id,
-    bool &is_finish, ObSQLSessionInfo *session)
+    bool &is_finish, ObSQLSessionInfo *session, common::ObMySQLProxy *sql_proxy)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -160,7 +160,7 @@ int ObDDLExecutorUtil::wait_build_index_finish(const int64_t task_id,
   if (OB_UNLIKELY(task_id <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_id));
-  } else if (OB_SUCCESS == share::ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id, -1 /* target_object_id */, unused_addr, false /* is_ddl_retry_task */, *(session != nullptr ? session->effective_sql_proxy() : GCTX.sql_proxy_), error_message, unused_user_msg_len)) {
+  } else if (OB_SUCCESS == share::ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id, -1 /* target_object_id */, unused_addr, false /* is_ddl_retry_task */, *(sql_proxy != nullptr ? sql_proxy : session != nullptr ? session->effective_sql_proxy() : GCTX.sql_proxy_), error_message, unused_user_msg_len)) {
     ret = error_message.ret_code_;
     if (OB_SUCCESS != ret) {
       FORWARD_USER_ERROR(ret, error_message.user_message_);

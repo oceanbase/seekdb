@@ -1139,6 +1139,7 @@ int ObLocalManagementService::alter_table(const obcall::ObAlterTableArg &arg, ob
                                    &arg,
                                    0 /*parent task id*/);
         if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param, *sql_proxy_, task_record))) {
+        } else if (OB_FALSE_IT(task_record.context_ = ddl_service_.get_task_context())) {
         } else if (OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
         } else {
           res.ddl_type_ = ddl_type;
@@ -1370,6 +1371,7 @@ int ObLocalManagementService::drop_table(const obcall::ObDropTableArg &arg, obca
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("error unexpected", K(ret), K(arg), K(target_object_id), K(schema_version));
     } else if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param, *sql_proxy_, task_record))) {
+    } else if (OB_FALSE_IT(task_record.context_ = ddl_service_.get_task_context())) {
     } else if (OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
     } else {
       res.schema_id_ = target_object_id;
@@ -1453,6 +1455,7 @@ int ObLocalManagementService::drop_database(const obcall::ObDropDatabaseArg &arg
                                 &arg,
                                 0 /* parent task id*/);
     if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param, *sql_proxy_, task_record))) {
+    } else if (OB_FALSE_IT(task_record.context_ = ddl_service_.get_task_context())) {
     } else if (OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
     } else {
       drop_database_res.ddl_res_.schema_id_ = database_id;
@@ -1616,6 +1619,7 @@ int ObLocalManagementService::truncate_table(const obcall::ObTruncateTableArg &a
                                    &arg,
                                    0 /* parent task id*/);
         if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param, *sql_proxy_, task_record))) {
+        } else if (OB_FALSE_IT(task_record.context_ = ddl_service_.get_task_context())) {
         } else if (OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
         } else {
           res.schema_id_ = table_schema->get_table_id();

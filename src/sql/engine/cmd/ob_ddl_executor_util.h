@@ -73,7 +73,7 @@ public:
       query::ObILocalCommandService &local_command_service,
       int64_t &affected_rows);
   static int wait_build_index_finish(const int64_t task_id, bool &is_finish,
-      ObSQLSessionInfo *session = nullptr);
+      ObSQLSessionInfo *session = nullptr, common::ObMySQLProxy *sql_proxy = nullptr);
   static int wait_ddl_task_to_status(
       const int64_t task_id,
       const share::ObDDLTaskStatus target_status,
