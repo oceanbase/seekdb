@@ -1649,23 +1649,7 @@ struct EngineWrites {
         values.append(result);
       } else { ret = OB_NOT_SUPPORTED; }
     } else if (!ret && request.type() == 'W') {
-      if (operation == 'Q') {
-        const int64_t timeout = request.number();
-        const bool left_header = request.number() != 0;
-        const bool right_header = request.number() != 0;
-        const ObString left_data = request.string();
-        const ObString right_data = request.string();
-        if (request.ret || !request.consumed()) {
-          ret = OB_INVALID_ARGUMENT;
-        } else {
-          ObLobLocatorV2 left(left_data, left_header);
-          ObLobLocatorV2 right(right_data, right_header);
-          bool equal = false;
-          ret = share::server_service<ObIDmlService>()->lob_binary_equal(
-              left, right, std::min(timeout, THIS_WORKER.get_timeout_ts()), *tx, equal);
-          if (!ret) { values.number(equal); }
-        }
-      } else if (operation == 'P') {
+      if (operation == 'P') {
         if (writes.size() >= 32) { ret = OB_SIZE_OVERFLOW; }
         auto prepared = std::make_unique<EngineWrite>();
         if (!ret) { ret = prepared->prepare(storage_space, *tx, request); }
@@ -2668,6 +2652,9 @@ private:
   common::ObILobReadService *local_ = nullptr;
 };
 
+int compare_in_process_lobs(ObLobLocatorV2 &left, ObLobLocatorV2 &right,
+                            int64_t timeout, ObTxDesc &tx, bool &equal);
+
 class RemoteDmlService final : public ObIDmlService {
 public:
   int lob_binary_equal(
@@ -2679,17 +2666,7 @@ public:
     auto *session = THIS_WORKER.get_session();
     StorageSessionScope scope(session && session->get_tx_desc() == &tx ? session : nullptr);
     if (scope.error()) { return scope.error(); }
-    Frame request('W'), reply;
-    request.number('Q'); request.number(tx.get_tx_id().get_id()); request.number(timeout);
-    request.number(left.has_lob_header()); request.number(right.has_lob_header());
-    request.string(ObString(left.size_, left.ptr_));
-    request.string(ObString(right.size_, right.ptr_));
-    int ret = request.ret ? request.ret : write_rpc(request, reply);
-    if (!ret) {
-      equal = reply.number() != 0;
-      if (!reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
-    }
-    return ret;
+    return compare_in_process_lobs(left, right, timeout, tx, equal);
   }
 
   int prepare_execution(

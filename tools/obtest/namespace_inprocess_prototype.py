@@ -152,6 +152,13 @@ def direct_probe(experiment):
         assert experiment.sql(
             "SELECT LENGTH(payload),SUBSTR(payload,7999,4),SUBSTR(payload,-1,1) "
             "FROM phase10.blobs WHERE id=2", child) == ((16000, b"AABB", b"B"),)
+        with child.cursor() as cursor:
+            cursor.execute("UPDATE phase10.blobs SET payload=payload WHERE id=2")
+            cursor.execute("UPDATE phase10.blobs SET payload=%s WHERE id=2", (b"A" * 8000 + b"B" * 8000,))
+            cursor.execute("UPDATE phase10.blobs SET payload=%s WHERE id=2", (b"A" * 8000 + b"C" * 8000,))
+        assert experiment.sql(
+            "SELECT SUBSTR(payload,7999,4),SUBSTR(payload,-1,1) "
+            "FROM phase10.blobs WHERE id=2", child) == ((b"AACC", b"C"),)
         experiment.sql("CREATE TABLE phase10.runtime_ddl(id INT PRIMARY KEY, v INT)", child)
         with child.cursor() as cursor:
             cursor.executemany("INSERT INTO phase10.runtime_ddl VALUES(%s,%s)",
