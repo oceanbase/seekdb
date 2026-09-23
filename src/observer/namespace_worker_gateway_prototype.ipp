@@ -5,7 +5,6 @@
 #include "storage/compaction/ob_freeze_info_mgr.h"
 #include <map>
 #include <mutex>
-#include "observer/namespace_worker_multiplex_prototype.ipp"
 #include "observer/namespace_worker_scan_prototype.ipp"
 #include "observer/namespace_worker_write_prototype.ipp"
 #include "observer/namespace_worker_direct_insert_prototype.ipp"
@@ -227,8 +226,8 @@ struct InProcessStorage {
   std::unique_ptr<EngineWrites> writes;
   ReadScans scans;
   DirectInsertRoute direct_insert;
-  RequestRoutes *direct_insert_routes = nullptr;
-  std::shared_ptr<PendingRequest> direct_insert_request;
+  DirectInsertRegistry *direct_insert_registry = nullptr;
+  RequestTag direct_insert_tag;
   sql::ObSQLSessionInfo *sql_session = nullptr; // switch key, not an owner
   Frame reply;
   bool initialized = false;
@@ -239,13 +238,13 @@ struct InProcessStorage {
         scans(StorageSpaceHandle::namespace_space(namespace_id)) {
     ::oceanbase::ns::NamespaceRuntime *runtime = nullptr;
     if (::oceanbase::ns::namespace_registry().get(namespace_id, runtime) && runtime != nullptr) {
-      direct_insert_routes = static_cast<RequestRoutes *>(
-          runtime->service(::oceanbase::ns::NamespaceRuntime::DIRECT_INSERT_ROUTES));
+      direct_insert_registry = static_cast<DirectInsertRegistry *>(
+          runtime->service(::oceanbase::ns::NamespaceRuntime::DIRECT_INSERT_REGISTRY));
     }
   }
   ~InProcessStorage() {
-    if (direct_insert_routes != nullptr && direct_insert_request) {
-      direct_insert_routes->release(direct_insert_request->tag, true);
+    if (direct_insert_registry != nullptr && direct_insert_tag.slot) {
+      direct_insert_registry->release(direct_insert_tag);
     }
   }
   InProcessStorage(const InProcessStorage &) = delete;
@@ -295,18 +294,18 @@ int in_process_send(InProcessStorage &ctx, const Frame &frame, bool)
     }
     result.number(ret);
   } else if (input.type() == 'J') {
-    if (ctx.direct_insert_routes == nullptr) {
+    if (ctx.direct_insert_registry == nullptr) {
       ret = OB_NOT_INIT;
     } else {
-      if (!ctx.direct_insert_request) {
-        ctx.direct_insert_request = ctx.direct_insert_routes->allocate(false);
+      if (!ctx.direct_insert_tag.slot) {
+        ctx.direct_insert_tag = ctx.direct_insert_registry->acquire();
       }
-      if (!ctx.direct_insert_request) {
+      if (!ctx.direct_insert_tag.slot) {
         ret = OB_EAGAIN;
       } else {
         ret = ctx.direct_insert.process(
             StorageSpaceHandle::namespace_space(ctx.ns),
-            ctx.direct_insert_request->tag, *ctx.direct_insert_routes,
+            ctx.direct_insert_tag, *ctx.direct_insert_registry,
             ctx.session_state, input, result);
       }
     }

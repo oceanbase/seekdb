@@ -299,7 +299,7 @@ struct InProcessNamespaceServices {
   RemoteDirectInsertService direct_insert;
   InProcessTabletAutoincrementService tablet_autoincrement;
   share::ObAutoincrementService autoincrement;
-  RequestRoutes direct_insert_routes{WORKER_REQUEST};
+  DirectInsertRegistry direct_insert_registry;
   std::atomic<bool> schema_loaded{false};
   std::atomic<bool> recovery_loaded{false};
 };
@@ -464,7 +464,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
         &services->tablet_autoincrement);
     runtime.set_service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE,
         &services->autoincrement);
-    runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_ROUTES, &services->direct_insert_routes);
+    runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_REGISTRY, &services->direct_insert_registry);
     runtime.set_service(ns::NamespaceRuntime::SQL_PROXY, services->sql_proxy);
     inprocess_services.emplace(ns, std::move(services));
     server.schema_runtime_service()->set_tablet_schema_resolver(

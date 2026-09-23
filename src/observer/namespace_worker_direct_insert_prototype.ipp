@@ -4,6 +4,8 @@
 #include "sql/engine/basic/ob_temp_column_spill_spool.h"
 #include "query/engine/vector/ob_i_vector.h"
 #include "share/ob_ddl_checksum.h"
+#include <map>
+#include <mutex>
 #include <shared_mutex>
 namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
 using namespace data_plane;
@@ -133,6 +135,48 @@ struct DirectInsertOwner final : ObIDirectInsertWorkerContext {
   }
 };
 
+class DirectInsertRegistry final {
+public:
+  RequestTag acquire() {
+    std::lock_guard<std::mutex> guard(mutex_);
+    if (next_slot_ == UINT64_MAX) { return {}; }
+    const RequestTag tag{++next_slot_, 1};
+    entries_.emplace(tag.slot, Entry{});
+    return tag;
+  }
+  int attach(RequestTag tag, const std::shared_ptr<DirectInsertOwner> &owner) {
+    std::lock_guard<std::mutex> guard(mutex_);
+    auto entry = entries_.find(tag.slot);
+    if (tag.generation != 1 || entry == entries_.end() || !owner) {
+      return OB_STATE_NOT_MATCH;
+    }
+    entry->second.owner = owner;
+    return OB_SUCCESS;
+  }
+  std::shared_ptr<DirectInsertOwner> find(RequestTag tag) {
+    std::lock_guard<std::mutex> guard(mutex_);
+    auto entry = entries_.find(tag.slot);
+    return tag.generation == 1 && entry != entries_.end()
+        ? entry->second.owner.lock() : nullptr;
+  }
+  void clear(RequestTag tag) {
+    std::lock_guard<std::mutex> guard(mutex_);
+    auto entry = entries_.find(tag.slot);
+    if (tag.generation == 1 && entry != entries_.end()) {
+      entry->second.owner.reset();
+    }
+  }
+  void release(RequestTag tag) {
+    std::lock_guard<std::mutex> guard(mutex_);
+    if (tag.generation == 1) { entries_.erase(tag.slot); }
+  }
+private:
+  struct Entry { std::weak_ptr<DirectInsertOwner> owner; };
+  std::mutex mutex_;
+  std::map<uint64_t, Entry> entries_;
+  uint64_t next_slot_ = 0;
+};
+
 struct DirectInsertWriterOwner {
   ObArenaAllocator allocator{ObMemAttr("NsDirectWriter")};
   std::shared_ptr<DirectInsertOwner> owner;
@@ -152,7 +196,7 @@ struct DirectInsertRoute {
   uint64_t session_generation = 0, writer_generation = 0;
   void reset() { writers.clear(); owner.reset(); }
 
-  int process(StorageSpaceHandle storage_space, RequestTag tag, RequestRoutes &routes,
+  int process(StorageSpaceHandle storage_space, RequestTag tag, DirectInsertRegistry &registry,
       const std::shared_ptr<StorageSessionState> &context, Frame &request, Frame &reply) {
     const uint64_t ns = storage_space.namespace_id();
     const uint64_t operation = request.number();
@@ -230,9 +274,7 @@ struct DirectInsertRoute {
               param.vector_param_table_schema_);
         }
       }
-      if (!ret) { failure_stage = "find_route"; }
-      auto pending = ret ? nullptr : routes.find(tag);
-      if (!ret && !pending) { ret = OB_STATE_NOT_MATCH; }
+      if (!ret && !tag.slot) { ret = OB_STATE_NOT_MATCH; }
       if (!ret) {
         failure_stage = "start";
         auto staged = std::make_shared<DirectInsertOwner>(
@@ -244,9 +286,11 @@ struct DirectInsertRoute {
                 (unsigned long long)param.data_format_version_, param.snapshot_version_,
                 param.schema_version_, param.participants_.count());
         if (!ret) {
-          owner = std::move(staged);
-          { std::lock_guard<std::mutex> guard(pending->mutex); pending->direct_insert = owner; }
-          output.number(tag.slot); output.number(tag.generation); output.number(owner->generation);
+          ret = registry.attach(tag, staged);
+          if (!ret) {
+            owner = std::move(staged);
+            output.number(tag.slot); output.number(tag.generation); output.number(owner->generation);
+          }
         }
       }
     } else if (!ret) {
@@ -254,8 +298,7 @@ struct DirectInsertRoute {
         if (!writers.empty()) { ret = OB_STATE_NOT_MATCH; }
         else {
           owner.reset();
-          auto pending = routes.find(parent);
-          if (pending) { std::lock_guard<std::mutex> guard(pending->mutex); owner = pending->direct_insert.lock(); }
+          owner = registry.find(parent);
           if (!owner || !owner->matches(parent, generation)) { owner.reset(); ret = OB_STATE_NOT_MATCH; }
         }
       }
@@ -267,8 +310,7 @@ struct DirectInsertRoute {
           else { ret = ObDirectInsertOrchestrator::finish(owner->session); }
         }
         if (!owner->session) {
-          auto pending = routes.find(tag);
-          if (pending) { std::lock_guard<std::mutex> guard(pending->mutex); pending->direct_insert.reset(); }
+          registry.clear(tag);
           owner.reset();
         }
       } else if (!ret) {
@@ -635,7 +677,7 @@ public:
             param.schema_version_, param.participants_.count());
     if (!ret) {
       const RequestTag origin{reply.number(), reply.number()}; const uint64_t generation = reply.number();
-      if (!reply.consumed() || !generation || !origin.generation || !(origin.slot & WORKER_REQUEST)) { ret = OB_INVALID_ARGUMENT; }
+      if (!reply.consumed() || !generation || !origin.slot || !origin.generation) { ret = OB_INVALID_ARGUMENT; }
       else { session = new (memory) RemoteDirectInsertSession(
           allocator, schedules, param.ddl_task_id_, schedule,
           sqc_session, origin, generation); }

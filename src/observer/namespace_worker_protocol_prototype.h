@@ -30,7 +30,6 @@ namespace oceanbase { namespace observer { namespace namespace_worker_prototype 
 constexpr size_t MAX_FRAME = 256 * 1024;
 constexpr size_t MAX_SQL_MESSAGE = 64 * 1024 * 1024;
 struct RequestTag { uint64_t slot = 0, generation = 0; };
-constexpr uint64_t WORKER_REQUEST = 1ULL << 63;
 class StorageSpaceHandle final
 {
 public:
@@ -296,7 +295,6 @@ int finish_namespace_schema_recovery(int64_t reconciled_schema_version);
 int fetch_schema_version(bool published, bool core_version, int64_t &version);
 share::schema::ObPrivMgr *make_remote_priv_mgr(int64_t version);
 struct SessionBinding;
-struct PendingRequest;
 // Native inner SQL can switch sessions while keeping the same execution stack.
 // Keep its storage route with that session and restore the caller on return.
 class StorageSessionScope {
