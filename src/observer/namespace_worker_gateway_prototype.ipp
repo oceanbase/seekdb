@@ -44,117 +44,12 @@ int release_storage_namespace_schemas(uint64_t namespace_id,
 struct SessionBinding {
   InProcessStorage *in_process = nullptr;
 };
-int catalog_schema_guard(int64_t version, ObSchemaGetterGuard &guard) {
-  auto &service = ObMultiVersionSchemaService::get_instance();
-  int64_t current = OB_INVALID_VERSION;
-  int ret = service.get_runtime_refreshed_schema_version(current, false);
-  // A current guard must use the native current-version entry. During recovery
-  // that is the core schema; the historical entry promotes it to the durable
-  // baseline before full schema is available. Validate again after acquisition
-  // so a concurrent refresh cannot silently change this request's snapshot.
-  if (!ret) { ret = service.get_runtime_schema_guard(guard, version == current ? OB_INVALID_VERSION : version); }
-  int64_t actual = OB_INVALID_VERSION;
-  if (!ret) { ret = guard.get_schema_version(actual); }
-  if (!ret && version != OB_INVALID_VERSION && actual != version) {
-    fprintf(stderr,
-        "PROTOTYPE_CATALOG_VERSION_MISMATCH requested=%lld current=%lld actual=%lld\n",
-        (long long)version, (long long)current, (long long)actual);
-    ret = OB_SCHEMA_EAGAIN;
-  } else if (ret == OB_SCHEMA_EAGAIN) {
-    fprintf(stderr,
-        "PROTOTYPE_CATALOG_GUARD_EAGAIN requested=%lld current=%lld actual=%lld\n",
-        (long long)version, (long long)current, (long long)actual);
-  }
-  return ret;
-}
-int catalog(uint64_t ns, Frame &request, Frame &reply) {
-  int ret = OB_SUCCESS;
-  const uint64_t id = request.number();
-  const ObString name = request.string();
-  const int64_t snapshot_version = static_cast<int64_t>(request.number());
-  if (request.type() == 'k') {
-    int64_t version = OB_INVALID_VERSION;
-    if (!request.consumed() || id > 1 || snapshot_version != OB_INVALID_VERSION
-        || (!name.empty() && name != "published")) { ret = OB_INVALID_ARGUMENT; }
-    else if (ns == 1) {
-      auto &service = ObMultiVersionSchemaService::get_instance();
-      ret = name.empty() ? service.get_runtime_refreshed_schema_version(version, id != 0)
-          : service.get_published_schema_version(version, id != 0);
-    } else {
-      ret = NamespaceForkKernelPrototype::namespace_schema_version(ns, version);
-    }
-    reply = Frame('c'); reply.number(ret); reply.number(version); return reply.ret;
-  }
-  const ObDatabaseSchema *database = nullptr;
-  const ObTableSchema *table = nullptr;
-  const ObUserInfo *user = nullptr;
-  const ObSysVariableSchema *variables = nullptr;
-  // Owner of the requested id, used below to reject ids that do not belong to
-  // this channel's namespace. Raw ids only exist inside namespace 1.
-  const uint64_t owner = NamespaceForkKernelPrototype::namespace_of(id);
-  int64_t namespace_schema_version = OB_INVALID_VERSION;
-  ObSchemaGetterGuard guard;
-  if (ns == 1 && request.consumed() && (request.type() == 'd' || owns_table(ns, id))) {
-    ret = catalog_schema_guard(snapshot_version, guard);
-    if (!ret && request.type() == 'd') { ret = guard.get_database_schema(name, database); }
-    else if (!ret && request.type() == 'b') { ret = guard.get_database_schema(id, database); }
-    else if (!ret && (request.type() == 't' || request.type() == 'j')) { ret = guard.get_table_schema(id, name, request.type() == 'j', table); }
-    else if (!ret && request.type() == 'i') { ret = guard.get_table_schema(id, table); }
-    else if (!ret && request.type() == 'n') { ret = id == 1 ? guard.get_sys_variable_schema(variables) : OB_INVALID_ARGUMENT; }
-    else if (!ret && request.type() == 'u') {
-      if (id) { ret = name.empty() ? guard.get_user_info(id, user) : OB_INVALID_ARGUMENT; }
-      else {
-        ObSEArray<const ObUserInfo *, 4> users;
-        ret = name.empty() ? guard.get_user_schemas_in_runtime(users) : guard.get_user_info(name, users);
-        reply = Frame('c'); reply.number(ret); reply.number(users.count());
-        for (const auto *item : users) { if (!ret) { reply.append(*item); } }
-        return reply.ret;
-      }
-    }
-  } else if (!request.consumed() || (request.type() == 'd' ? id != ns : owner != ns)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (snapshot_version != OB_INVALID_VERSION
-      && OB_FAIL(NamespaceForkKernelPrototype::namespace_schema_version(ns, namespace_schema_version))) {
-  } else if (snapshot_version != OB_INVALID_VERSION && namespace_schema_version != snapshot_version) {
-    ret = OB_SCHEMA_EAGAIN;
-  } else if (request.type() == 'd') {
-    ret = NamespaceForkKernelPrototype::database_in_namespace(ns, name, database);
-  } else if (request.type() == 'b') {
-    ret = NamespaceForkKernelPrototype::database_by_id(id, database);
-  } else if (request.type() == 't') {
-    ret = NamespaceForkKernelPrototype::schema_by_name(id, name, table);
-  } else if (request.type() == 'i') {
-    ret = NamespaceForkKernelPrototype::schema_by_id(id, table);
-  } else if (request.type() == 'l') {
-    ObArray<const ObTableSchema *> tables;
-    ret = name.empty() ? NamespaceForkKernelPrototype::list_schemas(id, tables) : OB_INVALID_ARGUMENT;
-    int64_t current_version = OB_INVALID_VERSION;
-    if (!ret && snapshot_version != OB_INVALID_VERSION) {
-      ret = NamespaceForkKernelPrototype::namespace_schema_version(ns, current_version);
-      if (!ret && current_version != snapshot_version) { ret = OB_SCHEMA_EAGAIN; }
-    }
-    reply = Frame('c'); reply.number(ret); reply.number(ret ? 0 : tables.count());
-    for (int64_t i = 0; !ret && i < tables.count(); ++i) { reply.append(*tables.at(i)); }
-    return reply.ret;
-  } else { ret = OB_NOT_SUPPORTED; }
-  reply = Frame('c'); reply.number(ret); reply.number(database || table || user || variables ? 1 : 0);
-  if (!ret && database) { reply.append(*database); }
-  if (!ret && table) { reply.append(*table); }
-  if (!ret && user) { reply.append(*user); }
-  if (!ret && variables) { reply.append(*variables); }
-  return reply.ret;
-}
 int serve_storage(StorageSpaceHandle storage_space, ReadScans *scans,
     EngineWrites *writes, int state, Frame &input, Frame &result) {
     const uint64_t ns = storage_space.namespace_id();
     int ret = OB_SUCCESS;
     if (!storage_space.is_namespace()) { return OB_INVALID_ARGUMENT; }
-    if (input.type() == 'd' || input.type() == 'b' || input.type() == 't' || input.type() == 'i' || input.type() == 'j' || input.type() == 'k' || input.type() == 'l'
-        || input.type() == 'u' || input.type() == 'n' || input.type() == 'p') {
-      result = Frame('c');
-      if (state) { result.number(state); }
-      else { ret = catalog(ns, input, result); }
-    } else if (input.type() == 'h') {
+    if (input.type() == 'h') {
       result = Frame('r');
       if (state) { result.number(state); }
       else { ret = process_lob_read(
