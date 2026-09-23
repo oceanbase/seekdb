@@ -29,6 +29,8 @@ using namespace data_plane;
 using namespace transaction;
 using namespace transaction::tablelock;
 using namespace blocksstable;
+int worker_send(const Frame &, bool cleanup = false);
+int worker_read(Frame &);
 
 bool cleanup_write(Frame &request) {
   const int64_t position = request.pos;

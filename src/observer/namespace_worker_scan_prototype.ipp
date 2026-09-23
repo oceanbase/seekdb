@@ -10,8 +10,6 @@ using namespace common;
 using namespace share;
 using namespace share::schema;
 using namespace storage;
-int worker_send(const Frame &, bool cleanup = false);
-int worker_read(Frame &);
 int storage_schema(StorageSpaceHandle storage_space, uint64_t id,
                    ObSchemaGetterGuard &guard, const ObTableSchema *&schema) {
   schema = nullptr;
@@ -153,10 +151,7 @@ int worker_materialization_schemas(
   }
   return ret;
 }
-// The NLJ right side reships the same serialized table schema per probe.
-// Cache the decoded and namespace-routed schema keyed by the wire bytes: a
-// repeated open pays one memcmp instead of a deserialize + schema copy.
-struct EngineSchemaCacheEntry {
+struct ScanSchema {
   ObArenaAllocator alloc{ObMemAttr("NsScanSchema")};
   ObTableSchema *logical = nullptr;
   ObTableSchema *routed = nullptr;
@@ -195,45 +190,19 @@ struct ScanBatch {
 int fetch_in_process_scan(uint64_t handle, ScanBatch &batch);
 int close_in_process_scan(uint64_t handle);
 int rescan_in_process_scan(uint64_t handle, const ObVTableScanParam &param);
-inline uint64_t engine_schema_hash(uint64_t ns, const ObString &blob) {
-  uint64_t h = 1469598103934665603ULL ^ (ns * 1099511628211ULL);
-  const char *p = blob.ptr();
-  int32_t n = blob.length();
-  while (n >= 8) {
-    uint64_t w;
-    memcpy(&w, p, 8);
-    h = (h ^ w) * 1099511628211ULL;
-    p += 8; n -= 8;
-  }
-  while (n-- > 0) { h = (h ^ static_cast<unsigned char>(*p++)) * 1099511628211ULL; }
-  return h;
-}
-int engine_schema_resolve(uint64_t ns, bool namespace_local, const ObString &blob,
-                          std::shared_ptr<EngineSchemaCacheEntry> &entry) {
-  struct Cache {
-    lib::ObMutex lock;
-    std::map<uint64_t, std::pair<std::string, std::shared_ptr<EngineSchemaCacheEntry>>> by_hash;
-  };
-  static Cache cache;
-  if (blob.empty() || blob.length() > 4 * 1024 * 1024) { return OB_INVALID_ARGUMENT; }
-  const uint64_t hash = engine_schema_hash(ns, blob);
-  {
-    ObMutexGuard guard(cache.lock);
-    auto it = cache.by_hash.find(hash);
-    if (it != cache.by_hash.end()
-        && it->second.first.size() == static_cast<size_t>(blob.length())
-        && memcmp(it->second.first.data(), blob.ptr(), blob.length()) == 0) {
-      entry = it->second.second;
-      return OB_SUCCESS;
-    }
-  }
-  auto built = std::make_shared<EngineSchemaCacheEntry>();
+int open_in_process_scan(StorageSpaceHandle storage_space,
+                         const ObVTableScanParam &param,
+                         const ObTableSchema &logical_schema, uint64_t &handle);
+int copy_scan_schema(uint64_t ns, bool namespace_local, const ObTableSchema &source,
+                     std::unique_ptr<ScanSchema> &entry) {
+  const int64_t size = source.get_serialize_size();
+  if (size <= 0 || size > 4 * 1024 * 1024) { return OB_INVALID_ARGUMENT; }
+  auto built = std::make_unique<ScanSchema>();
   void *buf = built->alloc.alloc(sizeof(ObTableSchema));
   if (!buf) { return OB_ALLOCATE_MEMORY_FAILED; }
   built->logical = new (buf) ObTableSchema(&built->alloc);
-  int64_t pos = 0;
-  int ret = built->logical->deserialize(blob.ptr(), blob.length(), pos);
-  if (ret || pos != blob.length()) { return ret ? ret : OB_INVALID_ARGUMENT; }
+  int ret = built->logical->assign(source);
+  if (ret) { return ret; }
   if (OB_FAIL(built->logical->get_tablet_ids(built->logical_tablets))) { return ret; }
   if (namespace_local && ns > 1) {
     buf = built->alloc.alloc(sizeof(ObTableSchema));
@@ -245,9 +214,6 @@ int engine_schema_resolve(uint64_t ns, bool namespace_local, const ObString &blo
     built->routed = built->logical;
   }
   if (OB_FAIL(built->routed->get_tablet_ids(built->storage_tablets))) { return ret; }
-  ObMutexGuard guard(cache.lock);
-  if (cache.by_hash.size() >= 256) { cache.by_hash.clear(); }
-  cache.by_hash[hash] = {std::string(blob.ptr(), blob.length()), built};
   entry = std::move(built);
   return OB_SUCCESS;
 }
@@ -267,7 +233,7 @@ struct EngineScan {
   // rescan can drop them without touching the schema copies in allocator.
   ObArenaAllocator iter_allocator{ObMemAttr("NsRemoteScanIt")};
   ObSchemaGetterGuard guard;
-  std::shared_ptr<EngineSchemaCacheEntry> cached_schema;
+  std::unique_ptr<ScanSchema> scan_schema;
   ObTableParam table{allocator};
   ObTableScanParam param;
   std::vector<ObObj> keys;
@@ -280,73 +246,50 @@ struct EngineScan {
       else { share::server_service<ObITabletScan>()->revert_scan_iter(iter); }
     }
   }
-  int open(StorageSpaceHandle channel_space, Frame &request,
+  int open(StorageSpaceHandle storage_space, const ObVTableScanParam &request,
+           const ObTableSchema &logical_schema,
            transaction::ObTxDesc *tx, sql::ObSQLSessionInfo *session) {
     int ret = OB_SUCCESS;
-    const uint64_t logical_table_id = request.number(), logical_tablet_id = request.number();
-    const bool has_logical_schema = request.number() != 0;
-    StorageSpaceHandle storage_space;
-    if (OB_FAIL(read_storage_space(request, channel_space, storage_space))) {
-      return ret;
-    }
+    const uint64_t logical_table_id = request.index_id_;
+    const uint64_t logical_tablet_id = request.tablet_id_.id();
     const bool namespace_local = storage_space.is_namespace();
     const uint64_t ns = storage_space.namespace_id();
-    const int64_t requested_schema_version = request.number();
-    // Length-prefixed blob: the cache keys on the exact wire bytes.
-    const ObString schema_blob = has_logical_schema ? request.string() : ObString();
-    if (has_logical_schema && !request.ret) {
-      if (OB_FAIL(engine_schema_resolve(ns, namespace_local, schema_blob, cached_schema))) {
-        return ret;
+    const int64_t requested_schema_version = request.schema_version_;
+    if (OB_FAIL(copy_scan_schema(ns, namespace_local, logical_schema, scan_schema))) {
+      return ret;
+    }
+    param.scan_flag_.flag_ = request.scan_flag_.flag_;
+    const bool get = request.is_get_;
+    param.limit_param_.limit_ = -1;
+    param.limit_param_.offset_ = 0;
+    const int64_t count = request.column_ids_.count();
+    if (count > OB_MAX_COLUMN_NUMBER) { return OB_NOT_SUPPORTED; }
+    bool logical_tablet_matches = false;
+    for (int64_t i = 0; i < scan_schema->logical_tablets.count(); ++i) {
+      if (scan_schema->logical_tablets.at(i).id() == logical_tablet_id) {
+        logical_tablet_matches = true;
+        break;
       }
     }
-    param.scan_flag_.flag_ = request.number();
-    const bool get = request.number() != 0;
-    param.limit_param_.limit_ = static_cast<int64_t>(request.number());
-    param.limit_param_.offset_ = static_cast<int64_t>(request.number());
-    const uint64_t count = request.number();
-    if (request.ret || count > OB_MAX_COLUMN_NUMBER) { return OB_NOT_SUPPORTED; }
-    bool logical_tablet_matches = !has_logical_schema;
-    if (has_logical_schema) {
-      for (int64_t i = 0; i < cached_schema->logical_tablets.count(); ++i) {
-        if (cached_schema->logical_tablets.at(i).id() == logical_tablet_id) {
-          logical_tablet_matches = true;
-          break;
-        }
-      }
-    }
-    const ObTableSchema *logical =
-        has_logical_schema ? cached_schema->logical : nullptr;
-    if (request.ret || (!has_logical_schema && namespace_local && ns > 1)
-        || (has_logical_schema && ((requested_schema_version <= 0
-                && !is_inner_table(logical_table_id))
+    const ObTableSchema *logical = scan_schema->logical;
+    if ((requested_schema_version <= 0 && !is_inner_table(logical_table_id))
             || logical->get_table_id() != logical_table_id
             || !logical_tablet_matches
             || logical->get_schema_version() < 0
             || (requested_schema_version > 0
-                && logical->get_schema_version() != requested_schema_version)))) {
+                && logical->get_schema_version() != requested_schema_version)) {
       return OB_INVALID_ARGUMENT;
     }
-    if (has_logical_schema) {
-      schema = cached_schema->routed;
-    } else {
-      // Resolving through the shared process SchemaService could lazy-load
-      // via inner SQL routed back to the requesting Worker, which deadlocks
-      // Worker activation.  Requests must carry the caller-resolved schema.
-      fprintf(stderr, "PROTOTYPE_SCAN_SCHEMA_REQUIRED ns=%llu table=%llu local=%d\n",
-          (unsigned long long)ns, (unsigned long long)logical_table_id,
-          static_cast<int>(namespace_local));
-      ret = OB_NOT_SUPPORTED;
-    }
-    if (ret) { return ret; }
+    schema = scan_schema->routed;
     uint64_t tablet_id = logical_tablet_id;
     if (schema && namespace_local && ns > 1) {
       ret = NamespaceForkKernelPrototype::storage_object_id(
           ns, logical_tablet_id, tablet_id);
     }
     bool storage_tablet_matches = false;
-    if (OB_SUCC(ret) && cached_schema) {
-      for (int64_t i = 0; i < cached_schema->storage_tablets.count(); ++i) {
-        if (cached_schema->storage_tablets.at(i).id() == tablet_id) {
+    if (OB_SUCC(ret) && scan_schema) {
+      for (int64_t i = 0; i < scan_schema->storage_tablets.count(); ++i) {
+        if (scan_schema->storage_tablets.at(i).id() == tablet_id) {
           storage_tablet_matches = true;
           break;
         }
@@ -356,12 +299,12 @@ struct EngineScan {
     if (!schema || (!is_virtual_table(logical_table_id) && !storage_tablet_matches)) {
       return OB_INVALID_ARGUMENT;
     }
-    const int64_t storage_schema_version = has_logical_schema && requested_schema_version > 0
+    const int64_t storage_schema_version = requested_schema_version > 0
         ? requested_schema_version : schema->get_schema_version();
     const uint64_t table_id = schema->is_sys_table()
         ? logical_table_id : schema->get_table_id();
-    for (uint64_t i = 0; !ret && i < count; ++i) {
-      const uint64_t column = request.number();
+    for (int64_t i = 0; !ret && i < count; ++i) {
+      const uint64_t column = request.column_ids_.at(i);
       if (column != OB_HIDDEN_TRANS_VERSION_COLUMN_ID
           && column != OB_HIDDEN_SQL_SEQUENCE_COLUMN_ID
           && column != OB_HIDDEN_GROUP_IDX_COLUMN_ID
@@ -370,29 +313,54 @@ struct EngineScan {
       }
       else { ret = param.column_ids_.push_back(column); }
     }
-    const uint64_t ranges = request.number();
+    const int64_t ranges = request.key_ranges_.count();
     // Must cover MAX_IN_QUERY_PER_TIME (1000): IN-batch refreshes arrive as
     // one range per element in a single scan request.
-    if (ret || request.ret || ranges > 8192) { return ret ? ret : OB_NOT_SUPPORTED; }
-    const uint64_t width = request.number();
-    if (request.ret || width == 0 || width > OB_MAX_ROWKEY_COLUMN_NUMBER) {
+    if (ret || ranges > 8192) { return ret ? ret : OB_NOT_SUPPORTED; }
+    const int64_t width = ranges == 0 ? 1 : request.key_ranges_.at(0).start_key_.get_obj_cnt();
+    if (width <= 0 || width > OB_MAX_ROWKEY_COLUMN_NUMBER) {
       return OB_INVALID_ARGUMENT;
     }
+    int64_t request_bytes = 105; // Former opcode and thirteen number fields.
+    auto add_bytes = [&](int64_t size) {
+      if (size < 0 || size > static_cast<int64_t>(MAX_SQL_MESSAGE) - request_bytes) {
+        return OB_SIZE_OVERFLOW;
+      }
+      request_bytes += size;
+      return OB_SUCCESS;
+    };
+    if (OB_FAIL(add_bytes(logical_schema.get_serialize_size()))
+        || OB_FAIL(add_bytes(count * 8))) { return ret; }
+    if (is_virtual_table(logical_table_id)) {
+      if (OB_FAIL(add_bytes(8))) { return ret; }
+    } else {
+      const auto &scan = static_cast<const ObTableScanParam &>(request);
+      if (OB_FAIL(add_bytes(40))
+          || OB_FAIL(add_bytes(scan.sample_info_.get_serialize_size()))
+          || OB_FAIL(add_bytes(scan.snapshot_.get_serialize_size()))) { return ret; }
+    }
     keys.resize(ranges * 2 * width);
-    for (uint64_t i = 0; !ret && i < ranges; ++i) {
+    for (int64_t i = 0; !ret && i < ranges; ++i) {
+      const ObNewRange &source = request.key_ranges_.at(i);
+      if (source.start_key_.get_obj_cnt() != width || source.end_key_.get_obj_cnt() != width) {
+        return OB_INVALID_ARGUMENT;
+      }
+      if (OB_FAIL(add_bytes(8))) { return ret; }
       ObNewRange range; range.table_id_ = table_id;
-      range.border_flag_.set_data(request.number());
-      for (uint64_t j = 0; !ret && j < width * 2; ++j) {
-        ObObj value; request.read(value);
-        ret = request.ret ? request.ret : ob_write_obj(iter_allocator, value, keys[i * width * 2 + j]);
+      range.border_flag_.set_data(source.border_flag_.get_data());
+      for (int64_t j = 0; !ret && j < width * 2; ++j) {
+        const ObObj &value = j < width ? source.start_key_.get_obj_ptr()[j]
+                                       : source.end_key_.get_obj_ptr()[j - width];
+        if (OB_FAIL(add_bytes(value.get_serialize_size()))) { return ret; }
+        ret = ob_write_obj(iter_allocator, value, keys[i * width * 2 + j]);
       }
       range.start_key_.assign(&keys[i * width * 2], width);
       range.end_key_.assign(&keys[i * width * 2 + width], width);
       if (!ret) { ret = param.key_ranges_.push_back(range); }
     }
     if (is_virtual_table(logical_table_id)) {
-      param.sql_mode_ = request.number();
-      if (ret || !request.consumed() || !session || ns != 1) { return ret ? ret : OB_INVALID_ARGUMENT; }
+      param.sql_mode_ = request.sql_mode_;
+      if (ret || !session || ns != 1) { return ret ? ret : OB_INVALID_ARGUMENT; }
       virtual_context = std::make_unique<VirtualContext>(allocator, *session);
       param.index_id_ = table_id; param.tablet_id_ = ObTabletID(tablet_id);
       param.schema_version_ = schema->get_schema_version();
@@ -404,17 +372,18 @@ struct EngineScan {
       fprintf(stderr, "PROTOTYPE_V18_VIRTUAL_SCAN table=%llu ret=%d\n", (unsigned long long)table_id, ret);
       return ret;
     }
-    const uint64_t txid = request.number();
+    const auto &scan = static_cast<const ObTableScanParam &>(request);
+    const uint64_t txid = scan.tx_id_.get_id();
     const bool read_latest = param.scan_flag_.is_read_latest();
-    param.for_update_ = request.number() != 0;
-    param.is_for_foreign_check_ = request.number() != 0;
-    request.read(param.sample_info_);
+    param.for_update_ = request.for_update_;
+    param.is_for_foreign_check_ = request.is_for_foreign_check_;
+    param.sample_info_ = scan.sample_info_;
     if (!tx || static_cast<uint64_t>(data_plane::tx_desc_id(tx).get_id()) != txid) {
       return OB_INVALID_ARGUMENT;
     }
-    request.read(param.snapshot_);
-    param.tx_lock_timeout_ = request.number();
-    param.tx_seq_base_ = request.number();
+    if (OB_FAIL(param.snapshot_.assign(scan.snapshot_))) { return ret; }
+    param.tx_lock_timeout_ = scan.tx_lock_timeout_;
+    param.tx_seq_base_ = scan.tx_seq_base_;
     param.tx_id_ = data_plane::tx_desc_id(tx);
     param.trans_desc_ = tx; // Native pointer from this request, never from IPC.
     if (!param.snapshot_.is_valid() || param.snapshot_.is_weak_read()
@@ -422,9 +391,7 @@ struct EngineScan {
         || (!txid && read_latest)) {
       return OB_INVALID_ARGUMENT;
     }
-    if (ret || !request.consumed()) {
-      return ret ? ret : OB_INVALID_ARGUMENT;
-    }
+    if (ret) { return ret; }
     param.index_id_ = table_id; param.tablet_id_ = ObTabletID(tablet_id);
     param.schema_version_ = storage_schema_version;
     param.runtime_schema_version_ = storage_schema_version;
@@ -433,9 +400,7 @@ struct EngineScan {
     param.allocator_ = &iter_allocator; param.scan_allocator_ = &iter_allocator;
     param.reserved_cell_count_ = count;
     // Match the native SQL scan path: every LOB storage column needs a V2
-    // locator, including __all_* columns. The worker owns SQL but the bytes
-    // still live in the shared storage process, so an unmarked system-table
-    // locator cannot be materialized after it crosses IPC.
+    // locator, including __all_* columns.
     table.get_enable_lob_locator_v2() = true;
     // Reads never materialize: an inherited tablet is served through
     // resolve_read_tablet redirection inside the storage layer instead.
@@ -572,27 +537,19 @@ struct ReadScans {
     auto it = scans.find(id);
     return it == scans.end() ? OB_INVALID_ARGUMENT : it->second->rescan(param);
   }
-  int process(Frame &request, Frame &reply, transaction::ObTxDesc *tx = nullptr, sql::ObSQLSessionInfo *session = nullptr) {
-    const uint64_t ns = storage_space.namespace_id();
-    int ret = OB_SUCCESS;
-    if (!storage_space.is_namespace()) { ret = OB_INVALID_ARGUMENT; }
-    reply = Frame('s');
-    if (request.type() == 'O') {
-      if (scans.size() >= 4) { ret = OB_NOT_SUPPORTED; }
-      auto scan = std::make_unique<EngineScan>();
-      if (!ret) { ret = scan->open(storage_space, request, tx, session); }
-      if (ret) { fprintf(stderr, "PROTOTYPE_V17_SCAN_FAILED ret=%d\n", ret); }
-      reply.number(ret); reply.number(ret ? 0 : ++sequence);
-      if (!ret) { scans.emplace(sequence, std::move(scan)); }
-    } else {
-      const uint64_t id = request.number();
-      auto it = scans.find(id);
-      if (!request.consumed() || it == scans.end()) { reply.number(OB_INVALID_ARGUMENT); }
-      else { reply.number(OB_NOT_SUPPORTED); }
+  int open(StorageSpaceHandle requested_space, const ObVTableScanParam &param,
+           const ObTableSchema &logical_schema, transaction::ObTxDesc *tx,
+           sql::ObSQLSessionInfo *session, uint64_t &handle) {
+    handle = 0;
+    if (!storage_space.is_namespace() || scans.size() >= 4) { return OB_NOT_SUPPORTED; }
+    auto scan = std::make_unique<EngineScan>();
+    int ret = scan->open(requested_space, param, logical_schema, tx, session);
+    if (ret) { fprintf(stderr, "PROTOTYPE_V17_SCAN_FAILED ret=%d\n", ret); }
+    else {
+      handle = ++sequence;
+      scans.emplace(handle, std::move(scan));
     }
-    // Storage errors belong in the reply. A sent RPC must receive that reply
-    // before cancellation cleanup can issue its next operation.
-    return reply.ret;
+    return ret;
   }
 };
 class RemoteScanIterator final : public ObNewRowIterator {
@@ -651,64 +608,13 @@ public:
               static_cast<long long>(param.schema_version_), send_logical_schema);
       return ret;
     }
-    Frame request('O'); request.number(param.index_id_); request.number(param.tablet_id_.id());
-    request.number(send_logical_schema); write_storage_space(request, storage_space);
-    request.number(param.schema_version_);
-    if (send_logical_schema) {
-      // Length-prefixed in place so the shared side can key its decoded
-      // schema cache on the exact wire bytes without a second copy.
-      const int64_t len_pos = request.data.size();
-      request.number(0);
-      const int64_t begin = request.data.size();
-      request.append(*logical_schema);
-      const uint64_t len = request.data.size() - begin;
-      for (unsigned i = 0; i < 8; ++i) {
-        request.data[len_pos + i] = static_cast<char>(len >> (8 * i));
-      }
-    }
-    request.number(param.scan_flag_.flag_); request.number(param.is_get_);
-    // Legacy op_filters are SQL callbacks even when storage pushdown is off.
-    // Apply both those predicates and the scan limit in this worker, in order.
-    request.number(static_cast<uint64_t>(-1)); request.number(0);
-    request.number(param.column_ids_.count());
-    for (int64_t i = 0; i < param.column_ids_.count(); ++i) { request.number(param.column_ids_.at(i)); }
-    request.number(param.key_ranges_.count());
-    const int64_t width = param.key_ranges_.empty() ? 1 : param.key_ranges_.at(0).start_key_.get_obj_cnt();
-    request.number(width);
-    for (int64_t i = 0; i < param.key_ranges_.count(); ++i) {
-      const ObNewRange &range = param.key_ranges_.at(i);
-      if (range.start_key_.get_obj_cnt() != width || range.end_key_.get_obj_cnt() != width) { return OB_NOT_SUPPORTED; }
-      request.number(range.border_flag_.get_data());
-      for (int64_t j = 0; j < width; ++j) {
-        const ObObj &obj = range.start_key_.get_obj_ptr()[j];
-        request.append(obj);
-      }
-      for (int64_t j = 0; j < width; ++j) { request.append(range.end_key_.get_obj_ptr()[j]); }
-    }
-    if (is_virtual_table(param.index_id_)) { request.number(param.sql_mode_); }
-    else {
-      const auto &scan = static_cast<const ObTableScanParam &>(param);
-      request.number(scan.tx_id_.get_id());
-      request.number(param.for_update_);
-      request.number(param.is_for_foreign_check_);
-      request.append(scan.sample_info_);
-      request.append(scan.snapshot_); request.number(scan.tx_lock_timeout_); request.number(scan.tx_seq_base_);
-    }
-    if (request.ret) {
-      fprintf(stderr,
-              "PROTOTYPE_V22_SCAN_OPEN stage=encode ret=%d table=%llu ranges=%lld sample=%d\n",
-              request.ret, static_cast<unsigned long long>(param.index_id_),
-              static_cast<long long>(param.key_ranges_.count()),
-              is_virtual_table(param.index_id_) ? -1
-                  : static_cast<const ObTableScanParam &>(param).sample_info_.method_);
-    }
-    Frame reply; ret = request.ret ? request.ret : exchange(request, reply);
+    ret = !send_logical_schema || logical_schema == nullptr ? OB_NOT_SUPPORTED
+        : open_in_process_scan(storage_space, param, *logical_schema, handle);
     if (ret) {
       fprintf(stderr,
-              "PROTOTYPE_V22_SCAN_OPEN stage=exchange ret=%d table=%llu\n",
+              "PROTOTYPE_V22_SCAN_OPEN stage=in_process ret=%d table=%llu\n",
               ret, static_cast<unsigned long long>(param.index_id_));
     }
-    if (!ret) { handle = reply.number(); if (!reply.consumed() || handle == 0) { ret = OB_INVALID_ARGUMENT; } }
     return ret;
   }
   int get_next_row(ObNewRow *&out) override {
@@ -804,15 +710,6 @@ public:
       reset(); return open();
     }
     return OB_SUCCESS;
-  }
-private:
-  int exchange(const Frame &request, Frame &reply) {
-    StorageSessionScope scope(param.op_ ? param.op_->get_eval_ctx().exec_ctx_.get_my_session() : nullptr);
-    int ret = scope.error() ? scope.error() : worker_send(request);
-    if (!ret) { ret = worker_read(reply); }
-    if (!ret && reply.type() != 's') { ret = OB_INVALID_ARGUMENT; }
-    if (!ret) { ret = static_cast<int>(reply.number()); }
-    return ret ? ret : reply.ret;
   }
 };
 class RemoteTabletScan final : public ObIVirtualTableScan {

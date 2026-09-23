@@ -44,16 +44,11 @@ int release_storage_namespace_schemas(uint64_t namespace_id,
 struct SessionBinding {
   InProcessStorage *in_process = nullptr;
 };
-int serve_storage(StorageSpaceHandle storage_space, ReadScans *scans,
+int serve_storage(StorageSpaceHandle storage_space,
     EngineWrites *writes, int state, Frame &input, Frame &result) {
-    const uint64_t ns = storage_space.namespace_id();
     int ret = OB_SUCCESS;
     if (!storage_space.is_namespace()) { return OB_INVALID_ARGUMENT; }
-    if (scans && input.type() == 'O') {
-      result = Frame('s');
-      if (state) { result.number(state); }
-      else { ret = scans->process(input, result, writes ? writes->tx : nullptr, writes ? &writes->session : nullptr); }
-    } else if (writes && (input.type() == 'T' || input.type() == 'W')) {
+    if (writes && (input.type() == 'T' || input.type() == 'W')) {
       result = Frame('w');
       if (state && !cleanup_write(input)) { result.number(state); }
       else { ret = writes->process(input, result); }
@@ -290,7 +285,7 @@ int in_process_send(InProcessStorage &ctx, const Frame &frame, bool)
     ret = OB_NOT_INIT;
   } else {
     ret = serve_storage(StorageSpaceHandle::namespace_space(ctx.ns),
-        &ctx.scans, ctx.writes.get(), OB_SUCCESS, input, result);
+        ctx.writes.get(), OB_SUCCESS, input, result);
   }
   THIS_WORKER.set_session(old_session);
   THIS_WORKER.set_timeout_ts(old_timeout);
@@ -302,6 +297,27 @@ int in_process_read(InProcessStorage &ctx, Frame &frame)
   frame = std::move(ctx.reply);
   ctx.reply = Frame();
   return OB_SUCCESS;
+}
+int open_in_process_scan(StorageSpaceHandle storage_space,
+                         const ObVTableScanParam &param,
+                         const ObTableSchema &logical_schema, uint64_t &handle)
+{
+  handle = 0;
+  InProcessStorage *ctx = in_process_storage;
+  if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
+  if (ctx->ns != serving_namespace()
+      || !(storage_space.is_namespace() && storage_space.namespace_id() == ctx->ns)
+          && !(storage_space.is_global() && ctx->ns == 1)) {
+    return OB_INVALID_ARGUMENT;
+  }
+  const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
+  auto *old_session = THIS_WORKER.get_session();
+  THIS_WORKER.set_session(&ctx->session);
+  const int ret = ctx->scans.open(storage_space, param, logical_schema,
+      ctx->writes->tx, &ctx->session, handle);
+  THIS_WORKER.set_session(old_session);
+  THIS_WORKER.set_timeout_ts(old_timeout);
+  return ret;
 }
 int fetch_in_process_scan(uint64_t handle, ScanBatch &batch)
 {
