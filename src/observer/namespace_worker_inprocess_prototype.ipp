@@ -354,9 +354,8 @@ int ensure_in_process_namespace(uint64_t ns)
   }
   return ret;
 }
-// Per-command schema advance for an in-process forked namespace, mirroring
-// the worker's refresh_namespace_schema: a one-time static full refresh,
-// then incremental refresh on every command.
+// Initial schema load for an in-process namespace. DDL publishes later
+// changes through InProcessSchemaRefreshScheduler in this same process.
 int inprocess_refresh_schema(uint64_t ns)
 {
   std::shared_lock<std::shared_mutex> guard(inprocess_services_mutex);
@@ -371,8 +370,6 @@ int inprocess_refresh_schema(uint64_t ns)
     }
     ret = services.schema_service->refresh_runtime_schema_from_static_system();
     if (ret) { services.schema_loaded.store(false, std::memory_order_release); }
-  } else {
-    ret = services.schema_service->refresh_and_add_schema(false);
   }
   guard.unlock();
   bool expected = false;

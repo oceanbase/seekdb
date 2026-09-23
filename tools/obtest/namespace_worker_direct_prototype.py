@@ -1543,8 +1543,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", required=True)
     parser.add_argument("--case", choices=("full", "forked", "tls"), default="full")
+    parser.add_argument("--in-process", action="store_true")
     args = parser.parse_args()
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+    if args.in_process:
+        if args.case == "forked":
+            parser.error("--in-process supports --case full or tls")
+        from namespace_inprocess_prototype import run_case
+        run_case(args.binary, "tls" if args.case == "tls" else "direct")
+        return
     os.environ["SEEKDB_NAMESPACE_SQL_WORKER_DIRECT_PROBE"] = "1"
     os.environ["SEEKDB_NAMESPACE_DDL_PUBLISH_DELAY_US"] = "500000"
     experiment = BootstrapExperiment(args.binary, "direct_v19", prototype=6)

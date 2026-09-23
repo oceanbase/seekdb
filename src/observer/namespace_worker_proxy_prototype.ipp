@@ -128,6 +128,9 @@ void send_error(int fd, uint8_t seq, uint32_t code, const char *sqlstate,
 }
 // Wire layout identical to rust/sql-nio handshake::build_greeting.
 bool send_greeting(int fd, uint32_t conn_id) {
+  const uint32_t capabilities = ENTRY_CAPABILITIES
+      | (forked_in_process() && ns1_in_process()
+         && GCONF.ssl_client_authentication ? CLIENT_SSL : 0);
   uint8_t scramble[20];
   std::random_device source;
   for (auto &byte : scramble) { byte = static_cast<uint8_t>(source()); }
@@ -139,12 +142,12 @@ bool send_greeting(int fd, uint32_t conn_id) {
   for (unsigned i = 0; i < 4; ++i) { body.push_back(static_cast<uint8_t>(conn_id >> (8 * i))); }
   body.insert(body.end(), scramble, scramble + 8);
   body.push_back(0);
-  body.push_back(static_cast<uint8_t>(ENTRY_CAPABILITIES));
-  body.push_back(static_cast<uint8_t>(ENTRY_CAPABILITIES >> 8));
+  body.push_back(static_cast<uint8_t>(capabilities));
+  body.push_back(static_cast<uint8_t>(capabilities >> 8));
   body.push_back(46); // utf8mb4 server charset
   body.push_back(2); body.push_back(0); // SERVER_STATUS_AUTOCOMMIT
-  body.push_back(static_cast<uint8_t>(ENTRY_CAPABILITIES >> 16));
-  body.push_back(static_cast<uint8_t>(ENTRY_CAPABILITIES >> 24));
+  body.push_back(static_cast<uint8_t>(capabilities >> 16));
+  body.push_back(static_cast<uint8_t>(capabilities >> 24));
   body.push_back(21); // auth plugin data length
   body.insert(body.end(), 10, 0);
   body.insert(body.end(), scramble + 8, scramble + 20);
@@ -336,11 +339,22 @@ void serve_connection(int client_fd, sockaddr_storage peer) {
   std::string user, branch;
   do {
     if (!send_greeting(client_fd, conn_id)) { break; }
-    if (!peek_packet(client_fd, seq, body) || seq != 1
-        || !parse_client_login(body, login)) { break; }
+    if (!peek_packet(client_fd, seq, body) || seq != 1) { break; }
+    if (body.size() == 32 && (body[1] & (CLIENT_SSL >> 8))) {
+      // SSLRequest precedes the encrypted login. NIO finishes TLS, then
+      // resolves the branch name from that login in the same process.
+      if (forked_in_process() && ns1_in_process()
+          && obmysql::global_sql_nio_server != nullptr
+          && obmysql::global_sql_nio_server->inject_fd(client_fd) == OB_SUCCESS) {
+        untrack_fd(client_fd);
+        return;
+      }
+      send_error(client_fd, 2, 1043, "08S01",
+                 "TLS is not supported on this entry yet");
+      break;
+    }
+    if (!parse_client_login(body, login)) { break; }
     if (login.caps & CLIENT_SSL) {
-      // TLS upgrade hook: an SSLRequest arrives here once this entry
-      // advertises CLIENT_SSL; v1 serves cleartext only.
       send_error(client_fd, 2, 1043, "08S01",
                  "TLS is not supported on this entry yet");
       break;

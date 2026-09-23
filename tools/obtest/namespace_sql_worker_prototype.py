@@ -1082,8 +1082,15 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", required=True)
     parser.add_argument("--case", choices=("full", "slow-timeout", "insert", "dml", "nested", "ddl", "index"), default="full")
+    parser.add_argument("--in-process", action="store_true")
     args = parser.parse_args()
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+    if args.in_process:
+        if args.case != "full":
+            parser.error("--in-process currently supports --case full")
+        from namespace_inprocess_prototype import run_case
+        run_case(args.binary, "sql")
+        return
     case_name = {"insert": "insert_v14", "dml": "native_execution_v16", "nested": "nested_session_v17"}.get(args.case, "timeout_v13")
     experiment = WorkerExperiment(args.binary, case_name, prototype=6)
     try:

@@ -72,8 +72,13 @@ class BootstrapExperiment(Experiment):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", required=True)
+    parser.add_argument("--in-process", action="store_true")
     args = parser.parse_args()
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+    if args.in_process:
+        from namespace_inprocess_prototype import run_case
+        run_case(args.binary, "bootstrap")
+        return
     experiment = BootstrapExperiment(args.binary, "bootstrap_v18", prototype=6)
     try:
         experiment.start()
