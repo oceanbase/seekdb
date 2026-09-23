@@ -308,7 +308,8 @@ int ObTableInsertUpOp::inner_get_next_row()
       plan_ctx->add_row_matched_count(found_rows_);
     }
     int sync_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (sync_ret = plan_ctx->sync_last_value_to_store())) {
+    if (OB_SUCCESS != (sync_ret = plan_ctx->sync_last_value_to_store(
+            ctx_.get_my_session()->effective_autoincrement_service()))) {
     }
     if (OB_SUCC(ret)) {
       ret = OB_SUCCESS == sync_ret ? OB_ITER_END : sync_ret;

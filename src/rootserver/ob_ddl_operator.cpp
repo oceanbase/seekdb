@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_ddl_operator.h"
+#include "rootserver/ob_ddl_autoincrement_service.h"
 #include "share/ob_autoincrement_service.h"
 #include "rootserver/ob_dependency_ddl_helper.h"
 #include "lib/encrypt/ob_encrypted_helper.h"
@@ -646,11 +647,12 @@ int ObDDLOperator::reinit_autoinc_row(const ObTableSchema &table_schema,
   ObString table_name = table_schema.get_table_name();
   int64_t truncate_version = table_schema.get_truncate_version();
   uint64_t column_id = table_schema.get_autoinc_column_id();
-  ObAutoincrementService &autoinc_service = share::ObAutoincrementService::get_instance();
+  ObAutoincrementService *autoinc_service = nullptr;
+  if (OB_FAIL(ddl_autoincrement_service(sql_proxy_, autoinc_service))) { return ret; }
 
   if (0 != column_id) {
     // reinit auto_increment value
-    if (OB_FAIL(autoinc_service.reinit_autoinc_row(table_id,
+    if (OB_FAIL(autoinc_service->reinit_autoinc_row(table_id,
                                                    column_id, truncate_version, trans))) {
     }
   }
@@ -668,11 +670,12 @@ int ObDDLOperator::try_reinit_autoinc_row(const ObTableSchema &table_schema,
 
   const int64_t truncate_version = table_schema.get_truncate_version();
   const uint64_t column_id = table_schema.get_autoinc_column_id();
-  ObAutoincrementService &autoinc_service = share::ObAutoincrementService::get_instance();
-  if (OB_FAIL(autoinc_service.try_lock_autoinc_row(table_id, column_id, truncate_version,
+  ObAutoincrementService *autoinc_service = nullptr;
+  if (OB_FAIL(ddl_autoincrement_service(sql_proxy_, autoinc_service))) { return ret; }
+  if (OB_FAIL(autoinc_service->try_lock_autoinc_row(table_id, column_id, truncate_version,
                                                     need_reinit_inner_table, trans))) {
   } else if (need_reinit_inner_table) {
-    if (OB_FAIL(autoinc_service.reset_autoinc_row(table_id, column_id,
+    if (OB_FAIL(autoinc_service->reset_autoinc_row(table_id, column_id,
                                                   truncate_version, trans))) {
     }
   }
@@ -3034,14 +3037,15 @@ int ObDDLOperator::drop_table_for_not_dropped_schema(
 int ObDDLOperator::cleanup_autoinc_cache(const ObTableSchema &table_schema)
 {
   int ret = OB_SUCCESS;
-  ObAutoincrementService &autoinc_service = share::ObAutoincrementService::get_instance();
+  ObAutoincrementService *autoinc_service = nullptr;
+  if (OB_FAIL(ddl_autoincrement_service(sql_proxy_, autoinc_service))) { return ret; }
 
   if (0 != table_schema.get_autoinc_column_id()) {
     uint64_t table_id = table_schema.get_table_id();
     uint64_t autoinc_column_id = table_schema.get_autoinc_column_id();
     LOG_INFO("begin to clear local auto-increment cache",
              K(table_id), K(autoinc_column_id));
-    if (OB_FAIL(autoinc_service.clear_autoinc_cache(table_id,
+    if (OB_FAIL(autoinc_service->clear_autoinc_cache(table_id,
                                                     autoinc_column_id))) {
     }
   }

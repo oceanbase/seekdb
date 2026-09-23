@@ -149,10 +149,9 @@ int ObPhysicalPlanCtx::sync_last_value_local()
 	return ret;
 }
 
-int ObPhysicalPlanCtx::sync_last_value_to_store()
+int ObPhysicalPlanCtx::sync_last_value_to_store(ObAutoincrementService &auto_service)
 {
   int ret = OB_SUCCESS;
-  ObAutoincrementService &auto_service = ObAutoincrementService::get_instance();
   ObIArray<AutoincParam> &autoinc_params = get_autoinc_params();
   for (int64_t i = 0; OB_SUCC(ret) && i < autoinc_params.count(); ++i) {
     AutoincParam &autoinc_param = autoinc_params.at(i);

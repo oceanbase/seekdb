@@ -36,6 +36,7 @@
 #include "sql/optimizer/stat/ob_opt_stat_manager.h" // for ObOptStatManager
 #include "sql/session/ob_user_resource_mgr.h"
 #include "namespace/namespace.h"
+#include "share/ob_autoincrement_service.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 
 using namespace oceanbase::sql;
@@ -220,6 +221,15 @@ share::ObITabletAutoincrementService *ObSQLSessionInfo::effective_tablet_autoinc
   return service != nullptr
       ? static_cast<share::ObITabletAutoincrementService *>(service)
       : share::server_service<share::ObITabletAutoincrementService>();
+}
+
+share::ObAutoincrementService &ObSQLSessionInfo::effective_autoincrement_service() const
+{
+  void *service = ns_runtime_ != nullptr
+      ? ns_runtime_->service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE) : nullptr;
+  return service != nullptr
+      ? *static_cast<share::ObAutoincrementService *>(service)
+      : share::ObAutoincrementService::get_instance();
 }
 
 void ObSQLSessionInfo::configure_obj_cast(

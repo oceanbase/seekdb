@@ -33,6 +33,7 @@
 
 namespace oceanbase
 {
+namespace share { class ObAutoincrementService; }
 namespace sql
 {
 class ObResultSet;
@@ -399,7 +400,7 @@ public:
   inline bool is_affect_found_row() const { return is_affect_found_row_; }
   inline void set_is_affect_found_row(bool is_affect_found_row) { is_affect_found_row_ = is_affect_found_row; }
   int sync_last_value_local();
-  int sync_last_value_to_store();
+  int sync_last_value_to_store(share::ObAutoincrementService &auto_service);
   int set_row_matched_count(int64_t row_count);
   inline void add_row_matched_count(int64_t row_count) { row_matched_count_ += row_count; }
   int64_t get_row_matched_count() const { return row_matched_count_; }

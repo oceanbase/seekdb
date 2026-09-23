@@ -55,6 +55,7 @@ public:
     DIRECT_INSERT_ROUTES = 4,
     SQL_PROXY = 5,
     TABLET_AUTOINCREMENT_SERVICE = 6,
+    AUTOINCREMENT_SERVICE = 7,
     SLOT_COUNT
   };
   explicit NamespaceRuntime(Namespace &ns) : ns_(ns) {}

@@ -323,7 +323,7 @@ int ObExprAutoincNextval::eval_nextval(
             static_cast<ObAutoincNextvalInfo *>(expr.extra_info_)->autoinc_table_id_;
     uint64_t autoinc_col_id =
             static_cast<ObAutoincNextvalInfo *>(expr.extra_info_)->autoinc_col_id_;
-    ObAutoincrementService &auto_service = ObAutoincrementService::get_instance();
+    ObAutoincrementService &auto_service = my_session->effective_autoincrement_service();
     ObIArray<AutoincParam> &autoinc_params = plan_ctx->get_autoinc_params();
     bool is_to_generate = false;
     AutoincParam *autoinc_param = NULL;

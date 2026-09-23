@@ -812,7 +812,8 @@ int ObTableModifyOp::inner_close()
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *plan_ctx = ctx_.get_physical_plan_ctx();
   // release cache_handle for auto-increment
-  share::ObAutoincrementService &auto_service = share::ObAutoincrementService::get_instance();
+  share::ObAutoincrementService &auto_service =
+      ctx_.get_my_session()->effective_autoincrement_service();
   ObIArray<share::AutoincParam> &autoinc_params = plan_ctx->get_autoinc_params();
   for (int64_t i = 0; i < autoinc_params.count(); ++i) {
     if (NULL != autoinc_params.at(i).cache_handle_) {

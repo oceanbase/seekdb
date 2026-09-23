@@ -287,7 +287,8 @@ int ObTableReplaceOp::inner_get_next_row()
       plan_ctx->set_row_duplicated_count(delete_rows_);
     }
     int sync_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (sync_ret = plan_ctx->sync_last_value_to_store())) {
+    if (OB_SUCCESS != (sync_ret = plan_ctx->sync_last_value_to_store(
+            ctx_.get_my_session()->effective_autoincrement_service()))) {
     }
 
     if (OB_SUCC(ret)) {

@@ -22,6 +22,7 @@
 
 #include "ob_ddl_service.h"
 #include "rootserver/ob_runtime_ddl_service.h"
+#include "rootserver/ob_ddl_autoincrement_service.h"
 #include "rootserver/ob_rootserver_local_runtime.h"
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "share/ob_ddl_common.h"
@@ -4515,13 +4516,14 @@ int ObDDLService::delete_auto_increment_attribute(
   uint64_t table_id  = new_table_schema.get_table_id();
   uint64_t part_num  = new_table_schema.get_all_part_num();
   // drop auto-increment attr in drop column
-  ObAutoincrementService &autoinc_service = ObAutoincrementService::get_instance();
+  ObAutoincrementService *autoinc_service = nullptr;
+  if (OB_FAIL(ddl_autoincrement_service(*sql_proxy_, autoinc_service))) { return ret; }
   if (0 != orig_table_schema->get_autoinc_column_id()
       && 0 == new_table_schema.get_autoinc_column_id()) {
     LOG_INFO("begin to clear local auto-increment cache",
         K(table_id), K(part_num),
         K(orig_table_schema->get_autoinc_column_id()));
-    if (OB_FAIL(autoinc_service.clear_autoinc_cache(table_id,
+    if (OB_FAIL(autoinc_service->clear_autoinc_cache(table_id,
         orig_table_schema->get_autoinc_column_id()))) {
       LOG_WARN("failed to clear auto-increment cache", K(table_id));
     }
@@ -4532,7 +4534,7 @@ int ObDDLService::delete_auto_increment_attribute(
     if (new_table_schema.get_autoinc_column_id() > 0 && auto_increment > 0) {
       LOG_INFO("begin to sync auto_increment",
           K(table_id), K(part_num), K(auto_increment));
-      if (OB_FAIL(autoinc_service.sync_auto_increment(
+      if (OB_FAIL(autoinc_service->sync_auto_increment(
           new_table_schema,
           0 == auto_increment ? 0 : auto_increment - 1))) {
         LOG_WARN("failed to sync auto_increment", K(table_id), K(auto_increment));
@@ -4914,8 +4916,6 @@ int ObDDLService::update_autoinc_schema(obcall::ObAlterTableArg &alter_table_arg
     const ObTableSchema *curr_table_schema;
     ObTableSchema new_table_schema;
     int64_t refreshed_schema_version = 0;
-    ObAutoincrementService &auto_inc_service = ObAutoincrementService::get_instance();
-
     if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard))) {
       LOG_WARN("get schema guard failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema( table_id, curr_table_schema))) {
@@ -9934,7 +9934,8 @@ int ObDDLService::alter_table_auto_increment(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  ObAutoincrementService &auto_inc_service = ObAutoincrementService::get_instance();
+  ObAutoincrementService *auto_inc_service = nullptr;
+  if (OB_FAIL(ddl_autoincrement_service(*sql_proxy_, auto_inc_service))) { return ret; }
   
   const uint64_t table_id = orig_table_schema.get_table_id();
   const uint64_t column_id = orig_table_schema.get_autoinc_column_id();
@@ -9945,7 +9946,7 @@ int ObDDLService::alter_table_auto_increment(
   // alter_table operation.
   const bool is_reduced_autoinc =
       (alter_table_schema.get_auto_increment() < orig_table_schema.get_auto_increment());
-  if (!is_reduced_autoinc && OB_FAIL(auto_inc_service.get_sequence_value(
+  if (!is_reduced_autoinc && OB_FAIL(auto_inc_service->get_sequence_value(
           table_id, column_id, truncate_version, current_auto_increment))) {
     LOG_WARN("fail to get sequence value", K(ret));
   } else if (is_reduced_autoinc ||
@@ -10016,7 +10017,7 @@ int ObDDLService::alter_table_auto_increment(
       // column. all new auto_inc request will be based on the auto_increment value in the table
       // schema.
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(auto_inc_service.clear_autoinc_cache(table_id,
+      } else if (OB_FAIL(auto_inc_service->clear_autoinc_cache(table_id,
                                                               column_id))) {
         LOG_WARN("fail to clear local autoinc cache", K(ret));
       } else if (OB_FAIL(ddl_operator.reinit_autoinc_row(new_table_schema, trans))) {
