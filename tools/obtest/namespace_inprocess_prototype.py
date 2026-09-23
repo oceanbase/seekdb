@@ -121,6 +121,10 @@ def sql_probe(experiment):
             "SELECT variable_value FROM INFORMATION_SCHEMA.GLOBAL_VARIABLES "
             "WHERE variable_name='optimizer_switch'", child)
         assert len(global_switch) == 1, global_switch
+        session_variables = experiment.sql("SHOW VARIABLES LIKE 'optimizer_dynamic_sampling'", child)
+        global_variables = experiment.sql("SHOW GLOBAL VARIABLES LIKE 'optimizer_dynamic_sampling'", child)
+        assert session_variables and session_variables[0][0] == "optimizer_dynamic_sampling"
+        assert global_variables and global_variables[0][0] == "optimizer_dynamic_sampling"
         experiment.sql("SET optimizer_switch = (SELECT variable_value FROM "
                        "INFORMATION_SCHEMA.GLOBAL_VARIABLES "
                        "WHERE variable_name='optimizer_switch')", child)
