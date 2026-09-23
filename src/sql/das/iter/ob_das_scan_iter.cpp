@@ -86,7 +86,11 @@ int ObDASScanIter::do_table_scan()
   } else if (OB_UNLIKELY(nullptr != result_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected not null result iter ptr before do table scan", K(ret), KP_(result));
-  } else if (scan_param_->op_ == nullptr && scan_param_->output_exprs_ == nullptr
+  } else if (((scan_param_->op_ == nullptr && scan_param_->output_exprs_ == nullptr)
+              || (scan_param_->aggregate_exprs_ != nullptr
+                  && !scan_param_->aggregate_exprs_->empty())
+              || (scan_param_->table_param_ != nullptr
+                  && scan_param_->table_param_->is_fts_index()))
              && observer::namespace_worker_prototype::in_process_session_ns(
                     THIS_WORKER.get_session()) > 1) {
     const uint64_t ns = observer::namespace_worker_prototype::in_process_session_ns(
