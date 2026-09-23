@@ -155,7 +155,26 @@ private:
   uint64_t ns_;
   share::schema::ObMultiVersionSchemaService &schema_;
 };
+class InProcessTabletAutoincrementService final : public share::ObITabletAutoincrementService
+{
+public:
+  explicit InProcessTabletAutoincrementService(uint64_t ns) : ns_(ns) {}
+  int next_value(const common::ObTabletID &tablet_id, uint64_t &value) override
+  {
+    if (!tablet_id.is_valid()) { return OB_INVALID_ARGUMENT; }
+    common::ObTabletID storage_tablet_id = tablet_id;
+    int ret = route_tablet_id(ns_, storage_tablet_id);
+    if (OB_SUCC(ret)) {
+      auto *service = share::server_service<share::ObITabletAutoincrementService>();
+      ret = service == nullptr ? OB_NOT_INIT : service->next_value(storage_tablet_id, value);
+    }
+    return ret;
+  }
+private:
+  uint64_t ns_;
+};
 struct InProcessNamespaceServices {
+  explicit InProcessNamespaceServices(uint64_t ns) : tablet_autoincrement(ns) {}
   NamespaceRoutingSqlProxy *sql_proxy = nullptr;
   NamespaceRoutingSqlProxy *ddl_proxy = nullptr;
   share::schema::ObMultiVersionSchemaService *schema_service = nullptr;
@@ -167,7 +186,7 @@ struct InProcessNamespaceServices {
   rootserver::ObLocalManagementService *root_commands = nullptr;
   RemoteRootserverLocalRuntime *local_runtime = nullptr;
   RemoteDirectInsertService direct_insert;
-  RemoteTabletAutoincrementService tablet_autoincrement;
+  InProcessTabletAutoincrementService tablet_autoincrement;
   share::ObAutoincrementService autoincrement;
   RequestRoutes direct_insert_routes{WORKER_REQUEST};
   std::atomic<bool> schema_loaded{false};
@@ -204,7 +223,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
 {
   int ret = OB_SUCCESS;
   ObServer &server = ObServer::get_instance();
-  auto services = std::make_unique<InProcessNamespaceServices>();
+  auto services = std::make_unique<InProcessNamespaceServices>(ns);
   char suffix[32];
   snprintf(suffix, sizeof(suffix), "ns%llu", static_cast<unsigned long long>(ns));
   const char *stage = "alloc";

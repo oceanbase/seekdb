@@ -1063,47 +1063,6 @@ int process_tablet_autoincrement_cache_invalidation(
   return reply.ret;
 }
 
-int process_tablet_autoincrement_next_value(
-    StorageSpaceHandle channel_space, Frame &request, Frame &reply)
-{
-  StorageSpaceHandle storage_space;
-  int ret = read_storage_space(request, channel_space, storage_space);
-  ObTabletID tablet_id(request.number());
-  uint64_t value = 0;
-  if (OB_SUCC(ret) && (request.ret || !request.consumed() || !tablet_id.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_SUCC(ret) && OB_FAIL(route_tablet_id(storage_space, tablet_id))) {
-  } else if (OB_SUCC(ret)) {
-    auto *service = share::server_service<share::ObITabletAutoincrementService>();
-    ret = service == nullptr ? OB_NOT_INIT : service->next_value(tablet_id, value);
-  }
-  reply = Frame('g');
-  reply.number(ret);
-  if (OB_SUCC(ret)) { reply.number(value); }
-  return reply.ret;
-}
-
-class RemoteTabletAutoincrementService final : public share::ObITabletAutoincrementService
-{
-public:
-  int next_value(const ObTabletID &tablet_id, uint64_t &value) override
-  {
-    if (!tablet_id.is_valid()) { return OB_INVALID_ARGUMENT; }
-    StorageSessionScope scope(THIS_WORKER.get_session());
-    if (scope.error()) { return scope.error(); }
-    Frame request('Q'), reply;
-    write_storage_space(request, active_worker_storage_space());
-    request.number(tablet_id.id());
-    int ret = request.ret ? request.ret : worker_send(request);
-    if (OB_SUCC(ret)) { ret = worker_read(reply); }
-    if (OB_SUCC(ret) && reply.type() != 'g') { ret = OB_INVALID_ARGUMENT; }
-    if (OB_SUCC(ret)) { ret = static_cast<int>(reply.number()); }
-    if (OB_SUCC(ret)) { value = reply.number(); }
-    if (OB_SUCC(ret) && !reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
-    return ret ? ret : reply.ret;
-  }
-};
-
 struct EngineWrite {
   ObArenaAllocator allocator{ObMemAttr("NsRemoteWrite")};
   ObSchemaGetterGuard guard;
