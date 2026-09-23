@@ -547,10 +547,10 @@ int ObDDLRedefinitionTask::send_local_build_request()
       param.execution_id_ = execution_id_;
       param.data_format_version_ = data_format_version_;
       if (OB_FAIL(ObDDLUtil::get_tablets(
-              *GCTX.schema_service_, object_id_, param.source_tablet_ids_))) {
+              *task_schema_service(), object_id_, param.source_tablet_ids_))) {
         LOG_WARN("fail to get tablets", K(ret), K(object_id_));
       } else if (OB_FAIL(ObDDLUtil::get_tablets(
-                     *GCTX.schema_service_, target_object_id_, param.dest_tablet_ids_))) {
+                     *task_schema_service(), target_object_id_, param.dest_tablet_ids_))) {
         LOG_WARN("fail to get tablets", K(ret), K(target_object_id_));
       }
       const int64_t src_tablet_cnt = param.source_tablet_ids_.count();

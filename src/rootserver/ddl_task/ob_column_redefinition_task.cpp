@@ -105,7 +105,7 @@ int ObColumnRedefinitionTask::init(const ObDDLTaskRecord &task_record)
     LOG_WARN("invalid arguments", K(ret));
   } else if (OB_FAIL(deserialize_params_from_message(task_record.message_.ptr(), task_record.message_.length(), pos))) {
   } else if (OB_FAIL(set_ddl_stmt_str(task_record.ddl_stmt_str_))) {
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
+  } else if (OB_FAIL(task_schema_service()->get_runtime_schema_guard(
           schema_guard, schema_version))) {
   } else if (OB_FAIL(schema_guard.check_formal_guard())) {
   } else if (OB_FAIL(schema_guard.get_table_schema( data_table_id, data_schema))) {
@@ -136,6 +136,73 @@ int ObColumnRedefinitionTask::init(const ObDDLTaskRecord &task_record)
   return ret;
 }
 
+int ObColumnRedefinitionTask::send_sql_local_build_request()
+{
+  int ret = OB_SUCCESS;
+  ObLocalManagementService *service = context_.root_service_ != nullptr
+      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>();
+  int64_t new_execution_id = 0;
+  ObSchemaGetterGuard schema_guard;
+  const ObTableSchema *source_schema = nullptr;
+  const ObTableSchema *hidden_schema = nullptr;
+  if (OB_ISNULL(service) || OB_ISNULL(task_sql_proxy())) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(ObDDLTask::push_task_execution_id(
+                 *task_sql_proxy(), task_id_, task_type_, true, new_execution_id))) {
+  } else {
+    execution_id_ = new_execution_id;
+    const ObSQLMode sql_mode = alter_table_arg_.sql_mode_ | SMO_NO_AUTO_VALUE_ON_ZERO;
+    ObDDLRedefinitionSSTableBuildTask task(
+        task_id_, object_id_, target_object_id_, schema_version_, snapshot_version_,
+        new_execution_id, sql_mode, trace_id_, parallelism_, false,
+        service, data_format_version_, true);
+    if (OB_FAIL(service->get_ddl_service().get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
+    } else if (OB_FAIL(schema_guard.get_table_schema(object_id_, source_schema))) {
+    } else if (OB_FAIL(schema_guard.get_table_schema(target_object_id_, hidden_schema))) {
+    } else if (OB_ISNULL(source_schema) || OB_ISNULL(hidden_schema)) {
+      ret = OB_TABLE_NOT_EXIST;
+    } else if (OB_FAIL(task.init(*source_schema, *hidden_schema,
+                                alter_table_arg_.alter_table_schema_, alter_table_arg_.tz_info_wrap_))) {
+    } else if (OB_FAIL(service->submit_ddl_local_build_task(task))) {
+    }
+  }
+  return ret;
+}
+
+int ObColumnRedefinitionTask::wait_data_complement(const ObDDLTaskStatus next_task_status)
+{
+  // The storage DAG resolves schema globally; child namespaces use the SQL build task.
+  if (context_.namespace_id_ == 1) {
+    return ObDDLRedefinitionTask::wait_data_complement(next_task_status);
+  }
+  int ret = OB_SUCCESS;
+  bool finished = false;
+  int64_t finished_execution_id = 0;
+  if (snapshot_version_ <= 0) {
+    ret = OB_ERR_UNEXPECTED;
+    finished = true;
+  } else if (local_build_request_time_ == 0) {
+    if (OB_FAIL(send_sql_local_build_request())) {
+      finished = true;
+    } else {
+      local_build_request_time_ = ObTimeUtility::current_time();
+    }
+  }
+  if (OB_SUCC(ret)) {
+    TCRLockGuard guard(lock_);
+    if (complete_sstable_job_ret_code_ != INT64_MAX) {
+      finished = true;
+      ret = complete_sstable_job_ret_code_;
+      finished_execution_id = execution_id_;
+    }
+  }
+  if (finished && OB_SUCC(ret) && OB_FAIL(check_data_dest_tables_columns_checksum(finished_execution_id))) {
+  }
+  if (finished && OB_FAIL(switch_status(next_task_status, true, ret))) {
+  }
+  return ret;
+}
+
 
 // Update the local SSTable complement status.
 int ObColumnRedefinitionTask::update_complete_sstable_job_status(const common::ObTabletID &tablet_id,
@@ -156,6 +223,10 @@ int ObColumnRedefinitionTask::update_complete_sstable_job_status(const common::O
     LOG_WARN("snapshot version not match", K(ret), K(snapshot_version), K(snapshot_version_));
   } else if (execution_id < execution_id_) {
     LOG_INFO("receive a mismatch execution result, ignore", K(ret_code), K(execution_id), K(execution_id_));
+  } else if (context_.namespace_id_ > 1 && !tablet_id.is_valid()) {
+    TCWLockGuard guard(lock_);
+    complete_sstable_job_ret_code_ = ret_code;
+    execution_id_ = execution_id;
   } else if (OB_FAIL(local_builder_.update_build_progress(tablet_id,
                                                             ret_code,
                                                             addition_info.row_scanned_,
@@ -170,7 +241,8 @@ int ObColumnRedefinitionTask::update_complete_sstable_job_status(const common::O
 int ObColumnRedefinitionTask::copy_table_indexes()
 {
   int ret = OB_SUCCESS;
-  ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
+      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObColumnRedefinitionTask has not been inited", K(ret));
@@ -183,9 +255,9 @@ int ObColumnRedefinitionTask::copy_table_indexes()
     int64_t active_task_cnt = 0;
     // check if has rebuild index
     if (has_rebuild_index_) {
-    } else if (OB_ISNULL(GCTX.sql_proxy_) ) {
+    } else if (OB_ISNULL(task_sql_proxy())) {
       ret = OB_INVALID_ARGUMENT;
-    } else if (OB_FAIL(ObDDLTaskRecordOperator::get_create_index_task_cnt(*GCTX.sql_proxy_, target_object_id_, active_task_cnt))) {
+    } else if (OB_FAIL(ObDDLTaskRecordOperator::get_create_index_task_cnt(*task_sql_proxy(), target_object_id_, active_task_cnt))) {
     } else if (active_task_cnt >= MAX_ACTIVE_TASK_CNT) {
       ret = OB_EAGAIN;
     } else {
@@ -215,7 +287,7 @@ int ObColumnRedefinitionTask::copy_table_indexes()
           if (OB_FAIL(generate_rebuild_index_arg_list(object_id_, schema_guard, alter_table_arg_))) {
           } else if (OB_FAIL(get_orig_all_index_tablet_count(schema_guard, all_tablet_count))) {
           } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(all_tablet_count, rpc_timeout))) {
-          } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->                execute_ddl_task(alter_table_arg_, index_ids); }))) {
+          } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return local_management_service->execute_ddl_task(alter_table_arg_, index_ids); }))) {
           }
         }
       }
@@ -271,7 +343,7 @@ int ObColumnRedefinitionTask::copy_table_indexes()
                 param.sub_task_trace_id_ = sub_task_trace_id_;
                 param.data_format_version_ = data_format_version_;
                 if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param,
-                                                                   *GCTX.sql_proxy_,
+                                                                   *task_sql_proxy(),
                                                                    task_record))) {
                   if (OB_ENTRY_EXIST == ret) {
                     ret = OB_SUCCESS;
@@ -280,6 +352,7 @@ int ObColumnRedefinitionTask::copy_table_indexes()
                     LOG_WARN("submit ddl task failed", K(ret));
                   }
                 } else if (FALSE_IT(active_task_cnt += 1)) {
+                } else if (FALSE_IT(task_record.context_ = context_)) {
                 } else if (OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
                 }
               }
@@ -317,7 +390,8 @@ int ObColumnRedefinitionTask::copy_table_constraints()
 {
   int ret = OB_SUCCESS;
   int64_t rpc_timeout = 0;
-  ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
+      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>();
   const ObTableSchema *table_schema = nullptr;
   ObSchemaGetterGuard schema_guard;
   if (OB_UNLIKELY(!is_inited_)) {
@@ -348,8 +422,8 @@ int ObColumnRedefinitionTask::copy_table_constraints()
         alter_table_arg_.table_id_ = object_id_;
         alter_table_arg_.hidden_table_id_ = target_object_id_;
         if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
-                *GCTX.schema_service_, target_object_id_, rpc_timeout))) {
-        } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->              execute_ddl_task(alter_table_arg_, constraint_ids); }))) {
+                *task_schema_service(), target_object_id_, rpc_timeout))) {
+        } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return local_management_service->execute_ddl_task(alter_table_arg_, constraint_ids); }))) {
         }
       } else {
         LOG_INFO("constraint has already been built");
@@ -367,7 +441,8 @@ int ObColumnRedefinitionTask::copy_table_foreign_keys()
 {
   int ret = OB_SUCCESS;
   int64_t rpc_timeout = 0;
-  ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
+      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>();
   const ObSimpleTableSchemaV2 *table_schema = nullptr;
   ObSchemaGetterGuard schema_guard;
   if (OB_UNLIKELY(!is_inited_)) {
@@ -392,10 +467,10 @@ int ObColumnRedefinitionTask::copy_table_foreign_keys()
         alter_table_arg_.table_id_ = object_id_;
         alter_table_arg_.hidden_table_id_ = target_object_id_;
         if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
-                *GCTX.schema_service_, target_object_id_, rpc_timeout))) {
+                *task_schema_service(), target_object_id_, rpc_timeout))) {
           LOG_WARN("get ddl rpc timeout failed", K(ret));
           ret = OB_INVALID_ARGUMENT;
-        } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->              execute_ddl_task(alter_table_arg_, fk_ids); }))) {
+        } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return local_management_service->execute_ddl_task(alter_table_arg_, fk_ids); }))) {
         }
         DEBUG_SYNC(COLUMN_REDEFINITION_COPY_TABLE_FOREIGN_KEYS);
         if (OB_SUCC(ret)) {
@@ -474,7 +549,7 @@ int ObColumnRedefinitionTask::copy_table_dependent_objects(const ObDDLTaskStatus
         HEAP_VAR(ObDDLErrorMessageTableOperator::ObBuildDDLErrorMessage, error_message) {
           int64_t unused_user_msg_len = 0;
           if (OB_FAIL(ObDDLErrorMessageTableOperator::get_ddl_error_message(child_task_id, target_object_id,
-            unused_addr, false /* is_ddl_retry_task */, *GCTX.sql_proxy_, error_message, unused_user_msg_len))) {
+            unused_addr, false /* is_ddl_retry_task */, *task_sql_proxy(), error_message, unused_user_msg_len))) {
             if (OB_ENTRY_NOT_EXIST == ret) {
               ret = OB_SUCCESS;
               LOG_INFO("ddl task not finish", K(task_key), K(child_task_id), K(target_object_id));
@@ -527,7 +602,7 @@ int ObColumnRedefinitionTask::take_effect(const ObDDLTaskStatus next_task_status
     LOG_WARN("ObColumnRedefinitionTask has not been inited", K(ret));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(DDL_SIM(task_id_, DDL_TASK_TAKE_EFFECT_FAILED))) {
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(task_schema_service()->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
@@ -555,11 +630,11 @@ int ObColumnRedefinitionTask::take_effect(const ObDDLTaskStatus next_task_status
       LOG_WARN("fail to sync stats info", K(ret), K(object_id_), K(target_object_id_));
     }
   } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
-                 *GCTX.schema_service_, target_object_id_, rpc_timeout))) {
+                 *task_schema_service(), target_object_id_, rpc_timeout))) {
   } else if (OB_FAIL(rootserver::local_ddl_serial_call([&] {
-               return ::oceanbase::share::server_service<
-                   ::oceanbase::rootserver::ObLocalManagementService>()->execute_ddl_task(
-                       alter_table_arg_, objs);
+               ObLocalManagementService *service = context_.root_service_ != nullptr
+                   ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>();
+               return service->execute_ddl_task(alter_table_arg_, objs);
              }))) {
     LOG_WARN("fail to swap original and hidden table state", K(ret));
     if (OB_TIMEOUT == ret) {

@@ -64,6 +64,8 @@ private:
   int copy_table_indexes();
   int copy_table_constraints();
   int copy_table_foreign_keys();
+  int wait_data_complement(const share::ObDDLTaskStatus next_task_status) override;
+  int send_sql_local_build_request();
 private:
   static const int64_t OB_COLUMN_REDEFINITION_TASK_VERSION = 1L; 
   bool has_rebuild_index_;
