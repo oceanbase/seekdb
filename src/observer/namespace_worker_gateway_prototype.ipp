@@ -49,7 +49,7 @@ int serve_storage(StorageSpaceHandle storage_space, ReadScans *scans,
     const uint64_t ns = storage_space.namespace_id();
     int ret = OB_SUCCESS;
     if (!storage_space.is_namespace()) { return OB_INVALID_ARGUMENT; }
-    if (scans && (input.type() == 'O' || input.type() == 'R')) {
+    if (scans && input.type() == 'O') {
       result = Frame('s');
       if (state) { result.number(state); }
       else { ret = scans->process(input, result, writes ? writes->tx : nullptr, writes ? &writes->session : nullptr); }
@@ -331,6 +331,22 @@ int close_in_process_scan(uint64_t handle)
   auto *old_session = THIS_WORKER.get_session();
   THIS_WORKER.set_session(&ctx->session);
   const int ret = ctx->scans.close(handle);
+  THIS_WORKER.set_session(old_session);
+  THIS_WORKER.set_timeout_ts(old_timeout);
+  return ret;
+}
+int rescan_in_process_scan(uint64_t handle, const ObVTableScanParam &param)
+{
+  InProcessStorage *ctx = in_process_storage;
+  const StorageSpaceHandle space = active_worker_storage_space();
+  if (ctx == nullptr || !ctx->initialized) { return OB_NOT_INIT; }
+  if (!space.is_namespace() || ctx->ns != space.namespace_id() || handle == 0) {
+    return OB_INVALID_ARGUMENT;
+  }
+  const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
+  auto *old_session = THIS_WORKER.get_session();
+  THIS_WORKER.set_session(&ctx->session);
+  const int ret = ctx->scans.rescan(handle, param);
   THIS_WORKER.set_session(old_session);
   THIS_WORKER.set_timeout_ts(old_timeout);
   return ret;

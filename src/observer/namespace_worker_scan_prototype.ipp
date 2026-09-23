@@ -194,6 +194,7 @@ struct ScanBatch {
 };
 int fetch_in_process_scan(uint64_t handle, ScanBatch &batch);
 int close_in_process_scan(uint64_t handle);
+int rescan_in_process_scan(uint64_t handle, const ObVTableScanParam &param);
 inline uint64_t engine_schema_hash(uint64_t ns, const ObString &blob) {
   uint64_t h = 1469598103934665603ULL ^ (ns * 1099511628211ULL);
   const char *p = blob.ptr();
@@ -450,46 +451,53 @@ struct EngineScan {
   }
   // NLJ rescans only change key ranges. Rebuild the storage iterator in place
   // instead of paying a full schema ship + tablet lookup + scan open per row.
-  int rescan(Frame &request, Frame &reply) {
-    const uint64_t flag = request.number();
-    const bool get = request.number() != 0;
-    const uint64_t ranges = request.number();
-    const uint64_t width = request.number();
-    if (virtual_context || !iter || request.ret) { reply.number(OB_NOT_SUPPORTED); return OB_SUCCESS; }
-    if (ranges > 256 || width == 0 || width > OB_MAX_ROWKEY_COLUMN_NUMBER) {
-      reply.number(OB_INVALID_ARGUMENT);
-      return OB_SUCCESS;
+  int rescan(const ObVTableScanParam &request) {
+    if (virtual_context || !iter) { return OB_NOT_SUPPORTED; }
+    const int64_t ranges = request.key_ranges_.count();
+    const int64_t width = ranges == 0 ? 1 : request.key_ranges_.at(0).start_key_.get_obj_cnt();
+    if (ranges > 256 || width <= 0 || width > OB_MAX_ROWKEY_COLUMN_NUMBER) {
+      return OB_INVALID_ARGUMENT;
     }
-    // Validate against the live iterator first; shallow cells stay frame-backed.
-    std::vector<uint64_t> borders(ranges);
-    std::vector<ObObj> shallow(ranges * 2 * width);
-    for (uint64_t i = 0; i < ranges && !request.ret; ++i) {
-      borders[i] = request.number();
-      for (uint64_t j = 0; j < width * 2; ++j) { request.read(shallow[i * width * 2 + j]); }
+    size_t bytes = 41; // Former frame opcode and five numbers.
+    for (int64_t i = 0; i < ranges; ++i) {
+      const ObNewRange &range = request.key_ranges_.at(i);
+      if (range.start_key_.get_obj_cnt() != width || range.end_key_.get_obj_cnt() != width
+          || bytes > MAX_SQL_MESSAGE - 8) { return OB_INVALID_ARGUMENT; }
+      bytes += 8;
+      for (int64_t j = 0; j < width * 2; ++j) {
+        const ObObj &obj = j < width ? range.start_key_.get_obj_ptr()[j]
+                                      : range.end_key_.get_obj_ptr()[j - width];
+        const int64_t size = obj.get_serialize_size();
+        if (size < 0 || static_cast<size_t>(size) > MAX_SQL_MESSAGE - bytes) {
+          return OB_SIZE_OVERFLOW;
+        }
+        bytes += static_cast<size_t>(size);
+      }
     }
-    if (request.ret || !request.consumed()) { reply.number(OB_INVALID_ARGUMENT); return OB_SUCCESS; }
     share::server_service<ObITabletScan>()->revert_scan_iter(iter);
     iter = nullptr;
     iter_allocator.reset();
     param.key_ranges_.reset();
     keys.resize(ranges * 2 * width);
     int ret = OB_SUCCESS;
-    for (uint64_t i = 0; !ret && i < ranges; ++i) {
+    for (int64_t i = 0; !ret && i < ranges; ++i) {
+      const ObNewRange &source = request.key_ranges_.at(i);
       ObNewRange range; range.table_id_ = param.index_id_;
-      range.border_flag_.set_data(borders[i]);
-      for (uint64_t j = 0; !ret && j < width * 2; ++j) {
-        ret = ob_write_obj(iter_allocator, shallow[i * width * 2 + j], keys[i * width * 2 + j]);
+      range.border_flag_.set_data(source.border_flag_.get_data());
+      for (int64_t j = 0; !ret && j < width * 2; ++j) {
+        const ObObj &obj = j < width ? source.start_key_.get_obj_ptr()[j]
+                                      : source.end_key_.get_obj_ptr()[j - width];
+        ret = ob_write_obj(iter_allocator, obj, keys[i * width * 2 + j]);
       }
       range.start_key_.assign(&keys[i * width * 2], width);
       range.end_key_.assign(&keys[i * width * 2 + width], width);
       if (!ret) { ret = param.key_ranges_.push_back(range); }
     }
-    param.scan_flag_.flag_ = flag;
-    param.is_get_ = get;
+    param.scan_flag_.flag_ = request.scan_flag_.flag_;
+    param.is_get_ = request.is_get_;
     param.timeout_ = THIS_WORKER.get_timeout_ts();
     if (!ret) { ret = share::server_service<ObITabletScan>()->table_scan(param, iter); }
-    reply.number(ret);
-    return OB_SUCCESS;
+    return ret;
   }
   int fetch(ScanBatch &batch) {
     batch.reset();
@@ -560,6 +568,10 @@ struct ReadScans {
     scans.erase(it);
     return OB_SUCCESS;
   }
+  int rescan(uint64_t id, const ObVTableScanParam &param) {
+    auto it = scans.find(id);
+    return it == scans.end() ? OB_INVALID_ARGUMENT : it->second->rescan(param);
+  }
   int process(Frame &request, Frame &reply, transaction::ObTxDesc *tx = nullptr, sql::ObSQLSessionInfo *session = nullptr) {
     const uint64_t ns = storage_space.namespace_id();
     int ret = OB_SUCCESS;
@@ -575,14 +587,7 @@ struct ReadScans {
     } else {
       const uint64_t id = request.number();
       auto it = scans.find(id);
-      if (request.type() == 'R') {
-        // Rescan carries fresh key ranges beyond the handle; consume them in
-        // the scan itself. A logical failure is a reply value so the worker
-        // can fall back to a full reopen on the still-healthy channel.
-        if (it == scans.end()) { reply.number(OB_INVALID_ARGUMENT); }
-        else { it->second->rescan(request, reply); }
-      }
-      else if (!request.consumed() || it == scans.end()) { reply.number(OB_INVALID_ARGUMENT); }
+      if (!request.consumed() || it == scans.end()) { reply.number(OB_INVALID_ARGUMENT); }
       else { reply.number(OB_NOT_SUPPORTED); }
     }
     // Storage errors belong in the reply. A sent RPC must receive that reply
@@ -790,22 +795,8 @@ public:
   int rescan() {
     batch.reset(); row_index = 0; rows_left = 0; end = false; qualified = 0; returned = 0;
     if (!handle || is_virtual_table(param.index_id_)) { reset(); return open(); }
-    Frame request('R'); request.number(handle);
-    request.number(param.scan_flag_.flag_); request.number(param.is_get_);
-    request.number(param.key_ranges_.count());
-    const int64_t width = param.key_ranges_.empty() ? 1 : param.key_ranges_.at(0).start_key_.get_obj_cnt();
-    request.number(width);
-    for (int64_t i = 0; i < param.key_ranges_.count(); ++i) {
-      const ObNewRange &range = param.key_ranges_.at(i);
-      if (range.start_key_.get_obj_cnt() != width || range.end_key_.get_obj_cnt() != width) {
-        return OB_NOT_SUPPORTED;
-      }
-      request.number(range.border_flag_.get_data());
-      for (int64_t j = 0; j < width; ++j) { request.append(range.start_key_.get_obj_ptr()[j]); }
-      for (int64_t j = 0; j < width; ++j) { request.append(range.end_key_.get_obj_ptr()[j]); }
-    }
-    Frame reply;
-    const int ret = request.ret ? request.ret : exchange(request, reply);
+    StorageSessionScope scope(param.op_ ? param.op_->get_eval_ctx().exec_ctx_.get_my_session() : nullptr);
+    const int ret = scope.error() ? scope.error() : rescan_in_process_scan(handle, param);
     if (ret) {
       fprintf(stderr, "PROTOTYPE_V23_SCAN_RESCAN_FALLBACK ret=%d table=%llu ranges=%lld\n",
           ret, static_cast<unsigned long long>(param.index_id_),
