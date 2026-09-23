@@ -160,39 +160,6 @@ bool native_namespace_schema_authority()
   return true;
 }
 
-// V10: the SQL-only process owns these decoded schemas. The engine sends values
-// over IPC; neither its schema pointers nor SQL proxy cross the process boundary.
-int remote_database(char op, uint64_t id, const ObString &name, const ObDatabaseSchema *&schema) {
-  using namespace observer::namespace_worker_prototype;
-  schema = nullptr; Frame reply;
-  int ret = worker_catalog_fetch(op, id, name, OB_INVALID_VERSION, reply);
-  if (ret || reply.number() == 0) { return ret ? ret : reply.ret; }
-  std::unique_ptr<DatabaseHolder> holder(new DatabaseHolder());
-  reply.read(holder->schema);
-  if (!reply.consumed()) { return reply.ret ? reply.ret : OB_INVALID_ARGUMENT; }
-  holder->simple.set_database_id(holder->schema.get_database_id());
-  holder->simple.set_schema_version(holder->schema.get_schema_version());
-  holder->simple.set_name_case_mode(OB_LOWERCASE_AND_INSENSITIVE);
-  if ((ret = holder->simple.set_database_name(holder->schema.get_database_name_str()))) { return ret; }
-  std::lock_guard<std::mutex> lock(schema_mutex);
-  auto &slot = database_schemas[holder->schema.get_database_id()];
-  if (!slot) { slot = std::move(holder); }
-  schema = &slot->schema; return OB_SUCCESS;
-}
-int remote_table(char op, uint64_t id, const ObString &name, const ObTableSchema *&schema) {
-  using namespace observer::namespace_worker_prototype;
-  schema = nullptr; Frame reply;
-  int ret = worker_catalog_fetch(op, id, name, OB_INVALID_VERSION, reply);
-  if (ret || reply.number() == 0) { return ret ? ret : reply.ret; }
-  std::unique_ptr<SchemaHolder> holder(new SchemaHolder());
-  reply.read(holder->schema);
-  if (!reply.consumed()) { return reply.ret ? reply.ret : OB_INVALID_ARGUMENT; }
-  std::lock_guard<std::mutex> lock(schema_mutex);
-  auto &slot = schemas[holder->schema.get_table_id()];
-  if (!slot) { slot = std::move(holder); }
-  schema = &slot->schema; return OB_SUCCESS;
-}
-
 int64_t cap_min(int64_t a, int64_t b) { return a == 0 ? b : b == 0 ? a : std::min(a, b); }
 uint64_t encoded(uint64_t db, uint64_t local) {
   return NamespaceObjectKey{db, local}.storage_id();
@@ -1863,7 +1830,6 @@ int NamespaceForkKernelPrototype::database_by_address(const ObString &address, c
 }
 int NamespaceForkKernelPrototype::database_in_namespace(uint64_t ns, const ObString &name,
                                                        const ObDatabaseSchema *&schema) {
-  if (observer::namespace_worker_prototype::worker_catalog_fetch) { return remote_database('d', ns, name, schema); }
   schema = nullptr;
   if (!GCTX.sql_proxy_ || !NamespaceObjectKey{ns, 1}.is_valid()) { return OB_INVALID_ARGUMENT; }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
@@ -1873,40 +1839,6 @@ int NamespaceForkKernelPrototype::database_in_namespace(uint64_t ns, const ObStr
   return ret == OB_SUCCESS ? database_from_value(ns, value, schema) : ret;
 }
 int NamespaceForkKernelPrototype::database_by_id(uint64_t id, const ObDatabaseSchema *&schema) {
-  if (observer::namespace_worker_prototype::worker_catalog_fetch) {
-    { std::lock_guard<std::mutex> lock(schema_mutex);
-      auto it = database_schemas.find(id); if (it != database_schemas.end()) { schema = &it->second->schema; return OB_SUCCESS; } }
-    int ret = remote_database('b', id, ObString(), schema);
-    // Worker startup can race the shared catalog refresh immediately after a
-    // fork. The worker already has the source database in its native schema;
-    // use it only as a metadata bootstrap fallback, while table ids/storage
-    // remain governed by the fork catalog and encoded namespace.
-    if (ret != OB_SUCCESS && is_encoded_id(id) && GCTX.schema_service_) {
-      ObSchemaGetterGuard guard;
-      const ObDatabaseSchema *native = nullptr;
-      if (OB_SUCCESS == GCTX.schema_service_->get_runtime_schema_guard(guard)
-          && OB_SUCCESS == guard.get_database_schema(local_of(id), native)) {
-        if (native != nullptr) {
-          std::unique_ptr<DatabaseHolder> holder(new DatabaseHolder());
-          ret = holder->schema.assign(*native);
-          if (ret == OB_SUCCESS) {
-            holder->schema.set_database_id(id);
-            holder->simple.set_database_id(id);
-            holder->simple.set_schema_version(holder->schema.get_schema_version());
-            holder->simple.set_name_case_mode(OB_LOWERCASE_AND_INSENSITIVE);
-            ret = holder->simple.set_database_name(holder->schema.get_database_name_str());
-            if (ret == OB_SUCCESS) {
-              std::lock_guard<std::mutex> lock(schema_mutex);
-              auto &slot = database_schemas[id];
-              if (!slot) { slot = std::move(holder); }
-              schema = &slot->schema;
-            }
-          }
-        }
-      }
-    }
-    return ret;
-  }
   schema = nullptr; Roots root; Value value;
   if (!is_encoded_id(id) || !GCTX.sql_proxy_) { return OB_INVALID_ARGUMENT; }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
@@ -2911,16 +2843,6 @@ int NamespaceForkKernelPrototype::capture(ObISQLClient &trans, uint64_t source, 
   return ret;
 }
 int NamespaceForkKernelPrototype::schema_by_name(uint64_t db, const ObString &name, const ObTableSchema *&schema) {
-  // The source namespace keeps its canonical schema in the worker-local
-  // native schema service. Only forked namespaces consult the immutable
-  // namespace catalog overlay.
-  if (observer::namespace_worker_prototype::worker_catalog_fetch && is_encoded_id(db)) {
-    return remote_table('t', db, name, schema);
-  } else if (observer::namespace_worker_prototype::worker_catalog_fetch && !is_encoded_id(db)) {
-    ObSchemaGetterGuard guard;
-    int ret = GSCHEMASERVICE.get_runtime_schema_guard(guard);
-    return ret ? ret : guard.get_table_schema(db, name, false, schema);
-  }
   schema = nullptr; if (!GCTX.sql_proxy_) { return OB_NOT_INIT; }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   const uint64_t owner = namespace_of(db);
@@ -2938,7 +2860,6 @@ int NamespaceForkKernelPrototype::schema_by_id(uint64_t id, const ObTableSchema 
   schema = nullptr; if (!is_encoded_id(id)) { return OB_INVALID_ARGUMENT; }
   { std::lock_guard<std::mutex> lock(schema_mutex);
     auto it = schemas.find(id); if (it != schemas.end()) { schema = &it->second->schema; return OB_SUCCESS; } }
-  if (observer::namespace_worker_prototype::worker_catalog_fetch) { return remote_table('i', id, ObString(), schema); }
   if (!GCTX.sql_proxy_) { return OB_NOT_INIT; }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   Roots root; Value value; int ret = roots(*GCTX.sql_proxy_, database_of(id), root);
@@ -2969,7 +2890,6 @@ int NamespaceForkKernelPrototype::table_id_for_tablet(const ObTabletID &tablet, 
   return OB_SUCCESS;
 }
 int NamespaceForkKernelPrototype::list_schemas(uint64_t db, ObIArray<const ObTableSchema *> &out) {
-  if (observer::namespace_worker_prototype::worker_catalog_fetch) { return OB_NOT_SUPPORTED; }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   const uint64_t owner = namespace_of(db);
   Roots root; int ret = roots(*GCTX.sql_proxy_, owner, root);
