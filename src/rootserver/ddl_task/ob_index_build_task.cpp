@@ -1134,6 +1134,8 @@ int ObIndexBuildTask::create_schedule_queue()
     LOG_WARN("the parameters is invalid", K(ret), K(object_id_), K(index_table_id_), K(task_id_));
   } else if (OB_FAIL(ObDDLUtil::get_tablets(*task_schema_service(), index_table_id_, index_tablet_ids))) {
   } else if (OB_FAIL(tablet_scheduler_.init(
+    *task_schema_service(),
+    *task_sql_proxy(),
     index_table_id_,
     object_id_,
     task_id_,

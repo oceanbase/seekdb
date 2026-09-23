@@ -31,7 +31,9 @@ class ObDDLTabletScheduler final
 public:
   ObDDLTabletScheduler();
   ~ObDDLTabletScheduler();
-  int init(const uint64_t table_id,
+  int init(share::schema::ObMultiVersionSchemaService &schema_service,
+           common::ObMySQLProxy &sql_proxy,
+           const uint64_t table_id,
            const uint64_t ref_data_table_id,
            const int64_t  task_id,
            const int64_t  parallelism,
@@ -70,6 +72,8 @@ private:
   common::ObCurTraceId::TraceId trace_id_;
   common::TCRWLock lock_; // protects pending/running tablet queues against ddl builder and scheduler races.
   ObLocalManagementService *local_management_service_;
+  share::schema::ObMultiVersionSchemaService *schema_service_;
+  common::ObMySQLProxy *sql_proxy_;
   ObArray<ObTabletID> all_tablets_;
   ObArray<ObTabletID> running_tablets_;
   int64_t running_execution_id_;

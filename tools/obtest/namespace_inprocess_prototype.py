@@ -233,6 +233,16 @@ def direct_probe(experiment):
         assert experiment.sql("SELECT COUNT(*),SUM(v) FROM phase10.parts", child) == ((4, 100),)
         assert experiment.sql(
             "SELECT /*+ parallel(2) */ SUM(v) FROM phase10.parts", child) == ((100,),)
+        experiment.sql(
+            "CREATE TABLE phase10.generated_parts(c1 INT,c2 VARCHAR(20),"
+            "c3 INT GENERATED ALWAYS AS (LENGTH(c4)),c4 VARCHAR(20)) "
+            "PARTITION BY KEY(c3,c4) PARTITIONS 2", child)
+        experiment.sql(
+            "INSERT INTO phase10.generated_parts(c1,c2,c4) VALUES(1,'x','ab')", child)
+        experiment.sql("CREATE INDEX generated_parts_c2 ON phase10.generated_parts(c2)", child)
+        assert experiment.sql(
+            "SELECT c1,c2,c3,c4 FROM phase10.generated_parts "
+            "FORCE INDEX(generated_parts_c2)", child) == ((1, "x", 2, "ab"),)
         experiment.sql("CREATE TABLE phase10.blobs(id INT PRIMARY KEY, payload MEDIUMBLOB)", child)
         with child.cursor() as cursor:
             cursor.execute("INSERT INTO phase10.blobs VALUES(1,%s)", (b"namespace-blob",))

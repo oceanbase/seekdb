@@ -789,7 +789,7 @@ public:
   int revert_scan_iter(ObNewRowIterator *iter) override { delete iter; return OB_SUCCESS; }
   int reuse_scan_iter(bool, ObNewRowIterator *iter) override {
     auto *scan = static_cast<RemoteScanIterator *>(iter);
-    if (!scan) { return OB_INVALID_ARGUMENT; }
+    if (!scan) { return OB_SUCCESS; }
     scan->reset(); return OB_SUCCESS;
   }
   int table_rescan(ObVTableScanParam &, ObNewRowIterator *iter) override {

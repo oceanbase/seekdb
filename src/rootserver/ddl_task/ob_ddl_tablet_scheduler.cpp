@@ -34,7 +34,8 @@ using namespace oceanbase::sql;
 ObDDLTabletScheduler::ObDDLTabletScheduler()
   : is_inited_(false), table_id_(OB_INVALID_ID), ref_data_table_id_(OB_INVALID_ID),
     task_id_(OB_INVALID_ID), parallelism_(0), snapshot_version_(0), trace_id_(),
-    lock_(), local_management_service_(nullptr), all_tablets_(), running_tablets_(),
+    lock_(), local_management_service_(nullptr), schema_service_(nullptr), sql_proxy_(nullptr),
+    all_tablets_(), running_tablets_(),
     running_execution_id_(-1), tablet_id_to_data_size_(), tablet_id_to_data_row_cnt_(),
     tablet_id_to_execution_id_map_()
 {
@@ -45,7 +46,9 @@ ObDDLTabletScheduler::~ObDDLTabletScheduler()
 
 }
 
-int ObDDLTabletScheduler::init(const uint64_t table_id,
+int ObDDLTabletScheduler::init(ObMultiVersionSchemaService &schema_service,
+                               ObMySQLProxy &sql_proxy,
+                               const uint64_t table_id,
                                const uint64_t ref_data_table_id,
                                const int64_t  task_id,
                                const int64_t  parallelism,
@@ -57,6 +60,7 @@ int ObDDLTabletScheduler::init(const uint64_t table_id,
   ObArenaAllocator arena("tblt_sched_init");
   common::ObArray<ObString> running_sql_info;
   common::ObArray<ObTabletID> ref_data_table_tablets;
+  // Running sessions are process-wide, even for a child namespace DDL task.
   common::hash::ObHashMap<uint64_t, bool> tablet_finished_map;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
@@ -77,13 +81,10 @@ int ObDDLTabletScheduler::init(const uint64_t table_id,
           && tablets.count() > 0))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(table_id), K(ref_data_table_id), K(task_id), K(parallelism), K(snapshot_version), K(trace_id), K(tablets.count()));
-  } else if (OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, ref_data_table_id, ref_data_table_tablets))) {
+  } else if (OB_FAIL(ObDDLUtil::get_tablets(schema_service, ref_data_table_id, ref_data_table_tablets))) {
   } else if (OB_UNLIKELY(tablets.count() != ref_data_table_tablets.count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("index table tablets count is not equal to data table tablets count", K(ret), K(tablets.count()), K(ref_data_table_tablets.count()));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(tablet_finished_map.create(tablets.count(), ObModIds::OB_SSTABLE_CREATE_INDEX))) {
   } else if (OB_FAIL(tablet_id_to_data_size_.create(ref_data_table_tablets.count(), ObModIds::OB_SSTABLE_CREATE_INDEX))) {
   } else if (OB_FAIL(tablet_id_to_data_row_cnt_.create(ref_data_table_tablets.count(), ObModIds::OB_SSTABLE_CREATE_INDEX))) {
@@ -93,7 +94,7 @@ int ObDDLTabletScheduler::init(const uint64_t table_id,
     table_id,
     task_id,
     tablets,
-    *GCTX.sql_proxy_,
+    sql_proxy,
     tablet_finished_map))) {
   } else if (OB_FAIL(ObDDLTaskRecordOperator::get_running_tasks_inner_sql(
       *GCTX.sql_proxy_, trace_id, task_id, snapshot_version, arena, running_sql_info))) {
@@ -118,7 +119,7 @@ int ObDDLTabletScheduler::init(const uint64_t table_id,
       } else if (OB_FAIL(tablet_id_to_data_size_.set_refactored(ref_data_table_tablets.at(i).id(), tablet_data_size, true /* overwrite */))) {
       } else if (OB_FAIL(tablet_id_to_data_row_cnt_.set_refactored(ref_data_table_tablets.at(i).id(), tablet_data_row_cnt, true /* overwrite */))) {
       } else if (OB_FAIL(part_tablets.push_back(tablets.at(i)))) {
-      } else if (OB_FAIL(ObDDLUtil::get_index_table_batch_partition_names(*GCTX.schema_service_, ref_data_table_id, table_id, part_tablets, arena, partition_names))) {
+      } else if (OB_FAIL(ObDDLUtil::get_index_table_batch_partition_names(schema_service, ref_data_table_id, table_id, part_tablets, arena, partition_names))) {
       } else {
         if (OB_FAIL(tablet_finished_map.get_refactored(tablets.at(i).id(), is_finished_status))) {
           if (OB_HASH_NOT_EXIST == ret) {
@@ -155,6 +156,8 @@ int ObDDLTabletScheduler::init(const uint64_t table_id,
     parallelism_ = parallelism;
     snapshot_version_ = snapshot_version;
     trace_id_ = trace_id;
+    schema_service_ = &schema_service;
+    sql_proxy_ = &sql_proxy;
     is_inited_ = true;
     LOG_INFO("success to init", K(ret), K(table_id), K(ref_data_table_id), K(task_id), K(parallelism), K(snapshot_version), K(trace_id), K(tablets), K(all_tablets_.count()), K(running_tablets_.count()));
   } else {
@@ -280,10 +283,10 @@ int ObDDLTabletScheduler::push_task_execution_id(int64_t &new_task_execution_id)
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("scheduler not init", K(ret));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+  } else if (OB_ISNULL(sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
-  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+    LOG_WARN("invalid argument", KR(ret), KP(sql_proxy_));
+  } else if (OB_FAIL(trans.start(sql_proxy_))) {
   } else if (OB_FAIL(ObDDLTaskRecordOperator::select_for_update(trans, task_id_, task_status, task_execution_id, ret_code, unused_snapshot_ver))) {
   } else if (task_execution_id == -1) {
     task_execution_id = 0;
@@ -393,6 +396,7 @@ int ObDDLTabletScheduler::get_unfinished_tablets(const share::ObDDLType task_typ
   tablets.reset();
   ObArray<ObTabletID> tablet_queue;
   uint64_t left_space_size = 0;
+  // Disk statistics describe the process host, not a namespace catalog.
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(is_inited_));
@@ -439,7 +443,7 @@ int ObDDLTabletScheduler::calculate_candidate_tablets(const uint64_t left_space_
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( ref_data_table_id_, data_table_schema))) {
   } else if (OB_ISNULL(data_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
@@ -542,9 +546,9 @@ int ObDDLTabletScheduler::check_running_task_completion_status()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+  } else if (OB_ISNULL(sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
+    LOG_WARN("invalid argument", KR(ret), KP(sql_proxy_));
   } else {
     {
       TCRLockGuard guard(lock_);
@@ -559,7 +563,7 @@ int ObDDLTabletScheduler::check_running_task_completion_status()
     } else {
       ObArray<ObString> partition_names;
       bool is_running_status = false;
-      if (OB_FAIL(ObDDLUtil::get_index_table_batch_partition_names(*GCTX.schema_service_,
+      if (OB_FAIL(ObDDLUtil::get_index_table_batch_partition_names(*schema_service_,
             ref_data_table_id_, table_id_, running_tablet_queue, arena, partition_names))) {
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < partition_names.count(); i++) {
@@ -581,7 +585,7 @@ int ObDDLTabletScheduler::check_running_task_completion_status()
           table_id_,
           task_id_,
           running_tablet_queue,
-          *GCTX.sql_proxy_,
+          *sql_proxy_,
           tablet_finished_map))) {
         } else {
           bool is_finished_status = true;
@@ -637,6 +641,8 @@ bool ObDDLTabletScheduler::is_recovered_running_task()
 void ObDDLTabletScheduler::destroy()
 {
   is_inited_ = false;
+  schema_service_ = nullptr;
+  sql_proxy_ = nullptr;
   table_id_ = 0;
   ref_data_table_id_ = 0;
   task_id_ = 0;
