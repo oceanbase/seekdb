@@ -37,10 +37,12 @@ ObUpdateAutoincSequenceTask::ObUpdateAutoincSequenceTask(
     const ObObjType &orig_column_type,
     const ObSQLMode &sql_mode,
     const common::ObCurTraceId::TraceId &trace_id,
-    const int64_t task_id)
+    const int64_t task_id,
+    ObLocalManagementService *local_management_service)
     : data_table_id_(data_table_id), dest_table_id_(dest_table_id),
       schema_version_(schema_version), column_id_(column_id), orig_column_type_(orig_column_type),
-      sql_mode_(sql_mode), trace_id_(trace_id), task_id_(task_id)
+      sql_mode_(sql_mode), trace_id_(trace_id), task_id_(task_id),
+      local_management_service_(local_management_service)
 {
   set_retry_times(0);
 }
@@ -49,7 +51,9 @@ int ObUpdateAutoincSequenceTask::process()
 {
   int ret = OB_SUCCESS;
   ObTraceIdGuard trace_id_guard(trace_id_);
-  ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = local_management_service_ != nullptr
+      ? local_management_service_
+      : ::oceanbase::share::server_service<ObLocalManagementService>();
   int64_t max_value = 0;
   int tmp_ret = OB_SUCCESS;
   if (OB_ISNULL(local_management_service)) {
@@ -87,7 +91,8 @@ int ObUpdateAutoincSequenceTask::process()
         ObTimeoutCtx timeout_ctx;
         ObSqlString sql;
         sqlclient::ObMySQLResult *result = NULL;
-        common::ObCommonSqlProxy *user_sql_proxy = GCTX.ddl_sql_proxy_;
+        common::ObCommonSqlProxy *user_sql_proxy = local_management_service->ddl_sql_proxy() != nullptr
+            ? local_management_service->ddl_sql_proxy() : GCTX.ddl_sql_proxy_;
         ObSessionParam session_param;
         session_param.sql_mode_ = reinterpret_cast<int64_t *>(&sql_mode_);
         session_param.ddl_info_.set_is_ddl(true);
@@ -144,7 +149,8 @@ ObAsyncTask *ObUpdateAutoincSequenceTask::deep_copy(char *buf, const int64_t buf
                                                      orig_column_type_,
                                                      sql_mode_,
                                                      trace_id_,
-                                                     task_id_);
+                                                     task_id_,
+                                                     local_management_service_);
   }
   return new_task;
 }
@@ -195,6 +201,7 @@ int ObModifyAutoincTask::init(const int64_t task_id,
 int ObModifyAutoincTask::init(const ObDDLTaskRecord &task_record)
 {
   int ret = OB_SUCCESS;
+  set_context(task_record.context_);
   const uint64_t data_table_id = task_record.object_id_;
   const uint64_t target_schema_id = task_record.target_object_id_;
   const int64_t schema_version = task_record.schema_version_;
@@ -275,10 +282,10 @@ int ObModifyAutoincTask::unlock_table()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObModifyAutoincTask has not been inited", K(ret));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+  } else if (OB_ISNULL(task_sql_proxy())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
-  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+    LOG_WARN("invalid argument", KR(ret), KP(task_sql_proxy()));
+  } else if (OB_FAIL(trans.start(task_sql_proxy()))) {
   } else if (OB_FAIL(owner_id.convert_from_value(ObLockOwnerType::DEFAULT_OWNER_TYPE,
                                                  task_id_))) {
   } else if (OB_FAIL(ObDDLLock::unlock_for_offline_ddl(object_id_, nullptr/*hidden_tablet_ids_alone*/, owner_id, trans))) {
@@ -296,7 +303,8 @@ int ObModifyAutoincTask::modify_autoinc()
 {
   int ret = OB_SUCCESS;
   bool is_update_autoinc_end = false;
-  ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
+      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObModifyAutoincTask has not been inited", K(ret));
@@ -347,7 +355,7 @@ int ObModifyAutoincTask::modify_autoinc()
           ObObjType column_type = orig_table_schema->get_column_schema(alter_column_id)->get_data_type();
           ObUpdateAutoincSequenceTask task(object_id_, target_object_id_, schema_version_,
                                           alter_column_id, column_type, alter_table_arg_.sql_mode_,
-                                          trace_id_, task_id_);
+                                          trace_id_, task_id_, local_management_service);
           if (OB_FAIL(local_management_service->submit_ddl_local_build_task(task))) {
           } else {
             update_autoinc_job_time_ = ObTimeUtility::current_time();
@@ -371,7 +379,8 @@ int ObModifyAutoincTask::wait_trans_end()
   int tmp_ret = OB_SUCCESS;
   ObDDLTaskStatus new_status = WAIT_TRANS_END;
   const ObDDLTaskStatus next_task_status = SUCCESS;
-  ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
+      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObModifyAutoincTask has not been inited", K(ret));
@@ -392,11 +401,13 @@ int ObModifyAutoincTask::wait_trans_end()
     } else if (OB_ISNULL(updated_table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("cannot find orig table", K(ret), K(alter_table_arg_));
+    } else if (FALSE_IT(wait_trans_ctx_.set_context(context_))) {
     } else if (OB_FAIL(wait_trans_ctx_.init(task_id_,
                                             task_status_,
                                             object_id_,
                                             ObDDLWaitTransEndCtx::WAIT_SCHEMA_TRANS,
-                                            updated_table_schema->get_schema_version()))) {
+                                            updated_table_schema->get_schema_version(),
+                                            *task_schema_service()))) {
     }
   }
   // try wait transaction end
@@ -435,8 +446,10 @@ int ObModifyAutoincTask::set_schema_available()
     alter_table_arg_.ddl_task_type_ = share::UPDATE_AUTOINC_SCHEMA;
     
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
-            *GCTX.schema_service_, object_id_, rpc_timeout))) {
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->        execute_ddl_task(alter_table_arg_, unused_ids); }))) {
+            *task_schema_service(), object_id_, rpc_timeout))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return (context_.root_service_ != nullptr
+        ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>())
+            ->execute_ddl_task(alter_table_arg_, unused_ids); }))) {
     }
   }
   return ret;
@@ -461,8 +474,10 @@ int ObModifyAutoincTask::rollback_schema()
         
         alter_table_arg.alter_table_schema_.reset_column_info();
         if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
-                *GCTX.schema_service_, object_id_, rpc_timeout))) {
-        } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->            execute_ddl_task(alter_table_arg, unused_ids); }))) {
+                *task_schema_service(), object_id_, rpc_timeout))) {
+        } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return (context_.root_service_ != nullptr
+            ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>())
+                ->execute_ddl_task(alter_table_arg, unused_ids); }))) {
         }
       }
     }
@@ -540,11 +555,11 @@ int ObModifyAutoincTask::check_health()
     need_retry_ = false;
   } else if (OB_FAIL(refresh_status())) {
   } else if (OB_FAIL(refresh_schema_version())) {
-  } else if (OB_ISNULL(GCTX.schema_service_)) {
+  } else if (OB_ISNULL(task_schema_service())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
+    LOG_WARN("invalid argument", KR(ret), KP(task_schema_service()));
   } else {
-    ObMultiVersionSchemaService &schema_service = *GCTX.schema_service_;
+    ObMultiVersionSchemaService &schema_service = *task_schema_service();
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *index_schema = nullptr;
     bool is_source_table_exist = false;

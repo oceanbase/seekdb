@@ -2487,6 +2487,7 @@ int ObDDLScheduler::recover_task(const ObDDLTaskContext &context)
             && cur_record.ddl_type_ != DDL_CREATE_INDEX
             && cur_record.ddl_type_ != DDL_CREATE_PARTITIONED_LOCAL_INDEX
             && cur_record.ddl_type_ != DDL_CREATE_FTS_INDEX
+            && cur_record.ddl_type_ != DDL_MODIFY_AUTO_INCREMENT
             && cur_record.ddl_type_ != DDL_CREATE_MULTIVALUE_INDEX
             && cur_record.ddl_type_ != DDL_CREATE_VEC_SPIV_INDEX
             && cur_record.ddl_type_ != DDL_DROP_INDEX

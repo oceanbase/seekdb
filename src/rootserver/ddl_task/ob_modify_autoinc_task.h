@@ -35,7 +35,8 @@ public:
     const ObObjType &orig_column_type,
     const ObSQLMode &sql_mode,
     const common::ObCurTraceId::TraceId &trace_id,
-    const int64_t task_id);
+    const int64_t task_id,
+    ObLocalManagementService *local_management_service);
   virtual ~ObUpdateAutoincSequenceTask() = default;
   virtual int process() override;
   virtual int64_t get_deep_copy_size() const override { return sizeof(*this); }
@@ -49,6 +50,7 @@ private:
   ObSQLMode sql_mode_;
   common::ObCurTraceId::TraceId trace_id_;
   int64_t task_id_;
+  ObLocalManagementService *local_management_service_;
 };
 
 class ObModifyAutoincTask : public ObDDLTask

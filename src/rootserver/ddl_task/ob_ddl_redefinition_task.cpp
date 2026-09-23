@@ -1101,7 +1101,7 @@ int ObDDLRedefinitionTask::modify_autoinc(const ObDDLTaskStatus next_task_status
           ObObjType column_type = new_table_schema->get_column_schema(alter_autoinc_column_id)->get_data_type();
           ObUpdateAutoincSequenceTask task(object_id_, target_object_id_, schema_version_,
                                           alter_autoinc_column_id, column_type, alter_table_arg_.sql_mode_,
-                                          trace_id_, task_id_);
+                                          trace_id_, task_id_, local_management_service);
           if (OB_FAIL(local_management_service->submit_ddl_local_build_task(task))) {
             LOG_WARN("fail to submit ObUpdateAutoincSequenceTask", K(ret));
           } else {
