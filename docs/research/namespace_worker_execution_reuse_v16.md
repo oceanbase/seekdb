@@ -27,7 +27,7 @@
 
 - [worker 请求外壳](../../src/observer/namespace_sql_worker_prototype.ipp)
 - [原型范围检查与 IPC sender](../../src/observer/namespace_worker_sql_request_prototype.ipp)
-- [结果值传输](../../src/observer/namespace_worker_result_prototype.h)
+- 结果值传输文件已随旧 Worker IPC 清理删除；本文保留 V16 方案记录。
 - [共享端结果转发](../../src/observer/mysql/namespace_worker_query_prototype.ipp)
 - [事务和写入代理](../../src/observer/namespace_worker_write_prototype.ipp)
 - [扫描代理](../../src/observer/namespace_worker_scan_prototype.ipp)

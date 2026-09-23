@@ -54,7 +54,6 @@ OBSERVER_PRIVATE_HEADERS = [
     "namespace_worker_direct_insert_prototype.ipp",
     "namespace_worker_gateway_prototype.ipp",
     "namespace_worker_protocol_prototype.h",
-    "namespace_worker_result_prototype.h",
     "namespace_worker_scan_prototype.ipp",
     "namespace_worker_write_prototype.ipp",
     "ob_command_line_parser.h",

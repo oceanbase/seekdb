@@ -1206,26 +1206,6 @@ struct EngineWrites {
     int ret = request.ret ? request.ret
         : !storage_space.is_namespace() ? OB_INVALID_ARGUMENT : OB_SUCCESS;
     Frame values;
-    if (!ret && request.type() == 'T' && operation == 'x') {
-      const int cause = static_cast<int>(
-          static_cast<int64_t>(request.number()));
-      auto *native_service =
-          share::server_service<transaction::ObTransService>();
-      if (!request.consumed() || txid == 0 || cause == OB_SUCCESS) {
-        ret = OB_INVALID_ARGUMENT;
-      } else if (OB_ISNULL(native_service)) {
-        ret = OB_NOT_INIT;
-      } else {
-        ret = native_service->interrupt(
-            transaction::ObTransID(static_cast<int64_t>(txid)), cause);
-      }
-      reply = Frame('w');
-      reply.number(ret);
-      fprintf(stderr,
-          "PROTOTYPE_NAMESPACE_TX_INTERRUPT ns=%llu tx=%llu cause=%d ret=%d\n",
-          (unsigned long long)ns, (unsigned long long)txid, cause, ret);
-      return reply.ret;
-    }
     if (!ret && request.type() == 'T' && operation == 'z') {
       ObTxReadSnapshot snapshot;
       request.read(snapshot);
@@ -1874,6 +1854,7 @@ private:
 
 int call_in_process_tx_clock(
     const std::function<int(ObITransactionService &)> &call);
+int call_in_process_tx_interrupt(const transaction::ObTxDesc &tx, int cause);
 
 class RemoteTransactionService final : public ObITransactionService {
 public:
@@ -1971,15 +1952,7 @@ public:
     return ret ? ret : tx_rpc('M', tx, request, reply);
   }
   int interrupt(transaction::ObTxDesc &tx, int cause) override {
-    IndependentStorageScope scope;
-    Frame request('T'), reply;
-    request.number('x');
-    request.number(tx.get_tx_id().get_id());
-    request.number(cause);
-    int ret = scope.error();
-    if (!ret) { ret = write_rpc(request, reply); }
-    if (!ret && !reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
-    return ret;
+    return call_in_process_tx_interrupt(tx, cause);
   }
   int get_read_snapshot(transaction::ObTxDesc &tx,
                                 transaction::ObTxIsolationLevel isolation_level,
