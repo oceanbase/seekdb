@@ -91,24 +91,10 @@ int ObDDLService::drop_namespace_prototype_(const ObString &name)
         id, released_storage_tables, released_storage_databases);
   }
   if (OB_SUCC(ret)) {
-    if (observer::namespace_worker_prototype::worker_process) {
-      ret = observer::namespace_worker_prototype::reload_storage_freeze_info();
-    } else {
-      auto *freeze = share::server_service<ObFreezeInfoMgr>();
-      ret = freeze ? freeze->reload_for_test() : OB_NOT_INIT;
-    }
+    auto *freeze = share::server_service<ObFreezeInfoMgr>();
+    ret = freeze ? freeze->reload_for_test() : OB_NOT_INIT;
   }
   if (OB_SUCC(ret) && id == 1) { ret = publish_schema(); }
-  if (OB_SUCC(ret) && id > 1
-      && observer::namespace_worker_prototype::worker_process) {
-    const int endpoint_ret = observer::namespace_worker_prototype::deactivate_namespace(id);
-    if (endpoint_ret != OB_SUCCESS) {
-      // Deletion is already committed. A stale endpoint rejects storage via
-      // the namespace tombstone and the lifecycle manager can retry teardown.
-      LOG_WARN("namespace deleted before worker endpoint teardown failed",
-          K(endpoint_ret), K(id));
-    }
-  }
   // A failed attempt leaves DELETING persisted. Reissuing the same operation resumes it.
   LOG_INFO("PROTOTYPE_V7_NAMESPACE_DROP", K(ret), K(name), K(id),
       "private_tablets", bound.count(), K(released_tables), K(released_databases),
@@ -123,12 +109,6 @@ int ObDDLService::fork_database(
   } else if (!fork_database_arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(fork_database_arg));
-  } else if (observer::namespace_worker_prototype::worker_process
-      && observer::namespace_worker_prototype::worker_namespace != 1) {
-    // Namespace lifecycle metadata is global and is currently coordinated by
-    // the default Worker. Reject before opening the control transaction; a
-    // child must never commit a namespace whose endpoint it cannot activate.
-    ret = OB_NOT_SUPPORTED;
   } else if (fork_database_arg.dst_database_name_ == "__drop__") {
     ret = drop_namespace_prototype_(fork_database_arg.src_database_name_);
   } else {

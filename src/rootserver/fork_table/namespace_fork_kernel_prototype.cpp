@@ -2054,23 +2054,8 @@ int NamespaceForkKernelPrototype::control_namespace(const ObString &source, cons
   if (ret == OB_SUCCESS && !bootstrap) {
     ret = observer::namespace_worker_prototype::reload_storage_freeze_info();
   }
-  if (ret == OB_SUCCESS && !bootstrap
-      && observer::namespace_worker_prototype::worker_process) {
-    const int endpoint_ret = observer::namespace_worker_prototype::activate_namespace(id);
-    if (endpoint_ret != OB_SUCCESS) {
-      // The namespace transaction is already durable. Endpoint creation is a
-      // retryable lifecycle action and must not turn a committed fork into a
-      // client-visible SQL failure.
-      LOG_WARN("namespace committed before worker endpoint activation failed",
-          K(endpoint_ret), K(id));
-    }
-  }
-  if (ret == OB_SUCCESS && target != "__template__"
-      && !observer::namespace_worker_prototype::worker_process
-      && observer::namespace_worker_prototype::forked_in_process()) {
-    // In-process forked namespaces need no worker endpoint. Registering the
-    // name lets later logins bind the runtime directly; per-namespace
-    // services activate lazily on the first login (ticket 05c).
+  if (ret == OB_SUCCESS && target != "__template__") {
+    // Register the name so later logins can bind the runtime directly.
     char register_name[ns::Namespace::MAX_NAME_LEN];
     if (target.length() < ns::Namespace::MAX_NAME_LEN) {
       MEMCPY(register_name, target.ptr(), target.length());
