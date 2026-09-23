@@ -387,9 +387,20 @@ public:
                                    const ObTableSchema *lob_meta_table_schema,
                                    common::ObArenaAllocator &allocator,
                                    ObDDLTableSchema &ddl_table_schema);
+  static int fill_ddl_table_schema(const ObTableSchema &table_schema,
+                                   const ObTableSchema *lob_meta_table_schema,
+                                   const ObTableSchema *vector_data_table_schema,
+                                   const ObTableSchema *vector_param_table_schema,
+                                   common::ObArenaAllocator &allocator,
+                                   ObDDLTableSchema &ddl_table_schema);
+  static int resolve_vector_index_schemas(ObSchemaGetterGuard &schema_guard,
+                                          const ObTableSchema &table_schema,
+                                          const ObTableSchema *&data_table_schema,
+                                          const ObTableSchema *&param_table_schema);
 private:
-  static int fill_vector_index_schema_item(ObSchemaGetterGuard &schema_guard,
-                                           const ObTableSchema *table_schema,
+  static int fill_vector_index_schema_item(const ObTableSchema &table_schema,
+                                           const ObTableSchema &data_table_schema,
+                                           const ObTableSchema &param_table_schema,
                                            common::ObArenaAllocator &allocator,
                                            const ObIArray<ObColDesc> &column_descs,
                                            ObDDLTableSchema &ddl_table_schema);

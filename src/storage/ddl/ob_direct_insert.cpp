@@ -252,8 +252,12 @@ public:
       storage::ObDDLInsertDagInitParam dag_param;
       share::schema::ObTableSchema table_schema(allocator_);
       share::schema::ObTableSchema lob_meta_table_schema(allocator_);
+      share::schema::ObTableSchema vector_data_table_schema(allocator_);
+      share::schema::ObTableSchema vector_param_table_schema(allocator_);
       int64_t schema_pos = 0;
       int64_t lob_schema_pos = 0;
+      int64_t data_schema_pos = 0;
+      int64_t param_schema_pos = 0;
 
       if (OB_FAIL(table_schema.deserialize(
               param.table_schema_.ptr(), param.table_schema_.length(),
@@ -278,6 +282,19 @@ public:
         ret = common::OB_INVALID_ARGUMENT;
         LOG_WARN("invalid direct insert lob meta schema", K(ret),
             K(lob_schema_pos), K(param.lob_meta_table_schema_.length()));
+      } else if (!param.vector_data_table_schema_.empty()
+                 && OB_FAIL(vector_data_table_schema.deserialize(
+                        param.vector_data_table_schema_.ptr(),
+                        param.vector_data_table_schema_.length(), data_schema_pos))) {
+      } else if (!param.vector_param_table_schema_.empty()
+                 && OB_FAIL(vector_param_table_schema.deserialize(
+                        param.vector_param_table_schema_.ptr(),
+                        param.vector_param_table_schema_.length(), param_schema_pos))) {
+      } else if ((!param.vector_data_table_schema_.empty()
+                  && data_schema_pos != param.vector_data_table_schema_.length())
+                 || (!param.vector_param_table_schema_.empty()
+                     && param_schema_pos != param.vector_param_table_schema_.length())) {
+        ret = common::OB_INVALID_ARGUMENT;
       } else if (param.data_format_version_
                  < storage::DDL_IDEM_DATA_FORMAT_VERSION) {
         ret = common::OB_NOT_SUPPORTED;
@@ -303,6 +320,12 @@ public:
         dag_param.lob_meta_table_schema_ =
             param.lob_meta_table_schema_.empty()
                 ? nullptr : &lob_meta_table_schema;
+        dag_param.vector_data_table_schema_ =
+            param.vector_data_table_schema_.empty()
+                ? nullptr : &vector_data_table_schema;
+        dag_param.vector_param_table_schema_ =
+            param.vector_param_table_schema_.empty()
+                ? nullptr : &vector_param_table_schema;
       }
 
       if (OB_FAIL(ret)) {

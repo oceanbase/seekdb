@@ -368,43 +368,40 @@ bool ObDDLWriteStat::operator!=(const ObDDLWriteStat &other)
 }
 OB_SERIALIZE_MEMBER(ObDDLWriteStat, row_count_);
 
-int ObDDLTableSchema::fill_vector_index_schema_item(ObSchemaGetterGuard &schema_guard,
-    const ObTableSchema *table_schema,
-    ObArenaAllocator &allocator,
-    const ObIArray<ObColDesc> &column_descs,
-    ObDDLTableSchema &ddl_table_schema)
+int ObDDLTableSchema::resolve_vector_index_schemas(ObSchemaGetterGuard &schema_guard,
+    const ObTableSchema &table_schema,
+    const ObTableSchema *&data_table_schema,
+    const ObTableSchema *&with_param_table_schema)
 {
   int ret = OB_SUCCESS;
   ObSEArray<uint64_t , 1> col_ids;
   uint64_t with_param_table_tid;
   // for hnsw, table_schema here is snapshot table, need to get related delta buffer table.
   ObIndexType index_type = INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL;
-
-  ObTableSchemaItem &schema_item = ddl_table_schema.table_item_;
-  const ObTableSchema *data_table_schema = nullptr;
+  data_table_schema = nullptr;
+  with_param_table_schema = nullptr;
 
   // ivf param is saved in centroid table's schema
-  if (table_schema->is_vec_ivfflat_index()) {
+  if (table_schema.is_vec_ivfflat_index()) {
     index_type = INDEX_TYPE_VEC_IVFFLAT_CENTROID_LOCAL;
-  } else if (table_schema->is_vec_ivfsq8_index()) {
+  } else if (table_schema.is_vec_ivfsq8_index()) {
     index_type = INDEX_TYPE_VEC_IVFSQ8_CENTROID_LOCAL;
-  } else if (table_schema->is_vec_ivfpq_index()) {
+  } else if (table_schema.is_vec_ivfpq_index()) {
     index_type = INDEX_TYPE_VEC_IVFPQ_CENTROID_LOCAL;
   }
-  const ObTableSchema *with_param_table_schema = nullptr;
   // get data schema
-  if (OB_FAIL(schema_guard.get_table_schema( table_schema->get_data_table_id(), data_table_schema))) {
+  if (OB_FAIL(schema_guard.get_table_schema( table_schema.get_data_table_id(), data_table_schema))) {
   } else if (OB_ISNULL(data_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
-    LOG_WARN("table not exist", K(ret), K(table_schema->get_data_table_id()));
-  } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_id(*data_table_schema, *table_schema, col_ids))) {
+    LOG_WARN("table not exist", K(ret), K(table_schema.get_data_table_id()));
+  } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_id(*data_table_schema, table_schema, col_ids))) {
   } else if (col_ids.count() != 1) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get invalid col id array", K(ret), K(col_ids));
   } else {
     if (index_type == INDEX_TYPE_VEC_DELTA_BUFFER_LOCAL) {
       ObString index_prefix;
-      if (OB_FAIL(ObVectorIndexUtil::get_vector_index_prefix(*table_schema, index_prefix))) {
+      if (OB_FAIL(ObVectorIndexUtil::get_vector_index_prefix(table_schema, index_prefix))) {
       } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_tid_with_index_prefix(&schema_guard,
                                                                                    *data_table_schema,
                                                                                    index_type,
@@ -427,23 +424,36 @@ int ObDDLTableSchema::fill_vector_index_schema_item(ObSchemaGetterGuard &schema_
   } else if (OB_ISNULL(with_param_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table not exist", K(ret), K(with_param_table_tid));
-  } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_dim(*with_param_table_schema, *data_table_schema, schema_item.vec_dim_))) {
+  }
+  return ret;
+}
+
+int ObDDLTableSchema::fill_vector_index_schema_item(const ObTableSchema &table_schema,
+    const ObTableSchema &data_table_schema,
+    const ObTableSchema &with_param_table_schema,
+    ObArenaAllocator &allocator,
+    const ObIArray<ObColDesc> &column_descs,
+    ObDDLTableSchema &ddl_table_schema)
+{
+  int ret = OB_SUCCESS;
+  ObTableSchemaItem &schema_item = ddl_table_schema.table_item_;
+  if (OB_FAIL(ObVectorIndexUtil::get_vector_index_column_dim(with_param_table_schema, data_table_schema, schema_item.vec_dim_))) {
   } else if (schema_item.vec_dim_ == 0) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get vector dim is zero, fail to calc", K(ret), K(schema_item.vec_dim_), KPC(with_param_table_schema));
-  } else if (OB_FAIL(ob_write_string(allocator, with_param_table_schema->get_index_params(), schema_item.vec_idx_param_))) {
+    LOG_WARN("get vector dim is zero, fail to calc", K(ret), K(schema_item.vec_dim_), K(with_param_table_schema));
+  } else if (OB_FAIL(ob_write_string(allocator, with_param_table_schema.get_index_params(), schema_item.vec_idx_param_))) {
   } else {
-    schema_item.lob_inrow_threshold_ = data_table_schema->get_lob_inrow_threshold();
+    schema_item.lob_inrow_threshold_ = data_table_schema.get_lob_inrow_threshold();
     ObIArray<ObColumnSchemaItem> &column_items = ddl_table_schema.column_items_;
     for (int64_t i = 0; OB_SUCC(ret) && i < column_items.count(); ++i) {
        const schema::ObColumnSchemaV2 *data_column_schema = nullptr;
        ObColumnSchemaItem &column_item = column_items.at(i);
-       if (i >= table_schema->get_rowkey_column_num() && i < table_schema->get_rowkey_column_num() + ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt()) {
+       if (i >= table_schema.get_rowkey_column_num() && i < table_schema.get_rowkey_column_num() + ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt()) {
          // skip multi version column, keep item invalid
        } else if (i >= column_descs.count()) {
          ret = OB_ERR_UNEXPECTED;
          LOG_WARN("error unexpected, index is invalid", K(ret), K(i), K(column_descs));
-       } else if (OB_ISNULL(data_column_schema = data_table_schema->get_column_schema(column_descs.at(i).col_id_))) {
+       } else if (OB_ISNULL(data_column_schema = data_table_schema.get_column_schema(column_descs.at(i).col_id_))) {
          ret = OB_ERR_UNEXPECTED;
          LOG_WARN("data column schema is null", K(ret), K(i), K(column_descs.at(i).col_id_));
        } else {
@@ -532,12 +542,16 @@ int ObDDLTableSchema::fill_ddl_table_schema(const uint64_t table_id,
     }
     if (OB_SUCC(ret)) {
       if (FALSE_IT(is_vector_data_complement = ObDDLUtil::is_vector_index_complement(table_schema->get_index_type()))) {
-      } else if (is_vector_data_complement && OB_FAIL(fill_vector_index_schema_item(schema_guard,
-          table_schema,
-          allocator,
-          column_descs,
-          ddl_table_schema))) {
-        LOG_WARN("fail to prepare vector index data", K(ret));
+      } else if (is_vector_data_complement) {
+        const ObTableSchema *data_schema = nullptr;
+        const ObTableSchema *param_schema = nullptr;
+        if (OB_FAIL(resolve_vector_index_schemas(schema_guard, *table_schema,
+                data_schema, param_schema))) {
+        } else if (OB_FAIL(fill_vector_index_schema_item(*table_schema,
+                *data_schema, *param_schema, allocator, column_descs,
+                ddl_table_schema))) {
+        }
+        if (OB_FAIL(ret)) { LOG_WARN("fail to prepare vector index data", K(ret)); }
       }
     }
   }
@@ -547,6 +561,18 @@ int ObDDLTableSchema::fill_ddl_table_schema(const uint64_t table_id,
 int ObDDLTableSchema::fill_ddl_table_schema(
     const ObTableSchema &table_schema,
     const ObTableSchema *lob_meta_table_schema,
+    ObArenaAllocator &allocator,
+    ObDDLTableSchema &ddl_table_schema)
+{
+  return fill_ddl_table_schema(table_schema, lob_meta_table_schema,
+      nullptr, nullptr, allocator, ddl_table_schema);
+}
+
+int ObDDLTableSchema::fill_ddl_table_schema(
+    const ObTableSchema &table_schema,
+    const ObTableSchema *lob_meta_table_schema,
+    const ObTableSchema *vector_data_table_schema,
+    const ObTableSchema *vector_param_table_schema,
     ObArenaAllocator &allocator,
     ObDDLTableSchema &ddl_table_schema)
 {
@@ -565,11 +591,15 @@ int ObDDLTableSchema::fill_ddl_table_schema(
         "lob_meta_table_id", table_schema.get_aux_lob_meta_tid(),
         KP(lob_meta_table_schema));
   } else if (ObDDLUtil::is_vector_index_complement(table_schema.get_index_type())) {
-    // Vector direct insert needs related data/parameter table schemas as well.
-    // The namespace protocol will add those facts when that path is enabled.
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("vector direct insert requires related schema facts", K(ret),
+    if (OB_ISNULL(vector_data_table_schema) || OB_ISNULL(vector_param_table_schema)
+        || vector_data_table_schema->get_table_id() != table_schema.get_data_table_id()) {
+      ret = OB_INVALID_ARGUMENT;
+    }
+    if (OB_FAIL(ret)) { LOG_WARN("vector direct insert has invalid related schemas", K(ret),
         "table_id", table_schema.get_table_id());
+    }
+  }
+  if (OB_FAIL(ret)) {
   } else if (OB_FAIL(table_schema.get_multi_version_column_descs(column_descs))) {
   } else {
     ddl_table_schema.table_id_ = table_schema.get_table_id();
@@ -626,6 +656,11 @@ int ObDDLTableSchema::fill_ddl_table_schema(
           }
         }
       }
+    }
+    if (OB_SUCC(ret) && ObDDLUtil::is_vector_index_complement(table_schema.get_index_type())) {
+      ret = fill_vector_index_schema_item(table_schema,
+          *vector_data_table_schema, *vector_param_table_schema,
+          allocator, column_descs, ddl_table_schema);
     }
   }
   return ret;

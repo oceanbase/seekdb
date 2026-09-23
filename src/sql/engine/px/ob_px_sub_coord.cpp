@@ -29,6 +29,7 @@
 #include "sql/engine/basic/ob_select_into_op.h"
 #include "storage/ddl/ob_ddl_direct_load_utils.h"
 #include "storage/ddl/ob_ddl_insert_dag.h"
+#include "storage/ddl/ob_ddl_struct.h"
 #include "share/ob_server_struct.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 
@@ -798,6 +799,8 @@ int ObPxSubCoord::start_ddl()
     share::schema::ObSchemaGetterGuard schema_guard;
     const share::schema::ObTableSchema *table_schema = nullptr;
     const share::schema::ObTableSchema *lob_meta_table_schema = nullptr;
+    const share::schema::ObTableSchema *vector_data_table_schema = nullptr;
+    const share::schema::ObTableSchema *vector_param_table_schema = nullptr;
     if (OB_UNLIKELY(!plan_ctx->has_direct_insert_task_info())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("direct insert task info was not prepared by QC", K(ret),
@@ -843,6 +846,18 @@ int ObPxSubCoord::start_ddl()
                && OB_FAIL(serialize_direct_insert_table_schema(
                       *lob_meta_table_schema, exec_ctx->get_allocator(),
                       start_param.lob_meta_table_schema_))) {
+    } else if (ObDDLUtil::is_vector_index_complement(table_schema->get_index_type())
+               && OB_FAIL(ObDDLTableSchema::resolve_vector_index_schemas(
+                      schema_guard, *table_schema,
+                      vector_data_table_schema, vector_param_table_schema))) {
+    } else if (OB_NOT_NULL(vector_data_table_schema)
+               && OB_FAIL(serialize_direct_insert_table_schema(
+                      *vector_data_table_schema, exec_ctx->get_allocator(),
+                      start_param.vector_data_table_schema_))) {
+    } else if (OB_NOT_NULL(vector_param_table_schema)
+               && OB_FAIL(serialize_direct_insert_table_schema(
+                      *vector_param_table_schema, exec_ctx->get_allocator(),
+                      start_param.vector_param_table_schema_))) {
     } else if (OB_FAIL(get_participants(sqc_arg_.sqc_, ddl_table_id,
                                  start_param.participants_))) {
     } else if (OB_FAIL(data_plane::ObDirectInsertOrchestrator::start(

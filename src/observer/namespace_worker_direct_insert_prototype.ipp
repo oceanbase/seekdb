@@ -173,8 +173,12 @@ struct DirectInsertRoute {
       param.is_offline_index_rebuild_ = offline_rebuild;
       const ObString logical_table_schema = request.string();
       const ObString logical_lob_meta_schema = request.string();
+      const ObString logical_vector_data_schema = request.string();
+      const ObString logical_vector_param_schema = request.string();
       param.table_schema_ = logical_table_schema;
       param.lob_meta_table_schema_ = logical_lob_meta_schema;
+      param.vector_data_table_schema_ = logical_vector_data_schema;
+      param.vector_param_table_schema_ = logical_vector_param_schema;
       const uint64_t count = request.number();
       if (request.ret || !count || count > MAX_FRAME / 8 || owner || parent.slot || parent.generation
           || generation || offline_rebuild > 1 || session_generation == UINT64_MAX) { ret = OB_INVALID_ARGUMENT; }
@@ -211,6 +215,18 @@ struct DirectInsertRoute {
           ret = route_direct_insert_schema(
               ns, logical_lob_meta_schema, 0, route_allocator,
               param.lob_meta_table_schema_);
+        }
+        if (OB_SUCC(ret)) {
+          failure_stage = "route_vector_data_schema";
+          ret = route_direct_insert_schema(
+              ns, logical_vector_data_schema, 0, route_allocator,
+              param.vector_data_table_schema_);
+        }
+        if (OB_SUCC(ret)) {
+          failure_stage = "route_vector_param_schema";
+          ret = route_direct_insert_schema(
+              ns, logical_vector_param_schema, 0, route_allocator,
+              param.vector_param_table_schema_);
         }
       }
       if (!ret) { failure_stage = "find_route"; }
@@ -602,6 +618,8 @@ public:
     request.number(param.snapshot_version_); request.number(param.schema_version_);
     request.number(param.is_offline_index_rebuild_);
     request.string(param.table_schema_); request.string(param.lob_meta_table_schema_);
+    request.string(param.vector_data_table_schema_);
+    request.string(param.vector_param_table_schema_);
     request.number(param.participants_.count());
     for (int64_t i = 0; i < param.participants_.count(); ++i) { request.number(param.participants_.at(i).id()); }
     int ret = scope.error();

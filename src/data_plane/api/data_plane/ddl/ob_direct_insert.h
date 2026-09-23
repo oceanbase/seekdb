@@ -88,6 +88,7 @@ struct ObDirectInsertStartParam final
       data_format_version_(0), snapshot_version_(0), schema_version_(0),
       is_offline_index_rebuild_(false),
       table_schema_(), lob_meta_table_schema_(),
+      vector_data_table_schema_(), vector_param_table_schema_(),
       participants_()
   {}
 
@@ -110,6 +111,8 @@ struct ObDirectInsertStartParam final
   bool is_offline_index_rebuild_;
   common::ObString table_schema_;
   common::ObString lob_meta_table_schema_;
+  common::ObString vector_data_table_schema_;
+  common::ObString vector_param_table_schema_;
   common::ObArray<Participant> participants_;
 };
 
