@@ -69,6 +69,7 @@ class IDirectInsertService;
 }
 namespace share
 {
+class ObITabletAutoincrementService;
 namespace schema
 {
 class ObMultiVersionSchemaService;
@@ -443,6 +444,7 @@ public:
   share::schema::ObMultiVersionSchemaService *effective_schema_service() const;
   common::ObMySQLProxy *effective_sql_proxy() const;
   data_plane::IDirectInsertService *effective_direct_insert_service() const;
+  share::ObITabletAutoincrementService *effective_tablet_autoincrement_service() const;
   void reset(bool skip_sys_var);
   void clean_status();
   const common::ObWarningBuffer &get_show_warnings_buffer() const { return show_warnings_buf_; }

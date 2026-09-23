@@ -213,6 +213,15 @@ data_plane::IDirectInsertService *ObSQLSessionInfo::effective_direct_insert_serv
       : share::server_service<data_plane::IDirectInsertService>();
 }
 
+share::ObITabletAutoincrementService *ObSQLSessionInfo::effective_tablet_autoincrement_service() const
+{
+  void *service = ns_runtime_ != nullptr
+      ? ns_runtime_->service(ns::NamespaceRuntime::TABLET_AUTOINCREMENT_SERVICE) : nullptr;
+  return service != nullptr
+      ? static_cast<share::ObITabletAutoincrementService *>(service)
+      : share::server_service<share::ObITabletAutoincrementService>();
+}
+
 void ObSQLSessionInfo::configure_obj_cast(
     common::ObObjCastParams &params,
     common::ObISrsProvider *srs_provider,

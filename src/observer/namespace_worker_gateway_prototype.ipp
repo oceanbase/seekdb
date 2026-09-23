@@ -655,6 +655,11 @@ int serve_storage(StorageSpaceHandle storage_space, ReadScans *scans,
       if (state) { result.number(state); }
       else { ret = process_tablet_autoincrement_cache_invalidation(
           storage_space, input, result); }
+    } else if (input.type() == 'Q') {
+      result = Frame('g');
+      if (state) { result.number(state); }
+      else { ret = process_tablet_autoincrement_next_value(
+          storage_space, input, result); }
     } else if (input.type() == 'G') {
       result = Frame('g');
       if (state) { result.number(state); }

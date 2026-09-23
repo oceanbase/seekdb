@@ -104,8 +104,10 @@ int ObExprDocID::cg_expr(
                                                              eval_ctx.exec_ctx_.get_autoinc_range_interval(),
                                                              eval_ctx.exec_ctx_.get_slice_row_idx());
       } else {
-        share::ObITabletAutoincrementService *auto_inc =
-            ::oceanbase::share::server_service<::oceanbase::share::ObITabletAutoincrementService>();
+        ObSQLSessionInfo *session = eval_ctx.exec_ctx_.get_my_session();
+        share::ObITabletAutoincrementService *auto_inc = session != nullptr
+            ? session->effective_tablet_autoincrement_service()
+            : ::oceanbase::share::server_service<share::ObITabletAutoincrementService>();
         if (OB_ISNULL(auto_inc)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("tablet autoincrement service is unavailable", K(ret));

@@ -375,7 +375,8 @@ public:
       const uint64_t target_task_id,
       ObDDLUpdateParentTaskIDType update_type,
       ObIAllocator &allocator,
-      common::ObISQLClient &proxy);
+      common::ObISQLClient &proxy,
+      common::ObMySQLProxy &read_proxy);
 
   static int get_schedule_info(
       common::ObISQLClient &proxy,

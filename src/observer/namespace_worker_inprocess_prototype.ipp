@@ -182,6 +182,7 @@ struct InProcessNamespaceServices {
   rootserver::ObLocalManagementService *root_commands = nullptr;
   RemoteRootserverLocalRuntime *local_runtime = nullptr;
   RemoteDirectInsertService direct_insert;
+  RemoteTabletAutoincrementService tablet_autoincrement;
   RequestRoutes direct_insert_routes{WORKER_REQUEST};
   std::atomic<bool> schema_loaded{false};
   std::atomic<bool> recovery_loaded{false};
@@ -317,6 +318,8 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
     runtime.set_service(ns::NamespaceRuntime::PLAN_CACHE, services->plan_cache);
     runtime.set_service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE, services->root_commands);
     runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_SERVICE, &services->direct_insert);
+    runtime.set_service(ns::NamespaceRuntime::TABLET_AUTOINCREMENT_SERVICE,
+        &services->tablet_autoincrement);
     runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_ROUTES, &services->direct_insert_routes);
     runtime.set_service(ns::NamespaceRuntime::SQL_PROXY, services->sql_proxy);
     inprocess_services.emplace(ns, std::move(services));

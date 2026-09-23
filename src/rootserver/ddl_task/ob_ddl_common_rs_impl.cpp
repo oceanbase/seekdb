@@ -867,7 +867,8 @@ int ObDDLTaskUtil::write_defensive_and_obtain_snapshot(
     const ObTableSchema &data_table_schema,
     const ObTableSchema &index_table_schema,
     ObSchemaService *schema_service,
-    int64_t &new_fetched_snapshot)
+    int64_t &new_fetched_snapshot,
+    ObIRootserverLocalRuntime *local_runtime)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(schema_service)) {
@@ -885,10 +886,11 @@ int ObDDLTaskUtil::write_defensive_and_obtain_snapshot(
                                                                     trans,
                                                                     tmp_table_schema))) {
       } else if (OB_FAIL(data_table_schema.get_tablet_ids(tablet_ids))) {
-      } else if (OB_FAIL(ObTabletBindingMdsHelper::modify_tablet_binding_for_write_defensive(tablet_ids,
-                                                                                             tmp_table_schema.get_schema_version(),
-                                                                                             abs_timeout_us,
-                                                                                             trans))) {
+      } else if (OB_FAIL(local_runtime != nullptr
+          ? local_runtime->modify_tablet_binding_for_write_defensive(
+                trans, tablet_ids, tmp_table_schema.get_schema_version(), abs_timeout_us)
+          : ObTabletBindingMdsHelper::modify_tablet_binding_for_write_defensive(
+                tablet_ids, tmp_table_schema.get_schema_version(), abs_timeout_us, trans))) {
       } else if (OB_FAIL(ObDDLTaskUtil::obtain_snapshot(trans, data_table_schema, index_table_schema, new_fetched_snapshot))) {
       }
     }
@@ -899,7 +901,9 @@ int ObDDLTaskUtil::write_defensive_and_obtain_snapshot(
 int ObDDLTaskUtil::load_ddl_task(
     const int64_t task_id,
     ObIAllocator &allocator,
-    rootserver::ObDDLTask &task)
+    rootserver::ObDDLTask &task,
+    ObMySQLProxy &sql_proxy,
+    const ObDDLTaskContext &context)
 {
   int ret = OB_SUCCESS;
   rootserver::ObDDLTaskRecord task_record;
@@ -908,9 +912,10 @@ int ObDDLTaskUtil::load_ddl_task(
     LOG_WARN("there are invalid args", K(ret), K(task_id));
   } else if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::get_ddl_task_record(
                                                                               task_id,
-                                                                              *GCTX.sql_proxy_,
+                                                                              sql_proxy,
                                                                               allocator,
                                                                               task_record))) {
+  } else if (OB_FALSE_IT(task_record.context_ = context)) {
   } else if (OB_FAIL(task.init(task_record))) {
   }
   LOG_INFO("finish to load ddl task obj from the disk", K(ret), K(task));

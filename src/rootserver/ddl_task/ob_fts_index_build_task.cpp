@@ -173,6 +173,7 @@ int ObFtsIndexBuildTask::init(
 int ObFtsIndexBuildTask::init(const ObDDLTaskRecord &task_record)
 {
   int ret = OB_SUCCESS;
+  set_context(task_record.context_);
   const uint64_t data_table_id = task_record.object_id_;
   const uint64_t index_table_id = task_record.target_object_id_;
   const int64_t schema_version = task_record.schema_version_;
@@ -182,7 +183,8 @@ int ObFtsIndexBuildTask::init(const ObDDLTaskRecord &task_record)
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
+  } else if (OB_ISNULL(local_management_service_ = context_.root_service_ != nullptr
+      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
     LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
@@ -332,11 +334,11 @@ int ObFtsIndexBuildTask::check_health()
   } else if (OB_FAIL(refresh_schema_version())) {
   } else if (status == ObDDLTaskStatus::FAIL) {
     /*already failed, and have submitted drop index task, do nothing*/
-  } else if (OB_ISNULL(GCTX.schema_service_)) {
+  } else if (OB_ISNULL(task_schema_service())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
+    LOG_WARN("invalid argument", KR(ret), KP(task_schema_service()));
   } else {
-    ObMultiVersionSchemaService &schema_service = *GCTX.schema_service_;
+    ObMultiVersionSchemaService &schema_service = *task_schema_service();
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *index_schema = nullptr;
     bool is_data_table_exist = false;
@@ -477,7 +479,7 @@ int ObFtsIndexBuildTask::prepare_aux_table(
       OB_FAIL(dependent_task_result_map_.create(num_fts_child_task,
                                                 lib::ObLabel("DepTasMap")))) {
     LOG_WARN("create dependent task map failed", K(ret));
-  } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(*GCTX.schema_service_, data_table_id,
+  } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(*task_schema_service(), data_table_id,
                                                     ddl_rpc_timeout))) {
   } else {
     SMART_VARS_3((obcall::ObCreateIndexArg, index_arg),
@@ -495,7 +497,7 @@ int ObFtsIndexBuildTask::prepare_aux_table(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to assign create index arg", K(ret));
       } else if (OB_FALSE_IT(arg.snapshot_version_ = snapshot_version_)) {
-      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->create_aux_index(arg, res); }))) {
+      } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return local_management_service_->create_aux_index(arg, res); }))) {
       } else if (res.schema_generated_) {
         task_submitted = true;
         aux_table_id = res.aux_table_id_;
@@ -591,10 +593,10 @@ int ObFtsIndexBuildTask::prepare_aux_index_tables()
     LOG_WARN("fail to check need to load dic", K(ret), K(parser_name), K(need_to_load_dic));
   } else if (need_to_load_dic) {
     ObMySQLTransaction trans;
-    if (OB_ISNULL(GCTX.sql_proxy_)) {
+    if (OB_ISNULL(task_sql_proxy())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("sql proxy is null", K(ret));
-    } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+    } else if (OB_FAIL(trans.start(task_sql_proxy()))) {
     } else if (OB_FAIL(get_charset_type(charset_type))) {
     } else if (OB_FAIL(ObGenDicLoader::get_instance().get_dic_loader(
                                                                      parser_name,
@@ -801,12 +803,12 @@ int ObFtsIndexBuildTask::load_dictionary()
   } else if (OB_UNLIKELY(!dic_loader_handle.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("the dic loader handle is not valid", K(ret), K(dic_loader_handle));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+  } else if (OB_ISNULL(task_sql_proxy())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
+    LOG_WARN("invalid argument", KR(ret), KP(task_sql_proxy()));
   } else if (OB_FAIL(timeout_ctx.set_trx_timeout_us(timeout))) {
   } else if (OB_FAIL(timeout_ctx.set_timeout(timeout))) {
-  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+  } else if (OB_FAIL(trans.start(task_sql_proxy()))) {
   } else if (OB_FAIL(dic_loader_handle.get_loader()->try_load_dictionary_in_trans(trans))) {
   }
 
@@ -900,7 +902,7 @@ int ObFtsIndexBuildTask::wait_aux_table_complement()
                                                       target_object_id,
                                                       unused_addr,
                                                       false /* is_ddl_retry_task */,
-                                                      *GCTX.sql_proxy_,
+                                                      *task_sql_proxy(),
                                                       error_message,
                                                       unused_user_msg_len))) {
             if (OB_ENTRY_NOT_EXIST == ret) {
@@ -1342,7 +1344,7 @@ int ObFtsIndexBuildTask::get_task_status(int64_t task_id, uint64_t aux_table_id,
                                                   target_object_id,
                                                   unused_addr,
                                                   false /* is_ddl_retry_task */,
-                                                  *GCTX.sql_proxy_,
+                                                  *task_sql_proxy(),
                                                   error_message,
                                                   unused_user_msg_len))) {
         if (OB_ENTRY_NOT_EXIST == ret) {
@@ -1379,7 +1381,7 @@ int ObFtsIndexBuildTask::refresh_task_context(const share::ObDDLTaskStatus statu
           break;
         }
         case ObDDLTaskStatus::WAIT_ROWKEY_DOC_TABLE_COMPLEMENT: {
-          if (OB_FAIL(ObDDLTaskUtil::load_ddl_task(task_id_, allocator_, task))) {
+          if (OB_FAIL(ObDDLTaskUtil::load_ddl_task(task_id_, allocator_, task, *task_sql_proxy(), context_))) {
           } else if (OB_FAIL(refresh_task_depend_map_context(task))) {
           }
           break;
@@ -1389,7 +1391,7 @@ int ObFtsIndexBuildTask::refresh_task_context(const share::ObDDLTaskStatus statu
           break;
         }
         case ObDDLTaskStatus::WAIT_AUX_TABLE_COMPLEMENT: {
-          if (OB_FAIL(ObDDLTaskUtil::load_ddl_task(task_id_, allocator_, task))) {
+          if (OB_FAIL(ObDDLTaskUtil::load_ddl_task(task_id_, allocator_, task, *task_sql_proxy(), context_))) {
           } else if (OB_FAIL(refresh_task_depend_map_context(task))) {
           }
           break;
@@ -1398,7 +1400,7 @@ int ObFtsIndexBuildTask::refresh_task_context(const share::ObDDLTaskStatus statu
           if (is_fts_task() &&
               (OB_INVALID_ID == domain_index_aux_table_id_ ||
               OB_INVALID_ID == fts_doc_word_aux_table_id_)) {
-            if (OB_FAIL(ObDDLTaskUtil::load_ddl_task(task_id_, allocator_, task))) {
+            if (OB_FAIL(ObDDLTaskUtil::load_ddl_task(task_id_, allocator_, task, *task_sql_proxy(), context_))) {
             } else {
               domain_index_aux_table_id_ = task.get_domain_index_aux_table_id();
               fts_doc_word_aux_table_id_ = task.get_fts_doc_word_aux_table_id();
@@ -1407,7 +1409,7 @@ int ObFtsIndexBuildTask::refresh_task_context(const share::ObDDLTaskStatus statu
           break;
         }
         case ObDDLTaskStatus::FAIL: {
-          if (OB_FAIL(ObDDLTaskUtil::load_ddl_task(task_id_, allocator_, task))) {
+          if (OB_FAIL(ObDDLTaskUtil::load_ddl_task(task_id_, allocator_, task, *task_sql_proxy(), context_))) {
           } else if (OB_FAIL(refresh_task_depend_map_context(task))) {
           } else {
             rowkey_doc_aux_table_id_ = task.get_rowkey_doc_aux_table_id();
@@ -1506,7 +1508,7 @@ int ObFtsIndexBuildTask::clean_on_failed()
                                                       target_object_id,
                                                       unused_addr,
                                                       false /* is_ddl_retry_task */,
-                                                      *GCTX.sql_proxy_,
+                                                      *task_sql_proxy(),
                                                       error_message,
                                                       unused_user_msg_len))) {
             if (OB_ENTRY_NOT_EXIST == ret) {
@@ -1514,10 +1516,10 @@ int ObFtsIndexBuildTask::clean_on_failed()
               ret = OB_SUCCESS;
               not_finished_cnt++;
               ObMySQLTransaction trans;
-              if (OB_ISNULL(GCTX.sql_proxy_)) {
+              if (OB_ISNULL(task_sql_proxy())) {
                 ret = OB_INVALID_ARGUMENT;
-                LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
-              } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+                LOG_WARN("invalid argument", KR(ret), KP(task_sql_proxy()));
+              } else if (OB_FAIL(trans.start(task_sql_proxy()))) {
               } else if (OB_FAIL(ObDDLTaskRecordOperator::update_task_status(
                                  trans, child_task_id, ObDDLTaskStatus::FAIL))) {
               } else {
@@ -1576,10 +1578,10 @@ int ObFtsIndexBuildTask::submit_drop_fts_index_task()
   bool has_aux_table = (domain_index_aux_table_id_ != OB_INVALID_ID);
   uint64_t index_table_id = has_aux_table ? domain_index_aux_table_id_ : index_table_id_;
 
-  if (OB_ISNULL(GCTX.schema_service_)) {
+  if (OB_ISNULL(task_schema_service())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("invalid argument", KR(ret), KP(task_schema_service()));
+  } else if (OB_FAIL(task_schema_service()->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_INVALID_ID != rowkey_doc_aux_table_id_ &&
              OB_FAIL(drop_index_arg.index_ids_.push_back(rowkey_doc_aux_table_id_))) {
     LOG_WARN("fail to push back rowkey_doc_aux_table_id_", K(ret), K(rowkey_doc_aux_table_id_));
@@ -1626,7 +1628,7 @@ int ObFtsIndexBuildTask::submit_drop_fts_index_task()
     drop_index_arg.is_hidden_         = create_index_arg_.is_offline_rebuild_;
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(data_table_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout))) {
     } else if (OB_FAIL(DDL_SIM(task_id_, DROP_INDEX_RPC_FAILED))) {
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index_on_failed(drop_index_arg, drop_index_res); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return local_management_service_->drop_index_on_failed(drop_index_arg, drop_index_res); }))) {
     } else {
       drop_index_task_submitted_ = true;
       drop_index_task_id_ = drop_index_res.task_id_;
@@ -1656,7 +1658,7 @@ int ObFtsIndexBuildTask::wait_drop_index_finish(bool &is_finish)
                                                   target_object_id,
                                                   unused_addr,
                                                   false /* is_ddl_retry_task */,
-                                                  *GCTX.sql_proxy_,
+                                                  *task_sql_proxy(),
                                                   error_message,
                                                   unused_user_msg_len))) {
         if (OB_ENTRY_NOT_EXIST == ret) {
@@ -1785,9 +1787,9 @@ int ObFtsIndexBuildTask::cleanup_impl()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(report_error_code(unused_str))) {
-  } else if (OB_ISNULL(GCTX.sql_proxy_) || OB_ISNULL(GCTX.schema_service_)) {
+  } else if (OB_ISNULL(task_sql_proxy()) || OB_ISNULL(task_schema_service())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_), KP(GCTX.schema_service_));
+    LOG_WARN("invalid argument", KR(ret), KP(task_sql_proxy()), KP(task_schema_service()));
   } else {
     const uint64_t data_table_id = object_id_;
     const uint64_t index_table_id = domain_index_aux_table_id_;
@@ -1801,7 +1803,7 @@ int ObFtsIndexBuildTask::cleanup_impl()
     ObDicLoaderHandle dic_loader_handle;
     ObCharsetType charset_type = CHARSET_INVALID;
     bool is_skip_unlock = false;
-    if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    if (OB_FAIL(task_schema_service()->get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_table_schema(
                                                      data_table_id,
                                                      data_schema))) {
@@ -1812,7 +1814,7 @@ int ObFtsIndexBuildTask::cleanup_impl()
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("fail to get table schema", K(ret), KPC(data_schema));
     }
-    if (FAILEDx(trans.start(GCTX.sql_proxy_))) {
+    if (FAILEDx(trans.start(task_sql_proxy()))) {
       LOG_WARN("start transaction failed", K(ret));
     } else if (OB_FAIL(owner_id.convert_from_value(ObLockOwnerType::DEFAULT_OWNER_TYPE, task_id_))) {
     } else if (!is_skip_unlock &&
@@ -1860,7 +1862,7 @@ int ObFtsIndexBuildTask::cleanup_impl()
   DEBUG_SYNC(CREATE_INDEX_SUCCESS);
 
   if(OB_FAIL(ret)) {
-  } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*GCTX.sql_proxy_,
+  } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*task_sql_proxy(),
                                                             task_id_))) {
   } else {
     need_retry_ = false;      // clean succ, stop the task
@@ -1950,6 +1952,7 @@ int ObFtsIndexBuildTask::check_schema_and_trans_end(
 {
   int ret = OB_SUCCESS;
   ObDDLWaitTransEndCtx wait_trans_end;
+  wait_trans_end.set_context(context_);
   const ObTableSchema *index_schema = nullptr;
   int64_t snapshot_version = 0;
   is_trans_end = false;
@@ -1961,7 +1964,8 @@ int ObFtsIndexBuildTask::check_schema_and_trans_end(
     ret = OB_SCHEMA_EAGAIN;
     LOG_WARN("index schema cann't read index", K(ret), KPC(index_schema));
   } else if (OB_FAIL(wait_trans_end.init(ddl_task_id, task_status_, index_tid,
-          ObDDLWaitTransEndCtx::WaitTransType::WAIT_SCHEMA_TRANS, index_schema->get_schema_version()))) {
+          ObDDLWaitTransEndCtx::WaitTransType::WAIT_SCHEMA_TRANS,
+          index_schema->get_schema_version(), *task_schema_service()))) {
   } else if (OB_FAIL(wait_trans_end.try_wait(is_trans_end, snapshot_version))) {
   } else {
     FLOG_INFO("succeed to check schema and trans end", K(ret), K(ddl_task_id), K(index_tid), K(is_trans_end));
@@ -1976,17 +1980,17 @@ int ObFtsIndexBuildTask::try_release_snapshot(ObMySQLTransaction &trans)
   SCN snapshot_scn;
   if (snapshot_version_ > 0) {
     if (OB_FAIL(ObDDLUtil::get_tablet_ids(
-            *GCTX.schema_service_, object_id_, target_object_id_, tablet_ids))) {
+            *task_schema_service(), object_id_, target_object_id_, tablet_ids))) {
     } else if (tablet_ids.count() <= 0) {
       snapshot_version_ = 0;
     } else if (OB_FAIL(snapshot_scn.convert_for_tx(snapshot_version_))) {
-    } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
+    } else if (OB_ISNULL(local_management_service_)) {
       ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", KR(ret), KP(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()));
-    } else if (OB_UNLIKELY(!::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->get_ddl_service().is_inited())) {
+      LOG_WARN("invalid argument", KR(ret), KP(local_management_service_));
+    } else if (OB_UNLIKELY(!local_management_service_->get_ddl_service().is_inited())) {
       ret = OB_NOT_INIT;
       LOG_WARN("not init", KR(ret));
-    } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->get_ddl_service().get_snapshot_mgr().batch_release_snapshot_in_trans(
+    } else if (OB_FAIL(local_management_service_->get_ddl_service().get_snapshot_mgr().batch_release_snapshot_in_trans(
             trans, SNAPSHOT_FOR_DDL, rowkey_doc_schema_version_, snapshot_scn, tablet_ids))) {
     } else if (OB_FAIL(ObDDLTaskRecordOperator::update_snapshot_version(trans,
                                                                         task_id_,

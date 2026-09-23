@@ -30,8 +30,10 @@ namespace rootserver
 {
 
 class ObDDLTask;
+struct ObDDLTaskContext;
 class ObRootService;
 class ObLocalManagementService;
+class ObIRootserverLocalRuntime;
 
 // Rootserver-owned DDL orchestration helpers.  These operations deliberately
 // depend on Rootserver task/service implementations and are not Share APIs.
@@ -134,11 +136,14 @@ public:
       const share::schema::ObTableSchema &data_table_schema,
       const share::schema::ObTableSchema &index_table_schema,
       share::schema::ObSchemaService *schema_service,
-      int64_t &new_fetched_snapshot);
+      int64_t &new_fetched_snapshot,
+      ObIRootserverLocalRuntime *local_runtime);
   static int load_ddl_task(
       const int64_t task_id,
       common::ObIAllocator &allocator,
-      ObDDLTask &task);
+      ObDDLTask &task,
+      common::ObMySQLProxy &sql_proxy,
+      const ObDDLTaskContext &context);
 
 private:
   static int generate_order_by_str(

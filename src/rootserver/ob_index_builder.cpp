@@ -158,7 +158,7 @@ int ObIndexBuilder::drop_index_on_failed(const ObDropIndexArg &arg, obcall::ObDr
         }
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(ObDDLTaskRecordOperator::update_parent_task_message(arg.task_id_, new_index_schemas.at(0), res.task_id_, res.task_id_,
-            ObDDLUpdateParentTaskIDType::UPDATE_DROP_INDEX_TASK_ID, allocator, trans))) {
+            ObDDLUpdateParentTaskIDType::UPDATE_DROP_INDEX_TASK_ID, allocator, trans, ddl_service_.get_sql_proxy()))) {
         }
       }
     }
@@ -438,12 +438,12 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
           } else if (index_table_schema->is_vec_index() &&
                      arg.is_vec_inner_drop_ &&
                      OB_FAIL(ObDDLTaskRecordOperator::update_parent_task_message(arg.task_id_, *index_table_schema, res.task_id_, res.task_id_,
-                        ObDDLUpdateParentTaskIDType::UPDATE_VEC_REBUILD_DROP_INDEX_TASK_ID, allocator, trans))) {
+                        ObDDLUpdateParentTaskIDType::UPDATE_VEC_REBUILD_DROP_INDEX_TASK_ID, allocator, trans, ddl_service_.get_sql_proxy()))) {
             LOG_WARN("fail to update parent task message", K(ret), K(arg.task_id_), K(res.task_id_));
           } else if (index_table_schema->is_fts_index() &&
                      ObDDLType::DDL_DROP_INDEX == task_record.ddl_type_ &&
                      OB_FAIL(ObDDLTaskRecordOperator::update_parent_task_message(arg.task_id_, *index_table_schema, 0/*target_table_id*/, res.task_id_,
-                                ObDDLUpdateParentTaskIDType::UPDATE_DROP_INDEX_TASK_ID, allocator, trans))) {
+                                ObDDLUpdateParentTaskIDType::UPDATE_DROP_INDEX_TASK_ID, allocator, trans, ddl_service_.get_sql_proxy()))) {
             LOG_WARN("fail to update drop fulltext index parent task message", K(ret), K(arg.task_id_), K(res.task_id_));
           }
         }
@@ -1438,7 +1438,8 @@ int ObIndexBuilder::do_create_local_index(
                                                                    new_table_schema,
                                                                    index_schema,
                                                                    ddl_service_.get_schema_service().get_schema_service(),
-                                                                   new_fetched_snapshot))) {
+                                                                   new_fetched_snapshot,
+                                                                   ddl_service_.get_task_context().local_runtime_))) {
         }
       }
 
@@ -1472,7 +1473,7 @@ int ObIndexBuilder::do_create_local_index(
       } else if (share::schema::is_vec_index(create_index_arg.index_type_) &&
                  create_index_arg.is_rebuild_index_ &&
                  OB_FAIL(ObDDLTaskRecordOperator::update_parent_task_message(create_index_arg.task_id_, index_schema, res.index_table_id_, res.task_id_,
-                        ObDDLUpdateParentTaskIDType::UPDATE_VEC_REBUILD_CREATE_INDEX_TASK_ID, allocator, trans))) {
+                        ObDDLUpdateParentTaskIDType::UPDATE_VEC_REBUILD_CREATE_INDEX_TASK_ID, allocator, trans, ddl_service_.get_sql_proxy()))) {
         LOG_WARN("fail to update parent task message", K(ret), K(create_index_arg.task_id_), K(res.task_id_));
       }
     }

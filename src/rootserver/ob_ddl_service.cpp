@@ -5461,7 +5461,7 @@ int ObDDLService::create_aux_index(
         }
       }
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(ObDDLTaskRecordOperator::update_parent_task_message(arg.task_id_, *idx_schema, result.aux_table_id_, result.ddl_task_id_, ObDDLUpdateParentTaskIDType::UPDATE_CREATE_INDEX_ID, allocator, trans))) {
+      } else if (OB_FAIL(ObDDLTaskRecordOperator::update_parent_task_message(arg.task_id_, *idx_schema, result.aux_table_id_, result.ddl_task_id_, ObDDLUpdateParentTaskIDType::UPDATE_CREATE_INDEX_ID, allocator, trans, *sql_proxy_))) {
         LOG_WARN("fail to update parent task message", K(ret), K(arg.task_id_), K(idx_schema));
       }
     } else { // 3. index scheme not exist, generate schema && create ddl task
@@ -5492,7 +5492,7 @@ int ObDDLService::create_aux_index(
       } else if (FALSE_IT(result.ddl_task_id_ = task_record.task_id_)) {
       }
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(ObDDLTaskRecordOperator::update_parent_task_message(arg.task_id_, index_schema, result.aux_table_id_, result.ddl_task_id_, ObDDLUpdateParentTaskIDType::UPDATE_CREATE_INDEX_ID, allocator, trans))) {
+      } else if (OB_FAIL(ObDDLTaskRecordOperator::update_parent_task_message(arg.task_id_, index_schema, result.aux_table_id_, result.ddl_task_id_, ObDDLUpdateParentTaskIDType::UPDATE_CREATE_INDEX_ID, allocator, trans, *sql_proxy_))) {
         LOG_WARN("fail to update parent task message", K(ret), K(arg.task_id_), K(index_schema));
       }
     }
@@ -5509,6 +5509,7 @@ int ObDDLService::create_aux_index(
       } else if (OB_INVALID_ID == result.ddl_task_id_) { // no need to schedule
       } else {
         DEBUG_SYNC(CREATE_AUX_INDEX_TABLE);
+        task_record.context_ = task_context_;
         if (OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
           LOG_WARN("fail to schedule ddl task", K(ret), K(task_record));
         }
@@ -5861,7 +5862,8 @@ int ObDDLService::alter_table_index(obcall::ObAlterTableArg &alter_table_arg,
                                                                              new_table_schema,
                                                                              index_schema,
                                                                              get_schema_service().get_schema_service(),
-                                                                             new_fetched_snapshot))) {
+                                                                             new_fetched_snapshot,
+                                                                             task_context_.local_runtime_))) {
                     LOG_WARN("fail to write defensive and obtain snapshot",
                         K(ret), K(new_table_schema));
                   }
