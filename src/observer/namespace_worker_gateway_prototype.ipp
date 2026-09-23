@@ -62,43 +62,6 @@ int serve_storage(StorageSpaceHandle storage_space, ReadScans *scans,
       result = Frame('s');
       if (state && input.type() != 'X') { result.number(state); }
       else { ret = scans->process(input, result, writes ? writes->tx : nullptr, writes ? &writes->session : nullptr); }
-    } else if (input.type() == 'M') {
-      result = Frame('g');
-      const uint64_t operation = input.number();
-      if (operation == 2 || operation == 4 || operation == 5 || operation == 6) {
-        const int64_t schema_version = operation == 4 || operation == 6
-            ? static_cast<int64_t>(input.number()) : 0;
-        int command_ret = state;
-        if (!command_ret && !input.consumed()) {
-          command_ret = OB_INVALID_ARGUMENT;
-        } else if (!command_ret && operation == 2) {
-          command_ret = storage::NamespaceForkKernelPrototype::begin_schema_change(ns);
-        } else if (!command_ret && operation == 4) {
-          command_ret = storage::NamespaceForkKernelPrototype::finish_schema_change(
-              ns, schema_version);
-        } else if (!command_ret && operation == 5) {
-          bool recovery_needed = false;
-          command_ret = storage::NamespaceForkKernelPrototype::begin_schema_recovery(
-              ns, recovery_needed);
-          result.number(0);
-          result.number(command_ret);
-          if (!command_ret) { result.number(recovery_needed); }
-          return result.ret;
-        } else if (!command_ret) {
-          command_ret = storage::NamespaceForkKernelPrototype::finish_schema_recovery(
-              ns, schema_version);
-        }
-        result.number(0);
-        result.number(command_ret);
-        return result.ret;
-      }
-      if (operation == 3) {
-        const int command_ret = state ? state : apply_namespace_schema_delta(ns, input);
-        result.number(0);
-        result.number(command_ret);
-        return result.ret;
-      }
-      ret = OB_INVALID_ARGUMENT;
     } else if (writes && (input.type() == 'T' || input.type() == 'W')) {
       result = Frame('w');
       if (state && !cleanup_write(input)) { result.number(state); }
