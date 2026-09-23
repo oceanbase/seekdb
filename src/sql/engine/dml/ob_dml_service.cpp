@@ -1912,7 +1912,7 @@ int ObDMLService::set_update_hidden_pk(ObEvalCtx &eval_ctx,
     ObExpr *auto_inc_expr = upd_ctdef.new_row_.at(0);
     ObSQLSessionInfo *my_session = eval_ctx.exec_ctx_.get_my_session();
     
-    if (OB_FAIL(get_heap_table_hidden_pk(tablet_id, autoinc_seq))) {
+    if (OB_FAIL(get_heap_table_hidden_pk(my_session, tablet_id, autoinc_seq))) {
     } else if (OB_ISNULL(auto_inc_expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("new_hidden_pk_expr is null", K(ret), K(upd_ctdef));
@@ -1928,13 +1928,15 @@ int ObDMLService::set_update_hidden_pk(ObEvalCtx &eval_ctx,
   return ret;
 }
 
-int ObDMLService::get_heap_table_hidden_pk(const ObTabletID &tablet_id,
+int ObDMLService::get_heap_table_hidden_pk(ObSQLSessionInfo *session,
+                                           const ObTabletID &tablet_id,
                                            uint64_t &pk)
 {
   int ret = OB_SUCCESS;
   uint64_t autoinc_seq = 0;
-  share::ObITabletAutoincrementService *auto_inc =
-      ::oceanbase::share::server_service<::oceanbase::share::ObITabletAutoincrementService>();
+  share::ObITabletAutoincrementService *auto_inc = session == nullptr
+      ? share::server_service<share::ObITabletAutoincrementService>()
+      : session->effective_tablet_autoincrement_service();
   if (OB_ISNULL(auto_inc)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet autoincrement service is null", K(ret));
@@ -1953,8 +1955,8 @@ int ObDMLService::set_heap_table_hidden_pk(const ObInsCtDef &ins_ctdef,
   uint64_t autoinc_seq = 0;
   if (ins_ctdef.is_table_without_pk_ && ins_ctdef.is_primary_index_) {
     ObSQLSessionInfo *my_session = eval_ctx.exec_ctx_.get_my_session();
-    
-    if (OB_FAIL(ObDMLService::get_heap_table_hidden_pk(tablet_id,
+
+    if (OB_FAIL(ObDMLService::get_heap_table_hidden_pk(my_session, tablet_id,
                                                        autoinc_seq))) {
     } else {
       ObExpr *auto_inc_expr = ins_ctdef.new_row_.at(0);

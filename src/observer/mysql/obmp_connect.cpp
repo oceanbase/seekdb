@@ -710,10 +710,14 @@ int ObMPConnect::bind_session_namespace(ObSQLSessionInfo &session)
   }
   if (OB_SUCC(ret) && runtime != nullptr && runtime->ns().id() > 1) {
     // Ticket 05c: the first login to an in-process forked namespace blocks
-    // while its service group (schema service, plan cache) is constructed.
+    // while its service group and initial catalog are loaded.
     ret = namespace_worker_prototype::ensure_in_process_namespace(runtime->ns().id());
     if (OB_FAIL(ret)) {
       LOG_WARN("failed to activate in-process namespace", K(ret),
+               "namespace_id", runtime->ns().id());
+    } else if (OB_FAIL(namespace_worker_prototype::inprocess_refresh_schema(
+                   runtime->ns().id()))) {
+      LOG_WARN("failed to load in-process namespace schema", K(ret),
                "namespace_id", runtime->ns().id());
     }
   }

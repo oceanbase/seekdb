@@ -58,6 +58,7 @@ public:
   int get_latest_expected_schema(const uint64_t table_id,
                                  const int64_t table_version,
                                  const int64_t runtime_schema_version,
+                                 share::schema::ObMultiVersionSchemaService &schema_service,
                                  share::schema::ObSchemaGetterGuard &schema_guard,
                                  const share::schema::ObTableSchema *&t_schema);
   virtual int create_vt_iter(common::ObVTableScanParam &params,

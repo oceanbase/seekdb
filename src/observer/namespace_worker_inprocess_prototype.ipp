@@ -22,7 +22,9 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <condition_variable>
 #include <shared_mutex>
+#include <thread>
 namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
 // ---------------------------------------------------------------------------
 // In-process storage context: the channel-free twin of DirectStorageContext.
@@ -301,6 +303,9 @@ struct InProcessNamespaceServices {
   share::ObAutoincrementService autoincrement;
   DirectInsertRegistry direct_insert_registry;
   std::atomic<bool> schema_loaded{false};
+  std::mutex schema_load_mutex;
+  std::condition_variable schema_load_cv;
+  std::thread::id schema_loading_thread;
   std::atomic<bool> recovery_loaded{false};
 };
 std::shared_mutex inprocess_services_mutex;
@@ -493,20 +498,35 @@ int ensure_in_process_namespace(uint64_t ns)
 // changes through InProcessSchemaRefreshScheduler in this same process.
 int inprocess_refresh_schema(uint64_t ns)
 {
+  InProcessServingScope serving(ns);
   std::shared_lock<std::shared_mutex> guard(inprocess_services_mutex);
   auto it = inprocess_services.find(ns);
   if (it == inprocess_services.end()) { return OB_NOT_INIT; }
   InProcessNamespaceServices &services = *it->second;
+  // Service entries are retained for the lifetime of the process. Release the
+  // map lock before refresh, which can re-enter this path through storage.
+  guard.unlock();
   int ret = OB_SUCCESS;
   if (!services.schema_loaded.load(std::memory_order_acquire)) {
-    bool expected = false;
-    if (!services.schema_loaded.compare_exchange_strong(expected, true)) {
-      return OB_SUCCESS; // A concurrent first refresh drives the full load.
+    std::unique_lock<std::mutex> load_guard(services.schema_load_mutex);
+    while (!services.schema_loaded.load(std::memory_order_acquire)
+           && services.schema_loading_thread != std::thread::id()) {
+      if (services.schema_loading_thread == std::this_thread::get_id()) {
+        return OB_SUCCESS; // The refresh can re-enter through its own storage reads.
+      }
+      services.schema_load_cv.wait(load_guard);
     }
-    ret = services.schema_service->refresh_runtime_schema_from_static_system();
-    if (ret) { services.schema_loaded.store(false, std::memory_order_release); }
+    if (!services.schema_loaded.load(std::memory_order_acquire)) {
+      services.schema_loading_thread = std::this_thread::get_id();
+      load_guard.unlock();
+      ret = services.schema_service->refresh_runtime_schema_from_static_system();
+      load_guard.lock();
+      services.schema_loaded.store(ret == OB_SUCCESS, std::memory_order_release);
+      services.schema_loading_thread = std::thread::id();
+      load_guard.unlock();
+      services.schema_load_cv.notify_all();
+    }
   }
-  guard.unlock();
   bool expected = false;
   if (!ret && services.recovery_loaded.compare_exchange_strong(expected, true)) {
     rootserver::ObDDLTaskContext context;

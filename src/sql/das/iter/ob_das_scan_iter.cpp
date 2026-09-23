@@ -22,6 +22,7 @@
 #include "src/sql/engine/ob_exec_context.h"
 #include "observer/namespace_worker_protocol_prototype.h"
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 
 namespace oceanbase
 {
@@ -38,10 +39,15 @@ int ObDASScanIter::inner_init(ObDASIterParam &param)
   } else {
     const ObDASScanCtDef *scan_ctdef = (static_cast<ObDASScanIterParam&>(param)).scan_ctdef_;
     output_ = &scan_ctdef->result_output_;
-    tsc_service_ = observer::namespace_worker_prototype::effective_tablet_scan(THIS_WORKER.get_session(),
-        is_virtual_table(scan_ctdef->ref_table_id_)
-            ? share::server_service<common::ObIVirtualTableScan>()
-            : share::server_service<common::ObITabletScan>());
+    common::ObITabletScan *native_scan = is_virtual_table(scan_ctdef->ref_table_id_)
+        ? share::server_service<common::ObIVirtualTableScan>()
+        : share::server_service<common::ObITabletScan>();
+    // Warnings are stored in the current SQL session. The namespace scan
+    // adapter cannot serialize that session-local virtual table.
+    tsc_service_ = scan_ctdef->ref_table_id_ == share::OB_ALL_VIRTUAL_WARNING_TID
+        ? native_scan
+        : observer::namespace_worker_prototype::effective_tablet_scan(
+              THIS_WORKER.get_session(), native_scan);
     if (OB_ISNULL(tsc_service_)) {
       ret = OB_NOT_INIT;
       LOG_WARN("tablet scan service is not bound", K(ret), K(scan_ctdef->ref_table_id_));

@@ -227,7 +227,8 @@ public:
   static int copy_heap_table_hidden_pk(ObEvalCtx &eval_ctx,
                                        const ObUpdCtDef &upd_ctdef);
 
-  static int get_heap_table_hidden_pk(const common::ObTabletID &tablet_id,
+  static int get_heap_table_hidden_pk(ObSQLSessionInfo *session,
+                                      const common::ObTabletID &tablet_id,
                                       uint64_t &pk);
 
   static int set_heap_table_hidden_pk(const ObInsCtDef &ins_ctdef,

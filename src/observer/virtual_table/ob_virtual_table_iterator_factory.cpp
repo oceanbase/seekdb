@@ -273,6 +273,7 @@ int ObVTIterCreator::get_latest_expected_schema(
     const uint64_t table_id,
     const int64_t table_version,
     const int64_t runtime_schema_version,
+    ObMultiVersionSchemaService &schema_service,
     ObSchemaGetterGuard &schema_guard,
     const ObTableSchema *&t_schema)
 {
@@ -280,7 +281,7 @@ int ObVTIterCreator::get_latest_expected_schema(
   if (OB_UNLIKELY(table_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
     SERVER_LOG(WARN, "invalid schema version", K(table_version), K(ret));
-  } else if (OB_FAIL(get_schema_service().get_runtime_schema_guard(
+  } else if (OB_FAIL(schema_service.get_runtime_schema_guard(
       schema_guard, runtime_schema_version))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, t_schema))) {
   } else if(NULL == t_schema
@@ -333,6 +334,10 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
   ObSchemaGetterGuard &schema_guard = params.get_schema_guard();
   // We also support index on virtual table.
   uint64_t index_id = params.index_id_;
+  ObSQLSessionInfo *session = params.op_ == NULL
+      ? NULL : params.op_->get_eval_ctx().exec_ctx_.get_my_session();
+  ObMultiVersionSchemaService &schema_service = session == NULL
+      ? get_schema_service() : *session->effective_schema_service();
   
   if (OB_UNLIKELY(OB_INVALID_ID == index_id)) {
      ret = OB_INVALID_ARGUMENT;
@@ -340,6 +345,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
   } else if (OB_FAIL(get_latest_expected_schema(index_id,
                                                 params.schema_version_,
                                                 params.runtime_schema_version_,
+                                                schema_service,
                                                 schema_guard,
                                                 index_schema))) {
   } else {
@@ -1761,6 +1767,10 @@ int ObVTIterCreator::check_can_create_iter(ObVTableScanParam &params)
   ObSchemaGetterGuard &schema_guard = params.get_schema_guard();
   // We also support index on virtual table.
   uint64_t index_id = params.index_id_;
+  ObSQLSessionInfo *session = params.op_ == NULL
+      ? NULL : params.op_->get_eval_ctx().exec_ctx_.get_my_session();
+  ObMultiVersionSchemaService &schema_service = session == NULL
+      ? get_schema_service() : *session->effective_schema_service();
   
   if (OB_UNLIKELY(OB_INVALID_ID == index_id)) {
      ret = OB_INVALID_ARGUMENT;
@@ -1768,6 +1778,7 @@ int ObVTIterCreator::check_can_create_iter(ObVTableScanParam &params)
   } else if (OB_FAIL(get_latest_expected_schema(index_id,
                                                 params.schema_version_,
                                                 params.runtime_schema_version_,
+                                                schema_service,
                                                 schema_guard,
                                                 index_schema))) {
   } else {

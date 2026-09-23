@@ -378,7 +378,9 @@ int ObPDMLOpDataDriver::set_heap_table_hidden_pk(
 {
   int ret = OB_SUCCESS;
   uint64_t autoinc_seq = 0;
-  if (OB_FAIL(ObDMLService::get_heap_table_hidden_pk(tablet_id, autoinc_seq))) {
+  ObSQLSessionInfo *session = eval_ctx_ == nullptr
+      ? nullptr : eval_ctx_->exec_ctx_.get_my_session();
+  if (OB_FAIL(ObDMLService::get_heap_table_hidden_pk(session, tablet_id, autoinc_seq))) {
   } else if (OB_FAIL(set_heap_table_hidden_pk_value(row, tablet_id, autoinc_seq))) {
   }
   return ret;

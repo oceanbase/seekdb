@@ -53,6 +53,15 @@ def bootstrap_probe(experiment):
     start = time.perf_counter()
     experiment.sql("CREATE NAMESPACE phase10_empty")
     experiment.record("namespace_create_latency", seconds=round(time.perf_counter() - start, 3))
+    # The first connection must be able to select a database from the template.
+    with connect(experiment, "root@phase10_empty", database="test") as selected:
+        assert experiment.sql("SELECT DATABASE()", selected) == (("test",),)
+        assert experiment.sql("SHOW WARNINGS", selected) == ()
+        experiment.sql("CREATE TABLE warning_probe(c1 INT PRIMARY KEY, c2 INT)", selected)
+        experiment.sql("INSERT INTO warning_probe VALUES(1,8),(2,7)", selected)
+        experiment.sql("SELECT 1 AS c1, 2 AS c2 FROM warning_probe GROUP BY c1", selected)
+        warning_rows = experiment.sql("SHOW WARNINGS", selected)
+        assert warning_rows and warning_rows[0][:2] == ("Warning", 1052), warning_rows
     with connect(experiment, "root@phase10_empty") as empty:
         databases = {row[0] for row in experiment.sql("SHOW DATABASES", empty)}
         assert "phase10" not in databases and "__fork_proto_meta" not in databases, databases
@@ -150,6 +159,11 @@ def direct_probe(experiment):
     with setup_branch(experiment) as child:
         experiment.sql("CREATE TABLE phase10.records(id INT PRIMARY KEY, v VARCHAR(64), amount DECIMAL(12,2))", child)
         experiment.sql("INSERT INTO phase10.records VALUES(1,'first',12.34),(2,'second',56.78)", child)
+        experiment.sql("CREATE TABLE phase10.heap_rows(d DATE)", child)
+        experiment.sql("INSERT INTO phase10.heap_rows VALUES('2078-10-10'),('1970-11-01')", child)
+        experiment.sql("UPDATE phase10.heap_rows SET d='1970-11-02' WHERE d='1970-11-01'", child)
+        assert experiment.sql("SELECT COUNT(*) FROM phase10.heap_rows", child) == ((2,),)
+        assert experiment.sql("SELECT COUNT(*) FROM phase10.heap_rows WHERE d='1970-11-02'", child) == ((1,),)
         experiment.sql("CREATE INDEX records_v ON phase10.records(v)", child)
         assert experiment.sql("SELECT id FROM phase10.records FORCE INDEX(records_v) WHERE v='second'", child) == ((2,),)
         experiment.sql("CREATE TABLE phase10.parts(id INT PRIMARY KEY, v INT) PARTITION BY HASH(id) PARTITIONS 4", child)
