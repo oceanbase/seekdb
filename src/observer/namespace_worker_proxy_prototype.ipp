@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include "namespace/namespace.h"
+#include "rpc/obmysql/ob_sql_nio_server.h"
 #include <algorithm>
 #include <condition_variable>
 #include <cstring>
@@ -73,6 +74,40 @@ bool read_packet(int fd, uint8_t &seq, std::vector<uint8_t> &body) {
   if (len > MAX_LOGIN_PACKET) { return false; }
   body.resize(len);
   return len == 0 || read_full(fd, body.data(), len);
+}
+// MSG_PEEK variant of read_packet (ticket 06): waits for one full login
+// packet without consuming it, so the in-process fast path can hand the
+// socket to the local NIO with the login bytes still queued. Falls back to
+// read_packet for worker endpoints, which then sees identical bytes.
+bool peek_packet(int fd, uint8_t &seq, std::vector<uint8_t> &body) {
+  std::vector<uint8_t> buffer(4);
+  size_t want = 4;
+  while (true) {
+    const ssize_t got = ::recv(fd, buffer.data(), want, MSG_PEEK);
+    if (got < 0) {
+      if (errno == EINTR) { continue; }
+      return false;
+    }
+    if (got == 0) { return false; }
+    if (static_cast<size_t>(got) < want) {
+      pollfd pfd = { fd, POLLIN, 0 };
+      int ready;
+      do { ready = ::poll(&pfd, 1, 1000); } while (ready < 0 && errno == EINTR);
+      if (ready <= 0) { return false; }
+      continue;
+    }
+    if (want == 4) {
+      const uint32_t len = uint32_t(buffer[0]) | (uint32_t(buffer[1]) << 8)
+          | (uint32_t(buffer[2]) << 16);
+      seq = buffer[3];
+      if (len > MAX_LOGIN_PACKET) { return false; }
+      want = 4 + len;
+      buffer.resize(want);
+      continue;
+    }
+    body.assign(buffer.begin() + 4, buffer.end());
+    return true;
+  }
 }
 bool write_packet(int fd, uint8_t seq, const uint8_t *body, size_t len) {
   uint8_t header[4] = { static_cast<uint8_t>(len), static_cast<uint8_t>(len >> 8),
@@ -306,7 +341,7 @@ void serve_connection(int client_fd, sockaddr_storage peer) {
   std::string user, branch;
   do {
     if (!send_greeting(client_fd, conn_id)) { break; }
-    if (!read_packet(client_fd, seq, body) || seq != 1
+    if (!peek_packet(client_fd, seq, body) || seq != 1
         || !parse_client_login(body, login)) { break; }
     if (login.caps & CLIENT_SSL) {
       // TLS upgrade hook: an SSLRequest arrives here once this entry
@@ -363,6 +398,23 @@ void serve_connection(int client_fd, sockaddr_storage peer) {
       send_error(client_fd, 2, 1105, "HY000",
                  "namespace worker unavailable (err=" + std::to_string(ret) + ")");
       break;
+    }
+    if (outcome->endpoint == "run/sql.sock"
+        && obmysql::global_sql_nio_server != nullptr) {
+      // Ticket 06 fast path: the target namespace is served by this
+      // process's own NIO. Hand the client socket over with the peeked
+      // login still queued; NIO admits it without a second greeting. On
+      // failure fall through to the byte pump (login consumed below).
+      if (obmysql::global_sql_nio_server->inject_fd(client_fd) == OB_SUCCESS) {
+        untrack_fd(client_fd);
+        return;
+      }
+    }
+    {
+      // Worker endpoint (or injection failure): consume the peeked login.
+      uint8_t consumed_seq = 0;
+      std::vector<uint8_t> consumed;
+      if (!read_packet(client_fd, consumed_seq, consumed)) { break; }
     }
     worker_fd = connect_worker(outcome->endpoint);
     if (worker_fd < 0

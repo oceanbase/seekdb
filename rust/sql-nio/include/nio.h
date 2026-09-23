@@ -444,6 +444,10 @@ nio_reactor *nio_start(const char *addr, uint32_t abi_version,
 /* Return the actual bound TCP port, including the ephemeral port selected for
  * an address ending in :0. Returns 0 for NULL or a TCP-disabled reactor. */
 uint32_t nio_get_bound_tcp_port(const nio_reactor *reactor);
+/* Adopt an already-accepted TCP socket whose greeting was sent by the
+   namespace proxy; admitted without a second greeting. On success (0) the
+   reactor owns fd; on failure (-1) the caller keeps it. */
+int nio_inject_fd(nio_reactor *reactor, int32_t fd);
 void nio_stop(nio_reactor *reactor);
 void nio_wait_destroy(nio_reactor *reactor);
 int nio_update_tcp_keepalive_params(nio_reactor *reactor, int32_t enabled,

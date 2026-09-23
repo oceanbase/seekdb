@@ -199,6 +199,17 @@ void ObSqlNioServer::stop()
   }
 }
 
+int ObSqlNioServer::inject_fd(int fd)
+{
+  int ret = OB_NOT_INIT;
+  lib::ObMutexGuard guard(reactor_lock_);
+  if (NULL != reactor_) {
+    // On success the reactor owns fd; on failure the caller keeps it.
+    ret = 0 == nio_inject_fd(reactor_, fd) ? OB_SUCCESS : OB_ERR_UNEXPECTED;
+  }
+  return ret;
+}
+
 void ObSqlNioServer::wait()
 {
   // The Rust io thread is joined in destroy(); nothing to wait on here.

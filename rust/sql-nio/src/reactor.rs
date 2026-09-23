@@ -54,6 +54,9 @@ impl Drop for LocalEndpointGuard {
 
 pub struct Reactor {
     pub(crate) wakers: Vec<Arc<Waker>>,
+    // Injected connections (already greeted by the namespace proxy) wait here
+    // for the reactor thread. Owns nothing else; safe to touch off-thread.
+    pub(crate) inject_queue: Arc<Mutex<Vec<PendingConn>>>,
     stop: Arc<AtomicBool>,
     pub(crate) joins: Vec<JoinHandle<()>>,
     local_endpoint: Option<LocalEndpointGuard>,
@@ -175,8 +178,13 @@ impl<V> ConnSlab<V> {
     }
 }
 
+// A stream waiting for admission. The bool marks connections injected by the
+// namespace proxy after it already sent the greeting (ticket 06 fast path);
+// accept-path streams always carry false.
+pub(crate) type PendingConn = (ConnStream, bool);
+
 pub(crate) struct PeerHandoff {
-    incoming: Arc<Mutex<Vec<ConnStream>>>,
+    incoming: Arc<Mutex<Vec<PendingConn>>>,
     waker: Arc<Waker>,
 }
 
@@ -193,7 +201,10 @@ pub(crate) struct EventLoop {
     pub(crate) pending_pipe: Option<NamedPipe>,
     #[cfg(windows)]
     pub(crate) pipe_startup: Option<std::sync::mpsc::Sender<bool>>,
-    pub(crate) incoming: Arc<Mutex<Vec<ConnStream>>>,
+    pub(crate) incoming: Arc<Mutex<Vec<PendingConn>>>,
+    // Connections injected by the namespace proxy after it already sent the
+    // greeting; admitted without a second greeting (ticket 06 fast path).
+    pub(crate) injected: Arc<Mutex<Vec<PendingConn>>>,
     pub(crate) peers: Vec<PeerHandoff>,
     pub(crate) next_accept_target: usize,
     pub(crate) reg: Arc<Registry>,
@@ -238,7 +249,8 @@ impl EventLoop {
             self.reactor_polling.store(true, Ordering::Release);
             let skip_poll = !stopping
                 && (!self.ready.lock().unwrap().is_empty()
-                    || !self.commits.lock().unwrap().is_empty());
+                    || !self.commits.lock().unwrap().is_empty()
+                    || !self.injected.lock().unwrap().is_empty());
             let poll_failed = if skip_poll {
                 false
             } else {
@@ -286,6 +298,7 @@ impl EventLoop {
             }
             if !stopping {
                 self.drain_incoming();
+                self.drain_injected();
             }
             self.drain_commits();
             self.drain_completions();
@@ -396,6 +409,7 @@ impl EventLoop {
         fd: c_int,
         is_unix: c_int,
         preregistered: bool,
+        skip_greeting: bool,
     ) -> bool {
         let sess = conn.sess();
         insert_conn_mapping(conn);
@@ -408,7 +422,10 @@ impl EventLoop {
             }
             None => true,
         };
-        if rejected || conn.err.load(Ordering::Acquire) || !send_greeting(conn, &greeting) {
+        if rejected
+            || conn.err.load(Ordering::Acquire)
+            || (!skip_greeting && !send_greeting(conn, &greeting))
+        {
             self.abort_admission(conn, preregistered);
             return false;
         }
@@ -453,7 +470,7 @@ impl EventLoop {
             if sock.set_nodelay(true).is_err() {
                 continue;
             }
-            self.distribute(ConnStream::from(sock));
+            self.distribute((ConnStream::from(sock), false));
         }
     }
 
@@ -469,7 +486,7 @@ impl EventLoop {
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
                 Err(_) => break,
             };
-            self.distribute(ConnStream::from(sock));
+            self.distribute((ConnStream::from(sock), false));
         }
     }
 
@@ -506,7 +523,7 @@ impl EventLoop {
             self.rearm_pending();
             return;
         }
-        if self.admit(&conn, -1, 1, true) {
+        if self.admit(&conn, -1, 1, true, false) {
             self.conns.insert(token, conn);
         }
         self.rearm_pending();
@@ -540,11 +557,11 @@ impl EventLoop {
         Ok(())
     }
 
-    fn distribute(&mut self, stream: ConnStream) {
+    fn distribute(&mut self, pending: PendingConn) {
         let fanout = self.peers.len() + 1;
         let target = self.next_accept_target;
         self.next_accept_target = (self.next_accept_target + 1) % fanout;
-        let mut stream = Some(stream);
+        let mut pending = Some(pending);
         if target != 0 {
             for slot in 0..self.peers.len() {
                 let idx = (target - 1 + slot) % self.peers.len();
@@ -552,7 +569,7 @@ impl EventLoop {
                 let pushed = {
                     let mut queue = peer.incoming.lock().unwrap();
                     if queue.len() < HANDOFF_CAP {
-                        queue.push(stream.take().expect("stream handed off once"));
+                        queue.push(pending.take().expect("stream handed off once"));
                         true
                     } else {
                         false
@@ -564,31 +581,42 @@ impl EventLoop {
                 }
             }
         }
-        if let Some(stream) = stream.take() {
-            self.admit_incoming(stream);
+        if let Some(pending) = pending.take() {
+            self.admit_incoming(pending);
         }
     }
 
-    fn admit_incoming(&mut self, stream: ConnStream) {
+    fn admit_incoming(&mut self, pending: PendingConn) {
         let token = match self.conns.next_token() {
             Some(token) => token,
             None => return,
         };
+        let (stream, skip_greeting) = pending;
         let fd = raw_fd(&stream);
         let is_unix = stream.is_local() as c_int;
         let conn = self.make_conn(token, stream);
-        if self.admit(&conn, fd, is_unix, false) {
+        if self.admit(&conn, fd, is_unix, false, skip_greeting) {
             self.conns.insert(token, conn);
         }
     }
 
     fn drain_incoming(&mut self) {
         loop {
-            let sock = match self.incoming.lock().unwrap().pop() {
-                Some(sock) => sock,
+            let pending = match self.incoming.lock().unwrap().pop() {
+                Some(pending) => pending,
                 None => break,
             };
-            self.admit_incoming(sock);
+            self.admit_incoming(pending);
+        }
+    }
+
+    fn drain_injected(&mut self) {
+        loop {
+            let pending = match self.injected.lock().unwrap().pop() {
+                Some(pending) => pending,
+                None => break,
+            };
+            self.distribute(pending);
         }
     }
 
@@ -1087,6 +1115,7 @@ pub(crate) unsafe fn nio_start_in_dir(
             let waker = Arc::new(Waker::new(poll.registry(), WAKER)?);
             let reactor_polling = Arc::new(AtomicBool::new(false));
             let incoming = Arc::new(Mutex::new(Vec::new()));
+            let injected = Arc::new(Mutex::new(Vec::new()));
             let io = EventLoop {
                 poll,
                 listener: None,
@@ -1103,6 +1132,7 @@ pub(crate) unsafe fn nio_start_in_dir(
                 #[cfg(windows)]
                 pipe_startup: Some(pipe_startup_tx.clone()),
                 incoming: incoming.clone(),
+                injected: injected.clone(),
                 peers: Vec::new(),
                 next_accept_target: 0,
                 reg,
@@ -1134,6 +1164,7 @@ pub(crate) unsafe fn nio_start_in_dir(
         ios[0].1.listener = listener;
         ios[0].1.peers = handoffs.split_off(1);
 
+        let inject_queue = ios[0].1.injected.clone();
         let mut wakers = Vec::with_capacity(thread_count);
         let mut joins = Vec::with_capacity(thread_count);
         for (index, io, waker) in ios {
@@ -1222,6 +1253,7 @@ pub(crate) unsafe fn nio_start_in_dir(
         };
         Ok(Reactor {
             wakers,
+            inject_queue,
             stop,
             joins,
             local_endpoint,
@@ -1277,6 +1309,46 @@ pub unsafe extern "C" fn nio_update_tcp_keepalive_params(
         let _ = waker.wake();
     }
     0
+}
+
+/// Adopt an already-accepted TCP socket whose greeting was sent by the
+/// namespace proxy (ticket 06 fast path). The connection is admitted without
+/// a second greeting; the client's login packet is still queued on `fd`.
+/// On success the reactor owns `fd`; on failure the caller keeps it.
+///
+/// # Safety
+/// `reactor` must be a live handle that is not being destroyed. Touches only
+/// construction-time Arc fields, so it is safe to call off the reactor thread.
+#[no_mangle]
+pub unsafe extern "C" fn nio_inject_fd(reactor: *mut Reactor, fd: c_int) -> c_int {
+    let Some(reactor) = (unsafe { reactor.as_ref() }) else {
+        return -1;
+    };
+    if fd < 0 || reactor.stop.load(Ordering::Acquire) {
+        return -1;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::fd::FromRawFd;
+        use std::os::fd::IntoRawFd;
+        let stream = unsafe { std::net::TcpStream::from_raw_fd(fd) };
+        if stream.set_nonblocking(true).is_err() || stream.set_nodelay(true).is_err() {
+            let _ = stream.into_raw_fd();
+            return -1;
+        }
+        let stream = mio::net::TcpStream::from_std(stream);
+        reactor.inject_queue.lock().unwrap().push((Stream::Tcp(stream), true));
+        if let Some(waker) = reactor.wakers.first() {
+            let _ = waker.wake();
+        }
+        0
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = reactor;
+        let _ = fd;
+        -1
+    }
 }
 
 /// # Safety

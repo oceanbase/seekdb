@@ -38,6 +38,9 @@ public:
   }
   int start(int port, rpc::frame::ObReqDeliver* deliver, int n_thread,
             bool use_tls, const char *min_tls_version);
+  // Adopt an already-accepted TCP socket whose greeting was sent by the
+  // namespace proxy (ticket 06 fast path). On OB_SUCCESS the reactor owns fd.
+  int inject_fd(int fd);
   int set_thread_count(const int thread_num);
   void stop();
   void wait();
