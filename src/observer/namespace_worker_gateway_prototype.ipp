@@ -21,7 +21,6 @@ int namespace_proto_worker_write(const char *, size_t);
 #include "observer/namespace_worker_multiplex_prototype.ipp"
 #include "observer/namespace_worker_scan_prototype.ipp"
 #include "observer/namespace_worker_write_prototype.ipp"
-#include "observer/namespace_worker_range_prototype.ipp"
 #include "observer/namespace_worker_direct_insert_prototype.ipp"
 #include "observer/namespace_worker_commands_prototype.ipp"
 #include "observer/namespace_worker_privileges_prototype.ipp"
@@ -157,7 +156,7 @@ bool is_storage_request(char type) {
   return type == 'C'
       || type == 'd' || type == 'b' || type == 't' || type == 'i' || type == 'j' || type == 'k' || type == 'l'
       || type == 'u' || type == 'n' || type == 'p'
-      || type == 'O' || type == 'F' || type == 'X' || type == 'M' || type == 'T' || type == 'W' || type == 'G' || type == 'J' || type == 'Y'
+      || type == 'O' || type == 'F' || type == 'X' || type == 'M' || type == 'T' || type == 'W' || type == 'J' || type == 'Y'
       || type == 'R'
       || type == 'h' || type == 'A';
 }
@@ -588,10 +587,6 @@ int serve_storage(StorageSpaceHandle storage_space, ReadScans *scans,
       if (state) { result.number(state); }
       else { ret = process_tablet_autoincrement_cache_invalidation(
           storage_space, input, result); }
-    } else if (input.type() == 'G') {
-      result = Frame('g');
-      if (state) { result.number(state); }
-      else { ret = process_ranges(storage_space, input, result); }
     } else if (input.type() == 'Y') {
       result = Frame('w');
       if (state) { result.number(state); }

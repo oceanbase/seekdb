@@ -141,6 +141,8 @@ def direct_probe(experiment):
         experiment.sql("CREATE TABLE phase10.parts(id INT PRIMARY KEY, v INT) PARTITION BY HASH(id) PARTITIONS 4", child)
         experiment.sql("INSERT INTO phase10.parts VALUES(1,10),(2,20),(3,30),(4,40)", child)
         assert experiment.sql("SELECT COUNT(*),SUM(v) FROM phase10.parts", child) == ((4, 100),)
+        assert experiment.sql(
+            "SELECT /*+ parallel(2) */ SUM(v) FROM phase10.parts", child) == ((100,),)
         experiment.sql("CREATE TABLE phase10.blobs(id INT PRIMARY KEY, payload MEDIUMBLOB)", child)
         with child.cursor() as cursor:
             cursor.execute("INSERT INTO phase10.blobs VALUES(1,%s)", (b"namespace-blob",))

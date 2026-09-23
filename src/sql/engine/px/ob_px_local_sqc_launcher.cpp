@@ -139,6 +139,8 @@ int ObLocalSqcLauncher::pre_setup_op_input(ObPxSqcHandler &sqc_handler)
   ObExecContext *ctx = sqc_handler.get_sqc_init_arg().exec_ctx_;
   ObOpSpec *root = sqc_handler.get_sqc_init_arg().op_spec_root_;
   ObPxSqcMeta &sqc = sqc_handler.get_sqc_init_arg().sqc_;
+  // GI setup runs before startup_normal_sqc and can execute DAS range tasks.
+  ObWorkerSessionGuard worker_session_guard(ctx != nullptr ? ctx->get_my_session() : nullptr);
   sub_coord.set_is_single_tsc_leaf_dfo(sqc.is_single_tsc_leaf_dfo());
   CK(OB_NOT_NULL(ctx) && OB_NOT_NULL(root));
   if (sqc.is_single_tsc_leaf_dfo() &&

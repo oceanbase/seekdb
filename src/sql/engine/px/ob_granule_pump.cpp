@@ -1146,7 +1146,7 @@ int ObAffinitizeGranuleSplitter::split_tasks_affinity(ObExecContext &ctx,
       int64_t tablet_idx = -1;
       if (NULL == table_schema || table_schema->get_table_id() != tablet_loc.loc_meta_->ref_table_id_) {
         uint64_t table_id = tablet_loc.loc_meta_->ref_table_id_;
-        if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+        if (OB_FAIL(my_session->effective_schema_service()->get_runtime_schema_guard(
                     schema_guard))) {
         } else if (OB_FAIL(schema_guard.get_table_schema(
                    table_id, table_schema))) {

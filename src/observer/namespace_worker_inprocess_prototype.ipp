@@ -10,6 +10,7 @@
 // Per-namespace services (schema service, plan cache) live in the namespace
 // runtime's service slots and are constructed lazily on first use.
 #include "namespace/namespace.h"
+#include "data_plane/ob_i_range_service.h"
 #include "observer/schema/ob_schema_service_sql_impl.h"
 #include "rootserver/ob_max_id_cache_adapter.h"
 #include "rootserver/ob_local_management_service.h"
@@ -38,7 +39,6 @@ bool shared_inner_sql_bounces(uint64_t target_namespace)
 // ---------------------------------------------------------------------------
 RemoteTabletScan inprocess_scan;
 RemoteLobReadService inprocess_lob_read;
-RemoteRangeService inprocess_ranges;
 RemoteDmlService inprocess_dml;
 RemoteWriteContext inprocess_write_context;
 RemoteTransactionService inprocess_transactions;
@@ -62,11 +62,6 @@ common::ObILobReadService *effective_lob_read_service(sql::ObSQLSessionInfo *ses
                                                       common::ObILobReadService *fallback)
 {
   return in_process_session_ns(session) > 1 ? &inprocess_lob_read : fallback;
-}
-data_plane::ObIRangeService *effective_range_service(sql::ObSQLSessionInfo *session,
-                                                     data_plane::ObIRangeService *fallback)
-{
-  return in_process_session_ns(session) > 1 ? &inprocess_ranges : fallback;
 }
 data_plane::ObIDmlService *effective_dml_service(sql::ObSQLSessionInfo *session,
                                                  data_plane::ObIDmlService *fallback)
@@ -173,6 +168,126 @@ public:
 private:
   uint64_t ns_;
 };
+class InProcessRangeService final : public data_plane::ObIRangeService
+{
+public:
+  int get_multi_ranges_cost(const common::ObTabletID &tablet, int64_t timeout,
+      const common::ObIArray<common::ObStoreRange> &ranges, int64_t &size) override
+  {
+    return invoke('C', tablet, timeout, ranges, 0, nullptr, nullptr, size);
+  }
+  int split_multi_ranges(const common::ObTabletID &tablet, int64_t timeout,
+      const common::ObIArray<common::ObStoreRange> &ranges, int64_t tasks,
+      common::ObIAllocator &allocator,
+      common::ObArrayArray<common::ObStoreRange> &split) override
+  {
+    int64_t unused_size = 0;
+    return invoke('S', tablet, timeout, ranges, tasks, &allocator, &split, unused_size);
+  }
+private:
+  int invoke(char operation, const common::ObTabletID &logical_tablet, int64_t timeout,
+      const common::ObIArray<common::ObStoreRange> &ranges, int64_t tasks,
+      common::ObIAllocator *allocator,
+      common::ObArrayArray<common::ObStoreRange> *split, int64_t &size)
+  {
+    if (timeout <= 0) { return OB_TIMEOUT; }
+    if (!logical_tablet.is_valid() || ranges.empty()
+        || (operation == 'S' && (tasks <= 0 || allocator == nullptr || split == nullptr))) {
+      return OB_INVALID_ARGUMENT;
+    }
+    auto *sql_session = THIS_WORKER.get_session();
+    StorageSessionScope scope(sql_session);
+    if (scope.error()) { return scope.error(); }
+    const uint64_t logical_table_id = ranges.at(0).get_table_id();
+    StorageSpaceHandle storage_space = active_worker_storage_space();
+    ObSchemaGetterGuard guard;
+    const ObTableSchema *logical_schema = nullptr;
+    const bool has_logical_schema = serves_namespace_schema()
+        && !storage::NamespaceForkKernelPrototype::is_encoded_id(logical_table_id)
+        && (!is_inner_table(logical_table_id) || serving_namespace() > 1);
+    int ret = OB_SUCCESS;
+    if (has_logical_schema) {
+      auto *schema_service = sql_session != nullptr
+          ? sql_session->effective_schema_service()
+          : &ObMultiVersionSchemaService::get_instance();
+      ret = schema_service->get_runtime_schema_guard(guard);
+      if (OB_SUCC(ret)) { ret = guard.get_table_schema(logical_table_id, logical_schema); }
+      if (OB_SUCC(ret) && (logical_schema == nullptr
+          || logical_schema->get_table_id() != logical_table_id)) {
+        ret = OB_SCHEMA_EAGAIN;
+      }
+      if (OB_SUCC(ret)) {
+        ret = worker_storage_space_for_schema(*logical_schema, guard, storage_space);
+      }
+    }
+    uint64_t storage_table_id = logical_table_id;
+    common::ObTabletID storage_tablet = logical_tablet;
+    if (OB_SUCC(ret) && storage_space.is_namespace() && storage_space.namespace_id() > 1) {
+      if (!has_logical_schema) {
+        ret = OB_INVALID_ARGUMENT;
+      } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
+                     storage_space.namespace_id(), logical_table_id, storage_table_id))) {
+      } else {
+        ret = route_tablet_id(storage_space, storage_tablet);
+      }
+    }
+    common::ObSEArray<common::ObStoreRange, 4> storage_ranges;
+    for (int64_t i = 0; OB_SUCC(ret) && i < ranges.count(); ++i) {
+      if (ranges.at(i).get_table_id() != logical_table_id) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        common::ObStoreRange range = ranges.at(i);
+        if (has_logical_schema) { range.set_table_id(storage_table_id); }
+        ret = storage_ranges.push_back(range);
+      }
+    }
+    if (OB_SUCC(ret)
+        && storage::NamespaceForkKernelPrototype::is_encoded_id(storage_tablet.id())) {
+      common::ObTabletID physical;
+      int64_t redirect_cap = 0;
+      ret = storage::NamespaceForkKernelPrototype::resolve_read_tablet(
+          storage_tablet, physical, redirect_cap);
+      if (OB_SUCC(ret)) { storage_tablet = physical; }
+    }
+    const int64_t now = ObTimeUtility::current_time();
+    const int64_t deadline = timeout > INT64_MAX - now ? INT64_MAX : now + timeout;
+    const int64_t remaining = std::min(deadline, THIS_WORKER.get_timeout_ts()) - now;
+    if (OB_SUCC(ret) && remaining <= 0) { ret = OB_TIMEOUT; }
+    auto *native = share::server_service<data_plane::ObIRangeService>();
+    if (OB_SUCC(ret) && native == nullptr) { ret = OB_NOT_INIT; }
+    if (OB_SUCC(ret)) {
+      auto *previous_session = THIS_WORKER.get_session();
+      THIS_WORKER.set_session(in_process_storage != nullptr
+          ? &in_process_storage->session : previous_session);
+      if (operation == 'C') {
+        ret = native->get_multi_ranges_cost(
+            storage_tablet, remaining, storage_ranges, size);
+      } else {
+        common::ObArrayArray<common::ObStoreRange> storage_split;
+        ret = native->split_multi_ranges(storage_tablet, remaining,
+            storage_ranges, tasks, *allocator, storage_split);
+        split->reset();
+        for (int64_t i = 0; OB_SUCC(ret) && i < storage_split.count(); ++i) {
+          common::ObSEArray<common::ObStoreRange, 4> group;
+          for (int64_t j = 0; OB_SUCC(ret) && j < storage_split.count(i); ++j) {
+            common::ObStoreRange range = storage_split.at(i, j);
+            if (has_logical_schema) { range.set_table_id(logical_table_id); }
+            ret = group.push_back(range);
+          }
+          if (OB_SUCC(ret)) { ret = split->push_back(group); }
+        }
+      }
+      THIS_WORKER.set_session(previous_session);
+    }
+    return ret;
+  }
+};
+InProcessRangeService inprocess_ranges;
+data_plane::ObIRangeService *effective_range_service(sql::ObSQLSessionInfo *session,
+                                                     data_plane::ObIRangeService *fallback)
+{
+  return in_process_session_ns(session) > 1 ? &inprocess_ranges : fallback;
+}
 struct InProcessNamespaceServices {
   explicit InProcessNamespaceServices(uint64_t ns) : tablet_autoincrement(ns) {}
   NamespaceRoutingSqlProxy *sql_proxy = nullptr;

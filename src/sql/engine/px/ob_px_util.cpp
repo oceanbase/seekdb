@@ -755,15 +755,18 @@ int ObPxSqcDistributionUtil::set_sqcs_accessed_location(
 // used to fast lookup from phy partition id to partition order(index)
 // for a range partition, the greater the range, the greater the partition_index
 // for a hash partition, the index means nothing
-int ObPxSqcDistributionUtil::build_tablet_idx_map(ObSqlExecutorCtx &task_exec_ctx,
+int ObPxSqcDistributionUtil::build_tablet_idx_map(ObExecContext &exec_ctx,
                                               uint64_t ref_table_id,
                                               ObTabletIdxMap &idx_map)
 {
   int ret = OB_SUCCESS;
   share::schema::ObSchemaGetterGuard schema_guard;
   const share::schema::ObTableSchema *table_schema = NULL;
-  if (OB_ISNULL(task_exec_ctx.schema_service_)) {
-  } else if (OB_FAIL(task_exec_ctx.schema_service_->get_runtime_schema_guard(schema_guard))) {
+  auto *session = exec_ctx.get_my_session();
+  auto *schema_service = session != nullptr && session->ns_runtime() != nullptr
+      ? session->effective_schema_service() : exec_ctx.get_sql_exec_ctx().schema_service_;
+  if (OB_ISNULL(schema_service)) {
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( ref_table_id, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
@@ -813,7 +816,7 @@ int ObPxSqcDistributionUtil::reorder_all_partitions(
     ObTabletIdxMap tablet_order_map;
     if (OB_FAIL(dst_locations.reserve(src_locations.size()))) {
     } else if (!is_virtual_table(ref_table_id) &&
-        OB_FAIL(build_tablet_idx_map(exec_ctx.get_sql_exec_ctx(),
+        OB_FAIL(build_tablet_idx_map(exec_ctx,
                                      ref_table_id, tablet_order_map))) {
       LOG_WARN("fail build index lookup map", K(ret));
     }
@@ -2143,7 +2146,10 @@ int ObSlaveMapUtil::build_ppwj_ch_mn_map(ObExecContext &ctx, ObDfo &parent, ObDf
         const ObDASTabletLoc &location = *locations.at(loc_idx);
         if (NULL == table_schema) {
           uint64_t table_id = location.loc_meta_->ref_table_id_;
-          if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+          auto *session = ctx.get_my_session();
+          auto *schema_service = session != nullptr && session->ns_runtime() != nullptr
+              ? session->effective_schema_service() : GCTX.schema_service_;
+          if (OB_FAIL(schema_service->get_runtime_schema_guard(
                       schema_guard))) {
           } else if (OB_FAIL(schema_guard.get_table_schema(
                      table_id, table_schema))) {

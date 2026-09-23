@@ -58,7 +58,6 @@ OBSERVER_PRIVATE_HEADERS = [
     "namespace_worker_multiplex_prototype.ipp",
     "namespace_worker_privileges_prototype.ipp",
     "namespace_worker_protocol_prototype.h",
-    "namespace_worker_range_prototype.ipp",
     "namespace_worker_result_prototype.h",
     "namespace_worker_scan_prototype.ipp",
     "namespace_worker_write_prototype.ipp",

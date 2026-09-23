@@ -176,7 +176,7 @@ private:
                                  const ObOpSpec &op);
 
   static int build_tablet_idx_map(
-      ObSqlExecutorCtx &task_exec_ctx,
+      ObExecContext &exec_ctx,
       uint64_t ref_table_id,
       ObTabletIdxMap &idx_map);
   static int reorder_all_partitions(
