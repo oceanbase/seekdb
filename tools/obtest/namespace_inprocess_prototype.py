@@ -117,6 +117,13 @@ def bootstrap_probe(experiment):
 def sql_probe(experiment):
     with setup_branch(experiment) as child, connect(experiment, "root@phase10_child") as other:
         assert experiment.sql("SELECT CURRENT_SCN()", child)[0][0] > 0
+        global_switch = experiment.sql(
+            "SELECT variable_value FROM INFORMATION_SCHEMA.GLOBAL_VARIABLES "
+            "WHERE variable_name='optimizer_switch'", child)
+        assert len(global_switch) == 1, global_switch
+        experiment.sql("SET optimizer_switch = (SELECT variable_value FROM "
+                       "INFORMATION_SCHEMA.GLOBAL_VARIABLES "
+                       "WHERE variable_name='optimizer_switch')", child)
         experiment.sql("CREATE NAMESPACE phase10_fresh")
         try:
             experiment.sql("CREATE NAMESPACE forbidden_from_child", child)

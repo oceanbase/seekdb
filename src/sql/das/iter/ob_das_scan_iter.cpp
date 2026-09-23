@@ -46,6 +46,7 @@ int ObDASScanIter::inner_init(ObDASIterParam &param)
     // session or its namespace schema guard in this process.
     const uint64_t table_id = scan_ctdef->ref_table_id_;
     const bool native_virtual = table_id == share::OB_ALL_VIRTUAL_WARNING_TID
+        || table_id == share::OB_ALL_VIRTUAL_GLOBAL_VARIABLE_TID
         || table_id == share::OB_ALL_VIRTUAL_TABLE_COLUMN_TID
         || table_id == share::OB_ALL_VIRTUAL_TABLE_INDEX_TID
         || table_id == share::OB_ALL_VIRTUAL_COLLATION_TID
