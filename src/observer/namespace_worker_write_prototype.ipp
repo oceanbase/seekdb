@@ -2659,9 +2659,28 @@ public:
     int ret = !has_lob_header || !is_outrow ? OB_INVALID_ARGUMENT : materialize(ctx, ctx.locator_);
     if (!ret) {
       free_lob_query_iter(ctx);
+      // The reader materializes the full LOB; callers size their result for
+      // the configured window, so expose only that window as the first block.
+      const int64_t byte_len = ctx.content_byte_len_;
+      const int64_t char_len = common::ObCharset::strlen_char(cs_type, ctx.buff_, byte_len);
+      const int64_t start_char = static_cast<int64_t>(
+          std::min<uint64_t>(ctx.start_offset_, static_cast<uint64_t>(char_len)));
+      const int64_t read_chars = ctx.total_access_len_ == 0
+          ? char_len - start_char
+          : std::min<int64_t>(ctx.total_access_len_, char_len - start_char);
+      if (read_chars < 0) { return OB_INVALID_ARGUMENT; }
+      const int64_t start_byte = common::ObCharset::charpos(
+          cs_type, ctx.buff_, byte_len, start_char);
+      const int64_t end_byte = common::ObCharset::charpos(
+          cs_type, ctx.buff_, byte_len, start_char + read_chars);
+      if (start_byte > end_byte || end_byte > byte_len) {
+        return OB_INVALID_ARGUMENT;
+      }
+      if (ctx.buff_ != nullptr) { ctx.buff_ += start_byte; }
+      ctx.buff_byte_len_ -= static_cast<uint32_t>(start_byte);
+      ctx.content_byte_len_ = static_cast<uint32_t>(end_byte - start_byte);
+      ctx.content_len_ = static_cast<uint32_t>(read_chars);
       str.assign_ptr(ctx.buff_, ctx.content_byte_len_);
-      ctx.content_len_ = static_cast<uint32_t>(
-          common::ObCharset::strlen_char(cs_type, ctx.buff_, ctx.content_byte_len_));
       ctx.accessed_byte_len_ = ctx.content_byte_len_;
       ctx.accessed_len_ = ctx.content_len_;
       ++ctx.iter_count_;

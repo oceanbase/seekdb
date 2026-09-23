@@ -147,6 +147,11 @@ def direct_probe(experiment):
         with child.cursor() as cursor:
             cursor.execute("INSERT INTO phase10.blobs VALUES(1,%s)", (b"namespace-blob",))
         assert experiment.sql("SELECT payload FROM phase10.blobs", child) == ((b"namespace-blob",),)
+        with child.cursor() as cursor:
+            cursor.execute("INSERT INTO phase10.blobs VALUES(2,%s)", (b"A" * 8000 + b"B" * 8000,))
+        assert experiment.sql(
+            "SELECT LENGTH(payload),SUBSTR(payload,7999,4),SUBSTR(payload,-1,1) "
+            "FROM phase10.blobs WHERE id=2", child) == ((16000, b"AABB", b"B"),)
         experiment.sql("ALTER TABLE phase10.records ADD COLUMN revision INT DEFAULT 7", child)
         assert experiment.sql("SELECT revision FROM phase10.records WHERE id=1", child) == ((7,),)
         experiment.sql("DROP INDEX records_v ON phase10.records", child)
