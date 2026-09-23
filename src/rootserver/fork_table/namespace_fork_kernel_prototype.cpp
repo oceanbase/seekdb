@@ -1136,6 +1136,30 @@ int NamespaceForkKernelPrototype::ensure_control_schema() {
     int64_t affected_rows = 0;
     if (OB_FAIL(GCTX.sql_proxy_->write(statement, affected_rows))) { break; }
   }
+  if (OB_SUCC(ret)) {
+    ObMySQLProxy::MySQLResult result;
+    sqlclient::ObMySQLResult *rows = nullptr;
+    if (OB_FAIL(GCTX.sql_proxy_->read(result,
+        "SELECT namespace_id FROM __fork_proto_meta.namespaces WHERE namespace_id=1"))) {
+    } else if (OB_ISNULL(rows = result.get_result())) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      const int next_ret = rows->next();
+      if (next_ret == OB_ITER_END) {
+        uint64_t id = 0;
+        if (OB_FAIL(control_namespace(ObString::make_string("__empty__"),
+                                     ObString::make_string("ns1"), id))) {
+        } else if (id != 1) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          ret = control_namespace(ObString::make_string("ns1"),
+                                  ObString::make_string("__template__"), id);
+        }
+      } else if (next_ret != OB_SUCCESS) {
+        ret = next_ret;
+      }
+    }
+  }
   LOG_INFO("PROTOTYPE_NAMESPACE_CONTROL_SCHEMA", K(ret));
   return ret;
 }
@@ -2030,7 +2054,8 @@ int NamespaceForkKernelPrototype::control_namespace(const ObString &source, cons
           K(endpoint_ret), K(id));
     }
   }
-  if (ret == OB_SUCCESS && !observer::namespace_worker_prototype::worker_process
+  if (ret == OB_SUCCESS && target != "__template__"
+      && !observer::namespace_worker_prototype::worker_process
       && observer::namespace_worker_prototype::forked_in_process()) {
     // In-process forked namespaces need no worker endpoint. Registering the
     // name lets later logins bind the runtime directly; per-namespace

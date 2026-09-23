@@ -246,7 +246,7 @@ inline bool is_namespace_control_database(const common::ObString &name)
 }
 inline bool can_access_namespace_control_database()
 {
-  return !worker_process || worker_namespace <= 1;
+  return serving_namespace() <= 1;
 }
 inline bool owns_namespace_schema()
 {

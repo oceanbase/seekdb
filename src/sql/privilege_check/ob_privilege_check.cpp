@@ -1283,21 +1283,9 @@ int get_fork_database_stmt_need_privs(
              K(ret), "stmt type", basic_stmt->get_stmt_type());
   } else {
     ObNeedPriv need_priv;
-    const ObForkDatabaseStmt *stmt = static_cast<const ObForkDatabaseStmt *>(basic_stmt);
-    const obcall::ObForkDatabaseArg &fork_database_arg = stmt->get_fork_database_arg();
-    if (OB_FAIL(ret)) {
-    } else {
-      // Need SELECT privilege on source database
-      need_priv.db_ = fork_database_arg.src_database_name_;
-      need_priv.priv_set_ = OB_PRIV_SELECT;
-      need_priv.priv_level_ = OB_PRIV_DB_LEVEL;
-      ADD_NEED_PRIV(need_priv);
-      // Need CREATE privilege on destination database
-      need_priv.db_ = fork_database_arg.dst_database_name_;
-      need_priv.priv_set_ = OB_PRIV_CREATE;
-      need_priv.priv_level_ = OB_PRIV_DB_LEVEL;
-      ADD_NEED_PRIV(need_priv);
-    }
+    need_priv.priv_set_ = OB_PRIV_SUPER;
+    need_priv.priv_level_ = OB_PRIV_USER_LEVEL;
+    ADD_NEED_PRIV(need_priv);
   }
   return ret;
 }

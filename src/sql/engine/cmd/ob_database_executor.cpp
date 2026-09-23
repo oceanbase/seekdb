@@ -27,6 +27,7 @@
 #include "sql/resolver/ddl/ob_recyclebin_restore_stmt.h"
 #include "sql/resolver/ddl/ob_purge_stmt.h"
 #include "sql/resolver/ddl/ob_fork_database_stmt.h"
+#include "namespace/namespace.h"
 #include "share/ob_structured_event_logger.h"
 
 namespace oceanbase
@@ -283,6 +284,9 @@ int ObForkDatabaseExecutor::execute(ObExecContext &ctx, ObForkDatabaseStmt &stmt
   } else if (OB_ISNULL(my_session = ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "session is null", K(ret));
+  } else if (my_session->ns_runtime() == NULL
+             || my_session->ns_runtime()->ns().id() != 1) {
+    ret = OB_NOT_SUPPORTED;
   } else {
     // Fillin ddl params.
     tmp_arg.ddl_stmt_str_ = first_stmt;

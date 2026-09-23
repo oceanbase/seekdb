@@ -39,8 +39,7 @@ def setup_branch(experiment):
     experiment.sql("CREATE DATABASE phase10")
     experiment.sql("CREATE TABLE phase10.parent(id INT PRIMARY KEY, v INT)")
     experiment.sql("INSERT INTO phase10.parent VALUES(1,10),(2,20)")
-    experiment.sql("FORK DATABASE __empty__ TO phase10_root")
-    experiment.sql("FORK DATABASE phase10_root TO phase10_child")
+    experiment.sql("FORK NAMESPACE phase10_child FROM ns1")
     child = connect(experiment, "root@phase10_child")
     assert experiment.sql("SELECT id,v FROM phase10.parent ORDER BY id", child) == ((1, 10), (2, 20))
     check_single_process(experiment)
@@ -51,12 +50,49 @@ def bootstrap_probe(experiment):
     assert experiment.sql("SELECT 1") == ((1,),)
     with setup_branch(experiment) as child:
         assert experiment.sql("SELECT COUNT(*) FROM oceanbase.__all_database", child)[0][0] >= 6
+    start = time.perf_counter()
+    experiment.sql("CREATE NAMESPACE phase10_empty")
+    experiment.record("namespace_create_latency", seconds=round(time.perf_counter() - start, 3))
+    with connect(experiment, "root@phase10_empty") as empty:
+        databases = {row[0] for row in experiment.sql("SHOW DATABASES", empty)}
+        assert "phase10" not in databases and "__fork_proto_meta" not in databases, databases
+        try:
+            experiment.sql("SELECT COUNT(*) FROM __fork_proto_meta.namespaces", empty)
+        except pymysql.MySQLError:
+            pass
+        else:
+            raise AssertionError("child namespace read the control catalog")
+        experiment.sql("CREATE DATABASE fresh", empty)
+        experiment.sql("CREATE TABLE fresh.t(id INT PRIMARY KEY)", empty)
+        experiment.sql("INSERT INTO fresh.t VALUES(1)", empty)
+        assert experiment.sql("SELECT id FROM fresh.t", empty) == ((1,),)
+    try:
+        connect(experiment, "root@__template__").close()
+    except pymysql.MySQLError:
+        pass
+    else:
+        raise AssertionError("template namespace accepted a login")
+    for statement in ("FORK NAMESPACE copy FROM __template__",
+                      "FORK DATABASE ns1 TO old_syntax"):
+        try:
+            experiment.sql(statement)
+        except pymysql.MySQLError:
+            pass
+        else:
+            raise AssertionError(f"reserved or retired syntax succeeded: {statement}")
     experiment.record("PASS", case="inprocess_bootstrap", one_process=True,
-                      child_login=True, inherited_read=True)
+                      child_login=True, inherited_read=True, empty_namespace=True)
 
 
 def sql_probe(experiment):
     with setup_branch(experiment) as child, connect(experiment, "root@phase10_child") as other:
+        experiment.sql("CREATE NAMESPACE phase10_fresh")
+        try:
+            experiment.sql("CREATE NAMESPACE forbidden_from_child", child)
+        except pymysql.MySQLError:
+            pass
+        else:
+            raise AssertionError("child created a namespace")
         experiment.sql("CREATE TABLE phase10.owned(id INT PRIMARY KEY, v INT)", child)
         experiment.sql("INSERT INTO phase10.owned VALUES(1,11),(2,22)", child)
         experiment.sql("CREATE INDEX owned_v ON phase10.owned(v)", child)
@@ -68,10 +104,12 @@ def sql_probe(experiment):
         assert experiment.sql("SELECT v FROM phase10.owned WHERE id=1", child) == ((11,),)
         experiment.sql("UPDATE phase10.parent SET v=30 WHERE id=1", child)
         assert experiment.sql("SELECT v FROM phase10.parent WHERE id=1") == ((10,),)
-        experiment.sql("FORK DATABASE phase10_child TO phase10_grandchild")
+        experiment.sql("FORK NAMESPACE phase10_grandchild FROM phase10_child")
     with connect(experiment, "root@phase10_grandchild") as grandchild:
         assert experiment.sql("SELECT v FROM phase10.parent WHERE id=1", grandchild) == ((30,),)
         assert experiment.sql("SELECT SUM(v) FROM phase10.owned", grandchild) == ((33,),)
+    with connect(experiment, "root@phase10_fresh") as fresh:
+        assert "phase10" not in {row[0] for row in experiment.sql("SHOW DATABASES", fresh)}
     check_single_process(experiment)
     experiment.connection.close()
     experiment.connection = None
@@ -82,6 +120,8 @@ def sql_probe(experiment):
         assert experiment.sql("SELECT SUM(v) FROM phase10.owned", child) == ((33,),)
     with connect(experiment, "root@phase10_grandchild") as grandchild:
         assert experiment.sql("SELECT v FROM phase10.parent WHERE id=1", grandchild) == ((30,),)
+    with connect(experiment, "root@phase10_fresh") as fresh:
+        assert "phase10" not in {row[0] for row in experiment.sql("SHOW DATABASES", fresh)}
     with connect(experiment, "root@phase10_child") as child:
         parent_us = median_query_us(experiment.connection)
         child_us = median_query_us(child)
@@ -125,8 +165,7 @@ def tls_probe(experiment):
         experiment.sql("CREATE DATABASE phase10", control)
         experiment.sql("CREATE TABLE phase10.secure(id INT PRIMARY KEY, v INT)", control)
         experiment.sql("INSERT INTO phase10.secure VALUES(1,42)", control)
-        experiment.sql("FORK DATABASE __empty__ TO phase10_tls_root", control)
-        experiment.sql("FORK DATABASE phase10_tls_root TO phase10_tls_child", control)
+        experiment.sql("FORK NAMESPACE phase10_tls_child FROM ns1", control)
     with connect(experiment, "root@phase10_tls_child", **ssl) as child:
         cipher = child._sock.cipher()
         assert cipher is not None and cipher[1] in ("TLSv1.2", "TLSv1.3"), cipher

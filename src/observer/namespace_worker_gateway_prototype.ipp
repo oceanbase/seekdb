@@ -1380,7 +1380,7 @@ int reconcile_namespace_workers() {
     if (OB_SUCC(ret)) {
       ret = GCTX.sql_proxy_->read(result,
           "SELECT namespace_id,name FROM __fork_proto_meta.namespaces "
-          "WHERE state=0 ORDER BY namespace_id");
+          "WHERE state=0 AND name!='__template__' ORDER BY namespace_id");
     }
     if (OB_SUCC(ret) && OB_ISNULL(rows = result.get_result())) {
       ret = OB_ERR_UNEXPECTED;

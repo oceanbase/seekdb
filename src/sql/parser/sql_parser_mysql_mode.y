@@ -4404,9 +4404,13 @@ FORK TABLE relation_factor TO relation_factor
 ;
 
 fork_database_stmt:
-FORK DATABASE database_factor TO database_factor
+FORK NAMESPACE database_factor FROM database_factor
 {
-  malloc_non_terminal_node($$, result->malloc_pool_, T_FORK_DATABASE, 2, $5, $3);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FORK_DATABASE, 2, $3, $5);
+}
+| CREATE NAMESPACE database_factor
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FORK_DATABASE, 2, $3, NULL);
 }
 ;
 

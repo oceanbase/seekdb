@@ -70,31 +70,39 @@ int ObForkDatabaseResolver::resolve(const ParseNode &parse_tree)
     ObString dst_database_name;
     ObString src_database_name;
 
-    if (OB_ISNULL(dst_database_node) || OB_ISNULL(src_database_node)) {
+    if (OB_ISNULL(dst_database_node)) {
       ret = OB_ERR_UNEXPECTED;
       SQL_RESV_LOG(WARN, "invalid parse tree!", K(ret));
-    } else if (T_IDENT != dst_database_node->type_ || T_IDENT != src_database_node->type_) {
+    } else if (T_IDENT != dst_database_node->type_
+               || (src_database_node != NULL && T_IDENT != src_database_node->type_)) {
       ret = OB_ERR_UNEXPECTED;
       SQL_RESV_LOG(WARN, "invalid parse tree node type!", K(ret),
-                   K(dst_database_node->type_), K(src_database_node->type_));
+                   K(dst_database_node->type_));
     } else {
       // Get destination database name
       dst_database_name.assign_ptr(dst_database_node->str_value_,
                                    static_cast<int32_t>(dst_database_node->str_len_));
       // Get source database name
-      src_database_name.assign_ptr(src_database_node->str_value_,
-                                   static_cast<int32_t>(src_database_node->str_len_));
+      if (src_database_node == NULL) {
+        src_database_name = ObString::make_string("__template__");
+      } else {
+        src_database_name.assign_ptr(src_database_node->str_value_,
+                                     static_cast<int32_t>(src_database_node->str_len_));
+      }
 
       // Check and convert database names
       ObNameCaseMode mode = OB_NAME_CASE_INVALID;
-      if (OB_FAIL(session_info_->get_name_case_mode(mode))) {
+      if (dst_database_name.prefix_match("__")
+          || (src_database_node != NULL && src_database_name.prefix_match("__"))) {
+        ret = OB_NOT_SUPPORTED;
+      } else if (OB_FAIL(session_info_->get_name_case_mode(mode))) {
       } else {
         bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
         ObCollationType cs_type = CS_TYPE_INVALID;
         if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
         } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
                     cs_type, perserve_lettercase, dst_database_name))) {
-        } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
+        } else if (src_database_node != NULL && OB_FAIL(ObSQLUtils::check_and_convert_db_name(
                     cs_type, perserve_lettercase, src_database_name))) {
         } else if (OB_FAIL(deep_copy_str(dst_database_name, fork_database_arg.dst_database_name_))) {
         } else if (OB_FAIL(deep_copy_str(src_database_name, fork_database_arg.src_database_name_))) {
