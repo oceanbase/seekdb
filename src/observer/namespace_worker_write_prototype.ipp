@@ -37,7 +37,7 @@ bool cleanup_write(Frame &request) {
   const uint64_t op = request.number();
   request.pos = position;
   return (request.type() == 'W' && op == 'X')
-      || (request.type() == 'T' && (op == 'B' || op == 'R' || op == 'U' || op == 'E' || op == 'V'));
+      || (request.type() == 'T' && (op == 'B' || op == 'R' || op == 'U' || op == 'E'));
 }
 int write_rpc(Frame &request, Frame &reply) {
   int ret = worker_send(request, cleanup_write(request));
@@ -1187,6 +1187,12 @@ struct EngineWrites {
     }
   }
   ~EngineWrites() { reset(); }
+  int release(uint64_t txid) {
+    if (!tx || static_cast<uint64_t>(tx->get_tx_id().get_id()) != txid
+        || !writes.empty()) { return OB_INVALID_ARGUMENT; }
+    reset();
+    return OB_SUCCESS;
+  }
   int process(Frame &request, Frame &reply) {
     const uint64_t ns = storage_space.namespace_id();
     auto *service = query_transaction_service();
@@ -1206,9 +1212,6 @@ struct EngineWrites {
     if (!ret && request.type() == 'T') {
       if (operation == 'A' || operation == 't') {
         if (!request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-      } else if (operation == 'V') {
-        if (!request.consumed() || !writes.empty()) { ret = OB_INVALID_ARGUMENT; }
-        else { reset(); }
       } else if (operation == 'H') {
         ObTxParam param; request.read(param);
         if (!request.consumed() || !param.is_valid()) { ret = OB_INVALID_ARGUMENT; }
@@ -1476,7 +1479,7 @@ struct EngineWrites {
     }
     reply = Frame('w'); reply.number(ret);
     if (!ret || (request.type() == 'W' && operation == 'f' && ret == OB_ERR_PRIMARY_KEY_DUPLICATE)) {
-      if ((request.type() == 'T' && operation != 'V') || (request.type() == 'W' && operation == 'X')) { reply.append(*tx); }
+      if (request.type() == 'T' || (request.type() == 'W' && operation == 'X')) { reply.append(*tx); }
       reply.data.insert(reply.data.end(), values.data.begin() + Frame::HEADER_SIZE, values.data.end());
       if (values.ret) { reply.ret = values.ret; }
     }
@@ -1740,6 +1743,7 @@ int call_in_process_tx_clock(
 int call_in_process_tx_interrupt(const transaction::ObTxDesc &tx, int cause);
 int call_in_process_tx_snapshot(char operation,
                                 transaction::ObTxReadSnapshot &snapshot);
+int release_in_process_tx(const transaction::ObTxDesc &tx);
 
 class RemoteTransactionService final : public ObITransactionService {
 public:
@@ -1804,9 +1808,7 @@ public:
       if (session != nullptr && session->get_tx_desc() == &tx
           && in_process_session_ns(session) > 1) {
         StorageSessionScope scope(session, false);
-        Frame request('T'), reply; request.number('V'); request.number(tx.get_tx_id().get_id());
-        ret = scope.error() ? scope.error() : write_rpc(request, reply);
-        if (!ret && !reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
+        ret = scope.error() ? scope.error() : release_in_process_tx(tx);
       }
       revert_tx_owner_session(borrowed);
     }
