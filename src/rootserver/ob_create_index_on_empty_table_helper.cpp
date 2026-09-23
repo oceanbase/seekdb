@@ -41,6 +41,9 @@ int ObCreateIndexOnEmptyTableHelper::check_create_index_on_empty_table_opt(
   int ret = OB_SUCCESS;
   is_create_index_on_empty_table_opt = false;
   if (!share::schema::is_index_support_empty_table_opt(index_type) && index_type != ObIndexType::INDEX_TYPE_IS_NOT) {
+  } else if (ddl_service.get_task_context().namespace_id_ > 1) {
+    // The empty-table shortcut writes tablet MDS through the process-wide route.
+    // Child namespace indexes use the ordinary namespace-aware DDL task.
   } else if (OB_FAIL(ObDDLTaskUtil::check_table_empty(ddl_service.get_sql_proxy(),
                                                   sys_var_schema, database_name,
                                                   table_schema,

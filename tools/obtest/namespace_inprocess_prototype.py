@@ -243,6 +243,16 @@ def direct_probe(experiment):
         assert experiment.sql(
             "SELECT c1,c2,c3,c4 FROM phase10.generated_parts "
             "FORCE INDEX(generated_parts_c2)", child) == ((1, "x", 2, "ab"),)
+        experiment.sql(
+            "CREATE TABLE phase10.empty_index_parts(c1 INT,c2 VARCHAR(20),c3 CHAR(50),"
+            "INDEX idx(c2(5)),INDEX idx2(c2(7)))", child)
+        experiment.sql(
+            "ALTER TABLE phase10.empty_index_parts ADD INDEX idx3(c3(20))", child)
+        experiment.sql(
+            "INSERT INTO phase10.empty_index_parts VALUES(1,'first','third')", child)
+        assert experiment.sql(
+            "SELECT c1 FROM phase10.empty_index_parts FORCE INDEX(idx3) "
+            "WHERE c3='third'", child) == ((1,),)
         experiment.sql("CREATE TABLE phase10.blobs(id INT PRIMARY KEY, payload MEDIUMBLOB)", child)
         with child.cursor() as cursor:
             cursor.execute("INSERT INTO phase10.blobs VALUES(1,%s)", (b"namespace-blob",))
