@@ -357,8 +357,7 @@ int ObDDLExecutorUtil::wait_local_schema_visible(
   while (OB_SUCC(ret) && ctx.get_timeout() > 0 && !schema_visible) {
     int64_t refreshed_schema_version = OB_INVALID_VERSION;
     if (OB_FAIL(ObDDLExecutorUtil::handle_session_exception(*session))) {
-    } else if (observer::namespace_worker_prototype::owns_namespace_schema()
-               || observer::namespace_worker_prototype::in_process_session_ns(session) > 1) {
+    } else if (observer::namespace_worker_prototype::in_process_session_ns(session) > 1) {
       const uint64_t namespace_id =
           observer::namespace_worker_prototype::in_process_session_ns(session);
       if (namespace_id > 1 && OB_FAIL(
@@ -372,8 +371,7 @@ int ObDDLExecutorUtil::wait_local_schema_visible(
       if ((namespace_wait_iterations++ % 100) == 0) {
         fprintf(stderr,
             "PROTOTYPE_NATIVE_DDL_WAIT ns=%llu ret=%d current=%lld target=%lld visible=%d\n",
-            (unsigned long long)(namespace_id > 1 ? namespace_id
-                : observer::namespace_worker_prototype::worker_namespace),
+            (unsigned long long)namespace_id,
             ret, (long long)refreshed_schema_version, (long long)schema_version,
             schema_visible);
       }

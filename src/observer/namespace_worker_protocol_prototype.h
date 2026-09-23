@@ -151,22 +151,6 @@ inline int read_storage_space(Frame &frame,
   }
   return ret;
 }
-inline uint64_t worker_namespace = 0;
-inline bool worker_process = false;
-inline bool worker_bootstrapping = false;
-inline bool ns1_in_process()
-{
-  return !worker_process;
-}
-inline bool forked_in_process()
-{
-  return !worker_process;
-}
-inline bool in_process_namespace_enabled(uint64_t namespace_id)
-{
-  return namespace_id == 1 ? ns1_in_process()
-      : namespace_id > 1 && namespace_id < (1ULL << 30) && forked_in_process();
-}
 // Storage scope is independent from the worker's fixed namespace identity.
 // A narrow global scope lets a native SQL operation address shared control
 // tablets in the same transaction without switching the worker SchemaService.
@@ -183,9 +167,8 @@ inline bool uses_global_storage_scope()
 {
   return worker_global_storage_scope_depth != 0;
 }
-// The namespace this thread currently serves SQL for. Worker mode: the
-// process identity. In-process (ticket 05c): the bound session's namespace,
-// published at command/query entry by InProcessServingScope.
+// The namespace this thread currently serves SQL for, published at
+// command/query entry by InProcessServingScope.
 struct InProcessStorage;
 inline thread_local InProcessStorage *in_process_storage = nullptr;
 inline thread_local uint64_t in_process_serving_ns = 0;
@@ -203,12 +186,11 @@ private:
 uint64_t in_process_bound_namespace();
 inline uint64_t serving_namespace()
 {
-  return worker_process ? worker_namespace
-      : in_process_serving_ns ? in_process_serving_ns
+  return in_process_serving_ns ? in_process_serving_ns
       : in_process_bound_namespace();
 }
-// True while this thread serves SQL for a forked namespace, in either hosting
-// mode. Storage stubs use it to ship caller-resolved schema and to pick the
+// True while this thread serves SQL for a forked namespace. Storage stubs
+// use it to ship caller-resolved schema and to pick the
 // namespace storage space; schema refresh uses it for local-id translation.
 inline bool serves_forked_schema()
 {
@@ -228,16 +210,11 @@ inline bool can_access_namespace_control_database()
 {
   return serving_namespace() <= 1;
 }
-inline bool owns_namespace_schema()
-{
-  return worker_process && worker_namespace != 0;
-}
-// True while this thread serves SQL for a namespace whose schema it can
-// resolve and ship: any Worker (ns>=1), or in-process serving of a forked
-// namespace (ticket 05c). Plain shared-process threads return false.
+// True while this thread serves SQL for a forked namespace whose schema it
+// can resolve and ship.
 inline bool serves_namespace_schema()
 {
-  return owns_namespace_schema() || serves_forked_schema();
+  return serves_forked_schema();
 }
 // Shared management code can move across runtime threads before it starts
 // Native inner SQL uses the target namespace carried by its SQL client.

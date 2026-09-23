@@ -476,7 +476,7 @@ int ensure_in_process_namespace(uint64_t ns)
 {
   int ret = OB_SUCCESS;
   ns::NamespaceRuntime *runtime = nullptr;
-  if (ns <= 1 || ns >= (1ULL << 30) || !forked_in_process()) {
+  if (ns <= 1 || ns >= (1ULL << 30)) {
     ret = OB_NOT_SUPPORTED;
   } else if (!ns::namespace_registry().get(ns, runtime) || runtime == nullptr) {
     ret = OB_ERR_UNEXPECTED;
@@ -527,7 +527,7 @@ int inprocess_refresh_schema(uint64_t ns)
 }
 share::schema::ObMultiVersionSchemaService *namespace_schema_service(uint64_t ns)
 {
-  if (worker_process || ns <= 1) {
+  if (ns <= 1) {
     return &share::schema::ObMultiVersionSchemaService::get_instance();
   }
   ns::NamespaceRuntime *runtime = nullptr;

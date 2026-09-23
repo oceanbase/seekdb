@@ -3518,15 +3518,8 @@ int ObSql::pc_add_plan(ObPlanCacheCtx &pc_ctx,
   plan_added = false;
   bool is_batch_exec = pc_ctx.sql_ctx_.is_batch_params_execute();
   if (OB_ISNULL(phy_plan) || OB_ISNULL(plan_cache)) {
-    // A fork worker deliberately does not own a plan cache.  The physical
-    // plan is still executable for this request; skip only cache insertion.
-    if (observer::namespace_worker_prototype::owns_namespace_schema() &&
-        OB_NOT_NULL(phy_plan) && OB_ISNULL(plan_cache)) {
-      plan_added = false;
-    } else {
-      ret = OB_NOT_INIT;
-      LOG_WARN("Fail to generate plan", K(phy_plan), K(plan_cache));
-    }
+    ret = OB_NOT_INIT;
+    LOG_WARN("Fail to generate plan", K(phy_plan), K(plan_cache));
   } else if (OB_USE_PLAN_CACHE_NONE == phy_plan->get_phy_plan_hint().plan_cache_policy_) {
     if (is_batch_exec) {
       ret = OB_BATCHED_MULTI_STMT_ROLLBACK;

@@ -1858,7 +1858,6 @@ sql::ObSQLSessionInfo *tx_owner_session(transaction::ObTxDesc &tx,
   borrowed = nullptr;
   sql::ObSQLSessionInfo *session = THIS_WORKER.get_session();
   if (session != nullptr && session->get_tx_desc() == &tx) { return session; }
-  if (worker_process || !forked_in_process()) { return session; }
   auto *mgr = share::server_service<sql::ObSQLSessionMgr>();
   sql::ObSQLSessionInfo *resolved = nullptr;
   if (OB_NOT_NULL(mgr)
@@ -2162,7 +2161,7 @@ public:
   }
   int release_tx(transaction::ObTxDesc &tx) override {
     int ret = OB_SUCCESS;
-    if (!tx.is_shadow() && forked_in_process()) {
+    if (!tx.is_shadow()) {
       // Release through the owning session's in-process storage context.
       sql::ObSQLSessionInfo *borrowed = nullptr;
       auto *session = tx_owner_session(tx, borrowed);

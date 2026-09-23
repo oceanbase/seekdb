@@ -72,35 +72,6 @@ ObString extract_user_name(const ObString &in, ObString &ns_name)
   return user_name;
 }
 
-int refresh_namespace_worker_login_state(
-    const share::ObGlobalContext &gctx,
-    ObSMConnection &conn)
-{
-  int ret = OB_SUCCESS;
-  int64_t current_autocommit = 0;
-  if (OB_ISNULL(gctx.schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(gctx.schema_service_
-                         ->refresh_runtime_schema_from_static_system())) {
-    // A concurrent bootstrap is retryable and must not create a partially
-    // initialized client session.
-  } else if (OB_FAIL(share::schema::ObSchemaUtils::get_runtime_int_variable(
-                 *gctx.schema_service_, share::SYS_VAR_AUTOCOMMIT,
-                 current_autocommit))) {
-  } else if (OB_UNLIKELY(current_autocommit != 0
-                         && current_autocommit != 1)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected global autocommit", K(ret), K(current_autocommit));
-  } else {
-    // The Rust accept callback snapshots this value before the login packet
-    // reaches the SQL worker. A schema refresh can make that snapshot stale
-    // after SET GLOBAL, so update it before load_privilege_info() copies global
-    // defaults into the new SQL session.
-    conn.autocommit_snapshot_ = current_autocommit;
-  }
-  return ret;
-}
-
 }  // namespace observer
 }  // namespace oceanbase
 
@@ -275,12 +246,6 @@ int ObMPConnect::process()
       ret = OB_SERVER_IS_STOPPING;
       LOG_WARN("server is stopping", K(ret));
     } else if (OB_FAIL(share::check_server_runtime_ready())) {
-    } else if (namespace_worker_prototype::worker_process
-               && OB_FAIL(refresh_namespace_worker_login_state(gctx_, *conn))) {
-      // Direct clients bypass the gateway executor that normally refreshes the
-      // worker's namespace schema before each statement. Load it before the
-      // authentication lookup; a concurrent bootstrap reports EAGAIN and the
-      // client can retry without entering a partially initialized session.
     } else if (OB_FAIL(check_client_property(*conn))) {
     } else if (OB_FAIL(verify_connection())) {
     } else if (OB_FAIL(create_session(conn, session))) {
@@ -722,11 +687,8 @@ int ObMPConnect::bind_session_namespace(ObSQLSessionInfo &session)
   int ret = OB_SUCCESS;
   ns::NamespaceRuntime *runtime = nullptr;
   if (login_ns_name_.empty()) {
-    // No '@' suffix lands on this process's home namespace: the namespace a
-    // worker serves, or the system namespace 1 everywhere else. This matches
-    // single-image behaviour for namespace-agnostic clients.
-    const uint64_t home_ns = namespace_worker_prototype::worker_namespace != 0
-        ? namespace_worker_prototype::worker_namespace : 1;
+    // No '@' suffix lands on the system namespace.
+    const uint64_t home_ns = 1;
     if (!ns::namespace_registry().get(home_ns, runtime)) {
       ret = OB_SERVER_IS_INIT;
       LOG_WARN("home namespace is not registered yet", K(ret), K(home_ns));
@@ -747,9 +709,7 @@ int ObMPConnect::bind_session_namespace(ObSQLSessionInfo &session)
       }
     }
   }
-  if (OB_SUCC(ret) && runtime != nullptr
-      && namespace_worker_prototype::forked_in_process()
-      && runtime->ns().id() > 1) {
+  if (OB_SUCC(ret) && runtime != nullptr && runtime->ns().id() > 1) {
     // Ticket 05c: the first login to an in-process forked namespace blocks
     // while its service group (schema service, plan cache) is constructed.
     ret = namespace_worker_prototype::ensure_in_process_namespace(runtime->ns().id());

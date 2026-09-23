@@ -407,9 +407,6 @@ int ObMajorMergeScheduler::check_namespace_progress(
   using observer::namespace_worker_prototype::inprocess_refresh_schema;
   using observer::namespace_worker_prototype::namespace_schema_service;
   all_compacted = true;
-  if (!observer::namespace_worker_prototype::forked_in_process()) {
-    return OB_SUCCESS;
-  }
   std::vector<uint64_t> namespace_ids;
   ns::namespace_registry().list_ids(namespace_ids);
   share::ObTabletMetaTableStorage tablet_storage;

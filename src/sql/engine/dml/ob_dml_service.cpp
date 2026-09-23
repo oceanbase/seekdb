@@ -1975,12 +1975,8 @@ int ObDMLService::check_nested_sql_legality(ObExecContext &ctx, common::ObTableI
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = ctx.get_my_session();
-  if (session->get_is_deserialized() && ctx.get_parent_ctx() != nullptr
-      && !observer::namespace_worker_prototype::worker_process) {
-    // A conventional distributed execution worker lacks transaction
-    // scheduler control. A namespace SQL worker remains the coordinator: its
-    // transaction service forwards the same descriptor to shared storage and
-    // merges PX shadow state back into that descriptor.
+  if (session->get_is_deserialized() && ctx.get_parent_ctx() != nullptr) {
+    // A distributed execution worker lacks transaction scheduler control.
     pl::ObPLContext *pl_ctx = ctx.get_parent_ctx()->get_pl_stack_ctx();
     //this nested sql require transaction scheduler control
     //but the session is remote, means this sql executing without transaction scheduler control

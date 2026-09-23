@@ -77,8 +77,7 @@ int ObSMConnectionCallback::init(ObSqlSockSession& sess, ObSMConnection& conn)
   // the session id and the scramble the later auth check verifies against.
   RLOCAL(common::ObMysqlRandom, thread_scramble_rand);
   int64_t autocommit = 0;
-  if (namespace_worker_prototype::forked_in_process()
-      && !sess.client_addr_.using_unix()
+  if (!sess.client_addr_.using_unix()
       && !ATOMIC_LOAD(&GCTX.sys_package_ready_)) {
     ret = OB_SERVER_IS_INIT;
   } else if (OB_FAIL(sm_conn_init(conn))) {
