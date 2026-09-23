@@ -1,4 +1,4 @@
-// Throwaway V13 wire protocol. Q/U carry one absolute deadline; Z cancels its tag.
+// In-process prototype frame format pending typed service calls.
 #ifndef SEEKDB_NAMESPACE_WORKER_PROTOCOL_PROTOTYPE_H_
 #define SEEKDB_NAMESPACE_WORKER_PROTOCOL_PROTOTYPE_H_
 #include "lib/ob_errno.h"
@@ -59,24 +59,13 @@ private:
   uint64_t value_ = 0;
 };
 struct Frame {
-  static constexpr int64_t HEADER_SIZE = 17; // type + request slot + generation
+  static constexpr int64_t HEADER_SIZE = 1; // request type
   std::vector<char> data;
   int64_t pos = HEADER_SIZE;
   int ret = common::OB_SUCCESS;
   size_t limit = MAX_SQL_MESSAGE;
   explicit Frame(char type = '?', size_t max_size = MAX_SQL_MESSAGE) : data(HEADER_SIZE, 0), limit(max_size) { data[0] = type; }
   char type() const { return data.empty() ? '?' : data[0]; }
-  RequestTag tag() {
-    if (data.size() < HEADER_SIZE) { ret = common::OB_INVALID_ARGUMENT; return {}; }
-    const int64_t saved = pos; pos = 1;
-    RequestTag result{number(), number()}; pos = saved; return result;
-  }
-  void tag(RequestTag route) {
-    for (unsigned i = 0; i < 8; ++i) {
-      data[1 + i] = static_cast<char>(route.slot >> (8 * i));
-      data[9 + i] = static_cast<char>(route.generation >> (8 * i));
-    }
-  }
   void number(uint64_t n) {
     if (data.size() + 8 > limit) { ret = common::OB_SIZE_OVERFLOW; return; }
     for (unsigned i = 0; i < 8; ++i) { data.push_back(static_cast<char>(n >> (8 * i))); }
