@@ -157,6 +157,7 @@ public:
   virtual int start_transaction(bool with_snap_shot = false) override;
   virtual int rollback() override;
   virtual int commit() override;
+  transaction::tablelock::ObIInnerConnectionLockRuntime *inner_lock_runtime() const override;
   sql::ObSQLSessionInfo &get_session() { return NULL == extern_session_ ? *inner_session_ : *extern_session_; }
   const sql::ObSQLSessionInfo &get_session() const { return NULL == extern_session_ ? *inner_session_ : *extern_session_; }
   const sql::ObSQLSessionInfo *get_extern_session() const { return extern_session_; }

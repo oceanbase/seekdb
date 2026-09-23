@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 
+#include "query/session/ob_inner_sql_connection_access.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h"
 #include "rootserver/fork_table/ob_fork_table_helper.h"
 #include "rootserver/ob_ddl_service.h"
@@ -356,7 +357,7 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
           if (OB_ISNULL(iconn)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("inner connection is null", KR(ret));
-          } else if (OB_FAIL(transaction::tablelock::ObInnerConnectionLockUtil::lock_table(
+          } else if (OB_FAIL(query::ObInnerSQLConnectionAccess::lock_table(
                          src_table_schema->get_table_id(),
                          transaction::tablelock::SHARE, lock_timeout_us, iconn))) {
           } else if (OB_ISNULL(rootserver_local_runtime())) {

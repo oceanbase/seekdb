@@ -20,7 +20,12 @@ namespace oceanbase { namespace data_plane { class ObIDmlService; } }
 namespace oceanbase { namespace data_plane { class ObIWriteContextService; } }
 namespace oceanbase { namespace data_plane { class ObITransactionService; } }
 namespace oceanbase { namespace obcall { struct ObAdminSetConfigArg; } }
+namespace oceanbase { namespace query { class ObIRootCommandService; } }
+namespace oceanbase { namespace common { namespace sqlclient { class ObISQLConnection; } } }
+namespace oceanbase { namespace transaction { namespace tablelock { struct ObLockObjRequest; } } }
+namespace oceanbase { namespace transaction { namespace tablelock { class ObIInnerConnectionLockRuntime; } } }
 namespace oceanbase { namespace share { namespace schema { class ObPrivMgr; } } }
+namespace oceanbase { namespace share { namespace schema { class ObMultiVersionSchemaService; } } }
 namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
 constexpr size_t MAX_FRAME = 256 * 1024;
 constexpr size_t MAX_SQL_MESSAGE = 64 * 1024 * 1024;
@@ -283,11 +288,7 @@ int check_sql_execution_role();
 // Shared-process inner SQL normally bounces to the target namespace worker
 // over IPC. With the ticket-05a gate, ns-1-bound inner SQL instead executes
 // on the vanilla local path inside the shared process; ns>1 still bounces.
-inline bool shared_inner_sql_bounces()
-{
-  return !worker_process
-      && !in_process_namespace_enabled(resolve_shared_inner_sql_namespace());
-}
+bool shared_inner_sql_bounces(sql::ObSQLSessionInfo &session);
 // A worker owns the decision to create a fork snapshot, while the storage
 // process owns the transaction clock used to produce its SCN.
 int acquire_storage_snapshot(int64_t &snapshot);
@@ -318,6 +319,7 @@ int broadcast_system_package_ready(bool ready);
 // Publish the table-schema delta committed by a namespace-local DDL into the
 // shared namespace directory before the SQL command is acknowledged.
 int sync_namespace_schema_delta(uint64_t namespace_id,
+                                share::schema::ObMultiVersionSchemaService &schema_service,
                                 int64_t base_schema_version,
                                 int64_t &published_schema_version);
 int begin_namespace_schema_change();
@@ -371,8 +373,13 @@ private:
 // SQL must use: the in-process remote stub for forked-namespace sessions,
 // the process-local implementation otherwise.
 uint64_t in_process_session_ns(sql::ObSQLSessionInfo *session);
+query::ObIRootCommandService *effective_root_command_service(
+    sql::ObSQLSessionInfo *session, query::ObIRootCommandService *fallback);
+transaction::tablelock::ObIInnerConnectionLockRuntime *inprocess_lock_runtime(
+    common::sqlclient::ObISQLConnection *conn);
 int ensure_in_process_namespace(uint64_t namespace_id);
 int inprocess_refresh_schema(uint64_t namespace_id);
+share::schema::ObMultiVersionSchemaService *namespace_schema_service(uint64_t namespace_id);
 common::ObITabletScan *effective_tablet_scan(sql::ObSQLSessionInfo *session,
                                              common::ObITabletScan *fallback);
 common::ObILobReadService *effective_lob_read_service(sql::ObSQLSessionInfo *session,

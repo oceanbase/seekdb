@@ -12,12 +12,19 @@
 #include "namespace/namespace.h"
 #include "observer/schema/ob_schema_service_sql_impl.h"
 #include "rootserver/ob_max_id_cache_adapter.h"
+#include "rootserver/ob_local_management_service.h"
 #include "sql/plan_cache/ob_plan_cache.h"
 #include <map>
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
 namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
+bool shared_inner_sql_bounces(sql::ObSQLSessionInfo &session)
+{
+  const uint64_t ns = in_process_session_ns(&session);
+  return !worker_process
+      && !in_process_namespace_enabled(ns > 1 ? ns : resolve_shared_inner_sql_namespace());
+}
 // ---------------------------------------------------------------------------
 // In-process storage context: the channel-free twin of DirectStorageContext.
 // Owns the native storage session, open scans and write engine for one SQL
@@ -33,6 +40,16 @@ RemoteRangeService inprocess_ranges;
 RemoteDmlService inprocess_dml;
 RemoteWriteContext inprocess_write_context;
 RemoteTransactionService inprocess_transactions;
+RemoteInnerConnectionLockRuntime inprocess_inner_locks;
+transaction::tablelock::ObIInnerConnectionLockRuntime *inprocess_lock_runtime(
+    common::sqlclient::ObISQLConnection *conn)
+{
+  auto *inner = static_cast<ObInnerSQLConnection *>(conn);
+  return inner != nullptr && in_process_session_ns(&inner->get_session()) > 1
+      ? static_cast<transaction::tablelock::ObIInnerConnectionLockRuntime *>(
+            &inprocess_inner_locks)
+      : share::server_service<transaction::tablelock::ObIInnerConnectionLockRuntime>();
+}
 common::ObITabletScan *effective_tablet_scan(sql::ObSQLSessionInfo *session,
                                              common::ObITabletScan *fallback)
 {
@@ -73,6 +90,17 @@ sql::ObPlanCache *effective_plan_cache(sql::ObSQLSessionInfo *session,
   void *service = runtime ? runtime->service(ns::NamespaceRuntime::PLAN_CACHE) : nullptr;
   return service != nullptr ? static_cast<sql::ObPlanCache *>(service) : fallback;
 }
+query::ObIRootCommandService *effective_root_command_service(
+    sql::ObSQLSessionInfo *session, query::ObIRootCommandService *fallback)
+{
+  if (in_process_session_ns(session) <= 1) { return fallback; }
+  ns::NamespaceRuntime *runtime = session->ns_runtime();
+  void *service = runtime ? runtime->service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE) : nullptr;
+  return service != nullptr
+      ? static_cast<query::ObIRootCommandService *>(
+            static_cast<rootserver::ObLocalManagementService *>(service))
+      : nullptr;
+}
 // ---------------------------------------------------------------------------
 // Per-namespace service group, constructed lazily on first use (ticket 05c).
 // The composition mirrors the worker bootstrap: a routing sql proxy pins the
@@ -82,6 +110,7 @@ sql::ObPlanCache *effective_plan_cache(sql::ObSQLSessionInfo *session,
 class NamespaceRoutingSqlProxy final : public common::ObMySQLProxy
 {
 public:
+  uint64_t target_namespace() const override { return ns_; }
   int init_routed(uint64_t ns, bool is_ddl)
   {
     ns_ = ns;
@@ -101,6 +130,19 @@ public:
     const int ret = override_ret ? override_ret
         : ObCommonSqlProxy::write(sql, group_id, affected_rows);
     if (!override_ret) { pop_inner_sql_namespace_override(); }
+    return ret;
+  }
+  int acquire_connection(common::sqlclient::ObISQLConnectionGuard &conn,
+                         const int32_t group_id) override
+  {
+    int ret = ObCommonSqlProxy::acquire_connection(conn, group_id);
+    ns::NamespaceRuntime *runtime = nullptr;
+    if (OB_SUCC(ret) && (!ns::namespace_registry().get(ns_, runtime)
+        || runtime == nullptr)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_SUCC(ret)) {
+      static_cast<ObInnerSQLConnection *>(conn.get_ptr())->get_session().set_ns_runtime(runtime);
+    }
     return ret;
   }
 private:
@@ -136,6 +178,7 @@ struct InProcessNamespaceServices {
   share::schema::ObSchemaServiceSQLImpl *backend = nullptr;
   InProcessSchemaRefreshScheduler *scheduler = nullptr;
   sql::ObPlanCache *plan_cache = nullptr;
+  rootserver::ObLocalManagementService *root_commands = nullptr;
   std::atomic<bool> schema_loaded{false};
 };
 std::shared_mutex inprocess_services_mutex;
@@ -223,7 +266,8 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
           recovery_ret = OB_STATE_NOT_MATCH;
         } else if (local_schema_version > directory_schema_version) {
           recovery_ret = sync_namespace_schema_delta(
-              ns, directory_schema_version, published_schema_version);
+              ns, *services->schema_service, directory_schema_version,
+              published_schema_version);
         } else {
           published_schema_version = local_schema_version;
         }
@@ -241,6 +285,15 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(services->plan_cache->init(common::OB_PLAN_CACHE_BUCKET_NUMBER,
           server))) {
+  } else if (FALSE_IT(stage = "root_commands")) {
+  } else if (OB_ISNULL(services->root_commands = OB_NEW(
+          rootserver::ObLocalManagementService, ObModIds::OB_SCHEMA_SERVICE))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (FALSE_IT(services->root_commands->set_local_command_service(
+          server.get_ob_service()))) {
+  } else if (OB_FAIL(services->root_commands->init_sql_worker(
+          GCONF, *GCTX.config_mgr_, server.get_self(), *services->sql_proxy,
+          *services->schema_service))) {
   } else {
     stage = "done";
   }
@@ -250,6 +303,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
   if (!ret) {
     runtime.set_service(ns::NamespaceRuntime::SCHEMA_SERVICE, services->schema_service);
     runtime.set_service(ns::NamespaceRuntime::PLAN_CACHE, services->plan_cache);
+    runtime.set_service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE, services->root_commands);
     inprocess_services.emplace(ns, std::move(services));
   }
   return ret;
@@ -290,5 +344,17 @@ int inprocess_refresh_schema(uint64_t ns)
     return ret;
   }
   return services.schema_service->refresh_and_add_schema(false);
+}
+share::schema::ObMultiVersionSchemaService *namespace_schema_service(uint64_t ns)
+{
+  if (worker_process || ns <= 1) {
+    return &share::schema::ObMultiVersionSchemaService::get_instance();
+  }
+  ns::NamespaceRuntime *runtime = nullptr;
+  if (!ns::namespace_registry().get(ns, runtime) || runtime == nullptr) {
+    return nullptr;
+  }
+  return static_cast<share::schema::ObMultiVersionSchemaService *>(
+      runtime->service(ns::NamespaceRuntime::SCHEMA_SERVICE));
 }
 } } }

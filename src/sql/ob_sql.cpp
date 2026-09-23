@@ -133,7 +133,9 @@ void ObSql::bind_resolver_runtime_services(ObResolverParams &resolver_ctx)
   resolver_ctx.pl_sql_runtime_ = this;
   resolver_ctx.pl_engine_ = pl_engine_;
   resolver_ctx.dependency_info_queue_ = &queue_;
-  resolver_ctx.root_command_service_ = root_command_service_;
+  resolver_ctx.root_command_service_ =
+      observer::namespace_worker_prototype::effective_root_command_service(
+          resolver_ctx.session_info_, root_command_service_);
   resolver_ctx.srs_provider_ = srs_provider_;
   resolver_ctx.lob_read_service_ = observer::namespace_worker_prototype::effective_lob_read_service(
       resolver_ctx.session_info_, lob_read_service_);
@@ -153,7 +155,9 @@ void ObSql::bind_exec_context_runtime_services(ObExecContext &exec_ctx)
   services.prepared_statement_runtime_ = this;
   services.sql_execution_id_provider_ = this;
   services.query_runtime_environment_ = query_runtime_environment_;
-  services.root_command_service_ = root_command_service_;
+  services.root_command_service_ =
+      observer::namespace_worker_prototype::effective_root_command_service(
+          exec_ctx.get_my_session(), root_command_service_);
   services.local_command_service_ = local_command_service_;
   services.change_stream_service_ = change_stream_service_;
   services.ddl_execution_limiter_ = ddl_execution_limiter_;
@@ -2346,16 +2350,6 @@ int ObSql::generate_physical_plan(ParseResult &parse_result,
   } else if (OB_ISNULL(basic_stmt)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Generate stmt success, but stmt is NULL", K(ret));
-  } else if (ObStmt::is_ddl_stmt(basic_stmt->get_stmt_type(), true)
-             && observer::namespace_worker_prototype::in_process_session_ns(
-                    &result.get_session()) > 1) {
-    // Ticket 05c: DDL execution is rooted in the system namespace's DDL
-    // machinery; a forked-namespace session must never mutate it.
-    // Forked-namespace DDL is ticket 07 territory.
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("forked-namespace sessions cannot execute DDL", K(ret),
-             K(basic_stmt->get_stmt_type()));
-    // begin/commit statement does not need to check privilege
   } else if (!is_begin_commit_stmt
           && OB_FAIL(ObPrivilegeCheck::check_privilege_new(sql_ctx,
                                                            basic_stmt,

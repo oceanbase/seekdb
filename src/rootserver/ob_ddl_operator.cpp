@@ -322,7 +322,8 @@ int ObDDLOperator::drop_database(const ObDatabaseSchema &db_schema,
   }
 
   // flush pl cache
-  OZ (pl::ObPLCacheMgr::flush_pl_cache_by_sql(OB_INVALID_ID, database_id, schema_service_));
+  OZ (pl::ObPLCacheMgr::flush_pl_cache_by_sql(OB_INVALID_ID, database_id,
+      schema_service_, sql_proxy_));
 
   // delete mock_fk_parent_tables in database
   if (OB_SUCC(ret)) {
@@ -355,7 +356,6 @@ int ObDDLOperator::drop_database(const ObDatabaseSchema &db_schema,
       }
     }
   }
-
   if (OB_SUCC(ret)) {
     int64_t new_schema_version = OB_INVALID_VERSION;
     if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {

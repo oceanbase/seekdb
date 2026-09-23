@@ -269,13 +269,11 @@ int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
     }
 
     if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(GCTX.schema_service_)) {
+    } else if (OB_ISNULL(session_info_)
+               || OB_ISNULL(session_info_->effective_schema_service())) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "invalid argument", K(GCTX.schema_service_));
-    } else if (OB_ISNULL(session_info_)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("session info should not be null", K(ret));
-    } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+      SERVER_LOG(WARN, "invalid session schema service", K(ret));
+    } else if (OB_FAIL(session_info_->effective_schema_service()->get_runtime_schema_guard(
                 schema_guard))) {
     } else {
       // do nothing

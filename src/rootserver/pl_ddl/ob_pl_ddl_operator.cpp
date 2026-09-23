@@ -160,7 +160,7 @@ int ObPLDDLOperator::drop_routine(const share::schema::ObRoutineInfo &routine_in
   }
   uint64_t rt_id = routine_info.get_routine_id();
   uint64_t db_id = routine_info.get_database_id();
-  OZ (pl::ObPLCacheMgr::flush_pl_cache_by_sql(rt_id, db_id, schema_service_));
+  OZ (pl::ObPLCacheMgr::flush_pl_cache_by_sql(rt_id, db_id, schema_service_, sql_proxy_));
   OZ (ObDependencyInfo::delete_schema_object_dependency(trans,
                                      routine_info.get_routine_id(),
                                      new_schema_version,
@@ -307,19 +307,19 @@ int ObPLDDLOperator::drop_package(const ObPackageInfo &package_info,
                                                         new_schema_version,
                                                         package_info.get_object_type()));
         OZ (pl::ObPLCacheMgr::flush_pl_cache_by_sql(package_info.get_package_id(), package_info.get_database_id(),
-                                                              schema_service_));
+                                                              schema_service_, sql_proxy_));
         if (OB_NOT_NULL(package_body_info)) {
           OZ (ObDependencyInfo::delete_schema_object_dependency(trans,
                                                         package_body_info->get_package_id(),
                                                         new_schema_version,
                                                         package_body_info->get_object_type()));
-          OZ (pl::ObPLCacheMgr::flush_pl_cache_by_sql(package_body_info->get_package_id(), package_body_info->get_database_id(), schema_service_));
+          OZ (pl::ObPLCacheMgr::flush_pl_cache_by_sql(package_body_info->get_package_id(), package_body_info->get_database_id(), schema_service_, sql_proxy_));
         }
       }
     } else {
       OZ (pl::ObPLCacheMgr::flush_pl_cache_by_sql(package_info.get_package_id(),
                                                   package_info.get_database_id(),
-                                                  schema_service_));
+                                                  schema_service_, sql_proxy_));
     }
   }
 
@@ -471,10 +471,10 @@ int ObPLDDLOperator::drop_trigger(const share::schema::ObTriggerInfo &trigger_in
   uint64_t body_trig_id = share::schema::ObTriggerInfo::get_trigger_body_package_id(trigger_info.get_trigger_id());
   OZ (pl::ObPLCacheMgr::flush_pl_cache_by_sql(spec_trig_id,
                                               trigger_info.get_database_id(),
-                                              schema_service_));
+                                              schema_service_, sql_proxy_));
   OZ (pl::ObPLCacheMgr::flush_pl_cache_by_sql(body_trig_id,
                                               trigger_info.get_database_id(),
-                                              schema_service_));
+                                              schema_service_, sql_proxy_));
   if (OB_FAIL(ret)) {
   } else if (!is_update_table_schema_version) {
   } else {

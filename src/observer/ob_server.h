@@ -337,6 +337,7 @@ public:
   sql::ObSQLSessionMgr &get_sql_session_mgr() { return session_mgr_; }
   sql::ObSql &get_sql_engine() { return sql_engine_; }
   rootserver::ObLocalManagementService &get_local_management_service() { return local_management_service_; }
+  ObService &get_ob_service() { return ob_service_; }
   common::ObMySQLProxy &get_mysql_proxy() { return sql_proxy_; }
   int64_t get_start_time() const { return start_time_; }
   sql::ObConnectResourceMgr& get_conn_res_mgr() { return conn_res_mgr_; }

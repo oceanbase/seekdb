@@ -95,7 +95,7 @@ ObLocalManagementService::ObLocalManagementService()
     local_services_ready_(false),
     debug_(false),
     self_addr_(), config_(NULL), config_mgr_(NULL),
-    sql_proxy_(),
+    sql_proxy_(NULL),
     schema_service_(NULL),
     local_command_service_(NULL),
     root_minor_freeze_(),
@@ -148,7 +148,7 @@ int ObLocalManagementService::init(ObServerConfig &config,
 
     self_addr_ = self;
 
-    sql_proxy_.assign(sql_proxy);
+    sql_proxy_ = &sql_proxy;
     service_started_ = false;
 
     schema_service_ = schema_service;
@@ -165,12 +165,12 @@ int ObLocalManagementService::init(ObServerConfig &config,
   } else if (OB_FAIL(root_minor_freeze_.init())) {
     // init root minor freeze
     FLOG_WARN("init root_minor_freeze_ failed", KR(ret));
-  } else if (OB_FAIL(ddl_service_.init(*GCTX.sql_proxy_, *GCTX.schema_service_,
+  } else if (OB_FAIL(ddl_service_.init(*sql_proxy_, *schema_service_,
                                        snapshot_manager_, runtime_ddl_service_))) {
     // init ddl service
     FLOG_WARN("init ddl_service_ failed", KR(ret));
   } else if (OB_FAIL(runtime_ddl_service_.init(ddl_service_,
-          sql_proxy_, *schema_service))) {
+          *sql_proxy_, *schema_service))) {
     // Initialize the server runtime DDL service.
     FLOG_WARN("init runtime_ddl_service_ failed", KR(ret));
   } else if (OB_FAIL(snapshot_manager_.init(self_addr_))) {
@@ -192,7 +192,7 @@ int ObLocalManagementService::init(ObServerConfig &config,
 int ObLocalManagementService::init_sql_worker(
     ObServerConfig &config,
     ObConfigManager &config_mgr,
-    ObAddr &self,
+    const ObAddr &self,
     ObMySQLProxy &sql_proxy,
     ObMultiVersionSchemaService &schema_service)
 {
@@ -205,16 +205,16 @@ int ObLocalManagementService::init_sql_worker(
     config_ = &config;
     config_mgr_ = &config_mgr;
     self_addr_ = self;
-    sql_proxy_.assign(sql_proxy);
+    sql_proxy_ = &sql_proxy;
     schema_service_ = &schema_service;
     need_bootstrap_ = false;
     service_started_ = false;
   }
   if (OB_SUCC(ret) && OB_FAIL(ddl_service_.init(
-          sql_proxy_, schema_service, snapshot_manager_, runtime_ddl_service_))) {
+          *sql_proxy_, schema_service, snapshot_manager_, runtime_ddl_service_))) {
     LOG_WARN("init SQL worker ddl service failed", KR(ret));
   } else if (OB_SUCC(ret) && OB_FAIL(runtime_ddl_service_.init(
-          ddl_service_, sql_proxy_, schema_service))) {
+          ddl_service_, *sql_proxy_, schema_service))) {
     LOG_WARN("init SQL worker runtime ddl service failed", KR(ret));
   } else if (OB_SUCC(ret) && OB_FAIL(snapshot_manager_.init(self_addr_))) {
     LOG_WARN("init SQL worker snapshot manager failed", KR(ret));
@@ -452,10 +452,10 @@ int ObLocalManagementService::execute_bootstrap()
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("local_management_service not inited", K(ret));
-  } else if (!sql_proxy_.is_inited() || !service_started_) {
+  } else if (!sql_proxy_->is_inited() || !service_started_) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("sql proxy or local management service is not ready",
-             "sql_proxy_inited", sql_proxy_.is_inited(),
+             "sql_proxy_inited", sql_proxy_->is_inited(),
              K(service_started_), K(ret));
   } else {
     FLOG_INFO("try to get local-service lock in execute_bootstrap");
@@ -467,7 +467,7 @@ int ObLocalManagementService::execute_bootstrap()
     }
 
     BOOTSTRAP_LOG(INFO, "start local services");
-    ObGlobalStatProxy global_proxy(sql_proxy_);
+    ObGlobalStatProxy global_proxy(*sql_proxy_);
     ObArray<ObAddr> self_addr;
     ObTimeoutCtx ctx;
     if (OB_FAIL(ret)) {
@@ -558,7 +558,7 @@ int ObLocalManagementService::check_config_result(const char *name, const char* 
         LOG_WARN("sync config info use too much time", K(ret), K(name), K(value),
                  "cost_us", ObTimeUtility::current_time() - start);
       } else {
-        if (OB_FAIL(sql_proxy_.read(res, sql.ptr()))) {
+        if (OB_FAIL(sql_proxy_->read(res, sql.ptr()))) {
         } else if (NULL == (result = res.get_result())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("fail to get sql result", K(ret));
@@ -594,7 +594,7 @@ int ObLocalManagementService::update_baseline_schema_version()
   if (!inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(trans.start(&sql_proxy_))) {
+  } else if (OB_FAIL(trans.start(sql_proxy_))) {
   } else if (OB_FAIL(ddl_service_.get_schema_service().
                      get_runtime_refreshed_schema_version(baseline_schema_version))) {
   } else {
@@ -1130,7 +1130,7 @@ int ObLocalManagementService::alter_table(const obcall::ObAlterTableArg &arg, ob
                                    &allocator,
                                    &arg,
                                    0 /*parent task id*/);
-        if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param, sql_proxy_, task_record))) {
+        if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param, *sql_proxy_, task_record))) {
         } else if (OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
         } else {
           res.ddl_type_ = ddl_type;
@@ -1361,7 +1361,7 @@ int ObLocalManagementService::drop_table(const obcall::ObDropTableArg &arg, obca
     if (OB_UNLIKELY(OB_INVALID_ID == target_object_id || OB_INVALID_SCHEMA_VERSION == schema_version)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("error unexpected", K(ret), K(arg), K(target_object_id), K(schema_version));
-    } else if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param, sql_proxy_, task_record))) {
+    } else if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param, *sql_proxy_, task_record))) {
     } else if (OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
     } else {
       res.schema_id_ = target_object_id;
@@ -1444,7 +1444,7 @@ int ObLocalManagementService::drop_database(const obcall::ObDropDatabaseArg &arg
                                 &allocator,
                                 &arg,
                                 0 /* parent task id*/);
-    if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param, sql_proxy_, task_record))) {
+    if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param, *sql_proxy_, task_record))) {
     } else if (OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
     } else {
       drop_database_res.ddl_res_.schema_id_ = database_id;
@@ -1607,7 +1607,7 @@ int ObLocalManagementService::truncate_table(const obcall::ObTruncateTableArg &a
                                    &allocator,
                                    &arg,
                                    0 /* parent task id*/);
-        if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param, sql_proxy_, task_record))) {
+        if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param, *sql_proxy_, task_record))) {
         } else if (OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
         } else {
           res.schema_id_ = table_schema->get_table_id();
@@ -1929,22 +1929,22 @@ int ObLocalManagementService::init_debug_database()
           if (OB_SUCCESS != (temp_ret = create_func_sql.assign(
                       "create function time_to_usec(t timestamp) "
                       "returns bigint(20) deterministic begin return unix_timestamp(t); end;"))) {
-          } else if (OB_SUCCESS != (temp_ret = sql_proxy_.write(
+          } else if (OB_SUCCESS != (temp_ret = sql_proxy_->write(
                       create_func_sql.ptr(), affected_rows))) {
           } else if (OB_SUCCESS != (temp_ret = create_func_sql.assign(
                       "create function usec_to_time(u bigint(20)) "
                       "returns timestamp deterministic begin return from_unixtime(u); end;"))) {
-          } else if (OB_SUCCESS != (temp_ret = sql_proxy_.write(
+          } else if (OB_SUCCESS != (temp_ret = sql_proxy_->write(
                       create_func_sql.ptr(), affected_rows))) {
           }
 
           memset(sql, 0, sizeof(sql));
           if (OB_FAIL(del_sql.assign_fmt(
                       "DROP table IF EXISTS %s", table_schema.get_table_name()))) {
-          } else if (OB_FAIL(sql_proxy_.write(del_sql.ptr(), affected_rows))) {
+          } else if (OB_FAIL(sql_proxy_->write(del_sql.ptr(), affected_rows))) {
           } else if (OB_FAIL(ObSchema2DDLSql::convert(
                       table_schema, sql, sizeof(sql)))) {
-          } else if (OB_FAIL(sql_proxy_.write(sql, affected_rows))) {
+          } else if (OB_FAIL(sql_proxy_->write(sql, affected_rows))) {
           }
         }
       }
@@ -2013,14 +2013,14 @@ int ObLocalManagementService::start_local_services_()
     FLOG_INFO("success to start ddl service", KR(ret));
   }
 
-  if (FAILEDx(max_id_cache_mgr_.init(&sql_proxy_))) {
+  if (FAILEDx(max_id_cache_mgr_.init(sql_proxy_))) {
     FLOG_WARN("max id cache mgr start failed", KR(ret));
   } else {
     FLOG_INFO("success to start max id cache mgr");
   }
 
   if (OB_SUCC(ret)) {
-    ObGlobalStatProxy global_proxy(sql_proxy_);
+    ObGlobalStatProxy global_proxy(*sql_proxy_);
     if (OB_FAIL(global_proxy.get_baseline_schema_version(baseline_schema_version_))) {
     }
   }
@@ -2469,7 +2469,7 @@ int ObLocalManagementService::init_sys_admin_ctx(ObSystemAdminCtx &ctx)
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else {
-    ctx.sql_proxy_ = &sql_proxy_;
+    ctx.sql_proxy_ = sql_proxy_;
     ctx.schema_service_ = schema_service_;
     ctx.ddl_service_ = &ddl_service_;
     ctx.config_mgr_ = config_mgr_;
@@ -3014,7 +3014,7 @@ int ObLocalManagementService::set_config_after_bootstrap_()
       if (OB_FAIL(sql.append_fmt("%c %s = %s", (i == 0 ? ' ' : ','), configs[i][0], configs[i][1]))) {
       }
     }
-    if (FAILEDx(sql_proxy_.write(sql.ptr(), affected_rows))) {
+    if (FAILEDx(sql_proxy_->write(sql.ptr(), affected_rows))) {
       LOG_WARN("failed to set configs", KR(ret), K(sql));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(configs); i++) {

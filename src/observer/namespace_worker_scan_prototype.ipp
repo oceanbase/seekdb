@@ -152,8 +152,11 @@ int worker_local_table_schema(uint64_t table_id, int64_t schema_version,
   // as the storage-schema version below.
   const int64_t guard_version = is_inner_table(table_id)
       ? OB_INVALID_VERSION : schema_version;
-  int ret = ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
-      guard, guard_version);
+  ObMultiVersionSchemaService *service = is_inner_table(table_id)
+      ? &ObMultiVersionSchemaService::get_instance()
+      : namespace_schema_service(serving_namespace());
+  int ret = service == nullptr ? OB_NOT_INIT
+      : service->get_runtime_schema_guard(guard, guard_version);
   if (!ret) { ret = guard.get_table_schema(table_id, schema); }
   if (!ret && (schema == nullptr || schema->get_table_id() != table_id)) {
     ret = OB_SCHEMA_EAGAIN;

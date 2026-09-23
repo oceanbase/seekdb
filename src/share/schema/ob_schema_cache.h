@@ -205,6 +205,7 @@ private:
   KVCache cache_;
   HistoryCache history_cache_;
   bool is_inited_;
+  common::ObArenaAllocator all_core_table_allocator_;
   ObTableSchema all_core_table_;
   TabletCache tablet_cache_;
 private:

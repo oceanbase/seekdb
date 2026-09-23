@@ -737,7 +737,7 @@ public:
                              common::ObIArray<share::schema::ObTableSchema> *table_schemas = nullptr);
   int refresh_schema_and_get_published_version(int64_t &published_schema_version);
 
-static int get_runtime_schema_guard_with_version_in_inner_table(share::schema::ObSchemaGetterGuard &schema_guard);
+  int get_runtime_schema_guard_with_version_in_inner_table(share::schema::ObSchemaGetterGuard &schema_guard);
   // only push schema version, and publish schema
   int log_nop_operation(const obcall::ObDDLNopOpreatorArg &arg);
 
@@ -2065,6 +2065,7 @@ public:
                         
                         start_operation_schema_version_(OB_INVALID_VERSION),
                         namespace_base_schema_version_(OB_INVALID_VERSION),
+                        namespace_id_(1),
                         need_end_signal_(need_end_signal),
                         enable_ddl_parallel_(enable_ddl_parallel),
                         enable_check_ddl_epoch_(enable_check_ddl_epoch),
@@ -2106,6 +2107,7 @@ private:
   // It is captured in the transaction object because asynchronous DDL can
   // commit on a different thread from the client session.
   int64_t namespace_base_schema_version_;
+  uint64_t namespace_id_;
   
   //no need to set end_signal while ddl end transaction
   bool need_end_signal_;

@@ -554,12 +554,11 @@ ObAlterTableExecutor::~ObAlterTableExecutor()
 {
 }
 
-int ObAlterTableExecutor::refresh_schema_for_table()
+int ObAlterTableExecutor::refresh_schema_for_table(ObSQLSessionInfo &session)
 {
   int ret = OB_SUCCESS;
   share::schema::ObSchemaGetterGuard schema_guard;
-  const ObGlobalContext &gctx = GCTX;
-  ObMultiVersionSchemaService *schema_service = gctx.schema_service_;
+  ObMultiVersionSchemaService *schema_service = session.effective_schema_service();
   int64_t local_version = OB_INVALID_VERSION;
   int64_t global_version = OB_INVALID_VERSION;
 
@@ -634,7 +633,7 @@ int ObAlterTableExecutor::alter_table_rpc_v2(
   }
   if (OB_SUCC(ret)) {
     AlterTableSchema &alter_table_schema = const_cast<AlterTableSchema &>(alter_table_arg.alter_table_schema_);
-    if (OB_FAIL(populate_based_schema_obj_info_(alter_table_arg))) {
+    if (OB_FAIL(populate_based_schema_obj_info_(alter_table_arg, *my_session))) {
     } else {
       alter_table_arg.data_version_ = DATA_CURRENT_VERSION;
     }
@@ -855,7 +854,7 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
     if (OB_SUCC(ret)) {
       if (!need_check) {
         // do nothing, don't check if data is valid
-      } else if (OB_FAIL(refresh_schema_for_table())) {
+      } else if (OB_FAIL(refresh_schema_for_table(*my_session))) {
       } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(
           res.task_id_, res.ddl_need_retry_at_executor_, my_session,
           *ctx.get_query_runtime_environment(), ctx.local_command_service()))) {
@@ -866,7 +865,7 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
       if (!need_modify_fk_validate) {
         // do nothing, don't check if data is valid
       } else {
-        if (OB_FAIL(refresh_schema_for_table())) {
+        if (OB_FAIL(refresh_schema_for_table(*my_session))) {
         } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(
             res.task_id_, res.ddl_need_retry_at_executor_, my_session,
             *ctx.get_query_runtime_environment(), ctx.local_command_service()))) {
@@ -881,7 +880,7 @@ int ObAlterTableExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
                                      || (ObDDLType::DDL_DROP_COLUMN_INSTANT == res.ddl_type_ && res.task_id_ > 0 /* with drop lob*/);
       if (OB_SUCC(ret) && need_wait_ddl_finish) {
         int64_t affected_rows = 0;
-        if (OB_FAIL(refresh_schema_for_table())) {
+        if (OB_FAIL(refresh_schema_for_table(*my_session))) {
         } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(
             res.task_id_, res.ddl_need_retry_at_executor_, my_session,
             *ctx.get_query_runtime_environment(), ctx.local_command_service(), is_support_cancel))) {
@@ -1308,7 +1307,7 @@ int ObAlterTableExecutor::check_alter_part_key(ObExecContext &ctx,
     const ObColumnSchemaV2 *orig_column_schema = NULL;
     CK (!origin_database_name.empty() && !origin_table_name.empty());
     CK (OB_NOT_NULL(my_session));
-    OZ (ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
+    OZ (my_session->effective_schema_service()->get_runtime_schema_guard(
     schema_guard));
     if (FAILEDx(schema_guard.get_table_schema(
                                               origin_database_name,
@@ -1685,7 +1684,9 @@ ObTruncateTableExecutor::~ObTruncateTableExecutor()
 {
 }
 
-int ObTruncateTableExecutor::check_use_parallel_truncate(const obcall::ObTruncateTableArg &arg, bool &use_parallel_truncate)
+int ObTruncateTableExecutor::check_use_parallel_truncate(const obcall::ObTruncateTableArg &arg,
+                                                         ObSQLSessionInfo &session,
+                                                         bool &use_parallel_truncate)
 {
   int ret = OB_SUCCESS;
   use_parallel_truncate = false;
@@ -1694,10 +1695,10 @@ int ObTruncateTableExecutor::check_use_parallel_truncate(const obcall::ObTruncat
   const ObString table_name = arg.table_name_;
   const ObString database_name = arg.database_name_;
   share::schema::ObSchemaGetterGuard schema_guard;
-  if (OB_ISNULL(GCTX.schema_service_)) {
+  if (OB_ISNULL(session.effective_schema_service())) {
     ret = OB_NOT_INIT;
     LOG_WARN("GCTX schema_service not init", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(session.effective_schema_service()->get_runtime_schema_guard(schema_guard))) {
   } else if (FALSE_IT(schema_guard.set_session_id(arg.session_id_))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( database_name, table_name, false, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
@@ -1745,7 +1746,8 @@ int ObTruncateTableExecutor::execute(ObExecContext &ctx, ObTruncateTableStmt &st
       int64_t affected_rows = 0;
       bool use_parallel_truncate = false;
       
-      if (OB_FAIL(check_use_parallel_truncate(truncate_table_arg, use_parallel_truncate))) {
+      if (OB_FAIL(check_use_parallel_truncate(truncate_table_arg, *my_session,
+                                              use_parallel_truncate))) {
       } else if (!use_parallel_truncate) {
         if (OB_FAIL(query::serialize_root_service_call(
                 [&]{ return ctx.root_command_service().truncate_table(truncate_table_arg, res); }))) {
@@ -1937,14 +1939,15 @@ int ObOptimizeTableExecutor::execute(ObExecContext &ctx, ObOptimizeTableStmt &st
   return ret;
 }
 
-int ObAlterTableExecutor::populate_based_schema_obj_info_(obcall::ObAlterTableArg &alter_table_arg) {
+int ObAlterTableExecutor::populate_based_schema_obj_info_(
+    obcall::ObAlterTableArg &alter_table_arg, ObSQLSessionInfo &session) {
   int ret = OB_SUCCESS;
   const uint64_t table_id = alter_table_arg.alter_table_schema_.get_table_id();
   if (OB_INVALID_ID != table_id) {
     
     SMART_VAR(ObSchemaGetterGuard, guard) {
     const ObTableSchema *orig_table = nullptr;
-    if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
+    if (OB_FAIL(session.effective_schema_service()->get_runtime_schema_guard(
                 guard))) {
     } else if (OB_FAIL(guard.get_table_schema( table_id, orig_table))) {
     } else if (OB_ISNULL(orig_table)) {

@@ -44,6 +44,13 @@ namespace pl
 {
 class ObUserDefinedType;
 }
+namespace transaction
+{
+namespace tablelock
+{
+class ObIInnerConnectionLockRuntime;
+}
+}
 namespace common
 {
 class ObIAllocator;
@@ -79,6 +86,8 @@ public:
   virtual ~ObISQLConnection() {
     allocator_.reset();
   }
+  virtual transaction::tablelock::ObIInnerConnectionLockRuntime *inner_lock_runtime() const
+  { return nullptr; }
 
   // sql execute interface
   virtual int execute_read(const ObString &sql,

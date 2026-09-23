@@ -15,6 +15,7 @@
  */
 
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
+#include "common/mysqlclient/ob_isql_connection.h"
 #include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
@@ -25,15 +26,18 @@ namespace tablelock
 {
 namespace
 {
-ObIInnerConnectionLockRuntime *runtime()
+ObIInnerConnectionLockRuntime *runtime(common::sqlclient::ObISQLConnection *conn)
 {
+  if (conn != nullptr && conn->inner_lock_runtime() != nullptr) {
+    return conn->inner_lock_runtime();
+  }
   return ::oceanbase::share::server_service<
       ::oceanbase::transaction::tablelock::ObIInnerConnectionLockRuntime>();
 }
 }
 
 #define FORWARD_INNER_LOCK_CALL(call)                       \
-  ObIInnerConnectionLockRuntime *adapter = runtime();       \
+  ObIInnerConnectionLockRuntime *adapter = runtime(conn);   \
   return OB_ISNULL(adapter) ? common::OB_NOT_INIT : adapter->call
 
 int ObInnerConnectionLockUtil::process_lock_rpc(

@@ -1,6 +1,7 @@
 // PROTOTYPE: real immutable B+ tree pages stored in engine tables, one-engine transactions.
 // Fixed two-integer-column schemas; mode 6 adds explicit metadata page reclamation.
 #define USING_LOG_PREFIX STORAGE
+#include "query/session/ob_inner_sql_connection_access.h"
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 #include "namespace/namespace.h"
 #include "observer/namespace_worker_protocol_prototype.h"
@@ -1829,8 +1830,10 @@ int NamespaceForkKernelPrototype::finish_schema_recovery(
   }
   return ret;
 }
-int NamespaceForkKernelPrototype::begin_schema_changes(ObISQLClient &trans) {
-  if (!observer::namespace_worker_prototype::worker_process) { return OB_SUCCESS; }
+int NamespaceForkKernelPrototype::begin_schema_changes(ObISQLClient &trans, uint64_t namespace_id) {
+  if (!observer::namespace_worker_prototype::worker_process) {
+    return namespace_id > 1 ? begin_schema_change(namespace_id) : OB_SUCCESS;
+  }
   int ret = OB_SUCCESS;
   {
     std::lock_guard<std::mutex> lock(pending_schema_changes_mutex);
@@ -1839,8 +1842,7 @@ int NamespaceForkKernelPrototype::begin_schema_changes(ObISQLClient &trans) {
       ret = OB_INIT_TWICE;
     }
   }
-  if (OB_SUCC(ret)
-      && observer::namespace_worker_prototype::worker_namespace > 1) {
+  if (OB_SUCC(ret) && namespace_id > 1) {
     ret = observer::namespace_worker_prototype::begin_namespace_schema_change();
   }
   if (OB_FAIL(ret)) {
@@ -1851,15 +1853,18 @@ int NamespaceForkKernelPrototype::begin_schema_changes(ObISQLClient &trans) {
   return ret;
 }
 int NamespaceForkKernelPrototype::finish_schema_changes(
-    ObISQLClient &trans, int64_t committed_schema_version) {
-  if (!observer::namespace_worker_prototype::worker_process) { return OB_SUCCESS; }
+    ObISQLClient &trans, uint64_t namespace_id, int64_t committed_schema_version) {
+  if (!observer::namespace_worker_prototype::worker_process) {
+    return namespace_id > 1
+        ? finish_schema_change(namespace_id, committed_schema_version) : OB_SUCCESS;
+  }
   bool active = false;
   {
     std::lock_guard<std::mutex> lock(pending_schema_changes_mutex);
     active = active_schema_transactions.erase(&trans) != 0;
   }
   if (!active) { return OB_SUCCESS; }
-  return observer::namespace_worker_prototype::worker_namespace > 1
+  return namespace_id > 1
       ? observer::namespace_worker_prototype::finish_namespace_schema_change(
           committed_schema_version)
       : OB_SUCCESS;
@@ -2910,7 +2915,7 @@ int NamespaceForkKernelPrototype::publish_schema_delta(
       ret = locks.tablet_ids_.push_back(private_tablets.at(i));
     }
     if (OB_SUCC(ret) && !locks.tablet_ids_.empty()
-        && OB_FAIL(ObInnerConnectionLockUtil::lock_tablet(
+        && OB_FAIL(query::ObInnerSQLConnectionAccess::lock_tablet(
             locks, trans.get_connection()))) {
     }
     if (OB_SUCC(ret)) {

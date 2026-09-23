@@ -201,7 +201,6 @@ int ObCreateIndexHelper::lock_objects_by_id_()
   if (FAILEDx(lock_existed_objects_by_id_())) {
     LOG_WARN("fail to lock objects by id", KR(ret));
   }
-
   return ret;
 }
 

@@ -770,7 +770,8 @@ int ObServer::namespace_sql_worker_prototype(const char *query)
       }
       if (OB_SUCC(ret) && worker_schema_version > directory_schema_version) {
         WORKER_STEP(sync_namespace_schema_delta(
-            worker_namespace, directory_schema_version, published_schema_version));
+            worker_namespace, schema_service_, directory_schema_version,
+            published_schema_version));
       } else if (OB_SUCC(ret)) {
         published_schema_version = worker_schema_version;
       }

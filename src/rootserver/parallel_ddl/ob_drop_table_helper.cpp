@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX RS
+#include "query/session/ob_inner_sql_connection_access.h"
 #include "rootserver/parallel_ddl/ob_drop_table_helper.h"
 
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
@@ -170,7 +171,7 @@ int ObDropTableHelper::lock_tables_()
     for (int64_t i = 0; OB_SUCC(ret) && i < sorted_table_ids.count(); i++) {
       const uint64_t table_id = sorted_table_ids.at(i);
       LOG_INFO("lock table", KR(ret), K(table_id));
-      if (OB_FAIL(ObInnerConnectionLockUtil::lock_table(table_id,
+      if (OB_FAIL(query::ObInnerSQLConnectionAccess::lock_table(table_id,
                                                         EXCLUSIVE,
                                                         timeout,
                                                         conn))) {

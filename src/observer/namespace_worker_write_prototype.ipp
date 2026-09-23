@@ -211,7 +211,11 @@ int worker_mds_storage_space(transaction::ObTxDataSourceType type,
   }
   if (OB_SUCC(ret) && !arg.table_schemas_.empty()) {
     ObSchemaGetterGuard guard;
-    if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(guard))) {
+    ObMultiVersionSchemaService *service =
+        namespace_schema_service(storage_space.namespace_id());
+    if (service == nullptr) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(service->get_runtime_schema_guard(guard))) {
     }
     StorageSpaceHandle classified;
     for (int64_t i = 0; OB_SUCC(ret) && i < arg.table_schemas_.count(); ++i) {
@@ -266,7 +270,8 @@ int append_worker_table_lock_plan(
   ObSchemaGetterGuard guard;
   const ObTableSchema *schema = nullptr;
   ObTabletIDArray tablet_ids;
-  int ret = ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(guard);
+  ObMultiVersionSchemaService *service = namespace_schema_service(serving_namespace());
+  int ret = service == nullptr ? OB_NOT_INIT : service->get_runtime_schema_guard(guard);
   if (OB_SUCC(ret)) {
     ret = guard.get_table_schema(arg.table_id_, schema);
   }
@@ -2115,7 +2120,8 @@ public:
   {
     ObSchemaGetterGuard guard;
     ObArray<const ObSimpleTableSchemaV2 *> tables;
-    int ret = ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(guard);
+    ObMultiVersionSchemaService *service = namespace_schema_service(serving_namespace());
+    int ret = service == nullptr ? OB_NOT_INIT : service->get_runtime_schema_guard(guard);
     if (OB_SUCC(ret)) {
       ret = guard.get_table_schemas_in_database(database_schema.get_database_id(), tables);
     }
@@ -2974,8 +2980,9 @@ public:
       }
       send_logical_schema = !ret;
     } else if (columns.empty() && table_id != 0) {
-      ret = ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
-          schema_guard, write_spec.schema_version_);
+      ObMultiVersionSchemaService *service = namespace_schema_service(serving_namespace());
+      ret = service == nullptr ? OB_NOT_INIT
+          : service->get_runtime_schema_guard(schema_guard, write_spec.schema_version_);
       if (!ret) { ret = schema_guard.get_table_schema(table_id, logical_schema); }
     }
     ObArray<const ObTableSchema *> materialization_schemas;

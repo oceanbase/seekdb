@@ -25,6 +25,10 @@
 
 namespace oceanbase
 {
+namespace common
+{
+class ObISQLClient;
+}
 
 namespace sql
 {
@@ -180,7 +184,8 @@ public:
   static int flush_pl_cache_by_sql(
                                   uint64_t key_id,
                                   uint64_t db_id,
-                                  share::schema::ObMultiVersionSchemaService & schema_service);
+                                  share::schema::ObMultiVersionSchemaService & schema_service,
+                                  common::ObISQLClient &sql_proxy);
   static int get_sys_var_in_pl_cache_str(ObBasicSessionInfo &session,
                                           ObIAllocator &allocator,
                                           ObString &sys_var_str);

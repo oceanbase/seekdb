@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 
+#include "query/session/ob_inner_sql_connection_access.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h"
 #include "rootserver/fork_table/ob_fork_table_helper.h"
 #include "rootserver/ob_ddl_operator.h"
@@ -80,7 +81,7 @@ int ObDDLService::drop_namespace_prototype_(const ObString &name)
       } else if (!bound.empty() && OB_FAIL(drop.add_drop_tablets_arg(bound))) {
       } else {
         if (OB_SUCC(ret) && !bound.empty()) {
-          if (OB_FAIL(ObInnerConnectionLockUtil::lock_tablet(locks, trans.get_connection()))) {
+          if (OB_FAIL(query::ObInnerSQLConnectionAccess::lock_tablet(locks, trans.get_connection()))) {
           } else { ret = drop.execute(); }
         }
       }

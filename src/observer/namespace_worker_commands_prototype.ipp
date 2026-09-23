@@ -60,11 +60,12 @@ int finish_namespace_schema_recovery(int64_t reconciled_schema_version) {
       : serving_namespace() <= 1 ? common::OB_SUCCESS : common::OB_INVALID_ARGUMENT;
 }
 
-int sync_namespace_schema_delta(uint64_t ns, int64_t base_schema_version,
+int sync_namespace_schema_delta(uint64_t ns, ObMultiVersionSchemaService &service,
+                                int64_t base_schema_version,
                                 int64_t &published_schema_version) {
   using namespace share::schema;
   published_schema_version = base_schema_version;
-  auto &service = ObMultiVersionSchemaService::get_instance();
+  InProcessServingScope serving(ns);
   if (ns == 0) { return common::OB_INVALID_ARGUMENT; }
   // A successful DDL is not complete from the SQL worker's point of view
   // until its private SchemaService can observe the committed metadata.

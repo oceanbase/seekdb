@@ -1109,6 +1109,7 @@ int ObDDLTaskUtil::get_task_tablet_slice_count(const int64_t ddl_task_id, bool &
 }
 
 int ObDDLTaskUtil::check_table_empty(
+    ObMySQLProxy &sql_proxy,
     const share::schema::ObSysVariableSchema &sys_var_schema,
     const ObString &database_name,
     const share::schema::ObTableSchema &table_schema,
@@ -1145,7 +1146,7 @@ int ObDDLTaskUtil::check_table_empty(
 
     {
       format_str = "SELECT /*+ %.*s */ 1 FROM `%.*s`.`%.*s` WHERE NOT 1 != 1 LIMIT 1";
-      if (OB_FAIL(single_conn_proxy.connect(0/*group_id*/, GCTX.sql_proxy_))) {
+      if (OB_FAIL(single_conn_proxy.connect(0/*group_id*/, &sql_proxy))) {
       }
     }
 

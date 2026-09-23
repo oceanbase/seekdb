@@ -346,7 +346,9 @@ int ObTabletCacheValue::deep_copy(char *buf,
 ObSchemaCache::ObSchemaCache()
   : cache_(),
     history_cache_(),
-    is_inited_(false)
+    is_inited_(false),
+    all_core_table_allocator_(ObModIds::OB_SCHEMA_OB_SCHEMA_ARENA),
+    all_core_table_(&all_core_table_allocator_)
 {
 }
 

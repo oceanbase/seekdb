@@ -160,6 +160,13 @@ ObInnerSQLConnection::~ObInnerSQLConnection()
   }
 }
 
+transaction::tablelock::ObIInnerConnectionLockRuntime *
+ObInnerSQLConnection::inner_lock_runtime() const
+{
+  return namespace_worker_prototype::inprocess_lock_runtime(
+      const_cast<ObInnerSQLConnection *>(this));
+}
+
 int ObInnerSQLConnection::create_connection_with_owned_session(
     const bool use_static_engine,
     const int32_t group_id,
@@ -494,8 +501,8 @@ int ObInnerSQLConnection::init_result(ObInnerSQLResult &res,
   int ret = OB_SUCCESS;
   UNUSED(vt_iter_factory);
   sql::ObResultSet &result_set = res.result_set();
-  const ObGlobalContext &gctx = ObServer::get_instance().get_gctx();
-  result_set.get_exec_context().get_sql_exec_ctx().schema_service_ = gctx.schema_service_;
+  result_set.get_exec_context().get_sql_exec_ctx().schema_service_ =
+      get_session().effective_schema_service();
   result_set.get_exec_context().set_sql_ctx(&res.sql_ctx());
   res.sql_ctx().retry_times_ = retry_cnt;
   res.sql_ctx().session_info_ = &get_session();
@@ -799,7 +806,6 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
   ObExecutingSqlStatRecord sqlstat_record;
 
   exec_timestamp.exec_type_ = sql::InnerSql;
-  const ObGlobalContext &gctx = ObServer::get_instance().get_gctx();
   int64_t start_time = ObTimeUtility::current_time();
   get_session().set_query_start_time(start_time); //FIXME temporarily written like this
   get_session().set_trans_type(transaction::ObTxClass::SYS);
@@ -890,7 +896,8 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
 
           if (OB_FAIL(ret)){
             // do nothing
-          } else if (OB_FAIL(gctx.schema_service_->get_runtime_schema_guard(res.schema_guard_))) {
+          } else if (OB_FAIL(get_session().effective_schema_service()->get_runtime_schema_guard(
+                         res.schema_guard_))) {
           } else if (OB_FAIL(init_result(res, vt_iter_factory, retry_cnt,
                                          res.schema_guard_, NULL, false, false))) {
           } else if (OB_FAIL(res.schema_guard_.get_schema_version(local_database_schema_version))) {
@@ -1007,7 +1014,7 @@ int ObInnerSQLConnection::start_transaction(
 int ObInnerSQLConnection::start_transaction_inner(
     bool with_snap_shot /* = false */)
 {
-  if (namespace_worker_prototype::shared_inner_sql_bounces()) {
+  if (namespace_worker_prototype::shared_inner_sql_bounces(get_session())) {
     namespace_worker_prototype::Frame payload; payload.number('B'); payload.number(with_snap_shot);
     int64_t affected = 0;
     int ret = namespace_worker_prototype::inner_call(worker_binding_, *this, std::move(payload), affected);
@@ -1086,7 +1093,8 @@ int ObInnerSQLConnection::register_multi_data_source(
         namespace_worker_prototype::StorageSessionScope storage_scope(
             &get_session(), false);
         data_plane::ObITransactionService *tx_service =
-            data_plane::query_transaction_service();
+            namespace_worker_prototype::effective_transaction_service(
+                &get_session(), data_plane::query_transaction_service());
         if (OB_FAIL(storage_scope.error())) {
           LOG_WARN("failed to restore inner SQL namespace storage binding",
                    KR(ret), K(type), K(get_session().get_server_sid()));
@@ -1116,7 +1124,7 @@ int ObInnerSQLConnection::register_multi_data_source(
 
 int ObInnerSQLConnection::rollback()
 {
-  if (namespace_worker_prototype::shared_inner_sql_bounces()) {
+  if (namespace_worker_prototype::shared_inner_sql_bounces(get_session())) {
     namespace_worker_prototype::Frame payload; payload.number('X'); int64_t affected = 0;
     int ret = namespace_worker_prototype::inner_call(worker_binding_, *this, std::move(payload), affected);
     set_is_in_trans(false); return ret;
@@ -1146,7 +1154,7 @@ int ObInnerSQLConnection::rollback()
 
 int ObInnerSQLConnection::commit()
 {
-  if (namespace_worker_prototype::shared_inner_sql_bounces()) {
+  if (namespace_worker_prototype::shared_inner_sql_bounces(get_session())) {
     namespace_worker_prototype::Frame payload; payload.number('C'); int64_t affected = 0;
     int ret = namespace_worker_prototype::inner_call(worker_binding_, *this, std::move(payload), affected);
     set_is_in_trans(false); return ret;
@@ -1202,7 +1210,7 @@ int ObInnerSQLConnection::execute_proc(ObIAllocator &allocator,
 int ObInnerSQLConnection::execute_write_inner(const ObString &sql,
     int64_t &affected_rows, bool is_user_sql)
 {
-  if (namespace_worker_prototype::shared_inner_sql_bounces()) {
+  if (namespace_worker_prototype::shared_inner_sql_bounces(get_session())) {
     namespace_worker_prototype::Frame payload('?', namespace_worker_prototype::MAX_SQL_MESSAGE);
     payload.number('W'); payload.number(is_user_sql); payload.string(sql);
     return namespace_worker_prototype::inner_call(worker_binding_, *this, std::move(payload), affected_rows);
@@ -1248,10 +1256,11 @@ int ObInnerSQLConnection::execute_write_inner(const ObString &sql,
         // The shared process persists DDL metadata. Once the write has
         // completed, refresh its native schema service so subsequent catalog
         // lookups see the new table/columns.
-        if (!namespace_worker_prototype::worker_process && GCTX.schema_service_ && !ret) {
+        auto *schema_service = get_session().effective_schema_service();
+        if (!namespace_worker_prototype::worker_process && schema_service && !ret) {
           int64_t schema_version = OB_INVALID_VERSION;
-          const int refresh_ret = GCTX.schema_service_->get_published_schema_version(schema_version);
-          if (!refresh_ret) { (void)GCTX.schema_service_->async_refresh_schema(schema_version); }
+          const int refresh_ret = schema_service->get_published_schema_version(schema_version);
+          if (!refresh_ret) { (void)schema_service->async_refresh_schema(schema_version); }
         }
       }
     }
@@ -1281,7 +1290,7 @@ int ObInnerSQLConnection::execute_read_inner(const ObString &sql,
                                              ObISQLClient::ReadResult &res,
                                              bool is_user_sql)
 {
-  if (namespace_worker_prototype::shared_inner_sql_bounces()) {
+  if (namespace_worker_prototype::shared_inner_sql_bounces(get_session())) {
     return namespace_worker_prototype::inner_read(worker_binding_, *this, sql, res, is_user_sql);
   }
   int ret = OB_SUCCESS;
@@ -1472,7 +1481,7 @@ int ObInnerSQLConnection::set_session_variable(const ObString &name, int64_t val
   } else if (0 == name.case_compare("ob_read_consistency")) {
     LOG_INFO("inner session use weak consitency", K(val), "inner_connection_p", this);
   }
-  if (!ret && namespace_worker_prototype::shared_inner_sql_bounces()) {
+  if (!ret && namespace_worker_prototype::shared_inner_sql_bounces(get_session())) {
     namespace_worker_prototype::Frame payload; payload.number('S'); payload.string(name);
     ObObj value; value.set_int(val); payload.append(value); int64_t affected = 0;
     ret = namespace_worker_prototype::inner_call(worker_binding_, *this, std::move(payload), affected);
@@ -1488,7 +1497,7 @@ int ObInnerSQLConnection::set_session_variable(const ObString &name, const ObStr
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(get_session().update_sys_variable(name, val))) {
   }
-  if (!ret && namespace_worker_prototype::shared_inner_sql_bounces()) {
+  if (!ret && namespace_worker_prototype::shared_inner_sql_bounces(get_session())) {
     namespace_worker_prototype::Frame payload; payload.number('S'); payload.string(name);
     ObObj value; value.set_varchar(val); payload.append(value); int64_t affected = 0;
     ret = namespace_worker_prototype::inner_call(worker_binding_, *this, std::move(payload), affected);
@@ -1690,10 +1699,45 @@ int ObInnerSQLConnectionAccess::lock_obj(
     const transaction::tablelock::ObLockObjRequest &request,
     common::sqlclient::ObISQLConnection *connection)
 {
-  return nullptr == connection
-      ? common::OB_INVALID_ARGUMENT
-      : transaction::tablelock::ObInnerConnectionLockUtil::lock_obj(
-            request, connection);
+  auto *runtime = observer::namespace_worker_prototype::inprocess_lock_runtime(connection);
+  return nullptr == connection ? common::OB_INVALID_ARGUMENT
+      : nullptr == runtime ? common::OB_NOT_INIT : runtime->lock_obj(request, connection);
+}
+
+int ObInnerSQLConnectionAccess::lock_table(
+    uint64_t table_id,
+    transaction::tablelock::ObTableLockMode lock_mode,
+    int64_t timeout_us,
+    common::sqlclient::ObISQLConnection *connection,
+    transaction::tablelock::ObTableLockOwnerID owner_id,
+    transaction::tablelock::ObTableLockPriority lock_priority)
+{
+  auto *runtime = observer::namespace_worker_prototype::inprocess_lock_runtime(connection);
+  return nullptr == connection ? common::OB_INVALID_ARGUMENT
+      : nullptr == runtime ? common::OB_NOT_INIT
+      : runtime->lock_table(table_id, lock_mode, timeout_us, connection, owner_id, lock_priority);
+}
+
+int ObInnerSQLConnectionAccess::lock_tablet(
+    uint64_t table_id,
+    const common::ObIArray<common::ObTabletID> &tablet_ids,
+    transaction::tablelock::ObTableLockMode lock_mode,
+    int64_t timeout_us,
+    common::sqlclient::ObISQLConnection *connection)
+{
+  auto *runtime = observer::namespace_worker_prototype::inprocess_lock_runtime(connection);
+  return nullptr == connection ? common::OB_INVALID_ARGUMENT
+      : nullptr == runtime ? common::OB_NOT_INIT
+      : runtime->lock_tablet(table_id, tablet_ids, lock_mode, timeout_us, connection);
+}
+
+int ObInnerSQLConnectionAccess::lock_tablet(
+    const transaction::tablelock::ObLockAloneTabletRequest &request,
+    common::sqlclient::ObISQLConnection *connection)
+{
+  auto *runtime = observer::namespace_worker_prototype::inprocess_lock_runtime(connection);
+  return nullptr == connection ? common::OB_INVALID_ARGUMENT
+      : nullptr == runtime ? common::OB_NOT_INIT : runtime->lock_tablet(request, connection);
 }
 
 int ObInnerSQLConnectionAccess::register_multi_data_source(

@@ -192,8 +192,9 @@ private:
 
   int set_index_arg_list(ObExecContext &ctx, ObAlterTableStmt &stmt);
 
-  int refresh_schema_for_table();
-  int populate_based_schema_obj_info_(obcall::ObAlterTableArg &alter_table_arg);
+  int refresh_schema_for_table(ObSQLSessionInfo &session);
+  int populate_based_schema_obj_info_(obcall::ObAlterTableArg &alter_table_arg,
+                                      ObSQLSessionInfo &session);
 
 private:
   //DISALLOW_COPY_AND_ASSIGN(ObAlterTableExecutor);
@@ -240,7 +241,8 @@ public:
   virtual ~ObTruncateTableExecutor();
   int execute(ObExecContext &ctx, ObTruncateTableStmt &stmt);
 private:
-  int check_use_parallel_truncate(const obcall::ObTruncateTableArg &arg, bool &use_parallel_truncate);
+  int check_use_parallel_truncate(const obcall::ObTruncateTableArg &arg,
+                                  ObSQLSessionInfo &session, bool &use_parallel_truncate);
 
 };
 

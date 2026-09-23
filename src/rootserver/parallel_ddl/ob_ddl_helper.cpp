@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX RS
+#include "query/session/ob_inner_sql_connection_access.h"
 #include "rootserver/parallel_ddl/ob_ddl_helper.h"
 #include "share/ob_share_util.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h" //ObInnerConnectionLockUtil
@@ -239,7 +240,9 @@ ObDDLHelper::ObDDLHelper(
     lock_object_id_map_(),
     allocator_(),
     parallel_ddl_type_(parallel_ddl_type),
-    schema_guard_wrapper_(schema_service, !enable_ddl_parallel),
+    schema_guard_wrapper_(schema_service,
+        !enable_ddl_parallel
+        || schema_service != &share::schema::ObMultiVersionSchemaService::get_instance()),
     enable_ddl_parallel_(enable_ddl_parallel),
     trans_(schema_service_,
            false, /*need_end_signal*/
@@ -577,7 +580,7 @@ int ObDDLHelper::lock_objects_in_map_(
           lock_arg.op_type_ = ObTableLockOpType::IN_TRANS_COMMON_LOCK;
           lock_arg.timeout_us_ = timeout;
           LOG_INFO("try lock object", KR(ret), K(lock_arg));
-          if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(lock_arg, conn))) {
+          if (OB_FAIL(query::ObInnerSQLConnectionAccess::lock_obj(lock_arg, conn))) {
           }
         }
       } // end foreach
@@ -833,7 +836,7 @@ int ObDDLHelper::obj_lock_with_lock_id_(
     lock_arg.op_type_ = ObTableLockOpType::IN_TRANS_COMMON_LOCK;
     if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, GCONF.rpc_timeout))) {
     } else if (FALSE_IT(lock_arg.timeout_us_ = ctx.get_timeout())) {
-    } else if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(lock_arg, conn))) {
+    } else if (OB_FAIL(query::ObInnerSQLConnectionAccess::lock_obj(lock_arg, conn))) {
     }
   }
   return ret;

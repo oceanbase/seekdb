@@ -19,6 +19,7 @@
 
 #include <stdint.h>
 #include "common/mysqlclient/ob_isql_connection.h"
+#include "storage/tablelock/ob_lock_inner_connection_util.h"
 
 namespace oceanbase
 {
@@ -64,6 +65,27 @@ public:
 
   static int lock_obj(
       const transaction::tablelock::ObLockObjRequest &request,
+      common::sqlclient::ObISQLConnection *connection);
+
+  static int lock_table(
+      uint64_t table_id,
+      transaction::tablelock::ObTableLockMode lock_mode,
+      int64_t timeout_us,
+      common::sqlclient::ObISQLConnection *connection,
+      transaction::tablelock::ObTableLockOwnerID owner_id =
+          transaction::tablelock::ObTableLockOwnerID::default_owner(),
+      transaction::tablelock::ObTableLockPriority lock_priority =
+          transaction::tablelock::ObTableLockPriority::NORMAL);
+
+  static int lock_tablet(
+      uint64_t table_id,
+      const common::ObIArray<common::ObTabletID> &tablet_ids,
+      transaction::tablelock::ObTableLockMode lock_mode,
+      int64_t timeout_us,
+      common::sqlclient::ObISQLConnection *connection);
+
+  static int lock_tablet(
+      const transaction::tablelock::ObLockAloneTabletRequest &request,
       common::sqlclient::ObISQLConnection *connection);
 
   static int register_multi_data_source(

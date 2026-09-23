@@ -115,7 +115,7 @@ public:
            const bool need_bootstrap);
   int init_sql_worker(common::ObServerConfig &config,
                       common::ObConfigManager &config_mgr,
-                      common::ObAddr &self,
+                      const common::ObAddr &self,
                       common::ObMySQLProxy &sql_proxy,
                       share::schema::ObMultiVersionSchemaService &schema_service);
   inline bool is_inited() const { return inited_; }
@@ -134,7 +134,7 @@ public:
   virtual bool check_config(const ObConfigItem &item, const char *&err_info);
   // misc get functions
   share::schema::ObMultiVersionSchemaService &get_schema_service() { return *schema_service_; }
-  common::ObMySQLProxy &get_sql_proxy() { return sql_proxy_; }
+  common::ObMySQLProxy &get_sql_proxy() { return *sql_proxy_; }
   common::ObServerConfig *get_server_config() { return config_; }
   int64_t get_core_meta_table_version() { return core_meta_table_version_; }
   ObRootMinorFreeze &get_root_minor_freeze() { return root_minor_freeze_; }
@@ -347,7 +347,7 @@ private:
   common::ObServerConfig *config_;
   common::ObConfigManager *config_mgr_;
 
-  common::ObMySQLProxy sql_proxy_;
+  common::ObMySQLProxy *sql_proxy_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
   query::ObILocalCommandService *local_command_service_;
 

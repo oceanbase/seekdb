@@ -123,11 +123,11 @@ int ObDDLService::init(common::ObMySQLProxy &sql_proxy,
 int ObDDLService::get_runtime_schema_guard_with_version_in_inner_table(ObSchemaGetterGuard &schema_guard)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(GCTX.schema_service_)) {
+  if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("pointer is null", K(ret), KP(GCTX.schema_service_));
+    LOG_WARN("pointer is null", K(ret), KP(schema_service_));
   } else {
-    ret = GCTX.schema_service_->get_runtime_schema_guard_with_version_in_inner_table(schema_guard);
+    ret = schema_service_->get_runtime_schema_guard_with_version_in_inner_table(schema_guard);
   }
   return ret;
 }
@@ -5043,7 +5043,7 @@ int ObDDLService::lock_tablets(ObMySQLTransaction &trans,
     LOG_WARN("conn_ is NULL", KR(ret));
   } else {
     LOG_INFO("lock tablet", KR(ret), K(tablet_ids), K(table_id), KP(conn));
-    if (OB_FAIL(ObInnerConnectionLockUtil::lock_tablet(table_id,
+    if (OB_FAIL(query::ObInnerSQLConnectionAccess::lock_tablet(table_id,
                                                           tablet_ids,
                                                           EXCLUSIVE,
                                                           timeout,
@@ -5075,7 +5075,7 @@ int ObDDLService::lock_table(ObMySQLTransaction &trans,
   } else {
     LOG_INFO("lock table", KR(ret), K(table_id), K(owner_id),
              K(lock_priority), K(timeout_us), KP(conn));
-    if (OB_FAIL(ObInnerConnectionLockUtil::lock_table(table_id,
+    if (OB_FAIL(query::ObInnerSQLConnectionAccess::lock_table(table_id,
                                                       EXCLUSIVE,
                                                       timeout_us,
                                                       conn,
@@ -12677,12 +12677,8 @@ int ObDDLService::check_has_domain_index(
 {
   int ret = OB_SUCCESS;
   domain_index_exist = false;
-  ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
   const ObTableSchema *table_schema = nullptr;
-  if (OB_ISNULL(local_management_service)) {
-    ret = OB_ERR_SYS;
-    LOG_WARN("error sys, local management service must not be nullptr", K(ret));
-  } else if (OB_FAIL(local_management_service->get_ddl_service().get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
+  if (OB_FAIL(get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( data_table_id, table_schema))) {
     LOG_WARN("get table schema failed", K(ret), K(data_table_id));
   } else if (OB_ISNULL(table_schema)) {
@@ -18780,7 +18776,7 @@ int ObDDLService::new_truncate_table(const obcall::ObTruncateTableArg &arg,
     // try lock
     if (OB_FAIL(ObDDLHelper::obj_lock_obj_id(trans, table_id, transaction::tablelock::EXCLUSIVE))) {
       LOG_WARN("fail to lock table id", KR(ret), K(table_id));
-    } else if (OB_FAIL(ObInnerConnectionLockUtil::lock_table(table_id,
+    } else if (OB_FAIL(query::ObInnerSQLConnectionAccess::lock_table(table_id,
                                                       EXCLUSIVE,
                                                       0,
                                                       conn))) {
@@ -25167,6 +25163,9 @@ int ObDDLSQLTransaction::start(ObISQLClient *proxy,
              KP(schema_service_), KP(schema_service_->get_schema_service()));
   } else {
     namespace_base_schema_version_ = runtime_refreshed_schema_version;
+    namespace_id_ = observer::namespace_worker_prototype::worker_process
+        ? observer::namespace_worker_prototype::worker_namespace
+        : proxy->target_namespace();
     
     auto *tsi_oper = GET_TSI(share::schema::TSILastOper);
     if (OB_ISNULL(tsi_oper)) {
@@ -25203,8 +25202,8 @@ int ObDDLSQLTransaction::start(ObISQLClient *proxy,
       }
     }
     if (OB_SUCC(ret)
-        && observer::namespace_worker_prototype::worker_process
-        && OB_FAIL(storage::NamespaceForkKernelPrototype::begin_schema_changes(*this))) {
+        && OB_FAIL(storage::NamespaceForkKernelPrototype::begin_schema_changes(
+            *this, namespace_id_))) {
       LOG_WARN("fail to begin namespace schema changes", KR(ret));
     }
   }
@@ -25326,13 +25325,13 @@ int ObDDLSQLTransaction::end(const bool commit)
   ret = OB_SUCC(ret) ? tmp_ret : ret;
   const bool namespace_transaction_committed = commit && OB_SUCC(ret);
   const int finish_schema_ret = storage::NamespaceForkKernelPrototype::finish_schema_changes(
-      *this, namespace_transaction_committed && committed_schema_version > 0
+      *this, namespace_id_, namespace_transaction_committed && committed_schema_version > 0
           ? committed_schema_version : 0);
   if (OB_SUCC(ret)) { ret = finish_schema_ret; }
   if (namespace_transaction_committed
       && OB_SUCC(ret)
       && committed_schema_version > 0
-      && observer::namespace_worker_prototype::worker_namespace > 1) {
+      && namespace_id_ > 1) {
     if (const char *delay_text = std::getenv(
             "SEEKDB_NAMESPACE_DDL_PUBLISH_DELAY_US")) {
       char *end = nullptr;
@@ -25347,7 +25346,7 @@ int ObDDLSQLTransaction::end(const bool commit)
     if (base_schema_version <= 0) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(observer::namespace_worker_prototype::sync_namespace_schema_delta(
-            observer::namespace_worker_prototype::worker_namespace,
+            namespace_id_, *schema_service_,
             base_schema_version,
             published_schema_version))) {
       LOG_WARN("failed to publish committed namespace schema transaction",
@@ -25507,8 +25506,8 @@ int ObDDLSQLTransaction::lock_all_ddl_operation(
       lock_arg.lock_mode_ = !enable_parallel ? EXCLUSIVE : SHARE;
       lock_arg.op_type_ = ObTableLockOpType::IN_TRANS_COMMON_LOCK;
       lock_arg.timeout_us_ = ctx.get_timeout();
-      if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(lock_arg,
-                                                      conn))) {
+      if (OB_FAIL(query::ObInnerSQLConnectionAccess::lock_obj(lock_arg,
+                                                              conn))) {
         LOG_WARN("lock table failed", KR(ret));
       }
     }

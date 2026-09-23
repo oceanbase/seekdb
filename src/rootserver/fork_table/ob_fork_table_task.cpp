@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 
+#include "query/session/ob_inner_sql_connection_access.h"
 #include "rootserver/fork_table/ob_fork_table_task.h"
 #include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_ddl_service.h"
@@ -561,7 +562,7 @@ int ObForkTableTask::cleanup_impl()
         lock_arg.lock_mode_ = EXCLUSIVE;  // Use EXCLUSIVE lock for cleanup operation
         lock_arg.op_type_ = ObTableLockOpType::IN_TRANS_COMMON_LOCK;
         lock_arg.timeout_us_ = ctx.get_timeout();
-        if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(lock_arg, conn))) {
+        if (OB_FAIL(query::ObInnerSQLConnectionAccess::lock_obj(lock_arg, conn))) {
         }
       }
 

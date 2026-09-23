@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX PL_CACHE
 #include "ob_pl_cache_mgr.h"
+#include "common/mysqlclient/ob_isql_client.h"
 #include "src/sql/plan_cache/ob_plan_cache_util.h"
 using namespace oceanbase::observer;
 
@@ -246,7 +247,8 @@ int ObPLCacheMgr::add_pl_cache(ObPlanCache *lib_cache, ObILibCacheObject *pl_obj
 int ObPLCacheMgr::flush_pl_cache_by_sql(
                                   uint64_t key_id,
                                   uint64_t db_id,
-                                  share::schema::ObMultiVersionSchemaService & schema_service)
+                                  share::schema::ObMultiVersionSchemaService & schema_service,
+                                  common::ObISQLClient &sql_proxy)
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard runtime_schema_guard;
@@ -265,18 +267,14 @@ int ObPLCacheMgr::flush_pl_cache_by_sql(
     db_name = database_schema->get_database_name();
   }
 
-  ObMySQLProxy *sql_proxy = nullptr;
   ObSqlString sql;
   int64_t affected_rows = 0;
   if (OB_FAIL(ret)) {
     // do nothing
-  } else if (OB_ISNULL(sql_proxy = GCTX.sql_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected sql proxy", K(ret));
   } else if (OB_FAIL(sql.assign_fmt("alter system flush pl cache schema_id = %lu databases = \"%.*s\"",
                                       key_id, db_name.length(), db_name.ptr()))) {
   } else {
-    if (OB_FAIL(sql_proxy->write(sql.ptr(), affected_rows))) {
+    if (OB_FAIL(sql_proxy.write(sql.ptr(), affected_rows))) {
     } else {
       // do nothing
       LOG_INFO("succ to flush pl cache", K(key_id), K(affected_rows));

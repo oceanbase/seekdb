@@ -357,7 +357,9 @@ int ObTabletCreator::execute()
         // the binding immediately after registering CREATE_TABLET_NEW_MDS in
         // the shared transaction, using the already-routed physical tablets.
         if (OB_SUCC(ret) && batch_arg->batch_arg_.set_binding_info_outside_create()
-            && !observer::namespace_worker_prototype::worker_process) {
+            && !observer::namespace_worker_prototype::worker_process
+            && observer::namespace_worker_prototype::in_process_session_ns(
+                query::ObInnerSQLConnectionAccess::get_session(conn)) <= 1) {
           const int64_t start_time = ObTimeUtility::current_time();
           if (OB_FAIL(ObTabletBindingMdsHelper::modify_tablet_binding_for_create(batch_arg->batch_arg_, ctx.get_abs_timeout(), trans_))) {
           }

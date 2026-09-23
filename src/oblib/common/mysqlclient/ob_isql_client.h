@@ -47,6 +47,8 @@ public:
   ObISQLClient() {}
   virtual ~ObISQLClient() {}
 
+  virtual uint64_t target_namespace() const { return 1; }
+
   // sql string escape
   virtual int escape(const char *from, const int64_t from_size,
       char *to, const int64_t to_size, int64_t &out_size) = 0;

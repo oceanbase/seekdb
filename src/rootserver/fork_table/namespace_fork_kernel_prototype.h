@@ -84,9 +84,9 @@ public:
   static int finish_schema_change(uint64_t namespace_id, int64_t schema_version);
   static int begin_schema_recovery(uint64_t namespace_id, bool &needed);
   static int finish_schema_recovery(uint64_t namespace_id, int64_t schema_version);
-  static int begin_schema_changes(common::ObISQLClient &trans);
+  static int begin_schema_changes(common::ObISQLClient &trans, uint64_t namespace_id);
   static int finish_schema_changes(common::ObISQLClient &trans,
-                                   int64_t committed_schema_version);
+                                   uint64_t namespace_id, int64_t committed_schema_version);
   static int observe_schema(common::ObISQLClient &trans, const share::schema::ObTableSchema &schema);
   static int observe_schemas(common::ObISQLClient &trans,
                              const common::ObIArray<share::schema::ObTableSchema> &schemas);

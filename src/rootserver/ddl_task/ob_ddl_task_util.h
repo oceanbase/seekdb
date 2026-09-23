@@ -21,6 +21,7 @@
 
 namespace oceanbase
 {
+namespace common { class ObMySQLProxy; }
 namespace obcall
 {
 struct ObCreateIndexArg;
@@ -64,6 +65,7 @@ public:
       bool &is_partition_table,
       common::hash::ObHashMap<int64_t, int64_t> &tablet_slice_count_map);
   static int check_table_empty(
+      common::ObMySQLProxy &sql_proxy,
       const share::schema::ObSysVariableSchema &sys_var_schema,
       const common::ObString &database_name,
       const share::schema::ObTableSchema &table_schema,
