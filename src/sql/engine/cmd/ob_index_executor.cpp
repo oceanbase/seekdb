@@ -292,7 +292,7 @@ int ObDropIndexExecutor::wait_drop_index_finish(
     while (OB_SUCC(ret)) {
       int tmp_ret = OB_SUCCESS;
       bool write_enabled = true;
-      if (OB_SUCCESS == share::ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id, -1 /* target_object_id */, unused_addr, false /* is_ddl_retry_task */, *GCTX.sql_proxy_, error_message, unused_user_msg_len)) {
+      if (OB_SUCCESS == share::ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id, -1 /* target_object_id */, unused_addr, false /* is_ddl_retry_task */, *session.effective_sql_proxy(), error_message, unused_user_msg_len)) {
         ret = error_message.ret_code_;
         if (OB_SUCCESS != ret) {
           FORWARD_USER_ERROR(ret, error_message.user_message_);

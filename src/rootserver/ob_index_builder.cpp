@@ -172,6 +172,7 @@ int ObIndexBuilder::drop_index_on_failed(const ObDropIndexArg &arg, obcall::ObDr
     if (OB_SUCC(ret)) {
       int tmp_ret = OB_SUCCESS;
       if (OB_FAIL(ddl_service_.publish_schema())) {
+      } else if (FALSE_IT(task_record.context_ = ddl_service_.get_task_context())) {
       } else if (OB_TMP_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
       }
     }
@@ -457,6 +458,7 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
       if (OB_SUCC(ret) && !has_other_domain_index) {
         int tmp_ret = OB_SUCCESS;
         if (OB_FAIL(ddl_service_.publish_schema())) {
+        } else if (FALSE_IT(task_record.context_ = ddl_service_.get_task_context())) {
         } else if (OB_TMP_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
         }
       }
@@ -597,6 +599,7 @@ int ObIndexBuilder::do_create_global_index(
     if (OB_SUCC(ret)) {
       int tmp_ret = OB_SUCCESS;
       if (OB_FAIL(ddl_service_.publish_schema())) {
+      } else if (FALSE_IT(task_record.context_ = ddl_service_.get_task_context())) {
       } else if (OB_TMP_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
       }
     }
@@ -1483,6 +1486,7 @@ int ObIndexBuilder::do_create_local_index(
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ddl_service_.publish_schema())) {
+      } else if (!create_index_on_empty_table_opt && FALSE_IT(task_record.context_ = ddl_service_.get_task_context())) {
       } else if (!create_index_on_empty_table_opt && OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
         LOG_ERROR("fail to schedule ddl task", K(ret), K(task_record));
       }

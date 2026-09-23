@@ -101,6 +101,7 @@ public:
   share::schema::ObMultiVersionSchemaService &get_schema_service() { return *schema_service_; }
   common::ObMySQLProxy &get_sql_proxy() { return *sql_proxy_; }
   void set_task_context(const ObDDLTaskContext &context) { task_context_ = context; }
+  const ObDDLTaskContext &get_task_context() const { return task_context_; }
   ObSnapshotInfoManager &get_snapshot_mgr() { return *snapshot_mgr_; }
 
   // create_index_table will fill table_id and frozen_version to table_schema

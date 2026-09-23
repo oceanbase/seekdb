@@ -83,10 +83,12 @@ int ObDropIndexTask::init(
 {
   int ret = OB_SUCCESS;
   int64_t pos = 0;
+  set_context(task_record.context_);
   if (OB_UNLIKELY(!task_record.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_record));
-  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
+  } else if (OB_ISNULL(local_management_service_ = context_.root_service_ != nullptr
+      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, local management service is null", K(ret));
   } else {
@@ -128,7 +130,7 @@ int ObDropIndexTask::update_index_status(const ObIndexStatus new_status)
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
+  } else if (OB_FAIL(task_schema_service()->get_runtime_schema_guard(
       schema_guard, schema_version_))) {
   } else if (OB_FAIL(schema_guard.check_formal_guard())) {
   } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, index_schema))) {
@@ -146,9 +148,9 @@ int ObDropIndexTask::update_index_status(const ObIndexStatus new_status)
     int64_t table_id = index_schema->get_table_id();
     DEBUG_SYNC(BEFORE_UPDATE_GLOBAL_INDEX_STATUS);
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
-            *GCTX.schema_service_, table_id, ddl_rpc_timeout))) {
+            *task_schema_service(), table_id, ddl_rpc_timeout))) {
     } else if (OB_FAIL(DDL_SIM(task_id_, UPDATE_INDEX_STATUS_FAILED))) {
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->update_index_status(arg); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return local_management_service_->update_index_status(arg); }))) {
     } else {
       LOG_INFO("notify index status changed finish", K(new_status), K(target_object_id_));
     }
@@ -204,9 +206,9 @@ int ObDropIndexTask::drop_index_impl()
   bool is_index_exist = false;
   ObString index_name;
   const ObTableSchema *index_schema = nullptr;
-  if (OB_ISNULL(GCTX.schema_service_) ) {
+  if (OB_ISNULL(task_schema_service())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(task_schema_service()->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.check_table_exist(target_object_id_, is_index_exist))) {
   } else if (!is_index_exist) {
     // by pass
@@ -240,7 +242,7 @@ int ObDropIndexTask::drop_index_impl()
     drop_index_arg.is_hidden_         = drop_index_arg_.is_hidden_;
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(index_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout))) {
     } else if (OB_FAIL(DDL_SIM(task_id_, DROP_INDEX_RPC_FAILED))) {
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index(drop_index_arg, drop_index_res); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return local_management_service_->drop_index(drop_index_arg, drop_index_res); }))) {
     }
     LOG_INFO("drop index", K(ret), K(drop_index_sql.ptr()), K(drop_index_arg));
   }
@@ -278,10 +280,10 @@ int ObDropIndexTask::cleanup_impl()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(report_error_code(unused_str))) {
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+  } else if (OB_ISNULL(task_sql_proxy())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
-  } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*GCTX.sql_proxy_, task_id_))) {
+    LOG_WARN("invalid argument", KR(ret), KP(task_sql_proxy()));
+  } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*task_sql_proxy(), task_id_))) {
   } else {
     need_retry_ = false;      // clean succ, stop the task
   }
@@ -366,9 +368,9 @@ int ObDropIndexTask::check_switch_succ()
   } else if (OB_ISNULL(local_management_service_)) {
     ret = OB_ERR_SYS;
     LOG_WARN("error sys", K(ret));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+  } else if (OB_ISNULL(task_sql_proxy())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
+    LOG_WARN("invalid argument", KR(ret), KP(task_sql_proxy()));
   } else if (OB_FAIL(refresh_schema_version())) {
   } else if (OB_FAIL(local_management_service_->get_schema_service().get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.check_table_exist(target_object_id_, is_index_exist))) {
