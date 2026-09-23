@@ -344,7 +344,7 @@ int namespace_chain_link(ObISQLClient &sql, uint64_t ns, uint64_t &parent, int64
   }
   ObSqlString q; ObMySQLProxy::MySQLResult res; sqlclient::ObMySQLResult *r = nullptr;
   int ret = q.assign_fmt(
-      "SELECT parent_namespace,fork_cap FROM %s WHERE namespace_id=%lu AND state=0",
+      "SELECT parent_namespace,fork_cap FROM %s WHERE namespace_id=%lu",
       NAMESPACES, ns);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(sql.read(res, q.ptr()))) {
@@ -1175,6 +1175,7 @@ int NamespaceForkKernelPrototype::begin_namespace_drop(const ObString &name, uin
   if (!GCTX.sql_proxy_) { return OB_NOT_SUPPORTED; }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   ObMySQLTransaction trans; Roots root; ObSqlString q;
+  bool registry_closed = false;
   int ret = trans.start(GCTX.sql_proxy_);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(namespace_named(trans, name, id))) {
@@ -1188,26 +1189,20 @@ int NamespaceForkKernelPrototype::begin_namespace_drop(const ObString &name, uin
     ret = OB_EAGAIN;
   } else if (root.state == 2) { done = true;
   } else if (root.state != 0 && root.state != 1) { ret = OB_STATE_NOT_MATCH;
-  } else if (id != 1 && OB_FAIL([&]() -> int {
-      // A child namespace reads inherited tablets through this namespace's
-      // physical copies. Dropping a parent with live forks would orphan them,
-      // so refuse until the children are gone. (Prototype simplification; the
-      // directory model retained source snapshots instead.)
-      ObMySQLProxy::MySQLResult res; sqlclient::ObMySQLResult *r = nullptr;
-      int check = q.assign_fmt(
-          "SELECT 1 FROM %s WHERE parent_namespace=%lu AND state<>2 LIMIT 1", NAMESPACES, id);
-      if (check != OB_SUCCESS) {
-      } else if (OB_SUCCESS != (check = trans.read(res, q.ptr()))) {
-      } else if (OB_ISNULL(r = res.get_result())) { check = OB_ERR_UNEXPECTED;
-      } else if ((check = r->next()) == OB_SUCCESS) {
-        check = OB_OP_NOT_ALLOW;
-        LOG_USER_ERROR(OB_OP_NOT_ALLOW, "drop a namespace with live forks");
-      } else if (check == OB_ITER_END) { check = OB_SUCCESS; }
-      return check;
-  }())) {
+  } else if (!ns::namespace_registry().begin_drop(id)) {
+    ret = OB_OP_NOT_ALLOW;
+    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "drop a namespace with active connections");
   } else if (OB_FAIL(q.assign_fmt("UPDATE %s SET state=1 WHERE namespace_id=%lu", NAMESPACES, id))) {
-  } else { ret = write_sql(trans, q); }
-  if (trans.is_started()) { const int end = trans.end(ret == OB_SUCCESS); if (ret == OB_SUCCESS) { ret = end; } }
+    registry_closed = true;
+  } else {
+    registry_closed = true;
+    ret = write_sql(trans, q);
+  }
+  const bool commit_attempted = ret == OB_SUCCESS;
+  if (trans.is_started()) { const int end = trans.end(commit_attempted); if (ret == OB_SUCCESS) { ret = end; } }
+  if (ret != OB_SUCCESS && registry_closed && !commit_attempted) {
+    ns::namespace_registry().cancel_drop(id);
+  }
   if (OB_SUCC(ret)) { invalidate_namespace_state(id); }
   LOG_INFO("PROTOTYPE_V7_NAMESPACE_CLOSE", K(ret), K(id), K(done));
   return ret;
@@ -1242,9 +1237,6 @@ int NamespaceForkKernelPrototype::finish_namespace_drop(ObISQLClient &trans, uin
   Roots root; ObSqlString q; int ret = roots(trans, id, root, true, true);
   if (OB_FAIL(ret)) {
   } else if (root.state != 1) { ret = OB_STATE_NOT_MATCH;
-  } else if (id != 1 && OB_FAIL(q.assign_fmt(
-      "DELETE FROM %s WHERE namespace_id=%lu", EXCEPTIONS, id))) {
-  } else if (id != 1 && OB_FAIL(write_sql(trans, q))) {
   } else if (OB_FAIL(q.assign_fmt("UPDATE %s SET state=2,source_id=0,snapshot_ref=0,catalog_page=0,catalog_cap=0,directory_page=0,directory_cap=0,snapshot=0,schema_version=0,active_schema_changes=0,pending_schema_version=0 WHERE namespace_id=%lu AND state=1", NAMESPACES, id))) {
   } else { ret = write_sql(trans, q); }
   if (OB_SUCC(ret) && root.snapshot_ref) {
@@ -1295,7 +1287,8 @@ int NamespaceForkKernelPrototype::drain_access() {
   }
   return ret;
 }
-int NamespaceForkKernelPrototype::check_table_access(uint64_t table_id, const ObTabletID &tablet_id, bool &held) {
+int NamespaceForkKernelPrototype::check_table_access(
+    uint64_t table_id, const ObTabletID &tablet_id, bool read_only, bool &held) {
   if (tablet_id.is_inner_tablet() && !is_encoded_id(tablet_id.id())) {
     return OB_SUCCESS;
   }
@@ -1324,7 +1317,10 @@ int NamespaceForkKernelPrototype::check_table_access(uint64_t table_id, const Ob
       state = root.state;
       remember_namespace_state(id, state);
     }
-    if (state != 0) {
+    if (state != 0 && !(read_only && (state == 1 || state == 2))) {
+      // Descendants may still read a physical tablet owned by this ancestor.
+      // Namespace admission and the access drain fence prevent new reads from
+      // the dropped owner itself; all writes must target a live namespace.
       ret = OB_OP_NOT_ALLOW;
       LOG_USER_ERROR(OB_OP_NOT_ALLOW, "access a closing or deleted prototype namespace");
     }
@@ -1341,17 +1337,21 @@ int NamespaceForkKernelPrototype::protect_snapshot_tablets(ObIArray<ObTabletID> 
   // chain may hold its own owned copy. Prototype simplification: ownership is
   // checked regardless of fork order, so a tablet dropped in a parent is
   // retained until every LIVE descendant is gone.
-  std::unordered_map<uint64_t, uint64_t> live_parents;
+  std::unordered_map<uint64_t, uint64_t> parents;
+  std::unordered_set<uint64_t> live_readers;
   {
     ObSqlString q; ObMySQLProxy::MySQLResult res; sqlclient::ObMySQLResult *r = nullptr;
-    if (OB_FAIL(q.assign_fmt("SELECT namespace_id,parent_namespace FROM %s WHERE state=0", NAMESPACES))) {
+    if (OB_FAIL(q.assign_fmt("SELECT namespace_id,parent_namespace,state FROM %s", NAMESPACES))) {
     } else if (OB_FAIL(GCTX.sql_proxy_->read(res, q.ptr()))) {
     } else if (OB_ISNULL(r = res.get_result())) { ret = OB_ERR_UNEXPECTED;
     } else {
       while (OB_SUCC(ret = r->next())) {
         uint64_t ns = 0, parent = 0;
-        if (OB_FAIL(r->get_uint(0L, ns)) || OB_FAIL(r->get_uint(1L, parent))) { break; }
-        live_parents[ns] = parent;
+        int64_t state = 0;
+        if (OB_FAIL(r->get_uint(0L, ns)) || OB_FAIL(r->get_uint(1L, parent))
+            || OB_FAIL(r->get_int(2L, state))) { break; }
+        parents[ns] = parent;
+        if (state == 0) { live_readers.insert(ns); }
       }
       if (ret == OB_ITER_END) { ret = OB_SUCCESS; }
     }
@@ -1397,8 +1397,7 @@ int NamespaceForkKernelPrototype::protect_snapshot_tablets(ObIArray<ObTabletID> 
     const uint64_t owner = namespace_of(id);
     const uint64_t local = local_of(id);
     bool retained = false;
-    for (const auto &live : live_parents) {
-      const uint64_t reader = live.first;
+    for (const uint64_t reader : live_readers) {
       if (reader == owner) { continue; }
       if (tombstoned_by_local[local].count(reader) != 0) { continue; }
       // Walk the reader's chain: the first owned copy below the owner serves
@@ -1407,10 +1406,10 @@ int NamespaceForkKernelPrototype::protect_snapshot_tablets(ObIArray<ObTabletID> 
       uint64_t cur = reader;
       bool via_candidate = false;
       for (int depth = 0; depth < 64; ++depth) {
-        if (owned_by_local[local].count(cur) != 0) { break; }
         if (cur == owner) { via_candidate = true; break; }
-        const auto parent = live_parents.find(cur);
-        if (parent == live_parents.end() || parent->second == 0) { break; }
+        if (owned_by_local[local].count(cur) != 0) { break; }
+        const auto parent = parents.find(cur);
+        if (parent == parents.end() || parent->second == 0) { break; }
         cur = parent->second;
       }
       if (via_candidate) { retained = true; break; }
@@ -1423,6 +1422,98 @@ int NamespaceForkKernelPrototype::protect_snapshot_tablets(ObIArray<ObTabletID> 
     }
   }
   if (OB_SUCC(ret)) { ret = candidates.assign(unreferenced); }
+  return ret;
+}
+int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets() {
+  if (!GCTX.sql_proxy_ || !ATOMIC_LOAD(&GCTX.sys_package_ready_)) { return OB_SUCCESS; }
+  static std::mutex scan_mutex;
+  static uint64_t cursor_namespace = 0, cursor_tablet = 0;
+  std::lock_guard<std::mutex> scan_guard(scan_mutex);
+  ObSqlString scan;
+  int ret = scan.assign_fmt(
+      "SELECT e.namespace_id,e.tablet_id FROM %s e "
+      "JOIN %s n ON n.namespace_id=e.namespace_id "
+      "WHERE n.state=2 AND e.kind=0 AND "
+      "(e.namespace_id>%lu OR (e.namespace_id=%lu AND e.tablet_id>%lu)) "
+      "ORDER BY e.namespace_id,e.tablet_id LIMIT 64",
+      EXCEPTIONS, NAMESPACES, cursor_namespace, cursor_namespace, cursor_tablet);
+  ObMySQLProxy::MySQLResult result;
+  sqlclient::ObMySQLResult *rows = nullptr;
+  if (OB_SUCC(ret)) { ret = GCTX.sql_proxy_->read(result, scan.ptr()); }
+  ObArray<ObTabletID> candidates;
+  ObArray<ObTabletID> stale;
+  if (OB_SUCC(ret) && OB_ISNULL(rows = result.get_result())) { ret = OB_ERR_UNEXPECTED; }
+  bool saw_row = false;
+  while (OB_SUCC(ret)) {
+    ret = rows->next();
+    if (ret == OB_ITER_END) { ret = OB_SUCCESS; break; }
+    uint64_t namespace_id = 0, local_tablet_id = 0;
+    if (OB_FAIL(rows->get_uint(0L, namespace_id))
+        || OB_FAIL(rows->get_uint(1L, local_tablet_id))) {
+    } else {
+      saw_row = true;
+      cursor_namespace = namespace_id;
+      cursor_tablet = local_tablet_id;
+      const NamespaceObjectKey key{namespace_id, local_tablet_id};
+      bool exists = false;
+      if (!key.is_valid()) {
+        ret = OB_INVALID_ARGUMENT;
+      } else if (OB_FAIL(probe_physical_tablet(key.storage_id(), exists))) {
+      } else if (exists) {
+        ret = candidates.push_back(ObTabletID(key.storage_id()));
+      } else {
+        ret = stale.push_back(ObTabletID(key.storage_id()));
+      }
+    }
+  }
+  if (OB_SUCC(ret) && !saw_row) { cursor_namespace = cursor_tablet = 0; }
+  bool deferred = false;
+  if (OB_SUCC(ret) && !candidates.empty()) {
+    ret = protect_snapshot_tablets(candidates, deferred);
+  }
+  if (OB_FAIL(ret) || (candidates.empty() && stale.empty())) { return ret; }
+  int64_t schema_version = 0;
+  ObSchemaGetterGuard guard;
+  if (OB_FAIL(GSCHEMASERVICE.get_runtime_schema_guard(guard))) {
+  } else if (OB_FAIL(guard.get_schema_version(schema_version))) {
+  }
+  ObMySQLTransaction trans;
+  if (OB_SUCC(ret)) { ret = trans.start(GCTX.sql_proxy_); }
+  if (OB_SUCC(ret) && !candidates.empty()) {
+    ObLockAloneTabletRequest locks;
+    locks.lock_mode_ = EXCLUSIVE;
+    locks.op_type_ = ObTableLockOpType::IN_TRANS_COMMON_LOCK;
+    locks.timeout_us_ = 5 * 1000 * 1000L;
+    if (OB_FAIL(locks.tablet_ids_.assign(candidates))) {
+    } else if (OB_FAIL(query::ObInnerSQLConnectionAccess::lock_tablet(
+            locks, trans.get_connection()))) {
+    } else {
+      rootserver::ObTabletDrop drop(trans, schema_version);
+      if (OB_FAIL(drop.init())) {
+      } else if (OB_FAIL(drop.add_drop_tablets_arg(candidates))) {
+      } else { ret = drop.execute(); }
+    }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < candidates.count() + stale.count(); ++i) {
+    const ObTabletID tablet = i < candidates.count()
+        ? candidates.at(i) : stale.at(i - candidates.count());
+    ObSqlString q;
+    if (OB_FAIL(q.assign_fmt("DELETE FROM %s WHERE namespace_id=%lu "
+            "AND tablet_id=%lu AND kind=0", EXCEPTIONS,
+            database_of(tablet.id()), local_of(tablet.id())))) {
+    } else { ret = write_sql(trans, q); }
+  }
+  if (trans.is_started()) {
+    const int end = trans.end(OB_SUCC(ret));
+    if (OB_SUCC(ret)) { ret = end; }
+  }
+  if (OB_SUCC(ret)) {
+    for (int64_t i = 0; i < candidates.count(); ++i) {
+      drop_exception_cache(database_of(candidates.at(i).id()));
+    }
+  }
+  LOG_INFO("PROTOTYPE_NAMESPACE_DROPPED_TABLET_GC", K(ret),
+      "dropped", candidates.count(), "stale", stale.count(), K(deferred));
   return ret;
 }
 bool NamespaceForkKernelPrototype::is_encoded_id(uint64_t id) {

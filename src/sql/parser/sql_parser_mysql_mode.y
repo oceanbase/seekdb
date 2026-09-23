@@ -4412,6 +4412,10 @@ FORK NAMESPACE database_factor FROM database_factor
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_FORK_DATABASE, 2, $3, NULL);
 }
+| DROP NAMESPACE database_factor
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FORK_DATABASE, 2, NULL, $3);
+}
 ;
 
 /*****************************************************************************

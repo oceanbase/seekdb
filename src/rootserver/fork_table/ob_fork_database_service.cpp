@@ -33,6 +33,7 @@
 #include "storage/compaction/ob_freeze_info_mgr.h"
 #include "rootserver/ddl_task/ob_ddl_task_util.h"
 #include "observer/namespace_worker_protocol_prototype.h"
+#include "namespace/namespace.h"
 
 namespace oceanbase {
 using namespace common;
@@ -68,23 +69,6 @@ int ObDDLService::drop_namespace_prototype_(const ObString &name)
         } else if (OB_FAIL(lock_tables_in_recyclebin(db, trans))) {
         } else { ret = ddl_operator.drop_database(db, trans); }
       }
-    } else {
-      // Virtual branch schemas have no native catalog rows. Delete only the private
-      // tablets recorded by its current directory, using ordinary DDL locks and MDS.
-      ObTabletDrop drop(trans, version);
-      ObLockAloneTabletRequest locks;
-      locks.lock_mode_ = EXCLUSIVE;
-      locks.op_type_ = ObTableLockOpType::IN_TRANS_COMMON_LOCK;
-      locks.timeout_us_ = std::max(int64_t(1), THIS_WORKER.get_timeout_remain());
-      if (OB_FAIL(drop.init())) {
-      } else if (!bound.empty() && OB_FAIL(locks.tablet_ids_.assign(bound))) {
-      } else if (!bound.empty() && OB_FAIL(drop.add_drop_tablets_arg(bound))) {
-      } else {
-        if (OB_SUCC(ret) && !bound.empty()) {
-          if (OB_FAIL(query::ObInnerSQLConnectionAccess::lock_tablet(locks, trans.get_connection()))) {
-          } else { ret = drop.execute(); }
-        }
-      }
     }
     if (OB_SUCC(ret)) { ret = NamespaceForkKernelPrototype::finish_namespace_drop(trans, id); }
     if (OB_SUCC(ret)) {
@@ -93,6 +77,7 @@ int ObDDLService::drop_namespace_prototype_(const ObString &name)
     }
   }
   if (trans.is_started()) { const int end = trans.end(ret == OB_SUCCESS); if (ret == OB_SUCCESS) { ret = end; } }
+  if (OB_SUCC(ret) && id > 1) { ns::namespace_registry().remove(id); }
   int64_t released_tables = 0;
   int64_t released_databases = 0;
   int64_t released_storage_tables = 0;

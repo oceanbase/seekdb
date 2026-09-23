@@ -30,14 +30,15 @@ class ObFreeSessionCtx
 {
 public:
   ObFreeSessionCtx()
-    : has_inc_active_num_(false), sessid_(0)
+    : has_inc_active_num_(false), sessid_(0), namespace_id_(0)
   {}
   ~ObFreeSessionCtx() {}
 
-  VIRTUAL_TO_STRING_KV(K_(has_inc_active_num), K_(sessid));
+  VIRTUAL_TO_STRING_KV(K_(has_inc_active_num), K_(sessid), K_(namespace_id));
 
   bool has_inc_active_num_;
   uint32_t sessid_;
+  uint64_t namespace_id_;
 };
 
 } // namespace sql

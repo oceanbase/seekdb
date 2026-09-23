@@ -593,7 +593,8 @@ int ObAccessService::check_read_allowed_(
   ObTabletID read_tablet_id = tablet_id;
   int64_t redirect_cap = 0;
 
-  if (OB_FAIL(NamespaceForkKernelPrototype::check_table_access(scan_param.index_id_, tablet_id, ctx_guard.prototype_access()))) {
+  if (OB_FAIL(NamespaceForkKernelPrototype::check_table_access(
+          scan_param.index_id_, tablet_id, true, ctx_guard.prototype_access()))) {
   } else if (OB_FAIL(NamespaceForkKernelPrototype::resolve_read_tablet(tablet_id, read_tablet_id, redirect_cap))) {
   } else if (OB_FAIL(ls_svr_->get_ls(ls))) {
   } else if (OB_FAIL(ctx_guard.init(ls))) {
@@ -721,7 +722,8 @@ int ObAccessService::check_write_allowed_(
     ret = OB_SUCCESS;
   }
   if (OB_FAIL(NamespaceForkKernelPrototype::check_table_access(dml_param.table_param_
-      ? dml_param.table_param_->get_data_table().get_table_id() : OB_INVALID_ID, tablet_id, ctx_guard.prototype_access()))) {
+      ? dml_param.table_param_->get_data_table().get_table_id() : OB_INVALID_ID,
+      tablet_id, false, ctx_guard.prototype_access()))) {
   } else if (OB_FAIL(NamespaceForkKernelPrototype::ensure_tablet(tablet_id))) {
   } else if (OB_FAIL(check_memstore_limit_(is_out_of_mem))) {
   } else if (is_out_of_mem && !tablet_id.is_inner_tablet()) {

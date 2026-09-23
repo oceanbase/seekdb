@@ -54,6 +54,7 @@ public:
     is_runtime_locked_ = false;
     connection_phase_ = rpc::ConnectionPhaseEnum::CPE_CONNECTED;
     sessid_ = INITIAL_SESSID;
+    namespace_id_ = 0;
     runtime_ = NULL;
     connect_in_bytes_ = 0;
     ret_ = common::OB_SUCCESS;
@@ -101,6 +102,7 @@ public:
 
   rpc::ConnectionPhaseEnum connection_phase_;
   uint32_t sessid_;
+  uint64_t namespace_id_; // External namespace connection lease.
   uint32_t version_;
   // Worker-side storage session cached per MySQL connection. Null keeps the
   // existing in-process SQL path.

@@ -18,6 +18,7 @@
 
 #include "obmp_base.h"
 #include "observer/namespace_worker_protocol_prototype.h"
+#include "namespace/namespace.h"
 
 #include "sql/ob_mysql_end_trans_cb.h"
 #include "rpc/obmysql/packet/ompk_row.h"
@@ -307,8 +308,11 @@ int ObMPBase::free_session()
     
     ctx.sessid_ = conn->sessid_;
     ctx.has_inc_active_num_ = conn->has_inc_active_num_;
+    ctx.namespace_id_ = conn->namespace_id_;
     if (OB_FAIL(OBSERVER.get_sql_session_mgr().free_session(ctx))) {
     } else {
+      ns::namespace_registry().release_session(ctx.namespace_id_);
+      conn->namespace_id_ = 0;
       LOG_INFO("free session successfully", K(ctx));
       conn->is_sess_free_.store(true, std::memory_order_release);
     }

@@ -87,6 +87,13 @@ void ObEmptyShellTask::runTimerTask()
   if (OB_SUCC(ret)) {
     STORAGE_LOG(INFO, "[emptytablet] succeed to change tablet to empty shell", KR(ret), K(times));
   }
+  const int64_t previous_timeout = THIS_WORKER.get_timeout_ts();
+  THIS_WORKER.set_timeout_ts(INT64_MAX);
+  const int namespace_gc_ret = NamespaceForkKernelPrototype::collect_dropped_namespace_tablets();
+  THIS_WORKER.set_timeout_ts(previous_timeout);
+  if (namespace_gc_ret != OB_SUCCESS) {
+    STORAGE_LOG(WARN, "failed to collect dropped namespace tablets", K(namespace_gc_ret));
+  }
 }
 
 

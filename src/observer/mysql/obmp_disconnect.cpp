@@ -19,6 +19,7 @@
 #include "obmp_disconnect.h"
 #include "share/rc/ob_server_runtime.h"
 #include "observer/namespace_worker_protocol_prototype.h"
+#include "namespace/namespace.h"
 
 
 using namespace oceanbase::observer;
@@ -74,7 +75,9 @@ int ObMPDisconnect::run()
     } else {
       // bugfix:
       (void) kill_unfinished_session(ctx_.sessid_); // ignore ret
-      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->free_session(ctx_))) {
+      const int free_ret = ::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->free_session(ctx_);
+      ns::namespace_registry().release_session(ctx_.namespace_id_);
+      if (OB_FAIL(free_ret)) {
       } else {
         LOG_INFO("free session successfully", "sessid", ctx_.sessid_);
       }

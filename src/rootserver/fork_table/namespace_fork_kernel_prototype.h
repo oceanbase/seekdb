@@ -38,11 +38,13 @@ public:
   static int lock_namespace_drop(common::ObISQLClient &trans, uint64_t id,
                                  common::ObIArray<common::ObTabletID> &bound);
   static int finish_namespace_drop(common::ObISQLClient &trans, uint64_t id);
-  static int check_table_access(uint64_t table_id, const common::ObTabletID &tablet_id, bool &held);
+  static int check_table_access(uint64_t table_id, const common::ObTabletID &tablet_id,
+                                bool read_only, bool &held);
   static int check_baseline_access(const common::ObTabletID &tablet_id, bool &held);
   static void release_access(bool &held);
   static int drain_access();
   static int protect_snapshot_tablets(common::ObIArray<common::ObTabletID> &candidates, bool &need_retry);
+  static int collect_dropped_namespace_tablets();
   static bool is_namespace_address(const common::ObString &name);
   static int parse_namespace_address(const common::ObString &address,
                                      uint64_t &namespace_id,

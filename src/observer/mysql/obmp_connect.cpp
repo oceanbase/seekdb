@@ -758,6 +758,19 @@ int ObMPConnect::bind_session_namespace(ObSQLSessionInfo &session)
                "namespace_id", runtime->ns().id());
     }
   }
+  if (OB_SUCC(ret) && runtime != nullptr && runtime->ns().id() > 1) {
+    ObSMConnection *conn = get_conn();
+    if (conn == NULL || (conn->namespace_id_ != 0
+                         && conn->namespace_id_ != runtime->ns().id())) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (conn->namespace_id_ == 0) {
+      if (!ns::namespace_registry().acquire_session(runtime->ns().id())) {
+        ret = OB_OP_NOT_ALLOW;
+      } else {
+        conn->namespace_id_ = runtime->ns().id();
+      }
+    }
+  }
   if (OB_SUCC(ret)) {
     session.set_ns_runtime(runtime);
   }

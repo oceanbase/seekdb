@@ -85,6 +85,11 @@ public:
   bool get(uint64_t id, NamespaceRuntime *&runtime);
   bool find(const char *name, NamespaceRuntime *&runtime);
   void list_ids(std::vector<uint64_t> &ids);
+  bool acquire_session(uint64_t id);
+  void release_session(uint64_t id);
+  bool begin_drop(uint64_t id);
+  void cancel_drop(uint64_t id);
+  void remove(uint64_t id);
 private:
   struct Impl;
   Impl *impl_;

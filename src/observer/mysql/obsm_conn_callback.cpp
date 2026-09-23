@@ -132,6 +132,7 @@ void ObSMConnectionCallback::destroy(ObSMConnection& conn)
       
       ctx.sessid_ = conn.sessid_;
       ctx.has_inc_active_num_ = conn.has_inc_active_num_;
+      ctx.namespace_id_ = conn.namespace_id_;
 
       //free session in task
       ObSrvTask *task = OB_NEW(ObDisconnectTask,
