@@ -1206,62 +1206,6 @@ struct EngineWrites {
     int ret = request.ret ? request.ret
         : !storage_space.is_namespace() ? OB_INVALID_ARGUMENT : OB_SUCCESS;
     Frame values;
-    if (!ret && request.type() == 'T' && operation == 'Q') {
-      const int64_t timeout_us = request.number();
-      int64_t unique_id = 0;
-      if (!request.consumed() || timeout_us <= 0) {
-        ret = OB_INVALID_ARGUMENT;
-      } else {
-        ret = service->gen_unique_id(unique_id, timeout_us);
-      }
-      reply = Frame('w');
-      reply.number(ret);
-      if (!ret) { reply.number(unique_id); }
-      fprintf(stderr,
-          "PROTOTYPE_V20_UNIQUE_ID ns=%llu id=%lld ret=%d\n",
-          (unsigned long long)ns, (long long)unique_id, ret);
-      return reply.ret;
-    }
-    if (!ret && request.type() == 'T' && operation == 'q') {
-      const int64_t timeout_us = request.number();
-      share::SCN gts;
-      if (!request.consumed() || timeout_us <= 0) {
-        ret = OB_INVALID_ARGUMENT;
-      } else {
-        ret = service->get_gts_sync(timeout_us, gts);
-      }
-      reply = Frame('w');
-      reply.number(ret);
-      if (!ret) { reply.append(gts); }
-      fprintf(stderr,
-          "PROTOTYPE_V22_GTS ns=%llu gts=%lld ret=%d\n",
-          (unsigned long long)ns,
-          (long long)(gts.is_valid() ? gts.get_val_for_tx() : 0), ret);
-      return reply.ret;
-    }
-    if (!ret && request.type() == 'T'
-        && (operation == 'r' || operation == 'w')) {
-      const int64_t argument = static_cast<int64_t>(request.number());
-      share::SCN snapshot;
-      if (!request.consumed() || (operation == 'r' && argument <= 0)) {
-        ret = OB_INVALID_ARGUMENT;
-      } else if (operation == 'r') {
-        ret = service->get_read_snapshot_version(
-            std::min(argument, THIS_WORKER.get_timeout_ts()), snapshot);
-      } else {
-        ret = service->get_weak_read_snapshot_version(argument, snapshot);
-      }
-      reply = Frame('w');
-      reply.number(ret);
-      if (!ret) { reply.append(snapshot); }
-      fprintf(stderr,
-          "PROTOTYPE_NAMESPACE_SNAPSHOT ns=%llu kind=%s snapshot=%lld ret=%d\n",
-          (unsigned long long)ns,
-          operation == 'r' ? "strong" : "weak",
-          (long long)(snapshot.is_valid() ? snapshot.get_val_for_tx() : 0),
-          ret);
-      return reply.ret;
-    }
     if (!ret && request.type() == 'T' && operation == 'x') {
       const int cause = static_cast<int>(
           static_cast<int64_t>(request.number()));
@@ -1928,33 +1872,24 @@ private:
   }
 };
 
+int call_in_process_tx_clock(
+    const std::function<int(ObITransactionService &)> &call);
+
 class RemoteTransactionService final : public ObITransactionService {
 public:
   int gen_unique_id(int64_t &unique_id, int64_t timeout_us) override {
-    Frame request('T'), reply;
-    request.number('Q');
-    request.number(0);
-    request.number(timeout_us);
-    int ret = write_rpc(request, reply);
-    if (!ret) {
-      unique_id = static_cast<int64_t>(reply.number());
-      if (!reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
-    }
-    return ret;
+    if (timeout_us <= 0) { return OB_INVALID_ARGUMENT; }
+    return call_in_process_tx_clock(
+        [&](ObITransactionService &service) {
+          return service.gen_unique_id(unique_id, timeout_us);
+        });
   }
   int get_gts_sync(int64_t timeout_us, share::SCN &gts) override {
-    IndependentStorageScope scope;
-    Frame request('T'), reply;
-    request.number('q');
-    request.number(0);
-    request.number(timeout_us);
-    int ret = scope.error();
-    if (!ret) { ret = write_rpc(request, reply); }
-    if (!ret) {
-      reply.read(gts);
-      if (!reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
-    }
-    return ret;
+    if (timeout_us <= 0) { return OB_INVALID_ARGUMENT; }
+    return call_in_process_tx_clock(
+        [&](ObITransactionService &service) {
+          return service.get_gts_sync(timeout_us, gts);
+        });
   }
   int acquire_tx(transaction::ObTxDesc *&tx,
                          uint32_t session_id) override {
@@ -2056,33 +1991,20 @@ public:
     return ret; }
   int get_read_snapshot_version(int64_t expire_ts,
                                 share::SCN &snapshot_version) override {
-    IndependentStorageScope scope;
-    Frame request('T'), reply;
-    request.number('r');
-    request.number(0);
-    request.number(expire_ts);
-    int ret = scope.error();
-    if (!ret) { ret = write_rpc(request, reply); }
-    if (!ret) {
-      reply.read(snapshot_version);
-      if (!reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
-    }
-    return ret;
+    if (expire_ts <= 0) { return OB_INVALID_ARGUMENT; }
+    return call_in_process_tx_clock(
+        [&](ObITransactionService &service) {
+          return service.get_read_snapshot_version(
+              std::min(expire_ts, THIS_WORKER.get_timeout_ts()), snapshot_version);
+        });
   }
   int get_weak_read_snapshot_version(int64_t max_read_stale_time,
                                      share::SCN &snapshot_version) override {
-    IndependentStorageScope scope;
-    Frame request('T'), reply;
-    request.number('w');
-    request.number(0);
-    request.number(max_read_stale_time);
-    int ret = scope.error();
-    if (!ret) { ret = write_rpc(request, reply); }
-    if (!ret) {
-      reply.read(snapshot_version);
-      if (!reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
-    }
-    return ret;
+    return call_in_process_tx_clock(
+        [&](ObITransactionService &service) {
+          return service.get_weak_read_snapshot_version(
+              max_read_stale_time, snapshot_version);
+        });
   }
   int register_tx_snapshot_verify(
       transaction::ObTxReadSnapshot &snapshot) override {

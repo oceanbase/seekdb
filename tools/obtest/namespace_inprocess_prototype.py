@@ -86,6 +86,7 @@ def bootstrap_probe(experiment):
 
 def sql_probe(experiment):
     with setup_branch(experiment) as child, connect(experiment, "root@phase10_child") as other:
+        assert experiment.sql("SELECT CURRENT_SCN()", child)[0][0] > 0
         experiment.sql("CREATE NAMESPACE phase10_fresh")
         try:
             experiment.sql("CREATE NAMESPACE forbidden_from_child", child)

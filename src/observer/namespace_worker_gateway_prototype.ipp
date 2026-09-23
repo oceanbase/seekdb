@@ -174,6 +174,28 @@ int compare_in_process_lobs(ObLobLocatorV2 &left, ObLobLocatorV2 &right,
   THIS_WORKER.set_timeout_ts(old_timeout);
   return ret;
 }
+int call_in_process_tx_clock(
+    const std::function<int(ObITransactionService &)> &call)
+{
+  IndependentStorageScope scope;
+  if (scope.error()) { return scope.error(); }
+  InProcessStorage *storage = in_process_storage;
+  ObITransactionService *service = data_plane::query_transaction_service();
+  if (storage == nullptr || !storage->initialized || service == nullptr) {
+    return OB_NOT_INIT;
+  }
+  const StorageSpaceHandle space = active_worker_storage_space();
+  if (!space.is_namespace() || storage->ns != space.namespace_id()) {
+    return OB_INVALID_ARGUMENT;
+  }
+  auto *old_session = THIS_WORKER.get_session();
+  const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
+  THIS_WORKER.set_session(&storage->session);
+  const int ret = call(*service);
+  THIS_WORKER.set_session(old_session);
+  THIS_WORKER.set_timeout_ts(old_timeout);
+  return ret;
+}
 int in_process_open(InProcessStorage &ctx, uint32_t sid, bool internal)
 {
   int ret = OB_SUCCESS;
