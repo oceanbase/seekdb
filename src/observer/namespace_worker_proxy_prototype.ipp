@@ -196,13 +196,9 @@ int resolve_branch(const std::string &branch, uint64_t &namespace_id,
     ObSqlString statement;
     ObMySQLProxy::MySQLResult result;
     sqlclient::ObMySQLResult *rows = nullptr;
-    const int override_ret = push_inner_sql_namespace_override(1);
-    ret = override_ret;
-    if (!ret) {
-      ret = statement.assign_fmt(
-          "SELECT namespace_id FROM __fork_proto_meta.namespaces "
-          "WHERE name=UNHEX('%s') AND state=0", hexed.c_str());
-    }
+    ret = statement.assign_fmt(
+        "SELECT namespace_id FROM __fork_proto_meta.namespaces "
+        "WHERE name=UNHEX('%s') AND state=0", hexed.c_str());
     if (!ret) { ret = GCTX.sql_proxy_->read(result, statement.ptr()); }
     if (!ret && !(rows = result.get_result())) { ret = OB_ERR_UNEXPECTED; }
     if (!ret) { ret = rows->next(); }
@@ -211,7 +207,6 @@ int resolve_branch(const std::string &branch, uint64_t &namespace_id,
     if (!ret && (namespace_id == 0 || namespace_id >= (1ULL << 30))) {
       ret = OB_INVALID_ARGUMENT;
     }
-    if (!override_ret) { pop_inner_sql_namespace_override(); }
   }
   if (!ret) {
     if (namespace_id == 1 && ns1_in_process()) {

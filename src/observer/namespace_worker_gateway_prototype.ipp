@@ -30,60 +30,6 @@ namespace oceanbase { namespace observer { namespace namespace_worker_prototype 
 using namespace common;
 using namespace share::schema;
 using storage::NamespaceForkKernelPrototype;
-std::mutex shared_inner_sql_namespaces_mutex;
-std::map<uint64_t, std::pair<uint64_t, uint64_t>> shared_inner_sql_namespaces;
-thread_local std::vector<uint64_t> inner_sql_namespace_overrides;
-int bind_shared_inner_sql_namespace(uint64_t trace_seq, uint64_t namespace_id) {
-  if (trace_seq == 0 || namespace_id == 0 || namespace_id >= (1ULL << 30)) {
-    return OB_INVALID_ARGUMENT;
-  }
-  std::lock_guard<std::mutex> guard(shared_inner_sql_namespaces_mutex);
-  auto &binding = shared_inner_sql_namespaces[trace_seq];
-  if (binding.second != 0 && binding.first != namespace_id) { return OB_STATE_NOT_MATCH; }
-  binding.first = namespace_id;
-  ++binding.second;
-  fprintf(stderr, "PROTOTYPE_NATIVE_NAMESPACE_BIND trace=%llu ns=%llu refs=%llu\n",
-      (unsigned long long)trace_seq, (unsigned long long)namespace_id,
-      (unsigned long long)binding.second);
-  return OB_SUCCESS;
-}
-void unbind_shared_inner_sql_namespace(uint64_t trace_seq) {
-  std::lock_guard<std::mutex> guard(shared_inner_sql_namespaces_mutex);
-  auto binding = shared_inner_sql_namespaces.find(trace_seq);
-  if (binding != shared_inner_sql_namespaces.end()
-      && --binding->second.second == 0) {
-    shared_inner_sql_namespaces.erase(binding);
-  }
-}
-int push_inner_sql_namespace_override(uint64_t namespace_id) {
-  if (namespace_id == 0 || namespace_id >= (1ULL << 30)) { return OB_INVALID_ARGUMENT; }
-  inner_sql_namespace_overrides.push_back(namespace_id);
-  return OB_SUCCESS;
-}
-void pop_inner_sql_namespace_override() {
-  if (!inner_sql_namespace_overrides.empty()) { inner_sql_namespace_overrides.pop_back(); }
-}
-bool has_inner_sql_namespace_override() {
-  return !inner_sql_namespace_overrides.empty();
-}
-uint64_t resolve_shared_inner_sql_namespace() {
-  if (worker_process && worker_namespace != 0) {
-    return worker_namespace;
-  }
-  if (!inner_sql_namespace_overrides.empty()) {
-    return inner_sql_namespace_overrides.back();
-  }
-  const auto *trace = ObCurTraceId::get_trace_id();
-  if (!trace || !trace->is_valid()) { return 1; }
-  std::lock_guard<std::mutex> guard(shared_inner_sql_namespaces_mutex);
-  auto binding = shared_inner_sql_namespaces.find(trace->get_seq());
-  const uint64_t namespace_id = binding == shared_inner_sql_namespaces.end()
-      ? 1 : binding->second.first;
-  fprintf(stderr, "PROTOTYPE_NATIVE_NAMESPACE_RESOLVE trace=%llu ns=%llu found=%d\n",
-      (unsigned long long)trace->get_seq(), (unsigned long long)namespace_id,
-      binding != shared_inner_sql_namespaces.end());
-  return namespace_id;
-}
 int check_sql_execution_role() {
   // User SQL executes only in namespace workers; the shared process owns
   // storage, fork control and the thin TCP router.
@@ -1313,16 +1259,8 @@ int stop_channel(uint64_t ns) {
 }
 int write_endpoint_registry(const ObSqlString &statement) {
   if (!GCTX.sql_proxy_) { return OB_NOT_INIT; }
-  bool override_held = false;
-  int ret = OB_SUCCESS;
-  if (!worker_process) {
-    ret = push_inner_sql_namespace_override(1);
-    override_held = ret == OB_SUCCESS;
-  }
   int64_t affected_rows = 0;
-  if (!ret) { ret = GCTX.sql_proxy_->write(statement.ptr(), affected_rows); }
-  if (override_held) { pop_inner_sql_namespace_override(); }
-  return ret;
+  return GCTX.sql_proxy_->write(statement.ptr(), affected_rows);
 }
 int publish_endpoint(uint64_t namespace_id, uint64_t generation,
                      uint32_t pid, const std::string &client_endpoint) {
@@ -1451,11 +1389,8 @@ int reconcile_namespace_workers() {
   std::vector<uint64_t> namespaces;
   // In-process ns1 (ticket 05a) spawns no worker for the system namespace.
   if (!ns1_in_process()) { namespaces.push_back(1); }
-  int ret = push_inner_sql_namespace_override(1);
+  int ret = OB_SUCCESS;
   if (!ret) {
-    struct OverrideGuard {
-      ~OverrideGuard() { pop_inner_sql_namespace_override(); }
-    } override_guard;
     ObMySQLProxy::MySQLResult result;
     sqlclient::ObMySQLResult *rows = nullptr;
     ret = GCTX.sql_proxy_->read(result,

@@ -66,7 +66,6 @@ public:
   // Owner namespace of an id: the encoded namespace, or 1 for a raw (unscoped)
   // id, which is only namespace 1's original engine objects.
   static uint64_t namespace_of(uint64_t id);
-  static uint64_t current_namespace_id();
   static int local_object_id(uint64_t namespace_id, uint64_t object_id, uint64_t &local_id);
   static int storage_object_id(uint64_t namespace_id, uint64_t object_id, uint64_t &storage_id);
   static uint64_t encode_object(uint64_t database_id, uint64_t local_id);

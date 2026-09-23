@@ -20,11 +20,9 @@
 #include <mutex>
 #include <shared_mutex>
 namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
-bool shared_inner_sql_bounces(sql::ObSQLSessionInfo &session)
+bool shared_inner_sql_bounces(uint64_t target_namespace)
 {
-  const uint64_t ns = in_process_session_ns(&session);
-  return !worker_process
-      && !in_process_namespace_enabled(ns > 1 ? ns : resolve_shared_inner_sql_namespace());
+  return !worker_process && !in_process_namespace_enabled(target_namespace);
 }
 // ---------------------------------------------------------------------------
 // In-process storage context: the channel-free twin of DirectStorageContext.
@@ -116,22 +114,6 @@ public:
   {
     ns_ = ns;
     return ObCommonSqlProxy::init(is_ddl);
-  }
-  int read(ReadResult &res, const char *sql, const int32_t group_id) override
-  {
-    const int override_ret = push_inner_sql_namespace_override(ns_);
-    const int ret = override_ret ? override_ret
-        : ObCommonSqlProxy::read(res, sql, group_id);
-    if (!override_ret) { pop_inner_sql_namespace_override(); }
-    return ret;
-  }
-  int write(const char *sql, const int32_t group_id, int64_t &affected_rows) override
-  {
-    const int override_ret = push_inner_sql_namespace_override(ns_);
-    const int ret = override_ret ? override_ret
-        : ObCommonSqlProxy::write(sql, group_id, affected_rows);
-    if (!override_ret) { pop_inner_sql_namespace_override(); }
-    return ret;
   }
   int acquire_connection(common::sqlclient::ObISQLConnectionGuard &conn,
                          const int32_t group_id) override

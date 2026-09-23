@@ -29,9 +29,10 @@ namespace common
 int OB_WEAK_SYMBOL create_inner_sql_connection_for_proxy(
     bool is_ddl,
     int32_t group_id,
+    uint64_t target_namespace,
     sqlclient::ObISQLConnectionGuard &conn)
 {
-  UNUSEDx(is_ddl, group_id);
+  UNUSEDx(is_ddl, group_id, target_namespace);
   conn.reset();
   return OB_NOT_SUPPORTED;
 }
@@ -50,7 +51,8 @@ OB_SERIALIZE_MEMBER(ObSessionDDLInfo, ddl_info_.ddl_info_, // FARM COMPAT WHITEL
 ObCommonSqlProxy::ObCommonSqlProxy()
     : inited_(false),
       is_ddl_(false),
-      stopped_(false)
+      stopped_(false),
+      namespace_id_(1)
 {
 }
 
@@ -77,6 +79,16 @@ void ObCommonSqlProxy::operator=(const ObCommonSqlProxy &o)
   inited_ = o.inited_;
   is_ddl_ = o.is_ddl_;
   stopped_ = o.stopped_;
+  namespace_id_ = o.namespace_id_;
+}
+
+int ObCommonSqlProxy::set_target_namespace(uint64_t namespace_id)
+{
+  if (namespace_id == 0 || namespace_id >= (1ULL << 30)) {
+    return OB_INVALID_ARGUMENT;
+  }
+  namespace_id_ = namespace_id;
+  return OB_SUCCESS;
 }
 
 int ObCommonSqlProxy::read(ReadResult &result, const char *sql, const int32_t group_id)
@@ -241,7 +253,8 @@ int ObCommonSqlProxy::acquire_connection(
     ret = OB_INACTIVE_SQL_CLIENT;
     LOG_WARN("sql proxy stopped", K(ret));
   } else {
-    ret = create_inner_sql_connection_for_proxy(is_ddl_, group_id, conn);
+    ret = create_inner_sql_connection_for_proxy(is_ddl_, group_id,
+                                                target_namespace(), conn);
     if (OB_FAIL(ret)) {
       fprintf(stderr,
               "PROTOTYPE_V22_SQL_PROXY_ACQUIRE ret=%d ddl=%d group=%d\n",

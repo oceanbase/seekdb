@@ -700,8 +700,7 @@ int ObTableSqlService::drop_table(const ObTableSchema &storage_schema,
   ObSqlString sql;
 
   ObTableSchema namespace_schema;
-  const uint64_t namespace_id =
-      observer::namespace_worker_prototype::resolve_shared_inner_sql_namespace();
+  const uint64_t namespace_id = sql_client.target_namespace();
   if (namespace_id > 1) {
     ret = storage::NamespaceForkKernelPrototype::make_namespace_schema(
         namespace_id, storage_schema, namespace_schema);
@@ -2199,8 +2198,7 @@ int ObTableSqlService::batch_create_table(ObIArray<ObTableSchema> &tables,
   int64_t cost_usec = 0;
   ObSEArray<ObTableSchema, 4> namespace_tables;
   ObIArray<ObTableSchema> *metadata_tables = &tables;
-  const uint64_t namespace_id =
-      observer::namespace_worker_prototype::resolve_shared_inner_sql_namespace();
+  const uint64_t namespace_id = sql_client.target_namespace();
   if (namespace_id > 1) {
     for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); ++i) {
       ObTableSchema logical_schema;

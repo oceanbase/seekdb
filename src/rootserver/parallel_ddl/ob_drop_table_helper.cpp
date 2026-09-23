@@ -53,14 +53,13 @@ int get_tablet_autoincrement_admin(
 }
 
 int make_namespace_metadata_schema(
+    uint64_t namespace_id,
     const ObTableSchema &storage_schema,
     ObTableSchema &namespace_schema,
     const ObTableSchema *&metadata_schema)
 {
   int ret = OB_SUCCESS;
   metadata_schema = &storage_schema;
-  const uint64_t namespace_id =
-      oceanbase::observer::namespace_worker_prototype::resolve_shared_inner_sql_namespace();
   if (namespace_id > 1
       && OB_FAIL(oceanbase::storage::NamespaceForkKernelPrototype::make_namespace_schema(
           namespace_id, storage_schema, namespace_schema))) {
@@ -70,10 +69,9 @@ int make_namespace_metadata_schema(
   return ret;
 }
 
-int namespace_metadata_object_id(const uint64_t storage_id, uint64_t &metadata_id)
+int namespace_metadata_object_id(uint64_t namespace_id,
+                                 const uint64_t storage_id, uint64_t &metadata_id)
 {
-  const uint64_t namespace_id =
-      oceanbase::observer::namespace_worker_prototype::resolve_shared_inner_sql_namespace();
   return namespace_id > 1
       ? oceanbase::storage::NamespaceForkKernelPrototype::local_object_id(
           namespace_id, storage_id, metadata_id)
@@ -143,8 +141,8 @@ int ObDropTableHelper::lock_tables_()
   int ret = OB_SUCCESS;
   common::sqlclient::ObISQLConnection *conn = NULL;
   const int64_t timeout = 0;
-  const bool namespace_scoped =
-      storage::NamespaceForkKernelPrototype::current_namespace_id() > 1;
+  const bool namespace_scoped = sql_proxy_ != nullptr
+      && sql_proxy_->target_namespace() > 1;
   if (OB_FAIL(check_inner_stat_())) {
   } else if (OB_ISNULL(conn = get_trans_().get_connection())) {
     ret = OB_ERR_UNEXPECTED;
@@ -194,7 +192,8 @@ int ObDropTableHelper::check_legitimacy_()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("table schema is null", KR(ret));
       } else if (OB_FAIL(namespace_metadata_object_id(
-                     table_schema->get_table_id(), metadata_table_id))) {
+                     sql_proxy_->target_namespace(), table_schema->get_table_id(),
+                     metadata_table_id))) {
         LOG_WARN("failed to get namespace metadata table id", KR(ret), KPC(table_schema));
       } else if (!ObSchemaUtils::is_support_parallel_drop(table_schema->get_table_type())) {
         ret = OB_NOT_SUPPORTED;
@@ -727,7 +726,8 @@ int ObDropTableHelper::lock_objects_by_id_()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("table schema is null", KR(ret));
       } else if (OB_FAIL(make_namespace_metadata_schema(
-                     *table_schema, namespace_schema, metadata_schema))) {
+                     sql_proxy_->target_namespace(), *table_schema,
+                     namespace_schema, metadata_schema))) {
         LOG_WARN("failed to make namespace metadata schema", KR(ret), KPC(table_schema));
       } else {
         const uint64_t table_id = metadata_schema->get_table_id();
@@ -806,7 +806,8 @@ int ObDropTableHelper::lock_objects_by_id_()
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("table schema is null", KR(ret));
         } else if (OB_FAIL(namespace_metadata_object_id(
-                       table_schema->get_table_id(), table_id))) {
+                       sql_proxy_->target_namespace(), table_schema->get_table_id(),
+                       table_id))) {
           LOG_WARN("failed to get namespace metadata table id", KR(ret), KPC(table_schema));
         } else if (OB_FAIL(ObDependencyInfo::collect_all_dep_objs(table_id, *sql_proxy_, dep_objs_after_lock))) {
         } else if (OB_FAIL(check_dep_objs_consistent(dep_objs_before_lock_array.at(i), dep_objs_after_lock))) {
@@ -1084,8 +1085,8 @@ int ObDropTableHelper::calc_schema_version_cnt_for_table_(
 {
   int ret = OB_SUCCESS;
   const uint64_t table_id = table_schema.get_table_id();
-  const bool namespace_scoped =
-      storage::NamespaceForkKernelPrototype::current_namespace_id() > 1;
+  const bool namespace_scoped = sql_proxy_ != nullptr
+      && sql_proxy_->target_namespace() > 1;
   if (OB_FAIL(check_inner_stat_())) {
   } else {
     // table
@@ -1288,8 +1289,8 @@ int ObDropTableHelper::drop_table_(const ObTableSchema &table_schema, const ObSt
   int ret = OB_SUCCESS;
   ObSchemaService *schema_service_impl = NULL;
   int64_t new_schema_version = OB_INVALID_VERSION;
-  const uint64_t namespace_id =
-      storage::NamespaceForkKernelPrototype::current_namespace_id();
+  const uint64_t namespace_id = sql_proxy_ != nullptr
+      ? sql_proxy_->target_namespace() : 1;
   const bool namespace_scoped = namespace_id > 1;
   if (OB_FAIL(check_inner_stat_())) {
   } else if (OB_ISNULL(schema_service_impl = schema_service_->get_schema_service())) {

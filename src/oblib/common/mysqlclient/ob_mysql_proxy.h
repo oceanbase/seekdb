@@ -33,6 +33,7 @@ class ObISQLConnection;
 int create_inner_sql_connection_for_proxy(
     bool is_ddl,
     int32_t group_id,
+    uint64_t target_namespace,
     sqlclient::ObISQLConnectionGuard &conn);
 
 struct InnerDDLInfo final
@@ -222,6 +223,8 @@ public:
 
 
   int init(const bool is_ddl);
+  uint64_t target_namespace() const override { return namespace_id_; }
+  int set_target_namespace(uint64_t namespace_id);
 
   virtual int escape(const char *from, const int64_t from_size,
       char *to, const int64_t to_size, int64_t &out_size) override;
@@ -255,12 +258,22 @@ protected:
   bool inited_;
   bool is_ddl_;
   bool stopped_;
+  uint64_t namespace_id_;
 
   DISALLOW_COPY_AND_ASSIGN(ObCommonSqlProxy);
 };
 
 class ObMySQLProxy : public ObCommonSqlProxy
 {
+};
+
+class TargetSqlProxy final : public ObMySQLProxy
+{
+public:
+  explicit TargetSqlProxy(uint64_t namespace_id) : namespace_id_(namespace_id) {}
+  uint64_t target_namespace() const override { return namespace_id_; }
+private:
+  uint64_t namespace_id_;
 };
 
 // SQLXXX_APPEND macros for appending class member to insert sql

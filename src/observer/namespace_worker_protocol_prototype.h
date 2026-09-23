@@ -277,19 +277,12 @@ inline bool uses_remote_schema()
   return worker_process && worker_namespace != 0 && !owns_namespace_schema();
 }
 // Shared management code can move across runtime threads before it starts
-// native inner SQL. Bind namespace to the propagated call trace at the IPC
-// boundary instead of deriving it from database/table IDs.
-int bind_shared_inner_sql_namespace(uint64_t trace_seq, uint64_t namespace_id);
-void unbind_shared_inner_sql_namespace(uint64_t trace_seq);
-int push_inner_sql_namespace_override(uint64_t namespace_id);
-bool has_inner_sql_namespace_override();
-void pop_inner_sql_namespace_override();
-uint64_t resolve_shared_inner_sql_namespace();
+// Native inner SQL uses the target namespace carried by its SQL client.
 int check_sql_execution_role();
 // Shared-process inner SQL normally bounces to the target namespace worker
 // over IPC. With the ticket-05a gate, ns-1-bound inner SQL instead executes
 // on the vanilla local path inside the shared process; ns>1 still bounces.
-bool shared_inner_sql_bounces(sql::ObSQLSessionInfo &session);
+bool shared_inner_sql_bounces(uint64_t target_namespace);
 // A worker owns the decision to create a fork snapshot, while the storage
 // process owns the transaction clock used to produce its SCN.
 int acquire_storage_snapshot(int64_t &snapshot);

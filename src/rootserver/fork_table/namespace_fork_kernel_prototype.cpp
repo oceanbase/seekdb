@@ -209,61 +209,6 @@ bool native_namespace_schema_authority()
   return true;
 }
 
-// Namespace management metadata is global. A target namespace DDL keeps its
-// own transaction on the target worker, but standalone catalog reads issued by
-// the shared kernel must use the control worker. This override is local to the
-// thread that selects the inner-SQL connection; the stable request namespace
-// remains trace-bound for work that moves across runtime threads.
-class ControlSqlNamespaceScope final {
-public:
-  ControlSqlNamespaceScope()
-  {
-    using namespace observer::namespace_worker_prototype;
-    if (!worker_process) {
-      error_ = push_inner_sql_namespace_override(1);
-      held_ = error_ == OB_SUCCESS;
-    }
-  }
-  ~ControlSqlNamespaceScope()
-  {
-    if (held_) {
-      observer::namespace_worker_prototype::pop_inner_sql_namespace_override();
-    }
-  }
-  int error() const { return error_; }
-
-private:
-  int error_ = OB_SUCCESS;
-  bool held_ = false;
-  ControlSqlNamespaceScope(const ControlSqlNamespaceScope &) = delete;
-  ControlSqlNamespaceScope &operator=(const ControlSqlNamespaceScope &) = delete;
-};
-
-class ExplicitSqlNamespaceScope final {
-public:
-  explicit ExplicitSqlNamespaceScope(uint64_t namespace_id)
-  {
-    using namespace observer::namespace_worker_prototype;
-    if (!worker_process) {
-      error_ = push_inner_sql_namespace_override(namespace_id);
-      held_ = error_ == OB_SUCCESS;
-    }
-  }
-  ~ExplicitSqlNamespaceScope()
-  {
-    if (held_) {
-      observer::namespace_worker_prototype::pop_inner_sql_namespace_override();
-    }
-  }
-  int error() const { return error_; }
-
-private:
-  int error_ = OB_SUCCESS;
-  bool held_ = false;
-  ExplicitSqlNamespaceScope(const ExplicitSqlNamespaceScope &) = delete;
-  ExplicitSqlNamespaceScope &operator=(const ExplicitSqlNamespaceScope &) = delete;
-};
-
 // V10: the SQL-only process owns these decoded schemas. The engine sends values
 // over IPC; neither its schema pointers nor SQL proxy cross the process boundary.
 int remote_database(char op, uint64_t id, const ObString &name, const ObDatabaseSchema *&schema) {
@@ -1055,8 +1000,6 @@ int release_lineage(ObISQLClient &trans, uint64_t id) {
 
 int collect_metadata() {
   if (metadata_depth || !GCTX.sql_proxy_) { return OB_STATE_NOT_MATCH; }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   std::unique_lock<std::shared_timed_mutex> exclusive(metadata_mutex, std::defer_lock);
   int ret = OB_SUCCESS;
   while (!exclusive.try_lock_for(std::chrono::milliseconds(1))) {
@@ -1164,8 +1107,6 @@ int collect_metadata() {
 
 int NamespaceForkKernelPrototype::ensure_control_schema() {
   if (!GCTX.sql_proxy_) { return OB_NOT_INIT; }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   const char *statements[] = {
     "CREATE DATABASE IF NOT EXISTS __fork_proto_meta",
     "CREATE TABLE IF NOT EXISTS __fork_proto_meta.pages("
@@ -1211,8 +1152,6 @@ NamespaceSourceDropGuard::~NamespaceSourceDropGuard() {
 int NamespaceForkKernelPrototype::begin_namespace_drop(const ObString &name, uint64_t &id, bool &done) {
   done = false; id = 0;
   if (!GCTX.sql_proxy_) { return OB_NOT_SUPPORTED; }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   ObMySQLTransaction trans; Roots root; ObSqlString q;
   int ret = trans.start(GCTX.sql_proxy_);
@@ -1297,8 +1236,6 @@ int NamespaceForkKernelPrototype::finish_namespace_drop(ObISQLClient &trans, uin
   return ret;
 }
 int NamespaceForkKernelPrototype::check_baseline_access(const ObTabletID &tablet_id, bool &held) {
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   if (!held) { active_accesses.fetch_add(1); held = true; }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   if (!is_encoded_id(tablet_id.id())) { return OB_SUCCESS; }
@@ -1341,8 +1278,6 @@ int NamespaceForkKernelPrototype::check_table_access(uint64_t table_id, const Ob
   if (tablet_id.is_inner_tablet() && !is_encoded_id(tablet_id.id())) {
     return OB_SUCCESS;
   }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   // Classify encoded storage by its actual tablet, including old plans and DML callers
   // without a schema parameter. Internal LOB scans must still bypass by owning tablet.
   const uint64_t id = namespace_of(tablet_id.id());
@@ -1377,8 +1312,6 @@ int NamespaceForkKernelPrototype::check_table_access(uint64_t table_id, const Ob
 }
 int NamespaceForkKernelPrototype::protect_snapshot_tablets(ObIArray<ObTabletID> &candidates, bool &need_retry) {
   if (candidates.empty()) { return OB_SUCCESS; }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   int ret = OB_SUCCESS;
   // Candidates are committed deletions. A candidate stays referenced while any
@@ -1479,9 +1412,6 @@ uint64_t NamespaceForkKernelPrototype::encode_id(uint64_t namespace_id, uint64_t
 }
 uint64_t NamespaceForkKernelPrototype::namespace_of(uint64_t id) {
   return is_encoded_id(id) ? database_of(id) : 1;
-}
-uint64_t NamespaceForkKernelPrototype::current_namespace_id() {
-  return observer::namespace_worker_prototype::resolve_shared_inner_sql_namespace();
 }
 int NamespaceForkKernelPrototype::local_object_id(
     uint64_t namespace_id, uint64_t object_id, uint64_t &local_id) {
@@ -1713,8 +1643,6 @@ int NamespaceForkKernelPrototype::namespace_schema_version(uint64_t ns, int64_t 
   if (!GCTX.sql_proxy_ || !NamespaceObjectKey{ns, 1}.is_valid()) {
     return OB_INVALID_ARGUMENT;
   }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   MetadataReadGuard access;
   if (access.error() != OB_SUCCESS) { return access.error(); }
   Roots root;
@@ -1726,8 +1654,6 @@ int NamespaceForkKernelPrototype::begin_schema_change(uint64_t ns) {
   if (!GCTX.sql_proxy_ || ns <= 1 || ns >= (1ULL << 30)) {
     return OB_INVALID_ARGUMENT;
   }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   ObSqlString q;
   int ret = q.assign_fmt(
       "UPDATE %s SET active_schema_changes=active_schema_changes+1 "
@@ -1743,8 +1669,6 @@ int NamespaceForkKernelPrototype::finish_schema_change(
       || schema_version < 0) {
     return OB_INVALID_ARGUMENT;
   }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   ObMySQLTransaction trans;
   Roots root;
   ObSqlString q;
@@ -1774,8 +1698,6 @@ int NamespaceForkKernelPrototype::begin_schema_recovery(uint64_t ns, bool &neede
   if (!GCTX.sql_proxy_ || ns <= 1 || ns >= (1ULL << 30)) {
     return OB_INVALID_ARGUMENT;
   }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   ObMySQLTransaction trans;
   Roots root;
   ObSqlString q;
@@ -1803,8 +1725,6 @@ int NamespaceForkKernelPrototype::finish_schema_recovery(
       || schema_version <= 0) {
     return OB_INVALID_ARGUMENT;
   }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   ObMySQLTransaction trans;
   Roots root;
   ObSqlString q;
@@ -1914,8 +1834,6 @@ int NamespaceForkKernelPrototype::database_in_namespace(uint64_t ns, const ObStr
   if (observer::namespace_worker_prototype::worker_catalog_fetch) { return remote_database('d', ns, name, schema); }
   schema = nullptr;
   if (!GCTX.sql_proxy_ || !NamespaceObjectKey{ns, 1}.is_valid()) { return OB_INVALID_ARGUMENT; }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   Roots root; Value value; int ret = roots(*GCTX.sql_proxy_, ns, root);
   if (ret == OB_SUCCESS) { ret = find(*GCTX.sql_proxy_, root.catalog, "D" + std::string(name.ptr(), name.length()), value); }
@@ -1959,8 +1877,6 @@ int NamespaceForkKernelPrototype::database_by_id(uint64_t id, const ObDatabaseSc
   }
   schema = nullptr; Roots root; Value value;
   if (!is_encoded_id(id) || !GCTX.sql_proxy_) { return OB_INVALID_ARGUMENT; }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   int ret = roots(*GCTX.sql_proxy_, database_of(id), root);
   if (ret == OB_SUCCESS) { ret = find(*GCTX.sql_proxy_, root.catalog, "@" + key_of(local_of(id)), value); }
@@ -1994,8 +1910,6 @@ int NamespaceForkKernelPrototype::check_database_ddl(const ObDatabaseSchema &sch
 }
 int NamespaceForkKernelPrototype::control_namespace(const ObString &source, const ObString &target, uint64_t &id) {
   if (!GCTX.sql_proxy_ || target.empty() || target.length() > 128) { return OB_INVALID_ARGUMENT; }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   if (source == "__gc__" && target == "__gc__") { id = OB_INVALID_ID; return collect_metadata(); }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   const int64_t begin_us = ObTimeUtility::current_time();
@@ -2138,7 +2052,7 @@ int NamespaceForkKernelPrototype::control_namespace(const ObString &source, cons
   return ret;
 }
 int NamespaceForkKernelPrototype::observe_schema(ObISQLClient &trans, const ObTableSchema &schema) {
-  const uint64_t namespace_id = observer::namespace_worker_prototype::resolve_shared_inner_sql_namespace();
+  const uint64_t namespace_id = trans.target_namespace();
   const uint64_t schema_namespace = namespace_id > 1 ? namespace_id : 0;
   const int ret = observer::namespace_worker_prototype::worker_process
           && defer_schema_change(trans)
@@ -2466,7 +2380,7 @@ int NamespaceForkKernelPrototype::flush_schema_changes(
 }
 int NamespaceForkKernelPrototype::forget_schema(ObISQLClient &trans, const ObTableSchema &schema,
                                                 int64_t schema_version, bool *private_tablet) {
-  const uint64_t namespace_id = observer::namespace_worker_prototype::resolve_shared_inner_sql_namespace();
+  const uint64_t namespace_id = trans.target_namespace();
   const uint64_t schema_namespace = namespace_id > 1 ? namespace_id : 0;
   if (observer::namespace_worker_prototype::worker_process
       && defer_schema_change(trans)) {
@@ -2846,8 +2760,6 @@ int NamespaceForkKernelPrototype::publish_schema_delta(
     // transaction mutates only the global namespace directory, so route its
     // SQL through the control Worker. Child Workers deliberately do not load
     // or resolve the global control schema.
-    ControlSqlNamespaceScope control_sql;
-    if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
     ObMySQLTransaction trans;
     if (OB_SUCC(ret)) { ret = trans.start(GCTX.sql_proxy_); }
     if (OB_SUCC(ret) && native_namespace_schema_authority()) {
@@ -2903,8 +2815,6 @@ int NamespaceForkKernelPrototype::publish_schema_delta(
   // are shared engine metadata, so reclaim them only after the namespace
   // catalog commit and through a control-namespace transaction.
   if (OB_SUCC(ret) && !private_tablets.empty()) {
-    ControlSqlNamespaceScope control_sql;
-    if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
     ObMySQLTransaction trans;
     ObLockAloneTabletRequest locks;
     locks.lock_mode_ = EXCLUSIVE;
@@ -2946,8 +2856,6 @@ int NamespaceForkKernelPrototype::is_tablet_owned(
   }
   int ret = local_object_id(namespace_id, tablet_id.id(), local_tablet_id);
   if (OB_FAIL(ret)) { return ret; }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   // Ownership is exactly the owned exception row: the physical tablet id is a
   // pure function of (namespace, local tablet), so no binding is recorded.
@@ -2966,8 +2874,6 @@ int NamespaceForkKernelPrototype::owned_storage_tablets(
       || namespace_id >= (1ULL << 30) || !GCTX.sql_proxy_) {
     return OB_INVALID_ARGUMENT;
   }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   MetadataReadGuard access;
   if (access.error() != OB_SUCCESS) { return access.error(); }
   int ret = load_exceptions(*GCTX.sql_proxy_, namespace_id);
@@ -3051,8 +2957,6 @@ int NamespaceForkKernelPrototype::schema_by_name(uint64_t db, const ObString &na
     return ret ? ret : guard.get_table_schema(db, name, false, schema);
   }
   schema = nullptr; if (!GCTX.sql_proxy_) { return OB_NOT_INIT; }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   const uint64_t owner = namespace_of(db);
   Roots root; Value value; int ret = roots(*GCTX.sql_proxy_, owner, root);
@@ -3071,8 +2975,6 @@ int NamespaceForkKernelPrototype::schema_by_id(uint64_t id, const ObTableSchema 
     auto it = schemas.find(id); if (it != schemas.end()) { schema = &it->second->schema; return OB_SUCCESS; } }
   if (observer::namespace_worker_prototype::worker_catalog_fetch) { return remote_table('i', id, ObString(), schema); }
   if (!GCTX.sql_proxy_) { return OB_NOT_INIT; }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   Roots root; Value value; int ret = roots(*GCTX.sql_proxy_, database_of(id), root);
   if (ret != OB_SUCCESS) { return ret; }
@@ -3089,8 +2991,6 @@ int NamespaceForkKernelPrototype::table_id_for_tablet(const ObTabletID &tablet, 
     const auto it = tablet_table_cache.find(tablet.id());
     if (it != tablet_table_cache.end()) { table_id = it->second; return OB_SUCCESS; }
   }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   // Only owned tablets have a table binding here; inherited tablets resolve
   // through their ancestor and never appear in this namespace's set.
@@ -3105,8 +3005,6 @@ int NamespaceForkKernelPrototype::table_id_for_tablet(const ObTabletID &tablet, 
 }
 int NamespaceForkKernelPrototype::list_schemas(uint64_t db, ObIArray<const ObTableSchema *> &out) {
   if (observer::namespace_worker_prototype::worker_catalog_fetch) { return OB_NOT_SUPPORTED; }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   const uint64_t owner = namespace_of(db);
   Roots root; int ret = roots(*GCTX.sql_proxy_, owner, root);
@@ -3139,8 +3037,6 @@ int NamespaceForkKernelPrototype::check_ddl(const ObSimpleTableSchemaV2 &schema,
     }
     return OB_SUCCESS;
   }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   {
     bool ready = false; const int ret = namespace_registry_ready(ready);
     if (ret != OB_SUCCESS || !ready) { return ret; }
@@ -3169,8 +3065,6 @@ int NamespaceForkKernelPrototype::schedule_baseline(const ObTablet &tablet) {
   if (!is_encoded_id(meta.tablet_id_.id()) || tablet.is_empty_shell()
       || !meta.fork_info_.is_valid() || meta.fork_info_.is_complete()) { return OB_SUCCESS; }
   if (!GCTX.sql_proxy_) { return OB_NOT_INIT; }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator("NsForkBaseline");
@@ -3224,8 +3118,6 @@ int NamespaceForkKernelPrototype::resolve_read_tablet(
     if (exists) { return OB_SUCCESS; }
   }
   if (!GCTX.sql_proxy_) { return OB_NOT_INIT; }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   const uint64_t db = database_of(tablet_id.id());
   const uint64_t local = local_of(tablet_id.id());
@@ -3268,8 +3160,6 @@ int NamespaceForkKernelPrototype::ensure_tablet_impl(
   } // Do not pin an uncommitted tablet while waiting for its creator's row lock.
   LOG_INFO("PROTOTYPE_V4_DIRECTORY_SLOW_PATH", K(tablet_id));
   if (!GCTX.sql_proxy_) { return OB_NOT_INIT; }
-  ControlSqlNamespaceScope control_sql;
-  if (control_sql.error() != OB_SUCCESS) { return control_sql.error(); }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   if (OB_FAIL(load_exceptions(*GCTX.sql_proxy_, db))) { return ret; }
   if (exception_tombstoned(db, local)) {

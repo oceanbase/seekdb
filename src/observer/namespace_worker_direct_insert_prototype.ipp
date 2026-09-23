@@ -110,18 +110,15 @@ struct DirectInsertOwner final : ObIDirectInsertWorkerContext {
       item.checksum_ = column_checksums.at(i);
       ret = items.push_back(item);
     }
-    bool override_held = false;
-    if (OB_SUCC(ret)) {
-      ret = push_inner_sql_namespace_override(namespace_id);
-      override_held = OB_SUCC(ret);
-    }
     if (OB_SUCC(ret) && OB_ISNULL(GCTX.sql_proxy_)) {
       ret = OB_NOT_INIT;
     } else if (OB_SUCC(ret)) {
-      ret = share::ObDDLChecksumOperator::update_checksum(
-          data_format_version, items, *GCTX.sql_proxy_);
+      TargetSqlProxy target_sql(namespace_id);
+      if (OB_SUCC(ret = target_sql.init(false))) {
+        ret = share::ObDDLChecksumOperator::update_checksum(
+            data_format_version, items, target_sql);
+      }
     }
-    if (override_held) { pop_inner_sql_namespace_override(); }
     fprintf(stderr,
         "PROTOTYPE_NAMESPACE_DDL_CHECKSUM ns=%llu table=%llu tablet=%llu count=%lld ret=%d\n",
         static_cast<unsigned long long>(namespace_id),

@@ -46,6 +46,8 @@ public:
 
   int connect(const int32_t group_id, ObISQLClient *sql_client);
   virtual sqlclient::ObISQLConnection *get_connection() override { return conn_.get_ptr(); }
+  uint64_t target_namespace() const override
+  { return sql_client_ ? sql_client_->target_namespace() : 1; }
   virtual int acquire_connection(sqlclient::ObISQLConnectionGuard &conn,
                                  const int32_t group_id) override;
 

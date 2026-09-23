@@ -2501,6 +2501,13 @@ int ObServer::init_global_context()
   gctx_.meta_db_pool_ = &meta_db_pool_;
   gctx_.sql_proxy_ = &sql_proxy_;
   gctx_.ddl_sql_proxy_ = &ddl_sql_proxy_;
+  const uint64_t sql_namespace = namespace_worker_prototype::worker_process
+      ? namespace_worker_prototype::worker_namespace : 1;
+  if (OB_FAIL(sql_proxy_.set_target_namespace(sql_namespace))) {
+    return ret;
+  } else if (OB_FAIL(ddl_sql_proxy_.set_target_namespace(sql_namespace))) {
+    return ret;
+  }
   gctx_.self_addr_seq_.set_addr(self_addr_);
   gctx_.bandwidth_throttle_ = &bandwidth_throttle_;
   gctx_.start_time_ = start_time_;

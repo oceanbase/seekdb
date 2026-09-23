@@ -153,9 +153,10 @@ public:
     int64_t idx; int ret = index(name, idx); return ret ? ret : inner_get_number(idx, value, allocator);
   }
 };
-int inner_call(SessionBinding *&binding, ObInnerSQLConnection &connection, Frame payload, int64_t &affected) {
+int inner_call(uint64_t namespace_id, SessionBinding *&binding,
+               ObInnerSQLConnection &connection, Frame payload, int64_t &affected) {
   if (payload.ret) { return payload.ret; }
-  const uint64_t namespace_id = resolve_shared_inner_sql_namespace();
+  if (namespace_id == 0 || namespace_id >= (1ULL << 30)) { return OB_INVALID_ARGUMENT; }
   if (binding && binding->channel->storage_space
           != StorageSpaceHandle::namespace_space(namespace_id)) {
     close_session(binding);
@@ -176,10 +177,11 @@ int inner_call(SessionBinding *&binding, ObInnerSQLConnection &connection, Frame
   }
   return ret == OB_ITER_END ? OB_SUCCESS : ret;
 }
-int inner_read(SessionBinding *&binding, ObInnerSQLConnection &connection, const ObString &sql,
+int inner_read(uint64_t namespace_id, SessionBinding *&binding,
+               ObInnerSQLConnection &connection, const ObString &sql,
                common::ObISQLClient::ReadResult &result, bool is_user_sql) {
   result.reuse();
-  const uint64_t namespace_id = resolve_shared_inner_sql_namespace();
+  if (namespace_id == 0 || namespace_id >= (1ULL << 30)) { return OB_INVALID_ARGUMENT; }
   if (binding && binding->channel->storage_space
           != StorageSpaceHandle::namespace_space(namespace_id)) {
     close_session(binding);

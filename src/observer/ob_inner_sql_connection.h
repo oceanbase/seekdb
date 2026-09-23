@@ -161,6 +161,8 @@ public:
   sql::ObSQLSessionInfo &get_session() { return NULL == extern_session_ ? *inner_session_ : *extern_session_; }
   const sql::ObSQLSessionInfo &get_session() const { return NULL == extern_session_ ? *inner_session_ : *extern_session_; }
   const sql::ObSQLSessionInfo *get_extern_session() const { return extern_session_; }
+  int set_target_namespace(uint64_t namespace_id);
+  uint64_t target_namespace() const;
   // session environment
   virtual int get_session_variable(const ObString &name, int64_t &val) override;
   virtual int set_session_variable(const ObString &name, int64_t val) override;
@@ -313,6 +315,7 @@ private:
   bool inited_;
   // The native connection outlives its remote SQL session and streamed results.
   namespace_worker_prototype::SessionBinding *worker_binding_ = nullptr;
+  uint64_t target_namespace_ = 0;
   sql::ObQueryRetryCtrl retry_ctrl_;
   sql::ObSQLSessionInfo *extern_session_;   // nested sql and spi both use it, rename to extern.
   sql::ObSQLSessionInfo *inner_session_;
