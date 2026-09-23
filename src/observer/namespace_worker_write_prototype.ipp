@@ -2162,13 +2162,8 @@ public:
   }
   int release_tx(transaction::ObTxDesc &tx) override {
     int ret = OB_SUCCESS;
-    if (worker_request && !tx.is_shadow()) {
-      Frame request('T'), reply; request.number('V'); request.number(tx.get_tx_id().get_id());
-      ret = write_rpc(request, reply);
-      if (!ret && !reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
-    } else if (!tx.is_shadow() && !worker_process && forked_in_process()) {
-      // Ticket 05c: same native release as the worker-mode branch above,
-      // through the owning session's in-process storage context.
+    if (!tx.is_shadow() && forked_in_process()) {
+      // Release through the owning session's in-process storage context.
       sql::ObSQLSessionInfo *borrowed = nullptr;
       auto *session = tx_owner_session(tx, borrowed);
       if (session != nullptr && session->get_tx_desc() == &tx
@@ -2597,7 +2592,6 @@ struct RemoteExecution final : public ObIDmlExecutionState {
       // only when its write context is released. Refresh after that point so
       // SQL autocommit sees the completed write, including partial failures.
       if (!ret) { reply.read(*tx); if (!reply.consumed()) { ret = OB_INVALID_ARGUMENT; } }
-      if (ret && worker_request) { worker_request->cancel(ret); }
     }
     delete this;
   }
