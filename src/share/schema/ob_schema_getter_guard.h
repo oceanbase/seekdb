@@ -766,8 +766,6 @@ private:
   SchemaGuardType schema_guard_type_;
   bool is_inited_;
   int64_t pin_cache_size_;
-  // One remote snapshot for every metadata lookup made through this guard.
-  int64_t worker_schema_version_ = common::OB_INVALID_VERSION;
   ObPrivMgr *worker_priv_mgr_ = nullptr;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSchemaGetterGuard);

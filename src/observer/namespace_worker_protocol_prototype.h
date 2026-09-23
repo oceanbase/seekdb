@@ -181,11 +181,6 @@ inline thread_local bool worker_inner_sql_execution = false;
 // worker does not occupy an executor retrying a tablet that bootstrap itself
 // still has to create.
 inline thread_local bool worker_shared_bootstrap_request = false;
-// A user statement pins one namespace schema version at admission. Native SQL
-// may create many short-lived guards while resolving and optimizing that same
-// statement; all of them must reuse the pinned version instead of asking the
-// shared process for a newer version on every lookup.
-inline thread_local int64_t worker_request_schema_version = common::OB_INVALID_VERSION;
 // Storage scope is independent from the worker's fixed namespace identity.
 // A narrow global scope lets a native SQL operation address shared control
 // tablets in the same transaction without switching the worker SchemaService.
@@ -257,10 +252,6 @@ inline bool owns_namespace_schema()
 inline bool serves_namespace_schema()
 {
   return owns_namespace_schema() || serves_forked_schema();
-}
-inline bool uses_remote_schema()
-{
-  return worker_process && worker_namespace != 0 && !owns_namespace_schema();
 }
 // Shared management code can move across runtime threads before it starts
 // Native inner SQL uses the target namespace carried by its SQL client.

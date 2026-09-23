@@ -256,7 +256,6 @@ int ObSchemaGetterGuard::reset()
     FLOG_WARN("hold too much full schema memory", K(pin_cache_size_), K(lbt()));
   }
   pin_cache_size_ = 0;
-  worker_schema_version_ = OB_INVALID_VERSION;
   
 
   for (int64_t i = 0; i < schema_mgr_infos_.count(); i++) {
@@ -274,9 +273,6 @@ int ObSchemaGetterGuard::reset()
 
 int ObSchemaGetterGuard::get_schema_version(int64_t &schema_version) const
 {
-  if (worker_schema_version_ != OB_INVALID_VERSION) {
-    schema_version = worker_schema_version_; return OB_SUCCESS;
-  }
   int ret = OB_SUCCESS;
   const ObSchemaMgrInfo *schema_mgr_info = NULL;
   if (OB_FAIL(get_schema_mgr_info( schema_mgr_info))) {

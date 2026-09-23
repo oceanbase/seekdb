@@ -658,14 +658,6 @@ int ObMultiVersionSchemaService::get_runtime_schema_guard(
     int64_t runtime_schema_version/* = common::OB_INVALID_VERSION*/,
     const RefreshSchemaMode refresh_schema_mode /* = RefreshSchemaMode::NORMAL */)
 {
-  const bool remote = observer::namespace_worker_prototype::uses_remote_schema();
-  int64_t requested_version = runtime_schema_version;
-  if (remote && requested_version == OB_INVALID_VERSION) {
-    requested_version = observer::namespace_worker_prototype::worker_request_schema_version;
-  }
-  // The local bootstrap manager supplies immutable engine definitions. Remote
-  // catalog reads use the shared service's version, including historical guards.
-  if (remote) { runtime_schema_version = OB_INVALID_VERSION; }
   int ret = OB_SUCCESS;
   int64_t latest_local_version = OB_INVALID_VERSION;
   int64_t snapshot_version = OB_INVALID_VERSION;
@@ -711,14 +703,6 @@ int ObMultiVersionSchemaService::get_runtime_schema_guard(
       guard.schema_service_ = this;
       guard.schema_guard_type_ = ObSchemaGetterGuard::RUNTIME_SCHEMA_GUARD;
     }
-  }
-
-  if (OB_SUCC(ret) && remote) {
-    int64_t version = requested_version;
-    if (version == OB_INVALID_VERSION) {
-      ret = observer::namespace_worker_prototype::fetch_schema_version(false, true, version);
-    }
-    if (!ret) { guard.worker_schema_version_ = version; }
   }
 
   return ret;
@@ -1716,15 +1700,6 @@ int ObMultiVersionSchemaService::async_refresh_schema(const int64_t schema_versi
       }
     }
   }
-  if (OB_SUCC(ret)
-      && observer::namespace_worker_prototype::uses_remote_schema()
-      && observer::namespace_worker_prototype::worker_request_schema_version != OB_INVALID_VERSION
-      && schema_version > observer::namespace_worker_prototype::worker_request_schema_version) {
-    // DDL and explicit schema refresh are visibility fences inside the current
-    // request.  Once the live catalog has reached the target, later work in
-    // that same statement must be allowed to observe it.
-    observer::namespace_worker_prototype::worker_request_schema_version = schema_version;
-  }
   return ret;
 }
 
@@ -2373,13 +2348,6 @@ int ObMultiVersionSchemaService::get_runtime_refreshed_schema_version(
     int64_t &schema_version,
     const bool core_version) const
 {
-  if (observer::namespace_worker_prototype::uses_remote_schema()) {
-    if (observer::namespace_worker_prototype::worker_request_schema_version != OB_INVALID_VERSION) {
-      schema_version = observer::namespace_worker_prototype::worker_request_schema_version;
-      return OB_SUCCESS;
-    }
-    return observer::namespace_worker_prototype::fetch_schema_version(false, core_version, schema_version);
-  }
   int ret = OB_SUCCESS;
   int64_t refreshed_schema_version = OB_INVALID_VERSION;
   {
@@ -2396,10 +2364,6 @@ int ObMultiVersionSchemaService::get_live_runtime_refreshed_schema_version(
     int64_t &schema_version,
     const bool core_version) const
 {
-  if (observer::namespace_worker_prototype::uses_remote_schema()) {
-    return observer::namespace_worker_prototype::fetch_schema_version(
-        false, core_version, schema_version);
-  }
   return get_runtime_refreshed_schema_version(schema_version, core_version);
 }
 
@@ -2407,9 +2371,6 @@ int ObMultiVersionSchemaService::get_published_schema_version(
     int64_t &schema_version,
     const bool core_schema_version) const
 {
-  if (observer::namespace_worker_prototype::uses_remote_schema()) {
-    return observer::namespace_worker_prototype::fetch_schema_version(true, core_schema_version, schema_version);
-  }
   int ret = OB_SUCCESS;
   int64_t published_schema_version = OB_INVALID_VERSION;
   {
