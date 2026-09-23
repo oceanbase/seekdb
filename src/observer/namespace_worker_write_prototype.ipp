@@ -1163,15 +1163,6 @@ struct EngineWrite {
   }
 };
 
-// The existing gateway session owns the real descriptor. Its native disconnect
-// handling can interrupt it; no extra transaction registry or cleanup thread.
-struct RegisteredSnapshot {
-  std::unique_ptr<ObTxReadSnapshot> snapshot;
-  uint64_t refs;
-  explicit RegisteredSnapshot(std::unique_ptr<ObTxReadSnapshot> value)
-      : snapshot(std::move(value)), refs(1) {}
-};
-
 struct EngineWrites {
   StorageSpaceHandle storage_space;
   sql::ObSQLSessionInfo &session;
@@ -1179,10 +1170,6 @@ struct EngineWrites {
   ObTxDesc *&tx;
   uint64_t sequence = 0;
   std::map<uint64_t, std::unique_ptr<EngineWrite>> writes;
-  // Native snapshot verification stores object addresses in ObTxDesc. Keep
-  // storage-process copies stable until the Worker closes the cursor, and
-  // synchronize their state before each fetch.
-  std::vector<RegisteredSnapshot> registered_snapshots;
   explicit EngineWrites(StorageSpaceHandle space, sql::ObSQLSessionInfo &s)
       : storage_space(space), session(s), sid(s.get_server_sid()), tx(s.get_tx_desc()) {}
   void reset() {
@@ -1206,82 +1193,6 @@ struct EngineWrites {
     int ret = request.ret ? request.ret
         : !storage_space.is_namespace() ? OB_INVALID_ARGUMENT : OB_SUCCESS;
     Frame values;
-    if (!ret && request.type() == 'T' && operation == 'z') {
-      ObTxReadSnapshot snapshot;
-      request.read(snapshot);
-      ObTxReadSnapshot *registered = nullptr;
-      if (!request.consumed()
-          || !snapshot.tx_id().is_valid()
-          || static_cast<uint64_t>(snapshot.tx_id().get_id()) != txid) {
-        ret = OB_INVALID_ARGUMENT;
-      }
-      for (size_t i = 0;
-           !ret && !registered && i < registered_snapshots.size();
-           ++i) {
-        ObTxReadSnapshot *candidate = registered_snapshots[i].snapshot.get();
-        if (candidate->tx_id() == snapshot.tx_id()
-            && candidate->tx_seq() == snapshot.tx_seq()
-            && candidate->version() == snapshot.version()) {
-          registered = candidate;
-        }
-      }
-      if (!ret && !registered) { ret = OB_ENTRY_NOT_EXIST; }
-      reply = Frame('w');
-      reply.number(ret);
-      if (!ret) { reply.append(*registered); }
-      fprintf(stderr,
-          "PROTOTYPE_NAMESPACE_TX_SNAPSHOT_REFRESH ns=%llu tx=%llu valid=%d committed=%d ret=%d\n",
-          (unsigned long long)ns, (unsigned long long)txid,
-          registered != nullptr && registered->is_valid(),
-          registered != nullptr && registered->is_committed(), ret);
-      return reply.ret;
-    }
-    if (!ret && request.type() == 'T' && operation == 'y') {
-      ObTxReadSnapshot snapshot;
-      request.read(snapshot);
-      size_t registered_index = registered_snapshots.size();
-      if (!request.consumed()
-          || !snapshot.tx_id().is_valid()
-          || static_cast<uint64_t>(snapshot.tx_id().get_id()) != txid) {
-        ret = OB_INVALID_ARGUMENT;
-      }
-      for (size_t i = 0;
-           !ret && registered_index == registered_snapshots.size()
-               && i < registered_snapshots.size();
-           ++i) {
-        const ObTxReadSnapshot *candidate =
-            registered_snapshots[i].snapshot.get();
-        if (candidate->tx_id() == snapshot.tx_id()
-            && candidate->tx_seq() == snapshot.tx_seq()
-            && candidate->version() == snapshot.version()) {
-          registered_index = i;
-        }
-      }
-      if (!ret && registered_index == registered_snapshots.size()) {
-        ret = OB_ENTRY_NOT_EXIST;
-      }
-      if (!ret) {
-        RegisteredSnapshot &registered =
-            registered_snapshots[registered_index];
-        const bool release = registered.refs == 1;
-        if (!release) {
-          --registered.refs;
-        } else {
-          ret = service->unregister_tx_snapshot_verify(*registered.snapshot);
-        }
-        if (!ret && release) {
-          registered_snapshots.erase(
-              registered_snapshots.begin() + registered_index);
-        }
-      }
-      reply = Frame('w');
-      reply.number(ret);
-      fprintf(stderr,
-          "PROTOTYPE_NAMESPACE_TX_SNAPSHOT_UNREGISTER ns=%llu tx=%llu remaining=%zu ret=%d\n",
-          (unsigned long long)ns, (unsigned long long)txid,
-          registered_snapshots.size(), ret);
-      return reply.ret;
-    }
     if (!ret && request.type() == 'T' && operation == 't') {
       if (tx) { ret = OB_INIT_TWICE; }
       else { ret = service->acquire_tx(request.data.data(), request.data.size(), request.pos, tx); }
@@ -1495,36 +1406,6 @@ struct EngineWrites {
           session.set_reserved_snapshot_version(snapshot.core_.version_);
         }
         values.append(snapshot);
-      } else if (operation == 'v') {
-        ObTxReadSnapshot snapshot;
-        request.read(snapshot);
-        bool exists = false;
-        if (!request.consumed()
-            || !snapshot.is_valid()
-            || snapshot.tx_id() != tx->get_tx_id()) {
-          ret = OB_INVALID_ARGUMENT;
-        }
-        for (size_t i = 0;
-             !ret && !exists && i < registered_snapshots.size();
-             ++i) {
-          const ObTxReadSnapshot *candidate =
-              registered_snapshots[i].snapshot.get();
-          exists = candidate->tx_id() == snapshot.tx_id()
-              && candidate->tx_seq() == snapshot.tx_seq()
-              && candidate->version() == snapshot.version();
-          if (exists) { ++registered_snapshots[i].refs; }
-        }
-        if (!ret && !exists) {
-          auto registered = std::make_unique<ObTxReadSnapshot>();
-          if (OB_FAIL(registered->assign(snapshot))) {
-          } else if (OB_FAIL(service->register_tx_snapshot_verify(*registered))) {
-          } else {
-            registered_snapshots.emplace_back(std::move(registered));
-          }
-        }
-        fprintf(stderr,
-            "PROTOTYPE_NAMESPACE_TX_SNAPSHOT_REGISTER ns=%llu tx=%llu reused=%d ret=%d\n",
-            (unsigned long long)ns, (unsigned long long)txid, exists, ret);
       } else if (operation == 'C') {
         const int64_t deadline = request.number();
         if (!request.consumed() || !writes.empty()) { ret = OB_INVALID_ARGUMENT; }
@@ -1855,6 +1736,8 @@ private:
 int call_in_process_tx_clock(
     const std::function<int(ObITransactionService &)> &call);
 int call_in_process_tx_interrupt(const transaction::ObTxDesc &tx, int cause);
+int call_in_process_tx_snapshot(char operation,
+                                transaction::ObTxReadSnapshot &snapshot);
 
 class RemoteTransactionService final : public ObITransactionService {
 public:
@@ -1987,11 +1870,7 @@ public:
     if (!tx || tx->get_tx_id() != snapshot.tx_id()) {
       return OB_INVALID_ARGUMENT;
     }
-    Frame request, reply;
-    request.append(snapshot);
-    int ret = request.ret ? request.ret : tx_rpc('v', *tx, request, reply);
-    if (!ret && !reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
-    return ret;
+    return call_in_process_tx_snapshot('v', snapshot);
   }
   int refresh_tx_snapshot_verify(
       transaction::ObTxReadSnapshot &snapshot) override {
@@ -2000,38 +1879,12 @@ public:
         || snapshot.is_committed()) {
       return OB_SUCCESS;
     }
-    sql::ObSQLSessionInfo *session = THIS_WORKER.get_session();
-    StorageSessionScope scope(session, false);
-    Frame request('T'), reply;
-    request.number('z');
-    request.number(snapshot.tx_id().get_id());
-    request.append(snapshot);
-    int ret = scope.error();
-    if (!ret) { ret = request.ret ? request.ret : write_rpc(request, reply); }
-    if (!ret) {
-      ObTxReadSnapshot refreshed;
-      reply.read(refreshed);
-      if (!reply.consumed()) {
-        ret = OB_INVALID_ARGUMENT;
-      } else {
-        ret = snapshot.assign(refreshed);
-      }
-    }
-    return ret;
+    return call_in_process_tx_snapshot('z', snapshot);
   }
   int unregister_tx_snapshot_verify(
       transaction::ObTxReadSnapshot &snapshot) override {
     if (!snapshot.tx_id().is_valid()) { return OB_SUCCESS; }
-    sql::ObSQLSessionInfo *session = THIS_WORKER.get_session();
-    StorageSessionScope scope(session, false);
-    Frame request('T'), reply;
-    request.number('y');
-    request.number(snapshot.tx_id().get_id());
-    request.append(snapshot);
-    int ret = scope.error();
-    if (!ret) { ret = request.ret ? request.ret : write_rpc(request, reply); }
-    if (!ret && !reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
-    return ret;
+    return call_in_process_tx_snapshot('y', snapshot);
   }
   int create_implicit_savepoint(transaction::ObTxDesc &tx,
                                         const transaction::ObTxParam &tx_param,

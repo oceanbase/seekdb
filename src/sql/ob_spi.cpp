@@ -1105,12 +1105,11 @@ int ObSPIService::spi_calc_package_expr(ObPLExecCtx *ctx,
   ObPL *pl_engine = NULL;
   share::schema::ObSchemaGetterGuard schema_guard;
   CK (OB_NOT_NULL(ctx), ctx->valid());
-  CK (OB_NOT_NULL(GCTX.schema_service_));
   CK (OB_NOT_NULL(exec_ctx = ctx->exec_ctx_));
   CK (OB_NOT_NULL(session_info = exec_ctx->get_my_session()));
   CK (OB_NOT_NULL(sql_proxy = exec_ctx->get_sql_proxy()));
   CK (OB_NOT_NULL(pl_engine = exec_ctx->get_pl_engine()));
-  OZ (GCTX.schema_service_->get_runtime_schema_guard(
+  OZ (session_info->effective_schema_service()->get_runtime_schema_guard(
                             schema_guard));
   if (OB_SUCC(ret)) {
     ObPLPackageGuard package_guard{};
@@ -1211,7 +1210,6 @@ int ObSPIService::spi_set_package_variable(
   ObPL *pl_engine = NULL;
   ObMySQLProxy *sql_proxy = NULL;
   ObSQLSessionInfo *session_info = NULL;
-  CK (OB_NOT_NULL(GCTX.schema_service_));
   CK (OB_NOT_NULL(exec_ctx));
   CK (OB_NOT_NULL(session_info = exec_ctx->get_my_session()));
   CK (OB_NOT_NULL(sql_proxy = exec_ctx->get_sql_proxy()));
@@ -1232,7 +1230,7 @@ int ObSPIService::spi_set_package_variable(
     resolve_ctx.params_.pl_engine_ = exec_ctx->get_pl_engine();
     resolve_ctx.params_.srs_provider_ = exec_ctx->get_srs_provider();
     resolve_ctx.params_.lob_read_service_ = exec_ctx->get_lob_read_service();
-    OZ (GCTX.schema_service_->get_runtime_schema_guard(
+    OZ (session_info->effective_schema_service()->get_runtime_schema_guard(
         schema_guard));
     OZ (package_guard.init());
     OZ (pl_manager.set_package_var_val(
@@ -2466,12 +2464,11 @@ int ObSPIService::spi_get_package_cursor_info(ObPLExecCtx *ctx,
   UNUSED(routine_id);
   cursor = NULL;
   CK (OB_NOT_NULL(ctx), ctx->valid());
-  CK (OB_NOT_NULL(GCTX.schema_service_));
   CK (OB_NOT_NULL(exec_ctx = ctx->exec_ctx_));
   CK (OB_NOT_NULL(session_info = exec_ctx->get_my_session()));
   CK (OB_NOT_NULL(sql_proxy = exec_ctx->get_sql_proxy()));
   CK (OB_NOT_NULL(pl_engine = exec_ctx->get_pl_engine()));
-  OZ (GCTX.schema_service_->get_runtime_schema_guard(
+  OZ (session_info->effective_schema_service()->get_runtime_schema_guard(
                             schema_guard));
   ObPLPackageGuard package_guard{};
   OZ (package_guard.init());
@@ -3892,12 +3889,11 @@ int ObSPIService::spi_get_package_allocator(
   ObPL *pl_engine = NULL;
   share::schema::ObSchemaGetterGuard schema_guard;
   CK (OB_NOT_NULL(ctx));
-  CK (OB_NOT_NULL(GCTX.schema_service_));
   CK (OB_NOT_NULL(exec_ctx = ctx->exec_ctx_));
   CK (OB_NOT_NULL(session_info = exec_ctx->get_my_session()));
   CK (OB_NOT_NULL(sql_proxy = exec_ctx->get_sql_proxy()));
   CK (OB_NOT_NULL(pl_engine = exec_ctx->get_pl_engine()));
-  OZ (GCTX.schema_service_->get_runtime_schema_guard(
+  OZ (session_info->effective_schema_service()->get_runtime_schema_guard(
                             schema_guard));
   ObPLPackageGuard package_guard{};
   OZ (package_guard.init());
@@ -6315,7 +6311,8 @@ ObSPIRetryCtrlGuard::ObSPIRetryCtrlGuard(
   if (THIS_WORKER.is_timeout()) {
     ret = OB_TIMEOUT;
     LOG_WARN("already timeout!", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(spi_result_.get_scheme_guard()))) {
+  } else if (OB_FAIL(session_info_.effective_schema_service()->get_runtime_schema_guard(
+                 spi_result_.get_scheme_guard()))) {
   } else if (OB_FAIL(spi_result_.get_scheme_guard().get_schema_version(database_schema_version))) {
   } else {
     retry_ctrl_.set_current_local_schema_version(database_schema_version);

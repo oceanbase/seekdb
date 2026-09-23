@@ -133,6 +133,23 @@ def sql_probe(experiment):
         assert experiment.sql("SELECT v FROM phase10.owned WHERE id=1", other) == ((11,),)
         experiment.sql("ROLLBACK", child)
         assert experiment.sql("SELECT v FROM phase10.owned WHERE id=1", child) == ((11,),)
+        experiment.sql("CREATE PROCEDURE phase10.count_owned(OUT n INT) "
+                       "BEGIN SELECT COUNT(*) INTO n FROM phase10.owned; END", child)
+        experiment.sql("SET @owned_count=0", child)
+        experiment.sql("CALL phase10.count_owned(@owned_count)", child)
+        assert experiment.sql("SELECT @owned_count", child) == ((2,),)
+        experiment.sql("CREATE PROCEDURE phase10.sum_owned(INOUT total INT) BEGIN "
+                       "DECLARE done INT DEFAULT 0; DECLARE value INT; "
+                       "DECLARE cur CURSOR FOR SELECT v FROM phase10.owned FOR UPDATE; "
+                       "DECLARE CONTINUE HANDLER FOR NOT FOUND SET done=1; "
+                       "OPEN cur; loop1: LOOP FETCH cur INTO value; "
+                       "IF done THEN LEAVE loop1; END IF; "
+                       "SET total=total+value; END LOOP; CLOSE cur; END", child)
+        experiment.sql("SET @owned_total=0", child)
+        experiment.sql("BEGIN", child)
+        experiment.sql("CALL phase10.sum_owned(@owned_total)", child)
+        assert experiment.sql("SELECT @owned_total", child) == ((33,),)
+        experiment.sql("COMMIT", child)
         experiment.sql("UPDATE phase10.parent SET v=30 WHERE id=1", child)
         assert experiment.sql("SELECT v FROM phase10.parent WHERE id=1") == ((10,),)
         experiment.sql("FORK NAMESPACE phase10_grandchild FROM phase10_child")

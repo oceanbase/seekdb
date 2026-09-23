@@ -214,6 +214,34 @@ int call_in_process_tx_interrupt(const transaction::ObTxDesc &tx, int cause)
   }
   return service->interrupt(tx.get_tx_id(), cause);
 }
+int call_in_process_tx_snapshot(char operation,
+                                transaction::ObTxReadSnapshot &snapshot)
+{
+  StorageSessionScope scope(THIS_WORKER.get_session(), false);
+  if (scope.error()) { return scope.error(); }
+  InProcessStorage *storage = in_process_storage;
+  auto *service = share::server_service<transaction::ObTransService>();
+  if (storage == nullptr || !storage->initialized || service == nullptr) {
+    return OB_NOT_INIT;
+  }
+  const StorageSpaceHandle space = active_worker_storage_space();
+  if (!space.is_namespace() || storage->ns != space.namespace_id()) {
+    return OB_INVALID_ARGUMENT;
+  }
+  if (operation == 'v') {
+    if (!snapshot.is_valid() || storage->writes == nullptr
+        || storage->writes->tx == nullptr
+        || snapshot.tx_id() != storage->writes->tx->get_tx_id()) {
+      return OB_INVALID_ARGUMENT;
+    }
+    return service->register_tx_snapshot_verify(snapshot);
+  } else if (operation == 'z') {
+    return service->refresh_tx_snapshot_verify(snapshot);
+  } else if (operation == 'y') {
+    return service->unregister_tx_snapshot_verify(snapshot);
+  }
+  return OB_INVALID_ARGUMENT;
+}
 int in_process_open(InProcessStorage &ctx, uint32_t sid, bool internal)
 {
   int ret = OB_SUCCESS;
