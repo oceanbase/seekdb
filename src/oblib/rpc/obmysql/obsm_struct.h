@@ -35,7 +35,6 @@ class ObServerRuntime;
 }
 namespace observer
 {
-namespace namespace_worker_prototype { struct SessionBinding; }
 
 struct ObSMConnection
 {
@@ -104,9 +103,6 @@ public:
   uint32_t sessid_;
   uint64_t namespace_id_; // External namespace connection lease.
   uint32_t version_;
-  // Worker-side storage session cached per MySQL connection. Null keeps the
-  // existing in-process SQL path.
-  namespace_worker_prototype::SessionBinding *namespace_worker_binding_ = nullptr;
   int64_t sess_create_time_; // client connection creation time
 
   // Errors may occur during the ObSMHandler::on_connect stage, and these error messages need to be returned to the client;

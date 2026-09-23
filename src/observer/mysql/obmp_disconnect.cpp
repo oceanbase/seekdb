@@ -18,7 +18,6 @@
 
 #include "obmp_disconnect.h"
 #include "share/rc/ob_server_runtime.h"
-#include "observer/namespace_worker_protocol_prototype.h"
 #include "namespace/namespace.h"
 
 
@@ -27,9 +26,8 @@ using namespace oceanbase::common;
 
 void OB_WEAK_SYMBOL request_finish_callback();
 
-ObMPDisconnect::ObMPDisconnect(const sql::ObFreeSessionCtx &ctx,
-    namespace_worker_prototype::SessionBinding *binding)
-    : ctx_(ctx), worker_binding_(binding)
+ObMPDisconnect::ObMPDisconnect(const sql::ObFreeSessionCtx &ctx)
+    : ctx_(ctx)
 {
 }
 
@@ -66,8 +64,6 @@ int ObMPDisconnect::kill_unfinished_session(uint32_t sessid)
 int ObMPDisconnect::run()
 {
   int ret = OB_SUCCESS;
-  namespace_worker_prototype::close_session(worker_binding_);
-  worker_binding_ = nullptr;
   if (ctx_.sessid_ != 0) {
     if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>())) {
       ret = OB_INVALID_ARGUMENT;

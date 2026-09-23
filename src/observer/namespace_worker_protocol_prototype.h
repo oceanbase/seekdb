@@ -358,13 +358,6 @@ data_plane::ObITransactionService *effective_transaction_service(
     sql::ObSQLSessionInfo *session, data_plane::ObITransactionService *fallback);
 sql::ObPlanCache *effective_plan_cache(sql::ObSQLSessionInfo *session,
                                        sql::ObPlanCache *fallback);
-int begin_direct_request(uint32_t sid, SessionBinding *&binding, bool internal = false);
-int finish_direct_request();
-int bind_direct_session(SessionBinding *binding, sql::ObSQLSessionInfo &session);
-int open_session(uint64_t namespace_id, sql::ObSQLSessionInfo &gateway, SessionBinding *&binding, bool internal = false);
-sql::ObSQLSessionInfo *bound_session(SessionBinding *binding);
-int append_session_state(sql::ObSQLSessionInfo &session, Frame &frame, bool identity = false);
-int apply_session_state(sql::ObSQLSessionInfo &session, Frame &frame);
 void close_session(SessionBinding *binding);
 // Thin TCP entry (worker mode): routes "user@branch" logins on the public
 // MySQL port to the branch's worker Unix socket and byte-proxies from there.

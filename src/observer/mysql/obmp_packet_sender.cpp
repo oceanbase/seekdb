@@ -287,7 +287,7 @@ ObMPPacketSender::ObMPPacketSender()
     : req_(NULL), request_generation_(0), nio_connection_handle_(NULL),
       mid_request_read_started_(false), read_packet_lease_(0),
       request_ownership_(RequestOwnership::RELEASED), response_started_(false),
-      response_disabled_(true), query_receive_ts_(0), conn_(NULL), borrowed_session_(NULL) {}
+      response_disabled_(true), query_receive_ts_(0), conn_(NULL) {}
 
 ObMPPacketSender::~ObMPPacketSender()
 {
@@ -304,7 +304,6 @@ void ObMPPacketSender::reset()
     (void)release_read_packet_lease();
   }
   clear_request_identity(RequestOwnership::RELEASED);
-  borrowed_session_ = NULL;
 }
 
 void ObMPPacketSender::clear_request_identity(RequestOwnership next_state) {
@@ -745,8 +744,6 @@ int ObMPPacketSender::revert_session(ObSQLSessionInfo *sess_info)
         KP(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()),
         K(sess_info),
         K(ret));
-  } else if (borrowed_session_ == sess_info) {
-    // Borrowed from the connection-owned pin; no per-request hash lookup/ref.
   } else {
     ::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->revert_session(sess_info);
   }
@@ -759,10 +756,6 @@ int ObMPPacketSender::get_session(ObSQLSessionInfo *&sess_info)
   if (OB_ISNULL(conn_) || OB_ISNULL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("conn or session mgr is NULL", K(ret), KP(conn_), K(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()));
-  } else if (conn_->namespace_worker_binding_) {
-    sess_info = namespace_worker_prototype::bound_session(conn_->namespace_worker_binding_);
-    if (!sess_info) { ret = OB_ERR_SESSION_INTERRUPTED; }
-    else { borrowed_session_ = sess_info; }
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()->get_session(conn_->sessid_, sess_info))) {
   } else {
     NG_TRACE_EXT(session, OB_ID(sid), sess_info->get_server_sid());
@@ -1113,8 +1106,6 @@ int ObMPPacketSender::finish_sql_request() {
         LOG_ERROR("owned mysql request has no request object", K(ret),
                   K(request_generation_));
     } else {
-        const int storage_ret = namespace_worker_prototype::finish_direct_request();
-        if (storage_ret) { (void)SQL_REQ_OP.disconnect_sql_conn(req_, request_generation_); }
         (void)release_read_packet_lease();
         rpc::ObRequest *req = req_;
         const uint64_t generation = request_generation_;

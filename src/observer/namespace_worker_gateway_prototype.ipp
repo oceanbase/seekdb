@@ -255,7 +255,6 @@ void Channel::fail() {
     }
   }
 }
-sql::ObSQLSessionInfo *bound_session(SessionBinding *binding) { return binding ? binding->gateway : nullptr; }
 int attach(uint64_t ns, std::shared_ptr<Child> &child) {
   if (ns == 0 || ns >= (1ULL << 30)) { return OB_NOT_SUPPORTED; }
   std::lock_guard<std::mutex> guard(children_mutex);
@@ -264,50 +263,6 @@ int attach(uint64_t ns, std::shared_ptr<Child> &child) {
     it = children.emplace(ns, std::make_shared<Child>()).first;
   }
   child = it->second; return OB_SUCCESS;
-}
-// These scalar mirrors are needed by gateway protocol encoding. SQL variables
-// and their allocator remain in the worker; no complete session is serialized.
-const share::ObSysVarClassType state_vars[] = {
-  share::SYS_VAR_CHARACTER_SET_CLIENT, share::SYS_VAR_CHARACTER_SET_CONNECTION,
-  share::SYS_VAR_CHARACTER_SET_RESULTS, share::SYS_VAR_COLLATION_CONNECTION,
-  share::SYS_VAR_COLLATION_DATABASE, share::SYS_VAR_SQL_MODE, share::SYS_VAR_OB_QUERY_TIMEOUT,
-  share::SYS_VAR_AUTOCOMMIT
-};
-int append_session_state(sql::ObSQLSessionInfo &session, Frame &frame, bool identity) {
-  frame.number(session.get_database_id()); frame.string(session.get_database_name());
-  int ret = OB_SUCCESS;
-  for (auto id : state_vars) {
-    ObObj value;
-    if ((ret = session.get_sys_variable(id, value))) { return ret; }
-    frame.number(value.is_uint64() ? value.get_uint64() : static_cast<uint64_t>(value.get_int()));
-  }
-  if (identity) {
-    // Authentication is performed before the worker session is opened. Carry
-    // the verified identity so permission checks in the worker use the same user.
-    frame.number(session.get_user_id());
-    frame.string(session.get_user_name());
-    frame.string(session.get_host_name());
-  }
-  return frame.ret;
-}
-int apply_session_state(sql::ObSQLSessionInfo &session, Frame &frame) {
-  const uint64_t db = frame.number(); const ObString name = frame.string();
-  int ret = frame.ret;
-  if (!ret) {
-    ObString logical_name = name;
-    const ObDatabaseSchema *database = nullptr;
-    if (NamespaceForkKernelPrototype::is_namespace_address(name)
-        && NamespaceForkKernelPrototype::database_by_address(name, database) == OB_SUCCESS
-        && database != nullptr) {
-      logical_name = database->get_database_name_str();
-    }
-    ret = session.set_default_database(logical_name); session.set_database_id(db);
-  }
-  for (auto id : state_vars) {
-    const uint64_t value = frame.number();
-    if (!ret) { ret = frame.ret ? frame.ret : session.update_sys_variable(id, static_cast<int64_t>(value)); }
-  }
-  return ret ? ret : frame.ret;
 }
 int catalog_schema_guard(int64_t version, ObSchemaGetterGuard &guard) {
   auto &service = ObMultiVersionSchemaService::get_instance();
@@ -1010,65 +965,6 @@ int restore_namespace_registry() {
   }
   return ret;
 }
-int open_session(uint64_t ns, sql::ObSQLSessionInfo &gateway, SessionBinding *&binding, bool internal) {
-  binding = nullptr;
-  // The shared process coordinates package installation through an internal
-  // namespace-1 session.  Do not expose an external Worker session until that
-  // DDL is complete: otherwise a process crash can make an unrelated user DDL
-  // the first waiter on the recovering package transaction's runtime lock.
-  if (!worker_process && !internal
-      && !ATOMIC_LOAD(&GCTX.sys_package_ready_)) {
-    return OB_EAGAIN;
-  } else if (ns > 1) {
-    int64_t schema_version = common::OB_INVALID_VERSION;
-    const int namespace_ret = storage::NamespaceForkKernelPrototype::namespace_schema_version(
-        ns, schema_version);
-    if (namespace_ret != common::OB_SUCCESS || schema_version <= 0) {
-      return namespace_ret != common::OB_SUCCESS
-          ? namespace_ret : common::OB_STATE_NOT_MATCH;
-    }
-  }
-  std::unique_ptr<SessionBinding> owned(new SessionBinding());
-  int ret = ensure_channel(ns, owned->channel);
-  if (ret) { return ret; }
-  owned->internal = internal;
-  if (internal) { owned->gateway = &gateway; }
-  else if ((ret = share::server_service<sql::ObSQLSessionMgr>()->get_session(gateway.get_server_sid(), owned->gateway))) { return ret; }
-  owned->writes = std::make_unique<EngineWrites>(owned->channel->storage_space, gateway);
-  Frame request(internal ? 'a' : 'A'); request.number(gateway.get_server_sid());
-  request.number(gateway.get_capability().capability_);
-  if ((ret = append_session_state(gateway, request, !internal))) { return ret; }
-  bool opened = false;
-  // A newly spawned worker may still be constructing its native core schema
-  // when the first client session arrives. Retry only the transient schema
-  // visibility errors; protocol/authentication errors remain terminal.
-  for (int attempt = 0; attempt < 8 && !opened; ++attempt) {
-    Frame attempt_request = request;
-    ret = exchange(*owned->channel, std::move(attempt_request), nullptr, [&](Frame &reply) {
-      if (reply.type() != 'a' || opened) { return OB_INVALID_ARGUMENT; }
-      owned->slot = reply.number(); owned->slot_generation = reply.number();
-      opened = reply.consumed() && owned->slot_generation != 0;
-      return opened ? OB_SUCCESS : OB_INVALID_ARGUMENT;
-    });
-    if (!opened && (ret == OB_TABLE_NOT_EXIST || ret == OB_EAGAIN)) {
-      ob_usleep(10 * 1000);
-    } else {
-      break;
-    }
-  }
-  if (!ret && !opened) { owned->channel->fail(); ret = OB_INVALID_ARGUMENT; }
-  if (!ret) {
-    std::lock_guard<std::mutex> guard(owned->channel->bindings_mutex);
-    if (owned->channel->closed) { ret = OB_CONNECT_ERROR; }
-    else {
-      owned->next = owned->channel->bindings;
-      if (owned->next) { owned->next->previous = owned.get(); }
-      owned->channel->bindings = owned.get(); owned->linked = true;
-      binding = owned.release();
-    }
-  }
-  return ret;
-}
 void close_session(SessionBinding *binding) {
   std::unique_ptr<SessionBinding> owned(binding);
   if (!owned) { return; }
@@ -1121,49 +1017,7 @@ int worker_read(Frame &frame) {
       ? in_process_read(*in_process_storage, frame)
       : OB_ERR_UNEXPECTED;
 }
-int begin_direct_request(uint32_t sid, SessionBinding *&binding, bool internal) {
-  if (!worker_process) { return OB_SUCCESS; }
-  if (binding) {
-    if (!binding->direct_request) { return OB_INVALID_ARGUMENT; }
-    worker_request = binding->direct_request.get();
-    worker_request->cancelled = OB_SUCCESS;
-    worker_request->deadline = INT64_MAX;
-    return OB_SUCCESS;
-  }
-  auto owner = std::make_unique<SessionBinding>();
-  owner->direct_request = worker_storage_routes.allocate(false);
-  if (!owner->direct_request) { return OB_EAGAIN; }
-  worker_request = owner->direct_request.get();
-  Frame request('L'), reply; request.number(sid); request.number(internal);
-  int ret = worker_send(request);
-  if (!ret) { ret = worker_read(reply); }
-  if (!ret) { ret = reply.type() == 'l' ? static_cast<int>(reply.number()) : OB_INVALID_ARGUMENT; }
-  if (!ret && !reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
-  if (ret) {
-    worker_storage_routes.release(worker_request->tag, true);
-    worker_request = nullptr;
-  } else { binding = owner.release(); }
-  return ret;
-}
-int finish_direct_request() {
-  if (!worker_request || !(worker_request->tag.slot & WORKER_REQUEST)) { return OB_SUCCESS; }
-  Frame request('e'), reply;
-  int ret = worker_send(request, true);
-  if (!ret) { ret = worker_read(reply); }
-  if (!ret) { ret = reply.type() == 'l' ? static_cast<int>(reply.number()) : OB_INVALID_ARGUMENT; }
-  if (!ret && !reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
-  worker_request = nullptr;
-  return ret;
-}
-int bind_direct_session(SessionBinding *binding, sql::ObSQLSessionInfo &session) {
-  if (!worker_process || !binding || !binding->direct_request) { return OB_SUCCESS; }
-  if (binding->gateway) { share::server_service<sql::ObSQLSessionMgr>()->revert_session(binding->gateway); binding->gateway = nullptr; }
-  binding->direct_request->sql_session = &session;
-  return share::server_service<sql::ObSQLSessionMgr>()->get_session(session.get_server_sid(), binding->gateway);
-}
-// Create (or rebind) the in-process storage context for a session served in
-// the shared process (ticket 05c). Mirrors the worker-mode begin_direct_request
-// path: one storage context per SQL session, keyed on the session's binding.
+// Keep one storage context per SQL session in a forked namespace.
 int open_in_process_storage(sql::ObSQLSessionInfo &session)
 {
   SessionBinding *&slot = session.namespace_storage_binding();
