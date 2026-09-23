@@ -330,7 +330,12 @@ struct EngineScan {
         ? logical_table_id : schema->get_table_id();
     for (uint64_t i = 0; !ret && i < count; ++i) {
       const uint64_t column = request.number();
-      if (!schema->get_column_schema(column)) { ret = OB_NOT_SUPPORTED; }
+      if (column != OB_HIDDEN_TRANS_VERSION_COLUMN_ID
+          && column != OB_HIDDEN_SQL_SEQUENCE_COLUMN_ID
+          && column != OB_HIDDEN_GROUP_IDX_COLUMN_ID
+          && !schema->get_column_schema(column)) {
+        ret = OB_NOT_SUPPORTED;
+      }
       else { ret = param.column_ids_.push_back(column); }
     }
     const uint64_t ranges = request.number();

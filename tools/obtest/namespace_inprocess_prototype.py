@@ -164,6 +164,12 @@ def direct_probe(experiment):
         experiment.sql("UPDATE phase10.heap_rows SET d='1970-11-02' WHERE d='1970-11-01'", child)
         assert experiment.sql("SELECT COUNT(*) FROM phase10.heap_rows", child) == ((2,),)
         assert experiment.sql("SELECT COUNT(*) FROM phase10.heap_rows WHERE d='1970-11-02'", child) == ((1,),)
+        experiment.sql("CREATE TABLE phase10.join_left(a BIGINT)", child)
+        experiment.sql("INSERT INTO phase10.join_left VALUES(32)", child)
+        experiment.sql("CREATE TABLE phase10.join_right(b YEAR(4), KEY key_b(b))", child)
+        experiment.sql("INSERT INTO phase10.join_right VALUES(1901)", child)
+        assert experiment.sql(
+            "SELECT a,b FROM phase10.join_left,phase10.join_right WHERE a>b", child) == ()
         experiment.sql("CREATE INDEX records_v ON phase10.records(v)", child)
         assert experiment.sql("SELECT id FROM phase10.records FORCE INDEX(records_v) WHERE v='second'", child) == ((2,),)
         experiment.sql("CREATE TABLE phase10.parts(id INT PRIMARY KEY, v INT) PARTITION BY HASH(id) PARTITIONS 4", child)
