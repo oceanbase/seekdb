@@ -99,15 +99,26 @@ pub fn ensure_supported() -> Result<(), Error> {
     }
 }
 
-/// Check the deployment filesystem's directory-sync capability at startup.
+/// Check that the deployment directory is accessible at startup.
 pub fn check_storage_directory(path: &Path) -> Result<(), Error> {
     ensure_supported()?;
     let parent = path
         .parent()
         .ok_or_else(|| Error::new(0, None, "auto-config has no parent"))?;
-    File::open(parent)
-        .and_then(|directory| directory.sync_all())
-        .map_err(|error| Error::io("sync auto-config directory at startup", error, false))
+    sync_directory(parent, false)
+}
+
+fn sync_directory(path: &Path, after_replace: bool) -> Result<(), Error> {
+    let result = File::open(path).and_then(|directory| directory.sync_all());
+    // Some filesystems reject fsync on directories; the file syncs and rename
+    // still protect against a process dying during replacement.
+    #[cfg(unix)]
+    if let Err(error) = &result {
+        if matches!(error.kind(), io::ErrorKind::InvalidInput | io::ErrorKind::Unsupported) {
+            return Ok(());
+        }
+    }
+    result.map_err(|error| Error::io("sync auto-config directory", error, after_replace))
 }
 
 fn parse_name(source: &str, line: usize) -> Result<(String, &str), Error> {
@@ -306,9 +317,7 @@ fn replace_with_hook(
             .and_then(|file| file.sync_all())
             .map_err(|error| Error::io("sync replaced auto-config file", error, true))?;
         after_stage(ReplaceStage::NewFileSynced)?;
-        File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|error| Error::io("sync auto-config directory", error, true))?;
+        sync_directory(parent, true)?;
         after_stage(ReplaceStage::DirectorySynced)?;
         Ok(())
     })();

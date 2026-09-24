@@ -24,7 +24,6 @@
 
 #include <memory>
 #include <new>
-#include <cstdio>
 
 namespace oceanbase
 {
@@ -144,11 +143,6 @@ int ObConfigManager::update_local()
     if (OB_FAIL(ret)) {
       LOG_ERROR("invalid auto-config entry", K(ret), "name", entry.name.c_str(),
                 "line", entry.line);
-      std::fprintf(stderr, "seekdb auto-config line %u, parameter %s: %s (%d)\n",
-                   entry.line, entry.name.c_str(),
-                   ret == OB_ERR_SYS_CONFIG_UNKNOWN ? "unknown parameter" : "invalid value",
-                   ret);
-      std::fflush(stderr);
     }
   }
 
