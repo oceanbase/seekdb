@@ -24,6 +24,7 @@
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
 #include "sql/das/iter/ob_das_vec_scan_utils.h"
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
+#include "namespace/namespace.h"
 
 namespace oceanbase
 {
@@ -744,6 +745,30 @@ int ObDASIvfBaseScanIter::try_write_centroid_cache(
   return ret;
 }
 
+int ObDASIvfBaseScanIter::get_cache_tablet_id(ObTabletID &cache_tablet_id) const
+{
+  int ret = OB_SUCCESS;
+  cache_tablet_id = centroid_tablet_id_;
+  ObSQLSessionInfo *session = sort_rtdef_ != nullptr && sort_rtdef_->eval_ctx_ != nullptr
+      ? sort_rtdef_->eval_ctx_->exec_ctx_.get_my_session() : nullptr;
+  if (session == nullptr || !cache_tablet_id.is_valid()) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    const uint64_t namespace_id = session->ns_runtime() == nullptr
+        ? 1 : session->ns_runtime()->ns().id();
+    if (namespace_id > 1) {
+      // The cache is process-wide, while forked namespaces can share local tablet IDs.
+      const ns::NamespaceObjectKey key{namespace_id, cache_tablet_id.id()};
+      if (!key.is_valid()) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        cache_tablet_id = ObTabletID(key.storage_id());
+      }
+    }
+  }
+  return ret;
+}
+
 int ObDASIvfBaseScanIter::get_centers_cache(bool is_vectorized, 
                                         bool is_pq_centers, 
                                         ObIvfCacheMgrGuard &cache_guard,
@@ -756,9 +781,11 @@ int ObDASIvfBaseScanIter::get_centers_cache(bool is_vectorized,
   ObIvfCacheMgr *cache_mgr = nullptr;
   const ObDASScanCtDef *centroid_ctdef = vec_aux_ctdef_->get_vec_aux_tbl_ctdef(
       vec_aux_ctdef_->get_ivf_centroid_tbl_idx(), ObTSCIRScanType::OB_VEC_IVF_CENTROID_SCAN);
+  ObTabletID cache_tablet_id;
 
   // pq/flat both use centroid_tablet_id_
-  if (OB_FAIL(vec_index_service->acquire_ivf_cache_mgr_guard(centroid_tablet_id_, vec_index_param_, dim_, centroid_ctdef->ref_table_id_, cache_guard))) {
+  if (OB_FAIL(get_cache_tablet_id(cache_tablet_id))) {
+  } else if (OB_FAIL(vec_index_service->acquire_ivf_cache_mgr_guard(cache_tablet_id, vec_index_param_, dim_, centroid_ctdef->ref_table_id_, cache_guard))) {
   } else if (OB_ISNULL(cache_mgr = cache_guard.get_ivf_cache_mgr())) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("invalid null cache mgr", K(ret));
@@ -2738,8 +2765,10 @@ int ObDASIvfPQScanIter::get_pq_precomputetable_cache(
   ObIvfCacheMgr *cache_mgr = nullptr;
   const ObDASScanCtDef *centroid_ctdef = vec_aux_ctdef_->get_vec_aux_tbl_ctdef(
       vec_aux_ctdef_->get_ivf_centroid_tbl_idx(), ObTSCIRScanType::OB_VEC_IVF_CENTROID_SCAN);
+  ObTabletID cache_tablet_id;
   // pq/flat both use centroid_tablet_id_
-  if (OB_FAIL(vec_index_service->acquire_ivf_cache_mgr_guard(centroid_tablet_id_, vec_index_param_, dim_, centroid_ctdef->ref_table_id_, cache_guard))) {
+  if (OB_FAIL(get_cache_tablet_id(cache_tablet_id))) {
+  } else if (OB_FAIL(vec_index_service->acquire_ivf_cache_mgr_guard(cache_tablet_id, vec_index_param_, dim_, centroid_ctdef->ref_table_id_, cache_guard))) {
   } else if (OB_ISNULL(cache_mgr = cache_guard.get_ivf_cache_mgr())) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("invalid null cache mgr", K(ret));

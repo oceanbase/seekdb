@@ -524,6 +524,12 @@ def direct_probe(experiment):
         nearest_pq += "l2_distance(embedding,[0,0,0,0]) APPROXIMATE LIMIT 1"
         pq_result = experiment.sql(nearest_pq, child)
         assert len(pq_result) == 1 and 1 <= pq_result[0][0] <= 20, pq_result
+        pq_cache_rows = experiment.sql(
+            "SELECT rowkey_vid_tablet_id,statistics FROM "
+            "oceanbase.__all_virtual_vector_index_info", log=False)
+        assert any((tablet_id >> 32) & ((1 << 30) - 1) == child_namespace_id
+                   and "cache_type=1" in statistics and "count=40" in statistics
+                   for tablet_id, statistics in pq_cache_rows), pq_cache_rows
         experiment.sql("CREATE TABLE phase10.ivf_sq8_rows(id INT PRIMARY KEY, embedding VECTOR(4))", child)
         experiment.sql("INSERT INTO phase10.ivf_sq8_rows VALUES " + pq_values, child)
         experiment.sql("CREATE VECTOR INDEX sq8_embedding ON phase10.ivf_sq8_rows(embedding) "

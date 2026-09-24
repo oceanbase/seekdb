@@ -277,6 +277,7 @@ protected:
   int try_write_centroid_cache(
     ObIvfCentCache &cent_cache,
     bool is_vectorized);
+  int get_cache_tablet_id(ObTabletID &cache_tablet_id) const;
   int get_centers_cache(
       bool is_vectorized, 
       bool is_pq_centers, 
