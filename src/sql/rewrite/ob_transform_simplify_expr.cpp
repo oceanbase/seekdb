@@ -27,6 +27,8 @@ using namespace oceanbase::sql;
 
 namespace
 {
+namespace common = oceanbase::common;
+
 // An EXISTS over a plain table with no predicates only tests whether a row
 // exists.  Snapshot and sampled scans are excluded: the former can fail at
 // execution, and the latter has a separate scan contract.  Its projection is
