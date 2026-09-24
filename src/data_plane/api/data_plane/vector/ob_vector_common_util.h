@@ -568,7 +568,7 @@ int ObVectorCenterClusterHelper<VEC_T, CENTER_T>::push_center(
       SHARE_LOG(WARN, "no memory for table entity", K(ret));
     } else {
       ObCenterWithBuf<CENTER_T> *center_with_buf = new (ptr) ObCenterWithBuf<CENTER_T>(&alloc_);
-      ASSERT_COND(center_with_buf != nullptr);
+      OB_ASSERT(center_with_buf != nullptr);
       if (OB_FAIL(center_with_buf->new_from_src(center))) {
       } else {
         HeapCenterItemTemp item(distance, center_with_buf);

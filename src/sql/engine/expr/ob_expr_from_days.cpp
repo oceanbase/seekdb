@@ -41,8 +41,8 @@ int ObExprFromDays::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
   {
-    ASSERT_COND(rt_expr.arg_cnt_ == 1);
-    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
+    OB_ASSERT(rt_expr.arg_cnt_ == 1);
+    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
     CK(ObInt32Type == rt_expr.args_[0]->datum_meta_.type_);
     rt_expr.eval_func_ = ObExprFromDays::calc_fromdays;
   }

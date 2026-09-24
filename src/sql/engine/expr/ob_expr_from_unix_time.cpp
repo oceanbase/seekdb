@@ -92,10 +92,10 @@ int ObExprFromUnixTime::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
   {
-    ASSERT_COND((rt_expr.arg_cnt_ == 1 || rt_expr.arg_cnt_ == 2) && rt_expr.args_ != nullptr);
+    OB_ASSERT((rt_expr.arg_cnt_ == 1 || rt_expr.arg_cnt_ == 2) && rt_expr.args_ != nullptr);
     if (1 == rt_expr.arg_cnt_) {
       {
-        ASSERT_COND(rt_expr.args_[0] != nullptr);
+        OB_ASSERT(rt_expr.args_[0] != nullptr);
         if (ObNumberType != rt_expr.args_[0]->datum_meta_.type_) {
           rt_expr.eval_func_ = &eval_one_temporal_fromtime;
         } else {
@@ -104,7 +104,7 @@ int ObExprFromUnixTime::cg_expr(ObExprCGCtx &op_cg_ctx,
       }
     } else {
       {
-        ASSERT_COND(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
+        OB_ASSERT(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
         if (0 == raw_expr.get_from_unixtime_flag()) {
           rt_expr.eval_func_ = &eval_fromtime_normal;
         } else {

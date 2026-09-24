@@ -116,7 +116,7 @@ int ObMaxIdCache::fetch_max_id(const ObMaxIdType max_id_type,
   }
   if (OB_FAIL(ret)) {
   } else {
-    ASSERT_COND(item != nullptr);
+    OB_ASSERT(item != nullptr);
     if (OB_FAIL(item->fetch_max_id(max_id_type, id, size, sql_proxy))) {
     }
   }

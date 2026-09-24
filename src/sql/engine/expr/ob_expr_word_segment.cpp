@@ -67,7 +67,7 @@ int ObExprWordSegment::cg_expr(
   UNUSED(raw_expr);
   UNUSED(cg_ctx);
   {
-    ASSERT_COND(rt_expr.arg_cnt_ >= 1 && rt_expr.args_ != nullptr);
+    OB_ASSERT(rt_expr.arg_cnt_ >= 1 && rt_expr.args_ != nullptr);
     rt_expr.eval_func_ = generate_fulltext_column;
   }
   return ret;

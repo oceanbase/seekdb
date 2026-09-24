@@ -1659,8 +1659,8 @@ int ObSortOpImpl::build_ems_heap(int64_t &merge_ways)
 {
   int ret = OB_SUCCESS;
   // sort() checks initialization and enters the merge loop with at least two chunks.
-  ASSERT_COND(inited_);
-  ASSERT_COND(sort_chunks_.get_size() >= 2);
+  OB_ASSERT(inited_);
+  OB_ASSERT(sort_chunks_.get_size() >= 2);
   if (OB_FAIL(sql_mem_processor_.get_max_available_mem_size(
     &mem_context_->get_malloc_allocator()))) {
   } else {

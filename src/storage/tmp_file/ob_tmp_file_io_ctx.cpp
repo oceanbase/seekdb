@@ -255,8 +255,8 @@ int ObTmpFileIOCtx::wait_read_finish_()
 {
   int ret = OB_SUCCESS;
 
-  ASSERT_COND(is_read_);
-  ASSERT_COND(buf_size_ == done_size_ + todo_size_);
+  OB_ASSERT(is_read_);
+  OB_ASSERT(buf_size_ == done_size_ + todo_size_);
   if (OB_FAIL(do_read_wait_())) {
   }
 

@@ -2971,7 +2971,7 @@ int ObSubQueryRelationalExpr::calc_resultN(ObObj &result,
       tmp_row.count_ = param_num - 1;
       left_row = &tmp_row;
       const ObObj &idx_obj = param_array[param_num - 1];
-      ASSERT_COND(left_row != nullptr);
+      OB_ASSERT(left_row != nullptr);
       if (OB_FAIL(idx_obj.get_int(subquery_idx))) {
       } else if (T_WITH_ALL == subquery_key_) {
         if (OB_FAIL(calc_result_with_all(result, *left_row, subquery_idx, expr_ctx))) {
@@ -4946,7 +4946,7 @@ int ObLocationExprOperator::get_pos_int64(const ObObj &obj, ObExprCtx &expr_ctx,
     if (OB_FAIL(ret)) {
       //do nothing
     } else {
-      ASSERT_COND(pnmb != nullptr);
+      OB_ASSERT(pnmb != nullptr);
       if (pnmb->is_valid_int64(tmp_int)) {
         out = tmp_int;
       } else if (pnmb->is_valid_uint64(tmp_uint)) {

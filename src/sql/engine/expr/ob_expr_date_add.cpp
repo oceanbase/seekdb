@@ -326,8 +326,8 @@ int ObExprDateAdd::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, Ob
   if (rt_expr.arg_cnt_ != 3) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ASSERT_COND(rt_expr.args_ != nullptr);
-    ASSERT_COND(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr && rt_expr.args_[2] != nullptr);
+    OB_ASSERT(rt_expr.args_ != nullptr);
+    OB_ASSERT(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr && rt_expr.args_[2] != nullptr);
     rt_expr.eval_func_ = ObExprDateAdd::calc_date_add;
   }
   return ret;
@@ -350,8 +350,8 @@ int ObExprDateSub::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, Ob
   if (rt_expr.arg_cnt_ != 3) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ASSERT_COND(rt_expr.args_ != nullptr);
-    ASSERT_COND(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr && rt_expr.args_[2] != nullptr);
+    OB_ASSERT(rt_expr.args_ != nullptr);
+    OB_ASSERT(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr && rt_expr.args_[2] != nullptr);
     rt_expr.eval_func_ = ObExprDateSub::calc_date_sub;
   }
   return ret;
@@ -393,8 +393,8 @@ int ObExprLastDay::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, Ob
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
   {
-    ASSERT_COND(rt_expr.arg_cnt_ == 1);
-    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
+    OB_ASSERT(rt_expr.arg_cnt_ == 1);
+    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
     rt_expr.eval_func_ = ObExprLastDay::calc_last_day;
   }
   return ret;

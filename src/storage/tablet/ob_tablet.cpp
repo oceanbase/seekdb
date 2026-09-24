@@ -5378,7 +5378,7 @@ int ObTablet::check_schema_version_with_cache(const int64_t schema_version)
 
           if (OB_FAIL(ret)) {
           } else {
-            ASSERT_COND(candidate_cache != nullptr);
+            OB_ASSERT(candidate_cache != nullptr);
             if (OB_FAIL(check_schema_version(*candidate_cache, schema_version))) {
             }
           }
@@ -5459,7 +5459,7 @@ int ObTablet::check_snapshot_readable_with_cache(
 
           if (OB_FAIL(ret)) {
           } else {
-            ASSERT_COND(candidate_cache != nullptr);
+            OB_ASSERT(candidate_cache != nullptr);
             if (OB_FAIL(check_snapshot_readable(*candidate_cache, snapshot_version, schema_version))) {
             }
           }

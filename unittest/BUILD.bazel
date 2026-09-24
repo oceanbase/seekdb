@@ -1,4 +1,0 @@
-exports_files(
-    ["all_tests_main.cpp"],
-    visibility = ["//unittest:__subpackages__"],
-)

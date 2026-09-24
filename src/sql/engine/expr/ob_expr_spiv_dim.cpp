@@ -60,7 +60,7 @@ int ObExprSpivDim::cg_expr(
   UNUSED(raw_expr);
   UNUSED(expr_cg_ctx);
   {
-    ASSERT_COND(rt_expr.arg_cnt_ >= 1 && rt_expr.args_ != nullptr);
+    OB_ASSERT(rt_expr.arg_cnt_ >= 1 && rt_expr.args_ != nullptr);
     rt_expr.eval_func_ = generate_spiv_dim;
   }
   return ret;

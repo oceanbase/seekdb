@@ -326,7 +326,7 @@ int ObTableIndex::add_rowkey_indexes(const ObTableSchema &table_schema,
     const ObTableSchema *real_table_schema = &table_schema;
     if (OB_FAIL(ret)) {
     } else {
-      ASSERT_COND(real_table_schema != nullptr);
+      OB_ASSERT(real_table_schema != nullptr);
       if (OB_FAIL(get_rowkey_index_column(*real_table_schema, column_schema, is_column_visible, is_end))) {
       } else if (is_end) {
         // do nothing
@@ -710,7 +710,7 @@ int ObTableIndex::add_normal_index_column(const ObString &database_name,
     const ObTableSchema *real_table_schema = &table_schema;
     if (OB_FAIL(ret)) {
     } else {
-      ASSERT_COND(real_table_schema != nullptr);
+      OB_ASSERT(real_table_schema != nullptr);
       if (OB_FAIL(
               get_normal_index_column(*real_table_schema, index_schema, column_schema, is_column_visible, is_end))) {
       } else if (is_end) {

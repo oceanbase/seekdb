@@ -204,7 +204,7 @@ int ObCreateTableLikeHelper::generate_aux_table_schemas_()
     int64_t obj_cnt = 0;
     uint64_t new_table_id = OB_INVALID_ID;
     uint64_t new_database_id = OB_INVALID_ID;
-    ASSERT_COND(new_table_schema != nullptr);
+    OB_ASSERT(new_table_schema != nullptr);
     if (OB_FAIL(new_table_schema->get_simple_index_infos(simple_index_infos))) {
     } else {
       obj_cnt= simple_index_infos.count();
@@ -270,7 +270,7 @@ int ObCreateTableLikeHelper::generate_aux_table_schemas_()
       new_table_schema = &(new_tables_.at(0));
       bool need_doc_id = false;
       bool need_vid = false;
-      ASSERT_COND(new_table_schema != nullptr);
+      OB_ASSERT(new_table_schema != nullptr);
       if (OB_FAIL(ObFtsIndexBuilderUtil::check_need_doc_id(*new_table_schema, need_doc_id))) {
       } else if (OB_FAIL(ObVectorIndexUtil::check_need_vid(*new_table_schema, need_vid))) {
       } else if (OB_FAIL(ObDomainIndexBuilderUtil::retrieve_complete_domain_index(
@@ -281,7 +281,7 @@ int ObCreateTableLikeHelper::generate_aux_table_schemas_()
     new_table_schema = &(new_tables_.at(0));
     if (OB_FAIL(ret)) {
     } else {
-      ASSERT_COND(new_table_schema != nullptr);
+      OB_ASSERT(new_table_schema != nullptr);
       if (new_table_schema->has_lob_column(true /*ignore_unused_column*/)) {
         HEAP_VARS_2((ObTableSchema, lob_meta_schema), (ObTableSchema, lob_piece_schema))
         {
@@ -302,7 +302,7 @@ int ObCreateTableLikeHelper::generate_aux_table_schemas_()
           } else {
             new_table_schema = &new_tables_.at(0); // memory of data table may change after add table to new_tables_
             {
-              ASSERT_COND(new_table_schema != nullptr);
+              OB_ASSERT(new_table_schema != nullptr);
               new_table_schema->set_aux_lob_meta_tid(lob_meta_schema.get_table_id());
               new_table_schema->set_aux_lob_piece_tid(lob_piece_schema.get_table_id());
             }

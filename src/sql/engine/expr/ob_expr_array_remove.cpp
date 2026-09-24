@@ -336,8 +336,8 @@ int ObExprArrayRemove::cg_expr(ObExprCGCtx &expr_cg_ctx,
   int ret = OB_SUCCESS;
   UNUSED(raw_expr);
   {
-    ASSERT_COND(rt_expr.arg_cnt_ == 2 && rt_expr.args_ != nullptr);
-    ASSERT_COND(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
+    OB_ASSERT(rt_expr.arg_cnt_ == 2 && rt_expr.args_ != nullptr);
+    OB_ASSERT(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
     rt_expr.eval_func_ = NULL;
     const ObObjType right_type = rt_expr.args_[1]->datum_meta_.type_;  
     ObObjTypeClass right_tc = ob_obj_type_class(right_type);

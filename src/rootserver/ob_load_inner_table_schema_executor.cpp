@@ -44,7 +44,7 @@ int ObLoadInnerTableSchemaExecutor::load_inner_table_schema(
   const ObIArray<share::ObLoadInnerTableSchemaInfo> *infos = arg.get_infos();
   for (int64_t i = 0; !find && OB_SUCC(ret) && i < infos->count(); i++) {
     const share::ObLoadInnerTableSchemaInfo *info = &infos->at(i);
-    ASSERT_COND(info != nullptr);
+    OB_ASSERT(info != nullptr);
     if (arg.get_table_id() == info->get_inner_table_id()) {
       find = true;
       if (OB_FAIL(load_inner_table_schema(arg, *info))) {
@@ -149,7 +149,7 @@ int ObLoadInnerTableSchemaExecutor::init_args_(ObIArray<share::schema::ObTableSc
     const share::ObLoadInnerTableSchemaInfo *info = &infos_.at(i);
     insert_idx.reuse();
     {
-      ASSERT_COND(info != nullptr);
+      OB_ASSERT(info != nullptr);
       const char *row = nullptr;
       uint64_t table_id = 0;
       for (int64_t j = 0; OB_SUCC(ret) && j < info->get_row_count(); j++) {

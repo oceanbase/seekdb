@@ -164,7 +164,7 @@ int ObTabletReplayCreateHandler::init(
       total_tablet_item_arr_[i] = ObTabletReplayItem(iter->first, iter->second);
     }
     {
-      ASSERT_COND(i == total_tablet_cnt_);
+      OB_ASSERT(i == total_tablet_cnt_);
       lib::ob_sort(total_tablet_item_arr_, total_tablet_item_arr_ + total_tablet_cnt_);
     }
   }

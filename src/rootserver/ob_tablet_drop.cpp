@@ -166,7 +166,7 @@ int ObTabletDrop::drop_tablet_(
 
   if (OB_FAIL(ret)) {
   } else {
-    ASSERT_COND(tablet_ids_ != nullptr);
+    OB_ASSERT(tablet_ids_ != nullptr);
     if (OB_ISNULL(table_schema_ptr_array.at(0))) {
       ret = OB_ERR_UNEXPECTED;
     } else {

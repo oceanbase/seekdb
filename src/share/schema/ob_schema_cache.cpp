@@ -283,7 +283,7 @@ int ObTabletCacheKey::deep_copy(char *buf,
     ret = OB_INVALID_ARGUMENT;
   } else {
     ObTabletCacheKey *new_key = new (buf) ObTabletCacheKey();
-    ASSERT_COND(new_key != nullptr);
+    OB_ASSERT(new_key != nullptr);
     if (OB_FAIL(new_key->init(tablet_id_, schema_version_))) {
     } else {
       key = new_key;
@@ -323,7 +323,7 @@ int ObTabletCacheValue::deep_copy(char *buf,
     ret = OB_INVALID_ARGUMENT;
   } else {
     ObTabletCacheValue *new_value = new (buf) ObTabletCacheValue();
-    ASSERT_COND(new_value != nullptr);
+    OB_ASSERT(new_value != nullptr);
     if (OB_FAIL(new_value->init(table_id_))) {
     } else {
       value = new_value;

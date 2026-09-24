@@ -101,8 +101,8 @@ int ObExprDecodeTraceId::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
   {
-    ASSERT_COND(rt_expr.arg_cnt_ == 1);
-    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
+    OB_ASSERT(rt_expr.arg_cnt_ == 1);
+    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
     rt_expr.eval_func_ = ObExprDecodeTraceId::calc_decode_trace_id_expr;
     rt_expr.eval_batch_func_ = ObExprDecodeTraceId::calc_decode_trace_id_expr_batch;
   }

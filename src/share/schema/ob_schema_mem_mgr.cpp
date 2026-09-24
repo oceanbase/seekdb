@@ -125,9 +125,9 @@ int ObSchemaMemMgr::alloc_schema_mgr(ObSchemaMgr *&schema_mgr)
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(alloc_(sizeof(ObSchemaMgr), tmp_ptr, &allocator))) {
   } else {
-    ASSERT_COND(allocator != nullptr && tmp_ptr != nullptr);
+    OB_ASSERT(allocator != nullptr && tmp_ptr != nullptr);
     schema_mgr = new (tmp_ptr) ObSchemaMgr(*allocator);
-    ASSERT_COND(schema_mgr != nullptr);
+    OB_ASSERT(schema_mgr != nullptr);
     schema_mgr->set_allocator_idx(pos_);
   }
   return ret;
@@ -144,7 +144,7 @@ int ObSchemaMemMgr::find_ptr(const void *ptr, const int ptrs_pos, int &idx)
     int tmp_idx = -1;
     for (int i = 0; i < ptrs.count() && OB_SUCC(ret) && -1 == tmp_idx; ++i) {
       void *cur_ptr = ptrs.at(i);
-      ASSERT_COND(cur_ptr != nullptr);
+      OB_ASSERT(cur_ptr != nullptr);
       if (cur_ptr == ptr) {
         tmp_idx = i;
       }
@@ -175,7 +175,7 @@ int ObSchemaMemMgr::free_(void *ptr)
       if (-1 == idx1 && -1 == idx2) {
         // do-nothing
       } else {
-        ASSERT_COND(idx1 == -1 || idx2 == -1);
+        OB_ASSERT(idx1 == -1 || idx2 == -1);
         if (-1 != idx1) {
           if (OB_FAIL(ptrs_[pos_].remove(idx1))) {
           }

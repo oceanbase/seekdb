@@ -811,7 +811,7 @@ int ObTabletMdsData::build_tablet_status(
     key = &uncommitted_kv.ptr_->k_;
     node = &uncommitted_kv.ptr_->v_;
     {
-      ASSERT_COND(node != nullptr);
+      OB_ASSERT(node != nullptr);
       key->mds_table_id_ = mds::GET_MDS_TABLE_ID<mds::NormalMdsTable>::value;
       key->mds_unit_id_ = mds::TupleTypeIdx<mds::NormalMdsTable, mds::MdsUnit<mds::DummyKey, ObTabletCreateDeleteMdsUserData>>::value;
       key->allocator_ = &allocator;
@@ -836,7 +836,7 @@ int ObTabletMdsData::build_tablet_status(
     key = &committed_kv.ptr_->k_;
     node = &committed_kv.ptr_->v_;
     {
-      ASSERT_COND(node != nullptr);
+      OB_ASSERT(node != nullptr);
       key->mds_table_id_ = mds::GET_MDS_TABLE_ID<mds::NormalMdsTable>::value;
       key->mds_unit_id_ = mds::TupleTypeIdx<mds::NormalMdsTable, mds::MdsUnit<mds::DummyKey, ObTabletCreateDeleteMdsUserData>>::value;
       key->allocator_ = &allocator;
@@ -919,7 +919,7 @@ int ObTabletMdsData::build_aux_tablet_info(
     key = &uncommitted_kv.ptr_->k_;
     node = &uncommitted_kv.ptr_->v_;
     {
-      ASSERT_COND(node != nullptr);
+      OB_ASSERT(node != nullptr);
       key->mds_table_id_ = mds::GET_MDS_TABLE_ID<mds::NormalMdsTable>::value;
       key->mds_unit_id_ = mds::TupleTypeIdx<mds::NormalMdsTable, mds::MdsUnit<mds::DummyKey, ObTabletBindingMdsUserData>>::value;
       key->allocator_ = &allocator;
@@ -945,7 +945,7 @@ int ObTabletMdsData::build_aux_tablet_info(
     key = &committed_kv.ptr_->k_;
     node = &committed_kv.ptr_->v_;
     {
-      ASSERT_COND(node != nullptr);
+      OB_ASSERT(node != nullptr);
       key->mds_table_id_ = mds::GET_MDS_TABLE_ID<mds::NormalMdsTable>::value;
       key->mds_unit_id_ = mds::TupleTypeIdx<mds::NormalMdsTable, mds::MdsUnit<mds::DummyKey, ObTabletBindingMdsUserData>>::value;
       key->allocator_ = &allocator;

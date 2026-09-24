@@ -71,7 +71,7 @@ int ObPLServerCursorInfo::init_params(int64_t param_count)
   OV (OB_NOT_NULL(sql_entity_), OB_NOT_INIT, ps_sql_, param_count);
   OX (alloc = &sql_entity_->get_arena_allocator());
   if (OB_SUCC(ret)) {
-    ASSERT_COND(alloc != nullptr);
+    OB_ASSERT(alloc != nullptr);
     exec_params_.~Ob2DArray();
     new (&exec_params_) ParamStore(ObWrapperAllocator(alloc));
   }

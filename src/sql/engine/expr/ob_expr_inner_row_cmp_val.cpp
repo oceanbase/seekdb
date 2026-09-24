@@ -64,8 +64,8 @@ int ObExprInnerRowCmpVal::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw
   int ret = OB_SUCCESS;
   UNUSED(expr_cg_ctx);
   {
-    ASSERT_COND(rt_expr.arg_cnt_ == 3);
-    ASSERT_COND(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr && rt_expr.args_[2] != nullptr);
+    OB_ASSERT(rt_expr.arg_cnt_ == 3);
+    OB_ASSERT(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr && rt_expr.args_[2] != nullptr);
     if (!ob_is_decimal_int_tc(rt_expr.args_[0]->datum_meta_.type_) ||
         !ob_is_decimal_int_tc(rt_expr.args_[1]->datum_meta_.type_)) {
       ret = OB_INVALID_ARGUMENT;

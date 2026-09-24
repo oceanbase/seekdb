@@ -91,8 +91,8 @@ int ObExprAlignDate4Cmp::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_
   UNUSED(expr_cg_ctx);
   UNUSED(raw_expr);
   {
-    ASSERT_COND(rt_expr.arg_cnt_ == 3);
-    ASSERT_COND(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr && rt_expr.args_[2] != nullptr);
+    OB_ASSERT(rt_expr.arg_cnt_ == 3);
+    OB_ASSERT(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr && rt_expr.args_[2] != nullptr);
     rt_expr.eval_func_ = eval_align_date4cmp;
     rt_expr.extra_ = raw_expr.get_cast_mode();
   }

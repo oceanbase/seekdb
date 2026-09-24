@@ -459,7 +459,7 @@ int ObBlockStatIterator::construct_iters()
 
   if (OB_FAIL(ret)) {
   } else {
-    ASSERT_COND(scan_tables_.count() == memtable_iters_.count() + sstable_iters_.count());
+    OB_ASSERT(scan_tables_.count() == memtable_iters_.count() + sstable_iters_.count());
     // iter startup
     for (int64_t i = 0; OB_SUCC(ret) && i < memtable_iters_.count(); ++i) {
       MemTableIter &iter = memtable_iters_.at(i);

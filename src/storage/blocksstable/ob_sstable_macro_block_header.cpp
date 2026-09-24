@@ -190,7 +190,7 @@ int ObSSTableMacroBlockHeader::serialize(char *buf, const int64_t buf_len, int64
     }
     tmp_pos += fixed_header_.column_count_ * sizeof(int64_t);
     {
-      ASSERT_COND(get_serialize_size() == tmp_pos - pos);
+      OB_ASSERT(get_serialize_size() == tmp_pos - pos);
       pos += get_serialize_size();
     }
   }

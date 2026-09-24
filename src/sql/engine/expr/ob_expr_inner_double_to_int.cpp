@@ -382,7 +382,7 @@ int ObExprInnerDoubleToInt::cg_expr(ObExprCGCtx &expr_cg_ctx,
   if (OB_UNLIKELY(1 != rt_expr.arg_cnt_)) {
     ret = OB_ERR_PARAM_SIZE;
   } else {
-    ASSERT_COND(rt_expr.args_[0] != nullptr);
+    OB_ASSERT(rt_expr.args_[0] != nullptr);
     rt_expr.eval_func_ = ObExprInnerDoubleToInt::eval_inner_double_to_int;
     rt_expr.extra_ = raw_expr.get_range_flag();
   }

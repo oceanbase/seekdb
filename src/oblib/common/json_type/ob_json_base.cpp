@@ -5631,7 +5631,7 @@ int ObJsonBaseFactory::get_json_base(ObIAllocator *allocator, const char *ptr, u
       }
       if (OB_FAIL(ret)) {
       } else {
-        ASSERT_COND(j_bin != nullptr && j_bin->is_bin());
+        OB_ASSERT(j_bin != nullptr && j_bin->is_bin());
         if (OB_FAIL(j_bin->parse_tree(j_tree))) {
         } else {
           out = j_bin;

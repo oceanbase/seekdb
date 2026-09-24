@@ -72,7 +72,7 @@ public:  // derived from ObIKVCacheKey
       STORAGE_LOG(WARN, "invalid argument", KR(ret), K(buf_len), K(size()));
     } else {
       ObTxDataCacheKey *new_key = new (buf) ObTxDataCacheKey(tx_id_);
-      ASSERT_COND(new_key != nullptr);
+      OB_ASSERT(new_key != nullptr);
       key = new_key;
     }
     return ret;

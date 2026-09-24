@@ -43,8 +43,8 @@ int ObExprWeekOfYear::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
   {
-    ASSERT_COND(rt_expr.arg_cnt_ == 1);
-    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
+    OB_ASSERT(rt_expr.arg_cnt_ == 1);
+    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
     rt_expr.eval_func_ = ObExprWeekOfYear::calc_weekofyear;
   }
   return ret;
@@ -118,8 +118,8 @@ int ObExprWeekDay::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
   {
-    ASSERT_COND(rt_expr.arg_cnt_ == 1);
-    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
+    OB_ASSERT(rt_expr.arg_cnt_ == 1);
+    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
     rt_expr.eval_func_ = ObExprWeekDay::calc_weekday;
   }
   return ret;
@@ -279,8 +279,8 @@ int ObExprYearWeek::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
   {
-    ASSERT_COND(rt_expr.arg_cnt_ == 1 || rt_expr.arg_cnt_ == 2);
-    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
+    OB_ASSERT(rt_expr.arg_cnt_ == 1 || rt_expr.arg_cnt_ == 2);
+    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
     if (2 == rt_expr.arg_cnt_ && OB_ISNULL(rt_expr.args_[1])) {
       ret = OB_ERR_UNEXPECTED;
     } else {
@@ -396,8 +396,8 @@ int ObExprWeek::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
   {
-    ASSERT_COND(rt_expr.arg_cnt_ == 1 || rt_expr.arg_cnt_ == 2);
-    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
+    OB_ASSERT(rt_expr.arg_cnt_ == 1 || rt_expr.arg_cnt_ == 2);
+    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
     if (2 == rt_expr.arg_cnt_ && OB_ISNULL(rt_expr.args_[1])) {
       ret = OB_ERR_UNEXPECTED;
     } else {

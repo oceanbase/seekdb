@@ -501,7 +501,7 @@ int ObSkipIndexFilterExecutor::in_operator(const sql::ObWhiteFilterExecutor &fil
     int64_t pos = std::lower_bound(datums.get_data(), datums.get_data() + datums.count(), min_datum, cmp_rev) - datums.get_data();
     if (OB_FAIL(ret)) {
     } else {
-      ASSERT_COND(pos >= 0 && pos <= datums.count());
+      OB_ASSERT(pos >= 0 && pos <= datums.count());
       if (pos == datums.count()) { // datums[datums.count()-1] < min_datum <= max_datum
         fal_desc.set_always_false();
       } else {

@@ -66,7 +66,7 @@ int ObExprDocID::cg_expr(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected param count", K(rt_expr.arg_cnt_), K(rt_expr.args_), K(rt_expr.type_));
   } else {
-    ASSERT_COND(rt_expr.arg_cnt_ != 1 || rt_expr.args_ != nullptr);
+    OB_ASSERT(rt_expr.arg_cnt_ != 1 || rt_expr.args_ != nullptr);
     rt_expr.eval_func_ = generate_doc_id;
   }
   return ret;

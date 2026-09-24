@@ -692,7 +692,7 @@ int ObExprLike::cg_expr(ObExprCGCtx &op_cg_ctx,
   } else if (rt_expr.arg_cnt_ != 3 || OB_ISNULL(rt_expr.args_)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ASSERT_COND(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr && rt_expr.args_[2] != nullptr);
+    OB_ASSERT(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr && rt_expr.args_[2] != nullptr);
     if (OB_UNLIKELY(!((ob_is_string_tc(rt_expr.args_[0]->datum_meta_.type_) ||
                        ob_is_text_tc(rt_expr.args_[0]->datum_meta_.type_) ||
                        ObNullType == rt_expr.args_[0]->datum_meta_.type_)))) {

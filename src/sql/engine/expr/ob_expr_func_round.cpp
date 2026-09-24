@@ -662,7 +662,7 @@ int ObExprFuncRound::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr
   UNUSED(raw_expr);
   // round(x, fmt)
   {
-    ASSERT_COND(1 == rt_expr.arg_cnt_ || 2 == rt_expr.arg_cnt_);
+    OB_ASSERT(1 == rt_expr.arg_cnt_ || 2 == rt_expr.arg_cnt_);
     const ObObjType &x_type = rt_expr.args_[0]->datum_meta_.type_;
     const ObObjType &res_type = rt_expr.datum_meta_.type_;
     if (OB_UNLIKELY(x_type != res_type)) {

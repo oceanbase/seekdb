@@ -169,7 +169,7 @@ int ObDfo::get_sqc(int64_t idx, ObPxSqcMeta *&sqc)
     ret = OB_ERR_UNEXPECTED;
   } else {
     sqc = &sqcs_.at(idx);
-    ASSERT_COND(sqc != nullptr);
+    OB_ASSERT(sqc != nullptr);
     if (idx != sqc->get_sqc_id()) {
       // According to design expectations, the order of sqc added to sqcs_ and id should be consistent
       ret = OB_ERR_UNEXPECTED;

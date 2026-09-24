@@ -1262,7 +1262,7 @@ int ObMPQuery::deserialize_com_field_list()
    */
   ObIAllocator *alloc = &THIS_WORKER.get_sql_arena_allocator();
   {
-    ASSERT_COND(alloc != nullptr);
+    OB_ASSERT(alloc != nullptr);
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     ObString table_name;
     ObString wildcard;

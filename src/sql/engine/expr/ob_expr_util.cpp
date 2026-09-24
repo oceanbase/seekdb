@@ -93,7 +93,7 @@ int ObExprUtil::get_int64_from_num(number::ObNumber &nmb,
   if (OB_FAIL(ret)) {
     //do nothing
   } else {
-    ASSERT_COND(pnmb != nullptr);
+    OB_ASSERT(pnmb != nullptr);
     if (pnmb->is_valid_int64(tmp_int)) {
       out = tmp_int;
     } else if (pnmb->is_valid_uint64(tmp_uint)) {

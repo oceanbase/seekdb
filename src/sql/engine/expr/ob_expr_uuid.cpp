@@ -563,7 +563,7 @@ int ObExprUuid2bin::cg_expr(ObExprCGCtx &op_cg_ctx,
     rt_expr.eval_func_ = ObExprUuid2bin::uuid2bin;
     // Only implement vectorization when parameter 0 is batch and parameter 1 is constant or null
     {
-      ASSERT_COND(rt_expr.args_[0] != nullptr);
+      OB_ASSERT(rt_expr.args_[0] != nullptr);
       if (rt_expr.args_[0]->is_batch_result()) {
         if (rt_expr.arg_cnt_ != 2 || !rt_expr.args_[1]->is_batch_result()) {
           rt_expr.eval_batch_func_ = ObExprUuid2bin::uuid2bin_batch;
@@ -849,11 +849,11 @@ int ObExprBin2uuid::cg_expr(ObExprCGCtx &op_cg_ctx,
     rt_expr.eval_func_ = ObExprBin2uuid::bin2uuid;
     // Only implement vectorization when parameter 0 is batch and parameter 1 is constant or null
     {
-      ASSERT_COND(rt_expr.args_[0] != nullptr);
+      OB_ASSERT(rt_expr.args_[0] != nullptr);
       if (rt_expr.args_[0]->is_batch_result()) {
         if (rt_expr.arg_cnt_ == 2) {
           {
-            ASSERT_COND(rt_expr.args_[1] != nullptr);
+            OB_ASSERT(rt_expr.args_[1] != nullptr);
             if (!rt_expr.args_[1]->is_batch_result()) {
               rt_expr.eval_batch_func_ = ObExprBin2uuid::bin2uuid_batch;
             }

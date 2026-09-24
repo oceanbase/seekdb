@@ -101,7 +101,7 @@ int ObExprSqrt::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   UNUSED(expr_cg_ctx);
   rt_expr.extra_ = raw_expr.get_aggr_type();
   {
-    ASSERT_COND(1 == rt_expr.arg_cnt_);
+    OB_ASSERT(1 == rt_expr.arg_cnt_);
     ObObjType arg_res_type = rt_expr.args_[0]->datum_meta_.type_;
     if (ObDoubleType == arg_res_type) {
       rt_expr.eval_func_ = calc_sqrt_expr_mysql;

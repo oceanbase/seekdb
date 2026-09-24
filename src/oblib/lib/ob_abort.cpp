@@ -42,17 +42,3 @@ OB_NORETURN OB_WEAK_SYMBOL void ob_abort (void) __THROW
   fprintf(stderr, "OB_ABORT, tid: %ld, lbt: %s\n", GETTID(), oceanbase::common::lbt());
   abort();
 }
-
-namespace oceanbase
-{
-namespace common
-{
-void assert_cond_failed(const char *condition, const char *file, int line)
-{
-  // Do not depend on the configured log level or expand logging at call sites.
-  fprintf(stderr, "ASSERT_COND failed: condition=%s, file=%s, line=%d\n",
-          condition, file, line);
-  ob_abort();
-}
-}
-}

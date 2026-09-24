@@ -297,7 +297,7 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
             || scale < 0 || scale > precision) {
           ret = OB_ERR_UNEXPECTED;
         } else {
-          ASSERT_COND(rt_expr->obj_datum_map_ == OBJ_DATUM_DECIMALINT);
+          OB_ASSERT(rt_expr->obj_datum_map_ == OBJ_DATUM_DECIMALINT);
         }
       }
     }
@@ -857,7 +857,7 @@ int ObStaticEngineExprCG::arrange_datum_data(ObIArray<ObRawExpr *> &exprs,
       }
     }
     if (OB_SUCC(ret)) {
-      ASSERT_COND(data_off == frame.frame_size_);
+      OB_ASSERT(data_off == frame.frame_size_);
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -1004,7 +1004,7 @@ int ObStaticEngineExprCG::arrange_datums_data(ObIArray<ObRawExpr *> &exprs,
                 K(expr_data_offset));
     }
     if (OB_SUCC(ret)) {
-      ASSERT_COND((cur_total_size + expr_data_offset) == frame.frame_size_);
+      OB_ASSERT((cur_total_size + expr_data_offset) == frame.frame_size_);
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -1155,7 +1155,7 @@ int ObStaticEngineExprCG::generate_calculable_exprs(
       if (T_QUESTIONMARK == e->type_ && e->extra_ >= param_cnt_) {
         int64_t idx = e->extra_ - param_cnt_;
         if (OB_SUCC(ret)) {
-          ASSERT_COND(idx < flying_param_cnt_);
+          OB_ASSERT(idx < flying_param_cnt_);
           ObExpr **parents = e->parents_;
           uint32_t parent_cnt = e->parent_cnt_;
           *e = *pre_calc_frame.pre_calc_rt_exprs_.at(idx);
@@ -1539,7 +1539,7 @@ int ObStaticEngineExprCG::gen_expr_with_row_desc(const ObRawExpr *expr,
     OZ(temp_expr->idx_col_arr_.assign(idx_col_arr));
     OX(temp_expr->expr_idx_ = get_rt_expr(*expr) - &(temp_expr->rt_exprs_.at(0)));
     if (OB_SUCC(ret)) {
-      ASSERT_COND(temp_expr->expr_idx_ >= 0 && temp_expr->expr_idx_ <= temp_expr->rt_exprs_.count());
+      OB_ASSERT(temp_expr->expr_idx_ >= 0 && temp_expr->expr_idx_ <= temp_expr->rt_exprs_.count());
     }
   }
 

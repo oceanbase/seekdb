@@ -3324,7 +3324,7 @@ int ObDDLResolver::check_partition_name_duplicate(ParseNode *node)
     }
     if (OB_FAIL(ret)) {
     } else {
-      ASSERT_COND(partition_name_set != nullptr);
+      OB_ASSERT(partition_name_set != nullptr);
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < partition_num; i++) {
       element_node = partition_expr_list->children_[i];
@@ -7564,7 +7564,7 @@ int ObDDLResolver::check_and_set_partition_names(ObPartitionedStmt *stmt,
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     partition_name_set = new(buf)ObPartitionNameSet();
-    ASSERT_COND(partition_name_set != nullptr);
+    OB_ASSERT(partition_name_set != nullptr);
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < partition_num; ++i) {
@@ -7648,7 +7648,7 @@ int ObDDLResolver::check_and_set_individual_subpartition_names(ObPartitionedStmt
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     partition_name_set = new(buf)ObPartitionNameSet();
-    ASSERT_COND(partition_name_set != nullptr);
+    OB_ASSERT(partition_name_set != nullptr);
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < partition_num; ++i) {

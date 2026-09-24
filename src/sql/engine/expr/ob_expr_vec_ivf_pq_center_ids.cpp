@@ -70,7 +70,7 @@ int ObExprVecIVFPQCenterIds::cg_expr(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected param count", K(rt_expr.arg_cnt_), K(rt_expr.args_), K(rt_expr.type_));
   } else {
-    ASSERT_COND(rt_expr.arg_cnt_ != 8 || rt_expr.args_ != nullptr);
+    OB_ASSERT(rt_expr.arg_cnt_ != 8 || rt_expr.args_ != nullptr);
     rt_expr.eval_func_ = calc_pq_center_ids;
   }
   return ret;

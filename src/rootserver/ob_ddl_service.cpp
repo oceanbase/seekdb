@@ -1218,7 +1218,7 @@ int ObDDLService::create_tablets_in_trans_(ObIArray<ObTableSchema> &table_schema
 
   if (OB_FAIL(ret)) {
   } else {
-    ASSERT_COND(first_table != nullptr);
+    OB_ASSERT(first_table != nullptr);
     if (OB_FAIL(ObMajorFreezeHelper::get_frozen_scn(frozen_scn))) {
     } else {
       ObTableCreator table_creator(frozen_scn, trans);
@@ -12155,7 +12155,7 @@ int ObDDLService::check_alter_add_partitions(const share::schema::ObTableSchema 
     }
     if (OB_FAIL(ret)) {
     } else {
-      ASSERT_COND(rowkey_last != nullptr);
+      OB_ASSERT(rowkey_last != nullptr);
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < inc_part_num; ++i) {
       const ObRowkey *rowkey_cur = &inc_part_array[i]->get_high_bound_val();
@@ -12315,7 +12315,7 @@ int ObDDLService::check_add_list_partition(const share::schema::ObPartitionSchem
           ret = OB_ERR_UNEXPECTED;
         } else {
           const ObIArray<common::ObNewRow>* orig_list_value = &(orig_part_array[i]->get_list_row_values());
-          ASSERT_COND(orig_list_value != nullptr);
+          OB_ASSERT(orig_list_value != nullptr);
           for (int j = 0; OB_SUCC(ret) && j < orig_list_value->count(); ++j) {
             const common::ObNewRow *new_row = &(orig_list_value->at(j));
             if (1 <= new_row->get_count() && new_row->get_cell(0).is_max_value()) {
@@ -12335,7 +12335,7 @@ int ObDDLService::check_add_list_partition(const share::schema::ObPartitionSchem
           ret = OB_ERR_UNEXPECTED;
         } else {
           const ObIArray<common::ObNewRow>* list_value = &(part_array[i]->get_list_row_values());
-          ASSERT_COND(list_value != nullptr);
+          OB_ASSERT(list_value != nullptr);
           for (int j = 0; OB_SUCC(ret) && j < list_value->count(); ++j) {
             row_key.reset();
             row_key.assign(list_value->at(j).cells_, list_value->at(j).get_count());
@@ -12373,7 +12373,7 @@ int ObDDLService::check_add_list_subpartition(const ObPartition &orig_part, cons
           ret = OB_ERR_UNEXPECTED;
         } else {
           const ObIArray<common::ObNewRow>* orig_list_value = &(orig_subpart_array[i]->get_list_row_values());
-          ASSERT_COND(orig_list_value != nullptr);
+          OB_ASSERT(orig_list_value != nullptr);
           for (int j = 0; OB_SUCC(ret) && j < orig_list_value->count(); ++j) {
             const common::ObNewRow *new_row = &(orig_list_value->at(j));
             if (1 == new_row->get_count() && new_row->get_cell(0).is_max_value()) {
@@ -12393,7 +12393,7 @@ int ObDDLService::check_add_list_subpartition(const ObPartition &orig_part, cons
           ret = OB_ERR_UNEXPECTED;
         } else {
           const ObIArray<common::ObNewRow>* list_value = &(subpart_array[i]->get_list_row_values());
-          ASSERT_COND(list_value != nullptr);
+          OB_ASSERT(list_value != nullptr);
           for (int j = 0; OB_SUCC(ret) && j < list_value->count(); ++j) {
             row_key.reset();
             row_key.assign(list_value->at(j).cells_, list_value->at(j).get_count());

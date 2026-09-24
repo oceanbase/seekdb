@@ -258,7 +258,7 @@ int ObCreateIndexHelper::generate_index_schema_()
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (FALSE_IT(new_arg_ = new (new_arg_ptr)obcall::ObCreateIndexArg)) {
   } else {
-    ASSERT_COND(new_arg_ != nullptr);
+    OB_ASSERT(new_arg_ != nullptr);
     if (OB_FAIL(new_arg_->assign(arg_))) {
     } else if (OB_UNLIKELY(!new_arg_->is_valid())) {
       ret = OB_ERR_UNEXPECTED;
@@ -294,7 +294,7 @@ int ObCreateIndexHelper::generate_index_schema_()
   if (FAILEDx(ObIndexBuilderUtil::adjust_expr_index_args(
       *new_arg_, *new_data_table_schema_, allocator_, gen_columns_))) {
   } else {
-    ASSERT_COND(index_schema != nullptr);
+    OB_ASSERT(index_schema != nullptr);
     if (OB_FAIL(index_builder_.generate_schema(*new_arg_, *new_data_table_schema_, global_index_without_column_info,
                                                false /*generate_id*/, *index_schema))) {
     } else if (gen_columns_.empty() || is_local_generate) {

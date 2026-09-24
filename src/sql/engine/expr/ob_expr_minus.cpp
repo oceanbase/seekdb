@@ -408,7 +408,7 @@ int ObExprMinus::cg_expr(ObExprCGCtx &op_cg_ctx,
   if (rt_expr.arg_cnt_ != 2 || OB_ISNULL(rt_expr.args_)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    ASSERT_COND(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
+    OB_ASSERT(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
     rt_expr.eval_func_ = NULL;
     rt_expr.may_not_need_raw_check_ = false;
     const ObObjType left_type = rt_expr.args_[0]->datum_meta_.type_;

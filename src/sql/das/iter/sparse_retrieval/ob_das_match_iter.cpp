@@ -584,7 +584,7 @@ int ObDASMatchIter::collect_dims_by_id(const ObDatum *&id_datum, double &relevan
 
   if (OB_SUCC(ret)) {
     id_datum = &iter_domain_ids_[iter_idx].get_datum();
-    ASSERT_COND(id_datum != nullptr);
+    OB_ASSERT(id_datum != nullptr);
     if (OB_FAIL(relevance_collector_->get_result(relevance, got_valid_id))) {
     } else if (got_valid_id && OB_FAIL(process_collected_row(*id_datum, relevance))) {
     } else if (is_match_part_score_iter() &&

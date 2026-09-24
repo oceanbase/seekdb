@@ -99,7 +99,7 @@ int ObExprEmbeddedVec::cg_expr(
   if (OB_UNLIKELY(rt_expr.arg_cnt_ != 6 && rt_expr.arg_cnt_ != 1)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ASSERT_COND(rt_expr.arg_cnt_ != 6 || rt_expr.args_ != nullptr);
+    OB_ASSERT(rt_expr.arg_cnt_ != 6 || rt_expr.args_ != nullptr);
     rt_expr.eval_func_ = generate_embedded_vec;
   }
   return ret;

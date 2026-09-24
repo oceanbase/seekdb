@@ -686,42 +686,6 @@ for (__typeof__((c).at(0)) *it = ((extra_condition) && (c).count() > 0 ? &(c).at
 
 ////////////////////////////////////////////////////////////////
 // assert utilities
-#ifdef __cplusplus
-namespace oceanbase
-{
-namespace common
-{
-// Shared failure path: assertions remain fatal in builds with NDEBUG.
-[[noreturn]]
-#if defined(_MSC_VER)
-__declspec(noinline)
-#else
-__attribute__((cold, noinline))
-#endif
-void assert_cond_failed(const char *condition, const char *file, int line);
-
-inline void assert_cond(bool condition, const char *expr, const char *file, int line)
-{
-  if (OB_UNLIKELY(!condition)) {
-    assert_cond_failed(expr, file, line);
-  }
-}
-
-// Reject error codes and pointers: callers must spell out a boolean condition.
-template <typename T>
-void assert_cond(T, const char *, const char *, int) = delete;
-}
-}
-
-// Assert a side-effect-free internal invariant, not a business operation's
-// return value. Evaluate once, without changing ret/tmp_ret. External input
-// validation, allocation failures and other recoverable errors must propagate.
-#define ASSERT_COND(condition) \
-  do { \
-    ::oceanbase::common::assert_cond((condition), #condition, __FILE__, __LINE__); \
-  } while (false)
-#endif
-
 #define BACKTRACE(LEVEL, cond, _fmt_, args...) \
   do \
   { \
@@ -740,19 +704,15 @@ void assert_cond(T, const char *, const char *, int) = delete;
     } \
   } while (false)
 
-#ifdef NDEBUG
-#define OB_ASSERT(x) (void)(x)
-#else
+// Evaluate once and remain fatal in both Debug and Release builds.
 #define OB_ASSERT(x)                                    \
   do{                                                   \
-    bool v=(x);                                         \
-    if(OB_UNLIKELY(!(v))) {                             \
+    if(OB_UNLIKELY(!(x))) {                             \
       _OB_LOG_RET(ERROR, oceanbase::common::OB_ERROR, "assert fail, exp=%s", #x);        \
       BACKTRACE_RET(ERROR, oceanbase::common::OB_ERROR, 1, "assert fail");               \
-      assert(v);                                        \
+      ob_abort();                                       \
     }                                                   \
   } while(false)
-#endif
 
 #ifndef ENABLE_DEBUG_LOG
 #define OB_SAFE_ASSERT(x)                                                                   \

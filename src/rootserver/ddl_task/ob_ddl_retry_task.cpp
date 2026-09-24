@@ -96,7 +96,7 @@ int ObDDLRetryTask::deep_copy_ddl_arg(
         
     if (OB_FAIL(ret)) {
     } else {
-      ASSERT_COND(ddl_arg_ != nullptr);
+      OB_ASSERT(ddl_arg_ != nullptr);
       if (OB_FAIL(source_arg->serialize(serialize_buf, serialize_size, pos))) {
       } else if (FALSE_IT(pos = 0)) {
       } else if (OB_FAIL(ddl_arg_->deserialize(serialize_buf, serialize_size, pos))) {

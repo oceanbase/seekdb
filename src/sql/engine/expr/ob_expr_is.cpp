@@ -412,7 +412,7 @@ int ObExprInnerIsTrue::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr
   if (rt_expr.arg_cnt_ != 2) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
+    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
     if (OB_ISNULL(param2 = static_cast<const ObConstRawExpr *>(raw_expr.get_param_expr(1)))) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_UNLIKELY(!param2->get_value().is_int())) {

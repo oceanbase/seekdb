@@ -552,7 +552,7 @@ int ObTableHelper::inner_generate_aux_table_schema_(const ObCreateTableArg &arg)
     LOG_WARN("table cnt not match", KR(ret), "table_cnt", new_tables_.count());
   } else {
     ObTableSchema *data_table = &(new_tables_.at(0));
-    ASSERT_COND(data_table != nullptr);
+    OB_ASSERT(data_table != nullptr);
     if (OB_SUCC(ret)) {
       data_table = &(new_tables_.at(0));
       // 0. fetch object_ids

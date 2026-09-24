@@ -59,8 +59,8 @@ int ObExprTimestampNvl::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
   {
-    ASSERT_COND(rt_expr.arg_cnt_ == 2);
-    ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
+    OB_ASSERT(rt_expr.arg_cnt_ == 2);
+    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
     rt_expr.eval_func_ = ObExprTimestampNvl::calc_timestampnvl;
   }
   return ret;
