@@ -6142,9 +6142,8 @@ int ObDDLService::alter_table_index(obcall::ObAlterTableArg &alter_table_arg,
       }
     }
     if (OB_SUCC(ret) && is_only_add_index_on_empty_table 
-                     && OB_FAIL(ObTabletBindingHelper::build_single_table_write_defensive(new_table_schema,
-                                                                                          max_schema_version,
-                                                                                          trans))) {
+                     && OB_FAIL(observer::namespace_worker_prototype::build_tablet_write_defensive(
+                            new_table_schema, max_schema_version, trans))) {
       LOG_WARN("failed to build single table write defensive", K(ret), K(new_table_schema), K(max_schema_version));
     }
     if (OB_SUCC(ret) && !drop_parent_table_mock_foreign_key_infos_array.empty()) {

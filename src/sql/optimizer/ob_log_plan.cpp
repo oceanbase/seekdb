@@ -5358,10 +5358,10 @@ int ObLogPlan::check_aggr_pushdown_enabled(ObSQLSessionInfo &session_info,
   
   enable_aggr_push_down = false;
   enable_groupby_push_down = false;
-  // Ticket 05c: forked-namespace sessions scan through the in-process remote
-  // stub, which (like the worker-mode remote scan) cannot evaluate pushed
+  // Namespace sessions scan through the in-process storage adapter,
+  // which cannot evaluate pushed
   // aggregates; plan without aggregate/groupby pushdown for them.
-  if (observer::namespace_worker_prototype::in_process_session_ns(&session_info) > 1) {
+  if (observer::namespace_worker_prototype::in_process_session_ns(&session_info) > 0) {
     return ret;
   }
   int64_t hint_level = INT64_MAX;

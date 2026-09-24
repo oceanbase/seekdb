@@ -2,6 +2,7 @@
 #include "observer/namespace_worker_protocol_prototype.h"
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 #include "rootserver/ddl_task/ob_ddl_task_util.h"
+#include "storage/tablet/ob_tablet_binding_helper.h"
 #include "storage/compaction/ob_freeze_info_mgr.h"
 #include <map>
 #include <mutex>
@@ -592,12 +593,12 @@ int call_in_process_tablet_binding(ObTxDesc &view, char operation,
   auto *old_session = THIS_WORKER.get_session();
   THIS_WORKER.set_session(&ctx->session);
   ObArray<ObTabletID> routed;
-  int ret = space.is_global() ? routed.assign(tablets)
-      : route_existing_namespace_tablets(space.namespace_id(), tablets, routed);
+  int ret = route_existing_namespace_tablets(
+      space.tablet_namespace_id(), tablets, routed);
   ObArray<ObTabletID> routed_hidden;
   if (!ret && hidden) {
-    ret = space.is_global() ? routed_hidden.assign(*hidden)
-        : route_existing_namespace_tablets(space.namespace_id(), *hidden, routed_hidden);
+    ret = route_existing_namespace_tablets(
+        space.tablet_namespace_id(), *hidden, routed_hidden);
   }
   if (ret) {
     THIS_WORKER.set_session(old_session);
@@ -676,6 +677,35 @@ int write_in_process_batch(const ObTxDesc &view, const WriteBatch &batch,
   const int ret = ctx->writes->batch(view, batch, affected, duplicates);
   THIS_WORKER.set_session(old_session);
   THIS_WORKER.set_timeout_ts(old_timeout);
+  return ret;
+}
+int build_tablet_write_defensive(const ObTableSchema &schema,
+                                 int64_t schema_version,
+                                 ObMySQLTransaction &trans)
+{
+  auto *connection = trans.get_connection();
+  auto *session = connection
+      ? query::ObInnerSQLConnectionAccess::get_session(connection) : nullptr;
+  const uint64_t ns = in_process_session_ns(session);
+  if (ns == 0) {
+    return storage::ObTabletBindingHelper::build_single_table_write_defensive(
+        schema, schema_version, trans);
+  }
+  if (!trans.is_started() || session->get_tx_desc() == nullptr
+      || !schema.is_valid() || schema_version <= 0) {
+    return OB_INVALID_ARGUMENT;
+  }
+  ObArray<ObTabletID> tablets;
+  int64_t timeout_us = 0;
+  int ret = schema.get_tablet_ids(tablets);
+  if (!ret) { ret = share::ObDDLUtil::get_ddl_rpc_timeout(tablets.count(), timeout_us); }
+  StorageSessionScope scope(session);
+  if (!ret && scope.error()) { ret = scope.error(); }
+  if (!ret) {
+    ret = call_in_process_tablet_binding(*session->get_tx_desc(), 'd',
+        active_worker_storage_space(), tablets, nullptr, schema_version,
+        ObTimeUtility::current_time() + timeout_us);
+  }
   return ret;
 }
 #include "observer/namespace_inprocess_gateway_io.ipp"

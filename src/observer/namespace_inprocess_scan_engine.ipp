@@ -33,8 +33,8 @@ struct EngineScan {
     int ret = OB_SUCCESS;
     const uint64_t logical_table_id = request.index_id_;
     const uint64_t logical_tablet_id = request.tablet_id_.id();
-    const bool namespace_local = storage_space.is_namespace();
-    const uint64_t ns = storage_space.namespace_id();
+    const bool namespace_local = storage_space.is_namespace() || storage_space.is_global();
+    const uint64_t ns = storage_space.tablet_namespace_id();
     const int64_t requested_schema_version = request.schema_version_;
     if (OB_FAIL(copy_scan_schema(ns, namespace_local, logical_schema, scan_schema))) {
       return ret;

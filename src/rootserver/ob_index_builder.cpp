@@ -27,6 +27,7 @@
 #include "storage/tablelock/ob_table_lock_service.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_create_index_on_empty_table_helper.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 
 namespace oceanbase
 {
@@ -564,7 +565,7 @@ int ObIndexBuilder::do_create_global_index(
       }
       if (OB_FAIL(ret)) {
       } else if (create_index_on_empty_table_opt) {
-        if OB_FAIL(ObTabletBindingHelper::build_single_table_write_defensive(new_table_schema,
+        if OB_FAIL(observer::namespace_worker_prototype::build_tablet_write_defensive(new_table_schema,
                                                                              index_schema.get_schema_version(),
                                                                              trans)) {
         } else {
@@ -1445,7 +1446,7 @@ int ObIndexBuilder::do_create_local_index(
       }
 
       if (OB_FAIL(ret)) {
-      } else if (create_index_on_empty_table_opt && OB_FAIL(ObTabletBindingHelper::build_single_table_write_defensive(new_table_schema,
+      } else if (create_index_on_empty_table_opt && OB_FAIL(observer::namespace_worker_prototype::build_tablet_write_defensive(new_table_schema,
                                                                                                                       index_schema.get_schema_version(),
                                                                                                                       trans))) {
         LOG_WARN("fail to build single table write defensive", K(ret), K(index_schema));

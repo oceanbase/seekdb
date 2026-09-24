@@ -16,6 +16,7 @@ namespace oceanbase { namespace sql { class ObBasicSessionInfo; } }
 namespace oceanbase { namespace sql { class ObPlanCache; } }
 namespace oceanbase { namespace common { class ObITabletScan; } }
 namespace oceanbase { namespace common { class ObMySQLProxy; } }
+namespace oceanbase { namespace common { class ObMySQLTransaction; } }
 namespace oceanbase { namespace common { class ObILobReadService; } }
 namespace oceanbase { namespace data_plane { class ObIRangeService; } }
 namespace oceanbase { namespace data_plane { class ObIDmlService; } }
@@ -28,6 +29,7 @@ namespace oceanbase { namespace transaction { namespace tablelock { struct ObLoc
 namespace oceanbase { namespace transaction { namespace tablelock { class ObIInnerConnectionLockRuntime; } } }
 namespace oceanbase { namespace share { namespace schema { class ObPrivMgr; } } }
 namespace oceanbase { namespace share { namespace schema { class ObMultiVersionSchemaService; } } }
+namespace oceanbase { namespace share { namespace schema { class ObTableSchema; } } }
 namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
 constexpr size_t MAX_FRAME = 256 * 1024;
 constexpr size_t MAX_SQL_MESSAGE = 64 * 1024 * 1024;
@@ -55,6 +57,7 @@ public:
   bool is_global() const { return scope_ == Scope::GLOBAL; }
   bool is_physical_mds() const { return scope_ == Scope::PHYSICAL_MDS; }
   uint64_t namespace_id() const { return is_namespace() ? value_ : 0; }
+  uint64_t tablet_namespace_id() const { return is_global() ? 1 : namespace_id(); }
   bool operator==(const StorageSpaceHandle &other) const
   {
     return scope_ == other.scope_ && value_ == other.value_;
@@ -150,6 +153,9 @@ inline bool serves_namespace_schema()
 int acquire_storage_snapshot(int64_t &snapshot);
 // Refresh snapshot retention after committing a new acquired-snapshot row.
 int reload_storage_freeze_info();
+int build_tablet_write_defensive(const share::schema::ObTableSchema &schema,
+                                 int64_t schema_version,
+                                 common::ObMySQLTransaction &trans);
 // Namespace DROP drains access leases before reclaiming physical tablets.
 int drain_storage_namespace_access(uint64_t namespace_id);
 // Restore committed namespace names after the system package load completes.

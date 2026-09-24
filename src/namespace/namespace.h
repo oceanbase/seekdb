@@ -26,8 +26,8 @@ namespace ns
 
 class NamespaceControlState;
 
-// Bounded translation from a namespace-local object id to the engine's
-// 64-bit key. Namespace 1 keeps its original unencoded ids.
+// Bounded translation from a namespace-local storage resource id to the
+// engine's 64-bit physical key. Tablet ids use this encoding; schema ids do not.
 struct NamespaceObjectKey
 {
   static constexpr uint64_t MARK = 1ULL << 62;
@@ -42,8 +42,7 @@ struct NamespaceObjectKey
   }
   static uint64_t encoded_namespace(uint64_t id) { return (id & ~MARK) >> 37; }
   static uint64_t local_part(uint64_t id) { return id & (LOCAL_LIMIT - 1); }
-  uint64_t storage_id() const { return namespace_id == 1 ? local_id
-      : MARK | (namespace_id << 37) | local_id; }
+  uint64_t storage_id() const { return MARK | (namespace_id << 37) | local_id; }
 };
 
 // Identity, lineage and storage root of one namespace. Pure metadata.

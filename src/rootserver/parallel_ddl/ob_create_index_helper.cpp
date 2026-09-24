@@ -28,6 +28,7 @@
 #include "share/schema/ob_table_sql_service.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "rootserver/ob_create_index_on_empty_table_helper.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -454,7 +455,7 @@ int ObCreateIndexHelper::operate_schemas_()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("new arg is null", KR(ret));
     } else if (create_index_on_empty_table_opt_) {
-      if (OB_FAIL(ObTabletBindingHelper::build_single_table_write_defensive(*new_data_table_schema_,
+      if (OB_FAIL(observer::namespace_worker_prototype::build_tablet_write_defensive(*new_data_table_schema_,
                                                                             index_schema.get_schema_version(),
                                                                             get_trans_()))) {
       }

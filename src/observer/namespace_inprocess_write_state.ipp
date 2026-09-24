@@ -43,7 +43,7 @@ struct EngineWrite {
     spec = request.spec;
     ret = logical_schema.assign(request.logical_schema);
     if (OB_FAIL(ret)) { return ret; }
-    const uint64_t ns = storage_space.namespace_id();
+    const uint64_t ns = storage_space.tablet_namespace_id();
     const int64_t materialization_schema_count = request.materialization_schemas.count();
     if (materialization_schema_count > 3) {
       return OB_INVALID_ARGUMENT;
@@ -52,9 +52,7 @@ struct EngineWrite {
       auto logical = std::make_unique<ObTableSchema>(&allocator);
       if (OB_FAIL(logical->assign(*request.materialization_schemas.at(i)))) { return ret; }
       auto routed = std::make_unique<ObTableSchema>(&allocator);
-      int schema_ret = storage_space.is_global()
-          ? routed->assign(*logical)
-          : NamespaceForkKernelPrototype::make_storage_schema(ns, *logical, *routed);
+      int schema_ret = NamespaceForkKernelPrototype::make_storage_schema(ns, *logical, *routed);
       if (schema_ret != OB_SUCCESS) { return schema_ret; }
       if (OB_FAIL(materialization_schemas.push_back(routed.get()))) { return ret; }
       logical_materialization_schemas.push_back(std::move(logical));
@@ -79,9 +77,7 @@ struct EngineWrite {
                 && logical_schema.get_schema_version() != spec.schema_version_)) {
       ret = OB_INVALID_ARGUMENT;
     } else {
-      ret = storage_space.is_global()
-          ? routed_schema.assign(logical_schema)
-          : NamespaceForkKernelPrototype::make_storage_schema(ns, logical_schema, routed_schema);
+      ret = NamespaceForkKernelPrototype::make_storage_schema(ns, logical_schema, routed_schema);
       if (!ret) { schema = &routed_schema; }
     }
     if (!ret) {
@@ -108,8 +104,7 @@ struct EngineWrite {
     logical_tablets.reserve(schema_tablets.count());
     for (int64_t i = 0; OB_SUCC(ret) && i < schema_tablets.count(); ++i) {
       uint64_t logical_tablet_id = schema_tablets.at(i).id();
-      if (storage_space.is_namespace()
-          && NamespaceForkKernelPrototype::is_encoded_id(logical_tablet_id)) {
+      if (NamespaceForkKernelPrototype::is_encoded_id(logical_tablet_id)) {
         ret = NamespaceForkKernelPrototype::local_object_id(
             ns, logical_tablet_id, logical_tablet_id);
       }

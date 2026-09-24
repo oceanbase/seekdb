@@ -98,12 +98,9 @@ int route_object_id(StorageSpaceHandle storage_space,
                     uint64_t logical_id, uint64_t &storage_id)
 {
   if (!storage_space.is_valid()) { return OB_INVALID_ARGUMENT; }
-  if (storage_space.is_global()) {
-    storage_id = logical_id;
-    return OB_SUCCESS;
-  }
+  if (storage_space.is_physical_mds()) { return OB_INVALID_ARGUMENT; }
   return storage::NamespaceForkKernelPrototype::storage_object_id(
-      storage_space.namespace_id(), logical_id, storage_id);
+      storage_space.tablet_namespace_id(), logical_id, storage_id);
 }
 
 int route_tablet_id(StorageSpaceHandle storage_space,
@@ -127,7 +124,6 @@ int route_existing_namespace_tablets(
     common::ObIArray<common::ObTabletID> &storage_tablets)
 {
   storage_tablets.reset();
-  if (ns <= 1) { return storage_tablets.assign(logical_tablets); }
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < logical_tablets.count(); ++i) {
     common::ObTabletID tablet = logical_tablets.at(i);
@@ -162,10 +158,10 @@ int route_tablet_mds(StorageSpaceHandle storage_space,
   if (!storage_space.is_valid()) {
     return OB_INVALID_ARGUMENT;
   }
-  if (storage_space.is_global() || storage_space.is_physical_mds()) {
+  if (storage_space.is_physical_mds()) {
     return OB_SUCCESS;
   }
-  const uint64_t ns = storage_space.namespace_id();
+  const uint64_t ns = storage_space.tablet_namespace_id();
   int ret = OB_SUCCESS;
   int64_t pos = 0;
   if (type == transaction::ObTxDataSourceType::CREATE_TABLET_NEW_MDS) {
@@ -494,7 +490,7 @@ int append_worker_table_lock_plan(
 int route_table_lock_id(uint64_t ns, uint64_t &table_id)
 {
   int ret = OB_SUCCESS;
-  if (ns > 1 && !is_sys_table(table_id)) {
+  if (ns > 0 && !is_sys_table(table_id)) {
     uint64_t storage_id = OB_INVALID_ID;
     if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
             ns, table_id, storage_id))) {
@@ -528,13 +524,8 @@ int check_namespace_tablet_elapsed(
   if (!storage_space.is_valid()) {
     return OB_INVALID_ARGUMENT;
   }
-  if (storage_space.is_global()) {
-    return check(arg, result);
-  }
-  const uint64_t ns = storage_space.namespace_id();
-  if (ns <= 1) {
-    return check(arg, result);
-  }
+  const uint64_t ns = storage_space.tablet_namespace_id();
+  if (ns == 0) { return OB_INVALID_ARGUMENT; }
 
   int ret = OB_SUCCESS;
   const int64_t logical_count = arg.tablets_.count();
@@ -607,15 +598,8 @@ int route_rootserver_build_arg(
     obcall::ObDDLLocalBuildArg &routed)
 {
   int ret = routed.assign(arg);
-  uint64_t source_table_id = routed.source_table_id_;
-  uint64_t dest_table_id = routed.dest_schema_id_;
   if (!ret && OB_FAIL(route_tablet_id(storage_space, routed.source_tablet_id_))) {
   } else if (!ret && OB_FAIL(route_tablet_id(storage_space, routed.dest_tablet_id_))) {
-  } else if (!ret && OB_FAIL(route_table_lock_id(storage_space, source_table_id))) {
-  } else if (!ret && OB_FAIL(route_table_lock_id(storage_space, dest_table_id))) {
-  } else if (!ret) {
-    routed.source_table_id_ = source_table_id;
-    routed.dest_schema_id_ = dest_table_id;
   }
   return ret;
 }
@@ -760,14 +744,10 @@ int process_table_lock(
     } else if (OB_SUCC(ret) && ns > 1) {
       ret = storage::NamespaceForkKernelPrototype::owned_storage_tablets(
           ns, plan.tablet_ids, tablet_ids);
-    } else if (OB_SUCC(ret) && storage_space.is_global()) {
-      // Global-space tablets (the namespace-control catalog) are already
-      // physical ids; namespace routing applies to namespace spaces only.
-      ret = tablet_ids.assign(plan.tablet_ids);
     } else if (OB_SUCC(ret)) {
       for (int64_t i = 0; OB_SUCC(ret) && i < plan.tablet_ids.count(); ++i) {
         ObTabletID tablet_id = plan.tablet_ids.at(i);
-        if (OB_FAIL(route_tablet_id(ns, tablet_id))) {
+        if (OB_FAIL(route_tablet_id(storage_space, tablet_id))) {
         } else {
           ret = tablet_ids.push_back(tablet_id);
         }
@@ -798,7 +778,7 @@ int process_table_lock(
   Type arg;                                                                       \
   if (OB_FAIL(deserialize_lock_request(payload, arg))) {                           \
   } else if (has_explicit_tablets) {                                               \
-    if (OB_FAIL(route_table_lock_id(ns, arg.table_id_))) {                         \
+    if (OB_FAIL(route_table_lock_id(storage_space, arg.table_id_))) {              \
     } else if (OB_FAIL(service->lock_with_explicit_tablets(                       \
                    tx, tx_param, arg, schema_version, tablet_ids))) {              \
     }                                                                              \

@@ -9,11 +9,6 @@ int route_direct_insert_schema(
   if (logical_bytes.empty()) {
     return OB_SUCCESS;
   }
-  if (ns <= 1) {
-    storage_bytes = logical_bytes;
-    return OB_SUCCESS;
-  }
-
   share::schema::ObTableSchema logical_schema(&allocator);
   share::schema::ObTableSchema storage_schema(&allocator);
   int64_t pos = 0;
