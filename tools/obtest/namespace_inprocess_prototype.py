@@ -46,10 +46,94 @@ def setup_branch(experiment):
     return child
 
 
+def legacy_template_probe(experiment):
+    experiment.sql("CREATE DATABASE legacy_template_user")
+    experiment.sql("CREATE TABLE legacy_template_user.secret(id INT PRIMARY KEY)")
+    experiment.sql("INSERT INTO legacy_template_user.secret VALUES(42)")
+    experiment.sql("CREATE TABLE test.legacy_template_rows(id INT PRIMARY KEY)")
+    experiment.sql("INSERT INTO test.legacy_template_rows VALUES(9)")
+    experiment.sql("CREATE TABLE mysql.legacy_template_rows(id INT PRIMARY KEY)")
+    experiment.sql("INSERT INTO mysql.legacy_template_rows VALUES(8)")
+    experiment.sql("CREATE VIEW mysql.legacy_template_view AS "
+                   "SELECT id FROM mysql.legacy_template_rows")
+    experiment.sql("CREATE PROCEDURE mysql.legacy_template_proc() SELECT 11")
+    experiment.sql("CREATE USER 'legacy_template_login'@'%' IDENTIFIED BY 'test-pass'")
+    experiment.sql("CREATE ROLE legacy_template_role")
+    experiment.sql("DELETE FROM __fork_proto_meta.namespaces WHERE name='__template__'")
+    experiment.connection.close()
+    experiment.connection = None
+    experiment.proc.terminate()
+    experiment.proc.wait(timeout=20)
+    experiment.start()
+    assert experiment.sql(
+        "SELECT parent_namespace FROM __fork_proto_meta.namespaces "
+        "WHERE name='__template__'") == ((1,),)
+    assert experiment.sql(
+        "SELECT COUNT(*) FROM __fork_proto_meta.namespaces "
+        "WHERE name='__template_build__'") == ((0,),)
+    assert experiment.sql("SELECT id FROM legacy_template_user.secret") == ((42,),)
+    assert experiment.sql("SELECT id FROM test.legacy_template_rows") == ((9,),)
+    assert experiment.sql("SELECT id FROM mysql.legacy_template_view") == ((8,),)
+    assert experiment.sql(
+        "SELECT routine_name FROM oceanbase.__all_routine "
+        "WHERE routine_name='legacy_template_proc'") == (("legacy_template_proc",),)
+    assert experiment.sql(
+        "SELECT user_name FROM oceanbase.__all_user "
+        "WHERE user_name='legacy_template_login'") == (("legacy_template_login",),)
+    assert experiment.sql(
+        "SELECT user_name FROM oceanbase.__all_user "
+        "WHERE user_name='legacy_template_role'") == (("legacy_template_role",),)
+    experiment.sql("CREATE NAMESPACE phase10_migrated")
+    with connect(experiment, "root@phase10_migrated", database="test") as migrated:
+        assert experiment.sql("SELECT DATABASE()", migrated) == (("test",),)
+        assert "legacy_template_user" not in {
+            row[0] for row in experiment.sql("SHOW DATABASES", migrated)}
+        assert ("legacy_template_rows",) not in experiment.sql("SHOW TABLES FROM test", migrated)
+        assert not [row for row in experiment.sql("SHOW TABLES FROM mysql", migrated)
+                    if row[0].startswith("legacy_template_")]
+        assert experiment.sql(
+            "SELECT routine_name FROM oceanbase.__all_routine "
+            "WHERE routine_name='legacy_template_proc'", migrated) == ()
+        assert experiment.sql(
+            "SELECT user_name FROM oceanbase.__all_user "
+            "WHERE user_name='legacy_template_login'", migrated) == ()
+        assert experiment.sql(
+            "SELECT user_name FROM oceanbase.__all_user "
+            "WHERE user_name='legacy_template_role'", migrated) == ()
+        experiment.sql("CREATE TABLE test.owned(id INT PRIMARY KEY)", migrated)
+        experiment.sql("INSERT INTO test.owned VALUES(7)", migrated)
+    experiment.connection.close()
+    experiment.connection = None
+    experiment.proc.terminate()
+    experiment.proc.wait(timeout=20)
+    experiment.start()
+    with connect(experiment, "root@phase10_migrated", database="test") as migrated:
+        assert experiment.sql("SELECT id FROM owned", migrated) == ((7,),)
+        assert ("legacy_template_rows",) not in experiment.sql("SHOW TABLES FROM test", migrated)
+        assert not [row for row in experiment.sql("SHOW TABLES FROM mysql", migrated)
+                    if row[0].startswith("legacy_template_")]
+        assert experiment.sql(
+            "SELECT routine_name FROM oceanbase.__all_routine "
+            "WHERE routine_name='legacy_template_proc'", migrated) == ()
+    try:
+        pymysql.connect(host="127.0.0.1", port=experiment.port,
+                        user="legacy_template_login@phase10_migrated",
+                        password="test-pass", connect_timeout=3).close()
+    except pymysql.MySQLError:
+        pass
+    else:
+        raise AssertionError("migrated template leaked a legacy login")
+    with pymysql.connect(host="127.0.0.1", port=experiment.port,
+                         user="legacy_template_login", password="test-pass",
+                         connect_timeout=3):
+        pass
+
+
 def bootstrap_probe(experiment):
     # mysqltest regressions: select_basic, column_alias, view,
     # table_column_related_views, create_using_type, special_stmt.
     assert experiment.sql("SELECT 1") == ((1,),)
+    legacy_template_probe(experiment)
     with setup_branch(experiment) as child:
         assert experiment.sql("SELECT COUNT(*) FROM oceanbase.__all_database", child)[0][0] >= 6
     start = time.perf_counter()
@@ -66,7 +150,9 @@ def bootstrap_probe(experiment):
         assert warning_rows and warning_rows[0][:2] == ("Warning", 1052), warning_rows
     with connect(experiment, "root@phase10_empty") as empty:
         databases = {row[0] for row in experiment.sql("SHOW DATABASES", empty)}
-        assert "phase10" not in databases and "__fork_proto_meta" not in databases, databases
+        assert "phase10" not in databases and "legacy_template_user" not in databases, databases
+        assert "__fork_proto_meta" not in databases, databases
+        assert ("legacy_template_rows",) not in experiment.sql("SHOW TABLES FROM test", empty)
         try:
             experiment.sql("SELECT COUNT(*) FROM __fork_proto_meta.namespaces", empty)
         except pymysql.MySQLError:

@@ -2075,7 +2075,8 @@ int NamespaceForkKernelPrototype::control_namespace(const ObString &source, cons
   if (ret == OB_SUCCESS && !bootstrap) {
     ret = observer::namespace_worker_prototype::reload_storage_freeze_info();
   }
-  if (ret == OB_SUCCESS && target != "__template__") {
+  if (ret == OB_SUCCESS && target != "__template__"
+      && target != "__template_build__") {
     // Register the name so later logins can bind the runtime directly.
     char register_name[ns::Namespace::MAX_NAME_LEN];
     if (target.length() < ns::Namespace::MAX_NAME_LEN) {
