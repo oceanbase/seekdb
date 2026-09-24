@@ -7,3 +7,7 @@ description = "Durable instance parameter auto-configuration for seekdb"
 
 [lib]
 name = "seekdb_auto_config"
+crate-type = ["staticlib", "rlib"]
+
+[build-dependencies]
+cbindgen = "=0.29.4"

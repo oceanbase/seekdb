@@ -19,6 +19,8 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
+mod ffi;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Entry {
     pub name: String,

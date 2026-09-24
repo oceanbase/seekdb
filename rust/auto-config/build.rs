@@ -16,13 +16,15 @@ use std::{env, path::PathBuf};
 
 fn main() {
     let crate_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let out = crate_dir.join("include").join("nio.h");
-    std::fs::create_dir_all(out.parent().unwrap()).unwrap();
+    let config = cbindgen::Config::from_file(crate_dir.join("cbindgen.toml"))
+        .expect("auto-config cbindgen config failed");
+    cbindgen::Builder::new()
+        .with_src(crate_dir.join("src").join("ffi.rs"))
+        .with_config(config)
+        .generate()
+        .expect("auto-config cbindgen failed")
+        .write_to_file(crate_dir.join("include").join("auto_config.h"));
 
-    cbindgen::generate(&crate_dir)
-        .expect("cbindgen failed")
-        .write_to_file(&out);
-
-    println!("cargo:rerun-if-changed=src");
+    println!("cargo:rerun-if-changed=src/ffi.rs");
     println!("cargo:rerun-if-changed=cbindgen.toml");
 }

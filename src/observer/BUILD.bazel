@@ -519,6 +519,7 @@ _SEEKDB_GRPC_ABSL_ARCHIVE_NAMES = [
 
 _SEEKDB_ORDERED_LINK_FILES = [
     "//rust:sql_nio_archive",
+    "//rust:auto_config_archive",
 ] + select({
     "//bazel:sanity_enabled": [
         "//deps/external:jemalloc_archive",

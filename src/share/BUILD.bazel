@@ -543,7 +543,7 @@ seekdb_semantic_unity_cc_library(
         "//src/oblib:oblib_compression",
         "//src/oblib:oblib_foundation",
         "//src/oblib:oblib_mysql_client_domain",
-        "//rust:sql_nio_headers",
+        "//rust:auto_config_headers",
     ],
     implementation_deps = [
         ":cluster_version_interface",
