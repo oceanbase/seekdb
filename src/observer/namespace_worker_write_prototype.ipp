@@ -340,7 +340,12 @@ int deserialize_lock_request(const ObString &payload, T &request)
   return ret ? ret : pos == payload.length() ? OB_SUCCESS : OB_INVALID_ARGUMENT;
 }
 
-constexpr uint64_t EXPLICIT_TABLE_LOCK_PLAN = 0x4e534c4f434b5031ULL; // NSLOCKP1
+struct TableLockPlan {
+  StorageSpaceHandle storage_space;
+  int64_t schema_version = OB_INVALID_VERSION;
+  ObTabletIDArray tablet_ids;
+  bool explicit_tablets = false;
+};
 
 bool is_schema_table_lock_operation(
     obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation)
@@ -360,8 +365,7 @@ int append_worker_table_lock_plan(
     const ObLockTableRequest &arg,
     obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation,
     const ObString &payload,
-    Frame &request,
-    StorageSpaceHandle &storage_space)
+    TableLockPlan &plan)
 {
   using Operation = obcall::ObInnerSQLTransmitArg::InnerSQLOperationType;
   ObSchemaGetterGuard guard;
@@ -381,7 +385,7 @@ int append_worker_table_lock_plan(
     ret = OB_OP_NOT_ALLOW;
   }
   if (OB_SUCC(ret)) {
-    ret = worker_storage_space_for_schema(*schema, guard, storage_space);
+    ret = worker_storage_space_for_schema(*schema, guard, plan.storage_space);
   }
 
   if (OB_SUCC(ret)
@@ -441,13 +445,9 @@ int append_worker_table_lock_plan(
   }
 
   if (OB_SUCC(ret)) {
-    request.number(EXPLICIT_TABLE_LOCK_PLAN);
-    request.number(static_cast<uint64_t>(schema->get_schema_version()));
-    request.number(static_cast<uint64_t>(tablet_ids.count()));
-    for (int64_t i = 0; OB_SUCC(request.ret) && i < tablet_ids.count(); ++i) {
-      request.number(tablet_ids.at(i).id());
-    }
-    ret = request.ret;
+    plan.schema_version = schema->get_schema_version();
+    ret = plan.tablet_ids.assign(tablet_ids);
+    if (OB_SUCC(ret)) { plan.explicit_tablets = true; }
   }
   return ret;
 }
@@ -455,8 +455,7 @@ int append_worker_table_lock_plan(
 int append_worker_table_lock_plan(
     obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation,
     const ObString &payload,
-    Frame &request,
-    StorageSpaceHandle &storage_space)
+    TableLockPlan &plan)
 {
   using Operation = obcall::ObInnerSQLTransmitArg::InnerSQLOperationType;
   int ret = OB_SUCCESS;
@@ -465,7 +464,7 @@ int append_worker_table_lock_plan(
   if (OB_FAIL(deserialize_lock_request(payload, arg))) {                           \
   } else {                                                                        \
     ret = append_worker_table_lock_plan(                                          \
-        arg, operation, payload, request, storage_space);                         \
+        arg, operation, payload, plan);                                           \
   }                                                                               \
 } while (false)
   if (operation == Operation::OPERATION_TYPE_UNLOCK_TABLE) {
@@ -739,41 +738,26 @@ int calc_namespace_column_checksum(
 }
 
 // A lock is storage state attached to the same native transaction as the DDL
-// catalog writes.  Decode the SQL worker's lock intent only at the shared
-// gateway; the native table-lock service remains the sole lock implementation.
-int process_table_lock(StorageSpaceHandle channel_space,
-                       Frame &request,
-                       ObTxDesc &tx)
+// catalog writes. The native table-lock service remains the sole lock
+// implementation.
+int process_table_lock(
+    obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation,
+    StorageSpaceHandle storage_space, const ObTxParam &tx_param,
+    const ObString &payload, const TableLockPlan &plan, ObTxDesc &tx)
 {
   using namespace transaction::tablelock;
-  const auto operation = static_cast<obcall::ObInnerSQLTransmitArg::InnerSQLOperationType>(request.number());
-  StorageSpaceHandle storage_space;
-  int ret = read_storage_space(request, channel_space, storage_space);
+  int ret = OB_SUCCESS;
   const uint64_t ns = storage_space.namespace_id();
-  ObTxParam tx_param;
-  request.read(tx_param);
-  const ObString payload = request.string();
-  if (OB_SUCC(ret)) { ret = request.ret; }
-  bool has_explicit_tablets = false;
-  int64_t schema_version = OB_INVALID_VERSION;
+  bool has_explicit_tablets = plan.explicit_tablets;
+  const int64_t schema_version = plan.schema_version;
   ObTabletIDArray tablet_ids;
-  if (OB_SUCC(ret) && is_schema_table_lock_operation(operation)
-      && !request.consumed()) {
-    const uint64_t marker = request.number();
-    schema_version = static_cast<int64_t>(request.number());
-    const uint64_t count = request.number();
-    if (request.ret || marker != EXPLICIT_TABLE_LOCK_PLAN
-        || schema_version < 0 || count > 65536) {
+  if (is_schema_table_lock_operation(operation) && has_explicit_tablets) {
+    if (schema_version < 0 || plan.tablet_ids.count() > 65536) {
       ret = OB_INVALID_ARGUMENT;
     }
-    ObTabletIDArray logical_tablet_ids;
-    for (uint64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
-      const uint64_t logical_tablet_id = request.number();
-      ObTabletID tablet_id(logical_tablet_id);
-      if (request.ret || !tablet_id.is_valid()) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < plan.tablet_ids.count(); ++i) {
+      if (!plan.tablet_ids.at(i).is_valid()) {
         ret = OB_INVALID_ARGUMENT;
-      } else {
-        ret = logical_tablet_ids.push_back(tablet_id);
       }
     }
     if (OB_SUCC(ret) && ns > 1
@@ -787,26 +771,24 @@ int process_table_lock(StorageSpaceHandle channel_space,
       // concrete, child-owned physical tablets.
     } else if (OB_SUCC(ret) && ns > 1) {
       ret = storage::NamespaceForkKernelPrototype::owned_storage_tablets(
-          ns, logical_tablet_ids, tablet_ids);
+          ns, plan.tablet_ids, tablet_ids);
     } else if (OB_SUCC(ret) && storage_space.is_global()) {
       // Global-space tablets (the namespace-control catalog) are already
       // physical ids; namespace routing applies to namespace spaces only.
-      ret = tablet_ids.assign(logical_tablet_ids);
+      ret = tablet_ids.assign(plan.tablet_ids);
     } else if (OB_SUCC(ret)) {
-      for (int64_t i = 0; OB_SUCC(ret) && i < logical_tablet_ids.count(); ++i) {
-        ObTabletID tablet_id = logical_tablet_ids.at(i);
+      for (int64_t i = 0; OB_SUCC(ret) && i < plan.tablet_ids.count(); ++i) {
+        ObTabletID tablet_id = plan.tablet_ids.at(i);
         if (OB_FAIL(route_tablet_id(ns, tablet_id))) {
         } else {
           ret = tablet_ids.push_back(tablet_id);
         }
       }
     }
-    has_explicit_tablets = OB_SUCC(ret);
   }
-  const bool consumed = request.consumed();
   const bool valid_param = tx_param.is_valid();
   ObTableLockService *service = share::server_service<ObTableLockService>();
-  if (!ret && (!consumed || !valid_param || payload.empty())) {
+  if (!ret && (!storage_space.is_valid() || !valid_param || payload.empty())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (!ret && OB_ISNULL(service)) {
     ret = OB_NOT_INIT;
@@ -1287,8 +1269,6 @@ struct EngineWrites {
     if (!ret && request.type() == 'T') {
       if (operation == 't') {
         if (!request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-      } else if (operation == 'O') {
-        ret = process_table_lock(storage_space, request, *tx);
       } else { ret = OB_NOT_SUPPORTED; }
     }
     reply = Frame('w'); reply.number(ret);
@@ -1366,6 +1346,10 @@ int call_in_process_tx_register_mds(ObTxDesc &view,
     ObTxDataSourceType type, StorageSpaceHandle space,
     const char *buffer, int64_t buffer_size,
     const ObRegisterMdsFlag &flag, ObTxSEQ sequence);
+int call_in_process_tx_table_lock(ObTxDesc &view,
+    obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation,
+    StorageSpaceHandle space, const ObTxParam &param,
+    const ObString &payload, const TableLockPlan &plan);
 int call_in_process_tablet_binding(ObTxDesc &view, char operation,
     StorageSpaceHandle space, const ObIArray<ObTabletID> &tablets,
     const ObIArray<ObTabletID> *hidden, int64_t schema_version,
@@ -1448,6 +1432,20 @@ int tx_register_mds(ObTxDesc &view, ObTxDataSourceType type,
   const int ret = scope.error() ? scope.error()
       : call_in_process_tx_register_mds(
           view, type, space, buffer, buffer_size, flag, sequence);
+  revert_tx_owner_session(borrowed);
+  return ret;
+}
+int tx_table_lock(ObTxDesc &view,
+    obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation,
+    StorageSpaceHandle space, const ObTxParam &param,
+    const ObString &payload, const TableLockPlan &plan)
+{
+  sql::ObSQLSessionInfo *borrowed = nullptr;
+  auto *session = tx_owner_session(view, borrowed);
+  StorageSessionScope scope(session && session->get_tx_desc() == &view ? session : nullptr);
+  const int ret = scope.error() ? scope.error()
+      : call_in_process_tx_table_lock(
+          view, operation, space, param, payload, plan);
   revert_tx_owner_session(borrowed);
   return ret;
 }
@@ -1597,11 +1595,8 @@ private:
     if (!inner || !inner->is_in_trans() || !tx || payload.empty()) {
       return OB_INVALID_ARGUMENT;
     }
-    // A shared-originated inner SQL runs inside an outer IPC request, while its
-    // native transaction lives on the inner session's persistent storage
-    // route.  ObSqlTransControl establishes that route when the transaction is
-    // opened; restore it here so the lock and catalog writes use the same
-    // EngineWrites/ObTxDesc instead of the outer request's transaction owner.
+    // An inner SQL lock may run while another session is ambient. Restore the
+    // inner session's storage route so locks and catalog writes share its tx.
     if (!inner->get_session().namespace_storage_binding()) {
       return OB_NOT_INIT;
     }
@@ -1614,25 +1609,14 @@ private:
     param.isolation_ = inner->get_session().get_tx_isolation();
     inner->get_session().get_tx_timeout(param.timeout_us_);
     param.lock_timeout_us_ = inner->get_session().get_trx_lock_timeout();
-    Frame request, reply;
-    request.number(operation);
-    StorageSpaceHandle storage_space = active_worker_storage_space();
-    Frame lock_plan;
+    TableLockPlan lock_plan;
+    lock_plan.storage_space = active_worker_storage_space();
     int ret = OB_SUCCESS;
     if (is_schema_table_lock_operation(operation)) {
-      ret = append_worker_table_lock_plan(
-          operation, payload, lock_plan, storage_space);
+      ret = append_worker_table_lock_plan(operation, payload, lock_plan);
     }
-    write_storage_space(request, storage_space);
-    request.append(param);
-    request.string(payload);
-    if (OB_SUCC(ret) && OB_FAIL(request.ret)) {
-    } else if (OB_SUCC(ret) && is_schema_table_lock_operation(operation)) {
-      request.data.insert(request.data.end(),
-          lock_plan.data.begin() + Frame::HEADER_SIZE, lock_plan.data.end());
-      ret = lock_plan.ret;
-    }
-    return ret ? ret : tx_rpc('O', *tx, request, reply);
+    return ret ? ret : tx_table_lock(
+        *tx, operation, lock_plan.storage_space, param, payload, lock_plan);
   }
 
   template <typename T>

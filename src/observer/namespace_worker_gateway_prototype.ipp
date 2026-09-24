@@ -520,6 +520,30 @@ int call_in_process_tx_exec_result(ObTxDesc &view, char operation,
   THIS_WORKER.set_timeout_ts(old_timeout);
   return ret;
 }
+int call_in_process_tx_table_lock(ObTxDesc &view,
+    obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation,
+    StorageSpaceHandle space, const ObTxParam &param,
+    const ObString &payload, const TableLockPlan &plan)
+{
+  InProcessStorage *ctx = in_process_storage;
+  if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
+  if (!ctx->writes->tx || ctx->writes->tx->get_tx_id() != view.get_tx_id()
+      || !((space.is_namespace() && space.namespace_id() == ctx->ns)
+          || (space.is_global() && ctx->ns == 1))
+      || plan.storage_space != space || !param.is_valid()
+      || payload.empty() || payload.length() > static_cast<int64_t>(MAX_SQL_MESSAGE)) {
+    return OB_INVALID_ARGUMENT;
+  }
+  const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
+  auto *old_session = THIS_WORKER.get_session();
+  THIS_WORKER.set_session(&ctx->session);
+  int ret = process_table_lock(
+      operation, space, param, payload, plan, *ctx->writes->tx);
+  if (!ret) { ret = view.sync_serialized_state_from(*ctx->writes->tx); }
+  THIS_WORKER.set_session(old_session);
+  THIS_WORKER.set_timeout_ts(old_timeout);
+  return ret;
+}
 int call_in_process_tx_register_mds(ObTxDesc &view,
     ObTxDataSourceType type, StorageSpaceHandle space,
     const char *buffer, int64_t buffer_size,
