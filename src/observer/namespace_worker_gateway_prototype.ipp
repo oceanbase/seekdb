@@ -49,6 +49,7 @@ struct SessionBinding {
 // One native storage context belongs to each forked-namespace SQL session.
 struct InProcessStorage {
   const uint64_t ns;
+  const StorageSpaceHandle storage_space;
   std::shared_ptr<StorageSessionState> session_state;
   sql::ObSQLSessionInfo &session; // storage-side native session
   std::unique_ptr<EngineWrites> writes;
@@ -60,9 +61,10 @@ struct InProcessStorage {
   bool initialized = false;
   explicit InProcessStorage(uint64_t namespace_id)
       : ns(namespace_id),
+        storage_space(StorageSpaceHandle::namespace_space(namespace_id)),
         session_state(std::make_shared<StorageSessionState>()),
         session(session_state->session),
-        scans(StorageSpaceHandle::namespace_space(namespace_id)) {
+        scans(storage_space) {
     ::oceanbase::ns::NamespaceRuntime *runtime = nullptr;
     if (::oceanbase::ns::namespace_registry().get(namespace_id, runtime) && runtime != nullptr) {
       direct_insert_registry = static_cast<DirectInsertRegistry *>(
@@ -76,6 +78,7 @@ struct InProcessStorage {
   }
   InProcessStorage(const InProcessStorage &) = delete;
   InProcessStorage &operator=(const InProcessStorage &) = delete;
+  bool owns(StorageSpaceHandle space) const { return space == storage_space; }
 };
 int call_in_process_rootserver_runtime(
     uint64_t namespace_id,
@@ -253,9 +256,7 @@ int open_in_process_scan(StorageSpaceHandle storage_space,
   handle = 0;
   InProcessStorage *ctx = in_process_storage;
   if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
-  if (ctx->ns != serving_namespace()
-      || !(storage_space.is_namespace() && storage_space.namespace_id() == ctx->ns)
-          && !(storage_space.is_global() && ctx->ns == 1)) {
+  if (ctx->ns != serving_namespace() || !ctx->owns(storage_space)) {
     return OB_INVALID_ARGUMENT;
   }
   const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
@@ -492,8 +493,7 @@ int call_in_process_tx_table_lock(ObTxDesc &view,
   InProcessStorage *ctx = in_process_storage;
   if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
   if (!ctx->writes->tx || ctx->writes->tx->get_tx_id() != view.get_tx_id()
-      || !((space.is_namespace() && space.namespace_id() == ctx->ns)
-          || (space.is_global() && ctx->ns == 1))
+      || !ctx->owns(space)
       || plan.storage_space != space || !param.is_valid()
       || payload.empty() || payload.length() > static_cast<int64_t>(MAX_SQL_MESSAGE)) {
     return OB_INVALID_ARGUMENT;
@@ -516,8 +516,7 @@ int call_in_process_tx_register_mds(ObTxDesc &view,
   InProcessStorage *ctx = in_process_storage;
   if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
   if (!ctx->writes->tx || ctx->writes->tx->get_tx_id() != view.get_tx_id()
-      || !((space.is_namespace() && space.namespace_id() == ctx->ns)
-          || (space.is_global() && ctx->ns == 1))
+      || !ctx->owns(space)
       || type <= ObTxDataSourceType::UNKNOWN
       || type >= ObTxDataSourceType::MAX_TYPE
       || !buffer || buffer_size <= 0) {
@@ -581,8 +580,7 @@ int call_in_process_tablet_binding(ObTxDesc &view, char operation,
   InProcessStorage *ctx = in_process_storage;
   if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
   if (!ctx->writes->tx || ctx->writes->tx->get_tx_id() != view.get_tx_id()
-      || !((space.is_namespace() && space.namespace_id() == ctx->ns)
-          || (space.is_global() && ctx->ns == 1))
+      || !ctx->owns(space)
       || (operation != 'd' && operation != 'b' && operation != 'u')
       || schema_version <= 0 || deadline <= 0
       || tablets.count() > static_cast<int64_t>(MAX_SQL_MESSAGE / sizeof(uint64_t))
@@ -656,9 +654,7 @@ int prepare_in_process_write(const WritePrepareRequest &request,
   InProcessStorage *ctx = in_process_storage;
   if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
   const StorageSpaceHandle space = request.storage_space;
-  if (ctx->ns != serving_namespace()
-      || (!(space.is_namespace() && space.namespace_id() == ctx->ns)
-          && !(space.is_global() && ctx->ns == 1))) {
+  if (ctx->ns != serving_namespace() || !ctx->owns(space)) {
     return OB_INVALID_ARGUMENT;
   }
   const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
@@ -676,9 +672,7 @@ int write_in_process_batch(const ObTxDesc &view, const WriteBatch &batch,
   InProcessStorage *ctx = in_process_storage;
   const StorageSpaceHandle space = active_worker_storage_space();
   if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
-  if (ctx->ns != serving_namespace()
-      || (!(space.is_namespace() && space.namespace_id() == ctx->ns)
-          && !(space.is_global() && ctx->ns == 1))) {
+  if (ctx->ns != serving_namespace() || !ctx->owns(space)) {
     return OB_INVALID_ARGUMENT;
   }
   const int64_t old_timeout = THIS_WORKER.get_timeout_ts();

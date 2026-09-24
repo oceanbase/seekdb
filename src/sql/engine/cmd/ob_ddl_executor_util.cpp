@@ -360,9 +360,7 @@ int ObDDLExecutorUtil::wait_local_schema_visible(
     } else if (observer::namespace_worker_prototype::in_process_session_ns(session) > 1) {
       const uint64_t namespace_id =
           observer::namespace_worker_prototype::in_process_session_ns(session);
-      if (namespace_id > 1 && OB_FAIL(
-              observer::namespace_worker_prototype::inprocess_refresh_schema(namespace_id))) {
-      } else if (namespace_id <= 1 && OB_FAIL(schema_service->refresh_and_add_schema(false))) {
+      if (OB_FAIL(observer::namespace_worker_prototype::inprocess_refresh_schema(namespace_id))) {
       } else if (OB_FAIL(schema_service->get_runtime_refreshed_schema_version(
           refreshed_schema_version))) {
       } else if (refreshed_schema_version >= schema_version) {

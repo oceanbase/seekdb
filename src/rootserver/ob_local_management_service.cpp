@@ -185,6 +185,8 @@ int ObLocalManagementService::init(ObServerConfig &config,
   if (OB_SUCC(ret)) {
     ObDDLTaskContext context;
     context.namespace_id_ = sql_proxy.target_namespace();
+    context.local_build_mode_ = ObDDLTaskContext::LocalBuildMode::PERSISTENT_DAG;
+    context.recovery_mode_ = ObDDLTaskContext::RecoveryMode::BEST_EFFORT;
     context.sql_proxy_ = &sql_proxy;
     context.session_sql_proxy_ = &sql_proxy;
     context.ddl_proxy_ = ddl_sql_proxy_;
@@ -244,6 +246,8 @@ int ObLocalManagementService::init_sql_worker(
   if (OB_SUCC(ret)) {
     ObDDLTaskContext context;
     context.namespace_id_ = sql_proxy.target_namespace();
+    context.local_build_mode_ = ObDDLTaskContext::LocalBuildMode::RESTARTABLE_SQL;
+    context.recovery_mode_ = ObDDLTaskContext::RecoveryMode::RETRY_UNTIL_CONSISTENT;
     context.sql_proxy_ = &sql_proxy;
     context.session_sql_proxy_ = &session_sql_proxy;
     context.ddl_proxy_ = ddl_sql_proxy_;

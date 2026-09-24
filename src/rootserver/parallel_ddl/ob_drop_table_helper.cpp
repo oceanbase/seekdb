@@ -1289,11 +1289,11 @@ int ObDropTableHelper::drop_table_(const ObTableSchema &table_schema, const ObSt
   int ret = OB_SUCCESS;
   ObSchemaService *schema_service_impl = NULL;
   int64_t new_schema_version = OB_INVALID_VERSION;
-  const uint64_t namespace_id = sql_proxy_ != nullptr
-      ? sql_proxy_->target_namespace() : 1;
-  const bool namespace_scoped = namespace_id > 1;
   if (OB_FAIL(check_inner_stat_())) {
-  } else if (OB_ISNULL(schema_service_impl = schema_service_->get_schema_service())) {
+    return ret;
+  }
+  const bool namespace_scoped = sql_proxy_->target_namespace() > 1;
+  if (OB_ISNULL(schema_service_impl = schema_service_->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service impl is null", KR(ret));
   } else if (namespace_scoped) {

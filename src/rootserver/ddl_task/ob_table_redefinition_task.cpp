@@ -214,7 +214,8 @@ int ObTableRedefinitionTask::send_build_replica_request_by_sql()
   // A recovered child task has no live local SQL writer. If its previous
   // checksum is incomplete, start another execution and verify its result
   // before the hidden table can replace the original table.
-  const bool retry_recovered_child_heap_build = context_.namespace_id_ > 1
+  const bool retry_recovered_heap_build =
+      context_.local_build_mode_ == ObDDLTaskContext::LocalBuildMode::RESTARTABLE_SQL
       && use_heap_table_ddl_plan_ && get_execution_id() >= 1;
   if (OB_ISNULL(local_management_service)) {
     ret = OB_ERR_UNEXPECTED;
@@ -222,7 +223,7 @@ int ObTableRedefinitionTask::send_build_replica_request_by_sql()
   } else if (OB_FAIL(DDL_SIM(task_id_, DDL_TASK_SEND_LOCAL_BUILD_REQUEST_FAILED))) {
   } else if (OB_FAIL(check_modify_autoinc(modify_autoinc))) {
   } else if (OB_FAIL(ObDDLTask::push_task_execution_id(*task_sql_proxy(), task_id_, task_type_,
-                      is_ddl_retryable_ || retry_recovered_child_heap_build, new_execution_id))) {
+                      is_ddl_retryable_ || retry_recovered_heap_build, new_execution_id))) {
   } else {
     execution_id_ = new_execution_id;
     ObSQLMode sql_mode = alter_table_arg_.sql_mode_;

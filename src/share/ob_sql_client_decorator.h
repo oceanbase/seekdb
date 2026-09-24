@@ -31,6 +31,9 @@ public:
   {}
   virtual ~ObSQLClientRetry() {}
 
+  uint64_t target_namespace() const override
+  { return sql_client_ ? sql_client_->target_namespace() : 0; }
+
   virtual int escape(const char *from, const int64_t from_size,
       char *to, const int64_t to_size, int64_t &out_size) override;
   virtual int read(ReadResult &res, const char *sql, const int32_t group_id) override;

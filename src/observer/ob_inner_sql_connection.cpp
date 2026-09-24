@@ -164,10 +164,7 @@ int ObInnerSQLConnection::set_target_namespace(uint64_t namespace_id)
 
 uint64_t ObInnerSQLConnection::target_namespace() const
 {
-  if (target_namespace_ != 0) { return target_namespace_; }
-  const uint64_t session_ns = namespace_worker_prototype::in_process_session_ns(
-      const_cast<sql::ObSQLSessionInfo *>(&get_session()));
-  return session_ns > 1 ? session_ns : 1;
+  return target_namespace_;
 }
 
 transaction::tablelock::ObIInnerConnectionLockRuntime *

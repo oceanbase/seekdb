@@ -170,8 +170,8 @@ int ObColumnRedefinitionTask::send_sql_local_build_request()
 
 int ObColumnRedefinitionTask::wait_data_complement(const ObDDLTaskStatus next_task_status)
 {
-  // The storage DAG resolves schema globally; child namespaces use the SQL build task.
-  if (context_.namespace_id_ == 1) {
+  // The bound build mode determines how this task waits for local data.
+  if (context_.local_build_mode_ == ObDDLTaskContext::LocalBuildMode::PERSISTENT_DAG) {
     return ObDDLRedefinitionTask::wait_data_complement(next_task_status);
   }
   int ret = OB_SUCCESS;
@@ -222,7 +222,8 @@ int ObColumnRedefinitionTask::update_complete_sstable_job_status(const common::O
     LOG_WARN("snapshot version not match", K(ret), K(snapshot_version), K(snapshot_version_));
   } else if (execution_id < execution_id_) {
     LOG_INFO("receive a mismatch execution result, ignore", K(ret_code), K(execution_id), K(execution_id_));
-  } else if (context_.namespace_id_ > 1 && !tablet_id.is_valid()) {
+  } else if (context_.local_build_mode_ == ObDDLTaskContext::LocalBuildMode::RESTARTABLE_SQL
+             && !tablet_id.is_valid()) {
     TCWLockGuard guard(lock_);
     complete_sstable_job_ret_code_ = ret_code;
     execution_id_ = execution_id;

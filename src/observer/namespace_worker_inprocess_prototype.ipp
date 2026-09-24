@@ -542,6 +542,8 @@ int inprocess_refresh_schema(uint64_t ns)
   if (!ret && services.recovery_loaded.compare_exchange_strong(expected, true)) {
     rootserver::ObDDLTaskContext context;
     context.namespace_id_ = ns;
+    context.local_build_mode_ = rootserver::ObDDLTaskContext::LocalBuildMode::RESTARTABLE_SQL;
+    context.recovery_mode_ = rootserver::ObDDLTaskContext::RecoveryMode::RETRY_UNTIL_CONSISTENT;
     context.sql_proxy_ = services.sql_proxy;
     context.session_sql_proxy_ = GCTX.sql_proxy_;
     context.ddl_proxy_ = services.ddl_proxy;

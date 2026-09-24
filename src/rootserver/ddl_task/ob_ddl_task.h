@@ -43,7 +43,21 @@ class ObIRootserverLocalRuntime;
 
 struct ObDDLTaskContext final
 {
+  enum class LocalBuildMode : uint8_t
+  {
+    INVALID,
+    PERSISTENT_DAG,
+    RESTARTABLE_SQL
+  };
+  enum class RecoveryMode : uint8_t
+  {
+    INVALID,
+    BEST_EFFORT,
+    RETRY_UNTIL_CONSISTENT
+  };
   uint64_t namespace_id_ = 0;
+  LocalBuildMode local_build_mode_ = LocalBuildMode::INVALID;
+  RecoveryMode recovery_mode_ = RecoveryMode::INVALID;
   common::ObMySQLProxy *sql_proxy_ = nullptr;
   common::ObMySQLProxy *session_sql_proxy_ = nullptr;
   common::ObMySQLProxy *ddl_proxy_ = nullptr;
@@ -53,6 +67,8 @@ struct ObDDLTaskContext final
   bool is_complete() const
   {
     return namespace_id_ > 0 && namespace_id_ < (1ULL << 30)
+        && local_build_mode_ != LocalBuildMode::INVALID
+        && recovery_mode_ != RecoveryMode::INVALID
         && sql_proxy_ != nullptr && session_sql_proxy_ != nullptr
         && ddl_proxy_ != nullptr
         && schema_service_ != nullptr && root_service_ != nullptr
