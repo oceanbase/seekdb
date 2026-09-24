@@ -34,7 +34,6 @@ use mio::windows::NamedPipe;
 use mio::{Events, Interest, Poll, Registry, Token, Waker};
 use slab::Slab;
 
-mod auto_config_ffi;
 mod capability;
 mod cert;
 mod codec;

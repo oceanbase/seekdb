@@ -15,7 +15,7 @@
 use std::ffi::{c_char, c_int, c_void, CStr, CString};
 use std::path::Path;
 
-use seekdb_auto_config::{self as store, Error};
+use crate::{self as store, Error};
 
 #[repr(C)]
 pub struct SeekdbAutoConfigError {
