@@ -2267,9 +2267,20 @@ int ObDDLRedefinitionTask::reap_old_local_build_task(bool &need_exec_new_inner_s
     const ObTabletID unused_tablet_id;
     const ObDDLTaskInfo unused_addition_info;
     const int old_ret_code = OB_SUCCESS;
-    if (old_execution_id < 0 || context_.namespace_id_ > 1) {
-      // In-process jobs reach this path after a callback or process restart.
+    if (old_execution_id < 0) {
       need_exec_new_inner_sql = true;
+    } else if (context_.namespace_id_ > 1) {
+      // A restarted in-process session is gone, but its destination checksum
+      // may already be durable. Claim that completed build before retrying.
+      ret = ObCheckTabletDataComplementOp::check_finish_report_checksum(
+          *task_schema_service(), *task_sql_proxy(), dest_table_id,
+          old_execution_id, task_id_);
+      if (OB_EAGAIN == ret) {
+        ret = OB_SUCCESS;
+        need_exec_new_inner_sql = true;
+      } else if (OB_SUCC(ret)) {
+        need_exec_new_inner_sql = false;
+      }
     } else if (OB_FAIL(ObCheckTabletDataComplementOp::check_and_wait_old_complement_task(
         *task_schema_service(), *task_sql_proxy(), dest_table_id,
         task_id_, old_execution_id, trace_id_,
@@ -2277,7 +2288,8 @@ int ObDDLRedefinitionTask::reap_old_local_build_task(bool &need_exec_new_inner_s
       if (OB_EAGAIN != ret) {
         LOG_WARN("failed to check and wait old complement task", K(ret));
       }
-    } else if (!need_exec_new_inner_sql) {
+    }
+    if (OB_SUCC(ret) && !need_exec_new_inner_sql) {
       if (OB_FAIL(update_complete_sstable_job_status(unused_tablet_id, snapshot_version_, old_execution_id, old_ret_code, unused_addition_info))) {
         LOG_WARN("failed to wait and complete old task finished!", K(ret));
       }
