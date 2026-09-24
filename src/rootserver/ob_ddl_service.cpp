@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX RS
 
 #include <algorithm>
+#include <memory>
+#include <vector>
 #include "rootserver/ob_dependency_ddl_helper.h"
 #include "share/ob_sys_time_zone_util.h"
 
@@ -11129,7 +11131,7 @@ int ObDDLService::check_could_write_truncate_info_(
       } else if (OB_ISNULL(sql_proxy_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("sql proxy is unexpected null", KR(ret), KP_(sql_proxy));
-      } else if (OB_FAIL(truncate_service.init(*sql_proxy_))) {
+      } else if (OB_FAIL(truncate_service.init(*sql_proxy_, get_schema_service()))) {
         LOG_WARN("failed to init truncate service", KR(ret));
       } else if (OB_FAIL(truncate_service.check_only_have_ref_columns(arg.alter_part_type_, only_ref_columns))) {
         LOG_WARN("failed to check only have ref columns", KR(ret));
@@ -14191,6 +14193,66 @@ int ObDDLService::alter_table(obcall::ObAlterTableArg &alter_table_arg,
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(check_alter_partitions(*orig_table_schema, alter_table_arg))) {
           LOG_WARN("check alter partitions failed", K(ret), K(orig_table_schema), K(alter_table_arg));
+        }
+      }
+    }
+
+    // Truncate MDS updates the global index tablets. Materialize inherited
+    // tablets before the DDL transaction so its MDS cannot target the parent.
+    if (OB_SUCC(ret) && task_context_.namespace_id_ > 1
+        && alter_table_arg.is_update_global_indexes_
+        && GCONF._ob_enable_truncate_partition_preserve_global_index
+        && (alter_table_arg.alter_part_type_ == obcall::ObAlterTableArg::TRUNCATE_PARTITION
+            || alter_table_arg.alter_part_type_ == obcall::ObAlterTableArg::TRUNCATE_SUB_PARTITION)) {
+      ObSEArray<ObAuxTableMetaInfo, 8> index_infos;
+      if (OB_FAIL(orig_table_schema->get_simple_index_infos(index_infos))) {
+        LOG_WARN("get index metadata failed before truncate", KR(ret));
+      }
+      for (int64_t i = 0; OB_SUCC(ret) && i < index_infos.count(); ++i) {
+        const ObTableSchema *index_schema = nullptr;
+        if (OB_FAIL(schema_guard.get_table_schema(index_infos.at(i).table_id_, index_schema))) {
+          LOG_WARN("get global index schema failed", KR(ret), K(index_infos.at(i)));
+        } else if (OB_ISNULL(index_schema)) {
+          ret = OB_TABLE_NOT_EXIST;
+          LOG_WARN("global index schema missing", KR(ret), K(index_infos.at(i)));
+        } else if (!index_schema->is_global_index_table() || !index_schema->can_read_index()) {
+        } else {
+          ObArenaAllocator materialize_allocator("TruncIndexCOW");
+          std::vector<std::unique_ptr<ObTableSchema>> storage_schemas;
+          ObSEArray<const ObTableSchema *, 3> binding_schemas;
+          ObTabletIDArray index_tablets;
+          const uint64_t table_ids[] = {index_schema->get_table_id(),
+              index_schema->get_aux_lob_meta_tid(), index_schema->get_aux_lob_piece_tid()};
+          for (uint64_t table_id : table_ids) {
+            const ObTableSchema *logical_schema = nullptr;
+            if (OB_FAIL(ret) || table_id == 0 || table_id == OB_INVALID_ID) {
+            } else if (OB_FAIL(schema_guard.get_table_schema(table_id, logical_schema))) {
+              LOG_WARN("get index binding schema failed", KR(ret), K(table_id));
+            } else if (OB_ISNULL(logical_schema)) {
+              ret = OB_TABLE_NOT_EXIST;
+              LOG_WARN("index binding schema missing", KR(ret), K(table_id));
+            } else {
+              std::unique_ptr<ObTableSchema> storage_schema(
+                  new ObTableSchema(&materialize_allocator));
+              if (OB_FAIL(NamespaceForkKernelPrototype::make_storage_schema(
+                      task_context_.namespace_id_, *logical_schema, *storage_schema))) {
+                LOG_WARN("route index binding schema failed", KR(ret), K(table_id));
+              } else if (OB_FAIL(binding_schemas.push_back(storage_schema.get()))) {
+                LOG_WARN("append index binding schema failed", KR(ret), K(table_id));
+              } else {
+                storage_schemas.push_back(std::move(storage_schema));
+              }
+            }
+          }
+          if (OB_SUCC(ret) && OB_FAIL(storage_schemas.front()->get_tablet_ids(index_tablets))) {
+            LOG_WARN("get global index tablets failed", KR(ret), K(index_schema->get_table_id()));
+          }
+          for (int64_t j = 0; OB_SUCC(ret) && j < index_tablets.count(); ++j) {
+            if (OB_FAIL(NamespaceForkKernelPrototype::ensure_tablet(
+                    index_tablets.at(j), *storage_schemas.front(), binding_schemas))) {
+              LOG_WARN("materialize global index tablet failed", KR(ret), K(index_tablets.at(j)));
+            }
+          }
         }
       }
     }

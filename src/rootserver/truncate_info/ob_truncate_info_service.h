@@ -31,6 +31,7 @@ namespace share
 namespace schema
 {
 class ObTableSchema;
+class ObMultiVersionSchemaService;
 }
 }
 namespace common
@@ -51,7 +52,8 @@ struct ObTruncatePartKeyInfo final
   ~ObTruncatePartKeyInfo();
   int init(
     ObIAllocator &allocator,
-    const ObTableSchema &data_table_schema);
+    const ObTableSchema &data_table_schema,
+    share::schema::ObMultiVersionSchemaService &schema_service);
   bool is_valid() const
   {
     return nullptr != part_expr_ && !ref_column_ids_.empty();
@@ -111,7 +113,8 @@ public:
   ObTruncateInfoService(
     const obcall::ObAlterTableArg &arg,
     const share::schema::ObTableSchema &data_table_schema);
-  int init(ObMySQLProxy &sql_proxy);
+  int init(ObMySQLProxy &sql_proxy,
+           share::schema::ObMultiVersionSchemaService &schema_service);
   int check_only_have_ref_columns(
     const obcall::ObAlterTableArg::AlterPartitionType &alter_type,
     bool &only_ref_columns);

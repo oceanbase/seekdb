@@ -36,10 +36,17 @@ def median_query_us(connection):
     return statistics.median(samples)
 
 
-def setup_branch(experiment):
+def setup_branch(experiment, seed_global_index=False):
     experiment.sql("CREATE DATABASE phase10")
     experiment.sql("CREATE TABLE phase10.parent(id INT PRIMARY KEY, v INT)")
     experiment.sql("INSERT INTO phase10.parent VALUES(1,10),(2,20)")
+    if seed_global_index:
+        experiment.sql("CREATE TABLE phase10.trunc_inherited(id INT PRIMARY KEY,k INT) "
+                       "PARTITION BY RANGE(id) (PARTITION p0 VALUES LESS THAN (100), "
+                       "PARTITION p1 VALUES LESS THAN (200))")
+        experiment.sql("CREATE UNIQUE INDEX idx_k ON phase10.trunc_inherited(k) GLOBAL "
+                       "PARTITION BY HASH(k) PARTITIONS 2")
+        experiment.sql("INSERT INTO phase10.trunc_inherited VALUES(1,1),(2,2),(120,3)")
     experiment.sql("FORK NAMESPACE phase10_child FROM ns1")
     child = connect(experiment, "root@phase10_child")
     assert experiment.sql("SELECT id,v FROM phase10.parent ORDER BY id", child) == ((1, 10), (2, 20))
@@ -375,7 +382,7 @@ def direct_probe(experiment):
     from namespace_inprocess_ddl_regressions import (
         before_restart, after_restart, interrupted_heap_recovery)
 
-    with setup_branch(experiment) as child:
+    with setup_branch(experiment, seed_global_index=True) as child:
         experiment.sql("TRUNCATE TABLE phase10.parent", child)
         assert experiment.sql("SELECT COUNT(*) FROM phase10.parent", child) == ((0,),)
         assert experiment.sql("SELECT COUNT(*) FROM phase10.parent") == ((2,),)

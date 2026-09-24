@@ -22,6 +22,7 @@
 #include "storage/tablet/ob_tablet_binding_helper.h"
 #include "storage/tablet/ob_tablet_fork_mds_helper.h"
 #include "storage/tablet/ob_tablet_create_delete_helper.h"
+#include "storage/truncate_info/ob_truncate_tablet_arg.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx/ob_trans_define_v4.h"
 namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
@@ -259,6 +260,21 @@ int route_tablet_mds(StorageSpaceHandle storage_space,
       // Keeping one cleanup owner also makes DROP, TRUNCATE and repartitioning
       // follow the same path instead of teaching MDS about statement kinds.
       skip_mds = true;
+    }
+  } else if (type == transaction::ObTxDataSourceType::SYNC_TRUNCATE_INFO) {
+    ObArenaAllocator allocator(ObMemAttr("NsTruncateMds"));
+    storage::ObTruncateTabletArg arg;
+    if (OB_FAIL(arg.deserialize(allocator, input.ptr(), input.length(), pos))) {
+    } else if (pos != input.length() || !arg.is_valid()) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(route_tablet_id(ns, arg.index_tablet_id_))) {
+    } else {
+      storage_buffer.resize(arg.get_serialize_size());
+      pos = 0;
+      if (OB_FAIL(arg.serialize(storage_buffer.data(), storage_buffer.size(), pos))) {
+      } else if (pos != static_cast<int64_t>(storage_buffer.size())) {
+        ret = OB_ERR_UNEXPECTED;
+      }
     }
   }
   return ret;

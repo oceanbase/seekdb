@@ -58,13 +58,14 @@ ObTruncatePartKeyInfo::~ObTruncatePartKeyInfo()
 
 int ObTruncatePartKeyInfo::init(
     ObIAllocator &allocator,
-    const ObTableSchema &data_table_schema)
+    const ObTableSchema &data_table_schema,
+    ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   const ObPartitionLevel part_level = data_table_schema.get_part_level();
   const uint64_t data_table_id = data_table_schema.get_table_id();
-  if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+  if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(create_tmp_session(schema_guard, free_session_ctx_, session_))) {
   } else if (OB_UNLIKELY(ObPartitionLevel::PARTITION_LEVEL_ONE != part_level
       && ObPartitionLevel::PARTITION_LEVEL_TWO != part_level)) {
@@ -383,13 +384,14 @@ ObTruncateInfoService::ObTruncateInfoService(
       is_inited_(false)
 {}
 
-int ObTruncateInfoService::init(ObMySQLProxy &sql_proxy)
+int ObTruncateInfoService::init(ObMySQLProxy &sql_proxy,
+                                ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_FAIL(part_key_info_.init(allocator_, data_table_schema_))) {
+  } else if (OB_FAIL(part_key_info_.init(allocator_, data_table_schema_, schema_service))) {
   } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(sql_proxy, ddl_task_id_))) {
   } else {
     is_inited_ = true;

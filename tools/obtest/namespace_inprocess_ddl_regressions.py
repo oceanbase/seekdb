@@ -47,6 +47,31 @@ def before_restart(experiment, child):
     sql("ALTER TABLE phase10.repartition PARTITION BY HASH(id) PARTITIONS 3")
     assert sql("SELECT COUNT(*),SUM(v) FROM phase10.repartition") == ((2, 33),)
 
+    experiment.sql("ALTER SYSTEM SET _ob_enable_truncate_partition_preserve_global_index=true")
+    sql("CREATE TABLE phase10.trunc_global(id INT PRIMARY KEY,k INT,c VARCHAR(20)) "
+        "PARTITION BY RANGE(id) (PARTITION p0 VALUES LESS THAN (100), "
+        "PARTITION p1 VALUES LESS THAN (200))")
+    sql("CREATE UNIQUE INDEX idx_k ON phase10.trunc_global(k) GLOBAL "
+        "PARTITION BY HASH(k) PARTITIONS 2")
+    sql("INSERT INTO phase10.trunc_global VALUES(1,1,'a'),(2,2,'b'),(120,3,'c')")
+    sql("ALTER TABLE phase10.trunc_global TRUNCATE PARTITION p0")
+    assert sql("SELECT id,k FROM phase10.trunc_global FORCE INDEX(idx_k) ORDER BY id") == ((120, 3),)
+    sql("INSERT INTO phase10.trunc_global VALUES(5,5,'new')")
+    assert sql("SELECT id,k FROM phase10.trunc_global FORCE INDEX(idx_k) ORDER BY id") == (
+        (5, 5), (120, 3))
+    assert sql("SELECT id,k FROM phase10.trunc_inherited FORCE INDEX(idx_k) ORDER BY id") == (
+        (1, 1), (2, 2), (120, 3))
+    sql("ALTER TABLE phase10.trunc_inherited TRUNCATE PARTITION p0")
+    assert sql("SELECT id,k FROM phase10.trunc_inherited FORCE INDEX(idx_k) ORDER BY id") == (
+        (120, 3),)
+    sql("INSERT INTO phase10.trunc_inherited VALUES(5,5)")
+    assert sql("SELECT id,k FROM phase10.trunc_inherited FORCE INDEX(idx_k) ORDER BY id") == (
+        (5, 5), (120, 3))
+    assert experiment.sql(
+        "SELECT id,k FROM phase10.trunc_inherited FORCE INDEX(idx_k) ORDER BY id") == (
+            (1, 1), (2, 2), (120, 3))
+    experiment.sql("ALTER SYSTEM SET _ob_enable_truncate_partition_preserve_global_index=false")
+
     sql("CREATE TABLE phase10.auto_owned(id BIGINT PRIMARY KEY AUTO_INCREMENT, v INT)")
     sql("INSERT INTO phase10.auto_owned(v) VALUES(30)")
     sql("INSERT INTO phase10.auto_owned(id,v) VALUES(10,40)")
@@ -70,6 +95,13 @@ def after_restart(experiment, child):
     assert sql("SELECT COUNT(*),SUM(v) FROM phase10.drop_pk") == ((2, 33),)
     assert "PRIMARY KEY" not in sql("SHOW CREATE TABLE phase10.drop_pk")[0][1]
     assert sql("SELECT COUNT(*),SUM(v) FROM phase10.repartition") == ((2, 33),)
+    assert sql("SELECT id,k FROM phase10.trunc_global FORCE INDEX(idx_k) ORDER BY id") == (
+        (5, 5), (120, 3))
+    assert sql("SELECT id,k FROM phase10.trunc_inherited FORCE INDEX(idx_k) ORDER BY id") == (
+        (5, 5), (120, 3))
+    assert experiment.sql(
+        "SELECT id,k FROM phase10.trunc_inherited FORCE INDEX(idx_k) ORDER BY id") == (
+            (1, 1), (2, 2), (120, 3))
     assert sql("SELECT COUNT(*),SUM(v) FROM phase10.checked") == ((2, 33),)
     try:
         sql("INSERT INTO phase10.checked VALUES(3,-1)")
