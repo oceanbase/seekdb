@@ -1102,6 +1102,7 @@ public:
                                      ObIArray<ObSEArray<CandidatePlan, 4>> &dist_best_list);
   int get_valid_subplan_filter_dist_method(ObIArray<ObLogPlan*> &subplans,
                                            const bool has_onetime,
+                                           const bool has_hinted_initplan,
                                            const bool ignore_hint,
                                            int64_t &dist_methods);
 
