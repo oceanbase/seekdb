@@ -422,6 +422,20 @@ def direct_probe(experiment):
         assert experiment.sql(
             "SELECT /*+ parallel(2) */ SUM(v) FROM phase10.parts", child) == ((100,),)
         experiment.sql(
+            "CREATE TABLE phase10.exchange_parts(id INT PRIMARY KEY, v INT) "
+            "PARTITION BY RANGE(id) (PARTITION p0 VALUES LESS THAN (10), "
+            "PARTITION p1 VALUES LESS THAN (MAXVALUE))", child)
+        experiment.sql("CREATE TABLE phase10.exchange_plain(id INT PRIMARY KEY, v INT)", child)
+        experiment.sql("INSERT INTO phase10.exchange_parts VALUES(1,11),(11,111)", child)
+        experiment.sql("INSERT INTO phase10.exchange_plain VALUES(2,22)", child)
+        experiment.sql(
+            "ALTER TABLE phase10.exchange_parts EXCHANGE PARTITION p0 "
+            "WITH TABLE phase10.exchange_plain WITHOUT VALIDATION", child)
+        assert experiment.sql(
+            "SELECT id,v FROM phase10.exchange_parts ORDER BY id", child) == ((2, 22), (11, 111))
+        assert experiment.sql(
+            "SELECT id,v FROM phase10.exchange_plain ORDER BY id", child) == ((1, 11),)
+        experiment.sql(
             "CREATE TABLE phase10.generated_parts(c1 INT,c2 VARCHAR(20),"
             "c3 INT GENERATED ALWAYS AS (LENGTH(c4)),c4 VARCHAR(20)) "
             "PARTITION BY KEY(c3,c4) PARTITIONS 2", child)
@@ -602,6 +616,10 @@ def direct_probe(experiment):
     experiment.start()
     with connect(experiment, "root@phase10_child") as child:
         after_restart(experiment, child)
+        assert experiment.sql(
+            "SELECT id,v FROM phase10.exchange_parts ORDER BY id", child) == ((2, 22), (11, 111))
+        assert experiment.sql(
+            "SELECT id,v FROM phase10.exchange_plain ORDER BY id", child) == ((1, 11),)
         assert experiment.sql("SELECT id FROM phase10.fulltext_rows "
                               "WHERE MATCH(body) AGAINST('beta')", child) == ((2,),)
         assert experiment.sql("SELECT v FROM phase10.fulltext_heap "

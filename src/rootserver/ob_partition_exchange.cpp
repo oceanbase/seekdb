@@ -1995,7 +1995,8 @@ int ObPartitionExchange::build_single_table_rw_defensive_(const ObIArray<common:
   } else {
     const int64_t abs_timeout_us = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_ts()
                                                                      : ObTimeUtility::current_time() + GCONF.rpc_timeout;
-    ObIRootserverLocalRuntime *runtime = rootserver_local_runtime();
+    ObIRootserverLocalRuntime *runtime = ddl_service_.get_task_context().local_runtime_ != nullptr
+        ? ddl_service_.get_task_context().local_runtime_ : rootserver_local_runtime();
     if (OB_ISNULL(runtime)) {
       ret = OB_NOT_INIT;
     } else if (OB_FAIL(runtime->modify_tablet_binding_for_rw_defensive(
