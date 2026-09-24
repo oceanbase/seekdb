@@ -1,5 +1,5 @@
 language = "C"
-include_guard = "SEEKDB_AUTO_CONFIG_H_"
+include_guard = "AUTO_CONFIG_H_"
 cpp_compat = true
 documentation = false
 style = "both"
@@ -26,9 +26,9 @@ header = """/*
 
 [export]
 include = [
-  "SeekdbAutoConfigError",
-  "SeekdbAutoConfigEntryCallback",
-  "seekdb_auto_config_supported",
-  "seekdb_auto_config_load",
-  "seekdb_auto_config_update",
+  "AutoConfigError",
+  "AutoConfigEntryCallback",
+  "auto_config_supported",
+  "auto_config_load",
+  "auto_config_update",
 ]

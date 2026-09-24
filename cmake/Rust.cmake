@@ -71,10 +71,10 @@ set(RUST_TARGET_DIR "${CMAKE_BINARY_DIR}/rust-target")
 # Unix/MSYS, sql_nio.lib with the MSVC toolchain.
 if(WIN32)
   set(RUST_STATICLIB "${RUST_TARGET_DIR}/${_cargo_out_subdir}/sql_nio.lib")
-  set(AUTO_CONFIG_STATICLIB "${RUST_TARGET_DIR}/${_cargo_out_subdir}/seekdb_auto_config.lib")
+  set(AUTO_CONFIG_STATICLIB "${RUST_TARGET_DIR}/${_cargo_out_subdir}/auto_config.lib")
 else()
   set(RUST_STATICLIB "${RUST_TARGET_DIR}/${_cargo_target_subdir}${_cargo_out_subdir}/libsql_nio.a")
-  set(AUTO_CONFIG_STATICLIB "${RUST_TARGET_DIR}/${_cargo_target_subdir}${_cargo_out_subdir}/libseekdb_auto_config.a")
+  set(AUTO_CONFIG_STATICLIB "${RUST_TARGET_DIR}/${_cargo_target_subdir}${_cargo_out_subdir}/libauto_config.a")
 endif()
 
 # Sources whose change should retrigger a rebuild of the staticlib.
@@ -168,7 +168,7 @@ add_custom_command(
   COMMAND "${CMAKE_COMMAND}" -E env ${_rust_build_env}
           "${CARGO}" build ${_cargo_profile_flag} ${_cargo_target_args}
           --manifest-path "${RUST_WORKSPACE_DIR}/Cargo.toml"
-          --package sql-nio --package seekdb-auto-config
+          --package sql-nio --package auto-config
   WORKING_DIRECTORY "${RUST_WORKSPACE_DIR}"
   DEPENDS ${_rust_sources}
   COMMENT "[rust] cargo build sql-nio and auto-config (${_cargo_out_subdir})"

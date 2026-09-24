@@ -56,7 +56,7 @@ int append_entry(void *context, const char *name, const char *value, uint32_t li
   return load.ret;
 }
 
-int report_error(const char *operation, const SeekdbAutoConfigError &error)
+int report_error(const char *operation, const AutoConfigError &error)
 {
   int ret = OB_INVALID_CONFIG;
   LOG_ERROR("auto-config operation failed", K(operation), "detail", error.message,
@@ -76,8 +76,8 @@ int report_error(const char *operation, const SeekdbAutoConfigError &error)
 int ObConfigStorage::init()
 {
   int ret = OB_SUCCESS;
-  SeekdbAutoConfigError error = {};
-  if (0 != seekdb_auto_config_supported(AUTO_CONFIG_PATH, &error)) {
+  AutoConfigError error = {};
+  if (0 != auto_config_supported(AUTO_CONFIG_PATH, &error)) {
     ret = report_error("initialize", error);
   } else {
     inited_ = true;
@@ -92,9 +92,9 @@ int ObConfigStorage::load_all_configs(std::vector<Entry> &entries)
   if (!is_inited()) {
     ret = OB_NOT_INIT;
   } else {
-    SeekdbAutoConfigError error = {};
+    AutoConfigError error = {};
     LoadContext context{entries, OB_SUCCESS};
-    if (0 != seekdb_auto_config_load(AUTO_CONFIG_PATH, append_entry, &context, &error)) {
+    if (0 != auto_config_load(AUTO_CONFIG_PATH, append_entry, &context, &error)) {
       ret = OB_SUCCESS != context.ret ? context.ret : report_error("load", error);
     }
   }
@@ -137,8 +137,8 @@ int ObConfigStorage::save_config(const char *name, const char *value)
   } else if (nullptr == name || nullptr == value) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    SeekdbAutoConfigError error = {};
-    if (0 != seekdb_auto_config_update(AUTO_CONFIG_PATH, name, value, 0, &error)) {
+    AutoConfigError error = {};
+    if (0 != auto_config_update(AUTO_CONFIG_PATH, name, value, 0, &error)) {
       ret = report_error("save", error);
     }
   }
@@ -153,8 +153,8 @@ int ObConfigStorage::reset_config(const char *name)
   } else if (nullptr == name) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    SeekdbAutoConfigError error = {};
-    if (0 != seekdb_auto_config_update(AUTO_CONFIG_PATH, name, nullptr, 1, &error)) {
+    AutoConfigError error = {};
+    if (0 != auto_config_update(AUTO_CONFIG_PATH, name, nullptr, 1, &error)) {
       ret = report_error("reset", error);
     }
   }

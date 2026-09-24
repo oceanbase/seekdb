@@ -44,13 +44,13 @@ _RUST_INPUTS = [
 genrule(
     name = "_rust_static_unix",
     srcs = _RUST_INPUTS,
-    outs = ["libsql_nio.a", "libseekdb_auto_config.a"],
+    outs = ["libsql_nio.a", "libauto_config.a"],
     cmd = """
 set -eu
 export CARGO_TARGET_DIR="$(@D)/rust-cargo-target"
-cargo build --release --manifest-path "$(location Cargo.toml)" --package sql-nio --package seekdb-auto-config
+cargo build --release --manifest-path "$(location Cargo.toml)" --package sql-nio --package auto-config
 cp "$$CARGO_TARGET_DIR/release/libsql_nio.a" "$(@D)/libsql_nio.a"
-cp "$$CARGO_TARGET_DIR/release/libseekdb_auto_config.a" "$(@D)/libseekdb_auto_config.a"
+cp "$$CARGO_TARGET_DIR/release/libauto_config.a" "$(@D)/libauto_config.a"
 """,
     tags = [
         "no-remote",
@@ -65,12 +65,12 @@ cp "$$CARGO_TARGET_DIR/release/libseekdb_auto_config.a" "$(@D)/libseekdb_auto_co
 genrule(
     name = "_rust_static_windows",
     srcs = _RUST_INPUTS,
-    outs = ["sql_nio.lib", "seekdb_auto_config.lib"],
+    outs = ["sql_nio.lib", "auto_config.lib"],
     cmd_bat = """
 set CARGO_TARGET_DIR=$(@D)\\rust-cargo-target
-cargo build --release --manifest-path "$(location Cargo.toml)" --package sql-nio --package seekdb-auto-config
+cargo build --release --manifest-path "$(location Cargo.toml)" --package sql-nio --package auto-config
 copy /Y "%CARGO_TARGET_DIR%\\release\\sql_nio.lib" "$(@D)\\sql_nio.lib"
-copy /Y "%CARGO_TARGET_DIR%\\release\\seekdb_auto_config.lib" "$(@D)\\seekdb_auto_config.lib"
+copy /Y "%CARGO_TARGET_DIR%\\release\\auto_config.lib" "$(@D)\\auto_config.lib"
 """,
     tags = [
         "no-remote",
@@ -94,8 +94,8 @@ filegroup(
 filegroup(
     name = "auto_config_archive",
     srcs = select({
-        ":windows": ["seekdb_auto_config.lib"],
-        "//conditions:default": ["libseekdb_auto_config.a"],
+        ":windows": ["auto_config.lib"],
+        "//conditions:default": ["libauto_config.a"],
     }),
     visibility = ["//src/observer:__pkg__"],
 )
