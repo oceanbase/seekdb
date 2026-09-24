@@ -264,13 +264,6 @@ struct DirectInsertRoute {
     const uint64_t ns = storage_space.namespace_id();
     if (!ret) {
       const uint64_t logical_table_id = static_cast<uint64_t>(param.table_id_);
-      uint64_t storage_table_id = OB_INVALID_ID;
-      if (OB_FAIL(route_object_id(storage_space, logical_table_id, storage_table_id))) {
-      } else if (storage_table_id > static_cast<uint64_t>(INT64_MAX)) {
-        ret = OB_SIZE_OVERFLOW;
-      } else {
-        param.table_id_ = static_cast<int64_t>(storage_table_id);
-      }
       for (int64_t i = 0; !ret && i < param.participants_.count(); ++i) {
         ret = route_tablet_id(storage_space, param.participants_.at(i));
       }

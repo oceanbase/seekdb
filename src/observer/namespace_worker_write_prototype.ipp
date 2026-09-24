@@ -218,16 +218,7 @@ int route_tablet_mds(StorageSpaceHandle storage_space,
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < arg.create_tablet_schemas_.count(); ++i) {
-      storage::ObCreateTabletSchema *schema = arg.create_tablet_schemas_.at(i);
-      uint64_t storage_id = common::OB_INVALID_ID;
-      if (OB_ISNULL(schema)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (schema->get_table_type() != share::schema::SYSTEM_TABLE
-                 && OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
-                     ns, schema->get_table_id(), storage_id))) {
-      } else if (schema->get_table_type() != share::schema::SYSTEM_TABLE) {
-        schema->set_table_id(storage_id);
-      }
+      if (OB_ISNULL(arg.create_tablet_schemas_.at(i))) { ret = OB_ERR_UNEXPECTED; }
     }
     if (OB_SUCC(ret)) {
       storage_buffer.resize(arg.get_serialize_size());
@@ -653,21 +644,6 @@ int calc_namespace_column_checksum(
   }
   for (int64_t i = 0; !ret && i < arg.calc_items_.count(); ++i) {
     ret = route_tablet_id(storage_space, arg.calc_items_.at(i).tablet_id_);
-    if (!ret) {
-      uint64_t table_id = arg.calc_items_.at(i).calc_table_id_;
-      if (OB_FAIL(route_table_lock_id(storage_space, table_id))) {
-      } else {
-        arg.calc_items_.at(i).calc_table_id_ = table_id;
-      }
-    }
-  }
-  uint64_t target_table_id = arg.target_table_id_;
-  uint64_t source_table_id = arg.source_table_id_;
-  if (!ret && OB_FAIL(route_table_lock_id(storage_space, target_table_id))) {
-  } else if (!ret && OB_FAIL(route_table_lock_id(storage_space, source_table_id))) {
-  } else if (!ret) {
-    arg.target_table_id_ = target_table_id;
-    arg.source_table_id_ = source_table_id;
   }
   obcall::ObCalcColumnChecksumRequestArg submit_arg;
   ObSEArray<int64_t, 10> submit_positions;

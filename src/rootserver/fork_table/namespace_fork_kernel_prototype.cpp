@@ -1382,104 +1382,15 @@ uint64_t NamespaceForkKernelPrototype::encode_object(uint64_t database_id, uint6
 int NamespaceForkKernelPrototype::make_namespace_schema(
     uint64_t namespace_id, const ObTableSchema &storage_schema, ObTableSchema &namespace_schema) {
   if (!NamespaceObjectKey{namespace_id, 1}.is_valid()) { return OB_INVALID_ARGUMENT; }
+  if (is_encoded_id(storage_schema.get_table_id())
+      || is_encoded_id(storage_schema.get_database_id())) {
+    return OB_INVALID_ARGUMENT;
+  }
   int ret = namespace_schema.assign(storage_schema);
-  auto local_id = [&](uint64_t object_id, uint64_t &result) {
-    return local_object_id(namespace_id, object_id, result);
-  };
-  auto set_optional = [&](uint64_t object_id, auto setter) {
-    if (object_id == 0 || object_id == OB_INVALID_ID) { return OB_SUCCESS; }
-    uint64_t result = OB_INVALID_ID;
-    const int optional_ret = local_id(object_id, result);
-    if (optional_ret == OB_SUCCESS) { setter(result); }
-    return optional_ret;
-  };
-  uint64_t logical_table_id = storage_schema.get_table_id();
-  uint64_t result = OB_INVALID_ID;
-  if (OB_SUCC(ret) && !storage_schema.is_sys_table()) {
-    if (OB_FAIL(local_id(storage_schema.get_database_id(), result))) {
-    } else {
-      namespace_schema.set_database_id(result);
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(local_id(storage_schema.get_table_id(), logical_table_id))) {
-      } else {
-        namespace_schema.set_table_id(logical_table_id);
-      }
-    }
-    if (OB_SUCC(ret)) {
-      ret = set_optional(storage_schema.get_data_table_id(),
-          [&](uint64_t id) { namespace_schema.set_data_table_id(id); });
-    }
-    if (OB_SUCC(ret)) {
-      ret = set_optional(storage_schema.get_association_table_id(),
-          [&](uint64_t id) { namespace_schema.set_association_table_id(id); });
-    }
-    if (OB_SUCC(ret)) {
-      std::vector<ObAuxTableMetaInfo> indexes = index_infos(storage_schema);
-      namespace_schema.reset_simple_index_infos();
-      for (auto &index : indexes) {
-        if (OB_FAIL(local_id(index.table_id_, result))) { break; }
-        index.table_id_ = result;
-        if (OB_FAIL(namespace_schema.add_simple_index_info(index))) { break; }
-      }
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < namespace_schema.get_foreign_key_infos().count(); ++i) {
-      auto &foreign_key = namespace_schema.get_foreign_key_infos().at(i);
-      foreign_key.table_id_ = logical_table_id;
-      if (OB_FAIL(local_id(foreign_key.child_table_id_, result))) {
-      } else {
-        foreign_key.child_table_id_ = result;
-      }
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(local_id(foreign_key.parent_table_id_, result))) {
-        } else {
-          foreign_key.parent_table_id_ = result;
-        }
-      }
-      if (OB_SUCC(ret) && foreign_key.ref_cst_id_ != OB_INVALID_ID) {
-        if (OB_FAIL(local_id(foreign_key.ref_cst_id_, result))) {
-        } else {
-          foreign_key.ref_cst_id_ = result;
-        }
-      }
-    }
-    for (auto it = namespace_schema.constraint_begin_for_non_const_iter();
-         OB_SUCC(ret) && it != namespace_schema.constraint_end_for_non_const_iter(); ++it) {
-      if (*it == nullptr) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(local_id((*it)->get_table_id(), result))) {
-      } else {
-        (*it)->set_table_id(result);
-        if (OB_FAIL(local_id((*it)->get_constraint_id(), result))) {
-        } else {
-          (*it)->set_constraint_id(result);
-        }
-      }
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < namespace_schema.get_column_count(); ++i) {
-      ObColumnSchemaV2 *column = namespace_schema.get_column_schema_by_idx(i);
-      if (column == nullptr) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(local_id(column->get_table_id(), result))) {
-      } else if (result != logical_table_id) {
-        ret = OB_INVALID_ARGUMENT;
-      } else {
-        column->set_table_id(logical_table_id);
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    ret = set_optional(storage_schema.get_aux_lob_meta_tid(),
-        [&](uint64_t id) { namespace_schema.set_aux_lob_meta_tid(id); });
-  }
-  if (OB_SUCC(ret)) {
-    ret = set_optional(storage_schema.get_aux_lob_piece_tid(),
-        [&](uint64_t id) { namespace_schema.set_aux_lob_piece_tid(id); });
-  }
   if (OB_SUCC(ret) && !namespace_schema.is_view_table()) {
     ret = rewrite_tablet_ids(namespace_schema,
         [&](uint64_t id, uint64_t &rewritten) {
-          return local_id(id, rewritten);
+          return local_object_id(namespace_id, id, rewritten);
         });
   }
   return ret;
@@ -1487,93 +1398,16 @@ int NamespaceForkKernelPrototype::make_namespace_schema(
 int NamespaceForkKernelPrototype::make_storage_schema(
     uint64_t namespace_id, const ObTableSchema &logical_schema, ObTableSchema &storage_schema) {
   if (!NamespaceObjectKey{namespace_id, 1}.is_valid()) { return OB_INVALID_ARGUMENT; }
+  if (is_encoded_id(logical_schema.get_table_id())
+      || is_encoded_id(logical_schema.get_database_id())) {
+    return OB_INVALID_ARGUMENT;
+  }
   int ret = storage_schema.assign(logical_schema);
-  auto storage_id = [&](uint64_t object_id, uint64_t &result) {
-    uint64_t local_id = OB_INVALID_ID;
-    int local_ret = local_object_id(namespace_id, object_id, local_id);
-    const NamespaceObjectKey key{namespace_id, local_id};
-    if (local_ret != OB_SUCCESS) { return local_ret; }
-    if (!key.is_valid()) { return OB_SIZE_OVERFLOW; }
-    result = key.storage_id();
-    return OB_SUCCESS;
-  };
-  auto set_optional = [&](uint64_t object_id, auto setter) {
-    if (object_id == 0 || object_id == OB_INVALID_ID) { return OB_SUCCESS; }
-    uint64_t physical_id = OB_INVALID_ID;
-    const int optional_ret = storage_id(object_id, physical_id);
-    if (optional_ret == OB_SUCCESS) { setter(physical_id); }
-    return optional_ret;
-  };
-  uint64_t physical_table_id = logical_schema.get_table_id();
-  uint64_t physical_id = OB_INVALID_ID;
-  if (OB_SUCC(ret) && !logical_schema.is_sys_table()) {
-    if (OB_FAIL(storage_id(logical_schema.get_database_id(), physical_id))) {
-    } else {
-      storage_schema.set_database_id(physical_id);
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(storage_id(logical_schema.get_table_id(), physical_table_id))) {
-      } else {
-        storage_schema.set_table_id(physical_table_id);
-      }
-    }
-    if (OB_SUCC(ret)) {
-      ret = set_optional(logical_schema.get_data_table_id(),
-          [&](uint64_t id) { storage_schema.set_data_table_id(id); });
-    }
-    if (OB_SUCC(ret)) {
-      ret = set_optional(logical_schema.get_association_table_id(),
-          [&](uint64_t id) { storage_schema.set_association_table_id(id); });
-    }
-    if (OB_SUCC(ret)) {
-      std::vector<ObAuxTableMetaInfo> indexes = index_infos(logical_schema);
-      storage_schema.reset_simple_index_infos();
-      for (auto &index : indexes) {
-        uint64_t index_id = OB_INVALID_ID;
-        if (OB_FAIL(storage_id(index.table_id_, index_id))) { break; }
-        index.table_id_ = index_id;
-        if (OB_FAIL(storage_schema.add_simple_index_info(index))) { break; }
-      }
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < storage_schema.get_foreign_key_infos().count(); ++i) {
-      auto &foreign_key = storage_schema.get_foreign_key_infos().at(i);
-      foreign_key.table_id_ = physical_table_id;
-      if (OB_FAIL(storage_id(foreign_key.child_table_id_, physical_id))) {
-      } else {
-        foreign_key.child_table_id_ = physical_id;
-      }
-      if (OB_SUCC(ret)) {
-        if (OB_FAIL(storage_id(foreign_key.parent_table_id_, physical_id))) {
-        } else {
-          foreign_key.parent_table_id_ = physical_id;
-        }
-      }
-      if (OB_SUCC(ret) && foreign_key.ref_cst_id_ != OB_INVALID_ID) {
-        if (OB_FAIL(storage_id(foreign_key.ref_cst_id_, physical_id))) {
-        } else {
-          foreign_key.ref_cst_id_ = physical_id;
-        }
-      }
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < storage_schema.get_column_count(); ++i) {
-      ObColumnSchemaV2 *column = const_cast<ObColumnSchemaV2 *>(
-          storage_schema.get_column_schema_by_idx(i));
-      if (column == nullptr) { ret = OB_ERR_UNEXPECTED; }
-      else { column->set_table_id(physical_table_id); }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    ret = set_optional(logical_schema.get_aux_lob_meta_tid(),
-        [&](uint64_t id) { storage_schema.set_aux_lob_meta_tid(id); });
-  }
-  if (OB_SUCC(ret)) {
-    ret = set_optional(logical_schema.get_aux_lob_piece_tid(),
-        [&](uint64_t id) { storage_schema.set_aux_lob_piece_tid(id); });
-  }
+  // Schema IDs stay local to their bound namespace; only tablet IDs address shared storage.
   if (OB_SUCC(ret) && !storage_schema.is_view_table()) {
     ret = rewrite_tablet_ids(storage_schema,
         [&](uint64_t id, uint64_t &rewritten) {
-          return storage_id(id, rewritten);
+          return storage_object_id(namespace_id, id, rewritten);
         });
   }
   return ret;
