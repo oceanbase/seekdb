@@ -684,9 +684,34 @@ public:
   int load_for_update(uint64_t id, Roots &root) override {
     return snapshot_roots(trans_, id, root, true);
   }
+  int increment_ref(uint64_t id) override {
+    ObSqlString q;
+    int ret = q.assign_fmt("UPDATE %s SET ref_count=ref_count+1 WHERE snapshot_id=%lu", SNAPSHOTS, id);
+    return ret == OB_SUCCESS ? write_sql(trans_, q) : ret;
+  }
   int decrement_ref(uint64_t id) override {
     ObSqlString q;
     int ret = q.assign_fmt("UPDATE %s SET ref_count=ref_count-1 WHERE snapshot_id=%lu", SNAPSHOTS, id);
+    return ret == OB_SUCCESS ? write_sql(trans_, q) : ret;
+  }
+  int insert_snapshot(const Roots &root) override {
+    ObSqlString q;
+    int ret = q.assign_fmt("INSERT INTO %s VALUES(%ld,%lu,%lu,%ld,%ld,%ld,%ld,%lu,1)", SNAPSHOTS,
+        root.snapshot, root.catalog.page, root.directory.page, root.snapshot, root.schema_version,
+        root.catalog.cap, root.directory.cap, root.snapshot_ref);
+    return ret == OB_SUCCESS ? write_sql(trans_, q) : ret;
+  }
+  int attach_child(uint64_t child_id, uint64_t parent_namespace_id,
+                   const Roots &root) override {
+    ObSqlString q;
+    int ret = q.assign_fmt("UPDATE %s SET snapshot_ref=%ld WHERE namespace_id=%lu",
+        NAMESPACES, root.snapshot, child_id);
+    if (OB_SUCC(ret)) { ret = write_sql(trans_, q); }
+    if (OB_SUCC(ret)) { ret = save_roots(trans_, child_id, root); }
+    if (OB_SUCC(ret)) {
+      ret = q.assign_fmt("UPDATE %s SET parent_namespace=%lu,fork_cap=%ld WHERE namespace_id=%lu",
+          NAMESPACES, parent_namespace_id, root.snapshot, child_id);
+    }
     return ret == OB_SUCCESS ? write_sql(trans_, q) : ret;
   }
   int remove_snapshot(uint64_t id, const Roots &snapshot) override {
@@ -1830,31 +1855,16 @@ int NamespaceForkKernelPrototype::control_namespace(const ObString &source, cons
       }
       if (OB_FAIL(ret)) {
       } else {
-        root.catalog.cap = cap_min(root.catalog.cap, root.snapshot);
-        root.directory.cap = cap_min(root.directory.cap, root.snapshot);
-        if (root.snapshot_ref) {
-          Roots parent;
-          if (OB_FAIL(snapshot_roots(trans, root.snapshot_ref, parent, true))) {
-          } else if (parent.ref_count == INT64_MAX) { ret = OB_SIZE_OVERFLOW;
-          } else if (OB_FAIL(q.assign_fmt("UPDATE %s SET ref_count=ref_count+1 WHERE snapshot_id=%lu", SNAPSHOTS, root.snapshot_ref))) {
-          } else { ret = write_sql(trans, q); }
+        SqlSnapshotLineageStore store(trans);
+        const auto result = ::oceanbase::ns::NamespaceSnapshotLineage::fork(
+            source_id, id, root, store);
+        if (result.error == ::oceanbase::ns::SnapshotForkError::INVALID) {
+          ret = OB_INVALID_ARGUMENT;
+        } else if (result.error == ::oceanbase::ns::SnapshotForkError::OVERFLOW) {
+          ret = OB_SIZE_OVERFLOW;
+        } else if (result.error == ::oceanbase::ns::SnapshotForkError::STORE) {
+          ret = result.store_error;
         }
-        if (OB_SUCC(ret)) {
-          if (OB_FAIL(q.assign_fmt("INSERT INTO %s VALUES(%ld,%lu,%lu,%ld,%ld,%ld,%ld,%lu,1)", SNAPSHOTS,
-              root.snapshot, root.catalog.page, root.directory.page, root.snapshot, root.schema_version,
-              root.catalog.cap, root.directory.cap, root.snapshot_ref))) {
-          } else if (OB_FAIL(write_sql(trans, q))) {
-          } else if (OB_FAIL(q.assign_fmt("UPDATE %s SET snapshot_ref=%ld WHERE namespace_id=%lu", NAMESPACES, root.snapshot, id))) {
-          } else { ret = write_sql(trans, q); }
-        }
-        root.source = 0;
-        if (OB_SUCC(ret)) { ret = save_roots(trans, id, root); }
-        if (OB_SUCC(ret)) {
-          ret = q.assign_fmt(
-              "UPDATE %s SET parent_namespace=%lu,fork_cap=%ld WHERE namespace_id=%lu",
-              NAMESPACES, source_id, root.snapshot, id);
-        }
-        if (OB_SUCC(ret)) { ret = write_sql(trans, q); }
       }
     }
   }

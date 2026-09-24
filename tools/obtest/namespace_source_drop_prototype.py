@@ -30,6 +30,15 @@ def run(binary):
         child_id = experiment.sql(
             "SELECT namespace_id FROM __fork_proto_meta.namespaces "
             "WHERE name='child_drop'")[0][0]
+        source_snapshot = experiment.sql(
+            "SELECT snapshot_ref FROM __fork_proto_meta.namespaces "
+            f"WHERE namespace_id={source_id}")[0][0]
+        child_snapshot = experiment.sql(
+            "SELECT snapshot_ref FROM __fork_proto_meta.namespaces "
+            f"WHERE namespace_id={child_id}")[0][0]
+        assert experiment.sql(
+            "SELECT ref_count FROM __fork_proto_meta.snapshots "
+            f"WHERE snapshot_id={source_snapshot}") == ((2,),)
         child = connect(experiment, "root@child_drop")
         assert experiment.sql("SELECT SUM(v) FROM owned.t", child) == ((43,),)
         try:
@@ -40,6 +49,9 @@ def run(binary):
             raise AssertionError("drop accepted an active source connection")
         source.close(); source = None
         experiment.sql("DROP NAMESPACE source_drop")
+        assert experiment.sql(
+            "SELECT ref_count FROM __fork_proto_meta.snapshots "
+            f"WHERE snapshot_id={source_snapshot}") == ((1,),)
         try:
             connect(experiment, "root@source_drop").close()
         except pymysql.MySQLError:
@@ -76,10 +88,22 @@ def run(binary):
         grand_id = experiment.sql(
             "SELECT namespace_id FROM __fork_proto_meta.namespaces "
             "WHERE name='grand_drop'")[0][0]
+        grand_snapshot = experiment.sql(
+            "SELECT snapshot_ref FROM __fork_proto_meta.namespaces "
+            f"WHERE namespace_id={grand_id}")[0][0]
+        assert experiment.sql(
+            "SELECT ref_count FROM __fork_proto_meta.snapshots "
+            f"WHERE snapshot_id={child_snapshot}") == ((2,),)
         experiment.sql("DROP NAMESPACE child_drop")
+        assert experiment.sql(
+            "SELECT ref_count FROM __fork_proto_meta.snapshots "
+            f"WHERE snapshot_id={child_snapshot}") == ((1,),)
         with connect(experiment, "root@grand_drop") as grand:
             assert experiment.sql("SELECT SUM(v) FROM owned.t", grand) == ((45,),)
         experiment.sql("DROP NAMESPACE grand_drop")
+        assert experiment.sql(
+            "SELECT snapshot_id FROM __fork_proto_meta.snapshots "
+            f"WHERE snapshot_id IN ({source_snapshot},{child_snapshot},{grand_snapshot})") == ()
         for _ in range(20):
             remaining = experiment.sql(
                 "SELECT COUNT(*) FROM __fork_proto_meta.exceptions "

@@ -628,6 +628,12 @@ def direct_probe(experiment):
         experiment.sql("CREATE TABLE phase10.drop_source_rows(id INT PRIMARY KEY)", source)
         experiment.sql("INSERT INTO phase10.drop_source_rows VALUES(7)", source)
         experiment.sql("FORK NAMESPACE phase10_drop_child FROM phase10_drop_source")
+        source_snapshot = experiment.sql(
+            "SELECT snapshot_ref FROM __fork_proto_meta.namespaces "
+            "WHERE name='phase10_drop_source'")[0][0]
+        assert experiment.sql(
+            "SELECT ref_count FROM __fork_proto_meta.snapshots "
+            f"WHERE snapshot_id={source_snapshot}") == ((2,),)
         try:
             experiment.sql("DROP NAMESPACE phase10_drop_source")
         except pymysql.MySQLError:
@@ -635,6 +641,9 @@ def direct_probe(experiment):
         else:
             raise AssertionError("dropped a namespace with an active connection")
     experiment.sql("DROP NAMESPACE phase10_drop_source")
+    assert experiment.sql(
+        "SELECT ref_count FROM __fork_proto_meta.snapshots "
+        f"WHERE snapshot_id={source_snapshot}") == ((1,),)
     experiment.sql("CREATE NAMESPACE phase10_drop_source")
     with connect(experiment, "root@phase10_drop_child") as descendant:
         assert experiment.sql("SELECT id FROM phase10.drop_source_rows", descendant) == ((7,),)

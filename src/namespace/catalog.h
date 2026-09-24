@@ -41,12 +41,24 @@ class ISnapshotLineageStore {
 public:
   virtual ~ISnapshotLineageStore() = default;
   virtual int load_for_update(uint64_t snapshot_id, CatalogRoots &roots) = 0;
+  virtual int increment_ref(uint64_t snapshot_id) = 0;
   virtual int decrement_ref(uint64_t snapshot_id) = 0;
+  virtual int insert_snapshot(const CatalogRoots &roots) = 0;
+  virtual int attach_child(uint64_t child_id, uint64_t parent_namespace_id,
+                           const CatalogRoots &roots) = 0;
   virtual int remove_snapshot(uint64_t snapshot_id, const CatalogRoots &roots) = 0;
+};
+
+enum class SnapshotForkError : uint8_t { NONE, INVALID, OVERFLOW, STORE };
+struct SnapshotForkResult {
+  SnapshotForkError error = SnapshotForkError::NONE;
+  int store_error = 0;
 };
 
 class NamespaceSnapshotLineage final {
 public:
+  static SnapshotForkResult fork(uint64_t parent_namespace_id, uint64_t child_id,
+                                 CatalogRoots &roots, ISnapshotLineageStore &store);
   static int release(uint64_t snapshot_id, ISnapshotLineageStore &store);
 };
 
