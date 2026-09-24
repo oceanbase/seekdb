@@ -98,7 +98,7 @@ int route_object_id(StorageSpaceHandle storage_space,
                     uint64_t logical_id, uint64_t &storage_id)
 {
   if (!storage_space.is_valid()) { return OB_INVALID_ARGUMENT; }
-  if (storage_space.is_global() || storage_space.namespace_id() == 1) {
+  if (storage_space.is_global()) {
     storage_id = logical_id;
     return OB_SUCCESS;
   }
@@ -166,9 +166,6 @@ int route_tablet_mds(StorageSpaceHandle storage_space,
     return OB_SUCCESS;
   }
   const uint64_t ns = storage_space.namespace_id();
-  if (ns <= 1) {
-    return OB_SUCCESS;
-  }
   int ret = OB_SUCCESS;
   int64_t pos = 0;
   if (type == transaction::ObTxDataSourceType::CREATE_TABLET_NEW_MDS) {
