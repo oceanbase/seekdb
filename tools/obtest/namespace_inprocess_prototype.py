@@ -371,6 +371,8 @@ def direct_probe(experiment):
     # mysqltest regressions: truncate_table, join_basic, bulk_insert,
     # two_order_by, idx_unique_many_idx_one_ins, generated_column,
     # rename_table2; plus child FTS and IVF index lifecycle.
+    from namespace_inprocess_ddl_regressions import before_restart, after_restart
+
     with setup_branch(experiment) as child:
         experiment.sql("TRUNCATE TABLE phase10.parent", child)
         assert experiment.sql("SELECT COUNT(*) FROM phase10.parent", child) == ((0,),)
@@ -454,6 +456,13 @@ def direct_probe(experiment):
         assert experiment.sql(
             "SELECT SUBSTR(payload,7999,4),SUBSTR(payload,-1,1) "
             "FROM phase10.blobs WHERE id=2", child) == ((b"AACC", b"C"),)
+        experiment.sql("CREATE TABLE phase10.utf8_lob(id INT PRIMARY KEY, payload MEDIUMTEXT)", child)
+        with child.cursor() as cursor:
+            cursor.execute("INSERT INTO phase10.utf8_lob VALUES(1,%s)",
+                           ("界" * 8000 + "山" * 8000,))
+        assert experiment.sql(
+            "SELECT SUBSTR(payload,7999,4),SUBSTR(payload,-1,1) "
+            "FROM phase10.utf8_lob WHERE id=1", child) == (("界界山山", "山"),)
         experiment.sql("CREATE TABLE phase10.runtime_ddl(id INT PRIMARY KEY, v INT)", child)
         with child.cursor() as cursor:
             cursor.executemany("INSERT INTO phase10.runtime_ddl VALUES(%s,%s)",
@@ -499,6 +508,17 @@ def direct_probe(experiment):
         nearest_pq += "l2_distance(embedding,[0,0,0,0]) APPROXIMATE LIMIT 1"
         pq_result = experiment.sql(nearest_pq, child)
         assert len(pq_result) == 1 and 1 <= pq_result[0][0] <= 20, pq_result
+        experiment.sql("CREATE TABLE phase10.ivf_sq8_rows(id INT PRIMARY KEY, embedding VECTOR(4))", child)
+        experiment.sql("INSERT INTO phase10.ivf_sq8_rows VALUES " + pq_values, child)
+        experiment.sql("CREATE VECTOR INDEX sq8_embedding ON phase10.ivf_sq8_rows(embedding) "
+                       "WITH (distance=l2,type=ivf_sq8,nlist=2,sample_per_nlist=5)", child)
+        nearest_sq8 = "SELECT id FROM phase10.ivf_sq8_rows ORDER BY "
+        nearest_sq8 += "l2_distance(embedding,[0,0,0,0]) APPROXIMATE LIMIT 1"
+        assert experiment.sql(nearest_sq8, child) == ((1,),)
+        experiment.sql("CREATE TABLE phase10.empty_hnsw(id INT PRIMARY KEY, embedding VECTOR(3))", child)
+        experiment.sql("CREATE VECTOR INDEX empty_embedding ON phase10.empty_hnsw(embedding) "
+                       "WITH (distance=l2,type=hnsw,lib=vsag)", child)
+        before_restart(experiment, child)
     check_single_process(experiment)
     experiment.connection.close()
     experiment.connection = None
@@ -506,15 +526,22 @@ def direct_probe(experiment):
     experiment.proc.wait(timeout=20)
     experiment.start()
     with connect(experiment, "root@phase10_child") as child:
+        after_restart(experiment, child)
         assert experiment.sql("SELECT id FROM phase10.fulltext_rows "
                               "WHERE MATCH(body) AGAINST('beta')", child) == ((2,),)
         assert experiment.sql(nearest_ivf, child) == ((1,),)
         pq_result = experiment.sql(nearest_pq, child)
         assert len(pq_result) == 1 and 1 <= pq_result[0][0] <= 20, pq_result
+        assert experiment.sql(nearest_sq8, child) == ((1,),)
+        assert experiment.sql("SELECT COUNT(*) FROM phase10.empty_hnsw", child) == ((0,),)
+        assert experiment.sql("SELECT SUBSTR(payload,7999,4) FROM phase10.utf8_lob "
+                              "WHERE id=1", child) == (("界界山山",),)
         experiment.sql("DROP INDEX ivf_embedding ON phase10.ivf_rows", child)
         experiment.sql("DROP INDEX pq_embedding ON phase10.ivf_pq_rows", child)
+        experiment.sql("DROP INDEX sq8_embedding ON phase10.ivf_sq8_rows", child)
         assert experiment.sql("SELECT COUNT(*) FROM phase10.ivf_rows", child) == ((6,),)
         assert experiment.sql("SELECT COUNT(*) FROM phase10.ivf_pq_rows", child) == ((20,),)
+        assert experiment.sql("SELECT COUNT(*) FROM phase10.ivf_sq8_rows", child) == ((20,),)
     experiment.sql("FORK NAMESPACE phase10_drop_source FROM ns1")
     with connect(experiment, "root@phase10_drop_source") as source:
         experiment.sql("CREATE TABLE phase10.drop_source_rows(id INT PRIMARY KEY)", source)
@@ -530,11 +557,17 @@ def direct_probe(experiment):
     experiment.sql("CREATE NAMESPACE phase10_drop_source")
     with connect(experiment, "root@phase10_drop_child") as descendant:
         assert experiment.sql("SELECT id FROM phase10.drop_source_rows", descendant) == ((7,),)
+        experiment.sql("FORK TABLE phase10.drop_source_rows "
+                       "TO phase10.drop_source_copy", descendant)
+        assert experiment.sql("SELECT id FROM phase10.drop_source_copy", descendant) == ((7,),)
     with connect(experiment, "root@phase10_drop_source") as replacement:
         assert "phase10" not in {row[0] for row in experiment.sql("SHOW DATABASES", replacement)}
     experiment.record("PASS", case="inprocess_direct", ddl=True, partition=True,
                       index=True, lob=True, fulltext=True, ivf=True, ivf_pq=True,
-                      source_drop=True, restart=True)
+                      ivf_sq8=True, empty_hnsw=True,
+                      source_drop=True, ddl_redefinition=True,
+                      check_constraint=True, auto_increment=True,
+                      fork_table=True, restart=True)
 
 
 def tls_probe(experiment):
