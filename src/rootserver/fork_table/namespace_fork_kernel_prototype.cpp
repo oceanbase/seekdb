@@ -2342,12 +2342,6 @@ int NamespaceForkKernelPrototype::forget_schema_in_namespace(
 
 namespace {
 
-struct DirectoryTabletState
-{
-  uint64_t table_id = OB_INVALID_ID;
-  uint64_t physical_tablet_id = OB_INVALID_ID;
-};
-
 bool owns_namespace_directory_entries(const ObTableSchema &schema)
 {
   return schema.is_user_table() || schema.is_index_table()
@@ -2357,7 +2351,7 @@ bool owns_namespace_directory_entries(const ObTableSchema &schema)
 int collect_directory_tablets(
     uint64_t namespace_id,
     const ObIArray<const ObTableSchema *> &schemas,
-    std::map<uint64_t, DirectoryTabletState> &tablets)
+    std::map<uint64_t, uint64_t> &tablets)
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < schemas.count(); ++i) {
@@ -2393,11 +2387,7 @@ int collect_directory_tablets(
             || !storage_key.is_valid()) {
           ret = OB_INVALID_ARGUMENT;
         } else {
-          DirectoryTabletState state;
-          state.table_id = table_id;
-          state.physical_tablet_id = encoded_tablet
-              ? schema_tablet_id : storage_key.storage_id();
-          if (!tablets.emplace(tablet_id, state).second) {
+          if (!tablets.emplace(tablet_id, table_id).second) {
             ret = OB_STATE_NOT_MATCH;
           }
         }
@@ -2420,8 +2410,8 @@ int replace_namespace_exceptions(
     const ObIArray<const ObTableSchema *> &previous_schemas,
     ObIArray<ObTabletID> &private_tablets)
 {
-  std::map<uint64_t, DirectoryTabletState> previous_tablets;
-  std::map<uint64_t, DirectoryTabletState> current_tablets;
+  std::map<uint64_t, uint64_t> previous_tablets;
+  std::map<uint64_t, uint64_t> current_tablets;
   int ret = collect_directory_tablets(
       namespace_id, previous_schemas, previous_tablets);
   if (OB_SUCC(ret)) {
@@ -2441,39 +2431,32 @@ int replace_namespace_exceptions(
     ret = load_exceptions(trans, namespace_id);
   }
 
-  // Tablets that disappeared from the changed-schema set are dropped here:
-  // physically delete the ones this namespace owns, and tombstone every one
-  // so no later read can fall through to an inherited ancestor copy.
-  for (auto it = previous_tablets.begin(); OB_SUCC(ret)
-      && it != previous_tablets.end(); ++it) {
-    const uint64_t tablet_id = it->first;
-    if (current_tablets.count(tablet_id) != 0) { continue; }
-    if (control_state().owned(namespace_id, tablet_id)) {
-      const NamespaceObjectKey key{namespace_id, tablet_id};
-      if (!key.is_valid()) {
-        ret = OB_INVALID_ARGUMENT;
-      } else {
-        ret = private_tablets.push_back(ObTabletID(key.storage_id()));
+  // Plan the complete delta before applying it: EXCHANGE PARTITION keeps the
+  // physical tablet while changing its table, unlike a drop and a create.
+  const auto actions = ::oceanbase::ns::NamespaceExceptionDelta::plan(
+      previous_tablets, current_tablets);
+  for (const auto &action : actions) {
+    if (OB_FAIL(ret)) { break; }
+    const uint64_t tablet_id = action.tablet_id;
+    ObSqlString q;
+    if (action.kind == ::oceanbase::ns::ExceptionDeltaKind::TOMBSTONE) {
+      // A removed owned tablet must be reclaimed; the tombstone also stops
+      // reads from falling through to an inherited ancestor copy.
+      if (control_state().owned(namespace_id, tablet_id)) {
+        const NamespaceObjectKey key{namespace_id, tablet_id};
+        if (!key.is_valid()) {
+          ret = OB_INVALID_ARGUMENT;
+        } else {
+          ret = private_tablets.push_back(ObTabletID(key.storage_id()));
+        }
       }
-    }
-    ObSqlString q;
-    if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(q.assign_fmt("REPLACE INTO %s VALUES(%lu,%lu,%lu,1,0)",
-        EXCEPTIONS, namespace_id, tablet_id, it->second.table_id))) {
-    } else {
-      ret = write_sql(trans, q);
-    }
-  }
-
-  // Truly new logical tablets are physically created by the worker's DDL and
-  // become owned rows here. A kept tablet only needs its table id refreshed
-  // when the delta moved it between tables.
-  for (auto it = current_tablets.begin(); OB_SUCC(ret)
-      && it != current_tablets.end(); ++it) {
-    const uint64_t tablet_id = it->first;
-    const auto previous_it = previous_tablets.find(tablet_id);
-    ObSqlString q;
-    if (previous_it == previous_tablets.end()) {
+      if (OB_FAIL(ret)) {
+      } else if (OB_FAIL(q.assign_fmt("REPLACE INTO %s VALUES(%lu,%lu,%lu,1,0)",
+          EXCEPTIONS, namespace_id, tablet_id, action.table_id))) {
+      } else {
+        ret = write_sql(trans, q);
+      }
+    } else if (action.kind == ::oceanbase::ns::ExceptionDeltaKind::PROBE_NEW) {
       // A recovery delta can list tablets this namespace only inherits: their
       // physical copy lives in an ancestor, so they must stay chain-resolved.
       // Only a tablet whose physical copy exists locally becomes an owned row.
@@ -2484,14 +2467,14 @@ int replace_namespace_exceptions(
       } else if (OB_FAIL(probe_physical_tablet(key.storage_id(), exists))) {
       } else if (!exists) {
       } else if (OB_FAIL(q.assign_fmt("REPLACE INTO %s VALUES(%lu,%lu,%lu,0,0)",
-          EXCEPTIONS, namespace_id, tablet_id, it->second.table_id))) {
+          EXCEPTIONS, namespace_id, tablet_id, action.table_id))) {
       } else {
         ret = write_sql(trans, q);
       }
-    } else if (previous_it->second.table_id != it->second.table_id) {
+    } else {
       if (OB_FAIL(q.assign_fmt(
           "UPDATE %s SET table_id=%lu WHERE namespace_id=%lu AND tablet_id=%lu AND kind=0",
-          EXCEPTIONS, it->second.table_id, namespace_id, tablet_id))) {
+          EXCEPTIONS, action.table_id, namespace_id, tablet_id))) {
       } else {
         ret = write_sql(trans, q);
       }

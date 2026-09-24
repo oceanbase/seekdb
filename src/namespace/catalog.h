@@ -4,6 +4,7 @@
 // Persistent namespace catalog values and their storage-independent encoding.
 #include <cstddef>
 #include <cstdint>
+#include <map>
 #include <mutex>
 #include <shared_mutex>
 #include <string>
@@ -120,6 +121,22 @@ struct NamespaceExceptionRow {
   uint64_t tablet = 0;
   uint64_t table = 0;
   int64_t kind = 0;
+};
+
+enum class ExceptionDeltaKind : uint8_t { TOMBSTONE, PROBE_NEW, UPDATE_TABLE };
+struct ExceptionDeltaAction {
+  ExceptionDeltaKind kind;
+  uint64_t tablet_id;
+  uint64_t table_id;
+};
+
+class NamespaceExceptionDelta final {
+public:
+  // The maps contain namespace-local tablet id -> table id. A new tablet
+  // still needs a physical-presence probe before it can be marked owned.
+  static std::vector<ExceptionDeltaAction> plan(
+      const std::map<uint64_t, uint64_t> &previous,
+      const std::map<uint64_t, uint64_t> &current);
 };
 
 class IExceptionLoader {
