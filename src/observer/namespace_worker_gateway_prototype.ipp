@@ -48,7 +48,7 @@ int serve_storage(StorageSpaceHandle storage_space,
     EngineWrites *writes, int state, Frame &input, Frame &result) {
     int ret = OB_SUCCESS;
     if (!storage_space.is_namespace()) { return OB_INVALID_ARGUMENT; }
-    if (writes && (input.type() == 'T' || input.type() == 'W')) {
+    if (writes && input.type() == 'T') {
       result = Frame('w');
       if (state && !cleanup_write(input)) { result.number(state); }
       else { ret = writes->process(input, result); }
@@ -365,6 +365,26 @@ int prepare_in_process_write(const WritePrepareRequest &request,
   auto *old_session = THIS_WORKER.get_session();
   THIS_WORKER.set_session(&ctx->session);
   const int ret = ctx->writes->prepare(request, view, handle);
+  THIS_WORKER.set_session(old_session);
+  THIS_WORKER.set_timeout_ts(old_timeout);
+  return ret;
+}
+int write_in_process_batch(const ObTxDesc &view, const WriteBatch &batch,
+                           int64_t &affected, WriteResult &duplicates)
+{
+  affected = 0;
+  InProcessStorage *ctx = in_process_storage;
+  const StorageSpaceHandle space = active_worker_storage_space();
+  if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
+  if (ctx->ns != serving_namespace()
+      || (!(space.is_namespace() && space.namespace_id() == ctx->ns)
+          && !(space.is_global() && ctx->ns == 1))) {
+    return OB_INVALID_ARGUMENT;
+  }
+  const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
+  auto *old_session = THIS_WORKER.get_session();
+  THIS_WORKER.set_session(&ctx->session);
+  const int ret = ctx->writes->batch(view, batch, affected, duplicates);
   THIS_WORKER.set_session(old_session);
   THIS_WORKER.set_timeout_ts(old_timeout);
   return ret;

@@ -43,6 +43,46 @@ struct WritePrepareRequest {
 };
 int prepare_in_process_write(const WritePrepareRequest &request,
                              const ObTxDesc &view, uint64_t &handle);
+struct WriteCells {
+  ObArenaAllocator allocator{ObMemAttr("NsWriteCells")};
+  std::vector<ObObj> cells;
+  std::vector<bool> lob_headers;
+  size_t bytes;
+  explicit WriteCells(size_t initial_bytes) : bytes(initial_bytes) {}
+  int append(const ObObj &value, bool has_lob_header) {
+    const int64_t size = value.get_serialize_size();
+    if (size < 0 || bytes > MAX_SQL_MESSAGE - 8
+        || static_cast<size_t>(size) > MAX_SQL_MESSAGE - bytes - 8) {
+      return OB_SIZE_OVERFLOW;
+    }
+    ObObj copied;
+    int ret = ob_write_obj(allocator, value, copied);
+    if (!ret) {
+      cells.push_back(copied);
+      lob_headers.push_back(has_lob_header);
+      bytes += static_cast<size_t>(size) + 8;
+    }
+    return ret;
+  }
+};
+struct WriteBatch : WriteCells {
+  char operation;
+  uint64_t handle;
+  uint64_t tablet_id;
+  uint64_t rows = 0;
+  int64_t lock_timeout = 0;
+  ObRowLockMode lock_mode = ObRowLockMode::NONE;
+  ObDuplicateReturnMode duplicate_mode = ObDuplicateReturnMode::ALL;
+  std::vector<uint64_t> updated_columns;
+  WriteBatch(char op, uint64_t h, uint64_t tablet)
+      : WriteCells(49), operation(op), handle(h), tablet_id(tablet) {}
+};
+struct WriteResult : WriteCells {
+  uint64_t rows = 0;
+  WriteResult() : WriteCells(25) {}
+};
+int write_in_process_batch(const ObTxDesc &view, const WriteBatch &batch,
+                           int64_t &affected, WriteResult &duplicates);
 
 bool cleanup_write(Frame &request) {
   const int64_t position = request.pos;
@@ -1056,17 +1096,19 @@ struct EngineWrite {
     context.reset();
   }
 
-  int batch(char operation, ObTxDesc &tx, Frame &request,
-            int64_t &affected, Frame &returned) {
+  int batch(const WriteBatch &request, ObTxDesc &tx,
+            int64_t &affected, WriteResult &returned) {
+    const char operation = request.operation;
     const bool namespace_local = storage_space.is_namespace();
     const uint64_t ns = storage_space.namespace_id();
-    const uint64_t tablet_id = request.number(), count = request.number();
+    const uint64_t tablet_id = request.tablet_id, count = request.rows;
     const bool update = operation == 'U';
-    if (request.ret
-        || std::find(logical_tablets.begin(), logical_tablets.end(), tablet_id)
+    if (std::find(logical_tablets.begin(), logical_tablets.end(), tablet_id)
             == logical_tablets.end()
         || count == 0
-        || count > (update ? 64 : 32) || (update && count % 2)) { return OB_INVALID_ARGUMENT; }
+        || count > (update ? 64 : 32) || (update && count % 2)
+        || request.cells.size() != count * columns.count()
+        || request.lob_headers.size() != request.cells.size()) { return OB_INVALID_ARGUMENT; }
     ObTabletID tablet(tablet_id);
     int ret = OB_SUCCESS;
     if (namespace_local && ns > 1) {
@@ -1079,42 +1121,32 @@ struct EngineWrite {
     if (OB_FAIL(ret)) { return ret; }
     if (OB_SUCC(ret)) { ret = acquire(tx); }
     if (OB_FAIL(ret)) { return ret; }
-    int64_t lock_timeout = 0;
-    ObRowLockMode lock_mode = ObRowLockMode::NONE;
-    if (operation == 'L') {
-      lock_timeout = request.number(); lock_mode = static_cast<ObRowLockMode>(request.number());
-      if (request.ret || (lock_mode != ObRowLockMode::NONE && lock_mode != ObRowLockMode::WRITE)) { return OB_INVALID_ARGUMENT; }
-    }
+    const int64_t lock_timeout = request.lock_timeout;
+    const ObRowLockMode lock_mode = request.lock_mode;
+    if (operation == 'L' && lock_mode != ObRowLockMode::NONE
+        && lock_mode != ObRowLockMode::WRITE) { return OB_INVALID_ARGUMENT; }
     ObSEArray<uint64_t, 2> updated_columns;
-    const uint64_t updated_count = request.number();
-    if (request.ret || updated_count > uint64_t(columns.count())
+    const uint64_t updated_count = request.updated_columns.size();
+    if (updated_count > uint64_t(columns.count())
         || (update || operation == 'f' ? updated_count == 0 : updated_count != 0)) { return OB_INVALID_ARGUMENT; }
     for (uint64_t i = 0; i < updated_count; ++i) {
-      const uint64_t column = request.number();
-      if (request.ret || !has_exist_in_array(columns, column)
+      const uint64_t column = request.updated_columns[i];
+      if (!has_exist_in_array(columns, column)
           || has_exist_in_array(updated_columns, column)) { return OB_INVALID_ARGUMENT; }
       int ret = updated_columns.push_back(column);
       if (ret) { return ret; }
     }
-    auto duplicate_mode = operation == 'f' ? static_cast<ObDuplicateReturnMode>(request.number()) : ObDuplicateReturnMode::ALL;
+    const auto duplicate_mode = request.duplicate_mode;
     if (duplicate_mode != ObDuplicateReturnMode::ALL && duplicate_mode != ObDuplicateReturnMode::ONE) { return OB_INVALID_ARGUMENT; }
-    // Decode and validate a bounded batch before entering native storage.
-    std::vector<ObObj> cells(count * columns.count());
-    std::vector<bool> lob_headers(cells.size());
-    for (size_t i = 0; i < cells.size(); ++i) {
-      lob_headers[i] = request.read_object(cells[i]);
-      if (request.ret) { return OB_INVALID_ARGUMENT; }
-    }
-    if (!request.consumed()) { return OB_INVALID_ARGUMENT; }
     class Rows final : public ObDatumRowIterator {
     public:
-      std::vector<ObObj> &cells;
-      std::vector<bool> &lob_headers;
+      const std::vector<ObObj> &cells;
+      const std::vector<bool> &lob_headers;
       int64_t width;
       size_t position = 0;
       // UPDATE's old row must remain alive while storage obtains its new row.
       ObDatumRow rows[2];
-      Rows(std::vector<ObObj> &values, std::vector<bool> &headers, int64_t columns)
+      Rows(const std::vector<ObObj> &values, const std::vector<bool> &headers, int64_t columns)
           : cells(values), lob_headers(headers), width(columns) {}
       int get_next_row(ObDatumRow *&out) override {
         if (position == cells.size()) { return OB_ITER_END; }
@@ -1127,7 +1159,7 @@ struct EngineWrite {
         }
         row.row_flag_.set_flag(DF_INSERT); out = &row; return ret;
       }
-    } rows(cells, lob_headers, columns.count());
+    } rows(request.cells, request.lob_headers, columns.count());
     ret = rows.rows[0].init(columns.count());
     if (!ret) { ret = rows.rows[1].init(columns.count()); }
     auto *service = share::server_service<ObIDmlService>();
@@ -1140,10 +1172,11 @@ struct EngineWrite {
       } release{service, duplicates};
       if (!ret || ret == OB_ERR_PRIMARY_KEY_DUPLICATE) {
         const int storage_ret = ret;
-        Frame values; int64_t count = 0; ret = OB_SUCCESS;
+        int64_t duplicate_count = 0; ret = OB_SUCCESS;
         ObDatumRow *row = nullptr;
         while (duplicates && !ret && !(ret = duplicates->get_next_row(row))) {
-          if (!row || row->get_column_count() != updated_columns.count() || count >= 32) { ret = OB_SIZE_OVERFLOW; break; }
+          if (!row || row->get_column_count() != updated_columns.count()
+              || duplicate_count >= 32) { ret = OB_SIZE_OVERFLOW; break; }
           for (int64_t i = 0; !ret && i < updated_columns.count(); ++i) {
             ObObj cell;
             const auto &descriptors = plan.get_col_descs();
@@ -1153,16 +1186,14 @@ struct EngineWrite {
             }
             ret = column ? row->storage_datums_[i].to_obj_enhance(cell, column->col_type_) : OB_INVALID_ARGUMENT;
             if (!ret) {
-              values.write_object(cell, row->storage_datums_[i].has_lob_header());
-              ret = values.ret;
+              ret = returned.append(cell, row->storage_datums_[i].has_lob_header());
             }
           }
-          ++count;
+          ++duplicate_count;
         }
         if (ret == OB_ITER_END) { ret = OB_SUCCESS; }
         if (!ret) {
-          returned.number(count);
-          returned.data.insert(returned.data.end(), values.data.begin() + Frame::HEADER_SIZE, values.data.end());
+          returned.rows = duplicate_count;
           ret = storage_ret;
         }
       }
@@ -1228,6 +1259,18 @@ struct EngineWrites {
       writes.emplace(handle, std::move(prepared));
     }
     return ret;
+  }
+  int batch(const ObTxDesc &view, const WriteBatch &request,
+            int64_t &affected, WriteResult &duplicates) {
+    if (!tx || tx->get_tx_id() != view.get_tx_id()) { return OB_INVALID_ARGUMENT; }
+    if (request.operation != 'I' && request.operation != 'U'
+        && request.operation != 'D' && request.operation != 'L'
+        && request.operation != 'p' && request.operation != 'f') {
+      return OB_INVALID_ARGUMENT;
+    }
+    auto it = writes.find(request.handle);
+    return it == writes.end() ? OB_INVALID_ARGUMENT
+        : it->second->batch(request, *tx, affected, duplicates);
   }
   int process(Frame &request, Frame &reply) {
     const uint64_t ns = storage_space.namespace_id();
@@ -1494,19 +1537,9 @@ struct EngineWrites {
         else { ret = service->collect_tx_exec_result(*tx, result); }
         values.append(result);
       } else { ret = OB_NOT_SUPPORTED; }
-    } else if (!ret && request.type() == 'W') {
-        const uint64_t handle = request.number();
-        auto it = writes.find(handle);
-        if (request.ret || it == writes.end()) { ret = OB_INVALID_ARGUMENT; }
-        else if (operation == 'I' || operation == 'U' || operation == 'D' || operation == 'L' || operation == 'p' || operation == 'f') {
-          int64_t affected = 0; Frame returned;
-          ret = it->second->batch(operation, *tx, request, affected, returned);
-          values.number(affected);
-          values.data.insert(values.data.end(), returned.data.begin() + Frame::HEADER_SIZE, returned.data.end());
-        } else { ret = OB_INVALID_ARGUMENT; }
     }
     reply = Frame('w'); reply.number(ret);
-    if (!ret || (request.type() == 'W' && operation == 'f' && ret == OB_ERR_PRIMARY_KEY_DUPLICATE)) {
+    if (!ret) {
       if (request.type() == 'T') { reply.append(*tx); }
       reply.data.insert(reply.data.end(), values.data.begin() + Frame::HEADER_SIZE, values.data.end());
       if (values.ret) { reply.ret = values.ret; }
@@ -2223,7 +2256,7 @@ struct RemoteExecution final : public ObIDmlExecutionState {
 
 class DuplicateRows final : public ObDatumRowIterator {
 public:
-  std::vector<Frame> batches;
+  std::vector<std::unique_ptr<WriteResult>> batches;
   size_t current = 0;
   uint64_t remaining = 0;
   int64_t width;
@@ -2232,19 +2265,19 @@ public:
   int get_next_row(ObDatumRow *&out) override {
     while (!remaining) {
       if (current == batches.size()) { return OB_ITER_END; }
-      remaining = batches[current].number();
+      remaining = batches[current]->rows;
       if (!remaining) { ++current; }
     }
-    Frame &batch = batches[current];
+    WriteResult &batch = *batches[current];
+    if (batch.cells.size() != batch.rows * width
+        || batch.lob_headers.size() != batch.cells.size()) { return OB_INVALID_ARGUMENT; }
     int ret = row.is_valid() ? OB_SUCCESS : row.init(width);
     for (int64_t i = 0; !ret && i < width; ++i) {
-      ObObj value;
-      const bool has_lob_header = batch.read_object(value);
-      ret = batch.ret ? batch.ret : row.storage_datums_[i].from_obj_enhance(value);
-      if (!ret && has_lob_header) { row.storage_datums_[i].set_has_lob_header(); }
+      const size_t index = (batch.rows - remaining) * width + i;
+      ret = row.storage_datums_[i].from_obj_enhance(batch.cells[index]);
+      if (!ret && batch.lob_headers[index]) { row.storage_datums_[i].set_has_lob_header(); }
     }
     if (!--remaining) {
-      if (!batch.consumed()) { ret = OB_INVALID_ARGUMENT; }
       ++current;
     }
     out = &row; return ret;
@@ -2579,9 +2612,23 @@ public:
     int ret = OB_SUCCESS;
     bool end = false, duplicated = false;
     while (!ret && !end) {
-      Frame cells;
+      WriteBatch batch(operation, state->handle, tablet_id.id());
+      batch.lock_timeout = lock_timeout;
+      batch.lock_mode = lock_mode;
+      batch.duplicate_mode = duplicate_mode;
+      if (operation == 'L') { batch.bytes += 16; }
+      if (duplicates) { batch.bytes += 8; }
+      if (updated_column_ids) {
+        if (updated_column_ids->count() > static_cast<int64_t>((MAX_SQL_MESSAGE - batch.bytes) / 8)) {
+          return OB_SIZE_OVERFLOW;
+        }
+        batch.bytes += updated_column_ids->count() * 8;
+        for (int64_t i = 0; i < updated_column_ids->count(); ++i) {
+          batch.updated_columns.push_back(updated_column_ids->at(i));
+        }
+      }
       int64_t rows = 0;
-      // Keep old/new pairs in the same frame: at most 32 logical writes.
+      // Keep old/new pairs in the same batch: at most 32 logical writes.
       while (!ret && rows < (operation == 'U' ? 64 : 32)) {
         ObDatumRow *row = nullptr;
         ret = THIS_WORKER.check_status();
@@ -2592,29 +2639,21 @@ public:
           ObObj value;
           ret = row->storage_datums_[i].to_obj_enhance(value, state->types[i]);
           if (!ret) {
-            cells.write_object(value, row->storage_datums_[i].has_lob_header());
-            ret = cells.ret;
+            ret = batch.append(value, row->storage_datums_[i].has_lob_header());
           }
         }
         if (!ret) { ++rows; }
       }
       if (!ret && operation == 'U' && rows % 2) { ret = OB_INVALID_ARGUMENT; }
       if (!ret && rows) {
-        Frame request('W'), reply; request.number(operation); request.number(state->txid);
-        request.number(state->handle); request.number(tablet_id.id()); request.number(rows);
-        if (operation == 'L') { request.number(lock_timeout); request.number(static_cast<int>(lock_mode)); }
-        request.number(updated_column_ids ? updated_column_ids->count() : 0);
-        if (updated_column_ids) {
-          for (int64_t i = 0; i < updated_column_ids->count(); ++i) { request.number(updated_column_ids->at(i)); }
-        }
-        if (duplicates) { request.number(static_cast<int>(duplicate_mode)); }
-        request.data.insert(request.data.end(), cells.data.begin() + Frame::HEADER_SIZE, cells.data.end());
-        ret = write_rpc(request, reply);
+        batch.rows = rows;
+        auto returned = std::make_unique<WriteResult>();
+        int64_t affected = 0;
+        ret = write_in_process_batch(tx_desc, batch, affected, *returned);
         if (duplicates && ret == OB_ERR_PRIMARY_KEY_DUPLICATE) { duplicated = true; ret = OB_SUCCESS; }
         if (!ret) {
-          affected_rows += reply.number();
-          if (duplicates && !reply.ret) { duplicates->batches.push_back(std::move(reply)); }
-          else if (!reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
+          affected_rows += affected;
+          if (duplicates) { duplicates->batches.push_back(std::move(returned)); }
         }
       }
     }
