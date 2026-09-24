@@ -188,29 +188,45 @@ int can_skip_fractional_decimal_eq(ObTransformerCtx *ctx, ObRawExpr *expr, bool 
 }
 
 // A CAST or type-demotion CAST of a literal can be checked under the current SQL mode without
-// changing the statement's warning buffer.  Keep parameterized casts out of
-// this exception: their value can change after the plan is compiled.
+// changing the statement's warning buffer. Prepared parameters can change
+// between executions; only text SQL's bound, automatically parameterized literal is eligible.
 int check_warning_free_literal_cast(ObTransformerCtx *ctx,
                                     ObRawExpr *expr,
                                     bool &is_safe)
 {
   int ret = OB_SUCCESS;
   is_safe = false;
+  const ObSqlCtx *sql_ctx = NULL;
+  ObPhysicalPlanCtx *plan_ctx = NULL;
   ObRawExpr *src = NULL;
   ObRawExpr *type_arg = NULL;
+  const oceanbase::common::ObObj *value = NULL;
   bool has_warning = false;
-  if (OB_ISNULL(ctx) || OB_ISNULL(expr)) {
+  if (OB_ISNULL(ctx) || OB_ISNULL(ctx->exec_ctx_) || OB_ISNULL(expr)) {
     ret = OB_ERR_UNEXPECTED;
+  } else if (OB_ISNULL(sql_ctx = ctx->exec_ctx_->get_sql_ctx())
+             || OB_ISNULL(plan_ctx = ctx->exec_ctx_->get_physical_plan_ctx())) {
+    // No bound literal is available for a warning probe.
   } else if ((T_FUN_SYS_CAST != expr->get_expr_type() &&
               T_FUN_SYS_DEMOTE_CAST != expr->get_expr_type()) ||
              expr->get_param_count() != 2 ||
              !expr->is_static_scalar_const_expr() ||
-             expr->has_flag(CNT_STATIC_PARAM) || expr->has_flag(CNT_DYNAMIC_PARAM) ||
              OB_ISNULL(src = expr->get_param_expr(0)) ||
              OB_ISNULL(type_arg = expr->get_param_expr(1)) ||
-             !src->is_immutable_const_expr() || !type_arg->is_immutable_const_expr() ||
-             static_cast<const ObConstRawExpr*>(src)->get_value().is_null()) {
+             !type_arg->is_immutable_const_expr()) {
     // Other casts can depend on row values, parameters or runtime state.
+  } else if (src->is_immutable_const_expr()) {
+    value = &static_cast<const ObConstRawExpr *>(src)->get_value();
+  } else if (T_QUESTIONMARK == src->get_expr_type()
+             && !sql_ctx->is_prepare_protocol_ && !sql_ctx->is_text_ps_mode_) {
+    // Text SQL is parameterized before rewrites. Probe its bound literal and
+    // make the resulting plan noncacheable when this exception is used.
+    const int64_t idx = static_cast<const ObConstRawExpr *>(src)->get_value().get_unknown();
+    if (idx >= 0 && idx < plan_ctx->get_param_store().count()) {
+      value = &plan_ctx->get_param_store().at(idx);
+    }
+  }
+  if (OB_FAIL(ret) || OB_ISNULL(value) || value->is_null()) {
   } else if (OB_FAIL(ObTransformUtils::check_static_expr_has_warning(ctx, expr, has_warning))) {
   } else {
     is_safe = !has_warning;
