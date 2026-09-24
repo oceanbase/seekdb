@@ -643,27 +643,13 @@ int ObDropTableHelper::prefetch_table_schemas_()
       ObTableType table_type = ObTableType::MAX_TABLE_TYPE;
       int64_t schema_version = OB_INVALID_VERSION;
       const ObTableSchema *table_schema = NULL;
-      const bool namespace_table =
-          storage::NamespaceForkKernelPrototype::is_encoded_id(table_items_.at(i).table_id_);
-      if (namespace_table) {
-        table_id = table_items_.at(i).table_id_;
-      }
 
       if (OB_UNLIKELY(OB_INVALID_ID == database_id)) {
         // invalid database_id indicates bad database
         LOG_WARN("database id is invalid", KR(ret));
         if (OB_FAIL(log_table_not_exist_msg_(table_items_.at(i)))) {
         }
-      } else if (namespace_table
-                 && OB_FAIL(schema_guard_wrapper_.get_table_schema(table_id, table_schema))) {
-      } else if (namespace_table && OB_ISNULL(table_schema)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("namespace table schema is null", KR(ret), K(table_id));
-      } else if (namespace_table && FALSE_IT(
-                     (table_type = table_schema->get_table_type(),
-                      schema_version = table_schema->get_schema_version()))) {
-      } else if (!namespace_table
-                 && OB_FAIL(schema_guard_wrapper_.get_table_id(
+      } else if (OB_FAIL(schema_guard_wrapper_.get_table_id(
                      database_id, session_id, table_name, table_id, table_type, schema_version))) {
       } else if (OB_UNLIKELY(OB_INVALID_ID == table_id)) {
         // skip
@@ -1353,7 +1339,7 @@ int ObDropTableHelper::drop_table_(const ObTableSchema &table_schema, const ObSt
         LOG_WARN("failed to remove dbms vector jobs", KR(ret), K(table_schema.get_table_id()));
       }
     }
-    if (OB_SUCC(ret) && storage::NamespaceForkKernelPrototype::is_encoded_id(table_schema.get_table_id())) {
+    if (OB_SUCC(ret)) {
       res_.schema_version_ = std::max(res_.schema_version_, new_schema_version);
     }
   }
@@ -1727,7 +1713,6 @@ int ObDropTableHelper::sync_version_for_cascade_mock_fk_parent_table_(const ObIA
 bool ObDropTableHelper::is_to_recyclebin_(const ObTableSchema &table_schema)
 {
   return arg_.to_recyclebin_
-         && !storage::NamespaceForkKernelPrototype::is_encoded_id(table_schema.get_table_id())
          && !table_schema.is_tmp_table()
          && !table_schema.is_aux_table()
          && !is_inner_table(table_schema.get_table_id());
