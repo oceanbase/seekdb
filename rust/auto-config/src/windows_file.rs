@@ -20,11 +20,8 @@ use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::FromRawHandle;
 use std::path::Path;
 use std::ptr;
-use std::time::Duration;
-
 use windows_sys::Win32::Foundation::{
-    CloseHandle, LocalFree, ERROR_ACCESS_DENIED, ERROR_INSUFFICIENT_BUFFER, ERROR_LOCK_VIOLATION,
-    ERROR_SHARING_VIOLATION, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE,
+    CloseHandle, LocalFree, ERROR_INSUFFICIENT_BUFFER, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE,
 };
 use windows_sys::Win32::Security::Authorization::{
     ConvertSidToStringSidW, ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
@@ -164,29 +161,15 @@ pub(super) fn create_private(path: &Path) -> io::Result<File> {
 pub(super) fn replace(from: &Path, to: &Path) -> io::Result<()> {
     let from = wide_path(from);
     let to = wide_path(to);
-    for attempt in 0..=100 {
-        if unsafe {
-            MoveFileExW(
-                from.as_ptr(),
-                to.as_ptr(),
-                MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
-            )
-        } != 0
-        {
-            return Ok(());
-        }
-        let error = io::Error::last_os_error();
-        if attempt == 100
-            || !matches!(
-                error.raw_os_error(),
-                Some(code) if code == ERROR_ACCESS_DENIED as i32
-                    || code == ERROR_SHARING_VIOLATION as i32
-                    || code == ERROR_LOCK_VIOLATION as i32
-            )
-        {
-            return Err(error);
-        }
-        std::thread::sleep(Duration::from_millis(100));
+    if unsafe {
+        MoveFileExW(
+            from.as_ptr(),
+            to.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    } == 0
+    {
+        return Err(io::Error::last_os_error());
     }
-    unreachable!()
+    Ok(())
 }
