@@ -1178,9 +1178,8 @@ private:
 class ObCartesianGeometrycollection : public ObGeometrycollection
 {
 public:
-  typedef PageArena<ObGeometry *, ModulePageAllocator> ObCGeoModuleArena;
-  typedef ObVector<ObGeometry *, ObCGeoModuleArena>::iterator iterator;
-  typedef ObVector<ObGeometry *, ObCGeoModuleArena>::const_iterator const_iterator;
+  typedef ObArray<ObGeometry *>::iterator iterator;
+  typedef ObArray<ObGeometry *>::const_iterator const_iterator;
   typedef ObCartesianMultipolygon sub_mp_type;
   typedef ObCartesianMultipoint sub_mpt_type;
   typedef ObCartesianMultilinestring sub_ml_type;
@@ -1241,9 +1240,8 @@ private:
 class ObGeographGeometrycollection : public ObGeometrycollection
 {
 public:
-  typedef PageArena<ObGeometry *, ModulePageAllocator> ObCGeoModuleArena;
-  typedef ObVector<ObGeometry *, ObCGeoModuleArena>::iterator iterator;
-  typedef ObVector<ObGeometry *, ObCGeoModuleArena>::const_iterator const_iterator;
+  typedef ObArray<ObGeometry *>::iterator iterator;
+  typedef ObArray<ObGeometry *>::const_iterator const_iterator;
   typedef ObGeographMultipolygon sub_mp_type;
   typedef ObGeographMultipoint sub_mpt_type;
   typedef ObGeographMultilinestring sub_ml_type;
