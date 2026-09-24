@@ -1704,7 +1704,7 @@ void ObMultipleMerge::dump_tx_statistic_for_4377(ObStoreCtx *store_ctx)
   LOG_ERROR("==================== Start trx info ====================");
 
   if (NULL != store_ctx) {
-    store_ctx->force_print_trace_log();
+    store_ctx->force_dump_tx_state();
     if (NULL != store_ctx->mvcc_acc_ctx_.tx_ctx_) {
       LOG_ERROR("Dump trx info", K(ret), KPC(store_ctx->mvcc_acc_ctx_.tx_ctx_));
       if (NULL != store_ctx->mvcc_acc_ctx_.mem_ctx_) {
