@@ -1092,6 +1092,9 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
   LOG_INFO("create ddl task", K(param));
   // The checksum-error virtual table is backed by process-wide metadata and
   // cannot be queried through a child namespace SQL proxy.
+  // TODO(namespace): checksum-error rows have no namespace ID. Match the
+  // physical table/tablet owner before applying an ns1 error to a child table
+  // whose logical table ID may collide with the ns1 ID.
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLScheduler has not been inited", K(ret));
