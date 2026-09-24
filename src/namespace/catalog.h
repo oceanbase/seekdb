@@ -43,6 +43,46 @@ public:
   static bool decode_node(const std::string &data, int64_t cap, CatalogNode &node);
 };
 
+// Page persistence belongs to the caller; the tree owns ordering, splits,
+// snapshot caps, and immutable-page replacement.
+class ICatalogPageStore {
+public:
+  virtual ~ICatalogPageStore() = default;
+  virtual int read(uint64_t page, std::string &data) = 0;
+  virtual int write(const std::string &data, uint64_t &page) = 0;
+};
+
+enum class CatalogTreeError : uint8_t { NONE, NOT_FOUND, CORRUPT, TOO_DEEP, STORE };
+struct CatalogTreeResult {
+  CatalogTreeError error = CatalogTreeError::NONE;
+  int store_error = 0;
+  bool ok() const { return error == CatalogTreeError::NONE; }
+  static CatalogTreeResult from_store(int error) {
+    return {CatalogTreeError::STORE, error};
+  }
+};
+
+class NamespaceCatalogTree final {
+public:
+  explicit NamespaceCatalogTree(ICatalogPageStore &store) : store_(store) {}
+  CatalogTreeResult read_node(CatalogPageRef ref, CatalogNode &node);
+  CatalogTreeResult find(CatalogPageRef root, const std::string &key, CatalogValue &value);
+  CatalogTreeResult put(CatalogPageRef root, const std::string &key,
+                        CatalogValue value, CatalogPageRef &next);
+  CatalogTreeResult remove(CatalogPageRef root, const std::string &key,
+                           CatalogPageRef &next);
+private:
+  struct Split { CatalogPageRef left, right; std::string separator; };
+  CatalogTreeResult save_node(const CatalogNode &node, CatalogPageRef &ref);
+  CatalogTreeResult put_path(CatalogPageRef root, const std::string &key,
+                             CatalogValue value, Split &out, int depth);
+  CatalogTreeResult first_key(CatalogPageRef ref, std::string &key);
+  CatalogTreeResult remove_path(CatalogPageRef root, const std::string &key,
+                                CatalogPageRef &next, bool &found,
+                                std::string &minimum, int depth);
+  ICatalogPageStore &store_;
+};
+
 } // namespace ns
 } // namespace oceanbase
 

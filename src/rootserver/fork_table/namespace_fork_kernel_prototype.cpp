@@ -53,7 +53,6 @@ using Ref = ::oceanbase::ns::CatalogPageRef;
 using Value = ::oceanbase::ns::CatalogValue;
 using Node = ::oceanbase::ns::CatalogNode;
 using Roots = ::oceanbase::ns::CatalogRoots;
-constexpr size_t FANOUT = Codec::FANOUT;
 const char *ROOTS = "__fork_proto_meta.roots";
 const char *PAGES = "__fork_proto_meta.pages";
 const char *NAMESPACES = "__fork_proto_meta.namespaces";
@@ -359,142 +358,44 @@ int resolve_inherited_tablet(ObISQLClient &sql, uint64_t ns, uint64_t local,
   if (OB_SUCC(ret) && !found) { ret = OB_TABLET_NOT_EXIST; }
   return ret;
 }
-int read_node(ObISQLClient &sql, Ref ref, Node &node) {
-  if (!ref.page) { node = Node(); return OB_SUCCESS; }
-  std::string s; int ret = blob(sql, ref.page, s);
-  if (ret != OB_SUCCESS) { return ret; }
-  return Codec::decode_node(s, ref.cap, node) ? OB_SUCCESS : OB_CHECKSUM_ERROR;
+class SqlCatalogPageStore final : public ::oceanbase::ns::ICatalogPageStore {
+public:
+  explicit SqlCatalogPageStore(ObISQLClient &sql) : sql_(sql) {}
+  int read(uint64_t page, std::string &data) override { return blob(sql_, page, data); }
+  int write(const std::string &data, uint64_t &page) override {
+    return save_blob(sql_, data, page);
+  }
+private:
+  ObISQLClient &sql_;
+};
+
+int catalog_tree_error(const ::oceanbase::ns::CatalogTreeResult &result) {
+  using ::oceanbase::ns::CatalogTreeError;
+  switch (result.error) {
+    case CatalogTreeError::NONE: return OB_SUCCESS;
+    case CatalogTreeError::NOT_FOUND: return OB_ENTRY_NOT_EXIST;
+    case CatalogTreeError::CORRUPT: return OB_CHECKSUM_ERROR;
+    case CatalogTreeError::TOO_DEEP: return OB_SIZE_OVERFLOW;
+    case CatalogTreeError::STORE: return result.store_error;
+  }
+  return OB_ERR_UNEXPECTED;
 }
-int save_node(ObISQLClient &sql, const Node &node, Ref &ref) {
-  const std::string s = Codec::encode_node(node);
-  ref.cap = 0; return save_blob(sql, s, ref.page);
+int read_node(ObISQLClient &sql, Ref ref, Node &node) {
+  SqlCatalogPageStore pages(sql);
+  return catalog_tree_error(::oceanbase::ns::NamespaceCatalogTree(pages).read_node(ref, node));
 }
 int find(ObISQLClient &sql, Ref ref, const std::string &key, Value &value) {
-  for (int depth = 0; depth < 32; ++depth) {
-    if (!ref.page) { return OB_ENTRY_NOT_EXIST; }
-    Node node; int ret = read_node(sql, ref, node);
-    if (ret != OB_SUCCESS) { return ret; }
-    if (node.leaf) {
-      auto it = std::lower_bound(node.keys.begin(), node.keys.end(), key);
-      if (it == node.keys.end() || *it != key) { return OB_ENTRY_NOT_EXIST; }
-      value = node.values[it - node.keys.begin()]; return OB_SUCCESS;
-    }
-    ref = node.children[std::upper_bound(node.keys.begin(), node.keys.end(), key) - node.keys.begin()];
-  }
-  return OB_SIZE_OVERFLOW;
-}
-struct Split { Ref left, right; std::string separator; };
-int put_path(ObISQLClient &sql, Ref root, const std::string &key, Value value, Split &out, int depth) {
-  if (depth > 32) { return OB_SIZE_OVERFLOW; }
-  Node node; int ret = read_node(sql, root, node);
-  if (ret != OB_SUCCESS) { return ret; }
-  if (node.leaf) {
-    size_t i = std::lower_bound(node.keys.begin(), node.keys.end(), key) - node.keys.begin();
-    if (i < node.keys.size() && node.keys[i] == key) { node.values[i] = std::move(value); }
-    else { node.keys.insert(node.keys.begin() + i, key); node.values.insert(node.values.begin() + i, std::move(value)); }
-  } else {
-    size_t i = std::upper_bound(node.keys.begin(), node.keys.end(), key) - node.keys.begin();
-    Split child;
-    if ((ret = put_path(sql, node.children[i], key, std::move(value), child, depth + 1)) != OB_SUCCESS) { return ret; }
-    node.children[i] = child.left;
-    if (child.right.page) {
-      node.keys.insert(node.keys.begin() + i, child.separator);
-      node.children.insert(node.children.begin() + i + 1, child.right);
-    }
-  }
-  if (node.keys.size() <= FANOUT) { return save_node(sql, node, out.left); }
-  const size_t mid = node.keys.size() / 2;
-  Node right; right.leaf = node.leaf; out.separator = node.keys[mid];
-  if (node.leaf) {
-    right.keys.assign(node.keys.begin() + mid, node.keys.end());
-    right.values.assign(node.values.begin() + mid, node.values.end());
-    node.keys.resize(mid); node.values.resize(mid);
-  } else {
-    right.keys.assign(node.keys.begin() + mid + 1, node.keys.end());
-    right.children.assign(node.children.begin() + mid + 1, node.children.end());
-    node.keys.resize(mid); node.children.resize(mid + 1);
-  }
-  if ((ret = save_node(sql, node, out.left)) == OB_SUCCESS) { ret = save_node(sql, right, out.right); }
-  return ret;
+  SqlCatalogPageStore pages(sql);
+  return catalog_tree_error(::oceanbase::ns::NamespaceCatalogTree(pages).find(ref, key, value));
 }
 int put(ObISQLClient &sql, Ref root, const std::string &key, Value value, Ref &next) {
-  Split split; int ret = put_path(sql, root, key, std::move(value), split, 0);
-  if (ret != OB_SUCCESS) { return ret; }
-  if (!split.right.page) { next = split.left; return OB_SUCCESS; }
-  Node node; node.leaf = false; node.keys.push_back(split.separator);
-  node.children = {split.left, split.right}; return save_node(sql, node, next);
-}
-int first_key(ObISQLClient &sql, Ref ref, std::string &key) {
-  for (int depth = 0; depth < 32; ++depth) {
-    Node node;
-    int ret = read_node(sql, ref, node);
-    if (ret != OB_SUCCESS) { return ret; }
-    if (node.leaf) {
-      if (node.keys.empty()) { return OB_CHECKSUM_ERROR; }
-      key = node.keys.front();
-      return OB_SUCCESS;
-    }
-    if (node.children.empty()) { return OB_CHECKSUM_ERROR; }
-    ref = node.children.front();
-  }
-  return OB_SIZE_OVERFLOW;
-}
-int remove_path(ObISQLClient &sql, Ref root, const std::string &key,
-                Ref &next, bool &found, std::string &minimum, int depth) {
-  if (depth > 32) { return OB_SIZE_OVERFLOW; }
-  if (!root.page) { next = root; return OB_SUCCESS; }
-  Node node;
-  int ret = read_node(sql, root, node);
-  if (ret != OB_SUCCESS) { return ret; }
-  if (node.leaf) {
-    const size_t i = std::lower_bound(node.keys.begin(), node.keys.end(), key)
-        - node.keys.begin();
-    if (i == node.keys.size() || node.keys[i] != key) {
-      next = root;
-    } else {
-      found = true;
-      node.keys.erase(node.keys.begin() + i);
-      node.values.erase(node.values.begin() + i);
-      if (node.keys.empty()) { next = Ref(); }
-      else {
-        minimum = node.keys.front();
-        ret = save_node(sql, node, next);
-      }
-    }
-  } else {
-    const size_t i = std::upper_bound(node.keys.begin(), node.keys.end(), key)
-        - node.keys.begin();
-    Ref child;
-    std::string child_minimum;
-    if (OB_FAIL(remove_path(sql, node.children[i], key, child, found,
-                            child_minimum, depth + 1))) {
-    } else if (!found) {
-      next = root;
-    } else {
-      if (child.page) {
-        node.children[i] = child;
-        if (i > 0) { node.keys[i - 1] = child_minimum; }
-      } else {
-        node.children.erase(node.children.begin() + i);
-        node.keys.erase(node.keys.begin() + (i == 0 ? 0 : i - 1));
-      }
-      if (node.children.empty()) {
-        ret = OB_CHECKSUM_ERROR;
-      } else if (OB_FAIL(first_key(sql, node.children.front(), minimum))) {
-      } else if (node.keys.empty()) {
-        next = node.children.front();
-      } else {
-        ret = save_node(sql, node, next);
-      }
-    }
-  }
-  return ret;
+  SqlCatalogPageStore pages(sql);
+  return catalog_tree_error(::oceanbase::ns::NamespaceCatalogTree(pages).put(
+      root, key, std::move(value), next));
 }
 int remove_key(ObISQLClient &sql, Ref root, const std::string &key, Ref &next) {
-  bool found = false;
-  std::string minimum;
-  const int ret = remove_path(sql, root, key, next, found, minimum, 0);
-  return ret == OB_SUCCESS && !found ? OB_ENTRY_NOT_EXIST : ret;
+  SqlCatalogPageStore pages(sql);
+  return catalog_tree_error(::oceanbase::ns::NamespaceCatalogTree(pages).remove(root, key, next));
 }
 int roots(ObISQLClient &sql, uint64_t db, Roots &root, bool lock = false, bool inactive = false) {
   int ret = OB_SUCCESS; ObSqlString q; ObMySQLProxy::MySQLResult res;

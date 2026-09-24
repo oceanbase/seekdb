@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <utility>
 
 namespace oceanbase {
 namespace ns {
@@ -116,6 +117,193 @@ bool NamespaceCatalogCodec::decode_node(const std::string &data, int64_t cap,
     }
   }
   return pos == data.size();
+}
+
+CatalogTreeResult NamespaceCatalogTree::read_node(CatalogPageRef ref, CatalogNode &node)
+{
+  if (!ref.page) { node = CatalogNode(); return {}; }
+  std::string data;
+  const int error = store_.read(ref.page, data);
+  if (error != 0) { return CatalogTreeResult::from_store(error); }
+  return NamespaceCatalogCodec::decode_node(data, ref.cap, node)
+      ? CatalogTreeResult{} : CatalogTreeResult{CatalogTreeError::CORRUPT, 0};
+}
+
+CatalogTreeResult NamespaceCatalogTree::save_node(const CatalogNode &node, CatalogPageRef &ref)
+{
+  const std::string data = NamespaceCatalogCodec::encode_node(node);
+  ref.cap = 0;
+  const int error = store_.write(data, ref.page);
+  return error == 0 ? CatalogTreeResult{} : CatalogTreeResult::from_store(error);
+}
+
+CatalogTreeResult NamespaceCatalogTree::find(CatalogPageRef ref,
+    const std::string &key, CatalogValue &value)
+{
+  for (int depth = 0; depth < 32; ++depth) {
+    if (!ref.page) { return {CatalogTreeError::NOT_FOUND, 0}; }
+    CatalogNode node;
+    const CatalogTreeResult result = read_node(ref, node);
+    if (!result.ok()) { return result; }
+    if (node.leaf) {
+      const auto it = std::lower_bound(node.keys.begin(), node.keys.end(), key);
+      if (it == node.keys.end() || *it != key) {
+        return {CatalogTreeError::NOT_FOUND, 0};
+      }
+      value = node.values[it - node.keys.begin()];
+      return {};
+    }
+    ref = node.children[std::upper_bound(node.keys.begin(), node.keys.end(), key)
+        - node.keys.begin()];
+  }
+  return {CatalogTreeError::TOO_DEEP, 0};
+}
+
+CatalogTreeResult NamespaceCatalogTree::put_path(CatalogPageRef root,
+    const std::string &key, CatalogValue value, Split &out, int depth)
+{
+  if (depth > 32) { return {CatalogTreeError::TOO_DEEP, 0}; }
+  CatalogNode node;
+  CatalogTreeResult result = read_node(root, node);
+  if (!result.ok()) { return result; }
+  if (node.leaf) {
+    const size_t i = std::lower_bound(node.keys.begin(), node.keys.end(), key)
+        - node.keys.begin();
+    if (i < node.keys.size() && node.keys[i] == key) {
+      node.values[i] = std::move(value);
+    } else {
+      node.keys.insert(node.keys.begin() + i, key);
+      node.values.insert(node.values.begin() + i, std::move(value));
+    }
+  } else {
+    const size_t i = std::upper_bound(node.keys.begin(), node.keys.end(), key)
+        - node.keys.begin();
+    Split child;
+    result = put_path(node.children[i], key, std::move(value), child, depth + 1);
+    if (!result.ok()) { return result; }
+    node.children[i] = child.left;
+    if (child.right.page) {
+      node.keys.insert(node.keys.begin() + i, child.separator);
+      node.children.insert(node.children.begin() + i + 1, child.right);
+    }
+  }
+  if (node.keys.size() <= NamespaceCatalogCodec::FANOUT) {
+    return save_node(node, out.left);
+  }
+  const size_t mid = node.keys.size() / 2;
+  CatalogNode right;
+  right.leaf = node.leaf;
+  out.separator = node.keys[mid];
+  if (node.leaf) {
+    right.keys.assign(node.keys.begin() + mid, node.keys.end());
+    right.values.assign(node.values.begin() + mid, node.values.end());
+    node.keys.resize(mid);
+    node.values.resize(mid);
+  } else {
+    right.keys.assign(node.keys.begin() + mid + 1, node.keys.end());
+    right.children.assign(node.children.begin() + mid + 1, node.children.end());
+    node.keys.resize(mid);
+    node.children.resize(mid + 1);
+  }
+  result = save_node(node, out.left);
+  return result.ok() ? save_node(right, out.right) : result;
+}
+
+CatalogTreeResult NamespaceCatalogTree::put(CatalogPageRef root,
+    const std::string &key, CatalogValue value, CatalogPageRef &next)
+{
+  Split split;
+  CatalogTreeResult result = put_path(root, key, std::move(value), split, 0);
+  if (!result.ok()) { return result; }
+  if (!split.right.page) { next = split.left; return {}; }
+  CatalogNode node;
+  node.leaf = false;
+  node.keys.push_back(split.separator);
+  node.children = {split.left, split.right};
+  return save_node(node, next);
+}
+
+CatalogTreeResult NamespaceCatalogTree::first_key(CatalogPageRef ref, std::string &key)
+{
+  for (int depth = 0; depth < 32; ++depth) {
+    CatalogNode node;
+    const CatalogTreeResult result = read_node(ref, node);
+    if (!result.ok()) { return result; }
+    if (node.leaf) {
+      if (node.keys.empty()) { return {CatalogTreeError::CORRUPT, 0}; }
+      key = node.keys.front();
+      return {};
+    }
+    if (node.children.empty()) { return {CatalogTreeError::CORRUPT, 0}; }
+    ref = node.children.front();
+  }
+  return {CatalogTreeError::TOO_DEEP, 0};
+}
+
+CatalogTreeResult NamespaceCatalogTree::remove_path(CatalogPageRef root,
+    const std::string &key, CatalogPageRef &next, bool &found,
+    std::string &minimum, int depth)
+{
+  if (depth > 32) { return {CatalogTreeError::TOO_DEEP, 0}; }
+  if (!root.page) { next = root; return {}; }
+  CatalogNode node;
+  CatalogTreeResult result = read_node(root, node);
+  if (!result.ok()) { return result; }
+  if (node.leaf) {
+    const size_t i = std::lower_bound(node.keys.begin(), node.keys.end(), key)
+        - node.keys.begin();
+    if (i == node.keys.size() || node.keys[i] != key) {
+      next = root;
+    } else {
+      found = true;
+      node.keys.erase(node.keys.begin() + i);
+      node.values.erase(node.values.begin() + i);
+      if (node.keys.empty()) { next = CatalogPageRef(); }
+      else {
+        minimum = node.keys.front();
+        result = save_node(node, next);
+      }
+    }
+  } else {
+    const size_t i = std::upper_bound(node.keys.begin(), node.keys.end(), key)
+        - node.keys.begin();
+    CatalogPageRef child;
+    std::string child_minimum;
+    result = remove_path(node.children[i], key, child, found, child_minimum,
+                         depth + 1);
+    if (!result.ok()) {
+    } else if (!found) {
+      next = root;
+    } else {
+      if (child.page) {
+        node.children[i] = child;
+        if (i > 0) { node.keys[i - 1] = child_minimum; }
+      } else {
+        node.children.erase(node.children.begin() + i);
+        node.keys.erase(node.keys.begin() + (i == 0 ? 0 : i - 1));
+      }
+      if (node.children.empty()) {
+        result = {CatalogTreeError::CORRUPT, 0};
+      } else {
+        result = first_key(node.children.front(), minimum);
+        if (result.ok()) {
+          if (node.keys.empty()) { next = node.children.front(); }
+          else { result = save_node(node, next); }
+        }
+      }
+    }
+  }
+  return result;
+}
+
+CatalogTreeResult NamespaceCatalogTree::remove(CatalogPageRef root,
+    const std::string &key, CatalogPageRef &next)
+{
+  bool found = false;
+  std::string minimum;
+  const CatalogTreeResult result = remove_path(root, key, next, found, minimum, 0);
+  return result.ok() && !found
+      ? CatalogTreeResult{CatalogTreeError::NOT_FOUND, 0} : result;
 }
 
 } // namespace ns
