@@ -59,9 +59,8 @@ private:
   Scope scope_ = Scope::INVALID;
   uint64_t value_ = 0;
 };
-// Storage scope is independent from the worker's fixed namespace identity.
 // A narrow global scope lets a native SQL operation address shared control
-// tablets in the same transaction without switching the worker SchemaService.
+// tablets in the same transaction without switching its SchemaService.
 inline thread_local uint64_t worker_global_storage_scope_depth = 0;
 class GlobalStorageScope final
 {
@@ -97,9 +96,8 @@ inline uint64_t serving_namespace()
   return in_process_serving_ns ? in_process_serving_ns
       : in_process_bound_namespace();
 }
-// True while this thread serves SQL for a forked namespace. Storage stubs
-// use it to ship caller-resolved schema and to pick the
-// namespace storage space; schema refresh uses it for local-id translation.
+// True while this thread serves SQL for a forked namespace. Storage adapters
+// use it to carry caller-resolved schema and pick the namespace storage space.
 inline bool serves_forked_schema()
 {
   return serving_namespace() > 1;
@@ -124,20 +122,12 @@ inline bool serves_namespace_schema()
 {
   return serves_forked_schema();
 }
-// Shared management code can move across runtime threads before it starts
 // Native inner SQL uses the target namespace carried by its SQL client.
-// Shared-process inner SQL normally bounces to the target namespace worker
-// over IPC. With the ticket-05a gate, ns-1-bound inner SQL instead executes
-// on the vanilla local path inside the shared process; ns>1 still bounces.
-// A worker owns the decision to create a fork snapshot, while the storage
-// process owns the transaction clock used to produce its SCN.
+// The shared transaction service provides the clock for a fork snapshot.
 int acquire_storage_snapshot(int64_t &snapshot);
-// Snapshot retention is cached by the shared storage process. Refresh that
-// cache after the worker commits a new acquired-snapshot row.
+// Refresh snapshot retention after committing a new acquired-snapshot row.
 int reload_storage_freeze_info();
-// Namespace access leases and compatibility schema holders live beside the
-// shared storage engine. Namespace DROP must drain and reclaim them in that
-// process rather than touching the control Worker's process-local copies.
+// Namespace DROP drains access leases and reclaims compatibility schema holders.
 int drain_storage_namespace_access(uint64_t namespace_id);
 int release_storage_namespace_schemas(uint64_t namespace_id,
                                       int64_t &table_count,
@@ -167,9 +157,8 @@ private:
   StorageSessionScope(const StorageSessionScope &) = delete;
   StorageSessionScope &operator=(const StorageSessionScope &) = delete;
 };
-// Native worker services such as the DDL scheduler run outside a client SQL
-// request. Give one such call its own multiplexed storage route; it must not
-// borrow a user session merely to reach the shared storage process.
+// Services such as the DDL scheduler run outside a client SQL request. Give
+// one such call its own storage route without borrowing a user session.
 class IndependentStorageScope final {
 public:
   IndependentStorageScope();
@@ -183,14 +172,9 @@ private:
   IndependentStorageScope(const IndependentStorageScope &) = delete;
   IndependentStorageScope &operator=(const IndependentStorageScope &) = delete;
 };
-// Ticket 05c (in-process forked namespaces). in_process_session_ns returns
-// the served forked namespace id for a session bound to an in-process
-// runtime, else 0. ensure_in_process_namespace lazily constructs the
-// namespace's service group (schema service, plan cache) on first use.
-// inprocess_refresh_schema mirrors the worker-mode per-command schema
-// refresh. The effective_* helpers resolve the storage service a session's
-// SQL must use: the in-process remote stub for forked-namespace sessions,
-// the process-local implementation otherwise.
+// in_process_session_ns returns the namespace id for a bound session, or 0.
+// ensure_in_process_namespace lazily constructs its schema service and plan
+// cache. The effective_* helpers select the service for that session.
 uint64_t in_process_session_ns(sql::ObSQLSessionInfo *session);
 query::ObIRootCommandService *effective_root_command_service(
     sql::ObSQLSessionInfo *session, query::ObIRootCommandService *fallback);
@@ -215,11 +199,5 @@ data_plane::ObITransactionService *effective_transaction_service(
 sql::ObPlanCache *effective_plan_cache(sql::ObSQLSessionInfo *session,
                                        sql::ObPlanCache *fallback);
 void close_session(SessionBinding *binding);
-// Thin TCP entry (worker mode): routes "user@branch" logins on the public
-// MySQL port to the branch's worker Unix socket and byte-proxies from there.
-namespace proxy {
-int start();
-void stop();
-}
 } } }
 #endif
