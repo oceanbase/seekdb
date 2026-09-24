@@ -1284,22 +1284,14 @@ struct EngineWrites {
       if (tx) { ret = OB_INIT_TWICE; }
       else { ret = service->acquire_tx(request.data.data(), request.data.size(), request.pos, tx); }
     }
-    if (!ret && !tx && request.type() == 'T' && (operation == 'A' || operation == 'S')) {
-      ret = service->acquire_tx(tx, sid);
-    }
     if (!ret && (!tx || static_cast<uint64_t>(tx->get_tx_id().get_id()) != txid)) { ret = OB_INVALID_ARGUMENT; }
     if (!ret && request.type() == 'T') {
-      if (operation == 'A' || operation == 't') {
+      if (operation == 't') {
         if (!request.consumed()) { ret = OB_INVALID_ARGUMENT; }
       } else if (operation == 'H') {
         ObTxParam param; request.read(param);
         if (!request.consumed() || !param.is_valid()) { ret = OB_INVALID_ARGUMENT; }
         else { ret = service->start_tx(*tx, param); }
-      } else if (operation == 'S' || operation == 'N' || operation == 'U') {
-        if (!request.consumed() || (operation != 'S' && !writes.empty())) { ret = OB_INVALID_ARGUMENT; }
-        else if (operation == 'S') { ret = service->prepare_tx_for_statement(*tx); }
-        else if (operation == 'N') { ret = service->prepare_tx_for_autocommit_retry(*tx); }
-        else { ret = service->reuse_tx(*tx); }
       } else if (operation == 'M') {
         const int64_t raw_type = static_cast<int64_t>(request.number());
         StorageSpaceHandle request_space;
@@ -1597,6 +1589,16 @@ int tx_rpc(char operation, ObTxDesc &tx, Frame &request, Frame &reply) {
   revert_tx_owner_session(borrowed);
   return ret;
 }
+int call_in_process_tx_basic(char operation, ObTxDesc &view);
+int tx_basic(char operation, ObTxDesc &view)
+{
+  sql::ObSQLSessionInfo *borrowed = nullptr;
+  auto *session = tx_owner_session(view, borrowed);
+  StorageSessionScope scope(session && session->get_tx_desc() == &view ? session : nullptr);
+  const int ret = scope.error() ? scope.error() : call_in_process_tx_basic(operation, view);
+  revert_tx_owner_session(borrowed);
+  return ret;
+}
 
 class RemoteInnerConnectionLockRuntime final : public ObIInnerConnectionLockRuntime
 {
@@ -1827,9 +1829,7 @@ public:
                          uint32_t session_id) override {
     if (tx) { return OB_INVALID_ARGUMENT; }
     auto owned = std::make_unique<ObTxDesc>();
-    Frame request, reply;
-    int ret = tx_rpc('A', *owned, request, reply);
-    if (!ret && !reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
+    int ret = tx_basic('A', *owned);
     if (!ret) { tx = owned.release(); }
     return ret; }
   int acquire_tx(const char *buf,
@@ -1875,9 +1875,9 @@ public:
       revert_tx_owner_session(borrowed);
     }
     delete &tx; return ret; }
-  int reuse_tx(transaction::ObTxDesc &tx) override { Frame request, reply; return tx_rpc('U', tx, request, reply); }
-  int prepare_tx_for_statement(transaction::ObTxDesc &tx) override { Frame request, reply; return tx_rpc('S', tx, request, reply); }
-  int prepare_tx_for_autocommit_retry(transaction::ObTxDesc &tx) override { Frame request, reply; return tx_rpc('N', tx, request, reply); }
+  int reuse_tx(transaction::ObTxDesc &tx) override { return tx_basic('U', tx); }
+  int prepare_tx_for_statement(transaction::ObTxDesc &tx) override { return tx_basic('S', tx); }
+  int prepare_tx_for_autocommit_retry(transaction::ObTxDesc &tx) override { return tx_basic('N', tx); }
   int register_mds_into_tx(
       transaction::ObTxDesc &tx,
       const transaction::ObTxDataSourceType &type,

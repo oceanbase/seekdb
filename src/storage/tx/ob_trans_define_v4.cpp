@@ -372,6 +372,31 @@ int ObTxDesc::deserialize_shadow(const char *buf, int64_t len, int64_t &pos)
   return ret;
 }
 
+int ObTxDesc::sync_serialized_state_from(const ObTxDesc &source)
+{
+  if (this == &source) { return OB_SUCCESS; }
+  if (tx_id_.is_valid() && tx_id_ != source.tx_id_) { return OB_INVALID_ARGUMENT; }
+  // Match the ObTxDesc serialization field list above; runtime fields stay local.
+  data_version_ = source.data_version_;
+  sess_id_ = source.sess_id_;
+  addr_ = source.addr_;
+  tx_id_ = source.tx_id_;
+  isolation_ = source.isolation_;
+  access_mode_ = source.access_mode_;
+  op_sn_ = source.op_sn_;
+  state_ = source.state_;
+  flags_ = source.flags_;
+  expire_ts_ = source.expire_ts_;
+  active_ts_ = source.active_ts_;
+  timeout_us_ = source.timeout_us_;
+  lock_timeout_us_ = source.lock_timeout_us_;
+  active_scn_ = source.active_scn_;
+  has_write_state_ = source.has_write_state_;
+  write_state_ = source.write_state_;
+  seq_base_ = source.seq_base_;
+  return OB_SUCCESS;
+}
+
 ObTxDesc::ObTxDesc()
   : trace_info_(),
     data_version_(0),

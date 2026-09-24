@@ -317,6 +317,43 @@ int release_in_process_tx(const transaction::ObTxDesc &tx)
   THIS_WORKER.set_timeout_ts(old_timeout);
   return ret;
 }
+int call_in_process_tx_basic(char operation, transaction::ObTxDesc &view)
+{
+  InProcessStorage *ctx = in_process_storage;
+  const StorageSpaceHandle space = active_worker_storage_space();
+  if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
+  if (!space.is_namespace() || ctx->ns != space.namespace_id()
+      || (operation != 'A' && operation != 'S' && operation != 'N' && operation != 'U')) {
+    return OB_INVALID_ARGUMENT;
+  }
+  const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
+  auto *old_session = THIS_WORKER.get_session();
+  THIS_WORKER.set_session(&ctx->session);
+  auto *service = data_plane::query_transaction_service();
+  int ret = service ? OB_SUCCESS : OB_NOT_INIT;
+  ObTxDesc *&native = ctx->writes->tx;
+  if (!ret && !native && (operation == 'A' || operation == 'S')) {
+    ret = service->acquire_tx(native, ctx->writes->sid);
+  }
+  if (!ret && (!native || native->get_tx_id() != view.get_tx_id())) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  if (!ret && operation != 'A') {
+    if (operation != 'S' && !ctx->writes->writes.empty()) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (operation == 'S') {
+      ret = service->prepare_tx_for_statement(*native);
+    } else if (operation == 'N') {
+      ret = service->prepare_tx_for_autocommit_retry(*native);
+    } else {
+      ret = service->reuse_tx(*native);
+    }
+  }
+  if (!ret) { ret = view.sync_serialized_state_from(*native); }
+  THIS_WORKER.set_session(old_session);
+  THIS_WORKER.set_timeout_ts(old_timeout);
+  return ret;
+}
 int close_in_process_write(transaction::ObTxDesc &view, uint64_t handle)
 {
   InProcessStorage *ctx = in_process_storage;
