@@ -168,6 +168,7 @@ SHARE_PUBLIC_HEADER_ROOTS = [
     "ob_time_wheel.h",
     "ob_time_zone_info_manager.h",
     "ob_timezone_mgr.h",
+    "ob_internal_table_change_notifier.h",
     "ob_truncated_string.h",
     "ob_unique_index_row_transformer.h",
     "ob_version.h",
