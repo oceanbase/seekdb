@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 
+#include "config_bridge.h"
 #include "query/vector/ob_vector_index_adaptor.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "share/rc/ob_server_runtime.h"
@@ -2930,7 +2931,7 @@ int ObPluginVectorIndexAdaptor::refresh_bitmap_background()
   ObVectorQueryAdaptorResultContext ctx(0, &tmp_alloc, &tmp_alloc);
   ObArray<uint64_t> i_vids;
   share::SCN snapshot_scn;
-  const int64_t DEFAULT_TIMEOUT = GCONF.internal_sql_execute_timeout;
+  const int64_t DEFAULT_TIMEOUT = config::internal_sql_execute_timeout();
   transaction::ObTransService *txs = ::oceanbase::share::server_service<::oceanbase::transaction::ObTransService>();
   ObTimeoutCtx timeout_ctx;
   if (OB_ISNULL(txs)) {

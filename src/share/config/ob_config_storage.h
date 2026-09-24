@@ -17,35 +17,29 @@
 #ifndef OCEANBASE_SHARE_CONFIG_OB_CONFIG_STORAGE_H_
 #define OCEANBASE_SHARE_CONFIG_OB_CONFIG_STORAGE_H_
 
-#include <string>
-#include <vector>
-
 #include "lib/string/ob_string.h"
 #include "lib/allocator/ob_allocator.h"
+#include "auto_config.h"
 
 namespace oceanbase
 {
 namespace common
 {
+inline constexpr char AUTO_CONFIG_PATH[] = "./etc/seekdb.auto.conf";
 
 class ObConfigStorage
 {
 public:
-  struct Entry
-  {
-    std::string name;
-    std::string value;
-    uint32_t line;
-  };
-
   ObConfigStorage() : inited_(false) {}
   ~ObConfigStorage() = default;
 
   int init();
-  int load_all_configs(std::vector<Entry> &entries);
-  int get_config_value(const char *name, ObString &value, common::ObIAllocator &allocator);
-  int save_config(const char *name, const char *value);
-  int reset_config(const char *name);
+  int load_active_checked(bool startup, AutoConfigEntryCallback callback, void *context);
+  int save_config(const char *name, const char *value, bool *after_replace = nullptr);
+  int reset_config(const char *name, bool *after_replace = nullptr);
+  int update_checked(const char *name, const char *value, bool reset,
+                     AutoConfigCheckCallback callback, void *context,
+                     bool *after_replace);
 
   bool is_inited() const { return inited_; }
 

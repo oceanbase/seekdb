@@ -18,6 +18,7 @@
 
 
 #include "ob_ddl_service.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 
 namespace oceanbase
 {

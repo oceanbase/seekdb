@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
+#include "config_bridge.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/tablet/ob_tablet_table_operator.h"
@@ -863,7 +864,7 @@ int ObMediumCompactionScheduleFunc::prepare_medium_info(
 int ObMediumCompactionScheduleFunc::choose_encoding_limit(ObMediumCompactionInfo &medium_info)
 {
   int ret = OB_SUCCESS;
-  medium_info.encoding_granularity_ = GCONF.ob_encoding_granularity;
+  medium_info.encoding_granularity_ = config::ob_encoding_granularity();
   return ret;
 }
 

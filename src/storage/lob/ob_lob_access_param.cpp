@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
+#include "config_bridge.h"
 #include "ob_lob_access_param.h"
 #include "storage/tx_storage/ob_access_service.h"
 #include "share/ob_server_struct.h"
@@ -192,7 +193,7 @@ bool ObLobAccessParam::has_single_chunk() const
 
 bool ObLobAccessParam::enable_block_cache() const
 {
-  return byte_size_ <= GCONF.lob_enable_block_cache_threshold;
+  return byte_size_ <= config::lob_enable_block_cache_threshold();
 }
 
 int ObLobAccessParam::check_handle_size() const

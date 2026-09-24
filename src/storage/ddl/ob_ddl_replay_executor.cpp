@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "ob_ddl_replay_executor.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
@@ -136,7 +137,7 @@ int ObDDLRedoReplayExecutor::do_replay_(ObTabletHandle &tablet_handle)
     write_info.buffer_ = redo_info.data_buffer_.ptr();
     write_info.size_= redo_info.data_buffer_.length();
     write_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
-    write_info.io_timeout_ms_ = max(DDL_FLUSH_MACRO_BLOCK_TIMEOUT / 1000L, GCONF._data_storage_io_timeout / 1000L);
+    write_info.io_timeout_ms_ = max(DDL_FLUSH_MACRO_BLOCK_TIMEOUT / 1000L, config::_data_storage_io_timeout() / 1000L);
     macro_block.block_type_ = redo_info.block_type_;
     macro_block.logic_id_ = redo_info.logic_id_;
     macro_block.scn_ = scn_;
@@ -247,7 +248,7 @@ int ObDDLRedoReplayExecutor::do_full_replay_(
     write_info.offset_ = 0;
     write_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
     write_info.io_desc_.set_sealed();
-    write_info.io_timeout_ms_ = max(DDL_FLUSH_MACRO_BLOCK_TIMEOUT / 1000L, GCONF._data_storage_io_timeout / 1000L);
+    write_info.io_timeout_ms_ = max(DDL_FLUSH_MACRO_BLOCK_TIMEOUT / 1000L, config::_data_storage_io_timeout() / 1000L);
     
 
     if (OB_FAIL(ObObjectManager::async_write_object(opt, write_info, macro_handle))) {

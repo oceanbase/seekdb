@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX PL
+#include "config_bridge.h"
 #include "ob_dbms_index_manager.h"
 #include "query/change_stream/ob_change_stream_service.h"
 #include "share/rc/ob_server_runtime.h"
@@ -36,7 +37,7 @@ int ObDBMSIndexManager::refresh(
   UNUSED(result);
 
   ObMySQLProxy *mysql_proxy = GCTX.sql_proxy_;
-  const int64_t timeout_us = GCONF.internal_sql_execute_timeout;
+  const int64_t timeout_us = config::internal_sql_execute_timeout();
   query::ObIChangeStreamService *change_stream =
       OB_ISNULL(ctx.exec_ctx_)
           ? nullptr

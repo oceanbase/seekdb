@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS_COMPACTION
 
+#include "config_bridge.h"
 #include "rootserver/freeze/ob_major_freeze_helper.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/ob_ex_rpc.h"
@@ -55,7 +56,7 @@ int ObMajorFreezeHelper::tablet_major_freeze(const ObTabletMajorFreezeParam &par
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (!GCONF.enable_major_freeze) {
+  } else if (!config::enable_major_freeze()) {
     ret = OB_MAJOR_FREEZE_NOT_ALLOW;
   } else {
     LOG_INFO("tablet major freeze", K(ret), K(param));

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "ob_px_dist_transmit_op.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
 
@@ -569,7 +570,7 @@ int ObPxDistTransmitOp::add_row_for_piece_msg(ObChunkDatumStore &sample_store)
         if (sampled_input_rows_.get_mem_hold() != mem_hold) {
           mem_hold = sampled_input_rows_.get_mem_hold();
           // try extend memory bound when used memory close to memory bound.
-          if (GCONF.is_sql_operator_dump_enabled()
+          if (config::enable_sql_operator_dump()
               && mem_hold >= sql_mem_processor_.get_mem_bound() - ObRADatumStore::BIG_BLOCK_SIZE) {
             bool dumped = false;
             OZ(sql_mem_processor_.extend_max_memory_size(
@@ -646,7 +647,7 @@ int ObPxDistTransmitOp::add_batch_row_for_piece_msg(ObChunkDatumStore &sample_st
         if (sampled_input_rows_.get_mem_hold() != mem_hold) {
           mem_hold = sampled_input_rows_.get_mem_hold();
           // try extend memory bound when used memory close to memory bound.
-          if (GCONF.is_sql_operator_dump_enabled()
+          if (config::enable_sql_operator_dump()
               && mem_hold >= sql_mem_processor_.get_mem_bound() - ObRADatumStore::BIG_BLOCK_SIZE) {
             bool dumped = false;
             OZ(sql_mem_processor_.extend_max_memory_size(

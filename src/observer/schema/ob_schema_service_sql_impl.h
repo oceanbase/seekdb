@@ -42,7 +42,6 @@ namespace common
 class ObSqlString;
 class ObMySQLTransaction;
 class ObMySQLProxy;
-class ObCommonConfig;
 }
 namespace share
 {
@@ -87,7 +86,6 @@ public:
   virtual ~ObSchemaServiceSQLImpl();
   virtual int init(common::ObMySQLProxy *sql_proxy,
                    const share::schema::ObServerSchemaService *schema_service);
-  virtual void set_common_config(const common::ObCommonConfig *config) { config_ = config; }
 
 #define GET_DDL_SQL_SERVICE_FUNC(SCHEMA_TYPE, SCHEMA)            \
   Ob##SCHEMA_TYPE##SqlService &get_##SCHEMA##_sql_service() {    \
@@ -883,7 +881,6 @@ private:
   // schema version must be updated  after local schema refreshed
   int64_t refreshed_schema_version_;
   int64_t gen_schema_version_;
-  const common::ObCommonConfig *config_;
   bool is_inited_;
   common::SpinRWLock rw_lock_;
   

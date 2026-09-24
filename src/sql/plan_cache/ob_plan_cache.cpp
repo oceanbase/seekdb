@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_PC
+#include "config_bridge.h"
 #include "ob_plan_cache.h"
 #include "share/ob_truncated_string.h"
 #include "sql/plan_cache/ob_plan_cache_callback.h"
@@ -348,7 +349,7 @@ int ObPlanCache::init(
                                                   ObModIds::OB_HASH_NODE_PLAN_CACHE))) {
     } else if (FALSE_IT(evict_task_.plan_cache_ = this)) {
     } else if (OB_FAIL(evict_timer_.init("PlanCacheEvict", ObMemAttr("PlanCacheEvict")))) {
-    } else if (OB_FAIL(evict_timer_.schedule(evict_task_, GCONF.plan_cache_evict_interval, true))) {
+    } else if (OB_FAIL(evict_timer_.schedule(evict_task_, config::plan_cache_evict_interval(), true))) {
     } else if (OB_FAIL(set_mem_conf(default_conf))) {
     } else {
       cn_factory_.set_lib_cache(this);
@@ -483,7 +484,7 @@ int ObPlanCache::get_plan(common::ObIAllocator &allocator,
           LOG_WARN("standby server is read only", KR(ret), K(pc_ctx.sql_traits_));
          } else if (!is_internal_maintenance
                     && !is_standby_control_stmt
-                    && GCONF.enable_perf_event) {
+                    && config::enable_perf_event()) {
            bool read_only = false;
            if (OB_FAIL(pc_ctx.sql_ctx_.schema_guard_->get_runtime_read_only(read_only))) {
            } else if (OB_FAIL(pc_ctx.sql_ctx_.session_info_->check_read_only_privilege(
@@ -791,14 +792,14 @@ bool ObPlanCache::can_do_insert_batch_opt(ObPlanCacheCtx &pc_ctx)
   ObSQLSessionInfo *session_info = nullptr;
   if (OB_NOT_NULL(session_info = pc_ctx.sql_ctx_.session_info_)) {
     if (!pc_ctx.sql_ctx_.is_batch_params_execute() &&
-        GCONF._sql_insert_multi_values_split_opt &&
+        config::_sql_insert_multi_values_split_opt() &&
         !session_info->is_inner() &&
         OB_BATCHED_MULTI_STMT_ROLLBACK != session_info->get_retry_info().get_last_query_retry_err()) {
       bret = true;
     } else {
       LOG_TRACE("can't do insert batch optimization",
           "is_arraybinding", pc_ctx.sql_ctx_.is_batch_params_execute(),
-          "is_open_switch", GCONF._sql_insert_multi_values_split_opt,
+          "is_open_switch", config::_sql_insert_multi_values_split_opt(),
           "is_inner_sql", session_info->is_inner(),
           "last_ret", session_info->get_retry_info().get_last_query_retry_err(),
           "curr_sql", pc_ctx.raw_sql_);
@@ -1845,7 +1846,7 @@ template int ObPlanCache::add_ps_plan<ObPLFunction>(ObPLFunction *plan, ObPlanCa
 //            sql_plan->stat_.sql_id_.length());
 //   }
 //   //check read only privilege
-//   if (OB_SUCC(ret) && GCONF.enable_perf_event) {
+//   if (OB_SUCC(ret) && config::enable_perf_event()) {
 //     bool read_only = false;
 //     if (OB_FAIL(pc_ctx.sql_ctx_.schema_guard_->get_tenant_read_only(read_only))) {
 //       SQL_PC_LOG(WARN, "fail to get tenant read only attribute", K(ret));
@@ -1912,7 +1913,7 @@ int ObPlanCache::get_ps_plan(ObCacheObjGuard& guard,
 
   }
   //check read only privilege
-  if (OB_SUCC(ret) && GCONF.enable_perf_event) {
+  if (OB_SUCC(ret) && config::enable_perf_event()) {
     
     bool read_only = false;
     if (pc_ctx.sql_ctx_.session_info_->is_inner() && !pc_ctx.sql_ctx_.session_info_->is_user_session()) {
@@ -2228,7 +2229,7 @@ void ObPlanCacheEliminationTask::runTimerTask()
   int ret = OB_SUCCESS;
 
   ++run_task_counter_;
-  const int64_t auto_flush_pc_interval = (int64_t)(GCONF._ob_plan_cache_auto_flush_interval) / (1000 * 1000L); // second
+  const int64_t auto_flush_pc_interval = (int64_t)(config::_ob_plan_cache_auto_flush_interval()) / (1000 * 1000L); // second
   {
     // Before calling the plan cache interface and referencing the plan resource, a guard must be defined
     query::ObPlanCacheAccessGuard req_timeinfo_guard(
@@ -2240,10 +2241,10 @@ void ObPlanCacheEliminationTask::runTimerTask()
       IGNORE_RETURN plan_cache_->flush_plan_cache();
     }
     SQL_PC_LOG(INFO, "schedule next cache evict task",
-              "evict_interval", (int64_t)(GCONF.plan_cache_evict_interval));
+              "evict_interval", (int64_t)(config::plan_cache_evict_interval()));
   }
   SQL_PC_LOG(INFO, "schedule next cache evict task",
-             "evict_interval", (int64_t)(GCONF.plan_cache_evict_interval));
+             "evict_interval", (int64_t)(config::plan_cache_evict_interval()));
 }
 
 void ObPlanCacheEliminationTask::run_plan_cache_task()

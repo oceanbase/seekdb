@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX COMMON
+#include "config_bridge.h"
 #include "ob_dynamic_sampling.h"
 #include "lib/oblog/ob_warning_buffer.h"
 #include "data_plane/transaction/ob_i_transaction_service.h"
@@ -1481,7 +1482,7 @@ int64_t ObDynamicSamplingUtils::get_dynamic_sampling_max_timeout(ObOptimizerCont
   if (THIS_WORKER.get_timeout_remain() / 10 >= OB_DS_MIN_QUERY_TIMEOUT) {
     max_ds_timeout = THIS_WORKER.get_timeout_remain() / 10;//default ds time can't exceed 10% of current sql remain timeout
 
-    int64_t ds_maximum_time = GCONF._optimizer_ads_time_limit * 1000000;
+    int64_t ds_maximum_time = config::_optimizer_ads_time_limit() * 1000000;
     if (max_ds_timeout > ds_maximum_time) {//can't exceed the max ds timeout for single table
       max_ds_timeout = ds_maximum_time;
     }

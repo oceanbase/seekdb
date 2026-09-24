@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "config_bridge.h"
 #include "observer/virtual_table/ob_all_virtual_server.h"
 #include "share/rc/ob_server_runtime.h"
 
@@ -34,8 +35,7 @@ using namespace oceanbase::common;
 
 ObAllVirtualServer::ObAllVirtualServer()
     : ObVirtualTableScannerIterator(),
-      addr_(),
-      config_(nullptr)
+      addr_()
 {
   ip_buf_[0] = '\0';
   role_buf_[0] = '\0';
@@ -52,14 +52,12 @@ ObAllVirtualServer::~ObAllVirtualServer()
   switchover_status_buf_[0] = '\0';
   pending_role_buf_[0] = '\0';
   log_restore_source_buf_[0] = '\0';
-  config_ = nullptr;
 }
 
-int ObAllVirtualServer::init(common::ObAddr &addr, common::ObServerConfig *config)
+int ObAllVirtualServer::init(common::ObAddr &addr)
 {
   addr_ = addr;
   ip_buf_[0] = '\0';
-  config_ = config;
   return OB_SUCCESS;
 }
 
@@ -77,9 +75,9 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
   } else if (OB_ISNULL(cur_row_.cells_)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(ERROR, "cur row cell is NULL", KR(ret));
-  } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::observer::ObService>()) || OB_ISNULL(config_)) {
+  } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::observer::ObService>())) {
     ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(ERROR, "ob_service_ is NULL", KR(ret), KP(::oceanbase::share::server_service<::oceanbase::observer::ObService>()), KP(config_));
+    SERVER_LOG(ERROR, "ob_service_ is NULL", KR(ret), KP(::oceanbase::share::server_service<::oceanbase::observer::ObService>()));
   } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::observer::ObService>()->get_server_resource_info(resource_info))) {
   } else if (OB_FAIL(ObIOManager::get_instance().get_device_health_status(dhs,
       data_disk_abnormal_time))) {
@@ -123,7 +121,9 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
     }
 
     log_restore_source_buf_[0] = '\0';
-    const ObString log_restore_source = GCONF.log_restore_source.str();
+    const rust::String log_restore_source_value = config::log_restore_source();
+    const ObString log_restore_source(static_cast<int32_t>(log_restore_source_value.size()),
+                                      log_restore_source_value.data());
     if (!log_restore_source.empty()) {
       snprintf(log_restore_source_buf_, sizeof(log_restore_source_buf_), "%.*s",
           static_cast<int>(log_restore_source.length()), log_restore_source.ptr());
@@ -184,7 +184,7 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
           cur_row_.cells_[i].set_int(obmysql::get_sql_nio_bound_tcp_port());
           break;
         case RPC_PORT:
-          cur_row_.cells_[i].set_int(GCONF.rpc_port);
+          cur_row_.cells_[i].set_int(config::rpc_port());
           break;
         case CPU_CAPACITY:
           cur_row_.cells_[i].set_int(resource_info.cpu_);
@@ -233,7 +233,7 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
           cur_row_.cells_[i].set_int(GCTX.ssl_key_expired_time_);
           break;
         case RPC_TLS_ENABLED:
-          cur_row_.cells_[i].set_int(GCONF.enable_rpc_tls);
+          cur_row_.cells_[i].set_int(config::enable_rpc_tls());
           break;
         case MEMORY_LIMIT:
           // Keep the legacy column name for virtual-table compatibility.
@@ -243,7 +243,7 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
           cur_row_.cells_[i].set_int(GCTX.start_service_time_);
           break;
         case CREATE_TIME:
-          cur_row_.cells_[i].set_int(config_->server_create_time);
+          cur_row_.cells_[i].set_int(config::server_create_time());
           break;
         case ROLE:
           cur_row_.cells_[i].set_varchar(role_buf_);

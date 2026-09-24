@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "src/sql/engine/ob_exec_context.h"
@@ -183,7 +184,7 @@ int ObExprResultTypeUtil::get_div_result_type(ObObjType &result_type,
     bool can_use_decint_div = (ob_is_decimal_int(type1) || ob_is_integer_type(type1))
                            && (ob_is_decimal_int(type2) || ob_is_integer_type(type2))
                            && true
-                           && GCONF._enable_decimal_int_type;
+                           && config::_enable_decimal_int_type();
     if (ob_is_decimal_int(result_type)) {
       result_type = ObNumberType;
     }

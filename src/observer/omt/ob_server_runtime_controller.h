@@ -133,7 +133,7 @@ protected:
 private:
   int update_freezer_config_();
   int update_throttle_config_();
-  // Single server-runtime resource configuration sourced from GCONF.
+  // Single server-runtime resource configuration sourced from Rust instance parameters.
   int build_server_resource_config_(share::ObServerRuntimeConfig &runtime_config);
   int apply_server_resource_config_(const share::ObServerRuntimeConfig &runtime_config);
   int bring_up_runtime_();

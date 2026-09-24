@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE
+#include "config_bridge.h"
 #include "ob_tablet_meta_table_compaction_operator.h"
 #include "share/tablet/ob_tablet_table_operator.h"
 #include "share/tablet/ob_tablet_meta_table_storage.h"
@@ -231,7 +232,7 @@ int ObTabletMetaTableCompactionOperator::get_estimated_timeout_us(
     estimated_timeout_us = tablet_count * 1000L; // 1ms for each tablet
     estimated_timeout_us = MAX(estimated_timeout_us, THIS_WORKER.get_timeout_remain());
     estimated_timeout_us = MIN(estimated_timeout_us, 3 * 3600 * 1000 * 1000L);
-    estimated_timeout_us = MAX(estimated_timeout_us, GCONF.rpc_timeout);
+    estimated_timeout_us = MAX(estimated_timeout_us, config::rpc_timeout());
   }
   return ret;
 }

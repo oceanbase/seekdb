@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "config_bridge.h"
 #include "ob_physical_plan.h"
 #include "lib/utility/ob_smart_call.h"
 #include "sql/engine/ob_operator_factory.h"
@@ -350,7 +351,7 @@ void ObPhysicalPlan::update_plan_stat(const ObAuditRecordData &record,
     ATOMIC_INC(&(stat_.timeout_count_));
     ATOMIC_AAF(&(stat_.total_process_time_), record.get_process_time());
   }
-  if (!GCONF.enable_perf_event) { // short route
+  if (!config::enable_perf_event()) { // short route
     ATOMIC_AAF(&(stat_.elapsed_time_), record.get_elapsed_time());
     ATOMIC_AAF(&(stat_.cpu_time_), record.get_elapsed_time() - record.exec_record_.wait_time_end_
                                    - (record.exec_timestamp_.run_ts_ - record.exec_timestamp_.receive_ts_));
@@ -385,7 +386,7 @@ void ObPhysicalPlan::update_plan_stat(const ObAuditRecordData &record,
       ATOMIC_INC(&(stat_.hit_count_));
     }
 
-    if (record.get_elapsed_time() > GCONF.trace_log_slow_query_watermark) {
+    if (record.get_elapsed_time() > config::trace_log_slow_query_watermark()) {
       ATOMIC_INC(&(stat_.slow_count_));
     }
     int64_t slowest_usec = ATOMIC_LOAD(&stat_.slowest_exec_usec_);

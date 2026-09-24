@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "config_bridge.h"
 #include "storage/tablet/ob_tablet_create_mds_helper.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/multi_data_source/ob_tablet_create_mds_ctx.h"
@@ -172,7 +173,7 @@ int ObTabletCreateMdsHelper::check_create_new_tablets(
   ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   int64_t tablet_cnt_per_gb = 20000; // default value
 
-  tablet_cnt_per_gb = GCONF._max_tablet_cnt_per_gb;
+  tablet_cnt_per_gb = config::_max_tablet_cnt_per_gb();
   switch (level) {
     case ObTabletCreateThrottlingLevel::SOFT:
       tablet_cnt_per_gb = MAX(tablet_cnt_per_gb, 30000);

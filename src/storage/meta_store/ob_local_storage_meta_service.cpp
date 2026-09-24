@@ -15,6 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "ob_local_storage_meta_service.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/meta_store/ob_storage_meta_io_util.h"
@@ -224,7 +225,7 @@ int ObLocalStorageMetaService::read_from_block(
   ObObjectReadHandle read_handle(allocator);
   ObObjectReadInfo read_info;
   read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
-  read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000;
+  read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000;
   read_info.addr_ = addr;
   if (OB_FAIL(ObObjectReaderWriter::async_read(read_info, read_handle))) {
   } else if (OB_FAIL(read_handle.wait())) {

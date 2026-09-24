@@ -2287,9 +2287,10 @@ int ObSelectResolver::resolve_group_clause(const ParseNode *node)
       if (OB_FAIL(select_stmt->add_rollup_dir(order_items.at(i).order_type_))) {
       } else {/* do nothing. */}
     }
-    bool enable_hash_rollup = true
-                              && (GCONF._use_hash_rollup.case_compare("auto") == 0
-                                  || GCONF._use_hash_rollup.case_compare("forced") == 0);
+    const rust::String rollup_value = config::_use_hash_rollup();
+    const ObString rollup_policy(static_cast<int32_t>(rollup_value.size()), rollup_value.data());
+    bool enable_hash_rollup = rollup_policy.case_compare("auto") == 0
+                              || rollup_policy.case_compare("forced") == 0;
     if (OB_SUCC(ret) && enable_hash_rollup) {
       if (OB_FAIL(append(select_stmt->get_order_items(), order_items))) {
       }

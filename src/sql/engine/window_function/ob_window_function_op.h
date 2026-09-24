@@ -17,6 +17,7 @@
 #ifndef _OB_WINDOW_FUNCTION_OP_H
 #define _OB_WINDOW_FUNCTION_OP_H 1
 
+#include "config_bridge.h"
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_fixed_array.h"
 #include "lib/lock/ob_scond.h"
@@ -1109,7 +1110,7 @@ int ObWindowFunctionOp::update_mem_limit_version_periodically()
   bool updated = false;
   bool need_inc_version = false;
   const static int64_t UPDATE_MEM_SIZE_PERIODIC_CNT = 1024;
-  if (!GCONF.is_sql_operator_dump_enabled()) {
+  if (!config::enable_sql_operator_dump()) {
     // do nothing, disable dump
   } else if (OB_FAIL(sql_mem_processor_.update_max_available_mem_size_periodically(
       &mem_context_->get_malloc_allocator(),

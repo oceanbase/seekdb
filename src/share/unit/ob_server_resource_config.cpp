@@ -70,8 +70,8 @@ int ObServerResourceConfig::init(
 
 int ObServerResourceConfig::init_default(const int64_t log_disk_size)
 {
-  const double min_cpu = GCONF.get_database_default_min_cpu();
-  return init(GCONF.get_database_default_max_cpu(),
+  const double min_cpu = ::oceanbase::common::get_server_default_min_cpu();
+  return init(::oceanbase::common::get_server_default_max_cpu(),
               min_cpu,
               GMEMCONF.get_server_memory_budget(),
               log_disk_size,

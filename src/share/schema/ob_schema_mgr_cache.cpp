@@ -16,10 +16,11 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 
+#include "share/rc/ob_server_runtime.h"
+#include "config_bridge.h"
 #include "ob_schema_mgr_cache.h"
 #include "share/schema/ob_schema_service.h"
 #include "share/schema/ob_schema_mgr.h"
-#include "share/config/ob_runtime_config.h"
 
 namespace oceanbase
 {
@@ -438,7 +439,7 @@ int ObSchemaMgrCache::put(ObSchemaMgr *schema_mgr,
     int64_t max_schema_slot_num = max_cached_num_;
     {
 
-      max_schema_slot_num = GCONF._max_schema_slot_num;
+      max_schema_slot_num = config::_max_schema_slot_num();
 
     }
     TCWLockGuard guard(lock_);

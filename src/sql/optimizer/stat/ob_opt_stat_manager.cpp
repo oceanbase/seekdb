@@ -67,13 +67,12 @@ int ObOptStatManager::refresh_on_schema_change(int64_t schema_version)
 }
 #endif
 
-int ObOptStatManager::init(ObMySQLProxy *proxy,
-                           ObServerConfig *config)
+int ObOptStatManager::init(ObMySQLProxy *proxy)
 {
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
-  } else if (OB_FAIL(stat_service_.init(proxy, config))) {
+  } else if (OB_FAIL(stat_service_.init(proxy))) {
   } else {
     inited_ = true;
   }

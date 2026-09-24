@@ -107,14 +107,11 @@ public:
   int execute(obcall::ObAdminSetConfigArg &arg);
 
 private:
-  class ObServerConfigChecker : public common::ObServerConfig
-  {
-  };
-
-private:
   int verify_config(obcall::ObAdminSetConfigArg &arg);
   int update_config(obcall::ObAdminSetConfigArg &arg);
-  int update_sys_config_(const obcall::ObAdminSetConfigItem &item);
+  int update_sys_config_(const obcall::ObAdminSetConfigItem &item,
+                         obcall::ObAdminSetConfigArg &arg);
+  static int checked_config_callback(void *context);
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAdminSetConfig);

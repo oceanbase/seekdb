@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_EXE
 
+#include "config_bridge.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_cmd_executor.h"
 #include "query/ddl/ob_ddl_execution_guard.h"
@@ -135,7 +136,7 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       my_session->get_query_timeout(ori_query_timeout);
       my_session->get_tx_timeout(ori_trx_timeout);
       ObObj val;
-      val.set_int(GCONF._ob_ddl_timeout);
+      val.set_int(config::_ob_ddl_timeout());
       is_ddl_or_dcl_stmt = true;
       if (OB_FAIL(my_session->update_sys_variable(
                          share::SYS_VAR_OB_QUERY_TIMEOUT, val))) {
@@ -143,9 +144,9 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
                          share::SYS_VAR_OB_TRX_TIMEOUT, val))) {
       } else {
         ctx.get_physical_plan_ctx()->set_timeout_timestamp(
-            my_session->get_query_start_time() + GCONF._ob_ddl_timeout);
+            my_session->get_query_start_time() + config::_ob_ddl_timeout());
         THIS_WORKER.set_timeout_ts(
-            my_session->get_query_start_time() + GCONF._ob_ddl_timeout);
+            my_session->get_query_start_time() + config::_ob_ddl_timeout());
       }
       if (OB_SUCC(ret)) {
         // DDL release the specific version of schema_mgr held before sending rpc to RS
@@ -173,9 +174,9 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
   query::ObDdlExecutionGuard ddl_guard(
       ctx.get_ddl_execution_limiter());
   if (OB_SUCC(ret)) {
-    if (true && GCONF._enable_ddl_worker_isolation
+    if (true && config::_enable_ddl_worker_isolation()
         && ObStmt::is_ddl_stmt(static_cast<stmt::StmtType>(cmd.get_cmd_type()), true)) {
-      if (OB_FAIL(ddl_guard.try_acquire(GCONF.cpu_quota_concurrency))) {
+      if (OB_FAIL(ddl_guard.try_acquire(config::cpu_quota_concurrency()))) {
       }
     }
   }

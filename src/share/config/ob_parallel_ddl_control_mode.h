@@ -18,7 +18,6 @@
 #define OCEANBASE_SHARE_CONFIG_OB_PARALLEL_DDL_CONTROL_MODE_H_
 
 #include "lib/string/ob_sql_string.h"
-#include "share/config/ob_config.h"
 
 namespace oceanbase
 {
@@ -27,7 +26,7 @@ namespace share
 namespace schema
 {
 
-class ObParallelDDLControlMode final : public common::ObIConfigMode
+class ObParallelDDLControlMode final
 {
 public:
   ObParallelDDLControlMode(): value_(0) {}
@@ -42,8 +41,11 @@ public:
 
   static constexpr uint64_t MASK_SIZE = 2;
   static constexpr uint64_t MASK = 0x03;
-  virtual int set_value(const common::ObConfigModeItem &mode_item) override;
+  static constexpr uint8_t MODE_DEFAULT = 0;
+  static constexpr uint8_t MODE_OFF = 1;
+  static constexpr uint8_t MODE_ON = 2;
   uint64_t get_value() const { return value_; }
+  void set_encoded_value(const uint64_t value) { value_ = value; }
   int set_parallel_ddl_mode(const ObParallelDDLType type, const uint8_t mode);
   int is_parallel_ddl(const ObParallelDDLType type, bool &is_parallel);
   static int is_parallel_ddl_enable(const ObParallelDDLType ddl_type, bool &is_parallel);

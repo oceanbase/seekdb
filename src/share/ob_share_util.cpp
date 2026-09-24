@@ -15,10 +15,11 @@
  */
 
 #define USING_LOG_PREFIX SHARE
+#include "config_bridge.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/io/ob_io_manager.h"
-#include "share/config/ob_server_config.h" // GCONF (get_rs_default_timeout_ctx)
+#include "share/config/ob_server_config.h"
 #include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
@@ -76,7 +77,7 @@ int ObShareUtil::set_default_timeout_ctx(ObTimeoutCtx &ctx, const int64_t defaul
 int ObShareUtil::get_rs_default_timeout_ctx(ObTimeoutCtx &ctx)
 {
   int ret = OB_SUCCESS;
-  int64_t DEFAULT_TIMEOUT_US = GCONF.rpc_timeout; // default is 2s
+  int64_t DEFAULT_TIMEOUT_US = config::rpc_timeout(); // default is 2s
 #ifdef __APPLE__
   // On Mac, the system is significantly slower due to lack of O_DIRECT and software CRC.
   // Increase the default timeout to 10s to avoid bootstrap failure.

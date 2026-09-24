@@ -84,7 +84,9 @@ file(GLOB_RECURSE _auto_config_sources CONFIGURE_DEPENDS
 list(APPEND _rust_sources ${_auto_config_sources}
   "${AUTO_CONFIG_CRATE_DIR}/Cargo.toml"
   "${AUTO_CONFIG_CRATE_DIR}/build.rs"
-  "${AUTO_CONFIG_CRATE_DIR}/cbindgen.toml")
+  "${AUTO_CONFIG_CRATE_DIR}/cbindgen.toml"
+  "${AUTO_CONFIG_CRATE_DIR}/parameters.tsv"
+  "${AUTO_CONFIG_CRATE_DIR}/internal_state.tsv")
 list(APPEND _rust_sources
   "${RUST_WORKSPACE_DIR}/Cargo.toml"
   "${RUST_WORKSPACE_DIR}/rust-toolchain.toml"
@@ -97,7 +99,10 @@ list(APPEND _rust_sources
 # to the same toolchain as the rest of the build instead of whatever `cc`
 # discovers on PATH.
 set(_rust_build_env "CARGO_TARGET_DIR=${RUST_TARGET_DIR}"
-                    "CC=${CMAKE_C_COMPILER}" "AR=${CMAKE_AR}")
+                    "SEEKDB_CXX_HEADER_DIR=${RUST_TARGET_DIR}/include"
+                    "SEEKDB_DEFAULT_LOG_LEVEL=${DEFAULT_LOG_LEVEL}"
+                    "CC=${CMAKE_C_COMPILER}" "CXX=${CMAKE_CXX_COMPILER}"
+                    "AR=${CMAKE_AR}")
 if(ANDROID)
   string(REGEX REPLACE "^android-" "" _android_api "${ANDROID_PLATFORM}")
   get_filename_component(_ndk_toolchain_bin "${CMAKE_C_COMPILER}" DIRECTORY)
@@ -165,10 +170,13 @@ add_custom_command(
   OUTPUT "${RUST_STATICLIB}"
   BYPRODUCTS "${AUTO_CONFIG_STATICLIB}"
              "${RUST_INCLUDE_DIR}/nio.h" "${AUTO_CONFIG_INCLUDE_DIR}/auto_config.h"
+             "${RUST_TARGET_DIR}/include/config_bridge.h"
+             "${RUST_TARGET_DIR}/include/config_checkers.h"
   COMMAND "${CMAKE_COMMAND}" -E env ${_rust_build_env}
           "${CARGO}" build ${_cargo_profile_flag} ${_cargo_target_args}
           --manifest-path "${RUST_WORKSPACE_DIR}/Cargo.toml"
           --package sql-nio --package auto-config
+  COMMAND "${CMAKE_COMMAND}" -E touch "${RUST_STATICLIB}"
   WORKING_DIRECTORY "${RUST_WORKSPACE_DIR}"
   DEPENDS ${_rust_sources}
   COMMENT "[rust] cargo build sql-nio and auto-config (${_cargo_out_subdir})"
@@ -198,7 +206,8 @@ target_link_libraries(sql_nio INTERFACE "${RUST_STATICLIB}" ${_rust_syslibs})
 
 add_library(auto_config INTERFACE)
 add_dependencies(auto_config rust_staticlibs_build)
-target_include_directories(auto_config INTERFACE "${AUTO_CONFIG_INCLUDE_DIR}")
+target_include_directories(auto_config INTERFACE
+  "${AUTO_CONFIG_INCLUDE_DIR}" "${RUST_TARGET_DIR}/include")
 target_link_libraries(auto_config INTERFACE "${AUTO_CONFIG_STATICLIB}" ${_rust_syslibs})
 
 set_property(DIRECTORY APPEND PROPERTY

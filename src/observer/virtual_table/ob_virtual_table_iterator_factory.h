@@ -29,7 +29,6 @@ namespace common
 {
 class ObVTableScanParam;
 class ObVirtualTableIterator;
-class ObServerConfig;
 }
 namespace share
 {
@@ -48,10 +47,9 @@ namespace observer
 class ObVTIterCreator
 {
 public:
-  ObVTIterCreator(rootserver::ObLocalManagementService &local_management_service, common::ObAddr &addr, common::ObServerConfig *config = NULL)
+  ObVTIterCreator(rootserver::ObLocalManagementService &local_management_service, common::ObAddr &addr)
     : local_management_service_(local_management_service),
-      addr_(addr),
-      config_(config)
+      addr_(addr)
   {}
   virtual ~ObVTIterCreator() {}
   int get_latest_expected_schema(const uint64_t table_id,
@@ -70,15 +68,14 @@ public:
 private:
   rootserver::ObLocalManagementService &local_management_service_;
   common::ObAddr &addr_;
-  common::ObServerConfig *config_;
 };
 
 class ObVirtualTableIteratorFactory : public sql::ObIVirtualTableIteratorFactory
 {
 public:
   explicit ObVirtualTableIteratorFactory(ObVTIterCreator &vt_iter_creator);
-  ObVirtualTableIteratorFactory(rootserver::ObLocalManagementService &local_management_service, common::ObAddr &addr,
-                                common::ObServerConfig *config = NULL);
+  ObVirtualTableIteratorFactory(rootserver::ObLocalManagementService &local_management_service,
+                                common::ObAddr &addr);
   virtual ~ObVirtualTableIteratorFactory();
   virtual int create_virtual_table_iterator(common::ObVTableScanParam &params,
                                             common::ObVirtualTableIterator *&vt_iter);

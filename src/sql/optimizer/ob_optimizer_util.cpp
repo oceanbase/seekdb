@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_OPT
+#include "config_bridge.h"
 #include "ob_optimizer_util.h"
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_utils.h"
@@ -6952,7 +6953,7 @@ int ObOptimizerUtil::check_can_encode_sortkey(const common::ObIArray<OrderItem> 
     if (OB_FAIL(opt_params.get_bool_opt_param(ObOptParamHint::ENABLE_NEWSORT, can_sort_opt))) {
     }
   } else {
-    can_sort_opt &= GCONF._enable_newsort;
+    can_sort_opt &= config::_enable_newsort();
 
     for (int64_t i = 0; OB_SUCC(ret) && can_sort_opt && i < order_keys.count(); i++) {
       if (!ObOrderPerservingEncoder::can_encode_sortkey(
@@ -8002,7 +8003,7 @@ int ObOptimizerUtil::compute_nlj_spf_storage_compute_parallel_skew(ObOptimizerCo
     } else if (OB_UNLIKELY(NULL == table_schema)) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      data_plane::ObParallelRangeTaskParams params(GCONF.px_task_size >> 10);
+      data_plane::ObParallelRangeTaskParams params(config::px_task_size() >> 10);
       params.parallelism_ = compute_parallel;
       if (table_schema->get_tablet_size() / 1024 > 0) {
         params.expected_task_load_kb_ = table_schema->get_tablet_size() / 1024;

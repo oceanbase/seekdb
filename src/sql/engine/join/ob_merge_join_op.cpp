@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "sql/engine/join/ob_merge_join_op.h"
 
 namespace oceanbase
@@ -846,7 +847,7 @@ int ObMergeJoinOp::process_dump()
       [&](int64_t cur_cnt){ return right_cache_.get_row_cnt_in_memory() > cur_cnt; },
       updated))) {
   } else if (sql_mem_processor_.get_data_size() > sql_mem_processor_.get_mem_bound()
-         && GCONF.is_sql_operator_dump_enabled()
+         && config::enable_sql_operator_dump()
           && OB_FAIL(sql_mem_processor_.extend_max_memory_size(
             &mem_context_->get_malloc_allocator(),
             [&](int64_t max_memory_size) {

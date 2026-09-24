@@ -29,7 +29,6 @@ namespace oceanbase
 {
 namespace common
 {
-class ObServerConfig;
 class ObConfigManager;
 class ObMySQLProxy;
 class ObCommonSqlProxy;
@@ -67,7 +66,6 @@ struct ObGlobalContext
 {
   common::ObAddrWithSeq self_addr_seq_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
-  common::ObServerConfig *config_;
   common::ObConfigManager *config_mgr_;
   share::ObTabletTableOperator *tablet_operator_;
   share::ObSQLiteConnectionPool *meta_db_pool_;

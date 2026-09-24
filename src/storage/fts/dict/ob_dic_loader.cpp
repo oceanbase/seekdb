@@ -15,6 +15,8 @@
  */
 
 #define USING_LOG_PREFIX STORAGE_FTS
+#include "config_bridge.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "common/ob_timeout_ctx.h"
 #include "data_plane/fts/dict/ob_dic_loader.h"
 #include "storage/fts/dict/ob_dic_lock.h"
@@ -120,7 +122,7 @@ int ObDicLoader::try_load_dictionary_in_trans()
     if (!is_load_) {
       ObTimeoutCtx timeout_ctx;
       const int64_t default_timeout = DEFAULT_TIMEOUT_US;
-      const int64_t timeout = MAX(default_timeout, GCONF.internal_sql_execute_timeout);
+      const int64_t timeout = MAX(default_timeout, config::internal_sql_execute_timeout());
       ObMySQLTransaction trans;
       if (OB_ISNULL(GCTX.sql_proxy_)) {
         ret = OB_ERR_UNEXPECTED;

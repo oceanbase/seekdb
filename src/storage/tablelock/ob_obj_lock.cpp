@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX TABLELOCK
 
+#include "config_bridge.h"
 #include "ob_obj_lock.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
@@ -151,7 +152,7 @@ int ObOBJLock::slow_lock(
   const int64_t trans_id_value = lock_op.create_trans_id_;
   bool enable_lock_priority = false;
   const ObTableLockPriority priority = param.lock_priority_;
-  enable_lock_priority = GCONF.enable_lock_priority;
+  enable_lock_priority = config::enable_lock_priority();
   // case 1, if it is two phase lock, must check first
   // case 2, if enable_lock_priority is true, must check first (for dml)
   // NOTE that we set enable_lock_priority to false to avoid unexpected cases
@@ -459,7 +460,7 @@ int ObOBJLock::check_enable_lock_priority_(bool &enable_lock_priority)
   bool tmp_enable_lock_priority = false;
   if (current_time - last_check_timestamp < CACHE_REFRESH_INTERVAL) {
   } else {
-    tmp_enable_lock_priority = GCONF.enable_lock_priority;
+    tmp_enable_lock_priority = config::enable_lock_priority();
     last_result = tmp_enable_lock_priority;
     last_check_timestamp = current_time;
   }

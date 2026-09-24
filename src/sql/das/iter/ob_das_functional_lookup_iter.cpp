@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_DAS
+#include "config_bridge.h"
 #include "sql/das/iter/ob_das_functional_lookup_iter.h"
 #include "sql/das/iter/ob_das_scan_iter.h"
 #include "sql/das/iter/ob_das_func_data_iter.h"
@@ -271,7 +272,7 @@ int ObDASFuncLookupIter::check_index_lookup()
 {
   int ret = OB_SUCCESS;
   OB_ASSERT(data_table_iter_->get_type() == DAS_ITER_FUNC_DATA);
-  if (GCONF.enable_defensive_check()) {
+  if ((config::_enable_defensive_check() > 0)) {
     if (OB_UNLIKELY(lookup_rowkey_cnt_ != lookup_row_cnt_)) {
       ret = OB_ERR_DEFENSIVE_CHECK;
       ObString func_name = ObString::make_string("check_lookup_row_cnt");

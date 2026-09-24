@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX RS
+#include "config_bridge.h"
 #include "rootserver/parallel_ddl/ob_ddl_helper.h"
 #include "share/ob_share_util.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h" //ObInnerConnectionLockUtil
@@ -519,7 +520,7 @@ int ObDDLHelper::lock_objects_in_map_(
   } else if (0 == lock_cnt || !enable_ddl_parallel_) {
     // skip
   } else if (OB_FAIL(lock_pairs.reserve(lock_cnt))) {
-  } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, GCONF.rpc_timeout))) {
+  } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, config::rpc_timeout()))) {
   } else if (OB_ISNULL(conn = get_trans_().get_connection())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
@@ -782,7 +783,7 @@ int ObDDLHelper::obj_lock_with_lock_id_(
     lock_arg.obj_id_ = obj_id;
     lock_arg.lock_mode_ = lock_mode;
     lock_arg.op_type_ = ObTableLockOpType::IN_TRANS_COMMON_LOCK;
-    if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, GCONF.rpc_timeout))) {
+    if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, config::rpc_timeout()))) {
     } else if (FALSE_IT(lock_arg.timeout_us_ = ctx.get_timeout())) {
     } else if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(lock_arg, conn))) {
     }

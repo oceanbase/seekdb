@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 
 #include "sql/resolver/cmd/ob_alter_system_resolver.h"
+#include "share/config/ob_config_helper.h"
 #include "sql/resolver/cmd/ob_alter_system_stmt.h"
 #include "sql/resolver/ddl/ob_create_table_resolver.h"
 #include "sql/resolver/ddl/ob_drop_table_stmt.h"
@@ -24,6 +25,7 @@
 #include "sql/resolver/ob_resolver_utils.h"
 #include "share/ob_server_struct.h"
 #include "share/ob_share_util.h"
+#include "config_bridge.h"
 
 namespace oceanbase
 {
@@ -852,8 +854,7 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
         } else {
           ObString name(var->str_len_, var->str_value_);
           {
-            if (true &&
-                nullptr != GCONF.get_container().get(ObConfigStringKey(name))) {
+            if (config::parameter_exists(rust::Str(name.ptr(), name.length()))) {
                 set_parameters = true;
                 break;
             }
@@ -1059,15 +1060,16 @@ int ObResetConfigResolver::resolve(const ParseNode &parse_tree)
                   ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, name);
                   if (OB_FAIL(item.name_.assign(name))) {
                   } else {
-                    ObConfigItem * const *config_item =
-                        GCONF.get_container().get(ObConfigStringKey(item.name_.ptr()));
-                    if (OB_ISNULL(config_item) || OB_ISNULL(*config_item)) {
+                    if (!config::parameter_exists(rust::Str(item.name_.ptr()))) {
                       ret = OB_ERR_SYS_CONFIG_UNKNOWN;
-                    } else if (OB_FAIL(item.value_.assign((*config_item)->default_str()))) {
                     } else {
+                      const rust::String default_value = config::parameter_default(rust::Str(item.name_.ptr()));
+                      if (OB_FAIL(item.value_.assign(ObString(default_value.size(), default_value.data())))) {
+                      } else {
                       item.is_reset_ = true;
                       if (OB_FAIL(alter_system_set_reset_add_config_item(
                                      stmt->get_rpc_arg(), item))) {
+                      }
                       }
                     }
                   }
@@ -1115,8 +1117,7 @@ int ObAlterSystemResetResolver::resolve(const ParseNode &parse_tree)
         } else {
           ObString name(var->str_len_, var->str_value_);
           {
-            if (true &&
-              nullptr != GCONF.get_container().get(ObConfigStringKey(name))) {
+            if (config::parameter_exists(rust::Str(name.ptr(), name.length()))) {
               set_parameters = true;
               break;
             }
@@ -1163,13 +1164,14 @@ int ObAlterSystemResetResolver::resolve(const ParseNode &parse_tree)
                 continue;
               }
               //value
-              ObConfigItem * const *config_item =
-                  GCONF.get_container().get(ObConfigStringKey(item.name_.ptr()));
-              if (OB_ISNULL(config_item) || OB_ISNULL(*config_item)) {
+              if (!config::parameter_exists(rust::Str(item.name_.ptr()))) {
                 ret = OB_ERR_SYS_CONFIG_UNKNOWN;
-              } else if (OB_FAIL(item.value_.assign((*config_item)->default_str()))) {
               } else {
+                const rust::String default_value = config::parameter_default(rust::Str(item.name_.ptr()));
+                if (OB_FAIL(item.value_.assign(ObString(default_value.size(), default_value.data())))) {
+                } else {
                 item.is_reset_ = true;
+                }
               }
               if (OB_SUCC(ret)) {
                 if (OB_FAIL(alter_system_set_reset_add_config_item(

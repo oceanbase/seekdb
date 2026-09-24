@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "share/ob_server_struct.h"
 #include "storage/tmp_file/ob_i_tmp_file.h"
 #include "share/ob_errno.h"
 #include "share/config/ob_server_config.h"
@@ -293,7 +294,7 @@ int ObITmpFile::init(const int64_t dir_id,
     if (nullptr != cur_trace_id) {
       trace_id_ = *cur_trace_id;
     } else {
-      trace_id_.init(GCONF.self_addr_);
+      trace_id_.init(GCTX.self_addr());
     }
     last_access_ts_ = ObTimeUtility::current_time();
     last_modify_ts_ = ObTimeUtility::current_time();

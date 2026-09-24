@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "storage/tmp_file/ob_tmp_file_page_cache_controller.h"
 #include "storage/tmp_file/ob_tmp_file_manager.h"
 
@@ -129,7 +130,7 @@ void ObTmpFilePageCacheController::refresh_disk_usage_limit()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else {
-    const int64_t max_disk_usage = GCONF.temporary_file_max_disk_size;
+    const int64_t max_disk_usage = config::temporary_file_max_disk_size();
     int64_t disk_limit = max_disk_usage > 0 ? max_disk_usage : 0;
     ATOMIC_SET(&disk_usage_limit_, disk_limit);
   }

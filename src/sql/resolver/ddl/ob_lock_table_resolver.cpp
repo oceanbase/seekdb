@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
+#include "config_bridge.h"
 #include "ob_lock_table_resolver.h"
 
 namespace oceanbase
@@ -51,7 +52,7 @@ int ObLockTableResolver::resolve_mysql_mode_(const ParseNode &parse_tree)
   ObString db_name;
 
   
-  if (GCONF.enable_lock_priority) {
+  if (config::enable_lock_priority()) {
     ObLockTableStmt *lock_stmt = static_cast<ObLockTableStmt *>(stmt_);
     if (parse_tree.num_child_ == 0) {
       // it is unlock table stmt

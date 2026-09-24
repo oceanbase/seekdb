@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "config_bridge.h"
 #include "observer/ai_service/ob_ai_service_executor.h"
 #include "share/ob_dml_sql_splicer.h"
 #include "observer/ai_service/ob_ai_service_proxy.h"
@@ -251,7 +252,7 @@ int ObAiServiceExecutor::fetch_new_ai_model_endpoint_id(uint64_t &new_ai_model_e
 int ObAiServiceExecutor::lock_and_fetch_endpoint_version(ObMySQLTransaction &trans, int64_t &endpoint_version)
 {
   int ret = OB_SUCCESS;
-  const int64_t timeout = GCONF.internal_sql_execute_timeout;
+  const int64_t timeout = config::internal_sql_execute_timeout();
   observer::ObInnerSQLConnection *conn = NULL;
   ObSqlString sql;
   

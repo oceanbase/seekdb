@@ -30,6 +30,7 @@ pub type AutoConfigEntryCallback = unsafe extern "C" fn(
     value: *const c_char,
     line: u32,
 ) -> c_int;
+pub type AutoConfigCheckCallback = unsafe extern "C" fn(context: *mut c_void) -> c_int;
 
 fn write_error(output: *mut AutoConfigError, error: &Error) {
     if output.is_null() {
@@ -72,10 +73,7 @@ fn argument(value: *const c_char, label: &str) -> Result<String, Error> {
 }
 
 #[no_mangle]
-pub extern "C" fn auto_config_supported(
-    path: *const c_char,
-    error: *mut AutoConfigError,
-) -> c_int {
+pub extern "C" fn auto_config_supported(path: *const c_char, error: *mut AutoConfigError) -> c_int {
     let result =
         argument(path, "path").and_then(|path| store::check_storage_directory(Path::new(&path)));
     match result {
@@ -148,8 +146,139 @@ pub extern "C" fn auto_config_update(
         } else {
             None
         };
-        store::update(Path::new(&path), &name, value.as_deref())
+        if store::config::find(&name).is_some() {
+            store::config::update_parameter(Path::new(&path), &name, value.as_deref())
+        } else if let Some(value) = value.as_deref() {
+            store::config::update_internal_state(Path::new(&path), &name, value)
+        } else {
+            Err(Error::new(0, Some(name), "cannot reset internal state"))
+        }
     })();
+    match result {
+        Ok(()) => 0,
+        Err(problem) => {
+            write_error(error, &problem);
+            1
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn auto_config_update_checked(
+    path: *const c_char,
+    name: *const c_char,
+    value: *const c_char,
+    reset: u8,
+    callback: AutoConfigCheckCallback,
+    context: *mut c_void,
+    error: *mut AutoConfigError,
+) -> c_int {
+    let result = (|| {
+        let path = argument(path, "path")?;
+        let name = argument(name, "name")?;
+        let value = if reset == 0 {
+            Some(argument(value, "value")?)
+        } else {
+            None
+        };
+        store::config::update_parameter_checked(Path::new(&path), &name, value.as_deref(), || {
+            let status = unsafe { callback(context) };
+            if status == 0 {
+                Ok(())
+            } else {
+                Err(Error::new(
+                    0,
+                    Some(name.clone()),
+                    format!("business checker rejected value ({status})"),
+                ))
+            }
+        })
+    })();
+    match result {
+        Ok(()) => 0,
+        Err(problem) => {
+            write_error(error, &problem);
+            1
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn auto_config_load_active(
+    path: *const c_char,
+    startup: u8,
+    error: *mut AutoConfigError,
+) -> c_int {
+    let result = argument(path, "path")
+        .and_then(|path| store::config::load_active(Path::new(&path), startup != 0));
+    match result {
+        Ok(()) => 0,
+        Err(problem) => {
+            write_error(error, &problem);
+            1
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn auto_config_load_active_checked(
+    path: *const c_char,
+    startup: u8,
+    callback: AutoConfigEntryCallback,
+    context: *mut c_void,
+    error: *mut AutoConfigError,
+) -> c_int {
+    let result = argument(path, "path").and_then(|path| {
+        store::config::load_active_checked(Path::new(&path), startup != 0, |entry| {
+            let name = CString::new(entry.name.as_str()).expect("validated parameter name");
+            let value = CString::new(entry.value.as_str()).expect("validated parameter value");
+            let status =
+                unsafe { callback(context, name.as_ptr(), value.as_ptr(), entry.line as u32) };
+            if status == 0 {
+                Ok(())
+            } else {
+                Err(Error::new(
+                    entry.line,
+                    Some(entry.name.clone()),
+                    format!("business checker rejected value ({status})"),
+                ))
+            }
+        })
+    });
+    match result {
+        Ok(()) => 0,
+        Err(problem) => {
+            write_error(error, &problem);
+            1
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn auto_config_bootstrap_set(
+    name: *const c_char,
+    value: *const c_char,
+    error: *mut AutoConfigError,
+) -> c_int {
+    let result = argument(name, "name").and_then(|name| {
+        argument(value, "value").and_then(|value| store::config::bootstrap_set(&name, &value))
+    });
+    match result {
+        Ok(()) => 0,
+        Err(problem) => {
+            write_error(error, &problem);
+            1
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn auto_config_save_bootstrap(
+    path: *const c_char,
+    error: *mut AutoConfigError,
+) -> c_int {
+    let result =
+        argument(path, "path").and_then(|path| store::config::save_bootstrap(Path::new(&path)));
     match result {
         Ok(()) => 0,
         Err(problem) => {

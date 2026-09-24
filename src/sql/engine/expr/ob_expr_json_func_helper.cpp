@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "config_bridge.h"
 #include "ob_expr_json_func_helper.h"
 #include "share/ob_json_access_utils.h"
 #include "ob_expr_json_utils.h"
@@ -2033,7 +2034,7 @@ int ObJsonExprHelper::get_json_max_depth_config()
 {
   uint32_t json_max_depth = JSON_DOCUMENT_MAX_DEPTH;
 
-  json_max_depth = GCONF.json_document_max_depth;
+  json_max_depth = config::json_document_max_depth();
   if (json_max_depth < JSON_DOCUMENT_MAX_DEPTH || json_max_depth > 1024) {
     json_max_depth = JSON_DOCUMENT_MAX_DEPTH;
   }

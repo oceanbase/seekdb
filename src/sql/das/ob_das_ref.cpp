@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_DAS
+#include "config_bridge.h"
 #include "ob_das_ref.h"
 #include "share/rc/ob_server_runtime.h"
 #include "sql/das/ob_data_access_service.h"
@@ -322,7 +323,7 @@ int ObDASRef::retry_all_fail_tasks(common::ObIArray<ObIDASTaskOp *> &failed_task
   int ret = OB_SUCCESS;
   for (int i = 0; OB_SUCC(ret) && i < failed_tasks.count(); i++) {
     ObIDASTaskOp *failed_task = failed_tasks.at(i);
-    if (!GCONF._enable_partition_level_retry || !failed_task->can_part_retry()) {
+    if (!config::_enable_partition_level_retry() || !failed_task->can_part_retry()) {
       ret = failed_task->errcode_;
     } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::sql::ObDataAccessService>()->retry_das_task(*this, *failed_tasks.at(i)))) {
     }

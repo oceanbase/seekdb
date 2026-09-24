@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "sql/engine/dml/ob_table_insert_op.h"
 #include "sql/engine/dml/ob_dml_service.h"
 
@@ -277,7 +278,7 @@ int ObTableInsertOp::write_rows_post_proc(int last_errno)
     if (OB_SUCC(ret)) {
       ret = sync_ret;
     }
-    if (OB_SUCC(ret) && GCONF.enable_defensive_check()) {
+    if (OB_SUCC(ret) && (config::_enable_defensive_check() > 0)) {
       if (OB_FAIL(check_insert_affected_row())) {
       }
     }

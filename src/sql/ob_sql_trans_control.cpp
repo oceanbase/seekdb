@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_EXE
 
+#include "config_bridge.h"
 #include "ob_sql_trans_control.h"
 #include "data_plane/tablelock/ob_table_lock.h"
 #include "data_plane/transaction/ob_deadlock.h"
@@ -427,7 +428,7 @@ int ObSqlTransControl::do_end_trans_(ObSQLSessionInfo *session,
   int ret = OB_SUCCESS;
   ObTxDesc *&tx_ptr = session->get_tx_desc();
   const ObTransID tx_id = data_plane::tx_desc_id(tx_ptr);
-  const int64_t lcl_op_interval = GCONF._lcl_op_interval;
+  const int64_t lcl_op_interval = config::_lcl_op_interval();
   if (lcl_op_interval > 0) {
     data_plane::finish_transaction_deadlock(data_plane::tx_desc_id(tx_ptr));
   }
@@ -658,7 +659,7 @@ int ObSqlTransControl::stmt_setup_snapshot_(ObSQLSessionInfo *session,
                                                     snapshot_version))) {
       TRANS_LOG(WARN, "get weak read snapshot fail", KPC(txs));
       int64_t stale_time = session->get_ob_max_read_stale_time();
-      int64_t refresh_interval = GCONF.weak_read_version_refresh_interval;
+      int64_t refresh_interval = config::weak_read_version_refresh_interval();
       if (stale_time > 0 && refresh_interval > stale_time) {
         TRANS_LOG(WARN, "weak_read_version_refresh_interval is larger than ob_max_read_stale_time ", 
                   K(refresh_interval), K(stale_time), KPC(txs));
@@ -1133,7 +1134,7 @@ int ObSqlTransControl::reset_session_tx_state(ObSQLSessionInfo *session, bool re
   // cleanup txn level temp tables if this is the txn start node
   ObTxDesc *tx_desc = session->get_tx_desc();
   if (data_plane::tx_owns_local_temporary_tables(
-          tx_desc, GCONF.self_addr_)) {
+          tx_desc, GCTX.self_addr())) {
     temp_ret = session->drop_temp_tables(false);
     if (OB_SUCCESS != temp_ret) {
       LOG_WARN_RET(temp_ret, "trx level temporary table clean failed", KR(temp_ret));

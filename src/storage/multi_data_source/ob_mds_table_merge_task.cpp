@@ -94,7 +94,7 @@ int ObMdsTableMergeTask::process()
     ctx.static_param_.start_time_ = common::ObTimeUtility::fast_current_time();
     const common::ObTabletID &tablet_id = ctx.get_tablet_id();
 #ifdef ERRSIM
-    if (GCONF.errsim_test_tablet_id.get_value() > 0 && tablet_id.id() == GCONF.errsim_test_tablet_id.get_value()) {
+    if (::oceanbase::common::errsim_config().errsim_test_tablet_id.load() > 0 && tablet_id.id() == ::oceanbase::common::errsim_config().errsim_test_tablet_id.load()) {
       LOG_INFO("test tablet mds dump start", K(ret), K(tablet_id));
       DEBUG_SYNC(BEFORE_DDL_LOB_META_TABLET_MDS_DUMP);
     }

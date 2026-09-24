@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX PL
 
+#include "config_bridge.h"
 #include "ob_pl_resolver.h"
 #include "share/rc/ob_server_runtime.h"
 #include "pl/ob_pl_router.h"
@@ -1029,7 +1030,7 @@ int ObPLResolver::resolve_sp_scalar_type(ObIAllocator &allocator,
   } else {
     ObDataType scalar_data_type;
     bool convert_real_to_decimal =
-        (GCONF._enable_convert_real_to_decimal);
+        (config::_enable_convert_real_to_decimal());
     bool enable_mysql_compatible_dates = false;
     if (OB_FAIL(ObSQLUtils::check_enable_mysql_compatible_dates(&session_info, false /*is_ddl*/,
                               enable_mysql_compatible_dates))) {

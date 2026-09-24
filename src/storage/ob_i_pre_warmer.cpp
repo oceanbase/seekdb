@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX SHARE
+#include "config_bridge.h"
 #include "ob_i_pre_warmer.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/ob_tablet_stat_mgr.h"
@@ -30,7 +31,7 @@ int ObPreWarmerParam::init(const common::ObTabletID &tablet_id, const bool use_f
   if (tablet_id.is_user_tablet()) {
     if (use_fixed_percentage) {
 
-      fixed_percentage_ = GCONF._compaction_prewarm_percentage;
+      fixed_percentage_ = config::_compaction_prewarm_percentage();
 
       if (fixed_percentage_ > 0) {
         tmp_type = MEM_PRE_WARM;

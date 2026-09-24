@@ -1311,7 +1311,7 @@ int ObEmbeddingTaskHandler::push_task(ObEmbeddingTask &task)
 void ObEmbeddingTaskHandler::handle(void *task)
 {
   int ret = OB_SUCCESS;
-  ObCurTraceId::init(GCONF.self_addr_);
+  ObCurTraceId::init(GCTX.self_addr());
   ObEmbeddingTask *embedding_task = nullptr;
 
   if (IS_NOT_INIT) {

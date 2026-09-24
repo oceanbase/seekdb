@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "config_bridge.h"
 #include "ob_partition_parallel_merge_ctx.h"
 #include "lib/alloc/alloc_func.h"
 #include "share/rc/ob_server_runtime.h"
@@ -85,7 +86,7 @@ int ObParallelMergeCtx::init(compaction::ObBasicTabletMergeCtx &merge_ctx)
     enable_parallel_minor_merge = false;
   } else {
 
-    enable_parallel_minor_merge = GCONF._enable_parallel_minor_merge;
+    enable_parallel_minor_merge = config::_enable_parallel_minor_merge();
 
   }
 

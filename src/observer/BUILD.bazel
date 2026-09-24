@@ -284,6 +284,8 @@ seekdb_semantic_unity_cc_library(
     source_replacements = _OBSERVER_GENERATED_SOURCE_REPLACEMENTS,
     implementation_deps = [
         ":observer_internal_interface",
+        "//rust:config_bridge_headers",
+        "//rust:auto_config_headers",
     ] + _OBSERVER_NON_OBLIB_NATIVE_DEPS,
     group_implementation_deps = observer_runtime_group_oblib_deps(
         _OBSERVER_RUNTIME_UNITY_GROUPS,

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "storage/ob_dml_running_ctx.h"
 #include "storage/ob_table_dml_param.h"
 #include "storage/tablet/ob_tablet.h"
@@ -179,7 +180,7 @@ int ObDMLRunningCtx::check_need_old_row_legitimacy()
   if (OB_FAIL(relative_table_.has_udf_column(is_need_check_old_row_))) {
   } else if (is_need_check_old_row_) {
     is_udf_ = true;
-  } else if (GCONF.enable_defensive_check()) {
+  } else if ((config::_enable_defensive_check() > 0)) {
     is_need_check_old_row_ = true;
     if ((relative_table_.is_index_table() && !relative_table_.can_read_index())
         || dml_param_.is_main_table_in_fts_ddl_ ) {

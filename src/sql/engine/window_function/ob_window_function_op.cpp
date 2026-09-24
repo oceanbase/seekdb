@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "config_bridge.h"
 #include "sql/engine/window_function/ob_window_function_op.h"
 #include "sql/engine/expr/ob_expr_truncate.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
@@ -3726,7 +3727,7 @@ int ObWindowFunctionOp::init_hp_infras_group_mgr()
   int64_t est_rows = MY_SPEC.rows_ / MY_SPEC.estimated_part_cnt_;
   
   if (!hp_infras_mgr_.is_inited()) {
-    if (OB_FAIL(hp_infras_mgr_.init(GCONF.is_sql_operator_dump_enabled(), est_rows,
+    if (OB_FAIL(hp_infras_mgr_.init(config::enable_sql_operator_dump(), est_rows,
                                     MY_SPEC.width_, true /*unique*/, 1 /*ways*/, &eval_ctx_,
                                     &sql_mem_processor_, &io_event_observer_))) {
     }

@@ -244,14 +244,14 @@ int ObOptStatService::load_column_stat_and_put_cache(ObIArray<const ObOptColumnS
   return ret;
 }
 
-int ObOptStatService::init(common::ObMySQLProxy *proxy, ObServerConfig *config)
+int ObOptStatService::init(common::ObMySQLProxy *proxy)
 {
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(proxy)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(sql_service_.init(proxy, config))) {
+  } else if (OB_FAIL(sql_service_.init(proxy))) {
   } else if (OB_FAIL(table_stat_cache_.init(
       "opt_table_stat_cache", DEFAULT_TAB_STAT_CACHE_PRIORITY))) {
   } else if (OB_FAIL(column_stat_cache_.init("opt_column_stat_cache",

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_REWRITE
 
+#include "config_bridge.h"
 #include "sql/rewrite/ob_transformer_impl.h"
 #include "sql/rewrite/ob_transform_view_merge.h"
 #include "sql/rewrite/ob_transform_min_max.h"
@@ -114,9 +115,9 @@ int ObTransformerImpl::set_transformation_parameters(ObQueryCtx *query_ctx)
   if (OB_SUCC(ret)) {
     
 
-    ctx_->complex_cbqt_table_num_ = GCONF._complex_cbqt_table_num;
-    ctx_->force_subquery_unnest_ = GCONF._force_subquery_unnest;
-    ctx_->nested_loop_join_enabled_ = GCONF._nested_loop_join_enabled;
+    ctx_->complex_cbqt_table_num_ = config::_complex_cbqt_table_num();
+    ctx_->force_subquery_unnest_ = config::_force_subquery_unnest();
+    ctx_->nested_loop_join_enabled_ = config::_nested_loop_join_enabled();
     if (OB_FAIL(query_ctx->get_global_hint().opt_params_.get_bool_opt_param(ObOptParamHint::NESTED_LOOP_JOIN_ENABLED, 
                                                                             ctx_->nested_loop_join_enabled_))) {
     }

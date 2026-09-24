@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "ob_temp_block_store.h"
 
 
@@ -1079,7 +1080,7 @@ int ObTempBlockStore::dump_block_if_need(const int64_t extra_size)
 bool ObTempBlockStore::need_dump(const int64_t extra_size)
 {
   bool need_to_dump = false;
-  if (!GCONF.is_sql_operator_dump_enabled() || !enable_dump_) { // no dump
+  if (!config::enable_sql_operator_dump() || !enable_dump_) { // no dump
   } else if (mem_limit_ > 0) {
     if (mem_hold_ + extra_size > mem_limit_) {
       need_to_dump = true;

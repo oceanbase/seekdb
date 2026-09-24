@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_DAS
+#include "config_bridge.h"
 #include "query/runtime/ob_query_runtime_environment.h"
 #include "share/rc/ob_server_runtime.h"
 #include "sql/das/ob_data_access_service.h"
@@ -207,7 +208,7 @@ int ObDataAccessService::rescan_das_task(ObDASRef &das_ref, ObDASScanOp &scan_op
     scan_op.errcode_ = ret;
   }
   OB_ASSERT(scan_op.errcode_ == ret);
-  if (OB_FAIL(ret) && GCONF._enable_partition_level_retry && scan_op.can_part_retry()) {
+  if (OB_FAIL(ret) && config::_enable_partition_level_retry() && scan_op.can_part_retry()) {
     //only fast select can be retry with partition level
     if (OB_FAIL(retry_das_task(das_ref, scan_op))) {
     }

@@ -129,7 +129,7 @@ int ObMajorFreezeService::alloc_local_major_freeze(const bool append_mode)
   } else if (FALSE_IT(local_major_freeze_ = new(buf) ObLocalMajorFreeze{})) {
     // impossible
   } else if (OB_FAIL(local_major_freeze_->init(is_primary_service, *GCTX.sql_proxy_,
-             *GCTX.config_, *GCTX.schema_service_))) {
+             *GCTX.schema_service_))) {
   } else if (OB_FAIL(local_major_freeze_->start(append_mode))) {
   }
 

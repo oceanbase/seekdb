@@ -16,6 +16,7 @@
 
 #ifndef OCEANBASE_SHARE_OB_SHARE_UTIL_H_
 #define OCEANBASE_SHARE_OB_SHARE_UTIL_H_
+#include "config_bridge.h"
 #include "common/ob_timeout_ctx.h"
 #include "share/ob_define.h"
 #include "share/ob_id_generator.h"
@@ -42,7 +43,7 @@ public:
                            common::ObString &ip_string);
   // priority to set timeout_ctx: ctx > worker > default_timeout
   static int set_default_timeout_ctx(common::ObTimeoutCtx &ctx, const int64_t default_timeout);
-  // moved up from rootserver::ObRootUtils(body uses only GCONF.rpc_timeout + set_default_timeout_ctx, share-clean)
+  // moved up from rootserver::ObRootUtils(body uses only config::rpc_timeout() + set_default_timeout_ctx, share-clean)
   static int get_rs_default_timeout_ctx(common::ObTimeoutCtx &ctx);
   // priority to get timeout: ctx > worker > default_timeout
   static int get_abs_timeout(const int64_t default_timeout, int64_t &abs_timeout);

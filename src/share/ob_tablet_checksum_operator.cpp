@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE
 
+#include "config_bridge.h"
 #include "common/ob_timeout_ctx.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
 #include "common/mysqlclient/ob_mysql_transaction.h"
@@ -498,7 +499,7 @@ int ObTabletChecksumOperator::get_estimated_timeout_us(
     const int64_t default_timeout_us = 9 * 1000 * 1000L;
     estimated_timeout_us = MAX(estimated_timeout_us, default_timeout_us);
     estimated_timeout_us = MIN(estimated_timeout_us, 3600 * 1000 * 1000L);
-    estimated_timeout_us = MAX(estimated_timeout_us, GCONF.rpc_timeout);
+    estimated_timeout_us = MAX(estimated_timeout_us, config::rpc_timeout());
   }
   return ret;
 }

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DTL
 
+#include "config_bridge.h"
 #include "ob_dtl_memory_manager.h"
 
 using namespace oceanbase::common;
@@ -31,7 +32,7 @@ int ObDtlMemoryManager::init()
 {
   int ret = OB_SUCCESS;
   char *buf = nullptr;
-  hash_cnt_ = next_pow2(common::ObServerConfig::get_instance()._px_chunklist_count_ratio) * HASH_CNT;
+  hash_cnt_ = next_pow2(::oceanbase::config::_px_chunklist_count_ratio()) * HASH_CNT;
   ObMemAttr attr("SqlDtlMgr");
   buf = reinterpret_cast<char*>(ob_malloc(hash_cnt_ * sizeof(ObDtlChannelMemManager), attr));
   if (nullptr == buf) {
@@ -69,7 +70,7 @@ int ObDtlMemoryManager::init()
       buf = nullptr;
     }
     times_.reset();
-    int64_t ratio = common::ObServerConfig::get_instance()._px_chunklist_count_ratio;
+    int64_t ratio = ::oceanbase::config::_px_chunklist_count_ratio();
   }
   return ret;
 }
@@ -188,7 +189,7 @@ int64_t ObDtlMemoryManager::variance_alloc_times()
 
 int64_t ObDtlMemoryManager::get_min_buffer_size()
 {
-  int64_t reserve_buffer_min_size = GCONF._parallel_min_message_pool;
+  int64_t reserve_buffer_min_size = config::_parallel_min_message_pool();
   return reserve_buffer_min_size;
 }
 

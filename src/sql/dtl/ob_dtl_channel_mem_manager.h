@@ -17,6 +17,7 @@
 #ifndef OB_DTL_CHANNEL_MEM_MANAGER_H
 #define OB_DTL_CHANNEL_MEM_MANAGER_H
 
+#include "config_bridge.h"
 #include "lib/queue/ob_lighty_queue.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/allocator/ob_fifo_allocator.h"
@@ -120,7 +121,7 @@ OB_INLINE int64_t ObDtlChannelMemManager::get_max_memory_limit_size()
 
 OB_INLINE void ObDtlChannelMemManager::update_max_memory_percent()
 {
-  size_per_buffer_ = GCONF.dtl_buffer_size;
+  size_per_buffer_ = config::dtl_buffer_size();
   get_max_mem_percent();
 }
 

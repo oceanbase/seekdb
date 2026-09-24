@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "ob_dfo_mgr.h"
 #include "sql/engine/basic/ob_temp_table_access_op.h"
 #include "sql/engine/basic/ob_material_op.h"
@@ -59,7 +60,7 @@ int ObDfoSchedDepthGenerator::generate_sched_depth(ObExecContext &exec_ctx,
                                                    ObDfoMgr &dfo_mgr)
 {
   int ret = OB_SUCCESS;
-  if (GCONF._px_max_pipeline_depth > 2) {
+  if (config::_px_max_pipeline_depth() > 2) {
     ObDfo *dfo_tree = dfo_mgr.get_root_dfo();
     if (OB_ISNULL(dfo_tree)) {
       ret = OB_ERR_UNEXPECTED;
@@ -694,7 +695,7 @@ int ObDfoMgr::get_ready_dfos(ObIArray<ObDfo*> &dfos) const
       // Three-layer DFO scheduling logic
       // Note: Even if a sibling has been scheduled above, 3 DFOs have already been scheduled
       // will still attempt to schedule the 4th depend parent dfo
-      if (OB_SUCC(ret) && !got_pair_dfo && GCONF._px_max_pipeline_depth > 2) {
+      if (OB_SUCC(ret) && !got_pair_dfo && config::_px_max_pipeline_depth() > 2) {
         ObDfo *parent_edge = edge->parent();
         if (NULL != parent_edge &&
             !parent_edge->is_active() &&

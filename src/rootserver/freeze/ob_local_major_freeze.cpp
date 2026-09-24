@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 
+#include "config_bridge.h"
 #include "rootserver/freeze/ob_local_major_freeze.h"
 
 #include "share/ob_tablet_meta_table_compaction_operator.h"
@@ -43,7 +44,6 @@ ObLocalMajorFreeze::~ObLocalMajorFreeze()
 int ObLocalMajorFreeze::init(
     const bool is_primary_service,
     ObMySQLProxy &sql_proxy,
-    ObServerConfig &config,
     share::schema::ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
@@ -53,12 +53,12 @@ int ObLocalMajorFreeze::init(
   } else if (OB_FAIL(snapshot_gc_scn_renewer_.init(
              is_primary_service, major_merge_info_mgr_))) {
   } else if (OB_FAIL(merge_scheduler_.init(is_primary_service, major_merge_info_mgr_,
-             schema_service, config, sql_proxy))) {
+             schema_service, sql_proxy))) {
   }  else if (OB_FAIL(major_merge_info_detector_.init(is_primary_service, sql_proxy,
               major_merge_info_mgr_, snapshot_gc_scn_renewer_,
               merge_scheduler_.get_major_scheduler_idling()))) {
   } else if (is_primary_service) {
-    if (OB_FAIL(daily_launcher_.init(config, sql_proxy, major_merge_info_mgr_))) {
+    if (OB_FAIL(daily_launcher_.init(sql_proxy, major_merge_info_mgr_))) {
     }
   }
   if (OB_SUCC(ret)) {
@@ -209,7 +209,7 @@ int ObLocalMajorFreeze::launch_major_freeze(const ObMajorFreezeReason freeze_rea
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(check_runtime_status())) {
-  } else if (!GCONF.enable_major_freeze) {
+  } else if (!config::enable_major_freeze()) {
     ret = OB_MAJOR_FREEZE_NOT_ALLOW;
   } else if (merge_scheduler_.is_paused()) {
     ret = OB_LEADER_NOT_EXIST;

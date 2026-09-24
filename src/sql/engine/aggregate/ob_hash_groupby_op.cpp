@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "sql/engine/aggregate/ob_hash_groupby_op.h"
 #include "sql/engine/expr/ob_expr_estimate_ndv.h"
 #include "share/rc/ob_server_runtime.h"
@@ -255,7 +256,7 @@ int ObHashGroupByOp::inner_open()
     } else {
       llc_est_.enabled_ = MY_SPEC.by_pass_enabled_ && MY_SPEC.llc_ndv_est_enabled_ && !force_by_pass_;
       enable_dump_ = (!(aggr_processor_.has_distinct() || aggr_processor_.has_order_by())
-                     && GCONF.is_sql_operator_dump_enabled());
+                     && config::enable_sql_operator_dump());
       group_store_.set_dir_id(sql_mem_processor_.get_dir_id());
       group_store_.set_callback(&sql_mem_processor_);
       group_store_.set_allocator(mem_context_->get_malloc_allocator());
@@ -264,7 +265,7 @@ int ObHashGroupByOp::inner_open()
       op_monitor_info_.otherstat_1_id_ = ObSqlMonitorStatIds::HASH_INIT_BUCKET_COUNT;
       op_monitor_info_.otherstat_4_value_ = 0;
       op_monitor_info_.otherstat_4_id_ = ObSqlMonitorStatIds::HASH_POPULAR_MAP_SIZE;
-      force_dump_ = GCONF._force_hash_groupby_dump;
+      force_dump_ = config::_force_hash_groupby_dump();
       LOG_TRACE("trace init hash table", K(init_size), K(MY_SPEC.est_group_cnt_), K(est_group_cnt),
         K(est_hash_mem_size), K(estimate_mem_size),
         K(profile_.get_expect_size()),
@@ -680,7 +681,7 @@ int ObHashGroupByOp::init_distinct_info(bool is_part)
   } else if (is_part) {
     // do nothing
   } else if (OB_FAIL(distinct_data_set_.init(
-      GCONF.is_sql_operator_dump_enabled(),
+      config::enable_sql_operator_dump(),
       true, true, 1, &distinct_sql_mem_processor_))) {
   } else if (FALSE_IT(distinct_data_set_.set_io_event_observer(&io_event_observer_))) {
   } else if (0 == distinct_origin_exprs_.count()
@@ -897,7 +898,7 @@ int ObHashGroupByOp::load_data()
   // We use sort based group by for aggregation which need distinct or sort right now,
   // disable operator dump for compatibility.
   const bool is_dump_enabled = (!(aggr_processor_.has_distinct() || aggr_processor_.has_order_by())
-                                && GCONF.is_sql_operator_dump_enabled());
+                                && config::enable_sql_operator_dump());
   ObGroupRowItem curr_gr_item;
   const ObGroupRowItem *exist_curr_gr_item = NULL;
   DatumStoreLinkPartition *parts[MAX_PARTITION_CNT] = {};

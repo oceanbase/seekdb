@@ -22,8 +22,6 @@
 #include "lib/ob_errno.h"
 #include "lib/utility/ob_print_utils.h"
 
-#include <cstring>
-
 namespace oceanbase
 {
 namespace common
@@ -31,30 +29,6 @@ namespace common
 
 namespace
 {
-constexpr const char *AUTO_CONFIG_PATH = "./etc/seekdb.auto.conf";
-
-struct LoadContext
-{
-  std::vector<ObConfigStorage::Entry> &entries;
-  int ret;
-};
-
-int append_entry(void *context, const char *name, const char *value, uint32_t line)
-{
-  LoadContext &load = *static_cast<LoadContext *>(context);
-  if (nullptr == name || nullptr == value) {
-    load.ret = OB_INVALID_ARGUMENT;
-  } else if (std::strlen(name) >= OB_MAX_CONFIG_NAME_LEN ||
-             std::strlen(value) >= OB_MAX_CONFIG_VALUE_LEN) {
-    load.ret = OB_INVALID_CONFIG;
-    int ret = load.ret;
-    LOG_ERROR("auto-config entry exceeds parameter limits", K(ret), K(line), K(name));
-  } else {
-    load.entries.push_back({name, value, line});
-  }
-  return load.ret;
-}
-
 int report_error(const char *operation, const AutoConfigError &error)
 {
   int ret = OB_INVALID_CONFIG;
@@ -82,53 +56,31 @@ int ObConfigStorage::init()
   return ret;
 }
 
-int ObConfigStorage::load_all_configs(std::vector<Entry> &entries)
+int ObConfigStorage::load_active_checked(bool startup,
+                                         AutoConfigEntryCallback callback,
+                                         void *context)
 {
   int ret = OB_SUCCESS;
-  entries.clear();
   if (!is_inited()) {
     ret = OB_NOT_INIT;
+  } else if (nullptr == callback) {
+    ret = OB_INVALID_ARGUMENT;
   } else {
     AutoConfigError error = {};
-    LoadContext context{entries, OB_SUCCESS};
-    if (0 != auto_config_load(AUTO_CONFIG_PATH, append_entry, &context, &error)) {
-      ret = OB_SUCCESS != context.ret ? context.ret : report_error("load", error);
+    if (0 != auto_config_load_active_checked(AUTO_CONFIG_PATH, startup ? 1 : 0,
+                                             callback, context, &error)) {
+      ret = report_error("load active", error);
     }
   }
   return ret;
 }
 
-int ObConfigStorage::get_config_value(
-    const char *name, ObString &value, common::ObIAllocator &allocator)
+int ObConfigStorage::save_config(const char *name, const char *value, bool *after_replace)
 {
   int ret = OB_SUCCESS;
-  value.reset();
-  std::vector<Entry> entries;
-  if (nullptr == name) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(load_all_configs(entries))) {
-  } else {
-    ret = OB_ENTRY_NOT_EXIST;
-    for (const Entry &entry : entries) {
-      if (entry.name == name && !entry.value.empty()) {
-        char *buffer = static_cast<char *>(allocator.alloc(entry.value.size()));
-        if (nullptr == buffer) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else {
-          MEMCPY(buffer, entry.value.data(), entry.value.size());
-          value.assign_ptr(buffer, static_cast<int32_t>(entry.value.size()));
-          ret = OB_SUCCESS;
-        }
-        break;
-      }
-    }
+  if (nullptr != after_replace) {
+    *after_replace = false;
   }
-  return ret;
-}
-
-int ObConfigStorage::save_config(const char *name, const char *value)
-{
-  int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
   } else if (nullptr == name || nullptr == value) {
@@ -136,15 +88,21 @@ int ObConfigStorage::save_config(const char *name, const char *value)
   } else {
     AutoConfigError error = {};
     if (0 != auto_config_update(AUTO_CONFIG_PATH, name, value, 0, &error)) {
+      if (nullptr != after_replace) {
+        *after_replace = 0 != error.after_replace;
+      }
       ret = report_error("save", error);
     }
   }
   return ret;
 }
 
-int ObConfigStorage::reset_config(const char *name)
+int ObConfigStorage::reset_config(const char *name, bool *after_replace)
 {
   int ret = OB_SUCCESS;
+  if (nullptr != after_replace) {
+    *after_replace = false;
+  }
   if (!is_inited()) {
     ret = OB_NOT_INIT;
   } else if (nullptr == name) {
@@ -152,7 +110,35 @@ int ObConfigStorage::reset_config(const char *name)
   } else {
     AutoConfigError error = {};
     if (0 != auto_config_update(AUTO_CONFIG_PATH, name, nullptr, 1, &error)) {
+      if (nullptr != after_replace) {
+        *after_replace = 0 != error.after_replace;
+      }
       ret = report_error("reset", error);
+    }
+  }
+  return ret;
+}
+
+int ObConfigStorage::update_checked(const char *name, const char *value, bool reset,
+                                    AutoConfigCheckCallback callback, void *context,
+                                    bool *after_replace)
+{
+  int ret = OB_SUCCESS;
+  if (nullptr != after_replace) {
+    *after_replace = false;
+  }
+  if (!is_inited()) {
+    ret = OB_NOT_INIT;
+  } else if (nullptr == name || (!reset && nullptr == value) || nullptr == callback) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    AutoConfigError error = {};
+    if (0 != auto_config_update_checked(AUTO_CONFIG_PATH, name, value,
+                                        reset ? 1 : 0, callback, context, &error)) {
+      if (nullptr != after_replace) {
+        *after_replace = 0 != error.after_replace;
+      }
+      ret = report_error(reset ? "checked reset" : "checked save", error);
     }
   }
   return ret;

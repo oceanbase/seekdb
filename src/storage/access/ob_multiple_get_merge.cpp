@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "config_bridge.h"
 #include "ob_multiple_get_merge.h"
 
 namespace oceanbase
@@ -225,7 +226,7 @@ int ObMultipleGetMerge::inner_get_next_row(ObDatumRow &row)
         } else {
           // When the index lookups the rowkeys from the main table, it should exists
           // and if we find that it does not exist, there must be an anomaly
-          if (GCONF.enable_defensive_check()
+          if ((config::_enable_defensive_check() > 0)
               && access_ctx_->query_flag_.is_lookup_for_4377()) {
             ret = handle_4377("[index lookup]ObMultipleGetMerge::inner_get_next_row");
             STORAGE_LOG(WARN,"[index lookup] row not found", K(ret),

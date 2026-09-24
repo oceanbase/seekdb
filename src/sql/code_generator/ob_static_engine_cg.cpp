@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "ob_static_engine_cg.h"
 #include "sql/optimizer/ob_log_group_by.h"
 #include "sql/optimizer/ob_log_sort.h"
@@ -661,6 +662,7 @@ int ObStaticEngineCG::get_query_compress_type(const ObLogPlan &log_plan,
 {
   int ret = OB_SUCCESS;
   ObString codec_str;
+  rust::String configured_codec;
   
   if (OB_ISNULL(log_plan.get_stmt()) || OB_ISNULL(log_plan.get_stmt()->get_query_ctx())) {
     ret = OB_ERR_UNEXPECTED;
@@ -670,7 +672,8 @@ int ObStaticEngineCG::get_query_compress_type(const ObLogPlan &log_plan,
     ObObj hint_val;
     if (OB_FAIL(opt_params->get_opt_param(ObOptParamHint::SPILL_COMPRESSION_CODEC, hint_val))) {
     } else if (hint_val.is_nop_value()) { // get compression algorithm from configure
-      codec_str = ObString::make_string(GCONF.spill_compression_codec.get_value());
+      configured_codec = config::spill_compression_codec();
+      codec_str = ObString(static_cast<int32_t>(configured_codec.size()), configured_codec.data());
     } else { // get compression algorithm from hint
       codec_str = hint_val.get_varchar();
     }
@@ -2466,7 +2469,7 @@ int ObStaticEngineCG::generate_spec(ObLogJoinFilter &op, ObJoinFilterSpec &spec,
   spec.set_filter_length(op.get_filter_length());
   spec.set_shared_filter_type(op.get_filter_type());
   spec.is_shuffle_ = op.is_use_filter_shuffle();
-  spec.bloom_filter_ratio_ = GCONF._bloom_filter_ratio;
+  spec.bloom_filter_ratio_ = config::_bloom_filter_ratio();
   if (OB_ISNULL(opt_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(opt_ctx_->get_global_hint().opt_params_.get_integer_opt_param(ObOptParamHint::BLOOM_FILTER_RATIO, spec.bloom_filter_ratio_))) {
@@ -3443,8 +3446,8 @@ int ObStaticEngineCG::generate_spec(ObLogGroupBy &op, ObHashGroupBySpec &spec,
     OZ(set_3stage_info(op, spec));
     spec.by_pass_enabled_ = op.is_adaptive_aggregate();
     
-    spec.llc_ndv_est_enabled_ = GCONF._enable_hgby_llc_ndv_adaptive;
-    spec.skew_detection_enabled_ = GCONF._enable_hgby_skew_detection;
+    spec.llc_ndv_est_enabled_ = config::_enable_hgby_llc_ndv_adaptive();
+    spec.skew_detection_enabled_ = config::_enable_hgby_skew_detection();
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(generate_dist_aggr_distinct_columns(op, spec))) {
     } else if (OB_FAIL(spec.distinct_exprs_.init(op.get_distinct_exprs().count()))){
@@ -3741,7 +3744,7 @@ int ObStaticEngineCG::generate_tsc_flags(ObLogTableScan &op, ObTableScanSpec &sp
     int64_t pd_level = 0;
     OB_ASSERT(opt_params != nullptr);
     if (OB_FAIL(
-            get_pushdown_storage_level(log_plan->get_optimizer_context(), GCONF._pushdown_storage_level, pd_level))) {
+            get_pushdown_storage_level(log_plan->get_optimizer_context(), config::_pushdown_storage_level(), pd_level))) {
     } else if (OB_FAIL(opt_params->has_opt_param(ObOptParamHint::IO_READ_BATCH_SIZE, has_io_batch_size_hint))) {
     } else if (OB_FAIL(opt_params->has_opt_param(ObOptParamHint::IO_READ_REDUNDANT_LIMIT_PERCENTAGE,
                                                  has_io_gap_percentage_hint))) {
@@ -3760,26 +3763,26 @@ int ObStaticEngineCG::generate_tsc_flags(ObLogTableScan &op, ObTableScanSpec &sp
       }
     }
     if (OB_SUCC(ret)) {
-      const int64_t io_read_batch_size = has_io_batch_size_hint ? hint_io_read_batch_size : GCONF._io_read_batch_size;
-      const int64_t io_read_gap_size = io_read_batch_size * (has_io_gap_percentage_hint ? hint_io_gap_percentage : GCONF._io_read_redundant_limit_percentage) / 100;
+      const int64_t io_read_batch_size = has_io_batch_size_hint ? hint_io_read_batch_size : config::_io_read_batch_size();
+      const int64_t io_read_gap_size = io_read_batch_size * (has_io_gap_percentage_hint ? hint_io_gap_percentage : config::_io_read_redundant_limit_percentage()) / 100;
       pd_blockscan = ObPushdownFilterUtils::is_blockscan_pushdown_enabled(pd_level);
       pd_filter = ObPushdownFilterUtils::is_filter_pushdown_enabled(pd_level);
-      enable_skip_index = GCONF._enable_skip_index;
-      enable_prefetch_limit = GCONF._enable_prefetch_limiting;
+      enable_skip_index = config::_enable_skip_index();
+      enable_prefetch_limit = config::_enable_prefetch_limiting();
       ObDASScanCtDef &scan_ctdef = spec.tsc_ctdef_.scan_ctdef_;
       ObDASScanCtDef *lookup_ctdef = spec.tsc_ctdef_.lookup_ctdef_;
-      enable_filter_reordering = GCONF._enable_filter_reordering;
+      enable_filter_reordering = config::_enable_filter_reordering();
       scan_ctdef.pd_expr_spec_.pd_storage_flag_.set_flags(pd_blockscan, pd_filter, enable_skip_index,
                                                           enable_prefetch_limit, enable_filter_reordering);
       scan_ctdef.table_scan_opt_.io_read_batch_size_ = io_read_batch_size;
       scan_ctdef.table_scan_opt_.io_read_gap_size_ = io_read_gap_size;
-      scan_ctdef.table_scan_opt_.storage_rowsets_size_ = GCONF.storage_rowsets_size;
+      scan_ctdef.table_scan_opt_.storage_rowsets_size_ = config::storage_rowsets_size();
       if (nullptr != lookup_ctdef) {
         lookup_ctdef->pd_expr_spec_.pd_storage_flag_.set_flags(pd_blockscan, pd_filter, enable_skip_index,
                                                               enable_prefetch_limit, enable_filter_reordering);
         lookup_ctdef->table_scan_opt_.io_read_batch_size_ = io_read_batch_size;
         lookup_ctdef->table_scan_opt_.io_read_gap_size_ = io_read_gap_size;
-        lookup_ctdef->table_scan_opt_.storage_rowsets_size_ = GCONF.storage_rowsets_size;
+        lookup_ctdef->table_scan_opt_.storage_rowsets_size_ = config::storage_rowsets_size();
       }
     }
   }
@@ -5664,7 +5667,7 @@ int ObStaticEngineCG::generate_spec(ObLogStatCollector &op,
 int ObStaticEngineCG::set_properties_pre(const ObLogPlan &log_plan, ObPhysicalPlan &phy_plan)
 {
   int ret = OB_SUCCESS;
-  phy_plan.set_px_worker_share_plan_enabled(GCONF._px_worker_share_plan_enabled);
+  phy_plan.set_px_worker_share_plan_enabled(config::_px_worker_share_plan_enabled());
   return ret;
 }
 

@@ -16,11 +16,12 @@
 
 #define USING_LOG_PREFIX RS_COMPACTION
 
+#include "share/rc/ob_server_runtime.h"
+#include "config_bridge.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "rootserver/freeze/ob_major_merge_scheduler.h"
 #include "share/ob_server_struct.h"
 #include "share/ob_structured_event_logger.h" // for ROOTSERVICE_EVENT_ADD
-#include "share/config/ob_runtime_config.h"  // RUNTIME_CONF, previously hidden behind a transitive include
 #include "share/ob_tablet_meta_table_compaction_operator.h"
 #include "share/ob_column_checksum_error_operator.h"
 #include "share/ob_global_merge_table_operator.h"
@@ -48,7 +49,7 @@ int64_t ObMajorMergeIdling::get_idle_interval_us()
 {
   int64_t interval_us = DEFAULT_SCHEDULE_IDLE_US;
   if (OB_LIKELY(true)) {
-    interval_us = GCONF.merger_check_interval;
+    interval_us = config::merger_check_interval();
   }
   return interval_us;
 }
@@ -63,7 +64,6 @@ ObMajorMergeScheduler::ObMajorMergeScheduler()
     first_check_merge_us_(0),
     idling_(stop_),
     merge_info_mgr_(nullptr),
-    config_(nullptr),
     sql_proxy_(nullptr),
     progress_checker_(nullptr)
 {
@@ -81,7 +81,6 @@ int ObMajorMergeScheduler::init(
     const bool is_primary_service,
     ObMajorMergeInfoManager &merge_info_mgr,
     share::schema::ObMultiVersionSchemaService &schema_service,
-    common::ObServerConfig &config,
     common::ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
@@ -106,7 +105,6 @@ int ObMajorMergeScheduler::init(
     first_check_merge_us_ = 0;
     is_primary_service_ = is_primary_service;
     merge_info_mgr_ = &merge_info_mgr;
-    config_ = &config;
     sql_proxy_ = &sql_proxy;
     is_inited_ = true;
   }
@@ -298,7 +296,7 @@ int ObMajorMergeScheduler::do_one_round_major_merge()
     // loop until 'this round major merge finished' or 'epoch changed'
     while (!stop_ && !is_paused()) {
       update_last_run_timestamp();
-      ObCurTraceId::init(GCONF.self_addr_);
+      ObCurTraceId::init(GCTX.self_addr());
       // Place is_last_merge_complete() to the head of this while loop.
       // So as to break this loop at once, when the last merge is complete.
       // Otherwise, may run one extra loop that should not run, and thus incur error.
@@ -313,7 +311,7 @@ int ObMajorMergeScheduler::do_one_round_major_merge()
           MANAGEMENT_EVENT_ADD("daily_merge", "merge_process",
                             "check merge progress fail", ret,
                             "global_broadcast_scn", global_info.global_broadcast_scn_,
-                            "service_addr", GCONF.self_addr_);
+                            "service_addr", GCTX.self_addr());
         }
       }
       // wait some time to merge

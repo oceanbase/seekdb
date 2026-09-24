@@ -15,6 +15,7 @@
  */
 
 #include "storage/tablet/ob_tablet_create_mds_helper.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "share/rc/ob_server_runtime.h"
 #include "common/ob_tablet_id.h"
 #include "share/scn.h"

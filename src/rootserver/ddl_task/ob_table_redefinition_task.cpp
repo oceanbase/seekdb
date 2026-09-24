@@ -337,7 +337,7 @@ int ObTableRedefinitionTask::table_redefinition(const ObDDLTaskStatus next_task_
     bool need_verify_checksum = true;
 #ifdef ERRSIM
     // when the major compaction is delayed, skip verify column checksum
-    need_verify_checksum = 0 == GCONF.errsim_ddl_major_delay_time;
+    need_verify_checksum = 0 == ::oceanbase::common::errsim_config().errsim_ddl_major_delay_time.load();
 #endif
     if (OB_SUCC(ret) && need_verify_checksum) {
       if (OB_FAIL(replica_end_check(ret))) {

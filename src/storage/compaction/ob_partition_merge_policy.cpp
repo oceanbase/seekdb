@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 #define PRINT_TS_WRAPPER(x) (ObPrintTableStore(*(x.get_member())))
 
+#include "config_bridge.h"
 #include "ob_partition_merge_policy.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/compaction/ob_compaction_progress.h"
@@ -161,7 +162,7 @@ int ObPartitionMergePolicy::get_mds_merge_tables(
   int64_t minor_compact_trigger = DEFAULT_MINOR_COMPACT_TRIGGER;
   {
 
-    minor_compact_trigger = GCONF.minor_compact_trigger;
+    minor_compact_trigger = config::minor_compact_trigger();
 
   }
   if (OB_FAIL(ret)) {
@@ -519,7 +520,7 @@ int ObPartitionMergePolicy::find_minor_merge_tables(
     bool found_greater = false;
     {
 
-      minor_compact_trigger = GCONF.minor_compact_trigger;
+      minor_compact_trigger = config::minor_compact_trigger();
 
     }
 
@@ -778,7 +779,7 @@ int ObPartitionMergePolicy::diagnose_table_count_unsafe(
   int tmp_ret = OB_SUCCESS;
   int64_t minor_compact_trigger = DEFAULT_MINOR_COMPACT_TRIGGER;
   {
-    minor_compact_trigger = GCONF.minor_compact_trigger;
+    minor_compact_trigger = config::minor_compact_trigger();
   }
 
   // check min_reserved_snapshot
@@ -883,9 +884,9 @@ int ObPartitionMergePolicy::refine_minor_merge_result(
     int64_t size_amplification_factor = OB_DEFAULT_COMPACTION_AMPLIFICATION_FACTOR;
     {
 
-      write_amplification_threshold = GCONF._minor_merge_write_amplification_threshold;
-      if (int64_t(GCONF._minor_compaction_amplification_factor) > 0) {
-        size_amplification_factor = GCONF._minor_compaction_amplification_factor;
+      write_amplification_threshold = config::_minor_merge_write_amplification_threshold();
+      if (int64_t(config::_minor_compaction_amplification_factor()) > 0) {
+        size_amplification_factor = config::_minor_compaction_amplification_factor();
       }
 
     }
@@ -948,7 +949,7 @@ int ObPartitionMergePolicy::refine_minor_merge_result(
 
 int64_t ObPartitionMergePolicy::cal_hist_minor_merge_threshold()
 {
-  return MIN((1 + GCONF.minor_compact_trigger) * OB_HIST_MINOR_FACTOR,
+  return MIN((1 + config::minor_compact_trigger()) * OB_HIST_MINOR_FACTOR,
              MAX_TABLE_CNT_IN_STORAGE / 2);
 }
 

@@ -19,11 +19,12 @@
 
 #include "ob_config_manager.h"
 #include "share/ob_sql_client_decorator.h"
-#include "share/config/ob_system_config.h"
 #include "share/config/ob_config_rpc_types.h"
+#include "config_bridge.h"
+#include "config_checkers.h"
+#include "auto_config.h"
 
-#include <memory>
-#include <new>
+#include <cstring>
 
 namespace oceanbase
 {
@@ -36,6 +37,22 @@ OB_SERIALIZE_MEMBER(ObAdminSetConfigItem, name_, value_, comment_, is_reset_);
 
 namespace common
 {
+namespace
+{
+int check_load_entry(void *, const char *name, const char *value, uint32_t line)
+{
+  int ret = OB_SUCCESS;
+  if (nullptr == name || nullptr == value) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (config::parameter_exists(rust::Str(name)) &&
+             !config::check_parameter(name, value)) {
+    ret = OB_INVALID_CONFIG;
+    LOG_ERROR("invalid auto-config entry", K(ret), K(line), K(name));
+  }
+  return ret;
+}
+}
+
 ObConfigManager::~ObConfigManager()
 {
 }
@@ -64,99 +81,16 @@ void ObConfigManager::destroy()
 
 int ObConfigManager::reload_config()
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(server_config_.check_all())) {
-  } else if (OB_FAIL(reload_config_func_())) {
-  }
-  return ret;
-}
-
-int ObConfigManager::check_header_change(const char* path, const char* buf) const
-{
-  UNUSED(path);
-  UNUSED(buf);
-  return OB_SUCCESS;
-}
-
-int ObConfigManager::dump2file_unsafe(const char* path) const
-{
-  UNUSED(path);
-  return OB_SUCCESS;
-}
-
-int ObConfigManager::dump2file(const char* path) const
-{
-  DRWLock::RDLockGuard guard(server_config_.rwlock_);
-  return dump2file_unsafe(path);
+  return reload_config_func_();
 }
 
 int ObConfigManager::update_local()
 {
   int ret = OB_SUCCESS;
-  ObSystemConfig system_config;
-  std::vector<ObConfigStorage::Entry> entries;
-  struct ConfigSnapshotChecker : public ObServerConfig {};
-  std::unique_ptr<ConfigSnapshotChecker> checker(new (std::nothrow) ConfigSnapshotChecker());
-
-  if (!checker) {
-    ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(system_config.init())) {
-  } else if (OB_FAIL(storage_.load_all_configs(entries))) {
-  }
-
-  // Build the complete next snapshot before mutating the live configuration.
-  if (OB_SUCC(ret)) {
-    for (ObConfigContainer::const_iterator it = checker->get_container().begin();
-         OB_SUCC(ret) && it != checker->get_container().end(); ++it) {
-      if (OB_ISNULL(it->second)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        ObSystemConfigKey key;
-        ObSystemConfigValue value;
-        key.set_name(it->first.str());
-        value.set_value(it->second->default_str());
-        if (OB_FAIL(system_config.update_value(key, value))) {
-        }
-      }
-    }
-  }
-  for (const ObConfigStorage::Entry &entry : entries) {
-    if (OB_FAIL(ret)) {
-      break;
-    }
-    ObConfigItem *const *item = checker->get_container().get(
-        ObConfigStringKey(entry.name.c_str()));
-    if (OB_ISNULL(item) || OB_ISNULL(*item)) {
-      ret = OB_ERR_SYS_CONFIG_UNKNOWN;
-    } else if (!(*item)->check_unit(entry.value.c_str()) ||
-               !(*item)->set_value_for_validation(entry.value.c_str()) ||
-               !(*item)->check()) {
-      ret = OB_INVALID_CONFIG;
-    } else {
-      ObSystemConfigKey key;
-      ObSystemConfigValue value;
-      key.set_name(entry.name.c_str());
-      value.set_value(entry.value.c_str());
-      if (OB_FAIL(system_config.update_value(key, value))) {
-      }
-    }
-    if (OB_FAIL(ret)) {
-      LOG_ERROR("invalid auto-config entry", K(ret), "name", entry.name.c_str(),
-                "line", entry.line);
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    DRWLock::WRLockGuard guard(server_config_.rwlock_);
-    if (OB_FAIL(server_config_.read_config(system_config, enable_static_effect_))) {
-    } else {
-      LOG_INFO("read config success");
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    server_config_.print();
+  if (OB_FAIL(storage_.load_active_checked(!enable_static_effect_, check_load_entry,
+                                           nullptr))) {
   } else {
+    LOG_INFO("read config success");
   }
   return ret;
 }
@@ -177,58 +111,75 @@ int ObConfigManager::got_version()
 
 int ObConfigManager::save_config(
     const char *config_name,
-    const char *value)
+    const char *value,
+    bool *after_replace)
 {
   int ret = OB_SUCCESS;
+  if (nullptr != after_replace) {
+    *after_replace = false;
+  }
   if (OB_ISNULL(config_name) || OB_ISNULL(value)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    // Get config item from server_config_ container
-    ObConfigItem *const *ci_ptr = server_config_.get_container().get(
-                                     ObConfigStringKey(config_name));
-    if (OB_ISNULL(ci_ptr)) {
+    if (!config::parameter_exists(rust::Str(config_name))) {
       ret = OB_ERR_SYS_CONFIG_UNKNOWN;
-    } else if (OB_ISNULL(*ci_ptr)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(storage_.save_config(config_name, value))) {
+    } else if (OB_FAIL(storage_.save_config(config_name, value, after_replace))) {
     }
   }
   return ret;
 }
 
-int ObConfigManager::reset_config(const char *config_name)
+int ObConfigManager::reset_config(const char *config_name, bool *after_replace)
 {
   int ret = OB_SUCCESS;
+  if (nullptr != after_replace) {
+    *after_replace = false;
+  }
   if (OB_ISNULL(config_name)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(server_config_.get_container().get(
-                 ObConfigStringKey(config_name)))) {
+  } else if (!config::parameter_exists(rust::Str(config_name))) {
     ret = OB_ERR_SYS_CONFIG_UNKNOWN;
-  } else if (OB_FAIL(storage_.reset_config(config_name))) {
+  } else if (OB_FAIL(storage_.reset_config(config_name, after_replace))) {
   }
   return ret;
 }
 
-int ObConfigManager::get_config_value(
-    const char *name, ObString &value, ObIAllocator &allocator)
-{
-  return storage_.get_config_value(name, value, allocator);
-}
-
-int ObConfigManager::save_configs(int64_t base_version)
+int ObConfigManager::save_internal_state(const char *name, const char *value)
 {
   int ret = OB_SUCCESS;
-  ObConfigContainer::const_iterator it = server_config_.get_container().begin();
-  for (; OB_SUCC(ret) && it != server_config_.get_container().end(); ++it) {
-    if (OB_ISNULL(it->second)) {
-      // ignore ret
-      LOG_WARN("config item is null", "name", it->first.str());
-      continue;
-    }
-      if (it->second->version() > base_version) {
-      if (OB_FAIL(save_config(it->first.str(), it->second->str()))) {
-      }
-    }
+  if (OB_ISNULL(name) || OB_ISNULL(value)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (0 != std::strcmp(name, "server_create_time") &&
+             0 != std::strcmp(name, "server_role_info")) {
+    ret = OB_ERR_SYS_CONFIG_UNKNOWN;
+  } else if (OB_FAIL(storage_.save_config(name, value))) {
+  }
+  return ret;
+}
+
+int ObConfigManager::update_checked(const char *name, const char *value, bool reset,
+                                    AutoConfigCheckCallback callback, void *context,
+                                    bool *after_replace)
+{
+  int ret = OB_SUCCESS;
+  if (nullptr == name) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!config::parameter_exists(rust::Str(name))) {
+    ret = OB_ERR_SYS_CONFIG_UNKNOWN;
+  } else if (OB_FAIL(storage_.update_checked(name, value, reset,
+                                             callback, context, after_replace))) {
+  }
+  return ret;
+}
+
+int ObConfigManager::save_configs()
+{
+  int ret = OB_SUCCESS;
+  AutoConfigError error = {};
+  if (0 != auto_config_save_bootstrap(AUTO_CONFIG_PATH, &error)) {
+    ret = OB_INVALID_CONFIG;
+    LOG_ERROR("failed to save startup parameters", K(ret), "detail", error.message,
+              "after_replace", error.after_replace);
   }
   return ret;
 }

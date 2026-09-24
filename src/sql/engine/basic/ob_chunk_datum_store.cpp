@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "query/engine/basic/ob_spill_row_store.h"
 #include "ob_chunk_datum_store.h"
 #include "sql/engine/ob_exec_context.h"
@@ -484,10 +485,10 @@ int ObChunkDatumStore::init(int64_t mem_limit,
   
   ctx_id_ = mem_ctx_id;
   UNUSED(label_);
-  if (0 == GCONF._chunk_row_store_mem_limit) {
+  if (0 == config::_chunk_row_store_mem_limit()) {
     mem_limit_ = mem_limit;
   } else {
-    mem_limit_ = GCONF._chunk_row_store_mem_limit;
+    mem_limit_ = config::_chunk_row_store_mem_limit();
   }
   inited_ = true;
   default_block_size_ = std::max(static_cast<int64_t>(MIN_BLOCK_SIZE), default_block_size);
@@ -1837,7 +1838,7 @@ int ObChunkDatumStore::aio_read_file(
 bool ObChunkDatumStore::need_dump(int64_t extra_size)
 {
   bool dump = false;
-  if (!GCONF.is_sql_operator_dump_enabled()) {
+  if (!config::enable_sql_operator_dump()) {
     // no dump
   } else if (mem_limit_ > 0) {
     if (mem_used_ + extra_size > mem_limit_) {

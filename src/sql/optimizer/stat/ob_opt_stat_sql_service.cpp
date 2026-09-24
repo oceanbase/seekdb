@@ -253,7 +253,7 @@ namespace common
 {
 
 ObOptStatSqlService::ObOptStatSqlService()
-    : inited_(false), mysql_proxy_(nullptr), mutex_(ObLatchIds::DEFAULT_MUTEX), config_(nullptr)
+    : inited_(false), mysql_proxy_(nullptr), mutex_(ObLatchIds::DEFAULT_MUTEX)
 {
 }
 
@@ -261,7 +261,7 @@ ObOptStatSqlService::~ObOptStatSqlService()
 {
 }
 
-int ObOptStatSqlService::init(ObMySQLProxy *proxy, ObServerConfig *config)
+int ObOptStatSqlService::init(ObMySQLProxy *proxy)
 {
   int ret = OB_SUCCESS;
   lib::ObMutexGuard guard(mutex_);
@@ -271,7 +271,6 @@ int ObOptStatSqlService::init(ObMySQLProxy *proxy, ObServerConfig *config)
     ret = OB_INIT_TWICE;
   } else {
     mysql_proxy_ = proxy;
-    config_ = config;
     inited_ = true;
   }
   return ret;

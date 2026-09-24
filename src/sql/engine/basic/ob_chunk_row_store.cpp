@@ -19,6 +19,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "sql/engine/basic/ob_chunk_row_store.h"
 
 
@@ -248,10 +249,10 @@ int ObChunkRowStore::init(int64_t mem_limit,
     
     ctx_id_ = mem_ctx_id;
     label_ = label;
-    if (0 == GCONF._chunk_row_store_mem_limit) {
+    if (0 == config::_chunk_row_store_mem_limit()) {
       mem_limit_ = mem_limit;
     } else {
-      mem_limit_ = GCONF._chunk_row_store_mem_limit;
+      mem_limit_ = config::_chunk_row_store_mem_limit();
     }
     inited_ = true;
     default_block_size_ = BLOCK_SIZE;
@@ -1427,7 +1428,7 @@ int ObChunkRowStore::read_file(void *buf, const int64_t size, const int64_t offs
 bool ObChunkRowStore::need_dump(int64_t extra_size)
 {
   bool dump = false;
-  if (!GCONF.is_sql_operator_dump_enabled()) {
+  if (!config::enable_sql_operator_dump()) {
     // no dump
   } else if (mem_limit_ > 0) {
     if (mem_used_ + extra_size > mem_limit_) {
