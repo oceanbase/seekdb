@@ -79,6 +79,8 @@ public:
   ObSyncTabletAutoincSeqCtx();
   ~ObSyncTabletAutoincSeqCtx() {}
   int init(
+      share::schema::ObMultiVersionSchemaService &schema_service,
+      uint64_t namespace_id,
       int64_t src_table_id,
       int64_t dest_table_id);
   int sync();

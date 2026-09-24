@@ -19,6 +19,7 @@
 #include "common/mysqlclient/ob_isql_connection.h"
 #include "ob_ddl_redefinition_task.h"
 #include "rootserver/ddl_task/ob_ddl_task_util.h"
+#include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
@@ -1919,7 +1920,8 @@ int ObDDLRedefinitionTask::sync_tablet_autoinc_seq()
   if (OB_FAIL(DDL_SIM(task_id_, REDEF_TASK_SYNC_TABLET_AUTOINC_SEQ_FAILED))) {
     LOG_WARN("ddl sim failure", K(ret), K(task_id_));
   } else if (!sync_tablet_autoinc_seq_ctx_.is_inited()
-      && OB_FAIL(sync_tablet_autoinc_seq_ctx_.init(object_id_, target_object_id_))) {
+      && OB_FAIL(sync_tablet_autoinc_seq_ctx_.init(
+          *task_schema_service(), context_.namespace_id_, object_id_, target_object_id_))) {
     LOG_ERROR("failed to init sync tablet autoinc seq ctx", K(ret));
   } else if (OB_FAIL(sync_tablet_autoinc_seq_ctx_.sync())) {
     LOG_WARN("failed to sync tablet autoinc seq", K(ret));
@@ -2073,24 +2075,47 @@ ObSyncTabletAutoincSeqCtx::ObSyncTabletAutoincSeqCtx()
 {}
 
 int ObSyncTabletAutoincSeqCtx::init(
+    ObMultiVersionSchemaService &schema_service,
+    uint64_t namespace_id,
     int64_t src_table_id,
     int64_t dest_table_id)
 {
   int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(src_table_id == OB_INVALID_ID || dest_table_id == OB_INVALID_ID)) {
+  if (OB_UNLIKELY(namespace_id == 0 || src_table_id == OB_INVALID_ID || dest_table_id == OB_INVALID_ID)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(src_table_id), K(dest_table_id));
-  } else if (OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, src_table_id, orig_src_tablet_ids_))) {
+    LOG_WARN("invalid argument", K(ret), K(namespace_id), K(src_table_id), K(dest_table_id));
+  } else if (OB_FAIL(ObDDLUtil::get_tablets(schema_service, src_table_id, orig_src_tablet_ids_))) {
     LOG_WARN("failed to get data table snapshot", K(ret));
   } else if (OB_FAIL(src_tablet_ids_.assign(orig_src_tablet_ids_))) {
     LOG_WARN("failed to assign src_tablet_ids", K(ret));
-  } else if (OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, dest_table_id, dest_tablet_ids_))) {
+  } else if (OB_FAIL(ObDDLUtil::get_tablets(schema_service, dest_table_id, dest_tablet_ids_))) {
     LOG_WARN("failed to get dest table snapshot", K(ret));
+  } else if (OB_UNLIKELY(src_tablet_ids_.count() != dest_tablet_ids_.count())) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("source and destination tablet count differs", K(ret), K(src_tablet_ids_), K(dest_tablet_ids_));
   } else {
-
-
-    is_synced_ = false;
-    is_inited_ = true;
+    // The counter is a high-water mark; an inherited source may read its
+    // ancestor's newer value without reusing any key from the fork snapshot.
+    for (int64_t i = 0; OB_SUCC(ret) && namespace_id > 1 && i < src_tablet_ids_.count(); ++i) {
+      uint64_t encoded_source = OB_INVALID_ID;
+      uint64_t encoded_dest = OB_INVALID_ID;
+      ObTabletID physical_source;
+      int64_t inherited_cap = 0;
+      if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
+              namespace_id, src_tablet_ids_.at(i).id(), encoded_source))) {
+      } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
+              namespace_id, dest_tablet_ids_.at(i).id(), encoded_dest))) {
+      } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::resolve_read_tablet(
+              ObTabletID(encoded_source), physical_source, inherited_cap))) {
+      } else {
+        src_tablet_ids_.at(i) = physical_source;
+        dest_tablet_ids_.at(i) = ObTabletID(encoded_dest);
+      }
+    }
+    if (OB_SUCC(ret)) {
+      is_synced_ = false;
+      is_inited_ = true;
+    }
   }
   return ret;
 }

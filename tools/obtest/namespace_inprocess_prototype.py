@@ -489,6 +489,15 @@ def direct_probe(experiment):
         experiment.sql("CREATE FULLTEXT INDEX fulltext_body ON phase10.fulltext_rows(body)", child)
         assert experiment.sql("SELECT id FROM phase10.fulltext_rows "
                               "WHERE MATCH(body) AGAINST('alpha')", child) == ((1,),)
+        experiment.sql("CREATE TABLE phase10.fulltext_heap(body TEXT, v INT)", child)
+        experiment.sql("INSERT INTO phase10.fulltext_heap VALUES"
+                       "('alpha text',7),('beta text',8)", child)
+        experiment.sql("CREATE FULLTEXT INDEX heap_body ON phase10.fulltext_heap(body)", child)
+        experiment.sql("ALTER TABLE phase10.fulltext_heap MODIFY COLUMN v VARCHAR(20)", child)
+        assert experiment.sql("SELECT v FROM phase10.fulltext_heap "
+                              "WHERE MATCH(body) AGAINST('alpha')", child) == (("7",),)
+        experiment.sql("INSERT INTO phase10.fulltext_heap VALUES('gamma text','9')", child)
+        assert experiment.sql("SELECT COUNT(*) FROM phase10.fulltext_heap", child) == ((3,),)
         experiment.sql("ALTER SYSTEM SET vector_index_optimize_duty_time='[00:00:00,23:59:59]'")
         experiment.sql("CREATE TABLE phase10.ivf_rows(id INT PRIMARY KEY, embedding VECTOR(3))", child)
         experiment.sql("INSERT INTO phase10.ivf_rows VALUES "
@@ -564,6 +573,9 @@ def direct_probe(experiment):
         after_restart(experiment, child)
         assert experiment.sql("SELECT id FROM phase10.fulltext_rows "
                               "WHERE MATCH(body) AGAINST('beta')", child) == ((2,),)
+        assert experiment.sql("SELECT v FROM phase10.fulltext_heap "
+                              "WHERE MATCH(body) AGAINST('alpha')", child) == (("7",),)
+        assert experiment.sql("SELECT COUNT(*) FROM phase10.fulltext_heap", child) == ((3,),)
         assert experiment.sql(nearest_ivf, child) == ((1,),)
         pq_result = experiment.sql(nearest_pq, child)
         assert len(pq_result) == 1 and 1 <= pq_result[0][0] <= 20, pq_result
