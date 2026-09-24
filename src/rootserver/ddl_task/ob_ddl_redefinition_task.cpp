@@ -2098,7 +2098,7 @@ int ObSyncTabletAutoincSeqCtx::init(
   } else {
     // The counter is a high-water mark; an inherited source may read its
     // ancestor's newer value without reusing any key from the fork snapshot.
-    for (int64_t i = 0; OB_SUCC(ret) && namespace_id > 1 && i < src_tablet_ids_.count(); ++i) {
+    for (int64_t i = 0; OB_SUCC(ret) && i < src_tablet_ids_.count(); ++i) {
       uint64_t encoded_source = OB_INVALID_ID;
       uint64_t encoded_dest = OB_INVALID_ID;
       ObTabletID physical_source;
