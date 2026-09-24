@@ -5377,9 +5377,10 @@ int ObTablet::check_schema_version_with_cache(const int64_t schema_version)
           }
 
           if (OB_FAIL(ret)) {
-          } else if (OB_ISNULL(candidate_cache)) {
-            ret = OB_ERR_UNEXPECTED;
-          } else if (OB_FAIL(check_schema_version(*candidate_cache, schema_version))) {
+          } else {
+            ASSERT_COND(candidate_cache != nullptr);
+            if (OB_FAIL(check_schema_version(*candidate_cache, schema_version))) {
+            }
           }
         }
       }
@@ -5457,9 +5458,10 @@ int ObTablet::check_snapshot_readable_with_cache(
           }
 
           if (OB_FAIL(ret)) {
-          } else if (OB_ISNULL(candidate_cache)) {
-            ret = OB_ERR_UNEXPECTED;
-          } else if (OB_FAIL(check_snapshot_readable(*candidate_cache, snapshot_version, schema_version))) {
+          } else {
+            ASSERT_COND(candidate_cache != nullptr);
+            if (OB_FAIL(check_snapshot_readable(*candidate_cache, snapshot_version, schema_version))) {
+            }
           }
         }
       }

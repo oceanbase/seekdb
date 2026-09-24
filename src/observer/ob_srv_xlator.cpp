@@ -134,9 +134,8 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
       if (pkt.get_cmd() == obmysql::COM_QUERY) {
         char *buf = (&co_ep_callp_buf)->obmp_query_buffer_;
         ObMPQuery *p = new (buf) ObMPQuery(gctx_);
-        if (OB_ISNULL(p)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else if (OB_FAIL(p->init())) {
+        ASSERT_COND(p != nullptr);
+        if (OB_FAIL(p->init())) {
           SERVER_LOG(ERROR, "Init ObMPQuery fail", K(ret));
           p->~ObMPQuery();
         } else {
@@ -149,9 +148,8 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
         } else {
           char *buf = (&co_ep_callp_buf)->obmp_query_buffer_;
           ObMPProcessInfo *p = new (buf) ObMPProcessInfo(gctx_);
-          if (OB_ISNULL(p)) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-          } else if (OB_FAIL(p->init())) {
+          ASSERT_COND(p != nullptr);
+          if (OB_FAIL(p->init())) {
             SERVER_LOG(ERROR, "Init ObMPProcessInfo fail", K(ret));
             p->~ObMPProcessInfo();
           } else {
@@ -165,9 +163,8 @@ int ObSrvMySQLXlator::translate(rpc::ObRequest &req, ObReqProcessor *&processor)
         } else {
           char *buf = (&co_ep_callp_buf)->obmp_query_buffer_;
           ObMPProcessKill *p = new (buf) ObMPProcessKill(gctx_);
-          if (OB_ISNULL(p)) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-          } else if (OB_FAIL(p->init())) {
+          ASSERT_COND(p != nullptr);
+          if (OB_FAIL(p->init())) {
             SERVER_LOG(ERROR, "Init ObMPProcessKill fail", K(ret));
             p->~ObMPProcessKill();
           } else {

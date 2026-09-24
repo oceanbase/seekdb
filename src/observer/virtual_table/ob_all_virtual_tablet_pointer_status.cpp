@@ -77,10 +77,7 @@ int ObAllVirtualTabletPtr::get_next_tablet_pointer(
   if (nullptr == tablet_iter_) {
     ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
     tablet_iter_ = new (iter_buf_) ObTabletPtrWithInMemObjIterator(*t3m);
-    if (OB_ISNULL(tablet_iter_)) {
-      ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "fail to new tablet_iter_", K(ret));
-    }
+    ASSERT_COND(tablet_iter_ != nullptr);
   }
   if (OB_FAIL(ret)) {
     // do nothing

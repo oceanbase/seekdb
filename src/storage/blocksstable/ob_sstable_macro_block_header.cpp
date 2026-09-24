@@ -189,9 +189,8 @@ int ObSSTableMacroBlockHeader::serialize(char *buf, const int64_t buf_len, int64
       MEMCPY(buf + tmp_pos, column_checksum_, fixed_header_.column_count_ * sizeof(int64_t));
     }
     tmp_pos += fixed_header_.column_count_ * sizeof(int64_t);
-    if (OB_UNLIKELY(get_serialize_size() != tmp_pos - pos)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
+    {
+      ASSERT_COND(get_serialize_size() == tmp_pos - pos);
       pos += get_serialize_size();
     }
   }

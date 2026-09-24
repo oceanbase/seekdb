@@ -842,9 +842,8 @@ int ObMultiVersionSchemaService::add_schema_mgr_info(
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(new_schema_mgr_info)) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
+    ASSERT_COND(new_schema_mgr_info != nullptr);
     ObSchemaMgrHandle& handle = new_schema_mgr_info->get_schema_mgr_handle();
     if (RefreshSchemaMode::FORCE_FALLBACK == refresh_schema_mode) {
       // The requested historical version may have aged out of the live schema_mgr_cache;
@@ -1340,9 +1339,8 @@ int ObMultiVersionSchemaService::add_schema(
     schema_mgr_cache = &schema_store->schema_mgr_cache_;
     new_schema_version = schema_mgr_for_cache->get_schema_version();
     refreshed_schema_version = schema_store->get_refreshed_version();
-    if (OB_ISNULL(schema_mgr_cache)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (refreshed_schema_version > new_schema_version) {
+    ASSERT_COND(schema_mgr_cache != nullptr);
+    if (refreshed_schema_version > new_schema_version) {
       LOG_WARN("add schema is old",
                K(refreshed_schema_version),
                K(new_schema_version),
@@ -2085,9 +2083,8 @@ int ObMultiVersionSchemaService::try_gc_allocator_when_add_schema_(
     }
     if (OB_FAIL(ret)) {
       // ignore
-    } else if (all_ptrs.count() != schema_mgr_infos.count()) {
-      ret = OB_ERR_UNEXPECTED;
     } else {
+      ASSERT_COND(all_ptrs.count() == schema_mgr_infos.count());
       int64_t schema_mgr_cnt = schema_mgr_infos.count();
       int64_t reserve_index = schema_mgr_cnt > reserve_mgr_count ?
                               schema_mgr_cnt - reserve_mgr_count - 1 : OB_INVALID_INDEX;

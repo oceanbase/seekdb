@@ -165,41 +165,40 @@ int ObTabletDrop::drop_tablet_(
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(tablet_ids_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(table_schema_ptr_array.at(0))) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
-    bool only_drop_index = table_schema_ptr_array.at(0)->is_index_local_storage();
-    ObBasePartition *first_table_part = NULL;
-    ObBasePartition *part = NULL;
-    for (int r = 0; r < table_schema_ptr_array.count() && OB_SUCC(ret); r++) {
-      const share::schema::ObTableSchema *table_schema_ptr = table_schema_ptr_array.at(r);
-      if (OB_ISNULL(table_schema_ptr)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (is_hidden && 
-               (PARTITION_LEVEL_ONE != table_schema_ptr->get_part_level()
-             || table_schema_ptr->get_hidden_partition_num() <= part_idx
-             || 0 > part_idx)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (PARTITION_LEVEL_ZERO == table_schema_ptr->get_part_level()) {
-        ObTabletID tablet_id = table_schema_ptr->get_tablet_id();
-        if (OB_FAIL(tablet_ids_->push_back(tablet_id))) {
-        }
-      } else if(is_hidden && OB_FALSE_IT(part = table_schema_ptr->get_hidden_part_array()[part_idx])) {
-      } else if (!is_hidden && OB_FAIL(table_schema_ptr->get_part_by_idx(part_idx, subpart_idx, part))) {
-      } else if (OB_ISNULL(part)) {
-        ret = OB_INVALID_ARGUMENT;
-      } else {
-        if (r == 0) {
-          first_table_part = part;
-        } else {
-          if (OB_UNLIKELY(!first_table_part->same_base_partition(*part))) {
-            ret = OB_INVALID_ARGUMENT;
+    ASSERT_COND(tablet_ids_ != nullptr);
+    if (OB_ISNULL(table_schema_ptr_array.at(0))) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      bool only_drop_index = table_schema_ptr_array.at(0)->is_index_local_storage();
+      ObBasePartition *first_table_part = NULL;
+      ObBasePartition *part = NULL;
+      for (int r = 0; r < table_schema_ptr_array.count() && OB_SUCC(ret); r++) {
+        const share::schema::ObTableSchema *table_schema_ptr = table_schema_ptr_array.at(r);
+        if (OB_ISNULL(table_schema_ptr)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (is_hidden && (PARTITION_LEVEL_ONE != table_schema_ptr->get_part_level() ||
+                                 table_schema_ptr->get_hidden_partition_num() <= part_idx || 0 > part_idx)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (PARTITION_LEVEL_ZERO == table_schema_ptr->get_part_level()) {
+          ObTabletID tablet_id = table_schema_ptr->get_tablet_id();
+          if (OB_FAIL(tablet_ids_->push_back(tablet_id))) {
           }
-        }
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(tablet_ids_->push_back(part->get_tablet_id()))) {
+        } else if (is_hidden && OB_FALSE_IT(part = table_schema_ptr->get_hidden_part_array()[part_idx])) {
+        } else if (!is_hidden && OB_FAIL(table_schema_ptr->get_part_by_idx(part_idx, subpart_idx, part))) {
+        } else if (OB_ISNULL(part)) {
+          ret = OB_INVALID_ARGUMENT;
+        } else {
+          if (r == 0) {
+            first_table_part = part;
+          } else {
+            if (OB_UNLIKELY(!first_table_part->same_base_partition(*part))) {
+              ret = OB_INVALID_ARGUMENT;
+            }
+          }
+          if (OB_FAIL(ret)) {
+          } else if (OB_FAIL(tablet_ids_->push_back(part->get_tablet_id()))) {
+          }
         }
       }
     }

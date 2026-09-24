@@ -1,0 +1,9 @@
+load("//bazel:defs.bzl", "seekdb_module_cc_test")
+
+seekdb_module_cc_test(
+    name = "share_tests",
+    srcs = ["schema/test_schema_assert_cond.cpp"],
+    test_hdrs = [],
+    module_interface = "//src/share:share_unit_test_interface",
+    shard_count = 1,
+)

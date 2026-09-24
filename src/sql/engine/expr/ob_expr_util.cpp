@@ -92,16 +92,17 @@ int ObExprUtil::get_int64_from_num(number::ObNumber &nmb,
   }
   if (OB_FAIL(ret)) {
     //do nothing
-  } else if (OB_ISNULL(pnmb)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (pnmb->is_valid_int64(tmp_int)) {
-    out = tmp_int;
-  } else if (pnmb->is_valid_uint64(tmp_uint)) {
-    out = (tmp_uint > INT64_MAX) ? INT64_MAX : static_cast<int64_t>(tmp_uint);
   } else {
-    //Even if number exceeds the INT64 value range, no error is reported,
-    //select substr('abcd',-18446744073709551615) from dual; expect to return NULL
-    out = INT64_MAX;
+    ASSERT_COND(pnmb != nullptr);
+    if (pnmb->is_valid_int64(tmp_int)) {
+      out = tmp_int;
+    } else if (pnmb->is_valid_uint64(tmp_uint)) {
+      out = (tmp_uint > INT64_MAX) ? INT64_MAX : static_cast<int64_t>(tmp_uint);
+    } else {
+      // Even if number exceeds the INT64 value range, no error is reported,
+      // select substr('abcd',-18446744073709551615) from dual; expect to return NULL
+      out = INT64_MAX;
+    }
   }
     // ret = OB_ERR_TRUNCATED_WRONG_VALUE;
     // if (CM_IS_WARN_ON_FAIL(expr_ctx.cast_mode_)) {

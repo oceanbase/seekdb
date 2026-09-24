@@ -584,11 +584,11 @@ int ObDASMatchIter::collect_dims_by_id(const ObDatum *&id_datum, double &relevan
 
   if (OB_SUCC(ret)) {
     id_datum = &iter_domain_ids_[iter_idx].get_datum();
-    if (OB_ISNULL(id_datum)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(relevance_collector_->get_result(relevance, got_valid_id))) {
-    } else if (got_valid_id &&OB_FAIL(process_collected_row(*id_datum, relevance))) {
-    } else if (is_match_part_score_iter() && ir_match_part_score_rtdef_->score_norm_function_ == ObMatchScoreNorm::SCORE_NORM_MIN_MAX) {
+    ASSERT_COND(id_datum != nullptr);
+    if (OB_FAIL(relevance_collector_->get_result(relevance, got_valid_id))) {
+    } else if (got_valid_id && OB_FAIL(process_collected_row(*id_datum, relevance))) {
+    } else if (is_match_part_score_iter() &&
+               ir_match_part_score_rtdef_->score_norm_function_ == ObMatchScoreNorm::SCORE_NORM_MIN_MAX) {
       relevance = relevance / max_query_score_;
     }
   }

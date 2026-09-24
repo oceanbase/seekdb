@@ -204,9 +204,8 @@ int ObCreateTableLikeHelper::generate_aux_table_schemas_()
     int64_t obj_cnt = 0;
     uint64_t new_table_id = OB_INVALID_ID;
     uint64_t new_database_id = OB_INVALID_ID;
-    if (OB_ISNULL(new_table_schema)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(new_table_schema->get_simple_index_infos(simple_index_infos))) {
+    ASSERT_COND(new_table_schema != nullptr);
+    if (OB_FAIL(new_table_schema->get_simple_index_infos(simple_index_infos))) {
     } else {
       obj_cnt= simple_index_infos.count();
       if (new_table_schema->has_lob_column(true/*ignore_unused_column*/)) {
@@ -271,48 +270,45 @@ int ObCreateTableLikeHelper::generate_aux_table_schemas_()
       new_table_schema = &(new_tables_.at(0));
       bool need_doc_id = false;
       bool need_vid = false;
-      if (OB_ISNULL(new_table_schema)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(ObFtsIndexBuilderUtil::check_need_doc_id(*new_table_schema, need_doc_id))) {
+      ASSERT_COND(new_table_schema != nullptr);
+      if (OB_FAIL(ObFtsIndexBuilderUtil::check_need_doc_id(*new_table_schema, need_doc_id))) {
       } else if (OB_FAIL(ObVectorIndexUtil::check_need_vid(*new_table_schema, need_vid))) {
-      } else if (OB_FAIL(ObDomainIndexBuilderUtil::retrieve_complete_domain_index(shared_schema_array,
-                                                                                  domain_schema_array,
-                                                                                  aux_schema_array,
-                                                                                  allocator_,
-                                                                                  new_table_id,
-                                                                                  new_tables_,
-                                                                                  need_doc_id,
-                                                                                  need_vid))) {
+      } else if (OB_FAIL(ObDomainIndexBuilderUtil::retrieve_complete_domain_index(
+                     shared_schema_array, domain_schema_array, aux_schema_array, allocator_, new_table_id, new_tables_,
+                     need_doc_id, need_vid))) {
       }
     }
     new_table_schema = &(new_tables_.at(0));
     if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(new_table_schema)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (new_table_schema->has_lob_column(true/*ignore_unused_column*/)) {
-      HEAP_VARS_2((ObTableSchema, lob_meta_schema), (ObTableSchema, lob_piece_schema)) {
-      ObLobMetaBuilder lob_meta_builder(*ddl_service_);
-      ObLobPieceBuilder lob_piece_builder(*ddl_service_);
-      bool need_object_id = false;
-      uint64_t object_id = OB_INVALID_ID;
-      if (OB_FAIL(id_generator.next(object_id))) {
-      } else if (OB_FAIL(lob_meta_builder.generate_aux_lob_meta_schema(
-        schema_service_->get_schema_service(), *new_table_schema, object_id, lob_meta_schema, need_object_id))) {
-      } else if (OB_FAIL(id_generator.next(object_id))) {
-      } else if (OB_FAIL(lob_piece_builder.generate_aux_lob_piece_schema(
-        schema_service_->get_schema_service(), *new_table_schema, object_id, lob_piece_schema, need_object_id))) {
-      } else if (OB_FAIL(new_tables_.push_back(lob_meta_schema))) {
-      } else if (OB_FAIL(new_tables_.push_back(lob_piece_schema))) {
-      } else {
-        new_table_schema = &new_tables_.at(0); // memory of data table may change after add table to new_tables_
-        if (OB_ISNULL(new_table_schema)) {
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-        new_table_schema->set_aux_lob_meta_tid(lob_meta_schema.get_table_id());
-        new_table_schema->set_aux_lob_piece_tid(lob_piece_schema.get_table_id());
-        }
+    } else {
+      ASSERT_COND(new_table_schema != nullptr);
+      if (new_table_schema->has_lob_column(true /*ignore_unused_column*/)) {
+        HEAP_VARS_2((ObTableSchema, lob_meta_schema), (ObTableSchema, lob_piece_schema))
+        {
+          ObLobMetaBuilder lob_meta_builder(*ddl_service_);
+          ObLobPieceBuilder lob_piece_builder(*ddl_service_);
+          bool need_object_id = false;
+          uint64_t object_id = OB_INVALID_ID;
+          if (OB_FAIL(id_generator.next(object_id))) {
+          } else if (OB_FAIL(lob_meta_builder.generate_aux_lob_meta_schema(schema_service_->get_schema_service(),
+                                                                           *new_table_schema, object_id,
+                                                                           lob_meta_schema, need_object_id))) {
+          } else if (OB_FAIL(id_generator.next(object_id))) {
+          } else if (OB_FAIL(lob_piece_builder.generate_aux_lob_piece_schema(schema_service_->get_schema_service(),
+                                                                             *new_table_schema, object_id,
+                                                                             lob_piece_schema, need_object_id))) {
+          } else if (OB_FAIL(new_tables_.push_back(lob_meta_schema))) {
+          } else if (OB_FAIL(new_tables_.push_back(lob_piece_schema))) {
+          } else {
+            new_table_schema = &new_tables_.at(0); // memory of data table may change after add table to new_tables_
+            {
+              ASSERT_COND(new_table_schema != nullptr);
+              new_table_schema->set_aux_lob_meta_tid(lob_meta_schema.get_table_id());
+              new_table_schema->set_aux_lob_piece_tid(lob_piece_schema.get_table_id());
+            }
+          }
+        } // end heap vars
       }
-      }// end heap vars
     }
   }
   return ret;

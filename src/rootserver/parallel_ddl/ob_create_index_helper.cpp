@@ -257,33 +257,34 @@ int ObCreateIndexHelper::generate_index_schema_()
   } else if (OB_ISNULL(new_arg_ptr = allocator_.alloc(sizeof(obcall::ObCreateIndexArg)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (FALSE_IT(new_arg_ = new (new_arg_ptr)obcall::ObCreateIndexArg)) {
-  } else if (OB_ISNULL(new_arg_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(new_arg_->assign(arg_))) {
-  } else if (OB_UNLIKELY(!new_arg_->is_valid())) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(is_local_generate_schema_(is_local_generate))) {
-  } else if (OB_ISNULL(orig_data_table_schema_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_, *orig_data_table_schema_, new_data_table_schema_))) {
-  } else if (OB_ISNULL(new_data_table_schema_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (is_local_generate) {
-    global_index_without_column_info = true;
-    index_schema = &tmp_index_schema;
-    if (INDEX_TYPE_NORMAL_GLOBAL == new_arg_->index_type_) {
-      new_arg_->index_type_ = INDEX_TYPE_NORMAL_GLOBAL_LOCAL_STORAGE;
-      new_arg_->index_schema_.set_index_type(INDEX_TYPE_NORMAL_GLOBAL_LOCAL_STORAGE);
-    } else if (INDEX_TYPE_UNIQUE_GLOBAL == new_arg_->index_type_) {
-      new_arg_->index_type_ = INDEX_TYPE_UNIQUE_GLOBAL_LOCAL_STORAGE;
-      new_arg_->index_schema_.set_index_type(INDEX_TYPE_UNIQUE_GLOBAL_LOCAL_STORAGE);
-    } else if (INDEX_TYPE_SPATIAL_GLOBAL == new_arg_->index_type_) {
-      new_arg_->index_type_ = INDEX_TYPE_SPATIAL_GLOBAL_LOCAL_STORAGE;
-      new_arg_->index_schema_.set_index_type(INDEX_TYPE_SPATIAL_GLOBAL_LOCAL_STORAGE);
-    }
   } else {
-    global_index_without_column_info = false;
-    index_schema = &new_arg_->index_schema_;
+    ASSERT_COND(new_arg_ != nullptr);
+    if (OB_FAIL(new_arg_->assign(arg_))) {
+    } else if (OB_UNLIKELY(!new_arg_->is_valid())) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(is_local_generate_schema_(is_local_generate))) {
+    } else if (OB_ISNULL(orig_data_table_schema_)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_, *orig_data_table_schema_, new_data_table_schema_))) {
+    } else if (OB_ISNULL(new_data_table_schema_)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (is_local_generate) {
+      global_index_without_column_info = true;
+      index_schema = &tmp_index_schema;
+      if (INDEX_TYPE_NORMAL_GLOBAL == new_arg_->index_type_) {
+        new_arg_->index_type_ = INDEX_TYPE_NORMAL_GLOBAL_LOCAL_STORAGE;
+        new_arg_->index_schema_.set_index_type(INDEX_TYPE_NORMAL_GLOBAL_LOCAL_STORAGE);
+      } else if (INDEX_TYPE_UNIQUE_GLOBAL == new_arg_->index_type_) {
+        new_arg_->index_type_ = INDEX_TYPE_UNIQUE_GLOBAL_LOCAL_STORAGE;
+        new_arg_->index_schema_.set_index_type(INDEX_TYPE_UNIQUE_GLOBAL_LOCAL_STORAGE);
+      } else if (INDEX_TYPE_SPATIAL_GLOBAL == new_arg_->index_type_) {
+        new_arg_->index_type_ = INDEX_TYPE_SPATIAL_GLOBAL_LOCAL_STORAGE;
+        new_arg_->index_schema_.set_index_type(INDEX_TYPE_SPATIAL_GLOBAL_LOCAL_STORAGE);
+      }
+    } else {
+      global_index_without_column_info = false;
+      index_schema = &new_arg_->index_schema_;
+    }
   }
   if (OB_SUCC(ret)) {
     if (create_index_on_empty_table_opt_) {
@@ -292,12 +293,13 @@ int ObCreateIndexHelper::generate_index_schema_()
   }
   if (FAILEDx(ObIndexBuilderUtil::adjust_expr_index_args(
       *new_arg_, *new_data_table_schema_, allocator_, gen_columns_))) {
-  } else if (OB_ISNULL(index_schema)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(index_builder_.generate_schema(*new_arg_, *new_data_table_schema_, global_index_without_column_info,
-              false/*generate_id*/, *index_schema))) {
-  } else if (gen_columns_.empty() || is_local_generate) {
-    if (OB_FAIL(new_data_table_schema_->check_create_index_on_hidden_primary_key(*index_schema))) {
+  } else {
+    ASSERT_COND(index_schema != nullptr);
+    if (OB_FAIL(index_builder_.generate_schema(*new_arg_, *new_data_table_schema_, global_index_without_column_info,
+                                               false /*generate_id*/, *index_schema))) {
+    } else if (gen_columns_.empty() || is_local_generate) {
+      if (OB_FAIL(new_data_table_schema_->check_create_index_on_hidden_primary_key(*index_schema))) {
+      }
     }
   }
   if (FAILEDx(index_schema->generate_origin_index_name())) {

@@ -91,9 +91,8 @@ int ObTableForkInfo::generate_fork_params(common::ObIArray<ObTabletForkParam> &p
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(source_tablet_ids_.count() != dest_tablet_ids_.count())) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
+    ASSERT_COND(source_tablet_ids_.count() == dest_tablet_ids_.count());
     for (int64_t i = 0; OB_SUCC(ret) && i < source_tablet_ids_.count(); ++i) {
       ObTabletForkParam fork_param;
       
@@ -120,9 +119,8 @@ int ObTableForkInfo::get_tablet_fork_param(
   int64_t found_idx = -1;
   if (OB_UNLIKELY(!is_valid() || !tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_UNLIKELY(source_tablet_ids_.count() != dest_tablet_ids_.count())) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
+    ASSERT_COND(source_tablet_ids_.count() == dest_tablet_ids_.count());
     for (int64_t i = 0; i < source_tablet_ids_.count(); ++i) {
       if (source_tablet_ids_.at(i) == tablet_id) {
         found_idx = i;

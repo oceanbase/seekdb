@@ -5630,11 +5630,12 @@ int ObJsonBaseFactory::get_json_base(ObIAllocator *allocator, const char *ptr, u
         j_bin = new (buf) ObJsonBin(allocator);
       }
       if (OB_FAIL(ret)) {
-      } else if (OB_ISNULL(j_bin) || !j_bin->is_bin()) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(j_bin->parse_tree(j_tree))) {
       } else {
-        out = j_bin;
+        ASSERT_COND(j_bin != nullptr && j_bin->is_bin());
+        if (OB_FAIL(j_bin->parse_tree(j_tree))) {
+        } else {
+          out = j_bin;
+        }
       }
     }
   } else if (in_type == ObJsonInType::JSON_BIN) {

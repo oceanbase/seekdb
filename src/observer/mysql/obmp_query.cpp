@@ -1261,9 +1261,8 @@ int ObMPQuery::deserialize_com_field_list()
   * Reference: https://dev.mysql.com/doc/internals/en/com-field-list.html
    */
   ObIAllocator *alloc = &THIS_WORKER.get_sql_arena_allocator();
-  if (OB_ISNULL(alloc)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
+  {
+    ASSERT_COND(alloc != nullptr);
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     ObString table_name;
     ObString wildcard;

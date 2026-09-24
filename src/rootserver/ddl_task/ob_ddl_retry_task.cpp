@@ -95,13 +95,14 @@ int ObDDLRetryTask::deep_copy_ddl_arg(
     }
         
     if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(ddl_arg_)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(source_arg->serialize(serialize_buf, serialize_size, pos))) {
-    } else if (FALSE_IT(pos = 0)) {
-    } else if (OB_FAIL(ddl_arg_->deserialize(serialize_buf, serialize_size, pos))) {
+    } else {
+      ASSERT_COND(ddl_arg_ != nullptr);
+      if (OB_FAIL(source_arg->serialize(serialize_buf, serialize_size, pos))) {
+      } else if (FALSE_IT(pos = 0)) {
+      } else if (OB_FAIL(ddl_arg_->deserialize(serialize_buf, serialize_size, pos))) {
+      }
     }
-    
+
     if (OB_FAIL(ret)) {
       if (nullptr != ddl_arg_) {
         ddl_arg_->~ObDDLArg();

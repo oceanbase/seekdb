@@ -1217,70 +1217,62 @@ int ObDDLService::create_tablets_in_trans_(ObIArray<ObTableSchema> &table_schema
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(first_table)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(ObMajorFreezeHelper::get_frozen_scn(frozen_scn))) {
   } else {
-    ObTableCreator table_creator(frozen_scn, trans);
+    ASSERT_COND(first_table != nullptr);
+    if (OB_FAIL(ObMajorFreezeHelper::get_frozen_scn(frozen_scn))) {
+    } else {
+      ObTableCreator table_creator(frozen_scn, trans);
 
-    if (fork_table_info.is_valid()) {
-      common::ObArray<uint64_t> dest_table_ids;
-      for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); ++i) {
-        const uint64_t table_id = table_schemas.at(i).get_table_id();
-        if (OB_FAIL(dest_table_ids.push_back(table_id))) {
+      if (fork_table_info.is_valid()) {
+        common::ObArray<uint64_t> dest_table_ids;
+        for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); ++i) {
+          const uint64_t table_id = table_schemas.at(i).get_table_id();
+          if (OB_FAIL(dest_table_ids.push_back(table_id))) {
+          }
         }
+        if (OB_SUCC(ret)) {
+          // sort dest_table_ids to ensure the order of src_table_ids is the same as dest_table_ids
+          std::sort(dest_table_ids.begin(), dest_table_ids.end());
+          if (OB_FAIL(table_creator.init_with_fork_table_info(fork_table_info, dest_table_ids, schema_guard,
+                                                              true /*need_tablet_cnt_check*/))) {
+          } else {
+            need_create_empty_major = false;
+          }
+        }
+      } else if (OB_FAIL(table_creator.init(true /*need_tablet_cnt_check*/))) {
       }
-      if (OB_SUCC(ret)) {
-        // sort dest_table_ids to ensure the order of src_table_ids is the same as dest_table_ids
-        std::sort(dest_table_ids.begin(), dest_table_ids.end());
-        if (OB_FAIL(table_creator.init_with_fork_table_info(
-                  fork_table_info,
-                  dest_table_ids,
-                  schema_guard,
-                  true/*need_tablet_cnt_check*/))) {
+
+      ObArray<const ObTableSchema *> schemas;
+      ObArray<bool> need_create_empty_majors;
+      int64_t last_schema_version = OB_INVALID_VERSION;
+      for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); i++) {
+        const share::schema::ObTableSchema &this_table = table_schemas.at(i);
+        const int64_t table_id = this_table.get_table_id();
+        if (!this_table.has_tablet()) {
+        } else if (!this_table.is_global_index_table()) {
+          if (OB_FAIL(schemas.push_back(&this_table)) ||
+              OB_FAIL(need_create_empty_majors.push_back(need_create_empty_major))) {
+          }
         } else {
-          need_create_empty_major = false;
+          if (OB_FAIL(table_creator.add_create_tablets_of_table_arg(
+                  this_table, data_format_version, need_create_empty_major /*need_create_empty_major_sstable*/,
+                  &schema_guard))) {
+          }
+        }
+        if (OB_SUCC(ret)) {
+          if (OB_INVALID_VERSION == last_schema_version && OB_FAIL(get_last_schema_version(last_schema_version))) {
+          } else if (OB_FAIL(ddl_operator.insert_ori_schema_version(trans, table_id, last_schema_version))) {
+          }
         }
       }
-    } else if (OB_FAIL(table_creator.init(true/*need_tablet_cnt_check*/))) {
-    }
 
-    ObArray<const ObTableSchema*> schemas;
-    ObArray<bool> need_create_empty_majors;
-    int64_t last_schema_version = OB_INVALID_VERSION;
-    for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); i++) {
-      const share::schema::ObTableSchema &this_table = table_schemas.at(i);
-      const int64_t table_id = this_table.get_table_id();
-      if (!this_table.has_tablet()) {
-      } else if (!this_table.is_global_index_table()) {
-        if (OB_FAIL(schemas.push_back(&this_table)) || OB_FAIL(need_create_empty_majors.push_back(need_create_empty_major))) {
-        }
-      } else {
-        if (OB_FAIL(table_creator.add_create_tablets_of_table_arg(
-            this_table,
-            data_format_version,
-            need_create_empty_major /*need_create_empty_major_sstable*/,
-            &schema_guard))) {
-        }
+      if (OB_FAIL(ret)) {
+      } else if (schemas.count() <= 0) {
+        // virtual tablet and view skip
+      } else if (OB_FAIL(table_creator.add_create_tablets_of_tables_arg(schemas, data_format_version,
+                                                                        need_create_empty_majors, &schema_guard))) {
+      } else if (OB_FAIL(table_creator.execute())) {
       }
-      if (OB_SUCC(ret)) {
-        if (OB_INVALID_VERSION == last_schema_version
-          && OB_FAIL(get_last_schema_version(last_schema_version))) {
-        } else if (OB_FAIL(ddl_operator.insert_ori_schema_version(
-            trans, table_id, last_schema_version))) {
-        }
-      }
-    }
-
-    if (OB_FAIL(ret)) {
-    } else if (schemas.count() <= 0) {
-      // virtual tablet and view skip
-    } else if (OB_FAIL(table_creator.add_create_tablets_of_tables_arg(
-            schemas,
-            data_format_version,
-            need_create_empty_majors,
-            &schema_guard))) {
-    } else if (OB_FAIL(table_creator.execute())) {
     }
   }
   return ret;
@@ -12162,8 +12154,8 @@ int ObDDLService::check_alter_add_partitions(const share::schema::ObTableSchema 
       rowkey_last = &orig_part_array[orig_part_num - 1]->get_high_bound_val();
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(rowkey_last)) {
-      ret = OB_ERR_UNEXPECTED;
+    } else {
+      ASSERT_COND(rowkey_last != nullptr);
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < inc_part_num; ++i) {
       const ObRowkey *rowkey_cur = &inc_part_array[i]->get_high_bound_val();
@@ -12323,9 +12315,7 @@ int ObDDLService::check_add_list_partition(const share::schema::ObPartitionSchem
           ret = OB_ERR_UNEXPECTED;
         } else {
           const ObIArray<common::ObNewRow>* orig_list_value = &(orig_part_array[i]->get_list_row_values());
-          if (OB_ISNULL(orig_list_value)) {
-            ret = OB_ERR_UNEXPECTED;
-          }
+          ASSERT_COND(orig_list_value != nullptr);
           for (int j = 0; OB_SUCC(ret) && j < orig_list_value->count(); ++j) {
             const common::ObNewRow *new_row = &(orig_list_value->at(j));
             if (1 <= new_row->get_count() && new_row->get_cell(0).is_max_value()) {
@@ -12345,9 +12335,7 @@ int ObDDLService::check_add_list_partition(const share::schema::ObPartitionSchem
           ret = OB_ERR_UNEXPECTED;
         } else {
           const ObIArray<common::ObNewRow>* list_value = &(part_array[i]->get_list_row_values());
-          if (OB_ISNULL(list_value)) {
-            ret = OB_ERR_UNEXPECTED;
-          }
+          ASSERT_COND(list_value != nullptr);
           for (int j = 0; OB_SUCC(ret) && j < list_value->count(); ++j) {
             row_key.reset();
             row_key.assign(list_value->at(j).cells_, list_value->at(j).get_count());
@@ -12385,9 +12373,7 @@ int ObDDLService::check_add_list_subpartition(const ObPartition &orig_part, cons
           ret = OB_ERR_UNEXPECTED;
         } else {
           const ObIArray<common::ObNewRow>* orig_list_value = &(orig_subpart_array[i]->get_list_row_values());
-          if (OB_ISNULL(orig_list_value)) {
-            ret = OB_ERR_UNEXPECTED;
-          }
+          ASSERT_COND(orig_list_value != nullptr);
           for (int j = 0; OB_SUCC(ret) && j < orig_list_value->count(); ++j) {
             const common::ObNewRow *new_row = &(orig_list_value->at(j));
             if (1 == new_row->get_count() && new_row->get_cell(0).is_max_value()) {
@@ -12407,9 +12393,7 @@ int ObDDLService::check_add_list_subpartition(const ObPartition &orig_part, cons
           ret = OB_ERR_UNEXPECTED;
         } else {
           const ObIArray<common::ObNewRow>* list_value = &(subpart_array[i]->get_list_row_values());
-          if (OB_ISNULL(list_value)) {
-            ret = OB_ERR_UNEXPECTED;
-          }
+          ASSERT_COND(list_value != nullptr);
           for (int j = 0; OB_SUCC(ret) && j < list_value->count(); ++j) {
             row_key.reset();
             row_key.assign(list_value->at(j).cells_, list_value->at(j).get_count());

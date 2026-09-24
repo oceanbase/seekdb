@@ -2971,9 +2971,8 @@ int ObSubQueryRelationalExpr::calc_resultN(ObObj &result,
       tmp_row.count_ = param_num - 1;
       left_row = &tmp_row;
       const ObObj &idx_obj = param_array[param_num - 1];
-      if (OB_ISNULL(left_row)) {
-        ret = OB_INVALID_ARGUMENT;
-      } else if (OB_FAIL(idx_obj.get_int(subquery_idx))) {
+      ASSERT_COND(left_row != nullptr);
+      if (OB_FAIL(idx_obj.get_int(subquery_idx))) {
       } else if (T_WITH_ALL == subquery_key_) {
         if (OB_FAIL(calc_result_with_all(result, *left_row, subquery_idx, expr_ctx))) {
         }
@@ -4946,17 +4945,18 @@ int ObLocationExprOperator::get_pos_int64(const ObObj &obj, ObExprCtx &expr_ctx,
     }
     if (OB_FAIL(ret)) {
       //do nothing
-    } else if (OB_ISNULL(pnmb)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (pnmb->is_valid_int64(tmp_int)) {
-      out = tmp_int;
-    } else if (pnmb->is_valid_uint64(tmp_uint)) {
-      out = 0;//no errors  no warnings in mysql.
     } else {
-      ret = OB_ERR_TRUNCATED_WRONG_VALUE;
-      if (CM_IS_WARN_ON_FAIL(expr_ctx.cast_mode_)) {
-        ret = OB_SUCCESS;
-        out = 0;
+      ASSERT_COND(pnmb != nullptr);
+      if (pnmb->is_valid_int64(tmp_int)) {
+        out = tmp_int;
+      } else if (pnmb->is_valid_uint64(tmp_uint)) {
+        out = 0; // no errors  no warnings in mysql.
+      } else {
+        ret = OB_ERR_TRUNCATED_WRONG_VALUE;
+        if (CM_IS_WARN_ON_FAIL(expr_ctx.cast_mode_)) {
+          ret = OB_SUCCESS;
+          out = 0;
+        }
       }
     }
   } else {

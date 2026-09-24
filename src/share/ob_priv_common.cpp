@@ -242,7 +242,7 @@ int ObPrivPacker::raw_obj_priv_from_pack(
   bool exists;
   raw_priv_array.reset();
   if (packed_obj_privs > 0) {
-    CK (OBJ_PRIV_ID_MAX <= N_PIRVS_PER_GROUP);
+    ASSERT_COND(OBJ_PRIV_ID_MAX <= N_PIRVS_PER_GROUP);
     for (raw_priv = 1; OB_SUCC(ret) && raw_priv <= OBJ_PRIV_ID_MAX; raw_priv ++) {
       OZ (ObOraPrivCheck::raw_obj_priv_exists(raw_priv, packed_obj_privs, exists));
       if (OB_SUCC(ret) && exists) {
@@ -262,7 +262,7 @@ int ObPrivPacker::raw_option_obj_priv_from_pack(
   bool exists;
   raw_priv_array.reset();
   if (packed_obj_privs > 0) {
-    CK (OBJ_PRIV_ID_MAX <= N_PIRVS_PER_GROUP);
+    ASSERT_COND(OBJ_PRIV_ID_MAX <= N_PIRVS_PER_GROUP);
     for (raw_priv = 1; OB_SUCC(ret) && raw_priv <= OBJ_PRIV_ID_MAX; raw_priv ++) {
       OZ (ObOraPrivCheck::raw_obj_priv_exists(raw_priv, GRANT_OPTION, packed_obj_privs, exists));
       if (OB_SUCC(ret) && exists) {
@@ -283,7 +283,7 @@ int ObPrivPacker::raw_no_option_obj_priv_from_pack(
   bool exists;
   raw_priv_array.reset();
   if (packed_obj_privs > 0) {
-    CK (OBJ_PRIV_ID_MAX <= N_PIRVS_PER_GROUP);
+    ASSERT_COND(OBJ_PRIV_ID_MAX <= N_PIRVS_PER_GROUP);
     for (raw_priv = 1; OB_SUCC(ret) && raw_priv <= OBJ_PRIV_ID_MAX; raw_priv ++) {
       OZ (ObOraPrivCheck::raw_obj_priv_exists(raw_priv, packed_obj_privs, exists));
       OZ (ObOraPrivCheck::raw_obj_priv_exists(raw_priv, GRANT_OPTION, 
@@ -459,7 +459,7 @@ int ObPrivPacker::get_total_obj_privs(
   bool exists;
   n_cnt = 0;
   if (packed_obj_privs > 0) {
-    CK (OBJ_PRIV_ID_MAX <= N_PIRVS_PER_GROUP);
+    ASSERT_COND(OBJ_PRIV_ID_MAX <= N_PIRVS_PER_GROUP);
     for (raw_priv = 1; OB_SUCC(ret) && raw_priv <= OBJ_PRIV_ID_MAX; raw_priv ++) {
       OZ (ObOraPrivCheck::raw_obj_priv_exists(raw_priv, packed_obj_privs, exists));
       if (OB_SUCC(ret) && exists) {

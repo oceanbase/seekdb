@@ -3739,11 +3739,12 @@ int ObStaticEngineCG::generate_tsc_flags(ObLogTableScan &op, ObTableScanSpec &sp
     const ObOptParamHint *opt_params = &log_plan->get_stmt()->get_query_ctx()->get_global_hint().opt_params_;
     
     int64_t pd_level = 0;
-    if (OB_ISNULL(opt_params)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(get_pushdown_storage_level(log_plan->get_optimizer_context(), GCONF._pushdown_storage_level, pd_level))) {
+    ASSERT_COND(opt_params != nullptr);
+    if (OB_FAIL(
+            get_pushdown_storage_level(log_plan->get_optimizer_context(), GCONF._pushdown_storage_level, pd_level))) {
     } else if (OB_FAIL(opt_params->has_opt_param(ObOptParamHint::IO_READ_BATCH_SIZE, has_io_batch_size_hint))) {
-    } else if (OB_FAIL(opt_params->has_opt_param(ObOptParamHint::IO_READ_REDUNDANT_LIMIT_PERCENTAGE, has_io_gap_percentage_hint))) {
+    } else if (OB_FAIL(opt_params->has_opt_param(ObOptParamHint::IO_READ_REDUNDANT_LIMIT_PERCENTAGE,
+                                                 has_io_gap_percentage_hint))) {
     }
     if (OB_SUCC(ret) && has_io_batch_size_hint) {
       ObObj io_read_batch_size_obj;
