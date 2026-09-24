@@ -92,7 +92,7 @@ int can_skip_fractional_decimal_eq(ObTransformerCtx *ctx, ObRawExpr *expr, bool 
       // value above the DECIMAL column's legal range, without rounding it.
     } else {
       ObRawExpr *literal = cast->get_param_expr(0);
-      const common::ObObj *value = NULL;
+      const oceanbase::common::ObObj *value = NULL;
       if (OB_ISNULL(literal) || !literal->is_const_raw_expr()) {
       } else if (T_NUMBER == literal->get_expr_type()) {
         value = &static_cast<ObConstRawExpr *>(literal)->get_value();
@@ -107,9 +107,9 @@ int can_skip_fractional_decimal_eq(ObTransformerCtx *ctx, ObRawExpr *expr, bool 
       } else if (value->is_number()) {
         is_fractional = !value->get_number().is_integer();
       } else if (value->is_decimal_int()) {
-        common::ObNumStackOnceAlloc alloc;
-        common::number::ObNumber number;
-        if (OB_SUCCESS == common::wide::to_number(value->get_decimal_int(),
+        ObNumStackOnceAlloc alloc;
+        oceanbase::common::number::ObNumber number;
+        if (OB_SUCCESS == oceanbase::common::wide::to_number(value->get_decimal_int(),
                                                   value->get_int_bytes(),
                                                   value->get_scale(),
                                                   alloc,
