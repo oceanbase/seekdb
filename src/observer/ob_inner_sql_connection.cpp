@@ -155,7 +155,7 @@ ObInnerSQLConnection::~ObInnerSQLConnection()
 
 int ObInnerSQLConnection::set_target_namespace(uint64_t namespace_id)
 {
-  if (namespace_id == 0 || namespace_id >= (1ULL << 30)) {
+  if (namespace_id == 0 || namespace_id >= ns::NamespaceObjectKey::NAMESPACE_LIMIT) {
     return OB_INVALID_ARGUMENT;
   }
   target_namespace_ = namespace_id;

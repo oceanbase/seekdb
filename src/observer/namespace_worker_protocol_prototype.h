@@ -1,6 +1,7 @@
 // In-process namespace storage binding and typed service helpers.
 #ifndef SEEKDB_NAMESPACE_WORKER_PROTOCOL_PROTOTYPE_H_
 #define SEEKDB_NAMESPACE_WORKER_PROTOCOL_PROTOTYPE_H_
+#include "namespace/namespace.h"
 #include "lib/ob_errno.h"
 #include "lib/string/ob_string.h"
 #include "common/object/ob_object.h"
@@ -38,7 +39,7 @@ public:
   StorageSpaceHandle() = default;
   static StorageSpaceHandle namespace_space(uint64_t namespace_id)
   {
-    return namespace_id > 0 && namespace_id < (1ULL << 30)
+    return namespace_id > 0 && namespace_id < ns::NamespaceObjectKey::NAMESPACE_LIMIT
         ? StorageSpaceHandle(Scope::NAMESPACE, namespace_id) : StorageSpaceHandle();
   }
   static StorageSpaceHandle global_space()

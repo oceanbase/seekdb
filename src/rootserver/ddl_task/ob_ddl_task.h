@@ -66,7 +66,7 @@ struct ObDDLTaskContext final
   ObIRootserverLocalRuntime *local_runtime_ = nullptr;
   bool is_complete() const
   {
-    return namespace_id_ > 0 && namespace_id_ < (1ULL << 30)
+    return namespace_id_ > 0 && namespace_id_ < (1ULL << 25)
         && local_build_mode_ != LocalBuildMode::INVALID
         && recovery_mode_ != RecoveryMode::INVALID
         && sql_proxy_ != nullptr && session_sql_proxy_ != nullptr

@@ -55,7 +55,7 @@ NamespaceRegistry::~NamespaceRegistry()
 
 int NamespaceRegistry::add(uint64_t id, const char *name)
 {
-  if (impl_ == nullptr || id == 0 || id >= (1ULL << 30)) { return -1; }
+  if (impl_ == nullptr || id == 0 || id >= NamespaceObjectKey::NAMESPACE_LIMIT) { return -1; }
   Impl::Entry *entry = new (std::nothrow) Impl::Entry(id, name);
   if (entry == nullptr) { return -2; }
   std::lock_guard<std::mutex> guard(impl_->mutex);

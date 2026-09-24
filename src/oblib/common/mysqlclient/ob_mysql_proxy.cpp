@@ -63,7 +63,7 @@ ObCommonSqlProxy::~ObCommonSqlProxy()
 int ObCommonSqlProxy::init(const bool is_ddl)
 {
   int ret = OB_SUCCESS;
-  if (target_namespace() == 0 || target_namespace() >= (1ULL << 30)) {
+  if (target_namespace() == 0 || target_namespace() >= (1ULL << 25)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("sql proxy target namespace is not bound", K(ret), "namespace_id", target_namespace());
   } else if (is_inited()) {
@@ -87,7 +87,7 @@ void ObCommonSqlProxy::operator=(const ObCommonSqlProxy &o)
 
 int ObCommonSqlProxy::set_target_namespace(uint64_t namespace_id)
 {
-  if (namespace_id == 0 || namespace_id >= (1ULL << 30)) {
+  if (namespace_id == 0 || namespace_id >= (1ULL << 25)) {
     return OB_INVALID_ARGUMENT;
   }
   namespace_id_ = namespace_id;

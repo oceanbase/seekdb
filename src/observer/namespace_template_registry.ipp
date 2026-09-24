@@ -280,7 +280,7 @@ int restore_namespace_registry() {
     char name_buf[ns::Namespace::MAX_NAME_LEN];
     if (OB_FAIL(rows->get_uint(0L, namespace_id))) {
     } else if (OB_FAIL(rows->get_varchar(1L, name))) {
-    } else if (namespace_id == 0 || namespace_id >= (1ULL << 30)
+    } else if (namespace_id == 0 || namespace_id >= ns::NamespaceObjectKey::NAMESPACE_LIMIT
                || name.empty() || name.length() >= sizeof(name_buf)) {
       ret = OB_INVALID_ARGUMENT;
     } else {

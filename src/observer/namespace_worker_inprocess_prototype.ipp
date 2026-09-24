@@ -492,7 +492,7 @@ int ensure_in_process_namespace(uint64_t ns)
 {
   int ret = OB_SUCCESS;
   ns::NamespaceRuntime *runtime = nullptr;
-  if (ns <= 1 || ns >= (1ULL << 30)) {
+  if (ns <= 1 || ns >= ns::NamespaceObjectKey::NAMESPACE_LIMIT) {
     ret = OB_NOT_SUPPORTED;
   } else if (!ns::namespace_registry().get(ns, runtime) || runtime == nullptr) {
     ret = OB_ERR_UNEXPECTED;

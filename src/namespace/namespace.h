@@ -31,17 +31,19 @@ class NamespaceControlState;
 struct NamespaceObjectKey
 {
   static constexpr uint64_t MARK = 1ULL << 62;
+  static constexpr uint64_t NAMESPACE_LIMIT = 1ULL << 25;
+  static constexpr uint64_t LOCAL_LIMIT = 1ULL << 37;
   uint64_t namespace_id;
   uint64_t local_id;
-  bool is_valid() const { return namespace_id > 0 && namespace_id < (1ULL << 30)
-      && local_id > 0 && local_id < (1ULL << 32); }
+  bool is_valid() const { return namespace_id > 0 && namespace_id < NAMESPACE_LIMIT
+      && local_id > 0 && local_id < LOCAL_LIMIT; }
   static bool is_encoded(uint64_t id) {
     return id != UINT64_MAX && (id & (3ULL << 62)) == MARK;
   }
-  static uint64_t encoded_namespace(uint64_t id) { return (id & ~MARK) >> 32; }
-  static uint64_t local_part(uint64_t id) { return id & 0xffffffffULL; }
+  static uint64_t encoded_namespace(uint64_t id) { return (id & ~MARK) >> 37; }
+  static uint64_t local_part(uint64_t id) { return id & (LOCAL_LIMIT - 1); }
   uint64_t storage_id() const { return namespace_id == 1 ? local_id
-      : MARK | (namespace_id << 32) | local_id; }
+      : MARK | (namespace_id << 37) | local_id; }
 };
 
 // Identity, lineage and storage root of one namespace. Pure metadata.

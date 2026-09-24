@@ -1356,7 +1356,7 @@ uint64_t NamespaceForkKernelPrototype::namespace_of(uint64_t id) {
 int NamespaceForkKernelPrototype::local_object_id(
     uint64_t namespace_id, uint64_t object_id, uint64_t &local_id) {
   local_id = object_id;
-  if (namespace_id == 0 || namespace_id >= (1ULL << 30)) { return OB_INVALID_ARGUMENT; }
+  if (namespace_id == 0 || namespace_id >= NamespaceObjectKey::NAMESPACE_LIMIT) { return OB_INVALID_ARGUMENT; }
   if (is_encoded_id(object_id)) {
     if (database_of(object_id) != namespace_id) { return OB_INVALID_ARGUMENT; }
     local_id = local_of(object_id);
@@ -1591,7 +1591,7 @@ int NamespaceForkKernelPrototype::namespace_schema_version(uint64_t ns, int64_t 
   return ret;
 }
 int NamespaceForkKernelPrototype::begin_schema_change(uint64_t ns) {
-  if (!GCTX.sql_proxy_ || ns <= 1 || ns >= (1ULL << 30)) {
+  if (!GCTX.sql_proxy_ || ns <= 1 || ns >= NamespaceObjectKey::NAMESPACE_LIMIT) {
     return OB_INVALID_ARGUMENT;
   }
   ObSqlString q;
@@ -1605,7 +1605,7 @@ int NamespaceForkKernelPrototype::begin_schema_change(uint64_t ns) {
 }
 int NamespaceForkKernelPrototype::finish_schema_change(
     uint64_t ns, int64_t schema_version) {
-  if (!GCTX.sql_proxy_ || ns <= 1 || ns >= (1ULL << 30)
+  if (!GCTX.sql_proxy_ || ns <= 1 || ns >= NamespaceObjectKey::NAMESPACE_LIMIT
       || schema_version < 0) {
     return OB_INVALID_ARGUMENT;
   }
@@ -1635,7 +1635,7 @@ int NamespaceForkKernelPrototype::finish_schema_change(
 }
 int NamespaceForkKernelPrototype::begin_schema_recovery(uint64_t ns, bool &needed) {
   needed = false;
-  if (!GCTX.sql_proxy_ || ns <= 1 || ns >= (1ULL << 30)) {
+  if (!GCTX.sql_proxy_ || ns <= 1 || ns >= NamespaceObjectKey::NAMESPACE_LIMIT) {
     return OB_INVALID_ARGUMENT;
   }
   ObMySQLTransaction trans;
@@ -1661,7 +1661,7 @@ int NamespaceForkKernelPrototype::begin_schema_recovery(uint64_t ns, bool &neede
 }
 int NamespaceForkKernelPrototype::finish_schema_recovery(
     uint64_t ns, int64_t schema_version) {
-  if (!GCTX.sql_proxy_ || ns <= 1 || ns >= (1ULL << 30)
+  if (!GCTX.sql_proxy_ || ns <= 1 || ns >= NamespaceObjectKey::NAMESPACE_LIMIT
       || schema_version <= 0) {
     return OB_INVALID_ARGUMENT;
   }
@@ -1914,7 +1914,7 @@ int NamespaceForkKernelPrototype::observe_schema_in_namespace(
     // are materialized, and namespace 1 keeps its raw tablets unregistered.
     return OB_SUCCESS;
   }
-  if (namespace_id >= (1ULL << 30)) { return OB_INVALID_ARGUMENT; }
+  if (namespace_id >= NamespaceObjectKey::NAMESPACE_LIMIT) { return OB_INVALID_ARGUMENT; }
   const bool system_object = schema.is_sys_table() || schema.is_aux_lob_table()
       || (is_inner_table(schema.get_table_id()) && schema.is_index_table());
   uint64_t owner = namespace_id;
@@ -1955,10 +1955,10 @@ int NamespaceForkKernelPrototype::observe_schema_in_namespace(
   const uint64_t tablet_id = tablet_ids.front();
   if (native_namespace_schema_authority()
       && (!directory_supported(schema)
-          || database_id >= (1ULL << 30)
+          || database_id >= NamespaceObjectKey::NAMESPACE_LIMIT
           || table_id >= (1ULL << 32)
           || std::any_of(tablet_ids.begin(), tablet_ids.end(),
-                         [](uint64_t id) { return id >= (1ULL << 32); }))) {
+                         [](uint64_t id) { return id >= NamespaceObjectKey::LOCAL_LIMIT; }))) {
     return OB_NOT_SUPPORTED;
   }
   const bool all_tablets_encoded = std::all_of(
@@ -1989,8 +1989,8 @@ int NamespaceForkKernelPrototype::observe_schema_in_namespace(
   } else if (OB_FAIL(r->get_varchar(0L, name))) {
   } else if (name.prefix_match("__fork_proto_meta")) { return OB_SUCCESS;
   } else if ((!native_namespace_schema_authority() && !legacy_catalog_supported(schema))
-      || database_id >= (1ULL << 30)
-      || table_id >= (1ULL << 32) || tablet_id >= (1ULL << 32)) { ret = OB_NOT_SUPPORTED; }
+      || database_id >= NamespaceObjectKey::NAMESPACE_LIMIT
+      || table_id >= (1ULL << 32) || tablet_id >= NamespaceObjectKey::LOCAL_LIMIT) { ret = OB_NOT_SUPPORTED; }
   }
   if (ret != OB_SUCCESS) { return ret; }
   {
@@ -2223,7 +2223,7 @@ int NamespaceForkKernelPrototype::forget_schema_in_namespace(
     encoded_tablets_valid = is_encoded_id(schema_tablets.at(i).id())
         && database_of(schema_tablets.at(i).id()) == owner;
   }
-  if (owner == 0 || owner >= (1ULL << 30) || schema_version <= 0
+  if (owner == 0 || owner >= NamespaceObjectKey::NAMESPACE_LIMIT || schema_version <= 0
       || (encoded_schema && ((namespace_id == 0 && !is_encoded_id(schema.get_database_id()))
           || !encoded_tablets_valid
           || (is_encoded_id(schema.get_database_id())
@@ -2499,7 +2499,7 @@ int NamespaceForkKernelPrototype::publish_schema_delta(
     int64_t schema_version,
     const ObIArray<const ObTableSchema *> &current_schemas,
     const ObIArray<const ObTableSchema *> &previous_schemas) {
-  if (namespace_id <= 1 || namespace_id >= (1ULL << 30)
+  if (namespace_id <= 1 || namespace_id >= NamespaceObjectKey::NAMESPACE_LIMIT
       || schema_version <= 0 || GCTX.sql_proxy_ == nullptr) {
     return OB_INVALID_ARGUMENT;
   }
@@ -2626,7 +2626,7 @@ int NamespaceForkKernelPrototype::is_tablet_owned(
     uint64_t namespace_id, const ObTabletID &tablet_id, bool &owned) {
   owned = false;
   uint64_t local_tablet_id = OB_INVALID_ID;
-  if (namespace_id <= 1 || namespace_id >= (1ULL << 30)
+  if (namespace_id <= 1 || namespace_id >= NamespaceObjectKey::NAMESPACE_LIMIT
       || !tablet_id.is_valid() || !GCTX.sql_proxy_) {
     return OB_INVALID_ARGUMENT;
   }
@@ -2647,7 +2647,7 @@ int NamespaceForkKernelPrototype::owned_storage_tablets(
     ObIArray<ObTabletID> &owned_tablets) {
   owned_tablets.reset();
   if (namespace_id <= 1
-      || namespace_id >= (1ULL << 30) || !GCTX.sql_proxy_) {
+      || namespace_id >= NamespaceObjectKey::NAMESPACE_LIMIT || !GCTX.sql_proxy_) {
     return OB_INVALID_ARGUMENT;
   }
   MetadataReadGuard access;
@@ -2681,7 +2681,7 @@ int NamespaceForkKernelPrototype::release_namespace_schemas(
   table_count = 0;
   database_count = 0;
   if (namespace_id <= 1
-      || namespace_id >= (1ULL << 30)) {
+      || namespace_id >= NamespaceObjectKey::NAMESPACE_LIMIT) {
     return OB_INVALID_ARGUMENT;
   }
   // DROP tombstones the namespace and drains storage access before committing.
@@ -2713,7 +2713,7 @@ int NamespaceForkKernelPrototype::capture(ObISQLClient &trans, uint64_t source, 
   Roots root; int ret = roots(trans, source, root, true);
   if (ret == OB_ITER_END) { ret = OB_SUCCESS; }
   if (ret != OB_SUCCESS) { return ret; }
-  if (root.snapshot || target >= (1ULL << 30) || root.schema_version > schema_version) { return OB_NOT_SUPPORTED; }
+  if (root.snapshot || target >= NamespaceObjectKey::NAMESPACE_LIMIT || root.schema_version > schema_version) { return OB_NOT_SUPPORTED; }
   root.source = source; root.snapshot = snapshot; root.schema_version = schema_version;
   root.catalog.cap = cap_min(root.catalog.cap, snapshot); root.directory.cap = cap_min(root.directory.cap, snapshot);
   ret = save_roots(trans, target, root);
