@@ -389,6 +389,22 @@ int write_in_process_batch(const ObTxDesc &view, const WriteBatch &batch,
   THIS_WORKER.set_timeout_ts(old_timeout);
   return ret;
 }
+int call_in_process_direct_insert_simple(RequestTag parent, uint64_t generation,
+                                         char operation, bool &is_final)
+{
+  InProcessStorage *ctx = in_process_storage;
+  const StorageSpaceHandle space = active_worker_storage_space();
+  if (ctx == nullptr || !ctx->initialized || !ctx->direct_insert_registry) { return OB_NOT_INIT; }
+  if (!space.is_namespace() || ctx->ns != space.namespace_id()) { return OB_INVALID_ARGUMENT; }
+  const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
+  auto *old_session = THIS_WORKER.get_session();
+  THIS_WORKER.set_session(&ctx->session);
+  const int ret = ctx->direct_insert.simple(space, parent, generation,
+      *ctx->direct_insert_registry, operation, is_final);
+  THIS_WORKER.set_session(old_session);
+  THIS_WORKER.set_timeout_ts(old_timeout);
+  return ret;
+}
 int fetch_in_process_scan(uint64_t handle, ScanBatch &batch)
 {
   InProcessStorage *ctx = in_process_storage;

@@ -195,6 +195,40 @@ struct DirectInsertRoute {
   std::map<uint64_t, std::unique_ptr<DirectInsertWriterOwner>> writers;
   uint64_t session_generation = 0, writer_generation = 0;
   void reset() { writers.clear(); owner.reset(); }
+  int resolve(RequestTag parent, uint64_t generation, DirectInsertRegistry &registry) {
+    if (!owner || !owner->matches(parent, generation)) {
+      if (!writers.empty()) { return OB_STATE_NOT_MATCH; }
+      owner.reset();
+      owner = registry.find(parent);
+      if (!owner || !owner->matches(parent, generation)) {
+        owner.reset();
+        return OB_STATE_NOT_MATCH;
+      }
+    }
+    return OB_SUCCESS;
+  }
+  int simple(StorageSpaceHandle storage_space, RequestTag parent, uint64_t generation,
+             DirectInsertRegistry &registry, char operation, bool &is_final) {
+    is_final = false;
+    if (!storage_space.is_namespace() || (operation != 'I' && operation != 'C')) {
+      return OB_INVALID_ARGUMENT;
+    }
+    int ret = resolve(parent, generation, registry);
+    if (ret) { return ret; }
+    std::shared_lock<std::shared_mutex> guard(owner->mutex);
+    ObIDirectInsertSession *session = owner->session;
+    if (!session) { return OB_NOT_INIT; }
+    if (operation == 'I') { is_final = session->is_final(); }
+    else {
+      ObIDirectInsertWorkerContext *previous_context =
+          set_current_direct_insert_worker_context(owner.get());
+      ret = session->complete_px_worker();
+      set_current_direct_insert_worker_context(previous_context);
+    }
+    fprintf(stderr, "PROTOTYPE_DIRECT_INSERT_SIMPLE ns=%llu op=%c ret=%d final=%d\n",
+        static_cast<unsigned long long>(storage_space.namespace_id()), operation, ret, is_final);
+    return ret;
+  }
 
   int process(StorageSpaceHandle storage_space, RequestTag tag, DirectInsertRegistry &registry,
       const std::shared_ptr<StorageSessionState> &context, Frame &request, Frame &reply) {
@@ -294,14 +328,7 @@ struct DirectInsertRoute {
         }
       }
     } else if (!ret) {
-      if (!owner || !owner->matches(parent, generation)) {
-        if (!writers.empty()) { ret = OB_STATE_NOT_MATCH; }
-        else {
-          owner.reset();
-          owner = registry.find(parent);
-          if (!owner || !owner->matches(parent, generation)) { owner.reset(); ret = OB_STATE_NOT_MATCH; }
-        }
-      }
+      ret = resolve(parent, generation, registry);
       if (!ret && operation == 'F') {
         if (!request.consumed() || parent.slot != tag.slot || parent.generation != tag.generation) { ret = OB_INVALID_ARGUMENT; }
         else {
@@ -319,16 +346,7 @@ struct DirectInsertRoute {
         std::shared_lock<std::shared_mutex> guard(owner->mutex);
         auto *session = owner->session;
         if (!session) { ret = OB_NOT_INIT; }
-        else if (operation == 'I' || operation == 'C') {
-          if (!request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-          else if (operation == 'I') { output.number(session->is_final()); }
-          else {
-            ObIDirectInsertWorkerContext *previous_context =
-                set_current_direct_insert_worker_context(owner.get());
-            ret = session->complete_px_worker();
-            set_current_direct_insert_worker_context(previous_context);
-          }
-        } else if (operation == 'P') {
+        else if (operation == 'P') {
           const uint64_t count = request.number();
           ObArray<ObDDLTabletSliceCount> slice_counts;
           if (request.ret || !count
@@ -434,6 +452,8 @@ struct DirectInsertRoute {
     return output.ret ? output.ret : reply.ret;
   }
 };
+int call_in_process_direct_insert_simple(RequestTag parent, uint64_t generation,
+                                         char operation, bool &is_final);
 
 class RemoteDirectInsertSession final : public ObIDirectInsertSession, public ObIDirectInsertWriterFactory {
 public:
@@ -468,15 +488,16 @@ public:
             operation, ret, error.load(), cleanup);
     return ret;
   }
-  int empty_call(char operation) const {
-    Frame payload, reply; int ret = call(operation, payload, reply);
-    return ret ? ret : reply.consumed() ? OB_SUCCESS : OB_INVALID_ARGUMENT;
+  int simple_call(char operation, bool &is_final) const {
+    StorageSessionScope scope(THIS_WORKER.get_session());
+    int ret = scope.error() ? scope.error() : error.load();
+    if (!ret) { ret = call_in_process_direct_insert_simple(origin, generation, operation, is_final); }
+    if (ret) { int expected = OB_SUCCESS; error.compare_exchange_strong(expected, ret); }
+    return ret;
   }
   bool is_final() const override {
-    Frame payload, reply; int ret = call('I', payload, reply);
-    const uint64_t final = ret ? 0 : reply.number();
-    if (!ret && (!reply.consumed() || final > 1)) { error = OB_INVALID_ARGUMENT; }
-    return !error && final;
+    bool final = false;
+    return !simple_call('I', final) && final;
   }
   int prepare_ordered_input(
       const common::ObIArray<ObDDLTabletSliceCount> &slice_counts) override {
@@ -516,7 +537,10 @@ public:
     if (!ret) { ret = prepare_ordered_input(slice_counts); }
     return ret;
   }
-  int complete_px_worker() override { return empty_call('C'); }
+  int complete_px_worker() override {
+    bool unused = false;
+    return simple_call('C', unused);
+  }
   int resolve_write_policy(const ObDirectInsertPlanFacts &facts, ObDirectInsertWritePolicy &policy) const override {
     Frame payload, reply;
     payload.number(facts.regenerate_heap_table_pk_ | (facts.vector_rowkey_vid_ << 1)
