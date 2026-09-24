@@ -60,7 +60,8 @@ private:
   int recursively_convert_join_preds_vector_to_scalar(TableItem *table_item, bool &trans_happened);
   int remove_dummy_exprs(ObDMLStmt *stmt, bool &trans_happened);
   int remove_dummy_filter_exprs(common::ObIArray<ObRawExpr*> &exprs,
-                                ObIArray<ObExprConstraint> &constraints);
+                                ObIArray<ObExprConstraint> &constraints,
+                                const bool is_where_filter = false);
   int remove_dummy_join_condition_exprs(TableItem *table,
                                         ObIArray<ObExprConstraint> &constraints);
   int inner_remove_dummy_expr(ObRawExpr *&expr,
@@ -74,6 +75,7 @@ private:
   int adjust_dummy_expr(const ObIArray<int64_t> &true_exprs,
                         const ObIArray<int64_t> &false_exprs,
                         const bool is_and_op,
+                        const bool is_where_filter,
                         ObIArray<ObRawExpr *> &adjust_exprs,
                         ObRawExpr *&transed_expr,
                         ObIArray<ObExprConstraint> &constraints);

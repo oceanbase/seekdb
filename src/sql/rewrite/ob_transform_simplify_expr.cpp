@@ -21,6 +21,7 @@
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/expr/ob_shared_expr_resolver.h"
 #include "sql/engine/ob_physical_plan.h"
+#include "sql/ob_sql_context.h"
 
 using namespace oceanbase::sql;
 
@@ -45,6 +46,85 @@ int has_scalar_in_predicate(ObRawExpr *expr, bool &has_in)
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && !has_in && i < expr->get_param_count(); ++i) {
       if (OB_FAIL(has_scalar_in_predicate(expr->get_param_expr(i), has_in))) {
+      }
+    }
+  }
+  return ret;
+}
+
+int can_skip_fractional_decimal_eq(ObTransformerCtx *ctx, ObRawExpr *expr, bool &can_skip)
+{
+  can_skip = false;
+  int ret = OB_SUCCESS;
+  const ObSqlCtx *sql_ctx = NULL;
+  ObPhysicalPlanCtx *plan_ctx = NULL;
+  if (OB_ISNULL(ctx) || OB_ISNULL(ctx->exec_ctx_) || OB_ISNULL(ctx->phy_plan_)
+      || OB_ISNULL(sql_ctx = ctx->exec_ctx_->get_sql_ctx())
+      || OB_ISNULL(plan_ctx = ctx->exec_ctx_->get_physical_plan_ctx())
+      || sql_ctx->is_prepare_protocol_ || sql_ctx->is_text_ps_mode_
+      || OB_ISNULL(expr) || T_OP_EQ != expr->get_expr_type() || 2 != expr->get_param_count()) {
+    // Only text SQL with literal values is considered. Other predicates keep the general guard.
+  } else {
+    ObRawExpr *column = expr->get_param_expr(0);
+    ObRawExpr *cast = expr->get_param_expr(1);
+    if (OB_NOT_NULL(column) && OB_NOT_NULL(cast) && !column->is_column_ref_expr()) {
+      ObRawExpr *tmp = column;
+      column = cast;
+      cast = tmp;
+    }
+    if (OB_ISNULL(column) || OB_ISNULL(cast) || !column->is_column_ref_expr()
+        || !column->get_result_type().is_decimal_int()
+        || 0 != column->get_result_type().get_scale()
+        || static_cast<ObColumnRefRawExpr *>(column)->is_generated_column()
+        || T_FUN_SYS_CAST != cast->get_expr_type()
+        || 2 != cast->get_param_count()
+        || !cast->get_result_type().is_decimal_int()
+        || cast->get_result_type().get_scale() != 0
+        || cast->get_result_type().get_precision()
+               != column->get_result_type().get_precision()
+        || !cast->has_flag(IS_OP_OPERAND_IMPLICIT_CAST)
+        || CM_IS_EXPLICIT_CAST(cast->get_cast_mode())
+        || (cast->get_cast_mode() & (CM_CONST_TO_DECIMAL_INT_EQ
+                                   | CM_CONST_TO_DECIMAL_INT_UP
+                                   | CM_CONST_TO_DECIMAL_INT_DOWN)) != CM_CONST_TO_DECIMAL_INT_EQ
+        || !cast->is_static_scalar_const_expr()) {
+      // A comparison cast with EQ mode maps an unrepresentable fraction to the
+      // value above the DECIMAL column's legal range, without rounding it.
+    } else {
+      ObRawExpr *literal = cast->get_param_expr(0);
+      const common::ObObj *value = NULL;
+      if (OB_ISNULL(literal) || !literal->is_const_raw_expr()) {
+      } else if (T_NUMBER == literal->get_expr_type()) {
+        value = &static_cast<ObConstRawExpr *>(literal)->get_value();
+      } else if (T_QUESTIONMARK == literal->get_expr_type()) {
+        const int64_t idx = static_cast<ObConstRawExpr *>(literal)->get_value().get_unknown();
+        if (idx >= 0 && idx < plan_ctx->get_param_store().count()) {
+          value = &plan_ctx->get_param_store().at(idx);
+        }
+      }
+      bool is_fractional = false;
+      if (OB_ISNULL(value)) {
+      } else if (value->is_number()) {
+        is_fractional = !value->get_number().is_integer();
+      } else if (value->is_decimal_int()) {
+        common::ObNumStackOnceAlloc alloc;
+        common::number::ObNumber number;
+        if (OB_SUCCESS == common::wide::to_number(value->get_decimal_int(),
+                                                  value->get_int_bytes(),
+                                                  value->get_scale(),
+                                                  alloc,
+                                                  number)) {
+          is_fractional = !number.is_integer();
+        }
+      }
+      if (is_fractional) {
+        bool has_warning = false;
+        // Probe the exact implicit cast under this session's SQL mode. A warning
+        // or error must still be produced by the original runtime expression.
+        if (OB_SUCCESS == ObTransformUtils::check_static_expr_has_warning(ctx, cast, has_warning)
+            && !has_warning) {
+          can_skip = true;
+        }
       }
     }
   }
@@ -703,7 +783,9 @@ int ObTransformSimplifyExpr::remove_dummy_exprs(ObDMLStmt *stmt, bool &trans_hap
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(remove_dummy_case_when(stmt, trans_happened))) {
   } else if (OB_FAIL(remove_dummy_nvl(stmt, trans_happened))) {
-  } else if (OB_FAIL(remove_dummy_filter_exprs(stmt->get_condition_exprs(), constraints))) {
+  } else if (OB_FAIL(remove_dummy_filter_exprs(stmt->get_condition_exprs(),
+                                               constraints,
+                                               stmt->is_select_stmt()))) {
   } else if (stmt->is_select_stmt() && !static_cast<ObSelectStmt*>(stmt)->is_scala_group_by() &&
              OB_FAIL(remove_dummy_filter_exprs(static_cast<ObSelectStmt*>(stmt)->get_having_exprs(),
                                                constraints))) {
@@ -745,7 +827,8 @@ int ObTransformSimplifyExpr::inner_remove_dummy_expr(common::ObIArray<ObRawExpr*
 //  1. and_op(1 = 1, c1 = 1, 2 = 1) create pre calc frame use and_op(1 = 1, 2 = 1) expect false;
 //  2. or_op(1 = 1, c1 = 1, 2 = 1) create pre calc frame use and_op(1 = 1, 2 = 1) expect false;
 int ObTransformSimplifyExpr::remove_dummy_filter_exprs(common::ObIArray<ObRawExpr*> &exprs,
-                                                       ObIArray<ObExprConstraint> &constraints)
+                                                       ObIArray<ObExprConstraint> &constraints,
+                                                       const bool is_where_filter)
 {
   int ret = OB_SUCCESS;
   bool is_valid_type = true;
@@ -769,7 +852,13 @@ int ObTransformSimplifyExpr::remove_dummy_filter_exprs(common::ObIArray<ObRawExp
                && exprs.at(false_exprs.at(0))->is_const_raw_expr()) {
       /* do nothing */
       /* exprs has only false condition, do not adjust */
-    } else if (OB_FAIL(adjust_dummy_expr(true_exprs, false_exprs, true, exprs, transed_expr, constraints))) {
+    } else if (OB_FAIL(adjust_dummy_expr(true_exprs,
+                                         false_exprs,
+                                         true,
+                                         is_where_filter,
+                                         exprs,
+                                         transed_expr,
+                                         constraints))) {
     } else if (transed_expr != NULL) {
       exprs.reset();
       bool is_true = false;
@@ -895,6 +984,7 @@ int ObTransformSimplifyExpr::inner_remove_dummy_expr(ObRawExpr *&expr,
         /*do nothing*/
       } else if (OB_FAIL(adjust_dummy_expr(true_exprs, false_exprs,
                                            T_OP_AND == expr->get_expr_type(),
+                                           false,
                                            op_expr->get_param_exprs(),
                                            transed_expr,
                                            constraints))) {
@@ -939,6 +1029,7 @@ int ObTransformSimplifyExpr::is_valid_transform_type(ObRawExpr *expr,
 int ObTransformSimplifyExpr::adjust_dummy_expr(const ObIArray<int64_t> &true_exprs,
                                                const ObIArray<int64_t> &false_exprs,
                                                const bool is_and_op,
+                                               const bool is_where_filter,
                                                ObIArray<ObRawExpr *> &adjust_exprs,
                                                ObRawExpr *&transed_expr,
                                                ObIArray<ObExprConstraint> &constraints)
@@ -954,6 +1045,7 @@ int ObTransformSimplifyExpr::adjust_dummy_expr(const ObIArray<int64_t> &true_exp
     ObSEArray<ObRawExpr*, 4> op_params;
     bool is_error_free = true;
     bool cur_error_free = true;
+    bool has_safe_decimal_eq = false;
     bool has_uncacheable_in_expr = false;
     const PreCalcExprExpectResult expect_result = ((is_and_op && !false_exprs.empty())
                                                    || (!is_and_op && true_exprs.empty()))
@@ -970,6 +1062,7 @@ int ObTransformSimplifyExpr::adjust_dummy_expr(const ObIArray<int64_t> &true_exp
       for (int64_t i = 0; OB_SUCC(ret) && is_error_free && i < check_expr_count; ++i) {
         bool has_warning = false;
         bool cur_cache_safe = true;
+        bool can_skip_decimal_eq = false;
         bool has_in = false;
         const bool checked_expr_was_evaluated = ObOptimizerUtil::find_item(op_params, check_exprs.at(i));
         if (OB_ISNULL(check_exprs.at(i))) {
@@ -990,8 +1083,13 @@ int ObTransformSimplifyExpr::adjust_dummy_expr(const ObIArray<int64_t> &true_exp
         } else if (has_warning) {
           is_error_free = false;
         } else if (OB_FAIL(ObTransformUtils::check_error_free_expr(check_exprs.at(i), cur_error_free))) {
+        } else if (!cur_error_free && is_where_filter && is_and_op && remove_all
+                   && OB_FAIL(can_skip_fractional_decimal_eq(ctx_,
+                                                              check_exprs.at(i),
+                                                              can_skip_decimal_eq))) {
         } else {
-          is_error_free = cur_error_free;
+          is_error_free = cur_error_free || can_skip_decimal_eq;
+          has_safe_decimal_eq |= can_skip_decimal_eq;
         }
       }
     }
@@ -1034,6 +1132,12 @@ int ObTransformSimplifyExpr::adjust_dummy_expr(const ObIArray<int64_t> &true_exp
     } else if (OB_FAIL(op_expr->formalize(ctx_->session_info_))) {
     } else if (OB_FAIL(constraints.push_back(ObExprConstraint(op_expr, expect_result)))) {
     } else { /*do nothing*/ }
+    if (OB_SUCC(ret) && is_error_free && has_safe_decimal_eq && OB_NOT_NULL(ctx_->phy_plan_)) {
+      // The checked fraction is a literal in this compilation, but text SQL is
+      // parameterized for caching. Keep the FALSE constraint and do not cache a
+      // plan that omits this comparison for a different literal value.
+      ctx_->phy_plan_->get_phy_plan_hint().plan_cache_policy_ = OB_USE_PLAN_CACHE_NONE;
+    }
   }
   return ret;
 }
