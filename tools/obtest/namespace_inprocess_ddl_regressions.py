@@ -1,13 +1,14 @@
 """DDL and namespace data paths that previously failed in child namespaces."""
 
 import pymysql
+import threading
+import time
 
 
 def before_restart(experiment, child):
     sql = lambda statement: experiment.sql(statement, child)
 
-    # The heap-table rewrite succeeds without interruption. Its interrupted
-    # recovery is tracked separately because replaying partial rows is unsafe.
+    # Keep a normal heap-table rewrite alongside the interrupted case below.
     sql("CREATE TABLE phase10.drop_pk(id INT PRIMARY KEY, v INT)")
     sql("INSERT INTO phase10.drop_pk VALUES(1,11),(2,22)")
     sql("ALTER TABLE phase10.drop_pk DROP PRIMARY KEY")
@@ -90,3 +91,71 @@ def after_restart(experiment, child):
     assert sql("SELECT id,v FROM phase10.fork_dst ORDER BY id") == (
         (1, 11), (2, 22))
     assert sql("SELECT v FROM phase10.fork_src WHERE id=1") == ((99,),)
+
+
+def interrupted_heap_recovery(experiment, connect):
+    row_count = 1 << 18
+    with connect(experiment, "root@phase10_child") as child:
+        experiment.sql("CREATE TABLE phase10.drop_pk_recovery(id INT PRIMARY KEY, v INT)", child)
+        experiment.sql("INSERT INTO phase10.drop_pk_recovery VALUES(1,11)", child)
+        for step in range(18):
+            experiment.sql(
+                "INSERT INTO phase10.drop_pk_recovery "
+                f"SELECT id+{1 << step},v FROM phase10.drop_pk_recovery", child, log=False)
+        assert experiment.sql("SELECT COUNT(*) FROM phase10.drop_pk_recovery", child) == ((row_count,),)
+        old_tasks = {row[0] for row in experiment.sql(
+            "SELECT task_id FROM oceanbase.__all_ddl_task_status", child, log=False)}
+        errors = []
+
+        def alter():
+            try:
+                with connect(experiment, "root@phase10_child") as ddl:
+                    experiment.sql("ALTER TABLE phase10.drop_pk_recovery DROP PRIMARY KEY", ddl)
+            except pymysql.MySQLError as error:
+                errors.append(error)
+
+        worker = threading.Thread(target=alter, daemon=True)
+        worker.start()
+        deadline = time.monotonic() + 20
+        task_id = None
+        while time.monotonic() < deadline:
+            rows = experiment.sql(
+                "SELECT task_id,status,execution_id FROM oceanbase.__all_ddl_task_status",
+                child, log=False)
+            matches = [row[0] for row in rows
+                       if row[0] not in old_tasks and row[1:] == (3, 1)]
+            if matches:
+                task_id = matches[0]
+                break
+            time.sleep(.01)
+        assert task_id is not None, rows
+        assert experiment.sql(
+            "SELECT COUNT(*) FROM oceanbase.__all_ddl_checksum "
+            f"WHERE ddl_task_id={task_id} AND execution_id=1", child, log=False) == ((0,),)
+    experiment.connection.close()
+    experiment.connection = None
+    experiment.proc.terminate()
+    experiment.proc.wait(timeout=20)
+    worker.join(timeout=1)
+    experiment.start()
+    with connect(experiment, "root@phase10_child") as child:
+        deadline = time.monotonic() + 45
+        while time.monotonic() < deadline:
+            tasks = experiment.sql(
+                "SELECT status FROM oceanbase.__all_ddl_task_status "
+                f"WHERE task_id={task_id}", child, log=False)
+            if not tasks or tasks[0][0] == 99:
+                break
+            time.sleep(.5)
+        assert not tasks, (task_id, tasks, errors)
+        assert experiment.sql(
+            "SELECT COUNT(*),SUM(v),MIN(id),MAX(id) "
+            "FROM phase10.drop_pk_recovery", child) == ((row_count, row_count * 11, 1, row_count),)
+        assert "PRIMARY KEY" not in experiment.sql(
+            "SHOW CREATE TABLE phase10.drop_pk_recovery", child)[0][1]
+        execution_ids = experiment.sql(
+            "SELECT DISTINCT execution_id FROM oceanbase.__all_ddl_checksum "
+            f"WHERE ddl_task_id={task_id}", child, log=False)
+        assert execution_ids == ((2,),), execution_ids
+    experiment.record("interrupted_drop_primary_recovery", task_id=task_id,
+                      rows=row_count, execution_id=2)

@@ -372,7 +372,8 @@ def direct_probe(experiment):
     # mysqltest regressions: truncate_table, join_basic, bulk_insert,
     # two_order_by, idx_unique_many_idx_one_ins, generated_column,
     # rename_table2; plus child FTS and IVF index lifecycle.
-    from namespace_inprocess_ddl_regressions import before_restart, after_restart
+    from namespace_inprocess_ddl_regressions import (
+        before_restart, after_restart, interrupted_heap_recovery)
 
     with setup_branch(experiment) as child:
         experiment.sql("TRUNCATE TABLE phase10.parent", child)
@@ -678,12 +679,14 @@ def direct_probe(experiment):
         with connect(experiment, f"root@{name}", database="test") as cycle:
             assert experiment.sql("SELECT 1", cycle) == ((1,),)
         experiment.sql(f"DROP NAMESPACE {name}")
+    interrupted_heap_recovery(experiment, connect)
     experiment.record("PASS", case="inprocess_direct", ddl=True, partition=True,
                       index=True, lob=True, fulltext=True, ivf=True, ivf_pq=True,
                       ivf_sq8=True, empty_hnsw=True,
                       source_drop=True, ddl_redefinition=True,
                       check_constraint=True, auto_increment=True,
-                      fork_table=True, cache_lifecycle=True, restart=True)
+                      fork_table=True, cache_lifecycle=True,
+                      interrupted_heap_recovery=True, restart=True)
 
 
 def tls_probe(experiment):
