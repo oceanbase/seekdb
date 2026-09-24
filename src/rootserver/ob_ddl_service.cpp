@@ -9974,7 +9974,9 @@ int ObDDLService::alter_table_auto_increment(
         ObTimeoutCtx timeout_ctx;
         ObSqlString sql;
         sqlclient::ObMySQLResult *result = NULL;
-        common::ObCommonSqlProxy *user_sql_proxy = GCTX.ddl_sql_proxy_;
+        common::ObCommonSqlProxy *user_sql_proxy = task_context_.ddl_proxy_ != nullptr
+            ? task_context_.ddl_proxy_
+            : task_context_.namespace_id_ == 1 ? GCTX.ddl_sql_proxy_ : nullptr;
         ObSessionParam session_param;
         int64_t sql_mode = alter_table_arg.sql_mode_;
         session_param.sql_mode_ = reinterpret_cast<int64_t *>(&sql_mode);
@@ -9995,6 +9997,10 @@ int ObDDLService::alter_table_auto_increment(
                                     orig_table_schema.get_table_name()))) {
           LOG_WARN("failed to assign fmt", K(ret), K(column_schema->get_column_name_str()),
                                            K(db_schema->get_database_name_str()));
+        } else if (OB_ISNULL(user_sql_proxy)) {
+          ret = OB_NOT_INIT;
+          LOG_WARN("namespace DDL SQL proxy is not initialized", KR(ret),
+                   K(task_context_.namespace_id_));
         } else if (OB_FAIL(user_sql_proxy->read(res, sql.ptr(), &session_param))) {
           LOG_WARN("fail to read", KR(ret), K(sql));
         } else if (OB_ISNULL(result = res.get_result())) {

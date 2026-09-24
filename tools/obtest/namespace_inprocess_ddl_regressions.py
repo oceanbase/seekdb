@@ -25,6 +25,20 @@ def before_restart(experiment, child):
     else:
         raise AssertionError("child CHECK constraint allowed an invalid row")
 
+    sql("CREATE TABLE phase10.checked_invalid(id INT PRIMARY KEY, v INT)")
+    sql("INSERT INTO phase10.checked_invalid VALUES(1,-1)")
+    try:
+        sql("ALTER TABLE phase10.checked_invalid "
+            "ADD CONSTRAINT positive_existing CHECK (v > 0)")
+    except pymysql.MySQLError as error:
+        assert error.args[0] == 3819, error.args
+    else:
+        raise AssertionError("CHECK validation accepted an existing invalid row")
+    assert sql("SELECT id,v FROM phase10.checked_invalid") == ((1, -1),)
+    sql("UPDATE phase10.checked_invalid SET v=1 WHERE id=1")
+    sql("ALTER TABLE phase10.checked_invalid "
+        "ADD CONSTRAINT positive_existing CHECK (v > 0)")
+
     sql("CREATE TABLE phase10.redef_ref(id INT PRIMARY KEY)")
     sql("INSERT INTO phase10.redef_ref VALUES(1),(2)")
     sql("CREATE TABLE phase10.redef_deps(id INT PRIMARY KEY, ref_id INT, payload INT, "
@@ -105,6 +119,9 @@ def before_restart(experiment, child):
     sql("ALTER TABLE phase10.auto_owned AUTO_INCREMENT=100")
     sql("INSERT INTO phase10.auto_owned(v) VALUES(60)")
     assert sql("SELECT id FROM phase10.auto_owned WHERE v=60") == ((100,),)
+    sql("ALTER TABLE phase10.auto_owned AUTO_INCREMENT=2")
+    sql("INSERT INTO phase10.auto_owned(v) VALUES(65)")
+    assert sql("SELECT id FROM phase10.auto_owned WHERE v=65")[0][0] > 100
 
     sql("CREATE TABLE phase10.fork_src(id INT PRIMARY KEY, v INT)")
     sql("INSERT INTO phase10.fork_src VALUES(1,11),(2,22)")
@@ -137,6 +154,13 @@ def after_restart(experiment, child):
     assert sql("SELECT COUNT(*),SUM(v) FROM phase10.checked") == ((2, 33),)
     try:
         sql("INSERT INTO phase10.checked VALUES(3,-1)")
+    except pymysql.MySQLError as error:
+        assert error.args[0] == 3819, error.args
+    else:
+        raise AssertionError("recovered CHECK constraint allowed an invalid row")
+    assert sql("SELECT id,v FROM phase10.checked_invalid") == ((1, 1),)
+    try:
+        sql("INSERT INTO phase10.checked_invalid VALUES(2,-1)")
     except pymysql.MySQLError as error:
         assert error.args[0] == 3819, error.args
     else:
