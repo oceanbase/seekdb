@@ -195,7 +195,8 @@ int route_tablet_mds(StorageSpaceHandle storage_space,
                   ns, logical.id(), storage_id))) {
           } else { logical = ObTabletID(storage_id); }
         }
-        if (OB_SUCC(ret) && storage::NamespaceForkKernelPrototype::namespace_of(logical.id()) == ns) {
+        if (OB_SUCC(ret) && storage::NamespaceForkKernelPrototype::is_encoded_id(logical.id())
+            && ::oceanbase::ns::NamespaceObjectKey::encoded_namespace(logical.id()) == ns) {
           ObTabletID physical;
           int64_t inherited_cap = 0;
           if (OB_FAIL(storage::NamespaceForkKernelPrototype::resolve_read_tablet(

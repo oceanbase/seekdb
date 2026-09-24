@@ -305,23 +305,24 @@ int resolve_inprocess_tablet_schema(uint64_t physical_tablet_id,
     share::schema::ObMultiVersionSchemaService *&schema_service,
     uint64_t &logical_tablet_id)
 {
-  const uint64_t ns = storage::NamespaceForkKernelPrototype::namespace_of(physical_tablet_id);
-  int ret = OB_SUCCESS;
-  if (ns > 1) {
-    if (OB_FAIL(ensure_in_process_namespace(ns))) {
-    } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::local_object_id(
-                   ns, physical_tablet_id, logical_tablet_id))) {
-    } else if (OB_ISNULL(schema_service = namespace_schema_service(ns))) {
+  if (!storage::NamespaceForkKernelPrototype::is_encoded_id(physical_tablet_id)) {
+    return OB_SUCCESS;
+  }
+  const uint64_t ns = ::oceanbase::ns::NamespaceObjectKey::encoded_namespace(physical_tablet_id);
+  int ret = storage::NamespaceForkKernelPrototype::local_object_id(
+      ns, physical_tablet_id, logical_tablet_id);
+  if (ret != OB_SUCCESS || ns == 1) { return ret; }
+  if (OB_FAIL(ensure_in_process_namespace(ns))) {
+  } else if (OB_ISNULL(schema_service = namespace_schema_service(ns))) {
+    ret = OB_NOT_INIT;
+  } else {
+    std::shared_lock<std::shared_mutex> guard(inprocess_services_mutex);
+    const auto it = inprocess_services.find(ns);
+    if (it == inprocess_services.end()) {
       ret = OB_NOT_INIT;
-    } else {
-      std::shared_lock<std::shared_mutex> guard(inprocess_services_mutex);
-      const auto it = inprocess_services.find(ns);
-      if (it == inprocess_services.end()) {
-        ret = OB_NOT_INIT;
-      } else if (!it->second->schema_loaded.load(std::memory_order_acquire)) {
-        guard.unlock();
-        ret = inprocess_refresh_schema(ns);
-      }
+    } else if (!it->second->schema_loaded.load(std::memory_order_acquire)) {
+      guard.unlock();
+      ret = inprocess_refresh_schema(ns);
     }
   }
   return ret;

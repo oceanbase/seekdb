@@ -960,12 +960,10 @@ int NamespaceForkKernelPrototype::drain_access() {
 }
 int NamespaceForkKernelPrototype::check_table_access(
     uint64_t table_id, const ObTabletID &tablet_id, bool read_only, bool &held) {
-  if (tablet_id.is_inner_tablet() && !is_encoded_id(tablet_id.id())) {
+  if (!is_encoded_id(tablet_id.id())) {
     return OB_SUCCESS;
   }
-  // Classify encoded storage by its actual tablet, including old plans and DML callers
-  // without a schema parameter. Internal LOB scans must still bypass by owning tablet.
-  const uint64_t id = namespace_of(tablet_id.id());
+  const uint64_t id = database_of(tablet_id.id());
   int ret = OB_SUCCESS;
   if (id == 1) {
     // Namespace 1 is the undeletable physical root and also owns global control
