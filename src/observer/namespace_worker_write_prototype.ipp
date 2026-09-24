@@ -1461,19 +1461,6 @@ struct EngineWrites {
         }
       } else if (operation == 'O') {
         ret = process_table_lock(storage_space, request, *tx);
-      } else if (operation == 'B') {
-        ObTxSEQ savepoint; request.read(savepoint);
-        const int64_t deadline = request.number();
-        const bool touched = request.number() != 0;
-        auto policy = static_cast<ObTxCleanPolicy>(request.number());
-        if (!request.consumed() || (policy != FAST_ROLLBACK && policy != ROLLBACK && policy != KEEP)) { ret = OB_INVALID_ARGUMENT; }
-        else {
-          // Native releases each store ctx before savepoint rollback, which
-          // merges write state into the tx descriptor. Without that merge the
-          // tx still looks IDLE and the rollback silently skips the undo.
-          for (auto &entry : writes) { entry.second->release_context(); }
-          ret = service->rollback_to_implicit_savepoint(*tx, savepoint, deadline, touched, policy);
-        }
       } else if (operation == 'F' || operation == 'L' || operation == 'D' || operation == 'K') {
         const ObString name = request.string();
         const int64_t deadline = operation == 'L' ? request.number() : 0;
@@ -1558,6 +1545,8 @@ int call_in_process_tx_read_snapshot(ObTxDesc &view,
     ObTxIsolationLevel isolation, int64_t deadline, ObTxReadSnapshot &snapshot);
 int call_in_process_tx_create_savepoint(ObTxDesc &view, char operation,
     const ObTxParam *param, bool release, int16_t branch, ObTxSEQ &savepoint);
+int call_in_process_tx_rollback_savepoint(ObTxDesc &view, ObTxSEQ savepoint,
+    int64_t deadline, bool touched_storage, ObTxCleanPolicy policy);
 int tx_state(char operation, ObTxDesc &view,
              const ObTxParam *param = nullptr, int64_t deadline = 0)
 {
@@ -1589,6 +1578,18 @@ int tx_create_savepoint(ObTxDesc &view, char operation,
   const int ret = scope.error() ? scope.error()
       : call_in_process_tx_create_savepoint(
           view, operation, param, release, branch, savepoint);
+  revert_tx_owner_session(borrowed);
+  return ret;
+}
+int tx_rollback_savepoint(ObTxDesc &view, ObTxSEQ savepoint,
+    int64_t deadline, bool touched_storage, ObTxCleanPolicy policy)
+{
+  sql::ObSQLSessionInfo *borrowed = nullptr;
+  auto *session = tx_owner_session(view, borrowed);
+  StorageSessionScope scope(session && session->get_tx_desc() == &view ? session : nullptr);
+  const int ret = scope.error() ? scope.error()
+      : call_in_process_tx_rollback_savepoint(
+          view, savepoint, deadline, touched_storage, policy);
   revert_tx_owner_session(borrowed);
   return ret;
 }
@@ -1963,9 +1964,8 @@ public:
       int64_t expire_ts,
       bool touched_storage,
       transaction::ObTxCleanPolicy clean_policy) override {
-    Frame request, reply; request.append(savepoint); request.number(expire_ts);
-    request.number(touched_storage); request.number(clean_policy);
-    return tx_rpc('B', tx, request, reply); }
+    return tx_rollback_savepoint(tx, savepoint, expire_ts,
+        touched_storage, clean_policy); }
   int rollback_to_explicit_savepoint(transaction::ObTxDesc &tx,
                                              const common::ObString &savepoint,
                                              int64_t expire_ts) override {

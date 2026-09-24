@@ -426,6 +426,30 @@ int call_in_process_tx_create_savepoint(ObTxDesc &view, char operation,
   THIS_WORKER.set_timeout_ts(old_timeout);
   return ret;
 }
+int call_in_process_tx_rollback_savepoint(ObTxDesc &view, ObTxSEQ savepoint,
+    int64_t deadline, bool touched_storage, ObTxCleanPolicy policy)
+{
+  InProcessStorage *ctx = in_process_storage;
+  const StorageSpaceHandle space = active_worker_storage_space();
+  if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
+  if (!space.is_namespace() || ctx->ns != space.namespace_id()
+      || !ctx->writes->tx || ctx->writes->tx->get_tx_id() != view.get_tx_id()
+      || (policy != FAST_ROLLBACK && policy != ROLLBACK && policy != KEEP)) {
+    return OB_INVALID_ARGUMENT;
+  }
+  const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
+  auto *old_session = THIS_WORKER.get_session();
+  THIS_WORKER.set_session(&ctx->session);
+  // Write contexts publish their state into the native descriptor before rollback.
+  for (auto &entry : ctx->writes->writes) { entry.second->release_context(); }
+  auto *service = data_plane::query_transaction_service();
+  int ret = service ? service->rollback_to_implicit_savepoint(
+      *ctx->writes->tx, savepoint, deadline, touched_storage, policy) : OB_NOT_INIT;
+  if (!ret) { ret = view.sync_serialized_state_from(*ctx->writes->tx); }
+  THIS_WORKER.set_session(old_session);
+  THIS_WORKER.set_timeout_ts(old_timeout);
+  return ret;
+}
 int close_in_process_write(transaction::ObTxDesc &view, uint64_t handle)
 {
   InProcessStorage *ctx = in_process_storage;
