@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Single-process paths for the four namespace prototype gates."""
 from pathlib import Path
+import re
 import statistics
 import subprocess
 import time
@@ -520,6 +521,18 @@ def direct_probe(experiment):
         experiment.sql("INSERT INTO phase10.ivf_pq_rows VALUES " + pq_values, child)
         experiment.sql("CREATE VECTOR INDEX pq_embedding ON phase10.ivf_pq_rows(embedding) "
                        "WITH (distance=l2,type=ivf_pq,nlist=2,sample_per_nlist=5,m=2)", child)
+        pq_cache_rows = ()
+        for _ in range(18):
+            pq_cache_rows = experiment.sql(
+                "SELECT rowkey_vid_tablet_id,statistics FROM "
+                "oceanbase.__all_virtual_vector_index_info", log=False)
+            if any((tablet_id >> 32) & ((1 << 30) - 1) == child_namespace_id
+                   and re.search(r"cache_type=1;[^}]*count=40;", statistics)
+                   for tablet_id, statistics in pq_cache_rows):
+                break
+            time.sleep(2)
+        else:
+            raise AssertionError("child IVF_PQ background cache was not loaded: %r" % (pq_cache_rows,))
         nearest_pq = "SELECT id FROM phase10.ivf_pq_rows ORDER BY "
         nearest_pq += "l2_distance(embedding,[0,0,0,0]) APPROXIMATE LIMIT 1"
         pq_result = experiment.sql(nearest_pq, child)
@@ -528,7 +541,7 @@ def direct_probe(experiment):
             "SELECT rowkey_vid_tablet_id,statistics FROM "
             "oceanbase.__all_virtual_vector_index_info", log=False)
         assert any((tablet_id >> 32) & ((1 << 30) - 1) == child_namespace_id
-                   and "cache_type=1" in statistics and "count=40" in statistics
+                   and re.search(r"cache_type=1;[^}]*count=40;", statistics)
                    for tablet_id, statistics in pq_cache_rows), pq_cache_rows
         experiment.sql("CREATE TABLE phase10.ivf_sq8_rows(id INT PRIMARY KEY, embedding VECTOR(4))", child)
         experiment.sql("INSERT INTO phase10.ivf_sq8_rows VALUES " + pq_values, child)

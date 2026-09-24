@@ -61,7 +61,8 @@ int ObIvfCacheUtil::scan_and_write_ivf_cent_cache(ObPluginVectorIndexService &se
       LOG_WARN("failed to get centers", K(ret));
       cent_cache.reuse();
     } else {
-      if (cent_cache.is_full_cache()) {
+      // A ready IVF index may contain fewer PQ centers than the cache capacity.
+      if (cent_cache.get_count() > 0) {
         cent_cache.set_completed();
       } else {
         cent_cache.reuse();
