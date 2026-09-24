@@ -1,0 +1,9 @@
+[package]
+name = "seekdb-auto-config"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Durable instance parameter auto-configuration for seekdb"
+
+[lib]
+name = "seekdb_auto_config"

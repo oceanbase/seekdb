@@ -30,7 +30,11 @@ _SQL_NIO_INPUTS = [
     "Cargo.toml",
     "rust-toolchain.toml",
     "sql-nio/Cargo.toml",
-] + glob(["sql-nio/src/*.rs"])
+    "sql-nio/auto-config-cbindgen.toml",
+    "sql-nio/cbindgen.toml",
+    "sql-nio/build.rs",
+    "auto-config/Cargo.toml",
+] + glob(["sql-nio/src/*.rs", "auto-config/src/*.rs"])
 
 # Cargo remains the authoritative Rust dependency resolver used by the
 # upstream CMake build.  Keep the action local and outside the sandbox until
@@ -86,12 +90,13 @@ filegroup(
 
 cc_library(
     name = "sql_nio_headers",
-    hdrs = ["sql-nio/include/nio.h"],
+    hdrs = ["sql-nio/include/nio.h", "sql-nio/include/auto_config.h"],
     includes = ["sql-nio/include"],
     visibility = [
         "//src/oblib:__pkg__",
         "//src/observer:__pkg__",
         "//src/query:__pkg__",
+        "//src/share:__pkg__",
         "//unittest/oblib:__pkg__",
     ],
 )

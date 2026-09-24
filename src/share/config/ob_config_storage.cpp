@@ -17,236 +17,149 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_config_storage.h"
-#include "lib/guard/ob_unique_guard.h"
+#include "auto_config.h"
 #include "lib/oblog/ob_log.h"
+#include "lib/ob_errno.h"
 #include "lib/utility/ob_print_utils.h"
-#include "lib/time/ob_time_utility.h"
-#include "lib/guard/ob_unique_guard.h"
-#include "share/config/ob_system_config.h"
-#include "share/config/ob_config.h"
-#include "share/storage/ob_sqlite_connection_pool.h"
-#include "share/storage/ob_sqlite_table_schema.h"
-#include "lib/string/ob_string.h"  // ObString
-#include "lib/allocator/ob_allocator.h"  // ObIAllocator
-#include <string.h>
+
+#include <cstring>
+#include <cstdio>
 
 namespace oceanbase
 {
 namespace common
 {
 
-ObConfigStorage::ObConfigStorage()
-  : pool_(nullptr)
+namespace
 {
-}
+constexpr const char *AUTO_CONFIG_PATH = "./etc/seekdb.auto.conf";
 
-ObConfigStorage::~ObConfigStorage()
+struct LoadContext
 {
-}
+  std::vector<ObConfigStorage::Entry> &entries;
+  int ret;
+};
 
-int ObConfigStorage::init(share::ObSQLiteConnectionPool *pool)
+int append_entry(void *context, const char *name, const char *value, uint32_t line)
 {
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(pool_ = pool)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(create_table_if_not_exists())) {
-  }
-  if (OB_FAIL(ret)) {
-    pool_ = NULL;
-  }
-  return ret;
-}
-
-int ObConfigStorage::create_table_if_not_exists()
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(pool_)) {
-    ret = OB_NOT_INIT;
+  LoadContext &load = *static_cast<LoadContext *>(context);
+  if (nullptr == name || nullptr == value) {
+    load.ret = OB_INVALID_ARGUMENT;
+  } else if (std::strlen(name) >= OB_MAX_CONFIG_NAME_LEN ||
+             std::strlen(value) >= OB_MAX_CONFIG_VALUE_LEN) {
+    load.ret = OB_INVALID_CONFIG;
+    int ret = load.ret;
+    LOG_ERROR("auto-config entry exceeds parameter limits", K(ret), K(line), K(name));
   } else {
-    share::ObSQLiteConnectionGuard guard(pool_);
-    if (!guard) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_SYS_PARAMETER, nullptr))) {
-    }
+    load.entries.push_back({name, value, line});
+  }
+  return load.ret;
+}
+
+int report_error(const char *operation, const SeekdbAutoConfigError &error)
+{
+  int ret = OB_INVALID_CONFIG;
+  LOG_ERROR("auto-config operation failed", K(operation), "detail", error.message,
+            "line", error.line, "after_replace", error.after_replace);
+  std::fprintf(stderr, "seekdb auto-config %s failed: %s\n", operation, error.message);
+  std::fflush(stderr);
+  if (error.after_replace != 0) {
+    LOG_USER_ERROR(OB_INVALID_CONFIG,
+                   "auto-config file was replaced, but durability could not be confirmed");
+  } else {
+    LOG_USER_ERROR(OB_INVALID_CONFIG, error.message);
+  }
+  return ret;
+}
+} // namespace
+
+int ObConfigStorage::init()
+{
+  int ret = OB_SUCCESS;
+  SeekdbAutoConfigError error = {};
+  if (0 != seekdb_auto_config_supported(AUTO_CONFIG_PATH, &error)) {
+    ret = report_error("initialize", error);
+  } else {
+    inited_ = true;
   }
   return ret;
 }
 
-int ObConfigStorage::load_all_configs(ObSystemConfig &system_config)
+int ObConfigStorage::load_all_configs(std::vector<Entry> &entries)
 {
   int ret = OB_SUCCESS;
-  ObUniqueGuard<ObSystemConfigValue> config_value;
+  entries.clear();
   if (!is_inited()) {
     ret = OB_NOT_INIT;
-  } else if (OB_FAIL(ob_make_unique(config_value))) {
   } else {
-    const char *select_sql =
-      "SELECT name, data_type, value, info, section, scope, source, edit_level "
-      "FROM __all_sys_parameter;";
-
-    auto row_processor = [&](share::ObSQLiteRowReader &reader) -> int {
-      ObSystemConfigKey key;
-      ObSystemConfigValue &value = *config_value;
-      value.reset();
-
-      const char *name_str = reader.get_text();
-      if (nullptr != name_str) {
-        ObString name_val((int32_t)strlen(name_str), name_str);
-        key.set_name(name_val);
-      }
-
-      const char *data_type_str = reader.get_text();
-      const char *value_str = reader.get_text();
-      if (nullptr != value_str) {
-        ObString value_val((int32_t)strlen(value_str), value_str);
-        value.set_value(value_val);
-      }
-
-      const char *info_str = reader.get_text();
-      if (nullptr != info_str) {
-        ObString info_val((int32_t)strlen(info_str), info_str);
-        value.set_info(info_val);
-      }
-
-      const char *section_str = reader.get_text();
-      if (nullptr != section_str) {
-        ObString section_val((int32_t)strlen(section_str), section_str);
-        value.set_section(section_val);
-      }
-
-      const char *scope_str = reader.get_text();
-      if (nullptr != scope_str) {
-        ObString scope_val((int32_t)strlen(scope_str), scope_str);
-        value.set_scope(scope_val);
-      }
-
-      const char *source_str = reader.get_text();
-      if (nullptr != source_str) {
-        ObString source_val((int32_t)strlen(source_str), source_str);
-        value.set_source(source_val);
-      }
-
-      const char *edit_level_str = reader.get_text();
-      if (nullptr != edit_level_str) {
-        ObString edit_level_val((int32_t)strlen(edit_level_str), edit_level_str);
-        value.set_edit_level(edit_level_val);
-      }
-
-      if (OB_FAIL(system_config.update_value(key, value))) {
-      }
-      return ret;
-    };
-
-    share::ObSQLiteConnectionGuard guard(pool_);
-    if (!guard) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(guard->query(select_sql, nullptr, row_processor))) {
-      if (OB_ENTRY_NOT_EXIST != ret) {
-      } else {
-        ret = OB_SUCCESS; // No rows is acceptable
-        LOG_INFO("load all configs from sqlite success (empty)");
-      }
-    } else {
-      LOG_INFO("load all configs from sqlite success");
+    SeekdbAutoConfigError error = {};
+    LoadContext context{entries, OB_SUCCESS};
+    if (0 != seekdb_auto_config_load(AUTO_CONFIG_PATH, append_entry, &context, &error)) {
+      ret = OB_SUCCESS != context.ret ? context.ret : report_error("load", error);
     }
   }
   return ret;
 }
 
-int ObConfigStorage::get_config_value(const char *name, ObString &value, common::ObIAllocator &allocator)
+int ObConfigStorage::get_config_value(
+    const char *name, ObString &value, common::ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
   value.reset();
-  
-  if (!is_inited()) {
-    ret = OB_NOT_INIT;
-  } else if (OB_ISNULL(name)) {
+  std::vector<Entry> entries;
+  if (nullptr == name) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(load_all_configs(entries))) {
   } else {
-    // Use load_all_configs interface to load configs from table
-    ObSystemConfig system_config;
-    if (OB_FAIL(system_config.init())) {
-    } else if (OB_FAIL(load_all_configs(system_config))) {
-    } else {
-      // Find config value from system_config
-      ObSystemConfigKey key;
-      key.set_name(ObString::make_string(name));
-      const ObSystemConfigValue *pvalue = nullptr;
-      
-      if (OB_FAIL(system_config.find(key, pvalue))) {
-        if (OB_SEARCH_NOT_FOUND == ret) {
-          ret = OB_ENTRY_NOT_EXIST;
+    ret = OB_ENTRY_NOT_EXIST;
+    for (const Entry &entry : entries) {
+      if (entry.name == name && !entry.value.empty()) {
+        char *buffer = static_cast<char *>(allocator.alloc(entry.value.size()));
+        if (nullptr == buffer) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
         } else {
+          MEMCPY(buffer, entry.value.data(), entry.value.size());
+          value.assign_ptr(buffer, static_cast<int32_t>(entry.value.size()));
+          ret = OB_SUCCESS;
         }
-      } else if (OB_ISNULL(pvalue)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        const char *config_value_str = pvalue->value();
-        if (OB_ISNULL(config_value_str) || 0 == strlen(config_value_str)) {
-          ret = OB_ENTRY_NOT_EXIST;
-        } else {
-          // Allocate memory from allocator and copy the value to ensure lifetime
-          int64_t value_len = strlen(config_value_str);
-          char *buf = static_cast<char *>(allocator.alloc(value_len));
-          if (OB_ISNULL(buf)) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-          } else {
-            MEMCPY(buf, config_value_str, value_len);
-            value.assign_ptr(buf, static_cast<int32_t>(value_len));
-          }
-        }
+        break;
       }
     }
   }
   return ret;
 }
 
-int ObConfigStorage::upsert_config(
-    const char *name,
-    const char *data_type,
-    const char *value,
-    const char *info,
-    const char *section,
-    const char *scope,
-    const char *source,
-    const char *edit_level)
+int ObConfigStorage::save_config(const char *name, const char *value)
 {
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     ret = OB_NOT_INIT;
+  } else if (nullptr == name || nullptr == value) {
+    ret = OB_INVALID_ARGUMENT;
   } else {
-    const char *upsert_sql =
-      "INSERT OR REPLACE INTO __all_sys_parameter "
-      "(name, data_type, value, info, "
-      " section, scope, source, edit_level, config_version, gmt_modified) "
-      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?);";
-
-    int64_t current_time = ObTimeUtility::current_time();
-
-    auto binder = [&](share::ObSQLiteBinder &b) -> int {
-      b.bind_text(name);
-      b.bind_text(data_type);
-      b.bind_text(value);
-      b.bind_text(info);
-      b.bind_text(section);
-      b.bind_text(scope);
-      b.bind_text(source);
-      b.bind_text(edit_level);
-      b.bind_int64(current_time);
-      return OB_SUCCESS;
-    };
-
-    share::ObSQLiteConnectionGuard guard(pool_);
-    if (!guard) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(guard->execute(upsert_sql, binder))) {
-    } else {
-      LOG_INFO("upsert config to sqlite success", K(name));
+    SeekdbAutoConfigError error = {};
+    if (0 != seekdb_auto_config_update(AUTO_CONFIG_PATH, name, value, 0, &error)) {
+      ret = report_error("save", error);
     }
   }
   return ret;
 }
 
+int ObConfigStorage::reset_config(const char *name)
+{
+  int ret = OB_SUCCESS;
+  if (!is_inited()) {
+    ret = OB_NOT_INIT;
+  } else if (nullptr == name) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    SeekdbAutoConfigError error = {};
+    if (0 != seekdb_auto_config_update(AUTO_CONFIG_PATH, name, nullptr, 1, &error)) {
+      ret = report_error("reset", error);
+    }
+  }
+  return ret;
+}
 
 } // namespace common
 } // namespace oceanbase

@@ -23,6 +23,18 @@ fn main() {
         .expect("cbindgen failed")
         .write_to_file(&out);
 
+    let auto_config = crate_dir.join("include").join("auto_config.h");
+    let auto_config_config =
+        cbindgen::Config::from_file(crate_dir.join("auto-config-cbindgen.toml"))
+            .expect("auto-config cbindgen config failed");
+    cbindgen::Builder::new()
+        .with_src(crate_dir.join("src").join("auto_config_ffi.rs"))
+        .with_config(auto_config_config)
+        .generate()
+        .expect("auto-config cbindgen failed")
+        .write_to_file(&auto_config);
+
     println!("cargo:rerun-if-changed=src");
     println!("cargo:rerun-if-changed=cbindgen.toml");
+    println!("cargo:rerun-if-changed=auto-config-cbindgen.toml");
 }

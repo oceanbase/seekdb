@@ -54,6 +54,7 @@ int ObServerReloadConfig::operator()()
     if (OB_TMP_FAIL(ObReloadConfig::operator()())) {
     }
     if (OB_TMP_FAIL(OBSERVER.reload_config())) {
+      ret = tmp_ret;
     }
     if (OB_TMP_FAIL(OBSERVER.get_net_frame().reload_config())) {
     }

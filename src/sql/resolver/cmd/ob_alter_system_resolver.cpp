@@ -1064,8 +1064,11 @@ int ObResetConfigResolver::resolve(const ParseNode &parse_tree)
                     if (OB_ISNULL(config_item) || OB_ISNULL(*config_item)) {
                       ret = OB_ERR_SYS_CONFIG_UNKNOWN;
                     } else if (OB_FAIL(item.value_.assign((*config_item)->default_str()))) {
-                    } else if (OB_FAIL(alter_system_set_reset_add_config_item(
-                                   stmt->get_rpc_arg(), item))) {
+                    } else {
+                      item.is_reset_ = true;
+                      if (OB_FAIL(alter_system_set_reset_add_config_item(
+                                     stmt->get_rpc_arg(), item))) {
+                      }
                     }
                   }
                 }
@@ -1165,6 +1168,8 @@ int ObAlterSystemResetResolver::resolve(const ParseNode &parse_tree)
               if (OB_ISNULL(config_item) || OB_ISNULL(*config_item)) {
                 ret = OB_ERR_SYS_CONFIG_UNKNOWN;
               } else if (OB_FAIL(item.value_.assign((*config_item)->default_str()))) {
+              } else {
+                item.is_reset_ = true;
               }
               if (OB_SUCC(ret)) {
                 if (OB_FAIL(alter_system_set_reset_add_config_item(

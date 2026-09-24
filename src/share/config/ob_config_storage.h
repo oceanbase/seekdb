@@ -17,12 +17,12 @@
 #ifndef OCEANBASE_SHARE_CONFIG_OB_CONFIG_STORAGE_H_
 #define OCEANBASE_SHARE_CONFIG_OB_CONFIG_STORAGE_H_
 
-#include "share/config/ob_system_config.h"
-#include "share/config/ob_system_config_key.h"
-#include "share/config/ob_system_config_value.h"
-#include "share/storage/ob_sqlite_connection_pool.h"
+#include <string>
+#include <vector>
 
-struct sqlite3_stmt;
+#include "lib/string/ob_string.h"
+#include "lib/allocator/ob_allocator.h"
+
 namespace oceanbase
 {
 namespace common
@@ -31,31 +31,26 @@ namespace common
 class ObConfigStorage
 {
 public:
-  ObConfigStorage();
-  virtual ~ObConfigStorage();
+  struct Entry
+  {
+    std::string name;
+    std::string value;
+    uint32_t line;
+  };
 
-  // Initialize with shared connection pool instance
-  int init(share::ObSQLiteConnectionPool *pool);
+  ObConfigStorage() : inited_(false) {}
+  ~ObConfigStorage() = default;
 
-  int load_all_configs(ObSystemConfig &system_config);
+  int init();
+  int load_all_configs(std::vector<Entry> &entries);
   int get_config_value(const char *name, ObString &value, common::ObIAllocator &allocator);
-  int upsert_config(
-      const char *name,
-      const char *data_type,
-      const char *value,
-      const char *info,
-      const char *section,
-      const char *scope,
-      const char *source,
-      const char *edit_level);
+  int save_config(const char *name, const char *value);
+  int reset_config(const char *name);
 
-  bool is_inited() const { return nullptr != pool_; }
+  bool is_inited() const { return inited_; }
 
 private:
-  // Create table if not exists
-  int create_table_if_not_exists();
-
-  share::ObSQLiteConnectionPool *pool_;
+  bool inited_;
   DISALLOW_COPY_AND_ASSIGN(ObConfigStorage);
 };
 

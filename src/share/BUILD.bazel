@@ -539,11 +539,11 @@ seekdb_semantic_unity_cc_library(
         ":config_parser_interface",
         ":config_value_support",
         ":core_types",
-        ":sqlite_storage_interface",
         ":tenant_runtime",
         "//src/oblib:oblib_compression",
         "//src/oblib:oblib_foundation",
         "//src/oblib:oblib_mysql_client_domain",
+        "//rust:sql_nio_headers",
     ],
     implementation_deps = [
         ":cluster_version_interface",
