@@ -129,6 +129,63 @@ def legacy_template_probe(experiment):
         pass
 
 
+def legacy_template_resume_probe(binary):
+    experiment = BootstrapExperiment(binary, "template_resume_alias", prototype=6)
+    try:
+        experiment.start()
+        for name in ("legacy_resume_a", "legacy_resume_b"):
+            experiment.sql(f"CREATE DATABASE {name}")
+            experiment.sql(f"CREATE TABLE {name}.t(id INT PRIMARY KEY)")
+            experiment.sql(f"INSERT INTO {name}.t VALUES(1)")
+        experiment.sql("CREATE USER 'legacy_resume_login'@'%' IDENTIFIED BY 'test-pass'")
+        experiment.sql("CREATE PROCEDURE mysql.legacy_resume_proc() SELECT 11")
+        experiment.sql("DELETE FROM __fork_proto_meta.namespaces WHERE name='__template__'")
+        experiment.sql("FORK NAMESPACE template_staging FROM ns1")
+        staging_id = experiment.sql(
+            "SELECT namespace_id FROM __fork_proto_meta.namespaces "
+            "WHERE name='template_staging'")[0][0]
+        with connect(experiment, "root@template_staging") as staging:
+            experiment.sql("DROP DATABASE legacy_resume_a", staging)
+        experiment.sql(
+            "UPDATE __fork_proto_meta.namespaces SET name='__template_build__' "
+            "WHERE name='template_staging'")
+        experiment.sql("UPDATE __fork_proto_meta.namespaces SET name='a' WHERE namespace_id=1")
+        experiment.connection.close()
+        experiment.connection = None
+        experiment.proc.terminate()
+        experiment.proc.wait(timeout=20)
+        experiment.start()
+        assert experiment.sql(
+            "SELECT namespace_id,parent_namespace FROM __fork_proto_meta.namespaces "
+            "WHERE name='__template__'") == ((staging_id, 1),)
+        assert experiment.sql("SELECT id FROM legacy_resume_a.t") == ((1,),)
+        assert experiment.sql("SELECT id FROM legacy_resume_b.t") == ((1,),)
+        experiment.sql("CREATE NAMESPACE resumed_empty")
+        with connect(experiment, "root@resumed_empty", database="test") as empty:
+            assert "legacy_resume_a" not in {
+                row[0] for row in experiment.sql("SHOW DATABASES", empty)}
+            assert "legacy_resume_b" not in {
+                row[0] for row in experiment.sql("SHOW DATABASES", empty)}
+            assert experiment.sql(
+                "SELECT user_name FROM oceanbase.__all_user "
+                "WHERE user_name='legacy_resume_login'", empty) == ()
+            assert experiment.sql(
+                "SELECT routine_name FROM oceanbase.__all_routine "
+                "WHERE routine_name='legacy_resume_proc'", empty) == ()
+            experiment.sql("CREATE TABLE test.owned(id INT PRIMARY KEY)", empty)
+            experiment.sql("INSERT INTO test.owned VALUES(7)", empty)
+        experiment.connection.close()
+        experiment.connection = None
+        experiment.proc.terminate()
+        experiment.proc.wait(timeout=20)
+        experiment.start()
+        with connect(experiment, "root@resumed_empty", database="test") as empty:
+            assert experiment.sql("SELECT id FROM owned", empty) == ((7,),)
+        experiment.record("template_resume_alias", staging_id=staging_id, restart=True)
+    finally:
+        experiment.close()
+
+
 def bootstrap_probe(experiment):
     # mysqltest regressions: select_basic, column_alias, view,
     # table_column_related_views, create_using_type, special_stmt.
@@ -207,8 +264,8 @@ def bootstrap_probe(experiment):
             pass
         else:
             raise AssertionError(f"reserved or retired syntax succeeded: {statement}")
-    experiment.record("PASS", case="inprocess_bootstrap", one_process=True,
-                      child_login=True, inherited_read=True, empty_namespace=True)
+    experiment.record("bootstrap_checks", one_process=True, child_login=True,
+                      inherited_read=True, empty_namespace=True)
 
 
 def sql_probe(experiment):
@@ -514,5 +571,10 @@ def run_case(binary, case):
         experiment.start()
         {"bootstrap": bootstrap_probe, "sql": sql_probe,
          "direct": direct_probe, "tls": tls_probe}[case](experiment)
+        if case == "bootstrap":
+            legacy_template_resume_probe(binary)
+            experiment.record("PASS", case="inprocess_bootstrap", one_process=True,
+                              child_login=True, inherited_read=True, empty_namespace=True,
+                              template_resume=True, legacy_alias=True)
     finally:
         experiment.close()
