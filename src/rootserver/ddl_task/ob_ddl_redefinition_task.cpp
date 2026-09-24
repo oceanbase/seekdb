@@ -318,8 +318,7 @@ int ObDDLRedefinitionTask::check_table_empty(const ObDDLTaskStatus next_task_sta
   int ret = OB_SUCCESS;
   bool need_check_table_empty = false;
   bool is_local_check_end = false;
-  ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
-      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = task_root_service();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableRedefinitionTask has not been inited", K(ret));
@@ -702,9 +701,7 @@ int ObDDLRedefinitionTask::add_constraint_ddl_task(const int64_t constraint_id)
     const ObTableSchema *table_schema = nullptr;
     AlterTableSchema &alter_table_schema = alter_table_arg.alter_table_schema_;
     const ObConstraint *constraint = nullptr;
-    ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
-        ? context_.root_service_
-        : ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+    ObLocalManagementService *local_management_service = task_root_service();
     const ObDatabaseSchema *database_schema = nullptr;
     if (OB_UNLIKELY(!is_inited_)) {
       ret = OB_NOT_INIT;
@@ -801,9 +798,7 @@ int ObDDLRedefinitionTask::add_fk_ddl_task(const int64_t fk_id)
     ObDDLEventInfo ddl_event_info(GCTX.self_addr(), sub_task_trace_id_);
     AlterTableSchema &alter_table_schema = alter_table_arg.alter_table_schema_;
     ObConstraint *constraint = nullptr;
-    ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
-        ? context_.root_service_
-        : ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+    ObLocalManagementService *local_management_service = task_root_service();
     const ObDatabaseSchema *database_schema = nullptr;
     if (OB_UNLIKELY(!is_inited_)) {
       ret = OB_NOT_INIT;
@@ -1039,9 +1034,7 @@ int ObDDLRedefinitionTask::sync_auto_increment_position()
 int ObDDLRedefinitionTask::modify_autoinc(const ObDDLTaskStatus next_task_status)
 {
   int ret = OB_SUCCESS;
-  ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
-      ? context_.root_service_
-      : ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = task_root_service();
   bool is_update_autoinc_end = false;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
@@ -1176,9 +1169,7 @@ int ObDDLRedefinitionTask::cleanup_impl()
 int ObDDLRedefinitionTask::finish()
 {
   int ret = OB_SUCCESS;
-  ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
-      ? context_.root_service_
-      : ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = task_root_service();
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *data_table_schema = nullptr;
   ObSArray<uint64_t> objs;
@@ -1193,6 +1184,9 @@ int ObDDLRedefinitionTask::finish()
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLRedefinitionTask has not been inited", K(ret));
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_ISNULL(local_management_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ddl task root service is unavailable", KR(ret), K(context_.namespace_id_));
   } else if (OB_FAIL(DDL_SIM(task_id_, REDEF_TASK_FINISH_FAILED))) {
     LOG_WARN("ddl sim failure", K(ret), K(task_id_));
   } else if (snapshot_version_ > 0 && OB_FAIL(ObDDLTaskUtil::release_snapshot(

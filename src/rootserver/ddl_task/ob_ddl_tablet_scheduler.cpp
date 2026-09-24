@@ -34,7 +34,7 @@ using namespace oceanbase::sql;
 ObDDLTabletScheduler::ObDDLTabletScheduler()
   : is_inited_(false), table_id_(OB_INVALID_ID), ref_data_table_id_(OB_INVALID_ID),
     task_id_(OB_INVALID_ID), parallelism_(0), snapshot_version_(0), trace_id_(),
-    lock_(), local_management_service_(nullptr), schema_service_(nullptr), sql_proxy_(nullptr),
+    lock_(), schema_service_(nullptr), sql_proxy_(nullptr),
     all_tablets_(), running_tablets_(),
     running_execution_id_(-1), tablet_id_to_data_size_(), tablet_id_to_data_row_cnt_(),
     tablet_id_to_execution_id_map_()
@@ -65,9 +65,6 @@ int ObDDLTabletScheduler::init(ObMultiVersionSchemaService &schema_service,
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret), K(is_inited_));
-  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
-    ret = OB_ERR_SYS;
-    LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("ddl service not started", KR(ret));

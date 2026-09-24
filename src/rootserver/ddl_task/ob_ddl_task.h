@@ -624,6 +624,7 @@ public:
   const ObDDLTaskContext &context() const { return context_; }
   common::ObMySQLProxy *task_sql_proxy() const;
   share::schema::ObMultiVersionSchemaService *task_schema_service() const;
+  ObLocalManagementService *task_root_service() const;
   virtual int init(const ObDDLTaskRecord &task_record) { return common::OB_NOT_IMPLEMENT; }
   virtual int on_child_task_finish(const uint64_t child_task_key, const int ret_code) { return common::OB_NOT_SUPPORTED; }
   virtual int process() { return OB_NOT_SUPPORTED; }

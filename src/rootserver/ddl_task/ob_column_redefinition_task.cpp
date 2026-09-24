@@ -139,8 +139,7 @@ int ObColumnRedefinitionTask::init(const ObDDLTaskRecord &task_record)
 int ObColumnRedefinitionTask::send_sql_local_build_request()
 {
   int ret = OB_SUCCESS;
-  ObLocalManagementService *service = context_.root_service_ != nullptr
-      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>();
+  ObLocalManagementService *service = task_root_service();
   int64_t new_execution_id = 0;
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *source_schema = nullptr;
@@ -241,8 +240,7 @@ int ObColumnRedefinitionTask::update_complete_sstable_job_status(const common::O
 int ObColumnRedefinitionTask::copy_table_indexes()
 {
   int ret = OB_SUCCESS;
-  ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
-      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = task_root_service();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObColumnRedefinitionTask has not been inited", K(ret));
@@ -391,8 +389,7 @@ int ObColumnRedefinitionTask::copy_table_constraints()
 {
   int ret = OB_SUCCESS;
   int64_t rpc_timeout = 0;
-  ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
-      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = task_root_service();
   const ObTableSchema *table_schema = nullptr;
   ObSchemaGetterGuard schema_guard;
   if (OB_UNLIKELY(!is_inited_)) {
@@ -442,8 +439,7 @@ int ObColumnRedefinitionTask::copy_table_foreign_keys()
 {
   int ret = OB_SUCCESS;
   int64_t rpc_timeout = 0;
-  ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
-      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = task_root_service();
   const ObSimpleTableSchemaV2 *table_schema = nullptr;
   ObSchemaGetterGuard schema_guard;
   if (OB_UNLIKELY(!is_inited_)) {
@@ -587,6 +583,7 @@ int ObColumnRedefinitionTask::copy_table_dependent_objects(const ObDDLTaskStatus
 int ObColumnRedefinitionTask::take_effect(const ObDDLTaskStatus next_task_status)
 {
   int ret = OB_SUCCESS;
+  ObLocalManagementService *root_service = task_root_service();
   int64_t rpc_timeout = 0;
   ObSArray<uint64_t> objs;
   alter_table_arg_.ddl_task_type_ = share::MAKE_DDL_TAKE_EFFECT_TASK;
@@ -602,6 +599,9 @@ int ObColumnRedefinitionTask::take_effect(const ObDDLTaskStatus next_task_status
     ret = OB_NOT_INIT;
     LOG_WARN("ObColumnRedefinitionTask has not been inited", K(ret));
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_ISNULL(root_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ddl task root service is unavailable", KR(ret), K(context_.namespace_id_));
   } else if (OB_FAIL(DDL_SIM(task_id_, DDL_TASK_TAKE_EFFECT_FAILED))) {
   } else if (OB_FAIL(task_schema_service()->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, table_schema))) {
@@ -633,9 +633,7 @@ int ObColumnRedefinitionTask::take_effect(const ObDDLTaskStatus next_task_status
   } else if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
                  *task_schema_service(), target_object_id_, rpc_timeout))) {
   } else if (OB_FAIL(rootserver::local_ddl_serial_call([&] {
-               ObLocalManagementService *service = context_.root_service_ != nullptr
-                   ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>();
-               return service->execute_ddl_task(alter_table_arg_, objs);
+               return root_service->execute_ddl_task(alter_table_arg_, objs);
              }))) {
     LOG_WARN("fail to swap original and hidden table state", K(ret));
     if (OB_TIMEOUT == ret) {

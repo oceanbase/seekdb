@@ -531,8 +531,7 @@ int ObConstraintTask::init(const ObDDLTaskRecord &task_record)
   const int64_t schema_version = task_record.schema_version_;
   task_type_ = task_record.ddl_type_;
   ObSchemaGetterGuard schema_guard;
-  ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
-      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = task_root_service();
   const ObTableSchema *table_schema = nullptr;
   int64_t pos = 0;
   if (OB_UNLIKELY(is_inited_)) {

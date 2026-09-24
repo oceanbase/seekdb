@@ -48,11 +48,11 @@ int ObIndexSSTableBuildTask::process()
 {
   int ret = OB_SUCCESS;
   ObMultiVersionSchemaService *schema_service = context_.schema_service_ != nullptr
-      ? context_.schema_service_ : &ObMultiVersionSchemaService::get_instance();
+      ? context_.schema_service_ : context_.namespace_id_ == 1 ? &ObMultiVersionSchemaService::get_instance() : nullptr;
   ObMySQLProxy *sql_proxy = context_.sql_proxy_ != nullptr
-      ? context_.sql_proxy_ : GCTX.sql_proxy_;
+      ? context_.sql_proxy_ : context_.namespace_id_ == 1 ? GCTX.sql_proxy_ : nullptr;
   ObMySQLProxy *ddl_proxy = context_.ddl_proxy_ != nullptr
-      ? context_.ddl_proxy_ : GCTX.ddl_sql_proxy_;
+      ? context_.ddl_proxy_ : context_.namespace_id_ == 1 ? GCTX.ddl_sql_proxy_ : nullptr;
   ObArenaAllocator arena("index_sst_build");
   ObTraceIdGuard trace_id_guard(trace_id_);
   ObDDLEventInfo ddl_event_info(GCTX.self_addr());
@@ -83,6 +83,10 @@ int ObIndexSSTableBuildTask::process()
   }
 #endif
   if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(schema_service) || OB_ISNULL(sql_proxy) || OB_ISNULL(ddl_proxy)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("index build namespace services are unavailable", KR(ret), K(context_.namespace_id_),
+             KP(schema_service), KP(sql_proxy), KP(ddl_proxy));
   } else if (OB_FAIL(schema_service->get_runtime_schema_guard(
       schema_guard))) {
   } else if (OB_FAIL(schema_guard.check_formal_guard())) {
@@ -417,9 +421,7 @@ int ObIndexBuildTask::init(const ObDDLTaskRecord &task_record)
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
-  } else if (OB_ISNULL(local_management_service_ = context_.root_service_ != nullptr
-      ? context_.root_service_
-      : ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
+  } else if (OB_ISNULL(local_management_service_ = task_root_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("local_management_service is null", KR(ret), KP(local_management_service_));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {

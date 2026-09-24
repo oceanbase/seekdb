@@ -59,6 +59,13 @@ def before_restart(experiment, child):
     assert sql("SELECT id,w FROM phase10.redef_fts_col "
                "WHERE MATCH(body) AGAINST('alpha')") == ((1, 4),)
 
+    sql("CREATE TABLE phase10.part_local(id INT PRIMARY KEY, k INT) "
+        "PARTITION BY HASH(id) PARTITIONS 2")
+    sql("INSERT INTO phase10.part_local VALUES(1,11),(2,22),(3,33)")
+    sql("CREATE INDEX idx_k_local ON phase10.part_local(k) LOCAL")
+    assert sql("SELECT id,k FROM phase10.part_local FORCE INDEX(idx_k_local) "
+               "WHERE k >= 22 ORDER BY k") == ((2, 22), (3, 33))
+
     sql("CREATE TABLE phase10.repartition(id INT PRIMARY KEY, v INT)")
     sql("INSERT INTO phase10.repartition VALUES(1,11),(2,22)")
     sql("ALTER TABLE phase10.repartition PARTITION BY HASH(id) PARTITIONS 3")
@@ -118,6 +125,8 @@ def after_restart(experiment, child):
                "WHERE MATCH(body) AGAINST('gamma')") == ((3, "9"),)
     assert sql("SELECT id,w FROM phase10.redef_fts_col "
                "WHERE MATCH(body) AGAINST('alpha')") == ((1, 4),)
+    assert sql("SELECT id,k FROM phase10.part_local FORCE INDEX(idx_k_local) "
+               "WHERE k >= 22 ORDER BY k") == ((2, 22), (3, 33))
     assert sql("SELECT id,k FROM phase10.trunc_global FORCE INDEX(idx_k) ORDER BY id") == (
         (5, 5), (120, 3))
     assert sql("SELECT id,k FROM phase10.trunc_inherited FORCE INDEX(idx_k) ORDER BY id") == (

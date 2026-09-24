@@ -83,8 +83,7 @@ int ObDropLobTask::init(
   if (OB_UNLIKELY(!task_record.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", KR(ret), K(task_record));
-  } else if (OB_ISNULL(local_management_service_ = context_.root_service_ != nullptr
-      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>())) {
+  } else if (OB_ISNULL(local_management_service_ = task_root_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, local management service is null", KR(ret));
   } else {

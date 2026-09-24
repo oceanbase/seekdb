@@ -164,11 +164,7 @@ int ObDDLTaskUtil::construct_domain_index_arg(ObSchemaGetterGuard &schema_guard,
     ObDDLType &ddl_type)
 {
   int ret = OB_SUCCESS;
-  rootserver::ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
-  if (OB_ISNULL(local_management_service)) {
-    ret = OB_ERR_SYS;
-    LOG_WARN("error sys, local management service must not be nullptr", K(ret));
-  } else if (OB_ISNULL(table_schema) || OB_ISNULL(index_schema)) {
+  if (OB_ISNULL(table_schema) || OB_ISNULL(index_schema)) {
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, table schema must not be nullptr", K(ret));
   } else if (index_schema->is_vec_hnsw_index()) {
@@ -674,7 +670,9 @@ int ObDDLTaskUtil::obtain_snapshot(
           FLOG_INFO("found a persisted snapshot in inner table", "task_id", task->get_task_id(), K(persisted_snapshot), K(new_fetched_snapshot));
         } else if (OB_FAIL(hold_snapshot(trans, task, table_id, target_table_id,
                                          task->context().root_service_ != nullptr ? task->context().root_service_ :
-                                             ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>(),
+                                             task->context().namespace_id_ == 1
+                                                 ? ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()
+                                                 : nullptr,
                                          new_fetched_snapshot))) {
           if (OB_SNAPSHOT_DISCARDED == ret) {
             wait_trans_ctx->reset();

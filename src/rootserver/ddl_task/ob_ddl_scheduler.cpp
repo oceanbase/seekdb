@@ -2516,9 +2516,10 @@ int ObDDLScheduler::recover_task(const ObDDLTaskContext &context)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  ObMySQLProxy *sql_proxy = context.sql_proxy_ != nullptr ? context.sql_proxy_ : GCTX.sql_proxy_;
+  ObMySQLProxy *sql_proxy = context.sql_proxy_ != nullptr
+      ? context.sql_proxy_ : context.namespace_id_ == 1 ? GCTX.sql_proxy_ : nullptr;
   ObMultiVersionSchemaService *schema_service = context.schema_service_ != nullptr
-      ? context.schema_service_ : GCTX.schema_service_;
+      ? context.schema_service_ : context.namespace_id_ == 1 ? GCTX.schema_service_ : nullptr;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
@@ -2691,6 +2692,12 @@ int ObDDLScheduler::schedule_ddl_task(const ObDDLTaskRecord &record)
   if (OB_UNLIKELY(!record.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ddl task record is invalid", K(ret), K(record));
+  } else if (record.context_.namespace_id_ > 1
+      && (OB_ISNULL(record.context_.schema_service_)
+          || OB_ISNULL(record.context_.sql_proxy_)
+          || OB_ISNULL(record.context_.root_service_))) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("child ddl task context is incomplete", KR(ret), K(record.context_.namespace_id_), K(record));
   } else if (OB_FAIL(DDL_SIM(record.task_id_, SCHEDULE_DDL_TASK_FAILED))) {
   } else {
     switch (record.ddl_type_) {

@@ -178,8 +178,7 @@ int ObVecIndexBuildTask::init(const ObDDLTaskRecord &task_record)
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_ISNULL(local_management_service_ = context_.root_service_ != nullptr
-      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>())) {
+  } else if (OB_ISNULL(local_management_service_ = task_root_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {

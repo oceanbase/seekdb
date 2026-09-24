@@ -537,6 +537,13 @@ share::schema::ObMultiVersionSchemaService *ObDDLTask::task_schema_service() con
       : context_.namespace_id_ == 1 ? GCTX.schema_service_ : nullptr;
 }
 
+ObLocalManagementService *ObDDLTask::task_root_service() const
+{
+  return context_.root_service_ != nullptr ? context_.root_service_
+      : context_.namespace_id_ == 1
+          ? ::oceanbase::share::server_service<ObLocalManagementService>() : nullptr;
+}
+
 int ObDDLTask::convert_to_record(
     ObDDLTaskRecord &task_record,
     common::ObIAllocator &allocator)
@@ -899,7 +906,8 @@ int ObDDLTask::batch_release_snapshot(
   int64_t timeout = 0;
   ObLocalManagementService *root_service = context_.root_service_ != nullptr
       ? context_.root_service_
-      : ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+      : context_.namespace_id_ == 1
+          ? ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>() : nullptr;
   if (OB_ISNULL(task_sql_proxy())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret));
@@ -1362,7 +1370,7 @@ int ObDDLWaitTransEndCtx::check_schema_trans_end(
     arg.need_wait_trans_end_ = need_wait_trans_end;
     arg.ddl_task_id_ = ddl_task_id_;
     ObIRootserverLocalRuntime *runtime = context_.local_runtime_ != nullptr
-        ? context_.local_runtime_ : rootserver_local_runtime();
+        ? context_.local_runtime_ : context_.namespace_id_ == 1 ? rootserver_local_runtime() : nullptr;
     auto schema_fn = [runtime](const obcall::ObCheckSchemaVersionElapsedArg &a,
                         obcall::ObCheckSchemaVersionElapsedResult &r) -> int {
       return runtime == nullptr ? OB_NOT_INIT : runtime->check_schema_version_elapsed(a, r);
@@ -1384,11 +1392,12 @@ int ObDDLWaitTransEndCtx::do_write_defensive(const int64_t ddl_task_id,
   int ret = OB_SUCCESS;
   rootserver::ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
       ? context_.root_service_
-      : ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+      : context_.namespace_id_ == 1
+          ? ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>() : nullptr;
   ObIRootserverLocalRuntime *runtime = context_.local_runtime_ != nullptr
-      ? context_.local_runtime_ : rootserver_local_runtime();
+      ? context_.local_runtime_ : context_.namespace_id_ == 1 ? rootserver_local_runtime() : nullptr;
   ObMySQLProxy *sql_proxy = context_.sql_proxy_ != nullptr
-      ? context_.sql_proxy_ : GCTX.sql_proxy_;
+      ? context_.sql_proxy_ : context_.namespace_id_ == 1 ? GCTX.sql_proxy_ : nullptr;
   ObMySQLTransaction trans;
   int64_t timeout_us = 0;
   int64_t cur_task_status = 0;
@@ -1446,7 +1455,7 @@ int ObDDLWaitTransEndCtx::check_sstable_trans_end(const int64_t sstable_exist_ts
     arg.sstable_exist_ts_ = sstable_exist_ts;
     arg.ddl_task_id_ = ddl_task_id_;
     ObIRootserverLocalRuntime *runtime = context_.local_runtime_ != nullptr
-        ? context_.local_runtime_ : rootserver_local_runtime();
+        ? context_.local_runtime_ : context_.namespace_id_ == 1 ? rootserver_local_runtime() : nullptr;
     auto modify_fn = [runtime](const obcall::ObCheckModifyTimeElapsedArg &a,
                         obcall::ObCheckModifyTimeElapsedResult &r) -> int {
       return runtime == nullptr ? OB_NOT_INIT : runtime->check_modify_time_elapsed(a, r);
@@ -1649,6 +1658,8 @@ int ObDDLWaitColumnChecksumCtx::init(
     const uint64_t data_format_version)
 {
   int ret = OB_SUCCESS;
+  ObMultiVersionSchemaService *schema_service = context_.schema_service_ != nullptr
+      ? context_.schema_service_ : context_.namespace_id_ == 1 ? GCTX.schema_service_ : nullptr;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret), K(is_inited_));
@@ -1673,7 +1684,10 @@ int ObDDLWaitColumnChecksumCtx::init(
     tmp_stat.col_checksum_stat_ = CCS_INVALID;
     tmp_stat.execution_id_ = execution_id;
     tmp_stat.snapshot_ = -1;
-    if (OB_FAIL(tablet_set.create(1023))) {
+    if (OB_ISNULL(schema_service)) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("checksum task schema service is unavailable", KR(ret), K(context_.namespace_id_));
+    } else if (OB_FAIL(tablet_set.create(1023))) {
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < NEED_CALC_CHECKSUM_COUNT; ++i) {
       const uint64_t cur_table_id =  0 == i ? source_table_id : target_table_id;
@@ -1681,9 +1695,7 @@ int ObDDLWaitColumnChecksumCtx::init(
       if (OB_UNLIKELY(cur_table_id <= 0)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid table id", K(ret), K(i), K(cur_table_id));
-      } else if (OB_FAIL(ObDDLUtil::get_tablets(
-              *(context_.schema_service_ != nullptr ? context_.schema_service_ : GCTX.schema_service_),
-              cur_table_id, tablet_ids))) {
+      } else if (OB_FAIL(ObDDLUtil::get_tablets(*schema_service, cur_table_id, tablet_ids))) {
       } else if (OB_UNLIKELY(tablet_ids.count() <= 0)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get invalid tablet ids", K(ret), K(tablet_ids.count()));
@@ -1969,7 +1981,7 @@ int ObDDLWaitColumnChecksumCtx::send_calc_rpc(int64_t &send_succ_count)
     const ObTableSchema *source_schema = nullptr;
     const ObTableSchema *target_schema = nullptr;
     ObMultiVersionSchemaService *schema_service = context_.schema_service_ != nullptr
-        ? context_.schema_service_ : GCTX.schema_service_;
+        ? context_.schema_service_ : context_.namespace_id_ == 1 ? GCTX.schema_service_ : nullptr;
     if (OB_ISNULL(schema_service)) {
       ret = OB_NOT_INIT;
     } else if (OB_FAIL(schema_service->get_runtime_schema_guard(
@@ -2004,9 +2016,9 @@ int ObDDLWaitColumnChecksumCtx::send_calc_rpc(int64_t &send_succ_count)
     }
 
     ObIRootserverLocalRuntime *local_runtime = context_.local_runtime_ != nullptr
-        ? context_.local_runtime_ : rootserver_local_runtime();
+        ? context_.local_runtime_ : context_.namespace_id_ == 1 ? rootserver_local_runtime() : nullptr;
     ObMySQLProxy *sql_proxy = context_.sql_proxy_ != nullptr
-        ? context_.sql_proxy_ : GCTX.sql_proxy_;
+        ? context_.sql_proxy_ : context_.namespace_id_ == 1 ? GCTX.sql_proxy_ : nullptr;
     if (OB_SUCC(ret) && !arg.calc_items_.empty() &&
         (OB_ISNULL(local_runtime) || OB_ISNULL(sql_proxy))) {
       ret = OB_NOT_INIT;

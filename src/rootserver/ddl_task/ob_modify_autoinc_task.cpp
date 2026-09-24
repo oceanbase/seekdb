@@ -51,9 +51,7 @@ int ObUpdateAutoincSequenceTask::process()
 {
   int ret = OB_SUCCESS;
   ObTraceIdGuard trace_id_guard(trace_id_);
-  ObLocalManagementService *local_management_service = local_management_service_ != nullptr
-      ? local_management_service_
-      : ::oceanbase::share::server_service<ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = local_management_service_;
   int64_t max_value = 0;
   int tmp_ret = OB_SUCCESS;
   if (OB_ISNULL(local_management_service)) {
@@ -303,8 +301,7 @@ int ObModifyAutoincTask::modify_autoinc()
 {
   int ret = OB_SUCCESS;
   bool is_update_autoinc_end = false;
-  ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
-      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = task_root_service();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObModifyAutoincTask has not been inited", K(ret));
@@ -379,8 +376,7 @@ int ObModifyAutoincTask::wait_trans_end()
   int tmp_ret = OB_SUCCESS;
   ObDDLTaskStatus new_status = WAIT_TRANS_END;
   const ObDDLTaskStatus next_task_status = SUCCESS;
-  ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
-      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = task_root_service();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObModifyAutoincTask has not been inited", K(ret));
@@ -436,10 +432,14 @@ int ObModifyAutoincTask::set_schema_available()
   int ret = OB_SUCCESS;
   int64_t tablet_count = 0;
   int64_t rpc_timeout = 0;
+  ObLocalManagementService *root_service = task_root_service();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObModifyAutoincTask has not been inited", K(ret));
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_ISNULL(root_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ddl task root service is unavailable", KR(ret), K(context_.namespace_id_));
   } else if (OB_FAIL(DDL_SIM(task_id_, DDL_TASK_TAKE_EFFECT_FAILED))) {
   } else {
     ObSArray<uint64_t> unused_ids;
@@ -447,9 +447,7 @@ int ObModifyAutoincTask::set_schema_available()
     
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
             *task_schema_service(), object_id_, rpc_timeout))) {
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return (context_.root_service_ != nullptr
-        ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>())
-            ->execute_ddl_task(alter_table_arg_, unused_ids); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return root_service->execute_ddl_task(alter_table_arg_, unused_ids); }))) {
     }
   }
   return ret;
@@ -460,10 +458,14 @@ int ObModifyAutoincTask::rollback_schema()
   int ret = OB_SUCCESS;
   int64_t tablet_count = 0;
   int64_t rpc_timeout = 0;
+  ObLocalManagementService *root_service = task_root_service();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObModifyAutoincTask has not been inited", K(ret));
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_ISNULL(root_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ddl task root service is unavailable", KR(ret), K(context_.namespace_id_));
   } else {
     ObArenaAllocator allocator;
     SMART_VAR(obcall::ObAlterTableArg, alter_table_arg) {
@@ -475,9 +477,7 @@ int ObModifyAutoincTask::rollback_schema()
         alter_table_arg.alter_table_schema_.reset_column_info();
         if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(
                 *task_schema_service(), object_id_, rpc_timeout))) {
-        } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return (context_.root_service_ != nullptr
-            ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>())
-                ->execute_ddl_task(alter_table_arg, unused_ids); }))) {
+        } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return root_service->execute_ddl_task(alter_table_arg, unused_ids); }))) {
         }
       }
     }

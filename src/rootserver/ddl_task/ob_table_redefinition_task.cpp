@@ -209,9 +209,7 @@ int ObTableRedefinitionTask::send_build_replica_request_by_sql()
 {
   int ret = OB_SUCCESS;
   bool modify_autoinc = false;
-  ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
-      ? context_.root_service_
-      : ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = task_root_service();
   int64_t new_execution_id = 0;
   // A recovered child task has no live local SQL writer. If its previous
   // checksum is incomplete, start another execution and verify its result
@@ -387,9 +385,7 @@ int ObTableRedefinitionTask::replica_end_check(const int ret_code)
 int ObTableRedefinitionTask::copy_table_indexes()
 {
   int ret = OB_SUCCESS;
-  ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
-      ? context_.root_service_
-      : ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = task_root_service();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableRedefinitionTask has not been inited", K(ret));
@@ -541,9 +537,7 @@ int ObTableRedefinitionTask::copy_table_indexes()
 int ObTableRedefinitionTask::copy_table_constraints()
 {
   int ret = OB_SUCCESS;
-  ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
-      ? context_.root_service_
-      : ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = task_root_service();
   const ObTableSchema *table_schema = nullptr;
   ObSchemaGetterGuard schema_guard;
   if (OB_UNLIKELY(!is_inited_)) {
@@ -606,9 +600,7 @@ int ObTableRedefinitionTask::copy_table_constraints()
 int ObTableRedefinitionTask::copy_table_foreign_keys()
 {
   int ret = OB_SUCCESS;
-  ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
-      ? context_.root_service_
-      : ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = task_root_service();
   const ObSimpleTableSchemaV2 *table_schema = nullptr;
   ObSchemaGetterGuard schema_guard;
   if (OB_UNLIKELY(!is_inited_)) {
@@ -747,9 +739,7 @@ int ObTableRedefinitionTask::copy_table_dependent_objects(const ObDDLTaskStatus 
 int ObTableRedefinitionTask::take_effect(const ObDDLTaskStatus next_task_status)
 {
   int ret = OB_SUCCESS;
-  ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
-      ? context_.root_service_
-      : ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = task_root_service();
 #ifdef ERRSIM
   MANAGEMENT_EVENT_ADD("ddl_task", "before_table_redefinition_task_effect",
                    "object_id", object_id_,
@@ -771,6 +761,9 @@ int ObTableRedefinitionTask::take_effect(const ObDDLTaskStatus next_task_status)
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableRedefinitionTask has not been inited", K(ret));
     ret = OB_INVALID_ARGUMENT;
+  } else if (OB_ISNULL(local_management_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ddl task root service is unavailable", KR(ret), K(context_.namespace_id_));
   } else if (OB_FAIL(DDL_SIM(task_id_, DDL_TASK_TAKE_EFFECT_FAILED))) {
   } else if (OB_FAIL(task_schema_service()->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( target_object_id_, table_schema))) {
