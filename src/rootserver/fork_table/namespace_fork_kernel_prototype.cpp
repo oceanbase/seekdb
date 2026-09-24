@@ -129,7 +129,7 @@ struct Roots {
   int64_t snapshot = 0, schema_version = 0;
   uint64_t snapshot_ref = 0;
   uint64_t parent_ref = 0; int64_t ref_count = 0; // Only canonical V8 snapshot rows.
-  int64_t state = 0; // 0 LIVE, 1 DELETING, 2 DELETED; names/ids are not reused.
+  int64_t state = 0; // 0 LIVE, 1 DELETING, 2 DELETED; ids are not reused.
   int64_t active_schema_changes = 0;
   int64_t pending_schema_version = 0;
 };
@@ -1155,7 +1155,7 @@ int NamespaceForkKernelPrototype::finish_namespace_drop(ObISQLClient &trans, uin
   Roots root; ObSqlString q; int ret = roots(trans, id, root, true, true);
   if (OB_FAIL(ret)) {
   } else if (root.state != 1) { ret = OB_STATE_NOT_MATCH;
-  } else if (OB_FAIL(q.assign_fmt("UPDATE %s SET state=2,source_id=0,snapshot_ref=0,catalog_page=0,catalog_cap=0,directory_page=0,directory_cap=0,snapshot=0,schema_version=0,active_schema_changes=0,pending_schema_version=0 WHERE namespace_id=%lu AND state=1", NAMESPACES, id))) {
+  } else if (OB_FAIL(q.assign_fmt("UPDATE %s SET state=2,name=NULL,source_id=0,snapshot_ref=0,catalog_page=0,catalog_cap=0,directory_page=0,directory_cap=0,snapshot=0,schema_version=0,active_schema_changes=0,pending_schema_version=0 WHERE namespace_id=%lu AND state=1", NAMESPACES, id))) {
   } else { ret = write_sql(trans, q); }
   if (OB_SUCC(ret) && root.snapshot_ref) {
     ret = release_lineage(trans, root.snapshot_ref);

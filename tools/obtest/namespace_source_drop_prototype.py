@@ -43,6 +43,19 @@ def run(binary):
             pass
         else:
             raise AssertionError("dropped source accepted login")
+        experiment.sql("CREATE NAMESPACE source_drop")
+        replacement_id = experiment.sql(
+            "SELECT namespace_id FROM __fork_proto_meta.namespaces "
+            "WHERE name='source_drop'")[0][0]
+        assert replacement_id != source_id
+        assert experiment.sql(
+            "SELECT state,name FROM __fork_proto_meta.namespaces "
+            f"WHERE namespace_id={source_id}") == ((2, None),)
+        assert experiment.sql(
+            "SELECT parent_namespace FROM __fork_proto_meta.namespaces "
+            "WHERE name='child_drop'") == ((source_id,),)
+        with connect(experiment, "root@source_drop") as replacement:
+            assert "owned" not in {row[0] for row in experiment.sql("SHOW DATABASES", replacement)}
         assert experiment.sql("SELECT SUM(v) FROM owned.t", child) == ((43,),)
         assert experiment.sql("SELECT v FROM app.base WHERE id=1", child) == ((10,),)
         experiment.sql("UPDATE owned.t SET v=23 WHERE id=1", child)
@@ -54,6 +67,8 @@ def run(binary):
         with connect(experiment, "root@child_drop") as recovered:
             assert experiment.sql("SELECT SUM(v) FROM owned.t", recovered) == ((45,),)
             assert experiment.sql("SELECT v FROM app.base WHERE id=1", recovered) == ((10,),)
+        with connect(experiment, "root@source_drop") as replacement:
+            assert "owned" not in {row[0] for row in experiment.sql("SHOW DATABASES", replacement)}
         experiment.sql("DROP NAMESPACE child_drop")
         for _ in range(20):
             remaining = experiment.sql(
