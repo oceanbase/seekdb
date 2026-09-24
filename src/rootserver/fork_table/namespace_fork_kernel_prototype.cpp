@@ -3,6 +3,7 @@
 #define USING_LOG_PREFIX STORAGE
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
+#include "namespace/catalog.h"
 #include "namespace/namespace.h"
 #include "observer/namespace_worker_protocol_prototype.h"
 #include "rootserver/ob_tablet_creator.h"
@@ -47,7 +48,12 @@ using namespace share;
 using namespace share::schema;
 using namespace transaction::tablelock;
 namespace {
-constexpr size_t FANOUT = 8;
+using Codec = ::oceanbase::ns::NamespaceCatalogCodec;
+using Ref = ::oceanbase::ns::CatalogPageRef;
+using Value = ::oceanbase::ns::CatalogValue;
+using Node = ::oceanbase::ns::CatalogNode;
+using Roots = ::oceanbase::ns::CatalogRoots;
+constexpr size_t FANOUT = Codec::FANOUT;
 const char *ROOTS = "__fork_proto_meta.roots";
 const char *PAGES = "__fork_proto_meta.pages";
 const char *NAMESPACES = "__fork_proto_meta.namespaces";
@@ -113,24 +119,6 @@ private:
   MetadataReadGuard(const MetadataReadGuard &) = delete;
   MetadataReadGuard &operator=(const MetadataReadGuard &) = delete;
 };
-struct Ref { uint64_t page = 0; int64_t cap = 0; };
-struct Value { std::string data; int64_t cap = 0; };
-struct Node {
-  bool leaf = true;
-  std::vector<std::string> keys;
-  std::vector<Value> values;
-  std::vector<Ref> children;
-};
-struct Roots {
-  uint64_t source = 0;
-  Ref catalog, directory;
-  int64_t snapshot = 0, schema_version = 0;
-  uint64_t snapshot_ref = 0;
-  uint64_t parent_ref = 0; int64_t ref_count = 0; // Only canonical V8 snapshot rows.
-  int64_t state = 0; // 0 LIVE, 1 DELETING, 2 DELETED; ids are not reused.
-  int64_t active_schema_changes = 0;
-  int64_t pending_schema_version = 0;
-};
 struct SchemaHolder {
   ObArenaAllocator allocator;
   ObTableSchema schema;
@@ -158,14 +146,14 @@ bool native_namespace_schema_authority()
   return true;
 }
 
-int64_t cap_min(int64_t a, int64_t b) { return a == 0 ? b : b == 0 ? a : std::min(a, b); }
+int64_t cap_min(int64_t a, int64_t b) { return Codec::cap_min(a, b); }
 uint64_t encoded(uint64_t db, uint64_t local) {
   return NamespaceObjectKey{db, local}.storage_id();
 }
 uint64_t database_of(uint64_t id) { return NamespaceObjectKey::encoded_namespace(id); }
 uint64_t local_of(uint64_t id) { return NamespaceObjectKey::local_part(id); }
 std::string key_of(uint64_t id) {
-  char buf[32]; snprintf(buf, sizeof(buf), "%020lu", id); return buf;
+  return Codec::object_key(id);
 }
 std::string hex(const std::string &s) {
   const char *digits = "0123456789abcdef";
@@ -173,30 +161,12 @@ std::string hex(const std::string &s) {
   for (unsigned char c : s) { out += digits[c >> 4]; out += digits[c & 15]; }
   return out;
 }
-void number(std::string &s, uint64_t n) {
-  for (int i = 0; i < 8; ++i) { s += static_cast<char>(n >> (8 * i)); }
-}
-bool number(const std::string &s, size_t &pos, uint64_t &n) {
-  if (pos > s.size() || s.size() - pos < 8) { return false; }
-  n = 0;
-  for (int i = 0; i < 8; ++i) { n |= uint64_t(static_cast<unsigned char>(s[pos++])) << (8 * i); }
-  return true;
-}
-void bytes(std::string &s, const std::string &v) { number(s, v.size()); s += v; }
-bool bytes(const std::string &s, size_t &pos, std::string &v) {
-  uint64_t size = 0;
-  if (!number(s, pos, size) || size > s.size() - pos) { return false; }
-  v.assign(s, pos, size); pos += size; return true;
-}
 std::string entry(uint64_t schema_object, uint64_t local_table, uint64_t local_tablet,
                   uint64_t bound_tablet = 0) {
-  std::string s; number(s, schema_object); number(s, local_table); number(s, local_tablet);
-  number(s, bound_tablet); return s;
+  return Codec::encode_entry(schema_object, local_table, local_tablet, bound_tablet);
 }
 bool entry(const std::string &s, uint64_t &object, uint64_t &table, uint64_t &tablet, uint64_t &bound) {
-  size_t p = 0;
-  return number(s, p, object) && number(s, p, table) && number(s, p, tablet)
-      && number(s, p, bound) && p == s.size();
+  return Codec::decode_entry(s, object, table, tablet, bound);
 }
 int write_sql(ObISQLClient &sql, const ObSqlString &statement) {
   int64_t affected = 0; return sql.write(statement.ptr(), affected);
@@ -393,36 +363,10 @@ int read_node(ObISQLClient &sql, Ref ref, Node &node) {
   if (!ref.page) { node = Node(); return OB_SUCCESS; }
   std::string s; int ret = blob(sql, ref.page, s);
   if (ret != OB_SUCCESS) { return ret; }
-  uint64_t version = 0, leaf = 0, count = 0, n = 0; size_t p = 0;
-  if (!number(s, p, version) || version != 1 || !number(s, p, leaf) || leaf > 1
-      || !number(s, p, count) || count > FANOUT) { return OB_CHECKSUM_ERROR; }
-  node = Node(); node.leaf = leaf; node.keys.resize(count);
-  for (auto &key : node.keys) { if (!bytes(s, p, key)) { return OB_CHECKSUM_ERROR; } }
-  if (!std::is_sorted(node.keys.begin(), node.keys.end())
-      || std::adjacent_find(node.keys.begin(), node.keys.end()) != node.keys.end()) { return OB_CHECKSUM_ERROR; }
-  if (node.leaf) {
-    node.values.resize(count);
-    for (auto &value : node.values) {
-      if (!bytes(s, p, value.data) || !number(s, p, n)) { return OB_CHECKSUM_ERROR; }
-      value.cap = cap_min(n, ref.cap);
-    }
-  } else {
-    node.children.resize(count + 1);
-    for (auto &child : node.children) {
-      if (!number(s, p, child.page) || !child.page || !number(s, p, n)) { return OB_CHECKSUM_ERROR; }
-      child.cap = cap_min(n, ref.cap);
-    }
-  }
-  return p == s.size() ? OB_SUCCESS : OB_CHECKSUM_ERROR;
+  return Codec::decode_node(s, ref.cap, node) ? OB_SUCCESS : OB_CHECKSUM_ERROR;
 }
 int save_node(ObISQLClient &sql, const Node &node, Ref &ref) {
-  std::string s; number(s, 1); number(s, node.leaf); number(s, node.keys.size());
-  for (auto &key : node.keys) { bytes(s, key); }
-  if (node.leaf) {
-    for (auto &v : node.values) { bytes(s, v.data); number(s, v.cap); }
-  } else {
-    for (auto &c : node.children) { number(s, c.page); number(s, c.cap); }
-  }
+  const std::string s = Codec::encode_node(node);
   ref.cap = 0; return save_blob(sql, s, ref.page);
 }
 int find(ObISQLClient &sql, Ref ref, const std::string &key, Value &value) {
