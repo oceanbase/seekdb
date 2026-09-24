@@ -380,7 +380,9 @@ def direct_probe(experiment):
     # two_order_by, idx_unique_many_idx_one_ins, generated_column,
     # rename_table2; plus child FTS and IVF index lifecycle.
     from namespace_inprocess_ddl_regressions import (
-        before_restart, after_restart, interrupted_heap_recovery)
+        before_restart, after_restart, checksum_error_before_restart,
+        inject_checksum_errors, checksum_error_after_restart,
+        interrupted_heap_recovery)
 
     with setup_branch(experiment, seed_global_index=True) as child:
         experiment.sql("TRUNCATE TABLE phase10.parent", child)
@@ -616,14 +618,17 @@ def direct_probe(experiment):
             assert experiment.sql("SELECT COUNT(*) FROM phase10.ivf_inherited_rows", inherited) == ((6,),)
             assert experiment.sql(inherited_query, inherited) == ((1,),)
         before_restart(experiment, child)
+        checksum_error_table_ids = checksum_error_before_restart(experiment, child)
     check_single_process(experiment)
     experiment.connection.close()
     experiment.connection = None
     experiment.proc.terminate()
     experiment.proc.wait(timeout=20)
+    inject_checksum_errors(experiment, checksum_error_table_ids)
     experiment.start()
     with connect(experiment, "root@phase10_child") as child:
         after_restart(experiment, child)
+        checksum_error_after_restart(experiment, child, checksum_error_table_ids)
         assert experiment.sql(
             "SELECT id,v FROM phase10.exchange_parts ORDER BY id", child) == ((2, 22), (11, 111))
         assert experiment.sql(

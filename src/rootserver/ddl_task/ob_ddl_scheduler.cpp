@@ -1090,18 +1090,17 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
   const obcall::ObRebuildIndexArg *rebuild_index_arg = nullptr;
   const obcall::ObForkTableArg *fork_table_arg = nullptr;
   LOG_INFO("create ddl task", K(param));
-  // The checksum-error virtual table is backed by process-wide metadata and
-  // cannot be queried through a child namespace SQL proxy.
-  // TODO(namespace): checksum-error rows have no namespace ID. Match the
-  // physical table/tablet owner before applying an ns1 error to a child table
-  // whose logical table ID may collide with the ns1 ID.
+  // Major-compaction checksum errors belong to the process namespace. The
+  // backing table has no namespace ID, so a child's logical table ID can
+  // collide with an ns1 error row. Child DDL validates its own task checksum.
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLScheduler has not been inited", K(ret));
   } else if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(param));
-  } else if (ObDDLUtil::is_verifying_checksum_error_needed(param.type_)
+  } else if (proxy.target_namespace() == 1
+      && ObDDLUtil::is_verifying_checksum_error_needed(param.type_)
       && OB_FAIL(ObDDLUtil::check_table_compaction_checksum_error(
           *GCTX.schema_service_, *GCTX.sql_proxy_, *GCTX.meta_db_pool_,
           param.src_table_schema_->get_table_id()))) {
@@ -2538,7 +2537,11 @@ int ObDDLScheduler::recover_task(const ObDDLTaskContext &context)
     } else if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
     } else if (!write_enabled) {
       LOG_INFO("server is read-only, skip schedule ddl task", K(write_enabled));
+      if (context.namespace_id_ > 1) {
+        ret = OB_EAGAIN; // Retry child recovery after writes become available.
+      }
     } else {
+      int recovery_ret = OB_SUCCESS;
       LOG_INFO("start processing ddl recovery", "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(task_records));
       for (int64_t i = 0; OB_SUCC(ret) && i < task_records.count(); ++i) {
         ObDDLTaskRecord &cur_record = task_records.at(i);
@@ -2600,6 +2603,9 @@ int ObDDLScheduler::recover_task(const ObDDLTaskContext &context)
         } else if (runtime_schema_version < cur_record.schema_version_) {
           // schema has not publish, by pass now
           LOG_INFO("skip schedule ddl task because runtime schema version is too old", K(runtime_schema_version), K(cur_record));
+          if (context.namespace_id_ > 1 && OB_SUCCESS == recovery_ret) {
+            recovery_ret = OB_EAGAIN;
+          }
         } else if (OB_FAIL(trans.start(sql_proxy))) {
         } else if (OB_FAIL(ObDDLTaskRecordOperator::select_for_update(trans,
                                                                       cur_record.task_id_,
@@ -2614,9 +2620,18 @@ int ObDDLScheduler::recover_task(const ObDDLTaskContext &context)
         if (OB_SUCCESS != tmp_ret) {
           ret = (OB_SUCCESS == ret) ? tmp_ret : ret;
         }
-        ret = OB_SUCCESS; // ignore ret
-
-        LOG_INFO("recover ddl task", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(cur_record));
+        if (OB_SUCCESS != ret && OB_ENTRY_EXIST != ret) {
+          LOG_WARN("recover ddl task failed", KR(ret), K(context.namespace_id_), K(cur_record));
+          if (context.namespace_id_ > 1 && OB_SUCCESS == recovery_ret) {
+            recovery_ret = ret;
+          }
+        } else {
+          LOG_INFO("recover ddl task", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(cur_record));
+        }
+        ret = OB_SUCCESS; // Continue recovering the other tasks.
+      }
+      if (context.namespace_id_ > 1 && OB_SUCCESS != recovery_ret) {
+        ret = recovery_ret;
       }
     }
   }

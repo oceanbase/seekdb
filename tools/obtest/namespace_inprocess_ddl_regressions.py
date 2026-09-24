@@ -1,6 +1,7 @@
 """DDL and namespace data paths that previously failed in child namespaces."""
 
 import pymysql
+import sqlite3
 import threading
 import time
 
@@ -181,6 +182,49 @@ def after_restart(experiment, child):
     assert sql("SELECT v FROM phase10.fork_src WHERE id=1") == ((99,),)
 
 
+def checksum_error_before_restart(experiment, child):
+    experiment.sql("CREATE TABLE phase10.ckm_parent(id INT PRIMARY KEY, v INT)")
+    experiment.sql("INSERT INTO phase10.ckm_parent VALUES(1,11)")
+    experiment.sql("CREATE TABLE phase10.ckm_child(id INT PRIMARY KEY, v INT)", child)
+    experiment.sql("INSERT INTO phase10.ckm_child VALUES(1,22)", child)
+    parent_id = experiment.sql(
+        "SELECT table_id FROM oceanbase.__all_table "
+        "WHERE table_name='ckm_parent'")[0][0]
+    child_id = experiment.sql(
+        "SELECT table_id FROM oceanbase.__all_table "
+        "WHERE table_name='ckm_child'", child)[0][0]
+    return parent_id, child_id
+
+
+def inject_checksum_errors(experiment, table_ids):
+    # The process-wide checksum table is SQLite metadata, not writable SQL.
+    # Inject only while the disposable prototype instance is stopped.
+    with sqlite3.connect(experiment.base / "store/sstable/meta.db") as connection:
+        connection.executemany(
+            "INSERT OR IGNORE INTO __all_column_checksum_error_info "
+            "(frozen_scn,index_type,data_table_id,index_table_id,data_tablet_id,"
+            "index_tablet_id,column_id,data_column_checksum,index_column_checksum) "
+            "VALUES (1,1,?,1,1,1,1,1,1)", ((table_id,) for table_id in table_ids))
+
+
+def checksum_error_after_restart(experiment, child, table_ids):
+    for table_id in table_ids:
+        assert experiment.sql(
+            "SELECT data_table_id FROM "
+            "oceanbase.__all_virtual_column_checksum_error_info "
+            f"WHERE data_table_id={table_id}") == ((table_id,),)
+    experiment.sql("CREATE INDEX idx_ckm_child ON phase10.ckm_child(v)", child)
+    assert experiment.sql(
+        "SELECT id FROM phase10.ckm_child FORCE INDEX(idx_ckm_child) WHERE v=22",
+        child) == ((1,),)
+    try:
+        experiment.sql("CREATE INDEX idx_ckm_parent ON phase10.ckm_parent(v)")
+    except pymysql.MySQLError as error:
+        assert error.args[0] == 1235, error.args
+    else:
+        raise AssertionError("ns1 DDL ignored its compaction checksum error")
+
+
 def interrupted_heap_recovery(experiment, connect):
     row_count = 1 << 18
     with connect(experiment, "root@phase10_child") as child:
@@ -206,20 +250,30 @@ def interrupted_heap_recovery(experiment, connect):
         worker.start()
         deadline = time.monotonic() + 20
         task_id = None
+        task_schema_version = None
         while time.monotonic() < deadline:
             rows = experiment.sql(
-                "SELECT task_id,status,execution_id FROM oceanbase.__all_ddl_task_status",
+                "SELECT task_id,status,execution_id,schema_version "
+                "FROM oceanbase.__all_ddl_task_status",
                 child, log=False)
-            matches = [row[0] for row in rows
-                       if row[0] not in old_tasks and row[1:] == (3, 1)]
+            matches = [row for row in rows
+                       if row[0] not in old_tasks and row[1:3] == (3, 1)]
             if matches:
-                task_id = matches[0]
+                task_id, _, _, task_schema_version = matches[0]
                 break
             time.sleep(.01)
         assert task_id is not None, rows
         assert experiment.sql(
             "SELECT COUNT(*) FROM oceanbase.__all_ddl_checksum "
             f"WHERE ddl_task_id={task_id} AND execution_id=1", child, log=False) == ((0,),)
+        # Delay this one recovery until the namespace schema version catches up.
+        # The first reconnect must leave recovery retryable instead of latching
+        # recovery_loaded after skipping the task.
+        future_schema_version = task_schema_version + 1000000000
+        experiment.sql(
+            "UPDATE oceanbase.__all_ddl_task_status "
+            f"SET schema_version={future_schema_version} WHERE task_id={task_id}",
+            child, log=False)
     experiment.connection.close()
     experiment.connection = None
     experiment.proc.terminate()
@@ -227,6 +281,13 @@ def interrupted_heap_recovery(experiment, connect):
     worker.join(timeout=1)
     experiment.start()
     with connect(experiment, "root@phase10_child") as child:
+        assert experiment.sql(
+            "SELECT schema_version FROM oceanbase.__all_ddl_task_status "
+            f"WHERE task_id={task_id}", child, log=False) == ((future_schema_version,),)
+        experiment.sql(
+            "UPDATE oceanbase.__all_ddl_task_status "
+            f"SET schema_version={task_schema_version} WHERE task_id={task_id}",
+            child, log=False)
         deadline = time.monotonic() + 45
         while time.monotonic() < deadline:
             tasks = experiment.sql(
@@ -246,4 +307,4 @@ def interrupted_heap_recovery(experiment, connect):
             f"WHERE ddl_task_id={task_id}", child, log=False)
         assert execution_ids == ((2,),), execution_ids
     experiment.record("interrupted_drop_primary_recovery", task_id=task_id,
-                      rows=row_count, execution_id=2)
+                      rows=row_count, execution_id=2, delayed_schema_recovery=True)
