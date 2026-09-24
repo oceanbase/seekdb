@@ -488,6 +488,7 @@ def direct_probe(experiment):
         experiment.sql("CREATE FULLTEXT INDEX fulltext_body ON phase10.fulltext_rows(body)", child)
         assert experiment.sql("SELECT id FROM phase10.fulltext_rows "
                               "WHERE MATCH(body) AGAINST('alpha')", child) == ((1,),)
+        experiment.sql("ALTER SYSTEM SET vector_index_optimize_duty_time='[00:00:00,23:59:59]'")
         experiment.sql("CREATE TABLE phase10.ivf_rows(id INT PRIMARY KEY, embedding VECTOR(3))", child)
         experiment.sql("INSERT INTO phase10.ivf_rows VALUES "
                        "(1,'[1,0,0]'),(2,'[2,0,0]'),(3,'[3,0,0]'),"
@@ -495,6 +496,21 @@ def direct_probe(experiment):
         experiment.sql("SET ob_query_timeout=120000000", child)
         experiment.sql("CREATE VECTOR INDEX ivf_embedding ON phase10.ivf_rows(embedding) "
                        "WITH (distance=l2,type=ivf_flat,nlist=2,sample_per_nlist=3)", child)
+        child_namespace_id = experiment.sql(
+            "SELECT namespace_id FROM __fork_proto_meta.namespaces "
+            "WHERE name='phase10_child'")[0][0]
+        cache_rows = ()
+        for _ in range(18):
+            cache_rows = experiment.sql(
+                "SELECT rowkey_vid_tablet_id,statistics FROM "
+                "oceanbase.__all_virtual_vector_index_info", log=False)
+            if any((tablet_id >> 32) & ((1 << 30) - 1) == child_namespace_id
+                   and "cache_type=0" in statistics and "count=2" in statistics
+                   for tablet_id, statistics in cache_rows):
+                break
+            time.sleep(2)
+        else:
+            raise AssertionError("child IVF background cache was not loaded: %r" % (cache_rows,))
         nearest_ivf = "SELECT id FROM phase10.ivf_rows ORDER BY "
         nearest_ivf += "l2_distance(embedding,[0,0,0]) APPROXIMATE LIMIT 1"
         assert experiment.sql(nearest_ivf, child) == ((1,),)

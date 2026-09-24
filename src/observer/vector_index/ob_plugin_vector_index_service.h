@@ -441,6 +441,10 @@ public:
                K_(is_ls_or_tablet_changed), KP_(schema_service), KP_(ls_service));
 private:
   // for ivf
+  int resolve_ivf_aux_target(const ObTabletID storage_tablet_id,
+                             uint64_t &namespace_id,
+                             ObTabletID &logical_tablet_id,
+                             ObMySQLProxy *&sql_proxy);
   int generate_get_aux_info_sql(
       uint64_t namespace_id,
       const uint64_t table_id,
@@ -484,6 +488,9 @@ int ObPluginVectorIndexService::process_ivf_aux_info(
   int ret = OB_SUCCESS;
   bool is_hidden_table = false;
   ObSqlString sql_string;
+  uint64_t namespace_id = 1;
+  ObTabletID logical_tablet_id;
+  ObMySQLProxy *target_sql_proxy = nullptr;
   static_assert(std::is_same<typename std::invoke_result<CallbackFunc, const common::ObString&, int64_t, float*>::type, int>::value,
         "process_ivf_aux_info callback format error");
   if (IS_NOT_INIT) {
@@ -492,7 +499,10 @@ int ObPluginVectorIndexService::process_ivf_aux_info(
   } else if (OB_ISNULL(lob_read_service_)) {
     ret = OB_NOT_INIT;
     OB_LOG(WARN, "LOB read service is not installed", KR(ret));
-  } else if (OB_FAIL(generate_get_aux_info_sql(0, table_id, tablet_id, is_hidden_table, sql_string))) {
+  } else if (OB_FAIL(resolve_ivf_aux_target(tablet_id, namespace_id,
+                                             logical_tablet_id, target_sql_proxy))) {
+  } else if (OB_FAIL(generate_get_aux_info_sql(namespace_id, table_id,
+                                                logical_tablet_id, is_hidden_table, sql_string))) {
   } else {
     const common::ObLobReadOptions lob_read_options(*lob_read_service_);
     ObSessionParam session_param;
@@ -503,7 +513,7 @@ int ObPluginVectorIndexService::process_ivf_aux_info(
     session_param.ddl_info_.set_dest_table_hidden(false);
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql_proxy_->read(res, sql_string.ptr(), &session_param))) {
+      if (OB_FAIL(target_sql_proxy->read(res, sql_string.ptr(), &session_param))) {
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         OB_LOG(WARN, "failed to execute sql", K(ret), K(sql_string));

@@ -23,6 +23,7 @@
 #include "storage/vector_type/ob_vector_common_util.h"
 #include "observer/vector_index/ob_vector_index_util.h"
 #include "observer/namespace_worker_protocol_prototype.h"
+#include "namespace/namespace.h"
 
 namespace oceanbase
 {
@@ -1502,6 +1503,25 @@ int ObPluginVectorIndexService::get_ivf_aux_info(
 }
 
 // need partition key
+int ObPluginVectorIndexService::resolve_ivf_aux_target(
+    const ObTabletID storage_tablet_id, uint64_t &namespace_id,
+    ObTabletID &logical_tablet_id, ObMySQLProxy *&sql_proxy)
+{
+  int ret = OB_SUCCESS;
+  namespace_id = 1;
+  logical_tablet_id = storage_tablet_id;
+  sql_proxy = sql_proxy_;
+  if (ns::NamespaceObjectKey::is_encoded(storage_tablet_id.id())) {
+    namespace_id = ns::NamespaceObjectKey::encoded_namespace(storage_tablet_id.id());
+    logical_tablet_id = ObTabletID(ns::NamespaceObjectKey::local_part(storage_tablet_id.id()));
+    sql_proxy = observer::namespace_worker_prototype::namespace_sql_proxy(namespace_id);
+  }
+  if (!logical_tablet_id.is_valid() || sql_proxy == nullptr) {
+    ret = OB_NOT_INIT;
+  }
+  return ret;
+}
+
 int ObPluginVectorIndexService::generate_get_aux_info_sql(
     const uint64_t namespace_id,
     const uint64_t table_id,

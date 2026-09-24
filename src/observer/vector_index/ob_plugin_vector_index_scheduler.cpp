@@ -20,6 +20,8 @@
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
 #include "observer/vector_index/ob_vector_index_util.h"
 #include "observer/vector_index/ob_vector_index_async_task_util.h"
+#include "observer/namespace_worker_protocol_prototype.h"
+#include "namespace/namespace.h"
 #include "storage/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/ob_table_dml_param.h"
 #include "storage/ob_value_row_iterator.h"
@@ -390,6 +392,23 @@ int ObPluginVectorIndexLoadScheduler::check_has_vector_index(bool &has_ivf_index
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObPluginVectorIndexUtils::get_vector_index_ids( has_ivf_index, vec_table_id_array))) {
+  }
+  std::vector<uint64_t> namespace_ids;
+  ns::namespace_registry().list_ids(namespace_ids);
+  for (uint64_t namespace_id : namespace_ids) {
+    if (OB_FAIL(ret) || has_ivf_index) { break; }
+    if (namespace_id <= 1) { continue; }
+    auto *service = observer::namespace_worker_prototype::namespace_schema_service(namespace_id);
+    if (service == nullptr || !service->is_runtime_schema_ready()) { continue; }
+    ObSchemaGetterGuard guard;
+    ObSEArray<uint64_t, 16> child_table_ids;
+    bool child_has_ivf = false;
+    if (OB_FAIL(service->get_runtime_schema_guard(guard))) {
+    } else if (OB_FAIL(guard.get_vector_info_index_ids_in_runtime(
+                       child_has_ivf, child_table_ids))) {
+    } else {
+      has_ivf_index = child_has_ivf;
+    }
   }
   return ret;
 }

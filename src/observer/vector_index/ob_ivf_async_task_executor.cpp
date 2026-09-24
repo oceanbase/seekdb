@@ -17,7 +17,10 @@
 #include "ob_ivf_async_task_executor.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "observer/vector_index/ob_vector_index_ivf_cache_util.h"
+#include "observer/namespace_worker_protocol_prototype.h"
+#include "namespace/namespace.h"
 #include "storage/ls/ob_ls.h"
+#include <algorithm>
 
 namespace oceanbase
 {
@@ -31,7 +34,15 @@ int ObIvfAsyncTaskExector::LoadTaskCallback::is_cache_mgr_deprecated(ObIvfCacheM
   is_deprecated = false;
   const ObTableSchema *table_schema = nullptr;
   ObTabletHandle tablet_handle;
-  if (OB_FAIL(schema_guard_.get_table_schema( cache_mgr.get_table_id(), table_schema))) {
+  const ObTabletID tablet_id = cache_mgr.get_cache_mgr_key();
+  const uint64_t namespace_id = ns::NamespaceObjectKey::is_encoded(tablet_id.id())
+      ? ns::NamespaceObjectKey::encoded_namespace(tablet_id.id()) : 1;
+  auto *schema_service = observer::namespace_worker_prototype::namespace_schema_service(namespace_id);
+  ObSchemaGetterGuard schema_guard;
+  if (schema_service == nullptr) {
+    is_deprecated = true;
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(schema_guard.get_table_schema(cache_mgr.get_table_id(), table_schema))) {
   } else if (OB_ISNULL(table_schema) || table_schema->is_in_recyclebin()) {
     is_deprecated = true;
   } else if (OB_FAIL(
@@ -126,12 +137,14 @@ int ObIvfAsyncTaskExector::LoadTaskCallback::is_cache_writable(const ObIvfAuxTab
                                                        table_info.centroid_tablet_ids_[idx],
                                                        vec_param,
                                                        vec_param.dim_,
+                                                       IvfCacheType::IVF_CENTROID_CACHE,
                                                        is_writable))) {
   } else if (!is_writable && table_info.type_ == ObVectorIndexAlgorithmType::VIAT_IVF_PQ) {
     if (OB_FAIL(ObIvfCacheUtil::is_cache_writable(table_info.centroid_table_id_,
                                                   table_info.centroid_tablet_ids_[idx],
                                                   vec_param,
                                                   vec_param.dim_,
+                                                  IvfCacheType::IVF_PQ_CENTROID_CACHE,
                                                   is_writable))) {
     }
   }
@@ -233,7 +246,8 @@ int ObIvfAsyncTaskExector::check_and_set_thread_pool()
   return ret;
 }
 
-int ObIvfAsyncTaskExector::get_tablet_ids_by_ls(const ObTableSchema &index_table_schema,
+int ObIvfAsyncTaskExector::get_tablet_ids_by_ls(uint64_t namespace_id,
+                                                const ObTableSchema &index_table_schema,
                                                 common::ObIArray<ObTabletID> &tablet_id_array)
 {
   int ret = OB_SUCCESS;
@@ -246,9 +260,18 @@ int ObIvfAsyncTaskExector::get_tablet_ids_by_ls(const ObTableSchema &index_table
     ObTabletHandle tablet_handle;
     // check tablet if exist in self ls
     for (int64_t i = 0; i < tmp_tablet_id_array.count(); ++i) {
-      ret = ls_->get_tablet_svr()->get_tablet(tmp_tablet_id_array.at(i), tablet_handle);
+      ObTabletID storage_tablet_id = tmp_tablet_id_array.at(i);
+      if (namespace_id > 1) {
+        const ns::NamespaceObjectKey key{namespace_id, storage_tablet_id.id()};
+        if (!key.is_valid()) {
+          ret = OB_INVALID_ARGUMENT;
+          break;
+        }
+        storage_tablet_id = ObTabletID(key.storage_id());
+      }
+      ret = ls_->get_tablet_svr()->get_tablet(storage_tablet_id, tablet_handle);
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(tablet_id_array.push_back(tmp_tablet_id_array.at(i)))) {
+        if (OB_FAIL(tablet_id_array.push_back(storage_tablet_id))) {
         }
       } else if (ret == OB_TABLET_NOT_EXIST) {
         // do nothing
@@ -262,6 +285,7 @@ int ObIvfAsyncTaskExector::get_tablet_ids_by_ls(const ObTableSchema &index_table
 }
 
 int ObIvfAsyncTaskExector::record_aux_table_info(ObSchemaGetterGuard &schema_guard,
+                                                 uint64_t namespace_id,
                                                  const ObTableSchema &index_table_schema,
                                                  ObIvfAuxTableInfo &aux_table_info)
 {
@@ -283,7 +307,8 @@ int ObIvfAsyncTaskExector::record_aux_table_info(ObSchemaGetterGuard &schema_gua
 
     if (OB_SUCC(ret) && need_record) {
       aux_table_info.pq_centroid_tablet_ids_.reset();
-      if (OB_FAIL(get_tablet_ids_by_ls(index_table_schema, aux_table_info.pq_centroid_tablet_ids_))) {
+      if (OB_FAIL(get_tablet_ids_by_ls(namespace_id, index_table_schema,
+                                       aux_table_info.pq_centroid_tablet_ids_))) {
       } else {
         aux_table_info.pq_centroid_table_id_ = index_table_schema.get_table_id();
       }
@@ -303,7 +328,8 @@ int ObIvfAsyncTaskExector::record_aux_table_info(ObSchemaGetterGuard &schema_gua
 
     if (OB_SUCC(ret) && need_record) {
       aux_table_info.centroid_tablet_ids_.reset();
-      if (OB_FAIL(get_tablet_ids_by_ls(index_table_schema, aux_table_info.centroid_tablet_ids_))) {
+      if (OB_FAIL(get_tablet_ids_by_ls(namespace_id, index_table_schema,
+                                       aux_table_info.centroid_tablet_ids_))) {
       } else {
         aux_table_info.centroid_table_id_ = index_table_schema.get_table_id();
         if (index_table_schema.is_vec_ivfflat_centroid_index()) {
@@ -320,6 +346,7 @@ int ObIvfAsyncTaskExector::record_aux_table_info(ObSchemaGetterGuard &schema_gua
 }
 
 int ObIvfAsyncTaskExector::generate_aux_table_info_map(ObSchemaGetterGuard &schema_guard,
+                                                       uint64_t namespace_id,
                                                        const int64_t table_id,
                                                        ObIvfAuxTableInfoMap &aux_table_info_map)
 {
@@ -362,7 +389,7 @@ int ObIvfAsyncTaskExector::generate_aux_table_info_map(ObSchemaGetterGuard &sche
 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(record_aux_table_info(
-                     schema_guard, *index_table_schema, cur_aux_table_info))) {
+                     schema_guard, namespace_id, *index_table_schema, cur_aux_table_info))) {
       } else if (OB_FAIL(
                      aux_table_info_map.set_refactored(key, cur_aux_table_info, 1 /*overwrite*/))) {
       }
@@ -386,29 +413,39 @@ int ObIvfAsyncTaskExector::check_schema_version_changed(bool &schema_changed)
 {
   int ret = OB_SUCCESS;
   schema_changed = false;
-  int64_t schema_version = 0;
-  ObSchemaGetterGuard schema_guard;
-  
-  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
-          schema_guard))) {
-  } else if (OB_FAIL(schema_guard.get_schema_version(schema_version))) {
-  } else if (!ObSchemaService::is_formal_version(schema_version)) {
-    ret = OB_EAGAIN;
-    LOG_INFO("is not a formal_schema_version", KR(ret), K(schema_version));
-  } else if (local_schema_version_ == OB_INVALID_VERSION || local_schema_version_ < schema_version) {
-    LOG_INFO("schema changed", KR(ret), K_(local_schema_version), K(schema_version));
-    local_schema_version_ = schema_version;
-    schema_changed = true;
+  std::vector<uint64_t> namespace_ids;
+  ns::namespace_registry().list_ids(namespace_ids);
+  if (std::find(namespace_ids.begin(), namespace_ids.end(), 1) == namespace_ids.end()) {
+    namespace_ids.push_back(1);
+  }
+  for (uint64_t namespace_id : namespace_ids) {
+    auto *schema_service = observer::namespace_worker_prototype::namespace_schema_service(namespace_id);
+    if (schema_service == nullptr || !schema_service->is_runtime_schema_ready()) {
+      continue;
+    }
+    int64_t schema_version = 0;
+    ObSchemaGetterGuard schema_guard;
+    if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
+    } else if (OB_FAIL(schema_guard.get_schema_version(schema_version))) {
+    } else if (!ObSchemaService::is_formal_version(schema_version)) {
+      ret = OB_EAGAIN;
+      LOG_INFO("is not a formal_schema_version", KR(ret), K(schema_version), K(namespace_id));
+    } else if (local_schema_versions_[namespace_id] < schema_version) {
+      local_schema_versions_[namespace_id] = schema_version;
+      schema_changed = true;
+    }
+    if (OB_FAIL(ret)) { break; }
   }
   return ret;
 }
 
-int ObIvfAsyncTaskExector::generate_aux_table_info_map(ObIvfAuxTableInfoMap &aux_table_info_map)
+int ObIvfAsyncTaskExector::generate_aux_table_info_map(ObSchemaGetterGuard &schema_guard,
+    uint64_t namespace_id, ObIvfAuxTableInfoMap &aux_table_info_map)
 {
   int ret = OB_SUCCESS;
   ObSEArray<uint64_t, DEFAULT_TABLE_ID_ARRAY_SIZE> table_id_array;
   ObMemAttr memattr("IvfTaskExec");
-  if (OB_FAIL(ObVecIndexAsyncTaskUtil::get_table_ids(table_id_array))) {
+  if (OB_FAIL(schema_guard.get_table_ids_in_runtime(table_id_array))) {
   } else if (!table_id_array.empty() &&
              OB_FAIL(aux_table_info_map.create(DEFAULT_TABLE_ID_ARRAY_SIZE, memattr, memattr))) {
     LOG_WARN("fail to create param map", KR(ret));
@@ -416,17 +453,12 @@ int ObIvfAsyncTaskExector::generate_aux_table_info_map(ObIvfAuxTableInfoMap &aux
   int64_t start_idx = 0;
   int64_t end_idx = 0;
   while (OB_SUCC(ret) && start_idx < table_id_array.count()) {
-    ObSchemaGetterGuard schema_guard;
     start_idx = end_idx;
     end_idx = MIN(table_id_array.count(), start_idx + DEFAULT_TABLE_ID_ARRAY_SIZE);
-
-    if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
-            schema_guard))) {
-    }
-
     for (int64_t idx = start_idx; OB_SUCC(ret) && idx < end_idx; ++idx) {
       const int64_t table_id = table_id_array.at(idx);
-      if (OB_FAIL(generate_aux_table_info_map(schema_guard, table_id, aux_table_info_map))) {
+      if (OB_FAIL(generate_aux_table_info_map(schema_guard, namespace_id, table_id,
+                                             aux_table_info_map))) {
       }
     }
   }
@@ -453,19 +485,38 @@ int ObIvfAsyncTaskExector::load_task(uint64_t &task_trace_base_num)
   } else if (OB_ISNULL(ls_)) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("invalid null ls", K(ret));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
-                 schema_guard))) {
   } else {
     ObVecIndexTaskCtxArray task_status_array;
-    LoadTaskCallback load_task_func(
-        index_mgr->get_async_task_opt(), *ls_, task_status_array, schema_guard, task_trace_base_num);
-    ObIvfAuxTableInfoMap aux_table_info_map;
-
-    if (OB_FAIL(index_mgr->get_ivf_cache_mgr_map().foreach_refactored(
-            load_task_func))) {
-    } else if (OB_FAIL(generate_aux_table_info_map(aux_table_info_map))) {
-    } else if (OB_FAIL(aux_table_info_map.foreach_refactored(load_task_func))) {
-    } else if (OB_FAIL(insert_new_task(task_status_array))) {
+    auto *root_schema_service = observer::namespace_worker_prototype::namespace_schema_service(1);
+    if (root_schema_service == nullptr) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(root_schema_service->get_runtime_schema_guard(schema_guard))) {
+    } else {
+      LoadTaskCallback cleanup_func(index_mgr->get_async_task_opt(), *ls_,
+          task_status_array, schema_guard, task_trace_base_num);
+      ret = index_mgr->get_ivf_cache_mgr_map().foreach_refactored(cleanup_func);
+    }
+    std::vector<uint64_t> namespace_ids;
+    ns::namespace_registry().list_ids(namespace_ids);
+    if (std::find(namespace_ids.begin(), namespace_ids.end(), 1) == namespace_ids.end()) {
+      namespace_ids.push_back(1);
+    }
+    for (uint64_t namespace_id : namespace_ids) {
+      if (OB_FAIL(ret)) { break; }
+      auto *service = observer::namespace_worker_prototype::namespace_schema_service(namespace_id);
+      if (service == nullptr || !service->is_runtime_schema_ready()) { continue; }
+      ObSchemaGetterGuard namespace_guard;
+      ObIvfAuxTableInfoMap aux_table_info_map;
+      if (OB_FAIL(service->get_runtime_schema_guard(namespace_guard))) {
+      } else if (OB_FAIL(generate_aux_table_info_map(namespace_guard, namespace_id,
+                                                     aux_table_info_map))) {
+      } else {
+        LoadTaskCallback load_func(index_mgr->get_async_task_opt(), *ls_,
+            task_status_array, namespace_guard, task_trace_base_num);
+        ret = aux_table_info_map.foreach_refactored(load_func);
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(insert_new_task(task_status_array))) {
     }
     // clear on fail
     if (OB_FAIL(ret) && !task_status_array.empty()) {

@@ -18,6 +18,8 @@
 #include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "observer/vector_index/ob_vector_index_ivf_cache_util.h"
+#include "observer/namespace_worker_protocol_prototype.h"
+#include "namespace/namespace.h"
 
 namespace oceanbase
 {
@@ -48,6 +50,10 @@ int ObIvfAsyncTask::write_cache(ObPluginVectorIndexService &vector_index_service
   ObIvfCentCache *cent_cache = nullptr;
   ObIvfAuxTableInfo *aux_table_info = nullptr;
   ObSchemaGetterGuard schema_guard;
+  const uint64_t namespace_id = ctx_ != nullptr
+      && ns::NamespaceObjectKey::is_encoded(ctx_->task_status_.tablet_id_.id())
+      ? ns::NamespaceObjectKey::encoded_namespace(ctx_->task_status_.tablet_id_.id()) : 1;
+  auto *schema_service = observer::namespace_worker_prototype::namespace_schema_service(namespace_id);
 
   if (OB_ISNULL(ctx_)) {
     ret = OB_ERR_NULL_VALUE;
@@ -55,8 +61,9 @@ int ObIvfAsyncTask::write_cache(ObPluginVectorIndexService &vector_index_service
   } else if (OB_ISNULL(aux_table_info = reinterpret_cast<ObIvfAuxTableInfo *>(ctx_->extra_data_))) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("invalid null aux_table_info", K(ret), KP(ctx_->extra_data_));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
-                 schema_guard))) {
+  } else if (OB_ISNULL(schema_service)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(ObVectorIndexUtil::get_vector_index_param_with_dim(
                  schema_guard,
                  ctx_->task_status_.table_id_,

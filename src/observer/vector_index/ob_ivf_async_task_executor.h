@@ -19,6 +19,7 @@
 
 #include "observer/vector_index/ob_vector_index_i_task_executor.h"
 #include "query/vector/ob_vector_index_cache.h"
+#include <unordered_map>
 
 namespace oceanbase
 {
@@ -28,7 +29,7 @@ namespace share
 class ObIvfAsyncTaskExector final : public ObVecITaskExecutor
 {
 public:
-  ObIvfAsyncTaskExector() : ObVecITaskExecutor() {}
+  ObIvfAsyncTaskExector() : ObVecITaskExecutor(), local_schema_versions_() {}
   virtual ~ObIvfAsyncTaskExector() {}
   int load_task(uint64_t &task_trace_base_num) override;
   int check_and_set_thread_pool() override;
@@ -106,17 +107,20 @@ private:
     uint64_t &task_trace_base_num_;
   };
 
-  int generate_aux_table_info_map(ObIvfAuxTableInfoMap &aux_table_info_map);
-  int generate_aux_table_info_map(ObSchemaGetterGuard &schema_guard, const int64_t table_id,
+  int generate_aux_table_info_map(ObSchemaGetterGuard &schema_guard, uint64_t namespace_id,
                                   ObIvfAuxTableInfoMap &aux_table_info_map);
-  int record_aux_table_info(ObSchemaGetterGuard &schema_guard,
+  int generate_aux_table_info_map(ObSchemaGetterGuard &schema_guard, uint64_t namespace_id,
+                                  const int64_t table_id,
+                                  ObIvfAuxTableInfoMap &aux_table_info_map);
+  int record_aux_table_info(ObSchemaGetterGuard &schema_guard, uint64_t namespace_id,
                             const ObTableSchema &index_table_schema,
                             ObIvfAuxTableInfo &aux_table_info);
-  int get_tablet_ids_by_ls(const ObTableSchema &index_table_schema,
+  int get_tablet_ids_by_ls(uint64_t namespace_id,
+                           const ObTableSchema &index_table_schema,
                            common::ObIArray<ObTabletID> &tablet_id_array);
   int check_need_load_task(ObSchemaGetterGuard &schema_guard, bool &need_load_task);
 private:
-  int64_t local_schema_version_;
+  std::unordered_map<uint64_t, int64_t> local_schema_versions_;
 };
 
 }  // namespace share
