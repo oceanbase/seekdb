@@ -1213,44 +1213,44 @@ OB_SERIALIZE_MEMBER((ObForkTableArg, ObDDLArg),
                     if_not_exist_,
                     session_id_);
 
-int ObForkDatabaseArg::assign(const ObForkDatabaseArg &other)
+int NamespaceCommandArg::assign(const NamespaceCommandArg &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDDLArg::assign(other))) {
     LOG_WARN("assign ddl arg failed", K(ret));
   } else {
 
-    src_database_name_ = other.src_database_name_;
-    dst_database_name_ = other.dst_database_name_;
+    source_name_ = other.source_name_;
+    target_name_ = other.target_name_;
     if_not_exist_ = other.if_not_exist_;
     session_id_ = other.session_id_;
   }
   return ret;
 }
 
-bool ObForkDatabaseArg::is_valid() const
+bool NamespaceCommandArg::is_valid() const
 {
-  return (!src_database_name_.empty()
-          && !dst_database_name_.empty());
+  return (!source_name_.empty()
+          && !target_name_.empty());
 }
 
-DEF_TO_STRING(ObForkDatabaseArg)
+DEF_TO_STRING(NamespaceCommandArg)
 {
   int64_t pos = 0;
   J_OBJ_START();
   J_KV(
-       K_(src_database_name),
-       K_(dst_database_name),
+       K_(source_name),
+       K_(target_name),
        K_(if_not_exist),
        K_(session_id));
   J_OBJ_END();
   return pos;
 }
 
-OB_SERIALIZE_MEMBER((ObForkDatabaseArg, ObDDLArg),
+OB_SERIALIZE_MEMBER((NamespaceCommandArg, ObDDLArg),
 
-                    src_database_name_,
-                    dst_database_name_,
+                    source_name_,
+                    target_name_,
                     if_not_exist_,
                     session_id_);
 

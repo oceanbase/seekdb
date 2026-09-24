@@ -1,0 +1,119 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#define USING_LOG_PREFIX SQL_RESV
+#include "sql/resolver/ddl/namespace_command_resolver.h"
+#include "sql/resolver/ob_resolver_utils.h"
+#include "sql/session/ob_sql_session_info.h"
+#include "share/ob_rpc_struct.h"
+#include "sql/parser/parse_node.h"
+#include "sql/ob_sql_utils.h"
+
+namespace oceanbase
+{
+using namespace common;
+using namespace share::schema;
+using namespace share;
+using namespace obcall;
+namespace sql
+{
+
+NamespaceCommandResolver::NamespaceCommandResolver(ObResolverParams &params)
+  : ObDDLResolver(params)
+{
+}
+
+NamespaceCommandResolver::~NamespaceCommandResolver()
+{
+}
+
+int NamespaceCommandResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  NamespaceCommandStmt *namespace_command_stmt = NULL;
+
+  if (OB_ISNULL(session_info_) ||
+      OB_ISNULL(allocator_) ||
+      T_NAMESPACE_COMMAND != parse_tree.type_ ||
+      MAX_NODE != parse_tree.num_child_ ||
+      OB_ISNULL(parse_tree.children_)) {
+    ret = OB_ERR_UNEXPECTED;
+    SQL_RESV_LOG(WARN, "invalid parse tree!", K(ret));
+  } else if (OB_ISNULL(namespace_command_stmt = create_stmt<NamespaceCommandStmt>())) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    SQL_RESV_LOG(ERROR, "create namespace command stmt failed", K(ret));
+  } else {
+    stmt_ = namespace_command_stmt;
+    obcall::NamespaceCommandArg &namespace_command_arg = namespace_command_stmt->get_namespace_command_arg();
+    namespace_command_arg.if_not_exist_ = false;
+  }
+
+  if (OB_SUCC(ret)) {
+    obcall::NamespaceCommandArg &namespace_command_arg = namespace_command_stmt->get_namespace_command_arg();
+    ParseNode *target_node = parse_tree.children_[TARGET_NODE];
+    ParseNode *source_node = parse_tree.children_[SOURCE_NODE];
+    ObString target_name;
+    ObString source_name;
+
+    if (OB_ISNULL(target_node) && OB_ISNULL(source_node)) {
+      ret = OB_ERR_UNEXPECTED;
+      SQL_RESV_LOG(WARN, "invalid parse tree!", K(ret));
+    } else if ((target_node != NULL && T_IDENT != target_node->type_)
+               || (source_node != NULL && T_IDENT != source_node->type_)) {
+      ret = OB_ERR_UNEXPECTED;
+      SQL_RESV_LOG(WARN, "invalid parse tree node type!", K(ret));
+    } else {
+      // Get target namespace name
+      if (target_node == NULL) {
+        target_name = ObString::make_string("__drop__");
+      } else {
+        target_name.assign_ptr(target_node->str_value_,
+                               static_cast<int32_t>(target_node->str_len_));
+      }
+      // Get source namespace name
+      if (source_node == NULL) {
+        source_name = ObString::make_string("__template__");
+      } else {
+        source_name.assign_ptr(source_node->str_value_,
+                               static_cast<int32_t>(source_node->str_len_));
+      }
+
+      // Check and convert namespace names
+      ObNameCaseMode mode = OB_NAME_CASE_INVALID;
+      if ((target_node != NULL && target_name.prefix_match("__"))
+          || (source_node != NULL && source_name.prefix_match("__"))) {
+        ret = OB_NOT_SUPPORTED;
+      } else if (OB_FAIL(session_info_->get_name_case_mode(mode))) {
+      } else {
+        bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
+        ObCollationType cs_type = CS_TYPE_INVALID;
+        if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
+        } else if (target_node != NULL && OB_FAIL(ObSQLUtils::check_and_convert_db_name(
+                    cs_type, perserve_lettercase, target_name))) {
+        } else if (source_node != NULL && OB_FAIL(ObSQLUtils::check_and_convert_db_name(
+                    cs_type, perserve_lettercase, source_name))) {
+        } else if (OB_FAIL(deep_copy_str(target_name, namespace_command_arg.target_name_))) {
+        } else if (OB_FAIL(deep_copy_str(source_name, namespace_command_arg.source_name_))) {
+        }
+      }
+    }
+  }
+
+  return ret;
+}
+
+} // namespace sql
+} // namespace oceanbase

@@ -14,33 +14,33 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_SQL_RESOLVER_DDL_OB_FORK_DATABASE_RESOLVER_H_
-#define OCEANBASE_SQL_RESOLVER_DDL_OB_FORK_DATABASE_RESOLVER_H_ 1
+#ifndef OCEANBASE_SQL_RESOLVER_DDL_NAMESPACE_COMMAND_RESOLVER_H_
+#define OCEANBASE_SQL_RESOLVER_DDL_NAMESPACE_COMMAND_RESOLVER_H_ 1
 
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
-#include "sql/resolver/ddl/ob_fork_database_stmt.h"
+#include "sql/resolver/ddl/namespace_command_stmt.h"
 
 namespace oceanbase
 {
 namespace sql
 {
-class ObForkDatabaseResolver : public ObDDLResolver
+class NamespaceCommandResolver : public ObDDLResolver
 {
 public:
   enum node_type {
-    DST_DATABASE_NODE = 0,
-    SRC_DATABASE_NODE,
+    TARGET_NODE = 0,
+    SOURCE_NODE,
     MAX_NODE
   };
 public:
-  explicit ObForkDatabaseResolver(ObResolverParams &params);
-  virtual ~ObForkDatabaseResolver();
+  explicit NamespaceCommandResolver(ObResolverParams &params);
+  virtual ~NamespaceCommandResolver();
 
   virtual int resolve(const ParseNode &parse_tree);
 private:
-  DISALLOW_COPY_AND_ASSIGN(ObForkDatabaseResolver);
+  DISALLOW_COPY_AND_ASSIGN(NamespaceCommandResolver);
 };
 }  // namespace sql
 }  // namespace oceanbase
 
-#endif /* OCEANBASE_SQL_RESOLVER_DDL_OB_FORK_DATABASE_RESOLVER_H_ */
+#endif /* OCEANBASE_SQL_RESOLVER_DDL_NAMESPACE_COMMAND_RESOLVER_H_ */

@@ -1454,24 +1454,24 @@ public:
   int64_t session_id_;
 };
 
-struct ObForkDatabaseArg : public ObDDLArg
+struct NamespaceCommandArg : public ObDDLArg
 {
   OB_UNIS_VERSION(1);
 public:
-  ObForkDatabaseArg():
+  NamespaceCommandArg():
       ObDDLArg(),
-      src_database_name_(),
-      dst_database_name_(),
+      source_name_(),
+      target_name_(),
       if_not_exist_(false),
       session_id_(0)
   {}
   bool is_valid() const;
-  int assign(const ObForkDatabaseArg &other);
+  int assign(const NamespaceCommandArg &other);
   DECLARE_TO_STRING;
 
 
-  common::ObString src_database_name_;
-  common::ObString dst_database_name_;
+  common::ObString source_name_;
+  common::ObString target_name_;
   bool if_not_exist_;
   int64_t session_id_;
 };

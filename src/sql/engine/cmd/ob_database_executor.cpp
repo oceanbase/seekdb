@@ -26,7 +26,7 @@
 #include "sql/resolver/ddl/ob_drop_database_stmt.h"
 #include "sql/resolver/ddl/ob_recyclebin_restore_stmt.h"
 #include "sql/resolver/ddl/ob_purge_stmt.h"
-#include "sql/resolver/ddl/ob_fork_database_stmt.h"
+#include "sql/resolver/ddl/namespace_command_stmt.h"
 #include "namespace/namespace.h"
 #include "share/ob_structured_event_logger.h"
 
@@ -271,11 +271,11 @@ int ObPurgeDatabaseExecutor::execute(ObExecContext &ctx, ObPurgeDatabaseStmt &st
   return ret;
 }
 
-int ObForkDatabaseExecutor::execute(ObExecContext &ctx, ObForkDatabaseStmt &stmt)
+int NamespaceCommandExecutor::execute(ObExecContext &ctx, NamespaceCommandStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  const obcall::ObForkDatabaseArg &fork_database_arg = stmt.get_fork_database_arg();
-  obcall::ObForkDatabaseArg &tmp_arg = const_cast<obcall::ObForkDatabaseArg&>(fork_database_arg);
+  const obcall::NamespaceCommandArg &namespace_command_arg = stmt.get_namespace_command_arg();
+  obcall::NamespaceCommandArg &tmp_arg = const_cast<obcall::NamespaceCommandArg&>(namespace_command_arg);
   ObString first_stmt;
   obcall::ObDDLRes res;
   ObSQLSessionInfo *my_session = nullptr;
@@ -297,9 +297,9 @@ int ObForkDatabaseExecutor::execute(ObExecContext &ctx, ObForkDatabaseStmt &stmt
     if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
       ret = OB_NOT_INIT;
       SQL_ENG_LOG(WARN, "get task executor context failed");
-    } else if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().fork_database(fork_database_arg, res); }))) {
+    } else if (OB_FAIL(query::serialize_root_service_call([&]{ return ctx.root_command_service().namespace_command(namespace_command_arg, res); }))) {
     } else {
-      SQL_ENG_LOG(INFO, "fork database executor finished", K(fork_database_arg), K(res));
+      SQL_ENG_LOG(INFO, "namespace command finished", K(namespace_command_arg), K(res));
     }
   }
 

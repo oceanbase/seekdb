@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_SQL_RESOLVER_DDL_OB_FORK_DATABASE_STMT_
-#define OCEANBASE_SQL_RESOLVER_DDL_OB_FORK_DATABASE_STMT_
+#ifndef OCEANBASE_SQL_RESOLVER_DDL_NAMESPACE_COMMAND_STMT_
+#define OCEANBASE_SQL_RESOLVER_DDL_NAMESPACE_COMMAND_STMT_
 
 #include "share/ob_rpc_struct.h"
 #include "sql/resolver/ddl/ob_ddl_stmt.h"
@@ -24,25 +24,25 @@ namespace oceanbase
 {
 namespace sql
 {
-class ObForkDatabaseStmt : public ObDDLStmt
+class NamespaceCommandStmt : public ObDDLStmt
 {
 public:
-  explicit ObForkDatabaseStmt(common::ObIAllocator *name_pool);
-  ObForkDatabaseStmt();
-  virtual ~ObForkDatabaseStmt();
+  explicit NamespaceCommandStmt(common::ObIAllocator *name_pool);
+  NamespaceCommandStmt();
+  virtual ~NamespaceCommandStmt();
 
-  const obcall::ObForkDatabaseArg &get_fork_database_arg() const { return fork_database_arg_; }
-  obcall::ObForkDatabaseArg &get_fork_database_arg() { return fork_database_arg_; }
+  const obcall::NamespaceCommandArg &get_namespace_command_arg() const { return namespace_command_arg_; }
+  obcall::NamespaceCommandArg &get_namespace_command_arg() { return namespace_command_arg_; }
   virtual bool cause_implicit_commit() const { return true; }
-  virtual obcall::ObDDLArg &get_ddl_arg() { return fork_database_arg_; }
+  virtual obcall::ObDDLArg &get_ddl_arg() { return namespace_command_arg_; }
 
-  TO_STRING_KV(K_(stmt_type), K_(fork_database_arg));
+  TO_STRING_KV(K_(stmt_type), K_(namespace_command_arg));
 private:
-  obcall::ObForkDatabaseArg fork_database_arg_;
-  DISALLOW_COPY_AND_ASSIGN(ObForkDatabaseStmt);
+  obcall::NamespaceCommandArg namespace_command_arg_;
+  DISALLOW_COPY_AND_ASSIGN(NamespaceCommandStmt);
 };
 
 }
 }
 
-#endif //OCEANBASE_SQL_RESOLVER_DDL_OB_FORK_DATABASE_STMT_
+#endif //OCEANBASE_SQL_RESOLVER_DDL_NAMESPACE_COMMAND_STMT_

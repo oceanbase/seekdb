@@ -785,7 +785,7 @@ int ObLocalManagementService::create_table(const ObCreateTableArg &arg, ObCreate
   return ret;
 }
 
-int ObLocalManagementService::fork_database(const obcall::ObForkDatabaseArg &arg, obcall::ObDDLRes &res)
+int ObLocalManagementService::namespace_command(const obcall::NamespaceCommandArg &arg, obcall::ObDDLRes &res)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -794,18 +794,18 @@ int ObLocalManagementService::fork_database(const obcall::ObForkDatabaseArg &arg
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(arg), K(ret));
-  } else if (OB_FAIL(ddl_service_.fork_database(arg, res))) {
+  } else if (OB_FAIL(ddl_service_.namespace_command(arg, res))) {
   }
-  char database_names_buffer[512] = {0};
-  snprintf(database_names_buffer, sizeof(database_names_buffer), "%.*s -> %.*s",
-           static_cast<int>(arg.src_database_name_.length()), arg.src_database_name_.ptr(),
-           static_cast<int>(arg.dst_database_name_.length()), arg.dst_database_name_.ptr());
-  MANAGEMENT_EVENT_ADD("ddl scheduler", "fork database",
+  char namespace_names_buffer[512] = {0};
+  snprintf(namespace_names_buffer, sizeof(namespace_names_buffer), "%.*s -> %.*s",
+           static_cast<int>(arg.source_name_.length()), arg.source_name_.ptr(),
+           static_cast<int>(arg.target_name_.length()), arg.target_name_.ptr());
+  MANAGEMENT_EVENT_ADD("ddl scheduler", "namespace command",
                         "ret", ret,
                         "trace_id", *ObCurTraceId::get_trace_id(),
                         "task_id", res.task_id_,
-                        "databases", database_names_buffer);
-  LOG_INFO("finish fork database ddl", K(ret), K(arg), K(res), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
+                        "namespaces", namespace_names_buffer);
+  LOG_INFO("finish namespace command", K(ret), K(arg), K(res), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 

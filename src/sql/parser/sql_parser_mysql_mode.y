@@ -374,7 +374,7 @@ END_P SET_VAR DELIMITER
 %type <node> sql_stmt stmt_list stmt opt_end_p
 %type <node> select_stmt update_stmt delete_stmt
 %type <node> insert_stmt single_table_insert values_clause dml_table_name
-%type <node> create_table_stmt create_table_like_stmt fork_table_stmt fork_database_stmt diff_table_stmt merge_table_stmt opt_table_option_list table_option_list table_option table_option_list_space_seperated parallel_option lob_storage_clause lob_storage_parameter lob_storage_parameters lob_chunk_size
+%type <node> create_table_stmt create_table_like_stmt fork_table_stmt namespace_command_stmt diff_table_stmt merge_table_stmt opt_table_option_list table_option_list table_option table_option_list_space_seperated parallel_option lob_storage_clause lob_storage_parameter lob_storage_parameters lob_chunk_size
 %type <node> index_or_heap
 %type <node> create_database_stmt drop_database_stmt alter_database_stmt use_database_stmt
 %type <node> opt_database_name database_option database_option_list opt_database_option_list database_factor databases_expr opt_databases
@@ -570,7 +570,7 @@ stmt:
   }
   | create_table_like_stmt  { $$ = $1; check_question_mark($$, result); }
   | fork_table_stmt         { $$ = $1; check_question_mark($$, result); }
-  | fork_database_stmt      { $$ = $1; check_question_mark($$, result); }
+  | namespace_command_stmt { $$ = $1; check_question_mark($$, result); }
   | diff_table_stmt         { $$ = $1; check_question_mark($$, result); }
   | merge_table_stmt        { $$ = $1; check_question_mark($$, result); }
   | create_database_stmt    { $$ = $1; check_question_mark($$, result); }
@@ -4403,18 +4403,18 @@ FORK TABLE relation_factor TO relation_factor
 }
 ;
 
-fork_database_stmt:
+namespace_command_stmt:
 FORK NAMESPACE database_factor FROM database_factor
 {
-  malloc_non_terminal_node($$, result->malloc_pool_, T_FORK_DATABASE, 2, $3, $5);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_NAMESPACE_COMMAND, 2, $3, $5);
 }
 | CREATE NAMESPACE database_factor
 {
-  malloc_non_terminal_node($$, result->malloc_pool_, T_FORK_DATABASE, 2, $3, NULL);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_NAMESPACE_COMMAND, 2, $3, NULL);
 }
 | DROP NAMESPACE database_factor
 {
-  malloc_non_terminal_node($$, result->malloc_pool_, T_FORK_DATABASE, 2, NULL, $3);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_NAMESPACE_COMMAND, 2, NULL, $3);
 }
 ;
 

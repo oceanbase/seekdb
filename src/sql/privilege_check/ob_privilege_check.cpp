@@ -38,7 +38,7 @@
 #include "sql/resolver/ddl/ob_rename_table_stmt.h"
 #include "sql/resolver/ddl/ob_create_table_like_stmt.h"
 #include "sql/resolver/ddl/ob_fork_table_stmt.h"
-#include "sql/resolver/ddl/ob_fork_database_stmt.h"
+#include "sql/resolver/ddl/namespace_command_stmt.h"
 #include "sql/resolver/ddl/ob_recyclebin_restore_stmt.h"
 #include "sql/resolver/cmd/ob_call_procedure_stmt.h"
 #include "sql/resolver/ddl/ob_lock_table_stmt.h"
@@ -1268,7 +1268,7 @@ int get_fork_table_stmt_need_privs(
   return ret;
 }
 
-int get_fork_database_stmt_need_privs(
+int get_namespace_command_stmt_need_privs(
     const ObSessionPrivInfo &session_priv,
     const ObStmt *basic_stmt,
     ObIArray<ObNeedPriv> &need_privs)
@@ -1277,9 +1277,9 @@ int get_fork_database_stmt_need_privs(
   if (OB_ISNULL(basic_stmt)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Basic stmt should be not be NULL", K(ret));
-  } else if (OB_UNLIKELY(stmt::T_FORK_DATABASE != basic_stmt->get_stmt_type())) {
+  } else if (OB_UNLIKELY(stmt::T_NAMESPACE_COMMAND != basic_stmt->get_stmt_type())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Stmt type should be T_FORK_DATABASE",
+    LOG_WARN("Stmt type should be T_NAMESPACE_COMMAND",
              K(ret), "stmt type", basic_stmt->get_stmt_type());
   } else {
     ObNeedPriv need_priv;

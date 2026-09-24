@@ -31,7 +31,7 @@
 #include "sql/resolver/ddl/ob_rename_table_resolver.h"
 #include "sql/resolver/ddl/ob_truncate_table_resolver.h"
 #include "sql/resolver/ddl/ob_fork_table_resolver.h"
-#include "sql/resolver/ddl/ob_fork_database_resolver.h"
+#include "sql/resolver/ddl/namespace_command_resolver.h"
 #include "sql/resolver/ddl/ob_create_table_like_resolver.h"
 #include "sql/resolver/ddl/ob_alter_table_resolver.h"
 #include "sql/resolver/ddl/ob_drop_table_resolver.h"
@@ -226,8 +226,9 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(ForkTable);
         break;
       }
-      case T_FORK_DATABASE: {
-        REGISTER_STMT_RESOLVER(ForkDatabase);
+      case T_NAMESPACE_COMMAND: {
+        ret = stmt_resolver_func<NamespaceCommandResolver>(
+            params_, *real_parse_tree, stmt);
         break;
       }
       case T_DIFF_TABLE: {

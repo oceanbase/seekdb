@@ -41,7 +41,7 @@
 #include "sql/resolver/ddl/ob_truncate_table_stmt.h"
 #include "sql/resolver/ddl/ob_create_table_like_stmt.h"
 #include "sql/resolver/ddl/ob_fork_table_stmt.h"
-#include "sql/resolver/ddl/ob_fork_database_stmt.h"
+#include "sql/resolver/ddl/namespace_command_stmt.h"
 #include "sql/resolver/ddl/ob_purge_stmt.h"
 #include "sql/resolver/ddl/ob_lock_table_stmt.h"
 #include "sql/resolver/dcl/ob_create_user_stmt.h"
@@ -277,8 +277,8 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
         DEFINE_EXECUTE_CMD(ObForkTableStmt, ObForkTableExecutor);
         break;
       }
-      case stmt::T_FORK_DATABASE: {
-        DEFINE_EXECUTE_CMD(ObForkDatabaseStmt, ObForkDatabaseExecutor);
+      case stmt::T_NAMESPACE_COMMAND: {
+        DEFINE_EXECUTE_CMD(NamespaceCommandStmt, NamespaceCommandExecutor);
         break;
       }
       case stmt::T_MERGE_TABLE: {

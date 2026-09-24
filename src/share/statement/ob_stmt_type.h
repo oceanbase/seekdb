@@ -100,7 +100,7 @@ OB_STMT_TYPE_DEF(T_CREATE_OUTLINE, get_create_outline_stmt_need_privs, 124, ACTI
 OB_STMT_TYPE_DEF(T_ALTER_OUTLINE, get_alter_outline_stmt_need_privs, 125, ACTION_TYPE_ALTER_OUTLINE)
 OB_STMT_TYPE_DEF(T_DROP_OUTLINE, get_drop_outline_stmt_need_privs, 126, ACTION_TYPE_DROP_OUTLINE)
 OB_STMT_TYPE_DEF(T_FORK_TABLE, get_fork_table_stmt_need_privs, 127, ACTION_TYPE_FORK_TABLE)
-OB_STMT_TYPE_DEF(T_FORK_DATABASE, get_fork_database_stmt_need_privs, 128, ACTION_TYPE_FORK_DATABASE)
+OB_STMT_TYPE_DEF(T_NAMESPACE_COMMAND, get_namespace_command_stmt_need_privs, 128, ACTION_TYPE_NAMESPACE_COMMAND)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_RECYCLEBIN_RESTORE_DATABASE, get_restore_database_stmt_need_privs, 131)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_RECYCLEBIN_RESTORE_TABLE, get_restore_table_stmt_need_privs, 132)
 OB_STMT_TYPE_DEF_UNKNOWN_AT(T_PURGE_RECYCLEBIN, get_purge_recyclebin_stmt_need_privs, 134)

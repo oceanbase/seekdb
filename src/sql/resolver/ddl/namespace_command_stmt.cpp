@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_RESV
-#include "sql/resolver/ddl/ob_fork_database_stmt.h"
+#include "sql/resolver/ddl/namespace_command_stmt.h"
 #include "lib/allocator/ob_allocator.h"
 
 namespace oceanbase
@@ -24,19 +24,19 @@ using namespace common;
 namespace sql
 {
 
-ObForkDatabaseStmt::ObForkDatabaseStmt(ObIAllocator *name_pool)
-  : ObDDLStmt(name_pool, stmt::T_FORK_DATABASE),
-    fork_database_arg_()
+NamespaceCommandStmt::NamespaceCommandStmt(ObIAllocator *name_pool)
+  : ObDDLStmt(name_pool, stmt::T_NAMESPACE_COMMAND),
+    namespace_command_arg_()
 {
 }
 
-ObForkDatabaseStmt::ObForkDatabaseStmt()
-  : ObDDLStmt(stmt::T_FORK_DATABASE),
-    fork_database_arg_()
+NamespaceCommandStmt::NamespaceCommandStmt()
+  : ObDDLStmt(stmt::T_NAMESPACE_COMMAND),
+    namespace_command_arg_()
 {
 }
 
-ObForkDatabaseStmt::~ObForkDatabaseStmt()
+NamespaceCommandStmt::~NamespaceCommandStmt()
 {
 }
 

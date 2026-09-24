@@ -236,7 +236,7 @@ public:
         stmt_type == stmt::T_CREATE_DATABASE
             || stmt_type == stmt::T_ALTER_DATABASE
             || stmt_type == stmt::T_DROP_DATABASE
-            || stmt_type == stmt::T_FORK_DATABASE
+            || stmt_type == stmt::T_NAMESPACE_COMMAND
             // table
             || stmt_type == stmt::T_CREATE_TABLE
             || stmt_type == stmt::T_DROP_TABLE

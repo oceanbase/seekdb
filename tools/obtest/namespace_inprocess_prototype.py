@@ -372,8 +372,26 @@ def direct_probe(experiment):
         experiment.sql("DROP INDEX pq_embedding ON phase10.ivf_pq_rows", child)
         assert experiment.sql("SELECT COUNT(*) FROM phase10.ivf_rows", child) == ((6,),)
         assert experiment.sql("SELECT COUNT(*) FROM phase10.ivf_pq_rows", child) == ((20,),)
+    experiment.sql("FORK NAMESPACE phase10_drop_source FROM ns1")
+    with connect(experiment, "root@phase10_drop_source") as source:
+        experiment.sql("CREATE TABLE phase10.drop_source_rows(id INT PRIMARY KEY)", source)
+        experiment.sql("INSERT INTO phase10.drop_source_rows VALUES(7)", source)
+        experiment.sql("FORK NAMESPACE phase10_drop_child FROM phase10_drop_source")
+        try:
+            experiment.sql("DROP NAMESPACE phase10_drop_source")
+        except pymysql.MySQLError:
+            pass
+        else:
+            raise AssertionError("dropped a namespace with an active connection")
+    experiment.sql("DROP NAMESPACE phase10_drop_source")
+    experiment.sql("CREATE NAMESPACE phase10_drop_source")
+    with connect(experiment, "root@phase10_drop_child") as descendant:
+        assert experiment.sql("SELECT id FROM phase10.drop_source_rows", descendant) == ((7,),)
+    with connect(experiment, "root@phase10_drop_source") as replacement:
+        assert "phase10" not in {row[0] for row in experiment.sql("SHOW DATABASES", replacement)}
     experiment.record("PASS", case="inprocess_direct", ddl=True, partition=True,
-                      index=True, lob=True, fulltext=True, ivf=True, ivf_pq=True, restart=True)
+                      index=True, lob=True, fulltext=True, ivf=True, ivf_pq=True,
+                      source_drop=True, restart=True)
 
 
 def tls_probe(experiment):

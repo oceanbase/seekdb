@@ -97,15 +97,15 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObPurgeDatabaseExecutor);
 };
 
-class ObForkDatabaseStmt;
-class ObForkDatabaseExecutor
+class NamespaceCommandStmt;
+class NamespaceCommandExecutor
 {
 public:
-  ObForkDatabaseExecutor() {}
-  virtual ~ObForkDatabaseExecutor() {}
-  int execute(ObExecContext &ctx, ObForkDatabaseStmt &stmt);
+  NamespaceCommandExecutor() {}
+  virtual ~NamespaceCommandExecutor() {}
+  int execute(ObExecContext &ctx, NamespaceCommandStmt &stmt);
 private:
-  DISALLOW_COPY_AND_ASSIGN(ObForkDatabaseExecutor);
+  DISALLOW_COPY_AND_ASSIGN(NamespaceCommandExecutor);
 };
 
 }  // namespace sql

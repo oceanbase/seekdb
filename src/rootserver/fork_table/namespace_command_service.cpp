@@ -102,19 +102,18 @@ int ObDDLService::drop_namespace_prototype_(const ObString &name)
   return ret;
 }
 
-int ObDDLService::fork_database(
-    const obcall::ObForkDatabaseArg &fork_database_arg, obcall::ObDDLRes &res) {
+int ObDDLService::namespace_command(
+    const obcall::NamespaceCommandArg &namespace_command_arg, obcall::ObDDLRes &res) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat())) {
-  } else if (!fork_database_arg.is_valid()) {
+  } else if (!namespace_command_arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(fork_database_arg));
-  } else if (fork_database_arg.dst_database_name_ == "__drop__") {
-    ret = drop_namespace_prototype_(fork_database_arg.src_database_name_);
+    LOG_WARN("invalid arg", K(ret), K(namespace_command_arg));
+  } else if (namespace_command_arg.target_name_ == "__drop__") {
+    ret = drop_namespace_prototype_(namespace_command_arg.source_name_);
   } else {
-    // Disposable control transport: these names identify namespaces, not databases.
-    ret = NamespaceForkKernelPrototype::control_namespace(fork_database_arg.src_database_name_,
-        fork_database_arg.dst_database_name_, res.schema_id_);
+    ret = NamespaceForkKernelPrototype::control_namespace(namespace_command_arg.source_name_,
+        namespace_command_arg.target_name_, res.schema_id_);
   }
   return ret;
 }

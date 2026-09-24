@@ -48,7 +48,7 @@ public:
   virtual int maintain_obj_dependency_info(const obcall::ObDependencyObjDDLArg &arg) = 0;
   virtual int rename_table(const obcall::ObRenameTableArg &arg) = 0;
   virtual int fork_table(const obcall::ObForkTableArg &arg, obcall::ObDDLRes &res) = 0;
-  virtual int fork_database(const obcall::ObForkDatabaseArg &arg, obcall::ObDDLRes &res) = 0;
+  virtual int namespace_command(const obcall::NamespaceCommandArg &arg, obcall::ObDDLRes &res) = 0;
   virtual int truncate_table(const obcall::ObTruncateTableArg &arg, obcall::ObDDLRes &res) = 0;
   virtual int truncate_table_v2(const obcall::ObTruncateTableArg &arg, obcall::ObDDLRes &res) = 0;
   virtual int exchange_partition(const obcall::ObExchangePartitionArg &arg, obcall::ObAlterTableRes &res) = 0;

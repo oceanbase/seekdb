@@ -551,7 +551,7 @@ public:
       const uint64_t data_format_version);
   virtual int rename_table(const obcall::ObRenameTableArg &rename_table_arg);
   virtual int fork_table(const obcall::ObForkTableArg &fork_table_arg, obcall::ObDDLRes &res);
-  virtual int fork_database(const obcall::ObForkDatabaseArg &fork_database_arg, obcall::ObDDLRes &res);
+  virtual int namespace_command(const obcall::NamespaceCommandArg &namespace_command_arg, obcall::ObDDLRes &res);
   int collect_temporary_tables_in_session(const obcall::ObDropTableArg &drop_table_arg);
   int need_collect_current_temp_table(share::schema::ObSchemaGetterGuard &schema_guard,
                                       obcall::ObDropTableArg &drop_table_arg,
@@ -1004,7 +1004,7 @@ int check_will_be_having_domain_index_operation(
   int drop_namespace_prototype_(const common::ObString &name);
 
   // Helper function to fork a single table within a transaction.
-  // This is shared by fork_table() and fork_database().
+  // This is shared by fork_table() and namespace_command().
   int fork_single_table_in_trans_(const share::schema::ObTableSchema &src_table_schema,
               const share::schema::ObDatabaseSchema &src_db_schema,
               const share::schema::ObDatabaseSchema &dst_db_schema,
