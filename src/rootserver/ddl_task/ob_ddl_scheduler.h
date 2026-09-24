@@ -314,20 +314,21 @@ public:
       const ObDDLTaskKey &task_key,
       const uint64_t autoinc_val,
       const int ret_code);
-  int get_task_record(const ObDDLTaskID &task_id, 
-                      ObISQLClient &trans,
+  int get_task_record(const ObDDLTaskID &task_id,
+                      const ObDDLTaskContext &context,
                       ObDDLTaskRecord &task_record,
                       common::ObIAllocator &allocator);
-  int modify_redef_task(const ObDDLTaskID &task_id, ObRedefCallback &cb);
-  int abort_redef_table(const ObDDLTaskID &task_id);
+  int modify_redef_task(const ObDDLTaskID &task_id, const ObDDLTaskContext &context, ObRedefCallback &cb);
+  int abort_redef_table(const ObDDLTaskID &task_id, const ObDDLTaskContext &context);
 
   int copy_table_dependents(const ObDDLTaskID &task_id,
+                            const ObDDLTaskContext &context,
                             const bool is_copy_constraints,
                             const bool is_copy_indexes,
                             const bool is_copy_triggers,
                             const bool is_copy_foreign_keys,
                             const bool is_ignore_errors);
-  int finish_redef_table(const ObDDLTaskID &task_id);
+  int finish_redef_table(const ObDDLTaskID &task_id, const ObDDLTaskContext &context);
   int start_redef_table(const obcall::ObStartRedefTableArg &arg,
                         const ObDDLTaskContext &context,
                         obcall::ObStartRedefTableRes &res);

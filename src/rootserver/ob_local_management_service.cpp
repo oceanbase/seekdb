@@ -971,7 +971,8 @@ int ObLocalManagementService::abort_redef_table(const obcall::ObAbortRedefTableA
     LOG_WARN("invalid arg", K(ret), K(arg));
   } else if (OB_FAIL(DDL_SIM(arg.task_id_, ABORT_REDEF_TABLE_RPC_FAILED))) {
   } else if (OB_FAIL(DDL_SIM(arg.task_id_, ABORT_REDEF_TABLE_RPC_SLOW))) {
-  } else if (OB_FAIL(ObSysDDLSchedulerUtil::abort_redef_table(ObDDLTaskID(task_id)))) {
+  } else if (OB_FAIL(ObSysDDLSchedulerUtil::abort_redef_table(
+          ObDDLTaskID(task_id), ddl_service_.get_task_context()))) {
   }
   MANAGEMENT_EVENT_ADD("ddl scheduler", "abort redef table",
                         "ret", ret,
@@ -993,7 +994,8 @@ int ObLocalManagementService::finish_redef_table(const obcall::ObFinishRedefTabl
     LOG_WARN("invalid arg", K(ret), K(arg));
   } else if (OB_FAIL(DDL_SIM(arg.task_id_, FINISH_REDEF_TABLE_RPC_FAILED))) {
   } else if (OB_FAIL(DDL_SIM(arg.task_id_, FINISH_REDEF_TABLE_RPC_SLOW))) {
-  } else if (OB_FAIL(ObSysDDLSchedulerUtil::finish_redef_table(ObDDLTaskID(task_id)))) {
+  } else if (OB_FAIL(ObSysDDLSchedulerUtil::finish_redef_table(
+          ObDDLTaskID(task_id), ddl_service_.get_task_context()))) {
   }
   MANAGEMENT_EVENT_ADD("ddl scheduler", "finish redef table",
                         "ret", ret,
@@ -1022,6 +1024,7 @@ int ObLocalManagementService::copy_table_dependents(const obcall::ObCopyTableDep
   } else if (OB_FAIL(DDL_SIM(arg.task_id_, COPY_TABLE_DEPENDENTS_RPC_FAILED))) {
   } else if (OB_FAIL(DDL_SIM(arg.task_id_, COPY_TABLE_DEPENDENTS_RPC_SLOW))) {
   } else if (OB_FAIL(ObSysDDLSchedulerUtil::copy_table_dependents(ObDDLTaskID(task_id),
+                                                          ddl_service_.get_task_context(),
                                                           is_copy_constraints,
                                                           is_copy_indexes,
                                                           is_copy_triggers,

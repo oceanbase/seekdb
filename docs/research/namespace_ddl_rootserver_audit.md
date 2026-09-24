@@ -24,6 +24,8 @@
 
 子空间服务来源可追到 `namespace_worker_inprocess_prototype.ipp:activate_in_process_namespace` 和 `ObLocalManagementService::init_sql_worker`；任务恢复在 `inprocess_refresh_schema` 中把同一组服务写入 `ObDDLTaskContext`。`ObDDLTask::task_schema_service()` 仅在 namespace 1 缺省回退全局服务。这个归口验证不代表每个 DDL 的其他依赖都已显式化。
 
+任务调度器中多处 `fetch_new_task_id(*GCTX.sql_proxy_, ...)` 看似读全局任务表；实现实际上忽略 SQL proxy，使用 `ObCommonIDUtils::gen_unique_id` 生成进程级唯一 ID。已核对的 `schedule_*_task` 路径在具体任务的 `init(task_record)` 中设置 context，表/列重定义也由 scheduler 或任务 `init` 设置。仍须审计任务运行中的辅助对象与异常路径；不能只凭调度时 context 正确推断全程隔离。
+
 ## 已确认并修复：TRUNCATE PARTITION 保留全局索引
 
 子空间自有分区表带全局唯一索引，开启 `_ob_enable_truncate_partition_preserve_global_index` 后执行 `TRUNCATE PARTITION`，此前返回 1146。`ObTruncatePartKeyInfo` 解析分区表达式时从 `GCTX.schema_service_` 取 ns1 schema guard，却用它查子空间表；现在从 `ObDDLService` 显式传入所属 schema service。
@@ -36,10 +38,13 @@
 
 - `ObRedefCallback::modify_info` 的队列未命中检查已改用任务所属 SQL proxy；缺失 child context 时显式报错。
 - `start_redef_table` 已从本地管理服务接收 DDL context，用所属 schema/SQL 服务建任务，并把 context 附到新任务记录；该入口在当前 SQL 四件套中没有直接可触发语句，尚缺动态专项验证。
-- 同组 `abort_redef_table`、`finish_redef_table`、`copy_table_dependents` 经 `modify_redef_task` 时仍在全局 SQL proxy 读写任务记录；当前源码没有从 SQL 到这些 legacy RPC 的调用链，但公开的本地管理服务入口仍可收到子空间任务 ID。下一轮需统一传入调用者 context 并核对队列未命中分支。
-- 建任务前的 compaction checksum 检查读取进程级虚表。尝试使用 child SQL proxy 后，现有子空间 `CREATE INDEX` 返回 1235；因此已恢复全局读取。还需核对该进程级错误表中 child 对象 ID 的编码与隔离，不能只凭 SQL 建索引成功认定校验语义正确。
+- 同组 `abort_redef_table`、`finish_redef_table`、`copy_table_dependents` 现由本地管理服务传入所属 DDL context；scheduler 以所属 SQL proxy 锁定、回读和更新任务记录，队列未命中回读后补上 context。原实现把回读错误留在临时变量中，可能把空记录当作可恢复任务，现直接传播错误。队列命中时检查 namespace ID，防止任务 ID 指向别的空间。旧 RPC 当前没有 SQL 调用链，尚缺动态专项验证。
+- 心跳超时清理原只按任务 ID 调用 `abort_redef_table`；现从队列任务取 namespace context，并按任务类型调用表重定义或通用队列取消。队列已移除的过期条目只清除心跳，不再以默认 ns1 context 访问任务表。此处与 `renew_ddl_task_lease` 一样是进程级入口；任务 ID 必须在队列中才能判定所属 namespace。
+- 建任务前的 compaction checksum 检查读取进程级虚表。尝试使用 child SQL proxy 后，现有子空间 `CREATE INDEX` 返回 1235；因此已恢复全局读取。进一步追踪确认：底层 `__all_column_checksum_error_info` SQLite 表没有 namespace 字段，写入者 `ObTableCkmItems` 直接记录 schema 的逻辑 table ID；major freeze 校验器从进程级 schema guard 取表。子空间和 ns1 可复用逻辑表 ID，因此进程级错误行可能误挡子空间 DDL；当前没有注入错误行的动态复现，不能据此认定已经发生。需设计按物理表/namespace ID 隔离的校验语义，避免简单改用 child SQL proxy 或无条件跳过检查。
 - `ObPartitionExchange::update_table_all_monitor_modified_` 过去用全局 SQL proxy 读统计、在所属 DDL 事务中写统计；现读写均用同一事务。交换分区虽非 seekdb 核心功能，该错误跨越了通用 namespace/事务边界。
 - `ObDDLTaskUtil::get_domain_index_share_table_snapshot` 的离线重建分支原用全局 root/schema/SQL 服务。显式主键、FTS 索引、两行数据的子空间表执行 `ALTER TABLE ... MODIFY COLUMN v VARCHAR(20)` 时，父任务 type 1001 在复制依赖索引阶段返回 `OB_ERR_UNEXPECTED(-4016)`，客户端超时；同一 SQL 在 ns1 成功。临时阶段日志确认：ns1 schema guard 对子空间 rowkey-doc 表 ID 500020 返回空 schema。现在表/列重定义父任务都把所属 root service 传给 FTS/向量子任务的 snapshot 辅助函数；新建索引的 snapshot 入口也接收所属 root service。聚焦 `/tmp/seekdb-ddl-audit2-fts-route-focused.log` 和 `/tmp/seekdb-ddl-audit2-fts-column-focused.log` 均 PASS，两类重定义及重启查询已写入 direct full 四件套。临时诊断代码已移除。
 - 其余默认版本 guard 调用和 DDL 任务族仍需逐项追踪，特别是异常、重试与重启恢复路径。历史的 152 项验收框暂不勾选。
 
 本轮构建 `/tmp/seekdb-ddl-audit2-fts-sibling-build.log` exit 0；四件套 `/tmp/seekdb-ddl-audit2-final2-{bootstrap,sql,direct,tls}.log` 均 exit 0 且 PASS。direct full 覆盖两类 FTS 重定义、恢复后 FTS 查询和既有 EXCHANGE PARTITION。完整 mysqltest/sysbench 未运行。
+
+旧 RPC/心跳路径修订后离线增量编译 `/tmp/seekdb-ddl-audit3-build-final.log` exit 0；四件套 `/tmp/seekdb-ddl-audit3-final-{bootstrap,sql,direct,tls}.log` 均 exit 0 且 PASS。已有失败复现仍保留在 direct full 的 `namespace_inprocess_ddl_regressions.py`。旧 RPC 无现成 SQL 触发入口，因此此次通过的是现有 DDL 功能回归，不视为 RPC 队列未命中分支的动态专项验证。

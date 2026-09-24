@@ -44,6 +44,23 @@ using namespace common;
 namespace rootserver
 {
 
+static bool is_table_redefinition_task_type(const ObDDLType type)
+{
+  switch (type) {
+    case DDL_DROP_PRIMARY_KEY:
+    case DDL_MODIFY_COLUMN:
+    case DDL_ADD_PRIMARY_KEY:
+    case DDL_ALTER_PRIMARY_KEY:
+    case DDL_ALTER_PARTITION_BY:
+    case DDL_CONVERT_TO_CHARACTER:
+    case DDL_TABLE_REDEFINITION:
+    case DDL_MODIFY_AUTO_INCREMENT_WITH_REDEFINITION:
+      return true;
+    default:
+      return false;
+  }
+}
+
 ObDDLTaskQueue::ObDDLTaskQueue()
   : task_list_(), task_map_(), lock_(), stop_(true), is_inited_(false)
 {
@@ -1449,39 +1466,51 @@ int ObDDLScheduler::prepare_alter_table_arg(const ObPrepareAlterTableArgParam &p
 }
 
 int ObDDLScheduler::get_task_record(const ObDDLTaskID &task_id,
-                                    ObISQLClient &trans,
+                                    const ObDDLTaskContext &context,
                                     ObDDLTaskRecord &task_record,
                                     common::ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
+  ObMySQLProxy *sql_proxy = context.sql_proxy_ != nullptr
+      ? context.sql_proxy_ : context.namespace_id_ == 1 ? GCTX.sql_proxy_ : nullptr;
   if (OB_UNLIKELY(!task_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(task_id));
   } else {
     task_record.reset();
-    if (OB_FAIL(task_queue_.modify_task(task_id, [&task_record, &allocator](ObDDLTask &task) -> int {
+    if (OB_FAIL(task_queue_.modify_task(task_id, [&task_id, &task_record, &allocator, &context](ObDDLTask &task) -> int {
           int ret = OB_SUCCESS;
-          ObTableRedefinitionTask *table_redefinition_task = static_cast<ObTableRedefinitionTask*>(&task);
-          if (OB_UNLIKELY(!table_redefinition_task->is_valid())) {
+          if (OB_UNLIKELY(task.context().namespace_id_ != context.namespace_id_)) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_WARN("ddl task belongs to another namespace", KR(ret), K(task_id),
+                     K(task.context().namespace_id_), K(context.namespace_id_));
+          } else if (OB_UNLIKELY(!is_table_redefinition_task_type(task.get_task_type()))) {
+            ret = OB_INVALID_ARGUMENT;
+            LOG_WARN("ddl task is not a table redefinition task", KR(ret), K(task_id), K(task.get_task_type()));
+          } else if (OB_UNLIKELY(!task.is_valid())) {
             ret = OB_INVALID_ARGUMENT;
             LOG_WARN("table rdefinition task is not valid", K(ret));
-          } else if (OB_FAIL(table_redefinition_task->convert_to_record(task_record, allocator))) {
-            LOG_WARN("convert to ddl task record failed", K(ret), K(*table_redefinition_task));
+          } else if (OB_FAIL(static_cast<ObTableRedefinitionTask&>(task).convert_to_record(task_record, allocator))) {
+            LOG_WARN("convert to ddl task record failed", K(ret), K(task));
           }
           return ret;
         }))) {
       if (OB_ENTRY_NOT_EXIST == ret) {
-        int tmp_ret = OB_SUCCESS;
-        if (OB_ISNULL(GCTX.sql_proxy_)) {
-          tmp_ret = OB_INVALID_ARGUMENT;
-          LOG_WARN("invalid argument", KR(tmp_ret));
-        } else if (OB_TMP_FAIL(ObDDLTaskRecordOperator::get_ddl_task_record(
-                                                                    task_id.task_id_,
-                                                                    *GCTX.sql_proxy_,
-                                                                    allocator,
-                                                                    task_record))) {
+        if (OB_ISNULL(sql_proxy)) {
+          ret = OB_NOT_INIT;
+          LOG_WARN("ddl task sql proxy is unavailable", KR(ret), K(task_id), K(context.namespace_id_));
         } else {
-          LOG_INFO("get ddl task record success", K(ret), K(task_record));
+          int read_ret = ObDDLTaskRecordOperator::get_ddl_task_record(
+              task_id.task_id_, *sql_proxy, allocator, task_record);
+          if (OB_SUCCESS != read_ret) {
+            // The row was locked by modify_redef_task. A missing reread must
+            // not be mistaken for a queue miss with a usable task record.
+            ret = OB_ENTRY_NOT_EXIST == read_ret ? OB_EAGAIN : read_ret;
+            LOG_WARN("failed to read ddl task record", KR(ret), K(task_id), K(context.namespace_id_));
+          } else {
+            task_record.context_ = context;
+            LOG_INFO("get ddl task record success", K(ret), K(task_record));
+          }
         }
       } else {
         LOG_WARN("failed to modify task", K(ret));
@@ -1491,7 +1520,9 @@ int ObDDLScheduler::get_task_record(const ObDDLTaskID &task_id,
   return ret;
 }
 
-int ObDDLScheduler::modify_redef_task(const ObDDLTaskID &task_id, ObRedefCallback &cb)
+int ObDDLScheduler::modify_redef_task(const ObDDLTaskID &task_id,
+                                     const ObDDLTaskContext &context,
+                                     ObRedefCallback &cb)
 {
   int ret = OB_SUCCESS;
   int64_t table_task_status = 0;
@@ -1500,11 +1531,13 @@ int ObDDLScheduler::modify_redef_task(const ObDDLTaskID &task_id, ObRedefCallbac
   int64_t unused_snapshot_ver = OB_INVALID_VERSION;
   ObMySQLTransaction trans;
   common::ObArenaAllocator allocator(lib::ObLabel("task_info"));
-  if (OB_UNLIKELY(!task_id.is_valid()) || OB_ISNULL(GCTX.sql_proxy_)) {
+  ObMySQLProxy *sql_proxy = context.sql_proxy_ != nullptr
+      ? context.sql_proxy_ : context.namespace_id_ == 1 ? GCTX.sql_proxy_ : nullptr;
+  if (OB_UNLIKELY(!task_id.is_valid()) || OB_ISNULL(sql_proxy)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(task_id), KP(GCTX.sql_proxy_));
+    LOG_WARN("invalid arg or namespace sql proxy", K(ret), K(task_id), KP(sql_proxy), K(context.namespace_id_));
   } else if (OB_FAIL(DDL_SIM(task_id.task_id_, REDEF_TABLE_ABORT_FAILED))) {
-  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+  } else if (OB_FAIL(trans.start(sql_proxy))) {
   } else if (OB_FAIL(ObDDLTaskRecordOperator::select_for_update(trans,
                                                                 task_id.task_id_,
                                                                 table_task_status,
@@ -1515,7 +1548,7 @@ int ObDDLScheduler::modify_redef_task(const ObDDLTaskID &task_id, ObRedefCallbac
     bool need_reschedule = false;
     ObDDLTaskRecord task_record;
     HEAP_VAR(ObTableRedefinitionTask, redefinition_task) {
-      if (OB_FAIL(ObSysDDLSchedulerUtil::get_task_record(task_id, trans, task_record, allocator))) {
+      if (OB_FAIL(ObSysDDLSchedulerUtil::get_task_record(task_id, context, task_record, allocator))) {
         if (OB_ENTRY_NOT_EXIST == ret) {
           need_reschedule = true;
           ret = OB_SUCCESS;
@@ -1546,16 +1579,18 @@ int ObDDLScheduler::modify_redef_task(const ObDDLTaskID &task_id, ObRedefCallbac
   return ret;
 }
 
-int ObDDLScheduler::abort_redef_table(const ObDDLTaskID &task_id)
+int ObDDLScheduler::abort_redef_table(const ObDDLTaskID &task_id,
+                                     const ObDDLTaskContext &context)
 {
   int ret = OB_SUCCESS;
   ObAbortRedefCallback cb;
-  if (OB_FAIL(ObSysDDLSchedulerUtil::modify_redef_task(task_id, cb))) {
+  if (OB_FAIL(ObSysDDLSchedulerUtil::modify_redef_task(task_id, context, cb))) {
   }
   return ret;
 }
 
 int ObDDLScheduler::copy_table_dependents(const ObDDLTaskID &task_id,
+                                          const ObDDLTaskContext &context,
                                           const bool is_copy_constraints,
                                           const bool is_copy_indexes,
                                           const bool is_copy_triggers,
@@ -1574,17 +1609,18 @@ int ObDDLScheduler::copy_table_dependents(const ObDDLTaskID &task_id,
   } else if (OB_FAIL(infos.set_refactored("is_ignore_errors", is_ignore_errors))) {
   } else if (FALSE_IT(cb.set_infos(&infos))) {
   } else if (OB_FAIL(DDL_SIM(task_id.task_id_, REDEF_TABLE_COPY_DEPES_FAILED))) {
-  } else if (OB_FAIL(ObSysDDLSchedulerUtil::modify_redef_task(task_id, cb))) {
+  } else if (OB_FAIL(ObSysDDLSchedulerUtil::modify_redef_task(task_id, context, cb))) {
   }
   return ret;
 }
 
-int ObDDLScheduler::finish_redef_table(const ObDDLTaskID &task_id)
+int ObDDLScheduler::finish_redef_table(const ObDDLTaskID &task_id,
+                                      const ObDDLTaskContext &context)
 {
   int ret = OB_SUCCESS;
   ObFinishRedefCallback cb;
   if (OB_FAIL(DDL_SIM(task_id.task_id_, REDEF_TABLE_FINISH_FAILED))) {
-  } else if (OB_FAIL(ObSysDDLSchedulerUtil::modify_redef_task(task_id, cb))) {
+  } else if (OB_FAIL(ObSysDDLSchedulerUtil::modify_redef_task(task_id, context, cb))) {
   }
   return ret;
 }
@@ -2610,8 +2646,26 @@ int ObDDLScheduler::remove_inactive_ddl_task()
       LOG_INFO("need remove task", K(remove_task_ids));
       for (int64_t i = 0; i < remove_task_ids.size(); i++) {
         ObDDLTaskID remove_task_id;
+        ObDDLTaskContext context;
+        bool task_in_queue = false;
+        bool is_table_redefinition = false;
         if (OB_FAIL(remove_task_ids.at(i, remove_task_id))) {
-        } else if (OB_FAIL(abort_redef_table(remove_task_id))) {
+        } else if (OB_FAIL(task_queue_.modify_task(remove_task_id, [&context, &task_in_queue, &is_table_redefinition](ObDDLTask &task) -> int {
+          context = task.context();
+          task_in_queue = true;
+          is_table_redefinition = is_table_redefinition_task_type(task.get_task_type());
+          return OB_SUCCESS;
+        }))) {
+          if (OB_ENTRY_NOT_EXIST == ret) {
+            // A completed task can leave a stale heartbeat entry. Its namespace
+            // cannot be inferred from the task ID after it leaves the queue.
+            LOG_INFO("remove stale ddl task heartbeat", K(remove_task_id));
+            ret = OB_SUCCESS;
+          }
+        }
+        if (OB_SUCC(ret) && task_in_queue &&
+            OB_FAIL(is_table_redefinition ? abort_redef_table(remove_task_id, context)
+                                          : task_queue_.abort_task(remove_task_id))) {
           if (OB_ENTRY_NOT_EXIST == ret) {
             LOG_INFO("abort_redef_table() success, but manager_reg_heart_beat_task last deletion failed", K(ret));
             ret = OB_SUCCESS;
