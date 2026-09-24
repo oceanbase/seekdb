@@ -450,6 +450,41 @@ int call_in_process_tx_rollback_savepoint(ObTxDesc &view, ObTxSEQ savepoint,
   THIS_WORKER.set_timeout_ts(old_timeout);
   return ret;
 }
+int call_in_process_tx_named_savepoint(ObTxDesc &view, char operation,
+    const ObString &name, int64_t deadline)
+{
+  InProcessStorage *ctx = in_process_storage;
+  const StorageSpaceHandle space = active_worker_storage_space();
+  if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
+  if (!space.is_namespace() || ctx->ns != space.namespace_id()
+      || !ctx->writes->tx || ctx->writes->tx->get_tx_id() != view.get_tx_id()
+      || (operation != 'F' && operation != 'L' && operation != 'D'
+          && operation != 'K')) {
+    return OB_INVALID_ARGUMENT;
+  }
+  if (name.length() < 0
+      || name.length() > static_cast<int64_t>(MAX_SQL_MESSAGE - 64)) {
+    return OB_SIZE_OVERFLOW;
+  }
+  const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
+  auto *old_session = THIS_WORKER.get_session();
+  THIS_WORKER.set_session(&ctx->session);
+  auto *service = data_plane::query_transaction_service();
+  int ret = service ? OB_SUCCESS : OB_NOT_INIT;
+  if (!ret && operation == 'F') {
+    ret = service->create_explicit_savepoint(*ctx->writes->tx, name);
+  } else if (!ret && operation == 'L') {
+    ret = service->rollback_to_explicit_savepoint(*ctx->writes->tx, name, deadline);
+  } else if (!ret && operation == 'D') {
+    ret = service->release_explicit_savepoint(*ctx->writes->tx, name);
+  } else if (!ret) {
+    ret = service->create_stash_savepoint(*ctx->writes->tx, name);
+  }
+  if (!ret) { ret = view.sync_serialized_state_from(*ctx->writes->tx); }
+  THIS_WORKER.set_session(old_session);
+  THIS_WORKER.set_timeout_ts(old_timeout);
+  return ret;
+}
 int close_in_process_write(transaction::ObTxDesc &view, uint64_t handle)
 {
   InProcessStorage *ctx = in_process_storage;

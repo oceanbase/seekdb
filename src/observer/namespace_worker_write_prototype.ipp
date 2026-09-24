@@ -1461,14 +1461,6 @@ struct EngineWrites {
         }
       } else if (operation == 'O') {
         ret = process_table_lock(storage_space, request, *tx);
-      } else if (operation == 'F' || operation == 'L' || operation == 'D' || operation == 'K') {
-        const ObString name = request.string();
-        const int64_t deadline = operation == 'L' ? request.number() : 0;
-        if (!request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-        else if (operation == 'F') { ret = service->create_explicit_savepoint(*tx, name); }
-        else if (operation == 'L') { ret = service->rollback_to_explicit_savepoint(*tx, name, deadline); }
-        else if (operation == 'D') { ret = service->release_explicit_savepoint(*tx, name); }
-        else { ret = service->create_stash_savepoint(*tx, name); }
       } else if (operation == 'a') {
         ObTxExecResult result; request.read(result);
         if (!request.consumed()) { ret = OB_INVALID_ARGUMENT; }
@@ -1547,6 +1539,8 @@ int call_in_process_tx_create_savepoint(ObTxDesc &view, char operation,
     const ObTxParam *param, bool release, int16_t branch, ObTxSEQ &savepoint);
 int call_in_process_tx_rollback_savepoint(ObTxDesc &view, ObTxSEQ savepoint,
     int64_t deadline, bool touched_storage, ObTxCleanPolicy policy);
+int call_in_process_tx_named_savepoint(ObTxDesc &view, char operation,
+    const ObString &name, int64_t deadline);
 int tx_state(char operation, ObTxDesc &view,
              const ObTxParam *param = nullptr, int64_t deadline = 0)
 {
@@ -1590,6 +1584,17 @@ int tx_rollback_savepoint(ObTxDesc &view, ObTxSEQ savepoint,
   const int ret = scope.error() ? scope.error()
       : call_in_process_tx_rollback_savepoint(
           view, savepoint, deadline, touched_storage, policy);
+  revert_tx_owner_session(borrowed);
+  return ret;
+}
+int tx_named_savepoint(ObTxDesc &view, char operation,
+    const ObString &name, int64_t deadline = 0)
+{
+  sql::ObSQLSessionInfo *borrowed = nullptr;
+  auto *session = tx_owner_session(view, borrowed);
+  StorageSessionScope scope(session && session->get_tx_desc() == &view ? session : nullptr);
+  const int ret = scope.error() ? scope.error()
+      : call_in_process_tx_named_savepoint(view, operation, name, deadline);
   revert_tx_owner_session(borrowed);
   return ret;
 }
@@ -1957,7 +1962,7 @@ public:
     return tx_create_savepoint(tx, 'I', nullptr, false, 0, savepoint); }
   int create_explicit_savepoint(transaction::ObTxDesc &tx,
                                         const common::ObString &savepoint) override {
-    Frame request, reply; request.string(savepoint); return tx_rpc('F', tx, request, reply); }
+    return tx_named_savepoint(tx, 'F', savepoint); }
   int rollback_to_implicit_savepoint(
       transaction::ObTxDesc &tx,
       transaction::ObTxSEQ savepoint,
@@ -1969,13 +1974,13 @@ public:
   int rollback_to_explicit_savepoint(transaction::ObTxDesc &tx,
                                              const common::ObString &savepoint,
                                              int64_t expire_ts) override {
-    Frame request, reply; request.string(savepoint); request.number(expire_ts); return tx_rpc('L', tx, request, reply); }
+    return tx_named_savepoint(tx, 'L', savepoint, expire_ts); }
   int release_explicit_savepoint(transaction::ObTxDesc &tx,
                                          const common::ObString &savepoint) override {
-    Frame request, reply; request.string(savepoint); return tx_rpc('D', tx, request, reply); }
+    return tx_named_savepoint(tx, 'D', savepoint); }
   int create_stash_savepoint(transaction::ObTxDesc &tx,
                                      const common::ObString &name) override {
-    Frame request, reply; request.string(name); return tx_rpc('K', tx, request, reply); }
+    return tx_named_savepoint(tx, 'K', name); }
   int merge_tx_state(transaction::ObTxDesc &to,
                              const transaction::ObTxDesc &from) override {
     if (to.get_tx_id() != from.get_tx_id()) { return OB_INVALID_ARGUMENT; }
