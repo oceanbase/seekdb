@@ -38,6 +38,15 @@ bool bytes(const std::string &data, size_t &pos, std::string &value)
 }
 } // namespace
 
+bool CatalogRoots::valid_snapshot(uint64_t expected_id) const
+{
+  return expected_id != 0 && snapshot > 0
+      && static_cast<uint64_t>(snapshot) == expected_id
+      && snapshot_ref == expected_id && parent_ref < expected_id
+      && ref_count > 0 && catalog.cap > 0 && directory.cap > 0
+      && catalog.cap <= snapshot && directory.cap <= snapshot;
+}
+
 int64_t NamespaceCatalogCodec::cap_min(int64_t a, int64_t b)
 {
   return a == 0 ? b : b == 0 ? a : std::min(a, b);

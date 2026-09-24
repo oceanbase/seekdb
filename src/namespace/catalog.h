@@ -32,6 +32,7 @@ struct CatalogRoots {
   int64_t state = 0; // 0 LIVE, 1 DELETING, 2 DELETED; ids are never reused.
   int64_t active_schema_changes = 0;
   int64_t pending_schema_version = 0;
+  bool valid_snapshot(uint64_t expected_id) const;
 };
 
 class NamespaceCatalogCodec final {

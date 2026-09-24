@@ -376,13 +376,11 @@ int snapshot_roots(ObISQLClient &sql, uint64_t id, Roots &root, bool lock = fals
   } else if (OB_FAIL(r->next())) {
   } else if (OB_FAIL(r->get_uint(0L, root.catalog.page)) || OB_FAIL(r->get_uint(1L, root.directory.page))
       || OB_FAIL(r->get_int(2L, root.snapshot)) || OB_FAIL(r->get_int(3L, root.schema_version))) {
-  } else if (root.snapshot <= 0 || uint64_t(root.snapshot) != id) { ret = OB_CHECKSUM_ERROR;
   } else {
     root.catalog.cap = root.directory.cap = root.snapshot; root.snapshot_ref = id;
     if (OB_FAIL(r->get_int(4L, root.catalog.cap)) || OB_FAIL(r->get_int(5L, root.directory.cap))
         || OB_FAIL(r->get_uint(6L, root.parent_ref)) || OB_FAIL(r->get_int(7L, root.ref_count))) {
-    } else if (root.parent_ref >= id || root.ref_count <= 0 || root.catalog.cap <= 0
-        || root.directory.cap <= 0 || root.catalog.cap > root.snapshot || root.directory.cap > root.snapshot) {
+    } else if (!root.valid_snapshot(id)) {
       ret = OB_CHECKSUM_ERROR;
     }
   }
