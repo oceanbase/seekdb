@@ -52,32 +52,6 @@ int get_tablet_autoincrement_admin(
   return ret;
 }
 
-int make_namespace_metadata_schema(
-    uint64_t namespace_id,
-    const ObTableSchema &storage_schema,
-    ObTableSchema &namespace_schema,
-    const ObTableSchema *&metadata_schema)
-{
-  int ret = OB_SUCCESS;
-  metadata_schema = &storage_schema;
-  if (namespace_id > 1
-      && OB_FAIL(oceanbase::storage::NamespaceForkKernelPrototype::make_namespace_schema(
-          namespace_id, storage_schema, namespace_schema))) {
-  } else if (namespace_id > 1) {
-    metadata_schema = &namespace_schema;
-  }
-  return ret;
-}
-
-int namespace_metadata_object_id(uint64_t namespace_id,
-                                 const uint64_t storage_id, uint64_t &metadata_id)
-{
-  return namespace_id > 1
-      ? oceanbase::storage::NamespaceForkKernelPrototype::local_object_id(
-          namespace_id, storage_id, metadata_id)
-      : (metadata_id = storage_id, OB_SUCCESS);
-}
-
 } // namespace
 
 ObDropTableHelper::ObDropTableHelper(
@@ -187,14 +161,9 @@ int ObDropTableHelper::check_legitimacy_()
     for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas_.count(); i++) {
       const ObTableSchema *table_schema = table_schemas_.at(i);
       bool has_conflict_ddl = false;
-      uint64_t metadata_table_id = OB_INVALID_ID;
       if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("table schema is null", KR(ret));
-      } else if (OB_FAIL(namespace_metadata_object_id(
-                     sql_proxy_->target_namespace(), table_schema->get_table_id(),
-                     metadata_table_id))) {
-        LOG_WARN("failed to get namespace metadata table id", KR(ret), KPC(table_schema));
       } else if (!ObSchemaUtils::is_support_parallel_drop(table_schema->get_table_type())) {
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("unsupport table type for parallel drop table", KR(ret), K(table_schema->get_table_type()));
@@ -208,7 +177,7 @@ int ObDropTableHelper::check_legitimacy_()
         LOG_USER_WARN(OB_NOT_SUPPORTED, "Offline ddl is being executed, other ddl operations");
       } else if (arg_.table_type_ == USER_TABLE && OB_FAIL(ObDDLTaskRecordOperator::check_has_conflict_ddl(
                  sql_proxy_,
-                 metadata_table_id,
+                 table_schema->get_table_id(),
                  arg_.task_id_,
                  ObDDLType::DDL_DROP_TABLE,
                  has_conflict_ddl))) {
@@ -697,16 +666,11 @@ int ObDropTableHelper::lock_objects_by_id_()
     ObArray<ObArray<std::pair<uint64_t, share::schema::ObObjectType>>> dep_objs_before_lock_array;
     for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas_.count(); i++) {
       const ObTableSchema *table_schema = table_schemas_.at(i);
-      ObTableSchema namespace_schema;
-      const ObTableSchema *metadata_schema = nullptr;
+      const ObTableSchema *metadata_schema = table_schema;
       ObArray<std::pair<uint64_t, share::schema::ObObjectType>> dep_objs_before_lock;
       if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("table schema is null", KR(ret));
-      } else if (OB_FAIL(make_namespace_metadata_schema(
-                     sql_proxy_->target_namespace(), *table_schema,
-                     namespace_schema, metadata_schema))) {
-        LOG_WARN("failed to make namespace metadata schema", KR(ret), KPC(table_schema));
       } else {
         const uint64_t table_id = metadata_schema->get_table_id();
         // table
@@ -779,15 +743,11 @@ int ObDropTableHelper::lock_objects_by_id_()
       for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas_.count(); i++) {
         ObArray<std::pair<uint64_t, share::schema::ObObjectType>> dep_objs_after_lock;
         const ObTableSchema *table_schema = table_schemas_.at(i);
-        uint64_t table_id = OB_INVALID_ID;
         if (OB_ISNULL(table_schema)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("table schema is null", KR(ret));
-        } else if (OB_FAIL(namespace_metadata_object_id(
-                       sql_proxy_->target_namespace(), table_schema->get_table_id(),
-                       table_id))) {
-          LOG_WARN("failed to get namespace metadata table id", KR(ret), KPC(table_schema));
-        } else if (OB_FAIL(ObDependencyInfo::collect_all_dep_objs(table_id, *sql_proxy_, dep_objs_after_lock))) {
+        } else if (OB_FAIL(ObDependencyInfo::collect_all_dep_objs(
+                       table_schema->get_table_id(), *sql_proxy_, dep_objs_after_lock))) {
         } else if (OB_FAIL(check_dep_objs_consistent(dep_objs_before_lock_array.at(i), dep_objs_after_lock))) {
         } else if (OB_FAIL(dep_objs_.push_back(dep_objs_after_lock))) {
         }
