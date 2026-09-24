@@ -155,7 +155,7 @@ int copy_scan_schema(uint64_t ns, bool namespace_local, const ObTableSchema &sou
   int ret = built->logical->assign(source);
   if (ret) { return ret; }
   if (OB_FAIL(built->logical->get_tablet_ids(built->logical_tablets))) { return ret; }
-  if (namespace_local && ns > 1) {
+  if (namespace_local) {
     buf = built->alloc.alloc(sizeof(ObTableSchema));
     if (!buf) { return OB_ALLOCATE_MEMORY_FAILED; }
     built->routed = new (buf) ObTableSchema(&built->alloc);

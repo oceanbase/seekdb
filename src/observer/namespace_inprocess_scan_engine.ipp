@@ -63,7 +63,7 @@ struct EngineScan {
     }
     schema = scan_schema->routed;
     uint64_t tablet_id = logical_tablet_id;
-    if (schema && namespace_local && ns > 1) {
+    if (schema && namespace_local) {
       ret = NamespaceForkKernelPrototype::storage_object_id(
           ns, logical_tablet_id, tablet_id);
     }

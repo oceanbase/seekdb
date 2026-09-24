@@ -629,15 +629,15 @@ int calc_namespace_column_checksum(
   int ret = arg.assign(input);
   ObTableSchema storage_source_schema;
   ObTableSchema storage_target_schema;
-  if (!ret && storage_space.is_namespace() && ns > 1 && OB_FAIL(
+  if (!ret && storage_space.is_namespace() && OB_FAIL(
           storage::NamespaceForkKernelPrototype::make_storage_schema(
               ns, arg.source_schema_, storage_source_schema))) {
-  } else if (!ret && storage_space.is_namespace() && ns > 1 && OB_FAIL(
+  } else if (!ret && storage_space.is_namespace() && OB_FAIL(
           storage::NamespaceForkKernelPrototype::make_storage_schema(
               ns, arg.target_schema_, storage_target_schema))) {
-  } else if (!ret && storage_space.is_namespace() && ns > 1 && OB_FAIL(
+  } else if (!ret && storage_space.is_namespace() && OB_FAIL(
           arg.source_schema_.assign(storage_source_schema))) {
-  } else if (!ret && storage_space.is_namespace() && ns > 1 && OB_FAIL(
+  } else if (!ret && storage_space.is_namespace() && OB_FAIL(
           arg.target_schema_.assign(storage_target_schema))) {
   }
   for (int64_t i = 0; !ret && i < arg.calc_items_.count(); ++i) {
