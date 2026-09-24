@@ -934,9 +934,14 @@ int ObDDLTaskUtil::check_and_cancel_single_replica_dag(
 {
   int ret = OB_SUCCESS;
   all_dag_exit = false;
+  ObIRootserverLocalRuntime *local_runtime = task != nullptr
+      && task->context().local_runtime_ != nullptr
+      ? task->context().local_runtime_ : rootserver_local_runtime();
   if (OB_ISNULL(task)) {
     ret = OB_BAD_NULL_ERROR;
     LOG_WARN("invalid argument", K(ret));
+  } else if (OB_ISNULL(local_runtime)) {
+    ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!task->is_inited())) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
@@ -946,8 +951,11 @@ int ObDDLTaskUtil::check_and_cancel_single_replica_dag(
     common::ObArray<common::ObTabletID> dst_tablet_ids;
 
 
-    if (OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, table_id, src_tablet_ids))) {
-    } else if (OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, target_table_id, dst_tablet_ids))) {
+    ObMultiVersionSchemaService *schema_service = task->task_schema_service();
+    if (OB_ISNULL(schema_service)) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(ObDDLUtil::get_tablets(*schema_service, table_id, src_tablet_ids))) {
+    } else if (OB_FAIL(ObDDLUtil::get_tablets(*schema_service, target_table_id, dst_tablet_ids))) {
     } else if (OB_FAIL(check_dag_exit_tablets_map.create(CHECK_DAG_EXIT_BUCKET_NUM, lib::ObLabel("DDLChkDagMap")))) {
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < src_tablet_ids.count(); i++) {
@@ -984,12 +992,12 @@ int ObDDLTaskUtil::check_and_cancel_single_replica_dag(
         int tmp_ret = OB_SUCCESS;
         bool is_dag_exist = true;
         if (is_complement_data_dag && OB_TMP_FAIL(
-            rootserver_local_runtime()->check_and_cancel_ddl_complement_data_dag(arg, is_dag_exist))) {
+            local_runtime->check_and_cancel_ddl_complement_data_dag(arg, is_dag_exist))) {
           saved_ret = OB_SUCC(saved_ret) ? tmp_ret : saved_ret;
           is_tablet_dag_exist = true;
           LOG_WARN("check and cancel ddl complement dag failed", K(tmp_ret), K(arg));
         } else if (!is_complement_data_dag && OB_TMP_FAIL(
-            rootserver_local_runtime()->check_and_cancel_delete_lob_meta_row_dag(arg, is_dag_exist))) {
+            local_runtime->check_and_cancel_delete_lob_meta_row_dag(arg, is_dag_exist))) {
           saved_ret = OB_SUCC(saved_ret) ? tmp_ret : saved_ret;
           is_tablet_dag_exist = true;
           LOG_WARN("check and cancel delete lob meta row dag failed", K(tmp_ret), K(arg));

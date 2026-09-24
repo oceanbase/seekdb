@@ -1064,7 +1064,10 @@ bool ObDDLTask::is_local_build_need_retry(
     // Sometimes, the tablet leader has not refreshed the latest schema.
     // Thus, check whether the table really does not exist.
     const ObTableSchema *table_schema = nullptr;
-    if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+    ObMultiVersionSchemaService *schema_service = task_schema_service();
+    if (OB_ISNULL(schema_service)) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(ObDDLUtil::check_table_exist(object_id_, schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, table_schema))) {
     } else if (OB_ISNULL(table_schema)) {
