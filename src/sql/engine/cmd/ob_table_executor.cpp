@@ -353,7 +353,7 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
           ObBasicSessionInfo::UserScopeGuard user_scope_guard(my_session->get_sql_scope_flags());
           common::sqlclient::ObISQLConnection *conn = NULL;
           common::sqlclient::ObISQLConnectionGuard conn_guard;
-          
+
           if (OB_FAIL(my_session->get_autocommit(original_autocommit))) {
           } else if (need_set_autocommit &&
                      !original_autocommit && OB_FAIL(my_session->set_autocommit(true))) {
@@ -378,7 +378,7 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
             }
             conn = NULL;
             conn_guard.reset();
-          } 
+          }
         }
 
         DEBUG_SYNC(BEFORE_EXECUTE_CTAS_CLEAR_SESSION_ID);

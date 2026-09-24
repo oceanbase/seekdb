@@ -1141,8 +1141,8 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
         if (parent_id != OB_INVALID_INDEX) {
           db_id = parent_id;
         } else if (OB_FAIL(session_info.get_database_id(db_id))) {
-        } 
-        
+        }
+
         if (OB_SUCC(ret)) {
           // db_id == OB_INVALID_ID searches the system namespace.
           // Otherwise search the selected database before the system namespace.

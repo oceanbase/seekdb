@@ -3078,10 +3078,9 @@ int ObTableSchema::add_col_to_id_hash_array(ObColumnSchemaV2 *column)
       if (NULL == (buf = static_cast<char*>(alloc(id_hash_array_mem_size)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("Fail to allocate memory for id_hash_array, ", K(id_hash_array_mem_size));
-      } else if (NULL == (id_hash_array_ = new (buf) IdHashArray(id_hash_array_mem_size))){
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Fail to new id_hash_array.");
       } else {
+        id_hash_array_ = new (buf) IdHashArray(id_hash_array_mem_size);
+        OB_ASSERT(id_hash_array_ != nullptr);
         if (OB_SUCCESS != (hash_ret = id_hash_array_->set_refactored(ObColumnIdKey(column->get_column_id()),
                                                                 column))) {
           ret = OB_SCHEMA_ERROR;
@@ -3098,9 +3097,7 @@ int ObTableSchema::add_col_to_id_hash_array(ObColumnSchemaV2 *column)
           LOG_ERROR("fail to alloc memory", K(id_hash_array_mem_size), K(ret));
         } else {
           IdHashArray *new_array = new (buf) IdHashArray(id_hash_array_mem_size);
-          if (NULL == new_array) {
-            ret = OB_ERR_UNEXPECTED;
-          }
+          OB_ASSERT(new_array != nullptr);
           for (IdHashArray::Iterator iter = id_hash_array_->begin();
             OB_SUCC(ret) && iter != id_hash_array_->end(); ++iter) {
             if (OB_FAIL(new_array->set_refactored(id_hash_array_->get_key(iter), *iter))) {
@@ -3166,9 +3163,9 @@ int ObTableSchema::add_col_to_name_hash_array(
       if (NULL == (buf = static_cast<char*>(alloc(name_hash_array_mem_size)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("Fail to allocate memory, ", K(name_hash_array_mem_size), K(ret));
-      } else if (NULL == (name_hash_array_ = new (buf) NameHashArray(name_hash_array_mem_size))) {
-        ret = OB_ERR_UNEXPECTED;
       } else {
+        name_hash_array_ = new (buf) NameHashArray(name_hash_array_mem_size);
+        OB_ASSERT(name_hash_array_ != nullptr);
         ObColumnSchemaV2 **column_ptr = name_hash_array_->get(column_name_key);
         if (NULL != column_ptr && NULL != *column_ptr) {
           ret = OB_ERR_COLUMN_DUPLICATE;
@@ -3184,9 +3181,7 @@ int ObTableSchema::add_col_to_name_hash_array(
           LOG_ERROR("Fail to allocate memory, ", K(name_hash_array_mem_size), K(ret));
         } else {
           NameHashArray *new_array = new (buf) NameHashArray(name_hash_array_mem_size);
-          if (NULL == new_array) {
-            ret = OB_ERR_UNEXPECTED;
-          }
+          OB_ASSERT(new_array != nullptr);
           for (NameHashArray::Iterator iter = name_hash_array_->begin();
             OB_SUCC(ret) && iter != name_hash_array_->end(); ++iter) {
             if (OB_FAIL(new_array->set_refactored(name_hash_array_->get_key(iter), *iter))) {

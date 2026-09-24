@@ -691,37 +691,36 @@ int ObExprLike::cg_expr(ObExprCGCtx &op_cg_ctx,
     LOG_ERROR("null pointer", K(text_expr), K(pattern_expr), K(escape_expr));
   } else if (rt_expr.arg_cnt_ != 3 || OB_ISNULL(rt_expr.args_)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (OB_ISNULL(rt_expr.args_[0]) || OB_ISNULL(rt_expr.args_[1])
-            || OB_ISNULL(rt_expr.args_[2])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_UNLIKELY(!((ob_is_string_tc(rt_expr.args_[0]->datum_meta_.type_)
-                            || ob_is_text_tc(rt_expr.args_[0]->datum_meta_.type_)
-                            || ObNullType == rt_expr.args_[0]->datum_meta_.type_)))) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_UNLIKELY(!(ob_is_string_tc(rt_expr.args_[1]->datum_meta_.type_)
-                           || ob_is_text_tc(rt_expr.args_[1]->datum_meta_.type_)
-                           || ObNullType == rt_expr.args_[1]->datum_meta_.type_))) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_UNLIKELY(!(ObVarcharType == rt_expr.args_[2]->datum_meta_.type_
-              || ObNullType == rt_expr.args_[2]->datum_meta_.type_))) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
-    //Do optimization even if pattern_expr/escape is pushdown parameter, pattern and escape are
-    //checked whether the same as last time which is recorded in like_ctx for each row in execution.
-    bool pattern_literal = pattern_expr->is_const_expr();
-    bool escape_literal = escape_expr->is_const_expr();
-    //do check and match optimization only if extra_ is 1.
-    if (pattern_literal && escape_literal) {
-      rt_expr.extra_ = 1;
+    OB_ASSERT(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr && rt_expr.args_[2] != nullptr);
+    if (OB_UNLIKELY(!((ob_is_string_tc(rt_expr.args_[0]->datum_meta_.type_) ||
+                       ob_is_text_tc(rt_expr.args_[0]->datum_meta_.type_) ||
+                       ObNullType == rt_expr.args_[0]->datum_meta_.type_)))) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_UNLIKELY(!(ob_is_string_tc(rt_expr.args_[1]->datum_meta_.type_) ||
+                             ob_is_text_tc(rt_expr.args_[1]->datum_meta_.type_) ||
+                             ObNullType == rt_expr.args_[1]->datum_meta_.type_))) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_UNLIKELY(!(ObVarcharType == rt_expr.args_[2]->datum_meta_.type_ ||
+                             ObNullType == rt_expr.args_[2]->datum_meta_.type_))) {
+      ret = OB_ERR_UNEXPECTED;
     } else {
-      rt_expr.extra_ = 0;
-    }
-    rt_expr.eval_func_ = ObExprLike::like_varchar;
-    // Batch evaluation supports a batch text argument with scalar pattern and escape.
-    if (text_expr->is_vectorize_result() &&
-        !rt_expr.args_[1]->is_batch_result() &&
-        !rt_expr.args_[2]->is_batch_result()) {
-      rt_expr.eval_batch_func_ = ObExprLike::eval_like_expr_batch_only_text_vectorized;
+      // Do optimization even if pattern_expr/escape is pushdown parameter, pattern and escape are
+      // checked whether the same as last time which is recorded in like_ctx for each row in execution.
+      bool pattern_literal = pattern_expr->is_const_expr();
+      bool escape_literal = escape_expr->is_const_expr();
+      // do check and match optimization only if extra_ is 1.
+      if (pattern_literal && escape_literal) {
+        rt_expr.extra_ = 1;
+      } else {
+        rt_expr.extra_ = 0;
+      }
+      rt_expr.eval_func_ = ObExprLike::like_varchar;
+      // Batch evaluation supports a batch text argument with scalar pattern and escape.
+      if (text_expr->is_vectorize_result() && !rt_expr.args_[1]->is_batch_result() &&
+          !rt_expr.args_[2]->is_batch_result()) {
+        rt_expr.eval_batch_func_ = ObExprLike::eval_like_expr_batch_only_text_vectorized;
+      }
     }
   }
   return ret;

@@ -500,23 +500,25 @@ int ObSkipIndexFilterExecutor::in_operator(const sql::ObWhiteFilterExecutor &fil
     ObDatumComparator cmp_rev(cmp_func, ret, equal, nullptr, true);
     int64_t pos = std::lower_bound(datums.get_data(), datums.get_data() + datums.count(), min_datum, cmp_rev) - datums.get_data();
     if (OB_FAIL(ret)) {
-    } else if (pos < 0 || pos > datums.count()) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (pos == datums.count()) { // datums[datums.count()-1] < min_datum <= max_datum
-      fal_desc.set_always_false();
     } else {
-      const ObDatum &ref_datum = datums.at(pos);
-      if (OB_FAIL(cmp_func(max_datum, ref_datum, cmp_res, nullptr))) {
-      } else if (cmp_res > 0) { // min_datum <= datums[pos] < max_datum
-        fal_desc.set_uncertain();
-      } else if (is_max_prefix) {
-        fal_desc.set_uncertain();
-      } else if (cmp_res < 0) { // min_datum <= max_datum < datums[0] or datums[pos-1] < min_datum <= max_datum < datums[pos]
+      OB_ASSERT(pos >= 0 && pos <= datums.count());
+      if (pos == datums.count()) { // datums[datums.count()-1] < min_datum <= max_datum
         fal_desc.set_always_false();
-      } else if (equal) { // min_datum == max_datum == datums[pos]
-        fal_desc.set_always_true();
       } else {
-        fal_desc.set_uncertain(); // min_datum != max_datum and max_datum == datums[pos]
+        const ObDatum &ref_datum = datums.at(pos);
+        if (OB_FAIL(cmp_func(max_datum, ref_datum, cmp_res, nullptr))) {
+        } else if (cmp_res > 0) { // min_datum <= datums[pos] < max_datum
+          fal_desc.set_uncertain();
+        } else if (is_max_prefix) {
+          fal_desc.set_uncertain();
+        } else if (cmp_res <
+                   0) { // min_datum <= max_datum < datums[0] or datums[pos-1] < min_datum <= max_datum < datums[pos]
+          fal_desc.set_always_false();
+        } else if (equal) { // min_datum == max_datum == datums[pos]
+          fal_desc.set_always_true();
+        } else {
+          fal_desc.set_uncertain(); // min_datum != max_datum and max_datum == datums[pos]
+        }
       }
     }
   }

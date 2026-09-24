@@ -63,20 +63,19 @@ int ObExprInnerRowCmpVal::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw
 {
   int ret = OB_SUCCESS;
   UNUSED(expr_cg_ctx);
-  if (rt_expr.arg_cnt_ != 3) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(rt_expr.args_[0]) || OB_ISNULL(rt_expr.args_[1]) ||
-             OB_ISNULL(rt_expr.args_[2])) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (!ob_is_decimal_int_tc(rt_expr.args_[0]->datum_meta_.type_) ||
-             !ob_is_decimal_int_tc(rt_expr.args_[1]->datum_meta_.type_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (rt_expr.args_[0]->datum_meta_.precision_ != rt_expr.args_[1]->datum_meta_.precision_
-             || rt_expr.args_[0]->datum_meta_.scale_ != rt_expr.args_[1]->datum_meta_.scale_) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-    rt_expr.eval_func_ = eval_inner_row_cmp_val;
-    rt_expr.extra_ = raw_expr.get_ret_code();
+  {
+    OB_ASSERT(rt_expr.arg_cnt_ == 3);
+    OB_ASSERT(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr && rt_expr.args_[2] != nullptr);
+    if (!ob_is_decimal_int_tc(rt_expr.args_[0]->datum_meta_.type_) ||
+        !ob_is_decimal_int_tc(rt_expr.args_[1]->datum_meta_.type_)) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (rt_expr.args_[0]->datum_meta_.precision_ != rt_expr.args_[1]->datum_meta_.precision_ ||
+               rt_expr.args_[0]->datum_meta_.scale_ != rt_expr.args_[1]->datum_meta_.scale_) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      rt_expr.eval_func_ = eval_inner_row_cmp_val;
+      rt_expr.extra_ = raw_expr.get_ret_code();
+    }
   }
   return ret;
 }

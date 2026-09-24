@@ -100,11 +100,9 @@ int ObExprDecodeTraceId::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_
   UNUSED(expr_cg_ctx);
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
-  if (rt_expr.arg_cnt_ != 1) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
+  {
+    OB_ASSERT(rt_expr.arg_cnt_ == 1);
+    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
     rt_expr.eval_func_ = ObExprDecodeTraceId::calc_decode_trace_id_expr;
     rt_expr.eval_batch_func_ = ObExprDecodeTraceId::calc_decode_trace_id_expr_batch;
   }

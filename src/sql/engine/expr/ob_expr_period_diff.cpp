@@ -85,12 +85,9 @@ int ObExprPeriodDiff::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
-  if (rt_expr.arg_cnt_ != 2) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])
-            || OB_ISNULL(rt_expr.args_[1])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
+  {
+    OB_ASSERT(rt_expr.arg_cnt_ == 2);
+    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
     CK(ObUInt64Type == rt_expr.args_[0]->datum_meta_.type_);
     CK(ObUInt64Type == rt_expr.args_[1]->datum_meta_.type_);
     rt_expr.eval_func_ = ObExprPeriodDiff::calc_perioddiff;
@@ -176,12 +173,9 @@ int ObExprPeriodAdd::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
-  if (rt_expr.arg_cnt_ != 2) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])
-            || OB_ISNULL(rt_expr.args_[1])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
+  {
+    OB_ASSERT(rt_expr.arg_cnt_ == 2);
+    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
     CK(ObIntType == rt_expr.args_[0]->datum_meta_.type_);
     CK(ObIntType == rt_expr.args_[1]->datum_meta_.type_);
     rt_expr.eval_func_ = ObExprPeriodAdd::calc_periodadd;

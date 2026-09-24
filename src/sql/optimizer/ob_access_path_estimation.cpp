@@ -1621,13 +1621,12 @@ int ObAccessPathEstimation::storage_estimate_range_rowcount(ObOptimizerContext &
   }
   
   if (OB_FAIL(ret) || need_fallback) {
-  } else if (OB_ISNULL(ranges)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(choose_storage_estimation_ranges(range_limit, *ranges, false, chosen_scan_ranges))) {
-  } else if (OB_FAIL(choose_storage_estimation_partitions(partition_limit,
-                                                          part_loc_infos,
-                                                          chosen_partitions))) {
   } else {
+    OB_ASSERT(ranges != nullptr);
+    if (OB_FAIL(choose_storage_estimation_ranges(range_limit, *ranges, false, chosen_scan_ranges))) {
+    } else if (OB_FAIL(choose_storage_estimation_partitions(partition_limit, part_loc_infos, chosen_partitions))) {
+    } else {
+    }
   }
   for (int64_t i = 0; OB_SUCC(ret) && !need_fallback && i < chosen_partitions.count(); i ++) {
     EstimatedTablet local_tablet;

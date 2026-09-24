@@ -8754,8 +8754,8 @@ int ObTransformUtils::check_correlated_exprs_can_pullup(const ObIArray<ObExecPar
     } else if (!can_pullup) {
       //do nothing
     } else if (OB_FAIL(check_can_pullup_conds(subquery, has_special_expr))) {
-    } else if (OB_FAIL(is_from_item_correlated(exec_params, 
-                                               subquery, 
+    } else if (OB_FAIL(is_from_item_correlated(exec_params,
+                                               subquery,
                                                is_correlated))) {
     } else if (is_correlated) {
       can_pullup = false;

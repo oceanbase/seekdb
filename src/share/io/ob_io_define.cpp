@@ -1357,8 +1357,8 @@ ObIOHandle& ObIOHandle::operator=(const ObIOHandle &other)
   if (&other != this) {
   	int ret = OB_SUCCESS;
     if (OB_NOT_NULL(other.result_)) {
-    	if (OB_FAIL(set_result(*other.result_))) {
-    	}
+        if (OB_FAIL(set_result(*other.result_))) {
+        }
     }
   }
   return *this;

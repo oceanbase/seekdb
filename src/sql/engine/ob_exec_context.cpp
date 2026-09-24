@@ -1069,9 +1069,8 @@ pl::ObPLPackageGuard* ObExecContext::get_package_guard()
     } else {
       package_guard_ =
         new(package_guard_)pl::ObPLPackageGuard{};
-      if (OB_ISNULL(package_guard_)) {
-        ret = OB_ERR_UNEXPECTED;
-      } else if (OB_FAIL(package_guard_->init())) {
+      OB_ASSERT(package_guard_ != nullptr);
+      if (OB_FAIL(package_guard_->init())) {
       }
     }
   }

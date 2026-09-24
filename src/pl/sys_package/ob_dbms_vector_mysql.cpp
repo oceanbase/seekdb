@@ -292,7 +292,7 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
       const int64_t max_pos = 1;
       ObObj sum_result_obj;
       ObObj max_result_obj;
-      
+
       SMART_VAR(ObMySQLProxy::MySQLResult, res) {
         ObSqlString query_string;
         sqlclient::ObMySQLResult *result = NULL;

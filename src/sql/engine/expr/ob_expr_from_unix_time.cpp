@@ -91,24 +91,26 @@ int ObExprFromUnixTime::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
-  if (OB_UNLIKELY(rt_expr.arg_cnt_ != 1 && rt_expr.arg_cnt_ != 2)
-      || OB_ISNULL(rt_expr.args_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (1 == rt_expr.arg_cnt_) {
-    if (OB_ISNULL(rt_expr.args_[0])) {
-      ret = OB_INVALID_ARGUMENT;
-    } else if (ObNumberType != rt_expr.args_[0]->datum_meta_.type_) {
-      rt_expr.eval_func_ = &eval_one_temporal_fromtime;
+  {
+    OB_ASSERT((rt_expr.arg_cnt_ == 1 || rt_expr.arg_cnt_ == 2) && rt_expr.args_ != nullptr);
+    if (1 == rt_expr.arg_cnt_) {
+      {
+        OB_ASSERT(rt_expr.args_[0] != nullptr);
+        if (ObNumberType != rt_expr.args_[0]->datum_meta_.type_) {
+          rt_expr.eval_func_ = &eval_one_temporal_fromtime;
+        } else {
+          rt_expr.eval_func_ = &eval_one_param_fromtime;
+        }
+      }
     } else {
-      rt_expr.eval_func_ = &eval_one_param_fromtime;
-    }
-  } else {
-    if (OB_ISNULL(rt_expr.args_[0]) || OB_ISNULL(rt_expr.args_[1])) {
-      ret = OB_INVALID_ARGUMENT;
-    } else if (0 == raw_expr.get_from_unixtime_flag()) {
-      rt_expr.eval_func_ = &eval_fromtime_normal;
-    } else {
-      rt_expr.eval_func_ = &eval_fromtime_special;
+      {
+        OB_ASSERT(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
+        if (0 == raw_expr.get_from_unixtime_flag()) {
+          rt_expr.eval_func_ = &eval_fromtime_normal;
+        } else {
+          rt_expr.eval_func_ = &eval_fromtime_special;
+        }
+      }
     }
   }
   return ret;

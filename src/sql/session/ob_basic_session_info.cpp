@@ -5123,8 +5123,8 @@ int ObBasicSessionInfo::ensure_sys_var_loaded(const ObSysVarClassType sys_var_id
     if (OB_FAIL(mutable_this->apply_server_runtime_default(sys_var_id, value))) {
     } else if (OB_FAIL(mutable_this->load_sys_variable_fast(calc_buf, sys_var_id,
                                                             type, value, min_val, max_val, var_flag, false))) {
-    } 
-    
+    }
+
     if (OB_NOT_NULL(mutable_this->sys_vars_[store_idx]) &&
         mutable_this->sys_vars_[store_idx]->is_influence_plan()) {
       if (OB_FAIL(mutable_this->influence_plan_var_indexs_.push_back(store_idx))) {
