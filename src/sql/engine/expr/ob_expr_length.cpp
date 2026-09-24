@@ -62,9 +62,8 @@ int ObExprLength::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr, ObE
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
-  if (rt_expr.arg_cnt_ != 1) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
+  {
+    ASSERT_COND(rt_expr.arg_cnt_ == 1);
     ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
     ObObjType text_type = rt_expr.args_[0]->datum_meta_.type_;
     ObObjTypeClass type_class = ob_obj_type_class(text_type);

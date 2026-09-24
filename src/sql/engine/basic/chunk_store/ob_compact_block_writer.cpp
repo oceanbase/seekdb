@@ -32,9 +32,9 @@ int ObCompactBlockWriter::CurRowInfo::init(const ChunkRowMeta *row_meta, const u
   int ret = OB_SUCCESS;
   if (OB_ISNULL(row_meta) || OB_ISNULL(buf)) {
     ret = OB_ERR_UNEXPECTED;
-  } else if (offset_width != BASE_OFFSET_SIZE && offset_width != EXTENDED_OFFSET_SIZE) {
-    ret = OB_INVALID_ARGUMENT;
   } else {
+    // Private callers instantiate the row writer with uint16_t or uint32_t.
+    ASSERT_COND(offset_width == BASE_OFFSET_SIZE || offset_width == EXTENDED_OFFSET_SIZE);
     buf_ = buf;
     cur_var_offset_pos_ = 0;
     var_column_cnt_ = row_meta->col_cnt_ - row_meta->fixed_cnt_;

@@ -256,9 +256,8 @@ int ObExprArrayContains::cg_expr(ObExprCGCtx &expr_cg_ctx,
 {
   int ret = OB_SUCCESS;
   UNUSED(raw_expr);
-  if (rt_expr.arg_cnt_ != 2 || OB_ISNULL(rt_expr.args_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
+  {
+    ASSERT_COND(rt_expr.arg_cnt_ == 2 && rt_expr.args_ != nullptr);
     ASSERT_COND(rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
     rt_expr.eval_func_ = NULL;
     rt_expr.may_not_need_raw_check_ = false;

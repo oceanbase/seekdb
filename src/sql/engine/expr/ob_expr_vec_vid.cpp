@@ -60,9 +60,8 @@ int ObExprVecVid::cg_expr(
   if (OB_UNLIKELY(rt_expr.arg_cnt_ != 1 && rt_expr.arg_cnt_ != 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected param count", K(rt_expr.arg_cnt_), K(rt_expr.args_), K(rt_expr.type_));
-  } else if (OB_UNLIKELY(rt_expr.arg_cnt_ == 1 && OB_ISNULL(rt_expr.args_))) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
+    ASSERT_COND(rt_expr.arg_cnt_ != 1 || rt_expr.args_ != nullptr);
     rt_expr.eval_func_ = generate_vec_id;
   }
   return ret;

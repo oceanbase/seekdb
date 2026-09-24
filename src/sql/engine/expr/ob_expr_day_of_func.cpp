@@ -80,9 +80,8 @@ int ObExprToSeconds::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
-  if (rt_expr.arg_cnt_ != 1) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
+  {
+    ASSERT_COND(rt_expr.arg_cnt_ == 1);
     ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
     rt_expr.eval_func_ = ObExprToSeconds::calc_toseconds;
   }
@@ -158,9 +157,8 @@ int ObExprSecToTime::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
-  if (rt_expr.arg_cnt_ != 1) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
+  {
+    ASSERT_COND(rt_expr.arg_cnt_ == 1);
     ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
     CK(ObNumberType == rt_expr.args_[0]->datum_meta_.type_);
     rt_expr.eval_func_ = ObExprSecToTime::calc_sectotime;
@@ -241,9 +239,8 @@ int ObExprTimeToSec::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
-  if (rt_expr.arg_cnt_ != 1) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
+  {
+    ASSERT_COND(rt_expr.arg_cnt_ == 1);
     ASSERT_COND(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
     CK(ObTimeType == rt_expr.args_[0]->datum_meta_.type_);
     rt_expr.eval_func_ = ObExprTimeToSec::calc_timetosec;

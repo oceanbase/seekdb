@@ -1955,8 +1955,10 @@ int ObStaticEngineCG::generate_spec(ObLogInsert &op, ObTableReplaceSpec &spec, c
     uint64_t ft_col_id = OB_INVALID_ID;
     OZ(table_schema->get_fulltext_column_ids(spec.doc_id_col_id_, ft_col_id));
     // Record the column_ref expression and column_id of the rowkey of the current main table
-    CK(primary_dml_info->column_exprs_.count() == primary_dml_info->column_convert_exprs_.count());
-    CK(del_dml_infos.count() == insert_dml_infos.count());
+    if (OB_SUCC(ret)) {
+      ASSERT_COND(primary_dml_info->column_exprs_.count() == primary_dml_info->column_convert_exprs_.count());
+      ASSERT_COND(del_dml_infos.count() == insert_dml_infos.count());
+    }
     OZ(spec.replace_ctdefs_.allocate_array(phy_plan_->get_allocator(), insert_dml_infos.count()));
     for (int64_t i = 0; OB_SUCC(ret) && i < insert_dml_infos.count(); ++i) {
       const IndexDMLInfo *index_dml_info = insert_dml_infos.at(i);
@@ -2540,7 +2542,7 @@ int ObStaticEngineCG::generate_spec(ObLogJoinFilter &op, ObJoinFilterSpec &spec,
     const common::ObIArray<int64_t> &p2p_sequence_ids = op.get_p2p_sequence_ids();
     const common::ObIArray<RuntimeFilterType> &rf_types =
         op.get_join_filter_types();
-    CK(p2p_sequence_ids.count() > 0 && p2p_sequence_ids.count() == rf_types.count());
+    ASSERT_COND(p2p_sequence_ids.count() > 0 && p2p_sequence_ids.count() == rf_types.count());
     OZ(spec.rf_infos_.init(rf_types.count()));
     ObExpr *join_filter_expr = nullptr;
     for (int i = 0; i < rf_types.count() && OB_SUCC(ret); ++i) {
@@ -3898,20 +3900,22 @@ int ObStaticEngineCG::generate_join_spec(ObLogJoin &op, ObJoinSpec &spec)
     ARRAY_FOREACH(equal_join_conds, i) {
       ObMergeJoinSpec::EqualConditionInfo equal_cond_info;
       ObRawExpr *raw_expr = equal_join_conds.at(i);
-      CK(OB_NOT_NULL(raw_expr));
-      CK(T_OP_EQ == raw_expr->get_expr_type() || T_OP_NSEQ == raw_expr->get_expr_type());
+      if (OB_SUCC(ret)) {
+        ASSERT_COND(raw_expr != nullptr);
+        ASSERT_COND(T_OP_EQ == raw_expr->get_expr_type() || T_OP_NSEQ == raw_expr->get_expr_type());
+      }
       OZ(generate_rt_expr(*raw_expr, equal_cond_info.expr_));
-      CK(OB_NOT_NULL(equal_cond_info.expr_));
-      CK(equal_cond_info.expr_->arg_cnt_ == 2)
-      CK(OB_NOT_NULL(equal_cond_info.expr_->args_));
-      CK(OB_NOT_NULL(equal_cond_info.expr_->args_[0]));
-      CK(OB_NOT_NULL(equal_cond_info.expr_->args_[1]));
       if (OB_SUCC(ret)){
+        ASSERT_COND(equal_cond_info.expr_ != nullptr);
+        ASSERT_COND(equal_cond_info.expr_->arg_cnt_ == 2);
+        ASSERT_COND(equal_cond_info.expr_->args_ != nullptr);
+        ASSERT_COND(equal_cond_info.expr_->args_[0] != nullptr);
+        ASSERT_COND(equal_cond_info.expr_->args_[1] != nullptr);
         ObDatumMeta &l = equal_cond_info.expr_->args_[0]->datum_meta_;
         ObDatumMeta &r = equal_cond_info.expr_->args_[1]->datum_meta_;
         bool has_lob_header = equal_cond_info.expr_->args_[0]->obj_meta_.has_lob_header() ||
                               equal_cond_info.expr_->args_[1]->obj_meta_.has_lob_header();
-        CK(l.cs_type_ == r.cs_type_);
+        ASSERT_COND(l.cs_type_ == r.cs_type_);
         if (OB_SUCC(ret)) {
           const ObScale scale = ObDatumFuncs::max_scale(l.scale_, r.scale_);
           OZ(calc_equal_cond_opposite(op, *raw_expr, equal_cond_info.is_opposite_));
