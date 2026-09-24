@@ -31,7 +31,9 @@ namespace common
 {
 struct ObDatum;
 class ObIVector;
+class ObMySQLProxy;
 }
+namespace share { namespace schema { class ObMultiVersionSchemaService; } }
 namespace query
 {
 class ObISpillBatchSpoolFactory;
@@ -63,6 +65,15 @@ public:
   {
     return common::OB_NOT_SUPPORTED;
   }
+  // Resolve physical DDL ids and the task's catalog services at the query
+  // boundary. Storage reports errors through the returned logical context.
+  virtual int resolve_ddl_error_context(
+      uint64_t &table_id, uint64_t &tablet_id,
+      share::schema::ObMultiVersionSchemaService *&schema_service,
+      common::ObMySQLProxy *&sql_proxy)
+  {
+    return common::OB_NOT_SUPPORTED;
+  }
 };
 
 // Direct-insert DAG work can move to its private thread pool.  These helpers
@@ -70,6 +81,10 @@ public:
 // without exposing SQL-worker types to Storage.
 ObIDirectInsertWorkerContext *set_current_direct_insert_worker_context(
     ObIDirectInsertWorkerContext *context);
+int resolve_direct_insert_ddl_error_context(
+    uint64_t &table_id, uint64_t &tablet_id,
+    share::schema::ObMultiVersionSchemaService *&schema_service,
+    common::ObMySQLProxy *&sql_proxy);
 int report_direct_insert_ddl_checksum(
     uint64_t data_format_version,
     int64_t execution_id,

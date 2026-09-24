@@ -660,6 +660,16 @@ ObIDirectInsertWorkerContext *set_current_direct_insert_worker_context(
   return previous;
 }
 
+int resolve_direct_insert_ddl_error_context(
+    uint64_t &table_id, uint64_t &tablet_id,
+    share::schema::ObMultiVersionSchemaService *&schema_service,
+    common::ObMySQLProxy *&sql_proxy)
+{
+  return current_worker_context == nullptr ? common::OB_NOT_SUPPORTED
+      : current_worker_context->resolve_ddl_error_context(
+          table_id, tablet_id, schema_service, sql_proxy);
+}
+
 int report_direct_insert_ddl_checksum(
     const uint64_t data_format_version,
     const int64_t execution_id,

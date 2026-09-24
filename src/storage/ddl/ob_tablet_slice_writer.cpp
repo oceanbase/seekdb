@@ -22,6 +22,7 @@
 #include "storage/ddl/ob_ddl_macro_block_writer.h"
 #include "storage/ddl/ob_lob_macro_block_writer.h"
 #include "storage/ddl/ob_ddl_vector_utils.h"
+#include "data_plane/ddl/ob_direct_insert.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "sql/engine/ob_batch_rows.h"
@@ -36,6 +37,22 @@ using namespace oceanbase::share::schema;
 using namespace oceanbase::storage;
 using namespace oceanbase::blocksstable;
 using namespace oceanbase::sql;
+
+namespace {
+int resolve_unique_index_report_context(
+    uint64_t storage_table_id, const ObTabletID &storage_tablet_id,
+    uint64_t &table_id, uint64_t &tablet_id,
+    ObMultiVersionSchemaService *&schema_service, ObMySQLProxy *&sql_proxy)
+{
+  table_id = storage_table_id;
+  tablet_id = storage_tablet_id.id();
+  schema_service = &ObMultiVersionSchemaService::get_instance();
+  sql_proxy = GCTX.sql_proxy_;
+  const int ret = data_plane::resolve_direct_insert_ddl_error_context(
+      table_id, tablet_id, schema_service, sql_proxy);
+  return ret == OB_NOT_SUPPORTED ? OB_SUCCESS : ret;
+}
+}
 
 ObTabletSliceWriter::ObTabletSliceWriter()
   : is_inited_(false), allocator_(ObMemAttr("ddl_mb_writer")), slice_idx_(-1), storage_column_count_(0), macro_block_writer_(nullptr), row_count_(0), unique_index_id_(0)
@@ -71,9 +88,18 @@ int ObTabletSliceWriter::report_unique_key_duplicated(
   report_ret_code = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = nullptr;
-  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+  uint64_t logical_table_id = OB_INVALID_ID;
+  uint64_t logical_tablet_id = OB_INVALID_ID;
+  ObMultiVersionSchemaService *schema_service = nullptr;
+  ObMySQLProxy *sql_proxy = nullptr;
+  if (OB_FAIL(resolve_unique_index_report_context(
+          table_id, tablet_id, logical_table_id, logical_tablet_id,
+          schema_service, sql_proxy))) {
+  } else if (OB_ISNULL(schema_service) || OB_ISNULL(sql_proxy)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("get runtime schema failed", K(ret), K(table_id));
-  } else if (OB_FAIL(schema_guard.get_table_schema(table_id, table_schema))) {
+  } else if (OB_FAIL(schema_guard.get_table_schema(logical_table_id, table_schema))) {
     LOG_WARN("get table schema failed", K(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
@@ -88,11 +114,11 @@ int ObTabletSliceWriter::report_unique_key_duplicated(
         *table_schema, index_key, index_key_buffer, OB_TMP_BUF_SIZE_256))) {
       LOG_WARN("extract unique index key failed", K(ret), K(index_key));
     } else if (OB_FAIL(ObDDLErrorMessageTableOperator::get_index_task_info(
-        *GCTX.sql_proxy_, *table_schema, error_info))) {
+        *sql_proxy, *table_schema, error_info))) {
       LOG_WARN("get task id of index table failed", K(ret), K(table_schema));
     } else if (OB_FAIL(ObDDLErrorMessageTableOperator::generate_index_ddl_error_message(
         ret_code, *table_schema, ObCurTraceId::get_trace_id_str(), error_info.task_id_,
-        error_info.parent_task_id_, tablet_id.id(), GCTX.self_addr(), *GCTX.sql_proxy_,
+        error_info.parent_task_id_, logical_tablet_id, GCTX.self_addr(), *sql_proxy,
         index_key_buffer, report_ret_code))) {
       LOG_WARN("generate index ddl error message", K(ret), K(report_ret_code));
     }
@@ -111,9 +137,18 @@ int ObTabletSliceWriter::report_unique_key_duplicated(
   report_ret_code = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = nullptr;
-  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+  uint64_t logical_table_id = OB_INVALID_ID;
+  uint64_t logical_tablet_id = OB_INVALID_ID;
+  ObMultiVersionSchemaService *schema_service = nullptr;
+  ObMySQLProxy *sql_proxy = nullptr;
+  if (OB_FAIL(resolve_unique_index_report_context(
+          table_id, tablet_id, logical_table_id, logical_tablet_id,
+          schema_service, sql_proxy))) {
+  } else if (OB_ISNULL(schema_service) || OB_ISNULL(sql_proxy)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("get runtime schema failed", K(ret), K(table_id));
-  } else if (OB_FAIL(schema_guard.get_table_schema(table_id, table_schema))) {
+  } else if (OB_FAIL(schema_guard.get_table_schema(logical_table_id, table_schema))) {
     LOG_WARN("get table schema failed", K(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
@@ -187,11 +222,11 @@ int ObTabletSliceWriter::report_unique_key_duplicated(
         *table_schema, *index_key, index_key_buffer, OB_TMP_BUF_SIZE_256))) {
       LOG_WARN("extract unique index key failed", K(ret), KPC(index_key));
     } else if (OB_FAIL(ObDDLErrorMessageTableOperator::get_index_task_info(
-        *GCTX.sql_proxy_, *table_schema, error_info))) {
+        *sql_proxy, *table_schema, error_info))) {
       LOG_WARN("get task id of index table failed", K(ret), K(table_schema));
     } else if (OB_FAIL(ObDDLErrorMessageTableOperator::generate_index_ddl_error_message(
         ret_code, *table_schema, ObCurTraceId::get_trace_id_str(), error_info.task_id_,
-        error_info.parent_task_id_, tablet_id.id(), GCTX.self_addr(), *GCTX.sql_proxy_,
+        error_info.parent_task_id_, logical_tablet_id, GCTX.self_addr(), *sql_proxy,
         index_key_buffer, report_ret_code))) {
       LOG_WARN("generate index ddl error message", K(ret), K(report_ret_code));
     }

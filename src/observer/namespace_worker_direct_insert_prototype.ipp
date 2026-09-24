@@ -81,6 +81,36 @@ struct DirectInsertOwner final : ObIDirectInsertWorkerContext {
     THIS_WORKER.set_session(&context->session);
     THIS_WORKER.set_timeout_ts(deadline);
   }
+  int resolve_ddl_error_context(
+      uint64_t &table_id, uint64_t &tablet_id,
+      share::schema::ObMultiVersionSchemaService *&schema_service,
+      ObMySQLProxy *&sql_proxy) override {
+    schema_service = nullptr;
+    sql_proxy = nullptr;
+    ns::NamespaceRuntime *runtime = nullptr;
+    if (!ns::namespace_registry().get(namespace_id, runtime) || runtime == nullptr) {
+      return OB_NOT_INIT;
+    }
+    schema_service = static_cast<share::schema::ObMultiVersionSchemaService *>(
+        runtime->service(ns::NamespaceRuntime::SCHEMA_SERVICE));
+    sql_proxy = static_cast<ObMySQLProxy *>(
+        runtime->service(ns::NamespaceRuntime::SQL_PROXY));
+    if (!schema_service || !sql_proxy) { return OB_NOT_INIT; }
+    if (namespace_id > 1) {
+      uint64_t logical_table_id = OB_INVALID_ID;
+      uint64_t logical_tablet_id = OB_INVALID_ID;
+      int ret = storage::NamespaceForkKernelPrototype::local_object_id(
+          namespace_id, table_id, logical_table_id);
+      if (!ret) {
+        ret = storage::NamespaceForkKernelPrototype::local_object_id(
+            namespace_id, tablet_id, logical_tablet_id);
+      }
+      if (ret) { return ret; }
+      table_id = logical_table_id;
+      tablet_id = logical_tablet_id;
+    }
+    return OB_SUCCESS;
+  }
   int report_ddl_checksum(
       uint64_t data_format_version,
       int64_t execution_id,
@@ -188,6 +218,17 @@ struct DirectInsertWriterOwner {
     ObIDirectInsertWriterFactory::destroy(writer);
     --owner->writers;
   }
+};
+
+class DirectInsertWorkerContextScope final {
+public:
+  explicit DirectInsertWorkerContextScope(ObIDirectInsertWorkerContext *context)
+      : previous_(set_current_direct_insert_worker_context(context)) {}
+  ~DirectInsertWorkerContextScope() {
+    set_current_direct_insert_worker_context(previous_);
+  }
+private:
+  ObIDirectInsertWorkerContext *previous_;
 };
 
 struct DirectInsertRoute {
@@ -368,6 +409,7 @@ struct DirectInsertRoute {
     auto entry = writers.find(writer_id);
     if (entry == writers.end()) { return OB_STATE_NOT_MATCH; }
     if (operation == 'E') {
+      DirectInsertWorkerContextScope context_scope(owner.get());
       ret = entry->second->writer->close();
       if (!ret) {
         rows = entry->second->writer->get_row_count();
@@ -401,6 +443,7 @@ struct DirectInsertRoute {
     if (!owner->session) { return OB_NOT_INIT; }
     auto entry = writers.find(writer_id);
     if (entry == writers.end()) { return OB_STATE_NOT_MATCH; }
+    DirectInsertWorkerContextScope context_scope(owner.get());
     std::vector<ObDatum *> row(column_count);
     for (int64_t i = 0; !ret && i < row_count; ++i) {
       for (int64_t j = 0; j < column_count; ++j) {
