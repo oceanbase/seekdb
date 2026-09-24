@@ -23,7 +23,6 @@
 #include "lib/utility/ob_print_utils.h"
 
 #include <cstring>
-#include <cstdio>
 
 namespace oceanbase
 {
@@ -61,8 +60,6 @@ int report_error(const char *operation, const AutoConfigError &error)
   int ret = OB_INVALID_CONFIG;
   LOG_ERROR("auto-config operation failed", K(operation), "detail", error.message,
             "line", error.line, "after_replace", error.after_replace);
-  std::fprintf(stderr, "seekdb auto-config %s failed: %s\n", operation, error.message);
-  std::fflush(stderr);
   if (error.after_replace != 0) {
     LOG_USER_ERROR(OB_INVALID_CONFIG,
                    "auto-config file was replaced, but durability could not be confirmed");
