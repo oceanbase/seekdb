@@ -244,7 +244,7 @@ int in_process_open(InProcessStorage &ctx, uint32_t sid, bool internal)
   }
   if (!ret) {
     ctx.writes = std::make_unique<EngineWrites>(
-        StorageSpaceHandle::namespace_space(ctx.ns), ctx.session);
+        ctx.storage_space, ctx.session);
     ctx.initialized = true;
   }
   return ret;

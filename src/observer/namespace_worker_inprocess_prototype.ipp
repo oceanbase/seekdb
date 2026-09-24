@@ -79,7 +79,7 @@ sql::ObPlanCache *effective_plan_cache(sql::ObSQLSessionInfo *session,
   ns::NamespaceRuntime *runtime =
       session->ns_runtime();
   void *service = runtime ? runtime->service(ns::NamespaceRuntime::PLAN_CACHE) : nullptr;
-  return service != nullptr ? static_cast<sql::ObPlanCache *>(service) : fallback;
+  return static_cast<sql::ObPlanCache *>(service);
 }
 query::ObIRootCommandService *effective_root_command_service(
     sql::ObSQLSessionInfo *session, query::ObIRootCommandService *fallback)
@@ -561,9 +561,6 @@ int inprocess_refresh_schema(uint64_t ns)
 }
 share::schema::ObMultiVersionSchemaService *namespace_schema_service(uint64_t ns)
 {
-  if (ns <= 1) {
-    return &share::schema::ObMultiVersionSchemaService::get_instance();
-  }
   ns::NamespaceRuntime *runtime = nullptr;
   if (!ns::namespace_registry().get(ns, runtime) || runtime == nullptr) {
     return nullptr;
@@ -573,9 +570,6 @@ share::schema::ObMultiVersionSchemaService *namespace_schema_service(uint64_t ns
 }
 common::ObMySQLProxy *namespace_sql_proxy(uint64_t ns)
 {
-  if (ns <= 1) {
-    return GCTX.sql_proxy_;
-  }
   ns::NamespaceRuntime *runtime = nullptr;
   if (!ns::namespace_registry().get(ns, runtime) || runtime == nullptr) {
     return nullptr;

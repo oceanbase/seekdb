@@ -221,9 +221,11 @@ int ObServer::get_or_insert_schedule_info(
   common::ObMySQLProxy *sql_proxy = runtime != nullptr
       ? static_cast<common::ObMySQLProxy *>(
           runtime->service(ns::NamespaceRuntime::SQL_PROXY)) : nullptr;
-  if (sql_proxy == nullptr) { sql_proxy = GCTX.sql_proxy_; }
   rootserver::ObDDLSliceInfo ddl_slice_info;
-  if (OB_FAIL(ddl_slice_info.part_ranges_.assign(part_ranges))) {
+  if (OB_ISNULL(sql_proxy)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("session SQL proxy is not bound", KR(ret), KP(runtime));
+  } else if (OB_FAIL(ddl_slice_info.part_ranges_.assign(part_ranges))) {
     LOG_WARN("assign DDL slice ranges failed", KR(ret), K(task_id));
   } else if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::get_or_insert_schedule_info(
                  *sql_proxy, task_id, allocator, ddl_slice_info, is_idempotent_mode))) {
@@ -1343,18 +1345,6 @@ int ObServer::start()
       LOG_ERROR("fail to wait for server metadata readiness", KR(ret));
     } else {
       FLOG_INFO("server metadata is ready");
-    }
-
-    if (OB_SUCC(ret)) {
-      if (ns::namespace_registry().add(1, "") != 0) {
-        ret = OB_ERR_UNEXPECTED;
-      } else {
-        ns::NamespaceRuntime *home = nullptr;
-        if (ns::namespace_registry().get(1, home) && home != nullptr) {
-          home->set_service(ns::NamespaceRuntime::SCHEMA_SERVICE,
-              &share::schema::ObMultiVersionSchemaService::get_instance());
-        }
-      }
     }
 
     if (FAILEDx(net_frame_.start())) {
@@ -2507,6 +2497,16 @@ int ObServer::init_global_context()
   } else if (OB_FAIL(ddl_sql_proxy_.set_target_namespace(1))) {
     return ret;
   }
+  if (ns::namespace_registry().add(1, "") != 0) {
+    return OB_ERR_UNEXPECTED;
+  }
+  ns::NamespaceRuntime *home = nullptr;
+  if (!ns::namespace_registry().get(1, home) || home == nullptr) {
+    return OB_ERR_UNEXPECTED;
+  }
+  home->set_service(ns::NamespaceRuntime::SCHEMA_SERVICE,
+      &share::schema::ObMultiVersionSchemaService::get_instance());
+  home->set_service(ns::NamespaceRuntime::SQL_PROXY, &sql_proxy_);
   gctx_.self_addr_seq_.set_addr(self_addr_);
   gctx_.bandwidth_throttle_ = &bandwidth_throttle_;
   gctx_.start_time_ = start_time_;

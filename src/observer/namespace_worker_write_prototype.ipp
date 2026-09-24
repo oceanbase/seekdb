@@ -94,13 +94,25 @@ int route_tablet_id(uint64_t ns, common::ObTabletID &tablet_id)
   return ret;
 }
 
+int route_object_id(StorageSpaceHandle storage_space,
+                    uint64_t logical_id, uint64_t &storage_id)
+{
+  if (!storage_space.is_valid()) { return OB_INVALID_ARGUMENT; }
+  if (storage_space.is_global() || storage_space.namespace_id() == 1) {
+    storage_id = logical_id;
+    return OB_SUCCESS;
+  }
+  return storage::NamespaceForkKernelPrototype::storage_object_id(
+      storage_space.namespace_id(), logical_id, storage_id);
+}
+
 int route_tablet_id(StorageSpaceHandle storage_space,
                     common::ObTabletID &tablet_id)
 {
-  return storage_space.is_global() ? OB_SUCCESS
-      : storage_space.is_namespace()
-          ? route_tablet_id(storage_space.namespace_id(), tablet_id)
-          : OB_INVALID_ARGUMENT;
+  uint64_t storage_id = common::OB_INVALID_ID;
+  int ret = route_object_id(storage_space, tablet_id.id(), storage_id);
+  if (OB_SUCC(ret)) { tablet_id = common::ObTabletID(storage_id); }
+  return ret;
 }
 
 // A child DDL may inspect inherited tablets and locally-created hidden

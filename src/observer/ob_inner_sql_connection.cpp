@@ -731,10 +731,8 @@ int ObInnerSQLConnection::do_query(sqlclient::ObIExecutor &executor, ObInnerSQLR
     // Bind this connection's explicit target before local SQL execution.
     if (target_namespace_ != 0) {
       ns::NamespaceRuntime *target_runtime = nullptr;
-      if (target_namespace_ == 1) {
-        get_session().set_ns_runtime(nullptr);
-      } else if (ns::namespace_registry().get(target_namespace_, target_runtime)
-                 && OB_NOT_NULL(target_runtime)) {
+      if (ns::namespace_registry().get(target_namespace_, target_runtime)
+          && OB_NOT_NULL(target_runtime)) {
         get_session().set_ns_runtime(target_runtime);
       } else {
         ret = OB_NOT_INIT;

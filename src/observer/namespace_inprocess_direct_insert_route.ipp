@@ -62,8 +62,7 @@ struct DirectInsertRoute {
     std::shared_lock<std::shared_mutex> guard(owner->mutex);
     if (!owner->session) { return OB_NOT_INIT; }
     ObTabletID tablet = logical_tablet;
-    const uint64_t ns = storage_space.namespace_id();
-    if (ns > 1) { ret = route_tablet_id(ns, tablet); }
+    ret = route_tablet_id(storage_space, tablet);
     if (!ret) { ret = owner->session->build_autoinc_param(scope, tablet, slice, param); }
     return ret ? ret : param.is_valid() ? OB_SUCCESS : OB_INVALID_ARGUMENT;
   }
@@ -77,9 +76,8 @@ struct DirectInsertRoute {
     std::shared_lock<std::shared_mutex> guard(owner->mutex);
     if (!owner->session) { return OB_NOT_INIT; }
     ObTabletID tablet = logical_tablet, target = logical_target;
-    const uint64_t ns = storage_space.namespace_id();
-    if (ns > 1 && OB_FAIL(route_tablet_id(ns, tablet))) {
-    } else if (ns > 1 && OB_FAIL(route_tablet_id(ns, target))) {
+    if (OB_FAIL(route_tablet_id(storage_space, tablet))) {
+    } else if (OB_FAIL(route_tablet_id(storage_space, target))) {
     } else {
       ret = owner->session->sync_tablet_autoinc(tablet, target, slice, rows);
     }
@@ -97,15 +95,14 @@ struct DirectInsertRoute {
     std::shared_lock<std::shared_mutex> guard(owner->mutex);
     if (!owner->session) { return OB_NOT_INIT; }
     ObArray<ObDDLTabletSliceCount> routed;
-    const uint64_t ns = storage_space.namespace_id();
     for (int64_t i = 0; !ret && i < logical_counts.count(); ++i) {
       const ObDDLTabletSliceCount &entry = logical_counts.at(i);
       if (entry.tablet_id_ < 0 || entry.slice_count_ <= 0) {
         ret = OB_INVALID_ARGUMENT;
       } else {
         uint64_t tablet_id = static_cast<uint64_t>(entry.tablet_id_);
-        if (tablet_id != 0 && ns > 1) {
-          ret = storage::NamespaceForkKernelPrototype::storage_object_id(ns, tablet_id, tablet_id);
+        if (tablet_id != 0) {
+          ret = route_object_id(storage_space, tablet_id, tablet_id);
         }
         if (!ret && tablet_id > static_cast<uint64_t>(INT64_MAX)) { ret = OB_SIZE_OVERFLOW; }
         if (!ret) { ret = routed.push_back(ObDDLTabletSliceCount(
@@ -149,8 +146,7 @@ struct DirectInsertRoute {
     if (!owner->session) { return OB_NOT_INIT; }
     ObDirectInsertWriterRequest request = logical_request;
     request.spool_factory_ = &sql::get_temp_column_spill_spool_factory();
-    const uint64_t ns = storage_space.namespace_id();
-    if (ns > 1) { ret = route_tablet_id(ns, request.tablet_id_); }
+    ret = route_tablet_id(storage_space, request.tablet_id_);
     auto staged = ret ? nullptr : std::make_unique<DirectInsertWriterOwner>(owner);
     if (!ret) {
       ret = owner->session->get_writer_factory().create(
@@ -266,18 +262,17 @@ struct DirectInsertRoute {
       ret = tablet.is_valid() ? param.participants_.push_back(tablet) : OB_INVALID_ARGUMENT;
     }
     const uint64_t ns = storage_space.namespace_id();
-    if (!ret && ns > 1) {
+    if (!ret) {
       const uint64_t logical_table_id = static_cast<uint64_t>(param.table_id_);
       uint64_t storage_table_id = OB_INVALID_ID;
-      if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
-              ns, logical_table_id, storage_table_id))) {
+      if (OB_FAIL(route_object_id(storage_space, logical_table_id, storage_table_id))) {
       } else if (storage_table_id > static_cast<uint64_t>(INT64_MAX)) {
         ret = OB_SIZE_OVERFLOW;
       } else {
         param.table_id_ = static_cast<int64_t>(storage_table_id);
       }
       for (int64_t i = 0; !ret && i < param.participants_.count(); ++i) {
-        ret = route_tablet_id(ns, param.participants_.at(i));
+        ret = route_tablet_id(storage_space, param.participants_.at(i));
       }
       if (!ret) { ret = route_direct_insert_schema(ns, logical.table_schema_,
           logical_table_id, route_allocator, param.table_schema_); }
