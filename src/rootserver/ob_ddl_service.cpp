@@ -737,8 +737,6 @@ int ObDDLService::generate_tablet_id(
       if (OB_FAIL(id_generator.next(new_tablet_id))) {
         LOG_WARN("fail to get next tablet_id", KR(ret));
       } else {
-        new_tablet_id = storage::NamespaceForkKernelPrototype::encode_object(
-            table_schema.get_database_id(), new_tablet_id);
         (void) table_schema.set_tablet_id(new_tablet_id);
       }
     } else {

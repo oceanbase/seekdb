@@ -1375,10 +1375,6 @@ int NamespaceForkKernelPrototype::storage_object_id(
   }
   return ret;
 }
-uint64_t NamespaceForkKernelPrototype::encode_object(uint64_t database_id, uint64_t local_id) {
-  return is_encoded_id(database_id) && NamespaceObjectKey{database_of(database_id), local_id}.is_valid()
-      ? encoded(database_of(database_id), local_id) : local_id;
-}
 int NamespaceForkKernelPrototype::make_namespace_schema(
     uint64_t namespace_id, const ObTableSchema &storage_schema, ObTableSchema &namespace_schema) {
   if (!NamespaceObjectKey{namespace_id, 1}.is_valid()) { return OB_INVALID_ARGUMENT; }
@@ -2628,13 +2624,8 @@ int NamespaceForkKernelPrototype::list_schemas(uint64_t db, ObIArray<const ObTab
 int NamespaceForkKernelPrototype::check_ddl(const ObSimpleTableSchemaV2 &schema, const ObISQLClient *trans) {
   if (trans && source_drop_trans.load() == trans) { return OB_SUCCESS; }
   if (!schema.is_user_table()) { return OB_SUCCESS; }
-  if (is_encoded_id(schema.get_table_id())) {
-    if (!is_encoded_id(schema.get_database_id())
-        || database_of(schema.get_database_id()) != database_of(schema.get_table_id())) {
-      return OB_INVALID_ARGUMENT;
-    }
-    return OB_SUCCESS;
-  }
+  if (is_encoded_id(schema.get_table_id())
+      || is_encoded_id(schema.get_database_id())) { return OB_INVALID_ARGUMENT; }
   {
     bool ready = false; const int ret = namespace_registry_ready(ready);
     if (ret != OB_SUCCESS || !ready) { return ret; }

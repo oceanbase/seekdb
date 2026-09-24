@@ -59,7 +59,6 @@ public:
   static uint64_t namespace_of(uint64_t id);
   static int local_object_id(uint64_t namespace_id, uint64_t object_id, uint64_t &local_id);
   static int storage_object_id(uint64_t namespace_id, uint64_t object_id, uint64_t &storage_id);
-  static uint64_t encode_object(uint64_t database_id, uint64_t local_id);
   static int make_namespace_schema(uint64_t namespace_id,
                                    const share::schema::ObTableSchema &storage_schema,
                                    share::schema::ObTableSchema &namespace_schema);
