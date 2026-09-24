@@ -2241,15 +2241,21 @@ int ObDDLTaskRecordOperator::update_parent_task_message(
     ObDDLUpdateParentTaskIDType update_type,
     ObIAllocator &allocator,
     common::ObISQLClient &proxy,
-    common::ObMySQLProxy &read_proxy)
+    common::ObMySQLProxy &read_proxy,
+    const ObDDLTaskContext &context)
 {
   int ret = OB_SUCCESS;
   ObDDLTaskRecord task_record;
   if (OB_INVALID_ID == parent_task_id || OB_INVALID_ID == target_table_id) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(parent_task_id), K(target_table_id));
+  } else if (!context.is_complete() || context.namespace_id_ != read_proxy.target_namespace()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid ddl task context", K(ret), K(context.namespace_id_),
+        "proxy_namespace_id", read_proxy.target_namespace());
   } else if (OB_FAIL(get_ddl_task_record(parent_task_id, read_proxy, allocator, task_record))) {
   } else {
+    task_record.context_ = context;
     if (task_record.ddl_type_ == DDL_CREATE_VEC_INDEX) {
       SMART_VAR(ObVecIndexBuildTask, task) {
         if (OB_FAIL(task.init(task_record))) {

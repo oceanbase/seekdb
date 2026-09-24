@@ -701,12 +701,9 @@ int ObTableSqlService::drop_table(const ObTableSchema &storage_schema,
 
   ObTableSchema namespace_schema;
   const uint64_t namespace_id = sql_client.target_namespace();
-  if (namespace_id > 1) {
-    ret = storage::NamespaceForkKernelPrototype::make_namespace_schema(
-        namespace_id, storage_schema, namespace_schema);
-  }
-  const ObTableSchema &table_schema =
-      namespace_id > 1 ? namespace_schema : storage_schema;
+  ret = storage::NamespaceForkKernelPrototype::make_namespace_schema(
+      namespace_id, storage_schema, namespace_schema);
+  const ObTableSchema &table_schema = namespace_schema;
   const uint64_t table_id = table_schema.get_table_id();
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(check_ddl_allowed(table_schema, &sql_client))) {
@@ -2187,19 +2184,15 @@ int ObTableSqlService::batch_create_table(ObIArray<ObTableSchema> &tables,
   int64_t end_usec = 0;
   int64_t cost_usec = 0;
   ObSEArray<ObTableSchema, 4> namespace_tables;
-  ObIArray<ObTableSchema> *metadata_tables = &tables;
   const uint64_t namespace_id = sql_client.target_namespace();
-  if (namespace_id > 1) {
-    for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); ++i) {
-      ObTableSchema logical_schema;
-      if (OB_FAIL(storage::NamespaceForkKernelPrototype::make_namespace_schema(
-              namespace_id, tables.at(i), logical_schema))) {
-      } else if (OB_FAIL(namespace_tables.push_back(logical_schema))) {
-      }
+  for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); ++i) {
+    ObTableSchema logical_schema;
+    if (OB_FAIL(storage::NamespaceForkKernelPrototype::make_namespace_schema(
+            namespace_id, tables.at(i), logical_schema))) {
+    } else if (OB_FAIL(namespace_tables.push_back(logical_schema))) {
     }
-    if (OB_SUCC(ret)) { metadata_tables = &namespace_tables; }
   }
-  ObIArray<ObTableSchema> &schemas = *metadata_tables;
+  ObIArray<ObTableSchema> &schemas = namespace_tables;
   if (OB_FAIL(ret)) {
   } else if (schemas.empty()) {
   } else {

@@ -79,20 +79,12 @@ struct DirectInsertOwner final : ObIDirectInsertWorkerContext {
     sql_proxy = static_cast<ObMySQLProxy *>(
         runtime->service(ns::NamespaceRuntime::SQL_PROXY));
     if (!schema_service || !sql_proxy) { return OB_NOT_INIT; }
-    if (namespace_id > 1) {
-      uint64_t logical_table_id = OB_INVALID_ID;
-      uint64_t logical_tablet_id = OB_INVALID_ID;
-      int ret = storage::NamespaceForkKernelPrototype::local_object_id(
-          namespace_id, table_id, logical_table_id);
-      if (!ret) {
-        ret = storage::NamespaceForkKernelPrototype::local_object_id(
-            namespace_id, tablet_id, logical_tablet_id);
-      }
-      if (ret) { return ret; }
-      table_id = logical_table_id;
-      tablet_id = logical_tablet_id;
+    if (storage::NamespaceForkKernelPrototype::is_encoded_id(table_id)
+        || !storage::NamespaceForkKernelPrototype::is_encoded_id(tablet_id)) {
+      return OB_INVALID_ARGUMENT;
     }
-    return OB_SUCCESS;
+    return storage::NamespaceForkKernelPrototype::local_object_id(
+        namespace_id, tablet_id, tablet_id);
   }
   int report_ddl_checksum(
       uint64_t data_format_version,
@@ -102,23 +94,21 @@ struct DirectInsertOwner final : ObIDirectInsertWorkerContext {
       const ObTabletID &tablet_id,
       const ObIArray<uint64_t> &column_ids,
       const ObIArray<int64_t> &column_checksums) override {
-    uint64_t logical_table_id = table_id;
     uint64_t logical_tablet_id = tablet_id.id();
     int ret = column_ids.count() <= 0
             || column_ids.count() != column_checksums.count()
+            || storage::NamespaceForkKernelPrototype::is_encoded_id(table_id)
+            || !storage::NamespaceForkKernelPrototype::is_encoded_id(tablet_id.id())
         ? OB_INVALID_ARGUMENT : OB_SUCCESS;
-    if (OB_SUCC(ret) && namespace_id > 1) {
-      if (OB_FAIL(storage::NamespaceForkKernelPrototype::local_object_id(
-              namespace_id, table_id, logical_table_id))) {
-      } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::local_object_id(
-                     namespace_id, tablet_id.id(), logical_tablet_id))) {
-      }
+    if (OB_SUCC(ret)) {
+      ret = storage::NamespaceForkKernelPrototype::local_object_id(
+          namespace_id, tablet_id.id(), logical_tablet_id);
     }
     ObArray<share::ObDDLChecksumItem> items;
     for (int64_t i = 0; OB_SUCC(ret) && i < column_ids.count(); ++i) {
       share::ObDDLChecksumItem item;
       item.execution_id_ = execution_id;
-      item.table_id_ = logical_table_id;
+      item.table_id_ = table_id;
       item.tablet_id_ = logical_tablet_id;
       item.ddl_task_id_ = ddl_task_id;
       item.column_id_ = column_ids.at(i);
@@ -138,7 +128,7 @@ struct DirectInsertOwner final : ObIDirectInsertWorkerContext {
     fprintf(stderr,
         "PROTOTYPE_NAMESPACE_DDL_CHECKSUM ns=%llu table=%llu tablet=%llu count=%lld ret=%d\n",
         static_cast<unsigned long long>(namespace_id),
-        static_cast<unsigned long long>(logical_table_id),
+        static_cast<unsigned long long>(table_id),
         static_cast<unsigned long long>(logical_tablet_id),
         static_cast<long long>(items.count()), ret);
     return ret;

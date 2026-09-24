@@ -26,6 +26,7 @@
 #include "share/rc/ob_server_runtime.h"
 #include "data_plane/report/ob_i_disk_report.h"
 #include "observer/ob_server.h"
+#include "namespace/namespace.h"
 #include "ob_server_runtime.h"
 #include "rpc/obmysql/ob_sql_nio_server.h"
 #include "share/schema/ob_schema_runtime_service.h"
@@ -1468,6 +1469,14 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) &&
       OB_FAIL(ObPlanCache::server_module_init(mods_plan_cache_, OBSERVER))) {
     SERVER_LOG(WARN, "mods_plan_cache_ fail", KR(ret));
+  }
+  if (OB_SUCC(ret)) {
+    ns::NamespaceRuntime *home = nullptr;
+    if (!ns::namespace_registry().get(1, home) || home == nullptr) {
+      ret = OB_NOT_INIT;
+    } else {
+      home->set_service(ns::NamespaceRuntime::PLAN_CACHE, mods_plan_cache_);
+    }
   }
   if (OB_SUCC(ret) && OB_FAIL(ObDfc::server_module_init(mods_dfc_))) { SERVER_LOG(WARN, "mods_dfc_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObPxPools::server_module_init(mods_px_pools_))) { SERVER_LOG(WARN, "mods_px_pools_ fail", KR(ret)); }

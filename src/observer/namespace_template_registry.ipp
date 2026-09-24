@@ -28,6 +28,12 @@ std::string quote_sql_identifier(const std::string &name)
   quoted += '`';
   return quoted;
 }
+int require_raw_schema_id(uint64_t id, uint64_t &raw_id)
+{
+  if (NamespaceForkKernelPrototype::is_encoded_id(id)) { return OB_INVALID_ARGUMENT; }
+  raw_id = id;
+  return OB_SUCCESS;
+}
 int ensure_legacy_template_namespace()
 {
   uint64_t template_id = 0;
@@ -77,8 +83,7 @@ int ensure_legacy_template_namespace()
         for (int64_t i = 0; OB_SUCC(ret) && i < databases.count(); ++i) {
           const auto &database = *databases.at(i);
           uint64_t local_id = 0;
-          if (OB_FAIL(NamespaceForkKernelPrototype::local_object_id(
-                  build_id, database.get_database_id(), local_id))) {
+          if (OB_FAIL(require_raw_schema_id(database.get_database_id(), local_id))) {
           } else if (is_inner_db(local_id)) {
             const ObString name = database.get_database_name_str();
             system_databases.emplace(local_id, std::string(name.ptr(), name.length()));
@@ -95,10 +100,8 @@ int ensure_legacy_template_namespace()
           if (!table.is_user_table() && !table.is_view_table()) { continue; }
           uint64_t local_db_id = 0;
           uint64_t local_table_id = 0;
-          if (OB_FAIL(NamespaceForkKernelPrototype::local_object_id(
-                  build_id, table.get_database_id(), local_db_id))) {
-          } else if (OB_FAIL(NamespaceForkKernelPrototype::local_object_id(
-                  build_id, table.get_table_id(), local_table_id))) {
+          if (OB_FAIL(require_raw_schema_id(table.get_database_id(), local_db_id))) {
+          } else if (OB_FAIL(require_raw_schema_id(table.get_table_id(), local_table_id))) {
           } else if (is_inner_table(local_table_id)) {
           } else {
             const auto database = system_databases.find(local_db_id);
@@ -116,8 +119,7 @@ int ensure_legacy_template_namespace()
           const auto &routine = *routines.at(i);
           if (routine.get_package_id() != OB_INVALID_ID) { continue; }
           uint64_t local_db_id = 0;
-          if (OB_FAIL(NamespaceForkKernelPrototype::local_object_id(
-                  build_id, routine.get_database_id(), local_db_id))) {
+          if (OB_FAIL(require_raw_schema_id(routine.get_database_id(), local_db_id))) {
           } else if (is_inner_db(local_db_id)) {
             const auto database = system_databases.find(local_db_id);
             if (database != system_databases.end()) {
@@ -134,8 +136,7 @@ int ensure_legacy_template_namespace()
         for (int64_t i = 0; OB_SUCC(ret) && i < users.count(); ++i) {
           const auto &user = *users.at(i);
           uint64_t local_id = 0;
-          if (OB_FAIL(NamespaceForkKernelPrototype::local_object_id(
-                  build_id, user.get_user_id(), local_id))) {
+          if (OB_FAIL(require_raw_schema_id(user.get_user_id(), local_id))) {
           } else if (!is_inner_object_id(local_id)) {
             const ObString name = user.get_user_name_str();
             const ObString host = user.get_host_name_str();
@@ -191,8 +192,7 @@ int ensure_legacy_template_namespace()
         for (int64_t i = 0; OB_SUCC(ret) && i < databases.count(); ++i) {
           const auto &database = *databases.at(i);
           uint64_t local_id = 0;
-          if (OB_FAIL(NamespaceForkKernelPrototype::local_object_id(
-                  build_id, database.get_database_id(), local_id))) {
+          if (OB_FAIL(require_raw_schema_id(database.get_database_id(), local_id))) {
           } else if (database.get_database_name_str() == "test") {
             default_database_found = true;
           } else if (!is_inner_db(local_id)
@@ -208,10 +208,8 @@ int ensure_legacy_template_namespace()
           if (!table.is_user_table() && !table.is_view_table()) { continue; }
           uint64_t local_db_id = 0;
           uint64_t local_table_id = 0;
-          if (OB_FAIL(NamespaceForkKernelPrototype::local_object_id(
-                  build_id, table.get_database_id(), local_db_id))) {
-          } else if (OB_FAIL(NamespaceForkKernelPrototype::local_object_id(
-                  build_id, table.get_table_id(), local_table_id))) {
+          if (OB_FAIL(require_raw_schema_id(table.get_database_id(), local_db_id))) {
+          } else if (OB_FAIL(require_raw_schema_id(table.get_table_id(), local_table_id))) {
           } else if (is_inner_db(local_db_id) && !is_inner_table(local_table_id)) {
             ret = OB_ERR_UNEXPECTED;
           }
@@ -221,8 +219,7 @@ int ensure_legacy_template_namespace()
         for (int64_t i = 0; OB_SUCC(ret) && i < routines.count(); ++i) {
           const auto &routine = *routines.at(i);
           uint64_t local_db_id = 0;
-          if (OB_FAIL(NamespaceForkKernelPrototype::local_object_id(
-                  build_id, routine.get_database_id(), local_db_id))) {
+          if (OB_FAIL(require_raw_schema_id(routine.get_database_id(), local_db_id))) {
           } else if (is_inner_db(local_db_id) && routine.get_package_id() == OB_INVALID_ID) {
             ret = OB_ERR_UNEXPECTED;
           }
@@ -231,8 +228,7 @@ int ensure_legacy_template_namespace()
         }
         for (int64_t i = 0; OB_SUCC(ret) && i < users.count(); ++i) {
           uint64_t local_id = 0;
-          if (OB_FAIL(NamespaceForkKernelPrototype::local_object_id(
-                  build_id, users.at(i)->get_user_id(), local_id))) {
+          if (OB_FAIL(require_raw_schema_id(users.at(i)->get_user_id(), local_id))) {
           } else if (!is_inner_object_id(local_id)) {
             ret = OB_ERR_UNEXPECTED;
           }

@@ -2404,7 +2404,8 @@ int ObServer::init_local_management_service(const bool need_bootstrap)
   int ret = OB_SUCCESS;
 
   local_management_service_.set_local_command_service(ob_service_);
-  local_management_service_.set_ddl_local_runtime(&ob_service_);
+  local_management_service_.set_ddl_local_runtime(
+      namespace_worker_prototype::root_namespace_ddl_runtime());
   local_management_service_.set_ddl_sql_proxy(&ddl_sql_proxy_);
   if (OB_FAIL(local_management_service_.init(
                  config_, config_mgr_,
@@ -2507,6 +2508,11 @@ int ObServer::init_global_context()
   home->set_service(ns::NamespaceRuntime::SCHEMA_SERVICE,
       &share::schema::ObMultiVersionSchemaService::get_instance());
   home->set_service(ns::NamespaceRuntime::SQL_PROXY, &sql_proxy_);
+  home->set_service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE,
+      &local_management_service_);
+  home->set_service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE,
+      &share::ObAutoincrementService::get_instance());
+  namespace_worker_prototype::register_root_namespace_storage_services(*home);
   gctx_.self_addr_seq_.set_addr(self_addr_);
   gctx_.bandwidth_throttle_ = &bandwidth_throttle_;
   gctx_.start_time_ = start_time_;

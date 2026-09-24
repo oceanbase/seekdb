@@ -22,6 +22,11 @@
 #include <shared_mutex>
 #include <thread>
 namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
+rootserver::ObIRootserverLocalRuntime *root_namespace_ddl_runtime()
+{
+  static InProcessRootserverLocalRuntime runtime(1);
+  return &runtime;
+}
 // ---------------------------------------------------------------------------
 // In-process storage context: the channel-free twin of DirectStorageContext.
 // Owns the native storage session, open scans and write engine for one SQL
@@ -75,22 +80,20 @@ data_plane::ObITransactionService *effective_transaction_service(
 sql::ObPlanCache *effective_plan_cache(sql::ObSQLSessionInfo *session,
                                        sql::ObPlanCache *fallback)
 {
-  if (in_process_session_ns(session) <= 1) { return fallback; }
-  ns::NamespaceRuntime *runtime =
-      session->ns_runtime();
-  void *service = runtime ? runtime->service(ns::NamespaceRuntime::PLAN_CACHE) : nullptr;
-  return static_cast<sql::ObPlanCache *>(service);
+  ns::NamespaceRuntime *runtime = session ? session->ns_runtime() : nullptr;
+  return runtime ? static_cast<sql::ObPlanCache *>(
+      runtime->service(ns::NamespaceRuntime::PLAN_CACHE)) : fallback;
 }
 query::ObIRootCommandService *effective_root_command_service(
     sql::ObSQLSessionInfo *session, query::ObIRootCommandService *fallback)
 {
-  if (in_process_session_ns(session) <= 1) { return fallback; }
-  ns::NamespaceRuntime *runtime = session->ns_runtime();
-  void *service = runtime ? runtime->service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE) : nullptr;
-  return service != nullptr
+  ns::NamespaceRuntime *runtime = session ? session->ns_runtime() : nullptr;
+  void *service = runtime
+      ? runtime->service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE) : nullptr;
+  return runtime != nullptr
       ? static_cast<query::ObIRootCommandService *>(
             static_cast<rootserver::ObLocalManagementService *>(service))
-      : nullptr;
+      : fallback;
 }
 // ---------------------------------------------------------------------------
 // Per-namespace service group, constructed lazily on first use (ticket 05c).
@@ -162,6 +165,17 @@ public:
 private:
   uint64_t ns_;
 };
+void register_root_namespace_storage_services(ns::NamespaceRuntime &runtime)
+{
+  static InProcessDirectInsertService direct_insert;
+  static DirectInsertRegistry direct_insert_registry;
+  static InProcessTabletAutoincrementService tablet_autoincrement(1);
+  runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_SERVICE, &direct_insert);
+  runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_REGISTRY,
+      &direct_insert_registry);
+  runtime.set_service(ns::NamespaceRuntime::TABLET_AUTOINCREMENT_SERVICE,
+      &tablet_autoincrement);
+}
 class InProcessRangeService final : public data_plane::ObIRangeService
 {
 public:
@@ -311,16 +325,19 @@ int resolve_inprocess_tablet_schema(uint64_t physical_tablet_id,
   const uint64_t ns = ::oceanbase::ns::NamespaceObjectKey::encoded_namespace(physical_tablet_id);
   int ret = storage::NamespaceForkKernelPrototype::local_object_id(
       ns, physical_tablet_id, logical_tablet_id);
-  if (ret != OB_SUCCESS || ns == 1) { return ret; }
-  if (OB_FAIL(ensure_in_process_namespace(ns))) {
+  ns::NamespaceRuntime *runtime = nullptr;
+  if (ret != OB_SUCCESS) {
+  } else if (!ns::namespace_registry().get(ns, runtime) || runtime == nullptr) {
+    ret = OB_NOT_INIT;
+  } else if (runtime->service(ns::NamespaceRuntime::SCHEMA_SERVICE) == nullptr
+             && OB_FAIL(ensure_in_process_namespace(ns))) {
   } else if (OB_ISNULL(schema_service = namespace_schema_service(ns))) {
     ret = OB_NOT_INIT;
   } else {
     std::shared_lock<std::shared_mutex> guard(inprocess_services_mutex);
     const auto it = inprocess_services.find(ns);
-    if (it == inprocess_services.end()) {
-      ret = OB_NOT_INIT;
-    } else if (!it->second->schema_loaded.load(std::memory_order_acquire)) {
+    if (it != inprocess_services.end()
+        && !it->second->schema_loaded.load(std::memory_order_acquire)) {
       guard.unlock();
       ret = inprocess_refresh_schema(ns);
     }

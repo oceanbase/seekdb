@@ -402,7 +402,8 @@ public:
       ObDDLUpdateParentTaskIDType update_type,
       ObIAllocator &allocator,
       common::ObISQLClient &proxy,
-      common::ObMySQLProxy &read_proxy);
+      common::ObMySQLProxy &read_proxy,
+      const ObDDLTaskContext &context);
 
   static int get_schedule_info(
       common::ObISQLClient &proxy,

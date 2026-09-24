@@ -190,46 +190,44 @@ ObSQLSessionInfo::~ObSQLSessionInfo()
 
 share::schema::ObMultiVersionSchemaService *ObSQLSessionInfo::effective_schema_service() const
 {
-  void *service = ns_runtime_ != nullptr
-      ? ns_runtime_->service(ns::NamespaceRuntime::SCHEMA_SERVICE) : nullptr;
-  return service != nullptr
-      ? static_cast<share::schema::ObMultiVersionSchemaService *>(service)
+  return ns_runtime_ != nullptr
+      ? static_cast<share::schema::ObMultiVersionSchemaService *>(
+            ns_runtime_->service(ns::NamespaceRuntime::SCHEMA_SERVICE))
       : &share::schema::ObMultiVersionSchemaService::get_instance();
 }
 
 common::ObMySQLProxy *ObSQLSessionInfo::effective_sql_proxy() const
 {
-  void *service = ns_runtime_ != nullptr
-      ? ns_runtime_->service(ns::NamespaceRuntime::SQL_PROXY) : nullptr;
-  return service != nullptr
-      ? static_cast<common::ObMySQLProxy *>(service) : GCTX.sql_proxy_;
+  return ns_runtime_ != nullptr
+      ? static_cast<common::ObMySQLProxy *>(
+            ns_runtime_->service(ns::NamespaceRuntime::SQL_PROXY))
+      : GCTX.sql_proxy_;
 }
 
 data_plane::IDirectInsertService *ObSQLSessionInfo::effective_direct_insert_service() const
 {
-  void *service = ns_runtime_ != nullptr
-      ? ns_runtime_->service(ns::NamespaceRuntime::DIRECT_INSERT_SERVICE) : nullptr;
-  return service != nullptr
-      ? static_cast<data_plane::IDirectInsertService *>(service)
+  return ns_runtime_ != nullptr
+      ? static_cast<data_plane::IDirectInsertService *>(
+            ns_runtime_->service(ns::NamespaceRuntime::DIRECT_INSERT_SERVICE))
       : share::server_service<data_plane::IDirectInsertService>();
 }
 
 share::ObITabletAutoincrementService *ObSQLSessionInfo::effective_tablet_autoincrement_service() const
 {
-  void *service = ns_runtime_ != nullptr
-      ? ns_runtime_->service(ns::NamespaceRuntime::TABLET_AUTOINCREMENT_SERVICE) : nullptr;
-  return service != nullptr
-      ? static_cast<share::ObITabletAutoincrementService *>(service)
+  return ns_runtime_ != nullptr
+      ? static_cast<share::ObITabletAutoincrementService *>(
+            ns_runtime_->service(ns::NamespaceRuntime::TABLET_AUTOINCREMENT_SERVICE))
       : share::server_service<share::ObITabletAutoincrementService>();
 }
 
 share::ObAutoincrementService &ObSQLSessionInfo::effective_autoincrement_service() const
 {
-  void *service = ns_runtime_ != nullptr
-      ? ns_runtime_->service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE) : nullptr;
-  return service != nullptr
-      ? *static_cast<share::ObAutoincrementService *>(service)
-      : share::ObAutoincrementService::get_instance();
+  if (ns_runtime_ != nullptr) {
+    void *service = ns_runtime_->service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE);
+    OB_ASSERT(service != nullptr);
+    return *static_cast<share::ObAutoincrementService *>(service);
+  }
+  return share::ObAutoincrementService::get_instance();
 }
 
 void ObSQLSessionInfo::configure_obj_cast(

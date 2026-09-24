@@ -25,6 +25,8 @@
 #include "sql/das/iter/ob_das_vec_scan_utils.h"
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
 #include "namespace/namespace.h"
+#include "observer/namespace_worker_protocol_prototype.h"
+#include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 
 namespace oceanbase
 {
@@ -754,16 +756,13 @@ int ObDASIvfBaseScanIter::get_cache_tablet_id(ObTabletID &cache_tablet_id) const
   if (session == nullptr || !cache_tablet_id.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    const uint64_t namespace_id = session->ns_runtime() == nullptr
-        ? 1 : session->ns_runtime()->ns().id();
-    if (namespace_id > 1) {
-      // The cache is process-wide, while forked namespaces can share local tablet IDs.
-      const ns::NamespaceObjectKey key{namespace_id, cache_tablet_id.id()};
-      if (!key.is_valid()) {
-        ret = OB_INVALID_ARGUMENT;
-      } else {
-        cache_tablet_id = ObTabletID(key.storage_id());
-      }
+    const uint64_t namespace_id =
+        observer::namespace_worker_prototype::in_process_session_ns(session);
+    uint64_t storage_id = OB_INVALID_ID;
+    if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
+            namespace_id, cache_tablet_id.id(), storage_id))) {
+    } else {
+      cache_tablet_id = ObTabletID(storage_id);
     }
   }
   return ret;

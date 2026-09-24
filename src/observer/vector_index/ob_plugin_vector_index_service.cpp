@@ -1508,15 +1508,17 @@ int ObPluginVectorIndexService::resolve_ivf_aux_target(
     ObTabletID &logical_tablet_id, ObMySQLProxy *&sql_proxy)
 {
   int ret = OB_SUCCESS;
-  namespace_id = 1;
-  logical_tablet_id = storage_tablet_id;
-  sql_proxy = sql_proxy_;
-  if (ns::NamespaceObjectKey::is_encoded(storage_tablet_id.id())) {
+  namespace_id = 0;
+  logical_tablet_id = ObTabletID();
+  sql_proxy = nullptr;
+  if (!ns::NamespaceObjectKey::is_encoded(storage_tablet_id.id())) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
     namespace_id = ns::NamespaceObjectKey::encoded_namespace(storage_tablet_id.id());
     logical_tablet_id = ObTabletID(ns::NamespaceObjectKey::local_part(storage_tablet_id.id()));
     sql_proxy = observer::namespace_worker_prototype::namespace_sql_proxy(namespace_id);
   }
-  if (!logical_tablet_id.is_valid() || sql_proxy == nullptr) {
+  if (OB_SUCC(ret) && (!logical_tablet_id.is_valid() || sql_proxy == nullptr)) {
     ret = OB_NOT_INIT;
   }
   return ret;

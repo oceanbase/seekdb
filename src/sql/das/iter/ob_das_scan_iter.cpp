@@ -111,7 +111,7 @@ int ObDASScanIter::do_table_scan()
               || (scan_param_->table_param_ != nullptr
                   && scan_param_->table_param_->is_fts_index()))
              && observer::namespace_worker_prototype::in_process_session_ns(
-                    THIS_WORKER.get_session()) > 1) {
+                    THIS_WORKER.get_session()) > 0) {
     const uint64_t ns = observer::namespace_worker_prototype::in_process_session_ns(
         THIS_WORKER.get_session());
     uint64_t physical_tablet = OB_INVALID_ID;

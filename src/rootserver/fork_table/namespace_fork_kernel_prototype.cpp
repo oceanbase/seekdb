@@ -998,6 +998,11 @@ int NamespaceForkKernelPrototype::check_table_access(
 }
 int NamespaceForkKernelPrototype::protect_snapshot_tablets(ObIArray<ObTabletID> &candidates, bool &need_retry) {
   if (candidates.empty()) { return OB_SUCCESS; }
+  bool has_namespace_tablets = false;
+  for (int64_t i = 0; i < candidates.count(); ++i) {
+    has_namespace_tablets |= is_encoded_id(candidates.at(i).id());
+  }
+  if (!has_namespace_tablets) { return OB_SUCCESS; }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   int ret = OB_SUCCESS;
   // Candidates are committed deletions. A candidate stays referenced while any
@@ -1033,6 +1038,7 @@ int NamespaceForkKernelPrototype::protect_snapshot_tablets(ObIArray<ObTabletID> 
     } else {
       std::unordered_set<uint64_t> locals;
       for (int64_t i = 0; OB_SUCC(ret) && i < candidates.count(); ++i) {
+        if (!is_encoded_id(candidates.at(i).id())) { continue; }
         const uint64_t local = local_of(candidates.at(i).id());
         if (locals.insert(local).second) {
           ret = q.append_fmt("%s%lu", locals.size() == 1 ? "" : ",", local);
@@ -1063,15 +1069,18 @@ int NamespaceForkKernelPrototype::protect_snapshot_tablets(ObIArray<ObTabletID> 
   ObArray<ObTabletID> unreferenced;
   for (int64_t i = 0; OB_SUCC(ret) && i < candidates.count(); ++i) {
     const uint64_t id = candidates.at(i).id();
-    const uint64_t owner = namespace_of(id);
+    if (!is_encoded_id(id)) {
+      ret = unreferenced.push_back(candidates.at(i));
+      continue;
+    }
+    const uint64_t owner = database_of(id);
     const uint64_t local = local_of(id);
     bool retained = false;
     for (const uint64_t reader : live_readers) {
       if (reader == owner) { continue; }
       if (tombstoned_by_local[local].count(reader) != 0) { continue; }
       // Walk the reader's chain: the first owned copy below the owner serves
-      // the reader instead, and reaching namespace 1 only helps a raw
-      // candidate.
+      // the reader instead.
       uint64_t cur = reader;
       bool via_candidate = false;
       for (int depth = 0; depth < 64; ++depth) {
@@ -1195,9 +1204,6 @@ bool NamespaceForkKernelPrototype::is_encoded_id(uint64_t id) {
 }
 uint64_t NamespaceForkKernelPrototype::encode_id(uint64_t namespace_id, uint64_t local_id) {
   return NamespaceObjectKey{namespace_id, local_id}.storage_id();
-}
-uint64_t NamespaceForkKernelPrototype::namespace_of(uint64_t id) {
-  return is_encoded_id(id) ? database_of(id) : 1;
 }
 int NamespaceForkKernelPrototype::local_object_id(
     uint64_t namespace_id, uint64_t object_id, uint64_t &local_id) {

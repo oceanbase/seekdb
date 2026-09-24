@@ -37,8 +37,11 @@ int ObIvfAsyncTaskExector::LoadTaskCallback::is_cache_mgr_deprecated(ObIvfCacheM
   const ObTableSchema *table_schema = nullptr;
   ObTabletHandle tablet_handle;
   const ObTabletID tablet_id = cache_mgr.get_cache_mgr_key();
-  const uint64_t namespace_id = ns::NamespaceObjectKey::is_encoded(tablet_id.id())
-      ? ns::NamespaceObjectKey::encoded_namespace(tablet_id.id()) : 1;
+  if (!ns::NamespaceObjectKey::is_encoded(tablet_id.id())) {
+    is_deprecated = true;
+    return OB_SUCCESS;
+  }
+  const uint64_t namespace_id = ns::NamespaceObjectKey::encoded_namespace(tablet_id.id());
   auto *schema_service = observer::namespace_worker_prototype::namespace_schema_service(namespace_id);
   ObSchemaGetterGuard schema_guard;
   if (schema_service == nullptr) {
@@ -267,15 +270,12 @@ int ObIvfAsyncTaskExector::get_tablet_ids_by_ls(uint64_t namespace_id,
     ObTabletHandle tablet_handle;
     // check tablet if exist in self ls
     for (int64_t i = 0; i < tmp_tablet_id_array.count(); ++i) {
-      ObTabletID storage_tablet_id = tmp_tablet_id_array.at(i);
-      if (namespace_id > 1) {
-        const ns::NamespaceObjectKey key{namespace_id, storage_tablet_id.id()};
-        if (!key.is_valid()) {
-          ret = OB_INVALID_ARGUMENT;
-          break;
-        }
-        storage_tablet_id = ObTabletID(key.storage_id());
+      uint64_t storage_id = OB_INVALID_ID;
+      if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
+              namespace_id, tmp_tablet_id_array.at(i).id(), storage_id))) {
+        break;
       }
+      ObTabletID storage_tablet_id(storage_id);
       ObTabletID physical_tablet_id = storage_tablet_id;
       int64_t cap_scn = 0;
       ret = storage::NamespaceForkKernelPrototype::resolve_read_tablet(

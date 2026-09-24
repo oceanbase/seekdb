@@ -28,6 +28,9 @@
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_create_index_on_empty_table_helper.h"
 #include "observer/namespace_worker_protocol_prototype.h"
+#include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
+#include <memory>
+#include <vector>
 
 namespace oceanbase
 {
@@ -40,6 +43,51 @@ using namespace sql;
 using namespace palf;
 namespace rootserver
 {
+static int materialize_index_source_tablets(
+    const ObDDLTaskContext &context,
+    ObSchemaGetterGuard &schema_guard,
+    const ObTableSchema &source_schema)
+{
+  int ret = OB_SUCCESS;
+  ObArenaAllocator allocator("IndexSourceFork");
+  std::vector<std::unique_ptr<ObTableSchema>> storage_schemas;
+  ObSEArray<const ObTableSchema *, 3> binding_schemas;
+  ObTabletIDArray source_tablets;
+  if (!context.is_complete()) {
+    ret = OB_NOT_INIT;
+  } else {
+    const uint64_t binding_table_ids[] = {
+        source_schema.get_table_id(), source_schema.get_aux_lob_meta_tid(),
+        source_schema.get_aux_lob_piece_tid()};
+    for (uint64_t binding_table_id : binding_table_ids) {
+      if (OB_FAIL(ret) || binding_table_id == 0 || binding_table_id == OB_INVALID_ID) {
+      } else {
+        const ObTableSchema *logical_schema = nullptr;
+        if (OB_FAIL(schema_guard.get_table_schema(binding_table_id, logical_schema))) {
+        } else if (OB_ISNULL(logical_schema)) {
+          ret = OB_TABLE_NOT_EXIST;
+        } else {
+          std::unique_ptr<ObTableSchema> storage_schema(new ObTableSchema(&allocator));
+          if (OB_FAIL(storage::NamespaceForkKernelPrototype::make_storage_schema(
+                  context.namespace_id_, *logical_schema, *storage_schema))) {
+          } else if (OB_FAIL(binding_schemas.push_back(storage_schema.get()))) {
+          } else {
+            storage_schemas.push_back(std::move(storage_schema));
+          }
+        }
+      }
+    }
+    if (OB_SUCC(ret) && storage_schemas.empty()) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_SUCC(ret) && OB_FAIL(storage_schemas.front()->get_tablet_ids(source_tablets))) {
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < source_tablets.count(); ++i) {
+      ret = storage::NamespaceForkKernelPrototype::ensure_tablet(
+          source_tablets.at(i), *storage_schemas.front(), binding_schemas);
+    }
+  }
+  return ret;
+}
 
 ObIndexBuilder::ObIndexBuilder(ObDDLService &ddl_service)
   : ddl_service_(ddl_service)
@@ -159,7 +207,7 @@ int ObIndexBuilder::drop_index_on_failed(const ObDropIndexArg &arg, obcall::ObDr
         }
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(ObDDLTaskRecordOperator::update_parent_task_message(arg.task_id_, new_index_schemas.at(0), res.task_id_, res.task_id_,
-            ObDDLUpdateParentTaskIDType::UPDATE_DROP_INDEX_TASK_ID, allocator, trans, ddl_service_.get_sql_proxy()))) {
+            ObDDLUpdateParentTaskIDType::UPDATE_DROP_INDEX_TASK_ID, allocator, trans, ddl_service_.get_sql_proxy(), ddl_service_.get_task_context()))) {
         }
       }
     }
@@ -439,12 +487,12 @@ int ObIndexBuilder::drop_index(const ObDropIndexArg &const_arg, obcall::ObDropIn
           } else if (index_table_schema->is_vec_index() &&
                      arg.is_vec_inner_drop_ &&
                      OB_FAIL(ObDDLTaskRecordOperator::update_parent_task_message(arg.task_id_, *index_table_schema, res.task_id_, res.task_id_,
-                        ObDDLUpdateParentTaskIDType::UPDATE_VEC_REBUILD_DROP_INDEX_TASK_ID, allocator, trans, ddl_service_.get_sql_proxy()))) {
+                        ObDDLUpdateParentTaskIDType::UPDATE_VEC_REBUILD_DROP_INDEX_TASK_ID, allocator, trans, ddl_service_.get_sql_proxy(), ddl_service_.get_task_context()))) {
             LOG_WARN("fail to update parent task message", K(ret), K(arg.task_id_), K(res.task_id_));
           } else if (index_table_schema->is_fts_index() &&
                      ObDDLType::DDL_DROP_INDEX == task_record.ddl_type_ &&
                      OB_FAIL(ObDDLTaskRecordOperator::update_parent_task_message(arg.task_id_, *index_table_schema, 0/*target_table_id*/, res.task_id_,
-                                ObDDLUpdateParentTaskIDType::UPDATE_DROP_INDEX_TASK_ID, allocator, trans, ddl_service_.get_sql_proxy()))) {
+                                ObDDLUpdateParentTaskIDType::UPDATE_DROP_INDEX_TASK_ID, allocator, trans, ddl_service_.get_sql_proxy(), ddl_service_.get_task_context()))) {
             LOG_WARN("fail to update drop fulltext index parent task message", K(ret), K(arg.task_id_), K(res.task_id_));
           }
         }
@@ -1475,7 +1523,7 @@ int ObIndexBuilder::do_create_local_index(
       } else if (share::schema::is_vec_index(create_index_arg.index_type_) &&
                  create_index_arg.is_rebuild_index_ &&
                  OB_FAIL(ObDDLTaskRecordOperator::update_parent_task_message(create_index_arg.task_id_, index_schema, res.index_table_id_, res.task_id_,
-                        ObDDLUpdateParentTaskIDType::UPDATE_VEC_REBUILD_CREATE_INDEX_TASK_ID, allocator, trans, ddl_service_.get_sql_proxy()))) {
+                        ObDDLUpdateParentTaskIDType::UPDATE_VEC_REBUILD_CREATE_INDEX_TASK_ID, allocator, trans, ddl_service_.get_sql_proxy(), ddl_service_.get_task_context()))) {
         LOG_WARN("fail to update parent task message", K(ret), K(create_index_arg.task_id_), K(res.task_id_));
       }
     }
@@ -1553,6 +1601,9 @@ int ObIndexBuilder::do_create_index(
     LOG_WARN("too many index or index aux for table",
              K(index_count), K(OB_MAX_INDEX_PER_TABLE), K(index_aux_count), K(OB_MAX_AUX_TABLE_PER_MAIN_TABLE), K(ret));
   } else if (OB_FAIL(ddl_service_.check_fk_related_table_ddl(*table_schema, ObDDLType::DDL_CREATE_INDEX))) {
+  } else if (OB_FAIL(materialize_index_source_tablets(
+          ddl_service_.get_task_context(), schema_guard, *table_schema))) {
+    LOG_WARN("materialize index source tablets failed", K(ret), K(table_id));
   } else if (INDEX_TYPE_NORMAL_LOCAL == arg.index_type_
              || INDEX_TYPE_UNIQUE_LOCAL == arg.index_type_
              || INDEX_TYPE_SPATIAL_LOCAL == arg.index_type_

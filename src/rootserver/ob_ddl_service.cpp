@@ -5461,7 +5461,7 @@ int ObDDLService::create_aux_index(
         }
       }
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(ObDDLTaskRecordOperator::update_parent_task_message(arg.task_id_, *idx_schema, result.aux_table_id_, result.ddl_task_id_, ObDDLUpdateParentTaskIDType::UPDATE_CREATE_INDEX_ID, allocator, trans, *sql_proxy_))) {
+      } else if (OB_FAIL(ObDDLTaskRecordOperator::update_parent_task_message(arg.task_id_, *idx_schema, result.aux_table_id_, result.ddl_task_id_, ObDDLUpdateParentTaskIDType::UPDATE_CREATE_INDEX_ID, allocator, trans, *sql_proxy_, get_task_context()))) {
         LOG_WARN("fail to update parent task message", K(ret), K(arg.task_id_), K(idx_schema));
       }
     } else { // 3. index scheme not exist, generate schema && create ddl task
@@ -5492,7 +5492,7 @@ int ObDDLService::create_aux_index(
       } else if (FALSE_IT(result.ddl_task_id_ = task_record.task_id_)) {
       }
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(ObDDLTaskRecordOperator::update_parent_task_message(arg.task_id_, index_schema, result.aux_table_id_, result.ddl_task_id_, ObDDLUpdateParentTaskIDType::UPDATE_CREATE_INDEX_ID, allocator, trans, *sql_proxy_))) {
+      } else if (OB_FAIL(ObDDLTaskRecordOperator::update_parent_task_message(arg.task_id_, index_schema, result.aux_table_id_, result.ddl_task_id_, ObDDLUpdateParentTaskIDType::UPDATE_CREATE_INDEX_ID, allocator, trans, *sql_proxy_, get_task_context()))) {
         LOG_WARN("fail to update parent task message", K(ret), K(arg.task_id_), K(index_schema));
       }
     }

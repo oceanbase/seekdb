@@ -24,6 +24,7 @@ namespace oceanbase { namespace data_plane { class ObIWriteContextService; } }
 namespace oceanbase { namespace data_plane { class ObITransactionService; } }
 namespace oceanbase { namespace obcall { struct ObAdminSetConfigArg; } }
 namespace oceanbase { namespace query { class ObIRootCommandService; } }
+namespace oceanbase { namespace rootserver { class ObIRootserverLocalRuntime; } }
 namespace oceanbase { namespace common { namespace sqlclient { class ObISQLConnection; } } }
 namespace oceanbase { namespace transaction { namespace tablelock { struct ObLockObjRequest; } } }
 namespace oceanbase { namespace transaction { namespace tablelock { class ObIInnerConnectionLockRuntime; } } }
@@ -204,6 +205,8 @@ private:
 // ensure_in_process_namespace lazily constructs its schema service and plan
 // cache. The effective_* helpers select the service for that session.
 uint64_t in_process_session_ns(sql::ObSQLSessionInfo *session);
+rootserver::ObIRootserverLocalRuntime *root_namespace_ddl_runtime();
+void register_root_namespace_storage_services(ns::NamespaceRuntime &runtime);
 query::ObIRootCommandService *effective_root_command_service(
     sql::ObSQLSessionInfo *session, query::ObIRootCommandService *fallback);
 transaction::tablelock::ObIInnerConnectionLockRuntime *inprocess_lock_runtime(

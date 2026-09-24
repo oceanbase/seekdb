@@ -50,14 +50,17 @@ int ObIvfAsyncTask::write_cache(ObPluginVectorIndexService &vector_index_service
   ObIvfCentCache *cent_cache = nullptr;
   ObIvfAuxTableInfo *aux_table_info = nullptr;
   ObSchemaGetterGuard schema_guard;
-  const uint64_t namespace_id = ctx_ != nullptr
-      && ns::NamespaceObjectKey::is_encoded(ctx_->task_status_.tablet_id_.id())
-      ? ns::NamespaceObjectKey::encoded_namespace(ctx_->task_status_.tablet_id_.id()) : 1;
+  const bool valid_tablet = ctx_ != nullptr
+      && ns::NamespaceObjectKey::is_encoded(ctx_->task_status_.tablet_id_.id());
+  const uint64_t namespace_id = valid_tablet
+      ? ns::NamespaceObjectKey::encoded_namespace(ctx_->task_status_.tablet_id_.id()) : 0;
   auto *schema_service = observer::namespace_worker_prototype::namespace_schema_service(namespace_id);
 
   if (OB_ISNULL(ctx_)) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("invalid null ctx_", K(ret), KP(ctx_));
+  } else if (!valid_tablet) {
+    ret = OB_INVALID_ARGUMENT;
   } else if (OB_ISNULL(aux_table_info = reinterpret_cast<ObIvfAuxTableInfo *>(ctx_->extra_data_))) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("invalid null aux_table_info", K(ret), KP(ctx_->extra_data_));
