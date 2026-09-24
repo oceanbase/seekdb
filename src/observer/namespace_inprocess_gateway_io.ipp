@@ -184,6 +184,5 @@ uint64_t in_process_bound_namespace()
 uint64_t in_process_session_ns(sql::ObSQLSessionInfo *session)
 {
   ns::NamespaceRuntime *runtime = session ? session->ns_runtime() : nullptr;
-  return runtime != nullptr && runtime->ns().id() > 1
-      ? runtime->ns().id() : 0;
+  return runtime != nullptr ? runtime->ns().id() : 0;
 }
