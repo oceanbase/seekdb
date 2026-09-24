@@ -328,7 +328,9 @@ public:
                             const bool is_copy_foreign_keys,
                             const bool is_ignore_errors);
   int finish_redef_table(const ObDDLTaskID &task_id);
-  int start_redef_table(const obcall::ObStartRedefTableArg &arg, obcall::ObStartRedefTableRes &res);
+  int start_redef_table(const obcall::ObStartRedefTableArg &arg,
+                        const ObDDLTaskContext &context,
+                        obcall::ObStartRedefTableRes &res);
   int update_ddl_task_active_time(const ObDDLTaskID &task_id);
   int prepare_alter_table_arg(const ObPrepareAlterTableArgParam &param,
                               const ObTableSchema *target_table_schema,
@@ -422,7 +424,8 @@ private:
       ObIAllocator &allocator,
       ObDDLTaskRecord &task_record,
       int64_t snapshot_version = 0,
-      const bool ddl_need_retry_at_executor = false);
+      const bool ddl_need_retry_at_executor = false,
+      ObLocalManagementService *root_service = nullptr);
   int create_build_vec_ivf_index_task(
       common::ObISQLClient &proxy,
       const share::schema::ObTableSchema *data_table_schema,
@@ -445,7 +448,8 @@ private:
       ObIAllocator &allocator,
       ObDDLTaskRecord &task_record,
       const int64_t snapshot_version,
-      const bool ddl_need_retry_at_executor = false);
+      const bool ddl_need_retry_at_executor = false,
+      ObLocalManagementService *root_service = nullptr);
   int create_constraint_task(
       common::ObISQLClient &proxy,
       const share::schema::ObTableSchema *table_schema,

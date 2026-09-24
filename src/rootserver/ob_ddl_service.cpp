@@ -5865,7 +5865,8 @@ int ObDDLService::alter_table_index(obcall::ObAlterTableArg &alter_table_arg,
                                                                              index_schema,
                                                                              get_schema_service().get_schema_service(),
                                                                              new_fetched_snapshot,
-                                                                             task_context_.local_runtime_))) {
+                                                                             task_context_.local_runtime_,
+                                                                             task_context_.root_service_))) {
                     LOG_WARN("fail to write defensive and obtain snapshot",
                         K(ret), K(new_table_schema));
                   }

@@ -1045,7 +1045,8 @@ int ObLocalManagementService::start_redef_table(const obcall::ObStartRedefTableA
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(arg));
-  } else if (OB_FAIL(ObSysDDLSchedulerUtil::start_redef_table(arg, res))) {
+  } else if (OB_FAIL(ObSysDDLSchedulerUtil::start_redef_table(
+          arg, ddl_service_.get_task_context(), res))) {
   }
   char table_id_buffer[128];
   snprintf(table_id_buffer, sizeof(table_id_buffer), "orig_table_id:%ld, target_table_id:%ld",

@@ -513,7 +513,12 @@ int ObRedefCallback::modify_info(ObTableRedefinitionTask &redef_task,
         } else if (OB_FAIL(update_task_info_in_queue(redef_task, task_queue))) {
           if (OB_ENTRY_NOT_EXIST == ret) {
             bool exist = false;
-            if (OB_FAIL(ObDDLTaskRecordOperator::check_task_id_exist(*GCTX.sql_proxy_, redef_task.get_task_id(), exist))) {
+            ObMySQLProxy *task_proxy = redef_task.task_sql_proxy();
+            if (OB_ISNULL(task_proxy)) {
+              ret = OB_NOT_INIT;
+              LOG_WARN("ddl task sql proxy is unavailable", KR(ret), K(redef_task.get_task_id()));
+            } else if (OB_FAIL(ObDDLTaskRecordOperator::check_task_id_exist(
+                    *task_proxy, redef_task.get_task_id(), exist))) {
             } else {
               if (exist) {
                 ret = OB_EAGAIN;
@@ -1068,6 +1073,8 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
   const obcall::ObRebuildIndexArg *rebuild_index_arg = nullptr;
   const obcall::ObForkTableArg *fork_table_arg = nullptr;
   LOG_INFO("create ddl task", K(param));
+  // The checksum-error virtual table is backed by process-wide metadata and
+  // cannot be queried through a child namespace SQL proxy.
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLScheduler has not been inited", K(ret));
@@ -1075,8 +1082,9 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(param));
   } else if (ObDDLUtil::is_verifying_checksum_error_needed(param.type_)
-      && OB_FAIL(ObDDLUtil::check_table_compaction_checksum_error(*GCTX.schema_service_,
-          *GCTX.sql_proxy_, *GCTX.meta_db_pool_, param.src_table_schema_->get_table_id()))) {
+      && OB_FAIL(ObDDLUtil::check_table_compaction_checksum_error(
+          *GCTX.schema_service_, *GCTX.sql_proxy_, *GCTX.meta_db_pool_,
+          param.src_table_schema_->get_table_id()))) {
     if (OB_NOT_SUPPORTED != ret) {
       LOG_WARN("unexpected error in check_table_compaction_checksum_error, choose to suppress the error", K(ret), K(param));
       ret = OB_SUCCESS;
@@ -1119,7 +1127,8 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
                                                 *param.allocator_,
                                                 task_record,
                                                 param.new_snapshot_version_,
-                                                param.ddl_need_retry_at_executor_))) {
+                                                param.ddl_need_retry_at_executor_,
+                                                param.root_service_))) {
         }
         break;
       case DDL_CREATE_VEC_IVFFLAT_INDEX:
@@ -1150,7 +1159,8 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
                                                 *param.allocator_,
                                                 task_record,
                                                 param.new_snapshot_version_,
-                                                param.ddl_need_retry_at_executor_))) {
+                                                param.ddl_need_retry_at_executor_,
+                                                param.root_service_))) {
         }
         break;
       case DDL_DROP_INDEX:
@@ -1579,13 +1589,18 @@ int ObDDLScheduler::finish_redef_table(const ObDDLTaskID &task_id)
   return ret;
 }
 
-int ObDDLScheduler::start_redef_table(const obcall::ObStartRedefTableArg &arg, obcall::ObStartRedefTableRes &res)
+int ObDDLScheduler::start_redef_table(const obcall::ObStartRedefTableArg &arg,
+                                      const ObDDLTaskContext &context,
+                                      obcall::ObStartRedefTableRes &res)
 {
   int ret = OB_SUCCESS;
   ObDDLTaskRecord task_record;
   ObSchemaGetterGuard orig_schema_guard;
   ObSchemaGetterGuard target_schema_guard;
-  ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
+  ObMultiVersionSchemaService *schema_service = context.schema_service_ != nullptr
+      ? context.schema_service_ : context.namespace_id_ == 1 ? GCTX.schema_service_ : nullptr;
+  ObMySQLProxy *sql_proxy = context.sql_proxy_ != nullptr
+      ? context.sql_proxy_ : context.namespace_id_ == 1 ? GCTX.sql_proxy_ : nullptr;
 
   const int64_t table_id = arg.orig_table_id_;
 
@@ -1593,9 +1608,9 @@ int ObDDLScheduler::start_redef_table(const obcall::ObStartRedefTableArg &arg, o
   const ObTableSchema *orig_table_schema = nullptr;
   const ObTableSchema *target_table_schema = nullptr;
   const ObDatabaseSchema *orig_database_schema = nullptr;
-  if (OB_UNLIKELY(!arg.is_valid()) || OB_ISNULL(GCTX.sql_proxy_)) {
+  if (OB_UNLIKELY(!arg.is_valid()) || OB_ISNULL(sql_proxy)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(arg), KP(GCTX.sql_proxy_));
+    LOG_WARN("invalid arg or namespace sql proxy", K(ret), K(arg), KP(sql_proxy));
   } else if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema_service is null", K(ret));
@@ -1636,7 +1651,8 @@ int ObDDLScheduler::start_redef_table(const obcall::ObStartRedefTableArg &arg, o
                                       &allocator,
                                       &alter_table_arg,
                                       0);
-        if (OB_FAIL(create_ddl_task(param, *GCTX.sql_proxy_, task_record)))  {
+        if (OB_FAIL(create_ddl_task(param, *sql_proxy, task_record)))  {
+        } else if (FALSE_IT(task_record.context_ = context)) {
         } else if (OB_FAIL(schedule_ddl_task(task_record))) {
         } else {
           res.task_id_ = task_record.task_id_;
@@ -1663,7 +1679,8 @@ int ObDDLScheduler::create_build_fts_index_task(
     ObIAllocator &allocator,
     ObDDLTaskRecord &task_record,
     int64_t snapshot_version,
-    const bool ddl_need_retry_at_executor)
+    const bool ddl_need_retry_at_executor,
+    ObLocalManagementService *root_service)
 {
   int ret = OB_SUCCESS;
   int64_t task_id = 0;
@@ -1680,7 +1697,8 @@ int ObDDLScheduler::create_build_fts_index_task(
       LOG_WARN("invalid argument", K(ret), KPC(create_index_arg),
           KPC(data_table_schema), KPC(index_schema), K(data_format_version), KP(GCTX.sql_proxy_));
     } else if (OB_FAIL(ObDDLTaskUtil::get_domain_index_share_table_snapshot(
-                   data_table_schema, index_schema, parent_task_id, *create_index_arg, snapshot_version))) {
+                   data_table_schema, index_schema, parent_task_id, *create_index_arg,
+                   root_service, snapshot_version))) {
     } else if (OB_FAIL(ObFtsIndexBuilderUtil::check_supportability_for_building_index(data_table_schema, create_index_arg))) {
     } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
     } else if (OB_FAIL(index_task.init(task_id,
@@ -1758,7 +1776,8 @@ int ObDDLScheduler::create_build_vec_index_task(
     ObIAllocator &allocator,
     ObDDLTaskRecord &task_record,
     int64_t snapshot_version,
-    const bool ddl_need_retry_at_executor)
+    const bool ddl_need_retry_at_executor,
+    ObLocalManagementService *root_service)
 {
   int ret = OB_SUCCESS;
   int64_t task_id = 0;
@@ -1773,7 +1792,8 @@ int ObDDLScheduler::create_build_vec_index_task(
       LOG_WARN("invalid argument", K(ret), KPC(create_index_arg),
           KPC(data_table_schema), KPC(index_schema));
     } else if (OB_FAIL(ObDDLTaskUtil::get_domain_index_share_table_snapshot(
-                   data_table_schema, index_schema, parent_task_id, *create_index_arg, snapshot_version))) {
+                   data_table_schema, index_schema, parent_task_id, *create_index_arg,
+                   root_service, snapshot_version))) {
     } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
     } else if (OB_FAIL(index_task.init(task_id,
                                        data_table_schema,

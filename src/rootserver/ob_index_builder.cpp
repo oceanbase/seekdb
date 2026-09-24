@@ -1439,7 +1439,8 @@ int ObIndexBuilder::do_create_local_index(
                                                                    index_schema,
                                                                    ddl_service_.get_schema_service().get_schema_service(),
                                                                    new_fetched_snapshot,
-                                                                   ddl_service_.get_task_context().local_runtime_))) {
+                                                                   ddl_service_.get_task_context().local_runtime_,
+                                                                   ddl_service_.get_task_context().root_service_))) {
         }
       }
 

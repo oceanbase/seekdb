@@ -342,6 +342,7 @@ int ObColumnRedefinitionTask::copy_table_indexes()
                                            task_id_);
                 param.sub_task_trace_id_ = sub_task_trace_id_;
                 param.data_format_version_ = data_format_version_;
+                param.root_service_ = local_management_service;
                 if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param,
                                                                    *task_sql_proxy(),
                                                                    task_record))) {

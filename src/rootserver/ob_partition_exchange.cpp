@@ -2078,9 +2078,8 @@ int ObPartitionExchange::update_table_all_monitor_modified_(const uint64_t new_t
     int64_t updates = 0;
     int64_t deletes = 0;
     common::sqlclient::ObMySQLResult *result = NULL;
-    auto &sql_client_retry_weak = *GCTX.sql_proxy_;
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-      if (OB_FAIL(sql_client_retry_weak.read(res, monitor_modified_read_sql_string.ptr()))) {
+      if (OB_FAIL(trans.read(res, monitor_modified_read_sql_string.ptr()))) {
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail query sql", K(ret));

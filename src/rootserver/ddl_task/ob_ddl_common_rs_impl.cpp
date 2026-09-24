@@ -121,7 +121,8 @@ int ObDDLTaskUtil::hold_snapshot(
     common::ObMySQLTransaction &trans,
     const ObTableSchema &data_table_schema,
     const ObTableSchema &index_table_schema,
-    const int64_t snapshot)
+    const int64_t snapshot,
+    ObLocalManagementService &root_service)
 {
   int ret = OB_SUCCESS;
   SCN snapshot_scn;
@@ -134,7 +135,7 @@ int ObDDLTaskUtil::hold_snapshot(
     LOG_WARN("snapshot version not valid", K(ret), K(snapshot));
   } else if (OB_FAIL(snapshot_scn.convert_for_tx(snapshot))) {
   } else {
-    rootserver::ObDDLService &ddl_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->get_ddl_service();
+    rootserver::ObDDLService &ddl_service = root_service.get_ddl_service();
     ObSEArray<ObTabletID, 2> tablet_ids;
     bool need_acquire_lob = false;
     if (OB_FAIL(data_table_schema.get_tablet_ids(tablet_ids))) {
@@ -142,10 +143,10 @@ int ObDDLTaskUtil::hold_snapshot(
     } else if (OB_FAIL(ObDDLUtil::check_need_acquire_lob_snapshot(
         &data_table_schema, &index_table_schema, need_acquire_lob))) {
     } else if (need_acquire_lob && data_table_schema.get_aux_lob_meta_tid() != OB_INVALID_ID &&
-               OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, data_table_schema.get_aux_lob_meta_tid(), tablet_ids))) {
+               OB_FAIL(ObDDLUtil::get_tablets(ddl_service.get_schema_service(), data_table_schema.get_aux_lob_meta_tid(), tablet_ids))) {
       LOG_WARN("failed to get data lob meta table snapshot", K(ret));
     } else if (need_acquire_lob && data_table_schema.get_aux_lob_piece_tid() != OB_INVALID_ID &&
-               OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, data_table_schema.get_aux_lob_piece_tid(), tablet_ids))) {
+               OB_FAIL(ObDDLUtil::get_tablets(ddl_service.get_schema_service(), data_table_schema.get_aux_lob_piece_tid(), tablet_ids))) {
       LOG_WARN("failed to get data lob piece table snapshot", K(ret));
     } else if (OB_FAIL(ddl_service.get_snapshot_mgr().batch_acquire_snapshot(
             trans, SNAPSHOT_FOR_DDL, schema_version, snapshot_scn, nullptr, tablet_ids))) {
@@ -257,20 +258,22 @@ int ObDDLTaskUtil::get_domain_index_share_table_snapshot(const ObTableSchema *ta
     const ObTableSchema *index_schema,
     const int64_t task_id,
     const obcall::ObCreateIndexArg &create_index_arg,
+    ObLocalManagementService *root_service,
     int64_t &fts_snapshot_version)
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard new_schema_guard;
-  rootserver::ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
-
   bool need_update_snapshot = false;
-  if (OB_ISNULL(local_management_service) || OB_ISNULL(table_schema) || OB_ISNULL(index_schema)) {
+  if (OB_ISNULL(table_schema) || OB_ISNULL(index_schema)) {
     ret = OB_ERR_SYS;
-    LOG_WARN("error sys, local management service, table schema, index schema must not be nullptr", K(ret), K(local_management_service), K(table_schema), K(index_schema));
+    LOG_WARN("table schema and index schema must not be nullptr", K(ret), K(table_schema), K(index_schema));
   } else if (OB_FAIL(ObDDLTaskUtil::check_need_update_domain_index_share_table_snapshot(
                  table_schema, index_schema, task_id, create_index_arg, need_update_snapshot))) {
   } else if (!need_update_snapshot) {
     // don't need update snapshot
+  } else if (OB_ISNULL(root_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("root service is required for offline domain-index rebuild", KR(ret));
   } else if (index_schema->is_fts_index() || index_schema->is_multivalue_index() || index_schema->is_vec_spiv_index()
              || index_schema->is_vec_hnsw_index()) {
     ObMySQLTransaction trans;
@@ -280,13 +283,15 @@ int ObDDLTaskUtil::get_domain_index_share_table_snapshot(const ObTableSchema *ta
       LOG_WARN("failed to get rowkey doc table id", K(ret));
     } else if (index_schema->is_vec_hnsw_index() && OB_FAIL(table_schema->get_rowkey_vid_tid(domain_index_share_tid))) {
       LOG_WARN("failed to get rowkey vid table id", K(ret));
-    } else if (OB_FAIL(local_management_service->get_ddl_service().get_runtime_schema_guard_with_version_in_inner_table(new_schema_guard))) {
+    } else if (OB_FAIL(root_service->get_ddl_service().get_runtime_schema_guard_with_version_in_inner_table(new_schema_guard))) {
     } else if (OB_FAIL(new_schema_guard.get_table_schema( domain_index_share_tid, domain_index_share_schema))) {
     } else if (OB_ISNULL(domain_index_share_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("error unexpected, rowkey doc/vid index schema must not be nullptr", K(ret));
-    } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
-    } else if (OB_FAIL(ObDDLTaskUtil::obtain_snapshot(trans, *table_schema, *domain_index_share_schema, fts_snapshot_version))) {
+    } else if (OB_FAIL(trans.start(&root_service->get_sql_proxy()))) {
+    } else if (OB_FAIL(ObDDLTaskUtil::obtain_snapshot(
+                   trans, *table_schema, *domain_index_share_schema, fts_snapshot_version,
+                   *root_service))) {
       if (OB_SNAPSHOT_DISCARDED == ret) {
         LOG_INFO("snapshot discarded, need retry waiting trans", K(ret), K(fts_snapshot_version));
       } else {
@@ -744,7 +749,8 @@ int ObDDLTaskUtil::obtain_snapshot(
     common::ObMySQLTransaction &trans,
     const ObTableSchema &data_table_schema,
     const ObTableSchema &index_table_schema,
-    int64_t &new_fetched_snapshot)
+    int64_t &new_fetched_snapshot,
+    ObLocalManagementService &root_service)
 {
   int ret = OB_SUCCESS;
 
@@ -756,7 +762,9 @@ int ObDDLTaskUtil::obtain_snapshot(
     LOG_WARN("the snapshot is not valid", K(ret), K(new_fetched_snapshot));
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(ObDDLTaskUtil::hold_snapshot(trans, data_table_schema, index_table_schema, new_fetched_snapshot))) {
+  } else if (OB_FAIL(ObDDLTaskUtil::hold_snapshot(
+                 trans, data_table_schema, index_table_schema, new_fetched_snapshot,
+                 root_service))) {
     if (OB_SNAPSHOT_DISCARDED == ret) {
       LOG_INFO("snapshot discarded, need retry waiting trans", K(ret), K(new_fetched_snapshot));
     } else {
@@ -868,9 +876,13 @@ int ObDDLTaskUtil::write_defensive_and_obtain_snapshot(
     const ObTableSchema &index_table_schema,
     ObSchemaService *schema_service,
     int64_t &new_fetched_snapshot,
-    ObIRootserverLocalRuntime *local_runtime)
+    ObIRootserverLocalRuntime *local_runtime,
+    ObLocalManagementService *root_service)
 {
   int ret = OB_SUCCESS;
+  if (root_service == nullptr) {
+    root_service = ::oceanbase::share::server_service<ObLocalManagementService>();
+  }
   if (OB_ISNULL(schema_service)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("there are invalid arg", KP(schema_service));
@@ -891,7 +903,11 @@ int ObDDLTaskUtil::write_defensive_and_obtain_snapshot(
                 trans, tablet_ids, tmp_table_schema.get_schema_version(), abs_timeout_us)
           : ObTabletBindingMdsHelper::modify_tablet_binding_for_write_defensive(
                 tablet_ids, tmp_table_schema.get_schema_version(), abs_timeout_us, trans))) {
-      } else if (OB_FAIL(ObDDLTaskUtil::obtain_snapshot(trans, data_table_schema, index_table_schema, new_fetched_snapshot))) {
+      } else if (OB_ISNULL(root_service)) {
+        ret = OB_NOT_INIT;
+      } else if (OB_FAIL(ObDDLTaskUtil::obtain_snapshot(
+                     trans, data_table_schema, index_table_schema, new_fetched_snapshot,
+                     *root_service))) {
       }
     }
   }

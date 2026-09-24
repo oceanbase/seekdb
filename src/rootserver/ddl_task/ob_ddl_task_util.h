@@ -112,7 +112,8 @@ public:
       common::ObMySQLTransaction &trans,
       const share::schema::ObTableSchema &data_table_schema,
       const share::schema::ObTableSchema &index_table_schema,
-      int64_t &new_fetched_snapshot);
+      int64_t &new_fetched_snapshot,
+      ObLocalManagementService &root_service);
   static int calc_snapshot_with_gts(
       int64_t &snapshot,
       const int64_t ddl_task_id = 0,
@@ -130,6 +131,7 @@ public:
       const share::schema::ObTableSchema *index_schema,
       const int64_t task_id,
       const obcall::ObCreateIndexArg &create_index_arg,
+      ObLocalManagementService *root_service,
       int64_t &fts_snapshot_version);
   static int write_defensive_and_obtain_snapshot(
       common::ObMySQLTransaction &trans,
@@ -137,7 +139,8 @@ public:
       const share::schema::ObTableSchema &index_table_schema,
       share::schema::ObSchemaService *schema_service,
       int64_t &new_fetched_snapshot,
-      ObIRootserverLocalRuntime *local_runtime);
+      ObIRootserverLocalRuntime *local_runtime,
+      ObLocalManagementService *root_service);
   static int load_ddl_task(
       const int64_t task_id,
       common::ObIAllocator &allocator,
@@ -167,7 +170,8 @@ private:
       common::ObMySQLTransaction &trans,
       const share::schema::ObTableSchema &data_table_schema,
       const share::schema::ObTableSchema &index_table_schema,
-      const int64_t snapshot);
+      const int64_t snapshot,
+      ObLocalManagementService &root_service);
 };
 
 } // namespace rootserver

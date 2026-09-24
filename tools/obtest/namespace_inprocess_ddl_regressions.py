@@ -42,6 +42,23 @@ def before_restart(experiment, child):
         else:
             raise AssertionError("redefined constraint accepted ref_id=%d" % ref_id)
 
+    sql("CREATE TABLE phase10.redef_fts_pk(id INT PRIMARY KEY, body TEXT, v INT)")
+    sql("INSERT INTO phase10.redef_fts_pk VALUES(1,'alpha text',7),(2,'beta text',8)")
+    sql("CREATE FULLTEXT INDEX body_ft ON phase10.redef_fts_pk(body)")
+    sql("ALTER TABLE phase10.redef_fts_pk MODIFY COLUMN v VARCHAR(20)")
+    assert sql("SELECT id,v FROM phase10.redef_fts_pk "
+               "WHERE MATCH(body) AGAINST('alpha')") == ((1, "7"),)
+    sql("INSERT INTO phase10.redef_fts_pk VALUES(3,'gamma text','9')")
+    assert sql("SELECT id,v FROM phase10.redef_fts_pk "
+               "WHERE MATCH(body) AGAINST('gamma')") == ((3, "9"),)
+
+    sql("CREATE TABLE phase10.redef_fts_col(id INT PRIMARY KEY, body TEXT, v INT)")
+    sql("INSERT INTO phase10.redef_fts_col VALUES(1,'alpha text',7),(2,'beta text',8)")
+    sql("CREATE FULLTEXT INDEX body_ft ON phase10.redef_fts_col(body)")
+    sql("ALTER TABLE phase10.redef_fts_col DROP COLUMN v, ADD COLUMN w INT DEFAULT 4")
+    assert sql("SELECT id,w FROM phase10.redef_fts_col "
+               "WHERE MATCH(body) AGAINST('alpha')") == ((1, 4),)
+
     sql("CREATE TABLE phase10.repartition(id INT PRIMARY KEY, v INT)")
     sql("INSERT INTO phase10.repartition VALUES(1,11),(2,22)")
     sql("ALTER TABLE phase10.repartition PARTITION BY HASH(id) PARTITIONS 3")
@@ -95,6 +112,12 @@ def after_restart(experiment, child):
     assert sql("SELECT COUNT(*),SUM(v) FROM phase10.drop_pk") == ((2, 33),)
     assert "PRIMARY KEY" not in sql("SHOW CREATE TABLE phase10.drop_pk")[0][1]
     assert sql("SELECT COUNT(*),SUM(v) FROM phase10.repartition") == ((2, 33),)
+    assert sql("SELECT id,v FROM phase10.redef_fts_pk "
+               "WHERE MATCH(body) AGAINST('alpha')") == ((1, "7"),)
+    assert sql("SELECT id,v FROM phase10.redef_fts_pk "
+               "WHERE MATCH(body) AGAINST('gamma')") == ((3, "9"),)
+    assert sql("SELECT id,w FROM phase10.redef_fts_col "
+               "WHERE MATCH(body) AGAINST('alpha')") == ((1, 4),)
     assert sql("SELECT id,k FROM phase10.trunc_global FORCE INDEX(idx_k) ORDER BY id") == (
         (5, 5), (120, 3))
     assert sql("SELECT id,k FROM phase10.trunc_inherited FORCE INDEX(idx_k) ORDER BY id") == (
