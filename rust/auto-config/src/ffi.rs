@@ -18,20 +18,20 @@ use std::path::Path;
 use crate::{self as store, Error};
 
 #[repr(C)]
-pub struct SeekdbAutoConfigError {
+pub struct AutoConfigError {
     pub line: u32,
     pub after_replace: u8,
     pub message: [c_char; 512],
 }
 
-pub type SeekdbAutoConfigEntryCallback = unsafe extern "C" fn(
+pub type AutoConfigEntryCallback = unsafe extern "C" fn(
     context: *mut c_void,
     name: *const c_char,
     value: *const c_char,
     line: u32,
 ) -> c_int;
 
-fn write_error(output: *mut SeekdbAutoConfigError, error: &Error) {
+fn write_error(output: *mut AutoConfigError, error: &Error) {
     if output.is_null() {
         return;
     }
@@ -72,9 +72,9 @@ fn argument(value: *const c_char, label: &str) -> Result<String, Error> {
 }
 
 #[no_mangle]
-pub extern "C" fn seekdb_auto_config_supported(
+pub extern "C" fn auto_config_supported(
     path: *const c_char,
-    error: *mut SeekdbAutoConfigError,
+    error: *mut AutoConfigError,
 ) -> c_int {
     let result =
         argument(path, "path").and_then(|path| store::check_storage_directory(Path::new(&path)));
@@ -88,11 +88,11 @@ pub extern "C" fn seekdb_auto_config_supported(
 }
 
 #[no_mangle]
-pub extern "C" fn seekdb_auto_config_load(
+pub extern "C" fn auto_config_load(
     path: *const c_char,
-    callback: SeekdbAutoConfigEntryCallback,
+    callback: AutoConfigEntryCallback,
     context: *mut c_void,
-    error: *mut SeekdbAutoConfigError,
+    error: *mut AutoConfigError,
 ) -> c_int {
     let result = (|| {
         let path = argument(path, "path")?;
@@ -133,12 +133,12 @@ pub extern "C" fn seekdb_auto_config_load(
 }
 
 #[no_mangle]
-pub extern "C" fn seekdb_auto_config_update(
+pub extern "C" fn auto_config_update(
     path: *const c_char,
     name: *const c_char,
     value: *const c_char,
     reset: u8,
-    error: *mut SeekdbAutoConfigError,
+    error: *mut AutoConfigError,
 ) -> c_int {
     let result = (|| {
         let path = argument(path, "path")?;
