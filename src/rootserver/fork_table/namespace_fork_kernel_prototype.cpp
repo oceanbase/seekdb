@@ -2598,7 +2598,7 @@ int NamespaceForkKernelPrototype::table_id_for_tablet(const ObTabletID &tablet, 
   const int ret = load_exceptions(*GCTX.sql_proxy_, db);
   if (ret != OB_SUCCESS) { return ret; }
   if (!control_state().owned(db, local_of(tablet.id()), &local_table)) { return OB_SUCCESS; }
-  table_id = encoded(db, local_table);
+  table_id = local_table;
   remember_tablet_table(tablet.id(), table_id);
   return OB_SUCCESS;
 }
