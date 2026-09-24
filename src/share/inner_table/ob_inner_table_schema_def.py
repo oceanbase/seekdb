@@ -1385,7 +1385,10 @@ all_routine_def = dict(
       ('routine_body', 'longtext', 'true'),
       ('comment', 'varchar:MAX_SCHEMA_COMMENT_LENGTH', 'true'),
       ('route_sql', 'longtext', 'true'),
-      ('type_id', 'int', 'true', 'OB_INVALID_ID')
+      ('type_id', 'int', 'true', 'OB_INVALID_ID'),
+      ('native_module_id', 'varchar:255', 'true', ''),
+      ('native_implementation_id', 'varchar:255', 'true', ''),
+      ('native_abi_version', 'int', 'true', '0')
                      ]
   )
 

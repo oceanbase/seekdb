@@ -439,6 +439,7 @@ END_P SET_VAR DELIMITER
 %type <node> truncate_table_stmt
 %type <node> lock_user_stmt lock_spec_mysql57
 %type <node> grant_stmt grant_privileges role_or_priv_list role_or_priv priv_level opt_privilege grant_options object_type
+%type <node> opt_native_priv_signature native_priv_signature_list native_priv_signature_type
 %type <node> revoke_stmt opt_with_admin_option opt_ignore_unknown_user set_role_stmt default_set_role_clause set_role_clause
 %type <node> opt_limit opt_for_grant_user opt_using_role
 %type <node> parameterized_trim
@@ -3141,16 +3142,24 @@ MOD '(' expr ',' expr ')'
   ParseNode *expr_list = $3;
   malloc_non_terminal_node($$, result->malloc_pool_, T_FUN_SYS_MULTIPOLYGON, 1, expr_list);
 }
-| geometry_collection '(' expr_list ')'
+| GEOMCOLLECTION '(' expr_list ')'
 {
-  UNUSED($1);
   ParseNode *expr_list = $3;
   malloc_non_terminal_node($$, result->malloc_pool_, T_FUN_SYS_GEOMCOLLECTION, 1, expr_list);
 }
-| geometry_collection '(' ')'
+| GEOMCOLLECTION '(' ')'
 {
-  UNUSED($1);
   malloc_non_terminal_node($$, result->malloc_pool_, T_FUN_SYS_GEOMCOLLECTION, 1, NULL);
+}
+| GEOMETRYCOLLECTION '(' expr_list ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FUN_SYS_GEOMCOLLECTION, 1, $3);
+  $$->value_ = 1; /* Preserve the SQL alias for database-local routine lookup. */
+}
+| GEOMETRYCOLLECTION '(' ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_FUN_SYS_GEOMCOLLECTION, 1, NULL);
+  $$->value_ = 1;
 }
 | _ST_ASMVT '(' column_ref ')'
 {
@@ -13945,17 +13954,22 @@ GRANT grant_privileges ON priv_level TO user_specification_list grant_options
   malloc_non_terminal_node($$, result->malloc_pool_, T_GRANT,
                            4, privileges_node, NULL, $4, users_node);
 }
-| GRANT grant_privileges ON object_type priv_level TO user_specification_list grant_options
+| GRANT grant_privileges ON object_type priv_level opt_native_priv_signature TO user_specification_list grant_options
 {
   ParseNode *privileges_list_node = NULL;
   ParseNode *privileges_node = NULL;
   ParseNode *users_node = NULL;
   malloc_non_terminal_node(privileges_list_node, result->malloc_pool_,
-                           T_LINK_NODE, 2, $2, $8);
+                           T_LINK_NODE, 2, $2, $9);
   merge_nodes(privileges_node, result, T_PRIVILEGES, privileges_list_node);
-  merge_nodes(users_node, result, T_USERS, $7);
+  merge_nodes(users_node, result, T_USERS, $8);
+  ParseNode *object_node = $4;
+  if ($6 != NULL) {
+    malloc_non_terminal_node(object_node, result->malloc_pool_, T_PRIV_OBJECT, 1, $6);
+    object_node->value_ = $4->value_;
+  }
   malloc_non_terminal_node($$, result->malloc_pool_, T_GRANT,
-                           4, privileges_node, $4, $5, users_node);
+                           4, privileges_node, object_node, $5, users_node);
 }
 | GRANT role_or_priv_list TO user_specification_without_password_list opt_with_admin_option
 {
@@ -14297,6 +14311,24 @@ priv_level:
 }
 ;
 
+/* Declaration identity, not an expression/call argument list. Array syntax
+ * denotes the stored variadic array input; the resolver enforces final-only. */
+opt_native_priv_signature:
+/* empty */ { $$ = NULL; }
+| '(' ')' { malloc_terminal_node($$, result->malloc_pool_, T_EXPR_LIST); }
+| '(' native_priv_signature_list ')'
+{ merge_nodes($$, result, T_EXPR_LIST, $2); }
+;
+native_priv_signature_list:
+native_priv_signature_type { $$ = $1; }
+| native_priv_signature_list ',' native_priv_signature_type
+{ malloc_non_terminal_node($$, result->malloc_pool_, T_LINK_NODE, 2, $1, $3); }
+;
+native_priv_signature_type:
+data_type
+{ malloc_non_terminal_node($$, result->malloc_pool_, T_EXPR_LIST, 1, $1); $$->value_ = 0; }
+;
+
 grant_options:
 WITH GRANT OPTION
 {
@@ -14322,16 +14354,43 @@ REVOKE opt_if_exists grant_privileges ON priv_level FROM user_list opt_ignore_un
   merge_nodes(privileges_node, result, T_PRIVILEGES, $3);
   merge_nodes(users_node, result, T_USERS, $7);
   malloc_non_terminal_node($$, result->malloc_pool_, T_REVOKE,
-                           6, privileges_node, NULL, $5, users_node, $2, $8);
+                           7, privileges_node, NULL, $5, users_node, $2, $8, NULL);
 }
-| REVOKE opt_if_exists grant_privileges ON object_type priv_level FROM user_list opt_ignore_unknown_user
+| REVOKE opt_if_exists grant_privileges ON object_type priv_level opt_native_priv_signature FROM user_list opt_ignore_unknown_user opt_drop_behavior
 {
   ParseNode *privileges_node = NULL;
   ParseNode *users_node = NULL;
   merge_nodes(privileges_node, result, T_PRIVILEGES, $3);
-  merge_nodes(users_node, result, T_USERS, $8);
+  merge_nodes(users_node, result, T_USERS, $9);
+  ParseNode *object_node = $5;
+  if ($7 != NULL) {
+    malloc_non_terminal_node(object_node, result->malloc_pool_, T_PRIV_OBJECT, 1, $7);
+    object_node->value_ = $5->value_;
+  }
+  ParseNode *options = NULL;
+  malloc_terminal_node(options, result->malloc_pool_, T_INT);
+  /* bit 0: option-only; bits 1..2: omitted / RESTRICT / CASCADE. */
+  /* Statement value_ is reserved for check_question_mark. */
+  options->value_ = $11[0] << 1;
   malloc_non_terminal_node($$, result->malloc_pool_, T_REVOKE,
-                           6, privileges_node, $5, $6, users_node, $2, $9);
+                           7, privileges_node, object_node, $6, users_node, $2, $10, options);
+}
+| REVOKE opt_if_exists GRANT OPTION FOR grant_privileges ON object_type priv_level opt_native_priv_signature FROM user_list opt_ignore_unknown_user opt_drop_behavior
+{
+  ParseNode *privileges_node = NULL;
+  ParseNode *users_node = NULL;
+  merge_nodes(privileges_node, result, T_PRIVILEGES, $6);
+  merge_nodes(users_node, result, T_USERS, $12);
+  ParseNode *object_node = $8;
+  if ($10 != NULL) {
+    malloc_non_terminal_node(object_node, result->malloc_pool_, T_PRIV_OBJECT, 1, $10);
+    object_node->value_ = $8->value_;
+  }
+  ParseNode *options = NULL;
+  malloc_terminal_node(options, result->malloc_pool_, T_INT);
+  options->value_ = 1 | ($14[0] << 1);
+  malloc_non_terminal_node($$, result->malloc_pool_, T_REVOKE,
+                           7, privileges_node, object_node, $9, users_node, $2, $13, options);
 }
 | REVOKE opt_if_exists ALL opt_privilege ',' GRANT OPTION FROM user_list opt_ignore_unknown_user
 {

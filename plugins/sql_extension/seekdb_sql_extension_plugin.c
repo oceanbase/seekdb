@@ -61,9 +61,15 @@ static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL add_one(
       argument_count != 1 || NULL == arguments ||
       arguments[0].struct_size < sizeof(arguments[0]) ||
       NULL == arguments[0].type_id ||
-      strcmp(arguments[0].type_id, "core.type.int64") != 0 ||
-      arguments[0].data_size != sizeof(int64_t) ||
-      NULL == arguments[0].data) {
+      strcmp(arguments[0].type_id, "core.type.int64") != 0 || arguments[0].is_null > 1) {
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  // Also shared by an implementation without NULL_PROPAGATING. It receives
+  // NULL inputs directly rather than relying on the host expression shortcut.
+  if (arguments[0].is_null) {
+    return emit_value(context, "core.type.int64", NULL, 0, 1);
+  }
+  if (arguments[0].data_size != sizeof(int64_t) || NULL == arguments[0].data) {
     return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
   }
   int64_t value = 0;
@@ -375,6 +381,19 @@ static const char *const series_signature[] = {
    signature, 1, SEEKDB_PLUGIN_SIGNATURE_FLAG_NONE, {0, 0, 0, 0}}
 
 static const seekdb_plugin_function_descriptor_v2_t sql_functions[] = {
+    // Same diagnostic label and signature as the public function below, but
+    // no SQL-name registration. A SQL package binds the stable object ID.
+    {{sizeof(seekdb_plugin_function_descriptor_v2_t),
+      "org.seekdb.sql-extension.function.native-add-one", "seekdb_add_one",
+      1, 1, "core.type.int64", SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY |
+          SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC | SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING,
+      IMPLEMENTATION("org.seekdb.sql-extension.add-one"), {0, 0, 0, 0}},
+     integer_signature, 1, SEEKDB_PLUGIN_SIGNATURE_FLAG_NONE, {0, 0, 0, 0}},
+    {{sizeof(seekdb_plugin_function_descriptor_v2_t),
+      "org.seekdb.sql-extension.function.unnamed-add-one", NULL,
+      1, 1, "core.type.int64", SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY,
+      IMPLEMENTATION("org.seekdb.sql-extension.add-one"), {0, 0, 0, 0}},
+     integer_signature, 1, SEEKDB_PLUGIN_SIGNATURE_FLAG_NONE, {0, 0, 0, 0}},
     {{sizeof(seekdb_plugin_function_descriptor_v2_t),
       "org.seekdb.sql-extension.function.sql-exec", "seekdb_sql_exec",
       2, 2, "core.type.int64", 0,

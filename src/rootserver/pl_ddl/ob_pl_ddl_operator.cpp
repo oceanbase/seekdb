@@ -22,6 +22,8 @@
 #include "share/schema/ob_user_sql_service.h"
 #include "share/schema/ob_table_sql_service.h"
 #include "share/schema/ob_dependency_info.h"
+#include "share/schema/ob_priv_sql_service.h"
+#include "share/schema/native_routine_signature.h"
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
 #include "sql/resolver/ddl/ob_trigger_source_builder.h"
 #include <string>
@@ -39,6 +41,9 @@ struct RoutineIdReservation::Identity
   uint64_t owner_ = OB_INVALID_ID;
   ObRoutineType type_ = INVALID_ROUTINE_TYPE;
   std::string name_;
+  bool native_ = false;
+  int64_t slot_ = 0;
+  std::string input_;
 };
 
 RoutineIdReservation::RoutineIdReservation() = default;
@@ -60,7 +65,8 @@ int RoutineIdReservation::reserve(ObSchemaService &service, const ObRoutineInfo 
       routine.get_owner_id() == 0 || routine.get_owner_id() > INT64_MAX ||
       (routine.get_routine_type() != ROUTINE_FUNCTION_TYPE &&
        routine.get_routine_type() != ROUTINE_PROCEDURE_TYPE) ||
-      routine.get_package_id() != OB_INVALID_ID || routine.get_overload() != 0 ||
+      routine.get_package_id() != OB_INVALID_ID || routine.get_overload() < 0 ||
+      (!routine.is_native() && routine.get_overload() != 0) ||
       name.ptr() == nullptr || name.length() <= 0 || name.length() > OB_MAX_ROUTINE_NAME_BINARY_LENGTH)
     return OB_INVALID_ARGUMENT;
   try {
@@ -70,6 +76,12 @@ int RoutineIdReservation::reserve(ObSchemaService &service, const ObRoutineInfo 
     identity->owner_ = routine.get_owner_id();
     identity->type_ = routine.get_routine_type();
     identity->name_.assign(name.ptr(), name.length());
+    identity->native_ = routine.is_native();
+    identity->slot_ = routine.get_overload();
+    if (identity->native_) {
+      const int ret = NativeRoutineSignature::input_identity(routine, identity->input_);
+      if (ret != OB_SUCCESS) return ret;
+    }
     // Allocate the owned identity/name BEFORE consuming a sequence value.
     int ret = service.fetch_new_sys_pl_object_id(identity->id_);
     if (OB_SUCC(ret) && (identity->id_ == 0 || identity->id_ > INT64_MAX)) ret = OB_INVALID_DATA;
@@ -85,10 +97,16 @@ int RoutineIdReservation::take(ObSchemaService &service, const ObRoutineInfo &ro
   auto identity = std::move(identity_);
   if (!identity) return OB_STATE_NOT_MATCH;
   const auto &name = routine.get_routine_name();
+  std::string input;
+  if (routine.is_native()) {
+    const int ret = NativeRoutineSignature::input_identity(routine, input);
+    if (ret != OB_SUCCESS) return ret;
+  }
   if (identity->service_ != &service || identity->id_ != routine.get_routine_id() ||
       identity->database_ != routine.get_database_id() || identity->owner_ != routine.get_owner_id() ||
       identity->type_ != routine.get_routine_type() || routine.get_package_id() != OB_INVALID_ID ||
-      routine.get_overload() != 0 || name.ptr() == nullptr || name.length() <= 0 ||
+      routine.is_native() != identity->native_ || routine.get_overload() != identity->slot_ ||
+      input != identity->input_ || name.ptr() == nullptr || name.length() <= 0 ||
       identity->name_.size() != static_cast<size_t>(name.length()) ||
       identity->name_.compare(0, identity->name_.size(), name.ptr(), name.length()) != 0)
     return OB_STATE_NOT_MATCH;
@@ -107,12 +125,18 @@ struct RoutineVersionReservation::Identity
   int64_t version_ = OB_INVALID_VERSION, delete_parameters_version_ = OB_INVALID_VERSION;
   int64_t old_version_ = OB_INVALID_VERSION, old_parameters_ = 0;
   bool drop_ = false;
+  bool native_ = false;
+  int64_t slot_ = 0;
+  std::string input_;
 
   bool matches(const ObRoutineInfo &routine) const {
     const auto &name = routine.get_routine_name();
+    std::string input;
+    if (routine.is_native() && NativeRoutineSignature::input_identity(routine, input) != OB_SUCCESS) return false;
     return routine.get_routine_id() == id_ && routine.get_database_id() == database_ &&
         routine.get_owner_id() == owner_ && routine.get_routine_type() == type_ &&
-        routine.get_package_id() == OB_INVALID_ID && routine.get_overload() == 0 &&
+        routine.get_package_id() == OB_INVALID_ID && routine.get_overload() == slot_ &&
+        routine.is_native() == native_ && input == input_ &&
         name.ptr() != nullptr && name.length() > 0 && name_.size() == static_cast<size_t>(name.length()) &&
         name_.compare(0, name_.size(), name.ptr(), name.length()) == 0;
   }
@@ -146,7 +170,8 @@ int RoutineVersionReservation::reserve_impl(ObMultiVersionSchemaService &service
       routine.get_database_id() == 0 || routine.get_database_id() > INT64_MAX ||
       routine.get_owner_id() == 0 || routine.get_owner_id() > INT64_MAX ||
       (routine.get_routine_type() != ROUTINE_FUNCTION_TYPE && routine.get_routine_type() != ROUTINE_PROCEDURE_TYPE) ||
-      routine.get_package_id() != OB_INVALID_ID || routine.get_overload() != 0 ||
+      routine.get_package_id() != OB_INVALID_ID || routine.get_overload() < 0 ||
+      (!routine.is_native() && routine.get_overload() != 0) ||
       name.ptr() == nullptr || name.length() <= 0 || name.length() > OB_MAX_ROUTINE_NAME_BINARY_LENGTH)
     return OB_INVALID_ARGUMENT;
   try {
@@ -160,6 +185,12 @@ int RoutineVersionReservation::reserve_impl(ObMultiVersionSchemaService &service
     identity->owner_ = routine.get_owner_id();
     identity->type_ = routine.get_routine_type();
     identity->name_.assign(name.ptr(), name.length());
+    identity->native_ = routine.is_native();
+    identity->slot_ = routine.get_overload();
+    if (identity->native_) {
+      const int ret = NativeRoutineSignature::input_identity(routine, identity->input_);
+      if (ret != OB_SUCCESS) return ret;
+    }
     if (old_routine != nullptr) {
       if (!identity->matches(*old_routine) || old_routine->get_schema_version() <= 0)
         return OB_INVALID_ARGUMENT;
@@ -333,6 +364,30 @@ int ObPLDDLOperator::alter_routine(const share::schema::ObRoutineInfo &routine_i
   return ret;
 }
 
+static int drop_native_routine_object_privileges(ObMultiVersionSchemaService &service,
+    ObMySQLTransaction &transaction, const ObRoutineInfo &routine)
+{
+  int ret = OB_SUCCESS;
+  auto *sql_service = service.get_schema_service();
+  if (!sql_service) return OB_ERR_UNEXPECTED;
+  try {
+    ObSEArray<ObObjPriv, 4> grants;
+    // Read the caller's transaction, not the committed privilege cache: GRANT
+    // and DROP can belong to the same uncommitted extension install/update.
+    if (OB_FAIL(ObPrivSqlService::get_native_routine_privileges_for_drop(routine, transaction, grants))) return ret;
+    for (int64_t i = 0; OB_SUCC(ret) && i < grants.count(); ++i) {
+      int64_t version = OB_INVALID_VERSION;
+      if (OB_FAIL(service.gen_new_schema_version(version))) {
+      } else if (version <= routine.get_schema_version()) ret = OB_STATE_NOT_MATCH;
+      else ret = sql_service->get_priv_sql_service().delete_obj_priv(grants.at(i), version, transaction);
+      // A missing row after our transactional read/lock is not a stale cache
+      // result. Propagate it and roll back; never proceed with partial cleanup.
+    }
+  } catch (const std::bad_alloc &) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+  catch (...) { ret = OB_ERR_UNEXPECTED; }
+  return ret;
+}
+
 int ObPLDDLOperator::drop_routine(const share::schema::ObRoutineInfo &routine_info,
                                   common::ObMySQLTransaction &trans,
                                   share::schema::ObErrorInfo &error_info,
@@ -350,8 +405,10 @@ int ObPLDDLOperator::drop_routine(const share::schema::ObRoutineInfo &routine_in
     LOG_ERROR("schema_service must not null", K(ret));
   } else if (version_reservation != nullptr && OB_FAIL(version_reservation->take_drop(
       schema_service_, trans, routine_info, new_schema_version))) {
-  } else if (OB_FAIL(drop_obj_privs(routine_info.get_routine_id(),
-                                    static_cast<uint64_t>(routine_info.get_routine_type()),
+  } else if (routine_info.is_native() && OB_FAIL(drop_native_routine_object_privileges(
+      schema_service_, trans, routine_info))) {
+  } else if (!routine_info.is_native() && OB_FAIL(drop_obj_privs(routine_info.get_routine_id(),
+                                    static_cast<uint64_t>(routine_info.get_object_type()),
                                     trans))) {
   } else if (version_reservation == nullptr && OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
   } else if (OB_FAIL(schema_service->get_routine_sql_service().drop_routine(

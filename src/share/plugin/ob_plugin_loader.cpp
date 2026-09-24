@@ -87,7 +87,8 @@ const seekdb_plugin_extension_flags_t KNOWN_EXTENSION_FLAGS =
     SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING |
     SEEKDB_PLUGIN_EXTENSION_FLAG_PERSISTENT |
     SEEKDB_PLUGIN_EXTENSION_FLAG_PARALLEL_SAFE |
-    SEEKDB_PLUGIN_EXTENSION_FLAG_REQUIRES_CATALOG;
+    SEEKDB_PLUGIN_EXTENSION_FLAG_REQUIRES_CATALOG |
+    SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY;
 
 struct StagedService
 {
@@ -1167,11 +1168,13 @@ int validate_extension_common(const uint32_t struct_size,
                               const uint64_t *reserved,
                               const size_t reserved_count,
                               const char *kind,
-                              std::string &error)
+                              std::string &error,
+                              const bool allow_implementation_only = false)
 {
   int ret = OB_SUCCESS;
   if (struct_size < required_size || !valid_identifier(object_id) ||
       (flags & ~KNOWN_EXTENSION_FLAGS) != 0 ||
+      (!allow_implementation_only && (flags & SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY)) ||
       !all_zero(reserved, reserved_count)) {
     ret = OB_INVALID_DATA;
     error = std::string("invalid ") + kind + " extension descriptor";
@@ -1214,9 +1217,12 @@ int normalize_extension(const seekdb_plugin_function_descriptor_v1_t &source,
   int ret = validate_extension_common(
       source.struct_size, sizeof(source), source.object_id, source.flags,
       source.reserved, sizeof(source.reserved) / sizeof(source.reserved[0]),
-      "function", error);
+      "function", error, true);
+  const bool unnamed_implementation =
+      (source.flags & SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY) &&
+      (source.sql_name == nullptr || source.sql_name[0] == '\0');
   if (OB_SUCCESS == ret &&
-      (!valid_sql_name(source.sql_name) ||
+      ((!unnamed_implementation && !valid_sql_name(source.sql_name)) ||
        source.minimum_arity > source.maximum_arity ||
        (nullptr != source.static_result_type_id &&
         !valid_identifier(source.static_result_type_id)))) {
@@ -1226,7 +1232,7 @@ int normalize_extension(const seekdb_plugin_function_descriptor_v1_t &source,
   if (OB_SUCCESS == ret) {
     target.kind_ = SEEKDB_PLUGIN_EXTENSION_FUNCTION;
     target.object_id_ = source.object_id;
-    target.sql_name_ = source.sql_name;
+    target.sql_name_ = source.sql_name == nullptr ? "" : source.sql_name;
     target.minimum_arity_ = source.minimum_arity;
     target.maximum_arity_ = source.maximum_arity;
     if (nullptr != source.static_result_type_id) {
@@ -2025,6 +2031,38 @@ struct ObPluginLoader::Impl
     }
     return nullptr;
   }
+
+  int acquire_bound_function(const seekdb_plugin_sql_binding_v1_t &binding,
+      ObPluginExtensionLease &object, ObPluginLease &implementation)
+  try {
+    if (!registry_) return OB_NOT_INIT;
+    const bool unnamed = (binding.flags & SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY) &&
+                         binding.sql_name[0] == '\0';
+    if (binding.struct_size < sizeof(binding) || binding.kind != SEEKDB_PLUGIN_EXTENSION_FUNCTION ||
+        !binding.owner_generation || !binding.catalog_epoch || !all_zero(binding.reserved, 4) ||
+        !valid_identifier(binding.object_id) || !valid_identifier(binding.owner_plugin_id) ||
+        !valid_identifier(binding.result_type_id) || (!unnamed && !valid_sql_name(binding.sql_name)) ||
+        (binding.flags & ~KNOWN_EXTENSION_FLAGS) || binding.minimum_arity > binding.maximum_arity ||
+        binding.maximum_arity > SEEKDB_PLUGIN_MAX_ARGUMENTS) return OB_INVALID_ARGUMENT;
+    // Acquire by durable implementation identity, never by a SQL label. The
+    // same atomic epoch/generation fence protects public and implementation-only
+    // functions, and the two leases keep both metadata and code alive.
+    ObPluginExtensionInfo expected;
+    expected.spec_.kind_ = SEEKDB_PLUGIN_EXTENSION_FUNCTION;
+    expected.spec_.object_id_ = binding.object_id;
+    expected.owner_plugin_id_ = binding.owner_plugin_id;
+    expected.owner_generation_ = binding.owner_generation;
+    int ret = registry_->acquire_extension_with_implementation(
+        expected, object, implementation, binding.catalog_epoch);
+    if (ret != OB_SUCCESS) return ret;
+    const auto &spec = object.info()->spec_;
+    if (spec.flags_ != binding.flags || spec.sql_name_ != binding.sql_name ||
+        spec.minimum_arity_ != binding.minimum_arity || spec.maximum_arity_ != binding.maximum_arity ||
+        (!spec.static_result_type_id_.empty() && spec.static_result_type_id_ != binding.result_type_id))
+      return OB_STATE_NOT_MATCH;
+    return OB_SUCCESS;
+  } catch (const std::bad_alloc &) { return OB_ALLOCATE_MEMORY_FAILED; }
+  catch (...) { return OB_ERR_UNEXPECTED; }
 
   int find_bound_type(const seekdb_plugin_sql_binding_v1_t &binding,
                       ObPluginExtensionInfo &expected)
@@ -4379,16 +4417,46 @@ int ObPluginLoader::resolve_sql_extension(
     const uint32_t argument_count,
     seekdb_plugin_sql_binding_v1_t &binding) const
 try {
-  if (!impl_ || !impl_->registry_) return OB_NOT_INIT;
   binding = {};
+  if (!impl_ || !impl_->registry_) return OB_NOT_INIT;
   ObPluginExtensionInfo extension;
   uint64_t epoch = 0;
   const int ret = impl_->registry_->resolve_sql_extension(
       kind, sql_name, argument_type_ids, argument_count, extension, epoch);
   if (OB_SUCCESS != ret) return ret;
+  return finish_sql_binding(extension, epoch, argument_type_ids, argument_count, binding);
+} catch (const std::bad_alloc &) {
+  binding = {}; return OB_ALLOCATE_MEMORY_FAILED;
+} catch (...) {
+  binding = {}; return OB_ERR_UNEXPECTED;
+}
+
+int ObPluginLoader::resolve_native_function(const char *module_id, const char *implementation_id,
+    const char *const *argument_type_ids, uint32_t argument_count,
+    seekdb_plugin_sql_binding_v1_t &binding) const
+try {
+  binding = {};
+  if (!impl_ || !impl_->registry_) return OB_NOT_INIT;
+  ObPluginExtensionInfo extension;
+  uint64_t epoch = 0;
+  const int ret = impl_->registry_->resolve_native_function(module_id, implementation_id,
+      argument_type_ids, argument_count, extension, epoch);
+  if (ret != OB_SUCCESS) return ret;
+  return finish_sql_binding(extension, epoch, argument_type_ids, argument_count, binding);
+} catch (const std::bad_alloc &) {
+  binding = {}; return OB_ALLOCATE_MEMORY_FAILED;
+} catch (...) {
+  binding = {}; return OB_ERR_UNEXPECTED;
+}
+
+int ObPluginLoader::finish_sql_binding(const ObPluginExtensionInfo &extension, uint64_t epoch,
+    const char *const *argument_type_ids, uint32_t argument_count,
+    seekdb_plugin_sql_binding_v1_t &binding) const
+try {
+  binding = {};
 
   std::string result_type = extension.spec_.static_result_type_id_;
-  if (kind == SEEKDB_PLUGIN_EXTENSION_FUNCTION && result_type.empty()) {
+  if (extension.spec_.kind_ == SEEKDB_PLUGIN_EXTENSION_FUNCTION && result_type.empty()) {
     const int resolved = impl_->resolve_result_type(extension, epoch, argument_type_ids,
         argument_count, result_type);
     if (resolved != OB_SUCCESS) return resolved;
@@ -4439,24 +4507,9 @@ int ObPluginLoader::execute_bound_function(
     return OB_INVALID_ARGUMENT;
   }
 
-  std::vector<ObPluginExtensionInfo> candidates;
-  uint64_t observed_epoch = 0;
-  int ret = impl_->registry_->find_extensions_by_sql_name(
-      binding.kind, binding.sql_name, candidates, observed_epoch);
-  if (OB_SUCCESS != ret) return ret;
-  const auto found = std::find_if(
-      candidates.begin(), candidates.end(),
-      [&binding](const ObPluginExtensionInfo &candidate) {
-        return candidate.spec_.object_id_ == binding.object_id &&
-               candidate.owner_plugin_id_ == binding.owner_plugin_id &&
-               candidate.owner_generation_ == binding.owner_generation;
-      });
-  if (found == candidates.end()) return OB_ENTRY_NOT_EXIST;
-
   ObPluginExtensionLease extension_lease;
   ObPluginLease implementation_lease;
-  ret = impl_->registry_->acquire_extension_with_implementation(
-      *found, extension_lease, implementation_lease);
+  const int ret = impl_->acquire_bound_function(binding, extension_lease, implementation_lease);
   if (OB_SUCCESS != ret) return ret;
   return impl_->execute_typed_lease(extension_lease.info()->spec_, binding.catalog_epoch,
       implementation_lease, context, arguments, argument_count);
@@ -4470,31 +4523,18 @@ try {
   if (!impl_ || !impl_->registry_) return OB_NOT_INIT;
   if (binding.struct_size < sizeof(binding) || binding.kind != SEEKDB_PLUGIN_EXTENSION_FUNCTION ||
       !binding.owner_generation || !binding.catalog_epoch || !all_zero(binding.reserved, 4) ||
-      !valid_identifier(binding.object_id) || !valid_identifier(binding.sql_name) ||
+      !valid_identifier(binding.object_id) ||
       !valid_identifier(binding.owner_plugin_id) || !valid_identifier(binding.result_type_id) ||
       !context || context->struct_size < sizeof(*context) || context->reserved_word ||
       !all_zero(context->reserved, 4) || !context->emit_result || !context->query_context ||
       context->query_context->struct_size < sizeof(seekdb_plugin_execution_context_v1_t) ||
       !context->query_context->emit_result || !all_zero(context->query_context->reserved, 6) ||
       row_count > SEEKDB_PLUGIN_MAX_BATCH_ROWS || (row_count && !rows)) return OB_INVALID_ARGUMENT;
-  std::vector<ObPluginExtensionInfo> candidates;
-  uint64_t epoch = 0;
-  int ret = impl_->registry_->find_extensions_by_sql_name(binding.kind, binding.sql_name, candidates, epoch);
-  if (ret != OB_SUCCESS) return ret;
-  if (epoch != binding.catalog_epoch) return OB_STATE_NOT_MATCH;
-  const auto found = std::find_if(candidates.begin(), candidates.end(), [&](const ObPluginExtensionInfo &item) {
-    return item.spec_.object_id_ == binding.object_id && item.owner_plugin_id_ == binding.owner_plugin_id &&
-        item.owner_generation_ == binding.owner_generation;
-  });
-  if (found == candidates.end()) return OB_ENTRY_NOT_EXIST;
   ObPluginExtensionLease object;
   ObPluginLease implementation;
-  if (OB_SUCCESS != (ret = impl_->registry_->acquire_extension_with_implementation(
-      *found, object, implementation, binding.catalog_epoch))) return ret;
+  int ret = impl_->acquire_bound_function(binding, object, implementation);
+  if (ret != OB_SUCCESS) return ret;
   const auto &spec = object.info()->spec_;
-  if (spec.flags_ != binding.flags || spec.minimum_arity_ != binding.minimum_arity ||
-      spec.maximum_arity_ != binding.maximum_arity ||
-      (!spec.static_result_type_id_.empty() && spec.static_result_type_id_ != binding.result_type_id)) return OB_STATE_NOT_MATCH;
   if (OB_SUCCESS != (ret = validate_function_lease(implementation))) return ret;
   auto *instance = impl_->instance_for_lease(implementation);
   if (!instance) return OB_ENTRY_NOT_EXIST;

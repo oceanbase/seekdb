@@ -1,2 +1,3 @@
 default_version = '1.0'
 requires = 'text_ops'
+superuser = false

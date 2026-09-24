@@ -2289,6 +2289,7 @@ typedef enum ObItemType
   T_CREATE_EXTENSION = 4924,
   T_DROP_EXTENSION = 4925,
   T_ALTER_EXTENSION = 4926,
+  T_SF_NATIVE_BODY = 4927, // AS module, implementation LANGUAGE C
   T_MAX //Attention: add a new type before T_MAX
 } ObItemType;
 

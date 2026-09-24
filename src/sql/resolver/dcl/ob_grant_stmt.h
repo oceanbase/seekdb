@@ -83,6 +83,8 @@ public:
   bool is_grant_all_tab_priv() const { return is_grant_all_tab_priv_; }
 
   virtual bool cause_implicit_commit() const { return true; }
+  obcall::NativeRoutinePrivilegeTarget &native_target() { return grant_arg_.native_target_; }
+  const obcall::NativeRoutinePrivilegeTarget &native_target() const { return grant_arg_.native_target_; }
   virtual obcall::ObDDLArg &get_ddl_arg() { return grant_arg_; }
   int add_column_privs(const ObString& column_name,const ObPrivSet priv_set) { return column_names_priv_.push_back(std::make_pair(column_name, priv_set)); }
   const ObIArray<std::pair<ObString, ObPrivType>> &get_column_privs() const { return column_names_priv_; }

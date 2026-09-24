@@ -421,62 +421,43 @@ static Geometry buffer_geometry(const Geometry &input, double distance)
                    box.max_x + delta, box.max_y + delta);
 }
 
-static double approximate_log(double value)
-{
-  /* Newton iteration keeps the plugin independent of the host's math ABI. */
-  if (value <= 0.0) return -1e9;
-  double result = 0.0;
-  double scaled = value;
-  while (scaled > 2.0) { scaled *= 0.5; result += 0.6931471805599453; }
-  while (scaled < 0.5) { scaled *= 2.0; result -= 0.6931471805599453; }
-  const double y = (scaled - 1.0) / (scaled + 1.0);
-  double term = y;
-  double series = 0.0;
-  for (int i = 1; i < 32; i += 2) {
-    series += term / static_cast<double>(i);
-    term *= y * y;
-  }
-  return result + 2.0 * series;
-}
-
-static double approximate_exp(double value)
-{
-  if (value < -40.0) return 0.0;
-  if (value > 40.0) return 2.3e17;
-  const double base = 1.0 + value / 256.0;
-  double result = 1.0;
-  for (int i = 0; i < 8; ++i) result *= base;
-  return result;
-}
-
-static void transform_point(Point &point, uint32_t source_srid, uint32_t target_srid)
+static bool transform_point(Point &point, uint32_t source_srid, uint32_t target_srid)
 {
   const double earth_radius = 6378137.0;
   const double degrees_to_radians = 0.017453292519943295;
   const double radians_to_degrees = 57.29577951308232;
   if (source_srid == 4326 && target_srid == 3857) {
-    const double latitude = std::max(-85.05112878, std::min(85.05112878, point.y));
+    // EPSG:3857 uses spherical Mercator with WGS84's semi-major radius.
+    // asinh(tan(phi)) equals log(tan(pi/4 + phi/2)), but is symmetric
+    // across the equator and avoids cancellation at latitude zero.
+    // The web-tile latitude cutoff is not a coordinate transformation: do
+    // not silently move a valid high-latitude input onto that cutoff.
+    if (point.y <= -90.0 || point.y >= 90.0) return false;
+    const double latitude = point.y * degrees_to_radians;
     point.x = earth_radius * point.x * degrees_to_radians;
-    const double tangent = (90.0 + latitude) * degrees_to_radians * 0.5;
-    /* tan(x) computed from a short rational approximation around pi/4. */
-    const double t = tangent - 0.7853981633974483;
-    const double tan_value = (1.0 + t + t * t * 0.5) /
-                             (1.0 - t + t * t * 0.5);
-    point.y = earth_radius * approximate_log(tan_value);
+    point.y = earth_radius * std::asinh(std::tan(latitude));
   } else if (source_srid == 3857 && target_srid == 4326) {
     point.x = point.x / earth_radius * radians_to_degrees;
-    const double e = approximate_exp(point.y / earth_radius);
-    point.y = (2.0 * std::atan(e) - 1.5707963267948966) * radians_to_degrees;
+    const double northing = point.y / earth_radius;
+    // exp receives only non-positive values, including extreme finite
+    // northings. The hemisphere reflection avoids overflow in exp(+y/R).
+    const double latitude = 1.5707963267948966 - 2.0 * std::atan(std::exp(-std::abs(northing)));
+    point.y = std::copysign(latitude * radians_to_degrees, northing);
   }
+  return std::isfinite(point.x) && std::isfinite(point.y);
 }
 
-static void transform_geometry(Geometry &geometry, uint32_t source_srid, uint32_t target_srid)
+static bool transform_geometry(Geometry &geometry, uint32_t source_srid, uint32_t target_srid)
 {
-  for (Point &point : geometry.points) transform_point(point, source_srid, target_srid);
+  for (Point &point : geometry.points)
+    if (!transform_point(point, source_srid, target_srid)) return false;
   for (std::vector<Point> &ring : geometry.rings) {
-    for (Point &point : ring) transform_point(point, source_srid, target_srid);
+    for (Point &point : ring)
+      if (!transform_point(point, source_srid, target_srid)) return false;
   }
-  for (Geometry &child : geometry.children) transform_geometry(child, source_srid, target_srid);
+  for (Geometry &child : geometry.children)
+    if (!transform_geometry(child, source_srid, target_srid)) return false;
+  return true;
 }
 
 static bool same_point(const Point &left, const Point &right);
@@ -966,10 +947,11 @@ static double geometry_distance(const Geometry &left, const Geometry &right)
 }
 
 static seekdb_plugin_status_t emit_bytes(
-    const seekdb_plugin_execution_context_v1_t *context, const std::string &value)
+    const seekdb_plugin_execution_context_v1_t *context, const std::string &value,
+    const char *type = "org.seekdb.gis.scalar.bytes")
 {
   const seekdb_plugin_execution_result_v1_t result = {
-      sizeof(result), "org.seekdb.gis.scalar.bytes",
+      sizeof(result), type,
       reinterpret_cast<const uint8_t *>(value.data()), value.size(), 0,
       {0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0}};
   return context->emit_result(context->host, &result);
@@ -1043,7 +1025,13 @@ extern "C" seekdb_plugin_status_t seekdb_gis_geometry_operation(
       return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
     }
     const uint32_t source_srid = first.srid;
-    transform_geometry(first, source_srid, target_srid);
+    if (source_srid != target_srid &&
+        !((source_srid == 4326 && target_srid == 3857) || (source_srid == 3857 && target_srid == 4326))) {
+      // This engine has no arbitrary-CRS registry. Relabeling coordinates
+      // would manufacture a successful result rather than transform them.
+      return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+    }
+    if (!transform_geometry(first, source_srid, target_srid)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
     first.srid = target_srid;
     return emit_geometry(context, first);
   }
@@ -1274,7 +1262,7 @@ extern "C" seekdb_plugin_status_t seekdb_gis_text_operation(
   if (operation == SEEKDB_GIS_TEXT_AS_TEXT) geometry_to_wkt(geometry, stream);
   else if (operation == SEEKDB_GIS_TEXT_AS_GEOJSON) geometry_to_geojson(geometry, stream);
   else return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
-  return emit_bytes(context, stream.str());
+  return emit_bytes(context, stream.str(), "core.type.text");
 }
 
 extern "C" seekdb_plugin_status_t seekdb_gis_wkb_from_bytes(

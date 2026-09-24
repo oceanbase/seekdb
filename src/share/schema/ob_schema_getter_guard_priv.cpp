@@ -18,6 +18,11 @@
 
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_schema_mgr.h"
+#include "share/schema/native_routine_admission.h"
+#include "share/schema/routine_schema_overlay.h"
+#include <set>
+#include <map>
+#include <vector>
 
 namespace oceanbase
 {
@@ -710,6 +715,47 @@ int ObSchemaGetterGuard::check_routine_priv(const ObSessionPrivInfo &session_pri
                                             const ObNeedPriv &routine_need_priv)
 {
   int ret = OB_SUCCESS;
+  if (routine_need_priv.native_routine_id_ != OB_INVALID_ID || routine_need_priv.native_routine_version_ != 0) {
+    if (routine_need_priv.priv_level_ != OB_PRIV_ROUTINE_LEVEL ||
+        routine_need_priv.obj_type_ != ObObjectType::FUNCTION ||
+        routine_need_priv.native_routine_id_ == 0 || routine_need_priv.native_routine_id_ > INT64_MAX ||
+        routine_need_priv.native_routine_version_ <= 0 || routine_need_priv.db_.empty() ||
+        routine_need_priv.table_.empty() || !routine_need_priv.columns_.empty() ||
+        routine_need_priv.check_any_column_priv_ || routine_need_priv.priv_check_type_ != OB_PRIV_CHECK_ALL)
+      return OB_INVALID_ARGUMENT;
+    const ObRoutineInfo *routine = nullptr;
+    uint64_t database = OB_INVALID_ID;
+    if (OB_FAIL(get_routine_info(routine_need_priv.native_routine_id_, routine))) return ret;
+    if (!routine) return OB_ERR_SP_DOES_NOT_EXIST;
+    if (OB_FAIL(get_database_id(routine_need_priv.db_, database))) return ret;
+    if (!routine->is_native() || routine->get_package_id() != OB_INVALID_ID ||
+        routine->get_database_id() != database ||
+        routine->get_schema_version() != routine_need_priv.native_routine_version_ ||
+        routine_need_priv.table_.case_compare(routine->get_routine_name()) != 0) return OB_SCHEMA_EAGAIN;
+    return check_native_routine_priv(session_priv, enable_role_id_array, *routine, routine_need_priv.priv_set_);
+  }
+  // Name-only callers (including PL resolution) must also use the exact native
+  // object ACL. CREATE ROUTINE remains a database-level admission operation.
+  const ObPrivSet native_rights = OB_PRIV_EXECUTE | OB_PRIV_ALTER_ROUTINE | OB_PRIV_GRANT;
+  if (routine_need_priv.obj_type_ == ObObjectType::FUNCTION &&
+      (routine_need_priv.priv_set_ & (OB_PRIV_EXECUTE | OB_PRIV_ALTER_ROUTINE)) &&
+      !(routine_need_priv.priv_set_ & ~native_rights)) {
+    uint64_t database = OB_INVALID_ID;
+    ObSEArray<const ObRoutineInfo *, 4> family;
+    if (OB_FAIL(get_database_id(routine_need_priv.db_, database))) return ret;
+    if (database != OB_INVALID_ID) {
+      if (OB_FAIL(get_standalone_function_infos(database, routine_need_priv.table_, family))) return ret;
+      bool native = false;
+      for (int64_t i = 0; i < family.count(); ++i) {
+        if (!family.at(i)) return OB_ERR_UNEXPECTED;
+        native = native || family.at(i)->is_native();
+      }
+      if (native) {
+        if (family.count() != 1) return OB_ERR_FUNC_DUP;
+        return check_native_routine_priv(session_priv, enable_role_id_array, *family.at(0), routine_need_priv.priv_set_);
+      }
+    }
+  }
   
   const ObSchemaMgr *mgr = NULL;
   if (OB_INVALID_ID == session_priv.user_id_) {
@@ -808,6 +854,204 @@ int ObSchemaGetterGuard::check_routine_priv(const ObSessionPrivInfo &session_pri
   return ret;
 }
 
+int ObSchemaGetterGuard::check_native_routine_priv(const ObSessionPrivInfo &session_priv,
+    const ObIArray<uint64_t> &enabled_roles, const ObRoutineInfo &expected, ObPrivSet required,
+    const ObIArray<ObObjPriv> *transaction_acl, uint64_t grantor)
+{
+  return check_native_routine_priv_impl(session_priv, enabled_roles, expected, required,
+      transaction_acl, grantor, nullptr);
+}
+
+int ObSchemaGetterGuard::select_native_routine_grantors(const ObSessionPrivInfo &actor,
+    const ObIArray<uint64_t> &enabled_roles, const ObRoutineInfo &expected, ObPrivSet rights,
+    const ObIArray<ObObjPriv> &transaction_acl, NativeRoutineGrantors &sources)
+{
+  sources = NativeRoutineGrantors{};
+  if (!rights || (rights & ~(OB_PRIV_EXECUTE | OB_PRIV_ALTER_ROUTINE))) return OB_INVALID_ARGUMENT;
+  NativeRoutineGrantors proposed;
+  const int ret = check_native_routine_priv_impl(actor, enabled_roles, expected, rights | OB_PRIV_GRANT,
+      &transaction_acl, OB_INVALID_ID, &proposed);
+  if (ret == OB_SUCCESS) sources = proposed; // Never return a partially authorized plan.
+  return ret;
+}
+
+int ObSchemaGetterGuard::check_native_routine_priv_impl(const ObSessionPrivInfo &session_priv,
+    const ObIArray<uint64_t> &enabled_roles, const ObRoutineInfo &expected, ObPrivSet required,
+    const ObIArray<ObObjPriv> *transaction_acl, uint64_t grantor, NativeRoutineGrantors *sources)
+{
+  const ObPrivSet operations = OB_PRIV_EXECUTE | OB_PRIV_ALTER_ROUTINE;
+  if ((required & operations) == 0 || (required & ~(operations | OB_PRIV_GRANT)) != 0 ||
+      !expected.is_native() || !expected.is_native_binding_valid() ||
+      expected.get_routine_id() == 0 || expected.get_routine_id() > INT64_MAX ||
+      expected.get_owner_id() == 0 || expected.get_owner_id() > INT64_MAX ||
+      expected.get_schema_version() <= 0 || session_priv.user_id_ == 0 ||
+      session_priv.user_id_ > INT64_MAX ||
+      (grantor != OB_INVALID_ID && (grantor == 0 || grantor > INT64_MAX || !transaction_acl ||
+          !(required & OB_PRIV_GRANT)))) return OB_INVALID_ARGUMENT;
+  int ret = OB_SUCCESS;
+  const ObSchemaMgr *manager = nullptr;
+  const ObRoutineInfo *current = nullptr;
+  const ObDatabaseSchema *database = nullptr;
+  const ObUserInfo *user = nullptr;
+  const ObUserInfo *owner = nullptr;
+  if (OB_FAIL(check_lazy_guard(manager))) return ret;
+  if (OB_FAIL(get_routine_info(expected.get_routine_id(), current))) return ret;
+  if (!current) return OB_ERR_SP_DOES_NOT_EXIST;
+  if (current->get_routine_id() != expected.get_routine_id() ||
+      current->get_database_id() != expected.get_database_id() ||
+      current->get_owner_id() != expected.get_owner_id() ||
+      current->get_overload() != expected.get_overload() ||
+      current->get_schema_version() != expected.get_schema_version() ||
+      !NativeRoutineAdmission::same_signature(*current, expected)) return OB_SCHEMA_EAGAIN;
+  if (OB_FAIL(get_database_schema(current->get_database_id(), database))) return ret;
+  if (!database) return OB_ERR_BAD_DATABASE;
+  if (OB_FAIL(get_user_info(session_priv.user_id_, user))) return ret;
+  if (!user) return OB_USER_NOT_EXIST;
+  if (OB_FAIL(get_user_info(current->get_owner_id(), owner))) return ret;
+  if (!owner) return OB_USER_NOT_EXIST;
+  try {
+    // A locking SQL reader supplies a COMPLETE object snapshot. Absence is
+    // authoritative too: never fill gaps from cache or provisional after-images.
+    std::map<uint64_t, ObPackedObjPriv> transaction_rights;
+    if (transaction_acl) {
+      if (transaction_acl->count() > 16384) return OB_SIZE_OVERFLOW;
+      for (int64_t i = 0; i < transaction_acl->count(); ++i) {
+        const auto &entry = transaction_acl->at(i);
+        if (!entry.is_valid() || entry.get_obj_id() != current->get_routine_id() ||
+            entry.get_objtype() != uint64_t(ObObjectType::FUNCTION) ||
+            entry.get_grantee_id() == 0 || entry.get_grantee_id() > INT64_MAX ||
+            entry.get_grantor_id() == 0 || entry.get_grantor_id() > INT64_MAX) return OB_INVALID_DATA;
+        if (entry.get_col_id() == OBJ_LEVEL_FOR_TAB_PRIV)
+          transaction_rights[entry.get_grantee_id()] |= entry.get_obj_privs();
+      }
+    }
+    // A direct superuser acts as the object's owner for DCL. Never manufacture
+    // a grant chain rooted at the transient superuser identity. Session bits
+    // and SUPER assigned to an inherited role are not a superuser attribute.
+    if (OB_TEST_PRIVS(user->get_priv_set(), OB_PRIV_SUPER)) {
+      if (grantor != OB_INVALID_ID && grantor != owner->get_user_id()) return OB_ERR_NO_ROUTINE_PRIVILEGE;
+      if (sources) {
+        if (required & OB_PRIV_EXECUTE) sources->execute_ = owner->get_user_id();
+        if (required & OB_PRIV_ALTER_ROUTINE) sources->alter_ = owner->get_user_id();
+      }
+      return OB_SUCCESS;
+    }
+    bool grantor_seen = false;
+    bool owns_object = false;
+    // Use the current user/role schemas, not stale session privilege bits.
+    // Object grants from every grantor may contribute, but never from another
+    // object, object class or column. Names are diagnostic data, not ACL keys.
+    ObPrivSet broad = 0;
+    ObPackedObjPriv object = 0;
+    const auto collect = [&](const ObUserInfo &principal) -> int {
+      // Preserve provenance: a role's grant option authorizes that role as
+      // grantor, not an unrelated actor. The role must be currently reachable.
+      if (grantor != OB_INVALID_ID && grantor != principal.get_user_id()) return OB_SUCCESS;
+      grantor_seen = true;
+      const bool principal_owns = principal.get_user_id() == owner->get_user_id();
+      owns_object = owns_object || principal_owns;
+      ObPrivSet database_bits = 0;
+      int code = manager->priv_mgr_.get_db_priv_set(
+          ObOriginalDBKey(principal.get_user_id(), database->get_database_name_str()), database_bits);
+      if (code != OB_SUCCESS) return code;
+      const ObPrivSet principal_broad = (principal.get_priv_set() | database_bits) & ~OB_PRIV_SUPER;
+      broad |= principal_broad;
+      if (transaction_acl) {
+        const auto found = transaction_rights.find(principal.get_user_id());
+        const ObPackedObjPriv principal_object = found == transaction_rights.end() ? 0 : found->second;
+        object |= principal_object;
+        if (sources) {
+          for (const ObPrivSet permission : {OB_PRIV_EXECUTE, OB_PRIV_ALTER_ROUTINE}) {
+            if (!(required & permission)) continue;
+            bool allowed = principal_owns ||
+                OB_TEST_PRIVS(principal_broad, permission | OB_PRIV_GRANT);
+            if (!allowed) {
+              code = ObOraPrivCheck::raw_obj_priv_exists(permission == OB_PRIV_EXECUTE ?
+                  OBJ_PRIV_ID_EXECUTE : OBJ_PRIV_ID_ALTER, GRANT_OPTION, principal_object, allowed);
+              if (code != OB_SUCCESS) return code;
+            }
+            uint64_t &source = permission == OB_PRIV_EXECUTE ? sources->execute_ : sources->alter_;
+            const uint64_t candidate = principal.get_user_id();
+            // Prefer the actor; otherwise the lowest reachable enabled role ID.
+            // Never combine one principal's ordinary right with another's option.
+            if (allowed && source != session_priv.user_id_ &&
+                (candidate == session_priv.user_id_ || candidate < source)) source = candidate;
+          }
+        }
+        return OB_SUCCESS;
+      }
+      ObPackedObjPriv bits = 0;
+      const ObObjPrivSortKey key(current->get_routine_id(), static_cast<uint64_t>(ObObjectType::FUNCTION),
+          OBJ_LEVEL_FOR_TAB_PRIV, OB_INVALID_ID, principal.get_user_id());
+      const auto *private_acl = routine_overlay_ ? routine_overlay_->privileges() : nullptr;
+      if (private_acl && private_acl->has_object_changes(key.obj_id_, key.grantee_id_)) {
+        ObSEArray<const ObObjPriv *, 4> base;
+        code = manager->priv_mgr_.get_obj_privs_in_ur_and_obj(key, base);
+        if (code == OB_SUCCESS) code = private_acl->merge_object_privileges(*current, key.grantee_id_, base, bits);
+      } else {
+        code = manager->priv_mgr_.get_obj_privs_in_ur_and_obj(key, bits);
+      }
+      if (code == OB_SUCCESS) object |= bits;
+      return code;
+    };
+    if (OB_FAIL(collect(*user))) return ret;
+    std::vector<uint64_t> queue;
+    std::set<uint64_t> seen;
+    seen.insert(user->get_user_id());
+    constexpr size_t max_roles = 16384;
+    const auto enqueue = [&](uint64_t id) -> int {
+      if (id == 0 || id > INT64_MAX) return OB_INVALID_DATA;
+      if (seen.count(id)) return OB_SUCCESS;
+      if (seen.size() >= max_roles) return OB_SIZE_OVERFLOW;
+      seen.insert(id); queue.push_back(id);
+      return OB_SUCCESS;
+    };
+    for (int64_t i = 0; i < enabled_roles.count(); ++i) {
+      const uint64_t role = enabled_roles.at(i);
+      if (has_exist_in_array(user->get_role_id_array(), role) && OB_FAIL(enqueue(role))) return ret;
+    }
+    for (size_t i = 0; i < queue.size(); ++i) {
+      const ObUserInfo *role = nullptr;
+      if (OB_FAIL(get_user_info(queue[i], role))) return ret;
+      if (!role) return OB_ERR_USER_NOT_EXIST;
+      if (!role->is_role()) return OB_INVALID_DATA;
+      if (OB_FAIL(collect(*role))) return ret;
+      for (int64_t j = 0; j < role->get_role_id_array().count(); ++j)
+        if (OB_FAIL(enqueue(role->get_role_id_array().at(j)))) return ret;
+    }
+    if (sources) {
+      // Ownership (including an enabled, currently reachable owning role)
+      // supplies all grant options, even after the owner's ordinary ACL was
+      // revoked. Use that identity consistently for the complete DCL request.
+      if (owns_object) {
+        if (required & OB_PRIV_EXECUTE) sources->execute_ = owner->get_user_id();
+        if (required & OB_PRIV_ALTER_ROUTINE) sources->alter_ = owner->get_user_id();
+      }
+      return ((required & OB_PRIV_EXECUTE) && sources->execute_ == OB_INVALID_ID) ||
+          ((required & OB_PRIV_ALTER_ROUTINE) && sources->alter_ == OB_INVALID_ID)
+          ? OB_ERR_NO_ROUTINE_PRIVILEGE : OB_SUCCESS;
+    }
+    if (grantor != OB_INVALID_ID && !grantor_seen) return OB_ERR_NO_ROUTINE_PRIVILEGE;
+    // GRANT OPTION is per privilege. An EXECUTE grant option must not make an
+    // independently granted ALTER privilege delegable (or vice versa).
+    const uint64_t option = (required & OB_PRIV_GRANT) ? GRANT_OPTION : NO_OPTION;
+    for (const ObPrivSet permission : {OB_PRIV_EXECUTE, OB_PRIV_ALTER_ROUTINE}) {
+      if (!(required & permission)) continue;
+      // ALTER is an ownership action; EXECUTE remains an independently
+      // revocable ordinary privilege. Ownership itself is never an ACL edge.
+      if (owns_object && ((required & OB_PRIV_GRANT) || permission == OB_PRIV_ALTER_ROUTINE)) continue;
+      if (OB_TEST_PRIVS(broad, permission | (required & OB_PRIV_GRANT))) continue;
+      bool allowed = false;
+      if (OB_FAIL(ObOraPrivCheck::raw_obj_priv_exists(
+          permission == OB_PRIV_EXECUTE ? OBJ_PRIV_ID_EXECUTE : OBJ_PRIV_ID_ALTER, option, object, allowed)))
+        return ret;
+      if (!allowed) return OB_ERR_NO_ROUTINE_PRIVILEGE;
+    }
+    return OB_SUCCESS;
+  } catch (const std::bad_alloc &) { return OB_ALLOCATE_MEMORY_FAILED; }
+  catch (...) { return OB_ERR_UNEXPECTED; }
+}
+
 int ObSchemaGetterGuard::check_db_priv(const ObSessionPrivInfo &session_priv,
                                        const common::ObIArray<uint64_t> &enable_role_id_array,
                                        const ObString &db,
@@ -885,6 +1129,8 @@ int ObSchemaGetterGuard::check_priv(
   if (session_priv.is_valid()) {
     for (int64_t i = 0; OB_SUCC(ret) && i < need_privs.count(); ++i) {
       const ObNeedPriv &need_priv = need_privs.at(i);
+      if ((need_priv.native_routine_id_ != OB_INVALID_ID || need_priv.native_routine_version_ != 0) &&
+          need_priv.priv_level_ != OB_PRIV_ROUTINE_LEVEL) return OB_INVALID_ARGUMENT;
       switch (need_priv.priv_level_) {
         case OB_PRIV_USER_LEVEL: {
           if (OB_FAIL(check_user_priv(session_priv,

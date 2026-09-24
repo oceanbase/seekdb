@@ -17,10 +17,16 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_expr_udf.h"
+#include "share/schema/native_routine_signature.h"
 #include "share/ob_server_struct.h"
 #include "sql/pl/ob_pl_stmt.h"
 #include "sql/ob_spi.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "sql/engine/expr/plugin_function_expr.h"
+#include "sql/engine/expr/plugin_builtin_types.h"
+#include "sql/resolver/expr/plugin_expr_type.h"
+#include "sql/code_generator/ob_static_engine_expr_cg.h"
+#include "sql/session/ob_sql_session_info.h"
 
 namespace oceanbase
 {
@@ -595,7 +601,9 @@ int ObExprUDF::before_calc_result(share::schema::ObSchemaGetterGuard &schema_gua
       || OB_ISNULL(exec_ctx.get_sql_ctx()->schema_guard_)) {
     sql::ObSqlExecutorCtx &task_ctx = exec_ctx.get_sql_exec_ctx();
     const share::ObGlobalContext &gctx = GCTX;
-    if (OB_FAIL(gctx.schema_service_->get_runtime_schema_guard(
+    if (OB_ISNULL(gctx.schema_service_)) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(gctx.schema_service_->get_runtime_schema_guard(
                 schema_guard,
                 task_ctx.get_query_begin_schema_version()))) {
     }
@@ -635,11 +643,155 @@ int ObExprUDF::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObEx
   } else {
     OZ(info->from_raw_expr(fun_sys));
     info->is_called_in_sql_ = is_called_in_sql();
+    // Local PL routines and constructors have no standalone catalog version.
+    // Preserve their existing dispatch rather than looking up their local IDs.
+    if (OB_SUCC(ret) && fun_sys.is_standalone_udf() &&
+        fun_sys.get_udf_version() != OB_INVALID_VERSION && expr_cg_ctx.schema_guard_) {
+      const share::schema::ObRoutineInfo *routine = nullptr;
+      OZ(expr_cg_ctx.schema_guard_->get_routine_info(info->udf_id_, routine));
+      if (OB_SUCC(ret) && routine && routine->is_native()) {
+        int64_t parameter_count = 0;
+        OZ(share::schema::NativeRoutineSignature::call_count(*routine, fun_sys.get_param_count(), parameter_count));
+        if (routine->get_schema_version() != fun_sys.get_udf_version()) ret = OB_SCHEMA_EAGAIN;
+        else if (!routine->get_ret_type() ||
+            routine->get_ret_type()->get_obj_type() != info->result_type_.get_type() ||
+            parameter_count != info->params_type_.count() ||
+            info->params_desc_.count() != info->params_type_.count()) ret = OB_INVALID_DATA;
+        for (int64_t i = 0; OB_SUCC(ret) && i < info->params_type_.count(); ++i) {
+          share::schema::ObRoutineParam *parameter = nullptr;
+          OZ(routine->get_routine_param(share::schema::NativeRoutineSignature::parameter_index(*routine, i), parameter));
+          if (OB_SUCC(ret) && (!parameter || info->params_desc_.at(i).is_out() ||
+              parameter->get_param_type().get_obj_type() != info->params_type_.at(i).get_type()))
+            ret = OB_INVALID_DATA;
+          const auto *child = fun_sys.get_param_expr(i);
+          if (OB_SUCC(ret) && !child) ret = OB_INVALID_DATA;
+          if (OB_SUCC(ret) && child->get_plugin_type()) {
+            const auto &type = *child->get_plugin_type();
+            if (type.stored_ || type.physical_type_ != child->get_data_type() ||
+                !PluginBuiltinTypes::contains(type.logical_id_)) ret = OB_NOT_SUPPORTED;
+          }
+        }
+        seekdb_plugin_sql_binding_v1_t binding{};
+        std::vector<std::string> arguments;
+        OZ(PluginFunctionExpr::resolve_native_binding(*routine, binding, arguments, fun_sys.get_param_count()));
+        if (OB_SUCC(ret)) {
+          info->native_ = OB_NEWx(PluginFunctionExtraInfo, (&alloc), alloc, T_FUN_SYS_PLUGIN_FUNCTION);
+          if (!info->native_) ret = OB_ALLOCATE_MEMORY_FAILED;
+        }
+        OZ(info->native_->initialize(binding, arguments));
+        OX(info->native_schema_version_ = routine->get_schema_version());
+      }
+    }
     rt_expr.extra_info_ = info;
   }
   rt_expr.eval_func_ = eval_udf;
+  // eval_udf retains one stable serialized scalar entrypoint. Batch plans use
+  // the native batch bridge only for admitted native routine metadata.
+  if (OB_SUCC(ret) && info->native_) rt_expr.eval_batch_func_ = eval_native_batch;
   return ret;
 }
+
+namespace {
+int check_native_routine(ObExecContext &execution, const ObExprUDFInfo &info,
+                         const share::schema::ObRoutineInfo *&routine)
+{
+  using namespace share::schema;
+  routine = nullptr;
+  auto *session = execution.get_my_session();
+  auto *sql = execution.get_sql_ctx();
+  if (!session || !sql || !sql->schema_guard_ || !info.native_ ||
+      info.udf_package_id_ != OB_INVALID_ID || info.native_schema_version_ <= 0) return OB_INVALID_DATA;
+  auto &guard = *sql->schema_guard_;
+  int ret = guard.get_routine_info(info.udf_id_, routine);
+  if (OB_FAIL(ret)) return ret;
+  if (!routine) return OB_ERR_SP_DOES_NOT_EXIST;
+  seekdb_plugin_sql_binding_v1_t binding{};
+  if (OB_FAIL(info.native_->binding(binding))) return ret;
+  if (!routine->is_native() || !routine->is_native_binding_valid() ||
+      routine->get_schema_version() != info.native_schema_version_ ||
+      routine->get_native_module_id() != ObString::make_string(binding.owner_plugin_id) ||
+      routine->get_native_implementation_id() != ObString::make_string(binding.object_id))
+    return OB_SCHEMA_EAGAIN;
+  const ObDatabaseSchema *database = nullptr;
+  if (OB_FAIL(guard.get_database_schema(routine->get_database_id(), database))) return ret;
+  if (!database) return OB_ERR_BAD_DATABASE;
+  ObSessionPrivInfo privilege;
+  if (OB_FAIL(guard.get_session_priv_info(session->get_priv_user_id(), session->get_database_name(), privilege)))
+    return ret;
+  // Slot zero is an object identity too; no native execution uses a shared name ACL.
+  return guard.check_native_routine_priv(privilege, session->get_enable_role_array(), *routine, OB_PRIV_EXECUTE);
+}
+}
+
+int ObExprUDF::eval_native(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
+{
+  const auto *info = dynamic_cast<const ObExprUDFInfo *>(expr.extra_info_);
+  if (!info || !info->native_ || expr.arg_cnt_ != info->params_desc_.count() ||
+      expr.arg_cnt_ != info->params_type_.count()) return OB_INVALID_DATA;
+  for (int64_t i = 0; i < expr.arg_cnt_; ++i) if (!expr.args_ || !expr.args_[i]) return OB_INVALID_DATA;
+  int ret = check_types(expr, *info);
+  share::schema::ObSchemaGetterGuard local_guard;
+  ObSqlCtx local_sql;
+  OZ(before_calc_result(local_guard, local_sql, ctx.exec_ctx_));
+  DEFER(if (ctx.exec_ctx_.get_sql_ctx()) after_calc_result(local_guard, local_sql, ctx.exec_ctx_));
+  const share::schema::ObRoutineInfo *routine = nullptr;
+  OZ(check_native_routine(ctx.exec_ctx_, *info, routine));
+  // Arguments belong to the caller, including any nested SQL/security context.
+  // Do not elevate them to SECURITY DEFINER while marshalling the callback.
+  OZ(SMART_CALL(expr.eval_param_value(ctx)));
+  pl::ObPLContext scope;
+  if (OB_SUCC(ret)) {
+    OZ(scope.enter_native(*ctx.exec_ctx_.get_my_session(), ctx.exec_ctx_, *routine,
+                          *ctx.exec_ctx_.get_sql_ctx()->schema_guard_));
+    if (OB_SUCC(ret)) ret = PluginFunctionExpr::evaluate_bound(expr, ctx, res, info->native_, 0);
+  }
+  scope.leave_native(ret);
+  return ret;
+}
+
+int ObExprUDF::eval_native_batch(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, int64_t size)
+try {
+  const auto *info = dynamic_cast<const ObExprUDFInfo *>(expr.extra_info_);
+  if (!info || !info->native_ || size < 0 || !expr.is_batch_result() ||
+      expr.arg_cnt_ != info->params_desc_.count() ||
+      expr.arg_cnt_ != info->params_type_.count()) return OB_INVALID_DATA;
+  auto &evaluated = expr.get_evaluated_flags(ctx);
+  struct FailureGuard {
+    ObBitVector &flags; int64_t size; bool success = false;
+    ~FailureGuard() { if (!success) flags.reset(size); }
+  } failure{evaluated, size};
+  std::vector<uint64_t> words(ObBitVector::memory_size(size) / sizeof(uint64_t), UINT64_MAX);
+  auto &pending = *to_bit_vector(words.data());
+  bool any = false;
+  for (int64_t i = 0; i < size; ++i) {
+    if (!skip.at(i) && !evaluated.at(i)) { pending.unset(i); any = true; }
+  }
+  if (!any) { failure.success = true; return OB_SUCCESS; }
+  ObEvalCtx::BatchInfoScopeGuard frame(ctx);
+  frame.set_batch_size(size);
+  for (int64_t i = 0; i < expr.arg_cnt_; ++i) if (!expr.args_ || !expr.args_[i]) return OB_INVALID_DATA;
+  int ret = check_types(expr, *info);
+  share::schema::ObSchemaGetterGuard local_guard;
+  ObSqlCtx local_sql;
+  OZ(before_calc_result(local_guard, local_sql, ctx.exec_ctx_));
+  DEFER(if (ctx.exec_ctx_.get_sql_ctx()) after_calc_result(local_guard, local_sql, ctx.exec_ctx_));
+  const share::schema::ObRoutineInfo *routine = nullptr;
+  OZ(check_native_routine(ctx.exec_ctx_, *info, routine));
+  for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
+    if (!expr.args_ || !expr.args_[i]) ret = OB_INVALID_DATA;
+    else OZ(expr.args_[i]->eval_batch(ctx, pending, size));
+  }
+  pl::ObPLContext scope;
+  if (OB_SUCC(ret)) {
+    OZ(scope.enter_native(*ctx.exec_ctx_.get_my_session(), ctx.exec_ctx_, *routine,
+                          *ctx.exec_ctx_.get_sql_ctx()->schema_guard_));
+    if (OB_SUCC(ret)) ret = PluginFunctionExpr::evaluate_bound_batch(expr, ctx, skip, size, info->native_, 0);
+  }
+  scope.leave_native(ret);
+  failure.success = OB_SUCC(ret);
+  return ret;
+} catch (const std::bad_alloc &) { return OB_ALLOCATE_MEMORY_FAILED;
+} catch (...) { return OB_ERR_UNEXPECTED; }
 
 int ObExprUDF::ObExprUDFCtx::init_param_store(int param_num)
 {
@@ -674,6 +826,9 @@ int ObExprUDF::build_udf_ctx(int64_t udf_ctx_id,
 
 int ObExprUDF::eval_udf(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
+  const auto *metadata = dynamic_cast<const ObExprUDFInfo *>(expr.extra_info_);
+  if (!metadata) return OB_INVALID_DATA;
+  if (metadata->native_) return eval_native(expr, ctx, res);
   int ret = OB_SUCCESS;
   ObObj tmp_result;
   ObObj result;
@@ -872,6 +1027,9 @@ OB_DEF_SERIALIZE(ObExprUDFInfo)
               reserved_udt_cons_,
               is_called_in_sql_,
               is_deterministic_);
+  const bool native = native_ != nullptr;
+  LST_DO_CODE(OB_UNIS_ENCODE, native, native_schema_version_);
+  if (OB_SUCC(ret) && native) ret = native_->serialize(buf, buf_len, pos);
   return ret;
 }
 
@@ -890,6 +1048,16 @@ OB_DEF_DESERIALIZE(ObExprUDFInfo)
               reserved_udt_cons_,
               is_called_in_sql_,
               is_deterministic_);
+  bool native = false;
+  native_ = nullptr;
+  native_schema_version_ = 0;
+  LST_DO_CODE(OB_UNIS_DECODE, native, native_schema_version_);
+  if (OB_SUCC(ret) && native) {
+    if (native_schema_version_ <= 0 || udf_package_id_ != OB_INVALID_ID) ret = OB_INVALID_DATA;
+    else if (!(native_ = OB_NEWx(PluginFunctionExtraInfo, (&allocator_), allocator_, T_FUN_SYS_PLUGIN_FUNCTION)))
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    else ret = native_->deserialize(buf, data_len, pos);
+  } else if (OB_SUCC(ret) && native_schema_version_ != 0) ret = OB_INVALID_DATA;
   return ret;
 }
 
@@ -908,6 +1076,9 @@ OB_DEF_SERIALIZE_SIZE(ObExprUDFInfo)
               reserved_udt_cons_,
               is_called_in_sql_,
               is_deterministic_);
+  const bool native = native_ != nullptr;
+  LST_DO_CODE(OB_UNIS_ADD_LEN, native, native_schema_version_);
+  if (native) len += native_->get_serialize_size();
   return len;
 }
 
@@ -916,7 +1087,9 @@ int ObExprUDFInfo::deep_copy(common::ObIAllocator &allocator,
                          ObIExprExtraInfo *&copied_info) const
 {
   int ret = common::OB_SUCCESS;
+  copied_info = nullptr;
   OZ(ObExprExtraInfoFactory::alloc(allocator, type, copied_info));
+  if (OB_FAIL(ret)) return ret;
   ObExprUDFInfo &other = *static_cast<ObExprUDFInfo *>(copied_info);
   other.udf_id_ = udf_id_;
   other.udf_package_id_ = udf_package_id_;
@@ -925,6 +1098,13 @@ int ObExprUDFInfo::deep_copy(common::ObIAllocator &allocator,
   other.loc_ = loc_;
   other.reserved_udt_cons_ = reserved_udt_cons_;
   other.is_called_in_sql_ = is_called_in_sql_;
+  other.is_deterministic_ = is_deterministic_;
+  other.native_schema_version_ = native_schema_version_;
+  if (OB_SUCC(ret) && native_) {
+    ObIExprExtraInfo *copy = nullptr;
+    OZ(native_->deep_copy(allocator, T_FUN_SYS_PLUGIN_FUNCTION, copy));
+    OX(other.native_ = static_cast<PluginFunctionExtraInfo *>(copy));
+  }
   OZ(other.subprogram_path_.assign(subprogram_path_));
   OZ(other.params_type_.assign(params_type_));
   OZ(other.params_desc_.assign(params_desc_));

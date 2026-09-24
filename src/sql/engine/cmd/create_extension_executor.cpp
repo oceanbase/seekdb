@@ -47,6 +47,7 @@ int CreateExtensionExecutor::execute(ObExecContext &ctx, const CreateExtensionSt
       ret = OB_INVALID_ARGUMENT;
     } else {
       share::schema::ObStmtNeedPrivs privileges(ctx.get_allocator());
+      share::schema::ObSessionPrivInfo actor;
       std::string root;
       ExtensionScript script;
       ExtensionRoutineResolver resolver;
@@ -62,6 +63,10 @@ int CreateExtensionExecutor::execute(ObExecContext &ctx, const CreateExtensionSt
       } else if (OB_FAIL(script.load(root, std::string(statement.name().ptr(), statement.name().length()),
           statement.version().empty() ? std::string() : std::string(statement.version().ptr(), statement.version().length()),
           session->get_sql_mode(), error))) {
+      } else if (OB_FAIL(session->get_session_priv_info(actor))) {
+      } else if (script.source().requires_superuser_ && !(actor.user_priv_set_ & OB_PRIV_SUPER)) {
+        ret = OB_ERR_NO_PRIVILEGE;
+        error = "Extension control requires SUPER; no installation callback has been invoked";
       } else {
         ret = GCTX.plugin_runtime_->prepare_catalog_install(script.source(), 1,
             statement.database_id(), session->get_priv_user_id(), declarations);

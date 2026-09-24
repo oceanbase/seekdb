@@ -415,6 +415,8 @@ pub const IMMUTABLE: u64 = 2;
 pub const NULL_PROPAGATING: u64 = 4;
 pub const PERSISTENT: u64 = 1 << 3;
 pub const REQUIRES_CATALOG: u64 = 1 << 5;
+/// Scalar implementation for LANGUAGE C bindings; not a globally visible SQL function.
+pub const IMPLEMENTATION_ONLY: u64 = 1 << 6;
 
 #[repr(C)]
 #[derive(Clone, Copy)]

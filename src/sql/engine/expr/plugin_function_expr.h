@@ -28,6 +28,7 @@
 
 namespace oceanbase
 {
+namespace share { namespace schema { class ObRoutineInfo; } }
 namespace sql
 {
 class ObRawExprFactory;
@@ -110,6 +111,15 @@ public:
                       common::ObDatum &result);
   static int evaluate_batch(const ObExpr &expression, ObEvalCtx &context,
                             const ObBitVector &skip, int64_t size);
+  // Native catalog routines have no hidden dispatch-name argument. Their UDF
+  // caller owns catalog/ACL checks; both paths share marshalling and execution.
+  static int evaluate_bound(const ObExpr &, ObEvalCtx &, common::ObDatum &,
+                            const PluginFunctionExtraInfo *, uint32_t argument_offset);
+  static int evaluate_bound_batch(const ObExpr &, ObEvalCtx &, const ObBitVector &, int64_t,
+                                  const PluginFunctionExtraInfo *, uint32_t argument_offset);
+  static int resolve_native_binding(const share::schema::ObRoutineInfo &routine,
+      seekdb_plugin_sql_binding_v1_t &binding, std::vector<std::string> &arguments,
+      int64_t call_argument_count = -1);
   // Unary cast/type carriers preserve batch execution through their source.
   static int evaluate_argument_batch(const ObExpr &expression, ObEvalCtx &context,
                                      const ObBitVector &skip, int64_t size);

@@ -3199,6 +3199,55 @@ int ObSchemaGetterGuard::get_routine_info(
   return ret;
 }
 
+int ObSchemaGetterGuard::get_standalone_function_infos(uint64_t database_id, const ObString &function_name,
+    ObIArray<const ObRoutineInfo *> &function_infos)
+{
+  int ret = OB_SUCCESS;
+  function_infos.reset();
+  const ObSchemaMgr *mgr = nullptr;
+  ObSEArray<const ObSimpleRoutineSchema *, 4> simple;
+  ObSEArray<const ObRoutineInfo *, 4> base;
+  if (!check_inner_stat()) {
+    ret = OB_INNER_STAT_ERROR;
+  } else if (database_id == OB_INVALID_ID || function_name.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (has_retired_routine_overlay()) {
+    ret = OB_STATE_NOT_MATCH;
+  } else if (OB_FAIL(check_lazy_guard(mgr))) {
+  } else if (OB_FAIL(mgr->routine_mgr_.get_standalone_function_schemas(database_id, function_name, simple))) {
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < simple.count(); ++i) {
+      const ObSimpleRoutineSchema *entry = simple.at(i);
+      const ObRoutineInfo *routine = nullptr;
+      if (OB_ISNULL(entry)) {
+        ret = OB_ERR_UNEXPECTED;
+      // Load the base snapshot directly, not get_routine_info(): that method
+      // applies the overlay already, hiding identity conflicts and tombstones.
+      } else if (OB_FAIL(get_schema(ROUTINE_SCHEMA, entry->get_routine_id(), routine,
+                                   entry->get_schema_version()))) {
+      } else if (OB_ISNULL(routine)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (routine->get_routine_id() != entry->get_routine_id()
+                 || routine->get_database_id() != entry->get_database_id()
+                 || routine->get_package_id() != entry->get_package_id()
+                 || routine->get_overload() != entry->get_overload()
+                 || routine->get_routine_type() != entry->get_routine_type()
+                 || routine->get_schema_version() != entry->get_schema_version()
+                 || ObSchemaNameComparator().compare(routine->get_routine_name(), entry->get_routine_name()) != 0) {
+        ret = OB_STATE_NOT_MATCH;
+      } else if (OB_FAIL(base.push_back(routine))) {
+      }
+    }
+    if (OB_SUCC(ret)) {
+      RoutineSchemaOverlay empty;
+      const RoutineSchemaOverlay &view = routine_overlay_ ? *routine_overlay_ : empty;
+      ret = view.merge_function_candidates(database_id, function_name, base, function_infos);
+    }
+  }
+  if (OB_FAIL(ret)) function_infos.reset();
+  return ret;
+}
+
 int ObSchemaGetterGuard::get_package_routine_infos(uint64_t database_id, uint64_t package_id, const common::ObString &routine_name,
   ObRoutineType routine_type, common::ObIArray<const ObIRoutineInfo *> &routine_infos,
   ObRoutineType inside_routine_type)

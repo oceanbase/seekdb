@@ -1631,6 +1631,20 @@ int ObSchemaRetrieveUtils::fill_routine_schema(T &result, ObRoutineInfo &routine
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, comment, routine_info);
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL_SKIP_RET(result, route_sql, routine_info);
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, type_id, routine_info, uint64_t);
+    ObString native_module, native_implementation;
+    int64_t native_abi = 0;
+    // Pre-native catalogs and old history rows denote ordinary SQL routines.
+    // A partially populated binding must fail validation, never become PL.
+    EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(
+        result, "native_module_id", native_module, true, true, ObString());
+    EXTRACT_VARCHAR_FIELD_MYSQL_WITH_DEFAULT_VALUE(
+        result, "native_implementation_id", native_implementation, true, true, ObString());
+    EXTRACT_INT_FIELD_MYSQL_WITH_DEFAULT_VALUE(
+        result, "native_abi_version", native_abi, int64_t, true, true, 0);
+    if (OB_SUCC(ret)) {
+      ret = routine_info.set_native_binding(native_module, native_implementation, native_abi);
+      if (OB_SUCC(ret) && !routine_info.is_native_binding_valid()) ret = OB_INVALID_DATA;
+    }
   }
   return ret;
 }
@@ -3248,7 +3262,7 @@ int ObSchemaRetrieveUtils::fill_mock_fk_parent_table_schema(T &result,
   return ret;
 }
 
-int ObSchemaRetrieveUtils::fill_sys_table_lob_tid(ObTableSchema &table)
+inline int ObSchemaRetrieveUtils::fill_sys_table_lob_tid(ObTableSchema &table)
 {
   int ret = OB_SUCCESS;
   const int64_t table_id = table.get_table_id();

@@ -952,7 +952,7 @@ int durable_provider_resolves_requirement(
              ObPluginDependencyKind::EXTENSION_OBJECT) {
     ret = query_count(
         connection,
-        "SELECT COUNT(*) FROM __all_plugin_extension WHERE plugin_id=? "
+        "SELECT COUNT(*) FROM oceanbase.__all_plugin_extension WHERE plugin_id=? "
         "AND generation=? AND object_id=?",
         [&](ObPluginSqlBinder &binder) {
           int bind_ret = bind_string(binder, provider_plugin_id);
@@ -1637,7 +1637,7 @@ struct ObPluginCatalog::Impl
   int mutate_dependency(ObPluginSqlConnection &connection,
                         const ObPluginDependencySpec &dependency,
                         bool add,
-                        std::string &error);
+                        std::string &error, bool allow_existing = false);
   int list_blockers(ObPluginSqlConnection &connection,
                     const std::string &plugin_id,
                      std::vector<ObPluginRestrictBlocker> &blockers, bool for_update = false) const;
@@ -1850,7 +1850,7 @@ int ObPluginCatalog::Impl::load_record(
       "data_format_version,verification_level,desired_state,actual_state,"
       "generation,runtime_incarnation,operation_id,last_phase,last_status,"
       "last_error,operator_id,audit_id,gmt_create,gmt_modified "
-      "FROM __all_plugin_package WHERE plugin_id=?";
+      "FROM oceanbase.__all_plugin_package WHERE plugin_id=?";
   bool found = false;
   const std::string sql = for_update ? std::string(SQL) + " FOR UPDATE" : SQL;
   int ret = connection.query(
@@ -1901,7 +1901,7 @@ int ObPluginCatalog::Impl::has_unfinished_operation(
 {
   has_unfinished = false;
   const char SQL[] =
-      "SELECT state FROM __all_plugin_operation WHERE plugin_id=? "
+      "SELECT state FROM oceanbase.__all_plugin_operation WHERE plugin_id=? "
       "ORDER BY gmt_create DESC";
   int ret = connection.query(
       SQL,
@@ -3247,7 +3247,7 @@ int ObPluginCatalog::Impl::mutate_dependency(
     ObPluginSqlConnection &connection,
     const ObPluginDependencySpec &dependency,
     const bool add,
-    std::string &error)
+    std::string &error, bool allow_existing)
 {
   int ret = OB_SUCCESS;
   seekdb_plugin_semantic_version_t resolved_provider_version = {0, 0, 0};
@@ -3316,7 +3316,7 @@ int ObPluginCatalog::Impl::mutate_dependency(
   int64_t affected_rows = 0;
   if (OB_SUCCESS == ret && add) {
     static const char INSERT_SQL[] =
-        "INSERT INTO __all_plugin_dependency("
+        "INSERT INTO oceanbase.__all_plugin_dependency("
         "consumer_kind,consumer_id,consumer_plugin_id,consumer_generation,"
         "provider_plugin_id,provider_generation,dependency_kind,dependency_id,"
         "service_abi_major,requested_min_version_major,requested_min_version_minor,"
@@ -3384,13 +3384,13 @@ int ObPluginCatalog::Impl::mutate_dependency(
           return bind_ret;
         },
         &affected_rows);
-    if (OB_SUCCESS == ret && affected_rows == 0) {
+    if (OB_SUCCESS == ret && affected_rows == 0 && !allow_existing) {
       ret = OB_ENTRY_EXIST;
       error = "plugin dependency already exists";
     }
   } else if (OB_SUCCESS == ret) {
     ret = connection.execute(
-        "DELETE FROM __all_plugin_dependency WHERE consumer_kind=? "
+        "DELETE FROM oceanbase.__all_plugin_dependency WHERE consumer_kind=? "
         "AND consumer_id=? AND consumer_plugin_id=? AND consumer_generation=? "
         "AND provider_plugin_id=? AND provider_generation=? "
         "AND dependency_kind=? AND dependency_id=? AND service_abi_major=?",
@@ -6293,6 +6293,112 @@ int ObPluginCatalog::mutate_type_dependency(
     error = "unexpected logical plugin type dependency failure";
   }
   return ret;
+}
+
+int ObPluginCatalog::mutate_routine_dependency(ObPluginSqlConnection &connection,
+    const std::string &module_id, const std::string &implementation_id,
+    uint64_t routine_id, bool add, std::string &error, uint64_t expected_generation)
+{
+  error.clear();
+  if (!impl_) return OB_ALLOCATE_MEMORY_FAILED;
+  try {
+    if (!impl_->initialized_.load(std::memory_order_acquire)) return OB_NOT_INIT;
+    if (!connection.is_in_transaction()) {
+      error = "native routine dependency requires the schema write transaction";
+      return OB_STATE_NOT_MATCH;
+    }
+    if (!catalog_valid_identifier(module_id) || !catalog_valid_identifier(implementation_id) ||
+        routine_id == 0 || routine_id == OB_INVALID_ID ||
+        (add ? expected_generation == 0 || expected_generation > MAX_DURABLE_GENERATION : expected_generation != 0)) {
+      error = "native routine dependency identity is invalid";
+      return OB_INVALID_ARGUMENT;
+    }
+    ObPluginDependencySpec dependency;
+    dependency.consumer_kind_ = ObPluginDependencyConsumerKind::USER_OBJECT;
+    dependency.consumer_id_ = "routine." + std::to_string(routine_id);
+    dependency.provider_plugin_id_ = module_id;
+    dependency.dependency_kind_ = ObPluginDependencyKind::EXTENSION_OBJECT;
+    dependency.dependency_id_ = implementation_id;
+    size_t matches = 0;
+    const auto read_generation = [&](ObPluginSqlRowReader &reader) {
+      int64_t generation = 0;
+      const int status = reader.read_int64(0, generation);
+      if (status != OB_SUCCESS) return status;
+      if (++matches != 1 || generation <= 0) return OB_INVALID_DATA;
+      dependency.provider_generation_ = static_cast<uint64_t>(generation);
+      return OB_SUCCESS;
+    };
+    int ret = OB_SUCCESS;
+    if (add) {
+      // The package lock is the same admission barrier used by RESTRICT. Do
+      // not first lock an implementation/edge and then its parent package.
+      int64_t provider_generation = 0;
+      size_t providers = 0;
+      ret = connection.query(
+          "SELECT desired_state,actual_state,generation FROM oceanbase.__all_plugin_package WHERE plugin_id=? FOR UPDATE",
+          [&](ObPluginSqlBinder &binder) { return bind_string(binder, module_id); },
+          [&](ObPluginSqlRowReader &reader) {
+            int64_t desired = 0, actual = 0;
+            if (++providers != 1) return OB_INVALID_DATA;
+            int status = reader.read_int64(0, desired);
+            if (status == OB_SUCCESS) status = reader.read_int64(1, actual);
+            if (status == OB_SUCCESS) status = reader.read_int64(2, provider_generation);
+            if (status == OB_SUCCESS && (desired != static_cast<int64_t>(ObPluginDesiredState::ACTIVE) ||
+                actual != static_cast<int64_t>(ObPluginState::ACTIVE) || provider_generation <= 0))
+              status = OB_STATE_NOT_MATCH;
+            return status;
+          });
+      if (ret == OB_SUCCESS && providers != 1) ret = OB_ENTRY_NOT_EXIST;
+      if (ret == OB_SUCCESS && static_cast<uint64_t>(provider_generation) != expected_generation) {
+        error = "native routine implementation changed after signature validation";
+        ret = OB_STATE_NOT_MATCH;
+      }
+      if (ret == OB_SUCCESS) ret = connection.query(
+          "SELECT generation FROM oceanbase.__all_sql_extension_function WHERE function_id=? "
+          "AND plugin_id=? AND generation=? AND kind=? FOR UPDATE",
+          [&](ObPluginSqlBinder &binder) {
+            int status = bind_string(binder, implementation_id);
+            if (status == OB_SUCCESS) status = bind_string(binder, module_id);
+            if (status == OB_SUCCESS) status = binder.bind_int64(provider_generation);
+            if (status == OB_SUCCESS) status = binder.bind_int(SEEKDB_PLUGIN_EXTENSION_FUNCTION);
+            return status;
+          }, read_generation);
+      if (ret == OB_SUCCESS && matches == 1 &&
+          dependency.provider_generation_ != static_cast<uint64_t>(provider_generation))
+        ret = OB_STATE_NOT_MATCH;
+    } else {
+      // No runtime or active package lookup: DROP must work with an unavailable
+      // implementation. Recovery may have advanced this edge's generation.
+      ret = connection.query(
+          "SELECT provider_generation FROM oceanbase.__all_plugin_dependency WHERE consumer_kind=? "
+          "AND consumer_id=? AND consumer_plugin_id='' AND consumer_generation=0 "
+          "AND provider_plugin_id=? AND dependency_kind=? AND dependency_id=? "
+          "AND service_abi_major=0 AND requested_min_version_major=0 "
+          "AND requested_min_version_minor=0 AND requested_min_version_patch=0 "
+          "AND requested_max_version_major=0 AND requested_max_version_minor=0 "
+          "AND requested_max_version_patch=0 AND required_capabilities=0 AND optional=0 FOR UPDATE",
+          [&](ObPluginSqlBinder &binder) {
+            int status = binder.bind_int(static_cast<int32_t>(dependency.consumer_kind_));
+            if (status == OB_SUCCESS) status = bind_string(binder, dependency.consumer_id_);
+            if (status == OB_SUCCESS) status = bind_string(binder, module_id);
+            if (status == OB_SUCCESS) status = binder.bind_int(static_cast<int32_t>(dependency.dependency_kind_));
+            if (status == OB_SUCCESS) status = bind_string(binder, implementation_id);
+            return status;
+          }, read_generation);
+    }
+    if (ret == OB_SUCCESS && matches != 1) ret = OB_ENTRY_NOT_EXIST;
+    // Revalidating an unchanged target may produce a successful no-op upsert.
+    // Do not confuse that with a failed INSERT returning OB_ENTRY_EXIST.
+    if (ret == OB_SUCCESS) ret = impl_->mutate_dependency(connection, dependency, add, error, true);
+    if (ret != OB_SUCCESS && error.empty())
+      error = add ? "native routine implementation is missing or unavailable"
+                  : "native routine dependency is missing or invalid";
+    return ret;
+  } catch (const std::bad_alloc &) {
+    return OB_ALLOCATE_MEMORY_FAILED;
+  } catch (...) {
+    return OB_ERR_UNEXPECTED;
+  }
 }
 
 int ObPluginCatalog::list_restrict_blockers(

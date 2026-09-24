@@ -51,7 +51,8 @@ seekdb_plugin_status_t SEEKDB_PLUGIN_CALL emit_wkb_plugin_result(
   if (nullptr == host || nullptr == result || result->struct_size != sizeof(*result) ||
       result->is_null != 0 || result->data_size == 0 || nullptr == result->data ||
       nullptr == result->type_id ||
-      0 != std::strcmp(result->type_id, "org.seekdb.gis.scalar.bytes")) {
+      (0 != std::strcmp(result->type_id, "org.seekdb.gis.scalar.bytes") &&
+       0 != std::strcmp(result->type_id, "core.type.blob"))) {
     return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
   }
   WkbPluginSink *sink = reinterpret_cast<WkbPluginSink *>(host);

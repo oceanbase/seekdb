@@ -17,6 +17,8 @@ namespace rootserver {
 // Reserve after identity/permission admission, then stage version() in the
 // transaction's resolver view. No version is invented or substituted at apply.
 // ALTER also reserves the old-parameter deletion version, before the new version.
+// Native tokens pin the slot and input signature across reservation and take;
+// changing either requires a different object, not an ALTER of this identity.
 // This token is NOT authorization, a wire field, or a durable transaction ID.
 // Its owner must destroy it on transaction end and never restart/reuse that
 // transaction object while tokens remain. Abandoned versions are not recycled.

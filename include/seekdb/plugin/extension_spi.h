@@ -70,7 +70,14 @@ enum seekdb_plugin_extension_flags {
   SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING = UINT64_C(1) << 2,
   SEEKDB_PLUGIN_EXTENSION_FLAG_PERSISTENT = UINT64_C(1) << 3,
   SEEKDB_PLUGIN_EXTENSION_FLAG_PARALLEL_SAFE = UINT64_C(1) << 4,
-  SEEKDB_PLUGIN_EXTENSION_FLAG_REQUIRES_CATALOG = UINT64_C(1) << 5
+  SEEKDB_PLUGIN_EXTENSION_FLAG_REQUIRES_CATALOG = UINT64_C(1) << 5,
+  /* Scalar functions only. Register an implementation for database-local
+   * LANGUAGE C declarations, without publishing a module-level SQL name.
+   * sql_name may be NULL/empty, or a diagnostic label; it reserves no SQL name.
+   * Exact owner/object-ID lookup, introspection, leases and durable dependency
+   * tracking remain available. This flag is not an authorization boundary.
+   * Hosts that do not recognize the flag must reject the descriptor. */
+  SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY = UINT64_C(1) << 6
 };
 
 typedef int32_t seekdb_plugin_cast_context_t;

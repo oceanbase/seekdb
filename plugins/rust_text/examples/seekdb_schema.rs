@@ -1,6 +1,8 @@
 // Copyright (c) 2026 OceanBase. Licensed under the Apache License, Version 2.0.
 //! Native metadata plus handwritten SQL, using the ordinary routine installer.
-use seekdb_extension::schema::{scalar_wrapper, Package, Script, SqlAccess, SqlType};
+use seekdb_extension::schema::{
+    scalar_wrapper, Package, PackageOptions, Script, SqlAccess, SqlType,
+};
 
 fn main() -> Result<(), String> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
@@ -34,5 +36,11 @@ fn main() -> Result<(), String> {
             },
         ],
     }
-    .write_to(std::path::Path::new(&args[0]))
+    .write_to_with_options(
+        std::path::Path::new(&args[0]),
+        PackageOptions {
+            superuser: Some(false),
+            ..PackageOptions::default()
+        },
+    )
 }

@@ -23,6 +23,9 @@
 #include "lib/string/ob_string.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/container/ob_array.h"
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+#include "rootserver/pl_ddl/routine_ddl_invalidation.h"
+#endif
 #include "lib/hash/ob_placement_hashset.h"
 #include "query/ddl/ob_ddl_schema_service.h"
 #include "share/ob_rpc_struct.h"
@@ -619,6 +622,8 @@ public:
                               const ObUserInfo &role_info,
                               const share::schema::ObUserInfo *user_info);
   virtual int grant(const obcall::ObGrantArg &arg);
+  int grant_native_routine(const obcall::ObGrantArg &arg);
+  int revoke_native_routine(const obcall::ObRevokeRoutineArg &arg);
   int revoke(const obcall::ObRevokeUserArg &arg);
   virtual int grant_priv_to_user(const uint64_t user_id,
                                  const common::ObString &user_name,
@@ -2094,6 +2099,9 @@ public:
                        const int64_t buf_len);
   int register_ddl_trans_signal();
   bool is_enable_parallel() {return enable_ddl_parallel_;}
+  // External extension DROP records on this transaction; never sends flush
+  // SQL through another connection before the coordinator's commit.
+  virtual int record_routine_invalidation(uint64_t routine_id, uint64_t database_id);
 private:
   int lock_ddl_epoch_(common::ObMySQLTransaction &trans);
 
@@ -2113,6 +2121,9 @@ private:
 
   // default true to check newest schema; daily major set false not check just use schema from inner table
   bool enable_check_newest_schema_;
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  std::unique_ptr<RoutineDdlInvalidation> routine_invalidations_;
+#endif
 };
 // Fill in the partition name and the high values of the last partition
 template<typename SCHEMA, typename ALTER_SCHEMA>

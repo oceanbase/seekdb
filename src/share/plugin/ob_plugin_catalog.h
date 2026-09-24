@@ -288,6 +288,17 @@ public:
                              const seekdb_plugin_sql_binding_v1_t &identity,
                              uint64_t table_id, uint64_t column_id, bool add,
                              std::string &error);
+  // Native SQL routine identity is independent of module generations and SQL
+  // aliases. Resolve/lock the durable function owner while adding; remove the
+  // recorded generation even after recovery or module deactivation. The host
+  // must validate the routine signature and write its schema in this same
+  // transaction. Add requires the validated implementation's generation;
+  // DROP passes zero and does not need any live implementation.
+  // This does not create, authorize or publish a routine.
+  int mutate_routine_dependency(ObPluginSqlConnection &connection,
+                                const std::string &module_id, const std::string &implementation_id,
+                                uint64_t routine_id, bool add, std::string &error,
+                                uint64_t expected_generation = 0);
   int list_restrict_blockers(
       const std::string &plugin_id,
       std::vector<ObPluginRestrictBlocker> &blockers) const;

@@ -70,6 +70,10 @@ int read_extension_source(const std::string &root, const std::string &name,
     if (seekdb_runtime_package_native_install(package.get(), &native_install) != SEEKDB_RUNTIME_OK || native_install > 1)
       return OB_ERR_UNEXPECTED;
     staged.native_install_ = native_install != 0;
+    uint32_t invoker_only = 0;
+    if (seekdb_runtime_package_invoker_only(package.get(), &invoker_only) != SEEKDB_RUNTIME_OK || invoker_only > 1)
+      return OB_ERR_UNEXPECTED;
+    staged.requires_superuser_ = invoker_only == 0;
     const bool native_base = installed_version == nullptr && staged.native_install_;
     if ((script_count == 0) != (no_op || native_base) ||
         (staged.native_install_ && staged.native_module_.empty())) return OB_ERR_UNEXPECTED;
@@ -176,7 +180,8 @@ int validate_extension_package_source(const ExtensionPackageSource &source, std:
         source.native_install_ ? 1u : 0u, prerequisites.data(), static_cast<uint32_t>(prerequisites.size())};
     seekdb_runtime_package *raw = nullptr;
     char diagnostic[512] = {};
-    const int32_t status = seekdb_runtime_package_from_source(&input, &raw, diagnostic, sizeof(diagnostic));
+    const int32_t status = seekdb_runtime_package_from_source_with_policy(
+        &input, source.requires_superuser_ ? 0u : 1u, &raw, diagnostic, sizeof(diagnostic));
     std::unique_ptr<seekdb_runtime_package, decltype(&seekdb_runtime_package_destroy)>
         package(raw, seekdb_runtime_package_destroy);
     if (status != SEEKDB_RUNTIME_OK) {

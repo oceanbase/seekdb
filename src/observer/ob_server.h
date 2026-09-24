@@ -709,6 +709,9 @@ public:
       const char *const *argument_type_ids,
       uint32_t argument_count,
       seekdb_plugin_sql_binding_v1_t *binding) override;
+  int resolve_plugin_native_function(const char *module_id, const char *implementation_id,
+      const char *const *argument_type_ids, uint32_t argument_count,
+      seekdb_plugin_sql_binding_v1_t *binding) override;
   int execute_bound_plugin_function(
       const seekdb_plugin_sql_binding_v1_t *binding,
       const seekdb_plugin_execution_context_v1 *context,
@@ -772,6 +775,10 @@ public:
       uint64_t table_id,
       uint64_t column_id,
       bool add) override;
+  int reserve_routine_invalidations(share::schema::RoutineCatalogTransaction &journal, uint64_t scope) override;
+  int mutate_native_routine_dependency(common::ObISQLClient &sql_client,
+      const common::ObString &module_id, const common::ObString &implementation_id,
+      uint64_t routine_id, bool add, uint64_t expected_generation = 0) override;
   // Explicit module lifecycle (ObServer owns modules; defined in ob_server_runtime_controller.cpp).
   int obs_construct_modules();
   int obs_init_modules();

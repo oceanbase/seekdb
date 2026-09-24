@@ -24,15 +24,18 @@
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_dependency_info.h"
 #include <string>
+#include <memory>
 
 namespace oceanbase
 {
 namespace share { namespace plugin {
 class IExtensionCatalogInstaller;
+class IExtensionSchemaInstaller;
 struct ExtensionInstallSpec;
 class IExtensionCatalogDropper;
 struct ExtensionDropRequest;
 class IExtensionCatalogUpdater;
+class IExtensionSchemaUpdater;
 struct ExtensionUpdateRequest;
 struct ExtensionRoutineUpdateOperation;
 class IExtensionRoutineScript;
@@ -42,6 +45,7 @@ using namespace share;
 
 namespace rootserver
 {
+class NativeRoutineAclVersionReservation;
 class ObDDLSQLTransaction;
 class ObDDLService;
 class ObDDLOperator;
@@ -50,6 +54,13 @@ class RoutineIdReservation;
 class ObPLDDLService
 {
 public:
+  // Same Root updater used by the catalog coordinator; borrowed inputs must
+  // outlive it. Host-only, not authorization or transaction ownership.
+  static std::unique_ptr<share::plugin::IExtensionSchemaUpdater> make_routine_extension_updater(
+      const ObIArray<share::plugin::ExtensionRoutineUpdateOperation> &operations,
+      const ObSessionPrivInfo &priv, const ObIArray<uint64_t> &roles,
+      share::schema::ObSchemaGetterGuard &guard, ObDDLService &ddl,
+      ObDDLSQLTransaction &transaction, share::plugin::IExtensionRoutineScript *script);
   //----Functions for managing routine----
   // With external_trans, only writes schema/dependencies/automatic privileges;
   // never starts, ends, or publishes that transaction. Returned ID is provisional.
@@ -82,6 +93,16 @@ public:
       ObDDLService &ddl_service,
       uint64_t &extension_id, int &publication_status, std::string &error,
       share::plugin::IExtensionRoutineScript *script = nullptr);
+  // Core-only adapter shared by the Root entry and controlled-transport tests.
+  // Caller holds Root serialization and keeps all borrowed services, arguments
+  // and authenticated identity alive. The returned adapter never owns commit
+  // or schema publication; use the catalog installation coordinator to run it.
+  static std::unique_ptr<share::plugin::IExtensionSchemaInstaller> make_routine_extension_installer(
+      const common::ObIArray<const obcall::ObCreateRoutineArg *> &args,
+      const share::schema::ObSessionPrivInfo &session_priv,
+      const common::ObIArray<uint64_t> &enabled_roles,
+      share::schema::ObSchemaGetterGuard &guard, ObDDLService &ddl_service,
+      ObDDLSQLTransaction &transaction, share::plugin::IExtensionRoutineScript *script = nullptr);
   // Same external-transaction ownership as create_routine, including the MySQL
   // alter-via-replacement branch. This entry resolves existing published objects;
   // an update adapter must separately handle provisional script objects.
@@ -181,7 +202,8 @@ private:
                             rootserver::ObDDLService &ddl_service,
                             ObDDLSQLTransaction *external_trans = nullptr,
                             RoutineIdReservation *reservation = nullptr,
-                            RoutineVersionReservation *version_reservation = nullptr);
+                            RoutineVersionReservation *version_reservation = nullptr,
+                            NativeRoutineAclVersionReservation *owner_grant = nullptr);
   static int alter_routine(const ObRoutineInfo &routine_info,
                            ObErrorInfo &error_info,
                            const ObString *ddl_stmt_str,

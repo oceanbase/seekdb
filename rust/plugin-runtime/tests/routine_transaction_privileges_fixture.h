@@ -68,9 +68,12 @@ inline void run()
     need.db_ = identity.db_; need.table_ = ObString::make_string("value");
     need.obj_type_ = ObObjectType::FUNCTION; need.priv_level_ = OB_PRIV_ROUTINE_LEVEL;
     need.priv_set_ = rights;
-    CHECK(next.check_routine_priv(identity, roles, need) == expected);
+    const int actual = next.check_routine_priv(identity, roles, need);
+    if (actual != expected) std::cerr << "transaction privilege db=" << db << " user=" << user
+                                    << " actual=" << actual << " expected=" << expected << std::endl;
+    CHECK(actual == expected);
   };
-  ObRoutineInfo routines[2];
+  ObRoutineInfo routines[2], base_routines[2];
   for (int i = 0; i < 2; ++i) {
     auto &routine = routines[i];
     routine.set_database_id(100 + i); routine.set_routine_id(8001 + i); routine.set_owner_id(123);
@@ -78,6 +81,13 @@ inline void run()
     routine.set_routine_type(ROUTINE_FUNCTION_TYPE);
     CHECK(routine.set_routine_name("value") == OB_SUCCESS);
     CHECK(routine.set_routine_body("RETURN 1") == OB_SUCCESS);
+    // Name-only privilege checks inspect the complete candidate family before
+    // choosing native object ACL versus ordinary PL name grants. Keep the base
+    // snapshot alive and immutable while the working routines are replaced.
+    CHECK(base_routines[i].assign(routine) == OB_SUCCESS);
+    for (auto *guard : {&first, &next, &independent}) {
+      CHECK(MockSchemaService::cache_routine(*guard, base_routines[i]) == OB_SUCCESS);
+    }
   }
   const auto drop = [&](const ObRoutineInfo &routine) {
     CHECK(privileges->record_drop(routine) == OB_SUCCESS);

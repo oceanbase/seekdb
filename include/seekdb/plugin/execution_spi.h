@@ -37,6 +37,11 @@ extern "C" {
  * SQL narrow integer/float types may be promoted to int64/uint64/float64;
  * the logical type_id determines the actual representation. User-defined
  * type IDs do not inherit a builtin encoding merely by sharing its suffix.
+ * core.type.decimal contains the exact SQL decimal as ASCII text, without a
+ * trailing NUL; plugins must not interpret it as a private host number object.
+ * core.type.text/blob carry unwrapped bytes too, but declare SQL long-text
+ * results (UTF-8 general_ci / binary respectively), not bounded VARCHAR.
+ * LOB headers and storage locators are always host-owned, never ABI payloads.
  */
 #define SEEKDB_PLUGIN_EXECUTION_SPI_MAJOR 1u
 #define SEEKDB_PLUGIN_EXECUTION_SPI_MINOR 0u

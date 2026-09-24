@@ -55,6 +55,7 @@ ROOTSERVER_PUBLIC_HEADERS = [
     "pl_ddl/ob_pl_ddl_service.h",
     "pl_ddl/routine_catalog_writer.h",
     "pl_ddl/routine_cache_invalidation.h",
+    "pl_ddl/routine_ddl_invalidation.h",
     "ob_admin_job_table_operator.h",
     "ob_admin_job_type.h",
     "ob_local_ddl_serial_call.h",

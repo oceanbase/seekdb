@@ -1,5 +1,23 @@
 # Catalog-driven SQL extension example
 
+The reference module also registers two scalar implementations with
+`SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY`:
+`org.seekdb.sql-extension.function.native-add-one` and
+`org.seekdb.sql-extension.function.unnamed-add-one`. They use the same int64
+callback as `seekdb_add_one`, but contribute no module-level SQL names. The first
+has the diagnostic label `seekdb_add_one` (without reserving or shadowing that
+name); the second has no label. A database-local `LANGUAGE C` routine can bind
+either exact object ID under owner `org.seekdb.sql_extension` (the manifest ID,
+not the hyphenated service namespace). This separates
+implementation registration from SQL installation; it is not a private-code
+security boundary. Native creation still requires the host's privilege,
+signature, catalog-column and durable dependency admission.
+
+Both direct and snapshot registration regressions check that only the public
+function is found by SQL name and that either implementation-only ID executes
+through the normal leased callback. These are loader/ABI tests, not proof of
+committed database installation or recovery.
+
 This plugin demonstrates PostgreSQL-style SQL object contributions through the
 stable seekdb C ABI. The core does not contain a dedicated expression class or
 factory registration for any function exported by this package.

@@ -39,6 +39,7 @@ struct ExtensionPackageSource
   bool relocatable_ = false;
   bool native_install_ = false; // Explicit control source; fresh install has no static SQL.
   std::vector<std::string> prerequisites_{}; // Intermediate-only requirements, locked but not persisted.
+  bool requires_superuser_ = true; // Strongest policy across the selected script path; no elevation.
 };
 
 // Read-only core package source API. Empty requested_version selects the

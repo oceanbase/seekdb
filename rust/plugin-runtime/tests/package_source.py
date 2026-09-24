@@ -9,6 +9,23 @@ with tempfile.TemporaryDirectory(prefix="seekdb-extension-package-") as temporar
     root = pathlib.Path(temporary) / "packages"
     root.mkdir()
 
+    # PG-style shared directory; exercise Rust preparation through the real
+    # C ABI and C++ owned-source adapter, not only Rust unit tests.
+    (root / "flat.control").write_text(
+        "default_version = '2'\ndirectory = 'flat_sql'\n"
+        "module_pathname = '$libdir/flat'\nnative_module = 'org.flat'\n", encoding="utf-8")
+    flat_sql = root / "flat_sql"
+    flat_sql.mkdir()
+    (flat_sql / "flat--1.sql").write_text("SELECT 'MODULE_PATHNAME';", encoding="utf-8")
+    (flat_sql / "flat--1--2.sql").write_text("SELECT 'MODULE_PATHNAME';", encoding="utf-8")
+    (flat_sql / "flat--2.control").write_text("module_pathname = '$libdir/flat_v2'\n", encoding="utf-8")
+
+    (root / "policy.control").write_text("default_version = '3'\nsuperuser = false\n", encoding="utf-8")
+    (root / "policy--1.sql").write_text("SELECT 1;", encoding="utf-8")
+    (root / "policy--1--2.sql").write_text("SELECT 2;", encoding="utf-8")
+    (root / "policy--2--3.sql").write_text("SELECT 3;", encoding="utf-8")
+    (root / "policy--2.control").write_text("superuser = true\n", encoding="utf-8")
+
     native = root / "native_only"
     native.mkdir()
     (native / "native_only.control").write_text("default_version = '1.0'\nnative_module = 'org.test'\ninstall_source = 'native'\n", encoding="utf-8")
@@ -22,6 +39,8 @@ with tempfile.TemporaryDirectory(prefix="seekdb-extension-package-") as temporar
         return directory
 
     plain = package("plain", "default_version = '1.0'\nrequires = 'dep1, dep2'\nrelocatable = true\n", b"SELECT 'first';\n")
+    package("ambiguous")
+    (root / "ambiguous.control").write_text("default_version = '1.0'\n", encoding="utf-8")
     (plain / "plain--2.0.sql").write_text("SELECT 'second';\n", encoding="utf-8")
     package("bad_utf8", sql=b"\xff")
     package("sql_nul", sql=b"SELECT 1;\x00SELECT 2;")

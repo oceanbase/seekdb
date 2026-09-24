@@ -837,6 +837,26 @@ int ObServerPluginRuntime::resolve_sql_object(
 #endif
 }
 
+int ObServerPluginRuntime::resolve_native_function(const char *module_id, const char *implementation_id,
+    const char *const *argument_type_ids, uint32_t argument_count,
+    seekdb_plugin_sql_binding_v1 *binding)
+{
+  if (binding == nullptr) return OB_INVALID_ARGUMENT;
+  *binding = {};
+  if (!impl_ || !impl_->initialized_) return OB_NOT_INIT;
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  if (!impl_->loader_) return OB_NOT_INIT;
+  return impl_->loader_->resolve_native_function(module_id, implementation_id,
+      argument_type_ids, argument_count, *binding);
+#else
+  UNUSED(module_id);
+  UNUSED(implementation_id);
+  UNUSED(argument_type_ids);
+  UNUSED(argument_count);
+  return OB_NOT_SUPPORTED;
+#endif
+}
+
 int ObServerPluginRuntime::execute_bound_function(
     const seekdb_plugin_sql_binding_v1 *binding,
     const seekdb_plugin_execution_context_v1 *context,
@@ -1111,6 +1131,38 @@ int ObServerPluginRuntime::candidate_hooks_available(seekdb_plugin_candidate_pha
     return impl_->loader_->candidate_hooks_available(phase, available);
 #endif
   return OB_SUCCESS;
+}
+
+int ObServerPluginRuntime::mutate_routine_dependency(common::ObISQLClient &sql_client,
+    const common::ObString &module_id, const common::ObString &implementation_id,
+    uint64_t routine_id, bool add, uint64_t expected_generation)
+{
+  if (!impl_ || !impl_->initialized_) return OB_NOT_INIT;
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  if (!impl_->catalog_) return OB_NOT_INIT;
+  if (module_id.empty() || module_id.ptr() == nullptr ||
+      implementation_id.empty() || implementation_id.ptr() == nullptr) return OB_INVALID_ARGUMENT;
+  try {
+    // No catalog mutex/loader calls while the borrowed schema transaction
+    // holds SQL locks: management takes the catalog mutex before those locks.
+    share::ObPluginSqlConnection connection(&sql_client);
+    std::string error;
+    const int ret = impl_->catalog_->mutate_routine_dependency(connection,
+        std::string(module_id.ptr(), module_id.length()),
+        std::string(implementation_id.ptr(), implementation_id.length()), routine_id, add, error, expected_generation);
+    if (ret != OB_SUCCESS) LOG_WARN("failed to mutate native routine dependency",
+        K(ret), K(add), K(routine_id), KCSTRING(error.c_str()));
+    return ret;
+  } catch (const std::bad_alloc &) {
+    return OB_ALLOCATE_MEMORY_FAILED;
+  } catch (...) {
+    return OB_ERR_UNEXPECTED;
+  }
+#else
+  UNUSED(sql_client); UNUSED(module_id); UNUSED(implementation_id); UNUSED(routine_id); UNUSED(add);
+  UNUSED(expected_generation);
+  return OB_NOT_SUPPORTED;
+#endif
 }
 
 int ObServerPluginRuntime::mutate_type_dependency(

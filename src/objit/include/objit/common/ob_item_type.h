@@ -2282,6 +2282,7 @@ typedef enum ObItemType
   T_FORK_DATABASE = 4917,
   T_DIFF_TABLE = 4918,
   T_MERGE_TABLE = 4919,
+  T_SF_NATIVE_BODY = 4927, // AS module, implementation LANGUAGE C
   T_MAX //Attention: add a new type before T_MAX
 } ObItemType;
 

@@ -74,6 +74,12 @@ pub fn scalar_wrapper(
     result: SqlType,
     access: SqlAccess,
 ) -> Result<String> {
+    if definition.flags & sys::IMPLEMENTATION_ONLY != 0 {
+        return Err(
+            "implementation-only functions require a LANGUAGE C declaration, not a SQL wrapper"
+                .into(),
+        );
+    }
     let native = definition
         .sql_name
         .to_str()
@@ -147,6 +153,7 @@ pub struct VersionControl<'a> {
     pub native_module: Option<&'a str>,
     pub schema: Option<&'a str>,
     pub relocatable: Option<bool>,
+    pub superuser: Option<bool>,
 }
 
 impl<'a> VersionControl<'a> {
@@ -157,6 +164,7 @@ impl<'a> VersionControl<'a> {
             native_module: None,
             schema: None,
             relocatable: None,
+            superuser: None,
         }
     }
 }
@@ -168,6 +176,8 @@ pub struct PackageOptions<'a> {
     pub install_source: InstallSource,
     pub requires: &'a [&'a str],
     pub version_controls: &'a [VersionControl<'a>],
+    /// None inherits the server's PG-style default (true). False never elevates.
+    pub superuser: Option<bool>,
 }
 
 impl Default for PackageOptions<'_> {
@@ -176,6 +186,7 @@ impl Default for PackageOptions<'_> {
             install_source: InstallSource::Sql,
             requires: &[],
             version_controls: &[],
+            superuser: None,
         }
     }
 }
@@ -267,6 +278,9 @@ impl Package<'_> {
         if !options.requires.is_empty() {
             control.push_str(&format!("requires = '{}'\n", options.requires.join(", ")));
         }
+        if let Some(superuser) = options.superuser {
+            control.push_str(&format!("superuser = {superuser}\n"));
+        }
         let mut files = vec![(format!("{}.control", self.name), control)];
         let mut names = BTreeSet::new();
         let mut versions = BTreeSet::new();
@@ -354,6 +368,9 @@ impl Package<'_> {
             if let Some(relocatable) = version.relocatable {
                 body.push_str(&format!("relocatable = {relocatable}\n"));
             }
+            if let Some(superuser) = version.superuser {
+                body.push_str(&format!("superuser = {superuser}\n"));
+            }
             if let Some(requires) = version.requires {
                 requirement_names(self.name, requires)?;
                 body.push_str(&format!("requires = '{}'\n", requires.join(", ")));
@@ -413,6 +430,51 @@ impl Package<'_> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn primary_and_version_superuser_policies_are_explicit() {
+        use super::*;
+        let package = Package {
+            name: "policy",
+            default_version: "1",
+            native_module: None,
+            scripts: &[Script {
+                from: None,
+                to: "1",
+                sql: "SELECT 1;",
+            }],
+        };
+        for superuser in [None, Some(false), Some(true)] {
+            let controls = [VersionControl {
+                superuser: Some(true),
+                ..VersionControl::new("1")
+            }];
+            let files = package
+                .render_with_options(PackageOptions {
+                    superuser,
+                    version_controls: &controls,
+                    ..PackageOptions::default()
+                })
+                .unwrap();
+            let primary = &files
+                .iter()
+                .find(|(name, _)| name == "policy.control")
+                .unwrap()
+                .1;
+            match superuser {
+                Some(value) => assert!(primary.ends_with(&format!("superuser = {value}\n"))),
+                None => assert!(!primary.contains("superuser")),
+            }
+            assert_eq!(
+                files
+                    .iter()
+                    .find(|(name, _)| name == "policy--1.control")
+                    .unwrap()
+                    .1,
+                "superuser = true\n"
+            );
+        }
+    }
+
     use super::*;
     #[test]
     fn version_controls_preserve_inheritance_clearing_and_deterministic_files() {
@@ -867,6 +929,17 @@ mod tests {
     }
     #[test]
     fn wrapper_rejects_shadowing_injection_arity_and_type_erasure() {
+        let mut implementation = definition();
+        implementation.flags |= sys::IMPLEMENTATION_ONLY;
+        assert!(scalar_wrapper(
+            "wrapper",
+            &implementation,
+            &[("arg", SqlType::Text)],
+            SqlType::BigInt,
+            SqlAccess::NoSql
+        )
+        .unwrap_err()
+        .contains("LANGUAGE C"));
         for name in ["NATIVE_F", "x.y", "a`); DROP TABLE t;--", ""] {
             assert!(scalar_wrapper(
                 name,

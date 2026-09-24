@@ -2170,6 +2170,53 @@ int ObRawExprResolverImpl::process_geo_func_node(const ParseNode *node, ObRawExp
   int ret = OB_SUCCESS;
   ObSysFunRawExpr *func_expr = NULL;
 
+#if !SEEKDB_ENABLE_CORE_GIS
+  if (node && node->type_ != T_FUN_SYS_ARRAY && node->type_ != T_FUN_SYS_MAP) {
+    // POINT/collection names are grammar keywords with legacy parse-node
+    // shapes. Normalize only that syntax; use the ordinary catalog resolver
+    // for binding, arity, types and evaluation, just like ST_Area(name).
+    if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(T_FUN_SYS, func_expr))) return ret;
+    if (OB_FAIL(set_geo_func_name(func_expr, node->type_))) return ret;
+    if (node->type_ == T_FUN_SYS_GEOMCOLLECTION && node->value_ == 1) {
+      func_expr->set_func_name(N_GEOMETRYCOLLECTION);
+    }
+    if (!node->children_ || node->num_child_ < 1) return OB_ERR_PARSER_SYNTAX;
+    ParseNode name = {}, arguments = {}, call = {};
+    name.type_ = T_IDENT;
+    name.str_value_ = func_expr->get_func_name().ptr();
+    name.str_len_ = func_expr->get_func_name().length();
+    ParseNode *parameters = node->children_[0];
+    if (node->type_ == T_FUN_SYS_POINT) {
+      if (node->num_child_ != 2) return OB_ERR_PARSER_SYNTAX;
+      arguments.type_ = T_EXPR_LIST;
+      arguments.num_child_ = node->num_child_;
+      arguments.children_ = node->children_;
+      parameters = &arguments;
+    }
+    ParseNode *children[] = {&name, parameters};
+    call.type_ = T_FUN_SYS;
+    // Ordinary parenthesized call, not Oracle's NEW constructor syntax.
+    call.int16_values_[0] = 1;
+    call.num_child_ = parameters ? 2 : 1;
+    call.children_ = children;
+    ret = process_fun_sys_node(&call, expr, false);
+    if (ret == OB_ERR_FUNCTION_UNKNOWN) {
+      // Keyword constructors have no outer T_FUN_SYS fallback. Once a module
+      // only publishes implementations, resolve its SQL declaration through
+      // the same database routine namespace as an ordinary function call.
+      ParseNode *object_access = nullptr;
+      if (OB_FAIL(ObResolverUtils::transform_sys_func_to_objaccess(
+              &ctx_.expr_factory_.get_allocator(), &call, object_access))) {
+      } else if (OB_ISNULL(object_access)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else {
+        ret = process_obj_access_node(*object_access, expr);
+      }
+    }
+    return ret;
+  }
+#endif
+
   if (OB_ISNULL(node)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(node->type_, func_expr))) {
@@ -5143,6 +5190,12 @@ int ObRawExprResolverImpl::process_fun_sys_node(const ParseNode *node,
         std::vector<const char *> unresolved_types(
             static_cast<size_t>(sql_argument_count), nullptr);
         std::string owned_name(func_name.ptr(), func_name.length());
+        // MySQL function names are case-insensitive; catalog identifiers use
+        // canonical ASCII names. Keep the same identity for preflight and the
+        // hidden dispatch argument used during typed binding.
+        for (char &character : owned_name) {
+          if (character >= 'A' && character <= 'Z') character += 'a' - 'A';
+        }
         seekdb_plugin_sql_binding_v1_t binding = {};
         int lookup_ret = OB_ENTRY_NOT_EXIST;
         if (T_FROM_SCOPE == ctx_.current_scope_) {
@@ -5158,12 +5211,14 @@ int ObRawExprResolverImpl::process_fun_sys_node(const ParseNode *node,
               static_cast<uint32_t>(unresolved_types.size()), &binding);
         }
         if (OB_SUCCESS == lookup_ret) {
-          plugin_sql_name = func_name;
-          func_name = ObString::make_string(
-              binding.kind == SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION
-                  ? PluginTableFunctionExpr::SQL_DISPATCH_NAME
-                  : PluginFunctionExpr::SQL_DISPATCH_NAME);
-          is_plugin_function = true;
+          if (OB_SUCC(ret = ob_write_string(ctx_.expr_factory_.get_allocator(),
+                  ObString(owned_name.size(), owned_name.data()), plugin_sql_name))) {
+            func_name = ObString::make_string(
+                binding.kind == SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION
+                    ? PluginTableFunctionExpr::SQL_DISPATCH_NAME
+                    : PluginFunctionExpr::SQL_DISPATCH_NAME);
+            is_plugin_function = true;
+          }
         } else {
           ret = OB_ERR_FUNCTION_UNKNOWN;
         }

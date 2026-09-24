@@ -179,7 +179,7 @@ int ObRoutineSqlService::replace_routine(ObRoutineInfo &routine_info,
     LOG_WARN("old_routine_info", K(*old_routine_info), K(old_routine_info->get_routine_params().count()));
     if (!routine_info.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(add_routine(*sql_client, routine_info, true))) {
+    } else if (OB_FAIL(add_routine(*sql_client, routine_info, true, false, old_routine_info->is_native()))) {
     } else if (old_routine_info->get_routine_params().count() > 0
                && OB_FAIL(del_routine_params(*sql_client, *old_routine_info, del_param_schema_version))) {
     } else if (OB_FAIL(add_routine_params(*sql_client, routine_info))) {
@@ -384,7 +384,8 @@ int ObRoutineSqlService::gen_package_dml(
 int ObRoutineSqlService::gen_routine_dml(
     const ObRoutineInfo &routine_info,
     ObDMLSqlSplicer &dml,
-    bool is_replace)
+    bool is_replace,
+    bool clear_native_binding)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(dml.add_pk_column("routine_id", ObSchemaUtils::get_extract_schema_id(
@@ -409,6 +410,17 @@ int ObRoutineSqlService::gen_routine_dml(
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(dml.add_column("type_id", routine_info.get_type_id()))) {
+  }
+  // Ordinary PL DDL still works with pre-native system tables. Native creation
+  // requires the new columns; replacing a native object must explicitly clear
+  // the old binding rather than leaving a native implementation on a PL body.
+  if (OB_SUCC(ret) && (routine_info.is_native() || clear_native_binding)) {
+    if (!routine_info.is_native_binding_valid()) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(dml.add_column("native_module_id", ObHexEscapeSqlStr(routine_info.get_native_module_id())))
+        || OB_FAIL(dml.add_column("native_implementation_id", ObHexEscapeSqlStr(routine_info.get_native_implementation_id())))
+        || OB_FAIL(dml.add_column("native_abi_version", routine_info.get_native_abi_version()))) {
+    }
   }
   if (OB_FAIL(ret)) {
   } else if ((!is_replace && OB_FAIL(dml.add_gmt_create()))
@@ -478,13 +490,16 @@ int ObRoutineSqlService::gen_routine_param_dml(
 int ObRoutineSqlService::add_routine(ObISQLClient &sql_client,
                                      const ObRoutineInfo &routine_info,
                                      bool is_replace,
-                                     bool only_history)
+                                     bool only_history,
+                                     bool clear_native_binding)
 {
   int ret = OB_SUCCESS;
   
   
   ObDMLSqlSplicer dml;
-  if (OB_FAIL(gen_routine_dml(routine_info, dml, is_replace))) {
+  if (!routine_info.is_native_binding_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(gen_routine_dml(routine_info, dml, is_replace, clear_native_binding))) {
   } else {
     CatalogDMLSqlHelper exec(sql_client);
     int64_t affected_rows = 0;

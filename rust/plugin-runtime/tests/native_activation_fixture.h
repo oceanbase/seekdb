@@ -18,7 +18,7 @@ struct Observation {
   bool aborted = false;
   bool gis = false;
   size_t expected_services = 7;
-  size_t expected_extensions = 7;
+  size_t expected_extensions = 9; // SQL reference plugin: seven public objects + two implementation-only functions.
   std::vector<ObPluginExtensionInfo> objects;
 };
 class TestArtifact final : public ObPluginVerifiedArtifact {

@@ -88,6 +88,7 @@ ALTER                         { return ALTER; }
 BINARY                        { return BINARY; }
 CALL                          { return CALL; }
 CREATE                        { return CREATE; }
+AS                            { return AS; }
 DELETE                        { return DELETE; }
 DO                            { return DO; }
 DROP                          { return DROP; }

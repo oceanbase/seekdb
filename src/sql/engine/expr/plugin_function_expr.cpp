@@ -17,6 +17,9 @@
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "sql/engine/expr/plugin_function_expr.h"
+#include "sql/resolver/ddl/native_function_default.h"
+#include "share/schema/native_routine_signature.h"
+#include "sql/engine/expr/plugin_builtin_types.h"
 
 #include <cstring>
 #include <limits>
@@ -24,6 +27,7 @@
 #include <vector>
 
 #include "share/rc/ob_module_provider.h"
+#include "share/schema/ob_routine_info.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/plugin_sql_context.h"
@@ -44,7 +48,9 @@ namespace
 const char *core_type_identifier(const ObObjType type)
 {
   if (ob_is_geometry(type)) return "core.type.geometry";
+  if (ob_is_uint_tc(type)) return "core.type.uint64";
   if (ob_is_integer_type(type)) return "core.type.int64";
+  if (ob_is_number_tc(type) || ob_is_decimal_int(type)) return "core.type.decimal";
   if (ob_is_double_type(type) || ob_is_float_type(type)) {
     return "core.type.float64";
   }
@@ -57,15 +63,7 @@ const char *core_type_identifier(const ObObjType type)
 // A user type named e.g. org.example.int64 is still an opaque user type.
 bool is_builtin_type(const char *type_id, const char *suffix)
 {
-  if (nullptr == type_id || nullptr == suffix) return false;
-  constexpr const char *core = "core.type";
-  constexpr const char *gis = "org.seekdb.gis.scalar";
-  return (std::strncmp(type_id, core, std::strlen(core)) == 0 &&
-          std::strcmp(type_id + std::strlen(core), suffix) == 0) ||
-         (std::strncmp(type_id, gis, std::strlen(gis)) == 0 &&
-          std::strcmp(type_id + std::strlen(gis), suffix) == 0) ||
-         (std::strcmp(suffix, ".geometry") == 0 &&
-          std::strcmp(type_id, "org.seekdb.gis.geometry") == 0);
+  return PluginBuiltinTypes::matches(type_id, suffix);
 }
 
 struct ResultSink
@@ -144,6 +142,19 @@ seekdb_plugin_status_t write_sql_result(
         static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
       return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
     }
+    if (ob_is_geometry(sink.expression_->datum_meta_.type_) ||
+        ob_is_text_tc(sink.expression_->datum_meta_.type_)) {
+      ObTextStringDatumResult text(sink.expression_->datum_meta_.type_,
+          sink.expression_, sink.context_, sink.result_);
+      int ret = text.init(result->data_size);
+      if (OB_SUCCESS == ret && result->data_size) {
+        ret = text.append(reinterpret_cast<const char *>(result->data), result->data_size);
+      }
+      if (ret != OB_SUCCESS) return ret == OB_ALLOCATE_MEMORY_FAILED
+          ? SEEKDB_PLUGIN_STATUS_NO_MEMORY : SEEKDB_PLUGIN_STATUS_INTERNAL;
+      text.set_result();
+      return SEEKDB_PLUGIN_STATUS_OK;
+    }
     char *buffer = sink.expression_->get_str_res_mem(
         *sink.context_, static_cast<int64_t>(result->data_size));
     if (result->data_size != 0 && nullptr == buffer) {
@@ -217,6 +228,24 @@ struct ArgumentStorage
   uint8_t boolean_ = 0;
 };
 
+int materialize_plugin_decimal(const ObDatum &datum, const ObDatumMeta &meta, ObIAllocator &allocator,
+                               const uint8_t *&data, uint64_t &size)
+{
+  // The public ABI carries exact decimal text, never private ObNumber storage.
+  char *buffer = static_cast<char *>(allocator.alloc(number::ObNumber::MAX_PRINTABLE_SIZE));
+  if (!buffer) return OB_ALLOCATE_MEMORY_FAILED;
+  int64_t length = 0;
+  const int ret = ob_is_decimal_int(meta.type_)
+      ? wide::to_string(datum.get_decimal_int(), datum.get_int_bytes(), meta.scale_,
+                        buffer, number::ObNumber::MAX_PRINTABLE_SIZE, length)
+      : number::ObNumber(datum.get_number()).format(buffer, number::ObNumber::MAX_PRINTABLE_SIZE, length, -1);
+  if (ret == OB_SUCCESS) {
+    data = reinterpret_cast<const uint8_t *>(buffer);
+    size = length;
+  }
+  return ret;
+}
+
 struct TableResultSink
 {
   ObEvalCtx *context_;
@@ -281,7 +310,13 @@ seekdb_plugin_status_t SEEKDB_PLUGIN_CALL emit_sql_row(
 
 void assign_sql_result_type(ObExprResType &type, const char *type_id)
 {
-  if (is_builtin_type(type_id, ".geometry")) {
+  if (is_builtin_type(type_id, ".text") || is_builtin_type(type_id, ".blob")) {
+    type.set_type(ObLongTextType);
+    type.set_accuracy(ObAccuracy::DDL_DEFAULT_ACCURACY[ObLongTextType]);
+    type.set_collation_type(is_builtin_type(type_id, ".blob")
+        ? CS_TYPE_BINARY : CS_TYPE_UTF8MB4_GENERAL_CI);
+    type.set_collation_level(CS_LEVEL_IMPLICIT);
+  } else if (is_builtin_type(type_id, ".geometry")) {
     type.set_geometry();
     type.set_length(
         ObAccuracy::DDL_DEFAULT_ACCURACY[ObGeometryType].get_length());
@@ -400,7 +435,8 @@ int PluginFunctionExtraInfo::initialize(const seekdb_plugin_sql_binding_v1_t &so
 int PluginFunctionExtraInfo::binding(seekdb_plugin_sql_binding_v1_t &out) const
 {
   out = {};
-  if (sql_name_.empty() || object_id_.empty() || owner_.empty() || result_type_.empty() ||
+  if ((sql_name_.empty() && !(flags_ & SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY)) ||
+      object_id_.empty() || owner_.empty() || result_type_.empty() ||
       generation_ == 0 || epoch_ == 0 ||
       minimum_arity_ > maximum_arity_ || maximum_arity_ > SEEKDB_PLUGIN_MAX_ARGUMENTS ||
       arguments_.count() < minimum_arity_ || arguments_.count() > maximum_arity_) return OB_INVALID_DATA;
@@ -777,6 +813,98 @@ try {
   return OB_ERR_UNEXPECTED;
 }
 
+int PluginFunctionExpr::resolve_native_binding(const share::schema::ObRoutineInfo &routine,
+    seekdb_plugin_sql_binding_v1_t &binding, std::vector<std::string> &arguments,
+    int64_t call_argument_count)
+try {
+  binding = {};
+  arguments.clear();
+  static_assert(share::schema::NativeRoutineSignature::MAX_EXPANDED_ARGUMENTS == SEEKDB_PLUGIN_MAX_ARGUMENTS,
+      "native SQL expansion and the C ABI must have the same argument bound");
+  if (!routine.is_native() || !routine.is_native_binding_valid() || !routine.get_ret_type() ||
+      routine.get_param_count() < 0 || routine.get_param_count() > SEEKDB_PLUGIN_MAX_ARGUMENTS)
+    return OB_INVALID_ARGUMENT;
+  if (!share::g_mp) return OB_NOT_SUPPORTED;
+  const bool variadic = share::schema::NativeRoutineSignature::variadic(routine);
+  int64_t argument_count = routine.get_param_count();
+  if (call_argument_count < -1) return OB_INVALID_ARGUMENT;
+  if (call_argument_count >= 0) {
+    const int status = share::schema::NativeRoutineSignature::call_count(routine, call_argument_count, argument_count);
+    if (status != OB_SUCCESS) return status;
+    if (argument_count != call_argument_count) return OB_INVALID_ARGUMENT;
+  }
+  std::vector<std::string> types;
+  bool has_default = false;
+  for (int64_t i = 0; i < argument_count; ++i) {
+    share::schema::ObRoutineParam *parameter = nullptr;
+    int ret = routine.get_routine_param(share::schema::NativeRoutineSignature::parameter_index(routine, i), parameter);
+    if (ret != OB_SUCCESS || !parameter) return ret == OB_SUCCESS ? OB_INVALID_DATA : ret;
+    if (parameter->is_out_param() || parameter->is_inout_param()) return OB_NOT_SUPPORTED;
+    if (!parameter->get_default_value().empty()) {
+      if (!NativeFunctionDefault::supported(parameter->get_default_value())) return OB_NOT_SUPPORTED;
+      has_default = true;
+    } else if (has_default) return OB_INVALID_ARGUMENT;
+    const ObObjType type = parameter->get_param_type().get_obj_type();
+    if (ob_is_geometry(type) && !parameter->get_default_value().empty() &&
+        !NativeFunctionDefault::is_null(parameter->get_default_value())) return OB_INVALID_ARGUMENT;
+    if (!(ob_is_geometry(type) || ob_is_integer_type(type) || ob_is_number_tc(type) ||
+          ob_is_decimal_int(type) || ob_is_float_type(type) || ob_is_double_type(type) ||
+          ob_is_string_or_lob_type(type))) return OB_NOT_SUPPORTED;
+    types.emplace_back(core_type_identifier(type));
+  }
+  std::vector<const char *> identifiers;
+  for (const auto &type : types) identifiers.push_back(type.c_str());
+  seekdb_plugin_sql_binding_v1_t selected{};
+  int ret = share::g_mp->resolve_plugin_native_function(routine.get_native_module_id().ptr(),
+      routine.get_native_implementation_id().ptr(), identifiers.empty() ? nullptr : identifiers.data(),
+      identifiers.size(), &selected);
+  if (ret != OB_SUCCESS) return ret;
+  if (selected.struct_size != sizeof(selected) || selected.kind != SEEKDB_PLUGIN_EXTENSION_FUNCTION ||
+      selected.owner_generation == 0 || selected.catalog_epoch == 0 ||
+      !std::memchr(selected.owner_plugin_id, '\0', sizeof(selected.owner_plugin_id)) ||
+      !std::memchr(selected.object_id, '\0', sizeof(selected.object_id)) ||
+      !std::memchr(selected.result_type_id, '\0', sizeof(selected.result_type_id)) ||
+      routine.get_native_module_id() != ObString::make_string(selected.owner_plugin_id) ||
+      routine.get_native_implementation_id() != ObString::make_string(selected.object_id))
+    return OB_STATE_NOT_MATCH;
+  ObExprResType result;
+  assign_sql_result_type(result, selected.result_type_id);
+  // A native callback must emit the declared SQL datum representation. Never
+  // reinterpret e.g. double bits as a DECIMAL or silently choose another alias.
+  if (result.get_type() != routine.get_ret_type()->get_obj_type() ||
+      (routine.is_deterministic() && !(selected.flags & SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC)))
+    return OB_INVALID_ARGUMENT;
+  if (variadic && call_argument_count == -1) {
+    // Admit the declared repeating element pattern over the implementation's
+    // entire bounded arity range, not just its first accepted argument count.
+    if (selected.maximum_arity > SEEKDB_PLUGIN_MAX_ARGUMENTS || selected.maximum_arity <= argument_count)
+      return OB_INVALID_ARGUMENT;
+    const char *element = identifiers.back();
+    while (identifiers.size() < selected.maximum_arity) {
+      identifiers.push_back(element);
+      seekdb_plugin_sql_binding_v1_t expanded{};
+      ret = share::g_mp->resolve_plugin_native_function(routine.get_native_module_id().ptr(),
+          routine.get_native_implementation_id().ptr(), identifiers.data(), identifiers.size(), &expanded);
+      if (ret != OB_SUCCESS) return ret;
+      if (expanded.struct_size != selected.struct_size || expanded.kind != selected.kind ||
+          expanded.owner_generation != selected.owner_generation || expanded.catalog_epoch != selected.catalog_epoch ||
+          expanded.minimum_arity != selected.minimum_arity || expanded.maximum_arity != selected.maximum_arity ||
+          expanded.flags != selected.flags ||
+          std::memcmp(expanded.owner_plugin_id, selected.owner_plugin_id, sizeof(selected.owner_plugin_id)) != 0 ||
+          std::memcmp(expanded.object_id, selected.object_id, sizeof(selected.object_id)) != 0 ||
+          std::memcmp(expanded.result_type_id, selected.result_type_id, sizeof(selected.result_type_id)) != 0)
+        return OB_STATE_NOT_MATCH;
+    }
+  }
+  binding = selected;
+  arguments = std::move(types);
+  return OB_SUCCESS;
+} catch (const std::bad_alloc &) {
+  binding = {}; arguments.clear(); return OB_ALLOCATE_MEMORY_FAILED;
+} catch (...) {
+  binding = {}; arguments.clear(); return OB_ERR_UNEXPECTED;
+}
+
 int PluginFunctionExpr::cg_expr(ObExprCGCtx &cg_context,
                                 const ObRawExpr &raw_expression,
                                 ObExpr &runtime_expression) const
@@ -813,10 +941,10 @@ namespace {
 int prepare_function_arguments(const ObExpr &expression, ObEvalCtx &context,
     const PluginFunctionExtraInfo *info, const seekdb_plugin_sql_binding_v1_t &binding,
     ObIAllocator &allocator, std::vector<seekdb_plugin_execution_value_v1_t> &arguments,
-    std::vector<ArgumentStorage> &argument_storage, bool &strict_null)
+    std::vector<ArgumentStorage> &argument_storage, bool &strict_null, uint32_t offset)
 {
   int ret = OB_SUCCESS;
-  const uint32_t argument_count = expression.arg_cnt_ - 1;
+  const uint32_t argument_count = expression.arg_cnt_ - offset;
   arguments.resize(argument_count);
   argument_storage.resize(argument_count);
   strict_null = false;
@@ -828,7 +956,9 @@ int prepare_function_arguments(const ObExpr &expression, ObEvalCtx &context,
       stored = &info->stored().at(stored_position++);
     }
     ObDatum *datum = nullptr;
-    if (OB_FAIL(expression.args_[i + 1]->eval(context, datum))) return ret;
+    if (!expression.args_ || !expression.args_[i + offset]) return OB_INVALID_DATA;
+    const auto &child = *expression.args_[i + offset];
+    if (OB_FAIL(child.eval(context, datum))) return ret;
     if (nullptr == datum) return OB_ERR_UNEXPECTED;
 
     arguments[i].struct_size = sizeof(arguments[i]);
@@ -836,11 +966,18 @@ int prepare_function_arguments(const ObExpr &expression, ObEvalCtx &context,
     // borrowing them avoids allocating and copying type strings on every row.
     const ObString &logical_type = info->arguments().at(i);
     arguments[i].type_id = logical_type.empty() ? nullptr : logical_type.ptr();
-    const auto *nested_info = dynamic_cast<const PluginFunctionExtraInfo *>(expression.args_[i + 1]->extra_info_);
+    const auto *nested_info = dynamic_cast<const PluginFunctionExtraInfo *>(child.extra_info_);
     if (nested_info) {
       seekdb_plugin_sql_binding_v1_t nested_binding = {};
       if (OB_FAIL(nested_info->binding(nested_binding))) return ret;
-      if (logical_type != ObString::make_string(nested_binding.result_type_id)) return OB_STATE_NOT_MATCH;
+      const ObString produced = ObString::make_string(nested_binding.result_type_id);
+      if (logical_type != produced && !(offset == 0 &&
+          PluginBuiltinTypes::contains(logical_type) && PluginBuiltinTypes::contains(produced)))
+        return OB_STATE_NOT_MATCH;
+      // A catalog UDF first applies its declared SQL parameter coercion. Known
+      // builtin/GIS aliases now carry that SQL datum, not the original callback
+      // wire width (e.g. uint32 has become a uint64 datum). Marshal it below as
+      // the declared core type. Opaque/custom logical types are never relabeled.
     }
     arguments[i].is_null = datum->is_null() ? 1 : 0;
     if (datum->is_null()) {
@@ -852,14 +989,13 @@ int prepare_function_arguments(const ObExpr &expression, ObEvalCtx &context,
       continue;
     }
 
-    const ObObjType type = expression.args_[i + 1]->datum_meta_.type_;
+    const ObObjType type = child.datum_meta_.type_;
     if (stored) {
       if (!ob_is_string_or_lob_type(type)) return OB_STATE_NOT_MATCH;
       ObString encoded;
       if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
           context.exec_ctx_, allocator, *datum,
-          expression.args_[i + 1]->datum_meta_,
-          expression.args_[i + 1]->obj_meta_.has_lob_header(), encoded))) return ret;
+          child.datum_meta_, child.obj_meta_.has_lob_header(), encoded))) return ret;
       DecodeSink sink{allocator, stored->binding_.object_id, decoded_bytes, {}};
       seekdb_plugin_execution_context_v1_t codec_context = {};
       codec_context.struct_size = sizeof(codec_context);
@@ -896,6 +1032,9 @@ int prepare_function_arguments(const ObExpr &expression, ObEvalCtx &context,
         arguments[i].data = reinterpret_cast<const uint8_t *>(&argument_storage[i].uint32_);
         arguments[i].data_size = sizeof(argument_storage[i].uint32_);
       }
+    } else if (ob_is_number_tc(type) || ob_is_decimal_int(type)) {
+      if (OB_FAIL(materialize_plugin_decimal(*datum, child.datum_meta_, allocator,
+          arguments[i].data, arguments[i].data_size))) return ret;
     } else if (ob_is_double_type(type) || ob_is_float_type(type)) {
       argument_storage[i].floating_ =
           ob_is_float_type(type) ? datum->get_float() : datum->get_double();
@@ -904,11 +1043,10 @@ int prepare_function_arguments(const ObExpr &expression, ObEvalCtx &context,
       arguments[i].data_size = sizeof(argument_storage[i].floating_);
     } else {
       ObString bytes = datum->get_string();
-      if (ob_is_geometry(type) &&
+      if ((ob_is_geometry(type) || ob_is_string_or_lob_type(type)) &&
           OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(
               context.exec_ctx_, allocator, *datum,
-              expression.args_[i + 1]->datum_meta_,
-              expression.args_[i + 1]->obj_meta_.has_lob_header(), bytes))) {
+              child.datum_meta_, child.obj_meta_.has_lob_header(), bytes))) {
         return ret;
       }
       arguments[i].data = reinterpret_cast<const uint8_t *>(bytes.ptr());
@@ -921,16 +1059,23 @@ int prepare_function_arguments(const ObExpr &expression, ObEvalCtx &context,
 } // namespace
 
 int PluginFunctionExpr::evaluate(const ObExpr &expression, ObEvalCtx &context, ObDatum &result)
+{
+  return evaluate_bound(expression, context, result,
+      dynamic_cast<const PluginFunctionExtraInfo *>(expression.extra_info_), 1);
+}
+
+int PluginFunctionExpr::evaluate_bound(const ObExpr &expression, ObEvalCtx &context, ObDatum &result,
+    const PluginFunctionExtraInfo *info, uint32_t offset)
 try {
-  if (expression.arg_cnt_ < 1 || !share::g_mp) return OB_NOT_SUPPORTED;
+  if (!share::g_mp) return OB_NOT_SUPPORTED;
+  if (offset > 1 || expression.arg_cnt_ < offset || !info ||
+      info->arguments().count() != expression.arg_cnt_ - offset) return OB_INVALID_DATA;
   int ret = OB_SUCCESS;
   auto &execution = context.exec_ctx_;
   auto *runtime = static_cast<RuntimeContext *>(execution.get_expr_op_ctx(expression.expr_ctx_id_));
   if (!runtime && OB_FAIL(execution.create_expr_op_ctx(expression.expr_ctx_id_, runtime))) return ret;
   if (!runtime) return OB_ALLOCATE_MEMORY_FAILED;
-  const auto *info = dynamic_cast<const PluginFunctionExtraInfo *>(expression.extra_info_);
-  const uint32_t argument_count = expression.arg_cnt_ - 1;
-  if (!info || info->arguments().count() != argument_count) return OB_INVALID_DATA;
+  const uint32_t argument_count = expression.arg_cnt_ - offset;
   if (!runtime->initialized_) {
     if (OB_FAIL(info->binding(runtime->binding_))) return ret;
     runtime->initialized_ = true;
@@ -940,7 +1085,7 @@ try {
   ObEvalCtx::TempAllocGuard temporary(context);
   bool strict_null = false;
   if (OB_FAIL(prepare_function_arguments(expression, context, info, runtime->binding_,
-      temporary.get_allocator(), arguments, storage, strict_null))) return ret;
+      temporary.get_allocator(), arguments, storage, strict_null, offset))) return ret;
   if (strict_null) { result.set_null(); return OB_SUCCESS; }
   ResultSink sink{&expression, &context, &result, false, runtime->binding_.result_type_id};
   PluginSqlContext sql_context(context.exec_ctx_);
@@ -996,6 +1141,13 @@ struct FunctionBatchSink
 
 int PluginFunctionExpr::evaluate_batch(const ObExpr &expression, ObEvalCtx &context,
     const ObBitVector &skip, int64_t size)
+{
+  return evaluate_bound_batch(expression, context, skip, size,
+      dynamic_cast<const PluginFunctionExtraInfo *>(expression.extra_info_), 1);
+}
+
+int PluginFunctionExpr::evaluate_bound_batch(const ObExpr &expression, ObEvalCtx &context,
+    const ObBitVector &skip, int64_t size, const PluginFunctionExtraInfo *info, uint32_t offset)
 try {
   // Frame capacity is established by ObExpr's caller. Standalone expression
   // contexts can leave max_batch_size_ unset, as for other native batch evaluators.
@@ -1010,9 +1162,9 @@ try {
   std::vector<int64_t> pending;
   for (int64_t i = 0; i < size; ++i) if (!skip.at(i) && !evaluated.at(i)) pending.push_back(i);
   if (pending.empty()) { failure.success = true; return OB_SUCCESS; }
-  if (expression.arg_cnt_ < 1 || !share::g_mp) return OB_NOT_SUPPORTED;
-  const auto *info = dynamic_cast<const PluginFunctionExtraInfo *>(expression.extra_info_);
-  if (!info || info->arguments().count() != expression.arg_cnt_ - 1) return OB_INVALID_DATA;
+  if (!share::g_mp) return OB_NOT_SUPPORTED;
+  if (offset > 1 || expression.arg_cnt_ < offset || !info ||
+      info->arguments().count() != expression.arg_cnt_ - offset) return OB_INVALID_DATA;
   seekdb_plugin_sql_binding_v1_t binding{};
   int ret = info->binding(binding);
   if (OB_FAIL(ret)) return ret;
@@ -1026,10 +1178,10 @@ try {
   for (const auto index : pending) argument_skip.unset(index);
   size_t active = pending.size();
   const bool strict = binding.flags & SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING;
-  for (uint32_t a = 0; a + 1 < expression.arg_cnt_ && active; ++a) {
-    if (!expression.args_[a + 1]) return OB_INVALID_DATA;
+  for (uint32_t a = 0; a + offset < expression.arg_cnt_ && active; ++a) {
+    if (!expression.args_ || !expression.args_[a + offset]) return OB_INVALID_DATA;
     if (OB_FAIL(context.exec_ctx_.check_status())) return ret;
-    auto &child = *expression.args_[a + 1];
+    auto &child = *expression.args_[a + offset];
     if (OB_FAIL(child.eval_batch(context, argument_skip, size))) return ret;
     if (strict) {
       auto values = child.locate_expr_datumvector(context);
@@ -1093,7 +1245,7 @@ try {
       ObEvalCtx::TempAllocGuard temporary(context);
       bool strict_null = false;
       if (OB_FAIL(prepare_function_arguments(expression, context, info, binding,
-          temporary.get_allocator(), owned.arguments, owned.numbers, strict_null))) return ret;
+          temporary.get_allocator(), owned.arguments, owned.numbers, strict_null, offset))) return ret;
       if (strict_null) { expression.locate_batch_datums(context)[index].set_null(); continue; }
       for (const auto &value : owned.arguments) if (!value.is_null) {
         if (value.data_size > UINT64_C(16777216) || value.data_size > SEEKDB_PLUGIN_MAX_BATCH_BYTES - row_bytes)
@@ -1359,7 +1511,7 @@ try {
   // during repeated type inference. Do not classify arbitrary *.int64 as core.
   const std::string source(logical->logical_id_.ptr(), logical->logical_id_.length());
   if (!logical->stored_) {
-    for (const char *suffix : {".bytes", ".geometry", ".bool", ".int32", ".uint32", ".int64", ".uint64", ".float64"}) {
+    for (const char *suffix : {".bytes", ".text", ".blob", ".geometry", ".bool", ".int32", ".uint32", ".int64", ".uint64", ".float64"}) {
       if (is_builtin_type(source.c_str(), suffix)) return OB_SUCCESS;
     }
   }
@@ -1782,7 +1934,7 @@ namespace {
 bool native_case_identity(const ObString &id)
 {
   const std::string text(id.ptr(), id.length());
-  for (const char *suffix : {".bytes", ".geometry", ".float64", ".int64", ".uint64", ".int32", ".uint32", ".bool"})
+  for (const char *suffix : {".bytes", ".text", ".blob", ".geometry", ".float64", ".int64", ".uint64", ".int32", ".uint32", ".bool"})
     if (is_builtin_type(text.c_str(), suffix)) return true;
   return false;
 }
@@ -3488,6 +3640,9 @@ try {
           storage[i].boolean_ = storage[i].integer_ != 0;
           arguments[i].data = &storage[i].boolean_; arguments[i].data_size = sizeof(storage[i].boolean_);
         }
+      } else if (ob_is_number_tc(type) || ob_is_decimal_int(type)) {
+        if (OB_FAIL(materialize_plugin_decimal(*datum, expression.args_[i + 1]->datum_meta_, temporary.get_allocator(),
+            arguments[i].data, arguments[i].data_size))) return ret;
       } else if (ob_is_double_type(type) || ob_is_float_type(type)) {
         storage[i].floating_ =
             ob_is_float_type(type) ? datum->get_float() : datum->get_double();

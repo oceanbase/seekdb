@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <map>
 
 namespace oceanbase { namespace common {
 class ExtensionVersionRows final : public ObMySQLTransaction
@@ -19,6 +20,11 @@ public:
     std::string version = "1.0";
     std::string module;
     std::string dependency;
+    // Opt-in positional rows for catalog tests with a different SELECT shape.
+    // Once populated, missing or wrongly typed fields fail rather than falling
+    // back to the extension-instance defaults above.
+    std::map<int64_t, int64_t> integers{};
+    std::map<int64_t, std::string> strings{};
   };
   std::vector<Row> rows{Row{}};
   bool active = false;
@@ -58,7 +64,14 @@ private:
   class Result final : public sqlclient::ObMySQLResult {
   public:
     explicit Result(ExtensionVersionRows &fixture) : fixture_(fixture) {}
-    int64_t get_column_count() const override { return 4; }
+    int64_t get_column_count() const override {
+      if (fixture_.rows.empty()) return 4;
+      const auto &row = fixture_.rows.front();
+      if (row.integers.empty() && row.strings.empty()) return 4;
+      const int64_t integers = row.integers.empty() ? 0 : row.integers.rbegin()->first + 1;
+      const int64_t strings = row.strings.empty() ? 0 : row.strings.rbegin()->first + 1;
+      return integers > strings ? integers : strings;
+    }
     int close() override { ++fixture_.closes; return fixture_.close_status; }
     int next() override {
       ++index_;
@@ -67,12 +80,24 @@ private:
     }
     int get_int(int64_t column, int64_t &value) const override {
       if (column == fixture_.fail_field) return OB_ERR_NULL_VALUE;
+      const auto &row = fixture_.rows.at(index_);
+      if (!row.integers.empty() || !row.strings.empty()) {
+        const auto field = row.integers.find(column);
+        if (field == row.integers.end()) return OB_ERR_COLUMN_NOT_FOUND;
+        value = field->second; return OB_SUCCESS;
+      }
       if (column != 0 && column != 1) return OB_ERR_COLUMN_NOT_FOUND;
       value = column == 0 ? fixture_.rows.at(index_).id : fixture_.rows.at(index_).owner;
       return OB_SUCCESS;
     }
     int get_varchar(int64_t column, ObString &value) const override {
       if (column == fixture_.fail_field) return OB_ERR_NULL_VALUE;
+      const auto &row = fixture_.rows.at(index_);
+      if (!row.integers.empty() || !row.strings.empty()) {
+        const auto field = row.strings.find(column);
+        if (field == row.strings.end()) return OB_ERR_COLUMN_NOT_FOUND;
+        value = ObString(field->second.size(), field->second.data()); return OB_SUCCESS;
+      }
       if (column != 0 && column != 2 && column != 3) return OB_ERR_COLUMN_NOT_FOUND;
       const auto &text = column == 0 ? fixture_.rows.at(index_).dependency :
           column == 2 ? fixture_.rows.at(index_).version : fixture_.rows.at(index_).module;

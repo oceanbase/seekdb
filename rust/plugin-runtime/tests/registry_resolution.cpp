@@ -45,6 +45,19 @@ static std::shared_ptr<ObPluginGeneration> publish(ObPluginServiceRegistry &regi
   CHECK(registration.add_extension(type_spec) == OB_SUCCESS);
   CHECK(registration.add_extension(function("f.legacy", "convert", {})) == OB_SUCCESS);
   CHECK(registration.add_extension(function("f.typed", "convert", {"core.type.float64"})) == OB_SUCCESS);
+  auto implementation = function("f.native", "convert", {"core.type.float64"});
+  implementation.flags_ = SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY;
+  CHECK(registration.add_extension(implementation) == OB_SUCCESS); // No SQL-name conflict.
+  CHECK(registration.add_extension(implementation) == OB_ENTRY_EXIST); // IDs remain unique.
+  implementation.object_id_ = "f.unnamed"; implementation.sql_name_.clear();
+  CHECK(registration.add_extension(implementation) == OB_SUCCESS);
+  implementation.object_id_ = "f.hidden"; implementation.sql_name_ = "hidden_label";
+  CHECK(registration.add_extension(implementation) == OB_SUCCESS);
+  auto invalid_implementation = type_spec;
+  invalid_implementation.flags_ |= SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY;
+  CHECK(registration.add_extension(invalid_implementation) == OB_INVALID_ARGUMENT);
+  implementation.object_id_ = "f.unknown-flag"; implementation.flags_ |= UINT64_C(1) << 63;
+  CHECK(registration.add_extension(implementation) == OB_INVALID_ARGUMENT);
   CHECK(registration.add_extension(function("probe.a", "probe", {"core.type.int64"})) == OB_SUCCESS);
   CHECK(registration.add_extension(function("probe.b", "probe", {"core.type.float64"})) == OB_SUCCESS);
   CHECK(registration.add_extension(function("tie.a", "tie", {"core.type.bytes"})) == OB_SUCCESS);
@@ -106,6 +119,45 @@ int main()
 {
   ObPluginServiceRegistry registry;
   auto owner = publish(registry, 1);
+  {
+    ObPluginExtensionInfo selected;
+    uint64_t epoch = 99;
+    const char *type = "core.type.float64";
+    for (const char *id : {"f.native", "f.unnamed", "f.hidden"}) {
+      CHECK(registry.resolve_native_function("test.resolve", id, &type, 1, selected, epoch) == OB_SUCCESS);
+      CHECK(selected.spec_.object_id_ == id && (selected.spec_.flags_ & SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY));
+    }
+    std::vector<ObPluginExtensionInfo> names;
+    CHECK(registry.find_extensions_by_sql_name(SEEKDB_PLUGIN_EXTENSION_FUNCTION, "convert", names, epoch) == OB_SUCCESS);
+    CHECK(names.size() == 2);
+    CHECK(registry.find_extensions_by_sql_name(SEEKDB_PLUGIN_EXTENSION_FUNCTION, "hidden_label", names, epoch) == OB_SUCCESS);
+    CHECK(names.empty());
+    CHECK(registry.list_extensions(names) == OB_SUCCESS);
+    size_t implementations = 0;
+    for (const auto &entry : names) {
+      if (entry.spec_.flags_ & SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY) ++implementations;
+    }
+    CHECK(implementations == 3); // Hidden from SQL lookup, not from lifecycle inventory.
+    CHECK(registry.resolve_sql_extension(SEEKDB_PLUGIN_EXTENSION_FUNCTION, "hidden_label", &type, 1, selected, epoch) == OB_ENTRY_NOT_EXIST);
+    CHECK(registry.resolve_sql_extension(SEEKDB_PLUGIN_EXTENSION_FUNCTION, "f.hidden", &type, 1, selected, epoch) == OB_ENTRY_NOT_EXIST);
+    // SQL overload resolution would choose f.typed. A native declaration of
+    // f.legacy must retain that exact identity, not redirect by shared SQL name.
+    CHECK(registry.resolve_native_function("test.resolve", "f.legacy", &type, 1, selected, epoch) == OB_SUCCESS);
+    CHECK(selected.spec_.object_id_ == "f.legacy" && epoch != 0);
+    CHECK(registry.resolve_native_function("test.resolve", "f.typed", &type, 1, selected, epoch) == OB_SUCCESS);
+    CHECK(selected.spec_.object_id_ == "f.typed");
+    CHECK(registry.resolve_native_function("test.other", "f.typed", &type, 1, selected, epoch) == OB_ENTRY_NOT_EXIST);
+    CHECK(selected.spec_.object_id_.empty() && epoch == 0);
+    CHECK(registry.resolve_native_function("test.resolve", "convert", &type, 1, selected, epoch) == OB_ENTRY_NOT_EXIST);
+    CHECK(registry.resolve_native_function("test.resolve", "test.logical-type", nullptr, 0, selected, epoch) == OB_ENTRY_NOT_EXIST);
+    CHECK(registry.resolve_native_function(nullptr, "f.typed", &type, 1, selected, epoch) == OB_INVALID_ARGUMENT);
+    CHECK(registry.resolve_native_function("test.resolve", "../f.typed", &type, 1, selected, epoch) == OB_INVALID_ARGUMENT);
+    CHECK(registry.resolve_native_function("test.resolve", "f.typed", &type, 0, selected, epoch) == OB_ENTRY_NOT_EXIST);
+    type = "core.type.bytes";
+    CHECK(registry.resolve_native_function("test.resolve", "f.typed", &type, 1, selected, epoch) == OB_ENTRY_NOT_EXIST);
+    type = "core.type.int64";
+    CHECK(registry.resolve_native_function("test.resolve", "f.typed", &type, 1, selected, epoch) == OB_SUCCESS);
+  }
   ObPluginExtensionInfo logical_type;
   uint64_t type_epoch = 0;
   CHECK(registry.find_type_by_id("test.logical-type", logical_type, type_epoch) == OB_SUCCESS);
@@ -197,7 +249,11 @@ int main()
   CHECK(chosen.spec_.object_id_ == "f.typed");
   CHECK(epoch == registry.registry_epoch());
   CHECK(chosen.owner_generation_ == 1);
-  const auto old = chosen;
+  ObPluginExtensionInfo native;
+  uint64_t native_epoch = 0;
+  CHECK(registry.resolve_native_function("test.resolve", "f.typed", &integer, 1, native, native_epoch) == OB_SUCCESS);
+  CHECK(native.spec_.object_id_ == chosen.spec_.object_id_ && native_epoch == epoch);
+  const auto old = native;
   CHECK(registry.resolve_sql_extension(SEEKDB_PLUGIN_EXTENSION_FUNCTION, "probe", &integer, 1,
                                        chosen, epoch) == OB_SUCCESS);
   CHECK(chosen.spec_.object_id_ == "probe.a");
@@ -211,12 +267,21 @@ int main()
   CHECK(registry.resolve_sql_extension(SEEKDB_PLUGIN_EXTENSION_FUNCTION, "absent", &invalid, 1,
                                        chosen, epoch) == OB_INVALID_ARGUMENT);
   CHECK(registry.quiesce(owner) == OB_SUCCESS);
+  CHECK(registry.resolve_native_function("test.resolve", "f.hidden", &integer, 1, native, native_epoch) == OB_ENTRY_NOT_EXIST);
+  CHECK(registry.resolve_native_function("test.resolve", "f.typed", &integer, 1, native, native_epoch) == OB_ENTRY_NOT_EXIST);
+  CHECK(native.spec_.object_id_.empty() && native_epoch == 0);
   CHECK(registry.find_type_by_id("test.logical-type", logical_type, type_epoch) == OB_ENTRY_NOT_EXIST);
   CHECK(logical_type.spec_.object_id_.empty() && type_epoch == 0);
   CHECK(registry.resolve_common_type(branches, 4, common_type, common_epoch) == OB_ENTRY_NOT_EXIST);
   CHECK(common_type.empty() && common_epoch == 0);
   CHECK(registry.mark_stopped(owner) == OB_SUCCESS);
   auto replacement = publish(registry, 2);
+  CHECK(registry.resolve_native_function("test.resolve", "f.hidden", &integer, 1, native, native_epoch) == OB_SUCCESS);
+  CHECK(native.owner_generation_ == 2 && (native.spec_.flags_ & SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY));
+  CHECK(registry.resolve_sql_extension(SEEKDB_PLUGIN_EXTENSION_FUNCTION, "hidden_label", &integer, 1,
+                                       chosen, epoch) == OB_ENTRY_NOT_EXIST);
+  CHECK(registry.resolve_native_function("test.resolve", "f.typed", &integer, 1, native, native_epoch) == OB_SUCCESS);
+  CHECK(native.owner_generation_ == 2 && old.owner_generation_ == 1);
   CHECK(registry.find_type_by_id("test.logical-type", logical_type, type_epoch) == OB_SUCCESS);
   CHECK(logical_type.owner_generation_ == 2 && type_epoch != first_type_epoch);
   CHECK(first_type.owner_generation_ == 1 && first_type.spec_.sql_name_ == "sql_type_name");

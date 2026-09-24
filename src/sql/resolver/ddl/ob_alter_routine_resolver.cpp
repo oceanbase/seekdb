@@ -19,6 +19,7 @@
 #include "ob_alter_routine_stmt.h"
 #include "sql/pl/ob_pl_package.h"
 #include "sql/pl/parser/parse_stmt_item_type.h"
+#include "sql/resolver/ddl/native_routine_ddl.h"
 
 namespace oceanbase
 {
@@ -35,7 +36,7 @@ int ObAlterRoutineResolver::resolve(const ParseNode &parse_tree)
   CK (OB_NOT_NULL(schema_checker_));
   CK (OB_NOT_NULL(allocator_));
   CK (OB_LIKELY((T_SP_ALTER == parse_tree.type_) || (T_SF_ALTER == parse_tree.type_)));
-  CK (OB_LIKELY(2 == parse_tree.num_child_));
+  CK (OB_LIKELY(2 == parse_tree.num_child_ || (T_SF_ALTER == parse_tree.type_ && 3 == parse_tree.num_child_)));
   CK (OB_NOT_NULL(parse_tree.children_));
   CK (OB_NOT_NULL(parse_tree.children_[0]));
 
@@ -58,8 +59,18 @@ int ObAlterRoutineResolver::resolve(const ParseNode &parse_tree)
       OZ (schema_checker_->get_standalone_procedure_info(
         db_name, sp_name, routine_info));
     } else {
-      OZ (schema_checker_->get_standalone_function_info(
-       db_name, sp_name, routine_info));
+      uint64_t database_id = OB_INVALID_ID;
+      std::string signature;
+      const bool typed = parse_tree.num_child_ == 3;
+      OZ (schema_checker_->get_database_id(db_name, database_id));
+      if (typed) {
+        CK (parse_tree.children_[2] != nullptr);
+        OZ (NativeRoutineDdl::resolve_signature(*parse_tree.children_[2], *allocator_, *session_info_, signature));
+      }
+      CK (schema_checker_->get_schema_guard() != nullptr);
+      OZ (NativeRoutineDdl::find(*schema_checker_->get_schema_guard(), database_id, sp_name,
+          typed ? &signature : nullptr, routine_info));
+      if (ret == OB_ERR_FUNC_DUP) LOG_USER_ERROR(OB_ERR_FUNC_DUP, sp_name.length(), sp_name.ptr());
     }
     if (OB_SUCC(ret) && OB_ISNULL(routine_info)) {
       ret = OB_ERR_SP_DOES_NOT_EXIST;

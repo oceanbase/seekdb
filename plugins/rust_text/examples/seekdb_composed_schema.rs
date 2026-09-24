@@ -28,6 +28,7 @@ fn main() -> Result<(), String> {
         std::path::Path::new(&args[0]),
         PackageOptions {
             requires: &["text_ops"],
+            superuser: Some(false),
             ..PackageOptions::default()
         },
     )

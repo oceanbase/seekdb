@@ -2109,10 +2109,16 @@ int ObLocalManagementService::revoke_table(const ObRevokeTableArg &arg)
 int ObLocalManagementService::revoke_routine(const ObRevokeRoutineArg &arg)
 {
   int ret = OB_SUCCESS;
+  ObSchemaGetterGuard schema_guard;
   if (!inited_) {
     ret = OB_NOT_INIT;
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (arg.native_target_.resolved_) {
+    ret = ddl_service_.revoke_native_routine(arg);
+  } else if (arg.obj_type_ == uint64_t(ObObjectType::FUNCTION) &&
+      (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard)) ||
+       OB_FAIL(arg.admit_native_target(schema_guard)))) {
   } else {
     ObRoutinePrivSortKey routine_priv_key(arg.user_id_, arg.db_, arg.routine_,
                             (arg.obj_type_ == (int64_t)ObObjectType::PROCEDURE) ? ObRoutineType::ROUTINE_PROCEDURE_TYPE

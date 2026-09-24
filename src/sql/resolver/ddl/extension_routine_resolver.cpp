@@ -3,6 +3,7 @@
 #include "sql/resolver/ddl/catalog_routine_lookup.h"
 #include "sql/resolver/ddl/extension_script.h"
 #include "sql/resolver/ddl/extension_statement_diagnostics.h"
+#include "sql/resolver/ddl/native_routine_dcl_request.h"
 #include "sql/resolver/ddl/ob_create_routine_stmt.h"
 #include "sql/resolver/ddl/ob_drop_routine_stmt.h"
 #include "sql/resolver/ob_resolver.h"
@@ -96,6 +97,7 @@ int CallerRoutineMutation::apply(ObExecContext &context, ObMySQLTransaction &tra
     if (OB_FAIL(recorder->check_schema_operation())) return ret;
     const auto &op = batch_.operations().at(0);
     if (!op.has_valid_shape()) return OB_INVALID_ARGUMENT;
+    if (!op.is_schema_change()) return OB_NOT_SUPPORTED;
     const bool drop = op.kind_ == Kind::DROP;
     if (drop ? !op.drop_arg_->is_valid() : !op.create_arg_->is_valid()) return OB_INVALID_ARGUMENT;
     const auto &db_name = drop ? op.drop_arg_->db_name_ : op.create_arg_->db_name_;
@@ -123,12 +125,23 @@ int CallerRoutineMutation::apply(ObExecContext &context, ObMySQLTransaction &tra
     if (OB_FAIL(needs.need_privs_.reserve(1))) return ret;
     if (OB_FAIL(needs.need_privs_.push_back(need))) return ret;
     if (OB_FAIL(session->get_session_priv_info(session_priv))) return ret;
+    if (op.kind_ == Kind::CREATE && op.create_arg_->routine_info_.is_native() &&
+        !(session_priv.user_priv_set_ & OB_PRIV_SUPER)) return OB_ERR_NO_PRIVILEGE;
     if (!(session_priv.user_priv_set_ & OB_PRIV_SUPER) && OB_FAIL(guard.verify_read_only(needs))) return ret;
     if (OB_FAIL(guard.check_priv(session_priv, session->get_enable_role_array(), needs))) return ret;
     const ObRoutineInfo *before = nullptr;
     phase = "routine lookup";
-    ret = type == ROUTINE_FUNCTION_TYPE ? guard.get_standalone_function_info(database_id_, name, before)
-        : guard.get_standalone_procedure_info(database_id_, name, before);
+    if (drop && op.drop_arg_->native_target_resolved_) {
+      if (op.drop_arg_->native_target_.get_routine_id() != OB_INVALID_ID) {
+        ret = guard.get_routine_info(op.drop_arg_->native_target_.get_routine_id(), before);
+      }
+      if (OB_SUCC(ret)) ret = op.drop_arg_->check_native_target(before, database_id_);
+    } else if (op.kind_ == Kind::ALTER && op.create_arg_->routine_info_.is_native()) {
+      ret = guard.get_routine_info(op.create_arg_->routine_info_.get_routine_id(), before);
+    } else {
+      ret = type == ROUTINE_FUNCTION_TYPE ? guard.get_standalone_function_info(database_id_, name, before)
+          : guard.get_standalone_procedure_info(database_id_, name, before);
+    }
     if (OB_FAIL(ret)) return ret;
     RoutineCatalogWriter writer(*service, *context.get_sql_proxy(), guard, transaction, true);
     RoutineVersionReservation version;
@@ -142,7 +155,7 @@ int CallerRoutineMutation::apply(ObExecContext &context, ObMySQLTransaction &tra
       phase = "drop writer";
       if (OB_FAIL(writer.drop(*before, errors, &op.drop_arg_->ddl_stmt_str_, invalidation, &version))) return ret;
       phase = "drop view update";
-      if (OB_FAIL(schema.erase(database_id_, name, type, before->get_routine_id()))) return ret;
+      if (OB_FAIL(schema.erase(database_id_, name, type, before->get_routine_id(), before->get_overload()))) return ret;
       if (OB_FAIL(privileges.record_drop(*before))) return ret;
       object_id_ = before->get_routine_id();
     } else {
@@ -169,7 +182,8 @@ int CallerRoutineMutation::apply(ObExecContext &context, ObMySQLTransaction &tra
       } else {
         phase = "alter dependency preservation";
         if (after.get_database_id() != database_id_ || after.get_routine_id() != before->get_routine_id() ||
-            after.get_owner_id() != before->get_owner_id() || after.get_schema_version() != before->get_schema_version())
+            after.get_owner_id() != before->get_owner_id() || after.get_schema_version() != before->get_schema_version()
+            || after.get_overload() != before->get_overload() || after.get_routine_name() != before->get_routine_name())
           return OB_STATE_NOT_MATCH;
         // Attribute-only ALTER must retain committed AND earlier caller writes'
         // dependencies, not replace them with the resolver's empty array.
@@ -275,7 +289,8 @@ int ExtensionRoutineScriptResolver::preflight(const share::plugin::ExtensionUpda
   if (request.tenant_id_ != bound.tenant_id_ || request.database_id_ != bound.database_id_ ||
       request.expected_extension_id_ != bound.expected_extension_id_ || request.name_ != bound.name_ ||
       request.from_version_ != bound.from_version_ || request.to_version_ != bound.to_version_ ||
-      request.requires_ != bound.requires_ || request.prerequisites_ != bound.prerequisites_) return OB_STATE_NOT_MATCH;
+      request.requires_ != bound.requires_ || request.prerequisites_ != bound.prerequisites_ ||
+      request.requires_superuser_ != bound.requires_superuser_) return OB_STATE_NOT_MATCH;
   return preflight_common(error);
 }
 
@@ -290,9 +305,11 @@ int ExtensionRoutineScriptResolver::preflight_install(const share::plugin::Exten
   if (spec.tenant_id_ != 1 || spec.database_id_ != bound.database_id_ || spec.owner_id_ != bound.owner_id_ ||
       spec.name_ != bound.name_ || spec.version_ != bound.version_ || spec.native_module_id_ != bound.native_module_id_ ||
       spec.requires_ != bound.requires_ || spec.prerequisites_ != bound.prerequisites_ ||
+      spec.requires_superuser_ != bound.requires_superuser_ ||
       !spec.members_.empty() || !bound.members_.empty()) return OB_INVALID_ARGUMENT;
   if (!source.from_version_.empty() || source.name_ != spec.name_ || source.version_ != spec.version_ ||
-      source.native_module_ != spec.native_module_id_ || source.requires_ != spec.requires_ || source.prerequisites_ != spec.prerequisites_)
+      source.native_module_ != spec.native_module_id_ || source.requires_ != spec.requires_ || source.prerequisites_ != spec.prerequisites_ ||
+      source.requires_superuser_ != spec.requires_superuser_)
     return OB_STATE_NOT_MATCH;
   if (statement_count() == 0 && state.program_ == nullptr) return OB_INVALID_ARGUMENT;
   if (state.context_.session_info_ == nullptr) return OB_NOT_INIT;
@@ -313,6 +330,11 @@ int ExtensionRoutineScriptResolver::preflight_common(std::string &error)
     return OB_ERR_NO_PRIVILEGE;
   if (context.session_info_ == nullptr || services.session_info_ != context.session_info_ ||
       services.sql_proxy_ == nullptr) return OB_NOT_INIT;
+  share::schema::ObSessionPrivInfo actor;
+  const int privilege_ret = context.session_info_->get_session_priv_info(actor);
+  if (privilege_ret != OB_SUCCESS) return privilege_ret;
+  if (script.source().requires_superuser_ && !(actor.user_priv_set_ & OB_PRIV_SUPER))
+    return OB_ERR_NO_PRIVILEGE;
   if (state.database_id_ == 0 || state.database_id_ == OB_INVALID_ID ||
       state.database_id_ != context.session_info_->get_database_id() ||
       script.sql_mode() != context.session_info_->get_sql_mode()) return OB_STATE_NOT_MATCH;
@@ -323,6 +345,8 @@ int ExtensionRoutineScriptResolver::preflight_common(std::string &error)
     if (node->type_ == T_SF_CREATE || node->type_ == T_SP_CREATE) {
       if (node->value_ != 0) return OB_NOT_SUPPORTED;
       if (services.pl_sql_runtime_ == nullptr || services.pl_engine_ == nullptr) return OB_NOT_INIT;
+    } else if (node->type_ == T_GRANT || node->type_ == T_REVOKE) {
+      // Native routine scope/recipients are checked by the semantic resolver.
     } else if (state.plan_ == nullptr || (node->type_ != T_SF_ALTER && node->type_ != T_SP_ALTER &&
                node->type_ != T_SF_DROP && node->type_ != T_SP_DROP)) return OB_NOT_SUPPORTED;
   }
@@ -361,7 +385,9 @@ int ExtensionRoutineScriptResolver::resolve(int64_t index, share::schema::ObSche
           state.database_id_, *owned, error);
       if (OB_SUCC(ret)) {
         const auto &op = owned->operations().at(0);
-        const int64_t size = op.create_arg_ ? op.create_arg_->get_serialize_size() : op.drop_arg_->get_serialize_size();
+        const int64_t size = op.create_arg_ ? op.create_arg_->get_serialize_size()
+            : op.drop_arg_ ? op.drop_arg_->get_serialize_size()
+            : op.grant_arg_ ? op.grant_arg_->get_serialize_size() : op.revoke_arg_->get_serialize_size();
         if (size <= 0 || size > ExtensionRoutineUpdateBatch::MAX_WIRE_BYTES - state.bytes_) ret = OB_SIZE_OVERFLOW;
         else {
           state.statements_.push_back(std::move(owned));
@@ -546,6 +572,7 @@ int ExtensionRoutineResolver::resolve_statement(const ExtensionScript &script, i
   output.reset();
   error.clear();
   int ret = OB_SUCCESS;
+  const char *phase = "context validation";
   try {
     ExtensionStatementDiagnostics diagnostics(ret);
     if (context.disable_privilege_check_ != PRIV_CHECK_FLAG_NORMAL || services.disable_privilege_check_) {
@@ -562,10 +589,12 @@ int ExtensionRoutineResolver::resolve_statement(const ExtensionScript &script, i
         if ((node->type_ == T_SF_CREATE || node->type_ == T_SP_CREATE) && node->value_ == 0) kind = Kind::CREATE;
         else if (node->type_ == T_SF_ALTER || node->type_ == T_SP_ALTER) kind = Kind::ALTER;
         else if (node->type_ == T_SF_DROP || node->type_ == T_SP_DROP) kind = Kind::DROP;
+        else if (node->type_ == T_GRANT) kind = Kind::GRANT;
+        else if (node->type_ == T_REVOKE) kind = Kind::REVOKE;
       }
       if (kind == Kind::INVALID) {
         ret = OB_NOT_SUPPORTED;
-        error = "extension statement requires routine CREATE, ALTER or DROP; CREATE IF NOT EXISTS is not supported";
+        error = "extension statement requires routine CREATE, ALTER, DROP or native routine DCL; CREATE IF NOT EXISTS is not supported";
       }
     }
     if (OB_FAIL(ret)) {
@@ -674,16 +703,39 @@ int ExtensionRoutineResolver::resolve_statement(const ExtensionScript &script, i
           params.query_ctx_->set_sql_stmt(sql);
           state.context_.cur_sql_ = sql;
           ObResolver resolver(params);
+          phase = "semantic resolution";
           ret = resolver.resolve(ObResolver::IS_NOT_PREPARED_STMT, *parsed.result_tree_->children_[0], statement);
         }
         if (OB_SUCC(ret)) {
           share::schema::ObStmtNeedPrivs privileges(state.arena_);
+          phase = "privilege check";
           ret = ObPrivilegeCheck::check_privilege_new(state.context_, statement, privileges);
           if (OB_SUCC(ret)) ret = ObPrivilegeCheck::check_password_expired(state.context_, statement->get_stmt_type());
         }
         Operation operation;
         obcall::ObDDLArg *ddl = nullptr;
-        if (OB_SUCC(ret) && kind == Kind::DROP) {
+        if (OB_SUCC(ret)) phase = "operation preparation";
+        if (OB_SUCC(ret) && (kind == Kind::GRANT || kind == Kind::REVOKE)) {
+          const obcall::NativeRoutinePrivilegeTarget *target = nullptr;
+          if (kind == Kind::GRANT) {
+            auto *grant = dynamic_cast<ObGrantStmt *>(statement);
+            if (!grant) ret = OB_ERR_UNEXPECTED;
+            else if (OB_FAIL(NativeRoutineDclRequest::prepare(*grant, session, *context.schema_guard_))) {
+            } else {
+              auto &arg = static_cast<obcall::ObGrantArg &>(grant->get_ddl_arg());
+              operation = {kind, nullptr, nullptr, &arg}; ddl = &arg; target = &arg.native_target_;
+            }
+          } else {
+            auto *revoke = dynamic_cast<ObRevokeStmt *>(statement);
+            if (!revoke) ret = OB_ERR_UNEXPECTED;
+            else if (OB_FAIL(NativeRoutineDclRequest::prepare(*revoke, session, *context.schema_guard_))) {
+            } else {
+              auto &arg = static_cast<obcall::ObRevokeRoutineArg &>(revoke->get_ddl_arg());
+              operation = {kind, nullptr, nullptr, nullptr, &arg}; ddl = &arg; target = &arg.native_target_;
+            }
+          }
+          if (OB_SUCC(ret) && (!target || target->routine_.get_database_id() != database_id)) ret = OB_ERR_BAD_DATABASE;
+        } else if (OB_SUCC(ret) && kind == Kind::DROP) {
           auto *drop = dynamic_cast<ObDropRoutineStmt *>(statement);
           if (drop == nullptr) ret = OB_ERR_UNEXPECTED;
           else {
@@ -721,6 +773,7 @@ int ExtensionRoutineResolver::resolve_statement(const ExtensionScript &script, i
           }
         }
         // Wire-copy before all parser, package and schema-borrowing state dies.
+        if (OB_SUCC(ret)) phase = "owned snapshot";
         if (OB_SUCC(ret)) ret = ObCharset::charset_convert(state.arena_, sql, collation,
             ObCharset::get_system_collation(), ddl->ddl_stmt_str_, ObCharset::COPY_STRING_ON_SAME_CHARSET);
         ObSEArray<Operation, 1> one;
@@ -735,7 +788,7 @@ int ExtensionRoutineResolver::resolve_statement(const ExtensionScript &script, i
     if (error.empty()) {
       try {
         error = "extension routine resolution failed at statement " +
-            std::to_string(index >= 0 && index < script.statements().count() ? index + 1 : 0);
+            std::to_string(index >= 0 && index < script.statements().count() ? index + 1 : 0) + " (" + phase + ")";
       }
       catch (...) {} // Preserve the original status even if diagnostics run out of memory.
     }
@@ -789,6 +842,7 @@ int ExtensionRoutineResolver::install(const ExtensionScript &script, const ObRes
       spec.native_module_id_ = script.source().native_module_;
       spec.requires_ = script.source().requires_;
       spec.prerequisites_ = script.source().prerequisites_;
+      spec.requires_superuser_ = script.source().requires_superuser_;
       ExtensionRoutineScriptResolver sequence(script, spec, services, context, program);
       if (OB_FAIL(sequence.preflight_install(spec, error))) {
       } else if (OB_FAIL(context.schema_guard_->reset())) {

@@ -752,6 +752,31 @@ int get_drop_index_stmt_need_privs(
   return ret;
 }
 
+static int get_native_routine_dcl_need_privs(const ObSessionPrivInfo &session,
+    const obcall::NativeRoutinePrivilegeTarget &target, const ObString &database,
+    const ObString &name, uint64_t object, ObObjectType type, ObPrivLevel level,
+    ObPrivSet rights, bool create_user, ObIArray<ObNeedPriv> &needs)
+{
+  const ObPrivSet operations = OB_PRIV_EXECUTE | OB_PRIV_ALTER_ROUTINE;
+  if (!target.resolved_ || !target.is_valid() || level != OB_PRIV_ROUTINE_LEVEL ||
+      type != ObObjectType::FUNCTION || object != target.routine_.get_routine_id() ||
+      name.case_compare(target.routine_.get_routine_name()) != 0 ||
+      (rights & operations) == 0 || (rights & ~(operations | OB_PRIV_GRANT)) != 0)
+    return OB_INVALID_ARGUMENT;
+  int ret = ObPrivilegeCheck::can_do_grant_on_db_table(session, rights, database, name);
+  if (ret != OB_SUCCESS) return ret;
+  ObNeedPriv need(database, name, OB_PRIV_ROUTINE_LEVEL, rights | OB_PRIV_GRANT,
+      false, ObObjectType::FUNCTION);
+  need.native_routine_id_ = object;
+  need.native_routine_version_ = target.routine_.get_schema_version();
+  if (OB_FAIL(needs.push_back(need))) return ret;
+  if (create_user) {
+    ObNeedPriv user(ObString(), ObString(), OB_PRIV_USER_LEVEL, OB_PRIV_CREATE_USER, false);
+    ret = needs.push_back(user);
+  }
+  return ret;
+}
+
 int get_grant_stmt_need_privs(
     const ObSessionPrivInfo &session_priv,
     const ObStmt *basic_stmt,
@@ -762,6 +787,14 @@ int get_grant_stmt_need_privs(
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_UNLIKELY(stmt::T_GRANT != basic_stmt->get_stmt_type())) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (!static_cast<const ObGrantStmt *>(basic_stmt)->native_target().is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (const auto *grant = static_cast<const ObGrantStmt *>(basic_stmt);
+      grant->native_target().resolved_) {
+    ret = get_native_routine_dcl_need_privs(session_priv, grant->native_target(),
+        grant->get_database_name(), grant->get_table_name(), grant->get_object_id(),
+        grant->get_object_type(), grant->get_grant_level(), grant->get_priv_set(),
+        grant->need_create_user_priv(), need_privs);
   } else {
     ObNeedPriv need_priv;
     const ObGrantStmt *stmt = static_cast<const ObGrantStmt *>(basic_stmt);
@@ -837,6 +870,13 @@ int get_revoke_stmt_need_privs(
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_UNLIKELY(stmt::T_REVOKE != basic_stmt->get_stmt_type())) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (!static_cast<const ObRevokeStmt *>(basic_stmt)->native_target().is_valid()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (const auto *revoke = static_cast<const ObRevokeStmt *>(basic_stmt);
+      revoke->native_target().resolved_) {
+    ret = get_native_routine_dcl_need_privs(session_priv, revoke->native_target(),
+        revoke->get_database_name(), revoke->get_table_name(), revoke->get_object_id(),
+        revoke->get_object_type(), revoke->get_grant_level(), revoke->get_priv_set(), false, need_privs);
   } else if (is_root_user(session_priv.user_id_)) {
     // not necessary
   } else {
@@ -1062,6 +1102,12 @@ int get_routine_stmt_need_privs(
       need_priv.priv_level_ = OB_PRIV_ROUTINE_LEVEL; 
       need_priv.priv_set_ = OB_PRIV_CREATE_ROUTINE; 
       ADD_NEED_PRIV(need_priv); 
+      if (stmt->get_routine_arg().routine_info_.is_native()) {
+        ObNeedPriv native_priv;
+        native_priv.priv_level_ = OB_PRIV_USER_LEVEL;
+        native_priv.priv_set_ = OB_PRIV_SUPER;
+        ADD_NEED_PRIV(native_priv);
+      }
     }
   } else if (stmt::T_ALTER_ROUTINE == basic_stmt->get_stmt_type()) {
     const ObAlterRoutineStmt *stmt = static_cast<const ObAlterRoutineStmt*>(basic_stmt); 

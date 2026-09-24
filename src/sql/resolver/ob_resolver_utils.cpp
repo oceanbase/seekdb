@@ -21,6 +21,8 @@
 #include "sql/engine/cmd/ob_load_data_parser.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
 #include "sql/resolver/ob_resolver_utils.h"
+#include "share/schema/native_routine_signature.h"
+#include "sql/resolver/native_routine_overload.h"
 #include "sql/code_generator/ob_column_index_provider.h"
 #include "query/resolver/ob_partition_type_policy.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
@@ -717,29 +719,6 @@ int ObResolverUtils::get_candidate_routines(ObSchemaChecker &schema_checker, con
     }
   }
 
-#define GET_STANDALONE_ROUTINE()                                                              \
-  if (OB_FAIL(ret)) {                                                                         \
-  } else if (ROUTINE_PROCEDURE_TYPE == routine_type) {                                        \
-    if (OB_FAIL(schema_checker.get_standalone_procedure_info(                                 \
-          object_db_id, object_name, routine_info))) {                             \
-      LOG_WARN("failed to get procedure info",                                                \
-            K(ret), K(real_db_name), K(routine_name), K(object_name), K(ret));  \
-    } else {                                                                                  \
-      LOG_DEBUG("success get procedure info",                                                 \
-            K(ret), K(real_db_name), K(routine_name), K(object_name), K(ret));  \
-    }                                                                                         \
-  } else {                                                                                    \
-    if (OB_FAIL(schema_checker.get_standalone_function_info(                                  \
-          object_db_id, object_name, routine_info))) {                             \
-      LOG_WARN("failed to get function info",                                                 \
-               K(ret), K(real_db_name), K(package_name), K(routine_name),       \
-               K(object_db_id), K(db_name), K(object_name), K(ret));                          \
-    }                                                                                         \
-  }                                                                                           \
-  if (OB_SUCC(ret) && NULL != routine_info) {                                                 \
-    OZ (routines.push_back(routine_info));                                                    \
-  }
-
   if (OB_FAIL(ret)) {
     // do nothing ...
   } else if (package_name.empty()) { // must be standalone procedure/function.
@@ -747,8 +726,14 @@ int ObResolverUtils::get_candidate_routines(ObSchemaChecker &schema_checker, con
     OZ (schema_checker.get_database_id(real_db_name, database_id));
     OX (object_db_id = database_id);
     OX (object_name = routine_name);
-    if (OB_SUCC(ret)) {
-      GET_STANDALONE_ROUTINE();
+    if (OB_SUCC(ret) && ROUTINE_PROCEDURE_TYPE == routine_type) {
+      OZ (schema_checker.get_standalone_procedure_info(object_db_id, object_name, routine_info));
+      if (OB_SUCC(ret) && routine_info != nullptr) OZ (routines.push_back(routine_info));
+    } else if (OB_SUCC(ret)) {
+      ObSEArray<const ObRoutineInfo *, 4> functions;
+      CK (schema_checker.get_schema_guard() != nullptr);
+      OZ (schema_checker.get_schema_guard()->get_standalone_function_infos(object_db_id, object_name, functions));
+      for (int64_t i = 0; OB_SUCC(ret) && i < functions.count(); ++i) OZ (routines.push_back(functions.at(i)));
     }
   } else { // try package routines
     OZ (schema_checker.get_database_id(real_db_name, database_id));
@@ -1080,16 +1065,22 @@ int ObResolverUtils::check_match(const pl::ObPLResolveCtx &resolve_ctx,
 {
   int ret = OB_SUCCESS;
   bool is_sys_package = false;
+  int64_t parameter_count = 0;
+  bool variadic = false;
   CK (OB_NOT_NULL(routine_info));
+  if (OB_SUCC(ret)) {
+    variadic = share::schema::NativeRoutineSignature::variadic(*routine_info);
+    OZ (share::schema::NativeRoutineSignature::call_count(*routine_info, expr_params.count(), parameter_count));
+  }
   if (OB_FAIL(ret)) {
-  } else if (expr_params.count() > routine_info->get_param_count()) {
+  } else if (expr_params.count() > parameter_count) {
     ret = OB_ERR_SP_WRONG_ARG_NUM;
     LOG_WARN("argument count not match",
              K(ret), K(expr_params.count()), K(routine_info->get_param_count()));
   }
   OX (match_info.routine_info_ = routine_info);
   // MatchInfo initialization
-  for (int64_t i = 0; OB_SUCC(ret) && i < routine_info->get_param_count(); ++i) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < parameter_count; ++i) {
     OZ (match_info.match_info_.push_back(ObRoutineMatchInfo::MatchInfo()));
   }
 
@@ -1098,7 +1089,7 @@ int ObResolverUtils::check_match(const pl::ObPLResolveCtx &resolve_ctx,
   int64_t offset = 0;
   // Parse parameter expression array
   bool has_assign_param = false;
-  int arg_cnt = routine_info->get_param_count();
+  int arg_cnt = parameter_count;
   for (int64_t i = 0; OB_SUCC(ret) && offset < arg_cnt && i < expr_params.count(); ++i) {
     int64_t position = OB_INVALID_ID;
     ObObjType src_type;
@@ -1109,6 +1100,9 @@ int ObResolverUtils::check_match(const pl::ObPLResolveCtx &resolve_ctx,
     CK (OB_NOT_NULL(expr_params.at(i)));
     if (OB_FAIL(ret)) {
     } else if (T_SP_CPARAM == expr_params.at(i)->get_expr_type()) {
+      // Expanded elements have no individual names. Explicit array calls are
+      // a separate path, not yet admitted by the native bridge.
+      if (variadic) return OB_NOT_SUPPORTED;
       ObCallParamRawExpr* call_expr = static_cast<ObCallParamRawExpr*>(expr_params.at(i));
       OX (has_assign_param = true);
       CK (OB_NOT_NULL(call_expr) && OB_NOT_NULL(call_expr->get_expr()));
@@ -1141,7 +1135,8 @@ int ObResolverUtils::check_match(const pl::ObPLResolveCtx &resolve_ctx,
     }
     // Retrieve the type information at the matching position, for comparison
     ObIRoutineParam *routine_param = NULL;
-    OZ (routine_info->get_routine_param(position, routine_param));
+    OZ (routine_info->get_routine_param(
+        share::schema::NativeRoutineSignature::parameter_index(*routine_info, position), routine_param));
     CK (OB_NOT_NULL(routine_param));
     if (OB_FAIL(ret)) {
     } else if (routine_param->is_schema_routine_param()) {
@@ -1169,7 +1164,7 @@ int ObResolverUtils::check_match(const pl::ObPLResolveCtx &resolve_ctx,
     }
   }
   // Handle missing parameters
-  OZ (match_vacancy_parameters(*routine_info, match_info));
+  if (!variadic) OZ (match_vacancy_parameters(*routine_info, match_info));
   return ret;
 }
 
@@ -1326,6 +1321,39 @@ int ObResolverUtils::pick_routine(const pl::ObPLResolveCtx &resolve_ctx,
 {
   int ret = OB_SUCCESS;
   routine_info = NULL;
+  const auto *first = routine_infos.empty() ? nullptr : dynamic_cast<const ObRoutineInfo *>(routine_infos.at(0));
+  if (first && first->is_native()) {
+    ObSEArray<NativeRoutineOverload::Argument, 8> arguments;
+    for (int64_t i = 0; OB_SUCC(ret) && i < expr_params.count(); ++i) {
+      ObRawExpr *expr = expr_params.at(i);
+      NativeRoutineOverload::Argument argument;
+      CK (expr != nullptr);
+      if (OB_SUCC(ret) && expr->get_expr_type() == T_SP_CPARAM) {
+        auto *call = static_cast<ObCallParamRawExpr *>(expr);
+        argument.name_ = call->get_name(); expr = call->get_expr();
+        CK (expr != nullptr && !argument.name_.empty());
+      }
+      OZ (expr->extract_info());
+      OZ (expr->deduce_type(&resolve_ctx.session_info_));
+      if (OB_SUCC(ret)) {
+        argument.type_ = {expr->get_result_type().get_type(), expr->get_result_type().get_collation_type()};
+        uint64_t type_id = OB_INVALID_ID;
+        OZ (get_type_and_type_id(expr, argument.type_.type_, type_id));
+        if (OB_SUCC(ret) && expr->get_expr_type() == T_QUESTIONMARK
+            && (resolve_ctx.is_prepare_protocol_ || !resolve_ctx.is_sql_scope_
+                || resolve_ctx.session_info_.get_pl_context() != nullptr)
+            && (expr->get_result_type().get_type() == ObUnknownType
+                || expr->get_result_type().get_type() == ObNullType
+                || expr->get_result_type().is_mysql_question_mark_type())) {
+          argument.type_.type_ = ObUnknownType;
+        }
+        OZ (arguments.push_back(argument));
+      }
+    }
+    OZ (NativeRoutineOverload::select(arguments, routine_infos, routine_info));
+    if (ret == OB_ERR_FUNC_DUP) LOG_USER_ERROR(OB_ERR_FUNC_DUP, first->get_routine_name().length(), first->get_routine_name().ptr());
+    return ret;
+  }
   common::ObSEArray<ObRoutineMatchInfo, 16> match_infos;
   for (int64_t i = 0; OB_SUCC(ret) && i < routine_infos.count(); ++i) {
     ObRoutineMatchInfo match_info;
@@ -1440,8 +1468,13 @@ int ObResolverUtils::get_routine(const pl::ObPLResolveCtx &resolve_ctx,
                                      &resolve_ctx))) {
   } else {
     if (!candidate_routine_infos.empty()) {
-      CK (1 == candidate_routine_infos.count());
-      OX (routine = static_cast<const ObRoutineInfo *>(candidate_routine_infos.at(0)));
+      const auto *first = dynamic_cast<const ObRoutineInfo *>(candidate_routine_infos.at(0));
+      if (first && first->is_native()) {
+        OZ (pick_routine(resolve_ctx, expr_params, candidate_routine_infos, routine));
+      } else {
+        CK (1 == candidate_routine_infos.count());
+        OX (routine = first);
+      }
     }
     if (OB_SUCC(ret) && NULL == routine) {
       ret = OB_ERR_SP_DOES_NOT_EXIST;

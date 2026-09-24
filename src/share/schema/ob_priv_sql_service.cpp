@@ -46,6 +46,8 @@
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_schema_utils.h"
+#include "share/schema/routine_privilege_overlay.h"
+#include <tuple>
 
 
 namespace oceanbase
@@ -140,6 +142,11 @@ int ObPrivSqlService::insert_objauth(
   share::ObRawObjPriv raw_obj_priv;
 
   if (obj_priv_array.count() > 0) {
+    // A native routine grant can run on a borrowed caller connection whose
+    // selected database is not oceanbase. Never resolve catalog names there.
+    ObSqlString current_table, history_table;
+    OZ (current_table.assign_fmt("%s.%s", OB_SYS_DATABASE_NAME, OB_ALL_OBJAUTH_TNAME));
+    OZ (history_table.assign_fmt("%s.%s", OB_SYS_DATABASE_NAME, OB_ALL_OBJAUTH_HISTORY_TNAME));
     ARRAY_FOREACH(obj_priv_array, idx) {
       raw_obj_priv = obj_priv_array.at(idx);
       dml.reset();
@@ -147,9 +154,9 @@ int ObPrivSqlService::insert_objauth(
       OZ (gen_obj_priv_dml_ora(obj_priv_key, raw_obj_priv,
                                option, dml, is_deleted));
       if (is_deleted) {
-        OZ (exec.exec_delete(OB_ALL_OBJAUTH_TNAME, dml, affected_rows));
+        OZ (exec.exec_delete(current_table.ptr(), dml, affected_rows));
       } else {
-        OZ (exec.exec_replace(OB_ALL_OBJAUTH_TNAME, dml, affected_rows));
+        OZ (exec.exec_replace(current_table.ptr(), dml, affected_rows));
       }
       if (OB_FAIL(ret)) {
       } else if (!is_single_row(affected_rows) && !is_double_row(affected_rows)) {
@@ -163,7 +170,7 @@ int ObPrivSqlService::insert_objauth(
       if (OB_SUCC(ret)) {
         OZ (dml.add_pk_column("schema_version", new_schema_version));
         OZ (dml.add_column("is_deleted", is_deleted));
-        OZ (exec.exec_insert(OB_ALL_OBJAUTH_HISTORY_TNAME,
+        OZ (exec.exec_insert(history_table.ptr(),
                             dml,
                             affected_rows));
         if (OB_SUCC(ret) && !is_single_row(affected_rows)) {
@@ -597,6 +604,296 @@ int ObPrivSqlService::revoke_routine(
  * obj_priv_array + option: new privs of obj
  * new_schema_version_ora : used for new schemas
  */
+static int lock_native_routine_for_privileges(const ObRoutineInfo &expected, ObMySQLTransaction &transaction)
+{
+  const auto valid_id = [](uint64_t id) { return id > 0 && id <= INT64_MAX; };
+  if (!expected.is_native() || !expected.is_native_binding_valid() ||
+      expected.get_routine_type() != ROUTINE_FUNCTION_TYPE || expected.get_package_id() != OB_INVALID_ID ||
+      !valid_id(expected.get_routine_id()) || !valid_id(expected.get_database_id()) ||
+      !valid_id(expected.get_owner_id()) || expected.get_schema_version() <= 0 ||
+      expected.get_overload() < 0 || expected.get_routine_name().empty()) return OB_INVALID_ARGUMENT;
+  if (!transaction.is_started()) return OB_STATE_NOT_MATCH;
+
+  int ret = OB_SUCCESS;
+  ObSqlString sql;
+  // __all_routine's key includes package_id. Lock the exact standalone row,
+  // including when this is the first grant and no object ACL row exists yet.
+  if (OB_FAIL(sql.assign_fmt(
+      "SELECT database_id,owner_id,overload,schema_version,routine_type,native_abi_version,"
+      "routine_name,native_module_id,native_implementation_id FROM oceanbase.__all_routine "
+      "WHERE routine_id=%lu AND package_id=%lu FOR UPDATE",
+      expected.get_routine_id(), expected.get_package_id()))) return ret;
+  {
+    ObISQLClient::ReadResult result;
+    if (OB_FAIL(transaction.read(result, sql.ptr()))) {
+    } else if (!result.get_result()) ret = OB_ERR_UNEXPECTED;
+    else {
+      auto &row = *result.get_result();
+      ret = row.next();
+      if (ret == OB_ITER_END) ret = OB_ERR_SP_DOES_NOT_EXIST;
+      const int64_t values[] = {int64_t(expected.get_database_id()), int64_t(expected.get_owner_id()),
+          expected.get_overload(), expected.get_schema_version(), int64_t(ROUTINE_FUNCTION_TYPE),
+          int64_t(expected.get_native_abi_version())};
+      for (int64_t i = 0; OB_SUCC(ret) && i < 6; ++i) {
+        int64_t value = 0;
+        if (OB_FAIL(row.get_int(i, value))) {}
+        else if (value != values[i]) ret = OB_STATE_NOT_MATCH;
+      }
+      const ObString names[] = {expected.get_routine_name(), expected.get_native_module_id(),
+          expected.get_native_implementation_id()};
+      for (int64_t i = 0; OB_SUCC(ret) && i < 3; ++i) {
+        ObString value;
+        if (OB_FAIL(row.get_varchar(i + 6, value))) {}
+        else if (value != names[i]) ret = OB_STATE_NOT_MATCH;
+      }
+      if (OB_SUCC(ret)) {
+        ret = row.next();
+        if (ret == OB_ITER_END) ret = OB_SUCCESS;
+        else if (ret == OB_SUCCESS) ret = OB_ERR_UNEXPECTED;
+      }
+    }
+    const int close_ret = result.close();
+    if (OB_SUCC(ret)) ret = close_ret;
+    if (OB_FAIL(ret)) return ret;
+  }
+
+  return ret;
+}
+
+int ObPrivSqlService::get_native_routine_privileges_for_drop(const ObRoutineInfo &expected,
+    ObMySQLTransaction &transaction, ObIArray<ObObjPriv> &privileges)
+{
+  return read_native_routine_privileges(expected, transaction, privileges);
+}
+
+int ObPrivSqlService::read_native_routine_privileges(const ObRoutineInfo &expected,
+    ObMySQLTransaction &transaction, ObIArray<ObObjPriv> &privileges)
+{
+  privileges.reset();
+  int ret = lock_native_routine_for_privileges(expected, transaction);
+  if (OB_FAIL(ret)) return ret;
+  ObSqlString sql;
+  if (OB_FAIL(sql.assign_fmt(
+      "SELECT grantee_id,grantor_id,col_id,priv_id,priv_option FROM oceanbase.__all_objauth "
+      "WHERE obj_id=%lu AND objtype=%lu ORDER BY grantee_id,grantor_id,col_id,priv_id FOR UPDATE",
+      expected.get_routine_id(), uint64_t(ObObjectType::FUNCTION)))) return ret;
+  ObISQLClient::ReadResult result;
+  if (OB_FAIL(transaction.read(result, sql.ptr()))) {
+  } else if (!result.get_result()) ret = OB_ERR_UNEXPECTED;
+  else {
+    auto &row = *result.get_result();
+    std::tuple<int64_t, int64_t, int64_t, int64_t> previous{};
+    bool have_previous = false;
+    while (OB_SUCC(ret) && (ret = row.next()) == OB_SUCCESS) {
+      int64_t values[5] = {};
+      for (int64_t i = 0; OB_SUCC(ret) && i < 5; ++i) ret = row.get_int(i, values[i]);
+      if (OB_FAIL(ret)) break;
+      const auto key = std::make_tuple(values[0], values[1], values[2], values[3]);
+      if (values[0] <= 0 || values[1] <= 0 || values[2] < 0 ||
+          values[3] <= OBJ_PRIV_ID_NONE || values[3] >= OBJ_PRIV_ID_MAX ||
+          (values[4] != NO_OPTION && values[4] != GRANT_OPTION) ||
+          (have_previous && !(previous < key))) {
+        ret = OB_INVALID_DATA; break;
+      }
+      const bool new_group = !have_previous || std::get<0>(previous) != values[0] ||
+          std::get<1>(previous) != values[1] || std::get<2>(previous) != values[2];
+      if (new_group) {
+        if (privileges.count() >= 16384) { ret = OB_SIZE_OVERFLOW; break; }
+        ObObjPriv group;
+        group.set_user_id(values[0]); group.set_grantee_id(values[0]); group.set_grantor_id(values[1]);
+        group.set_obj_id(expected.get_routine_id()); group.set_objtype(uint64_t(ObObjectType::FUNCTION));
+        group.set_col_id(values[2]); group.set_schema_version(expected.get_schema_version());
+        if (OB_FAIL(privileges.push_back(group))) break;
+      }
+      ObPackedObjPriv bits = 0;
+      if (OB_FAIL(ObPrivPacker::raw_obj_priv_to_packed_info(values[4], values[3], bits))) break;
+      auto &group = privileges.at(privileges.count() - 1);
+      group.set_obj_privs(group.get_obj_privs() | bits);
+      if (!group.is_valid()) { ret = OB_INVALID_DATA; break; }
+      previous = key;
+      have_previous = true;
+    }
+    if (ret == OB_ITER_END) ret = OB_SUCCESS;
+  }
+  const int close_ret = result.close();
+  if (OB_SUCC(ret)) ret = close_ret;
+  if (OB_FAIL(ret)) privileges.reset();
+  return ret;
+}
+
+int ObPrivSqlService::change_native_routine_privileges_authorized(ObSchemaGetterGuard &guard,
+    const ObSessionPrivInfo &actor, const ObIArray<uint64_t> &enabled_roles,
+    const ObRoutineInfo &expected, uint64_t grantor, uint64_t grantee, ObPrivSet rights,
+    NativePrivilegeChange change, bool grant_option, int64_t new_schema_version,
+    ObMySQLTransaction &transaction, const ObString *ddl_stmt_str,
+    ObPackedObjPriv &before, ObPackedObjPriv &after, RoutinePrivilegeOverlay *private_view)
+{
+  before = after = 0;
+  const ObPrivSet supported = OB_PRIV_EXECUTE | OB_PRIV_ALTER_ROUTINE;
+  if (grantor == 0 || grantor > INT64_MAX || grantee == 0 || grantee > INT64_MAX ||
+      rights == 0 || (rights & ~supported) != 0 || new_schema_version <= expected.get_schema_version() ||
+      (change != NativePrivilegeChange::GRANT && change != NativePrivilegeChange::REVOKE &&
+       change != NativePrivilegeChange::REVOKE_GRANT_OPTION) ||
+      (grant_option && change != NativePrivilegeChange::GRANT)) return OB_INVALID_ARGUMENT;
+  if (private_view && private_view->is_retired()) return OB_STATE_NOT_MATCH;
+  try {
+    const ObUserInfo *recipient = nullptr;
+    int ret = guard.get_user_info(grantee, recipient);
+    if (OB_FAIL(ret)) return ret;
+    if (!recipient) return OB_USER_NOT_EXIST;
+    ObSEArray<ObObjPriv, 4> grants;
+    if (OB_FAIL(read_native_routine_privileges(expected, transaction, grants))) return ret;
+    if (OB_FAIL(guard.check_native_routine_priv(actor, enabled_roles, expected,
+        rights | OB_PRIV_GRANT, &grants, grantor))) return ret;
+    // Same transaction, same locked object. Re-read the selected grantee's
+    // current key for the delta; never use the authorization snapshot as a
+    // replacement payload that could overwrite another grantor's rights.
+    ret = change_native_routine_privileges(expected, grantor, grantee, rights,
+        change, grant_option, new_schema_version, transaction, ddl_stmt_str, before, after, nullptr);
+    if (OB_SUCC(ret) && private_view)
+      ret = private_view->record_object_change(expected, grantor, grantee, new_schema_version,
+          before, after, actor.user_id_);
+    if (OB_FAIL(ret)) before = after = 0;
+    return ret;
+  } catch (const std::bad_alloc &) { before = after = 0; return OB_ALLOCATE_MEMORY_FAILED; }
+  catch (...) { before = after = 0; return OB_ERR_UNEXPECTED; }
+}
+
+int ObPrivSqlService::change_native_routine_privileges(const ObRoutineInfo &expected,
+    uint64_t grantor, uint64_t grantee, ObPrivSet rights, NativePrivilegeChange change,
+    bool grant_option, int64_t new_schema_version, ObMySQLTransaction &transaction,
+    const ObString *ddl_stmt_str, ObPackedObjPriv &before, ObPackedObjPriv &after,
+    RoutinePrivilegeOverlay *private_view)
+{
+  return mutate_native_routine_privileges(expected, grantor, grantee, rights, change, grant_option,
+      new_schema_version, transaction, ddl_stmt_str, before, after, private_view, nullptr);
+}
+
+int ObPrivSqlService::apply_native_routine_privilege_reduction(const ObRoutineInfo &expected,
+    uint64_t grantor, uint64_t grantee, ObPackedObjPriv expected_before, ObPackedObjPriv desired_after,
+    int64_t new_schema_version, ObMySQLTransaction &transaction, const ObString *ddl_stmt_str)
+{
+  ObPackedObjPriv allowed = 0;
+  int ret = OB_SUCCESS;
+  for (const ObRawObjPriv right : {OBJ_PRIV_ID_EXECUTE, OBJ_PRIV_ID_ALTER}) {
+    ObPackedObjPriv plain = 0, grantable = 0;
+    if (OB_FAIL(ObPrivPacker::raw_obj_priv_to_packed_info(NO_OPTION, right, plain)) ||
+        OB_FAIL(ObPrivPacker::raw_obj_priv_to_packed_info(GRANT_OPTION, right, grantable))) return ret;
+    for (const auto bits : {expected_before, desired_after})
+      if ((bits & (grantable ^ plain)) && !(bits & plain)) return OB_INVALID_ARGUMENT;
+    allowed |= grantable;
+  }
+  if ((expected_before & ~allowed) || (desired_after & ~expected_before)) return OB_INVALID_ARGUMENT;
+  const NativeReduction reduction{expected_before, desired_after};
+  ObPackedObjPriv before = 0, after = 0;
+  return mutate_native_routine_privileges(expected, grantor, grantee, OB_PRIV_EXECUTE | OB_PRIV_ALTER_ROUTINE,
+      NativePrivilegeChange::REVOKE, false, new_schema_version, transaction, ddl_stmt_str,
+      before, after, nullptr, &reduction);
+}
+
+int ObPrivSqlService::mutate_native_routine_privileges(const ObRoutineInfo &expected,
+    uint64_t grantor, uint64_t grantee, ObPrivSet rights, NativePrivilegeChange change,
+    bool grant_option, int64_t new_schema_version, ObMySQLTransaction &transaction,
+    const ObString *ddl_stmt_str, ObPackedObjPriv &before, ObPackedObjPriv &after,
+    RoutinePrivilegeOverlay *private_view, const NativeReduction *reduction)
+{
+  before = after = 0;
+  const auto valid_id = [](uint64_t id) { return id > 0 && id <= INT64_MAX; };
+  const ObPrivSet supported = OB_PRIV_EXECUTE | OB_PRIV_ALTER_ROUTINE;
+  if (!valid_id(grantor) || !valid_id(grantee) || new_schema_version <= expected.get_schema_version() ||
+      rights == 0 || (rights & ~supported) != 0 ||
+      (change != NativePrivilegeChange::GRANT && change != NativePrivilegeChange::REVOKE &&
+       change != NativePrivilegeChange::REVOKE_GRANT_OPTION) ||
+      (grant_option && change != NativePrivilegeChange::GRANT)) return OB_INVALID_ARGUMENT;
+  if (private_view && private_view->is_retired()) return OB_STATE_NOT_MATCH;
+  int ret = lock_native_routine_for_privileges(expected, transaction);
+  if (OB_FAIL(ret)) return ret;
+  ObSqlString sql;
+  const ObObjPrivSortKey key(expected.get_routine_id(), uint64_t(ObObjectType::FUNCTION),
+      OBJ_LEVEL_FOR_TAB_PRIV, grantor, grantee);
+  // Never use guard/session ACL here: a preceding statement in the caller's
+  // transaction may already have changed a right or its grant option.
+  if (OB_FAIL(sql.assign_fmt(
+      "SELECT priv_id,priv_option FROM oceanbase.__all_objauth WHERE obj_id=%lu "
+      "AND objtype=%lu AND col_id=%lu AND grantor_id=%lu AND grantee_id=%lu "
+      "ORDER BY priv_id FOR UPDATE", key.obj_id_, key.obj_type_, key.col_id_, grantor, grantee))) return ret;
+  const ObRawObjPriv raw[] = {OBJ_PRIV_ID_EXECUTE, OBJ_PRIV_ID_ALTER};
+  int old_options[] = {-1, -1}; // absent, ordinary, grantable
+  {
+    ObISQLClient::ReadResult result;
+    if (OB_FAIL(transaction.read(result, sql.ptr()))) {
+    } else if (!result.get_result()) ret = OB_ERR_UNEXPECTED;
+    else {
+      auto &row = *result.get_result();
+      while (OB_SUCC(ret) && (ret = row.next()) == OB_SUCCESS) {
+        int64_t id = 0, option = 0;
+        if (OB_FAIL(row.get_int(int64_t{0}, id)) || OB_FAIL(row.get_int(int64_t{1}, option))) break;
+        const int index = id == raw[0] ? 0 : id == raw[1] ? 1 : -1;
+        if (index < 0 || old_options[index] != -1 || (option != NO_OPTION && option != GRANT_OPTION)) {
+          ret = OB_INVALID_DATA; break;
+        }
+        old_options[index] = int(option);
+      }
+      if (ret == OB_ITER_END) ret = OB_SUCCESS;
+    }
+    const int close_ret = result.close();
+    if (OB_SUCC(ret)) ret = close_ret;
+    if (OB_FAIL(ret)) return ret;
+  }
+
+  ObRawObjPrivArray ordinary, grantable, removed;
+  ObPackedObjPriv old_bits = 0, new_bits = 0;
+  const ObPrivSet requested[] = {OB_PRIV_EXECUTE, OB_PRIV_ALTER_ROUTINE};
+  for (int i = 0; OB_SUCC(ret) && i < 2; ++i) {
+    int next = old_options[i];
+    if (reduction) {
+      ObPackedObjPriv plain = 0, grantable = 0;
+      if (OB_FAIL(ObPrivPacker::raw_obj_priv_to_packed_info(NO_OPTION, raw[i], plain)) ||
+          OB_FAIL(ObPrivPacker::raw_obj_priv_to_packed_info(GRANT_OPTION, raw[i], grantable))) break;
+      next = !(reduction->after & plain) ? -1 :
+          (reduction->after & grantable) == grantable ? GRANT_OPTION : NO_OPTION;
+    } else if (rights & requested[i]) {
+      if (change == NativePrivilegeChange::GRANT)
+        next = grant_option || old_options[i] == GRANT_OPTION ? GRANT_OPTION : NO_OPTION;
+      else if (change == NativePrivilegeChange::REVOKE) next = -1;
+      else if (next == GRANT_OPTION) next = NO_OPTION;
+    }
+    ObPackedObjPriv bits = 0;
+    if (old_options[i] >= 0) {
+      if (OB_FAIL(ObPrivPacker::raw_obj_priv_to_packed_info(old_options[i], raw[i], bits))) break;
+      old_bits |= bits;
+    }
+    if (next >= 0) {
+      if (OB_FAIL(ObPrivPacker::raw_obj_priv_to_packed_info(next, raw[i], bits))) break;
+      new_bits |= bits;
+    }
+    if (next != old_options[i]) {
+      ret = (next < 0 ? removed : next == GRANT_OPTION ? grantable : ordinary).push_back(raw[i]);
+    }
+  }
+  if (OB_FAIL(ret)) return ret;
+  if (reduction && old_bits != reduction->before) return OB_STATE_NOT_MATCH;
+  if (old_bits != new_bits) {
+    ObDMLExecHelper exec(transaction);
+    ObDMLSqlSplicer dml;
+    // Multiple changed rights still produce only ONE schema operation at the
+    // reserved version. Unchanged rights must not acquire new history rows.
+    if (OB_FAIL(insert_objauth(key, new_schema_version, ordinary, false, NO_OPTION, exec, dml)) ||
+        OB_FAIL(insert_objauth(key, new_schema_version, grantable, false, GRANT_OPTION, exec, dml)) ||
+        OB_FAIL(insert_objauth(key, new_schema_version, removed, true, NO_OPTION, exec, dml))) return ret;
+    if (OB_FAIL(log_obj_priv_operation(key, new_schema_version,
+        new_bits == 0 ? OB_DDL_OBJ_PRIV_DELETE : OB_DDL_OBJ_PRIV_GRANT_REVOKE,
+        ddl_stmt_str, transaction))) return ret;
+  }
+  // Publish only after the SQL effects and their invalidation record succeed.
+  // A view failure still aborts the caller's operation; it must roll back SQL.
+  if (private_view && OB_FAIL(private_view->record_object_change(expected, grantor, grantee,
+      new_schema_version, old_bits, new_bits))) return ret;
+  before = old_bits;
+  after = new_bits;
+  return ret;
+}
+
 int ObPrivSqlService::grant_table_ora_only(
     const ObString *ddl_stmt_str,
     ObISQLClient &sql_client,

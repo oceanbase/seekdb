@@ -206,7 +206,7 @@ void obpl_mysql_wrap_get_user_var_into_subquery(ObParseCtx *parse_ctx, ParseNode
 /* reserved key words */
 %token
 //-----------------------------reserved keyword begin-----------------------------------------------
-        ALTER BEFORE BY CALL CASE CONDITION CONTINUE CREATE CURRENT_USER CURSOR DECLARE
+        ALTER AS BEFORE BY CALL CASE CONDITION CONTINUE CREATE CURRENT_USER CURSOR DECLARE
         DEFAULT DELETE DETERMINISTIC DROP EACH ELSE ELSEIF EXISTS EXIT FETCH FOR FROM IF IN
         INDEX INOUT INSERT INTO IS ITERATE LEAVE LIMIT LONG LOOP MODIFIES  NOT ON OR OUT
         PROCEDURE READS RENAME REPEAT REPLACE RESIGNAL RETURN SELECT SIGNAL SQL SQLEXCEPTION
@@ -224,7 +224,7 @@ void obpl_mysql_wrap_get_user_var_into_subquery(ObParseCtx *parse_ctx, ParseNode
 //-----------------------------non_reserved keyword begin-------------------------------------------
       AFTER AT AUTHID BEGIN_KEY BINARY_INTEGER BODY C CATALOG_NAME CLASS_ORIGIN CLOSE COLUMN_NAME COMMENT
       CONSTRAINT_CATALOG CONSTRAINT_NAME CONSTRAINT_ORIGIN CONSTRAINT_SCHEMA CONTAINS COUNT CURSOR_NAME
-      DATA DAY DEFINER DISABLE ENABLE END_KEY EXTEND FOLLOWS FOUND FUNCTION HANDLER HOUR INTERFACE INTERVAL INVOKER JSON LANGUAGE
+      DATA DAY DEFINER DISABLE ENABLE END_KEY EXTEND FOLLOWS FOUND FUNCTION HANDLER HOUR INTERFACE INTERVAL INVOKER JSON LANGUAGE VARIADIC
       MESSAGE_TEXT MINUTE MONTH MYSQL_ERRNO NATIONAL NEXT NO OF OPEN PACKAGE PRAGMA PRECEDES RECORD RETURNS ROW ROWTYPE
       SCHEMA_NAME SECOND SECURITY SUBCLASS_ORIGIN TABLE_NAME TO USER TYPE VALUE DATETIME TIMESTAMP TIME DATE YEAR
       TEXT NCHAR NVARCHAR BOOL BOOLEAN ENUM BIT FIXED SIGNED STARTS ROLE SUBMIT CANCEL JOB RECOVER
@@ -248,6 +248,7 @@ void obpl_mysql_wrap_get_user_var_into_subquery(ObParseCtx *parse_ctx, ParseNode
 %type <node> create_function_stmt function_body
 %type <node> drop_procedure_stmt drop_function_stmt
 %type <node> alter_procedure_stmt alter_function_stmt opt_sp_alter_chistics
+%type <node> native_routine_signature native_routine_signature_list native_routine_signature_type
 %type <node> sp_unlabeled_block
 %type <node> sp_block_content opt_sp_decls sp_proc_stmts sp_decl sp_decls
 %type <node> sp_labeled_block label_ident opt_sp_label
@@ -1381,10 +1382,16 @@ sp_fparam_list:
 ;
 
 sp_fparam:
-    ident param_type
+    ident param_type opt_param_default
     {
-      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SP_PARAM, 2, $1, $2);
+      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SP_PARAM, 3, $1, $2, $3);
       $$->value_ = MODE_IN;
+    }
+  | VARIADIC ident param_type '[' ']'
+    {
+      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SP_PARAM, 3, $2, $3, NULL);
+      $$->int32_values_[0] = MODE_IN;
+      $$->int32_values_[1] = 1; /* native variadic array; child 1 is element type */
     }
 ;
 
@@ -1480,6 +1487,12 @@ procedure_body:
 
 function_body:
   sp_proc_independent_statement { $$ = $1; }
+  | AS STRING ',' STRING LANGUAGE ident
+    {
+      // Keep native identity separate from the diagnostic/source text which
+      // create_function_stmt stores on the body node. No synthetic RETURN.
+      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SF_NATIVE_BODY, 3, $2, $4, $6);
+    }
 ;
 
 /*****************************************************************************
@@ -1498,6 +1511,42 @@ alter_function_stmt:
     ALTER FUNCTION sp_name opt_sp_alter_chistics
     {
       malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SF_ALTER, 2, $3, $4);
+    }
+  | ALTER FUNCTION sp_name native_routine_signature opt_sp_alter_chistics
+    {
+      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SF_ALTER, 3, $3, $5, $4);
+    }
+;
+
+native_routine_signature:
+    '(' ')'
+    {
+      malloc_terminal_node($$, parse_ctx->mem_pool_, T_SP_PARAM_LIST);
+    }
+  | '(' native_routine_signature_list ')'
+    {
+      merge_nodes($$, parse_ctx->mem_pool_, T_SP_PARAM_LIST, $2);
+    }
+;
+
+native_routine_signature_list:
+    native_routine_signature_type { $$ = $1; }
+  | native_routine_signature_list ',' native_routine_signature_type
+    {
+      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_LINK_NODE, 2, $1, $3);
+    }
+;
+
+native_routine_signature_type:
+    param_type
+    {
+      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SP_PARAM, 1, $1);
+      $$->value_ = 0;
+    }
+  | param_type '[' ']'
+    {
+      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SP_PARAM, 1, $1);
+      $$->value_ = 1;
     }
 ;
 
@@ -2021,6 +2070,11 @@ drop_function_stmt:
     DROP FUNCTION opt_if_exists sp_name
     {
       malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SF_DROP, 1, $4);
+      $$->value_ = $3;
+    }
+  | DROP FUNCTION opt_if_exists sp_name native_routine_signature
+    {
+      malloc_non_terminal_node($$, parse_ctx->mem_pool_, T_SF_DROP, 2, $4, $5);
       $$->value_ = $3;
     }
 ;

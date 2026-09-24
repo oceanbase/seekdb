@@ -70,6 +70,31 @@ public:
     variables.set_name_case_mode(mode);
     return manager.sys_variable_mgr_.add_sys_variable(variables);
   }
+  static int grant_object(ObSchemaMgr &manager, uint64_t object, uint64_t grantor,
+                          uint64_t grantee, ObPackedObjPriv rights,
+                          ObObjectType type = ObObjectType::FUNCTION,
+                          uint64_t column = OBJ_LEVEL_FOR_TAB_PRIV)
+  {
+    ObObjPriv privilege;
+    privilege.set_user_id(grantee); privilege.set_grantee_id(grantee);
+    privilege.set_grantor_id(grantor); privilege.set_obj_id(object);
+    privilege.set_objtype(static_cast<uint64_t>(type)); privilege.set_col_id(column);
+    privilege.set_schema_version(42); privilege.set_obj_privs(rights);
+    return manager.priv_mgr_.add_obj_priv(privilege);
+  }
+  static int grant_database(ObSchemaMgr &manager, uint64_t user, const char *database, ObPrivSet rights)
+  {
+    ObDBPriv privilege;
+    privilege.set_user_id(user); privilege.set_schema_version(42); privilege.set_priv_set(rights);
+    int ret = privilege.set_database_name(database);
+    if (ret == common::OB_SUCCESS) ret = manager.priv_mgr_.add_db_priv(privilege);
+    return ret;
+  }
+  static int revoke_object(ObSchemaMgr &manager, uint64_t object, uint64_t grantor, uint64_t grantee)
+  {
+    return manager.priv_mgr_.del_obj_priv(ObObjPrivSortKey(object,
+        static_cast<uint64_t>(ObObjectType::FUNCTION), OBJ_LEVEL_FOR_TAB_PRIV, grantor, grantee));
+  }
   static int bind(ObSchemaGetterGuard &guard, ObMultiVersionSchemaService &service, ObSchemaMgr &manager,
                   ObSchemaGetterGuard::SchemaGuardType type = ObSchemaGetterGuard::RUNTIME_SCHEMA_GUARD)
   {
@@ -85,13 +110,13 @@ public:
     return ret;
   }
   static int add(ObSchemaMgr &manager, uint64_t database, const char *name,
-                 uint64_t id, ObRoutineType type, int64_t version)
+                 uint64_t id, ObRoutineType type, int64_t version, uint64_t overload = 0)
   {
     ObSimpleRoutineSchema routine;
     routine.set_database_id(database);
     routine.set_package_id(common::OB_INVALID_ID);
     routine.set_routine_id(id);
-    routine.set_overload(0);
+    routine.set_overload(overload);
     routine.set_routine_type(type);
     routine.set_schema_version(version);
     int ret = routine.set_routine_name(common::ObString::make_string(name));

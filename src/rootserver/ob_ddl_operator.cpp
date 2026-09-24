@@ -38,6 +38,7 @@
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
 #include "share/schema/ob_dependency_info.h"  // relocated-definition owner
 #include "share/schema/ob_multi_version_schema_service.h"  // relocated-definition owner
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -315,6 +316,20 @@ int ObDDLOperator::drop_database(const ObDatabaseSchema &db_schema,
         } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
         } else if (OB_FAIL(schema_service_impl->get_routine_sql_service().drop_routine(
                            *routine_info, new_schema_version, trans))) {
+        } else if (routine_info->is_native()) {
+          // DROP DATABASE bypasses RoutineCatalogWriter. Remove the same
+          // logical edge here on its transaction, after extension instances
+          // and memberships have been locked/removed above. Never load code
+          // during teardown; a missing/corrupt edge fails the whole DDL.
+          if (!routine_info->is_native_binding_valid()) {
+            ret = OB_INVALID_ARGUMENT;
+          } else if (share::g_mp == nullptr) {
+            ret = OB_NOT_INIT;
+          } else {
+            ret = share::g_mp->mutate_native_routine_dependency(trans,
+                routine_info->get_native_module_id(), routine_info->get_native_implementation_id(),
+                routine_info->get_routine_id(), false);
+          }
         }
       }
     }

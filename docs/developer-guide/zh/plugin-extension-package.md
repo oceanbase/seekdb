@@ -6,15 +6,20 @@ SQL、不启动事务、不装载动态库，也不授予包任何权限。
 
 ## 文件布局与版本选择
 
-管理员指定的包根目录下，每个包使用一个子目录：
+新安装采用 PG 风格的平铺目录；管理员通过 `--extension-dir` 指定根目录：
 
 ```text
-<root>/text_ops/
+<root>/
   text_ops.control
   text_ops--1.0.sql
   text_ops--1.0--1.1.sql
   text_ops--1.1.control   # 可选，覆盖主 control 中该版本的字段
 ```
+
+兼容读取原有 `<root>/text_ops/text_ops.control` 子目录布局，但同名主 control 在
+两种布局中同时存在时拒绝读取，不静默选择其中之一。损坏的平铺 control 也不会
+回退到旧包。升级既有部署时由管理员移走旧包目录；安装过程不自动删除历史文件。
+仓库源码仍按包分目录组织，CMake 安装产物改为平铺。
 
 `read_extension_package(root, name, requested_version, source, error)` 是核心 C++
 入口；空版本选择 control 的 `default_version`，非空版本选择精确的目标版本。
@@ -67,6 +72,7 @@ C FFI 字段 `SEEKDB_RUNTIME_PACKAGE_FROM_VERSION` 返回该身份，C++ 会再�
 default_version = '1.0'
 comment = 'Pure SQL text functions'
 relocatable = true
+superuser = false
 # requires = 'base_text, utility'
 # native_module = 'seekdb.text'
 ```
@@ -75,27 +81,60 @@ relocatable = true
 每行一个赋值；允许空行、整行和行尾 `#` 注释。字符串必须单引号包围，两个连续
 单引号表示一个单引号；字符串内部的 `#` 是普通字符。没有反斜线转义或多行字符串。
 `relocatable` 只接受未加引号的 `true`、`false`，默认 false。
+`superuser` 同样只接受未加引号的布尔值，默认 true。
 
 | 字段 | 读取语义 |
 | --- | --- |
 | default_version | 默认安装版本；缺省时调用者必须显式选择版本 |
+| directory | 可选脚本及次级 control 目录，默认主 control 所在目录；相对路径相对于主 control，绝对路径也必须位于管理员配置的可信根目录内 |
+| module_pathname | 可选 `MODULE_PATHNAME` 文本替换值，最多 4096 字节；按每一步目的版本的有效 control 替换，不自动加载库、不等同于 native_module |
 | native_module | 可选的现有 native catalog 逻辑 ID，不是文件路径；只能为小写 ASCII 字母、数字、`._-`，1–255 字节；省略表示纯 SQL 包 |
 | install_source | 缺省或 `'sql'` 使用基础 SQL；`'native'` 由安装回调提供全部对象，必须有 native_module 和 default_version；当前只支持直接安装 default_version，更新仍使用显式 SQL 边 |
 | schema | 可选固定命名空间，1–255 字节 UTF-8；后续须由 seekdb 名称解析层解释，不等同于 PG schema |
 | relocatable | 是否允许安装位置可变；true 与固定 schema 互斥，读取本身不执行对象搬迁 |
+| superuser | 安装／更新是否要求 SUPER；默认 true。false 使用调用者本身的权限，逐条 SQL 仍须通过正常权限检查，绝不切换为管理员 |
 | requires | 逗号分隔的包名，最多 64 个；拒绝空项、重复和自依赖；仅返回声明，不验证依赖已经安装 |
 | comment | 描述性字符串，当前不返回、不持久化，不影响权限 |
 
-重复键、未知键、控制字符与 NUL 被拒绝。包括 `trusted` / `superuser` 在内的
-未实现选项不能被静默接受。SQL 文本不经过变量替换或字符串拼接；版本号、schema
-和模块 ID 不会自动插入 SQL。
+重复键、未知键、控制字符与 NUL 被拒绝。包括 `trusted` 在内的
+未实现选项不能被静默接受。仅配置 `module_pathname` 时对 SQL 中的
+`MODULE_PATHNAME` 作 PG 风格逐字替换（包括字符串和注释），不是参数绑定或 SQL
+转义；可信包作者负责完整 SQL 的合法性。未配置时保留原文。不对版本号、schema、
+owner 或 native_module 作隐式替换。每个脚本仍独立解析，替换前后分别受包大小限制。
+这只实现包源预处理，本身不赋予原生代码权限。原生 `AS ... LANGUAGE C` 声明现已
+另行接入实验性 routine 创建和调用路径，参见
+[native_math 参考包](../../../plugins/sql_packages/native_math/README.md)；其权限、类型、
+依赖与实际安装验证不能由 `MODULE_PATHNAME` 替换成功来代替。
+
+### 安装权限策略
+
+对齐 [PG control 的 superuser 选项](https://www.postgresql.org/docs/18/extend-extensions.html)：
+`superuser = false` 不是 `trusted = true`，不会提升执行身份，也不能绕过原生
+`LANGUAGE C` 创建、routine、GRANT／REVOKE 的各自权限检查。Root 使用已认证
+调用者的权限再次准入；SQL 层在调用安装回调前先检查包策略。
+
+版本 control 可以覆盖主文件的 superuser 字段；选中的多段安装／更新路径只要
+任一步要求管理员，整条路径就要求 SUPER。旧的起始版本不会重跑，其权限配置
+也不会无故加入本次路径。策略随拥有数据的 source／请求传递并绑定校验，不把
+它持久化为对象 owner，也不改变同版本 no-op 的身份和权限检查。
+
+**默认行为变化**：以前没有独立的包级管理员策略，纯 SQL 包仅受对象权限限制；
+现在省略 `superuser` 按 PG 默认要求 SUPER。已有允许普通用户安装的包应由可信
+作者显式加入 `superuser = false`。随仓库交付的 text_ops、text_composed 和
+Rust text SQL wrapper／builder 示例已显式配置；GIS 与 native_math 保留默认要求。
+
+Rust 生成器可通过 `PackageOptions { superuser: Some(false), ..Default::default() }`
+设置主 control，通过 `VersionControl.superuser` 设置版本覆盖；None 表示不输出，
+沿用继承／默认规则。宿主 C 源结构未扩展：新增独立 policy 入口，旧入口保留
+默认要求管理员的语义，避免把旧结构尾部 padding 当作权限标志。
 
 ### 版本 control 与迁移期间依赖
 
 可选的 `name--version.control` 按字段覆盖 `name.control`。缺省字段继承主文件；
 `requires = ''` 显式清空依赖，而不是继承或追加。次级文件不得设置 `default_version`
 或 `directory`，其他字段仍使用同一语法、大小、路径和语义校验；主 control 本身
-也必须有效。当前未实现任意 directory 配置。
+也必须有效。主 control 的 directory 决定脚本和次级 control 的位置，不允许次级
+control 重定向目录。CLI 检查同一脚本目录内所有次级 control。
 
 例如主 control 声明 `requires = 'base'`，基础版本覆盖为 `alpha`，中间版本覆盖为
 `beta`，目标版本覆盖为 `gamma`。链式新安装返回永久 `requires_ = [gamma]` 和
@@ -126,7 +165,7 @@ provider，但只将最终 requires 写成 Extension 依赖边；临时 provider
 
 - control 最大 64 KiB，所选全部 SQL 合计最大 4 MiB，均要求 UTF-8、无 NUL 的普通文件。
   基础 SQL 要求非空白，更新边允许空 SQL；语法合法性由后续内核 parser 负责。
-- 每包目录最多枚举 4096 项，版本图最多 1024 个版本，因此所选路径最多 1024 个文件；
+- 每个脚本目录最多枚举 4096 项（平铺时包含其他包的文件），版本图最多 1024 个版本，因此所选路径最多 1024 个文件；
   同包命名的 SQL 文件须符合基础/更新两种布局。无安装起点或无法到达目标时返回
   文件不存在错误；不把孤立更新脚本当作基础安装脚本。
 - canonical path 必须仍位于包根目录内。包目录、control 和 SQL 的符号链接逃逸
@@ -144,7 +183,7 @@ provider，但只将最终 requires 写成 Extension 依赖边；临时 provider
 ## 交付和当前验证
 
 `plugins/sql_packages/text_ops` 是不含动态库的源文件示例；实验插件开关开启时，
-CMake 顶层 `plugins` 安装组件将它放入 `${CMAKE_INSTALL_DATADIR}/seekdb/extension/text_ops`。
+CMake 顶层 `plugins` 安装组件将文件平铺放入 `${CMAKE_INSTALL_DATADIR}/seekdb/extension`。
 纯 SQL 子目录不继承 native 插件的 `EXCLUDE_FROM_ALL`；无需构建 GIS/模型动态库
 就能交付 SQL 文件。可以执行 `cmake --install build_release --prefix <目录> --component plugins`。
 复制文件不等于创建数据库 Extension，也不触发任何 native 初始化。

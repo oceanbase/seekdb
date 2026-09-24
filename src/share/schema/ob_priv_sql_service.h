@@ -24,6 +24,7 @@
 
 namespace oceanbase
 {
+namespace common { class ObMySQLTransaction; }
 namespace share
 {
 class ObDMLSqlSplicer;
@@ -31,6 +32,10 @@ namespace schema
 {
 struct ObOriginalDBKey;
 struct ObTablePrivSortKey;
+class ObRoutineInfo;
+class RoutinePrivilegeOverlay;
+class ObSchemaGetterGuard;
+struct ObSessionPrivInfo;
 
 class ObPrivSqlService : public ObDDLSqlService
 {
@@ -38,6 +43,45 @@ public:
   ObPrivSqlService(ObSchemaService &schema_service)
     : ObDDLSqlService(schema_service) {}
   virtual ~ObPrivSqlService() {}
+
+  enum class NativePrivilegeChange { GRANT, REVOKE, REVOKE_GRANT_OPTION };
+  // Host holds serialized user/role/database metadata admission and supplies a
+  // current guard. Recheck the selected grantor against the FULL transactional
+  // object ACL before invoking the delta writer below. The grantor must be the
+  // actor or one of its currently enabled/reachable roles. No grantor selection,
+  // dependency cascade, transaction ownership or cache publication here.
+  int change_native_routine_privileges_authorized(ObSchemaGetterGuard &guard,
+      const ObSessionPrivInfo &actor, const common::ObIArray<uint64_t> &enabled_roles,
+      const ObRoutineInfo &expected, uint64_t grantor, uint64_t grantee, ObPrivSet rights,
+      NativePrivilegeChange change, bool grant_option, int64_t new_schema_version,
+      common::ObMySQLTransaction &transaction, const common::ObString *ddl_stmt_str,
+      ObPackedObjPriv &before, ObPackedObjPriv &after, RoutinePrivilegeOverlay *private_view = nullptr);
+  // Host-admitted mutation of one exact (function, grantor, grantee) ACL.
+  // Requires a live caller transaction and a separately reserved schema version.
+  // Locks/rechecks the catalog identity and reads current rights on that same
+  // connection. No authorization, transaction completion or cache publication.
+  // The caller MUST roll back on error; before/after are published only on success.
+  int change_native_routine_privileges(const ObRoutineInfo &expected,
+      uint64_t grantor, uint64_t grantee, ObPrivSet rights, NativePrivilegeChange change,
+      bool grant_option, int64_t new_schema_version, common::ObMySQLTransaction &transaction,
+      const common::ObString *ddl_stmt_str, ObPackedObjPriv &before, ObPackedObjPriv &after,
+      RoutinePrivilegeOverlay *private_view = nullptr);
+  // Apply one decrease from a host-authorized whole-object revoke plan. This
+  // is NOT authorization: cascade grantors need not be roles of the actor.
+  // Locks the exact object/key and compares the entire current mask with
+  // expected_before before writing. Never adds rights or grant options; mixed
+  // privilege/option removal uses one history/operation version for the key.
+  int apply_native_routine_privilege_reduction(const ObRoutineInfo &expected,
+      uint64_t grantor, uint64_t grantee, ObPackedObjPriv expected_before, ObPackedObjPriv desired_after,
+      int64_t new_schema_version, common::ObMySQLTransaction &transaction,
+      const common::ObString *ddl_stmt_str);
+  // DROP reads every grantor/grantee/column group on this exact FUNCTION ID,
+  // including grants made earlier in the transaction. Output is owned and
+  // cleared on any read/validation/close error. No privilege deletion here.
+  static int get_native_routine_privileges_for_drop(const ObRoutineInfo &expected,
+      common::ObMySQLTransaction &transaction, common::ObIArray<ObObjPriv> &privileges);
+  static int read_native_routine_privileges(const ObRoutineInfo &expected,
+      common::ObMySQLTransaction &transaction, common::ObIArray<ObObjPriv> &privileges);
 
   virtual int grant_database(
       const ObOriginalDBKey &db_priv_key,
@@ -283,6 +327,12 @@ private:
       const common::ObString &grantor_host);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPrivSqlService);
+  struct NativeReduction { ObPackedObjPriv before, after; };
+  int mutate_native_routine_privileges(const ObRoutineInfo &expected,
+      uint64_t grantor, uint64_t grantee, ObPrivSet rights, NativePrivilegeChange change,
+      bool grant_option, int64_t new_schema_version, common::ObMySQLTransaction &transaction,
+      const common::ObString *ddl_stmt_str, ObPackedObjPriv &before, ObPackedObjPriv &after,
+      RoutinePrivilegeOverlay *private_view, const NativeReduction *reduction);
 };
 
 } //end of namespace schema

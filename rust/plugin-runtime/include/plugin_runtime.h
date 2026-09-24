@@ -351,11 +351,16 @@ typedef struct seekdb_runtime_package_input_source {
 } seekdb_runtime_package_input_source;
 int32_t seekdb_runtime_package_from_source(const seekdb_runtime_package_input_source *source,
     seekdb_runtime_package **output, char *error, uint32_t error_capacity);
+/* Additive host-only entrance; 1 means superuser=false, never elevated privileges.
+ * Existing source layout and default entrance remain unchanged. */
+int32_t seekdb_runtime_package_from_source_with_policy(const seekdb_runtime_package_input_source *source,
+    uint32_t invoker_only, seekdb_runtime_package **output, char *error, uint32_t error_capacity);
 int32_t seekdb_runtime_package_text(const seekdb_runtime_package *package,
     uint32_t field, uint32_t index, const uint8_t **data, uint32_t *length);
 int32_t seekdb_runtime_package_info(const seekdb_runtime_package *package,
     uint32_t *dependency_count, uint32_t *relocatable);
 int32_t seekdb_runtime_package_native_install(const seekdb_runtime_package *package, uint32_t *native_install);
+int32_t seekdb_runtime_package_invoker_only(const seekdb_runtime_package *package, uint32_t *invoker_only);
 int32_t seekdb_runtime_package_prerequisite_count(const seekdb_runtime_package *package, uint32_t *count);
 /* Pure validation, no SQL/lookup: <=64 unique non-self package names. */
 int32_t seekdb_runtime_extension_requires_validate(const uint8_t *name, uint32_t name_length,

@@ -32,6 +32,9 @@ private:
 // Owns mixed UPDATE commands in script order using the complete ordinary DDL
 // wire codec plus the same host-only schema versions. These scalar versions do
 // not confer write authority or replace Root's reservation tokens.
+// GRANT/REVOKE snapshots are also owned in-order, including target/actor/roles,
+// all recipients and option/behavior fields. Their presence does not admit DCL
+// in a SQL package: executors must support borrowed-transaction ACL staging.
 // Empty updates are valid (version-only/no-op); CREATE installation
 // batches above remain nonempty. Neither class performs semantic resolution.
 class ExtensionRoutineUpdateBatch final

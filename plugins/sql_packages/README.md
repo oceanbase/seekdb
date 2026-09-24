@@ -1,15 +1,33 @@
-# Pure SQL Extension packages
+# SQL Extension packages
 
 `text_ops` is a source package with a control file, an installation script and an update script,
 without a native module. It demonstrates the new Rust package reader; it is not
 yet an executable `CREATE EXTENSION` integration test.
 
 With experimental plugins enabled, the CMake `plugins` install component copies
-these files to `<prefix>/<datadir>/seekdb/extension/text_ops`. The package reader's
-root is `<prefix>/<datadir>/seekdb/extension`, not the `text_ops` subdirectory.
+these files directly to `<prefix>/<datadir>/seekdb/extension`, using the PG-style
+flat control/SQL layout. That directory is the package reader's root. Source
+examples remain grouped in subdirectories; the reader also accepts this legacy
+layout. Do not deploy both layouts for the same name: ambiguous controls fail
+instead of silently selecting an old or new package. An in-place upgrade from
+the old install layout requires the administrator to move the old package aside.
 No library is loaded and no SQL is run by installing or reading these files.
 
-The sample declares two independent invoker-security SQL functions:
+The primary control may set `directory` for scripts and secondary controls
+inside the trusted root. `module_pathname` performs PG-style `MODULE_PATHNAME`
+source substitution; it does not load a library or implement `LANGUAGE C`.
+`native_module` remains the separately validated logical module dependency.
+The [`native_math`](native_math/README.md) reference package now exercises native
+routine declarations with `AS 'MODULE_PATHNAME', 'implementation-id' LANGUAGE C`.
+It binds implementation-only entries in the optional C reference module directly,
+without SQL RETURN wrappers. Its 1.0 installation and 1.0-to-1.1 update are shipped
+by the same flat install component. The same component also ships
+[`gis.control` and `gis--1.0.sql`](../gis/sql/README.md), with 106 declarations for
+82 GIS function names backed by implementation-only entries in the GIS DSO.
+Native package server installation and recovery remain unverified. See the
+[PG migration plan](../../docs/developer-guide/zh/plugin-pg-extension-roadmap.md).
+
+The `text_ops` sample declares two independent invoker-security SQL functions:
 `seekdb_char_count(TEXT)` using `CHAR_LENGTH`, and `seekdb_byte_count(TEXT)` using
 `LENGTH`. These independent functions are a minimal example; the installation
 bridge now also stages earlier routines for later semantic resolution. Its SQL still needs the normal kernel parser,

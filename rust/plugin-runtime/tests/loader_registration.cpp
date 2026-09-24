@@ -6,6 +6,8 @@
 #include "seekdb/plugin/catalog_spi.h"
 #include <cstdlib>
 #include <cstring>
+#include <cmath>
+#include <limits>
 #include <iostream>
 
 using namespace oceanbase::share::plugin;
@@ -95,12 +97,88 @@ static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL emit_geometry(
   return SEEKDB_PLUGIN_STATUS_OK;
 }
 
+static void exercise_gis_transform(ObPluginLoader &loader, const std::vector<uint8_t> &seed)
+{
+  const char *types[] = {"org.seekdb.gis.geometry", "org.seekdb.gis.scalar.uint32"};
+  seekdb_plugin_sql_binding_v1_t binding{};
+  CHECK(loader.resolve_native_function("org.seekdb.gis", "org.seekdb.gis.function.st_transform",
+      types, 2, binding) == OB_SUCCESS);
+  const auto run = [&](uint32_t source, uint32_t target, double x, double y,
+                       double expected_x, double expected_y, int expected_status = OB_SUCCESS,
+                       bool z = false) {
+    auto bytes = seed;
+    for (int i = 0; i < 4; ++i) bytes[i] = static_cast<uint8_t>(source >> (i * 8));
+    const double coordinates[] = {x, y, 7.0};
+    if (z) {
+      bytes.resize(34);
+      bytes[6] = 0xe9; bytes[7] = 3; // ISO WKB PointZ = 1001, little endian.
+    }
+    std::memcpy(bytes.data() + 10, coordinates, z ? sizeof(coordinates) : 2 * sizeof(double));
+    seekdb_plugin_execution_value_v1_t arguments[2]{};
+    for (int i = 0; i < 2; ++i) {
+      arguments[i].struct_size = sizeof(arguments[i]);
+      arguments[i].type_id = types[i];
+    }
+    arguments[0].data = bytes.data(); arguments[0].data_size = bytes.size();
+    arguments[1].data = reinterpret_cast<const uint8_t *>(&target); arguments[1].data_size = sizeof(target);
+    GeometrySink sink;
+    seekdb_plugin_execution_context_v1_t context{};
+    context.struct_size = sizeof(context);
+    context.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&sink);
+    context.emit_result = emit_geometry;
+    CHECK(loader.execute_bound_function(binding, &context, arguments, 2) == expected_status);
+    if (expected_status != OB_SUCCESS) {
+      CHECK(sink.calls == 0 && sink.bytes.empty());
+      return;
+    }
+    CHECK(sink.calls == 1 && sink.bytes.size() == bytes.size());
+    for (int i = 0; i < 4; ++i) CHECK(sink.bytes[i] == static_cast<uint8_t>(target >> (i * 8)));
+    double result[3]{};
+    std::memcpy(result, sink.bytes.data() + 10, z ? sizeof(result) : 2 * sizeof(double));
+    CHECK(std::isfinite(result[0]) && std::isfinite(result[1]));
+    if (std::abs(result[0] - expected_x) > 1e-6 || std::abs(result[1] - expected_y) > 1e-6)
+      std::cerr << "Mercator " << source << " -> " << target << ": " << result[0] << ", " << result[1]
+                << " expected " << expected_x << ", " << expected_y << std::endl;
+    CHECK(std::abs(result[0] - expected_x) <= 1e-6 && std::abs(result[1] - expected_y) <= 1e-6);
+    if (z) CHECK(result[2] == coordinates[2]);
+  };
+  // Independent forward/inverse controls, not just a round trip that could
+  // conceal matching errors. EPSG:3857, R=6378137; PROJ webmerc equations.
+  run(4326, 3857, 2, 49, 222638.98158654713, 6274861.394006576);
+  run(3857, 4326, 222638.98158654713, 6274861.394006576, 2, 49);
+  run(4326, 3857, 120, -45, 13358338.895192828, -5621521.486192066, OB_SUCCESS, true);
+  run(3857, 4326, 13358338.895192828, -5621521.486192066, 120, -45, OB_SUCCESS, true);
+  run(4326, 3857, 0, 0, 0, 0);
+  run(4326, 3857, 0, 89, 0, 30240971.95838615);
+  run(4326, 3857, 0, -89, 0, -30240971.95838615);
+  run(3857, 4326, 0, std::numeric_limits<double>::max(), 0, 90);
+  run(3857, 4326, 0, -std::numeric_limits<double>::max(), 0, -90);
+  run(4326, 4326, 2, 49, 2, 49);
+  for (double latitude : {-91.0, -90.0, 90.0, 91.0})
+    run(4326, 3857, 2, latitude, 0, 0, OB_INVALID_ARGUMENT);
+  run(4326, 3857, std::numeric_limits<double>::max(), 45, 0, 0, OB_INVALID_ARGUMENT);
+  run(0, 3857, 2, 49, 0, 0, OB_INVALID_ARGUMENT);
+  run(4326, 32631, 2, 49, 0, 0, OB_INVALID_ARGUMENT);
+  std::cout << "PASS: GIS Mercator forward/inverse controls, poles, unsupported pairs and PointZ" << std::endl;
+}
+
 static void exercise_gis(ObPluginLoader &loader)
 {
-  const char *types[] = {"core.type.double", "core.type.double"};
+  const char *types[] = {"core.type.float64", "core.type.float64"};
   seekdb_plugin_sql_binding_v1_t binding = {};
   CHECK(loader.resolve_sql_extension(SEEKDB_PLUGIN_EXTENSION_FUNCTION,
-      "st_point", types, 2, binding) == OB_SUCCESS);
+      "st_point", types, 2, binding) == OB_ENTRY_NOT_EXIST);
+  CHECK(binding.struct_size == 0);
+  CHECK(loader.resolve_native_function("org.seekdb.gis", "org.seekdb.gis.function.st_point",
+      types, 2, binding) == OB_SUCCESS);
+  const auto named_binding = binding;
+  CHECK(loader.resolve_native_function("org.other", named_binding.object_id, types, 2, binding) == OB_ENTRY_NOT_EXIST);
+  CHECK(binding.struct_size == 0 && binding.owner_generation == 0);
+  CHECK(loader.resolve_native_function(named_binding.owner_plugin_id, "st_point", types, 2, binding) == OB_ENTRY_NOT_EXIST);
+  CHECK(loader.resolve_native_function(named_binding.owner_plugin_id, named_binding.object_id, types, 1, binding) == OB_ENTRY_NOT_EXIST);
+  CHECK(loader.resolve_native_function(named_binding.owner_plugin_id, named_binding.object_id, types, 2, binding) == OB_SUCCESS);
+  CHECK(std::strcmp(binding.object_id, named_binding.object_id) == 0 && binding.catalog_epoch == named_binding.catalog_epoch);
+  // Invoke the exact-ID binding through the same leased C execution path.
   double coordinates[] = {3.0, 4.0};
   seekdb_plugin_execution_value_v1_t arguments[2] = {};
   for (int i = 0; i < 2; ++i) {
@@ -126,8 +204,8 @@ static void exercise_gis(ObPluginLoader &loader)
   // Cross the C wrapper into the actual C++ geometry engine as well.
   const std::vector<uint8_t> point = sink.bytes;
   const char *geometry_types[] = {"org.seekdb.gis.geometry"};
-  CHECK(loader.resolve_sql_extension(SEEKDB_PLUGIN_EXTENSION_FUNCTION,
-      "st_centroid", geometry_types, 1, binding) == OB_SUCCESS);
+  CHECK(loader.resolve_native_function("org.seekdb.gis", "org.seekdb.gis.function.st_centroid",
+      geometry_types, 1, binding) == OB_SUCCESS);
   arguments[0].type_id = geometry_types[0];
   arguments[0].data = point.data();
   arguments[0].data_size = point.size();
@@ -140,6 +218,7 @@ static void exercise_gis(ObPluginLoader &loader)
   auto legacy_value = arguments[0];
   legacy_value.type_id = geometry.object_id; // New comparison protocol uses the TYPE identity, not the legacy GIS alias.
   CHECK(loader.compare_bound_type(geometry, legacy_value, legacy_value, ordering) == OB_NOT_SUPPORTED && ordering == 0);
+  exercise_gis_transform(loader, point);
 }
 
 static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL rust_fixture_sql(
@@ -1689,6 +1768,50 @@ int main(int argc, char **argv)
       context.emit_result = emit;
       CHECK(loader.execute_bound_function(binding, &context, &argument, 1) == OB_SUCCESS);
       CHECK(sink.calls == 1 && sink.value == 42);
+      CHECK(std::strcmp(binding.object_id, "org.seekdb.sql-extension.function.add-one") == 0);
+      std::vector<ObPluginExtensionInfo> visible;
+      uint64_t visible_epoch = 0;
+      CHECK(observation.registry->find_extensions_by_sql_name(SEEKDB_PLUGIN_EXTENSION_FUNCTION,
+          "seekdb_add_one", visible, visible_epoch) == OB_SUCCESS && visible.size() == 1);
+      CHECK(loader.resolve_sql_extension(SEEKDB_PLUGIN_EXTENSION_FUNCTION,
+          "native_add_one", types, 1, binding) == OB_ENTRY_NOT_EXIST);
+      for (const char *id : {"org.seekdb.sql-extension.function.native-add-one",
+                             "org.seekdb.sql-extension.function.unnamed-add-one"}) {
+        // Implementation IDs containing '-' are not valid SQL lookup names.
+        CHECK(loader.resolve_sql_extension(SEEKDB_PLUGIN_EXTENSION_FUNCTION, id, types, 1, binding) == OB_INVALID_ARGUMENT);
+        CHECK(loader.resolve_native_function("org.seekdb.sql_extension", id, types, 1, binding) == OB_SUCCESS);
+        CHECK(binding.flags & SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY);
+        sink = {};
+        CHECK(loader.execute_bound_function(binding, &context, &argument, 1) == OB_SUCCESS);
+        CHECK(sink.calls == 1 && sink.value == 42);
+        rust_batch_loader_test::Output output;
+        seekdb_plugin_batch_context_v1_t batch{};
+        batch.struct_size = sizeof(batch); batch.query_context = &context;
+        batch.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&output);
+        batch.emit_result = rust_batch_loader_test::emit_indexed;
+        seekdb_plugin_batch_row_v1_t rows[2]{};
+        for (auto &row : rows) { row.struct_size = sizeof(row); row.argument_count = 1; row.arguments = &argument; }
+        CHECK(loader.execute_bound_function_batch(binding, &batch, rows, 2) == OB_SUCCESS);
+        CHECK(output.values == std::vector<int64_t>({42, 42}));
+        // The unnamed implementation intentionally lacks NULL_PROPAGATING:
+        // its callback must handle NULL itself, including batch fallback.
+        auto null_argument = argument;
+        null_argument.is_null = 1; null_argument.data = nullptr; null_argument.data_size = 0;
+        sink = {};
+        CHECK(loader.execute_bound_function(binding, &context, &null_argument, 1) == OB_SUCCESS);
+        CHECK(sink.calls == 1 && sink.is_null);
+        rows[1].arguments = &null_argument;
+        output.values.clear(); output.nulls.clear();
+        CHECK(loader.execute_bound_function_batch(binding, &batch, rows, 2) == OB_SUCCESS);
+        CHECK(output.values.size() == 2 && output.values[0] == 42);
+        CHECK(output.nulls.size() == 2 && !output.nulls[0] && output.nulls[1]);
+        auto stale = binding; ++stale.catalog_epoch;
+        output.values.clear(); output.nulls.clear(); sink = {};
+        CHECK(loader.execute_bound_function(stale, &context, &argument, 1) == OB_STATE_NOT_MATCH && sink.calls == 0);
+        CHECK(loader.execute_bound_function_batch(stale, &batch, rows, 2) == OB_STATE_NOT_MATCH && output.values.empty());
+        ObPluginStatusSnapshot state;
+        CHECK(loader.get_status("org.seekdb.sql_extension", state) == OB_SUCCESS && state.lease_count_ == 0);
+      }
       CHECK(loader.resolve_sql_extension(SEEKDB_PLUGIN_EXTENSION_FUNCTION,
           "seekdb_sql_add_one", types, 1, binding) == OB_SUCCESS);
       sink = {};

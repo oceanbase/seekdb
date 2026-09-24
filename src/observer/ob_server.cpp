@@ -76,6 +76,16 @@ int ObServer::resolve_plugin_sql_object(
       : plugin_runtime_->resolve_sql_object(kind, sql_name, argument_type_ids,
                                              argument_count, binding);
 }
+int ObServer::resolve_plugin_native_function(const char *module_id, const char *implementation_id,
+    const char *const *argument_type_ids, uint32_t argument_count,
+    seekdb_plugin_sql_binding_v1_t *binding)
+{
+  if (binding == nullptr) return common::OB_INVALID_ARGUMENT;
+  *binding = {};
+  return plugin_runtime_ == nullptr ? common::OB_NOT_INIT :
+      plugin_runtime_->resolve_native_function(module_id, implementation_id, argument_type_ids,
+                                               argument_count, binding);
+}
 int ObServer::execute_bound_plugin_function(
     const seekdb_plugin_sql_binding_v1_t *binding,
     const seekdb_plugin_execution_context_v1 *context,
@@ -244,6 +254,24 @@ int ObServer::mutate_plugin_type_dependency(
       ? common::OB_NOT_INIT
       : plugin_runtime_->mutate_type_dependency(
             sql_client, binding, table_id, column_id, add);
+}
+int ObServer::reserve_routine_invalidations(share::schema::RoutineCatalogTransaction &journal, uint64_t scope)
+{
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  return mods_plan_cache_ ? mods_plan_cache_->reserve_plugin_invalidations(journal, scope) : OB_NOT_INIT;
+#else
+  UNUSEDx(journal, scope);
+  return OB_NOT_SUPPORTED;
+#endif
+}
+
+int ObServer::mutate_native_routine_dependency(common::ObISQLClient &sql_client,
+    const common::ObString &module_id, const common::ObString &implementation_id,
+    uint64_t routine_id, bool add, uint64_t expected_generation)
+{
+  return plugin_runtime_ == nullptr ? common::OB_NOT_INIT :
+      plugin_runtime_->mutate_routine_dependency(sql_client, module_id, implementation_id,
+                                               routine_id, add, expected_generation);
 }
 } }
 #include "rootserver/ob_local_ddl_serial_call.h"

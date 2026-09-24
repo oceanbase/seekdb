@@ -11,6 +11,8 @@ use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::{ptr, slice, str};
+#[cfg(test)]
+mod files_tests;
 pub mod source;
 mod versions;
 
@@ -28,6 +30,10 @@ struct Control {
     requires: Vec<String>,
     relocatable: bool,
     native_install: bool,
+    // Inverted so the derived default matches PG's superuser = true.
+    invoker_only: bool,
+    directory: String,
+    module_pathname: Option<String>,
 }
 
 pub struct Package {
@@ -119,7 +125,7 @@ fn parse_control_overlay(
         if !seen.insert(key) {
             return Err((INVALID, "duplicate control key"));
         }
-        if key != "relocatable" && !raw.trim_start().starts_with('\'') {
+        if !matches!(key, "relocatable" | "superuser") && !raw.trim_start().starts_with('\'') {
             return Err((INVALID, "control strings require single quotes"));
         }
         let parsed = value(raw)?;
@@ -127,6 +133,20 @@ fn parse_control_overlay(
             return Err((INVALID, "control value contains control character"));
         }
         match key {
+            "directory" => {
+                if parsed.is_empty() || parsed.len() > 4096 {
+                    return Err((INVALID, "invalid script directory"));
+                }
+                control.directory = parsed;
+            }
+            "module_pathname" => {
+                if parsed.is_empty() || parsed.len() > 4096 {
+                    return Err((INVALID, "invalid module pathname"));
+                }
+                // Source substitution only. This is NOT a module identity or
+                // permission to load code; native_module remains independent.
+                control.module_pathname = Some(parsed);
+            }
             "default_version" => {
                 if !component(&parsed) {
                     return Err((INVALID, "invalid default version"));
@@ -157,6 +177,12 @@ fn parse_control_overlay(
                     return Err((INVALID, "relocatable must be an unquoted boolean"));
                 }
                 control.relocatable = parsed == "true";
+            }
+            "superuser" => {
+                if !matches!(raw.split('#').next().unwrap_or("").trim(), "true" | "false") {
+                    return Err((INVALID, "superuser must be an unquoted boolean"));
+                }
+                control.invoker_only = parsed == "false";
             }
             "requires" => {
                 control.requires.clear(); // Explicit empty overrides inherited dependencies.
@@ -263,8 +289,67 @@ fn read_package(
     if !root.is_dir() {
         return Err((INVALID, "package root is not a directory"));
     }
-    let directory = root.join(name);
+    // Prefer neither of two conflicting sources. A broken flat control must
+    // also fail rather than falling back to a legacy package of the same name.
+    let flat = entry_exists(&root.join(format!("{name}.control")))?;
+    let legacy = entry_exists(&root.join(name).join(format!("{name}.control")))?;
+    if flat && legacy {
+        return Err((INVALID, "ambiguous flat and legacy extension controls"));
+    }
+    let directory = if flat { root.clone() } else { root.join(name) };
     read_package_directory(root, directory, name, from, requested)
+}
+
+fn entry_exists(path: &Path) -> Result<bool, Error> {
+    match path.symlink_metadata() {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(io_error(error)),
+    }
+}
+
+fn script_directory(
+    root: &Path,
+    control_directory: &Path,
+    control: &Control,
+) -> Result<PathBuf, Error> {
+    let directory = control_directory
+        .join(&control.directory)
+        .canonicalize()
+        .map_err(io_error)?;
+    if !directory.starts_with(root) || !directory.is_dir() {
+        return Err((
+            INVALID,
+            "script directory must remain inside trusted extension root",
+        ));
+    }
+    Ok(directory)
+}
+
+fn expand_module_pathname(
+    sql: String,
+    module: Option<&str>,
+    limit: usize,
+) -> Result<String, Error> {
+    let Some(module) = module else {
+        return if sql.len() <= limit {
+            Ok(sql)
+        } else {
+            Err((INVALID, "prepared scripts exceed package SQL limit"))
+        };
+    };
+    const TOKEN: &str = "MODULE_PATHNAME";
+    let count = sql.matches(TOKEN).count();
+    // Check expansion before allocating: a small repeated-token input must not
+    // bypass the total package SQL bound with a large control substitution.
+    let length = count
+        .checked_mul(module.len())
+        .and_then(|bytes| (sql.len() - count * TOKEN.len()).checked_add(bytes))
+        .ok_or((INVALID, "module substitution size overflow"))?;
+    if length > limit {
+        return Err((INVALID, "module substitution exceeds package SQL limit"));
+    }
+    Ok(sql.replace(TOKEN, module))
 }
 
 // Shared by server discovery and CLI validation of a flat staging directory.
@@ -291,11 +376,8 @@ fn read_package_directory(
     }
     // Enumerate names only; unreadable/invalid selected scripts must fail, not
     // silently cause selection of a different migration path.
-    let directory = directory.canonicalize().map_err(io_error)?;
-    if !directory.starts_with(&root) {
-        return Err((INVALID, "package directory escapes trusted root"));
-    }
-    let control = version_control(&root, &directory, name, version, &primary)?;
+    let directory = script_directory(&root, &directory, &primary)?;
+    let mut control = version_control(&root, &directory, name, version, &primary)?;
     let mut versions = versions::Versions::default();
     for (index, entry) in directory.read_dir().map_err(io_error)?.enumerate() {
         if index >= DIRECTORY_LIMIT {
@@ -337,6 +419,7 @@ fn read_package_directory(
     let mut all_dependencies: std::collections::BTreeSet<String> =
         control.requires.iter().cloned().collect();
     let mut total = 0;
+    let mut source_total = 0;
     for (index, to) in path.iter().enumerate().skip(usize::from(from.is_some())) {
         // Each override starts from primary, never the previous version's
         // override. Namespace relocation and native swaps are not implemented
@@ -352,6 +435,10 @@ fn read_package_directory(
             ));
         }
         all_dependencies.extend(step.requires);
+        // One transaction executes the entire selected path. Requiring SUPER
+        // if any step needs it is equivalent to checking every step, without
+        // allowing a weaker final control to erase an intermediate requirement.
+        control.invoker_only &= step.invoker_only;
         if all_dependencies.len() > 64 {
             return Err((
                 INVALID,
@@ -373,7 +460,9 @@ fn read_package_directory(
         } else {
             format!("{name}--{from}--{to}.sql")
         };
-        let sql = read_text(&root, &directory.join(filename), SQL_LIMIT - total)?;
+        let sql = read_text(&root, &directory.join(filename), SQL_LIMIT - source_total)?;
+        source_total += sql.len();
+        let sql = expand_module_pathname(sql, step.module_pathname.as_deref(), SQL_LIMIT - total)?;
         if from.is_empty() && sql.trim().is_empty() {
             return Err((INVALID, "empty base installation SQL"));
         }
@@ -415,7 +504,12 @@ pub fn inspect_install_source(directory: &Path, name: &str) -> Result<bool, Stri
     let primary = read_text(&root, &root.join(format!("{name}.control")), CONTROL_LIMIT)
         .and_then(|text| parse_control(&text))
         .map_err(|(_, diagnostic)| diagnostic.to_owned())?;
-    for entry in root.read_dir().map_err(|e| e.to_string())? {
+    let directory = script_directory(&root, &root, &primary)
+        .map_err(|(_, diagnostic)| diagnostic.to_owned())?;
+    for (index, entry) in directory.read_dir().map_err(|e| e.to_string())?.enumerate() {
+        if index >= DIRECTORY_LIMIT {
+            return Err("too many entries in package directory".into());
+        }
         let entry = entry.map_err(|e| e.to_string())?;
         let filename = entry.file_name();
         let Some(version) = filename
@@ -428,7 +522,7 @@ pub fn inspect_install_source(directory: &Path, name: &str) -> Result<bool, Stri
         if !component(version) {
             return Err("invalid secondary control filename".into());
         }
-        version_control(&root, &root, name, version, &primary)
+        version_control(&root, &directory, name, version, &primary)
             .map_err(|(_, diagnostic)| diagnostic.to_owned())?;
     }
     Ok(package.control.native_install)
@@ -674,6 +768,26 @@ pub unsafe extern "C" fn seekdb_runtime_package_info(
     OK
 }
 
+/// Whether this selected path requests ordinary invoker privileges only.
+/// This does not authorize SQL or permit privilege escalation.
+/// # Safety
+/// Handle is live; output is writable and disjoint from it.
+#[no_mangle]
+pub unsafe extern "C" fn seekdb_runtime_package_invoker_only(
+    package: *const Package,
+    invoker_only: *mut u32,
+) -> i32 {
+    if invoker_only.is_null() {
+        return INVALID;
+    }
+    unsafe { *invoker_only = 0 };
+    let Some(package) = (unsafe { package.as_ref() }) else {
+        return INVALID;
+    };
+    unsafe { *invoker_only = u32::from(package.control.invoker_only) };
+    OK
+}
+
 /// # Safety
 /// Handle is live; output is writable and disjoint from it. Failure clears output.
 #[no_mangle]
@@ -699,6 +813,28 @@ pub unsafe extern "C" fn seekdb_runtime_package_native_install(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn superuser_policy_is_explicit_without_trusted_elevation() {
+        assert!(!parse_control("").unwrap().invoker_only);
+        assert!(!parse_control("superuser = true").unwrap().invoker_only);
+        assert!(
+            parse_control("superuser = false # ordinary privileges")
+                .unwrap()
+                .invoker_only
+        );
+        for value in ["'false'", "'true'", "TRUE", "0", "off", "false garbage"] {
+            assert!(parse_control(&format!("superuser = {value}")).is_err());
+        }
+        assert!(parse_control("superuser = false\nsuperuser = true").is_err());
+        assert!(parse_control("superuser = false\ntrusted = true").is_err());
+        let mut output = 9;
+        assert_eq!(
+            unsafe { seekdb_runtime_package_invoker_only(ptr::null(), &mut output) },
+            INVALID
+        );
+        assert_eq!(output, 0);
+    }
 
     #[test]
     fn control_strings_comments_and_dependencies() {

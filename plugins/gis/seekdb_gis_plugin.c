@@ -54,7 +54,7 @@ static seekdb_plugin_status_t emit_bytes_result(
     return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
   }
   const seekdb_plugin_execution_result_v1_t result = {
-      sizeof(result), "org.seekdb.gis.scalar.bytes", data, data_size, 0,
+      sizeof(result), "core.type.blob", data, data_size, 0,
       {0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0}};
   return context->emit_result(context->host, &result);
 }
@@ -951,448 +951,205 @@ GIS_RELATION_SERVICE(gis_st_dwithin_service, gis_st_dwithin_execute)
 
 #undef GIS_RELATION_SERVICE
 
-#define GIS_RELATION_DESCRIPTOR(service_name, fq_name, sql_name, min_args, max_args) \
-    { sizeof(seekdb_plugin_function_descriptor_v1_t), fq_name, sql_name, min_args, max_args, \
-      "org.seekdb.gis.scalar.bool", \
+// GIS SQL declarations own names (including compatibility aliases), signatures,
+// coercions and NULL behavior. The kernel contains no GIS SQL-name dispatch.
+#define GIS_GEOMETRY "org.seekdb.gis.geometry"
+#define GIS_DOUBLE "org.seekdb.gis.scalar.float64"
+#define GIS_UINT32 "org.seekdb.gis.scalar.uint32"
+#define GIS_BYTES "org.seekdb.gis.scalar.bytes"
+static const char *const gis_args_g[] = {GIS_GEOMETRY};
+static const char *const gis_args_gg[] = {GIS_GEOMETRY, GIS_GEOMETRY};
+static const char *const gis_args_ggd[] = {GIS_GEOMETRY, GIS_GEOMETRY, GIS_DOUBLE};
+static const char *const gis_args_gu[] = {GIS_GEOMETRY, GIS_UINT32};
+static const char *const gis_args_gub[] = {GIS_GEOMETRY, GIS_UINT32, GIS_BYTES};
+static const char *const gis_args_bu[] = {GIS_BYTES, GIS_UINT32};
+static const char *const gis_args_gd[] = {GIS_GEOMETRY, GIS_DOUBLE};
+static const char *const gis_args_gdd[] = {GIS_GEOMETRY, GIS_DOUBLE, GIS_DOUBLE};
+static const char *const gis_args_gdb[] = {GIS_GEOMETRY, GIS_DOUBLE, GIS_BYTES};
+static const char *const gis_args_ggddd[] = {GIS_GEOMETRY, GIS_GEOMETRY, GIS_DOUBLE, GIS_DOUBLE, GIS_DOUBLE};
+static const char *const gis_args_bd[] = {GIS_BYTES, GIS_DOUBLE};
+static const char *const gis_args_d[] = {GIS_DOUBLE};
+
+/* Names remain descriptor metadata for package inventory, not global SQL
+ * publication. Database routines bind canonical object IDs via LANGUAGE C. */
+#define GIS_SQL_FUNCTION(object, name, service, lo, hi, result, args, variadic) \
+  { { sizeof(seekdb_plugin_function_descriptor_v2_t), object, name, lo, hi, result, \
       SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC | SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE | \
-          SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING, \
-      { sizeof(seekdb_plugin_implementation_ref_v1_t), fq_name, \
-        {sizeof(seekdb_plugin_version_range_t), {1, 0, 0}, {2, 0, 0}, {0, 0}}, \
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE, {0, 0, 0, 0} }, \
-      {0, 0, 0, 0} }
+          SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING | SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY, \
+      { sizeof(seekdb_plugin_implementation_ref_v1_t), service, \
+        { sizeof(seekdb_plugin_version_range_t), {1, 0, 0}, {2, 0, 0}, {0, 0} }, \
+        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE, {0, 0, 0, 0} }, {0, 0, 0, 0} }, \
+    gis_args_##args, sizeof(gis_args_##args) / sizeof(gis_args_##args[0]), variadic, {0, 0, 0, 0} }
 
-#define GIS_CODEC_DESCRIPTOR(fq_name, sql_name, min_args, max_args, result_type) \
-    { sizeof(seekdb_plugin_function_descriptor_v1_t), fq_name, sql_name, min_args, max_args, \
-      result_type, SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC | \
-          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE, \
-      { sizeof(seekdb_plugin_implementation_ref_v1_t), fq_name, \
-        {sizeof(seekdb_plugin_version_range_t), {1, 0, 0}, {2, 0, 0}, {0, 0}}, \
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE, {0, 0, 0, 0} }, \
-      {0, 0, 0, 0} }
-
-#define GIS_GEOMETRY_DESCRIPTOR(fq_name, sql_name, min_args, max_args) \
-    GIS_CODEC_DESCRIPTOR(fq_name, sql_name, min_args, max_args, "org.seekdb.gis.geometry")
-
-static const seekdb_plugin_function_descriptor_v1_t gis_functions[] = {
-    {
-      sizeof(seekdb_plugin_function_descriptor_v1_t),
-      "org.seekdb.gis.function.st_point",
-      "st_point",
-      2,
-      2,
-      "org.seekdb.gis.geometry",
-      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE,
-      {
-        sizeof(seekdb_plugin_implementation_ref_v1_t),
-        "org.seekdb.gis.function",
-        {
-          sizeof(seekdb_plugin_version_range_t),
-          {1, 0, 0},
-          {2, 0, 0},
-          {0, 0}
-        },
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE,
-        {0, 0, 0, 0}
-      },
-      {0, 0, 0, 0}
-    },
-    {
-      sizeof(seekdb_plugin_function_descriptor_v1_t),
-      "org.seekdb.gis.function.st_makeenvelope",
-      "st_makeenvelope",
-      4,
-      4,
-      "org.seekdb.gis.geometry",
-      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE,
-      {
-        sizeof(seekdb_plugin_implementation_ref_v1_t),
-        "org.seekdb.gis.function",
-        {
-          sizeof(seekdb_plugin_version_range_t),
-          {1, 0, 0},
-          {2, 0, 0},
-          {0, 0}
-        },
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE,
-        {0, 0, 0, 0}
-      },
-      {0, 0, 0, 0}
-    },
-    {
-      sizeof(seekdb_plugin_function_descriptor_v1_t),
-      "org.seekdb.gis.function.st_makepoint",
-      "st_makepoint",
-      2,
-      3,
-      "org.seekdb.gis.geometry",
-      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE,
-      {
-        sizeof(seekdb_plugin_implementation_ref_v1_t),
-        "org.seekdb.gis.function",
-        {
-          sizeof(seekdb_plugin_version_range_t),
-          {1, 0, 0},
-          {2, 0, 0},
-          {0, 0}
-        },
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE,
-        {0, 0, 0, 0}
-      },
-      {0, 0, 0, 0}
-    },
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.st_linestring", "st_linestring", 1, 64,
-                         "org.seekdb.gis.geometry"),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.st_polygon", "st_polygon", 1, 64,
-                         "org.seekdb.gis.geometry"),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.st_multipoint", "st_multipoint", 1, 64,
-                         "org.seekdb.gis.geometry"),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.st_multilinestring", "st_multilinestring", 1, 64,
-                         "org.seekdb.gis.geometry"),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.st_multipolygon", "st_multipolygon", 1, 64,
-                         "org.seekdb.gis.geometry"),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.st_geometrycollection", "st_geometrycollection", 1, 64,
-                         "org.seekdb.gis.geometry"),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.st_geomcollection", "st_geomcollection", 1, 64,
-                         "org.seekdb.gis.geometry"),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.st_transform", "st_transform", 2, 2,
-                         "org.seekdb.gis.geometry"),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.spatial_cellid", "spatial_cellid", 1, 1,
-                         "org.seekdb.gis.scalar.uint64"),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.spatial_mbr", "spatial_mbr", 1, 1,
-                         "org.seekdb.gis.scalar.bytes"),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.st_geohash", "_st_geohash", 1, 2,
-                         "org.seekdb.gis.scalar.bytes"),
-    {
-      sizeof(seekdb_plugin_function_descriptor_v1_t),
-      "org.seekdb.gis.function.st_x", "st_x", 1, 1,
-      "org.seekdb.gis.scalar.float64",
-      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING,
-      {
-        sizeof(seekdb_plugin_implementation_ref_v1_t),
-        "org.seekdb.gis.function.st_x",
-        {sizeof(seekdb_plugin_version_range_t), {1, 0, 0}, {2, 0, 0}, {0, 0}},
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE, {0, 0, 0, 0}
-      },
-      {0, 0, 0, 0}
-    },
-    {
-      sizeof(seekdb_plugin_function_descriptor_v1_t),
-      "org.seekdb.gis.function.st_y", "st_y", 1, 1,
-      "org.seekdb.gis.scalar.float64",
-      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING,
-      {
-        sizeof(seekdb_plugin_implementation_ref_v1_t),
-        "org.seekdb.gis.function.st_y",
-        {sizeof(seekdb_plugin_version_range_t), {1, 0, 0}, {2, 0, 0}, {0, 0}},
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE, {0, 0, 0, 0}
-      },
-      {0, 0, 0, 0}
-    },
-    {
-      sizeof(seekdb_plugin_function_descriptor_v1_t),
-      "org.seekdb.gis.function.st_latitude", "st_latitude", 1, 1,
-      "org.seekdb.gis.scalar.float64",
-      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING,
-      {
-        sizeof(seekdb_plugin_implementation_ref_v1_t),
-        "org.seekdb.gis.function.st_latitude",
-        {sizeof(seekdb_plugin_version_range_t), {1, 0, 0}, {2, 0, 0}, {0, 0}},
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE, {0, 0, 0, 0}
-      },
-      {0, 0, 0, 0}
-    },
-    {
-      sizeof(seekdb_plugin_function_descriptor_v1_t),
-      "org.seekdb.gis.function.st_longitude", "st_longitude", 1, 1,
-      "org.seekdb.gis.scalar.float64",
-      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING,
-      {
-        sizeof(seekdb_plugin_implementation_ref_v1_t),
-        "org.seekdb.gis.function.st_longitude",
-        {sizeof(seekdb_plugin_version_range_t), {1, 0, 0}, {2, 0, 0}, {0, 0}},
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE, {0, 0, 0, 0}
-      },
-      {0, 0, 0, 0}
-    },
-    {
-      sizeof(seekdb_plugin_function_descriptor_v1_t),
-      "org.seekdb.gis.function.st_srid", "st_srid", 1, 1,
-      "org.seekdb.gis.scalar.uint32",
-      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING,
-      {
-        sizeof(seekdb_plugin_implementation_ref_v1_t),
-        "org.seekdb.gis.function.st_srid",
-        {sizeof(seekdb_plugin_version_range_t), {1, 0, 0}, {2, 0, 0}, {0, 0}},
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE, {0, 0, 0, 0}
-      },
-      {0, 0, 0, 0}
-    },
-    {
-      sizeof(seekdb_plugin_function_descriptor_v1_t),
-      "org.seekdb.gis.function.st_aswkb", "st_aswkb", 1, 1,
-      "org.seekdb.gis.scalar.bytes",
-      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING,
-      {
-        sizeof(seekdb_plugin_implementation_ref_v1_t),
-        "org.seekdb.gis.function.st_aswkb",
-        {sizeof(seekdb_plugin_version_range_t), {1, 0, 0}, {2, 0, 0}, {0, 0}},
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE, {0, 0, 0, 0}
-      },
-      {0, 0, 0, 0}
-    },
-    {
-      sizeof(seekdb_plugin_function_descriptor_v1_t),
-      "org.seekdb.gis.function.st_asbinary", "st_asbinary", 1, 1,
-      "org.seekdb.gis.scalar.bytes",
-      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING,
-      {
-        sizeof(seekdb_plugin_implementation_ref_v1_t),
-        "org.seekdb.gis.function.st_asbinary",
-        {sizeof(seekdb_plugin_version_range_t), {1, 0, 0}, {2, 0, 0}, {0, 0}},
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE, {0, 0, 0, 0}
-      },
-      {0, 0, 0, 0}
-    },
-    {
-      sizeof(seekdb_plugin_function_descriptor_v1_t),
-      "org.seekdb.gis.function.geometrytype", "_st_geometrytype", 1, 1,
-      "org.seekdb.gis.scalar.bytes",
-      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING,
-      {
-        sizeof(seekdb_plugin_implementation_ref_v1_t),
-        "org.seekdb.gis.function.geometrytype",
-        {sizeof(seekdb_plugin_version_range_t), {1, 0, 0}, {2, 0, 0}, {0, 0}},
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE, {0, 0, 0, 0}
-      },
-      {0, 0, 0, 0}
-    },
-    {
-      sizeof(seekdb_plugin_function_descriptor_v1_t),
-      "org.seekdb.gis.function.st_isvalid", "st_isvalid", 1, 1,
-      "org.seekdb.gis.scalar.bool",
-      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING,
-      {
-        sizeof(seekdb_plugin_implementation_ref_v1_t),
-        "org.seekdb.gis.function.st_isvalid",
-        {sizeof(seekdb_plugin_version_range_t), {1, 0, 0}, {2, 0, 0}, {0, 0}},
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE, {0, 0, 0, 0}
-      },
-      {0, 0, 0, 0}
-    },
-    {
-      sizeof(seekdb_plugin_function_descriptor_v1_t),
-      "org.seekdb.gis.function.st_astext", "st_astext", 1, 1,
-      "org.seekdb.gis.scalar.bytes",
-      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING,
-      {
-        sizeof(seekdb_plugin_implementation_ref_v1_t),
-        "org.seekdb.gis.function.st_astext",
-        {sizeof(seekdb_plugin_version_range_t), {1, 0, 0}, {2, 0, 0}, {0, 0}},
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE, {0, 0, 0, 0}
-      },
-      {0, 0, 0, 0}
-    },
-    {
-      sizeof(seekdb_plugin_function_descriptor_v1_t),
-      "org.seekdb.gis.function.st_aswkt", "st_aswkt", 1, 1,
-      "org.seekdb.gis.scalar.bytes",
-      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING,
-      {
-        sizeof(seekdb_plugin_implementation_ref_v1_t),
-        "org.seekdb.gis.function.st_aswkt",
-        {sizeof(seekdb_plugin_version_range_t), {1, 0, 0}, {2, 0, 0}, {0, 0}},
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE, {0, 0, 0, 0}
-      },
-      {0, 0, 0, 0}
-    },
-    {
-      sizeof(seekdb_plugin_function_descriptor_v1_t),
-      "org.seekdb.gis.function.st_geomfromwkb", "st_geomfromwkb", 1, 2,
-      "org.seekdb.gis.geometry",
-      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE,
-      {
-        sizeof(seekdb_plugin_implementation_ref_v1_t),
-        "org.seekdb.gis.function.st_geomfromwkb",
-        {sizeof(seekdb_plugin_version_range_t), {1, 0, 0}, {2, 0, 0}, {0, 0}},
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE, {0, 0, 0, 0}
-      },
-      {0, 0, 0, 0}
-    },
-    {
-      sizeof(seekdb_plugin_function_descriptor_v1_t),
-      "org.seekdb.gis.function.st_geometryfromwkb", "st_geometryfromwkb", 1, 2,
-      "org.seekdb.gis.geometry",
-      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE,
-      {
-        sizeof(seekdb_plugin_implementation_ref_v1_t),
-        "org.seekdb.gis.function.st_geometryfromwkb",
-        {sizeof(seekdb_plugin_version_range_t), {1, 0, 0}, {2, 0, 0}, {0, 0}},
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE, {0, 0, 0, 0}
-      },
-      {0, 0, 0, 0}
-    },
-    {
-      sizeof(seekdb_plugin_function_descriptor_v1_t),
-      "org.seekdb.gis.function.st_setsrid", "_st_setsrid", 2, 2,
-      "org.seekdb.gis.geometry",
-      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE,
-      {
-        sizeof(seekdb_plugin_implementation_ref_v1_t),
-        "org.seekdb.gis.function.st_setsrid",
-        {sizeof(seekdb_plugin_version_range_t), {1, 0, 0}, {2, 0, 0}, {0, 0}},
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE, {0, 0, 0, 0}
-      },
-      {0, 0, 0, 0}
-    },
-    {
-      sizeof(seekdb_plugin_function_descriptor_v1_t),
-      "org.seekdb.gis.function.st_geomfromtext", "st_geomfromtext", 1, 2,
-      "org.seekdb.gis.geometry",
-      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE,
-      {
-        sizeof(seekdb_plugin_implementation_ref_v1_t),
-        "org.seekdb.gis.function.st_geomfromtext",
-        {sizeof(seekdb_plugin_version_range_t), {1, 0, 0}, {2, 0, 0}, {0, 0}},
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE, {0, 0, 0, 0}
-      },
-      {0, 0, 0, 0}
-    },
-    {
-      sizeof(seekdb_plugin_function_descriptor_v1_t),
-      "org.seekdb.gis.function.st_geometryfromtext", "st_geometryfromtext", 1, 2,
-      "org.seekdb.gis.geometry",
-      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE,
-      {
-        sizeof(seekdb_plugin_implementation_ref_v1_t),
-        "org.seekdb.gis.function.st_geometryfromtext",
-        {sizeof(seekdb_plugin_version_range_t), {1, 0, 0}, {2, 0, 0}, {0, 0}},
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE, {0, 0, 0, 0}
-      },
-      {0, 0, 0, 0}
-    },
-    {
-      sizeof(seekdb_plugin_function_descriptor_v1_t),
-      "org.seekdb.gis.function.st_area", "st_area", 1, 1,
-      "org.seekdb.gis.scalar.float64",
-      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE,
-      {
-        sizeof(seekdb_plugin_implementation_ref_v1_t),
-        "org.seekdb.gis.function.st_area",
-        {sizeof(seekdb_plugin_version_range_t), {1, 0, 0}, {2, 0, 0}, {0, 0}},
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE, {0, 0, 0, 0}
-      },
-      {0, 0, 0, 0}
-    },
-    {
-      sizeof(seekdb_plugin_function_descriptor_v1_t),
-      "org.seekdb.gis.function.st_length", "st_length", 1, 1,
-      "org.seekdb.gis.scalar.float64",
-      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE,
-      {
-        sizeof(seekdb_plugin_implementation_ref_v1_t),
-        "org.seekdb.gis.function.st_length",
-        {sizeof(seekdb_plugin_version_range_t), {1, 0, 0}, {2, 0, 0}, {0, 0}},
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE, {0, 0, 0, 0}
-      },
-      {0, 0, 0, 0}
-    },
-    {
-      sizeof(seekdb_plugin_function_descriptor_v1_t),
-      "org.seekdb.gis.function.st_distance", "st_distance", 2, 2,
-      "org.seekdb.gis.scalar.float64",
-      SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC |
-          SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE,
-      {
-        sizeof(seekdb_plugin_implementation_ref_v1_t),
-        "org.seekdb.gis.function.st_distance",
-        {sizeof(seekdb_plugin_version_range_t), {1, 0, 0}, {2, 0, 0}, {0, 0}},
-        SEEKDB_PLUGIN_CAPABILITY_THREAD_SAFE, {0, 0, 0, 0}
-      },
-      {0, 0, 0, 0}
-    },
-    GIS_RELATION_DESCRIPTOR(gis_st_equals_service, "org.seekdb.gis.function.st_equals", "st_equals", 2, 2),
-    GIS_RELATION_DESCRIPTOR(gis_st_intersects_service, "org.seekdb.gis.function.st_intersects", "st_intersects", 2, 2),
-    GIS_RELATION_DESCRIPTOR(gis_st_contains_service, "org.seekdb.gis.function.st_contains", "st_contains", 2, 2),
-    GIS_RELATION_DESCRIPTOR(gis_st_within_service, "org.seekdb.gis.function.st_within", "st_within", 2, 2),
-    GIS_RELATION_DESCRIPTOR(gis_st_covers_service, "org.seekdb.gis.function.st_covers", "st_covers", 2, 2),
-    GIS_RELATION_DESCRIPTOR(gis_st_touches_service, "org.seekdb.gis.function.st_touches", "st_touches", 2, 2),
-    GIS_RELATION_DESCRIPTOR(gis_st_crosses_service, "org.seekdb.gis.function.st_crosses", "st_crosses", 2, 2),
-    GIS_RELATION_DESCRIPTOR(gis_st_overlaps_service, "org.seekdb.gis.function.st_overlaps", "st_overlaps", 2, 2),
-    GIS_RELATION_DESCRIPTOR(gis_st_dwithin_service, "org.seekdb.gis.function.st_dwithin", "st_dwithin", 3, 3),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.st_asewkb", "_st_asewkb", 1, 1,
-                         "org.seekdb.gis.scalar.bytes"),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.st_asewkt", "_st_asewkt", 1, 1,
-                         "org.seekdb.gis.scalar.bytes"),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.st_geomfromewkb", "_st_geomfromewkb", 1, 2,
-                         "org.seekdb.gis.geometry"),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.st_geomfromewkt", "_st_geomfromewkt", 1, 2,
-                         "org.seekdb.gis.geometry"),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.st_geogfromtext", "_st_geogfromtext", 1, 2,
-                         "org.seekdb.gis.geometry"),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.st_geographyfromtext", "_st_geographyfromtext", 1, 2,
-                         "org.seekdb.gis.geometry"),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.st_iscollection", "_st_iscollection", 1, 1,
-                         "org.seekdb.gis.scalar.bool"),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.st_numinteriorrings", "_st_numinteriorrings", 1, 1,
-                         "org.seekdb.gis.scalar.int32"),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.st_asgeojson", "st_asgeojson", 1, 3,
-                         "org.seekdb.gis.scalar.bytes"),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.st_distance_sphere", "st_distance_sphere", 2, 3,
-                         "org.seekdb.gis.scalar.float64"),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.st_centroid", "st_centroid", 1, 1,
-                         "org.seekdb.gis.geometry"),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.st_pointonsurface", "_st_pointonsurface", 1, 1,
-                         "org.seekdb.gis.geometry"),
-    GIS_GEOMETRY_DESCRIPTOR("org.seekdb.gis.function.st_priv_transform", "_st_transform", 2, 3),
-    GIS_GEOMETRY_DESCRIPTOR("org.seekdb.gis.function.st_buffer", "st_buffer", 2, 8),
-    GIS_GEOMETRY_DESCRIPTOR("org.seekdb.gis.function.st_priv_buffer", "_st_buffer", 2, 8),
-    GIS_GEOMETRY_DESCRIPTOR("org.seekdb.gis.function.st_clipbybox2d", "_st_clipbybox2d", 2, 2),
-    GIS_GEOMETRY_DESCRIPTOR("org.seekdb.gis.function.st_union", "st_union", 2, 2),
-    GIS_GEOMETRY_DESCRIPTOR("org.seekdb.gis.function.st_difference", "st_difference", 2, 2),
-    GIS_GEOMETRY_DESCRIPTOR("org.seekdb.gis.function.st_symdifference", "st_symdifference", 2, 2),
-    GIS_GEOMETRY_DESCRIPTOR("org.seekdb.gis.function.st_asmvtgeom", "_st_asmvtgeom", 2, 5),
-    GIS_GEOMETRY_DESCRIPTOR("org.seekdb.gis.function.st_makevalid", "_st_makevalid", 1, 2),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.st_buffer_strategy", "st_buffer_strategy", 1, 2,
-                         "org.seekdb.gis.scalar.bytes"),
-    GIS_CODEC_DESCRIPTOR("org.seekdb.gis.function.st_bestsrid", "_st_bestsrid", 1, 2,
-                         "org.seekdb.gis.scalar.int32")
+static const seekdb_plugin_function_descriptor_v2_t gis_functions[] = {
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_point", "st_point",
+      "org.seekdb.gis.function", 2, 2, GIS_GEOMETRY, d, SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_makeenvelope", "st_makeenvelope",
+      "org.seekdb.gis.function", 4, 4, GIS_GEOMETRY, d, SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_makepoint", "st_makepoint",
+      "org.seekdb.gis.function", 2, 3, GIS_GEOMETRY, d, SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_linestring", "st_linestring",
+      "org.seekdb.gis.function.st_linestring", 1, 64, GIS_GEOMETRY, g, SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_polygon", "st_polygon",
+      "org.seekdb.gis.function.st_polygon", 1, 64, GIS_GEOMETRY, g, SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_multipoint", "st_multipoint",
+      "org.seekdb.gis.function.st_multipoint", 1, 64, GIS_GEOMETRY, g, SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_multilinestring", "st_multilinestring",
+      "org.seekdb.gis.function.st_multilinestring", 1, 64, GIS_GEOMETRY, g, SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_multipolygon", "st_multipolygon",
+      "org.seekdb.gis.function.st_multipolygon", 1, 64, GIS_GEOMETRY, g, SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_geometrycollection", "st_geometrycollection",
+      "org.seekdb.gis.function.st_geometrycollection", 1, 64, GIS_GEOMETRY, g, SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_geomcollection", "st_geomcollection",
+      "org.seekdb.gis.function.st_geomcollection", 1, 64, GIS_GEOMETRY, g, SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_transform", "st_transform",
+      "org.seekdb.gis.function.st_transform", 2, 2, GIS_GEOMETRY, gu, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.spatial_cellid", "spatial_cellid",
+      "org.seekdb.gis.function.spatial_cellid", 1, 1, "org.seekdb.gis.scalar.uint64", g, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.spatial_mbr", "spatial_mbr",
+      "org.seekdb.gis.function.spatial_mbr", 1, 1, GIS_BYTES, g, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_geohash", "_st_geohash",
+      "org.seekdb.gis.function.st_geohash", 1, 2, GIS_BYTES, gu, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_x", "st_x",
+      "org.seekdb.gis.function.st_x", 1, 1, GIS_DOUBLE, g, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_y", "st_y",
+      "org.seekdb.gis.function.st_y", 1, 1, GIS_DOUBLE, g, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_latitude", "st_latitude",
+      "org.seekdb.gis.function.st_latitude", 1, 1, GIS_DOUBLE, g, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_longitude", "st_longitude",
+      "org.seekdb.gis.function.st_longitude", 1, 1, GIS_DOUBLE, g, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_srid", "st_srid",
+      "org.seekdb.gis.function.st_srid", 1, 1, GIS_UINT32, g, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_aswkb", "st_aswkb",
+      "org.seekdb.gis.function.st_aswkb", 1, 1, "core.type.blob", g, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_asbinary", "st_asbinary",
+      "org.seekdb.gis.function.st_asbinary", 1, 1, "core.type.blob", g, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.geometrytype", "_st_geometrytype",
+      "org.seekdb.gis.function.geometrytype", 1, 1, GIS_BYTES, g, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_isvalid", "st_isvalid",
+      "org.seekdb.gis.function.st_isvalid", 1, 1, "org.seekdb.gis.scalar.bool", g, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_astext", "st_astext",
+      "org.seekdb.gis.function.st_astext", 1, 1, "core.type.text", g, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_aswkt", "st_aswkt",
+      "org.seekdb.gis.function.st_aswkt", 1, 1, "core.type.text", g, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_geomfromwkb", "st_geomfromwkb",
+      "org.seekdb.gis.function.st_geomfromwkb", 1, 2, GIS_GEOMETRY, bu, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_geometryfromwkb", "st_geometryfromwkb",
+      "org.seekdb.gis.function.st_geometryfromwkb", 1, 2, GIS_GEOMETRY, bu, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_setsrid", "_st_setsrid",
+      "org.seekdb.gis.function.st_setsrid", 2, 2, GIS_GEOMETRY, gu, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_geomfromtext", "st_geomfromtext",
+      "org.seekdb.gis.function.st_geomfromtext", 1, 2, GIS_GEOMETRY, bu, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_geometryfromtext", "st_geometryfromtext",
+      "org.seekdb.gis.function.st_geometryfromtext", 1, 2, GIS_GEOMETRY, bu, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_area", "st_area",
+      "org.seekdb.gis.function.st_area", 1, 1, GIS_DOUBLE, g, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_length", "st_length",
+      "org.seekdb.gis.function.st_length", 1, 1, GIS_DOUBLE, g, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_distance", "st_distance",
+      "org.seekdb.gis.function.st_distance", 2, 2, GIS_DOUBLE, gg, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_equals", "st_equals",
+      "org.seekdb.gis.function.st_equals", 2, 2, "org.seekdb.gis.scalar.bool", gg, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_intersects", "st_intersects",
+      "org.seekdb.gis.function.st_intersects", 2, 2, "org.seekdb.gis.scalar.bool", gg, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_contains", "st_contains",
+      "org.seekdb.gis.function.st_contains", 2, 2, "org.seekdb.gis.scalar.bool", gg, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_within", "st_within",
+      "org.seekdb.gis.function.st_within", 2, 2, "org.seekdb.gis.scalar.bool", gg, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_covers", "st_covers",
+      "org.seekdb.gis.function.st_covers", 2, 2, "org.seekdb.gis.scalar.bool", gg, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_touches", "st_touches",
+      "org.seekdb.gis.function.st_touches", 2, 2, "org.seekdb.gis.scalar.bool", gg, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_crosses", "st_crosses",
+      "org.seekdb.gis.function.st_crosses", 2, 2, "org.seekdb.gis.scalar.bool", gg, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_overlaps", "st_overlaps",
+      "org.seekdb.gis.function.st_overlaps", 2, 2, "org.seekdb.gis.scalar.bool", gg, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_dwithin", "st_dwithin",
+      "org.seekdb.gis.function.st_dwithin", 3, 3, "org.seekdb.gis.scalar.bool", ggd, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_asewkb", "_st_asewkb",
+      "org.seekdb.gis.function.st_asewkb", 1, 1, "core.type.blob", g, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_asewkt", "_st_asewkt",
+      "org.seekdb.gis.function.st_asewkt", 1, 1, "core.type.text", g, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_geomfromewkb", "_st_geomfromewkb",
+      "org.seekdb.gis.function.st_geomfromewkb", 1, 2, GIS_GEOMETRY, bu, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_geomfromewkt", "_st_geomfromewkt",
+      "org.seekdb.gis.function.st_geomfromewkt", 1, 2, GIS_GEOMETRY, bu, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_geogfromtext", "_st_geogfromtext",
+      "org.seekdb.gis.function.st_geogfromtext", 1, 2, GIS_GEOMETRY, bu, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_geographyfromtext", "_st_geographyfromtext",
+      "org.seekdb.gis.function.st_geographyfromtext", 1, 2, GIS_GEOMETRY, bu, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_iscollection", "_st_iscollection",
+      "org.seekdb.gis.function.st_iscollection", 1, 1, "org.seekdb.gis.scalar.bool", g, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_numinteriorrings", "_st_numinteriorrings",
+      "org.seekdb.gis.function.st_numinteriorrings", 1, 1, "org.seekdb.gis.scalar.int32", g, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_asgeojson", "st_asgeojson",
+      "org.seekdb.gis.function.st_asgeojson", 1, 3, "core.type.text", gdd, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_distance_sphere", "st_distance_sphere",
+      "org.seekdb.gis.function.st_distance_sphere", 2, 3, GIS_DOUBLE, ggd, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_centroid", "st_centroid",
+      "org.seekdb.gis.function.st_centroid", 1, 1, GIS_GEOMETRY, g, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_pointonsurface", "_st_pointonsurface",
+      "org.seekdb.gis.function.st_pointonsurface", 1, 1, GIS_GEOMETRY, g, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_priv_transform", "_st_transform",
+      "org.seekdb.gis.function.st_priv_transform", 2, 3, GIS_GEOMETRY, gub, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_buffer", "st_buffer",
+      "org.seekdb.gis.function.st_buffer", 2, 8, GIS_GEOMETRY, gdb, SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_priv_buffer", "_st_buffer",
+      "org.seekdb.gis.function.st_priv_buffer", 2, 8, GIS_GEOMETRY, gdb, SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_clipbybox2d", "_st_clipbybox2d",
+      "org.seekdb.gis.function.st_clipbybox2d", 2, 2, GIS_GEOMETRY, gg, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_union", "st_union",
+      "org.seekdb.gis.function.st_union", 2, 2, GIS_GEOMETRY, gg, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_difference", "st_difference",
+      "org.seekdb.gis.function.st_difference", 2, 2, GIS_GEOMETRY, gg, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_symdifference", "st_symdifference",
+      "org.seekdb.gis.function.st_symdifference", 2, 2, GIS_GEOMETRY, gg, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_asmvtgeom", "_st_asmvtgeom",
+      "org.seekdb.gis.function.st_asmvtgeom", 2, 5, GIS_GEOMETRY, ggddd, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_makevalid", "_st_makevalid",
+      "org.seekdb.gis.function.st_makevalid", 1, 2, GIS_GEOMETRY, gd, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_buffer_strategy", "st_buffer_strategy",
+      "org.seekdb.gis.function.st_buffer_strategy", 1, 2, GIS_BYTES, bd, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.st_bestsrid", "_st_bestsrid",
+      "org.seekdb.gis.function.st_bestsrid", 1, 2, "org.seekdb.gis.scalar.int32", gg, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.alias.point", "point",
+      "org.seekdb.gis.function", 2, 2, GIS_GEOMETRY, d, SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.alias._st_point", "_st_point",
+      "org.seekdb.gis.function", 2, 3, GIS_GEOMETRY, d, SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.alias._st_makepoint", "_st_makepoint",
+      "org.seekdb.gis.function", 2, 3, GIS_GEOMETRY, d, SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.alias._st_makeenvelope", "_st_makeenvelope",
+      "org.seekdb.gis.function", 4, 4, GIS_GEOMETRY, d, SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.alias.linestring", "linestring",
+      "org.seekdb.gis.function.st_linestring", 1, 64, GIS_GEOMETRY, g, SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.alias.polygon", "polygon",
+      "org.seekdb.gis.function.st_polygon", 1, 64, GIS_GEOMETRY, g, SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.alias.multipoint", "multipoint",
+      "org.seekdb.gis.function.st_multipoint", 1, 64, GIS_GEOMETRY, g, SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.alias.multilinestring", "multilinestring",
+      "org.seekdb.gis.function.st_multilinestring", 1, 64, GIS_GEOMETRY, g, SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.alias.multipolygon", "multipolygon",
+      "org.seekdb.gis.function.st_multipolygon", 1, 64, GIS_GEOMETRY, g, SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.alias.geometrycollection", "geometrycollection",
+      "org.seekdb.gis.function.st_geometrycollection", 1, 64, GIS_GEOMETRY, g, SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.alias.geomcollection", "geomcollection",
+      "org.seekdb.gis.function.st_geomcollection", 1, 64, GIS_GEOMETRY, g, SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.alias.area", "area",
+      "org.seekdb.gis.function.st_area", 1, 1, GIS_DOUBLE, g, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.alias.centroid", "centroid",
+      "org.seekdb.gis.function.st_centroid", 1, 1, GIS_GEOMETRY, g, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.alias._st_covers", "_st_covers",
+      "org.seekdb.gis.function.st_covers", 2, 2, "org.seekdb.gis.scalar.bool", gg, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.alias._st_equals", "_st_equals",
+      "org.seekdb.gis.function.st_equals", 2, 2, "org.seekdb.gis.scalar.bool", gg, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.alias._st_touches", "_st_touches",
+      "org.seekdb.gis.function.st_touches", 2, 2, "org.seekdb.gis.scalar.bool", gg, 0),
+  GIS_SQL_FUNCTION("org.seekdb.gis.function.alias._st_dwithin", "_st_dwithin",
+      "org.seekdb.gis.function.st_dwithin", 3, 3, "org.seekdb.gis.scalar.bool", ggd, 0),
 };
+#undef GIS_SQL_FUNCTION
 
-#undef GIS_RELATION_DESCRIPTOR
-#undef GIS_CODEC_DESCRIPTOR
-#undef GIS_GEOMETRY_DESCRIPTOR
+#include "sql_casts.h"
 
 static const seekdb_plugin_extension_snapshot_v1_t gis_snapshot = {
     sizeof(seekdb_plugin_extension_snapshot_v1_t),
@@ -1413,9 +1170,10 @@ static const seekdb_plugin_extension_snapshot_v1_t gis_snapshot = {
       },
       {0, 0, 0, 0}},
     1, sizeof(seekdb_plugin_type_descriptor_v1_t),
-    gis_functions, sizeof(gis_functions) / sizeof(gis_functions[0]),
+    (const seekdb_plugin_function_descriptor_v1_t *)gis_functions,
+    sizeof(gis_functions) / sizeof(gis_functions[0]),
     sizeof(gis_functions),
-    NULL, 0, 0,
+    gis_casts, sizeof(gis_casts) / sizeof(gis_casts[0]), sizeof(gis_casts),
     NULL, 0, 0,
     NULL, 0, 0,
     NULL, 0, 0,
@@ -1440,6 +1198,10 @@ static const seekdb_plugin_extension_catalog_service_v1_t gis_catalog_service = 
     {0, 0, 0, 0, 0, 0, 0, 0}};
 
 static const seekdb_plugin_service_provide_descriptor_t gis_services[] = {
+    GIS_CAST_PROVIDES(geometry),
+    GIS_CAST_PROVIDES(bytes),
+    GIS_CAST_PROVIDES(number),
+    GIS_CAST_PROVIDES(uint32),
     {
       sizeof(seekdb_plugin_service_provide_descriptor_t),
       "org.seekdb.gis.function",

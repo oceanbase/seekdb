@@ -2509,12 +2509,13 @@ int ObSchemaPrinter::print_routine_definition_param_v1(const ObRoutineInfo &rout
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(databuff_printf(buf, buf_len, pos, " "))) {
+      if (OB_FAIL(databuff_printf(buf, buf_len, pos, param->is_native_variadic() ? " VARIADIC " : " "))) {
       } else if (OB_FAIL(print_identifier(buf, buf_len, pos, param->get_param_name()))) {
       }
     }
 
     OZ (print_routine_param_type(param, NULL, buf, buf_len, pos, tz_info));
+    if (OB_SUCC(ret) && param->is_native_variadic()) OZ (databuff_printf(buf, buf_len, pos, "[]"));
 
     if (OB_SUCC(ret) && !param->get_default_value().empty()) {
       OZ (databuff_printf(buf,
@@ -2621,6 +2622,11 @@ int ObSchemaPrinter::print_routine_definition(const uint64_t routine_id,
     ParseResult parse_result;
     const ObString &routine_body = routine_info->get_routine_body();
     CK(!routine_body.empty());
+    if (OB_SUCC(ret) && routine_info->is_native() &&
+        (!routine_info->is_native_binding_valid() || !routine_body.prefix_match_ci("function"))) {
+      // Native bindings have a standalone declaration, never a legacy PL body.
+      ret = OB_INVALID_DATA;
+    }
 
     // TODO: Keep routine-body parsing conservative for OB-JDBC compatibility.
     if (OB_FAIL(ret)) {
@@ -2712,6 +2718,10 @@ int ObSchemaPrinter::print_routine_definition_v2_mysql(
                                               : create_node->children_[5]);
   CK (OB_NOT_NULL(body_node));
   CK (OB_NOT_NULL(body_node->raw_text_));
+  if (OB_SUCC(ret) && (routine_info.is_native() != (body_node->type_ == T_SF_NATIVE_BODY) ||
+      !routine_info.is_native_binding_valid())) {
+    ret = OB_INVALID_DATA;
+  }
 
   OX (priv_user = routine_info.get_priv_user());
   OX (user_name = priv_user.split_on('@'));
@@ -2780,10 +2790,21 @@ int ObSchemaPrinter::print_routine_definition_v2_mysql(
     }
   }
 
-  OZ (databuff_printf(buf, buf_len, pos, "\n%.*s",
-                      static_cast<int32_t>(body_node->text_len_),
-                      body_node->raw_text_),
-      K(buf), K(buf_len), K(routine_info), K(body_node->raw_text_), K(body_node->text_len_));
+  if (OB_SUCC(ret) && routine_info.is_native()) {
+    // The persisted binding is authoritative, not the original source text:
+    // rebinding must not make SHOW CREATE / a dump restore the old implementation.
+    // is_native_binding_valid() restricts IDs to [a-z0-9._-], so neither quotes
+    // nor backslashes can escape these SQL string literals under any sql_mode.
+    const ObString &module = routine_info.get_native_module_id();
+    const ObString &implementation = routine_info.get_native_implementation_id();
+    OZ (databuff_printf(buf, buf_len, pos, "\nAS '%.*s', '%.*s' LANGUAGE C",
+        module.length(), module.ptr(), implementation.length(), implementation.ptr()));
+  } else {
+    OZ (databuff_printf(buf, buf_len, pos, "\n%.*s",
+                        static_cast<int32_t>(body_node->text_len_),
+                        body_node->raw_text_),
+        K(buf), K(buf_len), K(routine_info), K(body_node->raw_text_), K(body_node->text_len_));
+  }
 
   return ret;
 }

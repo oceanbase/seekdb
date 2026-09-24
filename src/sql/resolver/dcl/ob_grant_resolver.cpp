@@ -19,6 +19,7 @@
 
 #include "sql/resolver/dcl/ob_set_password_resolver.h"
 #include "sql/engine/ob_exec_context.h"
+#include "sql/resolver/ddl/native_routine_ddl.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;
@@ -31,6 +32,53 @@ ObGrantResolver::ObGrantResolver(ObResolverParams &params)
 
 ObGrantResolver::~ObGrantResolver()
 {
+}
+
+int ObGrantResolver::resolve_native_privilege_target(const ParseNode &signature, ObSQLSessionInfo &session,
+    ObIAllocator &allocator, ObSchemaChecker &checker, const ObString &database,
+    const ObString &name, obcall::NativeRoutinePrivilegeTarget &target)
+{
+  target.resolved_ = target.signature_qualified_ = false;
+  target.routine_.reset();
+  target.clear_actor();
+  if (signature.type_ != T_EXPR_LIST || signature.num_child_ < 0 ||
+      signature.num_child_ > NativeRoutineSignature::MAX_EXPANDED_ARGUMENTS ||
+      (signature.num_child_ && !signature.children_) || name.empty() || database.empty() ||
+      !checker.get_schema_guard()) return OB_INVALID_ARGUMENT;
+  try {
+    // SQL and PL scalar type nodes share the type representation. Adapt only
+    // their list wrappers, then reuse the ALTER/DROP declaration identity codec.
+    std::vector<ParseNode> parameters(signature.num_child_);
+    std::vector<ParseNode *> pointers(signature.num_child_);
+    for (int64_t i = 0; i < signature.num_child_; ++i) {
+      const auto *input = signature.children_[i];
+      if (!input || input->type_ != T_EXPR_LIST || input->num_child_ != 1 ||
+          !input->children_ || !input->children_[0] || input->value_ != 0)
+        return OB_INVALID_ARGUMENT;
+      parameters[i] = *input;
+      parameters[i].type_ = T_SP_PARAM;
+      const auto *type = input->children_[0];
+      if (type->type_ == T_COLLECTION) {
+        if (type->int32_values_[0] != 0 || type->num_child_ != 1 || !type->children_ ||
+            !type->children_[0] || type->children_[0]->type_ == T_COLLECTION) return OB_NOT_SUPPORTED;
+        parameters[i].children_ = type->children_;
+        parameters[i].value_ = 1;
+      }
+      pointers[i] = &parameters[i];
+    }
+    ParseNode list{};
+    list.type_ = T_SP_PARAM_LIST; list.num_child_ = signature.num_child_; list.children_ = pointers.data();
+    std::string identity;
+    int ret = NativeRoutineDdl::resolve_signature(list, allocator, session, identity);
+    uint64_t database_id = OB_INVALID_ID;
+    const ObRoutineInfo *routine = nullptr;
+    if (OB_SUCC(ret)) ret = checker.get_database_id(database, database_id);
+    if (OB_SUCC(ret)) ret = NativeRoutineDdl::find(*checker.get_schema_guard(), database_id, name, &identity, routine);
+    if (OB_SUCC(ret) && !routine) ret = OB_ERR_SP_DOES_NOT_EXIST;
+    if (OB_SUCC(ret)) ret = target.assign(*routine, true);
+    return ret;
+  } catch (const std::bad_alloc &) { return OB_ALLOCATE_MEMORY_FAILED; }
+  catch (...) { return OB_ERR_UNEXPECTED; }
 }
 
 int ObGrantResolver::resolve_grantee_clause(
@@ -356,7 +404,7 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
                                                           params_.schema_checker_,
                                                           db,
                                                           table,
-                                                          allocator_))) {
+                                                          allocator_, true, session_info_))) {
           }
         }
 
@@ -410,7 +458,8 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
             if (session_info_->is_inner()) {
               // do nothing in inner_sql
             } else if (OB_FAIL(mask_password_for_users(allocator_,
-                session_info_->get_current_query_string(), users_node, 1, masked_sql))) {
+                params_.cur_sql_.empty() ? session_info_->get_current_query_string() : params_.cur_sql_,
+                users_node, 1, masked_sql))) {
             } else {
               grant_stmt->set_masked_sql(masked_sql);
             }
@@ -426,6 +475,11 @@ int ObGrantResolver::resolve_mysql(const ParseNode &parse_tree)
                 ret = OB_ERR_PARSE_SQL;
               } else if (OB_ISNULL(user_node->children_[0])) {
                 ret = OB_ERR_PARSE_SQL;
+              } else if (grant_stmt->native_target().resolved_ &&
+                         (user_node->children_[1] != nullptr || user_node->children_[4] != nullptr)) {
+                // Native object grants never alter principal credentials,
+                // including an explicitly empty password or auth plugin.
+                ret = OB_NOT_SUPPORTED;
               } else {
 
                 if (user_node->children_[0]->type_ == T_FUN_SYS_CURRENT_USER) {

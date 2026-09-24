@@ -112,7 +112,10 @@ def main():
             "src/sql/optimizer/ob_optimizer.cpp",
             "src/share/plugin/catalog_builder.h",
             "src/sql/resolver/ddl/catalog_routine_lookup.h",
+            "src/sql/printer/ob_schema_printer.cpp",
             "include/seekdb/plugin/catalog_spi.h",
+            "include/seekdb/plugin/extension_spi.h",
+            "include/seekdb/plugin/execution_spi.h",
             "include/seekdb/plugin/sql_spi.h",
             "include/seekdb/plugin/sql_catalog.h",
             "src/share/plugin/ob_plugin_registry.h",
@@ -138,6 +141,7 @@ def main():
             "src/sql/resolver/dml/ob_dml_resolver.cpp",
             "src/sql/resolver/dml/ob_dml_stmt.cpp",
             "src/sql/resolver/ob_resolver_utils.cpp",
+            "src/sql/resolver/native_routine_overload.h",
             "src/sql/engine/expr/plugin_function_expr.h",
             "src/sql/engine/expr/plugin_function_expr.cpp",
             "src/sql/engine/basic/ob_function_table_op.h",
@@ -219,12 +223,15 @@ def main():
             "src/sql/engine/cmd/alter_extension_executor.cpp",
             "src/share/schema/ob_schema_getter_guard.h",
             "src/share/schema/ob_schema_getter_guard.cpp",
+            "src/share/schema/ob_routine_mgr.h", "src/share/schema/ob_routine_mgr.cpp",
             "src/share/schema/ob_schema_getter_guard_priv.cpp",
             "src/share/schema/routine_privilege_overlay.h",
+            "src/share/schema/ob_priv_mgr.h",
             "src/share/schema/routine_catalog_savepoint.h",
             "src/share/schema/routine_catalog_transaction.h",
             "src/share/schema/routine_catalog_transaction.cpp",
             "src/rootserver/pl_ddl/routine_catalog_writer.h",
+            "src/rootserver/pl_ddl/routine_ddl_invalidation.h",
             "src/rootserver/pl_ddl/routine_cache_invalidation.h",
             "src/share/schema/ob_multi_version_schema_service.h",
             "src/share/schema/ob_multi_version_schema_service.cpp",
@@ -249,11 +256,28 @@ def main():
             "src/pl/ob_pl_router.cpp", "src/sql/pl/ob_pl_router.h",
             "src/sql/resolver/ob_resolver_define.h",
             "src/sql/resolver/ddl/ob_create_routine_resolver.cpp",
+            "src/sql/resolver/ddl/ob_alter_routine_resolver.cpp", "src/sql/resolver/ddl/native_routine_ddl.h",
+            "src/sql/resolver/ddl/ob_drop_routine_resolver.cpp", "src/share/ob_rpc_struct.h", "src/share/ob_rpc_struct.cpp",
+            "src/sql/resolver/ddl/native_function_default.h",
+            "src/share/schema/native_routine_signature.h",
+            "src/share/schema/ob_schema_getter_guard_priv.cpp", "src/share/schema/ob_priv_mgr.cpp",
+            "src/share/schema/ob_priv_sql_service.cpp", "src/share/schema/ob_priv_sql_service.h",
+            "src/sql/resolver/dcl/ob_grant_resolver.h", "src/sql/resolver/dcl/ob_grant_resolver.cpp",
+            "src/sql/resolver/dcl/ob_revoke_resolver.cpp", "src/sql/resolver/dcl/ob_grant_stmt.h",
+            "src/sql/resolver/dcl/ob_revoke_stmt.h", "src/sql/engine/cmd/ob_dcl_executor.cpp",
+            "src/sql/privilege_check/ob_privilege_check.cpp",
+            "src/share/schema/ob_schema_struct.h", "src/share/schema/ob_schema_struct.cpp",
+            "src/rootserver/ob_ddl_service.cpp", "src/rootserver/ob_local_management_service.cpp",
+            "src/sql/resolver/ob_resolver_utils.cpp",
+            "src/pl/parser/pl_non_reserved_keywords_mysql_mode.c",
+            "src/sql/resolver/expr/ob_raw_expr_util.cpp",
+            "src/pl/parser/pl_parser_mysql_mode.y",
             "src/sql/ob_sql.cpp", "src/sql/plan_cache/ob_plan_cache.cpp",
             "src/sql/plan_cache/ob_plan_cache.h",
             "src/sql/ob_spi.h", "src/sql/ob_spi.cpp",
             "src/rootserver/pl_ddl/routine_id_reservation.h",
             "src/share/plugin/extension_routine_update.h",
+            "src/sql/resolver/ddl/native_routine_dcl_request.h",
             "src/query/api/query/command/ob_root_command_service.h",
             "src/query/api/query/command/ob_root_service_serialization.h",
             "src/rootserver/ob_local_management_service.h",
@@ -262,7 +286,13 @@ def main():
             "src/rootserver/pl_ddl/ob_pl_ddl_operator.h",
             "src/rootserver/pl_ddl/ob_pl_ddl_operator.cpp",
             "src/rootserver/pl_ddl/ob_pl_ddl_service.h",
+            "src/rootserver/pl_ddl/native_routine_grant_plan.h",
+            "src/rootserver/pl_ddl/native_routine_acl_version_reservation.h",
             "src/rootserver/pl_ddl/ob_pl_ddl_service.cpp",
+            "src/share/schema/native_routine_admission.h",
+            "src/rootserver/ob_ddl_operator.cpp",
+            "src/share/plugin/ob_plugin_catalog.h",
+            "src/share/plugin/ob_plugin_catalog.cpp",
             "src/sql/engine/ob_exec_context.h",
             "src/sql/engine/ob_exec_context.cpp",
             "src/oblib/lib/oblog/ob_warning_buffer.h",
@@ -380,8 +410,7 @@ def main():
         if len(rust_artifacts) != 1:
             raise RuntimeError("expected exactly one installed Rust text DSO")
         installed_packages = installed / data_dir / "seekdb/extension"
-        built_package = installed_packages / "rust_text_built"
-        if not built_package.is_dir() or {p.name for p in built_package.iterdir()} != {"rust_text_built.control"}:
+        if not (installed_packages / "rust_text_built.control").is_file() or list(installed_packages.glob("rust_text_built--*.sql")):
             raise RuntimeError("transaction-built example must install control only, without placeholder SQL")
         generated_composed = stage / "generated composed source"
         subprocess.run(["cargo", "run", "--offline", "--manifest-path",
@@ -393,12 +422,12 @@ def main():
         if {p.name for p in generated_composed.iterdir()} != composed_files:
             raise RuntimeError("composed schema generator emitted unexpected files or incomplete output")
         for name in ("text_composed.control", "text_composed--1.0.sql", "text_composed--1.0--1.1.sql"):
-            artifact = installed_packages / "text_composed" / name
+            artifact = installed_packages / name
             if not artifact.is_file() or artifact.read_bytes() != (source / "plugins/sql_packages/text_composed" / name).read_bytes():
                 raise RuntimeError(f"composed package missing or different from source: {name}")
             if (generated_composed / name).read_bytes() != artifact.read_bytes():
                 raise RuntimeError(f"generated composed package differs from installed artifact: {name}")
-        native_package = installed_packages / "rust_text_native"
+        native_package = installed_packages
         if not (native_package / "rust_text_native.control").is_file() or not (native_package / "rust_text_native--1.0--1.1.sql").is_file():
             raise RuntimeError("native-source package was not installed")
         if (native_package / "rust_text_native--1.0.sql").exists():
@@ -421,12 +450,12 @@ def main():
                         "--manifest-path", str(source / "plugins/rust_text/Cargo.toml"),
                         "--output", str(generated_package)], cwd=source / "rust", check=True)
         for name in ("rust_text_ops.control", "rust_text_ops--1.0.sql", "rust_text_ops--1.0--1.1.sql"):
-            if not (installed_packages / "rust_text_ops" / name).is_file():
+            if not (installed_packages / name).is_file():
                 raise RuntimeError(f"top-level plugins component did not install {name}")
-            if (generated_package / name).read_bytes() != (installed_packages / "rust_text_ops" / name).read_bytes():
+            if (generated_package / name).read_bytes() != (installed_packages / name).read_bytes():
                 raise RuntimeError(f"generated SQL package differs from kernel-tested installed artifact: {name}")
         for name in ("text_ops.control", "text_ops--1.0.sql", "text_ops--1.0--1.1.sql"):
-            if not (installed_packages / "text_ops" / name).is_file():
+            if not (installed_packages / name).is_file():
                 raise RuntimeError(f"top-level plugins component did not install {name}")
         packages = stage / "packages"
         packages.mkdir()
@@ -447,7 +476,8 @@ def main():
         def package(name, sql, control="default_version = '1'\n"):
             directory = packages / name
             directory.mkdir()
-            (directory / f"{name}.control").write_text(control, encoding="utf-8")
+            # These fixtures exercise invoker ACL rather than the package gate.
+            (directory / f"{name}.control").write_text(control + "superuser = false\n", encoding="utf-8")
             (directory / f"{name}--1.sql").write_text(sql, encoding="utf-8")
 
         package("routines", """-- a function body is not split on its inner semicolons

@@ -41,12 +41,20 @@ unsafe fn text<'a>(span: Text, limit: usize) -> Result<&'a str, Error> {
 }
 
 unsafe fn snapshot(source: *const SourceInput) -> Result<Package, Error> {
+    unsafe { snapshot_with_policy(source, 0) }
+}
+
+unsafe fn snapshot_with_policy(
+    source: *const SourceInput,
+    invoker_only: u32,
+) -> Result<Package, Error> {
     if source.is_null() || unsafe { (*source).struct_size } < size_of::<SourceInput>() as u32 {
         return Err((INVALID, "missing or short in-memory package source"));
     }
     let source = unsafe { &*source };
     if source.relocatable > 1
         || source.native_install > 1
+        || invoker_only > 1
         || source.dependency_count > 64
         || source.prerequisite_count > 64 - source.dependency_count
         || source.script_count > 1024
@@ -157,6 +165,10 @@ unsafe fn snapshot(source: *const SourceInput) -> Result<Package, Error> {
             requires,
             relocatable: source.relocatable != 0,
             native_install: source.native_install != 0,
+            invoker_only: invoker_only != 0,
+            // In-memory sources already contain prepared SQL, not filesystem
+            // controls; never substitute them a second time.
+            ..Control::default()
         },
         scripts: owned,
         prerequisites: temporary,
@@ -176,6 +188,25 @@ pub unsafe extern "C" fn seekdb_runtime_package_from_source(
     capacity: u32,
 ) -> i32 {
     unsafe { finish_read(output, error, capacity, || snapshot(source)) }
+}
+
+/// Additive host entrance: preserve the existing source struct layout and
+/// default policy rather than interpreting its former padding as authority.
+/// # Safety
+/// Same pointer/ownership contract as `seekdb_runtime_package_from_source`.
+#[no_mangle]
+pub unsafe extern "C" fn seekdb_runtime_package_from_source_with_policy(
+    source: *const SourceInput,
+    invoker_only: u32,
+    output: *mut *mut Package,
+    error: *mut c_char,
+    capacity: u32,
+) -> i32 {
+    unsafe {
+        finish_read(output, error, capacity, || {
+            snapshot_with_policy(source, invoker_only)
+        })
+    }
 }
 
 #[cfg(test)]
@@ -206,6 +237,20 @@ mod tests {
             prerequisite_count: 0,
         }
     }
+    #[test]
+    fn invoker_policy_is_owned_and_validated() {
+        let scripts = [ScriptInput {
+            from_version: span(""),
+            to_version: span("2"),
+            sql: span("SELECT 1;"),
+        }];
+        let input = source(&scripts);
+        assert!(!unsafe { snapshot(&input) }.unwrap().control.invoker_only);
+        let package = unsafe { snapshot_with_policy(&input, 1) }.unwrap();
+        assert!(package.control.invoker_only);
+        assert!(unsafe { snapshot_with_policy(&input, 2) }.is_err());
+    }
+
     #[test]
     fn native_source_is_explicit_and_distinct_from_update_scripts() {
         let mut input = source(&[]);

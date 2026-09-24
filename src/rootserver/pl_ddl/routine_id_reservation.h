@@ -33,8 +33,9 @@ public:
   uint64_t id() const;
   // Every attempt consumes the token, including identity mismatch. Caller must
   // use the returned ID for this CREATE only; a later write error is not retryable
-  // with the same token. Body/parameters may change during semantic resolution;
-  // database, owner, kind, exact name, standalone namespace and ID may not.
+  // with the same token. Ordinary PL body/parameters may change during semantic
+  // resolution; database, owner, kind, exact name, standalone namespace and ID
+  // may not. Native tokens also pin the slot and declared input signature.
   int take(share::schema::ObSchemaService &service,
            const share::schema::ObRoutineInfo &routine, uint64_t &id);
 

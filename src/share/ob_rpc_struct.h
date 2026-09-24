@@ -2515,6 +2515,31 @@ public:
   common::ObSEArray<uint64_t, 4> user_ids_; //for set default role to multiple users
 };
 
+// An owned native FUNCTION identity, carried from DCL resolution to admission.
+// Unresolved legacy requests must never be reinterpreted as native overloads.
+struct NativeRoutinePrivilegeTarget
+{
+  OB_UNIS_VERSION(1);
+public:
+  bool resolved_ = false;
+  bool signature_qualified_ = false;
+  share::schema::ObRoutineInfo routine_;
+  // Executor-captured identity, not cached privilege bits or an authority token.
+  uint64_t actor_id_ = common::OB_INVALID_ID;
+  common::ObSEArray<uint64_t, 4> enabled_roles_;
+  void clear_actor() { actor_id_ = common::OB_INVALID_ID; enabled_roles_.reset(); }
+  int bind_actor(uint64_t actor, const common::ObIArray<uint64_t> &enabled_roles);
+  int assign(const share::schema::ObRoutineInfo &routine, bool signature_qualified = false);
+  bool is_valid() const;
+  int check(const share::schema::ObRoutineInfo *current) const;
+  // Identity revalidation for the dedicated object-ACL transaction endpoint.
+  // Does not authorize the actor and never permits a legacy name-keyed write.
+  int revalidate(share::schema::ObSchemaGetterGuard &guard, const common::ObString &database,
+      const common::ObString &name, uint64_t object_id) const;
+  int admit(share::schema::ObSchemaGetterGuard &guard, const common::ObString &database,
+      const common::ObString &name, uint64_t object_id) const;
+};
+
 struct ObGrantArg : public ObDDLArg
 {
   OB_UNIS_VERSION(1);
@@ -2569,6 +2594,7 @@ public:
   common::ObSEArray<std::pair<ObString, ObPrivType>, 4> column_names_priv_;
   common::ObString grantor_;
   common::ObString grantor_host_;
+  NativeRoutinePrivilegeTarget native_target_;
 };
 
 
@@ -2670,12 +2696,18 @@ struct ObRevokeRoutineArg : public ObDDLArg
   OB_UNIS_VERSION(1);
 
 public:
+  enum NativeRevokeBehavior : int64_t { REVOKE_DEFAULT = 0, REVOKE_RESTRICT = 1, REVOKE_CASCADE = 2 };
   ObRevokeRoutineArg() : ObDDLArg(), user_id_(common::OB_INVALID_ID),
                             priv_set_(0), grant_(true), obj_id_(common::OB_INVALID_ID),
                             obj_type_(common::OB_INVALID_ID), grantor_id_(common::OB_INVALID_ID),
                             obj_priv_array_(), revoke_all_ora_(false), grantor_(), grantor_host_()
   { }
   bool is_valid() const;
+  bool has_native_revoke_options() const { return grant_option_only_ || revoke_behavior_ != REVOKE_DEFAULT; }
+  int set_native_grantees(const common::ObIArray<uint64_t> &grantees);
+  // Until the Root endpoint owns the native batch transaction, never allow new
+  // options to fall through to the legacy name-keyed privilege writer.
+  int admit_native_target(share::schema::ObSchemaGetterGuard &guard) const;
   TO_STRING_KV(
                K_(user_id),
                K_(db),
@@ -2687,7 +2719,7 @@ public:
                K_(grantor_id),
                K_(obj_priv_array),
                K_(grantor),
-               K_(grantor_host));
+               K_(grantor_host), K_(grant_option_only), K_(revoke_behavior));
 
 
   uint64_t user_id_;
@@ -2702,6 +2734,12 @@ public:
   bool revoke_all_ora_;
   common::ObString grantor_;
   common::ObString grantor_host_;
+  NativeRoutinePrivilegeTarget native_target_;
+  bool grant_option_only_ = false;
+  NativeRevokeBehavior revoke_behavior_ = REVOKE_DEFAULT;
+  // Canonical sorted unique IDs for one atomic native REVOKE. Legacy requests
+  // use user_id_; batch requests leave it invalid, so they cannot fall through.
+  common::ObSEArray<uint64_t, 4> native_grantees_;
 };
 
 struct ObRevokeSysPrivArg : public ObDDLArg
@@ -3039,15 +3077,18 @@ public:
       routine_name_(),
       routine_type_(share::schema::INVALID_ROUTINE_TYPE),
       if_exist_(false),
-      error_info_() {}
+      error_info_(),
+      native_target_resolved_(false),
+      native_target_() {}
   virtual ~ObDropRoutineArg() {}
   bool is_valid() const;
+  int check_native_target(const share::schema::ObRoutineInfo *current, uint64_t database_id) const;
   TO_STRING_KV(
                K_(db_name),
                K_(routine_name),
                K_(routine_type),
                K_(if_exist),
-               K_(error_info));
+               K_(error_info), K_(native_target_resolved), K_(native_target));
 
 
   common::ObString db_name_;
@@ -3055,6 +3096,10 @@ public:
   share::schema::ObRoutineType routine_type_;
   bool if_exist_;
   share::schema::ObErrorInfo error_info_;
+  // Own the resolved native identity across parser arenas and RPC buffers.
+  // A resolved empty target represents an IF EXISTS miss, never a name retry.
+  bool native_target_resolved_;
+  share::schema::ObRoutineInfo native_target_;
 };
 
 struct ObCreatePackageArg : public ObDDLArg

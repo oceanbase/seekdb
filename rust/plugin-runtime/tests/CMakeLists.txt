@@ -229,6 +229,15 @@ set_tests_properties(plugin_kernel_build_gate PROPERTIES TIMEOUT 30)
 add_test(NAME plugin_query_catalog_runner
   COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/test_query_catalog_server.py")
 set_tests_properties(plugin_query_catalog_runner PROPERTIES TIMEOUT 30 LABELS "plugin_test_harness")
+add_test(NAME plugin_native_extension_runner
+  COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/test_native_extension_server.py")
+set_tests_properties(plugin_native_extension_runner PROPERTIES TIMEOUT 30 LABELS "plugin_test_harness")
+add_test(NAME plugin_gis_extension_runner
+  COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/test_gis_extension_server.py")
+set_tests_properties(plugin_gis_extension_runner PROPERTIES TIMEOUT 30 LABELS "plugin_test_harness")
+add_test(NAME plugin_gis_declaration_inventory
+  COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/test_gis_declarations.py")
+set_tests_properties(plugin_gis_declaration_inventory PROPERTIES TIMEOUT 30 LABELS "plugin_test_harness")
 set_tests_properties(generated_schema_inventory sql_source_inventory
   sql_plugin_profiles plugin_kernel_build_gate rust_plugin_cargo_boundary
   PROPERTIES LABELS "plugin_build_boundary")
@@ -244,4 +253,8 @@ if (UNIX)
     COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/package_source.py"
       "$<TARGET_FILE:plugin_package_source>" "${SEEKDB_SOURCE_DIR}/plugins/sql_packages")
   set_tests_properties(plugin_package_source PROPERTIES TIMEOUT 30)
+  add_test(NAME plugin_package_layout
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/package_layout.py"
+      "$<TARGET_FILE:plugin_package_source>" "${SEEKDB_SOURCE_DIR}/plugins/sql_packages" "${CMAKE_COMMAND}")
+  set_tests_properties(plugin_package_layout PROPERTIES TIMEOUT 60)
 endif()

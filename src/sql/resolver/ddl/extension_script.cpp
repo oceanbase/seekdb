@@ -244,6 +244,7 @@ int ExtensionUpdatePlan::load(const std::string &root, uint64_t tenant_id, uint6
       request.to_version_ = script_.source().version_; // includes control-default resolution
       request.requires_ = script_.source().requires_;
       request.prerequisites_ = script_.source().prerequisites_;
+      request.requires_superuser_ = script_.source().requires_superuser_;
       observed_ = observed;
       request_ = std::move(request);
       ready_ = true;

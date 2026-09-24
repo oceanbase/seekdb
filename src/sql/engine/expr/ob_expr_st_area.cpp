@@ -14,19 +14,12 @@
  * limitations under the License.
  */
 
+#if SEEKDB_ENABLE_CORE_GIS
 #define USING_LOG_PREFIX SQL_ENG
 
 #include "ob_expr_st_area.h"
-#include <cstring>
-#if SEEKDB_ENABLE_CORE_GIS
 #include "share/geo/ob_geo_func_register.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
-#else
-#include "sql/engine/expr/ob_plugin_expr_utils.h"
-#include "seekdb/plugin/execution_spi.h"
-#include "seekdb/plugin/extension_spi.h"
-#include "share/rc/ob_module_provider.h"
-#endif
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -36,30 +29,6 @@ namespace oceanbase
 {
 namespace sql
 {
-
-#if !SEEKDB_ENABLE_CORE_GIS
-namespace
-{
-struct AreaPluginSink { ObDatum *result_; };
-seekdb_plugin_status_t SEEKDB_PLUGIN_CALL emit_area_plugin_result(
-    seekdb_plugin_host_handle_t *host,
-    const seekdb_plugin_execution_result_v1_t *result)
-{
-  if (nullptr == host || nullptr == result || result->struct_size != sizeof(*result) ||
-      result->is_null != 0 || result->data_size != sizeof(double) || nullptr == result->data ||
-      nullptr == result->type_id ||
-      0 != std::strcmp(result->type_id, "org.seekdb.gis.scalar.float64")) {
-    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
-  }
-  AreaPluginSink *sink = reinterpret_cast<AreaPluginSink *>(host);
-  if (nullptr == sink->result_) return SEEKDB_PLUGIN_STATUS_FAILED_PRECONDITION;
-  double value = 0.0;
-  std::memcpy(&value, result->data, sizeof(value));
-  sink->result_->set_double(value);
-  return SEEKDB_PLUGIN_STATUS_OK;
-}
-}
-#endif
 
 ObExprSTArea::ObExprSTArea(ObIAllocator &alloc)
     : ObFuncExprOperator(alloc, T_FUN_SYS_ST_AREA, N_ST_AREA, 1, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
@@ -92,35 +61,6 @@ int ObExprSTArea::calc_result_type1(ObExprResType &type,
 
 int ObExprSTArea::eval_st_area(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
-#if !SEEKDB_ENABLE_CORE_GIS
-  int ret = OB_SUCCESS;
-  ObDatum *datum = nullptr;
-  if (OB_FAIL(expr.args_[0]->eval(ctx, datum))) {
-  } else if (datum->is_null()) {
-    res.set_null();
-  } else if (nullptr == share::g_mp) {
-    ret = OB_NOT_SUPPORTED;
-  } else {
-    ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
-    ObString geometry;
-    if (OB_FAIL(read_plugin_expr_bytes(*expr.args_[0], ctx, *datum,
-                                      tmp_alloc_g.get_allocator(), geometry))) return ret;
-    AreaPluginSink sink{&res};
-    seekdb_plugin_execution_context_v1_t plugin_ctx = {};
-    plugin_ctx.struct_size = sizeof(plugin_ctx);
-    plugin_ctx.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&sink);
-    plugin_ctx.emit_result = emit_area_plugin_result;
-    seekdb_plugin_execution_value_v1_t argument = {};
-    argument.struct_size = sizeof(argument);
-    argument.type_id = "org.seekdb.gis.geometry";
-    argument.data = reinterpret_cast<const uint8_t *>(geometry.ptr());
-    argument.data_size = static_cast<uint64_t>(geometry.length());
-    const int plugin_ret = share::g_mp->execute_plugin_extension(
-        SEEKDB_PLUGIN_EXTENSION_FUNCTION, "st_area", &plugin_ctx, &argument, 1);
-    if (OB_SUCCESS != plugin_ret) ret = OB_NOT_SUPPORTED;
-  }
-  return ret;
-#else
   int ret = OB_SUCCESS;
   ObDatum *gis_datum = NULL;
   ObExpr *gis_arg = expr.args_[0];
@@ -166,7 +106,6 @@ int ObExprSTArea::eval_st_area(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
     }
   }
   return ret;
-#endif
 }
 
 int ObExprSTArea::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObExpr &rt_expr) const
@@ -178,3 +117,5 @@ int ObExprSTArea::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, O
 
 }
 }
+
+#endif // SEEKDB_ENABLE_CORE_GIS

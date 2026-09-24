@@ -17,6 +17,9 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "ob_create_routine_resolver.h"
 #include "ob_create_routine_stmt.h"
+#include "sql/resolver/ddl/native_function_declaration.h"
+#include "sql/resolver/ddl/native_function_default.h"
+#include "sql/engine/expr/plugin_function_expr.h"
 #include "sql/pl/ob_pl_router.h"
 #include "sql/pl/ob_pl_resolver.h"
 #include "sql/pl/parser/parse_stmt_item_type.h"
@@ -563,6 +566,7 @@ int ObCreateRoutineResolver::resolve_param_list(const ParseNode *param_list, obc
   ObRoutineParam routine_param;
   ObPLDataType data_type;
   ObRoutineInfo &routine_info = crt_routine_arg.routine_info_;
+  bool has_default = false;
   ObPLDependencyTable deps;
   CK(OB_NOT_NULL(session_info_));
   if (OB_SUCC(ret) && param_list != NULL) {
@@ -619,13 +623,36 @@ int ObCreateRoutineResolver::resolve_param_list(const ParseNode *param_list, obc
         }
       }
       // set default value expr str
+      if (OB_SUCC(ret) && param_node->int32_values_[1] != 0) {
+        if (!routine_info.is_native()) ret = OB_NOT_SUPPORTED;
+        else if (param_node->int32_values_[1] != 1 || i + 1 != param_list->num_child_ || has_default)
+          ret = OB_INVALID_ARGUMENT;
+        else routine_param.set_native_variadic();
+      }
       if (OB_SUCC(ret)
           && 3 == param_node->num_child_ // default node
           && OB_NOT_NULL(param_node->children_[2])) {
-        {
+        if (!routine_info.is_native()) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "stored procedure's paramlist use default value in mysql mode");
+        } else {
+          const auto *node = param_node->children_[2];
+          const ObString text(node->str_len_, node->str_value_);
+          if (node->type_ != T_SP_DECL_DEFAULT || node->num_child_ != 1 ||
+              node->children_ == nullptr || node->children_[0] == nullptr) {
+            ret = OB_INVALID_DATA;
+          } else if (!NativeFunctionDefault::supported(text)) {
+            ret = OB_NOT_SUPPORTED;
+            LOG_USER_ERROR(OB_NOT_SUPPORTED, "native function defaults other than numeric, boolean or NULL literals");
+          } else {
+            ObRawExpr *value = nullptr;
+            OZ (ObResolverUtils::resolve_const_expr(params_, *node->children_[0], value, nullptr));
+            OZ (routine_param.set_default_value(text));
+            OX (has_default = true);
+          }
         }
+      } else if (OB_SUCC(ret) && routine_info.is_native() && has_default) {
+        ret = OB_INVALID_ARGUMENT;
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(routine_info.add_routine_param(routine_param))) {
@@ -709,6 +736,18 @@ int ObCreateRoutineResolver::resolve_impl(ObRoutineType routine_type,
   CK(OB_NOT_NULL(session_info_), OB_NOT_NULL(allocator_), OB_NOT_NULL(schema_checker_));
   CK (INVALID_ROUTINE_TYPE != routine_type);
 
+  const bool native = NativeFunctionDeclaration::is_native(body_node);
+  NativeFunctionDeclaration declaration;
+  if (OB_SUCC(ret) && native) {
+    OZ (NativeFunctionDeclaration::read(body_node, declaration));
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+    if (OB_SUCC(ret) && !session_info_->has_user_super_privilege()) ret = OB_ERR_NO_PRIVILEGE;
+#else
+    if (OB_SUCC(ret)) ret = OB_NOT_SUPPORTED;
+#endif
+    if (OB_SUCC(ret) && routine_type != ROUTINE_FUNCTION_TYPE) ret = OB_INVALID_ARGUMENT;
+  }
+
   OZ(resolve_sp_definer(sp_definer_node, crt_routine_arg->routine_info_));
   OZ (resolve_sp_name(name_node, crt_routine_arg));
   OZ (set_routine_info(routine_type, crt_routine_arg->routine_info_));
@@ -740,10 +779,25 @@ int ObCreateRoutineResolver::resolve_impl(ObRoutineType routine_type,
   if (OB_SUCC(ret) && ROUTINE_FUNCTION_TYPE == routine_type) {
     OZ (resolve_ret_type(ret_node, crt_routine_arg->routine_info_));
   }
+  if (OB_SUCC(ret) && native) {
+    OZ (crt_routine_arg->routine_info_.set_native_binding(
+        ObString(declaration.module_id_.size(), declaration.module_id_.data()),
+        ObString(declaration.implementation_id_.size(), declaration.implementation_id_.data()), 1));
+  }
   OZ (resolve_param_list(param_node, *crt_routine_arg));
   OZ (resolve_clause_list(clause_list, crt_routine_arg->routine_info_));
   CK (OB_NOT_NULL(body_node));
   if (OB_FAIL(ret)) {
+  } else if (native) {
+    // Native definitions have ordinary SQL ownership/signatures, but no PL
+    // executable body. Do not preserve a PL compilation error as CREATE OK.
+    if (OB_SUCC(ret)) {
+      seekdb_plugin_sql_binding_v1_t binding{};
+      std::vector<std::string> arguments;
+      ret = PluginFunctionExpr::resolve_native_binding(crt_routine_arg->routine_info_, binding, arguments);
+      // This is preflight only. Root validates again and fences the resulting
+      // generation while writing the routine and module edge atomically.
+    }
   } else {
     OZ (analyze_router_sql(crt_routine_arg));
   }

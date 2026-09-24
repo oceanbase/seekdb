@@ -445,7 +445,15 @@ static AllocFunc OP_ALLOC[T_MAX_OP];
     }();                                            \
   } while(0)
 
+#if SEEKDB_ENABLE_CORE_GIS
 #define REG_PLUGIN_GIS_OP(OpClass) REG_OP(OpClass)
+#else
+// SQL names/signatures belong to the GIS catalog. Keep only the legacy numeric
+// allocation entry for expressions synthesized by internal spatial machinery;
+// user SQL must resolve through PluginFunctionExpr, never a per-function shim.
+#define REG_PLUGIN_GIS_OP(OpClass) \
+  do { OpClass op(alloc); OP_ALLOC[op.get_type()] = ObExprOperatorFactory::alloc<OpClass>; } while (0)
+#endif
 // When developing two functionally identical expressions (e.g., mid and substr expressions) you can use this macro
 // OriOp is the existing expression, now we want to develop NewOp with the same functionality, using this macro can avoid duplicate code
 // But require OriOp has already registered
@@ -844,7 +852,7 @@ void ObExprOperatorFactory::register_expr_operators()
     // convert input value into an OceanBase error number and throw out as exception
     REG_OP(ObExprErrno);
 #endif
-    REG_OP(ObExprPoint);
+    REG_PLUGIN_GIS_OP(ObExprPoint);
     REG_PLUGIN_GIS_OP(ObExprLineString);
     REG_PLUGIN_GIS_OP(ObExprMultiPoint);
     REG_PLUGIN_GIS_OP(ObExprMultiLineString);
@@ -853,7 +861,9 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_PLUGIN_GIS_OP(ObExprGeomCollection);
     REG_PLUGIN_GIS_OP(ObExprGeometryCollection);
     REG_PLUGIN_GIS_OP(ObExprSTGeomFromText);
-    REG_PLUGIN_GIS_OP(ObExprSTArea);
+#if SEEKDB_ENABLE_CORE_GIS
+    REG_OP(ObExprSTArea);
+#endif
     REG_PLUGIN_GIS_OP(ObExprSTIntersects);
     REG_PLUGIN_GIS_OP(ObExprSTX);
     REG_PLUGIN_GIS_OP(ObExprSTY);
@@ -867,8 +877,8 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_PLUGIN_GIS_OP(ObExprSTAsWkt);
     REG_PLUGIN_GIS_OP(ObExprSTBufferStrategy);
     REG_PLUGIN_GIS_OP(ObExprSTBuffer);
-    REG_PLUGIN_GIS_OP(ObExprSpatialCellid);
-    REG_PLUGIN_GIS_OP(ObExprSpatialMbr);
+    REG_OP(ObExprSpatialCellid);
+    REG_OP(ObExprSpatialMbr);
     REG_PLUGIN_GIS_OP(ObExprPrivSTGeomFromEWKB);
     REG_PLUGIN_GIS_OP(ObExprSTGeomFromWKB);
     REG_PLUGIN_GIS_OP(ObExprSTGeometryFromWKB);
@@ -935,7 +945,7 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_OP(ObExprTransactionId);
     REG_OP(ObExprInnerRowCmpVal);
     REG_OP(ObExprTopNFilter);
-    REG_OP(ObExprPrivSTMakeEnvelope);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTMakeEnvelope);
     REG_PLUGIN_GIS_OP(ObExprPrivSTClipByBox2D);
     REG_PLUGIN_GIS_OP(ObExprPrivSTPointOnSurface);
     REG_PLUGIN_GIS_OP(ObExprPrivSTGeometryType);
@@ -950,7 +960,7 @@ void ObExprOperatorFactory::register_expr_operators()
     REG_PLUGIN_GIS_OP(ObExprPrivSTAsMVTGeom);
     REG_PLUGIN_GIS_OP(ObExprPrivSTMakeValid);
     REG_PLUGIN_GIS_OP(ObExprPrivSTGeoHash);
-    REG_OP(ObExprPrivSTMakePoint);
+    REG_PLUGIN_GIS_OP(ObExprPrivSTMakePoint);
     REG_OP(ObExprCurrentRole);
     REG_OP(ObExprArray);
     REG_OP(ObExprDemoteCast);
@@ -1225,12 +1235,14 @@ void ObExprOperatorFactory::get_function_alias_name(const ObString &origin_name,
     } else if (0 == origin_name.case_compare("character_length")) {
       // character_length is synonym for char_length
       alias_name = ObString::make_string(N_CHAR_LENGTH);
+#if SEEKDB_ENABLE_CORE_GIS
     } else if (0 == origin_name.case_compare("area")) {
       // area is synonym for st_area
       alias_name = ObString::make_string(N_ST_AREA);
     } else if (0 == origin_name.case_compare("centroid")) {
       // centroid is synonym for st_centroid
       alias_name = ObString::make_string(N_ST_CENTROID);
+#endif
     } else if (0 == origin_name.case_compare("semantic_distance")) {
       alias_name = ObString::make_string(N_SEMANTIC_DISTANCE);
     } else {

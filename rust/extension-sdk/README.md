@@ -21,6 +21,13 @@ errors. See [rust_text](../../plugins/rust_text/README.md) for a complete exampl
   argument type names may be generated dynamically: the host deep-copies
   descriptors before registration returns. Implementation version ranges and
   capabilities are explicit plugin choices, not hardcoded SDK policy.
+- `sys::IMPLEMENTATION_ONLY`: scalar registration without a global SQL name,
+  intended for database-local `AS 'module-id', 'implementation-id' LANGUAGE C`
+  declarations. Set this in a function definition's `flags`; `sql_name` is then
+  only an optional diagnostic label (use `c""` for an unnamed definition).
+  Exact owner/object-ID binding and lifecycle inventory remain available.
+  `schema::scalar_wrapper` rejects these definitions because a `RETURN name(...)`
+  wrapper cannot resolve an implementation that has no published SQL name.
 - `TypeDefinition`, `CastDefinition`, `ImplementationReference`, `CastContext`:
   byte-oriented type/codec registration and explicit, assignment or implicit
   conversion descriptors with plugin-selected cost, flags and service versions.

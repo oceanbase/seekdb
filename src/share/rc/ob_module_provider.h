@@ -30,9 +30,10 @@
 
 namespace oceanbase
 {
-namespace common { class ObISQLClient; }
+namespace common { class ObISQLClient; class ObString; }
 namespace share
 {
+namespace schema { class RoutineCatalogTransaction; }
 
 // A live table iterator owns the extension and implementation leases until
 // close(), so logical plugin disable cannot overtake an executing scan.
@@ -55,6 +56,10 @@ class ObIModuleProvider
 {
 public:
   virtual ~ObIModuleProvider() = default;
+  // Host-only handoff to the live plan cache. Reserve before SQL commit;
+  // journal outcome notification controls visibility, not this capability.
+  virtual int reserve_routine_invalidations(schema::RoutineCatalogTransaction &, uint64_t)
+  { return common::OB_NOT_SUPPORTED; }
   virtual int bind_plugin_custom_executor(const char *, uint32_t, uint32_t,
       plugin::CustomExecutorBinding &binding)
   { binding = {}; return common::OB_NOT_SUPPORTED; }
@@ -106,6 +111,15 @@ public:
       const char *const *argument_type_ids,
       uint32_t argument_count,
       seekdb_plugin_sql_binding_v1_t *binding) = 0;
+  // Catalog routines bind an exact implementation identity, never a SQL alias.
+  // Resolving metadata does not grant EXECUTE or pin a permanent code lease.
+  virtual int resolve_plugin_native_function(const char *, const char *,
+      const char *const *, uint32_t, seekdb_plugin_sql_binding_v1_t *binding)
+  {
+    if (binding == nullptr) return common::OB_INVALID_ARGUMENT;
+    *binding = {};
+    return common::OB_NOT_SUPPORTED;
+  }
   virtual int execute_bound_plugin_function(
       const seekdb_plugin_sql_binding_v1_t *binding,
       const seekdb_plugin_execution_context_v1 *context,
@@ -162,6 +176,12 @@ public:
       uint64_t table_id,
       uint64_t column_id,
       bool add) = 0;
+  // Borrow the caller's schema transaction; never activate code or commit it.
+  // Logical identities let DROP clean up an unavailable module after recovery.
+  virtual int mutate_native_routine_dependency(common::ObISQLClient &,
+      const common::ObString &, const common::ObString &, uint64_t, bool,
+      uint64_t expected_generation = 0)
+  { return common::OB_NOT_SUPPORTED; }
 };
 
 extern ObIModuleProvider *g_mp;

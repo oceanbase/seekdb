@@ -8,6 +8,7 @@
 #include "sql/code_generator/ob_static_engine_expr_cg.h"
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/resolver/expr/plugin_expr_type.h"
+#include <functional>
 
 namespace plugin_expression_test {
 using namespace oceanbase::common;
@@ -35,8 +36,22 @@ public:
   const char *expected_bytes_ = nullptr;
   const char *numeric_result_id_ = nullptr;
   std::vector<std::string> seen_;
+  std::function<int(ObISQLClient &, const ObString &, const ObString &, uint64_t, bool, uint64_t)> native_dependency_;
+  std::function<int(const char *, const char *, const char *const *, uint32_t, seekdb_plugin_sql_binding_v1_t *)> native_resolution_;
   Provider() { g_mp = this; }
   ~Provider() { g_mp = saved_; }
+  int mutate_native_routine_dependency(ObISQLClient &client, const ObString &module,
+      const ObString &implementation, uint64_t routine_id, bool add, uint64_t expected_generation) override
+  {
+    CHECK(native_dependency_);
+    return native_dependency_(client, module, implementation, routine_id, add, expected_generation);
+  }
+  int resolve_plugin_native_function(const char *module, const char *implementation,
+      const char *const *arguments, uint32_t count, seekdb_plugin_sql_binding_v1_t *binding) override
+  {
+    CHECK(native_resolution_);
+    return native_resolution_(module, implementation, arguments, count, binding);
+  }
   int execute_plugin_function(const char *, uint32_t, uint32_t,
       const seekdb_plugin_execution_context_v1 *, const seekdb_plugin_execution_value_v1 *, uint32_t) override
   { CHECK(false); return OB_ERR_UNEXPECTED; }
@@ -408,6 +423,22 @@ inline void run()
   auto *copy = dynamic_cast<PluginFunctionExtraInfo *>(copy_base);
   CHECK(copy && copy->arguments().at(0).ptr() != info->arguments().at(0).ptr());
   CHECK(copy->binding(binding) == OB_SUCCESS && binding.owner_generation == 7);
+  {
+    auto hidden = binding;
+    hidden.flags |= SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY;
+    hidden.sql_name[0] = '\0';
+    PluginFunctionExtraInfo original(copied_allocator, T_FUN_SYS_PLUGIN_FUNCTION);
+    CHECK(original.initialize(hidden, {CUSTOM}) == OB_SUCCESS);
+    std::vector<char> bytes(original.get_serialize_size()); int64_t offset = 0;
+    CHECK(original.serialize(bytes.data(), bytes.size(), offset) == OB_SUCCESS);
+    PluginFunctionExtraInfo restored(decoded_allocator, T_FUN_SYS_PLUGIN_FUNCTION); offset = 0;
+    CHECK(restored.deserialize(bytes.data(), bytes.size(), offset) == OB_SUCCESS);
+    seekdb_plugin_sql_binding_v1_t recovered{};
+    CHECK(restored.binding(recovered) == OB_SUCCESS && recovered.sql_name[0] == '\0');
+    CHECK(recovered.flags == hidden.flags && std::strcmp(recovered.object_id, hidden.object_id) == 0);
+    hidden.flags &= ~SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY;
+    CHECK(original.initialize(hidden, {CUSTOM}) == OB_INVALID_DATA);
+  }
   PluginFunctionExtraInfo rejected(copied_allocator, T_FUN_SYS_PLUGIN_FUNCTION);
   CHECK(rejected.initialize(binding, {CUSTOM}) == OB_SUCCESS);
   auto invalid = binding;

@@ -471,6 +471,12 @@ public:
                             const char *const *argument_type_ids,
                             uint32_t argument_count,
                             seekdb_plugin_sql_binding_v1_t &binding) const;
+  // Host-only binding primitive. No SQL authority or durable identity is
+  // conferred; a future native routine resolver must check those separately.
+  // Inputs must not borrow from binding, which is cleared before validation.
+  int resolve_native_function(const char *module_id, const char *implementation_id,
+      const char *const *argument_type_ids, uint32_t argument_count,
+      seekdb_plugin_sql_binding_v1_t &binding) const;
   // Typed scalar bindings apply direct implicit argument casts before invocation.
   // Conversion-dependent bindings require their catalog epoch to remain current
   // through preparation; all function/cast leases are pinned before callbacks.
@@ -566,6 +572,9 @@ private:
   int activate_internal(const std::string &relative_path,
                         const ObPluginRecoveryActivation *recovery,
                         uint64_t *loaded_generation);
+  int finish_sql_binding(const ObPluginExtensionInfo &extension, uint64_t epoch,
+      const char *const *argument_type_ids, uint32_t argument_count,
+      seekdb_plugin_sql_binding_v1_t &binding) const;
 
   struct Impl;
   std::unique_ptr<Impl> impl_;

@@ -103,6 +103,7 @@ inline void run(const char *root, const ObResolverParams &outer_services, const 
         ROUTINE_PROCEDURE_TYPE, 42) == OB_SUCCESS);
     CHECK(MockSchemaService::cache_routine(guard, existing_procedure) == OB_SUCCESS);
     ExtensionPackageSource source;
+    source.requires_superuser_ = false;
     source.name_ = "builder_ops"; source.version_ = "1";
     source.native_module_ = "org.seekdb.rust-text"; source.native_install_ = true;
     CHECK(script.load_source(source, session.get_sql_mode(), error) == OB_SUCCESS && script.statements().empty());
@@ -112,6 +113,7 @@ inline void run(const char *root, const ObResolverParams &outer_services, const 
       CHECK(source.native_install_ && source.scripts_.empty() && script.statements().empty());
     }
     ExtensionInstallSpec spec{1, OB_SYS_DATABASE_ID, 123, source.name_, source.version_, source.native_module_, {}, {}};
+    spec.requires_superuser_ = source.requires_superuser_;
     class Program final : public ICatalogBuildProgram {
     public:
       Program(int scenario, ObSQLSessionInfo &session) : scenario_(scenario), name_("builder_" + std::to_string(scenario)), session_(session) {}
@@ -309,6 +311,7 @@ inline void run(const char *root, const ObResolverParams &outer_services, const 
       CHECK(source.source().native_module_.empty());
       CHECK(source.source().requires_ == (provider ? std::vector<std::string>{} : std::vector<std::string>{"text_ops"}));
       ExtensionInstallSpec spec{1, OB_SYS_DATABASE_ID, 123, name, "1.0", "", {}, source.source().requires_};
+      spec.requires_superuser_ = source.source().requires_superuser_;
       ExtensionRoutineScriptResolver resolver(source, spec, services, context);
       CHECK(resolver.preflight_install(spec, error) == OB_SUCCESS);
       const int status = resolve_extension_routine_sequence(resolver, resolver.statement_count(), guard,
@@ -339,6 +342,7 @@ inline void run(const char *root, const ObResolverParams &outer_services, const 
     if (native_only) {
       CHECK(script.source().scripts_.empty() && script.statements().empty() && catalog_loader);
       ExtensionInstallSpec unprepared{1, OB_SYS_DATABASE_ID, 123, native_package, "1.0", script.source().native_module_, {}, {}};
+      unprepared.requires_superuser_ = script.source().requires_superuser_;
       ExtensionRoutineScriptResolver empty_sequence(script, unprepared, services, context);
       CHECK(empty_sequence.preflight_install(unprepared, error) == OB_INVALID_ARGUMENT);
     }
@@ -362,6 +366,7 @@ inline void run(const char *root, const ObResolverParams &outer_services, const 
       CHECK(script.load_source(declarations, session.get_sql_mode(), error) == OB_SUCCESS);
     }
     ExtensionInstallSpec spec{1, OB_SYS_DATABASE_ID, 123, native_package, "1.0", script.source().native_module_, {}, script.source().requires_};
+    spec.requires_superuser_ = script.source().requires_superuser_;
     spec.prerequisites_ = script.source().prerequisites_;
     ExtensionRoutineScriptResolver sequence(script, spec, services, context);
     CHECK(sequence.preflight_install(spec, error) == OB_SUCCESS);
@@ -438,8 +443,16 @@ inline void run(const char *root, const ObResolverParams &outer_services, const 
   ExtensionInstallSpec spec;
   spec.tenant_id_ = 1; spec.database_id_ = OB_SYS_DATABASE_ID; spec.owner_id_ = 123;
   spec.name_ = "create_chain"; spec.version_ = "1";
+  spec.requires_superuser_ = script.source().requires_superuser_;
   ExtensionRoutineScriptResolver sequence(script, spec, services, context);
   CHECK(sequence.preflight_install(spec, error) == OB_SUCCESS);
+  {
+    auto forged = spec;
+    forged.requires_superuser_ = !spec.requires_superuser_;
+    CHECK(sequence.preflight_install(forged, error) == OB_INVALID_ARGUMENT);
+    ExtensionRoutineScriptResolver wrong_policy(script, forged, services, context);
+    CHECK(wrong_policy.preflight_install(forged, error) == OB_STATE_NOT_MATCH);
+  }
   CHECK(sequence.preflight(ExtensionUpdateRequest{}, error) == OB_STATE_NOT_MATCH);
   for (int change = 0; change < 6; ++change) {
     auto changed = spec;

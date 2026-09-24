@@ -91,10 +91,12 @@ struct ExtensionRoutineUpdateBatch::Impl
 {
   struct OwnedOperation
   {
-    // Deserialized ObStrings can borrow this buffer. Destroy both payloads first.
+    // Deserialized ObStrings can borrow this buffer. Destroy payloads first.
     std::vector<char> bytes_;
     std::unique_ptr<obcall::ObCreateRoutineArg> create_;
     std::unique_ptr<obcall::ObDropRoutineArg> drop_;
+    std::unique_ptr<obcall::ObGrantArg> grant_;
+    std::unique_ptr<obcall::ObRevokeRoutineArg> revoke_;
   };
   std::vector<std::unique_ptr<OwnedOperation>> items_;
 };
@@ -149,6 +151,14 @@ int ExtensionRoutineUpdateBatch::assign(const ObIArray<Operation> &source)
             owned->drop_ = std::make_unique<obcall::ObDropRoutineArg>();
             ret = copy(*input.drop_arg_, *owned->drop_);
             output.drop_arg_ = owned->drop_.get();
+          } else if (input.kind_ == Operation::Kind::GRANT) {
+            owned->grant_ = std::make_unique<obcall::ObGrantArg>();
+            ret = copy(*input.grant_arg_, *owned->grant_);
+            output.grant_arg_ = owned->grant_.get();
+          } else if (input.kind_ == Operation::Kind::REVOKE) {
+            owned->revoke_ = std::make_unique<obcall::ObRevokeRoutineArg>();
+            ret = copy(*input.revoke_arg_, *owned->revoke_);
+            output.revoke_arg_ = owned->revoke_.get();
           } else {
             owned->create_ = std::make_unique<obcall::ObCreateRoutineArg>();
             ret = copy(*input.create_arg_, *owned->create_);

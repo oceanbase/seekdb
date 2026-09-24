@@ -4,6 +4,7 @@
 #include "rootserver/pl_ddl/ob_pl_ddl_operator.h"
 
 namespace oceanbase { namespace rootserver {
+class NativeRoutineAclVersionReservation;
 // Host-only, one-operation database effects. Caller supplies the admitted and
 // locked current schema view and an already active transaction; this is NOT an
 // ACL bypass, resolver, ID authority, plugin ABI or transaction coordinator.
@@ -23,10 +24,15 @@ public:
   // old==nullptr is CREATE; otherwise the ordinary replacement path (including
   // resolved MySQL ALTER attributes). Host must preserve existing dependencies
   // for attribute-only ALTER; an empty array does not mean "unchanged".
+  // owner_grant optionally pre-reserves native CREATE's automatic object ACL,
+  // together with the ID/schema reservations. Consumed on every writer attempt;
+  // target or automatic-grant policy mismatch fails before CREATE SQL. The
+  // transaction's owner/empty-ACL checks are still required, not bypassed.
   int create(share::schema::ObRoutineInfo &routine, const share::schema::ObRoutineInfo *old,
       share::schema::ObErrorInfo &errors, common::ObIArray<share::schema::ObDependencyInfo> &dependencies,
       const common::ObString *sql, RoutineIdReservation *identity = nullptr,
-      RoutineVersionReservation *version = nullptr);
+      RoutineVersionReservation *version = nullptr,
+      NativeRoutineAclVersionReservation *owner_grant = nullptr);
   // Recompile/error-status-only branch, not MySQL attribute replacement.
   int alter(const share::schema::ObRoutineInfo &routine, share::schema::ObErrorInfo &errors,
       const common::ObString *sql);

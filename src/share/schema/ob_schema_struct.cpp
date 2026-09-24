@@ -6492,6 +6492,8 @@ int ObNeedPriv::deep_copy(const ObNeedPriv &other, common::ObIAllocator &allocat
   priv_check_type_ = other.priv_check_type_;
   obj_type_ = other.obj_type_;
   check_any_column_priv_ = other.check_any_column_priv_;
+  native_routine_id_ = other.native_routine_id_;
+  native_routine_version_ = other.native_routine_version_;
   if (OB_FAIL(ob_write_string(allocator, other.db_, db_))) {
   } else if (OB_FAIL(ob_write_string(allocator, other.table_, table_))) {
   } else {

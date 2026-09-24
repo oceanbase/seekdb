@@ -41,6 +41,44 @@ updater 不再仅因关联了 native 模块而拒绝，SQL 更新不等于 nativ
 通过真实 Rust loader/registry 选择 native 函数；Query→Root 关联传递使用受控
 持久化替身。以上不代表实库 CREATE/ALTER/DROP、鉴权、模块卸载竞争与回滚已验证。
 
+## 安装脚本内的 native FUNCTION 授权
+
+顺序安装 adapter 已接入 `GRANT`／`REVOKE`：例如先用 `LANGUAGE C` 创建 native
+FUNCTION，再按签名对已有用户授权。每条 CREATE 先写入安装协调器的未提交事务，
+后续授权使用同一事务、schema overlay 和 privilege overlay；没有独立 DCL 提交。
+请求经过真实 resolver、普通权限检查、当前 actor/角色绑定和 Root 端再次准入。
+
+支持安装数据库内 native FUNCTION 的 EXECUTE／ALTER ROUTINE、grant option
+以及 REVOKE 的 RESTRICT／CASCADE。拒绝跨库目标、自动创建用户、密码修改（包括
+显式空密码）和认证子句。DCL 不产生 extension member；安装失败由协调器统一回滚，
+确认提交之后才发布 schema。不因使用内部 SQL 连接而跳过权限。
+
+caller-routine SPI DCL 和用户活动事务中的扩展安装仍未开放。
+目前通过构建、真实 GIS DSO/resolver 和受控 writer 回归。Root 与测试共同使用
+`make_routine_extension_installer` 返回的真实 adapter；新增受控 SQL transport
+用例将其与实际 routine/ACL writer、catalog binder 和 Rust 安装协调器串联，
+验证 CREATE→GRANT→REVOKE→CREATE 私有权限变化、仅两个 CREATE 产生成员、
+21 个写入位置逐一失败、4 个解析回调失败位置以及未知提交/回滚结果不重放。
+这些用例提供已解析输入、受控版本分配和 SQL 行，不执行 parser 或模拟数据库
+撤销数据。实库提交、回滚、并发与恢复仍待验收，不能据此宣称完整 PG 事务语义。
+
+UPDATE 脚本也已接入上述 native FUNCTION DCL，但采用两阶段执行：准入时锁定
+已发布对象的完整 ACL 基线，合并前序私有权限并预留版本；新建对象不尝试锁定尚未
+写入的 SQL 行。整段准入成功后恢复初始视图，再按语句顺序写入并重新鉴权。发生
+ACL 状态偏差时拒绝原计划，不另开事务或偷偷重算。DCL 不增加 extension member。
+
+真实 Root UPDATE adapter／协调器回归覆盖新建函数和已发布成员，分别逐一注入
+22／17 个 SQL 写入失败点，另覆盖解析失败、未知结束与 ACL 状态偏差。GIS fixture
+验证真实升级包内的 GRANT／REVOKE、grant option 和 CASCADE 解析。这里只证明
+受控传输和解析路径通过；实库事务验收仍待完成。
+
+已补充新建／已发布对象的 GRANT→ALTER→REVOKE 和 GRANT→DROP→同名重建
+回归，检查版本、ACL 与成员身份。扩展 DROP 不再在提交前发送独立的 PL-cache
+刷新 SQL：请求记录在外部 DDL 事务中，提交前预留现有 Rust 队列容量，确认提交
+后由 schema 版本门槛控制本地淘汰，确认回滚取消，淘汰失败保留重试。未知事务
+结果只能触发保守的版本门槛淘汰，不宣称提交或重放 SQL。上述缓存 journal／queue
+测试与 Root SQL fixture 均为离线验证，真实存储提交、并发、恢复仍待验收。
+
 ## Extension 组合依赖：requires
 
 control 的 `requires = 'base_text, utility'` 声明当前 tenant/database 中必须已安装的
@@ -627,6 +665,30 @@ RESTRICT 先读取/锁定数据库安装记录，再读取对象依赖，以匹�
 返回 blocker 的展示仍保持对象依赖在前、数据库安装在后，与锁顺序分开。
 
 ## 尚未实现与验证的部分
+
+### 原生 SQL 包的可选实库验收
+
+`native_math` 参考包提供 1.0 安装、1.0 → 1.1 与 1.1 → 1.2 升级脚本。
+后一次升级在同一脚本 ALTER 一个成员，再 DROP／同名重建另一个成员；
+重建函数的默认调用结果从 42 改为 100，用于检测旧预处理计划残留。
+默认安装版本保持 1.0，不改写已交付的旧版本 SQL。
+
+在**可丢弃、使用当前 schema 的测试实例**上，先由管理员交付完整 SQL 包并
+配置 `--extension-dir`，加载当前 `org.seekdb.sql_extension` 参考模块，再运行：
+
+```bash
+python3 rust/plugin-runtime/tests/native_extension_server.py \
+  --port 2881 --user root --confirm-disposable-server
+```
+
+可以用 `--unix-socket /绝对路径/run/sql.sock` 替代 `--port 2881`。
+密码通过 `SEEKDB_TEST_PASSWORD` 环境变量提供，不放进命令参数。
+脚本验证安装、两次升级、卸载、数据库隔离、成员／依赖／ACL 清理和预处理
+重新绑定；成功仅清理本次随机创建的库与用户，失败保留，不重试未知提交结果。
+**当前沙箱不能绑定 SQL 监听地址，实库流程仍未通过验收**；离线脚本自测、
+真实包读取／解析和受控事务回归不能替代真实提交、并发和恢复验证。
+
+### 其余差距
 
 - CREATE/ALTER UPDATE/DROP 的基本语法/statement/resolver/executor 已接线，仍缺真实
   数据库端到端验证、更多语法选项、routine 之外的多对象 DDL adapter 和用户事务接入。

@@ -3,9 +3,11 @@
 #define SEEKDB_SHARE_SCHEMA_ROUTINE_SCHEMA_OVERLAY_H_
 
 #include "share/schema/ob_routine_info.h"
+#include "share/schema/native_routine_signature.h"
 #include "share/schema/routine_privilege_overlay.h"
 #include <algorithm>
 #include <map>
+#include <set>
 #include <memory>
 #include <new>
 #include <string>
@@ -32,13 +34,15 @@ class RoutineSchemaOverlay final
     uint64_t database_;
     ObRoutineType type_;
     std::string name_;
+    uint64_t overload_;
   };
   struct NameLess {
     bool operator()(const Key &a, const Key &b) const {
       if (a.database_ != b.database_) return a.database_ < b.database_;
       if (a.type_ != b.type_) return a.type_ < b.type_;
       ObSchemaNameComparator comparator;
-      return comparator.compare(string(a.name_), string(b.name_)) < 0;
+      const int name_order = comparator.compare(string(a.name_), string(b.name_));
+      return name_order != 0 ? name_order < 0 : a.overload_ < b.overload_;
     }
   };
   struct Record;
@@ -81,13 +85,14 @@ public:
     if (is_retired()) return OB_STATE_NOT_MATCH;
     if (!valid_id(routine.get_routine_id()) || !valid_id(routine.get_database_id()) ||
         !standalone(routine.get_routine_type()) || routine.get_package_id() != OB_INVALID_ID ||
-        routine.get_overload() != 0 || !valid_name(routine.get_routine_name())) return OB_INVALID_ARGUMENT;
+        routine.get_overload() < 0 || !valid_name(routine.get_routine_name()) ||
+        (routine.get_overload() != 0 && !routine.is_native())) return OB_INVALID_ARGUMENT;
     const int64_t bytes = routine.get_convert_size();
     if (bytes <= 0 || bytes > MAX_SCHEMA_BYTES - schema_bytes_ || records_.size() >= MAX_RECORDS)
       return OB_SIZE_OVERFLOW;
     try {
       auto record = std::make_unique<Record>();
-      record->key_ = key(routine.get_database_id(), routine.get_routine_type(), routine.get_routine_name());
+      record->key_ = key(routine.get_database_id(), routine.get_routine_type(), routine.get_routine_name(), routine.get_overload());
       record->id_ = routine.get_routine_id();
       record->routine_ = std::make_unique<ObRoutineInfo>(&record->arena_);
       int ret = record->routine_->assign(routine);
@@ -100,16 +105,17 @@ public:
 
   // May seed a tombstone for an object from the base guard without first
   // staging its full schema. A mismatched live name/ID is never erased.
-  int erase(uint64_t database, const common::ObString &name, ObRoutineType type, uint64_t id)
+  int erase(uint64_t database, const common::ObString &name, ObRoutineType type, uint64_t id, uint64_t overload = 0)
   {
     using namespace common;
     if (is_retired()) return OB_STATE_NOT_MATCH;
-    if (!valid_id(database) || !valid_id(id) || !standalone(type) || !valid_name(name))
+    if (!valid_id(database) || !valid_id(id) || !standalone(type) || !valid_name(name) ||
+        overload > static_cast<uint64_t>(INT64_MAX) || (overload != 0 && type != ROUTINE_FUNCTION_TYPE))
       return OB_INVALID_ARGUMENT;
     if (records_.size() >= MAX_RECORDS) return OB_SIZE_OVERFLOW;
     try {
       auto record = std::make_unique<Record>();
-      record->key_ = key(database, type, name);
+      record->key_ = key(database, type, name, overload);
       record->id_ = id;
       return publish(std::move(record));
     } catch (const std::bad_alloc &) { return OB_ALLOCATE_MEMORY_FAILED; }
@@ -126,9 +132,10 @@ public:
     if (!valid_id(database) || !valid_name(name) || overload == OB_INVALID_INDEX || type == INVALID_ROUTINE_TYPE)
       return OB_INVALID_ARGUMENT;
     // Package routines have a different namespace, never shadow them.
-    if (package != OB_INVALID_ID || overload != 0 || !standalone(type)) return OB_SUCCESS;
+    if (package != OB_INVALID_ID || !standalone(type)) return OB_SUCCESS;
+    if (overload > static_cast<uint64_t>(INT64_MAX)) return OB_INVALID_ARGUMENT;
     try {
-      const auto found = names_.find(key(database, type, name));
+      const auto found = names_.find(key(database, type, name, overload));
       if (found != names_.end() && found->second != nullptr) {
         handled = true;
         routine = found->second->routine_.get();
@@ -150,6 +157,77 @@ public:
       routine = found->second->routine_.get();
     }
     return common::OB_SUCCESS;
+  }
+
+  // Merge one observed function-name family with this transaction's changes.
+  // Slot 0 retains the legacy singleton lookup contract; callers selecting an
+  // overload must use the complete family, not pick slot 0 or the first row.
+  // This neither allocates IDs/slots nor authorizes catalog writes or execution.
+  // Base and output must not alias. Failed merges clear output; borrowed values
+  // retain their respective guard/overlay lifetimes, including after rollback.
+  int merge_function_candidates(uint64_t database, const common::ObString &name,
+      const common::ObIArray<const ObRoutineInfo *> &base,
+      common::ObIArray<const ObRoutineInfo *> &output) const
+  {
+    using namespace common;
+    if (&base == &output) return OB_INVALID_ARGUMENT;
+    output.reset();
+    if (is_retired()) return OB_STATE_NOT_MATCH;
+    if (!valid_id(database) || !valid_name(name)) return OB_INVALID_ARGUMENT;
+    if (base.count() > MAX_RECORDS) return OB_SIZE_OVERFLOW;
+    try {
+      const Key first = key(database, ROUTINE_FUNCTION_TYPE, name);
+      std::map<uint64_t, const ObRoutineInfo *> selected;
+      std::set<uint64_t> base_ids, base_slots;
+      for (int64_t i = 0; i < base.count(); ++i) {
+        const auto *routine = base.at(i);
+        if (!routine || !valid_id(routine->get_routine_id()) || routine->get_overload() < 0 ||
+            routine->get_package_id() != OB_INVALID_ID || !valid_name(routine->get_routine_name()))
+          return OB_INVALID_ARGUMENT;
+        const Key current = key(routine->get_database_id(), routine->get_routine_type(),
+            routine->get_routine_name(), routine->get_overload());
+        if (!same_family(first, current) || !base_ids.insert(routine->get_routine_id()).second ||
+            !base_slots.insert(current.overload_).second) return OB_INVALID_ARGUMENT;
+        const auto id = ids_.find(routine->get_routine_id());
+        if (id != ids_.end() && id->second) {
+          if (!same_key(id->second->key_, current)) return OB_STATE_NOT_MATCH;
+          if (routine->is_native() && id->second->routine_ && id->second->routine_->is_native()) {
+            std::string before, after;
+            int ret = NativeRoutineSignature::input_identity(*routine, before);
+            if (ret == OB_SUCCESS) ret = NativeRoutineSignature::input_identity(*id->second->routine_, after);
+            if (ret != OB_SUCCESS) return ret;
+            if (before != after) return OB_STATE_NOT_MATCH;
+          }
+          continue; // Tombstone or replacement: append the current owned value below.
+        }
+        const auto slot = names_.find(current);
+        if (slot != names_.end() && slot->second) return OB_STATE_NOT_MATCH;
+        selected.emplace(current.overload_, routine);
+      }
+      for (auto it = names_.lower_bound(first); it != names_.end() && same_family(first, it->first); ++it) {
+        if (it->second && it->second->routine_)
+          selected.emplace(it->first.overload_, it->second->routine_.get());
+      }
+      if (selected.size() > MAX_RECORDS) return OB_SIZE_OVERFLOW;
+      std::set<std::string> signatures;
+      for (const auto &entry : selected) {
+        const auto &routine = *entry.second;
+        if (routine.is_native()) {
+          std::string signature;
+          const int ret = NativeRoutineSignature::input_identity(routine, signature);
+          if (ret != OB_SUCCESS) return ret;
+          if (!signatures.insert(std::move(signature)).second) return OB_STATE_NOT_MATCH;
+        } else if (selected.size() != 1 || routine.get_overload() != 0) {
+          return OB_NOT_SUPPORTED; // No implicit PL overloading or shared ACL.
+        }
+      }
+      for (const auto &entry : selected) {
+        const int ret = output.push_back(entry.second);
+        if (ret != OB_SUCCESS) { output.reset(); return ret; }
+      }
+      return OB_SUCCESS;
+    } catch (const std::bad_alloc &) { output.reset(); return OB_ALLOCATE_MEMORY_FAILED; }
+    catch (...) { output.reset(); return OB_ERR_UNEXPECTED; }
   }
 
   size_t record_count() const { return records_.size(); }
@@ -180,8 +258,14 @@ private:
   { return type == ROUTINE_FUNCTION_TYPE || type == ROUTINE_PROCEDURE_TYPE; }
   static bool valid_name(const common::ObString &name)
   { return name.length() > 0 && name.length() <= common::OB_MAX_ROUTINE_NAME_BINARY_LENGTH && name.ptr() != nullptr; }
-  static Key key(uint64_t database, ObRoutineType type, const common::ObString &name)
-  { return Key{database, type, std::string(name.ptr(), name.length())}; }
+  static Key key(uint64_t database, ObRoutineType type, const common::ObString &name, uint64_t overload = 0)
+  { return Key{database, type, std::string(name.ptr(), name.length()), overload}; }
+  static bool same_family(const Key &a, const Key &b)
+  {
+    ObSchemaNameComparator comparator;
+    return a.database_ == b.database_ && a.type_ == b.type_ &&
+        comparator.compare(string(a.name_), string(b.name_)) == 0;
+  }
   static bool same_key(const Key &a, const Key &b)
   { return !NameLess{}(a, b) && !NameLess{}(b, a); }
 
@@ -194,6 +278,34 @@ private:
       return OB_STATE_NOT_MATCH;
     if (old_id != ids_.end() && old_id->second && (!same_key(old_id->second->key_, record->key_) ||
         (!old_id->second->routine_ && record->routine_))) return OB_STATE_NOT_MATCH;
+    if (record->routine_) {
+      std::string incoming;
+      if (record->routine_->is_native()) {
+        const int ret = NativeRoutineSignature::input_identity(*record->routine_, incoming);
+        if (ret != OB_SUCCESS) return ret;
+      }
+      const Key first = key(record->key_.database_, record->key_.type_, string(record->key_.name_));
+      for (auto it = names_.lower_bound(first); it != names_.end() && same_family(first, it->first); ++it) {
+        if (!it->second || !it->second->routine_) continue;
+        const auto &existing = *it->second->routine_;
+        if (existing.get_routine_id() == record->id_) {
+          if (existing.is_native() && record->routine_->is_native()) {
+            std::string previous;
+            const int ret = NativeRoutineSignature::input_identity(existing, previous);
+            if (ret != OB_SUCCESS) return ret;
+            if (previous != incoming) return OB_STATE_NOT_MATCH; // Input signature is object identity.
+          }
+        } else {
+          // An ordinary MySQL routine is still a single-name object; do not
+          // silently give it native overload or name-wide privilege semantics.
+          if (!existing.is_native() || !record->routine_->is_native()) return OB_NOT_SUPPORTED;
+          std::string previous;
+          const int ret = NativeRoutineSignature::input_identity(existing, previous);
+          if (ret != OB_SUCCESS) return ret;
+          if (previous == incoming) return OB_STATE_NOT_MATCH;
+        }
+      }
+    }
     // Allocate before changing any published index. If the second insertion
     // fails, undo ONLY the newly inserted name entry; old state stays intact.
     if (records_.size() == records_.capacity())

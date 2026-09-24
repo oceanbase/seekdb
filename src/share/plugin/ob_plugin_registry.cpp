@@ -243,11 +243,15 @@ bool is_valid_extension_spec(const ObPluginExtensionSpec &spec)
       SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING |
       SEEKDB_PLUGIN_EXTENSION_FLAG_PERSISTENT |
       SEEKDB_PLUGIN_EXTENSION_FLAG_PARALLEL_SAFE |
-      SEEKDB_PLUGIN_EXTENSION_FLAG_REQUIRES_CATALOG;
+      SEEKDB_PLUGIN_EXTENSION_FLAG_REQUIRES_CATALOG |
+      SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY;
+  const bool implementation_only =
+      (spec.flags_ & SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY) != 0;
   bool valid = spec.kind_ >= SEEKDB_PLUGIN_EXTENSION_TYPE &&
                spec.kind_ <= SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION &&
                is_valid_service_name(spec.object_id_) &&
-               0 == (spec.flags_ & ~KNOWN_FLAGS);
+               0 == (spec.flags_ & ~KNOWN_FLAGS) &&
+               (!implementation_only || spec.kind_ == SEEKDB_PLUGIN_EXTENSION_FUNCTION);
   switch (spec.kind_) {
     case SEEKDB_PLUGIN_EXTENSION_TYPE:
       valid = valid && is_valid_sql_name(spec.sql_name_) &&
@@ -257,7 +261,7 @@ bool is_valid_extension_spec(const ObPluginExtensionSpec &spec)
       break;
     case SEEKDB_PLUGIN_EXTENSION_FUNCTION:
     case SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION:
-      valid = valid && is_valid_sql_name(spec.sql_name_) &&
+      valid = valid && ((implementation_only && spec.sql_name_.empty()) || is_valid_sql_name(spec.sql_name_)) &&
               spec.minimum_arity_ <= spec.maximum_arity_ &&
               spec.maximum_arity_ <= SEEKDB_PLUGIN_MAX_ARGUMENTS &&
               0 == (spec.signature_flags_ &
@@ -335,7 +339,9 @@ bool has_conflicting_extension_identity(const ObPluginExtensionSpec &left,
                   left.source_type_id_ == right.source_type_id_ &&
                   left.target_type_id_ == right.target_type_id_ &&
                   left.cast_context_ == right.cast_context_);
-  if (!conflict && left.kind_ == right.kind_ && !left.sql_name_.empty() &&
+  if (!conflict &&
+      ((left.flags_ | right.flags_) & SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY) == 0 &&
+      left.kind_ == right.kind_ && !left.sql_name_.empty() &&
       left.sql_name_ == right.sql_name_) {
     switch (left.kind_) {
       case SEEKDB_PLUGIN_EXTENSION_FUNCTION:
@@ -1528,6 +1534,7 @@ int ObPluginServiceRegistry::find_extensions_by_sql_name(
       for (uint32_t i = 0; i < live_snapshot_->extensions_.size(); ++i) {
         const auto &entry = live_snapshot_->extensions_.at(i);
         if (entry.info_ && entry.info_->spec_.kind_ == kind &&
+            !(entry.info_->spec_.flags_ & SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY) &&
             entry.info_->spec_.sql_name_ == sql_name) {
           candidate.push_back(*entry.info_);
         }
@@ -1551,10 +1558,30 @@ int ObPluginServiceRegistry::resolve_sql_extension(
     ObPluginExtensionInfo &extension,
     uint64_t &registry_epoch) const
 {
+  return resolve_extension_impl(kind, sql_name, nullptr, nullptr,
+      argument_type_ids, argument_count, extension, registry_epoch);
+}
+
+int ObPluginServiceRegistry::resolve_native_function(const char *module_id, const char *implementation_id,
+    const char *const *argument_type_ids, uint32_t argument_count,
+    ObPluginExtensionInfo &extension, uint64_t &registry_epoch) const
+{
+  extension = {}; registry_epoch = 0;
+  if (!is_valid_service_name(module_id) || !is_valid_service_name(implementation_id)) return OB_INVALID_ARGUMENT;
+  return resolve_extension_impl(SEEKDB_PLUGIN_EXTENSION_FUNCTION, nullptr, module_id, implementation_id,
+      argument_type_ids, argument_count, extension, registry_epoch);
+}
+
+int ObPluginServiceRegistry::resolve_extension_impl(seekdb_plugin_extension_kind_t kind, const char *sql_name,
+    const char *module_id, const char *implementation_id,
+    const char *const *argument_type_ids, uint32_t argument_count,
+    ObPluginExtensionInfo &extension, uint64_t &registry_epoch) const
+{
+  extension = {}; registry_epoch = 0;
   if ((SEEKDB_PLUGIN_EXTENSION_FUNCTION != kind &&
        SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION != kind &&
        SEEKDB_PLUGIN_EXTENSION_TYPE != kind) ||
-      !is_valid_sql_name(sql_name, true) ||
+      (implementation_id == nullptr && !is_valid_sql_name(sql_name, true)) ||
       argument_count > SEEKDB_PLUGIN_MAX_ARGUMENTS ||
       (argument_count != 0 && nullptr == argument_type_ids)) {
     return OB_INVALID_ARGUMENT;
@@ -1593,7 +1620,11 @@ int ObPluginServiceRegistry::resolve_sql_extension(
         casts.push_back({text(spec.source_type_id_), text(spec.target_type_id_),
                          static_cast<uint32_t>(spec.cast_context_), spec.cost_});
       }
-      if (kind != spec.kind_ || spec.sql_name_ != sql_name) continue;
+      if (kind != spec.kind_) continue;
+      if (implementation_id != nullptr) {
+        if (spec.object_id_ != implementation_id || entry.info_->owner_plugin_id_ != module_id) continue;
+      } else if ((spec.flags_ & SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY) ||
+                 spec.sql_name_ != sql_name) continue;
       const auto *signature = entry.signature_.get();
       candidates.push_back({text(spec.object_id_), signature == nullptr ? nullptr : signature->types_.data(),
           static_cast<uint32_t>(spec.argument_type_ids_.size()), spec.minimum_arity_, spec.maximum_arity_, 0});
@@ -1619,6 +1650,7 @@ int ObPluginServiceRegistry::resolve_sql_extension(
   } catch (...) {
     ret = OB_ERR_UNEXPECTED;
   }
+  if (ret != OB_SUCCESS) { extension = {}; registry_epoch = 0; }
   return ret;
 }
 

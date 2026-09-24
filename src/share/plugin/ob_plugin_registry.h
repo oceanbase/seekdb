@@ -433,6 +433,12 @@ public:
       uint32_t argument_count,
       ObPluginExtensionInfo &extension,
       uint64_t &registry_epoch) const;
+  // Native SQL declarations bind a module-owned implementation ID, not a
+  // public SQL name. Selection/casts observe the same immutable snapshot.
+  // Inputs must not alias output strings. Failures clear metadata and epoch.
+  int resolve_native_function(const char *module_id, const char *implementation_id,
+      const char *const *argument_type_ids, uint32_t argument_count,
+      ObPluginExtensionInfo &extension, uint64_t &registry_epoch) const;
   // A provider cast is eligible when its declared context is at least as
   // permissive as requested_context (IMPLICIT > ASSIGNMENT > EXPLICIT).
   // Eligible candidates are returned by ascending cost, then object_id.
@@ -469,6 +475,10 @@ private:
   friend class ObPluginRegistration;
   friend class ObPluginActivationCandidate;
   friend class ObPluginPreparedActivation;
+  int resolve_extension_impl(seekdb_plugin_extension_kind_t kind, const char *sql_name,
+      const char *module_id, const char *implementation_id,
+      const char *const *argument_type_ids, uint32_t argument_count,
+      ObPluginExtensionInfo &extension, uint64_t &registry_epoch) const;
 
   struct ServiceKey
   {

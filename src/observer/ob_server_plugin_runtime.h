@@ -38,7 +38,7 @@ typedef int32_t seekdb_plugin_cast_context_t;
 
 namespace oceanbase
 {
-namespace common { class ObISQLClient; }
+namespace common { class ObISQLClient; class ObString; }
 namespace share { class IPluginTableCursor; }
 namespace share { namespace plugin {
 class IExtensionCatalogInstaller;
@@ -109,6 +109,9 @@ public:
                          const char *const *argument_type_ids,
                          uint32_t argument_count,
                          seekdb_plugin_sql_binding_v1 *binding);
+  int resolve_native_function(const char *module_id, const char *implementation_id,
+      const char *const *argument_type_ids, uint32_t argument_count,
+      seekdb_plugin_sql_binding_v1 *binding);
   int execute_bound_function(
       const seekdb_plugin_sql_binding_v1 *binding,
       const seekdb_plugin_execution_context_v1 *context,
@@ -165,6 +168,9 @@ public:
                              uint64_t column_id,
                              bool add);
   void destroy() noexcept;
+  int mutate_routine_dependency(common::ObISQLClient &sql_client,
+      const common::ObString &module_id, const common::ObString &implementation_id,
+      uint64_t routine_id, bool add, uint64_t expected_generation = 0);
 
 private:
   struct Impl;

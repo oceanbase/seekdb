@@ -1,6 +1,7 @@
 // Copyright (c) 2026 OceanBase. Licensed under the Apache License, Version 2.0.
 // Links the real kernel parser, package adapter, and Rust archive. No SQL server.
 #include "sql/resolver/ddl/extension_script.h"
+#include "sql/resolver/ddl/native_function_declaration.h"
 #include "sql/resolver/ddl/extension_routine_resolver.h"
 #include "sql/resolver/ddl/extension_routine_batch.h"
 #include "sql/resolver/cmd/create_extension_resolver.h"
@@ -205,6 +206,31 @@ int main(int argc, char **argv)
   // resolver fixture happens to run before other users of default variables.
   CHECK(oceanbase::share::ObSysVariables::init_default_values() == OB_SUCCESS);
   CHECK(ObBasicSessionInfo::init_sys_vars_cache_base_values() == OB_SUCCESS);
+  {
+    ExtensionScript native; std::string error;
+    CHECK(native.load(argv[2], "native_math", "", 0, error) == OB_SUCCESS);
+    CHECK(native.statements().count() == 2);
+    for (int64_t i = 0; i < native.statements().count(); ++i) {
+      const auto *create = native.statements().at(i).node_;
+      CHECK(create && create->type_ == T_SF_CREATE);
+      NativeFunctionDeclaration binding;
+      CHECK(NativeFunctionDeclaration::read(create->children_[5], binding) == OB_SUCCESS);
+      CHECK(binding.module_id_ == "org.seekdb.sql_extension");
+      CHECK(binding.implementation_id_ == (i == 0 ? "org.seekdb.sql-extension.function.native-add-one" :
+                                                  "org.seekdb.sql-extension.function.unnamed-add-one"));
+    }
+    CHECK(native.load_update(argv[2], "native_math", "1.0", "1.1", 0, error) == OB_SUCCESS);
+    CHECK(native.statements().count() == 2 && native.statements().at(0).node_->type_ == T_SF_ALTER &&
+          native.statements().at(1).node_->type_ == T_SF_CREATE);
+    CHECK(native.load_update(argv[2], "native_math", "1.1", "1.2", 0, error) == OB_SUCCESS);
+    CHECK(native.statements().count() == 3 && native.statements().at(0).node_->type_ == T_SF_ALTER &&
+          native.statements().at(1).node_->type_ == T_SF_DROP &&
+          native.statements().at(2).node_->type_ == T_SF_CREATE);
+    NativeFunctionDeclaration replacement;
+    CHECK(NativeFunctionDeclaration::read(native.statements().at(2).node_->children_[5], replacement) == OB_SUCCESS);
+    CHECK(replacement.module_id_ == "org.seekdb.sql_extension" &&
+          replacement.implementation_id_ == "org.seekdb.sql-extension.function.unnamed-add-one");
+  }
   PlanCacheEvictionTestAccess::run();
   routine_transaction_privileges_test::run();
   session_catalog_view_test::run();

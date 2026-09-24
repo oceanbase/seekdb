@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX SQL_RESV
 
 #include "ob_raw_expr_util.h"
+#include "sql/resolver/ddl/native_function_default.h"
+#include "share/schema/native_routine_signature.h"
 #include "sql/resolver/expr/plugin_expr_type.h"
 #include "share/plugin/plugin_sql_type.h"
 #include "lib/json/ob_json_print_utils.h"
@@ -635,6 +637,11 @@ int ObRawExprUtils::resolve_udf_param_types(const ObIRoutineInfo* func_info,
 {
   int ret = OB_SUCCESS;
 
+  int64_t parameter_count = 0;
+  CK (OB_NOT_NULL(func_info));
+  OZ (share::schema::NativeRoutineSignature::call_count(*func_info,
+      udf_info.udf_param_num_ + udf_info.param_names_.count(), parameter_count));
+
 #define SET_RES_TYPE_BY_PL_TYPE(res_type, pl_type) \
   if (OB_SUCC(ret)) { \
     ObObjMeta meta; \
@@ -693,11 +700,11 @@ int ObRawExprUtils::resolve_udf_param_types(const ObIRoutineInfo* func_info,
     }
   }
   // Step2: process input parameters
-  for (int64_t i = 0; OB_SUCC(ret) && i < func_info->get_param_count(); ++i) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < parameter_count; ++i) {
     ObIRoutineParam *iparam = NULL;
     pl::ObPLDataType param_pl_type;
     ObRawExprResType param_type;
-    OZ (func_info->get_routine_param(i, iparam));
+    OZ (func_info->get_routine_param(share::schema::NativeRoutineSignature::parameter_index(*func_info, i), iparam));
     CK (OB_NOT_NULL(iparam));
     if (OB_FAIL(ret)) {
     } else if (iparam->is_schema_routine_param()) {
@@ -772,23 +779,30 @@ int ObRawExprUtils::resolve_udf_param_exprs(ObResolverParams &params,
   ObArray<ObRawExpr*> param_exprs;
   ObArray<ObString> param_names;
   ObUDFRawExpr *udf_raw_expr = udf_info.ref_expr_;
+  const auto *schema_routine = dynamic_cast<const share::schema::ObRoutineInfo *>(func_info);
+  const bool native = schema_routine != nullptr && schema_routine->is_native();
+  int64_t parameter_count = 0;
+  OZ (share::schema::NativeRoutineSignature::call_count(*func_info,
+      udf_info.udf_param_num_ + udf_info.param_names_.count(), parameter_count));
+  if (OB_FAIL(ret)) return ret;
+  if (share::schema::NativeRoutineSignature::variadic(*func_info) && !udf_info.param_names_.empty()) return OB_NOT_SUPPORTED;
   // Specify parameters by name and uniformly record them in param_names_ and param_exprs, so they must be equal here
   if (udf_info.param_names_.count() != udf_info.param_exprs_.count()) {
     ret = OB_ERR_UNEXPECTED;
     SQL_LOG(WARN, "names array not equal to exprs array count",
              K(ret), K(udf_info.param_names_.count()), K(udf_info.param_exprs_.count()));
-  } else if ((udf_info.udf_param_num_ + udf_info.param_names_.count()) > func_info->get_param_count()) {
+  } else if ((udf_info.udf_param_num_ + udf_info.param_names_.count()) > parameter_count) {
     ret = OB_ERR_SP_WRONG_ARG_NUM;
     LOG_USER_ERROR(OB_ERR_SP_WRONG_ARG_NUM, "FUNCTION", udf_info.udf_name_.ptr(),
                    static_cast<uint32_t>(func_info->get_param_count()),
                    static_cast<uint32_t>(udf_info.udf_param_num_ + udf_info.param_names_.count()));
     SQL_LOG(WARN, "params count mismatch",
              K(ret), K(udf_info.udf_name_), K(func_info->get_param_count()), K(udf_info));
-  } else if (OB_FAIL(udf_raw_expr->extend_param_exprs(func_info->get_param_count()))) {
+  } else if (OB_FAIL(udf_raw_expr->extend_param_exprs(parameter_count))) {
   } else {
     // process the remaining parameters, default values or parameters specified by name
     // Step 1: First initialize an empty parameter list
-    int64_t count = func_info->get_param_count() - udf_info.udf_param_num_;
+    int64_t count = parameter_count - udf_info.udf_param_num_;
     for (int64_t i = 0; OB_SUCC(ret) && i < udf_info.udf_param_num_; ++i) {
       ObString empty;
       OZ (udf_raw_expr->add_param_name(empty));
@@ -841,6 +855,14 @@ int ObRawExprUtils::resolve_udf_param_exprs(ObResolverParams &params,
           SQL_LOG(WARN, "parameter is null",
                   K(ret), K(i), K(default_val), K(udf_info), K(default_node),
                   K(params.allocator_), K(params.expr_factory_), K(params.secondary_namespace_));
+        } else if (native) {
+          // Native calls have no PL frame to evaluate the NULL placeholders.
+          // Defaults undergo the same SQL conversion as explicit arguments.
+          if (!NativeFunctionDefault::supported(default_val)) ret = OB_NOT_SUPPORTED;
+          else {
+            OZ (ObResolverUtils::resolve_const_expr(params, *default_node, default_expr, nullptr));
+            OX (param_exprs.at(i) = default_expr);
+          }
         } else if (OB_FAIL(ObRawExprUtils::build_const_int_expr(
                             *(params.expr_factory_), ObNullType, 0, const_default_expr))) {
         } else {
@@ -864,7 +886,7 @@ int ObRawExprUtils::resolve_udf_param_exprs(ObResolverParams &params,
       OB_ERR_UNEXPECTED, K(udf_info.udf_param_num_), K(param_exprs.count()), K(udf_raw_expr->get_param_count()));
   }
   if (OB_SUCC(ret)
-      && (func_info->get_param_count() != udf_info.udf_param_num_ + param_exprs.count())) {
+      && (parameter_count != udf_info.udf_param_num_ + param_exprs.count())) {
     ret = OB_ERR_SP_WRONG_ARG_NUM;
     LOG_USER_ERROR(OB_ERR_SP_WRONG_ARG_NUM, "FUNCTION", udf_info.udf_name_.ptr(),
                    static_cast<uint32_t>(func_info->get_param_count()),
@@ -874,10 +896,10 @@ int ObRawExprUtils::resolve_udf_param_exprs(ObResolverParams &params,
              K(func_info->get_param_count()), K(udf_info));
   }
   // Step 4: Process function's OUT parameters
-  for (int64_t i = 0; OB_SUCC(ret) && i < func_info->get_param_count(); ++i) {
+  for (int64_t i = 0; OB_SUCC(ret) && i < parameter_count; ++i) {
     ObIRoutineParam* iparam = NULL;
     pl::ObPLRoutineParamMode mode = pl::ObPLRoutineParamMode::PL_PARAM_INVALID;
-    OZ (func_info->get_routine_param(i, iparam));
+    OZ (func_info->get_routine_param(share::schema::NativeRoutineSignature::parameter_index(*func_info, i), iparam));
     CK (OB_NOT_NULL(iparam));
     OX (mode = static_cast<pl::ObPLRoutineParamMode>(iparam->get_mode()));
     if (OB_SUCC(ret)) {

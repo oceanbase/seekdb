@@ -30,6 +30,7 @@ struct ExtensionInstallSpec
   std::vector<ExtensionMemberIdentity> members_;
   std::vector<std::string> requires_; // Existing Extensions in this tenant/database, never auto-installed.
   std::vector<std::string> prerequisites_{}; // Migration-only providers, excluded from final dependency edges.
+  bool requires_superuser_ = true; // Source policy, not persisted ownership or an elevation request.
 };
 
 struct ExtensionDropRequest
@@ -61,6 +62,7 @@ struct ExtensionUpdateRequest
   std::string to_version_;
   std::vector<std::string> requires_; // Complete target set; only a versioned update may change it.
   std::vector<std::string> prerequisites_{}; // Selected intermediate versions, not retained in final catalog.
+  bool requires_superuser_ = true; // Source policy across all selected update scripts.
 };
 
 // One non-locking installation-row observation for choosing an update path.

@@ -9,7 +9,12 @@
 #include "lib/utility/ob_print_utils.h"
 
 namespace oceanbase {
-namespace obcall { struct ObCreateRoutineArg; struct ObDropRoutineArg; }
+namespace obcall {
+struct ObCreateRoutineArg;
+struct ObDropRoutineArg;
+struct ObGrantArg;
+struct ObRevokeRoutineArg;
+}
 namespace share { namespace schema { class ObSchemaGetterGuard; } }
 namespace share { namespace plugin {
 struct ExtensionUpdateRequest;
@@ -17,25 +22,34 @@ struct ExtensionInstallSpec;
 
 // Core-only ordered DDL input, NOT an installed plugin ABI or authority token.
 // CREATE and ALTER use the existing create/alter RPC payload; DROP uses its own
-// payload. Exactly one pointer is present. No sorting/deduplication is permitted:
+// payload. GRANT/REVOKE retain their full target/actor/recipient RPC snapshots.
+// Exactly one pointer is present. No sorting/deduplication is permitted:
 // DROP x; CREATE x and CREATE x; DROP x have different schema/member effects.
 // The executor must still resolve/fence objects, check privileges/dependencies,
 // and use the update coordinator's transaction. These views grant no authority.
 struct ExtensionRoutineUpdateOperation
 {
-  enum class Kind : uint8_t { INVALID, CREATE, DROP, ALTER };
+  enum class Kind : uint8_t { INVALID, CREATE, DROP, ALTER, GRANT, REVOKE };
   Kind kind_ = Kind::INVALID;
   const obcall::ObCreateRoutineArg *create_arg_ = nullptr;
   const obcall::ObDropRoutineArg *drop_arg_ = nullptr;
+  const obcall::ObGrantArg *grant_arg_ = nullptr;
+  const obcall::ObRevokeRoutineArg *revoke_arg_ = nullptr;
   // Container diagnostics intentionally omit SQL text and argument pointers.
   TO_STRING_KV("kind", static_cast<uint32_t>(kind_));
 
   bool has_valid_shape() const
   {
-    return ((kind_ == Kind::CREATE || kind_ == Kind::ALTER)
-             && create_arg_ != nullptr && drop_arg_ == nullptr)
-        || (kind_ == Kind::DROP && create_arg_ == nullptr && drop_arg_ != nullptr);
+    const int pointers = (create_arg_ != nullptr) + (drop_arg_ != nullptr)
+        + (grant_arg_ != nullptr) + (revoke_arg_ != nullptr);
+    return pointers == 1 && (((kind_ == Kind::CREATE || kind_ == Kind::ALTER) && create_arg_ != nullptr)
+        || (kind_ == Kind::DROP && drop_arg_ != nullptr)
+        || (kind_ == Kind::GRANT && grant_arg_ != nullptr)
+        || (kind_ == Kind::REVOKE && revoke_arg_ != nullptr));
   }
+  // Existing schema-only executors must opt in explicitly to privilege
+  // operations after wiring the SAME transaction and per-statement ACL view.
+  bool is_schema_change() const { return kind_ == Kind::CREATE || kind_ == Kind::ALTER || kind_ == Kind::DROP; }
 };
 
 // In-process Query -> Root semantic callback, NOT a native plugin service. The

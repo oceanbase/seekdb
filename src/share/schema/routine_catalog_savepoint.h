@@ -17,6 +17,7 @@ public:
                          std::shared_ptr<RoutinePrivilegeOverlay> privileges)
       : schema_(std::move(schema)), privileges_(std::move(privileges)),
         schema_mark_(schema_ ? schema_->head_ : 0), privilege_mark_(privileges_ ? privileges_->head_ : 0),
+        object_privilege_mark_(privileges_ ? privileges_->object_head_ : 0),
         active_(schema_ && privileges_ && !schema_->is_retired() && !privileges_->is_retired()
                 && schema_->privileges() == privileges_.get()) {}
   ~RoutineCatalogSavepoint() { if (active_) (void)rollback(); }
@@ -29,15 +30,17 @@ public:
     using namespace common;
     if (!active_) return OB_STATE_NOT_MATCH;
     active_ = false;
-    if (!schema_->ancestor(schema_mark_) || !privileges_->ancestor(privilege_mark_)) return OB_STATE_NOT_MATCH;
+    if (!schema_->ancestor(schema_mark_) || !privileges_->ancestor(privilege_mark_) ||
+        !privileges_->object_ancestor(object_privilege_mark_)) return OB_STATE_NOT_MATCH;
     schema_->rollback_to(schema_mark_);
     privileges_->rollback_to(privilege_mark_);
+    privileges_->rollback_objects_to(object_privilege_mark_);
     return OB_SUCCESS;
   }
 private:
   const std::shared_ptr<RoutineSchemaOverlay> schema_;
   const std::shared_ptr<RoutinePrivilegeOverlay> privileges_;
-  const size_t schema_mark_, privilege_mark_;
+  const size_t schema_mark_, privilege_mark_, object_privilege_mark_;
   bool active_;
 };
 } } }
