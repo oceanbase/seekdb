@@ -422,6 +422,43 @@ int resolve_in_process_direct_insert_policy(RequestTag parent, uint64_t generati
   THIS_WORKER.set_timeout_ts(old_timeout);
   return ret;
 }
+template <class Call>
+int with_in_process_direct_insert(Call &&call)
+{
+  InProcessStorage *ctx = in_process_storage;
+  const StorageSpaceHandle space = active_worker_storage_space();
+  if (ctx == nullptr || !ctx->initialized || !ctx->direct_insert_registry) { return OB_NOT_INIT; }
+  if (!space.is_namespace() || ctx->ns != space.namespace_id()) { return OB_INVALID_ARGUMENT; }
+  const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
+  auto *old_session = THIS_WORKER.get_session();
+  THIS_WORKER.set_session(&ctx->session);
+  const int ret = call(ctx->direct_insert, space, *ctx->direct_insert_registry);
+  THIS_WORKER.set_session(old_session);
+  THIS_WORKER.set_timeout_ts(old_timeout);
+  return ret;
+}
+int build_in_process_direct_insert_autoinc(RequestTag parent, uint64_t generation,
+                                           ObDirectInsertAutoincScope scope,
+                                           const ObTabletID &tablet, int64_t slice,
+                                           ObDirectInsertAutoincParam &param)
+{
+  return with_in_process_direct_insert([&](DirectInsertRoute &route,
+      StorageSpaceHandle space, DirectInsertRegistry &registry) {
+    return route.build_autoinc(space, parent, generation, registry,
+        scope, tablet, slice, param);
+  });
+}
+int sync_in_process_direct_insert_autoinc(RequestTag parent, uint64_t generation,
+                                          const ObTabletID &tablet,
+                                          const ObTabletID &target,
+                                          int64_t slice, int64_t rows)
+{
+  return with_in_process_direct_insert([&](DirectInsertRoute &route,
+      StorageSpaceHandle space, DirectInsertRegistry &registry) {
+    return route.sync_autoinc(space, parent, generation, registry,
+        tablet, target, slice, rows);
+  });
+}
 int fetch_in_process_scan(uint64_t handle, ScanBatch &batch)
 {
   InProcessStorage *ctx = in_process_storage;

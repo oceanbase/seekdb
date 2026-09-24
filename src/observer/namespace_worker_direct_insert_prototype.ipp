@@ -242,6 +242,41 @@ struct DirectInsertRoute {
         static_cast<unsigned long long>(storage_space.namespace_id()), ret);
     return ret;
   }
+  int build_autoinc(StorageSpaceHandle storage_space, RequestTag parent,
+                    uint64_t generation, DirectInsertRegistry &registry,
+                    ObDirectInsertAutoincScope scope, const ObTabletID &logical_tablet,
+                    int64_t slice, ObDirectInsertAutoincParam &param) {
+    if (!storage_space.is_namespace() || scope > DIRECT_INSERT_TABLET_AUTOINC) {
+      return OB_INVALID_ARGUMENT;
+    }
+    int ret = resolve(parent, generation, registry);
+    if (ret) { return ret; }
+    std::shared_lock<std::shared_mutex> guard(owner->mutex);
+    if (!owner->session) { return OB_NOT_INIT; }
+    ObTabletID tablet = logical_tablet;
+    const uint64_t ns = storage_space.namespace_id();
+    if (ns > 1) { ret = route_tablet_id(ns, tablet); }
+    if (!ret) { ret = owner->session->build_autoinc_param(scope, tablet, slice, param); }
+    return ret ? ret : param.is_valid() ? OB_SUCCESS : OB_INVALID_ARGUMENT;
+  }
+  int sync_autoinc(StorageSpaceHandle storage_space, RequestTag parent,
+                   uint64_t generation, DirectInsertRegistry &registry,
+                   const ObTabletID &logical_tablet, const ObTabletID &logical_target,
+                   int64_t slice, int64_t rows) {
+    if (!storage_space.is_namespace()) { return OB_INVALID_ARGUMENT; }
+    int ret = resolve(parent, generation, registry);
+    if (ret) { return ret; }
+    std::shared_lock<std::shared_mutex> guard(owner->mutex);
+    if (!owner->session) { return OB_NOT_INIT; }
+    ObTabletID tablet = logical_tablet, target = logical_target;
+    const uint64_t ns = storage_space.namespace_id();
+    if (ns > 1 && OB_FAIL(route_tablet_id(ns, tablet))) {
+    } else if (ns > 1 && OB_FAIL(route_tablet_id(ns, target))) {
+    } else {
+      ret = owner->session->sync_tablet_autoinc(tablet, target, slice, rows);
+    }
+    return ret;
+  }
 
   int process(StorageSpaceHandle storage_space, RequestTag tag, DirectInsertRegistry &registry,
       const std::shared_ptr<StorageSessionState> &context, Frame &request, Frame &reply) {
@@ -383,22 +418,6 @@ struct DirectInsertRoute {
           }
           if (!ret && !request.consumed()) { ret = OB_INVALID_ARGUMENT; }
           if (!ret) { ret = session->prepare_ordered_input(slice_counts); }
-        } else if (operation == 'A') {
-          const uint64_t scope = request.number();
-          ObTabletID tablet(request.number()); const int64_t slice = request.number();
-          ObDirectInsertAutoincParam param;
-          if (!request.consumed() || scope > DIRECT_INSERT_TABLET_AUTOINC) { ret = OB_INVALID_ARGUMENT; }
-          else if (ns > 1 && OB_FAIL(route_tablet_id(ns, tablet))) {}
-          else { ret = session->build_autoinc_param(static_cast<ObDirectInsertAutoincScope>(scope), tablet, slice, param); }
-          if (!ret) { output.number(param.enabled_); output.number(param.slice_count_);
-            output.number(param.slice_index_); output.number(param.range_interval_); }
-        } else if (operation == 'T') {
-          ObTabletID tablet(request.number()), target(request.number());
-          const int64_t slice = request.number(), rows = request.number();
-          if (!request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-          else if (ns > 1 && OB_FAIL(route_tablet_id(ns, tablet))) {}
-          else if (ns > 1 && OB_FAIL(route_tablet_id(ns, target))) {}
-          else { ret = session->sync_tablet_autoinc(tablet, target, slice, rows); }
         } else if (operation == 'W') {
           ObDirectInsertWriterRequest param;
           const uint64_t layout = request.number();
@@ -460,6 +479,14 @@ int call_in_process_direct_insert_simple(RequestTag parent, uint64_t generation,
 int resolve_in_process_direct_insert_policy(RequestTag parent, uint64_t generation,
                                             const ObDirectInsertPlanFacts &facts,
                                             ObDirectInsertWritePolicy &policy);
+int build_in_process_direct_insert_autoinc(RequestTag parent, uint64_t generation,
+                                           ObDirectInsertAutoincScope scope,
+                                           const ObTabletID &tablet, int64_t slice,
+                                           ObDirectInsertAutoincParam &param);
+int sync_in_process_direct_insert_autoinc(RequestTag parent, uint64_t generation,
+                                          const ObTabletID &tablet,
+                                          const ObTabletID &target,
+                                          int64_t slice, int64_t rows);
 
 class RemoteDirectInsertSession final : public ObIDirectInsertSession, public ObIDirectInsertWriterFactory {
 public:
@@ -556,19 +583,20 @@ public:
   }
   int build_autoinc_param(ObDirectInsertAutoincScope scope, const ObTabletID &tablet,
       int64_t slice, ObDirectInsertAutoincParam &param) override {
-    Frame payload, reply; payload.number(scope); payload.number(tablet.id()); payload.number(slice);
-    int ret = call('A', payload, reply);
-    if (!ret) {
-      const uint64_t enabled = reply.number(); param.enabled_ = enabled;
-      param.slice_count_ = reply.number(); param.slice_index_ = reply.number(); param.range_interval_ = reply.number();
-      if (!reply.consumed() || enabled > 1 || !param.is_valid()) { ret = OB_INVALID_ARGUMENT; }
-    }
+    StorageSessionScope binding(THIS_WORKER.get_session());
+    int ret = binding.error() ? binding.error() : error.load();
+    if (!ret) { ret = build_in_process_direct_insert_autoinc(
+        origin, generation, scope, tablet, slice, param); }
+    if (ret) { int expected = OB_SUCCESS; error.compare_exchange_strong(expected, ret); }
     return ret;
   }
   int sync_tablet_autoinc(const ObTabletID &tablet, const ObTabletID &target, int64_t slice, int64_t rows) override {
-    Frame payload, reply; payload.number(tablet.id()); payload.number(target.id()); payload.number(slice); payload.number(rows);
-    int ret = call('T', payload, reply);
-    return ret ? ret : reply.consumed() ? OB_SUCCESS : OB_INVALID_ARGUMENT;
+    StorageSessionScope binding(THIS_WORKER.get_session());
+    int ret = binding.error() ? binding.error() : error.load();
+    if (!ret) { ret = sync_in_process_direct_insert_autoinc(
+        origin, generation, tablet, target, slice, rows); }
+    if (ret) { int expected = OB_SUCCESS; error.compare_exchange_strong(expected, ret); }
+    return ret;
   }
   ObIDirectInsertWriterFactory &get_writer_factory() override { return *this; }
   int create(ObIAllocator &, const ObDirectInsertWriterRequest &, ObIDirectInsertWriter *&) override;
