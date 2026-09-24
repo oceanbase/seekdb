@@ -99,6 +99,18 @@ int ObTransService::acquire_tx(const char* buf,
   return ret;
 }
 
+int ObTransService::acquire_shadow_tx(const ObTxDesc &source, ObTxDesc *&tx)
+{
+  if (tx != nullptr) { return OB_INVALID_ARGUMENT; }
+  int ret = tx_desc_mgr_.alloc(tx);
+  if (OB_SUCC(ret)) { ret = tx->clone_shadow_from(source); }
+  if (OB_FAIL(ret) && tx != nullptr) {
+    tx_desc_mgr_.revert(*tx);
+    tx = nullptr;
+  }
+  return ret;
+}
+
 /*
  * do_commit_tx_ - the real work of commit tx
  *

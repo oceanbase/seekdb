@@ -1,4 +1,4 @@
-// In-process prototype frame format pending typed service calls.
+// In-process namespace storage binding and typed service helpers.
 #ifndef SEEKDB_NAMESPACE_WORKER_PROTOCOL_PROTOTYPE_H_
 #define SEEKDB_NAMESPACE_WORKER_PROTOCOL_PROTOTYPE_H_
 #include "lib/ob_errno.h"
@@ -58,88 +58,6 @@ private:
   Scope scope_ = Scope::INVALID;
   uint64_t value_ = 0;
 };
-struct Frame {
-  static constexpr int64_t HEADER_SIZE = 1; // request type
-  std::vector<char> data;
-  int64_t pos = HEADER_SIZE;
-  int ret = common::OB_SUCCESS;
-  size_t limit = MAX_SQL_MESSAGE;
-  explicit Frame(char type = '?', size_t max_size = MAX_SQL_MESSAGE) : data(HEADER_SIZE, 0), limit(max_size) { data[0] = type; }
-  char type() const { return data.empty() ? '?' : data[0]; }
-  void number(uint64_t n) {
-    if (data.size() + 8 > limit) { ret = common::OB_SIZE_OVERFLOW; return; }
-    for (unsigned i = 0; i < 8; ++i) { data.push_back(static_cast<char>(n >> (8 * i))); }
-  }
-  uint64_t number() {
-    uint64_t n = 0;
-    if (pos + 8 > static_cast<int64_t>(data.size())) { ret = common::OB_INVALID_ARGUMENT; return 0; }
-    for (unsigned i = 0; i < 8; ++i) { n |= uint64_t(static_cast<unsigned char>(data[pos++])) << (8 * i); }
-    return n;
-  }
-  void string(const common::ObString &s) {
-    number(s.length());
-    if (ret || s.length() < 0 || data.size() + s.length() > limit) { ret = common::OB_SIZE_OVERFLOW; return; }
-    if (!s.empty()) { data.insert(data.end(), s.ptr(), s.ptr() + s.length()); }
-  }
-  common::ObString string() {
-    const uint64_t n = number();
-    if (ret || n > data.size() - pos) { ret = common::OB_INVALID_ARGUMENT; return {}; }
-    common::ObString s(static_cast<int32_t>(n), data.data() + pos); pos += n; return s;
-  }
-  template<class T> void append(const T &value) {
-    if (ret) { return; }
-    const int64_t n = value.get_serialize_size();
-    int64_t p = data.size();
-    if (n < 0 || data.size() + n > limit) { ret = common::OB_SIZE_OVERFLOW; return; }
-    data.resize(p + n); ret = value.serialize(data.data(), data.size(), p); data.resize(p);
-  }
-  template<class T> void read(T &value) {
-    if (!ret) { ret = value.deserialize(data.data(), data.size(), pos); }
-  }
-  void write_object(const common::ObObj &value, const bool has_lob_header) {
-    append(value);
-    number(has_lob_header);
-  }
-  void write_object(const common::ObObj &value) {
-    write_object(value, value.has_lob_header());
-  }
-  bool read_object(common::ObObj &value) {
-    read(value);
-    const bool has_lob_header = !ret && number() != 0;
-    if (!ret && has_lob_header) { value.set_has_lob_header(); }
-    return !ret && has_lob_header;
-  }
-  bool consumed() const { return !ret && pos == static_cast<int64_t>(data.size()); }
-};
-// Storage requests normally inherit the immutable space bound to their
-// Channel. Only GLOBAL needs a wire discriminator; namespace_id is never
-// repeated on ordinary requests. The shared endpoint treats GLOBAL as a
-// capability available only to the default namespace Worker.
-inline void write_storage_space(Frame &frame, const StorageSpaceHandle &space)
-{
-  if (!space.is_valid()) {
-    frame.ret = common::OB_INVALID_ARGUMENT;
-  } else {
-    frame.number(space.is_global() ? 1 : 0);
-  }
-}
-inline int read_storage_space(Frame &frame,
-                              const StorageSpaceHandle &channel_space,
-                              StorageSpaceHandle &request_space)
-{
-  const uint64_t wire_scope = frame.number();
-  int ret = frame.ret;
-  if (OB_SUCC(ret) && wire_scope == 0 && channel_space.is_namespace()) {
-    request_space = channel_space;
-  } else if (OB_SUCC(ret) && wire_scope == 1
-             && channel_space.is_namespace()
-             && channel_space.namespace_id() == 1) {
-    request_space = StorageSpaceHandle::global_space();
-  } else if (OB_SUCC(ret)) {
-    ret = common::OB_INVALID_ARGUMENT;
-  }
-  return ret;
-}
 // Storage scope is independent from the worker's fixed namespace identity.
 // A narrow global scope lets a native SQL operation address shared control
 // tablets in the same transaction without switching the worker SchemaService.

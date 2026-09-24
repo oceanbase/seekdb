@@ -372,6 +372,15 @@ int ObTxDesc::deserialize_shadow(const char *buf, int64_t len, int64_t &pos)
   return ret;
 }
 
+int ObTxDesc::clone_shadow_from(const ObTxDesc &source)
+{
+  int ret = DATA_CURRENT_VERSION == source.data_version_
+      ? OB_SUCCESS : OB_NOT_SUPPORTED;
+  if (OB_SUCC(ret)) { ret = sync_serialized_state_from(source); }
+  if (OB_SUCC(ret)) { flags_.SHADOW_ = true; }
+  return ret;
+}
+
 int ObTxDesc::sync_serialized_state_from(const ObTxDesc &source)
 {
   if (this == &source) { return OB_SUCCESS; }

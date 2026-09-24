@@ -29,8 +29,6 @@ using namespace data_plane;
 using namespace transaction;
 using namespace transaction::tablelock;
 using namespace blocksstable;
-int worker_send(const Frame &, bool cleanup = false);
-int worker_read(Frame &);
 struct WritePrepareRequest {
   StorageSpaceHandle storage_space;
   uint64_t table_id;
@@ -83,20 +81,6 @@ struct WriteResult : WriteCells {
 };
 int write_in_process_batch(const ObTxDesc &view, const WriteBatch &batch,
                            int64_t &affected, WriteResult &duplicates);
-
-bool cleanup_write(Frame &request) {
-  const int64_t position = request.pos;
-  const uint64_t op = request.number();
-  request.pos = position;
-  return request.type() == 'T' && (op == 'B' || op == 'R' || op == 'U' || op == 'E');
-}
-int write_rpc(Frame &request, Frame &reply) {
-  int ret = worker_send(request, cleanup_write(request));
-  if (!ret) { ret = worker_read(reply); }
-  if (!ret && reply.type() != 'w') { ret = OB_INVALID_ARGUMENT; }
-  if (!ret) { ret = static_cast<int>(reply.number()); }
-  return ret ? ret : reply.ret;
-}
 
 int route_tablet_id(uint64_t ns, common::ObTabletID &tablet_id)
 {
@@ -1254,39 +1238,12 @@ struct EngineWrites {
     return it == writes.end() ? OB_INVALID_ARGUMENT
         : it->second->batch(request, *tx, affected, duplicates);
   }
-  int process(Frame &request, Frame &reply) {
-    auto *service = query_transaction_service();
-    const uint64_t operation = request.number();
-    const uint64_t txid = request.number();
-    int ret = request.ret ? request.ret
-        : !storage_space.is_namespace() ? OB_INVALID_ARGUMENT : OB_SUCCESS;
-    Frame values;
-    if (!ret && request.type() == 'T' && operation == 't') {
-      if (tx) { ret = OB_INIT_TWICE; }
-      else { ret = service->acquire_tx(request.data.data(), request.data.size(), request.pos, tx); }
-    }
-    if (!ret && (!tx || static_cast<uint64_t>(tx->get_tx_id().get_id()) != txid)) { ret = OB_INVALID_ARGUMENT; }
-    if (!ret && request.type() == 'T') {
-      if (operation == 't') {
-        if (!request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-      } else { ret = OB_NOT_SUPPORTED; }
-    }
-    reply = Frame('w'); reply.number(ret);
-    if (!ret) {
-      if (request.type() == 'T') { reply.append(*tx); }
-      reply.data.insert(reply.data.end(), values.data.begin() + Frame::HEADER_SIZE, values.data.end());
-      if (values.ret) { reply.ret = values.ret; }
-    }
-    fprintf(stderr, "PROTOTYPE_V14_RPC type=%c op=%c tx=%llu ret=%d wire=%d bytes=%zu\n",
-        request.type(), static_cast<char>(operation), (unsigned long long)txid, ret, reply.ret, reply.data.size());
-    return reply.ret;
-  }
 };
 
 // Compatibility view for query's existing descriptor accessors. Constructing
 // and decoding this value does not start a transaction service, register a
 // transaction, or allocate a storage context in the worker. Engine owns all
-// authoritative transaction state; this view is refreshed by transaction RPC.
+// authoritative transaction state; this view is refreshed by native calls.
 // Ticket 05c: resolve the transaction's owning session when the ambient
 // worker names another session or none (async end-trans completion runs off
 // the query thread). A session borrowed from the session manager is returned
@@ -1314,21 +1271,6 @@ void revert_tx_owner_session(sql::ObSQLSessionInfo *borrowed)
   if (OB_NOT_NULL(borrowed)) {
     share::server_service<sql::ObSQLSessionMgr>()->revert_session(borrowed);
   }
-}
-int tx_rpc(char operation, ObTxDesc &tx, Frame &request, Frame &reply) {
-  // A PX task owns a deserialized session. Explicit inner-SQL scopes can also
-  // run while THIS_WORKER still names their caller, so require pointer identity.
-  sql::ObSQLSessionInfo *borrowed = nullptr;
-  auto *session = tx_owner_session(tx, borrowed);
-  StorageSessionScope scope(session && session->get_tx_desc() == &tx ? session : nullptr);
-  if (scope.error()) { revert_tx_owner_session(borrowed); return scope.error(); }
-  Frame message('T'); message.number(operation); message.number(tx.get_tx_id().get_id());
-  message.data.insert(message.data.end(), request.data.begin() + Frame::HEADER_SIZE, request.data.end());
-  message.ret = request.ret;
-  int ret = write_rpc(message, reply);
-  if (!ret) { reply.read(tx); ret = reply.ret; }
-  revert_tx_owner_session(borrowed);
-  return ret;
 }
 int call_in_process_tx_state(char operation, ObTxDesc &view,
                              const ObTxParam *param, int64_t deadline);

@@ -22,6 +22,7 @@ int remove_ls(const bool graceful = true);
  * acquire a transaction descriptor by deserialize from buffer
  */
 int acquire_tx(const char* buf, const int64_t len, int64_t &pos, ObTxDesc *&tx);
+int acquire_shadow_tx(const ObTxDesc &source, ObTxDesc *&tx);
 int release_tx_ref(ObTxDesc &tx);
 /*
  * Used when a session is destroyed while it still references a TxDesc.

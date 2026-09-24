@@ -44,17 +44,6 @@ int release_storage_namespace_schemas(uint64_t namespace_id,
 struct SessionBinding {
   InProcessStorage *in_process = nullptr;
 };
-int serve_storage(StorageSpaceHandle storage_space,
-    EngineWrites *writes, int state, Frame &input, Frame &result) {
-    int ret = OB_SUCCESS;
-    if (!storage_space.is_namespace()) { return OB_INVALID_ARGUMENT; }
-    if (writes && input.type() == 'T') {
-      result = Frame('w');
-      if (state && !cleanup_write(input)) { result.number(state); }
-      else { ret = writes->process(input, result); }
-    } else { ret = OB_INVALID_ARGUMENT; }
-    return ret;
-}
 // One native storage context belongs to each forked-namespace SQL session.
 struct InProcessStorage {
   const uint64_t ns;
@@ -66,7 +55,6 @@ struct InProcessStorage {
   DirectInsertRegistry *direct_insert_registry = nullptr;
   RequestTag direct_insert_tag;
   sql::ObSQLSessionInfo *sql_session = nullptr; // switch key, not an owner
-  Frame reply;
   bool initialized = false;
   explicit InProcessStorage(uint64_t namespace_id)
       : ns(namespace_id),
@@ -255,32 +243,6 @@ int in_process_open(InProcessStorage &ctx, uint32_t sid, bool internal)
     ctx.initialized = true;
   }
   return ret;
-}
-// Deliver storage calls synchronously through the bound native session.
-int in_process_send(InProcessStorage &ctx, const Frame &frame, bool)
-{
-  Frame input = frame;
-  Frame result('l');
-  int ret = OB_SUCCESS;
-  const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
-  auto *old_session = THIS_WORKER.get_session();
-  THIS_WORKER.set_session(ctx.initialized ? &ctx.session : nullptr);
-  if (!ctx.initialized) {
-    ret = OB_NOT_INIT;
-  } else {
-    ret = serve_storage(StorageSpaceHandle::namespace_space(ctx.ns),
-        ctx.writes.get(), OB_SUCCESS, input, result);
-  }
-  THIS_WORKER.set_session(old_session);
-  THIS_WORKER.set_timeout_ts(old_timeout);
-  if (!ret) { ctx.reply = std::move(result); }
-  return ret;
-}
-int in_process_read(InProcessStorage &ctx, Frame &frame)
-{
-  frame = std::move(ctx.reply);
-  ctx.reply = Frame();
-  return OB_SUCCESS;
 }
 int open_in_process_scan(StorageSpaceHandle storage_space,
                          const ObVTableScanParam &param,
@@ -964,16 +926,6 @@ void close_session(SessionBinding *binding) {
   }
   delete ctx;
 }
-int worker_send(const Frame &frame, bool cleanup) {
-  return frame.ret ? frame.ret : in_process_storage
-      ? in_process_send(*in_process_storage, frame, cleanup)
-      : OB_ERR_UNEXPECTED;
-}
-int worker_read(Frame &frame) {
-  return in_process_storage
-      ? in_process_read(*in_process_storage, frame)
-      : OB_ERR_UNEXPECTED;
-}
 // Keep one storage context per SQL session in a forked namespace.
 int open_in_process_storage(sql::ObSQLSessionInfo &session)
 {
@@ -995,6 +947,27 @@ int open_in_process_storage(sql::ObSQLSessionInfo &session)
   }
   return ret;
 }
+int import_in_process_shadow_tx(ObTxDesc &view)
+{
+  InProcessStorage *ctx = in_process_storage;
+  if (!ctx || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
+  if (!view.is_shadow() || ctx->writes->tx) { return OB_INVALID_ARGUMENT; }
+  const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
+  auto *old_session = THIS_WORKER.get_session();
+  THIS_WORKER.set_session(&ctx->session);
+  auto *service = share::server_service<ObTransService>();
+  int ret = service ? service->acquire_shadow_tx(view, ctx->writes->tx) : OB_NOT_INIT;
+  if (!ret) { ret = view.sync_serialized_state_from(*ctx->writes->tx); }
+  fprintf(stderr, "PROTOTYPE_SHADOW_IMPORT ns=%llu tx=%lld ret=%d\n",
+      (unsigned long long)ctx->ns, (long long)view.get_tx_id().get_id(), ret);
+  if (ret && service && ctx->writes->tx) {
+    service->release_tx(*ctx->writes->tx);
+    ctx->writes->tx = nullptr;
+  }
+  THIS_WORKER.set_session(old_session);
+  THIS_WORKER.set_timeout_ts(old_timeout);
+  return ret;
+}
 StorageSessionScope::StorageSessionScope(sql::ObSQLSessionInfo *session, bool create) {
   if (session && in_process_session_ns(session) > 1
       && (!in_process_storage || in_process_storage->sql_session != session)
@@ -1006,9 +979,7 @@ StorageSessionScope::StorageSessionScope(sql::ObSQLSessionInfo *session, bool cr
     if (!error_) { in_process_storage->sql_session = session; }
     if (!error_ && created && session->get_tx_desc() && session->get_tx_desc()->is_shadow()) {
       // Import a PX shadow transaction once for this storage session.
-      Frame request, reply; request.append(*session->get_tx_desc());
-      error_ = tx_rpc('t', *session->get_tx_desc(), request, reply);
-      if (!error_ && !reply.consumed()) { error_ = OB_INVALID_ARGUMENT; }
+      error_ = import_in_process_shadow_tx(*session->get_tx_desc());
       if (error_) {
         close_session(session->namespace_storage_binding());
         session->namespace_storage_binding() = nullptr;

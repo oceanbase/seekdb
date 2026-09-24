@@ -1,11 +1,7 @@
 // Ticket 05c: serve forked namespaces (ns>1) inside the shared process.
 //
-// The worker-mode storage boundary is reused verbatim: the same Remote* stub
-// implementations serialize requests into Frames, and the same serve_storage
-// handlers translate (ns, local) ids to storage ids. Only the transport
-// changes: instead of a Unix socket round trip to a worker process, a bound
-// session delivers each frame synchronously to the in-process storage
-// context (InProcessStorage, the channel-free DirectStorageContext twin).
+// Query-side adapters bind each SQL session to its native storage context.
+// The typed service calls route logical namespace ids at that boundary.
 //
 // Per-namespace services (schema service, plan cache) live in the namespace
 // runtime's service slots and are constructed lazily on first use.

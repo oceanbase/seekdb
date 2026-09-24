@@ -413,6 +413,7 @@ public:
   bool is_clean() const { return !has_write_state_; }
   bool is_shadow() const  { return flags_.SHADOW_; }
   int deserialize_shadow(const char *buf, int64_t len, int64_t &pos);
+  int clone_shadow_from(const ObTxDesc &source);
   int sync_serialized_state_from(const ObTxDesc &source);
   bool is_explicit() const { return flags_.EXPLICIT_; }
   void set_with_temporary_table() { flags_.WITH_TEMP_TABLE_ = true; }
