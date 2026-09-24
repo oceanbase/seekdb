@@ -678,32 +678,39 @@ int database_from_value(uint64_t ns, const Value &value, const ObDatabaseSchema 
     auto &slot = database_schemas[id]; if (!slot) { slot = std::move(holder); } schema = &slot->schema; }
   return OB_SUCCESS;
 }
-int release_lineage(ObISQLClient &trans, uint64_t id) {
-  int ret = OB_SUCCESS;
-  // Locks go from newer snapshots to older parents. A child owns exactly one
-  // persistent reference to its parent, independent of any namespace tombstone.
-  while (OB_SUCC(ret) && id) {
-    Roots snapshot; ObSqlString q;
-    if (OB_FAIL(snapshot_roots(trans, id, snapshot, true))) {
-    } else if (snapshot.ref_count > 1) {
-      if (OB_FAIL(q.assign_fmt("UPDATE %s SET ref_count=ref_count-1 WHERE snapshot_id=%lu", SNAPSHOTS, id))) {
-      } else { ret = write_sql(trans, q); }
-      break;
-    } else {
-      ObSnapshotInfo pin; ObSnapshotTableProxy pins; SCN scn; ObArray<ObTabletID> tablets;
-      if (OB_FAIL(scn.convert_for_tx(snapshot.snapshot))) {
-      } else if (OB_FAIL(pins.get_snapshot(trans, SNAPSHOT_FOR_MULTI_VERSION, scn, pin))) {
-      } else if (pin.tablet_id_ != 0 || pin.schema_version_ != snapshot.schema_version) { ret = OB_STATE_NOT_MATCH;
-      } else if (OB_FAIL(tablets.push_back(ObTabletID(0)))) {
-      } else if (OB_FAIL(pins.batch_remove_snapshots(trans, SNAPSHOT_FOR_MULTI_VERSION,
-          snapshot.schema_version, scn, tablets))) {
-      } else if (OB_FAIL(q.assign_fmt("DELETE FROM %s WHERE snapshot_id=%lu", SNAPSHOTS, id))) {
-      } else { ret = write_sql(trans, q); }
-      LOG_INFO("PROTOTYPE_V8_RELEASE_SNAPSHOT_IN_TRANS", K(ret), K(id), "parent", snapshot.parent_ref);
-      id = snapshot.parent_ref;
-    }
+class SqlSnapshotLineageStore final : public ::oceanbase::ns::ISnapshotLineageStore {
+public:
+  explicit SqlSnapshotLineageStore(ObISQLClient &trans) : trans_(trans) {}
+  int load_for_update(uint64_t id, Roots &root) override {
+    return snapshot_roots(trans_, id, root, true);
   }
-  return ret;
+  int decrement_ref(uint64_t id) override {
+    ObSqlString q;
+    int ret = q.assign_fmt("UPDATE %s SET ref_count=ref_count-1 WHERE snapshot_id=%lu", SNAPSHOTS, id);
+    return ret == OB_SUCCESS ? write_sql(trans_, q) : ret;
+  }
+  int remove_snapshot(uint64_t id, const Roots &snapshot) override {
+    ObSnapshotInfo pin; ObSnapshotTableProxy pins; SCN scn; ObArray<ObTabletID> tablets;
+    ObSqlString q;
+    int ret = OB_SUCCESS;
+    if (OB_FAIL(scn.convert_for_tx(snapshot.snapshot))) {
+    } else if (OB_FAIL(pins.get_snapshot(trans_, SNAPSHOT_FOR_MULTI_VERSION, scn, pin))) {
+    } else if (pin.tablet_id_ != 0 || pin.schema_version_ != snapshot.schema_version) { ret = OB_STATE_NOT_MATCH;
+    } else if (OB_FAIL(tablets.push_back(ObTabletID(0)))) {
+    } else if (OB_FAIL(pins.batch_remove_snapshots(trans_, SNAPSHOT_FOR_MULTI_VERSION,
+        snapshot.schema_version, scn, tablets))) {
+    } else if (OB_FAIL(q.assign_fmt("DELETE FROM %s WHERE snapshot_id=%lu", SNAPSHOTS, id))) {
+    } else { ret = write_sql(trans_, q); }
+    LOG_INFO("PROTOTYPE_V8_RELEASE_SNAPSHOT_IN_TRANS", K(ret), K(id), "parent", snapshot.parent_ref);
+    return ret;
+  }
+private:
+  ObISQLClient &trans_;
+};
+
+int release_lineage(ObISQLClient &trans, uint64_t id) {
+  SqlSnapshotLineageStore store(trans);
+  return ::oceanbase::ns::NamespaceSnapshotLineage::release(id, store);
 }
 
 int sql_has_row(ObISQLClient &sql, const ObSqlString &query, bool &has_row) {

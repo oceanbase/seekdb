@@ -47,6 +47,26 @@ bool CatalogRoots::valid_snapshot(uint64_t expected_id) const
       && catalog.cap <= snapshot && directory.cap <= snapshot;
 }
 
+int NamespaceSnapshotLineage::release(uint64_t snapshot_id, ISnapshotLineageStore &store)
+{
+  int ret = 0;
+  // Each child owns one parent reference. Lock from child to parent so the
+  // whole chain can be released in the caller's transaction.
+  while (ret == 0 && snapshot_id != 0) {
+    CatalogRoots roots;
+    ret = store.load_for_update(snapshot_id, roots);
+    if (ret == 0) {
+      if (roots.ref_count > 1) {
+        ret = store.decrement_ref(snapshot_id);
+        break;
+      }
+      ret = store.remove_snapshot(snapshot_id, roots);
+      if (ret == 0) { snapshot_id = roots.parent_ref; }
+    }
+  }
+  return ret;
+}
+
 int64_t NamespaceCatalogCodec::cap_min(int64_t a, int64_t b)
 {
   return a == 0 ? b : b == 0 ? a : std::min(a, b);

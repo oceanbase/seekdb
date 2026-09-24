@@ -35,6 +35,21 @@ struct CatalogRoots {
   bool valid_snapshot(uint64_t expected_id) const;
 };
 
+// The caller owns one transaction for the whole release. Each load locks a
+// snapshot row, and removing a row also removes its persistent snapshot pin.
+class ISnapshotLineageStore {
+public:
+  virtual ~ISnapshotLineageStore() = default;
+  virtual int load_for_update(uint64_t snapshot_id, CatalogRoots &roots) = 0;
+  virtual int decrement_ref(uint64_t snapshot_id) = 0;
+  virtual int remove_snapshot(uint64_t snapshot_id, const CatalogRoots &roots) = 0;
+};
+
+class NamespaceSnapshotLineage final {
+public:
+  static int release(uint64_t snapshot_id, ISnapshotLineageStore &store);
+};
+
 class NamespaceCatalogCodec final {
 public:
   static constexpr size_t FANOUT = 8;
