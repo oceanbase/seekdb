@@ -281,7 +281,7 @@ struct DirectInsertRoute {
                       uint64_t generation, DirectInsertRegistry &registry,
                       const ObIArray<ObDDLTabletSliceCount> &logical_counts) {
     if (!storage_space.is_namespace() || logical_counts.count() <= 0
-        || logical_counts.count() > (MAX_FRAME - 64) / 16) {
+        || logical_counts.count() > (MAX_SQL_MESSAGE - 64) / 16) {
       return OB_INVALID_ARGUMENT;
     }
     int ret = resolve(parent, generation, registry);
@@ -375,6 +375,42 @@ struct DirectInsertRoute {
       }
     } else {
       writers.erase(entry);
+    }
+    return ret;
+  }
+  int append_writer(StorageSpaceHandle storage_space, RequestTag parent,
+                    uint64_t generation, DirectInsertRegistry &registry,
+                    uint64_t writer_id, ObDatum *cells,
+                    int64_t row_count, int64_t column_count, int64_t &rows) {
+    rows = 0;
+    if (!storage_space.is_namespace() || !cells || row_count <= 0 || row_count > 32
+        || column_count <= 0 || column_count > OB_MAX_COLUMN_NUMBER) {
+      return OB_INVALID_ARGUMENT;
+    }
+    int64_t payload_size = 121;
+    for (int64_t i = 0; i < row_count * column_count; ++i) {
+      const int64_t cell_size = cells[i].get_serialize_size();
+      if (cell_size < 0 || cell_size > static_cast<int64_t>(MAX_SQL_MESSAGE) - payload_size) {
+        return OB_SIZE_OVERFLOW;
+      }
+      payload_size += cell_size;
+    }
+    int ret = resolve(parent, generation, registry);
+    if (ret) { return ret; }
+    std::shared_lock<std::shared_mutex> guard(owner->mutex);
+    if (!owner->session) { return OB_NOT_INIT; }
+    auto entry = writers.find(writer_id);
+    if (entry == writers.end()) { return OB_STATE_NOT_MATCH; }
+    std::vector<ObDatum *> row(column_count);
+    for (int64_t i = 0; !ret && i < row_count; ++i) {
+      for (int64_t j = 0; j < column_count; ++j) {
+        row[j] = &cells[i * column_count + j];
+      }
+      ret = entry->second->writer->append_row(ObDirectInsertRowView(row.data(), column_count));
+    }
+    if (!ret) {
+      rows = entry->second->writer->get_row_count();
+      if (rows < 0) { ret = OB_INVALID_ARGUMENT; }
     }
     return ret;
   }
@@ -483,33 +519,7 @@ struct DirectInsertRoute {
         std::shared_lock<std::shared_mutex> guard(owner->mutex);
         auto *session = owner->session;
         if (!session) { ret = OB_NOT_INIT; }
-        else if (operation == 'B') {
-          const uint64_t id = request.number();
-          auto entry = writers.find(id);
-          if (request.ret || entry == writers.end()) { ret = OB_STATE_NOT_MATCH; }
-          else {
-            const uint64_t rows = request.number(), columns = request.number();
-            if (request.ret || !rows || rows > 32 || !columns || columns > OB_MAX_COLUMN_NUMBER) { ret = OB_INVALID_ARGUMENT; }
-            std::vector<ObDatum> cells;
-            if (!ret) { cells.resize(rows * columns); }
-            for (auto &cell : cells) {
-              request.read(cell);
-              // Native datum decoding borrows the frame; validate its payload
-              // boundary before invoking any writer or decoding another datum.
-              if (request.ret || request.pos > static_cast<int64_t>(request.data.size())) {
-                ret = OB_INVALID_ARGUMENT; break;
-              }
-            }
-            if (!ret && !request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-            std::vector<ObDatum *> row;
-            if (!ret) { row.resize(columns); }
-            for (uint64_t i = 0; !ret && i < rows; ++i) {
-              for (uint64_t j = 0; j < columns; ++j) { row[j] = &cells[i * columns + j]; }
-              ret = entry->second->writer->append_row(ObDirectInsertRowView(row.data(), columns));
-            }
-          }
-          if (!ret) { output.number(entry->second->writer->get_row_count()); }
-        } else { ret = OB_INVALID_ARGUMENT; }
+        else { ret = OB_INVALID_ARGUMENT; }
       }
     }
     reply = Frame('g'); reply.number(ret);
@@ -541,6 +551,9 @@ int create_in_process_direct_insert_writer(RequestTag parent, uint64_t generatio
     const ObDirectInsertWriterRequest &request, uint64_t &writer_id);
 int control_in_process_direct_insert_writer(RequestTag parent, uint64_t generation,
     uint64_t writer_id, char operation, int64_t &rows);
+int append_in_process_direct_insert_writer(RequestTag parent, uint64_t generation,
+    uint64_t writer_id, ObDatum *cells, int64_t row_count,
+    int64_t column_count, int64_t &rows);
 
 class RemoteDirectInsertSession final : public ObIDirectInsertSession, public ObIDirectInsertWriterFactory {
 public:
@@ -559,22 +572,6 @@ public:
       : allocator(a), schedule_registry(registry), ddl_task_id(task_id),
         schedule(std::move(task_schedule)), sqc_session(session), origin(tag),
         generation(id) {}
-  int call(char operation, const Frame &payload, Frame &reply,
-      sql::ObSQLSessionInfo *session = nullptr, bool cleanup = false) const {
-    StorageSessionScope scope(session ? session : THIS_WORKER.get_session());
-    int ret = scope.error() ? scope.error() : cleanup ? OB_SUCCESS : error.load();
-    Frame request('J'); request.number(operation); request.number(origin.slot);
-    request.number(origin.generation); request.number(generation);
-    request.data.insert(request.data.end(), payload.data.begin() + Frame::HEADER_SIZE, payload.data.end());
-    if (!ret) { ret = payload.ret ? payload.ret : request.data.size() + 64 > request.limit ? OB_SIZE_OVERFLOW : worker_send(request, cleanup); }
-    if (!ret) { ret = worker_read(reply); }
-    if (!ret) { ret = reply.type() == 'g' ? static_cast<int>(reply.number()) : OB_INVALID_ARGUMENT; }
-    if (ret) { int expected = OB_SUCCESS; error.compare_exchange_strong(expected, ret); }
-    fprintf(stderr,
-            "PROTOTYPE_V22_DIRECT_INSERT_CALL op=%c ret=%d sticky=%d cleanup=%d\n",
-            operation, ret, error.load(), cleanup);
-    return ret;
-  }
   int simple_call(char operation, bool &is_final) const {
     StorageSessionScope scope(THIS_WORKER.get_session());
     int ret = scope.error() ? scope.error() : error.load();
@@ -661,26 +658,32 @@ public:
       const ObDirectInsertWriterRequest &request)
       : allocator(a), session(s), sql_session(THIS_WORKER.get_session()), id(handle),
         tablet(request.tablet_id_), slice(request.slice_index_) {}
-  int send_rows(Frame &payload) {
-    Frame reply; int ret = session.call('B', payload, reply, sql_session);
-    if (!ret) { rows = reply.number(); if (!reply.consumed() || rows < 0) { ret = OB_INVALID_ARGUMENT; } }
+  int send_rows(ObDatum *cells, int64_t row_count, int64_t column_count) {
+    StorageSessionScope binding(sql_session);
+    int ret = binding.error() ? binding.error() : session.error.load();
+    int64_t new_rows = 0;
+    if (!ret) { ret = append_in_process_direct_insert_writer(
+        session.origin, session.generation, id, cells, row_count, column_count, new_rows); }
+    if (!ret) { rows = new_rows; }
+    if (ret) { int expected = OB_SUCCESS; session.error.compare_exchange_strong(expected, ret); }
     return ret;
   }
   int append_row(const ObDirectInsertRowView &row) override {
     if (!row.is_valid() || row.datum_count_ > OB_MAX_COLUMN_NUMBER) { return OB_INVALID_ARGUMENT; }
-    Frame payload; payload.number(id); payload.number(1); payload.number(row.datum_count_);
+    std::vector<ObDatum> cells(row.datum_count_);
     for (int64_t i = 0; i < row.datum_count_; ++i) {
       if (!row.datums_[i]) { return OB_INVALID_ARGUMENT; }
-      payload.append(*row.datums_[i]);
+      cells[i] = *row.datums_[i];
     }
-    return send_rows(payload);
+    return send_rows(cells.data(), 1, row.datum_count_);
   }
   int append_batch(const ObDirectInsertBatchView &batch) override {
     if (!batch.is_valid() || batch.vector_count_ > OB_MAX_COLUMN_NUMBER) { return OB_INVALID_ARGUMENT; }
     int ret = OB_SUCCESS;
     for (int64_t first = 0; !ret && first < batch.row_count_; first += 32) {
       const int64_t count = std::min<int64_t>(32, batch.row_count_ - first);
-      Frame payload; payload.number(id); payload.number(count); payload.number(batch.vector_count_);
+      std::vector<ObDatum> cells(count * batch.vector_count_);
+      std::vector<std::string> payloads(count * batch.vector_count_);
       for (int64_t i = first; i < first + count; ++i) {
         const int64_t index = batch.selection_type_ == ObDirectInsertBatchView::CONTIGUOUS_SELECTION
             ? batch.offset_ + i : batch.indices_[i];
@@ -688,11 +691,21 @@ public:
           if (!batch.vectors_[col]) { return OB_INVALID_ARGUMENT; }
           bool is_null = false; const char *value = nullptr; ObLength length = 0;
           batch.vectors_[col]->get_payload(index, is_null, value, length);
-          ObDatum datum; if (is_null) { datum.set_null(); } else { datum.set_string(value, length); }
-          payload.append(datum);
+          const int64_t cell_index = (i - first) * batch.vector_count_ + col;
+          ObDatum &datum = cells[cell_index];
+          if (is_null) {
+            datum.set_null();
+          } else if (length > MAX_SQL_MESSAGE) {
+            return OB_SIZE_OVERFLOW;
+          } else if (length > 0 && !value) {
+            return OB_INVALID_ARGUMENT;
+          } else {
+            payloads[cell_index].assign(value ? value : "", length);
+            datum.set_string(payloads[cell_index].data(), length);
+          }
         }
       }
-      ret = send_rows(payload);
+      if (!ret) { ret = send_rows(cells.data(), count, batch.vector_count_); }
     }
     return ret;
   }

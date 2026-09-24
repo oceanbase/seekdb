@@ -492,6 +492,16 @@ int control_in_process_direct_insert_writer(RequestTag parent, uint64_t generati
         writer_id, operation, rows);
   });
 }
+int append_in_process_direct_insert_writer(RequestTag parent, uint64_t generation,
+    uint64_t writer_id, ObDatum *cells, int64_t row_count,
+    int64_t column_count, int64_t &rows)
+{
+  return with_in_process_direct_insert([&](DirectInsertRoute &route,
+      StorageSpaceHandle space, DirectInsertRegistry &registry) {
+    return route.append_writer(space, parent, generation, registry,
+        writer_id, cells, row_count, column_count, rows);
+  });
+}
 int fetch_in_process_scan(uint64_t handle, ScanBatch &batch)
 {
   InProcessStorage *ctx = in_process_storage;
