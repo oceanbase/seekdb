@@ -1354,111 +1354,6 @@ struct EngineWrites {
             }
           }
         }
-      } else if (operation == 'd' || operation == 'b') {
-        StorageSpaceHandle request_space;
-        if (OB_SUCC(ret)) {
-          ret = read_storage_space(request, storage_space, request_space);
-        }
-        const int64_t schema_version = static_cast<int64_t>(request.number());
-        const int64_t abs_timeout_us = static_cast<int64_t>(request.number());
-        const uint64_t count = request.number();
-        ObArray<ObTabletID> logical_tablet_ids;
-        if (request.ret || schema_version <= 0 || abs_timeout_us <= 0
-            || count == 0 || count > MAX_SQL_MESSAGE / sizeof(uint64_t)) {
-          ret = OB_INVALID_ARGUMENT;
-        }
-        for (uint64_t i = 0; !ret && i < count; ++i) {
-          ObTabletID tablet_id(request.number());
-          if (request.ret) {
-            ret = request.ret;
-          } else if (OB_FAIL(logical_tablet_ids.push_back(tablet_id))) {
-          }
-        }
-        if (!ret && !request.consumed()) {
-          ret = OB_INVALID_ARGUMENT;
-        } else if (!ret) {
-          ObArray<ObTabletID> storage_tablet_ids;
-          if (request_space.is_global()) {
-            ret = storage_tablet_ids.assign(logical_tablet_ids);
-          } else if (OB_FAIL(route_existing_namespace_tablets(
-                         request_space.namespace_id(), logical_tablet_ids,
-                         storage_tablet_ids))) {
-          }
-          if (OB_SUCC(ret) && !storage_tablet_ids.empty()) {
-            if (operation == 'b') {
-              ret = storage::ObTabletBindingMdsHelper::
-                  modify_tablet_binding_for_rw_defensive(
-                      storage_tablet_ids,
-                      schema_version,
-                      std::min(abs_timeout_us, THIS_WORKER.get_timeout_ts()),
-                      *tx,
-                      *service);
-            } else {
-              ret = storage::ObTabletBindingMdsHelper::
-                  modify_tablet_binding_for_write_defensive(
-                      storage_tablet_ids,
-                      schema_version,
-                      std::min(abs_timeout_us, THIS_WORKER.get_timeout_ts()),
-                      *tx,
-                      *service);
-            }
-          }
-        }
-      } else if (operation == 'u') {
-        StorageSpaceHandle request_space;
-        if (OB_SUCC(ret)) {
-          ret = read_storage_space(request, storage_space, request_space);
-        }
-        const int64_t schema_version = static_cast<int64_t>(request.number());
-        const int64_t abs_timeout_us = static_cast<int64_t>(request.number());
-        const uint64_t orig_count = request.number();
-        ObArray<ObTabletID> logical_orig_tablet_ids;
-        ObArray<ObTabletID> logical_hidden_tablet_ids;
-        if (request.ret || schema_version <= 0 || abs_timeout_us <= 0
-            || orig_count > MAX_SQL_MESSAGE / sizeof(uint64_t)) {
-          ret = OB_INVALID_ARGUMENT;
-        }
-        for (uint64_t i = 0; !ret && i < orig_count; ++i) {
-          const ObTabletID tablet_id(request.number());
-          ret = request.ret ? request.ret
-              : logical_orig_tablet_ids.push_back(tablet_id);
-        }
-        const uint64_t hidden_count = !ret ? request.number() : 0;
-        if (!ret && (request.ret || hidden_count > MAX_SQL_MESSAGE / sizeof(uint64_t))) {
-          ret = OB_INVALID_ARGUMENT;
-        }
-        for (uint64_t i = 0; !ret && i < hidden_count; ++i) {
-          const ObTabletID tablet_id(request.number());
-          ret = request.ret ? request.ret
-              : logical_hidden_tablet_ids.push_back(tablet_id);
-        }
-        if (!ret && !request.consumed()) {
-          ret = OB_INVALID_ARGUMENT;
-        } else if (!ret) {
-          ObArray<ObTabletID> storage_orig_tablet_ids;
-          ObArray<ObTabletID> storage_hidden_tablet_ids;
-          if (request_space.is_global()) {
-            if (OB_FAIL(storage_orig_tablet_ids.assign(logical_orig_tablet_ids))) {
-            } else {
-              ret = storage_hidden_tablet_ids.assign(logical_hidden_tablet_ids);
-            }
-          } else if (OB_FAIL(route_existing_namespace_tablets(
-                         request_space.namespace_id(), logical_orig_tablet_ids,
-                         storage_orig_tablet_ids))) {
-          } else if (OB_FAIL(route_existing_namespace_tablets(
-                         request_space.namespace_id(), logical_hidden_tablet_ids,
-                         storage_hidden_tablet_ids))) {
-          }
-          if (OB_SUCC(ret)) {
-            ret = storage::ObTabletBindingMdsHelper::modify_tablet_binding_for_unbind(
-                storage_orig_tablet_ids,
-                storage_hidden_tablet_ids,
-                schema_version,
-                std::min(abs_timeout_us, THIS_WORKER.get_timeout_ts()),
-                *tx,
-                *service);
-          }
-        }
       } else if (operation == 'O') {
         ret = process_table_lock(storage_space, request, *tx);
       } else { ret = OB_NOT_SUPPORTED; }
@@ -1534,6 +1429,10 @@ int call_in_process_tx_named_savepoint(ObTxDesc &view, char operation,
     const ObString &name, int64_t deadline);
 int call_in_process_tx_exec_result(ObTxDesc &view, char operation,
     const ObTxExecResult *input, ObTxExecResult *output);
+int call_in_process_tablet_binding(ObTxDesc &view, char operation,
+    StorageSpaceHandle space, const ObIArray<ObTabletID> &tablets,
+    const ObIArray<ObTabletID> *hidden, int64_t schema_version,
+    int64_t deadline);
 int tx_state(char operation, ObTxDesc &view,
              const ObTxParam *param = nullptr, int64_t deadline = 0)
 {
@@ -2155,16 +2054,8 @@ private:
         ? OB_INVALID_ARGUMENT : OB_SUCCESS;
     StorageSessionScope scope(session, false);
     if (!ret && scope.error()) { ret = scope.error(); }
-    Frame request, reply;
-    write_storage_space(request, storage_space_());
-    request.number(schema_version);
-    request.number(abs_timeout_us);
-    request.number(tablet_ids.count());
-    for (int64_t i = 0; !request.ret && i < tablet_ids.count(); ++i) {
-      request.number(tablet_ids.at(i).id());
-    }
-    if (!ret) { ret = request.ret ? request.ret : tx_rpc(operation, *tx, request, reply); }
-    if (!ret && !reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
+    if (!ret) { ret = call_in_process_tablet_binding(*tx, operation,
+        storage_space_(), tablet_ids, nullptr, schema_version, abs_timeout_us); }
     return ret;
   }
 public:
@@ -2182,20 +2073,9 @@ public:
         ? OB_INVALID_ARGUMENT : OB_SUCCESS;
     StorageSessionScope scope(session, false);
     if (!ret && scope.error()) { ret = scope.error(); }
-    Frame request, reply;
-    write_storage_space(request, storage_space_());
-    request.number(schema_version);
-    request.number(abs_timeout_us);
-    request.number(orig_tablet_ids.count());
-    for (int64_t i = 0; !request.ret && i < orig_tablet_ids.count(); ++i) {
-      request.number(orig_tablet_ids.at(i).id());
-    }
-    request.number(hidden_tablet_ids.count());
-    for (int64_t i = 0; !request.ret && i < hidden_tablet_ids.count(); ++i) {
-      request.number(hidden_tablet_ids.at(i).id());
-    }
-    if (!ret) { ret = request.ret ? request.ret : tx_rpc('u', *tx, request, reply); }
-    if (!ret && !reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
+    if (!ret) { ret = call_in_process_tablet_binding(*tx, 'u',
+        storage_space_(), orig_tablet_ids, &hidden_tablet_ids,
+        schema_version, abs_timeout_us); }
     return ret;
   }
   int wait_until_change_stream_refreshed(

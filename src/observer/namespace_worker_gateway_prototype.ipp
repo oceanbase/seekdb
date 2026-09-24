@@ -520,6 +520,66 @@ int call_in_process_tx_exec_result(ObTxDesc &view, char operation,
   THIS_WORKER.set_timeout_ts(old_timeout);
   return ret;
 }
+int call_in_process_tablet_binding(ObTxDesc &view, char operation,
+    StorageSpaceHandle space, const ObIArray<ObTabletID> &tablets,
+    const ObIArray<ObTabletID> *hidden, int64_t schema_version,
+    int64_t deadline)
+{
+  InProcessStorage *ctx = in_process_storage;
+  if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
+  if (!ctx->writes->tx || ctx->writes->tx->get_tx_id() != view.get_tx_id()
+      || !((space.is_namespace() && space.namespace_id() == ctx->ns)
+          || (space.is_global() && ctx->ns == 1))
+      || (operation != 'd' && operation != 'b' && operation != 'u')
+      || schema_version <= 0 || deadline <= 0
+      || tablets.count() > static_cast<int64_t>(MAX_SQL_MESSAGE / sizeof(uint64_t))
+      || (operation != 'u' && tablets.empty())
+      || (operation == 'u' && !hidden)) {
+    return OB_INVALID_ARGUMENT;
+  }
+  if (hidden && (hidden->count() > static_cast<int64_t>(MAX_SQL_MESSAGE / sizeof(uint64_t))
+      || tablets.count() + hidden->count()
+          > static_cast<int64_t>((MAX_SQL_MESSAGE - 64) / sizeof(uint64_t)))) {
+    return OB_SIZE_OVERFLOW;
+  }
+  const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
+  auto *old_session = THIS_WORKER.get_session();
+  THIS_WORKER.set_session(&ctx->session);
+  ObArray<ObTabletID> routed;
+  int ret = space.is_global() ? routed.assign(tablets)
+      : route_existing_namespace_tablets(space.namespace_id(), tablets, routed);
+  ObArray<ObTabletID> routed_hidden;
+  if (!ret && hidden) {
+    ret = space.is_global() ? routed_hidden.assign(*hidden)
+        : route_existing_namespace_tablets(space.namespace_id(), *hidden, routed_hidden);
+  }
+  if (ret) {
+    THIS_WORKER.set_session(old_session);
+    THIS_WORKER.set_timeout_ts(old_timeout);
+    return ret;
+  }
+  auto *service = data_plane::query_transaction_service();
+  if (!service) {
+    ret = OB_NOT_INIT;
+  } else if (operation == 'b' && !routed.empty()) {
+    ret = storage::ObTabletBindingMdsHelper::modify_tablet_binding_for_rw_defensive(
+        routed, schema_version, std::min(deadline, THIS_WORKER.get_timeout_ts()),
+        *ctx->writes->tx, *service);
+  } else if (operation == 'd' && !routed.empty()) {
+    ret = storage::ObTabletBindingMdsHelper::modify_tablet_binding_for_write_defensive(
+        routed, schema_version, std::min(deadline, THIS_WORKER.get_timeout_ts()),
+        *ctx->writes->tx, *service);
+  } else if (operation == 'u') {
+    ret = storage::ObTabletBindingMdsHelper::modify_tablet_binding_for_unbind(
+        routed, routed_hidden, schema_version,
+        std::min(deadline, THIS_WORKER.get_timeout_ts()),
+        *ctx->writes->tx, *service);
+  }
+  if (!ret) { ret = view.sync_serialized_state_from(*ctx->writes->tx); }
+  THIS_WORKER.set_session(old_session);
+  THIS_WORKER.set_timeout_ts(old_timeout);
+  return ret;
+}
 int close_in_process_write(transaction::ObTxDesc &view, uint64_t handle)
 {
   InProcessStorage *ctx = in_process_storage;
