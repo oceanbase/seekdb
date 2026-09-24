@@ -569,7 +569,7 @@ int append_in_process_direct_insert_writer(RequestTag parent, uint64_t generatio
 int start_in_process_direct_insert(const ObDirectInsertStartParam &param,
     RequestTag &origin, uint64_t &generation);
 
-class RemoteDirectInsertSession final : public ObIDirectInsertSession, public ObIDirectInsertWriterFactory {
+class InProcessDirectInsertSession final : public ObIDirectInsertSession, public ObIDirectInsertWriterFactory {
 public:
   ObIAllocator &allocator;
   DirectInsertScheduleRegistry &schedule_registry;
@@ -579,7 +579,7 @@ public:
   RequestTag origin;
   uint64_t generation;
   mutable std::atomic<int> error{OB_SUCCESS};
-  RemoteDirectInsertSession(ObIAllocator &a,
+  InProcessDirectInsertSession(ObIAllocator &a,
       DirectInsertScheduleRegistry &registry, int64_t task_id,
       std::shared_ptr<DirectInsertSchedule> task_schedule,
       sql::ObSQLSessionInfo *session, RequestTag tag, uint64_t id)
@@ -655,20 +655,20 @@ private:
         : finish_in_process_direct_insert(origin, generation);
     if (error) { ret = error; }
     schedule_registry.release(ddl_task_id, schedule);
-    auto &a = allocator; this->~RemoteDirectInsertSession(); a.free(this);
+    auto &a = allocator; this->~InProcessDirectInsertSession(); a.free(this);
     return ret;
   }
 };
 
-class RemoteDirectInsertWriter final : public ObIDirectInsertWriter {
+class InProcessDirectInsertWriter final : public ObIDirectInsertWriter {
 public:
   ObIAllocator &allocator;
-  RemoteDirectInsertSession &session;
+  InProcessDirectInsertSession &session;
   sql::ObSQLSessionInfo *sql_session;
   uint64_t id;
   ObTabletID tablet;
   int64_t slice, rows = 0;
-  RemoteDirectInsertWriter(ObIAllocator &a, RemoteDirectInsertSession &s, uint64_t handle,
+  InProcessDirectInsertWriter(ObIAllocator &a, InProcessDirectInsertSession &s, uint64_t handle,
       const ObDirectInsertWriterRequest &request)
       : allocator(a), session(s), sql_session(THIS_WORKER.get_session()), id(handle),
         tablet(request.tablet_id_), slice(request.slice_index_) {}
@@ -744,14 +744,14 @@ private:
         : control_in_process_direct_insert_writer(
             session.origin, session.generation, id, 'X', unused_rows);
     if (ret) { int expected = OB_SUCCESS; session.error.compare_exchange_strong(expected, ret); }
-    auto &a = allocator; this->~RemoteDirectInsertWriter(); a.free(this);
+    auto &a = allocator; this->~InProcessDirectInsertWriter(); a.free(this);
   }
 };
-int RemoteDirectInsertSession::create(ObIAllocator &a, const ObDirectInsertWriterRequest &request,
+int InProcessDirectInsertSession::create(ObIAllocator &a, const ObDirectInsertWriterRequest &request,
     ObIDirectInsertWriter *&writer) {
   writer = nullptr;
   if (!request.is_valid()) { return OB_INVALID_ARGUMENT; }
-  auto *storage = a.alloc(sizeof(RemoteDirectInsertWriter));
+  auto *storage = a.alloc(sizeof(InProcessDirectInsertWriter));
   if (!storage) { return OB_ALLOCATE_MEMORY_FAILED; }
   StorageSessionScope binding(THIS_WORKER.get_session());
   int ret = binding.error() ? binding.error() : error.load();
@@ -759,12 +759,12 @@ int RemoteDirectInsertSession::create(ObIAllocator &a, const ObDirectInsertWrite
   if (!ret) { ret = create_in_process_direct_insert_writer(origin, generation, request, id); }
   if (!ret && !id) { ret = OB_INVALID_ARGUMENT; }
   if (ret) { int expected = OB_SUCCESS; error.compare_exchange_strong(expected, ret); }
-  if (!ret) { writer = new (storage) RemoteDirectInsertWriter(a, *this, id, request); }
+  if (!ret) { writer = new (storage) InProcessDirectInsertWriter(a, *this, id, request); }
   else { a.free(storage); }
   return ret;
 }
 
-class RemoteDirectInsertService final : public IDirectInsertService {
+class InProcessDirectInsertService final : public IDirectInsertService {
 public:
   int start(ObIAllocator &allocator, const ObDirectInsertStartParam &param,
       ObIDirectInsertWorkerContext &context, ObIDirectInsertSession *&session) override {
@@ -773,7 +773,7 @@ public:
     std::shared_ptr<DirectInsertSchedule> schedule =
         schedules.acquire(param.ddl_task_id_);
     if (!schedule) { return OB_ALLOCATE_MEMORY_FAILED; }
-    auto *memory = allocator.alloc(sizeof(RemoteDirectInsertSession));
+    auto *memory = allocator.alloc(sizeof(InProcessDirectInsertSession));
     if (!memory) {
       schedules.release(param.ddl_task_id_, schedule);
       return OB_ALLOCATE_MEMORY_FAILED;
@@ -793,7 +793,7 @@ public:
             param.schema_version_, param.participants_.count());
     if (!ret) {
       if (!generation || !origin.slot || !origin.generation) { ret = OB_INVALID_ARGUMENT; }
-      else { session = new (memory) RemoteDirectInsertSession(
+      else { session = new (memory) InProcessDirectInsertSession(
           allocator, schedules, param.ddl_task_id_, schedule,
           sqc_session, origin, generation); }
     }

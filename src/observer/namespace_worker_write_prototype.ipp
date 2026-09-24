@@ -1392,7 +1392,7 @@ int tx_table_lock(ObTxDesc &view,
   return ret;
 }
 
-class RemoteInnerConnectionLockRuntime final : public ObIInnerConnectionLockRuntime
+class InProcessInnerConnectionLockRuntime final : public ObIInnerConnectionLockRuntime
 {
 public:
   int process_lock_rpc(
@@ -1587,7 +1587,7 @@ int call_in_process_tx_snapshot(char operation,
 int release_in_process_tx(const transaction::ObTxDesc &tx);
 int close_in_process_write(transaction::ObTxDesc &view, uint64_t handle);
 
-class RemoteTransactionService final : public ObITransactionService {
+class InProcessTransactionService final : public ObITransactionService {
 public:
   int gen_unique_id(int64_t &unique_id, int64_t timeout_us) override {
     if (timeout_us <= 0) { return OB_INVALID_ARGUMENT; }
@@ -1781,11 +1781,11 @@ int call_in_process_rootserver_runtime(
     const std::function<int(rootserver::ObIRootserverLocalRuntime &,
                             StorageSpaceHandle)> &call);
 
-class RemoteRootserverLocalRuntime final
+class InProcessRootserverLocalRuntime final
     : public rootserver::ObIRootserverLocalRuntime
 {
 public:
-  explicit RemoteRootserverLocalRuntime(uint64_t namespace_id = 0)
+  explicit InProcessRootserverLocalRuntime(uint64_t namespace_id = 0)
       : namespace_id_(namespace_id) {}
   int set_ds_action(const obcall::ObDebugSyncActionArg &arg) override {
     return call_in_process_rootserver_runtime(namespace_id_,
@@ -1965,7 +1965,7 @@ private:
   uint64_t namespace_id_;
 };
 
-class RemoteWriteContext final : public ObIWriteContextService {
+class InProcessWriteContext final : public ObIWriteContextService {
 public:
   int acquire_write_context(int64_t, ObTxDesc &tx, const ObTxReadSnapshot &, int16_t,
                             concurrent_control::ObWriteFlag &, ObWriteContext &context) override {
@@ -1974,7 +1974,7 @@ public:
   }
 };
 
-struct RemoteExecution final : public ObIDmlExecutionState {
+struct InProcessExecution final : public ObIDmlExecutionState {
   uint64_t handle = 0, txid = 0;
   ObTxDesc *tx = nullptr; // Borrowed query view; never sent across IPC.
   sql::ObSQLSessionInfo *session = nullptr;
@@ -2202,7 +2202,7 @@ private:
 int compare_in_process_lobs(ObLobLocatorV2 &left, ObLobLocatorV2 &right,
                             int64_t timeout, ObTxDesc &tx, bool &equal);
 
-class RemoteDmlService final : public ObIDmlService {
+class InProcessDmlService final : public ObIDmlService {
 public:
   int lob_binary_equal(
       ObLobLocatorV2 &left,
@@ -2282,7 +2282,7 @@ public:
           (long long)column_count, write_spec.tz_info_ != nullptr);
       return OB_NOT_SUPPORTED;
     }
-    auto prepared = std::make_unique<RemoteExecution>();
+    auto prepared = std::make_unique<InProcessExecution>();
     prepared->session = THIS_WORKER.get_session();
     StorageSessionScope scope(prepared->session);
     if (scope.error()) { return scope.error(); }
@@ -2337,7 +2337,7 @@ public:
       const ObIArray<uint64_t> *updated_column_ids, ObDatumRowIterator *row_iter, int64_t &affected_rows,
       int64_t lock_timeout = 0, ObRowLockMode lock_mode = ObRowLockMode::NONE,
       DuplicateRows *duplicates = nullptr, ObDuplicateReturnMode duplicate_mode = ObDuplicateReturnMode::ALL) {
-    auto *state = static_cast<RemoteExecution *>(execution_state(execution));
+    auto *state = static_cast<InProcessExecution *>(execution_state(execution));
     if (!state || !row_iter || (column_ids && column_ids->count() != static_cast<int64_t>(state->columns.size()))
         || state->txid != static_cast<uint64_t>(tx_desc.get_tx_id().get_id())) { return OB_INVALID_ARGUMENT; }
     StorageSessionScope scope(state->session);

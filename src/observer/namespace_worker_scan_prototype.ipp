@@ -552,7 +552,7 @@ struct ReadScans {
     return ret;
   }
 };
-class RemoteScanIterator final : public ObNewRowIterator {
+class InProcessScanIterator final : public ObNewRowIterator {
 public:
   ObVTableScanParam &param;
   uint64_t handle = 0, row_index = 0, rows_left = 0;
@@ -560,8 +560,8 @@ public:
   bool end = false;
   ScanBatch batch; // Own variable-length cell bytes until the next batch.
   ObNewRow row;
-  explicit RemoteScanIterator(ObVTableScanParam &p) : param(p) {}
-  ~RemoteScanIterator() override { reset(); }
+  explicit InProcessScanIterator(ObVTableScanParam &p) : param(p) {}
+  ~InProcessScanIterator() override { reset(); }
   int open() {
     const sql::ObStoragePushdownFlag flags(param.pd_storage_flag_);
     // The storage process deliberately does not execute SQL expressions. A
@@ -712,21 +712,21 @@ public:
     return OB_SUCCESS;
   }
 };
-class RemoteTabletScan final : public ObIVirtualTableScan {
+class InProcessTabletScan final : public ObIVirtualTableScan {
 public:
   int table_scan(ObVTableScanParam &param, ObNewRowIterator *&iter) override {
     if (iter) { return OB_INVALID_ARGUMENT; }
-    auto scan = std::make_unique<RemoteScanIterator>(param);
+    auto scan = std::make_unique<InProcessScanIterator>(param);
     int ret = scan->open(); if (!ret) { iter = scan.release(); } return ret;
   }
   int revert_scan_iter(ObNewRowIterator *iter) override { delete iter; return OB_SUCCESS; }
   int reuse_scan_iter(bool, ObNewRowIterator *iter) override {
-    auto *scan = static_cast<RemoteScanIterator *>(iter);
+    auto *scan = static_cast<InProcessScanIterator *>(iter);
     if (!scan) { return OB_SUCCESS; }
     scan->reset(); return OB_SUCCESS;
   }
   int table_rescan(ObVTableScanParam &, ObNewRowIterator *iter) override {
-    auto *scan = static_cast<RemoteScanIterator *>(iter);
+    auto *scan = static_cast<InProcessScanIterator *>(iter);
     if (!scan) { return OB_INVALID_ARGUMENT; }
     return scan->rescan();
   }

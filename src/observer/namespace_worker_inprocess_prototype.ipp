@@ -31,12 +31,12 @@ namespace oceanbase { namespace observer { namespace namespace_worker_prototype 
 // Storage service stubs: one stateless global set serves every in-process
 // namespace; the serving namespace travels with the bound session context.
 // ---------------------------------------------------------------------------
-RemoteTabletScan inprocess_scan;
+InProcessTabletScan inprocess_scan;
 InProcessLobReadService inprocess_lob_read;
-RemoteDmlService inprocess_dml;
-RemoteWriteContext inprocess_write_context;
-RemoteTransactionService inprocess_transactions;
-RemoteInnerConnectionLockRuntime inprocess_inner_locks;
+InProcessDmlService inprocess_dml;
+InProcessWriteContext inprocess_write_context;
+InProcessTransactionService inprocess_transactions;
+InProcessInnerConnectionLockRuntime inprocess_inner_locks;
 transaction::tablelock::ObIInnerConnectionLockRuntime *inprocess_lock_runtime(
     common::sqlclient::ObISQLConnection *conn)
 {
@@ -293,8 +293,8 @@ struct InProcessNamespaceServices {
   InProcessSchemaRefreshScheduler *scheduler = nullptr;
   sql::ObPlanCache *plan_cache = nullptr;
   rootserver::ObLocalManagementService *root_commands = nullptr;
-  RemoteRootserverLocalRuntime *local_runtime = nullptr;
-  RemoteDirectInsertService direct_insert;
+  InProcessRootserverLocalRuntime *local_runtime = nullptr;
+  InProcessDirectInsertService direct_insert;
   InProcessTabletAutoincrementService tablet_autoincrement;
   share::ObAutoincrementService autoincrement;
   DirectInsertRegistry direct_insert_registry;
@@ -450,7 +450,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
           server))) {
   } else if (FALSE_IT(stage = "root_commands")) {
   } else if (OB_ISNULL(services->local_runtime = OB_NEW(
-          RemoteRootserverLocalRuntime, ObModIds::OB_SCHEMA_SERVICE, ns))) {
+          InProcessRootserverLocalRuntime, ObModIds::OB_SCHEMA_SERVICE, ns))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_ISNULL(services->root_commands = OB_NEW(
           rootserver::ObLocalManagementService, ObModIds::OB_SCHEMA_SERVICE))) {
