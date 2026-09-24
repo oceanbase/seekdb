@@ -317,13 +317,16 @@ int release_in_process_tx(const transaction::ObTxDesc &tx)
   THIS_WORKER.set_timeout_ts(old_timeout);
   return ret;
 }
-int call_in_process_tx_basic(char operation, transaction::ObTxDesc &view)
+int call_in_process_tx_state(char operation, transaction::ObTxDesc &view,
+                             const ObTxParam *param, int64_t deadline)
 {
   InProcessStorage *ctx = in_process_storage;
   const StorageSpaceHandle space = active_worker_storage_space();
   if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
   if (!space.is_namespace() || ctx->ns != space.namespace_id()
-      || (operation != 'A' && operation != 'S' && operation != 'N' && operation != 'U')) {
+      || (operation != 'A' && operation != 'S' && operation != 'N'
+          && operation != 'U' && operation != 'H' && operation != 'C'
+          && operation != 'R')) {
     return OB_INVALID_ARGUMENT;
   }
   const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
@@ -339,14 +342,24 @@ int call_in_process_tx_basic(char operation, transaction::ObTxDesc &view)
     ret = OB_INVALID_ARGUMENT;
   }
   if (!ret && operation != 'A') {
-    if (operation != 'S' && !ctx->writes->writes.empty()) {
-      ret = OB_INVALID_ARGUMENT;
-    } else if (operation == 'S') {
+    if (operation == 'S') {
       ret = service->prepare_tx_for_statement(*native);
     } else if (operation == 'N') {
-      ret = service->prepare_tx_for_autocommit_retry(*native);
-    } else {
-      ret = service->reuse_tx(*native);
+      ret = ctx->writes->writes.empty()
+          ? service->prepare_tx_for_autocommit_retry(*native) : OB_INVALID_ARGUMENT;
+    } else if (operation == 'U') {
+      ret = ctx->writes->writes.empty()
+          ? service->reuse_tx(*native) : OB_INVALID_ARGUMENT;
+    } else if (operation == 'H') {
+      ret = param && param->is_valid()
+          ? service->start_tx(*native, *param) : OB_INVALID_ARGUMENT;
+    } else if (operation == 'C') {
+      ret = ctx->writes->writes.empty()
+          ? service->commit_tx(*native, std::min(deadline, THIS_WORKER.get_timeout_ts()))
+          : OB_INVALID_ARGUMENT;
+    } else if (operation == 'R') {
+      ret = ctx->writes->writes.empty()
+          ? service->rollback_tx(*native) : OB_ERR_UNEXPECTED;
     }
   }
   if (!ret) { ret = view.sync_serialized_state_from(*native); }

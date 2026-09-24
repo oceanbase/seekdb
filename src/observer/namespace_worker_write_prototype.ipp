@@ -1288,10 +1288,6 @@ struct EngineWrites {
     if (!ret && request.type() == 'T') {
       if (operation == 't') {
         if (!request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-      } else if (operation == 'H') {
-        ObTxParam param; request.read(param);
-        if (!request.consumed() || !param.is_valid()) { ret = OB_INVALID_ARGUMENT; }
-        else { ret = service->start_tx(*tx, param); }
       } else if (operation == 'M') {
         const int64_t raw_type = static_cast<int64_t>(request.number());
         StorageSpaceHandle request_space;
@@ -1482,15 +1478,6 @@ struct EngineWrites {
           session.set_reserved_snapshot_version(snapshot.core_.version_);
         }
         values.append(snapshot);
-      } else if (operation == 'C') {
-        const int64_t deadline = request.number();
-        if (!request.consumed() || !writes.empty()) { ret = OB_INVALID_ARGUMENT; }
-        else { ret = service->commit_tx(*tx, std::min(deadline, THIS_WORKER.get_timeout_ts())); }
-        fprintf(stderr, "PROTOTYPE_V14_COMMIT session=%u tx=%llu ret=%d\n", sid, (unsigned long long)txid, ret);
-      } else if (operation == 'R') {
-        if (!request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-        else if (!writes.empty()) { ret = OB_ERR_UNEXPECTED; }
-        else { ret = service->rollback_tx(*tx); }
       } else if (operation == 'B') {
         ObTxSEQ savepoint; request.read(savepoint);
         const int64_t deadline = request.number();
@@ -1589,13 +1576,16 @@ int tx_rpc(char operation, ObTxDesc &tx, Frame &request, Frame &reply) {
   revert_tx_owner_session(borrowed);
   return ret;
 }
-int call_in_process_tx_basic(char operation, ObTxDesc &view);
-int tx_basic(char operation, ObTxDesc &view)
+int call_in_process_tx_state(char operation, ObTxDesc &view,
+                             const ObTxParam *param, int64_t deadline);
+int tx_state(char operation, ObTxDesc &view,
+             const ObTxParam *param = nullptr, int64_t deadline = 0)
 {
   sql::ObSQLSessionInfo *borrowed = nullptr;
   auto *session = tx_owner_session(view, borrowed);
   StorageSessionScope scope(session && session->get_tx_desc() == &view ? session : nullptr);
-  const int ret = scope.error() ? scope.error() : call_in_process_tx_basic(operation, view);
+  const int ret = scope.error() ? scope.error()
+      : call_in_process_tx_state(operation, view, param, deadline);
   revert_tx_owner_session(borrowed);
   return ret;
 }
@@ -1829,7 +1819,7 @@ public:
                          uint32_t session_id) override {
     if (tx) { return OB_INVALID_ARGUMENT; }
     auto owned = std::make_unique<ObTxDesc>();
-    int ret = tx_basic('A', *owned);
+    int ret = tx_state('A', *owned);
     if (!ret) { tx = owned.release(); }
     return ret; }
   int acquire_tx(const char *buf,
@@ -1847,11 +1837,11 @@ public:
     return ret; }
   int start_tx(transaction::ObTxDesc &tx,
                        const transaction::ObTxParam &tx_param) override {
-    Frame request, reply; request.append(tx_param); return tx_rpc('H', tx, request, reply); }
+    return tx_state('H', tx, &tx_param); }
   int abort_tx(transaction::ObTxDesc &tx, int cause) override { return rollback_tx(tx); }
-  int rollback_tx(transaction::ObTxDesc &tx) override { Frame request, reply; return tx_rpc('R', tx, request, reply); }
+  int rollback_tx(transaction::ObTxDesc &tx) override { return tx_state('R', tx); }
   int commit_tx(transaction::ObTxDesc &tx,
-                        int64_t expire_ts) override { Frame request, reply; request.number(expire_ts); return tx_rpc('C', tx, request, reply); }
+                        int64_t expire_ts) override { return tx_state('C', tx, nullptr, expire_ts); }
   int submit_commit_tx(transaction::ObTxDesc &tx,
                                int64_t expire_ts,
                                transaction::ObITxCallback &callback) override {
@@ -1875,9 +1865,9 @@ public:
       revert_tx_owner_session(borrowed);
     }
     delete &tx; return ret; }
-  int reuse_tx(transaction::ObTxDesc &tx) override { return tx_basic('U', tx); }
-  int prepare_tx_for_statement(transaction::ObTxDesc &tx) override { return tx_basic('S', tx); }
-  int prepare_tx_for_autocommit_retry(transaction::ObTxDesc &tx) override { return tx_basic('N', tx); }
+  int reuse_tx(transaction::ObTxDesc &tx) override { return tx_state('U', tx); }
+  int prepare_tx_for_statement(transaction::ObTxDesc &tx) override { return tx_state('S', tx); }
+  int prepare_tx_for_autocommit_retry(transaction::ObTxDesc &tx) override { return tx_state('N', tx); }
   int register_mds_into_tx(
       transaction::ObTxDesc &tx,
       const transaction::ObTxDataSourceType &type,
