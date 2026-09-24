@@ -475,6 +475,14 @@ int finish_in_process_direct_insert(RequestTag parent, uint64_t generation)
         parent, generation, registry);
   });
 }
+int create_in_process_direct_insert_writer(RequestTag parent, uint64_t generation,
+    const ObDirectInsertWriterRequest &request, uint64_t &writer_id)
+{
+  return with_in_process_direct_insert([&](DirectInsertRoute &route,
+      StorageSpaceHandle space, DirectInsertRegistry &registry) {
+    return route.create_writer(space, parent, generation, registry, request, writer_id);
+  });
+}
 int fetch_in_process_scan(uint64_t handle, ScanBatch &batch)
 {
   InProcessStorage *ctx = in_process_storage;

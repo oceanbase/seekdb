@@ -325,6 +325,35 @@ struct DirectInsertRoute {
     }
     return ret;
   }
+  int create_writer(StorageSpaceHandle storage_space, RequestTag parent,
+                    uint64_t generation, DirectInsertRegistry &registry,
+                    const ObDirectInsertWriterRequest &logical_request,
+                    uint64_t &writer_id) {
+    writer_id = 0;
+    if (!storage_space.is_namespace() || !logical_request.is_valid()
+        || logical_request.layout_ > DIRECT_INSERT_ORDERED_WRITER
+        || writer_generation == UINT64_MAX) {
+      return OB_INVALID_ARGUMENT;
+    }
+    int ret = resolve(parent, generation, registry);
+    if (ret) { return ret; }
+    std::shared_lock<std::shared_mutex> guard(owner->mutex);
+    if (!owner->session) { return OB_NOT_INIT; }
+    ObDirectInsertWriterRequest request = logical_request;
+    request.spool_factory_ = &sql::get_temp_column_spill_spool_factory();
+    const uint64_t ns = storage_space.namespace_id();
+    if (ns > 1) { ret = route_tablet_id(ns, request.tablet_id_); }
+    auto staged = ret ? nullptr : std::make_unique<DirectInsertWriterOwner>(owner);
+    if (!ret) {
+      ret = owner->session->get_writer_factory().create(
+          staged->allocator, request, staged->writer);
+    }
+    if (!ret) {
+      writer_id = ++writer_generation;
+      writers.emplace(writer_id, std::move(staged));
+    }
+    return ret;
+  }
 
   int process(StorageSpaceHandle storage_space, RequestTag tag, DirectInsertRegistry &registry,
       const std::shared_ptr<StorageSessionState> &context, Frame &request, Frame &reply) {
@@ -430,23 +459,7 @@ struct DirectInsertRoute {
         std::shared_lock<std::shared_mutex> guard(owner->mutex);
         auto *session = owner->session;
         if (!session) { ret = OB_NOT_INIT; }
-        else if (operation == 'W') {
-          ObDirectInsertWriterRequest param;
-          const uint64_t layout = request.number();
-          param.layout_ = static_cast<ObDirectInsertWriterLayout>(layout);
-          param.tablet_id_ = ObTabletID(request.number()); param.slice_index_ = request.number();
-          param.parallel_count_ = request.number(); param.autoinc_column_index_ = request.number();
-          const uint64_t idempotent = request.number(); param.idempotent_tablet_autoinc_ = idempotent;
-          // Both sides execute in one process; the native vector writer needs
-          // the same spill factory that the SQL writer uses.
-          param.spool_factory_ = &sql::get_temp_column_spill_spool_factory();
-          if (!request.consumed() || layout > DIRECT_INSERT_ORDERED_WRITER || idempotent > 1
-              || !param.is_valid() || writer_generation == UINT64_MAX) { ret = OB_INVALID_ARGUMENT; }
-          if (!ret && ns > 1) { ret = route_tablet_id(ns, param.tablet_id_); }
-          auto staged = ret ? nullptr : std::make_unique<DirectInsertWriterOwner>(owner);
-          if (!ret) { ret = session->get_writer_factory().create(staged->allocator, param, staged->writer); }
-          if (!ret) { const uint64_t id = ++writer_generation; writers.emplace(id, std::move(staged)); output.number(id); }
-        } else if (operation == 'B' || operation == 'E' || operation == 'X') {
+        else if (operation == 'B' || operation == 'E' || operation == 'X') {
           const uint64_t id = request.number();
           auto entry = writers.find(id);
           if (request.ret || entry == writers.end()) { ret = OB_STATE_NOT_MATCH; }
@@ -502,6 +515,8 @@ int sync_in_process_direct_insert_autoinc(RequestTag parent, uint64_t generation
 int prepare_in_process_direct_insert_ordered(RequestTag parent, uint64_t generation,
     const ObIArray<ObDDLTabletSliceCount> &slice_counts);
 int finish_in_process_direct_insert(RequestTag parent, uint64_t generation);
+int create_in_process_direct_insert_writer(RequestTag parent, uint64_t generation,
+    const ObDirectInsertWriterRequest &request, uint64_t &writer_id);
 
 class RemoteDirectInsertSession final : public ObIDirectInsertSession, public ObIDirectInsertWriterFactory {
 public:
@@ -680,12 +695,12 @@ int RemoteDirectInsertSession::create(ObIAllocator &a, const ObDirectInsertWrite
   if (!request.is_valid()) { return OB_INVALID_ARGUMENT; }
   auto *storage = a.alloc(sizeof(RemoteDirectInsertWriter));
   if (!storage) { return OB_ALLOCATE_MEMORY_FAILED; }
-  Frame payload, reply;
-  payload.number(request.layout_); payload.number(request.tablet_id_.id()); payload.number(request.slice_index_);
-  payload.number(request.parallel_count_); payload.number(request.autoinc_column_index_); payload.number(request.idempotent_tablet_autoinc_);
-  int ret = call('W', payload, reply);
-  const uint64_t id = ret ? 0 : reply.number();
-  if (!ret && (!reply.consumed() || !id)) { ret = OB_INVALID_ARGUMENT; }
+  StorageSessionScope binding(THIS_WORKER.get_session());
+  int ret = binding.error() ? binding.error() : error.load();
+  uint64_t id = 0;
+  if (!ret) { ret = create_in_process_direct_insert_writer(origin, generation, request, id); }
+  if (!ret && !id) { ret = OB_INVALID_ARGUMENT; }
+  if (ret) { int expected = OB_SUCCESS; error.compare_exchange_strong(expected, ret); }
   if (!ret) { writer = new (storage) RemoteDirectInsertWriter(a, *this, id, request); }
   else { a.free(storage); }
   return ret;
