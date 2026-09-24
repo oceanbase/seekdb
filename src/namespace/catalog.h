@@ -4,7 +4,12 @@
 // Persistent namespace catalog values and their storage-independent encoding.
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
+#include <shared_mutex>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
 #include <vector>
 
 namespace oceanbase {
@@ -81,6 +86,51 @@ private:
                                 CatalogPageRef &next, bool &found,
                                 std::string &minimum, int depth);
   ICatalogPageStore &store_;
+};
+
+struct NamespaceExceptionRow {
+  uint64_t tablet = 0;
+  uint64_t table = 0;
+  int64_t kind = 0;
+};
+
+class IExceptionLoader {
+public:
+  virtual ~IExceptionLoader() = default;
+  // Return zero on success; the caller's storage error passes through unchanged.
+  class IRowSink {
+  public:
+    virtual ~IRowSink() = default;
+    virtual void add(const NamespaceExceptionRow &row) = 0;
+  };
+  virtual int load(uint64_t namespace_id, IRowSink &sink) = 0;
+};
+
+// One namespace's immutable lineage links and committed tablet exceptions.
+// Registry owns this state so there is still only one process-wide namespace
+// authority. Loading holds the same lock as post-commit updates: a load cannot
+// publish a snapshot that misses a committed exception row.
+class NamespaceControlState final {
+public:
+  bool chain_link(uint64_t namespace_id, uint64_t &parent, int64_t &fork_cap) const;
+  void remember_chain_link(uint64_t namespace_id, uint64_t parent, int64_t fork_cap);
+  void forget_chain_link(uint64_t namespace_id);
+  int load_exceptions(uint64_t namespace_id, IExceptionLoader &loader);
+  bool owned(uint64_t namespace_id, uint64_t local_tablet,
+             uint64_t *table = nullptr) const;
+  bool tombstoned(uint64_t namespace_id, uint64_t local_tablet) const;
+  void apply_owned(uint64_t namespace_id, uint64_t local_tablet, uint64_t table);
+  void drop_exceptions(uint64_t namespace_id);
+private:
+  struct ExceptionSet {
+    bool loaded = false;
+    std::unordered_map<uint64_t, uint64_t> owned;
+    std::unordered_set<uint64_t> tombstoned;
+  };
+  mutable std::shared_mutex chain_mutex_;
+  std::unordered_map<uint64_t, std::pair<uint64_t, int64_t>> chain_links_;
+  mutable std::mutex exceptions_mutex_;
+  std::unordered_map<uint64_t, ExceptionSet> exception_sets_;
 };
 
 } // namespace ns

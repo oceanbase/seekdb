@@ -1,4 +1,5 @@
 #include "namespace/namespace.h"
+#include "namespace/catalog.h"
 
 #include <cstring>
 #include <mutex>
@@ -39,6 +40,7 @@ struct NamespaceRegistry::Impl
   };
   std::mutex mutex;
   std::unordered_map<uint64_t, Entry *> entries;
+  NamespaceControlState control_state;
 };
 
 NamespaceRegistry::NamespaceRegistry() : impl_(new (std::nothrow) Impl()) {}
@@ -158,6 +160,11 @@ void NamespaceRegistry::remove(uint64_t id)
   const auto it = impl_->entries.find(id);
   // Existing background owners may still hold Runtime pointers.
   if (it != impl_->entries.end()) { it->second->registered = false; }
+}
+
+NamespaceControlState &NamespaceRegistry::control_state()
+{
+  return impl_->control_state;
 }
 
 NamespaceRegistry &namespace_registry()

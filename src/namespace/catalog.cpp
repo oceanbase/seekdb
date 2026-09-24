@@ -306,5 +306,94 @@ CatalogTreeResult NamespaceCatalogTree::remove(CatalogPageRef root,
       ? CatalogTreeResult{CatalogTreeError::NOT_FOUND, 0} : result;
 }
 
+bool NamespaceControlState::chain_link(uint64_t namespace_id,
+    uint64_t &parent, int64_t &fork_cap) const
+{
+  std::shared_lock<std::shared_mutex> lock(chain_mutex_);
+  const auto it = chain_links_.find(namespace_id);
+  if (it == chain_links_.end()) { return false; }
+  parent = it->second.first;
+  fork_cap = it->second.second;
+  return true;
+}
+
+void NamespaceControlState::remember_chain_link(uint64_t namespace_id,
+    uint64_t parent, int64_t fork_cap)
+{
+  std::unique_lock<std::shared_mutex> lock(chain_mutex_);
+  chain_links_[namespace_id] = {parent, fork_cap};
+}
+
+void NamespaceControlState::forget_chain_link(uint64_t namespace_id)
+{
+  std::unique_lock<std::shared_mutex> lock(chain_mutex_);
+  chain_links_.erase(namespace_id);
+}
+
+int NamespaceControlState::load_exceptions(uint64_t namespace_id,
+    IExceptionLoader &loader)
+{
+  std::lock_guard<std::mutex> lock(exceptions_mutex_);
+  ExceptionSet &set = exception_sets_[namespace_id];
+  if (set.loaded) { return 0; }
+  struct RowSink final : IExceptionLoader::IRowSink {
+    explicit RowSink(ExceptionSet &set) : set_(set) {}
+    void add(const NamespaceExceptionRow &row) override {
+      if (row.kind == 0) {
+        set_.owned[row.tablet] = row.table;
+      } else {
+        set_.tombstoned.insert(row.tablet);
+        set_.owned.erase(row.tablet);
+      }
+    }
+    ExceptionSet &set_;
+  } sink(set);
+  const int error = loader.load(namespace_id, sink);
+  if (error != 0) {
+    exception_sets_.erase(namespace_id);
+  } else {
+    set.loaded = true;
+  }
+  return error;
+}
+
+bool NamespaceControlState::owned(uint64_t namespace_id,
+    uint64_t local_tablet, uint64_t *table) const
+{
+  std::lock_guard<std::mutex> lock(exceptions_mutex_);
+  const auto it = exception_sets_.find(namespace_id);
+  if (it == exception_sets_.end() || !it->second.loaded) { return false; }
+  const auto owned = it->second.owned.find(local_tablet);
+  if (owned == it->second.owned.end()) { return false; }
+  if (table != nullptr) { *table = owned->second; }
+  return true;
+}
+
+bool NamespaceControlState::tombstoned(uint64_t namespace_id,
+    uint64_t local_tablet) const
+{
+  std::lock_guard<std::mutex> lock(exceptions_mutex_);
+  const auto it = exception_sets_.find(namespace_id);
+  return it != exception_sets_.end() && it->second.loaded
+      && it->second.tombstoned.count(local_tablet) != 0;
+}
+
+void NamespaceControlState::apply_owned(uint64_t namespace_id,
+    uint64_t local_tablet, uint64_t table)
+{
+  std::lock_guard<std::mutex> lock(exceptions_mutex_);
+  const auto it = exception_sets_.find(namespace_id);
+  if (it != exception_sets_.end() && it->second.loaded) {
+    it->second.owned[local_tablet] = table;
+    it->second.tombstoned.erase(local_tablet);
+  }
+}
+
+void NamespaceControlState::drop_exceptions(uint64_t namespace_id)
+{
+  std::lock_guard<std::mutex> lock(exceptions_mutex_);
+  exception_sets_.erase(namespace_id);
+}
+
 } // namespace ns
 } // namespace oceanbase

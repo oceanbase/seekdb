@@ -24,6 +24,8 @@ namespace oceanbase
 namespace ns
 {
 
+class NamespaceControlState;
+
 // Bounded translation from a namespace-local object id to the engine's
 // 64-bit key. Namespace 1 keeps its original unencoded ids.
 struct NamespaceObjectKey
@@ -109,6 +111,8 @@ public:
   bool begin_drop(uint64_t id);
   void cancel_drop(uint64_t id);
   void remove(uint64_t id);
+  // Catalog caches are owned by the same process-wide namespace authority.
+  NamespaceControlState &control_state();
 private:
   struct Impl;
   Impl *impl_;

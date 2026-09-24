@@ -211,22 +211,12 @@ int save_blob(ObISQLClient &sql, const std::string &data, uint64_t &id) {
 // chain; encode(1, local) == local, so namespace 1 terminates every walk with
 // its raw tablet ids.
 // Parent links never change after fork commit and namespace ids are never
-// reused, so this cache needs no invalidation.
-std::shared_mutex chain_mutex;
-std::unordered_map<uint64_t, std::pair<uint64_t, int64_t>> chain_links;
-void remember_chain_link(uint64_t ns, uint64_t parent, int64_t fork_cap) {
-  std::unique_lock<std::shared_mutex> lock(chain_mutex);
-  chain_links[ns] = {parent, fork_cap};
+// reused; the cache entry is removed when its tombstone is pruned.
+ns::NamespaceControlState &control_state() {
+  return ns::namespace_registry().control_state();
 }
 int namespace_chain_link(ObISQLClient &sql, uint64_t ns, uint64_t &parent, int64_t &fork_cap) {
-  {
-    std::shared_lock<std::shared_mutex> lock(chain_mutex);
-    const auto it = chain_links.find(ns);
-    if (it != chain_links.end()) {
-      parent = it->second.first; fork_cap = it->second.second;
-      return OB_SUCCESS;
-    }
-  }
+  if (control_state().chain_link(ns, parent, fork_cap)) { return OB_SUCCESS; }
   ObSqlString q; ObMySQLProxy::MySQLResult res; sqlclient::ObMySQLResult *r = nullptr;
   int ret = q.assign_fmt(
       "SELECT parent_namespace,fork_cap FROM %s WHERE namespace_id=%lu",
@@ -237,85 +227,44 @@ int namespace_chain_link(ObISQLClient &sql, uint64_t ns, uint64_t &parent, int64
   } else if (OB_FAIL(r->next())) {
   } else if (OB_FAIL(r->get_uint(0L, parent))) {
   } else {
-    // fork_cap is BIGINT UNSIGNED; the worker-bounced result set rejects
-    // get_int on an unsigned cell.
     uint64_t cap_value = 0;
     if (OB_FAIL(r->get_uint(1L, cap_value))) {
     } else {
       fork_cap = static_cast<int64_t>(cap_value);
-      remember_chain_link(ns, parent, fork_cap);
+      control_state().remember_chain_link(ns, parent, fork_cap);
     }
   }
   return ret;
 }
-// Exception rows are written only by this process, inside the same transaction
-// as the physical tablet change they describe, and applied here synchronously
-// after commit. The lazy SELECT load and every post-commit apply serialize on
-// one mutex, and a commit always precedes its apply, so the cache can never
-// miss a committed row.
-struct ExceptionSet {
-  bool loaded = false;
-  std::unordered_map<uint64_t, uint64_t> owned; // local tablet -> local table
-  std::unordered_set<uint64_t> tombstoned;      // dropped here: never inherit
-};
-std::mutex exceptions_mutex;
-std::unordered_map<uint64_t, ExceptionSet> exception_sets;
-int load_exceptions(ObISQLClient &sql, uint64_t ns) {
-  std::lock_guard<std::mutex> lock(exceptions_mutex);
-  ExceptionSet &set = exception_sets[ns];
-  if (set.loaded) { return OB_SUCCESS; }
-  ObSqlString q; ObMySQLProxy::MySQLResult res; sqlclient::ObMySQLResult *r = nullptr;
-  int ret = q.assign_fmt(
-      "SELECT tablet_id,table_id,kind FROM %s WHERE namespace_id=%lu", EXCEPTIONS, ns);
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(sql.read(res, q.ptr()))) {
-  } else if (OB_ISNULL(r = res.get_result())) { ret = OB_ERR_UNEXPECTED;
-  } else {
-    while (OB_SUCC(ret = r->next())) {
-      uint64_t tablet = 0, table = 0; int64_t kind = 0;
-      if (OB_FAIL(r->get_uint(0L, tablet)) || OB_FAIL(r->get_uint(1L, table))
-          || OB_FAIL(r->get_int(2L, kind))) {
-        break;
-      } else if (kind == 0) {
-        set.owned[tablet] = table;
-      } else {
-        set.tombstoned.insert(tablet);
-        set.owned.erase(tablet);
+class SqlExceptionLoader final : public ns::IExceptionLoader {
+public:
+  explicit SqlExceptionLoader(ObISQLClient &sql) : sql_(sql) {}
+  int load(uint64_t ns, IRowSink &sink) override {
+    ObSqlString q; ObMySQLProxy::MySQLResult res; sqlclient::ObMySQLResult *r = nullptr;
+    int ret = q.assign_fmt(
+        "SELECT tablet_id,table_id,kind FROM %s WHERE namespace_id=%lu", EXCEPTIONS, ns);
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(sql_.read(res, q.ptr()))) {
+    } else if (OB_ISNULL(r = res.get_result())) { ret = OB_ERR_UNEXPECTED;
+    } else {
+      while (OB_SUCC(ret = r->next())) {
+        ns::NamespaceExceptionRow row;
+        if (OB_FAIL(r->get_uint(0L, row.tablet)) || OB_FAIL(r->get_uint(1L, row.table))
+            || OB_FAIL(r->get_int(2L, row.kind))) {
+          break;
+        }
+        sink.add(row);
       }
+      if (ret == OB_ITER_END) { ret = OB_SUCCESS; }
     }
-    if (ret == OB_ITER_END) { ret = OB_SUCCESS; }
+    return ret;
   }
-  if (OB_SUCC(ret)) { set.loaded = true; }
-  if (OB_FAIL(ret)) { exception_sets.erase(ns); }
-  return ret;
-}
-// Callers must have loaded the namespace's set first.
-bool exception_owned(uint64_t ns, uint64_t local, uint64_t *table = nullptr) {
-  std::lock_guard<std::mutex> lock(exceptions_mutex);
-  const auto it = exception_sets.find(ns);
-  if (it == exception_sets.end() || !it->second.loaded) { return false; }
-  const auto owned = it->second.owned.find(local);
-  if (owned == it->second.owned.end()) { return false; }
-  if (table != nullptr) { *table = owned->second; }
-  return true;
-}
-bool exception_tombstoned(uint64_t ns, uint64_t local) {
-  std::lock_guard<std::mutex> lock(exceptions_mutex);
-  const auto it = exception_sets.find(ns);
-  return it != exception_sets.end() && it->second.loaded
-      && it->second.tombstoned.count(local) != 0;
-}
-void apply_exception_owned(uint64_t ns, uint64_t local, uint64_t table) {
-  std::lock_guard<std::mutex> lock(exceptions_mutex);
-  const auto it = exception_sets.find(ns);
-  if (it != exception_sets.end() && it->second.loaded) {
-    it->second.owned[local] = table;
-    it->second.tombstoned.erase(local);
-  }
-}
-void drop_exception_cache(uint64_t ns) {
-  std::lock_guard<std::mutex> lock(exceptions_mutex);
-  exception_sets.erase(ns);
+private:
+  ObISQLClient &sql_;
+};
+int load_exceptions(ObISQLClient &sql, uint64_t ns) {
+  SqlExceptionLoader loader(sql);
+  return control_state().load_exceptions(ns, loader);
 }
 // Committed physical presence in the tablet manager. Uncommitted creations do
 // not count, so a reader racing a materialization simply falls through to the
@@ -825,9 +774,8 @@ int prune_dropped_namespace_row(uint64_t &cursor, bool &found) {
   }
   if (OB_SUCC(ret) && !has_child && !has_owned && root.state == 2) {
     invalidate_namespace_state(id);
-    drop_exception_cache(id);
-    std::unique_lock<std::shared_mutex> lock(chain_mutex);
-    chain_links.erase(id);
+    control_state().drop_exceptions(id);
+    control_state().forget_chain_link(id);
     LOG_INFO("PROTOTYPE_NAMESPACE_TOMBSTONE_PRUNED", K(id));
   }
   return ret;
@@ -1090,7 +1038,7 @@ int NamespaceForkKernelPrototype::finish_namespace_drop(ObISQLClient &trans, uin
   // The caller still commits, but a spurious cache miss after a rollback is
   // harmless while a stale LIVE entry after a committed drop is not.
   if (OB_SUCC(ret)) { invalidate_namespace_state(id); }
-  if (OB_SUCC(ret)) { drop_exception_cache(id); }
+  if (OB_SUCC(ret)) { control_state().drop_exceptions(id); }
   return ret;
 }
 int NamespaceForkKernelPrototype::check_baseline_access(const ObTabletID &tablet_id, bool &held) {
@@ -1112,7 +1060,7 @@ int NamespaceForkKernelPrototype::check_baseline_access(const ObTabletID &tablet
   }
   if (state != 0) { return OB_ENTRY_NOT_EXIST; }
   int ret = load_exceptions(*GCTX.sql_proxy_, ns);
-  if (OB_SUCC(ret) && !exception_owned(ns, local_of(tablet_id.id()))) {
+  if (OB_SUCC(ret) && !control_state().owned(ns, local_of(tablet_id.id()))) {
     ret = OB_ENTRY_NOT_EXIST;
   }
   return ret;
@@ -1358,7 +1306,7 @@ int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets() {
   }
   if (OB_SUCC(ret)) {
     for (int64_t i = 0; i < candidates.count(); ++i) {
-      drop_exception_cache(database_of(candidates.at(i).id()));
+      control_state().drop_exceptions(database_of(candidates.at(i).id()));
     }
   }
   LOG_INFO("PROTOTYPE_NAMESPACE_DROPPED_TABLET_GC", K(ret),
@@ -1913,7 +1861,7 @@ int NamespaceForkKernelPrototype::control_namespace(const ObString &source, cons
   const int64_t published_us = ObTimeUtility::current_time();
   if (ret == OB_SUCCESS && !bootstrap) {
     // The parent link is immutable from this commit on; cache it forever.
-    remember_chain_link(id, source_id, root.snapshot);
+    control_state().remember_chain_link(id, source_id, root.snapshot);
   }
   if (ret == OB_SUCCESS && !bootstrap) {
     ret = observer::namespace_worker_prototype::reload_storage_freeze_info();
@@ -2485,7 +2433,7 @@ int replace_namespace_exceptions(
       && it != previous_tablets.end(); ++it) {
     const uint64_t tablet_id = it->first;
     if (current_tablets.count(tablet_id) != 0) { continue; }
-    if (exception_owned(namespace_id, tablet_id)) {
+    if (control_state().owned(namespace_id, tablet_id)) {
       const NamespaceObjectKey key{namespace_id, tablet_id};
       if (!key.is_valid()) {
         ret = OB_INVALID_ARGUMENT;
@@ -2639,7 +2587,7 @@ int NamespaceForkKernelPrototype::publish_schema_delta(
   if (OB_SUCC(ret)) {
     // The delta rewrote several exception rows; force a lazy reload rather
     // than tracking every mutation.
-    drop_exception_cache(namespace_id);
+    control_state().drop_exceptions(namespace_id);
   }
   // Native schema rows live in the namespace worker. Physical tablet mappings
   // are shared engine metadata, so reclaim them only after the namespace
@@ -2691,7 +2639,7 @@ int NamespaceForkKernelPrototype::is_tablet_owned(
   // pure function of (namespace, local tablet), so no binding is recorded.
   if (OB_FAIL(load_exceptions(*GCTX.sql_proxy_, namespace_id))) {
   } else {
-    owned = exception_owned(namespace_id, local_tablet_id);
+    owned = control_state().owned(namespace_id, local_tablet_id);
   }
   return ret;
 }
@@ -2717,7 +2665,7 @@ int NamespaceForkKernelPrototype::owned_storage_tablets(
       const NamespaceObjectKey local_key{namespace_id, local_tablet_id};
       if (!local_key.is_valid()) {
         ret = OB_INVALID_ARGUMENT;
-      } else if (exception_owned(namespace_id, local_tablet_id)) {
+      } else if (control_state().owned(namespace_id, local_tablet_id)) {
         ret = owned_tablets.push_back(ObTabletID(local_key.storage_id()));
       }
     }
@@ -2817,7 +2765,7 @@ int NamespaceForkKernelPrototype::table_id_for_tablet(const ObTabletID &tablet, 
   uint64_t local_table = 0;
   const int ret = load_exceptions(*GCTX.sql_proxy_, db);
   if (ret != OB_SUCCESS) { return ret; }
-  if (!exception_owned(db, local_of(tablet.id()), &local_table)) { return OB_SUCCESS; }
+  if (!control_state().owned(db, local_of(tablet.id()), &local_table)) { return OB_SUCCESS; }
   table_id = encoded(db, local_table);
   remember_tablet_table(tablet.id(), table_id);
   return OB_SUCCESS;
@@ -2893,7 +2841,7 @@ int NamespaceForkKernelPrototype::schedule_baseline(const ObTablet &tablet) {
   // The owned exception row is the proof that this tablet's physical binding
   // committed. A dropped namespace has no rows left and simply skips.
   if (OB_FAIL(load_exceptions(*GCTX.sql_proxy_, db))) {
-  } else if (!exception_owned(db, local, &table)) {
+  } else if (!control_state().owned(db, local, &table)) {
     ret = OB_ENTRY_NOT_EXIST;
   } else if (OB_FAIL(tablet.load_storage_schema(allocator, storage_schema))) {
   } else if (OB_ISNULL(storage_schema)) {
@@ -2941,11 +2889,11 @@ int NamespaceForkKernelPrototype::resolve_read_tablet(
   const uint64_t local = local_of(tablet_id.id());
   int ret = load_exceptions(*GCTX.sql_proxy_, db);
   if (OB_FAIL(ret)) { return ret; }
-  if (exception_tombstoned(db, local)) {
+  if (control_state().tombstoned(db, local)) {
     // Dropped in this namespace: never fall through to an inherited copy.
     return OB_TABLET_NOT_EXIST;
   }
-  if (exception_owned(db, local)) {
+  if (control_state().owned(db, local)) {
     // Owned here; the creation commit is ahead of tablet-manager visibility,
     // so let the caller's tablet open wait out the transient instead of failing.
     return OB_SUCCESS;
@@ -2980,11 +2928,11 @@ int NamespaceForkKernelPrototype::ensure_tablet_impl(
   if (!GCTX.sql_proxy_) { return OB_NOT_INIT; }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   if (OB_FAIL(load_exceptions(*GCTX.sql_proxy_, db))) { return ret; }
-  if (exception_tombstoned(db, local)) {
+  if (control_state().tombstoned(db, local)) {
     // Dropped in this namespace: there is nothing to materialize onto.
     return OB_TABLET_NOT_EXIST;
   }
-  if (exception_owned(db, local)) {
+  if (control_state().owned(db, local)) {
     // Creation commit is ahead of tablet-manager visibility.
     return OB_SUCCESS;
   }
@@ -3011,7 +2959,7 @@ int NamespaceForkKernelPrototype::ensure_tablet_impl(
       // on the namespace row lock; re-check inside it before creating anything.
       bool exists = false;
       int result = probe_physical_tablet(tablet_id.id(), exists);
-      if (result == OB_SUCCESS) { already = exists || exception_owned(db, local); }
+      if (result == OB_SUCCESS) { already = exists || control_state().owned(db, local); }
       return result;
   }()))) {
   }
@@ -3200,7 +3148,7 @@ int NamespaceForkKernelPrototype::ensure_tablet_impl(
   if (trans.is_started()) { int end = trans.end(ret == OB_SUCCESS); if (ret == OB_SUCCESS) { ret = end; } }
   if (ret == OB_SUCCESS && !already) {
     for (const auto &item : items) {
-      apply_exception_owned(db, item.local_tablet, local_of(item.schema->get_table_id()));
+      control_state().apply_owned(db, item.local_tablet, local_of(item.schema->get_table_id()));
     }
   }
   if (ret != OB_SUCCESS) {
