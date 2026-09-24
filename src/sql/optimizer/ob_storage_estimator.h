@@ -49,8 +49,7 @@ public:
 
   static int estimate_block_count_and_row_count(const obcall::ObEstBlockArg &arg,
                                                 obcall::ObEstBlockRes &res,
-                                                ObSQLSessionInfo *session,
-                                                uint64_t table_id);
+                                                ObSQLSessionInfo *session);
 private:
 
   // compute memtable whole range row counts

@@ -59,7 +59,7 @@ int ObStorageEstimator::estimate_row_count(const obcall::ObEstPartArg &arg,
     param.tablet_id_ = source.tablet_id_;
     param.tx_id_ = source.tx_id_;
     bool inherited_with_cap = false;
-    if (namespace_id > 1 && !is_inner_table(param.index_id_)) {
+    if (namespace_id != 0) {
       uint64_t encoded_tablet_id = OB_INVALID_ID;
       common::ObTabletID physical_tablet;
       int64_t fork_cap = 0;
@@ -98,8 +98,7 @@ int ObStorageEstimator::estimate_row_count(const obcall::ObEstPartArg &arg,
 
 int ObStorageEstimator::estimate_block_count_and_row_count(const obcall::ObEstBlockArg &arg,
                                                            obcall::ObEstBlockRes &res,
-                                                           ObSQLSessionInfo *session,
-                                                           uint64_t table_id)
+                                                           ObSQLSessionInfo *session)
 {
   int ret = OB_SUCCESS;
   const uint64_t namespace_id =
@@ -107,7 +106,7 @@ int ObStorageEstimator::estimate_block_count_and_row_count(const obcall::ObEstBl
   for (int64_t i = 0; OB_SUCC(ret) && i < arg.tablet_params_arg_.count(); ++i) {
     obcall::ObEstBlockResElement est_res;
     auto routed = arg.tablet_params_arg_.at(i);
-    if (namespace_id > 1 && !is_inner_table(table_id)) {
+    if (namespace_id != 0) {
       uint64_t encoded_tablet_id = OB_INVALID_ID;
       common::ObTabletID physical_tablet;
       int64_t fork_cap = 0;
