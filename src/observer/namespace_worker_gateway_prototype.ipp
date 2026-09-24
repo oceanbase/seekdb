@@ -520,6 +520,71 @@ int call_in_process_tx_exec_result(ObTxDesc &view, char operation,
   THIS_WORKER.set_timeout_ts(old_timeout);
   return ret;
 }
+int call_in_process_tx_register_mds(ObTxDesc &view,
+    ObTxDataSourceType type, StorageSpaceHandle space,
+    const char *buffer, int64_t buffer_size,
+    const ObRegisterMdsFlag &flag, ObTxSEQ sequence)
+{
+  InProcessStorage *ctx = in_process_storage;
+  if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
+  if (!ctx->writes->tx || ctx->writes->tx->get_tx_id() != view.get_tx_id()
+      || !((space.is_namespace() && space.namespace_id() == ctx->ns)
+          || (space.is_global() && ctx->ns == 1))
+      || type <= ObTxDataSourceType::UNKNOWN
+      || type >= ObTxDataSourceType::MAX_TYPE
+      || !buffer || buffer_size <= 0) {
+    return OB_INVALID_ARGUMENT;
+  }
+  if (buffer_size > static_cast<int64_t>(MAX_SQL_MESSAGE - 128)) {
+    return OB_SIZE_OVERFLOW;
+  }
+  const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
+  auto *old_session = THIS_WORKER.get_session();
+  THIS_WORKER.set_session(&ctx->session);
+  const ObString input(static_cast<int32_t>(buffer_size), buffer);
+  std::vector<char> storage_buffer;
+  bool skip_mds = false;
+  int ret = route_tablet_mds(space, type, input, storage_buffer, skip_mds);
+  if (ret) {
+    fprintf(stderr,
+        "PROTOTYPE_NAMESPACE_MDS_ROUTE ns=%llu global=%d type=%lld input=%d ret=%d\n",
+        (unsigned long long)space.namespace_id(), space.is_global(),
+        (long long)type, input.length(), ret);
+  }
+  auto *service = data_plane::query_transaction_service();
+  if (!ret && !skip_mds && !service) { ret = OB_NOT_INIT; }
+  if (!ret && !skip_mds) {
+    const char *mds_buffer = storage_buffer.empty()
+        ? input.ptr() : storage_buffer.data();
+    const int64_t mds_size = storage_buffer.empty()
+        ? input.length() : storage_buffer.size();
+    ret = service->register_mds_into_tx(
+        *ctx->writes->tx, type, mds_buffer, mds_size, flag, sequence);
+    if (ret) {
+      fprintf(stderr,
+          "PROTOTYPE_NAMESPACE_MDS_REGISTER ns=%llu type=%lld input=%d routed=%zu ret=%d\n",
+          (unsigned long long)ctx->ns, (long long)type,
+          input.length(), storage_buffer.size(), ret);
+    }
+    if (!ret && type == ObTxDataSourceType::CREATE_TABLET_NEW_MDS) {
+      obcall::ObBatchCreateTabletArg create_arg;
+      int64_t create_pos = 0;
+      if (OB_FAIL(create_arg.deserialize(mds_buffer, mds_size, create_pos))) {
+      } else if (create_pos != mds_size || !create_arg.is_valid()) {
+        ret = OB_INVALID_ARGUMENT;
+      } else if (create_arg.set_binding_info_outside_create()
+                 && OB_FAIL(storage::ObTabletBindingMdsHelper::
+                     modify_tablet_binding_for_create(
+                         create_arg, THIS_WORKER.get_timeout_ts(),
+                         *ctx->writes->tx, *service))) {
+      }
+    }
+  }
+  if (!ret) { ret = view.sync_serialized_state_from(*ctx->writes->tx); }
+  THIS_WORKER.set_session(old_session);
+  THIS_WORKER.set_timeout_ts(old_timeout);
+  return ret;
+}
 int call_in_process_tablet_binding(ObTxDesc &view, char operation,
     StorageSpaceHandle space, const ObIArray<ObTabletID> &tablets,
     const ObIArray<ObTabletID> *hidden, int64_t schema_version,

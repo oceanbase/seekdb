@@ -1273,7 +1273,6 @@ struct EngineWrites {
         : it->second->batch(request, *tx, affected, duplicates);
   }
   int process(Frame &request, Frame &reply) {
-    const uint64_t ns = storage_space.namespace_id();
     auto *service = query_transaction_service();
     const uint64_t operation = request.number();
     const uint64_t txid = request.number();
@@ -1288,72 +1287,6 @@ struct EngineWrites {
     if (!ret && request.type() == 'T') {
       if (operation == 't') {
         if (!request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-      } else if (operation == 'M') {
-        const int64_t raw_type = static_cast<int64_t>(request.number());
-        StorageSpaceHandle request_space;
-        if (OB_SUCC(ret)) {
-          ret = read_storage_space(request, storage_space, request_space);
-        }
-        const ObString buffer = request.string();
-        ObRegisterMdsFlag flag;
-        ObTxSEQ sequence;
-        request.read(flag);
-        request.read(sequence);
-        if (!request.consumed()
-            || raw_type <= static_cast<int64_t>(ObTxDataSourceType::UNKNOWN)
-            || raw_type >= static_cast<int64_t>(ObTxDataSourceType::MAX_TYPE)
-            || buffer.empty()) {
-          ret = OB_INVALID_ARGUMENT;
-        } else {
-          const auto type = static_cast<ObTxDataSourceType>(raw_type);
-          std::vector<char> storage_buffer;
-          bool skip_mds = false;
-          if (OB_FAIL(route_tablet_mds(
-                  request_space, type, buffer, storage_buffer, skip_mds))) {
-            fprintf(stderr,
-                "PROTOTYPE_NAMESPACE_MDS_ROUTE ns=%llu global=%d type=%lld input=%d ret=%d\n",
-                (unsigned long long)request_space.namespace_id(),
-                request_space.is_global(), (long long)raw_type,
-                buffer.length(), ret);
-          } else if (skip_mds) {
-            ret = OB_SUCCESS;
-          } else {
-            const char *mds_buffer = storage_buffer.empty()
-                ? buffer.ptr() : storage_buffer.data();
-            const int64_t mds_size = storage_buffer.empty()
-                ? buffer.length() : storage_buffer.size();
-            ret = service->register_mds_into_tx(
-                *tx,
-                type,
-                mds_buffer,
-                mds_size,
-                flag,
-                sequence);
-            if (OB_FAIL(ret)) {
-              fprintf(stderr,
-                  "PROTOTYPE_NAMESPACE_MDS_REGISTER ns=%llu type=%lld input=%d routed=%zu ret=%d\n",
-                  (unsigned long long)ns, (long long)raw_type,
-                  buffer.length(), storage_buffer.size(), ret);
-            }
-            if (OB_SUCC(ret)
-                && type == ObTxDataSourceType::CREATE_TABLET_NEW_MDS) {
-              obcall::ObBatchCreateTabletArg create_arg;
-              int64_t create_pos = 0;
-              if (OB_FAIL(create_arg.deserialize(
-                      mds_buffer, mds_size, create_pos))) {
-              } else if (create_pos != mds_size || !create_arg.is_valid()) {
-                ret = OB_INVALID_ARGUMENT;
-              } else if (create_arg.set_binding_info_outside_create()
-                         && OB_FAIL(storage::ObTabletBindingMdsHelper::
-                             modify_tablet_binding_for_create(
-                                 create_arg,
-                                 THIS_WORKER.get_timeout_ts(),
-                                 *tx,
-                                 *service))) {
-              }
-            }
-          }
-        }
       } else if (operation == 'O') {
         ret = process_table_lock(storage_space, request, *tx);
       } else { ret = OB_NOT_SUPPORTED; }
@@ -1429,6 +1362,10 @@ int call_in_process_tx_named_savepoint(ObTxDesc &view, char operation,
     const ObString &name, int64_t deadline);
 int call_in_process_tx_exec_result(ObTxDesc &view, char operation,
     const ObTxExecResult *input, ObTxExecResult *output);
+int call_in_process_tx_register_mds(ObTxDesc &view,
+    ObTxDataSourceType type, StorageSpaceHandle space,
+    const char *buffer, int64_t buffer_size,
+    const ObRegisterMdsFlag &flag, ObTxSEQ sequence);
 int call_in_process_tablet_binding(ObTxDesc &view, char operation,
     StorageSpaceHandle space, const ObIArray<ObTabletID> &tablets,
     const ObIArray<ObTabletID> *hidden, int64_t schema_version,
@@ -1498,6 +1435,19 @@ int tx_exec_result(ObTxDesc &view, char operation,
   StorageSessionScope scope(session && session->get_tx_desc() == &view ? session : nullptr);
   const int ret = scope.error() ? scope.error()
       : call_in_process_tx_exec_result(view, operation, input, output);
+  revert_tx_owner_session(borrowed);
+  return ret;
+}
+int tx_register_mds(ObTxDesc &view, ObTxDataSourceType type,
+    StorageSpaceHandle space, const char *buffer, int64_t buffer_size,
+    const ObRegisterMdsFlag &flag, ObTxSEQ sequence)
+{
+  sql::ObSQLSessionInfo *borrowed = nullptr;
+  auto *session = tx_owner_session(view, borrowed);
+  StorageSessionScope scope(session && session->get_tx_desc() == &view ? session : nullptr);
+  const int ret = scope.error() ? scope.error()
+      : call_in_process_tx_register_mds(
+          view, type, space, buffer, buffer_size, flag, sequence);
   revert_tx_owner_session(borrowed);
   return ret;
 }
@@ -1790,17 +1740,10 @@ public:
     if (buffer == nullptr || buffer_size <= 0 || buffer_size > INT32_MAX) {
       return OB_INVALID_ARGUMENT;
     }
-    Frame request, reply;
-    request.number(static_cast<int64_t>(type));
     StorageSpaceHandle storage_space;
     int ret = worker_mds_storage_space(type, buffer, buffer_size, storage_space);
-    write_storage_space(request, storage_space);
-    request.string(ObString(static_cast<int32_t>(buffer_size), buffer));
-    request.append(flag);
-    request.append(sequence);
-    if (OB_SUCC(ret) && OB_FAIL(request.ret)) {
-    }
-    return ret ? ret : tx_rpc('M', tx, request, reply);
+    return ret ? ret : tx_register_mds(
+        tx, type, storage_space, buffer, buffer_size, flag, sequence);
   }
   int interrupt(transaction::ObTxDesc &tx, int cause) override {
     return call_in_process_tx_interrupt(tx, cause);
