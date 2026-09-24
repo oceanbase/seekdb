@@ -169,12 +169,6 @@ int ObLatestSchemaGuard::get_database_id(
     const common::ObString &database_name,
     uint64_t &database_id)
 {
-  if (storage::NamespaceForkKernelPrototype::is_namespace_address(database_name)) {
-    const ObDatabaseSchema *database = nullptr;
-    const int ret = storage::NamespaceForkKernelPrototype::database_by_address(database_name, database);
-    database_id = database ? database->get_database_id() : OB_INVALID_ID;
-    return ret;
-  }
   int ret = OB_SUCCESS;
   ObSchemaService *schema_service_impl = NULL;
   ObISQLClient *sql_client = NULL;

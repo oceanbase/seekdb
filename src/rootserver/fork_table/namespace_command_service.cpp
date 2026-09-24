@@ -78,18 +78,6 @@ int ObDDLService::drop_namespace_prototype_(const ObString &name)
   }
   if (trans.is_started()) { const int end = trans.end(ret == OB_SUCCESS); if (ret == OB_SUCCESS) { ret = end; } }
   if (OB_SUCC(ret) && id > 1) { ns::namespace_registry().remove(id); }
-  int64_t released_tables = 0;
-  int64_t released_databases = 0;
-  int64_t released_storage_tables = 0;
-  int64_t released_storage_databases = 0;
-  if (OB_SUCC(ret) && id > 1) {
-    ret = NamespaceForkKernelPrototype::release_namespace_schemas(
-        id, released_tables, released_databases);
-  }
-  if (OB_SUCC(ret) && id > 1) {
-    ret = observer::namespace_worker_prototype::release_storage_namespace_schemas(
-        id, released_storage_tables, released_storage_databases);
-  }
   if (OB_SUCC(ret)) {
     auto *freeze = share::server_service<ObFreezeInfoMgr>();
     ret = freeze ? freeze->reload_for_test() : OB_NOT_INIT;
@@ -97,8 +85,7 @@ int ObDDLService::drop_namespace_prototype_(const ObString &name)
   if (OB_SUCC(ret) && id == 1) { ret = publish_schema(); }
   // A failed attempt leaves DELETING persisted. Reissuing the same operation resumes it.
   LOG_INFO("PROTOTYPE_V7_NAMESPACE_DROP", K(ret), K(name), K(id),
-      "private_tablets", bound.count(), K(released_tables), K(released_databases),
-      K(released_storage_tables), K(released_storage_databases));
+      "private_tablets", bound.count());
   return ret;
 }
 

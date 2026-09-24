@@ -128,11 +128,8 @@ inline bool serves_namespace_schema()
 int acquire_storage_snapshot(int64_t &snapshot);
 // Refresh snapshot retention after committing a new acquired-snapshot row.
 int reload_storage_freeze_info();
-// Namespace DROP drains access leases and reclaims compatibility schema holders.
+// Namespace DROP drains access leases before reclaiming physical tablets.
 int drain_storage_namespace_access(uint64_t namespace_id);
-int release_storage_namespace_schemas(uint64_t namespace_id,
-                                      int64_t &table_count,
-                                      int64_t &database_count);
 // Restore committed namespace names after the system package load completes.
 int restore_namespace_registry();
 // Publish the table-schema delta committed by a namespace-local DDL into the

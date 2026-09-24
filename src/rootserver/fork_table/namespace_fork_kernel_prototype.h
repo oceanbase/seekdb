@@ -34,21 +34,11 @@ public:
   static int drain_access();
   static int protect_snapshot_tablets(common::ObIArray<common::ObTabletID> &candidates, bool &need_retry);
   static int collect_dropped_namespace_tablets();
-  static bool is_namespace_address(const common::ObString &name);
-  static int parse_namespace_address(const common::ObString &address,
-                                     uint64_t &namespace_id,
-                                     common::ObString &database_name);
   static int control_namespace(const common::ObString &source, const common::ObString &target,
                                 uint64_t &namespace_id);
   static int observe_database(common::ObISQLClient &trans, const share::schema::ObDatabaseSchema &schema);
   static int check_database_ddl(const share::schema::ObDatabaseSchema &schema,
                                 const common::ObISQLClient *trans = nullptr);
-  static int database_in_namespace(uint64_t namespace_id, const common::ObString &name,
-                                   const share::schema::ObDatabaseSchema *&schema);
-  static int database_by_address(const common::ObString &address,
-                                 const share::schema::ObDatabaseSchema *&schema);
-  static int database_by_id(uint64_t id, const share::schema::ObDatabaseSchema *&schema);
-  static int database_by_id(uint64_t id, const share::schema::ObSimpleDatabaseSchema *&schema);
   static bool is_encoded_id(uint64_t id);
   // Single source of truth for the namespace-scoped id encoding. Code outside
   // this file must never hand-roll the marker bit; use these instead of
@@ -91,18 +81,10 @@ public:
       uint64_t namespace_id,
       const common::ObIArray<common::ObTabletID> &logical_tablets,
       common::ObIArray<common::ObTabletID> &owned_tablets);
-  static void release_schema(uint64_t table_id);
-  static int release_namespace_schemas(uint64_t namespace_id,
-                                       int64_t &table_count,
-                                       int64_t &database_count);
   static int capture(common::ObISQLClient &trans, uint64_t source, uint64_t target,
                      int64_t snapshot, int64_t schema_version);
-  static int schema_by_name(uint64_t database, const common::ObString &name,
-                            const share::schema::ObTableSchema *&schema);
-  static int schema_by_id(uint64_t table_id, const share::schema::ObTableSchema *&schema);
   static int table_id_for_tablet(const common::ObTabletID &tablet, int64_t schema_version,
                                  uint64_t &table_id);
-  static int list_schemas(uint64_t database, common::ObIArray<const share::schema::ObTableSchema *> &schemas);
   static int check_ddl(const share::schema::ObSimpleTableSchemaV2 &schema,
                        const common::ObISQLClient *trans = nullptr);
   static int ensure_tablet(const common::ObTabletID &tablet_id);

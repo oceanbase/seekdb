@@ -549,14 +549,6 @@ int ObDropTableHelper::construct_and_adjust_result_(int &return_ret)
       LOG_USER_ERROR(OB_ERR_BAD_TABLE, static_cast<int>(err_table_list_.length()) - 1, err_table_list_.ptr());
     }
   }
-  if (OB_SUCC(ret)) {
-    for (int64_t i = 0; i < table_schemas_.count(); ++i) {
-      const uint64_t table_id = table_schemas_.at(i)->get_table_id();
-      if (storage::NamespaceForkKernelPrototype::is_encoded_id(table_id)) {
-        storage::NamespaceForkKernelPrototype::release_schema(table_id);
-      }
-    }
-  }
   return ret;
 }
 

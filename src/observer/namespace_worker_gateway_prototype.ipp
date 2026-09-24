@@ -32,17 +32,6 @@ int drain_storage_namespace_access(uint64_t namespace_id) {
   }
   return storage::NamespaceForkKernelPrototype::drain_access();
 }
-int release_storage_namespace_schemas(uint64_t namespace_id,
-                                      int64_t &table_count,
-                                      int64_t &database_count) {
-  table_count = 0;
-  database_count = 0;
-  if (namespace_id <= 1 || namespace_id >= ns::NamespaceObjectKey::NAMESPACE_LIMIT) {
-    return OB_INVALID_ARGUMENT;
-  }
-  return storage::NamespaceForkKernelPrototype::release_namespace_schemas(
-      namespace_id, table_count, database_count);
-}
 struct SessionBinding {
   InProcessStorage *in_process = nullptr;
 };

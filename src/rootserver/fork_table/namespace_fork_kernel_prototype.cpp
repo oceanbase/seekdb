@@ -118,24 +118,6 @@ private:
   MetadataReadGuard(const MetadataReadGuard &) = delete;
   MetadataReadGuard &operator=(const MetadataReadGuard &) = delete;
 };
-struct SchemaHolder {
-  ObArenaAllocator allocator;
-  ObTableSchema schema;
-  SchemaHolder() : allocator("ForkProtoSchema"), schema(&allocator) {}
-};
-std::mutex schema_mutex;
-// Immutable schemas remain alive for existing schema guards and cached plans.
-// ponytail: process-lifetime schema cache; bounded by tables opened in this disposable instance.
-std::map<uint64_t, std::unique_ptr<SchemaHolder>> schemas;
-struct DatabaseHolder {
-  ObArenaAllocator allocator;
-  ObDatabaseSchema schema;
-  ObSimpleDatabaseSchema simple;
-  DatabaseHolder() : allocator("ForkProtoDB"), schema(&allocator), simple(&allocator) {}
-};
-// Schemas stay alive for old guards/plans; storage admission rejects deleted namespaces.
-std::map<uint64_t, std::unique_ptr<DatabaseHolder>> database_schemas;
-
 // Native namespace workers load their only schema authority from their own
 // all_* tables.  This is an architecture-wide mode, not a property of the
 // process currently executing a hook: namespace 1 enrollment runs in the
@@ -569,66 +551,6 @@ std::vector<ObAuxTableMetaInfo> index_infos(const ObTableSchema &schema) {
   }
   return indexes;
 }
-int schema_from_value(uint64_t db, const Value &value, const ObTableSchema *&schema) {
-  uint64_t object = 0, table = 0, tablet = 0, bound = 0;
-  if (!entry(value.data, object, table, tablet, bound)) { return OB_CHECKSUM_ERROR; }
-  const uint64_t id = encoded(db, table);
-  { std::lock_guard<std::mutex> lock(schema_mutex);
-    auto it = schemas.find(id); if (it != schemas.end()) { schema = &it->second->schema; return OB_SUCCESS; } }
-  std::string data; int ret = blob(*GCTX.sql_proxy_, object, data);
-  std::unique_ptr<SchemaHolder> holder(new SchemaHolder());
-  ObTableSchema *copy = &holder->schema; int64_t pos = 0;
-  if (ret != OB_SUCCESS) { return ret; }
-  if ((ret = copy->deserialize(data.data(), data.size(), pos)) != OB_SUCCESS) { return ret; }
-  if (pos != int64_t(data.size()) || !legacy_catalog_supported(*copy)) {
-    return OB_NOT_SUPPORTED;
-  }
-  if (!copy->is_sys_table()) {
-    copy->set_database_id(encoded(db, copy->get_database_id()));
-    copy->set_table_id(id);
-    if (copy->get_data_table_id() != 0 && copy->get_data_table_id() != OB_INVALID_ID) {
-      copy->set_data_table_id(encoded(db, copy->get_data_table_id()));
-    }
-    if (copy->get_association_table_id() != 0 && copy->get_association_table_id() != OB_INVALID_ID) {
-      copy->set_association_table_id(encoded(db, copy->get_association_table_id()));
-    }
-    if (copy->get_aux_lob_meta_tid() != OB_INVALID_ID) {
-      copy->set_aux_lob_meta_tid(encoded(db, copy->get_aux_lob_meta_tid()));
-    }
-    if (copy->get_aux_lob_piece_tid() != OB_INVALID_ID) {
-      copy->set_aux_lob_piece_tid(encoded(db, copy->get_aux_lob_piece_tid()));
-    }
-    std::vector<ObAuxTableMetaInfo> indexes = index_infos(*copy);
-    copy->reset_simple_index_infos();
-    for (auto &index : indexes) {
-      index.table_id_ = encoded(db, index.table_id_);
-      if (OB_FAIL(copy->add_simple_index_info(index))) { return ret; }
-    }
-    for (int64_t i = 0; i < copy->get_foreign_key_infos().count(); ++i) {
-      auto &fk = copy->get_foreign_key_infos().at(i);
-      fk.table_id_ = id;
-      fk.child_table_id_ = encoded(db, fk.child_table_id_);
-      fk.parent_table_id_ = encoded(db, fk.parent_table_id_);
-      if (fk.ref_cst_id_ != OB_INVALID_ID) { fk.ref_cst_id_ = encoded(db, fk.ref_cst_id_); }
-    }
-    for (int64_t i = 0; i < copy->get_column_count(); ++i) {
-      const_cast<ObColumnSchemaV2 *>(copy->get_column_schema_by_idx(i))->set_table_id(id);
-    }
-  } else {
-    if (copy->get_aux_lob_meta_tid() != OB_INVALID_ID) {
-      copy->set_aux_lob_meta_tid(encoded(db, copy->get_aux_lob_meta_tid()));
-    }
-    if (copy->get_aux_lob_piece_tid() != OB_INVALID_ID) {
-      copy->set_aux_lob_piece_tid(encoded(db, copy->get_aux_lob_piece_tid()));
-    }
-  }
-  // Namespace identity belongs to storage addressing. System schemas keep
-  // their native logical IDs while each namespace gets a distinct tablet.
-  copy->set_tablet_id(ObTabletID(encoded(db, tablet)));
-  { std::lock_guard<std::mutex> lock(schema_mutex);
-    auto &slot = schemas[id]; if (!slot) { slot = std::move(holder); } schema = &slot->schema; }
-  return OB_SUCCESS;
-}
 int namespace_named(ObISQLClient &sql, const ObString &name, uint64_t &id) {
   ObSqlString q; ObMySQLProxy::MySQLResult res; int ret = OB_SUCCESS;
   sqlclient::ObMySQLResult *r = nullptr;
@@ -655,28 +577,6 @@ int namespace_registry_ready(bool &ready) {
     ready = ret == OB_SUCCESS && schema != nullptr;
   }
   return ret;
-}
-int database_from_value(uint64_t ns, const Value &value, const ObDatabaseSchema *&schema) {
-  uint64_t object = 0, db = 0, unused = 0, bound = 0;
-  if (!entry(value.data, object, db, unused, bound) || unused || bound
-      || !NamespaceObjectKey{ns, db}.is_valid()) { return OB_CHECKSUM_ERROR; }
-  const uint64_t id = encoded(ns, db);
-  { std::lock_guard<std::mutex> lock(schema_mutex);
-    auto it = database_schemas.find(id);
-    if (it != database_schemas.end()) { schema = &it->second->schema; return OB_SUCCESS; } }
-  std::string data; int ret = blob(*GCTX.sql_proxy_, object, data); int64_t pos = 0;
-  std::unique_ptr<DatabaseHolder> holder(new DatabaseHolder());
-  if (ret != OB_SUCCESS) { return ret; }
-  if ((ret = holder->schema.deserialize(data.data(), data.size(), pos)) != OB_SUCCESS) { return ret; }
-  if (pos != int64_t(data.size()) || holder->schema.get_database_id() != db) { return OB_CHECKSUM_ERROR; }
-  holder->schema.set_database_id(id);
-  holder->simple.set_database_id(id);
-  holder->simple.set_schema_version(holder->schema.get_schema_version());
-  holder->simple.set_name_case_mode(OB_LOWERCASE_AND_INSENSITIVE);
-  if ((ret = holder->simple.set_database_name(holder->schema.get_database_name_str())) != OB_SUCCESS) { return ret; }
-  { std::lock_guard<std::mutex> lock(schema_mutex);
-    auto &slot = database_schemas[id]; if (!slot) { slot = std::move(holder); } schema = &slot->schema; }
-  return OB_SUCCESS;
 }
 class SqlSnapshotLineageStore final : public ::oceanbase::ns::ISnapshotLineageStore {
 public:
@@ -1527,74 +1427,6 @@ int NamespaceForkKernelPrototype::finish_schema_changes(
     ObISQLClient &, uint64_t namespace_id, int64_t committed_schema_version) {
   return namespace_id > 1
       ? finish_schema_change(namespace_id, committed_schema_version) : OB_SUCCESS;
-}
-bool NamespaceForkKernelPrototype::is_namespace_address(const ObString &name) {
-  return name.prefix_match("__fork_ns_");
-}
-int NamespaceForkKernelPrototype::parse_namespace_address(
-    const ObString &address, uint64_t &namespace_id, ObString &database_name) {
-  namespace_id = 0;
-  database_name.reset();
-  constexpr int64_t prefix_length = 10;
-  if (!is_namespace_address(address) || address.length() <= prefix_length + 2) {
-    return OB_INVALID_ARGUMENT;
-  }
-  int64_t separator = -1;
-  for (int64_t i = prefix_length; i + 1 < address.length(); ++i) {
-    if (address[i] == '_' && address[i + 1] == '_') {
-      separator = i;
-      break;
-    }
-    if (address[i] < '0' || address[i] > '9'
-        || i - prefix_length >= 10) {
-      return OB_INVALID_ARGUMENT;
-    }
-    namespace_id = namespace_id * 10 + address[i] - '0';
-  }
-  if (separator == prefix_length || separator < 0
-      || separator + 2 >= address.length()
-      || !NamespaceObjectKey{namespace_id, 1}.is_valid()) {
-    return OB_INVALID_ARGUMENT;
-  }
-  database_name.assign_ptr(address.ptr() + separator + 2,
-                           address.length() - separator - 2);
-  return OB_SUCCESS;
-}
-int NamespaceForkKernelPrototype::database_by_address(const ObString &address, const ObDatabaseSchema *&schema) {
-  schema = nullptr;
-  uint64_t namespace_id = 0;
-  ObString database_name;
-  const int ret = parse_namespace_address(address, namespace_id, database_name);
-  return ret == OB_SUCCESS
-      ? database_in_namespace(namespace_id, database_name, schema) : ret;
-}
-int NamespaceForkKernelPrototype::database_in_namespace(uint64_t ns, const ObString &name,
-                                                       const ObDatabaseSchema *&schema) {
-  schema = nullptr;
-  if (!GCTX.sql_proxy_ || !NamespaceObjectKey{ns, 1}.is_valid()) { return OB_INVALID_ARGUMENT; }
-  MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
-  Roots root; Value value; int ret = roots(*GCTX.sql_proxy_, ns, root);
-  if (ret == OB_SUCCESS) { ret = find(*GCTX.sql_proxy_, root.catalog, "D" + std::string(name.ptr(), name.length()), value); }
-  if (ret == OB_ITER_END || ret == OB_ENTRY_NOT_EXIST) { return OB_SUCCESS; }
-  return ret == OB_SUCCESS ? database_from_value(ns, value, schema) : ret;
-}
-int NamespaceForkKernelPrototype::database_by_id(uint64_t id, const ObDatabaseSchema *&schema) {
-  schema = nullptr; Roots root; Value value;
-  if (!is_encoded_id(id) || !GCTX.sql_proxy_) { return OB_INVALID_ARGUMENT; }
-  MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
-  int ret = roots(*GCTX.sql_proxy_, database_of(id), root);
-  if (ret == OB_SUCCESS) { ret = find(*GCTX.sql_proxy_, root.catalog, "@" + key_of(local_of(id)), value); }
-  if (ret == OB_ITER_END || ret == OB_ENTRY_NOT_EXIST) { return OB_SUCCESS; }
-  return ret == OB_SUCCESS ? database_from_value(database_of(id), value, schema) : ret;
-}
-int NamespaceForkKernelPrototype::database_by_id(uint64_t id, const ObSimpleDatabaseSchema *&schema) {
-  schema = nullptr; const ObDatabaseSchema *full = nullptr;
-  int ret = database_by_id(id, full);
-  if (ret == OB_SUCCESS && full) {
-    std::lock_guard<std::mutex> lock(schema_mutex);
-    schema = &database_schemas.at(id)->simple;
-  }
-  return ret;
 }
 int NamespaceForkKernelPrototype::observe_database(ObISQLClient &trans, const ObDatabaseSchema &schema) {
   if (is_inner_db(schema.get_database_id())
@@ -2500,43 +2332,6 @@ int NamespaceForkKernelPrototype::owned_storage_tablets(
   }
   return ret;
 }
-void NamespaceForkKernelPrototype::release_schema(uint64_t table_id) {
-  std::lock_guard<std::mutex> lock(schema_mutex);
-  schemas.erase(table_id);
-}
-int NamespaceForkKernelPrototype::release_namespace_schemas(
-    uint64_t namespace_id,
-    int64_t &table_count,
-    int64_t &database_count) {
-  table_count = 0;
-  database_count = 0;
-  if (namespace_id <= 1
-      || namespace_id >= NamespaceObjectKey::NAMESPACE_LIMIT) {
-    return OB_INVALID_ARGUMENT;
-  }
-  // DROP tombstones the namespace and drains storage access before committing.
-  // After that commit no shared request can acquire another pointer from these
-  // compatibility holders. Worker SchemaService memory is released with the
-  // Worker process; only this shared adapter cache needs explicit erasure.
-  std::lock_guard<std::mutex> lock(schema_mutex);
-  for (auto it = schemas.begin(); it != schemas.end();) {
-    if (is_encoded_id(it->first) && database_of(it->first) == namespace_id) {
-      it = schemas.erase(it);
-      ++table_count;
-    } else {
-      ++it;
-    }
-  }
-  for (auto it = database_schemas.begin(); it != database_schemas.end();) {
-    if (is_encoded_id(it->first) && database_of(it->first) == namespace_id) {
-      it = database_schemas.erase(it);
-      ++database_count;
-    } else {
-      ++it;
-    }
-  }
-  return OB_SUCCESS;
-}
 int NamespaceForkKernelPrototype::capture(ObISQLClient &trans, uint64_t source, uint64_t target,
                                           int64_t snapshot, int64_t schema_version) {
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
@@ -2550,32 +2345,6 @@ int NamespaceForkKernelPrototype::capture(ObISQLClient &trans, uint64_t source, 
   LOG_INFO("PROTOTYPE_V2_ROOT_CAPTURE", K(ret), K(source), K(target), K(snapshot),
            "catalog_root", root.catalog.page, "directory_root", root.directory.page);
   return ret;
-}
-int NamespaceForkKernelPrototype::schema_by_name(uint64_t db, const ObString &name, const ObTableSchema *&schema) {
-  schema = nullptr; if (!GCTX.sql_proxy_) { return OB_NOT_INIT; }
-  MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
-  const uint64_t owner = namespace_of(db);
-  Roots root; Value value; int ret = roots(*GCTX.sql_proxy_, owner, root);
-  if (ret == OB_ITER_END) { return OB_SUCCESS; }
-  if (ret != OB_SUCCESS) { return ret; }
-  DEBUG_SYNC(BEFORE_FETCH_SIMPLE_TABLES);
-  if (OB_FAIL(THIS_WORKER.check_status())) { return ret; }
-  const std::string name_key = "T" + key_of(local_of(db)) + "/"
-      + std::string(name.ptr(), name.length());
-  ret = find(*GCTX.sql_proxy_, root.catalog, name_key, value);
-  return ret == OB_ENTRY_NOT_EXIST ? OB_SUCCESS : ret != OB_SUCCESS ? ret : schema_from_value(owner, value, schema);
-}
-int NamespaceForkKernelPrototype::schema_by_id(uint64_t id, const ObTableSchema *&schema) {
-  schema = nullptr; if (!is_encoded_id(id)) { return OB_INVALID_ARGUMENT; }
-  { std::lock_guard<std::mutex> lock(schema_mutex);
-    auto it = schemas.find(id); if (it != schemas.end()) { schema = &it->second->schema; return OB_SUCCESS; } }
-  if (!GCTX.sql_proxy_) { return OB_NOT_INIT; }
-  MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
-  Roots root; Value value; int ret = roots(*GCTX.sql_proxy_, database_of(id), root);
-  if (ret != OB_SUCCESS) { return ret; }
-  if (!root.snapshot) { return OB_TABLE_NOT_EXIST; }
-  ret = find(*GCTX.sql_proxy_, root.catalog, "#" + key_of(local_of(id)), value);
-  return ret != OB_SUCCESS ? ret : schema_from_value(database_of(id), value, schema);
 }
 int NamespaceForkKernelPrototype::table_id_for_tablet(const ObTabletID &tablet, int64_t schema_version,
                                                      uint64_t &table_id) {
@@ -2597,29 +2366,6 @@ int NamespaceForkKernelPrototype::table_id_for_tablet(const ObTabletID &tablet, 
   table_id = local_table;
   remember_tablet_table(tablet.id(), table_id);
   return OB_SUCCESS;
-}
-int NamespaceForkKernelPrototype::list_schemas(uint64_t db, ObIArray<const ObTableSchema *> &out) {
-  MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
-  const uint64_t owner = namespace_of(db);
-  Roots root; int ret = roots(*GCTX.sql_proxy_, owner, root);
-  if (ret == OB_ITER_END) { return OB_SUCCESS; }
-  if (ret != OB_SUCCESS || !root.snapshot) { return ret; }
-  std::vector<Ref> pending; if (root.catalog.page) { pending.push_back(root.catalog); }
-  while (!pending.empty() && ret == OB_SUCCESS) {
-    Ref ref = pending.back(); pending.pop_back(); Node node;
-    if ((ret = read_node(*GCTX.sql_proxy_, ref, node)) != OB_SUCCESS) { break; }
-    if (node.leaf) {
-      for (size_t i = 0; i < node.keys.size() && ret == OB_SUCCESS; ++i) {
-        // The catalog indexes each schema by id and by name. Enumerate only the id index.
-        if (!node.keys[i].empty() && node.keys[i][0] == '#') {
-          const ObTableSchema *schema = nullptr;
-          if ((ret = schema_from_value(owner, node.values[i], schema)) == OB_SUCCESS
-              && schema->get_database_id() == db) { ret = out.push_back(schema); }
-        }
-      }
-    } else { pending.insert(pending.end(), node.children.rbegin(), node.children.rend()); }
-  }
-  return ret;
 }
 int NamespaceForkKernelPrototype::check_ddl(const ObSimpleTableSchemaV2 &schema, const ObISQLClient *trans) {
   if (trans && source_drop_trans.load() == trans) { return OB_SUCCESS; }

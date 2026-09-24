@@ -110,10 +110,6 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
           if (OB_FAIL(resolve_table_relation_node(table_node,
                                                   table_name,
                                                   db_name))) {
-          } else if (storage::NamespaceForkKernelPrototype::is_namespace_address(db_name)) {
-            // Cross-namespace catalog references are read-only, including for IF EXISTS.
-            ret = OB_NOT_SUPPORTED;
-            LOG_USER_ERROR(OB_NOT_SUPPORTED, "DROP TABLE in namespace fork prototype");
           } else {
             table_item.reset();
             if (OB_FAIL(session_info_->get_name_case_mode(table_item.mode_))) {

@@ -574,12 +574,6 @@ int ObSchemaGetterGuard::get_can_write_index_array(const uint64_t table_id,
 int ObSchemaGetterGuard::get_database_id(const ObString &database_name,
                                          uint64_t &database_id)
 {
-  if (storage::NamespaceForkKernelPrototype::is_namespace_address(database_name)) {
-    const ObDatabaseSchema *schema = nullptr;
-    int ret = storage::NamespaceForkKernelPrototype::database_by_address(database_name, schema);
-    database_id = schema ? schema->get_database_id() : OB_INVALID_ID;
-    return ret;
-  }
   int ret = OB_SUCCESS;
   const ObSchemaMgr *mgr = NULL;
   database_id = OB_INVALID_ID;
@@ -1012,9 +1006,6 @@ int ObSchemaGetterGuard::get_database_schema(
                                              const ObString &database_name,
                                              const ObDatabaseSchema *&database_schema)
 {
-  if (storage::NamespaceForkKernelPrototype::is_namespace_address(database_name)) {
-    return storage::NamespaceForkKernelPrototype::database_by_address(database_name, database_schema);
-  }
   int ret = OB_SUCCESS;
   const ObSchemaMgr *mgr = NULL;
   database_schema = NULL;
