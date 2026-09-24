@@ -171,6 +171,8 @@ public:
   ObKVCacheConfig();
   void reset();
   bool is_valid_;
+  bool shareable_;
+  int64_t registration_count_;
   int64_t mem_limit_pct_;
   char cache_name_[MAX_CACHE_NAME_LENGTH];
 };

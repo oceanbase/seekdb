@@ -47,7 +47,8 @@ public:
   ObSchemaCacheKey();
   ObSchemaCacheKey(const ObSchemaType schema_type,
                    const uint64_t schema_id,
-                   const uint64_t schema_version);
+                   const uint64_t schema_version,
+                   const uint64_t cache_scope = 0);
   virtual ~ObSchemaCacheKey() {}
   
   virtual bool operator ==(const ObIKVCacheKey &other) const;
@@ -59,11 +60,12 @@ public:
                         ObIKVCacheKey *&key) const;
   TO_STRING_KV(K_(schema_type),
                K_(schema_id),
-               K_(schema_version));
+               K_(schema_version), K_(cache_scope));
 
   ObSchemaType schema_type_;
   uint64_t schema_id_;
   uint64_t schema_version_;
+  uint64_t cache_scope_;
 };
 
 class ObSchemaCacheValue : public common::ObIKVCacheValue
@@ -115,11 +117,13 @@ public:
   virtual int deep_copy(char *buf,
                         const int64_t buf_len,
                         ObIKVCacheKey *&key) const;
+  void set_cache_scope(const uint64_t cache_scope) { cache_scope_ = cache_scope; }
   TO_STRING_KV(K_(tablet_id),
-               K_(schema_version));
+               K_(schema_version), K_(cache_scope));
 private:
   ObTabletID tablet_id_;
   int64_t schema_version_;
+  uint64_t cache_scope_;
 };
 
 class ObTabletCacheValue : public common::ObIKVCacheValue
@@ -148,8 +152,7 @@ public:
   ObSchemaCache();
   virtual ~ObSchemaCache();
 
-  // name_suffix isolates the globally registered KV cache slots when a
-  // second schema service instance lives in the same process (e.g. "ns2").
+  // Each instance uses distinct cache keys while sharing registered KV slots.
   int init(const char *name_suffix = nullptr);
   void destroy();
   int get_schema(const ObSchemaType schema_type,
@@ -208,6 +211,7 @@ private:
   common::ObArenaAllocator all_core_table_allocator_;
   ObTableSchema all_core_table_;
   TabletCache tablet_cache_;
+  uint64_t cache_scope_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSchemaCache);
 };

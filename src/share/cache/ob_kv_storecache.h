@@ -58,7 +58,9 @@ class ObKVCache : public ObIKVCache<Key, Value>
 public:
   ObKVCache();
   virtual ~ObKVCache();
-  int init(const char *cache_name, const int64_t mem_limit_pct = 100);
+  // Shared registrations require callers to distinguish instances in their keys.
+  int init(const char *cache_name, const int64_t mem_limit_pct = 100,
+           const bool shareable = false);
   void destroy();
   int set_mem_limit_pct(const int64_t mem_limit_pct);
   virtual int put(const Key &key, const Value &value, bool overwrite = true);
@@ -154,7 +156,8 @@ private:
   friend class HazptrHolder;
   ObKVGlobalCache();
   virtual ~ObKVGlobalCache();
-  int register_cache(const char *cache_name, const int64_t mem_limit_pct, int64_t &cache_id);
+  int register_cache(const char *cache_name, const int64_t mem_limit_pct,
+                     int64_t &cache_id, const bool shareable = false);
   void deregister_cache(const int64_t cache_id);
   int set_mem_limit_pct(const int64_t cache_id, const int64_t mem_limit_pct);
   int put(
@@ -370,7 +373,8 @@ ObKVCache<Key, Value>::~ObKVCache()
 }
 
 template <class Key, class Value>
-int ObKVCache<Key, Value>::init(const char *cache_name, const int64_t mem_limit_pct)
+int ObKVCache<Key, Value>::init(const char *cache_name, const int64_t mem_limit_pct,
+                                const bool shareable)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(inited_)) {
@@ -380,7 +384,8 @@ int ObKVCache<Key, Value>::init(const char *cache_name, const int64_t mem_limit_
       || OB_UNLIKELY(mem_limit_pct <= 0 || mem_limit_pct > 100)) {
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "Invalid argument, ", KP(cache_name), K(ret));
-  } else if (OB_FAIL(ObKVGlobalCache::get_instance().register_cache(cache_name, mem_limit_pct, cache_id_))) {
+  } else if (OB_FAIL(ObKVGlobalCache::get_instance().register_cache(
+      cache_name, mem_limit_pct, cache_id_, shareable))) {
   } else {
     COMMON_LOG(INFO, "Succ to register cache", K(cache_name), K_(cache_id));
     inited_ = true;

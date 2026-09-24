@@ -562,12 +562,20 @@ def direct_probe(experiment):
         assert experiment.sql("SELECT id FROM phase10.drop_source_copy", descendant) == ((7,),)
     with connect(experiment, "root@phase10_drop_source") as replacement:
         assert "phase10" not in {row[0] for row in experiment.sql("SHOW DATABASES", replacement)}
+    # A former 32-slot KV cache limit rejected the fifth freshly activated
+    # namespace after earlier child schema services had registered caches.
+    for index in range(8):
+        name = f"phase10_cache_cycle_{index}"
+        experiment.sql(f"CREATE NAMESPACE {name}")
+        with connect(experiment, f"root@{name}", database="test") as cycle:
+            assert experiment.sql("SELECT 1", cycle) == ((1,),)
+        experiment.sql(f"DROP NAMESPACE {name}")
     experiment.record("PASS", case="inprocess_direct", ddl=True, partition=True,
                       index=True, lob=True, fulltext=True, ivf=True, ivf_pq=True,
                       ivf_sq8=True, empty_hnsw=True,
                       source_drop=True, ddl_redefinition=True,
                       check_constraint=True, auto_increment=True,
-                      fork_table=True, restart=True)
+                      fork_table=True, cache_lifecycle=True, restart=True)
 
 
 def tls_probe(experiment):

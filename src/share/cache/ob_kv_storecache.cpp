@@ -462,7 +462,8 @@ int ObKVGlobalCache::erase_cache(const char *cache_name)
 int ObKVGlobalCache::register_cache(
   const char *cache_name,
   const int64_t mem_limit_pct,
-  int64_t &cache_id)
+  int64_t &cache_id,
+  const bool shareable)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
@@ -473,17 +474,25 @@ int ObKVGlobalCache::register_cache(
     COMMON_LOG(WARN, "Invalid argument, ", KP(cache_name), K(ret));
   } else {
     int64_t i = 0;
+    bool reused = false;
     lib::ObMutexGuard guard(mutex_);
-    for (i = 0; OB_SUCC(ret) && i < cache_num_; ++i) {
+    for (i = 0; OB_SUCC(ret) && !reused && i < cache_num_; ++i) {
       if (configs_[i].is_valid_) {
         if (0 == STRNCMP(cache_name, configs_[i].cache_name_, MAX_CACHE_NAME_LENGTH)) {
-          ret = OB_INVALID_ARGUMENT;
-          COMMON_LOG(WARN, "The cache name has been registered, ", K(ret));
+          if (shareable && configs_[i].shareable_
+              && mem_limit_pct == configs_[i].mem_limit_pct_) {
+            cache_id = i;
+            ++configs_[i].registration_count_;
+            reused = true;
+          } else {
+            ret = OB_INVALID_ARGUMENT;
+            COMMON_LOG(WARN, "The cache name has been registered, ", K(ret));
+          }
         }
       }
     }
 
-    if (OB_SUCC(ret)) {
+    if (OB_SUCC(ret) && !reused) {
       if (cache_num_ >= MAX_CACHE_NUM) {
         ret = OB_SIZE_OVERFLOW;
         COMMON_LOG(WARN, "Can not register more cache, ", K(ret));
@@ -493,6 +502,8 @@ int ObKVGlobalCache::register_cache(
         configs_[cache_id].cache_name_[MAX_CACHE_NAME_LENGTH - 1] = '\0';
         configs_[cache_id].mem_limit_pct_ = mem_limit_pct;
         configs_[cache_id].is_valid_ = true;
+        configs_[cache_id].shareable_ = shareable;
+        configs_[cache_id].registration_count_ = 1;
       }
     }
   }
@@ -511,7 +522,11 @@ void ObKVGlobalCache::deregister_cache(const int64_t cache_id)
     COMMON_LOG(WARN, "Invalid argument, ", K(cache_id), K(ret));
   } else {
     lib::ObMutexGuard guard(mutex_);
-    configs_[cache_id].is_valid_ = false;
+    if (!configs_[cache_id].is_valid_ || configs_[cache_id].registration_count_ <= 0) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (--configs_[cache_id].registration_count_ == 0) {
+      configs_[cache_id].is_valid_ = false;
+    }
   }
 
   if (OB_SUCC(ret)) {

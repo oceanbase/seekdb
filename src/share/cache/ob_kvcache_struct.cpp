@@ -27,7 +27,7 @@ namespace common
  * ------------------------------------------------------------ObKVCacheConfig---------------------------------------------------------
  */
 ObKVCacheConfig::ObKVCacheConfig()
-  : is_valid_(false)
+  : is_valid_(false), shareable_(false), registration_count_(0), mem_limit_pct_(100)
 {
   MEMSET(cache_name_, 0, MAX_CACHE_NAME_LENGTH);
 }
@@ -35,6 +35,8 @@ ObKVCacheConfig::ObKVCacheConfig()
 void ObKVCacheConfig::reset()
 {
   is_valid_ = false;
+  shareable_ = false;
+  registration_count_ = 0;
   mem_limit_pct_ = 100;
   MEMSET(cache_name_, 0, MAX_CACHE_NAME_LENGTH);
 }
