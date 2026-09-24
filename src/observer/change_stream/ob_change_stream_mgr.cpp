@@ -136,7 +136,8 @@ int ObChangeStreamMgr::wait_refresh_scn(
   if (OB_FAIL(OB_TS_MGR.get_gts_sync(abs_timeout_us - ObTimeUtility::current_time(),
                                     safe_visible_scn))) {
   } else {
-    ObChangeStreamMgr *mgr = ::oceanbase::share::server_service<::oceanbase::share::ObChangeStreamMgr>();
+    ObChangeStreamMgr *mgr =
+        ::oceanbase::share::server_service<::oceanbase::share::ObChangeStreamMgr>();
     bool is_satisfied = false;
     while (OB_SUCC(ret) && !is_satisfied) {
       SCN current_refresh_scn;

@@ -205,6 +205,35 @@ int ObDDLService::fork_database(
       }
     }
 
+    // Drain async-index work that predates this FORK before taking source
+    // table locks.  A committed DML can already be queued in ChangeStream
+    // while its index-table write still needs a lock related to the source
+    // table; locking first and waiting for that same work creates a cycle.
+    // Keep the post-lock wait below to close the pre-drain/lock race.
+    bool has_async_index_table = false;
+    for (int64_t i = 0;
+         OB_SUCC(ret) && !has_async_index_table && i < user_table_schemas.count(); ++i) {
+      const ObTableSchema *table_schema = user_table_schemas.at(i);
+      if (OB_ISNULL(table_schema)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(check_has_async_vector_index(*table_schema, schema_guard,
+                                                       has_async_index_table))) {
+      }
+    }
+    if (OB_SUCC(ret) && has_async_index_table) {
+      ObIRootserverLocalRuntime *local_runtime = rootserver_local_runtime();
+      const int64_t pre_drain_timeout_us = THIS_WORKER.is_timeout_ts_valid()
+          ? THIS_WORKER.get_timeout_remain()
+          : GCONF._ob_ddl_timeout;
+      if (OB_ISNULL(local_runtime)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(local_runtime->wait_until_change_stream_refreshed(
+                     get_sql_proxy(), pre_drain_timeout_us))) {
+      } else {
+        LOG_INFO("async index backlog drained before fork database locks");
+      }
+    }
+
     // Start transaction and create destination database.
     ObDatabaseSchema dst_db_schema;
     if (OB_SUCC(ret)) {
@@ -234,7 +263,12 @@ int ObDDLService::fork_database(
     if (OB_SUCC(ret) && user_table_schemas.count() > 0) {
       bool need_wait = false;
       common::sqlclient::ObISQLConnection *iconn = trans.get_connection();
-      const int64_t lock_timeout_us = GCONF.internal_sql_execute_timeout;
+      // Keep both the source-table locks and ChangeStream catch-up inside the
+      // caller's DDL deadline.  The internal-SQL timeout is shorter than the
+      // embedded FORK operation and can otherwise surface as a false 4012.
+      const int64_t lock_timeout_us = THIS_WORKER.is_timeout_ts_valid()
+          ? THIS_WORKER.get_timeout_remain()
+          : GCONF._ob_ddl_timeout;
       if (OB_ISNULL(iconn)) {
         ret = OB_ERR_UNEXPECTED;
       }

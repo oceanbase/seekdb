@@ -116,7 +116,8 @@ struct ObCSTxInfo
   /// Free redo buffers and reset; caller then frees the ObCSTxInfo itself.
   void destroy();
 
-  TO_STRING_KV(K_(tx_id), K_(commit_version), K_(start_lsn), K_(schema_version), K_(is_ddl), K_(in_dispatch_time));
+  TO_STRING_KV(K_(tx_id), K_(commit_version), K_(start_lsn), K_(schema_version),
+               K_(is_ddl), K_(in_dispatch_time));
 };
 
 // ---------------------------------------------------------------------------
@@ -143,10 +144,13 @@ public:
   int get_min_dep_lsn(palf::LSN &min_lsn);
 
   /// For change_stream_refresh_scn:
-  /// - no async table: returns GTS
-  /// - async table with in-flight tx: returns invalid SCN (skip advancing this round)
-  /// - async table without in-flight tx: returns GTS only when current_lsn catches up;
-  ///   otherwise returns current_scn to avoid over-advancing.
+  /// - no async table: returns invalid SCN so the last processed watermark is
+  ///   retained for a later IDLE -> ACTIVE transition
+  /// - async table with a committed dispatched tx: returns invalid SCN (skip
+  ///   this round); redo-only/open transactions cannot commit below the GTS
+  ///   already sampled for this refresh round
+  /// - otherwise returns GTS only when current_lsn catches up; returns
+  ///   current_scn while logs are still being consumed.
   int get_refresh_scn(SCN &refresh_scn);
   /// For log reclaim: returns the minimum LSN still depended on by in-flight tx.
   palf::LSN get_min_dep_lsn() const;
