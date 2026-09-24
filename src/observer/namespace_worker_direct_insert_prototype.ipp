@@ -229,6 +229,19 @@ struct DirectInsertRoute {
         static_cast<unsigned long long>(storage_space.namespace_id()), operation, ret, is_final);
     return ret;
   }
+  int resolve_policy(StorageSpaceHandle storage_space, RequestTag parent,
+                     uint64_t generation, DirectInsertRegistry &registry,
+                     const ObDirectInsertPlanFacts &facts,
+                     ObDirectInsertWritePolicy &policy) {
+    if (!storage_space.is_namespace()) { return OB_INVALID_ARGUMENT; }
+    int ret = resolve(parent, generation, registry);
+    if (ret) { return ret; }
+    std::shared_lock<std::shared_mutex> guard(owner->mutex);
+    ret = owner->session ? owner->session->resolve_write_policy(facts, policy) : OB_NOT_INIT;
+    fprintf(stderr, "PROTOTYPE_DIRECT_INSERT_POLICY ns=%llu ret=%d\n",
+        static_cast<unsigned long long>(storage_space.namespace_id()), ret);
+    return ret;
+  }
 
   int process(StorageSpaceHandle storage_space, RequestTag tag, DirectInsertRegistry &registry,
       const std::shared_ptr<StorageSessionState> &context, Frame &request, Frame &reply) {
@@ -370,16 +383,6 @@ struct DirectInsertRoute {
           }
           if (!ret && !request.consumed()) { ret = OB_INVALID_ARGUMENT; }
           if (!ret) { ret = session->prepare_ordered_input(slice_counts); }
-        } else if (operation == 'R') {
-          const uint64_t flags = request.number();
-          ObDirectInsertPlanFacts facts; ObDirectInsertWritePolicy policy;
-          facts.regenerate_heap_table_pk_ = flags & 1; facts.vector_rowkey_vid_ = flags & 2;
-          facts.has_table_autoinc_ = flags & 4; facts.rowkey_doc_id_ = flags & 8;
-          facts.data_table_without_pk_ = flags & 16;
-          if (!request.consumed() || flags > 31) { ret = OB_INVALID_ARGUMENT; }
-          else { ret = session->resolve_write_policy(facts, policy); }
-          if (!ret) { output.number(policy.vector_generated_id_ | (policy.idempotent_tablet_autoinc_ << 1)
-              | (policy.idempotent_table_autoinc_ << 2) | (policy.idempotent_doc_id_ << 3)); }
         } else if (operation == 'A') {
           const uint64_t scope = request.number();
           ObTabletID tablet(request.number()); const int64_t slice = request.number();
@@ -454,6 +457,9 @@ struct DirectInsertRoute {
 };
 int call_in_process_direct_insert_simple(RequestTag parent, uint64_t generation,
                                          char operation, bool &is_final);
+int resolve_in_process_direct_insert_policy(RequestTag parent, uint64_t generation,
+                                            const ObDirectInsertPlanFacts &facts,
+                                            ObDirectInsertWritePolicy &policy);
 
 class RemoteDirectInsertSession final : public ObIDirectInsertSession, public ObIDirectInsertWriterFactory {
 public:
@@ -542,14 +548,10 @@ public:
     return simple_call('C', unused);
   }
   int resolve_write_policy(const ObDirectInsertPlanFacts &facts, ObDirectInsertWritePolicy &policy) const override {
-    Frame payload, reply;
-    payload.number(facts.regenerate_heap_table_pk_ | (facts.vector_rowkey_vid_ << 1)
-        | (facts.has_table_autoinc_ << 2) | (facts.rowkey_doc_id_ << 3) | (facts.data_table_without_pk_ << 4));
-    int ret = call('R', payload, reply);
-    const uint64_t flags = ret ? 0 : reply.number();
-    if (!ret && (!reply.consumed() || flags > 15)) { ret = OB_INVALID_ARGUMENT; }
-    if (!ret) { policy.vector_generated_id_ = flags & 1; policy.idempotent_tablet_autoinc_ = flags & 2;
-      policy.idempotent_table_autoinc_ = flags & 4; policy.idempotent_doc_id_ = flags & 8; }
+    StorageSessionScope scope(THIS_WORKER.get_session());
+    int ret = scope.error() ? scope.error() : error.load();
+    if (!ret) { ret = resolve_in_process_direct_insert_policy(origin, generation, facts, policy); }
+    if (ret) { int expected = OB_SUCCESS; error.compare_exchange_strong(expected, ret); }
     return ret;
   }
   int build_autoinc_param(ObDirectInsertAutoincScope scope, const ObTabletID &tablet,
