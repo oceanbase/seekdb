@@ -280,7 +280,7 @@ static void release_session_tx_desc(sql::ObSQLSessionInfo *self,
   data_plane::ObITransactionService *txs = nwp::effective_transaction_service(
       self, data_plane::query_transaction_service());
   if (OB_NOT_NULL(txs)) {
-    if (nwp::in_process_session_ns(self) > 1) {
+    if (nwp::in_process_session_ns(self) > 0) {
       nwp::StorageSessionScope scope(self, false);
       txs->release_tx(*tx_desc);
     } else {

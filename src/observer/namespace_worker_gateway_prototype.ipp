@@ -67,7 +67,10 @@ struct InProcessStorage {
   }
   InProcessStorage(const InProcessStorage &) = delete;
   InProcessStorage &operator=(const InProcessStorage &) = delete;
-  bool owns(StorageSpaceHandle space) const { return space == storage_space; }
+  bool owns(StorageSpaceHandle space) const
+  {
+    return space == storage_space || space.is_global() || space.is_physical_mds();
+  }
 };
 int call_in_process_rootserver_runtime(
     uint64_t namespace_id,
@@ -105,7 +108,7 @@ int read_in_process_lob(ObLobLocatorV2 &locator, int64_t timeout,
     return OB_NOT_INIT;
   }
   const StorageSpaceHandle space = active_worker_storage_space();
-  if (!space.is_namespace() || !locator.is_valid() || !locator.has_lob_header()
+  if (!storage->owns(space) || !locator.is_valid() || !locator.has_lob_header()
       || !locator.is_persist_lob()) {
     return OB_INVALID_ARGUMENT;
   }
@@ -138,7 +141,7 @@ int compare_in_process_lobs(ObLobLocatorV2 &left, ObLobLocatorV2 &right,
   }
   const StorageSpaceHandle space = active_worker_storage_space();
   ObTxDesc *storage_tx = storage->writes->tx;
-  if (!space.is_namespace() || storage->ns != space.namespace_id()
+  if (!storage->owns(space)
       || storage_tx == nullptr || storage_tx->get_tx_id() != tx.get_tx_id()) {
     return OB_INVALID_ARGUMENT;
   }
@@ -162,7 +165,7 @@ int call_in_process_tx_clock(
     return OB_NOT_INIT;
   }
   const StorageSpaceHandle space = active_worker_storage_space();
-  if (!space.is_namespace() || storage->ns != space.namespace_id()) {
+  if (!storage->owns(space)) {
     return OB_INVALID_ARGUMENT;
   }
   auto *old_session = THIS_WORKER.get_session();
@@ -186,7 +189,7 @@ int call_in_process_tx_interrupt(const transaction::ObTxDesc &tx, int cause)
     return OB_NOT_INIT;
   }
   const StorageSpaceHandle space = active_worker_storage_space();
-  if (!space.is_namespace() || storage->ns != space.namespace_id()) {
+  if (!storage->owns(space)) {
     return OB_INVALID_ARGUMENT;
   }
   return service->interrupt(tx.get_tx_id(), cause);
@@ -202,7 +205,7 @@ int call_in_process_tx_snapshot(char operation,
     return OB_NOT_INIT;
   }
   const StorageSpaceHandle space = active_worker_storage_space();
-  if (!space.is_namespace() || storage->ns != space.namespace_id()) {
+  if (!storage->owns(space)) {
     return OB_INVALID_ARGUMENT;
   }
   if (operation == 'v') {
@@ -262,7 +265,7 @@ int release_in_process_tx(const transaction::ObTxDesc &tx)
   InProcessStorage *ctx = in_process_storage;
   const StorageSpaceHandle space = active_worker_storage_space();
   if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
-  if (!space.is_namespace() || ctx->ns != space.namespace_id()) { return OB_INVALID_ARGUMENT; }
+  if (!ctx->owns(space)) { return OB_INVALID_ARGUMENT; }
   const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
   auto *old_session = THIS_WORKER.get_session();
   THIS_WORKER.set_session(&ctx->session);
@@ -275,9 +278,8 @@ int call_in_process_tx_state(char operation, transaction::ObTxDesc &view,
                              const ObTxParam *param, int64_t deadline)
 {
   InProcessStorage *ctx = in_process_storage;
-  const StorageSpaceHandle space = active_worker_storage_space();
   if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
-  if (!space.is_namespace() || ctx->ns != space.namespace_id()
+  if (!ctx->owns(active_worker_storage_space())
       || (operation != 'A' && operation != 'S' && operation != 'N'
           && operation != 'U' && operation != 'H' && operation != 'C'
           && operation != 'R')) {
@@ -316,7 +318,11 @@ int call_in_process_tx_state(char operation, transaction::ObTxDesc &view,
           ? service->rollback_tx(*native) : OB_ERR_UNEXPECTED;
     }
   }
-  if (!ret) { ret = view.sync_serialized_state_from(*native); }
+  if (!ret) {
+    ret = operation == 'U'
+        ? view.sync_reused_state_from(*native)
+        : view.sync_serialized_state_from(*native);
+  }
   THIS_WORKER.set_session(old_session);
   THIS_WORKER.set_timeout_ts(old_timeout);
   return ret;
@@ -327,7 +333,7 @@ int call_in_process_tx_read_snapshot(ObTxDesc &view,
   InProcessStorage *ctx = in_process_storage;
   const StorageSpaceHandle space = active_worker_storage_space();
   if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
-  if (!space.is_namespace() || ctx->ns != space.namespace_id()
+  if (!ctx->owns(space)
       || !ctx->writes->tx || ctx->writes->tx->get_tx_id() != view.get_tx_id()) {
     return OB_INVALID_ARGUMENT;
   }
@@ -354,7 +360,7 @@ int call_in_process_tx_create_savepoint(ObTxDesc &view, char operation,
   InProcessStorage *ctx = in_process_storage;
   const StorageSpaceHandle space = active_worker_storage_space();
   if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
-  if (!space.is_namespace() || ctx->ns != space.namespace_id()
+  if (!ctx->owns(space)
       || !ctx->writes->tx || ctx->writes->tx->get_tx_id() != view.get_tx_id()
       || (operation != 'P' && operation != 'J' && operation != 'I')) {
     return OB_INVALID_ARGUMENT;
@@ -386,7 +392,7 @@ int call_in_process_tx_rollback_savepoint(ObTxDesc &view, ObTxSEQ savepoint,
   InProcessStorage *ctx = in_process_storage;
   const StorageSpaceHandle space = active_worker_storage_space();
   if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
-  if (!space.is_namespace() || ctx->ns != space.namespace_id()
+  if (!ctx->owns(space)
       || !ctx->writes->tx || ctx->writes->tx->get_tx_id() != view.get_tx_id()
       || (policy != FAST_ROLLBACK && policy != ROLLBACK && policy != KEEP)) {
     return OB_INVALID_ARGUMENT;
@@ -410,7 +416,7 @@ int call_in_process_tx_named_savepoint(ObTxDesc &view, char operation,
   InProcessStorage *ctx = in_process_storage;
   const StorageSpaceHandle space = active_worker_storage_space();
   if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
-  if (!space.is_namespace() || ctx->ns != space.namespace_id()
+  if (!ctx->owns(space)
       || !ctx->writes->tx || ctx->writes->tx->get_tx_id() != view.get_tx_id()
       || (operation != 'F' && operation != 'L' && operation != 'D'
           && operation != 'K')) {
@@ -445,7 +451,7 @@ int call_in_process_tx_exec_result(ObTxDesc &view, char operation,
   InProcessStorage *ctx = in_process_storage;
   const StorageSpaceHandle space = active_worker_storage_space();
   if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
-  if (!space.is_namespace() || ctx->ns != space.namespace_id()
+  if (!ctx->owns(space)
       || !ctx->writes->tx || ctx->writes->tx->get_tx_id() != view.get_tx_id()
       || (operation != 'a' && operation != 'E')
       || (operation == 'a' && !input) || (operation == 'E' && !output)) {
@@ -625,7 +631,7 @@ int close_in_process_write(transaction::ObTxDesc &view, uint64_t handle)
   InProcessStorage *ctx = in_process_storage;
   const StorageSpaceHandle space = active_worker_storage_space();
   if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
-  if (!space.is_namespace() || ctx->ns != space.namespace_id() || handle == 0) {
+  if (!ctx->owns(space) || handle == 0) {
     return OB_INVALID_ARGUMENT;
   }
   const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
@@ -704,7 +710,7 @@ int open_in_process_storage(sql::ObSQLSessionInfo &session)
   }
   if (slot != nullptr) { return OB_ERR_UNEXPECTED; }
   const uint64_t ns = in_process_session_ns(&session);
-  if (ns <= 1) { return OB_INVALID_ARGUMENT; }
+  if (ns == 0) { return OB_INVALID_ARGUMENT; }
   auto owned = std::make_unique<SessionBinding>();
   owned->in_process = new (std::nothrow) InProcessStorage(ns);
   int ret = owned->in_process == nullptr ? OB_ALLOCATE_MEMORY_FAILED : OB_SUCCESS;
@@ -737,7 +743,13 @@ int import_in_process_shadow_tx(ObTxDesc &view)
   return ret;
 }
 StorageSessionScope::StorageSessionScope(sql::ObSQLSessionInfo *session, bool create) {
-  if (session && in_process_session_ns(session) > 1
+  const uint64_t session_ns = in_process_session_ns(session);
+  if (session_ns > 0 && in_process_serving_ns != session_ns) {
+    previous_serving_ns_ = in_process_serving_ns;
+    in_process_serving_ns = session_ns;
+    serving_switched_ = true;
+  }
+  if (session && session_ns > 0
       && (!in_process_storage || in_process_storage->sql_session != session)
       && (create || session->namespace_storage_binding())) {
     switched_ = true;
@@ -759,6 +771,9 @@ StorageSessionScope::~StorageSessionScope() {
   if (switched_) {
     in_process_storage = previous_in_process_;
   }
+  if (serving_switched_) {
+    in_process_serving_ns = previous_serving_ns_;
+  }
 }
 void StorageSessionScope::close(SessionBinding *&binding) {
   if (binding) {
@@ -768,7 +783,7 @@ void StorageSessionScope::close(SessionBinding *&binding) {
 }
 IndependentStorageScope::IndependentStorageScope()
     : previous_timeout_(THIS_WORKER.get_timeout_ts()) {
-  if (in_process_serving_ns > 1
+  if (in_process_serving_ns > 0
       && !in_process_storage) {
     // Background storage calls borrow a short-lived context for this namespace.
     if (previous_timeout_ <= 0) { THIS_WORKER.set_timeout_ts(INT64_MAX); }

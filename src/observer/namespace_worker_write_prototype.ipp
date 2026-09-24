@@ -162,7 +162,7 @@ int route_tablet_mds(StorageSpaceHandle storage_space,
   if (!storage_space.is_valid()) {
     return OB_INVALID_ARGUMENT;
   }
-  if (storage_space.is_global()) {
+  if (storage_space.is_global() || storage_space.is_physical_mds()) {
     return OB_SUCCESS;
   }
   const uint64_t ns = storage_space.namespace_id();
@@ -292,11 +292,13 @@ int worker_mds_storage_space(transaction::ObTxDataSourceType type,
                              int64_t buffer_size,
   StorageSpaceHandle &storage_space)
 {
-  storage_space = active_worker_storage_space();
+  storage_space = uses_physical_tablet_mds_scope()
+      ? StorageSpaceHandle::physical_mds_space()
+      : active_worker_storage_space();
   if (!storage_space.is_valid() || buffer == nullptr || buffer_size <= 0) {
     return OB_INVALID_ARGUMENT;
   }
-  if (storage_space.is_global()
+  if (storage_space.is_global() || storage_space.is_physical_mds()
       || type != transaction::ObTxDataSourceType::CREATE_TABLET_NEW_MDS) {
     return OB_SUCCESS;
   }

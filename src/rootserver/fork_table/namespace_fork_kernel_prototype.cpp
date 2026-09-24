@@ -2146,6 +2146,11 @@ int NamespaceForkKernelPrototype::ensure_tablet_impl(
         }
       }
       const ObTabletID data_tablet(encoded(db, items.front().local_tablet));
+      auto copy_physical_sequences = [&]() {
+        observer::namespace_worker_prototype::PhysicalTabletMdsScope physical_mds(true);
+        return ObTabletAutoincrementService::get_instance().copy_sequences_for_fork(
+            source_ids, ids, source_snapshot_versions, trans);
+      };
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(arg.init(ids, data_tablet, definitions, false, DATA_CURRENT_VERSION,
                                  empty_major, logical_birth, fork_infos))) {
@@ -2153,9 +2158,7 @@ int NamespaceForkKernelPrototype::ensure_tablet_impl(
       } else if (OB_FAIL(creator.add_create_tablet_arg(arg))) {
       } else if (FALSE_IT(creator.set_materialization_for_prototype())) {
       } else if (OB_FAIL(creator.execute())) {
-      } else if (OB_FAIL(ObTabletAutoincrementService::get_instance()
-                             .copy_sequences_for_fork(
-                                 source_ids, ids, source_snapshot_versions, trans))) {
+      } else if (OB_FAIL(copy_physical_sequences())) {
       } else if (OB_FAIL(ObTabletMappingTableOperator::batch_update(trans, mappings))) {
       } else {
         failure_stage = "exceptions";

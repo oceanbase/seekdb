@@ -346,9 +346,13 @@ int ObTabletCreator::execute()
         if (ctx.is_timeouted()) {
           ret = OB_TIMEOUT;
           LOG_WARN("already timeout", KR(ret), K(ctx));
-        } else if (OB_FAIL(query::ObInnerSQLConnectionAccess::register_multi_data_source(
-                       conn, transaction::ObTxDataSourceType::CREATE_TABLET_NEW_MDS,
-                       buf, buf_len))) {
+        } else {
+          observer::namespace_worker_prototype::PhysicalTabletMdsScope physical_mds(
+              batch_arg->batch_arg_.create_type_
+                  == storage::ObTabletMdsUserDataType::PROTOTYPE_MATERIALIZE_TABLET);
+          ret = query::ObInnerSQLConnectionAccess::register_multi_data_source(
+              conn, transaction::ObTxDataSourceType::CREATE_TABLET_NEW_MDS,
+              buf, buf_len);
         }
         int64_t end_time = ObTimeUtility::current_time();
         LOG_INFO("generate create arg", KR(ret), K(buf_len), K(batch_arg->batch_arg_.tablets_.count()),
@@ -357,7 +361,7 @@ int ObTabletCreator::execute()
         // CREATE_TABLET_NEW_MDS with the routed physical tablets.
         if (OB_SUCC(ret) && batch_arg->batch_arg_.set_binding_info_outside_create()
             && observer::namespace_worker_prototype::in_process_session_ns(
-                query::ObInnerSQLConnectionAccess::get_session(conn)) <= 1) {
+                query::ObInnerSQLConnectionAccess::get_session(conn)) == 0) {
           const int64_t start_time = ObTimeUtility::current_time();
           if (OB_FAIL(ObTabletBindingMdsHelper::modify_tablet_binding_for_create(batch_arg->batch_arg_, ctx.get_abs_timeout(), trans_))) {
           }

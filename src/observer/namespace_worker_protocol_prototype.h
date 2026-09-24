@@ -35,7 +35,7 @@ struct RequestTag { uint64_t slot = 0, generation = 0; };
 class StorageSpaceHandle final
 {
 public:
-  enum class Scope : uint8_t { INVALID, NAMESPACE, GLOBAL };
+  enum class Scope : uint8_t { INVALID, NAMESPACE, GLOBAL, PHYSICAL_MDS };
   StorageSpaceHandle() = default;
   static StorageSpaceHandle namespace_space(uint64_t namespace_id)
   {
@@ -46,9 +46,14 @@ public:
   {
     return StorageSpaceHandle(Scope::GLOBAL, 0);
   }
+  static StorageSpaceHandle physical_mds_space()
+  {
+    return StorageSpaceHandle(Scope::PHYSICAL_MDS, 0);
+  }
   bool is_valid() const { return scope_ != Scope::INVALID; }
   bool is_namespace() const { return scope_ == Scope::NAMESPACE; }
   bool is_global() const { return scope_ == Scope::GLOBAL; }
+  bool is_physical_mds() const { return scope_ == Scope::PHYSICAL_MDS; }
   uint64_t namespace_id() const { return is_namespace() ? value_ : 0; }
   bool operator==(const StorageSpaceHandle &other) const
   {
@@ -74,6 +79,23 @@ public:
 inline bool uses_global_storage_scope()
 {
   return worker_global_storage_scope_depth != 0;
+}
+inline thread_local uint64_t worker_physical_mds_scope_depth = 0;
+class PhysicalTabletMdsScope final
+{
+public:
+  explicit PhysicalTabletMdsScope(bool active) : active_(active)
+  { if (active_) { ++worker_physical_mds_scope_depth; } }
+  ~PhysicalTabletMdsScope()
+  { if (active_) { --worker_physical_mds_scope_depth; } }
+  PhysicalTabletMdsScope(const PhysicalTabletMdsScope &) = delete;
+  PhysicalTabletMdsScope &operator=(const PhysicalTabletMdsScope &) = delete;
+private:
+  bool active_;
+};
+inline bool uses_physical_tablet_mds_scope()
+{
+  return worker_physical_mds_scope_depth != 0;
 }
 // The namespace this thread currently serves SQL for, published at
 // command/query entry by InProcessServingScope.
@@ -121,7 +143,7 @@ inline bool can_access_namespace_control_database()
 // can resolve and ship.
 inline bool serves_namespace_schema()
 {
-  return serves_forked_schema();
+  return serving_namespace() > 0;
 }
 // Native inner SQL uses the target namespace carried by its SQL client.
 // The shared transaction service provides the clock for a fork snapshot.
@@ -150,6 +172,8 @@ public:
   void close(SessionBinding *&binding);
 private:
   InProcessStorage *previous_in_process_ = nullptr;
+  uint64_t previous_serving_ns_ = 0;
+  bool serving_switched_ = false;
   bool switched_ = false;
   int error_ = common::OB_SUCCESS;
   StorageSessionScope(const StorageSessionScope &) = delete;

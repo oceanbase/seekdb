@@ -16,7 +16,6 @@ public:
     if (!param.op_ || !param.output_exprs_
         || param.output_exprs_->count() != param.column_ids_.count()
         || (param.aggregate_exprs_ && !param.aggregate_exprs_->empty())
-        || (flags.is_filter_pushdown() && !param.op_filters_)
         || flags.is_aggregate_pushdown() || flags.is_group_by_pushdown()) {
       fprintf(stderr,
           "PROTOTYPE_V22_SCAN_UNSUPPORTED table=%llu columns=%lld outputs=%lld "

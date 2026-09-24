@@ -406,6 +406,15 @@ int ObTxDesc::sync_serialized_state_from(const ObTxDesc &source)
   return OB_SUCCESS;
 }
 
+int ObTxDesc::sync_reused_state_from(const ObTxDesc &source)
+{
+  if (this == &source || source.tx_id_.is_valid() || source.state_ != State::IDLE) {
+    return OB_INVALID_ARGUMENT;
+  }
+  reset();
+  return sync_serialized_state_from(source);
+}
+
 ObTxDesc::ObTxDesc()
   : trace_info_(),
     data_version_(0),

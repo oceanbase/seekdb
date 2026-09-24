@@ -45,7 +45,7 @@ struct EngineScan {
     param.limit_param_.offset_ = 0;
     const int64_t count = request.column_ids_.count();
     if (count > OB_MAX_COLUMN_NUMBER) { return OB_NOT_SUPPORTED; }
-    bool logical_tablet_matches = false;
+    bool logical_tablet_matches = is_virtual_table(logical_table_id);
     for (int64_t i = 0; i < scan_schema->logical_tablets.count(); ++i) {
       if (scan_schema->logical_tablets.at(i).id() == logical_tablet_id) {
         logical_tablet_matches = true;
@@ -63,11 +63,11 @@ struct EngineScan {
     }
     schema = scan_schema->routed;
     uint64_t tablet_id = logical_tablet_id;
-    if (schema && namespace_local) {
+    if (schema && namespace_local && !is_virtual_table(logical_table_id)) {
       ret = NamespaceForkKernelPrototype::storage_object_id(
           ns, logical_tablet_id, tablet_id);
     }
-    bool storage_tablet_matches = false;
+    bool storage_tablet_matches = is_virtual_table(logical_table_id);
     if (OB_SUCC(ret) && scan_schema) {
       for (int64_t i = 0; i < scan_schema->storage_tablets.count(); ++i) {
         if (scan_schema->storage_tablets.at(i).id() == tablet_id) {

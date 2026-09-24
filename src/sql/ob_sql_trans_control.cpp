@@ -506,7 +506,7 @@ int ObSqlTransControl::start_stmt(ObExecContext &exec_ctx)
 {
   int ret = OB_SUCCESS;
   observer::namespace_worker_prototype::StorageSessionScope worker_storage_scope(
-      observer::namespace_worker_prototype::serving_namespace() > 1 ? GET_MY_SESSION(exec_ctx) : nullptr);
+      observer::namespace_worker_prototype::serving_namespace() > 0 ? GET_MY_SESSION(exec_ctx) : nullptr);
   if (worker_storage_scope.error()) { return worker_storage_scope.error(); }
   data_plane::begin_lock_wait_request();
   ObSQLSessionInfo *session = GET_MY_SESSION(exec_ctx);

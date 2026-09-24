@@ -58,7 +58,7 @@ public:
       sql::ObSQLSessionInfo *borrowed = nullptr;
       auto *session = tx_owner_session(tx, borrowed);
       if (session != nullptr && session->get_tx_desc() == &tx
-          && in_process_session_ns(session) > 1) {
+          && in_process_session_ns(session) > 0) {
         StorageSessionScope scope(session, false);
         ret = scope.error() ? scope.error() : release_in_process_tx(tx);
       }

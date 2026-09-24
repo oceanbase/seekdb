@@ -41,7 +41,7 @@ transaction::tablelock::ObIInnerConnectionLockRuntime *inprocess_lock_runtime(
     common::sqlclient::ObISQLConnection *conn)
 {
   auto *inner = static_cast<ObInnerSQLConnection *>(conn);
-  return inner != nullptr && in_process_session_ns(&inner->get_session()) > 1
+  return inner != nullptr && in_process_session_ns(&inner->get_session()) > 0
       ? static_cast<transaction::tablelock::ObIInnerConnectionLockRuntime *>(
             &inprocess_inner_locks)
       : share::server_service<transaction::tablelock::ObIInnerConnectionLockRuntime>();
@@ -49,28 +49,28 @@ transaction::tablelock::ObIInnerConnectionLockRuntime *inprocess_lock_runtime(
 common::ObITabletScan *effective_tablet_scan(sql::ObSQLSessionInfo *session,
                                              common::ObITabletScan *fallback)
 {
-  return in_process_session_ns(session) > 1
+  return in_process_session_ns(session) > 0
       ? static_cast<common::ObITabletScan *>(&inprocess_scan) : fallback;
 }
 common::ObILobReadService *effective_lob_read_service(sql::ObSQLSessionInfo *session,
                                                       common::ObILobReadService *fallback)
 {
-  return in_process_session_ns(session) > 1 ? &inprocess_lob_read : fallback;
+  return in_process_session_ns(session) > 0 ? &inprocess_lob_read : fallback;
 }
 data_plane::ObIDmlService *effective_dml_service(sql::ObSQLSessionInfo *session,
                                                  data_plane::ObIDmlService *fallback)
 {
-  return in_process_session_ns(session) > 1 ? &inprocess_dml : fallback;
+  return in_process_session_ns(session) > 0 ? &inprocess_dml : fallback;
 }
 data_plane::ObIWriteContextService *effective_write_context_service(
     sql::ObSQLSessionInfo *session, data_plane::ObIWriteContextService *fallback)
 {
-  return in_process_session_ns(session) > 1 ? &inprocess_write_context : fallback;
+  return in_process_session_ns(session) > 0 ? &inprocess_write_context : fallback;
 }
 data_plane::ObITransactionService *effective_transaction_service(
     sql::ObSQLSessionInfo *session, data_plane::ObITransactionService *fallback)
 {
-  return in_process_session_ns(session) > 1 ? &inprocess_transactions : fallback;
+  return in_process_session_ns(session) > 0 ? &inprocess_transactions : fallback;
 }
 sql::ObPlanCache *effective_plan_cache(sql::ObSQLSessionInfo *session,
                                        sql::ObPlanCache *fallback)
@@ -275,7 +275,7 @@ InProcessRangeService inprocess_ranges;
 data_plane::ObIRangeService *effective_range_service(sql::ObSQLSessionInfo *session,
                                                      data_plane::ObIRangeService *fallback)
 {
-  return in_process_session_ns(session) > 1 ? &inprocess_ranges : fallback;
+  return in_process_session_ns(session) > 0 ? &inprocess_ranges : fallback;
 }
 struct InProcessNamespaceServices {
   explicit InProcessNamespaceServices(uint64_t ns) : tablet_autoincrement(ns) {}

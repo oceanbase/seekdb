@@ -52,8 +52,9 @@ struct EngineWrite {
       auto logical = std::make_unique<ObTableSchema>(&allocator);
       if (OB_FAIL(logical->assign(*request.materialization_schemas.at(i)))) { return ret; }
       auto routed = std::make_unique<ObTableSchema>(&allocator);
-      int schema_ret = NamespaceForkKernelPrototype::make_storage_schema(
-          ns, *logical, *routed);
+      int schema_ret = storage_space.is_global()
+          ? routed->assign(*logical)
+          : NamespaceForkKernelPrototype::make_storage_schema(ns, *logical, *routed);
       if (schema_ret != OB_SUCCESS) { return schema_ret; }
       if (OB_FAIL(materialization_schemas.push_back(routed.get()))) { return ret; }
       logical_materialization_schemas.push_back(std::move(logical));
@@ -78,8 +79,9 @@ struct EngineWrite {
                 && logical_schema.get_schema_version() != spec.schema_version_)) {
       ret = OB_INVALID_ARGUMENT;
     } else {
-      ret = NamespaceForkKernelPrototype::make_storage_schema(
-          ns, logical_schema, routed_schema);
+      ret = storage_space.is_global()
+          ? routed_schema.assign(logical_schema)
+          : NamespaceForkKernelPrototype::make_storage_schema(ns, logical_schema, routed_schema);
       if (!ret) { schema = &routed_schema; }
     }
     if (!ret) {
@@ -106,7 +108,8 @@ struct EngineWrite {
     logical_tablets.reserve(schema_tablets.count());
     for (int64_t i = 0; OB_SUCC(ret) && i < schema_tablets.count(); ++i) {
       uint64_t logical_tablet_id = schema_tablets.at(i).id();
-      if (NamespaceForkKernelPrototype::is_encoded_id(logical_tablet_id)) {
+      if (storage_space.is_namespace()
+          && NamespaceForkKernelPrototype::is_encoded_id(logical_tablet_id)) {
         ret = NamespaceForkKernelPrototype::local_object_id(
             ns, logical_tablet_id, logical_tablet_id);
       }
@@ -304,7 +307,8 @@ struct EngineWrites {
               uint64_t &handle) {
     handle = 0;
     if (!tx || tx->get_tx_id() != view.get_tx_id()
-        || request.storage_space != storage_space) { return OB_INVALID_ARGUMENT; }
+        || (request.storage_space != storage_space
+            && !request.storage_space.is_global())) { return OB_INVALID_ARGUMENT; }
     if (writes.size() >= 32) { return OB_SIZE_OVERFLOW; }
     auto prepared = std::make_unique<EngineWrite>();
     int ret = prepared->prepare(request, *tx);
@@ -347,7 +351,7 @@ sql::ObSQLSessionInfo *tx_owner_session(transaction::ObTxDesc &tx,
   if (OB_NOT_NULL(mgr)
       && OB_SUCCESS == mgr->get_session(tx.get_session_id(), resolved)
       && OB_NOT_NULL(resolved) && resolved->get_tx_desc() == &tx
-      && in_process_session_ns(resolved) > 1) {
+      && in_process_session_ns(resolved) > 0) {
     borrowed = resolved;
     return resolved;
   }

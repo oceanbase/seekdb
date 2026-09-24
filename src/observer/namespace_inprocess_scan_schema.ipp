@@ -154,8 +154,10 @@ int copy_scan_schema(uint64_t ns, bool namespace_local, const ObTableSchema &sou
   built->logical = new (buf) ObTableSchema(&built->alloc);
   int ret = built->logical->assign(source);
   if (ret) { return ret; }
-  if (OB_FAIL(built->logical->get_tablet_ids(built->logical_tablets))) { return ret; }
-  if (namespace_local) {
+  const bool has_physical_tablets = !is_virtual_table(source.get_table_id());
+  if (has_physical_tablets
+      && OB_FAIL(built->logical->get_tablet_ids(built->logical_tablets))) { return ret; }
+  if (namespace_local && has_physical_tablets) {
     buf = built->alloc.alloc(sizeof(ObTableSchema));
     if (!buf) { return OB_ALLOCATE_MEMORY_FAILED; }
     built->routed = new (buf) ObTableSchema(&built->alloc);
@@ -164,7 +166,8 @@ int copy_scan_schema(uint64_t ns, bool namespace_local, const ObTableSchema &sou
   } else {
     built->routed = built->logical;
   }
-  if (OB_FAIL(built->routed->get_tablet_ids(built->storage_tablets))) { return ret; }
+  if (has_physical_tablets
+      && OB_FAIL(built->routed->get_tablet_ids(built->storage_tablets))) { return ret; }
   entry = std::move(built);
   return OB_SUCCESS;
 }
