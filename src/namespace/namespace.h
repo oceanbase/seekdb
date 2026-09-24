@@ -8,9 +8,9 @@
 //   - NamespaceRuntime: per-ns service group holder (pure compute layer)
 //   - NamespaceRegistry: the single global registry
 //
-// Dependency direction is one-way: namespace -> observer -> sql -> storage.
-// Lower layers (sql/storage/share) must NOT depend on this package; that is
-// enforced by the visibility whitelist in BUILD.bazel.
+// Observer, SQL, and the rootserver fork translator may interpret namespace
+// identity here. Storage and share remain namespace-blind; BUILD.bazel limits
+// direct users of this package.
 //
 // This layer depends on nothing inside src/ (STL only) so it can sit at the
 // bottom of the layering rules. Error codes are plain ints; callers map them
@@ -23,6 +23,24 @@ namespace oceanbase
 {
 namespace ns
 {
+
+// Bounded translation from a namespace-local object id to the engine's
+// 64-bit key. Namespace 1 keeps its original unencoded ids.
+struct NamespaceObjectKey
+{
+  static constexpr uint64_t MARK = 1ULL << 62;
+  uint64_t namespace_id;
+  uint64_t local_id;
+  bool is_valid() const { return namespace_id > 0 && namespace_id < (1ULL << 30)
+      && local_id > 0 && local_id < (1ULL << 32); }
+  static bool is_encoded(uint64_t id) {
+    return id != UINT64_MAX && (id & (3ULL << 62)) == MARK;
+  }
+  static uint64_t encoded_namespace(uint64_t id) { return (id & ~MARK) >> 32; }
+  static uint64_t local_part(uint64_t id) { return id & 0xffffffffULL; }
+  uint64_t storage_id() const { return namespace_id == 1 ? local_id
+      : MARK | (namespace_id << 32) | local_id; }
+};
 
 // Identity, lineage and storage root of one namespace. Pure metadata.
 class Namespace final

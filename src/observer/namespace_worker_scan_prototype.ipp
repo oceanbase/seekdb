@@ -29,7 +29,7 @@ int storage_schema(StorageSpaceHandle storage_space, uint64_t id,
       int ret = NamespaceForkKernelPrototype::local_object_id(ns, id, local_id);
       return ret ? ret : NamespaceForkKernelPrototype::schema_by_id(id, schema);
     }
-    const NamespaceObjectKey key{ns, id};
+    const ::oceanbase::ns::NamespaceObjectKey key{ns, id};
     return key.is_valid()
         ? NamespaceForkKernelPrototype::schema_by_id(key.storage_id(), schema)
         : OB_INVALID_ARGUMENT;

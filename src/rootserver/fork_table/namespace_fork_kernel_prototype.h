@@ -19,17 +19,6 @@ private:
   NamespaceSourceDropGuard(const NamespaceSourceDropGuard &) = delete;
   NamespaceSourceDropGuard &operator=(const NamespaceSourceDropGuard &) = delete;
 };
-// Bounded adapter for the prototype's existing 64-bit storage/cache/lock keys.
-// Namespace 1 owns the original engine objects; other namespaces keep the same local ids.
-struct NamespaceObjectKey
-{
-  uint64_t namespace_id;
-  uint64_t local_id;
-  bool is_valid() const { return namespace_id > 0 && namespace_id < (1ULL << 30)
-      && local_id > 0 && local_id < (1ULL << 32); }
-  uint64_t storage_id() const { return namespace_id == 1 ? local_id
-      : (1ULL << 62) | (namespace_id << 32) | local_id; }
-};
 class NamespaceForkKernelPrototype final
 {
 public:

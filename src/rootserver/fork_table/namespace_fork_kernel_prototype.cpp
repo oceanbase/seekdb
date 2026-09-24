@@ -41,14 +41,12 @@
 
 namespace oceanbase {
 namespace storage {
+using ::oceanbase::ns::NamespaceObjectKey;
 using namespace common;
 using namespace share;
 using namespace share::schema;
 using namespace transaction::tablelock;
 namespace {
-// Encodes (owner, local id): owner is the V2 database or V5 namespace.
-// Both parts are checked; ids with the marker are reserved for this isolated experiment.
-constexpr uint64_t ID_MARK = 1ULL << 62;
 constexpr size_t FANOUT = 8;
 const char *ROOTS = "__fork_proto_meta.roots";
 const char *PAGES = "__fork_proto_meta.pages";
@@ -164,8 +162,8 @@ int64_t cap_min(int64_t a, int64_t b) { return a == 0 ? b : b == 0 ? a : std::mi
 uint64_t encoded(uint64_t db, uint64_t local) {
   return NamespaceObjectKey{db, local}.storage_id();
 }
-uint64_t database_of(uint64_t id) { return (id & ~ID_MARK) >> 32; }
-uint64_t local_of(uint64_t id) { return id & 0xffffffffULL; }
+uint64_t database_of(uint64_t id) { return NamespaceObjectKey::encoded_namespace(id); }
+uint64_t local_of(uint64_t id) { return NamespaceObjectKey::local_part(id); }
 std::string key_of(uint64_t id) {
   char buf[32]; snprintf(buf, sizeof(buf), "%020lu", id); return buf;
 }
@@ -1524,7 +1522,7 @@ int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets() {
   return ret;
 }
 bool NamespaceForkKernelPrototype::is_encoded_id(uint64_t id) {
-  return id != OB_INVALID_ID && (id & (3ULL << 62)) == ID_MARK;
+  return NamespaceObjectKey::is_encoded(id);
 }
 uint64_t NamespaceForkKernelPrototype::encode_id(uint64_t namespace_id, uint64_t local_id) {
   return NamespaceObjectKey{namespace_id, local_id}.storage_id();
