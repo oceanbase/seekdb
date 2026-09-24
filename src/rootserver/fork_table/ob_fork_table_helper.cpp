@@ -602,17 +602,14 @@ int ObForkTableHelper::get_tablet_handle_(
   inherited_cap = 0;
 
   const uint64_t namespace_id = sql_proxy_.target_namespace();
-  if (namespace_id > 1) {
-    uint64_t storage_id = OB_INVALID_ID;
-    if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
-            namespace_id, tablet_id.id(), storage_id))) {
-      return ret;
-    }
-    const ObTabletID logical(storage_id);
-    if (OB_FAIL(storage::NamespaceForkKernelPrototype::resolve_read_tablet(
-            logical, physical_tablet_id, inherited_cap))) {
-      return ret;
-    }
+  uint64_t storage_id = OB_INVALID_ID;
+  if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
+          namespace_id, tablet_id.id(), storage_id))) {
+    return ret;
+  }
+  if (OB_FAIL(storage::NamespaceForkKernelPrototype::resolve_read_tablet(
+          ObTabletID(storage_id), physical_tablet_id, inherited_cap))) {
+    return ret;
   }
 
   SERVER_MODULE_SCOPE {
