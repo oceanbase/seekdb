@@ -169,7 +169,7 @@ int load_from_config(
   common::ObString value;
   common::ObArenaAllocator allocator(ObModIds::OB_TEMP_VARIABLES);
   server_info.reset();
-  if (OB_FAIL(config_manager.get_storage().get_config_value(
+  if (OB_FAIL(config_manager.get_config_value(
       SERVER_ROLE_STATE_CONFIG, value, allocator))) {
     if (OB_ENTRY_NOT_EXIST != ret) {
       LOG_WARN("failed to load server role state", KR(ret));

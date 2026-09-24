@@ -19,6 +19,7 @@ name = "sql_nio"
 crate-type = ["staticlib", "rlib"]
 
 [dependencies]
+seekdb-auto-config = { path = "../auto-config" }
 # mio = epoll (Linux) / kqueue (macOS) / IOCP (Windows), no async runtime.
 # os-ext: mio::windows::NamedPipe for the per-reactor pending-pipe acceptor.
 mio = { version = "1", features = ["os-poll", "net", "os-ext"] }

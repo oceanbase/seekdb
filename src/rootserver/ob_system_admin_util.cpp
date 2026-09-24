@@ -126,7 +126,10 @@ int ObAdminSetConfig::update_sys_config_(const obcall::ObAdminSetConfigItem &ite
     ret = OB_INVALID_ARGUMENT;
   } else {
     if (OB_SUCC(ret) && OB_NOT_NULL(GCTX.config_mgr_)) {
-      if (OB_FAIL(GCTX.config_mgr_->save_config(
+      if (item.is_reset_) {
+        if (OB_FAIL(GCTX.config_mgr_->reset_config(item.name_.ptr()))) {
+        }
+      } else if (OB_FAIL(GCTX.config_mgr_->save_config(
                     item.name_.ptr(), item.value_.ptr()))) {
       }
     }
@@ -134,7 +137,15 @@ int ObAdminSetConfig::update_sys_config_(const obcall::ObAdminSetConfigItem &ite
   // try update local memory and trigger remote server to refresh this change
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(GCTX.config_mgr_->got_version())) {
+    const int apply_ret = ret;
+    LOG_ERROR("instance parameter saved but could not be applied", K(apply_ret), K(item));
+    ret = OB_INVALID_CONFIG;
+    LOG_USER_ERROR(OB_INVALID_CONFIG, "parameter was saved but could not be applied");
   } else if (OB_FAIL(GCTX.config_mgr_->reload_config())) {
+    const int apply_ret = ret;
+    LOG_ERROR("instance parameter saved but reload failed", K(apply_ret), K(item));
+    ret = OB_INVALID_CONFIG;
+    LOG_USER_ERROR(OB_INVALID_CONFIG, "parameter was saved but could not be applied");
   } else {
     LOG_INFO("got new sys config", K(item));
   }

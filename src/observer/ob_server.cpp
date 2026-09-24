@@ -1711,7 +1711,7 @@ int ObServer::init_config(const ObServerOptions &opts)
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(FileDirectoryUtils::create_full_path(meta_db_dir))) {
   } else if (OB_FAIL(meta_db_pool_.init(abs_meta_db_path))) {
-  } else if (OB_FAIL(config_mgr_.init(&meta_db_pool_))) {
+  } else if (OB_FAIL(config_mgr_.init())) {
   } else if (OB_FAIL(config_mgr_.got_version())) {
   } else if (FALSE_IT(base_version = config_mgr_.get_current_version())) {
   } else if (OB_FAIL(DATA_VERSION_MGR.init())) {

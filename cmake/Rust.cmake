@@ -73,12 +73,17 @@ endif()
 
 # Sources whose change should retrigger a rebuild of the staticlib.
 file(GLOB_RECURSE _rust_sources CONFIGURE_DEPENDS "${RUST_CRATE_DIR}/src/*.rs")
+file(GLOB_RECURSE _auto_config_sources CONFIGURE_DEPENDS
+  "${RUST_WORKSPACE_DIR}/auto-config/src/*.rs")
+list(APPEND _rust_sources ${_auto_config_sources}
+  "${RUST_WORKSPACE_DIR}/auto-config/Cargo.toml")
 list(APPEND _rust_sources
   "${RUST_WORKSPACE_DIR}/Cargo.toml"
   "${RUST_WORKSPACE_DIR}/rust-toolchain.toml"
   "${RUST_CRATE_DIR}/Cargo.toml"
   "${RUST_CRATE_DIR}/build.rs"
-  "${RUST_CRATE_DIR}/cbindgen.toml")
+  "${RUST_CRATE_DIR}/cbindgen.toml"
+  "${RUST_CRATE_DIR}/auto-config-cbindgen.toml")
 
 # CC/AR: cargo inherits CMake's PATH but not its compiler variables, and
 # `ring` (rustls's crypto backend) compiles C through the `cc` crate. Pin it
@@ -151,7 +156,7 @@ endif()
 
 add_custom_command(
   OUTPUT "${RUST_STATICLIB}"
-  BYPRODUCTS "${RUST_INCLUDE_DIR}/nio.h"
+  BYPRODUCTS "${RUST_INCLUDE_DIR}/nio.h" "${RUST_INCLUDE_DIR}/auto_config.h"
   COMMAND "${CMAKE_COMMAND}" -E env ${_rust_build_env}
           "${CARGO}" build ${_cargo_profile_flag} ${_cargo_target_args}
           --manifest-path "${RUST_WORKSPACE_DIR}/Cargo.toml"

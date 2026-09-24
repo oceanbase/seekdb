@@ -33,7 +33,7 @@ public:
   ObConfigManager(ObServerConfig &server_config, ObReloadConfig &reload_config);
   virtual ~ObConfigManager();
 
-  int init(share::ObSQLiteConnectionPool *pool);
+  int init();
   void stop();
   void wait();
   void destroy();
@@ -49,7 +49,7 @@ public:
 
   ObServerConfig &get_config(void);
 
-  ObConfigStorage &get_storage() { return storage_; }
+  int get_config_value(const char *name, ObString &value, ObIAllocator &allocator);
 
   int update_local();
   virtual int got_version();
@@ -58,6 +58,7 @@ public:
   int save_config(
       const char *config_name,
       const char *value);
+  int reset_config(const char *config_name);
   void enable_static_effect() { enable_static_effect_ = true; }
 private:
   // whitout lock, only used inner
