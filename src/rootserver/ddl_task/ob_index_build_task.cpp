@@ -47,12 +47,9 @@ int ObIndexSSTableBuildTask::set_addition_info(const ObIArray<ObTabletID> &index
 int ObIndexSSTableBuildTask::process()
 {
   int ret = OB_SUCCESS;
-  ObMultiVersionSchemaService *schema_service = context_.schema_service_ != nullptr
-      ? context_.schema_service_ : context_.namespace_id_ == 1 ? &ObMultiVersionSchemaService::get_instance() : nullptr;
-  ObMySQLProxy *sql_proxy = context_.sql_proxy_ != nullptr
-      ? context_.sql_proxy_ : context_.namespace_id_ == 1 ? GCTX.sql_proxy_ : nullptr;
-  ObMySQLProxy *ddl_proxy = context_.ddl_proxy_ != nullptr
-      ? context_.ddl_proxy_ : context_.namespace_id_ == 1 ? GCTX.ddl_sql_proxy_ : nullptr;
+  ObMultiVersionSchemaService *schema_service = context_.schema_service_;
+  ObMySQLProxy *sql_proxy = context_.sql_proxy_;
+  ObMySQLProxy *ddl_proxy = context_.ddl_proxy_;
   ObArenaAllocator arena("index_sst_build");
   ObTraceIdGuard trace_id_guard(trace_id_);
   ObDDLEventInfo ddl_event_info(GCTX.self_addr());

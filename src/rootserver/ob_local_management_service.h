@@ -118,6 +118,7 @@ public:
                       common::ObConfigManager &config_mgr,
                       const common::ObAddr &self,
                       common::ObMySQLProxy &sql_proxy,
+                      common::ObMySQLProxy &session_sql_proxy,
                       share::schema::ObMultiVersionSchemaService &schema_service);
   void set_ddl_local_runtime(ObIRootserverLocalRuntime *runtime) { ddl_local_runtime_ = runtime; }
   ObIRootserverLocalRuntime *ddl_local_runtime() const { return ddl_local_runtime_; }

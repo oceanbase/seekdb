@@ -463,6 +463,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
           server.get_ob_service()))) {
   } else if (OB_FAIL(services->root_commands->init_sql_worker(
           GCONF, *GCTX.config_mgr_, server.get_self(), *services->sql_proxy,
+          server.get_mysql_proxy(),
           *services->schema_service))) {
   } else {
     stage = "done";
@@ -542,6 +543,7 @@ int inprocess_refresh_schema(uint64_t ns)
     rootserver::ObDDLTaskContext context;
     context.namespace_id_ = ns;
     context.sql_proxy_ = services.sql_proxy;
+    context.session_sql_proxy_ = GCTX.sql_proxy_;
     context.ddl_proxy_ = services.ddl_proxy;
     context.schema_service_ = services.schema_service;
     context.root_service_ = services.root_commands;

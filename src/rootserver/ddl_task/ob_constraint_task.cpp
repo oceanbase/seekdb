@@ -60,11 +60,12 @@ int ObCheckConstraintValidationTask::process()
   int tmp_ret = OB_SUCCESS;
   ObTabletID unused_tablet_id;
   ObDDLTaskKey task_key(target_object_id_, schema_version_);
-  ObMultiVersionSchemaService &schema_service = local_management_service_ != nullptr
-      ? local_management_service_->get_schema_service() : ObMultiVersionSchemaService::get_instance();
   ObMySQLProxy *ddl_proxy = local_management_service_ != nullptr
-      ? local_management_service_->ddl_sql_proxy() : GCTX.ddl_sql_proxy_;
-  if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
+      ? local_management_service_->ddl_sql_proxy() : nullptr;
+  if (OB_ISNULL(local_management_service_) || OB_ISNULL(ddl_proxy)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("constraint task services are unavailable", KR(ret));
+  } else if (OB_FAIL(local_management_service_->get_schema_service().get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( data_table_id_, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
@@ -237,9 +238,10 @@ int ObForeignKeyConstraintValidationTask::check_fk_by_send_sql() const
   const ObTableSchema *parent_table_schema = nullptr;
   const ObDatabaseSchema *parent_database_schema = nullptr;
   ObForeignKeyInfo fk_info;
-  ObMultiVersionSchemaService &schema_service = local_management_service_ != nullptr
-      ? local_management_service_->get_schema_service() : ObMultiVersionSchemaService::get_instance();
-  if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
+  if (OB_ISNULL(local_management_service_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("constraint task root service is unavailable", KR(ret));
+  } else if (OB_FAIL(local_management_service_->get_schema_service().get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( data_table_id_, data_table_schema))) {
   } else if (OB_ISNULL(data_table_schema) || data_table_schema->is_in_recyclebin()) {
     ret = OB_TABLE_NOT_EXIST;
@@ -424,7 +426,7 @@ int ObForeignKeyConstraintValidationTask::check_fk_constraint_data_valid(
       if (OB_SUCC(ret)) {
         ObCommonSqlProxy *sql_proxy = nullptr;
         sql_proxy = local_management_service_ != nullptr
-            ? &local_management_service_->get_sql_proxy() : GCTX.sql_proxy_;
+            ? &local_management_service_->get_sql_proxy() : nullptr;
 
         DEBUG_SYNC(BEFORE_CHECK_FK_DATA_VALID_SEND_SQL);
 
@@ -767,7 +769,7 @@ int ObConstraintTask::send_check_constraint_request()
                                         trace_id_, task_id_,
                                         ObDDLType::DDL_ADD_NOT_NULL_COLUMN == task_type_,
                                         alter_table_arg_.alter_constraint_type_,
-                                        context_.namespace_id_ > 1 ? local_management_service_ : nullptr);
+                                        local_management_service_);
     if (OB_ISNULL(local_management_service_)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", KR(ret), KP(local_management_service_));
@@ -788,7 +790,7 @@ int ObConstraintTask::send_fk_constraint_request()
     LOG_WARN("ObConstraintTask has not been inited", K(ret));
   } else {
     ObForeignKeyConstraintValidationTask task(object_id_, target_object_id_, schema_version_, trace_id_, task_id_,
-                                             context_.namespace_id_ > 1 ? local_management_service_ : nullptr);
+                                             local_management_service_);
     if (OB_ISNULL(local_management_service_)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", KR(ret), KP(local_management_service_));

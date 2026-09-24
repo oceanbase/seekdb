@@ -216,8 +216,7 @@ int ObDDLRedefinitionSSTableBuildTask::process()
           data_format_version_, snapshot_version_, schema_version_,
           dest_table_id_, false /* is_offline_index_rebuild */);
       const int64_t DDL_INNER_SQL_EXECUTE_TIMEOUT = ObDDLUtil::calc_inner_sql_execute_timeout();
-      user_sql_proxy = local_management_service_->ddl_sql_proxy() != nullptr
-          ? local_management_service_->ddl_sql_proxy() : GCTX.ddl_sql_proxy_;
+      user_sql_proxy = local_management_service_->ddl_sql_proxy();
       add_event_info(ret, "ddl redefinition sstable build task generate innersql");
       LOG_INFO("execute sql" , K(sql_string), K(data_table_id_),
               "is_strict_mode", is_strict_mode(sql_mode_), K(sql_mode_), K(parallelism_), K(DDL_INNER_SQL_EXECUTE_TIMEOUT), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
@@ -228,6 +227,9 @@ int ObDDLRedefinitionSSTableBuildTask::process()
       } else {
         if (OB_FAIL(DDL_SIM(task_id_, REDEF_SSTABLE_BULD_TASK_PROCESS_FAILED))) {
           LOG_WARN("ddl sim failure", K(ret), K(task_id_));
+        } else if (OB_ISNULL(user_sql_proxy)) {
+          ret = OB_NOT_INIT;
+          LOG_WARN("DDL SQL proxy is unavailable", KR(ret));
         } else if (OB_FAIL(user_sql_proxy->write(sql_string.ptr(), affected_rows,
                                                  &session_param))) {
           LOG_WARN("fail to execute local build sql", K(ret));
@@ -334,7 +336,7 @@ int ObDDLRedefinitionTask::check_table_empty(const ObDDLTaskStatus next_task_sta
       ObCheckConstraintValidationTask task(object_id_, -1/*constraint id*/, target_object_id_,
                                            schema_version_, trace_id_, task_id_, true/*check_table_empty*/,
                                            obcall::ObAlterTableArg::AlterConstraintType::ADD_CONSTRAINT,
-                                           context_.namespace_id_ > 1 ? local_management_service : nullptr);
+                                           local_management_service);
       if (OB_FAIL(local_management_service->submit_ddl_local_build_task(task))) {
         LOG_WARN("submit ddl single local build task failed", K(ret));
       } else {

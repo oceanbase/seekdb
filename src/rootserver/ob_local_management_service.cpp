@@ -177,11 +177,28 @@ int ObLocalManagementService::init(ObServerConfig &config,
     FLOG_WARN("init snapshot manager failed", KR(ret));
   } else if (OB_FAIL(THE_ADMIN_JOB_TABLE.init())) {
     FLOG_WARN("init THE_ADMIN_JOB_TABLE failed", KR(ret));
+  } else if (OB_ISNULL(ddl_sql_proxy_) || OB_ISNULL(ddl_local_runtime_)) {
+    ret = OB_NOT_INIT;
+    FLOG_WARN("DDL task services are unavailable", KR(ret), KP(ddl_sql_proxy_), KP(ddl_local_runtime_));
   }
 
   if (OB_SUCC(ret)) {
-    inited_ = true;
-    FLOG_INFO("initialize local management services succeeded", KR(ret), K_(inited));
+    ObDDLTaskContext context;
+    context.namespace_id_ = sql_proxy.target_namespace();
+    context.sql_proxy_ = &sql_proxy;
+    context.session_sql_proxy_ = &sql_proxy;
+    context.ddl_proxy_ = ddl_sql_proxy_;
+    context.schema_service_ = schema_service;
+    context.root_service_ = this;
+    context.local_runtime_ = ddl_local_runtime_;
+    if (!context.is_complete()) {
+      ret = OB_NOT_INIT;
+      FLOG_WARN("DDL task context is incomplete", KR(ret), K(context.namespace_id_));
+    } else {
+      ddl_service_.set_task_context(context);
+      inited_ = true;
+      FLOG_INFO("initialize local management services succeeded", KR(ret), K_(inited));
+    }
   } else {
     LOG_ERROR("failed to initialize local management services", KR(ret));
   }
@@ -194,6 +211,7 @@ int ObLocalManagementService::init_sql_worker(
     ObConfigManager &config_mgr,
     const ObAddr &self,
     ObMySQLProxy &sql_proxy,
+    ObMySQLProxy &session_sql_proxy,
     ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
@@ -218,7 +236,7 @@ int ObLocalManagementService::init_sql_worker(
     LOG_WARN("init SQL worker runtime ddl service failed", KR(ret));
   } else if (OB_SUCC(ret) && OB_FAIL(snapshot_manager_.init(self_addr_))) {
     LOG_WARN("init SQL worker snapshot manager failed", KR(ret));
-  } else if (OB_SUCC(ret) && OB_ISNULL(ddl_local_runtime_)) {
+  } else if (OB_SUCC(ret) && (OB_ISNULL(ddl_local_runtime_) || OB_ISNULL(ddl_sql_proxy_))) {
     ret = OB_NOT_INIT;
   } else if (OB_SUCC(ret) && OB_FAIL(root_minor_freeze_.init(ddl_local_runtime_))) {
     LOG_WARN("init namespace minor freeze failed", KR(ret));
@@ -227,13 +245,19 @@ int ObLocalManagementService::init_sql_worker(
     ObDDLTaskContext context;
     context.namespace_id_ = sql_proxy.target_namespace();
     context.sql_proxy_ = &sql_proxy;
+    context.session_sql_proxy_ = &session_sql_proxy;
     context.ddl_proxy_ = ddl_sql_proxy_;
     context.schema_service_ = &schema_service;
     context.root_service_ = this;
     context.local_runtime_ = ddl_local_runtime_;
-    ddl_service_.set_task_context(context);
-    inited_ = true;
-    local_services_ready_ = true;
+    if (!context.is_complete()) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("DDL task context is incomplete", KR(ret), K(context.namespace_id_));
+    } else {
+      ddl_service_.set_task_context(context);
+      inited_ = true;
+      local_services_ready_ = true;
+    }
   }
   return ret;
 }
@@ -2619,7 +2643,8 @@ ObLocalManagementService::ObLoadDDLTask::ObLoadDDLTask(ObLocalManagementService 
 
 void ObLocalManagementService::ObLoadDDLTask::runTimerTask()
 {
-  int ret = ObSysDDLSchedulerUtil::recover_task();
+  int ret = ObSysDDLSchedulerUtil::recover_task(
+      local_management_service_.ddl_service_.get_task_context());
   if (OB_FAIL(ret)) {
   } else {
     local_management_service_.load_ddl_task_timer_.cancel_task(*this);

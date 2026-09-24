@@ -89,8 +89,7 @@ int ObUpdateAutoincSequenceTask::process()
         ObTimeoutCtx timeout_ctx;
         ObSqlString sql;
         sqlclient::ObMySQLResult *result = NULL;
-        common::ObCommonSqlProxy *user_sql_proxy = local_management_service->ddl_sql_proxy() != nullptr
-            ? local_management_service->ddl_sql_proxy() : GCTX.ddl_sql_proxy_;
+        common::ObCommonSqlProxy *user_sql_proxy = local_management_service->ddl_sql_proxy();
         ObSessionParam session_param;
         session_param.sql_mode_ = reinterpret_cast<int64_t *>(&sql_mode_);
         session_param.ddl_info_.set_is_ddl(true);
@@ -104,6 +103,9 @@ int ObUpdateAutoincSequenceTask::process()
                                     column_schema->get_column_name(),
                                     db_schema->get_database_name(),
                                     table_schema->get_table_name()))) {
+        } else if (OB_ISNULL(user_sql_proxy)) {
+          ret = OB_NOT_INIT;
+          LOG_WARN("DDL SQL proxy is unavailable", KR(ret));
         } else if (OB_FAIL(user_sql_proxy->read(res, sql.ptr(), &session_param))) {
         } else if (OB_ISNULL(result = res.get_result())) {
           ret = OB_ERR_UNEXPECTED;

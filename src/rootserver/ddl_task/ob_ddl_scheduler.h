@@ -285,7 +285,6 @@ public:
 
   int schedule_ddl_task(
       const ObDDLTaskRecord &task_record);
-  int recover_task();
   int recover_task(const ObDDLTaskContext &context);
   int remove_inactive_ddl_task();
 

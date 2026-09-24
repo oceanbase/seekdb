@@ -664,12 +664,7 @@ int ObCreateIndexHelper::construct_and_adjust_result_(int &return_ret) {
       if (create_index_on_empty_table_opt_) {
         res_.task_id_ = 0;
       } else {
-        task_record_.context_.namespace_id_ = sql_proxy_->target_namespace();
-        task_record_.context_.sql_proxy_ = sql_proxy_;
-        task_record_.context_.ddl_proxy_ = root_service_.ddl_sql_proxy();
-        task_record_.context_.schema_service_ = schema_service_;
-        task_record_.context_.root_service_ = &root_service_;
-        task_record_.context_.local_runtime_ = root_service_.ddl_local_runtime();
+        task_record_.context_ = root_service_.get_ddl_service().get_task_context();
         if (OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record_))) {
         }
       }

@@ -43,12 +43,21 @@ class ObIRootserverLocalRuntime;
 
 struct ObDDLTaskContext final
 {
-  uint64_t namespace_id_ = 1;
+  uint64_t namespace_id_ = 0;
   common::ObMySQLProxy *sql_proxy_ = nullptr;
+  common::ObMySQLProxy *session_sql_proxy_ = nullptr;
   common::ObMySQLProxy *ddl_proxy_ = nullptr;
   share::schema::ObMultiVersionSchemaService *schema_service_ = nullptr;
   ObLocalManagementService *root_service_ = nullptr;
   ObIRootserverLocalRuntime *local_runtime_ = nullptr;
+  bool is_complete() const
+  {
+    return namespace_id_ > 0 && namespace_id_ < (1ULL << 30)
+        && sql_proxy_ != nullptr && session_sql_proxy_ != nullptr
+        && ddl_proxy_ != nullptr
+        && schema_service_ != nullptr && root_service_ != nullptr
+        && local_runtime_ != nullptr;
+  }
 };
 
 static constexpr int64_t DEFAULT_EXECUTION_ID = 1;

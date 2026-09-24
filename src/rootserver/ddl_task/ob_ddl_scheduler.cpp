@@ -755,7 +755,13 @@ int ObDDLScheduler::DDLScanTask::schedule()
 void ObDDLScheduler::DDLScanTask::runTimerTask()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObSysDDLSchedulerUtil::recover_task())) {
+  ObLocalManagementService *root_service =
+      ::oceanbase::share::server_service<ObLocalManagementService>();
+  if (OB_ISNULL(root_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("DDL root service is unavailable", KR(ret));
+  } else if (OB_FAIL(ObSysDDLSchedulerUtil::recover_task(
+          root_service->get_ddl_service().get_task_context()))) {
   }
 
   if (OB_FAIL(ObFtsIndexBuilderUtil::try_load_dictionary())) {
@@ -1473,8 +1479,7 @@ int ObDDLScheduler::get_task_record(const ObDDLTaskID &task_id,
                                     common::ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
-  ObMySQLProxy *sql_proxy = context.sql_proxy_ != nullptr
-      ? context.sql_proxy_ : context.namespace_id_ == 1 ? GCTX.sql_proxy_ : nullptr;
+  ObMySQLProxy *sql_proxy = context.sql_proxy_;
   if (OB_UNLIKELY(!task_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(task_id));
@@ -1533,8 +1538,7 @@ int ObDDLScheduler::modify_redef_task(const ObDDLTaskID &task_id,
   int64_t unused_snapshot_ver = OB_INVALID_VERSION;
   ObMySQLTransaction trans;
   common::ObArenaAllocator allocator(lib::ObLabel("task_info"));
-  ObMySQLProxy *sql_proxy = context.sql_proxy_ != nullptr
-      ? context.sql_proxy_ : context.namespace_id_ == 1 ? GCTX.sql_proxy_ : nullptr;
+  ObMySQLProxy *sql_proxy = context.sql_proxy_;
   if (OB_UNLIKELY(!task_id.is_valid()) || OB_ISNULL(sql_proxy)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg or namespace sql proxy", K(ret), K(task_id), KP(sql_proxy), K(context.namespace_id_));
@@ -1635,10 +1639,8 @@ int ObDDLScheduler::start_redef_table(const obcall::ObStartRedefTableArg &arg,
   ObDDLTaskRecord task_record;
   ObSchemaGetterGuard orig_schema_guard;
   ObSchemaGetterGuard target_schema_guard;
-  ObMultiVersionSchemaService *schema_service = context.schema_service_ != nullptr
-      ? context.schema_service_ : context.namespace_id_ == 1 ? GCTX.schema_service_ : nullptr;
-  ObMySQLProxy *sql_proxy = context.sql_proxy_ != nullptr
-      ? context.sql_proxy_ : context.namespace_id_ == 1 ? GCTX.sql_proxy_ : nullptr;
+  ObMultiVersionSchemaService *schema_service = context.schema_service_;
+  ObMySQLProxy *sql_proxy = context.sql_proxy_;
 
   const int64_t table_id = arg.orig_table_id_;
 
@@ -2509,19 +2511,12 @@ int ObDDLScheduler::insert_task_record(
   return ret;
 }
 
-int ObDDLScheduler::recover_task()
-{
-  return recover_task(ObDDLTaskContext());
-}
-
 int ObDDLScheduler::recover_task(const ObDDLTaskContext &context)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
-  ObMySQLProxy *sql_proxy = context.sql_proxy_ != nullptr
-      ? context.sql_proxy_ : context.namespace_id_ == 1 ? GCTX.sql_proxy_ : nullptr;
-  ObMultiVersionSchemaService *schema_service = context.schema_service_ != nullptr
-      ? context.schema_service_ : context.namespace_id_ == 1 ? GCTX.schema_service_ : nullptr;
+  ObMySQLProxy *sql_proxy = context.sql_proxy_;
+  ObMultiVersionSchemaService *schema_service = context.schema_service_;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
@@ -2710,12 +2705,9 @@ int ObDDLScheduler::schedule_ddl_task(const ObDDLTaskRecord &record)
   if (OB_UNLIKELY(!record.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ddl task record is invalid", K(ret), K(record));
-  } else if (record.context_.namespace_id_ > 1
-      && (OB_ISNULL(record.context_.schema_service_)
-          || OB_ISNULL(record.context_.sql_proxy_)
-          || OB_ISNULL(record.context_.root_service_))) {
+  } else if (!record.context_.is_complete()) {
     ret = OB_NOT_INIT;
-    LOG_WARN("child ddl task context is incomplete", KR(ret), K(record.context_.namespace_id_), K(record));
+    LOG_WARN("DDL task context is incomplete", KR(ret), K(record.context_.namespace_id_), K(record));
   } else if (OB_FAIL(DDL_SIM(record.task_id_, SCHEDULE_DDL_TASK_FAILED))) {
   } else {
     switch (record.ddl_type_) {

@@ -2414,6 +2414,8 @@ int ObServer::init_local_management_service(const bool need_bootstrap)
   int ret = OB_SUCCESS;
 
   local_management_service_.set_local_command_service(ob_service_);
+  local_management_service_.set_ddl_local_runtime(&ob_service_);
+  local_management_service_.set_ddl_sql_proxy(&ddl_sql_proxy_);
   if (OB_FAIL(local_management_service_.init(
                  config_, config_mgr_,
                  self_addr_, sql_proxy_,

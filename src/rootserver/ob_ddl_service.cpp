@@ -9974,9 +9974,7 @@ int ObDDLService::alter_table_auto_increment(
         ObTimeoutCtx timeout_ctx;
         ObSqlString sql;
         sqlclient::ObMySQLResult *result = NULL;
-        common::ObCommonSqlProxy *user_sql_proxy = task_context_.ddl_proxy_ != nullptr
-            ? task_context_.ddl_proxy_
-            : task_context_.namespace_id_ == 1 ? GCTX.ddl_sql_proxy_ : nullptr;
+        common::ObCommonSqlProxy *user_sql_proxy = task_context_.ddl_proxy_;
         ObSessionParam session_param;
         int64_t sql_mode = alter_table_arg.sql_mode_;
         session_param.sql_mode_ = reinterpret_cast<int64_t *>(&sql_mode);
@@ -14745,8 +14743,7 @@ int ObDDLService::build_single_table_rw_defensive_(const ObArray<ObTabletID> &ta
   } else {
     const int64_t abs_timeout_us = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_ts()
                                                                      : ObTimeUtility::current_time() + GCONF.rpc_timeout;
-    ObIRootserverLocalRuntime *runtime = task_context_.local_runtime_ != nullptr
-        ? task_context_.local_runtime_ : rootserver_local_runtime();
+    ObIRootserverLocalRuntime *runtime = task_context_.local_runtime_;
     if (OB_ISNULL(runtime)) {
       ret = OB_NOT_INIT;
     } else if (OB_FAIL(runtime->modify_tablet_binding_for_rw_defensive(
@@ -17439,8 +17436,7 @@ int ObDDLService::unbind_hidden_tablets(
   } else {
     const int64_t abs_timeout_us = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_ts()
                                                                      : ObTimeUtility::current_time() + GCONF.rpc_timeout;
-    rootserver::ObIRootserverLocalRuntime *runtime = task_context_.local_runtime_ != nullptr
-        ? task_context_.local_runtime_ : rootserver_local_runtime();
+    rootserver::ObIRootserverLocalRuntime *runtime = task_context_.local_runtime_;
     if (OB_ISNULL(runtime)) {
       ret = OB_NOT_INIT;
       LOG_WARN("rootserver local runtime is not initialized", K(ret));

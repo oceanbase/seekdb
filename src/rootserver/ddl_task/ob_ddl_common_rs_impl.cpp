@@ -669,10 +669,7 @@ int ObDDLTaskUtil::obtain_snapshot(
           // found a persisted snapshot, do not hold it again.
           FLOG_INFO("found a persisted snapshot in inner table", "task_id", task->get_task_id(), K(persisted_snapshot), K(new_fetched_snapshot));
         } else if (OB_FAIL(hold_snapshot(trans, task, table_id, target_table_id,
-                                         task->context().root_service_ != nullptr ? task->context().root_service_ :
-                                             task->context().namespace_id_ == 1
-                                                 ? ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()
-                                                 : nullptr,
+                                         task->context().root_service_,
                                          new_fetched_snapshot))) {
           if (OB_SNAPSHOT_DISCARDED == ret) {
             wait_trans_ctx->reset();
@@ -949,8 +946,7 @@ int ObDDLTaskUtil::check_and_cancel_single_replica_dag(
   int ret = OB_SUCCESS;
   all_dag_exit = false;
   ObIRootserverLocalRuntime *local_runtime = task != nullptr
-      && task->context().local_runtime_ != nullptr
-      ? task->context().local_runtime_ : rootserver_local_runtime();
+      ? task->context().local_runtime_ : nullptr;
   if (OB_ISNULL(task)) {
     ret = OB_BAD_NULL_ERROR;
     LOG_WARN("invalid argument", K(ret));
