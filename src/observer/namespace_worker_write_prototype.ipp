@@ -1461,12 +1461,6 @@ struct EngineWrites {
         }
       } else if (operation == 'O') {
         ret = process_table_lock(storage_space, request, *tx);
-      } else if (operation == 'P') {
-        ObTxParam param; ObTxSEQ savepoint;
-        request.read(param); const bool release = request.number() != 0;
-        if (!request.consumed() || !param.is_valid()) { ret = OB_INVALID_ARGUMENT; }
-        else { ret = service->create_implicit_savepoint(*tx, param, savepoint, release); }
-        values.append(savepoint);
       } else if (operation == 'B') {
         ObTxSEQ savepoint; request.read(savepoint);
         const int64_t deadline = request.number();
@@ -1480,13 +1474,6 @@ struct EngineWrites {
           for (auto &entry : writes) { entry.second->release_context(); }
           ret = service->rollback_to_implicit_savepoint(*tx, savepoint, deadline, touched, policy);
         }
-      } else if (operation == 'J' || operation == 'I') {
-        ObTxSEQ savepoint;
-        const int16_t branch = operation == 'J' ? request.number() : 0;
-        if (!request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-        else if (operation == 'J') { ret = service->create_branch_savepoint(*tx, branch, savepoint); }
-        else { ret = service->create_in_txn_implicit_savepoint(*tx, savepoint); }
-        values.append(savepoint);
       } else if (operation == 'F' || operation == 'L' || operation == 'D' || operation == 'K') {
         const ObString name = request.string();
         const int64_t deadline = operation == 'L' ? request.number() : 0;
@@ -1569,6 +1556,8 @@ int call_in_process_tx_state(char operation, ObTxDesc &view,
                              const ObTxParam *param, int64_t deadline);
 int call_in_process_tx_read_snapshot(ObTxDesc &view,
     ObTxIsolationLevel isolation, int64_t deadline, ObTxReadSnapshot &snapshot);
+int call_in_process_tx_create_savepoint(ObTxDesc &view, char operation,
+    const ObTxParam *param, bool release, int16_t branch, ObTxSEQ &savepoint);
 int tx_state(char operation, ObTxDesc &view,
              const ObTxParam *param = nullptr, int64_t deadline = 0)
 {
@@ -1588,6 +1577,18 @@ int tx_read_snapshot(ObTxDesc &view, ObTxIsolationLevel isolation,
   StorageSessionScope scope(session && session->get_tx_desc() == &view ? session : nullptr);
   const int ret = scope.error() ? scope.error()
       : call_in_process_tx_read_snapshot(view, isolation, deadline, snapshot);
+  revert_tx_owner_session(borrowed);
+  return ret;
+}
+int tx_create_savepoint(ObTxDesc &view, char operation,
+    const ObTxParam *param, bool release, int16_t branch, ObTxSEQ &savepoint)
+{
+  sql::ObSQLSessionInfo *borrowed = nullptr;
+  auto *session = tx_owner_session(view, borrowed);
+  StorageSessionScope scope(session && session->get_tx_desc() == &view ? session : nullptr);
+  const int ret = scope.error() ? scope.error()
+      : call_in_process_tx_create_savepoint(
+          view, operation, param, release, branch, savepoint);
   revert_tx_owner_session(borrowed);
   return ret;
 }
@@ -1945,21 +1946,14 @@ public:
                                         const transaction::ObTxParam &tx_param,
                                         transaction::ObTxSEQ &savepoint,
                                         bool release) override {
-    Frame request, reply; request.append(tx_param); request.number(release);
-    int ret = tx_rpc('P', tx, request, reply);
-    if (!ret) { reply.read(savepoint); if (!reply.consumed()) { ret = OB_INVALID_ARGUMENT; } }
-    return ret; }
+    return tx_create_savepoint(tx, 'P', &tx_param, release, 0, savepoint); }
   int create_branch_savepoint(transaction::ObTxDesc &tx,
                                       int16_t branch,
                                       transaction::ObTxSEQ &savepoint) override {
-    Frame request, reply; request.number(branch); int ret = tx_rpc('J', tx, request, reply);
-    if (!ret) { reply.read(savepoint); if (!reply.consumed()) { ret = OB_INVALID_ARGUMENT; } }
-    return ret; }
+    return tx_create_savepoint(tx, 'J', nullptr, false, branch, savepoint); }
   int create_in_txn_implicit_savepoint(transaction::ObTxDesc &tx,
                                                transaction::ObTxSEQ &savepoint) override {
-    Frame request, reply; int ret = tx_rpc('I', tx, request, reply);
-    if (!ret) { reply.read(savepoint); if (!reply.consumed()) { ret = OB_INVALID_ARGUMENT; } }
-    return ret; }
+    return tx_create_savepoint(tx, 'I', nullptr, false, 0, savepoint); }
   int create_explicit_savepoint(transaction::ObTxDesc &tx,
                                         const common::ObString &savepoint) override {
     Frame request, reply; request.string(savepoint); return tx_rpc('F', tx, request, reply); }
