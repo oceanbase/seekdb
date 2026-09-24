@@ -277,6 +277,36 @@ struct DirectInsertRoute {
     }
     return ret;
   }
+  int prepare_ordered(StorageSpaceHandle storage_space, RequestTag parent,
+                      uint64_t generation, DirectInsertRegistry &registry,
+                      const ObIArray<ObDDLTabletSliceCount> &logical_counts) {
+    if (!storage_space.is_namespace() || logical_counts.count() <= 0
+        || logical_counts.count() > (MAX_FRAME - 64) / 16) {
+      return OB_INVALID_ARGUMENT;
+    }
+    int ret = resolve(parent, generation, registry);
+    if (ret) { return ret; }
+    std::shared_lock<std::shared_mutex> guard(owner->mutex);
+    if (!owner->session) { return OB_NOT_INIT; }
+    ObArray<ObDDLTabletSliceCount> routed;
+    const uint64_t ns = storage_space.namespace_id();
+    for (int64_t i = 0; !ret && i < logical_counts.count(); ++i) {
+      const ObDDLTabletSliceCount &entry = logical_counts.at(i);
+      if (entry.tablet_id_ < 0 || entry.slice_count_ <= 0) {
+        ret = OB_INVALID_ARGUMENT;
+      } else {
+        uint64_t tablet_id = static_cast<uint64_t>(entry.tablet_id_);
+        if (tablet_id != 0 && ns > 1) {
+          ret = storage::NamespaceForkKernelPrototype::storage_object_id(ns, tablet_id, tablet_id);
+        }
+        if (!ret && tablet_id > static_cast<uint64_t>(INT64_MAX)) { ret = OB_SIZE_OVERFLOW; }
+        if (!ret) { ret = routed.push_back(ObDDLTabletSliceCount(
+            static_cast<int64_t>(tablet_id), entry.slice_count_)); }
+      }
+    }
+    if (!ret) { ret = owner->session->prepare_ordered_input(routed); }
+    return ret;
+  }
 
   int process(StorageSpaceHandle storage_space, RequestTag tag, DirectInsertRegistry &registry,
       const std::shared_ptr<StorageSessionState> &context, Frame &request, Frame &reply) {
@@ -394,31 +424,7 @@ struct DirectInsertRoute {
         std::shared_lock<std::shared_mutex> guard(owner->mutex);
         auto *session = owner->session;
         if (!session) { ret = OB_NOT_INIT; }
-        else if (operation == 'P') {
-          const uint64_t count = request.number();
-          ObArray<ObDDLTabletSliceCount> slice_counts;
-          if (request.ret || !count
-              || count > (request.data.size() - request.pos) / 16) {
-            ret = OB_INVALID_ARGUMENT;
-          }
-          for (uint64_t i = 0; !ret && i < count; ++i) {
-            uint64_t tablet_id = request.number();
-            const uint64_t slice_count = request.number();
-            if (request.ret || !slice_count || slice_count > INT64_MAX) {
-              ret = OB_INVALID_ARGUMENT;
-            } else if (tablet_id != 0 && ns > 1
-                       && OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
-                              ns, tablet_id, tablet_id))) {
-            } else if (tablet_id > static_cast<uint64_t>(INT64_MAX)) {
-              ret = OB_SIZE_OVERFLOW;
-            } else if (OB_FAIL(slice_counts.push_back(
-                           ObDDLTabletSliceCount(static_cast<int64_t>(tablet_id),
-                                                static_cast<int64_t>(slice_count))))) {
-            }
-          }
-          if (!ret && !request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-          if (!ret) { ret = session->prepare_ordered_input(slice_counts); }
-        } else if (operation == 'W') {
+        else if (operation == 'W') {
           ObDirectInsertWriterRequest param;
           const uint64_t layout = request.number();
           param.layout_ = static_cast<ObDirectInsertWriterLayout>(layout);
@@ -487,6 +493,8 @@ int sync_in_process_direct_insert_autoinc(RequestTag parent, uint64_t generation
                                           const ObTabletID &tablet,
                                           const ObTabletID &target,
                                           int64_t slice, int64_t rows);
+int prepare_in_process_direct_insert_ordered(RequestTag parent, uint64_t generation,
+    const ObIArray<ObDDLTabletSliceCount> &slice_counts);
 
 class RemoteDirectInsertSession final : public ObIDirectInsertSession, public ObIDirectInsertWriterFactory {
 public:
@@ -534,27 +542,10 @@ public:
   }
   int prepare_ordered_input(
       const common::ObIArray<ObDDLTabletSliceCount> &slice_counts) override {
-    int ret = OB_SUCCESS;
-    Frame payload, reply;
-    if (OB_SUCC(ret)) {
-      payload.number(slice_counts.count());
-      for (int64_t i = 0; !payload.ret && i < slice_counts.count(); ++i) {
-        const ObDDLTabletSliceCount &entry = slice_counts.at(i);
-        if (entry.slice_count_ <= 0) {
-          ret = OB_INVALID_ARGUMENT;
-        } else {
-          payload.number(entry.tablet_id_);
-          payload.number(entry.slice_count_);
-        }
-      }
-      if (OB_SUCC(ret) && payload.ret) { ret = payload.ret; }
-    }
-    if (OB_SUCC(ret)) { ret = call('P', payload, reply); }
-    if (OB_SUCC(ret) && !reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
-    if (OB_FAIL(ret)) {
-      int expected = OB_SUCCESS;
-      error.compare_exchange_strong(expected, ret);
-    }
+    StorageSessionScope binding(THIS_WORKER.get_session());
+    int ret = binding.error() ? binding.error() : error.load();
+    if (!ret) { ret = prepare_in_process_direct_insert_ordered(origin, generation, slice_counts); }
+    if (ret) { int expected = OB_SUCCESS; error.compare_exchange_strong(expected, ret); }
     return ret;
   }
   int prepare_ordered_input() override {

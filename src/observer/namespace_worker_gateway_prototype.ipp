@@ -459,6 +459,14 @@ int sync_in_process_direct_insert_autoinc(RequestTag parent, uint64_t generation
         tablet, target, slice, rows);
   });
 }
+int prepare_in_process_direct_insert_ordered(RequestTag parent, uint64_t generation,
+    const ObIArray<ObDDLTabletSliceCount> &slice_counts)
+{
+  return with_in_process_direct_insert([&](DirectInsertRoute &route,
+      StorageSpaceHandle space, DirectInsertRegistry &registry) {
+    return route.prepare_ordered(space, parent, generation, registry, slice_counts);
+  });
+}
 int fetch_in_process_scan(uint64_t handle, ScanBatch &batch)
 {
   InProcessStorage *ctx = in_process_storage;
