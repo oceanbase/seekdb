@@ -346,6 +346,16 @@ def direct_probe(experiment):
         nearest_ivf = "SELECT id FROM phase10.ivf_rows ORDER BY "
         nearest_ivf += "l2_distance(embedding,[0,0,0]) APPROXIMATE LIMIT 1"
         assert experiment.sql(nearest_ivf, child) == ((1,),)
+        experiment.sql("CREATE TABLE phase10.ivf_pq_rows(id INT PRIMARY KEY, embedding VECTOR(4))", child)
+        pq_values = ",".join("(%d,'[%d,%d,%d,%d]')" % (i, i, i, i, i)
+                             for i in range(1, 21))
+        experiment.sql("INSERT INTO phase10.ivf_pq_rows VALUES " + pq_values, child)
+        experiment.sql("CREATE VECTOR INDEX pq_embedding ON phase10.ivf_pq_rows(embedding) "
+                       "WITH (distance=l2,type=ivf_pq,nlist=2,sample_per_nlist=5,m=2)", child)
+        nearest_pq = "SELECT id FROM phase10.ivf_pq_rows ORDER BY "
+        nearest_pq += "l2_distance(embedding,[0,0,0,0]) APPROXIMATE LIMIT 1"
+        pq_result = experiment.sql(nearest_pq, child)
+        assert len(pq_result) == 1 and 1 <= pq_result[0][0] <= 20, pq_result
     check_single_process(experiment)
     experiment.connection.close()
     experiment.connection = None
@@ -356,10 +366,14 @@ def direct_probe(experiment):
         assert experiment.sql("SELECT id FROM phase10.fulltext_rows "
                               "WHERE MATCH(body) AGAINST('beta')", child) == ((2,),)
         assert experiment.sql(nearest_ivf, child) == ((1,),)
+        pq_result = experiment.sql(nearest_pq, child)
+        assert len(pq_result) == 1 and 1 <= pq_result[0][0] <= 20, pq_result
         experiment.sql("DROP INDEX ivf_embedding ON phase10.ivf_rows", child)
+        experiment.sql("DROP INDEX pq_embedding ON phase10.ivf_pq_rows", child)
         assert experiment.sql("SELECT COUNT(*) FROM phase10.ivf_rows", child) == ((6,),)
+        assert experiment.sql("SELECT COUNT(*) FROM phase10.ivf_pq_rows", child) == ((20,),)
     experiment.record("PASS", case="inprocess_direct", ddl=True, partition=True,
-                      index=True, lob=True, fulltext=True, ivf=True, restart=True)
+                      index=True, lob=True, fulltext=True, ivf=True, ivf_pq=True, restart=True)
 
 
 def tls_probe(experiment):

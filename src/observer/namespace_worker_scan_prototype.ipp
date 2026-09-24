@@ -669,7 +669,10 @@ public:
     count = 0;
     auto &ctx = param.op_->get_eval_ctx();
     sql::ObEvalCtx::BatchInfoScopeGuard batch(ctx);
-    const int64_t limit = std::min<int64_t>(32, capacity);
+    // Expression frames only reserve max_batch_size_ datums. IVF PQ may ask
+    // for a larger scan batch than its frame can hold.
+    const int64_t frame_capacity = ctx.max_batch_size_ > 0 ? ctx.max_batch_size_ : capacity;
+    const int64_t limit = std::min<int64_t>(32, std::min(capacity, frame_capacity));
     if (limit <= 0) { return OB_INVALID_ARGUMENT; }
     batch.set_batch_size(limit);
     int ret = OB_SUCCESS;
