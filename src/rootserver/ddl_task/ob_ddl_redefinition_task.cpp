@@ -702,7 +702,9 @@ int ObDDLRedefinitionTask::add_constraint_ddl_task(const int64_t constraint_id)
     const ObTableSchema *table_schema = nullptr;
     AlterTableSchema &alter_table_schema = alter_table_arg.alter_table_schema_;
     const ObConstraint *constraint = nullptr;
-    ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+    ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
+        ? context_.root_service_
+        : ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
     const ObDatabaseSchema *database_schema = nullptr;
     if (OB_UNLIKELY(!is_inited_)) {
       ret = OB_NOT_INIT;
@@ -755,13 +757,14 @@ int ObDDLRedefinitionTask::add_constraint_ddl_task(const int64_t constraint_id)
                                      task_id_);
           param.sub_task_trace_id_ = sub_task_trace_id_;
           if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param,
-                                                             *GCTX.sql_proxy_,
+                                                             *task_sql_proxy(),
                                                              task_record))) {
             if (OB_ENTRY_EXIST == ret) {
               ret = OB_SUCCESS;
             } else {
               LOG_WARN("submit ddl task failed", K(ret));
             }
+          } else if (FALSE_IT(task_record.context_ = context_)) {
           } else if (OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
             LOG_WARN("fail to schedule ddl task", K(ret), K(task_record));
           }
@@ -798,7 +801,9 @@ int ObDDLRedefinitionTask::add_fk_ddl_task(const int64_t fk_id)
     ObDDLEventInfo ddl_event_info(GCTX.self_addr(), sub_task_trace_id_);
     AlterTableSchema &alter_table_schema = alter_table_arg.alter_table_schema_;
     ObConstraint *constraint = nullptr;
-    ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+    ObLocalManagementService *local_management_service = context_.root_service_ != nullptr
+        ? context_.root_service_
+        : ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
     const ObDatabaseSchema *database_schema = nullptr;
     if (OB_UNLIKELY(!is_inited_)) {
       ret = OB_NOT_INIT;
@@ -878,12 +883,13 @@ int ObDDLRedefinitionTask::add_fk_ddl_task(const int64_t fk_id)
           param.sub_task_trace_id_ = sub_task_trace_id_;
           if (OB_FAIL(alter_table_arg.foreign_key_arg_list_.push_back(fk_arg))) {
             LOG_WARN("push back foreign key arg failed", K(ret));
-          } else if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param, *GCTX.sql_proxy_, task_record))) {
+          } else if (OB_FAIL(ObSysDDLSchedulerUtil::create_ddl_task(param, *task_sql_proxy(), task_record))) {
             if (OB_ENTRY_EXIST == ret) {
               ret = OB_SUCCESS;
             } else {
               LOG_WARN("submit ddl task failed", K(ret));
             }
+          } else if (FALSE_IT(task_record.context_ = context_)) {
           } else if (OB_FAIL(ObSysDDLSchedulerUtil::schedule_ddl_task(task_record))) {
             LOG_WARN("fail to schedule ddl task", K(ret), K(task_record));
           }

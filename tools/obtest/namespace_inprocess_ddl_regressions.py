@@ -24,6 +24,23 @@ def before_restart(experiment, child):
     else:
         raise AssertionError("child CHECK constraint allowed an invalid row")
 
+    sql("CREATE TABLE phase10.redef_ref(id INT PRIMARY KEY)")
+    sql("INSERT INTO phase10.redef_ref VALUES(1),(2)")
+    sql("CREATE TABLE phase10.redef_deps(id INT PRIMARY KEY, ref_id INT, payload INT, "
+        "CONSTRAINT redef_positive CHECK(ref_id>0), "
+        "CONSTRAINT redef_fk FOREIGN KEY(ref_id) REFERENCES phase10.redef_ref(id))")
+    sql("INSERT INTO phase10.redef_deps VALUES(1,1,7),(2,2,8)")
+    sql("ALTER TABLE phase10.redef_deps MODIFY COLUMN payload VARCHAR(20)")
+    assert sql("SELECT id,ref_id,payload FROM phase10.redef_deps ORDER BY id") == (
+        (1, 1, "7"), (2, 2, "8"))
+    for ref_id in (0, 999):
+        try:
+            sql("INSERT INTO phase10.redef_deps VALUES(3,%d,'9')" % ref_id)
+        except pymysql.MySQLError as error:
+            assert error.args[0] == (3819 if ref_id == 0 else 1452), error.args
+        else:
+            raise AssertionError("redefined constraint accepted ref_id=%d" % ref_id)
+
     sql("CREATE TABLE phase10.repartition(id INT PRIMARY KEY, v INT)")
     sql("INSERT INTO phase10.repartition VALUES(1,11),(2,22)")
     sql("ALTER TABLE phase10.repartition PARTITION BY HASH(id) PARTITIONS 3")
@@ -59,6 +76,15 @@ def after_restart(experiment, child):
         assert error.args[0] == 3819, error.args
     else:
         raise AssertionError("recovered CHECK constraint allowed an invalid row")
+    assert sql("SELECT id,ref_id,payload FROM phase10.redef_deps ORDER BY id") == (
+        (1, 1, "7"), (2, 2, "8"))
+    for ref_id in (0, 999):
+        try:
+            sql("INSERT INTO phase10.redef_deps VALUES(3,%d,'9')" % ref_id)
+        except pymysql.MySQLError as error:
+            assert error.args[0] == (3819 if ref_id == 0 else 1452), error.args
+        else:
+            raise AssertionError("recovered constraint accepted ref_id=%d" % ref_id)
     sql("INSERT INTO phase10.auto_owned(v) VALUES(70)")
     assert sql("SELECT id FROM phase10.auto_owned WHERE v=70")[0][0] > 100
     assert sql("SELECT id,v FROM phase10.fork_dst ORDER BY id") == (
