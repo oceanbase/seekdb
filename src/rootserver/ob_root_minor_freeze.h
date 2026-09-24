@@ -24,6 +24,7 @@ namespace oceanbase
 {
 namespace rootserver
 {
+class ObIRootserverLocalRuntime;
 
 class ObRootMinorFreeze
 {
@@ -31,7 +32,7 @@ public:
   ObRootMinorFreeze();
   ~ObRootMinorFreeze();
 
-  int init();
+  int init(ObIRootserverLocalRuntime *runtime = nullptr);
   void start();
   void stop();
   int destroy();
@@ -41,6 +42,7 @@ private:
 
   bool inited_;
   bool stopped_;
+  ObIRootserverLocalRuntime *runtime_;
 };
 
 } // namespace rootserver

@@ -28,7 +28,7 @@ namespace rootserver
 {
 
 ObRootMinorFreeze::ObRootMinorFreeze()
-  : inited_(false), stopped_(false)
+  : inited_(false), stopped_(false), runtime_(nullptr)
 {}
 
 ObRootMinorFreeze::~ObRootMinorFreeze()
@@ -36,13 +36,14 @@ ObRootMinorFreeze::~ObRootMinorFreeze()
   destroy();
 }
 
-int ObRootMinorFreeze::init()
+int ObRootMinorFreeze::init(ObIRootserverLocalRuntime *runtime)
 {
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("minor freeze service is already initialized", KR(ret));
   } else {
+    runtime_ = runtime;
     inited_ = true;
     stopped_ = false;
   }
@@ -62,6 +63,7 @@ void ObRootMinorFreeze::stop()
 int ObRootMinorFreeze::destroy()
 {
   inited_ = false;
+  runtime_ = nullptr;
   return OB_SUCCESS;
 }
 
@@ -84,7 +86,11 @@ int ObRootMinorFreeze::try_minor_freeze(const obcall::ObMinorFreezeArg &arg) con
   if (OB_FAIL(check_cancel())) {
   } else {
     obcall::Int64 result;
-    if (OB_FAIL(rootserver_local_runtime()->minor_freeze(arg, result))) {
+    ObIRootserverLocalRuntime *runtime = runtime_ != nullptr
+        ? runtime_ : rootserver_local_runtime();
+    if (OB_ISNULL(runtime)) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(runtime->minor_freeze(arg, result))) {
     } else if (OB_FAIL(static_cast<int>(result))) {
     }
   }

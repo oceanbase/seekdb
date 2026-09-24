@@ -215,6 +215,7 @@ def direct_probe(experiment):
         assert experiment.sql("SELECT id FROM phase10.parent", child) == ((3,),)
         experiment.sql("CREATE TABLE phase10.records(id INT PRIMARY KEY, v VARCHAR(64), amount DECIMAL(12,2))", child)
         experiment.sql("INSERT INTO phase10.records VALUES(1,'first',12.34),(2,'second',56.78)", child)
+        experiment.sql("ALTER SYSTEM MINOR FREEZE", child)
         experiment.sql("CREATE TABLE phase10.heap_rows(d DATE)", child)
         experiment.sql("INSERT INTO phase10.heap_rows VALUES('2078-10-10'),('1970-11-01')", child)
         experiment.sql("UPDATE phase10.heap_rows SET d='1970-11-02' WHERE d='1970-11-01'", child)

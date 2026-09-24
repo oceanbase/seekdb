@@ -218,6 +218,10 @@ int ObLocalManagementService::init_sql_worker(
     LOG_WARN("init SQL worker runtime ddl service failed", KR(ret));
   } else if (OB_SUCC(ret) && OB_FAIL(snapshot_manager_.init(self_addr_))) {
     LOG_WARN("init SQL worker snapshot manager failed", KR(ret));
+  } else if (OB_SUCC(ret) && OB_ISNULL(ddl_local_runtime_)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_SUCC(ret) && OB_FAIL(root_minor_freeze_.init(ddl_local_runtime_))) {
+    LOG_WARN("init namespace minor freeze failed", KR(ret));
   }
   if (OB_SUCC(ret)) {
     ObDDLTaskContext context;
