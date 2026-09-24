@@ -20,6 +20,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 mod ffi;
+#[cfg(windows)]
+mod windows_file;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Entry {
@@ -85,11 +87,11 @@ fn lock_writers() -> Result<std::sync::MutexGuard<'static, ()>, Error> {
 
 /// Return an explicit error at startup on platforms without this durability protocol.
 pub fn ensure_supported() -> Result<(), Error> {
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         Ok(())
     }
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         Err(Error::new(
             0,
@@ -109,16 +111,37 @@ pub fn check_storage_directory(path: &Path) -> Result<(), Error> {
 }
 
 fn sync_directory(path: &Path, after_replace: bool) -> Result<(), Error> {
-    let result = File::open(path).and_then(|directory| directory.sync_all());
-    // Some filesystems reject fsync on directories; the file syncs and rename
-    // still protect against a process dying during replacement.
-    #[cfg(unix)]
-    if let Err(error) = &result {
-        if matches!(error.kind(), io::ErrorKind::InvalidInput | io::ErrorKind::Unsupported) {
-            return Ok(());
+    #[cfg(windows)]
+    {
+        let metadata = fs::metadata(path)
+            .map_err(|error| Error::io("stat auto-config directory", error, after_replace))?;
+        if !metadata.is_dir() {
+            return Err(Error::io(
+                "stat auto-config directory",
+                io::Error::new(io::ErrorKind::InvalidInput, "parent is not a directory"),
+                after_replace,
+            ));
         }
+        // Windows has no directory fsync equivalent. The process-crash
+        // guarantee comes from flushing the files and replacing by rename.
+        return Ok(());
     }
-    result.map_err(|error| Error::io("sync auto-config directory", error, after_replace))
+    #[cfg(not(windows))]
+    {
+        let result = File::open(path).and_then(|directory| directory.sync_all());
+        // Some filesystems reject fsync on directories; the file syncs and rename
+        // still protect against a process dying during replacement.
+        #[cfg(unix)]
+        if let Err(error) = &result {
+            if matches!(
+                error.kind(),
+                io::ErrorKind::InvalidInput | io::ErrorKind::Unsupported
+            ) {
+                return Ok(());
+            }
+        }
+        result.map_err(|error| Error::io("sync auto-config directory", error, after_replace))
+    }
 }
 
 fn parse_name(source: &str, line: usize) -> Result<(String, &str), Error> {
@@ -267,19 +290,62 @@ fn create_private_temp(path: &Path) -> Result<(PathBuf, File), Error> {
     ))
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn create_private_temp(path: &Path) -> Result<(PathBuf, File), Error> {
+    for _ in 0..1024 {
+        let id = NEXT_TEMP_ID.fetch_add(1, Ordering::Relaxed);
+        let mut name = path.as_os_str().to_os_string();
+        name.push(format!(".tmp.{}.{}", std::process::id(), id));
+        let candidate = PathBuf::from(name);
+        match windows_file::create_private(&candidate) {
+            Ok(file) => return Ok((candidate, file)),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(Error::io("open temporary auto-config file", error, false)),
+        }
+    }
+    Err(Error::new(
+        0,
+        None,
+        "could not choose a unique temporary file",
+    ))
+}
+
+#[cfg(not(any(unix, windows)))]
 fn create_private_temp(_path: &Path) -> Result<(PathBuf, File), Error> {
     ensure_supported()?;
     unreachable!()
 }
 
 fn sync_existing(path: &Path) -> Result<(), Error> {
-    match File::open(path) {
+    match open_for_sync(path) {
         Ok(file) => file
             .sync_all()
             .map_err(|error| Error::io("sync existing auto-config file", error, false)),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(Error::io("open existing auto-config file", error, false)),
+    }
+}
+
+fn open_for_sync(path: &Path) -> io::Result<File> {
+    #[cfg(windows)]
+    {
+        // FlushFileBuffers requires a handle with write access.
+        OpenOptions::new().read(true).write(true).open(path)
+    }
+    #[cfg(not(windows))]
+    {
+        File::open(path)
+    }
+}
+
+fn replace_file(from: &Path, to: &Path) -> io::Result<()> {
+    #[cfg(windows)]
+    {
+        windows_file::replace(from, to)
+    }
+    #[cfg(not(windows))]
+    {
+        fs::rename(from, to)
     }
 }
 
@@ -310,10 +376,10 @@ fn replace_with_hook(
         after_stage(ReplaceStage::TemporaryFileSynced)?;
         sync_existing(path)?;
         after_stage(ReplaceStage::ExistingFileSynced)?;
-        fs::rename(&temp_path, path)
+        replace_file(&temp_path, path)
             .map_err(|error| Error::io("replace auto-config file", error, false))?;
         after_stage(ReplaceStage::Replaced)?;
-        File::open(path)
+        open_for_sync(path)
             .and_then(|file| file.sync_all())
             .map_err(|error| Error::io("sync replaced auto-config file", error, true))?;
         after_stage(ReplaceStage::NewFileSynced)?;
@@ -384,8 +450,8 @@ mod tests {
     impl TestDirectory {
         fn new() -> Self {
             let id = NEXT_TEST_DIR.fetch_add(1, Ordering::Relaxed);
-            let path = std::env::temp_dir()
-                .join(format!("auto-config-{}-{id}", std::process::id()));
+            let path =
+                std::env::temp_dir().join(format!("auto-config-{}-{id}", std::process::id()));
             fs::create_dir(&path).unwrap();
             Self(path)
         }
