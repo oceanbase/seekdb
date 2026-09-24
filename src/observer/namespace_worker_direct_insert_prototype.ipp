@@ -415,120 +415,89 @@ struct DirectInsertRoute {
     return ret;
   }
 
-  int process(StorageSpaceHandle storage_space, RequestTag tag, DirectInsertRegistry &registry,
-      const std::shared_ptr<StorageSessionState> &context, Frame &request, Frame &reply) {
+  int start(StorageSpaceHandle storage_space, RequestTag tag, DirectInsertRegistry &registry,
+            const std::shared_ptr<StorageSessionState> &context,
+            const ObDirectInsertStartParam &logical, RequestTag &origin,
+            uint64_t &generation) {
+    origin = {};
+    generation = 0;
+    if (!storage_space.is_namespace() || !logical.is_valid() || owner
+        || session_generation == UINT64_MAX
+        || logical.participants_.count() > MAX_FRAME / 8) {
+      return OB_INVALID_ARGUMENT;
+    }
+    if (!tag.slot) { return OB_STATE_NOT_MATCH; }
+    size_t request_size = 137 + 8 * logical.participants_.count();
+    const ObString schemas[] = {logical.table_schema_, logical.lob_meta_table_schema_,
+        logical.vector_data_table_schema_, logical.vector_param_table_schema_};
+    for (const ObString &schema : schemas) {
+      if (schema.length() < 0 || schema.length() > MAX_SQL_MESSAGE - request_size) {
+        return OB_SIZE_OVERFLOW;
+      }
+      request_size += schema.length();
+    }
+    ObArenaAllocator route_allocator{ObMemAttr("NsDirectRoute")};
+    ObDirectInsertStartParam param;
+    param.ddl_task_id_ = logical.ddl_task_id_;
+    param.execution_id_ = logical.execution_id_;
+    param.table_id_ = logical.table_id_;
+    param.worker_count_ = logical.worker_count_;
+    param.data_format_version_ = logical.data_format_version_;
+    param.snapshot_version_ = logical.snapshot_version_;
+    param.schema_version_ = logical.schema_version_;
+    param.is_offline_index_rebuild_ = logical.is_offline_index_rebuild_;
+    param.table_schema_ = logical.table_schema_;
+    param.lob_meta_table_schema_ = logical.lob_meta_table_schema_;
+    param.vector_data_table_schema_ = logical.vector_data_table_schema_;
+    param.vector_param_table_schema_ = logical.vector_param_table_schema_;
+    int ret = OB_SUCCESS;
+    for (int64_t i = 0; !ret && i < logical.participants_.count(); ++i) {
+      const ObTabletID tablet = logical.participants_.at(i);
+      ret = tablet.is_valid() ? param.participants_.push_back(tablet) : OB_INVALID_ARGUMENT;
+    }
     const uint64_t ns = storage_space.namespace_id();
-    const uint64_t operation = request.number();
-    const RequestTag parent{request.number(), request.number()};
-    const uint64_t generation = request.number();
-    int ret = request.ret ? request.ret
-        : !storage_space.is_namespace() ? OB_INVALID_ARGUMENT : OB_SUCCESS;
-    const char *failure_stage = ret ? "header" : "dispatch";
-    Frame output;
-    if (!ret && operation == 'S') {
-      failure_stage = "decode_start";
-      ObArenaAllocator route_allocator{ObMemAttr("NsDirectRoute")};
-      ObDirectInsertStartParam param;
-      param.ddl_task_id_ = request.number(); param.execution_id_ = request.number();
-      param.table_id_ = request.number(); param.worker_count_ = request.number();
-      param.data_format_version_ = request.number();
-      param.snapshot_version_ = request.number(); param.schema_version_ = request.number();
-      const uint64_t offline_rebuild = request.number();
-      param.is_offline_index_rebuild_ = offline_rebuild;
-      const ObString logical_table_schema = request.string();
-      const ObString logical_lob_meta_schema = request.string();
-      const ObString logical_vector_data_schema = request.string();
-      const ObString logical_vector_param_schema = request.string();
-      param.table_schema_ = logical_table_schema;
-      param.lob_meta_table_schema_ = logical_lob_meta_schema;
-      param.vector_data_table_schema_ = logical_vector_data_schema;
-      param.vector_param_table_schema_ = logical_vector_param_schema;
-      const uint64_t count = request.number();
-      if (request.ret || !count || count > MAX_FRAME / 8 || owner || parent.slot || parent.generation
-          || generation || offline_rebuild > 1 || session_generation == UINT64_MAX) { ret = OB_INVALID_ARGUMENT; }
-      for (uint64_t i = 0; !ret && i < count; ++i) {
-        const ObTabletID tablet(request.number());
-        ret = request.ret ? request.ret : !tablet.is_valid() ? OB_INVALID_ARGUMENT : param.participants_.push_back(tablet);
+    if (!ret && ns > 1) {
+      const uint64_t logical_table_id = static_cast<uint64_t>(param.table_id_);
+      uint64_t storage_table_id = OB_INVALID_ID;
+      if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
+              ns, logical_table_id, storage_table_id))) {
+      } else if (storage_table_id > static_cast<uint64_t>(INT64_MAX)) {
+        ret = OB_SIZE_OVERFLOW;
+      } else {
+        param.table_id_ = static_cast<int64_t>(storage_table_id);
       }
-      if (!ret && (!request.consumed() || !param.is_valid())) {
-        ret = OB_INVALID_ARGUMENT;
+      for (int64_t i = 0; !ret && i < param.participants_.count(); ++i) {
+        ret = route_tablet_id(ns, param.participants_.at(i));
       }
-      if (!ret && ns > 1) {
-        failure_stage = "route_table_id";
-        const uint64_t logical_table_id = static_cast<uint64_t>(param.table_id_);
-        uint64_t storage_table_id = OB_INVALID_ID;
-        if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
-                ns, logical_table_id, storage_table_id))) {
-        } else if (storage_table_id > static_cast<uint64_t>(INT64_MAX)) {
-          ret = OB_SIZE_OVERFLOW;
-        } else {
-          param.table_id_ = static_cast<int64_t>(storage_table_id);
-        }
-        for (int64_t i = 0; OB_SUCC(ret) && i < param.participants_.count(); ++i) {
-          failure_stage = "route_participant";
-          ret = route_tablet_id(ns, param.participants_.at(i));
-        }
-        if (OB_SUCC(ret)) {
-          failure_stage = "route_table_schema";
-          ret = route_direct_insert_schema(
-              ns, logical_table_schema, logical_table_id, route_allocator,
-              param.table_schema_);
-        }
-        if (OB_SUCC(ret)) {
-          failure_stage = "route_lob_schema";
-          ret = route_direct_insert_schema(
-              ns, logical_lob_meta_schema, 0, route_allocator,
-              param.lob_meta_table_schema_);
-        }
-        if (OB_SUCC(ret)) {
-          failure_stage = "route_vector_data_schema";
-          ret = route_direct_insert_schema(
-              ns, logical_vector_data_schema, 0, route_allocator,
-              param.vector_data_table_schema_);
-        }
-        if (OB_SUCC(ret)) {
-          failure_stage = "route_vector_param_schema";
-          ret = route_direct_insert_schema(
-              ns, logical_vector_param_schema, 0, route_allocator,
-              param.vector_param_table_schema_);
-        }
-      }
-      if (!ret && !tag.slot) { ret = OB_STATE_NOT_MATCH; }
+      if (!ret) { ret = route_direct_insert_schema(ns, logical.table_schema_,
+          logical_table_id, route_allocator, param.table_schema_); }
+      if (!ret) { ret = route_direct_insert_schema(ns, logical.lob_meta_table_schema_,
+          0, route_allocator, param.lob_meta_table_schema_); }
+      if (!ret) { ret = route_direct_insert_schema(ns, logical.vector_data_table_schema_,
+          0, route_allocator, param.vector_data_table_schema_); }
+      if (!ret) { ret = route_direct_insert_schema(ns, logical.vector_param_table_schema_,
+          0, route_allocator, param.vector_param_table_schema_); }
+    }
+    if (!ret) {
+      auto staged = std::make_shared<DirectInsertOwner>(
+          context, tag, ns, ++session_generation);
+      ret = ObDirectInsertOrchestrator::start(
+          staged->allocator, param, *staged, staged->session);
+      fprintf(stderr,
+          "PROTOTYPE_V22_DIRECT_INSERT_SHARED ret=%d ns=%llu task=%ld table=%ld format=%llu snapshot=%ld schema=%ld participants=%ld\n",
+          ret, (unsigned long long)ns, param.ddl_task_id_, param.table_id_,
+          (unsigned long long)param.data_format_version_, param.snapshot_version_,
+          param.schema_version_, param.participants_.count());
       if (!ret) {
-        failure_stage = "start";
-        auto staged = std::make_shared<DirectInsertOwner>(
-            context, tag, ns, ++session_generation);
-        ret = ObDirectInsertOrchestrator::start(staged->allocator, param, *staged, staged->session);
-        fprintf(stderr,
-                "PROTOTYPE_V22_DIRECT_INSERT_SHARED ret=%d ns=%llu task=%ld table=%ld format=%llu snapshot=%ld schema=%ld participants=%ld\n",
-                ret, (unsigned long long)ns, param.ddl_task_id_, param.table_id_,
-                (unsigned long long)param.data_format_version_, param.snapshot_version_,
-                param.schema_version_, param.participants_.count());
+        ret = registry.attach(tag, staged);
         if (!ret) {
-          ret = registry.attach(tag, staged);
-          if (!ret) {
-            owner = std::move(staged);
-            output.number(tag.slot); output.number(tag.generation); output.number(owner->generation);
-          }
+          owner = std::move(staged);
+          origin = tag;
+          generation = owner->generation;
         }
-      }
-    } else if (!ret) {
-      ret = resolve(parent, generation, registry);
-      if (!ret) {
-        // PX tasks use their own existing routes and can finish concurrently.
-        std::shared_lock<std::shared_mutex> guard(owner->mutex);
-        auto *session = owner->session;
-        if (!session) { ret = OB_NOT_INIT; }
-        else { ret = OB_INVALID_ARGUMENT; }
       }
     }
-    reply = Frame('g'); reply.number(ret);
-    if (!ret) { reply.data.insert(reply.data.end(), output.data.begin() + Frame::HEADER_SIZE, output.data.end()); }
-    fprintf(stderr,
-            "PROTOTYPE_V22_DIRECT_INSERT_ROUTE ns=%llu op=%c ret=%d stage=%s owner=%d writers=%zu\n",
-            (unsigned long long)ns, static_cast<char>(operation), ret,
-            failure_stage, nullptr != owner, writers.size());
-    return output.ret ? output.ret : reply.ret;
+    return ret;
   }
 };
 int call_in_process_direct_insert_simple(RequestTag parent, uint64_t generation,
@@ -554,6 +523,8 @@ int control_in_process_direct_insert_writer(RequestTag parent, uint64_t generati
 int append_in_process_direct_insert_writer(RequestTag parent, uint64_t generation,
     uint64_t writer_id, ObDatum *cells, int64_t row_count,
     int64_t column_count, int64_t &rows);
+int start_in_process_direct_insert(const ObDirectInsertStartParam &param,
+    RequestTag &origin, uint64_t &generation);
 
 class RemoteDirectInsertSession final : public ObIDirectInsertSession, public ObIDirectInsertWriterFactory {
 public:
@@ -768,28 +739,17 @@ public:
     context.bind_current_thread();
     auto *sqc_session = THIS_WORKER.get_session();
     StorageSessionScope scope(sqc_session);
-    Frame request('J'), reply; request.number('S'); request.number(0); request.number(0); request.number(0);
-    request.number(param.ddl_task_id_); request.number(param.execution_id_); request.number(param.table_id_);
-    request.number(param.worker_count_); request.number(param.data_format_version_);
-    request.number(param.snapshot_version_); request.number(param.schema_version_);
-    request.number(param.is_offline_index_rebuild_);
-    request.string(param.table_schema_); request.string(param.lob_meta_table_schema_);
-    request.string(param.vector_data_table_schema_);
-    request.string(param.vector_param_table_schema_);
-    request.number(param.participants_.count());
-    for (int64_t i = 0; i < param.participants_.count(); ++i) { request.number(param.participants_.at(i).id()); }
+    RequestTag origin;
+    uint64_t generation = 0;
     int ret = scope.error();
-    if (!ret) { ret = worker_send(request); }
-    if (!ret) { ret = worker_read(reply); }
-    if (!ret) { ret = reply.type() == 'g' ? static_cast<int>(reply.number()) : OB_INVALID_ARGUMENT; }
+    if (!ret) { ret = start_in_process_direct_insert(param, origin, generation); }
     fprintf(stderr,
             "PROTOTYPE_V22_DIRECT_INSERT_WORKER ret=%d task=%ld table=%ld format=%llu snapshot=%ld schema=%ld participants=%ld\n",
             ret, param.ddl_task_id_, param.table_id_,
             (unsigned long long)param.data_format_version_, param.snapshot_version_,
             param.schema_version_, param.participants_.count());
     if (!ret) {
-      const RequestTag origin{reply.number(), reply.number()}; const uint64_t generation = reply.number();
-      if (!reply.consumed() || !generation || !origin.slot || !origin.generation) { ret = OB_INVALID_ARGUMENT; }
+      if (!generation || !origin.slot || !origin.generation) { ret = OB_INVALID_ARGUMENT; }
       else { session = new (memory) RemoteDirectInsertSession(
           allocator, schedules, param.ddl_task_id_, schedule,
           sqc_session, origin, generation); }

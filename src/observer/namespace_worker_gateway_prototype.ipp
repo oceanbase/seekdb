@@ -265,23 +265,7 @@ int in_process_send(InProcessStorage &ctx, const Frame &frame, bool)
   const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
   auto *old_session = THIS_WORKER.get_session();
   THIS_WORKER.set_session(ctx.initialized ? &ctx.session : nullptr);
-  if (input.type() == 'J') {
-    if (ctx.direct_insert_registry == nullptr) {
-      ret = OB_NOT_INIT;
-    } else {
-      if (!ctx.direct_insert_tag.slot) {
-        ctx.direct_insert_tag = ctx.direct_insert_registry->acquire();
-      }
-      if (!ctx.direct_insert_tag.slot) {
-        ret = OB_EAGAIN;
-      } else {
-        ret = ctx.direct_insert.process(
-            StorageSpaceHandle::namespace_space(ctx.ns),
-            ctx.direct_insert_tag, *ctx.direct_insert_registry,
-            ctx.session_state, input, result);
-      }
-    }
-  } else if (!ctx.initialized) {
+  if (!ctx.initialized) {
     ret = OB_NOT_INIT;
   } else {
     ret = serve_storage(StorageSpaceHandle::namespace_space(ctx.ns),
@@ -436,6 +420,23 @@ int with_in_process_direct_insert(Call &&call)
   THIS_WORKER.set_session(old_session);
   THIS_WORKER.set_timeout_ts(old_timeout);
   return ret;
+}
+int start_in_process_direct_insert(const ObDirectInsertStartParam &param,
+    RequestTag &origin, uint64_t &generation)
+{
+  InProcessStorage *ctx = in_process_storage;
+  if (ctx == nullptr || !ctx->initialized || !ctx->direct_insert_registry) { return OB_NOT_INIT; }
+  const StorageSpaceHandle space = active_worker_storage_space();
+  if (!space.is_namespace() || ctx->ns != space.namespace_id()) { return OB_INVALID_ARGUMENT; }
+  if (!ctx->direct_insert_tag.slot) {
+    ctx->direct_insert_tag = ctx->direct_insert_registry->acquire();
+  }
+  if (!ctx->direct_insert_tag.slot) { return OB_EAGAIN; }
+  return with_in_process_direct_insert([&](DirectInsertRoute &route,
+      StorageSpaceHandle target, DirectInsertRegistry &registry) {
+    return route.start(target, ctx->direct_insert_tag, registry,
+        ctx->session_state, param, origin, generation);
+  });
 }
 int build_in_process_direct_insert_autoinc(RequestTag parent, uint64_t generation,
                                            ObDirectInsertAutoincScope scope,
