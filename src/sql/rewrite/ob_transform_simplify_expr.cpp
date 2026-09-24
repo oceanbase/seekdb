@@ -243,6 +243,98 @@ int check_error_free_integer_literal_eq(ObTransformerCtx *ctx,
   return ret;
 }
 
+// A DATE column compared with a canonical DATE string has no conversion
+// diagnostics if its implicit cast succeeds without warnings in this session.
+// This exception is deliberately limited to text SQL; prepared parameters can
+// change between executions, including to invalid date strings.
+int check_error_free_date_literal_eq(ObTransformerCtx *ctx,
+                                     ObRawExpr *expr,
+                                     bool &is_safe)
+{
+  int ret = OB_SUCCESS;
+  is_safe = false;
+  const ObSqlCtx *sql_ctx = NULL;
+  ObPhysicalPlanCtx *plan_ctx = NULL;
+  ObRawExpr *column = NULL;
+  ObRawExpr *cast = NULL;
+  ObRawExpr *literal = NULL;
+  const oceanbase::common::ObObj *value = NULL;
+  bool column_is_error_free = false;
+  bool has_warning = false;
+  if (OB_ISNULL(ctx) || OB_ISNULL(ctx->exec_ctx_) || OB_ISNULL(ctx->phy_plan_)
+      || OB_ISNULL(sql_ctx = ctx->exec_ctx_->get_sql_ctx())
+      || OB_ISNULL(plan_ctx = ctx->exec_ctx_->get_physical_plan_ctx())
+      || sql_ctx->is_prepare_protocol_ || sql_ctx->is_text_ps_mode_
+      || OB_ISNULL(expr) || T_OP_EQ != expr->get_expr_type()
+      || 2 != expr->get_param_count()) {
+  } else {
+    column = expr->get_param_expr(0);
+    cast = expr->get_param_expr(1);
+    if (OB_NOT_NULL(column) && OB_NOT_NULL(cast) && !column->is_column_ref_expr()) {
+      ObRawExpr *tmp = column;
+      column = cast;
+      cast = tmp;
+    }
+    if (OB_ISNULL(column) || OB_ISNULL(cast) || !column->is_column_ref_expr()
+        || !column->get_result_type().is_mysql_date()
+        || static_cast<ObColumnRefRawExpr *>(column)->is_generated_column()
+        || (T_FUN_SYS_CAST != cast->get_expr_type()
+            && T_FUN_SYS_DEMOTE_CAST != cast->get_expr_type())
+        || !cast->get_result_type().is_mysql_date()
+        || 2 != cast->get_param_count()
+        || CM_IS_EXPLICIT_CAST(cast->get_cast_mode())
+        || !(cast->has_flag(IS_OP_OPERAND_IMPLICIT_CAST)
+             || cast->has_flag(IS_INNER_ADDED_EXPR))
+        || !cast->is_static_scalar_const_expr()
+        || OB_ISNULL(literal = cast->get_param_expr(0))) {
+    } else if (literal->is_immutable_const_expr()) {
+      value = &static_cast<ObConstRawExpr *>(literal)->get_value();
+    } else if (T_QUESTIONMARK == literal->get_expr_type()) {
+      const int64_t idx = static_cast<ObConstRawExpr *>(literal)->get_value().get_unknown();
+      if (idx >= 0 && idx < plan_ctx->get_param_store().count()) {
+        value = &plan_ctx->get_param_store().at(idx);
+      }
+    }
+    if (OB_ISNULL(value) || !value->is_string_type()) {
+    } else {
+      const ObString date_str = value->get_string();
+      bool canonical = 10 == date_str.length() && OB_NOT_NULL(date_str.ptr());
+      for (int64_t i = 0; canonical && i < date_str.length(); ++i) {
+        const char ch = date_str.ptr()[i];
+        if (i == 4 || i == 7) {
+          canonical = '-' == ch;
+        } else {
+          canonical = ch >= '0' && ch <= '9';
+        }
+      }
+      if (canonical) {
+        const char *str = date_str.ptr();
+        const int32_t year = (str[0] - '0') * 1000 + (str[1] - '0') * 100
+                             + (str[2] - '0') * 10 + str[3] - '0';
+        const int32_t month = (str[5] - '0') * 10 + str[6] - '0';
+        const int32_t day = (str[8] - '0') * 10 + str[9] - '0';
+        static const int32_t days_by_month[] = {31, 28, 31, 30, 31, 30,
+                                                31, 31, 30, 31, 30, 31};
+        canonical = year > 0 && month >= 1 && month <= 12 && day >= 1;
+        if (canonical) {
+          const bool leap = 0 == year % 4 && (0 != year % 100 || 0 == year % 400);
+          canonical = day <= days_by_month[month - 1] + (month == 2 && leap ? 1 : 0);
+        }
+      }
+      if (canonical && OB_FAIL(ObTransformUtils::check_error_free_expr(column,
+                                                                        column_is_error_free))) {
+      } else if (canonical && column_is_error_free
+                 && OB_FAIL(ObTransformUtils::check_static_expr_has_warning(ctx,
+                                                                             cast,
+                                                                             has_warning))) {
+      } else {
+        is_safe = canonical && column_is_error_free && !has_warning;
+      }
+    }
+  }
+  return ret;
+}
+
 int check_error_free_with_literal_eq(ObTransformerCtx *ctx,
                                      ObRawExpr *expr,
                                      bool &is_safe,
@@ -271,6 +363,7 @@ int check_error_free_with_literal_eq(ObTransformerCtx *ctx,
       }
     }
   } else if (OB_FAIL(check_error_free_integer_literal_eq(ctx, expr, is_safe))) {
+  } else if (!is_safe && OB_FAIL(check_error_free_date_literal_eq(ctx, expr, is_safe))) {
   } else {
     used_literal_eq = is_safe;
   }
