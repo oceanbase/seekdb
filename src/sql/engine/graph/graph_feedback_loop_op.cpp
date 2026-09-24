@@ -294,33 +294,39 @@ void GraphFeedbackFrontier::reset()
 
 GraphFeedbackLoopSpec::GraphFeedbackLoopSpec(common::ObIAllocator &allocator,
                                              const ObPhyOperatorType type)
-    : RecursivePumpSpec(allocator, type)
+    : RecursivePumpSpec(allocator, type),
+      source_scan_desc_(allocator),
+      edge_scan_desc_(allocator),
+      target_scan_desc_(allocator)
 {
 }
 
-int GraphFeedbackLoopSpec::resolve_expand_scan_specs(
-    const ObTableScanSpec *&source_scan,
-    const ObTableScanSpec *&edge_scan,
-    const ObTableScanSpec *&target_scan) const
+int GraphFeedbackLoopSpec::bind_expand_scans(
+    uint64_t source_scan_op_id,
+    uint64_t edge_scan_op_id,
+    uint64_t target_scan_op_id)
 {
   int ret = OB_SUCCESS;
-  source_scan = find_table_scan_spec(get_left(), source_scan_op_id_);
-  edge_scan = find_table_scan_spec(get_right(), edge_scan_op_id_);
-  target_scan = find_table_scan_spec(get_right(), target_scan_op_id_);
+  const ObTableScanSpec *source_scan = find_table_scan_spec(
+      get_left(), source_scan_op_id);
+  const ObTableScanSpec *edge_scan = find_table_scan_spec(
+      get_right(), edge_scan_op_id);
+  const ObTableScanSpec *target_scan = find_table_scan_spec(
+      get_right(), target_scan_op_id);
   if (OB_UNLIKELY(!expand_access_desc_.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid graph expand access descriptor", K(ret),
              K_(expand_access_desc));
-  } else if (OB_UNLIKELY(source_scan_op_id_ == OB_INVALID_ID
-                         || edge_scan_op_id_ == OB_INVALID_ID
-                         || target_scan_op_id_ == OB_INVALID_ID
-                         || source_scan_op_id_ == edge_scan_op_id_
-                         || source_scan_op_id_ == target_scan_op_id_
-                         || edge_scan_op_id_ == target_scan_op_id_)) {
+  } else if (OB_UNLIKELY(source_scan_op_id == OB_INVALID_ID
+                         || edge_scan_op_id == OB_INVALID_ID
+                         || target_scan_op_id == OB_INVALID_ID
+                         || source_scan_op_id == edge_scan_op_id
+                         || source_scan_op_id == target_scan_op_id
+                         || edge_scan_op_id == target_scan_op_id)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("graph expand table scan binding is invalid", K(ret),
-             K_(source_scan_op_id), K_(edge_scan_op_id),
-             K_(target_scan_op_id));
+             K(source_scan_op_id), K(edge_scan_op_id),
+             K(target_scan_op_id));
   } else if (OB_ISNULL(source_scan) || OB_ISNULL(edge_scan)
              || OB_ISNULL(target_scan)) {
     ret = OB_ERR_UNEXPECTED;
@@ -339,6 +345,15 @@ int GraphFeedbackLoopSpec::resolve_expand_scan_specs(
     LOG_WARN("graph expand table scan spec does not match its descriptor",
              K(ret), K_(expand_access_desc), KPC(source_scan), KPC(edge_scan),
              KPC(target_scan));
+  } else if (OB_FAIL(source_scan_desc_.init(*source_scan))) {
+    LOG_WARN("failed to bind graph source scan descriptor", K(ret),
+             K(source_scan_op_id));
+  } else if (OB_FAIL(edge_scan_desc_.init(*edge_scan))) {
+    LOG_WARN("failed to bind graph edge scan descriptor", K(ret),
+             K(edge_scan_op_id));
+  } else if (OB_FAIL(target_scan_desc_.init(*target_scan))) {
+    LOG_WARN("failed to bind graph target scan descriptor", K(ret),
+             K(target_scan_op_id));
   }
   return ret;
 }
@@ -347,15 +362,14 @@ int GraphFeedbackLoopOp::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!get_graph_spec().get_path_desc().is_valid()
-                  || !get_graph_spec().get_expand_access_desc().is_valid())) {
+                  || !get_graph_spec().get_expand_access_desc().is_valid()
+                  || !get_graph_spec().get_source_scan_desc().is_valid()
+                  || !get_graph_spec().get_edge_scan_desc().is_valid()
+                  || !get_graph_spec().get_target_scan_desc().is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid graph feedback physical descriptor", K(ret),
              K(get_graph_spec().get_path_desc()),
              K(get_graph_spec().get_expand_access_desc()));
-  // The recursive implementation can place a child scan below a PX boundary,
-  // where that scan spec is owned by another DFO and is not a descendant of
-  // this runtime spec. Resolve the three scan specs only when constructing the
-  // native GraphExpand adapter; the current row pump does not consume them.
   } else if (OB_FAIL(RecursivePumpOp::inner_open())) {
   }
   return ret;
@@ -377,9 +391,9 @@ OB_SERIALIZE_MEMBER((GraphFeedbackLoopSpec, RecursivePumpSpec),
                     path_desc_.row_shape_,
                     path_desc_.need_path_,
                     expand_access_desc_,
-                    source_scan_op_id_,
-                    edge_scan_op_id_,
-                    target_scan_op_id_);
+                    source_scan_desc_,
+                    edge_scan_desc_,
+                    target_scan_desc_);
 
 } // namespace sql
 } // namespace oceanbase

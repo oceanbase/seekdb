@@ -249,6 +249,31 @@ int GraphFeedbackLoopLogOp::get_expand_scan_op_ids(
   return ret;
 }
 
+int GraphFeedbackLoopLogOp::get_expand_scan_exprs(
+    ObIArray<ObRawExpr *> &exprs)
+{
+  int ret = OB_SUCCESS;
+  ObLogTableScan *scans[] = {
+      find_internal_scan(get_child(first_child), GRAPH_SEED_VERTEX_ALIAS),
+      find_internal_scan(get_child(second_child), GRAPH_STEP_EDGE_ALIAS),
+      find_internal_scan(get_child(second_child), GRAPH_STEP_VERTEX_ALIAS)};
+  ObSEArray<ObRawExpr *, 16> scan_exprs;
+  for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(scans); ++i) {
+    scan_exprs.reuse();
+    if (OB_ISNULL(scans[i])) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("graph expand scan is missing", K(ret), K(i));
+    } else if (OB_FAIL(scans[i]->get_op_exprs(scan_exprs))) {
+      LOG_WARN("failed to collect graph expand scan expressions", K(ret),
+               K(i), K(scans[i]->get_op_id()));
+    } else if (OB_FAIL(append_array_no_dup(exprs, scan_exprs))) {
+      LOG_WARN("failed to append graph expand scan expressions", K(ret),
+               K(i));
+    }
+  }
+  return ret;
+}
+
 int GraphFeedbackLoopLogOp::get_plan_item_info(PlanText &plan_text,
                                                ObSqlPlanItem &plan_item)
 {

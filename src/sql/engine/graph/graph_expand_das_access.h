@@ -18,6 +18,7 @@
 
 #include "sql/das/ob_das_ref.h"
 #include "sql/engine/graph/graph_expand.h"
+#include "sql/engine/graph/graph_expand_scan_desc.h"
 
 namespace oceanbase
 {
@@ -27,7 +28,6 @@ namespace sql
 class ObEvalCtx;
 class ObExecContext;
 class ObExpr;
-class ObTableScanSpec;
 struct ObDASScanCtDef;
 struct ObDASScanRtDef;
 struct ObDASTableLocMeta;
@@ -43,9 +43,9 @@ public:
 
   int init(const GraphPathDesc &path_desc,
            const GraphExpandAccessDesc &access_desc,
-           const ObTableScanSpec &source_scan,
-           const ObTableScanSpec &edge_scan,
-           const ObTableScanSpec &target_scan);
+           const GraphExpandScanDesc &source_scan,
+           const GraphExpandScanDesc &edge_scan,
+           const GraphExpandScanDesc &target_scan);
 
   void release() override;
   int64_t used_memory() const override;
@@ -72,13 +72,13 @@ private:
     uint64_t table_id_{common::OB_INVALID_ID};
     int64_t key_count_{0};
     uint64_t key_columns_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
-    const ObTableScanSpec *scan_spec_{nullptr};
+    const GraphExpandScanDesc *scan_desc_{nullptr};
     const ObDASScanCtDef *scan_ctdef_{nullptr};
     const ObDASTableLocMeta *loc_meta_{nullptr};
     ObExpr *key_exprs_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
     TO_STRING_KV(K_(element_id), K_(table_id), K_(key_count),
                  "key_columns", common::ObArrayWrap<uint64_t>(key_columns_, key_count_),
-                 KP_(scan_spec), KP_(scan_ctdef), KP_(loc_meta));
+                 KP_(scan_desc), KP_(scan_ctdef), KP_(loc_meta));
   };
 
   // Binds the three typed identities carried by one physical edge row. The
@@ -97,7 +97,7 @@ private:
     uint64_t source_columns_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
     uint64_t edge_columns_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
     uint64_t target_columns_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
-    const ObTableScanSpec *scan_spec_{nullptr};
+    const GraphExpandScanDesc *scan_desc_{nullptr};
     const ObDASScanCtDef *access_ctdef_{nullptr};
     const ObDASScanCtDef *output_ctdef_{nullptr};
     ObExpr *source_exprs_[common::OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
@@ -109,18 +109,18 @@ private:
                  "source_columns", common::ObArrayWrap<uint64_t>(source_columns_, source_key_count_),
                  "edge_columns", common::ObArrayWrap<uint64_t>(edge_columns_, edge_key_count_),
                  "target_columns", common::ObArrayWrap<uint64_t>(target_columns_, target_key_count_),
-                 KP_(scan_spec), KP_(access_ctdef), KP_(output_ctdef));
+                 KP_(scan_desc), KP_(access_ctdef), KP_(output_ctdef));
   };
 
   int init_vertex_binding(uint64_t element_id,
                           uint64_t table_id,
                           int64_t key_count,
                           const uint64_t *key_columns,
-                          const ObTableScanSpec &scan_spec,
+                          const GraphExpandScanDesc &scan_desc,
                           VertexLookupBinding &binding);
   int init_edge_binding(const GraphPathDesc &path_desc,
                         const GraphExpandAccessDesc &access_desc,
-                        const ObTableScanSpec &scan_spec,
+                        const GraphExpandScanDesc &scan_desc,
                         EdgeScanBinding &binding);
   const VertexLookupBinding *find_vertex_binding(uint64_t element_id) const;
   int validate_requested(
@@ -129,7 +129,7 @@ private:
   int lookup_vertices(const VertexLookupBinding &binding,
                       const common::ObIArray<GraphElementIdentity> &requested,
                       common::ObIArray<GraphElementIdentity> &existing);
-  int init_scan_rtdef(const ObTableScanSpec &scan_spec,
+  int init_scan_rtdef(const GraphExpandScanDesc &scan_desc,
                       const ObDASScanCtDef &scan_ctdef,
                       const ObDASTableLocMeta *loc_meta,
                       bool uses_index_back,

@@ -123,6 +123,103 @@ int bind_column_exprs(const ObDASScanCtDef &ctdef,
 
 } // namespace
 
+GraphExpandScanDesc::GraphExpandScanDesc(ObIAllocator &allocator)
+    : startup_filters_(&allocator),
+      filters_(&allocator),
+      owned_ctdef_(allocator)
+{
+}
+
+int GraphExpandScanDesc::init(const ObTableScanSpec &scan_spec)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(scan_spec.get_id() == OB_INVALID_ID
+                  || scan_spec.get_table_loc_id() == OB_INVALID_ID
+                  || scan_spec.ref_table_id_ == OB_INVALID_ID
+                  || scan_spec.tsc_ctdef_.scan_ctdef_.ref_table_id_
+                         == OB_INVALID_ID)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid graph expand table scan spec", K(ret), K(scan_spec));
+  } else if (OB_FAIL(startup_filters_.assign(scan_spec.startup_filters_))) {
+    LOG_WARN("failed to copy graph scan startup filters", K(ret));
+  } else if (OB_FAIL(filters_.assign(scan_spec.filters_))) {
+    LOG_WARN("failed to copy graph scan filters", K(ret));
+  } else {
+    scan_op_id_ = scan_spec.get_id();
+    table_loc_id_ = scan_spec.get_table_loc_id();
+    ref_table_id_ = scan_spec.ref_table_id_;
+    frozen_version_ = scan_spec.frozen_version_;
+    rows_ = scan_spec.rows_;
+    width_ = scan_spec.width_;
+    need_check_output_datum_ = scan_spec.need_check_output_datum_;
+    codegen_ctdef_ = &scan_spec.tsc_ctdef_;
+  }
+  return ret;
+}
+
+bool GraphExpandScanDesc::is_valid() const
+{
+  const ObTableScanCtDef &ctdef = get_tsc_ctdef();
+  return scan_op_id_ != OB_INVALID_ID
+      && table_loc_id_ != OB_INVALID_ID
+      && ref_table_id_ != OB_INVALID_ID
+      && ctdef.scan_ctdef_.ref_table_id_ != OB_INVALID_ID;
+}
+
+OB_DEF_SERIALIZE(GraphExpandScanDesc)
+{
+  int ret = OB_SUCCESS;
+  const ObTableScanCtDef &tsc_ctdef = get_tsc_ctdef();
+  LST_DO_CODE(OB_UNIS_ENCODE,
+              scan_op_id_,
+              table_loc_id_,
+              ref_table_id_,
+              frozen_version_,
+              rows_,
+              width_,
+              need_check_output_datum_,
+              startup_filters_,
+              filters_,
+              tsc_ctdef);
+  return ret;
+}
+
+OB_DEF_DESERIALIZE(GraphExpandScanDesc)
+{
+  int ret = OB_SUCCESS;
+  codegen_ctdef_ = nullptr;
+  LST_DO_CODE(OB_UNIS_DECODE,
+              scan_op_id_,
+              table_loc_id_,
+              ref_table_id_,
+              frozen_version_,
+              rows_,
+              width_,
+              need_check_output_datum_,
+              startup_filters_,
+              filters_,
+              owned_ctdef_);
+  return ret;
+}
+
+OB_DEF_SERIALIZE_SIZE(GraphExpandScanDesc)
+{
+  int64_t len = 0;
+  const ObTableScanCtDef &tsc_ctdef = get_tsc_ctdef();
+  LST_DO_CODE(OB_UNIS_ADD_LEN,
+              scan_op_id_,
+              table_loc_id_,
+              ref_table_id_,
+              frozen_version_,
+              rows_,
+              width_,
+              need_check_output_datum_,
+              startup_filters_,
+              filters_,
+              tsc_ctdef);
+  return len;
+}
+
 GraphExpandDasAccess::GraphExpandDasAccess(ObExecContext &exec_ctx,
                                            ObEvalCtx &eval_ctx)
     : exec_ctx_(exec_ctx),
@@ -144,11 +241,11 @@ bool GraphExpandDasAccess::VertexLookupBinding::is_valid() const
       && table_id_ != OB_INVALID_ID
       && key_count_ > 0
       && key_count_ <= OB_USER_MAX_ROWKEY_COLUMN_NUMBER
-      && scan_spec_ != nullptr
+      && scan_desc_ != nullptr
       && scan_ctdef_ != nullptr
       && loc_meta_ != nullptr
       && scan_ctdef_->ref_table_id_ == table_id_
-      && loc_meta_->table_loc_id_ == scan_spec_->get_table_loc_id()
+      && loc_meta_->table_loc_id_ == scan_desc_->get_table_loc_id()
       && loc_meta_->ref_table_id_ == table_id_;
   for (int64_t i = 0; valid && i < key_count_; ++i) {
     valid = key_columns_[i] != OB_INVALID_ID && key_exprs_[i] != nullptr;
@@ -167,10 +264,10 @@ bool GraphExpandDasAccess::EdgeScanBinding::is_valid() const
       && edge_key_count_ <= OB_USER_MAX_ROWKEY_COLUMN_NUMBER
       && target_key_count_ > 0
       && target_key_count_ <= OB_USER_MAX_ROWKEY_COLUMN_NUMBER
-      && scan_spec_ != nullptr
+      && scan_desc_ != nullptr
       && access_ctdef_ != nullptr
       && output_ctdef_ != nullptr
-      && scan_spec_->ref_table_id_ == edge_table_id_
+      && scan_desc_->ref_table_id_ == edge_table_id_
       && access_ctdef_->ref_table_id_ == access_table_id_
       && (output_ctdef_ == access_ctdef_
           || output_ctdef_->ref_table_id_ == edge_table_id_);
@@ -188,9 +285,9 @@ bool GraphExpandDasAccess::EdgeScanBinding::is_valid() const
 
 int GraphExpandDasAccess::init(const GraphPathDesc &path_desc,
                                const GraphExpandAccessDesc &access_desc,
-                               const ObTableScanSpec &source_scan,
-                               const ObTableScanSpec &edge_scan,
-                               const ObTableScanSpec &target_scan)
+                               const GraphExpandScanDesc &source_scan,
+                               const GraphExpandScanDesc &edge_scan,
+                               const GraphExpandScanDesc &target_scan)
 {
   int ret = reset_edge_scan(OB_SUCCESS);
   initialized_ = false;
@@ -206,11 +303,14 @@ int GraphExpandDasAccess::init(const GraphPathDesc &path_desc,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid graph DAS access descriptor", K(ret), K(path_desc),
              K(access_desc));
-  } else if (OB_UNLIKELY(source_scan.ref_table_id_
+  } else if (OB_UNLIKELY(!source_scan.is_valid()
+                         || !edge_scan.is_valid()
+                         || !target_scan.is_valid()
+                         || source_scan.ref_table_id_
                              != access_desc.source_table_id_
                          || edge_scan.ref_table_id_
                              != access_desc.edge_table_id_
-                         || edge_scan.tsc_ctdef_.scan_ctdef_.ref_table_id_
+                         || edge_scan.get_tsc_ctdef().scan_ctdef_.ref_table_id_
                              != access_desc.edge_access_table_id_
                          || target_scan.ref_table_id_
                              != access_desc.target_table_id_)) {
@@ -218,7 +318,7 @@ int GraphExpandDasAccess::init(const GraphPathDesc &path_desc,
     LOG_WARN("graph DAS scans do not match their access descriptor", K(ret),
              K(access_desc), K(source_scan.ref_table_id_),
              K(edge_scan.ref_table_id_),
-             K(edge_scan.tsc_ctdef_.scan_ctdef_.ref_table_id_),
+             K(edge_scan.get_tsc_ctdef().scan_ctdef_.ref_table_id_),
              K(target_scan.ref_table_id_));
   } else if (OB_FAIL(init_vertex_binding(
                  path_desc.source_element_id_, access_desc.source_table_id_,
@@ -304,14 +404,15 @@ int GraphExpandDasAccess::init_vertex_binding(
     uint64_t table_id,
     int64_t key_count,
     const uint64_t *key_columns,
-    const ObTableScanSpec &scan_spec,
+    const GraphExpandScanDesc &scan_desc,
     VertexLookupBinding &binding)
 {
   int ret = OB_SUCCESS;
+  const ObTableScanCtDef &tsc_ctdef = scan_desc.get_tsc_ctdef();
   const ObDASScanCtDef *scan_ctdef
-      = scan_spec.tsc_ctdef_.graph_lookup_ctdef_;
+      = tsc_ctdef.graph_lookup_ctdef_;
   const ObDASTableLocMeta *loc_meta
-      = scan_spec.tsc_ctdef_.graph_lookup_loc_meta_;
+      = tsc_ctdef.graph_lookup_loc_meta_;
   VertexLookupBinding candidate;
   if (OB_UNLIKELY(element_id == OB_INVALID_ID || table_id == OB_INVALID_ID
                   || key_count <= 0
@@ -321,17 +422,17 @@ int GraphExpandDasAccess::init_vertex_binding(
   } else if (OB_ISNULL(scan_ctdef) || OB_ISNULL(loc_meta)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("graph vertex scan has no dedicated base-table DAS ctdef", K(ret),
-             K(table_id), K(scan_spec.ref_table_id_),
+             K(table_id), K(scan_desc.ref_table_id_),
              "access_table_id",
-             scan_spec.tsc_ctdef_.scan_ctdef_.ref_table_id_);
+             tsc_ctdef.scan_ctdef_.ref_table_id_);
   } else if (OB_UNLIKELY(scan_ctdef->ref_table_id_ != table_id
                          || loc_meta->ref_table_id_ != table_id
                          || loc_meta->table_loc_id_
-                                != scan_spec.get_table_loc_id())) {
+                                != scan_desc.get_table_loc_id())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("graph vertex lookup definition does not match table scan", K(ret),
              K(table_id), K(scan_ctdef->ref_table_id_), KPC(loc_meta),
-             K(scan_spec.get_table_loc_id()));
+             K(scan_desc.get_table_loc_id()));
   } else if (OB_UNLIKELY(scan_ctdef->access_column_ids_.count()
                          != scan_ctdef->pd_expr_spec_.access_exprs_.count())) {
     ret = OB_ERR_UNEXPECTED;
@@ -342,7 +443,7 @@ int GraphExpandDasAccess::init_vertex_binding(
     candidate.element_id_ = element_id;
     candidate.table_id_ = table_id;
     candidate.key_count_ = key_count;
-    candidate.scan_spec_ = &scan_spec;
+    candidate.scan_desc_ = &scan_desc;
     candidate.scan_ctdef_ = scan_ctdef;
     candidate.loc_meta_ = loc_meta;
     for (int64_t key = 0; OB_SUCC(ret) && key < key_count; ++key) {
@@ -378,16 +479,17 @@ int GraphExpandDasAccess::init_vertex_binding(
 int GraphExpandDasAccess::init_edge_binding(
     const GraphPathDesc &path_desc,
     const GraphExpandAccessDesc &access_desc,
-    const ObTableScanSpec &scan_spec,
+    const GraphExpandScanDesc &scan_desc,
     EdgeScanBinding &binding)
 {
   int ret = OB_SUCCESS;
   EdgeScanBinding candidate;
-  const ObDASScanCtDef *access_ctdef = &scan_spec.tsc_ctdef_.scan_ctdef_;
-  const ObDASScanCtDef *output_ctdef = scan_spec.tsc_ctdef_.lookup_ctdef_ == nullptr
-      ? access_ctdef : scan_spec.tsc_ctdef_.lookup_ctdef_;
+  const ObTableScanCtDef &tsc_ctdef = scan_desc.get_tsc_ctdef();
+  const ObDASScanCtDef *access_ctdef = &tsc_ctdef.scan_ctdef_;
+  const ObDASScanCtDef *output_ctdef = tsc_ctdef.lookup_ctdef_ == nullptr
+      ? access_ctdef : tsc_ctdef.lookup_ctdef_;
   if (OB_UNLIKELY(!path_desc.is_valid() || !access_desc.is_valid()
-                  || scan_spec.ref_table_id_ != access_desc.edge_table_id_
+                  || scan_desc.ref_table_id_ != access_desc.edge_table_id_
                   || access_ctdef->ref_table_id_
                          != access_desc.edge_access_table_id_)) {
     ret = OB_INVALID_ARGUMENT;
@@ -400,7 +502,7 @@ int GraphExpandDasAccess::init_edge_binding(
     candidate.source_key_count_ = access_desc.source_key_count_;
     candidate.edge_key_count_ = access_desc.edge_key_count_;
     candidate.target_key_count_ = access_desc.target_key_count_;
-    candidate.scan_spec_ = &scan_spec;
+    candidate.scan_desc_ = &scan_desc;
     candidate.access_ctdef_ = access_ctdef;
     candidate.output_ctdef_ = output_ctdef;
     for (int64_t i = 0; i < candidate.source_key_count_; ++i) {
@@ -508,7 +610,7 @@ int GraphExpandDasAccess::lookup_vertices(
 }
 
 int GraphExpandDasAccess::init_scan_rtdef(
-    const ObTableScanSpec &scan_spec,
+    const GraphExpandScanDesc &scan_desc,
     const ObDASScanCtDef &scan_ctdef,
     const ObDASTableLocMeta *loc_meta,
     bool uses_index_back,
@@ -523,56 +625,57 @@ int GraphExpandDasAccess::init_scan_rtdef(
     LOG_WARN("graph DAS scan runtime context is incomplete", K(ret),
              K(plan_ctx), K(session));
   } else {
-    const bool is_lookup = &scan_ctdef == scan_spec.tsc_ctdef_.lookup_ctdef_;
+    const ObTableScanCtDef &tsc_ctdef = scan_desc.get_tsc_ctdef();
+    const bool is_lookup = &scan_ctdef == tsc_ctdef.lookup_ctdef_;
     scan_rtdef.ctdef_ = &scan_ctdef;
     scan_rtdef.timeout_ts_ = plan_ctx->get_ps_timeout_timestamp();
     scan_rtdef.tx_lock_timeout_ = session->get_trx_lock_timeout();
-    scan_rtdef.scan_flag_ = scan_spec.tsc_ctdef_.scan_flags_;
+    scan_rtdef.scan_flag_ = tsc_ctdef.scan_flags_;
     scan_rtdef.scan_flag_.scan_order_ = uses_index_back && is_lookup
         ? ObQueryFlag::KeepOrder : ObQueryFlag::NoOrder;
     scan_rtdef.scan_flag_.index_back_ = uses_index_back;
     scan_rtdef.scan_flag_.is_need_feedback_ = false;
-    scan_rtdef.need_check_output_datum_ = scan_spec.need_check_output_datum_;
+    scan_rtdef.need_check_output_datum_ = scan_desc.need_check_output_datum_;
     scan_rtdef.sql_mode_ = session->get_sql_mode();
     scan_rtdef.stmt_allocator_.set_alloc(&scan_allocator);
     scan_rtdef.scan_allocator_.set_alloc(&scan_allocator);
     scan_rtdef.eval_ctx_ = &eval_ctx_;
-    scan_rtdef.frozen_version_ = scan_spec.frozen_version_;
-    scan_rtdef.scan_op_id_ = scan_spec.get_id();
-    scan_rtdef.scan_rows_size_ = scan_spec.rows_ * scan_spec.width_;
+    scan_rtdef.frozen_version_ = scan_desc.frozen_version_;
+    scan_rtdef.scan_op_id_ = scan_desc.get_id();
+    scan_rtdef.scan_rows_size_ = scan_desc.rows_ * scan_desc.width_;
     scan_rtdef.runtime_schema_version_
         = exec_ctx_.get_sql_exec_ctx().get_query_begin_schema_version();
     if (OB_FAIL(scan_rtdef.init_pd_op(exec_ctx_, scan_ctdef))) {
       LOG_WARN("failed to initialize graph DAS scan pushdown", K(ret),
                K(scan_ctdef));
-    } else if (OB_FAIL(scan_spec.tsc_ctdef_.snapshot_item_
+    } else if (OB_FAIL(tsc_ctdef.snapshot_item_
                            .set_snapshot_query_info(eval_ctx_, scan_rtdef))) {
       LOG_WARN("failed to initialize graph DAS scan snapshot", K(ret),
-               K(scan_spec));
+               K(scan_desc.get_id()));
     } else {
       scan_rtdef.table_loc_ = DAS_CTX(exec_ctx_).get_table_loc_by_id(
-          scan_spec.get_table_loc_id(), scan_ctdef.ref_table_id_);
+          scan_desc.get_table_loc_id(), scan_ctdef.ref_table_id_);
       if (scan_rtdef.table_loc_ == nullptr
           && loc_meta != nullptr) {
         ret = DAS_CTX(exec_ctx_).extended_table_loc(
             *loc_meta, scan_rtdef.table_loc_);
       } else if (scan_rtdef.table_loc_ == nullptr
-                 && &scan_ctdef == scan_spec.tsc_ctdef_.lookup_ctdef_
-                 && scan_spec.tsc_ctdef_.lookup_loc_meta_ != nullptr) {
+                 && &scan_ctdef == tsc_ctdef.lookup_ctdef_
+                 && tsc_ctdef.lookup_loc_meta_ != nullptr) {
         ret = DAS_CTX(exec_ctx_).extended_table_loc(
-            *scan_spec.tsc_ctdef_.lookup_loc_meta_, scan_rtdef.table_loc_);
+            *tsc_ctdef.lookup_loc_meta_, scan_rtdef.table_loc_);
       }
       if (OB_SUCC(ret)
           && (OB_ISNULL(scan_rtdef.table_loc_)
               || OB_ISNULL(scan_rtdef.table_loc_->loc_meta_))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("graph DAS scan table location metadata is missing", K(ret),
-                 K(scan_spec.get_table_loc_id()), K(scan_ctdef.ref_table_id_));
+                 K(scan_desc.get_table_loc_id()), K(scan_ctdef.ref_table_id_));
       } else if (OB_SUCC(ret)
                  && scan_rtdef.table_loc_->loc_meta_->is_weak_read_) {
         scan_rtdef.scan_flag_.set_is_select_follower();
       }
-      if (OB_SUCC(ret) && scan_spec.ref_table_id_ != scan_ctdef.ref_table_id_) {
+      if (OB_SUCC(ret) && scan_desc.ref_table_id_ != scan_ctdef.ref_table_id_) {
         scan_rtdef.need_scn_ = false;
       }
     }
@@ -592,7 +695,7 @@ int GraphExpandDasAccess::lookup_vertices(
       OB_MALLOC_NORMAL_BLOCK_SIZE,
       ModulePageAllocator(das_ref.get_das_alloc(), "GraphVtxRange"));
   das_ref.set_mem_attr(ObMemAttr("GraphVtxLookup"));
-  if (OB_FAIL(init_scan_rtdef(*binding.scan_spec_, *binding.scan_ctdef_,
+  if (OB_FAIL(init_scan_rtdef(*binding.scan_desc_, *binding.scan_ctdef_,
                               binding.loc_meta_, false,
                               das_ref.get_das_alloc(), scan_rtdef))) {
   }
@@ -878,13 +981,13 @@ int GraphExpandDasAccess::validate_edge_scan_request(
 int GraphExpandDasAccess::init_edge_scan_rtdefs(bool uses_index_back)
 {
   int ret = OB_SUCCESS;
-  const ObTableScanSpec *scan_spec = edge_binding_.scan_spec_;
+  const GraphExpandScanDesc *scan_desc = edge_binding_.scan_desc_;
   const ObDASScanCtDef *scan_ctdef = edge_binding_.access_ctdef_;
   const ObDASScanCtDef *lookup_ctdef = edge_binding_.output_ctdef_;
   edge_das_ref_.set_mem_attr(ObMemAttr("GraphEdgeScan"));
   void *scan_buffer = nullptr;
   void *lookup_buffer = nullptr;
-  if (OB_ISNULL(scan_spec) || OB_ISNULL(scan_ctdef)
+  if (OB_ISNULL(scan_desc) || OB_ISNULL(scan_ctdef)
       || OB_ISNULL(lookup_ctdef)) {
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(scan_buffer = edge_das_ref_.get_das_alloc().alloc(
@@ -892,7 +995,7 @@ int GraphExpandDasAccess::init_edge_scan_rtdefs(bool uses_index_back)
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     edge_scan_rtdef_ = new(scan_buffer) ObDASScanRtDef();
-    if (OB_FAIL(init_scan_rtdef(*scan_spec, *scan_ctdef, nullptr,
+    if (OB_FAIL(init_scan_rtdef(*scan_desc, *scan_ctdef, nullptr,
                                 uses_index_back,
                                 edge_das_ref_.get_das_alloc(),
                                 *edge_scan_rtdef_))) {
@@ -908,7 +1011,7 @@ int GraphExpandDasAccess::init_edge_scan_rtdefs(bool uses_index_back)
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
       edge_lookup_rtdef_ = new(lookup_buffer) ObDASScanRtDef();
-      if (OB_FAIL(init_scan_rtdef(*scan_spec, *lookup_ctdef, nullptr, true,
+      if (OB_FAIL(init_scan_rtdef(*scan_desc, *lookup_ctdef, nullptr, true,
                                   edge_das_ref_.get_das_alloc(),
                                   *edge_lookup_rtdef_))) {
       }
@@ -1007,14 +1110,14 @@ int GraphExpandDasAccess::start_full_edge_scan(bool &empty)
   int ret = OB_SUCCESS;
   bool startup_filtered = false;
   empty = false;
-  const ObTableScanSpec *scan_spec = edge_binding_.scan_spec_;
+  const GraphExpandScanDesc *scan_desc = edge_binding_.scan_desc_;
   const ObDASScanCtDef *scan_ctdef = edge_binding_.access_ctdef_;
-  if (OB_ISNULL(scan_spec) || OB_ISNULL(scan_ctdef)) {
+  if (OB_ISNULL(scan_desc) || OB_ISNULL(scan_ctdef)) {
     ret = OB_NOT_INIT;
   } else if (access_desc_.uses_adjacency_index()
              || edge_binding_.output_ctdef_ != scan_ctdef) {
     ret = OB_NOT_SUPPORTED;
-  } else if (OB_FAIL(evaluate_filters(eval_ctx_, scan_spec->startup_filters_,
+  } else if (OB_FAIL(evaluate_filters(eval_ctx_, scan_desc->startup_filters_,
                                       startup_filtered))) {
   } else if (startup_filtered) {
     empty = true;
@@ -1071,18 +1174,18 @@ int GraphExpandDasAccess::start_adjacency_edge_scan(
 {
   int ret = OB_SUCCESS;
   bool startup_filtered = false;
-  const ObTableScanSpec *scan_spec = edge_binding_.scan_spec_;
+  const GraphExpandScanDesc *scan_desc = edge_binding_.scan_desc_;
   const ObDASScanCtDef *scan_ctdef = edge_binding_.access_ctdef_;
   const bool uses_index_back = edge_binding_.output_ctdef_ != scan_ctdef;
   ObArray<ObNewRange> ranges(
       OB_MALLOC_NORMAL_BLOCK_SIZE,
       ModulePageAllocator(edge_das_ref_.get_das_alloc(), "GraphEdgeRange"));
   empty = false;
-  if (OB_ISNULL(scan_spec) || OB_ISNULL(scan_ctdef)) {
+  if (OB_ISNULL(scan_desc) || OB_ISNULL(scan_ctdef)) {
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!access_desc_.uses_adjacency_index())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(evaluate_filters(eval_ctx_, scan_spec->startup_filters_,
+  } else if (OB_FAIL(evaluate_filters(eval_ctx_, scan_desc->startup_filters_,
                                       startup_filtered))) {
   } else if (startup_filtered) {
     empty = true;
@@ -1166,9 +1269,9 @@ int GraphExpandDasAccess::get_edge_page(
 {
   int ret = OB_SUCCESS;
   bool finished = false;
-  const ObTableScanSpec *scan_spec = edge_binding_.scan_spec_;
+  const GraphExpandScanDesc *scan_desc = edge_binding_.scan_desc_;
   if (OB_UNLIKELY(!edge_scan_active_ || edge_scan_rtdef_ == nullptr
-                  || scan_spec == nullptr)) {
+                  || scan_desc == nullptr)) {
     ret = OB_NOT_INIT;
   }
   while (OB_SUCC(ret) && !finished && edges.count() < limit) {
@@ -1187,7 +1290,7 @@ int GraphExpandDasAccess::get_edge_page(
       bool filtered = false;
       bool matches = false;
       GraphExpandEdge edge;
-      if (OB_FAIL(evaluate_filters(eval_ctx_, scan_spec->filters_, filtered))) {
+      if (OB_FAIL(evaluate_filters(eval_ctx_, scan_desc->filters_, filtered))) {
       } else if (!filtered && OB_FAIL(materialize_edge(edge, matches))) {
       } else if (!filtered && matches
                  && access_desc_.uses_adjacency_index()

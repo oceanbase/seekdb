@@ -19,13 +19,12 @@
 #include "sql/engine/graph/graph_expand.h"
 #include "sql/engine/graph/graph_path_state_store.h"
 #include "sql/engine/recursive_cte/ob_recursive_union_all_op.h"
+#include "sql/engine/graph/graph_expand_scan_desc.h"
 
 namespace oceanbase
 {
 namespace sql
 {
-
-class ObTableScanSpec;
 
 // Query-local owner of one breadth-first path frontier. Each call to expand()
 // converts the current path-state IDs into GraphExpandInput batches, consumes
@@ -105,14 +104,9 @@ public:
   {
     expand_access_desc_ = expand_access_desc;
   }
-  void set_expand_scan_ops(uint64_t source_scan_op_id,
-                           uint64_t edge_scan_op_id,
-                           uint64_t target_scan_op_id)
-  {
-    source_scan_op_id_ = source_scan_op_id;
-    edge_scan_op_id_ = edge_scan_op_id;
-    target_scan_op_id_ = target_scan_op_id;
-  }
+  int bind_expand_scans(uint64_t source_scan_op_id,
+                        uint64_t edge_scan_op_id,
+                        uint64_t target_scan_op_id);
 
   const GraphPathDesc &get_path_desc() const { return path_desc_; }
   const GraphExpandAccessDesc &get_expand_access_desc() const
@@ -121,20 +115,22 @@ public:
   int64_t get_upper_bound() const { return path_desc_.upper_bound_; }
   GraphPathDirection get_direction() const { return path_desc_.direction_; }
   GraphPathMode get_path_mode() const { return path_desc_.path_mode_; }
-  int resolve_expand_scan_specs(const ObTableScanSpec *&source_scan,
-                                const ObTableScanSpec *&edge_scan,
-                                const ObTableScanSpec *&target_scan) const;
+  const GraphExpandScanDesc &get_source_scan_desc() const
+  { return source_scan_desc_; }
+  const GraphExpandScanDesc &get_edge_scan_desc() const
+  { return edge_scan_desc_; }
+  const GraphExpandScanDesc &get_target_scan_desc() const
+  { return target_scan_desc_; }
 
 private:
   GraphPathDesc path_desc_{};
   GraphExpandAccessDesc expand_access_desc_{};
-  // Operator IDs, rather than table IDs, distinguish the anchor and step
-  // aliases when both vertices use the same mapped table. The scan specs keep
-  // the generated filters, table-location metadata and DAS ctdefs that the
-  // native expand adapter will borrow.
-  uint64_t source_scan_op_id_{common::OB_INVALID_ID};
-  uint64_t edge_scan_op_id_{common::OB_INVALID_ID};
-  uint64_t target_scan_op_id_{common::OB_INVALID_ID};
+  // These snapshots cross DFO boundaries with the feedback-loop spec. The
+  // source, edge and target aliases can map to the same physical table, so
+  // binding happens by operator ID once during code generation.
+  GraphExpandScanDesc source_scan_desc_;
+  GraphExpandScanDesc edge_scan_desc_;
+  GraphExpandScanDesc target_scan_desc_;
 };
 
 class GraphFeedbackLoopOp final : public RecursivePumpOp

@@ -271,7 +271,18 @@ int ObStaticEngineCG::postorder_generate_op(ObLogicalOperator &op,
   }
   if (OB_FAIL(ret)) {
   } else if (NULL != partial_frame_gen.dfo_raw_exprs_ && phy_plan_->px_worker_share_plan_enabled()) {
-    if (OB_FAIL(partial_frame_gen.dfo_raw_exprs_->reserve(partial_frame_gen.dfo_raw_exprs_->count() + cur_op_exprs_.count()))) {
+    // GraphExpandScanDesc is serialized with the feedback-loop DFO even when
+    // its original table scan belongs to a child DFO. Register the scan's raw
+    // expressions here so partial-frame serialization keeps every expression
+    // referenced by the copied filters and DAS ctdefs.
+    if (op.get_type() == log_op_def::LOG_GRAPH_FEEDBACK_LOOP
+        && OB_FAIL(static_cast<GraphFeedbackLoopLogOp &>(op)
+                       .get_expand_scan_exprs(*partial_frame_gen.dfo_raw_exprs_))) {
+      LOG_WARN("failed to register graph expand expressions in DFO frame",
+               K(ret), K(op.get_op_id()));
+    } else if (OB_FAIL(partial_frame_gen.dfo_raw_exprs_->reserve(
+                   partial_frame_gen.dfo_raw_exprs_->count()
+                       + cur_op_exprs_.count()))) {
     } else {
       FOREACH_CNT_X(raw_expr, cur_op_exprs_, OB_SUCC(ret)) {
         OZ(partial_frame_gen.dfo_raw_exprs_->push_back(*raw_expr));
@@ -1190,8 +1201,12 @@ int ObStaticEngineCG::generate_spec(GraphFeedbackLoopLogOp &op,
   } else {
     spec.set_graph_path(op.get_path_desc());
     spec.set_expand_access(op.get_expand_access_desc());
-    spec.set_expand_scan_ops(source_scan_op_id, edge_scan_op_id,
-                             target_scan_op_id);
+    if (OB_FAIL(spec.bind_expand_scans(source_scan_op_id, edge_scan_op_id,
+                                       target_scan_op_id))) {
+      LOG_WARN("failed to bind graph expand scan descriptors", K(ret),
+               K(source_scan_op_id), K(edge_scan_op_id),
+               K(target_scan_op_id));
+    }
   }
   return ret;
 }
