@@ -1467,17 +1467,6 @@ struct EngineWrites {
         if (!request.consumed() || !param.is_valid()) { ret = OB_INVALID_ARGUMENT; }
         else { ret = service->create_implicit_savepoint(*tx, param, savepoint, release); }
         values.append(savepoint);
-      } else if (operation == 'G') {
-        auto isolation = static_cast<ObTxIsolationLevel>(request.number());
-        const int64_t deadline = request.number();
-        ObTxReadSnapshot snapshot;
-        if (!request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-        else { ret = service->get_read_snapshot(*tx, isolation, std::min(deadline, THIS_WORKER.get_timeout_ts()), snapshot); }
-        if (!ret && (!session.get_reserved_snapshot_version().is_valid()
-            || snapshot.core_.version_ < session.get_reserved_snapshot_version())) {
-          session.set_reserved_snapshot_version(snapshot.core_.version_);
-        }
-        values.append(snapshot);
       } else if (operation == 'B') {
         ObTxSEQ savepoint; request.read(savepoint);
         const int64_t deadline = request.number();
@@ -1578,6 +1567,8 @@ int tx_rpc(char operation, ObTxDesc &tx, Frame &request, Frame &reply) {
 }
 int call_in_process_tx_state(char operation, ObTxDesc &view,
                              const ObTxParam *param, int64_t deadline);
+int call_in_process_tx_read_snapshot(ObTxDesc &view,
+    ObTxIsolationLevel isolation, int64_t deadline, ObTxReadSnapshot &snapshot);
 int tx_state(char operation, ObTxDesc &view,
              const ObTxParam *param = nullptr, int64_t deadline = 0)
 {
@@ -1586,6 +1577,17 @@ int tx_state(char operation, ObTxDesc &view,
   StorageSessionScope scope(session && session->get_tx_desc() == &view ? session : nullptr);
   const int ret = scope.error() ? scope.error()
       : call_in_process_tx_state(operation, view, param, deadline);
+  revert_tx_owner_session(borrowed);
+  return ret;
+}
+int tx_read_snapshot(ObTxDesc &view, ObTxIsolationLevel isolation,
+                     int64_t deadline, ObTxReadSnapshot &snapshot)
+{
+  sql::ObSQLSessionInfo *borrowed = nullptr;
+  auto *session = tx_owner_session(view, borrowed);
+  StorageSessionScope scope(session && session->get_tx_desc() == &view ? session : nullptr);
+  const int ret = scope.error() ? scope.error()
+      : call_in_process_tx_read_snapshot(view, isolation, deadline, snapshot);
   revert_tx_owner_session(borrowed);
   return ret;
 }
@@ -1897,10 +1899,7 @@ public:
                                 transaction::ObTxIsolationLevel isolation_level,
                                 int64_t expire_ts,
                                 transaction::ObTxReadSnapshot &snapshot) override {
-    Frame request, reply; request.number(static_cast<int>(isolation_level)); request.number(expire_ts);
-    int ret = tx_rpc('G', tx, request, reply);
-    if (!ret) { reply.read(snapshot); if (!reply.consumed()) { ret = OB_INVALID_ARGUMENT; } }
-    return ret; }
+    return tx_read_snapshot(tx, isolation_level, expire_ts, snapshot); }
   int get_read_snapshot_version(int64_t expire_ts,
                                 share::SCN &snapshot_version) override {
     if (expire_ts <= 0) { return OB_INVALID_ARGUMENT; }

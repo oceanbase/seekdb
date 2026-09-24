@@ -367,6 +367,33 @@ int call_in_process_tx_state(char operation, transaction::ObTxDesc &view,
   THIS_WORKER.set_timeout_ts(old_timeout);
   return ret;
 }
+int call_in_process_tx_read_snapshot(ObTxDesc &view,
+    ObTxIsolationLevel isolation, int64_t deadline, ObTxReadSnapshot &snapshot)
+{
+  InProcessStorage *ctx = in_process_storage;
+  const StorageSpaceHandle space = active_worker_storage_space();
+  if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
+  if (!space.is_namespace() || ctx->ns != space.namespace_id()
+      || !ctx->writes->tx || ctx->writes->tx->get_tx_id() != view.get_tx_id()) {
+    return OB_INVALID_ARGUMENT;
+  }
+  const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
+  auto *old_session = THIS_WORKER.get_session();
+  THIS_WORKER.set_session(&ctx->session);
+  auto *service = data_plane::query_transaction_service();
+  ObTxReadSnapshot staged;
+  int ret = service ? service->get_read_snapshot(*ctx->writes->tx, isolation,
+      std::min(deadline, THIS_WORKER.get_timeout_ts()), staged) : OB_NOT_INIT;
+  if (!ret && (!ctx->session.get_reserved_snapshot_version().is_valid()
+      || staged.core_.version_ < ctx->session.get_reserved_snapshot_version())) {
+    ctx->session.set_reserved_snapshot_version(staged.core_.version_);
+  }
+  if (!ret) { ret = view.sync_serialized_state_from(*ctx->writes->tx); }
+  if (!ret) { ret = snapshot.assign(staged); }
+  THIS_WORKER.set_session(old_session);
+  THIS_WORKER.set_timeout_ts(old_timeout);
+  return ret;
+}
 int close_in_process_write(transaction::ObTxDesc &view, uint64_t handle)
 {
   InProcessStorage *ctx = in_process_storage;
