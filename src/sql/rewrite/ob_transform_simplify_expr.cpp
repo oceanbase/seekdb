@@ -29,6 +29,17 @@ namespace
 {
 namespace common = oceanbase::common;
 
+bool is_safe_simple_exists_limit(const ObSelectStmt &stmt)
+{
+  const ObRawExpr *limit = stmt.get_limit_expr();
+  // SIMPLIFY_SUBQUERY adds this literal LIMIT 1 to a plain EXISTS before
+  // SIMPLIFY_EXPR checks whether the EXISTS may be skipped by a constant OR.
+  return NULL == limit
+      || (T_INT == limit->get_expr_type()
+          && limit->is_immutable_const_expr()
+          && 1 == static_cast<const ObConstRawExpr *>(limit)->get_value().get_int());
+}
+
 // An EXISTS over a plain table with no predicates only tests whether a row
 // exists.  Snapshot and sampled scans are excluded: the former can fail at
 // execution, and the latter has a separate scan contract.  Its projection is
@@ -57,8 +68,10 @@ int check_error_free_simple_exists(ObRawExpr *expr, bool &is_error_free)
              || !select_stmt->get_condition_exprs().empty()
              || !select_stmt->get_having_exprs().empty()
              || 0 != select_stmt->get_order_item_size()
-             || NULL != select_stmt->get_limit_expr()
+             || !is_safe_simple_exists_limit(*select_stmt)
              || NULL != select_stmt->get_offset_expr()
+             || NULL != select_stmt->get_limit_percent_expr()
+             || select_stmt->has_fetch() || select_stmt->is_fetch_with_ties()
              || 1 != select_stmt->get_from_item_size()
              || 1 != select_stmt->get_table_items().count()
              || OB_ISNULL(table_item = select_stmt->get_table_items().at(0))
