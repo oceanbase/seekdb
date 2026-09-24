@@ -27,6 +27,9 @@ def run(binary):
         source_id = experiment.sql(
             "SELECT namespace_id FROM __fork_proto_meta.namespaces "
             "WHERE name='source_drop'")[0][0]
+        child_id = experiment.sql(
+            "SELECT namespace_id FROM __fork_proto_meta.namespaces "
+            "WHERE name='child_drop'")[0][0]
         child = connect(experiment, "root@child_drop")
         assert experiment.sql("SELECT SUM(v) FROM owned.t", child) == ((43,),)
         try:
@@ -69,7 +72,14 @@ def run(binary):
             assert experiment.sql("SELECT v FROM app.base WHERE id=1", recovered) == ((10,),)
         with connect(experiment, "root@source_drop") as replacement:
             assert "owned" not in {row[0] for row in experiment.sql("SHOW DATABASES", replacement)}
+        experiment.sql("FORK NAMESPACE grand_drop FROM child_drop")
+        grand_id = experiment.sql(
+            "SELECT namespace_id FROM __fork_proto_meta.namespaces "
+            "WHERE name='grand_drop'")[0][0]
         experiment.sql("DROP NAMESPACE child_drop")
+        with connect(experiment, "root@grand_drop") as grand:
+            assert experiment.sql("SELECT SUM(v) FROM owned.t", grand) == ((45,),)
+        experiment.sql("DROP NAMESPACE grand_drop")
         for _ in range(20):
             remaining = experiment.sql(
                 "SELECT COUNT(*) FROM __fork_proto_meta.exceptions "
@@ -78,6 +88,14 @@ def run(binary):
                 break
             time.sleep(1)
         assert remaining == 0, ("source tablet GC did not finish", remaining)
+        for _ in range(20):
+            tombstones = experiment.sql(
+                "SELECT COUNT(*) FROM __fork_proto_meta.namespaces "
+                f"WHERE namespace_id IN ({source_id},{child_id},{grand_id})")
+            if tombstones == ((0,),):
+                break
+            time.sleep(1)
+        assert tombstones == ((0,),), ("obsolete namespace rows were retained", tombstones)
         experiment.record("PASS", case="source_drop", restart=True, async_gc=True)
     finally:
         if source is not None:

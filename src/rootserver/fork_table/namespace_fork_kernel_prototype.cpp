@@ -916,6 +916,90 @@ int release_lineage(ObISQLClient &trans, uint64_t id) {
   return ret;
 }
 
+int sql_has_row(ObISQLClient &sql, const ObSqlString &query, bool &has_row) {
+  has_row = false;
+  ObMySQLProxy::MySQLResult result;
+  sqlclient::ObMySQLResult *rows = nullptr;
+  int ret = sql.read(result, query.ptr());
+  if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(rows = result.get_result())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else {
+    ret = rows->next();
+    if (ret == OB_ITER_END) { ret = OB_SUCCESS; }
+    else if (OB_SUCC(ret)) { has_row = true; }
+  }
+  return ret;
+}
+
+// Namespace ids are never reused. A deleted row only needs to survive while a
+// child still points at it or its private tablets await asynchronous GC.
+int prune_dropped_namespace_row(uint64_t &cursor, bool &found) {
+  found = false;
+  ObSqlString query;
+  int ret = query.assign_fmt("SELECT namespace_id FROM %s WHERE state=2 "
+      "AND namespace_id<%lu ORDER BY namespace_id DESC LIMIT 1", NAMESPACES, cursor);
+  ObMySQLProxy::MySQLResult result;
+  sqlclient::ObMySQLResult *rows = nullptr;
+  uint64_t id = 0;
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(GCTX.sql_proxy_->read(result, query.ptr()))) {
+  } else if (OB_ISNULL(rows = result.get_result())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(ret = rows->next())) {
+    if (ret == OB_ITER_END) { cursor = UINT64_MAX; ret = OB_SUCCESS; }
+  } else if (OB_FAIL(rows->get_uint(0L, id))) {
+  }
+  if (OB_FAIL(ret) || id == 0) { return ret; }
+  cursor = id;
+  found = true;
+
+  ObMySQLTransaction trans;
+  Roots root;
+  bool has_child = false, has_owned = false;
+  if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+  } else if (OB_FAIL(roots(trans, id, root, true, true))) {
+  } else if (root.state != 2) {
+    ret = OB_SUCCESS;
+  } else if (OB_FAIL(query.assign_fmt("SELECT 1 FROM %s WHERE parent_namespace=%lu LIMIT 1",
+      NAMESPACES, id))) {
+  } else if (OB_FAIL(sql_has_row(trans, query, has_child))) {
+  } else if (has_child) {
+  } else if (OB_FAIL(query.assign_fmt("SELECT 1 FROM %s WHERE namespace_id=%lu AND kind=0 LIMIT 1",
+      EXCEPTIONS, id))) {
+  } else if (OB_FAIL(sql_has_row(trans, query, has_owned))) {
+  } else if (has_owned) {
+  } else if (OB_FAIL(query.assign_fmt("DELETE FROM %s WHERE namespace_id=%lu", EXCEPTIONS, id))) {
+  } else if (OB_FAIL(write_sql(trans, query))) {
+  } else if (OB_FAIL(query.assign_fmt("DELETE FROM %s WHERE namespace_id=%lu AND state=2",
+      NAMESPACES, id))) {
+  } else {
+    ret = write_sql(trans, query);
+  }
+  if (trans.is_started()) {
+    const int end = trans.end(OB_SUCC(ret));
+    if (OB_SUCC(ret)) { ret = end; }
+  }
+  if (OB_SUCC(ret) && !has_child && !has_owned && root.state == 2) {
+    invalidate_namespace_state(id);
+    drop_exception_cache(id);
+    std::unique_lock<std::shared_mutex> lock(chain_mutex);
+    chain_links.erase(id);
+    LOG_INFO("PROTOTYPE_NAMESPACE_TOMBSTONE_PRUNED", K(id));
+  }
+  return ret;
+}
+
+int prune_dropped_namespace_rows(uint64_t &cursor) {
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < 64; ++i) {
+    bool found = false;
+    ret = prune_dropped_namespace_row(cursor, found);
+    if (!found) { break; }
+  }
+  return ret;
+}
+
 int collect_metadata() {
   if (metadata_depth || !GCTX.sql_proxy_) { return OB_STATE_NOT_MATCH; }
   std::unique_lock<std::shared_timed_mutex> exclusive(metadata_mutex, std::defer_lock);
@@ -1346,6 +1430,7 @@ int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets() {
   if (!GCTX.sql_proxy_ || !ATOMIC_LOAD(&GCTX.sys_package_ready_)) { return OB_SUCCESS; }
   static std::mutex scan_mutex;
   static uint64_t cursor_namespace = 0, cursor_tablet = 0;
+  static uint64_t tombstone_cursor = UINT64_MAX;
   std::lock_guard<std::mutex> scan_guard(scan_mutex);
   ObSqlString scan;
   int ret = scan.assign_fmt(
@@ -1389,7 +1474,10 @@ int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets() {
   if (OB_SUCC(ret) && !candidates.empty()) {
     ret = protect_snapshot_tablets(candidates, deferred);
   }
-  if (OB_FAIL(ret) || (candidates.empty() && stale.empty())) { return ret; }
+  if (OB_FAIL(ret)) { return ret; }
+  if (candidates.empty() && stale.empty()) {
+    return prune_dropped_namespace_rows(tombstone_cursor);
+  }
   int64_t schema_version = 0;
   ObSchemaGetterGuard guard;
   if (OB_FAIL(GSCHEMASERVICE.get_runtime_schema_guard(guard))) {
@@ -1432,6 +1520,7 @@ int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets() {
   }
   LOG_INFO("PROTOTYPE_NAMESPACE_DROPPED_TABLET_GC", K(ret),
       "dropped", candidates.count(), "stale", stale.count(), K(deferred));
+  if (OB_SUCC(ret)) { ret = prune_dropped_namespace_rows(tombstone_cursor); }
   return ret;
 }
 bool NamespaceForkKernelPrototype::is_encoded_id(uint64_t id) {
