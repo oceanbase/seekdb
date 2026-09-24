@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 
+#include "config_bridge.h"
 #include "sql/resolver/expr/ob_raw_expr_type_demotion.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
@@ -196,11 +197,13 @@ int ObRawExprTypeDemotion::init_query_ctx_flags(bool &disabled)
     // Check runtime configuration.
     
     if (OB_LIKELY(true)) {
-      query_ctx_->enable_constant_type_demotion_ = GCONF._enable_constant_type_demotion;
-      if (0 == GCONF._non_standard_comparison_level.case_compare("range")) {
+      query_ctx_->enable_constant_type_demotion_ = config::_enable_constant_type_demotion();
+      const rust::String comparison_level = config::_non_standard_comparison_level();
+      const ObString comparison_text(static_cast<int32_t>(comparison_level.size()), comparison_level.data());
+      if (0 == comparison_text.case_compare("range")) {
         query_ctx_->non_standard_equal_comparison_ = 1;
         query_ctx_->non_standard_range_comparison_ = 1;
-      } else if (0 == GCONF._non_standard_comparison_level.case_compare("equal")) {
+      } else if (0 == comparison_text.case_compare("equal")) {
         query_ctx_->non_standard_equal_comparison_ = 1;
       }
       query_ctx_->type_demotion_flag_inited_ = 1;

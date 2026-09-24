@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 
+#include "config_bridge.h"
 #include "ob_tx_data_allocator.h"
 #include "lib/alloc/alloc_func.h"
 #include "share/rc/ob_server_runtime.h"
@@ -54,8 +55,8 @@ void ObTxDataAllocator::init_throttle_config(int64_t &resource_limit,
                                                    int64_t &max_duration)
 {
   resource_limit = get_memory_limit();
-  trigger_percentage = GCONF.writing_throttling_trigger_percentage;
-  max_duration = GCONF.writing_throttling_maximum_duration;
+  trigger_percentage = config::writing_throttling_trigger_percentage();
+  max_duration = config::writing_throttling_maximum_duration();
 }
 void ObTxDataAllocator::adaptive_update_limit(const int64_t holding_size,
                                               const int64_t config_specify_resource_limit,

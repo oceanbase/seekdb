@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Write};
@@ -19,6 +20,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 
+pub mod config;
 mod ffi;
 #[cfg(windows)]
 mod windows_file;
@@ -77,12 +79,36 @@ type Entries = BTreeMap<String, Entry>;
 const MAX_FILE_BYTES: u64 = 32 * 1024 * 1024;
 static WRITER_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 static NEXT_TEMP_ID: AtomicU64 = AtomicU64::new(1);
+thread_local! { static IN_CHECKER: Cell<bool> = const { Cell::new(false) }; }
 
 fn lock_writers() -> Result<std::sync::MutexGuard<'static, ()>, Error> {
+    if IN_CHECKER.with(Cell::get) {
+        return Err(Error::new(
+            0,
+            None,
+            "configuration write or snapshot reentered a checker",
+        ));
+    }
     WRITER_LOCK
         .get_or_init(|| Mutex::new(()))
         .lock()
         .map_err(|_| Error::new(0, None, "auto-config writer lock poisoned"))
+}
+
+fn run_checker(check: impl FnOnce() -> Result<(), Error>) -> Result<(), Error> {
+    IN_CHECKER.with(|active| {
+        if active.replace(true) {
+            return Err(Error::new(0, None, "configuration checker reentered"));
+        }
+        struct Reset<'a>(&'a Cell<bool>);
+        impl Drop for Reset<'_> {
+            fn drop(&mut self) {
+                self.0.set(false);
+            }
+        }
+        let _reset = Reset(active);
+        check()
+    })
 }
 
 /// Return an explicit error at startup on platforms without this durability protocol.
@@ -399,6 +425,55 @@ fn update_with_hook(
     value: Option<&str>,
     after_stage: impl FnMut(ReplaceStage) -> Result<(), Error>,
 ) -> Result<(), Error> {
+    update_with_hook_and_commit(path, name, value, None, after_stage, || {})
+}
+
+pub(crate) fn update_with_commit(
+    path: &Path,
+    name: &str,
+    value: Option<&str>,
+    check: impl FnOnce() -> Result<(), Error>,
+    commit: impl FnOnce(),
+) -> Result<(), Error> {
+    update_with_hook_and_commit_checked(
+        path,
+        name,
+        value,
+        Some(config::validate_file_entry),
+        |_| Ok(()),
+        check,
+        commit,
+    )
+}
+
+fn update_with_hook_and_commit(
+    path: &Path,
+    name: &str,
+    value: Option<&str>,
+    validator: Option<fn(&Entry) -> Result<(), Error>>,
+    after_stage: impl FnMut(ReplaceStage) -> Result<(), Error>,
+    commit: impl FnOnce(),
+) -> Result<(), Error> {
+    update_with_hook_and_commit_checked(
+        path,
+        name,
+        value,
+        validator,
+        after_stage,
+        || Ok(()),
+        commit,
+    )
+}
+
+fn update_with_hook_and_commit_checked(
+    path: &Path,
+    name: &str,
+    value: Option<&str>,
+    validator: Option<fn(&Entry) -> Result<(), Error>>,
+    after_stage: impl FnMut(ReplaceStage) -> Result<(), Error>,
+    check: impl FnOnce() -> Result<(), Error>,
+    commit: impl FnOnce(),
+) -> Result<(), Error> {
     ensure_supported()?;
     let _guard = lock_writers()?;
     let (canonical_name, rest) = parse_name(name, 0)?;
@@ -432,7 +507,17 @@ fn update_with_hook(
     } else {
         entries.remove(&canonical_name);
     }
-    replace_with_hook(path, &entries, after_stage)
+    if let Some(validate) = validator {
+        for entry in entries.values() {
+            validate(entry)?;
+        }
+    }
+    run_checker(check)?;
+    let result = replace_with_hook(path, &entries, after_stage);
+    if result.is_ok() || result.as_ref().is_err_and(|error| error.after_replace) {
+        commit();
+    }
+    result
 }
 
 pub fn update(path: &Path, name: &str, value: Option<&str>) -> Result<(), Error> {
@@ -444,6 +529,7 @@ mod tests {
     use super::*;
 
     static NEXT_TEST_DIR: AtomicU64 = AtomicU64::new(1);
+    static CONFIG_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     struct TestDirectory(PathBuf);
 
@@ -465,6 +551,11 @@ mod tests {
         fn drop(&mut self) {
             fs::remove_dir_all(&self.0).unwrap();
         }
+    }
+
+    fn reset_active_defaults() {
+        let directory = TestDirectory::new();
+        crate::config::load_active(&directory.file(), true).unwrap();
     }
 
     #[test]
@@ -621,5 +712,284 @@ mod tests {
                 if was_replaced(crash_at) { "new" } else { "old" }
             );
         }
+    }
+
+    #[test]
+    fn declared_cpu_count_update_preserves_file_and_runtime_value_on_rejection() {
+        let _config_guard = CONFIG_TEST_LOCK.lock().unwrap();
+        let directory = TestDirectory::new();
+        let path = directory.file();
+        reset_active_defaults();
+        assert_eq!(crate::config::cpu_count(), 0);
+        let declaration = crate::config::find("CPU_COUNT").unwrap();
+        assert_eq!(declaration.name, "cpu_count");
+        assert_eq!(declaration.default, "0");
+        assert_eq!(declaration.edit_level, "DYNAMIC_EFFECTIVE");
+        assert_eq!(
+            crate::config::find("major_freeze_duty_time")
+                .unwrap()
+                .default,
+            "02:00"
+        );
+        assert!(crate::config::find("server_create_time").is_none());
+        crate::config::update_cpu_count(&path, "8").unwrap();
+        assert_eq!(crate::config::cpu_count(), 8);
+        assert_eq!(load(&path).unwrap()[0].value, "8");
+        assert!(crate::config::update_cpu_count(&path, "-1").is_err());
+        assert_eq!(crate::config::cpu_count(), 8);
+        assert_eq!(load(&path).unwrap()[0].value, "8");
+        crate::config::update_parameter(&path, "cpu_count", None).unwrap();
+    }
+
+    #[test]
+    fn declared_defaults_have_typed_readers() {
+        let _config_guard = CONFIG_TEST_LOCK.lock().unwrap();
+        reset_active_defaults();
+        assert!(crate::config::enable_record_trace_log());
+        assert_eq!(crate::config::datafile_size(), 32 * 1024 * 1024);
+        assert_eq!(crate::config::internal_sql_execute_timeout(), 30_000_000);
+        assert_eq!(crate::config::cpu_quota_concurrency(), 10.0);
+        assert_eq!(crate::config::data_dir(), "store");
+        crate::config::apply("enable_record_trace_log", "off").unwrap();
+        crate::config::apply("datafile_size", "5MB").unwrap();
+        crate::config::apply("internal_sql_execute_timeout", "250ms").unwrap();
+        crate::config::apply("cpu_quota_concurrency", "1.5").unwrap();
+        crate::config::apply("data_dir", "other").unwrap();
+        assert!(!crate::config::enable_record_trace_log());
+        assert_eq!(crate::config::datafile_size(), 5 * 1024 * 1024);
+        assert_eq!(crate::config::internal_sql_execute_timeout(), 250_000);
+        assert_eq!(crate::config::cpu_quota_concurrency(), 1.5);
+        assert_eq!(crate::config::data_dir(), "other");
+        crate::config::apply("enable_record_trace_log", "True").unwrap();
+        crate::config::apply("datafile_size", "32M").unwrap();
+        crate::config::apply("internal_sql_execute_timeout", "30s").unwrap();
+        crate::config::apply("cpu_quota_concurrency", "10").unwrap();
+        crate::config::apply("data_dir", "store").unwrap();
+    }
+
+    #[test]
+    fn declared_numeric_ranges_reject_without_publishing() {
+        let _config_guard = CONFIG_TEST_LOCK.lock().unwrap();
+        reset_active_defaults();
+        assert_eq!(crate::config::rpc_port(), 2882);
+        assert!(crate::config::apply("rpc_port", "1024").is_err());
+        assert_eq!(crate::config::rpc_port(), 2882);
+        crate::config::apply("rpc_port", "1025").unwrap();
+        assert_eq!(crate::config::rpc_port(), 1025);
+        assert!(crate::config::apply("rpc_port", "65536").is_err());
+        assert_eq!(crate::config::rpc_port(), 1025);
+        crate::config::apply("rpc_port", "2882").unwrap();
+
+        assert!(crate::config::apply("cpu_quota_concurrency", "0.99").is_err());
+        assert_eq!(crate::config::cpu_quota_concurrency(), 10.0);
+        assert!(crate::config::apply("datafile_size", "-1M").is_err());
+        assert!(crate::config::apply("datafile_size", "5").is_err());
+        assert_eq!(crate::config::datafile_size(), 32 * 1024 * 1024);
+        assert!(crate::config::apply("internal_sql_execute_timeout", "999us").is_err());
+        assert_eq!(crate::config::internal_sql_execute_timeout(), 30_000_000);
+    }
+
+    #[test]
+    fn every_declared_default_is_valid_and_special_values_are_checked() {
+        for parameter in crate::config::CATALOG {
+            crate::config::validate(parameter.name, parameter.default)
+                .unwrap_or_else(|error| panic!("{}: {error}", parameter.name));
+        }
+        assert!(crate::config::validate("not_declared", "1").is_err());
+        assert!(crate::config::validate("server_create_time", "123").is_err());
+        assert!(crate::config::validate("major_freeze_duty_time", "24:00").is_err());
+        assert!(crate::config::validate("major_freeze_duty_time", "disable").is_ok());
+        assert!(crate::config::validate("_parallel_ddl_control", "CREATE_INDEX:on").is_ok());
+        assert!(crate::config::validate("_parallel_ddl_control", "UNKNOWN:on").is_err());
+        assert!(crate::config::validate("default_table_organization", "HEAP").is_ok());
+        assert!(crate::config::validate("default_table_organization", "UNKNOWN").is_err());
+    }
+
+    #[test]
+    fn declared_special_values_have_typed_readers() {
+        let _config_guard = CONFIG_TEST_LOCK.lock().unwrap();
+        reset_active_defaults();
+        let moment = crate::config::major_freeze_duty_time_parts();
+        assert!(!moment.disabled);
+        assert_eq!((moment.hour, moment.minute), (2, 0));
+        crate::config::apply("major_freeze_duty_time", "disable").unwrap();
+        assert!(crate::config::major_freeze_duty_time_parts().disabled);
+        crate::config::apply("major_freeze_duty_time", "02:00").unwrap();
+        crate::config::apply("_parallel_ddl_control", "CREATE_INDEX:on,DROP_TABLE:off").unwrap();
+        assert_eq!(
+            crate::config::parallel_ddl_control_bits(),
+            (2 << 4) | (1 << 8)
+        );
+        crate::config::apply("_parallel_ddl_control", "").unwrap();
+    }
+
+    #[test]
+    fn declared_dynamic_and_static_updates_follow_file_and_effective_state() {
+        let _config_guard = CONFIG_TEST_LOCK.lock().unwrap();
+        let directory = TestDirectory::new();
+        let path = directory.file();
+        crate::config::load_active(&path, true).unwrap();
+        crate::config::update_parameter(&path, "rpc_port", Some("3001")).unwrap();
+        assert_eq!(crate::config::rpc_port(), 3001);
+        assert_eq!(
+            crate::config::effective_value("rpc_port").as_deref(),
+            Some("3001")
+        );
+        assert_eq!(
+            crate::config::configured_value("rpc_port").as_deref(),
+            Some("3001")
+        );
+        let port_row = crate::config::parameter_row(
+            crate::config::CATALOG
+                .iter()
+                .position(|parameter| parameter.name == "rpc_port")
+                .unwrap(),
+        );
+        assert_eq!(port_row.value, "3001");
+        assert_eq!(port_row.source, "DEFAULT");
+        crate::config::update_parameter(&path, "enable_record_trace_log", Some("off")).unwrap();
+        assert_eq!(
+            crate::config::effective_value("enable_record_trace_log").as_deref(),
+            Some("False")
+        );
+
+        crate::config::update_parameter(&path, "net_thread_count", Some("5")).unwrap();
+        assert_eq!(crate::config::net_thread_count(), 0);
+        assert_eq!(
+            crate::config::effective_value("net_thread_count").as_deref(),
+            Some("0")
+        );
+        assert_eq!(
+            crate::config::configured_value("net_thread_count").as_deref(),
+            Some("5")
+        );
+        crate::config::load_active(&path, false).unwrap();
+        assert_eq!(crate::config::net_thread_count(), 0);
+        crate::config::load_active(&path, true).unwrap();
+        assert_eq!(crate::config::net_thread_count(), 5);
+        crate::config::update_parameter(&path, "net_thread_count", None).unwrap();
+        crate::config::update_parameter(&path, "rpc_port", None).unwrap();
+        crate::config::update_parameter(&path, "enable_record_trace_log", None).unwrap();
+        assert_eq!(crate::config::rpc_port(), 2882);
+        crate::config::load_active(&path, true).unwrap();
+        assert_eq!(crate::config::net_thread_count(), 0);
+        assert!(load(&path).unwrap().is_empty());
+    }
+
+    #[test]
+    fn bootstrap_overrides_are_effective_before_writeback() {
+        let _config_guard = CONFIG_TEST_LOCK.lock().unwrap();
+        let directory = TestDirectory::new();
+        let path = directory.file();
+        crate::config::load_active(&path, true).unwrap();
+        crate::config::bootstrap_set("memory_budget", "2G").unwrap();
+        crate::config::bootstrap_set("net_thread_count", "3").unwrap();
+        assert_eq!(crate::config::memory_budget(), 2 * 1024 * 1024 * 1024);
+        assert_eq!(crate::config::net_thread_count(), 3);
+        assert!(!path.exists());
+        assert!(crate::config::bootstrap_set("server_create_time", "1").is_err());
+        crate::config::save_bootstrap(&path).unwrap();
+        let entries = load(&path).unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(
+            entries
+                .iter()
+                .find(|entry| entry.name == "memory_budget")
+                .unwrap()
+                .value,
+            "2G"
+        );
+        assert_eq!(
+            entries
+                .iter()
+                .find(|entry| entry.name == "net_thread_count")
+                .unwrap()
+                .value,
+            "3"
+        );
+        crate::config::load_active(&path, true).unwrap();
+        assert_eq!(crate::config::net_thread_count(), 3);
+    }
+
+    #[test]
+    fn checker_rejection_and_reentry_leave_file_unchanged() {
+        let _config_guard = CONFIG_TEST_LOCK.lock().unwrap();
+        let directory = TestDirectory::new();
+        let path = directory.file();
+        crate::config::load_active(&path, true).unwrap();
+        let rejected =
+            crate::config::update_parameter_checked(&path, "cpu_count", Some("4"), || {
+                Err(Error::new(0, None, "rejected"))
+            });
+        assert!(rejected.is_err());
+        assert!(!path.exists());
+        let reentered =
+            crate::config::update_parameter_checked(&path, "cpu_count", Some("4"), || {
+                crate::config::snapshot(&["cpu_count"]).map(|_| ())
+            });
+        assert!(reentered.unwrap_err().message.contains("reentered"));
+        assert!(!path.exists());
+    }
+
+    #[test]
+    fn internal_state_is_loaded_and_published_without_becoming_a_parameter() {
+        let _config_guard = CONFIG_TEST_LOCK.lock().unwrap();
+        let directory = TestDirectory::new();
+        let path = directory.file();
+        crate::config::load_active(&path, true).unwrap();
+        assert_eq!(crate::config::server_create_time(), 0);
+        assert_eq!(crate::config::server_role_info(), "");
+        crate::config::update_internal_state(&path, "server_create_time", "123").unwrap();
+        crate::config::update_internal_state(&path, "server_role_info", "PRIMARY:INVALID:NORMAL:0")
+            .unwrap();
+        assert_eq!(crate::config::server_create_time(), 123);
+        assert_eq!(
+            crate::config::server_role_info(),
+            "PRIMARY:INVALID:NORMAL:0"
+        );
+        assert!(crate::config::find("server_create_time").is_none());
+        crate::config::load_active(&path, true).unwrap();
+        assert_eq!(crate::config::server_create_time(), 123);
+    }
+
+    #[test]
+    fn corrupt_existing_declared_file_blocks_update_and_load() {
+        let _config_guard = CONFIG_TEST_LOCK.lock().unwrap();
+        let directory = TestDirectory::new();
+        let path = directory.file();
+        fs::write(&path, "rpc_port = 'not-a-port'\n").unwrap();
+        let error = crate::config::load_active(&path, true).unwrap_err();
+        assert_eq!(error.line, 1);
+        assert!(crate::config::update_parameter(&path, "cpu_count", Some("2")).is_err());
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            "rpc_port = 'not-a-port'\n"
+        );
+        fs::write(&path, "unknown = '1'\n").unwrap();
+        assert!(crate::config::load_active(&path, true).is_err());
+        assert!(crate::config::update_parameter(&path, "rpc_port", Some("3001")).is_err());
+    }
+
+    #[test]
+    fn checked_reload_rejects_before_publishing() {
+        let _config_guard = CONFIG_TEST_LOCK.lock().unwrap();
+        let directory = TestDirectory::new();
+        let path = directory.file();
+        crate::config::load_active(&path, true).unwrap();
+        fs::write(&path, "cpu_count = '3'\n").unwrap();
+        let error = crate::config::load_active_checked(&path, false, |entry| {
+            assert_eq!(entry.name, "cpu_count");
+            Err(Error::new(
+                entry.line,
+                Some(entry.name.clone()),
+                "checker rejected",
+            ))
+        })
+        .unwrap_err();
+        assert_eq!(error.line, 1);
+        assert_eq!(crate::config::cpu_count(), 0);
+        assert_eq!(fs::read_to_string(&path).unwrap(), "cpu_count = '3'\n");
+        crate::config::load_active_checked(&path, false, |_| Ok(())).unwrap();
+        assert_eq!(crate::config::cpu_count(), 3);
     }
 }

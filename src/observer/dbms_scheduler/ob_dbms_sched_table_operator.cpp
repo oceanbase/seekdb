@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "config_bridge.h"
 #include "ob_dbms_sched_table_operator.h"
 #include "ob_dbms_sched_job_utils.h"
 #include "query/scheduler/ob_scheduler_job.h"
@@ -271,7 +272,7 @@ int ObDBMSSchedTableOperator::check_job_can_running(int64_t alive_job_count, boo
   ObSqlString sql;
   OX (can_running = false);
   CK (true);
-  OX (job_queue_processor = GCONF.job_queue_processes);
+  OX (job_queue_processor = config::job_queue_processes());
   // found current running job count
   if (OB_FAIL(ret)) {
   } else if (alive_job_count <= job_queue_processor) {

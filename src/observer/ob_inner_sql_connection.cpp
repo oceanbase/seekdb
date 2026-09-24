@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "config_bridge.h"
 #include "lib/allocator/ob_malloc.h"
 #include "lib/objectpool/ob_resource_pool.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
@@ -1227,7 +1228,7 @@ int ObInnerSQLConnection::set_timeout(int64_t &abs_timeout_us)
 
   if (OB_SUCC(ret)) {
     if (0 == abs_timeout_us) {
-      timeout = (user_timeout_ > 0) ? user_timeout_ : GCONF.internal_sql_execute_timeout;
+      timeout = (user_timeout_ > 0) ? user_timeout_ : config::internal_sql_execute_timeout();
       trx_timeout = timeout;
       abs_timeout_us = now + timeout;
     }
@@ -1395,7 +1396,7 @@ bool ObInnerSQLConnection::is_inner_session_mgr_enable()
   bool bret = false;
   
 
-  bret = GCONF._enable_inner_session_mgr;
+  bret = config::_enable_inner_session_mgr();
 
   return bret;
 }

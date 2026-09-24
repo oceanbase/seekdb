@@ -881,8 +881,8 @@ int ObDDLKV::set_macro_block(
   const int64_t MEMORY_LIMIT = 50 * 1024 * 1024; // 50M
   int64_t freeze_block_count = MAX_DDL_BLOCK_COUNT;
 #ifdef ERRSIM
-  if (0 != GCONF.errsim_max_ddl_block_count) {
-    freeze_block_count = GCONF.errsim_max_ddl_block_count;
+  if (0 != ::oceanbase::common::errsim_config().errsim_max_ddl_block_count.load()) {
+    freeze_block_count = ::oceanbase::common::errsim_config().errsim_max_ddl_block_count.load();
     LOG_INFO("ddl set macro block count", K(freeze_block_count));
   }
 #endif

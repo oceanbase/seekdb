@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "config_bridge.h"
 #include "observer/ai_service/ob_ai_service_proxy.h"
 #include "share/ob_share_util.h"
 #include "share/ob_dml_sql_splicer.h"
@@ -96,7 +97,7 @@ int ObAiServiceProxy::select_ai_endpoint(ObArenaAllocator &allocator, ObISQLClie
   int ret = OB_SUCCESS;
   ObSqlString sql;
   ObTimeoutCtx ctx;
-  const int64_t default_timeout = GCONF.internal_sql_execute_timeout;
+  const int64_t default_timeout = config::internal_sql_execute_timeout();
   endpoint.reset();
   
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {
@@ -135,7 +136,7 @@ int ObAiServiceProxy::select_ai_endpoint_by_ai_model_name(ObArenaAllocator &allo
   int ret = OB_SUCCESS;
   ObSqlString sql;
   ObTimeoutCtx ctx;
-  const int64_t default_timeout = GCONF.internal_sql_execute_timeout;
+  const int64_t default_timeout = config::internal_sql_execute_timeout();
   endpoint.reset();
   
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {
@@ -251,7 +252,7 @@ int ObAiServiceProxy::check_ai_endpoint_exists(ObArenaAllocator &allocator, ObIS
   int ret = OB_SUCCESS;
   ObSqlString sql;
   ObTimeoutCtx ctx;
-  const int64_t default_timeout = GCONF.internal_sql_execute_timeout;
+  const int64_t default_timeout = config::internal_sql_execute_timeout();
   
   int64_t count = 0;
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {

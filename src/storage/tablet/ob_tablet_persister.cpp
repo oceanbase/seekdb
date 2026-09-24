@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/tablet/ob_tablet_persister.h"
@@ -1401,7 +1402,7 @@ int ObTabletPersister::load_table_store(
     read_info.addr_ = addr;
     read_info.io_desc_.set_mode(ObIOMode::READ);
     read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_DATA_READ);
-    read_info.io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000;
+    read_info.io_timeout_ms_ = config::_data_storage_io_timeout() / 1000;
     if (OB_FAIL(multi_stats_.acquire_stats("load_table_store", time_stats))) {
     } else if (OB_FAIL(ObObjectReaderWriter::async_read(read_info, io_handle))) {
     } else if (OB_FAIL(io_handle.wait())) {

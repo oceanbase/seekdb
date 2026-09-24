@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 
+#include "config_bridge.h"
 #include "ob_load_inner_table_schema_executor.h"
 
 #include "share/inner_table/ob_load_inner_table_schema.h"
@@ -187,7 +188,7 @@ int ObLoadInnerTableSchemaExecutor::init(
     ret = OB_INVALID_ARGUMENT;
   } else {
     parallel_count_ = common::max(THREAD_PER_CPU * max_cpu, 1);
-    load_rpc_timeout_ = parallel_count_ * GCONF.internal_sql_execute_timeout;
+    load_rpc_timeout_ = parallel_count_ * config::internal_sql_execute_timeout();
   }
   if (FAILEDx(init_args_(table_schemas))) {
   } else {

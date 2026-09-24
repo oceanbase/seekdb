@@ -16,6 +16,7 @@
 // Storage-owned DDL algorithms operating on tablets, macro blocks and LOBs.
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/ob_tablet_autoinc_seq_service.h"
 #include "share/ob_ddl_common.h"
@@ -463,7 +464,7 @@ int oceanbase::storage::ObDDLStorageUtil::get_task_ranges(
     range.set_whole_range();
     ObSEArray<common::ObStoreRange, 32> ranges;
     ObArrayArray<ObStoreRange> multi_range_split_array;
-    data_plane::ObParallelRangeTaskParams params(GCONF.px_task_size >> 10);
+    data_plane::ObParallelRangeTaskParams params(config::px_task_size() >> 10);
     params.parallelism_ = hint_parallelism;
     if (tablet_size / 1024 > 0) {
       params.expected_task_load_kb_ = tablet_size / 1024;

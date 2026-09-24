@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_DTL
+#include "config_bridge.h"
 #include "ob_dtl_channel_agent.h"
 
 using namespace oceanbase::common;
@@ -80,7 +81,7 @@ int ObDtlChanAgent::init(dtl::ObDtlFlowControl &dfc,
   
   dtl_buf_allocator_.set_timeout_ts(time_ts);
   
-  sys_dtl_buf_size_ = GCONF.dtl_buffer_size;
+  sys_dtl_buf_size_ = config::dtl_buffer_size();
   dfo_key_ = dfc.get_dfo_key();
 
   for (int64_t i = 0; i < channels.count() && OB_SUCC(ret); ++i) {

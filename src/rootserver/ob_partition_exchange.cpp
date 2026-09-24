@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX RS
+#include "config_bridge.h"
 #include "ob_partition_exchange.h"
 #include "share/schema/ob_table_sql_service.h"
 #include "share/tablet/ob_tablet_to_table_history_operator.h" // ObTabletToTableHistoryOperator
@@ -1800,7 +1801,7 @@ int ObPartitionExchange::build_single_table_rw_defensive_(const ObIArray<common:
     ret = OB_INNER_STAT_ERROR;
   } else {
     const int64_t abs_timeout_us = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_ts()
-                                                                     : ObTimeUtility::current_time() + GCONF.rpc_timeout;
+                                                                     : ObTimeUtility::current_time() + config::rpc_timeout();
     if (OB_FAIL(ObTabletBindingMdsHelper::modify_tablet_binding_for_rw_defensive(tablet_ids, schema_version, abs_timeout_us, trans))) {
     }
   }

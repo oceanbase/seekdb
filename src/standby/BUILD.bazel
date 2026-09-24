@@ -75,6 +75,7 @@ cc_library(
     srcs = ["control/standby_state_store.cpp"],
     hdrs = ["control/standby_state_store.h"],
     deps = [
+        "//rust:config_bridge_headers",
         "//src/oblib:oblib_foundation",
         "//src/oblib:oblib_foundation_base",
         "//src/oblib:oblib_foundation_support",

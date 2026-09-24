@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
+#include "config_bridge.h"
 #include "ob_multi_version_schema_service.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_schema_publish_signal.h"
@@ -1054,7 +1055,6 @@ ObMultiVersionSchemaService &ObMultiVersionSchemaService::get_instance()
 // init in main thread
 int ObMultiVersionSchemaService::init(
     ObMySQLProxy *sql_proxy,
-    const ObCommonConfig *config,
     ObSchemaStatusProxy &schema_status_proxy,
     const ObServiceStatus &service_status,
     bool &in_bootstrap,
@@ -1070,7 +1070,7 @@ int ObMultiVersionSchemaService::init(
   } else if (FALSE_IT(schema_refresh_scheduler_ = &schema_refresh_scheduler)) {
   } else if (FALSE_IT(schema_publish_signal_ = &schema_publish_signal)) {
   } else if (OB_FAIL(ObServerSchemaService::init(
-      sql_proxy, config, schema_status_proxy, service_status,
+      sql_proxy, schema_status_proxy, service_status,
       in_bootstrap, schema_backend))) {
   } else if (OB_FAIL(schema_fetcher_.init(schema_service_, sql_proxy))) {
   } else if (OB_FAIL(schema_cache_.init())) {
@@ -1359,7 +1359,7 @@ int ObMultiVersionSchemaService::add_schema(
     // try switch allocator
     if (OB_SUCC(ret)) {
       bool can_switch = false;
-      int64_t max_schema_slot_num = GCONF._max_schema_slot_num;
+      int64_t max_schema_slot_num = config::_max_schema_slot_num();
       const int64_t switch_cnt = max_schema_slot_num;
       if (OB_FAIL(mem_mgr->check_can_switch_allocator(switch_cnt, can_switch))) {
       } else if (can_switch) {
@@ -1968,7 +1968,7 @@ int ObMultiVersionSchemaService::try_gc_current_allocator(
     ObSchemaMgrCache *&schema_mgr_cache)
 {
   int ret = OB_SUCCESS;
-  int64_t recycle_interval = GCONF._schema_memory_recycle_interval;
+  int64_t recycle_interval = config::_schema_memory_recycle_interval();
   if (!check_inner_stat()) {
     ret = OB_INNER_STAT_ERROR;
   } else if (OB_ISNULL(mem_mgr) || OB_ISNULL(schema_mgr_cache)) {
@@ -2061,7 +2061,7 @@ int ObMultiVersionSchemaService::try_gc_allocator_when_add_schema_(
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_UNLIKELY(ERRSIM_GC_ALLOCATOR_WHEN_REFRESH_SCHEMA)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (0 == GCONF._schema_memory_recycle_interval) {
+  } else if (0 == config::_schema_memory_recycle_interval()) {
     // ignore
   } else if (OB_FAIL(mem_mgr->get_all_ptrs(all_ptrs))) {
   } else if (OB_FAIL(get_runtime_refreshed_schema_version(refreshed_schema_version))) {
@@ -2562,11 +2562,11 @@ int ObMultiVersionSchemaService::cal_purge_need_timeout(
 
   if (OB_SUCC(ret)) {
     int64_t high_bound_timeout = 0;
-    const int64_t low_bound_timeout = 10 * GCONF.rpc_timeout;
+    const int64_t low_bound_timeout = 10 * config::rpc_timeout();
     if (0 == total_purge_count) {
       cal_timeout = 0;
     } else if (OB_FAIL(ObShareUtil::get_ctx_timeout(
-        GCONF._ob_ddl_timeout, high_bound_timeout))) {
+        config::_ob_ddl_timeout(), high_bound_timeout))) {
     } else {
       tmp_timeout = std::max(low_bound_timeout, tmp_timeout);
       cal_timeout = std::min(high_bound_timeout, tmp_timeout);
@@ -2639,16 +2639,16 @@ int ObMultiVersionSchemaService::cal_purge_table_timeout_(
     }
     // has autoinc
     if (OB_SUCC(ret) && 0 != orig_table_schema->get_autoinc_column_id()) {
-      cal_table_timeout += GCONF.rpc_timeout;
+      cal_table_timeout += config::rpc_timeout();
     }
     // has trigger
     if (OB_SUCC(ret)) {
       const ObIArray<uint64_t> &trigger_id_list = orig_table_schema->get_trigger_list();
-      cal_table_timeout += trigger_id_list.count() * GCONF.rpc_timeout;
+      cal_table_timeout += trigger_id_list.count() * config::rpc_timeout();
     }
     if (OB_SUCC(ret)) {
       //100 tablet 2s,default 2s
-      cal_table_timeout += (part_num / 100 + (part_num % 100 == 0 ? 0 : 1)) * GCONF.rpc_timeout;
+      cal_table_timeout += (part_num / 100 + (part_num % 100 == 0 ? 0 : 1)) * config::rpc_timeout();
     }
   }
   return ret;
@@ -2681,7 +2681,7 @@ int ObMultiVersionSchemaService::cal_purge_database_timeout_(
     total_purge_count++;
     schema_guard.reset();
     // database itself
-    cal_database_timeout += GCONF.rpc_timeout;
+    cal_database_timeout += config::rpc_timeout();
     // cal table which is already in recyclebin
     if (OB_FAIL(schema_service_->fetch_recycle_objects_of_db(database_id,
                                                             *sql_proxy_,
@@ -2723,7 +2723,7 @@ int ObMultiVersionSchemaService::cal_purge_database_timeout_(
       if (OB_FAIL(get_runtime_schema_guard(schema_guard))) {
       } else if (OB_FAIL(schema_guard.get_simple_outline_schemas_in_database(database_id, outlines))) {
       } else {
-        cal_database_timeout += outlines.count() * GCONF.rpc_timeout;
+        cal_database_timeout += outlines.count() * config::rpc_timeout();
       }
     }
     // cal packags
@@ -2732,7 +2732,7 @@ int ObMultiVersionSchemaService::cal_purge_database_timeout_(
       if (OB_FAIL(get_runtime_schema_guard(schema_guard))) {
       } else if (OB_FAIL(schema_guard.get_simple_package_schemas_in_database(database_id, packages))) {
       } else {
-        cal_database_timeout += packages.count() * GCONF.rpc_timeout;
+        cal_database_timeout += packages.count() * config::rpc_timeout();
       }
     }
     // cal routines
@@ -2741,7 +2741,7 @@ int ObMultiVersionSchemaService::cal_purge_database_timeout_(
       if (OB_FAIL(get_runtime_schema_guard(schema_guard))) {
       } else if (OB_FAIL(schema_guard.get_simple_routine_schemas_in_database(database_id, routines))) {
       } else {
-        cal_database_timeout += routines.count() * GCONF.rpc_timeout;
+        cal_database_timeout += routines.count() * config::rpc_timeout();
       }
     }
     // cal mock_fk
@@ -2750,7 +2750,7 @@ int ObMultiVersionSchemaService::cal_purge_database_timeout_(
       if (OB_FAIL(get_runtime_schema_guard(schema_guard))) {
       } else if (OB_FAIL(schema_guard.get_simple_mock_fk_parent_table_schemas_in_database(database_id, mock_fk_parent_table_schemas))) {
       } else {
-        cal_database_timeout += mock_fk_parent_table_schemas.count() * GCONF.rpc_timeout;
+        cal_database_timeout += mock_fk_parent_table_schemas.count() * config::rpc_timeout();
       }
     }
   }

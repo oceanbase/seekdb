@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX RS
+#include "config_bridge.h"
 #include "ob_tablet_creator.h"
 #include "share/ob_share_util.h"
 #include "storage/tx/ob_trans_service.h"
@@ -296,7 +297,7 @@ int ObTabletCreator::execute()
 {
   int ret = OB_SUCCESS;
   ObTimeoutCtx ctx;
-  const int64_t default_timeout_ts = GCONF.rpc_timeout;
+  const int64_t default_timeout_ts = config::rpc_timeout();
   common::sqlclient::ObISQLConnection *conn = NULL;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;

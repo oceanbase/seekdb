@@ -15,7 +15,8 @@
  */
 
  #define USING_LOG_PREFIX RS
- #include "rootserver/parallel_ddl/ob_create_view_helper.h"
+ #include "config_bridge.h"
+#include "rootserver/parallel_ddl/ob_create_view_helper.h"
  #include "rootserver/ob_table_creator.h"
  #include "sql/resolver/ddl/ob_create_view_resolver.h"
  #include "share/schema/ob_multi_version_schema_service.h"
@@ -173,7 +174,7 @@ int ObCreateViewHelper::lock_and_check_view_name_()
                    arg_.schema_.get_table_name_str().ptr());
       // create or replace / alter view need to check schema type is USER/SYSTEM VIEW
       } else if (USER_VIEW == table_type
-                 || (GCONF.enable_sys_table_ddl && SYSTEM_VIEW == table_type)) {
+                 || (config::enable_sys_table_ddl() && SYSTEM_VIEW == table_type)) {
         // do nothing
       } else if (SYSTEM_VIEW == table_type) {
         ret = OB_OP_NOT_ALLOW;

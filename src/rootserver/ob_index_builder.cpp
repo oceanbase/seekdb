@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX RS
+#include "config_bridge.h"
 #include "ob_index_builder.h"
 #include "rootserver/ddl_task/ob_ddl_task_util.h"
 
@@ -1489,7 +1490,7 @@ int ObIndexBuilder::generate_schema(
   if (OB_SUCC(ret)) {
     //do some check
     if (OB_SUCC(ret)) {
-      if (!GCONF.enable_sys_table_ddl) {
+      if (!config::enable_sys_table_ddl()) {
         if (!data_schema.is_user_table() && !data_schema.is_tmp_table()) {
           ret = OB_ERR_WRONG_OBJECT;
           ObCStringHelper helper;

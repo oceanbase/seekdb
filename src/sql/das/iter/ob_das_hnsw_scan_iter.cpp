@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_DAS
+#include "config_bridge.h"
 #include "sql/das/iter/ob_das_hnsw_scan_iter.h"
 #include "share/rc/ob_server_runtime.h"
 #include "data_plane/blocksstable/ob_datum_row.h"
@@ -2218,7 +2219,7 @@ int ObDASHNSWScanIter::process_adaptor_state_post_filter(
   } else if (is_ipivf() && need_filter()) {
     query_cond_.query_limit_ = static_cast<int64_t>(std::ceil(query_cond_.query_limit_ * SPARSE_FIXED_MAGNIFICATION_RATIO));
   }
-  int64_t hnsw_max_iter_scan_nums = GCONF._hnsw_max_scan_vectors;
+  int64_t hnsw_max_iter_scan_nums = config::_hnsw_max_scan_vectors();
   while (OB_SUCC(ret) && !end_search) {
     ++adaptive_ctx_.iter_times_;
     if (first_search && OB_FAIL(process_adaptor_state_post_filter_once(ada_ctx, adaptor))) {

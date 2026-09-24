@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
+#include "config_bridge.h"
 #include "ob_schema_struct.h"
 #include "share/system_variable/ob_system_variable_alias.h"  // OB_SV_READ_ONLY, previously hidden behind a removed sql include chain, make the dependency explicit
 #include "share/ob_timezone_mgr.h"
@@ -7777,7 +7778,7 @@ bool check_can_drop_column_instant()
   int ret = OB_SUCCESS;
   bool can_drop_column_instant = true;
   if (can_drop_column_instant) {
-    can_drop_column_instant = GCONF._enable_drop_column_instant;
+    can_drop_column_instant = config::_enable_drop_column_instant();
   }
   return can_drop_column_instant;
 }

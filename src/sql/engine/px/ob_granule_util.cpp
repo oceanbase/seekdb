@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_EXE
 
+#include "config_bridge.h"
 #include "ob_granule_util.h"
 #include "data_plane/access/ob_parallel_range_task_planner.h"
 #include "share/config/ob_server_config.h"
@@ -216,7 +217,7 @@ int ObGranuleUtil::split_block_granule(ObExecContext &exec_ctx,
   // 3. calc the total number of tasks for all partitions
   int64_t esti_task_cnt_by_data_size = 0;
   if (OB_SUCC(ret)) {
-    data_plane::ObParallelRangeTaskParams params(GCONF.px_task_size >> 10);
+    data_plane::ObParallelRangeTaskParams params(config::px_task_size() >> 10);
     params.parallelism_ = parallelism;
     params.expected_task_load_kb_ = tablet_size/1024;
     if (OB_FAIL(data_plane::ObParallelRangeTaskPlanner::compute_total_task_count(

@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "config_bridge.h"
 #include "ob_memtable_context.h"
 #include "storage/tx/ob_tx_ctx.h"
 #include "storage/tablelock/ob_lock_memtable.h"
@@ -840,12 +841,12 @@ bool ObMemtableCtx::pending_log_size_too_large(const ObTxSEQ &write_seq_no)
 {
   bool ret = true;
 
-  if (0 == GCONF._private_buffer_size) {
+  if (0 == config::_private_buffer_size()) {
     ret = false;
   } else if (TX_FORCE_WRITE_CLOG) {
     ret = true;
   } else {
-    ret = trans_mgr_.pending_log_size_too_large(write_seq_no, GCONF._private_buffer_size);
+    ret = trans_mgr_.pending_log_size_too_large(write_seq_no, config::_private_buffer_size());
   }
 
   return ret;

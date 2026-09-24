@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX COMMON
+#include "config_bridge.h"
 #include "share/config/ob_server_config.h"
 #include "share/io/ob_io_manager.h"
 #include "share/redolog/ob_log_file_handler.h"
@@ -210,7 +211,7 @@ int ObLogFileHandler::inner_read(const ObIOFd &io_fd, void *buf, const int64_t s
       io_info.buf_ = nullptr;
       io_info.user_data_buf_ = reinterpret_cast<char*>(buf) + read_sz;
       io_info.callback_ = nullptr;
-      io_info.timeout_us_ = GCONF._data_storage_io_timeout;
+      io_info.timeout_us_ = config::_data_storage_io_timeout();
 
       ObIOHandle io_handle;
       io_handle.reset();
@@ -288,7 +289,7 @@ int ObLogFileHandler::normal_retry_write(void *buf, int64_t size, int64_t offset
       io_info.flag_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_WRITE);
       io_info.buf_ = reinterpret_cast<const char *>(buf);
       io_info.callback_ = nullptr;
-      io_info.timeout_us_ = GCONF._data_storage_io_timeout;
+      io_info.timeout_us_ = config::_data_storage_io_timeout();
       ObIOHandle io_handle;
       if (OB_FAIL(ObIOManager::get_instance().aio_write(io_info, io_handle))) {
       } else if(OB_FAIL(io_handle.wait())) {

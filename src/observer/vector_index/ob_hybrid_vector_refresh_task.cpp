@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#include "config_bridge.h"
 #include "ob_hybrid_vector_refresh_task.h"
 #include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
@@ -446,8 +447,8 @@ int ObHybridVectorRefreshTask::prepare_for_embedding(ObPluginVectorIndexAdaptor 
   int64_t http_timeout_us = 0;
   int64_t http_max_retries = 0;
 
-  http_timeout_us = GCONF.model_request_timeout;
-  http_max_retries = GCONF.model_max_retries;
+  http_timeout_us = config::model_request_timeout();
+  http_max_retries = config::model_max_retries();
 
   if (OB_ISNULL(task_ctx)) {
     ret = OB_ERR_UNEXPECTED;

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "ob_sort_op_impl.h"
 #include "query/engine/basic/ob_encoded_sort_row.h"
 #include "data_plane/encoding/ob_cpu_features.h"
@@ -1105,7 +1106,7 @@ int ObSortOpImpl::before_add_row()
       [&](int64_t cur_cnt){ return rows_->count() > cur_cnt; },
       updated))) {
     } else if (updated && OB_FAIL(sql_mem_processor_.update_used_mem_size(mem_context_->used()))) {
-    } else if (GCONF.is_sql_operator_dump_enabled()) {
+    } else if (config::enable_sql_operator_dump()) {
       if (rows_->count() >= MAX_ROW_CNT) {
         // Maximum 2G, exceeding 2G will expand to 4G, 4G allocation will fail
         if (OB_FAIL(do_dump())) {

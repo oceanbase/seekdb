@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "config_bridge.h"
 #include "common/ob_timeout_ctx.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/ob_server_struct.h"
@@ -462,7 +463,7 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
     bool enable_parallel_create_table = false;
     {
       enable_parallel_create_table = true
-                                     && GCONF._enable_parallel_table_creation;
+                                     && config::_enable_parallel_table_creation();
 
     }
     if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
@@ -476,7 +477,7 @@ int ObCreateTableExecutor::execute(ObExecContext &ctx, ObCreateTableStmt &stmt)
         is_parallel_create = false;
       } else {
         is_parallel_create = true
-                             && GCONF._enable_parallel_table_creation;
+                             && config::_enable_parallel_table_creation();
       }
       if (OB_FAIL(ret)) {
         // do nothing

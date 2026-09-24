@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/ob_global_merge_table_operator.h"
+#include "lib/utility/ob_smart_var.h"
 #include "share/inner_table/ob_inner_table_schema.h"
 #include "share/ob_merge_info.h"
 #include "share/ob_dml_sql_splicer.h"

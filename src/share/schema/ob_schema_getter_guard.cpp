@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX SHARE_SCHEMA
 
 
+#include "share/rc/ob_server_runtime.h"
+#include "config_bridge.h"
 #include "ob_schema_getter_guard.h"
 #include "ob_ai_model_schema_getter_guard.ipp"
 
@@ -39,7 +41,6 @@
 #include "object/ob_object.h"
 #include "share/cache/ob_kv_storecache.h"
 #include "share/config/ob_server_config.h"
-#include "share/config/ob_runtime_config.h"
 #include "share/inner_table/ob_inner_table_schema.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_errno.h"
@@ -1528,7 +1529,8 @@ int ObSchemaGetterGuard::check_ssl_invited_cn(
   int ret = OB_SUCCESS;
   if (NULL == tls_info || !tls_info->tls_active_) {
   } else {
-    ObString ob_ssl_invited_common_names(GCONF.ob_ssl_invited_common_names.str());
+    const rust::String invited_names = config::ob_ssl_invited_common_names();
+    ObString ob_ssl_invited_common_names(static_cast<int32_t>(invited_names.size()), invited_names.data());
     if (ob_ssl_invited_common_names.empty()) {
       ret = OB_PASSWORD_WRONG;
       LOG_WARN("ob_ssl_invited_common_names not match", "expect", ob_ssl_invited_common_names, KR(ret));

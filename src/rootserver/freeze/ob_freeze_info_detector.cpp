@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS_COMPACTION
 
+#include "share/ob_server_struct.h"
 #include "rootserver/freeze/ob_freeze_info_detector.h"
 
 #include "rootserver/freeze/ob_major_merge_info_manager.h"
@@ -106,7 +107,7 @@ void ObMajorMergeInfoDetector::runTimerTask()
     SERVER_MODULE_SCOPE {
       LOG_INFO("start freeze_info_detector");
       update_last_run_timestamp_();
-      ObCurTraceId::init(GCONF.self_addr_);
+      ObCurTraceId::init(GCTX.self_addr());
 
       bool can_work = false;
       if (OB_FAIL(can_start_work(can_work))) {

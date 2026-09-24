@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL
 
+#include "config_bridge.h"
 #include "sql/engine/cmd/ob_vector_index_refresh.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "data_plane/ddl/ob_ddl_coordinator.h"
@@ -76,7 +77,7 @@ int ObVectorIndexRefresher::refresh() {
 
 int ObVectorIndexRefresher::get_current_scn(share::SCN &current_scn) {
   int ret = OB_SUCCESS;
-  const int64_t DEFAULT_TIMEOUT = GCONF.internal_sql_execute_timeout;
+  const int64_t DEFAULT_TIMEOUT = config::internal_sql_execute_timeout();
   data_plane::ObITransactionService *txs =
       data_plane::query_transaction_service();
   if (OB_ISNULL(txs)) {
@@ -540,7 +541,7 @@ int ObVectorIndexRefresher::do_rebuild() {
   if (OB_FAIL(ret)) {
   } else if (triggered && (!is_hybrid_vector || need_embedding_when_rebuild)) {
     LOG_INFO("start to rebuild vec index");
-    const int64_t ddl_rpc_timeout = GCONF._ob_ddl_timeout;
+    const int64_t ddl_rpc_timeout = config::_ob_ddl_timeout();
     ObTimeoutCtx timeout_ctx;
     ObAddr rs_addr = GCTX.self_addr();
     SMART_VAR(obcall::ObRebuildIndexArg, rebuild_index_arg) {

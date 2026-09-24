@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "config_bridge.h"
 #include "obmp_base.h"
 
 #include "sql/ob_mysql_end_trans_cb.h"
@@ -102,7 +103,7 @@ int ObMPBase::after_process(int error_code)
   {
     NG_TRACE_EXT(process_end, OB_ID(run_ts), get_run_timestamp());
     const int64_t elapsed_time = common::ObTimeUtility::current_time() - get_receive_timestamp();
-    bool is_slow = (elapsed_time > GCONF.trace_log_slow_query_watermark)
+    bool is_slow = (elapsed_time > config::trace_log_slow_query_watermark())
       && !THIS_WORKER.need_retry();
     if (is_slow) {
       if (THIS_WORKER.need_retry() && OB_TRY_LOCK_ROW_CONFLICT == error_code) {
@@ -317,7 +318,7 @@ int ObMPBase::init_process_var(sql::ObSqlCtx &ctx,
   if (!packet_sender_.is_conn_valid()) {
     ret = OB_CONNECT_ERROR;
   } else {
-    const int64_t debug_sync_timeout = GCONF.debug_sync_timeout;
+    const int64_t debug_sync_timeout = config::debug_sync_timeout();
     // ignore session debug sync action actions to thread local actions error
     if (debug_sync_timeout > 0) {
       int tmp_ret = GDS.set_thread_local_actions(session.get_debug_sync_actions());
@@ -329,7 +330,7 @@ int ObMPBase::init_process_var(sql::ObSqlCtx &ctx,
     ctx.session_info_ = &session;
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
 
-    ctx.set_enable_strict_defensive_check(GCONF.enable_strict_defensive_check());
+    ctx.set_enable_strict_defensive_check((config::_enable_defensive_check() == 2));
     LOG_DEBUG("protocol flag info", K(ctx.get_enable_strict_defensive_check()));
   }
   return ret;

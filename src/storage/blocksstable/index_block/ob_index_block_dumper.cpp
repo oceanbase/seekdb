@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "ob_index_block_dumper.h"
 #include "storage/blocksstable/index_block/ob_index_block_builder.h"
 namespace oceanbase
@@ -798,7 +799,7 @@ int ObIndexBlockLoader::open_next_macro_block()
     ret = OB_ITER_END;
   } else if (OB_FAIL(prefetch())) {
   } else {
-    const int64_t io_timeout_ms = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
+    const int64_t io_timeout_ms = std::max(config::_data_storage_io_timeout() / 1000, DEFAULT_IO_WAIT_TIME_MS);
     cur_block_idx_++;
     micro_iter_.reuse();
     blocksstable::ObStorageObjectHandle &macro_io_handle = macro_io_handle_[cur_block_idx_ % PREFETCH_DEPTH];

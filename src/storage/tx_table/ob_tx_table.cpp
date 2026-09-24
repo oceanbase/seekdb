@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "ob_tx_table.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tx_table/ob_tx_data_cache.h"
@@ -818,7 +819,7 @@ int ObTxTable::get_recycle_scn(SCN &real_recycle_scn)
   int64_t tx_result_retention_s = DEFAULT_TX_RESULT_RETENTION_S;
 
   // use config value if config is valid
-  tx_result_retention_s = GCONF._tx_result_retention;
+  tx_result_retention_s = config::_tx_result_retention();
 
 
   if (current_time_us - recycle_record_.last_recycle_ts_ < MIN_INTERVAL_OF_TX_DATA_RECYCLE_US) {

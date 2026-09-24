@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 
+#include "config_bridge.h"
 #include "ob_root_inspection.h"
 #include "rootserver/ob_local_management_service.h"
 #include "share/ob_global_stat_proxy.h"//ObGlobalStatProxy
@@ -41,8 +42,8 @@ void ObPurgeRecyclebinTask::runTimerTask()
   int ret = OB_SUCCESS;
   const int64_t PURGE_EACH_TIME = 1000;
   int64_t delay = 1 * 60 * 1000 * 1000;
-  int64_t expire_time = GCONF.recyclebin_object_expire_time;
-  int64_t purge_interval = GCONF._recyclebin_object_purge_frequency;
+  int64_t expire_time = config::recyclebin_object_expire_time();
+  int64_t purge_interval = config::_recyclebin_object_purge_frequency();
   if (expire_time > 0 && purge_interval > 0) {
     if (OB_FAIL(local_management_service_.purge_recyclebin_objects(PURGE_EACH_TIME))) {
     }

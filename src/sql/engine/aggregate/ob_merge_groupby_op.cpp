@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "sql/engine/aggregate/ob_merge_groupby_op.h"
 
 namespace oceanbase
@@ -1145,7 +1146,7 @@ int ObMergeGroupByOp::init_hp_infras_group_mgr()
                     MY_SPEC.id_,
                     &ctx_))) {
     } else if (OB_FAIL(hp_infras_mgr_.init(
-      GCONF.is_sql_operator_dump_enabled(), est_rows, MY_SPEC.width_, true/*unique*/, 1/*ways*/,
+      config::enable_sql_operator_dump(), est_rows, MY_SPEC.width_, true/*unique*/, 1/*ways*/,
       &eval_ctx_, &sql_mem_processor_, &io_event_observer_))) {
     } else {
       aggr_processor_.set_hp_infras_mgr(&hp_infras_mgr_);

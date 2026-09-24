@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE_COMPACTION
+#include "config_bridge.h"
 #include "ob_sstable_builder.h"
 #include "storage/compaction/ob_basic_tablet_merge_ctx.h"
 
@@ -44,7 +45,7 @@ int ObSSTableRebuildMicroBlockIter::prefetch()
       read_info.io_desc_.set_mode(ObIOMode::READ);
       read_info.io_desc_.set_wait_event(ObWaitEventIds::DB_FILE_COMPACT_READ);
       read_info.io_desc_.set_sys_module_id(ObIOModule::INDEX_BLOCK_MICRO_ITER_IO);
-      read_info.io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
+      read_info.io_timeout_ms_ = std::max(config::_data_storage_io_timeout() / 1000, DEFAULT_IO_WAIT_TIME_MS);
       read_info.macro_block_id_ = macro_id_array_.at(prefetch_idx_);
       read_info.buf_ = io_buf_[io_index];
       

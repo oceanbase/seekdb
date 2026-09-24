@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
+#include "share/ob_server_struct.h"
 #include "ob_freezer.h"
 #include "share/ob_ex_rpc.h"
 #include "share/rc/ob_server_runtime.h"
@@ -1195,7 +1196,7 @@ int ObFreezer::submit_log_for_freeze(const bool is_tablet_freeze, const bool is_
   ObTabletID tablet_id(INT64_MAX); // used for diagnose
   bool trace_id_need_reset = false;
   if (!ObCurTraceId::get_trace_id()->is_valid()) {
-    ObCurTraceId::init(GCONF.self_addr_);
+    ObCurTraceId::init(GCTX.self_addr());
     bool trace_id_need_reset = true;
   }
   do {

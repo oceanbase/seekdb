@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_DAS
+#include "config_bridge.h"
 #include "sql/das/iter/ob_das_local_lookup_iter.h"
 #include "sql/das/iter/ob_das_functional_lookup_iter.h"
 #include "sql/das/iter/ob_das_func_data_iter.h"
@@ -259,7 +260,7 @@ int ObDASLocalLookupIter::check_index_lookup()
     scan_iter = static_cast<ObDASDomainIdMergeIter *>(data_table_iter_)->get_data_table_iter();
   }
   if (DAS_ITER_FUNC_DATA == data_table_iter_->get_type()) {
-    if (GCONF.enable_defensive_check() &&
+    if ((config::_enable_defensive_check() > 0) &&
         !(lookup_rtdef_ != nullptr && lookup_rtdef_->scan_flag_.skip_4377_for_async_index_lookup())) {
       if (OB_UNLIKELY(lookup_rowkey_cnt_ != lookup_row_cnt_)) {
         ret = OB_ERR_DEFENSIVE_CHECK;
@@ -283,7 +284,7 @@ int ObDASLocalLookupIter::check_index_lookup()
       }
     }
   } else {
-    if (GCONF.enable_defensive_check() &&
+    if ((config::_enable_defensive_check() > 0) &&
         lookup_ctdef_->pd_expr_spec_.pushdown_filters_.empty() &&
         !(lookup_rtdef_ != nullptr && lookup_rtdef_->scan_flag_.skip_4377_for_async_index_lookup())) {
       if (OB_UNLIKELY(lookup_rowkey_cnt_ != lookup_row_cnt_)) {

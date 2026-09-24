@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 #include "rootserver/ob_schema2ddl_sql.h"
+#include "lib/utility/ob_smart_var.h"
 
 #include "share/schema/ob_schema_service.h"
 

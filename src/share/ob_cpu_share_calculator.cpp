@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "config_bridge.h"
 #include <algorithm>
 
 #include "share/ob_cpu_share_calculator.h"
@@ -28,7 +29,7 @@ namespace common
 int64_t ObCpuShareCalculator::calc_px_pool_share(int64_t min_cpu)
 {
   return resolve_parallel_servers_target(
-      0, min_cpu, GCONF.px_workers_per_cpu_quota);
+      0, min_cpu, config::px_workers_per_cpu_quota());
 }
 
 } // namespace common

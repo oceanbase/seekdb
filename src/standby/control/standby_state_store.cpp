@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#include "config_bridge.h"
 #include "standby/control/standby_state_store.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/string/ob_string.h"
@@ -166,15 +167,11 @@ int load_from_config(
     share::ObServerInfo &server_info)
 {
   int ret = OB_SUCCESS;
-  common::ObString value;
-  common::ObArenaAllocator allocator(ObModIds::OB_TEMP_VARIABLES);
+  UNUSED(config_manager);
+  const rust::String stored = config::server_role_info();
+  const common::ObString value(static_cast<int32_t>(stored.size()), stored.data());
   server_info.reset();
-  if (OB_FAIL(config_manager.get_config_value(
-      SERVER_ROLE_STATE_CONFIG, value, allocator))) {
-    if (OB_ENTRY_NOT_EXIST != ret) {
-      LOG_WARN("failed to load server role state", KR(ret));
-    }
-  } else if (value.empty()) {
+  if (value.empty()) {
     ret = OB_ENTRY_NOT_EXIST;
   } else if (OB_FAIL(deserialize_server_info(value, server_info))) {
     LOG_WARN("failed to deserialize server role state", KR(ret), K(value));
@@ -200,7 +197,7 @@ int save_to_config(
     } else {
       MEMCPY(buf, value.ptr(), value.length());
       buf[value.length()] = '\0';
-      if (OB_FAIL(config_manager.save_config(SERVER_ROLE_STATE_CONFIG, buf))) {
+      if (OB_FAIL(config_manager.save_internal_state(SERVER_ROLE_STATE_CONFIG, buf))) {
         LOG_WARN("failed to persist server role state", KR(ret), K(value));
       } else {
         LOG_INFO("persisted server role state", K(value), K(server_info));

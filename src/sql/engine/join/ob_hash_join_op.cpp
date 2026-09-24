@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "sql/engine/join/ob_hash_join_op.h"
 #include "sql/engine/px/ob_px_util.h"
 #include "sql/engine/px/ob_px_util.h"
@@ -384,8 +385,8 @@ int ObHashJoinOp::inner_open()
     init_system_parameters();
     
     first_get_row_ = true;
-    force_hash_join_spill_ = GCONF._force_hash_join_spill;
-    hash_join_processor_ = GCONF._enable_hash_join_processor;
+    force_hash_join_spill_ = config::_force_hash_join_spill();
+    hash_join_processor_ = config::_enable_hash_join_processor();
     if (0 == (hash_join_processor_ & HJ_PROCESSOR_MASK)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(set_hash_function())) {
@@ -2253,7 +2254,7 @@ int ObHashJoinOp::fill_partition(int64_t &num_left_rows)
       if (OB_SUCC(ret)) {
         stored_row->set_is_match(false);
         stored_row->set_hash_value(hash_value);
-        if (GCONF.is_sql_operator_dump_enabled()) {
+        if (config::enable_sql_operator_dump()) {
           if (OB_FAIL(dump_build_table(num_left_rows))) {
           }
         }
@@ -2299,7 +2300,7 @@ int ObHashJoinOp::fill_partition_batch(int64_t &num_left_rows)
             hj_part_added_rows_[i]->set_hash_value(
                      hash_vals_[part_selectors_[part_idx * MY_SPEC.max_batch_size_ + i]]);
           }
-          if (GCONF.is_sql_operator_dump_enabled()) {
+          if (config::enable_sql_operator_dump()) {
             if (OB_FAIL(dump_build_table(num_left_rows))) {
             }
           }
@@ -2322,7 +2323,7 @@ int ObHashJoinOp::fill_partition_batch(int64_t &num_left_rows)
         if (OB_SUCC(ret)) {
           stored_row->set_is_match(false);
           stored_row->set_hash_value(hash_vals_[i]);
-          if (GCONF.is_sql_operator_dump_enabled()) {
+          if (config::enable_sql_operator_dump()) {
             if (OB_FAIL(dump_build_table(num_left_rows))) {
             }
           }
@@ -2380,7 +2381,7 @@ int ObHashJoinOp::split_partition(int64_t &num_left_rows)
     if (nullptr != left_batch_) {
       left_batch_->rescan();
     }
-    if (sql_mem_processor_.is_auto_mgr() && GCONF.is_sql_operator_dump_enabled()) {
+    if (sql_mem_processor_.is_auto_mgr() && config::enable_sql_operator_dump()) {
       // last stage for dump build table
       if (OB_FAIL(calc_basic_info())) {
       } else if (OB_FAIL(dump_build_table(profile_.get_row_count(), true))) {
@@ -2569,7 +2570,7 @@ int ObHashJoinOp::prepare_hash_table()
   // calculate the buckets number of hash table
   if (HJProcessor::RECURSIVE == hj_processor_) {
     if (OB_FAIL(calc_basic_info())) {
-    } else if (GCONF.is_sql_operator_dump_enabled() &&
+    } else if (config::enable_sql_operator_dump() &&
         OB_FAIL(dump_build_table(profile_.get_row_count(), true))) {
     } else if (OB_FAIL(dump_remain_partition())) {
     }

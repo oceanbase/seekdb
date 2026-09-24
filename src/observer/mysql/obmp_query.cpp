@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "config_bridge.h"
 #include "observer/ob_server_runtime_access.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "observer/mysql/obmp_query.h"
@@ -118,7 +119,7 @@ int ObMPQuery::process()
         //For performance optimization, reduce the array length to lower the construction and destruction overhead of unused elements
         ObSEArray<ObString, 1> queries;
         ObMPParseStat parse_stat;
-        if (GCONF.enable_record_trace_id) {
+        if (config::enable_record_trace_id()) {
           PreParseResult pre_parse_result;
           if (OB_FAIL(ObParser::pre_parse(sql_, pre_parse_result))) {
           } else {
@@ -424,7 +425,7 @@ int ObMPQuery::process_single_stmt(const ObMultiStmtItem &multi_stmt_item,
       } while (RETRY_TYPE_LOCAL == retry_ctrl_.get_retry_type());
     }
     ObThreadLogLevelUtils::clear();
-    const int64_t debug_sync_timeout = GCONF.debug_sync_timeout;
+    const int64_t debug_sync_timeout = config::debug_sync_timeout();
     if (debug_sync_timeout > 0) {
       // ignore thread local debug sync actions to session actions failed
       int tmp_ret = OB_SUCCESS;

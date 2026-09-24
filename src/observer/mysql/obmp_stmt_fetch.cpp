@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#include "config_bridge.h"
 #include "observer/mysql/obmp_stmt_fetch.h"
 #include "query/protocol/ob_mysql_protocol_util.h"
 #include "share/ob_lob_access_utils.h"
@@ -380,7 +381,7 @@ int ObMPStmtFetch::process_fetch_stmt(ObSQLSessionInfo &session,
     ret = do_process(session, need_response_error);
   }
   ObThreadLogLevelUtils::clear();
-  const int64_t debug_sync_timeout = GCONF.debug_sync_timeout;
+  const int64_t debug_sync_timeout = config::debug_sync_timeout();
   if (debug_sync_timeout > 0) {
     // ignore thread local debug sync actions to session actions failed
     int tmp_ret = OB_SUCCESS;

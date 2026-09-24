@@ -459,8 +459,6 @@ cc_library(
     hdrs = [
         "ob_encryption_util.h",
         "parameter/ob_parameter_attr.h",
-        "parameter/ob_parameter_macro.h",
-        "parameter/ob_parameter_seed.ipp",
     ],
     deps = [
         "//src/oblib:oblib_foundation",
@@ -504,14 +502,10 @@ _CONFIG_UNITY_GROUP = share_select_unity_sources(
     SHARE_UNITY_GROUPS,
     "config",
     [
-        "src/share/config/ob_common_config.cpp",
-        "src/share/config/ob_config.cpp",
         "src/share/config/ob_config_helper.cpp",
         "src/share/config/ob_config_manager.cpp",
         "src/share/config/ob_reload_config.cpp",
-        "src/share/config/ob_runtime_config.cpp",
         "src/share/config/ob_server_config.cpp",
-        "src/share/config/ob_system_config.cpp",
         "src/share/config/ob_config_storage.cpp",
     ],
 )
@@ -521,18 +515,12 @@ seekdb_semantic_unity_cc_library(
     owner_package = "src/share",
     unity_groups = [_CONFIG_UNITY_GROUP],
     public_hdrs = [
-        "config/ob_common_config.h",
-        "config/ob_config.h",
         "config/ob_config_manager.h",
         "config/ob_config_rpc_types.h",
         "config/ob_config_storage.h",
         "config/ob_parallel_ddl_control_mode.h",
         "config/ob_reload_config.h",
-        "config/ob_runtime_config.h",
         "config/ob_server_config.h",
-        "config/ob_system_config.h",
-        "config/ob_system_config_key.h",
-        "config/ob_system_config_value.h",
     ],
     deps = [
         ":cache",
@@ -544,6 +532,7 @@ seekdb_semantic_unity_cc_library(
         "//src/oblib:oblib_foundation",
         "//src/oblib:oblib_mysql_client_domain",
         "//rust:auto_config_headers",
+        "//rust:config_bridge_headers",
     ],
     implementation_deps = [
         ":cluster_version_interface",
@@ -1771,6 +1760,8 @@ seekdb_semantic_unity_cc_library(
     ),
     implementation_deps = [
         ":_share_implementation_headers",
+        "//rust:auto_config_headers",
+        "//rust:config_bridge_headers",
     ] + _SHARE_RUNTIME_COMPILE_DEPS,
     features = ["layering_check"],
     tags = ["manual"],

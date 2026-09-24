@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "config_bridge.h"
 #include "ob_mvcc_trans_ctx.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
@@ -872,7 +873,7 @@ int ObTransCallbackMgr::get_log_guard(const transaction::ObTxSEQ &write_seq,
     } else if (OB_ISNULL(log_lock = list->try_lock_log())) {
       ret = OB_NEED_RETRY;
       // if current list pending size too large, try to submit the min_epoch list
-    } else if (FALSE_IT(pending_too_large = list->pending_log_too_large(GCONF._private_buffer_size * 10))) {
+    } else if (FALSE_IT(pending_too_large = list->pending_log_too_large(config::_private_buffer_size() * 10))) {
     } else if (!check_list_has_min_epoch_(list_idx, my_epoch, pending_too_large, min_epoch, min_epoch_idx)) {
       ret = OB_EAGAIN;
       storage::ObIMemtable *to_log_memtable = list->get_log_cursor()->get_memtable();
@@ -1762,7 +1763,7 @@ int ObMvccRowCallback::trans_commit()
         } else if (blocksstable::ObDmlFlag::DF_LOCK == get_dml_flag()) {
           unlink_trans_node();
         } else {
-          const int64_t MAX_TRANS_NODE_CNT = 2 * GCONF._ob_elr_fast_freeze_threshold;
+          const int64_t MAX_TRANS_NODE_CNT = 2 * config::_ob_elr_fast_freeze_threshold();
           if (value_.total_trans_node_cnt_ > MAX_TRANS_NODE_CNT
               && NULL != memtable_
               && !memtable_->has_hotspot_row()) {

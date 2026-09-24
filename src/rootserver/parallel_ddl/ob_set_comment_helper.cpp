@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX RS
+#include "config_bridge.h"
 #include "rootserver/parallel_ddl/ob_set_comment_helper.h"
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_table_sql_service.h"
@@ -166,7 +167,7 @@ int ObSetCommentHelper::check_table_legitimacy_()
     ObCStringHelper helper2;
     LOG_USER_ERROR(OB_ERR_WRONG_OBJECT,
     helper2.convert(arg_.database_name_), helper2.convert(arg_.table_name_), "BASE TABLE");
-  } else if (OB_UNLIKELY(orig_table_schema_->is_sys_view() && !GCONF.enable_sys_table_ddl)) {
+  } else if (OB_UNLIKELY(orig_table_schema_->is_sys_view() && !config::enable_sys_table_ddl())) {
     ret = OB_OP_NOT_ALLOW;
     LOG_USER_ERROR(OB_OP_NOT_ALLOW, "alter system view");
   } else if (OB_UNLIKELY(orig_table_schema_->is_in_recyclebin())) {

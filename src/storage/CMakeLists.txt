@@ -7,7 +7,7 @@ seekdb_apply_standalone_inventory(ob_storage SEEKDB_STORAGE_STANDALONE)
 seekdb_apply_standalone_inventory(ob_storage_extra SEEKDB_STORAGE_EXTRA)
 
 ob_add_new_object_target(ob_storage ob_storage)
-target_link_libraries(ob_storage PUBLIC ob_base)
+target_link_libraries(ob_storage PUBLIC ob_base auto_config)
 
 # Keep the legacy aggregate target name used by the final link.  The current
 # production inventory has no Storage extra sources, so avoid creating an

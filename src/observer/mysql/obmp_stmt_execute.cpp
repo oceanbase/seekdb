@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "config_bridge.h"
 #include "nio.h"
 
 #include "obmp_stmt_execute.h"
@@ -1881,7 +1882,7 @@ int ObMPStmtExecute::process_execute_stmt(const ObMultiStmtItem &multi_stmt_item
       // ret = OB_SUCC(bak_ret) ? ret : bak_ret;
     }
     ObThreadLogLevelUtils::clear();
-    const int64_t debug_sync_timeout = GCONF.debug_sync_timeout;
+    const int64_t debug_sync_timeout = config::debug_sync_timeout();
     if (debug_sync_timeout > 0) {
       // ignore thread local debug sync actions to session actions failed
       int tmp_ret = OB_SUCCESS;

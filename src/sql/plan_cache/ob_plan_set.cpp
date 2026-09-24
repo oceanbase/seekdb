@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_PC
 
+#include "config_bridge.h"
 #include "ob_plan_set.h"
 #include "sql/plan_cache/ob_pcv_set.h"
 
@@ -1158,7 +1159,7 @@ int ObSqlPlanSet::try_get_local_plan(ObPlanCacheCtx &pc_ctx,
     } else if (OB_PHY_PLAN_LOCAL != real_type) {
       plan = NULL;
       get_next = true;
-    } else if (GCONF._enable_adaptive_auto_dop && plan->get_is_use_auto_dop() && is_single_table_
+    } else if (config::_enable_adaptive_auto_dop() && plan->get_is_use_auto_dop() && is_single_table_
                && !is_contain_inner_table_ && !plan->stat_.is_inner_) {
       int64_t dop = -1;
       bool is_single_part = false;
@@ -1189,7 +1190,7 @@ int ObSqlPlanSet::try_get_dist_plan(ObPlanCacheCtx &pc_ctx,
   ObExecContext &exec_ctx = pc_ctx.exec_ctx_;
   if (OB_FAIL(dist_plans_.get_plan(pc_ctx, plan))) {
   } else if (plan != NULL) {
-    if (GCONF._enable_adaptive_auto_dop && plan->get_is_use_auto_dop() && is_single_table_
+    if (config::_enable_adaptive_auto_dop() && plan->get_is_use_auto_dop() && is_single_table_
         && !is_contain_inner_table_ && !plan->stat_.is_inner_) {
       int64_t dop = -1;
       bool is_single_part = false;

@@ -19,6 +19,9 @@
 
 #include "ob_system_admin_util.h"
 #include "ob_local_management_service.h"
+#include "config_bridge.h"
+#include "config_checkers.h"
+#include <utility>
 namespace oceanbase
 {
 using namespace common;
@@ -33,8 +36,6 @@ namespace rootserver
 int ObAdminSetConfig::verify_config(obcall::ObAdminSetConfigArg &arg)
 {
   int ret = OB_SUCCESS;
-  void *ptr = nullptr;
-  ObServerConfigChecker *cfg = nullptr;
 
   if (!ctx_.is_inited()) {
     ret = OB_NOT_INIT;
@@ -42,40 +43,25 @@ int ObAdminSetConfig::verify_config(obcall::ObAdminSetConfigArg &arg)
     ret = OB_INVALID_ARGUMENT;
   }
 
-  if (nullptr == cfg) {
-    if (OB_ISNULL(ptr = ob_malloc(sizeof(ObServerConfigChecker),
-                                ObModIds::OB_RS_PARTITION_TABLE_TEMP))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-    } else if (OB_ISNULL(cfg = new (ptr) ObServerConfigChecker)) {
-      ret = OB_ERR_UNEXPECTED;
-    }
-  }
-
   FOREACH_X(item, arg.items_, OB_SUCCESS == ret) {
     if (item->name_.is_empty()) {
       ret = OB_INVALID_ARGUMENT;
     } else {
-      ObConfigItem *ci = nullptr;
-      ObConfigItem * const *ci_ptr = cfg->get_container().get(
-                                      ObConfigStringKey(item->name_.ptr()));
-      if (OB_ISNULL(ci_ptr) || OB_ISNULL(*ci_ptr)) {
+      const char *name = item->name_.ptr();
+      const char *value = item->value_.ptr();
+      if (!config::parameter_exists(rust::Str(name))) {
         ret = OB_ERR_SYS_CONFIG_UNKNOWN;
-      } else {
-        ci = *ci_ptr;
       }
 
       if (OB_SUCC(ret)) {
         const char *err = NULL;
-        if (ci->is_not_editable() && !arg.is_inner_) {
+        if (!config::parameter_valid(rust::Str(name), rust::Str(value))) {
+          ret = OB_INVALID_CONFIG;
+        } else if (config::parameter_readonly(rust::Str(name)) && !arg.is_inner_) {
           ret = OB_INVALID_CONFIG; //TODO: specific report not editable
-        } else if (!ci->check_unit(item->value_.ptr())) {
+        } else if (!config::check_parameter(name, value)) {
           ret = OB_INVALID_CONFIG;
-          LOG_ERROR("invalid config", "item", *item, KR(ret));
-        } else if (!ci->set_value_for_validation(item->value_.ptr())) {
-          ret = OB_INVALID_CONFIG;
-        } else if (!ci->check()) {
-          ret = OB_INVALID_CONFIG;
-        } else if (!ctx_.local_management_service_->check_config(*ci, err)) {
+        } else if (!ctx_.local_management_service_->check_config(name, value, err)) {
           ret = OB_INVALID_CONFIG;
         }
         if (OB_FAIL(ret)) {
@@ -87,15 +73,6 @@ int ObAdminSetConfig::verify_config(obcall::ObAdminSetConfigArg &arg)
     } // else
   } // FOREACH_X
 
-  if (nullptr != cfg) {
-    cfg->~ObServerConfigChecker();
-    ob_free(cfg);
-    cfg = nullptr;
-    ptr = nullptr;
-  } else if (nullptr != ptr) {
-    ob_free(ptr);
-    ptr = nullptr;
-  }
   return ret;
 }
 
@@ -111,7 +88,7 @@ int ObAdminSetConfig::update_config(obcall::ObAdminSetConfigArg &arg)
     for (int64_t i = 0; OB_SUCC(ret) && i < arg.items_.count(); ++i) {
       const ObAdminSetConfigItem &item = arg.items_.at(i);
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(update_sys_config_(item))) {
+      } else if (OB_FAIL(update_sys_config_(item, arg))) {
       }
     } // end for each item
   }
@@ -119,35 +96,46 @@ int ObAdminSetConfig::update_config(obcall::ObAdminSetConfigArg &arg)
   return ret;
 }
 
-int ObAdminSetConfig::update_sys_config_(const obcall::ObAdminSetConfigItem &item)
+int ObAdminSetConfig::checked_config_callback(void *context)
+{
+  auto *check = static_cast<std::pair<ObAdminSetConfig *, obcall::ObAdminSetConfigArg *> *>(context);
+  return check->first->verify_config(*check->second);
+}
+
+int ObAdminSetConfig::update_sys_config_(const obcall::ObAdminSetConfigItem &item,
+                                         obcall::ObAdminSetConfigArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(GCTX.config_mgr_)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    if (OB_SUCC(ret) && OB_NOT_NULL(GCTX.config_mgr_)) {
-      if (item.is_reset_) {
-        if (OB_FAIL(GCTX.config_mgr_->reset_config(item.name_.ptr()))) {
-        }
-      } else if (OB_FAIL(GCTX.config_mgr_->save_config(
-                    item.name_.ptr(), item.value_.ptr()))) {
+    bool after_replace = false;
+    std::pair<ObAdminSetConfig *, obcall::ObAdminSetConfigArg *> check_context(this, &arg);
+    const int save_ret = GCTX.config_mgr_->update_checked(
+        item.name_.ptr(), item.value_.ptr(), item.is_reset_,
+        checked_config_callback, &check_context, &after_replace);
+    if (OB_SUCCESS == save_ret || after_replace) {
+      // A durability error can follow a successful rename. In that case the
+      // visible file must still be loaded before returning the save error.
+      int apply_ret = GCTX.config_mgr_->got_version();
+      if (OB_SUCCESS == apply_ret) {
+        apply_ret = GCTX.config_mgr_->reload_config();
       }
+      if (OB_SUCCESS != save_ret) {
+        ret = save_ret;
+        if (OB_SUCCESS != apply_ret) {
+          LOG_ERROR("reloading replaced config failed", K(apply_ret), K(item));
+        }
+      } else if (OB_SUCCESS != apply_ret) {
+        ret = OB_INVALID_CONFIG;
+        LOG_ERROR("instance parameter saved but could not be applied", K(apply_ret), K(item));
+        LOG_USER_ERROR(OB_INVALID_CONFIG, "parameter was saved but could not be applied");
+      } else {
+        LOG_INFO("got new sys config", K(item));
+      }
+    } else {
+      ret = save_ret;
     }
-  }
-  // try update local memory and trigger remote server to refresh this change
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(GCTX.config_mgr_->got_version())) {
-    const int apply_ret = ret;
-    LOG_ERROR("instance parameter saved but could not be applied", K(apply_ret), K(item));
-    ret = OB_INVALID_CONFIG;
-    LOG_USER_ERROR(OB_INVALID_CONFIG, "parameter was saved but could not be applied");
-  } else if (OB_FAIL(GCTX.config_mgr_->reload_config())) {
-    const int apply_ret = ret;
-    LOG_ERROR("instance parameter saved but reload failed", K(apply_ret), K(item));
-    ret = OB_INVALID_CONFIG;
-    LOG_USER_ERROR(OB_INVALID_CONFIG, "parameter was saved but could not be applied");
-  } else {
-    LOG_INFO("got new sys config", K(item));
   }
   return ret;
 }

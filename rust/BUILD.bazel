@@ -35,6 +35,8 @@ _RUST_INPUTS = [
     "auto-config/Cargo.toml",
     "auto-config/cbindgen.toml",
     "auto-config/build.rs",
+    "auto-config/parameters.tsv",
+    "auto-config/internal_state.tsv",
 ] + glob(["sql-nio/src/*.rs", "auto-config/src/*.rs"])
 
 # Cargo remains the authoritative Rust dependency resolver used by the
@@ -44,10 +46,12 @@ _RUST_INPUTS = [
 genrule(
     name = "_rust_static_unix",
     srcs = _RUST_INPUTS,
-    outs = ["libsql_nio.a", "libauto_config.a"],
+    outs = ["libsql_nio.a", "libauto_config.a", "unix/config_bridge.h", "unix/config_checkers.h"],
     cmd = """
 set -eu
 export CARGO_TARGET_DIR="$(@D)/rust-cargo-target"
+export SEEKDB_CXX_HEADER_DIR="$$PWD/$(@D)/unix"
+export SEEKDB_DEFAULT_LOG_LEVEL=OB_LOG_LEVEL_ERROR
 cargo build --release --manifest-path "$(location Cargo.toml)" --package sql-nio --package auto-config
 cp "$$CARGO_TARGET_DIR/release/libsql_nio.a" "$(@D)/libsql_nio.a"
 cp "$$CARGO_TARGET_DIR/release/libauto_config.a" "$(@D)/libauto_config.a"
@@ -65,9 +69,11 @@ cp "$$CARGO_TARGET_DIR/release/libauto_config.a" "$(@D)/libauto_config.a"
 genrule(
     name = "_rust_static_windows",
     srcs = _RUST_INPUTS,
-    outs = ["sql_nio.lib", "auto_config.lib"],
+    outs = ["sql_nio.lib", "auto_config.lib", "windows/config_bridge.h", "windows/config_checkers.h"],
     cmd_bat = """
 set CARGO_TARGET_DIR=$(@D)\\rust-cargo-target
+set SEEKDB_CXX_HEADER_DIR=%CD%\\$(@D)\\windows
+set SEEKDB_DEFAULT_LOG_LEVEL=OB_LOG_LEVEL_ERROR
 cargo build --release --manifest-path "$(location Cargo.toml)" --package sql-nio --package auto-config
 copy /Y "%CARGO_TARGET_DIR%\\release\\sql_nio.lib" "$(@D)\\sql_nio.lib"
 copy /Y "%CARGO_TARGET_DIR%\\release\\auto_config.lib" "$(@D)\\auto_config.lib"
@@ -116,5 +122,18 @@ cc_library(
     name = "auto_config_headers",
     hdrs = ["auto-config/include/auto_config.h"],
     includes = ["auto-config/include"],
-    visibility = ["//src/share:__pkg__"],
+    visibility = ["//src/share:__pkg__", "//src/observer:__pkg__"],
+)
+
+cc_library(
+    name = "config_bridge_headers",
+    hdrs = select({
+        ":windows": ["windows/config_bridge.h", "windows/config_checkers.h"],
+        "//conditions:default": ["unix/config_bridge.h", "unix/config_checkers.h"],
+    }),
+    includes = select({
+        ":windows": ["windows"],
+        "//conditions:default": ["unix"],
+    }),
+    visibility = ["//src/share:__pkg__", "//src/observer:__pkg__", "//src/rootserver:__pkg__", "//src/sql:__subpackages__", "//src/storage:__pkg__", "//src/pl:__pkg__", "//src/standby:__pkg__"],
 )

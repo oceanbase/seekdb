@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "share/ob_server_struct.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_local_storage_checkpoint_slog_handler.h"
 #include "share/rc/ob_server_runtime.h"
@@ -130,7 +131,7 @@ int64_t ObLSCkptMember::get_serialize_size() const
 void ObLocalStorageCheckpointSlogHandler::ObWriteCheckpointTask::runTimerTask()
 {
   int ret = OB_SUCCESS;
-  ObCurTraceId::init(GCONF.self_addr_);
+  ObCurTraceId::init(GCTX.self_addr());
   if (SERVER_STORAGE_META_SERVICE.is_started()) {
     if (OB_FAIL(handler_->write_checkpoint(false/*is_force*/))) {
     }

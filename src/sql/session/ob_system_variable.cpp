@@ -15,8 +15,10 @@
  */
 
 #define USING_LOG_PREFIX SHARE
+#include "config_bridge.h"
 #include "data_plane/transaction/ob_transaction_isolation.h"
 #include "ob_system_variable.h"
+#include "share/config/ob_config_helper.h"
 #include "data_plane/transaction/ob_i_transaction_service.h"
 #include "share/system_variable/ob_sys_var_meta.h"
 #include "sql/engine/ob_exec_context.h"
@@ -25,6 +27,8 @@
 #include "sql/engine/expr/ob_expr_plsql_variable.h"
 #include "sql/engine/expr/ob_expr_uuid.h"
 #include "lib/locale/ob_locale_type.h"
+
+#include <string>
 
 
 using namespace oceanbase::common;
@@ -2508,7 +2512,7 @@ int ObPreProcessSysVars::init_config_sys_vars()
  // OB_SV_SERVER_PORT
   if (OB_SUCC(ret)) {
     pos = 0;
-    int64_t mysql_port = GCONF.mysql_port;
+    int64_t mysql_port = config::mysql_port();
     if (OB_FAIL(databuff_printf(ObSpecialSysVarValues::server_port_int_str_,
                                 ObSpecialSysVarValues::SERVER_PORT_INT_STR_MAX_LEN,
                                 pos,
@@ -2534,8 +2538,9 @@ int ObPreProcessSysVars::init_config_sys_vars()
 
   // OB_SV_DATADIR
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(share::ObSysVariables::set_value(OB_SV_DATADIR, GCONF.data_dir))) {
-    } else if (OB_FAIL(share::ObSysVariables::set_base_value(OB_SV_DATADIR, GCONF.data_dir))) {
+    static const std::string data_dir(config::data_dir().c_str());
+    if (OB_FAIL(share::ObSysVariables::set_value(OB_SV_DATADIR, data_dir.c_str()))) {
+    } else if (OB_FAIL(share::ObSysVariables::set_base_value(OB_SV_DATADIR, data_dir.c_str()))) {
     }
   }
   return ret;

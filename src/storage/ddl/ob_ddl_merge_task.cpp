@@ -449,7 +449,7 @@ int ObDDLTableMergeTask::merge_full_direct_load_ddl_kvs_for_sn(ObLS *ls, ObTable
   } else {
     DEBUG_SYNC(BEFORE_DDL_TABLE_MERGE_TASK);
 #ifdef ERRSIM
-    if (GCONF.errsim_test_tablet_id.get_value() > 0 && merge_param_.tablet_id_.id() == GCONF.errsim_test_tablet_id.get_value()) {
+    if (::oceanbase::common::errsim_config().errsim_test_tablet_id.load() > 0 && merge_param_.tablet_id_.id() == ::oceanbase::common::errsim_config().errsim_test_tablet_id.load()) {
       LOG_INFO("test tablet ddl merge start", K(ret), K(merge_param_));
       DEBUG_SYNC(BEFORE_LOB_META_TABELT_DDL_MERGE_TASK);
     }

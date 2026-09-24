@@ -31,4 +31,5 @@ include = [
   "auto_config_supported",
   "auto_config_load",
   "auto_config_update",
+  "auto_config_load_active",
 ]

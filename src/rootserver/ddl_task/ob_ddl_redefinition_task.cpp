@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX RS
+#include "config_bridge.h"
 #include "common/ob_timeout_ctx.h"
 #include "common/mysqlclient/ob_isql_connection.h"
 #include "ob_ddl_redefinition_task.h"
@@ -459,7 +460,7 @@ int ObDDLRedefinitionTask::wait_data_complement(const ObDDLTaskStatus next_task_
     bool need_verify_checksum = true;
 #ifdef ERRSIM
     // when the major compaction is delayed, skip verify column checksum
-    need_verify_checksum = 0 == GCONF.errsim_ddl_major_delay_time;
+    need_verify_checksum = 0 == ::oceanbase::common::errsim_config().errsim_ddl_major_delay_time.load();
 #endif
     if (OB_SUCC(ret) && need_verify_checksum && OB_FAIL(check_data_dest_tables_columns_checksum(get_execution_id()))) {
     }
@@ -853,7 +854,7 @@ int ObDDLRedefinitionTask::sync_auto_increment_position()
         // Bound the local inner-table read timeout instead of inheriting INT64_MAX,
         // which overflows timeout arithmetic when reading __ALL_AUTO_INCREMENT.
         const int64_t save_timeout_ts = THIS_WORKER.get_timeout_ts();
-        THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + max(GCONF.rpc_timeout, static_cast<int64_t>(1000 * 1000 * 20)));
+        THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + max(config::rpc_timeout(), static_cast<int64_t>(1000 * 1000 * 20)));
         ObAutoincrementService &auto_inc_service = ObAutoincrementService::get_instance();
         uint64_t sequence_value = 0;
         AutoincParam param;
@@ -967,7 +968,7 @@ int ObDDLRedefinitionTask::modify_autoinc(const ObDDLTaskStatus next_task_status
     if (OB_SUCC(ret) && is_update_autoinc_end && OB_NOT_NULL(new_table_schema)
         && (alter_autoinc_column_id = new_table_schema->get_autoinc_column_id()) != 0) {
       const int64_t save_timeout_ts = THIS_WORKER.get_timeout_ts();
-      THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + max(GCONF.rpc_timeout, static_cast<int64_t>(1000 * 1000 * 20)));
+      THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + max(config::rpc_timeout(), static_cast<int64_t>(1000 * 1000 * 20)));
       ObAutoincrementService &auto_inc_service = ObAutoincrementService::get_instance();
       const uint64_t autoinc_val = alter_table_schema.get_auto_increment();
       AutoincParam param;
@@ -1169,7 +1170,7 @@ int ObDDLRedefinitionTask::get_estimated_timeout(const ObTableSchema *dst_table_
     estimated_timeout = tablet_ids.count() * dst_table_schema->get_column_count() * 120L * 1000L; // 120ms for each column
     estimated_timeout = max(estimated_timeout, static_cast<int64_t>(9 * 1000 * 1000));
     estimated_timeout = min(estimated_timeout, static_cast<int64_t>(3600LL * 1000 * 1000));
-    estimated_timeout = max(estimated_timeout, GCONF._ob_ddl_timeout);
+    estimated_timeout = max(estimated_timeout, config::_ob_ddl_timeout());
     LOG_INFO("get estimate timeout", K(estimated_timeout));
   }
   return ret;

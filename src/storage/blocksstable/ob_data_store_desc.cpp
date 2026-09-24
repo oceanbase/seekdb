@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "storage/blocksstable/ob_data_store_desc.h"
 #include "storage/blocksstable/ob_sstable_meta.h"
 #include "share/ob_server_struct.h"
@@ -396,12 +397,16 @@ int ObDataStoreDesc::get_emergency_row_store_type()
 {
   int ret = OB_SUCCESS;
 
-  if (GCONF._force_skip_encoding_partition_id.get_value_string().empty()) {
+  const rust::String partition_id = config::_force_skip_encoding_partition_id();
+  if (partition_id.empty()) {
     // no need check emergency row store type
   } else {
     char partition_key[OB_TMP_BUF_SIZE_256];
-    if (OB_FAIL(GCONF._force_skip_encoding_partition_id.copy(partition_key, OB_TMP_BUF_SIZE_256))) {
+    if (partition_id.size() >= sizeof(partition_key)) {
+      ret = OB_BUF_NOT_ENOUGH;
     } else {
+      MEMCPY(partition_key, partition_id.data(), partition_id.size());
+      partition_key[partition_id.size()] = '\0';
       char *endptr = nullptr;
       ObTabletID emergency_tablet_id(std::strtoull(partition_key, &endptr, 0));
       
@@ -647,7 +652,7 @@ int ObWholeDataStoreDesc::init(
   if (is_ddl) {
     // for ddl and direct load, we only limit the encoding granularit for share nothing mode
 
-    encoding_granularity = GCONF.ob_encoding_granularity;
+    encoding_granularity = config::ob_encoding_granularity();
 
   }
 

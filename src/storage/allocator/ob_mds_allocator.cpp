@@ -15,6 +15,7 @@
  */
 
 
+#include "config_bridge.h"
 #include "ob_mds_allocator.h"
 #include "lib/alloc/alloc_func.h"
 #include "share/rc/ob_server_runtime.h"
@@ -44,8 +45,8 @@ void ObMdsAllocator::init_throttle_config(int64_t &resource_limit, int64_t &trig
   const int64_t MDS_THROTTLE_MAX_DURATION = 2LL * 60LL * 60LL * 1000LL * 1000LL;  // 2 hours
 
   resource_limit = get_memory_limit();
-  trigger_percentage = GCONF.writing_throttling_trigger_percentage;
-  max_duration = GCONF.writing_throttling_maximum_duration;
+  trigger_percentage = config::writing_throttling_trigger_percentage();
+  max_duration = config::writing_throttling_maximum_duration();
   if (trigger_percentage <= 0 || max_duration <= 0) {
     SHARE_LOG_RET(WARN, OB_INVALID_CONFIG, "init throttle config with default value");
     trigger_percentage = MDS_THROTTLE_TRIGGER_PERCENTAGE;

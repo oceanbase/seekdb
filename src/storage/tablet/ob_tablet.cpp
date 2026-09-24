@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "ob_tablet.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "share/rc/ob_server_runtime.h"
@@ -802,7 +803,7 @@ int ObTablet::get_truncate_info_newest_version(int64_t &newest_commit_version, i
     ObArenaAllocator tmp_allocator(ObMemAttr("TruncateInfoArr"));
     ObTruncateInfoArray tmp_array;
     SCN max_readable_scn;
-    if (OB_FAIL(OB_TS_MGR.get_gts_sync(GCONF.rpc_timeout, max_readable_scn))) {
+    if (OB_FAIL(OB_TS_MGR.get_gts_sync(config::rpc_timeout(), max_readable_scn))) {
     } else if (OB_FAIL(read_truncate_info_array(
                    tmp_allocator,
                    ObVersionRange(get_last_major_snapshot_version(),

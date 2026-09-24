@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "config_bridge.h"
 #include "storage/tx_storage/ob_checkpoint_service.h"
 #include "share/rc/ob_server_runtime.h"
 #include "logservice/ob_log_service.h"
@@ -172,7 +173,7 @@ void ObCheckPointService::ObTraversalFlushTask::runTimerTask()
 {
   STORAGE_LOG(INFO, "====== traversal_flush timer task ======");
   int ret = OB_SUCCESS;
-  ObCurTraceId::init(GCONF.self_addr_);
+  ObCurTraceId::init(GCTX.self_addr());
   ObLS *tenant_ls = nullptr;
   if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(tenant_ls))) {
   } else if (OB_FAIL(tenant_ls->get_checkpoint_executor()->traversal_flush())) {
@@ -205,7 +206,7 @@ void ObCheckPointService::ObAdvanceCkptTask::runTimerTask()
   int64_t advance_checkpoint_interval = 10LL * 60LL * 1000LL * 1000LL;
 
   // use config value if config is valid
-  advance_checkpoint_interval = GCONF._advance_checkpoint_interval;
+  advance_checkpoint_interval = config::_advance_checkpoint_interval();
 
 
   if (0 != advance_checkpoint_interval) {

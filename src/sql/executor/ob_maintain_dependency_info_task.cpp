@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_EXE
+#include "config_bridge.h"
 #include "sql/executor/ob_maintain_dependency_info_task.h"
 #include "query/command/ob_root_service_serialization.h"
 #include "query/command/ob_root_command_service.h"
@@ -205,11 +206,11 @@ void ObMaintainDepInfoTaskQueue::run2()
         LOG_INFO("[ASYNC TASK QUEUE]", K(queue_.size()), K(sys_view_consistent_.size()));
       }
       if (last_execute_time_ > 0
-         && static_cast<int64_t>(GCONF._ob_obj_dep_maint_task_interval) > 0) {
+         && static_cast<int64_t>(config::_ob_obj_dep_maint_task_interval()) > 0) {
         while (!stop_ && OB_SUCC(ret)) {
           int64_t now = ObTimeUtility::current_time();
           int64_t sleep_time =
-          last_execute_time_ + GCONF._ob_obj_dep_maint_task_interval - now;
+          last_execute_time_ + config::_ob_obj_dep_maint_task_interval() - now;
           if (sleep_time > 0) {
             ob_throttle_usleep(static_cast<int32_t>(MIN(sleep_time, SLEEP_INTERVAL)), 0);
           } else {

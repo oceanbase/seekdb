@@ -17,6 +17,7 @@
 #ifndef OB_BLOOM_FILTER_CACHE_H_
 #define OB_BLOOM_FILTER_CACHE_H_
 
+#include "config_bridge.h"
 #include "share/config/ob_server_config.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 
@@ -197,7 +198,7 @@ public:
     else {
       //newsize = base*(1 + (qsize / speed) * (qsize / speed))
       uint64_t newsize = static_cast<uint64_t>(qsize) >> BF_BUILD_SPEED_SHIFT;
-      newsize = GCONF.bf_cache_miss_count_threshold * (1 + newsize * newsize);
+      newsize = config::bf_cache_miss_count_threshold() * (1 + newsize * newsize);
       if (newsize != bf_cache_miss_count_threshold_) {
         bf_cache_miss_count_threshold_ = newsize < MAX_EMPTY_READ_CNT_THRESHOLD ? newsize : MAX_EMPTY_READ_CNT_THRESHOLD;
       }

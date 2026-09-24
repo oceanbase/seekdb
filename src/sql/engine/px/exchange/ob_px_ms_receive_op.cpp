@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "ob_px_ms_receive_op.h"
 #include "sql/engine/px/ob_px_scheduler.h"
 
@@ -951,7 +952,7 @@ int ObPxMSReceiveOp::MergeSortInput::need_dump(ObSqlMemMgrProcessor &sql_mem_pro
   int ret = OB_SUCCESS;
   need_dump = false;
   if (sql_mem_processor.get_data_size() > sql_mem_processor.get_mem_bound() 
-          && GCONF.is_sql_operator_dump_enabled()
+          && config::enable_sql_operator_dump()
           && OB_FAIL(sql_mem_processor.extend_max_memory_size(
             &alloc,
             [&](int64_t max_memory_size) {

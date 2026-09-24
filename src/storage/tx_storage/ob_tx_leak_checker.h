@@ -15,6 +15,7 @@
  */
 #ifndef OCEANBASE_STORAGE_OB_TX_LEAK_CHECKER_H_
 #define OCEANBASE_STORAGE_OB_TX_LEAK_CHECKER_H_
+#include "config_bridge.h"
 #include "share/leak_checker/ob_leak_checker.h"
 #include "share/rc/ob_server_runtime.h"
 #include "common/ob_tablet_id.h"
@@ -209,7 +210,7 @@ static int64_t get_tx_debug_level()
   if (current_time - last_check_timestamp < TX_DEBUG_LEVEL_CACHE_REFRESH_INTERVAL) {
     // Reuse the cached value until the refresh interval expires.
   } else {
-    last_result = GCONF._tx_debug_level;
+    last_result = config::_tx_debug_level();
     last_check_timestamp = current_time;
   }
 

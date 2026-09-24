@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_DAS
+#include "config_bridge.h"
 #include "ob_das_scan_op.h"
 #include "data_plane/access/ob_tablet_scan.h"
 #include "share/rc/ob_server_runtime.h"
@@ -1286,7 +1287,7 @@ int ObLocalIndexLookupOp::get_next_rows_from_data_table(int64_t &count, int64_t 
 int ObLocalIndexLookupOp::check_lookup_row_cnt()
 {
   int ret = OB_SUCCESS;
-  if (GCONF.enable_defensive_check()
+  if ((config::_enable_defensive_check() > 0)
       && !is_group_scan_
       && lookup_ctdef_->pd_expr_spec_.pushdown_filters_.empty()) {
     if (OB_UNLIKELY(lookup_rowkey_cnt_ != lookup_row_cnt_)) {

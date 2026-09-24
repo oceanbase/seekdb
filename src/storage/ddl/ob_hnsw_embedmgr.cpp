@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
+#include "config_bridge.h"
 #include "lib/allocator/ob_malloc.h"
 #include "share/rc/ob_server_runtime.h"
 #include "lib/oblog/ob_log.h"
@@ -556,8 +557,8 @@ int ObEmbeddingTaskMgr::init(const ObString &model_id)
   }
 
   if (OB_SUCC(ret)) {
-    model_request_timeout_us_ = GCONF.model_request_timeout;
-    model_max_retries_ = GCONF.model_max_retries;
+    model_request_timeout_us_ = config::model_request_timeout();
+    model_max_retries_ = config::model_max_retries();
   }
 
   if (OB_SUCC(ret)) {

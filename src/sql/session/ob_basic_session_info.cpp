@@ -17,7 +17,9 @@
 #define USING_LOG_PREFIX SQL_SESSION
 
 
+#include "config_bridge.h"
 #include "ob_basic_session_info.h"
+#include "share/config/ob_config_helper.h"
 #include "data_plane/transaction/ob_i_transaction_service.h"
 #include "lib/utility/ob_smart_call.h"
 #include "sql/monitor/show_trace/ob_show_trace.h"
@@ -1627,7 +1629,7 @@ int ObBasicSessionInfo::gen_configs_in_pc_str()
 {
   int ret = OB_SUCCESS;
 
-  const int64_t cluster_config_version = GCONF.get_current_version();
+  const int64_t cluster_config_version = config::generation();
   if (!config_in_pc_str_.empty() &&
       !inf_pc_configs_.is_out_of_date(cluster_config_version, cached_runtime_config_version_)) {
     // unupdated configs do nothing
@@ -2295,7 +2297,7 @@ OB_INLINE int ObBasicSessionInfo::process_session_variable(ObSysVarClassType var
       int64_t max_read_stale_time = 0;
       if (OB_FAIL(val.get_int(max_read_stale_time))) {
       } else if (max_read_stale_time != share::ObSysVarMeta::INVALID_MAX_READ_STALE_TIME &&
-                 max_read_stale_time < GCONF.weak_read_version_refresh_interval) {
+                 max_read_stale_time < config::weak_read_version_refresh_interval()) {
         ret = OB_INVALID_ARGUMENT;
         LOG_USER_ERROR(OB_INVALID_ARGUMENT,
                        "max_read_stale_time is smaller than weak_read_version_refresh_interval");
@@ -2584,7 +2586,7 @@ int ObBasicSessionInfo::fill_sys_vars_cache_base_value(
       int64_t max_read_stale_time = 0;
       if (OB_FAIL(val.get_int(max_read_stale_time))) {
       } else if (max_read_stale_time != share::ObSysVarMeta::INVALID_MAX_READ_STALE_TIME &&
-                 max_read_stale_time < GCONF.weak_read_version_refresh_interval) {
+                 max_read_stale_time < config::weak_read_version_refresh_interval()) {
         ret = OB_INVALID_ARGUMENT;
         LOG_USER_ERROR(OB_INVALID_ARGUMENT,
                        "max_read_stale_time is smaller than weak_read_version_refresh_interval");
@@ -2754,7 +2756,7 @@ int ObBasicSessionInfo::process_session_debug_sync(const ObObj &val,
                                                    const bool is_update_sys_var)
 {
   int ret = OB_SUCCESS;
-  if (GCONF.is_debug_sync_enabled()) {
+  if ((config::debug_sync_timeout() > 0)) {
     ObString debug_sync;
     if (OB_FAIL(val.get_varchar(debug_sync))) {
     } else {
@@ -2766,7 +2768,7 @@ int ObBasicSessionInfo::process_session_debug_sync(const ObObj &val,
       }
     }
   } else {
-    if (!GCONF.is_debug_sync_enabled() && is_update_sys_var) {
+    if (!(config::debug_sync_timeout() > 0) && is_update_sys_var) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "debug_sync is disabled, setting debug_sync is");
     }

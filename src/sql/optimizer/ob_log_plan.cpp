@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_OPT
+#include "config_bridge.h"
 #include "ob_log_plan.h"
 #include "sql/optimizer/ob_pwj_comparer.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
@@ -3947,7 +3948,7 @@ bool ObLogPlan::disable_hash_groupby_in_second_stage()
   if (OB_ISNULL(session_info = get_optimizer_context().get_session_info())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    disable_hash_groupby_in_second = GCONF._sqlexec_disable_hash_based_distagg_tiv;
+    disable_hash_groupby_in_second = config::_sqlexec_disable_hash_based_distagg_tiv();
   }
   return disable_hash_groupby_in_second;
 }
@@ -4642,15 +4643,17 @@ int ObLogPlan::init_groupby_helper(const ObIArray<ObRawExpr*> &group_exprs,
   } else if (OB_FAIL(query_ctx->query_hint_.global_hint_.opt_params_.get_hash_rollup_param(hash_rollup_policy,
                                                                                            has_rollup_opt_param))) {
   } else {
+    const rust::String rollup_value = config::_use_hash_rollup();
+    const ObString rollup_policy(static_cast<int32_t>(rollup_value.size()), rollup_value.data());
     enable_hash_rollup = has_rollup_opt_param ?
                            (hash_rollup_policy.get_string().case_compare("auto") == 0
                            || hash_rollup_policy.get_string().case_compare("forced") == 0) :
-                           (GCONF._use_hash_rollup.case_compare("auto") == 0
-                           || GCONF._use_hash_rollup.case_compare("forced") == 0);
+                           (rollup_policy.case_compare("auto") == 0
+                           || rollup_policy.case_compare("forced") == 0);
     force_hash_rollup =
       enable_hash_rollup
       && (has_rollup_opt_param ? hash_rollup_policy.get_string().case_compare("forced") == 0 :
-                                 GCONF._use_hash_rollup.case_compare("forced") == 0);
+                                 rollup_policy.case_compare("forced") == 0);
   }
   if (OB_FAIL(ret)) {
   } else if (FALSE_IT(
@@ -5122,8 +5125,8 @@ int ObLogPlan::check_aggr_pushdown_enabled(ObSQLSessionInfo &session_info,
   } else {
     if (hint_level == INT64_MAX) {
 
-      enable_aggr_push_down = ObPushdownFilterUtils::is_aggregate_pushdown_enabled(GCONF._pushdown_storage_level);
-      enable_groupby_push_down = ObPushdownFilterUtils::is_group_by_pushdown_enabled(GCONF._pushdown_storage_level);
+      enable_aggr_push_down = ObPushdownFilterUtils::is_aggregate_pushdown_enabled(config::_pushdown_storage_level());
+      enable_groupby_push_down = ObPushdownFilterUtils::is_group_by_pushdown_enabled(config::_pushdown_storage_level());
 
     } else {
       enable_aggr_push_down = ObPushdownFilterUtils::is_aggregate_pushdown_enabled(hint_level);

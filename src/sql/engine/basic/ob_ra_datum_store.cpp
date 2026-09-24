@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
+#include "config_bridge.h"
 #include "ob_ra_datum_store.h"
 #include "data_plane/tmp_file/ob_tmp_file.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
@@ -1228,7 +1229,7 @@ int ObRADatumStore::dump_block_if_need(const int64_t extra_size)
 bool ObRADatumStore::need_dump(const int64_t extra_size)
 {
   bool need_to_dump = false;
-  if (!GCONF.is_sql_operator_dump_enabled()) { // no dump
+  if (!config::enable_sql_operator_dump()) { // no dump
   } else if (mem_limit_ > 0) {
     if (mem_hold_ + extra_size > mem_limit_) {
       need_to_dump = true;

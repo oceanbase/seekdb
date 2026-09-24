@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 
+#include "share/ob_server_struct.h"
 #include "observer/virtual_table/ob_all_virtual_tmp_file.h"
 #include "observer/ob_server.h"
 #include "share/rc/ob_server_runtime.h"
@@ -93,7 +94,7 @@ int ObAllVirtualTmpFileInfo::fill_columns_(tmp_file::ObTmpFileInfo *tmp_file_inf
     SERVER_LOG(WARN, "invalid argument", KR(ret), KP(tmp_file_info));
   } else {
     const int64_t col_count = output_column_ids_.count();
-    ObAddr self_addr = GCONF.self_addr_;
+    ObAddr self_addr = GCTX.self_addr();
     for (int64_t i = 0; OB_SUCC(ret) && i < col_count; ++i) {
       uint64_t col_id = output_column_ids_.at(i);
       switch (col_id) {

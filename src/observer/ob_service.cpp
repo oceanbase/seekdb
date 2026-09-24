@@ -18,6 +18,7 @@
 
 
 
+#include "config_bridge.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/time/ob_time_utility.h"
 #include "ob_service.h"
@@ -116,7 +117,7 @@ void ObSchemaReleaseTimeTask::destroy()
 int ObSchemaReleaseTimeTask::schedule_()
 {
   int ret = OB_SUCCESS;
-  int64_t memory_recycle_interval = GCONF._schema_memory_recycle_interval;
+  int64_t memory_recycle_interval = config::_schema_memory_recycle_interval();
   if (0 == memory_recycle_interval) {
     memory_recycle_interval = 15L * 60L * 1000L * 1000L; //15mins
   }
@@ -680,7 +681,7 @@ int ObService::bootstrap()
     ret = OB_INVALID_ARGUMENT;
   } else {
     BOOTSTRAP_LOG(INFO, "begin bootstrap");
-    ObPreBootstrap pre_bootstrap(*gctx_.config_);
+    ObPreBootstrap pre_bootstrap;
     ObAddr master_rs;
     bool server_empty = false;
     if (OB_FAIL(check_server_empty(server_empty))) {
