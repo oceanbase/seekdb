@@ -562,6 +562,37 @@ def direct_probe(experiment):
         experiment.sql("CREATE TABLE phase10.empty_hnsw(id INT PRIMARY KEY, embedding VECTOR(3))", child)
         experiment.sql("CREATE VECTOR INDEX empty_embedding ON phase10.empty_hnsw(embedding) "
                        "WITH (distance=l2,type=hnsw,lib=vsag)", child)
+        experiment.sql("CREATE TABLE phase10.ivf_inherited_rows(id INT PRIMARY KEY, embedding VECTOR(4))")
+        experiment.sql("INSERT INTO phase10.ivf_inherited_rows VALUES "
+                       "(1,'[1,0,0,0]'),(2,'[2,0,0,0]'),(3,'[3,0,0,0]'),"
+                       "(4,'[4,0,0,0]'),(5,'[5,0,0,0]'),(6,'[6,0,0,0]')")
+        experiment.sql("CREATE VECTOR INDEX inherited_embedding ON phase10.ivf_inherited_rows(embedding) "
+                       "WITH (distance=l2,type=ivf_flat,nlist=2,sample_per_nlist=5)")
+        experiment.sql("FORK NAMESPACE phase10_ivf_inherited FROM ns1")
+        inherited_namespace_id = experiment.sql(
+            "SELECT namespace_id FROM __fork_proto_meta.namespaces "
+            "WHERE name='phase10_ivf_inherited'")[0][0]
+        inherited_query = "SELECT id FROM phase10.ivf_inherited_rows ORDER BY "
+        inherited_query += "l2_distance(embedding,[0,0,0,0]) APPROXIMATE LIMIT 1"
+        with connect(experiment, "root@phase10_ivf_inherited") as inherited:
+            assert experiment.sql("SELECT COUNT(*) FROM phase10.ivf_inherited_rows", inherited) == ((6,),)
+        experiment.sql("INSERT INTO phase10.ivf_inherited_rows VALUES(100,'[0,0,0,0]')")
+        inherited_cache_rows = ()
+        for _ in range(20):
+            inherited_cache_rows = experiment.sql(
+                "SELECT rowkey_vid_tablet_id,statistics FROM "
+                "oceanbase.__all_virtual_vector_index_info", log=False)
+            if any((tablet_id >> 32) & ((1 << 30) - 1) == inherited_namespace_id
+                   and "cache_type=0" in statistics and "count=2" in statistics
+                   for tablet_id, statistics in inherited_cache_rows):
+                break
+            time.sleep(2)
+        else:
+            raise AssertionError("inherited IVF background cache was not loaded: %r" %
+                                 (inherited_cache_rows,))
+        with connect(experiment, "root@phase10_ivf_inherited") as inherited:
+            assert experiment.sql("SELECT COUNT(*) FROM phase10.ivf_inherited_rows", inherited) == ((6,),)
+            assert experiment.sql(inherited_query, inherited) == ((1,),)
         before_restart(experiment, child)
     check_single_process(experiment)
     experiment.connection.close()
@@ -589,6 +620,9 @@ def direct_probe(experiment):
         assert experiment.sql("SELECT COUNT(*) FROM phase10.ivf_rows", child) == ((6,),)
         assert experiment.sql("SELECT COUNT(*) FROM phase10.ivf_pq_rows", child) == ((20,),)
         assert experiment.sql("SELECT COUNT(*) FROM phase10.ivf_sq8_rows", child) == ((20,),)
+    with connect(experiment, "root@phase10_ivf_inherited") as inherited:
+        assert experiment.sql("SELECT COUNT(*) FROM phase10.ivf_inherited_rows", inherited) == ((6,),)
+        assert experiment.sql(inherited_query, inherited) == ((1,),)
     experiment.sql("FORK NAMESPACE phase10_drop_source FROM ns1")
     with connect(experiment, "root@phase10_drop_source") as source:
         experiment.sql("CREATE TABLE phase10.drop_source_rows(id INT PRIMARY KEY)", source)

@@ -19,8 +19,10 @@
 #include "observer/vector_index/ob_vector_index_ivf_cache_util.h"
 #include "observer/namespace_worker_protocol_prototype.h"
 #include "namespace/namespace.h"
+#include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 #include "storage/ls/ob_ls.h"
 #include <algorithm>
+#include <unordered_set>
 
 namespace oceanbase
 {
@@ -45,13 +47,18 @@ int ObIvfAsyncTaskExector::LoadTaskCallback::is_cache_mgr_deprecated(ObIvfCacheM
   } else if (OB_FAIL(schema_guard.get_table_schema(cache_mgr.get_table_id(), table_schema))) {
   } else if (OB_ISNULL(table_schema) || table_schema->is_in_recyclebin()) {
     is_deprecated = true;
-  } else if (OB_FAIL(
-                 ls_->get_tablet_svr()->get_tablet(cache_mgr.get_cache_mgr_key(), tablet_handle))) {
-    if (OB_TABLET_NOT_EXIST != ret) {
-      LOG_WARN("fail to get tablet", K(ret), K(cache_mgr));
-    } else {
-      ret = OB_SUCCESS;  // not found, moved from this ls
-      is_deprecated = true;
+  } else {
+    ObTabletID physical_tablet_id = tablet_id;
+    int64_t cap_scn = 0;
+    if (OB_FAIL(storage::NamespaceForkKernelPrototype::resolve_read_tablet(
+            tablet_id, physical_tablet_id, cap_scn))) {
+    } else if (OB_FAIL(ls_->get_tablet_svr()->get_tablet(physical_tablet_id, tablet_handle))) {
+      if (OB_TABLET_NOT_EXIST != ret) {
+        LOG_WARN("fail to get tablet", K(ret), K(cache_mgr));
+      } else {
+        ret = OB_SUCCESS;  // not found, moved from this ls
+        is_deprecated = true;
+      }
     }
   }
   return ret;
@@ -269,7 +276,13 @@ int ObIvfAsyncTaskExector::get_tablet_ids_by_ls(uint64_t namespace_id,
         }
         storage_tablet_id = ObTabletID(key.storage_id());
       }
-      ret = ls_->get_tablet_svr()->get_tablet(storage_tablet_id, tablet_handle);
+      ObTabletID physical_tablet_id = storage_tablet_id;
+      int64_t cap_scn = 0;
+      ret = storage::NamespaceForkKernelPrototype::resolve_read_tablet(
+          storage_tablet_id, physical_tablet_id, cap_scn);
+      if (OB_SUCC(ret)) {
+        ret = ls_->get_tablet_svr()->get_tablet(physical_tablet_id, tablet_handle);
+      }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(tablet_id_array.push_back(storage_tablet_id))) {
         }
@@ -446,7 +459,36 @@ int ObIvfAsyncTaskExector::generate_aux_table_info_map(ObSchemaGetterGuard &sche
   ObSEArray<uint64_t, DEFAULT_TABLE_ID_ARRAY_SIZE> table_id_array;
   ObMemAttr memattr("IvfTaskExec");
   if (OB_FAIL(schema_guard.get_table_ids_in_runtime(table_id_array))) {
-  } else if (!table_id_array.empty() &&
+  } else if (namespace_id > 1) {
+    // Runtime enumeration only contains local schemas. Database enumeration
+    // also includes inherited index schemas from the fork catalog.
+    ObArray<const ObSimpleDatabaseSchema *> databases;
+    std::unordered_set<uint64_t> seen;
+    for (int64_t i = 0; i < table_id_array.count(); ++i) {
+      seen.insert(table_id_array.at(i));
+    }
+    if (OB_FAIL(schema_guard.get_database_schemas_in_runtime(databases))) {
+    } else {
+      for (int64_t i = 0; OB_SUCC(ret) && i < databases.count(); ++i) {
+        const uint64_t database_id = databases.at(i)->get_database_id();
+        if (!ns::NamespaceObjectKey::is_encoded(database_id)
+            || ns::NamespaceObjectKey::encoded_namespace(database_id) != namespace_id) {
+          continue;
+        }
+        ObSEArray<uint64_t, DEFAULT_TABLE_ID_ARRAY_SIZE> database_table_ids;
+        if (OB_FAIL(schema_guard.get_table_ids_in_database(database_id, database_table_ids))) {
+        } else {
+          for (int64_t j = 0; OB_SUCC(ret) && j < database_table_ids.count(); ++j) {
+            const uint64_t table_id = database_table_ids.at(j);
+            if (seen.insert(table_id).second) {
+              ret = table_id_array.push_back(table_id);
+            }
+          }
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret) && !table_id_array.empty() &&
              OB_FAIL(aux_table_info_map.create(DEFAULT_TABLE_ID_ARRAY_SIZE, memattr, memattr))) {
     LOG_WARN("fail to create param map", KR(ret));
   }
