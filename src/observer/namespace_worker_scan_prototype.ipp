@@ -541,7 +541,7 @@ struct ReadScans {
            const ObTableSchema &logical_schema, transaction::ObTxDesc *tx,
            sql::ObSQLSessionInfo *session, uint64_t &handle) {
     handle = 0;
-    if (!storage_space.is_namespace() || scans.size() >= 4) { return OB_NOT_SUPPORTED; }
+    if (!storage_space.is_namespace()) { return OB_INVALID_ARGUMENT; }
     auto scan = std::make_unique<EngineScan>();
     int ret = scan->open(requested_space, param, logical_schema, tx, session);
     if (ret) { fprintf(stderr, "PROTOTYPE_V17_SCAN_FAILED ret=%d\n", ret); }

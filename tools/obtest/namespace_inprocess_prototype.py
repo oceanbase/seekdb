@@ -228,6 +228,12 @@ def direct_probe(experiment):
             "SELECT a,b FROM phase10.join_left,phase10.join_right WHERE a>b", child) == ()
         experiment.sql("CREATE INDEX records_v ON phase10.records(v)", child)
         assert experiment.sql("SELECT id FROM phase10.records FORCE INDEX(records_v) WHERE v='second'", child) == ((2,),)
+        four_scan = experiment.sql(
+            "SELECT id FROM phase10.records WHERE v='first' "
+            "UNION ALL SELECT id FROM phase10.records WHERE v='second' "
+            "UNION ALL SELECT id FROM phase10.records WHERE v='first' "
+            "UNION ALL SELECT id FROM phase10.records WHERE v='second'", child)
+        assert sorted(row[0] for row in four_scan) == [1, 1, 2, 2], four_scan
         experiment.sql("CREATE TABLE phase10.unique_index_error(pk INT PRIMARY KEY, v INT)", child)
         experiment.sql("INSERT INTO phase10.unique_index_error VALUES(1,610),(2,610)", child)
         try:
