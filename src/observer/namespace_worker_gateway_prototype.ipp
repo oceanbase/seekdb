@@ -483,6 +483,15 @@ int create_in_process_direct_insert_writer(RequestTag parent, uint64_t generatio
     return route.create_writer(space, parent, generation, registry, request, writer_id);
   });
 }
+int control_in_process_direct_insert_writer(RequestTag parent, uint64_t generation,
+    uint64_t writer_id, char operation, int64_t &rows)
+{
+  return with_in_process_direct_insert([&](DirectInsertRoute &route,
+      StorageSpaceHandle space, DirectInsertRegistry &registry) {
+    return route.control_writer(space, parent, generation, registry,
+        writer_id, operation, rows);
+  });
+}
 int fetch_in_process_scan(uint64_t handle, ScanBatch &batch)
 {
   InProcessStorage *ctx = in_process_storage;

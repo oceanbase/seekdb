@@ -354,6 +354,30 @@ struct DirectInsertRoute {
     }
     return ret;
   }
+  int control_writer(StorageSpaceHandle storage_space, RequestTag parent,
+                     uint64_t generation, DirectInsertRegistry &registry,
+                     uint64_t writer_id, char operation, int64_t &rows) {
+    rows = 0;
+    if (!storage_space.is_namespace() || (operation != 'E' && operation != 'X')) {
+      return OB_INVALID_ARGUMENT;
+    }
+    int ret = resolve(parent, generation, registry);
+    if (ret) { return ret; }
+    std::shared_lock<std::shared_mutex> guard(owner->mutex);
+    if (!owner->session) { return OB_NOT_INIT; }
+    auto entry = writers.find(writer_id);
+    if (entry == writers.end()) { return OB_STATE_NOT_MATCH; }
+    if (operation == 'E') {
+      ret = entry->second->writer->close();
+      if (!ret) {
+        rows = entry->second->writer->get_row_count();
+        if (rows < 0) { ret = OB_INVALID_ARGUMENT; }
+      }
+    } else {
+      writers.erase(entry);
+    }
+    return ret;
+  }
 
   int process(StorageSpaceHandle storage_space, RequestTag tag, DirectInsertRegistry &registry,
       const std::shared_ptr<StorageSessionState> &context, Frame &request, Frame &reply) {
@@ -459,11 +483,11 @@ struct DirectInsertRoute {
         std::shared_lock<std::shared_mutex> guard(owner->mutex);
         auto *session = owner->session;
         if (!session) { ret = OB_NOT_INIT; }
-        else if (operation == 'B' || operation == 'E' || operation == 'X') {
+        else if (operation == 'B') {
           const uint64_t id = request.number();
           auto entry = writers.find(id);
           if (request.ret || entry == writers.end()) { ret = OB_STATE_NOT_MATCH; }
-          else if (operation == 'B') {
+          else {
             const uint64_t rows = request.number(), columns = request.number();
             if (request.ret || !rows || rows > 32 || !columns || columns > OB_MAX_COLUMN_NUMBER) { ret = OB_INVALID_ARGUMENT; }
             std::vector<ObDatum> cells;
@@ -483,10 +507,8 @@ struct DirectInsertRoute {
               for (uint64_t j = 0; j < columns; ++j) { row[j] = &cells[i * columns + j]; }
               ret = entry->second->writer->append_row(ObDirectInsertRowView(row.data(), columns));
             }
-          } else if (!request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-          else if (operation == 'E') { ret = entry->second->writer->close(); }
-          if (!ret && operation != 'X') { output.number(entry->second->writer->get_row_count()); }
-          if (!ret && operation == 'X') { writers.erase(entry); }
+          }
+          if (!ret) { output.number(entry->second->writer->get_row_count()); }
         } else { ret = OB_INVALID_ARGUMENT; }
       }
     }
@@ -517,6 +539,8 @@ int prepare_in_process_direct_insert_ordered(RequestTag parent, uint64_t generat
 int finish_in_process_direct_insert(RequestTag parent, uint64_t generation);
 int create_in_process_direct_insert_writer(RequestTag parent, uint64_t generation,
     const ObDirectInsertWriterRequest &request, uint64_t &writer_id);
+int control_in_process_direct_insert_writer(RequestTag parent, uint64_t generation,
+    uint64_t writer_id, char operation, int64_t &rows);
 
 class RemoteDirectInsertSession final : public ObIDirectInsertSession, public ObIDirectInsertWriterFactory {
 public:
@@ -673,9 +697,13 @@ public:
     return ret;
   }
   int close() override {
-    Frame payload, reply; payload.number(id);
-    int ret = session.call('E', payload, reply, sql_session);
-    if (!ret) { rows = reply.number(); if (!reply.consumed() || rows < 0) { ret = OB_INVALID_ARGUMENT; } }
+    StorageSessionScope binding(sql_session);
+    int ret = binding.error() ? binding.error() : session.error.load();
+    int64_t new_rows = 0;
+    if (!ret) { ret = control_in_process_direct_insert_writer(
+        session.origin, session.generation, id, 'E', new_rows); }
+    if (!ret) { rows = new_rows; }
+    if (ret) { int expected = OB_SUCCESS; session.error.compare_exchange_strong(expected, ret); }
     return ret;
   }
   int64_t get_row_count() const override { return rows; }
@@ -683,9 +711,12 @@ public:
   int64_t get_slice_index() const override { return slice; }
 private:
   void destroy_self() override {
-    Frame payload, reply; payload.number(id);
-    const int ret = session.call('X', payload, reply, sql_session, true);
-    if (!ret && !reply.consumed()) { session.error = OB_INVALID_ARGUMENT; }
+    StorageSessionScope binding(sql_session);
+    int64_t unused_rows = 0;
+    const int ret = binding.error() ? binding.error()
+        : control_in_process_direct_insert_writer(
+            session.origin, session.generation, id, 'X', unused_rows);
+    if (ret) { int expected = OB_SUCCESS; session.error.compare_exchange_strong(expected, ret); }
     auto &a = allocator; this->~RemoteDirectInsertWriter(); a.free(this);
   }
 };
