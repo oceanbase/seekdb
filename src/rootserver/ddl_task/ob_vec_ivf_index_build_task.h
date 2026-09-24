@@ -160,8 +160,10 @@ private:
   {
   public:
     CheckTaskStatusFn(common::hash::ObHashMap<uint64_t, rootserver::ObDomainDependTaskStatus> &dependent_task_result_map,
+                      ObLocalManagementService *local_management_service,
                       int64_t &finished_task_cnt, bool &child_task_failed, bool &state_finished) :
       dependent_task_result_map_(dependent_task_result_map),
+      local_management_service_(local_management_service),
       finished_task_cnt_(finished_task_cnt),
       child_task_failed_(child_task_failed),
       state_finished_(state_finished)
@@ -171,6 +173,7 @@ private:
     int operator() (common::hash::HashMapPair<uint64_t, rootserver::ObDomainDependTaskStatus> &entry);
   public:
     common::hash::ObHashMap<uint64_t, rootserver::ObDomainDependTaskStatus> &dependent_task_result_map_;
+    ObLocalManagementService *local_management_service_;
     int64_t &finished_task_cnt_;
     bool &child_task_failed_;
     bool &state_finished_;

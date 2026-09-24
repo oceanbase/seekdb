@@ -157,7 +157,7 @@ int ObExprVecIVFSQ8DataVector::generate_data_vector(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("service is nullptr", K(ret));
       } else if (OB_FAIL(meta_vectors.init(SQ_META_SIZE))) {
-      } else if (OB_FAIL(ObVectorIndexUtil::get_ivf_aux_info(service, cache, table_id, tablet_id, tablet_id, false /* is_pq_cache */, tmp_allocator, meta_vectors, center_prefix, 0))) {
+      } else if (OB_FAIL(ObVectorIndexUtil::get_ivf_aux_info(service, cache, table_id, tablet_id, tablet_id, false /* is_pq_cache */, tmp_allocator, meta_vectors, center_prefix, 0, eval_ctx))) {
       } else if (meta_vectors.empty()) {
         // special case 1: empty meta table, set res_vec to {0}
         if (OB_ISNULL(res_vec = reinterpret_cast<uint8_t *>(tmp_allocator.alloc(sizeof(uint8_t) * arr->size())))) {

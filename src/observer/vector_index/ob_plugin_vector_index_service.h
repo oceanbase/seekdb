@@ -405,6 +405,7 @@ public:
   // ivfsq index needs sq metas and center ids
   // ivfpq index needs center ids and pq center ids
   int get_ivf_aux_info(
+      uint64_t namespace_id,
       const uint64_t table_id,
       const ObTabletID tablet_id,
       ObIAllocator &allocator,
@@ -441,6 +442,7 @@ public:
 private:
   // for ivf
   int generate_get_aux_info_sql(
+      uint64_t namespace_id,
       const uint64_t table_id,
       const ObTabletID tablet_id,
       bool &is_hidden_table,
@@ -490,7 +492,7 @@ int ObPluginVectorIndexService::process_ivf_aux_info(
   } else if (OB_ISNULL(lob_read_service_)) {
     ret = OB_NOT_INIT;
     OB_LOG(WARN, "LOB read service is not installed", KR(ret));
-  } else if (OB_FAIL(generate_get_aux_info_sql(table_id, tablet_id, is_hidden_table, sql_string))) {
+  } else if (OB_FAIL(generate_get_aux_info_sql(0, table_id, tablet_id, is_hidden_table, sql_string))) {
   } else {
     const common::ObLobReadOptions lob_read_options(*lob_read_service_);
     ObSessionParam session_param;

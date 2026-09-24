@@ -33,6 +33,7 @@
 #include "query/vector/ob_vector_index_service.h"
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "query/vector/ob_vector_index_adaptor.h"
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
@@ -5434,7 +5435,7 @@ int ObVectorIndexUtil::eval_ivf_centers_common(ObIAllocator &allocator,
     } else {
       ObPluginVectorIndexService *service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
       ObExprVecIvfCenterIdCache *cache = get_ivf_center_id_cache_ctx(expr.expr_ctx_id_, &eval_ctx.exec_ctx_);
-      if (OB_FAIL(get_ivf_aux_info(service, cache, table_id, tablet_id, tablet_id, false /* is_pq_cache */, allocator, centers, center_prefix, 0))) {
+      if (OB_FAIL(get_ivf_aux_info(service, cache, table_id, tablet_id, tablet_id, false /* is_pq_cache */, allocator, centers, center_prefix, 0, eval_ctx))) {
       }
     }
   }
@@ -5613,9 +5614,12 @@ int ObVectorIndexUtil::get_ivf_aux_info(query::ObIVectorIndexService *service,
                                             common::ObIAllocator &allocator,
                                             ObIArray<float*> &centers,
                                             uint64_t &center_prefix,
-                                            int64_t m)
+                                            int64_t m,
+                                            sql::ObEvalCtx &eval_ctx)
 {
   int ret = OB_SUCCESS;
+  const uint64_t namespace_id = observer::namespace_worker_prototype::in_process_session_ns(
+      eval_ctx.exec_ctx_.get_my_session());
   bool cache_hit = false;
   center_prefix = 0;
   if (OB_ISNULL(service)) {
@@ -5630,11 +5634,11 @@ int ObVectorIndexUtil::get_ivf_aux_info(query::ObIVectorIndexService *service,
 
     if (!cache_hit && OB_SUCC(ret)) {
       if (OB_ISNULL(cache)) {
-        if (OB_FAIL(service->get_ivf_aux_info(table_id, tablet_id, allocator, is_pq_cache, centers, center_prefix))) {
+        if (OB_FAIL(service->get_ivf_aux_info(namespace_id, table_id, tablet_id, allocator, is_pq_cache, centers, center_prefix))) {
         }
       } else {
         cache->reuse();
-        if (OB_FAIL(service->get_ivf_aux_info(table_id, tablet_id, cache->get_allocator(), is_pq_cache, centers, center_prefix))) {
+        if (OB_FAIL(service->get_ivf_aux_info(namespace_id, table_id, tablet_id, cache->get_allocator(), is_pq_cache, centers, center_prefix))) {
         } else if (OB_FAIL(cache->update_cache(table_id, tablet_id, centers, center_prefix))) {
         }
       }

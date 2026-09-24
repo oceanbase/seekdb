@@ -47,6 +47,8 @@ def setup_branch(experiment):
 
 
 def bootstrap_probe(experiment):
+    # mysqltest regressions: select_basic, column_alias, view,
+    # table_column_related_views, create_using_type, special_stmt.
     assert experiment.sql("SELECT 1") == ((1,),)
     with setup_branch(experiment) as child:
         assert experiment.sql("SELECT COUNT(*) FROM oceanbase.__all_database", child)[0][0] >= 6
@@ -77,6 +79,15 @@ def bootstrap_probe(experiment):
         assert experiment.sql("SELECT id FROM fresh.t", empty) == ((1,),)
         experiment.sql("CREATE VIEW fresh.v AS SELECT id FROM fresh.t", empty)
         assert experiment.sql("SELECT id FROM fresh.v", empty) == ((1,),)
+        assert experiment.sql("SHOW COLUMNS FROM fresh.v", empty)[0][0] == "id"
+        experiment.sql("CREATE TABLE fresh.using_hash_t(c1 INT, PRIMARY KEY USING HASH (c1))", empty)
+        experiment.sql("CREATE TABLE fresh.using_btree_t(c1 INT, PRIMARY KEY USING BTREE (c1))", empty)
+        using_types = experiment.sql(
+            "SELECT t.table_name,t.index_using_type FROM oceanbase.__all_table t "
+            "JOIN oceanbase.__all_database d ON t.database_id=d.database_id "
+            "WHERE d.database_name='fresh' AND t.table_name IN "
+            "('using_hash_t','using_btree_t') ORDER BY t.table_name", empty)
+        assert len(using_types) == 2 and using_types[0][1] != using_types[1][1], using_types
         assert experiment.sql("SHOW COLUMNS FROM fresh.t", empty)[0][0] == "id"
         assert experiment.sql("SHOW INDEX FROM fresh.t", empty)[0][2] == "PRIMARY"
         assert "CREATE TABLE" in experiment.sql("SHOW CREATE TABLE fresh.t", empty)[0][1]
@@ -115,6 +126,7 @@ def bootstrap_probe(experiment):
 
 
 def sql_probe(experiment):
+    # mysqltest regressions: view_2 and the child SET GLOBAL permission cases.
     with setup_branch(experiment) as child, connect(experiment, "root@phase10_child") as other:
         assert experiment.sql("SELECT CURRENT_SCN()", child)[0][0] > 0
         global_switch = experiment.sql(
@@ -128,6 +140,12 @@ def sql_probe(experiment):
         experiment.sql("SET optimizer_switch = (SELECT variable_value FROM "
                        "INFORMATION_SCHEMA.GLOBAL_VARIABLES "
                        "WHERE variable_name='optimizer_switch')", child)
+        try:
+            experiment.sql("SET GLOBAL ob_sql_work_area_percentage=100", child)
+        except pymysql.MySQLError as error:
+            assert error.args[0] == 1227, error.args
+        else:
+            raise AssertionError("child changed a process global variable")
         experiment.sql("CREATE NAMESPACE phase10_fresh")
         try:
             experiment.sql("CREATE NAMESPACE forbidden_from_child", child)
@@ -207,6 +225,9 @@ def sql_probe(experiment):
 
 
 def direct_probe(experiment):
+    # mysqltest regressions: truncate_table, join_basic, bulk_insert,
+    # two_order_by, idx_unique_many_idx_one_ins, generated_column,
+    # rename_table2; plus child FTS and IVF index lifecycle.
     with setup_branch(experiment) as child:
         experiment.sql("TRUNCATE TABLE phase10.parent", child)
         assert experiment.sql("SELECT COUNT(*) FROM phase10.parent", child) == ((0,),)
@@ -235,6 +256,12 @@ def direct_probe(experiment):
             "UNION ALL SELECT id FROM phase10.records WHERE v='first' "
             "UNION ALL SELECT id FROM phase10.records WHERE v='second'", child)
         assert sorted(row[0] for row in four_scan) == [1, 1, 2, 2], four_scan
+        four_way_set = experiment.sql(
+            "(SELECT id FROM phase10.records WHERE id=1 ORDER BY id) "
+            "UNION (SELECT id FROM phase10.records WHERE id=2 ORDER BY id) "
+            "UNION ALL (SELECT id FROM phase10.records WHERE id=1 ORDER BY id) "
+            "EXCEPT (SELECT id FROM phase10.records WHERE id=2 ORDER BY id)", child)
+        assert four_way_set == ((1,),), four_way_set
         experiment.sql("CREATE TABLE phase10.unique_index_error(pk INT PRIMARY KEY, v INT)", child)
         experiment.sql("INSERT INTO phase10.unique_index_error VALUES(1,610),(2,610)", child)
         try:
@@ -291,13 +318,48 @@ def direct_probe(experiment):
         experiment.sql("CREATE UNIQUE INDEX runtime_v ON phase10.runtime_ddl(v)", child)
         experiment.sql("ALTER TABLE phase10.runtime_ddl MODIFY COLUMN v BIGINT", child)
         assert experiment.sql("SELECT COUNT(*),SUM(v) FROM phase10.runtime_ddl", child) == ((200, 220100),)
+        experiment.sql("CREATE TABLE phase10.rename_a(id INT PRIMARY KEY, v INT)", child)
+        experiment.sql("INSERT INTO phase10.rename_a VALUES(1,8)", child)
+        experiment.sql("CREATE INDEX rename_v ON phase10.rename_a(v)", child)
+        experiment.sql("RENAME TABLE phase10.rename_a TO phase10.rename_tmp, "
+                       "phase10.rename_tmp TO phase10.rename_b", child)
+        assert experiment.sql("SELECT id FROM phase10.rename_b FORCE INDEX(rename_v) "
+                              "WHERE v=8", child) == ((1,),)
+        assert ("rename_b",) in experiment.sql("SHOW TABLES FROM phase10", child)
         experiment.sql("ALTER TABLE phase10.records ADD COLUMN revision INT DEFAULT 7", child)
         assert experiment.sql("SELECT revision FROM phase10.records WHERE id=1", child) == ((7,),)
         experiment.sql("DROP INDEX records_v ON phase10.records", child)
         assert experiment.sql("SELECT COUNT(*) FROM phase10.records", child) == ((2,),)
+        experiment.sql("CREATE TABLE phase10.fulltext_rows(id INT PRIMARY KEY, body TEXT)", child)
+        experiment.sql("INSERT INTO phase10.fulltext_rows VALUES"
+                       "(1,'alpha word'),(2,'beta word')", child)
+        experiment.sql("CREATE FULLTEXT INDEX fulltext_body ON phase10.fulltext_rows(body)", child)
+        assert experiment.sql("SELECT id FROM phase10.fulltext_rows "
+                              "WHERE MATCH(body) AGAINST('alpha')", child) == ((1,),)
+        experiment.sql("CREATE TABLE phase10.ivf_rows(id INT PRIMARY KEY, embedding VECTOR(3))", child)
+        experiment.sql("INSERT INTO phase10.ivf_rows VALUES "
+                       "(1,'[1,0,0]'),(2,'[2,0,0]'),(3,'[3,0,0]'),"
+                       "(4,'[4,0,0]'),(5,'[5,0,0]'),(6,'[6,0,0]')", child)
+        experiment.sql("SET ob_query_timeout=120000000", child)
+        experiment.sql("CREATE VECTOR INDEX ivf_embedding ON phase10.ivf_rows(embedding) "
+                       "WITH (distance=l2,type=ivf_flat,nlist=2,sample_per_nlist=3)", child)
+        nearest_ivf = "SELECT id FROM phase10.ivf_rows ORDER BY "
+        nearest_ivf += "l2_distance(embedding,[0,0,0]) APPROXIMATE LIMIT 1"
+        assert experiment.sql(nearest_ivf, child) == ((1,),)
     check_single_process(experiment)
+    experiment.connection.close()
+    experiment.connection = None
+    experiment.proc.terminate()
+    experiment.proc.wait(timeout=20)
+    experiment.start()
+    with connect(experiment, "root@phase10_child") as child:
+        assert experiment.sql("SELECT id FROM phase10.fulltext_rows "
+                              "WHERE MATCH(body) AGAINST('beta')", child) == ((2,),)
+        assert experiment.sql(nearest_ivf, child) == ((1,),)
+        experiment.sql("DROP INDEX ivf_embedding ON phase10.ivf_rows", child)
+        assert experiment.sql("SELECT COUNT(*) FROM phase10.ivf_rows", child) == ((6,),)
     experiment.record("PASS", case="inprocess_direct", ddl=True, partition=True,
-                      index=True, lob=True)
+                      index=True, lob=True, fulltext=True, ivf=True, restart=True)
 
 
 def tls_probe(experiment):

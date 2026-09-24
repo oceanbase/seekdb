@@ -852,7 +852,8 @@ public:
                                   common::ObIAllocator &allocator,
                                   ObIArray<float*> &centers,
                                   uint64_t &center_prefix,
-                                  int64_t m = 0);
+                                  int64_t m,
+                                  sql::ObEvalCtx &eval_ctx);
   static int split_vector(ObIAllocator &alloc, int pq_m, int dim, float *vector, ObIArray<float *> &splited_arrs);
   static int split_vector(int pq_m, int dim, float *vector, ObIArray<float *> &splited_arrs);
   static bool column_id_asc_compare(uint64_t lhs, uint64_t rhs) { return lhs < rhs; }

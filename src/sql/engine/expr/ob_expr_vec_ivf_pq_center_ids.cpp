@@ -206,7 +206,7 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
       ObVectorIndexUtil::get_ivf_pq_center_id_cache_ctx(expr.expr_ctx_id_, &eval_ctx.exec_ctx_, cache, pq_cache);
       if (OB_FAIL(ObVectorIndexUtil::get_ivf_aux_info(service, pq_cache, pq_cent_table_id, pq_cent_tablet_id,
                                                       cent_tablet_id, true /* is_pq_cache */, tmp_allocator,
-                                                      pq_centers, center_prefix, pq_m))) {
+                                                      pq_centers, center_prefix, pq_m, eval_ctx))) {
       } else if (OB_FAIL(generate_empty_pq_ids(vb_buf, pq_m, nbits, center_prefix))) {
       }
     } else if (OB_ISNULL(arr) || pq_m > arr->size()) {
@@ -240,7 +240,7 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
     } else {
       ObSEArray<float*, 64> centers;
       uint64_t center_prefix = 0;
-      if (OB_FAIL(ObVectorIndexUtil::get_ivf_aux_info(service, cache, cent_table_id, cent_tablet_id, cent_tablet_id, false /* is_pq_cache */, tmp_allocator, centers, center_prefix, 0))) {
+      if (OB_FAIL(ObVectorIndexUtil::get_ivf_aux_info(service, cache, cent_table_id, cent_tablet_id, cent_tablet_id, false /* is_pq_cache */, tmp_allocator, centers, center_prefix, 0, eval_ctx))) {
       } else if (centers.empty()) {
         is_empty_pq_ids = true;
         if (OB_FAIL(generate_empty_pq_ids(vb_buf, pq_m, nbits, center_prefix))) {
@@ -259,7 +259,7 @@ int ObExprVecIVFPQCenterIds::calc_pq_center_ids(
       uint64_t center_prefix = 0;
       int64_t center_size_per_m = 0;
       int64_t pq_dim = arr->size() / pq_m;
-      if (OB_FAIL(ObVectorIndexUtil::get_ivf_aux_info(service, pq_cache, pq_cent_table_id, pq_cent_tablet_id, cent_tablet_id, true /* is_pq_cache */, tmp_allocator, pq_centers, center_prefix, pq_m))) {
+      if (OB_FAIL(ObVectorIndexUtil::get_ivf_aux_info(service, pq_cache, pq_cent_table_id, pq_cent_tablet_id, cent_tablet_id, true /* is_pq_cache */, tmp_allocator, pq_centers, center_prefix, pq_m, eval_ctx))) {
       } else if (pq_centers.count() == 0 || pq_centers.count() % pq_m != 0) {
         ret = OB_INVALID_ARGUMENT;
         SQL_RESV_LOG(ERROR, "invalid size of pq centers", K(ret), K(pq_centers.count()), K(pq_m));

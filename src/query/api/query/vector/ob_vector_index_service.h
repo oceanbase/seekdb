@@ -46,6 +46,7 @@ public:
       share::ObIvfCacheMgrGuard &cache_mgr_guard) = 0;
 
   virtual int get_ivf_aux_info(
+      uint64_t namespace_id,
       uint64_t table_id,
       common::ObTabletID tablet_id,
       common::ObIAllocator &allocator,

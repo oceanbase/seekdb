@@ -150,6 +150,7 @@ int ObVecIVFIndexBuildTask::init(
 int ObVecIVFIndexBuildTask::init(const ObDDLTaskRecord &task_record)
 {
   int ret = OB_SUCCESS;
+  set_context(task_record.context_);
   const uint64_t data_table_id = task_record.object_id_;
   const uint64_t index_table_id = task_record.target_object_id_;
   const int64_t schema_version = task_record.schema_version_;
@@ -159,7 +160,8 @@ int ObVecIVFIndexBuildTask::init(const ObDDLTaskRecord &task_record)
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
+  } else if (OB_ISNULL(local_management_service_ = context_.root_service_ != nullptr
+      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>())) {
     ret = OB_ERR_SYS;
     LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
   } else if (!ObDDLServiceLauncher::is_ddl_service_started()) {
@@ -917,7 +919,7 @@ int ObVecIVFIndexBuildTask::CheckTaskStatusFn::operator()(common::hash::HashMapP
                                                     target_object_id,
                                                     unused_addr,
                                                     false, //is_ddl_retry_task
-                                                    *GCTX.sql_proxy_,
+                                                    local_management_service_->get_sql_proxy(),
                                                     error_message,
                                                     unused_user_msg_len))) {
           if (OB_ENTRY_NOT_EXIST == ret) {
@@ -966,7 +968,8 @@ int ObVecIVFIndexBuildTask::wait_aux_table_complement()
     LOG_WARN("task status not match", K(ret), K(task_status_));
   } else {
     int64_t finished_task_cnt = 0;
-    CheckTaskStatusFn check_task_status_fn(dependent_task_result_map_, 
+    CheckTaskStatusFn check_task_status_fn(dependent_task_result_map_,
+                                           local_management_service_,
                                            finished_task_cnt, 
                                            child_task_failed, 
                                            state_finished);
@@ -1499,7 +1502,7 @@ int ObVecIVFIndexBuildTask::ChangeTaskStatusFn::operator()(common::hash::HashMap
                                                   target_object_id,
                                                   unused_addr,
                                                   false /* is_ddl_retry_task */,
-                                                  *GCTX.sql_proxy_,
+                                                  local_management_service_->get_sql_proxy(),
                                                   error_message,
                                                   unused_user_msg_len))) {
         if (OB_ENTRY_NOT_EXIST == ret) {
@@ -1643,7 +1646,7 @@ int ObVecIVFIndexBuildTask::submit_drop_vec_index_task()
     drop_index_arg.is_hidden_         = create_index_arg_.is_offline_rebuild_;
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(data_table_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout))) {
     } else if (OB_FAIL(DDL_SIM(task_id_, DROP_INDEX_RPC_FAILED))) {
-    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->drop_index_on_failed(drop_index_arg, drop_index_res); }))) {
+    } else if (OB_FAIL(rootserver::local_ddl_serial_call([&]{ return local_management_service_->drop_index_on_failed(drop_index_arg, drop_index_res); }))) {
     } else {
       drop_index_task_submitted_ = true;
       drop_index_task_id_ = drop_index_res.task_id_;
@@ -1673,7 +1676,7 @@ int ObVecIVFIndexBuildTask::wait_drop_index_finish(bool &is_finish)
                                                   target_object_id,
                                                   unused_addr,
                                                   false /* is_ddl_retry_task */,
-                                                  *GCTX.sql_proxy_,
+                                                  *task_sql_proxy(),
                                                   error_message,
                                                   unused_user_msg_len))) {
         if (OB_ENTRY_NOT_EXIST == ret) {
@@ -1739,9 +1742,9 @@ int ObVecIVFIndexBuildTask::cleanup_impl()
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_ISNULL(GCTX.sql_proxy_) || OB_ISNULL(GCTX.schema_service_)) {
+  } else if (OB_ISNULL(task_sql_proxy()) || OB_ISNULL(task_schema_service())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_), KP(GCTX.schema_service_));
+    LOG_WARN("invalid argument", KR(ret), KP(task_sql_proxy()), KP(task_schema_service()));
   } else if (OB_FAIL(report_error_code(unused_str))) {
   } else {
     const uint64_t data_table_id = object_id_;
@@ -1752,7 +1755,7 @@ int ObVecIVFIndexBuildTask::cleanup_impl()
     ObTableLockOwnerID owner_id;
     ObMySQLTransaction trans;
     bool is_skip_unlock = false;
-    if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    if (OB_FAIL(task_schema_service()->get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_table_schema(
                                                      data_table_id,
                                                      data_schema))) {
@@ -1762,7 +1765,7 @@ int ObVecIVFIndexBuildTask::cleanup_impl()
     } else if (OB_ISNULL(data_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("fail to get table schema", K(ret), KP(data_schema));
-    } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+    } else if (OB_FAIL(trans.start(task_sql_proxy()))) {
     } else if (OB_FAIL(owner_id.convert_from_value(ObLockOwnerType::DEFAULT_OWNER_TYPE,
                                                    task_id_))) {
     } else if (!is_skip_unlock && 
@@ -1783,7 +1786,7 @@ int ObVecIVFIndexBuildTask::cleanup_impl()
   }
   DEBUG_SYNC(CREATE_INDEX_SUCCESS);
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*GCTX.sql_proxy_,
+  } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*task_sql_proxy(),
                                                             task_id_))) {
   } else {
     need_retry_ = false;      // clean succ, stop the task

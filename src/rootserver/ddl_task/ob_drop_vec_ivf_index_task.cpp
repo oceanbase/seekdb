@@ -127,10 +127,12 @@ int ObDropVecIVFIndexTask::init(const ObDDLTaskRecord &task_record)
 {
   int ret = OB_SUCCESS;
   int64_t pos = 0;
+  set_context(task_record.context_);
   if (OB_UNLIKELY(!task_record.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_record));
-  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
+  } else if (OB_ISNULL(local_management_service_ = context_.root_service_ != nullptr
+      ? context_.root_service_ : ::oceanbase::share::server_service<ObLocalManagementService>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, local management service is nullptr", K(ret));
   } else {
@@ -300,12 +302,12 @@ int ObDropVecIVFIndexTask::update_task_message()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate memory", KR(ret), K(serialize_param_size));
   } else if (OB_FAIL(serialize_params_to_message(buf, serialize_param_size, pos))) {
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+  } else if (OB_ISNULL(task_sql_proxy())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
+    LOG_WARN("invalid argument", KR(ret), KP(task_sql_proxy()));
   } else {
     msg.assign(buf, serialize_param_size);
-    if (OB_FAIL(ObDDLTaskRecordOperator::update_message(*GCTX.sql_proxy_, task_id_, msg))) {
+    if (OB_FAIL(ObDDLTaskRecordOperator::update_message(*task_sql_proxy(), task_id_, msg))) {
     }
   }
   return ret;
@@ -570,7 +572,7 @@ int ObDropVecIVFIndexTask::check_drop_index_finish(const int64_t task_id,
   } else if (OB_FAIL(share::ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id,
                                                        -1/*target_object_id*/,
                                                        table_id,
-                                                       *GCTX.sql_proxy_,
+                                                       *task_sql_proxy(),
                                                        error_message,
                                                        unused_user_msg_len))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
@@ -704,10 +706,10 @@ int ObDropVecIVFIndexTask::cleanup_impl()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("local management service is null", K(ret));
   } else if (OB_FAIL(report_error_code(unused_str))) {
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+  } else if (OB_ISNULL(task_sql_proxy())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
-  } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*GCTX.sql_proxy_, task_id_))) {
+    LOG_WARN("invalid argument", KR(ret), KP(task_sql_proxy()));
+  } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*task_sql_proxy(), task_id_))) {
   } else {
     need_retry_ = false;
   }

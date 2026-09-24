@@ -567,4 +567,16 @@ share::schema::ObMultiVersionSchemaService *namespace_schema_service(uint64_t ns
   return static_cast<share::schema::ObMultiVersionSchemaService *>(
       runtime->service(ns::NamespaceRuntime::SCHEMA_SERVICE));
 }
+common::ObMySQLProxy *namespace_sql_proxy(uint64_t ns)
+{
+  if (ns <= 1) {
+    return GCTX.sql_proxy_;
+  }
+  ns::NamespaceRuntime *runtime = nullptr;
+  if (!ns::namespace_registry().get(ns, runtime) || runtime == nullptr) {
+    return nullptr;
+  }
+  return static_cast<common::ObMySQLProxy *>(
+      runtime->service(ns::NamespaceRuntime::SQL_PROXY));
+}
 } } }

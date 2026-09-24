@@ -22,6 +22,7 @@
 #include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "storage/vector_type/ob_vector_common_util.h"
 #include "observer/vector_index/ob_vector_index_util.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 
 namespace oceanbase
 {
@@ -1421,6 +1422,7 @@ int ObPluginVectorIndexMgr::create_ivf_cache_mgr(ObIAllocator &allocator,
 }
 
 int ObPluginVectorIndexService::get_ivf_aux_info(
+    const uint64_t namespace_id,
     const uint64_t table_id,
     const ObTabletID tablet_id,
     ObIAllocator &allocator,
@@ -1438,8 +1440,9 @@ int ObPluginVectorIndexService::get_ivf_aux_info(
   } else if (OB_ISNULL(lob_read_service_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("LOB read service is not installed", KR(ret));
-  } else if (OB_FAIL(generate_get_aux_info_sql(table_id, tablet_id, is_hidden_table, sql_string))) {
+  } else if (OB_FAIL(generate_get_aux_info_sql(namespace_id, table_id, tablet_id, is_hidden_table, sql_string))) {
   } else {
+    ObMySQLProxy *sql_proxy = observer::namespace_worker_prototype::namespace_sql_proxy(namespace_id);
     const common::ObLobReadOptions lob_read_options(*lob_read_service_);
     ObSessionParam session_param;
     session_param.sql_mode_ = nullptr;
@@ -1449,7 +1452,10 @@ int ObPluginVectorIndexService::get_ivf_aux_info(
     session_param.ddl_info_.set_dest_table_hidden(false);
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql_proxy_->read(res, sql_string.ptr(), &session_param))) {
+      if (OB_ISNULL(sql_proxy)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("namespace SQL proxy is null", K(ret), K(namespace_id));
+      } else if (OB_FAIL(sql_proxy->read(res, sql_string.ptr(), &session_param))) {
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to execute sql", K(ret), K(sql_string));
@@ -1497,6 +1503,7 @@ int ObPluginVectorIndexService::get_ivf_aux_info(
 
 // need partition key
 int ObPluginVectorIndexService::generate_get_aux_info_sql(
+    const uint64_t namespace_id,
     const uint64_t table_id,
     const ObTabletID tablet_id,
     bool &is_hidden_table,
@@ -1511,10 +1518,12 @@ int ObPluginVectorIndexService::generate_get_aux_info_sql(
     const ObTableSchema *data_table_schema = nullptr;
     ObString database_name;
     schema::ObSchemaGetterGuard schema_guard;
-    if (OB_ISNULL(schema_service_)) {
+    schema::ObMultiVersionSchemaService *schema_service =
+        observer::namespace_worker_prototype::namespace_schema_service(namespace_id);
+    if (OB_ISNULL(schema_service)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("schema_service is nullptr", K(ret));
-    } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard))) {
+      LOG_WARN("namespace schema service is null", K(ret), K(namespace_id));
+    } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_TABLE_NOT_EXIST;

@@ -14,6 +14,7 @@ namespace oceanbase { namespace sql { class ObSQLSessionInfo; } }
 namespace oceanbase { namespace sql { class ObBasicSessionInfo; } }
 namespace oceanbase { namespace sql { class ObPlanCache; } }
 namespace oceanbase { namespace common { class ObITabletScan; } }
+namespace oceanbase { namespace common { class ObMySQLProxy; } }
 namespace oceanbase { namespace common { class ObILobReadService; } }
 namespace oceanbase { namespace data_plane { class ObIRangeService; } }
 namespace oceanbase { namespace data_plane { class ObIDmlService; } }
@@ -198,6 +199,7 @@ transaction::tablelock::ObIInnerConnectionLockRuntime *inprocess_lock_runtime(
 int ensure_in_process_namespace(uint64_t namespace_id);
 int inprocess_refresh_schema(uint64_t namespace_id);
 share::schema::ObMultiVersionSchemaService *namespace_schema_service(uint64_t namespace_id);
+common::ObMySQLProxy *namespace_sql_proxy(uint64_t namespace_id);
 common::ObITabletScan *effective_tablet_scan(sql::ObSQLSessionInfo *session,
                                              common::ObITabletScan *fallback);
 common::ObILobReadService *effective_lob_read_service(sql::ObSQLSessionInfo *session,
