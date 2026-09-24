@@ -467,6 +467,14 @@ int prepare_in_process_direct_insert_ordered(RequestTag parent, uint64_t generat
     return route.prepare_ordered(space, parent, generation, registry, slice_counts);
   });
 }
+int finish_in_process_direct_insert(RequestTag parent, uint64_t generation)
+{
+  return with_in_process_direct_insert([&](DirectInsertRoute &route,
+      StorageSpaceHandle space, DirectInsertRegistry &registry) {
+    return route.finish(space, in_process_storage->direct_insert_tag,
+        parent, generation, registry);
+  });
+}
 int fetch_in_process_scan(uint64_t handle, ScanBatch &batch)
 {
   InProcessStorage *ctx = in_process_storage;

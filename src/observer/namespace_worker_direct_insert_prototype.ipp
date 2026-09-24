@@ -307,6 +307,24 @@ struct DirectInsertRoute {
     if (!ret) { ret = owner->session->prepare_ordered_input(routed); }
     return ret;
   }
+  int finish(StorageSpaceHandle storage_space, RequestTag tag, RequestTag parent,
+             uint64_t generation, DirectInsertRegistry &registry) {
+    if (!storage_space.is_namespace() || parent.slot != tag.slot
+        || parent.generation != tag.generation) {
+      return OB_INVALID_ARGUMENT;
+    }
+    int ret = resolve(parent, generation, registry);
+    if (ret) { return ret; }
+    {
+      std::unique_lock<std::shared_mutex> guard(owner->mutex);
+      ret = owner->writers ? OB_STATE_NOT_MATCH : ObDirectInsertOrchestrator::finish(owner->session);
+    }
+    if (!owner->session) {
+      registry.clear(tag);
+      owner.reset();
+    }
+    return ret;
+  }
 
   int process(StorageSpaceHandle storage_space, RequestTag tag, DirectInsertRegistry &registry,
       const std::shared_ptr<StorageSessionState> &context, Frame &request, Frame &reply) {
@@ -407,20 +425,8 @@ struct DirectInsertRoute {
       }
     } else if (!ret) {
       ret = resolve(parent, generation, registry);
-      if (!ret && operation == 'F') {
-        if (!request.consumed() || parent.slot != tag.slot || parent.generation != tag.generation) { ret = OB_INVALID_ARGUMENT; }
-        else {
-          std::unique_lock<std::shared_mutex> guard(owner->mutex);
-          if (owner->writers) { ret = OB_STATE_NOT_MATCH; }
-          else { ret = ObDirectInsertOrchestrator::finish(owner->session); }
-        }
-        if (!owner->session) {
-          registry.clear(tag);
-          owner.reset();
-        }
-      } else if (!ret) {
+      if (!ret) {
         // PX tasks use their own existing routes and can finish concurrently.
-        // Only final teardown excludes active native calls.
         std::shared_lock<std::shared_mutex> guard(owner->mutex);
         auto *session = owner->session;
         if (!session) { ret = OB_NOT_INIT; }
@@ -495,6 +501,7 @@ int sync_in_process_direct_insert_autoinc(RequestTag parent, uint64_t generation
                                           int64_t slice, int64_t rows);
 int prepare_in_process_direct_insert_ordered(RequestTag parent, uint64_t generation,
     const ObIArray<ObDDLTabletSliceCount> &slice_counts);
+int finish_in_process_direct_insert(RequestTag parent, uint64_t generation);
 
 class RemoteDirectInsertSession final : public ObIDirectInsertSession, public ObIDirectInsertWriterFactory {
 public:
@@ -593,8 +600,9 @@ public:
   int create(ObIAllocator &, const ObDirectInsertWriterRequest &, ObIDirectInsertWriter *&) override;
 private:
   int finish_and_destroy() override {
-    Frame payload, reply; int ret = call('F', payload, reply, sqc_session, true);
-    if (!ret && !reply.consumed()) { ret = OB_INVALID_ARGUMENT; }
+    StorageSessionScope binding(sqc_session);
+    int ret = binding.error() ? binding.error()
+        : finish_in_process_direct_insert(origin, generation);
     if (error) { ret = error; }
     schedule_registry.release(ddl_task_id, schedule);
     auto &a = allocator; this->~RemoteDirectInsertSession(); a.free(this);
