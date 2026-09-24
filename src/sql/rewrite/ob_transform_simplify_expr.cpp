@@ -27,6 +27,60 @@ using namespace oceanbase::sql;
 
 namespace
 {
+// An EXISTS over a plain table with no predicates only tests whether a row
+// exists.  Snapshot and sampled scans are excluded: the former can fail at
+// execution, and the latter has a separate scan contract.  Its projection is
+// required to be error-free since expression checks do not enter query refs.
+int check_error_free_simple_exists(ObRawExpr *expr, bool &is_error_free)
+{
+  int ret = OB_SUCCESS;
+  is_error_free = false;
+  ObRawExpr *query_expr = NULL;
+  ObSelectStmt *select_stmt = NULL;
+  const TableItem *table_item = NULL;
+  bool projection_error_free = false;
+  if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (T_OP_EXISTS != expr->get_expr_type() || 1 != expr->get_param_count()
+             || OB_ISNULL(query_expr = expr->get_param_expr(0))
+             || !query_expr->is_query_ref_expr()) {
+    // Keep the usual error check for every other kind of subquery.
+  } else if (OB_ISNULL(select_stmt = static_cast<ObQueryRefRawExpr *>(query_expr)->get_ref_stmt())) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (select_stmt->is_contains_assignment() || select_stmt->has_subquery()
+             || select_stmt->is_set_stmt() || select_stmt->has_recursive_cte()
+             || select_stmt->has_for_update() || select_stmt->has_select_into()
+             || select_stmt->has_group_by() || select_stmt->has_distinct()
+             || 0 != select_stmt->get_window_func_count()
+             || !select_stmt->get_condition_exprs().empty()
+             || !select_stmt->get_having_exprs().empty()
+             || 0 != select_stmt->get_order_item_size()
+             || NULL != select_stmt->get_limit_expr()
+             || NULL != select_stmt->get_offset_expr()
+             || 1 != select_stmt->get_from_item_size()
+             || 1 != select_stmt->get_table_items().count()
+             || OB_ISNULL(table_item = select_stmt->get_table_items().at(0))
+             || !table_item->is_basic_table()
+             || oceanbase::share::schema::USER_TABLE != table_item->table_type_
+             || table_item->is_view_table_ || table_item->is_index_table_
+             || table_item->has_for_update()
+             || NULL != table_item->ref_query_
+             || NULL != table_item->snapshot_query_expr_
+             || TableItem::NOT_USING != table_item->snapshot_query_type_
+             || NULL != table_item->sample_info_
+             || NULL != table_item->function_table_expr_
+             || !table_item->exec_params_.empty()
+             || 1 != select_stmt->get_select_items().count()
+             || OB_ISNULL(select_stmt->get_select_item(0).expr_)) {
+    // Subquery evaluation can have diagnostics or side effects.
+  } else if (OB_FAIL(ObTransformUtils::check_error_free_expr(
+                       select_stmt->get_select_item(0).expr_, projection_error_free))) {
+  } else {
+    is_error_free = projection_error_free;
+  }
+  return ret;
+}
+
 int has_scalar_in_predicate(ObRawExpr *expr, bool &has_in)
 {
   int ret = OB_SUCCESS;
@@ -127,6 +181,98 @@ int can_skip_fractional_decimal_eq(ObTransformerCtx *ctx, ObRawExpr *expr, bool 
         }
       }
     }
+  }
+  return ret;
+}
+
+// A CAST or type-demotion CAST of a literal can be checked under the current SQL mode without
+// changing the statement's warning buffer.  Keep parameterized casts out of
+// this exception: their value can change after the plan is compiled.
+int check_warning_free_literal_cast(ObTransformerCtx *ctx,
+                                    ObRawExpr *expr,
+                                    bool &is_safe)
+{
+  int ret = OB_SUCCESS;
+  is_safe = false;
+  ObRawExpr *src = NULL;
+  ObRawExpr *type_arg = NULL;
+  bool has_warning = false;
+  if (OB_ISNULL(ctx) || OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if ((T_FUN_SYS_CAST != expr->get_expr_type() &&
+              T_FUN_SYS_DEMOTE_CAST != expr->get_expr_type()) ||
+             expr->get_param_count() != 2 ||
+             !expr->is_static_scalar_const_expr() ||
+             expr->has_flag(CNT_STATIC_PARAM) || expr->has_flag(CNT_DYNAMIC_PARAM) ||
+             OB_ISNULL(src = expr->get_param_expr(0)) ||
+             OB_ISNULL(type_arg = expr->get_param_expr(1)) ||
+             !src->is_immutable_const_expr() || !type_arg->is_immutable_const_expr() ||
+             static_cast<const ObConstRawExpr*>(src)->get_value().is_null()) {
+    // Other casts can depend on row values, parameters or runtime state.
+  } else if (OB_FAIL(ObTransformUtils::check_static_expr_has_warning(ctx, expr, has_warning))) {
+  } else {
+    is_safe = !has_warning;
+  }
+  return ret;
+}
+
+int check_error_free_integer_literal_eq(ObTransformerCtx *ctx,
+                                        ObRawExpr *expr,
+                                        bool &is_safe)
+{
+  int ret = OB_SUCCESS;
+  is_safe = false;
+  ObRawExpr *column = NULL;
+  ObRawExpr *cast = NULL;
+  bool column_is_error_free = false;
+  if (OB_ISNULL(ctx) || OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (T_OP_EQ != expr->get_expr_type() || expr->get_param_count() != 2) {
+  } else if (OB_ISNULL(column = expr->get_param_expr(0)) ||
+             OB_ISNULL(cast = expr->get_param_expr(1))) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (!column->is_column_ref_expr() ||
+             (T_FUN_SYS_CAST != cast->get_expr_type() &&
+              T_FUN_SYS_DEMOTE_CAST != cast->get_expr_type()) ||
+             !column->get_result_type().is_integer_type() ||
+             column->get_result_type().get_type() != cast->get_result_type().get_type()) {
+  } else if (OB_FAIL(ObTransformUtils::check_error_free_expr(column, column_is_error_free))) {
+  } else if (column_is_error_free &&
+             OB_FAIL(check_warning_free_literal_cast(ctx, cast, is_safe))) {
+  }
+  return ret;
+}
+
+int check_error_free_with_literal_eq(ObTransformerCtx *ctx,
+                                     ObRawExpr *expr,
+                                     bool &is_safe,
+                                     bool &used_literal_eq)
+{
+  int ret = OB_SUCCESS;
+  is_safe = false;
+  used_literal_eq = false;
+  if (OB_ISNULL(ctx) || OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(ObTransformUtils::check_error_free_expr(expr, is_safe))) {
+  } else if (is_safe) {
+    // The existing general guard is sufficient.
+  } else if (T_OP_AND == expr->get_expr_type() || T_OP_OR == expr->get_expr_type()) {
+    is_safe = true;
+    for (int64_t i = 0; OB_SUCC(ret) && is_safe && i < expr->get_param_count(); ++i) {
+      bool child_safe = false;
+      bool child_used_literal_eq = false;
+      if (OB_FAIL(SMART_CALL(check_error_free_with_literal_eq(ctx,
+                                                               expr->get_param_expr(i),
+                                                               child_safe,
+                                                               child_used_literal_eq)))) {
+      } else {
+        is_safe = child_safe;
+        used_literal_eq |= child_used_literal_eq;
+      }
+    }
+  } else if (OB_FAIL(check_error_free_integer_literal_eq(ctx, expr, is_safe))) {
+  } else {
+    used_literal_eq = is_safe;
   }
   return ret;
 }
@@ -1047,6 +1193,7 @@ int ObTransformSimplifyExpr::adjust_dummy_expr(const ObIArray<int64_t> &true_exp
     bool cur_error_free = true;
     bool has_safe_decimal_eq = false;
     bool has_uncacheable_in_expr = false;
+    bool has_warning_free_literal_eq = false;
     const PreCalcExprExpectResult expect_result = ((is_and_op && !false_exprs.empty())
                                                    || (!is_and_op && true_exprs.empty()))
         ? PreCalcExprExpectResult::PRE_CALC_RESULT_FALSE
@@ -1063,6 +1210,7 @@ int ObTransformSimplifyExpr::adjust_dummy_expr(const ObIArray<int64_t> &true_exp
         bool has_warning = false;
         bool cur_cache_safe = true;
         bool can_skip_decimal_eq = false;
+        bool used_literal_eq = false;
         bool has_in = false;
         const bool checked_expr_was_evaluated = ObOptimizerUtil::find_item(op_params, check_exprs.at(i));
         if (OB_ISNULL(check_exprs.at(i))) {
@@ -1082,7 +1230,12 @@ int ObTransformSimplifyExpr::adjust_dummy_expr(const ObIArray<int64_t> &true_exp
                                                                            has_warning))) {
         } else if (has_warning) {
           is_error_free = false;
-        } else if (OB_FAIL(ObTransformUtils::check_error_free_expr(check_exprs.at(i), cur_error_free))) {
+        } else if (OB_FAIL(check_error_free_with_literal_eq(ctx_,
+                                                             check_exprs.at(i),
+                                                             cur_error_free,
+                                                             used_literal_eq))) {
+        } else if (!cur_error_free &&
+                   OB_FAIL(check_error_free_simple_exists(check_exprs.at(i), cur_error_free))) {
         } else if (!cur_error_free && is_where_filter && is_and_op && remove_all
                    && OB_FAIL(can_skip_fractional_decimal_eq(ctx_,
                                                               check_exprs.at(i),
@@ -1090,8 +1243,14 @@ int ObTransformSimplifyExpr::adjust_dummy_expr(const ObIArray<int64_t> &true_exp
         } else {
           is_error_free = cur_error_free || can_skip_decimal_eq;
           has_safe_decimal_eq |= can_skip_decimal_eq;
+          has_warning_free_literal_eq |= used_literal_eq;
         }
       }
+    }
+    if (OB_SUCC(ret) && is_error_free && has_warning_free_literal_eq && OB_NOT_NULL(ctx_->phy_plan_)) {
+      // The exception was proven for this literal. Do not reuse the folded
+      // predicate for a different literal through automatic parameterization.
+      ctx_->phy_plan_->get_phy_plan_hint().plan_cache_policy_ = OB_USE_PLAN_CACHE_NONE;
     }
     if (OB_FAIL(ret) || !is_error_free) {
       // Keep the original predicate when a removed branch may raise warnings/errors at runtime.
@@ -1427,6 +1586,7 @@ int ObTransformSimplifyExpr::do_remove_dummy_nvl(ObDMLStmt *stmt,
       } else {
         bool not_null = false;
         bool is_error_free = false;
+        bool safe_literal_cast = false;
         ObRawExpr *new_expr = NULL;
         ObArray<ObRawExpr *> not_null_constraints;
         if (OB_FAIL(ObTransformUtils::is_expr_not_null(not_null_ctx,
@@ -1438,20 +1598,41 @@ int ObTransformSimplifyExpr::do_remove_dummy_nvl(ObDMLStmt *stmt,
           if (child_0->has_flag(CNT_NOT)) {
             // NOT chains can be simplified later; keep IFNULL/NVL to avoid unsafe not-null constraints.
           } else if (OB_FAIL(ObTransformUtils::check_error_free_expr(child_0, is_error_free))) {
-          } else if (!is_error_free) {
+          } else if (!is_error_free &&
+                     OB_FAIL(check_warning_free_literal_cast(ctx_, child_0, safe_literal_cast))) {
+          } else if (!is_error_free && !safe_literal_cast) {
             // Keep IFNULL/NVL if the input may raise conversion/runtime errors.
           } else if (OB_FAIL(ObTransformUtils::add_param_not_null_constraint(*ctx_, not_null_constraints))) {
           } else {
             new_expr = child_0;
+            if (safe_literal_cast && OB_NOT_NULL(ctx_->phy_plan_)) {
+              ctx_->phy_plan_->get_phy_plan_hint().plan_cache_policy_ = OB_USE_PLAN_CACHE_NONE;
+            }
           }
         } else if (child_0->is_static_const_expr()) {
           ObObj result;
           bool got_result = false;
-          if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx_->exec_ctx_,
+          ObRawExpr *cast_src = NULL;
+          if (OB_FAIL(check_warning_free_literal_cast(ctx_, child_0, safe_literal_cast))) {
+          } else if (safe_literal_cast &&
+                     (OB_ISNULL(cast_src = child_0->get_param_expr(0)) ||
+                      !cast_src->get_result_type().is_string_type() ||
+                      !child_0->get_result_type().is_string_or_lob_locator_type())) {
+            safe_literal_cast = false;
+          }
+          if (OB_FAIL(ret)) {
+          } else if (OB_FAIL(ObSQLUtils::calc_const_or_calculable_expr(ctx_->exec_ctx_,
                                                                 child_0,
                                                                 result,
                                                                 got_result,
                                                                 *ctx_->allocator_))) {
+          } else if (safe_literal_cast && got_result && !result.is_ext() && !result.is_null()) {
+            // A warning-free CAST of a non-NULL string literal is always the
+            // first branch of IFNULL/NVL; its value is independent of rows.
+            new_expr = child_0;
+            if (OB_NOT_NULL(ctx_->phy_plan_)) {
+              ctx_->phy_plan_->get_phy_plan_hint().plan_cache_policy_ = OB_USE_PLAN_CACHE_NONE;
+            }
           } else if (got_result && !result.is_ext() && (result.is_null())) {
             // NVL(NULL, child_1) -> child_1 
             ObExprConstraint expr_cons(child_0, PreCalcExprExpectResult::PRE_CALC_RESULT_NULL);
