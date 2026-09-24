@@ -64,11 +64,6 @@ public:
   static int begin_schema_changes(common::ObISQLClient &trans, uint64_t namespace_id);
   static int finish_schema_changes(common::ObISQLClient &trans,
                                    uint64_t namespace_id, int64_t committed_schema_version);
-  static int observe_schema(common::ObISQLClient &trans, const share::schema::ObTableSchema &schema);
-  static int observe_schemas(common::ObISQLClient &trans,
-                             const common::ObIArray<share::schema::ObTableSchema> &schemas);
-  static int forget_schema(common::ObISQLClient &trans, const share::schema::ObTableSchema &schema,
-                           int64_t schema_version, bool *private_tablet = nullptr);
   static int publish_schema_delta(
       uint64_t namespace_id,
       int64_t schema_version,
@@ -105,16 +100,6 @@ private:
       const common::ObTabletID &tablet_id,
       const share::schema::ObTableSchema *requested_schema,
       const common::ObIArray<const share::schema::ObTableSchema *> *binding_schemas);
-  static int observe_schema_in_namespace(common::ObISQLClient &trans,
-                                         const share::schema::ObTableSchema &schema,
-                                         uint64_t namespace_id);
-  static int forget_schema_in_namespace(common::ObISQLClient &trans,
-                                        const share::schema::ObTableSchema &schema,
-                                        int64_t schema_version,
-                                        uint64_t namespace_id,
-                                        bool *private_tablet = nullptr,
-                                        common::ObIArray<common::ObTabletID> *private_tablets = nullptr,
-                                        const share::schema::ObTableSchema *replacement_schema = nullptr);
 };
 }
 }

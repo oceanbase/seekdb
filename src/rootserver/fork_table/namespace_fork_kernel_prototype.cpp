@@ -118,15 +118,6 @@ private:
   MetadataReadGuard(const MetadataReadGuard &) = delete;
   MetadataReadGuard &operator=(const MetadataReadGuard &) = delete;
 };
-// Native namespace workers load their only schema authority from their own
-// all_* tables.  This is an architecture-wide mode, not a property of the
-// process currently executing a hook: namespace 1 enrollment runs in the
-// shared process and must still avoid constructing the legacy schema catalog.
-bool native_namespace_schema_authority()
-{
-  return true;
-}
-
 int64_t cap_min(int64_t a, int64_t b) { return Codec::cap_min(a, b); }
 uint64_t encoded(uint64_t db, uint64_t local) {
   return NamespaceObjectKey{db, local}.storage_id();
@@ -508,49 +499,6 @@ int rewrite_tablet_ids(ObTableSchema &schema, Mapper mapper)
   return ret;
 }
 
-bool legacy_catalog_supported(const ObTableSchema &s) {
-  if (s.is_sys_table() || s.is_aux_lob_table()) {
-    return s.get_tablet_id().is_valid();
-  }
-  if (s.is_index_table()) {
-    const ObIndexType type = s.get_index_type();
-    const bool ordinary = type == INDEX_TYPE_NORMAL_LOCAL || type == INDEX_TYPE_UNIQUE_LOCAL
-        || type == INDEX_TYPE_NORMAL_GLOBAL_LOCAL_STORAGE
-        || type == INDEX_TYPE_UNIQUE_GLOBAL_LOCAL_STORAGE;
-    return s.get_table_type() == USER_INDEX && ordinary && s.is_storage_local_index_table()
-        && !s.is_partitioned_table() && s.get_data_table_id() != 0
-        && s.get_data_table_id() != OB_INVALID_ID && s.get_tablet_id().is_valid()
-        && s.get_column_count() > 0 && s.get_rowkey_column_num() > 0;
-  }
-  for (int64_t i = 0; i < s.get_foreign_key_infos().count(); ++i) {
-    const auto &fk = s.get_foreign_key_infos().at(i);
-    if (fk.is_parent_table_mock_ || fk.fk_ref_type_ != FK_REF_TYPE_PRIMARY_KEY) { return false; }
-  }
-  for (int64_t i = 0; i < s.get_simple_index_infos().count(); ++i) {
-    const auto &index = s.get_simple_index_infos().at(i);
-    if (index.table_type_ != USER_INDEX
-        || (index.index_type_ != INDEX_TYPE_NORMAL_LOCAL
-            && index.index_type_ != INDEX_TYPE_UNIQUE_LOCAL
-            && index.index_type_ != INDEX_TYPE_NORMAL_GLOBAL_LOCAL_STORAGE
-            && index.index_type_ != INDEX_TYPE_UNIQUE_GLOBAL_LOCAL_STORAGE)) {
-      return false;
-    }
-  }
-  const bool has_lob_meta = s.get_aux_lob_meta_tid() != OB_INVALID_ID;
-  const bool has_lob_piece = s.get_aux_lob_piece_tid() != OB_INVALID_ID;
-  return s.get_table_type() == USER_TABLE && !s.is_partitioned_table()
-      && s.get_trigger_list().empty() && !s.has_generated_column() && s.get_autoinc_column_id() == 0
-      && s.get_column_count() > 0 && s.get_rowkey_column_num() > 0
-      && has_lob_meta == has_lob_piece;
-}
-std::vector<ObAuxTableMetaInfo> index_infos(const ObTableSchema &schema) {
-  std::vector<ObAuxTableMetaInfo> indexes;
-  indexes.reserve(schema.get_simple_index_infos().count());
-  for (int64_t i = 0; i < schema.get_simple_index_infos().count(); ++i) {
-    indexes.push_back(schema.get_simple_index_infos().at(i));
-  }
-  return indexes;
-}
 int namespace_named(ObISQLClient &sql, const ObString &name, uint64_t &id) {
   ObSqlString q; ObMySQLProxy::MySQLResult res; int ret = OB_SUCCESS;
   sqlclient::ObMySQLResult *r = nullptr;
@@ -1558,449 +1506,6 @@ int NamespaceForkKernelPrototype::control_namespace(const ObString &source, cons
       "publish_us", published_us - begin_us, "reload_us", ObTimeUtility::current_time() - published_us);
   return ret;
 }
-int NamespaceForkKernelPrototype::observe_schema(ObISQLClient &trans, const ObTableSchema &schema) {
-  const uint64_t namespace_id = trans.target_namespace();
-  const uint64_t schema_namespace = namespace_id > 1 ? namespace_id : 0;
-  return observe_schema_in_namespace(trans, schema, schema_namespace);
-}
-
-int NamespaceForkKernelPrototype::observe_schema_in_namespace(
-    ObISQLClient &trans, const ObTableSchema &schema, uint64_t namespace_id) {
-  if ((!schema.is_user_table() && !schema.is_index_table()
-      && !schema.is_sys_table() && !schema.is_aux_lob_table())) {
-    return OB_SUCCESS;
-  }
-  if (native_namespace_schema_authority()) {
-    // The exception-table model has no per-table directory registration:
-    // tablets of a forked namespace resolve along the parent chain until they
-    // are materialized, and namespace 1 keeps its raw tablets unregistered.
-    return OB_SUCCESS;
-  }
-  if (namespace_id >= NamespaceObjectKey::NAMESPACE_LIMIT) { return OB_INVALID_ARGUMENT; }
-  const bool system_object = schema.is_sys_table() || schema.is_aux_lob_table()
-      || (is_inner_table(schema.get_table_id()) && schema.is_index_table());
-  uint64_t owner = namespace_id;
-  bool has_encoded_id = false;
-  auto take_owner = [&](uint64_t id) {
-    if (!is_encoded_id(id)) { return true; }
-    has_encoded_id = true;
-    const uint64_t candidate = database_of(id);
-    if (owner == 0) { owner = candidate; }
-    return owner == candidate;
-  };
-  if (!take_owner(schema.get_table_id()) || !take_owner(schema.get_database_id())
-      || ((schema.is_aux_lob_table() || schema.is_index_table())
-          && !take_owner(schema.get_data_table_id()))) {
-    return OB_INVALID_ARGUMENT;
-  }
-  for (int64_t i = 0; i < schema.get_simple_index_infos().count(); ++i) {
-    if (!take_owner(schema.get_simple_index_infos().at(i).table_id_)) { return OB_INVALID_ARGUMENT; }
-  }
-  ObArray<ObTabletID> schema_tablets;
-  if (schema_tablet_ids(schema, schema_tablets) != OB_SUCCESS || schema_tablets.empty()) {
-    return OB_INVALID_ARGUMENT;
-  }
-  for (int64_t i = 0; i < schema_tablets.count(); ++i) {
-    if (!take_owner(schema_tablets.at(i).id())) { return OB_INVALID_ARGUMENT; }
-  }
-  const bool encoded_schema = has_encoded_id;
-  const uint64_t database_id = is_encoded_id(schema.get_database_id())
-      ? local_of(schema.get_database_id()) : schema.get_database_id();
-  const uint64_t table_id = is_encoded_id(schema.get_table_id())
-      ? local_of(schema.get_table_id()) : schema.get_table_id();
-  std::vector<uint64_t> tablet_ids;
-  tablet_ids.reserve(schema_tablets.count());
-  for (int64_t i = 0; i < schema_tablets.count(); ++i) {
-    const uint64_t id = schema_tablets.at(i).id();
-    tablet_ids.push_back(is_encoded_id(id) ? local_of(id) : id);
-  }
-  const uint64_t tablet_id = tablet_ids.front();
-  if (native_namespace_schema_authority()
-      && (!directory_supported(schema)
-          || database_id >= NamespaceObjectKey::NAMESPACE_LIMIT
-          || table_id >= (1ULL << 32)
-          || std::any_of(tablet_ids.begin(), tablet_ids.end(),
-                         [](uint64_t id) { return id >= NamespaceObjectKey::LOCAL_LIMIT; }))) {
-    return OB_NOT_SUPPORTED;
-  }
-  const bool all_tablets_encoded = std::all_of(
-      schema_tablets.begin(), schema_tablets.end(),
-      [](const ObTabletID &id) { return NamespaceForkKernelPrototype::is_encoded_id(id.id()); });
-  if (encoded_schema && ((namespace_id == 0 && !is_encoded_id(schema.get_database_id()))
-      || !all_tablets_encoded
-      || ((!schema.is_aux_lob_table() && !schema.is_index_table())
-          && !is_encoded_id(schema.get_table_id()))
-      || ((schema.is_aux_lob_table() || schema.is_index_table())
-          && !is_encoded_id(schema.get_data_table_id())))) {
-    return OB_INVALID_ARGUMENT;
-  }
-  if (owner == 0) { owner = 1; }
-  if (is_inner_db(database_id) && !system_object) { return OB_SUCCESS; }
-  int ret = OB_SUCCESS;
-  if (!native_namespace_schema_authority()) {
-    bool ready = false; ret = namespace_registry_ready(ready);
-    if (ret != OB_SUCCESS || !ready) { return ret; }
-  }
-  if (!system_object && namespace_id == 0) { // Finish the result before issuing another statement on the same DDL connection.
-  ObSqlString q; ObMySQLProxy::MySQLResult res; ObString name;
-  sqlclient::ObMySQLResult *r = nullptr;
-  if (OB_FAIL(q.assign_fmt("SELECT database_name FROM oceanbase.__all_database WHERE database_id=%lu", database_id))) {
-  } else if (OB_FAIL(trans.read(res, q.ptr()))) {
-  } else if (OB_ISNULL(r = res.get_result())) { ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(r->next())) {
-  } else if (OB_FAIL(r->get_varchar(0L, name))) {
-  } else if (name.prefix_match("__fork_proto_meta")) { return OB_SUCCESS;
-  } else if ((!native_namespace_schema_authority() && !legacy_catalog_supported(schema))
-      || database_id >= NamespaceObjectKey::NAMESPACE_LIMIT
-      || table_id >= (1ULL << 32) || tablet_id >= NamespaceObjectKey::LOCAL_LIMIT) { ret = OB_NOT_SUPPORTED; }
-  }
-  if (ret != OB_SUCCESS) { return ret; }
-  {
-  MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
-  Roots root;
-  ret = roots(trans, owner, root, true);
-  if (ret == OB_ITER_END || ret == OB_TABLE_NOT_EXIST || ret == OB_ERR_BAD_DATABASE) {
-    if (ret == OB_ITER_END) {
-      ret = roots(trans, 1, root, false, true);
-      if (ret == OB_SUCCESS) { return OB_OP_NOT_ALLOW; }
-      if (ret != OB_ITER_END) { return ret; }
-    }
-    return OB_SUCCESS; // Native bootstrap is enrolled once when namespace 1 is registered.
-  }
-  if (ret == OB_ITER_END) { ret = OB_SUCCESS; }
-  if (ret != OB_SUCCESS) { return ret; }
-  if (root.snapshot != 0 && !encoded_schema && namespace_id == 0) { return OB_NOT_SUPPORTED; }
-  ObArenaAllocator allocator("NsDDLSchema");
-  ObTableSchema normalized(&allocator);
-  if (OB_FAIL(normalized.assign(schema))) { return ret; }
-  if (encoded_schema) {
-    // Catalog blobs stay namespace-neutral; schema lookup re-encodes them for
-    // the requesting namespace while the directory retains the physical owner.
-    normalized.set_database_id(database_id);
-    normalized.set_table_id(table_id);
-    if (OB_FAIL(rewrite_tablet_ids(normalized,
-            [&](uint64_t id, uint64_t &rewritten) {
-              if (!is_encoded_id(id) || database_of(id) != owner) {
-                return OB_INVALID_ARGUMENT;
-              }
-              rewritten = local_of(id);
-              return OB_SUCCESS;
-            }))) {
-      return ret;
-    }
-    if (normalized.get_data_table_id() != 0 && normalized.get_data_table_id() != OB_INVALID_ID) {
-      normalized.set_data_table_id(local_of(normalized.get_data_table_id()));
-    }
-    if (normalized.get_association_table_id() != 0
-        && normalized.get_association_table_id() != OB_INVALID_ID) {
-      normalized.set_association_table_id(local_of(normalized.get_association_table_id()));
-    }
-    if (normalized.get_aux_lob_meta_tid() != OB_INVALID_ID) {
-      normalized.set_aux_lob_meta_tid(local_of(normalized.get_aux_lob_meta_tid()));
-    }
-    if (normalized.get_aux_lob_piece_tid() != OB_INVALID_ID) {
-      normalized.set_aux_lob_piece_tid(local_of(normalized.get_aux_lob_piece_tid()));
-    }
-    std::vector<ObAuxTableMetaInfo> indexes = index_infos(normalized);
-    normalized.reset_simple_index_infos();
-    for (auto &index : indexes) {
-      index.table_id_ = local_of(index.table_id_);
-      if (OB_FAIL(normalized.add_simple_index_info(index))) { return ret; }
-    }
-    for (int64_t i = 0; i < normalized.get_foreign_key_infos().count(); ++i) {
-      auto &fk = normalized.get_foreign_key_infos().at(i);
-      fk.table_id_ = local_of(fk.table_id_);
-      fk.child_table_id_ = local_of(fk.child_table_id_);
-      fk.parent_table_id_ = local_of(fk.parent_table_id_);
-      if (fk.ref_cst_id_ != OB_INVALID_ID) { fk.ref_cst_id_ = local_of(fk.ref_cst_id_); }
-    }
-    for (int64_t i = 0; i < normalized.get_column_count(); ++i) {
-      const_cast<ObColumnSchemaV2 *>(normalized.get_column_schema_by_idx(i))->set_table_id(table_id);
-    }
-  }
-  // A namespace worker persists its canonical schema through the native
-  // all_* tables.  The storage directory needs only logical identity and the
-  // current physical binding; duplicating ObTableSchema blobs here creates a
-  // second schema authority and doubles the long-lived metadata.
-  const bool persist_legacy_catalog = !native_namespace_schema_authority();
-  std::string serialized;
-  int64_t pos = 0;
-  uint64_t object = 0;
-  std::vector<bool> insert_directory(tablet_ids.size(), true);
-  if (native_namespace_schema_authority()) {
-    for (size_t i = 0; OB_SUCC(ret) && i < tablet_ids.size(); ++i) {
-      Value existing;
-      const int find_ret = find(trans, root.directory, key_of(tablet_ids[i]), existing);
-      if (find_ret == OB_SUCCESS) {
-        uint64_t existing_object = 0;
-        uint64_t existing_table = 0;
-        uint64_t existing_tablet = 0;
-        uint64_t existing_bound = 0;
-        if (!entry(existing.data, existing_object, existing_table,
-                   existing_tablet, existing_bound)
-            || existing_table != table_id || existing_tablet != tablet_ids[i]) {
-          ret = OB_STATE_NOT_MATCH;
-        } else {
-          // An ALTER or a recovered schema delta must not turn an inherited
-          // tablet into a locally-owned tablet. Physical ownership changes only
-          // after materialization commits its create MDS and directory update.
-          insert_directory[i] = false;
-        }
-      } else if (find_ret != OB_ENTRY_NOT_EXIST) {
-        ret = find_ret;
-      }
-    }
-  }
-  if (OB_SUCC(ret) && persist_legacy_catalog) {
-    serialized.resize(normalized.get_serialize_size());
-    if (OB_FAIL(normalized.serialize(&serialized[0], serialized.size(), pos))) {
-    } else if (OB_FAIL(save_blob(trans, serialized, object))) {
-    }
-  }
-  if (OB_SUCC(ret)) {
-    Value value;
-    const uint64_t bound_tablet = encoded_schema ? schema_tablets.at(0).id()
-        : namespace_id > 1 ? NamespaceObjectKey{namespace_id, tablet_id}.storage_id() : 0;
-    value.data = entry(object, table_id, tablet_id, bound_tablet);
-    const std::string name_key = "T" + key_of(database_id) + "/" + schema.get_table_name();
-    if (persist_legacy_catalog
-        && OB_FAIL(put(trans, root.catalog, name_key, value, root.catalog))) {
-    } else if (persist_legacy_catalog
-        && OB_FAIL(put(trans, root.catalog, "#" + key_of(table_id), value, root.catalog))) {
-    }
-    for (size_t i = 0; OB_SUCC(ret) && i < tablet_ids.size(); ++i) {
-      if (!insert_directory[i]) { continue; }
-      const uint64_t tablet_bound = encoded_schema ? schema_tablets.at(i).id()
-          : namespace_id > 1
-              ? NamespaceObjectKey{namespace_id, tablet_ids[i]}.storage_id() : 0;
-      value.data = entry(object, table_id, tablet_ids[i], tablet_bound);
-      ret = put(trans, root.directory, key_of(tablet_ids[i]), value, root.directory);
-    }
-    if (OB_SUCC(ret)) {
-      root.schema_version = std::max(root.schema_version, schema.get_schema_version());
-      ret = save_roots(trans, owner, root);
-      for (size_t i = 0; OB_SUCC(ret) && i < tablet_ids.size(); ++i) {
-        Value verified;
-        ret = find(trans, root.directory, key_of(tablet_ids[i]), verified);
-      }
-      LOG_INFO("PROTOTYPE_V2_SOURCE_DIRECTORY", K(ret),
-          "table_id", schema.get_table_id(), "tablet_count", tablet_ids.size(),
-          "directory_root", root.directory.page);
-    }
-  }
-  } // Reader guard ends; the external native DDL transaction still owns the root.
-  if (OB_SUCC(ret)) {
-    DEBUG_SYNC(BEFORE_CREATE_TABLE_TRANS_COMMIT);
-    ret = THIS_WORKER.check_status();
-  }
-  return ret;
-}
-int NamespaceForkKernelPrototype::observe_schemas(ObISQLClient &trans,
-                                                  const ObIArray<ObTableSchema> &schemas) {
-  int ret = OB_SUCCESS;
-  for (int64_t i = 0; OB_SUCC(ret) && i < schemas.count(); ++i) {
-    const ObTableSchema &schema = schemas.at(i);
-    if (!schema.is_user_table()) {
-      ret = observe_schema(trans, schema);
-    } else {
-      ObArenaAllocator allocator("NsDDLBatch");
-      ObTableSchema complete(&allocator);
-      std::vector<ObAuxTableMetaInfo> indexes = index_infos(schema);
-      const uint64_t data_table_id = is_encoded_id(schema.get_table_id())
-          ? local_of(schema.get_table_id()) : schema.get_table_id();
-      for (int64_t j = 0; j < schemas.count(); ++j) {
-        const ObTableSchema &auxiliary = schemas.at(j);
-        const uint64_t auxiliary_data_table_id = is_encoded_id(auxiliary.get_data_table_id())
-            ? local_of(auxiliary.get_data_table_id()) : auxiliary.get_data_table_id();
-        if (auxiliary.is_index_table() && auxiliary_data_table_id == data_table_id) {
-          indexes.emplace_back(auxiliary.get_table_id(), auxiliary.get_table_type(),
-                               auxiliary.get_index_type());
-        }
-      }
-      std::sort(indexes.begin(), indexes.end(), [](const ObAuxTableMetaInfo &left,
-                                                   const ObAuxTableMetaInfo &right) {
-        return left.table_id_ < right.table_id_;
-      });
-      indexes.erase(std::unique(indexes.begin(), indexes.end(),
-                                [](const ObAuxTableMetaInfo &left,
-                                   const ObAuxTableMetaInfo &right) {
-        return left.table_id_ == right.table_id_;
-      }), indexes.end());
-      if (OB_FAIL(complete.assign(schema))) {
-      } else {
-        complete.reset_simple_index_infos();
-        for (const auto &index : indexes) {
-          if (OB_FAIL(complete.add_simple_index_info(index))) { break; }
-        }
-      }
-      if (OB_SUCC(ret)) { ret = observe_schema(trans, complete); }
-    }
-  }
-  return ret;
-}
-
-int NamespaceForkKernelPrototype::forget_schema(ObISQLClient &trans, const ObTableSchema &schema,
-                                                int64_t schema_version, bool *private_tablet) {
-  const uint64_t namespace_id = trans.target_namespace();
-  const uint64_t schema_namespace = namespace_id > 1 ? namespace_id : 0;
-  return forget_schema_in_namespace(
-      trans, schema, schema_version, schema_namespace, private_tablet);
-}
-
-int NamespaceForkKernelPrototype::forget_schema_in_namespace(
-    ObISQLClient &trans, const ObTableSchema &schema, int64_t schema_version,
-    uint64_t namespace_id, bool *private_tablet,
-    ObIArray<ObTabletID> *private_tablets,
-    const ObTableSchema *replacement_schema) {
-  if (private_tablet != nullptr) { *private_tablet = false; }
-  if (native_namespace_schema_authority()) {
-    // Namespace DDL in a fork publishes its tablet ownership delta through
-    // publish_schema_delta; namespace 1 keeps raw tablets and needs no
-    // unregistration either.
-    return OB_SUCCESS;
-  }
-  // Dropping namespace 1 deletes its native schema rows and then clears the
-  // whole namespace root.  Per-table directory updates would read that root as
-  // LIVE after begin_namespace_drop() has already made it DELETING.  They are
-  // also unnecessary: descendant snapshots retain the old immutable root and
-  // finish_namespace_drop() discards namespace 1's mutable root as one unit.
-  if (source_drop_trans.load() == &trans) {
-    return OB_SUCCESS;
-  }
-  if ((!schema.is_user_table() && !schema.is_index_table()
-      && !schema.is_aux_lob_table())) {
-    return OB_SUCCESS;
-  }
-  const bool encoded_schema = is_encoded_id(schema.get_table_id());
-  const uint64_t owner = namespace_id != 0 ? namespace_id
-      : encoded_schema ? database_of(schema.get_table_id())
-      : 1;
-  ObArray<ObTabletID> schema_tablets;
-  if (schema_tablet_ids(schema, schema_tablets) != OB_SUCCESS || schema_tablets.empty()) {
-    return OB_INVALID_ARGUMENT;
-  }
-  bool encoded_tablets_valid = true;
-  for (int64_t i = 0; encoded_schema && encoded_tablets_valid
-      && i < schema_tablets.count(); ++i) {
-    encoded_tablets_valid = is_encoded_id(schema_tablets.at(i).id())
-        && database_of(schema_tablets.at(i).id()) == owner;
-  }
-  if (owner == 0 || owner >= NamespaceObjectKey::NAMESPACE_LIMIT || schema_version <= 0
-      || (encoded_schema && ((namespace_id == 0 && !is_encoded_id(schema.get_database_id()))
-          || !encoded_tablets_valid
-          || (is_encoded_id(schema.get_database_id())
-              && database_of(schema.get_database_id()) != owner)))) {
-    return OB_INVALID_ARGUMENT;
-  }
-  const uint64_t database_id = encoded_schema ? local_of(schema.get_database_id())
-      : schema.get_database_id();
-  const uint64_t table_id = encoded_schema ? local_of(schema.get_table_id())
-      : schema.get_table_id();
-  std::vector<uint64_t> tablet_ids;
-  tablet_ids.reserve(schema_tablets.count());
-  for (int64_t i = 0; i < schema_tablets.count(); ++i) {
-    tablet_ids.push_back(is_encoded_id(schema_tablets.at(i).id())
-        ? local_of(schema_tablets.at(i).id()) : schema_tablets.at(i).id());
-  }
-  // For an in-place schema replacement, retain bindings that are present in
-  // both schema versions.  ALTER TABLE commonly keeps all tablets, while
-  // TRUNCATE and repartitioning may replace all or only a subset.  Removing
-  // every old binding and observing the new schema afterwards would silently
-  // turn retained inherited tablets into child-owned tablets.
-  std::unordered_set<uint64_t> retained_tablet_ids;
-  if (replacement_schema != nullptr) {
-    const bool replacement_encoded = is_encoded_id(replacement_schema->get_table_id());
-    const uint64_t replacement_owner = replacement_encoded
-        ? database_of(replacement_schema->get_table_id()) : owner;
-    const uint64_t replacement_table_id = replacement_encoded
-        ? local_of(replacement_schema->get_table_id())
-        : replacement_schema->get_table_id();
-    ObArray<ObTabletID> replacement_tablets;
-    const int replacement_ret = schema_tablet_ids(
-        *replacement_schema, replacement_tablets);
-    if (replacement_owner != owner || replacement_table_id != table_id
-        || replacement_ret != OB_SUCCESS
-        || replacement_tablets.empty()) {
-      return replacement_ret != OB_SUCCESS ? replacement_ret : OB_INVALID_ARGUMENT;
-    }
-    for (int64_t i = 0; i < replacement_tablets.count(); ++i) {
-      const uint64_t id = replacement_tablets.at(i).id();
-      if (replacement_encoded
-          && (!is_encoded_id(id) || database_of(id) != owner)) {
-        return OB_INVALID_ARGUMENT;
-      }
-      retained_tablet_ids.insert(is_encoded_id(id) ? local_of(id) : id);
-    }
-  }
-  // Namespace mode can be enabled before the global registry is installed
-  // (notably during the worker-only bootstrap probe).  CREATE already gates
-  // directory maintenance on registry visibility; DROP must make the same
-  // decision before trying to compile SQL against the control tables.
-  bool registry_ready = false;
-  int ret = namespace_registry_ready(registry_ready);
-  if (ret != OB_SUCCESS || !registry_ready) { return ret; }
-  MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
-  Roots root; ret = roots(trans, owner, root, true);
-  if (ret == OB_ITER_END) {
-    // The global control schema is installed before namespace 1 receives its
-    // first snapshot root. DDL in that interval is captured by the one-time
-    // enrollment, so a DROP has no directory entry to remove yet. Preserve
-    // the tombstone check used by CREATE to prevent writes after deletion.
-    ret = roots(trans, owner, root, false, true);
-    if (ret == OB_SUCCESS) { return OB_OP_NOT_ALLOW; }
-    if (ret != OB_ITER_END) { return ret; }
-    return OB_SUCCESS;
-  }
-  Ref next;
-  const std::string name_key = "T" + key_of(database_id) + "/" + schema.get_table_name();
-  bool all_private = !tablet_ids.empty();
-  bool removed_any = false;
-  for (size_t i = 0; OB_SUCC(ret) && i < tablet_ids.size(); ++i) {
-    if (retained_tablet_ids.count(tablet_ids[i]) != 0) { continue; }
-    removed_any = true;
-    Value directory_value;
-    if (OB_FAIL(find(trans, root.directory, key_of(tablet_ids[i]), directory_value))) {
-    } else {
-      uint64_t object = 0, entry_table = 0, entry_tablet = 0, bound = 0;
-      if (!entry(directory_value.data, object, entry_table, entry_tablet, bound)
-          || entry_table != table_id || entry_tablet != tablet_ids[i]) {
-        ret = OB_CHECKSUM_ERROR;
-      } else {
-        const uint64_t physical_tablet = encoded_schema ? schema_tablets.at(i).id()
-            : NamespaceObjectKey{owner, tablet_ids[i]}.storage_id();
-        const bool locally_owned = bound == physical_tablet;
-        all_private = all_private && locally_owned;
-        if (locally_owned && private_tablets != nullptr
-            && OB_FAIL(private_tablets->push_back(ObTabletID(physical_tablet)))) {
-        }
-      }
-    }
-  }
-  all_private = removed_any && all_private;
-  if (OB_SUCC(ret) && private_tablet != nullptr) { *private_tablet = all_private; }
-  if (OB_FAIL(ret)) {
-  } else if (!native_namespace_schema_authority()
-      && OB_FAIL(remove_key(trans, root.catalog, name_key, next))) {
-  } else if (!native_namespace_schema_authority()
-      && FALSE_IT(root.catalog = next)) {
-  } else if (!native_namespace_schema_authority()
-      && OB_FAIL(remove_key(trans, root.catalog, "#" + key_of(table_id), next))) {
-  } else if (!native_namespace_schema_authority()
-      && FALSE_IT(root.catalog = next)) {
-  }
-  for (size_t i = 0; OB_SUCC(ret) && i < tablet_ids.size(); ++i) {
-    if (retained_tablet_ids.count(tablet_ids[i]) != 0) { continue; }
-    if (OB_FAIL(remove_key(trans, root.directory, key_of(tablet_ids[i]), next))) {
-    } else {
-      root.directory = next;
-    }
-  }
-  if (OB_SUCC(ret)) {
-    root.schema_version = std::max(root.schema_version, schema_version);
-    ret = save_roots(trans, owner, root);
-  }
-  return ret;
-}
 
 namespace {
 
@@ -2025,27 +1530,18 @@ int collect_directory_tablets(
     } else if (!directory_supported(*schema)) {
       ret = OB_NOT_SUPPORTED;
     } else {
-      const bool encoded_schema = NamespaceForkKernelPrototype::is_encoded_id(
-          schema->get_table_id());
-      const uint64_t table_owner = encoded_schema
-          ? database_of(schema->get_table_id()) : namespace_id;
-      const uint64_t table_id = encoded_schema
-          ? local_of(schema->get_table_id()) : schema->get_table_id();
+      const uint64_t table_id = schema->get_table_id();
       ObArray<ObTabletID> schema_tablets;
-      if (table_owner != namespace_id || table_id >= (1ULL << 32)
+      if (NamespaceForkKernelPrototype::is_encoded_id(table_id)
+          || NamespaceForkKernelPrototype::is_encoded_id(schema->get_database_id())
+          || table_id >= (1ULL << 32)
           || OB_FAIL(schema_tablet_ids(*schema, schema_tablets))) {
         if (OB_SUCC(ret)) { ret = OB_INVALID_ARGUMENT; }
       }
       for (int64_t j = 0; OB_SUCC(ret) && j < schema_tablets.count(); ++j) {
-        const uint64_t schema_tablet_id = schema_tablets.at(j).id();
-        const bool encoded_tablet = NamespaceForkKernelPrototype::is_encoded_id(
-            schema_tablet_id);
-        const uint64_t tablet_owner = encoded_tablet
-            ? database_of(schema_tablet_id) : namespace_id;
-        const uint64_t tablet_id = encoded_tablet
-            ? local_of(schema_tablet_id) : schema_tablet_id;
+        const uint64_t tablet_id = schema_tablets.at(j).id();
         const NamespaceObjectKey storage_key{namespace_id, tablet_id};
-        if (encoded_tablet != encoded_schema || tablet_owner != namespace_id
+        if (NamespaceForkKernelPrototype::is_encoded_id(tablet_id)
             || !storage_key.is_valid()) {
           ret = OB_INVALID_ARGUMENT;
         } else {
@@ -2167,30 +1663,26 @@ int NamespaceForkKernelPrototype::publish_schema_delta(
   }
   int ret = OB_SUCCESS;
   ObArray<ObTabletID> private_tablets;
-  std::map<uint64_t, const ObTableSchema *> current_by_table_id;
+  std::unordered_set<uint64_t> current_table_ids;
   std::unordered_set<uint64_t> previous_table_ids;
   for (int64_t i = 0; OB_SUCC(ret) && i < current_schemas.count(); ++i) {
     const ObTableSchema *schema = current_schemas.at(i);
     if (schema == nullptr) {
       ret = OB_INVALID_ARGUMENT;
-    } else {
-      const uint64_t id = is_encoded_id(schema->get_table_id())
-          ? local_of(schema->get_table_id()) : schema->get_table_id();
-      if (!current_by_table_id.emplace(id, schema).second) {
-        ret = OB_INVALID_ARGUMENT;
-      }
+    } else if (is_encoded_id(schema->get_table_id())
+        || is_encoded_id(schema->get_database_id())
+        || !current_table_ids.insert(schema->get_table_id()).second) {
+      ret = OB_INVALID_ARGUMENT;
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < previous_schemas.count(); ++i) {
     const ObTableSchema *schema = previous_schemas.at(i);
     if (schema == nullptr) {
       ret = OB_INVALID_ARGUMENT;
-    } else {
-      const uint64_t id = is_encoded_id(schema->get_table_id())
-          ? local_of(schema->get_table_id()) : schema->get_table_id();
-      if (!previous_table_ids.insert(id).second) {
-        ret = OB_INVALID_ARGUMENT;
-      }
+    } else if (is_encoded_id(schema->get_table_id())
+        || is_encoded_id(schema->get_database_id())
+        || !previous_table_ids.insert(schema->get_table_id()).second) {
+      ret = OB_INVALID_ARGUMENT;
     }
   }
   {
@@ -2200,34 +1692,10 @@ int NamespaceForkKernelPrototype::publish_schema_delta(
     // or resolve the global control schema.
     ObMySQLTransaction trans;
     if (OB_SUCC(ret)) { ret = trans.start(GCTX.sql_proxy_); }
-    if (OB_SUCC(ret) && native_namespace_schema_authority()) {
+    if (OB_SUCC(ret)) {
       ret = replace_namespace_exceptions(
           trans, namespace_id, schema_version,
           current_schemas, previous_schemas, private_tablets);
-    } else {
-      for (int64_t i = 0; OB_SUCC(ret) && i < previous_schemas.count(); ++i) {
-        const ObTableSchema *previous = previous_schemas.at(i);
-        const uint64_t id = is_encoded_id(previous->get_table_id())
-            ? local_of(previous->get_table_id()) : previous->get_table_id();
-        const auto current = current_by_table_id.find(id);
-        if (OB_FAIL(forget_schema_in_namespace(
-            trans, *previous, schema_version, namespace_id,
-            nullptr, &private_tablets,
-            current == current_by_table_id.end() ? nullptr : current->second))) {
-        }
-      }
-      for (int64_t i = 0; OB_SUCC(ret) && i < current_schemas.count(); ++i) {
-        ret = observe_schema_in_namespace(
-            trans, *current_schemas.at(i), namespace_id);
-      }
-      if (OB_SUCC(ret)) {
-        Roots root;
-        if (OB_FAIL(roots(trans, namespace_id, root, true))) {
-        } else if (schema_version > root.schema_version) {
-          root.schema_version = schema_version;
-          ret = save_roots(trans, namespace_id, root);
-        }
-      }
     }
     if (OB_SUCC(ret)) {
       ObSqlString q;
@@ -2419,7 +1887,7 @@ int NamespaceForkKernelPrototype::schedule_baseline(const ObTablet &tablet) {
     ObTabletForkParam param; bool ready = false;
     // The exception table owns logical-to-physical identity; the tablet owns
     // the physical schema needed by compaction.
-    param.table_id_ = is_inner_table(table) ? table : encoded(db, table);
+    param.table_id_ = table;
     param.schema_version_ = storage_schema->get_schema_version();
     // Stable DAG identity only; no rootserver DDL task is created.
     param.task_id_ = meta.tablet_id_.id();

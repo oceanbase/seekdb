@@ -847,10 +847,6 @@ int ObTableSqlService::drop_table(const ObTableSchema &storage_schema,
       }
     }
   }
-  if (OB_SUCC(ret)) {
-    ret = storage::NamespaceForkKernelPrototype::forget_schema(
-        sql_client, table_schema, new_schema_version);
-  }
   return ret;
 }
 
@@ -1758,9 +1754,6 @@ int ObTableSqlService::add_table(
     }
   }
 
-  if (OB_SUCC(ret) && !only_history) {
-    ret = storage::NamespaceForkKernelPrototype::observe_schema(sql_client, table);
-  }
   return ret;
 }
 
@@ -1804,9 +1797,6 @@ int ObTableSqlService::batch_add_table_for_create_table(common::ObISQLClient &sq
     } else if (OB_FAIL(exec_dml(sql_client, OB_ALL_TABLE_HISTORY_TNAME, dml, tables.count()))) {
     } else if (FALSE_IT(time_guard.click("insert_all_table_history"))) {
     }
-  }
-  if (OB_SUCC(ret)) {
-    ret = storage::NamespaceForkKernelPrototype::observe_schemas(sql_client, tables);
   }
   return ret;
 }
