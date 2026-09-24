@@ -1461,15 +1461,6 @@ struct EngineWrites {
         }
       } else if (operation == 'O') {
         ret = process_table_lock(storage_space, request, *tx);
-      } else if (operation == 'a') {
-        ObTxExecResult result; request.read(result);
-        if (!request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-        else { ret = service->add_tx_exec_result(*tx, result); }
-      } else if (operation == 'E') {
-        ObTxExecResult result;
-        if (!request.consumed()) { ret = OB_INVALID_ARGUMENT; }
-        else { ret = service->collect_tx_exec_result(*tx, result); }
-        values.append(result);
       } else { ret = OB_NOT_SUPPORTED; }
     }
     reply = Frame('w'); reply.number(ret);
@@ -1541,6 +1532,8 @@ int call_in_process_tx_rollback_savepoint(ObTxDesc &view, ObTxSEQ savepoint,
     int64_t deadline, bool touched_storage, ObTxCleanPolicy policy);
 int call_in_process_tx_named_savepoint(ObTxDesc &view, char operation,
     const ObString &name, int64_t deadline);
+int call_in_process_tx_exec_result(ObTxDesc &view, char operation,
+    const ObTxExecResult *input, ObTxExecResult *output);
 int tx_state(char operation, ObTxDesc &view,
              const ObTxParam *param = nullptr, int64_t deadline = 0)
 {
@@ -1595,6 +1588,17 @@ int tx_named_savepoint(ObTxDesc &view, char operation,
   StorageSessionScope scope(session && session->get_tx_desc() == &view ? session : nullptr);
   const int ret = scope.error() ? scope.error()
       : call_in_process_tx_named_savepoint(view, operation, name, deadline);
+  revert_tx_owner_session(borrowed);
+  return ret;
+}
+int tx_exec_result(ObTxDesc &view, char operation,
+    const ObTxExecResult *input, ObTxExecResult *output)
+{
+  sql::ObSQLSessionInfo *borrowed = nullptr;
+  auto *session = tx_owner_session(view, borrowed);
+  StorageSessionScope scope(session && session->get_tx_desc() == &view ? session : nullptr);
+  const int ret = scope.error() ? scope.error()
+      : call_in_process_tx_exec_result(view, operation, input, output);
   revert_tx_owner_session(borrowed);
   return ret;
 }
@@ -1995,15 +1999,12 @@ public:
   int add_tx_exec_result(transaction::ObTxDesc &tx,
                                  const transaction::ObTxExecResult &exec_info) override {
     if (tx.is_shadow()) { return tx.add_exec_info(exec_info); }
-    Frame request, reply; request.append(exec_info);
-    return tx_rpc('a', tx, request, reply);
+    return tx_exec_result(tx, 'a', &exec_info, nullptr);
   }
   int collect_tx_exec_result(transaction::ObTxDesc &tx,
                                      transaction::ObTxExecResult &result) override {
     if (tx.is_shadow()) { return tx.get_inc_exec_info(result); }
-    Frame request, reply; int ret = tx_rpc('E', tx, request, reply);
-    if (!ret) { reply.read(result); if (!reply.consumed()) { ret = OB_INVALID_ARGUMENT; } }
-    return ret; }
+    return tx_exec_result(tx, 'E', nullptr, &result); }
   bool can_elr() const override { return false; }
 };
 

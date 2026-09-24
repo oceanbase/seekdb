@@ -485,6 +485,41 @@ int call_in_process_tx_named_savepoint(ObTxDesc &view, char operation,
   THIS_WORKER.set_timeout_ts(old_timeout);
   return ret;
 }
+int call_in_process_tx_exec_result(ObTxDesc &view, char operation,
+    const ObTxExecResult *input, ObTxExecResult *output)
+{
+  InProcessStorage *ctx = in_process_storage;
+  const StorageSpaceHandle space = active_worker_storage_space();
+  if (ctx == nullptr || !ctx->initialized || !ctx->writes) { return OB_NOT_INIT; }
+  if (!space.is_namespace() || ctx->ns != space.namespace_id()
+      || !ctx->writes->tx || ctx->writes->tx->get_tx_id() != view.get_tx_id()
+      || (operation != 'a' && operation != 'E')
+      || (operation == 'a' && !input) || (operation == 'E' && !output)) {
+    return OB_INVALID_ARGUMENT;
+  }
+  if (input) {
+    const int64_t size = input->get_serialize_size();
+    if (size < 0 || size > static_cast<int64_t>(MAX_SQL_MESSAGE - 64)) {
+      return OB_SIZE_OVERFLOW;
+    }
+  }
+  const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
+  auto *old_session = THIS_WORKER.get_session();
+  THIS_WORKER.set_session(&ctx->session);
+  auto *service = data_plane::query_transaction_service();
+  ObTxExecResult staged;
+  int ret = service ? OB_SUCCESS : OB_NOT_INIT;
+  if (!ret && operation == 'a') {
+    ret = service->add_tx_exec_result(*ctx->writes->tx, *input);
+  } else if (!ret) {
+    ret = service->collect_tx_exec_result(*ctx->writes->tx, staged);
+  }
+  if (!ret) { ret = view.sync_serialized_state_from(*ctx->writes->tx); }
+  if (!ret && output) { ret = output->assign(staged); }
+  THIS_WORKER.set_session(old_session);
+  THIS_WORKER.set_timeout_ts(old_timeout);
+  return ret;
+}
 int close_in_process_write(transaction::ObTxDesc &view, uint64_t handle)
 {
   InProcessStorage *ctx = in_process_storage;
