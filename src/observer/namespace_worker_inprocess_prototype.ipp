@@ -214,13 +214,10 @@ private:
         ret = worker_storage_space_for_schema(*logical_schema, guard, storage_space);
       }
     }
-    uint64_t storage_table_id = logical_table_id;
     common::ObTabletID storage_tablet = logical_tablet;
     if (OB_SUCC(ret) && storage_space.is_namespace() && storage_space.namespace_id() > 1) {
       if (!has_logical_schema) {
         ret = OB_INVALID_ARGUMENT;
-      } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
-                     storage_space.namespace_id(), logical_table_id, storage_table_id))) {
       } else {
         ret = route_tablet_id(storage_space, storage_tablet);
       }
@@ -231,7 +228,6 @@ private:
         ret = OB_INVALID_ARGUMENT;
       } else {
         common::ObStoreRange range = ranges.at(i);
-        if (has_logical_schema) { range.set_table_id(storage_table_id); }
         ret = storage_ranges.push_back(range);
       }
     }
@@ -265,7 +261,6 @@ private:
           common::ObSEArray<common::ObStoreRange, 4> group;
           for (int64_t j = 0; OB_SUCC(ret) && j < storage_split.count(i); ++j) {
             common::ObStoreRange range = storage_split.at(i, j);
-            if (has_logical_schema) { range.set_table_id(logical_table_id); }
             ret = group.push_back(range);
           }
           if (OB_SUCC(ret)) { ret = split->push_back(group); }

@@ -58,47 +58,20 @@ int ObStorageEstimator::estimate_row_count(const obcall::ObEstPartArg &arg,
     param.scan_flag_ = source.scan_flag_;
     param.tablet_id_ = source.tablet_id_;
     param.tx_id_ = source.tx_id_;
-    ObSimpleBatch routed_batch;
-    ObNewRange routed_range;
-    SQLScanRangeArray routed_ranges;
-    const ObSimpleBatch *batch = &source.batch_;
     bool inherited_with_cap = false;
     if (namespace_id > 1 && !is_inner_table(param.index_id_)) {
       uint64_t encoded_tablet_id = OB_INVALID_ID;
       common::ObTabletID physical_tablet;
       int64_t fork_cap = 0;
-      uint64_t physical_index_id = OB_INVALID_ID;
       if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
               namespace_id, param.tablet_id_.id(), encoded_tablet_id))) {
       } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::resolve_read_tablet(
                      common::ObTabletID(encoded_tablet_id), physical_tablet, fork_cap))) {
-      } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
-                     storage::NamespaceForkKernelPrototype::namespace_of(physical_tablet.id()),
-                     param.index_id_, physical_index_id))) {
       } else {
         inherited_with_cap = fork_cap > 0 && physical_tablet.id() != encoded_tablet_id;
         param.tablet_id_ = physical_tablet;
-        param.index_id_ = physical_index_id;
         if (fork_cap > 0) {
           param.frozen_version_ = std::min(param.frozen_version_, fork_cap);
-        }
-        if (source.batch_.type_ == ObSimpleBatch::T_SCAN && source.batch_.range_ != nullptr) {
-          routed_range = *source.batch_.range_;
-          routed_range.table_id_ = physical_index_id;
-          routed_batch.type_ = ObSimpleBatch::T_SCAN;
-          routed_batch.range_ = &routed_range;
-          batch = &routed_batch;
-        } else if (source.batch_.type_ == ObSimpleBatch::T_MULTI_SCAN
-                   && source.batch_.ranges_ != nullptr) {
-          if (OB_FAIL(routed_ranges.assign(*source.batch_.ranges_))) {
-          } else {
-            for (int64_t j = 0; j < routed_ranges.count(); ++j) {
-              routed_ranges.at(j).table_id_ = physical_index_id;
-            }
-            routed_batch.type_ = ObSimpleBatch::T_MULTI_SCAN;
-            routed_batch.ranges_ = &routed_ranges;
-            batch = &routed_batch;
-          }
         }
       }
     }
@@ -109,7 +82,7 @@ int ObStorageEstimator::estimate_row_count(const obcall::ObEstPartArg &arg,
       // Return an unreliable estimate instead of exposing parent-only rows.
       est_res.reset();
     } else {
-      ret = storage_estimate_rowcount(param, *batch, est_res);
+      ret = storage_estimate_rowcount(param, source.batch_, est_res);
     }
     if (OB_SUCC(ret)) {
       ret = res.index_param_res_.push_back(est_res);
