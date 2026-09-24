@@ -471,10 +471,6 @@ int ObIvfAsyncTaskExector::generate_aux_table_info_map(ObSchemaGetterGuard &sche
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < databases.count(); ++i) {
         const uint64_t database_id = databases.at(i)->get_database_id();
-        if (!ns::NamespaceObjectKey::is_encoded(database_id)
-            || ns::NamespaceObjectKey::encoded_namespace(database_id) != namespace_id) {
-          continue;
-        }
         ObSEArray<uint64_t, DEFAULT_TABLE_ID_ARRAY_SIZE> database_table_ids;
         if (OB_FAIL(schema_guard.get_table_ids_in_database(database_id, database_table_ids))) {
         } else {
