@@ -131,6 +131,43 @@ public:
     return ret;
   }
 
+  // Emits every path in one visible BFS level before advancing to the next
+  // level. Levels below the SQL lower bound are expanded but not returned.
+  int get_next_output_path(
+      const GraphFeedbackLoopSpec &spec,
+      const ObIArray<GraphPathState> *&path)
+  {
+    int ret = OB_SUCCESS;
+    path = nullptr;
+    if (OB_UNLIKELY(!seeds_loaded_)) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("graph feedback seeds are not loaded", K(ret));
+    }
+    while (OB_SUCC(ret) && path == nullptr) {
+      if (has_output_frontier(spec)
+          && next_output_index_ < get_output_count(spec)) {
+        if (OB_FAIL(get_output_path(spec, next_output_index_, path))) {
+          LOG_WARN("failed to read next graph feedback output path", K(ret),
+                   K_(next_output_index));
+        } else {
+          ++next_output_index_;
+        }
+      } else if (frontier_.empty()
+                 || frontier_.get_hop() >= spec.get_upper_bound()) {
+        ret = OB_ITER_END;
+      } else if (OB_FAIL(advance_frontier(spec))) {
+        if (ret != OB_ITER_END) {
+          LOG_WARN("failed to advance to next graph feedback output level",
+                   K(ret));
+        }
+      }
+    }
+    if (OB_SUCCESS != ret && OB_ITER_END != ret) {
+      reset();
+    }
+    return ret;
+  }
+
   // Advances exactly one level and never crosses the SQL upper bound. WALK
   // and TRAIL decisions remain path-local inside GraphFeedbackFrontier.
   int advance_frontier(const GraphFeedbackLoopSpec &spec)
@@ -150,6 +187,8 @@ public:
       }
     } else if (frontier_.empty()) {
       ret = OB_ITER_END;
+    } else {
+      next_output_index_ = 0;
     }
     if (OB_SUCCESS != ret && OB_ITER_END != ret) {
       reset();
@@ -161,6 +200,7 @@ public:
   {
     frontier_.reset();
     next_binding_id_ = 0;
+    next_output_index_ = 0;
     seeds_loaded_ = false;
   }
 
@@ -217,6 +257,7 @@ private:
   GraphExpand expand_;
   GraphFeedbackFrontier frontier_;
   int64_t next_binding_id_{0};
+  int64_t next_output_index_{0};
   bool seeds_loaded_{false};
 
   DISALLOW_COPY_AND_ASSIGN(GraphFeedbackRuntime);
