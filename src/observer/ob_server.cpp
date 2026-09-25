@@ -43,6 +43,7 @@ namespace oceanbase { namespace observer { common::ObILobReadService * ObServer:
 int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share::ObFreezeInfo &freeze_info) { return OB_ISNULL(mods_freeze_info_mgr_) ? common::OB_NOT_INIT : mods_freeze_info_mgr_->get_lower_bound_freeze_info_before_snapshot_version(snapshot_version, freeze_info); } } }
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
+#include "rootserver/ddl_task/ob_ddl_scheduler.h"
 #include "lib/alloc/memory_dump.h"
 #include "lib/oblog/ob_log_compressor.h"
 #include "lib/ob_running_mode.h"
@@ -2513,6 +2514,8 @@ int ObServer::init_global_context()
       &local_management_service_);
   home->set_service(ns::NamespaceRuntime::VIRTUAL_TABLE_SCAN_SERVICE,
       &vt_data_service_);
+  home->set_service(ns::NamespaceRuntime::DDL_CHECKSUM_ERROR_VERIFIER,
+      &rootserver::native_ddl_checksum_error_verifier());
   home->set_service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE,
       &share::ObAutoincrementService::get_instance());
   namespace_worker_prototype::register_root_namespace_storage_services(*home);

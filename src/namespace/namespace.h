@@ -82,6 +82,7 @@ public:
     VIRTUAL_TABLE_SCAN_SERVICE = 10,
     DML_SERVICE = 11,
     RANGE_SERVICE = 12,
+    DDL_CHECKSUM_ERROR_VERIFIER = 13,
     SLOT_COUNT
   };
   explicit NamespaceRuntime(Namespace &ns) : ns_(ns) {}

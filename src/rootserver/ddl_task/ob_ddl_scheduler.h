@@ -58,6 +58,16 @@ class ObMySQLResult;
 }
 namespace rootserver
 {
+class IDDLChecksumErrorVerifier
+{
+public:
+  virtual ~IDDLChecksumErrorVerifier() = default;
+  virtual int verify(share::ObDDLType type,
+                     const share::schema::ObTableSchema *source_table) = 0;
+};
+IDDLChecksumErrorVerifier &native_ddl_checksum_error_verifier();
+IDDLChecksumErrorVerifier &task_ddl_checksum_error_verifier();
+
 class ObDDLTaskQueue
 {
 public:

@@ -11,6 +11,7 @@
 #include "rootserver/ob_max_id_cache_adapter.h"
 #include "rootserver/ob_local_management_service.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h"
+#include "rootserver/ddl_task/ob_ddl_scheduler.h"
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 #include "share/ob_autoincrement_service.h"
 #include "share/schema/ob_schema_runtime_service.h"
@@ -630,6 +631,8 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
     runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_SERVICE, &services->direct_insert);
     runtime.set_service(ns::NamespaceRuntime::DML_SERVICE, &fork_inprocess_dml);
     runtime.set_service(ns::NamespaceRuntime::RANGE_SERVICE, &fork_inprocess_ranges);
+    runtime.set_service(ns::NamespaceRuntime::DDL_CHECKSUM_ERROR_VERIFIER,
+        &rootserver::task_ddl_checksum_error_verifier());
     runtime.set_service(ns::NamespaceRuntime::TABLET_AUTOINCREMENT_SERVICE,
         &services->tablet_autoincrement);
     runtime.set_service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE,
