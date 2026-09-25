@@ -24,8 +24,6 @@
 #include "config_checkers.h"
 #include "auto_config.h"
 
-#include <cstring>
-
 namespace oceanbase
 {
 namespace obcall
@@ -39,6 +37,22 @@ namespace common
 {
 namespace
 {
+constexpr char AUTO_CONFIG_PATH[] = "./etc/seekdb.auto.conf";
+
+int report_error(const char *operation, const AutoConfigError &error)
+{
+  int ret = OB_INVALID_CONFIG;
+  LOG_ERROR("auto-config operation failed", K(operation), "detail", error.message,
+            "line", error.line, "after_replace", error.after_replace);
+  if (error.after_replace != 0) {
+    LOG_USER_ERROR(OB_INVALID_CONFIG,
+                   "auto-config file was replaced, but durability could not be confirmed");
+  } else {
+    LOG_USER_ERROR(OB_INVALID_CONFIG, error.message);
+  }
+  return ret;
+}
+
 int check_load_entry(void *, const char *name, const char *value, uint32_t line)
 {
   int ret = OB_SUCCESS;
@@ -60,23 +74,13 @@ ObConfigManager::~ObConfigManager()
 int ObConfigManager::init()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(storage_.init())) {
+  AutoConfigError error = {};
+  if (0 != auto_config_supported(AUTO_CONFIG_PATH, &error)) {
+    ret = report_error("initialize", error);
   } else {
     inited_ = true;
   }
   return ret;
-}
-
-void ObConfigManager::stop()
-{
-}
-
-void ObConfigManager::wait()
-{
-}
-
-void ObConfigManager::destroy()
-{
 }
 
 int ObConfigManager::reload_config()
@@ -87,10 +91,17 @@ int ObConfigManager::reload_config()
 int ObConfigManager::update_local()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(storage_.load_active_checked(!enable_static_effect_, check_load_entry,
-                                           nullptr))) {
+  if (!inited_) {
+    ret = OB_NOT_INIT;
   } else {
-    LOG_INFO("read config success");
+    AutoConfigError error = {};
+    if (0 != auto_config_load_active_checked(AUTO_CONFIG_PATH,
+                                            enable_static_effect_ ? 0 : 1,
+                                            check_load_entry, nullptr, &error)) {
+      ret = report_error("load active", error);
+    } else {
+      LOG_INFO("read config success");
+    }
   }
   return ret;
 }
@@ -109,50 +120,18 @@ int ObConfigManager::got_version()
   return ret;
 }
 
-int ObConfigManager::save_config(
-    const char *config_name,
-    const char *value,
-    bool *after_replace)
-{
-  int ret = OB_SUCCESS;
-  if (nullptr != after_replace) {
-    *after_replace = false;
-  }
-  if (OB_ISNULL(config_name) || OB_ISNULL(value)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    if (!config::parameter_exists(rust::Str(config_name))) {
-      ret = OB_ERR_SYS_CONFIG_UNKNOWN;
-    } else if (OB_FAIL(storage_.save_config(config_name, value, after_replace))) {
-    }
-  }
-  return ret;
-}
-
-int ObConfigManager::reset_config(const char *config_name, bool *after_replace)
-{
-  int ret = OB_SUCCESS;
-  if (nullptr != after_replace) {
-    *after_replace = false;
-  }
-  if (OB_ISNULL(config_name)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (!config::parameter_exists(rust::Str(config_name))) {
-    ret = OB_ERR_SYS_CONFIG_UNKNOWN;
-  } else if (OB_FAIL(storage_.reset_config(config_name, after_replace))) {
-  }
-  return ret;
-}
-
 int ObConfigManager::save_internal_state(const char *name, const char *value)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(name) || OB_ISNULL(value)) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (0 != std::strcmp(name, "server_create_time") &&
-             0 != std::strcmp(name, "server_role_info")) {
-    ret = OB_ERR_SYS_CONFIG_UNKNOWN;
-  } else if (OB_FAIL(storage_.save_config(name, value))) {
+  } else if (!inited_) {
+    ret = OB_NOT_INIT;
+  } else {
+    AutoConfigError error = {};
+    if (0 != auto_config_update_internal_state(AUTO_CONFIG_PATH, name, value, &error)) {
+      ret = report_error("save internal state", error);
+    }
   }
   return ret;
 }
@@ -162,12 +141,26 @@ int ObConfigManager::update_checked(const char *name, const char *value, bool re
                                     bool *after_replace)
 {
   int ret = OB_SUCCESS;
+  if (nullptr != after_replace) {
+    *after_replace = false;
+  }
   if (nullptr == name) {
     ret = OB_INVALID_ARGUMENT;
   } else if (!config::parameter_exists(rust::Str(name))) {
     ret = OB_ERR_SYS_CONFIG_UNKNOWN;
-  } else if (OB_FAIL(storage_.update_checked(name, value, reset,
-                                             callback, context, after_replace))) {
+  } else if (!inited_) {
+    ret = OB_NOT_INIT;
+  } else if ((!reset && nullptr == value) || nullptr == callback) {
+    ret = OB_INVALID_ARGUMENT;
+  } else {
+    AutoConfigError error = {};
+    if (0 != auto_config_update_checked(AUTO_CONFIG_PATH, name, value,
+                                        reset ? 1 : 0, callback, context, &error)) {
+      if (nullptr != after_replace) {
+        *after_replace = 0 != error.after_replace;
+      }
+      ret = report_error(reset ? "checked reset" : "checked save", error);
+    }
   }
   return ret;
 }

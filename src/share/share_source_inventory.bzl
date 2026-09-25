@@ -234,7 +234,6 @@ SHARE_UNITY_GROUPS = [
             "src/share/config/ob_config_manager.cpp",
             "src/share/config/ob_reload_config.cpp",
             "src/share/config/ob_server_config.cpp",
-            "src/share/config/ob_config_storage.cpp",
         ],
         generated_srcs = [],
         external_srcs = [],

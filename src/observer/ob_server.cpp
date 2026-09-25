@@ -909,7 +909,6 @@ void ObServer::destroy()
   }
 
   FLOG_INFO("begin to destroy config manager");
-  config_mgr_.destroy();
   FLOG_INFO("destroy config manager success");
 
   if (!has_destroy_ && has_stopped_) {
@@ -1541,7 +1540,6 @@ int ObServer::stop()
   FLOG_INFO("stop task controller success");
 
   FLOG_INFO("begin to stop config manager");
-  config_mgr_.stop();
   FLOG_INFO("stop config manager success");
 
     FLOG_INFO("begin stop signal handle");

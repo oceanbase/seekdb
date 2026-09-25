@@ -27,12 +27,12 @@ typedef struct AutoConfigError {
   char message[512];
 } AutoConfigError;
 
+typedef int (*AutoConfigCheckCallback)(void *context);
+
 typedef int (*AutoConfigEntryCallback)(void *context,
                                        const char *name,
                                        const char *value,
                                        uint32_t line);
-
-typedef int (*AutoConfigCheckCallback)(void *context);
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,16 +40,10 @@ extern "C" {
 
 int auto_config_supported(const char *path, struct AutoConfigError *error);
 
-int auto_config_load(const char *path,
-                     AutoConfigEntryCallback callback,
-                     void *context,
-                     struct AutoConfigError *error);
-
-int auto_config_update(const char *path,
-                       const char *name,
-                       const char *value,
-                       uint8_t reset,
-                       struct AutoConfigError *error);
+int auto_config_update_internal_state(const char *path,
+                                      const char *name,
+                                      const char *value,
+                                      struct AutoConfigError *error);
 
 int auto_config_update_checked(const char *path,
                                const char *name,
@@ -58,8 +52,6 @@ int auto_config_update_checked(const char *path,
                                AutoConfigCheckCallback callback,
                                void *context,
                                struct AutoConfigError *error);
-
-int auto_config_load_active(const char *path, uint8_t startup, struct AutoConfigError *error);
 
 int auto_config_load_active_checked(const char *path,
                                     uint8_t startup,

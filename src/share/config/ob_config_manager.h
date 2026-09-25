@@ -19,7 +19,7 @@
 
 #include "share/config/ob_server_config.h"
 #include "share/config/ob_reload_config.h"
-#include "share/config/ob_config_storage.h"
+#include "auto_config.h"
 
 namespace oceanbase
 {
@@ -33,9 +33,6 @@ public:
   virtual ~ObConfigManager();
 
   int init();
-  void stop();
-  void wait();
-  void destroy();
 
   // Reload config really
   int reload_config();
@@ -43,12 +40,7 @@ public:
   int update_local();
   virtual int got_version();
   int save_configs();
-  int save_config(
-      const char *config_name,
-      const char *value,
-      bool *after_replace = nullptr);
   int save_internal_state(const char *name, const char *value);
-  int reset_config(const char *config_name, bool *after_replace = nullptr);
   int update_checked(const char *name, const char *value, bool reset,
                      AutoConfigCheckCallback callback, void *context,
                      bool *after_replace);
@@ -56,7 +48,6 @@ public:
 private:
   bool inited_;
   ObReloadConfig &reload_config_func_;
-  ObConfigStorage storage_;
   bool enable_static_effect_;
   DISALLOW_COPY_AND_ASSIGN(ObConfigManager);
 };

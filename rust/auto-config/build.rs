@@ -139,6 +139,14 @@ fn parameters(source: &str) -> Vec<Parameter> {
     let mut names = HashSet::new();
     for parameter in &parameters {
         rust_type(&parameter.kind);
+        if parameter.kind == "MODE_WITH_PARSER" {
+            let option_count = parameter.options.split(',').count();
+            assert!(
+                !parameter.options.is_empty() && option_count <= 32,
+                "mode parameter needs one to 32 declared operations: {}",
+                parameter.name
+            );
+        }
         assert!(
             names.insert(parameter.name.clone()),
             "duplicate parameter: {}",
@@ -183,10 +191,20 @@ fn generate_bridge(parameters: &[Parameter], internal_state: &[Parameter]) -> St
              }\n\
              extern \"Rust\" {\n",
     );
-    code.push_str("        fn parameter_count() -> usize;\n        fn parameter_row(index: usize) -> ParameterRow;\n        fn parameter_exists(name: &str) -> bool;\n        fn parameter_readonly(name: &str) -> bool;\n        fn parameter_default(name: &str) -> String;\n        fn parameter_valid(name: &str, value: &str) -> bool;\n        fn generation() -> i64;\n        fn server_create_time() -> i64;\n        fn server_role_info() -> String;\n        fn major_freeze_duty_time_parts() -> MomentTime;\n        fn parallel_ddl_control_bits() -> u64;\n");
+    code.push_str("        fn parameter_count() -> usize;\n        fn parameter_row(index: usize) -> ParameterRow;\n        fn parameter_exists(name: &str) -> bool;\n        fn parameter_readonly(name: &str) -> bool;\n        fn parameter_default(name: &str) -> String;\n        fn parameter_valid(name: &str, value: &str) -> bool;\n        fn generation() -> i64;\n        fn server_create_time() -> i64;\n        fn server_role_info() -> String;\n");
     for parameter in parameters {
         if let Some(ty) = rust_type(&parameter.kind) {
             code.push_str(&format!("        fn {}() -> {ty};\n", parameter.name));
+        }
+        match parameter.kind.as_str() {
+            "MOMENT" => code.push_str(&format!(
+                "        fn {}_parts() -> MomentTime;\n",
+                parameter.name
+            )),
+            "MODE_WITH_PARSER" => {
+                code.push_str(&format!("        fn {}_bits() -> u64;\n", parameter.name))
+            }
+            _ => {}
         }
     }
     code.push_str("    }\n}\n");
@@ -237,6 +255,17 @@ fn generate_bridge(parameters: &[Parameter], internal_state: &[Parameter]) -> St
                 ));
             }
             _ => unreachable!(),
+        }
+        match parameter.kind.as_str() {
+            "MOMENT" => code.push_str(&format!(
+                "pub fn {}_parts() -> bridge::MomentTime {{ parse_moment_parts(&{}()) }}\n",
+                parameter.name, parameter.name
+            )),
+            "MODE_WITH_PARSER" => code.push_str(&format!(
+                "pub fn {}_bits() -> u64 {{ parse_mode_bits(&{}(), {:?}) }}\n",
+                parameter.name, parameter.name, parameter.options
+            )),
+            _ => {}
         }
     }
     code.push_str("pub static CATALOG: &[ParameterMeta] = &[\n");

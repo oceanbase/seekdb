@@ -97,7 +97,7 @@ _force_hash_join_spill	BOOL	False		RUNTIME	DYNAMIC_EFFECTIVE	force hash join to 
 _enable_hash_join_hasher	INT	1	[1, 7]	RUNTIME	DYNAMIC_EFFECTIVE	which hash function to choose for hash join 1: murmurhash, 2: crc, 4: xxhash
 _enable_hash_join_processor	INT	7	[1, 7]	RUNTIME	DYNAMIC_EFFECTIVE	which path to process for hash join, default 7 to auto choose 1: nest loop, 2: recursive, 4: in-memory
 _pushdown_storage_level	INT	4	[0, 4]	RUNTIME	DYNAMIC_EFFECTIVE	the level of storage pushdown. Range: [0, 4] 0: disabled, 1:blockscan, 2: blockscan & filter, 3: blockscan & filter & aggregate, 4: blockscan & filter & aggregate & group by
-workarea_size_policy	WORK_AREA_POLICY	AUTO		RUNTIME	DYNAMIC_EFFECTIVE	policy used to size SQL working areas (MANUAL/AUTO)	ObConfigWorkAreaPolicyChecker
+workarea_size_policy	WORK_AREA_POLICY	AUTO		RUNTIME	DYNAMIC_EFFECTIVE	policy used to size SQL working areas (MANUAL/AUTO)	ObConfigWorkAreaPolicyChecker	AUTO, MANUAL
 temporary_file_max_disk_size	CAP	0M	[0,)	RUNTIME	DYNAMIC_EFFECTIVE	maximum disk usage of temporary file on a single node, 0 means no limit. Range: [0,+∞)
 _temporary_file_io_area_size	INT	1	[0, 50)	RUNTIME	DYNAMIC_EFFECTIVE	memory buffer size of temporary files, as a percentage of total server runtime memory. Range: [0, 50), percentage
 _storage_meta_memory_limit_percentage	INT	13	[0, 50)	RUNTIME	DYNAMIC_EFFECTIVE	maximum memory for storage metadata, as a percentage of total server runtime memory. Range: [0, 50), percentage, 0 means no limit to storage meta memory
@@ -112,7 +112,7 @@ enable_major_freeze	BOOL	True		ROOT_SERVICE	DYNAMIC_EFFECTIVE	specifies whether 
 ob_event_history_recycle_interval	TIME	7d	[1d, 180d]	ROOT_SERVICE	DYNAMIC_EFFECTIVE	the time to recycle event history. Range: [1d, 180d]
 _recyclebin_object_purge_frequency	TIME	10m	[0m,)	ROOT_SERVICE	DYNAMIC_EFFECTIVE	the time to purge recyclebin. Range: [0m, +∞)
 recyclebin_object_expire_time	TIME	0s	[0s,)	ROOT_SERVICE	DYNAMIC_EFFECTIVE	recyclebin object expire time, default 0 that means auto purge recyclebin off. Range: [0s, +∞)
-_parallel_ddl_control	MODE_WITH_PARSER			ROOT_SERVICE	DYNAMIC_EFFECTIVE	switch for parallel capability of parallel DDL	parser:common::ObParallelDDLControlParser
+_parallel_ddl_control	MODE_WITH_PARSER			ROOT_SERVICE	DYNAMIC_EFFECTIVE	switch for parallel capability of parallel DDL	parser:common::ObParallelDDLControlParser	TRUNCATE_TABLE, SET_COMMENT, CREATE_INDEX, CREATE_VIEW, DROP_TABLE
 log_disk_size	CAP	0M	[0M,)	LOGSERVICE	DYNAMIC_EFFECTIVE	the size of disk space used by the log files. Range: [0, +∞)
 log_disk_percentage	INT	0	[0,99]	LOGSERVICE	DYNAMIC_EFFECTIVE	the percentage of disk space used by the log files. Range: [0,99] in integer;only effective when parameter log_disk_size is 0;when log_disk_percentage is 0: a) if the data and the log are on the same disk, means log_disk_percentage = 30 b) if the data and the log are on the different disks, means log_disk_perecentage = 90
 log_disk_utilization_limit_threshold	INT	95	[80, 100]	LOGSERVICE	DYNAMIC_EFFECTIVE	maximum of log disk usage percentage before stop submitting or receiving logs, should be bigger than log_disk_utilization_threshold. Range: [80, 100]

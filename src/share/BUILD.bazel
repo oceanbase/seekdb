@@ -506,7 +506,6 @@ _CONFIG_UNITY_GROUP = share_select_unity_sources(
         "src/share/config/ob_config_manager.cpp",
         "src/share/config/ob_reload_config.cpp",
         "src/share/config/ob_server_config.cpp",
-        "src/share/config/ob_config_storage.cpp",
     ],
 )
 
@@ -517,7 +516,6 @@ seekdb_semantic_unity_cc_library(
     public_hdrs = [
         "config/ob_config_manager.h",
         "config/ob_config_rpc_types.h",
-        "config/ob_config_storage.h",
         "config/ob_parallel_ddl_control_mode.h",
         "config/ob_reload_config.h",
         "config/ob_server_config.h",

@@ -238,21 +238,15 @@ fn validate_moment(name: &str, value: &str) -> Result<(), crate::Error> {
     Ok(())
 }
 
-fn validate_parallel_ddl_mode(name: &str, value: &str) -> Result<(), crate::Error> {
+fn validate_mode(name: &str, value: &str, options: &str) -> Result<(), crate::Error> {
     if value.trim().is_empty() {
         return Ok(());
     }
     for item in value.split(',') {
         let (operation, state) = item.split_once(':').ok_or_else(|| invalid_value(name))?;
-        if ![
-            "TRUNCATE_TABLE",
-            "SET_COMMENT",
-            "CREATE_INDEX",
-            "CREATE_VIEW",
-            "DROP_TABLE",
-        ]
-        .iter()
-        .any(|candidate| operation.trim().eq_ignore_ascii_case(candidate))
+        if !options
+            .split(',')
+            .any(|candidate| operation.trim().eq_ignore_ascii_case(candidate.trim()))
             || !["on", "off"]
                 .iter()
                 .any(|candidate| state.trim().eq_ignore_ascii_case(candidate))
@@ -287,25 +281,8 @@ pub fn validate(name: &str, value: &str) -> Result<&'static ParameterMeta, crate
             parse_bool(name, value)?;
         }
         "MOMENT" => validate_moment(name, value)?,
-        "MODE_WITH_PARSER" => validate_parallel_ddl_mode(name, value)?,
-        "LOG_LEVEL" => {
-            if !parameter
-                .options
-                .split(',')
-                .any(|option| option.trim().eq_ignore_ascii_case(value))
-            {
-                return Err(invalid_value(name));
-            }
-        }
-        "WORK_AREA_POLICY" => {
-            if !["AUTO", "MANUAL"]
-                .iter()
-                .any(|option| option.eq_ignore_ascii_case(value))
-            {
-                return Err(invalid_value(name));
-            }
-        }
-        "STR" => {
+        "MODE_WITH_PARSER" => validate_mode(name, value, parameter.options)?,
+        "LOG_LEVEL" | "WORK_AREA_POLICY" | "STR" => {
             if !parameter.options.is_empty()
                 && !parameter
                     .options
@@ -595,8 +572,7 @@ pub fn snapshot(names: &[&str]) -> Result<Vec<String>, crate::Error> {
         .collect()
 }
 
-pub fn major_freeze_duty_time_parts() -> bridge::MomentTime {
-    let value = major_freeze_duty_time();
+fn parse_moment_parts(value: &str) -> bridge::MomentTime {
     if value.eq_ignore_ascii_case("disable") {
         bridge::MomentTime {
             disabled: true,
@@ -613,21 +589,14 @@ pub fn major_freeze_duty_time_parts() -> bridge::MomentTime {
     }
 }
 
-pub fn parallel_ddl_control_bits() -> u64 {
-    let value = _parallel_ddl_control();
+fn parse_mode_bits(value: &str, options: &str) -> u64 {
     let mut bits = 0_u64;
     for item in value.split(',').filter(|item| !item.trim().is_empty()) {
         let (operation, state) = item.split_once(':').expect("validated parallel DDL mode");
-        let index = [
-            "TRUNCATE_TABLE",
-            "SET_COMMENT",
-            "CREATE_INDEX",
-            "CREATE_VIEW",
-            "DROP_TABLE",
-        ]
-        .iter()
-        .position(|candidate| operation.trim().eq_ignore_ascii_case(candidate))
-        .expect("validated parallel DDL operation");
+        let index = options
+            .split(',')
+            .position(|candidate| operation.trim().eq_ignore_ascii_case(candidate.trim()))
+            .expect("validated mode operation");
         let mode = if state.trim().eq_ignore_ascii_case("on") {
             2_u64
         } else {
@@ -637,8 +606,4 @@ pub fn parallel_ddl_control_bits() -> u64 {
         bits = (bits & !(3_u64 << shift)) | (mode << shift);
     }
     bits
-}
-
-pub fn update_cpu_count(path: &Path, value: &str) -> Result<(), crate::Error> {
-    update_parameter(path, "cpu_count", Some(value))
 }

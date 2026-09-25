@@ -69,7 +69,6 @@ int ObSQLiteConnectionPool::init(const char *db_path)
     ret = OB_INVALID_ARGUMENT;
   } else {
     snprintf(db_path_, OB_MAX_FILE_NAME_LENGTH, "%s", db_path);
-    // Tables are created by specific storage classes (ObConfigStorage, ObTabletMetaTableStorage)
     // This class only manages the database connection
     LOG_INFO("sqlite table storage init success", K(db_path));
   }
@@ -121,4 +120,3 @@ void ObSQLiteConnectionPool::destroy()
 
 } // namespace share
 } // namespace oceanbase
-
