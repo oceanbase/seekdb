@@ -76,7 +76,7 @@ public:
     if (OB_UNLIKELY(seeds_loaded_)) {
       ret = OB_INIT_TWICE;
       LOG_WARN("graph feedback seeds are already loaded", K(ret),
-               K_(next_binding_id));
+               "binding_count", binding_store_.count());
     }
     while (OB_SUCC(ret) && !seeds_loaded_) {
       const int next_ret = anchor.get_next_row();
@@ -85,7 +85,7 @@ public:
       } else if (next_ret != OB_SUCCESS) {
         ret = next_ret;
         LOG_WARN("failed to read graph feedback seed row", K(ret));
-      } else if (OB_FAIL(add_seed(spec))) {
+      } else if (OB_FAIL(add_seed(anchor.get_spec().output_, spec))) {
         LOG_WARN("failed to save graph feedback seed row", K(ret));
       }
     }
@@ -212,24 +212,24 @@ public:
   {
     frontier_.reset();
     binding_store_.reset();
-    next_binding_id_ = 0;
     next_output_index_ = 0;
     seeds_loaded_ = false;
   }
 
 private:
-  int add_seed(const GraphFeedbackLoopSpec &spec)
+  int add_seed(const ObIArray<ObExpr *> &binding_exprs,
+               const GraphFeedbackLoopSpec &spec)
   {
     int ret = OB_SUCCESS;
+    int64_t binding_id = -1;
     GraphElementIdentity identity;
     ObObj key_values[OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
     const ExprFixedArray &key_exprs = spec.get_seed_key_exprs();
     const int64_t key_count = key_exprs.count();
-    if (OB_UNLIKELY(!spec.has_valid_seed_key_exprs()
-                    || next_binding_id_ == INT64_MAX)) {
+    if (OB_UNLIKELY(!spec.has_valid_seed_key_exprs())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid graph feedback seed state", K(ret), K(key_count),
-               K_(next_binding_id));
+               "binding_count", binding_store_.count());
     } else {
       identity.graph_id_ = spec.get_path_desc().graph_id_;
       identity.element_id_ = spec.get_path_desc().source_element_id_;
@@ -252,12 +252,15 @@ private:
       }
     }
     if (OB_SUCC(ret)
-        && OB_FAIL(frontier_.add_seed(next_binding_id_, identity))) {
+        && OB_FAIL(binding_store_.add_binding(
+               binding_exprs, eval_ctx_, binding_id))) {
+      LOG_WARN("failed to store graph feedback seed binding", K(ret),
+               "binding_count", binding_store_.count());
+    } else if (OB_SUCC(ret)
+               && OB_FAIL(frontier_.add_seed(binding_id, identity))) {
       ret = normalize_work_area_error(ret);
       LOG_WARN("failed to add graph feedback seed", K(ret),
-               K_(next_binding_id), K(identity));
-    } else if (OB_SUCC(ret)) {
-      ++next_binding_id_;
+               K(binding_id), K(identity));
     }
     if (OB_SUCCESS != ret) {
       reset();
@@ -281,7 +284,6 @@ private:
   GraphExpand expand_;
   GraphFeedbackFrontier frontier_;
   int64_t memory_limit_{0};
-  int64_t next_binding_id_{0};
   int64_t next_output_index_{0};
   bool seeds_loaded_{false};
 
