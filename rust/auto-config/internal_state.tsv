@@ -1,3 +1,0 @@
-# name<TAB>type<TAB>default<TAB>range<TAB>section<TAB>edit level<TAB>description<TAB>checker or parser<TAB>options
-server_create_time	INT	0	[1,)	OBSERVER	READONLY	the first time this server created, default: 0 (invalid timestamp), Range: [1,)
-server_role_info	STR			OBSERVER	DYNAMIC_EFFECTIVE	server role state, format: active_role:pending_role:transition_status:cutover_scn

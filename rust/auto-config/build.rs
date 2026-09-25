@@ -14,15 +14,24 @@
 
 use std::{collections::HashSet, env, fs, path::PathBuf};
 
+use serde::Deserialize;
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Parameter {
     name: String,
+    #[serde(rename = "type")]
     kind: String,
+    #[serde(rename = "default")]
     default_text: String,
+    #[serde(default)]
     range: String,
     section: String,
     edit_level: String,
     description: String,
+    #[serde(default)]
     checker: String,
+    #[serde(default)]
     options: String,
 }
 
@@ -101,17 +110,12 @@ fn log_default() -> &'static str {
 }
 
 fn parameters(source: &str) -> Vec<Parameter> {
-    let parameters: Vec<_> = source
-        .lines()
-        .filter(|line| !line.is_empty() && !line.starts_with('#'))
-        .map(|line| {
-            let mut fields: Vec<_> = line.split('\t').collect();
-            assert!(
-                (7..=9).contains(&fields.len()),
-                "parameter declaration must have seven to nine fields"
-            );
-            fields.resize(9, "");
-            let name = fields[0];
+    let parameters: Vec<Parameter> =
+        serde_yaml::from_str(source).expect("invalid YAML parameter declarations");
+    let parameters: Vec<_> = parameters
+        .into_iter()
+        .map(|mut parameter| {
+            let name = parameter.name.as_str();
             assert!(
                 name.starts_with(|ch: char| ch.is_ascii_lowercase() || ch == '_')
                     && name
@@ -119,21 +123,10 @@ fn parameters(source: &str) -> Vec<Parameter> {
                         .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_'),
                 "invalid parameter name: {name}"
             );
-            Parameter {
-                name: name.to_owned(),
-                kind: fields[1].to_owned(),
-                default_text: if fields[2] == "@DEFAULT_LOG_LEVEL@" {
-                    log_default().to_owned()
-                } else {
-                    fields[2].to_owned()
-                },
-                range: fields[3].to_owned(),
-                section: fields[4].to_owned(),
-                edit_level: fields[5].to_owned(),
-                description: fields[6].to_owned(),
-                checker: fields[7].to_owned(),
-                options: fields[8].to_owned(),
+            if parameter.default_text == "@DEFAULT_LOG_LEVEL@" {
+                parameter.default_text = log_default().to_owned();
             }
+            parameter
         })
         .collect();
     let mut names = HashSet::new();
@@ -401,9 +394,9 @@ fn generate_cpp_checkers(parameters: &[Parameter]) -> String {
 
 fn main() {
     let crate_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let catalog = fs::read_to_string(crate_dir.join("parameters.tsv"))
+    let catalog = fs::read_to_string(crate_dir.join("parameters.yaml"))
         .expect("cannot read Rust parameter declarations");
-    let state_catalog = fs::read_to_string(crate_dir.join("internal_state.tsv"))
+    let state_catalog = fs::read_to_string(crate_dir.join("internal_state.yaml"))
         .expect("cannot read Rust internal-state declarations");
     let output_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let generated = output_dir.join("generated_config.rs");
@@ -445,8 +438,8 @@ fn main() {
 
     println!("cargo:rerun-if-changed=src/ffi.rs");
     println!("cargo:rerun-if-changed=cbindgen.toml");
-    println!("cargo:rerun-if-changed=parameters.tsv");
-    println!("cargo:rerun-if-changed=internal_state.tsv");
+    println!("cargo:rerun-if-changed=parameters.yaml");
+    println!("cargo:rerun-if-changed=internal_state.yaml");
     println!("cargo:rerun-if-env-changed=SEEKDB_CXX_HEADER_DIR");
     println!("cargo:rerun-if-env-changed=SEEKDB_DEFAULT_LOG_LEVEL");
 }

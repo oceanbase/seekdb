@@ -1,0 +1,2205 @@
+# Instance parameter declarations, in display order.
+- name: data_dir
+  type: STR
+  default: "store"
+  section: SSTABLE
+  edit_level: READONLY
+  description: "the directory for the data file"
+
+- name: redo_dir
+  type: STR
+  default: ""
+  section: SSTABLE
+  edit_level: READONLY
+  description: "the directory for the redo/clog file"
+
+- name: datafile_size
+  type: CAP
+  default: "32M"
+  range: "[0M,)"
+  section: SSTABLE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "size of the data file. Range: [0, +∞)"
+
+- name: datafile_next
+  type: CAP
+  default: "0M"
+  range: "[0M,)"
+  section: SSTABLE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the auto extend step. 0 means using adaptive extend step size. Range: [0, +∞)"
+
+- name: datafile_maxsize
+  type: CAP
+  default: "1T"
+  range: "[0M,)"
+  section: SSTABLE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the auto extend max size. Range: [0, +∞)"
+
+- name: datafile_disk_percentage
+  type: INT
+  default: "0"
+  range: "[0,99]"
+  section: SSTABLE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the percentage of disk space used by the data files. Range: [0,99] in integer"
+
+- name: _datafile_usage_upper_bound_percentage
+  type: INT
+  default: "90"
+  range: "[5,99]"
+  section: SSTABLE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the percentage of disk space usage upper bound to trigger datafile extend. Range: [5,99] in integer"
+
+- name: enable_rpc_service
+  type: BOOL
+  default: "False"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether the standby gRPC service is enabled. Enabling takes effect dynamically; disabling takes effect after restart. Value: True: enabled False: disabled"
+
+- name: enable_rpc_tls
+  type: BOOL
+  default: "False"
+  section: OBSERVER
+  edit_level: STATIC_EFFECTIVE
+  description: "specifies whether mutual TLS (mTLS) is enabled for inter-node RPC communication. When True, certificates must exist in the wallet directory. Value: True: enabled False: disabled"
+
+- name: rpc_port
+  type: INT
+  default: "2882"
+  range: "(1024,65536)"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the port number for RPC protocol. Range: (1024, 65536) in integer"
+
+- name: mysql_port
+  type: INT
+  default: "2881"
+  range: "(1024,65536)"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "port number for mysql connection. Range: (1024, 65536) in integer"
+
+- name: mysql_port_mode
+  type: STR
+  default: "specified"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "port mode for mysql connection: specified, random, or disabled"
+
+- name: internal_sql_execute_timeout
+  type: TIME
+  default: "30s"
+  range: "[1000us, 1h]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the number of microseconds an internal DML request is permitted to execute before it is terminated. Range: [1000us, 1h]"
+
+- name: net_thread_count
+  type: INT
+  default: "0"
+  range: "[0,128]"
+  section: OBSERVER
+  edit_level: STATIC_EFFECTIVE
+  description: "the number of MySQL I/O threads. Range: [0, 128] in integer, 0 selects an adaptive value"
+
+- name: server_task_queue_size
+  type: INT
+  default: "16384"
+  range: "[1024,]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the size of the local server runtime task queue. Range: [1024,+∞)"
+
+- name: memory_budget
+  type: CAP_WITH_CHECKER
+  default: "0M"
+  range: "[0M,)"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the logical memory budget used to size caches and buffers. 0 targets 80% of cgroup or physical memory while reserving at least 1G for the system when possible. The minimum automatic value is 1G. Range: 0, [1G,)."
+  checker: "common::MemoryBudgetConfigChecker"
+
+- name: memory_limit
+  type: CAP_WITH_CHECKER
+  default: "0M"
+  range: "[0M,)"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "deprecated compatibility parameter. The configured value is accepted and persisted, but is ignored by memory sizing and memory control. Range: 0, [1G,)."
+  checker: "common::MemoryBudgetConfigChecker"
+
+- name: kvcache_memory_limit
+  type: CAP_WITH_CHECKER
+  default: "0M"
+  range: "[0M,1T]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the maximum memory used by KV cache. 0 derives the limit from memory_budget. The automatic value is min(1T, 40% of memory_budget). A dynamic increase cannot exceed the capacity reserved at startup. Range: [0M,1T]."
+  checker: "common::KVCacheMemoryLimitConfigChecker"
+
+- name: memstore_memory_limit
+  type: CAP
+  default: "0M"
+  range: "[0M,)"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the maximum memory used by Memstore. 0 derives the limit from memory_budget. The automatic value is 50% of memory_budget. Range: [0M,)."
+
+- name: vector_memory_limit
+  type: CAP
+  default: "0M"
+  range: "[0M,)"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the maximum memory used by the vector module. 0 derives the limit from effective memory, which is the smaller of physical memory and a finite cgroup memory limit. The automatic value is 50% of effective memory. The Vector allocator enforces this module limit independently of the TxShare aggregate limit. Range: [0M,)."
+
+- name: cpu_count
+  type: INT
+  default: "0"
+  range: "[0,]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the number of CPU\\'s in the system. If this parameter is set to zero, the number will be set according to sysconf; otherwise, this parameter is used. Range: [0,+∞) in integer"
+
+- name: trace_log_slow_query_watermark
+  type: TIME
+  default: "1s"
+  range: "[1ms,]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the threshold of execution time (in milliseconds) of a query beyond which it is considered to be \\'slow query\\'. Range: [1ms,+∞)"
+
+- name: enable_record_trace_log
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether to always record the trace log. The default value is True."
+
+- name: max_string_print_length
+  type: INT
+  default: "500"
+  range: "[0,]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "truncate very long string when printing to log file. Range:[0,]"
+
+- name: enable_record_trace_id
+  type: BOOL
+  default: "False"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether record app trace id is turned on."
+
+- name: enable_rich_error_msg
+  type: BOOL
+  default: "false"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether add ip:port, time and trace id to user error message. The default value is FALSE."
+
+- name: debug_sync_timeout
+  type: TIME
+  default: "0"
+  range: "[0,)"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Enable the debug sync facility and optionally specify a default wait timeout in micro seconds. A zero value keeps the facility disabled, Range: [0, +∞]"
+
+- name: dead_socket_detection_timeout
+  type: TIME
+  default: "3s"
+  range: "[0s,2h]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specify a tcp_user_timeout for RFC5482. A zero value makes the option disabled, Range: [0, 2h]"
+
+- name: enable_perf_event
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether to enable perf event feature. The default value is True."
+
+- name: schema_history_expire_time
+  type: TIME
+  default: "7d"
+  range: "[1m, 30d]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the expire time for schema history, from 1min to 30days, with default 7days. Range: [1m, 30d]"
+
+- name: default_compress_func
+  type: STR_WITH_CHECKER
+  default: "zstd_1.3.8"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "default compress function name for create new table, values: none, zlib_1.0, zstd_1.3.8"
+  checker: "common::ObConfigCompressFuncChecker"
+  options: "none, zlib_1.0, zstd_1.3.8"
+
+- name: default_row_format
+  type: STR_WITH_CHECKER
+  default: "dynamic"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "default row format in mysql mode"
+  checker: "common::ObConfigRowFormatChecker"
+  options: "REDUNDANT, COMPACT, DYNAMIC, COMPRESSED, CONDENSED"
+
+- name: storage_rowsets_size
+  type: INT
+  default: "8192"
+  range: "(0,1048576]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the row number processed by vectorized storage engine within one batch. Range: (0,1048576]"
+
+- name: weak_read_version_refresh_interval
+  type: TIME
+  default: "1000ms"
+  range: "[50ms,)"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the time interval to refresh cluster weak read version Range: [50ms, +∞)"
+
+- name: syslog_level
+  type: LOG_LEVEL
+  default: "@DEFAULT_LOG_LEVEL@"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies the current level of logging. There are DEBUG, TRACE, WDIAG, EDIAG, INFO, WARN, ERROR, seven different log levels."
+  checker: "ObConfigLogLevelChecker"
+  options: "DEBUG, TRACE, WDIAG, EDIAG, INFO, WARN, ERROR"
+
+- name: syslog_io_bandwidth_limit
+  type: CAP
+  default: "5MB"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Syslog IO bandwidth limitation, exceeding syslog would be truncated. Use 0 to disable ERROR log."
+
+- name: diag_syslog_per_error_limit
+  type: INT
+  default: "200"
+  range: "[0,]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "DIAG syslog limitation for each error per second, exceeding syslog would be truncated"
+
+- name: max_syslog_file_count
+  type: INT_WITH_CHECKER
+  default: "2"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies the maximum number of the log files that can co-exist before the log file recycling kicks in. Each log file can occupy at most 256MB disk space. When this value is set to 0, no log file will be removed. Range: [0, +∞) in integer"
+  checker: "common::ObConfigMaxSyslogFileCountChecker"
+
+- name: enable_async_syslog
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether use async log for observer.log, elec.log and rs.log"
+
+- name: syslog_disk_size
+  type: CAP
+  default: "0M"
+  range: "[0M,)"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the size of disk space used by the syslog files. Range: [0, +∞)"
+
+- name: syslog_compress_func
+  type: STR_WITH_CHECKER
+  default: "none"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "compress function name for syslog files, values: none, zstd_1.3.8"
+  checker: "common::ObConfigSyslogCompressFuncChecker"
+  options: "none, zstd_1.3.8"
+
+- name: syslog_file_uncompressed_count
+  type: INT_WITH_CHECKER
+  default: "0"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies the minimum number of the syslog files that will not be compressed. Each syslog file can occupy at most 256MB disk space. When this value is set to 0, all syslog file may be compressed. Range: [0, +∞) in integer"
+  checker: "common::ObConfigSyslogFileUncompressedCountChecker"
+
+- name: cache_wash_threshold
+  type: CAP
+  default: "64M"
+  range: "[0B,]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "size of remaining memory at which cache eviction will be triggered. Range: [0,+∞)"
+
+- name: memory_chunk_cache_size
+  type: CAP
+  default: "0M"
+  range: "[0M,]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the maximum size of memory cached by memory chunk cache. Range: [0M,], 0 stands for adaptive"
+
+- name: enable_sql_operator_dump
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether sql operators (sort/hash join/material/window function/interm result/...) allowed to write to disk"
+
+- name: _chunk_row_store_mem_limit
+  type: CAP
+  default: "0M"
+  range: "[0M,]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the maximum size of memory used by ChunkRowStore, 0 means follow operator's setting. Range: [0, +∞)"
+
+- name: _sort_area_size
+  type: CAP
+  default: "32M"
+  range: "[2M,]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "size of maximum memory that could be used by SORT. Range: [2M,+∞)"
+
+- name: _hash_area_size
+  type: CAP
+  default: "32M"
+  range: "[4M,]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "size of maximum memory that could be used by HASH JOIN. Range: [4M,+∞)"
+
+- name: _enable_partition_level_retry
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether allow the partition level retry when the leader changes"
+
+- name: _enable_defensive_check
+  type: INT_WITH_CHECKER
+  default: "1"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether allow to do some defensive checks when the query is executed, 0 means defensive check is disabled, 1 means normal defensive check is enabled, 2 means more strict defensive check is enabled, such as check partition id validity"
+  checker: "common::ObConfigEnableDefensiveChecker"
+
+- name: _sql_insert_multi_values_split_opt
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "True means that the split + batch optimization for inserting multiple rows of the insert values ​​statement can be done"
+
+- name: _min_malloc_sample_interval
+  type: INT
+  default: "16"
+  range: "[1, 10000]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the min malloc times between two samples, which is not more than _max_malloc_sample_interval. 10000 means not to sample any malloc, Range: [1, 10000]"
+
+- name: _max_malloc_sample_interval
+  type: INT
+  default: "256"
+  range: "[1, 10000]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the max malloc times between two samples, which is not less than _min_malloc_sample_interval. 1 means to sample all malloc, Range: [1, 10000]"
+
+- name: _enable_values_table_folding
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "whether enable values statement folds self params"
+
+- name: spill_compression_codec
+  type: STR_WITH_CHECKER
+  default: "NONE"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specific the compression algorithm type to compress the spilled data in temp block store during the sql execution phase. The supported compression codec is ZSTD. NONE means no compression.The default value is NONE."
+  checker: "common::ObConfigSQLSpillCompressionCodecChecker"
+  options: "zstd"
+
+- name: max_stale_time_for_weak_consistency
+  type: TIME_WITH_CHECKER
+  default: "5s"
+  range: "[5s,)"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the max data stale time that cluster weak read version behind current timestamp,no smaller than weak_read_version_refresh_interval, range: [5s, +∞)"
+  checker: "common::ObConfigStaleTimeChecker"
+
+- name: enable_monotonic_weak_read
+  type: BOOL
+  default: "false"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies observer supportting atomicity and monotonic order read"
+
+- name: server_cpu_quota_min
+  type: DBL
+  default: "0"
+  range: "[0,16]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the minimum number of vCPUs allocated to the server runtime. 0 stands for adaptive. Range: [0, 16]"
+
+- name: server_cpu_quota_max
+  type: DBL
+  default: "0"
+  range: "[0,16]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the maximum number of vCPUs allocated to the server runtime. 0 stands for adaptive. Range: [0, 16]"
+
+- name: workers_per_cpu_quota
+  type: INT
+  default: "10"
+  range: "[2,20]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the ratio(integer) between the number of system allocated workers vs the maximum number of threads that can be scheduled concurrently. Range: [2, 20]"
+
+- name: _ob_max_thread_num
+  type: INT
+  default: "0"
+  range: "[0,10000)"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "ob max thread number upper limit of observer thread count. Range: [0, 10000), 0 means no limit."
+
+- name: cpu_quota_concurrency
+  type: DBL
+  default: "10"
+  range: "[1,20]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "max allowed concurrency for 1 CPU quota. Range: [1,20]"
+
+- name: px_workers_per_cpu_quota
+  type: INT
+  default: "10"
+  range: "[0,20]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the ratio(integer) between the number of system allocated px workers vs the maximum number of threads that can be scheduled concurrently. Range: [0, 20]"
+
+- name: undo_retention
+  type: INT
+  default: "1800"
+  range: "[0, 4294967295]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the low threshold value of undo retention. The system retains undo for at least the time specified in this config when active txn protection is banned. Range: [0, 4294967295]"
+
+- name: _mvcc_gc_using_min_txn_snapshot
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies enable mvcc gc using active txn snapshot"
+
+- name: _rowsets_target_maxsize
+  type: INT
+  default: "524288"
+  range: "[262144, 8388608]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the size of the memory reserved for vectorized sql engine. Range: [262144, 8388608]"
+
+- name: _rowsets_max_rows
+  type: INT
+  default: "256"
+  range: "[0, 65535]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the row number processed by vectorized sql engine within one batch. Range: [0, 65535]"
+
+- name: _ctx_memory_limit
+  type: STR_WITH_CHECKER
+  default: ""
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies server runtime context memory limits."
+  checker: "common::ObCtxMemoryLimitChecker"
+
+- name: _enable_convert_real_to_decimal
+  type: BOOL
+  default: "False"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether convert column type float(M,D), double(M,D) to decimal(M,D) in DDL"
+
+- name: _enable_decimal_int_type
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies wether use decimal_int type as backend for decimal values"
+
+- name: _optimizer_ads_time_limit
+  type: INT
+  default: "10"
+  range: "[0, 300]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the maximum optimizer dynamic sampling time limit. Range: [0, 300]"
+
+- name: _hash_join_enabled
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable/disable hash join"
+
+- name: _optimizer_sortmerge_join_enabled
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable/disable merge join"
+
+- name: _nested_loop_join_enabled
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable/disable nested loop join"
+
+- name: _enable_mysql_compatible_dates
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Specifies whether to use MySQL-compatible date format that allows for invalid dates."
+
+- name: _min_const_integer_precision
+  type: INT
+  default: "1"
+  range: "[1, 20]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the minimum precision of integer constant"
+
+- name: _lob_rowsets_max_rows
+  type: INT
+  default: "65535"
+  range: "[1, 65535]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "max batch size of physical plan with lob data"
+
+- name: _use_hash_rollup
+  type: STR_WITH_CHECKER
+  default: "AUTO"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "policy of hash based rollup plan:AUTO: hash rollup plan is up to optimizer;FORCED: hash rollup plan is used by default;DISABLED: hash rollup plan is disabled;"
+  checker: "common::ObConfigEnableHashRollupChecker"
+  options: "auto, forced, disabled"
+
+- name: _enable_constant_type_demotion
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Controls whether to enable constant type demotion to optimize comparisons between constants and columns by downgrading the constant's type to match the column's type."
+
+- name: _non_standard_comparison_level
+  type: STR_WITH_CHECKER
+  default: "NONE"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Enable non-standard comparisons to optimize filtering by aligning constants with column types. Currently only affects comparisons between string columns and int constants NONE: all comparison types use standard comparison. EQUAL: non-standard comparisons rules will applied in equal conditions. RANGE: non-standard comparisons rules will applied in range conditions. "
+  checker: "common::ObConfigNonStdCmpLevelChecker"
+  options: "none, equal, range"
+
+- name: _memstore_limit_percentage
+  type: INT
+  default: "0"
+  range: "[0, 100)"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Deprecated compatibility parameter. The configured value is accepted and persisted, but is ignored by memstore sizing and memory control."
+
+- name: freeze_trigger_percentage
+  type: INT
+  default: "20"
+  range: "(0, 100)"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the threshold of the size of the mem store when freeze will be triggered. Rang:(0,100)"
+
+- name: writing_throttling_trigger_percentage
+  type: INT
+  default: "60"
+  range: "(0, 100]"
+  section: TRANS
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the threshold of the size of the mem store when writing_limit will be triggered. Rang:(0,100]. setting 100 means turn off writing limit"
+
+- name: data_disk_write_limit_percentage
+  type: INT
+  default: "0"
+  range: "[0, 100)"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "used to stop user write operations. When the user data disk reaches this watermark, SQL requests will report that the disk is full. The configuration should be greater than data_disk_usage_limit_percentage, with the recommended setting being: (1 - memstore_limit_size / data_disk_size) * 100%"
+
+- name: writing_throttling_maximum_duration
+  type: TIME
+  default: "2h"
+  range: "[1s, 3d]"
+  section: TRANS
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "maximum duration of writting throttling(in minutes), max value is 3 days"
+
+- name: plan_cache_evict_interval
+  type: TIME
+  default: "5s"
+  range: "[0s,)"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "time interval for periodic plan cache eviction. Range: [0s, +∞)"
+
+- name: default_progressive_merge_num
+  type: INT
+  default: "0"
+  range: "[0,)"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "default progressive_merge_num for a newly created table. Range:[0,)"
+
+- name: _parallel_min_message_pool
+  type: CAP
+  default: "16M"
+  range: "[16M, 8G]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "DTL message buffer pool reserve the mininum size after extend the size. Range: [16M,8G]"
+
+- name: _parallel_server_sleep_time
+  type: DBL
+  default: "1"
+  range: "[0, 2000]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "sleep time between get channel data in millisecond. Range: [0, 2000]"
+
+- name: _px_max_message_pool_pct
+  type: DBL
+  default: "40"
+  range: "[0,90]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "The maximum percentage of server runtime memory available to the DTL message buffer pool. Range: [0,90]"
+
+- name: _px_message_compression
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Enable DTL send message with compressionValue: True: enable compression False: disable compression"
+
+- name: _px_chunklist_count_ratio
+  type: INT
+  default: "1"
+  range: "[1, 128]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the ratio of the dtl buffer manager list. Range: [1, 128]"
+
+- name: _sqlexec_disable_hash_based_distagg_tiv
+  type: BOOL
+  default: "False"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "disable hash based distinct aggregation in the second stage of three stage aggregation for gby queriesValue:  True:turned on  False: turned off"
+
+- name: _force_hash_groupby_dump
+  type: BOOL
+  default: "False"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "force hash groupby to dumpValue:  True:turned on  False: turned off"
+
+- name: _force_hash_join_spill
+  type: BOOL
+  default: "False"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "force hash join to dump after get all build hash table Value:  True:turned on  False: turned off"
+
+- name: _enable_hash_join_hasher
+  type: INT
+  default: "1"
+  range: "[1, 7]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "which hash function to choose for hash join 1: murmurhash, 2: crc, 4: xxhash"
+
+- name: _enable_hash_join_processor
+  type: INT
+  default: "7"
+  range: "[1, 7]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "which path to process for hash join, default 7 to auto choose 1: nest loop, 2: recursive, 4: in-memory"
+
+- name: _pushdown_storage_level
+  type: INT
+  default: "4"
+  range: "[0, 4]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the level of storage pushdown. Range: [0, 4] 0: disabled, 1:blockscan, 2: blockscan & filter, 3: blockscan & filter & aggregate, 4: blockscan & filter & aggregate & group by"
+
+- name: workarea_size_policy
+  type: WORK_AREA_POLICY
+  default: "AUTO"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "policy used to size SQL working areas (MANUAL/AUTO)"
+  checker: "ObConfigWorkAreaPolicyChecker"
+  options: "AUTO, MANUAL"
+
+- name: temporary_file_max_disk_size
+  type: CAP
+  default: "0M"
+  range: "[0,)"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "maximum disk usage of temporary file on a single node, 0 means no limit. Range: [0,+∞)"
+
+- name: _temporary_file_io_area_size
+  type: INT
+  default: "1"
+  range: "[0, 50)"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "memory buffer size of temporary files, as a percentage of total server runtime memory. Range: [0, 50), percentage"
+
+- name: _storage_meta_memory_limit_percentage
+  type: INT
+  default: "13"
+  range: "[0, 50)"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "maximum memory for storage metadata, as a percentage of total server runtime memory. Range: [0, 50), percentage, 0 means no limit to storage meta memory"
+
+- name: _max_tablet_cnt_per_gb
+  type: INT
+  default: "20000"
+  range: "[1000, 50000)"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "The maximum number of tablets supported per 1GB of server runtime memory. Range: [1000, 50000)"
+
+- name: _enable_filter_reordering
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable filter reordering in storage engine"
+
+- name: enable_sys_table_ddl
+  type: BOOL
+  default: "False"
+  section: ROOT_SERVICE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether a \\'system\\' table is allowed be to created manually. Value: True: allowed; False: not allowed"
+
+- name: tablet_meta_table_scan_batch_count
+  type: INT
+  default: "999"
+  range: "(0, 65536]"
+  section: ROOT_SERVICE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the number of tablet replica info that will be read by each request on the tablet-related system tables during procedures such as load-balancing, daily merge, election and etc. Range:(0,65536]"
+
+- name: tablet_meta_table_check_interval
+  type: TIME
+  default: "30m"
+  range: "[1m,)"
+  section: ROOT_SERVICE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the time interval that observer compares tablet meta table with local ls replica info and make adjustments to ensure the correctness of tablet meta table. Range: [1m,+∞)"
+
+- name: enable_ddl
+  type: BOOL
+  default: "True"
+  section: ROOT_SERVICE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether DDL operation is turned on. Value:  True:turned on;  False: turned off"
+
+- name: _enable_parallel_table_creation
+  type: BOOL
+  default: "True"
+  section: ROOT_SERVICE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether create table parallelly. Value:  True: create table parallelly;  False: create table serially"
+
+- name: enable_major_freeze
+  type: BOOL
+  default: "True"
+  section: ROOT_SERVICE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether major_freeze function is turned on. Value:  True:turned on;  False: turned off"
+
+- name: ob_event_history_recycle_interval
+  type: TIME
+  default: "7d"
+  range: "[1d, 180d]"
+  section: ROOT_SERVICE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the time to recycle event history. Range: [1d, 180d]"
+
+- name: _recyclebin_object_purge_frequency
+  type: TIME
+  default: "10m"
+  range: "[0m,)"
+  section: ROOT_SERVICE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the time to purge recyclebin. Range: [0m, +∞)"
+
+- name: recyclebin_object_expire_time
+  type: TIME
+  default: "0s"
+  range: "[0s,)"
+  section: ROOT_SERVICE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "recyclebin object expire time, default 0 that means auto purge recyclebin off. Range: [0s, +∞)"
+
+- name: _parallel_ddl_control
+  type: MODE_WITH_PARSER
+  default: ""
+  section: ROOT_SERVICE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "switch for parallel capability of parallel DDL"
+  checker: "parser:common::ObParallelDDLControlParser"
+  options: "TRUNCATE_TABLE, SET_COMMENT, CREATE_INDEX, CREATE_VIEW, DROP_TABLE"
+
+- name: log_disk_size
+  type: CAP
+  default: "0M"
+  range: "[0M,)"
+  section: LOGSERVICE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the size of disk space used by the log files. Range: [0, +∞)"
+
+- name: log_disk_percentage
+  type: INT
+  default: "0"
+  range: "[0,99]"
+  section: LOGSERVICE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the percentage of disk space used by the log files. Range: [0,99] in integer;only effective when parameter log_disk_size is 0;when log_disk_percentage is 0: a) if the data and the log are on the same disk, means log_disk_percentage = 30 b) if the data and the log are on the different disks, means log_disk_perecentage = 90"
+
+- name: log_disk_utilization_limit_threshold
+  type: INT
+  default: "95"
+  range: "[80, 100]"
+  section: LOGSERVICE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "maximum of log disk usage percentage before stop submitting or receiving logs, should be bigger than log_disk_utilization_threshold. Range: [80, 100]"
+
+- name: log_disk_utilization_threshold
+  type: INT
+  default: "0"
+  range: "[0, 100)"
+  section: LOGSERVICE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "log disk utilization threshold before reuse log files, should be smaller than log_disk_utilization_limit_threshold. 0 means recycle log files as soon as possibleRange: [0, 100)"
+
+- name: log_disk_throttling_percentage
+  type: INT
+  default: "60"
+  range: "[40, 100]"
+  section: LOGSERVICE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the threshold of the size of the log disk when writing_limit will be triggered. Rang:[40,100]. setting 100 means turn off writing limit"
+
+- name: log_disk_throttling_maximum_duration
+  type: TIME
+  default: "2h"
+  range: "[1s, 3d]"
+  section: LOGSERVICE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "maximum duration of log disk throttling, that is the time remaining until the log disk space is exhausted after log disk throttling triggered."
+
+- name: log_storage_warning_tolerance_time
+  type: TIME
+  default: "5s"
+  range: "[1s,300s]"
+  section: LOGSERVICE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "time to tolerate log disk io delay, after that, the disk status will be set warning. Range: [1s,300s]"
+
+- name: _enable_log_cache
+  type: BOOL
+  default: "True"
+  section: LOGSERVICE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether allow to fill log kv cache. Value:  True:turned on  False: turned off"
+
+- name: _lcl_op_interval
+  type: TIME
+  default: "5s"
+  range: "[0ms, 5s]"
+  section: TRANS
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Scan interval for every detector node, smaller interval support larger deadlock scale, but cost more system resource. 0ms means disable deadlock, default value is 5s. Range:[0ms, 5s]"
+
+- name: major_freeze_duty_time
+  type: MOMENT
+  default: "02:00"
+  section: DAILY_MERGE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the start time of system daily merge procedure. Range: [00:00, 24:00)"
+
+- name: merger_check_interval
+  type: TIME
+  default: "10m"
+  range: "[10s, 60m]"
+  section: DAILY_MERGE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the time interval between the schedules of the task that checks on the progress of MERGE. Range: [10s, 60m]"
+
+- name: trx_commit_retry_interval
+  type: TIME
+  default: "100ms"
+  range: "[1ms, 5000ms]"
+  section: TRANS
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the time interval between the retries in case of failure during a transaction commit. Range: [1ms,5000ms]"
+
+- name: clog_sync_time_warn_threshold
+  type: TIME
+  default: "100ms"
+  range: "[1ms, 10000ms]"
+  section: TRANS
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the time given to the commit log synchronization between a leader and its followers before a \\'warning\\' message is printed in the log file.  Range: [1ms,1000ms]"
+
+- name: row_compaction_update_limit
+  type: INT
+  default: "6"
+  range: "[1, 6400]"
+  section: TRANS
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "maximum update count before trigger row compaction. Range: [1, 6400]"
+
+- name: enable_early_lock_release
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable early lock release"
+
+- name: _tx_result_retention
+  type: INT
+  default: "300"
+  range: "[0, 36000]"
+  section: TRANS
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "The tx data can be recycled after at least _tx_result_retention seconds. Range: [0, 36000]"
+
+- name: _enable_parallel_redo_logging
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable parallel write redo log."
+
+- name: _parallel_redo_logging_trigger
+  type: CAP
+  default: "16M"
+  range: "[0B,)"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "size of single transaction's pending redo log to trigger parallel writes redo log. Range: [0B,+∞)"
+
+- name: _tx_debug_level
+  type: INT
+  default: "0"
+  range: "[0, 10]"
+  section: TRANS
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the debug level of transaction module. Range: [0, 10] in integer."
+
+- name: rpc_timeout
+  type: TIME
+  default: "2s"
+  section: RPC
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the time during which a RPC request is permitted to execute before it is terminated"
+
+- name: location_cache_refresh_sql_timeout
+  type: TIME
+  default: "1s"
+  range: "[1ms,)"
+  section: LOCATION_CACHE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "The timeout used for refreshing location cache by SQL. Range: [1ms, +∞)"
+
+- name: bf_cache_miss_count_threshold
+  type: INT
+  default: "100"
+  range: "[0,)"
+  section: CACHE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "bf cache miss count threshold, 0 means disable bf cache. Range:[0, )"
+
+- name: _data_storage_io_timeout
+  type: TIME
+  default: "10s"
+  range: "[1s,600s]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "io timeout for data storage, Range [1s,600s]. The default value is 10s"
+
+- name: data_storage_warning_tolerance_time
+  type: TIME
+  default: "5s"
+  range: "[1s,300s]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "time to tolerate disk read failure, after that, the disk status will be set warning. Range [1s,300s]. The default value is 5s"
+
+- name: data_disk_usage_limit_percentage
+  type: INT
+  default: "90"
+  range: "[50,100]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the safe use percentage of data diskRange: [50,100] in integer"
+
+- name: sys_bkgd_net_percentage
+  type: INT
+  default: "60"
+  range: "[0,100]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the net percentage of sys background net. Range: [0, 100] in integer"
+
+- name: disk_io_thread_count
+  type: INT_WITH_CHECKER
+  default: "1"
+  range: "[1,32]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "The number of io threads on each disk. The default value is 8. Range: [2,32] in even integer"
+  checker: "common::ObConfigEvenIntChecker"
+
+- name: sync_io_thread_count
+  type: INT
+  default: "0"
+  range: "[0,1024]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "The number of io threads for synchronizing request on each device. The default value is 0. Range: [0,1024] in integer"
+
+- name: _io_callback_thread_count
+  type: INT
+  default: "0"
+  range: "[0,128]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "The number of io callback threads. The default value is 0. Range: [0,128] in integer. If not specified, The number of threads is dynamically configured according to the memory size"
+
+- name: _enable_parallel_minor_merge
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether enable parallel minor merge. Value: True:turned on;  False: turned off"
+
+- name: _enable_adaptive_compaction
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether allow adaptive compaction schedule and information collection"
+
+- name: compaction_dag_cnt_limit
+  type: INT
+  default: "50000"
+  range: "[10000,500000]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the compaction dag count limit. Range: [10000,500000] in integer. default value is 50000"
+
+- name: compaction_schedule_tablet_batch_cnt
+  type: INT
+  default: "50000"
+  range: "[10000,500000]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the batch size when scheduling tablet to execute compaction task. Range: [10000,500000] in integer. default value is 50000"
+
+- name: compaction_low_thread_score
+  type: INT
+  default: "0"
+  range: "[0,100]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the current work thread score of low priority compaction. Range: [0,100] in integer. Especially, 0 means default value"
+
+- name: compaction_mid_thread_score
+  type: INT
+  default: "0"
+  range: "[0,100]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the current work thread score of middle priority compaction. Range: [0,100] in integer. Especially, 0 means default value"
+
+- name: compaction_high_thread_score
+  type: INT
+  default: "0"
+  range: "[0,100]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the current work thread score of high priority compaction. Range: [0,100] in integer. Especially, 0 means default value"
+
+- name: storage_high_thread_score
+  type: INT
+  default: "0"
+  range: "[0,100]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the current work thread score of high priority storage tasks. Range: [0,100] in integer. Especially, 0 means default value"
+
+- name: ddl_thread_score
+  type: INT
+  default: "0"
+  range: "[0,100]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the current work thread score of ddl thread. Range: [0,100] in integer. Especially, 0 means default value"
+
+- name: minor_compact_trigger
+  type: INT
+  default: "2"
+  range: "[0,16]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "minor_compact_trigger, Range: [0,16] in integer"
+
+- name: _enable_compaction_diagnose
+  type: BOOL
+  default: "False"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable compaction diagnose functionValue:  True:turned on;  False: turned off"
+
+- name: _force_skip_encoding_partition_id
+  type: STR
+  default: ""
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "force the specified partition to major without encoding row store, only for emergency!"
+
+- name: _private_buffer_size
+  type: CAP
+  default: "16K"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "[0B,)the trigger remaining data size within transaction for immediate logging, 0B represents not trigger immediate loggingRange: [0B, total size of memory]"
+
+- name: _fast_commit_callback_count
+  type: INT
+  default: "10000"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "[0,)trigger max callback count allowed within transaction for durable callback checkpoint, 0 represents not allow durable callbackRange: [0, not limited callback count"
+
+- name: _trx_max_log_cb_limit
+  type: INT
+  default: "16"
+  range: "[0,)"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Control the upper limit of TxLogCbs involved in the participant to manage the maximum concurrency of  submiting logs in a transaction"
+
+- name: _minor_compaction_amplification_factor
+  type: INT
+  default: "0"
+  range: "[0,100]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "thre L1 compaction write amplification factor, 0 means default 25, Range: [0,100] in integer"
+
+- name: major_compact_trigger
+  type: INT
+  default: "0"
+  range: "[0,65535]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies how many minor freeze should be triggered between two major freeze, Range: [0,65535] in integer"
+
+- name: _minor_merge_write_amplification_threshold
+  type: INT
+  default: "2000000"
+  range: "[0,)"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "The write amplification threshold about minor compaction. The larger the value, the smaller the write amplicification"
+
+- name: ob_compaction_schedule_interval
+  type: TIME
+  default: "120s"
+  range: "[3s,5m]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the time interval to schedule compaction, Range: [3s,5m]Range: [3s, 5m]"
+
+- name: _ob_elr_fast_freeze_threshold
+  type: INT
+  default: "500000"
+  range: "[10000,)"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "per row update counts threshold to trigger minor freeze for tables with ELR optimization"
+
+- name: _ob_enable_fast_freeze
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether fast freeze is enabled for the server runtime. Value: True:turned on;  False: turned off"
+
+- name: _compaction_prewarm_percentage
+  type: INT
+  default: "0"
+  range: "[0,100]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies the fixed percentage data to prewarm in compactionRange: [0, 100] in integer0 means not use this method, value > 0 means the corresponding percentage of data will be prewarmed"
+
+- name: tablet_size
+  type: CAP_WITH_CHECKER
+  default: "128M"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "default tablet size, has to be a multiple of 2M"
+  checker: "common::ObConfigTabletSizeChecker"
+
+- name: builtin_db_data_verify_cycle
+  type: INT
+  default: "20"
+  range: "[0, 360]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "check cycle of db data. Range: [0, 360] in integer. Unit: day. 0: check nothing. 1-360: check all data every specified days. The default value is 20. The real check cycle maybe longer than the specified value for insuring performance."
+
+- name: micro_block_merge_verify_level
+  type: INT
+  default: "2"
+  range: "[0,3]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specify what kind of verification should be done when merging micro block. 0 : no verification will be done 1 : verify encoding algorithm, encoded micro block will be read to ensure data is correct 2 : verify encoding and compression algorithm, besides encoding verification, compressed block will be decompressed to ensure data is correct3 : verify encoding, compression algorithm and lost write protect"
+
+- name: _cache_wash_interval
+  type: TIME
+  default: "200ms"
+  range: "[1ms, 3s]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specify interval of cache background wash"
+
+- name: _io_read_batch_size
+  type: CAP
+  default: "0K"
+  range: "[0K,16M]"
+  section: SSTABLE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Maximum batch size in one read io request. Range:[0K,16M]"
+
+- name: _io_read_redundant_limit_percentage
+  type: INT
+  default: "0"
+  range: "[0, 99]"
+  section: SSTABLE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Maximum percentage of redundant size in one read io request, redundant data means blocks in the middle of the batch that hit in cache or filtered by skipping index but must be read. Range:[0,99]"
+
+- name: dtl_buffer_size
+  type: CAP
+  default: "64K"
+  range: "[4K,2M]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "to be removed"
+
+- name: px_task_size
+  type: CAP
+  default: "2M"
+  range: "[1K,)"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "to be removed"
+
+- name: _max_elr_dependent_trx_count
+  type: INT
+  default: "0"
+  range: "[0,)"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "max elr dependent transaction count"
+
+- name: stack_size
+  type: CAP
+  default: "256K"
+  range: "[256K, 20M]"
+  section: OBSERVER
+  edit_level: STATIC_EFFECTIVE
+  description: "the size of routine execution stackRange: [256K, 20M]"
+
+- name: _px_max_pipeline_depth
+  type: INT
+  default: "2"
+  range: "[2,3]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "max parallel execution pipeline depth, range: [2,3]"
+
+- name: ssl_client_authentication
+  type: BOOL
+  default: "False"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable server SSL support. Takes effect after ca/cert/key file is configured correctly."
+
+- name: use_ipv6
+  type: BOOL
+  default: "False"
+  section: OBSERVER
+  edit_level: STATIC_EFFECTIVE
+  description: "Whether this server uses ipv6 address"
+
+- name: _ob_ddl_timeout
+  type: TIME
+  default: "1000s"
+  range: "[1s,)"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the config parameter of ddl timeoutRange: [1s, +∞)"
+
+- name: ob_enable_batched_multi_statement
+  type: BOOL
+  default: "False"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable use of batched multi statement"
+
+- name: _bloom_filter_ratio
+  type: INT
+  default: "35"
+  range: "[0, 100]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "The px bloom filter false-positive rate. Range: [0,100]"
+
+- name: schema_history_recycle_interval
+  type: TIME
+  default: "10m"
+  range: "[0s,]"
+  section: LOAD_BALANCE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the time interval between the schedules of schema history recyle task. Range: [0s, +∞)"
+
+- name: _bloom_filter_enabled
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable join bloom filter"
+
+- name: ob_ssl_invited_common_names
+  type: STR
+  default: "NONE"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "when server use ssl, use it to control client identity with ssl subject common name. default NONE"
+
+- name: _ob_ssl_invited_nodes
+  type: STR
+  default: "NONE"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "when rpc need use ssl, we will use it to store invited server ipv4 during grayscale change.when it is finish, it can use ALL instead of all server ipv4"
+
+- name: _max_schema_slot_num
+  type: INT
+  default: "128"
+  range: "[2,256]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the max schema slot number for multi-version schema memory management, Range: [2, 256] in integer"
+
+- name: _enable_add_fulltext_index_to_existing_table
+  type: BOOL
+  default: "False"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable create fulltext index after table is created"
+
+- name: open_cursors
+  type: INT
+  default: "50"
+  range: "[0,65535]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies the maximum number of open cursors a session can have at once.can use this parameter to prevent a session from opening an excessive number of cursors.Range: [0, 65535] in integer"
+
+- name: _enable_px_batch_rescan
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable px batch rescan for nlj or subplan filter"
+
+- name: _enable_spf_batch_rescan
+  type: BOOL
+  default: "False"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable das batch rescan for subplan filter"
+
+- name: _enable_das_keep_order
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable das keep order optimization"
+
+- name: _enable_index_merge
+  type: BOOL
+  default: "False"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable index merge optimization"
+
+- name: _enable_distributed_das_scan
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable distributed DAS scan"
+
+- name: _enable_das_batch_rescan_flag
+  type: INT
+  default: "0"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable das batch rescan for multiple scenarios."
+
+- name: _parallel_max_active_sessions
+  type: INT
+  default: "0"
+  range: "[0,]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "maximum active parallel sessions allowed on the server runtime. Range: [0,+∞)"
+
+- name: enable_tcp_keepalive
+  type: BOOL
+  default: "true"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable TCP keepalive for the TCP connection of sql protocol. Take effect for new established connections."
+
+- name: tcp_keepidle
+  type: TIME
+  default: "7200s"
+  range: "[1s,]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "The time (in seconds) the connection needs to remain idle before TCP starts sending keepalive probe. Take effect for new established connections. Range: [1s, +∞]"
+
+- name: tcp_keepintvl
+  type: TIME
+  default: "6s"
+  range: "[1s,]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "The time (in seconds) between individual keepalive probes. Take effect for new established connections. Range: [1s, +∞]"
+
+- name: tcp_keepcnt
+  type: INT
+  default: "10"
+  range: "[1,]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "The maximum number of keepalive probes TCP should send before dropping the connection. Take effect for new established connections. Range: [1,+∞)"
+
+- name: _send_bloom_filter_size
+  type: INT
+  default: "1024"
+  range: "[1,]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Set send bloom filter slice sizeRange: [1, +∞)"
+
+- name: _enable_px_ordered_coord
+  type: BOOL
+  default: "false"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable px task ordered coord"
+
+- name: job_queue_processes
+  type: INT
+  default: "1000"
+  range: "[0,16384]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies the maximum number of job slaves per instance that can be created for the execution of DBMS_JOB and DBMS_SCHEDULER jobs."
+
+- name: _px_bloom_filter_group_size
+  type: STR_WITH_CHECKER
+  default: "auto"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies the px bloom filter each group size in sending to the other sqcRange: [1, +∞) or auto, the default value is auto"
+  checker: "common::ObConfigPxBFGroupSizeChecker"
+
+- name: _enable_block_file_punch_hole
+  type: BOOL
+  default: "False"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether to punch whole when free blocks in block_file"
+
+- name: _ob_enable_fast_parser
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "control if enable fast parser"
+
+- name: _ob_obj_dep_maint_task_interval
+  type: TIME
+  default: "1ms"
+  range: "[0,10s]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "The execution interval of the task of maintaining the dependency of the object. Range: [0, 10s]"
+
+- name: _enable_newsort
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "control if enable encode sort"
+
+- name: _px_object_sampling
+  type: INT
+  default: "200"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "[1, 100000]parallel query sampling for base objects (100000 = 100%)"
+
+- name: _follower_snapshot_read_retry_duration
+  type: TIME
+  default: "0ms"
+  range: "[0ms,]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the waiting time after the first judgment failure of strong reading on followerRange: [0ms, +∞)"
+
+- name: _print_sample_ppm
+  type: INT
+  default: "0"
+  range: "[0, 1000000]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "In the full link diagnosis, control the frequency of printing traces to the log (unit is ppm, parts per million)."
+
+- name: _enable_parallel_das_dml
+  type: BOOL
+  default: "False"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "By default, the das service is allowed to use multiple threads to submit das tasks"
+
+- name: _ob_immediate_row_conflict_check
+  type: BOOL
+  default: "False"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "By default, OB's MySQL mode will check unique conflicts row by row after the update.When the switch is turned off, it will only check whether the final state of a batch of data after the update satisfies the unique constraint."
+
+- name: _enable_var_assign_use_das
+  type: BOOL
+  default: "False"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable use das if the sql statement has variable assignment"
+
+- name: sql_net_thread_count
+  type: INT
+  default: "0"
+  range: "[0,64]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the number of global mysql I/O threads. Range: [0, 64] in integer, default value is 0, 0 stands for GCONF.net_thread_count"
+
+- name: _display_non_session_cursor
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "whether the content of non session cursors is displayed."
+
+- name: _ob_plan_cache_auto_flush_interval
+  type: TIME
+  default: "0s"
+  range: "[0s,)"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "time interval for auto periodic flush plan cache. Range: [0s, +∞)"
+
+- name: _px_join_skew_handling
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enables skew handling for parallel joins. The  default value is True."
+
+- name: _px_join_skew_minfreq
+  type: INT
+  default: "30"
+  range: "[1,100]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "sets minimum frequency(%) for skewed value for parallel joins. Range: [1, 100] in integer"
+
+- name: _enable_transaction_internal_routing
+  type: BOOL
+  default: "True"
+  section: TRANS
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable SQLs of transaction routed to any servers in the cluster on demand"
+
+- name: _enable_hgby_skew_detection
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether hgby skew detection is enabled"
+
+- name: _pdml_thread_cache_size
+  type: CAP
+  default: "2M"
+  range: "[1B,)"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "The cache size of per pdml thread.Range:[1B, )"
+
+- name: _enable_hgby_llc_ndv_adaptive
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether llc ndv adptive is activated"
+
+- name: rpc_client_authentication_method
+  type: STR_WITH_CHECKER
+  default: "NONE"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies rpc client authentication method. NONE: without authentication. SSL_NO_ENCRYPT: authentication by SSL handshake but not encrypt the communication channel. SSL_IO: authentication by SSL handshake and encrypt the communication channel"
+  checker: "common::ObCallClientAuthMethodChecker"
+  options: "NONE, SSL_NO_ENCRYPT, SSL_IO"
+
+- name: rpc_server_authentication_method
+  type: STR_WITH_CHECKER
+  default: "ALL"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies rpc server authentication method. ALL: support all authentication methods. NONE: without authentication. SSL_NO_ENCRYPT: authentication by SSL handshake but not encrypt the communication channel. SSL_IO: authentication by SSL handshake and encrypt the communication channel"
+  checker: "common::ObCallServerAuthMethodChecker"
+  options: "ALL, NONE, SSL_NO_ENCRYPT, SSL_IO"
+
+- name: _enable_backtrace_function
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Decide whether to let the backtrace function take effect"
+
+- name: _with_subquery
+  type: INT
+  default: "0"
+  range: "[0,2]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "WITH subquery transformation,0: optimizer,1: materialize,2: inline"
+
+- name: _optimizer_group_by_placement
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable group by placement transform rule"
+
+- name: _complex_cbqt_table_num
+  type: INT
+  default: "10"
+  range: "[0,)"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "cost-based transform will be disabled when table count in a single stmt exceeds threshold"
+
+- name: _enable_in_range_optimization
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Enable extract query range optimization for in predicate"
+
+- name: _force_subquery_unnest
+  type: BOOL
+  default: "FALSE"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "aggressively unnest all subqueries that can be unnested, with correctness guaranteed."
+
+- name: range_optimizer_max_mem_size
+  type: CAP
+  default: "128M"
+  range: "[0M,)"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "to limit the memory consumption for the query range optimizer. Range: [0M,+∞), 0 stands for unlimited"
+
+- name: _schema_memory_recycle_interval
+  type: TIME
+  default: "15m"
+  range: "[0s,)"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the time interval between the schedules of schema memory recycle task. 0 means only turn off gc current allocator, and other schema memory recycle task's interval will be 15mins. Range [0s,)"
+
+- name: _optimizer_better_inlist_costing
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable improved costing of index access using in-list(s)"
+
+- name: _enable_skip_index
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable the skip index in storage engine"
+
+- name: _ob_ddl_temp_file_compress_func
+  type: STR_WITH_CHECKER
+  default: "AUTO"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specific compression in ObTempBlockStore.AUTO: use compression algorithm from table schema;ZSTD: use ZSTD compression algorithm;NONE: do not use compression."
+  checker: "common::ObConfigTempStoreFormatChecker"
+  options: "AUTO, ZSTD, NONE"
+
+- name: _enable_prefetch_limiting
+  type: BOOL
+  default: "False"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable limiting memory in prefetch for single query"
+
+- name: _ob_sqlstat_enable
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable/disable sql stat"
+
+- name: _enable_inner_session_mgr
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable/disable inner session mgr"
+
+- name: _enable_trace_tablet_leak
+  type: BOOL
+  default: "False"
+  section: RUNTIME
+  edit_level: STATIC_EFFECTIVE
+  description: "enable t3m tablet leak checker. The default value is False"
+
+- name: _inlist_rewrite_threshold
+  type: INT
+  default: "1000"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "[1, 2147483647]specifies transform how much const params in IN list to values table"
+
+- name: vector_index_optimize_duty_time
+  type: STR_WITH_CHECKER
+  default: "[24:00:00, 24:00:00]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "A runtime range bounded by start time and end time for vector index background task, e.g., [23:00:00, 24:00:00]"
+  checker: "common::ObVecIndexOptDutyTimeChecker"
+
+- name: model_request_timeout
+  type: TIME
+  default: "60s"
+  range: "[1s,)"
+  section: AI
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Used to control the HTTP timeout for accessing the  model. Especially, the default value is 60s."
+
+- name: model_max_retries
+  type: INT
+  default: "2"
+  range: "[1,)"
+  section: AI
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Used to control the retry times after a failed model interaction. Especially, the default value is 2"
+
+- name: sql_protocol_min_tls_version
+  type: STR_WITH_CHECKER
+  default: "none"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "SQL SSL control options, used to specify the minimum SSL/TLS version number. values: none, TLSv1, TLSv1.1, TLSv1.2, TLSv1.3"
+  checker: "common::ObConfigSQLTlsVersionChecker"
+  options: "none, TLSv1, TLSv1.1, TLSv1.2, TLSv1.3"
+
+- name: shared_log_retention
+  type: TIME
+  default: "1d"
+  range: "[0s,7d]"
+  section: TRANS
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Retention time of log files on shared storage"
+
+- name: _enable_optimizer_qualify_filter
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Enable extracting qualify filters for window function"
+
+- name: _enable_range_extraction_for_not_in
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Enable extract query range for not in predicate"
+
+- name: optimizer_index_cost_adj
+  type: INT
+  default: "0"
+  range: "[0,100]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "adjust costing of index scan"
+
+- name: enable_rpc_authentication_bypass
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether allow OMS service to connect cluster and provide service when rpc authentication is turned on."
+
+- name: _preserve_order_for_pagination
+  type: BOOL
+  default: "False"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable preserver order for limit"
+
+- name: _preserve_order_for_groupby
+  type: BOOL
+  default: "False"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Control whether the query results are sorted according to the GROUP BY expression"
+
+- name: max_partition_num
+  type: INT
+  default: "8192"
+  range: "[8192, 65536]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "set max partition num in mysql mode"
+
+- name: json_document_max_depth
+  type: INT
+  default: "100"
+  range: "[100,1024]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "maximum nesting depth allowed in a JSON document"
+
+- name: _multimodel_memory_trace_level
+  type: INT
+  default: "0"
+  range: "[0,100)"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Multi-mode memory tracking mechanism"
+
+- name: _query_record_size_limit
+  type: INT
+  default: "65536"
+  range: "[0, 67108864] in integer"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "set sql_audit and plan stat query sql size. Range: [0,67108864] in integer in integer."
+
+- name: _allow_skip_replay_redo_after_detete_tablet
+  type: BOOL
+  default: "FALSE"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "allow skip replay invalid redo log after tablet delete transaction is committed.The default value is FALSE. Value: TRUE means we allow skip replaying this invalid redo log, False means we do not alow such behavior."
+
+- name: strict_check_os_params
+  type: BOOL
+  default: "False"
+  section: OBSERVER
+  edit_level: STATIC_EFFECTIVE
+  description: "Deprecated. The strict OS parameter check logic has been removed and this parameter has no effect. Default: False. Value: True/False are accepted for compatibility only."
+
+- name: _enable_tree_based_io_scheduler
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "A switch that allows enabling the tree-based IO scheduler.Value: True: allowed; False: disabled"
+
+- name: clog_io_isolation_mode
+  type: INT
+  default: "1"
+  range: "[1,2]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Specifies the I/O isolation mode for Commit Log (clog). Values: 1 - Non-isolation mode (disable I/O isolation), 2 - Full isolation mode (enable I/O isolation). Example: 1=Off, 2=On"
+
+- name: _enable_memleak_light_backtrace
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether allow memleak to get the backtrace of malloc by light_backtrace"
+
+- name: _enable_dbms_job_package
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Control whether can use DBMS_JOB package."
+
+- name: lob_enable_block_cache_threshold
+  type: CAP
+  default: "256K"
+  range: "[0B, 512M]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "For outrow-stored LOBs, if the length is less than or equal to that threshold, they can be admitted into the block cache to speed up the next query."
+
+- name: _ob_pl_compile_max_concurrency
+  type: INT
+  default: "4"
+  range: "[0,)"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "The maximum number of threads that an observer node can compile PL concurrently."
+
+- name: enable_lock_priority
+  type: BOOL
+  default: "False"
+  section: TRANS
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "specifies whether to enable lock priority, which, when activated, gives certain DDL operations the highest table lock precedence."
+
+- name: _preset_runtime_bloom_filter_size
+  type: BOOL
+  default: "False"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Whether build runtime bloom filter with row count estimated by optimizor.Value:  True:turned on  False: turned off"
+
+- name: _enable_ddl_worker_isolation
+  type: BOOL
+  default: "False"
+  section: ROOT_SERVICE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "a switch controling ddl thread isolation"
+
+- name: ob_vector_memory_limit_percentage
+  type: INT
+  default: "0"
+  range: "[0, 100)"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Deprecated compatibility parameter. The configured value is accepted and persisted, but is ignored by vector memory sizing and memory control."
+
+- name: vector_index_memory_saving_mode
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Specifies whether to enable the vector index memory saving mode. This can reduce the memory used by the partition table vector index rebuild."
+
+- name: _enable_drop_and_add_index
+  type: BOOL
+  default: "False"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "it specifies that whether we can drop and add index in single statement"
+
+- name: ob_encoding_granularity
+  type: INT
+  default: "65536"
+  range: "[8192, 1048576]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Maximum rows for encoding in one micro block. Range:[8192,1048576]"
+
+- name: _partition_wise_plan_enabled
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "enable/disable optimizer partition wise plan"
+
+- name: _enable_adaptive_auto_dop
+  type: BOOL
+  default: "False"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Enable or disable adaptive auto dop feature."
+
+- name: query_memory_limit_percentage
+  type: INT
+  default: "32"
+  range: "[0,100]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "the percentage of server runtime memory that can be used by a single SQL. The default value is 32. Range: [0,100]"
+
+- name: _ndv_runtime_bloom_filter_size
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "whether to use NDV to build a bloom filter in runtime filter.Value:  True:turned on  False: turned off"
+
+- name: _max_px_workers_per_cpu
+  type: INT
+  default: "1"
+  range: "[1,30]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "The upper limit of PX workers that each CPU can carry. Range: [1,30]"
+
+- name: default_table_organization
+  type: STR
+  default: "INDEX"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "The default_organization configuration option allows you to set the default table organization mode to either HEAP (unordered data storage) or INDEX (the data rows are held in an index defined on the primary key for the table) when creating new tables."
+  options: "INDEX, HEAP"
+
+- name: _enable_topn_runtime_filter
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Enable topn runtime filter."
+
+- name: _enable_async_load_sys_package
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Controls the ability to enable/disable async load sys package"
+
+- name: _enable_px_task_rebalance
+  type: BOOL
+  default: "False"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Enable or disable px task rebalance."
+
+- name: _px_task_rebalance_trigger_time
+  type: TIME
+  default: "10ms"
+  range: "[1us, 1h]"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Control the trigger time of px task rebalance. Range: [1us, 1h]"
+
+- name: _ob_enable_truncate_partition_preserve_global_index
+  type: BOOL
+  default: "False"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Specifies Whether to allow global indexes to be preserved when truncating/dropping the main table partition."
+
+- name: _px_worker_share_plan_enabled
+  type: BOOL
+  default: "True"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Enable parallel execution optimization by sharing plan and only serializing necessary expressions."
+
+- name: _enable_drop_column_instant
+  type: BOOL
+  default: "True"
+  section: ROOT_SERVICE
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Whether to enable the capability for fast column deletion.Value:  True: drop column instant;  False: drop column inplace"
+
+- name: _enable_routine_call_param_defend
+  type: BOOL
+  default: "True"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "Enable or disable routine call parameter defend."
+
+- name: _hnsw_max_scan_vectors
+  type: INT_WITH_CHECKER
+  default: "20000"
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "The upper limit of hnsw iter-filter search nums. Range: [0,)"
+  checker: "common::ObHNSWIterFilterScanNumChecker"
+
+- name: _advance_checkpoint_interval
+  type: TIME
+  default: "10m"
+  range: "[0m,12h]"
+  section: RUNTIME
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "The execution interval for the advance checkpoint task, 0m means disable this feature. Range: [0m, 12h]"
+
+- name: log_restore_source
+  type: STR
+  default: ""
+  section: OBSERVER
+  edit_level: DYNAMIC_EFFECTIVE
+  description: "standby log source in ip:rpc_port form"

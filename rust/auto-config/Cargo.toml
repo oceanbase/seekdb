@@ -12,6 +12,8 @@ crate-type = ["staticlib", "rlib"]
 [build-dependencies]
 cbindgen = "=0.29.4"
 cxx-build = "1"
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.9"
 
 [dependencies]
 cxx = "1"

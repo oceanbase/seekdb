@@ -35,8 +35,8 @@ _RUST_INPUTS = [
     "auto-config/Cargo.toml",
     "auto-config/cbindgen.toml",
     "auto-config/build.rs",
-    "auto-config/parameters.tsv",
-    "auto-config/internal_state.tsv",
+    "auto-config/parameters.yaml",
+    "auto-config/internal_state.yaml",
 ] + glob(["sql-nio/src/*.rs", "auto-config/src/*.rs"])
 
 # Cargo remains the authoritative Rust dependency resolver used by the

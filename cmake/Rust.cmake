@@ -85,8 +85,8 @@ list(APPEND _rust_sources ${_auto_config_sources}
   "${AUTO_CONFIG_CRATE_DIR}/Cargo.toml"
   "${AUTO_CONFIG_CRATE_DIR}/build.rs"
   "${AUTO_CONFIG_CRATE_DIR}/cbindgen.toml"
-  "${AUTO_CONFIG_CRATE_DIR}/parameters.tsv"
-  "${AUTO_CONFIG_CRATE_DIR}/internal_state.tsv")
+  "${AUTO_CONFIG_CRATE_DIR}/parameters.yaml"
+  "${AUTO_CONFIG_CRATE_DIR}/internal_state.yaml")
 list(APPEND _rust_sources
   "${RUST_WORKSPACE_DIR}/Cargo.toml"
   "${RUST_WORKSPACE_DIR}/rust-toolchain.toml"
