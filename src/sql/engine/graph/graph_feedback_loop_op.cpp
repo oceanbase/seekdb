@@ -120,7 +120,8 @@ public:
                        ObEvalCtx &eval_ctx,
                        int64_t memory_limit)
       : eval_ctx_(eval_ctx),
-        access_(exec_ctx, eval_ctx),
+        access_(exec_ctx, eval_ctx,
+                binding_store_.get_work_area_allocator()),
         expand_(binding_store_.get_work_area_allocator(), access_,
                 GRAPH_EXPAND_MAX_EDGE_PAGE_SIZE,
                 memory_limit),

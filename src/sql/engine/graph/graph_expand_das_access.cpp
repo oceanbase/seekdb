@@ -220,13 +220,16 @@ OB_DEF_SERIALIZE_SIZE(GraphExpandScanDesc)
   return len;
 }
 
-GraphExpandDasAccess::GraphExpandDasAccess(ObExecContext &exec_ctx,
-                                           ObEvalCtx &eval_ctx)
+GraphExpandDasAccess::GraphExpandDasAccess(
+    ObExecContext &exec_ctx,
+    ObEvalCtx &eval_ctx,
+    ObIAllocator &work_area_allocator)
     : exec_ctx_(exec_ctx),
       eval_ctx_(eval_ctx),
       edge_das_ref_(eval_ctx, exec_ctx),
       identity_page_allocator_(exec_ctx.get_allocator()),
-      edge_cursor_allocator_(exec_ctx.get_allocator())
+      edge_cursor_allocator_(exec_ctx.get_allocator()),
+      edge_source_index_(work_area_allocator)
 {
 }
 
@@ -363,9 +366,10 @@ int64_t GraphExpandDasAccess::used_memory() const
   const int64_t edge_das_bytes = edge_das_used > 0 ? edge_das_used : 0;
   const int64_t vertex_lookup_bytes = vertex_lookup_memory_bytes_ > 0
       ? vertex_lookup_memory_bytes_ : 0;
+  const int64_t source_index_bytes = edge_source_index_.used_memory();
   int64_t used = page_bytes;
   const int64_t memory_parts[] = {
-      cursor_bytes, edge_das_bytes, vertex_lookup_bytes};
+      cursor_bytes, edge_das_bytes, vertex_lookup_bytes, source_index_bytes};
   for (int64_t i = 0; i < ARRAYSIZEOF(memory_parts); ++i) {
     if (used > INT64_MAX - memory_parts[i]) {
       used = INT64_MAX;
@@ -392,10 +396,34 @@ int GraphExpandDasAccess::reset_edge_scan(int ret)
   edge_das_ref_.reuse();
   edge_result_iter_ = DASOpResultIter();
   edge_cursor_allocator_.reuse();
+  edge_source_index_.reset();
   edge_cursor_.reset();
   edge_sources_hash_ = 0;
   has_edge_cursor_ = false;
   edge_scan_active_ = false;
+  return ret;
+}
+
+int GraphExpandDasAccess::build_edge_source_index(
+    const ObIArray<GraphElementIdentity> &sources)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(edge_source_index_.init(sources.count()))) {
+    LOG_WARN("failed to initialize graph edge source index", K(ret),
+             "source_count", sources.count());
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < sources.count(); ++i) {
+    int64_t entry_index = -1;
+    bool inserted = false;
+    if (OB_FAIL(edge_source_index_.get_or_insert(
+            sources.at(i), entry_index, inserted))) {
+      LOG_WARN("failed to index graph edge source", K(ret), K(i));
+    } else if (OB_UNLIKELY(!inserted || entry_index != i)) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("duplicate graph edge source", K(ret), K(i), K(entry_index),
+               K(inserted));
+    }
+  }
   return ret;
 }
 
@@ -1289,17 +1317,21 @@ int GraphExpandDasAccess::get_edge_page(
     } else if (OB_SUCC(ret)) {
       bool filtered = false;
       bool matches = false;
+      bool source_found = false;
+      int64_t source_index = -1;
       GraphExpandEdge edge;
       if (OB_FAIL(evaluate_filters(eval_ctx_, scan_desc->filters_, filtered))) {
       } else if (!filtered && OB_FAIL(materialize_edge(edge, matches))) {
       } else if (!filtered && matches
-                 && access_desc_.uses_adjacency_index()
-                 && !contains(sources, edge.source_identity_)) {
+                 && OB_FAIL(edge_source_index_.find(
+                     edge.source_identity_, source_index, source_found))) {
+        LOG_WARN("failed to find graph edge frontier source", K(ret), K(edge));
+      } else if (!filtered && matches && access_desc_.uses_adjacency_index()
+                 && !source_found) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("graph adjacency scan returned a non-frontier edge", K(ret),
                  K(edge), K(sources));
-      } else if (!filtered && matches
-                 && contains(sources, edge.source_identity_)) {
+      } else if (!filtered && matches && source_found) {
         // edge_cursor_ is a continuity token for this stateful result iterator,
         // not a global seek key. Tablet task order need not match edge rowkey
         // order, and no output ordering is exposed without an outer ORDER BY.
@@ -1347,11 +1379,15 @@ int GraphExpandDasAccess::scan_edges(
   } else if (OB_SUCC(ret) && sources.empty()) {
     end = true;
   } else if (OB_SUCC(ret) && after_edge == nullptr) {
-    edge_sources_hash_ = identity_array_hash(sources);
-    if (access_desc_.uses_adjacency_index()
+    if (OB_FAIL(build_edge_source_index(sources))) {
+      LOG_WARN("failed to build graph edge source index", K(ret));
+    } else {
+      edge_sources_hash_ = identity_array_hash(sources);
+    }
+    if (OB_SUCC(ret) && access_desc_.uses_adjacency_index()
         && OB_FAIL(start_adjacency_edge_scan(sources, empty))) {
       LOG_WARN("failed to start graph adjacency scan", K(ret));
-    } else if (!access_desc_.uses_adjacency_index()
+    } else if (OB_SUCC(ret) && !access_desc_.uses_adjacency_index()
                && OB_FAIL(start_full_edge_scan(empty))) {
       LOG_WARN("failed to start graph edge full scan", K(ret));
     } else if (empty) {

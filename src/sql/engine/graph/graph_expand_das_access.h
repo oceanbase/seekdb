@@ -38,7 +38,9 @@ struct ObDASTableLocMeta;
 class GraphExpandDasAccess final : public IGraphExpandAccess
 {
 public:
-  GraphExpandDasAccess(ObExecContext &exec_ctx, ObEvalCtx &eval_ctx);
+  GraphExpandDasAccess(ObExecContext &exec_ctx,
+                       ObEvalCtx &eval_ctx,
+                       common::ObIAllocator &work_area_allocator);
   ~GraphExpandDasAccess() override;
 
   int init(const GraphPathDesc &path_desc,
@@ -166,6 +168,8 @@ private:
       common::ObIArray<GraphExpandEdge> &edges,
       bool &end);
   int reset_edge_scan(int ret);
+  int build_edge_source_index(
+      const common::ObIArray<GraphElementIdentity> &sources);
   int64_t find_requested(
       const common::ObIArray<GraphElementIdentity> &requested,
       const GraphElementIdentity &identity) const;
@@ -182,6 +186,7 @@ private:
   // The scan cursor must outlive page identities and the vertex lookup between
   // two edge pages, so it owns a separate deep copy of the last edge rowkey.
   common::ObArenaAllocator edge_cursor_allocator_;
+  GraphIdentityIndex edge_source_index_;
   GraphPathDesc path_desc_{};
   GraphExpandAccessDesc access_desc_{};
   VertexLookupBinding source_binding_{};

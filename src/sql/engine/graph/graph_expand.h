@@ -38,6 +38,54 @@ namespace sql
 static const int64_t GRAPH_EXPAND_MAX_INPUT_STATE_COUNT = 4096;
 static const int64_t GRAPH_EXPAND_MAX_EDGE_PAGE_SIZE = 4096;
 
+// Query-local hash index over typed graph identities. Compatible NUMBER and
+// DECIMAL_INT keys are normalized, while tolerance-compared DOUBLE keys use a
+// type bucket, so bucket selection follows graph endpoint equality. Identities
+// are shallow views: the caller must keep their rowkey backing alive until
+// reset(). Both buckets and entries use the owner's graph work-area allocator.
+class GraphIdentityIndex final
+{
+public:
+  explicit GraphIdentityIndex(common::ObIAllocator &allocator);
+  ~GraphIdentityIndex() = default;
+
+  int init(int64_t expected_count);
+  int get_or_insert(const GraphElementIdentity &identity,
+                    int64_t &entry_index,
+                    bool &inserted);
+  int find(const GraphElementIdentity &identity,
+           int64_t &entry_index,
+           bool &found) const;
+  void reset();
+  int64_t count() const { return entries_.count(); }
+  int64_t used_memory() const
+  {
+    return bucket_heads_.get_data_size()
+               > INT64_MAX - entries_.get_data_size()
+        ? INT64_MAX
+        : bucket_heads_.get_data_size() + entries_.get_data_size();
+  }
+
+private:
+  struct Entry
+  {
+    GraphElementIdentity identity_{};
+    int64_t next_entry_{-1};
+    TO_STRING_KV(K_(identity), K_(next_entry));
+  };
+
+  int calc_compatible_hash(const GraphElementIdentity &identity,
+                           uint64_t &hash) const;
+  int get_bucket(const GraphElementIdentity &identity,
+                 int64_t &bucket) const;
+
+private:
+  common::ObArray<int64_t> bucket_heads_;
+  common::ObArray<Entry> entries_;
+
+  DISALLOW_COPY_AND_ASSIGN(GraphIdentityIndex);
+};
+
 // Physical table/column binding for one GraphExpand hop. Endpoint columns are
 // normalized to the traversal direction: edge_current_columns_ join the input
 // frontier, while edge_next_columns_ produce target vertex identities. The
