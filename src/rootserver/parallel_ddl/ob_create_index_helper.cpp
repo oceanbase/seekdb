@@ -105,9 +105,6 @@ int ObCreateIndexHelper::lock_objects_()
                                                                                             arg_.data_version_,
                                                                                             arg_.sql_mode_,
                                                                                             create_index_on_empty_table_opt_))) {
-  } else if (sql_proxy_->target_namespace() > 1) {
-    // The shortcut registers tablet MDS outside the namespace storage route.
-    create_index_on_empty_table_opt_ = false;
   }
   DEBUG_SYNC(AFTER_PARALLEL_DDL_LOCK);
   RS_TRACE(lock_objects);
