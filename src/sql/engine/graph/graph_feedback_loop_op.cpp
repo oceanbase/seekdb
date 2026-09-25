@@ -145,9 +145,9 @@ public:
     return ret;
   }
 
-  // This loader stays dormant while RecursivePumpOp owns row production. The
-  // native executor will call it only after taking exclusive ownership of the
-  // anchor child, avoiding duplicate seed storage in the fallback work area.
+  // Called lazily on the first native output request after this runtime takes
+  // exclusive ownership of the anchor child. Fallback execution never creates
+  // this runtime, so one seed row cannot be stored by both implementations.
   int load_seeds(ObOperator &anchor, const GraphFeedbackLoopSpec &spec)
   {
     int ret = OB_SUCCESS;
@@ -268,13 +268,19 @@ public:
   // count and endpoint keys. The general path cursor above remains available
   // to TRAIL and payload writers added by later increments.
   int get_next_basic_output_row(
-      const GraphFeedbackLoopSpec &spec,
-      const ObIArray<ObExpr *> &binding_exprs,
-      const ObIArray<GraphPathState> *&path)
+      ObOperator &anchor,
+      const GraphFeedbackLoopSpec &spec)
   {
-    int ret = get_next_output_path(spec, binding_exprs, path);
-    if (OB_SUCC(ret) && OB_FAIL(materialize_basic_output_row(spec, *path))) {
-      path = nullptr;
+    int ret = OB_SUCCESS;
+    const ObIArray<GraphPathState> *path = nullptr;
+    if (!seeds_loaded_ && OB_FAIL(load_seeds(anchor, spec))) {
+      LOG_WARN("failed to load native graph feedback seeds", K(ret));
+    } else if (OB_FAIL(get_next_output_path(
+                   spec, anchor.get_spec().output_, path))) {
+      if (ret != OB_ITER_END) {
+        LOG_WARN("failed to get native graph feedback path", K(ret));
+      }
+    } else if (OB_FAIL(materialize_basic_output_row(spec, *path))) {
       LOG_WARN("failed to materialize basic graph feedback output", K(ret));
     }
     if (OB_SUCCESS != ret && OB_ITER_END != ret) {
@@ -866,6 +872,7 @@ int GraphFeedbackLoopSpec::bind_expand_scans(
 int GraphFeedbackLoopOp::inner_open()
 {
   int ret = OB_SUCCESS;
+  use_native_runtime_ = false;
   if (OB_UNLIKELY(!get_graph_spec().get_path_desc().is_valid()
                   || !get_graph_spec().get_expand_access_desc().is_valid()
                   || !get_graph_spec().get_output_row_desc().is_valid(
@@ -880,10 +887,13 @@ int GraphFeedbackLoopOp::inner_open()
              K(get_graph_spec().get_path_desc()),
              K(get_graph_spec().get_expand_access_desc()),
              K(get_graph_spec().get_output_row_desc()));
-  } else if (OB_FAIL(init_native_runtime())) {
+  } else if (FALSE_IT(use_native_runtime_
+                          = get_graph_spec().can_use_basic_native_runtime())) {
+  } else if (use_native_runtime_ && OB_FAIL(init_native_runtime())) {
     LOG_WARN("failed to initialize native graph feedback runtime", K(ret));
-  } else if (OB_FAIL(RecursivePumpOp::inner_open())) {
-    reset_native_runtime();
+  } else if (!use_native_runtime_
+             && OB_FAIL(RecursivePumpOp::inner_open())) {
+    LOG_WARN("failed to initialize recursive graph feedback runtime", K(ret));
   }
   return ret;
 }
@@ -891,13 +901,68 @@ int GraphFeedbackLoopOp::inner_open()
 int GraphFeedbackLoopOp::inner_close()
 {
   reset_native_runtime();
-  return RecursivePumpOp::inner_close();
+  return use_native_runtime_ ? OB_SUCCESS : RecursivePumpOp::inner_close();
+}
+
+int GraphFeedbackLoopOp::get_next_native_row()
+{
+  int ret = OB_SUCCESS;
+  clear_evaluated_flag();
+  if (OB_UNLIKELY(!use_native_runtime_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("native graph feedback runtime is not selected", K(ret));
+  } else if (OB_ISNULL(native_runtime_) || OB_ISNULL(left_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("native graph feedback runtime is incomplete", K(ret),
+             K_(native_runtime), K(left_));
+  } else if (OB_FAIL(try_check_status())) {
+  } else if (OB_FAIL(native_runtime_->get_next_basic_output_row(
+                 *left_, get_graph_spec()))) {
+    if (ret != OB_ITER_END) {
+      LOG_WARN("failed to produce native graph feedback row", K(ret));
+    }
+  }
+  return ret;
+}
+
+int GraphFeedbackLoopOp::inner_get_next_row()
+{
+  return use_native_runtime_
+      ? get_next_native_row()
+      : RecursivePumpOp::inner_get_next_row();
+}
+
+int GraphFeedbackLoopOp::inner_get_next_batch(int64_t max_row_cnt)
+{
+  int ret = OB_SUCCESS;
+  if (!use_native_runtime_) {
+    ret = RecursivePumpOp::inner_get_next_batch(max_row_cnt);
+  } else {
+    ObEvalCtx::BatchInfoScopeGuard guard(eval_ctx_);
+    guard.set_batch_size(1);
+    guard.set_batch_idx(0);
+    if (OB_FAIL(get_next_native_row())) {
+      if (ret == OB_ITER_END) {
+        ret = OB_SUCCESS;
+        brs_.size_ = 0;
+        brs_.end_ = true;
+      }
+    } else {
+      brs_.skip_->reset(1);
+      brs_.size_ = 1;
+      brs_.end_ = false;
+      brs_.all_rows_active_ = true;
+    }
+  }
+  return ret;
 }
 
 int GraphFeedbackLoopOp::inner_rescan()
 {
   reset_native_runtime();
-  return RecursivePumpOp::inner_rescan();
+  return use_native_runtime_
+      ? ObOperator::inner_rescan()
+      : RecursivePumpOp::inner_rescan();
 }
 
 int GraphFeedbackLoopOp::init_native_runtime()

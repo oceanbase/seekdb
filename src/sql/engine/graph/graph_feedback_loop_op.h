@@ -65,8 +65,8 @@ public:
 // Query-local owner of one breadth-first path frontier. Each call to expand()
 // converts the current path-state IDs into GraphExpandInput batches, consumes
 // their single-hop extensions, and installs the accepted child states as the
-// next frontier. GraphFeedbackLoopOp will use this controller once its current
-// recursive-SQL child is replaced by a native GraphExpand access adapter.
+// next frontier. GraphFeedbackLoopOp uses this controller for its conservative
+// native subset and retains the recursive-SQL child as a semantic fallback.
 class GraphFeedbackFrontier final
 {
 public:
@@ -180,8 +180,13 @@ public:
   }
   bool can_use_basic_native_runtime() const
   {
-    return output_row_desc_.supports_basic_native_output(
-        path_desc_, expand_access_desc_);
+    // Full-scan expansion currently partitions a large frontier and would
+    // rescan the complete edge table once per partition. Keep that access
+    // shape on the recursive fallback until native expansion can scan once
+    // for the whole BFS level.
+    return expand_access_desc_.uses_adjacency_index()
+        && output_row_desc_.supports_basic_native_output(
+               path_desc_, expand_access_desc_);
   }
 
 private:
@@ -211,21 +216,24 @@ public:
   ~GraphFeedbackLoopOp() = default;
   int inner_open() override;
   int inner_close() override;
+  int inner_get_next_row() override;
+  int inner_get_next_batch(int64_t max_row_cnt) override;
   int inner_rescan() override;
   void destroy() override;
 
 private:
   int init_native_runtime();
+  int get_next_native_row();
   void reset_native_runtime();
   void destroy_native_runtime();
   const GraphFeedbackLoopSpec &get_graph_spec() const
   { return static_cast<const GraphFeedbackLoopSpec &>(spec_); }
 
 private:
-  // Query-local owner of the native one-hop access and BFS state. The public
-  // row-production path still uses RecursivePumpOp until seed/result binding
-  // is switched in a later increment.
+  // Query-local owner of the native one-hop access and BFS state. Plans outside
+  // the basic native capability continue to use RecursivePumpOp unchanged.
   GraphFeedbackRuntime *native_runtime_{nullptr};
+  bool use_native_runtime_{false};
 };
 
 } // namespace sql
