@@ -41,7 +41,8 @@ public:
                        ObEvalCtx &eval_ctx,
                        ObIAllocator &allocator,
                        int64_t memory_limit)
-      : access_(exec_ctx, eval_ctx),
+      : eval_ctx_(eval_ctx),
+        access_(exec_ctx, eval_ctx),
         expand_(allocator, access_, GRAPH_EXPAND_MAX_EDGE_PAGE_SIZE,
                 memory_limit),
         frontier_(allocator, expand_, GRAPH_EXPAND_MAX_INPUT_STATE_COUNT,
@@ -56,12 +57,68 @@ public:
                         spec.get_target_scan_desc());
   }
 
-  void reset() { frontier_.reset(); }
+  // This entry point is intentionally dormant while RecursivePumpOp still
+  // owns anchor-row production. Calling it from that fallback would duplicate
+  // every seed in two work areas. The native executor will invoke it when it
+  // takes ownership of consuming the anchor child.
+  int add_seed(const GraphFeedbackLoopSpec &spec)
+  {
+    int ret = OB_SUCCESS;
+    GraphElementIdentity identity;
+    ObObj key_values[OB_USER_MAX_ROWKEY_COLUMN_NUMBER]{};
+    const ExprFixedArray &key_exprs = spec.get_seed_key_exprs();
+    const int64_t key_count = key_exprs.count();
+    if (OB_UNLIKELY(!spec.has_valid_seed_key_exprs()
+                    || next_binding_id_ == INT64_MAX)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid graph feedback seed state", K(ret), K(key_count),
+               K_(next_binding_id));
+    } else {
+      identity.graph_id_ = spec.get_path_desc().graph_id_;
+      identity.element_id_ = spec.get_path_desc().source_element_id_;
+      identity.rowkey_.assign(key_values, key_count);
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < key_count; ++i) {
+      ObExpr *expr = key_exprs.at(i);
+      ObDatum *datum = nullptr;
+      if (OB_ISNULL(expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("graph feedback seed key expression is null", K(ret), K(i));
+      } else if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
+        LOG_WARN("failed to evaluate graph feedback seed key", K(ret), K(i));
+      } else if (OB_ISNULL(datum) || datum->is_null()) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("graph feedback seed key is null", K(ret), K(i));
+      } else if (OB_FAIL(datum->to_obj(key_values[i], expr->obj_meta_,
+                                       expr->obj_datum_map_))) {
+        LOG_WARN("failed to materialize graph feedback seed key", K(ret), K(i));
+      }
+    }
+    if (OB_SUCC(ret)
+        && OB_FAIL(frontier_.add_seed(next_binding_id_, identity))) {
+      LOG_WARN("failed to add graph feedback seed", K(ret),
+               K_(next_binding_id), K(identity));
+    } else if (OB_SUCC(ret)) {
+      ++next_binding_id_;
+    }
+    if (OB_SUCCESS != ret) {
+      reset();
+    }
+    return ret;
+  }
+
+  void reset()
+  {
+    frontier_.reset();
+    next_binding_id_ = 0;
+  }
 
 private:
+  ObEvalCtx &eval_ctx_;
   GraphExpandDasAccess access_;
   GraphExpand expand_;
   GraphFeedbackFrontier frontier_;
+  int64_t next_binding_id_{0};
 
   DISALLOW_COPY_AND_ASSIGN(GraphFeedbackRuntime);
 };
