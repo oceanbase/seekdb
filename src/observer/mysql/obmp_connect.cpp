@@ -708,20 +708,14 @@ int ObMPConnect::bind_session_namespace(ObSQLSessionInfo &session)
       }
     }
   }
-  if (OB_SUCC(ret) && runtime != nullptr && runtime->ns().id() > 1) {
-    // Ticket 05c: the first login to an in-process forked namespace blocks
-    // while its service group and initial catalog are loaded.
-    ret = namespace_worker_prototype::ensure_in_process_namespace(runtime->ns().id());
-    if (OB_FAIL(ret)) {
-      LOG_WARN("failed to activate in-process namespace", K(ret),
-               "namespace_id", runtime->ns().id());
-    } else if (OB_FAIL(namespace_worker_prototype::inprocess_refresh_schema(
-                   runtime->ns().id()))) {
-      LOG_WARN("failed to load in-process namespace schema", K(ret),
+  if (OB_SUCC(ret) && runtime != nullptr) {
+    ret = namespace_worker_prototype::prepare_namespace_login(*runtime);
+    if (ret != OB_SUCCESS) {
+      LOG_WARN("failed to prepare namespace login", K(ret),
                "namespace_id", runtime->ns().id());
     }
   }
-  if (OB_SUCC(ret) && runtime != nullptr && runtime->ns().id() > 1) {
+  if (OB_SUCC(ret) && runtime != nullptr) {
     ObSMConnection *conn = get_conn();
     if (conn == NULL || (conn->namespace_id_ != 0
                          && conn->namespace_id_ != runtime->ns().id())) {

@@ -621,6 +621,21 @@ int ensure_in_process_namespace(uint64_t ns)
   }
   return ret;
 }
+int prepare_namespace_login(ns::NamespaceRuntime &runtime)
+{
+  auto *lifecycle = static_cast<INamespaceSchemaLifecycle *>(
+      runtime.service(ns::NamespaceRuntime::SCHEMA_LIFECYCLE));
+  int ret = OB_SUCCESS;
+  if (lifecycle == nullptr) {
+    ret = ensure_in_process_namespace(runtime.ns().id());
+    if (OB_SUCC(ret)) {
+      lifecycle = static_cast<INamespaceSchemaLifecycle *>(
+          runtime.service(ns::NamespaceRuntime::SCHEMA_LIFECYCLE));
+    }
+  }
+  return ret != OB_SUCCESS ? ret
+      : lifecycle == nullptr ? OB_NOT_INIT : lifecycle->refresh();
+}
 // Initial schema load for an in-process namespace. DDL publishes later
 // changes through InProcessSchemaRefreshScheduler in this same process.
 int inprocess_refresh_schema(uint64_t ns)

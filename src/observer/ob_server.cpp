@@ -2505,6 +2505,7 @@ int ObServer::init_global_context()
   if (!ns::namespace_registry().get(1, home) || home == nullptr) {
     return OB_ERR_UNEXPECTED;
   }
+  home->grant_global_control_authority();
   home->set_service(ns::NamespaceRuntime::SCHEMA_SERVICE,
       &share::schema::ObMultiVersionSchemaService::get_instance());
   home->set_service(ns::NamespaceRuntime::SQL_PROXY, &sql_proxy_);

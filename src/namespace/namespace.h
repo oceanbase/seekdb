@@ -83,6 +83,8 @@ public:
   };
   explicit NamespaceRuntime(Namespace &ns) : ns_(ns) {}
   Namespace &ns() const { return ns_; }
+  void grant_global_control_authority() { global_control_authority_ = true; }
+  bool has_global_control_authority() const { return global_control_authority_; }
   void set_service(ServiceSlot slot, void *service)
   {
     if (slot < SLOT_COUNT) { services_[slot] = service; }
@@ -93,6 +95,7 @@ public:
   }
 private:
   Namespace &ns_;
+  bool global_control_authority_ = false;
   void *services_[SLOT_COUNT] = {};
 };
 

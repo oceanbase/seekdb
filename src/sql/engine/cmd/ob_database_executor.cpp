@@ -285,7 +285,7 @@ int NamespaceCommandExecutor::execute(ObExecContext &ctx, NamespaceCommandStmt &
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "session is null", K(ret));
   } else if (my_session->ns_runtime() == NULL
-             || my_session->ns_runtime()->ns().id() != 1) {
+             || !my_session->ns_runtime()->has_global_control_authority()) {
     ret = OB_NOT_SUPPORTED;
   } else {
     // Fillin ddl params.

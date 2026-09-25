@@ -134,11 +134,19 @@ inline uint64_t serving_namespace()
   return in_process_serving_ns ? in_process_serving_ns
       : in_process_bound_namespace();
 }
+inline bool has_global_control_authority()
+{
+  const uint64_t namespace_id = serving_namespace();
+  if (namespace_id == 0) { return true; } // Bootstrap has no bound session.
+  ns::NamespaceRuntime *runtime = nullptr;
+  return ns::namespace_registry().get(namespace_id, runtime)
+      && runtime != nullptr && runtime->has_global_control_authority();
+}
 // True while this thread serves SQL for a forked namespace. Storage adapters
 // use it to carry caller-resolved schema and pick the namespace storage space.
 inline bool serves_forked_schema()
 {
-  return serving_namespace() > 1;
+  return !has_global_control_authority();
 }
 inline StorageSpaceHandle active_worker_storage_space()
 {
@@ -152,7 +160,7 @@ inline bool is_namespace_control_database(const common::ObString &name)
 }
 inline bool can_access_namespace_control_database()
 {
-  return serving_namespace() <= 1;
+  return has_global_control_authority();
 }
 // True while this thread serves SQL for a forked namespace whose schema it
 // can resolve and ship.
@@ -230,6 +238,7 @@ query::ObIRootCommandService *effective_root_command_service(
 transaction::tablelock::ObIInnerConnectionLockRuntime *inprocess_lock_runtime(
     common::sqlclient::ObISQLConnection *conn);
 int ensure_in_process_namespace(uint64_t namespace_id);
+int prepare_namespace_login(ns::NamespaceRuntime &runtime);
 int inprocess_refresh_schema(uint64_t namespace_id);
 share::schema::ObMultiVersionSchemaService *namespace_schema_service(uint64_t namespace_id);
 common::ObMySQLProxy *namespace_sql_proxy(uint64_t namespace_id);

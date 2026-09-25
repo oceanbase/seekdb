@@ -254,11 +254,10 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
                   LOG_USER_WARN(OB_NOT_SUPPORTED, "This system variable now is mock");
                 }
               } else {
-                // Global variables are instance-level state owned by namespace
-                // 1; a branch worker rejects them like the gateway's
-                // privilege-limited session did.
+                // Global variables are instance-level state owned by the
+                // control runtime; other namespace sessions cannot set them.
                 if (OB_SUCC(ret) && set_var.set_scope_ == ObSetVar::SET_SCOPE_GLOBAL
-                    && observer::namespace_worker_prototype::serving_namespace() > 1) {
+                    && !observer::namespace_worker_prototype::has_global_control_authority()) {
                   ret = OB_ERR_NO_PRIVILEGE;
                   LOG_USER_ERROR(OB_ERR_NO_PRIVILEGE, "SUPER");
                   LOG_WARN("SET GLOBAL rejected in a branch namespace worker", K(ret));

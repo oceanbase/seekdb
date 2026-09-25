@@ -3231,8 +3231,7 @@ int ObServerSchemaService::refresh_runtime_full_schema(
       // child's SchemaService. This keeps SHOW/resolution and storage routing
       // consistent without teaching every schema consumer about global scope.
       if (OB_SUCC(ret)
-          && observer::namespace_worker_prototype::serves_forked_schema()
-          && observer::namespace_worker_prototype::serving_namespace() > 1) {
+          && observer::namespace_worker_prototype::serves_forked_schema()) {
         uint64_t control_database_id = OB_INVALID_ID;
         for (int64_t i = simple_databases.count() - 1; OB_SUCC(ret) && i >= 0; --i) {
           if (observer::namespace_worker_prototype::is_namespace_control_database(
