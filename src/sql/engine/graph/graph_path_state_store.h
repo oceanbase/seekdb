@@ -52,6 +52,11 @@ public:
   int get_state(int64_t path_state_id, GraphPathState &state) const;
   int make_expand_input(int64_t path_state_id, GraphExpandInput &input) const;
 
+  // Reconstructs one root-to-leaf path. Returned identities are shallow views
+  // backed by this store and remain valid until reset().
+  int build_path(int64_t leaf_path_state_id,
+                 common::ObIArray<GraphPathState> &path) const;
+
   // Checks only the ancestry of one path. Equal edges used by different paths
   // do not conflict, which preserves TRAIL path multiplicity.
   int contains_edge(int64_t path_state_id,

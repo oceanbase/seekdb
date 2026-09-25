@@ -19,6 +19,8 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "share/ob_errno.h"
 
+#include <utility>
+
 namespace oceanbase
 {
 using namespace common;
@@ -203,6 +205,76 @@ int GraphPathStateStore::make_expand_input(int64_t path_state_id,
     input.binding_id_ = state.binding_id_;
     input.path_state_id_ = state.path_state_id_;
     input.source_identity_ = state.current_identity_;
+  }
+  return ret;
+}
+
+int GraphPathStateStore::build_path(
+    int64_t leaf_path_state_id,
+    ObIArray<GraphPathState> &path) const
+{
+  int ret = OB_SUCCESS;
+  GraphPathState state;
+  int64_t leaf_hop = -1;
+  int64_t binding_id = -1;
+  path.reuse();
+  if (OB_FAIL(get_state(leaf_path_state_id, state))) {
+    LOG_WARN("failed to read graph path leaf", K(ret),
+             K(leaf_path_state_id));
+  } else {
+    leaf_hop = state.hop_;
+    binding_id = state.binding_id_;
+  }
+  for (int64_t visited = 0; OB_SUCC(ret); ++visited) {
+    if (OB_UNLIKELY(visited > GRAPH_PATH_MAX_HOPS
+                    || state.hop_ != leaf_hop - visited
+                    || state.binding_id_ != binding_id)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("inconsistent graph path ancestry", K(ret), K(state),
+               K(leaf_hop), K(binding_id), K(visited));
+    } else if (OB_FAIL(path.push_back(state))) {
+      LOG_WARN("failed to append graph path state", K(ret), K(state));
+    } else if (state.hop_ == 0) {
+      if (OB_UNLIKELY(state.parent_path_state_id_
+                      != GRAPH_INVALID_PATH_STATE_ID)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("graph path root has a parent", K(ret), K(state));
+      }
+      break;
+    } else {
+      GraphPathState parent;
+      if (OB_UNLIKELY(!is_valid_state_id(state.parent_path_state_id_))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("graph path parent id is invalid", K(ret), K(state));
+      } else if (OB_FAIL(get_state(state.parent_path_state_id_, parent))) {
+        LOG_WARN("failed to read graph path parent", K(ret), K(state));
+      } else if (OB_UNLIKELY(parent.binding_id_ != state.binding_id_
+                             || parent.hop_ + 1 != state.hop_
+                             || parent.path_state_id_
+                                    != state.parent_path_state_id_
+                             || parent.path_state_id_
+                                    >= state.path_state_id_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("inconsistent graph path parent", K(ret), K(state),
+                 K(parent));
+      } else {
+        state = parent;
+      }
+    }
+  }
+  if (OB_SUCC(ret)
+      && OB_UNLIKELY(path.count() != leaf_hop + 1)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("graph path length does not match leaf hop", K(ret),
+             K(leaf_hop), "path_count", path.count());
+  }
+  for (int64_t left = 0, right = path.count() - 1;
+       OB_SUCC(ret) && left < right;
+       ++left, --right) {
+    std::swap(path.at(left), path.at(right));
+  }
+  if (OB_SUCCESS != ret) {
+    path.reuse();
   }
   return ret;
 }
