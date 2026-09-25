@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/graph/graph_feedback_loop_op.h"
+#include "sql/engine/graph/graph_binding_store.h"
 #include "sql/engine/graph/graph_expand_das_access.h"
 #include "sql/engine/ob_sql_mem_mgr_processor.h"
 #include "lib/utility/ob_macro_utils.h"
@@ -39,22 +40,31 @@ class GraphFeedbackRuntime final
 public:
   GraphFeedbackRuntime(ObExecContext &exec_ctx,
                        ObEvalCtx &eval_ctx,
-                       ObIAllocator &allocator,
                        int64_t memory_limit)
       : eval_ctx_(eval_ctx),
         access_(exec_ctx, eval_ctx),
-        expand_(allocator, access_, GRAPH_EXPAND_MAX_EDGE_PAGE_SIZE,
+        expand_(binding_store_.get_work_area_allocator(), access_,
+                GRAPH_EXPAND_MAX_EDGE_PAGE_SIZE,
                 memory_limit),
-        frontier_(allocator, expand_, GRAPH_EXPAND_MAX_INPUT_STATE_COUNT,
-                  memory_limit)
+        frontier_(binding_store_.get_work_area_allocator(), expand_,
+                  GRAPH_EXPAND_MAX_INPUT_STATE_COUNT, memory_limit),
+        memory_limit_(memory_limit)
   {}
   ~GraphFeedbackRuntime() = default;
 
   int init(const GraphFeedbackLoopSpec &spec)
   {
-    return access_.init(spec.get_path_desc(), spec.get_expand_access_desc(),
-                        spec.get_source_scan_desc(), spec.get_edge_scan_desc(),
-                        spec.get_target_scan_desc());
+    int ret = OB_SUCCESS;
+    if (OB_FAIL(binding_store_.init(memory_limit_))) {
+      LOG_WARN("failed to initialize graph feedback work area", K(ret),
+               K_(memory_limit));
+    } else if (OB_FAIL(access_.init(
+                   spec.get_path_desc(), spec.get_expand_access_desc(),
+                   spec.get_source_scan_desc(), spec.get_edge_scan_desc(),
+                   spec.get_target_scan_desc()))) {
+      LOG_WARN("failed to initialize graph expand access", K(ret));
+    }
+    return ret;
   }
 
   // This loader stays dormant while RecursivePumpOp owns row production. The
@@ -125,6 +135,7 @@ public:
     if (!has_output_frontier(spec)) {
       ret = OB_ITER_END;
     } else if (OB_FAIL(frontier_.get_frontier_path(index, path))) {
+      ret = normalize_work_area_error(ret);
       LOG_WARN("failed to reconstruct graph feedback output path", K(ret),
                K(index));
     }
@@ -181,6 +192,7 @@ public:
       ret = OB_ITER_END;
     } else if (OB_FAIL(frontier_.expand(spec.get_direction(),
                                         spec.get_path_mode()))) {
+      ret = normalize_work_area_error(ret);
       if (ret != OB_ITER_END) {
         LOG_WARN("failed to advance graph feedback frontier", K(ret),
                  K(current_hop));
@@ -199,6 +211,7 @@ public:
   void reset()
   {
     frontier_.reset();
+    binding_store_.reset();
     next_binding_id_ = 0;
     next_output_index_ = 0;
     seeds_loaded_ = false;
@@ -240,6 +253,7 @@ private:
     }
     if (OB_SUCC(ret)
         && OB_FAIL(frontier_.add_seed(next_binding_id_, identity))) {
+      ret = normalize_work_area_error(ret);
       LOG_WARN("failed to add graph feedback seed", K(ret),
                K_(next_binding_id), K(identity));
     } else if (OB_SUCC(ret)) {
@@ -251,11 +265,22 @@ private:
     return ret;
   }
 
+  int normalize_work_area_error(int error) const
+  {
+    return error == OB_ALLOCATE_MEMORY_FAILED
+        && binding_store_.memory_limit_exceeded()
+        ? OB_EXCEED_QUERY_MEM_LIMIT : error;
+  }
+
 private:
+  // Declared first because GraphExpand and GraphFeedbackFrontier allocate
+  // through the same hard-capped work-area allocator owned by this store.
+  GraphBindingStore binding_store_{};
   ObEvalCtx &eval_ctx_;
   GraphExpandDasAccess access_;
   GraphExpand expand_;
   GraphFeedbackFrontier frontier_;
+  int64_t memory_limit_{0};
   int64_t next_binding_id_{0};
   int64_t next_output_index_{0};
   bool seeds_loaded_{false};
@@ -672,7 +697,7 @@ int GraphFeedbackLoopOp::init_native_runtime()
   } else if (native_runtime_ == nullptr
              && OB_ISNULL(native_runtime_ = OB_NEWx(
                     GraphFeedbackRuntime, &ctx_.get_allocator(),
-                    ctx_, eval_ctx_, ctx_.get_allocator(), memory_limit))) {
+                    ctx_, eval_ctx_, memory_limit))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate native graph feedback runtime", K(ret),
              K(memory_limit));

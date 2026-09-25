@@ -27,16 +27,16 @@ using namespace common;
 namespace sql
 {
 
-int GraphBindingMemoryAllocator::init(int64_t memory_limit)
+int GraphWorkAreaAllocator::init(int64_t memory_limit)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(memory_limit_ > 0)) {
     ret = OB_INIT_TWICE;
-    LOG_WARN("graph binding allocator is already initialized", K(ret),
+    LOG_WARN("graph work-area allocator is already initialized", K(ret),
              K_(memory_limit));
   } else if (OB_UNLIKELY(memory_limit <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid graph binding allocator limit", K(ret),
+    LOG_WARN("invalid graph work-area allocator limit", K(ret),
              K(memory_limit));
   } else {
     memory_limit_ = memory_limit;
@@ -44,31 +44,52 @@ int GraphBindingMemoryAllocator::init(int64_t memory_limit)
   return ret;
 }
 
-void *GraphBindingMemoryAllocator::alloc(int64_t size)
+void *GraphWorkAreaAllocator::alloc(int64_t size)
 {
   return alloc(size, attr_);
 }
 
-void *GraphBindingMemoryAllocator::alloc(
+void *GraphWorkAreaAllocator::alloc(
     int64_t size,
     const lib::ObMemAttr &attr)
 {
   void *ptr = nullptr;
-  const int64_t used = tracker_.used();
+  const int64_t used = total();
+  const int64_t header_size = common::TrackedAllocator::header_size();
   UNUSED(attr);
   if (size <= 0 || memory_limit_ <= 0) {
   } else if (used < 0 || used > memory_limit_
-             || size > memory_limit_ - used) {
+             || size > INT64_MAX - header_size
+             || size + header_size > memory_limit_ - used) {
     limit_exceeded_ = true;
-  } else {
-    ptr = tracked_allocator_.alloc(size, attr_);
+  } else if (OB_NOT_NULL(ptr = tracked_allocator_.alloc(size, attr_))) {
+    ++allocation_count_;
   }
   return ptr;
 }
 
-void GraphBindingMemoryAllocator::free(void *ptr)
+void GraphWorkAreaAllocator::free(void *ptr)
 {
-  tracked_allocator_.free(ptr);
+  if (ptr != nullptr) {
+    OB_ASSERT(allocation_count_ > 0);
+    tracked_allocator_.free(ptr);
+    --allocation_count_;
+  }
+}
+
+int64_t GraphWorkAreaAllocator::total() const
+{
+  const int64_t payload_bytes = tracker_.used();
+  const int64_t header_size = common::TrackedAllocator::header_size();
+  int64_t total_bytes = INT64_MAX;
+  if (allocation_count_ >= 0
+      && allocation_count_ <= INT64_MAX / header_size) {
+    const int64_t header_bytes = allocation_count_ * header_size;
+    if (payload_bytes >= 0 && payload_bytes <= INT64_MAX - header_bytes) {
+      total_bytes = payload_bytes + header_bytes;
+    }
+  }
+  return total_bytes;
 }
 
 int GraphBindingStore::init(int64_t memory_limit)
