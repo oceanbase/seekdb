@@ -99,8 +99,8 @@ list(APPEND _rust_sources
 # to the same toolchain as the rest of the build instead of whatever `cc`
 # discovers on PATH.
 set(_rust_build_env "CARGO_TARGET_DIR=${RUST_TARGET_DIR}"
-                    "SEEKDB_CXX_HEADER_DIR=${RUST_TARGET_DIR}/include"
-                    "SEEKDB_DEFAULT_LOG_LEVEL=${DEFAULT_LOG_LEVEL}"
+                    "CONFIG_HEADER_DIR=${RUST_TARGET_DIR}/include"
+                    "DEFAULT_LOG_LEVEL=${DEFAULT_LOG_LEVEL}"
                     "CC=${CMAKE_C_COMPILER}" "CXX=${CMAKE_CXX_COMPILER}"
                     "AR=${CMAKE_AR}")
 if(ANDROID)

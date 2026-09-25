@@ -50,8 +50,8 @@ genrule(
     cmd = """
 set -eu
 export CARGO_TARGET_DIR="$(@D)/rust-cargo-target"
-export SEEKDB_CXX_HEADER_DIR="$$PWD/$(@D)/unix"
-export SEEKDB_DEFAULT_LOG_LEVEL=OB_LOG_LEVEL_ERROR
+export CONFIG_HEADER_DIR="$$PWD/$(@D)/unix"
+export DEFAULT_LOG_LEVEL=OB_LOG_LEVEL_ERROR
 cargo build --release --manifest-path "$(location Cargo.toml)" --package sql-nio --package auto-config
 cp "$$CARGO_TARGET_DIR/release/libsql_nio.a" "$(@D)/libsql_nio.a"
 cp "$$CARGO_TARGET_DIR/release/libauto_config.a" "$(@D)/libauto_config.a"
@@ -72,8 +72,8 @@ genrule(
     outs = ["sql_nio.lib", "auto_config.lib", "windows/config_bridge.h", "windows/config_checkers.h"],
     cmd_bat = """
 set CARGO_TARGET_DIR=$(@D)\\rust-cargo-target
-set SEEKDB_CXX_HEADER_DIR=%CD%\\$(@D)\\windows
-set SEEKDB_DEFAULT_LOG_LEVEL=OB_LOG_LEVEL_ERROR
+set CONFIG_HEADER_DIR=%CD%\\$(@D)\\windows
+set DEFAULT_LOG_LEVEL=OB_LOG_LEVEL_ERROR
 cargo build --release --manifest-path "$(location Cargo.toml)" --package sql-nio --package auto-config
 copy /Y "%CARGO_TARGET_DIR%\\release\\sql_nio.lib" "$(@D)\\sql_nio.lib"
 copy /Y "%CARGO_TARGET_DIR%\\release\\auto_config.lib" "$(@D)\\auto_config.lib"

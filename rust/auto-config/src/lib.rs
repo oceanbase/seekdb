@@ -678,10 +678,10 @@ mod tests {
     #[test]
     #[ignore]
     fn crash_writer_child() {
-        let Ok(path) = std::env::var("SEEKDB_AUTO_CONFIG_TEST_PATH") else {
+        let Ok(path) = std::env::var("AUTO_CONFIG_TEST_PATH") else {
             return;
         };
-        let crash_at = std::env::var("SEEKDB_AUTO_CONFIG_TEST_STAGE").unwrap();
+        let crash_at = std::env::var("AUTO_CONFIG_TEST_STAGE").unwrap();
         update_with_hook(Path::new(&path), "setting", Some("new"), |stage| {
             if format!("{stage:?}") == crash_at {
                 std::process::exit(42);
@@ -700,8 +700,8 @@ mod tests {
             update(&path, "setting", Some("old")).unwrap();
             let output = std::process::Command::new(std::env::current_exe().unwrap())
                 .args(["--ignored", "--exact", "tests::crash_writer_child"])
-                .env("SEEKDB_AUTO_CONFIG_TEST_PATH", &path)
-                .env("SEEKDB_AUTO_CONFIG_TEST_STAGE", format!("{crash_at:?}"))
+                .env("AUTO_CONFIG_TEST_PATH", &path)
+                .env("AUTO_CONFIG_TEST_STAGE", format!("{crash_at:?}"))
                 .output()
                 .unwrap();
             assert_eq!(output.status.code(), Some(42), "{output:?}");
