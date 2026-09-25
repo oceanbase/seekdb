@@ -178,6 +178,7 @@ SQL_UNITY_GROUPS = [
         name = "ob_sql_engine_1",
         language = "c++",
         srcs = [
+            "src/sql/engine/graph/graph_binding_store.cpp",
             "src/sql/engine/graph/graph_feedback_loop_op.cpp",
             "src/sql/engine/graph/graph_expand.cpp",
             "src/sql/engine/graph/graph_expand_das_access.cpp",
