@@ -262,6 +262,8 @@ public:
 private:
   uint64_t ns_;
 };
+class InProcessRangeService;
+extern InProcessRangeService native_inprocess_ranges;
 void register_root_namespace_storage_services(ns::NamespaceRuntime &runtime)
 {
   static InProcessDirectInsertService direct_insert;
@@ -271,6 +273,7 @@ void register_root_namespace_storage_services(ns::NamespaceRuntime &runtime)
   static RootTableLockTabletRouter table_lock_tablet_router;
   runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_SERVICE, &direct_insert);
   runtime.set_service(ns::NamespaceRuntime::DML_SERVICE, &native_inprocess_dml);
+  runtime.set_service(ns::NamespaceRuntime::RANGE_SERVICE, &native_inprocess_ranges);
   runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_REGISTRY,
       &direct_insert_registry);
   runtime.set_service(ns::NamespaceRuntime::TABLET_AUTOINCREMENT_SERVICE,
@@ -280,9 +283,30 @@ void register_root_namespace_storage_services(ns::NamespaceRuntime &runtime)
   runtime.set_service(ns::NamespaceRuntime::TABLE_LOCK_TABLET_ROUTER,
       &table_lock_tablet_router);
 }
+class IRangeSchemaPolicy
+{
+public:
+  virtual ~IRangeSchemaPolicy() = default;
+  virtual bool resolve_logical_schema(uint64_t table_id) const = 0;
+};
+class NativeRangeSchemaPolicy final : public IRangeSchemaPolicy
+{
+public:
+  bool resolve_logical_schema(uint64_t table_id) const override
+  {
+    return !is_inner_table(table_id);
+  }
+};
+class ForkRangeSchemaPolicy final : public IRangeSchemaPolicy
+{
+public:
+  bool resolve_logical_schema(uint64_t) const override { return true; }
+};
 class InProcessRangeService final : public data_plane::ObIRangeService
 {
 public:
+  explicit InProcessRangeService(const IRangeSchemaPolicy &schema_policy)
+      : schema_policy_(schema_policy) {}
   int get_multi_ranges_cost(const common::ObTabletID &tablet, int64_t timeout,
       const common::ObIArray<common::ObStoreRange> &ranges, int64_t &size) override
   {
@@ -316,7 +340,7 @@ private:
     const ObTableSchema *logical_schema = nullptr;
     const bool has_logical_schema = serves_namespace_schema()
         && !storage::NamespaceForkKernelPrototype::is_encoded_id(logical_table_id)
-        && (!is_inner_table(logical_table_id) || serving_namespace() > 1);
+        && schema_policy_.resolve_logical_schema(logical_table_id);
     int ret = OB_SUCCESS;
     if (has_logical_schema) {
       auto *schema_service = sql_session != nullptr
@@ -388,12 +412,20 @@ private:
     }
     return ret;
   }
+  const IRangeSchemaPolicy &schema_policy_;
 };
-InProcessRangeService inprocess_ranges;
+NativeRangeSchemaPolicy native_range_schema_policy;
+ForkRangeSchemaPolicy fork_range_schema_policy;
+InProcessRangeService native_inprocess_ranges(native_range_schema_policy);
+InProcessRangeService fork_inprocess_ranges(fork_range_schema_policy);
 data_plane::ObIRangeService *effective_range_service(sql::ObSQLSessionInfo *session,
                                                      data_plane::ObIRangeService *fallback)
 {
-  return in_process_session_ns(session) > 0 ? &inprocess_ranges : fallback;
+  ns::NamespaceRuntime *runtime = session ? session->ns_runtime() : nullptr;
+  return runtime != nullptr
+      ? static_cast<data_plane::ObIRangeService *>(
+            runtime->service(ns::NamespaceRuntime::RANGE_SERVICE))
+      : fallback;
 }
 struct InProcessNamespaceServices {
   explicit InProcessNamespaceServices(uint64_t ns)
@@ -597,6 +629,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
     runtime.set_service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE, services->root_commands);
     runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_SERVICE, &services->direct_insert);
     runtime.set_service(ns::NamespaceRuntime::DML_SERVICE, &fork_inprocess_dml);
+    runtime.set_service(ns::NamespaceRuntime::RANGE_SERVICE, &fork_inprocess_ranges);
     runtime.set_service(ns::NamespaceRuntime::TABLET_AUTOINCREMENT_SERVICE,
         &services->tablet_autoincrement);
     runtime.set_service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE,

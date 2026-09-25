@@ -81,6 +81,7 @@ public:
     TABLE_LOCK_TABLET_ROUTER = 9,
     VIRTUAL_TABLE_SCAN_SERVICE = 10,
     DML_SERVICE = 11,
+    RANGE_SERVICE = 12,
     SLOT_COUNT
   };
   explicit NamespaceRuntime(Namespace &ns) : ns_(ns) {}
