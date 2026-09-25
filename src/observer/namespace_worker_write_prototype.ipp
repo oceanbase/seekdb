@@ -343,7 +343,6 @@ struct TableLockPlan {
   StorageSpaceHandle storage_space;
   int64_t schema_version = OB_INVALID_VERSION;
   ObTabletIDArray tablet_ids;
-  bool explicit_tablets = false;
 };
 
 bool is_schema_table_lock_operation(
@@ -446,7 +445,6 @@ int append_worker_table_lock_plan(
   if (OB_SUCC(ret)) {
     plan.schema_version = schema->get_schema_version();
     ret = plan.tablet_ids.assign(tablet_ids);
-    if (OB_SUCC(ret)) { plan.explicit_tablets = true; }
   }
   return ret;
 }
@@ -720,10 +718,9 @@ int process_table_lock(
   using namespace transaction::tablelock;
   int ret = OB_SUCCESS;
   const uint64_t ns = storage_space.namespace_id();
-  bool has_explicit_tablets = plan.explicit_tablets;
   const int64_t schema_version = plan.schema_version;
   ObTabletIDArray tablet_ids;
-  if (is_schema_table_lock_operation(operation) && has_explicit_tablets) {
+  if (is_schema_table_lock_operation(operation)) {
     if (schema_version < 0 || plan.tablet_ids.count() > 65536) {
       ret = OB_INVALID_ARGUMENT;
     }
@@ -774,36 +771,33 @@ int process_table_lock(
   } else if (OB_FAIL(service->unlock(tx, tx_param, arg))) {                       \
   }                                                                               \
 } while (false)
-#define DECODE_AND_EXPLICIT_LOCK(Type, NativeCall) do {                           \
+#define DECODE_AND_EXPLICIT_LOCK(Type) do {                                       \
   Type arg;                                                                       \
   if (OB_FAIL(deserialize_lock_request(payload, arg))) {                           \
-  } else if (has_explicit_tablets) {                                               \
+  } else {                                                                         \
     if (OB_FAIL(route_table_lock_id(storage_space, arg.table_id_))) {              \
     } else if (OB_FAIL(service->lock_with_explicit_tablets(                       \
                    tx, tx_param, arg, schema_version, tablet_ids))) {              \
     }                                                                              \
-  } else if (ns > 1) {                                                            \
-    ret = OB_NOT_SUPPORTED;                                                        \
-  } else if (OB_FAIL(service->NativeCall(tx, tx_param, arg))) {                    \
   }                                                                                \
 } while (false)
 
   if (OB_SUCC(ret)) {
     switch (operation) {
       case obcall::ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_TABLE:
-        DECODE_AND_EXPLICIT_LOCK(ObLockTableRequest, lock); break;
+        DECODE_AND_EXPLICIT_LOCK(ObLockTableRequest); break;
       case obcall::ObInnerSQLTransmitArg::OPERATION_TYPE_UNLOCK_TABLE:
-        DECODE_AND_EXPLICIT_LOCK(ObUnLockTableRequest, unlock); break;
+        DECODE_AND_EXPLICIT_LOCK(ObUnLockTableRequest); break;
       case obcall::ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_TABLET:
-        DECODE_AND_EXPLICIT_LOCK(ObLockTabletsRequest, lock); break;
+        DECODE_AND_EXPLICIT_LOCK(ObLockTabletsRequest); break;
       case obcall::ObInnerSQLTransmitArg::OPERATION_TYPE_UNLOCK_TABLET:
-        DECODE_AND_EXPLICIT_LOCK(ObUnLockTabletRequest, unlock); break;
+        DECODE_AND_EXPLICIT_LOCK(ObUnLockTabletRequest); break;
       case obcall::ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_PART:
       case obcall::ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_SUBPART:
-        DECODE_AND_EXPLICIT_LOCK(ObLockPartitionRequest, lock); break;
+        DECODE_AND_EXPLICIT_LOCK(ObLockPartitionRequest); break;
       case obcall::ObInnerSQLTransmitArg::OPERATION_TYPE_UNLOCK_PART:
       case obcall::ObInnerSQLTransmitArg::OPERATION_TYPE_UNLOCK_SUBPART:
-        DECODE_AND_EXPLICIT_LOCK(ObUnLockPartitionRequest, unlock); break;
+        DECODE_AND_EXPLICIT_LOCK(ObUnLockPartitionRequest); break;
       case obcall::ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_OBJ: {
         ObLockObjRequest arg;
         ObLockObjsRequest args;
