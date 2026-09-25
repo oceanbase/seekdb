@@ -77,6 +77,7 @@ public:
     SQL_PROXY = 5,
     TABLET_AUTOINCREMENT_SERVICE = 6,
     AUTOINCREMENT_SERVICE = 7,
+    SCHEMA_LIFECYCLE = 8,
     SLOT_COUNT
   };
   explicit NamespaceRuntime(Namespace &ns) : ns_(ns) {}

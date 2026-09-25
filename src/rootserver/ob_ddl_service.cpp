@@ -14201,8 +14201,7 @@ int ObDDLService::alter_table(obcall::ObAlterTableArg &alter_table_arg,
 
     // Truncate MDS updates the global index tablets. Materialize inherited
     // tablets before the DDL transaction so its MDS cannot target the parent.
-    if (OB_SUCC(ret) && task_context_.namespace_id_ > 1
-        && alter_table_arg.is_update_global_indexes_
+    if (OB_SUCC(ret) && alter_table_arg.is_update_global_indexes_
         && GCONF._ob_enable_truncate_partition_preserve_global_index
         && (alter_table_arg.alter_part_type_ == obcall::ObAlterTableArg::TRUNCATE_PARTITION
             || alter_table_arg.alter_part_type_ == obcall::ObAlterTableArg::TRUNCATE_SUB_PARTITION)) {
@@ -25271,8 +25270,8 @@ int ObDDLSQLTransaction::start(ObISQLClient *proxy,
       }
     }
     if (OB_SUCC(ret)
-        && OB_FAIL(storage::NamespaceForkKernelPrototype::begin_schema_changes(
-            *this, namespace_id_))) {
+        && OB_FAIL(observer::namespace_worker_prototype::begin_namespace_schema_change(
+            namespace_id_))) {
       LOG_WARN("fail to begin namespace schema changes", KR(ret));
     }
   }
@@ -25382,28 +25381,17 @@ int ObDDLSQLTransaction::end(const bool commit)
   }
   ret = OB_SUCC(ret) ? tmp_ret : ret;
   const bool namespace_transaction_committed = commit && OB_SUCC(ret);
-  const int finish_schema_ret = storage::NamespaceForkKernelPrototype::finish_schema_changes(
-      *this, namespace_id_, namespace_transaction_committed && committed_schema_version > 0
+  const int finish_schema_ret = observer::namespace_worker_prototype::finish_namespace_schema_change(
+      namespace_id_, namespace_transaction_committed && committed_schema_version > 0
           ? committed_schema_version : 0);
   if (OB_SUCC(ret)) { ret = finish_schema_ret; }
   if (namespace_transaction_committed
       && OB_SUCC(ret)
-      && committed_schema_version > 0
-      && namespace_id_ > 1) {
-    if (const char *delay_text = std::getenv(
-            "SEEKDB_NAMESPACE_DDL_PUBLISH_DELAY_US")) {
-      char *end = nullptr;
-      const int64_t delay_us = std::strtoll(delay_text, &end, 10);
-      if (*delay_text && end && !*end && delay_us > 0 && delay_us <= 2000000) {
-        ob_usleep(delay_us);
-      }
-    }
+      && committed_schema_version > 0) {
     const int64_t base_schema_version = namespace_base_schema_version_ > 0
         ? namespace_base_schema_version_ : start_operation_schema_version_;
     int64_t published_schema_version = OB_INVALID_VERSION;
-    if (base_schema_version <= 0) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(observer::namespace_worker_prototype::sync_namespace_schema_delta(
+    if (OB_FAIL(observer::namespace_worker_prototype::publish_namespace_schema_change(
             namespace_id_, *schema_service_,
             base_schema_version,
             published_schema_version))) {

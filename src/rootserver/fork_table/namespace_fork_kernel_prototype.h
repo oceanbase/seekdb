@@ -58,9 +58,6 @@ public:
   static int finish_schema_change(uint64_t namespace_id, int64_t schema_version);
   static int begin_schema_recovery(uint64_t namespace_id, bool &needed);
   static int finish_schema_recovery(uint64_t namespace_id, int64_t schema_version);
-  static int begin_schema_changes(common::ObISQLClient &trans, uint64_t namespace_id);
-  static int finish_schema_changes(common::ObISQLClient &trans,
-                                   uint64_t namespace_id, int64_t committed_schema_version);
   static int publish_schema_delta(
       uint64_t namespace_id,
       int64_t schema_version,

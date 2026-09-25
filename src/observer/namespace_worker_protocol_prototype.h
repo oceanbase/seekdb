@@ -32,6 +32,17 @@ namespace oceanbase { namespace share { namespace schema { class ObPrivMgr; } } 
 namespace oceanbase { namespace share { namespace schema { class ObMultiVersionSchemaService; } } }
 namespace oceanbase { namespace share { namespace schema { class ObTableSchema; } } }
 namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
+class INamespaceSchemaLifecycle
+{
+public:
+  virtual ~INamespaceSchemaLifecycle() = default;
+  virtual int refresh() = 0;
+  virtual int fetch_version(bool published, bool core_version, int64_t &version) = 0;
+  virtual int begin_change() = 0;
+  virtual int finish_change(int64_t committed_schema_version) = 0;
+  virtual int publish(share::schema::ObMultiVersionSchemaService &schema_service,
+                      int64_t base_schema_version, int64_t &published_schema_version) = 0;
+};
 constexpr size_t MAX_FRAME = 256 * 1024;
 constexpr size_t MAX_SQL_MESSAGE = 64 * 1024 * 1024;
 struct RequestTag { uint64_t slot = 0, generation = 0; };
@@ -205,6 +216,13 @@ private:
 // ensure_in_process_namespace lazily constructs its schema service and plan
 // cache. The effective_* helpers select the service for that session.
 uint64_t in_process_session_ns(sql::ObSQLSessionInfo *session);
+INamespaceSchemaLifecycle *namespace_schema_lifecycle(uint64_t namespace_id);
+int refresh_session_schema(sql::ObSQLSessionInfo *session);
+int begin_namespace_schema_change(uint64_t namespace_id);
+int finish_namespace_schema_change(uint64_t namespace_id, int64_t committed_schema_version);
+int publish_namespace_schema_change(uint64_t namespace_id,
+    share::schema::ObMultiVersionSchemaService &schema_service,
+    int64_t base_schema_version, int64_t &published_schema_version);
 rootserver::ObIRootserverLocalRuntime *root_namespace_ddl_runtime();
 void register_root_namespace_storage_services(ns::NamespaceRuntime &runtime);
 query::ObIRootCommandService *effective_root_command_service(

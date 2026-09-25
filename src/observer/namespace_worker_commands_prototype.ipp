@@ -9,17 +9,7 @@ int sync_namespace_schema_delta(uint64_t ns, ObMultiVersionSchemaService &servic
   published_schema_version = base_schema_version;
   InProcessServingScope serving(ns);
   if (ns == 0) { return common::OB_INVALID_ARGUMENT; }
-  // A successful DDL is not complete from the SQL worker's point of view
-  // until its private SchemaService can observe the committed metadata.
-  // Namespace 1 does not need to publish a fork-directory delta, but it still
-  // needs the same local visibility guarantee as every forked namespace.
-  if (ns == 1) {
-    int ret = service.refresh_and_add_schema(false);
-    if (!ret) {
-      ret = service.get_runtime_refreshed_schema_version(published_schema_version);
-    }
-    return ret;
-  }
+  // A successful fork DDL must publish its directory delta before returning.
   ObSchemaService *backend = service.get_schema_service();
   common::ObMySQLProxy *proxy = service.get_sql_proxy();
   ObSchemaStatusProxy *status_proxy = service.get_schema_status_proxy();

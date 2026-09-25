@@ -1372,14 +1372,6 @@ int NamespaceForkKernelPrototype::finish_schema_recovery(
   }
   return ret;
 }
-int NamespaceForkKernelPrototype::begin_schema_changes(ObISQLClient &, uint64_t namespace_id) {
-  return namespace_id > 1 ? begin_schema_change(namespace_id) : OB_SUCCESS;
-}
-int NamespaceForkKernelPrototype::finish_schema_changes(
-    ObISQLClient &, uint64_t namespace_id, int64_t committed_schema_version) {
-  return namespace_id > 1
-      ? finish_schema_change(namespace_id, committed_schema_version) : OB_SUCCESS;
-}
 int NamespaceForkKernelPrototype::observe_database(ObISQLClient &trans, const ObDatabaseSchema &schema) {
   if (is_inner_db(schema.get_database_id())
       || schema.get_database_name_str().prefix_match("__fork_proto_meta")) { return OB_SUCCESS; }

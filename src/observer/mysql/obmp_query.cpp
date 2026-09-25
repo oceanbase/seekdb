@@ -85,22 +85,11 @@ int ObMPQuery::process()
     ObSQLSessionInfo &session = *sess;
     ObSQLSessionInfo::LockGuard lock_guard(session.get_query_lock());
     session.set_current_trace_id(ObCurTraceId::get_trace_id());
-    // Ticket 05c: a session routed to an in-process forked namespace executes
-    // the whole command under its serving scope, and advances the namespace's
-    // schema cache once per command (mirroring worker-mode before_process).
+    // Execute under the bound namespace and refresh its schema before the command.
     namespace_worker_prototype::InProcessServingScope inprocess_serving(
         namespace_worker_prototype::in_process_session_ns(sess));
-    if (OB_SUCC(ret) && namespace_worker_prototype::in_process_session_ns(sess) > 1) {
-      if (OB_FAIL(namespace_worker_prototype::ensure_in_process_namespace(
-              namespace_worker_prototype::in_process_session_ns(sess)))) {
-        LOG_WARN("failed to activate in-process namespace", K(ret));
-      } else {
-        ret = namespace_worker_prototype::inprocess_refresh_schema(
-            namespace_worker_prototype::in_process_session_ns(sess));
-        if (OB_FAIL(ret)) {
-          LOG_WARN("failed to refresh in-process namespace schema", K(ret));
-        }
-      }
+    if (OB_SUCC(ret) && OB_FAIL(namespace_worker_prototype::refresh_session_schema(sess))) {
+      LOG_WARN("failed to refresh namespace schema", K(ret));
     }
     if (OB_SUCC(ret)) {
       int64_t database_schema_version = 0;

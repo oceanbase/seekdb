@@ -22,6 +22,96 @@
 #include <shared_mutex>
 #include <thread>
 namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
+class RootSchemaLifecycle final : public INamespaceSchemaLifecycle
+{
+public:
+  int refresh() override { return OB_SUCCESS; }
+  int fetch_version(bool published, bool core_version, int64_t &version) override
+  {
+    auto &service = ObMultiVersionSchemaService::get_instance();
+    return published
+        ? service.get_published_schema_version(version, core_version)
+        : service.get_runtime_refreshed_schema_version(version, core_version);
+  }
+  int begin_change() override { return OB_SUCCESS; }
+  int finish_change(int64_t) override { return OB_SUCCESS; }
+  int publish(ObMultiVersionSchemaService &, int64_t base_schema_version,
+              int64_t &published_schema_version) override
+  {
+    published_schema_version = base_schema_version;
+    return OB_SUCCESS;
+  }
+};
+class ForkSchemaLifecycle final : public INamespaceSchemaLifecycle
+{
+public:
+  explicit ForkSchemaLifecycle(uint64_t ns) : ns_(ns) {}
+  int refresh() override { return inprocess_refresh_schema(ns_); }
+  int fetch_version(bool, bool, int64_t &version) override
+  {
+    return storage::NamespaceForkKernelPrototype::namespace_schema_version(ns_, version);
+  }
+  int begin_change() override
+  {
+    return storage::NamespaceForkKernelPrototype::begin_schema_change(ns_);
+  }
+  int finish_change(int64_t committed_schema_version) override
+  {
+    return storage::NamespaceForkKernelPrototype::finish_schema_change(
+        ns_, committed_schema_version);
+  }
+  int publish(ObMultiVersionSchemaService &schema_service,
+              int64_t base_schema_version, int64_t &published_schema_version) override
+  {
+    if (const char *delay_text = std::getenv("SEEKDB_NAMESPACE_DDL_PUBLISH_DELAY_US")) {
+      char *end = nullptr;
+      const int64_t delay_us = std::strtoll(delay_text, &end, 10);
+      if (*delay_text && end && !*end && delay_us > 0 && delay_us <= 2000000) {
+        ob_usleep(delay_us);
+      }
+    }
+    return sync_namespace_schema_delta(
+        ns_, schema_service, base_schema_version, published_schema_version);
+  }
+private:
+  uint64_t ns_;
+};
+INamespaceSchemaLifecycle *namespace_schema_lifecycle(uint64_t namespace_id)
+{
+  ns::NamespaceRuntime *runtime = nullptr;
+  return ns::namespace_registry().get(namespace_id, runtime) && runtime != nullptr
+      ? static_cast<INamespaceSchemaLifecycle *>(
+            runtime->service(ns::NamespaceRuntime::SCHEMA_LIFECYCLE))
+      : nullptr;
+}
+int refresh_session_schema(sql::ObSQLSessionInfo *session)
+{
+  ns::NamespaceRuntime *runtime = session ? session->ns_runtime() : nullptr;
+  if (runtime == nullptr) { return OB_SUCCESS; }
+  auto *lifecycle = static_cast<INamespaceSchemaLifecycle *>(
+      runtime->service(ns::NamespaceRuntime::SCHEMA_LIFECYCLE));
+  return lifecycle == nullptr ? OB_NOT_INIT : lifecycle->refresh();
+}
+int begin_namespace_schema_change(uint64_t namespace_id)
+{
+  auto *lifecycle = namespace_schema_lifecycle(namespace_id);
+  return lifecycle == nullptr ? OB_NOT_INIT : lifecycle->begin_change();
+}
+int finish_namespace_schema_change(uint64_t namespace_id,
+                                   int64_t committed_schema_version)
+{
+  auto *lifecycle = namespace_schema_lifecycle(namespace_id);
+  return lifecycle == nullptr ? OB_NOT_INIT
+      : lifecycle->finish_change(committed_schema_version);
+}
+int publish_namespace_schema_change(uint64_t namespace_id,
+    ObMultiVersionSchemaService &schema_service,
+    int64_t base_schema_version, int64_t &published_schema_version)
+{
+  auto *lifecycle = namespace_schema_lifecycle(namespace_id);
+  return lifecycle == nullptr ? OB_NOT_INIT
+      : lifecycle->publish(schema_service, base_schema_version, published_schema_version);
+}
 rootserver::ObIRootserverLocalRuntime *root_namespace_ddl_runtime()
 {
   static InProcessRootserverLocalRuntime runtime(1);
@@ -170,11 +260,14 @@ void register_root_namespace_storage_services(ns::NamespaceRuntime &runtime)
   static InProcessDirectInsertService direct_insert;
   static DirectInsertRegistry direct_insert_registry;
   static InProcessTabletAutoincrementService tablet_autoincrement(1);
+  static RootSchemaLifecycle schema_lifecycle;
   runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_SERVICE, &direct_insert);
   runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_REGISTRY,
       &direct_insert_registry);
   runtime.set_service(ns::NamespaceRuntime::TABLET_AUTOINCREMENT_SERVICE,
       &tablet_autoincrement);
+  runtime.set_service(ns::NamespaceRuntime::SCHEMA_LIFECYCLE,
+      &schema_lifecycle);
 }
 class InProcessRangeService final : public data_plane::ObIRangeService
 {
@@ -229,11 +322,11 @@ private:
       }
     }
     common::ObTabletID storage_tablet = logical_tablet;
-    if (OB_SUCC(ret) && storage_space.is_namespace() && storage_space.namespace_id() > 1) {
-      if (!has_logical_schema) {
-        ret = OB_INVALID_ARGUMENT;
-      } else {
+    if (OB_SUCC(ret) && storage_space.is_namespace()) {
+      if (has_logical_schema) {
         ret = route_tablet_id(storage_space, storage_tablet);
+      } else if (!is_inner_table(logical_table_id)) {
+        ret = OB_INVALID_ARGUMENT;
       }
     }
     common::ObSEArray<common::ObStoreRange, 4> storage_ranges;
@@ -292,7 +385,8 @@ data_plane::ObIRangeService *effective_range_service(sql::ObSQLSessionInfo *sess
   return in_process_session_ns(session) > 0 ? &inprocess_ranges : fallback;
 }
 struct InProcessNamespaceServices {
-  explicit InProcessNamespaceServices(uint64_t ns) : tablet_autoincrement(ns) {}
+  explicit InProcessNamespaceServices(uint64_t ns)
+      : tablet_autoincrement(ns), schema_lifecycle(ns) {}
   NamespaceRoutingSqlProxy *sql_proxy = nullptr;
   NamespaceRoutingSqlProxy *ddl_proxy = nullptr;
   share::schema::ObMultiVersionSchemaService *schema_service = nullptr;
@@ -305,6 +399,7 @@ struct InProcessNamespaceServices {
   InProcessRootserverLocalRuntime *local_runtime = nullptr;
   InProcessDirectInsertService direct_insert;
   InProcessTabletAutoincrementService tablet_autoincrement;
+  ForkSchemaLifecycle schema_lifecycle;
   share::ObAutoincrementService autoincrement;
   DirectInsertRegistry direct_insert_registry;
   std::atomic<bool> schema_loaded{false};
@@ -495,6 +590,8 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
         &services->autoincrement);
     runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_REGISTRY, &services->direct_insert_registry);
     runtime.set_service(ns::NamespaceRuntime::SQL_PROXY, services->sql_proxy);
+    runtime.set_service(ns::NamespaceRuntime::SCHEMA_LIFECYCLE,
+        &services->schema_lifecycle);
     inprocess_services.emplace(ns, std::move(services));
     server.schema_runtime_service()->set_tablet_schema_resolver(
         resolve_inprocess_tablet_schema);

@@ -835,8 +835,10 @@ IndependentStorageScope::~IndependentStorageScope() {
 }
 int fetch_schema_version(bool published, bool core_version, int64_t &version) {
   const uint64_t ns = serving_namespace();
-  if (ns > 1) {
-    return NamespaceForkKernelPrototype::namespace_schema_version(ns, version);
+  if (ns != 0) {
+    auto *lifecycle = namespace_schema_lifecycle(ns);
+    return lifecycle == nullptr ? OB_NOT_INIT
+        : lifecycle->fetch_version(published, core_version, version);
   }
   auto &service = ObMultiVersionSchemaService::get_instance();
   return published
