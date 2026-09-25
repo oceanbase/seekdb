@@ -21,9 +21,10 @@ struct EngineScan {
   ObNewRowIterator *iter = nullptr;
   const ObTableSchema *schema = nullptr;
   std::unique_ptr<VirtualContext> virtual_context;
+  ObIVirtualTableScan *virtual_scan_service = nullptr;
   ~EngineScan() {
     if (iter) {
-      if (virtual_context) { share::server_service<ObIVirtualTableScan>()->revert_scan_iter(iter); }
+      if (virtual_scan_service) { virtual_scan_service->revert_scan_iter(iter); }
       else { share::server_service<ObITabletScan>()->revert_scan_iter(iter); }
     }
   }
@@ -141,7 +142,17 @@ struct EngineScan {
     }
     if (is_virtual_table(logical_table_id)) {
       param.sql_mode_ = request.sql_mode_;
-      if (ret || !session || ns != 1) { return ret ? ret : OB_INVALID_ARGUMENT; }
+      ::oceanbase::ns::NamespaceRuntime *runtime = nullptr;
+      if (ret || !session
+          || !::oceanbase::ns::namespace_registry().get(
+              storage_space.tablet_namespace_id(), runtime)
+          || runtime == nullptr) {
+        return ret ? ret : OB_INVALID_ARGUMENT;
+      }
+      virtual_scan_service = static_cast<ObIVirtualTableScan *>(
+          runtime->service(
+              ::oceanbase::ns::NamespaceRuntime::VIRTUAL_TABLE_SCAN_SERVICE));
+      if (!virtual_scan_service) { return OB_NOT_SUPPORTED; }
       virtual_context = std::make_unique<VirtualContext>(allocator, *session);
       param.index_id_ = table_id; param.tablet_id_ = ObTabletID(tablet_id);
       param.schema_version_ = schema->get_schema_version();
@@ -149,7 +160,7 @@ struct EngineScan {
       param.timeout_ = THIS_WORKER.get_timeout_ts();
       param.scan_allocator_ = &iter_allocator; param.reserved_cell_count_ = count;
       param.op_ = &virtual_context->op;
-      ret = share::server_service<ObIVirtualTableScan>()->table_scan(param, iter);
+      ret = virtual_scan_service->table_scan(param, iter);
       fprintf(stderr, "PROTOTYPE_V18_VIRTUAL_SCAN table=%llu ret=%d\n", (unsigned long long)table_id, ret);
       return ret;
     }

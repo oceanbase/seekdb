@@ -2511,6 +2511,8 @@ int ObServer::init_global_context()
   home->set_service(ns::NamespaceRuntime::SQL_PROXY, &sql_proxy_);
   home->set_service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE,
       &local_management_service_);
+  home->set_service(ns::NamespaceRuntime::VIRTUAL_TABLE_SCAN_SERVICE,
+      &vt_data_service_);
   home->set_service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE,
       &share::ObAutoincrementService::get_instance());
   namespace_worker_prototype::register_root_namespace_storage_services(*home);
