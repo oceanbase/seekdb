@@ -236,8 +236,36 @@ private:
 int compare_in_process_lobs(ObLobLocatorV2 &left, ObLobLocatorV2 &right,
                             int64_t timeout, ObTxDesc &tx, bool &equal);
 
+class IWriteMaterializationPolicy
+{
+public:
+  virtual ~IWriteMaterializationPolicy() = default;
+  virtual int collect(const ObTableSchema &requested, ObSchemaGetterGuard &guard,
+                      ObIArray<const ObTableSchema *> &schemas) = 0;
+};
+class NativeWriteMaterialization final : public IWriteMaterializationPolicy
+{
+public:
+  int collect(const ObTableSchema &, ObSchemaGetterGuard &,
+              ObIArray<const ObTableSchema *> &schemas) override
+  {
+    schemas.reset();
+    return OB_SUCCESS;
+  }
+};
+class ForkWriteMaterialization final : public IWriteMaterializationPolicy
+{
+public:
+  int collect(const ObTableSchema &requested, ObSchemaGetterGuard &guard,
+              ObIArray<const ObTableSchema *> &schemas) override
+  {
+    return worker_materialization_schemas(requested, guard, schemas);
+  }
+};
 class InProcessDmlService final : public ObIDmlService {
 public:
+  explicit InProcessDmlService(IWriteMaterializationPolicy &materialization)
+      : materialization_(materialization) {}
   int lob_binary_equal(
       ObLobLocatorV2 &left,
       ObLobLocatorV2 &right,
@@ -295,9 +323,8 @@ public:
       if (!ret) { ret = schema_guard.get_table_schema(table_id, logical_schema); }
     }
     ObArray<const ObTableSchema *> materialization_schemas;
-    if (!ret && send_logical_schema && storage_space.is_namespace()
-        && serving_namespace() > 1) {
-      ret = worker_materialization_schemas(
+    if (!ret && send_logical_schema && storage_space.is_namespace()) {
+      ret = materialization_.collect(
           *logical_schema, schema_guard, materialization_schemas);
     }
     if (ret) { return ret; }
@@ -467,4 +494,6 @@ public:
       blocksstable::ObDatumRowIterator *row_iter,
       int64_t &affected_rows) override {
     return write_rows('L', tablet_id, tx_desc, execution, nullptr, nullptr, row_iter, affected_rows, abs_lock_timeout, lock_mode); }
+private:
+  IWriteMaterializationPolicy &materialization_;
 };

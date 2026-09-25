@@ -80,6 +80,7 @@ public:
     SCHEMA_LIFECYCLE = 8,
     TABLE_LOCK_TABLET_ROUTER = 9,
     VIRTUAL_TABLE_SCAN_SERVICE = 10,
+    DML_SERVICE = 11,
     SLOT_COUNT
   };
   explicit NamespaceRuntime(Namespace &ns) : ns_(ns) {}

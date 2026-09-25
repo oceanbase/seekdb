@@ -128,7 +128,10 @@ rootserver::ObIRootserverLocalRuntime *root_namespace_ddl_runtime()
 // ---------------------------------------------------------------------------
 InProcessTabletScan inprocess_scan;
 InProcessLobReadService inprocess_lob_read;
-InProcessDmlService inprocess_dml;
+NativeWriteMaterialization native_write_materialization;
+ForkWriteMaterialization fork_write_materialization;
+InProcessDmlService native_inprocess_dml(native_write_materialization);
+InProcessDmlService fork_inprocess_dml(fork_write_materialization);
 InProcessWriteContext inprocess_write_context;
 InProcessTransactionService inprocess_transactions;
 InProcessInnerConnectionLockRuntime inprocess_inner_locks;
@@ -155,7 +158,11 @@ common::ObILobReadService *effective_lob_read_service(sql::ObSQLSessionInfo *ses
 data_plane::ObIDmlService *effective_dml_service(sql::ObSQLSessionInfo *session,
                                                  data_plane::ObIDmlService *fallback)
 {
-  return in_process_session_ns(session) > 0 ? &inprocess_dml : fallback;
+  ns::NamespaceRuntime *runtime = session ? session->ns_runtime() : nullptr;
+  return runtime != nullptr
+      ? static_cast<data_plane::ObIDmlService *>(
+            runtime->service(ns::NamespaceRuntime::DML_SERVICE))
+      : fallback;
 }
 data_plane::ObIWriteContextService *effective_write_context_service(
     sql::ObSQLSessionInfo *session, data_plane::ObIWriteContextService *fallback)
@@ -263,6 +270,7 @@ void register_root_namespace_storage_services(ns::NamespaceRuntime &runtime)
   static RootSchemaLifecycle schema_lifecycle;
   static RootTableLockTabletRouter table_lock_tablet_router;
   runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_SERVICE, &direct_insert);
+  runtime.set_service(ns::NamespaceRuntime::DML_SERVICE, &native_inprocess_dml);
   runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_REGISTRY,
       &direct_insert_registry);
   runtime.set_service(ns::NamespaceRuntime::TABLET_AUTOINCREMENT_SERVICE,
@@ -588,6 +596,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
     runtime.set_service(ns::NamespaceRuntime::PLAN_CACHE, services->plan_cache);
     runtime.set_service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE, services->root_commands);
     runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_SERVICE, &services->direct_insert);
+    runtime.set_service(ns::NamespaceRuntime::DML_SERVICE, &fork_inprocess_dml);
     runtime.set_service(ns::NamespaceRuntime::TABLET_AUTOINCREMENT_SERVICE,
         &services->tablet_autoincrement);
     runtime.set_service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE,
