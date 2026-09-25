@@ -78,6 +78,7 @@ public:
     TABLET_AUTOINCREMENT_SERVICE = 6,
     AUTOINCREMENT_SERVICE = 7,
     SCHEMA_LIFECYCLE = 8,
+    TABLE_LOCK_TABLET_ROUTER = 9,
     SLOT_COUNT
   };
   explicit NamespaceRuntime(Namespace &ns) : ns_(ns) {}

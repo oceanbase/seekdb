@@ -507,6 +507,58 @@ int route_table_lock_id(StorageSpaceHandle storage_space, uint64_t &table_id)
           : OB_INVALID_ARGUMENT;
 }
 
+class ITableLockTabletRouter
+{
+public:
+  virtual ~ITableLockTabletRouter() = default;
+  virtual int route(StorageSpaceHandle storage_space,
+                    const ObIArray<ObTabletID> &logical_tablets,
+                    bool whole_table, ObTabletIDArray &storage_tablets) = 0;
+};
+
+class RootTableLockTabletRouter final : public ITableLockTabletRouter
+{
+public:
+  int route(StorageSpaceHandle storage_space,
+            const ObIArray<ObTabletID> &logical_tablets,
+            bool, ObTabletIDArray &storage_tablets) override
+  {
+    int ret = OB_SUCCESS;
+    for (int64_t i = 0; OB_SUCC(ret) && i < logical_tablets.count(); ++i) {
+      ObTabletID tablet_id = logical_tablets.at(i);
+      if (OB_FAIL(route_tablet_id(storage_space, tablet_id))) {
+      } else {
+        ret = storage_tablets.push_back(tablet_id);
+      }
+    }
+    return ret;
+  }
+};
+
+class ForkTableLockTabletRouter final : public ITableLockTabletRouter
+{
+public:
+  int route(StorageSpaceHandle storage_space,
+            const ObIArray<ObTabletID> &logical_tablets,
+            bool whole_table, ObTabletIDArray &storage_tablets) override
+  {
+    // Whole-table lock identity must survive inherited tablet materialization.
+    return whole_table ? OB_SUCCESS
+        : storage::NamespaceForkKernelPrototype::owned_storage_tablets(
+              storage_space.namespace_id(), logical_tablets, storage_tablets);
+  }
+};
+
+ITableLockTabletRouter *table_lock_tablet_router(StorageSpaceHandle storage_space)
+{
+  ns::NamespaceRuntime *runtime = nullptr;
+  return ns::namespace_registry().get(storage_space.tablet_namespace_id(), runtime)
+          && runtime != nullptr
+      ? static_cast<ITableLockTabletRouter *>(
+            runtime->service(ns::NamespaceRuntime::TABLE_LOCK_TABLET_ROUTER))
+      : nullptr;
+}
+
 // A namespace DDL wait is expressed over logical tablets.  A child can have a
 // mixture of local physical tablets (materialized source tablets and hidden
 // DDL targets) and inherited tablets with no child physical object.  Run the
@@ -717,7 +769,6 @@ int process_table_lock(
 {
   using namespace transaction::tablelock;
   int ret = OB_SUCCESS;
-  const uint64_t ns = storage_space.namespace_id();
   const int64_t schema_version = plan.schema_version;
   ObTabletIDArray tablet_ids;
   if (is_schema_table_lock_operation(operation)) {
@@ -729,26 +780,13 @@ int process_table_lock(
         ret = OB_INVALID_ARGUMENT;
       }
     }
-    if (OB_SUCC(ret) && ns > 1
-        && (operation == obcall::ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_TABLE
-            || operation == obcall::ObInnerSQLTransmitArg::OPERATION_TYPE_UNLOCK_TABLE)) {
-      // A whole-table lock is a namespace-logical object. Its routed table id
-      // already separates the child from its parent, while the set of locally
-      // materialized tablets can change during the DDL. Keeping that mutable
-      // set out of whole-table lock identity makes lock and unlock symmetric.
-      // Explicit tablet/partition lock requests below still route their
-      // concrete, child-owned physical tablets.
-    } else if (OB_SUCC(ret) && ns > 1) {
-      ret = storage::NamespaceForkKernelPrototype::owned_storage_tablets(
-          ns, plan.tablet_ids, tablet_ids);
-    } else if (OB_SUCC(ret)) {
-      for (int64_t i = 0; OB_SUCC(ret) && i < plan.tablet_ids.count(); ++i) {
-        ObTabletID tablet_id = plan.tablet_ids.at(i);
-        if (OB_FAIL(route_tablet_id(storage_space, tablet_id))) {
-        } else {
-          ret = tablet_ids.push_back(tablet_id);
-        }
-      }
+    if (OB_SUCC(ret)) {
+      auto *router = table_lock_tablet_router(storage_space);
+      const bool whole_table =
+          operation == obcall::ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_TABLE
+          || operation == obcall::ObInnerSQLTransmitArg::OPERATION_TYPE_UNLOCK_TABLE;
+      ret = router == nullptr ? OB_NOT_INIT
+          : router->route(storage_space, plan.tablet_ids, whole_table, tablet_ids);
     }
   }
   const bool valid_param = tx_param.is_valid();

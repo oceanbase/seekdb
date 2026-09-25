@@ -261,6 +261,7 @@ void register_root_namespace_storage_services(ns::NamespaceRuntime &runtime)
   static DirectInsertRegistry direct_insert_registry;
   static InProcessTabletAutoincrementService tablet_autoincrement(1);
   static RootSchemaLifecycle schema_lifecycle;
+  static RootTableLockTabletRouter table_lock_tablet_router;
   runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_SERVICE, &direct_insert);
   runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_REGISTRY,
       &direct_insert_registry);
@@ -268,6 +269,8 @@ void register_root_namespace_storage_services(ns::NamespaceRuntime &runtime)
       &tablet_autoincrement);
   runtime.set_service(ns::NamespaceRuntime::SCHEMA_LIFECYCLE,
       &schema_lifecycle);
+  runtime.set_service(ns::NamespaceRuntime::TABLE_LOCK_TABLET_ROUTER,
+      &table_lock_tablet_router);
 }
 class InProcessRangeService final : public data_plane::ObIRangeService
 {
@@ -400,6 +403,7 @@ struct InProcessNamespaceServices {
   InProcessDirectInsertService direct_insert;
   InProcessTabletAutoincrementService tablet_autoincrement;
   ForkSchemaLifecycle schema_lifecycle;
+  ForkTableLockTabletRouter table_lock_tablet_router;
   share::ObAutoincrementService autoincrement;
   DirectInsertRegistry direct_insert_registry;
   std::atomic<bool> schema_loaded{false};
@@ -592,6 +596,8 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
     runtime.set_service(ns::NamespaceRuntime::SQL_PROXY, services->sql_proxy);
     runtime.set_service(ns::NamespaceRuntime::SCHEMA_LIFECYCLE,
         &services->schema_lifecycle);
+    runtime.set_service(ns::NamespaceRuntime::TABLE_LOCK_TABLET_ROUTER,
+        &services->table_lock_tablet_router);
     inprocess_services.emplace(ns, std::move(services));
     server.schema_runtime_service()->set_tablet_schema_resolver(
         resolve_inprocess_tablet_schema);
