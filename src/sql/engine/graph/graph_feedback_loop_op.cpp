@@ -115,6 +115,22 @@ public:
     return ret;
   }
 
+  int get_output_path(
+      const GraphFeedbackLoopSpec &spec,
+      int64_t index,
+      const ObIArray<GraphPathState> *&path)
+  {
+    int ret = OB_SUCCESS;
+    path = nullptr;
+    if (!has_output_frontier(spec)) {
+      ret = OB_ITER_END;
+    } else if (OB_FAIL(frontier_.get_frontier_path(index, path))) {
+      LOG_WARN("failed to reconstruct graph feedback output path", K(ret),
+               K(index));
+    }
+    return ret;
+  }
+
   // Advances exactly one level and never crosses the SQL upper bound. WALK
   // and TRAIL decisions remain path-local inside GraphFeedbackFrontier.
   int advance_frontier(const GraphFeedbackLoopSpec &spec)
@@ -240,7 +256,9 @@ GraphFeedbackFrontier::GraphFeedbackFrontier(ObIAllocator &allocator,
       current_state_ids_(&frontier_buffer_a_),
       next_state_ids_(&frontier_buffer_b_),
       input_batch_(OB_MALLOC_NORMAL_BLOCK_SIZE,
-                   ModulePageAllocator(allocator, "GraphFrontier"))
+                   ModulePageAllocator(allocator, "GraphFrontier")),
+      path_buffer_(OB_MALLOC_NORMAL_BLOCK_SIZE,
+                   ModulePageAllocator(allocator, "GraphPathResult"))
 {
 }
 
@@ -251,8 +269,10 @@ int GraphFeedbackFrontier::check_memory_limit()
   const int64_t buffer_a_bytes = frontier_buffer_a_.get_data_size();
   const int64_t buffer_b_bytes = frontier_buffer_b_.get_data_size();
   const int64_t input_bytes = input_batch_.get_data_size();
+  const int64_t path_bytes = path_buffer_.get_data_size();
   const int64_t memory_parts[] = {
-      buffer_a_bytes, buffer_b_bytes, input_bytes, expand_.used_memory()};
+      buffer_a_bytes, buffer_b_bytes, input_bytes, path_bytes,
+      expand_.used_memory()};
 
   if (OB_UNLIKELY(memory_limit_ <= 0)) {
     ret = OB_INVALID_ARGUMENT;
@@ -450,6 +470,30 @@ int GraphFeedbackFrontier::get_frontier_state(
   return ret;
 }
 
+int GraphFeedbackFrontier::get_frontier_path(
+    int64_t index,
+    const ObIArray<GraphPathState> *&path)
+{
+  int ret = OB_SUCCESS;
+  GraphPathState leaf;
+  path = nullptr;
+  if (OB_FAIL(get_frontier_state(index, leaf))) {
+  } else if (OB_FAIL(state_store_.build_path(leaf.path_state_id_,
+                                             path_buffer_))) {
+    LOG_WARN("failed to reconstruct graph frontier path", K(ret), K(index),
+             K(leaf));
+  } else if (OB_FAIL(check_memory_limit())) {
+    LOG_WARN("failed to account graph frontier path", K(ret), K(index),
+             K(leaf));
+  } else {
+    path = &path_buffer_;
+  }
+  if (OB_SUCCESS != ret) {
+    path_buffer_.reuse();
+  }
+  return ret;
+}
+
 int GraphFeedbackFrontier::fail(int error)
 {
   reset();
@@ -463,6 +507,10 @@ void GraphFeedbackFrontier::reset()
   frontier_buffer_a_.reset();
   frontier_buffer_b_.reset();
   input_batch_.reset();
+  // ModulePageAllocator may wrap the query arena, whose individual free() is
+  // a no-op. Keep this reusable result block across rescans so reset does not
+  // lose the only pointer to memory that remains charged to the query.
+  path_buffer_.reuse();
   current_state_ids_ = &frontier_buffer_a_;
   next_state_ids_ = &frontier_buffer_b_;
   hop_ = 0;

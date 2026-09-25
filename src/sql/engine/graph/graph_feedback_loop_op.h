@@ -53,6 +53,12 @@ public:
   int expand(GraphPathDirection direction, GraphPathMode path_mode);
 
   int get_frontier_state(int64_t index, GraphPathState &state) const;
+  // Reconstructs one current frontier entry from its zero-hop root through
+  // the current vertex. The returned query-local view is reused by the next
+  // call and remains valid only until then or reset().
+  int get_frontier_path(
+      int64_t index,
+      const common::ObIArray<GraphPathState> *&path);
   int64_t get_hop() const { return hop_; }
   int64_t get_frontier_count() const { return current_state_ids_->count(); }
   int64_t get_path_state_count() const { return state_store_.count(); }
@@ -80,6 +86,7 @@ private:
   common::ObArray<int64_t> *current_state_ids_{nullptr};
   common::ObArray<int64_t> *next_state_ids_{nullptr};
   common::ObArray<GraphExpandInput> input_batch_;
+  common::ObArray<GraphPathState> path_buffer_;
   int64_t hop_{0};
   int64_t peak_memory_bytes_{0};
 
