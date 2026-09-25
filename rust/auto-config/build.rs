@@ -110,25 +110,21 @@ fn log_default() -> &'static str {
 }
 
 fn parameters(source: &str) -> Vec<Parameter> {
-    let parameters: Vec<Parameter> =
+    let mut parameters: Vec<Parameter> =
         serde_yaml::from_str(source).expect("invalid YAML parameter declarations");
-    let parameters: Vec<_> = parameters
-        .into_iter()
-        .map(|mut parameter| {
-            let name = parameter.name.as_str();
-            assert!(
-                name.starts_with(|ch: char| ch.is_ascii_lowercase() || ch == '_')
-                    && name
-                        .chars()
-                        .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_'),
-                "invalid parameter name: {name}"
-            );
-            if parameter.default_text == "@DEFAULT_LOG_LEVEL@" {
-                parameter.default_text = log_default().to_owned();
-            }
-            parameter
-        })
-        .collect();
+    for parameter in &mut parameters {
+        let name = parameter.name.as_str();
+        assert!(
+            name.starts_with(|ch: char| ch.is_ascii_lowercase() || ch == '_')
+                && name
+                    .chars()
+                    .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_'),
+            "invalid parameter name: {name}"
+        );
+        if parameter.default_text == "@DEFAULT_LOG_LEVEL@" {
+            parameter.default_text = log_default().to_owned();
+        }
+    }
     let mut names = HashSet::new();
     for parameter in &parameters {
         rust_type(&parameter.kind);
