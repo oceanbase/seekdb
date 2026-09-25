@@ -262,7 +262,6 @@ SHARE_INTERFACE_CLOSURE_HEADERS = [
     "cache/ob_recycle_multi_kvcache.h",
     "cache/ob_recycle_multi_kvcache.ipp",
     "config/ob_config_rpc_types.h",
-    "config/ob_config_storage.h",
     "config/ob_parallel_ddl_control_mode.h",
     "datum/ob_defined_collations.h",
     "geo/ob_geo_bin_iter.h",

@@ -732,10 +732,10 @@ mod tests {
             "02:00"
         );
         assert!(crate::config::find("server_create_time").is_none());
-        crate::config::update_cpu_count(&path, "8").unwrap();
+        crate::config::update_parameter(&path, "cpu_count", Some("8")).unwrap();
         assert_eq!(crate::config::cpu_count(), 8);
         assert_eq!(load(&path).unwrap()[0].value, "8");
-        assert!(crate::config::update_cpu_count(&path, "-1").is_err());
+        assert!(crate::config::update_parameter(&path, "cpu_count", Some("-1")).is_err());
         assert_eq!(crate::config::cpu_count(), 8);
         assert_eq!(load(&path).unwrap()[0].value, "8");
         crate::config::update_parameter(&path, "cpu_count", None).unwrap();
@@ -817,7 +817,7 @@ mod tests {
         crate::config::apply("major_freeze_duty_time", "02:00").unwrap();
         crate::config::apply("_parallel_ddl_control", "CREATE_INDEX:on,DROP_TABLE:off").unwrap();
         assert_eq!(
-            crate::config::parallel_ddl_control_bits(),
+            crate::config::_parallel_ddl_control_bits(),
             (2 << 4) | (1 << 8)
         );
         crate::config::apply("_parallel_ddl_control", "").unwrap();
@@ -933,6 +933,8 @@ mod tests {
 
     #[test]
     fn internal_state_is_loaded_and_published_without_becoming_a_parameter() {
+        use std::ffi::CString;
+
         let _config_guard = CONFIG_TEST_LOCK.lock().unwrap();
         let directory = TestDirectory::new();
         let path = directory.file();
@@ -948,8 +950,35 @@ mod tests {
             "PRIMARY:INVALID:NORMAL:0"
         );
         assert!(crate::config::find("server_create_time").is_none());
+        let path_arg = CString::new(path.to_str().unwrap()).unwrap();
+        let name_arg = CString::new("server_create_time").unwrap();
+        let value_arg = CString::new("124").unwrap();
+        let mut error = ffi::AutoConfigError {
+            line: 0,
+            after_replace: 0,
+            message: [0; 512],
+        };
+        let parameter_name = CString::new("cpu_count").unwrap();
+        assert_eq!(
+            ffi::auto_config_update_internal_state(
+                path_arg.as_ptr(),
+                parameter_name.as_ptr(),
+                value_arg.as_ptr(),
+                &mut error,
+            ),
+            1
+        );
+        assert_eq!(
+            ffi::auto_config_update_internal_state(
+                path_arg.as_ptr(),
+                name_arg.as_ptr(),
+                value_arg.as_ptr(),
+                &mut error,
+            ),
+            0
+        );
         crate::config::load_active(&path, true).unwrap();
-        assert_eq!(crate::config::server_create_time(), 123);
+        assert_eq!(crate::config::server_create_time(), 124);
     }
 
     #[test]

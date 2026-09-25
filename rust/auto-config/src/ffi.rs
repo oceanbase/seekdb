@@ -86,73 +86,17 @@ pub extern "C" fn auto_config_supported(path: *const c_char, error: *mut AutoCon
 }
 
 #[no_mangle]
-pub extern "C" fn auto_config_load(
-    path: *const c_char,
-    callback: AutoConfigEntryCallback,
-    context: *mut c_void,
-    error: *mut AutoConfigError,
-) -> c_int {
-    let result = (|| {
-        let path = argument(path, "path")?;
-        for entry in store::load(Path::new(&path))? {
-            let entry_name = entry.name.clone();
-            let name = CString::new(entry.name).map_err(|_| Error {
-                line: entry.line,
-                name: None,
-                after_replace: false,
-                message: "parameter name contains NUL".to_owned(),
-            })?;
-            let value = CString::new(entry.value).map_err(|_| Error {
-                line: entry.line,
-                name: None,
-                after_replace: false,
-                message: "parameter value contains NUL".to_owned(),
-            })?;
-            let status =
-                unsafe { callback(context, name.as_ptr(), value.as_ptr(), entry.line as u32) };
-            if status != 0 {
-                return Err(Error {
-                    line: entry.line,
-                    name: Some(entry_name),
-                    after_replace: false,
-                    message: format!("entry callback failed with status {status}"),
-                });
-            }
-        }
-        Ok(())
-    })();
-    match result {
-        Ok(()) => 0,
-        Err(problem) => {
-            write_error(error, &problem);
-            1
-        }
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn auto_config_update(
+pub extern "C" fn auto_config_update_internal_state(
     path: *const c_char,
     name: *const c_char,
     value: *const c_char,
-    reset: u8,
     error: *mut AutoConfigError,
 ) -> c_int {
     let result = (|| {
         let path = argument(path, "path")?;
         let name = argument(name, "name")?;
-        let value = if reset == 0 {
-            Some(argument(value, "value")?)
-        } else {
-            None
-        };
-        if store::config::find(&name).is_some() {
-            store::config::update_parameter(Path::new(&path), &name, value.as_deref())
-        } else if let Some(value) = value.as_deref() {
-            store::config::update_internal_state(Path::new(&path), &name, value)
-        } else {
-            Err(Error::new(0, Some(name), "cannot reset internal state"))
-        }
+        let value = argument(value, "value")?;
+        store::config::update_internal_state(Path::new(&path), &name, &value)
     })();
     match result {
         Ok(()) => 0,
@@ -194,23 +138,6 @@ pub extern "C" fn auto_config_update_checked(
             }
         })
     })();
-    match result {
-        Ok(()) => 0,
-        Err(problem) => {
-            write_error(error, &problem);
-            1
-        }
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn auto_config_load_active(
-    path: *const c_char,
-    startup: u8,
-    error: *mut AutoConfigError,
-) -> c_int {
-    let result = argument(path, "path")
-        .and_then(|path| store::config::load_active(Path::new(&path), startup != 0));
     match result {
         Ok(()) => 0,
         Err(problem) => {

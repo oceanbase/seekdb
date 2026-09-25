@@ -28,8 +28,11 @@ header = """/*
 include = [
   "AutoConfigError",
   "AutoConfigEntryCallback",
+  "AutoConfigCheckCallback",
   "auto_config_supported",
-  "auto_config_load",
-  "auto_config_update",
-  "auto_config_load_active",
+  "auto_config_update_internal_state",
+  "auto_config_update_checked",
+  "auto_config_load_active_checked",
+  "auto_config_bootstrap_set",
+  "auto_config_save_bootstrap",
 ]

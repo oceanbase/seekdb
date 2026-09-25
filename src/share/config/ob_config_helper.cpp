@@ -874,7 +874,7 @@ int ObParallelDDLControlMode::is_parallel_ddl_enable(const ObParallelDDLType ddl
   int ret = OB_SUCCESS;
   is_parallel = true;
   ObParallelDDLControlMode cfg;
-  cfg.set_encoded_value(config::parallel_ddl_control_bits());
+  cfg.set_encoded_value(config::_parallel_ddl_control_bits());
   if (OB_FAIL(cfg.is_parallel_ddl(ddl_type, is_parallel))) {
   }
   return ret;
