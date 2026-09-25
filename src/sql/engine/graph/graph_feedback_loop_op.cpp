@@ -143,9 +143,12 @@ public:
   }
 
   // Emits every path in one visible BFS level before advancing to the next
-  // level. Levels below the SQL lower bound are expanded but not returned.
+  // level. Before returning, restores the anchor/outer row associated with
+  // that path so later result materialization can evaluate correlated values.
+  // Levels below the SQL lower bound are expanded but not returned.
   int get_next_output_path(
       const GraphFeedbackLoopSpec &spec,
+      const ObIArray<ObExpr *> &binding_exprs,
       const ObIArray<GraphPathState> *&path)
   {
     int ret = OB_SUCCESS;
@@ -159,6 +162,10 @@ public:
           && next_output_index_ < get_output_count(spec)) {
         if (OB_FAIL(get_output_path(spec, next_output_index_, path))) {
           LOG_WARN("failed to read next graph feedback output path", K(ret),
+                   K_(next_output_index));
+        } else if (OB_FAIL(restore_output_binding(*path, binding_exprs))) {
+          path = nullptr;
+          LOG_WARN("failed to restore graph feedback output binding", K(ret),
                    K_(next_output_index));
         } else {
           ++next_output_index_;
@@ -217,6 +224,23 @@ public:
   }
 
 private:
+  int restore_output_binding(
+      const ObIArray<GraphPathState> &path,
+      const ObIArray<ObExpr *> &binding_exprs)
+  {
+    int ret = OB_SUCCESS;
+    if (OB_UNLIKELY(path.empty())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("graph feedback output path is empty", K(ret));
+    } else if (OB_FAIL(binding_store_.restore_binding(
+                   path.at(path.count() - 1).binding_id_,
+                   binding_exprs, eval_ctx_))) {
+      LOG_WARN("failed to restore graph feedback binding", K(ret),
+               "binding_id", path.at(path.count() - 1).binding_id_);
+    }
+    return ret;
+  }
+
   int add_seed(const ObIArray<ObExpr *> &binding_exprs,
                const GraphFeedbackLoopSpec &spec)
   {
