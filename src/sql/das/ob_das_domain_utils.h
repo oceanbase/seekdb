@@ -79,6 +79,7 @@ public:
       doc_word_tablet_id_(),
       snapshot_(),
       doc_word_schema_version_(),
+      namespace_access_mode_(data_plane::ObNamespaceAccessMode::UNBOUND),
       doc_word_found_(false)
   {}
   ~ObFTDocWordInfo() = default;
@@ -90,6 +91,7 @@ public:
     doc_word_table_id_ = src.doc_word_table_id_;
     doc_word_tablet_id_ = src.doc_word_tablet_id_;
     doc_word_schema_version_ = src.doc_word_schema_version_;
+    namespace_access_mode_ = src.namespace_access_mode_;
     doc_word_found_ = src.doc_word_found_;
 
     if (OB_FAIL(snapshot_.assign(src.snapshot_))) {
@@ -109,6 +111,7 @@ public:
   common::ObTabletID doc_word_tablet_id_;
   transaction::ObTxReadSnapshot snapshot_;
   int64_t doc_word_schema_version_;
+  data_plane::ObNamespaceAccessMode namespace_access_mode_;
   bool doc_word_found_;
 
 private:

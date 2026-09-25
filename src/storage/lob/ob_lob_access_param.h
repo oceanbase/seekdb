@@ -19,6 +19,7 @@
 
 #include "storage/tx/ob_trans_define_v4.h"
 #include "share/ob_tablet_autoincrement_param.h"
+#include "data_plane/access/ob_namespace_access_mode.h"
 
 namespace oceanbase
 {
@@ -43,7 +44,8 @@ public:
   ObLobAccessParam()
     : tmp_allocator_(nullptr), allocator_(nullptr),
       tx_desc_(nullptr), snapshot_(), tx_id_(),
-      sql_mode_(SMO_DEFAULT), dml_base_param_(nullptr), 
+      sql_mode_(SMO_DEFAULT), dml_base_param_(nullptr),
+      namespace_access_mode_(data_plane::ObNamespaceAccessMode::UNBOUND),
       tablet_id_(), lob_meta_tablet_id_(), lob_piece_tablet_id_(),
       coll_type_(), lob_locator_(nullptr), lob_common_(nullptr),
       lob_data_(nullptr), byte_size_(0), handle_size_(0), timeout_(0),
@@ -134,6 +136,7 @@ public:
   transaction::ObTransID tx_id_; // used when read-latest
   ObSQLMode sql_mode_;
   ObDMLBaseParam* dml_base_param_;
+  data_plane::ObNamespaceAccessMode namespace_access_mode_;
   // Some LOB operations read data from another LOB in the same database.
   
   common::ObTabletID tablet_id_;
@@ -215,7 +218,8 @@ struct ObLobCompareParams {
       offset_right_(0), 
       compare_len_(0),
       timeout_(0),
-      tx_desc_(nullptr)
+      tx_desc_(nullptr),
+      namespace_access_mode_(data_plane::ObNamespaceAccessMode::UNBOUND)
   {
   }
 
@@ -236,6 +240,7 @@ struct ObLobCompareParams {
   uint64_t compare_len_;
   int64_t timeout_;
   transaction::ObTxDesc *tx_desc_;
+  data_plane::ObNamespaceAccessMode namespace_access_mode_;
 };
 
 struct ObLobStorageParam

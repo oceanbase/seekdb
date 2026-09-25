@@ -5,6 +5,7 @@
 #include "lib/ob_errno.h"
 #include "lib/string/ob_string.h"
 #include "common/object/ob_object.h"
+#include "data_plane/access/ob_namespace_access_mode.h"
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -80,6 +81,25 @@ private:
   Scope scope_ = Scope::INVALID;
   uint64_t value_ = 0;
 };
+inline int storage_access_mode(StorageSpaceHandle space,
+                               data_plane::ObNamespaceAccessMode &mode)
+{
+  mode = data_plane::ObNamespaceAccessMode::UNBOUND;
+  if (space.is_global()) {
+    mode = data_plane::ObNamespaceAccessMode::UNFENCED;
+  } else if (space.is_namespace()) {
+    ns::NamespaceRuntime *runtime = nullptr;
+    if (!ns::namespace_registry().get(space.namespace_id(), runtime) || runtime == nullptr) {
+      return common::OB_NOT_INIT;
+    }
+    mode = runtime->storage_access_lease_required()
+        ? data_plane::ObNamespaceAccessMode::LEASED
+        : data_plane::ObNamespaceAccessMode::UNFENCED;
+  } else {
+    return common::OB_INVALID_ARGUMENT;
+  }
+  return common::OB_SUCCESS;
+}
 // A narrow global scope lets a native SQL operation address shared control
 // tablets in the same transaction without switching its SchemaService.
 inline thread_local uint64_t worker_global_storage_scope_depth = 0;

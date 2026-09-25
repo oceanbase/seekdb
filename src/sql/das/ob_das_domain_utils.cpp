@@ -26,6 +26,7 @@
 #include "sql/das/ob_das_dml_vec_iter.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "share/geo/ob_srs_provider.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 
 using namespace oceanbase::common;
 
@@ -238,8 +239,14 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KPC(snapshot));
   }
+  data_plane::ObNamespaceAccessMode access_mode;
+  if (OB_SUCC(ret)) {
+    ret = observer::namespace_worker_prototype::storage_access_mode(
+        observer::namespace_worker_prototype::active_worker_storage_space(), access_mode);
+  }
   for (int64_t i = 0; OB_SUCC(ret) && i < related_ctdefs.count(); ++i) {
     ObFTDocWordInfo doc_word_info;
+    doc_word_info.namespace_access_mode_ = access_mode;
     const ObDASDMLBaseCtDef *related_ctdef = static_cast<const ObDASDMLBaseCtDef *>(related_ctdefs.at(i));
     if (OB_ISNULL(related_ctdef)) {
       ret = OB_ERR_UNEXPECTED;
@@ -934,7 +941,8 @@ int ObFTDMLIterator::rewind()
                              doc_word_info_->doc_word_table_id_,
                              doc_word_info_->doc_word_tablet_id_,
                              &doc_word_info_->snapshot_,
-                             doc_word_info_->doc_word_schema_version_))) {
+                             doc_word_info_->doc_word_schema_version_,
+                             doc_word_info_->namespace_access_mode_))) {
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -976,7 +984,8 @@ int ObFTDMLIterator::init(
                                doc_word_info_->doc_word_table_id_,
                                doc_word_info_->doc_word_tablet_id_,
                                &doc_word_info_->snapshot_,
-                               doc_word_info_->doc_word_schema_version_))) {
+                               doc_word_info_->doc_word_schema_version_,
+                               doc_word_info_->namespace_access_mode_))) {
         }
         break;
       }
@@ -1036,7 +1045,8 @@ int ObFTDMLIterator::change_domain_dml_mode(const ObDomainDMLMode &mode)
                                doc_word_info_->doc_word_table_id_,
                                doc_word_info_->doc_word_tablet_id_,
                                &doc_word_info_->snapshot_,
-                               doc_word_info_->doc_word_schema_version_))) {
+                               doc_word_info_->doc_word_schema_version_,
+                               doc_word_info_->namespace_access_mode_))) {
         }
         break;
       }

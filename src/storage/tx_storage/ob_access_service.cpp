@@ -594,7 +594,8 @@ int ObAccessService::check_read_allowed_(
   int64_t redirect_cap = 0;
 
   if (OB_FAIL(NamespaceForkKernelPrototype::check_table_access(
-          scan_param.index_id_, tablet_id, true, ctx_guard.prototype_access()))) {
+          scan_param.index_id_, tablet_id, true,
+          scan_param.namespace_access_mode_, ctx_guard.prototype_access()))) {
   } else if (OB_FAIL(NamespaceForkKernelPrototype::resolve_read_tablet(tablet_id, read_tablet_id, redirect_cap))) {
   } else if (OB_FAIL(ls_svr_->get_ls(ls))) {
   } else if (OB_FAIL(ctx_guard.init(ls))) {
@@ -723,7 +724,7 @@ int ObAccessService::check_write_allowed_(
   }
   if (OB_FAIL(NamespaceForkKernelPrototype::check_table_access(dml_param.table_param_
       ? dml_param.table_param_->get_data_table().get_table_id() : OB_INVALID_ID,
-      tablet_id, false, ctx_guard.prototype_access()))) {
+      tablet_id, false, dml_param.namespace_access_mode_, ctx_guard.prototype_access()))) {
   } else if (OB_FAIL(NamespaceForkKernelPrototype::ensure_tablet(tablet_id))) {
   } else if (OB_FAIL(check_memstore_limit_(is_out_of_mem))) {
   } else if (is_out_of_mem && !tablet_id.is_inner_tablet()) {
@@ -826,6 +827,7 @@ int ObAccessService::prepare_execution(
     dml_param.dml_allocator_ = &allocator;
     dml_param.is_main_table_in_fts_ddl_ = write_spec.is_main_table_in_fts_ddl_;
     dml_param.check_schema_version_ = write_spec.check_schema_version_;
+    dml_param.namespace_access_mode_ = write_spec.namespace_access_mode_;
     dml_param.has_async_index_ =
         legacy_table_plan->get_data_table().has_async_index()
         || inherited_has_async_index;

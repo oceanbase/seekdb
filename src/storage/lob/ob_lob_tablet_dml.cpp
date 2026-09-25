@@ -56,6 +56,7 @@ int ObLobTabletDmlHelper::build_common_lob_param_for_dml(
   lob_param.parent_seq_no_ = run_ctx.store_ctx_.mvcc_acc_ctx_.tx_scn_;
   lob_param.tx_id_ = lob_param.tx_desc_->get_tx_id();
   lob_param.sql_mode_ = run_ctx.dml_param_.sql_mode_;
+  lob_param.namespace_access_mode_ = run_ctx.dml_param_.namespace_access_mode_;
   lob_param.is_total_quantity_log_ = run_ctx.dml_param_.is_total_quantity_log_;
   lob_param.tablet_id_ = run_ctx.relative_table_.get_tablet_id();
   lob_param.lob_meta_tablet_id_ = run_ctx.lob_dml_ctx_.lob_meta_tablet_id_;

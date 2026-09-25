@@ -19,7 +19,8 @@ struct EngineWrite {
   StorageSpaceHandle storage_space;
   const ObTableSchema *schema = nullptr;
 
-  int prepare(const WritePrepareRequest &request, ObTxDesc &tx) {
+  int prepare(const WritePrepareRequest &request,
+              data_plane::ObNamespaceAccessMode access_mode, ObTxDesc &tx) {
     const uint64_t table = request.table_id;
     if (request.spec.tz_info_ == nullptr) { return OB_INVALID_ARGUMENT; }
     int64_t request_bytes = 137; // Former opcode and seventeen number fields.
@@ -41,6 +42,8 @@ struct EngineWrite {
         || OB_FAIL(add_bytes(request.columns.size() * 8))) { return ret; }
     storage_space = request.storage_space;
     spec = request.spec;
+    spec.namespace_access_mode_ = request.storage_space.is_global()
+        ? data_plane::ObNamespaceAccessMode::UNFENCED : access_mode;
     ret = logical_schema.assign(request.logical_schema);
     if (OB_FAIL(ret)) { return ret; }
     const uint64_t ns = storage_space.tablet_namespace_id();
@@ -254,21 +257,24 @@ struct EngineWrite {
     else if (!ret && operation == 'p') { ret = service->put_rows(tablet, tx, execution, columns, &rows, affected); }
     else if (!ret) { ret = service->insert_rows(tablet, tx, execution, columns, &rows, affected); }
     fprintf(stderr, "PROTOTYPE_V15_WRITE_BATCH op=%c tx=%lld rows=%llu affected=%lld ret=%d\n",
-        operation, (long long)tx.get_tx_id().get_id(), (unsigned long long)(update ? count / 2 : count), (long long)affected,
-        ret);
+        operation, (long long)tx.get_tx_id().get_id(),
+        (unsigned long long)(update ? count / 2 : count), (long long)affected, ret);
     return ret;
   }
 };
 
 struct EngineWrites {
   StorageSpaceHandle storage_space;
+  data_plane::ObNamespaceAccessMode namespace_access_mode;
   sql::ObSQLSessionInfo &session;
   uint32_t sid;
   ObTxDesc *&tx;
   uint64_t sequence = 0;
   std::map<uint64_t, std::unique_ptr<EngineWrite>> writes;
-  explicit EngineWrites(StorageSpaceHandle space, sql::ObSQLSessionInfo &s)
-      : storage_space(space), session(s), sid(s.get_server_sid()), tx(s.get_tx_desc()) {}
+  explicit EngineWrites(StorageSpaceHandle space, sql::ObSQLSessionInfo &s,
+                        data_plane::ObNamespaceAccessMode access_mode)
+      : storage_space(space), namespace_access_mode(access_mode),
+        session(s), sid(s.get_server_sid()), tx(s.get_tx_desc()) {}
   void reset() {
     session.reset_reserved_snapshot_version();
     writes.clear();
@@ -306,7 +312,7 @@ struct EngineWrites {
             && !request.storage_space.is_global())) { return OB_INVALID_ARGUMENT; }
     if (writes.size() >= 32) { return OB_SIZE_OVERFLOW; }
     auto prepared = std::make_unique<EngineWrite>();
-    int ret = prepared->prepare(request, *tx);
+    int ret = prepared->prepare(request, namespace_access_mode, *tx);
     if (!ret) {
       handle = ++sequence;
       writes.emplace(handle, std::move(prepared));

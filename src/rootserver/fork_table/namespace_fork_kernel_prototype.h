@@ -2,6 +2,7 @@
 #ifndef OCEANBASE_NAMESPACE_FORK_KERNEL_PROTOTYPE_H_
 #define OCEANBASE_NAMESPACE_FORK_KERNEL_PROTOTYPE_H_
 #include "share/schema/ob_table_schema.h"
+#include "data_plane/access/ob_namespace_access_mode.h"
 namespace oceanbase {
 namespace common { class ObISQLClient; }
 namespace share { namespace schema { class ObSimpleDatabaseSchema; } }
@@ -28,7 +29,8 @@ public:
                                  common::ObIArray<common::ObTabletID> &bound);
   static int finish_namespace_drop(common::ObISQLClient &trans, uint64_t id);
   static int check_table_access(uint64_t table_id, const common::ObTabletID &tablet_id,
-                                bool read_only, bool &held);
+                                bool read_only, data_plane::ObNamespaceAccessMode access_mode,
+                                bool &held);
   static int check_baseline_access(const common::ObTabletID &tablet_id, bool &held);
   static void release_access(bool &held);
   static int drain_access();

@@ -115,7 +115,10 @@ int ObDASScanIter::do_table_scan()
     const uint64_t ns = observer::namespace_worker_prototype::in_process_session_ns(
         THIS_WORKER.get_session());
     uint64_t physical_tablet = OB_INVALID_ID;
-    if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
+    if (OB_FAIL(observer::namespace_worker_prototype::storage_access_mode(
+            observer::namespace_worker_prototype::StorageSpaceHandle::namespace_space(ns),
+            scan_param_->namespace_access_mode_))) {
+    } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
             ns, scan_param_->tablet_id_.id(), physical_tablet))) {
     } else {
       scan_param_->tablet_id_ = ObTabletID(physical_tablet);

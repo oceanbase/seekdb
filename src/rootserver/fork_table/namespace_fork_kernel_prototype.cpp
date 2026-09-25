@@ -181,8 +181,7 @@ int save_blob(ObISQLClient &sql, const std::string &data, uint64_t &id) {
 // (parent_namespace, fork_cap), and the exceptions table records just the
 // tablets this namespace physically owns or has explicitly dropped. Everything
 // else is resolved by probing deterministic physical ids along the parent
-// chain; encode(1, local) == local, so namespace 1 terminates every walk with
-// its raw tablet ids.
+// chain; namespace 1 terminates every walk with its encoded physical tablet ids.
 // Parent links never change after fork commit and namespace ids are never
 // reused; the cache entry is removed when its tombstone is pruned.
 ns::NamespaceControlState &control_state() {
@@ -959,40 +958,41 @@ int NamespaceForkKernelPrototype::drain_access() {
   return ret;
 }
 int NamespaceForkKernelPrototype::check_table_access(
-    uint64_t table_id, const ObTabletID &tablet_id, bool read_only, bool &held) {
+    uint64_t table_id, const ObTabletID &tablet_id, bool read_only,
+    data_plane::ObNamespaceAccessMode access_mode, bool &held) {
   if (!is_encoded_id(tablet_id.id())) {
     return OB_SUCCESS;
   }
-  const uint64_t id = database_of(tablet_id.id());
-  int ret = OB_SUCCESS;
-  if (id == 1) {
-    // Namespace 1 is the undeletable physical root and also owns global control
-    // storage.  Its lifetime therefore needs no namespace-registry lease.  More
-    // importantly, the storage process must not consult its own SchemaService to
-    // classify a table whose authoritative schema lives in the SQL worker.
+  if (access_mode == data_plane::ObNamespaceAccessMode::UNFENCED) {
     return OB_SUCCESS;
   }
-  if (OB_SUCC(ret)) {
-    // Register BEFORE reading LIVE; release only after iterators/store contexts or
-    // a baseline DAG have released their inputs. New work after close cannot enter.
-    if (!held) { active_accesses.fetch_add(1); held = true; }
-    int64_t state = 0;
-    if (cached_namespace_state(id, state)) {
-    } else {
-      Roots root;
-      if (OB_FAIL(roots(*GCTX.sql_proxy_, id, root, false, true))) {
-        return ret;
-      }
-      state = root.state;
-      remember_namespace_state(id, state);
+  if (access_mode != data_plane::ObNamespaceAccessMode::LEASED) {
+    const int ret = OB_INVALID_ARGUMENT;
+    LOG_ERROR("encoded tablet access has no namespace policy", K(table_id),
+              K(tablet_id), "access_mode", static_cast<int>(access_mode));
+    return ret;
+  }
+  const uint64_t id = database_of(tablet_id.id());
+  int ret = OB_SUCCESS;
+  // Register BEFORE reading LIVE; release only after iterators/store contexts or
+  // a baseline DAG have released their inputs. New work after close cannot enter.
+  if (!held) { active_accesses.fetch_add(1); held = true; }
+  int64_t state = 0;
+  if (cached_namespace_state(id, state)) {
+  } else {
+    Roots root;
+    if (OB_FAIL(roots(*GCTX.sql_proxy_, id, root, false, true))) {
+      return ret;
     }
-    if (state != 0 && !(read_only && (state == 1 || state == 2))) {
-      // Descendants may still read a physical tablet owned by this ancestor.
-      // Namespace admission and the access drain fence prevent new reads from
-      // the dropped owner itself; all writes must target a live namespace.
-      ret = OB_OP_NOT_ALLOW;
-      LOG_USER_ERROR(OB_OP_NOT_ALLOW, "access a closing or deleted prototype namespace");
-    }
+    state = root.state;
+    remember_namespace_state(id, state);
+  }
+  if (state != 0 && !(read_only && (state == 1 || state == 2))) {
+    // Descendants may still read a physical tablet owned by this ancestor.
+    // Namespace admission and the access drain fence prevent new reads from
+    // the dropped owner itself; all writes must target a live namespace.
+    ret = OB_OP_NOT_ALLOW;
+    LOG_USER_ERROR(OB_OP_NOT_ALLOW, "access a closing or deleted prototype namespace");
   }
   return ret;
 }

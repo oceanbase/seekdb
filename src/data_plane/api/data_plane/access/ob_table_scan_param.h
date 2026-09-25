@@ -22,6 +22,7 @@
 #include "data_plane/transaction/ob_tx_read_snapshot.h"
 #include "lib/container/ob_iarray.h"
 #include "data_plane/access/ob_tablet_scan.h"
+#include "data_plane/access/ob_namespace_access_mode.h"
 
 namespace oceanbase
 {
@@ -96,6 +97,7 @@ public:
       tx_id_(),
       tx_lock_timeout_(-1),
       table_param_(nullptr),
+      namespace_access_mode_(data_plane::ObNamespaceAccessMode::UNBOUND),
       allocator_(&CURRENT_CONTEXT->get_arena_allocator()),
       need_scn_(false),
       need_switch_param_(false),
@@ -117,6 +119,7 @@ public:
   transaction::ObTransID tx_id_;
   int64_t tx_lock_timeout_;
   const share::schema::ObTableParam *table_param_;
+  data_plane::ObNamespaceAccessMode namespace_access_mode_;
   common::ObIAllocator *allocator_;
   common::SampleInfo sample_info_;
   bool need_scn_;

@@ -234,6 +234,7 @@ int ObPersistentLobApator::build_lob_meta_table_dml(
   dml_base_param.check_schema_version_ = false; // lob tablet should not check schema version
   dml_base_param.schema_version_ = 0;
   dml_base_param.store_ctx_guard_ = store_ctx_guard;
+  dml_base_param.namespace_access_mode_ = param.namespace_access_mode_;
   dml_base_param.write_flag_.reset();
   dml_base_param.write_flag_.set_is_insert_up();
   if (param.skip_flush_redo()) dml_base_param.write_flag_.set_skip_flush_redo();
@@ -291,6 +292,7 @@ int ObPersistentLobApator::build_common_scan_param(
 
   if (OB_SUCC(ret)) {
     scan_param.tablet_id_ = param.lob_meta_tablet_id_;
+    scan_param.namespace_access_mode_ = param.namespace_access_mode_;
 
     scan_param.reserved_cell_count_ = scan_param.column_ids_.count();
     // table param

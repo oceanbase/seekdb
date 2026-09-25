@@ -28,7 +28,9 @@ struct EngineScan {
       else { share::server_service<ObITabletScan>()->revert_scan_iter(iter); }
     }
   }
-  int open(StorageSpaceHandle storage_space, const ObVTableScanParam &request,
+  int open(StorageSpaceHandle storage_space,
+           data_plane::ObNamespaceAccessMode access_mode,
+           const ObVTableScanParam &request,
            const ObTableSchema &logical_schema,
            transaction::ObTxDesc *tx, sql::ObSQLSessionInfo *session) {
     int ret = OB_SUCCESS;
@@ -178,6 +180,7 @@ struct EngineScan {
     param.tx_seq_base_ = scan.tx_seq_base_;
     param.tx_id_ = data_plane::tx_desc_id(tx);
     param.trans_desc_ = tx; // Native pointer from this request, never from IPC.
+    param.namespace_access_mode_ = access_mode;
     if (!param.snapshot_.is_valid() || param.snapshot_.is_weak_read()
         || (param.snapshot_.core_.tx_id_.is_valid() && param.snapshot_.core_.tx_id_ != param.tx_id_)
         || (!txid && read_latest)) {
@@ -329,13 +332,15 @@ struct ReadScans {
     auto it = scans.find(id);
     return it == scans.end() ? OB_INVALID_ARGUMENT : it->second->rescan(param);
   }
-  int open(StorageSpaceHandle requested_space, const ObVTableScanParam &param,
+  int open(StorageSpaceHandle requested_space,
+           data_plane::ObNamespaceAccessMode access_mode,
+           const ObVTableScanParam &param,
            const ObTableSchema &logical_schema, transaction::ObTxDesc *tx,
            sql::ObSQLSessionInfo *session, uint64_t &handle) {
     handle = 0;
     if (!storage_space.is_namespace()) { return OB_INVALID_ARGUMENT; }
     auto scan = std::make_unique<EngineScan>();
-    int ret = scan->open(requested_space, param, logical_schema, tx, session);
+    int ret = scan->open(requested_space, access_mode, param, logical_schema, tx, session);
     if (ret) { fprintf(stderr, "PROTOTYPE_V17_SCAN_FAILED ret=%d\n", ret); }
     else {
       handle = ++sequence;

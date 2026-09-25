@@ -68,6 +68,7 @@ struct ObDMLBaseParam
         is_batch_stmt_(false),
         dml_allocator_(nullptr),
         store_ctx_guard_(nullptr),
+        namespace_access_mode_(data_plane::ObNamespaceAccessMode::UNBOUND),
         spec_seq_no_(),
         snapshot_(),
         branch_id_(0),
@@ -96,6 +97,7 @@ struct ObDMLBaseParam
   bool is_batch_stmt_;
   mutable common::ObIAllocator *dml_allocator_;
   mutable ObStoreCtxGuard *store_ctx_guard_;
+  data_plane::ObNamespaceAccessMode namespace_access_mode_;
 
   // specified seq_no
   transaction::ObTxSEQ spec_seq_no_;

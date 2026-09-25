@@ -493,6 +493,8 @@ int ObLobManager::compare(ObLobLocatorV2& lob_left,
     // get lob access param
     ObLobAccessParam param_left;
     ObLobAccessParam param_right;
+    param_left.namespace_access_mode_ = cmp_params.namespace_access_mode_;
+    param_right.namespace_access_mode_ = cmp_params.namespace_access_mode_;
     if (OB_FAIL(build_lob_param(param_left, tmp_allocator, cmp_params.collation_left_,
                 cmp_params.offset_left_, cmp_params.compare_len_, cmp_params.timeout_, lob_left))) {
     } else if(OB_FAIL(build_lob_param(param_right, tmp_allocator, cmp_params.collation_right_,
@@ -886,7 +888,7 @@ int ObLobManager::append(
         ObString data;
         data.assign_buffer(buf + cur_handle_size, append_lob_len);
         SMART_VAR(ObLobAccessParam, read_param) {
-          
+          read_param.namespace_access_mode_ = param.namespace_access_mode_;
           if (OB_FAIL(build_lob_param(read_param, *param.get_tmp_allocator(), param.coll_type_,
                       0, UINT64_MAX, param.timeout_, lob))) {
           } else if (OB_FAIL(query(read_param, data))) {
@@ -969,7 +971,7 @@ int ObLobManager::append(ObLobAccessParam& param, ObLobLocatorV2& lob, ObLobMeta
         ObString data;
         data.assign_buffer(buf + cur_handle_size, append_lob_len);
         SMART_VAR(ObLobAccessParam, read_param) {
-          
+          read_param.namespace_access_mode_ = param.namespace_access_mode_;
           if (OB_FAIL(build_lob_param(read_param, *param.get_tmp_allocator(), param.coll_type_,
                       0, UINT64_MAX, param.timeout_, lob))) {
           } else if (OB_FAIL(query(read_param, data))) {
@@ -1030,6 +1032,7 @@ int ObLobManager::append(ObLobAccessParam& param, ObLobLocatorV2& lob, ObLobMeta
           LOG_WARN("alloc ObLobLocatorV2 failed.", K(ret), K(sizeof(ObLobLocatorV2)));
         } else {
           read_param = new(read_param)ObLobAccessParam();
+          read_param->namespace_access_mode_ = param.namespace_access_mode_;
           
           *copy_locator = lob;
           if (OB_FAIL(build_lob_param(*read_param, *param.get_tmp_allocator(), param.coll_type_,
@@ -1511,6 +1514,7 @@ int ObLobManager::write_inrow(ObLobAccessParam& param, ObLobLocatorV2& lob, uint
 {
   int ret = OB_SUCCESS;
   SMART_VAR(ObLobAccessParam, read_param) {
+    read_param.namespace_access_mode_ = param.namespace_access_mode_;
     if (OB_ISNULL(param.allocator_)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("param tmp allocator is null", K(ret), K(param));
@@ -1567,6 +1571,7 @@ int ObLobManager::write_outrow(ObLobAccessParam& param, ObLobLocatorV2& lob, uin
   int ret = OB_SUCCESS;
   ObLobQueryIter *iter = nullptr;
   SMART_VAR(ObLobAccessParam, read_param) {
+    read_param.namespace_access_mode_ = param.namespace_access_mode_;
     if (OB_ISNULL(param.allocator_)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("param tmp allocator is null", K(ret), K(param));
@@ -1813,7 +1818,7 @@ int ObLobManager::append_outrow(
   int ret = OB_SUCCESS;
   ObLobQueryIter *iter = nullptr;
   SMART_VAR(ObLobAccessParam, read_param) {
-    
+    read_param.namespace_access_mode_ = param.namespace_access_mode_;
     if (OB_ISNULL(param.get_tmp_allocator())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("param allocator is null", K(ret), K(param));
@@ -2843,7 +2848,8 @@ int lob_binary_equal(common::ObLobLocatorV2 &left,
                      common::ObLobLocatorV2 &right,
                      int64_t timeout_ts,
                      transaction::ObTxDesc *tx_desc,
-                     bool &is_equal)
+                     bool &is_equal,
+                     ObNamespaceAccessMode access_mode)
 {
   int ret = OB_SUCCESS;
   storage::ObLobManager *manager = ::oceanbase::share::server_service<::oceanbase::storage::ObLobManager>();
@@ -2859,6 +2865,7 @@ int lob_binary_equal(common::ObLobLocatorV2 &left,
     params.compare_len_ = UINT64_MAX;
     params.timeout_ = timeout_ts;
     params.tx_desc_ = tx_desc;
+    params.namespace_access_mode_ = access_mode;
     if (OB_FAIL(manager->equal(left, right, params, is_equal))) {
     }
   }
@@ -2869,12 +2876,14 @@ int read_lob_to_buffer(common::ObIAllocator &allocator,
                        common::ObLobLocatorV2 &lob,
                        int64_t timeout_ts,
                        transaction::ObTxDesc *tx_desc,
-                       common::ObString &buffer)
+                       common::ObString &buffer,
+                       ObNamespaceAccessMode access_mode)
 {
   int ret = OB_SUCCESS;
   storage::ObLobManager *manager = ::oceanbase::share::server_service<::oceanbase::storage::ObLobManager>();
   storage::ObLobAccessParam param;
   param.tx_desc_ = tx_desc;
+  param.namespace_access_mode_ = access_mode;
   if (OB_ISNULL(manager)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("LOB manager is null", K(ret));

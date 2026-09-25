@@ -40,6 +40,8 @@ struct SessionBinding {
 struct InProcessStorage {
   const uint64_t ns;
   const StorageSpaceHandle storage_space;
+  data_plane::ObNamespaceAccessMode namespace_access_mode =
+      data_plane::ObNamespaceAccessMode::UNBOUND;
   std::shared_ptr<StorageSessionState> session_state;
   sql::ObSQLSessionInfo &session; // storage-side native session
   std::unique_ptr<EngineWrites> writes;
@@ -55,6 +57,7 @@ struct InProcessStorage {
         session_state(std::make_shared<StorageSessionState>()),
         session(session_state->session),
         scans(storage_space) {
+    storage_access_mode(storage_space, namespace_access_mode);
     ::oceanbase::ns::NamespaceRuntime *runtime = nullptr;
     if (::oceanbase::ns::namespace_registry().get(namespace_id, runtime) && runtime != nullptr) {
       direct_insert_registry = static_cast<DirectInsertRegistry *>(
@@ -71,6 +74,11 @@ struct InProcessStorage {
   bool owns(StorageSpaceHandle space) const
   {
     return space == storage_space || space.is_global() || space.is_physical_mds();
+  }
+  data_plane::ObNamespaceAccessMode access_mode(StorageSpaceHandle space) const
+  {
+    return space.is_global() ? data_plane::ObNamespaceAccessMode::UNFENCED
+        : namespace_access_mode;
   }
 };
 int call_in_process_rootserver_runtime(
@@ -127,7 +135,8 @@ int read_in_process_lob(ObLobLocatorV2 &locator, int64_t timeout,
     const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
     THIS_WORKER.set_session(&storage->session);
     ret = data_plane::read_lob_to_buffer(allocator, locator,
-        std::min(timeout, old_timeout), storage->writes->tx, output);
+        std::min(timeout, old_timeout), storage->writes->tx, output,
+        storage->access_mode(space));
     THIS_WORKER.set_session(old_session);
     THIS_WORKER.set_timeout_ts(old_timeout);
   }
@@ -150,7 +159,8 @@ int compare_in_process_lobs(ObLobLocatorV2 &left, ObLobLocatorV2 &right,
   const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
   THIS_WORKER.set_session(&storage->session);
   const int ret = data_plane::lob_binary_equal(
-      left, right, std::min(timeout, old_timeout), storage_tx, equal);
+      left, right, std::min(timeout, old_timeout), storage_tx, equal,
+      storage->access_mode(space));
   THIS_WORKER.set_session(old_session);
   THIS_WORKER.set_timeout_ts(old_timeout);
   return ret;
@@ -228,6 +238,8 @@ int in_process_open(InProcessStorage &ctx, uint32_t sid, bool internal)
   int ret = OB_SUCCESS;
   if (ctx.initialized || (!sid && !internal)) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (ctx.namespace_access_mode == data_plane::ObNamespaceAccessMode::UNBOUND) {
+    ret = OB_NOT_INIT;
   } else if (OB_FAIL(ctx.session.test_init(1, static_cast<uint32_t>(sid),
              &ctx.session_state->allocator))) {
   } else if (sid != 0 || !internal) {
@@ -237,7 +249,7 @@ int in_process_open(InProcessStorage &ctx, uint32_t sid, bool internal)
   }
   if (!ret) {
     ctx.writes = std::make_unique<EngineWrites>(
-        ctx.storage_space, ctx.session);
+        ctx.storage_space, ctx.session, ctx.namespace_access_mode);
     ctx.initialized = true;
   }
   return ret;
@@ -255,7 +267,7 @@ int open_in_process_scan(StorageSpaceHandle storage_space,
   const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
   auto *old_session = THIS_WORKER.get_session();
   THIS_WORKER.set_session(&ctx->session);
-  const int ret = ctx->scans.open(storage_space, param, logical_schema,
+  const int ret = ctx->scans.open(storage_space, ctx->access_mode(storage_space), param, logical_schema,
       ctx->writes->tx, &ctx->session, handle);
   THIS_WORKER.set_session(old_session);
   THIS_WORKER.set_timeout_ts(old_timeout);

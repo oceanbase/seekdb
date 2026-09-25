@@ -485,6 +485,7 @@ int ObLobLocatorHelper::build_lob_locatorv2(ObLobLocatorV2 &locator,
             ObLobAccessParam param;
             param.tx_desc_ = NULL;
             param.sql_mode_ = access_ctx.sql_mode_;
+            param.namespace_access_mode_ = access_ctx.namespace_access_mode_;
             param.tablet_id_ = ObTabletID(tablet_id_);
 
             param.allocator_ = &tmp_lob_allocator;

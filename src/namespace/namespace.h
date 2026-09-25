@@ -89,6 +89,8 @@ public:
   Namespace &ns() const { return ns_; }
   void grant_global_control_authority() { global_control_authority_ = true; }
   bool has_global_control_authority() const { return global_control_authority_; }
+  void disable_storage_access_lease() { storage_access_lease_required_ = false; }
+  bool storage_access_lease_required() const { return storage_access_lease_required_; }
   void set_service(ServiceSlot slot, void *service)
   {
     if (slot < SLOT_COUNT) { services_[slot] = service; }
@@ -100,6 +102,7 @@ public:
 private:
   Namespace &ns_;
   bool global_control_authority_ = false;
+  bool storage_access_lease_required_ = true;
   void *services_[SLOT_COUNT] = {};
 };
 

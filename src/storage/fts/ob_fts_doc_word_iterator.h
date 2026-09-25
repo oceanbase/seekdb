@@ -39,7 +39,8 @@ public:
       const uint64_t table_id,
       const common::ObTabletID &tablet_id,
       const transaction::ObTxReadSnapshot *snapshot,
-      const int64_t schema_version);
+      const int64_t schema_version,
+      data_plane::ObNamespaceAccessMode access_mode);
   int do_scan(const uint64_t table_id, const ObDatum &row_mapping_id);
   int get_next_row(blocksstable::ObDatumRow *&datum_row);
 
@@ -51,7 +52,8 @@ private:
       const uint64_t table_id,
       const common::ObTabletID &tablet_id,
       const transaction::ObTxReadSnapshot *snapshot,
-      const int64_t schema_version);
+      const int64_t schema_version,
+      data_plane::ObNamespaceAccessMode access_mode);
   int build_table_param(
       const uint64_t table_id,
       share::schema::ObTableParam &table_param,

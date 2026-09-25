@@ -45,6 +45,7 @@ int ObLobAccessParam::assign(const ObLobAccessParam& other)
   this->tx_id_ = other.tx_id_;
   this->sql_mode_ = other.sql_mode_;
   this->dml_base_param_ = other.dml_base_param_;
+  this->namespace_access_mode_ = other.namespace_access_mode_;
 
   
   

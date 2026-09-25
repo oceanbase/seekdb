@@ -48,13 +48,15 @@ int ObFTDocWordScanIterator::init(
     const uint64_t table_id,
     const common::ObTabletID &tablet_id,
     const transaction::ObTxReadSnapshot *snapshot,
-    const int64_t schema_version)
+    const int64_t schema_version,
+    data_plane::ObNamespaceAccessMode access_mode)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init fulltext doc word scan iterator twice", K(ret), K(is_inited_));
-  } else if (OB_FAIL(init_scan_param(table_id, tablet_id, snapshot, schema_version))) {
+  } else if (OB_FAIL(init_scan_param(table_id, tablet_id, snapshot, schema_version,
+                                     access_mode))) {
   } else {
     is_inited_ = true;
   }
@@ -155,7 +157,8 @@ int ObFTDocWordScanIterator::init_scan_param(
     const uint64_t table_id,
     const common::ObTabletID &tablet_id,
     const transaction::ObTxReadSnapshot *snapshot,
-    const int64_t schema_version)
+    const int64_t schema_version,
+    data_plane::ObNamespaceAccessMode access_mode)
 {
   int ret = OB_SUCCESS;
   ObQueryFlag query_flag(ObQueryFlag::Forward, // scan_order
@@ -176,6 +179,7 @@ int ObFTDocWordScanIterator::init_scan_param(
   } else if (OB_FAIL(build_table_param(table_id, table_param_, scan_param_.column_ids_))) {
   } else {
     scan_param_.tablet_id_ = tablet_id;
+    scan_param_.namespace_access_mode_ = access_mode;
     scan_param_.schema_version_ = schema_version;
     scan_param_.is_get_ = false;
     scan_param_.scan_flag_.flag_ = query_flag.flag_;
@@ -345,12 +349,13 @@ int init_ft_doc_word_iterator(ObFTDocWordIterator *iterator,
                               uint64_t table_id,
                               const common::ObTabletID &tablet_id,
                               const transaction::ObTxReadSnapshot *snapshot,
-                              int64_t schema_version)
+                              int64_t schema_version,
+                              ObNamespaceAccessMode access_mode)
 {
   return OB_ISNULL(iterator)
       ? OB_INVALID_ARGUMENT
       : as_storage_iterator(iterator)->init(
-            table_id, tablet_id, snapshot, schema_version);
+            table_id, tablet_id, snapshot, schema_version, access_mode);
 }
 
 int scan_ft_doc_words(ObFTDocWordIterator *iterator,

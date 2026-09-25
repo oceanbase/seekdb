@@ -16,6 +16,7 @@ DATA_PLANE_API_INTERFACE_HEADERS = [
     "api/data_plane/access/ob_dml_execution.h",
     "api/data_plane/access/ob_dml_table_plan.h",
     "api/data_plane/access/ob_lock_flag.h",
+    "api/data_plane/access/ob_namespace_access_mode.h",
     "api/data_plane/access/ob_table_scan_access.h",
     "api/data_plane/access/ob_table_scan_param.h",
     "api/data_plane/blocksstable/ob_datum_row_factory.h",
