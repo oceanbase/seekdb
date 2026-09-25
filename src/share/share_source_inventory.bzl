@@ -564,7 +564,6 @@ SHARE_STANDALONE_SOURCES = [
     struct(path = "src/share/ob_rpc_struct.cpp", language = "c++", kind = "source"),
     struct(path = "src/share/ob_sql_client_decorator.cpp", language = "c++", kind = "source"),
     struct(path = "src/share/ob_timezone_mgr.cpp", language = "c++", kind = "source"),
-    struct(path = "src/share/parameter/ob_parameter_attr.cpp", language = "c++", kind = "source"),
 ]
 
 SHARE_DATUM_STANDALONE_SOURCES = [

@@ -305,7 +305,6 @@ SHARE_INTERFACE_CLOSURE_HEADERS = [
     "ob_lease_struct.h",
     "ob_server_status.h",
     "ob_server_switchover_status.h",
-    "parameter/ob_parameter_attr.h",
     "redolog/ob_log_definition.h",
     "redolog/ob_log_file_group.h",
     "redolog/ob_log_policy.h",

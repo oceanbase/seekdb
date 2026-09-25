@@ -982,9 +982,6 @@ _SHARE_RUNTIME_GROUP_OBLIB_DEPS = {
         "//src/oblib:oblib_memory_runtime_base",
         "//src/oblib:oblib_memory_utilities",
     ],
-    "share_runtime_standalone_31": [
-        "//src/oblib:oblib_foundation",
-    ],
     "share_runtime_standalone_4": [
         "//src/oblib:oblib_collections_advanced",
         "//src/oblib:oblib_collections_runtime",

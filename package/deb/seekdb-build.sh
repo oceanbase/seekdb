@@ -77,7 +77,7 @@ function install_payload
   (( ${#syspack_files[@]} > 0 )) ||
     fail "Bazel syspack output is empty: ${syspack_dir}"
 
-  require_file "${TOP_DIR}/src/share/parameter/default_parameter.json"
+  require_file "${TOP_DIR}/package/config/default_parameter.json"
   require_file "${TOP_DIR}/src/share/system_variable/default_system_variable.json"
   require_file "${profile_dir}/telemetry.sh.template"
   require_file "${obshell_binary}"
@@ -117,7 +117,7 @@ function install_payload
   chmod 0755 "${package_root}/usr/libexec/seekdb/scripts/telemetry.sh"
 
   install -m 0644 \
-    "${TOP_DIR}/src/share/parameter/default_parameter.json" \
+    "${TOP_DIR}/package/config/default_parameter.json" \
     "${TOP_DIR}/src/share/system_variable/default_system_variable.json" \
     "${profile_dir}/seekdb.cnf" \
     "${profile_dir}/oceanbase-pre.json" \

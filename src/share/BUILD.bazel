@@ -458,7 +458,6 @@ cc_library(
     name = "config_value_support",
     hdrs = [
         "ob_encryption_util.h",
-        "parameter/ob_parameter_attr.h",
     ],
     deps = [
         "//src/oblib:oblib_foundation",

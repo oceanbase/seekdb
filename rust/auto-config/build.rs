@@ -99,7 +99,7 @@ fn numeric_default(parameter: &Parameter) -> i64 {
 }
 
 fn log_default() -> &'static str {
-    match env::var("SEEKDB_DEFAULT_LOG_LEVEL")
+    match env::var("DEFAULT_LOG_LEVEL")
         .unwrap_or_else(|_| "OB_LOG_LEVEL_ERROR".to_owned())
         .as_str()
     {
@@ -405,9 +405,9 @@ fn main() {
     env::set_current_dir(&output_dir).expect("cannot enter generated source directory");
     cxx_build::bridge("generated_config.rs")
         .flag_if_supported("-std=c++17")
-        .compile("seekdb_config_cxx");
+        .compile("auto_config_cxx");
     env::set_current_dir(&crate_dir).expect("cannot restore crate directory");
-    if let Ok(header_dir) = env::var("SEEKDB_CXX_HEADER_DIR") {
+    if let Ok(header_dir) = env::var("CONFIG_HEADER_DIR") {
         let header_dir = PathBuf::from(header_dir);
         fs::create_dir_all(&header_dir).expect("cannot create CXX header directory");
         let source = output_dir.join("cxxbridge/include/auto-config/generated_config.rs.h");
@@ -436,6 +436,6 @@ fn main() {
     println!("cargo:rerun-if-changed=cbindgen.toml");
     println!("cargo:rerun-if-changed=parameters.yaml");
     println!("cargo:rerun-if-changed=internal_state.yaml");
-    println!("cargo:rerun-if-env-changed=SEEKDB_CXX_HEADER_DIR");
-    println!("cargo:rerun-if-env-changed=SEEKDB_DEFAULT_LOG_LEVEL");
+    println!("cargo:rerun-if-env-changed=CONFIG_HEADER_DIR");
+    println!("cargo:rerun-if-env-changed=DEFAULT_LOG_LEVEL");
 }
