@@ -1686,7 +1686,7 @@ int ObTransformSimplifyExpr::try_remove_subquery_in_expr(ObDMLStmt* stmt, ObRawE
     }
   }
   if (OB_SUCC(ret) && trans_happened) {
-    if (OB_FAIL(expr->formalize(ctx_->session_info_))) {
+    if (OB_FAIL(expr->formalize(ctx_->session_info_, false, false))) {
     }
   }
   return ret;
