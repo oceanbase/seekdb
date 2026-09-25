@@ -57,10 +57,42 @@ public:
                         spec.get_target_scan_desc());
   }
 
-  // This entry point is intentionally dormant while RecursivePumpOp still
-  // owns anchor-row production. Calling it from that fallback would duplicate
-  // every seed in two work areas. The native executor will invoke it when it
-  // takes ownership of consuming the anchor child.
+  // This loader stays dormant while RecursivePumpOp owns row production. The
+  // native executor will call it only after taking exclusive ownership of the
+  // anchor child, avoiding duplicate seed storage in the fallback work area.
+  int load_seeds(ObOperator &anchor, const GraphFeedbackLoopSpec &spec)
+  {
+    int ret = OB_SUCCESS;
+    if (OB_UNLIKELY(seeds_loaded_)) {
+      ret = OB_INIT_TWICE;
+      LOG_WARN("graph feedback seeds are already loaded", K(ret),
+               K_(next_binding_id));
+    }
+    while (OB_SUCC(ret) && !seeds_loaded_) {
+      const int next_ret = anchor.get_next_row();
+      if (next_ret == OB_ITER_END) {
+        seeds_loaded_ = true;
+      } else if (next_ret != OB_SUCCESS) {
+        ret = next_ret;
+        LOG_WARN("failed to read graph feedback seed row", K(ret));
+      } else if (OB_FAIL(add_seed(spec))) {
+        LOG_WARN("failed to save graph feedback seed row", K(ret));
+      }
+    }
+    if (OB_SUCCESS != ret) {
+      reset();
+    }
+    return ret;
+  }
+
+  void reset()
+  {
+    frontier_.reset();
+    next_binding_id_ = 0;
+    seeds_loaded_ = false;
+  }
+
+private:
   int add_seed(const GraphFeedbackLoopSpec &spec)
   {
     int ret = OB_SUCCESS;
@@ -107,18 +139,13 @@ public:
     return ret;
   }
 
-  void reset()
-  {
-    frontier_.reset();
-    next_binding_id_ = 0;
-  }
-
 private:
   ObEvalCtx &eval_ctx_;
   GraphExpandDasAccess access_;
   GraphExpand expand_;
   GraphFeedbackFrontier frontier_;
   int64_t next_binding_id_{0};
+  bool seeds_loaded_{false};
 
   DISALLOW_COPY_AND_ASSIGN(GraphFeedbackRuntime);
 };
