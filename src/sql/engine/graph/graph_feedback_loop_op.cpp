@@ -250,6 +250,25 @@ public:
     return ret;
   }
 
+  // Produces a complete recursive row for WALK queries that need only the hop
+  // count and endpoint keys. The general path cursor above remains available
+  // to TRAIL and payload writers added by later increments.
+  int get_next_basic_output_row(
+      const GraphFeedbackLoopSpec &spec,
+      const ObIArray<ObExpr *> &binding_exprs,
+      const ObIArray<GraphPathState> *&path)
+  {
+    int ret = get_next_output_path(spec, binding_exprs, path);
+    if (OB_SUCC(ret) && OB_FAIL(materialize_basic_output_row(spec, *path))) {
+      path = nullptr;
+      LOG_WARN("failed to materialize basic graph feedback output", K(ret));
+    }
+    if (OB_SUCCESS != ret && OB_ITER_END != ret) {
+      reset();
+    }
+    return ret;
+  }
+
   // Advances exactly one level and never crosses the SQL upper bound. WALK
   // and TRAIL decisions remain path-local inside GraphFeedbackFrontier.
   int advance_frontier(const GraphFeedbackLoopSpec &spec)
@@ -288,6 +307,91 @@ public:
   }
 
 private:
+  int write_output_value(ObExpr *expr, const ObObj &value)
+  {
+    int ret = OB_SUCCESS;
+    if (OB_ISNULL(expr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("graph feedback output expression is null", K(ret));
+    } else {
+      ObDatum &datum = expr->locate_datum_for_write(eval_ctx_);
+      if (OB_FAIL(datum.from_obj(value, expr->obj_datum_map_))) {
+        LOG_WARN("failed to write graph feedback output value", K(ret),
+                 K(value), KPC(expr));
+      } else {
+        expr->set_evaluated_projected(eval_ctx_);
+        ObEvalInfo &info = expr->get_eval_info(eval_ctx_);
+        info.notnull_ = !datum.is_null();
+        info.point_to_frame_ = false;
+      }
+    }
+    return ret;
+  }
+
+  int write_output_key(const ExprFixedArray &output_exprs,
+                       int64_t begin,
+                       int64_t count,
+                       const GraphElementIdentity &identity)
+  {
+    int ret = OB_SUCCESS;
+    if (OB_UNLIKELY(begin < 0 || count <= 0
+                    || begin > output_exprs.count() - count
+                    || identity.rowkey_.get_obj_cnt() != count)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("graph feedback output key shape is inconsistent", K(ret),
+               K(begin), K(count), "output_count", output_exprs.count(),
+               K(identity));
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
+      if (OB_FAIL(write_output_value(
+              output_exprs.at(begin + i), identity.rowkey_.get_obj_ptr()[i]))) {
+        LOG_WARN("failed to write graph feedback output key", K(ret), K(i),
+                 K(begin), K(identity));
+      }
+    }
+    return ret;
+  }
+
+  // Materializes the complete recursive row for the initial native subset:
+  // hop count plus source/current vertex keys. TRAIL history and JSON payload
+  // are rejected until their dedicated writers are installed.
+  int materialize_basic_output_row(
+      const GraphFeedbackLoopSpec &spec,
+      const ObIArray<GraphPathState> &path)
+  {
+    int ret = OB_SUCCESS;
+    ObObj hop_value;
+    const GraphFeedbackRowDesc &desc = spec.get_output_row_desc();
+    const ExprFixedArray &output_exprs = spec.output_union_exprs_;
+    if (OB_UNLIKELY(path.empty()
+                    || desc.output_expr_count_ != output_exprs.count())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid graph feedback output row", K(ret),
+               "path_count", path.count(), K(desc),
+               "output_count", output_exprs.count());
+    } else if (OB_UNLIKELY(spec.get_path_mode() != GraphPathMode::WALK
+                           || desc.trail_key_expr_count_ != 0
+                           || desc.payload_expr_count_ != 0)) {
+      ret = OB_NOT_SUPPORTED;
+      LOG_WARN("graph feedback output row requires path payload", K(ret),
+               K(desc));
+    } else {
+      const GraphPathState &root = path.at(0);
+      const GraphPathState &leaf = path.at(path.count() - 1);
+      hop_value.set_int(leaf.hop_);
+      if (OB_FAIL(write_output_value(
+              output_exprs.at(desc.depth_expr_index_), hop_value))) {
+      } else if (OB_FAIL(write_output_key(
+                     output_exprs, desc.source_key_expr_begin_,
+                     desc.source_key_expr_count_, root.current_identity_))) {
+      } else if (OB_FAIL(write_output_key(
+                     output_exprs, desc.current_key_expr_begin_,
+                     desc.current_key_expr_count_, leaf.current_identity_))) {
+      }
+    }
+    return ret;
+  }
+
   int restore_output_binding(
       const ObIArray<GraphPathState> &path,
       const ObIArray<ObExpr *> &binding_exprs)
