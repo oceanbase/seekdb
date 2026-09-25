@@ -40,6 +40,9 @@ public:
            int64_t output_count);
   bool is_valid(const GraphPathDesc &path_desc,
                 const GraphExpandAccessDesc &access_desc) const;
+  bool supports_basic_native_output(
+      const GraphPathDesc &path_desc,
+      const GraphExpandAccessDesc &access_desc) const;
 
   int64_t depth_expr_index_{0};
   int64_t source_key_expr_begin_{0};
@@ -174,6 +177,11 @@ public:
       valid = seed_key_exprs_.at(i) != nullptr;
     }
     return valid;
+  }
+  bool can_use_basic_native_runtime() const
+  {
+    return output_row_desc_.supports_basic_native_output(
+        path_desc_, expand_access_desc_);
   }
 
 private:

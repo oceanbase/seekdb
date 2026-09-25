@@ -96,6 +96,20 @@ bool GraphFeedbackRowDesc::is_valid(
   return valid;
 }
 
+bool GraphFeedbackRowDesc::supports_basic_native_output(
+    const GraphPathDesc &path_desc,
+    const GraphExpandAccessDesc &access_desc) const
+{
+  return is_valid(path_desc, access_desc)
+      && path_desc.source_element_id_ == path_desc.target_element_id_
+      && path_desc.row_shape_ == GraphPathRowShape::PER_MATCH
+      && path_desc.path_mode_ == GraphPathMode::WALK
+      && !path_desc.need_path_
+      && access_desc.source_table_id_ == access_desc.target_table_id_
+      && trail_key_expr_count_ == 0
+      && payload_expr_count_ == 0;
+}
+
 // Owns the native graph components as one allocation so their reference
 // dependencies are constructed and destroyed in a fixed order. It remains
 // query-local; no state is shared by rescans or concurrent executions.
@@ -369,12 +383,11 @@ private:
       LOG_WARN("invalid graph feedback output row", K(ret),
                "path_count", path.count(), K(desc),
                "output_count", output_exprs.count());
-    } else if (OB_UNLIKELY(spec.get_path_mode() != GraphPathMode::WALK
-                           || desc.trail_key_expr_count_ != 0
-                           || desc.payload_expr_count_ != 0)) {
+    } else if (OB_UNLIKELY(!spec.can_use_basic_native_runtime())) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("graph feedback output row requires path payload", K(ret),
-               K(desc));
+      LOG_WARN("graph feedback output row is outside basic native capability",
+               K(ret), K(spec.get_path_desc()),
+               K(spec.get_expand_access_desc()), K(desc));
     } else {
       const GraphPathState &root = path.at(0);
       const GraphPathState &leaf = path.at(path.count() - 1);
