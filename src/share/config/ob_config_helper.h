@@ -17,12 +17,6 @@
 #ifndef OCEANBASE_SHARE_CONFIG_OB_CONFIG_HELPER_H_
 #define OCEANBASE_SHARE_CONFIG_OB_CONFIG_HELPER_H_
 
-#ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#else
-#include <arpa/inet.h>
-#endif
 #include "lib/hash/ob_hashmap.h"
 #include "lib/hash_func/murmur_hash.h"
 #include "lib/hash/ob_hashutils.h"
@@ -46,34 +40,6 @@ public:
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigChecker);
-};
-
-class ObConfigIpChecker
-  : public ObConfigChecker
-{
-public:
-  ObConfigIpChecker() {}
-  virtual ~ObConfigIpChecker() {}
-  bool check(const char *text) const;
-
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigIpChecker);
-};
-
-class ObConfigConsChecker
-  : public ObConfigChecker
-{
-public:
-  ObConfigConsChecker(const ObConfigChecker *left, const ObConfigChecker *right)
-      : left_(left), right_(right)
-  {}
-  virtual ~ObConfigConsChecker();
-  bool check(const char *text) const;
-
-private:
-  const ObConfigChecker *left_;
-  const ObConfigChecker *right_;
-  DISALLOW_COPY_AND_ASSIGN(ObConfigConsChecker);
 };
 
 class ObConfigEvenIntChecker
@@ -157,17 +123,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigCompressFuncChecker);
 };
 
-class ObConfigPerfCompressFuncChecker
-  : public ObConfigChecker
-{
-public:
-  ObConfigPerfCompressFuncChecker() {}
-  virtual ~ObConfigPerfCompressFuncChecker() {}
-  bool check(const char *text) const;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigPerfCompressFuncChecker);
-};
-
 class ObConfigTempStoreFormatChecker
   : public ObConfigChecker
 {
@@ -246,72 +201,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigLogLevelChecker);
 };
 
-class ObConfigAuditTrailChecker
-  : public ObConfigChecker
-{
-public:
-  ObConfigAuditTrailChecker() {}
-  virtual ~ObConfigAuditTrailChecker() {}
-  bool check(const char *text) const;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigAuditTrailChecker);
-};
-
-class ObConfigAuditLogCompressionChecker
-  : public ObConfigChecker
-{
-public:
-  ObConfigAuditLogCompressionChecker() {}
-  virtual ~ObConfigAuditLogCompressionChecker() {}
-  bool check(const char *text) const;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigAuditLogCompressionChecker);
-};
-
-class ObConfigAuditLogPathChecker
-  : public ObConfigChecker
-{
-public:
-  ObConfigAuditLogPathChecker() {}
-  virtual ~ObConfigAuditLogPathChecker() {}
-  bool check(const char *text) const;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigAuditLogPathChecker);
-};
-
-class ObConfigAuditLogFormatChecker
-  : public ObConfigChecker
-{
-public:
-  ObConfigAuditLogFormatChecker() {}
-  virtual ~ObConfigAuditLogFormatChecker() {}
-  bool check(const char *text) const;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigAuditLogFormatChecker);
-};
-
-class ObConfigAuditLogQuerySQLChecker
-  : public ObConfigChecker
-{
-public:
-  ObConfigAuditLogQuerySQLChecker() {}
-  virtual ~ObConfigAuditLogQuerySQLChecker() {}
-  bool check(const char *text) const;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigAuditLogQuerySQLChecker);
-};
-
-class ObConfigAuditLogStrategyChecker
-  : public ObConfigChecker
-{
-public:
-  ObConfigAuditLogStrategyChecker() {}
-  virtual ~ObConfigAuditLogStrategyChecker() {}
-  bool check(const char *text) const;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigAuditLogStrategyChecker);
-};
-
 class ObConfigWorkAreaPolicyChecker
   : public ObConfigChecker
 {
@@ -350,30 +239,6 @@ public:
 
 private:
   DISALLOW_COPY_AND_ASSIGN(KVCacheMemoryLimitConfigChecker);
-};
-
-class ObConfigAuditModeChecker
-  : public ObConfigChecker
-{
-public:
-  ObConfigAuditModeChecker() {}
-  virtual ~ObConfigAuditModeChecker() {}
-
-  bool check(const char *text) const;
-
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObConfigAuditModeChecker);
-};
-
-class ObLogDiskUsagePercentageChecker
-  : public ObConfigChecker
-{
-public:
-  ObLogDiskUsagePercentageChecker() {}
-  virtual ~ObLogDiskUsagePercentageChecker() {}
-  bool check(const char *text) const;
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObLogDiskUsagePercentageChecker);
 };
 
 class ObCtxMemoryLimitChecker

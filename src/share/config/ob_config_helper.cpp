@@ -34,30 +34,6 @@ using namespace obcall;
 namespace common
 {
 
-bool ObConfigIpChecker::check(const char *text) const
-{
-  struct sockaddr_in sa;
-  int result = inet_pton(AF_INET, text, &(sa.sin_addr));
-  return result != 0;
-}
-
-ObConfigConsChecker:: ~ObConfigConsChecker()
-{
-  if (NULL != left_) {
-    ObConfigChecker *left = const_cast<ObConfigChecker*>(left_);
-    OB_DELETE(ObConfigChecker, "unused", left);
-  }
-  if (NULL != right_) {
-    ObConfigChecker *right = const_cast<ObConfigChecker*>(right_);
-    OB_DELETE(ObConfigChecker, "unused", right);
-  }
-}
-bool ObConfigConsChecker::check(const char *text) const
-{
-  return (NULL == left_ ? true : left_->check(text))
-         && (NULL == right_ ? true : right_->check(text));
-}
-
 bool ObConfigEvenIntChecker::check(const char *text) const
 {
   bool is_valid = false;
@@ -204,17 +180,6 @@ bool ObConfigCompressFuncChecker::check(const char *text) const
   return is_valid;
 }
 
-bool ObConfigPerfCompressFuncChecker::check(const char *text) const
-{
-  bool is_valid = false;
-  for (int i = 0; i < ARRAYSIZEOF(common::perf_compress_funcs) && !is_valid; ++i) {
-    if (0 == ObString::make_string(perf_compress_funcs[i]).case_compare(text)) {
-      is_valid = true;
-    }
-  }
-  return is_valid;
-}
-
 bool ObConfigTempStoreFormatChecker::check(const char *text) const
 {
   static const char *const FORMAT_OPTIONS[] = {
@@ -312,50 +277,6 @@ bool ObConfigLogLevelChecker::check(const char *text) const
   const ObString tmp_str(text);
   return ((0 == tmp_str.case_compare(ObLogger::PERF_LEVEL))
       || OB_SUCCESS == OB_LOGGER.parse_check(tmp_str.ptr(), tmp_str.length()));
-}
-
-bool ObConfigAuditTrailChecker::check(const char *text) const
-{
-  common::ObString tmp_string(text);
-  return false;
-}
-
-bool ObConfigAuditLogCompressionChecker::check(const char *text) const
-{
-  common::ObString tmp_string(text);
-  return 0 == tmp_string.case_compare("NONE")
-      || 0 == tmp_string.case_compare("ZSTD");
-}
-
-bool ObConfigAuditLogPathChecker::check(const char *text) const
-{
-  static constexpr char FILE_PREFIX[] = "file://";
-  const char *path = text;
-  return '\0' == path[0]
-      || (0 == STRNCMP(path, FILE_PREFIX, sizeof(FILE_PREFIX) - 1)
-          && OB_ISNULL(STRCHR(path, '?'))
-          && STRLEN(path) < OB_MAX_URI_LENGTH);
-}
-
-bool ObConfigAuditLogFormatChecker::check(const char *text) const
-{
-  common::ObString tmp_string(text);
-  return 0 == tmp_string.case_compare("CSV");
-}
-
-bool ObConfigAuditLogQuerySQLChecker::check(const char *text) const
-{
-  common::ObString tmp_string(text);
-  return 0 == tmp_string.case_compare("ALL")
-      || 0 == tmp_string.case_compare("NONE");
-}
-
-bool ObConfigAuditLogStrategyChecker::check(const char *text) const
-{
-  common::ObString tmp_string(text);
-  return 0 == tmp_string.case_compare("ASYNCHRONOUS")
-      || 0 == tmp_string.case_compare("PERFORMANCE")
-      || 0 == tmp_string.case_compare("SYNCHRONOUS");
 }
 
 bool ObConfigWorkAreaPolicyChecker::check(const char *text) const
@@ -475,23 +396,6 @@ bool KVCacheMemoryLimitConfigChecker::check(const char *text) const
   return is_valid;
 }
 
-bool ObLogDiskUsagePercentageChecker::check(const char *text) const
-{
-  bool is_valid = false;
-  int64_t value = ObConfigIntParser::get(text, is_valid);
-  if (is_valid) {
-    // TODO by runlun: runtime configuration item check
-    const int64_t log_disk_utilization_threshold = 100;
-    if (value < log_disk_utilization_threshold) {
-      is_valid = false;
-      LOG_USER_ERROR(OB_INVALID_CONFIG,
-          "log_disk_utilization_limit_threshold "
-          "should not be less than log_disk_utilization_threshold");
-    }
-  }
-  return is_valid;
-}
-
 bool ObConfigEnableDefensiveChecker::check(const char *text) const
 {
   bool is_valid = false;
@@ -565,13 +469,6 @@ int64_t ObConfigTimeParser::get(const char *str, bool &valid)
   }
 
   return value;
-}
-
-bool ObConfigAuditModeChecker::check(const char *text) const
-{
-  ObString v_str(text);
-  return 0 == v_str.case_compare("NONE") ||
-         0 == v_str.case_compare("MYSQL");
 }
 
 bool ObCtxMemoryLimitChecker::check(const char *text) const
