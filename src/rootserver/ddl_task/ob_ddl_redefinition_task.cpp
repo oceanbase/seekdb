@@ -2296,7 +2296,8 @@ int ObDDLRedefinitionTask::reap_old_local_build_task(bool &need_exec_new_inner_s
     const int old_ret_code = OB_SUCCESS;
     if (old_execution_id < 0) {
       need_exec_new_inner_sql = true;
-    } else if (context_.namespace_id_ > 1) {
+    } else if (context_.recovery_mode_
+               == ObDDLTaskContext::RecoveryMode::RETRY_UNTIL_CONSISTENT) {
       // A restarted in-process session is gone, but its destination checksum
       // may already be durable. Claim that completed build before retrying.
       ret = ObCheckTabletDataComplementOp::check_finish_report_checksum(
