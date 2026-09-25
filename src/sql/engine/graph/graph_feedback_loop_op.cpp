@@ -85,6 +85,62 @@ public:
     return ret;
   }
 
+  // The current frontier represents one complete BFS level. A level is
+  // externally visible only inside the inclusive SQL hop bounds; expansion
+  // may still be required for levels below the lower bound.
+  bool has_output_frontier(const GraphFeedbackLoopSpec &spec) const
+  {
+    const int64_t hop = frontier_.get_hop();
+    return seeds_loaded_
+        && !frontier_.empty()
+        && hop >= spec.get_lower_bound()
+        && hop <= spec.get_upper_bound();
+  }
+
+  int64_t get_output_count(const GraphFeedbackLoopSpec &spec) const
+  {
+    return has_output_frontier(spec) ? frontier_.get_frontier_count() : 0;
+  }
+
+  int get_output_state(const GraphFeedbackLoopSpec &spec,
+                       int64_t index,
+                       GraphPathState &state) const
+  {
+    int ret = OB_SUCCESS;
+    if (!has_output_frontier(spec)) {
+      ret = OB_ITER_END;
+    } else if (OB_FAIL(frontier_.get_frontier_state(index, state))) {
+      LOG_WARN("failed to read graph feedback output state", K(ret), K(index));
+    }
+    return ret;
+  }
+
+  // Advances exactly one level and never crosses the SQL upper bound. WALK
+  // and TRAIL decisions remain path-local inside GraphFeedbackFrontier.
+  int advance_frontier(const GraphFeedbackLoopSpec &spec)
+  {
+    int ret = OB_SUCCESS;
+    const int64_t current_hop = frontier_.get_hop();
+    if (OB_UNLIKELY(!seeds_loaded_)) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("graph feedback seeds are not loaded", K(ret));
+    } else if (frontier_.empty() || current_hop >= spec.get_upper_bound()) {
+      ret = OB_ITER_END;
+    } else if (OB_FAIL(frontier_.expand(spec.get_direction(),
+                                        spec.get_path_mode()))) {
+      if (ret != OB_ITER_END) {
+        LOG_WARN("failed to advance graph feedback frontier", K(ret),
+                 K(current_hop));
+      }
+    } else if (frontier_.empty()) {
+      ret = OB_ITER_END;
+    }
+    if (OB_SUCCESS != ret && OB_ITER_END != ret) {
+      reset();
+    }
+    return ret;
+  }
+
   void reset()
   {
     frontier_.reset();
