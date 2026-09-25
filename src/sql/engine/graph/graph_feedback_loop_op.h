@@ -26,6 +26,8 @@ namespace oceanbase
 namespace sql
 {
 
+class GraphFeedbackRuntime;
+
 // Query-local owner of one breadth-first path frontier. Each call to expand()
 // converts the current path-state IDs into GraphExpandInput batches, consumes
 // their single-hop extensions, and installs the accepted child states as the
@@ -143,10 +145,22 @@ public:
   {}
   ~GraphFeedbackLoopOp() = default;
   int inner_open() override;
+  int inner_close() override;
+  int inner_rescan() override;
+  void destroy() override;
 
 private:
+  int init_native_runtime();
+  void reset_native_runtime();
+  void destroy_native_runtime();
   const GraphFeedbackLoopSpec &get_graph_spec() const
   { return static_cast<const GraphFeedbackLoopSpec &>(spec_); }
+
+private:
+  // Query-local owner of the native one-hop access and BFS state. The public
+  // row-production path still uses RecursivePumpOp until seed/result binding
+  // is switched in a later increment.
+  GraphFeedbackRuntime *native_runtime_{nullptr};
 };
 
 } // namespace sql

@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/graph/graph_feedback_loop_op.h"
+#include "sql/engine/graph/graph_expand_das_access.h"
+#include "sql/engine/ob_sql_mem_mgr_processor.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "share/ob_errno.h"
 #include "sql/engine/table/ob_table_scan_op.h"
@@ -28,6 +30,41 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
+
+// Owns the native graph components as one allocation so their reference
+// dependencies are constructed and destroyed in a fixed order. It remains
+// query-local; no state is shared by rescans or concurrent executions.
+class GraphFeedbackRuntime final
+{
+public:
+  GraphFeedbackRuntime(ObExecContext &exec_ctx,
+                       ObEvalCtx &eval_ctx,
+                       ObIAllocator &allocator,
+                       int64_t memory_limit)
+      : access_(exec_ctx, eval_ctx),
+        expand_(allocator, access_, GRAPH_EXPAND_MAX_EDGE_PAGE_SIZE,
+                memory_limit),
+        frontier_(allocator, expand_, GRAPH_EXPAND_MAX_INPUT_STATE_COUNT,
+                  memory_limit)
+  {}
+  ~GraphFeedbackRuntime() = default;
+
+  int init(const GraphFeedbackLoopSpec &spec)
+  {
+    return access_.init(spec.get_path_desc(), spec.get_expand_access_desc(),
+                        spec.get_source_scan_desc(), spec.get_edge_scan_desc(),
+                        spec.get_target_scan_desc());
+  }
+
+  void reset() { frontier_.reset(); }
+
+private:
+  GraphExpandDasAccess access_;
+  GraphExpand expand_;
+  GraphFeedbackFrontier frontier_;
+
+  DISALLOW_COPY_AND_ASSIGN(GraphFeedbackRuntime);
+};
 
 namespace
 {
@@ -370,9 +407,74 @@ int GraphFeedbackLoopOp::inner_open()
     LOG_WARN("invalid graph feedback physical descriptor", K(ret),
              K(get_graph_spec().get_path_desc()),
              K(get_graph_spec().get_expand_access_desc()));
+  } else if (OB_FAIL(init_native_runtime())) {
+    LOG_WARN("failed to initialize native graph feedback runtime", K(ret));
   } else if (OB_FAIL(RecursivePumpOp::inner_open())) {
+    reset_native_runtime();
   }
   return ret;
+}
+
+int GraphFeedbackLoopOp::inner_close()
+{
+  reset_native_runtime();
+  return RecursivePumpOp::inner_close();
+}
+
+int GraphFeedbackLoopOp::inner_rescan()
+{
+  reset_native_runtime();
+  return RecursivePumpOp::inner_rescan();
+}
+
+int GraphFeedbackLoopOp::init_native_runtime()
+{
+  int ret = OB_SUCCESS;
+  int64_t memory_limit = 0;
+  if (OB_FAIL(ObSqlWorkareaUtil::get_workarea_size(
+          ObSqlWorkAreaType::HASH_WORK_AREA, &ctx_, memory_limit))) {
+    LOG_WARN("failed to get graph feedback work-area limit", K(ret));
+  } else if (OB_UNLIKELY(memory_limit <= 0)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("invalid graph feedback work-area limit", K(ret),
+             K(memory_limit));
+  } else if (native_runtime_ == nullptr
+             && OB_ISNULL(native_runtime_ = OB_NEWx(
+                    GraphFeedbackRuntime, &ctx_.get_allocator(),
+                    ctx_, eval_ctx_, ctx_.get_allocator(), memory_limit))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate native graph feedback runtime", K(ret),
+             K(memory_limit));
+  } else if (OB_FAIL(native_runtime_->init(get_graph_spec()))) {
+    LOG_WARN("failed to bind native graph feedback runtime", K(ret),
+             K(memory_limit));
+  }
+  if (OB_SUCCESS != ret) {
+    destroy_native_runtime();
+  }
+  return ret;
+}
+
+void GraphFeedbackLoopOp::reset_native_runtime()
+{
+  if (native_runtime_ != nullptr) {
+    native_runtime_->reset();
+  }
+}
+
+void GraphFeedbackLoopOp::destroy_native_runtime()
+{
+  if (native_runtime_ != nullptr) {
+    native_runtime_->reset();
+    native_runtime_->~GraphFeedbackRuntime();
+    native_runtime_ = nullptr;
+  }
+}
+
+void GraphFeedbackLoopOp::destroy()
+{
+  destroy_native_runtime();
+  RecursivePumpOp::destroy();
 }
 
 // Cached plans need the graph and element mapping IDs as well as traversal

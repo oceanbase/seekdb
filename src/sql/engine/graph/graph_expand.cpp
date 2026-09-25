@@ -29,7 +29,6 @@ using namespace share::schema;
 namespace sql
 {
 
-static constexpr int64_t GRAPH_EXPAND_MAX_EDGE_PAGE_SIZE = 4096;
 // Conservative fixed-memory reserves for container bookkeeping and identity
 // buffers; variable-length ObObj payloads are accounted by identity_allocator_.
 static constexpr int64_t GRAPH_EXPAND_INPUT_MEMORY_RESERVE_BYTES = 128;

@@ -36,6 +36,7 @@ namespace sql
 // GraphExpand validates this protocol limit independently of the caller's
 // query-memory budget. Frontier controllers split larger levels into batches.
 static const int64_t GRAPH_EXPAND_MAX_INPUT_STATE_COUNT = 4096;
+static const int64_t GRAPH_EXPAND_MAX_EDGE_PAGE_SIZE = 4096;
 
 // Physical table/column binding for one GraphExpand hop. Endpoint columns are
 // normalized to the traversal direction: edge_current_columns_ join the input
