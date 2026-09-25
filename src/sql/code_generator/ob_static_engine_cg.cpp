@@ -277,7 +277,7 @@ int ObStaticEngineCG::postorder_generate_op(ObLogicalOperator &op,
     // referenced by the copied filters and DAS ctdefs.
     if (op.get_type() == log_op_def::LOG_GRAPH_FEEDBACK_LOOP
         && OB_FAIL(static_cast<GraphFeedbackLoopLogOp &>(op)
-                       .get_expand_scan_exprs(*partial_frame_gen.dfo_raw_exprs_))) {
+                       .get_native_runtime_exprs(*partial_frame_gen.dfo_raw_exprs_))) {
       LOG_WARN("failed to register graph expand expressions in DFO frame",
                K(ret), K(op.get_op_id()));
     } else if (OB_FAIL(partial_frame_gen.dfo_raw_exprs_->reserve(
@@ -1190,11 +1190,17 @@ int ObStaticEngineCG::generate_spec(GraphFeedbackLoopLogOp &op,
                                     const bool in_root_job)
 {
   int ret = OB_SUCCESS;
+  ObArray<ObRawExpr *> seed_key_exprs;
   uint64_t source_scan_op_id = OB_INVALID_ID;
   uint64_t edge_scan_op_id = OB_INVALID_ID;
   uint64_t target_scan_op_id = OB_INVALID_ID;
   UNUSED(in_root_job);
   if (OB_FAIL(generate_recursive_pump_spec(op, spec))) {
+  } else if (OB_FAIL(op.get_seed_key_exprs(seed_key_exprs))) {
+    LOG_WARN("failed to get graph feedback seed key expressions", K(ret));
+  } else if (OB_FAIL(generate_rt_exprs(seed_key_exprs,
+                                       spec.get_seed_key_exprs()))) {
+    LOG_WARN("failed to generate graph feedback seed key expressions", K(ret));
   } else if (OB_FAIL(op.get_expand_scan_op_ids(
                  source_scan_op_id, edge_scan_op_id, target_scan_op_id))) {
     LOG_WARN("failed to get graph expand scan operator ids", K(ret));

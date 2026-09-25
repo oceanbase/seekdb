@@ -31,6 +31,7 @@ namespace
 {
 
 const double GRAPH_FEEDBACK_ESTIMATE_LIMIT = 1.0e15;
+const int64_t GRAPH_FEEDBACK_DEPTH_COLUMN_COUNT = 1;
 const char *GRAPH_SEED_VERTEX_ALIAS = "__g_seed_vertex";
 const char *GRAPH_STEP_EDGE_ALIAS = "__g_step_edge";
 const char *GRAPH_STEP_VERTEX_ALIAS = "__g_step_vertex";
@@ -249,7 +250,38 @@ int GraphFeedbackLoopLogOp::get_expand_scan_op_ids(
   return ret;
 }
 
-int GraphFeedbackLoopLogOp::get_expand_scan_exprs(
+int GraphFeedbackLoopLogOp::get_seed_key_exprs(
+    ObIArray<ObRawExpr *> &exprs) const
+{
+  int ret = OB_SUCCESS;
+  const ObLogicalOperator *anchor = get_child(first_child);
+  const int64_t key_count = expand_access_desc_.source_key_count_;
+  if (OB_ISNULL(anchor) || OB_UNLIKELY(key_count <= 0)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("graph feedback seed description is invalid", K(ret), K(anchor),
+             K(key_count));
+  } else if (OB_UNLIKELY(anchor->get_output_exprs().count()
+                         < GRAPH_FEEDBACK_DEPTH_COLUMN_COUNT + key_count)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("graph feedback anchor does not expose every source key", K(ret),
+             K(key_count), "output_count",
+             anchor->get_output_exprs().count());
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && i < key_count; ++i) {
+      ObRawExpr *expr = anchor->get_output_exprs().at(
+          GRAPH_FEEDBACK_DEPTH_COLUMN_COUNT + i);
+      if (OB_ISNULL(expr)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("graph feedback source key expression is null", K(ret), K(i));
+      } else if (OB_FAIL(exprs.push_back(expr))) {
+        LOG_WARN("failed to append graph feedback source key", K(ret), K(i));
+      }
+    }
+  }
+  return ret;
+}
+
+int GraphFeedbackLoopLogOp::get_native_runtime_exprs(
     ObIArray<ObRawExpr *> &exprs)
 {
   int ret = OB_SUCCESS;
@@ -270,6 +302,13 @@ int GraphFeedbackLoopLogOp::get_expand_scan_exprs(
       LOG_WARN("failed to append graph expand scan expressions", K(ret),
                K(i));
     }
+  }
+  ObArray<ObRawExpr *> seed_key_exprs;
+  if (OB_SUCC(ret) && OB_FAIL(get_seed_key_exprs(seed_key_exprs))) {
+    LOG_WARN("failed to collect graph feedback seed expressions", K(ret));
+  } else if (OB_SUCC(ret)
+             && OB_FAIL(append_array_no_dup(exprs, seed_key_exprs))) {
+    LOG_WARN("failed to register graph feedback seed expressions", K(ret));
   }
   return ret;
 }

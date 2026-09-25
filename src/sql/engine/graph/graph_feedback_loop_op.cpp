@@ -332,6 +332,7 @@ void GraphFeedbackFrontier::reset()
 GraphFeedbackLoopSpec::GraphFeedbackLoopSpec(common::ObIAllocator &allocator,
                                              const ObPhyOperatorType type)
     : RecursivePumpSpec(allocator, type),
+      seed_key_exprs_(allocator),
       source_scan_desc_(allocator),
       edge_scan_desc_(allocator),
       target_scan_desc_(allocator)
@@ -400,6 +401,7 @@ int GraphFeedbackLoopOp::inner_open()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!get_graph_spec().get_path_desc().is_valid()
                   || !get_graph_spec().get_expand_access_desc().is_valid()
+                  || !get_graph_spec().has_valid_seed_key_exprs()
                   || !get_graph_spec().get_source_scan_desc().is_valid()
                   || !get_graph_spec().get_edge_scan_desc().is_valid()
                   || !get_graph_spec().get_target_scan_desc().is_valid())) {
@@ -493,6 +495,7 @@ OB_SERIALIZE_MEMBER((GraphFeedbackLoopSpec, RecursivePumpSpec),
                     path_desc_.row_shape_,
                     path_desc_.need_path_,
                     expand_access_desc_,
+                    seed_key_exprs_,
                     source_scan_desc_,
                     edge_scan_desc_,
                     target_scan_desc_);

@@ -123,10 +123,25 @@ public:
   { return edge_scan_desc_; }
   const GraphExpandScanDesc &get_target_scan_desc() const
   { return target_scan_desc_; }
+  ExprFixedArray &get_seed_key_exprs() { return seed_key_exprs_; }
+  const ExprFixedArray &get_seed_key_exprs() const { return seed_key_exprs_; }
+  bool has_valid_seed_key_exprs() const
+  {
+    bool valid = seed_key_exprs_.count()
+        == expand_access_desc_.source_key_count_;
+    for (int64_t i = 0; valid && i < seed_key_exprs_.count(); ++i) {
+      valid = seed_key_exprs_.at(i) != nullptr;
+    }
+    return valid;
+  }
 
 private:
   GraphPathDesc path_desc_{};
   GraphExpandAccessDesc expand_access_desc_{};
+  // Evaluated after the anchor child produces a row. The expression order is
+  // the source element's declared key order, so it can be copied directly into
+  // a typed GraphElementIdentity without inspecting generated column names.
+  ExprFixedArray seed_key_exprs_;
   // These snapshots cross DFO boundaries with the feedback-loop spec. The
   // source, edge and target aliases can map to the same physical table, so
   // binding happens by operator ID once during code generation.
