@@ -21,7 +21,6 @@
 #include "namespace/namespace.h"
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 #include "storage/ls/ob_ls.h"
-#include <algorithm>
 #include <unordered_set>
 
 namespace oceanbase
@@ -428,9 +427,6 @@ int ObIvfAsyncTaskExector::check_schema_version_changed(bool &schema_changed)
   schema_changed = false;
   std::vector<uint64_t> namespace_ids;
   ns::namespace_registry().list_ids(namespace_ids);
-  if (std::find(namespace_ids.begin(), namespace_ids.end(), 1) == namespace_ids.end()) {
-    namespace_ids.push_back(1);
-  }
   for (uint64_t namespace_id : namespace_ids) {
     auto *schema_service = observer::namespace_worker_prototype::namespace_schema_service(namespace_id);
     if (schema_service == nullptr || !schema_service->is_runtime_schema_ready()) {
@@ -536,9 +532,6 @@ int ObIvfAsyncTaskExector::load_task(uint64_t &task_trace_base_num)
     }
     std::vector<uint64_t> namespace_ids;
     ns::namespace_registry().list_ids(namespace_ids);
-    if (std::find(namespace_ids.begin(), namespace_ids.end(), 1) == namespace_ids.end()) {
-      namespace_ids.push_back(1);
-    }
     for (uint64_t namespace_id : namespace_ids) {
       if (OB_FAIL(ret)) { break; }
       auto *service = observer::namespace_worker_prototype::namespace_schema_service(namespace_id);
