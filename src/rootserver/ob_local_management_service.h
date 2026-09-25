@@ -76,6 +76,7 @@ namespace obcall
 namespace rootserver
 {
 class ObIRootserverLocalRuntime;
+class ITableDropWorkflow;
 // Process-local management entry point for schema, DDL, jobs, freeze and recycle-bin work.
 class ObLocalManagementService : public query::ObIRootCommandService
 {
@@ -364,6 +365,7 @@ private:
 
   // ddl related
   ObDDLService ddl_service_;
+  ITableDropWorkflow *table_drop_workflow_ = nullptr;
   // Server runtime DDL service.
   ObRuntimeDDLService runtime_ddl_service_;
 

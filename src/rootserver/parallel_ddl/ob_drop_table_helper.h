@@ -23,6 +23,7 @@ namespace oceanbase {
 namespace share {
 namespace schema {
 class ObMultiVersionSchemaService;
+class ObSchemaService;
 }
 } // namespace share
 namespace obcall {
@@ -30,11 +31,29 @@ class ObDropTableArg;
 class ObDDLRes;
 } // namespace obcall
 namespace rootserver {
+class ObDropTableHelper;
+class ITableDropWorkflow
+{
+public:
+  virtual ~ITableDropWorkflow() = default;
+  virtual int collect_table_lock(const ObTableSchema &table_schema,
+                                 ObIArray<uint64_t> &table_ids) = 0;
+  virtual int64_t tablet_schema_versions(const ObTableSchema &table_schema) const = 0;
+  virtual int drop_table(ObDropTableHelper &helper,
+                         share::schema::ObSchemaService &schema_service,
+                         const ObTableSchema &table_schema,
+                         const ObString *ddl_stmt_str) = 0;
+};
+ITableDropWorkflow &native_table_drop_workflow();
+ITableDropWorkflow &directory_table_drop_workflow();
+class NativeTableDropWorkflow;
+class DirectoryTableDropWorkflow;
 class ObDropTableHelper : public ObDDLHelper {
 public:
   ObDropTableHelper(share::schema::ObMultiVersionSchemaService *schema_service,
                     const obcall::ObDropTableArg &arg,
                     obcall::ObDropTableRes &res,
+                    ITableDropWorkflow &workflow,
                     ObDDLSQLTransaction *external_trans = nullptr);
   virtual ~ObDropTableHelper();
   TO_STRING_KV(K_(arg),
@@ -88,6 +107,10 @@ private:
   int add_table_to_tablet_autoinc_cleaner_(const ObTableSchema &table_schema);
   int construct_drop_table_sql_(const ObTableSchema &table_schema, const obcall::ObTableItem &table_item);
   int drop_table_(const ObTableSchema &table_schema, const ObString *ddl_stmt_str);
+  int drop_native_table_(share::schema::ObSchemaService &schema_service,
+                         const ObTableSchema &table_schema, const ObString *ddl_stmt_str);
+  int drop_directory_table_(share::schema::ObSchemaService &schema_service,
+                            const ObTableSchema &table_schema, const ObString *ddl_stmt_str);
   int drop_table_to_recyclebin_(const ObTableSchema &table_schema, const ObString *ddl_stmt_str);
   int drop_triggers_(const ObTableSchema &table_schema);
   int drop_trigger_(const ObTriggerInfo &trigger_info, const ObTableSchema &table_schema);
@@ -103,6 +126,9 @@ private:
   bool is_to_recyclebin_(const ObTableSchema &table_schema);
   int log_table_not_exist_msg_(const obcall::ObTableItem &table_item);
 private:
+  friend class NativeTableDropWorkflow;
+  friend class DirectoryTableDropWorkflow;
+  ITableDropWorkflow &workflow_;
   const obcall::ObDropTableArg &arg_;
   obcall::ObDropTableRes &res_;
   ObSArray<obcall::ObTableItem> table_items_;

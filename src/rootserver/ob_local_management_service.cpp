@@ -183,6 +183,7 @@ int ObLocalManagementService::init(ObServerConfig &config,
   }
 
   if (OB_SUCC(ret)) {
+    table_drop_workflow_ = &native_table_drop_workflow();
     ObDDLTaskContext context;
     context.namespace_id_ = sql_proxy.target_namespace();
     context.local_build_mode_ = ObDDLTaskContext::LocalBuildMode::PERSISTENT_DAG;
@@ -244,6 +245,7 @@ int ObLocalManagementService::init_sql_worker(
     LOG_WARN("init namespace minor freeze failed", KR(ret));
   }
   if (OB_SUCC(ret)) {
+    table_drop_workflow_ = &directory_table_drop_workflow();
     ObDDLTaskContext context;
     context.namespace_id_ = sql_proxy.target_namespace();
     context.local_build_mode_ = ObDDLTaskContext::LocalBuildMode::RESTARTABLE_SQL;
@@ -1436,9 +1438,12 @@ int ObLocalManagementService::parallel_drop_table(const ObDropTableArg &arg, ObD
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), K(arg));
+  } else if (OB_ISNULL(table_drop_workflow_)) {
+    ret = OB_NOT_INIT;
   } else if (OB_FAIL(parallel_ddl_pre_check_())) {
   } else {
-    ObDropTableHelper drop_table_helper(schema_service_, arg, res);
+    ObDropTableHelper drop_table_helper(schema_service_, arg, res,
+                                      *table_drop_workflow_);
     if (OB_FAIL(drop_table_helper.init(ddl_service_))) {
     } else if (OB_FAIL(drop_table_helper.execute())) {
     }

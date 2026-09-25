@@ -54,12 +54,63 @@ int get_tablet_autoincrement_admin(
 
 } // namespace
 
+namespace oceanbase { namespace rootserver {
+class NativeTableDropWorkflow final : public ITableDropWorkflow
+{
+public:
+  int collect_table_lock(const ObTableSchema &table_schema,
+                         ObIArray<uint64_t> &table_ids) override
+  {
+    return table_schema.has_tablet()
+        ? table_ids.push_back(table_schema.get_table_id()) : OB_SUCCESS;
+  }
+  int64_t tablet_schema_versions(const ObTableSchema &table_schema) const override
+  {
+    return table_schema.has_tablet() ? 1 : 0;
+  }
+  int drop_table(ObDropTableHelper &helper, ObSchemaService &schema_service,
+                 const ObTableSchema &table_schema,
+                 const ObString *ddl_stmt_str) override
+  {
+    return helper.drop_native_table_(schema_service, table_schema, ddl_stmt_str);
+  }
+};
+class DirectoryTableDropWorkflow final : public ITableDropWorkflow
+{
+public:
+  int collect_table_lock(const ObTableSchema &, ObIArray<uint64_t> &) override
+  {
+    // The post-commit directory delta owns physical tablet reclamation.
+    return OB_SUCCESS;
+  }
+  int64_t tablet_schema_versions(const ObTableSchema &) const override { return 0; }
+  int drop_table(ObDropTableHelper &helper, ObSchemaService &schema_service,
+                 const ObTableSchema &table_schema,
+                 const ObString *ddl_stmt_str) override
+  {
+    return helper.drop_directory_table_(schema_service, table_schema, ddl_stmt_str);
+  }
+};
+ITableDropWorkflow &native_table_drop_workflow()
+{
+  static NativeTableDropWorkflow workflow;
+  return workflow;
+}
+ITableDropWorkflow &directory_table_drop_workflow()
+{
+  static DirectoryTableDropWorkflow workflow;
+  return workflow;
+}
+}} // namespace oceanbase::rootserver
+
 ObDropTableHelper::ObDropTableHelper(
     share::schema::ObMultiVersionSchemaService *schema_service,
     const obcall::ObDropTableArg &arg,
     obcall::ObDropTableRes &res,
+    ITableDropWorkflow &workflow,
     ObDDLSQLTransaction *external_trans)
     : ObDDLHelper(schema_service, "[parallel drop table]", external_trans),
+      workflow_(workflow),
       arg_(arg),
       res_(res),
       table_items_(arg.tables_),
@@ -115,8 +166,6 @@ int ObDropTableHelper::lock_tables_()
   int ret = OB_SUCCESS;
   common::sqlclient::ObISQLConnection *conn = NULL;
   const int64_t timeout = 0;
-  const bool namespace_scoped = sql_proxy_ != nullptr
-      && sql_proxy_->target_namespace() > 1;
   if (OB_FAIL(check_inner_stat_())) {
   } else if (OB_ISNULL(conn = get_trans_().get_connection())) {
     ret = OB_ERR_UNEXPECTED;
@@ -128,13 +177,8 @@ int ObDropTableHelper::lock_tables_()
       if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("table schema is null", KR(ret));
-      } else if (!table_schema->has_tablet()) {
-        // skip
-      } else if (namespace_scoped) {
-        // Namespace DDL owns only the native schema transaction here. The
-        // post-commit directory delta decides physical ownership and locks any
-        // private tablets before reclaiming them in the shared process.
-      } else if (OB_FAIL(sorted_table_ids.push_back(table_schema->get_table_id()))) {
+      } else if (OB_FAIL(workflow_.collect_table_lock(*table_schema,
+                                                     sorted_table_ids))) {
       }
     } 
 
@@ -1023,8 +1067,6 @@ int ObDropTableHelper::calc_schema_version_cnt_for_table_(
 {
   int ret = OB_SUCCESS;
   const uint64_t table_id = table_schema.get_table_id();
-  const bool namespace_scoped = sql_proxy_ != nullptr
-      && sql_proxy_->target_namespace() > 1;
   if (OB_FAIL(check_inner_stat_())) {
   } else {
     // table
@@ -1068,15 +1110,7 @@ int ObDropTableHelper::calc_schema_version_cnt_for_table_(
       // sync version for cascade mock fk parent table
       schema_version_cnt_ += table_schema.get_depend_mock_fk_parent_table_ids().count();
 
-      // tablet
-      if (table_schema.has_tablet()) {
-        // Child namespace tablet deletion is a post-commit shared-storage
-        // action; this transaction reserves versions only for native schema
-        // rows. The shared directory determines inherited/private ownership.
-        if (!namespace_scoped) {
-          schema_version_cnt_++;
-        }
-      }
+      schema_version_cnt_ += workflow_.tablet_schema_versions(table_schema);
     }
   } 
 
@@ -1224,84 +1258,97 @@ int ObDropTableHelper::construct_drop_table_sql_(const ObTableSchema &table_sche
 
 int ObDropTableHelper::drop_table_(const ObTableSchema &table_schema, const ObString *ddl_stmt_str)
 {
-  int ret = OB_SUCCESS;
-  ObSchemaService *schema_service_impl = NULL;
-  int64_t new_schema_version = OB_INVALID_VERSION;
-  if (OB_FAIL(check_inner_stat_())) {
-    return ret;
-  }
-  const bool namespace_scoped = sql_proxy_->target_namespace() > 1;
-  if (OB_ISNULL(schema_service_impl = schema_service_->get_schema_service())) {
+  int ret = check_inner_stat_();
+  ObSchemaService *schema_service_impl = nullptr;
+  if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(schema_service_impl = schema_service_->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service impl is null", KR(ret));
-  } else if (namespace_scoped) {
-    if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
-    } else if (OB_FAIL(schema_service_impl->get_table_sql_service().drop_table(
-                   table_schema,
-                   new_schema_version,
-                   get_trans_(),
-                   ddl_stmt_str,
-                   false/*is_truncate_table*/,
-                   false/*is_drop_db*/,
-                   false/*is_force_drop_lonely_lob_aux_table*/,
-                   NULL/*schema_guard*/,
-                   &drop_table_ids_))) {
-    }
-    if (OB_SUCC(ret)) {
-      res_.schema_version_ = std::max(res_.schema_version_, new_schema_version);
-    }
   } else {
-    ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
-    if (FAILEDx(drop_obj_privs_(table_schema.get_table_id(), ObObjectType::TABLE))) {
-      LOG_WARN("fail to drop obj privs", KR(ret));
-    } else if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
-    } else if (OB_FAIL(ddl_operator.cleanup_autoinc_cache(table_schema))) {
-    } else if (OB_FAIL(schema_service_impl->get_table_sql_service().drop_table(
-                       table_schema,
-                       new_schema_version,
-                       get_trans_(),
-                       ddl_stmt_str,
-                       false/*is_truncate_table*/,
-                       false/*is_drop_db*/,
-                       false/*is_force_drop_lonely_lob_aux_table*/,
-                       NULL/*schema_guard*/,
-                       &drop_table_ids_))) {
-    } else if (OB_FAIL(ddl_operator.sync_version_for_cascade_table(table_schema.get_depend_table_ids(), get_trans_()))) {
-    } else if (OB_FAIL(sync_version_for_cascade_mock_fk_parent_table_(table_schema.get_depend_mock_fk_parent_table_ids()))) {
-    }
+    ret = workflow_.drop_table(*this, *schema_service_impl,
+                               table_schema, ddl_stmt_str);
+  }
+  return ret;
+}
 
-    if (OB_SUCC(ret)) {
-      if (table_schema.is_aux_table() && !is_inner_table(table_schema.get_table_id())) {
-        ObSnapshotInfoManager snapshot_mgr;
-        ObArray<ObTabletID> tablet_ids;
-        SCN invalid_scn;
-        if (OB_FAIL(snapshot_mgr.init(GCTX.self_addr()))) {
-        } else if (OB_FAIL(table_schema.get_tablet_ids(tablet_ids))) {
-        } else if (OB_FAIL(snapshot_mgr.batch_release_snapshot_in_trans(
-                           get_trans_(),
-                           SNAPSHOT_FOR_DDL,
-                           -1/*schema_version*/,
-                           invalid_scn/*snapshot_scn*/,
-                           tablet_ids))) {
-        }
+int ObDropTableHelper::drop_directory_table_(ObSchemaService &schema_service_impl,
+    const ObTableSchema &table_schema, const ObString *ddl_stmt_str)
+{
+  int ret = OB_SUCCESS;
+  int64_t new_schema_version = OB_INVALID_VERSION;
+  if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
+  } else if (OB_FAIL(schema_service_impl.get_table_sql_service().drop_table(
+                 table_schema,
+                 new_schema_version,
+                 get_trans_(),
+                 ddl_stmt_str,
+                 false/*is_truncate_table*/,
+                 false/*is_drop_db*/,
+                 false/*is_force_drop_lonely_lob_aux_table*/,
+                 NULL/*schema_guard*/,
+                 &drop_table_ids_))) {
+  }
+  if (OB_SUCC(ret)) {
+    res_.schema_version_ = std::max(res_.schema_version_, new_schema_version);
+  }
+  return ret;
+}
+
+int ObDropTableHelper::drop_native_table_(ObSchemaService &schema_service_impl,
+    const ObTableSchema &table_schema, const ObString *ddl_stmt_str)
+{
+  int ret = OB_SUCCESS;
+  int64_t new_schema_version = OB_INVALID_VERSION;
+  ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
+  if (FAILEDx(drop_obj_privs_(table_schema.get_table_id(), ObObjectType::TABLE))) {
+    LOG_WARN("fail to drop obj privs", KR(ret));
+  } else if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
+  } else if (OB_FAIL(ddl_operator.cleanup_autoinc_cache(table_schema))) {
+  } else if (OB_FAIL(schema_service_impl.get_table_sql_service().drop_table(
+                     table_schema,
+                     new_schema_version,
+                     get_trans_(),
+                     ddl_stmt_str,
+                     false/*is_truncate_table*/,
+                     false/*is_drop_db*/,
+                     false/*is_force_drop_lonely_lob_aux_table*/,
+                     NULL/*schema_guard*/,
+                     &drop_table_ids_))) {
+  } else if (OB_FAIL(ddl_operator.sync_version_for_cascade_table(table_schema.get_depend_table_ids(), get_trans_()))) {
+  } else if (OB_FAIL(sync_version_for_cascade_mock_fk_parent_table_(table_schema.get_depend_mock_fk_parent_table_ids()))) {
+  }
+
+  if (OB_SUCC(ret)) {
+    if (table_schema.is_aux_table() && !is_inner_table(table_schema.get_table_id())) {
+      ObSnapshotInfoManager snapshot_mgr;
+      ObArray<ObTabletID> tablet_ids;
+      SCN invalid_scn;
+      if (OB_FAIL(snapshot_mgr.init(GCTX.self_addr()))) {
+      } else if (OB_FAIL(table_schema.get_tablet_ids(tablet_ids))) {
+      } else if (OB_FAIL(snapshot_mgr.batch_release_snapshot_in_trans(
+                         get_trans_(),
+                         SNAPSHOT_FOR_DDL,
+                         -1/*schema_version*/,
+                         invalid_scn/*snapshot_scn*/,
+                         tablet_ids))) {
       }
     }
+  }
 
-    if (OB_SUCC(ret)) {
-      if (table_schema.has_tablet() && OB_FAIL(ddl_operator.drop_tablet_of_table(table_schema, get_trans_()))) {
-        LOG_ERROR("fail to drop tablet", KR(ret));
-      }
+  if (OB_SUCC(ret)) {
+    if (table_schema.has_tablet() && OB_FAIL(ddl_operator.drop_tablet_of_table(table_schema, get_trans_()))) {
+      LOG_ERROR("fail to drop tablet", KR(ret));
     }
+  }
 
-    if (OB_SUCC(ret)) {
-      if ((table_schema.is_vec_delta_buffer_type() || table_schema.is_hybrid_vec_index_log_type()) &&
-          OB_FAIL(ObVectorIndexUtil::remove_dbms_vector_jobs(get_trans_(), table_schema.get_table_id()))) {
-        LOG_WARN("failed to remove dbms vector jobs", KR(ret), K(table_schema.get_table_id()));
-      }
+  if (OB_SUCC(ret)) {
+    if ((table_schema.is_vec_delta_buffer_type() || table_schema.is_hybrid_vec_index_log_type()) &&
+        OB_FAIL(ObVectorIndexUtil::remove_dbms_vector_jobs(get_trans_(), table_schema.get_table_id()))) {
+      LOG_WARN("failed to remove dbms vector jobs", KR(ret), K(table_schema.get_table_id()));
     }
-    if (OB_SUCC(ret)) {
-      res_.schema_version_ = std::max(res_.schema_version_, new_schema_version);
-    }
+  }
+  if (OB_SUCC(ret)) {
+    res_.schema_version_ = std::max(res_.schema_version_, new_schema_version);
   }
 
   return ret;
