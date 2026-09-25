@@ -28,6 +28,37 @@ namespace sql
 
 class GraphFeedbackRuntime;
 
+// Positional layout of the generated recursive row consumed by the native
+// feedback runtime. It deliberately uses expression indexes rather than the
+// temporary __g_* aliases created by the SQL lowering.
+struct GraphFeedbackRowDesc
+{
+  OB_UNIS_VERSION(1);
+public:
+  int init(const GraphPathDesc &path_desc,
+           const GraphExpandAccessDesc &access_desc,
+           int64_t output_count);
+  bool is_valid(const GraphPathDesc &path_desc,
+                const GraphExpandAccessDesc &access_desc) const;
+
+  int64_t depth_expr_index_{0};
+  int64_t source_key_expr_begin_{0};
+  int64_t source_key_expr_count_{0};
+  int64_t current_key_expr_begin_{0};
+  int64_t current_key_expr_count_{0};
+  int64_t trail_key_expr_begin_{0};
+  int64_t trail_key_expr_count_{0};
+  // Optional JSON edge-identity/property arrays follow the fixed fields.
+  int64_t payload_expr_begin_{0};
+  int64_t payload_expr_count_{0};
+  int64_t output_expr_count_{0};
+  TO_STRING_KV(K_(depth_expr_index), K_(source_key_expr_begin),
+               K_(source_key_expr_count), K_(current_key_expr_begin),
+               K_(current_key_expr_count), K_(trail_key_expr_begin),
+               K_(trail_key_expr_count), K_(payload_expr_begin),
+               K_(payload_expr_count), K_(output_expr_count));
+};
+
 // Query-local owner of one breadth-first path frontier. Each call to expand()
 // converts the current path-state IDs into GraphExpandInput batches, consumes
 // their single-hop extensions, and installs the accepted child states as the
@@ -113,6 +144,7 @@ public:
   {
     expand_access_desc_ = expand_access_desc;
   }
+  int init_output_row_desc();
   int bind_expand_scans(uint64_t source_scan_op_id,
                         uint64_t edge_scan_op_id,
                         uint64_t target_scan_op_id);
@@ -120,6 +152,8 @@ public:
   const GraphPathDesc &get_path_desc() const { return path_desc_; }
   const GraphExpandAccessDesc &get_expand_access_desc() const
   { return expand_access_desc_; }
+  const GraphFeedbackRowDesc &get_output_row_desc() const
+  { return output_row_desc_; }
   int64_t get_lower_bound() const { return path_desc_.lower_bound_; }
   int64_t get_upper_bound() const { return path_desc_.upper_bound_; }
   GraphPathDirection get_direction() const { return path_desc_.direction_; }
@@ -145,6 +179,7 @@ public:
 private:
   GraphPathDesc path_desc_{};
   GraphExpandAccessDesc expand_access_desc_{};
+  GraphFeedbackRowDesc output_row_desc_{};
   // Evaluated after the anchor child produces a row. The expression order is
   // the source element's declared key order, so it can be copied directly into
   // a typed GraphElementIdentity without inspecting generated column names.

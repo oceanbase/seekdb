@@ -32,6 +32,70 @@ using namespace common;
 namespace sql
 {
 
+int GraphFeedbackRowDesc::init(const GraphPathDesc &path_desc,
+                               const GraphExpandAccessDesc &access_desc,
+                               int64_t output_count)
+{
+  int ret = OB_SUCCESS;
+  GraphFeedbackRowDesc desc;
+  if (OB_UNLIKELY(!path_desc.is_valid() || !access_desc.is_valid()
+                  || output_count <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid graph feedback row description", K(ret), K(path_desc),
+             K(access_desc), K(output_count));
+  } else {
+    const int64_t trail_key_count = path_desc.path_mode_ == GraphPathMode::TRAIL
+        ? path_desc.upper_bound_ * access_desc.edge_key_count_ : 0;
+    const int64_t fixed_count = 1 + access_desc.source_key_count_
+        + access_desc.target_key_count_ + trail_key_count;
+    if (OB_UNLIKELY(output_count < fixed_count)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("graph feedback output row is too short", K(ret),
+               K(output_count), K(fixed_count), K(path_desc), K(access_desc));
+    } else {
+      desc.source_key_expr_begin_ = 1;
+      desc.source_key_expr_count_ = access_desc.source_key_count_;
+      desc.current_key_expr_begin_ = desc.source_key_expr_begin_
+          + desc.source_key_expr_count_;
+      desc.current_key_expr_count_ = access_desc.target_key_count_;
+      desc.trail_key_expr_begin_ = desc.current_key_expr_begin_
+          + desc.current_key_expr_count_;
+      desc.trail_key_expr_count_ = trail_key_count;
+      desc.payload_expr_begin_ = fixed_count;
+      desc.payload_expr_count_ = output_count - fixed_count;
+      desc.output_expr_count_ = output_count;
+      *this = desc;
+    }
+  }
+  return ret;
+}
+
+bool GraphFeedbackRowDesc::is_valid(
+    const GraphPathDesc &path_desc,
+    const GraphExpandAccessDesc &access_desc) const
+{
+  bool valid = path_desc.is_valid() && access_desc.is_valid();
+  if (valid) {
+    const int64_t trail_key_count = path_desc.path_mode_ == GraphPathMode::TRAIL
+        ? path_desc.upper_bound_ * access_desc.edge_key_count_ : 0;
+    const int64_t fixed_count = 1 + access_desc.source_key_count_
+        + access_desc.target_key_count_ + trail_key_count;
+    valid = depth_expr_index_ == 0
+        && source_key_expr_begin_ == 1
+        && source_key_expr_count_ == access_desc.source_key_count_
+        && current_key_expr_begin_
+               == source_key_expr_begin_ + source_key_expr_count_
+        && current_key_expr_count_ == access_desc.target_key_count_
+        && trail_key_expr_begin_
+               == current_key_expr_begin_ + current_key_expr_count_
+        && trail_key_expr_count_ == trail_key_count
+        && payload_expr_begin_ == fixed_count
+        && payload_expr_count_ >= 0
+        && output_expr_count_ == payload_expr_begin_ + payload_expr_count_;
+  }
+  return valid;
+}
+
 // Owns the native graph components as one allocation so their reference
 // dependencies are constructed and destroyed in a fixed order. It remains
 // query-local; no state is shared by rescans or concurrent executions.
@@ -619,6 +683,12 @@ GraphFeedbackLoopSpec::GraphFeedbackLoopSpec(common::ObIAllocator &allocator,
 {
 }
 
+int GraphFeedbackLoopSpec::init_output_row_desc()
+{
+  return output_row_desc_.init(path_desc_, expand_access_desc_,
+                               output_union_exprs_.count());
+}
+
 int GraphFeedbackLoopSpec::bind_expand_scans(
     uint64_t source_scan_op_id,
     uint64_t edge_scan_op_id,
@@ -681,6 +751,9 @@ int GraphFeedbackLoopOp::inner_open()
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!get_graph_spec().get_path_desc().is_valid()
                   || !get_graph_spec().get_expand_access_desc().is_valid()
+                  || !get_graph_spec().get_output_row_desc().is_valid(
+                         get_graph_spec().get_path_desc(),
+                         get_graph_spec().get_expand_access_desc())
                   || !get_graph_spec().has_valid_seed_key_exprs()
                   || !get_graph_spec().get_source_scan_desc().is_valid()
                   || !get_graph_spec().get_edge_scan_desc().is_valid()
@@ -688,7 +761,8 @@ int GraphFeedbackLoopOp::inner_open()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid graph feedback physical descriptor", K(ret),
              K(get_graph_spec().get_path_desc()),
-             K(get_graph_spec().get_expand_access_desc()));
+             K(get_graph_spec().get_expand_access_desc()),
+             K(get_graph_spec().get_output_row_desc()));
   } else if (OB_FAIL(init_native_runtime())) {
     LOG_WARN("failed to initialize native graph feedback runtime", K(ret));
   } else if (OB_FAIL(RecursivePumpOp::inner_open())) {
@@ -775,10 +849,23 @@ OB_SERIALIZE_MEMBER((GraphFeedbackLoopSpec, RecursivePumpSpec),
                     path_desc_.row_shape_,
                     path_desc_.need_path_,
                     expand_access_desc_,
+                    output_row_desc_,
                     seed_key_exprs_,
                     source_scan_desc_,
                     edge_scan_desc_,
                     target_scan_desc_);
+
+OB_SERIALIZE_MEMBER(GraphFeedbackRowDesc,
+                    depth_expr_index_,
+                    source_key_expr_begin_,
+                    source_key_expr_count_,
+                    current_key_expr_begin_,
+                    current_key_expr_count_,
+                    trail_key_expr_begin_,
+                    trail_key_expr_count_,
+                    payload_expr_begin_,
+                    payload_expr_count_,
+                    output_expr_count_);
 
 } // namespace sql
 } // namespace oceanbase
