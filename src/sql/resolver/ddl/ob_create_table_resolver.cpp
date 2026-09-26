@@ -1403,8 +1403,11 @@ int ObCreateTableResolver::generate_index_arg(const bool process_heap_table_prim
       index_schema.set_index_type(index_arg_.index_type_);
       
       bool check_data_schema = false;
-      if (OB_FAIL(share::ObIndexBuilderUtil::adjust_expr_index_args(
-              index_arg_, table_schema, *allocator_, gen_columns))) {
+      if (OB_ISNULL(session_info_->effective_schema_service())) {
+        ret = OB_NOT_INIT;
+      } else if (OB_FAIL(share::ObIndexBuilderUtil::adjust_expr_index_args(
+              index_arg_, table_schema, *allocator_, gen_columns,
+              *session_info_->effective_schema_service()))) {
       } else if (OB_FAIL(share::ObIndexBuilderUtil::set_index_table_columns(
               index_arg_, table_schema, index_schema, check_data_schema))) {
       }

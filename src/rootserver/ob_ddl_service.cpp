@@ -5409,7 +5409,8 @@ int ObDDLService::create_aux_index(
       && OB_FAIL(ObMulValueIndexBuilderUtil::adjust_mulvalue_index_args(create_index_arg,
                                                                         nonconst_data_schema,
                                                                         allocator,
-                                                                        gen_columns))) {
+                                                                        gen_columns,
+                                                                        *schema_service_))) {
       LOG_WARN("fail to adjust create index args", K(ret), K(create_index_arg));
     } else if (!create_index_arg.is_rebuild_index_
               && (ObIndexBuilderUtil::is_do_create_dense_vec_index(create_index_arg.index_type_) || is_vec_spiv_index_aux(create_index_arg.index_type_))
@@ -5830,7 +5831,7 @@ int ObDDLService::alter_table_index(obcall::ObAlterTableArg &alter_table_arg,
                 LOG_WARN("failed to adjust fts index name", K(ret));
               } else if (is_only_add_index_on_empty_table && FALSE_IT(my_arg.index_option_.index_status_ = INDEX_STATUS_AVAILABLE)) {
               } else if (OB_FAIL(ObIndexBuilderUtil::adjust_expr_index_args(
-                      my_arg, new_table_schema, allocator, gen_columns))) {
+                      my_arg, new_table_schema, allocator, gen_columns, *schema_service_))) {
                 LOG_WARN("adjust fulltext args failed", K(ret));
               } else if (is_generate_rowkey_doc &&
                          OB_FAIL(ObDDLLock::lock_table_in_trans(new_table_schema, transaction::tablelock::EXCLUSIVE, trans))) {
@@ -16142,7 +16143,7 @@ int ObDDLService::add_new_index_schema(obcall::ObAlterTableArg &alter_table_arg,
                 bool global_index_without_column_info = create_index_arg->index_schema_.is_partitioned_table() ? false : true;
                 if (OB_FAIL(ret)) {
                 } else if (OB_FAIL(ObIndexBuilderUtil::adjust_expr_index_args(
-                        *create_index_arg, new_table_schema, alter_table_arg.allocator_, gen_columns))) {
+                        *create_index_arg, new_table_schema, alter_table_arg.allocator_, gen_columns, *schema_service_))) {
                   LOG_WARN("adjust fulltext args failed", K(ret));
                 } else if (OB_FAIL(index_builder.generate_schema(*create_index_arg,
                                                           new_table_schema,
@@ -16420,7 +16421,7 @@ int ObDDLService::reconstruct_index_schema(obcall::ObAlterTableArg &alter_table_
             schema_guard, orig_table_schema, *index_table_schema, new_table_schema, new_index_schema, allocator, ddl_operator, trans, domain_index_columns, domain_store_columns))) {
             LOG_WARN("failed to generate vec index aux columns", K(ret));
           } else if ((new_index_schema.is_fts_index() || new_index_schema.is_multivalue_index()) && OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_mtv_index_aux_columns(
-              orig_table_schema, *index_table_schema, new_table_schema, new_index_schema, allocator, ddl_operator, trans, domain_index_columns, domain_store_columns))) {
+              orig_table_schema, *index_table_schema, new_table_schema, new_index_schema, allocator, ddl_operator, trans, domain_index_columns, domain_store_columns, *schema_service_))) {
             LOG_WARN("failed to generate fulltext/multivalue index aux columns", K(ret));
           }
           if (OB_SUCC(ret) && new_index_schema.is_hybrid_vec_index()) {

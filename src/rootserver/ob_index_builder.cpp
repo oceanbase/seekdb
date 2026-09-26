@@ -597,7 +597,7 @@ int ObIndexBuilder::do_create_global_index(
                                                                                               create_index_on_empty_table_opt))) {
     } else if (create_index_on_empty_table_opt && FALSE_IT(new_arg.index_option_.index_status_ = INDEX_STATUS_AVAILABLE)) {
     } else if (OB_FAIL(ObIndexBuilderUtil::adjust_expr_index_args(
-            new_arg, new_table_schema, allocator, gen_columns))) {
+            new_arg, new_table_schema, allocator, gen_columns, ddl_service_.get_schema_service()))) {
     } else if (OB_FAIL(generate_schema(
         new_arg, new_table_schema, global_index_without_column_info,
         true/*generate_id*/, index_schema))) {
@@ -1454,7 +1454,7 @@ int ObIndexBuilder::do_create_local_index(
           OB_FAIL(ObVecIndexBuilderUtil::generate_vec_index_name(&allocator, my_arg.index_type_, my_arg.index_name_, my_arg.index_name_))) {
         LOG_WARN("failed to adjust vec index name", K(ret));
       } else if (OB_FAIL(ObIndexBuilderUtil::adjust_expr_index_args(
-             my_arg, new_table_schema, allocator, gen_columns))) {
+             my_arg, new_table_schema, allocator, gen_columns, ddl_service_.get_schema_service()))) {
       } else if ((is_generate_rowkey_doc || is_generate_rowkey_vid) &&
                  OB_FAIL(ObDDLLock::lock_table_in_trans(new_table_schema, transaction::tablelock::EXCLUSIVE, trans))) {
         LOG_WARN("fail to lock for offline ddl", K(ret), K(new_table_schema));

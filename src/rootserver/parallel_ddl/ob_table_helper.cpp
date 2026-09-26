@@ -655,7 +655,7 @@ int ObTableHelper::inner_generate_aux_table_schema_(const ObCreateTableArg &arg)
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("invalid allocator", KR(ret));
         } else if (OB_FAIL(ObIndexBuilderUtil::adjust_expr_index_args(
-                   index_arg, *data_table, *allocator, gen_columns))) {
+                   index_arg, *data_table, *allocator, gen_columns, *schema_service_))) {
         } else if (OB_FAIL(index_builder.generate_schema(index_arg,
                                                          *data_table,
                                                          global_index_without_column_info,

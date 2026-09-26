@@ -5238,8 +5238,11 @@ int ObDDLResolver::generate_global_index_schema(
       ObTableSchema new_table_schema;
       if (OB_FAIL(new_table_schema.assign(*table_schema))) {
       } else if (OB_FAIL(my_create_index_arg.assign(create_index_arg))) {
+      } else if (OB_ISNULL(session_info_->effective_schema_service())) {
+        ret = OB_NOT_INIT;
       } else if (OB_FAIL(share::ObIndexBuilderUtil::adjust_expr_index_args(
-              my_create_index_arg, new_table_schema, *allocator_, gen_columns))) {
+              my_create_index_arg, new_table_schema, *allocator_, gen_columns,
+              *session_info_->effective_schema_service()))) {
       } else if (share::schema::is_fts_index(my_create_index_arg.index_type_) &&
                  OB_FAIL(ObFtsIndexBuilderUtil::generate_fts_parser_name_and_property(*table_schema, my_create_index_arg, allocator_))) {
         LOG_WARN("failed to genearte fts parser name", K(ret));

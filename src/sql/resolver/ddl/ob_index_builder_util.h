@@ -46,6 +46,7 @@ namespace schema
 {
 class ObTableSchema;
 class ObColumnSchemaV2;
+class ObMultiVersionSchemaService;
 };
 class ObIndexBuilderUtil
 {
@@ -55,7 +56,8 @@ public:
       obcall::ObCreateIndexArg &arg,
       share::schema::ObTableSchema &data_schema,
       common::ObIAllocator &allocator,
-      common::ObIArray<share::schema::ObColumnSchemaV2*> &gen_columns);
+      common::ObIArray<share::schema::ObColumnSchemaV2*> &gen_columns,
+      share::schema::ObMultiVersionSchemaService &schema_service);
   static int generate_ordinary_generated_column(
       sql::ObRawExpr &expr,
       const sql::ObSQLSessionInfo &session,
@@ -93,7 +95,8 @@ private:
       obcall::ObCreateIndexArg &arg,
       share::schema::ObTableSchema &data_schema,
       common::ObIAllocator &allocator,
-      common::ObIArray<share::schema::ObColumnSchemaV2*> &gen_columns);
+      common::ObIArray<share::schema::ObColumnSchemaV2*> &gen_columns,
+      share::schema::ObMultiVersionSchemaService &schema_service);
   static int add_shadow_pks(
       const share::schema::ObTableSchema &data_schema,
       common::ObRowDesc &row_desc,

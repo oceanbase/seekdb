@@ -1280,8 +1280,11 @@ int ObAlterTableResolver::resolve_add_index(const ParseNode &node)
                     ObArray<ObColumnSchemaV2 *> gen_columns;
                     if (OB_FAIL(new_table_schema.assign(*table_schema_))) {
                     } else if (OB_FAIL(my_create_index_arg.assign(index_arg))) {
+                    } else if (OB_ISNULL(session_info_->effective_schema_service())) {
+                      ret = OB_NOT_INIT;
                     } else if (OB_FAIL(share::ObIndexBuilderUtil::adjust_expr_index_args(
-                            my_create_index_arg, new_table_schema, *allocator_, gen_columns))) {
+                            my_create_index_arg, new_table_schema, *allocator_, gen_columns,
+                            *session_info_->effective_schema_service()))) {
                     } else if (OB_FAIL(share::ObIndexBuilderUtil::set_index_table_columns(
                               my_create_index_arg, new_table_schema, my_create_index_arg.index_schema_, false))) {
                     } else if (OB_FAIL(index_schema.assign(my_create_index_arg.index_schema_))){

@@ -22,6 +22,7 @@
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_schema_struct.h"
 namespace oceanbase { namespace sql { class ObSchemaChecker; class ObSqlSchemaGuard; } }
+namespace oceanbase { namespace share { namespace schema { class ObMultiVersionSchemaService; } } }
 #include "data_plane/fts/ob_doc_id.h"
 #include "data_plane/fts/ob_fts_literal.h"
 namespace oceanbase { namespace sql { class ObRawExpr; class ObRawExprFactory; } }  // fwd: previously re-exported through the share schema include chain
@@ -149,7 +150,8 @@ public:
       query::ObIColumnSchemaWriter &column_writer,
       common::ObMySQLTransaction &trans,
       ObSEArray<obcall::ObColumnSortItem, 2> &domain_index_columns,
-      ObSEArray<ObString, 1> &domain_store_columns);
+      ObSEArray<ObString, 1> &domain_store_columns,
+      schema::ObMultiVersionSchemaService &schema_service);
   static int generate_doc_id_column(
         const obcall::ObCreateIndexArg *index_arg,
         const uint64_t col_id,
@@ -302,6 +304,7 @@ public:
    ObTableSchema &data_schema, // not const since will add column to data schema
    ObIAllocator &allocator,
    ObIArray<schema::ObColumnSchemaV2 *> &gen_columns,
+   schema::ObMultiVersionSchemaService &schema_service,
    bool forece_rebuild = false);
  static int build_and_generate_multivalue_column_raw(
    obcall::ObCreateIndexArg &arg,
@@ -309,6 +312,7 @@ public:
    ObIAllocator &allocator,
    schema::ObColumnSchemaV2 *&mulvalue_col,
    schema::ObColumnSchemaV2 *&budy_col,
+   schema::ObMultiVersionSchemaService &schema_service,
    bool force_rebuild = false);
  static int build_and_generate_multivalue_column(
    ObIAllocator &allocator,

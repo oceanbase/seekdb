@@ -2124,7 +2124,8 @@ int ObFtsIndexBuilderUtil::generate_fts_mtv_index_aux_columns(
     query::ObIColumnSchemaWriter &column_writer,
     common::ObMySQLTransaction &trans,
     ObSEArray<obcall::ObColumnSortItem, 2> &domain_index_columns,
-    ObSEArray<ObString, 1> &domain_store_columns)
+    ObSEArray<ObString, 1> &domain_store_columns,
+    ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   if (new_index_schema.is_fts_index() || new_index_schema.is_multivalue_index()) {
@@ -2159,7 +2160,7 @@ int ObFtsIndexBuilderUtil::generate_fts_mtv_index_aux_columns(
           } else if (OB_FAIL(tmp_table_schema.assign(new_table_schema))) {
           } else if (new_index_schema.is_fts_index() && OB_FAIL(ObFtsIndexBuilderUtil::adjust_fts_args(index_arg, new_table_schema, allocator, gen_columns))) {
             LOG_WARN("failed to adjust fts args");
-          } else if (new_index_schema.is_multivalue_index_aux() && OB_FAIL(ObMulValueIndexBuilderUtil::adjust_mulvalue_index_args(index_arg, new_table_schema, allocator, gen_columns, true))) {
+          } else if (new_index_schema.is_multivalue_index_aux() && OB_FAIL(ObMulValueIndexBuilderUtil::adjust_mulvalue_index_args(index_arg, new_table_schema, allocator, gen_columns, schema_service, true))) {
             LOG_WARN("failed to adjust multivalue args");
           }
           tmp_table_schema.set_in_offline_ddl_white_list(true);
@@ -2601,6 +2602,7 @@ int ObMulValueIndexBuilderUtil::adjust_mulvalue_index_args(
     ObTableSchema &data_schema, // not const since will add column to data schema
     ObIAllocator &allocator,
     ObIArray<ObColumnSchemaV2 *> &gen_columns,
+    ObMultiVersionSchemaService &schema_service,
     bool forece_rebuild)
 {
   int ret = OB_SUCCESS;
@@ -2643,7 +2645,7 @@ int ObMulValueIndexBuilderUtil::adjust_mulvalue_index_args(
 
     if (OB_SUCC(ret) && OB_ISNULL(existing_mulvalue_col)) {
       if (OB_FAIL(build_and_generate_multivalue_column_raw(index_arg, data_schema, allocator, generated_mulvalue_col,
-                                                           generated_budy_mulvalue_col, forece_rebuild))) {
+                                                           generated_budy_mulvalue_col, schema_service, forece_rebuild))) {
       } else if (OB_FAIL(gen_columns.push_back(generated_mulvalue_col))) {
       } else if (OB_FAIL(gen_columns.push_back(generated_budy_mulvalue_col))) {
       }
@@ -2658,6 +2660,7 @@ int ObMulValueIndexBuilderUtil::build_and_generate_multivalue_column_raw(
     ObIAllocator &allocator,
     ObColumnSchemaV2 *&mulvalue_col,
     ObColumnSchemaV2 *&budy_mulvalue_col,
+    ObMultiVersionSchemaService &schema_service,
     bool force_rebuild)
 {
   int ret = OB_SUCCESS;
@@ -2709,7 +2712,7 @@ int ObMulValueIndexBuilderUtil::build_and_generate_multivalue_column_raw(
 
       if (OB_FAIL(session.init(0 /*default session id*/, &allocator))) {
       } else if (OB_FAIL(session.set_default_database(arg.database_name_))) {
-      } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(guard))) {
+      } else if (OB_FAIL(schema_service.get_runtime_schema_guard(guard))) {
       } else if (OB_FAIL(schema_checker.init(guard))) {
       } else if (OB_FAIL(guard.get_server_runtime_info(runtime_schema))) {
       } else if (OB_FAIL(session.init_runtime(runtime_schema->get_runtime_name_str()))) {

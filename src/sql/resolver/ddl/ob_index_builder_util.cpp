@@ -22,6 +22,7 @@
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "sql/session/ob_local_session_var.h"
+#include "share/schema/ob_multi_version_schema_service.h"
 namespace oceanbase
 {
 using namespace common;
@@ -621,7 +622,8 @@ int ObIndexBuilderUtil::adjust_expr_index_args(
     ObCreateIndexArg &arg,
     ObTableSchema &data_schema,
     ObIAllocator &allocator,
-    ObIArray<ObColumnSchemaV2*> &gen_columns)
+    ObIArray<ObColumnSchemaV2*> &gen_columns,
+    ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   if (ObSimpleTableSchemaV2::is_spatial_index(arg.index_type_)) {
@@ -638,9 +640,9 @@ int ObIndexBuilderUtil::adjust_expr_index_args(
     if (OB_FAIL(ObFtsIndexBuilderUtil::adjust_fts_args(arg, data_schema, allocator, gen_columns))) {
     }
   } else if (is_multivalue_index(arg.index_type_)) {
-    if (OB_FAIL(ObMulValueIndexBuilderUtil::adjust_mulvalue_index_args(arg, data_schema, allocator, gen_columns, true))) {
+    if (OB_FAIL(ObMulValueIndexBuilderUtil::adjust_mulvalue_index_args(arg, data_schema, allocator, gen_columns, schema_service, true))) {
     }
-  } else if (OB_FAIL(adjust_ordinary_index_column_args(arg, data_schema, allocator, gen_columns))) {
+  } else if (OB_FAIL(adjust_ordinary_index_column_args(arg, data_schema, allocator, gen_columns, schema_service))) {
   }
   return ret;
 }
@@ -649,7 +651,8 @@ int ObIndexBuilderUtil::adjust_ordinary_index_column_args(
     ObCreateIndexArg &arg,
     ObTableSchema &data_schema,
     ObIAllocator &allocator,
-    ObIArray<ObColumnSchemaV2*> &gen_columns)
+    ObIArray<ObColumnSchemaV2*> &gen_columns,
+    ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   ObIArray<ObColumnSortItem> &sort_items = arg.index_columns_;
@@ -693,7 +696,7 @@ int ObIndexBuilderUtil::adjust_ordinary_index_column_args(
           sql_mode_obj.set_uint64(arg.sql_mode_);
           if (OB_FAIL(session.init(0 /*default session id*/, &allocator))) {
           } else if (OB_FAIL(session.set_default_database(arg.database_name_))) {
-          } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(guard))) {
+          } else if (OB_FAIL(schema_service.get_runtime_schema_guard(guard))) {
           } else if (OB_FAIL(schema_checker.init(guard))) {
           } else if (OB_FAIL(guard.get_server_runtime_info(runtime_schema))) {
           } else if (OB_FAIL(session.init_runtime(runtime_schema->get_runtime_name_str()))) {
@@ -726,10 +729,7 @@ int ObIndexBuilderUtil::adjust_ordinary_index_column_args(
               LOG_WARN("Cannot create a functional index on an expression that returns a BLOB or TEXT.", K(ret));
             }
             if (OB_FAIL(ret)) {
-            } else if (OB_ISNULL(GCTX.schema_service_)) {
-              ret = OB_ERR_UNEXPECTED;
-              LOG_WARN("unexpected null", K(ret));
-            } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(guard))) {
+            } else if (OB_FAIL(schema_service.get_runtime_schema_guard(guard))) {
             } else if (OB_FAIL(generate_ordinary_generated_column(
                 *expr, session, data_schema, gen_col, &guard))) {
             } else if (OB_FAIL(ObRawExprUtils::check_generated_column_expr_str(

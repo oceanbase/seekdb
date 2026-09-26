@@ -317,7 +317,7 @@ int ObCreateIndexHelper::generate_index_schema_()
     }
   }
   if (FAILEDx(ObIndexBuilderUtil::adjust_expr_index_args(
-      *new_arg_, *new_data_table_schema_, allocator_, gen_columns_))) {
+      *new_arg_, *new_data_table_schema_, allocator_, gen_columns_, *schema_service_))) {
     LOG_WARN("fail to adjust expr index args", KR(ret));
   } else if (OB_ISNULL(index_schema)) {
     ret = OB_ERR_UNEXPECTED;
