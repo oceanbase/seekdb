@@ -180,9 +180,6 @@ public:
   // The cached information, which may be inconsistent with the version maintained by the schema service,
   // Caller needs to decide whether to call the refresh_runtime_schema_version interface based on the situation
   share::schema::ObSchemaGetterGuard &get_schema_guard() { return schema_guard_; }
-  int refresh_runtime_schema_guard();
-  // Namespace-aware variant: refreshes from the session's effective schema
-  // service instead of the process-wide THE_ONE.
   int refresh_runtime_schema_guard(share::schema::ObMultiVersionSchemaService &service);
   // Try to return the ref of schema_mgr, rule: perform a revert operation on schema_guard every 10s;
   // 1. If session has request access, then after each statement ends, attempt to trigger once;
@@ -443,10 +440,11 @@ public:
   // instance when the namespace has one, otherwise the process-wide THE_ONE
   // (system namespace 1 and namespace-agnostic paths).
   share::schema::ObMultiVersionSchemaService *effective_schema_service() const;
+  ObPsCache *effective_ps_cache() const;
   common::ObMySQLProxy *effective_sql_proxy() const;
   data_plane::IDirectInsertService *effective_direct_insert_service() const;
   share::ObITabletAutoincrementService *effective_tablet_autoincrement_service() const;
-  share::ObAutoincrementService &effective_autoincrement_service() const;
+  share::ObAutoincrementService *effective_autoincrement_service() const;
   void reset(bool skip_sys_var);
   void clean_status();
   const common::ObWarningBuffer &get_show_warnings_buffer() const { return show_warnings_buf_; }

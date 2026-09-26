@@ -131,8 +131,11 @@ int ObMPChangeUser::process()
   // Releases prepared statements. (include ps stmt, ps cursor, piece)
   if (OB_SUCC(ret)) {
     // 1 ps stmt
-    if (OB_FAIL(session->close_all_ps_stmt(
-            get_observer_sql_engine()->get_ps_cache()))) {
+    if (OB_ISNULL(session->effective_ps_cache())) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("PS cache is not bound", K(ret));
+    } else if (OB_FAIL(session->close_all_ps_stmt(
+            *session->effective_ps_cache()))) {
     }
 
     // 2 ps cursor

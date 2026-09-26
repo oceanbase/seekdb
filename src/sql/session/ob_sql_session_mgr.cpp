@@ -337,10 +337,11 @@ int ObSQLSessionMgr::free_session(const ObFreeSessionCtx &ctx)
   ObSQLSessionInfo *sess_info = NULL;
   sessinfo_map_.get(Key(sessid), sess_info);
   if (NULL != sess_info) {
-    if (OB_ISNULL(ps_cache_)) {
+    ObPsCache *ps_cache = sess_info->effective_ps_cache();
+    if (OB_ISNULL(ps_cache)) {
       LOG_ERROR("PS cache is not bound while freeing SQL session", K(sessid));
     } else {
-      const int close_ret = sess_info->close_all_ps_stmt(*ps_cache_);
+      const int close_ret = sess_info->close_all_ps_stmt(*ps_cache);
       if (OB_UNLIKELY(OB_SUCCESS != close_ret)) {
       }
     }

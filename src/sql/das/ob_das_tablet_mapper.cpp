@@ -500,12 +500,10 @@ int ObDASTabletMapper::get_default_tablet_and_object_id(const ObPartitionLevel p
       } else if (related_info_.related_tids_ != nullptr &&
                  !related_info_.related_tids_->empty()) {
         //calculate related partition id and tablet id
-        ObSchemaGetterGuard guard;
-
-        if (OB_ISNULL(GCTX.schema_service_)) {
-          ret = OB_INVALID_ARGUMENT;
-          LOG_ERROR("invalid schema service", KR(ret));
-        } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(guard))) {
+        ObSchemaGetterGuard *guard = related_info_.guard_;
+        if (OB_ISNULL(guard)) {
+          ret = OB_NOT_INIT;
+          LOG_WARN("related table schema guard is not bound", K(ret));
         }
         for (int64_t i = 0; OB_SUCC(ret) && i < related_info_.related_tids_->count(); ++i) {
           ObTableID related_table_id = related_info_.related_tids_->at(i);
@@ -513,7 +511,7 @@ int ObDASTabletMapper::get_default_tablet_and_object_id(const ObPartitionLevel p
           ObObjectID related_part_id = OB_INVALID_ID;
           ObObjectID related_first_level_part_id = OB_INVALID_ID;
           ObTabletID related_tablet_id;
-          if (OB_FAIL(guard.get_simple_table_schema( related_table_id, table_schema))) {
+          if (OB_FAIL(guard->get_simple_table_schema(related_table_id, table_schema))) {
           } else if (OB_ISNULL(table_schema)) {
             ret = OB_SCHEMA_EAGAIN;
             LOG_WARN("fail to get table schema", KR(ret), K(related_table_id));
@@ -589,16 +587,15 @@ int ObDASTabletMapper::get_related_partition_id(const ObTableID &src_table_id,
       ret = OB_SUCCESS;
     }
     if (OB_SUCC(ret) && is_found) {
-      ObSchemaGetterGuard guard;
+      ObSchemaGetterGuard *guard = related_info_.guard_;
       const ObSimpleTableSchemaV2 *dst_table_schema = nullptr;
       ObObjectID related_part_id = OB_INVALID_ID;
       ObObjectID related_first_level_part_id = OB_INVALID_ID;
       ObTabletID related_tablet_id;
-      if (OB_ISNULL(GCTX.schema_service_)) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_ERROR("invalid schema service", KR(ret));
-      } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(guard))) {
-      } else if (OB_FAIL(guard.get_simple_table_schema( dst_table_id, dst_table_schema))) {
+      if (OB_ISNULL(guard)) {
+        ret = OB_NOT_INIT;
+        LOG_WARN("related table schema guard is not bound", K(ret));
+      } else if (OB_FAIL(guard->get_simple_table_schema(dst_table_id, dst_table_schema))) {
       } else if (OB_ISNULL(dst_table_schema)) {
         ret = OB_SCHEMA_EAGAIN;
         LOG_WARN("fail to get table schema", KR(ret), K(dst_table_id));

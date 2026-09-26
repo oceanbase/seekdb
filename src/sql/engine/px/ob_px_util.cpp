@@ -763,9 +763,10 @@ int ObPxSqcDistributionUtil::build_tablet_idx_map(ObExecContext &exec_ctx,
   share::schema::ObSchemaGetterGuard schema_guard;
   const share::schema::ObTableSchema *table_schema = NULL;
   auto *session = exec_ctx.get_my_session();
-  auto *schema_service = session != nullptr && session->ns_runtime() != nullptr
-      ? session->effective_schema_service() : exec_ctx.get_sql_exec_ctx().schema_service_;
+  auto *schema_service = session == nullptr ? nullptr : session->effective_schema_service();
   if (OB_ISNULL(schema_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("PX schema service is not bound", K(ret));
   } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( ref_table_id, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
@@ -2147,9 +2148,11 @@ int ObSlaveMapUtil::build_ppwj_ch_mn_map(ObExecContext &ctx, ObDfo &parent, ObDf
         if (NULL == table_schema) {
           uint64_t table_id = location.loc_meta_->ref_table_id_;
           auto *session = ctx.get_my_session();
-          auto *schema_service = session != nullptr && session->ns_runtime() != nullptr
-              ? session->effective_schema_service() : GCTX.schema_service_;
-          if (OB_FAIL(schema_service->get_runtime_schema_guard(
+          auto *schema_service = session == nullptr ? nullptr : session->effective_schema_service();
+          if (OB_ISNULL(schema_service)) {
+            ret = OB_NOT_INIT;
+            LOG_WARN("PX schema service is not bound", K(ret));
+          } else if (OB_FAIL(schema_service->get_runtime_schema_guard(
                       schema_guard))) {
           } else if (OB_FAIL(schema_guard.get_table_schema(
                      table_id, table_schema))) {

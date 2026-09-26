@@ -377,19 +377,19 @@ int ObPxTaskProcess::do_process()
 
     if (OB_SUCC(ret)) {
       ObSqlExecutorCtx *executor_ctx = NULL;
-      if (OB_ISNULL(gctx_.schema_service_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL ptr", K(ret),
-                  KP(gctx_.schema_service_),
-                  KP(arg_.exec_ctx_));
-      } else if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(
+      ObExecContext *exec_ctx = arg_.exec_ctx_;
+      ObSQLSessionInfo *session = exec_ctx == nullptr ? nullptr : exec_ctx->get_my_session();
+      auto *schema_service = session == nullptr ? nullptr : session->effective_schema_service();
+      if (OB_ISNULL(schema_service) || OB_ISNULL(session->effective_sql_proxy())) {
+        ret = OB_NOT_INIT;
+        LOG_WARN("PX task services are not bound", K(ret), KP(exec_ctx), KP(session));
+      } else if (OB_FAIL(schema_service->get_runtime_schema_guard(
                   schema_guard_))) {
       } else {
         // Initialize virtual-table parameters for the local PX worker.
-        ObExecContext &exec_ctx = *arg_.exec_ctx_;
-        exec_ctx.get_sql_ctx()->schema_guard_ = &schema_guard_;
-        exec_ctx.set_sql_proxy(gctx_.sql_proxy_);
-        if (OB_ISNULL(executor_ctx = exec_ctx.get_sql_executor_ctx())) {
+        exec_ctx->get_sql_ctx()->schema_guard_ = &schema_guard_;
+        exec_ctx->set_sql_proxy(session->effective_sql_proxy());
+        if (OB_ISNULL(executor_ctx = exec_ctx->get_sql_executor_ctx())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("task executor ctx is NULL", K(ret));
         }

@@ -242,7 +242,15 @@ int in_process_open(InProcessStorage &ctx, uint32_t sid, bool internal)
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(ctx.session.test_init(1, static_cast<uint32_t>(sid),
              &ctx.session_state->allocator))) {
-  } else if (sid != 0 || !internal) {
+  } else {
+    ns::NamespaceRuntime *runtime = nullptr;
+    if (!ns::namespace_registry().get(ctx.ns, runtime) || runtime == nullptr) {
+      ret = OB_NOT_INIT;
+    } else {
+      ctx.session.set_ns_runtime(runtime);
+    }
+  }
+  if (OB_SUCC(ret) && (sid != 0 || !internal)) {
     // A sid-less internal route is a short-lived catalog/background storage
     // context; loading its variables can recurse into schema refresh.
     ret = ctx.session.load_default_sys_variable(false, false);

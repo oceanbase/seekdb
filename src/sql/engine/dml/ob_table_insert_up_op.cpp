@@ -308,8 +308,12 @@ int ObTableInsertUpOp::inner_get_next_row()
       plan_ctx->add_row_matched_count(found_rows_);
     }
     int sync_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (sync_ret = plan_ctx->sync_last_value_to_store(
-            ctx_.get_my_session()->effective_autoincrement_service()))) {
+    share::ObAutoincrementService *auto_service = ctx_.get_my_session() == nullptr
+        ? nullptr : ctx_.get_my_session()->effective_autoincrement_service();
+    if (OB_ISNULL(auto_service)) {
+      sync_ret = OB_NOT_INIT;
+      LOG_WARN("autoincrement service is not bound", K(sync_ret));
+    } else if (OB_SUCCESS != (sync_ret = plan_ctx->sync_last_value_to_store(*auto_service))) {
     }
     if (OB_SUCC(ret)) {
       ret = OB_SUCCESS == sync_ret ? OB_ITER_END : sync_ret;

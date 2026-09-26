@@ -1935,8 +1935,7 @@ int ObDMLService::get_heap_table_hidden_pk(ObSQLSessionInfo *session,
   int ret = OB_SUCCESS;
   uint64_t autoinc_seq = 0;
   share::ObITabletAutoincrementService *auto_inc = session == nullptr
-      ? share::server_service<share::ObITabletAutoincrementService>()
-      : session->effective_tablet_autoincrement_service();
+      ? nullptr : session->effective_tablet_autoincrement_service();
   if (OB_ISNULL(auto_inc)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet autoincrement service is null", K(ret));

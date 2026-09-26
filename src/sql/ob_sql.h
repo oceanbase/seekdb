@@ -230,11 +230,6 @@ public:
     OB_ASSERT_MSG(NULL != plan_cache_, "ObSql is not initialized with plan cache");
     return *plan_cache_;
   }
-  ObPsCache &get_ps_cache() const
-  {
-    OB_ASSERT_MSG(NULL != ps_cache_, "ObSql is not initialized with PS cache");
-    return *ps_cache_;
-  }
 
   // Bind the process-owned SQL services required by resolver entry points
   // that are created outside ObSql's normal statement-generation path.

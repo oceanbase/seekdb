@@ -34,6 +34,7 @@
 #include "observer/ob_inner_sql_connection.h"
 #include "sql/executor/ob_worker_session_guard.h"
 #include "sql/session/ob_sql_session_info.h"
+#include "namespace/namespace.h"
 #include "sql/ob_sql.h"
 
 namespace oceanbase
@@ -115,12 +116,21 @@ int ObDBMSSchedJobExecutor::init_session(
 int ObDBMSSchedJobExecutor::init_env(ObDBMSSchedJobInfo &job_info, ObSQLSessionInfo &session)
 {
   int ret = OB_SUCCESS;
+  ns::NamespaceRuntime *runtime = nullptr;
   ObSchemaGetterGuard schema_guard;
   const ObSysVariableSchema *sys_variable_schema = NULL;
   ObSEArray<const ObUserInfo *, 1> user_infos;
   const ObUserInfo* user_info = NULL;
   const ObDatabaseSchema *database_schema = NULL;
   ObExecEnv exec_env;
+  if (sql_proxy_ == nullptr
+      || !ns::namespace_registry().get(sql_proxy_->target_namespace(), runtime)
+      || runtime == nullptr) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("scheduler SQL target namespace is not bound", K(ret), KP(sql_proxy_));
+  } else {
+    session.set_ns_runtime(runtime);
+  }
   CK (OB_NOT_NULL(schema_service_));
   CK (job_info.valid());
   OZ (schema_service_->get_runtime_schema_guard(schema_guard));

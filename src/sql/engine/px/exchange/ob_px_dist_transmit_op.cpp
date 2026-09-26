@@ -362,11 +362,17 @@ int ObPxDistTransmitOp::do_sm_broadcast_dist()
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = NULL;
   uint64_t repart_ref_table_id = MY_SPEC.repartition_ref_table_id_;
+  ObSQLSessionInfo *session = ctx_.get_my_session();
+  ObMultiVersionSchemaService *schema_service = session == nullptr
+      ? nullptr : session->effective_schema_service();
   
   if (OB_ISNULL(trans_input = static_cast<ObPxDistTransmitOpInput *>(get_input()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("input is null", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+  } else if (OB_ISNULL(schema_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("PX schema service is not bound", K(ret));
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(
       schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( repart_ref_table_id, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
@@ -399,10 +405,16 @@ int ObPxDistTransmitOp::do_sm_pkey_hash_dist()
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = NULL;
   uint64_t repart_ref_table_id = MY_SPEC.repartition_ref_table_id_;
+  ObSQLSessionInfo *session = ctx_.get_my_session();
+  ObMultiVersionSchemaService *schema_service = session == nullptr
+      ? nullptr : session->effective_schema_service();
   if (OB_ISNULL(trans_input = static_cast<ObPxDistTransmitOpInput *>(get_input()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("input is null", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+  } else if (OB_ISNULL(schema_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("PX schema service is not bound", K(ret));
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(
       schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema(
     repart_ref_table_id, table_schema))) {

@@ -1466,6 +1466,14 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(ObTransIDService::server_module_init(mods_trans_id_service_))) { SERVER_LOG(WARN, "mods_trans_id_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObUniqueIDService::server_module_init(mods_unique_id_service_))) { SERVER_LOG(WARN, "mods_unique_id_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObPsCache::server_module_init(mods_ps_cache_))) { SERVER_LOG(WARN, "mods_ps_cache_ fail", KR(ret)); }
+  if (OB_SUCC(ret)) {
+    ns::NamespaceRuntime *home = nullptr;
+    if (!ns::namespace_registry().get(1, home) || home == nullptr) {
+      ret = OB_NOT_INIT;
+    } else {
+      home->set_service(ns::NamespaceRuntime::PS_CACHE, mods_ps_cache_);
+    }
+  }
   if (OB_SUCC(ret) &&
       OB_FAIL(ObPlanCache::server_module_init(mods_plan_cache_, OBSERVER))) {
     SERVER_LOG(WARN, "mods_plan_cache_ fail", KR(ret));

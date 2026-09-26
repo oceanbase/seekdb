@@ -148,7 +148,8 @@ void ObSql::bind_exec_context_runtime_services(ObExecContext &exec_ctx)
       exec_ctx.get_my_session(), lob_read_service_);
   services.plan_cache_ = observer::namespace_worker_prototype::effective_plan_cache(
       exec_ctx.get_my_session(), plan_cache_);
-  services.ps_cache_ = ps_cache_;
+  services.ps_cache_ = exec_ctx.get_my_session() == nullptr
+      ? nullptr : exec_ctx.get_my_session()->effective_ps_cache();
   services.plan_cache_access_service_ = plan_cache_access_service_;
   services.pl_sql_runtime_ = this;
   services.pl_engine_ = pl_engine_;
@@ -759,7 +760,7 @@ int ObSql::do_add_ps_cache(const PsCacheInfoCtx &info_ctx,
   int ret = OB_SUCCESS;
   bool is_contain_tmp_tbl = false;
   ObSQLSessionInfo &session = result.get_session();
-  ObPsCache *ps_cache = ps_cache_;
+  ObPsCache *ps_cache = session.effective_ps_cache();
   uint64_t db_id = OB_INVALID_ID;
   (void)session.get_database_id(db_id);
   if (OB_ISNULL(ps_cache)) {
@@ -1400,7 +1401,7 @@ int ObSql::handle_ps_prepare(const ObString &stmt,
 
   if (OB_SUCC(ret)) {
     ObSQLSessionInfo &session = result.get_session();
-    ObPsCache *ps_cache = ps_cache_;
+    ObPsCache *ps_cache = session.effective_ps_cache();
     ObExecContext &ectx = result.get_exec_context();
     ObIAllocator &allocator = result.get_mem_pool();
     ObPhysicalPlanCtx *pctx = ectx.get_physical_plan_ctx();
@@ -1859,7 +1860,7 @@ int ObSql::handle_ps_execute(const ObPsStmtId client_stmt_id,
   ObExecContext &ectx = result.get_exec_context();
   ParamStore fixed_params( (ObWrapperAllocator(allocator)) );
   ParamStore ps_params( (ObWrapperAllocator(allocator)) );
-  ObPsCache *ps_cache = ps_cache_;
+  ObPsCache *ps_cache = session.effective_ps_cache();
   ObPlanCache *plan_cache = observer::namespace_worker_prototype::effective_plan_cache(
       &session, plan_cache_);
   bool use_plan_cache = session.get_local_ob_enable_plan_cache();
@@ -2182,7 +2183,12 @@ int ObSql::generate_stmt(ParseResult &parse_result,
     resolver_ctx.is_dynamic_sql_ = context.is_dynamic_sql_;
     resolver_ctx.statement_id_ = context.statement_id_;
     resolver_ctx.param_list_ = &plan_ctx->get_param_store();
-    resolver_ctx.sql_proxy_ = GCTX.sql_proxy_;
+    resolver_ctx.sql_proxy_ = context.session_info_ == nullptr
+        ? nullptr : context.session_info_->effective_sql_proxy();
+    if (OB_ISNULL(resolver_ctx.sql_proxy_)) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("SQL proxy is not bound", K(ret));
+    }
   }
 
   if (OB_FAIL(ret)) {

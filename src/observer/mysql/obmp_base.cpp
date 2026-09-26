@@ -306,7 +306,22 @@ int ObMPBase::free_session()
 
 int ObMPBase::get_session(ObSQLSessionInfo *&sess_info)
 {
-  return packet_sender_.get_session(sess_info);
+  int ret = packet_sender_.get_session(sess_info);
+  if (OB_SUCC(ret) && sess_info != nullptr) {
+    const ns::NamespaceRuntime *runtime = sess_info->ns_runtime();
+    const ObSMConnection *conn = get_conn();
+    if (runtime == nullptr || !runtime->has_request_services()
+        || conn == nullptr || conn->namespace_id_ != runtime->ns().id()) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("session namespace services are not bound", K(ret), KP(runtime), KP(conn));
+      const int revert_ret = packet_sender_.revert_session(sess_info);
+      if (revert_ret != OB_SUCCESS) {
+        LOG_WARN("failed to revert unbound session", K(revert_ret));
+      }
+      sess_info = nullptr;
+    }
+  }
+  return ret;
 }
 
 int ObMPBase::revert_session(ObSQLSessionInfo *sess_info)

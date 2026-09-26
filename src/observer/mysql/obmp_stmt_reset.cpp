@@ -77,8 +77,7 @@ int ObMPStmtReset::process()
     ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
     LOG_TRACE("close ps stmt or cursor", K_(stmt_id), K(session->get_server_sid()));
     // get stmt info
-    ObPsCache *ps_cache = OB_ISNULL(get_observer_sql_engine())
-        ? nullptr : &get_observer_sql_engine()->get_ps_cache();
+    ObPsCache *ps_cache = session->effective_ps_cache();
     if (OB_NOT_NULL(ps_cache)) {
       ObPsStmtInfoGuard guard;
       ObPsStmtInfo *ps_info = NULL;

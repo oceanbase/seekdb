@@ -3025,7 +3025,7 @@ int ObTableScanOp::report_ddl_column_checksum()
     const int64_t scan_task_id_base = scan_task_id_;
     ObSQLSessionInfo *session = ctx_.get_my_session();
     ObMySQLProxy *sql_proxy = session != nullptr
-        ? session->effective_sql_proxy() : GCTX.sql_proxy_;
+        ? session->effective_sql_proxy() : nullptr;
     if (OB_ISNULL(sql_proxy)) {
       ret = OB_NOT_INIT;
       LOG_WARN("ddl checksum sql proxy is null", K(ret));

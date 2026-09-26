@@ -247,6 +247,7 @@ public:
         virtual_table_factory_provider_(nullptr),
         srs_provider_(nullptr),
         resource_limit_calculator_(nullptr),
+        sql_proxy_(nullptr),
         ns_runtime_(nullptr)
     {}
 
@@ -266,6 +267,7 @@ public:
     ObIVirtualTableFactoryProvider *virtual_table_factory_provider_;
     common::ObISrsProvider *srs_provider_;
     share::ObResourceLimitCalculator *resource_limit_calculator_;
+    common::ObMySQLProxy *sql_proxy_;
     ns::NamespaceRuntime *ns_runtime_;
   };
 
@@ -429,7 +431,7 @@ public:
   /**
    * @brief get sql proxy
    */
-  inline common::ObMySQLProxy *get_sql_proxy();
+  common::ObMySQLProxy *get_sql_proxy();
 
   /**
    * @brief get add, for plan cache show stat
@@ -813,6 +815,7 @@ protected:
   ObSqlExecutorCtx sql_executor_ctx_;
   ObSQLSessionInfo *my_session_;
   ObSQLSessionMgr *session_mgr_;
+  common::ObMySQLProxy *sql_proxy_;
   common::ObILobReadService *lob_read_service_;
   ObPlanCache *plan_cache_;
   ObPsCache *ps_cache_;
@@ -996,12 +999,7 @@ inline ObSQLSessionInfo *ObExecContext::get_my_session() const
 
 inline void ObExecContext::set_sql_proxy(common::ObMySQLProxy *sql_proxy)
 {
-  UNUSED(sql_proxy);
-}
-
-inline common::ObMySQLProxy *ObExecContext::get_sql_proxy()
-{
-  return GCTX.sql_proxy_;
+  sql_proxy_ = sql_proxy;
 }
 
 inline void ObExecContext::set_virtual_table_ctx(const ObVirtualTableCtx &virtual_table_ctx)

@@ -65,19 +65,12 @@ public:
                              common::ObVirtualTableIterator *&vt_iter);
   virtual int check_can_create_iter(common::ObVTableScanParam &params);
   rootserver::ObLocalManagementService &get_local_management_service() { return local_management_service_; }
-  void set_schema_service(share::schema::ObMultiVersionSchemaService &schema_service)
-  {
-    schema_service_ = &schema_service;
-  }
-  share::schema::ObMultiVersionSchemaService &get_schema_service();
-
 public:
   int check_is_index(const share::schema::ObTableSchema &table,
       const char *index_name, bool &is_index) const;
 
 private:
   rootserver::ObLocalManagementService &local_management_service_;
-  share::schema::ObMultiVersionSchemaService *schema_service_ = NULL;
   common::ObAddr &addr_;
   common::ObServerConfig *config_;
 };

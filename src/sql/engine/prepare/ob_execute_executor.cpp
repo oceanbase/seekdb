@@ -68,7 +68,10 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
         if (OB_ISNULL(task_ctx)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_ERROR("task executor ctx can not be NULL", K(task_ctx), K(ret));
-        } else if (OB_FAIL(GCTX.schema_service_->get_published_schema_version(
+        } else if (OB_ISNULL(ctx.get_my_session()->effective_schema_service())) {
+          ret = OB_NOT_INIT;
+          LOG_WARN("schema service is not bound", K(ret));
+        } else if (OB_FAIL(ctx.get_my_session()->effective_schema_service()->get_published_schema_version(
                     database_schema_version))) {
         } else {
           sql_ctx.retry_times_ = 0;
@@ -78,7 +81,7 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
           sql_ctx.is_prepare_protocol_ = ctx.get_sql_ctx()->is_prepare_protocol_;
           sql_ctx.is_prepare_stage_ = ctx.get_sql_ctx()->is_prepare_stage_;
           sql_ctx.schema_guard_ = ctx.get_sql_ctx()->schema_guard_;
-          task_ctx->schema_service_ = GCTX.schema_service_;
+          task_ctx->schema_service_ = ctx.get_my_session()->effective_schema_service();
           task_ctx->set_query_begin_schema_version(database_schema_version);
           if(OB_FAIL(ctx.get_my_session()->add_ps_stmt_id_in_use(stmt.get_prepare_id()))) {
           } else {

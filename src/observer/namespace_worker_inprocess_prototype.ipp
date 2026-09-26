@@ -16,6 +16,7 @@
 #include "share/ob_autoincrement_service.h"
 #include "share/schema/ob_schema_runtime_service.h"
 #include "sql/plan_cache/ob_plan_cache.h"
+#include "sql/plan_cache/ob_ps_cache.h"
 #include <map>
 #include <memory>
 #include <mutex>
@@ -88,7 +89,7 @@ INamespaceSchemaLifecycle *namespace_schema_lifecycle(uint64_t namespace_id)
 int refresh_session_schema(sql::ObSQLSessionInfo *session)
 {
   ns::NamespaceRuntime *runtime = session ? session->ns_runtime() : nullptr;
-  if (runtime == nullptr) { return OB_SUCCESS; }
+  if (runtime == nullptr) { return OB_NOT_INIT; }
   auto *lifecycle = static_cast<INamespaceSchemaLifecycle *>(
       runtime->service(ns::NamespaceRuntime::SCHEMA_LIFECYCLE));
   return lifecycle == nullptr ? OB_NOT_INIT : lifecycle->refresh();
@@ -346,8 +347,9 @@ private:
     if (has_logical_schema) {
       auto *schema_service = sql_session != nullptr
           ? sql_session->effective_schema_service()
-          : &ObMultiVersionSchemaService::get_instance();
-      ret = schema_service->get_runtime_schema_guard(guard);
+          : nullptr;
+      ret = schema_service == nullptr ? OB_NOT_INIT
+          : schema_service->get_runtime_schema_guard(guard);
       if (OB_SUCC(ret)) { ret = guard.get_table_schema(logical_table_id, logical_schema); }
       if (OB_SUCC(ret) && (logical_schema == nullptr
           || logical_schema->get_table_id() != logical_table_id)) {
@@ -439,6 +441,7 @@ struct InProcessNamespaceServices {
   share::schema::ObSchemaServiceSQLImpl *backend = nullptr;
   InProcessSchemaRefreshScheduler *scheduler = nullptr;
   sql::ObPlanCache *plan_cache = nullptr;
+  sql::ObPsCache *ps_cache = nullptr;
   rootserver::ObLocalManagementService *root_commands = nullptr;
   InProcessRootserverLocalRuntime *local_runtime = nullptr;
   InProcessDirectInsertService direct_insert;
@@ -601,6 +604,11 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(services->plan_cache->init(common::OB_PLAN_CACHE_BUCKET_NUMBER,
           server))) {
+  } else if (FALSE_IT(stage = "ps_cache")) {
+  } else if (OB_ISNULL(services->ps_cache = OB_NEW(sql::ObPsCache,
+          ObModIds::OB_SQL_PS_CACHE))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(sql::ObPsCache::server_module_init(services->ps_cache))) {
   } else if (FALSE_IT(stage = "root_commands")) {
   } else if (OB_ISNULL(services->local_runtime = OB_NEW(
           InProcessRootserverLocalRuntime, ObModIds::OB_SCHEMA_SERVICE, ns))) {
@@ -627,6 +635,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
   if (!ret) {
     runtime.set_service(ns::NamespaceRuntime::SCHEMA_SERVICE, services->schema_service);
     runtime.set_service(ns::NamespaceRuntime::PLAN_CACHE, services->plan_cache);
+    runtime.set_service(ns::NamespaceRuntime::PS_CACHE, services->ps_cache);
     runtime.set_service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE, services->root_commands);
     runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_SERVICE, &services->direct_insert);
     runtime.set_service(ns::NamespaceRuntime::DML_SERVICE, &fork_inprocess_dml);

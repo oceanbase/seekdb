@@ -812,12 +812,16 @@ int ObTableModifyOp::inner_close()
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *plan_ctx = ctx_.get_physical_plan_ctx();
   // release cache_handle for auto-increment
-  share::ObAutoincrementService &auto_service =
-      ctx_.get_my_session()->effective_autoincrement_service();
+  share::ObAutoincrementService *auto_service = ctx_.get_my_session() == nullptr
+      ? nullptr : ctx_.get_my_session()->effective_autoincrement_service();
   ObIArray<share::AutoincParam> &autoinc_params = plan_ctx->get_autoinc_params();
-  for (int64_t i = 0; i < autoinc_params.count(); ++i) {
+  if (OB_ISNULL(auto_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("autoincrement service is not bound", K(ret));
+  }
+  for (int64_t i = 0; auto_service != nullptr && i < autoinc_params.count(); ++i) {
     if (NULL != autoinc_params.at(i).cache_handle_) {
-      auto_service.release_handle(autoinc_params.at(i).cache_handle_);
+      auto_service->release_handle(autoinc_params.at(i).cache_handle_);
     }
   }
   close_inner_conn();

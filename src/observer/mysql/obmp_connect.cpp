@@ -715,7 +715,11 @@ int ObMPConnect::bind_session_namespace(ObSQLSessionInfo &session)
                "namespace_id", runtime->ns().id());
     }
   }
-  if (OB_SUCC(ret) && runtime != nullptr) {
+  if (OB_SUCC(ret) && (runtime == nullptr || !runtime->has_request_services())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("namespace request services are not ready", K(ret), KP(runtime));
+  }
+  if (OB_SUCC(ret)) {
     ObSMConnection *conn = get_conn();
     if (conn == NULL || (conn->namespace_id_ != 0
                          && conn->namespace_id_ != runtime->ns().id())) {

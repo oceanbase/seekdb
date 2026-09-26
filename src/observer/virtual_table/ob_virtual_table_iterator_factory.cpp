@@ -234,11 +234,6 @@ ObVirtualTableIteratorFactory::~ObVirtualTableIteratorFactory()
 {
 }
 
-ObMultiVersionSchemaService &ObVTIterCreator::get_schema_service()
-{
-  return NULL == schema_service_ ? local_management_service_.get_schema_service() : *schema_service_;
-}
-
 int ObVirtualTableIteratorFactory::create_virtual_table_iterator(ObVTableScanParam &params,
                                                                  ObVirtualTableIterator *&vt_iter)
 {
@@ -336,16 +331,19 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
   uint64_t index_id = params.index_id_;
   ObSQLSessionInfo *session = params.op_ == NULL
       ? NULL : params.op_->get_eval_ctx().exec_ctx_.get_my_session();
-  ObMultiVersionSchemaService &schema_service = session == NULL
-      ? get_schema_service() : *session->effective_schema_service();
+  ObMultiVersionSchemaService *schema_service = session == NULL
+      ? nullptr : session->effective_schema_service();
   
   if (OB_UNLIKELY(OB_INVALID_ID == index_id)) {
      ret = OB_INVALID_ARGUMENT;
      SERVER_LOG(WARN, "invalid index_id", K(index_id), K(ret));
+  } else if (OB_ISNULL(schema_service)) {
+    ret = OB_NOT_INIT;
+    SERVER_LOG(WARN, "virtual table schema service is not bound", K(ret));
   } else if (OB_FAIL(get_latest_expected_schema(index_id,
                                                 params.schema_version_,
                                                 params.runtime_schema_version_,
-                                                schema_service,
+                                                *schema_service,
                                                 schema_guard,
                                                 index_schema))) {
   } else {
@@ -373,8 +371,8 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
                  || OB_ISNULL(params.op_->get_eval_ctx().exec_ctx_.get_my_session())
                  || OB_ISNULL(index_schema)
                  || OB_ISNULL(get_observer_sql_engine())
-                 || OB_ISNULL(GCTX.schema_service_)
-                 || OB_ISNULL(GCTX.sql_proxy_)) {
+                 || OB_ISNULL(session->effective_schema_service())
+                 || OB_ISNULL(session->effective_sql_proxy())) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN,
                    "some variable is NULL",
@@ -382,8 +380,8 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
                    KP(params.op_),
                    KP(index_schema),
                    KP(get_observer_sql_engine()),
-                   KP(GCTX.schema_service_),
-                   KP(GCTX.sql_proxy_));
+                   KP(session),
+                   KP(session == nullptr ? nullptr : session->effective_sql_proxy()));
       } else if (is_extended_sys_view_table(pure_tid)
                  || is_extended_virtual_table(pure_tid)) {
         ret = OB_NOT_SUPPORTED;
@@ -445,7 +443,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             } else {
               table_status->set_allocator(&allocator);
               
-              table_status->set_sql_proxy(GCTX.sql_proxy_);
+              table_status->set_sql_proxy(session->effective_sql_proxy());
               vt_iter = static_cast<ObVirtualTableIterator *>(table_status);
             }
             break;
@@ -466,7 +464,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             if (OB_FAIL(ObSchemaUtils::get_all_table_history_name(table_name))) {
             } else if (OB_FAIL(NEW_VIRTUAL_TABLE(ObVritualCoreInnerTable, core_all_table))) {
             } else if (OB_FAIL(core_all_table->init(
-                session == NULL ? *GCTX.sql_proxy_ : *session->effective_sql_proxy(),
+                *session->effective_sql_proxy(),
                 table_name, pure_tid, &schema_guard))) {
             } else {
               vt_iter = static_cast<ObVirtualTableIterator *>(core_all_table);
@@ -477,7 +475,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             ObVritualCoreInnerTable *core_column_table = NULL;
             if (OB_FAIL(NEW_VIRTUAL_TABLE(ObVritualCoreInnerTable, core_column_table))) {
             } else if (OB_FAIL(core_column_table->init(
-                session == NULL ? *GCTX.sql_proxy_ : *session->effective_sql_proxy(),
+                *session->effective_sql_proxy(),
                 OB_ALL_COLUMN_HISTORY_TNAME, pure_tid, &schema_guard))) {
             } else {
               vt_iter = static_cast<ObVirtualTableIterator *>(core_column_table);
@@ -762,7 +760,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
             ObGlobalVariables *global_variables = NULL;
             if (OB_FAIL(NEW_VIRTUAL_TABLE(ObGlobalVariables, global_variables))) {
             } else {
-              global_variables->set_sql_proxy(GCTX.sql_proxy_);
+              global_variables->set_sql_proxy(session->effective_sql_proxy());
               const ObSysVariableSchema *sys_variable_schema = NULL;
               if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
               } else if (OB_ISNULL(sys_variable_schema)) {
@@ -1267,7 +1265,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           }
           case OB_ALL_VIRTUAL_SERVER_SCHEMA_INFO_TID: {
             ObAllVirtualServerSchemaInfo *server_schema_info = NULL;
-            share::schema::ObMultiVersionSchemaService &schema_service = get_schema_service();
+            share::schema::ObMultiVersionSchemaService &schema_service = *session->effective_schema_service();
             if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualServerSchemaInfo,
                                           server_schema_info, schema_service))) {
             } else {
@@ -1277,7 +1275,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           }
           case OB_ALL_VIRTUAL_SCHEMA_MEMORY_TID: {
             ObAllVirtualSchemaMemory *schema_memory = NULL;
-            share::schema::ObMultiVersionSchemaService &schema_service = get_schema_service();
+            share::schema::ObMultiVersionSchemaService &schema_service = *session->effective_schema_service();
             if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualSchemaMemory,
                                           schema_memory, schema_service))) {
             } else {
@@ -1287,7 +1285,7 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
           }
           case OB_ALL_VIRTUAL_SCHEMA_SLOT_TID: {
             ObAllVirtualSchemaSlot *schema_slot = NULL;
-            share::schema::ObMultiVersionSchemaService &schema_service = get_schema_service();
+            share::schema::ObMultiVersionSchemaService &schema_service = *session->effective_schema_service();
             if (OB_FAIL(NEW_VIRTUAL_TABLE(ObAllVirtualSchemaSlot,
                                           schema_slot, schema_service))) {
             } else {
@@ -1767,16 +1765,19 @@ int ObVTIterCreator::check_can_create_iter(ObVTableScanParam &params)
   uint64_t index_id = params.index_id_;
   ObSQLSessionInfo *session = params.op_ == NULL
       ? NULL : params.op_->get_eval_ctx().exec_ctx_.get_my_session();
-  ObMultiVersionSchemaService &schema_service = session == NULL
-      ? get_schema_service() : *session->effective_schema_service();
+  ObMultiVersionSchemaService *schema_service = session == NULL
+      ? nullptr : session->effective_schema_service();
   
   if (OB_UNLIKELY(OB_INVALID_ID == index_id)) {
      ret = OB_INVALID_ARGUMENT;
      SERVER_LOG(WARN, "invalid index_id", K(index_id), K(ret));
+  } else if (OB_ISNULL(schema_service)) {
+    ret = OB_NOT_INIT;
+    SERVER_LOG(WARN, "virtual table schema service is not bound", K(ret));
   } else if (OB_FAIL(get_latest_expected_schema(index_id,
                                                 params.schema_version_,
                                                 params.runtime_schema_version_,
-                                                schema_service,
+                                                *schema_service,
                                                 schema_guard,
                                                 index_schema))) {
   } else {

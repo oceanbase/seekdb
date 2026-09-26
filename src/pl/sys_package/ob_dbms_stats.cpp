@@ -6018,9 +6018,13 @@ int ObDbmsStats::refresh_runtime_schema_guard(ObExecContext &ctx)
   if (OB_ISNULL(ctx.get_my_session()) || OB_ISNULL(ctx.get_sql_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(ctx.get_my_session()), K(ctx.get_sql_ctx()));
+  } else if (OB_ISNULL(ctx.get_my_session()->effective_schema_service())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("schema service is not bound", K(ret));
   } else {
     ObCachedSchemaGuardInfo &cached_schema_info = ctx.get_my_session()->get_cached_schema_guard_info();
-    if (OB_FAIL(cached_schema_info.refresh_runtime_schema_guard())) {
+    if (OB_FAIL(cached_schema_info.refresh_runtime_schema_guard(
+            *ctx.get_my_session()->effective_schema_service()))) {
     } else {
       ctx.get_sql_ctx()->schema_guard_ = &(cached_schema_info.get_schema_guard());
     }

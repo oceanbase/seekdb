@@ -177,8 +177,9 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
         ObPsStmtInfoGuard guard;
         ObPsStmtInfo *ps_info = NULL;
         ObPsStmtId inner_stmt_id = OB_INVALID_ID;
-        if (OB_SUCC(session.get_inner_ps_stmt_id(cursor_id_, inner_stmt_id))
-              && OB_SUCC(get_observer_sql_engine()->get_ps_cache().get_stmt_info_guard(inner_stmt_id, guard))
+        if (OB_NOT_NULL(session.effective_ps_cache())
+              && OB_SUCC(session.get_inner_ps_stmt_id(cursor_id_, inner_stmt_id))
+              && OB_SUCC(session.effective_ps_cache()->get_stmt_info_guard(inner_stmt_id, guard))
               && OB_NOT_NULL(ps_info = guard.get_stmt_info())) {
           sql = ps_info->get_ps_sql();
         } else {

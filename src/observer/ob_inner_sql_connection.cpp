@@ -728,18 +728,7 @@ int ObInnerSQLConnection::do_query(sqlclient::ObIExecutor &executor, ObInnerSQLR
     bool is_restore = NULL != sql_modifier_;
     res.sql_ctx().is_restore_ = is_restore;
     get_session().set_process_query_time(ObTimeUtility::current_time());
-    // Bind this connection's explicit target before local SQL execution.
-    if (target_namespace_ != 0) {
-      ns::NamespaceRuntime *target_runtime = nullptr;
-      if (ns::namespace_registry().get(target_namespace_, target_runtime)
-          && OB_NOT_NULL(target_runtime)) {
-        get_session().set_ns_runtime(target_runtime);
-      } else {
-        ret = OB_NOT_INIT;
-      }
-    }
-    if (ret != OB_SUCCESS) {
-    } else if (!inited_) {
+    if (!inited_) {
       ret = OB_NOT_INIT;
       LOG_WARN("not init", K(ret));
     } else if (OB_ISNULL(ob_sql_)) {
@@ -814,8 +803,24 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
   } else if (OB_FAIL(retry_info.init())) {
   }
 
-  // Set the effective schema identity for this inner SQL connection.
-  
+  // Bind the proxy's explicit owner before the first schema lookup. Nested
+  // inner SQL inherits the session owner when no proxy target was supplied.
+  if (OB_SUCC(ret) && target_namespace_ != 0) {
+    ns::NamespaceRuntime *target_runtime = nullptr;
+    if (!ns::namespace_registry().get(target_namespace_, target_runtime)
+        || target_runtime == nullptr) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("inner SQL target namespace is not ready", K(ret), K(target_namespace_));
+    } else {
+      get_session().set_ns_runtime(target_runtime);
+    }
+  }
+  if (OB_SUCC(ret) && (get_session().ns_runtime() == nullptr
+      || get_session().effective_schema_service() == nullptr)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("inner SQL namespace runtime is not bound", K(ret), K(target_namespace_));
+  }
+
 
   if (OB_SUCC(ret)) {
     SERVER_MODULE_SCOPE {
@@ -1524,8 +1529,8 @@ int ObInnerSQLConnection::destroy_inner_session()
   if (NULL != inner_session_) {
     try_release_query_lock();
     if (INNER_SQL_SESS_ID == free_session_ctx_.sessid_) {
-      if (OB_NOT_NULL(ob_sql_)) {
-        const int close_ret = inner_session_->close_all_ps_stmt(ob_sql_->get_ps_cache());
+      if (OB_NOT_NULL(inner_session_->effective_ps_cache())) {
+        const int close_ret = inner_session_->close_all_ps_stmt(*inner_session_->effective_ps_cache());
         if (OB_UNLIKELY(OB_SUCCESS != close_ret)) {
         }
       }

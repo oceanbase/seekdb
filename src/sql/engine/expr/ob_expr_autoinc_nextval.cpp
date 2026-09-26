@@ -314,16 +314,20 @@ int ObExprAutoincNextval::eval_nextval(
   ObDatum *input_value = NULL;
   ObPhysicalPlanCtx *plan_ctx = ctx.exec_ctx_.get_physical_plan_ctx();
   ObSQLSessionInfo *my_session = ctx.exec_ctx_.get_my_session();
+  ObAutoincrementService *auto_service = my_session == nullptr
+      ? nullptr : my_session->effective_autoincrement_service();
   if (OB_ISNULL(plan_ctx) || OB_ISNULL(my_session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("no phy plan context", K(ret));
+  } else if (OB_ISNULL(auto_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("autoincrement service is not bound", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, input_value))) {
   } else {
     uint64_t autoinc_table_id =
             static_cast<ObAutoincNextvalInfo *>(expr.extra_info_)->autoinc_table_id_;
     uint64_t autoinc_col_id =
             static_cast<ObAutoincNextvalInfo *>(expr.extra_info_)->autoinc_col_id_;
-    ObAutoincrementService &auto_service = my_session->effective_autoincrement_service();
     ObIArray<AutoincParam> &autoinc_params = plan_ctx->get_autoinc_params();
     bool is_to_generate = false;
     AutoincParam *autoinc_param = NULL;
@@ -342,7 +346,7 @@ int ObExprAutoincNextval::eval_nextval(
 
     // sync last user specified value first(compatible with MySQL)
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(auto_service.sync_insert_value_local(*autoinc_param))) {
+      if (OB_FAIL(auto_service->sync_insert_value_local(*autoinc_param))) {
       }
     }
 
@@ -352,7 +356,7 @@ int ObExprAutoincNextval::eval_nextval(
       if (OB_FAIL(get_input_value(
               expr, ctx, input_value, *autoinc_param, is_to_generate, new_val))) {
       } else if (is_to_generate &&
-                 OB_FAIL(generate_autoinc_value(*my_session, new_val, auto_service, ctx,
+                 OB_FAIL(generate_autoinc_value(*my_session, new_val, *auto_service, ctx,
                                                 autoinc_param, plan_ctx))) {
         LOG_WARN("generate autoinc value failed", K(ret));
       }

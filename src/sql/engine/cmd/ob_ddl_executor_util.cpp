@@ -69,10 +69,10 @@ int ObDDLExecutorUtil::wait_ddl_finish(const int64_t task_id,
   THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + OB_MAX_USER_SPECIFIED_TIMEOUT);
   ObDDLErrorMessageTableOperator::ObBuildDDLErrorMessage error_message;
   ObMySQLProxy *sql_proxy = session != nullptr
-      ? session->effective_sql_proxy() : GCTX.sql_proxy_;
-  if (OB_UNLIKELY(task_id <= 0)) {
+      ? session->effective_sql_proxy() : nullptr;
+  if (OB_UNLIKELY(task_id <= 0) || OB_ISNULL(sql_proxy)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(task_id));
+    LOG_WARN("DDL wait requires its session SQL proxy", K(ret), K(task_id), KP(session));
   } else {
     SERVER_EVENT_ADD("ddl", "start wait ddl finish",
       "ret", ret,
@@ -150,6 +150,8 @@ int ObDDLExecutorUtil::wait_build_index_finish(const int64_t task_id,
   int64_t unused_user_msg_len = 0;
   THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + OB_MAX_USER_SPECIFIED_TIMEOUT);
   share::ObDDLErrorMessageTableOperator::ObBuildDDLErrorMessage error_message;
+  ObMySQLProxy *owner_proxy = sql_proxy != nullptr ? sql_proxy
+      : session != nullptr ? session->effective_sql_proxy() : nullptr;
   is_finish = false;
   SERVER_EVENT_ADD("ddl", "start wait build index finish",
     "ret", ret,
@@ -157,10 +159,10 @@ int ObDDLExecutorUtil::wait_build_index_finish(const int64_t task_id,
     "task_id", task_id);
   LOG_INFO("start wait build index finish", K(task_id), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
 
-  if (OB_UNLIKELY(task_id <= 0)) {
+  if (OB_UNLIKELY(task_id <= 0) || OB_ISNULL(owner_proxy)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(task_id));
-  } else if (OB_SUCCESS == share::ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id, -1 /* target_object_id */, unused_addr, false /* is_ddl_retry_task */, *(sql_proxy != nullptr ? sql_proxy : session != nullptr ? session->effective_sql_proxy() : GCTX.sql_proxy_), error_message, unused_user_msg_len)) {
+    LOG_WARN("index wait requires its SQL proxy", K(ret), K(task_id), KP(session));
+  } else if (OB_SUCCESS == share::ObDDLErrorMessageTableOperator::get_ddl_error_message(task_id, -1 /* target_object_id */, unused_addr, false /* is_ddl_retry_task */, *owner_proxy, error_message, unused_user_msg_len)) {
     ret = error_message.ret_code_;
     if (OB_SUCCESS != ret) {
       FORWARD_USER_ERROR(ret, error_message.user_message_);

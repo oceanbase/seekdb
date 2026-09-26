@@ -83,6 +83,7 @@ public:
     DML_SERVICE = 11,
     RANGE_SERVICE = 12,
     DDL_CHECKSUM_ERROR_VERIFIER = 13,
+    PS_CACHE = 14,
     SLOT_COUNT
   };
   explicit NamespaceRuntime(Namespace &ns) : ns_(ns) {}
@@ -98,6 +99,19 @@ public:
   void *service(ServiceSlot slot) const
   {
     return slot < SLOT_COUNT ? services_[slot] : nullptr;
+  }
+  bool has_request_services() const
+  {
+    const ServiceSlot required[] = {
+      SCHEMA_SERVICE, PLAN_CACHE, ROOT_COMMAND_SERVICE, DIRECT_INSERT_SERVICE,
+      DIRECT_INSERT_REGISTRY, SQL_PROXY, TABLET_AUTOINCREMENT_SERVICE,
+      AUTOINCREMENT_SERVICE, SCHEMA_LIFECYCLE, TABLE_LOCK_TABLET_ROUTER,
+      DML_SERVICE, RANGE_SERVICE, DDL_CHECKSUM_ERROR_VERIFIER, PS_CACHE
+    };
+    for (const ServiceSlot slot : required) {
+      if (services_[slot] == nullptr) { return false; }
+    }
+    return true;
   }
 private:
   Namespace &ns_;

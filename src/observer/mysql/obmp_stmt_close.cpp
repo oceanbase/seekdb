@@ -80,8 +80,11 @@ int ObMPStmtClose::process()
           LOG_WARN("fail to close cursor", K(ret), K_(stmt_id), K(session->get_server_sid()));
         }
       }
-      if (OB_FAIL(session->close_ps_stmt(
-              get_observer_sql_engine()->get_ps_cache(), stmt_id_))) {
+      if (OB_ISNULL(session->effective_ps_cache())) {
+        ret = OB_NOT_INIT;
+        LOG_WARN("PS cache is not bound", K(ret));
+      } else if (OB_FAIL(session->close_ps_stmt(
+              *session->effective_ps_cache(), stmt_id_))) {
       }
       if (OB_SUCCESS != tmp_ret) {
         // close_cursor failure error code priority is higher than close_ps_stmt, here we override

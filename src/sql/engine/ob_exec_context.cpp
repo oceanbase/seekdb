@@ -196,6 +196,7 @@ ObExecContext::ObExecContext(ObIAllocator &allocator,
     sql_executor_ctx_(),
     my_session_(NULL),
     session_mgr_(session_mgr),
+    sql_proxy_(nullptr),
     lob_read_service_(nullptr),
     plan_cache_(nullptr),
     ps_cache_(nullptr),
@@ -296,6 +297,7 @@ ObExecContext::RuntimeServices ObExecContext::get_runtime_services() const
   services.virtual_table_factory_provider_ = vt_factory_provider_;
   services.srs_provider_ = srs_provider_;
   services.resource_limit_calculator_ = resource_limit_calculator_;
+  services.sql_proxy_ = sql_proxy_;
   if (nullptr != get_my_session()) {
     services.ns_runtime_ = get_my_session()->ns_runtime();
   }
@@ -320,6 +322,7 @@ void ObExecContext::set_runtime_services(const RuntimeServices &services)
   vt_factory_provider_ = services.virtual_table_factory_provider_;
   srs_provider_ = services.srs_provider_;
   resource_limit_calculator_ = services.resource_limit_calculator_;
+  sql_proxy_ = services.sql_proxy_;
   if (nullptr != services.ns_runtime_ && nullptr != get_my_session()) {
     get_my_session()->set_ns_runtime(services.ns_runtime_);
   }
@@ -398,6 +401,11 @@ ObExecContext::~ObExecContext()
     data_plane::destroy_lob_access_context(lob_access_ctx_);
   }
   auto_dop_map_.destroy();
+}
+
+common::ObMySQLProxy *ObExecContext::get_sql_proxy()
+{
+  return my_session_ == nullptr ? sql_proxy_ : my_session_->effective_sql_proxy();
 }
 
 void ObExecContext::set_my_session(ObSQLSessionInfo *session)

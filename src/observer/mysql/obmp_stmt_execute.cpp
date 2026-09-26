@@ -1451,8 +1451,7 @@ int ObMPStmtExecute::execute_response(ObSQLSessionInfo &session,
   int ret = OB_SUCCESS;
   inner_stmt_id = OB_INVALID_ID;
   ObIAllocator &alloc = CURRENT_CONTEXT->get_arena_allocator();
-  ObPsCache *ps_cache = OB_ISNULL(get_observer_sql_engine())
-      ? nullptr : &get_observer_sql_engine()->get_ps_cache();
+  ObPsCache *ps_cache = session.effective_ps_cache();
   if (OB_ISNULL(ps_cache)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ps : ps cache is null.", K(ret), K(stmt_id_));
