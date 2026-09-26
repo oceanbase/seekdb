@@ -1567,7 +1567,6 @@ int ObServer::obs_init_modules()
   }
   if (OB_SUCC(ret)) {
     session_mgr_.bind_lifecycle_services(
-        *mods_ps_cache_,
         debug_sync_broadcaster_,
         conn_res_mgr_);
   }

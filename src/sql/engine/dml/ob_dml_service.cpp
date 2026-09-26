@@ -436,8 +436,8 @@ int ObDMLService::check_lob_column_changed(ObEvalCtx &eval_ctx,
         }
       } else {
         data_plane::ObIDmlService *dml_service =
-            observer::namespace_worker_prototype::effective_dml_service(eval_ctx.exec_ctx_.get_my_session(),
-                share::server_service<data_plane::ObIDmlService>());
+            observer::namespace_worker_prototype::effective_dml_service(
+                eval_ctx.exec_ctx_.get_my_session());
         transaction::ObTxDesc *tx_desc =
             eval_ctx.exec_ctx_.get_my_session()->get_tx_desc();
         if (OB_ISNULL(dml_service) || OB_ISNULL(tx_desc)) {
@@ -1207,8 +1207,7 @@ int ObDMLService::prepare_dml_execution(
   init_dml_write_flag(
       base_ctdef, base_rtdef, write_flag, use_snapshot_opt);
   data_plane::ObIDmlService *dml_service =
-      observer::namespace_worker_prototype::effective_dml_service(THIS_WORKER.get_session(),
-          ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDmlService>());
+      observer::namespace_worker_prototype::effective_dml_service(THIS_WORKER.get_session());
   if (OB_ISNULL(dml_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("DML service is null", K(ret));

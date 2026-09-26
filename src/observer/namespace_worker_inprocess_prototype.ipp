@@ -157,14 +157,13 @@ common::ObILobReadService *effective_lob_read_service(sql::ObSQLSessionInfo *ses
 {
   return in_process_session_ns(session) > 0 ? &inprocess_lob_read : fallback;
 }
-data_plane::ObIDmlService *effective_dml_service(sql::ObSQLSessionInfo *session,
-                                                 data_plane::ObIDmlService *fallback)
+data_plane::ObIDmlService *effective_dml_service(sql::ObSQLSessionInfo *session)
 {
   ns::NamespaceRuntime *runtime = session ? session->ns_runtime() : nullptr;
   return runtime != nullptr
       ? static_cast<data_plane::ObIDmlService *>(
             runtime->service(ns::NamespaceRuntime::DML_SERVICE))
-      : fallback;
+      : nullptr;
 }
 data_plane::ObIWriteContextService *effective_write_context_service(
     sql::ObSQLSessionInfo *session, data_plane::ObIWriteContextService *fallback)
@@ -176,15 +175,14 @@ data_plane::ObITransactionService *effective_transaction_service(
 {
   return in_process_session_ns(session) > 0 ? &inprocess_transactions : fallback;
 }
-sql::ObPlanCache *effective_plan_cache(sql::ObSQLSessionInfo *session,
-                                       sql::ObPlanCache *fallback)
+sql::ObPlanCache *effective_plan_cache(sql::ObSQLSessionInfo *session)
 {
   ns::NamespaceRuntime *runtime = session ? session->ns_runtime() : nullptr;
   return runtime ? static_cast<sql::ObPlanCache *>(
-      runtime->service(ns::NamespaceRuntime::PLAN_CACHE)) : fallback;
+      runtime->service(ns::NamespaceRuntime::PLAN_CACHE)) : nullptr;
 }
 query::ObIRootCommandService *effective_root_command_service(
-    sql::ObSQLSessionInfo *session, query::ObIRootCommandService *fallback)
+    sql::ObSQLSessionInfo *session)
 {
   ns::NamespaceRuntime *runtime = session ? session->ns_runtime() : nullptr;
   void *service = runtime
@@ -192,7 +190,7 @@ query::ObIRootCommandService *effective_root_command_service(
   return runtime != nullptr
       ? static_cast<query::ObIRootCommandService *>(
             static_cast<rootserver::ObLocalManagementService *>(service))
-      : fallback;
+      : nullptr;
 }
 // ---------------------------------------------------------------------------
 // Per-namespace service group, constructed lazily on first use (ticket 05c).
@@ -334,6 +332,9 @@ private:
       return OB_INVALID_ARGUMENT;
     }
     auto *sql_session = THIS_WORKER.get_session();
+    if (sql_session == nullptr || sql_session->ns_runtime() == nullptr) {
+      return OB_NOT_INIT;
+    }
     StorageSessionScope scope(sql_session);
     if (scope.error()) { return scope.error(); }
     const uint64_t logical_table_id = ranges.at(0).get_table_id();
@@ -421,14 +422,13 @@ NativeRangeSchemaPolicy native_range_schema_policy;
 ForkRangeSchemaPolicy fork_range_schema_policy;
 InProcessRangeService native_inprocess_ranges(native_range_schema_policy);
 InProcessRangeService fork_inprocess_ranges(fork_range_schema_policy);
-data_plane::ObIRangeService *effective_range_service(sql::ObSQLSessionInfo *session,
-                                                     data_plane::ObIRangeService *fallback)
+data_plane::ObIRangeService *effective_range_service(sql::ObSQLSessionInfo *session)
 {
   ns::NamespaceRuntime *runtime = session ? session->ns_runtime() : nullptr;
   return runtime != nullptr
       ? static_cast<data_plane::ObIRangeService *>(
             runtime->service(ns::NamespaceRuntime::RANGE_SERVICE))
-      : fallback;
+      : nullptr;
 }
 struct InProcessNamespaceServices {
   explicit InProcessNamespaceServices(uint64_t ns)

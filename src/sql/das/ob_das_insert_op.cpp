@@ -55,8 +55,11 @@ int ObDASIndexDMLAdaptor<DAS_OP_TABLE_INSERT, ObDASDMLIterator>::write_rows(cons
                                                                             int64_t &affected_rows)
 {
   int ret = OB_SUCCESS;
-  data_plane::ObIDmlService *as = observer::namespace_worker_prototype::effective_dml_service(THIS_WORKER.get_session(), ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDmlService>());
-  if (rtdef.use_put_) {
+  data_plane::ObIDmlService *as = observer::namespace_worker_prototype::effective_dml_service(THIS_WORKER.get_session());
+  if (OB_ISNULL(as)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("DML service is not bound", K(ret));
+  } else if (rtdef.use_put_) {
     ret = as->put_rows(tablet_id,
                        *tx_desc_,
                        dml_execution_,
@@ -195,7 +198,7 @@ int ObDASInsertOp::insert_row_with_fetch()
   int64_t affected_rows = 0;
   ObDASConflictIterator *result_iter = nullptr;
   void *buf = nullptr;
-  data_plane::ObIDmlService *as = observer::namespace_worker_prototype::effective_dml_service(THIS_WORKER.get_session(), ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDmlService>());
+  data_plane::ObIDmlService *as = observer::namespace_worker_prototype::effective_dml_service(THIS_WORKER.get_session());
   data_plane::ObDmlExecution execution;
   ObDASDMLIterator dml_iter(
       ins_ctdef_, insert_buffer_, op_alloc_, srs_provider_,
@@ -225,6 +228,9 @@ int ObDASInsertOp::insert_row_with_fetch()
 
   if (OB_FAIL(ret)) {
     // do nothing
+  } else if (OB_ISNULL(as)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("DML service is not bound", K(ret));
   } else if (ins_ctdef_->table_rowkey_types_.empty()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table_rowkey_types is invalid", K(ret));
@@ -240,7 +246,7 @@ int ObDASInsertOp::insert_row_with_fetch()
     LOG_WARN("fail to allocate ObDASConflictIterator", K(ret));
   } else {
     result_iter = new(buf) ObDASConflictIterator(ins_ctdef_->table_rowkey_types_,
-                                                 op_alloc_);
+                                                 op_alloc_, *as);
     result_ = result_iter;
   }
 
@@ -378,7 +384,7 @@ void ObDASConflictIterator::reset()
 {
   ObDuplicatedIterList::iterator iter = duplicated_iter_list_.begin();
   for (; iter != duplicated_iter_list_.end(); ++iter) {
-    observer::namespace_worker_prototype::effective_dml_service(THIS_WORKER.get_session(), ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDmlService>())->free_duplicate_rows_iterator(*iter);
+    dml_service_.free_duplicate_rows_iterator(*iter);
   }
   duplicated_iter_list_.reset();
 }

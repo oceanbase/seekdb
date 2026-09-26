@@ -55,11 +55,9 @@ public:
 
   int init();
   void bind_lifecycle_services(
-      ObPsCache &ps_cache,
       common::ObIDebugSyncBroadcaster &debug_sync_broadcaster,
       ObConnectResourceMgr &connect_resource_manager)
   {
-    ps_cache_ = &ps_cache;
     debug_sync_broadcaster_ = &debug_sync_broadcaster;
     connect_resource_manager_ = &connect_resource_manager;
   }
@@ -212,7 +210,6 @@ private:
   // Monotonically increasing session id allocator. Wraps around at UINT32_MAX, skips 0.
   uint32_t next_sessid_ CACHE_ALIGNED;
   common::ObIDebugSyncBroadcaster *debug_sync_broadcaster_;
-  ObPsCache *ps_cache_;
   ObConnectResourceMgr *connect_resource_manager_;
   DISALLOW_COPY_AND_ASSIGN(ObSQLSessionMgr);
 }; // end of class ObSQLSessionMgr

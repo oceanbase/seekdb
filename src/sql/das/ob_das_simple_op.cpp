@@ -54,9 +54,12 @@ ObDASSplitRangesOp::ObDASSplitRangesOp(ObIAllocator &op_alloc)
 int ObDASSplitRangesOp::open_op()
 {
   int ret = OB_SUCCESS;
-  data_plane::ObIRangeService *range_service = observer::namespace_worker_prototype::effective_range_service(THIS_WORKER.get_session(),
-      ::oceanbase::share::server_service<::oceanbase::data_plane::ObIRangeService>());
-  if (OB_FAIL(range_service->split_multi_ranges(tablet_id_,
+  data_plane::ObIRangeService *range_service =
+      observer::namespace_worker_prototype::effective_range_service(THIS_WORKER.get_session());
+  if (OB_ISNULL(range_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("range service is not bound", K(ret));
+  } else if (OB_FAIL(range_service->split_multi_ranges(tablet_id_,
                                                  timeout_us_,
                                                  ranges_,
                                                  expected_task_count_,
@@ -87,9 +90,12 @@ ObDASRangesCostOp::ObDASRangesCostOp(common::ObIAllocator &op_alloc)
 int ObDASRangesCostOp::open_op()
 {
   int ret = OB_SUCCESS;
-  data_plane::ObIRangeService *range_service = observer::namespace_worker_prototype::effective_range_service(THIS_WORKER.get_session(),
-      ::oceanbase::share::server_service<::oceanbase::data_plane::ObIRangeService>());
-  if (OB_FAIL(range_service->get_multi_ranges_cost(tablet_id_,
+  data_plane::ObIRangeService *range_service =
+      observer::namespace_worker_prototype::effective_range_service(THIS_WORKER.get_session());
+  if (OB_ISNULL(range_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("range service is not bound", K(ret));
+  } else if (OB_FAIL(range_service->get_multi_ranges_cost(tablet_id_,
                                                     timeout_us_,
                                                     ranges_,
                                                     total_size_))) {

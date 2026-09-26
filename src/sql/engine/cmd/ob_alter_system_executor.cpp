@@ -83,7 +83,7 @@ int ObFlushCacheExecutor::execute(ObExecContext &ctx, ObFlushCacheStmt &stmt)
       case CACHE_TYPE_LIB_CACHE: {
         SERVER_MODULE_SCOPE {
           ObPlanCache *plan_cache = observer::namespace_worker_prototype::effective_plan_cache(
-              ctx.get_my_session(), ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>());
+              ctx.get_my_session());
           if (OB_ISNULL(plan_cache)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("plan cache is null", K(ret));
@@ -98,7 +98,7 @@ int ObFlushCacheExecutor::execute(ObExecContext &ctx, ObFlushCacheStmt &stmt)
       case CACHE_TYPE_PLAN: {
         SERVER_MODULE_SCOPE {
           ObPlanCache *plan_cache = observer::namespace_worker_prototype::effective_plan_cache(
-              ctx.get_my_session(), ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>());
+              ctx.get_my_session());
           if (OB_ISNULL(plan_cache)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("plan cache is null", K(ret));
@@ -118,7 +118,7 @@ int ObFlushCacheExecutor::execute(ObExecContext &ctx, ObFlushCacheStmt &stmt)
       case CACHE_TYPE_PL_OBJ: {
         SERVER_MODULE_SCOPE {
           ObPlanCache *plan_cache = observer::namespace_worker_prototype::effective_plan_cache(
-              ctx.get_my_session(), ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>());
+              ctx.get_my_session());
           const bool by_schema_id =
               common::OB_INVALID_ID != stmt.flush_cache_arg_.schema_id_;
           if (OB_ISNULL(plan_cache)) {

@@ -254,7 +254,7 @@ int publish_namespace_schema_change(uint64_t namespace_id,
 rootserver::ObIRootserverLocalRuntime *root_namespace_ddl_runtime();
 void register_root_namespace_storage_services(ns::NamespaceRuntime &runtime);
 query::ObIRootCommandService *effective_root_command_service(
-    sql::ObSQLSessionInfo *session, query::ObIRootCommandService *fallback);
+    sql::ObSQLSessionInfo *session);
 transaction::tablelock::ObIInnerConnectionLockRuntime *inprocess_lock_runtime(
     common::sqlclient::ObISQLConnection *conn);
 int ensure_in_process_namespace(uint64_t namespace_id);
@@ -266,16 +266,13 @@ common::ObITabletScan *effective_tablet_scan(sql::ObSQLSessionInfo *session,
                                              common::ObITabletScan *fallback);
 common::ObILobReadService *effective_lob_read_service(sql::ObSQLSessionInfo *session,
                                                       common::ObILobReadService *fallback);
-data_plane::ObIRangeService *effective_range_service(sql::ObSQLSessionInfo *session,
-                                                     data_plane::ObIRangeService *fallback);
-data_plane::ObIDmlService *effective_dml_service(sql::ObSQLSessionInfo *session,
-                                                 data_plane::ObIDmlService *fallback);
+data_plane::ObIRangeService *effective_range_service(sql::ObSQLSessionInfo *session);
+data_plane::ObIDmlService *effective_dml_service(sql::ObSQLSessionInfo *session);
 data_plane::ObIWriteContextService *effective_write_context_service(
     sql::ObSQLSessionInfo *session, data_plane::ObIWriteContextService *fallback);
 data_plane::ObITransactionService *effective_transaction_service(
     sql::ObSQLSessionInfo *session, data_plane::ObITransactionService *fallback);
-sql::ObPlanCache *effective_plan_cache(sql::ObSQLSessionInfo *session,
-                                       sql::ObPlanCache *fallback);
+sql::ObPlanCache *effective_plan_cache(sql::ObSQLSessionInfo *session);
 void close_session(SessionBinding *binding);
 } } }
 #endif

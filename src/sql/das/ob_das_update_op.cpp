@@ -385,8 +385,11 @@ int ObDASIndexDMLAdaptor<DAS_OP_TABLE_UPDATE, ObDASUpdIterator>::write_rows(cons
                                                                             int64_t &affected_rows)
 {
   int ret = OB_SUCCESS;
-  data_plane::ObIDmlService *as = observer::namespace_worker_prototype::effective_dml_service(THIS_WORKER.get_session(), ::oceanbase::share::server_service<::oceanbase::data_plane::ObIDmlService>());
-  if (OB_UNLIKELY((ctdef.table_param_.get_data_table().is_vector_delta_buffer() ||
+  data_plane::ObIDmlService *as = observer::namespace_worker_prototype::effective_dml_service(THIS_WORKER.get_session());
+  if (OB_ISNULL(as)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("DML service is not bound", K(ret));
+  } else if (OB_UNLIKELY((ctdef.table_param_.get_data_table().is_vector_delta_buffer() ||
                   ctdef.table_param_.get_data_table().is_hybrid_vector_index_log()) &&
                   !ctdef.is_access_main_table_)) {
     // for vector delta buffer/hybrid log table, only do insert when DML with main table

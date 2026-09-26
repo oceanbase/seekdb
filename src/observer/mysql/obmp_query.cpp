@@ -994,8 +994,7 @@ OB_INLINE int ObMPQuery::do_process(ObSQLSessionInfo &session,
       sqlstat_record.set_is_plan_cache_hit(ctx_.plan_cache_hit_);
       sqlstat_record.move_to_sqlstat_cache(result.get_session(),
                                                  *namespace_worker_prototype::effective_plan_cache(
-                                                     &result.get_session(),
-                                                     &get_observer_sql_engine()->get_plan_cache()),
+                                                     &result.get_session()),
                                                  get_observer_sql_engine()->get_plan_cache_access_service(),
                                                  ctx_.cur_sql_,
                                                  result.get_physical_plan());

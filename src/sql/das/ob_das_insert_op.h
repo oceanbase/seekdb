@@ -29,10 +29,12 @@ class ObDASConflictIterator : public blocksstable::ObDatumRowIterator
 {
 public:
   ObDASConflictIterator(const ObjMetaFixedArray &output_types,
-                        common::ObIAllocator &alloc)
+                        common::ObIAllocator &alloc,
+                        data_plane::ObIDmlService &dml_service)
     : output_types_(output_types),
       duplicated_iter_list_(alloc),
-      curr_iter_(duplicated_iter_list_.begin())
+      curr_iter_(duplicated_iter_list_.begin()),
+      dml_service_(dml_service)
   {
   }
 
@@ -49,6 +51,7 @@ private:
   const ObjMetaFixedArray &output_types_;
   ObDuplicatedIterList duplicated_iter_list_;
   ObDuplicatedIterList::iterator curr_iter_;
+  data_plane::ObIDmlService &dml_service_;
 };
 
 class ObDASInsertOp : public ObIDASTaskOp

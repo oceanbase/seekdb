@@ -164,7 +164,6 @@ ObSQLSessionMgr::ObSQLSessionMgr()
   : sessinfo_map_(),
     next_sessid_(1),
     debug_sync_broadcaster_(nullptr),
-    ps_cache_(nullptr),
     connect_resource_manager_(nullptr)
 {}
 
@@ -219,7 +218,6 @@ int ObSQLSessionMgr::init()
 void ObSQLSessionMgr::destroy()
 {
   sessinfo_map_.destroy();
-  ps_cache_ = nullptr;
   connect_resource_manager_ = nullptr;
 }
 
@@ -289,8 +287,7 @@ int ObSQLSessionMgr::create_session(const uint32_t sessid,
   int err = OB_SUCCESS;
   session_info = NULL;
   ObSQLSessionInfo *tmp_sess = NULL;
-  if (OB_ISNULL(ps_cache_)
-      || OB_ISNULL(debug_sync_broadcaster_)
+  if (OB_ISNULL(debug_sync_broadcaster_)
       || OB_ISNULL(connect_resource_manager_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("SQL session runtime services are not bound", K(ret));
