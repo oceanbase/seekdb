@@ -95,6 +95,14 @@ int ObResolverUtils::get_all_function_table_column_names(const TableItem &table_
   CK (OB_NOT_NULL(package_guard));
   CK (OB_LIKELY(table_item.is_function_table()));
   CK (OB_NOT_NULL(table_expr = table_item.function_table_expr_));
+  if (T_FUN_SYS_AI_SPLIT_DOCUMENT == table_expr->get_expr_type()) {
+    // AI_SPLIT_DOCUMENT 是 sys 表函数（无 udt_id），固定输出 4 列。
+    OZ (column_names.push_back(ObString("chunk_id")));
+    OZ (column_names.push_back(ObString("chunk_offset")));
+    OZ (column_names.push_back(ObString("chunk_length")));
+    OZ (column_names.push_back(ObString("chunk_text")));
+    return ret;
+  }
   CK (table_expr->get_udt_id() != OB_INVALID_ID);
 
   CK (OB_NOT_NULL(params.schema_checker_));
@@ -2981,6 +2989,9 @@ bool ObResolverUtils::is_expr_can_be_used_in_table_function(const ObRawExpr &exp
     bret = true;
   } else if (T_FUN_SYS_GENERATOR == expr.get_expr_type()) {
     // for generator(N) stream function
+    bret = true;
+  } else if (T_FUN_SYS_AI_SPLIT_DOCUMENT == expr.get_expr_type()) {
+    // for AI_SPLIT_DOCUMENT(...) table function
     bret = true;
   }
   return bret;
