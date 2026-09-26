@@ -25,6 +25,7 @@
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "query/optimizer/stat/ob_optimizer_stat_service.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 
 namespace oceanbase
 {
@@ -128,17 +129,24 @@ void ObOptStatMonitorCheckTask::runTimerTask()
   }
 }
 
-int ObOptStatMonitorManager::init()
+int ObOptStatMonitorManager::init(
+    ObMySQLProxy *proxy,
+    share::schema::ObMultiVersionSchemaService *schema_service,
+    ObOptStatManager *stat_manager)
 {
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("column usage manager has already been initialized.", K(ret));
+  } else if (OB_ISNULL(proxy) || OB_ISNULL(schema_service) || OB_ISNULL(stat_manager)) {
+    ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(column_usage_map_.create(10000, "ColUsagHashMap", "ColUsagNode"))) {
   } else if (OB_FAIL(dml_stat_map_.create(10000, "DmlStatHashMap", "DmlStatNode"))) {
   } else {
     inited_ = true;
-    mysql_proxy_ = GCTX.sql_proxy_;
+    mysql_proxy_ = proxy;
+    schema_service_ = schema_service;
+    stat_manager_ = stat_manager;
     
     destroyed_ = false;
   }
@@ -178,12 +186,12 @@ int ObOptStatMonitorManager::flush_database_monitoring_info(sql::ObExecContext &
     } else if (0 >= timeout) {
       ret = OB_TIMEOUT;
       LOG_WARN("query timeout is reached", K(ret), K(timeout));
-    } else if (OB_FAIL(ex_rpc::sync_call([&]() -> int {
-      SERVER_MODULE_SCOPE {
-        return ::oceanbase::share::server_service<::oceanbase::common::ObOptStatMonitorManager>()->update_opt_stat_monitoring_info(arg);
-      }
-      return OB_SUCCESS;
-    }))) {
+    } else if (OB_ISNULL(observer::namespace_worker_prototype::
+                             effective_opt_stat_monitor_manager(ctx.get_my_session()))) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(observer::namespace_worker_prototype::
+                           effective_opt_stat_monitor_manager(ctx.get_my_session())
+                               ->update_opt_stat_monitoring_info(arg))) {
       LOG_WARN("failed to flush opt stat monitoring info caused by unknow error", K(ret), K(arg));
       //ignore flush cache failed, TODO @jiangxiu.wt can aduit it and flush cache manually later.
       if (ignore_failed) {
@@ -600,12 +608,16 @@ int ObOptStatMonitorManager::clean_useless_dml_stat_info()
   return ret;
 }
 
-int ObOptStatMonitorManager::server_module_init(ObOptStatMonitorManager* &optstat_monitor_mgr)
+int ObOptStatMonitorManager::server_module_init(
+    ObOptStatMonitorManager* &optstat_monitor_mgr,
+    ObMySQLProxy *proxy,
+    share::schema::ObMultiVersionSchemaService *schema_service,
+    ObOptStatManager *stat_manager)
 {
   int ret = OB_SUCCESS;
   
   if (OB_LIKELY(nullptr != optstat_monitor_mgr)) {
-    if (OB_FAIL(optstat_monitor_mgr->init())) {
+    if (OB_FAIL(optstat_monitor_mgr->init(proxy, schema_service, stat_manager))) {
     }
   }
   return ret;
@@ -621,6 +633,8 @@ int ObOptStatMonitorManager::server_module_start(ObOptStatMonitorManager* &optst
     } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::ObISharedTimer>()->schedule(
         optstat_monitor_mgr->get_check_task(),
         ObOptStatMonitorCheckTask::CHECK_INTERVAL, true))) {
+      ::oceanbase::share::server_service<::oceanbase::share::ObISharedTimer>()->cancel_task(
+          optstat_monitor_mgr->get_flush_all_task());
     } else {
       optstat_monitor_mgr->get_flush_all_task().disable_timeout_check();
       optstat_monitor_mgr->get_flush_all_task().optstat_monitor_mgr_ = optstat_monitor_mgr;
@@ -749,10 +763,10 @@ int ObOptStatMonitorManager::gen_tablet_list(const ObIArray<ObOptDmlStat> &dml_s
                   begin_idx >= end_idx || end_idx > dml_stats.count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(begin_idx), K(end_idx), K(dml_stats));
-  } else if (OB_ISNULL(GCTX.schema_service_)) {
+  } else if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(GCTX.schema_service_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("get unexpected error", K(ret), K(schema_service_));
+  } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard))) {
   } else {
     bool is_first = true;
     for (int64_t i = begin_idx; OB_SUCC(ret) && i < end_idx; ++i) {
@@ -876,7 +890,7 @@ int ObOptStatMonitorManager::mark_the_opt_stat_expired(const OptStatExpiredTable
                                                            part_infos,
                                                            subpart_infos,
                                                            partition_ids))) {
-  } else if (OB_FAIL(ObOptStatManager::get_instance().get_table_stat(expired_table_info.table_id_,
+  } else if (OB_FAIL(stat_manager_->get_table_stat(expired_table_info.table_id_,
                                                                      partition_ids,
                                                                      table_stats))) {
   } else if (OB_FAIL(get_async_stale_max_table_size(
@@ -905,7 +919,7 @@ int ObOptStatMonitorManager::mark_the_opt_stat_expired(const OptStatExpiredTable
     stat_arg.table_id_ = expired_table_info.table_id_;
     stat_arg.no_invalidate_ = true;
     if (OB_FAIL(append(stat_arg.partition_ids_, expired_partition_ids))) {
-    } else if (OB_FAIL(pl::ObDbmsStats::update_stat_cache(stat_arg))) {
+    } else if (OB_FAIL(pl::ObDbmsStats::update_stat_cache(*stat_manager_, stat_arg))) {
     }
   }
   return ret;
@@ -923,10 +937,10 @@ int ObOptStatMonitorManager::get_expired_table_part_info(ObIAllocator &allocator
   part_level = share::schema::ObPartitionLevel::PARTITION_LEVEL_MAX;
   part_infos.reset();
   subpart_infos.reset();
-  if (OB_ISNULL(GCTX.schema_service_) || OB_UNLIKELY(!expired_table_info.is_valid())) {
+  if (OB_ISNULL(schema_service_) || OB_UNLIKELY(!expired_table_info.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected error", K(ret), K(expired_table_info), K(GCTX.schema_service_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("get unexpected error", K(ret), K(expired_table_info), K(schema_service_));
+  } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema(
                                                    expired_table_info.table_id_,
                                                    table_schema))) {
@@ -1368,8 +1382,15 @@ int ObOptimizerStatService::report_dml_stat(
   stat.insert_row_count_ = inserted_rows;
   stat.update_row_count_ = updated_rows;
   stat.delete_row_count_ = deleted_rows;
+  const uint64_t physical_tablet_id = static_cast<uint64_t>(tablet_id);
+  const uint64_t owner_ns = ns::NamespaceObjectKey::is_encoded(physical_tablet_id)
+      ? ns::NamespaceObjectKey::encoded_namespace(physical_tablet_id) : 1;
+  ns::NamespaceRuntime *runtime = nullptr;
   common::ObOptStatMonitorManager *monitor =
-      ::oceanbase::share::server_service<::oceanbase::common::ObOptStatMonitorManager>();
+      ns::namespace_registry().get(owner_ns, runtime) && runtime != nullptr
+          ? static_cast<common::ObOptStatMonitorManager *>(
+                runtime->service(ns::NamespaceRuntime::OPT_STAT_MONITOR_MANAGER))
+          : nullptr;
   if (OB_ISNULL(monitor)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("optimizer stat monitor manager is null", K(ret));

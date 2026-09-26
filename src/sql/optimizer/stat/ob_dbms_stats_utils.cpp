@@ -16,8 +16,8 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "share/rc/ob_server_runtime.h"
-#include "share/rc/ob_server_runtime.h"
 #include "ob_dbms_stats_utils.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/ob_result_set.h"
@@ -139,7 +139,8 @@ int ObDbmsStatsUtils::check_range_skew(ObHistType hist_type,
   return ret;
 }
 
-int ObDbmsStatsUtils::batch_write(share::schema::ObSchemaGetterGuard *schema_guard,
+int ObDbmsStatsUtils::batch_write(ObOptStatManager &stat_manager,
+                                  share::schema::ObSchemaGetterGuard *schema_guard,
                                   sqlclient::ObISQLConnection *conn,
                                   ObIArray<ObOptTableStat *> &table_stats,
                                   ObIArray<ObOptColumnStat*> &column_stats,
@@ -149,7 +150,7 @@ int ObDbmsStatsUtils::batch_write(share::schema::ObSchemaGetterGuard *schema_gua
                                   const ObObjPrintParams &print_params)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObOptStatManager::get_instance().batch_write(schema_guard,
+  if (OB_FAIL(stat_manager.batch_write(schema_guard,
                                                            conn,
                                                            table_stats,
                                                            column_stats,
@@ -421,9 +422,11 @@ int ObDbmsStatsUtils::split_batch_write(sqlclient::ObISQLConnection *conn,
   //avoid the write stat sql is too long, we split write table stats and column stats:
   //  write 2000 tables and 2000 columns every time.
   int64_t current_time = ObTimeUtility::current_time();
-  if (OB_ISNULL(session_info)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(session_info));
+  ObOptStatManager *stat_manager = session_info == nullptr ? nullptr
+      : observer::namespace_worker_prototype::effective_opt_stat_manager(session_info);
+  if (OB_ISNULL(stat_manager)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("statistics manager is not bound", K(ret), KP(session_info));
   }
   while (OB_SUCC(ret) &&
         (idx_tab_stat < table_stats.count() || idx_col_stat < column_stats.count())) {
@@ -459,7 +462,7 @@ int ObDbmsStatsUtils::split_batch_write(sqlclient::ObISQLConnection *conn,
       }
     }
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObDbmsStatsUtils::batch_write(schema_guard,
+      if (OB_FAIL(ObDbmsStatsUtils::batch_write(*stat_manager, schema_guard,
                                                 conn,
                                                 write_table_stats,
                                                 write_column_stats,
@@ -950,7 +953,8 @@ int64_t ObDbmsStatsUtils::check_text_can_reuse(const ObObj &obj, bool &can_reuse
   return ret;
 }
 
-int ObDbmsStatsUtils::get_current_opt_stats(const ObTableStatParam &param,
+int ObDbmsStatsUtils::get_current_opt_stats(sql::ObExecContext &ctx,
+                                            const ObTableStatParam &param,
                                             ObIArray<ObOptTableStatHandle> &cur_tab_handles,
                                             ObIArray<ObOptColumnStatHandle> &cur_col_handles)
 {
@@ -958,11 +962,13 @@ int ObDbmsStatsUtils::get_current_opt_stats(const ObTableStatParam &param,
   ObSEArray<int64_t, 4> part_ids;
   ObSEArray<uint64_t, 4> column_ids;
   if (OB_FAIL(get_part_ids_and_column_ids(param, part_ids, column_ids))) {
-  } else if (OB_FAIL(erase_stat_cache( param.table_id_, part_ids, column_ids))) {
-  } else if (OB_FAIL(ObOptStatManager::get_instance().get_table_stat(param.table_id_,
+  } else if (OB_ISNULL(ctx.get_opt_stat_manager())) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(erase_stat_cache(ctx, param.table_id_, part_ids, column_ids))) {
+  } else if (OB_FAIL(ctx.get_opt_stat_manager()->get_table_stat(param.table_id_,
                                                                      part_ids,
                                                                      cur_tab_handles))) {
-  } else if (OB_FAIL(ObOptStatManager::get_instance().get_column_stat(param.table_id_,
+  } else if (OB_FAIL(ctx.get_opt_stat_manager()->get_column_stat(param.table_id_,
                                                                       part_ids,
                                                                       column_ids,
                                                                       cur_col_handles))) {
@@ -1010,13 +1016,16 @@ int ObDbmsStatsUtils::get_part_ids_and_column_ids(const ObTableStatParam &param,
   return ret;
 }
 
-int ObDbmsStatsUtils::erase_stat_cache(const uint64_t table_id,
+int ObDbmsStatsUtils::erase_stat_cache(sql::ObExecContext &ctx,
+                                       const uint64_t table_id,
                                        const ObIArray<int64_t> &part_ids,
                                        const ObIArray<uint64_t> &column_ids)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObOptStatManager::get_instance().erase_table_stat(table_id, part_ids))) {
-  } else if (OB_FAIL(ObOptStatManager::get_instance().erase_column_stat(table_id,
+  if (OB_ISNULL(ctx.get_opt_stat_manager())) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(ctx.get_opt_stat_manager()->erase_table_stat(table_id, part_ids))) {
+  } else if (OB_FAIL(ctx.get_opt_stat_manager()->erase_column_stat(table_id,
                                                                         part_ids,
                                                                         column_ids))) {
   } else {/*do nothing*/}
@@ -1118,7 +1127,8 @@ int ObDbmsStatsUtils::prepare_gather_stat_param(const ObTableStatParam &param,
   return ret;
 }
 
-int ObDbmsStatsUtils::get_current_opt_stats(ObIAllocator &allocator,
+int ObDbmsStatsUtils::get_current_opt_stats(sql::ObExecContext &ctx,
+                                            ObIAllocator &allocator,
                                             sqlclient::ObISQLConnection *conn,
                                             const ObTableStatParam &param,
                                             ObIArray<ObOptTableStat *> &table_stats,
@@ -1127,14 +1137,14 @@ int ObDbmsStatsUtils::get_current_opt_stats(ObIAllocator &allocator,
   int ret = OB_SUCCESS;
   ObSEArray<int64_t, 4> part_ids;
   ObSEArray<uint64_t, 4> column_ids;
-  if (OB_ISNULL(conn)) {
+  if (OB_ISNULL(conn) || OB_ISNULL(ctx.get_opt_stat_manager())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret));
   } else if (OB_FAIL(get_part_ids_and_column_ids(param, part_ids, column_ids))) {
   } else if (OB_FAIL(table_stats.prepare_allocate(part_ids.count()))) {
   } else if (OB_FAIL(column_stats.prepare_allocate(part_ids.count() * column_ids.count())))  {
   } else {
-    ObOptStatManager &stat_manager = ObOptStatManager::get_instance();
+    ObOptStatManager &stat_manager = *ctx.get_opt_stat_manager();
     ObSEArray<ObOptKeyColumnStat, 4> key_column_stats;
     for (int64_t i = 0; OB_SUCC(ret) && i < part_ids.count(); ++i) {
       void *ptr = NULL;

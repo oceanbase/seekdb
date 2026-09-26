@@ -15,6 +15,7 @@
  */
 
 #include "ob_all_virtual_dml_stats.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "share/rc/ob_server_runtime.h"
 
 namespace oceanbase
@@ -122,17 +123,16 @@ int ObAllVirtualDMmlStats::fill_scanner()
     ret = OB_ERR_UNEXPECTED;
   } else {
     port_ = addr.get_port();
-    SERVER_MODULE_SCOPE {
-      ObOptDmlStatMapGetter getter(scanner_, output_column_ids_, svr_ip_, port_, cur_row_);
-      ObOptStatMonitorManager *optstat_monitor_mgr = ::oceanbase::share::server_service<::oceanbase::common::ObOptStatMonitorManager>();
-      if (OB_ISNULL(optstat_monitor_mgr)) {
-        ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "optstat monitor mgr is NULL", K(ret));
-      } else if (OB_FAIL(optstat_monitor_mgr->generate_opt_stat_monitoring_info_rows(getter))) {
-      } else {
-        scanner_it_ = scanner_.begin();
-        start_to_read_ = true;
-      }
+    ObOptDmlStatMapGetter getter(scanner_, output_column_ids_, svr_ip_, port_, cur_row_);
+    ObOptStatMonitorManager *optstat_monitor_mgr =
+        namespace_worker_prototype::effective_opt_stat_monitor_manager(session_);
+    if (OB_ISNULL(optstat_monitor_mgr)) {
+      ret = OB_NOT_INIT;
+      SERVER_LOG(WARN, "optstat monitor mgr is NULL", K(ret));
+    } else if (OB_FAIL(optstat_monitor_mgr->generate_opt_stat_monitoring_info_rows(getter))) {
+    } else {
+      scanner_it_ = scanner_.begin();
+      start_to_read_ = true;
     }
   }
   return ret;

@@ -25,6 +25,7 @@ namespace oceanbase
 using namespace sql;
 namespace common
 {
+class ObOptStatManager;
 
 class ObIndexStatsEstimator : public ObBasicStatsEstimator
 {
@@ -51,7 +52,8 @@ private:
                                const ObOptStatGatherParam &param,
                                const int64_t dst_partition_id);
 
-  static int fast_get_index_avg_len(const int64_t data_partition_id,
+  static int fast_get_index_avg_len(ObOptStatManager &mgr,
+                                    const int64_t data_partition_id,
                                     const ObTableStatParam &data_param,
                                     const ObTableStatParam &index_param,
                                     bool &is_fast_get,

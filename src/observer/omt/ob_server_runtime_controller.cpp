@@ -1512,10 +1512,23 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(ObMultiVersionGarbageCollector::server_module_init(mods_multi_version_garbage_collector_))) { SERVER_LOG(WARN, "mods_multi_version_garbage_collector_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObEmptyReadBucket::server_module_init(mods_empty_read_bucket_))) { SERVER_LOG(WARN, "mods_empty_read_bucket_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObDBMSSchedService::server_module_init(mods_dbms_sched_service_))) { SERVER_LOG(WARN, "mods_dbms_sched_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObOptStatMonitorManager::server_module_init(mods_opt_stat_monitor_manager_))) { SERVER_LOG(WARN, "mods_opt_stat_monitor_manager_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(ObOptStatMonitorManager::server_module_init(
+      mods_opt_stat_monitor_manager_, &sql_proxy_,
+      &ObMultiVersionSchemaService::get_instance(),
+      &ObOptStatManager::get_instance()))) {
+    SERVER_LOG(WARN, "mods_opt_stat_monitor_manager_ fail", KR(ret));
+  }
+  if (OB_SUCC(ret)) {
+    ns::NamespaceRuntime *root_runtime = nullptr;
+    if (!ns::namespace_registry().get(1, root_runtime) || root_runtime == nullptr) {
+      ret = OB_NOT_INIT;
+    } else {
+      root_runtime->set_service(ns::NamespaceRuntime::OPT_STAT_MONITOR_MANAGER,
+          mods_opt_stat_monitor_manager_);
+    }
+  }
   if (OB_SUCC(ret) && OB_FAIL(omt::ObSrsService::server_module_init(mods_srs_service_))) { SERVER_LOG(WARN, "mods_srs_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(sql_engine_.init(
-      &ObOptStatManager::get_instance(),
       &vt_data_service_,
       self_addr_,
       *mods_plan_cache_,
@@ -1625,6 +1638,7 @@ void ObServer::obs_stop_modules()
   server_module_stop_default(mods_plugin_vector_index_service_);
   server_module_stop_default(mods_rb_mem_mgr_);
   ObOptStatMonitorManager::server_module_stop(mods_opt_stat_monitor_manager_);
+  namespace_worker_prototype::stop_in_process_opt_stat_monitors();
   server_module_stop_default(mods_dbms_sched_service_);
   server_module_stop_default(mods_multi_version_garbage_collector_);
   server_module_stop_default(mods_tx_loop_worker_);
@@ -1669,6 +1683,7 @@ void ObServer::obs_wait_modules()
   server_module_wait_default(mods_plugin_vector_index_service_);
   server_module_wait_default(mods_rb_mem_mgr_);
   ObOptStatMonitorManager::server_module_wait(mods_opt_stat_monitor_manager_);
+  namespace_worker_prototype::wait_in_process_opt_stat_monitors();
   server_module_wait_default(mods_dbms_sched_service_);
   server_module_wait_default(mods_multi_version_garbage_collector_);
   server_module_wait_default(mods_tx_loop_worker_);

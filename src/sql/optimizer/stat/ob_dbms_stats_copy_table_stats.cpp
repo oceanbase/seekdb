@@ -383,7 +383,7 @@ int ObDbmsStatsCopyTableStats::copy_tab_col_stats(sql::ObExecContext &ctx,
   ObSEArray<ObOptColumnStatHandle, 4> col_handles;
   ObSEArray<ObOptTableStat *, 1> table_stats;
   ObSEArray<ObOptColumnStat *, 4> column_stats;
-  if (OB_FAIL(ObDbmsStatsUtils::get_current_opt_stats(table_stat_param,
+  if (OB_FAIL(ObDbmsStatsUtils::get_current_opt_stats(ctx, table_stat_param,
                                                       tab_handles,
                                                       col_handles))) {
   } else if (OB_FAIL(find_src_tab_stat(table_stat_param, tab_handles, copy_stat_helper.src_part_stat_))) {

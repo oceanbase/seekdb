@@ -32,6 +32,7 @@ namespace  common
 ObOptStatManager::ObOptStatManager()
   : inited_(false),
     stat_service_(),
+    plan_cache_(nullptr),
     last_schema_version_(-1)
 {
 }
@@ -71,13 +72,14 @@ int ObOptStatManager::refresh_on_schema_change(int64_t schema_version)
 #endif
 
 int ObOptStatManager::init(ObMySQLProxy *proxy,
-                           ObServerConfig *config)
+                           ObServerConfig *config,
+                           const uint64_t namespace_id)
 {
   int ret = OB_SUCCESS;
   if (inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("optimizer statistics manager has already been initialized.", K(ret));
-  } else if (OB_FAIL(stat_service_.init(proxy, config))) {
+  } else if (OB_FAIL(stat_service_.init(proxy, config, namespace_id))) {
   } else {
     inited_ = true;
   }
@@ -418,13 +420,11 @@ int ObOptStatManager::refresh_system_stat_cache(const obcall::ObUpdateStatCacheA
     }
   }
   if (OB_SUCC(ret)) {
-    SERVER_MODULE_SCOPE {
-      sql::ObPlanCache *pc = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
-      if (OB_FAIL(pc->flush_plan_cache())) {
-        LOG_WARN("failed to evict plan", K(ret));
-        // use OB_SQL_PC_NOT_EXIST represent evict plan failed
-        ret = OB_SQL_PC_NOT_EXIST;
-      }
+    if (OB_ISNULL(plan_cache_)) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(plan_cache_->flush_plan_cache())) {
+      LOG_WARN("failed to evict plan", K(ret));
+      ret = OB_SQL_PC_NOT_EXIST;
     }
   }
   return ret;
@@ -433,14 +433,11 @@ int ObOptStatManager::refresh_system_stat_cache(const obcall::ObUpdateStatCacheA
 int ObOptStatManager::invalidate_plan(const uint64_t table_id)
 {
   int ret = OB_SUCCESS;
-  SERVER_MODULE_SCOPE {
-    sql::ObPlanCache *pc = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
-
-    if (OB_FAIL(pc->evict_plan(table_id))) {
-      LOG_WARN("failed to evict plan", K(ret));
-      // use OB_SQL_PC_NOT_EXIST represent evict plan failed
-      ret = OB_SQL_PC_NOT_EXIST;
-    }
+  if (OB_ISNULL(plan_cache_)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(plan_cache_->evict_plan(table_id))) {
+    LOG_WARN("failed to evict plan", K(ret));
+    ret = OB_SQL_PC_NOT_EXIST;
   }
   return ret;
 }

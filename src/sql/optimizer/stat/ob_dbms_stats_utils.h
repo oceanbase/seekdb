@@ -166,11 +166,13 @@ public:
 
   static int64_t check_text_can_reuse(const ObObj &obj, bool &can_reuse);
 
-  static int get_current_opt_stats(const ObTableStatParam &param,
+  static int get_current_opt_stats(sql::ObExecContext &ctx,
+                                   const ObTableStatParam &param,
                                    ObIArray<ObOptTableStatHandle> &cur_tab_handles,
                                    ObIArray<ObOptColumnStatHandle> &cur_col_handles);
 
-  static int get_current_opt_stats(ObIAllocator &allocator,
+  static int get_current_opt_stats(sql::ObExecContext &ctx,
+                                   ObIAllocator &allocator,
                                    sqlclient::ObISQLConnection *conn,
                                    const ObTableStatParam &param,
                                    ObIArray<ObOptTableStat *> &table_stats,
@@ -181,7 +183,8 @@ public:
                                          ObIArray<uint64_t> &column_ids,
                                          bool need_stat_column = false);
 
-  static int erase_stat_cache(const uint64_t table_id,
+  static int erase_stat_cache(sql::ObExecContext &ctx,
+                              const uint64_t table_id,
                               const ObIArray<int64_t> &part_ids,
                               const ObIArray<uint64_t> &column_ids);
 
@@ -266,7 +269,8 @@ public:
                                    int64_t &index_count);
 
 private:
-  static int batch_write(share::schema::ObSchemaGetterGuard *schema_guard,
+  static int batch_write(common::ObOptStatManager &stat_manager,
+                         share::schema::ObSchemaGetterGuard *schema_guard,
                          sqlclient::ObISQLConnection *conn,
                          ObIArray<ObOptTableStat *> &table_stats,
                          ObIArray<ObOptColumnStat*> &column_stats,

@@ -841,10 +841,10 @@ int ObDbmsStatsExecutor::set_table_stats(ObExecContext &ctx,
                                          const ObSetTableStatParam &param)
 {
   int ret = OB_SUCCESS;
-  UNUSED(ctx);
+  if (OB_ISNULL(ctx.get_opt_stat_manager())) { return OB_NOT_INIT; }
   ObArenaAllocator alloc("ObSetTableStats", OB_MALLOC_NORMAL_BLOCK_SIZE);
   ObOptTableStat table_stat;
-  ObOptStatManager &mgr = ObOptStatManager::get_instance();
+  ObOptStatManager &mgr = *ctx.get_opt_stat_manager();
   int64_t partition_id = param.table_param_.global_part_id_;
   ObOptTableStat::Key key(param.table_param_.table_id_, partition_id);
   StatLevel stat_level = TABLE_LEVEL;
@@ -901,9 +901,9 @@ int ObDbmsStatsExecutor::set_column_stats(ObExecContext &ctx,
                                           const ObSetColumnStatParam &param)
 {
   int ret = OB_SUCCESS;
-  UNUSED(ctx);
+  if (OB_ISNULL(ctx.get_opt_stat_manager())) { return OB_NOT_INIT; }
   ObOptColumnStatHandle col_stat_handle;
-  ObOptStatManager &mgr = ObOptStatManager::get_instance();
+  ObOptStatManager &mgr = *ctx.get_opt_stat_manager();
   ObOptColumnStat::Key key;
   ObSEArray<ObOptColumnStat *, 4> column_stats;
   ObIAllocator *alloc = NULL;
@@ -1062,7 +1062,7 @@ int ObDbmsStatsExecutor::delete_table_stats(ObExecContext &ctx,
                                             const bool cascade_columns)
 {
   int ret = OB_SUCCESS;
-  UNUSED(ctx);
+  if (OB_ISNULL(ctx.get_opt_stat_manager())) { return OB_NOT_INIT; }
   ObSEArray<int64_t, 4> part_ids;
   ObSEArray<int64_t, 4> no_stats_partition_ids;
   ObSEArray<uint64_t, 4> part_stattypes;
@@ -1104,7 +1104,7 @@ int ObDbmsStatsExecutor::delete_table_stats(ObExecContext &ctx,
     } else if (!param.is_temp_table_ &&
                OB_FAIL(ObDbmsStatsHistoryManager::backup_opt_stats(ctx, trans, param, ObTimeUtility::current_time()))) {
       LOG_WARN("failed to backup opt stats", K(ret));
-    } else if (OB_FAIL(ObOptStatManager::get_instance().delete_table_stat(table_id,
+    } else if (OB_FAIL(ctx.get_opt_stat_manager()->delete_table_stat(table_id,
                                                                           part_ids,
                                                                           cascade_columns,
                                                                           param.degree_,
@@ -1128,7 +1128,7 @@ int ObDbmsStatsExecutor::delete_column_stats(ObExecContext &ctx,
                                              const bool only_histogram)
 {
   int ret = OB_SUCCESS;
-  UNUSED(ctx);
+  if (OB_ISNULL(ctx.get_opt_stat_manager())) { return OB_NOT_INIT; }
   uint64_t table_id = param.table_id_;
   ObSEArray<int64_t, 4> part_ids;
   ObSEArray<uint64_t, 4> column_ids;
@@ -1158,7 +1158,7 @@ int ObDbmsStatsExecutor::delete_column_stats(ObExecContext &ctx,
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(ObOptStatManager::get_instance().delete_column_stat(table_id,
+    if (OB_FAIL(ctx.get_opt_stat_manager()->delete_column_stat(table_id,
                                                                     column_ids,
                                                                     part_ids,
                                                                     only_histogram,
@@ -1389,7 +1389,7 @@ int ObDbmsStatsExecutor::update_online_stat(ObExecContext &ctx,
       } else if (OB_ISNULL(conn = conn_guard.get_ptr())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("inner sql connection is null", K(ret));
-      } else if (OB_FAIL(ObDbmsStatsUtils::get_current_opt_stats(allocator,
+      } else if (OB_FAIL(ObDbmsStatsUtils::get_current_opt_stats(ctx, allocator,
                                                                  conn,
                                                                  param,
                                                                  cur_table_stats,
@@ -1432,7 +1432,7 @@ int ObDbmsStatsExecutor::update_online_stat(ObExecContext &ctx,
       //update stat cache
       if (succ_to_write_stats) {
         int tmp_ret = OB_SUCCESS;
-        if (OB_SUCCESS != (tmp_ret = pl::ObDbmsStats::update_stat_cache(param))) {
+        if (OB_SUCCESS != (tmp_ret = pl::ObDbmsStats::update_stat_cache(ctx, param))) {
           ret = COVER_SUCC(tmp_ret);
           LOG_WARN("fail to update stat cache", K(tmp_ret));
         }
@@ -1568,6 +1568,7 @@ int ObDbmsStatsExecutor::cancel_gather_stats(ObExecContext &ctx, ObString &task_
 int ObDbmsStatsExecutor::gather_system_stats(ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
+  if (OB_ISNULL(ctx.get_opt_stat_manager())) { return OB_NOT_INIT; }
   query::ObIQueryRuntimeEnvironment *runtime_environment =
       ctx.get_query_runtime_environment();
   int64_t cpu_mhz = 0;
@@ -1593,7 +1594,7 @@ int ObDbmsStatsExecutor::gather_system_stats(ObExecContext &ctx)
   }
   if (OB_SUCC(ret)) {
     ObOptSystemStat system_stat;
-    ObOptStatManager &mgr = ObOptStatManager::get_instance();
+    ObOptStatManager &mgr = *ctx.get_opt_stat_manager();
     int64_t current_time = ObTimeUtility::current_time();
     system_stat.set_last_analyzed(current_time);
     system_stat.set_cpu_speed(cpu_mhz);
@@ -1609,8 +1610,8 @@ int ObDbmsStatsExecutor::gather_system_stats(ObExecContext &ctx)
 int ObDbmsStatsExecutor::delete_system_stats(ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
-  UNUSED(ctx);
-  ObOptStatManager &mgr = ObOptStatManager::get_instance();
+  if (OB_ISNULL(ctx.get_opt_stat_manager())) { return OB_NOT_INIT; }
+  ObOptStatManager &mgr = *ctx.get_opt_stat_manager();
   if (OB_FAIL(mgr.delete_system_stats())) {
   }
   return ret;
@@ -1619,9 +1620,9 @@ int ObDbmsStatsExecutor::delete_system_stats(ObExecContext &ctx)
 int ObDbmsStatsExecutor::set_system_stats(ObExecContext &ctx, const ObSetSystemStatParam &param)
 {
   int ret = OB_SUCCESS;
-  UNUSED(ctx);
+  if (OB_ISNULL(ctx.get_opt_stat_manager())) { return OB_NOT_INIT; }
   ObOptSystemStat system_stat;
-  ObOptStatManager &mgr = ObOptStatManager::get_instance();
+  ObOptStatManager &mgr = *ctx.get_opt_stat_manager();
   if (OB_FAIL(mgr.get_system_stat(system_stat))) {
   } else if (ObCharset::case_insensitive_equal(param.name_, "cpu_speed")) {
     system_stat.set_cpu_speed(param.value_);

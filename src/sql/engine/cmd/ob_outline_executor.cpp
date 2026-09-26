@@ -230,12 +230,14 @@ int ObOutlineExecutor::get_outline(ObExecContext &ctx, ObDMLStmt *outline_stmt, 
   } else if (OB_ISNULL(ctx.get_expr_factory())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(ctx.get_expr_factory()));
+  } else if (OB_ISNULL(ctx.get_opt_stat_manager())) {
+    ret = OB_NOT_INIT;
   } else {
     const ObGlobalHint &global_hint = outline_stmt->get_query_ctx()->get_global_hint();
     ObOptimizerContext optctx(session_info,
                               &ctx,
                               &outline_stmt->get_query_ctx()->sql_schema_guard_,
-                              &ObOptStatManager::get_instance(),
+                              ctx.get_opt_stat_manager(),
                               ctx.get_allocator(),
                               &pctx->get_param_store(),
                               GCTX.self_addr(),

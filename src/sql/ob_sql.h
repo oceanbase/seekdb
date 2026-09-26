@@ -103,8 +103,7 @@ class ObSql : public ObIPLSqlRuntime,
   static const int64_t SQL_MEM_SIZE_LIMIT;
 public:
   /// init SQL module
-  int init(common::ObOptStatManager *opt_stat_mgr,
-           common::ObITabletScan *vt_partition_service,
+  int init(common::ObITabletScan *vt_partition_service,
            common::ObAddr &addr,
            ObPlanCache &plan_cache,
            ObPsCache &ps_cache,
@@ -272,7 +271,6 @@ public:
 public:
   ObSql()
   : inited_(false),
-    opt_stat_mgr_(NULL),
     vt_partition_service_(NULL),
     plan_cache_(NULL),
     ps_cache_(NULL),
@@ -542,7 +540,6 @@ public:
 private:
   bool inited_;
   // Process-lifetime collaborators supplied by the Observer composition root.
-  common::ObOptStatManager *opt_stat_mgr_;
   common::ObITabletScan *vt_partition_service_;
   ObPlanCache *plan_cache_;
   ObPsCache *ps_cache_;

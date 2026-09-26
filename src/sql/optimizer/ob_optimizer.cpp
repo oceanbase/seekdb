@@ -21,6 +21,7 @@
 #include "sql/optimizer/ob_select_log_plan.h"
 #include "sql/optimizer/ob_opt_cost_model_parameter.h"
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 
 using namespace oceanbase;
@@ -861,8 +862,10 @@ int ObOptimizer::set_auto_dop_params(const ObSQLSessionInfo &session)
     if (OB_ISNULL(runtime = share::server_runtime())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret));
+    } else if (session.is_user_session() && OB_ISNULL(session.effective_schema_service())) {
+      ret = OB_NOT_INIT;
     } else if (session.is_user_session() &&
-               OB_FAIL(ObSchemaUtils::get_runtime_int_variable(*GCTX.schema_service_,
+               OB_FAIL(ObSchemaUtils::get_runtime_int_variable(*session.effective_schema_service(),
                                                               SYS_VAR_PARALLEL_SERVERS_TARGET,
                                                               parallel_servers_target))) {
       LOG_WARN("fail to read runtime variable", K(ret));
@@ -1104,13 +1107,12 @@ int ObOptimizer::update_column_usage_infos()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(session));
   } else {
-    SERVER_MODULE_SCOPE {
-      ObOptStatMonitorManager *optstat_monitor_mgr = NULL;
-      if (OB_ISNULL(optstat_monitor_mgr = ::oceanbase::share::server_service<::oceanbase::common::ObOptStatMonitorManager>())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected null", K(ret), K(optstat_monitor_mgr));
-      } else if (OB_FAIL(optstat_monitor_mgr->update_local_cache(ctx_.get_column_usage_infos()))) {
-      } else {/*do nothing*/}
+    ObOptStatMonitorManager *optstat_monitor_mgr =
+        observer::namespace_worker_prototype::effective_opt_stat_monitor_manager(session);
+    if (OB_ISNULL(optstat_monitor_mgr)) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("optimizer statistics monitor is unavailable", K(ret));
+    } else if (OB_FAIL(optstat_monitor_mgr->update_local_cache(ctx_.get_column_usage_infos()))) {
     }
   }
   return ret;

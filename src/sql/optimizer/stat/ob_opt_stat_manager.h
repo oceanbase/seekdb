@@ -28,6 +28,7 @@
 #include "sql/optimizer/stat/ob_opt_system_stat.h"
 
 namespace oceanbase {
+namespace sql { class ObPlanCache; }
 namespace common {
 class ObOptColumnStatHandle;
 
@@ -37,7 +38,8 @@ public:
   ObOptStatManager();
   virtual ~ObOptStatManager() {}
   virtual int init(ObMySQLProxy *proxy,
-                   ObServerConfig *config);
+                   ObServerConfig *config,
+                   const uint64_t namespace_id);
   static int64_t get_default_data_size();
 
   static int64_t get_default_avg_row_size();
@@ -168,6 +170,7 @@ public:
     return instance_;
   }
   bool is_inited() const { return inited_; }
+  void bind_plan_cache(sql::ObPlanCache &plan_cache) { plan_cache_ = &plan_cache; }
   ObOptStatSqlService &get_stat_sql_service()
   {
     return stat_service_.get_sql_service();
@@ -211,6 +214,7 @@ private:
 protected:
   bool inited_;
   ObOptStatService stat_service_;
+  sql::ObPlanCache *plan_cache_;
   int64_t last_schema_version_;
 };
 

@@ -54,7 +54,7 @@ int ObIncrementalStatEstimator::derive_split_gather_stats(ObExecContext &ctx,
     ObSEArray<ObOptStat, 4> derive_opt_stats;
     ObTableStatParam new_param;
     if (OB_FAIL(prepare_get_opt_stats_param(param, derive_part_stat, new_param))) {
-    } else if (OB_FAIL(ObDbmsStatsUtils::get_current_opt_stats(allocator,
+    } else if (OB_FAIL(ObDbmsStatsUtils::get_current_opt_stats(ctx, allocator,
                                                                trans.get_connection(),
                                                                new_param,
                                                                cur_table_stats,
@@ -243,6 +243,7 @@ int ObIncrementalStatEstimator::generate_all_opt_stat(ObIArray<ObOptTableStat *>
 }
 
 int ObIncrementalStatEstimator::get_table_and_column_stats(
+                                                       ObOptStatManager &stat_manager,
                                                        ObOptStat &src_opt_stat,
                                                        const ObTableStatParam &param,
                                                        ObIArray<ObOptTableStat> &table_stats,
@@ -253,10 +254,10 @@ int ObIncrementalStatEstimator::get_table_and_column_stats(
   ObSEArray<int64_t, 4> part_ids;
   ObSEArray<uint64_t, 4> column_ids;
   if (OB_FAIL(get_part_ids_and_column_ids_info(src_opt_stat, param, part_ids, column_ids))) {
-  } else if (OB_FAIL(ObOptStatManager::get_instance().get_table_stat(table_id,
+  } else if (OB_FAIL(stat_manager.get_table_stat(table_id,
                                                                      part_ids,
                                                                      table_stats))) {
-  } else if (OB_FAIL(ObOptStatManager::get_instance().get_column_stat(table_id,
+  } else if (OB_FAIL(stat_manager.get_column_stat(table_id,
                                                                       part_ids,
                                                                       column_ids,
                                                                       col_handles))) {
@@ -658,7 +659,8 @@ int ObIncrementalStatEstimator::derive_global_histogram(ObIArray<ObHistogram> &a
   return ret;
 }
 
-int ObIncrementalStatEstimator::get_no_regather_partition_stats(const uint64_t table_id,
+int ObIncrementalStatEstimator::get_no_regather_partition_stats(ObOptStatManager &stat_manager,
+    const uint64_t table_id,
     const ObIArray<uint64_t> &column_ids,
     const ObIArray<int64_t> &no_regather_partition_ids,
     ObIArray<ObOptTableStat> &no_regather_table_stats,
@@ -668,10 +670,10 @@ int ObIncrementalStatEstimator::get_no_regather_partition_stats(const uint64_t t
   int ret = OB_SUCCESS;
   if (no_regather_partition_ids.empty()) {
     /*do nothing*/
-  } else if (OB_FAIL(ObOptStatManager::get_instance().get_table_stat(table_id,
+  } else if (OB_FAIL(stat_manager.get_table_stat(table_id,
                                                                      no_regather_partition_ids,
                                                                      no_regather_table_stats))) {
-  } else if (OB_FAIL(ObOptStatManager::get_instance().get_column_stat(table_id,
+  } else if (OB_FAIL(stat_manager.get_column_stat(table_id,
                                                                       no_regather_partition_ids,
                                                                       column_ids,
                                                                       no_regather_col_handles))) {
@@ -697,6 +699,7 @@ int ObIncrementalStatEstimator::get_column_ids(const ObIArray<ObColumnStatParam>
 
 
 int ObIncrementalStatEstimator::get_no_regather_subpart_stats(
+    ObOptStatManager &stat_manager,
     const ObTableStatParam &param,
     ObIArray<ObOptTableStat> &no_regather_table_stats,
     ObIArray<ObOptColumnStatHandle> &no_regather_col_handles,
@@ -715,7 +718,7 @@ int ObIncrementalStatEstimator::get_no_regather_subpart_stats(
   if (OB_SUCC(ret)) {
     ObSEArray<uint64_t, 4> column_ids;
     if (OB_FAIL(get_column_ids(param.column_params_, column_ids))) {
-    } else if (OB_FAIL(get_no_regather_partition_stats(param.table_id_,
+    } else if (OB_FAIL(get_no_regather_partition_stats(stat_manager, param.table_id_,
                                                        column_ids,
                                                        derive_need_no_regather_subpart_ids,
                                                        no_regather_table_stats,
@@ -727,6 +730,7 @@ int ObIncrementalStatEstimator::get_no_regather_subpart_stats(
 }
 
 int ObIncrementalStatEstimator::get_all_part_opt_stats(
+    ObOptStatManager &stat_manager,
     const ObTableStatParam param,
     const ObIArray<PartInfo> &partition_infos,
     ObIArray<ObOptTableStat> &part_tab_stats,
@@ -742,10 +746,10 @@ int ObIncrementalStatEstimator::get_all_part_opt_stats(
     LOG_WARN("get unexpected error", K(ret), K(param));
   } else if (OB_FAIL(get_partition_ids(partition_infos, partition_ids))) {
   } else if (OB_FAIL(get_column_ids(param.column_params_, column_ids))) {
-  } else if (OB_FAIL(ObOptStatManager::get_instance().get_table_stat(param.table_id_,
+  } else if (OB_FAIL(stat_manager.get_table_stat(param.table_id_,
                                                                      partition_ids,
                                                                      part_tab_stats))) {
-  } else if (OB_FAIL(ObOptStatManager::get_instance().get_column_stat(param.table_id_,
+  } else if (OB_FAIL(stat_manager.get_column_stat(param.table_id_,
                                                                       partition_ids,
                                                                       column_ids,
                                                                       part_col_handles))) {

@@ -23,6 +23,7 @@
 #include "sql/optimizer/stat/ob_stat_define.h"
 namespace oceanbase
 {
+namespace share { namespace schema { class ObMultiVersionSchemaService; } }
 namespace common
 {
 typedef std::pair<uint64_t, uint64_t> StatKey;
@@ -45,6 +46,7 @@ public:
 
 class ObMySQLProxy;
 class ObOptStatMonitorManager;
+class ObOptStatManager;
 struct ObColumnStatParam;
 
 struct ColumnUsageArg
@@ -109,11 +111,14 @@ public:
   ObOptStatMonitorManager()
     : inited_(false),
       destroyed_(false),
-      mysql_proxy_(NULL)
+      mysql_proxy_(NULL), schema_service_(NULL), stat_manager_(NULL)
       {}
   virtual ~ObOptStatMonitorManager() { if (inited_) { destroy(); }  }
   void destroy();
-  static int server_module_init(ObOptStatMonitorManager* &optstat_monitor_mgr);
+  static int server_module_init(ObOptStatMonitorManager* &optstat_monitor_mgr,
+                                ObMySQLProxy *proxy,
+                                share::schema::ObMultiVersionSchemaService *schema_service,
+                                ObOptStatManager *stat_manager);
   static int server_module_start(ObOptStatMonitorManager* &optstat_monitor_mgr);
   static void server_module_stop(ObOptStatMonitorManager* &optstat_monitor_mgr);
   static void server_module_wait(ObOptStatMonitorManager* &optstat_monitor_mgr);
@@ -153,7 +158,9 @@ public:
   int get_dml_stats(ObIArray<ObOptDmlStat> &dml_stats);
   ObOptStatMonitorFlushAllTask &get_flush_all_task() { return flush_all_task_; }
   ObOptStatMonitorCheckTask &get_check_task() { return check_task_; }
-  int init();
+  int init(ObMySQLProxy *proxy,
+           share::schema::ObMultiVersionSchemaService *schema_service,
+           ObOptStatManager *stat_manager);
   int check_opt_stats_expired(ObIArray<ObOptDmlStat> &dml_stats);
   int get_opt_stats_expired_table_info(ObIArray<ObOptDmlStat> &dml_stats,
                                        ObIArray<OptStatExpiredTableInfo> &stale_infos);
@@ -211,6 +218,8 @@ private:
   
   bool destroyed_;
   ObMySQLProxy *mysql_proxy_;
+  share::schema::ObMultiVersionSchemaService *schema_service_;
+  ObOptStatManager *stat_manager_;
   ColumnUsageMap column_usage_map_;
   DmlStatMap dml_stat_map_;
   common::SpinRWLock lock_;

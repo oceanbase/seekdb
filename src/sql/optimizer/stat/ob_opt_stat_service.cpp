@@ -265,9 +265,22 @@ int ObOptStatService::load_column_stat_and_put_cache(ObIArray<const ObOptColumnS
   return ret;
 }
 
-int ObOptStatService::init(common::ObMySQLProxy *proxy, ObServerConfig *config)
+int ObOptStatService::init(common::ObMySQLProxy *proxy, ObServerConfig *config,
+                           const uint64_t namespace_id)
 {
   int ret = OB_SUCCESS;
+  char table_cache_name[MAX_CACHE_NAME_LENGTH];
+  char column_cache_name[MAX_CACHE_NAME_LENGTH];
+  char ds_cache_name[MAX_CACHE_NAME_LENGTH];
+  char system_cache_name[MAX_CACHE_NAME_LENGTH];
+  snprintf(table_cache_name, sizeof(table_cache_name), "opt_table_stat_cache_%llu",
+           static_cast<unsigned long long>(namespace_id));
+  snprintf(column_cache_name, sizeof(column_cache_name), "opt_column_stat_cache_%llu",
+           static_cast<unsigned long long>(namespace_id));
+  snprintf(ds_cache_name, sizeof(ds_cache_name), "opt_ds_stat_cache_%llu",
+           static_cast<unsigned long long>(namespace_id));
+  snprintf(system_cache_name, sizeof(system_cache_name), "opt_system_stat_cache_%llu",
+           static_cast<unsigned long long>(namespace_id));
   if (inited_) {
     ret = OB_INIT_TWICE;
     LOG_WARN("col stat service has been initialized.", K(ret));
@@ -276,12 +289,12 @@ int ObOptStatService::init(common::ObMySQLProxy *proxy, ObServerConfig *config)
     LOG_WARN("invalid proxy object.", KP(proxy), K(ret));
   } else if (OB_FAIL(sql_service_.init(proxy, config))) {
   } else if (OB_FAIL(table_stat_cache_.init(
-      "opt_table_stat_cache", DEFAULT_TAB_STAT_CACHE_PRIORITY))) {
-  } else if (OB_FAIL(column_stat_cache_.init("opt_column_stat_cache",
+      table_cache_name, DEFAULT_TAB_STAT_CACHE_PRIORITY))) {
+  } else if (OB_FAIL(column_stat_cache_.init(column_cache_name,
                                              DEFAULT_COL_STAT_CACHE_PRIORITY))) {
-  } else if (OB_FAIL(ds_stat_cache_.init("opt_ds_stat_cache",
+  } else if (OB_FAIL(ds_stat_cache_.init(ds_cache_name,
                                           DEFAULT_DS_STAT_CACHE_PRIORITY))) {
-  } else if (OB_FAIL(system_stat_cache_.init("opt_system_stat_cache",
+  } else if (OB_FAIL(system_stat_cache_.init(system_cache_name,
                                              DEFAULT_SYSTEM_STAT_CACHE_PRIORITY))) {
   } else {
     inited_ = true;

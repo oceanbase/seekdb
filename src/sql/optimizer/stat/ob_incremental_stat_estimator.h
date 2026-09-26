@@ -72,7 +72,8 @@ private:
     ObOptStatGatherAudit *audit,
     ObIArray<ObOptStat> &approx_part_opt_stats);
 
-  static int get_table_and_column_stats(ObOptStat &src_opt_stat,
+  static int get_table_and_column_stats(ObOptStatManager &stat_manager,
+                                        ObOptStat &src_opt_stat,
                                         const ObTableStatParam &param,
                                         ObIArray<ObOptTableStat> &table_stats,
                                         ObIArray<ObOptColumnStatHandle> &col_handles);
@@ -130,7 +131,8 @@ private:
                                      ObHistogram &histogram,
                                      bool &need_gather_hist);
 
-  static int get_no_regather_partition_stats(const uint64_t table_id,
+  static int get_no_regather_partition_stats(ObOptStatManager &stat_manager,
+                                             const uint64_t table_id,
                                              const ObIArray<uint64_t> &column_ids,
                                              const ObIArray<int64_t> &no_regather_partition_ids,
                                              ObIArray<ObOptTableStat> &no_regather_table_stats,
@@ -141,12 +143,14 @@ private:
                             ObIArray<uint64_t> &column_ids);
 
 
-  static int get_no_regather_subpart_stats(const ObTableStatParam &param,
+  static int get_no_regather_subpart_stats(ObOptStatManager &stat_manager,
+                                           const ObTableStatParam &param,
                                            ObIArray<ObOptTableStat> &no_regather_table_stats,
                                            ObIArray<ObOptColumnStatHandle> &no_regather_col_handles,
                                            ObIArray<ObOptStat> &subpart_opt_stats);
 
-  static int get_all_part_opt_stats(const ObTableStatParam param,
+  static int get_all_part_opt_stats(ObOptStatManager &stat_manager,
+                                    const ObTableStatParam param,
                                     const ObIArray<PartInfo> &partition_infos,
                                     ObIArray<ObOptTableStat> &part_tab_stats,
                                     ObIArray<ObOptColumnStatHandle> &part_col_handles,

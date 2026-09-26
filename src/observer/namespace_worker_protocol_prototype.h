@@ -19,6 +19,8 @@ namespace oceanbase { namespace common { class ObITabletScan; } }
 namespace oceanbase { namespace common { class ObMySQLProxy; } }
 namespace oceanbase { namespace common { class ObMySQLTransaction; } }
 namespace oceanbase { namespace common { class ObILobReadService; } }
+namespace oceanbase { namespace common { class ObOptStatManager; } }
+namespace oceanbase { namespace common { class ObOptStatMonitorManager; } }
 namespace oceanbase { namespace data_plane { class ObIRangeService; } }
 namespace oceanbase { namespace data_plane { class ObIDmlService; } }
 namespace oceanbase { namespace data_plane { class ObIWriteContextService; } }
@@ -276,6 +278,11 @@ data_plane::ObIWriteContextService *effective_write_context_service(
 data_plane::ObITransactionService *effective_transaction_service(
     sql::ObSQLSessionInfo *session, data_plane::ObITransactionService *fallback);
 sql::ObPlanCache *effective_plan_cache(sql::ObSQLSessionInfo *session);
+common::ObOptStatManager *effective_opt_stat_manager(sql::ObSQLSessionInfo *session);
+common::ObOptStatMonitorManager *effective_opt_stat_monitor_manager(
+    sql::ObSQLSessionInfo *session);
+void stop_in_process_opt_stat_monitors();
+void wait_in_process_opt_stat_monitors();
 void close_session(SessionBinding *binding);
 } } }
 #endif

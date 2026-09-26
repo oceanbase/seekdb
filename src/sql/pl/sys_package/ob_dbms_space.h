@@ -27,6 +27,7 @@
 
 namespace oceanbase
 {
+namespace common { class ObOptStatManager; }
 using namespace sql;
 namespace pl
 {
@@ -104,6 +105,7 @@ public:
    *  the table_size in info.part_ids_'s order
    */
   static int estimate_index_table_size(ObMySQLProxy *sql_proxy,
+                                       common::ObOptStatManager &stat_manager,
                                        const ObTableSchema *table_schema,
                                        IndexCostInfo &info,
                                        ObIArray<uint64_t> &table_size);
@@ -133,7 +135,8 @@ private:
                                    const obcall::ObCreateIndexArg &arg,
                                    IndexCostInfo &info);
 
-  static int get_optimizer_stats(const IndexCostInfo &info,
+  static int get_optimizer_stats(common::ObOptStatManager &stat_manager,
+                                 const IndexCostInfo &info,
                                  OptStats &opt_stats);
 
   static int calc_index_size(OptStats &opt_stats,

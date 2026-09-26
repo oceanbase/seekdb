@@ -62,6 +62,7 @@ public:
       int64_t &table_size);
 
   static int estimate_index_table_size(
+      uint64_t namespace_id,
       common::ObMySQLProxy *sql_proxy,
       const share::schema::ObTableSchema *table_schema,
       const common::ObIArray<int64_t> &partition_ids,

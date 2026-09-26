@@ -881,7 +881,7 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
     } else if (OB_FAIL(init_refresh_cpu_frequency())) {
       LOG_ERROR("init refresh cpu frequency failed", KR(ret));
     } else if (OB_FAIL(ObOptStatManager::get_instance().init(
-                         &sql_proxy_, &config_))) {
+                         &sql_proxy_, &config_, 1))) {
       LOG_ERROR("init opt stat manager failed", KR(ret));
     } else if (OB_FAIL(ObSysTaskStatMgr::get_instance().set_self_addr(self_addr_))) {
       LOG_ERROR("set sys task status self addr failed", KR(ret));
@@ -2519,6 +2519,9 @@ int ObServer::init_global_context()
       &rootserver::native_ddl_checksum_error_verifier());
   home->set_service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE,
       &share::ObAutoincrementService::get_instance());
+  home->set_service(ns::NamespaceRuntime::OPT_STAT_MANAGER,
+      &common::ObOptStatManager::get_instance());
+  common::ObOptStatManager::get_instance().bind_plan_cache(*mods_plan_cache_);
   namespace_worker_prototype::register_root_namespace_storage_services(*home);
   gctx_.self_addr_seq_.set_addr(self_addr_);
   gctx_.bandwidth_throttle_ = &bandwidth_throttle_;

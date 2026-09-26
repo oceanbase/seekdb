@@ -227,7 +227,8 @@ int ObIndexStatsEstimator::fast_gather_index_stats(ObExecContext &ctx,
                                                    bool &is_fast_gather)
 {
   int ret = OB_SUCCESS;
-  ObOptStatManager &mgr = ObOptStatManager::get_instance();
+  if (OB_ISNULL(ctx.get_opt_stat_manager())) { return OB_NOT_INIT; }
+  ObOptStatManager &mgr = *ctx.get_opt_stat_manager();
   ObSEArray<int64_t, 4> gather_part_ids;
   ObSEArray<ObOptTableStat, 4> data_table_stats;
   ObSEArray<ObOptTableStat *, 4> index_table_stats;
@@ -273,7 +274,7 @@ int ObIndexStatsEstimator::fast_gather_index_stats(ObExecContext &ctx,
           index_stat->set_stattype_locked(index_param.stattype_);
           index_stat->set_row_count(data_tab_stat.get_row_count());
           int64_t avg_len = 0;
-          if (OB_FAIL(fast_get_index_avg_len(data_tab_stat.get_partition_id(),
+          if (OB_FAIL(fast_get_index_avg_len(mgr, data_tab_stat.get_partition_id(),
                                              data_param,
                                              index_param,
                                              is_continued,
@@ -331,7 +332,8 @@ int ObIndexStatsEstimator::fast_gather_index_stats(ObExecContext &ctx,
   return ret;
 }
 
-int ObIndexStatsEstimator::fast_get_index_avg_len(const int64_t data_partition_id,
+int ObIndexStatsEstimator::fast_get_index_avg_len(ObOptStatManager &mgr,
+                                                  const int64_t data_partition_id,
                                                   const ObTableStatParam &data_param,
                                                   const ObTableStatParam &index_param,
                                                   bool &is_fast_get,
@@ -362,7 +364,6 @@ int ObIndexStatsEstimator::fast_get_index_avg_len(const int64_t data_partition_i
     //need refine
     ObSEArray<ObOptColumnStatHandle, 4> col_stat_handles;
     ObSEArray<int64_t, 4> partition_ids;
-    ObOptStatManager &mgr = ObOptStatManager::get_instance();
     if (OB_FAIL(partition_ids.push_back(data_partition_id))) {
     } else if (OB_FAIL(mgr.get_column_stat(data_param.table_id_,
                                            partition_ids,

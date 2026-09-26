@@ -17,6 +17,9 @@
 #include "share/schema/ob_schema_runtime_service.h"
 #include "sql/plan_cache/ob_plan_cache.h"
 #include "sql/plan_cache/ob_ps_cache.h"
+#include "sql/optimizer/stat/ob_opt_stat_manager.h"
+#include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
+#include "observer/virtual_table/ob_virtual_data_access_service.h"
 #include <map>
 #include <memory>
 #include <mutex>
@@ -180,6 +183,19 @@ sql::ObPlanCache *effective_plan_cache(sql::ObSQLSessionInfo *session)
   ns::NamespaceRuntime *runtime = session ? session->ns_runtime() : nullptr;
   return runtime ? static_cast<sql::ObPlanCache *>(
       runtime->service(ns::NamespaceRuntime::PLAN_CACHE)) : nullptr;
+}
+common::ObOptStatManager *effective_opt_stat_manager(sql::ObSQLSessionInfo *session)
+{
+  ns::NamespaceRuntime *runtime = session ? session->ns_runtime() : nullptr;
+  return runtime ? static_cast<common::ObOptStatManager *>(
+      runtime->service(ns::NamespaceRuntime::OPT_STAT_MANAGER)) : nullptr;
+}
+common::ObOptStatMonitorManager *effective_opt_stat_monitor_manager(
+    sql::ObSQLSessionInfo *session)
+{
+  ns::NamespaceRuntime *runtime = session ? session->ns_runtime() : nullptr;
+  return runtime ? static_cast<common::ObOptStatMonitorManager *>(
+      runtime->service(ns::NamespaceRuntime::OPT_STAT_MONITOR_MANAGER)) : nullptr;
 }
 query::ObIRootCommandService *effective_root_command_service(
     sql::ObSQLSessionInfo *session)
@@ -442,6 +458,10 @@ struct InProcessNamespaceServices {
   InProcessSchemaRefreshScheduler *scheduler = nullptr;
   sql::ObPlanCache *plan_cache = nullptr;
   sql::ObPsCache *ps_cache = nullptr;
+  common::ObAddr address;
+  ObVirtualDataAccessService *virtual_table_scan = nullptr;
+  common::ObOptStatManager opt_stat_manager;
+  common::ObOptStatMonitorManager opt_stat_monitor_manager;
   rootserver::ObLocalManagementService *root_commands = nullptr;
   InProcessRootserverLocalRuntime *local_runtime = nullptr;
   InProcessDirectInsertService direct_insert;
@@ -458,6 +478,22 @@ struct InProcessNamespaceServices {
 };
 std::shared_mutex inprocess_services_mutex;
 std::map<uint64_t, std::unique_ptr<InProcessNamespaceServices>> inprocess_services;
+void stop_in_process_opt_stat_monitors()
+{
+  std::shared_lock<std::shared_mutex> guard(inprocess_services_mutex);
+  for (auto &entry : inprocess_services) {
+    auto *monitor = &entry.second->opt_stat_monitor_manager;
+    common::ObOptStatMonitorManager::server_module_stop(monitor);
+  }
+}
+void wait_in_process_opt_stat_monitors()
+{
+  std::shared_lock<std::shared_mutex> guard(inprocess_services_mutex);
+  for (auto &entry : inprocess_services) {
+    auto *monitor = &entry.second->opt_stat_monitor_manager;
+    common::ObOptStatMonitorManager::server_module_wait(monitor);
+  }
+}
 thread_local uint64_t activating_namespace = 0;
 int resolve_inprocess_tablet_schema(uint64_t physical_tablet_id,
     share::schema::ObMultiVersionSchemaService *&schema_service,
@@ -521,6 +557,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
   } else if (OB_FAIL(static_cast<NamespaceRoutingSqlProxy *>(
                  services->ddl_proxy)->init_routed(ns, true))) {
   } else if (OB_FAIL(services->autoincrement.init(services->sql_proxy))) {
+  } else if (OB_FAIL(services->opt_stat_manager.init(services->sql_proxy, &GCONF, ns))) {
   } else if (FALSE_IT(stage = "signal_init")) {
   } else if (OB_FAIL(services->signal->init())) {
   } else if (FALSE_IT(stage = "service_init")) {
@@ -608,6 +645,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(services->plan_cache->init(common::OB_PLAN_CACHE_BUCKET_NUMBER,
           server))) {
+  } else if (FALSE_IT(services->opt_stat_manager.bind_plan_cache(*services->plan_cache))) {
   } else if (FALSE_IT(stage = "ps_cache")) {
   } else if (OB_ISNULL(services->ps_cache = OB_NEW(sql::ObPsCache,
           ObModIds::OB_SQL_PS_CACHE))) {
@@ -630,6 +668,20 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
           GCONF, *GCTX.config_mgr_, server.get_self(), *services->sql_proxy,
           server.get_mysql_proxy(),
           *services->schema_service))) {
+  } else if (FALSE_IT(stage = "virtual_table_scan")) {
+  } else if (FALSE_IT(services->address = server.get_self())) {
+  } else if (OB_ISNULL(services->virtual_table_scan = OB_NEW(
+          ObVirtualDataAccessService, ObModIds::OB_SCHEMA_SERVICE,
+          *services->root_commands, services->address, &GCONF))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (FALSE_IT(stage = "opt_stat_monitor")) {
+  } else if (OB_FAIL(services->opt_stat_monitor_manager.init(
+          services->sql_proxy, services->schema_service,
+          &services->opt_stat_manager))) {
+  } else if (OB_FAIL(([&] {
+      auto *monitor = &services->opt_stat_monitor_manager;
+      return common::ObOptStatMonitorManager::server_module_start(monitor);
+    }()))) {
   } else {
     stage = "done";
   }
@@ -640,6 +692,12 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
     runtime.set_service(ns::NamespaceRuntime::SCHEMA_SERVICE, services->schema_service);
     runtime.set_service(ns::NamespaceRuntime::PLAN_CACHE, services->plan_cache);
     runtime.set_service(ns::NamespaceRuntime::PS_CACHE, services->ps_cache);
+    runtime.set_service(ns::NamespaceRuntime::OPT_STAT_MANAGER,
+        &services->opt_stat_manager);
+    runtime.set_service(ns::NamespaceRuntime::OPT_STAT_MONITOR_MANAGER,
+        &services->opt_stat_monitor_manager);
+    runtime.set_service(ns::NamespaceRuntime::VIRTUAL_TABLE_SCAN_SERVICE,
+        services->virtual_table_scan);
     runtime.set_service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE, services->root_commands);
     runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_SERVICE, &services->direct_insert);
     runtime.set_service(ns::NamespaceRuntime::DML_SERVICE, &fork_inprocess_dml);

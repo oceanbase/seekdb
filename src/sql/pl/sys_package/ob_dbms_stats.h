@@ -27,6 +27,7 @@
 
 namespace oceanbase
 {
+namespace common { class ObOptStatManager; }
 using namespace sql;
 using namespace common;
 namespace pl
@@ -405,10 +406,12 @@ public:
   static int get_part_ids_from_schema(const share::schema::ObTableSchema *table_schema,
                                       common::ObIArray<ObObjectID> &target_part_ids);
 
-  static int update_stat_cache(const ObTableStatParam &param,
+  static int update_stat_cache(ObExecContext &ctx,
+                               const ObTableStatParam &param,
                                ObOptStatRunningMonitor *running_monitor = NULL);
 
-  static int update_stat_cache(obcall::ObUpdateStatCacheArg &stat_arg,
+  static int update_stat_cache(common::ObOptStatManager &manager,
+                               obcall::ObUpdateStatCacheArg &stat_arg,
                                ObOptStatRunningMonitor *running_monitor = NULL);
 
   static int parse_set_table_stat_options(ObExecContext &ctx,
@@ -537,7 +540,7 @@ public:
                               sql::ParamStore &params,
                               common::ObObj &result);
 
-  static int update_system_stats_cache();
+  static int update_system_stats_cache(ObExecContext &ctx);
 
   static int convert_vaild_ident_name(common::ObIAllocator &allocator,
                                       const common::ObDataTypeCastParams &dtc_params,
@@ -651,7 +654,8 @@ private:
   static int determine_auto_sample_table(ObExecContext &ctx,
                                          ObTableStatParam &param);
 
-  static int update_analyze_failed_count(const ObTableStatParam &stat_param,
+  static int update_analyze_failed_count(ObExecContext &ctx,
+                                         const ObTableStatParam &stat_param,
                                          const ObSEArray<int64_t, 4> &failed_part_ids,
                                          const StatTable &stat_table);
 

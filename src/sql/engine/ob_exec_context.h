@@ -69,6 +69,7 @@ namespace oceanbase
 namespace common
 {
 class ObMySQLProxy;
+class ObOptStatManager;
 class ObILobAccessContext;
 class ObILobReadService;
 class ObISrsProvider;
@@ -432,6 +433,7 @@ public:
    * @brief get sql proxy
    */
   common::ObMySQLProxy *get_sql_proxy();
+  common::ObOptStatManager *get_opt_stat_manager();
 
   /**
    * @brief get add, for plan cache show stat

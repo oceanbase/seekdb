@@ -408,6 +408,11 @@ common::ObMySQLProxy *ObExecContext::get_sql_proxy()
   return my_session_ == nullptr ? sql_proxy_ : my_session_->effective_sql_proxy();
 }
 
+common::ObOptStatManager *ObExecContext::get_opt_stat_manager()
+{
+  return ::oceanbase::observer::namespace_worker_prototype::effective_opt_stat_manager(my_session_);
+}
+
 void ObExecContext::set_my_session(ObSQLSessionInfo *session)
 {
   my_session_ = session;

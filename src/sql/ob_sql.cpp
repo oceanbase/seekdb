@@ -54,8 +54,7 @@ namespace sql
 const int64_t ObSql::max_error_length = 80;
 const int64_t ObSql::SQL_MEM_SIZE_LIMIT = 1024 * 1024 * 64;
 
-int ObSql::init(common::ObOptStatManager *opt_stat_mgr,
-                common::ObITabletScan *vt_partition_service,
+int ObSql::init(common::ObITabletScan *vt_partition_service,
                 common::ObAddr &addr,
                 ObPlanCache &plan_cache,
                 ObPsCache &ps_cache,
@@ -71,18 +70,15 @@ int ObSql::init(common::ObOptStatManager *opt_stat_mgr,
                 common::ObILobReadService &lob_read_service)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(opt_stat_mgr)
-      || OB_ISNULL(vt_partition_service)) {
+  if (OB_ISNULL(vt_partition_service)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args",
              K(ret),
-             KP(opt_stat_mgr),
              KP(vt_partition_service));
   } else {
     if (OB_FAIL(queue_.init(1, 512))) {
     } else {
       queue_.bind_root_command_service(root_command_service);
-      opt_stat_mgr_ = opt_stat_mgr;
       vt_partition_service_ = vt_partition_service;
       plan_cache_ = &plan_cache;
       ps_cache_ = &ps_cache;
@@ -2405,10 +2401,12 @@ int ObSql::generate_plan(ParseResult &parse_result,
   ObPhysicalPlanCtx *pctx = result.get_exec_context().get_physical_plan_ctx();
   ObPlanCache *plan_cache = observer::namespace_worker_prototype::effective_plan_cache(
       &result.get_session());
+  ObOptStatManager *opt_stat_manager =
+      observer::namespace_worker_prototype::effective_opt_stat_manager(&result.get_session());
   bool allow_audit = false;
   if (OB_ISNULL(pctx) || OB_ISNULL(basic_stmt) ||
       OB_ISNULL(result.get_exec_context().get_expr_factory()) ||
-      OB_ISNULL(plan_cache)) {
+      OB_ISNULL(plan_cache) || OB_ISNULL(opt_stat_manager)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Physical plan ctx should not be NULL", K(ret));
   } else if (OB_ISNULL(result.get_exec_context().get_stmt_factory()->get_query_ctx())) {
@@ -2425,7 +2423,7 @@ int ObSql::generate_plan(ParseResult &parse_result,
     HEAP_VAR(ObOptimizerContext, optctx, sql_ctx.session_info_,
                               &result.get_exec_context(),
                               &result.get_exec_context().get_stmt_factory()->get_query_ctx()->sql_schema_guard_,
-                              opt_stat_mgr_,
+                              opt_stat_manager,
                               result.get_mem_pool(),
                               &pctx->get_param_store(),
                               self_addr_,
@@ -2495,7 +2493,7 @@ int ObSql::generate_plan(ParseResult &parse_result,
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(transform_stmt(&stmt->get_query_ctx()->sql_schema_guard_,
-                                      opt_stat_mgr_,
+                                      opt_stat_manager,
                                       &self_addr_,
                                       phy_plan,
                                       result.get_exec_context(),
@@ -2614,7 +2612,7 @@ int ObSql::generate_stmt_with_reconstruct_sql(ObDMLStmt* &stmt,
       LOG_WARN("Generate stmt success, but stmt is NULL", K(ret));
     } else if (OB_FALSE_IT(stmt = static_cast<ObDMLStmt*>(basic_stmt))) {
     } else if (OB_FAIL(transform_stmt(&stmt->get_query_ctx()->sql_schema_guard_,
-                                      opt_stat_mgr_,
+                                      observer::namespace_worker_prototype::effective_opt_stat_manager(session),
                                       &self_addr_,
                                       phy_plan,
                                       result.get_exec_context(),

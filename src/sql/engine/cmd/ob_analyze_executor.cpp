@@ -81,7 +81,7 @@ int ObAnalyzeExecutor::execute(ObExecContext &ctx, ObAnalyzeStmt &stmt)
           params.at(0).allocator_ = &tmp_alloc;//use the temp allocator to free memory after delete stats.
           if (OB_FAIL(ObDbmsStatsLockUnlock::check_stat_locked(ctx, params.at(0)))) {
           } else if (OB_FAIL(ObDbmsStatsExecutor::delete_table_stats(ctx, params.at(0), cascade_columns))) {
-          } else if (OB_FAIL(pl::ObDbmsStats::update_stat_cache(params.at(0)))) {
+          } else if (OB_FAIL(pl::ObDbmsStats::update_stat_cache(ctx, params.at(0)))) {
           } else if (cascade_indexes && params.at(0).part_name_.empty()) {
             if (OB_FAIL(pl::ObDbmsStats::delete_table_index_stats(ctx, params.at(0)))) {
             } else {/*do nothing*/}
@@ -109,7 +109,7 @@ int ObAnalyzeExecutor::execute(ObExecContext &ctx, ObAnalyzeStmt &stmt)
             } else if (OB_FAIL(ObDbmsStatsLockUnlock::check_stat_locked(ctx, param))) {
             } else if (OB_FAIL(ObOptStatMonitorManager::flush_database_monitoring_info(ctx, false, true))) {
             } else if (OB_FAIL(ObDbmsStatsExecutor::gather_table_stats(ctx, param, running_monitor))) {
-            } else if (OB_FAIL(pl::ObDbmsStats::update_stat_cache(param))) {
+            } else if (OB_FAIL(pl::ObDbmsStats::update_stat_cache(ctx, param))) {
             } else {
             }
             if (ret == OB_SUCCESS || ret == OB_TIMEOUT) {

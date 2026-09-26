@@ -111,7 +111,7 @@ int ObDbmsStats::gather_table_stats(ObExecContext &ctx, ParamStore &params, ObOb
       LOG_WARN("failed check stat locked", K(ret));
     } else if (OB_FAIL(ObOptStatMonitorManager::flush_database_monitoring_info(ctx, false, true))) {
     } else if (OB_FAIL(ObDbmsStatsExecutor::gather_table_stats(ctx, stat_param, running_monitor))) {
-    } else if (OB_FAIL(update_stat_cache(stat_param, &running_monitor))) {
+    } else if (OB_FAIL(update_stat_cache(ctx, stat_param, &running_monitor))) {
     } else if (!need_gather_index_stats(stat_param)) {
       //not gather virtual table/external table index.
     } else if (OB_FAIL(running_monitor.add_monitor_info(ObOptStatRunningPhase::GATHER_INDEX_STATS))) {
@@ -235,7 +235,7 @@ int ObDbmsStats::gather_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
           }
         } else if (OB_FAIL(ObDbmsStatsExecutor::gather_table_stats(
                        ctx, stat_param, running_monitor, &need_refresh_schema))) {
-        } else if (OB_FAIL(update_stat_cache(stat_param,
+        } else if (OB_FAIL(update_stat_cache(ctx, stat_param,
                                               &running_monitor))) {
         } else if (is_virtual_table(stat_param.table_id_)) {//not gather virtual table index.
           //do nothing
@@ -345,7 +345,7 @@ int ObDbmsStats::gather_index_stats(ObExecContext &ctx, ParamStore &params, ObOb
     LOG_WARN("failed check stat locked", K(ret));
   } else if (OB_FAIL(adjust_index_column_params(ctx, ind_stat_param, dummy_column_ids))) {
   } else if (OB_FAIL(ObDbmsStatsExecutor::gather_index_stats(ctx, ind_stat_param))) {
-  } else if (OB_FAIL(update_stat_cache(ind_stat_param))) {
+  } else if (OB_FAIL(update_stat_cache(ctx, ind_stat_param))) {
   } else {
   }
   return ret;
@@ -400,7 +400,7 @@ int ObDbmsStats::gather_table_index_stats(ObExecContext &ctx,
                                                                    index_param.duration_time_))) {
       } else if (OB_FAIL(adjust_index_column_params(ctx, index_param, no_deduce_column_ids))) {
       } else if (OB_FAIL(ObDbmsStatsExecutor::gather_index_stats(ctx, index_param))) {
-      } else if (OB_FAIL(update_stat_cache(index_param))) {
+      } else if (OB_FAIL(update_stat_cache(ctx, index_param))) {
       } else {
       }
     }
@@ -471,7 +471,7 @@ int ObDbmsStats::fast_gather_index_stats(ObExecContext &ctx,
           } else {
             is_all_fast_gather &= is_fast_gather;
           }
-        } else if (OB_FAIL(update_stat_cache(index_param))) {
+        } else if (OB_FAIL(update_stat_cache(ctx, index_param))) {
         } else {
           is_all_fast_gather &= is_fast_gather;
         }
@@ -540,7 +540,7 @@ int ObDbmsStats::set_table_stats(ObExecContext &ctx, ParamStore &params, ObObj &
              OB_FAIL(ObDbmsStatsLockUnlock::check_stat_locked(ctx, param.table_param_))) {
     LOG_WARN("failed check stat locked", K(ret));
   } else if (OB_FAIL(ObDbmsStatsExecutor::set_table_stats(ctx, param))) {
-  } else if (OB_FAIL(update_stat_cache(param.table_param_))) {
+  } else if (OB_FAIL(update_stat_cache(ctx, param.table_param_))) {
   } else {
   }
   return ret;
@@ -626,7 +626,7 @@ int ObDbmsStats::set_column_stats(sql::ObExecContext &ctx,
              OB_FAIL(ObDbmsStatsLockUnlock::check_stat_locked(ctx, param.table_param_))) {
     LOG_WARN("failed check stat locked", K(ret));
   } else if (OB_FAIL(ObDbmsStatsExecutor::set_column_stats(ctx, param))) {
-  } else if (OB_FAIL(update_stat_cache(param.table_param_))) {
+  } else if (OB_FAIL(update_stat_cache(ctx, param.table_param_))) {
   } else {
   }
   return ret;
@@ -716,7 +716,7 @@ int ObDbmsStats::set_index_stats(ObExecContext &ctx, ParamStore &params, ObObj &
              OB_FAIL(ObDbmsStatsLockUnlock::check_stat_locked(ctx, set_index_param.table_param_))) {
     LOG_WARN("failed check stat locked", K(ret));
   } else if (OB_FAIL(ObDbmsStatsExecutor::set_table_stats(ctx, set_index_param))) {
-  } else if (OB_FAIL(update_stat_cache(set_index_param.table_param_))) {
+  } else if (OB_FAIL(update_stat_cache(ctx, set_index_param.table_param_))) {
   } else {
   }
   return ret;
@@ -789,7 +789,7 @@ int ObDbmsStats::delete_table_stats(ObExecContext &ctx, ParamStore &params, ObOb
     } else if (OB_FAIL(ObDbmsStatsExecutor::delete_table_stats(ctx,
                                                                stat_param,
                                                                cascade_columns))) {
-    } else if (OB_FAIL(update_stat_cache(stat_param))) {
+    } else if (OB_FAIL(update_stat_cache(ctx, stat_param))) {
     } else if (cascade_indexes && stat_param.part_name_.empty()) {
       if (OB_FAIL(delete_table_index_stats(ctx, stat_param))) {
       } else {/*do nothing*/}
@@ -870,7 +870,7 @@ int ObDbmsStats::delete_column_stats(ObExecContext &ctx, ParamStore &params, ObO
     } else if (OB_FAIL(ObDbmsStatsExecutor::delete_column_stats(ctx,
                                                                 stat_param,
                                                                 only_histogram))) {
-    } else if (OB_FAIL(update_stat_cache(stat_param))) {
+    } else if (OB_FAIL(update_stat_cache(ctx, stat_param))) {
     }
   }
   return ret;
@@ -937,7 +937,7 @@ int ObDbmsStats::delete_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
               LOG_WARN("failed to check stat locked", K(ret));
             }
           } else if (OB_FAIL(ObDbmsStatsExecutor::delete_table_stats(ctx, stat_param, true))) {
-          } else if (OB_FAIL(update_stat_cache(stat_param))) {
+          } else if (OB_FAIL(update_stat_cache(ctx, stat_param))) {
           } else if (OB_FAIL(delete_table_index_stats(ctx, stat_param))) {
           } else {
             tmp_alloc.reset();
@@ -1011,7 +1011,7 @@ int ObDbmsStats::delete_index_stats(ObExecContext &ctx, ParamStore &params, ObOb
                OB_FAIL(ObDbmsStatsLockUnlock::check_stat_locked(ctx, index_stat_param))) {
       LOG_WARN("failed check stat locked", K(ret));
     } else if (OB_FAIL(ObDbmsStatsExecutor::delete_table_stats(ctx, index_stat_param, false))) {
-    } else if (OB_FAIL(update_stat_cache(index_stat_param))) {
+    } else if (OB_FAIL(update_stat_cache(ctx, index_stat_param))) {
     }
   }
   return ret;
@@ -1046,7 +1046,7 @@ int ObDbmsStats::delete_table_index_stats(sql::ObExecContext &ctx,
                    OB_FAIL(ObDbmsStatsLockUnlock::check_stat_locked(ctx, index_param))) {
           LOG_WARN("failed check stat locked", K(ret));
         } else if (OB_FAIL(ObDbmsStatsExecutor::delete_table_stats(ctx, index_param, false))) {
-        } else if (OB_FAIL(update_stat_cache(index_param))) {
+        } else if (OB_FAIL(update_stat_cache(ctx, index_param))) {
         } else {/*do nothing*/}
       }
     }
@@ -1575,7 +1575,7 @@ int ObDbmsStats::import_table_stats(ObExecContext &ctx, ParamStore &params, ObOb
               OB_FAIL(ObDbmsStatsLockUnlock::check_stat_locked(ctx, stat_param))) {
       LOG_WARN("failed check stat locked", K(ret));
     } else if (OB_FAIL(ObDbmsStatsExportImport::import_table_stats(ctx, stat_param))) {
-    } else if (OB_FAIL(update_stat_cache(stat_param))) {
+    } else if (OB_FAIL(update_stat_cache(ctx, stat_param))) {
     } else if (cascade_index && stat_param.part_name_.empty() &&
               OB_FAIL(import_table_index_stats(ctx, stat_param))) {
       LOG_WARN("failed to import table index stats", K(ret));
@@ -1650,7 +1650,7 @@ int ObDbmsStats::import_column_stats(sql::ObExecContext &ctx,
              OB_FAIL(ObDbmsStatsLockUnlock::check_stat_locked(ctx, stat_param))) {
     LOG_WARN("failed check stat locked", K(ret));
   } else if (OB_FAIL(ObDbmsStatsExportImport::import_column_stats(ctx, stat_param))) {
-  } else if (OB_FAIL(update_stat_cache(stat_param))) {
+  } else if (OB_FAIL(update_stat_cache(ctx, stat_param))) {
   } else {
   }
   return ret;
@@ -1735,7 +1735,7 @@ int ObDbmsStats::import_schema_stats(ObExecContext &ctx, ParamStore &params, ObO
               LOG_WARN("failed to check stat locked", K(ret));
             }
           } else if (OB_FAIL(ObDbmsStatsExportImport::import_table_stats(ctx, stat_param))) {
-          } else if (OB_FAIL(update_stat_cache(stat_param))) {
+          } else if (OB_FAIL(update_stat_cache(ctx, stat_param))) {
           } else if (OB_FAIL(import_table_index_stats(ctx, stat_param))) {
           } else {
             tmp_alloc.reset();
@@ -1818,7 +1818,7 @@ int ObDbmsStats::import_index_stats(ObExecContext &ctx, ParamStore &params, ObOb
              OB_FAIL(ObDbmsStatsLockUnlock::check_stat_locked(ctx, index_stat_param))) {
     LOG_WARN("failed check stat locked", K(ret));
   } else if (OB_FAIL(ObDbmsStatsExportImport::import_table_stats(ctx, index_stat_param))) {
-  } else if (OB_FAIL(update_stat_cache(index_stat_param))) {
+  } else if (OB_FAIL(update_stat_cache(ctx, index_stat_param))) {
   } else {
   }
   return ret;
@@ -1854,7 +1854,7 @@ int ObDbmsStats::import_table_index_stats(sql::ObExecContext &ctx,
                    OB_FAIL(ObDbmsStatsLockUnlock::check_stat_locked(ctx, index_param))) {
           LOG_WARN("failed check stat locked", K(ret));
         } else if (OB_FAIL(ObDbmsStatsExportImport::import_table_stats(ctx, index_param))) {
-        } else if (OB_FAIL(update_stat_cache(index_param))) {
+        } else if (OB_FAIL(update_stat_cache(ctx, index_param))) {
         } else {
         }
       }
@@ -1904,7 +1904,7 @@ int ObDbmsStats::lock_table_stats(sql::ObExecContext &ctx,
     stat_param.no_invalidate_ = true;
     if (OB_FAIL(ObDbmsStatsLockUnlock::set_table_stats_lock(ctx, stat_param, true))) {
     } else if (OB_FAIL(lock_or_unlock_index_stats(ctx, stat_param, true))) {
-    } else if (OB_FAIL(update_stat_cache(stat_param))) {
+    } else if (OB_FAIL(update_stat_cache(ctx, stat_param))) {
     } else {/*do nothing*/}
   }
   return ret;
@@ -1948,7 +1948,7 @@ int ObDbmsStats::lock_partition_stats(sql::ObExecContext &ctx,
     stat_param.subpart_stat_param_.need_modify_ = false;
     stat_param.no_invalidate_ = true;
     if (OB_FAIL(ObDbmsStatsLockUnlock::set_table_stats_lock(ctx, stat_param, true))) {
-    } else if (OB_FAIL(update_stat_cache(stat_param))) {
+    } else if (OB_FAIL(update_stat_cache(ctx, stat_param))) {
     } else {/*do nothing */}
   }
   return ret;
@@ -2002,7 +2002,7 @@ int ObDbmsStats::lock_schema_stats(sql::ObExecContext &ctx,
           stat_param.no_invalidate_ = true;
           if (OB_FAIL(ObDbmsStatsLockUnlock::set_table_stats_lock(ctx, stat_param, true))) {
           } else if (OB_FAIL(lock_or_unlock_index_stats(ctx, stat_param, true))) {
-          } else if (OB_FAIL(update_stat_cache(stat_param))) {
+          } else if (OB_FAIL(update_stat_cache(ctx, stat_param))) {
           } else {
             tmp_alloc.reset();
           }
@@ -2093,7 +2093,7 @@ int ObDbmsStats::unlock_table_stats(sql::ObExecContext &ctx,
     stat_param.no_invalidate_ = true;
     if (OB_FAIL(ObDbmsStatsLockUnlock::set_table_stats_lock(ctx, stat_param, false))) {
     } else if (OB_FAIL(lock_or_unlock_index_stats(ctx, stat_param, false))) {
-    } else if (OB_FAIL(update_stat_cache(stat_param))) {
+    } else if (OB_FAIL(update_stat_cache(ctx, stat_param))) {
     } else {/*do nothing*/}
   }
   return ret;
@@ -2137,7 +2137,7 @@ int ObDbmsStats::unlock_partition_stats(sql::ObExecContext &ctx,
     stat_param.subpart_stat_param_.need_modify_ = false;
     stat_param.no_invalidate_ = true;
     if (OB_FAIL(ObDbmsStatsLockUnlock::set_table_stats_lock(ctx, stat_param, false))) {
-    } else if (OB_FAIL(update_stat_cache(stat_param))) {
+    } else if (OB_FAIL(update_stat_cache(ctx, stat_param))) {
     } else {/*do nothing */}
   }
   return ret;
@@ -2193,7 +2193,7 @@ int ObDbmsStats::unlock_schema_stats(sql::ObExecContext &ctx,
           stat_param.no_invalidate_ = true;
           if (OB_FAIL(ObDbmsStatsLockUnlock::set_table_stats_lock(ctx, stat_param, false))) {
           } else if (OB_FAIL(lock_or_unlock_index_stats(ctx, stat_param, false))) {
-          } else if (OB_FAIL(update_stat_cache(stat_param))) {
+          } else if (OB_FAIL(update_stat_cache(ctx, stat_param))) {
           } else {
             tmp_alloc.reset();
           }
@@ -2298,7 +2298,7 @@ int ObDbmsStats::restore_table_stats(sql::ObExecContext &ctx,
   } else if (OB_FAIL(ObDbmsStatsHistoryManager::restore_table_stats(ctx,
                                                                     stat_param,
                                                                     specify_time))) {
-  } else if (OB_FAIL(update_stat_cache(stat_param))) {
+  } else if (OB_FAIL(update_stat_cache(ctx, stat_param))) {
   } else {/*do nothing*/}
   return ret;
 }
@@ -2375,7 +2375,7 @@ int ObDbmsStats::restore_schema_stats(sql::ObExecContext &ctx,
       } else if (OB_FAIL(ObDbmsStatsHistoryManager::restore_table_stats(ctx,
                                                                         stat_param,
                                                                         specify_time))) {
-      } else if (OB_FAIL(update_stat_cache(stat_param))) {
+      } else if (OB_FAIL(update_stat_cache(ctx, stat_param))) {
       } else {
         tmp_alloc.reset();
       }
@@ -2945,7 +2945,8 @@ int ObDbmsStats::async_gather_stats_job_proc(sql::ObExecContext &ctx,
   return ret;
 }
 
-int ObDbmsStats::update_stat_cache(const ObTableStatParam &param,
+int ObDbmsStats::update_stat_cache(ObExecContext &ctx,
+                                   const ObTableStatParam &param,
                                    ObOptStatRunningMonitor *running_monitor/*default null*/)
 {
   int ret = OB_SUCCESS;
@@ -2975,13 +2976,17 @@ int ObDbmsStats::update_stat_cache(const ObTableStatParam &param,
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_FAIL(update_stat_cache(stat_arg, running_monitor))) {
+    ObOptStatManager *manager = ctx.get_opt_stat_manager();
+    if (OB_ISNULL(manager)) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(update_stat_cache(*manager, stat_arg, running_monitor))) {
     }
   }
   return ret;
 }
 
-int ObDbmsStats::update_stat_cache(obcall::ObUpdateStatCacheArg &stat_arg,
+int ObDbmsStats::update_stat_cache(ObOptStatManager &manager,
+                                   obcall::ObUpdateStatCacheArg &stat_arg,
                                    ObOptStatRunningMonitor *running_monitor/*default null*/)
 {
   int ret = OB_SUCCESS;
@@ -2993,7 +2998,7 @@ int ObDbmsStats::update_stat_cache(obcall::ObUpdateStatCacheArg &stat_arg,
     ret = OB_TIMEOUT;
     LOG_WARN("query timeout is reached", K(ret), K(timeout));
   } else if (OB_FAIL(ex_rpc::sync_call([&]{
-    return ObOptStatManager::get_instance().refresh_stat_cache(stat_arg);
+    return manager.refresh_stat_cache(stat_arg);
   }))) {
       LOG_WARN("failed to update local stat cache caused by unknow error",
                                         K(ret), K(stat_arg));
@@ -4796,7 +4801,9 @@ int ObDbmsStats::process_not_size_manual_column(sql::ObExecContext &ctx,
     const int64_t part_id = table_param.global_part_id_;
     ObArray<ObOptColumnStatHandle> stat_handles;
     if (OB_FAIL(part_ids.push_back(part_id))) {
-    } else if (OB_FAIL(ObOptStatManager::get_instance().get_column_stat(table_param.table_id_,
+    } else if (OB_ISNULL(ctx.get_opt_stat_manager())) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(ctx.get_opt_stat_manager()->get_column_stat(table_param.table_id_,
                                                                         part_ids,
                                                                         column_ids,
                                                                         stat_handles))) {
@@ -5462,15 +5469,15 @@ int ObDbmsStats::gather_table_stats_with_default_param(ObExecContext &ctx,
     int tmp_ret_code = ret;
     if ((stat_table.is_async_gather_ || task_info.type_ == ObOptStatGatherType::AUTO_GATHER) &&
         (OB_ERR_INTERRUPTED != ret && !failed_part_and_subpart_ids.empty()) &&
-        OB_FAIL(update_analyze_failed_count(stat_param, failed_part_and_subpart_ids, stat_table))) {
+        OB_FAIL(update_analyze_failed_count(ctx, stat_param, failed_part_and_subpart_ids, stat_table))) {
       LOG_WARN("failed to update ANALYZE failed-count when gather table stats", K(ret));
     }
     if (!succ_part_and_subpart_ids.empty()) {
-      if (OB_FAIL(update_stat_cache(stat_param, &running_monitor))) {
+      if (OB_FAIL(update_stat_cache(ctx, stat_param, &running_monitor))) {
       }
     }
     ret = tmp_ret_code;
-  } else if (OB_FAIL(update_stat_cache(stat_param,
+  } else if (OB_FAIL(update_stat_cache(ctx, stat_param,
                                         &running_monitor))) {
   } else if (OB_FAIL(ObDbmsStatsUtils::get_valid_duration_time(task_info.task_start_time_,
                                                                 duration_time,
@@ -6053,7 +6060,7 @@ int ObDbmsStats::gather_system_stats(sql::ObExecContext &ctx,
   } else if (OB_FAIL(check_statistic_table_writeable(ctx))) {
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
   } else if (OB_FAIL(ObDbmsStatsExecutor::gather_system_stats(ctx))) {
-  } else if (OB_FAIL(update_system_stats_cache())) {
+  } else if (OB_FAIL(update_system_stats_cache(ctx))) {
   }
   return ret;
 }
@@ -6079,7 +6086,7 @@ int ObDbmsStats::delete_system_stats(sql::ObExecContext &ctx,
   } else if (OB_FAIL(check_statistic_table_writeable(ctx))) {
   } else if (OB_FAIL(ObDbmsStatsUtils::implicit_commit_before_gather_stats(ctx))) {
   } else if (OB_FAIL(ObDbmsStatsExecutor::delete_system_stats(ctx))) {
-  } else if (OB_FAIL(update_system_stats_cache())) {
+  } else if (OB_FAIL(update_system_stats_cache(ctx))) {
   }
   return ret;
 }
@@ -6130,12 +6137,12 @@ int ObDbmsStats::set_system_stats(sql::ObExecContext &ctx,
   } else if (OB_FAIL(num_value.extract_valid_int64_with_trunc(param.value_))) {
   } else if (OB_FAIL(ObDbmsStatsExecutor::set_system_stats(ctx, 
                                                            param))) {
-  } else if (OB_FAIL(update_system_stats_cache())) {
+  } else if (OB_FAIL(update_system_stats_cache(ctx))) {
   }
   return ret;
 }
 
-int ObDbmsStats::update_system_stats_cache()
+int ObDbmsStats::update_system_stats_cache(ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
   obcall::ObUpdateStatCacheArg stat_arg;
@@ -6147,8 +6154,10 @@ int ObDbmsStats::update_system_stats_cache()
   } else if (0 >= (timeout = THIS_WORKER.get_timeout_remain())) {
     ret = OB_TIMEOUT;
     LOG_WARN("query timeout is reached", K(ret), K(timeout));
+  } else if (OB_ISNULL(ctx.get_opt_stat_manager())) {
+    ret = OB_NOT_INIT;
   } else if (OB_FAIL(ex_rpc::sync_call([&]{
-    return ObOptStatManager::get_instance().refresh_stat_cache(stat_arg);
+    return ctx.get_opt_stat_manager()->refresh_stat_cache(stat_arg);
   }))) {
     LOG_WARN("failed to update local stat cache caused by unknow error",
                                       K(ret), K(stat_arg));
@@ -6250,7 +6259,7 @@ int ObDbmsStats::copy_table_stats(sql::ObExecContext &ctx,
                                           params.at(2),
                                           table_stat_param))) {
   } else if (OB_FAIL(ObDbmsStatsCopyTableStats::copy_tab_col_stats(ctx, table_stat_param, copy_stat_helper))) {
-  } else if (OB_FAIL(update_stat_cache(table_stat_param))) {
+  } else if (OB_FAIL(update_stat_cache(ctx, table_stat_param))) {
   }
   return ret;
 }
@@ -6683,7 +6692,8 @@ int ObDbmsStats::adjust_text_column_basic_stats(ObExecContext &ctx,
   return ret;
 }
 
-int ObDbmsStats::update_analyze_failed_count(const ObTableStatParam &stat_param,
+int ObDbmsStats::update_analyze_failed_count(ObExecContext &ctx,
+                                             const ObTableStatParam &stat_param,
                                              const ObSEArray<int64_t, 4> &failed_part_ids,
                                              const StatTable &stat_table)
 {
@@ -6695,7 +6705,9 @@ int ObDbmsStats::update_analyze_failed_count(const ObTableStatParam &stat_param,
   THIS_WORKER.set_timeout_ts(MAX_UPDATE_OPT_GATHER_STAT_TIMEOUT + ObTimeUtility::current_time());
   
   int64_t affected_rows = 0;
-  if (OB_SUCC(ret) && OB_FAIL(ObOptStatManager::get_instance().update_table_stat_failed_count(stat_table.table_id_, failed_part_ids, affected_rows))) {
+  if (OB_ISNULL(ctx.get_opt_stat_manager())) {
+    ret = OB_NOT_INIT;
+  } else if (OB_SUCC(ret) && OB_FAIL(ctx.get_opt_stat_manager()->update_table_stat_failed_count(stat_table.table_id_, failed_part_ids, affected_rows))) {
     LOG_WARN("failed to update ANALYZE failed_count", K(ret), K(affected_rows));
   }
   THIS_WORKER.set_session(origin_session);

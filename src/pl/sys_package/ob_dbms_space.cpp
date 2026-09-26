@@ -21,6 +21,7 @@
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 #include "query/optimizer/stat/ob_optimizer_stat_service.h"
+#include "namespace/namespace.h"
 
 #define GET_COMPRESSED_INFO_SQL "select sum(occupy_size)/sum(original_size) as compression_ratio from oceanbase.__all_virtual_tablet_sstable_macro_info "\
                                 "where tablet_id in (%.*s);"\
@@ -79,7 +80,9 @@ int ObDbmsSpace::create_index_cost(sql::ObExecContext &ctx,
                                             stmt,
                                             info))) {
   } else if (OB_FAIL(get_compressed_ratio(ctx, info))) {
-  } else if (OB_FAIL(get_optimizer_stats(info,
+  } else if (OB_ISNULL(ctx.get_opt_stat_manager())) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(get_optimizer_stats(*ctx.get_opt_stat_manager(), info,
                                          opt_stats))) {
   } else if (OB_FAIL(calc_index_size(opt_stats,
                                      info,
@@ -221,15 +224,16 @@ int ObDbmsSpace::get_index_column_ids(const share::schema::ObTableSchema *table_
   return ret;
 }
 
-int ObDbmsSpace::get_optimizer_stats(const IndexCostInfo &info,
+int ObDbmsSpace::get_optimizer_stats(ObOptStatManager &stat_manager,
+                                     const IndexCostInfo &info,
                                      OptStats &opt_stats)
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(ObOptStatManager::get_instance().get_table_stat(info.table_id_,
+  if (OB_FAIL(stat_manager.get_table_stat(info.table_id_,
                                                               info.part_ids_,
                                                               opt_stats.table_stats_))) {
-  } else if (OB_FAIL(ObOptStatManager::get_instance().get_column_stat(info.table_id_,
+  } else if (OB_FAIL(stat_manager.get_column_stat(info.table_id_,
                                                                       info.part_ids_,
                                                                       info.column_ids_,
                                                                       opt_stats.column_stats_))) {
@@ -675,6 +679,7 @@ int ObDbmsSpace::set_tablet_info_by_tablet_id(const ObTabletID tablet_id,
 }
 
 int ObDbmsSpace::estimate_index_table_size(ObMySQLProxy *sql_proxy,
+                                           ObOptStatManager &stat_manager,
                                            const ObTableSchema *table_schema,
                                            IndexCostInfo &info,
                                            ObIArray<uint64_t> &table_size)
@@ -690,7 +695,7 @@ int ObDbmsSpace::estimate_index_table_size(ObMySQLProxy *sql_proxy,
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "unexpected null ptr of table schema", K(ret), K(table_schema));
-  } else if (OB_FAIL(get_optimizer_stats(info, opt_stats))) {
+  } else if (OB_FAIL(get_optimizer_stats(stat_manager, info, opt_stats))) {
   } else if (OB_FAIL(check_stats_valid(opt_stats, is_valid))) {
   } else if (is_valid) {
     if (OB_FAIL(estimate_index_table_size_by_opt_stats(sql_proxy, table_schema, opt_stats, info, table_size))) {
@@ -923,6 +928,7 @@ namespace query
 {
 
 int ObOptimizerStatService::estimate_index_table_size(
+    uint64_t namespace_id,
     common::ObMySQLProxy *sql_proxy,
     const share::schema::ObTableSchema *table_schema,
     const common::ObIArray<int64_t> &partition_ids,
@@ -931,15 +937,22 @@ int ObOptimizerStatService::estimate_index_table_size(
 {
   int ret = OB_SUCCESS;
   pl::ObDbmsSpace::IndexCostInfo cost_info;
+  ns::NamespaceRuntime *runtime = nullptr;
+  common::ObOptStatManager *stat_manager = nullptr;
   if (OB_ISNULL(table_schema)) {
     ret = OB_INVALID_ARGUMENT;
     SQL_ENG_LOG(WARN, "table schema is null", K(ret));
+  } else if (!ns::namespace_registry().get(namespace_id, runtime)
+             || OB_ISNULL(runtime)
+             || OB_ISNULL(stat_manager = static_cast<common::ObOptStatManager *>(
+                    runtime->service(ns::NamespaceRuntime::OPT_STAT_MANAGER)))) {
+    ret = OB_NOT_INIT;
   } else if (OB_FAIL(cost_info.part_ids_.assign(partition_ids))) {
   } else if (OB_FAIL(cost_info.column_ids_.assign(column_ids))) {
   } else {
     cost_info.table_id_ = table_schema->get_table_id();
     if (OB_FAIL(pl::ObDbmsSpace::estimate_index_table_size(
-        sql_proxy, table_schema, cost_info, table_sizes))) {
+        sql_proxy, *stat_manager, table_schema, cost_info, table_sizes))) {
     }
   }
   return ret;
