@@ -97,7 +97,6 @@ minor_compact_trigger
 model_max_retries
 model_request_timeout
 mysql_port
-mysql_port_mode
 net_thread_count
 ob_compaction_schedule_interval
 ob_enable_batched_multi_statement
@@ -123,6 +122,8 @@ schema_history_expire_time
 schema_history_recycle_interval
 server_cpu_quota_max
 server_cpu_quota_min
+server_create_time
+server_role_info
 server_task_queue_size
 shared_log_retention
 spill_compression_codec
