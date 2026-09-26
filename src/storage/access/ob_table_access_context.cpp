@@ -194,6 +194,7 @@ int ObTableAccessContext::init(ObTableScanParam &scan_param,
     cached_iter_node_ = cached_iter_node;
     range_allocator_ = nullptr;
     tablet_id_ = scan_param.tablet_id_;
+    schema_tablet_id_ = scan_param.schema_tablet_id_;
     query_flag_ = scan_param.scan_flag_;
     sql_mode_ = scan_param.sql_mode_;
     namespace_access_mode_ = scan_param.namespace_access_mode_;
@@ -257,6 +258,7 @@ int ObTableAccessContext::init(const common::ObQueryFlag &query_flag,
     range_allocator_ = nullptr;
     trans_version_range_ = trans_version_range;
     tablet_id_ = ctx.tablet_id_;
+    schema_tablet_id_ = ctx.tablet_id_;
     // handle lob types without ObTableScanParam:
     // 1. use lob locator instead of full lob data
     // 2. without rowkey, since need not send result to dbmslob/client
@@ -306,6 +308,7 @@ int ObTableAccessContext::init(const common::ObQueryFlag &query_flag,
     range_allocator_ = nullptr;
     trans_version_range_ = trans_version_range;
     tablet_id_ = ctx.tablet_id_;
+    schema_tablet_id_ = ctx.tablet_id_;
     lob_locator_helper_ = nullptr;
     cached_iter_node_ = cached_iter_node;
     if (!micro_block_handle_mgr_.is_valid()
@@ -338,6 +341,7 @@ int ObTableAccessContext::init_for_fork(ObTableAccessContext &other,
   cached_iter_node_ = other.cached_iter_node_;
   range_allocator_ = other.range_allocator_;
   tablet_id_ = other.tablet_id_;
+  schema_tablet_id_ = other.schema_tablet_id_;
   query_flag_ = other.query_flag_;
   // disable row cache for fork
   query_flag_.set_not_use_row_cache();
@@ -438,6 +442,7 @@ void ObTableAccessContext::reset()
   is_inited_ = false;
   timeout_ = 0;
   tablet_id_.reset();
+  schema_tablet_id_.reset();
   query_flag_.reset();
   sql_mode_ = 0;
   namespace_access_mode_ = data_plane::ObNamespaceAccessMode::UNBOUND;
@@ -490,6 +495,7 @@ void ObTableAccessContext::reuse()
 {
   timeout_ = 0;
   tablet_id_.reset();
+  schema_tablet_id_.reset();
   query_flag_.reset();
   sql_mode_ = 0;
   if (NULL != store_ctx_) {

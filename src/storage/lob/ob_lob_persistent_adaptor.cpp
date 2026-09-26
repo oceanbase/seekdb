@@ -292,6 +292,8 @@ int ObPersistentLobApator::build_common_scan_param(
 
   if (OB_SUCC(ret)) {
     scan_param.tablet_id_ = param.lob_meta_tablet_id_;
+    scan_param.schema_tablet_id_ = param.schema_tablet_id_.is_valid()
+        ? param.schema_tablet_id_ : param.tablet_id_;
     scan_param.namespace_access_mode_ = param.namespace_access_mode_;
 
     scan_param.reserved_cell_count_ = scan_param.column_ids_.count();

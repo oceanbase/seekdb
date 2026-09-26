@@ -20,6 +20,8 @@
 #include "share/schema/ob_schema_getter_guard.h"  // previously hidden behind a transitive include, make the dependency explicit
 #include "share/schema/ob_column_schema.h"  // previously hidden behind a transitive include, make the dependency explicit
 #include "share/schema/ob_multi_version_schema_service.h"  // previously hidden behind a transitive include
+#include "share/schema/ob_schema_runtime_service.h"
+#include "share/rc/ob_server_runtime.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
 #include "share/ob_force_print_log.h"  // FLOG_*, previously hidden behind a transitive include
 #ifdef ERRSIM
@@ -571,7 +573,15 @@ int ObTableCkmItems::check_schema_change_after_major_freeze(
   
   const ObTableSchema *old_table_schema = nullptr;
   const ObTableSchema *old_index_schema = nullptr;
-  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
+  ObMultiVersionSchemaService *schema_service = nullptr;
+  auto *schema_runtime = share::server_service<ObSchemaRuntimeService>();
+  if (data_ckm.tablet_ids_.empty() || index_ckm.tablet_ids_.empty()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_ISNULL(schema_runtime)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(schema_runtime->resolve_tablet_schema(
+                 data_ckm.tablet_ids_.at(0).id(), schema_service))) {
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(
           schema_guard, freeze_info.schema_version_,
           ObMultiVersionSchemaService::RefreshSchemaMode::FORCE_LAZY))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( data_ckm.table_id_, old_table_schema))) {

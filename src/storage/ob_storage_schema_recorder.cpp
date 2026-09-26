@@ -256,6 +256,7 @@ int ObStorageSchemaRecorder::get_schema(
 {
   int ret = OB_SUCCESS;
   const ObTableSchema *t_schema = NULL;
+  ObMultiVersionSchemaService *schema_service = nullptr;
 
   int64_t runtime_schema_version = OB_INVALID_VERSION;
   if (OB_UNLIKELY(table_version < 0)) {
@@ -265,7 +266,9 @@ int ObStorageSchemaRecorder::get_schema(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema guard/schema/allocator is null", K(ret), K_(tablet_id), KP_(schema_guard),
         KP_(storage_schema), KP_(allocator));
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service()->get_runtime_schema_guard(*schema_guard_))) {
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->resolve_tablet_schema(
+                 tablet_id_.id(), schema_service))) {
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(*schema_guard_))) {
   } else if (OB_FAIL(schema_guard_->get_schema_version(runtime_schema_version))) {
   } else if (OB_FAIL(schema_guard_->get_table_schema( table_id_, t_schema))
              || NULL == t_schema

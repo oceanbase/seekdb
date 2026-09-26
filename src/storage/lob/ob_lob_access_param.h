@@ -46,7 +46,7 @@ public:
       tx_desc_(nullptr), snapshot_(), tx_id_(),
       sql_mode_(SMO_DEFAULT), dml_base_param_(nullptr),
       namespace_access_mode_(data_plane::ObNamespaceAccessMode::UNBOUND),
-      tablet_id_(), lob_meta_tablet_id_(), lob_piece_tablet_id_(),
+      tablet_id_(), schema_tablet_id_(), lob_meta_tablet_id_(), lob_piece_tablet_id_(),
       coll_type_(), lob_locator_(nullptr), lob_common_(nullptr),
       lob_data_(nullptr), byte_size_(0), handle_size_(0), timeout_(0),
       fb_snapshot_(), offset_(0), len_(0),
@@ -140,6 +140,7 @@ public:
   // Some LOB operations read data from another LOB in the same database.
   
   common::ObTabletID tablet_id_;
+  common::ObTabletID schema_tablet_id_;
   common::ObTabletID lob_meta_tablet_id_;
   common::ObTabletID lob_piece_tablet_id_;
   common::ObCollationType coll_type_;

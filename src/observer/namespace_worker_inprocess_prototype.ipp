@@ -458,31 +458,35 @@ struct InProcessNamespaceServices {
 };
 std::shared_mutex inprocess_services_mutex;
 std::map<uint64_t, std::unique_ptr<InProcessNamespaceServices>> inprocess_services;
+thread_local uint64_t activating_namespace = 0;
 int resolve_inprocess_tablet_schema(uint64_t physical_tablet_id,
     share::schema::ObMultiVersionSchemaService *&schema_service,
     uint64_t &logical_tablet_id)
 {
-  if (!storage::NamespaceForkKernelPrototype::is_encoded_id(physical_tablet_id)) {
-    return OB_SUCCESS;
-  }
-  const uint64_t ns = ::oceanbase::ns::NamespaceObjectKey::encoded_namespace(physical_tablet_id);
-  int ret = storage::NamespaceForkKernelPrototype::local_object_id(
-      ns, physical_tablet_id, logical_tablet_id);
+  const bool encoded = storage::NamespaceForkKernelPrototype::is_encoded_id(physical_tablet_id);
+  const uint64_t owner_ns = encoded
+      ? ::oceanbase::ns::NamespaceObjectKey::encoded_namespace(physical_tablet_id) : 1;
+  schema_service = nullptr;
+  logical_tablet_id = physical_tablet_id;
+  int ret = encoded ? storage::NamespaceForkKernelPrototype::local_object_id(
+      owner_ns, physical_tablet_id, logical_tablet_id) : OB_SUCCESS;
   ns::NamespaceRuntime *runtime = nullptr;
   if (ret != OB_SUCCESS) {
-  } else if (!ns::namespace_registry().get(ns, runtime) || runtime == nullptr) {
+  } else if (!ns::namespace_registry().get(owner_ns, runtime) || runtime == nullptr) {
     ret = OB_NOT_INIT;
   } else if (runtime->service(ns::NamespaceRuntime::SCHEMA_SERVICE) == nullptr
-             && OB_FAIL(ensure_in_process_namespace(ns))) {
-  } else if (OB_ISNULL(schema_service = namespace_schema_service(ns))) {
+             && (activating_namespace != 0
+                 || OB_FAIL(ensure_in_process_namespace(owner_ns)))) {
+    if (ret == OB_SUCCESS) { ret = OB_NOT_INIT; }
+  } else if (OB_ISNULL(schema_service = namespace_schema_service(owner_ns))) {
     ret = OB_NOT_INIT;
-  } else {
+  } else if (encoded && activating_namespace == 0) {
     std::shared_lock<std::shared_mutex> guard(inprocess_services_mutex);
-    const auto it = inprocess_services.find(ns);
+    const auto it = inprocess_services.find(owner_ns);
     if (it != inprocess_services.end()
         && !it->second->schema_loaded.load(std::memory_order_acquire)) {
       guard.unlock();
-      ret = inprocess_refresh_schema(ns);
+      ret = inprocess_refresh_schema(owner_ns);
     }
   }
   return ret;
@@ -653,8 +657,6 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
     runtime.set_service(ns::NamespaceRuntime::TABLE_LOCK_TABLET_ROUTER,
         &services->table_lock_tablet_router);
     inprocess_services.emplace(ns, std::move(services));
-    server.schema_runtime_service()->set_tablet_schema_resolver(
-        resolve_inprocess_tablet_schema);
   }
   return ret;
 }
@@ -670,7 +672,10 @@ int ensure_in_process_namespace(uint64_t ns)
   if (!ret && runtime->service(ns::NamespaceRuntime::SCHEMA_SERVICE) == nullptr) {
     std::unique_lock<std::shared_mutex> guard(inprocess_services_mutex);
     if (runtime->service(ns::NamespaceRuntime::SCHEMA_SERVICE) == nullptr) {
+      const uint64_t previous_activation = activating_namespace;
+      activating_namespace = ns;
       ret = activate_in_process_namespace(ns, *runtime);
+      activating_namespace = previous_activation;
     }
   }
   return ret;

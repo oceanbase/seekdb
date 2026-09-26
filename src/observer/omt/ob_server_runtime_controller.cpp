@@ -27,6 +27,7 @@
 #include "data_plane/report/ob_i_disk_report.h"
 #include "observer/ob_server.h"
 #include "namespace/namespace.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "ob_server_runtime.h"
 #include "rpc/obmysql/ob_sql_nio_server.h"
 #include "share/schema/ob_schema_runtime_service.h"
@@ -1493,6 +1494,10 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(ObSchemaRuntimeService::server_module_init(
       mods_schema_runtime_service_, schema_service_))) {
     SERVER_LOG(WARN, "mods_schema_runtime_service_ fail", KR(ret));
+  }
+  if (OB_SUCC(ret)) {
+    mods_schema_runtime_service_->set_tablet_schema_resolver(
+        namespace_worker_prototype::resolve_inprocess_tablet_schema);
   }
   if (OB_SUCC(ret) && OB_FAIL(ObMemstoreFreezer::server_module_init(mods_memstore_freezer_))) { SERVER_LOG(WARN, "mods_memstore_freezer_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObCheckPointService::server_module_init(mods_check_point_service_))) { SERVER_LOG(WARN, "mods_check_point_service_ fail", KR(ret)); }

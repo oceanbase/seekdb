@@ -25,6 +25,7 @@
 
 #include <map>
 #include <memory>
+#include <vector>
 
 using namespace oceanbase;
 using namespace oceanbase::common;
@@ -865,98 +866,101 @@ void ObTabletStatMgr::refresh_sys_stat()
 void ObTabletStatMgr::refresh_queuing_mode()
 {
   int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
   int64_t cost_time = common::ObTimeUtility::current_time();
   int64_t stream_cnt = 0;
   int64_t update_schema_cnt = 0;
-  int64_t schema_version = OB_INVALID_VERSION;
 
   auto *schema_runtime = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>();
-  ObMultiVersionSchemaService *schema_service = schema_runtime == nullptr
-      ? nullptr : schema_runtime->get_schema_service();
-  ObSchemaGetterGuard schema_guard;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("ObTabletStatMgr is not inited", K(ret));
-  } else if (OB_ISNULL(schema_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get get schema service", K(ret));
-  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
-  } else if (OB_FAIL(schema_guard.get_schema_version(schema_version))) {
+  } else if (OB_ISNULL(schema_runtime)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("schema runtime service is not initialized", K(ret));
   } else {
     ObBucketWLockAllGuard lock_guard(bucket_lock_);
     stream_cnt = stream_map_.size();
     int64_t cur_extreme_table_cnt = 0;
     if (stream_cnt > 0) {
-      ObSEArray<ObTabletID, 64> tablet_ids;
-      ObSEArray<uint64_t, 64> table_ids;
-      tablet_ids.reserve(stream_cnt);
-      table_ids.reserve(stream_cnt);
+      struct SchemaGroup {
+        ObSEArray<ObTabletID, 64> tablet_ids_;
+        ObSEArray<uint64_t, 64> table_ids_;
+        ObSchemaGetterGuard guard_;
+        int64_t schema_version_ = OB_INVALID_VERSION;
+      };
+      std::map<ObMultiVersionSchemaService *, std::unique_ptr<SchemaGroup>> schema_groups;
+      std::vector<std::pair<ObMultiVersionSchemaService *, int64_t>> tablet_groups;
+      tablet_groups.reserve(stream_cnt);
       std::map<std::pair<ObMultiVersionSchemaService *, uint64_t>, ObTableModeFlag> table_mode_map;
-      std::map<ObMultiVersionSchemaService *, std::unique_ptr<ObSchemaGetterGuard>> namespace_guards;
       TabletStreamMap::iterator iter = stream_map_.begin();
       for ( ; iter != stream_map_.end() && OB_SUCC(ret); ++iter) {
-        if (OB_FAIL(tablet_ids.push_back(iter->first.tablet_id_))) {
+        ObMultiVersionSchemaService *schema_service = nullptr;
+        uint64_t logical_tablet_id = iter->first.tablet_id_.id();
+        if (OB_FAIL(schema_runtime->resolve_tablet_schema(
+                logical_tablet_id, schema_service, logical_tablet_id))) {
+          LOG_WARN("failed to resolve tablet schema service", K(ret), K(logical_tablet_id));
+        } else {
+          auto &group = schema_groups[schema_service];
+          if (!group) {
+            group.reset(new SchemaGroup());
+          }
+          if (OB_FAIL(group->tablet_ids_.push_back(iter->first.tablet_id_))) {
+          } else {
+            tablet_groups.emplace_back(schema_service, group->tablet_ids_.count() - 1);
+          }
         }
       }
 
-      // TODO(chengkong): basical implement, can optimize it
-      if (FAILEDx(schema_service->get_tablet_to_table_history(tablet_ids, schema_version, table_ids))) {
-        LOG_WARN("failed to get table ids according to tablet ids", K(ret), K(schema_version));
-      } else if (OB_UNLIKELY(tablet_ids.count() != stream_cnt || table_ids.count() != stream_cnt)) {
+      for (auto &entry : schema_groups) {
+        if (ret != OB_SUCCESS) {
+          break;
+        }
+        SchemaGroup &group = *entry.second;
+        if (OB_FAIL(entry.first->get_runtime_schema_guard(group.guard_))) {
+        } else if (OB_FAIL(group.guard_.get_schema_version(group.schema_version_))) {
+        } else if (OB_FAIL(entry.first->get_tablet_to_table_history(
+                       group.tablet_ids_, group.schema_version_, group.table_ids_))) {
+          LOG_WARN("failed to get table ids according to tablet ids", K(ret), K(group.schema_version_));
+        } else if (group.table_ids_.count() != group.tablet_ids_.count()) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("tablet history result count mismatch", K(ret), K(group.table_ids_), K(group.tablet_ids_));
+        }
+      }
+      if (OB_SUCC(ret) && tablet_groups.size() != static_cast<size_t>(stream_cnt)) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get unexpected tablet ids or table ids", K(ret), K(tablet_ids), K(table_ids));
-      } else {
+        LOG_WARN("tablet group count mismatch", K(ret), K(stream_cnt));
+      } else if (OB_SUCC(ret)) {
         iter = stream_map_.begin();
         ObTabletStreamNode *stream_node = nullptr;
         const ObSimpleTableSchemaV2 *table_schema = nullptr;
         for (int64_t idx = 0; idx < stream_cnt && iter != stream_map_.end() && OB_SUCC(ret); ++idx, ++iter) {
           const ObTabletStatKey &key = iter->first;
           stream_node = iter->second;
-          const uint64_t table_id = table_ids.at(idx);
+          const auto &group_ref = tablet_groups[idx];
+          SchemaGroup &group = *schema_groups.at(group_ref.first);
+          const uint64_t table_id = group.table_ids_.at(group_ref.second);
           ObTableModeFlag tmp_mode_flag = TABLE_MODE_MAX;
           if (OB_UNLIKELY(OB_INVALID_ID == table_id)) {
             // TODO(chengkong): tablet id may be invalid in some cases like offline ddl or drop table.
-            LOG_WARN("failed to fetch table id from inner table, may be recycled or never exists, skip it", "tablet_id", tablet_ids.at(idx));
-          } else if (OB_UNLIKELY(key.tablet_id_ != tablet_ids.at(idx))) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("key mismatch with tablet id", K(ret), K(key), K(tablet_ids.at(idx)));
+            LOG_WARN("failed to fetch table id from inner table, may be recycled or never exists, skip it", K(key));
           } else {
-            ObMultiVersionSchemaService *tablet_schema_service = schema_service;
-            uint64_t logical_tablet_id = tablet_ids.at(idx).id();
-            if (OB_FAIL(schema_runtime->resolve_tablet_schema(
-                    tablet_ids.at(idx).id(), tablet_schema_service, logical_tablet_id))) {
-              LOG_WARN("failed to resolve tablet schema service", K(ret), K(key));
-            } else if (OB_ISNULL(tablet_schema_service)) {
-              ret = OB_NOT_INIT;
+            const auto mode_key = std::make_pair(group_ref.first, table_id);
+            const auto mode_it = table_mode_map.find(mode_key);
+            if (mode_it != table_mode_map.end()) {
+              tmp_mode_flag = mode_it->second;
             } else {
-              const auto mode_key = std::make_pair(tablet_schema_service, table_id);
-              const auto mode_it = table_mode_map.find(mode_key);
-              if (mode_it != table_mode_map.end()) {
-                tmp_mode_flag = mode_it->second;
-              } else {
-                ObSchemaGetterGuard *active_guard = &schema_guard;
-                if (tablet_schema_service != schema_service) {
-                  auto &namespace_guard = namespace_guards[tablet_schema_service];
-                  if (!namespace_guard) {
-                    namespace_guard.reset(new ObSchemaGetterGuard());
-                    ret = tablet_schema_service->get_runtime_schema_guard(*namespace_guard);
-                  }
-                  active_guard = namespace_guard.get();
-                }
-                if (OB_SUCC(ret) && OB_FAIL(active_guard->get_simple_table_schema(
-                        table_id, table_schema))) {
-                } else if (OB_SUCC(ret) && OB_ISNULL(table_schema)) {
-                  LOG_WARN("get nullptr table schema, skip this tablet", K(table_id));
-                } else if (OB_SUCC(ret)) {
-                  tmp_mode_flag = table_schema->get_table_mode_flag();
-                  table_mode_map.emplace(mode_key, tmp_mode_flag);
-                }
+              if (OB_FAIL(group.guard_.get_simple_table_schema(
+                      table_id, table_schema))) {
+              } else if (OB_SUCC(ret) && OB_ISNULL(table_schema)) {
+                LOG_WARN("get nullptr table schema, skip this tablet", K(table_id));
+              } else if (OB_SUCC(ret)) {
+                tmp_mode_flag = table_schema->get_table_mode_flag();
+                table_mode_map.emplace(mode_key, tmp_mode_flag);
               }
-              if (OB_SUCC(ret) && tmp_mode_flag != TABLE_MODE_MAX) {
-                stream_node->mode_ = tmp_mode_flag;
-                update_schema_cnt++;
-              }
+            }
+            if (OB_SUCC(ret) && tmp_mode_flag != TABLE_MODE_MAX) {
+              stream_node->mode_ = tmp_mode_flag;
+              update_schema_cnt++;
             }
           }
           if (ObTableModeFlag::TABLE_MODE_QUEUING_EXTREME == tmp_mode_flag) {
@@ -964,9 +968,11 @@ void ObTabletStatMgr::refresh_queuing_mode()
           }
           // prevent hunging schema memory too long
           if (OB_SUCC(ret) && (idx+1) % MAX_SCHEMA_GUARD_REFRESH_CNT == 0) {
-            schema_guard.reset();
-            namespace_guards.clear();
-            if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
+            for (auto &entry : schema_groups) {
+              entry.second->guard_.reset();
+              if (OB_FAIL(entry.first->get_runtime_schema_guard(entry.second->guard_))) {
+                break;
+              }
             }
           }
         }

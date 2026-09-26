@@ -1242,7 +1242,6 @@ int ObBasicTabletMergeCtx::get_meta_compaction_info()
 {
   int ret = OB_SUCCESS;
   ObTablet *tablet = get_tablet();
-  ObMultiVersionSchemaService *schema_service = nullptr;
   int64_t full_stored_col_cnt = 0;
   int64_t schema_version = 0;
   ObStorageSchema *storage_schema = nullptr;
@@ -1254,12 +1253,8 @@ int ObBasicTabletMergeCtx::get_meta_compaction_info()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected static param", K(ret), K(static_param_), KPC(static_param_.schema_));
   } else if (OB_FAIL(ObStorageSchemaUtil::alloc_storage_schema(mem_ctx_.get_allocator(), storage_schema))) {
-  } else if (OB_ISNULL(schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get schema service from server module provider", K(ret));
   } else if (OB_FAIL(tablet->get_schema_version_from_storage_schema(schema_version))){
-  } else if (OB_FAIL(ObMediumCompactionScheduleFunc::get_table_schema_to_merge(*schema_service,
-                                                                               *tablet,
+  } else if (OB_FAIL(ObMediumCompactionScheduleFunc::get_table_schema_to_merge(*tablet,
                                                                                schema_version,
                                                                                mem_ctx_.get_allocator(),
                                                                                *storage_schema,

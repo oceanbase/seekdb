@@ -59,7 +59,6 @@ public:
     const ObMediumCompactionInfoList &medium_list,
     int64_t &max_sync_medium_scn);
   static int get_table_schema_to_merge(
-    ObMultiVersionSchemaService &schema_service,
     const ObTablet &tablet,
     const int64_t schema_version,
     ObIAllocator &allocator,

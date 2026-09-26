@@ -50,6 +50,7 @@ int ObLobAccessParam::assign(const ObLobAccessParam& other)
   
   
   this->tablet_id_ = other.tablet_id_;
+  this->schema_tablet_id_ = other.schema_tablet_id_;
   this->lob_meta_tablet_id_ = other.lob_meta_tablet_id_;
   this->lob_piece_tablet_id_ = other.lob_piece_tablet_id_;
 

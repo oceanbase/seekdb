@@ -353,7 +353,7 @@ int ObAccessService::table_scan(
     ObNewRowIterator *&result)
 {
   int ret = OB_SUCCESS;
-  const common::ObTabletID &data_tablet_id = vparam.tablet_id_;
+  const common::ObTabletID data_tablet_id = vparam.tablet_id_;
   ObTableScanIterator *iter = nullptr;
   ObTabletHandle tablet_handle;
   ObTabletID read_tablet_id;
@@ -393,6 +393,8 @@ int ObAccessService::table_scan(
       LOG_WARN("fail to check query allowed", K(ret), K(data_tablet_id));
     }
     // skip inner table, one key reason is to let tablet merge going
+  } else if (FALSE_IT(param.schema_tablet_id_ = param.schema_tablet_id_.is_valid()
+                    ? param.schema_tablet_id_ : data_tablet_id)) {
   } else if (FALSE_IT(param.tablet_id_ = read_tablet_id)) {
   } else if (OB_FAIL(iter->get_ctx_guard().get_ls()->get_tablet_svr()->table_scan(
                          tablet_handle, *iter, param))) {
@@ -426,7 +428,7 @@ int ObAccessService::table_rescan(
     }
   } else {
     ObTableScanIterator *iter =  static_cast<ObTableScanIterator*>(result);
-    const common::ObTabletID &data_tablet_id = vparam.tablet_id_;
+    const common::ObTabletID data_tablet_id = vparam.tablet_id_;
     ObStoreAccessType access_type = param.scan_flag_.is_read_latest() ?
       ObStoreAccessType::READ_LATEST : ObStoreAccessType::READ;
     SCN user_specified_snapshot_scn;
@@ -447,6 +449,8 @@ int ObAccessService::table_rescan(
         LOG_WARN("fail to check query allowed", K(ret), K(result), K(data_tablet_id));
       }
     // skip inner table, one key reason is to let tablet merge going
+    } else if (FALSE_IT(param.schema_tablet_id_ = param.schema_tablet_id_.is_valid()
+                      ? param.schema_tablet_id_ : data_tablet_id)) {
     } else if (FALSE_IT(param.tablet_id_ = read_tablet_id)) {
     } else if (OB_FAIL(iter->get_ctx_guard().get_ls()->get_tablet_svr()->table_rescan(
                            tablet_handle, param, result))) {
@@ -1618,6 +1622,8 @@ int ObAccessService::do_table_scan_(
       LOG_WARN("fail to check query allowed", K(ret), K(data_tablet_id));
     }
     // skip inner table, one key reason is to let tablet merge going
+  } else if (FALSE_IT(param.schema_tablet_id_ = param.schema_tablet_id_.is_valid()
+                    ? param.schema_tablet_id_ : data_tablet_id)) {
   } else if (FALSE_IT(param.tablet_id_ = read_tablet_id)) {
   } else if (OB_FAIL(iter->get_ctx_guard().get_ls()->get_tablet_svr()->table_scan(
                          tablet_handle, *iter, param))) {
@@ -1662,6 +1668,8 @@ int ObAccessService::scan_block_stat(ObBlockStatScanParam &scan_param, ObBlockSt
       if (OB_UNLIKELY(OB_TABLET_NOT_EXIST != ret)) {
         LOG_WARN("fail to check read allowed", K(ret), K(tablet_id), K(access_type));
       }
+    } else if (FALSE_IT(table_scan_param.schema_tablet_id_ = table_scan_param.schema_tablet_id_.is_valid()
+                      ? table_scan_param.schema_tablet_id_ : tablet_id)) {
     } else if (FALSE_IT(table_scan_param.tablet_id_ = read_tablet_id)) {
     } else if (OB_FAIL(ctx_guard.get_ls()->get_tablet_svr()->scan_block_stat(
                            tablet_handle, scan_param, iter))) {

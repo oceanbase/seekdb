@@ -48,6 +48,12 @@ public:
   int resolve_tablet_schema(uint64_t tablet_id,
                             ObMultiVersionSchemaService *&schema_service,
                             uint64_t &schema_tablet_id);
+  int resolve_tablet_schema(uint64_t tablet_id,
+                            ObMultiVersionSchemaService *&schema_service)
+  {
+    uint64_t schema_tablet_id = tablet_id;
+    return resolve_tablet_schema(tablet_id, schema_service, schema_tablet_id);
+  }
 
 private:
   ObMultiVersionSchemaService *schema_service_;

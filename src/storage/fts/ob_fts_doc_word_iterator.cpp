@@ -19,6 +19,7 @@
 #include "storage/fts/ob_fts_doc_word_iterator.h"
 #include "data_plane/fts/ob_fts_doc_word_scan.h"
 #include "share/rc/ob_server_runtime.h"
+#include "share/schema/ob_schema_runtime_service.h"
 
 #include "storage/access/ob_table_scan_iterator.h"
 #include "storage/tx_storage/ob_access_service.h"
@@ -176,7 +177,7 @@ int ObFTDocWordScanIterator::init_scan_param(
               || schema_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(table_id), K(tablet_id), KPC(snapshot), K(schema_version));
-  } else if (OB_FAIL(build_table_param(table_id, table_param_, scan_param_.column_ids_))) {
+  } else if (OB_FAIL(build_table_param(table_id, tablet_id, table_param_, scan_param_.column_ids_))) {
   } else {
     scan_param_.tablet_id_ = tablet_id;
     scan_param_.namespace_access_mode_ = access_mode;
@@ -213,6 +214,7 @@ int ObFTDocWordScanIterator::init_scan_param(
 
 int ObFTDocWordScanIterator::build_table_param(
     const uint64_t table_id,
+    const common::ObTabletID &tablet_id,
     share::schema::ObTableParam &table_param,
     common::ObIArray<uint64_t> &column_ids)
 {
@@ -220,12 +222,15 @@ int ObFTDocWordScanIterator::build_table_param(
   
   share::schema::ObSchemaGetterGuard schema_guard;
   const share::schema::ObTableSchema *table_schema = nullptr;
+  share::schema::ObMultiVersionSchemaService *schema_service = nullptr;
   uint64_t generated_doc_id_col = OB_INVALID_ID;
   column_ids.reset();
   if (OB_UNLIKELY(OB_INVALID_ID == table_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(table_id));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(share::server_service<share::schema::ObSchemaRuntimeService>()->resolve_tablet_schema(
+                 tablet_id.id(), schema_service))) {
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;

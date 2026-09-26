@@ -19,6 +19,8 @@
 #include "ob_lob_location.h"
 #include "data_plane/access/ob_data_access_retry.h"
 #include "share/ob_server_struct.h"
+#include "share/rc/ob_server_runtime.h"
+#include "share/schema/ob_schema_runtime_service.h"
 
 namespace oceanbase
 {
@@ -31,16 +33,22 @@ int ObLobLocationUtil::lob_check_tablet_not_exist(ObLobAccessParam &param, uint6
   bool tablet_exist = false;
   share::schema::ObSchemaGetterGuard schema_guard;
   const share::schema::ObTableSchema *table_schema = nullptr;
-  if (OB_ISNULL(GCTX.schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid schema service", KR(ret), K(GCTX.schema_service_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+  share::schema::ObMultiVersionSchemaService *schema_service = nullptr;
+  const common::ObTabletID &schema_tablet_id = param.schema_tablet_id_.is_valid()
+      ? param.schema_tablet_id_ : param.tablet_id_;
+  uint64_t logical_tablet_id = schema_tablet_id.id();
+  auto *schema_runtime = share::server_service<share::schema::ObSchemaRuntimeService>();
+  if (OB_ISNULL(schema_runtime)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(schema_runtime->resolve_tablet_schema(
+                 schema_tablet_id.id(), schema_service, logical_tablet_id))) {
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     //table could be dropped
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table not exist, fast fail das task", K(table_id));
-  } else if (OB_FAIL(table_schema->check_if_tablet_exists(param.tablet_id_, tablet_exist))) {
+  } else if (OB_FAIL(table_schema->check_if_tablet_exists(common::ObTabletID(logical_tablet_id), tablet_exist))) {
   } else if (!tablet_exist) {
     ret = OB_PARTITION_NOT_EXIST;
     LOG_WARN("partition not exist, maybe dropped by DDL", K(ret), K(param), K(table_id));

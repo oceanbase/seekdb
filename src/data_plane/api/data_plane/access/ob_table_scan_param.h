@@ -97,6 +97,7 @@ public:
       tx_id_(),
       tx_lock_timeout_(-1),
       table_param_(nullptr),
+      schema_tablet_id_(),
       namespace_access_mode_(data_plane::ObNamespaceAccessMode::UNBOUND),
       allocator_(&CURRENT_CONTEXT->get_arena_allocator()),
       need_scn_(false),
@@ -119,6 +120,8 @@ public:
   transaction::ObTransID tx_id_;
   int64_t tx_lock_timeout_;
   const share::schema::ObTableParam *table_param_;
+  // The tablet admitted by the caller, before an inherited read is redirected.
+  common::ObTabletID schema_tablet_id_;
   data_plane::ObNamespaceAccessMode namespace_access_mode_;
   common::ObIAllocator *allocator_;
   common::SampleInfo sample_info_;

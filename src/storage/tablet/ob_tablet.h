@@ -622,7 +622,8 @@ private:
   int check_schema_version_for_bounded_staleness_read(
       const int64_t table_version_for_read,
       const int64_t data_max_schema_version,
-      const uint64_t table_id);
+      const uint64_t table_id,
+      const common::ObTabletID &schema_tablet_id);
 
   static int prepare_memtable(
       ObRelativeTable &relative_table,

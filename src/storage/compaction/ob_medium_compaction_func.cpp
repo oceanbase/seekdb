@@ -106,11 +106,7 @@ int ObMediumCompactionScheduleFunc::find_valid_freeze_info(
   ObTabletMemberWrapper<ObTabletTableStore> table_store_wrapper;
   ObSSTable *last_major = nullptr;
   int64_t last_sstable_schema_version = 0;
-  ObMultiVersionSchemaService *schema_service = nullptr;
-  if (OB_ISNULL(schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("failed to get schema service from server module provider", K(ret));
-  } else if (OB_FAIL(tablet.fetch_table_store(table_store_wrapper))) {
+  if (OB_FAIL(tablet.fetch_table_store(table_store_wrapper))) {
   } else {
     last_major = static_cast<ObSSTable *>(table_store_wrapper.get_member()->get_major_sstables().get_boundary_table(true/*last*/));
     if (OB_ISNULL(last_major)) {
@@ -142,8 +138,7 @@ int ObMediumCompactionScheduleFunc::find_valid_freeze_info(
       FLOG_INFO("schema version in freeze info is too small, try to schedule medium compaction instead", K(ret),
                 K(tablet_id), K(last_sstable_schema_version), K(freeze_info));
       break;
-    } else if (OB_FAIL(get_table_schema_to_merge(*schema_service,
-                                                 tablet,
+    } else if (OB_FAIL(get_table_schema_to_merge(tablet,
                                                  freeze_info.schema_version_,
                                                  allocator_,
                                                  medium_info.storage_schema_,
@@ -868,16 +863,11 @@ int ObMediumCompactionScheduleFunc::prepare_medium_info(
   } else if (0 == schema_version) { // not formal schema version
     ret = OB_NO_NEED_MERGE;
   } else if (medium_info.is_medium_compaction()) {
-    ObMultiVersionSchemaService *schema_service = nullptr;
     ObTablet *tablet = tablet_handle_.get_obj();
     bool is_skip_merge_index = false; // placeholder
 
-    if (OB_ISNULL(schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("failed to get schema service from server module provider", K(ret));
-    } else if (FALSE_IT(medium_info.storage_schema_.reset())) {
-    } else if (OB_FAIL(get_table_schema_to_merge(*schema_service,
-                                                 *tablet,
+    if (FALSE_IT(medium_info.storage_schema_.reset())) {
+    } else if (OB_FAIL(get_table_schema_to_merge(*tablet,
                                                  schema_version,
                                                  allocator_,
                                                  medium_info.storage_schema_,
@@ -932,7 +922,6 @@ int ObMediumCompactionScheduleFunc::get_table_id(
 }
 
 int ObMediumCompactionScheduleFunc::get_table_schema_to_merge(
-    ObMultiVersionSchemaService &schema_service,
     const ObTablet &tablet,
     const int64_t schema_version,
     ObIAllocator &allocator,
@@ -942,7 +931,7 @@ int ObMediumCompactionScheduleFunc::get_table_schema_to_merge(
   int ret = OB_SUCCESS;
   
   const ObTabletID &tablet_id = tablet.get_tablet_meta().tablet_id_;
-  ObMultiVersionSchemaService *resolved_schema_service = &schema_service;
+  ObMultiVersionSchemaService *resolved_schema_service = nullptr;
   uint64_t schema_tablet_id = tablet_id.id();
   auto *schema_runtime = share::server_service<schema::ObSchemaRuntimeService>();
   int64_t effective_schema_version = schema_version;
@@ -957,17 +946,12 @@ int ObMediumCompactionScheduleFunc::get_table_schema_to_merge(
   } else if (OB_FAIL(schema_runtime->resolve_tablet_schema(
                  tablet_id.id(), resolved_schema_service, schema_tablet_id))) {
     LOG_WARN("failed to resolve tablet schema", K(ret), K(tablet_id));
-  } else if (OB_ISNULL(resolved_schema_service)) {
-    ret = OB_NOT_INIT;
-  } else if (resolved_schema_service != &schema_service &&
-             OB_FAIL(resolved_schema_service->get_live_runtime_refreshed_schema_version(
+  } else if (OB_FAIL(resolved_schema_service->get_live_runtime_refreshed_schema_version(
                  save_schema_version))) {
     LOG_WARN("failed to get namespace schema version", K(ret), K(tablet_id));
-  } else if (FALSE_IT(effective_schema_version =
-                         resolved_schema_service == &schema_service
-                             ? schema_version : MIN(schema_version, save_schema_version))) {
+  } else if (FALSE_IT(effective_schema_version = MIN(schema_version, save_schema_version))) {
   } else if (OB_FAIL(get_table_id(*resolved_schema_service,
-                                 ObTabletID(schema_tablet_id), effective_schema_version, table_id))) {
+                                 tablet_id, effective_schema_version, table_id))) {
     if (OB_TABLE_IS_DELETED != ret) {
       LOG_WARN("failed to get table id", K(ret), K(tablet_id));
     }

@@ -259,6 +259,9 @@ transaction::tablelock::ObIInnerConnectionLockRuntime *inprocess_lock_runtime(
     common::sqlclient::ObISQLConnection *conn);
 int ensure_in_process_namespace(uint64_t namespace_id);
 int prepare_namespace_login(ns::NamespaceRuntime &runtime);
+int resolve_inprocess_tablet_schema(uint64_t physical_tablet_id,
+    share::schema::ObMultiVersionSchemaService *&schema_service,
+    uint64_t &logical_tablet_id);
 int inprocess_refresh_schema(uint64_t namespace_id);
 share::schema::ObMultiVersionSchemaService *namespace_schema_service(uint64_t namespace_id);
 common::ObMySQLProxy *namespace_sql_proxy(uint64_t namespace_id);

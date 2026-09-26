@@ -337,6 +337,7 @@ public:
   bool need_release_truncate_part_filter_;
   int64_t timeout_;
   common::ObTabletID tablet_id_;
+  common::ObTabletID schema_tablet_id_;
   common::ObQueryFlag query_flag_;
   ObSQLMode sql_mode_;
   data_plane::ObNamespaceAccessMode namespace_access_mode_;

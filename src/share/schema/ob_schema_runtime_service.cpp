@@ -51,11 +51,14 @@ int ObSchemaRuntimeService::resolve_tablet_schema(
     uint64_t tablet_id, ObMultiVersionSchemaService *&schema_service,
     uint64_t &schema_tablet_id)
 {
-  schema_service = schema_service_;
+  schema_service = nullptr;
   schema_tablet_id = tablet_id;
   TabletSchemaResolver resolver = tablet_schema_resolver_.load(std::memory_order_acquire);
-  return resolver == nullptr ? OB_SUCCESS
-      : resolver(tablet_id, schema_service, schema_tablet_id);
+  if (resolver == nullptr) {
+    return OB_NOT_INIT;
+  }
+  const int ret = resolver(tablet_id, schema_service, schema_tablet_id);
+  return ret == OB_SUCCESS && schema_service == nullptr ? OB_NOT_INIT : ret;
 }
 
 }

@@ -341,11 +341,11 @@ int ObPluginVectorIndexUtils::get_extra_column_count(
   
   const ObTableSchema *delta_buffer_schema = nullptr;
   const ObTableSchema *table_schema = nullptr;
-  ObMultiVersionSchemaService *schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service();
+  ObMultiVersionSchemaService *schema_service = nullptr;
   int64_t extra_info_actual_size = 0;
-  if (OB_ISNULL(schema_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), KP(schema_service));
+  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->resolve_tablet_schema(
+          adapter.get_inc_tablet_id().id(), schema_service))) {
+    LOG_WARN("failed to resolve vector index schema service", K(ret), K(adapter.get_inc_tablet_id()));
   } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( adapter.get_inc_table_id(), delta_buffer_schema))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( adapter.get_data_table_id(), table_schema))) {
@@ -374,11 +374,13 @@ int ObPluginVectorIndexUtils::get_data_table_out_column_id(
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *delta_buffer_schema = nullptr;
   const ObTableSchema *table_schema = nullptr;
-  ObMultiVersionSchemaService *schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service();
+  ObMultiVersionSchemaService *schema_service = nullptr;
   int64_t extra_info_actual_size = 0;
-  if (OB_ISNULL(schema_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null", K(ret), KP(schema_service));
+  if (OB_ISNULL(adapter)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->resolve_tablet_schema(
+                 adapter->get_inc_tablet_id().id(), schema_service))) {
+    LOG_WARN("failed to resolve vector index schema service", K(ret), K(adapter->get_inc_tablet_id()));
   } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( incr_index_table_id, delta_buffer_schema))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( data_table_id, table_schema))) {

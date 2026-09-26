@@ -1042,9 +1042,9 @@ int ObUniqueCheckingParam::init(
     }
   } else {
     SERVER_MODULE_SCOPE {
-      if (OB_ISNULL(schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service())) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("get schema service failed", K(ret));
+      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->resolve_tablet_schema(
+              tablet_id.id(), schema_service))) {
+        LOG_WARN("resolve tablet schema service failed", K(ret), K(tablet_id));
       } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard_, schema_version))) {
       } else if (OB_FAIL(schema_guard_.check_formal_guard())) {
       } else if (OB_FAIL(schema_guard_.get_table_schema( index_table_id, index_schema_))) {

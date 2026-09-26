@@ -2704,7 +2704,8 @@ int ObTablet::get_max_schema_version(int64_t &schema_version)
 int ObTablet::check_schema_version_for_bounded_staleness_read(
     const int64_t table_version_for_read,
     const int64_t data_max_schema_version,
-    const uint64_t table_id)
+    const uint64_t table_id,
+    const common::ObTabletID &schema_tablet_id)
 {
   int ret = OB_SUCCESS;
   int64_t cur_table_version = OB_INVALID_VERSION;
@@ -2725,12 +2726,11 @@ int ObTablet::check_schema_version_for_bounded_staleness_read(
     // To differentiate the above two cases, check with the help of local schema version
 
     
-    ObMultiVersionSchemaService *schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service();
+    ObMultiVersionSchemaService *schema_service = nullptr;
     ObSchemaGetterGuard schema_guard;
     // get schema version of this table in schema service
-    if (OB_ISNULL(schema_service)) {
-      ret = OB_NOT_INIT;
-      LOG_WARN("invalid schema service", K(ret), K(schema_service));
+    if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->resolve_tablet_schema(
+            schema_tablet_id.id(), schema_service))) {
     } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_schema_version(TABLE_SCHEMA, table_id, cur_table_version))) {
     }
@@ -4197,10 +4197,11 @@ int ObTablet::check_schema_version_elapsed(
             ::oceanbase::share::server_service<
                 share::schema::ObSchemaRuntimeService>();
         ObMultiVersionSchemaService *schema_service = nullptr;
-        if (OB_ISNULL(runtime_service)
-            || OB_ISNULL(schema_service = runtime_service->get_schema_service())) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("schema runtime service is null", K(ret), KP(runtime_service), KP(schema_service));
+        if (OB_ISNULL(runtime_service)) {
+          ret = OB_NOT_INIT;
+          LOG_WARN("schema runtime service is null", K(ret));
+        } else if (OB_FAIL(runtime_service->resolve_tablet_schema(
+                       tablet_meta_.tablet_id_.id(), schema_service))) {
         } else if (OB_FAIL(schema_service->get_runtime_refreshed_schema_version(
                        runtime_refreshed_schema_version))) {
           ret = OB_ENTRY_NOT_EXIST == ret ? OB_SCHEMA_EAGAIN : ret;

@@ -56,6 +56,7 @@ private:
       data_plane::ObNamespaceAccessMode access_mode);
   int build_table_param(
       const uint64_t table_id,
+      const common::ObTabletID &tablet_id,
       share::schema::ObTableParam &table_param,
       common::ObIArray<uint64_t> &column_ids);
   int build_key_range(const uint64_t table_id,
