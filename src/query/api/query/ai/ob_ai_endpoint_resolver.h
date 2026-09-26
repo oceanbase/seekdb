@@ -21,6 +21,7 @@
 
 namespace oceanbase
 {
+namespace share { namespace schema { class ObMultiVersionSchemaService; } }
 namespace query
 {
 
@@ -32,6 +33,7 @@ public:
       const common::ObString &model_name,
       common::ObIAllocator &allocator,
       share::ObAiModelEndpointInfo &endpoint,
+      share::schema::ObMultiVersionSchemaService &schema_service,
       bool check_access = true) const = 0;
 };
 

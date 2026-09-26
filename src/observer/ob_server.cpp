@@ -320,19 +320,21 @@ share::ObITabletAutoincrementAdmin *ObServer::tablet_autoincrement_admin()
 int ObServer::create_endpoint(
     common::ObArenaAllocator &allocator,
     const common::ObString &endpoint_name,
-    const common::ObIJsonBase &definition)
+    const common::ObIJsonBase &definition,
+    share::schema::ObMultiVersionSchemaService &schema_service)
 {
   return share::ObAiServiceExecutor::create_ai_model_endpoint(
-      allocator, endpoint_name, definition);
+      allocator, endpoint_name, definition, schema_service);
 }
 
 int ObServer::alter_endpoint(
     common::ObArenaAllocator &allocator,
     const common::ObString &endpoint_name,
-    const common::ObIJsonBase &definition)
+    const common::ObIJsonBase &definition,
+    share::schema::ObMultiVersionSchemaService &schema_service)
 {
   return share::ObAiServiceExecutor::alter_ai_model_endpoint(
-      allocator, endpoint_name, definition);
+      allocator, endpoint_name, definition, schema_service);
 }
 
 int ObServer::drop_endpoint(const common::ObString &endpoint_name)
@@ -344,6 +346,7 @@ int ObServer::resolve_by_model_name(
     const common::ObString &model_name,
     common::ObIAllocator &allocator,
     share::ObAiModelEndpointInfo &endpoint,
+    share::schema::ObMultiVersionSchemaService &schema_service,
     bool check_access) const
 {
   int ret = OB_SUCCESS;
@@ -355,7 +358,7 @@ int ObServer::resolve_by_model_name(
   } else if (OB_FAIL(mods_ai_service_->get_ai_service_guard(guard))) {
     LOG_WARN("get AI service guard failed", K(ret));
   } else if (OB_FAIL(guard.get_ai_endpoint_by_ai_model_name(
-                 model_name, resolved_endpoint, check_access))) {
+                 model_name, resolved_endpoint, schema_service, check_access))) {
     LOG_WARN("resolve AI endpoint failed", K(ret), K(model_name));
   } else if (OB_ISNULL(resolved_endpoint)) {
     ret = OB_ERR_UNEXPECTED;

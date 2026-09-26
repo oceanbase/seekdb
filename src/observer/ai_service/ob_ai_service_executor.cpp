@@ -34,31 +34,27 @@ namespace share
 {
 
 namespace {
-int local_get_runtime_name_case_mode(ObNameCaseMode &name_case_mode)
+int local_get_runtime_name_case_mode(
+    schema::ObMultiVersionSchemaService &schema_service,
+    ObNameCaseMode &name_case_mode)
 {
   int ret = OB_SUCCESS;
-  share::schema::ObMultiVersionSchemaService *schema_service = nullptr;
-  if (OB_ISNULL(schema_service = GCTX.schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    OB_LOG(WARN, "schema service must not be null", K(ret));
-  } else if (!schema_service->is_runtime_schema_refreshed()) {
+  if (!schema_service.is_runtime_schema_refreshed()) {
     ret = OB_SCHEMA_EAGAIN;
     OB_LOG(WARN, "wait schema refreshed", K(ret));
-  } else if (OB_FAIL(schema_service->get_runtime_name_case_mode(name_case_mode))) {
+  } else if (OB_FAIL(schema_service.get_runtime_name_case_mode(name_case_mode))) {
   }
   return ret;
 }
 
-int local_check_ai_model_exists(const ObString &ai_model_name)
+int local_check_ai_model_exists(
+    schema::ObMultiVersionSchemaService &schema_service,
+    const ObString &ai_model_name)
 {
   int ret = OB_SUCCESS;
-  schema::ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
   schema::ObSchemaGetterGuard guard;
   const schema::ObAiModelSchema *ai_model_schema = nullptr;
-  if (OB_ISNULL(schema_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", KR(ret));
-  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(guard))) {
+  if (OB_FAIL(schema_service.get_runtime_schema_guard(guard))) {
   } else if (OB_FAIL(guard.get_ai_model_schema(ai_model_name, ai_model_schema))) {
   } else if (OB_ISNULL(ai_model_schema)) {
     ret = OB_AI_FUNC_PARAM_VALUE_INVALID;
@@ -75,7 +71,7 @@ const int64_t ObAiServiceExecutor::SPECIAL_ENDPOINT_ID_FOR_VERSION = -1;
 const int64_t ObAiServiceExecutor::INIT_ENDPOINT_VERSION = 0;
 const char *ObAiServiceExecutor::SPECIAL_ENDPOINT_SCOPE_FOR_VERSION = "";
 
-int ObAiServiceExecutor::create_ai_model_endpoint(common::ObArenaAllocator &allocator, const ObString &endpoint_name, const ObIJsonBase &create_jbase)
+int ObAiServiceExecutor::create_ai_model_endpoint(common::ObArenaAllocator &allocator, const ObString &endpoint_name, const ObIJsonBase &create_jbase, schema::ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   ObMySQLTransaction trans;
@@ -86,7 +82,7 @@ int ObAiServiceExecutor::create_ai_model_endpoint(common::ObArenaAllocator &allo
   bool is_exists = false;
   ObAiModelEndpointInfo tmp_endpoint;
   if (OB_FAIL(endpoint.parse_from_json_base(allocator, endpoint_name, create_jbase))) {
-  } else if (OB_FAIL(local_check_ai_model_exists(endpoint.get_ai_model_name()))) {
+  } else if (OB_FAIL(local_check_ai_model_exists(schema_service, endpoint.get_ai_model_name()))) {
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
   } else if (OB_FAIL(ObAiServiceProxy::check_ai_endpoint_exists(allocator, trans, endpoint_name, is_exists))) {
   } else if (is_exists) {
@@ -94,7 +90,7 @@ int ObAiServiceExecutor::create_ai_model_endpoint(common::ObArenaAllocator &allo
     LOG_USER_ERROR(OB_AI_FUNC_ENDPOINT_EXISTS, endpoint_name.length(), endpoint_name.ptr());
   } else {
     // check if the ai model endpoint has the same ai model name is already exists
-    if (OB_FAIL(read_ai_endpoint_by_ai_model_name(allocator, endpoint.get_ai_model_name(), tmp_endpoint))) {
+    if (OB_FAIL(read_ai_endpoint_by_ai_model_name(allocator, endpoint.get_ai_model_name(), tmp_endpoint, schema_service))) {
       if (ret == OB_AI_FUNC_ENDPOINT_NOT_FOUND) {
         ret = OB_SUCCESS;
       } else {
@@ -125,7 +121,7 @@ int ObAiServiceExecutor::create_ai_model_endpoint(common::ObArenaAllocator &allo
   return ret;
 }
 
-int ObAiServiceExecutor::alter_ai_model_endpoint(ObArenaAllocator &allocator, const ObString &name, const ObIJsonBase &alter_jbase)
+int ObAiServiceExecutor::alter_ai_model_endpoint(ObArenaAllocator &allocator, const ObString &name, const ObIJsonBase &alter_jbase, schema::ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   ObAiModelEndpointInfo old_endpoint;
@@ -143,15 +139,15 @@ int ObAiServiceExecutor::alter_ai_model_endpoint(ObArenaAllocator &allocator, co
   } else if (OB_FAIL(ObAiServiceProxy::select_ai_endpoint(allocator, *GCTX.sql_proxy_, name, old_endpoint, true))) {
   } else if (OB_FAIL(construct_new_endpoint(allocator, old_endpoint, alter_jbase, new_endpoint))) {
   } else if (OB_FAIL(new_endpoint.check_valid())) {
-  } else if (OB_FAIL(local_get_runtime_name_case_mode(name_case_mode))) {
+  } else if (OB_FAIL(local_get_runtime_name_case_mode(schema_service, name_case_mode))) {
   } else if (ObCharset::case_mode_equal(name_case_mode, new_endpoint.get_ai_model_name(), old_endpoint.get_ai_model_name())) {
     // need check name case mode equal, if not change ai model name, just update the endpoint 
     LOG_INFO("ai model name is the same, just update the endpoint", KR(ret), K(name), K(name_case_mode), K(new_endpoint), K(old_endpoint));
-  } else if (OB_FAIL(local_check_ai_model_exists(new_endpoint.get_ai_model_name()))) {
+  } else if (OB_FAIL(local_check_ai_model_exists(schema_service, new_endpoint.get_ai_model_name()))) {
   } else {
     // if change ai model name, check if the ai model endpoint has the same ai model name is already exists
     // if not exists, continue
-    if (OB_FAIL(read_ai_endpoint_by_ai_model_name(allocator, new_endpoint.get_ai_model_name(), tmp_endpoint))) {
+    if (OB_FAIL(read_ai_endpoint_by_ai_model_name(allocator, new_endpoint.get_ai_model_name(), tmp_endpoint, schema_service))) {
       if (ret == OB_AI_FUNC_ENDPOINT_NOT_FOUND) {
         ret = OB_SUCCESS;
       } else {
@@ -228,13 +224,13 @@ int ObAiServiceExecutor::read_ai_endpoint(ObArenaAllocator &allocator, const ObS
   return ret;
 }
 
-int ObAiServiceExecutor::read_ai_endpoint_by_ai_model_name(ObArenaAllocator &allocator, const ObString &ai_model_name, ObAiModelEndpointInfo &endpoint_info)
+int ObAiServiceExecutor::read_ai_endpoint_by_ai_model_name(ObArenaAllocator &allocator, const ObString &ai_model_name, ObAiModelEndpointInfo &endpoint_info, schema::ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   
   
   ObNameCaseMode name_case_mode;
-  if (OB_FAIL(local_get_runtime_name_case_mode(name_case_mode))) {
+  if (OB_FAIL(local_get_runtime_name_case_mode(schema_service, name_case_mode))) {
   } else if (OB_NAME_CASE_INVALID >= name_case_mode || OB_NAME_CASE_MAX <= name_case_mode) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid name case mode", K(ret), K(name_case_mode));

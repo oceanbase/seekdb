@@ -637,16 +637,19 @@ public:
   int create_endpoint(
       common::ObArenaAllocator &allocator,
       const common::ObString &endpoint_name,
-      const common::ObIJsonBase &definition) override;
+      const common::ObIJsonBase &definition,
+      share::schema::ObMultiVersionSchemaService &schema_service) override;
   int alter_endpoint(
       common::ObArenaAllocator &allocator,
       const common::ObString &endpoint_name,
-      const common::ObIJsonBase &definition) override;
+      const common::ObIJsonBase &definition,
+      share::schema::ObMultiVersionSchemaService &schema_service) override;
   int drop_endpoint(const common::ObString &endpoint_name) override;
   int resolve_by_model_name(
       const common::ObString &model_name,
       common::ObIAllocator &allocator,
       share::ObAiModelEndpointInfo &endpoint,
+      share::schema::ObMultiVersionSchemaService &schema_service,
       bool check_access = true) const override;
   int try_acquire_ddl_execution(int64_t cpu_quota_concurrency) override;
   void release_ddl_execution() override;

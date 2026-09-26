@@ -173,7 +173,8 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("AI endpoint resolver is unavailable", K(ret));
     } else if (OB_FAIL(endpoint_resolver->resolve_by_model_name(
-                   model_id, temp_allocator, resolved_endpoint))) {
+                   model_id, temp_allocator, resolved_endpoint,
+                   *ctx.exec_ctx_.get_my_session()->effective_schema_service()))) {
     } 
 
     if (OB_FAIL(ret)) {

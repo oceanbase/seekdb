@@ -760,7 +760,8 @@ int ObVectorIndexUtil::get_vector_from_text_by_embedding(ObIAllocator &allocator
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ai service is null", K(ret));
     } else if (OB_FAIL(ai_service->get_ai_service_guard(ai_service_guard))) {
-    } else if (OB_FAIL(ai_service_guard.get_ai_endpoint_by_ai_model_name(endpoint_str, endpoint_info))) {
+    } else if (OB_FAIL(ai_service_guard.get_ai_endpoint_by_ai_model_name(
+                   endpoint_str, endpoint_info, schema_service))) {
     } else {
       int64_t dim = param.dim_;
       ObJsonInt *dim_json = nullptr;

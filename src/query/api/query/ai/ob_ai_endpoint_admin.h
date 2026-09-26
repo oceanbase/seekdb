@@ -25,6 +25,7 @@ class ObArenaAllocator;
 class ObIJsonBase;
 class ObString;
 }
+namespace share { namespace schema { class ObMultiVersionSchemaService; } }
 namespace query
 {
 
@@ -37,11 +38,13 @@ public:
   virtual int create_endpoint(
       common::ObArenaAllocator &allocator,
       const common::ObString &endpoint_name,
-      const common::ObIJsonBase &definition) = 0;
+      const common::ObIJsonBase &definition,
+      share::schema::ObMultiVersionSchemaService &schema_service) = 0;
   virtual int alter_endpoint(
       common::ObArenaAllocator &allocator,
       const common::ObString &endpoint_name,
-      const common::ObIJsonBase &definition) = 0;
+      const common::ObIJsonBase &definition,
+      share::schema::ObMultiVersionSchemaService &schema_service) = 0;
   virtual int drop_endpoint(const common::ObString &endpoint_name) = 0;
 };
 

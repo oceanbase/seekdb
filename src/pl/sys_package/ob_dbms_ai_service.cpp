@@ -123,8 +123,12 @@ int ObDBMSAiService::create_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore 
     } else if (OB_ISNULL(endpoint_admin)) {
       ret = OB_NOT_INIT;
       LOG_WARN("ai endpoint admin is not initialized", K(ret));
+    } else if (OB_ISNULL(ctx.exec_ctx_) || OB_ISNULL(ctx.exec_ctx_->get_my_session())
+               || OB_ISNULL(ctx.exec_ctx_->get_my_session()->effective_schema_service())) {
+      ret = OB_NOT_INIT;
     } else if (OB_FAIL(endpoint_admin->create_endpoint(
-                          tmp_allocator, endpoint_name, *j_base))) {
+                          tmp_allocator, endpoint_name, *j_base,
+                          *ctx.exec_ctx_->get_my_session()->effective_schema_service()))) {
     }
   }
 
@@ -163,8 +167,12 @@ int ObDBMSAiService::alter_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &
     } else if (OB_ISNULL(endpoint_admin)) {
       ret = OB_NOT_INIT;
       LOG_WARN("ai endpoint admin is not initialized", K(ret));
+    } else if (OB_ISNULL(ctx.exec_ctx_) || OB_ISNULL(ctx.exec_ctx_->get_my_session())
+               || OB_ISNULL(ctx.exec_ctx_->get_my_session()->effective_schema_service())) {
+      ret = OB_NOT_INIT;
     } else if (OB_FAIL(endpoint_admin->alter_endpoint(
-                          tmp_allocator, endpoint_name, *j_base))) {
+                          tmp_allocator, endpoint_name, *j_base,
+                          *ctx.exec_ctx_->get_my_session()->effective_schema_service()))) {
     }
   }
 

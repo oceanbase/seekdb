@@ -135,7 +135,7 @@ int ObAiServiceGuard::get_ai_endpoint(const common::ObString &name, const share:
   return ret;
 }
 
-int ObAiServiceGuard::get_ai_endpoint_by_ai_model_name(const common::ObString &ai_model_name, const share::ObAiModelEndpointInfo *&endpoint_info, bool need_check)
+int ObAiServiceGuard::get_ai_endpoint_by_ai_model_name(const common::ObString &ai_model_name, const share::ObAiModelEndpointInfo *&endpoint_info, share::schema::ObMultiVersionSchemaService &schema_service, bool need_check)
 {
   int ret = OB_SUCCESS;
   ObAiModelEndpointInfo *tmp_endpoint_info = nullptr;
@@ -145,7 +145,7 @@ int ObAiServiceGuard::get_ai_endpoint_by_ai_model_name(const common::ObString &a
   } else if (OB_ISNULL(tmp_endpoint_info = OB_NEWx(ObAiModelEndpointInfo, &local_allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to alloc endpoint info", KR(ret));
-  } else if (OB_FAIL(ObAiServiceExecutor::read_ai_endpoint_by_ai_model_name(local_allocator_, ai_model_name, *tmp_endpoint_info))) {
+  } else if (OB_FAIL(ObAiServiceExecutor::read_ai_endpoint_by_ai_model_name(local_allocator_, ai_model_name, *tmp_endpoint_info, schema_service))) {
   } else {
     endpoint_info = tmp_endpoint_info;
   }

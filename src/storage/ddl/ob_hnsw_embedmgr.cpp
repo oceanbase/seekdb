@@ -740,7 +740,7 @@ int ObEmbeddingTaskMgr::get_ai_config(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("AI endpoint resolver is unavailable", K(ret));
     } else if (OB_FAIL(endpoint_resolver->resolve_by_model_name(
-                   model_id, allocator_, endpoint_info))) {
+                   model_id, allocator_, endpoint_info, schema_service))) {
     } else if (OB_FALSE_IT(use_request_model_name =
                               !endpoint_info.get_request_model_name().empty())) {
     } else if (OB_FAIL(ob_write_string(

@@ -460,7 +460,9 @@ int ObHybridVectorRefreshTask::init_endpoint(ObPluginVectorIndexAdaptor &adaptor
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret), KPC(task_ctx), K(ai_service));
   } else if (OB_FAIL(ai_service->get_ai_service_guard(task_ctx->ai_service_))) {
-  } else if (OB_FAIL(task_ctx->ai_service_.get_ai_endpoint_by_ai_model_name(adaptor.get_endpoint(), task_ctx->endpoint_, false /*need_check*/))) {
+  } else if (OB_FAIL(task_ctx->ai_service_.get_ai_endpoint_by_ai_model_name(
+                 adaptor.get_endpoint(), task_ctx->endpoint_, *schema_service,
+                 false /*need_check*/))) {
   } else if (OB_FALSE_IT(use_request_model_name = !task_ctx->endpoint_->get_request_model_name().empty())) {
   } else if (use_request_model_name && OB_FAIL(ob_write_string(task_ctx->allocator_, task_ctx->endpoint_->get_request_model_name(), task_ctx->request_model_name_))) {
     LOG_WARN("failed to copy request_model_name", K(ret));
