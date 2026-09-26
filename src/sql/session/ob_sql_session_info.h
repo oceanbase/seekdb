@@ -436,9 +436,8 @@ public:
   // re-resolves through the registry.
   ns::NamespaceRuntime *ns_runtime() const { return ns_runtime_; }
   void set_ns_runtime(ns::NamespaceRuntime *runtime) { ns_runtime_ = runtime; }
-  // Schema service for this session's namespace: the runtime's bound
-  // instance when the namespace has one, otherwise the process-wide THE_ONE
-  // (system namespace 1 and namespace-agnostic paths).
+  data_plane::ObITransactionService *transaction_service_for_deserialize() override;
+  // Services are supplied by the runtime bound to this session.
   share::schema::ObMultiVersionSchemaService *effective_schema_service() const;
   ObPsCache *effective_ps_cache() const;
   common::ObMySQLProxy *effective_sql_proxy() const;

@@ -823,6 +823,10 @@ int ObPxInitTaskArgs::deep_copy_assign(ObPxInitTaskArgs &src,
                                           ObIAllocator &alloc)
 {
   int ret = OB_SUCCESS;
+  if (nullptr != exec_ctx_ && nullptr != src.exec_ctx_) {
+    static_cast<ObDesExecContext *>(exec_ctx_)->set_deserialize_runtime(
+        src.exec_ctx_->get_runtime_services().ns_runtime_);
+  }
   UNIS_VERSION_GUARD(lib::get_unis_global_compat_version());
   // Deep copy all elements in arg, into session, op tree etc.
   // Temporarily complete through serialization+deserialization

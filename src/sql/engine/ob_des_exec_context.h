@@ -30,6 +30,8 @@ public:
   ObDesExecContext(common::ObIAllocator &allocator, ObSQLSessionMgr *session_mgr);
   virtual ~ObDesExecContext();
   int create_my_session();
+  void set_deserialize_runtime(ns::NamespaceRuntime *runtime)
+  { deserialize_runtime_ = runtime; }
   virtual int deserialize(const char* buf, const int64_t data_len, int64_t& pos);
   void cleanup_session();
   void show_session();
@@ -38,6 +40,7 @@ protected:
   ObFreeSessionCtx free_session_ctx_;
   ObSqlCtx sql_ctx_;
 private:
+  ns::NamespaceRuntime *deserialize_runtime_;
   DISALLOW_COPY_AND_ASSIGN(ObDesExecContext);
 };
 

@@ -57,6 +57,11 @@ const int64_t ObBasicSessionInfo::ESSENTIAL_SYS_VARS_COUNT =
 
 ObBasicSessionInfo::SysVarsCacheData ObBasicSessionInfo::SysVarsCache::base_data_;
 
+data_plane::ObITransactionService *ObBasicSessionInfo::transaction_service_for_deserialize()
+{
+  return nullptr;
+}
+
 ObBasicSessionInfo::ObBasicSessionInfo()
   :   
       query_mutex_(common::ObLatchIds::SESSION_QUERY_LOCK),
@@ -3539,7 +3544,7 @@ OB_DEF_DESERIALIZE(ObBasicSessionInfo)
   if (OB_FAIL(serialization::decode(buf, data_len, pos, has_tx_desc))) {
   } else if (has_tx_desc) {
     data_plane::ObITransactionService *txs =
-        data_plane::query_transaction_service();
+        transaction_service_for_deserialize();
     if (OB_ISNULL(txs)) {
       ret = OB_NOT_INIT;
       LOG_WARN("transaction service is unavailable", K(ret));

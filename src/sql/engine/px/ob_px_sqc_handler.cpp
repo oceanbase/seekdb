@@ -241,6 +241,7 @@ int ObPxSqcHandler::copy_sqc_init_arg(int64_t &pos, const char *data_buf, int64_
   } else {
     allocator = &mem_context_->get_arena_allocator();
     WITH_CONTEXT(mem_context_) {
+      exec_ctx_->set_deserialize_runtime(runtime_services_.ns_runtime_);
       sqc_init_args_->set_deserialize_param(*exec_ctx_, *des_phy_plan_, allocator);
       if (OB_FAIL(sqc_init_args_->do_deserialize(pos, data_buf, data_len))) {
       } else {

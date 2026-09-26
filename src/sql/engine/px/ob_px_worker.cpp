@@ -69,6 +69,8 @@ int ObPxCoroWorker::deep_copy_assign(const ObPxInitTaskArgs &src,
                                      ObPxInitTaskArgs &dest)
 {
   int ret = OB_SUCCESS;
+  exec_ctx_.set_deserialize_runtime(
+      src.exec_ctx_->get_runtime_services().ns_runtime_);
   dest.set_deserialize_param(exec_ctx_, phy_plan_, &alloc_);
   // Deep copy all elements in arg, into session, op tree, etc.
   // Temporarily complete through serialization+deserialization

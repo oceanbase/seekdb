@@ -24,7 +24,7 @@ namespace sql
 {
 
 ObDesExecContext::ObDesExecContext(ObIAllocator &allocator, ObSQLSessionMgr *session_mgr)
-    : ObExecContext(allocator, session_mgr)
+    : ObExecContext(allocator, session_mgr), deserialize_runtime_(nullptr)
 {
   free_session_ctx_.sessid_ = ObSQLSessionInfo::INVALID_SESSID;
   set_sql_ctx(&sql_ctx_);
@@ -112,6 +112,7 @@ int ObDesExecContext::create_my_session()
     }
   }
   if (OB_SUCC(ret)) {
+    my_session_->set_ns_runtime(deserialize_runtime_);
     my_session_->set_thread_id(GETTID());
     //notice: can't unlink exec context and session info here
     typedef ObSQLSessionInfo::ExecCtxSessionRegister MyExecCtxSessionRegister;

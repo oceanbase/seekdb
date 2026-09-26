@@ -53,6 +53,9 @@
 
 namespace oceanbase
 {
+namespace data_plane {
+class ObITransactionService;
+}
 namespace observer {
 class ObSMConnection;
 }
@@ -368,6 +371,7 @@ public:
 public:
   ObBasicSessionInfo();
   virtual ~ObBasicSessionInfo();
+  virtual data_plane::ObITransactionService *transaction_service_for_deserialize();
 
   virtual int init(uint32_t sessid,
                    common::ObIAllocator *bucket_allocator, const ObTZInfoMap *tz_info);

@@ -47,6 +47,11 @@ using namespace oceanbase::pl;
 using namespace oceanbase::obmysql;
 using namespace oceanbase::observer;
 
+data_plane::ObITransactionService *ObSQLSessionInfo::transaction_service_for_deserialize()
+{
+  return namespace_worker_prototype::effective_transaction_service(this);
+}
+
 const char *state_str[] =
 {
   "INIT",
