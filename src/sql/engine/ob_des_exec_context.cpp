@@ -113,6 +113,7 @@ int ObDesExecContext::create_my_session()
   }
   if (OB_SUCC(ret)) {
     my_session_->set_ns_runtime(deserialize_runtime_);
+    set_my_session(my_session_);
     my_session_->set_thread_id(GETTID());
     //notice: can't unlink exec context and session info here
     typedef ObSQLSessionInfo::ExecCtxSessionRegister MyExecCtxSessionRegister;

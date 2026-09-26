@@ -354,8 +354,11 @@ int ObAdaptiveAutoDop::calculate_tsc_auto_dop(const ObIArray<ObBatchEstTasks *> 
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret));
     } else if (sql_ctx->session_info_->is_user_session()
+               && OB_ISNULL(sql_ctx->session_info_->effective_schema_service())) {
+      ret = OB_NOT_INIT;
+    } else if (sql_ctx->session_info_->is_user_session()
                && OB_FAIL(ObSchemaUtils::get_runtime_int_variable(
-                    *GCTX.schema_service_, SYS_VAR_PARALLEL_SERVERS_TARGET,
+                    *sql_ctx->session_info_->effective_schema_service(), SYS_VAR_PARALLEL_SERVERS_TARGET,
                     parallel_servers_target))) {
       LOG_WARN("fail to read runtime variable", K(ret));
     } else {

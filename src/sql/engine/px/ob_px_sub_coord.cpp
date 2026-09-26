@@ -941,6 +941,7 @@ int ObPxSubCoord::rebuild_sqc_access_table_locations()
       if (OB_ISNULL(table_loc) && location_keys.at(i).is_loc_uncertain_) {
         OZ(ObTableLocation::build_full_local_table_loc(das_ctx,
            sqc_arg_.exec_ctx_->get_allocator(),
+           sqc_arg_.exec_ctx_->get_sql_exec_ctx().schema_service_,
            location_keys.at(i).table_location_key_,
            location_keys.at(i).ref_table_id_,
            table_loc));

@@ -35,6 +35,7 @@ namespace common
 {
 struct ObObjCastParams;
 }
+namespace share { namespace schema { class ObMultiVersionSchemaService; } }
 
 namespace sql
 {
@@ -298,6 +299,7 @@ public:
       share::schema::ObColumnSchemaV2 &column_schema,
       common::ObObj &default_value,
       const common::ObTimeZoneInfoWrap &tz_info_wrap,
+      share::schema::ObMultiVersionSchemaService &schema_service,
       common::ObIAllocator &allocator);
   static int check_udt_default_value(ObObj &default_value,
                                      const common::ObTimeZoneInfoWrap &tz_info_wrap,

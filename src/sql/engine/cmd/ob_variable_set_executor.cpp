@@ -104,7 +104,7 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
       if (OB_ISNULL(expr_ctx.exec_ctx_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("expr_ctx.exec_ctx_ is NULL", K(ret));
-      } else if (OB_FAIL(password_ctx.init())) {
+      } else if (OB_FAIL(password_ctx.init(session))) {
       } else {
         expr_ctx.exec_ctx_->set_sql_proxy(sql_proxy);
       }
@@ -368,13 +368,12 @@ int ObVariableSetExecutor::execute_subquery_expr(ObExecContext &ctx,
                                                  common::ObObj &value_obj)
 {
   int ret = OB_SUCCESS;
-  ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
   sqlclient::ObISQLConnection *conn = NULL;
   sqlclient::ObISQLConnectionGuard conn_guard;
   
-  if (OB_ISNULL(session_info) || OB_ISNULL(sql_proxy)) {
+  if (OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("get unexpected null", K(ret), K(session_info), K(sql_proxy));
+    LOG_WARN("get unexpected null", K(ret), K(session_info));
   } else if (OB_FAIL(
                  query::ObInnerSQLConnectionAccess::
                      create_connection_with_external_session(
@@ -698,12 +697,15 @@ int ObVariableSetExecutor::cast_value(ObExecContext &ctx,
                                       ObObj &out_val)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(GCTX.schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_service_ is null");
-  } else if (OB_ISNULL(ctx.get_my_session())) {
+  ObSQLSessionInfo *session = ctx.get_my_session();
+  share::schema::ObMultiVersionSchemaService *schema_service =
+      session == nullptr ? nullptr : session->effective_schema_service();
+  if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("my session is null");
+  } else if (OB_ISNULL(schema_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("schema_service_ is null", K(ret));
   } else if (var_node.is_set_default_
              && var_node.variable_name_ == OB_SV_DEFAULT_STORAGE_ENGINE) {
     const ObObj &def_val = sys_var.get_global_default_value();
@@ -717,7 +719,7 @@ int ObVariableSetExecutor::cast_value(ObExecContext &ctx,
       const ObSysVarSchema *var_schema = NULL;
       const ObDataTypeCastParams dtc_params =
             ObBasicSessionInfo::create_dtc_params(ctx.get_my_session());
-      if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+      if (OB_FAIL(schema_service->get_runtime_schema_guard(
                   schema_guard))) {
       } else if (OB_FAIL(schema_guard.get_system_variable(var_node.variable_name_, var_schema))) {
       } else if (OB_FAIL(var_schema->get_value(&calc_buf, dtc_params, out_val))) {
@@ -919,15 +921,17 @@ int ObVariableSetExecutor::switch_to_session_variable(const ObObj &value,
   return ret;
 }
 
-int ObVariableSetExecutor::ObValidatePasswordCtx::init()
+int ObVariableSetExecutor::ObValidatePasswordCtx::init(ObSQLSessionInfo *session)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(GCTX.schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_service_ is null");
+  share::schema::ObMultiVersionSchemaService *schema_service =
+      session == nullptr ? nullptr : session->effective_schema_service();
+  if (OB_ISNULL(schema_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("schema_service_ is null", K(ret));
   } else {
     ObSchemaGetterGuard schema_guard;
-    if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(get_current_val(schema_guard,
                                        share::SYS_VAR_VALIDATE_PASSWORD_LENGTH,
                                        cur_length_))) {

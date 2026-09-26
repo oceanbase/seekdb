@@ -87,7 +87,7 @@ private:
       cur_number_count_(0),
       cur_special_count_(0)
     {}
-    int init();
+    int init(ObSQLSessionInfo *session);
     int get_current_val(share::schema::ObSchemaGetterGuard &schema_guard,
                         share::ObSysVarClassType var_id,
                         uint64_t &val);

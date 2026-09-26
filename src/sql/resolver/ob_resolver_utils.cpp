@@ -1431,13 +1431,13 @@ int ObResolverUtils::get_routine(pl::ObPLPackageGuard &package_guard,
   CK (OB_NOT_NULL(params.session_info_));
   CK (OB_NOT_NULL(params.schema_checker_));
   CK (OB_NOT_NULL(params.schema_checker_->get_schema_guard()));
-  CK (OB_NOT_NULL(GCTX.sql_proxy_));
+  CK (OB_NOT_NULL(params.session_info_->effective_sql_proxy()));
   if (OB_SUCC(ret)) {
     ObPLResolveCtx resolve_ctx(*(params.allocator_),
                                *(params.session_info_),
                                *(params.schema_checker_->get_schema_guard()),
                                package_guard,
-                               *(GCTX.sql_proxy_),
+                               *(params.session_info_->effective_sql_proxy()),
                                params.is_prepare_protocol_,
                                false, /*check mode*/
                                true, /*sql scope*/
@@ -5569,7 +5569,13 @@ int ObResolverUtils::resolve_external_symbol(common::ObIAllocator &allocator,
                                              ObIArray<ObSchemaObjVersion> *dep_tbl)
 {
   int ret = OB_SUCCESS;
-  if (NULL == package_guard) {
+  common::ObMySQLProxy *resolve_sql_proxy =
+      sql_proxy == nullptr ? session_info.effective_sql_proxy() : sql_proxy;
+  if (resolve_sql_proxy == nullptr) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("resolve SQL proxy is not bound", K(ret));
+  }
+  if (OB_SUCC(ret) && NULL == package_guard) {
     // patch bugfix from 42x: 55397384
     if (NULL != session_info.get_cur_exec_ctx()
         && NULL != session_info.get_cur_exec_ctx()->get_sql_ctx()) { // bypass tmp ObExecContext
@@ -5595,7 +5601,7 @@ int ObResolverUtils::resolve_external_symbol(common::ObIAllocator &allocator,
                                   session_info,
                                   schema_guard,
                                   *package_guard,
-                                  NULL == sql_proxy ? (NULL == ns ? *GCTX.sql_proxy_ : ns->get_external_ns()->get_resolve_ctx().sql_proxy_) : *sql_proxy,
+                                  *resolve_sql_proxy,
                                   session_info.get_cur_exec_ctx()->get_plan_cache(),
                                   session_info.get_cur_exec_ctx()->get_pl_sql_runtime(),
                                   session_info.get_cur_exec_ctx()->get_pl_engine(),
@@ -5615,7 +5621,7 @@ int ObResolverUtils::resolve_external_symbol(common::ObIAllocator &allocator,
                                                         *session_info.get_cur_exec_ctx()->get_plan_cache(),
                                                         session_info.get_cur_exec_ctx()->get_srs_provider(),
                                                         session_info.get_cur_exec_ctx()->get_lob_read_service(),
-                                                        NULL == sql_proxy ? (NULL == ns ? *GCTX.sql_proxy_ : ns->get_external_ns()->get_resolve_ctx().sql_proxy_) : *sql_proxy,
+                                                        *resolve_sql_proxy,
                                                         schema_guard,
                                                         *package_guard,
                                                         params,

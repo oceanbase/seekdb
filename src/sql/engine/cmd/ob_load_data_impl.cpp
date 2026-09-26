@@ -885,7 +885,7 @@ int ObLoadDataSPImpl::exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle)
   return ret;
 }
 
-int ObLoadDataSPImpl::exec_insert(ObInsertTask &task)
+int ObLoadDataSPImpl::exec_insert(ObInsertTask &task, ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
   int64_t sql_buff_len_init = OB_MALLOC_BIG_BLOCK_SIZE; //2M
@@ -959,7 +959,7 @@ int ObLoadDataSPImpl::exec_insert(ObInsertTask &task)
   param.sql_mode_ = &task.sql_mode_;
   param.tz_info_wrap_ = &task.timezone_;
 
-  if (OB_SUCC(ret) && OB_FAIL(GCTX.sql_proxy_->write(sql_str.string(),
+  if (OB_SUCC(ret) && OB_FAIL(sql_proxy.write(sql_str.string(),
                                                      affected_rows,
                                                      &param))) {
     LOG_WARN("fail to execute worker insert", K(ret), "task_id", task.task_id_);
@@ -1207,7 +1207,6 @@ int ObLoadDataSPImpl::execute_insert_task(ObExecContext &ctx,
                                           ToolBox &box,
                                           ObInsertTask &insert_task)
 {
-  UNUSED(ctx);
   UNUSED(box);
   int ret = OB_SUCCESS;
   ObInsertResult &result = insert_task.result_;
@@ -1218,7 +1217,8 @@ int ObLoadDataSPImpl::execute_insert_task(ObExecContext &ctx,
     // buffer. Keep the same isolation after executing the task synchronously so
     // successful inner inserts do not leak warnings to the LOAD DATA statement.
     ObWarningBufferIgnoreScope ignore_internal_insert_warnings;
-    result.exec_ret_ = exec_insert(insert_task);
+    ObMySQLProxy *sql_proxy = ctx.get_sql_proxy();
+    result.exec_ret_ = sql_proxy == nullptr ? OB_NOT_INIT : exec_insert(insert_task, *sql_proxy);
     if (OB_SUCCESS != result.exec_ret_) {
       ObWarningBuffer *warning_buf = ob_get_tsi_warning_buffer();
       if (OB_NOT_NULL(warning_buf)) {

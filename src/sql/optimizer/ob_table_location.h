@@ -682,6 +682,7 @@ public:
                                              NULL != gen_col_node_ || NULL != sub_gen_col_node_; }
   static int build_full_local_table_loc(ObDASCtx &das_ctx,
                                         ObIAllocator &allocator,
+                                        share::schema::ObMultiVersionSchemaService *schema_service,
                                         uint64_t table_id,
                                         uint64_t ref_table_id,
                                         ObDASTableLoc *&table_loc);

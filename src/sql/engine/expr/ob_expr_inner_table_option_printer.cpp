@@ -72,11 +72,11 @@ int ObExprInnerTableOptionPrinter::eval_inner_table_option_printer(const ObExpr 
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get my session", K(ret));
-  } else if (OB_ISNULL(GCTX.schema_service_)) {
+  } else if (OB_ISNULL(session->effective_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get schema_service", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, database_id, table_id))) {
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(session->effective_schema_service()->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id->get_int(), table_schema))) {
   } else if (nullptr == table_schema) {
     expr_datum.set_null();
@@ -156,13 +156,13 @@ int ObExprInnerTableSequenceGetter::eval_inner_table_sequence_getter(const ObExp
   if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get my session", K(ret));
-  } else if (OB_ISNULL(GCTX.schema_service_)) {
+  } else if (OB_ISNULL(session->effective_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get schema_service", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, table_id, auto_inc_col_id))) {
   } else if (auto_inc_col_id->is_null() || 0 == auto_inc_col_id->get_int()) {
     expr_datum.set_null();
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(session->effective_schema_service()->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id->get_int(), table_schema))) {
   } else if (nullptr == table_schema) {
     expr_datum.set_null();

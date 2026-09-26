@@ -4959,6 +4959,7 @@ int ObTableLocation::try_split_integer_range(const common::ObIArray<common::ObNe
 
 int ObTableLocation::build_full_local_table_loc(ObDASCtx &das_ctx,
                                                 ObIAllocator &allocator,
+                                                ObMultiVersionSchemaService *schema_service,
                                                 uint64_t table_id,
                                                 uint64_t ref_table_id,
                                                 ObDASTableLoc *&table_loc)
@@ -4969,7 +4970,8 @@ int ObTableLocation::build_full_local_table_loc(ObDASCtx &das_ctx,
   ObSEArray<ObObjectID, 4> partition_ids;
   ObSEArray<ObObjectID, 4> first_level_part_ids;
   ObSchemaGetterGuard schema_guard;
-  OZ(GCTX.schema_service_->get_runtime_schema_guard(schema_guard));
+  OV(OB_NOT_NULL(schema_service), OB_NOT_INIT);
+  OZ(schema_service->get_runtime_schema_guard(schema_guard));
   OZ(schema_guard.get_table_schema( ref_table_id, table_schema));
   if (OB_ISNULL(table_schema)) {
     ret = OB_SCHEMA_ERROR;

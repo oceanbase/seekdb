@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SQL_EXE
 
 #include "ob_sql_executor_ctx.h"
-#include "share/ob_server_struct.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;
@@ -40,7 +39,7 @@ ObSqlExecutorCtx::ObSqlExecutorCtx()
       admited_worker_cnt_(0),
       retry_times_(0),
       query_begin_schema_version_(-1),
-      schema_service_(GCTX.schema_service_)
+      schema_service_(nullptr)
 {
 }
 

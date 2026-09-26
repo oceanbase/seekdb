@@ -3920,6 +3920,7 @@ int ObDDLResolver::check_default_value(ObObj &default_value,
 int ObDDLResolver::calc_default_value(share::schema::ObColumnSchemaV2 &column,
                                       common::ObObj &default_value,
                                       const common::ObTimeZoneInfoWrap &tz_info_wrap,
+                                      share::schema::ObMultiVersionSchemaService &schema_service,
                                       common::ObIAllocator &allocator)
 {
   int ret = OB_SUCCESS;
@@ -3985,7 +3986,7 @@ int ObDDLResolver::calc_default_value(share::schema::ObColumnSchemaV2 &column,
         LOG_WARN("LOB read service is not installed", K(ret));
       } else if (FALSE_IT(exec_ctx.set_my_session(&empty_session))) {
       } else if (FALSE_IT(exec_ctx.set_lob_read_service(lob_read_service))) {
-      } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(guard))) {
+      } else if (OB_FAIL(schema_service.get_runtime_schema_guard(guard))) {
       } else if (OB_FAIL(guard.get_server_runtime_info(runtime_schema))) {
       } else if (OB_FAIL(empty_session.init_runtime(runtime_schema->get_runtime_name_str()))) {
       } else if (OB_FAIL(empty_session.load_all_sys_vars(guard))) {

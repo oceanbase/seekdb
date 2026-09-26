@@ -291,17 +291,18 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
     obcall::ObTableItem table_item;
     ObString create_table_name;
     ObSqlString ins_sql;
-    const ObGlobalContext &gctx = GCTX;
+    share::schema::ObMultiVersionSchemaService *schema_service =
+        my_session == nullptr ? nullptr : my_session->effective_schema_service();
     obcall::ObCreateTableRes create_table_res;
     obcall::ObCreateTableArg &create_table_arg = stmt.get_create_table_arg();
-    create_table_arg.is_inner_ = my_session->is_inner();
     bool need_clean = true;
     CK(OB_NOT_NULL(sql_proxy),
       OB_NOT_NULL(my_session),
-      OB_NOT_NULL(gctx.schema_service_),
+      OB_NOT_NULL(schema_service),
       OB_NOT_NULL(plan_ctx),
       OB_NOT_NULL(ctx.get_sql_ctx()));
     if (OB_SUCC(ret)) {
+      create_table_arg.is_inner_ = my_session->is_inner();
       if (OB_FAIL(ob_write_string(allocator, my_session->get_current_query_string(), cur_query))) {
       }
     }
@@ -336,7 +337,7 @@ int ObCreateTableExecutor::execute_ctas(ObExecContext &ctx,
           LOG_WARN("get unexpected schema version", K(ret), K(create_table_res));
         } else {
           
-          if (OB_FAIL(gctx.schema_service_->async_refresh_schema(create_table_res.schema_version_))) {
+          if (OB_FAIL(schema_service->async_refresh_schema(create_table_res.schema_version_))) {
           }
         }
         #ifdef ERRSIM

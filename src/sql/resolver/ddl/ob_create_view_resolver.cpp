@@ -910,7 +910,9 @@ int ObCreateViewResolver::add_column_infos(ObSelectStmt &select_stmt,
   ObColumnSchemaV2 column;
   int64_t cur_column_id = OB_APP_MIN_COLUMN_ID;
   share::schema::ObSchemaGetterGuard schema_guard;
-  if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+  if (OB_ISNULL(session_info.effective_schema_service())) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(session_info.effective_schema_service()->get_runtime_schema_guard(schema_guard))) {
   } else {
     if ((!column_list.empty() && OB_UNLIKELY(column_list.count() != select_items.count()))
         || (!comment_list.empty() && OB_UNLIKELY(comment_list.count() != select_items.count()))) {

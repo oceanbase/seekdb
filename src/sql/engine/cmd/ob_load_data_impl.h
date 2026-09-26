@@ -34,6 +34,7 @@
 
 namespace oceanbase
 {
+namespace common { class ObMySQLProxy; }
 namespace sql
 {
 
@@ -694,7 +695,7 @@ public:
                       ObString err_msg);
 
   static int exec_shuffle(int64_t task_id, ObShuffleTaskHandle *handle);
-  static int exec_insert(ObInsertTask &task);
+  static int exec_insert(ObInsertTask &task, common::ObMySQLProxy &sql_proxy);
 
 private:
   static int gen_load_table_column_desc(ObExecContext &ctx,

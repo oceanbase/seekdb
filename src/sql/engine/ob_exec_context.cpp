@@ -325,6 +325,7 @@ void ObExecContext::set_runtime_services(const RuntimeServices &services)
   sql_proxy_ = services.sql_proxy_;
   if (nullptr != services.ns_runtime_ && nullptr != get_my_session()) {
     get_my_session()->set_ns_runtime(services.ns_runtime_);
+    sql_executor_ctx_.schema_service_ = get_my_session()->effective_schema_service();
   }
 }
 
@@ -416,6 +417,7 @@ common::ObOptStatManager *ObExecContext::get_opt_stat_manager()
 void ObExecContext::set_my_session(ObSQLSessionInfo *session)
 {
   my_session_ = session;
+  sql_executor_ctx_.schema_service_ = session == nullptr ? nullptr : session->effective_schema_service();
   if (OB_ISNULL(lob_read_service_)) {
     lob_read_service_ = ::oceanbase::observer::namespace_worker_prototype::effective_lob_read_service(
         session);

@@ -40,15 +40,15 @@ int ObExprGetPackageVar::calc(ObObj &result,
   ObPL *pl_engine = NULL;
   ObPLPackageGuard *package_guard = NULL;
   share::schema::ObSchemaGetterGuard *schema_guard = NULL;
-  if (OB_ISNULL(GCTX.schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("global schema service is null", K(ret));
-  } else if (OB_ISNULL(exec_ctx)) {
+  if (OB_ISNULL(exec_ctx)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("exec ctx is null", K(ret));
   } else if (OB_ISNULL(session_info)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session info is null", K(ret));
+  } else if (OB_ISNULL(session_info->effective_schema_service())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("schema service is not bound", K(ret));
   } else if (OB_ISNULL(sql_proxy = exec_ctx->get_sql_proxy())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", K(ret));

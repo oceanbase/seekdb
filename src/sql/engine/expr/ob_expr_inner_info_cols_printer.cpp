@@ -80,10 +80,12 @@ int ObExprInnerInfoColsColumnDefPrinter::eval_column_def(const ObExpr &expr, ObE
   } else {
     share::schema::ObSchemaGetterGuard schema_guard;
     const ObTableSchema *table_schema = NULL;
-    if (OB_ISNULL(GCTX.schema_service_)) {
+    share::schema::ObMultiVersionSchemaService *schema_service =
+        ctx.exec_ctx_.get_sql_exec_ctx().schema_service_;
+    if (OB_ISNULL(schema_service)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get schema_service", K(ret));
-    } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_table_schema( table_id->get_int(), table_schema))) {
     } else if (OB_ISNULL(table_schema)) {
       expr_datum.set_null();
@@ -414,7 +416,11 @@ int ObExprInnerInfoColsPrivPrinter::eval_column_priv(const ObExpr &expr, ObEvalC
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     ObIAllocator &calc_alloc = alloc_guard.get_allocator();
     share::schema::ObSchemaGetterGuard schema_guard;
-    if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    share::schema::ObMultiVersionSchemaService *schema_service =
+        ctx.exec_ctx_.get_sql_exec_ctx().schema_service_;
+    if (OB_ISNULL(schema_service)) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_session_priv_info(session_priv))) {
     } else if (OB_UNLIKELY(!session_priv.is_valid())) {
       ret = OB_INVALID_ARGUMENT;
@@ -870,10 +876,12 @@ int ObExprInnerInfoColsColumnKeyPrinter::eval_column_column_key(const ObExpr &ex
   } else {
     share::schema::ObSchemaGetterGuard schema_guard;
     const ObTableSchema *table_schema = NULL;
-    if (OB_ISNULL(GCTX.schema_service_)) {
+    share::schema::ObMultiVersionSchemaService *schema_service =
+        ctx.exec_ctx_.get_sql_exec_ctx().schema_service_;
+    if (OB_ISNULL(schema_service)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get schema_service", K(ret));
-    } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_table_schema( table_id->get_int(), table_schema))) {
     } else if (OB_ISNULL(table_schema)) {
       expr_datum.set_string("");

@@ -7088,6 +7088,7 @@ int ObDDLService::resolve_orig_default_value(ObColumnSchemaV2 &alter_column_sche
       if (OB_FAIL(ObDDLResolver::calc_default_value(alter_column_schema,
                                                     orig_default_value,
                                                     tz_info_wrap,
+                                                    *schema_service_,
                                                     allocator))) {
         LOG_WARN("fail to calc default now expr", K(ret));
       } else if (!alter_column_schema.is_nullable() && orig_default_value.is_null()) {
@@ -7213,6 +7214,7 @@ int ObDDLService::resolve_timestamp_column(AlterColumnSchema *alter_column_schem
             if (OB_FAIL(ObDDLResolver::calc_default_value(*alter_column_schema,
                                                           cur_default_value,
                                                           tz_info_wrap,
+                                                          *schema_service_,
                                                           allocator))) {
               LOG_WARN("fail to calc default now expr", K(ret));
             }

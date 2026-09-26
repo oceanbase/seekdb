@@ -1692,7 +1692,7 @@ int ObSPIService::spi_inner_execute(ObPLExecCtx *ctx,
             || ObStmt::is_tcl_stmt(stmt_type)
             || ObStmt::is_savepoint_stmt(stmt_type)) {
           if (ObStmt::is_ddl_stmt(stmt_type, true)) {
-            OZ (force_refresh_schema(), sql);
+            OZ (force_refresh_schema(session), sql);
           }
           recreate_implicit_savapoint_if_need(ctx, ret);
         }
@@ -5902,24 +5902,36 @@ bool ObSPIService::is_get_package_or_subprogram_var_expression(const ObSqlExpres
   return T_OP_GET_PACKAGE_VAR == get_expression_type(expr) || T_OP_GET_SUBPROGRAM_VAR == get_expression_type(expr);
 }
 
-int ObSPIService::force_refresh_schema(int64_t refresh_version)
+int ObSPIService::force_refresh_schema(ObSQLSessionInfo *session, int64_t refresh_version)
+{
+  int ret = OB_SUCCESS;
+  share::schema::ObMultiVersionSchemaService *schema_service =
+      session == nullptr ? nullptr : session->effective_schema_service();
+  if (OB_ISNULL(schema_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("schema service is NULL", K(ret));
+  } else {
+    ret = force_refresh_schema(*schema_service, refresh_version);
+  }
+  return ret;
+}
+
+int ObSPIService::force_refresh_schema(share::schema::ObMultiVersionSchemaService &schema_service,
+                                       int64_t refresh_version)
 {
   int ret = OB_SUCCESS;
   int64_t local_version = OB_INVALID_VERSION;
   int64_t global_version = OB_INVALID_VERSION;
-  if (OB_ISNULL(GCTX.schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is NULL", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_refreshed_schema_version(
+  if (OB_FAIL(schema_service.get_runtime_refreshed_schema_version(
                      local_version))) {
-  } else if (OB_FAIL(GCTX.schema_service_->get_published_schema_version(
+  } else if (OB_FAIL(schema_service.get_published_schema_version(
                      global_version))) {
   }
   if (OB_SUCC(ret)) {
     int64_t need_refresh_version = OB_INVALID_VERSION == refresh_version ? global_version : refresh_version;
     if (local_version >= need_refresh_version) {
       // do nothing
-    } else if (OB_FAIL(GCTX.schema_service_->async_refresh_schema(need_refresh_version))) {
+    } else if (OB_FAIL(schema_service.async_refresh_schema(need_refresh_version))) {
     }
   }
   return ret;

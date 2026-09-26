@@ -3102,8 +3102,15 @@ int64_t ObSqlFatalErrExtraInfoGuard::to_string(char *buf, const int64_t buf_len)
         ObSchemaGetterGuard schema_guard;
         ObSchemaPrinter schema_printer(schema_guard);
         ObCharsetType charset_type = CHARSET_INVALID;
-        OZ (exec_ctx_->get_my_session()->get_character_set_results(charset_type));
-        OZ (GCTX.schema_service_->get_runtime_schema_guard(schema_guard, schema_obj.version_));
+        if (OB_ISNULL(exec_ctx_) || OB_ISNULL(exec_ctx_->get_my_session())
+            || OB_ISNULL(exec_ctx_->get_sql_exec_ctx().schema_service_)) {
+          ret = OB_NOT_INIT;
+          LOG_WARN("schema service is not bound for plan dependencies", K(ret));
+        } else {
+          OZ (exec_ctx_->get_my_session()->get_character_set_results(charset_type));
+          OZ (exec_ctx_->get_sql_exec_ctx().schema_service_->get_runtime_schema_guard(
+                  schema_guard, schema_obj.version_));
+        }
         OZ (databuff_printf(buf, buf_len, pos, (i != 0) ? ",\n\"" : "\n\""));
         OZ (schema_printer.print_table_definition(schema_obj.get_object_id(), buf, buf_len, pos, NULL, LS_DEFAULT, false, charset_type));
         OZ (databuff_printf(buf, buf_len, pos, "\""));

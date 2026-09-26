@@ -138,13 +138,15 @@ int ObSetNamesExecutor::get_global_sys_var_character_set_client(
   ObSchemaGetterGuard schema_guard;
   const ObSysVarSchema *var_schema = NULL;
   ObObj value;
+  share::schema::ObMultiVersionSchemaService *schema_service =
+      ctx.get_sql_exec_ctx().schema_service_;
   if (NULL == (session = ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(ERROR, "session is NULL", K(ret), K(ctx));
-  } else if (OB_ISNULL(GCTX.schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_ISNULL(schema_service)) {
+    ret = OB_NOT_INIT;
     SQL_ENG_LOG(ERROR, "schema service is null");
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(
               schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_system_variable(SYS_VAR_CHARACTER_SET_CLIENT, var_schema))) {
   } else if (OB_ISNULL(var_schema)) {

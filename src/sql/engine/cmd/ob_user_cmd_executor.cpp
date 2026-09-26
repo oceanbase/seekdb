@@ -103,12 +103,13 @@ int ObCreateUserExecutor::userinfo_extract_user_name(
 int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
 {
   int ret = OB_SUCCESS;
+  share::schema::ObMultiVersionSchemaService *schema_service = ctx.get_sql_exec_ctx().schema_service_;
   ObSqlExecutorCtx *task_exec_ctx = NULL;
   
   const ObStrings &users = stmt.get_users();
   const bool if_not_exist = stmt.get_if_not_exists();
   const int64_t FIX_MEMBER_CNT = 4;
-  if (OB_ISNULL(GCTX.schema_service_)) {
+  if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", K(ret));
   } else if (OB_ISNULL(ctx.get_my_session())) {
@@ -167,7 +168,7 @@ int ObCreateUserExecutor::execute(ObExecContext &ctx, ObCreateUserStmt &stmt)
 
         if (OB_SUCC(ret)) {
           ObSchemaGetterGuard schema_guard;
-          if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+          if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
           } else if (OB_FAIL(ObCreateUserExecutor::check_user_valid(schema_guard, ctx.get_my_session()->get_user_priv_set(),
                                                                     user_name, host_name, "CREATE USER"))) {
           } else if (OB_FAIL(user_info.set_user_name(user_name))) {
@@ -283,11 +284,12 @@ int ObDropUserExecutor::string_array_index_extract(const common::ObIArray<common
 int ObDropUserExecutor::execute(ObExecContext &ctx, ObDropUserStmt &stmt)
 {
   int ret = OB_SUCCESS;
+  share::schema::ObMultiVersionSchemaService *schema_service = ctx.get_sql_exec_ctx().schema_service_;
   ObSqlExecutorCtx *task_exec_ctx = NULL;
   
   const ObStrings *user_names = NULL;
 
-  if (OB_ISNULL(GCTX.schema_service_)) {
+  if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", K(ret));
   } else if (OB_ISNULL(ctx.get_my_session())) {
@@ -309,7 +311,7 @@ int ObDropUserExecutor::execute(ObExecContext &ctx, ObDropUserStmt &stmt)
     
     {
       ObSchemaGetterGuard schema_guard;
-      if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+      if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < user_names->count(); i += 2) {
         if (OB_FAIL(user_names->get_string(i, user_name))) {
@@ -462,6 +464,7 @@ int ObLockUserExecutor::lock_user(
 int ObAlterUserRoleExecutor::set_role_exec(ObExecContext &ctx, ObAlterUserRoleStmt &stmt)
 {
   int ret = OB_SUCCESS;
+  share::schema::ObMultiVersionSchemaService *schema_service = ctx.get_sql_exec_ctx().schema_service_;
   ObSQLSessionInfo *session = NULL;
   uint64_t role_id = OB_INVALID_ID;
   CK (ObAlterUserRoleStmt::SET_ROLE == stmt.get_set_role_flag());
@@ -475,7 +478,8 @@ int ObAlterUserRoleExecutor::set_role_exec(ObExecContext &ctx, ObAlterUserRoleSt
     ObSchemaGetterGuard schema_guard;
 
     obcall::ObAlterUserRoleArg &arg = static_cast<obcall::ObAlterUserRoleArg &>(stmt.get_ddl_arg());
-    OZ (GCTX.schema_service_->get_runtime_schema_guard(
+    OV (OB_NOT_NULL(schema_service), OB_NOT_INIT);
+    OZ (schema_service->get_runtime_schema_guard(
                   schema_guard));
     OZ (schema_guard.get_user_info(user_id, user_info));
     if (OB_SUCC(ret) && NULL == user_info) {
@@ -550,10 +554,11 @@ int ObAlterUserRoleExecutor::execute(ObExecContext &ctx, ObAlterUserRoleStmt &st
 int ObRenameUserExecutor::execute(ObExecContext &ctx, ObRenameUserStmt &stmt)
 {
   int ret = OB_SUCCESS;
+  share::schema::ObMultiVersionSchemaService *schema_service = ctx.get_sql_exec_ctx().schema_service_;
   ObSqlExecutorCtx *task_exec_ctx = NULL;
   
   const ObStrings *rename_infos = NULL;
-  if (OB_ISNULL(GCTX.schema_service_)) {
+  if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", K(ret));
   } else if (OB_ISNULL(ctx.get_my_session())) {
@@ -580,7 +585,7 @@ int ObRenameUserExecutor::execute(ObExecContext &ctx, ObRenameUserStmt &stmt)
     
     {
       ObSchemaGetterGuard schema_guard;
-      if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+      if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
       }
       //rename_infos arr contains old names and new names in pairs, so step is 2
       for (int64_t i = 0; OB_SUCC(ret) && i < rename_infos->count(); i += 4) {

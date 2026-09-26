@@ -57,12 +57,18 @@ int ObDASUtils::check_nested_sql_mutating(ObTableID ref_table_id, ObExecContext 
         ObSchemaGetterGuard schema_guard;
         const ObTableSchema *table_schema = NULL;
         
-        if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+        share::schema::ObMultiVersionSchemaService *schema_service =
+            exec_ctx.get_sql_exec_ctx().schema_service_;
+        if (OB_ISNULL(schema_service)) {
+          ret = OB_NOT_INIT;
+        } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
         } else if (OB_FAIL(schema_guard.get_table_schema( ref_table_id, table_schema))) {
         } else if (table_schema != nullptr) {
           LOG_MYSQL_USER_ERROR(OB_ERR_MUTATING_TABLE_OPERATION, table_schema->get_table_name());
         }
-        ret = OB_ERR_MUTATING_TABLE_OPERATION;
+        if (OB_SUCC(ret)) {
+          ret = OB_ERR_MUTATING_TABLE_OPERATION;
+        }
         LOG_WARN("table is mutating", K(ret), K(ref_table_id));
       }
     }

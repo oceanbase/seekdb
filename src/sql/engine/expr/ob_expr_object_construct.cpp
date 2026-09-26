@@ -83,10 +83,13 @@ int ObExprObjectConstruct::newx(ObEvalCtx &ctx, ObObj &result, uint64_t udt_id, 
   ObSchemaGetterGuard schema_guard;
   ObArenaAllocator tmp_alloc;
   CK (OB_NOT_NULL(alloc));
+  OV (OB_NOT_NULL(session), OB_NOT_INIT);
   if (OB_SUCC(ret)) {
     // if called by check_default_value in ddl resolver, no sql ctx, get guard from session cache
     if (OB_ISNULL(exec_ctx.get_sql_ctx()) || OB_ISNULL(exec_ctx.get_sql_ctx()->schema_guard_)) {
-      if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+      if (OB_ISNULL(session->effective_schema_service())) {
+        ret = OB_NOT_INIT;
+      } else if (OB_FAIL(session->effective_schema_service()->get_runtime_schema_guard(schema_guard))) {
       } else {
         schema_guard_ptr = &schema_guard;
       }

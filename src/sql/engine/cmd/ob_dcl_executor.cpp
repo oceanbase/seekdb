@@ -35,6 +35,7 @@ namespace sql
 int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
 {
   int ret = OB_SUCCESS;
+  share::schema::ObMultiVersionSchemaService *schema_service = ctx.get_sql_exec_ctx().schema_service_;
   ObSqlExecutorCtx *task_exec_ctx = NULL;
   ObSQLSessionInfo *session_info = NULL;
   
@@ -51,7 +52,7 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
   } else if (OB_ISNULL(session_info = ctx.get_my_session())) {
     ret = OB_NOT_INIT;
     LOG_WARN("Get my session error");
-  } else if (OB_ISNULL(GCTX.schema_service_)) {
+  } else if (OB_ISNULL(schema_service)) {
     ret = OB_NOT_INIT;
     LOG_WARN("get schema service failed", K(ret));
   } else if (!is_role) {
@@ -133,7 +134,7 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_user_info(session_info->get_priv_user_id(),
                                                   user_info))) {
     } else if (OB_ISNULL(user_info)) {
@@ -256,10 +257,11 @@ int ObRevokeExecutor::revoke_table(ObRevokeStmt &stmt,
                                    ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
+  share::schema::ObMultiVersionSchemaService *schema_service = ctx.get_sql_exec_ctx().schema_service_;
   ObSQLSessionInfo *session_info = NULL;
   ObSchemaGetterGuard schema_guard;
   const ObUserInfo *user_info = NULL;
-  if (OB_ISNULL(GCTX.schema_service_)) {
+  if (OB_ISNULL(schema_service)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Input argument error", K(ret));
   } else if (OB_ISNULL(session_info = ctx.get_my_session())) {
@@ -291,7 +293,7 @@ int ObRevokeExecutor::revoke_table(ObRevokeStmt &stmt,
       //todo: pl routine and others
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_user_info(session_info->get_priv_user_id(),
                                                   user_info))) {
     } else if (OB_ISNULL(user_info)) {
@@ -328,12 +330,15 @@ int ObRevokeExecutor::revoke_routine(ObRevokeStmt &stmt,
                                      ObExecContext &ctx)
 {
   int ret = OB_SUCCESS;
+  share::schema::ObMultiVersionSchemaService *schema_service = ctx.get_sql_exec_ctx().schema_service_;
   ObSQLSessionInfo *session_info = NULL;
   ObSchemaGetterGuard schema_guard;
   const ObUserInfo *user_info = NULL;
   if (OB_ISNULL(session_info = ctx.get_my_session())) {
     ret = OB_NOT_INIT;
     LOG_WARN("Get my session error");
+  } else if (OB_ISNULL(schema_service)) {
+    ret = OB_NOT_INIT;
   } else {
     obcall::ObRevokeRoutineArg &arg = static_cast<obcall::ObRevokeRoutineArg &>(stmt.get_ddl_arg());
     
@@ -345,7 +350,7 @@ int ObRevokeExecutor::revoke_routine(ObRevokeStmt &stmt,
     arg.grantor_id_ = stmt.get_grantor_id();
     arg.revoke_all_ora_ = stmt.get_revoke_all_ora();
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_user_info(session_info->get_priv_user_id(),
                                                   user_info))) {
     } else if (OB_ISNULL(user_info)) {

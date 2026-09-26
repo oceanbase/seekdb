@@ -150,6 +150,7 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
      OB_NOT_NULL(objs = static_cast<ObObj *> (alloc.alloc(expr.arg_cnt_ * sizeof(ObObj)))));
   CK(OB_NOT_NULL(info));
   CK(OB_NOT_NULL(session = ctx.exec_ctx_.get_my_session()));
+  OV(OB_NOT_NULL(session->effective_schema_service()), OB_NOT_INIT);
   CK (OB_NOT_NULL(ctx.exec_ctx_.get_sql_ctx()));
   CK (OB_NOT_NULL(ctx.exec_ctx_.get_plan_cache_access_service()));
 
@@ -192,7 +193,8 @@ int ObExprOpSubQueryInPl::eval_subquery(const ObExpr &expr,
             spi_result.reset_member_for_retry(*session);
           }
           retry_ctrl.clear_state_before_each_retry(session->get_retry_info_for_update());
-          if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(spi_result.get_scheme_guard()))) {
+          if (OB_FAIL(session->effective_schema_service()->get_runtime_schema_guard(
+                  spi_result.get_scheme_guard()))) {
           } else if (OB_FAIL(spi_result.get_scheme_guard().get_schema_version(database_schema_version))) {
           } else {
             retry_ctrl.set_current_local_schema_version(database_schema_version);

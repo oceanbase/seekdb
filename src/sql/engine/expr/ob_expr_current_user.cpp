@@ -63,10 +63,11 @@ int ObExprCurrentUser::eval_current_user(const ObExpr &expr, ObEvalCtx &ctx,
     
     uint64_t priv_user_id = session_info->get_priv_user_id();
     const ObUserInfo *user_info = nullptr;
-    if (OB_ISNULL(GCTX.schema_service_)) {
+    share::schema::ObMultiVersionSchemaService *schema_service = session_info->effective_schema_service();
+    if (OB_ISNULL(schema_service)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected NULL GCTX.schema_service_", K(ret));
-    } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+    } else if (OB_FAIL(schema_service->get_runtime_schema_guard(
                    schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_user_info(priv_user_id,
                                                   user_info))) {

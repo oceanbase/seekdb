@@ -322,7 +322,10 @@ int ObPLPackageManager::read_and_exec_package_sql(ObMySQLProxy &sql_proxy,
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("affected_rows expected to be zero", K(ret), K(affected_rows), K(stream.get_name()));
           } else {
-            OZ (ObSPIService::force_refresh_schema());
+            OV (OB_NOT_NULL(GCTX.schema_service_), OB_NOT_INIT);
+            if (OB_SUCC(ret)) {
+              OZ (ObSPIService::force_refresh_schema(*GCTX.schema_service_));
+            }
           }
           LOG_INFO("package source data consumed", K(ret), K(stream));
         }

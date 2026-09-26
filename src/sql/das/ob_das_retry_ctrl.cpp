@@ -43,13 +43,15 @@ void ObDASRetryCtrl::tablet_location_retry_proc(ObDASRef &das_ref,
   bool tablet_exist = false;
   schema::ObSchemaGetterGuard schema_guard;
   const schema::ObTableSchema *table_schema = nullptr;
+  schema::ObMultiVersionSchemaService *schema_service =
+      das_ref.get_exec_ctx().get_sql_exec_ctx().schema_service_;
   if (OB_ISNULL(tablet_loc)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet loc is nullptr", K(ret));
-  } else if (OB_ISNULL(GCTX.schema_service_)) {
+  } else if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid schema service", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
     // The runtime schema may not be ready.
     task_op.set_errcode(ret);
     LOG_WARN("get runtime schema guard fail", KR(ret));

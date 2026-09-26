@@ -170,14 +170,16 @@ int ObExprMysqlProcInfo::get_routine_info(ObSQLSessionInfo *session,
   ObSchemaGetterGuard schema_guard;
 
   CK (OB_NOT_NULL(session));
-  CK (OB_NOT_NULL(GCTX.schema_service_));
-  OZ (GCTX.schema_service_->get_runtime_schema_guard(schema_guard));
+  share::schema::ObMultiVersionSchemaService *schema_service =
+      session == nullptr ? nullptr : session->effective_schema_service();
+  CK (OB_NOT_NULL(schema_service));
+  OZ (schema_service->get_runtime_schema_guard(schema_guard));
   OZ (schema_guard.get_routine_info( routine_id, routine_info));
   
   if (OB_FAIL(ret)) {
   } else if (OB_UNLIKELY(OB_ISNULL(routine_info))) { //refresh schema try again
-    OZ (ObSPIService::force_refresh_schema());
-    OZ (GCTX.schema_service_->get_runtime_schema_guard(schema_guard));
+    OZ (ObSPIService::force_refresh_schema(session));
+    OZ (schema_service->get_runtime_schema_guard(schema_guard));
     OZ (schema_guard.get_routine_info( routine_id, routine_info));
   }
   CK (OB_NOT_NULL(routine_info));

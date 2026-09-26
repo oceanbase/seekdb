@@ -833,7 +833,10 @@ public:
                              int64_t &into_cnt,
                              bool &skip_locked,
                              ParamStore *params);
-  static int force_refresh_schema(int64_t refresh_version = OB_INVALID_VERSION);
+  static int force_refresh_schema(ObSQLSessionInfo *session,
+                                  int64_t refresh_version = OB_INVALID_VERSION);
+  static int force_refresh_schema(share::schema::ObMultiVersionSchemaService &schema_service,
+                                  int64_t refresh_version = OB_INVALID_VERSION);
 
   static int spi_check_composite_not_null(ObObjParam *v);
 

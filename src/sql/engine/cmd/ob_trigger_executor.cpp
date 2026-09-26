@@ -45,7 +45,7 @@ int ObCreateTriggerExecutor::execute(ObExecContext &ctx, ObCreateTriggerStmt &st
       [&]{ return ctx.root_command_service().create_trigger_with_res(arg, res); }),
       GCTX.self_addr());
   // Here needs to refresh schema, otherwise may not get the latest trigger_info
-  OZ (ObSPIService::force_refresh_schema());
+  OZ (ObSPIService::force_refresh_schema(ctx.get_my_session()));
   CK (OB_NOT_NULL(ctx.get_sql_ctx()));
   CK (OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));
   CK (OB_NOT_NULL(ctx.get_my_session()));

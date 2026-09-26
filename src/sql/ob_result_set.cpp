@@ -61,10 +61,11 @@ int find_table_scan_table_id(const ObOpSpec *spec, uint64_t &table_id)
 int ObResultSet::clear_ddl_checksum(ObPhysicalPlan *physical_plan)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(physical_plan) || OB_ISNULL(GCTX.sql_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
+  ObMySQLProxy *sql_proxy = my_session_.effective_sql_proxy();
+  if (OB_ISNULL(physical_plan) || OB_ISNULL(sql_proxy)) {
+    ret = OB_NOT_INIT;
     LOG_WARN("DDL plan or SQL proxy is null",
-             K(ret), KP(physical_plan), KP(GCTX.sql_proxy_));
+             K(ret), KP(physical_plan), KP(sql_proxy));
   } else {
     uint64_t table_scan_table_id = OB_INVALID_ID;
     if (OB_FAIL(find_table_scan_table_id(
@@ -74,7 +75,7 @@ int ObResultSet::clear_ddl_checksum(ObPhysicalPlan *physical_plan)
                    table_scan_table_id,
                    physical_plan->get_ddl_table_id(),
                    physical_plan->get_ddl_task_id(),
-                   *GCTX.sql_proxy_))) {
+                   *sql_proxy))) {
     }
   }
   return ret;

@@ -209,6 +209,7 @@ int ObPxSqcDistributionUtil::alloc_by_data_distribution_inner(
       CK(OB_NOT_NULL(ctx.get_my_session()));
       OZ(ObTableLocation::build_full_local_table_loc(DAS_CTX(ctx),
                                                      ctx.get_allocator(),
+                                                     ctx.get_sql_exec_ctx().schema_service_,
                                                      table_location_key,
                                                      ref_table_id,
                                                      table_loc));

@@ -6653,12 +6653,13 @@ int ObStaticEngineCG::check_fk_nested_dup_del(const uint64_t table_id,
                               bool &is_dup)
 {
   int ret = OB_SUCCESS;
-  ObSchemaGetterGuard schema_guard;
+  ObSchemaGetterGuard *schema_guard = opt_ctx_ == nullptr ? nullptr : opt_ctx_->get_schema_guard();
   const ObTableSchema *table_schema = NULL;
   
   if (OB_FAIL(parent_tables.push_back(root_table_id))) {
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
-  } else if (OB_FAIL(schema_guard.get_table_schema( root_table_id, table_schema))) {
+  } else if (OB_ISNULL(schema_guard)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(schema_guard->get_table_schema( root_table_id, table_schema))) {
   } else if (!OB_ISNULL(table_schema)) {
     const common::ObIArray<ObForeignKeyInfo> &foreign_key_infos = table_schema->get_foreign_key_infos();
     for (int64_t i = 0; OB_SUCC(ret) && i < foreign_key_infos.count() && !is_dup; ++i) {
@@ -6690,12 +6691,13 @@ int ObStaticEngineCG::check_fk_nested_dup_del(const uint64_t table_id,
  **/
 int ObStaticEngineCG::check_fk_nested_dup_upd(const ObIArray<uint64_t>& table_ids, const uint64_t root_table_id, const uint64_t root_column_id, ObIArray<std::pair<uint64_t, uint64_t>> &visited_columns, bool& is_dup) {
   int ret = OB_SUCCESS;
-  ObSchemaGetterGuard schema_guard;
+  ObSchemaGetterGuard *schema_guard = opt_ctx_ == nullptr ? nullptr : opt_ctx_->get_schema_guard();
   const ObTableSchema *table_schema = NULL;
   
   if (OB_FAIL(visited_columns.push_back(std::make_pair(root_table_id, root_column_id)))) {
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
-  } else if (OB_FAIL(schema_guard.get_table_schema( root_table_id, table_schema))) {
+  } else if (OB_ISNULL(schema_guard)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(schema_guard->get_table_schema( root_table_id, table_schema))) {
   } else if (!OB_ISNULL(table_schema)) {
     const common::ObIArray<ObForeignKeyInfo> &foreign_key_infos = table_schema->get_foreign_key_infos();
     // Enumerate all fks on the table, find the foreign keys having parent_column_id = root_column_id.

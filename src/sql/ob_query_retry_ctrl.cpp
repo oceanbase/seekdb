@@ -261,7 +261,8 @@ public:
   {
     int ret = OB_SUCCESS;
     // Design discussion reference:
-    if (NULL == GCTX.schema_service_) {
+    ObMultiVersionSchemaService *schema_service = v.session_.effective_schema_service();
+    if (NULL == schema_service) {
       v.client_ret_ = OB_INVALID_ARGUMENT;
       v.retry_type_ = RETRY_TYPE_NONE;
       v.no_more_test_ = true;
@@ -269,7 +270,7 @@ public:
     } else {
       ObSchemaGetterGuard schema_guard;
       int64_t latest_local_version = 0;
-      if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+      if (OB_FAIL(schema_service->get_runtime_schema_guard(
                   schema_guard))) {
         // No need to retry, and let it return the error code from get_schema_guard because it is the cause of not retrying
         LOG_WARN("get schema guard failed", K(v), K(ret));

@@ -311,7 +311,8 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
         get_runtime_schema_guard(schema_guard));
     OZ(schema_guard.get_routine_info( alter_routine_arg.routine_info_.get_routine_id(), routine_info));
     CK (OB_NOT_NULL(routine_info));
-    OZ (trans.start(GCTX.sql_proxy_, true));
+    OV (OB_NOT_NULL(ctx.get_sql_proxy()), OB_NOT_INIT);
+    OZ (trans.start(ctx.get_sql_proxy(), true));
     OZ (alter_routine_arg.error_info_.handle_error_info(trans, routine_info));
     OZ (ObDependencyInfo::delete_schema_object_dependency(trans,
                                     routine_info->get_routine_id(),

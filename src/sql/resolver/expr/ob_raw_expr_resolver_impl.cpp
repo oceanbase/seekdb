@@ -439,7 +439,7 @@ int ObRawExprResolverImpl::do_recursive_resolve(const ParseNode *node,
                                                   ctx_.expr_factory_,
                                                   *const_cast<ObSQLSessionInfo *>(ctx_.session_info_),
                                                   *(ctx_.schema_checker_->get_schema_guard()),
-                                                  GCTX.sql_proxy_,
+                                                  ctx_.session_info_->effective_sql_proxy(),
                                                   ctx_.secondary_namespace_,
                                                   access_idxs))) {
               } else if (access_idxs.count() > 0) {
