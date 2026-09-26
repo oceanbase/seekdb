@@ -21,6 +21,8 @@
 #include "share/json/ob_json_helper.h"
 #include "lib/encode/ob_base64_encode.h"
 
+namespace oceanbase { namespace share { namespace schema { class ObMultiVersionSchemaService; } } }
+
 namespace oceanbase 
 {
 namespace common 
@@ -336,7 +338,9 @@ public:
                                           share::ObJsonReaderHelper &json_reader, const int64_t dimension, float *&vector);
   static int get_ai_func_info(ObIAllocator &allocator, const ObString &model_id,
                               share::schema::ObSchemaGetterGuard &guard, ObAIFuncExprInfo *&info);
-  static int get_ai_func_info(ObIAllocator &allocator, const ObString &model_id, ObAIFuncExprInfo *&info);
+  static int get_ai_func_info(ObIAllocator &allocator, const ObString &model_id,
+                              share::schema::ObMultiVersionSchemaService &schema_service,
+                              ObAIFuncExprInfo *&info);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObAIFuncUtils);
 };

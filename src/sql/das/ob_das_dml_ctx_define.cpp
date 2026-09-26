@@ -21,6 +21,7 @@
 #include "sql/das/ob_das_domain_utils.h"
 #include "sql/engine/dml/ob_dml_service.h"
 #include "data_plane/blocksstable/ob_datum_row_factory.h"
+#include "sql/session/ob_basic_session_info.h"
 namespace oceanbase
 {
 namespace sql
@@ -116,6 +117,8 @@ int ObDASDMLIterator::get_next_domain_index_row(ObDatumRow *&row)
     ObDomainDMLParam param(
         allocator_, row_projector_, write_iter_, das_ctdef_, main_ctdef_,
         srs_provider_, lob_read_options_);
+    auto *session = THIS_WORKER.get_session();
+    param.schema_service_ = session == nullptr ? nullptr : session->effective_schema_service();
     if (das_ctdef_->table_param_.get_data_table().is_fts_index() && !das_ctdef_->old_row_projector_.empty()) {
       param.mode_ = main_ctdef_->is_main_table_in_fts_ddl_ ? ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT : ObDomainDMLMode::DOMAIN_DML_MODE_FT_SCAN;
       param.ft_doc_word_info_ = ft_doc_word_info_;
@@ -138,6 +141,8 @@ int ObDASDMLIterator::get_next_domain_index_rows(ObDatumRow *&rows, int64_t &row
     ObDomainDMLParam param(
         allocator_, row_projector_, write_iter_, das_ctdef_, main_ctdef_,
         srs_provider_, lob_read_options_);
+    auto *session = THIS_WORKER.get_session();
+    param.schema_service_ = session == nullptr ? nullptr : session->effective_schema_service();
     if (das_ctdef_->table_param_.get_data_table().is_fts_index() && !das_ctdef_->old_row_projector_.empty()) {
       param.mode_ = main_ctdef_->is_main_table_in_fts_ddl_ ? ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT : ObDomainDMLMode::DOMAIN_DML_MODE_FT_SCAN;
       param.ft_doc_word_info_ = ft_doc_word_info_;

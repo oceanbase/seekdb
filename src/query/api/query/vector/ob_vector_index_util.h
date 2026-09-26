@@ -505,7 +505,8 @@ public:
       ObIAllocator &allocator,
       const ObString &query_text,
       const ObString &param_str,
-      ObString &output_vec);
+      ObString &output_vec,
+      share::schema::ObMultiVersionSchemaService &schema_service);
   static int get_vector_from_vector_array_string(
       ObIAllocator &allocator,
       const ObString &vector_array_str,

@@ -453,7 +453,10 @@ int ObHybridVectorRefreshTask::init_endpoint(ObPluginVectorIndexAdaptor &adaptor
   ObAIFuncExprInfo *ai_func_info = nullptr;
   omt::ObAiService *ai_service = ::oceanbase::share::server_service<::oceanbase::omt::ObAiService>();
   ObHybridVectorRefreshTaskCtx *task_ctx = static_cast<ObHybridVectorRefreshTaskCtx *>(get_task_ctx());
-  if (OB_ISNULL(ai_service) || OB_ISNULL(task_ctx)) {
+  ObMultiVersionSchemaService *schema_service = task_ctx == nullptr ? nullptr :
+      observer::namespace_worker_prototype::namespace_schema_service(
+          ns::NamespaceObjectKey::owner_namespace(task_ctx->task_status_.tablet_id_.id()));
+  if (OB_ISNULL(ai_service) || OB_ISNULL(task_ctx) || OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret), KPC(task_ctx), K(ai_service));
   } else if (OB_FAIL(ai_service->get_ai_service_guard(task_ctx->ai_service_))) {
@@ -461,7 +464,8 @@ int ObHybridVectorRefreshTask::init_endpoint(ObPluginVectorIndexAdaptor &adaptor
   } else if (OB_FALSE_IT(use_request_model_name = !task_ctx->endpoint_->get_request_model_name().empty())) {
   } else if (use_request_model_name && OB_FAIL(ob_write_string(task_ctx->allocator_, task_ctx->endpoint_->get_request_model_name(), task_ctx->request_model_name_))) {
     LOG_WARN("failed to copy request_model_name", K(ret));
-  } else if (!use_request_model_name && OB_FAIL(ObAIFuncUtils::get_ai_func_info(task_ctx->allocator_, adaptor.get_endpoint(), ai_func_info))) {
+  } else if (!use_request_model_name && OB_FAIL(ObAIFuncUtils::get_ai_func_info(
+                 task_ctx->allocator_, adaptor.get_endpoint(), *schema_service, ai_func_info))) {
     LOG_WARN("failed to get ai func info", K(ret), K(adaptor.get_endpoint()));
   } else if (!use_request_model_name && OB_ISNULL(ai_func_info)) {
     ret = OB_ERR_UNEXPECTED;

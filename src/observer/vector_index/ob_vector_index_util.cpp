@@ -739,7 +739,8 @@ int ObVectorIndexUtil::get_vector_from_vector_array_string(ObIAllocator &allocat
 int ObVectorIndexUtil::get_vector_from_text_by_embedding(ObIAllocator &allocator,
                                                         const ObString &query_text,
                                                         const ObString &param_str,
-                                                        ObString &output_vec)
+                                                        ObString &output_vec,
+                                                        ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   ObVectorIndexParam param;
@@ -754,7 +755,7 @@ int ObVectorIndexUtil::get_vector_from_text_by_embedding(ObIAllocator &allocator
     omt::ObAiServiceGuard ai_service_guard;
     omt::ObAiService *ai_service = ::oceanbase::share::server_service<::oceanbase::omt::ObAiService>();
     const share::ObAiModelEndpointInfo *endpoint_info = nullptr;
-    if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(allocator, endpoint_str, ai_fun_info))) {
+    if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(allocator, endpoint_str, schema_service, ai_fun_info))) {
     } else if (OB_ISNULL(ai_service)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ai service is null", K(ret));
@@ -3320,7 +3321,12 @@ int ObVectorIndexUtil::check_index_param(
         } else if (last_variable == "MODEL") {
           if (!new_parser_name.empty()) {
             ObAIFuncExprInfo *ai_func_info;
-            if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(allocator, new_parser_name, ai_func_info))) {
+            if (OB_ISNULL(session_info->effective_schema_service())) {
+              ret = OB_NOT_INIT;
+              LOG_WARN("namespace schema service is unavailable", K(ret));
+            } else if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(
+                           allocator, new_parser_name,
+                           *session_info->effective_schema_service(), ai_func_info))) {
               ret = OB_NOT_SUPPORTED;
               LOG_WARN("invalid vector index model value", K(ret), K(new_parser_name));
               LOG_USER_ERROR(OB_NOT_SUPPORTED, "this value of vector index model is");

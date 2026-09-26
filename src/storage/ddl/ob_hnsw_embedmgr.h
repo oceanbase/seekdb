@@ -27,6 +27,7 @@
 
 namespace oceanbase
 {
+namespace share { namespace schema { class ObMultiVersionSchemaService; } }
 namespace common
 {
 class ObILobReadService;
@@ -253,7 +254,8 @@ public:
                          embedding_handler_(nullptr), slot_ring_(), ring_capacity_(9),
                          cfg_(), is_inited_(false), is_failed_(false) {}
   ~ObEmbeddingTaskMgr();
-  int init(const common::ObString &model_id);
+  int init(const common::ObString &model_id,
+           share::schema::ObMultiVersionSchemaService &schema_service);
   int submit_batch_info(ObTaskBatchInfo *&batch_info);
   int get_ready_batch_info(ObTaskBatchInfo *&batch_info, int &error_ret_code);
   int mark_task_ready(const int64_t slot_idx, const int ret_code);
@@ -263,7 +265,8 @@ public:
   TO_STRING_KV(K_(ring_capacity), K_(slot_ring), K_(cfg), K_(is_inited));
 
 private:
-  int get_ai_config(const common::ObString &model_id);
+  int get_ai_config(const common::ObString &model_id,
+                    share::schema::ObMultiVersionSchemaService &schema_service);
   void set_failed();
 
 private:

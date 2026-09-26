@@ -26,6 +26,7 @@
 #include "storage/tx_storage/ob_ls_service.h"
 #include "query/engine/expr/ob_expr_lob_utils.h"
 #include "query/engine/expr/ob_array_expr_utils.h"
+#include "namespace/namespace.h"
 
 using namespace oceanbase::storage;
 using namespace oceanbase::common;
@@ -1575,6 +1576,8 @@ int ObHNSWEmbeddingOperator::init(const ObTabletID &tablet_id)
   int ret = OB_SUCCESS;
   ObDDLTabletContext *tablet_context = nullptr;
   ObVectorIndexTabletContext *vector_index_ctx = nullptr;
+  ns::NamespaceRuntime *namespace_runtime = nullptr;
+  share::schema::ObMultiVersionSchemaService *schema_service = nullptr;
   tablet_id_ = tablet_id;
 
   if (OB_UNLIKELY(is_inited_)) {
@@ -1583,6 +1586,13 @@ int ObHNSWEmbeddingOperator::init(const ObTabletID &tablet_id)
   } else if (OB_UNLIKELY(!tablet_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_id));
+  } else if (!ns::namespace_registry().get(
+                 ns::NamespaceObjectKey::owner_namespace(tablet_id.id()),
+                 namespace_runtime) || namespace_runtime == nullptr
+             || OB_ISNULL(schema_service = static_cast<share::schema::ObMultiVersionSchemaService *>(
+                    namespace_runtime->service(ns::NamespaceRuntime::SCHEMA_SERVICE)))) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("namespace schema service is unavailable", K(ret), K(tablet_id));
   } else if (OB_FAIL(get_ddl_tablet_context(tablet_context))) {
   } else if (OB_ISNULL(lob_read_service_ = tablet_context->lob_read_service_)) {
     ret = OB_NOT_INIT;
@@ -1611,7 +1621,7 @@ int ObHNSWEmbeddingOperator::init(const ObTabletID &tablet_id)
     }
 
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(embedmgr_->init(model_id_))) {
+      if (OB_FAIL(embedmgr_->init(model_id_, *schema_service))) {
         embedmgr_->~ObEmbeddingTaskMgr();
         op_allocator_.free(embedmgr_);
         embedmgr_ = nullptr;

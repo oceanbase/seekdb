@@ -26,6 +26,8 @@
 #include "data_plane/fts/ob_fts_parser_helper.h"
 #include "share/geo/ob_srs_provider.h"
 
+namespace oceanbase { namespace share { namespace schema { class ObMultiVersionSchemaService; } } }
+
 namespace oceanbase
 {
 namespace sql
@@ -137,6 +139,7 @@ public:
     main_ctdef_(main_ctdef),
     srs_provider_(srs_provider),
     lob_read_options_(lob_read_options),
+    schema_service_(nullptr),
     ft_doc_word_info_(nullptr)
   {}
   ~ObDomainDMLParam() = default;
@@ -152,6 +155,7 @@ public:
   const ObDASDMLBaseCtDef *main_ctdef_;
   common::ObISrsProvider *srs_provider_;
   const common::ObLobReadOptions *lob_read_options_;
+  share::schema::ObMultiVersionSchemaService *schema_service_;
   const ObFTDocWordInfo *ft_doc_word_info_;
 
 private:

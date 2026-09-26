@@ -1348,16 +1348,13 @@ int ObAIFuncUtils::decode_float_embedding_array(const ObIJsonBase &embedding_jba
   return ret;
 }
 
-int ObAIFuncUtils::get_ai_func_info(ObIAllocator &allocator, const ObString &model_id, ObAIFuncExprInfo *&info)
+int ObAIFuncUtils::get_ai_func_info(ObIAllocator &allocator, const ObString &model_id,
+                                    share::schema::ObMultiVersionSchemaService &schema_service,
+                                    ObAIFuncExprInfo *&info)
 {
   int ret = OB_SUCCESS;
-  share::schema::ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
   share::schema::ObSchemaGetterGuard guard;
-  
-  if (OB_ISNULL(schema_service)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", KR(ret));
-  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(guard))) {
+  if (OB_FAIL(schema_service.get_runtime_schema_guard(guard))) {
   } else if (OB_FAIL(get_ai_func_info(allocator, model_id, guard, info))) {
   }
   return ret;
@@ -1834,12 +1831,13 @@ namespace query
 int ObAIModelResolver::resolve_model_name(
     common::ObIAllocator &allocator,
     const common::ObString &model_id,
+    share::schema::ObMultiVersionSchemaService &schema_service,
     common::ObString &model_name)
 {
   int ret = OB_SUCCESS;
   common::ObAIFuncExprInfo *info = nullptr;
   if (OB_FAIL(common::ObAIFuncUtils::get_ai_func_info(
-          allocator, model_id, info))) {
+          allocator, model_id, schema_service, info))) {
   } else if (OB_ISNULL(info)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ai model metadata is null", K(ret), K(model_id));

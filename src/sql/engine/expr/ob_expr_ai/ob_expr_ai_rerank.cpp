@@ -163,7 +163,12 @@ int ObExprAIRerank::eval_ai_rerank(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     }
     
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(temp_allocator, model_id, info))) {
+    } else if (OB_ISNULL(ctx.exec_ctx_.get_my_session())
+               || OB_ISNULL(ctx.exec_ctx_.get_my_session()->effective_schema_service())) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(
+                   temp_allocator, model_id,
+                   *ctx.exec_ctx_.get_my_session()->effective_schema_service(), info))) {
     } else if (OB_ISNULL(endpoint_resolver)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("AI endpoint resolver is unavailable", K(ret));
