@@ -1056,18 +1056,6 @@ int ObSqlTransControl::create_anonymous_savepoint(ObExecContext &exec_ctx, ObTxS
   return ret;
 }
 
-int ObSqlTransControl::create_anonymous_savepoint(ObTxDesc &tx_desc, ObTxSEQ &savepoint)
-{
-  int ret = OB_SUCCESS;
-  data_plane::ObITransactionService *txs = NULL;
-  if (OB_ISNULL(txs = data_plane::query_transaction_service())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_ERROR("get_tx_service", K(ret));
-  }
-  OZ (txs->create_in_txn_implicit_savepoint(tx_desc, savepoint));
-  return ret;
-}
-
 int ObSqlTransControl::rollback_savepoint(ObExecContext &exec_ctx, const ObTxSEQ savepoint)
 {
   int ret = OB_SUCCESS;

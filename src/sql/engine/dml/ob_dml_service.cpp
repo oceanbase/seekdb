@@ -1991,26 +1991,19 @@ int ObDMLService::check_nested_sql_legality(ObExecContext &ctx, common::ObTableI
   return ret;
 }
 
-int ObDMLService::create_anonymous_savepoint(ObTxDesc &tx_desc, transaction::ObTxSEQ &savepoint)
+int ObDMLService::create_anonymous_savepoint(data_plane::ObITransactionService &tx_service,
+                                              ObTxDesc &tx_desc,
+                                              transaction::ObTxSEQ &savepoint)
 {
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(ObSqlTransControl::create_anonymous_savepoint(tx_desc, savepoint))) {
-  }
-  return ret;
+  return tx_service.create_in_txn_implicit_savepoint(tx_desc, savepoint);
 }
 
-int ObDMLService::rollback_local_savepoint(ObTxDesc &tx_desc, const transaction::ObTxSEQ savepoint, int64_t expire_ts)
+int ObDMLService::rollback_local_savepoint(data_plane::ObITransactionService &tx_service,
+                                           ObTxDesc &tx_desc,
+                                           const transaction::ObTxSEQ savepoint,
+                                           int64_t expire_ts)
 {
-  int ret = OB_SUCCESS;
-  data_plane::ObITransactionService *tx =
-      data_plane::query_transaction_service();
-  if (OB_ISNULL(tx)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("transaction service is null", K(ret));
-  } else if (OB_FAIL(tx->rollback_to_implicit_savepoint(
-                 tx_desc, savepoint, expire_ts, false))) {
-  }
-  return ret;
+  return tx_service.rollback_to_implicit_savepoint(tx_desc, savepoint, expire_ts, false);
 }
 
 int ObDMLService::check_local_index_affected_rows(int64_t table_affected_rows,

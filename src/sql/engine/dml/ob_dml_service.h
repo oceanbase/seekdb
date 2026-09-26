@@ -234,8 +234,11 @@ public:
   static int set_heap_table_hidden_pk(const ObInsCtDef &ins_ctdef,
                                       const common::ObTabletID &tablet_id,
                                       ObEvalCtx &eval_ctx);
-  static int create_anonymous_savepoint(transaction::ObTxDesc &tx_desc, transaction::ObTxSEQ &savepoint);
-  static int rollback_local_savepoint(transaction::ObTxDesc &tx_desc,
+  static int create_anonymous_savepoint(data_plane::ObITransactionService &tx_service,
+                                        transaction::ObTxDesc &tx_desc,
+                                        transaction::ObTxSEQ &savepoint);
+  static int rollback_local_savepoint(data_plane::ObITransactionService &tx_service,
+                                      transaction::ObTxDesc &tx_desc,
                                       const transaction::ObTxSEQ savepoint,
                                       int64_t expire_ts);
   static int check_local_index_affected_rows(int64_t table_affected_rows,
@@ -415,8 +418,12 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet_with_ignore(DMLIterator &
   ObDASWriteBuffer::Iterator write_iter;
   data_plane::ObIWriteContextService *as =
       observer::namespace_worker_prototype::effective_write_context_service(THIS_WORKER.get_session());
+  data_plane::ObITransactionService *tx_service =
+      observer::namespace_worker_prototype::effective_transaction_service(THIS_WORKER.get_session());
   const bool with_local_index = related_ctdefs_ != nullptr && !related_ctdefs_->empty();
-  if (OB_FAIL(iter.get_write_buffer().begin(write_iter))) {
+  if (OB_ISNULL(tx_service)) {
+    ret = common::OB_NOT_INIT;
+  } else if (OB_FAIL(iter.get_write_buffer().begin(write_iter))) {
   }
   while (OB_SUCC(ret) && OB_SUCC(write_iter.get_next_row(dml_row))) {
     transaction::ObTxSEQ savepoint_no;
@@ -427,7 +434,7 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet_with_ignore(DMLIterator &
     // Here subsequent code will be removed, temporary processing
     ObChunkDatumStore::StoredRow *store_row = nullptr;
     dsr.store_row_ = const_cast<ObDASWriteBuffer::DmlRow*>(dml_row);
-    if (OB_FAIL(ObDMLService::create_anonymous_savepoint(*tx_desc_, savepoint_no))) {
+    if (OB_FAIL(ObDMLService::create_anonymous_savepoint(*tx_service, *tx_desc_, savepoint_no))) {
     } else if (OB_FAIL(single_row_buffer.init(*das_allocator_, ObDASWriteBuffer::DAS_ROW_DEFAULT_EXTEND_SIZE))) {
     } else if (OB_FAIL(single_row_buffer.try_add_row(dsr, das::OB_DAS_TASK_BUFFER_SIZE, added, &store_row))) {
     } else if (!added) {
@@ -500,7 +507,7 @@ int ObDASIndexDMLAdaptor<N, DMLIterator>::write_tablet_with_ignore(DMLIterator &
     }
     if (common::OB_ERR_PRIMARY_KEY_DUPLICATE == ret) {
       //rollback to savepoint
-      if (OB_FAIL(ObDMLService::rollback_local_savepoint(*tx_desc_,
+      if (OB_FAIL(ObDMLService::rollback_local_savepoint(*tx_service, *tx_desc_,
                                                          savepoint_no,
                                                          dml_execution_.timeout()))) {
       }
