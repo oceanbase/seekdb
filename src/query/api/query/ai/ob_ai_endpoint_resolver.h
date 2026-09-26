@@ -21,6 +21,7 @@
 
 namespace oceanbase
 {
+namespace common { class ObMySQLProxy; }
 namespace share { namespace schema { class ObMultiVersionSchemaService; } }
 namespace query
 {
@@ -34,6 +35,7 @@ public:
       common::ObIAllocator &allocator,
       share::ObAiModelEndpointInfo &endpoint,
       share::schema::ObMultiVersionSchemaService &schema_service,
+      common::ObMySQLProxy &sql_proxy,
       bool check_access = true) const = 0;
 };
 

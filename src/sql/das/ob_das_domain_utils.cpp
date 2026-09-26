@@ -635,7 +635,7 @@ int ObDomainDMLIterator::create_domain_dml_iterator(
         ObEmbeddedVecDMLIterator *iter = new (buf) ObEmbeddedVecDMLIterator(param.allocator_, param.row_projector_,
                                                                             param.write_iter_, param.das_ctdef_,
                                                                             param.main_ctdef_, param.lob_read_options_,
-                                                                            param.schema_service_);
+                                                                            param.schema_service_, param.sql_proxy_);
         domain_iter = static_cast<ObDomainDMLIterator *>(iter);
       }
     } else {

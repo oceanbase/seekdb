@@ -255,7 +255,8 @@ public:
                          cfg_(), is_inited_(false), is_failed_(false) {}
   ~ObEmbeddingTaskMgr();
   int init(const common::ObString &model_id,
-           share::schema::ObMultiVersionSchemaService &schema_service);
+           share::schema::ObMultiVersionSchemaService &schema_service,
+           common::ObMySQLProxy &sql_proxy);
   int submit_batch_info(ObTaskBatchInfo *&batch_info);
   int get_ready_batch_info(ObTaskBatchInfo *&batch_info, int &error_ret_code);
   int mark_task_ready(const int64_t slot_idx, const int ret_code);
@@ -266,7 +267,8 @@ public:
 
 private:
   int get_ai_config(const common::ObString &model_id,
-                    share::schema::ObMultiVersionSchemaService &schema_service);
+                    share::schema::ObMultiVersionSchemaService &schema_service,
+                    common::ObMySQLProxy &sql_proxy);
   void set_failed();
 
 private:

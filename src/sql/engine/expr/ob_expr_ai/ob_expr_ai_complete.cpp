@@ -163,9 +163,12 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
     } else if (OB_ISNULL(endpoint_resolver)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("AI endpoint resolver is unavailable", K(ret));
+    } else if (OB_ISNULL(ctx.exec_ctx_.get_my_session()->effective_sql_proxy())) {
+      ret = OB_NOT_INIT;
     } else if (OB_FAIL(endpoint_resolver->resolve_by_model_name(
                    model_id, temp_allocator, resolved_endpoint,
-                   *ctx.exec_ctx_.get_my_session()->effective_schema_service()))) {
+                   *ctx.exec_ctx_.get_my_session()->effective_schema_service(),
+                   *ctx.exec_ctx_.get_my_session()->effective_sql_proxy()))) {
     } else {
       ObAIFuncModel model(temp_allocator, *info, *endpoint_info);
       ObString result;

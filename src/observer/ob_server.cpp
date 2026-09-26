@@ -321,25 +321,28 @@ int ObServer::create_endpoint(
     common::ObArenaAllocator &allocator,
     const common::ObString &endpoint_name,
     const common::ObIJsonBase &definition,
-    share::schema::ObMultiVersionSchemaService &schema_service)
+    share::schema::ObMultiVersionSchemaService &schema_service,
+    common::ObMySQLProxy &sql_proxy)
 {
   return share::ObAiServiceExecutor::create_ai_model_endpoint(
-      allocator, endpoint_name, definition, schema_service);
+      allocator, endpoint_name, definition, schema_service, sql_proxy);
 }
 
 int ObServer::alter_endpoint(
     common::ObArenaAllocator &allocator,
     const common::ObString &endpoint_name,
     const common::ObIJsonBase &definition,
-    share::schema::ObMultiVersionSchemaService &schema_service)
+    share::schema::ObMultiVersionSchemaService &schema_service,
+    common::ObMySQLProxy &sql_proxy)
 {
   return share::ObAiServiceExecutor::alter_ai_model_endpoint(
-      allocator, endpoint_name, definition, schema_service);
+      allocator, endpoint_name, definition, schema_service, sql_proxy);
 }
 
-int ObServer::drop_endpoint(const common::ObString &endpoint_name)
+int ObServer::drop_endpoint(const common::ObString &endpoint_name,
+                            common::ObMySQLProxy &sql_proxy)
 {
-  return share::ObAiServiceExecutor::drop_ai_model_endpoint(endpoint_name);
+  return share::ObAiServiceExecutor::drop_ai_model_endpoint(endpoint_name, sql_proxy);
 }
 
 int ObServer::resolve_by_model_name(
@@ -347,6 +350,7 @@ int ObServer::resolve_by_model_name(
     common::ObIAllocator &allocator,
     share::ObAiModelEndpointInfo &endpoint,
     share::schema::ObMultiVersionSchemaService &schema_service,
+    common::ObMySQLProxy &sql_proxy,
     bool check_access) const
 {
   int ret = OB_SUCCESS;
@@ -358,7 +362,7 @@ int ObServer::resolve_by_model_name(
   } else if (OB_FAIL(mods_ai_service_->get_ai_service_guard(guard))) {
     LOG_WARN("get AI service guard failed", K(ret));
   } else if (OB_FAIL(guard.get_ai_endpoint_by_ai_model_name(
-                 model_name, resolved_endpoint, schema_service, check_access))) {
+                 model_name, resolved_endpoint, schema_service, sql_proxy, check_access))) {
     LOG_WARN("resolve AI endpoint failed", K(ret), K(model_name));
   } else if (OB_ISNULL(resolved_endpoint)) {
     ret = OB_ERR_UNEXPECTED;

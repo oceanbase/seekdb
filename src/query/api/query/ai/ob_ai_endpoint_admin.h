@@ -24,6 +24,7 @@ namespace common
 class ObArenaAllocator;
 class ObIJsonBase;
 class ObString;
+class ObMySQLProxy;
 }
 namespace share { namespace schema { class ObMultiVersionSchemaService; } }
 namespace query
@@ -39,13 +40,16 @@ public:
       common::ObArenaAllocator &allocator,
       const common::ObString &endpoint_name,
       const common::ObIJsonBase &definition,
-      share::schema::ObMultiVersionSchemaService &schema_service) = 0;
+      share::schema::ObMultiVersionSchemaService &schema_service,
+      common::ObMySQLProxy &sql_proxy) = 0;
   virtual int alter_endpoint(
       common::ObArenaAllocator &allocator,
       const common::ObString &endpoint_name,
       const common::ObIJsonBase &definition,
-      share::schema::ObMultiVersionSchemaService &schema_service) = 0;
-  virtual int drop_endpoint(const common::ObString &endpoint_name) = 0;
+      share::schema::ObMultiVersionSchemaService &schema_service,
+      common::ObMySQLProxy &sql_proxy) = 0;
+  virtual int drop_endpoint(const common::ObString &endpoint_name,
+                            common::ObMySQLProxy &sql_proxy) = 0;
 };
 
 } // namespace query

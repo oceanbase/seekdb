@@ -456,12 +456,16 @@ int ObHybridVectorRefreshTask::init_endpoint(ObPluginVectorIndexAdaptor &adaptor
   ObMultiVersionSchemaService *schema_service = task_ctx == nullptr ? nullptr :
       observer::namespace_worker_prototype::namespace_schema_service(
           ns::NamespaceObjectKey::owner_namespace(task_ctx->task_status_.tablet_id_.id()));
-  if (OB_ISNULL(ai_service) || OB_ISNULL(task_ctx) || OB_ISNULL(schema_service)) {
+  ObMySQLProxy *sql_proxy = task_ctx == nullptr ? nullptr :
+      observer::namespace_worker_prototype::namespace_sql_proxy(
+          ns::NamespaceObjectKey::owner_namespace(task_ctx->task_status_.tablet_id_.id()));
+  if (OB_ISNULL(ai_service) || OB_ISNULL(task_ctx) || OB_ISNULL(schema_service)
+      || OB_ISNULL(sql_proxy)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret), KPC(task_ctx), K(ai_service));
   } else if (OB_FAIL(ai_service->get_ai_service_guard(task_ctx->ai_service_))) {
   } else if (OB_FAIL(task_ctx->ai_service_.get_ai_endpoint_by_ai_model_name(
-                 adaptor.get_endpoint(), task_ctx->endpoint_, *schema_service,
+                 adaptor.get_endpoint(), task_ctx->endpoint_, *schema_service, *sql_proxy,
                  false /*need_check*/))) {
   } else if (OB_FALSE_IT(use_request_model_name = !task_ctx->endpoint_->get_request_model_name().empty())) {
   } else if (use_request_model_name && OB_FAIL(ob_write_string(task_ctx->allocator_, task_ctx->endpoint_->get_request_model_name(), task_ctx->request_model_name_))) {

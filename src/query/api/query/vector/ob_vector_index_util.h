@@ -32,6 +32,7 @@ namespace oceanbase
 namespace common
 {
 class ObMySQLTransaction;
+class ObMySQLProxy;
 }
 namespace obcall
 {
@@ -506,7 +507,8 @@ public:
       const ObString &query_text,
       const ObString &param_str,
       ObString &output_vec,
-      share::schema::ObMultiVersionSchemaService &schema_service);
+      share::schema::ObMultiVersionSchemaService &schema_service,
+      common::ObMySQLProxy &sql_proxy);
   static int get_vector_from_vector_array_string(
       ObIAllocator &allocator,
       const ObString &vector_array_str,

@@ -35,8 +35,8 @@ class ObAiServiceGuard
 public:
   ObAiServiceGuard();
   ~ObAiServiceGuard();
-  int get_ai_endpoint(const common::ObString &name, const share::ObAiModelEndpointInfo *&endpoint_info);
-  int get_ai_endpoint_by_ai_model_name(const common::ObString &ai_model_name, const share::ObAiModelEndpointInfo *&endpoint_info, share::schema::ObMultiVersionSchemaService &schema_service, bool need_check = true);
+  int get_ai_endpoint(const common::ObString &name, const share::ObAiModelEndpointInfo *&endpoint_info, common::ObMySQLProxy &sql_proxy);
+  int get_ai_endpoint_by_ai_model_name(const common::ObString &ai_model_name, const share::ObAiModelEndpointInfo *&endpoint_info, share::schema::ObMultiVersionSchemaService &schema_service, common::ObMySQLProxy &sql_proxy, bool need_check = true);
 private:
   int check_access_privilege();
   ObArenaAllocator local_allocator_;

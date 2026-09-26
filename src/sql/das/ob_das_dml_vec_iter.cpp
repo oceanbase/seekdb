@@ -714,11 +714,11 @@ int ObEmbeddedVecDMLIterator::generate_embedded_vec_row(const ObChunkDatumStore:
             if (is_old_row_) {
               obj_arr[embedded_vec_idx].set_null();
             } else {
-              if (OB_ISNULL(schema_service_)) {
+              if (OB_ISNULL(schema_service_) || OB_ISNULL(sql_proxy_)) {
                 ret = OB_NOT_INIT;
               } else if (OB_FAIL(ObVectorIndexUtil::get_vector_from_text_by_embedding(
                              allocator_, chunk, vec_index_param, embedded_vector,
-                             *schema_service_))) {
+                             *schema_service_, *sql_proxy_))) {
               } else {
                 obj_arr[embedded_vec_idx].set_string(embedded_vector);
               }

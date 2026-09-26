@@ -160,12 +160,14 @@ public:
       const ObDASDMLBaseCtDef *das_ctdef,
       const ObDASDMLBaseCtDef *main_ctdef,
       const common::ObLobReadOptions *lob_read_options,
-      share::schema::ObMultiVersionSchemaService *schema_service)
+      share::schema::ObMultiVersionSchemaService *schema_service,
+      common::ObMySQLProxy *sql_proxy)
     : ObDomainDMLIterator(
           allocator, row_projector, write_iter, das_ctdef, main_ctdef,
           lob_read_options),
       is_old_row_(das_ctdef_->op_type_ == ObDASOpType::DAS_OP_TABLE_UPDATE || das_ctdef_->op_type_ == ObDASOpType::DAS_OP_TABLE_DELETE),
-      schema_service_(schema_service)
+      schema_service_(schema_service),
+      sql_proxy_(sql_proxy)
     {}
   virtual ~ObEmbeddedVecDMLIterator() = default;
 protected:
@@ -179,6 +181,7 @@ private:
 public:
   bool is_old_row_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
+  common::ObMySQLProxy *sql_proxy_;
 };
 
 } // end namespace sql

@@ -140,6 +140,7 @@ public:
     srs_provider_(srs_provider),
     lob_read_options_(lob_read_options),
     schema_service_(nullptr),
+    sql_proxy_(nullptr),
     ft_doc_word_info_(nullptr)
   {}
   ~ObDomainDMLParam() = default;
@@ -156,6 +157,7 @@ public:
   common::ObISrsProvider *srs_provider_;
   const common::ObLobReadOptions *lob_read_options_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
+  common::ObMySQLProxy *sql_proxy_;
   const ObFTDocWordInfo *ft_doc_word_info_;
 
 private:

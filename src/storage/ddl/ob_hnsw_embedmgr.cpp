@@ -562,13 +562,14 @@ ObEmbeddingTaskMgr::~ObEmbeddingTaskMgr()
 }
 
 int ObEmbeddingTaskMgr::init(const ObString &model_id,
-                             share::schema::ObMultiVersionSchemaService &schema_service)
+                             share::schema::ObMultiVersionSchemaService &schema_service,
+                             ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("embedding task mgr init twice", K(ret));
-  } else if (OB_FAIL(get_ai_config(model_id, schema_service))) {
+  } else if (OB_FAIL(get_ai_config(model_id, schema_service, sql_proxy))) {
   } else {
     ObIVectorIndexRuntime *service = ::oceanbase::share::server_service<::oceanbase::storage::ObIVectorIndexRuntime>();
     if (OB_ISNULL(service)) {
@@ -717,7 +718,8 @@ int ObEmbeddingTaskMgr::get_ready_batch_info(ObTaskBatchInfo *&batch_info, int &
 //TODO(fanfangyao.ffy): Move this process to vectorindexctx
 int ObEmbeddingTaskMgr::get_ai_config(
     const common::ObString &model_id,
-    share::schema::ObMultiVersionSchemaService &schema_service)
+    share::schema::ObMultiVersionSchemaService &schema_service,
+    ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
   cfg_.model_url_.reset();
@@ -740,7 +742,7 @@ int ObEmbeddingTaskMgr::get_ai_config(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("AI endpoint resolver is unavailable", K(ret));
     } else if (OB_FAIL(endpoint_resolver->resolve_by_model_name(
-                   model_id, allocator_, endpoint_info, schema_service))) {
+                   model_id, allocator_, endpoint_info, schema_service, sql_proxy))) {
     } else if (OB_FALSE_IT(use_request_model_name =
                               !endpoint_info.get_request_model_name().empty())) {
     } else if (OB_FAIL(ob_write_string(

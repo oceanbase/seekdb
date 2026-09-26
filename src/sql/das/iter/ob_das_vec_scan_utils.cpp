@@ -285,11 +285,12 @@ int ObDasVecScanUtils::init_sort_of_hybrid_index(ObIAllocator &allocator,
           } else {
             auto *session = sort_rtdef->eval_ctx_->exec_ctx_.get_my_session();
             auto *schema_service = session == nullptr ? nullptr : session->effective_schema_service();
-            if (OB_ISNULL(schema_service)) {
+            auto *sql_proxy = session == nullptr ? nullptr : session->effective_sql_proxy();
+            if (OB_ISNULL(schema_service) || OB_ISNULL(sql_proxy)) {
               ret = OB_NOT_INIT;
             } else if (OB_FAIL(ObVectorIndexUtil::get_vector_from_text_by_embedding(
                            allocator, query_str, ir_ctdef->vec_index_param_,
-                           hybrid_search_vec, *schema_service))) {
+                           hybrid_search_vec, *schema_service, *sql_proxy))) {
             }
           }
         }
