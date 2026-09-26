@@ -62,6 +62,7 @@ class ObSMConnection;
 namespace transaction {
 class ObTxDesc;
 }
+namespace share { namespace schema { class ObMultiVersionSchemaService; } }
 namespace sql
 {
 class ObExprRegexpSessionVariables;
@@ -372,6 +373,7 @@ public:
   ObBasicSessionInfo();
   virtual ~ObBasicSessionInfo();
   virtual data_plane::ObITransactionService *transaction_service_for_deserialize();
+  virtual share::schema::ObMultiVersionSchemaService *effective_schema_service() const;
 
   virtual int init(uint32_t sessid,
                    common::ObIAllocator *bucket_allocator, const ObTZInfoMap *tz_info);
@@ -737,11 +739,13 @@ public:
                                      common::ObIAllocator &calc_buf,
                                      const common::ObString &var_name,
                                      common::ObObj &val);
-  static int get_global_sys_variable(common::ObIAllocator &calc_buf,
+  static int get_global_sys_variable(share::schema::ObMultiVersionSchemaService &schema_service,
+                                     common::ObIAllocator &calc_buf,
                                      const common::ObDataTypeCastParams &dtc_params,
                                      const common::ObString &var_name,
                                      common::ObObj &val);
-  static int get_global_sys_variable(common::ObIAllocator &calc_buf,
+  static int get_global_sys_variable(share::schema::ObMultiVersionSchemaService &schema_service,
+                                     common::ObIAllocator &calc_buf,
                                      const common::ObDataTypeCastParams &dtc_params,
                                      const share::ObSysVarClassType var_id,
                                      common::ObObj &val);

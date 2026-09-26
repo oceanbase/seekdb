@@ -653,13 +653,14 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
           ObModIds::OB_SQL_PLAN_CACHE))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(services->plan_cache->init(common::OB_PLAN_CACHE_BUCKET_NUMBER,
-          server))) {
+          server, *services->schema_service))) {
   } else if (FALSE_IT(services->opt_stat_manager.bind_plan_cache(*services->plan_cache))) {
   } else if (FALSE_IT(stage = "ps_cache")) {
   } else if (OB_ISNULL(services->ps_cache = OB_NEW(sql::ObPsCache,
           ObModIds::OB_SQL_PS_CACHE))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-  } else if (OB_FAIL(sql::ObPsCache::server_module_init(services->ps_cache))) {
+  } else if (OB_FAIL(sql::ObPsCache::server_module_init(
+          services->ps_cache, *services->schema_service))) {
   } else if (FALSE_IT(stage = "root_commands")) {
   } else if (OB_ISNULL(services->local_runtime = OB_NEW(
           InProcessRootserverLocalRuntime, ObModIds::OB_SCHEMA_SERVICE, ns))) {

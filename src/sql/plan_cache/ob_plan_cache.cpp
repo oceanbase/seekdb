@@ -295,6 +295,7 @@ struct ObIdleEvictOp
 ObPlanCache::ObPlanCache()
   :inited_(false),
    access_service_(nullptr),
+   schema_service_(nullptr),
    mem_limit_pct_(OB_PLAN_CACHE_PERCENTAGE),
    mem_high_pct_(OB_PLAN_CACHE_EVICT_HIGH_PERCENTAGE),
    mem_low_pct_(OB_PLAN_CACHE_EVICT_LOW_PERCENTAGE),
@@ -327,16 +328,19 @@ void ObPlanCache::destroy()
     }
     inited_ = false;
     access_service_ = nullptr;
+    schema_service_ = nullptr;
   }
 }
 
 int ObPlanCache::init(
     int64_t hash_bucket,
-    query::ObIPlanCacheAccessService &access_service)
+    query::ObIPlanCacheAccessService &access_service,
+    share::schema::ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   if (!inited_) {
     access_service_ = &access_service;
+    schema_service_ = &schema_service;
     ObPCMemPctConf default_conf;
     ObMemAttr attr("PlanCache", ObCtxIds::PLAN_CACHE_CTX_ID);
     lib::ContextParam param;
@@ -367,6 +371,8 @@ int ObPlanCache::init(
         DESTROY_CONTEXT(root_context_);
         root_context_ = NULL;
       }
+      schema_service_ = nullptr;
+      access_service_ = nullptr;
     }
   }
   return ret;
@@ -1664,9 +1670,13 @@ int ObPlanCache::update_memory_conf()
   ObArenaAllocator alloc;
   ObObj obj_val;
 
+  if (OB_ISNULL(schema_service_)) {
+    ret = OB_NOT_INIT;
+  }
+
   {
     for (int32_t i = 0; i < 3 && OB_SUCC(ret); ++i) {
-    if (OB_FAIL(ObBasicSessionInfo::get_global_sys_variable(alloc,
+    if (OB_FAIL(ObBasicSessionInfo::get_global_sys_variable(*schema_service_, alloc,
                                                             ObDataTypeCastParams(),
                                                             ObString(conf_names[i]), obj_val))) {
       } else if (OB_FAIL(obj_val.get_int(*conf_values[i]))) {
@@ -2070,13 +2080,14 @@ template int ObPlanCache::dump_deleted_objs<DUMP_ALL>(ObIArray<AllocCacheObjInfo
                                                         const int64_t) const;
 int ObPlanCache::server_module_init(
     ObPlanCache *&plan_cache,
-    query::ObIPlanCacheAccessService &access_service)
+    query::ObIPlanCacheAccessService &access_service,
+    share::schema::ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   
   if (OB_FAIL(plan_cache->init(common::calculate_scaled_value_by_memory(
       common::OB_PLAN_CACHE_BUCKET_NUMBER_MIN, common::OB_PLAN_CACHE_BUCKET_NUMBER),
-      access_service))) {
+      access_service, schema_service))) {
   } else {
     // do nothing
   }

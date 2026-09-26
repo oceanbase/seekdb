@@ -30,6 +30,7 @@ namespace sql
 ObPsCache::ObPsCache()
   : next_ps_stmt_id_(0),
     inited_(false),
+    schema_service_(nullptr),
     host_(),
     stmt_id_map_(),
     stmt_info_map_(),
@@ -50,6 +51,7 @@ ObPsCache::ObPsCache()
 void ObPsCache::destroy()
 {
   evict_timer_.destroy();
+  schema_service_ = nullptr;
   if (inited_) {
     // ps_stmt_id and ps_stmt_info will have their reference count incremented when created
     // Now PsCache is being destructed, decrement the reference count for all internal objects, if the reference count reaches 0, memory will be explicitly freed
@@ -77,7 +79,8 @@ ObPsCache::~ObPsCache()
   LOG_INFO("release ps plan cache", "bt", lbt(), K(ret));
 }
 
-int ObPsCache::server_module_init(ObPsCache* &ps_cache)
+int ObPsCache::server_module_init(ObPsCache* &ps_cache,
+                                  share::schema::ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ps_cache)) {
@@ -86,7 +89,7 @@ int ObPsCache::server_module_init(ObPsCache* &ps_cache)
   } else if (OB_FAIL(ps_cache->init(
                  common::calculate_scaled_value_by_memory(
                      common::OB_PLAN_CACHE_BUCKET_NUMBER_MIN,
-                     common::OB_PLAN_CACHE_BUCKET_NUMBER)))) {
+                     common::OB_PLAN_CACHE_BUCKET_NUMBER), schema_service))) {
   }
   return ret;
 }
@@ -99,11 +102,13 @@ void ObPsCache::server_module_stop(ObPsCache * &ps_cache)
   }
 }
 
-int ObPsCache::init(const int64_t hash_bucket)
+int ObPsCache::init(const int64_t hash_bucket,
+                    share::schema::ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   lib::ObMutexGuard guard(mutex_);
   if (!inited_) {
+    schema_service_ = &schema_service;
     ObMemAttr attr;
     attr.label_ = ObModIds::OB_SQL_PS_CACHE;
 
@@ -150,6 +155,7 @@ int ObPsCache::init(const int64_t hash_bucket)
     }
     inner_allocator_ = NULL;
     bucket_charge_ = 0;
+    schema_service_ = nullptr;
   }
   return ret;
 }
@@ -977,9 +983,13 @@ int ObPsCache::update_memory_conf()
   ObArenaAllocator alloc;
   ObObj obj_val;
 
+  if (OB_ISNULL(schema_service_)) {
+    ret = OB_NOT_INIT;
+  }
+
   {
     for (int32_t i = 0; i < 3 && OB_SUCC(ret); ++i) {
-    if (OB_FAIL(ObBasicSessionInfo::get_global_sys_variable(alloc,
+    if (OB_FAIL(ObBasicSessionInfo::get_global_sys_variable(*schema_service_, alloc,
                                                             ObDataTypeCastParams(),
                                                             ObString(conf_names[i]), obj_val))) {
       } else if (OB_FAIL(obj_val.get_int(*conf_values[i]))) {

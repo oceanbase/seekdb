@@ -1466,7 +1466,9 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(ObTimestampAccess::server_module_init(mods_timestamp_access_))) { SERVER_LOG(WARN, "mods_timestamp_access_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObTransIDService::server_module_init(mods_trans_id_service_))) { SERVER_LOG(WARN, "mods_trans_id_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObUniqueIDService::server_module_init(mods_unique_id_service_))) { SERVER_LOG(WARN, "mods_unique_id_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObPsCache::server_module_init(mods_ps_cache_))) { SERVER_LOG(WARN, "mods_ps_cache_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_ISNULL(GCTX.schema_service_)) { ret = OB_NOT_INIT; }
+  if (OB_SUCC(ret) && OB_FAIL(ObPsCache::server_module_init(
+          mods_ps_cache_, *GCTX.schema_service_))) { SERVER_LOG(WARN, "mods_ps_cache_ fail", KR(ret)); }
   if (OB_SUCC(ret)) {
     ns::NamespaceRuntime *home = nullptr;
     if (!ns::namespace_registry().get(1, home) || home == nullptr) {
@@ -1476,7 +1478,8 @@ int ObServer::obs_init_modules()
     }
   }
   if (OB_SUCC(ret) &&
-      OB_FAIL(ObPlanCache::server_module_init(mods_plan_cache_, OBSERVER))) {
+      OB_FAIL(ObPlanCache::server_module_init(
+          mods_plan_cache_, OBSERVER, *GCTX.schema_service_))) {
     SERVER_LOG(WARN, "mods_plan_cache_ fail", KR(ret));
   }
   if (OB_SUCC(ret)) {

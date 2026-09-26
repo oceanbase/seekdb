@@ -62,6 +62,11 @@ data_plane::ObITransactionService *ObBasicSessionInfo::transaction_service_for_d
   return nullptr;
 }
 
+share::schema::ObMultiVersionSchemaService *ObBasicSessionInfo::effective_schema_service() const
+{
+  return nullptr;
+}
+
 ObBasicSessionInfo::ObBasicSessionInfo()
   :   
       query_mutex_(common::ObLatchIds::SESSION_QUERY_LOCK),
@@ -340,8 +345,10 @@ int ObBasicSessionInfo::reset_sys_vars()
   sys_var_fac_.destroy();
   // Load built-in server defaults, then overlay the current runtime schema values.
   OZ (load_default_sys_variable(print_info_log, use_server_defaults));
-  OZ (GCTX.schema_service_->get_runtime_schema_guard(schema_guard,
-                                                    OB_INVALID_VERSION));
+  share::schema::ObMultiVersionSchemaService *schema_service = effective_schema_service();
+  OV (OB_NOT_NULL(schema_service), OB_NOT_INIT);
+  OZ (schema_service->get_runtime_schema_guard(schema_guard,
+                                               OB_INVALID_VERSION));
   OZ (load_all_sys_vars(schema_guard));
   if (OB_FAIL(ret) && is_schema_error(ret)) {
     ret = OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH;
@@ -771,13 +778,18 @@ int ObBasicSessionInfo::get_global_sys_variable(const ObBasicSessionInfo *sessio
     LOG_WARN("session is NULL", K(ret), K(var_name));
   } else {
     ObDataTypeCastParams dtc_params = session->get_dtc_params();
-    if (OB_FAIL(get_global_sys_variable(calc_buf, dtc_params, var_name, val))) {
+    share::schema::ObMultiVersionSchemaService *schema_service = session->effective_schema_service();
+    if (OB_ISNULL(schema_service)) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(get_global_sys_variable(*schema_service, calc_buf, dtc_params,
+                                               var_name, val))) {
     }
   }
   return ret;
 }
 
-int ObBasicSessionInfo::get_global_sys_variable(ObIAllocator &calc_buf,
+int ObBasicSessionInfo::get_global_sys_variable(ObMultiVersionSchemaService &schema_service,
+                                                ObIAllocator &calc_buf,
                                                 const ObDataTypeCastParams &dtc_params,
                                                 const ObSysVarClassType var_id,
                                                 ObObj &val)
@@ -786,10 +798,7 @@ int ObBasicSessionInfo::get_global_sys_variable(ObIAllocator &calc_buf,
   ObSchemaGetterGuard schema_guard;
   const ObSysVarSchema *sysvar_schema = NULL;
   const ObSysVariableSchema *sys_variable_schema = NULL;
-  if (OB_ISNULL(GCTX.schema_service_)) {
-    ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN,"invalid argument", K(GCTX.schema_service_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+  if (OB_FAIL(schema_service.get_runtime_schema_guard(
               schema_guard))) {
     ret = OB_SCHEMA_ERROR;
     OB_LOG(WARN,"fail get schema guard", K(ret));
@@ -811,7 +820,8 @@ int ObBasicSessionInfo::get_global_sys_variable(ObIAllocator &calc_buf,
   return ret;
 }
 
-int ObBasicSessionInfo::get_global_sys_variable(ObIAllocator &calc_buf,
+int ObBasicSessionInfo::get_global_sys_variable(ObMultiVersionSchemaService &schema_service,
+                                                ObIAllocator &calc_buf,
                                                 const ObDataTypeCastParams &dtc_params,
                                                 const ObString &var_name,
                                                 ObObj &val)
@@ -820,10 +830,7 @@ int ObBasicSessionInfo::get_global_sys_variable(ObIAllocator &calc_buf,
   ObSchemaGetterGuard schema_guard;
   const ObSysVarSchema *sysvar_schema = NULL;
   const ObSysVariableSchema *sys_variable_schema = NULL;
-  if (OB_ISNULL(GCTX.schema_service_)) {
-    ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN,"invalid argument", K(GCTX.schema_service_));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+  if (OB_FAIL(schema_service.get_runtime_schema_guard(
               schema_guard))) {
     ret = OB_SCHEMA_ERROR;
     OB_LOG(WARN,"fail get schema guard", K(ret));

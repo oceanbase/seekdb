@@ -31,6 +31,7 @@ namespace share
 namespace schema
 {
 class ObSchemaGetterGuard;
+class ObMultiVersionSchemaService;
 }
 }
 using common::ObPsStmtId;
@@ -81,9 +82,11 @@ public:
 
   ObPsCache();
   virtual ~ObPsCache();
-  static int server_module_init(ObPsCache* &ps_cache);
+  static int server_module_init(ObPsCache* &ps_cache,
+                                share::schema::ObMultiVersionSchemaService &schema_service);
   static void server_module_stop(ObPsCache * &ps_cache);
-  int init(const int64_t hash_bucket);
+  int init(const int64_t hash_bucket,
+           share::schema::ObMultiVersionSchemaService &schema_service);
   bool is_inited() const { return inited_; }
   int set_mem_conf(const ObPCMemPctConf &conf);
   int update_memory_conf();
@@ -174,6 +177,7 @@ private:
 
   ObPsStmtId next_ps_stmt_id_;
   bool inited_;
+  share::schema::ObMultiVersionSchemaService *schema_service_;
   
   common::ObAddr host_;
   PsStmtIdMap stmt_id_map_;

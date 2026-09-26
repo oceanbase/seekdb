@@ -31,6 +31,7 @@
 #include "sql/plan_cache/ob_lib_cache_object_manager.h"
 namespace oceanbase
 {
+namespace share { namespace schema { class ObMultiVersionSchemaService; } }
 namespace observer
 {
   class ObGVSql;
@@ -228,11 +229,13 @@ public:
   virtual ~ObPlanCache();
   static int server_module_init(
       ObPlanCache *&plan_cache,
-      query::ObIPlanCacheAccessService &access_service);
+      query::ObIPlanCacheAccessService &access_service,
+      share::schema::ObMultiVersionSchemaService &schema_service);
   static void server_module_stop(ObPlanCache * &plan_cache);
   int init(
       int64_t hash_bucket,
-      query::ObIPlanCacheAccessService &access_service);
+      query::ObIPlanCacheAccessService &access_service,
+      share::schema::ObMultiVersionSchemaService &schema_service);
   bool is_inited() { return inited_; }
   query::ObIPlanCacheAccessService &access_service() const
   {
@@ -459,6 +462,7 @@ private:
 private:
   bool inited_;
   query::ObIPlanCacheAccessService *access_service_;
+  share::schema::ObMultiVersionSchemaService *schema_service_;
   
   int64_t mem_limit_pct_;
   int64_t mem_high_pct_;                     // high water mark percentage

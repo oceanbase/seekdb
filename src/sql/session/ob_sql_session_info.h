@@ -438,7 +438,7 @@ public:
   void set_ns_runtime(ns::NamespaceRuntime *runtime) { ns_runtime_ = runtime; }
   data_plane::ObITransactionService *transaction_service_for_deserialize() override;
   // Services are supplied by the runtime bound to this session.
-  share::schema::ObMultiVersionSchemaService *effective_schema_service() const;
+  share::schema::ObMultiVersionSchemaService *effective_schema_service() const override;
   ObPsCache *effective_ps_cache() const;
   common::ObMySQLProxy *effective_sql_proxy() const;
   // Vector task records live in the shared scheduling catalog.
