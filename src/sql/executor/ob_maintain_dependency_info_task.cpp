@@ -26,10 +26,10 @@ using namespace common;
 namespace sql
 {
 ObMaintainObjDepInfoTask::ObMaintainObjDepInfoTask ()
-  : gctx_(GCTX),
-    view_schema_(&alloc_),
+  : view_schema_(&alloc_),
     reset_view_column_infos_(false),
-    root_command_service_(nullptr)
+    root_command_service_(nullptr),
+    schema_service_(nullptr)
 {
   set_retry_times(0);
 }
@@ -125,6 +125,9 @@ share::ObAsyncTask *ObMaintainObjDepInfoTask::deep_copy(char *buf, const int64_t
       static_cast<ObMaintainObjDepInfoTask *>(task)->
           bind_root_command_service(*root_command_service_);
     }
+    if (OB_NOT_NULL(schema_service_)) {
+      static_cast<ObMaintainObjDepInfoTask *>(task)->bind_schema_service(*schema_service_);
+    }
     OZ ((static_cast<ObMaintainObjDepInfoTask *> (task))->get_insert_dep_objs().assign(insert_dep_objs_));
     OZ ((static_cast<ObMaintainObjDepInfoTask *> (task))->get_update_dep_objs().assign(update_dep_objs_));
     OZ ((static_cast<ObMaintainObjDepInfoTask *> (task))->get_delete_dep_objs().assign(delete_dep_objs_));
@@ -143,8 +146,9 @@ int ObMaintainObjDepInfoTask::process()
     
     
     dep_obj_info_arg.reset_view_column_infos_ = reset_view_column_infos_;
-    OZ (gctx_.schema_service_->async_refresh_schema(last_version));
-    OZ (gctx_.schema_service_->get_runtime_schema_guard(schema_guard));
+    OV (OB_NOT_NULL(schema_service_), OB_NOT_INIT);
+    OZ (schema_service_->async_refresh_schema(last_version));
+    OZ (schema_service_->get_runtime_schema_guard(schema_guard));
     OZ (check_and_build_dep_info_arg(schema_guard, dep_obj_info_arg,
     insert_dep_objs_, share::schema::ObReferenceObjTable::INSERT_OP));
     OZ (check_and_build_dep_info_arg(schema_guard, dep_obj_info_arg,
@@ -290,7 +294,8 @@ void ObMaintainDepInfoTaskQueue::run2()
 int process_reference_obj_table(share::schema::ObReferenceObjTable &ref_obj_table,
                                                      const uint64_t dep_obj_id,
                                                      const share::schema::ObTableSchema *view_schema,
-                                                     sql::ObMaintainDepInfoTaskQueue &task_queue)
+                                                     sql::ObMaintainDepInfoTaskQueue &task_queue,
+                                                     share::schema::ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   bool write_enabled = false;
@@ -301,6 +306,7 @@ int process_reference_obj_table(share::schema::ObReferenceObjTable &ref_obj_tabl
     }
   } else {
     SMART_VAR(sql::ObMaintainObjDepInfoTask, task) {
+      task.bind_schema_service(schema_service);
       if (OB_NOT_NULL(task_queue.get_root_command_service())) {
         task.bind_root_command_service(
             *task_queue.get_root_command_service());

@@ -26,10 +26,6 @@
 
 namespace oceanbase
 {
-namespace share
-{
-struct ObGlobalContext;
-}
 namespace query
 {
 class ObIRootCommandService;
@@ -76,10 +72,13 @@ public:
   {
     root_command_service_ = &root_command_service;
   }
+  void bind_schema_service(share::schema::ObMultiVersionSchemaService &schema_service)
+  {
+    schema_service_ = &schema_service;
+  }
   bool reset_view_column_infos() const { return reset_view_column_infos_; }
 
 private:
-  const share::ObGlobalContext &gctx_;
   DepObjKeyItemList insert_dep_objs_;
   DepObjKeyItemList update_dep_objs_;
   DepObjKeyItemList delete_dep_objs_;
@@ -87,6 +86,7 @@ private:
   share::schema::ObTableSchema view_schema_;
   bool reset_view_column_infos_;
   query::ObIRootCommandService *root_command_service_;
+  share::schema::ObMultiVersionSchemaService *schema_service_;
   DISALLOW_COPY_AND_ASSIGN(ObMaintainObjDepInfoTask);
 };
 
@@ -133,7 +133,8 @@ private:
 int process_reference_obj_table(share::schema::ObReferenceObjTable &ref_obj_table,
                                 const uint64_t dep_obj_id,
                                 const share::schema::ObTableSchema *view_schema,
-                                ObMaintainDepInfoTaskQueue &task_queue);
+                                ObMaintainDepInfoTaskQueue &task_queue,
+                                share::schema::ObMultiVersionSchemaService &schema_service);
 
 }  // namespace sql
 }  // namespace oceanbase

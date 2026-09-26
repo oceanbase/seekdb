@@ -3722,8 +3722,11 @@ int ObSQLUtils::async_recompile_view(const share::schema::ObTableSchema &old_vie
         } else {
           LOG_WARN("failed to set table id", K(ret));
         }
+      } else if (OB_ISNULL(session_info.effective_schema_service())) {
+        ret = OB_NOT_INIT;
       } else if (OB_FAIL(process_reference_obj_table(*select_stmt->get_ref_obj_table(),
-        new_view_schema.get_table_id(), &new_view_schema, dependency_info_queue))) {
+        new_view_schema.get_table_id(), &new_view_schema, dependency_info_queue,
+        *session_info.effective_schema_service()))) {
       }
     }
   }
