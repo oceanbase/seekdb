@@ -33,6 +33,7 @@ ObRevokeStmt::ObRevokeStmt(ObIAllocator *name_pool)
       database_(),
       table_(),
       revoke_all_(false),
+      target_has_super_privilege_(false),
       role_id_set_(),
       object_type_(share::schema::ObObjectType::INVALID),
       sys_priv_array_(),
@@ -54,6 +55,7 @@ ObRevokeStmt::ObRevokeStmt()
       database_(),
       table_(),
       revoke_all_(false),
+      target_has_super_privilege_(false),
       role_id_set_(),
       object_type_(share::schema::ObObjectType::INVALID),
       sys_priv_array_(),
@@ -171,5 +173,4 @@ int64_t ObRevokeStmt::to_string(char *buf, const int64_t buf_len) const
 
 }
 }
-
 

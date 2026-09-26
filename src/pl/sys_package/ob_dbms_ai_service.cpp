@@ -276,10 +276,10 @@ int ObDBMSAiService::create_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, 
     LOG_WARN("ai model params is null", K(ret), K(params));
     ObString var_name = "PARAMS";
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, var_name.length(), var_name.ptr());
-  } else if (OB_ISNULL(GCTX.schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_ISNULL(ctx.exec_ctx_) || OB_ISNULL(ctx.exec_ctx_->get_my_session())
+             || OB_ISNULL(ctx.exec_ctx_->get_my_session()->effective_schema_service())) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(ctx.exec_ctx_->get_my_session()->effective_schema_service()->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_ai_model_schema( model_name, ai_model_schema))) {
   } else if (OB_NOT_NULL(ai_model_schema)) {
     ret = OB_AI_FUNC_MODEL_EXISTS;
@@ -338,10 +338,10 @@ int ObDBMSAiService::drop_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, co
     LOG_WARN("ai model name is empty", K(ret), K(params), K(model_name));
     ObString var_name = "name";
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, var_name.length(), var_name.ptr());
-  } else if (OB_ISNULL(GCTX.schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_ISNULL(ctx.exec_ctx_) || OB_ISNULL(ctx.exec_ctx_->get_my_session())
+             || OB_ISNULL(ctx.exec_ctx_->get_my_session()->effective_schema_service())) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(ctx.exec_ctx_->get_my_session()->effective_schema_service()->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_ai_model_schema( model_name, ai_model_schema))) {
   } else if (OB_ISNULL(ai_model_schema)) {
     ret = OB_AI_FUNC_MODEL_NOT_FOUND;

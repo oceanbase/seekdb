@@ -109,6 +109,7 @@ public:
   int check_package_body_legal(const ObPLBlockNS *parent_ns,
                                       const ObPLPackageAST &package_ast);
   static int update_schema_object_dep_info(ObIArray<ObSchemaObjVersion> &dp_tbl,
+                                           common::ObMySQLProxy &sql_proxy,
                                            uint64_t owner_id,
                                            uint64_t dep_obj_id,
                                            uint64_t schema_version,

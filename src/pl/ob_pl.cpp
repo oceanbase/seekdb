@@ -116,8 +116,9 @@ int ObPL::execute_proc(ObPLExecCtx &ctx,
 {
   int ret = OB_SUCCESS;
   lib::MemoryContext mem_context;
-  if (OB_ISNULL(GCTX.schema_service_)
-      || OB_ISNULL(ctx.exec_ctx_)
+  if (OB_ISNULL(ctx.exec_ctx_)
+      || OB_ISNULL(ctx.exec_ctx_->get_my_session())
+      || OB_ISNULL(ctx.exec_ctx_->get_my_session()->effective_schema_service())
       || OB_ISNULL(ctx.exec_ctx_->get_sql_ctx())
       || OB_ISNULL(ctx.result_)
       || OB_ISNULL(ctx.status_)
@@ -126,7 +127,6 @@ int ObPL::execute_proc(ObPLExecCtx &ctx,
       || (NULL != subprogram_path && 0 == path_length)) {
     ret = OB_ERR_UNEXPECTED;
   LOG_WARN("argument is NULL",
-             K(GCTX.schema_service_),
              K(ctx.exec_ctx_),
              K(ctx.result_),
              K(ctx.status_),
@@ -167,7 +167,7 @@ int ObPL::execute_proc(ObPLExecCtx &ctx,
     } else {
       share::schema::ObSchemaGetterGuard schema_guard;
       
-      if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+      if (OB_FAIL(ctx.exec_ctx_->get_my_session()->effective_schema_service()->get_runtime_schema_guard(schema_guard))) {
       } else {
         ObPL pl;
         share::schema::ObSchemaGetterGuard *old_schema_guard = ctx.exec_ctx_->get_sql_ctx()->schema_guard_;
@@ -1645,6 +1645,7 @@ int ObPL::get_pl_function(ObExecContext &ctx,
             *ctx.get_sql_proxy(), routine_info, share::server_is_write_enabled()));
         if (need_update_schema) {
           OZ (ObPLBuilder::update_schema_object_dep_info(routine->get_dependency_table(),
+                                                          *ctx.get_sql_proxy(),
                                                           routine->get_owner(),
                                                           routine_id,
                                                           routine_info->get_schema_version(),

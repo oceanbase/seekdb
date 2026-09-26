@@ -849,18 +849,7 @@ int get_revoke_stmt_need_privs(
       need_priv.obj_type_ = stmt->get_object_type();
       ADD_NEED_PRIV(need_priv);
 
-      ObSchemaGetterGuard schema_guard;
-      bool need_add = false;
-      CK (GCTX.schema_service_ != NULL);
-      OZ(GCTX.schema_service_->get_runtime_schema_guard(schema_guard));
-      for (int i = 0; OB_SUCC(ret) && i < stmt->get_users().count(); i++) {
-        const ObUserInfo *user_info = NULL;
-        OZ(schema_guard.get_user_info(stmt->get_users().at(i), user_info));
-        CK (user_info != NULL);
-        OX(need_add = (0 != (user_info->get_priv_set() & OB_PRIV_SUPER)));
-      }
-      if (OB_FAIL(ret)) {
-      } else if (need_add) { //mysql8.0 if exists dynamic privs, then need SYSTEM_USER dynamic privilge to revoke all, now use SUPER to do so.
+      if (stmt->target_has_super_privilege()) { //mysql8.0 if exists dynamic privs, then need SYSTEM_USER dynamic privilege to revoke all, now use SUPER to do so.
         need_priv.db_ = stmt->get_database_name();
         need_priv.table_ = stmt->get_table_name();
         need_priv.priv_set_ = OB_PRIV_SUPER;

@@ -35,7 +35,9 @@ int ObDBMSIndexManager::refresh(
   UNUSED(params);
   UNUSED(result);
 
-  ObMySQLProxy *mysql_proxy = GCTX.sql_proxy_;
+  ObMySQLProxy *mysql_proxy = OB_ISNULL(ctx.exec_ctx_)
+      || OB_ISNULL(ctx.exec_ctx_->get_my_session())
+      ? nullptr : ctx.exec_ctx_->get_my_session()->effective_sql_proxy();
   const int64_t timeout_us = GCONF.internal_sql_execute_timeout;
   query::ObIChangeStreamService *change_stream =
       OB_ISNULL(ctx.exec_ctx_)

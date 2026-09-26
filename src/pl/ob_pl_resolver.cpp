@@ -6611,17 +6611,18 @@ int ObPLResolver::resolve_obj_access_node(ParseNode *node,
                                           ObArray<pl::ObObjAccessIdx> &access_idxs)
 {
   int ret = OB_SUCCESS;
+  if (OB_ISNULL(sql_proxy)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("PL resolver SQL proxy is not bound", K(ret));
+    return ret;
+  }
   pl::ObPLPackageGuard dummy_pkg_guard{};
   pl::ObPLResolver pl_resolver(allocator,
                                session_info,
                                schema_guard,
                                NULL == ns ? dummy_pkg_guard 
                                         : ns->get_external_ns()->get_resolve_ctx().package_guard_,
-                               NULL == sql_proxy 
-                                          ? (NULL == ns ? *GCTX.sql_proxy_ 
-                                                        : ns->get_external_ns()
-                                                            ->get_resolve_ctx().sql_proxy_) 
-                                          : *sql_proxy,
+                               *sql_proxy,
                                NULL == ns ? nullptr : ns->get_external_ns()->get_resolve_ctx().params_.plan_cache_,
                                NULL == ns ? nullptr : ns->get_external_ns()->get_resolve_ctx().params_.pl_sql_runtime_,
                                NULL == ns ? nullptr : ns->get_external_ns()->get_resolve_ctx().params_.pl_engine_,
@@ -6672,7 +6673,7 @@ int ObPLResolver::resolve_obj_access_node(const ParseNode &node,
                               OB_MALLOC_NORMAL_BLOCK_SIZE);
     // fake resolve_ctx, we only use session_info, schema_guard
     ObPLResolveCtx resolve_ctx(
-      allocator, session_info, schema_guard, *package_guard, *(GCTX.sql_proxy_), false);
+      allocator, session_info, schema_guard, *package_guard, sql_proxy, false);
     ObPLExternalNS external_ns(resolve_ctx, NULL);
     CK (T_SP_OBJ_ACCESS_REF == node.type_);
     OZ (ObPLResolver::resolve_obj_access_idents(node, expr_factory, obj_access_idents, session_info));

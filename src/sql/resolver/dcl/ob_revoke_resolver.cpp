@@ -371,7 +371,13 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
                                                           user_id))) {
                 } else if (OB_FAIL(revoke_stmt->add_user(user_id))) {
                 } else {
-                  //do nothing
+                  const ObUserInfo *user_info = nullptr;
+                  if (OB_FAIL(params_.schema_checker_->get_user_info(user_id, user_info))) {
+                  } else if (OB_ISNULL(user_info)) {
+                    ret = OB_ERR_UNEXPECTED;
+                  } else if (user_info->get_priv_set() & OB_PRIV_SUPER) {
+                    revoke_stmt->mark_target_super_privilege();
+                  }
                 }
               }
             } //end for

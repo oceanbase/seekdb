@@ -568,13 +568,13 @@ int ObPLBuilder::compile(
 }
 
 int ObPLBuilder::update_schema_object_dep_info(ObIArray<ObSchemaObjVersion> &dp_tbl,
+                                                ObMySQLProxy &sql_proxy,
                                                 uint64_t owner_id,
                                                 uint64_t dep_obj_id, 
                                                 uint64_t schema_version,
                                                 ObObjectType dep_obj_type) 
 {
   int ret = OB_SUCCESS;
-  ObMySQLProxy *sql_proxy = nullptr;
   ObMySQLTransaction trans;
   bool skip = false;
   if (!share::server_is_write_enabled()) {
@@ -583,9 +583,7 @@ int ObPLBuilder::update_schema_object_dep_info(ObIArray<ObSchemaObjVersion> &dp_
       skip = true;
   }
   if (!skip) {
-    if (OB_ISNULL(sql_proxy = GCTX.sql_proxy_)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (OB_FAIL(trans.start(sql_proxy))) {
+    if (OB_FAIL(trans.start(&sql_proxy))) {
     } else {
       OZ (ObDependencyInfo::delete_schema_object_dependency(trans, dep_obj_id,
                                               schema_version,
@@ -835,6 +833,7 @@ int ObPLBuilder::build_package(const ObPackageInfo &package_info,
     lib::ObMutexGuard guard(package_dep_info_lock_);
     {
       OZ (update_schema_object_dep_info(package_ast.get_dependency_table(),
+                                        sql_proxy_,
                                         package_info.get_owner_id(),
                                         package_info.get_package_id(),
                                         package_info.get_schema_version(),

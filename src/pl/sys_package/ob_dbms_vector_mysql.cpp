@@ -314,7 +314,9 @@ int ObDBMSVectorMySql::index_vector_memory_estimate(ObPLExecCtx &ctx, ParamStore
         sqlclient::ObMySQLResult *result = NULL;
         if (OB_FAIL(query_string.assign_fmt("SELECT cast(sum(table_rows) as unsigned) as sum, max(table_rows) as max from information_schema.PARTITIONS WHERE table_schema='%.*s' and table_name='%.*s'",
                 database_name.length(), database_name.ptr(), table_name.length(), table_name.ptr()))) {
-        } else if (OB_FAIL(GCTX.sql_proxy_->read(res, query_string.ptr()))) {
+        } else if (OB_ISNULL(session_info->effective_sql_proxy())) {
+          ret = OB_NOT_INIT;
+        } else if (OB_FAIL(session_info->effective_sql_proxy()->read(res, query_string.ptr()))) {
         } else if (OB_ISNULL(result = res.get_result())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("fail to get sql result", K(ret), K(query_string));

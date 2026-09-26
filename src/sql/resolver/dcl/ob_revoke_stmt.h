@@ -62,6 +62,8 @@ public:
   ObPrivSet get_priv_set() const;
   
   bool get_revoke_all() const { return revoke_all_; }
+  void mark_target_super_privilege() { target_has_super_privilege_ = true; }
+  bool target_has_super_privilege() const { return target_has_super_privilege_; }
   const common::ObStrings& get_grantees() const { return grantees_; }
   virtual bool cause_implicit_commit() const { return true; }
   void set_has_warning() { has_warning_ = true; }
@@ -90,6 +92,7 @@ private:
   common::ObString table_;
   common::ObArray<uint64_t, common::ModulePageAllocator, true> users_;
   bool revoke_all_;
+  bool target_has_super_privilege_;
   common::ObStrings grantees_;
   obcall::ObRevokeUserArg user_arg_;
   obcall::ObRevokeDBArg db_arg_;
