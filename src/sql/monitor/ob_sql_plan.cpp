@@ -18,6 +18,7 @@
 #define USING_LOG_PREFIX SQL
 
 #include "data_plane/transaction/ob_i_transaction_service.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "sql/session/ob_inner_sql_connection.h"
 #include "sql/optimizer/ob_del_upd_log_plan.h"
@@ -2374,13 +2375,12 @@ int ObSqlPlan::restore_session(ObSQLSessionInfo *session,
   } else {
     transaction::ObTxDesc *new_tx_desc = session->get_tx_desc();
     session->set_nested_count(nested_count);
-    session->get_tx_desc() = tx_desc;
     session_value->reset();
     allocator_.free(session_value);
     session_value = 0;
     // release curr
     if (OB_NOT_NULL(new_tx_desc)) {
-      auto txs = data_plane::query_transaction_service();
+      auto txs = observer::namespace_worker_prototype::effective_transaction_service(session);
       if (OB_ISNULL(txs)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("can not acquire server TransService", KR(ret));
@@ -2388,6 +2388,7 @@ int ObSqlPlan::restore_session(ObSQLSessionInfo *session,
       } else if (OB_FAIL(txs->release_tx(*new_tx_desc))) {
       }
     }
+    session->get_tx_desc() = tx_desc;
   }
   return ret;
 }

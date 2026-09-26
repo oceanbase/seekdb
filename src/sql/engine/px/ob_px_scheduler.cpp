@@ -18,6 +18,7 @@
 
 #include "sql/engine/px/ob_px_scheduler.h"
 #include "data_plane/transaction/ob_i_transaction_service.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "data_plane/transaction/ob_tx_desc_access.h"
 #include "sql/engine/px/ob_dfo_scheduler.h"
 #include "sql/engine/px/datahub/components/ob_dh_winbuf.h"
@@ -261,6 +262,7 @@ int ObPxMsgProc::process_sqc_finish_msg_once(ObExecContext &ctx, const ObPxFinis
 {
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = NULL;
+  data_plane::ObITransactionService *txs = nullptr;
   ObPhysicalPlanCtx *phy_plan_ctx = NULL;
   if (OB_ISNULL(session = ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
@@ -270,8 +272,9 @@ int ObPxMsgProc::process_sqc_finish_msg_once(ObExecContext &ctx, const ObPxFinis
     LOG_WARN("phy plan ctx NULL", K(ret));
   } else if (OB_FAIL(ctx.get_feedback_info().merge_feedback_info(pkt.fb_info_))) {
   } else if (OB_ISNULL(session->get_tx_desc())) {
-  } else if (OB_FAIL(data_plane::query_transaction_service()
-                    ->add_tx_exec_result(*session->get_tx_desc(),
+  } else if (OB_ISNULL(txs = observer::namespace_worker_prototype::effective_transaction_service(session))) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(txs->add_tx_exec_result(*session->get_tx_desc(),
                                           pkt.get_trans_result()))) {
   } else {
     if (pkt.get_trans_result().touches_storage()) {
@@ -546,13 +549,15 @@ int ObPxTerminateMsgProc::on_sqc_finish_msg(ObExecContext &ctx, const ObPxFinish
   ObDfo *edge = NULL;
   ObPxSqcMeta *sqc = NULL;
   ObSQLSessionInfo *session = NULL;
+  data_plane::ObITransactionService *txs = nullptr;
   if (OB_ISNULL(session = ctx.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr session", K(ret));
   } else if (OB_FAIL(ctx.get_feedback_info().merge_feedback_info(pkt.fb_info_))) {
   } else if (OB_ISNULL(session->get_tx_desc())) {
-  } else if (OB_FAIL(data_plane::query_transaction_service()
-                     ->add_tx_exec_result(*session->get_tx_desc(),
+  } else if (OB_ISNULL(txs = observer::namespace_worker_prototype::effective_transaction_service(session))) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(txs->add_tx_exec_result(*session->get_tx_desc(),
                                           pkt.get_trans_result()))) {
   } else {
     if (pkt.get_trans_result().touches_storage()) {

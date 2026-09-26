@@ -324,7 +324,7 @@ int ObSqlTransControl::kill_query_session(ObSQLSessionInfo &session,
     
     SERVER_MODULE_SCOPE {
       data_plane::ObITransactionService *txs = NULL;
-      CK(OB_NOT_NULL(txs = data_plane::query_transaction_service()));
+      CK(OB_NOT_NULL(txs = observer::namespace_worker_prototype::effective_transaction_service(&session)));
       const ObTransID tx_id = data_plane::tx_desc_id(tx_desc);
       OZ(txs->interrupt(*tx_desc, OB_ERR_QUERY_INTERRUPTED), tx_id, status);
       LOG_INFO("kill_query_session", K(ret), K(session), K(tx_id),

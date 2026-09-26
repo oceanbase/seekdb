@@ -18,6 +18,7 @@
 #include "data_plane/transaction/ob_transaction_isolation.h"
 #include "ob_system_variable.h"
 #include "data_plane/transaction/ob_i_transaction_service.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "share/system_variable/ob_sys_var_meta.h"
 #include "sql/engine/ob_exec_context.h"
 #include "share/ob_version.h"
@@ -2196,8 +2197,11 @@ int ObSysVarOnUpdateFuncs::start_trans_by_set_trans_char_(
     session.get_query_timeout(query_timeout);
     int64_t stmt_expire_ts = session.get_query_start_time() + query_timeout;
     transaction::ObTxReadSnapshot snapshot;
-    if (OB_FAIL(data_plane::query_transaction_service()
-                ->get_read_snapshot(*session.get_tx_desc(),
+    data_plane::ObITransactionService *txs =
+        observer::namespace_worker_prototype::effective_transaction_service(&session);
+    if (OB_ISNULL(txs)) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(txs->get_read_snapshot(*session.get_tx_desc(),
                                     isolation,
                                     stmt_expire_ts,
                                     snapshot))) {

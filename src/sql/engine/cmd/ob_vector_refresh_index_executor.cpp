@@ -24,6 +24,8 @@
 #include "share/ob_ddl_common.h"
 #include "share/schema/ob_column_schema.h"
 #include "share/schema/ob_table_schema.h"
+#include "share/schema/ob_multi_version_schema_service.h"
+#include "sql/session/ob_sql_session_info.h"
 #include "sql/engine/cmd/ob_vector_index_refresh.h"
 
 namespace oceanbase {
@@ -39,15 +41,17 @@ int ObVectorRefreshIndexExecutor::execute_refresh(
     sql::ObExecContext *ctx, common::ObIAllocator *allocator,
     const ObVectorRefreshIndexArg &arg) {
   int ret = OB_SUCCESS;
+  ObSchemaGetterGuard schema_guard;
   ctx_ = ctx;
   allocator_ = allocator;
   CK(OB_NOT_NULL(ctx_), OB_NOT_NULL(allocator_));
   CK(OB_NOT_NULL(session_info_ =
                      query::ObExecContextAccess::get_session(*ctx_)));
-  CK(OB_NOT_NULL(query::ObExecContextAccess::get_schema_guard(*ctx_)));
+  CK(OB_NOT_NULL(session_info_->effective_schema_service()));
   OV(OB_LIKELY(arg.is_valid()), OB_INVALID_ARGUMENT, arg);
+  OZ(session_info_->effective_schema_service()->get_runtime_schema_guard(schema_guard));
   OZ(schema_checker_.init(
-      *query::ObExecContextAccess::get_schema_guard(*ctx_),
+      schema_guard,
       query::ObExecContextAccess::get_server_session_id(session_info_)));
   OX();
   OZ(resolve_refresh_arg(arg));
@@ -64,15 +68,17 @@ int ObVectorRefreshIndexExecutor::execute_refresh_inner(
 {
   int ret = OB_SUCCESS;
   bool in_recycle_bin = false;
+  ObSchemaGetterGuard schema_guard;
   ctx_ = ctx;
   allocator_ = allocator;
   CK(OB_NOT_NULL(ctx_), OB_NOT_NULL(allocator_));
   CK(OB_NOT_NULL(session_info_ =
                      query::ObExecContextAccess::get_session(*ctx_)));
-  CK(OB_NOT_NULL(query::ObExecContextAccess::get_schema_guard(*ctx_)));
+  CK(OB_NOT_NULL(session_info_->effective_schema_service()));
   OV(OB_LIKELY(arg.is_valid()), OB_INVALID_ARGUMENT, arg);
+  OZ(session_info_->effective_schema_service()->get_runtime_schema_guard(schema_guard));
   OZ(schema_checker_.init(
-      *query::ObExecContextAccess::get_schema_guard(*ctx_),
+      schema_guard,
       query::ObExecContextAccess::get_server_session_id(session_info_)));
   OX();
   OZ(resolve_refresh_inner_arg(arg, in_recycle_bin));
@@ -89,15 +95,17 @@ int ObVectorRefreshIndexExecutor::execute_rebuild(
     sql::ObExecContext *ctx, common::ObIAllocator *allocator,
     const ObVectorRebuildIndexArg &arg) {
   int ret = OB_SUCCESS;
+  ObSchemaGetterGuard schema_guard;
   ctx_ = ctx;
   allocator_ = allocator;
   CK(OB_NOT_NULL(ctx_), OB_NOT_NULL(allocator_));
   CK(OB_NOT_NULL(session_info_ =
                      query::ObExecContextAccess::get_session(*ctx_)));
-  CK(OB_NOT_NULL(query::ObExecContextAccess::get_schema_guard(*ctx_)));
+  CK(OB_NOT_NULL(session_info_->effective_schema_service()));
   OV(OB_LIKELY(arg.is_valid()), OB_INVALID_ARGUMENT, arg);
+  OZ(session_info_->effective_schema_service()->get_runtime_schema_guard(schema_guard));
   OZ(schema_checker_.init(
-      *query::ObExecContextAccess::get_schema_guard(*ctx_),
+      schema_guard,
       query::ObExecContextAccess::get_server_session_id(session_info_)));
   OX();
   OZ(resolve_rebuild_arg(arg));
@@ -114,15 +122,17 @@ int ObVectorRefreshIndexExecutor::execute_rebuild_inner(
 {
   int ret = OB_SUCCESS;
   bool in_recycle_bin = false;
+  ObSchemaGetterGuard schema_guard;
   ctx_ = ctx;
   allocator_ = allocator;
   CK(OB_NOT_NULL(ctx_), OB_NOT_NULL(allocator_));
   CK(OB_NOT_NULL(session_info_ =
                      query::ObExecContextAccess::get_session(*ctx_)));
-  CK(OB_NOT_NULL(query::ObExecContextAccess::get_schema_guard(*ctx_)));
+  CK(OB_NOT_NULL(session_info_->effective_schema_service()));
   OV(OB_LIKELY(arg.is_valid()), OB_INVALID_ARGUMENT, arg);
+  OZ(session_info_->effective_schema_service()->get_runtime_schema_guard(schema_guard));
   OZ(schema_checker_.init(
-      *query::ObExecContextAccess::get_schema_guard(*ctx_),
+      schema_guard,
       query::ObExecContextAccess::get_server_session_id(session_info_)));
   OX();
   OZ(resolve_rebuild_inner_arg(arg, in_recycle_bin));

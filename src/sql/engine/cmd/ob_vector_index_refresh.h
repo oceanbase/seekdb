@@ -76,7 +76,7 @@ public:
   TO_STRING_KV(KP_(ctx), KP_(refresh_ctx));
 
 private:
-  static int get_current_scn(share::SCN &current_scn);
+  int get_current_scn(share::SCN &current_scn);
   int get_table_row_count(const ObString &db_name, const ObString &table_name,
                           const share::SCN &scn, int64_t &row_cnt);
   int get_vector_index_col_names(

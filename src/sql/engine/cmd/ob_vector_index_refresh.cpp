@@ -20,6 +20,7 @@
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "data_plane/ddl/ob_ddl_coordinator.h"
 #include "data_plane/transaction/ob_i_transaction_service.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "data_plane/vector/ob_i_vector_index_runtime.h"
 #include "data_plane/vector/ob_vector_index_schema.h"
 #include "query/engine/ob_exec_context_access.h"
@@ -80,10 +81,12 @@ int ObVectorIndexRefresher::refresh() {
 int ObVectorIndexRefresher::get_current_scn(share::SCN &current_scn) {
   int ret = OB_SUCCESS;
   const int64_t DEFAULT_TIMEOUT = GCONF.internal_sql_execute_timeout;
+  ObSQLSessionInfo *session = ctx_ == nullptr ? nullptr :
+      query::ObExecContextAccess::get_session(*ctx_);
   data_plane::ObITransactionService *txs =
-      data_plane::query_transaction_service();
+      observer::namespace_worker_prototype::effective_transaction_service(session);
   if (OB_ISNULL(txs)) {
-    ret = OB_ERR_SYS;
+    ret = OB_NOT_INIT;
     LOG_WARN("trans service is null", KR(ret));
   } else {
     ObTimeoutCtx timeout_ctx;
@@ -270,7 +273,7 @@ int ObVectorIndexRefresher::do_refresh() {
   } else if (OB_FAIL(session_info->effective_schema_service()->get_runtime_schema_guard(
                  schema_guard))) {
   } else if (OB_FAIL(
-                 ObVectorIndexRefresher::get_current_scn(refresh_ctx_->scn_))) {
+                 get_current_scn(refresh_ctx_->scn_))) {
   } else {
     DEBUG_SYNC(BEFORE_DBMS_VECTOR_REFRESH);
   }
@@ -480,7 +483,7 @@ int ObVectorIndexRefresher::do_rebuild() {
     ret = OB_ERR_SYS;
     LOG_WARN("schema service is null", KR(ret));
   } else if (OB_FAIL(session_info->effective_schema_service()->get_runtime_schema_guard(schema_guard))) {
-  } else if (OB_FAIL(ObVectorIndexRefresher::get_current_scn(refresh_ctx_->scn_))) {
+  } else if (OB_FAIL(get_current_scn(refresh_ctx_->scn_))) {
   }
   // 1. get base_table row count ( if need )
   // 2. get domain_table row count (if need )

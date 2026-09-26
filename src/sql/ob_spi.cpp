@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL
 #include "ob_spi.h"
 #include "share/rc/ob_server_runtime.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "ob_sql.h"
 #include "sql/ob_query_retry_ctrl.h"
 #include "query/protocol/ob_client_protocol.h"
@@ -3179,7 +3180,7 @@ int ObSPIService::do_cursor_fetch(ObPLExecCtx *ctx,
     LOG_WARN("Cursor is not open", K(cursor), K(ret));
   } else if (cursor->is_need_check_snapshot()) {
     data_plane::ObITransactionService *tx_service =
-        data_plane::query_transaction_service();
+        observer::namespace_worker_prototype::effective_transaction_service(session);
     CK (OB_NOT_NULL(tx_service));
     OZ (tx_service->refresh_tx_snapshot_verify(cursor->get_snapshot()));
     if (OB_SUCC(ret) && !cursor->get_snapshot().is_valid()) {

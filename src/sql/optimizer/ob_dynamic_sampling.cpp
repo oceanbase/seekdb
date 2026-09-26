@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 #include "ob_dynamic_sampling.h"
 #include "data_plane/transaction/ob_i_transaction_service.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "data_plane/transaction/ob_tx_desc_access.h"
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "sql/optimizer/stat/ob_dbms_stats_utils.h"
@@ -1070,7 +1071,7 @@ int ObDynamicSampling::restore_session(ObSQLSessionInfo *session,
       // release curr
       if (OB_NOT_NULL(session->get_tx_desc())) {
         data_plane::ObITransactionService *txs =
-            data_plane::query_transaction_service();
+            observer::namespace_worker_prototype::effective_transaction_service(session);
         if (OB_ISNULL(txs)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_ERROR("can not acquire server TransService", KR(ret));
