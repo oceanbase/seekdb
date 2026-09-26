@@ -41,6 +41,10 @@ struct NamespaceObjectKey
     return id != UINT64_MAX && (id & (3ULL << 62)) == MARK;
   }
   static uint64_t encoded_namespace(uint64_t id) { return (id & ~MARK) >> 37; }
+  static uint64_t owner_namespace(uint64_t storage_id)
+  {
+    return is_encoded(storage_id) ? encoded_namespace(storage_id) : 1;
+  }
   static uint64_t local_part(uint64_t id) { return id & (LOCAL_LIMIT - 1); }
   uint64_t storage_id() const { return MARK | (namespace_id << 37) | local_id; }
 };

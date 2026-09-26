@@ -63,6 +63,10 @@ class ObIVectorIndexService;
 }
 namespace share
 {
+namespace schema
+{
+class ObMultiVersionSchemaService;
+}
 struct ObVectorNormalizeInfo;
 
 enum VecColType {
@@ -782,6 +786,7 @@ public:
       ObIArray<uint64_t> &vec_index_cols,
       const uint64_t col_id);
   static int check_table_exist(
+      schema::ObMultiVersionSchemaService &schema_service,
       const schema::ObTableSchema &data_table_schema,
       const ObString &domain_index_name);
   static int get_rebuild_drop_index_id_and_name(

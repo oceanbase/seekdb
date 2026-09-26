@@ -181,10 +181,12 @@ private:
   static int get_special_index_aux_table_column_count(schema::ObIndexType type,
                                                       uint64_t table_id,
                                                       uint32 &col_cnt,
-                                                      storage::ObTableScanParam& scan_param);
+                                                      storage::ObTableScanParam& scan_param,
+                                                      ObPluginVectorIndexAdaptor &adapter);
   static int get_shared_table_rowkey_colum_count(schema::ObIndexType type,
                                                  uint64_t table_id,
-                                                 uint32 &col_cnt);
+                                                 uint32 &col_cnt,
+                                                 ObPluginVectorIndexAdaptor &adapter);
   static int try_sync_snapshot_memdata(ObPluginVectorIndexAdaptor *&adapter,
                                        const bool create_new_adp,
                                        SCN &target_scn,

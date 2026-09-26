@@ -1053,7 +1053,7 @@ int ObPluginVectorIndexUtils::read_local_tablet(ObPluginVectorIndexAdaptor* adap
         } 
       } else {
         // vid_rowkey table or data table, get rowkey while complete
-        if (OB_FAIL(get_shared_table_rowkey_colum_count(type, table_id, col_cnt))) {
+        if (OB_FAIL(get_shared_table_rowkey_colum_count(type, table_id, col_cnt, *adapter))) {
         } else if (OB_ISNULL(buf = allocator.alloc(sizeof(ObObj) * col_cnt * 2))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("alloc scan range obj failed.", K(ret));
@@ -1130,7 +1130,7 @@ int ObPluginVectorIndexUtils::init_common_scan_param(storage::ObTableScanParam& 
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get null adapter", KR(ret), K(type));
     } else if (OB_FAIL(get_special_index_aux_table_column_count(type,
-                                                                table_id, col_cnt, scan_param))) {
+                                                                table_id, col_cnt, scan_param, *adapter))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected index type", KR(ret), K(type));
     }
@@ -1185,6 +1185,7 @@ int ObPluginVectorIndexUtils::init_table_param(ObTableParam *table_param,
   int ret = OB_SUCCESS;
   int64_t schema_version = OB_INVALID_VERSION;
   ObSchemaGetterGuard schema_guard;
+  ObMultiVersionSchemaService *schema_service = nullptr;
   const ObTableSchema *table_schema = NULL;
   ObSEArray<uint64_t, 4> column_ids;
   
@@ -1195,7 +1196,9 @@ int ObPluginVectorIndexUtils::init_table_param(ObTableParam *table_param,
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(server_service<ObSchemaRuntimeService>()->resolve_tablet_schema(
+                 adapter->get_inc_tablet_id().id(), schema_service))) {
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST; // table may be removed, handle in scheduler routine
@@ -1512,13 +1515,17 @@ int ObPluginVectorIndexUtils::get_special_index_aux_table_column_count(
   schema::ObIndexType type,
   uint64_t table_id,
   uint32 &col_cnt,
-  storage::ObTableScanParam& scan_param)
+  storage::ObTableScanParam& scan_param,
+  ObPluginVectorIndexAdaptor &adapter)
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
+  ObMultiVersionSchemaService *schema_service = nullptr;
   const ObTableSchema *table_schema = NULL;
   ObSEArray<uint64_t, 4> column_ids;
-  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+  if (OB_FAIL(server_service<ObSchemaRuntimeService>()->resolve_tablet_schema(
+          adapter.get_inc_tablet_id().id(), schema_service))) {
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST; // table may be removed, handle in scheduler routine
@@ -1562,13 +1569,17 @@ int ObPluginVectorIndexUtils::get_non_shared_index_aux_table_rowkey_colum_count(
 
 int ObPluginVectorIndexUtils::get_shared_table_rowkey_colum_count(schema::ObIndexType type,
                                                                   uint64_t table_id,
-                                                                  uint32 &col_cnt)
+                                                                  uint32 &col_cnt,
+                                                                  ObPluginVectorIndexAdaptor &adapter)
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
+  ObMultiVersionSchemaService *schema_service = nullptr;
   const ObTableSchema *table_schema = NULL;
   ObSEArray<uint64_t, 4> column_ids;
-  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+  if (OB_FAIL(server_service<ObSchemaRuntimeService>()->resolve_tablet_schema(
+          adapter.get_inc_tablet_id().id(), schema_service))) {
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST; // table may be removed, handle in scheduler routine

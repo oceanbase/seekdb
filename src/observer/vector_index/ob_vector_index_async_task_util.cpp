@@ -35,6 +35,7 @@
 #include "storage/ob_value_row_iterator.h"
 #include "observer/vector_index/ob_ivf_async_task.h"
 #include "share/config/ob_config_helper.h"
+#include "share/schema/ob_schema_runtime_service.h"
 
 namespace oceanbase
 {
@@ -1259,6 +1260,7 @@ bool ObVecIndexAsyncTask::check_task_satisfied_memory_limited(ObPluginVectorInde
   if (snapshot_table_id != OB_INVALID_ID) {
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *index_schema = nullptr;
+    ObMultiVersionSchemaService *schema_service = nullptr;
 
     int64_t current_incr_count = 0;
     int64_t current_snapshot_count = 0;
@@ -1268,7 +1270,9 @@ bool ObVecIndexAsyncTask::check_task_satisfied_memory_limited(ObPluginVectorInde
     if (OB_FAIL(adaptor.get_inc_index_row_cnt(current_incr_count))) {
     } else if (OB_FAIL(adaptor.get_snap_index_row_cnt(current_snapshot_count))) {
     } else if (OB_FALSE_IT(estimate_row_count = current_incr_count + current_snapshot_count)) {
-    } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+    } else if (OB_FAIL(server_service<ObSchemaRuntimeService>()->resolve_tablet_schema(
+                   adaptor.get_inc_tablet_id().id(), schema_service))) {
+    } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_table_schema( snapshot_table_id, index_schema))) {
     } else if (OB_ISNULL(index_schema)) {
       ret = OB_TABLE_NOT_EXIST;
@@ -1628,7 +1632,10 @@ int ObVecIndexAsyncTask::refresh_snapshot_index_data(ObPluginVectorIndexAdaptor 
   if OB_FAIL(ret) {
   } else {
     HEAP_VARS_2((storage::ObTableScanParam, snap_scan_param), (schema::ObTableParam, snap_table_param, allocator_)) {
-      if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+      ObMultiVersionSchemaService *schema_service = nullptr;
+      if (OB_FAIL(server_service<ObSchemaRuntimeService>()->resolve_tablet_schema(
+              adaptor.get_inc_tablet_id().id(), schema_service))) {
+      } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
       } else if (OB_FAIL(schema_guard.get_table_schema( adaptor.get_snapshot_table_id(), snapshot_table_schema))) {
       } else if (OB_FAIL(schema_guard.get_table_schema( adaptor.get_data_table_id(), data_table_schema))) {
       } else if (OB_ISNULL(snapshot_table_schema) || snapshot_table_schema->is_in_recyclebin() || OB_ISNULL(data_table_schema) || data_table_schema->is_in_recyclebin()) {
@@ -2023,6 +2030,7 @@ int ObVecIndexAsyncTask::delete_incr_table_data(ObPluginVectorIndexAdaptor &adap
   share::schema::ObTableDMLParam table_dml_param(allocator_);
   share::schema::ObTableDMLParam bitmap_table_dml_param(allocator_);
   ObSchemaGetterGuard schema_guard;
+  ObMultiVersionSchemaService *schema_service = nullptr;
   int64_t delta_table_affected_rows = 0;
   int64_t index_table_affected_rows = 0;
   SMART_VARS_2((storage::ObTableScanParam, delta_scan_param),
@@ -2030,7 +2038,9 @@ int ObVecIndexAsyncTask::delete_incr_table_data(ObPluginVectorIndexAdaptor &adap
     if (OB_ISNULL(tx_desc) || OB_ISNULL(oas)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to get tx desc or ob access service, get nullptr", K(ret));
-    } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+    } else if (OB_FAIL(server_service<ObSchemaRuntimeService>()->resolve_tablet_schema(
+                   adaptor.get_inc_tablet_id().id(), schema_service))) {
+    } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_table_schema( adaptor.get_inc_table_id(), delta_table_schema))) {
     } else if (OB_ISNULL(delta_table_schema) || delta_table_schema->is_in_recyclebin()) {
       ret = OB_ERR_UNEXPECTED;

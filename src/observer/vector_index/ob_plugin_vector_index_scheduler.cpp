@@ -26,6 +26,7 @@
 #include "storage/ob_table_dml_param.h"
 #include "storage/ob_value_row_iterator.h"
 #include "storage/ddl/ob_direct_load_struct.h"
+#include "share/schema/ob_schema_runtime_service.h"
 
 namespace oceanbase
 {
@@ -86,10 +87,15 @@ void ObPluginVectorIndexLoadScheduler::clean_deprecated_adapters()
       FOREACH_X(iter, index_mgr->get_complete_adapter_map(), OB_SUCC(ret)) {
         ObPluginVectorIndexAdaptor *adapter = iter->second;
         ObSchemaGetterGuard schema_guard;
+        ObMultiVersionSchemaService *schema_service = nullptr;
         const ObTableSchema *table_schema;
         ObTabletID tablet_id = iter->first;
         ObTabletHandle tablet_handle;
-        if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+        if (OB_ISNULL(adapter)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (OB_FAIL(server_service<ObSchemaRuntimeService>()->resolve_tablet_schema(
+                       adapter->get_inc_tablet_id().id(), schema_service))) {
+        } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
         } else if (OB_FAIL(schema_guard.get_table_schema( adapter->get_vbitmap_table_id(), table_schema))) {
         } else if (OB_ISNULL(table_schema) || table_schema->is_in_recyclebin()) {
           // remove adapter if tablet not exist or is in recyclebin

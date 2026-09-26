@@ -264,10 +264,10 @@ int ObVectorIndexRefresher::do_refresh() {
                            query::ObExecContextAccess::get_session(*ctx_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null session info", KR(ret), KP(ctx_));
-  } else if (OB_ISNULL(GCTX.schema_service_)) {
+  } else if (OB_ISNULL(session_info->effective_schema_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("schema service is null", KR(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(
+  } else if (OB_FAIL(session_info->effective_schema_service()->get_runtime_schema_guard(
                  schema_guard))) {
   } else if (OB_FAIL(
                  ObVectorIndexRefresher::get_current_scn(refresh_ctx_->scn_))) {
@@ -476,10 +476,10 @@ int ObVectorIndexRefresher::do_rebuild() {
                            query::ObExecContextAccess::get_session(*ctx_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null session info", KR(ret), KP(ctx_));
-  } else if (OB_ISNULL(GCTX.schema_service_)) {
+  } else if (OB_ISNULL(session_info->effective_schema_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("schema service is null", KR(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(session_info->effective_schema_service()->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(ObVectorIndexRefresher::get_current_scn(refresh_ctx_->scn_))) {
   }
   // 1. get base_table row count ( if need )

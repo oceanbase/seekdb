@@ -1405,7 +1405,9 @@ int ObIndexBuilder::do_create_local_index(
       bool rowkey_vid_exist = false;
       if (OB_FAIL(ret)) {
       } else if (need_rowkey_vid && ObIndexBuilderUtil::is_do_create_dense_vec_index(my_arg.index_type_)) {
-        if (OB_FAIL(ObVectorIndexUtil::check_table_exist(new_table_schema, my_arg.index_name_))) {  // index_name should be domain index name， like 'idx1'
+        if (OB_FAIL(ObVectorIndexUtil::check_table_exist(
+                ddl_service_.get_schema_service(), new_table_schema,
+                my_arg.index_name_))) {  // index_name should be domain index name， like 'idx1'
           if (OB_ERR_TABLE_EXIST != ret) {
             LOG_WARN("Failed to check vec table exist", K(ret), K(my_arg.index_name_));
           }

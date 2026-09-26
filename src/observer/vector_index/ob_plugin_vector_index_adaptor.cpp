@@ -30,6 +30,9 @@
 #include "share/tablet/ob_tablet_mapping_operator.h"
 #include "share/ob_server_struct.h"
 #include "share/ob_share_util.h"
+#include "share/schema/ob_schema_runtime_service.h"
+#include "observer/namespace_worker_protocol_prototype.h"
+#include "namespace/namespace.h"
 #include "common/ob_timeout_ctx.h"
 #include "storage/tx/ob_ts_mgr.h"
 
@@ -2903,19 +2906,26 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQuer
   // Fix for async index: ensure table_id is initialized before reading index_id_table
   // In async mode, adapter may be created by insert before scheduler sets table_id
   if (OB_SUCC(ret) && vbitmap_table_id_ == common::OB_INVALID_ID) {
+    schema::ObMultiVersionSchemaService *schema_service = nullptr;
+    uint64_t logical_tablet_id = vbitmap_tablet_id_.id();
+    const uint64_t namespace_id = ns::NamespaceObjectKey::owner_namespace(vbitmap_tablet_id_.id());
+    common::ObMySQLProxy *sql_proxy =
+        observer::namespace_worker_prototype::namespace_sql_proxy(namespace_id);
     if (!vbitmap_tablet_id_.is_valid()) {
       ret = common::OB_INVALID_ARGUMENT;
       LOG_WARN("vbitmap_tablet_id is invalid", K(ret), K(vbitmap_tablet_id_));
-    } else if (OB_ISNULL(GCTX.sql_proxy_)) {
-      ret = common::OB_ERR_UNEXPECTED;
-      LOG_WARN("sql_proxy is null", K(ret));
+    } else if (OB_ISNULL(sql_proxy)) {
+      ret = common::OB_NOT_INIT;
+      LOG_WARN("namespace sql_proxy is null", K(ret), K(namespace_id));
+    } else if (OB_FAIL(server_service<schema::ObSchemaRuntimeService>()->resolve_tablet_schema(
+                   vbitmap_tablet_id_.id(), schema_service, logical_tablet_id))) {
     } else {
-      // Query legacy tablet mapping to get table_id by tablet_id.
+      // Resolve the namespace-local tablet mapping to its logical table id.
       common::ObSEArray<common::ObTabletID, 1> tablet_ids;
       common::ObSEArray<::oceanbase::share::ObTabletTablePair, 1> tablet_infos;
-      if (OB_FAIL(tablet_ids.push_back(vbitmap_tablet_id_))) {
+      if (OB_FAIL(tablet_ids.push_back(common::ObTabletID(logical_tablet_id)))) {
       } else if (OB_FAIL(::oceanbase::share::ObTabletMappingTableOperator::batch_get(
-                     *GCTX.sql_proxy_, tablet_ids, tablet_infos))) {
+                     *sql_proxy, tablet_ids, tablet_infos))) {
         if (common::OB_ITEM_NOT_MATCH == ret) {
           // Tablet mapping is not visible yet (table just created), retry later.
           ret = common::OB_EAGAIN;
@@ -2931,8 +2941,7 @@ int ObPluginVectorIndexAdaptor::complete_index_mem_data_incremental(ObVectorQuer
         const uint64_t vbitmap_table_id = tablet_infos.at(0).get_table_id();
         schema::ObSchemaGetterGuard schema_guard;
         const schema::ObSimpleTableSchemaV2 *table_schema = nullptr;
-        if (OB_FAIL(schema::ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
-                schema_guard))) {
+        if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
         } else if (OB_FAIL(schema_guard.get_simple_table_schema( vbitmap_table_id, table_schema))) {
         } else if (OB_ISNULL(table_schema)) {
           ret = common::OB_TABLE_NOT_EXIST;

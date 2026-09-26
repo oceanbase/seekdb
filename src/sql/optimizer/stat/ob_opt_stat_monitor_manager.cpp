@@ -1383,8 +1383,7 @@ int ObOptimizerStatService::report_dml_stat(
   stat.update_row_count_ = updated_rows;
   stat.delete_row_count_ = deleted_rows;
   const uint64_t physical_tablet_id = static_cast<uint64_t>(tablet_id);
-  const uint64_t owner_ns = ns::NamespaceObjectKey::is_encoded(physical_tablet_id)
-      ? ns::NamespaceObjectKey::encoded_namespace(physical_tablet_id) : 1;
+  const uint64_t owner_ns = ns::NamespaceObjectKey::owner_namespace(physical_tablet_id);
   ns::NamespaceRuntime *runtime = nullptr;
   common::ObOptStatMonitorManager *monitor =
       ns::namespace_registry().get(owner_ns, runtime) && runtime != nullptr

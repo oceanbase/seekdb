@@ -24,6 +24,7 @@
 #include "storage/tx/ob_trans_service.h"
 #include "sql/das/ob_das_dml_vec_iter.h"
 #include "sql/engine/expr/ob_expr_ai/ob_ai_func_utils.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 
 namespace oceanbase
 {
@@ -260,11 +261,14 @@ int ObHybridVectorRefreshTask::get_index_id_column_ids(ObPluginVectorIndexAdapto
   ObSEArray<uint64_t, 4> part_column_ids;
   ObArray<uint64_t> tmp_column_ids;
   ObHybridVectorRefreshTaskCtx *task_ctx = static_cast<ObHybridVectorRefreshTaskCtx *>(get_task_ctx());
+  ObMultiVersionSchemaService *schema_service = task_ctx == nullptr ? nullptr :
+      observer::namespace_worker_prototype::namespace_schema_service(
+          ns::NamespaceObjectKey::owner_namespace(task_ctx->task_status_.tablet_id_.id()));
 
-  if (OB_ISNULL(task_ctx)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret), KPC(task_ctx));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+  if (OB_ISNULL(task_ctx) || OB_ISNULL(schema_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("namespace schema service is unavailable", K(ret), KPC(task_ctx));
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( adaptor.get_vbitmap_table_id(), table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
@@ -328,11 +332,14 @@ int ObHybridVectorRefreshTask::get_embedded_table_column_ids(ObPluginVectorIndex
   ObArray<uint64_t> tmp_column_ids;
   ObArray<uint64_t> part_key_column_ids; // is part ket and not rowkey
   ObHybridVectorRefreshTaskCtx *task_ctx = static_cast<ObHybridVectorRefreshTaskCtx *>(get_task_ctx());
+  ObMultiVersionSchemaService *schema_service = task_ctx == nullptr ? nullptr :
+      observer::namespace_worker_prototype::namespace_schema_service(
+          ns::NamespaceObjectKey::owner_namespace(task_ctx->task_status_.tablet_id_.id()));
 
-  if (OB_ISNULL(task_ctx)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error", K(ret), KPC(task_ctx));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+  if (OB_ISNULL(task_ctx) || OB_ISNULL(schema_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("namespace schema service is unavailable", K(ret), KPC(task_ctx));
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( adaptor.get_embedded_table_id(), table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
@@ -406,11 +413,15 @@ int ObHybridVectorRefreshTask::init_dml_param(uint64_t table_id,
   ObAccessService *oas = ::oceanbase::share::server_service<::oceanbase::storage::ObAccessService>();
   const uint64_t timeout_us = ObTimeUtility::current_time() + ObInsertLobColumnHelper::LOB_TX_TIMEOUT;
   ObHybridVectorRefreshTaskCtx *task_ctx = static_cast<ObHybridVectorRefreshTaskCtx *>(get_task_ctx());
+  ObMultiVersionSchemaService *schema_service = task_ctx == nullptr ? nullptr :
+      observer::namespace_worker_prototype::namespace_schema_service(
+          ns::NamespaceObjectKey::owner_namespace(task_ctx->task_status_.tablet_id_.id()));
 
-  if (OB_ISNULL(task_ctx) || OB_ISNULL(oas) || OB_ISNULL(tx_desc)) {
+  if (OB_ISNULL(task_ctx) || OB_ISNULL(oas) || OB_ISNULL(tx_desc)
+      || OB_ISNULL(schema_service)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret), KPC(task_ctx), K(oas), K(tx_desc));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;

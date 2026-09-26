@@ -4292,7 +4292,8 @@ int ObVectorIndexUtil::reconstruct_ivf_index_schema_in_rebuild(
   ObColumnSchemaV2 new_column_for_center_vec;
   schema::ColumnReferenceSet index_col_set;
   uint64_t available_col_id = data_table_schema.get_max_used_column_id() + 1;
-  rootserver::ObDDLOperator ddl_operator(*GCTX.schema_service_, ddl_service.get_sql_proxy());
+  rootserver::ObDDLOperator ddl_operator(
+      ddl_service.get_schema_service(), ddl_service.get_sql_proxy());
   if (OB_FAIL(ObVecIndexBuilderUtil::get_index_column_ids(data_table_schema, create_index_arg, index_col_set))) {
   }
   const ObColumnSchemaV2 *col_schema = nullptr;
@@ -4415,10 +4416,7 @@ int ObVectorIndexUtil::generate_index_schema_from_exist_table(
   ObArenaAllocator allocator(lib::ObLabel("DdlTaskTmp"));
   ObSchemaService *schema_service = nullptr;
 
-  if (OB_ISNULL(GCTX.schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_service is null", K(ret));
-  } else if (OB_ISNULL(schema_service = GCTX.schema_service_->get_schema_service())) {
+  if (OB_ISNULL(schema_service = ddl_service.get_schema_service().get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", K(ret));
   } else if (old_domain_table_id == OB_INVALID_ID ||
@@ -4587,11 +4585,11 @@ int ObVectorIndexUtil::check_rename_rebuild_confilt(
 }
 
 int ObVectorIndexUtil::check_table_exist(
+    ObMultiVersionSchemaService &schema_service,
     const ObTableSchema &data_table_schema,
     const ObString &domain_index_name)
 {
   int ret = OB_SUCCESS;
-  ObMultiVersionSchemaService &schema_service = ObMultiVersionSchemaService::get_instance();
   bool is_exist = false;
   
   const int64_t database_id = data_table_schema.get_database_id();
