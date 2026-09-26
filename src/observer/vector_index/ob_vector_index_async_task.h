@@ -26,6 +26,7 @@ namespace oceanbase
 {
 namespace share
 {
+namespace schema { class ObMultiVersionSchemaService; }
 // Schedule HNSW vector index tasks for an LS.
 class ObPluginVectorIndexMgr;
 class ObVecAsyncTaskExector : public ObVecITaskExecutor
@@ -42,9 +43,15 @@ public:
 class ObVecTaskManager
 {
 public:
-  ObVecTaskManager(int64_t index_table_id, ObVecIndexAsyncTaskType task_type)
-      : index_table_id_(index_table_id),
+  ObVecTaskManager(uint64_t namespace_id, int64_t index_table_id,
+                   ObVecIndexAsyncTaskType task_type,
+                   schema::ObMultiVersionSchemaService &schema_service,
+                   common::ObMySQLProxy &task_sql_proxy)
+      : namespace_id_(namespace_id),
+        index_table_id_(index_table_id),
         task_type_(task_type),
+        schema_service_(schema_service),
+        task_sql_proxy_(task_sql_proxy),
         task_ids_()
   {}
   ~ObVecTaskManager() {}
@@ -54,8 +61,11 @@ public:
   TO_STRING_KV(K_(index_table_id), K_(task_type), K_(task_ids));
 
 private:
+  uint64_t namespace_id_;
   int64_t index_table_id_;
   ObVecIndexAsyncTaskType task_type_;
+  schema::ObMultiVersionSchemaService &schema_service_;
+  common::ObMySQLProxy &task_sql_proxy_;
   ObSEArray<int64_t, 4> task_ids_;
 };
 

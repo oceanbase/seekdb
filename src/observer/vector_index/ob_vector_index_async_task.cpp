@@ -20,6 +20,7 @@
 #include "observer/vector_index/ob_vector_index_async_task.h"
 #include "observer/vector_index/ob_vector_index_async_task_util.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
+#include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 #include "storage/ls/ob_ls.h"
 
 using namespace oceanbase::share;
@@ -341,11 +342,18 @@ int ObVecTaskManager::create_task()
   ObSEArray<ObTabletID, 1> tablet_ids;
   ObArray<ObVecIndexAsyncTaskCtx*> task_ctx_array;
   ObArenaAllocator allocator("VecTaskCtx", OB_MALLOC_NORMAL_BLOCK_SIZE);
-  if (OB_FAIL(ObDDLUtil::get_tablets(*GCTX.schema_service_, index_table_id_, tablet_ids))) {
+  if (OB_FAIL(ObDDLUtil::get_tablets(schema_service_, index_table_id_, tablet_ids))) {
   } else {
     for (int i = 0; i < tablet_ids.count() && OB_SUCC(ret); i++) {
       int64_t new_task_id = OB_INVALID_ID;
       ObTabletID tablet_id = tablet_ids.at(i);
+      uint64_t storage_tablet_id = OB_INVALID_ID;
+      // The shared LS scheduler consumes physical tablet ids.
+      if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
+              namespace_id_, tablet_id.id(), storage_tablet_id))) {
+        break;
+      }
+      tablet_id = ObTabletID(storage_tablet_id);
       ObVecIndexAsyncTaskCtx* task_ctx = nullptr;
       common::ObCurTraceId::TraceId new_trace_id;
       char *task_ctx_buf = static_cast<char *>(allocator.alloc(sizeof(ObVecIndexAsyncTaskCtx)));
@@ -372,7 +380,7 @@ int ObVecTaskManager::create_task()
     }
   }
   if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::insert_new_task(task_ctx_array))) {
+  } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::insert_new_task(task_ctx_array, task_sql_proxy_))) {
   }
   return ret;
 }
@@ -380,42 +388,36 @@ int ObVecTaskManager::create_task()
 int ObVecTaskManager::check_task_status()
 {
   int ret = OB_SUCCESS;
-  ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
   ObSEArray<int64_t, 4> finished_task;
   ObSEArray<int64_t, 4> tmp_task;
-  if (OB_ISNULL(sql_proxy)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected nullptr", K(ret), KP(sql_proxy));
-  } else {
-    for (int i = 0; i < task_ids_.count() && OB_SUCC(ret); i++) {
-      ObSqlString sql;
-      ObVecIndexFieldArray filters;
-      ObVecIndexTaskStatusField field;
-      field.field_name_ = "task_id";
-      field.data_.uint_ = task_ids_.at(i);
-      if (OB_FAIL(filters.push_back(field))) {
-      } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::construct_read_task_sql(
-                     OB_ALL_VECTOR_INDEX_TASK_HISTORY_TNAME, false, false,
-                     filters, *sql_proxy, sql))) {
-      } else {
-        SMART_VAR(ObMySQLProxy::MySQLResult, res) {
-          ObVecIndexTaskStatus task_result;
-          sqlclient::ObMySQLResult* result = nullptr;
-          if (OB_FAIL(sql_proxy->read(res, sql.ptr()))) {
-          } else if (OB_ISNULL(result = res.get_result())) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("error unexpected, query result must not be NULL", K(ret));
-          } else if (OB_FAIL(result->next())) {
-            if (OB_ITER_END == ret) {
-              ret = OB_SUCCESS;
-            } else {
-              LOG_WARN("fail to get next row", K(ret));
-            }
-          } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::extract_one_task_sql_result(
-                         result, task_result))) {
-          } else if (OB_FAIL(task_result.ret_code_)) {
-          } else if (OB_FAIL(finished_task.push_back(task_result.task_id_))) {
+  for (int i = 0; i < task_ids_.count() && OB_SUCC(ret); i++) {
+    ObSqlString sql;
+    ObVecIndexFieldArray filters;
+    ObVecIndexTaskStatusField field;
+    field.field_name_ = "task_id";
+    field.data_.uint_ = task_ids_.at(i);
+    if (OB_FAIL(filters.push_back(field))) {
+    } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::construct_read_task_sql(
+                   OB_ALL_VECTOR_INDEX_TASK_HISTORY_TNAME, false, false,
+                   filters, task_sql_proxy_, sql))) {
+    } else {
+      SMART_VAR(ObMySQLProxy::MySQLResult, res) {
+        ObVecIndexTaskStatus task_result;
+        sqlclient::ObMySQLResult* result = nullptr;
+        if (OB_FAIL(task_sql_proxy_.read(res, sql.ptr()))) {
+        } else if (OB_ISNULL(result = res.get_result())) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("error unexpected, query result must not be NULL", K(ret));
+        } else if (OB_FAIL(result->next())) {
+          if (OB_ITER_END == ret) {
+            ret = OB_SUCCESS;
+          } else {
+            LOG_WARN("fail to get next row", K(ret));
           }
+        } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::extract_one_task_sql_result(
+                       result, task_result))) {
+        } else if (OB_FAIL(task_result.ret_code_)) {
+        } else if (OB_FAIL(finished_task.push_back(task_result.task_id_))) {
         }
       }
     }
@@ -446,19 +448,31 @@ namespace oceanbase
 namespace data_plane
 {
 
-int process_vector_index_embedding_task(const int64_t index_table_id)
+int process_vector_index_embedding_task(
+    const uint64_t namespace_id,
+    const int64_t index_table_id,
+    share::schema::ObMultiVersionSchemaService &schema_service,
+    common::ObMySQLProxy &task_sql_proxy)
 {
   share::ObVecTaskManager manager(
+      namespace_id,
       index_table_id,
-      share::ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_HYBRID_VECTOR_EMBEDDING);
+      share::ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_HYBRID_VECTOR_EMBEDDING,
+      schema_service, task_sql_proxy);
   return manager.process_task();
 }
 
-int process_vector_index_optimization_task(const int64_t index_table_id)
+int process_vector_index_optimization_task(
+    const uint64_t namespace_id,
+    const int64_t index_table_id,
+    share::schema::ObMultiVersionSchemaService &schema_service,
+    common::ObMySQLProxy &task_sql_proxy)
 {
   share::ObVecTaskManager manager(
+      namespace_id,
       index_table_id,
-      share::ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_OPTINAL);
+      share::ObVecIndexAsyncTaskType::OB_VECTOR_ASYNC_INDEX_OPTINAL,
+      schema_service, task_sql_proxy);
   return manager.process_task();
 }
 

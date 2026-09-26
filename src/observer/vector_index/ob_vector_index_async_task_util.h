@@ -434,7 +434,8 @@ public:
       common::ObISQLClient& proxy,
       ObVecIndexTaskStatusArray& result_arr,
       common::ObIAllocator *allocator);
-  static int insert_new_task(ObVecIndexTaskCtxArray &task_ctx_array);
+  static int insert_new_task(ObVecIndexTaskCtxArray &task_ctx_array,
+                             common::ObMySQLProxy &task_sql_proxy);
   static int construct_read_task_sql(const char *tname,
       const bool for_update /* select for update*/,
       const bool is_read_global_task,

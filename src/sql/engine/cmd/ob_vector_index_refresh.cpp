@@ -21,6 +21,7 @@
 #include "data_plane/ddl/ob_ddl_coordinator.h"
 #include "data_plane/transaction/ob_i_transaction_service.h"
 #include "observer/namespace_worker_protocol_prototype.h"
+#include "namespace/namespace.h"
 #include "data_plane/vector/ob_i_vector_index_runtime.h"
 #include "data_plane/vector/ob_vector_index_schema.h"
 #include "query/engine/ob_exec_context_access.h"
@@ -270,6 +271,9 @@ int ObVectorIndexRefresher::do_refresh() {
   } else if (OB_ISNULL(session_info->effective_schema_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("schema service is null", KR(ret));
+  } else if (OB_ISNULL(session_info->vector_task_sql_proxy())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("sql proxy is null", KR(ret));
   } else if (OB_FAIL(session_info->effective_schema_service()->get_runtime_schema_guard(
                  schema_guard))) {
   } else if (OB_FAIL(
@@ -440,7 +444,10 @@ int ObVectorIndexRefresher::do_refresh() {
     }
   } else if (domain_table_schema->is_hybrid_vec_index_log_type()) {
     if (OB_FAIL(data_plane::process_vector_index_embedding_task(
-            domain_table_schema->get_table_id()))) {
+            session_info->ns_runtime()->ns().id(),
+            domain_table_schema->get_table_id(),
+            *session_info->effective_schema_service(),
+            *session_info->vector_task_sql_proxy()))) {
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -482,6 +489,9 @@ int ObVectorIndexRefresher::do_rebuild() {
   } else if (OB_ISNULL(session_info->effective_schema_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("schema service is null", KR(ret));
+  } else if (OB_ISNULL(session_info->vector_task_sql_proxy())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("sql proxy is null", KR(ret));
   } else if (OB_FAIL(session_info->effective_schema_service()->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(get_current_scn(refresh_ctx_->scn_))) {
   }
@@ -634,7 +644,10 @@ int ObVectorIndexRefresher::do_rebuild() {
     }
   } else if (is_hybrid_vector && !need_embedding_when_rebuild) {
     if (OB_FAIL(data_plane::process_vector_index_optimization_task(
-            domain_table_schema->get_table_id()))) {
+            session_info->ns_runtime()->ns().id(),
+            domain_table_schema->get_table_id(),
+            *session_info->effective_schema_service(),
+            *session_info->vector_task_sql_proxy()))) {
     }
   }
   return ret;

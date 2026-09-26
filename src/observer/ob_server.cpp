@@ -2511,6 +2511,7 @@ int ObServer::init_global_context()
   home->set_service(ns::NamespaceRuntime::SCHEMA_SERVICE,
       &share::schema::ObMultiVersionSchemaService::get_instance());
   home->set_service(ns::NamespaceRuntime::SQL_PROXY, &sql_proxy_);
+  home->set_service(ns::NamespaceRuntime::VECTOR_TASK_SQL_PROXY, &sql_proxy_);
   home->set_service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE,
       &local_management_service_);
   home->set_service(ns::NamespaceRuntime::VIRTUAL_TABLE_SCAN_SERVICE,

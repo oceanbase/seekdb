@@ -723,6 +723,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
         &services->autoincrement);
     runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_REGISTRY, &services->direct_insert_registry);
     runtime.set_service(ns::NamespaceRuntime::SQL_PROXY, services->sql_proxy);
+    runtime.set_service(ns::NamespaceRuntime::VECTOR_TASK_SQL_PROXY, GCTX.sql_proxy_);
     runtime.set_service(ns::NamespaceRuntime::SCHEMA_LIFECYCLE,
         &services->schema_lifecycle);
     runtime.set_service(ns::NamespaceRuntime::TABLE_LOCK_TABLET_ROUTER,

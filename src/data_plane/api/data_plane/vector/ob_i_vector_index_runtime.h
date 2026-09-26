@@ -21,6 +21,8 @@
 
 namespace oceanbase
 {
+namespace common { class ObMySQLProxy; }
+namespace share { namespace schema { class ObMultiVersionSchemaService; } }
 namespace logservice
 {
 class ObIReplaySubHandler;
@@ -50,10 +52,18 @@ public:
   virtual void stop() = 0;
 };
 
-// Run and wait for the Observer-owned manual maintenance tasks associated
-// with a vector index. Storage provides only the index id and intent.
-int process_vector_index_embedding_task(int64_t index_table_id);
-int process_vector_index_optimization_task(int64_t index_table_id);
+// Run and wait for Observer-owned manual maintenance using the caller's
+// namespace schema and SQL services.
+int process_vector_index_embedding_task(
+    uint64_t namespace_id,
+    int64_t index_table_id,
+    share::schema::ObMultiVersionSchemaService &schema_service,
+    common::ObMySQLProxy &task_sql_proxy);
+int process_vector_index_optimization_task(
+    uint64_t namespace_id,
+    int64_t index_table_id,
+    share::schema::ObMultiVersionSchemaService &schema_service,
+    common::ObMySQLProxy &task_sql_proxy);
 
 } // namespace data_plane
 } // namespace oceanbase

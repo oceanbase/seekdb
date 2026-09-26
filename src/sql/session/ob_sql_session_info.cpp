@@ -203,6 +203,14 @@ common::ObMySQLProxy *ObSQLSessionInfo::effective_sql_proxy() const
       : nullptr;
 }
 
+common::ObMySQLProxy *ObSQLSessionInfo::vector_task_sql_proxy() const
+{
+  return ns_runtime_ != nullptr
+      ? static_cast<common::ObMySQLProxy *>(
+            ns_runtime_->service(ns::NamespaceRuntime::VECTOR_TASK_SQL_PROXY))
+      : nullptr;
+}
+
 data_plane::IDirectInsertService *ObSQLSessionInfo::effective_direct_insert_service() const
 {
   return ns_runtime_ != nullptr

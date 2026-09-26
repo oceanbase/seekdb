@@ -94,6 +94,7 @@ public:
     LOB_READ_SERVICE = 18,
     WRITE_CONTEXT_SERVICE = 19,
     TRANSACTION_SERVICE = 20,
+    VECTOR_TASK_SQL_PROXY = 21, // shared vector scheduling metadata
     SLOT_COUNT
   };
   explicit NamespaceRuntime(Namespace &ns) : ns_(ns) {}
@@ -118,7 +119,8 @@ public:
       AUTOINCREMENT_SERVICE, SCHEMA_LIFECYCLE, TABLE_LOCK_TABLET_ROUTER,
       DML_SERVICE, RANGE_SERVICE, DDL_CHECKSUM_ERROR_VERIFIER, PS_CACHE,
       OPT_STAT_MANAGER, OPT_STAT_MONITOR_MANAGER, TABLET_SCAN,
-      LOB_READ_SERVICE, WRITE_CONTEXT_SERVICE, TRANSACTION_SERVICE
+      LOB_READ_SERVICE, WRITE_CONTEXT_SERVICE, TRANSACTION_SERVICE,
+      VECTOR_TASK_SQL_PROXY
     };
     for (const ServiceSlot slot : required) {
       if (services_[slot] == nullptr) { return false; }

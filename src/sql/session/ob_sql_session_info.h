@@ -441,6 +441,8 @@ public:
   share::schema::ObMultiVersionSchemaService *effective_schema_service() const;
   ObPsCache *effective_ps_cache() const;
   common::ObMySQLProxy *effective_sql_proxy() const;
+  // Vector task records live in the shared scheduling catalog.
+  common::ObMySQLProxy *vector_task_sql_proxy() const;
   data_plane::IDirectInsertService *effective_direct_insert_service() const;
   share::ObITabletAutoincrementService *effective_tablet_autoincrement_service() const;
   share::ObAutoincrementService *effective_autoincrement_service() const;

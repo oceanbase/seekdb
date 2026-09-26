@@ -241,13 +241,14 @@ int ObVecIndexAsyncTaskUtil::check_task_is_cancel(ObVecIndexAsyncTaskCtx *task_c
   return ret;
 }
 
-int ObVecIndexAsyncTaskUtil::insert_new_task(ObVecIndexTaskCtxArray &task_ctx_array)
+int ObVecIndexAsyncTaskUtil::insert_new_task(ObVecIndexTaskCtxArray &task_ctx_array,
+                                              ObMySQLProxy &task_sql_proxy)
 {
   int ret = OB_SUCCESS;
   if (task_ctx_array.count() <= 0) {  // skip empty array
   } else {
     ObMySQLTransaction trans;
-    if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+    if (OB_FAIL(trans.start(&task_sql_proxy))) {
     } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::batch_insert_vec_task(
       OB_ALL_VECTOR_INDEX_TASK_TNAME, trans, task_ctx_array))) {
     }
