@@ -505,7 +505,32 @@ int ObRebuildIndexTask::fail()
 {
   int ret = OB_SUCCESS;
   bool is_finished = false;
-  if (-1 == index_drop_task_id_ && OB_FAIL(drop_index_impl())) {
+  if (-1 == index_drop_task_id_ && OB_INVALID_ID != new_index_id_ && index_build_task_id_ > 0) {
+    bool build_finished = false;
+    const int build_ret = check_ddl_task_finish(index_build_task_id_, build_finished);
+    if (!build_finished && OB_SUCCESS != build_ret) {
+      ret = build_ret;
+    } else if (build_finished && OB_SUCCESS != build_ret) {
+      // A failed vector-build child reports its result after dropping its auxiliary
+      // schemas. Do not submit another drop for an already removed new index.
+      ObSchemaGetterGuard schema_guard;
+      const ObTableSchema *original_index_schema = nullptr;
+      const ObTableSchema *new_index_schema = nullptr;
+      if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+      } else if (OB_FAIL(schema_guard.get_table_schema(target_object_id_, original_index_schema))) {
+      } else if (OB_FAIL(schema_guard.get_table_schema(new_index_id_, new_index_schema))) {
+      } else if (nullptr == new_index_schema && nullptr != original_index_schema
+                 && original_index_schema->get_data_table_id() == object_id_
+                 && 0 == original_index_schema->get_table_name_str().case_compare(target_object_name_)) {
+        is_finished = true;
+        LOG_INFO("failed vector-build child already cleaned the new index",
+                 K(task_id_), K(index_build_task_id_), K(new_index_id_), K(target_object_id_));
+      }
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (is_finished) {
+  } else if (-1 == index_drop_task_id_ && OB_FAIL(drop_index_impl())) {
   } else if (-1 == index_drop_task_id_ ) {
     is_finished = true;
     LOG_INFO("submit drop index task return task_id is -1", K(ret), K(index_drop_task_id_));
