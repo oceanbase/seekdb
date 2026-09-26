@@ -418,7 +418,7 @@ void ObExecContext::set_my_session(ObSQLSessionInfo *session)
   my_session_ = session;
   if (OB_ISNULL(lob_read_service_)) {
     lob_read_service_ = ::oceanbase::observer::namespace_worker_prototype::effective_lob_read_service(
-        session, ::oceanbase::share::server_service<common::ObILobReadService>());
+        session);
   }
   if (OB_NOT_NULL(session)) {
     session_mgr_ = session->get_session_manager();
@@ -1417,11 +1417,10 @@ int ObExecContext::get_lob_read_options(
   common::ObILobReadService *read_service = lob_read_service_;
   common::ObILobAccessContext *lob_access_ctx = nullptr;
   if (OB_ISNULL(read_service)) {
-    // Short-lived execution contexts used by range extraction and operator
-    // initialization may be created before request runtime services are
-    // copied.  The process service is safe for these read-only conversions.
+    // Short-lived execution contexts may be created before request runtime
+    // services are copied. Resolve through the bound session when needed.
     read_service = ::oceanbase::observer::namespace_worker_prototype::effective_lob_read_service(
-        get_my_session(), ::oceanbase::share::server_service<common::ObILobReadService>());
+        get_my_session());
     if (OB_NOT_NULL(read_service)) {
       lob_read_service_ = read_service;
     }

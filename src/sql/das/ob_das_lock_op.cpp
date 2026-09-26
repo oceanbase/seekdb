@@ -63,6 +63,8 @@ int ObDASLockOp::open_op()
       lock_ctdef_, lock_buffer_, op_alloc_, srs_provider_,
       lob_read_options_);
   data_plane::ObIDmlService *as = observer::namespace_worker_prototype::effective_dml_service(THIS_WORKER.get_session());
+  data_plane::ObIWriteContextService *write_context_service =
+      observer::namespace_worker_prototype::effective_write_context_service(THIS_WORKER.get_session());
   data_plane::ObWriteContext write_context;
 
   (void)ObDMLService::init_dml_write_flag(
@@ -71,7 +73,10 @@ int ObDASLockOp::open_op()
   if (OB_ISNULL(as)) {
     ret = OB_NOT_INIT;
     LOG_WARN("DML service is not bound", K(ret));
-  } else if (OB_FAIL(observer::namespace_worker_prototype::effective_write_context_service(THIS_WORKER.get_session(), ::oceanbase::share::server_service<::oceanbase::data_plane::ObIWriteContextService>())->acquire_write_context(
+  } else if (OB_ISNULL(write_context_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("write context service is not bound", K(ret));
+  } else if (OB_FAIL(write_context_service->acquire_write_context(
           lock_rtdef_->timeout_ts_,
           *trans_desc_,
           *snapshot_,

@@ -131,14 +131,14 @@ void ObSql::bind_resolver_runtime_services(ObResolverParams &resolver_ctx)
           resolver_ctx.session_info_);
   resolver_ctx.srs_provider_ = srs_provider_;
   resolver_ctx.lob_read_service_ = observer::namespace_worker_prototype::effective_lob_read_service(
-      resolver_ctx.session_info_, lob_read_service_);
+      resolver_ctx.session_info_);
 }
 
 void ObSql::bind_exec_context_runtime_services(ObExecContext &exec_ctx)
 {
   ObExecContext::RuntimeServices services = exec_ctx.get_runtime_services();
   services.lob_read_service_ = observer::namespace_worker_prototype::effective_lob_read_service(
-      exec_ctx.get_my_session(), lob_read_service_);
+      exec_ctx.get_my_session());
   services.plan_cache_ = observer::namespace_worker_prototype::effective_plan_cache(
       exec_ctx.get_my_session());
   services.ps_cache_ = exec_ctx.get_my_session() == nullptr
@@ -2998,7 +2998,7 @@ OB_INLINE int ObSql::init_exec_context(const ObSqlCtx &context, ObExecContext &e
     exec_ctx.set_my_session(context.session_info_);
     bind_exec_context_runtime_services(exec_ctx);
     exec_ctx.set_lob_read_service(observer::namespace_worker_prototype::effective_lob_read_service(
-        context.session_info_, lob_read_service_));
+        context.session_info_));
     exec_ctx.set_sql_ctx(const_cast<ObSqlCtx*>(&context));
     if (OB_NOT_NULL(exec_ctx.get_physical_plan_ctx()) && OB_NOT_NULL(context.session_info_)) {
       int64_t query_timeout = 0;

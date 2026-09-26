@@ -57,11 +57,13 @@ int ObExprCurrentScn::eval_current_scn(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     share::SCN current_scn;
     data_plane::ObITransactionService *txs =
         observer::namespace_worker_prototype::effective_transaction_service(
-            session, data_plane::query_transaction_service());
+            session);
     int64_t query_timeout = 0;
     session->get_query_timeout(query_timeout);
     int64_t expire_ts = session->get_query_start_time() + query_timeout;
-    if (OB_FAIL(txs->get_read_snapshot_version(expire_ts, current_scn))) {
+    if (OB_ISNULL(txs)) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(txs->get_read_snapshot_version(expire_ts, current_scn))) {
     } else if (ObUInt64Type == expr.datum_meta_.type_) {
       expr_datum.set_uint(current_scn.get_val_for_sql());
     } else {

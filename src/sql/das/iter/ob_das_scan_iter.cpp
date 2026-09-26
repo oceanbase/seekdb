@@ -60,7 +60,7 @@ int ObDASScanIter::inner_init(ObDASIterParam &param)
     tsc_service_ = native_virtual
         ? native_scan
         : observer::namespace_worker_prototype::effective_tablet_scan(
-              THIS_WORKER.get_session(), native_scan);
+              THIS_WORKER.get_session());
     if (OB_ISNULL(tsc_service_)) {
       ret = OB_NOT_INIT;
       LOG_WARN("tablet scan service is not bound", K(ret), K(scan_ctdef->ref_table_id_));

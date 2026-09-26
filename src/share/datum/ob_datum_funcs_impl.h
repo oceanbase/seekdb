@@ -305,7 +305,7 @@ OB_INLINE int datum_lob_locator_get_string(const ObDatum &datum,
     ObLobReadOptions *fallback_options = nullptr;
     if (OB_ISNULL(options)) {
       ObILobReadService *read_service = ::oceanbase::observer::namespace_worker_prototype::effective_lob_read_service(
-          THIS_WORKER.get_session(), share::server_service<ObILobReadService>());
+          THIS_WORKER.get_session());
       if (OB_NOT_NULL(read_service)) {
         void *buf = allocator.alloc(sizeof(ObLobReadOptions));
         if (OB_ISNULL(buf)) {

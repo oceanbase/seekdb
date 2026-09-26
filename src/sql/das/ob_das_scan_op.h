@@ -396,7 +396,7 @@ public:
                        K_(tablet_id),
                        K_(state),
                        K_(index_end));
-  common::ObITabletScan &get_tsc_service();
+  common::ObITabletScan *get_tsc_service();
 protected:
   virtual int init_scan_param();
 protected:

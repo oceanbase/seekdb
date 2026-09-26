@@ -1058,7 +1058,7 @@ int ObInnerSQLConnection::register_multi_data_source(
             &get_session(), false);
         data_plane::ObITransactionService *tx_service =
             namespace_worker_prototype::effective_transaction_service(
-                &get_session(), data_plane::query_transaction_service());
+                &get_session());
         if (OB_FAIL(storage_scope.error())) {
           LOG_WARN("failed to restore inner SQL namespace storage binding",
                    KR(ret), K(type), K(get_session().get_server_sid()));

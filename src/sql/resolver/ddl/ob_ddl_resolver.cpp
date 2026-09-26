@@ -3980,7 +3980,7 @@ int ObDDLResolver::calc_default_value(share::schema::ObColumnSchemaV2 &column,
         ret = OB_NOT_INIT;
         LOG_WARN("module provider is not installed", K(ret));
       } else if (OB_ISNULL(lob_read_service = ::oceanbase::observer::namespace_worker_prototype::effective_lob_read_service(
-              THIS_WORKER.get_session(), ::oceanbase::share::server_service<::oceanbase::common::ObILobReadService>()))) {
+              THIS_WORKER.get_session()))) {
         ret = OB_NOT_INIT;
         LOG_WARN("LOB read service is not installed", K(ret));
       } else if (FALSE_IT(exec_ctx.set_my_session(&empty_session))) {

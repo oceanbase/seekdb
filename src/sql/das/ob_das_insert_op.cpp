@@ -199,6 +199,7 @@ int ObDASInsertOp::insert_row_with_fetch()
   ObDASConflictIterator *result_iter = nullptr;
   void *buf = nullptr;
   data_plane::ObIDmlService *as = observer::namespace_worker_prototype::effective_dml_service(THIS_WORKER.get_session());
+  data_plane::ObIWriteContextService *write_context_service = nullptr;
   data_plane::ObDmlExecution execution;
   ObDASDMLIterator dml_iter(
       ins_ctdef_, insert_buffer_, op_alloc_, srs_provider_,
@@ -214,8 +215,9 @@ int ObDASInsertOp::insert_row_with_fetch()
     if (das_snapshot_opt_info_.isolation_level_ != transaction::ObTxIsolationLevel::RC) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected isolation_level", K(ret), K(das_snapshot_opt_info_));
-    } else if (OB_ISNULL(txs = data_plane::query_transaction_service())) {
-      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_ISNULL(txs = observer::namespace_worker_prototype::effective_transaction_service(
+                   THIS_WORKER.get_session()))) {
+      ret = OB_NOT_INIT;
       LOG_ERROR("get_tx_service", K(ret));
     } else if (OB_FAIL(txs->get_read_snapshot(*trans_desc_,
                                               das_snapshot_opt_info_.isolation_level_,
@@ -231,10 +233,15 @@ int ObDASInsertOp::insert_row_with_fetch()
   } else if (OB_ISNULL(as)) {
     ret = OB_NOT_INIT;
     LOG_WARN("DML service is not bound", K(ret));
+  } else if (OB_ISNULL(write_context_service =
+                 observer::namespace_worker_prototype::effective_write_context_service(
+                     THIS_WORKER.get_session()))) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("write context service is not bound", K(ret));
   } else if (ins_ctdef_->table_rowkey_types_.empty()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table_rowkey_types is invalid", K(ret));
-  } else if (OB_FAIL(observer::namespace_worker_prototype::effective_write_context_service(THIS_WORKER.get_session(), ::oceanbase::share::server_service<::oceanbase::data_plane::ObIWriteContextService>())->acquire_write_context(
+  } else if (OB_FAIL(write_context_service->acquire_write_context(
           ins_rtdef_->timeout_ts_,
           *trans_desc_,
           *snapshot,

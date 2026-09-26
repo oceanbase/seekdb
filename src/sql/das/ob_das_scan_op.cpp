@@ -1278,14 +1278,16 @@ int ObLocalIndexLookupOp::process_data_table_rowkeys(const int64_t size, const O
 int ObLocalIndexLookupOp::do_index_lookup()
 {
   int ret = OB_SUCCESS;
-  ObITabletScan &tsc_service = get_tsc_service();
+  ObITabletScan *tsc_service = get_tsc_service();
   ObNewRowIterator *&storage_iter = get_lookup_storage_iter();
-  if (scan_param_.key_ranges_.empty()) {
+  if (OB_ISNULL(tsc_service)) {
+    ret = OB_NOT_INIT;
+  } else if (scan_param_.key_ranges_.empty()) {
     //do nothing
   } else if (storage_iter == nullptr) {
     //first index lookup, init scan param and do table scan
     if (OB_FAIL(init_scan_param())) {
-    } else if (OB_FAIL(tsc_service.table_scan(scan_param_,
+    } else if (OB_FAIL(tsc_service->table_scan(scan_param_,
                        storage_iter))) {
       if (OB_SNAPSHOT_DISCARDED == ret && scan_param_.fb_snapshot_.is_valid()) {
         ret = OB_INVALID_QUERY_TIMESTAMP;
@@ -1298,7 +1300,7 @@ int ObLocalIndexLookupOp::do_index_lookup()
     scan_param_.need_switch_param_ = (storage_tablet_id.is_valid() && storage_tablet_id != tablet_id_ ? true : false);
     scan_param_.tablet_id_ = tablet_id_;
     if (OB_FAIL(reuse_iter())) {
-    } else if (OB_FAIL(tsc_service.table_rescan(scan_param_, storage_iter))) {
+    } else if (OB_FAIL(tsc_service->table_rescan(scan_param_, storage_iter))) {
     }
   }
   return ret;
@@ -1366,10 +1368,9 @@ int ObLocalIndexLookupOp::check_lookup_row_cnt()
   return ret;
 }
 
-OB_INLINE ObITabletScan &ObLocalIndexLookupOp::get_tsc_service()
+OB_INLINE ObITabletScan *ObLocalIndexLookupOp::get_tsc_service()
 {
-  return *observer::namespace_worker_prototype::effective_tablet_scan(THIS_WORKER.get_session(),
-      ::oceanbase::share::server_service<::oceanbase::common::ObITabletScan>());
+  return observer::namespace_worker_prototype::effective_tablet_scan(THIS_WORKER.get_session());
 }
 
 OB_INLINE int ObLocalIndexLookupOp::init_scan_param()
@@ -1439,8 +1440,10 @@ OB_INLINE int ObLocalIndexLookupOp::init_scan_param()
 int ObLocalIndexLookupOp::reuse_iter()
 {
   int ret = OB_SUCCESS;
-  ObITabletScan &tsc_service = get_tsc_service();
-  if (OB_FAIL(tsc_service.reuse_scan_iter(scan_param_.need_switch_param_, get_lookup_storage_iter()))) {
+  ObITabletScan *tsc_service = get_tsc_service();
+  if (OB_ISNULL(tsc_service)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(tsc_service->reuse_scan_iter(scan_param_.need_switch_param_, get_lookup_storage_iter()))) {
   }
   return ret;
 }
@@ -1468,8 +1471,10 @@ int ObLocalIndexLookupOp::reset_lookup_state()
 int ObLocalIndexLookupOp::revert_iter()
 {
   int ret = OB_SUCCESS;
-  ObITabletScan &tsc_service = get_tsc_service();
-  if (OB_FAIL(tsc_service.revert_scan_iter(get_lookup_storage_iter()))) {
+  ObITabletScan *tsc_service = get_tsc_service();
+  if (OB_ISNULL(tsc_service)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(tsc_service->revert_scan_iter(get_lookup_storage_iter()))) {
   }
   //release the memory hold by local index lookup op
 

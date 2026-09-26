@@ -278,7 +278,7 @@ static void release_session_tx_desc(sql::ObSQLSessionInfo *self,
 {
   namespace nwp = ::oceanbase::observer::namespace_worker_prototype;
   data_plane::ObITransactionService *txs = nwp::effective_transaction_service(
-      self, data_plane::query_transaction_service());
+      self);
   if (OB_NOT_NULL(txs)) {
     if (nwp::in_process_session_ns(self) > 0) {
       nwp::StorageSessionScope scope(self, false);

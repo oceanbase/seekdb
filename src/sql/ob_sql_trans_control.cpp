@@ -55,13 +55,10 @@ static int get_tx_service(ObBasicSessionInfo *session,
     
   }
   if (OB_SUCC(ret)) {
-    // Ticket 05c: a session of an in-process forked namespace transacts
-    // through the in-process remote stub; every other session keeps the
-    // process-local transaction service. Use the argument, not THIS_WORKER:
-    // SERVER_MODULE_SCOPE callers replace the ambient worker session.
+    // Use the explicit session argument: SERVER_MODULE_SCOPE callers may
+    // replace the ambient worker session.
     txs = observer::namespace_worker_prototype::effective_transaction_service(
-        static_cast<ObSQLSessionInfo *>(session),
-        data_plane::query_transaction_service());
+        static_cast<ObSQLSessionInfo *>(session));
     if (OB_ISNULL(txs)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("get_tx_service", K(ret));

@@ -149,16 +149,17 @@ transaction::tablelock::ObIInnerConnectionLockRuntime *inprocess_lock_runtime(
             &inprocess_inner_locks)
       : share::server_service<transaction::tablelock::ObIInnerConnectionLockRuntime>();
 }
-common::ObITabletScan *effective_tablet_scan(sql::ObSQLSessionInfo *session,
-                                             common::ObITabletScan *fallback)
+common::ObITabletScan *effective_tablet_scan(sql::ObSQLSessionInfo *session)
 {
-  return in_process_session_ns(session) > 0
-      ? static_cast<common::ObITabletScan *>(&inprocess_scan) : fallback;
+  ns::NamespaceRuntime *runtime = session ? session->ns_runtime() : nullptr;
+  return runtime ? static_cast<common::ObITabletScan *>(
+      runtime->service(ns::NamespaceRuntime::TABLET_SCAN)) : nullptr;
 }
-common::ObILobReadService *effective_lob_read_service(sql::ObSQLSessionInfo *session,
-                                                      common::ObILobReadService *fallback)
+common::ObILobReadService *effective_lob_read_service(sql::ObSQLSessionInfo *session)
 {
-  return in_process_session_ns(session) > 0 ? &inprocess_lob_read : fallback;
+  ns::NamespaceRuntime *runtime = session ? session->ns_runtime() : nullptr;
+  return runtime ? static_cast<common::ObILobReadService *>(
+      runtime->service(ns::NamespaceRuntime::LOB_READ_SERVICE)) : nullptr;
 }
 data_plane::ObIDmlService *effective_dml_service(sql::ObSQLSessionInfo *session)
 {
@@ -169,14 +170,18 @@ data_plane::ObIDmlService *effective_dml_service(sql::ObSQLSessionInfo *session)
       : nullptr;
 }
 data_plane::ObIWriteContextService *effective_write_context_service(
-    sql::ObSQLSessionInfo *session, data_plane::ObIWriteContextService *fallback)
+    sql::ObSQLSessionInfo *session)
 {
-  return in_process_session_ns(session) > 0 ? &inprocess_write_context : fallback;
+  ns::NamespaceRuntime *runtime = session ? session->ns_runtime() : nullptr;
+  return runtime ? static_cast<data_plane::ObIWriteContextService *>(
+      runtime->service(ns::NamespaceRuntime::WRITE_CONTEXT_SERVICE)) : nullptr;
 }
 data_plane::ObITransactionService *effective_transaction_service(
-    sql::ObSQLSessionInfo *session, data_plane::ObITransactionService *fallback)
+    sql::ObSQLSessionInfo *session)
 {
-  return in_process_session_ns(session) > 0 ? &inprocess_transactions : fallback;
+  ns::NamespaceRuntime *runtime = session ? session->ns_runtime() : nullptr;
+  return runtime ? static_cast<data_plane::ObITransactionService *>(
+      runtime->service(ns::NamespaceRuntime::TRANSACTION_SERVICE)) : nullptr;
 }
 sql::ObPlanCache *effective_plan_cache(sql::ObSQLSessionInfo *session)
 {
@@ -290,6 +295,10 @@ void register_root_namespace_storage_services(ns::NamespaceRuntime &runtime)
   runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_SERVICE, &direct_insert);
   runtime.set_service(ns::NamespaceRuntime::DML_SERVICE, &native_inprocess_dml);
   runtime.set_service(ns::NamespaceRuntime::RANGE_SERVICE, &native_inprocess_ranges);
+  runtime.set_service(ns::NamespaceRuntime::TABLET_SCAN, &inprocess_scan);
+  runtime.set_service(ns::NamespaceRuntime::LOB_READ_SERVICE, &inprocess_lob_read);
+  runtime.set_service(ns::NamespaceRuntime::WRITE_CONTEXT_SERVICE, &inprocess_write_context);
+  runtime.set_service(ns::NamespaceRuntime::TRANSACTION_SERVICE, &inprocess_transactions);
   runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_REGISTRY,
       &direct_insert_registry);
   runtime.set_service(ns::NamespaceRuntime::TABLET_AUTOINCREMENT_SERVICE,
@@ -702,6 +711,10 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
     runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_SERVICE, &services->direct_insert);
     runtime.set_service(ns::NamespaceRuntime::DML_SERVICE, &fork_inprocess_dml);
     runtime.set_service(ns::NamespaceRuntime::RANGE_SERVICE, &fork_inprocess_ranges);
+    runtime.set_service(ns::NamespaceRuntime::TABLET_SCAN, &inprocess_scan);
+    runtime.set_service(ns::NamespaceRuntime::LOB_READ_SERVICE, &inprocess_lob_read);
+    runtime.set_service(ns::NamespaceRuntime::WRITE_CONTEXT_SERVICE, &inprocess_write_context);
+    runtime.set_service(ns::NamespaceRuntime::TRANSACTION_SERVICE, &inprocess_transactions);
     runtime.set_service(ns::NamespaceRuntime::DDL_CHECKSUM_ERROR_VERIFIER,
         &rootserver::task_ddl_checksum_error_verifier());
     runtime.set_service(ns::NamespaceRuntime::TABLET_AUTOINCREMENT_SERVICE,

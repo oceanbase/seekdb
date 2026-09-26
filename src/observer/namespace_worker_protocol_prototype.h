@@ -267,16 +267,14 @@ int resolve_inprocess_tablet_schema(uint64_t physical_tablet_id,
 int inprocess_refresh_schema(uint64_t namespace_id);
 share::schema::ObMultiVersionSchemaService *namespace_schema_service(uint64_t namespace_id);
 common::ObMySQLProxy *namespace_sql_proxy(uint64_t namespace_id);
-common::ObITabletScan *effective_tablet_scan(sql::ObSQLSessionInfo *session,
-                                             common::ObITabletScan *fallback);
-common::ObILobReadService *effective_lob_read_service(sql::ObSQLSessionInfo *session,
-                                                      common::ObILobReadService *fallback);
+common::ObITabletScan *effective_tablet_scan(sql::ObSQLSessionInfo *session);
+common::ObILobReadService *effective_lob_read_service(sql::ObSQLSessionInfo *session);
 data_plane::ObIRangeService *effective_range_service(sql::ObSQLSessionInfo *session);
 data_plane::ObIDmlService *effective_dml_service(sql::ObSQLSessionInfo *session);
 data_plane::ObIWriteContextService *effective_write_context_service(
-    sql::ObSQLSessionInfo *session, data_plane::ObIWriteContextService *fallback);
+    sql::ObSQLSessionInfo *session);
 data_plane::ObITransactionService *effective_transaction_service(
-    sql::ObSQLSessionInfo *session, data_plane::ObITransactionService *fallback);
+    sql::ObSQLSessionInfo *session);
 sql::ObPlanCache *effective_plan_cache(sql::ObSQLSessionInfo *session);
 common::ObOptStatManager *effective_opt_stat_manager(sql::ObSQLSessionInfo *session);
 common::ObOptStatMonitorManager *effective_opt_stat_monitor_manager(
