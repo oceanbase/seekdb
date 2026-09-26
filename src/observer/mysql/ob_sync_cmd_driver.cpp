@@ -203,15 +203,11 @@ int ObSyncCmdDriver::process_schema_version_changes(
 {
   int ret = OB_SUCCESS;
 
-  if (OB_ISNULL(gctx_.schema_service_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_ERROR("invalid schema service", K(ret));
-  } else {
-    
-    if (ObStmt::is_ddl_stmt(result.get_stmt_type(), result.has_global_variable())) {
-      if (OB_FAIL(ObSQLUtils::update_session_last_schema_version(*gctx_.schema_service_,
-                                                                 session_))) {
-      }
+  if (ObStmt::is_ddl_stmt(result.get_stmt_type(), result.has_global_variable())) {
+    if (OB_ISNULL(session_.effective_schema_service())) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(ObSQLUtils::update_session_last_schema_version(
+                   *session_.effective_schema_service(), session_))) {
     }
   }
   return ret;

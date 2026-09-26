@@ -21,13 +21,16 @@
 
 namespace oceanbase
 {
+namespace ns { class NamespaceRuntime; }
 namespace query
 {
 
 // Query-owned autonomous cleanup for session-scoped locks.  The data plane
 // supplies only the persisted owner identity; transaction/session setup stays
 // behind this semantic interface.
-int release_locks_for_dead_owner(uint8_t owner_type, int64_t owner_id);
+int release_locks_for_dead_owner(
+    uint8_t owner_type, int64_t owner_id,
+    ns::NamespaceRuntime &runtime);
 
 } // namespace query
 } // namespace oceanbase

@@ -170,7 +170,9 @@ int ObMPStmtPrepare::process()
       LOG_WARN("session has been killed", K(session.get_session_state()), K_(sql),
                K(session.get_server_sid()), K(ret));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
-    } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(
+    } else if (OB_ISNULL(session.effective_schema_service())) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(session.effective_schema_service()->get_published_schema_version(
                 database_schema_version))) {
     } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
@@ -250,7 +252,9 @@ int ObMPStmtPrepare::process_prepare_stmt(const ObMultiStmtItem &multi_stmt_item
         share::schema::ObSchemaGetterGuard schema_guard;
         retry_ctrl_.clear_state_before_each_retry(session.get_retry_info_for_update());
         if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(
+        } else if (OB_ISNULL(session.effective_schema_service())) {
+          ret = OB_NOT_INIT;
+        } else if (OB_FAIL(session.effective_schema_service()->get_runtime_schema_guard(
                     schema_guard))) {
         } else if (OB_FAIL(schema_guard.get_schema_version(
                     database_schema_version))) {
@@ -294,19 +298,16 @@ int ObMPStmtPrepare::check_and_refresh_schema()
   int64_t local_version = 0;
   int64_t last_version = 0;
 
-  if (OB_ISNULL(gctx_.schema_service_)) {
+  if (OB_ISNULL(ctx_.session_info_)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null schema service", K(ret), K(gctx_));
-  } else {
-    if (OB_ISNULL(ctx_.session_info_)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid session info", K(ret), K(ctx_.session_info_));
-    } else if (OB_FAIL(gctx_.schema_service_->get_runtime_refreshed_schema_version(local_version))) {
-    } else if (FALSE_IT(last_version = ctx_.session_info_->get_last_ddl_schema_version())) {
-    } else if (local_version >= last_version) {
-      // skip
-    } else if (OB_FAIL(gctx_.schema_service_->async_refresh_schema(last_version))) {
-    }
+    LOG_WARN("invalid session info", K(ret), K(ctx_.session_info_));
+  } else if (OB_ISNULL(ctx_.session_info_->effective_schema_service())) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(ctx_.session_info_->effective_schema_service()->get_runtime_refreshed_schema_version(local_version))) {
+  } else if (FALSE_IT(last_version = ctx_.session_info_->get_last_ddl_schema_version())) {
+  } else if (local_version >= last_version) {
+    // skip
+  } else if (OB_FAIL(ctx_.session_info_->effective_schema_service()->async_refresh_schema(last_version))) {
   }
   return ret;
 }

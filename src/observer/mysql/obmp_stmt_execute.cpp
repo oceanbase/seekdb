@@ -1250,7 +1250,9 @@ int ObMPStmtExecute::request_params(ObSQLSessionInfo *session,
   share::schema::ObSchemaGetterGuard schema_guard;
   
 
-  if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(schema_guard))) {
+  if (OB_ISNULL(session->effective_schema_service())) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(session->effective_schema_service()->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(session->get_character_set_connection(charset))) {
   } else if (OB_FAIL(session->get_collation_connection(cs_conn))) {
   } else if (OB_FAIL(session->get_collation_server(cs_server))) {
@@ -1619,8 +1621,10 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
       if (OB_ISNULL(task_ctx)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("task executor ctx can not be NULL", K(task_ctx), K(ret));
+      } else if (OB_ISNULL(session.effective_schema_service())) {
+        ret = OB_NOT_INIT;
       } else {
-        task_ctx->schema_service_ = gctx_.schema_service_;
+        task_ctx->schema_service_ = session.effective_schema_service();
         task_ctx->set_query_begin_schema_version(retry_ctrl_.get_current_local_schema_version());
         ctx_.retry_times_ = retry_ctrl_.get_retry_times();
         session.reset_plsql_exec_time();
@@ -1851,7 +1855,8 @@ int ObMPStmtExecute::do_process_single(ObSQLSessionInfo &session,
     share::schema::ObSchemaGetterGuard schema_guard;
     int64_t database_schema_version = 0;
     retry_ctrl_.clear_state_before_each_retry(session.get_retry_info_for_update());
-    OZ (gctx_.schema_service_->get_runtime_schema_guard(schema_guard));
+    OV (OB_NOT_NULL(session.effective_schema_service()), OB_NOT_INIT);
+    OZ (session.effective_schema_service()->get_runtime_schema_guard(schema_guard));
     OZ (schema_guard.get_schema_version(database_schema_version));
     OX (ctx_.schema_guard_ = &schema_guard);
     OX (retry_ctrl_.set_current_local_schema_version(database_schema_version));
@@ -2016,7 +2021,9 @@ int ObMPStmtExecute::process()
                K(session.get_server_sid()), K(ret));
     } else if (OB_FAIL(session.check_and_init_retry_info(*cur_trace_id, ctx_.cur_sql_))) {
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
-    } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(
+    } else if (OB_ISNULL(session.effective_schema_service())) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(session.effective_schema_service()->get_published_schema_version(
                 database_schema_version))) {
     } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
       //packet size check with session variable max_allowd_packet or net_buffer_length

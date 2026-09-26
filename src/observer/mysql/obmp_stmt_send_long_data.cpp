@@ -136,7 +136,9 @@ int ObMPStmtSendLongData::process()
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
       LOG_WARN("packet too large than allowd for the session", K_(stmt_id), K_(param_id), K(ret));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
-    } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(
+    } else if (OB_ISNULL(session.effective_schema_service())) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(session.effective_schema_service()->get_published_schema_version(
                 runtime_version))) {
     } else {
       THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);

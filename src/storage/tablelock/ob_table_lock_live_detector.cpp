@@ -22,6 +22,7 @@
 #include "storage/tablelock/ob_table_lock_service.h"
 #include "query/session/ob_deadlock_session.h"
 #include "query/tablelock/ob_table_lock_runtime.h"
+#include "namespace/namespace.h"
 
 namespace oceanbase
 {
@@ -230,7 +231,14 @@ int ObTableLockDetector::do_detect_and_clear(common::ObISQLClient &sql_client)
 
 int ObTableLockDetector::remove_lock_by_owner_id(const ObTableLockOwnerID &owner_id)
 {
-  int ret = query::release_locks_for_dead_owner(owner_id.type(), owner_id.id());
+  int ret = OB_SUCCESS;
+  ns::NamespaceRuntime *runtime = nullptr;
+  if (!ns::namespace_registry().get(1, runtime) || OB_ISNULL(runtime)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("global lock detector runtime is unavailable", K(ret));
+  } else if (OB_FAIL(query::release_locks_for_dead_owner(
+                 owner_id.type(), owner_id.id(), *runtime))) {
+  }
   if (OB_FAIL(ret)) {
   }
   return ret;

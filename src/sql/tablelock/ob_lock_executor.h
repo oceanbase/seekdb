@@ -23,6 +23,7 @@
 
 namespace oceanbase
 {
+namespace ns { class NamespaceRuntime; }
 namespace sql
 {
 class ObSQLSessionInfo;
@@ -158,7 +159,8 @@ public:
               const ReleaseType release_type,
               int64_t &release_cnt);
   // used internal, release all the lock that required by the session.
-  int execute(uint8_t owner_type, int64_t owner_id);
+  int execute(uint8_t owner_type, int64_t owner_id,
+              ns::NamespaceRuntime &runtime);
 private:
   int execute_(sql::ObExecContext &ctx,
                const data_plane::ObPersistedLockOwner &owner,

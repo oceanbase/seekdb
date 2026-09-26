@@ -27,6 +27,7 @@
 #include "lib/utility/ob_fast_convert.h"
 #include "lib/utility/alloc_assist.h"
 #include "share/ob_table_access_helper.h"
+#include "namespace/namespace.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/ob_sql_trans_control.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -440,10 +441,14 @@ int ObUnLockExecutor::execute(ObExecContext &ctx,
   return ret;
 }
 
-int ObUnLockExecutor::execute(uint8_t owner_type, int64_t owner_id)
+int ObUnLockExecutor::execute(
+    uint8_t owner_type, int64_t owner_id,
+    ns::NamespaceRuntime &runtime)
 {
   int ret = OB_SUCCESS;
   int64_t release_cnt = 0;
+  auto *schema_service = static_cast<share::schema::ObMultiVersionSchemaService *>(
+      runtime.service(ns::NamespaceRuntime::SCHEMA_SERVICE));
   const data_plane::ObPersistedLockOwner owner(owner_type, owner_id);
   ObArenaAllocator allocator(ObModIds::OB_SQL_EXPR);
   SMART_VAR(sql::ObSQLSessionInfo, session) {
@@ -454,9 +459,11 @@ int ObUnLockExecutor::execute(uint8_t owner_type, int64_t owner_id)
       const ObServerRuntimeSchema *runtime_schema = nullptr;
       LinkExecCtxGuard link_guard(session, exec_ctx);
       sql::ObPhysicalPlanCtx phy_plan_ctx(allocator);
+      OV (OB_NOT_NULL(schema_service), OB_NOT_INIT);
       OZ (session.init(0 /*default session id*/, &allocator));
+      OX (session.set_ns_runtime(&runtime));
       OX (session.set_inner_session());
-      OZ (GCTX.schema_service_->get_runtime_schema_guard(guard));
+      OZ (schema_service->get_runtime_schema_guard(guard));
       OZ (guard.get_server_runtime_info(runtime_schema));
       OZ (session.init_runtime(runtime_schema->get_runtime_name_str()));
       OZ (session.load_all_sys_vars(guard));
@@ -582,10 +589,12 @@ data_plane::ObSessionLockScope ObUnLockExecutor::to_scope_(ReleaseType release_t
 namespace query
 {
 
-int release_locks_for_dead_owner(uint8_t owner_type, int64_t owner_id)
+int release_locks_for_dead_owner(
+    uint8_t owner_type, int64_t owner_id,
+    ns::NamespaceRuntime &runtime)
 {
   transaction::tablelock::ObUnLockExecutor executor;
-  return executor.execute(owner_type, owner_id);
+  return executor.execute(owner_type, owner_id, runtime);
 }
 
 } // namespace query

@@ -57,7 +57,9 @@ int ObMPResetConnection::process()
     session->update_last_active_time();
     session->set_query_start_time(ObTimeUtility::current_time());
     LOG_TRACE("begin reset connection. ", K(session->get_server_sid()));
-    if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    if (OB_ISNULL(session->effective_schema_service())) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(session->effective_schema_service()->get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
     } else if (OB_ISNULL(sys_variable_schema)) {
       ret = OB_ERR_UNEXPECTED;
@@ -175,8 +177,11 @@ int ObMPResetConnection::process()
       data_plane::ObPersistedLockOwner persisted_owner;
       if (OB_FAIL(data_plane::persist_session_lock_owner(owner,
                                                          persisted_owner))) {
+      } else if (OB_ISNULL(session->ns_runtime())) {
+        ret = OB_NOT_INIT;
       } else if (OB_FAIL(query::release_locks_for_dead_owner(
-                     persisted_owner.owner_type_, persisted_owner.owner_id_))) {
+                     persisted_owner.owner_type_, persisted_owner.owner_id_,
+                     *session->ns_runtime()))) {
       }
     }
 

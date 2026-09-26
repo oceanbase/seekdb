@@ -294,7 +294,9 @@ int ObMPStmtFetch::response_result(pl::ObPLServerCursorInfo &cursor,
           }
           if (OB_FAIL(ret)) {
             // do nothing
-          } else if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(schema_guard))) {
+          } else if (OB_ISNULL(session.effective_schema_service())) {
+            ret = OB_NOT_INIT;
+          } else if (OB_FAIL(session.effective_schema_service()->get_runtime_schema_guard(schema_guard))) {
           }
           ObPLExecCtx pl_ctx(cursor.get_allocator(), exec_ctx, &params,
                             NULL/*result*/, &ret, NULL/*func*/, true);
@@ -458,7 +460,9 @@ int ObMPStmtFetch::process()
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
       LOG_WARN("packet too large than allowed for the session", K_(cursor_id), K(ret));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
-    } else if (OB_FAIL(gctx_.schema_service_->get_published_schema_version(
+    } else if (OB_ISNULL(session.effective_schema_service())) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(session.effective_schema_service()->get_published_schema_version(
                 runtime_version))) {
     } else {
       need_disconnect = false;

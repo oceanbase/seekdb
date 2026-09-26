@@ -400,31 +400,30 @@ int ObMPBase::check_and_refresh_schema(ObSQLSessionInfo *session_info)
   int64_t local_version = 0;
   int64_t last_version = 0;
 
-  if (OB_ISNULL(gctx_.schema_service_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("null schema service", K(ret), K(gctx_));
-  } else {
-    bool need_revert_session = false;
-    if (NULL == session_info) {
-      if (OB_FAIL(get_session(session_info))) {
-      } else if (OB_ISNULL(session_info)) {
-        ret = OB_INVALID_ARGUMENT;
-        LOG_WARN("invalid session info", K(ret), K(session_info));
-      } else {
-        need_revert_session = true;
-      }
+  bool need_revert_session = false;
+  if (NULL == session_info) {
+    if (OB_FAIL(get_session(session_info))) {
+    } else if (OB_ISNULL(session_info)) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("invalid session info", K(ret), K(session_info));
+    } else {
+      need_revert_session = true;
     }
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(gctx_.schema_service_->get_runtime_refreshed_schema_version(local_version))) {
-      } else if (FALSE_IT(last_version = session_info->get_last_ddl_schema_version())) {
-      } else if (local_version >= last_version) {
-        // skip
-      } else if (OB_FAIL(gctx_.schema_service_->async_refresh_schema(last_version))) {
-      }
-      if (need_revert_session && OB_LIKELY(NULL != session_info)) {
-        revert_session(session_info);
-      }
+  }
+  if (OB_SUCC(ret)) {
+    auto *schema_service = session_info->effective_schema_service();
+    if (OB_ISNULL(schema_service)) {
+      ret = OB_NOT_INIT;
+      LOG_WARN("session schema service is unavailable", K(ret));
+    } else if (OB_FAIL(schema_service->get_runtime_refreshed_schema_version(local_version))) {
+    } else if (FALSE_IT(last_version = session_info->get_last_ddl_schema_version())) {
+    } else if (local_version >= last_version) {
+      // skip
+    } else if (OB_FAIL(schema_service->async_refresh_schema(last_version))) {
     }
+  }
+  if (need_revert_session && OB_NOT_NULL(session_info)) {
+    revert_session(session_info);
   }
   return ret;
 }
