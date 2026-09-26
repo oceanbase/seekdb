@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright (c) 2025 OceanBase.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,10 @@
 #include "sql/resolver/dml/ob_del_upd_resolver.h"
 #include "sql/resolver/dml/ob_select_resolver.h"
 #include "sql/resolver/dml/ob_delete_stmt.h"
+
+#ifdef IGNORE
+#undef IGNORE
+#endif
 namespace oceanbase
 {
 namespace sql

@@ -1153,6 +1153,7 @@ static const NonReservedKeyword Mysql_none_reserved_keywords[] =
   {"optimizer_costs", OPTIMIZER_COSTS},
   {"micro_index_clustered", MICRO_INDEX_CLUSTERED},
   {"unnest", UNNEST},
+{"ai_split_document", AI_SPLIT_DOCUMENT},
   {"tenant_sts_credential", TENANT_STS_CREDENTIAL},
   {"tablets", TABLETS},
   {"enable_macro_block_bloom_filter", ENABLE_MACRO_BLOCK_BLOOM_FILTER},
