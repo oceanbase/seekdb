@@ -1210,48 +1210,63 @@ int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets() {
   std::lock_guard<std::mutex> scan_guard(scan_mutex);
   ObSqlString scan;
   int ret = scan.assign_fmt(
-      "SELECT e.namespace_id,e.tablet_id FROM %s e "
-      "JOIN %s n ON n.namespace_id=e.namespace_id "
-      "WHERE n.state=2 AND e.kind=0 AND "
-      "(e.namespace_id>%lu OR (e.namespace_id=%lu AND e.tablet_id>%lu)) "
-      "ORDER BY e.namespace_id,e.tablet_id LIMIT 64",
-      EXCEPTIONS, NAMESPACES, cursor_namespace, cursor_namespace, cursor_tablet);
+      "SELECT namespace_id FROM %s WHERE state=2 AND namespace_id>=%lu "
+      "ORDER BY namespace_id LIMIT 1", NAMESPACES, cursor_namespace);
   ObMySQLProxy::MySQLResult result;
   sqlclient::ObMySQLResult *rows = nullptr;
   if (OB_SUCC(ret)) { ret = directory_sql_proxy()->read(result, scan.ptr()); }
-  ObArray<ObTabletID> candidates;
-  ObArray<ObTabletID> stale;
   if (OB_SUCC(ret) && OB_ISNULL(rows = result.get_result())) { ret = OB_ERR_UNEXPECTED; }
-  bool saw_row = false;
-  while (OB_SUCC(ret)) {
+  uint64_t namespace_id = 0;
+  if (OB_SUCC(ret)) {
     ret = rows->next();
-    if (ret == OB_ITER_END) { ret = OB_SUCCESS; break; }
-    uint64_t namespace_id = 0, local_tablet_id = 0;
-    if (OB_FAIL(rows->get_uint(0L, namespace_id))
-        || OB_FAIL(rows->get_uint(1L, local_tablet_id))) {
-    } else {
-      saw_row = true;
-      cursor_namespace = namespace_id;
-      cursor_tablet = local_tablet_id;
-      const NamespaceObjectKey key{namespace_id, local_tablet_id};
-      bool exists = false;
-      if (!key.is_valid()) {
-        ret = OB_INVALID_ARGUMENT;
-      } else if (OB_FAIL(probe_physical_tablet(key.storage_id(), exists))) {
-      } else if (exists) {
-        ret = candidates.push_back(ObTabletID(key.storage_id()));
-      } else {
-        ret = stale.push_back(ObTabletID(key.storage_id()));
-      }
+    if (ret == OB_ITER_END) {
+      cursor_namespace = cursor_tablet = 0;
+      ret = OB_SUCCESS;
+      return prune_dropped_namespace_rows(tombstone_cursor);
     }
   }
-  if (OB_SUCC(ret) && !saw_row) { cursor_namespace = cursor_tablet = 0; }
+  if (OB_SUCC(ret)) { ret = rows->get_uint(0L, namespace_id); }
+  if (OB_FAIL(ret)) { return ret; }
+  if (namespace_id != cursor_namespace) { cursor_tablet = 0; }
+  cursor_namespace = namespace_id;
+  const NamespaceObjectKey first{namespace_id, 1};
+  if (!first.is_valid()) { return OB_CHECKSUM_ERROR; }
+  ObArray<ObTabletTablePair> bindings;
+  ret = ObTabletMappingTableOperator::range_get_tablet_table_pairs(
+      *directory_sql_proxy(),
+      ObTabletID(first.storage_id() - 1 + cursor_tablet), 64, bindings);
+  if (OB_FAIL(ret)) { return ret; }
+  ObArray<ObTabletID> candidates;
+  int64_t invisible_count = 0;
+  bool exhausted = bindings.count() < 64;
+  for (int64_t i = 0; OB_SUCC(ret) && i < bindings.count(); ++i) {
+    const uint64_t physical = bindings.at(i).get_tablet_id().id();
+    if (!NamespaceObjectKey::is_encoded(physical)
+        || database_of(physical) != namespace_id) {
+      exhausted = true;
+      break;
+    }
+    cursor_tablet = local_of(physical);
+    bool exists = false;
+    if (OB_FAIL(probe_physical_tablet(physical, exists))) {
+    } else if (exists) {
+      ret = candidates.push_back(ObTabletID(physical));
+    } else {
+      // The mapping is committed but tablet-manager visibility can lag it.
+      // Keep both records and revisit after the scan wraps.
+      ++invisible_count;
+    }
+  }
+  if (OB_SUCC(ret) && exhausted) {
+    cursor_namespace = namespace_id + 1;
+    cursor_tablet = 0;
+  }
   bool deferred = false;
   if (OB_SUCC(ret) && !candidates.empty()) {
     ret = protect_snapshot_tablets(candidates, deferred);
   }
   if (OB_FAIL(ret)) { return ret; }
-  if (candidates.empty() && stale.empty()) {
+  if (candidates.empty()) {
     return prune_dropped_namespace_rows(tombstone_cursor);
   }
   int64_t schema_version = 0;
@@ -1279,9 +1294,8 @@ int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets() {
       } else { ret = drop.execute(); }
     }
   }
-  for (int64_t i = 0; OB_SUCC(ret) && i < candidates.count() + stale.count(); ++i) {
-    const ObTabletID tablet = i < candidates.count()
-        ? candidates.at(i) : stale.at(i - candidates.count());
+  for (int64_t i = 0; OB_SUCC(ret) && i < candidates.count(); ++i) {
+    const ObTabletID tablet = candidates.at(i);
     ObSqlString q;
     if (OB_FAIL(q.assign_fmt("DELETE FROM %s WHERE namespace_id=%lu "
             "AND tablet_id=%lu AND kind=0", EXCEPTIONS,
@@ -1298,7 +1312,7 @@ int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets() {
     }
   }
   LOG_INFO("PROTOTYPE_NAMESPACE_DROPPED_TABLET_GC", K(ret),
-      "dropped", candidates.count(), "stale", stale.count(), K(deferred));
+      "dropped", candidates.count(), "not_yet_visible", invisible_count, K(deferred));
   if (OB_SUCC(ret)) { ret = prune_dropped_namespace_rows(tombstone_cursor); }
   return ret;
 }
