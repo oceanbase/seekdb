@@ -1522,7 +1522,10 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(compaction::ObMediumChecker::server_module_init(mods_medium_checker_))) { SERVER_LOG(WARN, "mods_medium_checker_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(storage::ObCompactionMemPool::server_module_init(mods_compaction_mem_pool_))) { SERVER_LOG(WARN, "mods_compaction_mem_pool_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObDagScheduler::server_module_init(mods_dag_scheduler_))) { SERVER_LOG(WARN, "mods_dag_scheduler_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObFreezeInfoMgr::server_module_init(mods_freeze_info_mgr_))) { SERVER_LOG(WARN, "mods_freeze_info_mgr_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(ObFreezeInfoMgr::server_module_init(
+          mods_freeze_info_mgr_, *root_sql_proxy))) {
+    SERVER_LOG(WARN, "mods_freeze_info_mgr_ fail", KR(ret));
+  }
   if (OB_SUCC(ret) && OB_FAIL(ObTxLoopWorker::server_module_init(mods_tx_loop_worker_))) { SERVER_LOG(WARN, "mods_tx_loop_worker_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObAccessService::server_module_init(mods_access_service_))) { SERVER_LOG(WARN, "mods_access_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObMultiVersionGarbageCollector::server_module_init(mods_multi_version_garbage_collector_))) { SERVER_LOG(WARN, "mods_multi_version_garbage_collector_ fail", KR(ret)); }

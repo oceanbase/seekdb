@@ -84,6 +84,7 @@ ObFreezeInfoMgr::ObFreezeInfoMgr()
   : reload_task_(*this),
     update_reserved_snapshot_task_(*this),
     freeze_info_mgr_(),
+    sql_proxy_(nullptr),
     snapshots_(),
     lock_(),
     cur_idx_(0),
@@ -98,29 +99,28 @@ ObFreezeInfoMgr::~ObFreezeInfoMgr()
   destroy();
 }
 
-int ObFreezeInfoMgr::server_module_init(ObFreezeInfoMgr* &freeze_info_mgr)
+int ObFreezeInfoMgr::server_module_init(ObFreezeInfoMgr* &freeze_info_mgr,
+                                       ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(GCTX.sql_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "failed to get sql proxy from GCTX, cannot init FreezeInfoMgr", K(ret));
-  } else if (OB_FAIL(freeze_info_mgr->init(*GCTX.sql_proxy_))) {
+  if (OB_FAIL(freeze_info_mgr->init(sql_proxy))) {
   } else {
     STORAGE_LOG(INFO, "success to init freeze info manager");
   }
   return ret;
 }
 
-int ObFreezeInfoMgr::init(ObISQLClient &sql_proxy)
+int ObFreezeInfoMgr::init(ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(inited_)) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "init twice", K(ret));
-  } else if (OB_FAIL(freeze_info_mgr_.init(*GCTX.sql_proxy_))) {
+  } else if (OB_FAIL(freeze_info_mgr_.init(sql_proxy))) {
   } else if (OB_FAIL(reload_task_.init())) {
   } else if (OB_FAIL(reload_timer_.init("FreInfoReload", ObMemAttr("FreInfoReload")))) {
   } else {
+    sql_proxy_ = &sql_proxy;
     inited_ = true;
   }
   return ret;
@@ -453,7 +453,7 @@ int ObFreezeInfoMgr::ReloadTask::refresh_merge_info()
   int64_t cur_broadcast_version = 0;
   int64_t global_broadcast_version = 0;
 
-  if (OB_FAIL(ObGlobalMergeTableOperator::load_global_merge_info(*GCTX.sql_proxy_, global_merge_info))) {
+  if (OB_FAIL(ObGlobalMergeTableOperator::load_global_merge_info(*mgr_.sql_proxy_, global_merge_info))) {
   } else {
     // set merged version
     MERGE_SCHEDULER_PTR->set_inner_table_merged_scn(global_merge_info.last_merged_scn_.get_scn().get_val_for_tx());
@@ -495,9 +495,11 @@ int ObFreezeInfoMgr::try_update_info()
   share::SCN new_snapshot_gc_scn;
   share::ObSnapshotTableProxy snapshot_proxy;
 
-  if (OB_FAIL(ObFreezeInfoManager::fetch_new_freeze_info(
-        share::SCN::base_scn(), *GCTX.sql_proxy_, freeze_infos, new_snapshot_gc_scn))) {
-  } else if (OB_FAIL(snapshot_proxy.get_all_snapshots(*GCTX.sql_proxy_, snapshots))) {
+  if (OB_ISNULL(sql_proxy_)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(ObFreezeInfoManager::fetch_new_freeze_info(
+        share::SCN::base_scn(), *sql_proxy_, freeze_infos, new_snapshot_gc_scn))) {
+  } else if (OB_FAIL(snapshot_proxy.get_all_snapshots(*sql_proxy_, snapshots))) {
   } else if (OB_FAIL(inner_update_info(new_snapshot_gc_scn, freeze_infos, snapshots))) {
   }
   return ret;

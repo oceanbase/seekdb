@@ -97,9 +97,10 @@ public:
   };
 
 public:
-  static int server_module_init(ObFreezeInfoMgr* &freeze_info_mgr);
+  static int server_module_init(ObFreezeInfoMgr* &freeze_info_mgr,
+                                common::ObMySQLProxy &sql_proxy);
 
-  int init(common::ObISQLClient &sql_proxy);
+  int init(common::ObMySQLProxy &sql_proxy);
   void init_for_test() { inited_ = true; }
   // The throwaway fork prototype uses the normal reload protocol before publishing its handle.
   int reload_for_test() { return try_update_info(); }
@@ -189,6 +190,7 @@ private:
   ReloadTask reload_task_;
   UpdateLSResvSnapshotTask update_reserved_snapshot_task_;
   share::ObFreezeInfoManager freeze_info_mgr_;
+  common::ObMySQLProxy *sql_proxy_;
   common::ObSEArray<share::ObSnapshotInfo, 8> snapshots_[2]; // snapshots_ maintains multi_version_start for index and others
   common::RWLock lock_;
   int64_t cur_idx_;
