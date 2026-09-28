@@ -64,6 +64,7 @@ public:
   using PageVisitor = std::function<int(uint64_t)>;
   using PinVisitor = std::function<int(const InstanceNamespacePin &)>;
   using SnapshotAcquirer = std::function<int(int64_t &)>;
+  using PhysicalTabletProbe = std::function<int(uint64_t, bool &)>;
 
   InstanceNamespaceMetadata(storage::InstanceMetaStore &store, Transaction &transaction)
       : store_(store), transaction_(transaction) {}
@@ -87,6 +88,16 @@ public:
   int finish_schema_change(uint64_t id, int64_t schema_version);
   int begin_schema_recovery(uint64_t id, bool &needed);
   int finish_schema_recovery(uint64_t id, int64_t schema_version);
+
+  // Stage a complete native-schema delta and its directory version together.
+  // A local tablet in removed_owned must be dropped only after this KV commit.
+  // Roll back the caller's transaction on error. The physical probe must not
+  // reenter this transaction.
+  int stage_schema_delta(uint64_t id, int64_t schema_version,
+      const std::map<uint64_t, uint64_t> &previous_tablets,
+      const std::map<uint64_t, uint64_t> &current_tablets,
+      const PhysicalTabletProbe &probe,
+      std::vector<uint64_t> &removed_owned);
 
   int initialize_namespace_counter(uint64_t high_watermark);
   int allocate_namespace_id(uint64_t &id);

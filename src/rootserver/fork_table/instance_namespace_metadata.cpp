@@ -868,5 +868,61 @@ int InstanceNamespaceMetadata::finish_schema_recovery(uint64_t id,
   return ret;
 }
 
+int InstanceNamespaceMetadata::stage_schema_delta(uint64_t id,
+    int64_t schema_version,
+    const std::map<uint64_t, uint64_t> &previous_tablets,
+    const std::map<uint64_t, uint64_t> &current_tablets,
+    const PhysicalTabletProbe &probe,
+    std::vector<uint64_t> &removed_owned)
+{
+  removed_owned.clear();
+  if (schema_version <= 0 || !probe) { return OB_INVALID_ARGUMENT; }
+  InstanceNamespaceRecord record;
+  int ret = get_namespace(id, record, true);
+  if (ret == OB_SUCCESS && (record.roots.state != 0
+      || schema_version < record.roots.schema_version)) {
+    ret = OB_STATE_NOT_MATCH;
+  }
+  const auto actions = ns::NamespaceExceptionDelta::plan(
+      previous_tablets, current_tablets);
+  std::vector<uint64_t> pending_removal;
+  for (const auto &action : actions) {
+    if (ret != OB_SUCCESS) { break; }
+    if (!ns::NamespaceObjectKey{id, action.tablet_id}.is_valid()
+        || action.table_id == 0 || action.table_id >= (1ULL << 32)) {
+      ret = OB_INVALID_ARGUMENT;
+      break;
+    }
+    InstanceExceptionRecord old;
+    ret = get_exception(id, action.tablet_id, old, true);
+    const bool had_old = ret == OB_SUCCESS;
+    if (ret == OB_ENTRY_NOT_EXIST) { ret = OB_SUCCESS; }
+    if (ret != OB_SUCCESS) { break; }
+    if (action.kind == ns::ExceptionDeltaKind::TOMBSTONE) {
+      if (had_old && old.kind == 0) {
+        pending_removal.push_back(action.tablet_id);
+      }
+      ret = put_exception({id, action.tablet_id, action.table_id, 1, 0});
+    } else {
+      bool local_exists = false;
+      ret = probe(action.tablet_id, local_exists);
+      if (ret != OB_SUCCESS) { break; }
+      if (local_exists) {
+        ret = put_exception({id, action.tablet_id, action.table_id, 0, 0});
+      } else if (had_old && old.kind == 0) {
+        ret = OB_STATE_NOT_MATCH;
+      } else if (had_old) {
+        ret = erase_exception(id, action.tablet_id);
+      }
+    }
+  }
+  if (ret == OB_SUCCESS && schema_version > record.roots.schema_version) {
+    record.roots.schema_version = schema_version;
+    ret = update_namespace(record);
+  }
+  if (ret == OB_SUCCESS) { removed_owned.swap(pending_removal); }
+  return ret;
+}
+
 } // namespace rootserver
 } // namespace oceanbase
