@@ -916,9 +916,19 @@ int InstanceNamespaceMetadata::stage_schema_delta(uint64_t id,
       }
     }
   }
-  if (ret == OB_SUCCESS && schema_version > record.roots.schema_version) {
-    record.roots.schema_version = schema_version;
-    ret = update_namespace(record);
+  if (ret == OB_SUCCESS) {
+    bool changed = false;
+    if (schema_version > record.roots.schema_version) {
+      record.roots.schema_version = schema_version;
+      changed = true;
+    }
+    if (record.roots.pending_schema_version > 0
+        && record.roots.pending_schema_version != INT64_MAX
+        && record.roots.pending_schema_version <= schema_version) {
+      record.roots.pending_schema_version = 0;
+      changed = true;
+    }
+    if (changed) { ret = update_namespace(record); }
   }
   if (ret == OB_SUCCESS) { removed_owned.swap(pending_removal); }
   return ret;
