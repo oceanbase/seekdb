@@ -1,0 +1,327 @@
+SET ob_enable_index_direct_select = 1;
+SET ob_query_timeout = 20000000;
+SET ob_trx_timeout = 60000000;
+CREATE DATABASE `seekdb_identifier_quoting`;
+USE `seekdb_identifier_quoting`;
+CREATE TABLE `c1_plain` (`id` INT PRIMARY KEY, v VECTOR(3),
+VECTOR INDEX `idx`(v) WITH (distance=l2,type=hnsw,lib=vsag));
+INSERT INTO `c1_plain` VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
+SET @c1_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c1_plain'
+AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+SET @c1_index_name = 'idx';
+SET @c1_prefix = CONCAT('`', REPLACE(DATABASE(), '`', '``'),
+'`.`__idx_', @c1_table_id, '_', REPLACE(@c1_index_name, '`', '``'));
+SET @c1_delta_sql = CONCAT('SELECT COUNT(*) AS delta_rows FROM ', @c1_prefix, '`');
+SET @c1_ids_sql = CONCAT('SELECT COUNT(*) AS index_id_rows FROM ', @c1_prefix, '_index_id_table`');
+PREPARE c1_delta FROM @c1_delta_sql;
+PREPARE c1_ids FROM @c1_ids_sql;
+EXECUTE c1_delta;
+delta_rows
+3
+EXECUTE c1_ids;
+index_id_rows
+0
+CALL dbms_vector.refresh_index('idx','c1_plain','v',1,'FAST');
+EXECUTE c1_delta;
+delta_rows
+0
+EXECUTE c1_ids;
+index_id_rows
+3
+DEALLOCATE PREPARE c1_delta;
+DEALLOCATE PREPARE c1_ids;
+SELECT `id` AS id,v FROM `c1_plain` ORDER BY `id`;
+id	v
+1	[1,0,0]
+2	[0,1,0]
+3	[0,0,1]
+CALL dbms_vector.rebuild_index('idx','c1_plain','v');
+CALL dbms_vector.rebuild_index('idx','c1_plain','v',0);
+SELECT `id` AS id,v FROM `c1_plain` ORDER BY `id`;
+id	v
+1	[1,0,0]
+2	[0,1,0]
+3	[0,0,1]
+USE `seekdb_identifier_quoting`;
+CREATE TABLE `c1_partition_plain` (`id` INT PRIMARY KEY, v VECTOR(3),
+VECTOR INDEX `idx`(v) WITH (distance=l2,type=hnsw,lib=vsag))
+PARTITION BY RANGE COLUMNS(`id`)
+(PARTITION p0 VALUES LESS THAN (3), PARTITION p1 VALUES LESS THAN MAXVALUE);
+INSERT INTO `c1_partition_plain` VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
+SET @c1_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c1_partition_plain'
+AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+SET @c1_index_name = 'idx';
+SET @c1_prefix = CONCAT('`', REPLACE(DATABASE(), '`', '``'),
+'`.`__idx_', @c1_table_id, '_', REPLACE(@c1_index_name, '`', '``'));
+SET @c1_delta_sql = CONCAT('SELECT COUNT(*) AS delta_rows FROM ', @c1_prefix, '`');
+SET @c1_ids_sql = CONCAT('SELECT COUNT(*) AS index_id_rows FROM ', @c1_prefix, '_index_id_table`');
+PREPARE c1_delta FROM @c1_delta_sql;
+PREPARE c1_ids FROM @c1_ids_sql;
+EXECUTE c1_delta;
+delta_rows
+3
+EXECUTE c1_ids;
+index_id_rows
+0
+CALL dbms_vector.refresh_index('idx','c1_partition_plain','v',1,'FAST');
+EXECUTE c1_delta;
+delta_rows
+0
+EXECUTE c1_ids;
+index_id_rows
+3
+DEALLOCATE PREPARE c1_delta;
+DEALLOCATE PREPARE c1_ids;
+SELECT `id` AS id,v FROM `c1_partition_plain` ORDER BY `id`;
+id	v
+1	[1,0,0]
+2	[0,1,0]
+3	[0,0,1]
+CALL dbms_vector.rebuild_index('idx','c1_partition_plain','v');
+CALL dbms_vector.rebuild_index('idx','c1_partition_plain','v',0);
+SELECT `id` AS id,v FROM `c1_partition_plain` ORDER BY `id`;
+id	v
+1	[1,0,0]
+2	[0,1,0]
+3	[0,0,1]
+USE `seekdb_identifier_quoting`;
+CREATE TABLE `c1_partition_keyword` (`order` INT PRIMARY KEY, v VECTOR(3),
+VECTOR INDEX `idx`(v) WITH (distance=l2,type=hnsw,lib=vsag))
+PARTITION BY RANGE COLUMNS(`order`)
+(PARTITION p0 VALUES LESS THAN (3), PARTITION p1 VALUES LESS THAN MAXVALUE);
+INSERT INTO `c1_partition_keyword` VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
+SET @c1_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c1_partition_keyword'
+AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+SET @c1_index_name = 'idx';
+SET @c1_prefix = CONCAT('`', REPLACE(DATABASE(), '`', '``'),
+'`.`__idx_', @c1_table_id, '_', REPLACE(@c1_index_name, '`', '``'));
+SET @c1_delta_sql = CONCAT('SELECT COUNT(*) AS delta_rows FROM ', @c1_prefix, '`');
+SET @c1_ids_sql = CONCAT('SELECT COUNT(*) AS index_id_rows FROM ', @c1_prefix, '_index_id_table`');
+PREPARE c1_delta FROM @c1_delta_sql;
+PREPARE c1_ids FROM @c1_ids_sql;
+EXECUTE c1_delta;
+delta_rows
+3
+EXECUTE c1_ids;
+index_id_rows
+0
+CALL dbms_vector.refresh_index('idx','c1_partition_keyword','v',1,'FAST');
+EXECUTE c1_delta;
+delta_rows
+0
+EXECUTE c1_ids;
+index_id_rows
+3
+DEALLOCATE PREPARE c1_delta;
+DEALLOCATE PREPARE c1_ids;
+SELECT `order` AS id,v FROM `c1_partition_keyword` ORDER BY `order`;
+id	v
+1	[1,0,0]
+2	[0,1,0]
+3	[0,0,1]
+CALL dbms_vector.rebuild_index('idx','c1_partition_keyword','v');
+CALL dbms_vector.rebuild_index('idx','c1_partition_keyword','v',0);
+SELECT `order` AS id,v FROM `c1_partition_keyword` ORDER BY `order`;
+id	v
+1	[1,0,0]
+2	[0,1,0]
+3	[0,0,1]
+USE `seekdb_identifier_quoting`;
+CREATE TABLE `c1_partition_space` (`key id` INT PRIMARY KEY, v VECTOR(3),
+VECTOR INDEX `idx`(v) WITH (distance=l2,type=hnsw,lib=vsag))
+PARTITION BY RANGE COLUMNS(`key id`)
+(PARTITION p0 VALUES LESS THAN (3), PARTITION p1 VALUES LESS THAN MAXVALUE);
+INSERT INTO `c1_partition_space` VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
+SET @c1_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c1_partition_space'
+AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+SET @c1_index_name = 'idx';
+SET @c1_prefix = CONCAT('`', REPLACE(DATABASE(), '`', '``'),
+'`.`__idx_', @c1_table_id, '_', REPLACE(@c1_index_name, '`', '``'));
+SET @c1_delta_sql = CONCAT('SELECT COUNT(*) AS delta_rows FROM ', @c1_prefix, '`');
+SET @c1_ids_sql = CONCAT('SELECT COUNT(*) AS index_id_rows FROM ', @c1_prefix, '_index_id_table`');
+PREPARE c1_delta FROM @c1_delta_sql;
+PREPARE c1_ids FROM @c1_ids_sql;
+EXECUTE c1_delta;
+delta_rows
+3
+EXECUTE c1_ids;
+index_id_rows
+0
+CALL dbms_vector.refresh_index('idx','c1_partition_space','v',1,'FAST');
+EXECUTE c1_delta;
+delta_rows
+0
+EXECUTE c1_ids;
+index_id_rows
+3
+DEALLOCATE PREPARE c1_delta;
+DEALLOCATE PREPARE c1_ids;
+SELECT `key id` AS id,v FROM `c1_partition_space` ORDER BY `key id`;
+id	v
+1	[1,0,0]
+2	[0,1,0]
+3	[0,0,1]
+CALL dbms_vector.rebuild_index('idx','c1_partition_space','v');
+CALL dbms_vector.rebuild_index('idx','c1_partition_space','v',0);
+SELECT `key id` AS id,v FROM `c1_partition_space` ORDER BY `key id`;
+id	v
+1	[1,0,0]
+2	[0,1,0]
+3	[0,0,1]
+USE `seekdb_identifier_quoting`;
+CREATE TABLE `c1_partition_backtick` (`key``id` INT PRIMARY KEY, v VECTOR(3),
+VECTOR INDEX `idx`(v) WITH (distance=l2,type=hnsw,lib=vsag))
+PARTITION BY RANGE COLUMNS(`key``id`)
+(PARTITION p0 VALUES LESS THAN (3), PARTITION p1 VALUES LESS THAN MAXVALUE);
+INSERT INTO `c1_partition_backtick` VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
+SET @c1_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c1_partition_backtick'
+AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+SET @c1_index_name = 'idx';
+SET @c1_prefix = CONCAT('`', REPLACE(DATABASE(), '`', '``'),
+'`.`__idx_', @c1_table_id, '_', REPLACE(@c1_index_name, '`', '``'));
+SET @c1_delta_sql = CONCAT('SELECT COUNT(*) AS delta_rows FROM ', @c1_prefix, '`');
+SET @c1_ids_sql = CONCAT('SELECT COUNT(*) AS index_id_rows FROM ', @c1_prefix, '_index_id_table`');
+PREPARE c1_delta FROM @c1_delta_sql;
+PREPARE c1_ids FROM @c1_ids_sql;
+EXECUTE c1_delta;
+delta_rows
+3
+EXECUTE c1_ids;
+index_id_rows
+0
+CALL dbms_vector.refresh_index('idx','c1_partition_backtick','v',1,'FAST');
+EXECUTE c1_delta;
+delta_rows
+0
+EXECUTE c1_ids;
+index_id_rows
+3
+DEALLOCATE PREPARE c1_delta;
+DEALLOCATE PREPARE c1_ids;
+SELECT `key``id` AS id,v FROM `c1_partition_backtick` ORDER BY `key``id`;
+id	v
+1	[1,0,0]
+2	[0,1,0]
+3	[0,0,1]
+USE `seekdb_identifier_quoting`;
+CREATE TABLE `c1_table``quoted` (`id` INT PRIMARY KEY, v VECTOR(3),
+VECTOR INDEX `idx`(v) WITH (distance=l2,type=hnsw,lib=vsag));
+INSERT INTO `c1_table``quoted` VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
+SET @c1_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c1_table`quoted'
+AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+SET @c1_index_name = 'idx';
+SET @c1_prefix = CONCAT('`', REPLACE(DATABASE(), '`', '``'),
+'`.`__idx_', @c1_table_id, '_', REPLACE(@c1_index_name, '`', '``'));
+SET @c1_delta_sql = CONCAT('SELECT COUNT(*) AS delta_rows FROM ', @c1_prefix, '`');
+SET @c1_ids_sql = CONCAT('SELECT COUNT(*) AS index_id_rows FROM ', @c1_prefix, '_index_id_table`');
+PREPARE c1_delta FROM @c1_delta_sql;
+PREPARE c1_ids FROM @c1_ids_sql;
+EXECUTE c1_delta;
+delta_rows
+3
+EXECUTE c1_ids;
+index_id_rows
+0
+CALL dbms_vector.refresh_index('idx','c1_table`quoted','v',1,'FAST');
+EXECUTE c1_delta;
+delta_rows
+0
+EXECUTE c1_ids;
+index_id_rows
+3
+DEALLOCATE PREPARE c1_delta;
+DEALLOCATE PREPARE c1_ids;
+SELECT `id` AS id,v FROM `c1_table``quoted` ORDER BY `id`;
+id	v
+1	[1,0,0]
+2	[0,1,0]
+3	[0,0,1]
+CALL dbms_vector.rebuild_index('idx','c1_table`quoted','v');
+CALL dbms_vector.rebuild_index('idx','c1_table`quoted','v',0);
+SELECT `id` AS id,v FROM `c1_table``quoted` ORDER BY `id`;
+id	v
+1	[1,0,0]
+2	[0,1,0]
+3	[0,0,1]
+USE `seekdb_identifier_quoting`;
+CREATE TABLE `c1_index` (`id` INT PRIMARY KEY, v VECTOR(3),
+VECTOR INDEX `idx``quoted`(v) WITH (distance=l2,type=hnsw,lib=vsag));
+INSERT INTO `c1_index` VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
+SET @c1_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c1_index'
+AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+SET @c1_index_name = 'idx`quoted';
+SET @c1_prefix = CONCAT('`', REPLACE(DATABASE(), '`', '``'),
+'`.`__idx_', @c1_table_id, '_', REPLACE(@c1_index_name, '`', '``'));
+SET @c1_delta_sql = CONCAT('SELECT COUNT(*) AS delta_rows FROM ', @c1_prefix, '`');
+SET @c1_ids_sql = CONCAT('SELECT COUNT(*) AS index_id_rows FROM ', @c1_prefix, '_index_id_table`');
+PREPARE c1_delta FROM @c1_delta_sql;
+PREPARE c1_ids FROM @c1_ids_sql;
+EXECUTE c1_delta;
+delta_rows
+3
+EXECUTE c1_ids;
+index_id_rows
+0
+CALL dbms_vector.refresh_index('idx`quoted','c1_index','v',1,'FAST');
+EXECUTE c1_delta;
+delta_rows
+0
+EXECUTE c1_ids;
+index_id_rows
+3
+DEALLOCATE PREPARE c1_delta;
+DEALLOCATE PREPARE c1_ids;
+SELECT `id` AS id,v FROM `c1_index` ORDER BY `id`;
+id	v
+1	[1,0,0]
+2	[0,1,0]
+3	[0,0,1]
+CALL dbms_vector.rebuild_index('idx`quoted','c1_index','v');
+CALL dbms_vector.rebuild_index('idx`quoted','c1_index','v',0);
+SELECT `id` AS id,v FROM `c1_index` ORDER BY `id`;
+id	v
+1	[1,0,0]
+2	[0,1,0]
+3	[0,0,1]
+CREATE DATABASE `seekdb_identifier``quoting`;
+USE `seekdb_identifier``quoting`;
+CREATE TABLE `c1_database` (`id` INT PRIMARY KEY, v VECTOR(3),
+VECTOR INDEX `idx`(v) WITH (distance=l2,type=hnsw,lib=vsag));
+INSERT INTO `c1_database` VALUES (1,'[1,0,0]'),(2,'[0,1,0]'),(3,'[0,0,1]');
+SET @c1_table_id = (SELECT table_id FROM oceanbase.__all_table WHERE table_name = 'c1_database'
+AND database_id = (SELECT database_id FROM oceanbase.__all_database WHERE database_name = DATABASE()));
+SET @c1_index_name = 'idx';
+SET @c1_prefix = CONCAT('`', REPLACE(DATABASE(), '`', '``'),
+'`.`__idx_', @c1_table_id, '_', REPLACE(@c1_index_name, '`', '``'));
+SET @c1_delta_sql = CONCAT('SELECT COUNT(*) AS delta_rows FROM ', @c1_prefix, '`');
+SET @c1_ids_sql = CONCAT('SELECT COUNT(*) AS index_id_rows FROM ', @c1_prefix, '_index_id_table`');
+PREPARE c1_delta FROM @c1_delta_sql;
+PREPARE c1_ids FROM @c1_ids_sql;
+EXECUTE c1_delta;
+delta_rows
+3
+EXECUTE c1_ids;
+index_id_rows
+0
+CALL dbms_vector.refresh_index('idx','c1_database','v',1,'FAST');
+EXECUTE c1_delta;
+delta_rows
+0
+EXECUTE c1_ids;
+index_id_rows
+3
+DEALLOCATE PREPARE c1_delta;
+DEALLOCATE PREPARE c1_ids;
+SELECT `id` AS id,v FROM `c1_database` ORDER BY `id`;
+id	v
+1	[1,0,0]
+2	[0,1,0]
+3	[0,0,1]
+CALL dbms_vector.rebuild_index('idx','c1_database','v');
+CALL dbms_vector.rebuild_index('idx','c1_database','v',0);
+SELECT `id` AS id,v FROM `c1_database` ORDER BY `id`;
+id	v
+1	[1,0,0]
+2	[0,1,0]
+3	[0,0,1]
+USE `seekdb_identifier_quoting`;
