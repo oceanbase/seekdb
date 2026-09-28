@@ -34,6 +34,7 @@ class SCN;
 namespace common
 {
 class ObTabletID;
+class ObMySQLProxy;
 }
 
 
@@ -91,7 +92,8 @@ public:
   static int process(const char* buf, const int64_t len, const share::SCN &scn,
                      mds::BufferCtx &ctx, bool for_replay);
   static int record_ddl_complete_arg_to_mds(const ObTabletDDLCompleteArg &complete_arg,
-                                            common::ObIAllocator &allocator);
+                                            common::ObIAllocator &allocator,
+                                            common::ObMySQLProxy &sql_proxy);
   static int process_ddl(mds::BufferCtx &ctx,
                          ObLS *tenant_ls,
                          const ObTabletID &tablet_id,

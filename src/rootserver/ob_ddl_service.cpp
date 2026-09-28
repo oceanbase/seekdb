@@ -21968,7 +21968,7 @@ int ObDDLService::drop_database(const ObDropDatabaseArg &arg,
           tmp_ret = OB_ERR_UNEXPECTED;
           LOG_WARN("tablet autoincrement admin is null", K(tmp_ret));
         } else if (OB_TMP_FAIL(admin->collect_database_cache_invalidation(
-                       *db_schema, tablet_autoinc_cache_ids))) {
+                       schema_guard, *db_schema, tablet_autoinc_cache_ids))) {
           LOG_WARN("failed to collect database autoincrement cache invalidation",
                    K(tmp_ret));
         }

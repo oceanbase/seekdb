@@ -535,16 +535,14 @@ int ObTabletAutoincrementService::collect_table_cache_invalidation(
 }
 
 int ObTabletAutoincrementService::collect_database_cache_invalidation(
+    ObSchemaGetterGuard &schema_guard,
     const schema::ObDatabaseSchema &database_schema,
     common::ObIArray<common::ObTabletID> &cache_tablet_ids)
 {
   int ret = OB_SUCCESS;
-  ObSchemaGetterGuard schema_guard;
   const uint64_t database_id = database_schema.get_database_id();
   ObArray<const ObSimpleTableSchemaV2 *> table_schemas;
-  ObMultiVersionSchemaService &schema_service = ObMultiVersionSchemaService::get_instance();
-  if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
-  } else if (OB_FAIL(schema_guard.get_table_schemas_in_database(
+  if (OB_FAIL(schema_guard.get_table_schemas_in_database(
                  database_id, table_schemas))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); i++) {

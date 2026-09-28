@@ -157,6 +157,7 @@ public:
       const schema::ObTableSchema &table_schema,
       common::ObIArray<common::ObTabletID> &cache_tablet_ids) override;
   int collect_database_cache_invalidation(
+      schema::ObSchemaGetterGuard &schema_guard,
       const schema::ObDatabaseSchema &database_schema,
       common::ObIArray<common::ObTabletID> &cache_tablet_ids) override;
   int invalidate_caches(

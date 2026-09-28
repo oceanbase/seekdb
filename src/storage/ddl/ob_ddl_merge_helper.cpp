@@ -97,7 +97,8 @@ int ObSNDDLMergeHelperV2::set_ddl_complete(ObIDag *dag, ObTablet &tablet, ObDDLT
   ObDDLTabletContext *tablet_context = ddl_merge_param.get_tablet_ctx();
   ObTabletID target_tablet_id;
   /* ddl kv has already been freeze in prepare task */
-  if (OB_ISNULL(dag) || !ddl_merge_param.is_valid() || OB_ISNULL(tablet_context)) {
+  if (OB_ISNULL(dag) || !ddl_merge_param.is_valid() || OB_ISNULL(tablet_context)
+      || OB_ISNULL(ddl_merge_param.ddl_task_param_.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid param", K(ret), KP(dag), K(ddl_merge_param), KP(tablet_context));
   } else if (OB_FAIL(tablet.get_ddl_kv_mgr(ddl_kv_mgr_handle, false /* not for repaly*/))) {
@@ -126,7 +127,8 @@ int ObSNDDLMergeHelperV2::set_ddl_complete(ObIDag *dag, ObTablet &tablet, ObDDLT
     const ObDDLWriteStat *write_stat = target_tablet_id == tablet_context->lob_meta_tablet_id_ ? &tablet_context->lob_write_stat_ : &tablet_context->write_stat_;
     if (OB_FAIL(complete_arg.set_write_stat(*write_stat))) {
     } else if (OB_FAIL(complete_arg.set_storage_schema(*storage_schema))) {
-    } else if (OB_FAIL(ObTabletDDLCompleteMdsHelper::record_ddl_complete_arg_to_mds(complete_arg, allocator))) {
+    } else if (OB_FAIL(ObTabletDDLCompleteMdsHelper::record_ddl_complete_arg_to_mds(
+                   complete_arg, allocator, *ddl_merge_param.ddl_task_param_.sql_proxy_))) {
     }
   }
   return ret;

@@ -284,14 +284,14 @@ int ObTabletDDLCompleteMdsHelper::on_register(const char* buf, const int64_t len
 
 int ObTabletDDLCompleteMdsHelper::record_ddl_complete_arg_to_mds(
   const ObTabletDDLCompleteArg &complete_arg,
-  common::ObIAllocator &allocator)
+  common::ObIAllocator &allocator,
+  ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
   char *buf = nullptr;
   int64_t buf_len = 0;
   int64_t pos = 0;
   
-  ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
   if (OB_UNLIKELY(!complete_arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg for completement arg", KR(ret), K(complete_arg));
@@ -300,13 +300,10 @@ int ObTabletDDLCompleteMdsHelper::record_ddl_complete_arg_to_mds(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate buf", KR(ret), K(buf_len));
   } else if (OB_FAIL(complete_arg.serialize(buf, buf_len, pos))) {
-  } else if (OB_ISNULL(sql_proxy)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected null sql proxy", KR(ret), KP(sql_proxy));
   } else {
     ObMySQLTransaction trans;
     common::sqlclient::ObISQLConnection *conn = nullptr;
-    if (OB_FAIL(trans.start(sql_proxy))) {
+    if (OB_FAIL(trans.start(&sql_proxy))) {
     } else if (OB_ISNULL(conn = trans.get_connection())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null connection", KR(ret), KP(conn));
