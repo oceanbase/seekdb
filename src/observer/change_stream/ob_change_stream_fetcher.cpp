@@ -56,6 +56,7 @@ ObCSFetcher::ObCSFetcher()
     current_lsn_(),
     current_scn_(),
     current_schema_version_(0),
+    tx_info_(),
     total_tx_committed_(0),
     running_mode_(IDLE),
     has_async_index_tables_(false),
@@ -281,9 +282,12 @@ int ObCSFetcher::get_min_dep_lsn(palf::LSN &min_lsn)
 
 // ---------------------------------------------------------------------------
 // get_refresh_scn: get GTS, then decide refresh_scn based on async-index state:
-//   1. !has_async: return GTS — no async vector index tables.
-//   2. has_async && tx_info_ not empty: return OB_SUCCESS with invalid refresh_scn — worker handles.
-//   3. has_async && current_lsn_.is_valid() && current_lsn_ >= max_lsn:
+//   1. !has_async: do not advance the watermark.  A future async-index table
+//      may become visible after a DML has already committed; advancing while
+//      idle could then make Dispatcher skip that first transaction.
+//   2. has_async && a committed tx is still in dispatcher: return OB_SUCCESS
+//      with invalid refresh_scn.
+//   3. has_async && current_lsn_.is_valid() && current_lsn_ >= end_lsn:
 //      return GTS — no pending logs to consume.
 //   4. otherwise (including invalid current_lsn_): return current_scn_ —
 //      still consuming logs / cannot prove caught-up.
@@ -304,33 +308,52 @@ int ObCSFetcher::get_refresh_scn(SCN &refresh_scn)
   }
 
   if (!has_async) {
-    // Case 1: no async vector index tables — advance to GTS.
-    refresh_scn = gts_scn;
+    // Case 1: no async vector index tables.  Keep the last processed
+    // watermark instead of publishing GTS.  FORK only waits for this
+    // watermark after it has found an async index, and keeping the watermark
+    // conservative closes the IDLE -> ACTIVE schema-detection race: a DML
+    // committed for a newly-created async index must still be dispatched even
+    // if Fetcher notices the new schema a little later.
     return ret;
   }
 
-  // Case 2: in-flight tx — worker will advance refresh_scn after draining; skip here.
-  if (!tx_info_.empty()) {
+  // Case 2: a transaction blocks only after Fetcher has consumed its commit
+  // log and handed it to Dispatcher.  A redo-only/open transaction cannot
+  // later commit below the GTS sampled above.  If its commit log is already
+  // readable but has not been consumed, current_lsn_ remains behind end_lsn
+  // and case 4 below prevents this round from publishing that GTS.
+  bool has_blocking_tx = false;
+  for (common::hash::ObHashMap<int64_t, ObCSTxInfo *>::const_iterator it = tx_info_.begin();
+       !has_blocking_tx && it != tx_info_.end(); ++it) {
+    const ObCSTxInfo *tx = it->second;
+    if (OB_NOT_NULL(tx) && tx->commit_version_ > 0) {
+      has_blocking_tx = true;
+    }
+  }
+  if (has_blocking_tx) {
     return OB_SUCCESS;
   }
 
-  // Fetch max_lsn to distinguish case 3 and case 4.
-  palf::LSN max_lsn;
+  // Fetch the committed and flushed end LSN used by the log iterator.  Do not
+  // use max_lsn here: it is the allocator tail and may include an uncommitted
+  // log from the DDL transaction that is waiting for this refresh watermark.
+  // Comparing the iterator position with that tail would make the DDL wait on
+  // its own commit.
+  palf::LSN end_lsn;
   {
     storage::ObLS *ls = nullptr;
     if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::storage::ObLSService>()->get_ls(ls))
-        || OB_FAIL(ls->get_log_handler()->get_max_lsn(max_lsn))) {
+        || OB_FAIL(ls->get_log_handler()->get_end_lsn(end_lsn))) {
       return ret;
     }
   }
 
-  if (current_lsn_.is_valid() && current_lsn_ >= max_lsn) {
-    // Case 3: caught up — no pending logs, advance to GTS.
-    SCN gts_scn;
-    if (OB_FAIL(OB_TS_MGR.get_gts(gts_scn))) {
-    } else {
-      refresh_scn = gts_scn;
-    }
+  if (current_lsn_.is_valid() && current_lsn_ >= end_lsn) {
+    // Case 3: caught up — no pending logs.  Publish the GTS sampled before
+    // end_lsn.  Sampling a newer GTS here would open a window in which a
+    // transaction can commit after end_lsn was read but still be covered by
+    // the published watermark before Fetcher consumes its commit log.
+    refresh_scn = gts_scn;
   } else {
     // Case 4: still consuming logs, or current_lsn_ is invalid (e.g. restart init phase).
     // In both cases, be conservative and only advance to current_scn_.

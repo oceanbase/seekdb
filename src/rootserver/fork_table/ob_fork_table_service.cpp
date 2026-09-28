@@ -263,6 +263,7 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
     ObDDLSQLTransaction trans(schema_service_);
     ObArenaAllocator allocator(lib::ObLabel("ForkTable"));
     bool is_db_in_recyclebin = false;
+    bool has_async_vec_index = false;
     ObSEArray<const ObTableSchema*, 1> src_table_schemas;
 
     if (OB_FAIL(get_runtime_schema_guard_with_version_in_inner_table(
@@ -289,6 +290,8 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
         ret = OB_TABLE_NOT_EXIST;
       } else if (OB_FAIL(check_fork_table_supported(
                      *src_table_schema, schema_guard, &fork_table_arg))) {
+      } else if (OB_FAIL(check_has_async_vector_index(*src_table_schema, schema_guard,
+                                                       has_async_vec_index))) {
       }
     }
 
@@ -320,6 +323,27 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
       }
     }
 
+    // Drain async-index work that predates this FORK before taking the source
+    // table lock.  Otherwise an immediately preceding DML can already be in
+    // ChangeStream while its index-table write still needs a lock related to
+    // the source table; taking SHARE first and then waiting creates a cycle.
+    // The second wait below is still required after locking to close the race
+    // between this pre-drain and lock acquisition.
+    if (OB_SUCC(ret) && has_async_vec_index) {
+      ObIRootserverLocalRuntime *local_runtime = rootserver_local_runtime();
+      const int64_t pre_drain_timeout_us = THIS_WORKER.is_timeout_ts_valid()
+          ? THIS_WORKER.get_timeout_remain()
+          : GCONF._ob_ddl_timeout;
+      if (OB_ISNULL(local_runtime)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(local_runtime->wait_until_change_stream_refreshed(
+                     get_sql_proxy(), pre_drain_timeout_us))) {
+      } else {
+        LOG_INFO("async index backlog drained before fork table lock",
+                 "table_id", src_table_schema->get_table_id());
+      }
+    }
+
     if (OB_SUCC(ret)) {
       if (OB_FAIL(trans.start(&get_sql_proxy(), 
                               refreshed_schema_version))) {
@@ -329,13 +353,14 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
       // For tables with async vector indexes, lock the source table to block DML
       // and wait for ChangeStream to catch up before obtaining the snapshot.
       // This ensures the fork snapshot covers both main table data and async index data.
-      if (OB_SUCC(ret)) {
-        bool has_async_vec_index = false;
-        if (OB_FAIL(check_has_async_vector_index(*src_table_schema, schema_guard,
-                                                 has_async_vec_index))) {
-        } else if (has_async_vec_index) {
+      if (OB_SUCC(ret) && has_async_vec_index) {
           common::sqlclient::ObISQLConnection *iconn = trans.get_connection();
-          const int64_t lock_timeout_us = GCONF.internal_sql_execute_timeout;
+          // Keep both the source-table lock and ChangeStream catch-up inside
+          // the caller's DDL deadline rather than truncating FORK to the
+          // shorter internal-SQL timeout.
+          const int64_t lock_timeout_us = THIS_WORKER.is_timeout_ts_valid()
+              ? THIS_WORKER.get_timeout_remain()
+              : GCONF._ob_ddl_timeout;
           if (OB_ISNULL(iconn)) {
             ret = OB_ERR_UNEXPECTED;
           } else if (OB_FAIL(transaction::tablelock::ObInnerConnectionLockUtil::lock_table(
@@ -349,7 +374,6 @@ int ObDDLService::fork_table(const obcall::ObForkTableArg &fork_table_arg,
             LOG_INFO("async index sync completed before fork snapshot",
                      "table_id", src_table_schema->get_table_id());
           }
-        }
       }
 
       if (OB_FAIL(ret)) {
