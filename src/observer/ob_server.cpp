@@ -167,7 +167,7 @@ public:
     if (OB_FAIL(server_.schema_status_proxy_.get_refresh_schema_status(schema_status))) {
       LOG_WARN("failed to get schema refresh status", KR(ret));
     } else if (OB_FAIL(server_.home_schema_service().get_schema_version_in_inner_table(
-        server_.sql_proxy_, schema_status, schema_version))) {
+        server_.home_sql_proxy(), schema_status, schema_version))) {
       LOG_WARN("failed to get latest schema version", KR(ret));
     } else if (OB_FAIL(server_.ob_service_.submit_async_refresh_schema_task(schema_version))) {
       LOG_WARN("failed to submit schema refresh", KR(ret), K(schema_version));
@@ -651,12 +651,18 @@ share::schema::ObMultiVersionSchemaService &ObServer::home_schema_service() cons
   return *service;
 }
 
+common::ObMySQLProxy &ObServer::home_sql_proxy() const
+{
+  auto *proxy = namespace_worker_prototype::namespace_sql_proxy(1);
+  OB_ASSERT(proxy != nullptr);
+  return *proxy;
+}
+
 ObServer::ObServer()
   : need_ctas_cleanup_(true),
     gctx_(GCTX),
     prepare_stop_(true), stop_(true), need_bootstrap_(false), has_stopped_(true), has_destroy_(false),
     net_frame_(gctx_),
-    sql_proxy_(),
     config_(ObServerConfig::get_instance()),
     reload_config_(config_, gctx_), config_mgr_(config_, reload_config_),
     timezone_mgr_(omt::ObTimezoneMgr::get_instance()),
@@ -686,7 +692,7 @@ ObServer::ObServer()
     sql_mem_task_(),
     ctas_clean_up_task_(),
     refresh_cpu_frequency_task_(),
-    schema_status_proxy_(sql_proxy_),
+    schema_status_proxy_(),
     is_log_dir_empty_(false),
     conn_res_mgr_(),
     disk_usage_report_task_(),
@@ -769,8 +775,6 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("log compressor init error.", KR(ret));
     } else if (OB_FAIL(OB_LOGGER.set_log_compressor(&OB_LOG_COMPRESSOR))) {
       LOG_ERROR("set log compressor error.", KR(ret));
-    } else if (OB_FAIL(init_tz_info_mgr())) {
-      LOG_ERROR("init tz_info_mgr failed", KR(ret));
     } else if (OB_FAIL(ObSqlTaskFactory::get_instance().init())) {
       LOG_ERROR("init sql task factory failed", KR(ret));
     }
@@ -797,6 +801,8 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init pre setting failed", KR(ret));
     } else if (OB_FAIL(init_global_context())) {
       LOG_ERROR("init global context failed", KR(ret));
+    } else if (OB_FAIL(init_tz_info_mgr())) {
+      LOG_ERROR("init tz_info_mgr failed", KR(ret));
     } else if (OB_FAIL(parse_role(opts))) {
       LOG_ERROR("parse role failed", KR(ret));
     } else if (OB_FAIL(init_sql_proxy())) {
@@ -823,7 +829,7 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
     }
     }
     if (OB_SUCC(ret)) {
-    if (OB_FAIL(schema_status_proxy_.init())) {
+    if (OB_FAIL(schema_status_proxy_.init(home_sql_proxy()))) {
       LOG_ERROR("fail to init schema status proxy", KR(ret));
     }
     }
@@ -1117,6 +1123,8 @@ void ObServer::destroy()
     ns::NamespaceRuntime *home = nullptr;
     if (ns::namespace_registry().get(1, home) && home != nullptr) {
       home->clear_service(ns::NamespaceRuntime::SCHEMA_SERVICE);
+      home->clear_service(ns::NamespaceRuntime::VECTOR_TASK_SQL_PROXY);
+      home->clear_service(ns::NamespaceRuntime::SQL_PROXY);
       home->clear_service(ns::NamespaceRuntime::VIRTUAL_TABLE_SCAN_SERVICE);
       home->clear_service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE);
       home->clear_service(ns::NamespaceRuntime::OPT_STAT_MANAGER);
@@ -1666,7 +1674,9 @@ int ObServer::stop()
     FLOG_INFO("ctas clean up timer stopped");
 
     FLOG_INFO("begin to stop inner sql proxy");
-    sql_proxy_.stop();
+    if (auto *proxy = namespace_worker_prototype::namespace_sql_proxy(1)) {
+      proxy->stop();
+    }
     ddl_sql_proxy_.stop();
     FLOG_INFO("inner sql proxy stopped");
 
@@ -1792,7 +1802,7 @@ int ObServer::init_tz_info_mgr()
 {
   int ret = OB_SUCCESS;
 
-  if (OB_FAIL(timezone_mgr_.init(sql_proxy_))) {
+  if (OB_FAIL(timezone_mgr_.init(home_sql_proxy()))) {
     LOG_ERROR("timezone_mgr_ init failed", K_(self_addr), KR(ret));
   }
   return ret;
@@ -2122,7 +2132,7 @@ int ObServer::init_pre_setting()
 int ObServer::init_sql_proxy()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(sql_proxy_.init(false /* is_ddl */))) {
+  if (OB_FAIL(home_sql_proxy().init(false /* is_ddl */))) {
     LOG_ERROR("init sql proxy failed", KR(ret));
   } else if (OB_FAIL(ddl_sql_proxy_.init(true /* is_ddl */))) {
     LOG_ERROR("init ddl sql proxy failed", KR(ret));
@@ -2338,7 +2348,7 @@ int ObServer::init_schema()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to allocate schema refresh scheduler", KR(ret));
   } else if (OB_FAIL(home_schema_service().init(
-      &sql_proxy_,
+      &home_sql_proxy(),
       &config_,
       schema_status_proxy_,
       gctx_.status_,
@@ -2363,7 +2373,7 @@ int ObServer::init_autoincrement_service()
           home->service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE)))) {
     ret = OB_NOT_INIT;
     LOG_ERROR("root namespace autoincrement service is unavailable", KR(ret));
-  } else if (OB_FAIL(service->init(&sql_proxy_))) {
+  } else if (OB_FAIL(service->init(&home_sql_proxy()))) {
     LOG_ERROR("init autoincrement_service_ fail", KR(ret));
   }
   return ret;
@@ -2379,7 +2389,7 @@ int ObServer::init_opt_stat_manager()
           home->service(ns::NamespaceRuntime::OPT_STAT_MANAGER)))) {
     ret = OB_NOT_INIT;
     LOG_ERROR("root namespace stat manager is unavailable", KR(ret));
-  } else if (OB_FAIL(manager->init(&sql_proxy_, &config_, 1))) {
+  } else if (OB_FAIL(manager->init(&home_sql_proxy(), &config_, 1))) {
     LOG_ERROR("init opt stat manager failed", KR(ret));
   }
   return ret;
@@ -2459,7 +2469,7 @@ int ObServer::init_ob_service(bool need_bootstrap)
     LOG_ERROR("allocate standby module failed", KR(ret));
   } else if (OB_FAIL(standby_module_->init(standby_config, *standby_host_))) {
     LOG_ERROR("init standby module failed", KR(ret));
-  } else if (OB_FAIL(ob_service_.init(sql_proxy_, home_schema_service()))) {
+  } else if (OB_FAIL(ob_service_.init(home_sql_proxy(), home_schema_service()))) {
     LOG_ERROR("oceanbase service init failed", KR(ret));
   } else {
     need_bootstrap_ = need_bootstrap;
@@ -2488,7 +2498,7 @@ int ObServer::init_local_management_service(const bool need_bootstrap)
     root_commands->set_ddl_sql_proxy(&ddl_sql_proxy_);
     if (OB_FAIL(root_commands->init(
                  config_, config_mgr_,
-                 self_addr_, sql_proxy_,
+                 self_addr_, home_sql_proxy(),
                  &home_schema_service(),
                  *static_cast<share::ObAutoincrementService *>(
                      home->service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE)),
@@ -2573,7 +2583,11 @@ int ObServer::init_global_context()
   gctx_.config_mgr_ = &config_mgr_;
   gctx_.tablet_operator_ = &tablet_operator_;
   gctx_.meta_db_pool_ = &meta_db_pool_;
-  if (OB_FAIL(sql_proxy_.set_target_namespace(1))) {
+  std::unique_ptr<common::ObMySQLProxy> sql_proxy(
+      new (std::nothrow) common::ObMySQLProxy());
+  if (sql_proxy == nullptr) {
+    return OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_FAIL(sql_proxy->set_target_namespace(1))) {
     return ret;
   } else if (OB_FAIL(ddl_sql_proxy_.set_target_namespace(1))) {
     return ret;
@@ -2594,8 +2608,10 @@ int ObServer::init_global_context()
   }
   home->set_owned_service<share::schema::ObMultiVersionSchemaService>(
       ns::NamespaceRuntime::SCHEMA_SERVICE, std::move(schema_service));
-  home->set_service(ns::NamespaceRuntime::SQL_PROXY, &sql_proxy_);
-  home->set_service(ns::NamespaceRuntime::VECTOR_TASK_SQL_PROXY, &sql_proxy_);
+  home->set_owned_service<common::ObMySQLProxy>(
+      ns::NamespaceRuntime::SQL_PROXY, std::move(sql_proxy));
+  home->set_service(ns::NamespaceRuntime::VECTOR_TASK_SQL_PROXY,
+      &home_sql_proxy());
   home->set_service(ns::NamespaceRuntime::DDL_CHECKSUM_ERROR_VERIFIER,
       &rootserver::native_ddl_checksum_error_verifier());
   std::unique_ptr<share::ObAutoincrementService> autoincrement(
@@ -2714,7 +2730,7 @@ int ObServer::init_storage()
     } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.init(
         storage_env_.default_block_size_))) {
       LOG_ERROR("init storage object mgr fail", KR(ret));
-    } else if (OB_FAIL(disk_usage_report_task_.init(sql_proxy_))) {
+    } else if (OB_FAIL(disk_usage_report_task_.init(home_sql_proxy()))) {
       LOG_WARN("fail to init disk usage report task", KR(ret));
     }
   }

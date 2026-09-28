@@ -335,7 +335,6 @@ public:
   sql::ObSQLSessionMgr &get_sql_session_mgr() { return session_mgr_; }
   sql::ObSql &get_sql_engine() { return sql_engine_; }
   ObService &get_ob_service() { return ob_service_; }
-  common::ObMySQLProxy &get_mysql_proxy() { return sql_proxy_; }
   int64_t get_start_time() const { return start_time_; }
   sql::ObConnectResourceMgr& get_conn_res_mgr() { return conn_res_mgr_; }
 private:
@@ -373,6 +372,7 @@ private:
   int init_pl();
   int init_global_context();
   share::schema::ObMultiVersionSchemaService &home_schema_service() const;
+  common::ObMySQLProxy &home_sql_proxy() const;
   int parse_role(const ObServerOptions &opts);
   int init_px_target_mgr();
   int init_storage();
@@ -426,7 +426,6 @@ private:
   ObSrvNetworkFrame net_frame_;
 
 
-  common::ObMySQLProxy sql_proxy_;
   common::ObMySQLProxy ddl_sql_proxy_;
 
   // The OceanBase configuration relating to.
@@ -521,7 +520,6 @@ public:
   storage::ObLSService * ls_service() { return mods_ls_service_; }
   storage::ObILSRuntimeAdapter * ls_runtime_adapter() { return &ls_runtime_adapter_; }
   storage::ObLocalStorageMetaService * local_storage_meta_service() { return mods_local_storage_meta_service_; }
-  common::ObMySQLProxy * sql_proxy() { return &sql_proxy_; }
   tmp_file::ObTmpFileManager * tmp_file_manager() { return mods_tmp_file_manager_; }
   compaction::ObCompactionProgressMgr * compaction_progress_mgr() { return mods_compaction_progress_mgr_; }
   compaction::ObServerCompactionEventHistory * server_compaction_event_history() { return mods_server_compaction_event_history_; }

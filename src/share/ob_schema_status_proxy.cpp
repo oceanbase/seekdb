@@ -59,7 +59,7 @@ void update_schema_status(const ObRefreshSchemaStatus &new_status,
 }
 } // namespace
 
-int ObSchemaStatusProxy::init()
+int ObSchemaStatusProxy::init(common::ObISQLClient &sql_proxy)
 {
   int ret = OB_SUCCESS;
   ObRefreshSchemaStatus schema_status;
@@ -68,6 +68,7 @@ int ObSchemaStatusProxy::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else {
+    sql_proxy_ = &sql_proxy;
     common::SpinWLockGuard guard(schema_status_cache_lock_);
     schema_status_cache_ = schema_status;
     is_inited_ = true;
@@ -78,7 +79,7 @@ int ObSchemaStatusProxy::init()
 int ObSchemaStatusProxy::check_inner_stat()
 {
   int ret = OB_SUCCESS;
-  if (!is_inited_) {
+  if (!is_inited_ || sql_proxy_ == nullptr) {
     ret = OB_NOT_INIT;
   }
   return ret;
@@ -117,7 +118,7 @@ int ObSchemaStatusProxy::load_refresh_schema_status()
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat())) {
   } else {
-    ObCoreTableProxy core_table(OB_ALL_SCHEMA_STATUS_TNAME, sql_proxy_);
+    ObCoreTableProxy core_table(OB_ALL_SCHEMA_STATUS_TNAME, *sql_proxy_);
     if (OB_FAIL(core_table.load())) {
     } else {
       uint64_t row_id = OB_INVALID_ID;
@@ -166,7 +167,7 @@ int ObSchemaStatusProxy::set_runtime_schema_status(
                          && 0 != refresh_schema_status.snapshot_timestamp_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("snapshot timestamp must invalid or zero", KR(ret), K(refresh_schema_status));
-  } else if (OB_FAIL(trans.start(&sql_proxy_))) {
+  } else if (OB_FAIL(trans.start(sql_proxy_))) {
   } else {
     ObCoreTableProxy kv(OB_ALL_SCHEMA_STATUS_TNAME, trans);
     if (OB_FAIL(dml.add_pk_column(ROW_ID_CNAME, static_cast<uint64_t>(1)))

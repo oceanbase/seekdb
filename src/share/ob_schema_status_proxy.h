@@ -51,14 +51,14 @@ public:
   static const char *READABLE_SCHEMA_VERSION_CNAME;
   static const char *CREATED_SCHEMA_VERSION_CNAME;
 public:
-  ObSchemaStatusProxy(common::ObISQLClient &sql_proxy)
-    : sql_proxy_(sql_proxy),
+  ObSchemaStatusProxy()
+    : sql_proxy_(nullptr),
       schema_status_cache_(),
       schema_status_cache_lock_(),
       is_inited_(false) {}
   virtual ~ObSchemaStatusProxy() {}
 
-  int init();
+  int init(common::ObISQLClient &sql_proxy);
 
 
   int get_refresh_schema_status(
@@ -76,7 +76,7 @@ public:
 private:
   int check_inner_stat();
 private:
-  common::ObISQLClient &sql_proxy_;
+  common::ObISQLClient *sql_proxy_;
   share::schema::ObRefreshSchemaStatus schema_status_cache_;
   mutable common::SpinRWLock schema_status_cache_lock_;
   bool is_inited_;

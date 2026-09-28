@@ -1368,7 +1368,6 @@ int ObServer::obs_construct_modules()
     BIND_SERVICE(compaction_progress_mgr, compaction::ObCompactionProgressMgr);
     BIND_SERVICE(timestamp_service, transaction::ObTimestampService);
     BIND_SERVICE(tablet_autoincrement_admin, share::ObITabletAutoincrementAdmin);
-    BIND_SERVICE(sql_proxy, common::ObMySQLProxy);
     BIND_SERVICE(trans_id_service, transaction::ObTransIDService);
     BIND_SERVICE(tablet_runtime_meta_updater, observer::ObTabletRuntimeMetaUpdater);
     BIND_SERVICE(sstable_merge_info_mgr, storage::ObSSTableMergeInfoMgr);
@@ -1589,7 +1588,7 @@ int ObServer::obs_init_modules()
     SERVER_LOG(WARN, "mods_resource_limit_calculator_ fail", KR(ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(pl_engine_.init(
-      sql_proxy_, *this, *mods_resource_limit_calculator_))) {
+      *root_sql_proxy, *this, *mods_resource_limit_calculator_))) {
     SERVER_LOG(WARN, "pl_engine_ init failed", KR(ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(ObGlobalIteratorPool::server_module_init(mods_global_iterator_pool_))) { SERVER_LOG(WARN, "mods_global_iterator_pool_ fail", KR(ret)); }

@@ -118,6 +118,7 @@ int ObDDLCtrlSpeedItem::cal_limit(const int64_t bytes, int64_t &next_available_t
 int ObDDLCtrlSpeedItem::do_sleep(
   const int64_t next_available_ts,
   const int64_t task_id,
+  common::ObISQLClient &task_sql_client,
   ObDDLNeedStopWriteChecker &checker,
   int64_t &real_sleep_us)
 {
@@ -144,11 +145,8 @@ int ObDDLCtrlSpeedItem::do_sleep(
         uint64_t unused_data_format_version = 0;
         int64_t unused_snapshot_version = 0;
         share::ObDDLTaskStatus task_status = share::ObDDLTaskStatus::PREPARE;
-        if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::common::ObMySQLProxy>())) {
-          tmp_ret = OB_NOT_INIT;
-          LOG_WARN("sql proxy is not initialized", K(tmp_ret), K(task_id));
-        } else if (OB_TMP_FAIL(ObDDLUtil::get_data_information(
-                       *::oceanbase::share::server_service<::oceanbase::common::ObMySQLProxy>(), task_id, unused_data_format_version,
+        if (OB_TMP_FAIL(ObDDLUtil::get_data_information(
+                       task_sql_client, task_id, unused_data_format_version,
                        unused_snapshot_version, task_status))) {
           if (OB_ITER_END == tmp_ret) {
             is_need_stop_write = false;
@@ -204,6 +202,7 @@ int ObDDLCtrlSpeedItem::check_need_stop_write(ObDDLNeedStopWriteChecker &checker
 int ObDDLCtrlSpeedItem::limit_and_sleep(
   const int64_t bytes,
   const int64_t task_id,
+  common::ObISQLClient &task_sql_client,
   ObDDLNeedStopWriteChecker &checker,
   int64_t &real_sleep_us)
 {
@@ -226,7 +225,8 @@ int ObDDLCtrlSpeedItem::limit_and_sleep(
                                                                    ObTimeUtility::current_time(),
                                                                    INT64_MAX,
                                                                    &transmit_sleep_us))) {
-  } else if (OB_FAIL(do_sleep(next_available_ts, task_id, checker, real_sleep_us))) {
+  } else if (OB_FAIL(do_sleep(next_available_ts, task_id, task_sql_client,
+                              checker, real_sleep_us))) {
   } else {/* do nothing. */}
   return ret;
 }
@@ -262,6 +262,7 @@ int ObDDLCtrlSpeedHandle::init(common::ObTimer &timer)
 
 int ObDDLCtrlSpeedHandle::limit_and_sleep(const int64_t bytes,
                                           const int64_t task_id,
+                                          common::ObISQLClient &task_sql_client,
                                           ObDDLNeedStopWriteChecker &checker,
                                           int64_t &real_sleep_us)
 {
@@ -281,7 +282,8 @@ int ObDDLCtrlSpeedHandle::limit_and_sleep(const int64_t bytes,
     }
   }
   if (OB_SUCC(ret)) {
-    ret = speed_handle_item_.limit_and_sleep(bytes, task_id, checker, real_sleep_us);
+    ret = speed_handle_item_.limit_and_sleep(bytes, task_id,
+                                            task_sql_client, checker, real_sleep_us);
     if (OB_FAIL(ret)) {
     }
   }
@@ -410,7 +412,8 @@ int ObDDLRedoLogWriter::local_write_ddl_macro_redo(
                                                              ObDDLUtil::use_idempotent_mode()))) {
   } else {
     ObDDLFullNeedStopWriteChecker checker(ddl_kv_mgr_handle);
-    if (OB_TMP_FAIL(ObDDLCtrlSpeedHandle::get_instance().limit_and_sleep(buffer_size, task_id, checker, real_sleep_us))) {
+    if (OB_TMP_FAIL(ObDDLCtrlSpeedHandle::get_instance().limit_and_sleep(
+            buffer_size, task_id, *task_sql_client_, checker, real_sleep_us))) {
     }
   }
   if (OB_FAIL(ret)) {
@@ -599,12 +602,14 @@ int ObDDLRedoLogHandle::wait(const int64_t timeout)
 }
 
 ObDDLRedoLogWriter::ObDDLRedoLogWriter()
-  : is_inited_(false), tablet_id_(), ddl_redo_handle_array_(), buffer_(nullptr)
+  : is_inited_(false), tablet_id_(), task_sql_client_(nullptr),
+    ddl_redo_handle_array_(), buffer_(nullptr)
 {
   ddl_redo_handle_array_.set_attr(lib::ObMemAttr("DdlWriteHdl"));
 }
 
-int ObDDLRedoLogWriter::init(const ObTabletID &tablet_id)
+int ObDDLRedoLogWriter::init(const ObTabletID &tablet_id,
+                             common::ObISQLClient &task_sql_client)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -615,6 +620,7 @@ int ObDDLRedoLogWriter::init(const ObTabletID &tablet_id)
     LOG_WARN("invalid arguments", K(ret), K(tablet_id));
   } else {
     tablet_id_ = tablet_id;
+    task_sql_client_ = &task_sql_client;
     is_inited_ = true;
   }
   return ret;
@@ -624,6 +630,7 @@ void ObDDLRedoLogWriter::reset()
 {
   is_inited_ = false;
   tablet_id_.reset();
+  task_sql_client_ = nullptr;
   ddl_redo_handle_array_.reuse();
 }
 
@@ -699,7 +706,8 @@ ObDDLRedoLogWriterCallbackInitParam::ObDDLRedoLogWriterCallbackInitParam()
     need_submit_io_(true),
     merge_slice_idx_(0),
     macro_meta_store_(nullptr),
-    write_stat_(nullptr)
+    write_stat_(nullptr),
+    task_sql_client_(nullptr)
 {
 }
 
@@ -714,6 +722,7 @@ bool ObDDLRedoLogWriterCallbackInitParam::is_valid() const
           && (DDL_MB_INVALID_TYPE != block_type_)
           && (0 != task_id_)
           && (data_format_version_ >= 0)
+          && (task_sql_client_ != nullptr)
           && is_full_direct_load(direct_load_type_);
 }
 
@@ -731,6 +740,7 @@ void ObDDLRedoLogWriterCallbackInitParam::reset()
   merge_slice_idx_ = 0;
   macro_meta_store_ = nullptr;
   write_stat_ = nullptr;
+  task_sql_client_ = nullptr;
 }
 
 ObDDLRedoLogWriterCallback::ObDDLRedoLogWriterCallback()
@@ -755,7 +765,8 @@ int ObDDLRedoLogWriterCallback::init(ObDDLRedoLogWriterCallbackInitParam &init_p
   } else if (OB_UNLIKELY(!init_param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid init param", KR(ret), K(init_param));
-  } else if (OB_FAIL(ddl_writer_.init(init_param.tablet_id_))) {
+  } else if (OB_FAIL(ddl_writer_.init(init_param.tablet_id_,
+                                      *init_param.task_sql_client_))) {
   } else {
     // init kv mgr handle for idempotence check
     ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();

@@ -26,6 +26,10 @@
 
 namespace oceanbase
 {
+namespace common
+{
+class ObISQLClient;
+}
 
 namespace compaction
 {
@@ -79,6 +83,7 @@ public:
   int refresh();
   int limit_and_sleep(const int64_t bytes,
                       const int64_t task_id,
+                      common::ObISQLClient &task_sql_client,
                       ObDDLNeedStopWriteChecker &checker,
                       int64_t &real_sleep_us);
   int check_need_stop_write(ObDDLNeedStopWriteChecker &checker,
@@ -94,6 +99,7 @@ private:
   int cal_limit(const int64_t bytes, int64_t &next_available_ts);
   int do_sleep(const int64_t next_available_ts,
                const int64_t task_id,
+               common::ObISQLClient &task_sql_client,
                ObDDLNeedStopWriteChecker &checker,
                int64_t &real_sleep_us);
 private:
@@ -115,6 +121,7 @@ public:
   static ObDDLCtrlSpeedHandle &get_instance();
   int limit_and_sleep(const int64_t bytes,
                       const int64_t task_id,
+                      common::ObISQLClient &task_sql_client,
                       ObDDLNeedStopWriteChecker &checker,
                       int64_t &real_sleep_us);
 private:
@@ -191,7 +198,7 @@ class ObDDLRedoLogWriter final
 public:
   ObDDLRedoLogWriter();
   ~ObDDLRedoLogWriter();
-  int init(const ObTabletID &tablet_id);
+  int init(const ObTabletID &tablet_id, common::ObISQLClient &task_sql_client);
   void reset();
   int write_macro_block_log(
       const storage::ObDDLMacroBlockRedoInfo &redo_info,
@@ -216,6 +223,7 @@ private:
 private:
   bool is_inited_;
   ObTabletID tablet_id_;
+  common::ObISQLClient *task_sql_client_;
   ObSEArray<ObDDLRedoLogHandle, 1> ddl_redo_handle_array_;
   char *buffer_;
 };
@@ -229,7 +237,7 @@ struct ObDDLRedoLogWriterCallbackInitParam
   TO_STRING_KV(K_(tablet_id), K_(direct_load_type), K_(block_type),
                K_(table_key), K_(start_scn), K_(task_id), K_(data_format_version),
                K_(need_delay), K_(need_submit_io), K_(merge_slice_idx),
-               KP_(macro_meta_store), KP_(write_stat));
+               KP_(macro_meta_store), KP_(write_stat), KP_(task_sql_client));
   common::ObTabletID tablet_id_;
   storage::ObDirectLoadType direct_load_type_;
   storage::ObDDLMacroBlockType block_type_;
@@ -242,6 +250,7 @@ struct ObDDLRedoLogWriterCallbackInitParam
   int64_t merge_slice_idx_;
   blocksstable::ObMacroMetaTempStore *macro_meta_store_;
   ObDDLWriteStat *write_stat_;
+  common::ObISQLClient *task_sql_client_;
 };
 // write macro redo for data block, need to set lsn on ObDDLRedoLogWriter when commit.
 class ObDDLRedoLogWriterCallback : public blocksstable::ObIMacroBlockFlushCallback

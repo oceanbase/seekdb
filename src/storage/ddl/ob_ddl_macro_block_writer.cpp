@@ -124,6 +124,7 @@ int ObDDLMacroBlockWriter::init(
       init_param.need_submit_io_ = need_submit_io;
       init_param.macro_meta_store_ = macro_meta_store;
       init_param.write_stat_ = ddl_write_stat;
+      init_param.task_sql_client_ = param.sql_proxy_;
       if (OB_FAIL(ddl_redo_callback->init(init_param))) {
       }
     }
