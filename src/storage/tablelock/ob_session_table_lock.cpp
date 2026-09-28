@@ -57,6 +57,17 @@ ObTableLockTaskType task_type_for_scope(ObSessionLockScope scope)
   return task_type;
 }
 
+ObTableLockTaskType task_type_for_unlock_request(const ObLockRequest &request)
+{
+  ObTableLockTaskType task_type = INVALID_LOCK_TASK_TYPE;
+  if (ObLockRequest::ObLockMsgType::UNLOCK_OBJ_REQ == request.type_) {
+    task_type = LOCK_OBJECT;
+  } else if (ObLockRequest::ObLockMsgType::UNLOCK_TABLE_REQ == request.type_) {
+    task_type = LOCK_TABLE;
+  }
+  return task_type;
+}
+
 int unlock_request(ObTxDesc &tx,
                    const ObTxParam &tx_param,
                    const ObLockRequest &request)
@@ -249,14 +260,20 @@ int release_persisted_locks(share::ObILockMetadataSession &session_io,
       removed = 0;
       if (OB_ISNULL(request)) {
         ret = common::OB_ERR_UNEXPECTED;
+      } else if (INVALID_LOCK_TASK_TYPE == task_type_for_unlock_request(*request)) {
+        ret = common::OB_NOT_SUPPORTED;
       } else if (OB_FAIL(
                      transaction::tablelock::ObTableLockDetector::
                          remove_detect_info_from_inner_table(
-                             session_io, task_type_for_scope(scope), *request,
+                             session_io, task_type_for_unlock_request(*request), *request,
                              removed))) {
-      } else if (OB_FAIL(unlock_request(tx, tx_param, *request))) {
       } else {
-        release_count += removed;
+        const int unlock_ret = unlock_request(tx, tx_param, *request);
+        if (unlock_ret == OB_SUCCESS || unlock_ret == OB_OBJ_LOCK_NOT_EXIST) {
+          release_count += removed;
+        } else {
+          ret = unlock_ret;
+        }
       }
     }
   }

@@ -21,6 +21,7 @@
 #include "query/tablelock/ob_table_lock_runtime.h"
 #include "data_plane/transaction/ob_deadlock.h"
 #include "share/ob_dml_sql_splicer.h"
+#include "share/rc/ob_server_runtime.h"
 
 #include "common/mysqlclient/ob_mysql_proxy.h"
 #include "common/mysqlclient/ob_mysql_result.h"
@@ -449,6 +450,7 @@ int ObUnLockExecutor::execute(
   int64_t release_cnt = 0;
   auto *schema_service = static_cast<share::schema::ObMultiVersionSchemaService *>(
       runtime.service(ns::NamespaceRuntime::SCHEMA_SERVICE));
+  auto *session_mgr = share::server_service<sql::ObSQLSessionMgr>();
   const data_plane::ObPersistedLockOwner owner(owner_type, owner_id);
   ObArenaAllocator allocator(ObModIds::OB_SQL_EXPR);
   SMART_VAR(sql::ObSQLSessionInfo, session) {
@@ -460,8 +462,10 @@ int ObUnLockExecutor::execute(
       LinkExecCtxGuard link_guard(session, exec_ctx);
       sql::ObPhysicalPlanCtx phy_plan_ctx(allocator);
       OV (OB_NOT_NULL(schema_service), OB_NOT_INIT);
+      OV (OB_NOT_NULL(session_mgr), OB_NOT_INIT);
       OZ (session.init(0 /*default session id*/, &allocator));
       OX (session.set_ns_runtime(&runtime));
+      OX (session.set_session_manager(session_mgr));
       OX (session.set_inner_session());
       OZ (schema_service->get_runtime_schema_guard(guard));
       OZ (guard.get_server_runtime_info(runtime_schema));

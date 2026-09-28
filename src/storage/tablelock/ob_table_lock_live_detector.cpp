@@ -70,7 +70,9 @@ int ObTableLockDetectFuncList::do_session_alive_detect(common::ObISQLClient &sql
       } else if (!session_alive) {
         LOG_INFO(
           "find session is not alive, we will clean all recodrs of it later", K(ret), K(session_id), K(owner_id));
-        ObTableLockDetector::remove_lock_by_owner_id(owner_id);
+        if (OB_FAIL(ObTableLockDetector::remove_lock_by_owner_id(owner_id))) {
+          LOG_WARN("failed to remove locks held by dead session", KR(ret), K(owner_id));
+        }
       }
     }
   }
@@ -224,7 +226,10 @@ int ObTableLockDetector::do_detect_and_clear(common::ObISQLClient &sql_client)
   int ret = OB_SUCCESS;
   if (OB_FAIL(func1.call_function_directly(sql_client))) {
   }
-  remove_expired_lock_id(sql_client);
+  const int expire_ret = remove_expired_lock_id(sql_client);
+  if (ret == OB_SUCCESS) {
+    ret = expire_ret;
+  }
 
   return ret;
 }
