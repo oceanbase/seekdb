@@ -104,10 +104,13 @@ public:
   int finish_schema_recovery(uint64_t id, int64_t schema_version);
 
   // Stage a complete native-schema delta and its directory version together.
+  // A stale base returns OB_EAGAIN; the caller must reread the directory
+  // version and rebuild both schema views before retrying.
   // A local tablet in removed_owned must be dropped only after this KV commit.
   // Roll back the caller's transaction on error. The physical probe must not
   // reenter this transaction.
-  int stage_schema_delta(uint64_t id, int64_t schema_version,
+  int stage_schema_delta(uint64_t id, int64_t base_schema_version,
+      int64_t schema_version,
       const std::map<uint64_t, uint64_t> &previous_tablets,
       const std::map<uint64_t, uint64_t> &current_tablets,
       const PhysicalTabletProbe &probe,

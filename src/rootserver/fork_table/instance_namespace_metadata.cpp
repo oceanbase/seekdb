@@ -965,19 +965,22 @@ int InstanceNamespaceMetadata::finish_schema_recovery(uint64_t id,
 }
 
 int InstanceNamespaceMetadata::stage_schema_delta(uint64_t id,
-    int64_t schema_version,
+    int64_t base_schema_version, int64_t schema_version,
     const std::map<uint64_t, uint64_t> &previous_tablets,
     const std::map<uint64_t, uint64_t> &current_tablets,
     const PhysicalTabletProbe &probe,
     std::vector<uint64_t> &removed_owned)
 {
   removed_owned.clear();
-  if (schema_version <= 0 || !probe) { return OB_INVALID_ARGUMENT; }
+  if (base_schema_version <= 0 || schema_version < base_schema_version || !probe) {
+    return OB_INVALID_ARGUMENT;
+  }
   InstanceNamespaceRecord record;
   int ret = get_namespace(id, record, true);
-  if (ret == OB_SUCCESS && (record.roots.state != 0
-      || schema_version < record.roots.schema_version)) {
+  if (ret == OB_SUCCESS && record.roots.state != 0) {
     ret = OB_STATE_NOT_MATCH;
+  } else if (ret == OB_SUCCESS && record.roots.schema_version != base_schema_version) {
+    ret = OB_EAGAIN;
   }
   const auto actions = ns::NamespaceExceptionDelta::plan(
       previous_tablets, current_tablets);

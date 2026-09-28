@@ -1726,6 +1726,7 @@ int collect_directory_tablets(
 int replace_namespace_exceptions(
     ObISQLClient &trans,
     uint64_t namespace_id,
+    int64_t base_schema_version,
     int64_t schema_version,
     const ObIArray<const ObTableSchema *> &current_schemas,
     const ObIArray<const ObTableSchema *> &previous_schemas,
@@ -1747,6 +1748,9 @@ int replace_namespace_exceptions(
   if (OB_SUCC(ret)) {
     // The row lock serializes this delta against forks and materializations.
     ret = roots(trans, namespace_id, root, true);
+  }
+  if (OB_SUCC(ret) && root.schema_version != base_schema_version) {
+    ret = OB_EAGAIN;
   }
   if (OB_SUCC(ret)) {
     ret = load_exceptions(trans, namespace_id);
@@ -1817,11 +1821,13 @@ int replace_namespace_exceptions(
 
 int NamespaceForkKernelPrototype::publish_schema_delta(
     uint64_t namespace_id,
+    int64_t base_schema_version,
     int64_t schema_version,
     const ObIArray<const ObTableSchema *> &current_schemas,
     const ObIArray<const ObTableSchema *> &previous_schemas) {
   if (namespace_id <= 1 || namespace_id >= NamespaceObjectKey::NAMESPACE_LIMIT
-      || schema_version <= 0 || directory_sql_proxy() == nullptr) {
+      || base_schema_version <= 0 || schema_version < base_schema_version
+      || directory_sql_proxy() == nullptr) {
     return OB_INVALID_ARGUMENT;
   }
   int ret = OB_SUCCESS;
@@ -1857,7 +1863,7 @@ int NamespaceForkKernelPrototype::publish_schema_delta(
     if (OB_SUCC(ret)) { ret = trans.start(directory_sql_proxy()); }
     if (OB_SUCC(ret)) {
       ret = replace_namespace_exceptions(
-          trans, namespace_id, schema_version,
+          trans, namespace_id, base_schema_version, schema_version,
           current_schemas, previous_schemas, private_tablets);
     }
     if (OB_SUCC(ret)) {

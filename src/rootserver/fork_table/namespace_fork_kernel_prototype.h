@@ -65,6 +65,7 @@ public:
   static int finish_schema_recovery(uint64_t namespace_id, int64_t schema_version);
   static int publish_schema_delta(
       uint64_t namespace_id,
+      int64_t base_schema_version,
       int64_t schema_version,
       const common::ObIArray<const share::schema::ObTableSchema *> &current_schemas,
       const common::ObIArray<const share::schema::ObTableSchema *> &previous_schemas);

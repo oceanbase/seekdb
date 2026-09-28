@@ -2,8 +2,8 @@
 #include "share/schema/ob_multi_version_schema_service.h"
 #include <set>
 namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
-int sync_namespace_schema_delta(uint64_t ns, ObMultiVersionSchemaService &service,
-                                int64_t &published_schema_version) {
+int sync_namespace_schema_delta_once(uint64_t ns, ObMultiVersionSchemaService &service,
+                                     int64_t &published_schema_version) {
   using namespace share::schema;
   int64_t base_schema_version = common::OB_INVALID_VERSION;
   published_schema_version = common::OB_INVALID_VERSION;
@@ -70,9 +70,17 @@ int sync_namespace_schema_delta(uint64_t ns, ObMultiVersionSchemaService &servic
     ret = common::OB_INVALID_ARGUMENT;
   } else if (OB_SUCC(ret)) {
     ret = storage::NamespaceForkKernelPrototype::publish_schema_delta(
-        ns, latest_schema_version, upserts, previous_schemas);
+        ns, base_schema_version, latest_schema_version, upserts, previous_schemas);
   }
   if (OB_SUCC(ret)) { published_schema_version = latest_schema_version; }
+  return ret;
+}
+int sync_namespace_schema_delta(uint64_t ns, ObMultiVersionSchemaService &service,
+                                int64_t &published_schema_version) {
+  int ret = common::OB_EAGAIN;
+  for (int attempt = 0; ret == common::OB_EAGAIN && attempt < 16; ++attempt) {
+    ret = sync_namespace_schema_delta_once(ns, service, published_schema_version);
+  }
   return ret;
 }
 } } }
