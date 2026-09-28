@@ -574,7 +574,7 @@ int ObDDLRedefinitionTask::send_local_build_request()
         }
       }
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(local_builder_.build(param))) {
+        if (OB_FAIL(local_builder_.build(param, context_))) {
           LOG_WARN("fail to send build local build", K(ret));
         } else {
           TCWLockGuard guard(lock_);

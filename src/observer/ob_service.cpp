@@ -871,7 +871,16 @@ int ObService::clear_expired_deadlock_events()
 
 int ObService::load_all_special_system_packages()
 {
-  return pl::ObPLPackageManager::load_all_special_sys_package(*gctx_.sql_proxy_);
+  ns::NamespaceRuntime *runtime = nullptr;
+  if (!ns::namespace_registry().get(1, runtime) || runtime == nullptr) {
+    return OB_NOT_INIT;
+  }
+  auto *sql_proxy = static_cast<common::ObMySQLProxy *>(
+      runtime->service(ns::NamespaceRuntime::SQL_PROXY));
+  auto *schema_service = static_cast<share::schema::ObMultiVersionSchemaService *>(
+      runtime->service(ns::NamespaceRuntime::SCHEMA_SERVICE));
+  return sql_proxy == nullptr || schema_service == nullptr ? OB_NOT_INIT
+      : pl::ObPLPackageManager::load_all_special_sys_package(*sql_proxy, *schema_service);
 }
 
 int ObService::refresh_stat_cache(uint64_t namespace_id,

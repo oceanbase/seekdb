@@ -1265,12 +1265,9 @@ int ObDDLUtil::get_temp_store_compress_type(const ObCompressorType schema_compr_
   return ret;
 }
 
-int ObDDLUtil::check_table_compaction_checksum_error(ObMultiVersionSchemaService &schema_service,
-                                                     common::ObISQLClient &sql_client,
-                                                     ObSQLiteConnectionPool &meta_db_pool,
+int ObDDLUtil::check_table_compaction_checksum_error(common::ObISQLClient &sql_client,
                                                      const uint64_t table_id)
 {
-  UNUSEDx(schema_service, meta_db_pool);
   int ret = OB_SUCCESS;
   if (OB_INVALID_ID == table_id) {
     ret = OB_INVALID_ARGUMENT;

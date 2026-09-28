@@ -22,6 +22,7 @@
 #include "common/ob_tablet_id.h"
 #include "share/ob_ddl_common.h"
 #include "share/ob_rpc_struct.h"
+#include "rootserver/ddl_task/ob_ddl_task.h"
 
 namespace oceanbase
 {
@@ -155,12 +156,14 @@ public:
       parallelism_(0),
       execution_id_(0),
       data_format_version_(0),
+      context_(),
       lob_col_idxs_(),
       build_ctxs_(),
       lock_()
   {}
   ~ObDDLLocalBuildExecutor() = default;
-  int build(const ObDDLLocalBuildExecutorParam &param);
+  int build(const ObDDLLocalBuildExecutorParam &param,
+            const ObDDLTaskContext &context);
   int check_build_end(const bool need_checksum, bool &is_end, int64_t &ret_code);
   int update_build_progress(const ObTabletID &tablet_id,
                             const int ret_code,
@@ -202,6 +205,7 @@ private:
   int64_t parallelism_;
   int64_t execution_id_;
   int64_t data_format_version_;
+  ObDDLTaskContext context_;
   ObSArray<uint64_t> lob_col_idxs_;
   ObArray<ObDDLBuildCtx> build_ctxs_; // NOTE hold lock before access
   ObSpinLock lock_; // NOTE keep local service calls out of lock scope

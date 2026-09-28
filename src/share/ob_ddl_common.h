@@ -652,9 +652,7 @@ public:
   static int check_schema_version_refreshed(schema::ObMultiVersionSchemaService &schema_service,
                                             const int64_t target_schema_version);
   static bool reach_time_interval(const int64_t i, volatile int64_t &last_time);
-  static int check_table_compaction_checksum_error(schema::ObMultiVersionSchemaService &schema_service,
-                                                   common::ObISQLClient &sql_client,
-                                                   ObSQLiteConnectionPool &meta_db_pool,
+  static int check_table_compaction_checksum_error(common::ObISQLClient &sql_client,
                                                    const uint64_t table_id);
   static int get_temp_store_compress_type(const ObCompressorType schema_compr_type,
                                           const int64_t parallel,

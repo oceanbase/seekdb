@@ -99,12 +99,16 @@ int ObDDLBuildCtx::check_need_schedule(bool &need_schedule) const
   return ret;
 }
 
-int ObDDLLocalBuildExecutor::build(const ObDDLLocalBuildExecutorParam &param)
+int ObDDLLocalBuildExecutor::build(const ObDDLLocalBuildExecutorParam &param,
+                                   const ObDDLTaskContext &context)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(param));
+  } else if (!context.is_complete()) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("DDL local build context is incomplete", KR(ret), K(context.namespace_id_));
   } else if (OB_FAIL(DDL_SIM(param.task_id_, LOCAL_BUILD_EXECUTOR_BUILD_FAILED))) {
   } else {
     ObSpinLockGuard guard(lock_);
@@ -115,6 +119,7 @@ int ObDDLLocalBuildExecutor::build(const ObDDLLocalBuildExecutorParam &param)
     parallelism_ = param.parallelism_;
     execution_id_ = param.execution_id_;
     data_format_version_ = param.data_format_version_;
+    context_ = context;
     ObArray<ObDDLBuildCtx> build_ctxs;
     if (OB_FAIL(construct_build_ctxs(param, build_ctxs))) {
     } else if (OB_FAIL(lob_col_idxs_.assign(param.lob_col_idxs_))) {
@@ -146,9 +151,9 @@ int ObDDLLocalBuildExecutor::schedule_task()
     ret = OB_NOT_INIT;
     LOG_WARN("build executor not init", K(ret));
   } else if (OB_FAIL(DDL_SIM(ddl_task_id_, LOCAL_BUILD_EXECUTOR_SCHEDULE_TASK_FAILED))) {
-  } else if (OB_ISNULL(rootserver_local_runtime())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("rootserver local runtime is null", K(ret));
+  } else if (OB_ISNULL(context_.local_runtime_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("DDL local build runtime is unavailable", KR(ret), K(context_.namespace_id_));
   } else {
     ObArray<obcall::ObDDLLocalBuildArg> args;
     ObArray<ObTabletID> tablet_ids;
@@ -169,7 +174,7 @@ int ObDDLLocalBuildExecutor::schedule_task()
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < args.count(); ++i) {
       obcall::ObDDLLocalBuildResult result;
-      const int call_ret = rootserver_local_runtime()->build_ddl_local(args.at(i), result);
+      const int call_ret = context_.local_runtime_->build_ddl_local(args.at(i), result);
       ObSpinLockGuard guard(lock_);
       bool is_found = false;
       ObDDLBuildCtx *build_ctx = nullptr;
@@ -243,8 +248,11 @@ int ObDDLLocalBuildExecutor::check_build_end(const bool need_checksum, bool &is_
     ret_code = ret;
     LOG_INFO("all local builds finished", K(succ_cnt), K(total_cnt));
     if (need_checksum) {
-      if (OB_FAIL(ObCheckTabletDataComplementOp::check_finish_report_checksum(
-          *GCTX.schema_service_, *GCTX.sql_proxy_,
+      if (OB_ISNULL(context_.schema_service_) || OB_ISNULL(context_.sql_proxy_)) {
+        ret = OB_NOT_INIT;
+        LOG_WARN("DDL local build services are unavailable", KR(ret), K(context_.namespace_id_));
+      } else if (OB_FAIL(ObCheckTabletDataComplementOp::check_finish_report_checksum(
+          *context_.schema_service_, *context_.sql_proxy_,
           dest_table_id, execution_id_, ddl_task_id_))) {
       }
     }

@@ -296,6 +296,7 @@ int ObPLPackageManager::read_package_sql(ObCharStream &stream, char* buf, int64_
 }
 
 int ObPLPackageManager::read_and_exec_package_sql(ObMySQLProxy &sql_proxy,
+                                                  ObMultiVersionSchemaService &schema_service,
                                                   ObCharStream &stream)
 {
   int ret = OB_SUCCESS;
@@ -322,10 +323,7 @@ int ObPLPackageManager::read_and_exec_package_sql(ObMySQLProxy &sql_proxy,
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("affected_rows expected to be zero", K(ret), K(affected_rows), K(stream.get_name()));
           } else {
-            OV (OB_NOT_NULL(GCTX.schema_service_), OB_NOT_INIT);
-            if (OB_SUCC(ret)) {
-              OZ (ObSPIService::force_refresh_schema(*GCTX.schema_service_));
-            }
+            OZ (ObSPIService::force_refresh_schema(schema_service));
           }
           LOG_INFO("package source data consumed", K(ret), K(stream));
         }
@@ -367,6 +365,7 @@ int ObPLPackageManager::get_syspack_source_file_content(const char *file_name, c
 }
 
 int ObPLPackageManager::load_sys_package(ObMySQLProxy &sql_proxy,
+                                         ObMultiVersionSchemaService &schema_service,
                                          const ObSysPackageFile &pack_file_info,
                                          bool from_file)
 {
@@ -385,12 +384,12 @@ int ObPLPackageManager::load_sys_package(ObMySQLProxy &sql_proxy,
     if (OB_SUCC(ret) && OB_NOT_NULL(spec_file)) {
       OZ (databuff_printf(spec_file_path, MAX_PATH_SIZE, "%s/%s", sys_package_dir, spec_file));
       ObFileStream spec_stream{package_name, spec_file_path};
-      OZ (read_and_exec_package_sql(sql_proxy, spec_stream), spec_stream);
+      OZ (read_and_exec_package_sql(sql_proxy, schema_service, spec_stream), spec_stream);
     }
     if (OB_SUCC(ret) && OB_NOT_NULL(body_file)) {
       OZ (databuff_printf(body_file_path, MAX_PATH_SIZE, "%s/%s", sys_package_dir, body_file));
       ObFileStream body_stream{package_name, body_file_path};
-      OZ (read_and_exec_package_sql(sql_proxy, body_stream), body_stream);
+      OZ (read_and_exec_package_sql(sql_proxy, schema_service, body_stream), body_stream);
     }
   } else {
     const char *spec_content = nullptr;
@@ -398,12 +397,12 @@ int ObPLPackageManager::load_sys_package(ObMySQLProxy &sql_proxy,
     OZ (get_syspack_source_file_content(spec_file, spec_content));
     if (OB_SUCC(ret) && OB_NOT_NULL(spec_content)) {
       ObCStringStream spec_stream{package_name, spec_content};
-      OZ (read_and_exec_package_sql(sql_proxy, spec_stream), spec_stream);
+      OZ (read_and_exec_package_sql(sql_proxy, schema_service, spec_stream), spec_stream);
     }
     OZ (get_syspack_source_file_content(body_file, body_content));
     if (OB_SUCC(ret) && OB_NOT_NULL(body_content)) {
       ObCStringStream body_stream{package_name, body_content};
-      OZ (read_and_exec_package_sql(sql_proxy, body_stream), body_stream);
+      OZ (read_and_exec_package_sql(sql_proxy, schema_service, body_stream), body_stream);
     }
   }
 
@@ -413,6 +412,7 @@ int ObPLPackageManager::load_sys_package(ObMySQLProxy &sql_proxy,
 }
 
 int ObPLPackageManager::load_sys_package(ObMySQLProxy &sql_proxy,
+                                         ObMultiVersionSchemaService &schema_service,
                                          ObString &package_name,
                                          bool from_file)
 {
@@ -447,12 +447,13 @@ int ObPLPackageManager::load_sys_package(ObMySQLProxy &sql_proxy,
                    ObString("oceanbase").length(), ObString("oceanbase").ptr(),
                    package_name.length(), package_name.ptr());
   } else {
-    OZ (load_sys_package(sql_proxy, *pack_file_info, from_file));
+    OZ (load_sys_package(sql_proxy, schema_service, *pack_file_info, from_file));
   }
   return ret;
 }
 
 int ObPLPackageManager::load_sys_package_list(ObMySQLProxy &sql_proxy,
+                                              ObMultiVersionSchemaService &schema_service,
                                               const ObSysPackageFile *sys_package_list,
                                               int sys_package_count,
                                               bool from_file)
@@ -461,7 +462,7 @@ int ObPLPackageManager::load_sys_package_list(ObMySQLProxy &sql_proxy,
   CK (OB_NOT_NULL(sys_package_list));
   LOG_INFO("load sys package list begin", "sys package total count", sys_package_count);
   for (int i = 0; OB_SUCC(ret) && i < sys_package_count; ++i) {
-    OZ (load_sys_package(sql_proxy, sys_package_list[i], from_file));
+    OZ (load_sys_package(sql_proxy, schema_service, sys_package_list[i], from_file));
   }
   if (OB_FAIL(ret)) {
   } else {
@@ -471,9 +472,9 @@ int ObPLPackageManager::load_sys_package_list(ObMySQLProxy &sql_proxy,
 }
 
 int ObPLPackageManager::load_all_common_sys_package(
-    ObMySQLProxy &sql_proxy, bool from_file) {
+    ObMySQLProxy &sql_proxy, ObMultiVersionSchemaService &schema_service, bool from_file) {
   int ret = OB_SUCCESS;
-  OZ (load_sys_package_list(sql_proxy, mysql_syspack_file_list,
+  OZ (load_sys_package_list(sql_proxy, schema_service, mysql_syspack_file_list,
                             SIZE_OF_SYSPACK_LST(mysql_syspack_file_list),
                             from_file));
 
@@ -485,10 +486,11 @@ int ObPLPackageManager::load_all_common_sys_package(
   return ret;
 }
 
-int ObPLPackageManager::load_all_special_sys_package(ObMySQLProxy &sql_proxy)
+int ObPLPackageManager::load_all_special_sys_package(
+    ObMySQLProxy &sql_proxy, ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
-  OZ (load_sys_package_list(sql_proxy, mysql_special_syspack_file_list,
+  OZ (load_sys_package_list(sql_proxy, schema_service, mysql_special_syspack_file_list,
                             SIZE_OF_SYSPACK_LST(mysql_special_syspack_file_list),
                             false /* from_file */));
   return ret;

@@ -88,11 +88,12 @@ int ObSystemPackageLoadTask::load_system_package_()
 {
   int ret = OB_SUCCESS;
   ObMySQLProxy *sql_proxy = observer::namespace_worker_prototype::namespace_sql_proxy(1);
+  auto *schema_service = observer::namespace_worker_prototype::namespace_schema_service(1);
   int64_t job_id = OB_INVALID_ID;
   int64_t job_count = 0;
-  if (OB_ISNULL(sql_proxy)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy is null", KR(ret), KP(sql_proxy));
+  if (OB_ISNULL(sql_proxy) || OB_ISNULL(schema_service)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("system package services are unavailable", KR(ret), KP(sql_proxy), KP(schema_service));
   } else if (OB_FAIL(GET_ADMIN_JOB_COUNT(LOAD_MYSQL_SYS_PACKAGE, job_count))) {
   } else if (0 == job_count) {
     // job not exists, try insert inprogress job
@@ -111,7 +112,7 @@ int ObSystemPackageLoadTask::load_system_package_()
       LOG_WARN("failed to get INPROGRESS rs job", KR(ret));
     }
   } else if (OB_FAIL(pl::ObPLPackageManager::load_all_common_sys_package(
-                         *sql_proxy,
+                         *sql_proxy, *schema_service,
                          false/*from_file*/))) {
   } else if (OB_FAIL(ADMIN_JOB_COMPLETE(job_id, 0/*result_code*/))) {
   } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::ensure_control_schema())) {

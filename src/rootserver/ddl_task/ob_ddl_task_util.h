@@ -63,10 +63,6 @@ public:
       const common::ObString &partition_name,
       common::ObIAllocator &allocator,
       bool &is_running_status);
-  static int get_task_tablet_slice_count(
-      const int64_t task_id,
-      bool &is_partition_table,
-      common::hash::ObHashMap<int64_t, int64_t> &tablet_slice_count_map);
   static int check_table_empty(
       common::ObMySQLProxy &sql_proxy,
       const share::schema::ObSysVariableSchema &sys_var_schema,

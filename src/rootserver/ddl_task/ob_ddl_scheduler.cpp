@@ -49,20 +49,21 @@ class NativeDDLChecksumErrorVerifier final : public IDDLChecksumErrorVerifier
 {
 public:
   int verify(share::ObDDLType type,
-             const share::schema::ObTableSchema *source_table) override
+             const share::schema::ObTableSchema *source_table,
+             common::ObISQLClient &sql_client) override
   {
     return !ObDDLUtil::is_verifying_checksum_error_needed(type)
         ? OB_SUCCESS
         : ObDDLUtil::check_table_compaction_checksum_error(
-              *GCTX.schema_service_, *GCTX.sql_proxy_, *GCTX.meta_db_pool_,
-              source_table->get_table_id());
+              sql_client, source_table->get_table_id());
   }
 };
 class TaskDDLChecksumErrorVerifier final : public IDDLChecksumErrorVerifier
 {
 public:
   int verify(share::ObDDLType,
-             const share::schema::ObTableSchema *) override
+             const share::schema::ObTableSchema *,
+             common::ObISQLClient &) override
   {
     // The backing error table is process-wide; the task validates its own checksum.
     return OB_SUCCESS;
@@ -1149,7 +1150,7 @@ int ObDDLScheduler::create_ddl_task(const ObCreateDDLTaskParam &param,
       ret = OB_NOT_INIT;
       LOG_WARN("DDL checksum verifier is unavailable", K(ret),
                "namespace_id", proxy.target_namespace());
-    } else if (OB_FAIL(verifier->verify(param.type_, param.src_table_schema_))) {
+    } else if (OB_FAIL(verifier->verify(param.type_, param.src_table_schema_, proxy))) {
       if (OB_NOT_SUPPORTED != ret) {
         LOG_WARN("unexpected error in check_table_compaction_checksum_error, choose to suppress the error", K(ret), K(param));
         ret = OB_SUCCESS;

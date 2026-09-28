@@ -162,9 +162,9 @@ int ObAdminSetConfig::execute(obcall::ObAdminSetConfigArg &arg)
   if (!ctx_.is_inited()) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
-  } else if (!arg.is_valid() || OB_ISNULL(GCTX.sql_proxy_)) {
+  } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(arg), KR(ret), KP(GCTX.sql_proxy_));
+    LOG_WARN("invalid arg", K(arg), KR(ret));
   } else if (OB_FAIL(verify_config(arg))) {
   } else {
     if (OB_FAIL(ctx_.local_management_service_->set_config_pre_hook(arg))) {

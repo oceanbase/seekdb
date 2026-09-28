@@ -1093,48 +1093,6 @@ int ObDDLTaskUtil::check_target_partition_is_running(const ObString &running_sql
   return ret;
 }
 
-int ObDDLTaskUtil::get_task_tablet_slice_count(const int64_t ddl_task_id, bool &is_partitioned_table, common::hash::ObHashMap<int64_t, int64_t> &tablet_slice_cnt_map)
-{
-  int ret = OB_SUCCESS;
-
-  bool use_idem_mode = false;
-  rootserver::ObDDLSliceInfo ddl_slice_info;
-  ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
-  ObArenaAllocator arena(ObMemAttr("get_slice_info"));
-  bool is_use_idem_mode = false;
-  is_partitioned_table = true;
-  if (OB_ISNULL(sql_proxy)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy is null", K(ret));
-  } else if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::get_schedule_info(
-                    *sql_proxy, ddl_task_id, arena, true/*is_for_update*/, ddl_slice_info, use_idem_mode))) {
-  } else {
-    for (int64_t i = 0; i < ddl_slice_info.part_ranges_.count() && OB_SUCC(ret); i++) {
-      int64_t tablet_slice_cnt = 0;
-      const ObPxTabletRange &cur_part_range = ddl_slice_info.part_ranges_.at(i);
-      const int64_t cur_tablet_id = cur_part_range.tablet_id_;
-      if (0 == cur_tablet_id && 1 == ddl_slice_info.part_ranges_.count()) {
-        is_partitioned_table = false;
-      }
-
-      if (OB_FAIL(tablet_slice_cnt_map.get_refactored(cur_tablet_id, tablet_slice_cnt))) {
-        if (OB_HASH_NOT_EXIST == ret) {
-          ret = OB_SUCCESS;
-          if (OB_FAIL(tablet_slice_cnt_map.set_refactored(cur_tablet_id, 0))) {
-          }
-        } else {
-          LOG_WARN("failed to get  slice cnt", K(ret));
-        }
-      }
-
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(tablet_slice_cnt_map.set_refactored(cur_tablet_id, tablet_slice_cnt + cur_part_range.range_cut_.count(), 1 /* over write*/))) {
-      }
-    }
-  }
-  return ret;
-}
-
 int ObDDLTaskUtil::check_table_empty(
     ObMySQLProxy &sql_proxy,
     const share::schema::ObSysVariableSchema &sys_var_schema,

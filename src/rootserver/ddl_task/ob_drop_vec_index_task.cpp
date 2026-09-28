@@ -954,7 +954,7 @@ int ObDropVecIndexTask::send_local_build_request()
     }
 
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(local_builder_.build(param))) {
+    } else if (OB_FAIL(local_builder_.build(param, context_))) {
     } else {
       del_lob_meta_row_task_submitted_ = true;
       delte_lob_meta_request_time_ = ObTimeUtility::current_time();
