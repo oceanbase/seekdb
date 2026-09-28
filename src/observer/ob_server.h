@@ -729,8 +729,6 @@ private:
   transaction::ObTimestampAccess * mods_timestamp_access_ = nullptr;
   transaction::ObTransIDService * mods_trans_id_service_ = nullptr;
   transaction::ObUniqueIDService * mods_unique_id_service_ = nullptr;
-  sql::ObPsCache * mods_ps_cache_ = nullptr;
-  sql::ObPlanCache * mods_plan_cache_ = nullptr;
   sql::dtl::ObDfc * mods_dfc_ = nullptr;
   omt::ObPxPools * mods_px_pools_ = nullptr;
   sql::ObSqlMemoryManager * mods_sql_memory_manager_ = nullptr;

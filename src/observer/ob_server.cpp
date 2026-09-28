@@ -2532,7 +2532,6 @@ int ObServer::init_global_context()
       &autoincrement_service_);
   home->set_service(ns::NamespaceRuntime::OPT_STAT_MANAGER,
       &opt_stat_manager_);
-  opt_stat_manager_.bind_plan_cache(*mods_plan_cache_);
   namespace_worker_prototype::register_root_namespace_storage_services(*home);
   gctx_.self_addr_seq_.set_addr(self_addr_);
   gctx_.bandwidth_throttle_ = &bandwidth_throttle_;

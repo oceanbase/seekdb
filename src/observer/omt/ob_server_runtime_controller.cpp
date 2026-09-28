@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SERVER_OMT
 
+#include <memory>
+#include <new>
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_server_runtime_controller.h"
@@ -1261,8 +1263,23 @@ int ObServer::obs_construct_modules()
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_timestamp_access_))) { SERVER_LOG(WARN, "mods_timestamp_access_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_trans_id_service_))) { SERVER_LOG(WARN, "mods_trans_id_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_unique_id_service_))) { SERVER_LOG(WARN, "mods_unique_id_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_ps_cache_))) { SERVER_LOG(WARN, "mods_ps_cache_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_plan_cache_))) { SERVER_LOG(WARN, "mods_plan_cache_ fail", KR(ret)); }
+  if (OB_SUCC(ret)) {
+    ns::NamespaceRuntime *home = nullptr;
+    if (!ns::namespace_registry().get(1, home) || home == nullptr) {
+      ret = OB_NOT_INIT;
+    } else {
+      std::unique_ptr<ObPsCache> ps_cache(new (std::nothrow) ObPsCache());
+      std::unique_ptr<ObPlanCache> plan_cache(new (std::nothrow) ObPlanCache());
+      if (ps_cache == nullptr || plan_cache == nullptr) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else {
+        home->set_owned_service<ObPsCache>(ns::NamespaceRuntime::PS_CACHE,
+            std::move(ps_cache));
+        home->set_owned_service<ObPlanCache>(ns::NamespaceRuntime::PLAN_CACHE,
+            std::move(plan_cache));
+      }
+    }
+  }
   if (OB_SUCC(ret) && OB_FAIL(ObDfc::server_module_new(mods_dfc_))) { SERVER_LOG(WARN, "mods_dfc_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_px_pools_))) { SERVER_LOG(WARN, "mods_px_pools_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObSqlMemoryManager::server_module_new(mods_sql_memory_manager_))) { SERVER_LOG(WARN, "mods_sql_memory_manager_ fail", KR(ret)); }
@@ -1413,8 +1430,13 @@ int ObServer::obs_init_modules()
       root_runtime->service(ns::NamespaceRuntime::SQL_PROXY));
   auto *root_stat_manager = static_cast<ObOptStatManager *>(
       root_runtime->service(ns::NamespaceRuntime::OPT_STAT_MANAGER));
+  auto *root_ps_cache = static_cast<ObPsCache *>(
+      root_runtime->service(ns::NamespaceRuntime::PS_CACHE));
+  auto *root_plan_cache = static_cast<ObPlanCache *>(
+      root_runtime->service(ns::NamespaceRuntime::PLAN_CACHE));
   if (root_schema_service == nullptr || root_sql_proxy == nullptr
-      || root_stat_manager == nullptr) {
+      || root_stat_manager == nullptr || root_ps_cache == nullptr
+      || root_plan_cache == nullptr) {
     return OB_NOT_INIT;
   }
   if (OB_SUCC(ret) && OB_FAIL(ObSharedTimer::server_module_init(mods_shared_timer_))) { SERVER_LOG(WARN, "mods_shared_timer_ fail", KR(ret)); }
@@ -1462,27 +1484,16 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(ObTransIDService::server_module_init(mods_trans_id_service_))) { SERVER_LOG(WARN, "mods_trans_id_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObUniqueIDService::server_module_init(mods_unique_id_service_))) { SERVER_LOG(WARN, "mods_unique_id_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObPsCache::server_module_init(
-          mods_ps_cache_, *root_schema_service))) { SERVER_LOG(WARN, "mods_ps_cache_ fail", KR(ret)); }
-  if (OB_SUCC(ret)) {
-    ns::NamespaceRuntime *home = nullptr;
-    if (!ns::namespace_registry().get(1, home) || home == nullptr) {
-      ret = OB_NOT_INIT;
-    } else {
-      home->set_service(ns::NamespaceRuntime::PS_CACHE, mods_ps_cache_);
-    }
+          root_ps_cache, *root_schema_service))) {
+    SERVER_LOG(WARN, "root ps cache init failed", KR(ret));
   }
   if (OB_SUCC(ret) &&
       OB_FAIL(ObPlanCache::server_module_init(
-          mods_plan_cache_, OBSERVER, *root_schema_service))) {
-    SERVER_LOG(WARN, "mods_plan_cache_ fail", KR(ret));
+          root_plan_cache, OBSERVER, *root_schema_service))) {
+    SERVER_LOG(WARN, "root plan cache init failed", KR(ret));
   }
   if (OB_SUCC(ret)) {
-    ns::NamespaceRuntime *home = nullptr;
-    if (!ns::namespace_registry().get(1, home) || home == nullptr) {
-      ret = OB_NOT_INIT;
-    } else {
-      home->set_service(ns::NamespaceRuntime::PLAN_CACHE, mods_plan_cache_);
-    }
+    root_stat_manager->bind_plan_cache(*root_plan_cache);
   }
   if (OB_SUCC(ret) && OB_FAIL(ObDfc::server_module_init(mods_dfc_))) { SERVER_LOG(WARN, "mods_dfc_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObPxPools::server_module_init(mods_px_pools_))) { SERVER_LOG(WARN, "mods_px_pools_ fail", KR(ret)); }
@@ -1670,8 +1681,15 @@ void ObServer::obs_stop_modules()
   server_module_stop_default(mods_memstore_freezer_);
   ObDTLIntermResultManager::server_module_stop(mods_dtl_interm_result_manager_);
   ObPxPools::server_module_stop(mods_px_pools_);
-  ObPlanCache::server_module_stop(mods_plan_cache_);
-  ObPsCache::server_module_stop(mods_ps_cache_);
+  ns::NamespaceRuntime *root_runtime = nullptr;
+  if (ns::namespace_registry().get(1, root_runtime) && root_runtime != nullptr) {
+    auto *plan_cache = static_cast<ObPlanCache *>(
+        root_runtime->service(ns::NamespaceRuntime::PLAN_CACHE));
+    auto *ps_cache = static_cast<ObPsCache *>(
+        root_runtime->service(ns::NamespaceRuntime::PS_CACHE));
+    ObPlanCache::server_module_stop(plan_cache);
+    ObPsCache::server_module_stop(ps_cache);
+  }
   server_module_stop_default(mods_timestamp_service_);
   server_module_stop_default(mods_dead_lock_detector_mgr_);
   server_module_stop_default(mods_lob_manager_);
@@ -1771,8 +1789,11 @@ void ObServer::obs_destroy_modules()
   ObSqlMemoryManager::server_module_destroy(mods_sql_memory_manager_);
   ObPxPools::server_module_destroy(mods_px_pools_);
   ObDfc::server_module_destroy(mods_dfc_);
-  server_module_destroy_default(mods_plan_cache_);
-  server_module_destroy_default(mods_ps_cache_);
+  ns::NamespaceRuntime *root_runtime = nullptr;
+  if (ns::namespace_registry().get(1, root_runtime) && root_runtime != nullptr) {
+    root_runtime->clear_service(ns::NamespaceRuntime::PLAN_CACHE);
+    root_runtime->clear_service(ns::NamespaceRuntime::PS_CACHE);
+  }
   server_module_destroy_default(mods_unique_id_service_);
   server_module_destroy_default(mods_trans_id_service_);
   server_module_destroy_default(mods_timestamp_access_);
