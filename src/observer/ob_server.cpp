@@ -25,6 +25,7 @@
 #include <windows.h>
 #endif
 #include <thread>
+#include <cstdio>
 #include "observer/ob_server.h"
 #include "share/ob_autoincrement_service.h"
 #include "observer/ob_req_time_service.h"
@@ -427,10 +428,15 @@ static int check_need_initialize(const char *base_dir, const char *data_dir, con
     need_initialize = false;
   } else {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("The status of deployment environment is not consistent. Please clear the directories and restart.");
-    LOG_WARN("    base-dir", KCSTRING(base_dir));
-    LOG_WARN("    data-dir", KCSTRING(data_dir));
-    LOG_WARN("    redo-dir", KCSTRING(redo_dir));
+    // The logger is not initialized yet; LOG_STDERR also skips redirected streams.
+    std::fprintf(stderr,
+        "The status of deployment environment is not consistent. "
+        "Please clear the directories and restart. ret=%d\n"
+        "    base-dir: %s\n"
+        "    data-dir: %s\n"
+        "    redo-dir: %s\n",
+        ret, base_dir, data_dir, redo_dir);
+    std::fflush(stderr);
   }
   return ret;
 }
