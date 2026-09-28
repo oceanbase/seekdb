@@ -180,7 +180,6 @@ ROOTSERVER_UNITY_GROUPS = [
             "src/rootserver/parallel_ddl/ob_create_table_like_helper.cpp",
             "src/rootserver/pl_ddl/ob_pl_ddl_service.cpp",
             "src/rootserver/truncate_info/ob_truncate_info_service.cpp",
-            "src/rootserver/dbms_job/ob_dbms_job_master.cpp",
         ],
         generated_srcs = [],
         external_srcs = [],
