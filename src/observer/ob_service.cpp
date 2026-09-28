@@ -21,6 +21,7 @@
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/time/ob_time_utility.h"
 #include "ob_service.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "namespace/namespace.h"
 #include "storage/ob_storage_rpc_arg.h"
 #include "share/rc/ob_server_runtime.h"
@@ -183,7 +184,8 @@ int ObService::wait_until_change_stream_refreshed(
   return change_stream_service_.wait_until_refreshed(mysql_proxy, timeout_us);
 }
 
-int ObService::init(common::ObMySQLProxy &sql_proxy)
+int ObService::init(common::ObMySQLProxy &sql_proxy,
+                    ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   FLOG_INFO("[OBSERVICE_NOTICE] init ob_service begin");
@@ -195,7 +197,7 @@ int ObService::init(common::ObMySQLProxy &sql_proxy)
   } else if (!gctx_.is_inited()) {
     ret = OB_INVALID_ARGUMENT;
     FLOG_WARN("gctx not init", "gctx inited", gctx_.is_inited(), KR(ret));
-  } else if (OB_FAIL(schema_updater_.init(gctx_.self_addr(), gctx_.schema_service_))) {
+  } else if (OB_FAIL(schema_updater_.init(gctx_.self_addr(), &schema_service))) {
     FLOG_WARN("client_manager_.initialize failed", "self_addr", gctx_.self_addr(), KR(ret));
   } else if (OB_ISNULL(GCTX.meta_db_pool_)) {
     ret = OB_NOT_INIT;
@@ -306,7 +308,8 @@ int ObService::destroy()
 int ObService::update_baseline_schema_version(const int64_t schema_version)
 {
   int ret = OB_SUCCESS;
-    ObMultiVersionSchemaService *schema_service = gctx_.schema_service_;
+  ObMultiVersionSchemaService *schema_service =
+      namespace_worker_prototype::namespace_schema_service(1);
   if (schema_version <= 0) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(schema_version));

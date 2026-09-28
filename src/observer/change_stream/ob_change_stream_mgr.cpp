@@ -42,6 +42,8 @@ ObChangeStreamMgr::~ObChangeStreamMgr()
 int ObChangeStreamMgr::server_module_init(
     ObChangeStreamMgr *&mgr,
     logservice::ObILogStorage &log_storage,
+    schema::ObMultiVersionSchemaService &schema_service,
+    common::ObMySQLProxy &sql_proxy,
     schema::ObSchemaPublishSignal &schema_publish_signal,
     lib::IRunWrapper *run_wrapper)
 {
@@ -50,7 +52,7 @@ int ObChangeStreamMgr::server_module_init(
     ret = common::OB_INVALID_ARGUMENT;
     LOG_WARN("ObChangeStreamMgr: mgr is null", K(ret));
   } else if (OB_FAIL(
-      mgr->init(log_storage, schema_publish_signal, run_wrapper))) {
+      mgr->init(log_storage, schema_service, sql_proxy, schema_publish_signal, run_wrapper))) {
   } else {
     LOG_INFO("ObChangeStreamMgr server_module_init success");
   }
@@ -59,6 +61,8 @@ int ObChangeStreamMgr::server_module_init(
 
 int ObChangeStreamMgr::init(
     logservice::ObILogStorage &log_storage,
+    schema::ObMultiVersionSchemaService &schema_service,
+    common::ObMySQLProxy &sql_proxy,
     schema::ObSchemaPublishSignal &schema_publish_signal,
     lib::IRunWrapper *run_wrapper)
 {
@@ -67,8 +71,8 @@ int ObChangeStreamMgr::init(
   if (is_inited_) {
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(fetcher_.init(
-      &dispatcher_, log_storage, schema_publish_signal, run_wrapper))) {
-  } else if (OB_FAIL(dispatcher_.init())) {
+      &dispatcher_, log_storage, schema_service, schema_publish_signal, run_wrapper))) {
+  } else if (OB_FAIL(dispatcher_.init(schema_service, sql_proxy))) {
   } else if (OB_FAIL(worker_.init(worker_thread_count))) {
   } else {
     is_inited_ = true;

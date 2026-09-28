@@ -52,7 +52,7 @@ public:
   /// Process incremental rows (called by Worker for each subtask).
   virtual int process(common::ObIArray<ObCSRow> &rows, ObCSExecCtx &ctx) = 0;
   /// Called when all subtasks of the batch are done (output, advance scn, commit).
-  virtual int commit() = 0;
+  virtual int commit(ObCSExecCtx &ctx) = 0;
 
   CS_PLUGIN_TYPE get_plugin_type() const { return plugin_type_; }
   void set_plugin_type(CS_PLUGIN_TYPE type) { plugin_type_ = type; }

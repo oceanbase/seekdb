@@ -28,15 +28,12 @@ namespace schema
 {
 
 int ObSchemaRuntimeService::server_module_init(
-    ObSchemaRuntimeService *&schema_runtime_service,
-    ObMultiVersionSchemaService &schema_service)
+    ObSchemaRuntimeService *&schema_runtime_service)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(schema_runtime_service)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("schema_runtime_service is null", K(ret));
-  } else {
-    schema_runtime_service->schema_service_ = &schema_service;
   }
   return ret;
 }
@@ -44,7 +41,6 @@ int ObSchemaRuntimeService::server_module_init(
 void ObSchemaRuntimeService::destroy()
 {
   tablet_schema_resolver_.store(nullptr, std::memory_order_release);
-  schema_service_ = nullptr;
 }
 
 int ObSchemaRuntimeService::resolve_tablet_schema(

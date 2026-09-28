@@ -322,7 +322,6 @@ public:
     int cleanup_rule_type_;    //According to the temporary table rules or query table building rules
     DISALLOW_COPY_AND_ASSIGN(ObCTASCleanUp);
   };
-  share::schema::ObMultiVersionSchemaService &get_schema_service() { return schema_service_; }
   ObInOutBandwidthThrottle &get_bandwidth_throttle() { return bandwidth_throttle_; }
   uint64_t get_cpu_frequency_khz() { return cpu_frequency_; }
   int64_t get_network_speed() const { return ethernet_speed_; }
@@ -373,6 +372,7 @@ private:
   int init_sql_runner();
   int init_pl();
   int init_global_context();
+  share::schema::ObMultiVersionSchemaService &home_schema_service() const;
   int parse_role(const ObServerOptions &opts);
   int init_px_target_mgr();
   int init_storage();
@@ -437,7 +437,6 @@ private:
 
   // The Oceanbase schema relating to.
   share::schema::ObSchemaServiceSQLImpl *schema_service_sql_impl_;
-  share::schema::ObMultiVersionSchemaService &schema_service_;
   share::schema::ObSchemaPublishSignal schema_publish_signal_;
   ObSchemaRefreshSchedulerAdapter *schema_refresh_scheduler_;
   rootserver::ObMaxIdCacheAdapter *max_id_cache_adapter_;

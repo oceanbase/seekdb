@@ -596,8 +596,11 @@ int ObExprUDF::before_calc_result(share::schema::ObSchemaGetterGuard &schema_gua
   if (OB_ISNULL(exec_ctx.get_sql_ctx())
       || OB_ISNULL(exec_ctx.get_sql_ctx()->schema_guard_)) {
     sql::ObSqlExecutorCtx &task_ctx = exec_ctx.get_sql_exec_ctx();
-    const share::ObGlobalContext &gctx = GCTX;
-    if (OB_FAIL(gctx.schema_service_->get_runtime_schema_guard(
+    auto *session = exec_ctx.get_my_session();
+    auto *schema_service = session != nullptr ? session->effective_schema_service() : nullptr;
+    if (schema_service == nullptr) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(schema_service->get_runtime_schema_guard(
                 schema_guard,
                 task_ctx.get_query_begin_schema_version()))) {
     }

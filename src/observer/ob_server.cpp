@@ -113,6 +113,13 @@ namespace
 
 using StandbyModule = standby::StandbyModule;
 
+class SchemaServiceInstance final : public share::schema::ObMultiVersionSchemaService
+{
+public:
+  SchemaServiceInstance() = default;
+  ~SchemaServiceInstance() override = default;
+};
+
 } // namespace
 
 class ObServer::StandbyHostAdapter final : public standby::IStandbyHost
@@ -159,7 +166,7 @@ public:
     share::schema::ObRefreshSchemaStatus schema_status;
     if (OB_FAIL(server_.schema_status_proxy_.get_refresh_schema_status(schema_status))) {
       LOG_WARN("failed to get schema refresh status", KR(ret));
-    } else if (OB_FAIL(server_.schema_service_.get_schema_version_in_inner_table(
+    } else if (OB_FAIL(server_.home_schema_service().get_schema_version_in_inner_table(
         server_.sql_proxy_, schema_status, schema_version))) {
       LOG_WARN("failed to get latest schema version", KR(ret));
     } else if (OB_FAIL(server_.ob_service_.submit_async_refresh_schema_task(schema_version))) {
@@ -637,6 +644,13 @@ void ObServer::destroy_virtual_table_factory(
   }
 }
 
+share::schema::ObMultiVersionSchemaService &ObServer::home_schema_service() const
+{
+  auto *service = namespace_worker_prototype::namespace_schema_service(1);
+  OB_ASSERT(service != nullptr);
+  return *service;
+}
+
 ObServer::ObServer()
   : need_ctas_cleanup_(true),
     gctx_(GCTX),
@@ -647,7 +661,6 @@ ObServer::ObServer()
     reload_config_(config_, gctx_), config_mgr_(config_, reload_config_),
     timezone_mgr_(omt::ObTimezoneMgr::get_instance()),
     schema_service_sql_impl_(NULL),
-    schema_service_(share::schema::ObMultiVersionSchemaService::get_instance()),
     schema_publish_signal_(),
     schema_refresh_scheduler_(NULL),
     max_id_cache_adapter_(NULL),
@@ -977,7 +990,9 @@ void ObServer::destroy()
     FLOG_INFO("timer monitor destroyed");
 
     FLOG_INFO("begin to destroy schema service");
-    schema_service_.destroy();
+    if (auto *schema_service = namespace_worker_prototype::namespace_schema_service(1)) {
+      schema_service->destroy();
+    }
     if (OB_NOT_NULL(schema_refresh_scheduler_)) {
       OB_DELETE(ObSchemaRefreshSchedulerAdapter,
                 ObModIds::OB_SCHEMA_SERVICE,
@@ -1101,6 +1116,7 @@ void ObServer::destroy()
 
     ns::NamespaceRuntime *home = nullptr;
     if (ns::namespace_registry().get(1, home) && home != nullptr) {
+      home->clear_service(ns::NamespaceRuntime::SCHEMA_SERVICE);
       home->clear_service(ns::NamespaceRuntime::VIRTUAL_TABLE_SCAN_SERVICE);
       home->clear_service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE);
       home->clear_service(ns::NamespaceRuntime::OPT_STAT_MANAGER);
@@ -1512,11 +1528,11 @@ int ObServer::check_if_schema_ready()
                   "wait schema ready begin.");
   while (!stop_ && !schema_ready) {
     ret = OB_SUCCESS;
-    if (OB_FAIL(schema_service_.get_baseline_schema_version(true/*auto_update*/, baseline_schema_version))) {
+    if (OB_FAIL(home_schema_service().get_baseline_schema_version(true/*auto_update*/, baseline_schema_version))) {
       LOG_WARN("fail to get baseline schema version", KR(ret));
     } else if (OB_INVALID_VERSION == baseline_schema_version || baseline_schema_version < 0) {
       LOG_WARN("invalid baseline schema version", K(baseline_schema_version));
-    } else if (OB_FAIL(schema_service_.get_runtime_refreshed_schema_version(current_schema_version))) {
+    } else if (OB_FAIL(home_schema_service().get_runtime_refreshed_schema_version(current_schema_version))) {
       LOG_WARN("fail to get runtime refreshed schema version", KR(ret));
     } else {
       schema_ready = (current_schema_version >= baseline_schema_version);
@@ -1623,7 +1639,9 @@ int ObServer::stop()
 
 
     FLOG_INFO("begin to stop schema service");
-    schema_service_.stop();
+    if (auto *schema_service = namespace_worker_prototype::namespace_schema_service(1)) {
+      schema_service->stop();
+    }
     FLOG_INFO("schema service stopped");
 
 
@@ -2310,16 +2328,16 @@ int ObServer::init_schema()
       ObModIds::OB_SCHEMA_SERVICE,
       max_id_cache_adapter_,
       ddl_sql_proxy_,
-      schema_service_))) {
+      home_schema_service()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to allocate schema service backend", KR(ret));
   } else if (OB_ISNULL(schema_refresh_scheduler_ = OB_NEW(
       ObSchemaRefreshSchedulerAdapter,
       ObModIds::OB_SCHEMA_SERVICE,
-      ob_service_, schema_service_))) {
+      ob_service_, home_schema_service()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to allocate schema refresh scheduler", KR(ret));
-  } else if (OB_FAIL(schema_service_.init(
+  } else if (OB_FAIL(home_schema_service().init(
       &sql_proxy_,
       &config_,
       schema_status_proxy_,
@@ -2441,7 +2459,7 @@ int ObServer::init_ob_service(bool need_bootstrap)
     LOG_ERROR("allocate standby module failed", KR(ret));
   } else if (OB_FAIL(standby_module_->init(standby_config, *standby_host_))) {
     LOG_ERROR("init standby module failed", KR(ret));
-  } else if (OB_FAIL(ob_service_.init(sql_proxy_))) {
+  } else if (OB_FAIL(ob_service_.init(sql_proxy_, home_schema_service()))) {
     LOG_ERROR("oceanbase service init failed", KR(ret));
   } else {
     need_bootstrap_ = need_bootstrap;
@@ -2471,7 +2489,7 @@ int ObServer::init_local_management_service(const bool need_bootstrap)
     if (OB_FAIL(root_commands->init(
                  config_, config_mgr_,
                  self_addr_, sql_proxy_,
-                 &schema_service_,
+                 &home_schema_service(),
                  *static_cast<share::ObAutoincrementService *>(
                      home->service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE)),
                  need_bootstrap))) {
@@ -2489,7 +2507,7 @@ int ObServer::init_sql()
   LOG_INFO("init sql");
   if (OB_FAIL(session_mgr_.init())) {
     LOG_ERROR("init sql session mgr fail");
-  } else if (OB_FAIL(conn_res_mgr_.init(schema_service_, server_gtimer_))) {
+  } else if (OB_FAIL(conn_res_mgr_.init(home_schema_service(), server_gtimer_))) {
     LOG_ERROR("init user resource mgr failed", KR(ret));
   } else if (OB_FAIL(server_gtimer_.schedule(session_mgr_,
                                              ObSQLSessionMgr::SCHEDULE_PERIOD, true))) {
@@ -2551,12 +2569,10 @@ int ObServer::init_global_context()
 {
   int ret = OB_SUCCESS;
 
-  gctx_.schema_service_ = &schema_service_;
   gctx_.config_ = &config_;
   gctx_.config_mgr_ = &config_mgr_;
   gctx_.tablet_operator_ = &tablet_operator_;
   gctx_.meta_db_pool_ = &meta_db_pool_;
-  gctx_.sql_proxy_ = &sql_proxy_;
   if (OB_FAIL(sql_proxy_.set_target_namespace(1))) {
     return ret;
   } else if (OB_FAIL(ddl_sql_proxy_.set_target_namespace(1))) {
@@ -2571,7 +2587,13 @@ int ObServer::init_global_context()
   }
   home->grant_global_control_authority();
   home->disable_storage_access_lease();
-  home->set_service(ns::NamespaceRuntime::SCHEMA_SERVICE, &schema_service_);
+  std::unique_ptr<SchemaServiceInstance> schema_service(
+      new (std::nothrow) SchemaServiceInstance());
+  if (schema_service == nullptr) {
+    return OB_ALLOCATE_MEMORY_FAILED;
+  }
+  home->set_owned_service<share::schema::ObMultiVersionSchemaService>(
+      ns::NamespaceRuntime::SCHEMA_SERVICE, std::move(schema_service));
   home->set_service(ns::NamespaceRuntime::SQL_PROXY, &sql_proxy_);
   home->set_service(ns::NamespaceRuntime::VECTOR_TASK_SQL_PROXY, &sql_proxy_);
   home->set_service(ns::NamespaceRuntime::DDL_CHECKSUM_ERROR_VERIFIER,
@@ -3090,7 +3112,7 @@ int ObServer::clean_up_invalid_tables()
   ObArray<uint64_t> table_ids;
   obcall::ObDropTableArg drop_table_arg;
   obcall::ObTableItem table_item;
-  if (OB_FAIL(schema_service_.get_runtime_schema_guard(schema_guard))) {
+  if (OB_FAIL(home_schema_service().get_runtime_schema_guard(schema_guard))) {
     LOG_WARN("fail to get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_ids_in_runtime(table_ids))) {
     LOG_WARN("fail to get table schema", K(ret));
@@ -3104,7 +3126,7 @@ int ObServer::clean_up_invalid_tables()
       const uint64_t table_id = table_ids.at(i);
       // schema guard cannot be used repeatedly in iterative logic,
       // otherwise it will cause a memory hike in schema cache
-      if (OB_FAIL(schema_service_.get_runtime_schema_guard(schema_guard))) {
+      if (OB_FAIL(home_schema_service().get_runtime_schema_guard(schema_guard))) {
         LOG_WARN("get schema guard failed", K(ret));
       } else if (OB_FAIL(schema_guard.get_simple_table_schema( table_id, table_schema))) {
         LOG_WARN("get simple table schema failed", K(ret), KT(table_id));

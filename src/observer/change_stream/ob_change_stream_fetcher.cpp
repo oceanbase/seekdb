@@ -53,6 +53,7 @@ ObCSFetcher::ObCSFetcher()
     is_inited_(false),
     dispatcher_(nullptr),
     log_storage_(nullptr),
+    schema_service_(nullptr),
     iter_(),
     current_lsn_(),
     current_scn_(),
@@ -75,6 +76,7 @@ ObCSFetcher::~ObCSFetcher()
 int ObCSFetcher::init(
     ObCSDispatcher *dispatcher,
     logservice::ObILogStorage &log_storage,
+    schema::ObMultiVersionSchemaService &schema_service,
     schema::ObSchemaPublishSignal &schema_publish_signal,
     lib::IRunWrapper *run_wrapper)
 {
@@ -90,6 +92,7 @@ int ObCSFetcher::init(
   } else {
     dispatcher_ = dispatcher;
     log_storage_ = &log_storage;
+    schema_service_ = &schema_service;
     schema_publish_signal_ = &schema_publish_signal;
     observed_schema_publish_epoch_ = schema_publish_signal.current_epoch();
     current_scn_.set_min();
@@ -134,7 +137,7 @@ int ObCSFetcher::init_consumption_position_()
     }
   }
   if (OB_SUCC(ret)) {
-    if (OB_ISNULL(GCTX.schema_service_)) {
+    if (OB_ISNULL(schema_service_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("CSFetcher: schema_service is null", KR(ret));
     } else if (0 == persisted_min_dep_lsn) {
@@ -162,7 +165,7 @@ int ObCSFetcher::init_consumption_position_()
           schema::ObRefreshSchemaStatus schema_status;
           
           
-          if (OB_FAIL(GCTX.schema_service_->get_schema_version_by_timestamp(
+          if (OB_FAIL(schema_service_->get_schema_version_by_timestamp(
                           schema_status, timestamp_us, current_schema_version_))) {
           } else if (current_schema_version_ <= 0 || !ObSchemaService::is_formal_version(current_schema_version_)) {
             ret = OB_SCHEMA_EAGAIN;
@@ -220,6 +223,7 @@ void ObCSFetcher::destroy()
     tx_info_.destroy();
     dispatcher_ = nullptr;
     log_storage_ = nullptr;
+    schema_service_ = nullptr;
     schema_publish_signal_ = nullptr;
     observed_schema_publish_epoch_ = 0;
     current_lsn_.reset();
@@ -358,10 +362,10 @@ int ObCSFetcher::get_has_async_cached_(bool &has_async)
   int ret = OB_SUCCESS;
   has_async = false;
   int64_t refreshed_version = 0;
-  if (OB_ISNULL(GCTX.schema_service_)) {
+  if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("CSFetcher: schema_service is null", KR(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_refreshed_schema_version(refreshed_version))) {
+  } else if (OB_FAIL(schema_service_->get_runtime_refreshed_schema_version(refreshed_version))) {
   } else if (refreshed_version == last_checked_schema_version_) {
     has_async = has_async_index_tables_;
   } else {
@@ -381,12 +385,12 @@ int ObCSFetcher::check_has_async_index_tables_(bool &has_async)
 {
   int ret = OB_SUCCESS;
   has_async = false;
-  if (OB_ISNULL(GCTX.schema_service_)) {
+  if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("CSFetcher: schema_service is null", KR(ret));
   } else {
     schema::ObSchemaGetterGuard guard;
-    if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard_with_version_in_inner_table(guard))) {
+    if (OB_FAIL(schema_service_->get_runtime_schema_guard_with_version_in_inner_table(guard))) {
     } else {
       bool has_ivf_index = false;
       common::ObArray<uint64_t> table_ids;
@@ -749,7 +753,7 @@ void ObCSFetcher::run1()
   while (!has_set_stop()) {
     if (OB_ISNULL(observer::namespace_worker_prototype::namespace_sql_proxy(1))
         || GCTX.in_bootstrap_ || GCTX.start_service_time_ <= 0
-        || OB_ISNULL(GCTX.schema_service_)) {
+        || OB_ISNULL(schema_service_)) {
       usleep(CS_FETCHER_INIT_RETRY_SLEEP_US);
     } else {
       break;
@@ -759,7 +763,7 @@ void ObCSFetcher::run1()
   // Determine initial mode: check if any async vector index tables exist.
   if (!has_set_stop()) {
     int64_t refreshed_version = 0;
-    if (OB_SUCC(GCTX.schema_service_->get_runtime_refreshed_schema_version(
+    if (OB_SUCC(schema_service_->get_runtime_refreshed_schema_version(
                     refreshed_version))) {
       last_checked_schema_version_ = refreshed_version;
     }
@@ -786,7 +790,7 @@ void ObCSFetcher::run1()
 
     // Periodic schema version check: detect schema changes and switch mode.
     if (REACH_TIME_INTERVAL(CS_FETCHER_SCHEMA_CHECK_INTERVAL_US)
-        && OB_NOT_NULL(GCTX.schema_service_)) {
+        && OB_NOT_NULL(schema_service_)) {
       bool old_has_async = has_async_index_tables_;
       bool new_has_async = false;
       if (OB_SUCC(get_has_async_cached_(new_has_async))) {
@@ -841,8 +845,8 @@ void ObCSFetcher::run1()
     if (IDLE == running_mode_) {
       if (IDLE == running_mode_ && !has_set_stop()) {
         int64_t current_version = 0;
-        if (OB_NOT_NULL(GCTX.schema_service_)) {
-          GCTX.schema_service_->get_runtime_refreshed_schema_version(current_version);
+        if (OB_NOT_NULL(schema_service_)) {
+          schema_service_->get_runtime_refreshed_schema_version(current_version);
         }
         if (current_version == last_checked_schema_version_
             && OB_NOT_NULL(schema_publish_signal_)) {

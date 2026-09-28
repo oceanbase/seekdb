@@ -17,6 +17,7 @@
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
 #include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "sql/resolver/ddl/ob_vec_index_builder_util.h"
 #include "storage/ls/ob_ls.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -1950,11 +1951,13 @@ int ObPluginVectorIndexUtils::get_vector_index_ids(bool &has_ivf_index, common::
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
-  ObMultiVersionSchemaService &schema_service = ObMultiVersionSchemaService::get_instance();
-  if (!schema_service.is_runtime_schema_ready()) {
+  auto *schema_service = observer::namespace_worker_prototype::namespace_schema_service(1);
+  if (schema_service == nullptr) {
+    ret = OB_NOT_INIT;
+  } else if (!schema_service->is_runtime_schema_ready()) {
     ret = OB_EAGAIN;
     LOG_INFO("runtime schema is not ready after server restart, retry later");
-  } else if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_vector_info_index_ids_in_runtime( has_ivf_index, table_id_array))) {
   }
   return ret;

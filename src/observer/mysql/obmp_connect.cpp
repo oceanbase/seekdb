@@ -247,12 +247,12 @@ int ObMPConnect::process()
       LOG_WARN("server is stopping", K(ret));
     } else if (OB_FAIL(share::check_server_runtime_ready())) {
     } else if (OB_FAIL(check_client_property(*conn))) {
-    } else if (OB_FAIL(verify_connection())) {
     } else if (OB_FAIL(create_session(conn, session))) {
     } else if (OB_ISNULL(session)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("null session", K(ret), K(session));
     } else if (OB_FAIL(bind_session_namespace(*session))) {
+    } else if (OB_FAIL(verify_connection(*session))) {
     } else if (OB_FAIL(verify_identify(*conn, *session))) {
     } else if (OB_FAIL(update_charset_sys_vars(*conn, *session))) {
     }
@@ -662,7 +662,7 @@ int ObMPConnect::check_client_property(ObSMConnection &conn)
   return ret;
 }
 
-int ObMPConnect::verify_connection() const
+int ObMPConnect::verify_connection(ObSQLSessionInfo &session) const
 {
   int ret = OB_SUCCESS;
   const char *IPV4_LOCAL_STR = "127.0.0.1";
@@ -675,7 +675,7 @@ int ObMPConnect::verify_connection() const
             || 0 == client_ip_.compare(IPV6_LOCAL_STR))) {
     } else if (SS_INIT == GCTX.status_ || SS_STARTING == GCTX.status_) {
       LOG_INFO("server is initializing, ignore verify_ip_white_list", "status", GCTX.status_, K(ret));
-    } else if (OB_FAIL(verify_ip_white_list())) {
+    } else if (OB_FAIL(verify_ip_white_list(session))) {
     }
   }
   return ret;
@@ -820,7 +820,7 @@ int ObMPConnect::verify_identify(ObSMConnection &conn, ObSQLSessionInfo &session
   return ret;
 }
 
-int ObMPConnect::verify_ip_white_list() const
+int ObMPConnect::verify_ip_white_list(ObSQLSessionInfo &session) const
 {
   int ret = OB_SUCCESS;
   const ObSysVariableSchema *sys_variable_schema = NULL;
@@ -832,7 +832,9 @@ int ObMPConnect::verify_ip_white_list() const
     LOG_WARN("client_ip is empty", K(ret));
   } else if (0 == client_ip_.compare(UNIX_SOCKET_CLIENT_IP)) {
     LOG_INFO("match unix socket connection", K(client_ip_));
-  } else if (OB_FAIL(gctx_.schema_service_->get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_ISNULL(session.effective_schema_service())) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(session.effective_schema_service()->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
   } else if (OB_ISNULL(sys_variable_schema)) {
     ret = OB_ERR_UNEXPECTED;

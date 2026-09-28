@@ -40,6 +40,10 @@
 
 namespace oceanbase
 {
+namespace common
+{
+class ObMySQLProxy;
+}
 namespace share
 {
 
@@ -120,6 +124,8 @@ public:
   int64_t refresh_scn_;    // Max commit_version of tx in batch; advance after commit.
   int64_t schema_version_;
   int64_t epoch_;           // Creation epoch snapshot; mismatch with dispatcher.epoch_ → abort.
+  schema::ObMultiVersionSchemaService *schema_service_;
+  common::ObMySQLProxy *sql_proxy_;
 
   ObMySQLTransaction trans_;
 
@@ -165,7 +171,8 @@ public:
   ObCSDispatcher();
   virtual ~ObCSDispatcher();
 
-  int init();
+  int init(schema::ObMultiVersionSchemaService &schema_service,
+           common::ObMySQLProxy &sql_proxy);
   int start();
   void stop();
   void wait();
@@ -204,6 +211,8 @@ private:
   static const int64_t CS_AGGREGATE_ROW_THRESHOLD = 1000;  // Aggregate small tx until >= 1000 rows or queue empty.
 
   bool is_inited_;
+  schema::ObMultiVersionSchemaService *schema_service_;
+  common::ObMySQLProxy *sql_proxy_;
   common::ObExtendibleRingBuffer<ObCSTxInfo> tx_ring_;  // Stores ObCSTxInfo*
   int64_t refresh_scn_;
   int64_t next_sn_;           // Serial number for ring buffer set (Fetcher side)

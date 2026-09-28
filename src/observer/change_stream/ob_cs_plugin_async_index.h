@@ -279,7 +279,7 @@ public:
   virtual int init() override;
   virtual void destroy() override;
   virtual int process(common::ObIArray<ObCSRow> &rows, ObCSExecCtx &ctx) override;
-  virtual int commit() override;
+  virtual int commit(ObCSExecCtx &ctx) override;
 
 private:
   bool is_inited_;

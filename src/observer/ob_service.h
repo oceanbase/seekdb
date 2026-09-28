@@ -38,6 +38,10 @@ namespace share
 struct ObTabletLocalChecksumItem;
 class ObDagScheduler;
 class ObIDag;
+namespace schema
+{
+class ObMultiVersionSchemaService;
+}
 }
 namespace storage
 {
@@ -82,7 +86,8 @@ public:
       query::ObIChangeStreamService &change_stream_service);
   virtual ~ObService();
 
-  int init(common::ObMySQLProxy &sql_proxy);
+  int init(common::ObMySQLProxy &sql_proxy,
+           share::schema::ObMultiVersionSchemaService &schema_service);
   int bootstrap();
   int report_bootstrap_telemetry();
   int start();

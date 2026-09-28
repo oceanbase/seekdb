@@ -37,11 +37,9 @@ DEF_TO_STRING(ObGlobalContext)
   int64_t pos = 0;
   J_OBJ_START();
   J_KV(K_(self_addr_seq),
-       KP_(schema_service),
        KP_(config),
        KP_(config_mgr),
        KP_(tablet_operator),
-       KP_(sql_proxy),
        KP_(bandwidth_throttle),
        K_(start_time),
        KP_(warm_up_start_time));

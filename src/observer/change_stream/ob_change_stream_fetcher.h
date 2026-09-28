@@ -44,6 +44,7 @@ namespace share
 namespace schema
 {
 class ObSchemaPublishSignal;
+class ObMultiVersionSchemaService;
 }
 
 /// Interval for advancing min_dep_lsn to global_stat (us).
@@ -132,6 +133,7 @@ public:
   int init(
       ObCSDispatcher *dispatcher,
       logservice::ObILogStorage &log_storage,
+      schema::ObMultiVersionSchemaService &schema_service,
       schema::ObSchemaPublishSignal &schema_publish_signal,
       lib::IRunWrapper *run_wrapper);
   int start();
@@ -193,6 +195,7 @@ private:
   bool is_inited_;
   ObCSDispatcher *dispatcher_;
   logservice::ObILogStorage *log_storage_;
+  schema::ObMultiVersionSchemaService *schema_service_;
   palf::PalfBufferIterator iter_;
   palf::LSN current_lsn_;
   SCN current_scn_;

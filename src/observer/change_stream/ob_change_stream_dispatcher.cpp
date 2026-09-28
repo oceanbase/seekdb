@@ -40,6 +40,8 @@ namespace share
 ObCSDispatcher::ObCSDispatcher()
   : share::ObThreadPool(1),
     is_inited_(false),
+    schema_service_(nullptr),
+    sql_proxy_(nullptr),
     refresh_scn_(0),
     next_sn_(0),
     dispatch_sn_(0),
@@ -55,7 +57,8 @@ ObCSDispatcher::~ObCSDispatcher()
   destroy();
 }
 
-int ObCSDispatcher::init()
+int ObCSDispatcher::init(schema::ObMultiVersionSchemaService &schema_service,
+                         common::ObMySQLProxy &sql_proxy)
 {
   int ret = common::OB_SUCCESS;
   if (is_inited_) {
@@ -65,6 +68,8 @@ int ObCSDispatcher::init()
   } else if (FALSE_IT(ObThreadPool::set_run_wrapper(share::server_runtime()))) {
   } else if (OB_FAIL(ObThreadPool::init())) {
   } else {
+    schema_service_ = &schema_service;
+    sql_proxy_ = &sql_proxy;
     next_sn_ = 0;
     dispatch_sn_ = 0;
     next_commit_sn_ = 0;
@@ -93,9 +98,8 @@ int ObCSDispatcher::init_refresh_scn_()
   int ret = common::OB_SUCCESS;
   int64_t schema_version = 0;
   // The refresh cursor is persisted in Namespace 1's control catalog.
-  common::ObMySQLProxy *control_proxy = observer::namespace_worker_prototype::namespace_sql_proxy(1);
-  schema::ObMultiVersionSchemaService *control_schema =
-      observer::namespace_worker_prototype::namespace_schema_service(1);
+  common::ObMySQLProxy *control_proxy = sql_proxy_;
+  schema::ObMultiVersionSchemaService *control_schema = schema_service_;
   if (!is_inited_) {
     ret = common::OB_NOT_INIT;
     LOG_WARN("ObCSDispatcher: not inited", K(ret));
@@ -148,6 +152,8 @@ void ObCSDispatcher::destroy()
     wait();
     tx_ring_.destroy();
     dispatch_cond_.destroy();
+    schema_service_ = nullptr;
+    sql_proxy_ = nullptr;
     refresh_scn_ = 0;
     next_sn_ = 0;
     dispatch_sn_ = 0;
@@ -444,6 +450,8 @@ int ObCSDispatcher::do_dispatch_()
     exec_ctx->create_time_ = ObTimeUtil::current_time();
     exec_ctx->batch_sn_ = dispatch_sn_;
     exec_ctx->epoch_ = dispatcher_epoch_;  // Use dispatcher's local epoch, not the global atomic.
+    exec_ctx->schema_service_ = schema_service_;
+    exec_ctx->sql_proxy_ = sql_proxy_;
     // Rationale: if a worker just inc_epoch() due to a prior batch failure,
     // ATOMIC_LOAD(&epoch_) would give the new epoch, making workers unable
     // to detect that this batch should be aborted.  dispatcher_epoch_ is
@@ -517,7 +525,6 @@ int ObCSDispatcher::do_dispatch_()
            K(exec_ctx->row_count_), K(exec_ctx->refresh_scn_),
            K(exec_ctx->schema_version_), K(executor_count));
 
-  ObMultiVersionSchemaService *schema_service = nullptr;
   bool trans_started = false;
   // Bump worker timeout to 5 minutes so that ObInnerSQLConnection propagates
   // the same value to session's ob_query_timeout / ob_trx_timeout when the
@@ -527,10 +534,10 @@ int ObCSDispatcher::do_dispatch_()
   THIS_WORKER.set_timeout_ts(ObTimeUtil::current_time() + CS_DISPATCH_TRANS_TIMEOUT_US);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(exec_ctx->init_plugins())) {
-  } else if (OB_ISNULL(schema_service = ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service())) {
+  } else if (OB_ISNULL(exec_ctx->schema_service_) || OB_ISNULL(exec_ctx->sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null", KR(ret));
-  } else if (OB_FAIL(exec_ctx->trans_.start(GCTX.sql_proxy_))) {
+    LOG_WARN("change stream batch owner services are null", KR(ret));
+  } else if (OB_FAIL(exec_ctx->trans_.start(exec_ctx->sql_proxy_))) {
   } else {
     trans_started = true;
   }
@@ -615,6 +622,8 @@ void ObCSExecCtx::reset()
   tx_list_.reset();
   sub_tasks_.reset();
   destroy_plugins();
+  schema_service_ = nullptr;
+  sql_proxy_ = nullptr;
   MEMSET(plugins_, 0, sizeof(plugins_));
   plugin_cnt_ = 0;
   process_cnt_ =0;

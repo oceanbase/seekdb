@@ -36,6 +36,7 @@
 #include "observer/vector_index/ob_ivf_async_task.h"
 #include "share/config/ob_config_helper.h"
 #include "share/schema/ob_schema_runtime_service.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 
 namespace oceanbase
 {
@@ -329,18 +330,21 @@ int ObVecIndexAsyncTaskUtil::get_table_id_from_adapter(
 
 bool ObVecIndexAsyncTaskUtil::check_runtime_ready()
 {
-  return ObMultiVersionSchemaService::get_instance().is_runtime_schema_ready();
+  auto *schema_service = observer::namespace_worker_prototype::namespace_schema_service(1);
+  return schema_service != nullptr && schema_service->is_runtime_schema_ready();
 }
 
 int ObVecIndexAsyncTaskUtil::get_table_ids(ObIArray<uint64_t> &table_id_array)
 {
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
-  ObMultiVersionSchemaService &schema_service = ObMultiVersionSchemaService::get_instance();
-  if (!schema_service.is_runtime_schema_ready()) {
+  auto *schema_service = observer::namespace_worker_prototype::namespace_schema_service(1);
+  if (schema_service == nullptr) {
+    ret = OB_NOT_INIT;
+  } else if (!schema_service->is_runtime_schema_ready()) {
     ret = OB_EAGAIN;
     LOG_INFO("runtime schema is not ready, retry later", KR(ret));
-  } else if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_ids_in_runtime(table_id_array))) {
   }
   return ret;

@@ -235,7 +235,7 @@ void ObCSExecutor::do_finish_batch_(ObCSExecCtx *ctx, ObCSDispatcher &dispatcher
       // ── Success path: plugin commit + advance scn + trans commit. ──
       for (int64_t i = 0; OB_SUCC(ret) && i < ctx->plugin_cnt_; ++i) {
         ObCSPlugin *plugin = ctx->plugins_[i];
-        if (OB_NOT_NULL(plugin) && OB_FAIL(plugin->commit())) {
+        if (OB_NOT_NULL(plugin) && OB_FAIL(plugin->commit(*ctx))) {
           LOG_WARN("plugin commit failed", KR(ret), K(i));
         }
       }

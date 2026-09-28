@@ -311,7 +311,6 @@ public:
   : is_inited_(false),
     has_start_(false),
     is_ls_or_tablet_changed_(false),
-    schema_service_(NULL),
     ls_service_(NULL),
     lob_read_service_(NULL),
     memory_context_(NULL),
@@ -320,8 +319,7 @@ public:
     is_vec_async_task_started_(false)
   {}
   virtual ~ObPluginVectorIndexService();
-  int init(schema::ObMultiVersionSchemaService *schema_service,
-           storage::ObLSService *ls_service,
+  int init(storage::ObLSService *ls_service,
            common::ObILobReadService *lob_read_service);
   bool is_inited() { return is_inited_; }
   // Server module interfaces.
@@ -437,7 +435,7 @@ public:
   uint64_t *get_all_vsag_use_mem() { return all_vsag_use_mem_; }
 
   TO_STRING_KV(K_(is_inited), K_(has_start),
-               K_(is_ls_or_tablet_changed), KP_(schema_service), KP_(ls_service));
+               K_(is_ls_or_tablet_changed), KP_(ls_service));
 private:
   // for ivf
   int resolve_ivf_aux_target(const ObTabletID storage_tablet_id,
@@ -457,7 +455,6 @@ private:
   bool has_start_;
   bool is_ls_or_tablet_changed_;
 
-  share::schema::ObMultiVersionSchemaService *schema_service_;
   storage::ObLSService *ls_service_;
   common::ObILobReadService *lob_read_service_;
   ObFIFOAllocator allocator_;

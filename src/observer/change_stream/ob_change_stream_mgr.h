@@ -35,6 +35,7 @@ namespace share
 namespace schema
 {
 class ObSchemaPublishSignal;
+class ObMultiVersionSchemaService;
 }
 
 /// Process-wide Change Stream manager.
@@ -49,11 +50,15 @@ public:
   static int server_module_init(
       ObChangeStreamMgr *&mgr,
       logservice::ObILogStorage &log_storage,
+      schema::ObMultiVersionSchemaService &schema_service,
+      common::ObMySQLProxy &sql_proxy,
       schema::ObSchemaPublishSignal &schema_publish_signal,
       lib::IRunWrapper *run_wrapper);
 
   int init(
       logservice::ObILogStorage &log_storage,
+      schema::ObMultiVersionSchemaService &schema_service,
+      common::ObMySQLProxy &sql_proxy,
       schema::ObSchemaPublishSignal &schema_publish_signal,
       lib::IRunWrapper *run_wrapper);
   int start();

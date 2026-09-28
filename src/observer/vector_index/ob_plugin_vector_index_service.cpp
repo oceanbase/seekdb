@@ -828,7 +828,6 @@ void ObPluginVectorIndexService::destroy()
     has_start_ = false;
 
     is_ls_or_tablet_changed_ = false;
-    schema_service_ = NULL;
     ls_service_ = NULL;
 
     single_index_mgr_->destroy();
@@ -850,8 +849,7 @@ void ObPluginVectorIndexService::destroy()
   }
 }
 
-int ObPluginVectorIndexService::init(schema::ObMultiVersionSchemaService *schema_service,
-                                     storage::ObLSService *ls_service,
+int ObPluginVectorIndexService::init(storage::ObLSService *ls_service,
                                      common::ObILobReadService *lob_read_service)
 {
   int ret = OB_SUCCESS;
@@ -859,8 +857,7 @@ int ObPluginVectorIndexService::init(schema::ObMultiVersionSchemaService *schema
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
-  } else if (OB_ISNULL(schema_service)
-      || OB_ISNULL(ls_service)
+  } else if (OB_ISNULL(ls_service)
       || OB_ISNULL(lob_read_service)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument to init ObPluginVectorIndexService", KR(ret));
@@ -877,7 +874,6 @@ int ObPluginVectorIndexService::init(schema::ObMultiVersionSchemaService *schema
     } else if (FALSE_IT(single_index_mgr_ = new(mgr_buf) ObPluginVectorIndexMgr(memory_context_))) {
     } else if (OB_FAIL(single_index_mgr_->init(memory_context_, all_vsag_use_mem_))) {
     } else {
-      schema_service_ = schema_service;
       ls_service_ = ls_service;
       lob_read_service_ = lob_read_service;
       is_inited_ = true;
@@ -975,10 +971,9 @@ int ObPluginVectorIndexService::server_module_init(
     common::ObILobReadService *lob_read_service)
 {
   int ret = OB_SUCCESS;
-  schema::ObMultiVersionSchemaService *schema_service = &GSCHEMASERVICE;
   storage::ObLSService *ls_service = ::oceanbase::share::server_service<::oceanbase::storage::ObLSService>();
 
-  if (OB_FAIL(service->init(schema_service, ls_service, lob_read_service))) {
+  if (OB_FAIL(service->init(ls_service, lob_read_service))) {
   }
   return ret;
 }

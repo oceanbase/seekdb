@@ -206,7 +206,10 @@ int ObPluginVectorIndexLoadScheduler::check_schema_version()
   int ret = OB_SUCCESS;
   ObSchemaGetterGuard schema_guard;
   int64_t schema_version = 0;
-  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+  auto *schema_service = observer::namespace_worker_prototype::namespace_schema_service(1);
+  if (schema_service == nullptr) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_schema_version(schema_version))) {
   } else if (!ObSchemaService::is_formal_version(schema_version)) {
     ret = OB_EAGAIN;
@@ -453,7 +456,10 @@ int ObPluginVectorIndexLoadScheduler::execute_adapter_maintenance(ObIArray<uint6
     
       bool is_vector_index = false;
       bool is_shared_index = false;
-      if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+      auto *schema_service = observer::namespace_worker_prototype::namespace_schema_service(1);
+      if (schema_service == nullptr) {
+        ret = OB_NOT_INIT;
+      } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
       }
     
       for (int64_t idx = start_idx; OB_SUCC(ret) && idx < end_idx; ++idx) {

@@ -1961,7 +1961,6 @@ int ObRawExprUtils::resolve_gen_column_udf_expr(ObRawExpr *&udf_expr,
   // params.allocator_ = &(expr_factory.get_allocator());
   // params.session_info_ = const_cast<ObSQLSessionInfo *>(&session_info);
   // params.schema_checker_ = const_cast<ObSchemaChecker *>(schema_checker);
-  // params.sql_proxy_ = GCTX.sql_proxy_;
   // params.stmt_factory_ = &stmt_factory;
   // params.query_ctx_ = NULL;
   // // indicate not from pl scope; all symbol is searched inside schema

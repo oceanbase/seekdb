@@ -1099,12 +1099,6 @@ int ObMultiVersionSchemaService::destroy()
   return ret;
 }
 
-ObMultiVersionSchemaService &ObMultiVersionSchemaService::get_instance()
-{
-  static ObMultiVersionSchemaService THE_ONE;
-  return THE_ONE;
-}
-
 // init in main thread
 int ObMultiVersionSchemaService::init(
     ObMySQLProxy *sql_proxy,

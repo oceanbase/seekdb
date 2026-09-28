@@ -1501,7 +1501,7 @@ int ObServer::obs_init_modules()
   }
   if (OB_SUCC(ret) && OB_FAIL(ObDTLIntermResultManager::server_module_init(mods_dtl_interm_result_manager_))) { SERVER_LOG(WARN, "mods_dtl_interm_result_manager_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObSchemaRuntimeService::server_module_init(
-      mods_schema_runtime_service_, *root_schema_service))) {
+      mods_schema_runtime_service_))) {
     SERVER_LOG(WARN, "mods_schema_runtime_service_ fail", KR(ret));
   }
   if (OB_SUCC(ret)) {
@@ -1608,6 +1608,8 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(ObChangeStreamMgr::server_module_init(
       mods_change_stream_mgr_,
       *mods_log_storage_adapter_,
+      *root_schema_service,
+      *root_sql_proxy,
       schema_publish_signal_,
       share::server_runtime()))) {
     SERVER_LOG(WARN, "mods_change_stream_mgr_ fail", KR(ret));

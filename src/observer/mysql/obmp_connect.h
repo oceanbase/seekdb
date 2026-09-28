@@ -76,9 +76,9 @@ private:
                                bool has_more_result) const;
   int init_connect_process(common::ObString &init_sql,
                            sql::ObSQLSessionInfo &session) const;
-  int verify_connection() const;
+  int verify_connection(sql::ObSQLSessionInfo &session) const;
   int verify_identify(ObSMConnection &conn, sql::ObSQLSessionInfo &session);
-  int verify_ip_white_list() const;
+  int verify_ip_white_list(sql::ObSQLSessionInfo &session) const;
   int bind_session_namespace(sql::ObSQLSessionInfo &session);
 
   int check_password_expired(share::schema::ObSchemaGetterGuard &schema_guard,

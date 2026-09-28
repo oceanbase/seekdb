@@ -74,10 +74,7 @@ ObCSAsyncIndexProcessor::ObCSAsyncIndexProcessor(ObCSExecCtx &ctx)
 int ObCSAsyncIndexProcessor::init_schema_guard_()
 {
   int ret = common::OB_SUCCESS;
-  ObMultiVersionSchemaService *schema_service =
-      nullptr != ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()
-          ? ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service()
-          : nullptr;
+  ObMultiVersionSchemaService *schema_service = ctx_.schema_service_;
   if (OB_ISNULL(schema_service)) {
     ret = common::OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", K(ret));
@@ -1283,7 +1280,7 @@ int ObCSPluginAsyncIndex::process(common::ObIArray<ObCSRow> &rows, ObCSExecCtx &
 // commit(): do nothing for now
 // ---------------------------------------------------------------------------
 
-int ObCSPluginAsyncIndex::commit()
+int ObCSPluginAsyncIndex::commit(ObCSExecCtx &ctx)
 {
   int ret = common::OB_SUCCESS;
   if (!is_inited_) {
@@ -1300,10 +1297,7 @@ int ObCSPluginAsyncIndex::commit()
     const int64_t now = common::ObTimeUtility::current_time();
     if (now - ATOMIC_LOAD(&last_gc_time) > GC_INTERVAL_US) {
       ATOMIC_STORE(&last_gc_time, now);
-      schema::ObMultiVersionSchemaService *schema_service =
-          ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>() != nullptr
-              ? ::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->get_schema_service()
-              : nullptr;
+      schema::ObMultiVersionSchemaService *schema_service = ctx.schema_service_;
       if (OB_NOT_NULL(schema_service)) {
         int tmp_ret = OB_SUCCESS;
         if (OB_TMP_FAIL(schema_service->try_eliminate_schema_mgr())) {

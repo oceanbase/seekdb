@@ -58,20 +58,13 @@ class ObSQLiteConnectionPool;
 class ObRsMgr;
 class ObSchemaStatusProxy;
 
-namespace schema
-{
-class ObMultiVersionSchemaService;
-} // end of namespace schema
-
 struct ObGlobalContext
 {
   common::ObAddrWithSeq self_addr_seq_;
-  share::schema::ObMultiVersionSchemaService *schema_service_;
   common::ObServerConfig *config_;
   common::ObConfigManager *config_mgr_;
   share::ObTabletTableOperator *tablet_operator_;
   share::ObSQLiteConnectionPool *meta_db_pool_;
-  common::ObMySQLProxy *sql_proxy_;
   common::ObInOutBandwidthThrottle *bandwidth_throttle_;
   int64_t start_time_;
   int64_t *warm_up_start_time_;

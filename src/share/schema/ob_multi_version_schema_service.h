@@ -138,8 +138,6 @@ public:
   const char *print_refresh_schema_mode(const RefreshSchemaMode mode);
 
 public:
-  static ObMultiVersionSchemaService &get_instance();
-
   int init(common::ObMySQLProxy *proxy,
       const common::ObCommonConfig *config,
       ObSchemaStatusProxy &schema_status_proxy,
@@ -416,7 +414,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObMultiVersionSchemaService);
 };
 
-#define GSCHEMASERVICE (::oceanbase::share::schema::ObMultiVersionSchemaService::get_instance())
 }//end of namespace schema
 }//end of namespace share
 }//end of namespace oceanbase
