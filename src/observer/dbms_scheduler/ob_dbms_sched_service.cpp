@@ -17,7 +17,6 @@
 #include "observer/dbms_scheduler/ob_dbms_sched_service.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_job_utils.h"
 #include "share/rc/ob_server_runtime.h"
-#include "share/rc/ob_server_runtime.h"
 #define USING_LOG_PREFIX SERVER
 
 namespace oceanbase
@@ -27,9 +26,12 @@ using namespace oceanbase::share;
 namespace rootserver
 {
 
-int ObDBMSSchedService::server_module_init(ObDBMSSchedService *&dbms_sched_service)
+int ObDBMSSchedService::server_module_init(
+    ObDBMSSchedService *&dbms_sched_service,
+    ObMySQLProxy &sql_proxy,
+    share::schema::ObMultiVersionSchemaService &schema_service)
 {
-  return dbms_sched_service->init();
+  return dbms_sched_service->init(sql_proxy, schema_service);
 }
 
 int ObDBMSSchedService::allocate_job_id(int64_t &job_id)
@@ -46,13 +48,15 @@ int ObDBMSSchedService::create_job(
       sql_client, job_id, job_info);
 }
 
-int ObDBMSSchedService::init()
+int ObDBMSSchedService::init(
+    ObMySQLProxy &sql_proxy,
+    share::schema::ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   if (job_master_.is_inited()) {
     ret = OB_INIT_TWICE;
     LOG_WARN("has inited", KR(ret));
-  } else if (OB_FAIL(job_master_.init(GCTX.sql_proxy_, GCTX.schema_service_))) {
+  } else if (OB_FAIL(job_master_.init(&sql_proxy, &schema_service))) {
   } else if (OB_FAIL(ObServerThreadHelper::create(
       "DBMSSched",
       1))) {

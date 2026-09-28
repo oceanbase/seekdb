@@ -92,6 +92,7 @@ public:
       stoped_(true),
       is_leader_(false),
       wokeup_(false),
+      sql_proxy_(NULL),
       schema_service_(NULL),
       allocator_(ObMemAttr("DbmsScheduler"), OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_),
       alive_jobs_(),
@@ -138,6 +139,7 @@ private:
 
   common::ObThreadCond thread_cond_;
 
+  common::ObMySQLProxy *sql_proxy_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
   ObDBMSSchedTableOperator table_operator_;
 

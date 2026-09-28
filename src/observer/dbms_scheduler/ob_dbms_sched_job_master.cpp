@@ -54,6 +54,7 @@ int ObDBMSSchedJobMaster::init(common::ObMySQLProxy *sql_proxy,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("trace id is null", K(ret));
   } else {
+    sql_proxy_ = sql_proxy;
     schema_service_ = schema_service;
     inited_ = true;
   }
@@ -113,11 +114,12 @@ int64_t ObDBMSSchedJobMaster::run_job(ObDBMSSchedJobInfo &job_info, ObDBMSSchedJ
     // Run the job asynchronously so the scheduler thread remains responsive.
     // async_call deep-copies the ObString argument before dispatch.
     const uint64_t run_job_id = job_key->get_job_id();
+    ObMySQLProxy *sql_proxy = sql_proxy_;
+    ObMultiVersionSchemaService *schema_service = schema_service_;
     ex_rpc::async_call<void>(job_key->get_job_name(),
-      [run_job_id](const ObString &run_job_name) {
+      [run_job_id, sql_proxy, schema_service](const ObString &run_job_name) {
         ObDBMSSchedJobExecutor executor;
-        if (OB_NOT_NULL(GCTX.sql_proxy_) && OB_NOT_NULL(GCTX.schema_service_)
-            && OB_SUCCESS == executor.init(GCTX.sql_proxy_, GCTX.schema_service_)) {
+        if (OB_SUCCESS == executor.init(sql_proxy, schema_service)) {
           (void)executor.run_dbms_sched_job(run_job_id, run_job_name);
         }
       });

@@ -41,7 +41,9 @@ public:
     destroy();
   }
 
-  static int server_module_init(ObDBMSSchedService *&dbms_sched_service);
+  static int server_module_init(ObDBMSSchedService *&dbms_sched_service,
+                                common::ObMySQLProxy &sql_proxy,
+                                share::schema::ObMultiVersionSchemaService &schema_service);
   static void wakeup_scheduler();
   int allocate_job_id(int64_t &job_id) override;
   int create_job(
@@ -49,7 +51,8 @@ public:
       int64_t job_id,
       const dbms_scheduler::ObDBMSSchedJobInfo &job_info) override;
   void notify_scheduler() override { wakeup_scheduler(); }
-  int init();
+  int init(common::ObMySQLProxy &sql_proxy,
+           share::schema::ObMultiVersionSchemaService &schema_service);
   int start();
   virtual void do_work() override;
   void stop();
