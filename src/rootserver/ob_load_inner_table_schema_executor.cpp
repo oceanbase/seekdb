@@ -31,7 +31,8 @@ namespace rootserver
 ERRSIM_POINT_DEF(ERRSIM_LOAD_INNER_TABLE_SCHEMA);
 
 int ObLoadInnerTableSchemaExecutor::load_inner_table_schema(
-    const obcall::ObLoadRuntimeTableSchemaArg &arg)
+    const obcall::ObLoadRuntimeTableSchemaArg &arg,
+    ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
   DEBUG_SYNC(LOAD_INNER_TABLE_SCHEMA);
@@ -50,7 +51,7 @@ int ObLoadInnerTableSchemaExecutor::load_inner_table_schema(
       LOG_WARN("info is NULL", KR(ret), KP(info), K(i));
     } else if (arg.get_table_id() == info->get_inner_table_id()) {
       find = true;
-      if (OB_FAIL(load_inner_table_schema(arg, *info))) {
+      if (OB_FAIL(load_inner_table_schema(arg, *info, sql_proxy))) {
       }
     }
   }
@@ -65,17 +66,18 @@ int ObLoadInnerTableSchemaExecutor::load_inner_table_schema(
 
 int ObLoadInnerTableSchemaExecutor::load_inner_table_schema(
     const obcall::ObLoadRuntimeTableSchemaArg &arg,
-    const share::ObLoadInnerTableSchemaInfo &info)
+    const share::ObLoadInnerTableSchemaInfo &info,
+    ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
   ObMySQLTransaction trans;
   ObSqlString insert_header;
-  if (!arg.is_valid() || arg.get_table_id() != info.get_inner_table_id() || OB_ISNULL(GCTX.sql_proxy_)) {
+  if (!arg.is_valid() || arg.get_table_id() != info.get_inner_table_id()) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("invalid argument", KR(ret), K(arg), K(info), KP(GCTX.sql_proxy_));
+    LOG_WARN("invalid argument", KR(ret), K(arg), K(info));
   } else if (OB_FAIL(insert_header.append_fmt("INSERT INTO %s(%s) VALUES ", info.get_inner_table_name(),
               info.get_inner_table_column_names()))) {
-  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+  } else if (OB_FAIL(trans.start(&sql_proxy))) {
   } else {
     ObSqlString sql;
     const ObIArray<int64_t> &insert_idx = arg.get_insert_idx();
@@ -226,7 +228,7 @@ int ObLoadInnerTableSchemaExecutor::load_schema_version(common::ObISQLClient &cl
   return ret;
 }
 
-int ObLoadInnerTableSchemaExecutor::execute()
+int ObLoadInnerTableSchemaExecutor::execute(ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
   const int64_t start_ts = ObTimeUtility::current_time();
@@ -237,7 +239,7 @@ int ObLoadInnerTableSchemaExecutor::execute()
   } else {
     // seekdb: all local, sequential direct calls.
     for (next_arg_index_ = 0; OB_SUCC(ret) && next_arg_index_ < args_.count(); ++next_arg_index_) {
-      if (OB_FAIL(load_inner_table_schema(args_[next_arg_index_]))) {
+      if (OB_FAIL(load_inner_table_schema(args_[next_arg_index_], sql_proxy))) {
       }
     }
   }

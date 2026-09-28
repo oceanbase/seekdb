@@ -87,13 +87,14 @@ public:
       srs_old_snapshots_(&mode_arena_, common::ObModIds::OB_MODULE_PAGE_ALLOCATOR),
       srs_stale_(true), infinite_plane_() {}
   virtual ~ObSrsService() {};
-  int init();
+  int init(common::ObMySQLProxy &sql_proxy);
   int get_tenant_srs_guard(common::ObSrsCacheGuard &srs_guard) override;
   int get_srs_bounds(
       uint64_t srid,
       const common::ObSrsItem *srs_item,
       const common::ObSrsBoundsItem *&bounds_item) override;
-  static int server_module_init(ObSrsService* &srs_service);
+  static int server_module_init(ObSrsService* &srs_service,
+                                common::ObMySQLProxy &sql_proxy);
   void destroy();
   void mark_stale() { ATOMIC_STORE(&srs_stale_, true); }
 

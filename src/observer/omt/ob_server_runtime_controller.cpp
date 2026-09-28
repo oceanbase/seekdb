@@ -1542,7 +1542,10 @@ int ObServer::obs_init_modules()
           mods_opt_stat_monitor_manager_);
     }
   }
-  if (OB_SUCC(ret) && OB_FAIL(omt::ObSrsService::server_module_init(mods_srs_service_))) { SERVER_LOG(WARN, "mods_srs_service_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(omt::ObSrsService::server_module_init(
+          mods_srs_service_, *root_sql_proxy))) {
+    SERVER_LOG(WARN, "mods_srs_service_ fail", KR(ret));
+  }
   if (OB_SUCC(ret) && OB_FAIL(sql_engine_.init(
       &vt_data_service_,
       self_addr_,

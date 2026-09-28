@@ -22,6 +22,7 @@
 
 namespace oceanbase
 {
+namespace common { class ObMySQLProxy; }
 namespace share
 {
 class ObLoadInnerTableSchemaInfo;
@@ -36,18 +37,20 @@ namespace rootserver
 class ObLoadInnerTableSchemaExecutor
 {
 public:
-  static int load_inner_table_schema(const obcall::ObLoadRuntimeTableSchemaArg &arg);
+  static int load_inner_table_schema(const obcall::ObLoadRuntimeTableSchemaArg &arg,
+                                     common::ObMySQLProxy &sql_proxy);
   static int load_schema_version(common::ObISQLClient &client, const int64_t core_schema_version, const int64_t sys_schema_version);
 private:
   static int load_inner_table_schema(const obcall::ObLoadRuntimeTableSchemaArg &arg,
-      const share::ObLoadInnerTableSchemaInfo &info);
+      const share::ObLoadInnerTableSchemaInfo &info,
+      common::ObMySQLProxy &sql_proxy);
 
 public:
   ObLoadInnerTableSchemaExecutor() : inited_(false),
     args_(), next_arg_index_(0), load_rpc_timeout_(0), parallel_count_(0) {}
   int init(ObIArray<share::schema::ObTableSchema> &table_schemas,
       const int64_t max_cpu);
-  int execute();
+  int execute(common::ObMySQLProxy &sql_proxy);
 private:
   int init_args_(ObIArray<share::schema::ObTableSchema> &table_schemas);
   int append_arg(const ObIArray<int64_t> &insert_idx, const share::ObLoadInnerTableSchemaInfo &info);

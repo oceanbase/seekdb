@@ -254,7 +254,7 @@ int ObBootstrap::load_all_schema(
                   "bootstrap create all schema begin.");
   ObLoadInnerTableSchemaExecutor executor;
   if (OB_FAIL(executor.init(table_schemas, get_cpu_count()))) {
-  } else if (OB_FAIL(executor.execute())) {
+  } else if (OB_FAIL(executor.execute(ddl_service.get_sql_proxy()))) {
   } else if (OB_FAIL(ObLoadInnerTableSchemaExecutor::load_schema_version(ddl_service.get_sql_proxy(),
           ObSchemaUtils::get_inner_table_core_schema_version(table_schemas),
           ObSchemaUtils::get_inner_table_sys_schema_version(table_schemas)))) {

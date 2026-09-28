@@ -32,10 +32,11 @@ namespace oceanbase
 namespace omt
 {
 
-int ObSrsService::server_module_init(ObSrsService* &srs_service)
+int ObSrsService::server_module_init(ObSrsService* &srs_service,
+                                     common::ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(srs_service->init())) {
+  if (OB_FAIL(srs_service->init(sql_proxy))) {
   }
   return ret;
 }
@@ -53,10 +54,10 @@ void ObSrsService::destroy()
   }
 }
 
-int ObSrsService::init()
+int ObSrsService::init(common::ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
-  sql_proxy_ = GCTX.sql_proxy_;
+  sql_proxy_ = &sql_proxy;
   lib::ObMemAttr mem_attr("SrsService");
   if (inited_) {
     ret = OB_INIT_TWICE;

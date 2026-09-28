@@ -23,6 +23,7 @@
 #include "observer/namespace_worker_protocol_prototype.h"
 #include "observer/ob_srv_task.h"
 #include "share/schema/ob_schema_utils.h"
+#include "namespace/namespace.h"
 
 namespace oceanbase
 {
@@ -77,12 +78,20 @@ int ObSMConnectionCallback::init(ObSqlSockSession& sess, ObSMConnection& conn)
   // the session id and the scramble the later auth check verifies against.
   RLOCAL(common::ObMysqlRandom, thread_scramble_rand);
   int64_t autocommit = 0;
+  ns::NamespaceRuntime *root_runtime = nullptr;
+  auto *schema_service = ns::namespace_registry().get(1, root_runtime)
+      && root_runtime != nullptr
+      ? static_cast<share::schema::ObMultiVersionSchemaService *>(
+            root_runtime->service(ns::NamespaceRuntime::SCHEMA_SERVICE))
+      : nullptr;
   if (!sess.client_addr_.using_unix()
       && !ATOMIC_LOAD(&GCTX.sys_package_ready_)) {
     ret = OB_SERVER_IS_INIT;
+  } else if (OB_ISNULL(schema_service)) {
+    ret = OB_NOT_INIT;
   } else if (OB_FAIL(sm_conn_init(conn))) {
   } else if (OB_FAIL(share::schema::ObSchemaUtils::get_runtime_int_variable(
-                 *GCTX.schema_service_, share::SYS_VAR_AUTOCOMMIT, autocommit))) {
+                 *schema_service, share::SYS_VAR_AUTOCOMMIT, autocommit))) {
   } else if (OB_UNLIKELY(0 != autocommit && 1 != autocommit)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected global autocommit", K(ret), K(autocommit));
