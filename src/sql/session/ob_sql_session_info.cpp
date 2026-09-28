@@ -188,6 +188,14 @@ share::schema::ObMultiVersionSchemaService *ObSQLSessionInfo::effective_schema_s
       : nullptr;
 }
 
+transaction::tablelock::ObTableLockService *ObSQLSessionInfo::effective_table_lock_service() const
+{
+  return ns_runtime_ != nullptr
+      ? static_cast<transaction::tablelock::ObTableLockService *>(
+            ns_runtime_->service(ns::NamespaceRuntime::TABLE_LOCK_SERVICE))
+      : nullptr;
+}
+
 ObPsCache *ObSQLSessionInfo::effective_ps_cache() const
 {
   return ns_runtime_ != nullptr

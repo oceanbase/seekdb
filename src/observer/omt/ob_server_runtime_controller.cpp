@@ -50,7 +50,6 @@
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/meta_store/ob_local_storage_meta_service.h"
-#include "storage/tablelock/ob_table_lock_service.h"
 #include "storage/compaction/ob_sstable_merge_info_mgr.h" // ObSSTableMergeInfoMgr
 #include "storage/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/access/ob_table_scan_iterator.h"
@@ -1248,7 +1247,6 @@ int ObServer::obs_construct_modules()
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_server_compaction_event_history_))) { SERVER_LOG(WARN, "mods_server_compaction_event_history_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_tablet_stat_mgr_))) { SERVER_LOG(WARN, "mods_tablet_stat_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_lock_wait_mgr_))) { SERVER_LOG(WARN, "mods_lock_wait_mgr_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_table_lock_service_))) { SERVER_LOG(WARN, "mods_table_lock_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_primary_major_freeze_service_))) { SERVER_LOG(WARN, "mods_primary_major_freeze_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_restore_major_freeze_service_))) { SERVER_LOG(WARN, "mods_restore_major_freeze_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_tablet_runtime_meta_updater_))) { SERVER_LOG(WARN, "mods_tablet_runtime_meta_updater_ fail", KR(ret)); }
@@ -1343,7 +1341,6 @@ int ObServer::obs_construct_modules()
     BIND_SERVICE(dtl_interm_result_manager, sql::dtl::ObDTLIntermResultManager);
     BIND_SERVICE(shared_macro_block_mgr, blocksstable::ObSharedMacroBlockMgr);
     BIND_SERVICE(server_runtime_service, storage::ObIServerRuntime);
-    BIND_SERVICE(table_lock_service, transaction::tablelock::ObTableLockService);
     BIND_SERVICE(shared_timer, share::ObISharedTimer);
     BIND_SERVICE(schedule_suspect_info_mgr, compaction::ObScheduleSuspectInfoMgr);
     BIND_SERVICE(mds_service, storage::mds::ObMdsService);
@@ -1449,15 +1446,6 @@ int ObServer::obs_init_modules()
       mods_lock_wait_mgr_, session_mgr_, *this))) {
     SERVER_LOG(WARN, "mods_lock_wait_mgr_ fail", KR(ret));
   }
-  if (OB_SUCC(ret) &&
-      (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()) ||
-       OB_FAIL(ObTableLockService::server_module_init(
-           mods_table_lock_service_, *::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>())))) {
-    if (OB_SUCC(ret)) {
-      ret = OB_ERR_UNEXPECTED;
-    }
-    SERVER_LOG(WARN, "mods_table_lock_service_ fail", KR(ret), KP(::oceanbase::share::server_service<::oceanbase::sql::ObSQLSessionMgr>()));
-  }
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObPrimaryMajorFreezeService::server_module_init(mods_primary_major_freeze_service_))) { SERVER_LOG(WARN, "mods_primary_major_freeze_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObRestoreMajorFreezeService::server_module_init(mods_restore_major_freeze_service_))) { SERVER_LOG(WARN, "mods_restore_major_freeze_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(major_freeze_coordinator_adapter_.init(
@@ -1536,6 +1524,10 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(namespace_worker_prototype::init_namespace_dbms_scheduler(
           *root_runtime, *root_sql_proxy, *root_schema_service))) {
     SERVER_LOG(WARN, "root namespace DBMS scheduler init failed", KR(ret));
+  }
+  if (OB_SUCC(ret) && OB_FAIL(namespace_worker_prototype::init_namespace_table_lock_service(
+          *root_runtime, *root_sql_proxy, *root_schema_service, session_mgr_))) {
+    SERVER_LOG(WARN, "root namespace table lock service init failed", KR(ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(ObOptStatMonitorManager::server_module_init(
       mods_opt_stat_monitor_manager_, root_sql_proxy,
@@ -1635,7 +1627,9 @@ int ObServer::obs_start_modules()
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_local_storage_meta_service_))) { SERVER_LOG(WARN, "mods_local_storage_meta_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_tmp_file_manager_))) { SERVER_LOG(WARN, "mods_tmp_file_manager_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_lock_wait_mgr_))) { SERVER_LOG(WARN, "mods_lock_wait_mgr_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_table_lock_service_))) { SERVER_LOG(WARN, "mods_table_lock_service_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(namespace_worker_prototype::start_namespace_table_lock_services())) {
+    SERVER_LOG(WARN, "namespace table lock services failed to start", KR(ret));
+  }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_primary_major_freeze_service_))) { SERVER_LOG(WARN, "mods_primary_major_freeze_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_restore_major_freeze_service_))) { SERVER_LOG(WARN, "mods_restore_major_freeze_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_lob_manager_))) { SERVER_LOG(WARN, "mods_lob_manager_ fail", KR(ret)); }
@@ -1690,7 +1684,7 @@ void ObServer::obs_stop_modules()
   server_module_stop_default(mods_tablet_runtime_meta_updater_);
   server_module_stop_default(mods_restore_major_freeze_service_);
   server_module_stop_default(mods_primary_major_freeze_service_);
-  server_module_stop_default(mods_table_lock_service_);
+  namespace_worker_prototype::stop_namespace_table_lock_services();
   server_module_stop_default(mods_lock_wait_mgr_);
   server_module_stop_default(mods_tablet_stat_mgr_);
   server_module_stop_default(mods_tmp_file_manager_);
@@ -1732,7 +1726,7 @@ void ObServer::obs_wait_modules()
   server_module_wait_default(mods_tablet_runtime_meta_updater_);
   server_module_wait_default(mods_restore_major_freeze_service_);
   server_module_wait_default(mods_primary_major_freeze_service_);
-  server_module_wait_default(mods_table_lock_service_);
+  namespace_worker_prototype::wait_namespace_table_lock_services();
   server_module_wait_default(mods_lock_wait_mgr_);
   server_module_wait_default(mods_tablet_stat_mgr_);
   server_module_wait_default(mods_tmp_file_manager_);
@@ -1800,7 +1794,7 @@ void ObServer::obs_destroy_modules()
   major_freeze_coordinator_adapter_.reset();
   server_module_destroy_default(mods_restore_major_freeze_service_);
   server_module_destroy_default(mods_primary_major_freeze_service_);
-  server_module_destroy_default(mods_table_lock_service_);
+  namespace_worker_prototype::destroy_namespace_table_lock_services();
   server_module_destroy_default(mods_lock_wait_mgr_);
   server_module_destroy_default(mods_tablet_stat_mgr_);
   server_module_destroy_default(mods_server_compaction_event_history_);
@@ -1859,7 +1853,6 @@ void ObServer::obs_destroy_modules()
   UNBIND_SERVICE(sql::dtl::ObDTLIntermResultManager);
   UNBIND_SERVICE(blocksstable::ObSharedMacroBlockMgr);
   UNBIND_SERVICE(storage::ObIServerRuntime);
-  UNBIND_SERVICE(transaction::tablelock::ObTableLockService);
   UNBIND_SERVICE(share::ObISharedTimer);
   UNBIND_SERVICE(compaction::ObScheduleSuspectInfoMgr);
   UNBIND_SERVICE(storage::mds::ObMdsService);

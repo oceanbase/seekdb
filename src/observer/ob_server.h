@@ -194,7 +194,6 @@ class ObTxLoopWorker;
 namespace tablelock
 {
 class ObIInnerConnectionLockRuntime;
-class ObTableLockService;
 }
 }
 namespace logservice
@@ -549,7 +548,6 @@ public:
       common::ObIAllocator &allocator,
       common::Ob2DArray<sql::ObPxTabletRange> &part_ranges,
       bool &is_idempotent_mode) override;
-  transaction::tablelock::ObTableLockService * table_lock_service() { return mods_table_lock_service_; }
   rootserver::ObPrimaryMajorFreezeService * primary_major_freeze_service() { return mods_primary_major_freeze_service_; }
   rootserver::ObRestoreMajorFreezeService * restore_major_freeze_service() { return mods_restore_major_freeze_service_; }
   observer::ObTabletRuntimeMetaUpdater * tablet_runtime_meta_updater() { return mods_tablet_runtime_meta_updater_; }
@@ -718,7 +716,6 @@ private:
   compaction::ObServerCompactionEventHistory * mods_server_compaction_event_history_ = nullptr;
   storage::ObTabletStatMgr * mods_tablet_stat_mgr_ = nullptr;
   memtable::ObLockWaitMgr * mods_lock_wait_mgr_ = nullptr;
-  transaction::tablelock::ObTableLockService * mods_table_lock_service_ = nullptr;
   rootserver::ObMajorFreezeCoordinatorAdapter major_freeze_coordinator_adapter_;
   rootserver::ObPrimaryMajorFreezeService * mods_primary_major_freeze_service_ = nullptr;
   rootserver::ObRestoreMajorFreezeService * mods_restore_major_freeze_service_ = nullptr;

@@ -33,6 +33,7 @@ namespace transaction
 {
 class ObTxDesc;
 struct ObTxParam;
+namespace tablelock { class ObTableLockService; }
 }
 namespace data_plane
 {
@@ -69,14 +70,16 @@ enum class ObSessionLockScope : uint8_t
 // High-leverage session-lock operations.  Request construction, lock-record
 // persistence, and table-lock service details stay in the data plane; query
 // supplies only a transaction, an opaque inner-SQL adapter, and user intent.
-int acquire_named_lock(share::ObILockMetadataSession &session_io,
+int acquire_named_lock(transaction::tablelock::ObTableLockService &lock_service,
+                       share::ObILockMetadataSession &session_io,
                        transaction::ObTxDesc &tx,
                        const transaction::ObTxParam &tx_param,
                        const ObSessionLockOwner &owner,
                        uint64_t lock_id,
                        int64_t timeout_us);
 
-int acquire_mysql_table_lock(share::ObILockMetadataSession &session_io,
+int acquire_mysql_table_lock(transaction::tablelock::ObTableLockService &lock_service,
+                             share::ObILockMetadataSession &session_io,
                              transaction::ObTxDesc &tx,
                              const transaction::ObTxParam &tx_param,
                              const ObSessionLockOwner &owner,
@@ -86,21 +89,24 @@ int acquire_mysql_table_lock(share::ObILockMetadataSession &session_io,
 // release_count follows MySQL named-lock semantics: -1 means the lock does
 // not exist, 0 means it exists but belongs to another owner, and a positive
 // value is the number of released records.
-int release_named_lock(share::ObILockMetadataSession &session_io,
+int release_named_lock(transaction::tablelock::ObTableLockService &lock_service,
+                       share::ObILockMetadataSession &session_io,
                        transaction::ObTxDesc &tx,
                        const transaction::ObTxParam &tx_param,
                        const ObSessionLockOwner &owner,
                        uint64_t lock_id,
                        int64_t &release_count);
 
-int release_session_locks(share::ObILockMetadataSession &session_io,
+int release_session_locks(transaction::tablelock::ObTableLockService &lock_service,
+                          share::ObILockMetadataSession &session_io,
                           transaction::ObTxDesc &tx,
                           const transaction::ObTxParam &tx_param,
                           const ObSessionLockOwner &owner,
                           ObSessionLockScope scope,
                           int64_t &release_count);
 
-int release_persisted_locks(share::ObILockMetadataSession &session_io,
+int release_persisted_locks(transaction::tablelock::ObTableLockService &lock_service,
+                            share::ObILockMetadataSession &session_io,
                             transaction::ObTxDesc &tx,
                             const transaction::ObTxParam &tx_param,
                             const ObPersistedLockOwner &owner,

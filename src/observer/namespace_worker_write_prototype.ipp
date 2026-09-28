@@ -794,7 +794,13 @@ int process_table_lock(
     }
   }
   const bool valid_param = tx_param.is_valid();
-  ObTableLockService *service = share::server_service<ObTableLockService>();
+  ns::NamespaceRuntime *runtime = nullptr;
+  if (storage_space.is_valid() && !storage_space.is_physical_mds()) {
+    ns::namespace_registry().get(storage_space.tablet_namespace_id(), runtime);
+  }
+  ObTableLockService *service = runtime == nullptr ? nullptr
+      : static_cast<ObTableLockService *>(
+            runtime->service(ns::NamespaceRuntime::TABLE_LOCK_SERVICE));
   if (!ret && (!storage_space.is_valid() || !valid_param || payload.empty())) {
     ret = OB_INVALID_ARGUMENT;
   } else if (!ret && OB_ISNULL(service)) {

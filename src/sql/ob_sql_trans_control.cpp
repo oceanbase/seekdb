@@ -1198,15 +1198,17 @@ int ObSqlTransControl::lock_table(ObExecContext &exec_ctx,
     }
   }
   if (part_ids.empty()) {
-    OZ (data_plane::lock_table(*session->get_tx_desc(),
+    CK (OB_NOT_NULL(session->effective_table_lock_service()));
+    OZ (data_plane::lock_table(*session->effective_table_lock_service(), *session->get_tx_desc(),
                                tx_param,
                                table_id,
                                lock_mode,
                                lock_timeout_us),
         tx_param, table_id, lock_mode, lock_timeout_us);
   } else {
+    CK (OB_NOT_NULL(session->effective_table_lock_service()));
     for (int64_t i = 0; i < part_ids.count() && OB_SUCC(ret); ++i) {
-      OZ(data_plane::lock_partition_or_subpartition(*session->get_tx_desc(),
+      OZ(data_plane::lock_partition_or_subpartition(*session->effective_table_lock_service(), *session->get_tx_desc(),
                                                     tx_param,
                                                     table_id,
                                                     part_ids.at(i),

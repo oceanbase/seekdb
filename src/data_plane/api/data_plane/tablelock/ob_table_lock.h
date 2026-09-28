@@ -26,19 +26,22 @@ namespace transaction
 {
 class ObTxDesc;
 struct ObTxParam;
+namespace tablelock { class ObTableLockService; }
 }
 namespace data_plane
 {
 
 // Transactional table-lock capabilities.  The data plane owns request
-// construction and service lookup; query supplies only the lock intent.
-int lock_table(transaction::ObTxDesc &tx,
+// construction; query passes the service selected by its Namespace context.
+int lock_table(transaction::tablelock::ObTableLockService &lock_service,
+               transaction::ObTxDesc &tx,
                const transaction::ObTxParam &tx_param,
                uint64_t table_id,
                transaction::tablelock::ObTableLockMode lock_mode,
                int64_t timeout_us);
 
 int lock_partition_or_subpartition(
+    transaction::tablelock::ObTableLockService &lock_service,
     transaction::ObTxDesc &tx,
     const transaction::ObTxParam &tx_param,
     uint64_t table_id,

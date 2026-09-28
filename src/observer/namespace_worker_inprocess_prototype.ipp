@@ -13,6 +13,8 @@
 #include "rootserver/ddl_task/ob_sys_ddl_util.h"
 #include "rootserver/ddl_task/ob_ddl_scheduler.h"
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
+#include "query/tablelock/ob_table_lock_runtime.h"
+#include "storage/tablelock/ob_table_lock_service.h"
 #include "share/ob_autoincrement_service.h"
 #include "share/schema/ob_schema_runtime_service.h"
 #include "sql/plan_cache/ob_plan_cache.h"
@@ -491,6 +493,8 @@ std::map<uint64_t, std::unique_ptr<InProcessNamespaceServices>> inprocess_servic
 std::mutex namespace_dbms_scheduler_mutex;
 bool namespace_dbms_scheduler_started = false;
 bool namespace_dbms_scheduler_leader = false;
+std::mutex namespace_table_lock_service_mutex;
+bool namespace_table_lock_services_started = false;
 void stop_in_process_opt_stat_monitors()
 {
   std::shared_lock<std::shared_mutex> guard(inprocess_services_mutex);
@@ -616,6 +620,85 @@ void destroy_namespace_dbms_schedulers()
   ns::namespace_registry().list_retained_runtimes(runtimes);
   for (auto *runtime : runtimes) {
     runtime->clear_service(ns::NamespaceRuntime::DBMS_SCHEDULER);
+  }
+}
+std::vector<transaction::tablelock::ObTableLockService *> namespace_table_lock_services()
+{
+  std::vector<ns::NamespaceRuntime *> runtimes;
+  ns::namespace_registry().list_retained_runtimes(runtimes);
+  std::vector<transaction::tablelock::ObTableLockService *> services;
+  for (auto *runtime : runtimes) {
+    auto *service = static_cast<transaction::tablelock::ObTableLockService *>(
+        runtime->service(ns::NamespaceRuntime::TABLE_LOCK_SERVICE));
+    if (service != nullptr) { services.push_back(service); }
+  }
+  return services;
+}
+int init_namespace_table_lock_service(ns::NamespaceRuntime &runtime,
+    common::ObMySQLProxy &sql_proxy,
+    share::schema::ObMultiVersionSchemaService &schema_service,
+    query::ObIDeadlockSessionService &session_service)
+{
+  int ret = OB_SUCCESS;
+  std::lock_guard<std::mutex> guard(namespace_table_lock_service_mutex);
+  if (runtime.service(ns::NamespaceRuntime::TABLE_LOCK_SERVICE) != nullptr) {
+    ret = OB_INIT_TWICE;
+  } else {
+    auto service = std::make_unique<transaction::tablelock::ObTableLockService>();
+    auto cleanup = [&runtime](const transaction::tablelock::ObTableLockOwnerID &owner) {
+      return query::release_locks_for_dead_owner(owner.type(), owner.id(), runtime);
+    };
+    if (OB_FAIL(service->init(sql_proxy, schema_service, session_service, cleanup))) {
+    } else if (namespace_table_lock_services_started && OB_FAIL(service->start())) {
+      service->stop();
+      service->wait();
+      service->destroy();
+    } else {
+      runtime.set_owned_service<transaction::tablelock::ObTableLockService>(
+          ns::NamespaceRuntime::TABLE_LOCK_SERVICE, std::move(service));
+    }
+  }
+  return ret;
+}
+int start_namespace_table_lock_services()
+{
+  int ret = OB_SUCCESS;
+  std::lock_guard<std::mutex> guard(namespace_table_lock_service_mutex);
+  auto services = namespace_table_lock_services();
+  for (auto *service : services) {
+    if (OB_SUCCESS != (ret = service->start())) { break; }
+  }
+  if (ret == OB_SUCCESS) {
+    namespace_table_lock_services_started = true;
+  } else {
+    for (auto *service : services) { service->stop(); }
+    for (auto *service : services) { service->wait(); }
+  }
+  return ret;
+}
+void stop_namespace_table_lock_services()
+{
+  std::lock_guard<std::mutex> guard(namespace_table_lock_service_mutex);
+  namespace_table_lock_services_started = false;
+  for (auto *service : namespace_table_lock_services()) { service->stop(); }
+}
+void wait_namespace_table_lock_services()
+{
+  std::lock_guard<std::mutex> guard(namespace_table_lock_service_mutex);
+  for (auto *service : namespace_table_lock_services()) { service->wait(); }
+}
+void destroy_namespace_table_lock_services()
+{
+  std::lock_guard<std::mutex> guard(namespace_table_lock_service_mutex);
+  std::vector<ns::NamespaceRuntime *> runtimes;
+  ns::namespace_registry().list_retained_runtimes(runtimes);
+  for (auto *runtime : runtimes) {
+    auto *service = static_cast<transaction::tablelock::ObTableLockService *>(
+        runtime->service(ns::NamespaceRuntime::TABLE_LOCK_SERVICE));
+    if (service != nullptr) {
+      service->destroy();
+      runtime->clear_service(ns::NamespaceRuntime::TABLE_LOCK_SERVICE);
+    }
   }
 }
 thread_local uint64_t activating_namespace = 0;
@@ -816,6 +899,10 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
   } else if (FALSE_IT(stage = "dbms_scheduler")) {
   } else if (OB_FAIL(init_namespace_dbms_scheduler(
           runtime, *services->sql_proxy, *services->schema_service))) {
+  } else if (FALSE_IT(stage = "table_lock_service")) {
+  } else if (OB_FAIL(init_namespace_table_lock_service(runtime,
+          *services->sql_proxy, *services->schema_service,
+          server.get_sql_session_mgr()))) {
   } else {
     stage = "done";
   }

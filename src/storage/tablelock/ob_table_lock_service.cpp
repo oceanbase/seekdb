@@ -230,7 +230,10 @@ ObTableLockService::ObOBJLockGarbageCollector::ObOBJLockGarbageCollector()
     sql_proxy_(nullptr) {}
 ObTableLockService::ObOBJLockGarbageCollector::~ObOBJLockGarbageCollector() {}
 
-int ObTableLockService::ObOBJLockGarbageCollector::init(common::ObMySQLProxy &sql_proxy)
+int ObTableLockService::ObOBJLockGarbageCollector::init(
+    common::ObMySQLProxy &sql_proxy,
+    query::ObIDeadlockSessionService &session_service,
+    DeadOwnerCleanup cleanup)
 {
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(sql_proxy_)) {
@@ -238,6 +241,8 @@ int ObTableLockService::ObOBJLockGarbageCollector::init(common::ObMySQLProxy &sq
     LOG_WARN("object lock garbage collector init twice", K(ret));
   } else {
     sql_proxy_ = &sql_proxy;
+    session_service_ = &session_service;
+    dead_owner_cleanup_ = std::move(cleanup);
   }
   return ret;
 }
@@ -277,6 +282,8 @@ void ObTableLockService::ObOBJLockGarbageCollector::destroy()
 {
   timer_.destroy();
   sql_proxy_ = nullptr;
+  session_service_ = nullptr;
+  dead_owner_cleanup_ = nullptr;
   LOG_INFO("ObTableLockService::ObOBJLockGarbageCollector destroys successfully", KPC(this));
 }
 
@@ -313,7 +320,10 @@ int ObTableLockService::ObOBJLockGarbageCollector::garbage_collect_()
   } else if (OB_ISNULL(sql_proxy_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("sql proxy is not installed", K(ret));
-  } else if (OB_FAIL(ObTableLockDetector::do_detect_and_clear(*sql_proxy_))) {
+  } else if (OB_ISNULL(session_service_) || !dead_owner_cleanup_) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(ObTableLockDetector::do_detect_and_clear(
+                 *sql_proxy_, *session_service_, dead_owner_cleanup_))) {
   }
   return ret;
 }
@@ -402,29 +412,25 @@ bool ObTableLockService::ObTableLockCtx::is_deadlock_avoid_enabled() const
   return tablelock::is_deadlock_avoid_enabled(is_from_sql_, origin_timeout_us_);
 }
 
-int ObTableLockService::server_module_init(
-    ObTableLockService* &lock_service,
-    query::ObIDeadlockSessionService &session_service)
-{
-  return lock_service->init(session_service);
-}
-
 int ObTableLockService::init(
-    query::ObIDeadlockSessionService &session_service)
+    common::ObMySQLProxy &sql_proxy,
+    share::schema::ObMultiVersionSchemaService &schema_service,
+    query::ObIDeadlockSessionService &session_service,
+    DeadOwnerCleanup cleanup)
 {
   int ret = OB_SUCCESS;
 
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("lock service init twice.", K(ret));
-  } else if (OB_UNLIKELY(!GCTX.self_addr().is_valid()) ||
-             OB_ISNULL(GCTX.sql_proxy_)) {
+  } else if (!cleanup) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(GCTX.self_addr()),
-             KP(GCTX.sql_proxy_));
+    LOG_WARN("missing dead-owner cleanup", K(ret));
   } else {
-    sql_proxy_ = GCTX.sql_proxy_;
-    if (OB_FAIL(obj_lock_garbage_collector_.init(*sql_proxy_))) {
+    sql_proxy_ = &sql_proxy;
+    schema_service_ = &schema_service;
+    if (OB_FAIL(obj_lock_garbage_collector_.init(
+            sql_proxy, session_service, std::move(cleanup)))) {
     } else {
       session_service_ = &session_service;
       is_inited_ = true;
@@ -440,8 +446,7 @@ int ObTableLockService::init(
 
 int ObTableLockService::start()
 {
-  obj_lock_garbage_collector_.start();
-  return OB_SUCCESS;
+  return obj_lock_garbage_collector_.start();
 }
 
 void ObTableLockService::stop()
@@ -458,6 +463,7 @@ void ObTableLockService::destroy()
 {
   obj_lock_garbage_collector_.destroy();
   sql_proxy_ = nullptr;
+  schema_service_ = nullptr;
   session_service_ = nullptr;
   is_inited_ = false;
 }
@@ -1290,7 +1296,7 @@ int ObTableLockService::get_table_partition_level_(const ObTableID table_id,
   ObArenaAllocator allocator("TableSchema");
 
   if (OB_FAIL(ObSchemaUtils::get_latest_table_schema(
-      GCTX.schema_service_,
+      schema_service_,
       *sql_proxy_,
       allocator,
       table_id,
@@ -2076,7 +2082,7 @@ int ObTableLockService::get_table_schema_(const ObTableLockCtx &ctx,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("only get schema_version for LOCK TABLE and UNLOCK TABLE request", K(ret), K(ctx));
   } else if (OB_FAIL(ObSchemaUtils::get_latest_table_schema(
-               GCTX.schema_service_, *sql_proxy_, allocator, ctx.table_id_, table_schema))) {
+               schema_service_, *sql_proxy_, allocator, ctx.table_id_, table_schema))) {
     if (OB_TABLE_NOT_EXIST == ret) {
       LOG_INFO("table not exist, check whether it meets expectations", K(ret), K(ctx));
     } else {
@@ -2095,33 +2101,28 @@ int ObTableLockService::get_table_schema_(const ObTableLockCtx &ctx,
 namespace data_plane
 {
 
-int lock_table(transaction::ObTxDesc &tx,
+int lock_table(transaction::tablelock::ObTableLockService &lock_service,
+               transaction::ObTxDesc &tx,
                const transaction::ObTxParam &tx_param,
                const uint64_t table_id,
                const transaction::tablelock::ObTableLockMode lock_mode,
                const int64_t timeout_us)
 {
   int ret = OB_SUCCESS;
-  transaction::tablelock::ObTableLockService *lock_service =
-      share::server_service<transaction::tablelock::ObTableLockService>();
-  if (OB_ISNULL(lock_service)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("table lock service is not installed", K(ret));
-  } else {
-    transaction::tablelock::ObLockTableRequest request;
-    request.table_id_ = table_id;
-    request.owner_id_.set_default();
-    request.lock_mode_ = lock_mode;
-    request.op_type_ = transaction::tablelock::IN_TRANS_COMMON_LOCK;
-    request.timeout_us_ = timeout_us;
-    request.is_from_sql_ = true;
-    if (OB_FAIL(lock_service->lock(tx, tx_param, request))) {
-    }
+  transaction::tablelock::ObLockTableRequest request;
+  request.table_id_ = table_id;
+  request.owner_id_.set_default();
+  request.lock_mode_ = lock_mode;
+  request.op_type_ = transaction::tablelock::IN_TRANS_COMMON_LOCK;
+  request.timeout_us_ = timeout_us;
+  request.is_from_sql_ = true;
+  if (OB_FAIL(lock_service.lock(tx, tx_param, request))) {
   }
   return ret;
 }
 
 int lock_partition_or_subpartition(
+    transaction::tablelock::ObTableLockService &lock_service,
     transaction::ObTxDesc &tx,
     const transaction::ObTxParam &tx_param,
     const uint64_t table_id,
@@ -2130,23 +2131,16 @@ int lock_partition_or_subpartition(
     const int64_t timeout_us)
 {
   int ret = OB_SUCCESS;
-  transaction::tablelock::ObTableLockService *lock_service =
-      share::server_service<transaction::tablelock::ObTableLockService>();
-  if (OB_ISNULL(lock_service)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("table lock service is not installed", K(ret));
-  } else {
-    transaction::tablelock::ObLockPartitionRequest request;
-    request.table_id_ = table_id;
-    request.part_object_id_ = partition_object_id;
-    request.owner_id_.set_default();
-    request.lock_mode_ = lock_mode;
-    request.op_type_ = transaction::tablelock::IN_TRANS_COMMON_LOCK;
-    request.timeout_us_ = timeout_us;
-    request.is_from_sql_ = true;
-    if (OB_FAIL(lock_service->lock_partition_or_subpartition(
-            tx, tx_param, request))) {
-    }
+  transaction::tablelock::ObLockPartitionRequest request;
+  request.table_id_ = table_id;
+  request.part_object_id_ = partition_object_id;
+  request.owner_id_.set_default();
+  request.lock_mode_ = lock_mode;
+  request.op_type_ = transaction::tablelock::IN_TRANS_COMMON_LOCK;
+  request.timeout_us_ = timeout_us;
+  request.is_from_sql_ = true;
+  if (OB_FAIL(lock_service.lock_partition_or_subpartition(
+          tx, tx_param, request))) {
   }
   return ret;
 }

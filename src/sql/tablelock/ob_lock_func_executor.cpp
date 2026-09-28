@@ -74,7 +74,8 @@ int ObGetLockExecutor::execute(ObExecContext &ctx,
       OZ (stack_ctx2.init(ctx, timeout_us));
       OZ (ObSqlTransControl::build_tx_param(sess, tx_param));
       CK (OB_NOT_NULL(sess->get_tx_desc()));
-      OZ (data_plane::acquire_named_lock(session_io,
+      CK (OB_NOT_NULL(sess->effective_table_lock_service()));
+      OZ (data_plane::acquire_named_lock(*sess->effective_table_lock_service(), session_io,
                                          *sess->get_tx_desc(),
                                          tx_param,
                                          owner,
@@ -195,7 +196,8 @@ int ObReleaseLockExecutor::execute(ObExecContext &ctx,
         }
         OZ (ObSqlTransControl::build_tx_param(session, tx_param));
         CK (OB_NOT_NULL(session->get_tx_desc()));
-        OZ (data_plane::release_named_lock(session_io,
+        CK (OB_NOT_NULL(session->effective_table_lock_service()));
+        OZ (data_plane::release_named_lock(*session->effective_table_lock_service(), session_io,
                                            *session->get_tx_desc(),
                                            tx_param,
                                            owner,

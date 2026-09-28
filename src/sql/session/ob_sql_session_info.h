@@ -63,6 +63,7 @@ namespace ns
 {
 class NamespaceRuntime;
 }
+namespace transaction { namespace tablelock { class ObTableLockService; } }
 namespace data_plane
 {
 class IDirectInsertService;
@@ -439,6 +440,7 @@ public:
   data_plane::ObITransactionService *transaction_service_for_deserialize() override;
   // Services are supplied by the runtime bound to this session.
   share::schema::ObMultiVersionSchemaService *effective_schema_service() const override;
+  transaction::tablelock::ObTableLockService *effective_table_lock_service() const;
   ObPsCache *effective_ps_cache() const;
   common::ObMySQLProxy *effective_sql_proxy() const;
   // Vector task records live in the shared scheduling catalog.

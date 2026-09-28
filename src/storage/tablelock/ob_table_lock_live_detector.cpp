@@ -19,10 +19,7 @@
 
 #define USING_LOG_PREFIX TABLELOCK
 #include "storage/tablelock/ob_table_lock_live_detector.h"
-#include "storage/tablelock/ob_table_lock_service.h"
 #include "query/session/ob_deadlock_session.h"
-#include "query/tablelock/ob_table_lock_runtime.h"
-#include "namespace/namespace.h"
 
 namespace oceanbase
 {
@@ -31,24 +28,10 @@ namespace transaction
 {
 namespace tablelock
 {
-int ObTableLockDetectFuncList::detect_session_alive(const uint32_t session_id, bool &is_alive)
-{
-  int ret = OB_SUCCESS;
-  ObTableLockService *lock_service =
-      ::oceanbase::share::server_service<::oceanbase::transaction::tablelock::ObTableLockService>();
-  if (OB_ISNULL(lock_service)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("table lock service is not installed", K(ret));
-  } else {
-    ret = query::is_session_alive(
-        lock_service->get_deadlock_session_service(),
-        session_id,
-        is_alive);
-  }
-  return ret;
-}
-
-int ObTableLockDetectFuncList::do_session_alive_detect(common::ObISQLClient &sql_client)
+int ObTableLockDetectFuncList::do_session_alive_detect(
+    common::ObISQLClient &sql_client,
+    query::ObIDeadlockSessionService &session_service,
+    const DeadOwnerCleanup &cleanup)
 {
   int ret = OB_SUCCESS;
   ObArray<ObTableLockOwnerID *> owner_ids;
@@ -66,11 +49,11 @@ int ObTableLockDetectFuncList::do_session_alive_detect(common::ObISQLClient &sql
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("owner_id is invalid", K(ret), K(owner_id));
       } else if (OB_FAIL(owner_id.convert_to_sessid(session_id))) {
-      } else if (OB_FAIL(detect_session_alive(session_id, session_alive))) {
+      } else if (OB_FAIL(query::is_session_alive(session_service, session_id, session_alive))) {
       } else if (!session_alive) {
         LOG_INFO(
           "find session is not alive, we will clean all recodrs of it later", K(ret), K(session_id), K(owner_id));
-        if (OB_FAIL(ObTableLockDetector::remove_lock_by_owner_id(owner_id))) {
+        if (OB_FAIL(cleanup(owner_id))) {
           LOG_WARN("failed to remove locks held by dead session", KR(ret), K(owner_id));
         }
       }
@@ -94,7 +77,7 @@ int ObTableLockDetectFuncList::get_owner_id_list_from_table_(common::ObISQLClien
 {
   int ret = OB_SUCCESS;
   char table_name[OB_MAX_TABLE_NAME_BUF_LENGTH] = {0};
-  char where_cond[64] = {"WHERE detect_func_no = 1 GROUP BY owner_id"};
+  char where_cond[80] = {"WHERE detect_func_no = 1 GROUP BY owner_type, owner_id"};
   void *ptr = nullptr;
   ObTableLockOwnerID *new_owner_id = nullptr;
 
@@ -125,9 +108,6 @@ int ObTableLockDetectFuncList::get_owner_id_list_from_table_(common::ObISQLClien
   }
   return ret;
 }
-
-ObTableLockDetectFunc<common::ObISQLClient &> ObTableLockDetector::func1(
-    DETECT_SESSION_ALIVE, ObTableLockDetectFuncList::do_session_alive_detect);
 
 const char *ObTableLockDetector::detect_columns[8] = {
   "task_type", "obj_type", "obj_id", "lock_mode", "owner_id", "cnt", "detect_func_no", "detect_func_param"};
@@ -221,31 +201,20 @@ int ObTableLockDetector::remove_detect_info_from_inner_table(share::ObILockMetad
   return ret;
 }
 
-int ObTableLockDetector::do_detect_and_clear(common::ObISQLClient &sql_client)
+int ObTableLockDetector::do_detect_and_clear(
+    common::ObISQLClient &sql_client,
+    query::ObIDeadlockSessionService &session_service,
+    const DeadOwnerCleanup &cleanup)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(func1.call_function_directly(sql_client))) {
+  if (OB_FAIL(ObTableLockDetectFuncList::do_session_alive_detect(
+          sql_client, session_service, cleanup))) {
   }
   const int expire_ret = remove_expired_lock_id(sql_client);
   if (ret == OB_SUCCESS) {
     ret = expire_ret;
   }
 
-  return ret;
-}
-
-int ObTableLockDetector::remove_lock_by_owner_id(const ObTableLockOwnerID &owner_id)
-{
-  int ret = OB_SUCCESS;
-  ns::NamespaceRuntime *runtime = nullptr;
-  if (!ns::namespace_registry().get(1, runtime) || OB_ISNULL(runtime)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("global lock detector runtime is unavailable", K(ret));
-  } else if (OB_FAIL(query::release_locks_for_dead_owner(
-                 owner_id.type(), owner_id.id(), *runtime))) {
-  }
-  if (OB_FAIL(ret)) {
-  }
   return ret;
 }
 

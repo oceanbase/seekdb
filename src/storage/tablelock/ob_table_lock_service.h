@@ -24,6 +24,7 @@
 #include "storage/tablelock/ob_table_lock_common.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
 #include "storage/tablelock/ob_table_lock_local_executor.h"
+#include "storage/tablelock/ob_table_lock_live_detector.h"
 
 namespace oceanbase
 {
@@ -207,7 +208,9 @@ public:
     ObOBJLockGarbageCollector();
     ~ObOBJLockGarbageCollector();
   public:
-    int init(common::ObMySQLProxy &sql_proxy);
+    int init(common::ObMySQLProxy &sql_proxy,
+             query::ObIDeadlockSessionService &session_service,
+             DeadOwnerCleanup cleanup);
     int start();
     void stop();
     void wait();
@@ -238,28 +241,25 @@ public:
     TimerTask timer_task_;
     int64_t last_success_timestamp_;
     common::ObMySQLProxy *sql_proxy_;
+    query::ObIDeadlockSessionService *session_service_ = nullptr;
+    DeadOwnerCleanup dead_owner_cleanup_;
   };
 
   ObTableLockService()
     : sql_proxy_(nullptr),
+      schema_service_(nullptr),
       session_service_(nullptr),
       obj_lock_garbage_collector_(),
       is_inited_(false) {}
   ~ObTableLockService() {}
-  int init(query::ObIDeadlockSessionService &session_service);
-  static int server_module_init(
-      ObTableLockService* &lock_service,
-      query::ObIDeadlockSessionService &session_service);
+  int init(common::ObMySQLProxy &sql_proxy,
+           share::schema::ObMultiVersionSchemaService &schema_service,
+           query::ObIDeadlockSessionService &session_service,
+           DeadOwnerCleanup cleanup);
   int start();
   void stop();
   void wait();
   void destroy();
-  query::ObIDeadlockSessionService &get_deadlock_session_service()
-  {
-    OB_ASSERT(nullptr != session_service_);
-    return *session_service_;
-  }
-
   // Generate an owner ID unique within the database runtime.
   // this owner id can be used to link OUT_TRANS_LOCK and OUT_TRANS_UNLOCK operation.
   // ---------------------------- interface for OUT_TRANS lock ------------------------------/
@@ -478,6 +478,7 @@ private:
   static const int64_t DEFAULT_TIMEOUT_US = 1500L * 1000L * 1000L; // 1500s
 
   common::ObMySQLProxy *sql_proxy_;
+  share::schema::ObMultiVersionSchemaService *schema_service_;
   query::ObIDeadlockSessionService *session_service_;
   ObOBJLockGarbageCollector obj_lock_garbage_collector_;
   bool is_inited_;

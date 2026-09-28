@@ -507,7 +507,9 @@ int ObUnLockExecutor::execute_(ObExecContext &ctx,
             session_id, session_create_ts);
         OZ (ObSqlTransControl::build_tx_param(session, tx_param));
         CK (OB_NOT_NULL(session->get_tx_desc()));
+        CK (OB_NOT_NULL(session->effective_table_lock_service()));
         OZ (data_plane::release_session_locks(
+                *session->effective_table_lock_service(),
                 session_io,
                 *session->get_tx_desc(),
                 tx_param,
@@ -550,7 +552,9 @@ int ObUnLockExecutor::execute_(ObExecContext &ctx,
         query::ObSessionInnerSql session_io(session);
         OZ (ObSqlTransControl::build_tx_param(session, tx_param));
         CK (OB_NOT_NULL(session->get_tx_desc()));
+        CK (OB_NOT_NULL(session->effective_table_lock_service()));
         OZ (data_plane::release_persisted_locks(
+                *session->effective_table_lock_service(),
                 session_io,
                 *session->get_tx_desc(),
                 tx_param,

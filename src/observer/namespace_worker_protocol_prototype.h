@@ -27,6 +27,7 @@ namespace oceanbase { namespace data_plane { class ObIWriteContextService; } }
 namespace oceanbase { namespace data_plane { class ObITransactionService; } }
 namespace oceanbase { namespace obcall { struct ObAdminSetConfigArg; } }
 namespace oceanbase { namespace query { class ObIRootCommandService; } }
+namespace oceanbase { namespace query { class ObIDeadlockSessionService; } }
 namespace oceanbase { namespace rootserver { class ObIRootserverLocalRuntime; } }
 namespace oceanbase { namespace common { namespace sqlclient { class ObISQLConnection; } } }
 namespace oceanbase { namespace transaction { namespace tablelock { struct ObLockObjRequest; } } }
@@ -289,6 +290,14 @@ int update_namespace_dbms_scheduler_role(bool leader);
 void stop_namespace_dbms_schedulers();
 void wait_namespace_dbms_schedulers();
 void destroy_namespace_dbms_schedulers();
+int init_namespace_table_lock_service(ns::NamespaceRuntime &runtime,
+    common::ObMySQLProxy &sql_proxy,
+    share::schema::ObMultiVersionSchemaService &schema_service,
+    query::ObIDeadlockSessionService &session_service);
+int start_namespace_table_lock_services();
+void stop_namespace_table_lock_services();
+void wait_namespace_table_lock_services();
+void destroy_namespace_table_lock_services();
 void close_session(SessionBinding *binding);
 } } }
 #endif

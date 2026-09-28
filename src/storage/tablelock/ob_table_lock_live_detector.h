@@ -15,6 +15,7 @@
  */
 #ifndef OCEANBASE_STORAGE_TABLELOCK_OB_TABLE_LOCK_LIVE_DETECTOR_H
 #define OCEANBASE_STORAGE_TABLELOCK_OB_TABLE_LOCK_LIVE_DETECTOR_H
+#include <functional>
 #include "storage/tablelock/ob_table_lock_live_detect_func.h"
 #include "storage/tablelock/ob_table_lock_common.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
@@ -36,10 +37,12 @@ namespace share
 {
 class ObDMLSqlSplicer;
 }
+namespace query { class ObIDeadlockSessionService; }
 namespace transaction
 {
 namespace tablelock
 {
+using DeadOwnerCleanup = std::function<int(const ObTableLockOwnerID &)>;
 class ObTableLockDetectFuncList
 {
   static const int64_t RETRY_RPC_TIMES = 10;
@@ -47,8 +50,9 @@ class ObTableLockDetectFuncList
   static const int64_t DEFAULT_TIMEOUT_US = 10L * 1000L * 1000L;  // 10s
 
 public:
-  static int detect_session_alive(const uint32_t session_id, bool &is_alive);
-  static int do_session_alive_detect(common::ObISQLClient &sql_client);
+  static int do_session_alive_detect(common::ObISQLClient &sql_client,
+                                     query::ObIDeadlockSessionService &session_service,
+                                     const DeadOwnerCleanup &cleanup);
 
 private:
   static int get_owner_id_list_from_table_(common::ObISQLClient &sql_client,
@@ -95,8 +99,9 @@ public:
                                                  const ObTableLockTaskType &task_type,
                                                  const ObLockRequest &lock_req,
                                                  int64_t &cnt);
-  static int do_detect_and_clear(common::ObISQLClient &sql_client);
-  static int remove_lock_by_owner_id(const ObTableLockOwnerID &owner_id);
+  static int do_detect_and_clear(common::ObISQLClient &sql_client,
+                                 query::ObIDeadlockSessionService &session_service,
+                                 const DeadOwnerCleanup &cleanup);
   static int remove_expired_lock_id(common::ObISQLClient &sql_client);
 
   static int check_lock_id_exist_in_inner_table(share::ObILockMetadataSession &session_io,
@@ -192,7 +197,6 @@ private:
 public:
   static const char *detect_columns[DETECT_INFO_COLUMN_SIZE];
   // detect session alive
-  static ObTableLockDetectFunc<common::ObISQLClient &> func1;
 };
 }  // namespace tablelock
 }  // namespace transaction

@@ -54,8 +54,9 @@ int ObMySQLLockTableExecutor::execute(ObExecContext &ctx,
       OZ (stack_ctx.init(ctx, timeout_us));
       OZ (ObSqlTransControl::build_tx_param(sess, tx_param));
       CK (OB_NOT_NULL(sess->get_tx_desc()));
+      CK (OB_NOT_NULL(sess->effective_table_lock_service()));
       for (int64_t i = 0; OB_SUCC(ret) && i < lock_targets.count(); ++i) {
-        OZ (data_plane::acquire_mysql_table_lock(session_io,
+        OZ (data_plane::acquire_mysql_table_lock(*sess->effective_table_lock_service(), session_io,
                                                  *sess->get_tx_desc(),
                                                  tx_param,
                                                  owner,

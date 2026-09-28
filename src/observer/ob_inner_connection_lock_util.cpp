@@ -129,7 +129,8 @@ private:
       ObTxDesc &tx_desc,
       const ObTxParam &tx_param,
       const ObLockRequest &arg,
-      obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type);
+      obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
+      observer::ObInnerSQLConnection *conn);
   int request_lock_(
       uint64_t table_id,
       ObTabletID tablet_id,
@@ -174,7 +175,7 @@ private:
 
 #define CONVERT_TYPE_AND_DO_LOCK(T, arg, tx_desc, tx_param)                    \
   const T lock_req = static_cast<const T &>(arg);                              \
-  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::transaction::tablelock::ObTableLockService>()->lock(tx_desc, tx_param, lock_req))) { \
+  if (OB_FAIL(service->lock(tx_desc, tx_param, lock_req))) { \
     LOG_WARN("lock failed", K(ret), K(lock_req));                              \
   }                                                                            \
   break;
@@ -183,7 +184,7 @@ private:
   const T lock_req = static_cast<const T &>(arg);                                  \
   T &unlock_req = const_cast<T &>(lock_req);                                       \
   unlock_req.set_to_unlock_type();                                                 \
-  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::transaction::tablelock::ObTableLockService>()->unlock(tx_desc, tx_param, unlock_req))) { \
+  if (OB_FAIL(service->unlock(tx_desc, tx_param, unlock_req))) { \
     LOG_WARN("unlock failed", K(ret), K(unlock_req));                              \
   }                                                                                \
   break;
@@ -603,6 +604,8 @@ int ObInnerConnectionLockRuntime::replace_lock_(const ObReplaceLockRequest &req,
   if (OB_ISNULL(conn)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid conn", KR(ret));
+  } else if (OB_ISNULL(conn->get_session().effective_table_lock_service())) {
+    ret = OB_NOT_INIT;
   } else if (OB_ISNULL(tx_desc = conn->get_session().get_tx_desc())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid tx_desc");
@@ -614,7 +617,7 @@ int ObInnerConnectionLockRuntime::replace_lock_(const ObReplaceLockRequest &req,
     tx_param.lock_timeout_us_ = conn->get_session().get_trx_lock_timeout();
 
     SERVER_MODULE_SCOPE {
-      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::transaction::tablelock::ObTableLockService>()->replace_lock(*tx_desc, tx_param, req))) {
+      if (OB_FAIL(conn->get_session().effective_table_lock_service()->replace_lock(*tx_desc, tx_param, req))) {
       } else if (OB_FAIL(res.close())) {
       }
     }
@@ -632,6 +635,8 @@ int ObInnerConnectionLockRuntime::replace_lock_(const ObReplaceAllLocksRequest &
   if (OB_ISNULL(conn)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid conn", KR(ret));
+  } else if (OB_ISNULL(conn->get_session().effective_table_lock_service())) {
+    ret = OB_NOT_INIT;
   } else if (OB_ISNULL(tx_desc = conn->get_session().get_tx_desc())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid tx_desc");
@@ -643,7 +648,7 @@ int ObInnerConnectionLockRuntime::replace_lock_(const ObReplaceAllLocksRequest &
     tx_param.lock_timeout_us_ = conn->get_session().get_trx_lock_timeout();
 
     SERVER_MODULE_SCOPE {
-      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::transaction::tablelock::ObTableLockService>()->replace_lock(*tx_desc, tx_param, req))) {
+      if (OB_FAIL(conn->get_session().effective_table_lock_service()->replace_lock(*tx_desc, tx_param, req))) {
       } else if (OB_FAIL(res.close())) {
       }
     }
@@ -705,7 +710,7 @@ int ObInnerConnectionLockRuntime::do_obj_lock_(const ObLockRequest &arg,
     tx_param.lock_timeout_us_ = conn->get_session().get_trx_lock_timeout();
 
     SERVER_MODULE_SCOPE {
-      if (OB_FAIL(handle_request_by_operation_type_(*tx_desc, tx_param, arg, operation_type))) {
+      if (OB_FAIL(handle_request_by_operation_type_(*tx_desc, tx_param, arg, operation_type, conn))) {
       }
       if (OB_SUCC(ret) && OB_FAIL(res.close())) {
         LOG_WARN("close result set failed", K(ret));
@@ -798,9 +803,12 @@ int ObInnerConnectionLockRuntime::handle_request_by_operation_type_(
   ObTxDesc &tx_desc,
   const ObTxParam &tx_param,
   const ObLockRequest &arg,
-  const obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type)
+  const obcall::ObInnerSQLTransmitArg::InnerSQLOperationType operation_type,
+  observer::ObInnerSQLConnection *conn)
 {
   int ret = OB_SUCCESS;
+  auto *service = conn == nullptr ? nullptr : conn->get_session().effective_table_lock_service();
+  if (service == nullptr) { return OB_NOT_INIT; }
   switch (operation_type) {
   case ObInnerSQLTransmitArg::OPERATION_TYPE_LOCK_TABLE: {
     CONVERT_TYPE_AND_DO_LOCK(ObLockTableRequest, arg, tx_desc, tx_param);
