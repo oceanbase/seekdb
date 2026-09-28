@@ -1321,7 +1321,7 @@ int ObServer::obs_construct_modules()
     ::oceanbase::share::bind_server_service<omt::ObServerRuntimeController>(
         &server_runtime_controller_);
     ::oceanbase::share::bind_server_service<observer::ObVTIterCreator>(
-        &vt_data_service_.get_vt_iter_factory().get_vt_iter_creator());
+        &vt_iter_creator_);
     ::oceanbase::share::bind_server_service<observer::ObSrvNetworkFrame>(&net_frame_);
     ::oceanbase::share::bind_server_service<data_plane::ObIDiskReport>(
         &disk_usage_report_task_);
@@ -1556,12 +1556,17 @@ int ObServer::obs_init_modules()
     SERVER_LOG(WARN, "mods_srs_service_ fail", KR(ret));
   }
   auto *root_commands = namespace_worker_prototype::namespace_local_management_service(1);
+  auto *root_virtual_scan = static_cast<common::ObIVirtualTableScan *>(
+      root_runtime->service(ns::NamespaceRuntime::VIRTUAL_TABLE_SCAN_SERVICE));
   if (OB_SUCC(ret) && OB_ISNULL(root_commands)) {
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "root namespace command service is unavailable", KR(ret));
+  } else if (OB_SUCC(ret) && OB_ISNULL(root_virtual_scan)) {
+    ret = OB_NOT_INIT;
+    SERVER_LOG(WARN, "root namespace virtual table scan service is unavailable", KR(ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(sql_engine_.init(
-      &vt_data_service_,
+      root_virtual_scan,
       self_addr_,
       pl_engine_,
       *this,

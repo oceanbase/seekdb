@@ -623,7 +623,7 @@ int ObServer::create_virtual_table_factory(
     LOG_WARN("allocate virtual table iterator factory failed", K(ret));
   } else {
     factory = new (buf) ObVirtualTableIteratorFactory(
-        vt_data_service_.get_vt_iter_factory().get_vt_iter_creator());
+        vt_iter_creator_);
   }
   return ret;
 }
@@ -661,7 +661,7 @@ ObServer::ObServer()
     standby_module_(nullptr),
     ob_service_(gctx_, *this),
     debug_sync_broadcaster_(ob_service_),
-    server_runtime_controller_(), vt_data_service_(self_addr_, &config_),
+    server_runtime_controller_(), vt_iter_creator_(self_addr_, &config_),
     start_time_(ObTimeUtility::current_time()),
     warm_up_start_time_(0),
     diag_(),
@@ -1101,6 +1101,7 @@ void ObServer::destroy()
 
     ns::NamespaceRuntime *home = nullptr;
     if (ns::namespace_registry().get(1, home) && home != nullptr) {
+      home->clear_service(ns::NamespaceRuntime::VIRTUAL_TABLE_SCAN_SERVICE);
       home->clear_service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE);
       home->clear_service(ns::NamespaceRuntime::OPT_STAT_MANAGER);
       home->clear_service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE);
@@ -2573,8 +2574,6 @@ int ObServer::init_global_context()
   home->set_service(ns::NamespaceRuntime::SCHEMA_SERVICE, &schema_service_);
   home->set_service(ns::NamespaceRuntime::SQL_PROXY, &sql_proxy_);
   home->set_service(ns::NamespaceRuntime::VECTOR_TASK_SQL_PROXY, &sql_proxy_);
-  home->set_service(ns::NamespaceRuntime::VIRTUAL_TABLE_SCAN_SERVICE,
-      &vt_data_service_);
   home->set_service(ns::NamespaceRuntime::DDL_CHECKSUM_ERROR_VERIFIER,
       &rootserver::native_ddl_checksum_error_verifier());
   std::unique_ptr<share::ObAutoincrementService> autoincrement(
@@ -2583,10 +2582,15 @@ int ObServer::init_global_context()
       new (std::nothrow) common::ObOptStatManager());
   std::unique_ptr<rootserver::ObLocalManagementService> root_commands(
       new (std::nothrow) rootserver::ObLocalManagementService());
+  std::unique_ptr<ObVirtualDataAccessService> virtual_table_scan(
+      new (std::nothrow) ObVirtualDataAccessService(self_addr_, &config_));
   if (autoincrement == nullptr || opt_stat_manager == nullptr
-      || root_commands == nullptr) {
+      || root_commands == nullptr || virtual_table_scan == nullptr) {
     return OB_ALLOCATE_MEMORY_FAILED;
   }
+  home->set_owned_service<common::ObIVirtualTableScan>(
+      ns::NamespaceRuntime::VIRTUAL_TABLE_SCAN_SERVICE,
+      std::move(virtual_table_scan));
   home->set_owned_service<rootserver::ObLocalManagementService>(
       ns::NamespaceRuntime::ROOT_COMMAND_SERVICE, std::move(root_commands));
   home->set_owned_service<share::ObAutoincrementService>(

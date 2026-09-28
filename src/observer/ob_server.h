@@ -472,8 +472,8 @@ private:
 
   omt::ObServerRuntimeController server_runtime_controller_;
 
-  // virtual table related
-  ObVirtualDataAccessService vt_data_service_;
+  // Process-local virtual table iterator construction uses only address and config.
+  ObVTIterCreator vt_iter_creator_;
   // Weakly Consistent Read Service
   //observer start time
   int64_t start_time_;
