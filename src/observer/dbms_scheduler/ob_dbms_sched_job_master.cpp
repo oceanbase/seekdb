@@ -20,6 +20,8 @@
 #include "ob_dbms_sched_job_executor.h"
 #include "share/ob_ex_rpc.h"
 #include "share/ob_share_util.h"
+#include "share/ob_internal_table_change_notifier.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "sql/session/ob_basic_session_info.h"
 #define TO_TS(second) (1000000L * second)
 namespace oceanbase
@@ -48,6 +50,9 @@ int ObDBMSSchedJobMaster::init(common::ObMySQLProxy *sql_proxy,
   } else if (OB_FAIL(table_operator_.init(sql_proxy))) {
   } else if (OB_FAIL(alive_jobs_.create(1024, ObMemAttr("DbmsSched_Job")))) {
   } else if (OB_FAIL(thread_cond_.init(ObWaitEventIds::REENTRANT_THREAD_COND_WAIT))) {
+  } else if (OB_FAIL(ObInternalTableChangeNotifier::get_instance().register_table(
+                 OB_ALL_SCHEDULER_JOB_TID))) {
+    LOG_WARN("failed to register scheduler job table change tracking", K(ret));
   } else if (OB_ISNULL(ObCurTraceId::get())) {
     ret = OB_ERR_UNEXPECTED;
   } else {
@@ -81,11 +86,15 @@ int ObDBMSSchedJobMaster::stop()
 
 void ObDBMSSchedJobMaster::switch_to_leader()
 {
-  is_leader_ = true;
+  ATOMIC_STORE(&has_loaded_primary_jobs_, false);
+  ATOMIC_STORE(&is_leader_, true);
+  wakeup();
 }
 void ObDBMSSchedJobMaster::switch_to_follower()
 {
-  is_leader_ = false;
+  ATOMIC_STORE(&is_leader_, false);
+  ATOMIC_STORE(&has_loaded_primary_jobs_, false);
+  wakeup();
 }
 
 int64_t ObDBMSSchedJobMaster::calc_next_date(ObDBMSSchedJobInfo &job_info)
@@ -126,40 +135,48 @@ int ObDBMSSchedJobMaster::scheduler()
   if (!inited_) {
     ret = OB_ERR_UNEXPECTED;
   } else {
-    bool first_iter = true;
     while (OB_SUCC(ret) && !stoped_) {
-      int64_t deadline_us;
-      int64_t now = ObTimeUtility::current_time();
-      int64_t max_deadline = now + CHECK_NEW_INTERVAL;
-      if (is_leader_) {
-        schedule_due_jobs();
-        if (wait_vector_.count() > 0) {
-          ObDBMSSchedJobKey *job_key = wait_vector_[0];
-          if (OB_ISNULL(job_key) || !job_key->is_valid()) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_ERROR("unexpected error, invalid job key in ready queue!", K(ret), KPC(job_key));
-            break;
+      const int64_t now = ObTimeUtility::current_time();
+      const int64_t max_deadline = now + CHECK_NEW_INTERVAL;
+      int64_t deadline_us = max_deadline;
+      if (ATOMIC_LOAD(&is_leader_)) {
+        const int check_ret = check_runtime_jobs();
+        if (OB_SUCCESS != check_ret) {
+          LOG_WARN("fail to check runtime scheduler jobs", K(check_ret));
+        } else if (ATOMIC_LOAD(&is_leader_)
+                   && ATOMIC_LOAD(&has_loaded_primary_jobs_)) {
+          const int schedule_ret = schedule_due_jobs();
+          if (OB_EAGAIN == schedule_ret) {
+            deadline_us = ObTimeUtility::current_time();
+          } else if (OB_SUCCESS != schedule_ret) {
+            LOG_WARN("fail to schedule due dbms scheduler jobs", K(schedule_ret));
+            deadline_us = ObTimeUtility::current_time() + MIN_SCHEDULER_INTERVAL;
+          } else if (wait_vector_.count() > 0) {
+            ObDBMSSchedJobKey *job_key = wait_vector_.at(0);
+            if (OB_ISNULL(job_key) || !job_key->is_valid()) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_ERROR("unexpected invalid scheduler job key", K(ret), KPC(job_key));
+            } else {
+              deadline_us = std::min(
+                  job_key->get_execute_at(), static_cast<uint64_t>(max_deadline));
+            }
           }
-          deadline_us = std::min(job_key->get_execute_at(), static_cast<uint64_t>(max_deadline));
-        } else {
-          deadline_us = max_deadline;
         }
       } else {
-        clear_wait_vector();
+        if (wait_vector_.count() > 0) {
+          clear_wait_vector();
+        }
         alive_jobs_.clear();
-        deadline_us = max_deadline;
+        ATOMIC_STORE(&has_loaded_primary_jobs_, false);
       }
 
-      idle(deadline_us);
-
-      if (is_leader_ && (first_iter || TC_REACH_TIME_INTERVAL(CHECK_NEW_INTERVAL))) {
-        check_runtime_jobs();
+      if (OB_SUCC(ret)) {
+        (void)idle(deadline_us);
       }
-      first_iter = false;
-
     }
     clear_wait_vector();
     alive_jobs_.clear();
+    ATOMIC_STORE(&has_loaded_primary_jobs_, false);
     LOG_INFO("dbms sched job master stoped", K(ret));
   }
   return ret;
@@ -168,23 +185,43 @@ int ObDBMSSchedJobMaster::scheduler()
 int ObDBMSSchedJobMaster::schedule_due_jobs()
 {
   int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
   while (OB_SUCC(ret) && wait_vector_.count() > 0) {
-    ObDBMSSchedJobKey *job_key = wait_vector_[0];
-    if (OB_ISNULL(job_key) || !job_key->is_valid()) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_ERROR("unexpected error, invalid job key in ready queue!", K(ret), KPC(job_key));
-      break;
-    }
-    int64_t delay = job_key->get_execute_at() - ObTimeUtility::current_time();
-    if (delay > 0) {
-      break; // not yet due
-    }
-    common::ObCurTraceId::TraceId job_trace_id;
-    job_trace_id.init(GCONF.self_addr_);
-    ObTraceIdGuard trace_id_guard(job_trace_id);
-    if (OB_SUCCESS != (tmp_ret = wait_vector_.remove(wait_vector_.begin()))) {
-    } else if (OB_SUCCESS != (tmp_ret = scheduler_job(job_key))) {
+    bool write_enabled = false;
+    if (!ATOMIC_LOAD(&is_leader_)) {
+      ret = OB_EAGAIN;
+    } else if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
+      LOG_WARN("fail to verify scheduler write capability before execution", K(ret));
+    } else if (!write_enabled) {
+      ret = OB_EAGAIN;
+    } else {
+      uint64_t target_seq = 0;
+      const int seq_ret = ObInternalTableChangeNotifier::get_instance().get_change_seq(
+          OB_ALL_SCHEDULER_JOB_TID, target_seq);
+      if (OB_SUCCESS == seq_ret
+          && target_seq != ATOMIC_LOAD(&scheduler_job_table_change_seq_)) {
+        ret = OB_EAGAIN;
+      } else {
+        ObDBMSSchedJobKey *job_key = wait_vector_.at(0);
+        if (OB_ISNULL(job_key) || !job_key->is_valid()) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_ERROR("unexpected invalid scheduler job key", K(ret), KPC(job_key));
+        } else {
+          const int64_t delay = job_key->get_execute_at() - ObTimeUtility::current_time();
+          if (delay > 0) {
+            break;
+          }
+          common::ObCurTraceId::TraceId job_trace_id;
+          job_trace_id.init(GCONF.self_addr_);
+          ObTraceIdGuard trace_id_guard(job_trace_id);
+          int tmp_ret = wait_vector_.remove(wait_vector_.begin());
+          if (OB_SUCCESS != tmp_ret) {
+            ret = tmp_ret;
+            LOG_WARN("fail to remove scheduler job from wait vector", K(ret));
+          } else if (OB_SUCCESS != (tmp_ret = scheduler_job(job_key))) {
+            LOG_WARN("fail to schedule single dbms scheduler job", K(tmp_ret));
+          }
+        }
+      }
     }
   }
   return ret;
@@ -233,6 +270,7 @@ int ObDBMSSchedJobMaster::scheduler_job(ObDBMSSchedJobKey *job_key)
     const int64_t now = ObTimeUtility::current_time();
     int64_t next_check_date = now + MIN_SCHEDULER_INTERVAL;
     if (OB_FAIL(ret) || !job_info.valid()) {
+      ATOMIC_STORE(&has_loaded_primary_jobs_, false);
       free_job_key(job_key);
       job_key = NULL;
       LOG_INFO("free invalid job", K(job_info));
@@ -250,6 +288,7 @@ int ObDBMSSchedJobMaster::scheduler_job(ObDBMSSchedJobKey *job_key)
       job_key = NULL;
       int tmp = OB_SUCCESS;
       if (OB_SUCCESS != (tmp = table_operator_.update_for_kill(job_info))) {
+        ATOMIC_STORE(&has_loaded_primary_jobs_, false);
       } else {
         LOG_WARN("update for stop job", K(job_info));
       }
@@ -260,6 +299,7 @@ int ObDBMSSchedJobMaster::scheduler_job(ObDBMSSchedJobKey *job_key)
     } else if (now > job_info.get_end_date()) {
       int tmp = OB_SUCCESS;
       if (OB_SUCCESS != (tmp = table_operator_.update_for_enddate(job_info))) {
+        ATOMIC_STORE(&has_loaded_primary_jobs_, false);
       } else {
         LOG_WARN("update for end for expired job", K(job_info), K(now));
       }
@@ -292,6 +332,7 @@ int ObDBMSSchedJobMaster::scheduler_job(ObDBMSSchedJobKey *job_key)
     }
     int tmp = OB_SUCCESS;
     if (OB_NOT_NULL(job_key) && OB_SUCCESS != (tmp = register_job(job_key, next_check_date))) {
+      ATOMIC_STORE(&has_loaded_primary_jobs_, false);
       LOG_WARN("failed to register job", K(tmp), K(job_info));
       free_job_key(job_key);
       job_key = NULL;
@@ -306,7 +347,8 @@ int ObDBMSSchedJobMaster::destroy()
   thread_cond_.destroy();
   inited_ = false;
   stoped_ = true;
-  is_leader_ = false;
+  ATOMIC_STORE(&is_leader_, false);
+  ATOMIC_STORE(&has_loaded_primary_jobs_, false);
   return OB_SUCCESS;
 }
 
@@ -350,15 +392,35 @@ int ObDBMSSchedJobMaster::check_runtime_jobs()
   } else {
     bool write_enabled = true;
     if (OB_FAIL(ObShareUtil::is_server_write_enabled(write_enabled))) {
+      ATOMIC_STORE(&has_loaded_primary_jobs_, false);
     } else if (!write_enabled) {
-      clear_wait_vector();
+      if (wait_vector_.count() > 0) {
+        clear_wait_vector();
+      }
       alive_jobs_.clear();
+      ATOMIC_STORE(&has_loaded_primary_jobs_, false);
       LOG_INFO("server is read-only, not check new jobs, and remove exist jobs");
     } else {
-      OZ (check_new_jobs());
+      uint64_t target_seq = 0;
+      const int seq_ret = ObInternalTableChangeNotifier::get_instance().get_change_seq(
+          OB_ALL_SCHEDULER_JOB_TID, target_seq);
+      const bool need_reconcile = !ATOMIC_LOAD(&has_loaded_primary_jobs_)
+          || OB_SUCCESS != seq_ret
+          || target_seq != ATOMIC_LOAD(&scheduler_job_table_change_seq_);
+      if (need_reconcile) {
+        ATOMIC_STORE(&has_loaded_primary_jobs_, false);
+        if (OB_FAIL(check_new_jobs())) {
+        } else {
+          if (OB_SUCCESS == seq_ret) {
+            ATOMIC_STORE(&scheduler_job_table_change_seq_, target_seq);
+          }
+          ATOMIC_STORE(&has_loaded_primary_jobs_, true);
+        }
+      }
     }
   }
-  LOG_INFO("check runtime scheduler jobs", K(ret));
+  LOG_DEBUG("check runtime scheduler jobs", K(ret),
+            K_(scheduler_job_table_change_seq), K_(has_loaded_primary_jobs));
   return ret;
 }
 
@@ -376,43 +438,46 @@ int ObDBMSSchedJobMaster::check_new_jobs()
 int ObDBMSSchedJobMaster::register_new_jobs(ObIArray<ObDBMSSchedJobInfo> &job_infos)
 {
   int ret = OB_SUCCESS;
-  ObDBMSSchedJobInfo job_info;
-  for (int64_t i = 0; OB_SUCC(ret) && i < job_infos.count(); i++) {
-    job_info = job_infos.at(i);
-    if (job_info.valid() && !job_info.is_disabled() && !job_info.is_broken()) {
-      int tmp = alive_jobs_.exist_refactored(job_info.get_job_id());
-      if (OB_HASH_EXIST == tmp) {
-        // Job exists in memory, but its NEXT_DATE may have changed (e.g. via set_attribute).
-        // Find the existing key in wait_vector_, remove it, update execute_at, and re-insert.
-        int64_t new_next_date = job_info.get_next_date();
-        common::ObSortedVector<ObDBMSSchedJobKey *>::iterator iter;
-        for (iter = wait_vector_.begin(); iter != wait_vector_.end(); ++iter) {
-          ObDBMSSchedJobKey *exist_key = *iter;
-          if (exist_key->get_job_id() == job_info.get_job_id()) {
-            wait_vector_.remove(iter);
-            if (OB_FAIL(register_job(exist_key, new_next_date))) {
-              free_job_key(exist_key);
-            }
-            break;
-          }
-        }
-      } else if (OB_HASH_NOT_EXIST == tmp) {
-        ObDBMSSchedJobKey *job_key = NULL;
-        if (OB_FAIL(alloc_job_key(
-          job_key,
-          job_info.get_job_id(),
-          job_info.get_job_name()))) {
-        } else if (OB_FAIL(register_job(job_key, ObTimeUtility::current_time()))) {
-          free_job_key(job_key);
-          job_key = NULL;
-        }
-        LOG_INFO("register new job", K(ret), K(job_info));
-      } else {
-        LOG_ERROR("dbms sched job master check job exist failed", K(tmp), K(job_info));
+  // The full query succeeded, so replace the in-memory snapshot as one
+  // scheduler-thread-owned generation. Jobs absent from the result are removed.
+  clear_wait_vector();
+  alive_jobs_.clear();
+  for (int64_t i = 0; OB_SUCC(ret) && i < job_infos.count(); ++i) {
+    ObDBMSSchedJobInfo &job_info = job_infos.at(i);
+    const bool should_schedule = job_info.valid()
+        && (job_info.is_running() || job_info.is_killed()
+            || (!job_info.is_disabled() && !job_info.is_broken()));
+    if (should_schedule) {
+      ObDBMSSchedJobKey *job_key = NULL;
+      if (OB_FAIL(alloc_job_key(job_key, job_info.get_job_id(), job_info.get_job_name()))) {
+        LOG_WARN("fail to allocate reconciled scheduler job", K(ret), K(job_info));
+      } else if (OB_FAIL(register_job(job_key, get_reconcile_deadline_(job_info)))) {
+        LOG_WARN("fail to register reconciled scheduler job", K(ret), K(job_info));
+        free_job_key(job_key);
       }
     }
   }
+  if (OB_FAIL(ret)) {
+    clear_wait_vector();
+    alive_jobs_.clear();
+  }
   return ret;
+}
+
+int64_t ObDBMSSchedJobMaster::get_reconcile_deadline_(ObDBMSSchedJobInfo &job_info) const
+{
+  const int64_t now = ObTimeUtility::current_time();
+  int64_t deadline = job_info.get_next_date();
+  if (job_info.is_running()) {
+    const int64_t timeout_deadline =
+        job_info.get_this_date() + TO_TS(job_info.get_max_run_duration());
+    deadline = deadline > 0 ? MIN(deadline, timeout_deadline) : timeout_deadline;
+  } else if (job_info.is_killed() || now > job_info.get_end_date()) {
+    deadline = now;
+  } else if (deadline <= 0) {
+    deadline = now;
+  }
+  return deadline;
 }
 
 int ObDBMSSchedJobMaster::register_job(ObDBMSSchedJobKey *job_key, int64_t next_date)
@@ -427,6 +492,10 @@ int ObDBMSSchedJobMaster::register_job(ObDBMSSchedJobKey *job_key, int64_t next_
     common::ObSortedVector<ObDBMSSchedJobKey *>::iterator iter;
     ObDBMSSchedJobKey *replace_job_key = NULL;
     OZ (wait_vector_.replace(job_key, iter, compare_job_key, equal_job_key, replace_job_key));
+    if (OB_SUCC(ret) && OB_NOT_NULL(replace_job_key) && replace_job_key != job_key) {
+      allocator_.free(replace_job_key);
+      replace_job_key = NULL;
+    }
   }
   return ret;
 }

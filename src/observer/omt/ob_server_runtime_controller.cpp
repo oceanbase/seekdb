@@ -64,6 +64,7 @@
 #include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
+#include "share/ob_internal_table_change_notifier.h"
 #include "share/roaringbitmap/ob_rb_memory_mgr.h"
 #include "sql/dtl/ob_dtl_interm_result_manager.h"
 #include "sql/session/ob_sql_session_mgr.h"
@@ -1504,6 +1505,9 @@ int ObServer::obs_init_modules()
         *mods_ps_cache_,
         debug_sync_broadcaster_,
         conn_res_mgr_);
+  }
+  if (OB_SUCC(ret) && OB_FAIL(share::ObInternalTableChangeNotifier::get_instance().seal())) {
+    SERVER_LOG(WARN, "seal internal table change notifier failed", KR(ret));
   }
   return ret;
 }
