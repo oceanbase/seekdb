@@ -19,7 +19,7 @@
 
 #include "share/config/ob_server_config.h"
 #include "share/config/ob_reload_config.h"
-#include "auto_config.h"
+#include "config_ffi.h"
 
 namespace oceanbase
 {
@@ -42,7 +42,7 @@ public:
   int save_configs();
   int save_internal_state(const char *name, const char *value);
   int update_checked(const char *name, const char *value, bool reset,
-                     AutoConfigCheckCallback callback, void *context,
+                     ConfigCheckCallback callback, void *context,
                      bool *after_replace);
   void enable_static_effect() { enable_static_effect_ = true; }
 private:

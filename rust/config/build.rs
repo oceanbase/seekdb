@@ -42,8 +42,9 @@ fn rust_type(kind: &str) -> Option<&'static str> {
         }
         "BOOL" => Some("bool"),
         "DBL" => Some("f64"),
-        "STR" | "STR_WITH_CHECKER" | "LOG_LEVEL" | "WORK_AREA_POLICY" | "MOMENT"
-        | "MODE_WITH_PARSER" => Some("String"),
+        "STR" | "STR_WITH_CHECKER" | "LOG_LEVEL" | "WORK_AREA_POLICY" | "MOMENT" | "MODE" => {
+            Some("String")
+        }
         _ => panic!("unknown parameter type: {kind}"),
     }
 }
@@ -128,14 +129,6 @@ fn parameters(source: &str) -> Vec<Parameter> {
     let mut names = HashSet::new();
     for parameter in &parameters {
         rust_type(&parameter.kind);
-        if parameter.kind == "MODE_WITH_PARSER" {
-            let option_count = parameter.options.split(',').count();
-            assert!(
-                !parameter.options.is_empty() && option_count <= 32,
-                "mode parameter needs one to 32 declared operations: {}",
-                parameter.name
-            );
-        }
         assert!(
             names.insert(parameter.name.clone()),
             "duplicate parameter: {}",
@@ -177,6 +170,7 @@ fn generate_bridge(parameters: &[Parameter], internal_state: &[Parameter]) -> St
                  source: String,\n\
                  edit_level: String,\n\
                  default_value: String,\n\
+                 options: String,\n\
              }\n\
              extern \"Rust\" {\n",
     );
@@ -185,15 +179,11 @@ fn generate_bridge(parameters: &[Parameter], internal_state: &[Parameter]) -> St
         if let Some(ty) = rust_type(&parameter.kind) {
             code.push_str(&format!("        fn {}() -> {ty};\n", parameter.name));
         }
-        match parameter.kind.as_str() {
-            "MOMENT" => code.push_str(&format!(
+        if parameter.kind == "MOMENT" {
+            code.push_str(&format!(
                 "        fn {}_parts() -> MomentTime;\n",
                 parameter.name
-            )),
-            "MODE_WITH_PARSER" => {
-                code.push_str(&format!("        fn {}_bits() -> u64;\n", parameter.name))
-            }
-            _ => {}
+            ));
         }
     }
     code.push_str("    }\n}\n");
@@ -233,8 +223,7 @@ fn generate_bridge(parameters: &[Parameter], internal_state: &[Parameter]) -> St
                     parameter.name,
                 ));
             }
-            "STR" | "STR_WITH_CHECKER" | "LOG_LEVEL" | "WORK_AREA_POLICY" | "MOMENT"
-            | "MODE_WITH_PARSER" => {
+            "STR" | "STR_WITH_CHECKER" | "LOG_LEVEL" | "WORK_AREA_POLICY" | "MOMENT" | "MODE" => {
                 code.push_str(&format!(
                     "static {storage}: OnceLock<RwLock<String>> = OnceLock::new();\n\
                      fn {}_cell() -> &'static RwLock<String> {{ {storage}.get_or_init(|| RwLock::new({:?}.to_owned())) }}\n\
@@ -249,10 +238,6 @@ fn generate_bridge(parameters: &[Parameter], internal_state: &[Parameter]) -> St
             "MOMENT" => code.push_str(&format!(
                 "pub fn {}_parts() -> bridge::MomentTime {{ parse_moment_parts(&{}()) }}\n",
                 parameter.name, parameter.name
-            )),
-            "MODE_WITH_PARSER" => code.push_str(&format!(
-                "pub fn {}_bits() -> u64 {{ parse_mode_bits(&{}(), {:?}) }}\n",
-                parameter.name, parameter.name, parameter.options
             )),
             _ => {}
         }
@@ -288,7 +273,7 @@ fn generate_bridge(parameters: &[Parameter], internal_state: &[Parameter]) -> St
         ));
     }
     code.push_str("];\n");
-    code.push_str("pub(crate) fn apply(name: &str, value: &str) -> Result<(), crate::Error> {\n    validate(name, value)?;\n    match name.to_ascii_lowercase().as_str() {\n");
+    code.push_str("pub(crate) fn apply(name: &str, value: &str) -> Result<(), crate::Error> {\n    validate_storable(name, value)?;\n    match name.to_ascii_lowercase().as_str() {\n");
     for parameter in parameters {
         let parser = match parameter.kind.as_str() {
             "INT" | "INT_WITH_CHECKER" => "parse_int",
@@ -296,27 +281,26 @@ fn generate_bridge(parameters: &[Parameter], internal_state: &[Parameter]) -> St
             "TIME" | "TIME_WITH_CHECKER" => "parse_time",
             "BOOL" => "parse_bool",
             "DBL" => "parse_double",
-            "STR" | "STR_WITH_CHECKER" | "LOG_LEVEL" | "WORK_AREA_POLICY" | "MOMENT"
-            | "MODE_WITH_PARSER" => "",
+            "STR" | "STR_WITH_CHECKER" | "LOG_LEVEL" | "WORK_AREA_POLICY" | "MOMENT" | "MODE" => "",
             _ => unreachable!(),
         };
         let statement = match parameter.kind.as_str() {
             "STR" | "STR_WITH_CHECKER" | "LOG_LEVEL" | "WORK_AREA_POLICY"
-            | "MOMENT" | "MODE_WITH_PARSER" => format!(
+            | "MOMENT" | "MODE" => format!(
                 "*{}_cell().write().expect(\"config string lock poisoned\") = value.to_owned();",
                 parameter.name
             ),
             "DBL" => format!(
-                "let parsed = {parser}(name, value)?; validate_f64_range(name, parsed, {:?})?; {}.store(parsed.to_bits(), Ordering::Release);",
-                parameter.range, parameter.name.to_ascii_uppercase()
+                "let parsed = {parser}(name, value)?; {}.store(parsed.to_bits(), Ordering::Release);",
+                parameter.name.to_ascii_uppercase()
             ),
             "BOOL" => format!(
                 "{}.store({parser}(name, value)?, Ordering::Release);",
                 parameter.name.to_ascii_uppercase(),
             ),
             _ => format!(
-                "let parsed = {parser}(name, value)?; validate_i64_range(name, parsed, {:?}, {parser})?; {}.store(parsed, Ordering::Release);",
-                parameter.range, parameter.name.to_ascii_uppercase()
+                "let parsed = {parser}(name, value)?; {}.store(parsed, Ordering::Release);",
+                parameter.name.to_ascii_uppercase()
             ),
         };
         code.push_str(&format!(
@@ -340,7 +324,7 @@ fn generate_bridge(parameters: &[Parameter], internal_state: &[Parameter]) -> St
                  \"DBL\" => \"DOUBLE\",\n\
                  \"BOOL\" => \"BOOL\",\n\
                  \"MOMENT\" => \"MOMENT\",\n\
-                 \"MODE_WITH_PARSER\" => \"MODE\",\n\
+                 \"MODE\" => \"MODE\",\n\
                  _ => \"STRING\",\n\
              };\n\
              bridge::ParameterRow {\n\
@@ -353,6 +337,7 @@ fn generate_bridge(parameters: &[Parameter], internal_state: &[Parameter]) -> St
                  source: \"DEFAULT\".to_owned(),\n\
                  edit_level: meta.edit_level.to_owned(),\n\
                  default_value: meta.default.to_owned(),\n\
+                 options: meta.options.to_owned(),\n\
              }\n\
          }\n",
     );
@@ -371,7 +356,7 @@ fn generate_cpp_checkers(parameters: &[Parameter]) -> String {
            const common::ObString key = common::ObString::make_string(name);\n",
     );
     for parameter in parameters {
-        if parameter.checker.is_empty() || parameter.checker.starts_with("parser:") {
+        if parameter.checker.is_empty() {
             continue;
         }
         let checker = if parameter.checker.contains("::") {
@@ -405,12 +390,12 @@ fn main() {
     env::set_current_dir(&output_dir).expect("cannot enter generated source directory");
     cxx_build::bridge("generated_config.rs")
         .flag_if_supported("-std=c++17")
-        .compile("auto_config_cxx");
+        .compile("config_cxx");
     env::set_current_dir(&crate_dir).expect("cannot restore crate directory");
     if let Ok(header_dir) = env::var("CONFIG_HEADER_DIR") {
         let header_dir = PathBuf::from(header_dir);
         fs::create_dir_all(&header_dir).expect("cannot create CXX header directory");
-        let source = output_dir.join("cxxbridge/include/auto-config/generated_config.rs.h");
+        let source = output_dir.join("cxxbridge/include/config/generated_config.rs.h");
         let target = header_dir.join("config_bridge.h");
         let bytes = fs::read(source).expect("cannot read generated CXX header");
         if fs::read(&target).ok().as_deref() != Some(bytes.as_slice()) {
@@ -424,13 +409,13 @@ fn main() {
     }
 
     let config = cbindgen::Config::from_file(crate_dir.join("cbindgen.toml"))
-        .expect("auto-config cbindgen config failed");
+        .expect("config cbindgen config failed");
     cbindgen::Builder::new()
         .with_src(crate_dir.join("src").join("ffi.rs"))
         .with_config(config)
         .generate()
-        .expect("auto-config cbindgen failed")
-        .write_to_file(crate_dir.join("include").join("auto_config.h"));
+        .expect("config cbindgen failed")
+        .write_to_file(crate_dir.join("include").join("config_ffi.h"));
 
     println!("cargo:rerun-if-changed=src/ffi.rs");
     println!("cargo:rerun-if-changed=cbindgen.toml");

@@ -12,27 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::ffi::{c_char, c_int, c_void, CStr, CString};
+use std::ffi::{c_char, c_int, c_void, CStr};
 use std::path::Path;
 
 use crate::{self as store, Error};
 
 #[repr(C)]
-pub struct AutoConfigError {
+pub struct ConfigError {
     pub line: u32,
     pub after_replace: u8,
     pub message: [c_char; 512],
 }
 
-pub type AutoConfigEntryCallback = unsafe extern "C" fn(
-    context: *mut c_void,
-    name: *const c_char,
-    value: *const c_char,
-    line: u32,
-) -> c_int;
-pub type AutoConfigCheckCallback = unsafe extern "C" fn(context: *mut c_void) -> c_int;
+pub type ConfigCheckCallback = unsafe extern "C" fn(context: *mut c_void) -> c_int;
 
-fn write_error(output: *mut AutoConfigError, error: &Error) {
+fn write_error(output: *mut ConfigError, error: &Error) {
     if output.is_null() {
         return;
     }
@@ -73,7 +67,7 @@ fn argument(value: *const c_char, label: &str) -> Result<String, Error> {
 }
 
 #[no_mangle]
-pub extern "C" fn auto_config_supported(path: *const c_char, error: *mut AutoConfigError) -> c_int {
+pub extern "C" fn config_supported(path: *const c_char, error: *mut ConfigError) -> c_int {
     let result =
         argument(path, "path").and_then(|path| store::check_storage_directory(Path::new(&path)));
     match result {
@@ -86,11 +80,11 @@ pub extern "C" fn auto_config_supported(path: *const c_char, error: *mut AutoCon
 }
 
 #[no_mangle]
-pub extern "C" fn auto_config_update_internal_state(
+pub extern "C" fn config_update_internal_state(
     path: *const c_char,
     name: *const c_char,
     value: *const c_char,
-    error: *mut AutoConfigError,
+    error: *mut ConfigError,
 ) -> c_int {
     let result = (|| {
         let path = argument(path, "path")?;
@@ -108,14 +102,14 @@ pub extern "C" fn auto_config_update_internal_state(
 }
 
 #[no_mangle]
-pub extern "C" fn auto_config_update_checked(
+pub extern "C" fn config_update_checked(
     path: *const c_char,
     name: *const c_char,
     value: *const c_char,
     reset: u8,
-    callback: AutoConfigCheckCallback,
+    callback: ConfigCheckCallback,
     context: *mut c_void,
-    error: *mut AutoConfigError,
+    error: *mut ConfigError,
 ) -> c_int {
     let result = (|| {
         let path = argument(path, "path")?;
@@ -148,30 +142,13 @@ pub extern "C" fn auto_config_update_checked(
 }
 
 #[no_mangle]
-pub extern "C" fn auto_config_load_active_checked(
+pub extern "C" fn config_load_active(
     path: *const c_char,
     startup: u8,
-    callback: AutoConfigEntryCallback,
-    context: *mut c_void,
-    error: *mut AutoConfigError,
+    error: *mut ConfigError,
 ) -> c_int {
-    let result = argument(path, "path").and_then(|path| {
-        store::config::load_active_checked(Path::new(&path), startup != 0, |entry| {
-            let name = CString::new(entry.name.as_str()).expect("validated parameter name");
-            let value = CString::new(entry.value.as_str()).expect("validated parameter value");
-            let status =
-                unsafe { callback(context, name.as_ptr(), value.as_ptr(), entry.line as u32) };
-            if status == 0 {
-                Ok(())
-            } else {
-                Err(Error::new(
-                    entry.line,
-                    Some(entry.name.clone()),
-                    format!("business checker rejected value ({status})"),
-                ))
-            }
-        })
-    });
+    let result = argument(path, "path")
+        .and_then(|path| store::config::load_active(Path::new(&path), startup != 0));
     match result {
         Ok(()) => 0,
         Err(problem) => {
@@ -182,10 +159,10 @@ pub extern "C" fn auto_config_load_active_checked(
 }
 
 #[no_mangle]
-pub extern "C" fn auto_config_bootstrap_set(
+pub extern "C" fn config_bootstrap_set(
     name: *const c_char,
     value: *const c_char,
-    error: *mut AutoConfigError,
+    error: *mut ConfigError,
 ) -> c_int {
     let result = argument(name, "name").and_then(|name| {
         argument(value, "value").and_then(|value| store::config::bootstrap_set(&name, &value))
@@ -200,9 +177,9 @@ pub extern "C" fn auto_config_bootstrap_set(
 }
 
 #[no_mangle]
-pub extern "C" fn auto_config_save_bootstrap(
+pub extern "C" fn config_save_bootstrap(
     path: *const c_char,
-    error: *mut AutoConfigError,
+    error: *mut ConfigError,
 ) -> c_int {
     let result =
         argument(path, "path").and_then(|path| store::config::save_bootstrap(Path::new(&path)));

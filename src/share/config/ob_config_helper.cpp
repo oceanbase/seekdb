@@ -285,6 +285,12 @@ bool ObConfigWorkAreaPolicyChecker::check(const char *text) const
   return ((0 == tmp_str.case_compare(MANUAL)) || (0 == tmp_str.case_compare(AUTO)));
 }
 
+bool ObParallelDDLControlChecker::check(const char *text) const
+{
+  ObParallelDDLControlMode mode;
+  return nullptr != text && OB_SUCCESS == mode.parse_config(ObString::make_string(text));
+}
+
 bool ObDutyDurationUtil::extract_value(const char *ptr, uint64_t len, int32_t &value)
 {
   char buffer[16] = {0};
@@ -743,6 +749,46 @@ int ObParallelDDLControlMode::set_parallel_ddl_mode(const ObParallelDDLType type
   return ret;
 }
 
+int ObParallelDDLControlMode::parse_config(const ObString &value)
+{
+  int ret = OB_SUCCESS;
+  ObParallelDDLControlMode parsed;
+  const char *const data = value.ptr();
+  const int64_t length = value.length();
+  int64_t start = 0;
+  while (OB_SUCC(ret) && start < length) {
+    int64_t end = start;
+    while (end < length && data[end] != ',') {
+      ++end;
+    }
+    const ObString item = ObString(static_cast<int32_t>(end - start), data + start).trim();
+    if (!item.empty()) {
+      const char *const colon = item.find(':');
+      if (nullptr == colon) {
+        ret = OB_INVALID_CONFIG;
+      } else {
+        const int32_t operation_len = static_cast<int32_t>(colon - item.ptr());
+        const int32_t state_len = item.length() - operation_len - 1;
+        const ObString operation = ObString(operation_len, item.ptr()).trim();
+        const ObString state = ObString(state_len, colon + 1).trim();
+        const uint8_t mode = 0 == state.case_compare("on") ? MODE_ON
+            : 0 == state.case_compare("off") ? MODE_OFF : MODE_DEFAULT;
+        ObParallelDDLType type = MAX_TYPE;
+        if (MODE_DEFAULT == mode) {
+          ret = OB_INVALID_CONFIG;
+        } else if (OB_FAIL(string_to_ddl_type(operation, type))) {
+        } else if (OB_FAIL(parsed.set_parallel_ddl_mode(type, mode))) {
+        }
+      }
+    }
+    start = end + 1;
+  }
+  if (OB_SUCC(ret)) {
+    value_ = parsed.value_;
+  }
+  return ret;
+}
+
 int ObParallelDDLControlMode::is_parallel_ddl(const ObParallelDDLType type, bool &is_parallel)
 {
   int ret = OB_SUCCESS;
@@ -771,8 +817,11 @@ int ObParallelDDLControlMode::is_parallel_ddl_enable(const ObParallelDDLType ddl
   int ret = OB_SUCCESS;
   is_parallel = true;
   ObParallelDDLControlMode cfg;
-  cfg.set_encoded_value(config::_parallel_ddl_control_bits());
-  if (OB_FAIL(cfg.is_parallel_ddl(ddl_type, is_parallel))) {
+  const auto value = config::_parallel_ddl_control();
+  const ObString config_value(static_cast<int32_t>(value.size()), value.data());
+  if (OB_FAIL(cfg.parse_config(config_value))) {
+    OB_LOG(WARN, "invalid parallel DDL control", KR(ret), K(config_value));
+  } else if (OB_FAIL(cfg.is_parallel_ddl(ddl_type, is_parallel))) {
   }
   return ret;
 }

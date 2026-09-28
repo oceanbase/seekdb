@@ -6,7 +6,7 @@ seekdb_apply_standalone_inventory(ob_share_extra SEEKDB_SHARE_DATUM_STANDALONE)
 
 ob_add_new_object_target(ob_share ob_share)
 ob_add_new_object_target(ob_share_extra ob_share_extra)
-target_link_libraries(ob_share PUBLIC ob_base auto_config)
+target_link_libraries(ob_share PUBLIC ob_base config)
 target_link_libraries(ob_share_extra PUBLIC ob_base_without_pass)
 
 add_library(ob_share_static STATIC EXCLUDE_FROM_ALL)

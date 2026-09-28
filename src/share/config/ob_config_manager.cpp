@@ -22,7 +22,7 @@
 #include "share/config/ob_config_rpc_types.h"
 #include "config_bridge.h"
 #include "config_checkers.h"
-#include "auto_config.h"
+#include "config_ffi.h"
 
 namespace oceanbase
 {
@@ -37,34 +37,22 @@ namespace common
 {
 namespace
 {
-constexpr char AUTO_CONFIG_PATH[] = "./etc/seekdb.auto.conf";
+constexpr char CONFIG_PATH[] = "./etc/seekdb.conf";
 
-int report_error(const char *operation, const AutoConfigError &error)
+int report_error(const char *operation, const ConfigError &error)
 {
   int ret = OB_INVALID_CONFIG;
-  LOG_ERROR("auto-config operation failed", K(operation), "detail", error.message,
+  LOG_ERROR("config operation failed", K(operation), "detail", error.message,
             "line", error.line, "after_replace", error.after_replace);
   if (error.after_replace != 0) {
     LOG_USER_ERROR(OB_INVALID_CONFIG,
-                   "auto-config file was replaced, but durability could not be confirmed");
+                   "config file was replaced, but durability could not be confirmed");
   } else {
     LOG_USER_ERROR(OB_INVALID_CONFIG, error.message);
   }
   return ret;
 }
 
-int check_load_entry(void *, const char *name, const char *value, uint32_t line)
-{
-  int ret = OB_SUCCESS;
-  if (nullptr == name || nullptr == value) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (config::parameter_exists(rust::Str(name)) &&
-             !config::check_parameter(name, value)) {
-    ret = OB_INVALID_CONFIG;
-    LOG_ERROR("invalid auto-config entry", K(ret), K(line), K(name));
-  }
-  return ret;
-}
 }
 
 ObConfigManager::~ObConfigManager()
@@ -74,8 +62,8 @@ ObConfigManager::~ObConfigManager()
 int ObConfigManager::init()
 {
   int ret = OB_SUCCESS;
-  AutoConfigError error = {};
-  if (0 != auto_config_supported(AUTO_CONFIG_PATH, &error)) {
+  ConfigError error = {};
+  if (0 != config_supported(CONFIG_PATH, &error)) {
     ret = report_error("initialize", error);
   } else {
     inited_ = true;
@@ -94,10 +82,9 @@ int ObConfigManager::update_local()
   if (!inited_) {
     ret = OB_NOT_INIT;
   } else {
-    AutoConfigError error = {};
-    if (0 != auto_config_load_active_checked(AUTO_CONFIG_PATH,
-                                            enable_static_effect_ ? 0 : 1,
-                                            check_load_entry, nullptr, &error)) {
+    ConfigError error = {};
+    if (0 != config_load_active(CONFIG_PATH,
+                                    enable_static_effect_ ? 0 : 1, &error)) {
       ret = report_error("load active", error);
     } else {
       LOG_INFO("read config success");
@@ -128,8 +115,8 @@ int ObConfigManager::save_internal_state(const char *name, const char *value)
   } else if (!inited_) {
     ret = OB_NOT_INIT;
   } else {
-    AutoConfigError error = {};
-    if (0 != auto_config_update_internal_state(AUTO_CONFIG_PATH, name, value, &error)) {
+    ConfigError error = {};
+    if (0 != config_update_internal_state(CONFIG_PATH, name, value, &error)) {
       ret = report_error("save internal state", error);
     }
   }
@@ -137,7 +124,7 @@ int ObConfigManager::save_internal_state(const char *name, const char *value)
 }
 
 int ObConfigManager::update_checked(const char *name, const char *value, bool reset,
-                                    AutoConfigCheckCallback callback, void *context,
+                                    ConfigCheckCallback callback, void *context,
                                     bool *after_replace)
 {
   int ret = OB_SUCCESS;
@@ -153,8 +140,8 @@ int ObConfigManager::update_checked(const char *name, const char *value, bool re
   } else if ((!reset && nullptr == value) || nullptr == callback) {
     ret = OB_INVALID_ARGUMENT;
   } else {
-    AutoConfigError error = {};
-    if (0 != auto_config_update_checked(AUTO_CONFIG_PATH, name, value,
+    ConfigError error = {};
+    if (0 != config_update_checked(CONFIG_PATH, name, value,
                                         reset ? 1 : 0, callback, context, &error)) {
       if (nullptr != after_replace) {
         *after_replace = 0 != error.after_replace;
@@ -168,8 +155,8 @@ int ObConfigManager::update_checked(const char *name, const char *value, bool re
 int ObConfigManager::save_configs()
 {
   int ret = OB_SUCCESS;
-  AutoConfigError error = {};
-  if (0 != auto_config_save_bootstrap(AUTO_CONFIG_PATH, &error)) {
+  ConfigError error = {};
+  if (0 != config_save_bootstrap(CONFIG_PATH, &error)) {
     ret = OB_INVALID_CONFIG;
     LOG_ERROR("failed to save startup parameters", K(ret), "detail", error.message,
               "after_replace", error.after_replace);

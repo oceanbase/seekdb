@@ -217,6 +217,12 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObConfigWorkAreaPolicyChecker);
 };
 
+class ObParallelDDLControlChecker : public ObConfigChecker
+{
+public:
+  bool check(const char *text) const override;
+};
+
 class MemoryBudgetConfigChecker
   : public ObConfigChecker
 {
