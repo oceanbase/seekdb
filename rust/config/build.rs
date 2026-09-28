@@ -31,8 +31,6 @@ struct Parameter {
     description: String,
     #[serde(default)]
     checker: String,
-    #[serde(default)]
-    options: String,
 }
 
 fn rust_type(kind: &str) -> Option<&'static str> {
@@ -151,7 +149,6 @@ fn generate_bridge(parameters: &[Parameter], internal_state: &[Parameter]) -> St
              pub edit_level: &'static str,\n\
              pub description: &'static str,\n\
              pub checker: &'static str,\n\
-             pub options: &'static str,\n\
          }\n\
          #[cxx::bridge(namespace = \"oceanbase::config\")]\n\
          mod bridge {\n\
@@ -170,7 +167,6 @@ fn generate_bridge(parameters: &[Parameter], internal_state: &[Parameter]) -> St
                  source: String,\n\
                  edit_level: String,\n\
                  default_value: String,\n\
-                 options: String,\n\
              }\n\
              extern \"Rust\" {\n",
     );
@@ -245,7 +241,7 @@ fn generate_bridge(parameters: &[Parameter], internal_state: &[Parameter]) -> St
     code.push_str("pub static CATALOG: &[ParameterMeta] = &[\n");
     for parameter in parameters {
         code.push_str(&format!(
-            "    ParameterMeta {{ name: {:?}, kind: {:?}, default: {:?}, range: {:?}, section: {:?}, edit_level: {:?}, description: {:?}, checker: {:?}, options: {:?} }},\n",
+            "    ParameterMeta {{ name: {:?}, kind: {:?}, default: {:?}, range: {:?}, section: {:?}, edit_level: {:?}, description: {:?}, checker: {:?} }},\n",
             parameter.name,
             parameter.kind,
             parameter.default_text,
@@ -254,7 +250,6 @@ fn generate_bridge(parameters: &[Parameter], internal_state: &[Parameter]) -> St
             parameter.edit_level,
             parameter.description,
             parameter.checker,
-            parameter.options,
         ));
     }
     code.push_str(
@@ -266,10 +261,10 @@ fn generate_bridge(parameters: &[Parameter], internal_state: &[Parameter]) -> St
     code.push_str("pub static INTERNAL_STATE: &[ParameterMeta] = &[\n");
     for parameter in internal_state {
         code.push_str(&format!(
-            "    ParameterMeta {{ name: {:?}, kind: {:?}, default: {:?}, range: {:?}, section: {:?}, edit_level: {:?}, description: {:?}, checker: {:?}, options: {:?} }},\n",
+            "    ParameterMeta {{ name: {:?}, kind: {:?}, default: {:?}, range: {:?}, section: {:?}, edit_level: {:?}, description: {:?}, checker: {:?} }},\n",
             parameter.name, parameter.kind, parameter.default_text, parameter.range,
             parameter.section, parameter.edit_level, parameter.description,
-            parameter.checker, parameter.options,
+            parameter.checker,
         ));
     }
     code.push_str("];\n");
@@ -337,7 +332,6 @@ fn generate_bridge(parameters: &[Parameter], internal_state: &[Parameter]) -> St
                  source: \"DEFAULT\".to_owned(),\n\
                  edit_level: meta.edit_level.to_owned(),\n\
                  default_value: meta.default.to_owned(),\n\
-                 options: meta.options.to_owned(),\n\
              }\n\
          }\n",
     );

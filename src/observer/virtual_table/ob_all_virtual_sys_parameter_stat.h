@@ -49,8 +49,7 @@ private:
     SOURCE,
     EDIT_LEVEL,
     DEFAULT_VALUE,
-    ISDEFAULT,
-    OPTIONS
+    ISDEFAULT
 };
   std::size_t index_;
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualSysParameterStat);

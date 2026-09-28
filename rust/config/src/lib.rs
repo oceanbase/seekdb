@@ -799,7 +799,7 @@ mod tests {
     }
 
     #[test]
-    fn every_declared_default_is_valid_and_options_do_not_restrict_values() {
+    fn declared_defaults_and_checkers_validate_values() {
         for parameter in crate::config::CATALOG {
             crate::config::validate(parameter.name, parameter.default)
                 .unwrap_or_else(|error| panic!("{}: {error}", parameter.name));
@@ -813,18 +813,6 @@ mod tests {
         assert!(crate::config::validate("default_table_organization", "HEAP").is_ok());
         assert!(crate::config::validate("default_table_organization", "UNKNOWN").is_ok());
         assert!(crate::config::validate("syslog_level", "share.pt:trace").is_ok());
-        assert_eq!(
-            crate::config::find("syslog_level").unwrap().options,
-            "DEBUG, TRACE, WDIAG, EDIAG, INFO, WARN, ERROR"
-        );
-        let index = crate::config::CATALOG
-            .iter()
-            .position(|parameter| parameter.name == "syslog_level")
-            .unwrap();
-        assert_eq!(
-            crate::config::parameter_row(index).options,
-            "DEBUG, TRACE, WDIAG, EDIAG, INFO, WARN, ERROR"
-        );
     }
 
     #[test]
