@@ -468,14 +468,15 @@ int ObLocalManagementService::schedule_load_ddl_task()
   int ret = OB_SUCCESS;
   const bool did_repeat = true;
   bool task_exist = false;
-#ifdef ERRSIM
-  const int64_t delay = 1000L * 1000L; //1s
-#else
-  const int64_t delay = 5L * 1000L * 1000L; //5s
-#endif
+  const int64_t delay = ObDDLScheduler::DDL_TASK_SCAN_PERIOD;
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
+  } else if (!load_ddl_task_timer_.inited()
+             && OB_FAIL(load_ddl_task_timer_.init("LocalLoadDDL", ObMemAttr("LocalLoadDDL")))) {
+    LOG_WARN("init namespace DDL recovery timer failed", KR(ret));
+  } else if (OB_FAIL(load_ddl_task_timer_.start())) {
+    LOG_WARN("start namespace DDL recovery timer failed", KR(ret));
   } else if (FALSE_IT(task_exist = load_ddl_task_timer_.task_exist(load_ddl_task_))) {
   } else if (task_exist) {
     // ignore error
@@ -2629,8 +2630,8 @@ void ObLocalManagementService::ObLoadDDLTask::runTimerTask()
   int ret = ObSysDDLSchedulerUtil::recover_task(
       local_management_service_.ddl_service_.get_task_context());
   if (OB_FAIL(ret)) {
-  } else {
-    local_management_service_.load_ddl_task_timer_.cancel_task(*this);
+    LOG_WARN("recover namespace DDL tasks failed", KR(ret),
+             "namespace_id", local_management_service_.ddl_service_.get_task_context().namespace_id_);
   }
 }
 

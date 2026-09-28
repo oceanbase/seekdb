@@ -378,7 +378,7 @@ private:
   common::ObTimer purge_recyclebin_task_timer_;
 
   // async timer tasks
-  ObLoadDDLTask load_ddl_task_; // repeat on failure and cancel on success
+  ObLoadDDLTask load_ddl_task_; // periodic recovery for this Namespace
   ObDeadlockEventClearTask deadlock_event_clear_task_;  // repeat & no retry
 
   ObPurgeRecyclebinTask purge_recyclebin_task_;     // periodic schedule

@@ -695,6 +695,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
       auto *monitor = &services->opt_stat_monitor_manager;
       return common::ObOptStatMonitorManager::server_module_start(monitor);
     }()))) {
+  } else if (OB_FAIL(services->root_commands->schedule_load_ddl_task())) {
   } else {
     stage = "done";
   }

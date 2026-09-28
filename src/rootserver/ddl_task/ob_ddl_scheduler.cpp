@@ -812,15 +812,6 @@ int ObDDLScheduler::DDLScanTask::schedule()
 void ObDDLScheduler::DDLScanTask::runTimerTask()
 {
   int ret = OB_SUCCESS;
-  ObLocalManagementService *root_service =
-      ::oceanbase::share::server_service<ObLocalManagementService>();
-  if (OB_ISNULL(root_service)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("DDL root service is unavailable", KR(ret));
-  } else if (OB_FAIL(ObSysDDLSchedulerUtil::recover_task(
-          root_service->get_ddl_service().get_task_context()))) {
-  }
-
   if (OB_FAIL(ObFtsIndexBuilderUtil::try_load_dictionary())) {
   }
 
