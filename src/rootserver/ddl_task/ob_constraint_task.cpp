@@ -59,7 +59,6 @@ int ObCheckConstraintValidationTask::process()
   const ObDatabaseSchema *database_schema = nullptr;
   int tmp_ret = OB_SUCCESS;
   ObTabletID unused_tablet_id;
-  ObDDLTaskKey task_key(target_object_id_, schema_version_);
   ObMySQLProxy *ddl_proxy = local_management_service_ != nullptr
       ? local_management_service_->ddl_sql_proxy() : nullptr;
   if (OB_ISNULL(local_management_service_) || OB_ISNULL(ddl_proxy)) {
@@ -151,7 +150,8 @@ int ObCheckConstraintValidationTask::process()
   }
   ObDDLTaskInfo info;
   if (OB_TMP_FAIL(ObSysDDLSchedulerUtil::on_sstable_complement_job_reply(
-                      unused_tablet_id, task_key, 1L/*unused snapshot version*/,
+                      unused_tablet_id, ObDDLTaskID(task_id_), target_object_id_, schema_version_,
+                      1L/*unused snapshot version*/,
                       1L/*unused execution id*/, ret, info))) {
   }
   char table_id_buffer[256];
@@ -201,16 +201,16 @@ int ObForeignKeyConstraintValidationTask::process()
   if (OB_FAIL(DDL_SIM(task_id_, VALIDATE_CONSTRAINT_OR_FOREIGN_KEY_TASK_FAILED))) {
   } else {
     ObTabletID unused_tablet_id;
-    ObDDLTaskKey task_key(foregin_key_id_, schema_version_);
     ObDDLTaskInfo info;
     int tmp_ret = OB_SUCCESS;
     if (OB_FAIL(check_fk_by_send_sql())) {
     }
     if (OB_TMP_FAIL(ObSysDDLSchedulerUtil::on_sstable_complement_job_reply(
-                        unused_tablet_id, task_key, 1L/*unused snapshot version*/,
+                        unused_tablet_id, ObDDLTaskID(task_id_), foregin_key_id_, schema_version_,
+                        1L/*unused snapshot version*/,
                         1L/*unused execution id*/, ret, info))) {
     }
-    LOG_INFO("execute check foreign key task finish", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(task_key), K(data_table_id_), K(foregin_key_id_));
+    LOG_INFO("execute check foreign key task finish", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K_(task_id), K(data_table_id_), K(foregin_key_id_));
   }
   MANAGEMENT_EVENT_ADD("ddl scheduler", "foreign key constraint validation task process finish",
     "ret", ret,

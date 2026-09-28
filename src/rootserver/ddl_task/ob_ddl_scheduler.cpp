@@ -3428,6 +3428,12 @@ int ObDDLScheduler::inner_schedule_ddl_task(ObDDLTask *ddl_task,
   if (OB_ISNULL(ddl_task)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(ddl_task));
+  } else if (OB_UNLIKELY(!task_record.context_.is_complete()
+      || (ddl_task->context().namespace_id_ != 0
+          && ddl_task->context().namespace_id_ != task_record.context_.namespace_id_))) {
+    ret = OB_STATE_NOT_MATCH;
+    LOG_WARN("DDL task owner does not match its record", K(ret), K(task_record.context_.namespace_id_),
+             "task_namespace_id", ddl_task->context().namespace_id_);
   } else if (has_set_stop()) {
     ret = OB_NOT_RUNNING;
     LOG_WARN("sys ddl scheduler has stopped", K(ret));
@@ -3435,6 +3441,7 @@ int ObDDLScheduler::inner_schedule_ddl_task(ObDDLTask *ddl_task,
   } else {
     int tmp_ret = OB_SUCCESS;
     bool longops_added = true;
+    ddl_task->set_context(task_record.context_);
     ddl_task->set_gmt_create(task_record.gmt_create_);
     if (OB_TMP_FAIL(add_task_to_longops_mgr(ddl_task))) {
       longops_added = false;
@@ -3461,19 +3468,26 @@ int ObDDLScheduler::inner_schedule_ddl_task(ObDDLTask *ddl_task,
 
 int ObDDLScheduler::on_column_checksum_calc_reply(
     const common::ObTabletID &tablet_id,
-    const ObDDLTaskKey &task_key,
+    const ObDDLTaskID &task_id,
+    const uint64_t target_object_id,
+    const int64_t schema_version,
     const int ret_code)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_UNLIKELY(!(task_key.is_valid() && tablet_id.is_valid()))) {
+  } else if (OB_UNLIKELY(!(task_id.is_valid() && target_object_id != OB_INVALID_ID
+      && schema_version > 0 && tablet_id.is_valid()))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(task_key), K(tablet_id), K(ret_code));
-  } else if (OB_FAIL(task_queue_.modify_task(task_key, [&tablet_id, &ret_code](ObDDLTask &task) -> int {
+    LOG_WARN("invalid argument", K(ret), K(task_id), K(target_object_id), K(schema_version), K(tablet_id), K(ret_code));
+  } else if (OB_FAIL(task_queue_.modify_task(task_id, [&tablet_id, &target_object_id, &schema_version, &ret_code](ObDDLTask &task) -> int {
         int ret = OB_SUCCESS;
-        if (OB_UNLIKELY(!is_create_index(task.get_task_type()))) {
+        const ObDDLTaskKey key = task.get_task_key();
+        if (OB_UNLIKELY(key.object_id_ != target_object_id || key.schema_version_ != schema_version)) {
+          ret = OB_STATE_NOT_MATCH;
+          LOG_WARN("column checksum reply does not match DDL task", K(ret), K(key), K(target_object_id), K(schema_version));
+        } else if (OB_UNLIKELY(!is_create_index(task.get_task_type()))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("ddl task type not global index", K(ret), K(task));
         } else if (OB_FAIL(DDL_SIM(task.get_task_id(), ON_COLUMN_CHECKSUM_REPLY_FAILED))) {
@@ -3481,20 +3495,24 @@ int ObDDLScheduler::on_column_checksum_calc_reply(
         } else if (OB_FAIL(reinterpret_cast<ObIndexBuildTask *>(&task)->update_column_checksum_calc_status(tablet_id, ret_code))) {
           LOG_ERROR("update column checksum calc status failed", K(ret));
         }
+        if (OB_SUCC(ret)) {
+          task.add_event_info("on column checksum calc reply");
+        }
         return ret;
-      task.add_event_info("on column checksum calc reply");
       }))) {
   }
   if (OB_ENTRY_NOT_EXIST == ret) {
     ret = OB_NEED_RETRY;
   }
-  LOG_INFO("receive column checksum response", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(tablet_id), K(task_key), K(ret_code));
+  LOG_INFO("receive column checksum response", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(tablet_id), K(task_id), K(target_object_id), K(schema_version), K(ret_code));
   return ret;
 }
 
 int ObDDLScheduler::on_sstable_complement_job_reply(
     const common::ObTabletID &tablet_id,
-    const ObDDLTaskKey &task_key,
+    const ObDDLTaskID &task_id,
+    const uint64_t target_object_id,
+    const int64_t schema_version,
     const int64_t snapshot_version,
     const int64_t execution_id,
     const int ret_code,
@@ -3504,13 +3522,19 @@ int ObDDLScheduler::on_sstable_complement_job_reply(
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_UNLIKELY(!(task_key.is_valid() && snapshot_version > 0 && execution_id >= 0))) {
+  } else if (OB_UNLIKELY(!(task_id.is_valid() && target_object_id != OB_INVALID_ID
+      && schema_version > 0 && snapshot_version > 0 && execution_id >= 0))) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(task_key), K(snapshot_version), K(execution_id), K(ret_code));
-  } else if (OB_FAIL(task_queue_.modify_task(task_key, [&tablet_id, &snapshot_version, &execution_id, &ret_code, &addition_info](ObDDLTask &task) -> int {
+    LOG_WARN("invalid argument", K(ret), K(task_id), K(target_object_id), K(schema_version), K(snapshot_version), K(execution_id), K(ret_code));
+  } else if (OB_FAIL(task_queue_.modify_task(task_id, [&tablet_id, &target_object_id, &schema_version, &snapshot_version, &execution_id, &ret_code, &addition_info](ObDDLTask &task) -> int {
         int ret = OB_SUCCESS;
         const int64_t task_type = task.get_task_type();
-        switch (task_type) {
+        const ObDDLTaskKey key = task.get_task_key();
+        if (OB_UNLIKELY(key.object_id_ != target_object_id || key.schema_version_ != schema_version)) {
+          ret = OB_STATE_NOT_MATCH;
+          LOG_WARN("sstable reply does not match DDL task", K(ret), K(key), K(target_object_id), K(schema_version));
+        } else {
+          switch (task_type) {
           case ObDDLType::DDL_CREATE_INDEX:
           case ObDDLType::DDL_CREATE_PARTITIONED_LOCAL_INDEX:
             if (OB_FAIL(static_cast<ObIndexBuildTask *>(&task)->update_complete_sstable_job_status(tablet_id, snapshot_version, execution_id, ret_code, addition_info))) {
@@ -3556,15 +3580,18 @@ int ObDDLScheduler::on_sstable_complement_job_reply(
             ret = OB_NOT_SUPPORTED;
             LOG_WARN("not supported ddl task", K(ret), K(task));
             break;
+          }
+        }
+        if (OB_SUCC(ret)) {
+          task.add_event_info("on sstable complement job reply");
         }
         return ret;
-        task.add_event_info("on sstable complement job reply");
       }))) {
   }
   if (OB_ENTRY_NOT_EXIST == ret) {
     ret = OB_NEED_RETRY;
   }
-  LOG_INFO("ddl sstable complement job reply", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(tablet_id), K(task_key), K(ret_code));
+  LOG_INFO("ddl sstable complement job reply", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(tablet_id), K(task_id), K(target_object_id), K(schema_version), K(ret_code));
   return ret;
 }
 
@@ -3584,8 +3611,15 @@ int ObDDLScheduler::on_ddl_task_finish(
   } else {
     ObDDLTask *ddl_task = nullptr;
     if (OB_FAIL(task_queue_.modify_task(parent_task_id, [&child_task_key, &ret_code](ObDDLTask &task) -> int {
-          return task.on_child_task_finish(child_task_key.object_id_, ret_code);
-        task.add_event_info("ddl task finish");
+          int ret = OB_SUCCESS;
+          if (OB_UNLIKELY(task.context().namespace_id_ != child_task_key.namespace_id_)) {
+            ret = OB_STATE_NOT_MATCH;
+            LOG_WARN("child DDL task belongs to another namespace", K(ret), K(child_task_key), K(task));
+          } else if (OB_FAIL(task.on_child_task_finish(child_task_key.object_id_, ret_code))) {
+          } else {
+            task.add_event_info("ddl task finish");
+          }
+          return ret;
         }))) {
     }
   }
@@ -3593,7 +3627,7 @@ int ObDDLScheduler::on_ddl_task_finish(
   return ret;
 }
 
-int ObDDLScheduler::notify_update_autoinc_end(const ObDDLTaskKey &task_key,
+int ObDDLScheduler::notify_update_autoinc_end(const ObDDLTaskID &task_id,
                                               const uint64_t autoinc_val,
                                               const int ret_code)
 {
@@ -3601,10 +3635,10 @@ int ObDDLScheduler::notify_update_autoinc_end(const ObDDLTaskKey &task_key,
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_UNLIKELY(!task_key.is_valid())) {
+  } else if (OB_UNLIKELY(!task_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(task_key), K(ret_code));
-  } else if (OB_FAIL(task_queue_.modify_task(task_key, [&autoinc_val, &ret_code](ObDDLTask &task) -> int {
+    LOG_WARN("invalid argument", K(ret), K(task_id), K(ret_code));
+  } else if (OB_FAIL(task_queue_.modify_task(task_id, [&autoinc_val, &ret_code](ObDDLTask &task) -> int {
         int ret = OB_SUCCESS;
         const int64_t task_type = task.get_task_type();
         switch (task_type) {

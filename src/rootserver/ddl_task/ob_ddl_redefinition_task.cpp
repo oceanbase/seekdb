@@ -165,7 +165,6 @@ int ObDDLRedefinitionSSTableBuildTask::process()
   ddl_event_info.set_inner_sql_id(execution_id_);
   ObSqlString sql_string;
   ObSchemaGetterGuard schema_guard;
-  ObDDLTaskKey task_key(dest_table_id_, schema_version_);
   ObDDLTaskInfo info;
   const ObTableSchema *data_table_schema = nullptr;
 
@@ -242,7 +241,9 @@ int ObDDLRedefinitionSSTableBuildTask::process()
       }
     }
   }
-  if (OB_TMP_FAIL(ObSysDDLSchedulerUtil::on_sstable_complement_job_reply(unused_tablet_id, task_key, snapshot_version_, execution_id_, ret, info))) {
+  if (OB_TMP_FAIL(ObSysDDLSchedulerUtil::on_sstable_complement_job_reply(
+          unused_tablet_id, ObDDLTaskID(task_id_), dest_table_id_, schema_version_,
+          snapshot_version_, execution_id_, ret, info))) {
     LOG_WARN("fail to finish sstable complement", KR(tmp_ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
   }
   add_event_info(ret, "ddl redefinition sstable build task finish");

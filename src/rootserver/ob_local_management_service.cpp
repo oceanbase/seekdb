@@ -19,6 +19,7 @@
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_local_management_service.h"
 #include "observer/namespace_worker_protocol_prototype.h"
+#include "namespace/namespace.h"
 #include "data_plane/ddl/ob_ddl_coordinator.h"
 #include "query/command/ob_local_command_service.h"
 #include "share/ob_server_struct.h"
@@ -978,21 +979,6 @@ int ObLocalManagementService::parallel_create_table_like(const obcall::ObCreateT
   return ret;
 }
 
-int ObLocalManagementService::update_ddl_task_active_time(const obcall::ObUpdateDDLTaskActiveTimeArg &arg)
-{
-  int ret = OB_SUCCESS;
-  const int64_t task_id = arg.task_id_;
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_UNLIKELY(!arg.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", K(ret), K(arg));
-  } else if (OB_FAIL(ObSysDDLSchedulerUtil::update_ddl_task_active_time(ObDDLTaskID(task_id)))) {
-  }
-  return ret;
-}
-
 int ObLocalManagementService::abort_redef_table(const obcall::ObAbortRedefTableArg &arg)
 {
   int ret = OB_SUCCESS;
@@ -1837,22 +1823,6 @@ int ObLocalManagementService::optimize_table(const ObOptimizeTableArg &arg)
         }
       }
     }
-  }
-  return ret;
-}
-
-int ObLocalManagementService::calc_column_checksum_repsonse(const obcall::ObCalcColumnChecksumResponseArg &arg)
-{
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
-  } else if (OB_UNLIKELY(!arg.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(arg));
-  } else if (OB_FAIL(DDL_SIM(arg.task_id_, PROCESS_COLUMN_CHECKSUM_RESPONSE_SLOW))) {
-  } else if (OB_FAIL(ObSysDDLSchedulerUtil::on_column_checksum_calc_reply(
-              arg.tablet_id_, ObDDLTaskKey(arg.target_table_id_, arg.schema_version_), arg.ret_code_))) {
   }
   return ret;
 }
@@ -2919,37 +2889,6 @@ int ObLocalManagementService::clear_special_cluster_schema_status()
 
 
 
-int ObLocalManagementService::handle_ddl_local_build_response(const obcall::ObDDLLocalBuildResponse &arg)
-{
-  int ret = OB_SUCCESS;
-  ObDDLTaskInfo info;
-  info.row_scanned_ = arg.row_scanned_;
-  info.row_inserted_ = arg.row_inserted_;
-  info.physical_row_count_ = arg.physical_row_count_;
-  if (OB_UNLIKELY(!inited_)) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not inited", K(ret));
-  } else if (OB_UNLIKELY(!arg.is_valid())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(arg));
-  } else if (OB_FAIL(DDL_SIM(arg.task_id_, PROCESS_BUILD_SSTABLE_RESPONSE_SLOW))) {
-  } else if (OB_FAIL(ObSysDDLSchedulerUtil::on_sstable_complement_job_reply(
-          arg.tablet_id_/*source tablet id*/,
-          ObDDLTaskKey(arg.dest_schema_id_, arg.dest_schema_version_),
-          arg.snapshot_version_, arg.execution_id_, arg.ret_code_, info))) {
-  }
-  MANAGEMENT_EVENT_ADD("ddl scheduler", "build ddl local build response",
-                        "tid", 1UL,
-                        "ret", ret,
-                        "trace_id", *ObCurTraceId::get_trace_id(),
-                        "task_id", arg.task_id_,
-                        "tablet_id", arg.tablet_id_,
-                        "dag_result", arg.ret_code_,
-                        arg.snapshot_version_);
-  LOG_INFO("finish build ddl local build response ddl", K(ret), K(arg), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
-  return ret;
-}
-
 int ObLocalManagementService::purge_recyclebin_objects(int64_t purge_each_time)
 {
   int ret = OB_SUCCESS;
@@ -3357,11 +3296,13 @@ int report_column_checksum_response(
   }
   if (is_polled) {
     // The owning SQL worker will consume the result through its next poll.
-  } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
-    ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("local management service is null", K(ret));
-  } else if (OB_FAIL(
-                 ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->calc_column_checksum_repsonse(arg))) {
+  } else if (OB_UNLIKELY(!arg.is_valid())) {
+    ret = common::OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid column checksum response", K(ret), K(arg));
+  } else if (OB_FAIL(DDL_SIM(arg.task_id_, PROCESS_COLUMN_CHECKSUM_RESPONSE_SLOW))) {
+  } else if (OB_FAIL(rootserver::ObSysDDLSchedulerUtil::on_column_checksum_calc_reply(
+                 arg.tablet_id_, rootserver::ObDDLTaskID(arg.task_id_),
+                 arg.target_table_id_, arg.schema_version_, arg.ret_code_))) {
   }
   return ret;
 }
@@ -3370,12 +3311,26 @@ int report_ddl_single_replica_response(
     const obcall::ObDDLLocalBuildResponse &arg)
 {
   int ret = common::OB_SUCCESS;
-  if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
-    ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("local management service is null", K(ret));
-  } else if (OB_FAIL(
-                 ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->handle_ddl_local_build_response(arg))) {
+  rootserver::ObDDLTaskInfo info;
+  info.row_scanned_ = arg.row_scanned_;
+  info.row_inserted_ = arg.row_inserted_;
+  info.physical_row_count_ = arg.physical_row_count_;
+  if (OB_UNLIKELY(!arg.is_valid())) {
+    ret = common::OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid local build response", K(ret), K(arg));
+  } else if (OB_FAIL(DDL_SIM(arg.task_id_, PROCESS_BUILD_SSTABLE_RESPONSE_SLOW))) {
+  } else if (OB_FAIL(rootserver::ObSysDDLSchedulerUtil::on_sstable_complement_job_reply(
+                 arg.tablet_id_, rootserver::ObDDLTaskID(arg.task_id_),
+                 arg.dest_schema_id_, arg.dest_schema_version_,
+                 arg.snapshot_version_, arg.execution_id_, arg.ret_code_, info))) {
   }
+  MANAGEMENT_EVENT_ADD("ddl scheduler", "build ddl local build response",
+                       "tid", 1UL, "ret", ret,
+                       "trace_id", *ObCurTraceId::get_trace_id(),
+                       "task_id", arg.task_id_, "tablet_id", arg.tablet_id_,
+                       "dag_result", arg.ret_code_, arg.snapshot_version_);
+  LOG_INFO("finish build ddl local build response ddl", K(ret), K(arg),
+           "ddl_event_info", rootserver::ObDDLEventInfo(GCTX.self_addr()));
   return ret;
 }
 
@@ -3385,32 +3340,29 @@ int renew_ddl_task_lease(const int64_t task_id)
   if (task_id <= 0) {
     ret = common::OB_INVALID_ARGUMENT;
     LOG_WARN("invalid DDL task id", K(ret), K(task_id));
-  } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
-    ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("local management service is null", K(ret), K(task_id));
-  } else {
-    obcall::ObUpdateDDLTaskActiveTimeArg arg;
-    arg.task_id_ = task_id;
-    if (OB_FAIL(
-            ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->update_ddl_task_active_time(arg))) {
-    }
+  } else if (OB_FAIL(rootserver::ObSysDDLSchedulerUtil::update_ddl_task_active_time(
+                 rootserver::ObDDLTaskID(task_id)))) {
   }
   return ret;
 }
 
 int rebuild_vector_index(
+    uint64_t namespace_id,
     const obcall::ObRebuildIndexArg &arg,
     obcall::ObAlterTableRes &res)
 {
   int ret = common::OB_SUCCESS;
-  if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
-    ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("local management service is null", K(ret));
+  ns::NamespaceRuntime *runtime = nullptr;
+  auto *root_service = ns::namespace_registry().get(namespace_id, runtime)
+      && runtime != nullptr
+      ? static_cast<rootserver::ObLocalManagementService *>(
+            runtime->service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE))
+      : nullptr;
+  if (root_service == nullptr) {
+    ret = common::OB_NOT_INIT;
+    LOG_WARN("namespace root command service is unavailable", K(ret), K(namespace_id));
   } else if (OB_FAIL(rootserver::local_ddl_serial_call(
-                 [&] {
-                   return ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->rebuild_vec_index(
-                       arg, res);
-                 }))) {
+                 [&] { return root_service->rebuild_vec_index(arg, res); }))) {
   }
   return ret;
 }

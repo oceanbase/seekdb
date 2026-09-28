@@ -268,6 +268,9 @@ int ObVectorIndexRefresher::do_refresh() {
                            query::ObExecContextAccess::get_session(*ctx_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null session info", KR(ret), KP(ctx_));
+  } else if (OB_ISNULL(session_info->ns_runtime())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("namespace runtime is unavailable", KR(ret));
   } else if (OB_ISNULL(session_info->effective_schema_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("schema service is null", KR(ret));
@@ -486,6 +489,9 @@ int ObVectorIndexRefresher::do_rebuild() {
                            query::ObExecContextAccess::get_session(*ctx_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null session info", KR(ret), KP(ctx_));
+  } else if (OB_ISNULL(session_info->ns_runtime())) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("namespace runtime is unavailable", KR(ret));
   } else if (OB_ISNULL(session_info->effective_schema_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("schema service is null", KR(ret));
@@ -626,6 +632,7 @@ int ObVectorIndexRefresher::do_rebuild() {
 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(data_plane::rebuild_vector_index(
+                     session_info->ns_runtime()->ns().id(),
                      rebuild_index_arg, rebuild_index_res))) {
       } else {
         LOG_INFO("succ to send rebuild vector index rpc", K(rs_addr), K(refresh_ctx_));

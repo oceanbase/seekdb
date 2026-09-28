@@ -86,16 +86,16 @@ struct ObDDLTaskKey final
 {
 public:
   ObDDLTaskKey();
-  ObDDLTaskKey(const int64_t object_id, const int64_t schema_version);
+  ObDDLTaskKey(const uint64_t namespace_id, const int64_t object_id, const int64_t schema_version);
   ~ObDDLTaskKey() = default;
   uint64_t hash() const;
   int hash(uint64_t &hash_val) const { hash_val = hash(); return OB_SUCCESS; }
   bool operator==(const ObDDLTaskKey &other) const;
-  bool is_valid() const { return OB_INVALID_ID != object_id_ && schema_version_ > 0;}
+  bool is_valid() const { return namespace_id_ > 0 && OB_INVALID_ID != object_id_ && schema_version_ > 0;}
   int assign(const ObDDLTaskKey &other);
-  TO_STRING_KV(K_(object_id), K_(schema_version));
+  TO_STRING_KV(K_(namespace_id), K_(object_id), K_(schema_version));
 public:
-  
+  uint64_t namespace_id_;
   int64_t object_id_;
   int64_t schema_version_;
 };
@@ -676,7 +676,7 @@ public:
   void set_delay_schedule_time(int64_t delay_schedule_time) { delay_schedule_time_ = delay_schedule_time;}
   ObDDLWaitTransEndCtx* get_wait_trans_ctx() {return &wait_trans_ctx_;}
   ObDDLTaskID get_ddl_task_id() const { return ObDDLTaskID(task_id_); }
-  ObDDLTaskKey get_task_key() const { return ObDDLTaskKey(target_object_id_, dst_schema_version_); }
+  ObDDLTaskKey get_task_key() const { return ObDDLTaskKey(context_.namespace_id_, target_object_id_, dst_schema_version_); }
   int64_t get_parent_task_id() const { return parent_task_id_; }
   int64_t get_task_version() const { return task_version_; }
   int64_t get_parallelism() const { return parallelism_; }

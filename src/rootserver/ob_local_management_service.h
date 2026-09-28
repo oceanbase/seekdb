@@ -173,7 +173,6 @@ public:
   int copy_table_dependents(const obcall::ObCopyTableDependentsArg &arg);
   int finish_redef_table(const obcall::ObFinishRedefTableArg &arg);
   int abort_redef_table(const obcall::ObAbortRedefTableArg &arg);
-  int update_ddl_task_active_time(const obcall::ObUpdateDDLTaskActiveTimeArg &arg);
   int execute_ddl_task(const obcall::ObAlterTableArg &arg, common::ObSArray<uint64_t> &obj_ids);
   int cancel_ddl_task(const obcall::ObCancelDDLTaskArg &arg);
   int maintain_obj_dependency_info(const obcall::ObDependencyObjDDLArg &arg);
@@ -218,8 +217,6 @@ public:
 
   //for inner table monitor, purge in fixed time
   int purge_expire_recycle_objects(const obcall::ObPurgeRecycleBinArg &arg, obcall::Int64 &affected_rows);
-  int calc_column_checksum_repsonse(const obcall::ObCalcColumnChecksumResponseArg &arg);
-  int handle_ddl_local_build_response(const obcall::ObDDLLocalBuildResponse &arg);
   int optimize_table(const obcall::ObOptimizeTableArg &arg);
 
   //----Functions for managing privileges----

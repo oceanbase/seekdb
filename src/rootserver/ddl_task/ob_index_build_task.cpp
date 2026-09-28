@@ -181,10 +181,10 @@ int ObIndexSSTableBuildTask::process()
       }
     }
   }
-  ObDDLTaskKey task_key(dest_table_id_, schema_version_);
   ObDDLTaskInfo info;
   int tmp_ret = ObSysDDLSchedulerUtil::on_sstable_complement_job_reply(
-      unused_tablet_id, task_key, snapshot_version_, execution_id_, ret, addition_info_);
+      unused_tablet_id, ObDDLTaskID(task_id_), dest_table_id_, schema_version_,
+      snapshot_version_, execution_id_, ret, addition_info_);
   if (OB_SUCCESS != tmp_ret) {
     LOG_WARN("report build finish failed", K(ret), K(tmp_ret));
     ret = OB_SUCCESS == ret ? tmp_ret : ret;

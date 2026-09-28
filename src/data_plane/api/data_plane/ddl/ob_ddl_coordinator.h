@@ -61,6 +61,7 @@ int renew_ddl_task_lease(int64_t task_id);
 // Submit a vector-index rebuild through RootService without exposing
 // Rootserver dispatch or serialization details to Storage.
 int rebuild_vector_index(
+    uint64_t namespace_id,
     const obcall::ObRebuildIndexArg &arg,
     obcall::ObAlterTableRes &res);
 

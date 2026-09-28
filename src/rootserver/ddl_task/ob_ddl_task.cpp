@@ -46,31 +46,34 @@ namespace rootserver
 
 
 ObDDLTaskKey::ObDDLTaskKey()
-  : object_id_(OB_INVALID_ID), schema_version_(0)
+  : namespace_id_(0), object_id_(OB_INVALID_ID), schema_version_(0)
 {
 }
 
-ObDDLTaskKey::ObDDLTaskKey(const int64_t object_id, const int64_t schema_version)
-  : object_id_(object_id), schema_version_(schema_version)
+ObDDLTaskKey::ObDDLTaskKey(const uint64_t namespace_id, const int64_t object_id, const int64_t schema_version)
+  : namespace_id_(namespace_id), object_id_(object_id), schema_version_(schema_version)
 {
 }
 
 uint64_t ObDDLTaskKey::hash() const
 {
-  uint64_t hash_val = murmurhash(&object_id_, sizeof(object_id_), 0);
+  uint64_t hash_val = murmurhash(&namespace_id_, sizeof(namespace_id_), 0);
+  hash_val = murmurhash(&object_id_, sizeof(object_id_), hash_val);
   hash_val = murmurhash(&schema_version_, sizeof(schema_version_), hash_val);
   return hash_val;
 }
 
 bool ObDDLTaskKey::operator==(const ObDDLTaskKey &other) const
 {
-  return object_id_ == other.object_id_ && schema_version_ == other.schema_version_;
+  return namespace_id_ == other.namespace_id_ && object_id_ == other.object_id_
+      && schema_version_ == other.schema_version_;
 }
 
 int ObDDLTaskKey::assign(const ObDDLTaskKey &other)
 {
   int ret = OB_SUCCESS;
   
+  namespace_id_ = other.namespace_id_;
   object_id_ = other.object_id_;
   schema_version_ = other.schema_version_;
   return ret;

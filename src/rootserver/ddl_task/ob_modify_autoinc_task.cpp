@@ -71,7 +71,6 @@ int ObUpdateAutoincSequenceTask::process()
     const ObDatabaseSchema *db_schema = nullptr;
     const ObColumnSchemaV2 *column_schema = nullptr;
     ObSchemaGetterGuard schema_guard;
-    ObDDLTaskKey task_key(dest_table_id_, schema_version_);
     if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_table_schema( dest_table_id_, table_schema))) {
     } else if (OB_ISNULL(table_schema)) {
@@ -117,9 +116,9 @@ int ObUpdateAutoincSequenceTask::process()
         }
       }
     }
-    if (OB_TMP_FAIL(ObSysDDLSchedulerUtil::notify_update_autoinc_end(task_key, max_value + 1, ret))) {
+    if (OB_TMP_FAIL(ObSysDDLSchedulerUtil::notify_update_autoinc_end(ObDDLTaskID(task_id_), max_value + 1, ret))) {
     }
-    LOG_INFO("execute finish update autoinc task finish", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K(task_key), K(data_table_id_), K(column_id_), K(max_value));
+    LOG_INFO("execute finish update autoinc task finish", K(ret), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()), K_(task_id), K(data_table_id_), K(column_id_), K(max_value));
   }
   char table_id_buffer[256];
   snprintf(table_id_buffer, sizeof(table_id_buffer), "data_table_id:%ld, dest_table_id:%ld", 

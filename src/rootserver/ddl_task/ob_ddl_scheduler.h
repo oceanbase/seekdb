@@ -303,12 +303,16 @@ public:
 
   int on_column_checksum_calc_reply(
       const common::ObTabletID &tablet_id,
-      const ObDDLTaskKey &task_key,
+      const ObDDLTaskID &task_id,
+      const uint64_t target_object_id,
+      const int64_t schema_version,
       const int ret_code);
 
   int on_sstable_complement_job_reply(
       const common::ObTabletID &tablet_id,
-      const ObDDLTaskKey &task_key,
+      const ObDDLTaskID &task_id,
+      const uint64_t target_object_id,
+      const int64_t schema_version,
       const int64_t snapshot_version,
       const int64_t execution_id,
       const int ret_code,
@@ -321,7 +325,7 @@ public:
       const ObCurTraceId::TraceId &parent_task_trace_id);
 
   int notify_update_autoinc_end(
-      const ObDDLTaskKey &task_key,
+      const ObDDLTaskID &task_id,
       const uint64_t autoinc_val,
       const int ret_code);
   int get_task_record(const ObDDLTaskID &task_id,
