@@ -1863,7 +1863,10 @@ int NamespaceForkKernelPrototype::owned_storage_tablets(
   }
   MetadataReadGuard access;
   if (access.error() != OB_SUCCESS) { return access.error(); }
-  int ret = load_exceptions(*directory_sql_proxy(), namespace_id);
+  int ret = OB_SUCCESS;
+  ObArray<ObTabletID> physical_ids;
+  ObArray<ObTabletID> unique_ids;
+  std::unordered_set<uint64_t> requested;
   for (int64_t i = 0; OB_SUCC(ret) && i < logical_tablets.count(); ++i) {
     uint64_t local_tablet_id = OB_INVALID_ID;
     if (!logical_tablets.at(i).is_valid()) {
@@ -1874,8 +1877,32 @@ int NamespaceForkKernelPrototype::owned_storage_tablets(
       const NamespaceObjectKey local_key{namespace_id, local_tablet_id};
       if (!local_key.is_valid()) {
         ret = OB_INVALID_ARGUMENT;
-      } else if (control_state().owned(namespace_id, local_tablet_id)) {
-        ret = owned_tablets.push_back(ObTabletID(local_key.storage_id()));
+      } else {
+        const ObTabletID physical(local_key.storage_id());
+        ret = physical_ids.push_back(physical);
+        if (OB_SUCC(ret) && requested.insert(physical.id()).second) {
+          ret = unique_ids.push_back(physical);
+        }
+      }
+    }
+  }
+  if (OB_SUCC(ret) && !unique_ids.empty()) {
+    ObArray<ObTabletTablePair> bindings;
+    ret = ObTabletMappingTableOperator::batch_get(
+        *directory_sql_proxy(), unique_ids, bindings);
+    // batch_get returns the committed subset and reports ITEM_NOT_MATCH when
+    // some requested tablets have no physical mapping yet.
+    if (ret == OB_ITEM_NOT_MATCH) { ret = OB_SUCCESS; }
+    std::unordered_set<uint64_t> committed;
+    for (int64_t i = 0; OB_SUCC(ret) && i < bindings.count(); ++i) {
+      const uint64_t tablet = bindings.at(i).get_tablet_id().id();
+      if (requested.count(tablet) == 0 || !committed.insert(tablet).second) {
+        ret = OB_STATE_NOT_MATCH;
+      }
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && i < physical_ids.count(); ++i) {
+      if (committed.count(physical_ids.at(i).id()) != 0) {
+        ret = owned_tablets.push_back(physical_ids.at(i));
       }
     }
   }
