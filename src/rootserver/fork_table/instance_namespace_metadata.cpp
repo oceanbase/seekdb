@@ -640,6 +640,15 @@ int InstanceNamespaceMetadata::scan_exceptions(uint64_t ns_id,
       });
 }
 
+int InstanceExceptionLoader::load(uint64_t namespace_id, IRowSink &sink)
+{
+  return metadata_.scan_exceptions(namespace_id,
+      [&](const InstanceExceptionRecord &record) {
+        sink.add({record.tablet_id, record.table_id, record.kind});
+        return OB_SUCCESS;
+      });
+}
+
 int InstanceNamespaceMetadata::read_page(uint64_t page_id, std::string &data)
 {
   const int ret = get_value(store_, transaction_, MetaCollection::PAGES,

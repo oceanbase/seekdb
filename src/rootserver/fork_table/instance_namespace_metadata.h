@@ -177,6 +177,18 @@ private:
   InstanceNamespaceMetadata &metadata_;
 };
 
+// Feeds the existing Namespace exception cache from a read-only KV view.
+// The caller owns the metadata transaction.
+class InstanceExceptionLoader final : public ns::IExceptionLoader
+{
+public:
+  explicit InstanceExceptionLoader(InstanceNamespaceMetadata &metadata)
+      : metadata_(metadata) {}
+  int load(uint64_t namespace_id, IRowSink &sink) override;
+private:
+  InstanceNamespaceMetadata &metadata_;
+};
+
 // The lineage algorithm owns ordering and reference decisions; this adapter
 // keeps its snapshot rows, child attachment, and pin removal in one KV transaction.
 class InstanceSnapshotLineageStore final : public ns::ISnapshotLineageStore
