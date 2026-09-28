@@ -1939,6 +1939,7 @@ int ObDDLWaitColumnChecksumCtx::send_calc_rpc(int64_t &send_succ_count)
     ObArray<SendItem> send_array;
     ObCalcColumnChecksumRequestArg arg;
     ObCalcColumnChecksumRequestRes res;
+    arg.namespace_id_ = context_.namespace_id_;
     arg.task_id_ = task_id_;
     arg.source_table_id_ = source_table_id_;
     arg.target_table_id_ = target_table_id_;

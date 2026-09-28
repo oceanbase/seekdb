@@ -665,7 +665,9 @@ int calc_namespace_column_checksum(
   int ret = arg.assign(input);
   ObTableSchema storage_source_schema;
   ObTableSchema storage_target_schema;
-  if (!ret && storage_space.is_namespace() && OB_FAIL(
+  if (!ret && arg.namespace_id_ != ns) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!ret && storage_space.is_namespace() && OB_FAIL(
           storage::NamespaceForkKernelPrototype::make_storage_schema(
               ns, arg.source_schema_, storage_source_schema))) {
   } else if (!ret && storage_space.is_namespace() && OB_FAIL(

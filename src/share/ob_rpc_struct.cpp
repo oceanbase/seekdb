@@ -1780,6 +1780,7 @@ int ObCalcColumnChecksumRequestArg::SingleItem::assign(const SingleItem &other)
 
 OB_SERIALIZE_MEMBER(
     ObCalcColumnChecksumRequestArg,
+    namespace_id_,
     target_table_id_,
     schema_version_,
     execution_id_,
@@ -1796,6 +1797,7 @@ int ObCalcColumnChecksumRequestArg::assign(
     const ObCalcColumnChecksumRequestArg &other)
 {
   int ret = OB_SUCCESS;
+  namespace_id_ = other.namespace_id_;
   target_table_id_ = other.target_table_id_;
   schema_version_ = other.schema_version_;
   execution_id_ = other.execution_id_;
@@ -1813,7 +1815,8 @@ int ObCalcColumnChecksumRequestArg::assign(
 
 bool ObCalcColumnChecksumRequestArg::is_valid() const
 {
-  bool bret = OB_INVALID_ID != target_table_id_
+  bool bret = namespace_id_ > 0 && namespace_id_ < (1ULL << 25)
+      && OB_INVALID_ID != target_table_id_
       && OB_INVALID_VERSION != schema_version_ && execution_id_ >= 0
       && OB_INVALID_VERSION != snapshot_version_ && OB_INVALID_ID != source_table_id_
       && task_id_ > 0 && data_format_version_ > 0
@@ -1828,7 +1831,7 @@ bool ObCalcColumnChecksumRequestArg::is_valid() const
 
 void ObCalcColumnChecksumRequestArg::reset()
 {
-
+  namespace_id_ = 0;
   target_table_id_ = OB_INVALID_ID;
   schema_version_ = OB_INVALID_VERSION;
   snapshot_version_ = OB_INVALID_VERSION;

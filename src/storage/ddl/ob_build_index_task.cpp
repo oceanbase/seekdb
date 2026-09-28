@@ -450,7 +450,7 @@ int ObUniqueIndexChecker::check_unique_index(ObIDag *dag, const int64_t task_id)
               K(param_->tablet_id_), K(task_id));
     while (!dag->has_set_stop() && keep_report_err_msg) {
       ObDDLErrorMessageTableOperator::ObDDLErrorInfo info;
-      if (OB_SUCCESS != (tmp_ret = ObDDLErrorMessageTableOperator::get_index_task_info(*GCTX.sql_proxy_, *param_->index_schema_, info))) {
+      if (OB_SUCCESS != (tmp_ret = ObDDLErrorMessageTableOperator::get_index_task_info(*param_->sql_proxy_, *param_->index_schema_, info))) {
         if (OB_ITER_END == tmp_ret) {
           keep_report_err_msg = false;
           LOG_INFO("get task id failed, check whether index building task is cancled", K(ret), K(tmp_ret), KPC(param_->index_schema_));
@@ -461,7 +461,7 @@ int ObUniqueIndexChecker::check_unique_index(ObIDag *dag, const int64_t task_id)
         keep_report_err_msg = false;
         LOG_INFO("get task id mismatched, check whether index building task is cancled", K(ret), K(param_->task_id_), K(info.task_id_));
       } else if (OB_SUCCESS != (tmp_ret = ObDDLErrorMessageTableOperator::generate_index_ddl_error_message(
-          ret, *(param_->index_schema_), info.trace_id_str_, info.task_id_, info.parent_task_id_, param_->tablet_id_.id(), self_addr, *GCTX.sql_proxy_, "\0", report_ret_code))) {
+          ret, *(param_->index_schema_), info.trace_id_str_, info.task_id_, info.parent_task_id_, param_->tablet_id_.id(), self_addr, *param_->sql_proxy_, "\0", report_ret_code))) {
         LOG_WARN("fail to generate index ddl error message", K(ret), K(tmp_ret), KPC(param_->index_schema_), K(param_->tablet_id_), K(self_addr));
         ob_usleep(RETRY_INTERVAL);
         if (OB_FAIL(dag_yield())) {
@@ -526,6 +526,7 @@ ObUniqueCheckingDag::ObUniqueCheckingDag()
 }
 
 int ObUniqueCheckingDag::init(
+    ObMySQLProxy &sql_proxy,
     const ObTabletID &tablet_id,
     const bool is_scan_index,
     const uint64_t index_table_id,
@@ -541,7 +542,7 @@ int ObUniqueCheckingDag::init(
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "ObUniqueCheckingDag has already been inited", K(ret));
-  } else if (OB_FAIL(param_.init(tablet_id, is_scan_index, index_table_id,
+  } else if (OB_FAIL(param_.init(sql_proxy, tablet_id, is_scan_index, index_table_id,
                      schema_version, task_id, execution_id, snapshot_version,
                      user_parallelism, data_table_schema, index_schema))) {
   } else if (OB_UNLIKELY(!param_.is_valid())) {
@@ -915,13 +916,10 @@ int ObUniqueCheckingMergeTask::process()
       uint64_t data_format_version = 0;
       int64_t snapshot_version = 0;
       share::ObDDLTaskStatus unused_task_status = share::ObDDLTaskStatus::PREPARE;
-      if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::common::ObMySQLProxy>())) {
-        ret = OB_NOT_INIT;
-        LOG_WARN("sql proxy is not initialized", K(ret), K(param_->task_id_));
-      } else if (OB_FAIL(ObDDLUtil::get_data_information(
-                     *::oceanbase::share::server_service<::oceanbase::common::ObMySQLProxy>(), param_->task_id_,
+      if (OB_FAIL(ObDDLUtil::get_data_information(
+                     *param_->sql_proxy_, param_->task_id_,
                      data_format_version, snapshot_version, unused_task_status))) {
-      } else if (OB_FAIL(ObDDLChecksumOperator::update_checksum(data_format_version, checksum_items, *GCTX.sql_proxy_))) {
+      } else if (OB_FAIL(ObDDLChecksumOperator::update_checksum(data_format_version, checksum_items, *param_->sql_proxy_))) {
       }
     }
   }
@@ -993,6 +991,7 @@ int ObLocalUniqueIndexCallback::operator()(
 
 /* ObUniqueCheckingParam */
 int ObUniqueCheckingParam::init(
+  ObMySQLProxy &sql_proxy,
   const ObTabletID &tablet_id,
   const bool is_scan_index,
   const uint64_t index_table_id,
@@ -1038,6 +1037,7 @@ int ObUniqueCheckingParam::init(
       snapshot_version_ = snapshot_version;
       task_id_ = task_id;
       user_parallelism_ = user_parallelism;
+      sql_proxy_ = &sql_proxy;
       is_inited_ = true;
     }
   } else {
@@ -1064,6 +1064,7 @@ int ObUniqueCheckingParam::init(
         snapshot_version_ = snapshot_version;
         task_id_ = task_id;
         user_parallelism_ = user_parallelism;
+        sql_proxy_ = &sql_proxy;
       }
     } else {
       LOG_WARN("enter server module scope failed", K(ret), K(index_table_id));

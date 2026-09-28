@@ -369,12 +369,20 @@ int ObService::calc_column_checksum_request(const obcall::ObCalcColumnChecksumRe
     LOG_WARN("invalid arguments", KR(ret), K(arg));
   } else {
     // schedule unique checking task
-    
+    ns::NamespaceRuntime *namespace_runtime = nullptr;
+    auto *sql_proxy = ns::namespace_registry().get(arg.namespace_id_, namespace_runtime)
+        && namespace_runtime != nullptr
+        ? static_cast<common::ObMySQLProxy *>(
+              namespace_runtime->service(ns::NamespaceRuntime::SQL_PROXY))
+        : nullptr;
     int saved_ret = OB_SUCCESS;
     SERVER_MODULE_SCOPE {
       ObGlobalUniqueIndexCallback *callback = NULL;
       ObDagScheduler* dag_scheduler = nullptr;
-      if (OB_ISNULL(dag_scheduler = ::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>())) {
+      if (OB_ISNULL(sql_proxy) || sql_proxy->target_namespace() != arg.namespace_id_) {
+        ret = OB_NOT_INIT;
+        LOG_WARN("checksum request namespace SQL proxy is unavailable", KR(ret), K(arg.namespace_id_));
+      } else if (OB_ISNULL(dag_scheduler = ::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("error unexpected, dag scheduler must not be nullptr", KR(ret));
       } else if (OB_FAIL(res.ret_codes_.reserve(arg.calc_items_.count()))) {
@@ -389,7 +397,7 @@ int ObService::calc_column_checksum_request(const obcall::ObCalcColumnChecksumRe
             LOG_WARN("ddl sim failure: calcualte column checksum rpc slow", K(tmp_ret), K(arg.task_id_));
           } else if (OB_TMP_FAIL(dag_scheduler->alloc_dag(dag))) {
             STORAGE_LOG(WARN, "fail to alloc dag", KR(tmp_ret));
-          } else if (OB_TMP_FAIL(dag->init(calc_item.tablet_id_,
+          } else if (OB_TMP_FAIL(dag->init(*sql_proxy, calc_item.tablet_id_,
                                            calc_item.calc_table_id_ == arg.target_table_id_,
                                            arg.target_table_id_,
                                            arg.schema_version_,

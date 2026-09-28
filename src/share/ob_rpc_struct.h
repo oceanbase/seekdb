@@ -2071,14 +2071,14 @@ using ObClearTabletAutoincSeqCacheArg = ObBatchRemoveTabletArg;
 
 struct ObCalcColumnChecksumRequestArg final
 {
-  OB_UNIS_VERSION(2);
+  OB_UNIS_VERSION(3);
 public:
   ObCalcColumnChecksumRequestArg() { reset(); }
   ~ObCalcColumnChecksumRequestArg() = default;
   bool is_valid() const;
   void reset();
   int assign(const ObCalcColumnChecksumRequestArg &other);
-  TO_STRING_KV(K_(target_table_id), K_(schema_version), K_(execution_id),
+  TO_STRING_KV(K_(namespace_id), K_(target_table_id), K_(schema_version), K_(execution_id),
       K_(snapshot_version), K_(source_table_id), K_(task_id), K_(calc_items),
       K_(user_parallelism), K_(data_format_version));
   struct SingleItem final
@@ -2095,7 +2095,7 @@ public:
     int64_t calc_table_id_;
   };
 public:
-
+  uint64_t namespace_id_;
   uint64_t target_table_id_;
   int64_t schema_version_;
   int64_t execution_id_;

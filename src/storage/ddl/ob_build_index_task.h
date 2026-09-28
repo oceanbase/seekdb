@@ -152,14 +152,15 @@ struct ObUniqueCheckingParam final
 public:
   ObUniqueCheckingParam():
     is_inited_(false), tablet_id_(),
-    is_scan_index_(false), schema_service_(nullptr), schema_guard_(share::schema::ObSchemaMgrItem::MOD_UNIQ_CHECK),
+    is_scan_index_(false), sql_proxy_(nullptr), schema_service_(nullptr), schema_guard_(share::schema::ObSchemaMgrItem::MOD_UNIQ_CHECK),
     index_schema_(nullptr), data_table_schema_(nullptr), callback_(nullptr), execution_id_(0),
     snapshot_version_(0), task_id_(0), user_parallelism_(0),
     concurrent_cnt_(0), allocator_("UniqueChecking", OB_MALLOC_NORMAL_BLOCK_SIZE),
     owned_data_table_schema_(&allocator_), owned_index_schema_(&allocator_), ranges_()
     {}
   ~ObUniqueCheckingParam() { destroy(); }
-  int init(const ObTabletID &tablet_id,
+  int init(common::ObMySQLProxy &sql_proxy,
+          const ObTabletID &tablet_id,
           const bool is_scan_index,
           const uint64_t index_table_id,
           const int64_t schema_version,
@@ -172,7 +173,7 @@ public:
   int prepare_task_ranges();
   bool is_valid() const
   {
-    return tablet_id_.is_valid() && snapshot_version_ > 0
+    return sql_proxy_ != nullptr && tablet_id_.is_valid() && snapshot_version_ > 0
     && data_table_schema_ != nullptr && index_schema_ != nullptr
     && execution_id_ >= 0 && task_id_ > 0
     && user_parallelism_ > 0;
@@ -186,6 +187,7 @@ public:
     is_inited_ = false;
     tablet_id_.reset();
     is_scan_index_ = false;
+    sql_proxy_ = nullptr;
     schema_service_ = nullptr;
     schema_guard_.reset();
     index_schema_ = nullptr;
@@ -211,6 +213,7 @@ public:
   bool is_inited_;
   common::ObTabletID tablet_id_;
   bool is_scan_index_;
+  common::ObMySQLProxy *sql_proxy_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
   share::schema::ObSchemaGetterGuard schema_guard_;
   const share::schema::ObTableSchema *index_schema_;
@@ -263,6 +266,7 @@ public:
   ObUniqueCheckingDag();
   virtual ~ObUniqueCheckingDag() = default;
   int init(
+      common::ObMySQLProxy &sql_proxy,
       const common::ObTabletID &tablet_id,
       const bool is_scan_index,
       const uint64_t index_table_id, const int64_t schema_version,
