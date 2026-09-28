@@ -1516,7 +1516,10 @@ int ObServer::obs_init_modules()
         namespace_worker_prototype::resolve_inprocess_tablet_schema);
   }
   if (OB_SUCC(ret) && OB_FAIL(ObMemstoreFreezer::server_module_init(mods_memstore_freezer_))) { SERVER_LOG(WARN, "mods_memstore_freezer_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObCheckPointService::server_module_init(mods_check_point_service_))) { SERVER_LOG(WARN, "mods_check_point_service_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(ObCheckPointService::server_module_init(
+          mods_check_point_service_, *root_sql_proxy))) {
+    SERVER_LOG(WARN, "mods_check_point_service_ fail", KR(ret));
+  }
   if (OB_SUCC(ret) && OB_FAIL(ObTabletGCService::server_module_init(mods_tablet_gc_service_))) { SERVER_LOG(WARN, "mods_tablet_gc_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(compaction::ObTabletScheduler::server_module_init(mods_tablet_scheduler_))) { SERVER_LOG(WARN, "mods_tablet_scheduler_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(compaction::ObMediumChecker::server_module_init(mods_medium_checker_))) { SERVER_LOG(WARN, "mods_medium_checker_ fail", KR(ret)); }

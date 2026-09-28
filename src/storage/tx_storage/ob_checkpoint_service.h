@@ -23,6 +23,7 @@
 
 namespace oceanbase
 {
+namespace common { class ObMySQLProxy; }
 namespace storage
 {
 namespace checkpoint
@@ -34,20 +35,21 @@ class ObCheckPointService
 public:
   ObCheckPointService()
     : is_inited_(false),
+      sql_proxy_(nullptr),
       prev_advance_ckpt_task_ts_(0),
       checkpoint_timer_(),
       traversal_flush_timer_(),
       check_clog_disk_usage_timer_(),
       advance_ckpt_timer_(),
-      checkpoint_task_(),
+      checkpoint_task_(*this),
       traversal_flush_task_(),
       check_clog_disk_usage_task_(*this),
       advance_ckpt_task_()
   {}
 
   static const int64_t NEED_FLUSH_CLOG_DISK_PERCENT = 30;
-  static int server_module_init(ObCheckPointService *&m);
-  int init();
+  static int server_module_init(ObCheckPointService *&m, common::ObMySQLProxy &sql_proxy);
+  int init(common::ObMySQLProxy &sql_proxy);
   int start();
   int stop();
   void wait();
@@ -63,6 +65,7 @@ public:
   int64_t prev_advance_ckpt_task_ts() { return prev_advance_ckpt_task_ts_; }
 private:
   bool is_inited_;
+  common::ObMySQLProxy *sql_proxy_;
 
   // the thread which is used to deal with checkpoint task.
   ObLSFreezeThread freeze_thread_;
@@ -76,10 +79,13 @@ private:
   class ObCheckpointTask : public common::ObTimerTask
   {
   public:
-    ObCheckpointTask() {}
+    explicit ObCheckpointTask(ObCheckPointService &checkpoint_service)
+      : checkpoint_service_(checkpoint_service) {}
     virtual ~ObCheckpointTask() {}
 
     virtual void runTimerTask();
+  private:
+    ObCheckPointService &checkpoint_service_;
   };
 
   class ObTraversalFlushTask : public common::ObTimerTask
