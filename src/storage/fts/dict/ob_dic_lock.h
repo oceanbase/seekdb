@@ -27,9 +27,6 @@ class ObDicLock : public ObDDLLock
 {
 public:
   static int lock_dic_tables_out_trans(const ObDicLoader &dic_loader,
-      const transaction::tablelock::ObTableLockMode lock_mode, 
-      const transaction::tablelock::ObTableLockOwnerID &lock_owner);
-  static int lock_dic_tables_out_trans(const ObDicLoader &dic_loader,
     const transaction::tablelock::ObTableLockMode lock_mode, 
     const transaction::tablelock::ObTableLockOwnerID &lock_owner,
     ObMySQLTransaction &trans);

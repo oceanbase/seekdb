@@ -678,7 +678,6 @@ STORAGE_PRIVATE_HEADERS = [
     "fts/dict/ob_ft_cache_dict.h",
     "fts/dict/ob_ft_dict_hub.h",
     "fts/dict/ob_ft_dict_iterator.h",
-    "fts/dict/ob_ft_dict_table_iter.h",
     "fts/dict/ob_ft_range_dict.h",
     "fts/dict/ob_ft_trie.h",
     "fts/dict/ob_ik_dic.h",

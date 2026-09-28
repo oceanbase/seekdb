@@ -27,32 +27,6 @@ namespace storage
 {
 int ObDicLock::lock_dic_tables_out_trans(const ObDicLoader &dic_loader,
     const transaction::tablelock::ObTableLockMode lock_mode, 
-    const transaction::tablelock::ObTableLockOwnerID &lock_owner)
-{
-  int ret = OB_SUCCESS;
-  ObMySQLTransaction trans;
-  const ObArray<ObDicLoader::ObDicTableInfo> &dic_tables_info = dic_loader.get_dic_tables_info();
-  if (OB_UNLIKELY(dic_tables_info.count() <= 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("dic loader is invalid", K(ret), K(dic_tables_info));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy is null", K(ret));
-  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
-  } else if (OB_FAIL(lock_dic_tables_out_trans(dic_loader, lock_mode, lock_owner, trans))) {
-  }
-  if (trans.is_started()) {
-    int tmp_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-      LOG_ERROR("failed to commit trans", K(ret), K(tmp_ret));
-      ret = OB_SUCC(ret) ? tmp_ret : ret;
-    }
-  }
-  return ret;
-}
-
-int ObDicLock::lock_dic_tables_out_trans(const ObDicLoader &dic_loader,
-    const transaction::tablelock::ObTableLockMode lock_mode, 
     const transaction::tablelock::ObTableLockOwnerID &lock_owner,
     ObMySQLTransaction &trans)
 {

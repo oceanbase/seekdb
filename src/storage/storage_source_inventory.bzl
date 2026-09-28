@@ -532,7 +532,6 @@ STORAGE_UNITY_GROUPS = [
             "src/storage/fts/dict/ob_ft_cache_dict.cpp",
             "src/storage/fts/dict/ob_ft_dict_hub.cpp",
             "src/storage/fts/dict/ob_ft_range_dict.cpp",
-            "src/storage/fts/dict/ob_ft_dict_table_iter.cpp",
             "src/storage/fts/dict/ob_ft_cache.cpp",
         ],
         generated_srcs = [],

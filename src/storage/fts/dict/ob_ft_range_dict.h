@@ -66,8 +66,6 @@ public:
   static int try_load_cache(const ObFTDictDesc &desc,
                             const uint32_t range_count,
                             ObFTCacheRangeContainer &range_container);
-  static int build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &range_container);
-
   static int build_cache_from_ik_dict(const ObFTDictDesc &desc, ObFTCacheRangeContainer &range_container);
 
 private:

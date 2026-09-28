@@ -20,13 +20,10 @@
 #include "storage/fts/dict/ob_ik_dic.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/charset/ob_charset.h"
-#include "common/mysqlclient/ob_isql_client.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/utility.h"
-#include "lib/utility/ob_smart_var.h"
-#include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "storage/fts/dict/ob_ft_cache.h"
 #include "storage/fts/dict/ob_ft_cache_container.h"
 #include "storage/fts/dict/ob_ft_cache_dict.h"
@@ -34,7 +31,6 @@
 #include "storage/fts/dict/ob_ft_dict.h"
 #include "storage/fts/dict/ob_ft_dict_def.h"
 #include "storage/fts/dict/ob_ft_dict_iterator.h"
-#include "storage/fts/dict/ob_ft_dict_table_iter.h"
 #include "storage/fts/dict/ob_ft_trie.h"
 
 #define USING_LOG_PREFIX STORAGE_FTS
@@ -434,39 +430,6 @@ int ObFTRangeDict::build_dict_from_cache(const ObFTCacheRangeContainer &range_co
       }
     }
   }
-  return ret;
-}
-
-int ObFTRangeDict::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &range_container)
-{
-  int ret = OB_SUCCESS;
-
-  ObString table_name;
-  switch (desc.type_) {
-  case ObFTDictType::DICT_IK_MAIN: {
-    table_name = ObString(share::OB_FT_DICT_IK_UTF8_TNAME);
-  } break;
-  case ObFTDictType::DICT_IK_QUAN: {
-    table_name = ObString(share::OB_FT_QUANTIFIER_IK_UTF8_TNAME);
-  } break;
-  case ObFTDictType::DICT_IK_STOP: {
-    table_name = ObString(share::OB_FT_STOPWORD_IK_UTF8_TNAME);
-  } break;
-  default:
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("Not supported dict type.", K(ret));
-  }
-
-  if (OB_SUCC(ret)) {
-    SMART_VAR(ObISQLClient::ReadResult, result)
-    {
-      ObFTDictTableIter iter_table(result);
-      if (OB_FAIL(iter_table.init(table_name))) {
-      } else if (OB_FAIL(ObFTRangeDict::build_ranges(desc, iter_table, range_container))) {
-      }
-    }
-  }
-
   return ret;
 }
 

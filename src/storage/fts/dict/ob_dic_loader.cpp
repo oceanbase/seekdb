@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX STORAGE_FTS
-#include "common/ob_timeout_ctx.h"
 #include "data_plane/fts/dict/ob_dic_loader.h"
 #include "storage/fts/dict/ob_dic_lock.h"
 namespace oceanbase
@@ -68,10 +67,7 @@ int ObDicLoader::load_dictionary_in_trans(ObMySQLTransaction &trans)
         array_size -= DEFAULT_BATCH_SIZE;
         if (OB_SUCC(ret)) {
           int64_t affected_rows = 0;
-          if (OB_ISNULL(GCTX.sql_proxy_)) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("sql proxy is null", K(ret));
-          } else if (OB_FAIL(trans.write(query_string.ptr(), affected_rows))) {
+          if (OB_FAIL(trans.write(query_string.ptr(), affected_rows))) {
           } else if (OB_UNLIKELY(((array_size > 0) && affected_rows != DEFAULT_BATCH_SIZE) || (affected_rows <= 0))) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("invalid affected rows", K(ret), K(affected_rows));
@@ -123,24 +119,13 @@ int ObDicLoader::try_load_dictionary_in_trans()
     LOG_WARN("the dic loader is not initialized", K(ret));
   } else {
     if (!is_load_) {
-      ObTimeoutCtx timeout_ctx;
-      const int64_t default_timeout = DEFAULT_TIMEOUT_US;
-      const int64_t timeout = MAX(default_timeout, GCONF.internal_sql_execute_timeout);
-      ObMySQLTransaction trans;
-      if (OB_ISNULL(GCTX.sql_proxy_)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("sql proxy is null", K(ret));
-      } else if (OB_FAIL(timeout_ctx.set_trx_timeout_us(timeout))) {
-      } else if (OB_FAIL(timeout_ctx.set_timeout(timeout))) {
-      } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
-      } else if (OB_FAIL(try_load_dictionary_in_trans(trans))) {
-      }
-      if (trans.is_started()) {
-        int tmp_ret = OB_SUCCESS;
-        if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {
-          LOG_ERROR("failed to commit trans", K(ret), K(tmp_ret));
-          ret = OB_SUCC(ret) ? tmp_ret : ret;
-        }
+      bool is_need_load_dic = false;
+      if (OB_FAIL(check_need_load_dic(is_need_load_dic))) {
+      } else if (is_need_load_dic) {
+        ret = OB_NOT_SUPPORTED;
+        LOG_WARN("dictionary loading requires a caller-owned transaction", K(ret));
+      } else {
+        is_load_ = true;
       }
     }
   }
