@@ -74,6 +74,10 @@ public:
   int find_namespace(const std::string &name, uint64_t &id);
   int insert_namespace(const InstanceNamespaceRecord &record);
   int update_namespace(const InstanceNamespaceRecord &record);
+  // Atomically changes a live member's name and its unique name index.
+  // A mismatched old name or duplicate new name aborts the caller's tx.
+  int rename_namespace(uint64_t id, const std::string &expected_name,
+                       const std::string &new_name);
   int erase_namespace(uint64_t id);
   int scan_namespaces(const NamespaceVisitor &visitor);
 

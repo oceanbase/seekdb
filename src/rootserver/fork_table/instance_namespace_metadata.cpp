@@ -383,6 +383,22 @@ int InstanceNamespaceMetadata::update_namespace(const InstanceNamespaceRecord &r
   return ret;
 }
 
+int InstanceNamespaceMetadata::rename_namespace(uint64_t id,
+    const std::string &expected_name, const std::string &new_name)
+{
+  if (expected_name.empty() || new_name.empty() || new_name.size() > 128
+      || expected_name == new_name) { return OB_INVALID_ARGUMENT; }
+  InstanceNamespaceRecord record;
+  int ret = get_namespace(id, record, true);
+  if (ret == OB_SUCCESS && (record.roots.state != 0
+      || record.name != expected_name)) { ret = OB_STATE_NOT_MATCH; }
+  if (ret == OB_SUCCESS) {
+    record.name = new_name;
+    ret = update_namespace(record);
+  }
+  return ret;
+}
+
 int InstanceNamespaceMetadata::erase_namespace(uint64_t id)
 {
   InstanceNamespaceRecord previous;
