@@ -28,6 +28,8 @@
 #include <cstdint>
 #include "storage/multi_data_source/buffer_ctx.h"
 #include "storage/tx/ob_trans_submit_log_cb.h"
+#include <memory>
+#include <new>
 
 
 namespace oceanbase
@@ -113,11 +115,12 @@ public:
   ObTxCtx()
       : ObTransCtx(),
         common::ObLink(),
-        is_inited_(false), mt_ctx_(), reserve_allocator_("PartCtx"),
-        exec_info_(reserve_allocator_),
-        mds_cache_(reserve_allocator_),
+        is_inited_(false), mt_ctx_(), tx_module_allocator_("PartCtx"),
+        exec_info_(tx_module_allocator_),
+        mds_cache_(nullptr),
         has_async_index_redo_(false),
-        allocated_log_cb_count_(0)
+        allocated_log_cb_count_(0),
+        big_segment_info_(nullptr)
   { /*reset();*/ }
   ~ObTxCtx() { destroy(); }
   void destroy();
@@ -214,7 +217,6 @@ private:
 
 public:
   static const int64_t OP_LOCAL_NUM = 16;
-  static const int64_t RESERVED_MEM_SIZE = 256;
 private:
   void default_init_();
   int init_memtable_ctx_();
@@ -398,6 +400,16 @@ private:
   int add_unsynced_segment_cb_(ObTxLogCb *log_cb);
   int remove_unsynced_segment_cb_(const share::SCN &remove_scn);
   share::SCN get_min_unsyncd_segment_scn_();
+  int ensure_big_segment_info_();
+  void destroy_big_segment_info_();
+  bool is_big_segment_active_() const;
+  int ensure_mds_cache_();
+  void destroy_mds_cache_();
+  int prepare_mds_final_notify_array_(const bool need_reserve,
+                                      const bool need_merge_cache,
+                                      const bool allow_log_overflow);
+  ObTxBufferNodeArray &get_mds_final_notify_array_();
+  int64_t get_mds_cache_count_() const;
   int init_log_block_(ObTxLogBlock &log_block,
                       const int64_t suggested_buf_size = ObTxAdaptiveLogBuf::NORMAL_LOG_BUF_SIZE,
                       const bool serial_final = false);
@@ -473,6 +485,7 @@ private:
   bool is_contain_mds_type_(const ObTxDataSourceType target_type);
   int submit_multi_data_source_();
   int submit_multi_data_source_(ObTxLogBlock &log_block);
+  int add_multi_data_source_log_(ObTxLogBlock &log_block, ObTxMultiDataSourceLog &log);
 
   int prepare_mul_data_source_tx_end_(bool is_commit);
 
@@ -613,7 +626,7 @@ private:
   // data sequence no of first access
   ObTxSEQ first_scn_;
 private:
-  TransModulePageAllocator reserve_allocator_;
+  TransModulePageAllocator tx_module_allocator_;
   // ========================================================
   // newly added for 4.0
   // persistent state
@@ -622,7 +635,7 @@ private:
   // when multi source data is registered, it is stored in the array below,
   // it is moved to exec_info_.multi_source_data_ when corresponding
   // redo log callbacked.
-  ObTxMDSCache mds_cache_;
+  std::unique_ptr<ObTxMDSCache> mds_cache_;
   // runtime_state_ is volatile
   ObTxRuntimeState runtime_state_;
 
@@ -633,7 +646,7 @@ private:
   common::ObDList<ObTxLogCb> busy_cbs_;
 
   ObSpinLock log_cb_lock_;
-  ObTxLogBigSegmentInfo big_segment_info_;
+  std::unique_ptr<ObTxLogBigSegmentInfo> big_segment_info_;
   // flag if the first callback is linked to a logging_block memtable
   // to prevent unnecessary submit_log actions for freeze
   memtable::ObMemtable *block_frozen_memtable_;

@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX TABLELOCK
+#include <new>
 #include "ob_mem_ctx_table_lock.h"
 #include "storage/tablelock/ob_lock_memtable.h"
 #include "storage/tx/ob_trans_ctx_mgr_v4.h"
@@ -103,6 +104,9 @@ void ObLockMemCtx::reset()
     curr->~ObMemCtxLockPrioOpLinkNode();
     free_prio_link_node_(curr);
   }
+  lock_op_node_pool_.reset();
+  prio_op_node_pool_.reset();
+  lock_callback_pool_.reset();
   is_killed_ = false;
   max_durable_scn_.reset();
   memtable_handle_.reset();
@@ -667,30 +671,51 @@ int ObLockMemCtx::clear_priority_list()
   return ret;
 }
 
-ObOBJLockCallback *ObLockMemCtx::create_table_lock_callback(ObIMvccCtx &ctx, ObLockMemtable *memtable)
+ObOBJLockCallback *ObLockMemCtx::create_table_lock_callback(
+    ObIMvccCtx &ctx,
+    ObLockMemtable *memtable)
 {
   int ret = OB_SUCCESS;
   void *cb_buffer = NULL;
   ObOBJLockCallback *cb = NULL;
-  if (NULL == (cb_buffer = alloc_table_lock_callback_())) {
+  if (OB_ISNULL(cb_buffer = lock_callback_pool_.alloc())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     TRANS_LOG(WARN, "alloc ObOBJLockCallback cb_buffer fail", K(ret));
-  }
-  if (NULL != cb_buffer) {
-    if (NULL == (cb = new(cb_buffer) ObOBJLockCallback(ctx, memtable))) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      TRANS_LOG(WARN, "construct ObOBJLockCallback object fail", K(ret), "cb_buffer", cb_buffer);
-    }
+  } else if (OB_ISNULL(cb = new(cb_buffer) ObOBJLockCallback(ctx, memtable))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    TRANS_LOG(WARN, "construct ObOBJLockCallback object fail", K(ret),
+              KP(cb_buffer));
   }
   return cb;
 }
 
-OB_INLINE void *ObLockMemCtx::alloc_table_lock_callback_() { return host_.alloc_table_lock_callback(); }
-OB_INLINE void ObLockMemCtx::free_table_lock_callback_(memtable::ObITransCallback *cb) { host_.free_table_lock_callback(cb); }
-OB_INLINE void *ObLockMemCtx::alloc_lock_link_node_() { return host_.alloc_lock_link_node(); }
-OB_INLINE void ObLockMemCtx::free_lock_link_node_(void *ptr) { host_.free_lock_link_node(ptr); }
-OB_INLINE void *ObLockMemCtx::alloc_prio_link_node_() { return host_.alloc_prio_link_node(); }
-OB_INLINE void ObLockMemCtx::free_prio_link_node_(void *ptr) { host_.free_prio_link_node(ptr); }
+void ObLockMemCtx::free_table_lock_callback(ObITransCallback *cb)
+{
+  if (OB_NOT_NULL(cb)) {
+    static_cast<ObOBJLockCallback *>(cb)->~ObOBJLockCallback();
+    lock_callback_pool_.free(cb);
+  }
+}
+
+OB_INLINE void *ObLockMemCtx::alloc_lock_link_node_()
+{
+  return lock_op_node_pool_.alloc();
+}
+
+OB_INLINE void ObLockMemCtx::free_lock_link_node_(void *ptr)
+{
+  lock_op_node_pool_.free(ptr);
+}
+
+OB_INLINE void *ObLockMemCtx::alloc_prio_link_node_()
+{
+  return prio_op_node_pool_.alloc();
+}
+
+OB_INLINE void ObLockMemCtx::free_prio_link_node_(void *ptr)
+{
+  prio_op_node_pool_.free(ptr);
+}
 
 }  // namespace tablelock
 }  // namespace transaction

@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#include "lib/rc/context.h"
 #include "ob_hybrid_vector_refresh_task.h"
 #include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
@@ -404,7 +405,7 @@ int ObHybridVectorRefreshTask::init_dml_param(uint64_t table_id,
     dml_param.branch_id_ = 0;
     dml_param.store_ctx_guard_ = &store_ctx_guard;
     dml_param.schema_version_ = table_schema->get_schema_version();
-    dml_param.dml_allocator_ = &allocator_;
+    dml_param.dml_allocator_ = &CURRENT_CONTEXT->get_malloc_allocator();
     if (OB_FAIL(oas->get_write_store_ctx_guard(timeout_us, *tx_desc, snapshot, 0, dml_param.write_flag_, store_ctx_guard))) {
     }
   }

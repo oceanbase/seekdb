@@ -214,6 +214,7 @@ struct ObTxLogBigSegmentInfo
   }
 
   ObTxLogBigSegmentInfo() : submit_log_cb_template_(nullptr) { reset(); }
+  ~ObTxLogBigSegmentInfo() { reset(); }
 
   void reuse()
   {

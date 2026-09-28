@@ -85,14 +85,6 @@ int ObTransService::acquire_tx(ObTxDesc *&tx,
   } else {
     ret = init_tx_(*tx, session_id);
   }
-  if (OB_SUCC(ret)) {
-    ObTransTraceLog &tlog = tx->get_tlog();
-    REC_TRANS_TRACE_EXT(&tlog, acquire, OB_Y(ret),
-                        OB_ID(addr), (void*)tx,
-                        OB_ID(session), session_id,
-                        OB_ID(ref), tx->get_ref(),
-                        OB_ID(thread_id), GETTID());
-  }
   return ret;
 }
 
@@ -105,7 +97,7 @@ int ObTransService::finalize_tx_(ObTxDesc &tx)
     if (tx.is_tx_active()) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "release tx when tx is active", K(ret), KPC(this), K(tx));
-      tx.print_trace_();
+      tx.dump_state_();
     } else if (tx.is_committing()) {
       TRANS_LOG(WARN, "release tx when tx is committing", KPC(this), K(tx));
     }
@@ -137,14 +129,10 @@ int ObTransService::release_tx(ObTxDesc &tx)
   int ret = OB_SUCCESS;
   // There is one process-wide ObTransService; release directly on this service.
   {
-    ObTransTraceLog &tlog = tx.get_tlog();
-    REC_TRANS_TRACE_EXT(&tlog, release, OB_Y(ret),
-                        OB_ID(ref), tx.get_ref(),
-                        OB_ID(thread_id), GETTID());
     if (tx.flags_.SHADOW_) {
 #ifndef NDEBUG
       if (tx.tx_id_.is_valid()) {
-        tx.print_trace();
+        tx.dump_state();
       }
 #endif
       tx_desc_mgr_.revert(tx);
@@ -180,7 +168,7 @@ int ObTransService::reuse_tx(ObTxDesc &tx)
       if (++spin_cnt > 2000) {
         TRANS_LOG(WARN, "blocking to wait tx referent quiescent cost too much time",
                   "tx_id", orig_tx_id, KP(&tx), K(final_ref_cnt), K(spin_cnt), K(tx.get_ref()), K(cb_tid));
-        tx.print_trace();
+        tx.dump_state();
         usleep(2000000); // 2s
       } else if (spin_cnt > 200) {
         usleep(2000);    // 2ms
@@ -197,14 +185,6 @@ int ObTransService::reuse_tx(ObTxDesc &tx)
     // it is safe to operate tx without lock when not shared
     ret = reinit_tx_(tx, tx.sess_id_);
   }
-  ObTransTraceLog &tlog = tx.get_tlog();
-  REC_TRANS_TRACE_EXT(&tlog, reuse, OB_Y(ret),
-                      OB_ID(addr), (void*)&tx,
-                      OB_ID(txid), orig_tx_id,
-                      OB_ID(tag1), spin_cnt,
-                      OB_ID(tag2), final_ref_cnt,
-                      OB_ID(ref), tx.get_ref(),
-                      OB_ID(thread_id), GETTID());
   return ret;
 }
 
@@ -220,8 +200,8 @@ int ObTransService::stop_tx(ObTxDesc &tx)
   bool need_cb = false;
   {
     ObSpinLockGuard guard(tx.lock_);
-    TRANS_LOG(INFO, "stop_tx, print its trace as following", K(tx));
-    tx.print_trace_();
+    TRANS_LOG(INFO, "stop_tx, dump its state as following", K(tx));
+    tx.dump_state_();
     if (tx.addr_ != self_) {
       // A transaction on a temporary node depends on session cleanup to quit.
       TRANS_LOG(INFO, "this is not txn start node.");
@@ -280,12 +260,6 @@ int ObTransService::start_tx(ObTxDesc &tx, const ObTxParam &tx_param)
       tx.state_           = ObTxDesc::State::ACTIVE;
       tx.flags_.EXPLICIT_ = true;
     }
-    ObTransTraceLog &tlog = tx.get_tlog();
-    REC_TRANS_TRACE_EXT(&tlog, start_tx, OB_Y(ret),
-                        OB_ID(txid), tx.tx_id_,
-                        OB_ID(isolation_level), (int)tx.isolation_,
-                        OB_ID(ref), tx.get_ref(),
-                        OB_ID(thread_id), GETTID());
   }
   if (OB_FAIL(ret)) {
   } else {
@@ -432,10 +406,6 @@ int ObTransService::rollback_tx(ObTxDesc &tx, const int64_t expire_ts)
     }
   }
   TRANS_LOG(INFO, "rollback tx", K(ret), K(*this), K(tx));
-  ObTransTraceLog &tlog = tx.get_tlog();
-  REC_TRANS_TRACE_EXT(&tlog, rollback_tx, OB_Y(ret),
-                      OB_ID(ref), tx.get_ref(),
-                      OB_ID(thread_id), GETTID());
   return ret;
 }
 
@@ -451,12 +421,7 @@ int ObTransService::abort_tx(ObTxDesc &tx, int cause)
   if (tx.state_ != ObTxDesc::State::ABORTED) {
     ret = abort_tx_(tx, cause);
   }
-  ObTransTraceLog &tlog = tx.get_tlog();
-  REC_TRANS_TRACE_EXT(&tlog, abort_tx, OB_Y(ret),
-                      OB_ID(arg), cause,
-                      OB_ID(ref), tx.get_ref(),
-                      OB_ID(thread_id), GETTID());
-  tx.print_trace_();
+  tx.dump_state_();
   return ret;
 }
 
@@ -475,7 +440,6 @@ namespace {
 int ObTransService::commit_tx(ObTxDesc &tx, const int64_t expire_ts)
 {
   int ret = OB_SUCCESS;
-  int64_t start_ts = ObTimeUtility::current_time();
   SyncTxCommitCb cb;
   if (OB_SUCC(submit_commit_tx(tx, expire_ts, cb))) {
     int result = 0;
@@ -498,20 +462,14 @@ int ObTransService::commit_tx(ObTxDesc &tx, const int64_t expire_ts)
       ret = result;
     }
   }
-  int64_t elapsed_us = ObTimeUtility::current_time() - start_ts;
 #ifndef NDEBUG
   TRANS_LOG(INFO, "sync commit tx", K(ret), K(tx), K(expire_ts));
 #else
   if (OB_FAIL(ret)) {
   }
 #endif
-  ObTransTraceLog &tlog = tx.get_tlog();
-  REC_TRANS_TRACE_EXT(&tlog, commit_tx, OB_Y(ret), OB_Y(expire_ts),
-                      OB_ID(time_used), elapsed_us,
-                      OB_ID(ref), tx.get_ref(),
-                      OB_ID(thread_id), GETTID());
   if (OB_FAIL(ret)) {
-    tx.print_trace();
+    tx.dump_state();
   }
   return ret;
 }
@@ -570,7 +528,7 @@ int ObTransService::submit_commit_tx(ObTxDesc &tx,
     case ObTxDesc::State::IMPLICIT_ACTIVE:
       if (tx.expire_ts_ <= ObClockGenerator::getClock()) {
         TRANS_LOG(WARN, "tx has timeout, it has rollbacked internally", K_(tx.expire_ts), K(tx));
-        tx.print_trace_();
+        tx.dump_state_();
         ret = OB_TRANS_ROLLBACKED;
         handle_tx_commit_result_(tx, OB_TRANS_ROLLBACKED);
       } else if (tx.flags_.WRITE_STATE_INCOMPLETE_) {
@@ -641,11 +599,6 @@ int ObTransService::submit_commit_tx(ObTxDesc &tx,
     if (OB_FAIL(ret)) {
     }
     #endif
-    ObTransTraceLog &tlog = tx.get_tlog();
-    REC_TRANS_TRACE_EXT(&tlog, submit_commit_tx, OB_Y(ret), OB_Y(expire_ts),
-                        OB_ID(tag1), committed,
-                        OB_ID(ref), tx.get_ref(),
-                        OB_ID(thread_id), GETTID());
   }
 
   if (need_cb){
@@ -724,19 +677,6 @@ int ObTransService::get_read_snapshot(ObTxDesc &tx,
     }
     snapshot.valid_ = true;
   }
-  ObTransTraceLog &tlog = tx.get_tlog();
-  common::ObTraceIdAdaptor trace_id;
-  trace_id.set(ObCurTraceId::get());
-  REC_TRANS_TRACE_EXT(&tlog, get_read_snapshot, OB_Y(ret), OB_Y(expire_ts),
-                      OB_ID(txid), tx.tx_id_,
-                      OB_ID(isolation_level), (int)isolation,
-                      OB_ID(snapshot_source), (int)snapshot.source_,
-                      OB_ID(snapshot_version), snapshot.core_.version_,
-                      OB_ID(snapshot_txid), snapshot.core_.tx_id_.get_id(),
-                      OB_ID(snapshot_scn), snapshot.core_.scn_.cast_to_int(),
-                      OB_ID(trace_id), trace_id,
-                      OB_ID(ref), tx.get_ref(),
-                      OB_ID(thread_id), GETTID());
   return ret;
 }
 
@@ -807,8 +747,6 @@ int ObTransService::release_snapshot(ObTxDesc &tx)
     tx.snapshot_version_.reset();
     tx.snapshot_uncertain_bound_ = 0;
   }
-  ObTransTraceLog &tlog = tx.get_tlog();
-  REC_TRANS_TRACE_EXT(&tlog, release_snapshot, OB_Y(ret), OB_ID(thread_id), GETTID());
   return ret;
 }
 
@@ -825,13 +763,6 @@ int ObTransService::register_tx_snapshot_verify(ObTxReadSnapshot &snapshot)
       if (OB_FAIL(tx_sanity_check_(*tx))) {
       } else if (OB_FAIL(tx->savepoints_.push_back(sp))) {
       }
-      ObTransTraceLog &tlog = tx->get_tlog();
-      REC_TRANS_TRACE_EXT(&tlog, register_snapshot, OB_Y(ret),
-                          OB_ID(arg), (void*)&snapshot,
-                          OB_ID(snapshot_version), snapshot.core_.version_,
-                          OB_ID(snapshot_scn), snapshot.core_.scn_.cast_to_int(),
-                          OB_ID(ref), tx->get_ref(),
-                          OB_ID(thread_id), GETTID());
     } else if (ret != OB_ENTRY_NOT_EXIST) {
       TRANS_LOG(WARN, "get tx fail", K(tx_id), K(snapshot));
     } else {
@@ -853,14 +784,6 @@ int ObTransService::create_branch_savepoint(ObTxDesc &tx,
   ObSpinLockGuard guard(tx.lock_);
   if (OB_SUCC(tx_sanity_check_(tx))) {
     savepoint = tx.inc_and_get_tx_seq(branch);
-    ObTransTraceLog &tlog = tx.get_tlog();
-    REC_TRANS_TRACE_EXT(&tlog, create_branch_savepoint,
-                        OB_Y(ret),
-                        OB_ID(savepoint), savepoint.cast_to_int(),
-                        OB_ID(branch), (int)branch,
-                        OB_ID(opid), tx.op_sn_,
-                        OB_ID(ref), tx.get_ref(),
-                        OB_ID(thread_id), GETTID());
   }
   return ret;
 }
@@ -894,13 +817,6 @@ int ObTransService::create_local_implicit_savepoint_(ObTxDesc &tx,
 {
   int ret = OB_SUCCESS;
   savepoint = tx.inc_and_get_tx_seq(0);
-  ObTransTraceLog &tlog = tx.get_tlog();
-  REC_TRANS_TRACE_EXT(&tlog, create_local_implicit_savepoint,
-                      OB_Y(ret),
-                      OB_ID(savepoint), savepoint.cast_to_int(),
-                      OB_ID(opid), tx.op_sn_,
-                      OB_ID(ref), tx.get_ref(),
-                      OB_ID(thread_id), GETTID());
   return ret;
 }
 
@@ -945,14 +861,6 @@ int ObTransService::create_global_implicit_savepoint_(ObTxDesc &tx,
     }
     tx.add_implicit_savepoint(savepoint);
   }
-  ObTransTraceLog &tlog = tx.get_tlog();
-  REC_TRANS_TRACE_EXT(&tlog, create_global_implicit_savepoint, OB_Y(ret),
-                      OB_ID(txid), tx.tx_id_,
-                      OB_ID(savepoint), savepoint.cast_to_int(),
-                      OB_Y(release),
-                      OB_ID(opid), tx.op_sn_,
-                      OB_ID(ref), tx.get_ref(),
-                      OB_ID(thread_id), GETTID());
   return ret;
 }
 
@@ -1024,7 +932,6 @@ int ObTransService::rollback_to_local_implicit_savepoint_(ObTxDesc &tx,
 {
   int ret = OB_SUCCESS;
   ObTxWriteState *part = NULL;
-  int64_t start_ts = ObTimeUtility::current_time();
   // when rollback local we use this from_scn for the single write state
   ObTxSEQ from_scn = savepoint.clone_with_seq(ObSequence::inc_and_get_max_seq_no(), tx.seq_base_);
   if (OB_FAIL(find_write_state_after_savepoint_(tx, part, savepoint))) {
@@ -1045,20 +952,12 @@ int ObTransService::rollback_to_local_implicit_savepoint_(ObTxDesc &tx,
     }
   }
 
-  int64_t elapsed_us = ObTimeUtility::current_time() - start_ts;
 #ifndef NDEBUG
   TRANS_LOG(INFO, "rollback local implicit savepoint", K(ret), K(savepoint));
 #else
   if (OB_FAIL(ret)) {
   }
 #endif
-  ObTransTraceLog &tlog = tx.get_tlog();
-  REC_TRANS_TRACE_EXT(&tlog, rollback_local_implicit_savepoint,
-                      OB_Y(ret), OB_ID(savepoint), savepoint.cast_to_int(), OB_Y(expire_ts),
-                      OB_ID(time_used) , elapsed_us,
-                      OB_ID(opid), tx.op_sn_,
-                      OB_ID(ref), tx.get_ref(),
-                      OB_ID(thread_id), GETTID());
   return ret;
 }
 
@@ -1158,14 +1057,6 @@ int ObTransService::rollback_to_global_implicit_savepoint_(ObTxDesc &tx,
   if (OB_FAIL(ret)) {
   }
 #endif
-  ObTransTraceLog &tlog = tx.get_tlog();
-  REC_TRANS_TRACE_EXT(&tlog, rollback_global_implicit_savepoint,
-                      OB_Y(ret), OB_ID(savepoint), savepoint.cast_to_int(), OB_Y(expire_ts),
-                      OB_ID(time_used), elapsed_us,
-                      OB_ID(tag1), reset_tx,
-                      OB_ID(opid), tx.op_sn_,
-                      OB_ID(ref), tx.get_ref(),
-                      OB_ID(thread_id), GETTID());
   return ret;
 }
 
@@ -1236,13 +1127,6 @@ int ObTransService::create_explicit_savepoint(ObTxDesc &tx,
     }
   }
   tx.state_change_flags_.EXTRA_CHANGED_ = true;
-  ObTransTraceLog &tlog = tx.get_tlog();
-  REC_TRANS_TRACE_EXT(&tlog, create_explicit_savepoint, OB_Y(ret),
-                      OB_ID(savepoint), savepoint,
-                      OB_ID(seq_no), scn.cast_to_int(),
-                      OB_ID(opid), tx.op_sn_,
-                      OB_ID(ref), tx.get_ref(),
-                      OB_ID(thread_id), GETTID());
   return ret;
 }
 
@@ -1255,7 +1139,6 @@ int ObTransService::rollback_to_explicit_savepoint(ObTxDesc &tx,
                                                    const int64_t expire_ts)
 {
   int ret = OB_SUCCESS;
-  int64_t start_ts = ObTimeUtility::current_time();
   ObTxSEQ sp_scn;
   ObSpinLockGuard guard(tx.lock_);
   if (OB_SUCC(tx_sanity_check_(tx))) {
@@ -1300,15 +1183,6 @@ int ObTransService::rollback_to_explicit_savepoint(ObTxDesc &tx,
       }
     }
   }
-  int64_t elapsed_us = ObTimeUtility::current_time() - start_ts;
-  ObTransTraceLog &tlog = tx.get_tlog();
-  REC_TRANS_TRACE_EXT(&tlog, rollback_explicit_savepoint, OB_Y(ret),
-                      OB_ID(id), savepoint,
-                      OB_ID(savepoint), sp_scn.cast_to_int(),
-                      OB_ID(time_used), elapsed_us,
-                      OB_ID(opid), tx.op_sn_,
-                      OB_ID(ref), tx.get_ref(),
-                      OB_ID(thread_id), GETTID());
   return ret;
 }
 
@@ -1347,11 +1221,6 @@ int ObTransService::release_explicit_savepoint(ObTxDesc &tx, const ObString &sav
       }
     }
   }
-  ObTransTraceLog &tlog = tx.get_tlog();
-  REC_TRANS_TRACE_EXT(&tlog, release_explicit_savepoint, OB_Y(ret),
-                      OB_ID(savepoint), savepoint,
-                      OB_ID(seq_no), sp_id.cast_to_int(),
-                      OB_ID(opid), tx.op_sn_);
   return ret;
 }
 
@@ -1366,10 +1235,6 @@ int ObTransService::create_stash_savepoint(ObTxDesc &tx, const ObString &name)
     if (OB_FAIL(tx.savepoints_.push_back(sp))) {
     }
   }
-  REC_TRANS_TRACE_EXT(&tx.tlog_, create_stash_savepoint, OB_Y(ret),
-                      OB_ID(savepoint), name,
-                      OB_ID(seq_no), seq_no.cast_to_int(),
-                      OB_ID(opid), tx.op_sn_);
   return ret;
 }
 
@@ -1524,12 +1389,6 @@ int ObTransService::rollback_tx_to_savepoint_(const ObTransID &tx_id,
 int ObTransService::merge_tx_state(ObTxDesc &to, const ObTxDesc &from)
 {
   int ret = to.merge_exec_info_with(from);
-  ObTransTraceLog &tlog = to.get_tlog();
-  REC_TRANS_TRACE_EXT(&tlog, merge_tx_state, OB_Y(ret),
-                      OB_ID(to), (void*)&to,
-                      OB_ID(from), (void*)&from,
-                      OB_ID(opid), to.op_sn_,
-                      OB_ID(thread_id), GETTID());
   return ret;
 }
 int ObTransService::get_tx_exec_result(ObTxDesc &tx, ObTxExecResult &exec_info)
@@ -1540,10 +1399,6 @@ int ObTransService::get_tx_exec_result(ObTxDesc &tx, ObTxExecResult &exec_info)
 int ObTransService::add_tx_exec_result(ObTxDesc &tx, const ObTxExecResult &exec_info)
 {
   int ret = tx.add_exec_info(exec_info);
-  ObTransTraceLog &tlog = tx.get_tlog();
-  REC_TRANS_TRACE_EXT(&tlog, add_tx_exec_result, OB_ID(opid), tx.op_sn_,
-                      OB_ID(flag), exec_info.is_incomplete(),
-                      OB_ID(thread_id), GETTID());
   return ret;
 }
 
@@ -1590,13 +1445,6 @@ int ObTransService::start_epoch_(ObTxDesc &tx)
     TRANS_LOG(INFO, "tx start new epoch", K(ret), K(tx));
 #endif
   }
-  ObTransTraceLog &tlog = tx.get_tlog();
-  int tlog_truncate_cnt = 0;
-  if (OB_SUCC(ret) && tlog.count() > 50) {
-    tlog_truncate_cnt = tlog.count() - 10;
-    tlog.set_count(10);
-  }
-  REC_TRANS_TRACE_EXT(&tlog, start_epoch, OB_Y(ret), OB_ID(opid), tx.op_sn_, OB_ID(tag1), tlog_truncate_cnt);
   return ret;
 }
 
@@ -1650,7 +1498,7 @@ OB_INLINE int ObTransService::tx_sanity_check_(ObTxDesc &tx)
   }
   if (OB_FAIL(ret)) {
     TRANS_LOG(WARN, "tx state insanity", K(ret), K(tx));
-    tx.print_trace_();
+    tx.dump_state_();
   }
   return ret;
 }
@@ -1781,10 +1629,10 @@ bool tx_desc_is_timed_out(transaction::ObTxDesc *desc)
   return OB_NOT_NULL(desc) && desc->is_tx_timeout();
 }
 
-void dump_tx_desc_trace(transaction::ObTxDesc *desc)
+void dump_tx_desc_state(transaction::ObTxDesc *desc)
 {
   if (OB_NOT_NULL(desc)) {
-    desc->dump_and_print_trace();
+    desc->try_dump_state();
   }
 }
 

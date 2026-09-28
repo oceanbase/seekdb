@@ -32,14 +32,14 @@ void ObTransCtx::get_ctx_guard(CtxLockGuard &guard, uint8_t mode)
   guard.set(lock_, mode);
 }
 
-void ObTransCtx::print_trace_log()
+void ObTransCtx::dump_state()
 {
-  print_trace_log_();
+  dump_state_();
 }
 
-void ObTransCtx::print_trace_log_()
+void ObTransCtx::dump_state_()
 {
-  FORCE_PRINT_TRACE(tlog_, "[force print]");
+  TRANS_LOG(INFO, "[tx ctx dump]", KPC(this));
 }
 
 void ObTransCtx::before_unlock(CtxLockArg &arg)
@@ -73,10 +73,6 @@ void ObTransCtx::after_unlock(CtxLockArg &arg)
     if (0 == remaining_wait_interval_us) {
       if (OB_FAIL(arg.commit_cb_.callback())) {
       }
-      REC_TRANS_TRACE_EXT2(tlog_, end_trans_cb, OB_Y(ret),
-                           OB_ID(arg1), arg.commit_cb_.ret_,
-                           OB_ID(arg2), arg.commit_cb_.commit_version_,
-                           OB_ID(async), false);
     } else {
       // register asynchronous callback task
       ObTxCommitCallbackTask *task = NULL;
@@ -105,31 +101,16 @@ void ObTransCtx::after_unlock(CtxLockArg &arg)
         if (OB_FAIL(arg.commit_cb_.callback())) {
         }
       }
-      REC_TRANS_TRACE_EXT2(tlog_, end_trans_cb, OB_Y(ret),
-                           OB_ID(arg1), arg.commit_cb_.ret_,
-                           OB_ID(arg2), arg.commit_cb_.commit_version_,
-                           OB_ID(async), true);
     }
   }
 }
 
-void ObTransCtx::print_trace_log_if_necessary_()
+void ObTransCtx::dump_slow_trans_if_necessary_()
 {
-  static const int64_t SAMPLING_SEED = 128 * 64;
-  // freectx
-  if (!is_exiting_) {
-    TRANS_LOG_RET(WARN, OB_ERROR, "ObTxCtx not exiting", "context", *this, K(lbt()));
-    FORCE_PRINT_TRACE(tlog_, "[trans debug] ");
-  }
-
   if (is_slow_query_()) {
     static ObMiniStat::ObStatItem item("long trans statistics", 60 * 1000 * 1000);
     ObMiniStat::stat(item);
-    FORCE_PRINT_TRACE(tlog_, "[long trans] ");
-  } else if (OB_UNLIKELY(trans_id_ % SAMPLING_SEED == 1)) {
-    FORCE_PRINT_TRACE(tlog_, "[trans sampling] ");
-  } else {
-    PRINT_TRACE(tlog_);
+    TRANS_LOG(INFO, "[long trans][tx ctx dump]", KPC(this));
   }
 }
 
@@ -139,16 +120,14 @@ void ObTransCtx::set_exiting_()
 
   if (!is_exiting_) {
     is_exiting_ = true;
-    print_trace_log_if_necessary_();
+    dump_slow_trans_if_necessary_();
     ls_tx_ctx_mgr_->dec_active_tx_count();
 
-    const int64_t ctx_ref = get_ref();
     if (NULL == ls_tx_ctx_mgr_) {
       TRANS_LOG_RET(ERROR, tmp_ret, "ls_tx_ctx_mgr_ is null, unexpected error", KP(ls_tx_ctx_mgr_), "context", *this);
     } else {
       ls_tx_ctx_mgr_->del_tx_ctx(this);
       TRANS_LOG(DEBUG, "transaction exiting", "context", *this, K(lbt()));
-      REC_TRANS_TRACE_EXT2(tlog_, exiting, OB_ID(ref), ctx_ref, OB_ID(arg1), session_id_);
     }
   }
 }
@@ -163,7 +142,6 @@ void ObTransCtx::set_stc_(const MonotonicTs stc)
 {
   if (0 == stc_.mts_) {
     stc_ = stc;
-    REC_TRANS_TRACE_EXT2(tlog_, set_stc, OB_ID(stc), stc_.mts_);
   }
 }
 
@@ -171,7 +149,6 @@ void ObTransCtx::set_stc_by_now_()
 {
   if (0 == stc_.mts_) {
     stc_ = MonotonicTs::current_time();
-    REC_TRANS_TRACE_EXT2(tlog_, set_stc, OB_ID(stc), stc_.mts_);
   }
 }
 
@@ -179,7 +156,6 @@ MonotonicTs ObTransCtx::get_stc_()
 {
   if (0 == stc_.mts_) {
     stc_ = MonotonicTs::current_time();
-    REC_TRANS_TRACE_EXT2(tlog_, set_stc_by_get, OB_ID(stc), stc_.mts_);
   }
   return stc_;
 }
@@ -250,10 +226,6 @@ int ObTransCtx::register_timeout_task_(const int64_t interval_us)
       (void)ls_tx_ctx_mgr_->revert_tx_ctx_without_lock(this);
     }
   }
-  if (OB_FAIL(ret)) {
-    REC_TRANS_TRACE_EXT2(tlog_, register_timeout_task, OB_ID(ret), ret,
-                         OB_ID(ref), get_ref());
-  }
   return ret;
 }
 
@@ -277,10 +249,6 @@ int ObTransCtx::unregister_timeout_task_()
     } else {
       (void)ls_tx_ctx_mgr_->revert_tx_ctx_without_lock(this);
     }
-  }
-  if (OB_FAIL(ret)) {
-    REC_TRANS_TRACE_EXT2(tlog_, unregister_timeout_task, OB_ID(ret), ret,
-                         OB_ID(ref), get_ref());
   }
   return ret;
 }

@@ -77,15 +77,16 @@ class ObLockMemCtx
 private:
   static const int64_t MAGIC_NUM = -0xBEEF;
 public:
-  ObLockMemCtx(memtable::ObMemtableCtx &host) :
-      host_(host),
+  explicit ObLockMemCtx(common::ObIAllocator &allocator) :
+      lock_op_node_pool_(allocator),
+      prio_op_node_pool_(allocator),
+      lock_callback_pool_(allocator),
       lock_list_(),
       is_killed_(false),
       max_durable_scn_(),
       memtable_handle_(),
       priority_list_(),
       add_lock_latch_() {}
-  ObLockMemCtx() = delete;
   ~ObLockMemCtx() { reset(); }
   int init(ObLSTxCtxMgr *ls_tx_ctx_mgr);
   // for mintest
@@ -150,7 +151,9 @@ public:
   int get_priority_array(ObTableLockPrioOpArray &prio_op_array);
   int clear_priority_list();
 
-  ObOBJLockCallback *create_table_lock_callback(memtable::ObIMvccCtx &ctx, ObLockMemtable *memtable);
+  ObOBJLockCallback *create_table_lock_callback(memtable::ObIMvccCtx &ctx,
+                                                ObLockMemtable *memtable);
+  void free_table_lock_callback(memtable::ObITransCallback *cb);
 
 public:
  class AddLockGuard
@@ -180,13 +183,14 @@ private:
   void abort_table_lock_();
 
   void *alloc_lock_link_node_();
-  void *alloc_table_lock_callback_();
   void free_lock_link_node_(void *ptr);
-  void free_table_lock_callback_(memtable::ObITransCallback *cb);
   void *alloc_prio_link_node_();
   void free_prio_link_node_(void *ptr);
 private:
-  memtable::ObMemtableCtx &host_;
+  static constexpr int64_t OBJ_NUM = 1;
+  ObArenaObjPool<ObMemCtxLockOpLinkNode, OBJ_NUM> lock_op_node_pool_;
+  ObArenaObjPool<ObMemCtxLockPrioOpLinkNode, OBJ_NUM> prio_op_node_pool_;
+  ObArenaObjPool<ObOBJLockCallback, OBJ_NUM> lock_callback_pool_;
   // protect the lock_list_
   RWLock list_rwlock_;
   // the lock list of this tx.
