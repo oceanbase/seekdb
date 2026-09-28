@@ -124,9 +124,12 @@ public:
 
   // Repair a physical creation committed before its owned exception. The map
   // comes from this namespace's current schema; the probe checks that same
-  // namespace's physical tablet. This does not publish a schema version or
-  // clear a pending DDL marker. Caller rolls back its KV transaction on error.
-  int reconcile_owned_tablets(uint64_t id,
+  // namespace's physical tablet. The caller supplies both the observed
+  // directory version and the native schema version for stale-input checks.
+  // This does not publish a schema version or clear a pending DDL marker.
+  // Caller rolls back its KV transaction on error.
+  int reconcile_owned_tablets(uint64_t id, int64_t base_schema_version,
+      int64_t current_schema_version,
       const std::map<uint64_t, uint64_t> &current_tablets,
       const PhysicalTabletProbe &probe);
 
@@ -269,6 +272,12 @@ public:
       const std::map<uint64_t, uint64_t> &current_tablets,
       const InstanceNamespaceMetadata::PhysicalTabletProbe &probe,
       int64_t deadline, std::vector<uint64_t> &removed_owned);
+  // Repairs physical creations committed before their owned rows. The caller
+  // supplies tablet->table relations from this Namespace's current schema.
+  int reconcile_owned(uint64_t id, int64_t base_version, int64_t schema_version,
+      const std::map<uint64_t, uint64_t> &current_tablets,
+      const InstanceNamespaceMetadata::PhysicalTabletProbe &probe,
+      int64_t deadline);
 private:
   storage::InstanceMetaStore &store_;
 };

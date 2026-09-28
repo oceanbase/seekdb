@@ -1177,14 +1177,21 @@ int InstanceNamespaceMetadata::stage_schema_delta(uint64_t id,
 }
 
 int InstanceNamespaceMetadata::reconcile_owned_tablets(uint64_t id,
+    int64_t base_schema_version, int64_t current_schema_version,
     const std::map<uint64_t, uint64_t> &current_tablets,
     const PhysicalTabletProbe &probe)
 {
-  if (!probe) { return OB_INVALID_ARGUMENT; }
+  if (base_schema_version <= 0 || current_schema_version < base_schema_version
+      || !probe) { return OB_INVALID_ARGUMENT; }
   InstanceNamespaceRecord record;
   int ret = get_namespace(id, record, true);
   if (ret == OB_SUCCESS && record.roots.state != 0) {
     ret = OB_STATE_NOT_MATCH;
+  } else if (ret == OB_SUCCESS && (record.roots.schema_version != base_schema_version
+      || record.roots.active_schema_changes != 0
+      || (record.roots.pending_schema_version != INT64_MAX
+          && record.roots.pending_schema_version > current_schema_version))) {
+    ret = OB_EAGAIN;
   }
   for (const auto &tablet : current_tablets) {
     if (ret != OB_SUCCESS) { break; }
@@ -1507,6 +1514,22 @@ int InstanceNamespaceDirectory::publish_schema_delta(uint64_t id,
   ret = finish_directory_transaction(store_, tx, ret);
   if (ret == OB_SUCCESS) { removed_owned.swap(staged); }
   return ret;
+}
+
+int InstanceNamespaceDirectory::reconcile_owned(uint64_t id,
+    int64_t base_version, int64_t schema_version,
+    const std::map<uint64_t, uint64_t> &current_tablets,
+    const InstanceNamespaceMetadata::PhysicalTabletProbe &probe,
+    int64_t deadline)
+{
+  storage::InstanceMetaStore::Transaction tx;
+  int ret = store_.begin(tx, deadline);
+  if (ret == OB_SUCCESS) {
+    InstanceNamespaceMetadata metadata(store_, tx);
+    ret = metadata.reconcile_owned_tablets(id, base_version, schema_version,
+        current_tablets, probe);
+  }
+  return finish_directory_transaction(store_, tx, ret);
 }
 
 } // namespace rootserver
