@@ -94,7 +94,7 @@ int ObDDLTabletScheduler::init(ObMultiVersionSchemaService &schema_service,
     sql_proxy,
     tablet_finished_map))) {
   } else if (OB_FAIL(ObDDLTaskRecordOperator::get_running_tasks_inner_sql(
-      *GCTX.sql_proxy_, trace_id, task_id, snapshot_version, arena, running_sql_info))) {
+      sql_proxy, trace_id, task_id, snapshot_version, arena, running_sql_info))) {
   } else {
     bool is_running_status = false;
     bool is_finished_status = false;
@@ -393,7 +393,8 @@ int ObDDLTabletScheduler::get_unfinished_tablets(const share::ObDDLType task_typ
   tablets.reset();
   ObArray<ObTabletID> tablet_queue;
   uint64_t left_space_size = 0;
-  // Disk statistics describe the process host, not a namespace catalog.
+  // The virtual disk statistics describe the process host; query them through
+  // this task's SQL proxy so no root namespace service is selected implicitly.
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret), K(is_inited_));
@@ -401,7 +402,7 @@ int ObDDLTabletScheduler::get_unfinished_tablets(const share::ObDDLType task_typ
   } else if (OB_UNLIKELY(tablet_queue.count() < 1)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet queue is null", K(ret), K(tablet_queue.count()));
-  } else if (OB_FAIL(ObDDLUtil::get_ls_host_left_disk_space(*GCTX.sql_proxy_, left_space_size))) {
+  } else if (OB_FAIL(ObDDLUtil::get_ls_host_left_disk_space(*sql_proxy_, left_space_size))) {
   } else if (OB_FAIL(calculate_candidate_tablets(left_space_size, tablet_queue, tablets))) {
   } else if (OB_FAIL(push_tablet_execution_id(ddl_can_retry, tablets, new_execution_id))) {
   } else {
@@ -556,7 +557,7 @@ int ObDDLTabletScheduler::check_running_task_completion_status()
     } else if (running_tablet_queue.empty()) {
       // do nothing, the running task has finished and reported
     } else if (OB_FAIL(ObDDLTaskRecordOperator::get_running_tasks_inner_sql(
-          *GCTX.sql_proxy_, trace_id_, task_id_, snapshot_version_, arena, running_sql_info))) {
+          *sql_proxy_, trace_id_, task_id_, snapshot_version_, arena, running_sql_info))) {
     } else {
       ObArray<ObString> partition_names;
       bool is_running_status = false;
