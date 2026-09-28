@@ -1168,7 +1168,7 @@ int ObService::build_ddl_local(const ObDDLLocalBuildArg &arg,
       } else if (OB_ISNULL(dag)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected error, dag is null", K(ret), KP(dag));
-      } else if (OB_FAIL(dag->init(arg))) {
+      } else if (OB_FAIL(dag->init(arg, *schema_service))) {
         LOG_WARN("fail to init delete drop lob meta row dag", K(ret), K(arg));
       } else if (OB_FAIL(dag->create_first_task())) {
         LOG_WARN("create first task failed", K(ret));
@@ -1260,7 +1260,7 @@ int ObService::check_and_cancel_delete_lob_meta_row_dag(const obcall::ObDDLLocal
     LOG_WARN("DDL build namespace services are unavailable", KR(ret), K(arg.namespace_id_));
   } else {
     ObDagScheduler *dag_scheduler = nullptr;
-    ObComplementDataDag *dag = nullptr;
+    ObDeleteLobMetaRowDag *dag = nullptr;
     if (OB_ISNULL(dag_scheduler = ::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("dag scheduler is null", K(ret));
@@ -1269,8 +1269,8 @@ int ObService::check_and_cancel_delete_lob_meta_row_dag(const obcall::ObDDLLocal
     } else if (OB_ISNULL(dag)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected error, dag is null", K(ret), KP(dag));
-    } else if (OB_FAIL(dag->init(arg, *sql_proxy, *schema_service))) {
-      LOG_WARN("fail to init complement data dag", K(ret), K(arg));
+    } else if (OB_FAIL(dag->init(arg, *schema_service))) {
+      LOG_WARN("fail to init delete lob meta row dag", K(ret), K(arg));
     } else if (OB_FAIL(dag_scheduler->check_dag_exist(dag, is_dag_exist))) {
       LOG_WARN("check dag exist failed", K(ret));
     } else if (is_dag_exist && OB_FAIL(dag_scheduler->cancel_dag(dag))) {

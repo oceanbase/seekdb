@@ -35,6 +35,7 @@ struct ObDeleteLobMetaRowParam final
 public:
   ObDeleteLobMetaRowParam():
     is_inited_(false),  
+    schema_service_(nullptr),
     table_id_(common::OB_INVALID_ID), schema_id_(common::OB_INVALID_ID),
     tablet_id_(ObTabletID::INVALID_TABLET_ID), dest_tablet_id_(ObTabletID::INVALID_TABLET_ID), 
     row_store_type_(common::ENCODING_ROW_STORE), schema_version_(0), 
@@ -43,11 +44,12 @@ public:
     allocator_("CompleteDataPar", OB_MALLOC_NORMAL_BLOCK_SIZE)
   {}
   ~ObDeleteLobMetaRowParam() { destroy(); }
-  int init(const obcall::ObDDLLocalBuildArg &arg);
+  int init(const obcall::ObDDLLocalBuildArg &arg,
+           share::schema::ObMultiVersionSchemaService &schema_service);
   
   bool is_valid() const
   {
-    return common::OB_INVALID_ID != schema_id_
+    return schema_service_ != nullptr && common::OB_INVALID_ID != schema_id_
            && common::OB_INVALID_ID != table_id_ && tablet_id_.is_valid() && dest_tablet_id_.is_valid()
            && snapshot_version_ > 0
            && execution_id_ >= 0 && tablet_task_id_ > 0 && data_format_version_ > 0;
@@ -57,6 +59,7 @@ public:
   void destroy()
   {
     is_inited_ = false;
+    schema_service_ = nullptr;
     table_id_ = common::OB_INVALID_ID;
     schema_id_ = common::OB_INVALID_ID;
     tablet_id_.reset();
@@ -75,6 +78,7 @@ public:
       K_(execution_id), K_(data_format_version));
 public:
   bool is_inited_;
+  share::schema::ObMultiVersionSchemaService *schema_service_;
   uint64_t table_id_;
   uint64_t schema_id_;
   ObTabletID tablet_id_;
@@ -95,7 +99,8 @@ class ObDeleteLobMetaRowDag final: public share::ObIDag
 public:
   ObDeleteLobMetaRowDag();
   ~ObDeleteLobMetaRowDag();
-  int init(const obcall::ObDDLLocalBuildArg &arg);
+  int init(const obcall::ObDDLLocalBuildArg &arg,
+           share::schema::ObMultiVersionSchemaService &schema_service);
   virtual uint64_t hash() const override;
   bool operator==(const ObIDag& other) const override;
   bool is_inited() const { return is_inited_; }

@@ -34,7 +34,8 @@ using namespace name;
 namespace storage
 {
 
-int ObDeleteLobMetaRowParam::init(const obcall::ObDDLLocalBuildArg &arg)
+int ObDeleteLobMetaRowParam::init(const obcall::ObDDLLocalBuildArg &arg,
+    ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   
@@ -49,6 +50,7 @@ int ObDeleteLobMetaRowParam::init(const obcall::ObDDLLocalBuildArg &arg)
 
   if (OB_SUCC(ret)) {
     is_inited_ = true;
+    schema_service_ = &schema_service;
     table_id_ = table_id;
     schema_id_ = arg.dest_schema_id_;
     schema_version_ = arg.schema_version_;
@@ -73,7 +75,8 @@ ObDeleteLobMetaRowDag::~ObDeleteLobMetaRowDag()
 {
 }
 
-int ObDeleteLobMetaRowDag::init(const obcall::ObDDLLocalBuildArg &arg)
+int ObDeleteLobMetaRowDag::init(const obcall::ObDDLLocalBuildArg &arg,
+    ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -82,7 +85,7 @@ int ObDeleteLobMetaRowDag::init(const obcall::ObDDLLocalBuildArg &arg)
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(arg));
-  } else if (OB_FAIL(param_.init(arg))) {
+  } else if (OB_FAIL(param_.init(arg, schema_service))) {
   } else if (OB_UNLIKELY(!param_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("error unexpected", K(ret), K(param_));
@@ -264,7 +267,7 @@ int ObDeleteLobMetaRowTask::init_scan_param(ObTableScanParam& scan_param)
     
     const int64_t table_id = param_->table_id_;
     const int64_t schema_version = param_->schema_version_;
-    if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
+    if (OB_FAIL(param_->schema_service_->get_runtime_schema_guard(
                                             schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
     } else if (OB_ISNULL(table_schema)) {
