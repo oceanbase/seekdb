@@ -587,4 +587,5 @@ SHARE_DATUM_STANDALONE_SOURCES = [
     struct(path = "src/share/datum/ob_str_datum_funcs_compilation/ob_str_datum_funcs_compilation_0.cpp", language = "c++", kind = "source"),
     struct(path = "src/share/datum/ob_str_datum_funcs_compilation/ob_str_datum_funcs_compilation_1.cpp", language = "c++", kind = "source"),
     struct(path = "src/share/datum/ob_str_datum_funcs_compilation/ob_str_datum_funcs_compilation_2.cpp", language = "c++", kind = "source"),
+    struct(path = "src/share/datum/ob_str_datum_funcs_compilation/ob_str_datum_funcs_compilation_3.cpp", language = "c++", kind = "source"),
 ]

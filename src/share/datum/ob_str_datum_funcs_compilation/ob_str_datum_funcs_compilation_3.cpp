@@ -13,20 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "lib/charset/ob_charset.h"
+
+#include "ob_str_datum_funcs_compilation.ipp"
+
 namespace oceanbase
 {
 namespace common
 {
-extern void __init_str_func0();
-extern void __init_str_func1();
-extern void __init_str_func2();
-extern void __init_str_func3();
-void __init_all_str_funcs() {
-  __init_str_func0();
-  __init_str_func1();
-  __init_str_func2();
-  __init_str_func3();
-}
+
+DEF_STR_FUNC_INIT(CS_TYPE_UTF8MB4_UNICODE_CI, 3);
+
 } // end common
 } // end oceanbase
