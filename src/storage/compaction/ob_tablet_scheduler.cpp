@@ -263,7 +263,7 @@ void ObTabletScheduler::reset()
   LOG_INFO("The ObTabletScheduler destroy");
 }
 
-int ObTabletScheduler::init()
+int ObTabletScheduler::init(share::schema::ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   bool enable_adaptive_compaction = false;
@@ -295,6 +295,7 @@ int ObTabletScheduler::init()
                                     "bf_queue"))) {
   } else if (OB_FAIL(fast_freeze_checker_.init())) {
   } else {
+    runtime_status_.bind_schema_service(schema_service);
     IGNORE_RETURN runtime_status_.refresh_runtime_config(enable_adaptive_compaction);
     timer_task_mgr_.set_scheduler_interval(schedule_interval);
     batch_size_mgr_.set_tablet_batch_size(schedule_batch_size);
@@ -346,9 +347,10 @@ int ObTabletScheduler::reload_runtime_config()
   return ret;
 }
 
-int ObTabletScheduler::server_module_init(ObTabletScheduler* &scheduler)
+int ObTabletScheduler::server_module_init(ObTabletScheduler* &scheduler,
+                                         share::schema::ObMultiVersionSchemaService &schema_service)
 {
-  return scheduler->init();
+  return scheduler->init(schema_service);
 }
 
 void ObTabletScheduler::stop()

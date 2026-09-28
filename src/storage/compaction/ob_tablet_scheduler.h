@@ -98,9 +98,10 @@ class ObTabletScheduler : public ObBasicMergeScheduler
 public:
   ObTabletScheduler();
   virtual ~ObTabletScheduler();
-  static int server_module_init(ObTabletScheduler* &scheduler);
+  static int server_module_init(ObTabletScheduler* &scheduler,
+                                share::schema::ObMultiVersionSchemaService &schema_service);
 
-  int init();
+  int init(share::schema::ObMultiVersionSchemaService &schema_service);
   int start();
   void destroy();
   void reset();

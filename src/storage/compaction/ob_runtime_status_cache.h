@@ -18,6 +18,7 @@
 #include "lib/utility/ob_print_utils.h"
 namespace oceanbase
 {
+namespace share { namespace schema { class ObMultiVersionSchemaService; } }
 namespace compaction
 {
 
@@ -26,7 +27,8 @@ struct ObRuntimeStatusCache final
   ObRuntimeStatusCache()
     : is_inited_(false),
       during_restore_(false),
-      enable_adaptive_compaction_(false)
+      enable_adaptive_compaction_(false),
+      schema_service_(nullptr)
   {}
   ~ObRuntimeStatusCache() {}
   void reset()
@@ -34,7 +36,10 @@ struct ObRuntimeStatusCache final
     is_inited_ = false;
     during_restore_ = false;
     enable_adaptive_compaction_ = false;
+    schema_service_ = nullptr;
   }
+  void bind_schema_service(share::schema::ObMultiVersionSchemaService &schema_service)
+  { schema_service_ = &schema_service; }
   int during_restore(bool &during_restore) const;
   bool is_inited() const { return is_inited_; }
   bool should_skip_merge() const;
@@ -51,6 +56,7 @@ private:
   bool during_restore_;
   // Runtime configuration remains valid while the restore status is being initialized.
   bool enable_adaptive_compaction_;
+  share::schema::ObMultiVersionSchemaService *schema_service_;
 };
 
 } // namespace compaction

@@ -16,7 +16,7 @@
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "storage/compaction/ob_runtime_status_cache.h"
 #include "share/rc/ob_server_runtime.h"
-#include "share/ob_server_struct.h"
+#include "share/schema/ob_multi_version_schema_service.h"
 
 namespace oceanbase
 {
@@ -49,10 +49,14 @@ int ObRuntimeStatusCache::during_restore(bool &during_restore) const
 int ObRuntimeStatusCache::init_or_refresh()
 {
   int ret = OB_SUCCESS;
-  if (!is_inited_) {
+  if (OB_ISNULL(schema_service_)) {
+    ret = OB_NOT_INIT;
+  } else if (!is_inited_) {
     is_inited_ = true;
   }
-  IGNORE_RETURN inner_refresh_restore_status();
+  if (OB_SUCC(ret)) {
+    IGNORE_RETURN inner_refresh_restore_status();
+  }
   return ret;
 }
 
@@ -69,7 +73,7 @@ int ObRuntimeStatusCache::inner_refresh_restore_status()
     ObSchemaGetterGuard schema_guard;
     const ObSimpleServerRuntimeSchema *runtime_schema = nullptr;
 
-    if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_server_runtime_info(runtime_schema))) {
     } else if (OB_ISNULL(runtime_schema)) {
       ret = OB_SCHEMA_ERROR;

@@ -1521,7 +1521,10 @@ int ObServer::obs_init_modules()
     SERVER_LOG(WARN, "mods_check_point_service_ fail", KR(ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(ObTabletGCService::server_module_init(mods_tablet_gc_service_))) { SERVER_LOG(WARN, "mods_tablet_gc_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(compaction::ObTabletScheduler::server_module_init(mods_tablet_scheduler_))) { SERVER_LOG(WARN, "mods_tablet_scheduler_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(compaction::ObTabletScheduler::server_module_init(
+          mods_tablet_scheduler_, *root_schema_service))) {
+    SERVER_LOG(WARN, "mods_tablet_scheduler_ fail", KR(ret));
+  }
   if (OB_SUCC(ret) && OB_FAIL(compaction::ObMediumChecker::server_module_init(mods_medium_checker_))) { SERVER_LOG(WARN, "mods_medium_checker_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(storage::ObCompactionMemPool::server_module_init(mods_compaction_mem_pool_))) { SERVER_LOG(WARN, "mods_compaction_mem_pool_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObDagScheduler::server_module_init(mods_dag_scheduler_))) { SERVER_LOG(WARN, "mods_dag_scheduler_ fail", KR(ret)); }
