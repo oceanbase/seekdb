@@ -2073,15 +2073,8 @@ int NamespaceForkKernelPrototype::ensure_tablet_impl(
     // Dropped in this namespace: there is nothing to materialize onto.
     return OB_TABLET_NOT_EXIST;
   }
-  uint64_t committed_table = OB_INVALID_ID;
-  bool binding_exists = false;
-  if (OB_FAIL(committed_table_binding(*directory_sql_proxy(), tablet_id,
-                                      committed_table, binding_exists))) {
-    return ret;
-  }
-  if (binding_exists) {
-    // The physical transaction committed its mapping before tablet-manager
-    // visibility caught up; do not create a second physical copy.
+  if (control_state().owned(db, local)) {
+    // Creation commit is ahead of tablet-manager visibility.
     return OB_SUCCESS;
   }
   struct MaterializeItem {
@@ -2107,12 +2100,7 @@ int NamespaceForkKernelPrototype::ensure_tablet_impl(
       // on the namespace row lock; re-check inside it before creating anything.
       bool exists = false;
       int result = probe_physical_tablet(tablet_id.id(), exists);
-      uint64_t table = OB_INVALID_ID;
-      bool mapped = false;
-      if (result == OB_SUCCESS && !exists) {
-        result = committed_table_binding(*directory_sql_proxy(), tablet_id, table, mapped);
-      }
-      if (result == OB_SUCCESS) { already = exists || mapped; }
+      if (result == OB_SUCCESS) { already = exists || control_state().owned(db, local); }
       return result;
   }()))) {
   }
