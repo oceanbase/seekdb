@@ -24,6 +24,11 @@
 
 namespace oceanbase
 {
+namespace sql
+{
+class ObPlanCache;
+class ObSQLSessionInfo;
+}
 namespace observer
 {
 typedef common::hash::ObHashMap<sql::ObSqlStatRecordKey, sql::ObExecutedSqlStatRecord*> TmpSqlStatMap;
@@ -46,7 +51,7 @@ public:
 public:
   void destroy();
   void reset();
-  int init(ObIAllocator *allocator);
+  int init(ObIAllocator *allocator, sql::ObSQLSessionInfo &session);
   int get_next_sql_stat(sql::ObExecutedSqlStatRecord &sql_stat_value);
   bool operator()(sql::ObSQLSessionMgr::Key key, sql::ObSQLSessionInfo *sess_info);
 
@@ -54,6 +59,8 @@ private:
   int get_next_batch_sql_stat();
 private:
   ObIAllocator *allocator_;
+  sql::ObSQLSessionInfo *owner_session_;
+  sql::ObPlanCache *plan_cache_;
   bool done_;
   
   TmpSqlStatMap tmp_sql_stat_map_;

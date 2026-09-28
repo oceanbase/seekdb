@@ -23,6 +23,7 @@
 #include "share/rc/ob_context.h"
 #include "share/ob_server_struct.h"
 #include "observer/ob_server_runtime_access.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "sql/ob_sql.h"
 #include "sql/plan_cache/ob_plan_cache.h"
 
@@ -49,6 +50,8 @@ int ObGetAllSqlStatCacheIdOp::operator()(common::hash::HashMapPair<ObCacheObjID,
 
 ObAllVirtualSqlStatIter::ObAllVirtualSqlStatIter() :
   allocator_(nullptr),
+  owner_session_(nullptr),
+  plan_cache_(nullptr),
   done_(false),
   tmp_sql_stat_map_(),
   sql_stat_cache_id_array_(),
@@ -64,22 +67,29 @@ void ObAllVirtualSqlStatIter::destroy()
 void ObAllVirtualSqlStatIter::reset()
 {
   done_ = false;
+  owner_session_ = nullptr;
+  plan_cache_ = nullptr;
   tmp_sql_stat_map_.destroy();
   sql_stat_cache_id_array_.reset();
   sql_stat_cache_id_array_idx_ = 0;
 }
 
-int ObAllVirtualSqlStatIter::init(ObIAllocator *allocator)
+int ObAllVirtualSqlStatIter::init(ObIAllocator *allocator, ObSQLSessionInfo &session)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(allocator)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("allocator is null", KR(ret));
+  } else if (OB_ISNULL(session.ns_runtime())
+             || OB_ISNULL(namespace_worker_prototype::effective_plan_cache(&session))) {
+    ret = OB_NOT_INIT;
   } else {
     const int64_t default_bucket_num  = 64;
     if (OB_FAIL(tmp_sql_stat_map_.create(default_bucket_num, ObMemAttr("TmpSqlStatMgr")))) {
     } else {
       allocator_ = allocator;
+      owner_session_ = &session;
+      plan_cache_ = namespace_worker_prototype::effective_plan_cache(&session);
     }
   }
   return ret;
@@ -98,7 +108,7 @@ int ObAllVirtualSqlStatIter::get_next_batch_sql_stat()
       ret = OB_ITER_END;
     } else {
       ObReqTimeGuard req_timeinfo_guard;
-      ObPlanCache* plan_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
+      ObPlanCache* plan_cache = plan_cache_;
       if (OB_NOT_NULL(plan_cache)) {
         ObGetAllSqlStatCacheIdOp op(&sql_stat_cache_id_array_);
         if (OB_FAIL(plan_cache->foreach_cache_obj(op))) {
@@ -124,6 +134,9 @@ bool ObAllVirtualSqlStatIter::operator()(sql::ObSQLSessionMgr::Key key, ObSQLSes
   if (OB_ISNULL(sess_info)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null sess", K(ret));
+  } else if (OB_ISNULL(owner_session_)
+             || sess_info->ns_runtime() != owner_session_->ns_runtime()) {
+    // Active SQL statistics belong to the same Namespace as the query.
   } else if (false == sess_info->is_valid()) {
     // do nothing
   } else if (ObSQLSessionState::QUERY_ACTIVE != sess_info->get_session_state()) {
@@ -197,7 +210,7 @@ int ObAllVirtualSqlStatIter::get_next_sql_stat (
     } else {
       if (sql_stat_cache_id_array_idx_ < sql_stat_cache_id_array_.count()) {
         ObReqTimeGuard req_timeinfo_guard;
-        ObPlanCache* plan_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
+        ObPlanCache* plan_cache = plan_cache_;
         if (OB_NOT_NULL(plan_cache)) {
           uint64_t cur_sql_stat_cache_id = sql_stat_cache_id_array_.at(sql_stat_cache_id_array_idx_);
           sql_stat_cache_id_array_idx_++;
@@ -605,7 +618,9 @@ int ObAllVirtualSqlStat::inner_get_next_row(common::ObNewRow *&row)
 {
   int ret = OB_SUCCESS;
   if (!start_to_read_) {
-    if (OB_FAIL(iter_.init(allocator_))) {
+    if (OB_ISNULL(session_)) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(iter_.init(allocator_, *session_))) {
     } else {
       start_to_read_ = true;
       if (OB_FAIL(get_server_ip_and_port())) {
