@@ -246,6 +246,16 @@ public:
   int list_live(int64_t deadline, std::vector<InstanceNamespaceRecord> &records);
   int rename_live(uint64_t id, const std::string &expected_name,
                   const std::string &new_name, int64_t deadline);
+  // Caller closes new access first. Commit DELETING before physical cleanup;
+  // if commit returns an uncertain result, leave access closed and retry.
+  int mark_deleting(uint64_t id, const std::string &expected_name,
+                    int64_t deadline, bool &done);
+  // Enumerate owned local tablet IDs only after DELETING has committed.
+  // Physical cleanup also scans this Namespace's encoded addresses for orphans.
+  int list_deleting_owned(uint64_t id, int64_t deadline,
+                          std::vector<uint64_t> &local_tablets);
+  // Caller commits physical tablet cleanup before this separate KV transaction.
+  int finish_drop(uint64_t id, int64_t deadline);
 private:
   storage::InstanceMetaStore &store_;
 };

@@ -1351,5 +1351,69 @@ int InstanceNamespaceDirectory::rename_live(uint64_t id,
   return finish_directory_transaction(store_, tx, ret);
 }
 
+int InstanceNamespaceDirectory::mark_deleting(uint64_t id,
+    const std::string &expected_name, int64_t deadline, bool &done)
+{
+  done = false;
+  if (id == 0 || expected_name.empty()) { return OB_INVALID_ARGUMENT; }
+  storage::InstanceMetaStore::Transaction tx;
+  int ret = store_.begin(tx, deadline);
+  bool staged_done = false;
+  if (ret == OB_SUCCESS) {
+    InstanceNamespaceMetadata metadata(store_, tx);
+    InstanceNamespaceRecord record;
+    ret = metadata.get_namespace(id, record, true);
+    if (ret == OB_SUCCESS && record.roots.state != 2
+        && record.name != expected_name) {
+      ret = OB_STATE_NOT_MATCH;
+    }
+    if (ret == OB_SUCCESS) {
+      ret = metadata.mark_namespace_deleting(id, staged_done);
+    }
+  }
+  ret = finish_directory_transaction(store_, tx, ret);
+  if (ret == OB_SUCCESS) { done = staged_done; }
+  return ret;
+}
+
+int InstanceNamespaceDirectory::list_deleting_owned(uint64_t id,
+    int64_t deadline, std::vector<uint64_t> &local_tablets)
+{
+  local_tablets.clear();
+  if (id <= 1) { return OB_INVALID_ARGUMENT; }
+  storage::InstanceMetaStore::Transaction tx;
+  int ret = store_.begin(tx, deadline, true);
+  std::vector<uint64_t> staged;
+  if (ret == OB_SUCCESS) {
+    InstanceNamespaceMetadata metadata(store_, tx);
+    InstanceNamespaceRecord record;
+    ret = metadata.get_namespace(id, record);
+    if (ret == OB_SUCCESS && record.roots.state != 1) {
+      ret = OB_STATE_NOT_MATCH;
+    }
+    if (ret == OB_SUCCESS) {
+      ret = metadata.scan_exceptions(id, [&](const InstanceExceptionRecord &exception) {
+        if (exception.kind == 0) { staged.push_back(exception.tablet_id); }
+        return OB_SUCCESS;
+      });
+    }
+  }
+  ret = finish_directory_transaction(store_, tx, ret);
+  if (ret == OB_SUCCESS) { local_tablets.swap(staged); }
+  return ret;
+}
+
+int InstanceNamespaceDirectory::finish_drop(uint64_t id, int64_t deadline)
+{
+  if (id <= 1) { return OB_INVALID_ARGUMENT; }
+  storage::InstanceMetaStore::Transaction tx;
+  int ret = store_.begin(tx, deadline);
+  if (ret == OB_SUCCESS) {
+    InstanceNamespaceMetadata metadata(store_, tx);
+    ret = metadata.finish_namespace_drop(id);
+  }
+  return finish_directory_transaction(store_, tx, ret);
+}
+
 } // namespace rootserver
 } // namespace oceanbase
