@@ -281,6 +281,9 @@ common::ObOptStatMonitorManager *effective_opt_stat_monitor_manager(
     sql::ObSQLSessionInfo *session);
 void stop_in_process_opt_stat_monitors();
 void wait_in_process_opt_stat_monitors();
+int update_in_process_dbms_scheduler_role(bool leader);
+void stop_in_process_dbms_schedulers();
+void wait_in_process_dbms_schedulers();
 void close_session(SessionBinding *binding);
 } } }
 #endif

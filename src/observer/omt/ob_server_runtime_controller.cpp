@@ -1364,7 +1364,6 @@ int ObServer::obs_construct_modules()
     BIND_SERVICE(trans_id_service, transaction::ObTransIDService);
     BIND_SERVICE(tablet_runtime_meta_updater, observer::ObTabletRuntimeMetaUpdater);
     BIND_SERVICE(sstable_merge_info_mgr, storage::ObSSTableMergeInfoMgr);
-    BIND_SERVICE(scheduler_service, query::ObISchedulerService);
     BIND_SERVICE(rb_mem_mgr, common::ObRbMemMgr);
     BIND_SERVICE(opt_stat_monitor_manager, common::ObOptStatMonitorManager);
     BIND_SERVICE(compaction_mem_pool, storage::ObCompactionMemPool);
@@ -1403,7 +1402,6 @@ int ObServer::obs_construct_modules()
     BIND_SERVICE(internal_table_refresh_handler, logservice::ObILocalLogHandler);
     BIND_SERVICE(inner_connection_lock_runtime, transaction::tablelock::ObIInnerConnectionLockRuntime);
     BIND_SERVICE(ddl_service_launcher, rootserver::ObDDLServiceLauncher);
-    BIND_SERVICE(dbms_sched_service, rootserver::ObDBMSSchedService);
     BIND_SERVICE(active_snapshot_service, query::ObIActiveSnapshotService);
 #undef BIND_SERVICE
   }
@@ -1540,6 +1538,15 @@ int ObServer::obs_init_modules()
           mods_dbms_sched_service_, *root_sql_proxy, *root_schema_service))) {
     SERVER_LOG(WARN, "mods_dbms_sched_service_ fail", KR(ret));
   }
+  if (OB_SUCC(ret)) {
+    ns::NamespaceRuntime *root_runtime = nullptr;
+    if (!ns::namespace_registry().get(1, root_runtime) || root_runtime == nullptr) {
+      ret = OB_NOT_INIT;
+    } else {
+      root_runtime->set_service(ns::NamespaceRuntime::DBMS_SCHEDULER,
+          static_cast<query::ObISchedulerService *>(mods_dbms_sched_service_));
+    }
+  }
   if (OB_SUCC(ret) && OB_FAIL(ObOptStatMonitorManager::server_module_init(
       mods_opt_stat_monitor_manager_, root_sql_proxy,
       root_schema_service, root_stat_manager))) {
@@ -1672,6 +1679,7 @@ void ObServer::obs_stop_modules()
   server_module_stop_default(mods_rb_mem_mgr_);
   ObOptStatMonitorManager::server_module_stop(mods_opt_stat_monitor_manager_);
   namespace_worker_prototype::stop_in_process_opt_stat_monitors();
+  namespace_worker_prototype::stop_in_process_dbms_schedulers();
   server_module_stop_default(mods_dbms_sched_service_);
   server_module_stop_default(mods_multi_version_garbage_collector_);
   server_module_stop_default(mods_tx_loop_worker_);
@@ -1717,6 +1725,7 @@ void ObServer::obs_wait_modules()
   server_module_wait_default(mods_rb_mem_mgr_);
   ObOptStatMonitorManager::server_module_wait(mods_opt_stat_monitor_manager_);
   namespace_worker_prototype::wait_in_process_opt_stat_monitors();
+  namespace_worker_prototype::wait_in_process_dbms_schedulers();
   server_module_wait_default(mods_dbms_sched_service_);
   server_module_wait_default(mods_multi_version_garbage_collector_);
   server_module_wait_default(mods_tx_loop_worker_);
@@ -1881,7 +1890,6 @@ void ObServer::obs_destroy_modules()
   UNBIND_SERVICE(transaction::ObTransIDService);
   UNBIND_SERVICE(observer::ObTabletRuntimeMetaUpdater);
   UNBIND_SERVICE(storage::ObSSTableMergeInfoMgr);
-  UNBIND_SERVICE(query::ObISchedulerService);
   UNBIND_SERVICE(common::ObRbMemMgr);
   UNBIND_SERVICE(common::ObOptStatMonitorManager);
   UNBIND_SERVICE(storage::ObCompactionMemPool);
@@ -1921,7 +1929,6 @@ void ObServer::obs_destroy_modules()
   UNBIND_SERVICE(logservice::ObILocalLogHandler);
   UNBIND_SERVICE(transaction::tablelock::ObIInnerConnectionLockRuntime);
   UNBIND_SERVICE(rootserver::ObDDLServiceLauncher);
-  UNBIND_SERVICE(rootserver::ObDBMSSchedService);
   UNBIND_SERVICE(query::ObIActiveSnapshotService);
 #undef UNBIND_SERVICE
 }

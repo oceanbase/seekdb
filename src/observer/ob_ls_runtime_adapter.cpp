@@ -26,11 +26,28 @@
 #include "rootserver/freeze/ob_major_freeze_service.h"
 #include "rootserver/ob_ddl_service_launcher.h"
 #include "observer/ob_system_package_load_service.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 
 namespace oceanbase
 {
 namespace observer
 {
+int ObDBMSSchedulerRoleHandler::activate()
+{
+  int ret = service_ == nullptr ? common::OB_NOT_INIT : service_->activate();
+  if (ret == common::OB_SUCCESS) {
+    ret = namespace_worker_prototype::update_in_process_dbms_scheduler_role(true);
+    if (ret != common::OB_SUCCESS) { service_->deactivate(); }
+  }
+  return ret;
+}
+
+void ObDBMSSchedulerRoleHandler::deactivate()
+{
+  namespace_worker_prototype::update_in_process_dbms_scheduler_role(false);
+  if (service_ != nullptr) { service_->deactivate(); }
+}
+
 namespace
 {
 template <typename Handler>
@@ -71,6 +88,7 @@ int ObLSRuntimeAdapter::init(
 {
   primary_major_freeze_service_ = &primary_major_freeze_service;
   dbms_sched_service_ = &dbms_sched_service;
+  dbms_scheduler_role_handler_.bind(dbms_sched_service);
   ddl_scheduler_ = &ddl_scheduler;
   ddl_service_launcher_ = &ddl_service_launcher;
   sys_package_service_ = &sys_package_service;
@@ -88,7 +106,14 @@ int ObLSRuntimeAdapter::resolve_log_handler(
       ret = set_log_service_handler(primary_major_freeze_service_, handler);
       break;
     case logservice::DBMS_SCHEDULER_LOG_BASE_TYPE:
-      ret = set_log_service_handler(dbms_sched_service_, handler);
+      if (dbms_sched_service_ == nullptr) {
+        ret = common::OB_NOT_INIT;
+      } else {
+        handler.set(
+            static_cast<logservice::ObIReplaySubHandler *>(dbms_sched_service_),
+            &dbms_scheduler_role_handler_,
+            static_cast<logservice::ObICheckpointSubHandler *>(dbms_sched_service_));
+      }
       break;
     case logservice::SYS_DDL_SCHEDULER_LOG_BASE_TYPE:
       ret = set_log_service_handler(ddl_scheduler_, handler);

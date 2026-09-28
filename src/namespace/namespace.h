@@ -95,6 +95,7 @@ public:
     WRITE_CONTEXT_SERVICE = 19,
     TRANSACTION_SERVICE = 20,
     VECTOR_TASK_SQL_PROXY = 21, // shared vector scheduling metadata
+    DBMS_SCHEDULER = 22, // query::ObISchedulerService interface pointer
     SLOT_COUNT
   };
   explicit NamespaceRuntime(Namespace &ns) : ns_(ns) {}
@@ -120,7 +121,7 @@ public:
       DML_SERVICE, RANGE_SERVICE, DDL_CHECKSUM_ERROR_VERIFIER, PS_CACHE,
       OPT_STAT_MANAGER, OPT_STAT_MONITOR_MANAGER, TABLET_SCAN,
       LOB_READ_SERVICE, WRITE_CONTEXT_SERVICE, TRANSACTION_SERVICE,
-      VECTOR_TASK_SQL_PROXY
+      VECTOR_TASK_SQL_PROXY, DBMS_SCHEDULER
     };
     for (const ServiceSlot slot : required) {
       if (services_[slot] == nullptr) { return false; }

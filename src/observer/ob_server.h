@@ -114,7 +114,6 @@ class ObDTLIntermResultManager;
 namespace query
 {
 class ObIActiveSnapshotService;
-class ObISchedulerService;
 class ObIVectorIndexService;
 }
 namespace data_plane
@@ -665,8 +664,6 @@ public:
   storage::ObEmptyReadBucket * empty_read_bucket() { return mods_empty_read_bucket_; }
   transaction::tablelock::ObIInnerConnectionLockRuntime *
       inner_connection_lock_runtime();
-  rootserver::ObDBMSSchedService * dbms_sched_service() { return mods_dbms_sched_service_; }
-  query::ObISchedulerService * scheduler_service();
   query::ObIActiveSnapshotService * active_snapshot_service()
   {
     return &session_mgr_;

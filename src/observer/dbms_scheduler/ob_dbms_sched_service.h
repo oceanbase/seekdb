@@ -44,13 +44,13 @@ public:
   static int server_module_init(ObDBMSSchedService *&dbms_sched_service,
                                 common::ObMySQLProxy &sql_proxy,
                                 share::schema::ObMultiVersionSchemaService &schema_service);
-  static void wakeup_scheduler();
+  static void wakeup_scheduler(uint64_t namespace_id);
   int allocate_job_id(int64_t &job_id) override;
   int create_job(
       common::ObISQLClient &sql_client,
       int64_t job_id,
       const dbms_scheduler::ObDBMSSchedJobInfo &job_info) override;
-  void notify_scheduler() override { wakeup_scheduler(); }
+  void notify_scheduler() override { job_master_.wakeup(); }
   int init(common::ObMySQLProxy &sql_proxy,
            share::schema::ObMultiVersionSchemaService &schema_service);
   int start();

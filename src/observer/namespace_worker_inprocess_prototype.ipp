@@ -472,6 +472,7 @@ struct InProcessNamespaceServices {
   ObVirtualDataAccessService *virtual_table_scan = nullptr;
   common::ObOptStatManager opt_stat_manager;
   common::ObOptStatMonitorManager opt_stat_monitor_manager;
+  rootserver::ObDBMSSchedService dbms_scheduler;
   rootserver::ObLocalManagementService *root_commands = nullptr;
   InProcessRootserverLocalRuntime *local_runtime = nullptr;
   InProcessDirectInsertService direct_insert;
@@ -488,6 +489,7 @@ struct InProcessNamespaceServices {
 };
 std::shared_mutex inprocess_services_mutex;
 std::map<uint64_t, std::unique_ptr<InProcessNamespaceServices>> inprocess_services;
+bool inprocess_dbms_scheduler_leader = false; // guarded by inprocess_services_mutex
 void stop_in_process_opt_stat_monitors()
 {
   std::shared_lock<std::shared_mutex> guard(inprocess_services_mutex);
@@ -503,6 +505,53 @@ void wait_in_process_opt_stat_monitors()
     auto *monitor = &entry.second->opt_stat_monitor_manager;
     common::ObOptStatMonitorManager::server_module_wait(monitor);
   }
+}
+int update_in_process_dbms_scheduler_role(bool leader)
+{
+  std::vector<rootserver::ObDBMSSchedService *> schedulers;
+  {
+    std::unique_lock<std::shared_mutex> guard(inprocess_services_mutex);
+    inprocess_dbms_scheduler_leader = leader;
+    for (auto &entry : inprocess_services) {
+      schedulers.push_back(&entry.second->dbms_scheduler);
+    }
+  }
+  int ret = OB_SUCCESS;
+  for (auto *scheduler : schedulers) {
+    if (leader) {
+      if (OB_SUCCESS != (ret = scheduler->activate())) { break; }
+    } else {
+      scheduler->deactivate();
+    }
+  }
+  if (ret != OB_SUCCESS) {
+    for (auto *scheduler : schedulers) { scheduler->deactivate(); }
+    std::unique_lock<std::shared_mutex> guard(inprocess_services_mutex);
+    inprocess_dbms_scheduler_leader = false;
+  }
+  return ret;
+}
+void stop_in_process_dbms_schedulers()
+{
+  std::vector<rootserver::ObDBMSSchedService *> schedulers;
+  {
+    std::shared_lock<std::shared_mutex> guard(inprocess_services_mutex);
+    for (auto &entry : inprocess_services) {
+      schedulers.push_back(&entry.second->dbms_scheduler);
+    }
+  }
+  for (auto *scheduler : schedulers) { scheduler->stop(); }
+}
+void wait_in_process_dbms_schedulers()
+{
+  std::vector<rootserver::ObDBMSSchedService *> schedulers;
+  {
+    std::shared_lock<std::shared_mutex> guard(inprocess_services_mutex);
+    for (auto &entry : inprocess_services) {
+      schedulers.push_back(&entry.second->dbms_scheduler);
+    }
+  }
+  for (auto *scheduler : schedulers) { scheduler->wait(); }
 }
 thread_local uint64_t activating_namespace = 0;
 int resolve_inprocess_tablet_schema(uint64_t physical_tablet_id,
@@ -694,6 +743,12 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
   } else if (OB_FAIL(services->opt_stat_monitor_manager.init(
           services->sql_proxy, services->schema_service,
           &services->opt_stat_manager))) {
+  } else if (FALSE_IT(stage = "dbms_scheduler")) {
+  } else if (OB_FAIL(services->dbms_scheduler.init(
+          *services->sql_proxy, *services->schema_service))) {
+  } else if (OB_FAIL(services->dbms_scheduler.start())) {
+  } else if (inprocess_dbms_scheduler_leader
+             && OB_FAIL(services->dbms_scheduler.activate())) {
   } else if (OB_FAIL(([&] {
       auto *monitor = &services->opt_stat_monitor_manager;
       return common::ObOptStatMonitorManager::server_module_start(monitor);
@@ -731,6 +786,8 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
         &services->autoincrement);
     runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_REGISTRY, &services->direct_insert_registry);
     runtime.set_service(ns::NamespaceRuntime::SQL_PROXY, services->sql_proxy);
+    runtime.set_service(ns::NamespaceRuntime::DBMS_SCHEDULER,
+        static_cast<query::ObISchedulerService *>(&services->dbms_scheduler));
     runtime.set_service(ns::NamespaceRuntime::VECTOR_TASK_SQL_PROXY,
         namespace_sql_proxy(1));
     runtime.set_service(ns::NamespaceRuntime::SCHEMA_LIFECYCLE,

@@ -18,6 +18,7 @@
 #define OCEANBASE_OBSERVER_OB_LS_RUNTIME_ADAPTER_H_
 
 #include "storage/ls/ob_i_ls_runtime_adapter.h"
+#include "share/log/ob_log_base_type.h"
 
 namespace oceanbase
 {
@@ -35,6 +36,16 @@ class ObPluginVectorIndexService;
 }
 namespace observer
 {
+class ObDBMSSchedulerRoleHandler final : public logservice::ObILocalLogHandler
+{
+public:
+  void bind(rootserver::ObDBMSSchedService &service) { service_ = &service; }
+  int activate() override;
+  void deactivate() override;
+private:
+  rootserver::ObDBMSSchedService *service_ = nullptr;
+};
+
 class ObLSRuntimeAdapter final : public storage::ObILSRuntimeAdapter
 {
 public:
@@ -61,6 +72,7 @@ public:
 private:
   rootserver::ObPrimaryMajorFreezeService *primary_major_freeze_service_;
   rootserver::ObDBMSSchedService *dbms_sched_service_;
+  ObDBMSSchedulerRoleHandler dbms_scheduler_role_handler_;
   rootserver::ObDDLScheduler *ddl_scheduler_;
   rootserver::ObDDLServiceLauncher *ddl_service_launcher_;
   rootserver::ObSystemPackageLoadService *sys_package_service_;

@@ -363,7 +363,7 @@ int ObDBMSSchedJobUtils::remove_dbms_sched_job(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("affected_rows unexpected to be two", KR(ret), K(affected_rows));
       } else {
-        rootserver::ObDBMSSchedService::wakeup_scheduler();
+        rootserver::ObDBMSSchedService::wakeup_scheduler(sql_client.target_namespace());
       }
     }
   }
@@ -472,7 +472,7 @@ int ObDBMSSchedJobUtils::create_dbms_sched_job(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("affected_rows unexpected to be two", KR(ret), K(affected_rows));
       } else if (OB_SUCC(ret)) {
-        rootserver::ObDBMSSchedService::wakeup_scheduler();
+        rootserver::ObDBMSSchedService::wakeup_scheduler(sql_client.target_namespace());
       }
     }
   }
@@ -580,7 +580,7 @@ int ObDBMSSchedJobUtils::update_dbms_sched_job_info(common::ObISQLClient &sql_cl
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("affected_rows unexpected to be two", KR(ret), K(affected_rows));
     } else {
-      rootserver::ObDBMSSchedService::wakeup_scheduler();
+      rootserver::ObDBMSSchedService::wakeup_scheduler(sql_client.target_namespace());
     }
   }
   return ret;  

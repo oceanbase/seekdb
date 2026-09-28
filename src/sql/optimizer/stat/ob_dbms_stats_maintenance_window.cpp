@@ -23,6 +23,7 @@
 #include "query/scheduler/ob_scheduler_service.h"
 #include "share/ob_sql_client_decorator.h"
 #include "sql/engine/ob_exec_context.h"
+#include "namespace/namespace.h"
 
 namespace oceanbase {
 
@@ -50,8 +51,13 @@ int ObDbmsStatsMaintenanceWindow::get_stats_maintenance_window_jobs_sql(const Ob
   int64_t job_id = 1;
   int64_t pos = 0;
   int32_t offset_sec = 0;
-  query::ObISchedulerService *scheduler =
-      ::oceanbase::share::server_service<::oceanbase::query::ObISchedulerService>();
+  ns::NamespaceRuntime *runtime = nullptr;
+  if (!ns::namespace_registry().get(sql_client.target_namespace(), runtime)) {
+    runtime = nullptr;
+  }
+  query::ObISchedulerService *scheduler = runtime == nullptr ? nullptr
+      : static_cast<query::ObISchedulerService *>(
+          runtime->service(ns::NamespaceRuntime::DBMS_SCHEDULER));
   if (OB_ISNULL(scheduler)) {
     ret = OB_NOT_INIT;
     LOG_WARN("scheduler service is unavailable", K(ret));

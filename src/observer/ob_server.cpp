@@ -205,11 +205,6 @@ sql::ObSql *get_observer_sql_engine()
   return &ObServer::get_instance().get_sql_engine();
 }
 
-query::ObISchedulerService *ObServer::scheduler_service()
-{
-  return mods_dbms_sched_service_;
-}
-
 int ObServer::get_or_insert_schedule_info(
     sql::ObSQLSessionInfo &session,
     int64_t task_id,

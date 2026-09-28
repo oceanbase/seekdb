@@ -326,7 +326,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(
       OZ (ObDBMSSchedJobExecutor::init_env(job_info, *session_info));
       OX (session_info->set_job_info(&job_info));
       OZ (table_operator_.update_for_start_execute(job_info));
-      rootserver::ObDBMSSchedService::wakeup_scheduler();
+      rootserver::ObDBMSSchedService::wakeup_scheduler(sql_proxy_->target_namespace());
       OZ (ObInnerSQLConnection::create_spi_connection_with_external_session(
           session_info, conn_guard));
       OX (conn = static_cast<ObInnerSQLConnection *>(conn_guard.get_ptr()));
@@ -370,7 +370,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(uint64_t job_id, const ObString &
   if (OB_SUCC(ret)) {
     if (job_info.is_killed()) { //Intercept user cancellation requests before the actual execution of the job
       OZ(table_operator_.update_for_kill(job_info));
-      rootserver::ObDBMSSchedService::wakeup_scheduler();
+      rootserver::ObDBMSSchedService::wakeup_scheduler(sql_proxy_->target_namespace());
     } else {
       OZ (run_dbms_sched_job(job_info));
       bool job_is_user_stop = false;
@@ -386,7 +386,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(uint64_t job_id, const ObString &
       if (job_is_user_stop) {
         if ((OB_TMP_FAIL(table_operator_.update_for_kill(job_info)))) {
         }
-        rootserver::ObDBMSSchedService::wakeup_scheduler();
+        rootserver::ObDBMSSchedService::wakeup_scheduler(sql_proxy_->target_namespace());
       } else {
         ObString errmsg = common::ob_get_tsi_err_msg(ret);
         if (errmsg.empty() && ret != OB_SUCCESS) {
@@ -395,7 +395,7 @@ int ObDBMSSchedJobExecutor::run_dbms_sched_job(uint64_t job_id, const ObString &
         }
         if ((OB_TMP_FAIL(table_operator_.update_for_end(job_info, ret, errmsg)))) {
         }
-        rootserver::ObDBMSSchedService::wakeup_scheduler();
+        rootserver::ObDBMSSchedService::wakeup_scheduler(sql_proxy_->target_namespace());
       }
       ret = OB_SUCCESS == ret ? tmp_ret : ret;
     }

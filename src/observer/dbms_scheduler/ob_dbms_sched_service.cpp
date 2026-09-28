@@ -16,7 +16,7 @@
 
 #include "observer/dbms_scheduler/ob_dbms_sched_service.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_job_utils.h"
-#include "share/rc/ob_server_runtime.h"
+#include "namespace/namespace.h"
 #define USING_LOG_PREFIX SERVER
 
 namespace oceanbase
@@ -147,14 +147,13 @@ int ObDBMSSchedService::activate()
   }
   return ret;
 }
-void ObDBMSSchedService::wakeup_scheduler()
+void ObDBMSSchedService::wakeup_scheduler(uint64_t namespace_id)
 {
-  int ret = OB_SUCCESS;
-  SERVER_MODULE_SCOPE {
-    rootserver::ObDBMSSchedService *svc = ::oceanbase::share::server_service<::oceanbase::rootserver::ObDBMSSchedService>();
-    if (OB_NOT_NULL(svc)) {
-      svc->job_master_.wakeup();
-    }
+  ns::NamespaceRuntime *runtime = nullptr;
+  if (ns::namespace_registry().get(namespace_id, runtime) && runtime != nullptr) {
+    auto *service = static_cast<query::ObISchedulerService *>(
+        runtime->service(ns::NamespaceRuntime::DBMS_SCHEDULER));
+    if (service != nullptr) { service->notify_scheduler(); }
   }
 }
 
