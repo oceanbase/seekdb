@@ -1283,7 +1283,6 @@ int ObServer::obs_construct_modules()
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_access_service_))) { SERVER_LOG(WARN, "mods_access_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_multi_version_garbage_collector_))) { SERVER_LOG(WARN, "mods_multi_version_garbage_collector_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_empty_read_bucket_))) { SERVER_LOG(WARN, "mods_empty_read_bucket_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_dbms_sched_service_))) { SERVER_LOG(WARN, "mods_dbms_sched_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_opt_stat_monitor_manager_))) { SERVER_LOG(WARN, "mods_opt_stat_monitor_manager_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_srs_service_))) { SERVER_LOG(WARN, "mods_srs_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_new_default(mods_tablet_memtable_mgr_pool_))) { SERVER_LOG(WARN, "mods_tablet_memtable_mgr_pool_ fail", KR(ret)); }
@@ -1534,18 +1533,9 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(ObAccessService::server_module_init(mods_access_service_))) { SERVER_LOG(WARN, "mods_access_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObMultiVersionGarbageCollector::server_module_init(mods_multi_version_garbage_collector_))) { SERVER_LOG(WARN, "mods_multi_version_garbage_collector_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObEmptyReadBucket::server_module_init(mods_empty_read_bucket_))) { SERVER_LOG(WARN, "mods_empty_read_bucket_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(rootserver::ObDBMSSchedService::server_module_init(
-          mods_dbms_sched_service_, *root_sql_proxy, *root_schema_service))) {
-    SERVER_LOG(WARN, "mods_dbms_sched_service_ fail", KR(ret));
-  }
-  if (OB_SUCC(ret)) {
-    ns::NamespaceRuntime *root_runtime = nullptr;
-    if (!ns::namespace_registry().get(1, root_runtime) || root_runtime == nullptr) {
-      ret = OB_NOT_INIT;
-    } else {
-      root_runtime->set_service(ns::NamespaceRuntime::DBMS_SCHEDULER,
-          static_cast<query::ObISchedulerService *>(mods_dbms_sched_service_));
-    }
+  if (OB_SUCC(ret) && OB_FAIL(namespace_worker_prototype::init_namespace_dbms_scheduler(
+          *root_runtime, *root_sql_proxy, *root_schema_service))) {
+    SERVER_LOG(WARN, "root namespace DBMS scheduler init failed", KR(ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(ObOptStatMonitorManager::server_module_init(
       mods_opt_stat_monitor_manager_, root_sql_proxy,
@@ -1616,7 +1606,6 @@ int ObServer::obs_init_modules()
   }
   if (OB_SUCC(ret) && OB_FAIL(ls_runtime_adapter_.init(
       *mods_primary_major_freeze_service_,
-      *mods_dbms_sched_service_,
       *mods_ddl_scheduler_,
       *mods_ddl_service_launcher_,
       *mods_system_package_load_service_,
@@ -1660,7 +1649,9 @@ int ObServer::obs_start_modules()
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_freeze_info_mgr_))) { SERVER_LOG(WARN, "mods_freeze_info_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_tx_loop_worker_))) { SERVER_LOG(WARN, "mods_tx_loop_worker_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_multi_version_garbage_collector_))) { SERVER_LOG(WARN, "mods_multi_version_garbage_collector_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_dbms_sched_service_))) { SERVER_LOG(WARN, "mods_dbms_sched_service_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(namespace_worker_prototype::start_namespace_dbms_schedulers())) {
+    SERVER_LOG(WARN, "namespace DBMS schedulers failed to start", KR(ret));
+  }
   if (OB_SUCC(ret) && OB_FAIL(ObOptStatMonitorManager::server_module_start(mods_opt_stat_monitor_manager_))) { SERVER_LOG(WARN, "mods_opt_stat_monitor_manager_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_rb_mem_mgr_))) { SERVER_LOG(WARN, "mods_rb_mem_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_start_default(mods_plugin_vector_index_service_))) { SERVER_LOG(WARN, "mods_plugin_vector_index_service_ fail", KR(ret)); }
@@ -1679,8 +1670,7 @@ void ObServer::obs_stop_modules()
   server_module_stop_default(mods_rb_mem_mgr_);
   ObOptStatMonitorManager::server_module_stop(mods_opt_stat_monitor_manager_);
   namespace_worker_prototype::stop_in_process_opt_stat_monitors();
-  namespace_worker_prototype::stop_in_process_dbms_schedulers();
-  server_module_stop_default(mods_dbms_sched_service_);
+  namespace_worker_prototype::stop_namespace_dbms_schedulers();
   server_module_stop_default(mods_multi_version_garbage_collector_);
   server_module_stop_default(mods_tx_loop_worker_);
   server_module_stop_default(mods_freeze_info_mgr_);
@@ -1725,8 +1715,7 @@ void ObServer::obs_wait_modules()
   server_module_wait_default(mods_rb_mem_mgr_);
   ObOptStatMonitorManager::server_module_wait(mods_opt_stat_monitor_manager_);
   namespace_worker_prototype::wait_in_process_opt_stat_monitors();
-  namespace_worker_prototype::wait_in_process_dbms_schedulers();
-  server_module_wait_default(mods_dbms_sched_service_);
+  namespace_worker_prototype::wait_namespace_dbms_schedulers();
   server_module_wait_default(mods_multi_version_garbage_collector_);
   server_module_wait_default(mods_tx_loop_worker_);
   server_module_wait_default(mods_freeze_info_mgr_);
@@ -1775,7 +1764,7 @@ void ObServer::obs_destroy_modules()
   server_module_destroy_default(mods_tablet_memtable_mgr_pool_);
   server_module_destroy_default(mods_srs_service_);
   server_module_destroy_default(mods_opt_stat_monitor_manager_);
-  server_module_destroy_default(mods_dbms_sched_service_);
+  namespace_worker_prototype::destroy_namespace_dbms_schedulers();
   ObEmptyReadBucket::server_module_destroy(mods_empty_read_bucket_);
   server_module_destroy_default(mods_multi_version_garbage_collector_);
   server_module_destroy_default(mods_access_service_);

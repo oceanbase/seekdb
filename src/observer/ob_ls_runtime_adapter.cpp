@@ -19,7 +19,7 @@
 #include "observer/ob_ls_runtime_adapter.h"
 
 #include "data_plane/ob_log_service_handler.h"
-#include "observer/dbms_scheduler/ob_dbms_sched_service.h"
+#include "share/scn.h"
 #include "observer/vector_index/ob_plugin_vector_index_scheduler.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "rootserver/ddl_task/ob_ddl_scheduler.h"
@@ -32,20 +32,36 @@ namespace oceanbase
 {
 namespace observer
 {
-int ObDBMSSchedulerRoleHandler::activate()
+int DBMSSchedulerLogHandler::replay(
+    const void *buffer, const int64_t nbytes, const palf::LSN &lsn,
+    const share::SCN &scn)
 {
-  int ret = service_ == nullptr ? common::OB_NOT_INIT : service_->activate();
-  if (ret == common::OB_SUCCESS) {
-    ret = namespace_worker_prototype::update_in_process_dbms_scheduler_role(true);
-    if (ret != common::OB_SUCCESS) { service_->deactivate(); }
-  }
-  return ret;
+  UNUSED(buffer);
+  UNUSED(nbytes);
+  UNUSED(lsn);
+  UNUSED(scn);
+  return common::OB_SUCCESS;
 }
 
-void ObDBMSSchedulerRoleHandler::deactivate()
+int DBMSSchedulerLogHandler::activate()
 {
-  namespace_worker_prototype::update_in_process_dbms_scheduler_role(false);
-  if (service_ != nullptr) { service_->deactivate(); }
+  return namespace_worker_prototype::update_namespace_dbms_scheduler_role(true);
+}
+
+void DBMSSchedulerLogHandler::deactivate()
+{
+  namespace_worker_prototype::update_namespace_dbms_scheduler_role(false);
+}
+
+share::SCN DBMSSchedulerLogHandler::get_rec_scn()
+{
+  return share::SCN::max_scn();
+}
+
+int DBMSSchedulerLogHandler::flush(share::SCN &scn)
+{
+  UNUSED(scn);
+  return common::OB_SUCCESS;
 }
 
 namespace
@@ -70,7 +86,6 @@ int set_log_service_handler(
 
 ObLSRuntimeAdapter::ObLSRuntimeAdapter()
   : primary_major_freeze_service_(nullptr),
-    dbms_sched_service_(nullptr),
     ddl_scheduler_(nullptr),
     ddl_service_launcher_(nullptr),
     sys_package_service_(nullptr),
@@ -80,15 +95,12 @@ ObLSRuntimeAdapter::ObLSRuntimeAdapter()
 
 int ObLSRuntimeAdapter::init(
     rootserver::ObPrimaryMajorFreezeService &primary_major_freeze_service,
-    rootserver::ObDBMSSchedService &dbms_sched_service,
     rootserver::ObDDLScheduler &ddl_scheduler,
     rootserver::ObDDLServiceLauncher &ddl_service_launcher,
     rootserver::ObSystemPackageLoadService &sys_package_service,
     share::ObPluginVectorIndexService &vector_index_service)
 {
   primary_major_freeze_service_ = &primary_major_freeze_service;
-  dbms_sched_service_ = &dbms_sched_service;
-  dbms_scheduler_role_handler_.bind(dbms_sched_service);
   ddl_scheduler_ = &ddl_scheduler;
   ddl_service_launcher_ = &ddl_service_launcher;
   sys_package_service_ = &sys_package_service;
@@ -106,14 +118,8 @@ int ObLSRuntimeAdapter::resolve_log_handler(
       ret = set_log_service_handler(primary_major_freeze_service_, handler);
       break;
     case logservice::DBMS_SCHEDULER_LOG_BASE_TYPE:
-      if (dbms_sched_service_ == nullptr) {
-        ret = common::OB_NOT_INIT;
-      } else {
-        handler.set(
-            static_cast<logservice::ObIReplaySubHandler *>(dbms_sched_service_),
-            &dbms_scheduler_role_handler_,
-            static_cast<logservice::ObICheckpointSubHandler *>(dbms_sched_service_));
-      }
+      handler.set(&dbms_scheduler_log_handler_, &dbms_scheduler_log_handler_,
+                  &dbms_scheduler_log_handler_);
       break;
     case logservice::SYS_DDL_SCHEDULER_LOG_BASE_TYPE:
       ret = set_log_service_handler(ddl_scheduler_, handler);

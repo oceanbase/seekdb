@@ -281,9 +281,14 @@ common::ObOptStatMonitorManager *effective_opt_stat_monitor_manager(
     sql::ObSQLSessionInfo *session);
 void stop_in_process_opt_stat_monitors();
 void wait_in_process_opt_stat_monitors();
-int update_in_process_dbms_scheduler_role(bool leader);
-void stop_in_process_dbms_schedulers();
-void wait_in_process_dbms_schedulers();
+int init_namespace_dbms_scheduler(ns::NamespaceRuntime &runtime,
+    common::ObMySQLProxy &sql_proxy,
+    share::schema::ObMultiVersionSchemaService &schema_service);
+int start_namespace_dbms_schedulers();
+int update_namespace_dbms_scheduler_role(bool leader);
+void stop_namespace_dbms_schedulers();
+void wait_namespace_dbms_schedulers();
+void destroy_namespace_dbms_schedulers();
 void close_session(SessionBinding *binding);
 } } }
 #endif

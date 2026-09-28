@@ -18,7 +18,6 @@
 #define OCEANBASE_ROOTSERVER_OB_DBMS_SCHEDULER_SERVICE_H
 
 #include "share/ob_define.h"
-#include "share/log/ob_log_base_type.h"                        //ObILocalLogHandler ObICheckpointSubHandler ObIReplaySubHandler
 #include "observer/dbms_scheduler/ob_dbms_sched_job_master.h"
 #include "rootserver/ob_server_thread_helper.h" // for ObServerThreadHelper
 #include "query/scheduler/ob_scheduler_service.h"
@@ -28,8 +27,6 @@ namespace oceanbase
 namespace rootserver
 {
 class ObDBMSSchedService : public ObServerThreadHelper,
-                           public logservice::ObICheckpointSubHandler,
-                           public logservice::ObIReplaySubHandler,
                            public query::ObISchedulerService
 {
 public:
@@ -41,9 +38,6 @@ public:
     destroy();
   }
 
-  static int server_module_init(ObDBMSSchedService *&dbms_sched_service,
-                                common::ObMySQLProxy &sql_proxy,
-                                share::schema::ObMultiVersionSchemaService &schema_service);
   static void wakeup_scheduler(uint64_t namespace_id);
   int allocate_job_id(int64_t &job_id) override;
   int create_job(
@@ -62,28 +56,8 @@ public:
   bool is_stop() { return job_master_.is_stop(); }
 
 public:
-  // for replay, do nothing
-  int replay(const void *buffer, const int64_t nbytes, const palf::LSN &lsn, const share::SCN &scn) override
-  {
-    UNUSED(buffer);
-    UNUSED(nbytes);
-    UNUSED(lsn);
-    UNUSED(scn);
-    return OB_SUCCESS;
-  }
-  // for checkpoint, do nothing
-  virtual share::SCN get_rec_scn() override
-  {
-    return share::SCN::max_scn();
-  }
-  virtual int flush(share::SCN &scn) override
-  {
-    return OB_SUCCESS;
-  }
-
-  // for role change
-  void deactivate() override;
-  int activate() override;
+  void deactivate();
+  int activate();
 
 private:
   dbms_scheduler::ObDBMSSchedJobMaster job_master_;

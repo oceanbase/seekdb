@@ -111,6 +111,18 @@ void NamespaceRegistry::list_ids(std::vector<uint64_t> &ids)
   }
 }
 
+void NamespaceRegistry::list_retained_runtimes(std::vector<NamespaceRuntime *> &runtimes)
+{
+  runtimes.clear();
+  if (impl_ != nullptr) {
+    std::lock_guard<std::mutex> guard(impl_->mutex);
+    runtimes.reserve(impl_->entries.size());
+    for (const auto &entry : impl_->entries) {
+      runtimes.push_back(&entry.second->runtime);
+    }
+  }
+}
+
 bool NamespaceRegistry::acquire_session(uint64_t id)
 {
   if (impl_ == nullptr) { return false; }

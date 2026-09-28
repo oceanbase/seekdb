@@ -754,7 +754,6 @@ private:
   storage::ObAccessService * mods_access_service_ = nullptr;
   concurrency_control::ObMultiVersionGarbageCollector * mods_multi_version_garbage_collector_ = nullptr;
   storage::ObEmptyReadBucket * mods_empty_read_bucket_ = nullptr;
-  rootserver::ObDBMSSchedService * mods_dbms_sched_service_ = nullptr;
   oceanbase::common::ObOptStatMonitorManager * mods_opt_stat_monitor_manager_ = nullptr;
   omt::ObSrsService * mods_srs_service_ = nullptr;
   ObInternalTableRefreshAdapter internal_table_refresh_adapter_;

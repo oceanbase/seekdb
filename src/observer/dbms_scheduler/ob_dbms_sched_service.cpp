@@ -26,14 +26,6 @@ using namespace oceanbase::share;
 namespace rootserver
 {
 
-int ObDBMSSchedService::server_module_init(
-    ObDBMSSchedService *&dbms_sched_service,
-    ObMySQLProxy &sql_proxy,
-    share::schema::ObMultiVersionSchemaService &schema_service)
-{
-  return dbms_sched_service->init(sql_proxy, schema_service);
-}
-
 int ObDBMSSchedService::allocate_job_id(int64_t &job_id)
 {
   return dbms_scheduler::ObDBMSSchedJobUtils::generate_job_id(job_id);

@@ -17,6 +17,7 @@
 // to OB error codes.
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 namespace oceanbase
@@ -108,6 +109,22 @@ public:
   {
     if (slot < SLOT_COUNT) { services_[slot] = service; }
   }
+  template<typename Service, typename Owner>
+  void set_owned_service(ServiceSlot slot, std::unique_ptr<Owner> owner)
+  {
+    if (slot < SLOT_COUNT && owner != nullptr) {
+      Service *service = static_cast<Service *>(owner.get());
+      owned_services_[slot] = std::move(owner);
+      services_[slot] = service;
+    }
+  }
+  void clear_service(ServiceSlot slot)
+  {
+    if (slot < SLOT_COUNT) {
+      services_[slot] = nullptr;
+      owned_services_[slot].reset();
+    }
+  }
   void *service(ServiceSlot slot) const
   {
     return slot < SLOT_COUNT ? services_[slot] : nullptr;
@@ -133,6 +150,7 @@ private:
   bool global_control_authority_ = false;
   bool storage_access_lease_required_ = true;
   void *services_[SLOT_COUNT] = {};
+  std::shared_ptr<void> owned_services_[SLOT_COUNT];
 };
 
 // The single sanctioned new global (ADR 0003). Everything else stays
@@ -148,6 +166,9 @@ public:
   bool get(uint64_t id, NamespaceRuntime *&runtime);
   bool find(const char *name, NamespaceRuntime *&runtime);
   void list_ids(std::vector<uint64_t> &ids);
+  // Removed entries retain their Runtime until the process exits so owned
+  // background services can be stopped and destroyed during shutdown.
+  void list_retained_runtimes(std::vector<NamespaceRuntime *> &runtimes);
   bool acquire_session(uint64_t id);
   void release_session(uint64_t id);
   bool begin_drop(uint64_t id);

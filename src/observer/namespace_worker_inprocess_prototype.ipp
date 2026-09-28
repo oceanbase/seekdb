@@ -472,7 +472,6 @@ struct InProcessNamespaceServices {
   ObVirtualDataAccessService *virtual_table_scan = nullptr;
   common::ObOptStatManager opt_stat_manager;
   common::ObOptStatMonitorManager opt_stat_monitor_manager;
-  rootserver::ObDBMSSchedService dbms_scheduler;
   rootserver::ObLocalManagementService *root_commands = nullptr;
   InProcessRootserverLocalRuntime *local_runtime = nullptr;
   InProcessDirectInsertService direct_insert;
@@ -489,7 +488,9 @@ struct InProcessNamespaceServices {
 };
 std::shared_mutex inprocess_services_mutex;
 std::map<uint64_t, std::unique_ptr<InProcessNamespaceServices>> inprocess_services;
-bool inprocess_dbms_scheduler_leader = false; // guarded by inprocess_services_mutex
+std::mutex namespace_dbms_scheduler_mutex;
+bool namespace_dbms_scheduler_started = false;
+bool namespace_dbms_scheduler_leader = false;
 void stop_in_process_opt_stat_monitors()
 {
   std::shared_lock<std::shared_mutex> guard(inprocess_services_mutex);
@@ -506,52 +507,116 @@ void wait_in_process_opt_stat_monitors()
     common::ObOptStatMonitorManager::server_module_wait(monitor);
   }
 }
-int update_in_process_dbms_scheduler_role(bool leader)
+std::vector<rootserver::ObDBMSSchedService *> namespace_dbms_schedulers()
 {
+  std::vector<ns::NamespaceRuntime *> runtimes;
+  ns::namespace_registry().list_retained_runtimes(runtimes);
   std::vector<rootserver::ObDBMSSchedService *> schedulers;
-  {
-    std::unique_lock<std::shared_mutex> guard(inprocess_services_mutex);
-    inprocess_dbms_scheduler_leader = leader;
-    for (auto &entry : inprocess_services) {
-      schedulers.push_back(&entry.second->dbms_scheduler);
+  for (auto *runtime : runtimes) {
+    auto *service = static_cast<query::ObISchedulerService *>(
+        runtime->service(ns::NamespaceRuntime::DBMS_SCHEDULER));
+    if (service != nullptr) {
+      schedulers.push_back(static_cast<rootserver::ObDBMSSchedService *>(service));
     }
   }
+  return schedulers;
+}
+int init_namespace_dbms_scheduler(ns::NamespaceRuntime &runtime,
+    common::ObMySQLProxy &sql_proxy,
+    share::schema::ObMultiVersionSchemaService &schema_service)
+{
   int ret = OB_SUCCESS;
-  for (auto *scheduler : schedulers) {
-    if (leader) {
-      if (OB_SUCCESS != (ret = scheduler->activate())) { break; }
+  std::lock_guard<std::mutex> guard(namespace_dbms_scheduler_mutex);
+  if (runtime.service(ns::NamespaceRuntime::DBMS_SCHEDULER) != nullptr) {
+    ret = OB_INIT_TWICE;
+  } else {
+    auto scheduler = std::make_unique<rootserver::ObDBMSSchedService>();
+    bool start_attempted = false;
+    if (OB_FAIL(scheduler->init(sql_proxy, schema_service))) {
     } else {
-      scheduler->deactivate();
+      if (namespace_dbms_scheduler_started) {
+        start_attempted = true;
+        ret = scheduler->start();
+      }
+      if (ret == OB_SUCCESS && namespace_dbms_scheduler_started
+          && namespace_dbms_scheduler_leader) {
+        ret = scheduler->activate();
+      }
+      if (ret == OB_SUCCESS) {
+        runtime.set_owned_service<query::ObISchedulerService>(
+            ns::NamespaceRuntime::DBMS_SCHEDULER, std::move(scheduler));
+      }
     }
-  }
-  if (ret != OB_SUCCESS) {
-    for (auto *scheduler : schedulers) { scheduler->deactivate(); }
-    std::unique_lock<std::shared_mutex> guard(inprocess_services_mutex);
-    inprocess_dbms_scheduler_leader = false;
+    if (ret != OB_SUCCESS && start_attempted) {
+      scheduler->stop();
+      scheduler->wait();
+    }
   }
   return ret;
 }
-void stop_in_process_dbms_schedulers()
+int start_namespace_dbms_schedulers()
 {
-  std::vector<rootserver::ObDBMSSchedService *> schedulers;
-  {
-    std::shared_lock<std::shared_mutex> guard(inprocess_services_mutex);
-    for (auto &entry : inprocess_services) {
-      schedulers.push_back(&entry.second->dbms_scheduler);
+  int ret = OB_SUCCESS;
+  std::lock_guard<std::mutex> guard(namespace_dbms_scheduler_mutex);
+  auto schedulers = namespace_dbms_schedulers();
+  for (auto *scheduler : schedulers) {
+    if (OB_SUCCESS != (ret = scheduler->start())) { break; }
+    if (namespace_dbms_scheduler_leader
+        && OB_SUCCESS != (ret = scheduler->activate())) { break; }
+  }
+  if (ret != OB_SUCCESS) {
+    for (auto *scheduler : schedulers) { scheduler->deactivate(); }
+    for (auto *scheduler : schedulers) { scheduler->stop(); }
+  } else {
+    namespace_dbms_scheduler_started = true;
+  }
+  return ret;
+}
+int update_namespace_dbms_scheduler_role(bool leader)
+{
+  int ret = OB_SUCCESS;
+  std::lock_guard<std::mutex> guard(namespace_dbms_scheduler_mutex);
+  namespace_dbms_scheduler_leader = leader;
+  if (namespace_dbms_scheduler_started) {
+    auto schedulers = namespace_dbms_schedulers();
+    for (auto *scheduler : schedulers) {
+      if (leader) {
+        if (OB_SUCCESS != (ret = scheduler->activate())) { break; }
+      } else {
+        scheduler->deactivate();
+      }
+    }
+    if (ret != OB_SUCCESS) {
+      for (auto *scheduler : schedulers) { scheduler->deactivate(); }
+      namespace_dbms_scheduler_leader = false;
     }
   }
-  for (auto *scheduler : schedulers) { scheduler->stop(); }
+  return ret;
 }
-void wait_in_process_dbms_schedulers()
+void stop_namespace_dbms_schedulers()
+{
+  std::lock_guard<std::mutex> guard(namespace_dbms_scheduler_mutex);
+  namespace_dbms_scheduler_started = false;
+  namespace_dbms_scheduler_leader = false;
+  for (auto *scheduler : namespace_dbms_schedulers()) { scheduler->stop(); }
+}
+void wait_namespace_dbms_schedulers()
 {
   std::vector<rootserver::ObDBMSSchedService *> schedulers;
   {
-    std::shared_lock<std::shared_mutex> guard(inprocess_services_mutex);
-    for (auto &entry : inprocess_services) {
-      schedulers.push_back(&entry.second->dbms_scheduler);
-    }
+    std::lock_guard<std::mutex> guard(namespace_dbms_scheduler_mutex);
+    schedulers = namespace_dbms_schedulers();
   }
   for (auto *scheduler : schedulers) { scheduler->wait(); }
+}
+void destroy_namespace_dbms_schedulers()
+{
+  std::lock_guard<std::mutex> guard(namespace_dbms_scheduler_mutex);
+  std::vector<ns::NamespaceRuntime *> runtimes;
+  ns::namespace_registry().list_retained_runtimes(runtimes);
+  for (auto *runtime : runtimes) {
+    runtime->clear_service(ns::NamespaceRuntime::DBMS_SCHEDULER);
+  }
 }
 thread_local uint64_t activating_namespace = 0;
 int resolve_inprocess_tablet_schema(uint64_t physical_tablet_id,
@@ -743,17 +808,14 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
   } else if (OB_FAIL(services->opt_stat_monitor_manager.init(
           services->sql_proxy, services->schema_service,
           &services->opt_stat_manager))) {
-  } else if (FALSE_IT(stage = "dbms_scheduler")) {
-  } else if (OB_FAIL(services->dbms_scheduler.init(
-          *services->sql_proxy, *services->schema_service))) {
-  } else if (OB_FAIL(services->dbms_scheduler.start())) {
-  } else if (inprocess_dbms_scheduler_leader
-             && OB_FAIL(services->dbms_scheduler.activate())) {
   } else if (OB_FAIL(([&] {
       auto *monitor = &services->opt_stat_monitor_manager;
       return common::ObOptStatMonitorManager::server_module_start(monitor);
     }()))) {
   } else if (OB_FAIL(services->root_commands->schedule_load_ddl_task())) {
+  } else if (FALSE_IT(stage = "dbms_scheduler")) {
+  } else if (OB_FAIL(init_namespace_dbms_scheduler(
+          runtime, *services->sql_proxy, *services->schema_service))) {
   } else {
     stage = "done";
   }
@@ -786,8 +848,6 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
         &services->autoincrement);
     runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_REGISTRY, &services->direct_insert_registry);
     runtime.set_service(ns::NamespaceRuntime::SQL_PROXY, services->sql_proxy);
-    runtime.set_service(ns::NamespaceRuntime::DBMS_SCHEDULER,
-        static_cast<query::ObISchedulerService *>(&services->dbms_scheduler));
     runtime.set_service(ns::NamespaceRuntime::VECTOR_TASK_SQL_PROXY,
         namespace_sql_proxy(1));
     runtime.set_service(ns::NamespaceRuntime::SCHEMA_LIFECYCLE,

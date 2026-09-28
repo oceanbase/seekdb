@@ -25,7 +25,6 @@ namespace oceanbase
 namespace rootserver
 {
 class ObPrimaryMajorFreezeService;
-class ObDBMSSchedService;
 class ObDDLScheduler;
 class ObDDLServiceLauncher;
 class ObSystemPackageLoadService;
@@ -36,14 +35,17 @@ class ObPluginVectorIndexService;
 }
 namespace observer
 {
-class ObDBMSSchedulerRoleHandler final : public logservice::ObILocalLogHandler
+class DBMSSchedulerLogHandler final : public logservice::ObIReplaySubHandler,
+                                      public logservice::ObILocalLogHandler,
+                                      public logservice::ObICheckpointSubHandler
 {
 public:
-  void bind(rootserver::ObDBMSSchedService &service) { service_ = &service; }
+  int replay(const void *buffer, const int64_t nbytes, const palf::LSN &lsn,
+             const share::SCN &scn) override;
   int activate() override;
   void deactivate() override;
-private:
-  rootserver::ObDBMSSchedService *service_ = nullptr;
+  share::SCN get_rec_scn() override;
+  int flush(share::SCN &scn) override;
 };
 
 class ObLSRuntimeAdapter final : public storage::ObILSRuntimeAdapter
@@ -53,7 +55,6 @@ public:
 
   int init(
       rootserver::ObPrimaryMajorFreezeService &primary_major_freeze_service,
-      rootserver::ObDBMSSchedService &dbms_sched_service,
       rootserver::ObDDLScheduler &ddl_scheduler,
       rootserver::ObDDLServiceLauncher &ddl_service_launcher,
       rootserver::ObSystemPackageLoadService &sys_package_service,
@@ -71,8 +72,7 @@ public:
 
 private:
   rootserver::ObPrimaryMajorFreezeService *primary_major_freeze_service_;
-  rootserver::ObDBMSSchedService *dbms_sched_service_;
-  ObDBMSSchedulerRoleHandler dbms_scheduler_role_handler_;
+  DBMSSchedulerLogHandler dbms_scheduler_log_handler_;
   rootserver::ObDDLScheduler *ddl_scheduler_;
   rootserver::ObDDLServiceLauncher *ddl_service_launcher_;
   rootserver::ObSystemPackageLoadService *sys_package_service_;
