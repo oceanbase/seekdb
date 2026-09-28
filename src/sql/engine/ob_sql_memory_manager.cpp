@@ -325,10 +325,11 @@ int ObSqlMemoryManager::server_module_new(ObSqlMemoryManager *&sql_mem_mgr)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////
-int ObSqlMemoryManager::server_module_init(ObSqlMemoryManager *&sql_mem_mgr)
+int ObSqlMemoryManager::server_module_init(ObSqlMemoryManager *&sql_mem_mgr,
+    ObMultiVersionSchemaService &config_schema_service)
 {
   int ret = OB_SUCCESS;
-
+  sql_mem_mgr->config_schema_service_ = &config_schema_service;
   if (OB_FAIL(sql_mem_mgr->allocator_.init(
             lib::ObMallocAllocator::get_instance(),
             OB_MALLOC_NORMAL_BLOCK_SIZE,
@@ -814,10 +815,10 @@ int ObSqlMemoryManager::get_max_work_area_size(
   ObObj value;
   int64_t pctg = 0;
   max_wa_memory_size = 0;
-  if (OB_ISNULL(GCTX.schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is null");
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+  if (OB_ISNULL(config_schema_service_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("work-area config schema service is null", K(ret));
+  } else if (OB_FAIL(config_schema_service_->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_system_variable(
     SYS_VAR_OB_SQL_WORK_AREA_PERCENTAGE, var_schema))) {
   } else if (OB_ISNULL(var_schema)) {

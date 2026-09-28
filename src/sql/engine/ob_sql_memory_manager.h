@@ -27,6 +27,7 @@
 #include "sql/dtl/ob_dtl_linked_buffer.h"
 
 namespace oceanbase {
+namespace share { namespace schema { class ObMultiVersionSchemaService; } }
 namespace sql {
 
 enum ObSqlWorkAreaType
@@ -633,7 +634,7 @@ private:
   };
 public:
   ObSqlMemoryManager() :
-    wa_intervals_(nullptr), min_bound_size_(0),
+    config_schema_service_(nullptr), wa_intervals_(nullptr), min_bound_size_(0),
     enable_auto_memory_mgr_(false), mutex_(common::ObLatchIds::SQL_MEMORY_MGR_MUTEX_LOCK), profile_lists_(nullptr),
     drift_size_(0), profile_cnt_(0), pre_profile_cnt_(0), global_bound_size_(0),
     mem_target_(0), max_workarea_size_(0), workarea_hold_size_(0), max_auto_workarea_size_(0),
@@ -644,7 +645,8 @@ public:
   ~ObSqlMemoryManager() {}
 public:
   static int server_module_new(ObSqlMemoryManager *&sql_mem_mgr);
-  static int server_module_init(ObSqlMemoryManager *&sql_mem_mgr);
+  static int server_module_init(ObSqlMemoryManager *&sql_mem_mgr,
+      share::schema::ObMultiVersionSchemaService &config_schema_service);
   static void server_module_destroy(ObSqlMemoryManager *&sql_mem_mgr);
 
   int get_work_area_size(ObIAllocator *allocator, ObSqlWorkAreaProfile &profile);
@@ -766,6 +768,8 @@ private:
   static const int64_t MIN_PROFILE_CHANEG_CNT = 8;
 
   ObSqlMemoryTracker sql_mem_callback_;
+  // Process-wide work-area budget reads the control Namespace's system setting.
+  share::schema::ObMultiVersionSchemaService *config_schema_service_;
   common::ObFIFOAllocator allocator_;
   ObSqlWorkAreaInterval *wa_intervals_;
   int64_t min_bound_size_;

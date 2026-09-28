@@ -1497,7 +1497,10 @@ int ObServer::obs_init_modules()
   }
   if (OB_SUCC(ret) && OB_FAIL(ObDfc::server_module_init(mods_dfc_))) { SERVER_LOG(WARN, "mods_dfc_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObPxPools::server_module_init(mods_px_pools_))) { SERVER_LOG(WARN, "mods_px_pools_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObSqlMemoryManager::server_module_init(mods_sql_memory_manager_))) { SERVER_LOG(WARN, "mods_sql_memory_manager_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(ObSqlMemoryManager::server_module_init(
+          mods_sql_memory_manager_, *root_schema_service))) {
+    SERVER_LOG(WARN, "mods_sql_memory_manager_ fail", KR(ret));
+  }
   if (OB_SUCC(ret) && OB_FAIL(ObDTLIntermResultManager::server_module_init(mods_dtl_interm_result_manager_))) { SERVER_LOG(WARN, "mods_dtl_interm_result_manager_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObSchemaRuntimeService::server_module_init(
       mods_schema_runtime_service_, *root_schema_service))) {
