@@ -30,6 +30,7 @@ int CreateExtensionExecutor::execute(ObExecContext &ctx, const CreateExtensionSt
   int publication_status = OB_NOT_INIT;
   std::string error;
   try {
+    std::fprintf(stderr, "CREATE EXT phase=begin\n");
     if (nullptr == session || nullptr == context || nullptr == context->schema_guard_ ||
         nullptr == sql || nullptr == ctx.get_root_command_service() ||
         nullptr == ctx.get_physical_plan_ctx() || nullptr == GCTX.plugin_runtime_) {
@@ -54,6 +55,7 @@ int CreateExtensionExecutor::execute(ObExecContext &ctx, const CreateExtensionSt
       std::unique_ptr<share::plugin::ICatalogDeclarations> declarations;
       ObResolverParams services;
       sql->bind_resolver_runtime_services(services);
+      std::fprintf(stderr, "CREATE EXT phase=services\n");
       services.session_info_ = session;
       services.sql_proxy_ = ctx.get_sql_proxy();
       if (OB_FAIL(ObPrivilegeCheck::check_privilege_new(*context, &statement, privileges))) {
@@ -68,16 +70,20 @@ int CreateExtensionExecutor::execute(ObExecContext &ctx, const CreateExtensionSt
         ret = OB_ERR_NO_PRIVILEGE;
         error = "Extension control requires SUPER; no installation callback has been invoked";
       } else {
+        std::fprintf(stderr, "CREATE EXT phase=package-loaded statements=%ld\n", script.statements().count());
         ret = GCTX.plugin_runtime_->prepare_catalog_install(script.source(), 1,
             statement.database_id(), session->get_priv_user_id(), declarations);
+        std::fprintf(stderr, "CREATE EXT phase=catalog-prepared ret=%d declarations=%p\n", ret, declarations.get());
         if (OB_SUCC(ret) && declarations && !declarations->sql().empty())
           ret = script.append_catalog_declarations(declarations->sql(), error);
+        std::fprintf(stderr, "CREATE EXT phase=declarations-appended ret=%d statements=%ld\n", ret, script.statements().count());
         // Own all argument bytes before releasing the old schema guard and
         // entering the internally serialized Root command. No ordinary DDL
         // executor or implicit commit is involved in the installation script.
         if (OB_SUCC(ret)) ret = resolver.install(script, services, *context, statement.database_id(),
                                                 extension_id, publication_status, error,
                                                 declarations ? declarations->program() : nullptr);
+        std::fprintf(stderr, "CREATE EXT phase=installed ret=%d extension=%lu publication=%d\n", ret, extension_id, publication_status);
       }
     }
   } catch (const std::bad_alloc &) {

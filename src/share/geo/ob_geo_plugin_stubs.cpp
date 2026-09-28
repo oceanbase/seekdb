@@ -71,24 +71,37 @@ double ObGeoWkbByteOrderUtil::read_double(const char *data, ObGeoWkbByteOrder bo
   return ObGeoWkbByteOrderUtil::read<double>(data, bo);
 }
 
-uint32_t ObSrsItem::get_srid() const
+int ObGeoTypeUtil::get_srid_from_wkb(const ObString &value, uint32_t &srid)
 {
-  return (srs_info_ == nullptr) ? 0 : srs_info_->get_srid();
+  // Core-GIS-off SQL values carry the plugin's geometry envelope v1:
+  // little-endian SRID, version byte 1, then WKB. Only inspect the routing
+  // header here; the leased plugin validates the geometry before index rows
+  // can be emitted. This is not the legacy SWKB version marker (0x41).
+  if (value.ptr() == nullptr || value.length() < 10) return OB_ERR_GIS_INVALID_DATA;
+  const auto *bytes = reinterpret_cast<const uint8_t *>(value.ptr());
+  if (bytes[4] != 1 || bytes[5] > 1) return OB_ERR_GIS_INVALID_DATA;
+  uint32_t result = 0;
+  for (unsigned i = 0; i < 4; ++i) result |= uint32_t(bytes[i]) << (8 * i);
+  srid = result;
+  return OB_SUCCESS;
 }
 
-int64_t ObSrsBoundsItem::to_string(char *buf, const int64_t buf_len) const
+int ObGeoTypeUtil::get_type_from_wkb(const ObString &value, ObGeoType &type)
 {
-  int64_t pos = 0;
-  J_KV(K(minX_), K(minY_), K(maxX_), K(maxY_));
-  return pos;
-}
-
-int ObSrsWktParser::parse_srs_wkt(common::ObIAllocator &, uint64_t,
-                                  const common::ObString &,
-                                  ObSpatialReferenceSystemBase *&srs)
-{
-  srs = nullptr;
-  return OB_NOT_SUPPORTED;
+  uint32_t srid = 0;
+  const int ret = get_srid_from_wkb(value, srid);
+  if (ret != OB_SUCCESS) return ret;
+  const auto *bytes = reinterpret_cast<const uint8_t *>(value.ptr());
+  uint32_t encoded = 0;
+  for (unsigned i = 0; i < 4; ++i) {
+    encoded |= uint32_t(bytes[6 + i]) << (8 * (bytes[5] == 1 ? i : 3 - i));
+  }
+  if (!((encoded >= 1 && encoded <= 7) || (encoded >= 1001 && encoded <= 1007))) {
+    return OB_ERR_GIS_INVALID_DATA;
+  }
+  // Routing only. Full payload validation remains in the leased GIS service.
+  type = static_cast<ObGeoType>(encoded);
+  return OB_SUCCESS;
 }
 
 int mvt_agg_result::init_layer()
@@ -150,12 +163,6 @@ ObGeoType ObGeoTypeUtil::get_geo_type_by_name(ObString &)
 const char *ObGeoTypeUtil::get_geo_name_by_type(ObGeoType)
 {
   return "geometry";
-}
-
-int ObGeoTypeUtil::get_pg_reserved_prj4text(ObIAllocator *, uint32_t, ObString &result)
-{
-  result.reset();
-  return OB_NOT_SUPPORTED;
 }
 
 int ObGeometryTypeCastUtil::get_tree(ObIAllocator &, const ObString &, ObGeometry *&geo_tree,

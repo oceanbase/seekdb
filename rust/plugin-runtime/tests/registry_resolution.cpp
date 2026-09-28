@@ -117,6 +117,43 @@ static std::shared_ptr<ObPluginGeneration> publish(ObPluginServiceRegistry &regi
 
 int main()
 {
+  {
+    ObPluginServiceRegistry registry;
+    auto owner = std::make_shared<ObPluginGeneration>("test.spatial", 1);
+    CHECK(owner->transition_to(ObPluginState::VALIDATED) == OB_SUCCESS);
+    CHECK(owner->transition_to(ObPluginState::LOADED) == OB_SUCCESS);
+    CHECK(owner->transition_to(ObPluginState::INITIALIZING) == OB_SUCCESS);
+    ObPluginRegistration registration;
+    CHECK(registry.begin_registration(owner, registration) == OB_SUCCESS);
+    auto valid = function("spatial.test", "", {"core.type.geometry", "core.type.geometry"});
+    valid.minimum_arity_ = valid.maximum_arity_ = 2;
+    valid.flags_ = SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY |
+        SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC | SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE |
+        SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING | SEEKDB_PLUGIN_EXTENSION_FLAG_SPATIAL_INTERSECTS;
+    for (uint64_t flag : {uint64_t(SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY),
+        uint64_t(SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE), uint64_t(SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC),
+        uint64_t(SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING)}) {
+      auto bad = valid; bad.flags_ &= ~flag;
+      CHECK(registration.add_extension(bad) == OB_INVALID_ARGUMENT);
+    }
+    auto bad = valid; bad.flags_ |= SEEKDB_PLUGIN_EXTENSION_FLAG_SPATIAL_COVERS;
+    CHECK(registration.add_extension(bad) == OB_INVALID_ARGUMENT);
+    bad = valid; bad.minimum_arity_ = 1;
+    CHECK(registration.add_extension(bad) == OB_INVALID_ARGUMENT);
+    bad = valid; bad.argument_type_ids_.clear();
+    CHECK(registration.add_extension(bad) == OB_INVALID_ARGUMENT);
+    bad = valid; bad.signature_flags_ = SEEKDB_PLUGIN_SIGNATURE_FLAG_VARIADIC;
+    CHECK(registration.add_extension(bad) == OB_INVALID_ARGUMENT);
+    bad = valid; bad.kind_ = SEEKDB_PLUGIN_EXTENSION_TYPE;
+    CHECK(registration.add_extension(bad) == OB_INVALID_ARGUMENT);
+    CHECK(registration.add_extension(valid) == OB_SUCCESS);
+    valid.object_id_ = "spatial.distance";
+    valid.flags_ ^= SEEKDB_PLUGIN_EXTENSION_FLAG_SPATIAL_INTERSECTS | SEEKDB_PLUGIN_EXTENSION_FLAG_SPATIAL_DWITHIN;
+    CHECK(registration.add_extension(valid) == OB_INVALID_ARGUMENT);
+    valid.minimum_arity_ = valid.maximum_arity_ = 3;
+    valid.argument_type_ids_.push_back("core.type.float64");
+    CHECK(registration.add_extension(valid) == OB_SUCCESS);
+  }
   ObPluginServiceRegistry registry;
   auto owner = publish(registry, 1);
   {

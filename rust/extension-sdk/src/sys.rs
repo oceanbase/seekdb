@@ -417,6 +417,13 @@ pub const PERSISTENT: u64 = 1 << 3;
 pub const REQUIRES_CATALOG: u64 = 1 << 5;
 /// Scalar implementation for LANGUAGE C bindings; not a globally visible SQL function.
 pub const IMPLEMENTATION_ONLY: u64 = 1 << 6;
+/// Conservative spatial index strategies; mutually exclusive, strict immutable
+/// implementation-only scalar functions. The original SQL predicate is retained.
+pub const SPATIAL_INTERSECTS: u64 = 1 << 7;
+pub const SPATIAL_COVERS: u64 = 1 << 8;
+pub const SPATIAL_WITHIN: u64 = 1 << 9;
+pub const SPATIAL_DWITHIN: u64 = 1 << 10;
+pub const SPATIAL_MASK: u64 = 15 << 7;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -893,6 +900,35 @@ pub type MutateRoutine =
 pub struct SqlApiV4 {
     pub v3: SqlApiV3,
     pub mutate_routine: Option<MutateRoutine>,
+    pub reserved: [u64; 4],
+}
+#[repr(C)]
+pub struct SrsDefinition {
+    pub struct_size: u32,
+    pub srid: u32,
+    pub definition: *const c_char,
+    pub definition_size: u64,
+    pub proj4text: *const c_char,
+    pub proj4text_size: u64,
+    pub min_x: f64,
+    pub min_y: f64,
+    pub max_x: f64,
+    pub max_y: f64,
+    pub reserved: [u64; 4],
+}
+pub type ConsumeSrs = unsafe extern "C" fn(*mut c_void, *const SrsDefinition, u32) -> Status;
+pub type LookupSrs = unsafe extern "C" fn(
+    *mut Handle,
+    *const u32,
+    u32,
+    Option<ConsumeSrs>,
+    *mut c_void,
+    *mut SqlResult,
+) -> Status;
+#[repr(C)]
+pub struct SqlApiV5 {
+    pub v4: SqlApiV4,
+    pub lookup_srs: Option<LookupSrs>,
     pub reserved: [u64; 4],
 }
 #[repr(C)]

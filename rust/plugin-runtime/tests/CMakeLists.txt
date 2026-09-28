@@ -102,10 +102,19 @@ add_test(NAME plugin_native_loader COMMAND plugin_native_loader
 set_tests_properties(plugin_native_loader PROPERTIES TIMEOUT 30)
 
 # Compile the unmodified C/C++ GIS implementation, not a Rust replacement.
+include("${SEEKDB_SOURCE_DIR}/plugins/gis/BoostGeometry.cmake")
+include("${SEEKDB_SOURCE_DIR}/plugins/gis/S2.cmake")
 add_library(gis_registration MODULE
   "${SEEKDB_SOURCE_DIR}/plugins/gis/seekdb_gis_plugin.c"
-  "${SEEKDB_SOURCE_DIR}/plugins/gis/geometry_engine.cpp")
+  "${SEEKDB_SOURCE_DIR}/plugins/gis/geometry_engine.cpp"
+  "${SEEKDB_SOURCE_DIR}/plugins/gis/number_format.cpp"
+  "${SEEKDB_SOURCE_DIR}/plugins/gis/projection.cpp"
+  "${SEEKDB_SOURCE_DIR}/plugins/gis/spatial_index.cpp"
+  "${SEEKDB_SOURCE_DIR}/plugins/gis/srs_parser.cpp"
+  "${SEEKDB_SOURCE_DIR}/plugins/gis/srs_metadata.cpp"
+  "${SEEKDB_SOURCE_DIR}/plugins/gis/srs_service.cpp")
 target_compile_features(gis_registration PRIVATE cxx_std_17)
+target_link_libraries(gis_registration PRIVATE gis_boost_geometry gis_s2)
 target_include_directories(gis_registration PRIVATE "${SEEKDB_SOURCE_DIR}/include")
 set_target_properties(gis_registration PROPERTIES
   C_VISIBILITY_PRESET hidden CXX_VISIBILITY_PRESET hidden)
@@ -113,6 +122,46 @@ add_dependencies(plugin_loader_registration gis_registration)
 add_test(NAME plugin_loader_registration_gis COMMAND plugin_loader_registration
   "$<TARGET_FILE_DIR:gis_registration>" "$<TARGET_FILE_NAME:gis_registration>" gis)
 set_tests_properties(plugin_loader_registration_gis PROPERTIES TIMEOUT 30)
+
+add_executable(plugin_gis_topology gis_topology_probe.cpp "${SEEKDB_SOURCE_DIR}/plugins/gis/projection.cpp"
+  "${SEEKDB_SOURCE_DIR}/plugins/gis/number_format.cpp"
+  "${SEEKDB_SOURCE_DIR}/plugins/gis/srs_parser.cpp" "${SEEKDB_SOURCE_DIR}/plugins/gis/srs_metadata.cpp")
+target_compile_features(plugin_gis_topology PRIVATE cxx_std_17)
+target_include_directories(plugin_gis_topology PRIVATE "${SEEKDB_SOURCE_DIR}/include")
+target_link_libraries(plugin_gis_topology PRIVATE gis_boost_geometry gis_s2)
+add_test(NAME plugin_gis_topology COMMAND plugin_gis_topology)
+set_tests_properties(plugin_gis_topology PROPERTIES TIMEOUT 30)
+
+add_executable(plugin_gis_ewkt_number gis_ewkt_number_probe.cpp)
+target_compile_features(plugin_gis_ewkt_number PRIVATE cxx_std_17)
+target_include_directories(plugin_gis_ewkt_number PRIVATE "${SEEKDB_SOURCE_DIR}/include")
+target_link_libraries(plugin_gis_ewkt_number PRIVATE gis_boost_geometry)
+add_test(NAME plugin_gis_ewkt_number COMMAND plugin_gis_ewkt_number)
+set_tests_properties(plugin_gis_ewkt_number PROPERTIES TIMEOUT 30)
+
+add_executable(plugin_gis_projection gis_projection_probe.cpp "${SEEKDB_SOURCE_DIR}/plugins/gis/projection.cpp")
+target_compile_features(plugin_gis_projection PRIVATE cxx_std_17)
+target_include_directories(plugin_gis_projection PRIVATE "${SEEKDB_SOURCE_DIR}/include")
+target_link_libraries(plugin_gis_projection PRIVATE gis_boost_geometry)
+add_test(NAME plugin_gis_projection COMMAND plugin_gis_projection)
+set_tests_properties(plugin_gis_projection PROPERTIES TIMEOUT 30)
+
+add_executable(plugin_gis_s2_cover gis_s2_cover_probe.cpp)
+target_compile_features(plugin_gis_s2_cover PRIVATE cxx_std_17)
+target_include_directories(plugin_gis_s2_cover PRIVATE "${SEEKDB_SOURCE_DIR}/include")
+target_link_libraries(plugin_gis_s2_cover PRIVATE gis_s2)
+add_test(NAME plugin_gis_s2_cover COMMAND plugin_gis_s2_cover)
+set_tests_properties(plugin_gis_s2_cover PROPERTIES TIMEOUT 30)
+
+add_executable(plugin_gis_srs_parser gis_srs_parser_probe.cpp
+  "${SEEKDB_SOURCE_DIR}/plugins/gis/srs_parser.cpp"
+  "${SEEKDB_SOURCE_DIR}/plugins/gis/srs_metadata.cpp")
+target_compile_features(plugin_gis_srs_parser PRIVATE cxx_std_17)
+target_include_directories(plugin_gis_srs_parser PRIVATE "${SEEKDB_SOURCE_DIR}/include")
+target_link_libraries(plugin_gis_srs_parser PRIVATE gis_boost_geometry)
+add_test(NAME plugin_gis_srs_parser COMMAND plugin_gis_srs_parser
+  "${SEEKDB_SOURCE_DIR}/tools/obtest/sql/default_srs_data_mysql.sql")
+set_tests_properties(plugin_gis_srs_parser PROPERTIES TIMEOUT 60)
 
 add_executable(plugin_type_identity type_identity.cpp)
 target_compile_features(plugin_type_identity PRIVATE cxx_std_17)
@@ -235,6 +284,9 @@ set_tests_properties(plugin_native_extension_runner PROPERTIES TIMEOUT 30 LABELS
 add_test(NAME plugin_gis_extension_runner
   COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/test_gis_extension_server.py")
 set_tests_properties(plugin_gis_extension_runner PROPERTIES TIMEOUT 30 LABELS "plugin_test_harness")
+add_test(NAME plugin_private_library_boundary
+  COMMAND "${Python3_EXECUTABLE}" "${SEEKDB_SOURCE_DIR}/cmake/test_plugin_private_libraries.py")
+set_tests_properties(plugin_private_library_boundary PROPERTIES TIMEOUT 120 LABELS "plugin_build_boundary")
 add_test(NAME plugin_gis_declaration_inventory
   COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/test_gis_declarations.py")
 set_tests_properties(plugin_gis_declaration_inventory PROPERTIES TIMEOUT 30 LABELS "plugin_test_harness")

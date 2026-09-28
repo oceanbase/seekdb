@@ -31,8 +31,37 @@ enum seekdb_gis_geometry_operation {
   SEEKDB_GIS_OP_DIFFERENCE,
   SEEKDB_GIS_OP_SYMMETRIC_DIFFERENCE,
   SEEKDB_GIS_OP_ASMVTGEOM,
-  SEEKDB_GIS_OP_MAKE_VALID
+  SEEKDB_GIS_OP_MAKE_VALID,
+  SEEKDB_GIS_OP_INDEX_BUFFER
 };
+
+seekdb_plugin_status_t seekdb_gis_srs_describe(
+    seekdb_plugin_instance_handle_t *instance,
+    const seekdb_plugin_execution_context_v1_t *context,
+    const seekdb_plugin_execution_value_v1_t *arguments, uint32_t argument_count);
+
+seekdb_plugin_status_t seekdb_gis_srs_transform(
+    seekdb_plugin_instance_handle_t *instance,
+    const seekdb_plugin_execution_context_v1_t *context,
+    const seekdb_plugin_execution_value_v1_t *arguments, uint32_t argument_count);
+
+seekdb_plugin_status_t seekdb_gis_spatial_cover(
+    seekdb_plugin_instance_handle_t *instance,
+    const seekdb_plugin_execution_context_v1_t *context,
+    const seekdb_plugin_execution_value_v1_t *arguments,
+    uint32_t argument_count);
+
+seekdb_plugin_status_t seekdb_gis_spatial_filter(
+    seekdb_plugin_instance_handle_t *instance,
+    const seekdb_plugin_execution_context_v1_t *context,
+    const seekdb_plugin_execution_value_v1_t *arguments,
+    uint32_t argument_count);
+
+seekdb_plugin_status_t seekdb_gis_spatial_cells(
+    seekdb_plugin_instance_handle_t *instance,
+    const seekdb_plugin_execution_context_v1_t *context,
+    const seekdb_plugin_execution_value_v1_t *arguments,
+    uint32_t argument_count);
 
 enum seekdb_gis_relation_operation {
   SEEKDB_GIS_REL_EQUALS = 1,
@@ -49,7 +78,16 @@ enum seekdb_gis_relation_operation {
 enum seekdb_gis_text_operation {
   SEEKDB_GIS_TEXT_AS_TEXT = 1,
   SEEKDB_GIS_TEXT_AS_GEOJSON,
-  SEEKDB_GIS_TEXT_FROM_TEXT
+  SEEKDB_GIS_TEXT_FROM_TEXT,
+  SEEKDB_GIS_TEXT_CATALOG_FROM_TEXT,
+  SEEKDB_GIS_TEXT_CATALOG_FROM_WKB,
+  SEEKDB_GIS_TEXT_CATALOG_AS_TEXT,
+  SEEKDB_GIS_TEXT_CATALOG_AS_WKB,
+  SEEKDB_GIS_TEXT_FROM_EWKT,
+  SEEKDB_GIS_TEXT_FROM_EWKB,
+  SEEKDB_GIS_TEXT_GEOGRAPHY,
+  SEEKDB_GIS_TEXT_AS_EWKB,
+  SEEKDB_GIS_TEXT_AS_EWKT
 };
 
 enum seekdb_gis_metric_operation {
@@ -58,6 +96,12 @@ enum seekdb_gis_metric_operation {
   SEEKDB_GIS_METRIC_DISTANCE,
   SEEKDB_GIS_METRIC_DISTANCE_SPHERE
 };
+
+seekdb_plugin_status_t seekdb_gis_buffer_strategy(
+    seekdb_plugin_instance_handle_t *instance,
+    const seekdb_plugin_execution_context_v1_t *context,
+    const seekdb_plugin_execution_value_v1_t *arguments,
+    uint32_t argument_count);
 
 seekdb_plugin_status_t seekdb_gis_geometry_operation(
     uint32_t operation,
@@ -112,6 +156,12 @@ seekdb_plugin_status_t seekdb_gis_geohash_operation(
     uint32_t argument_count);
 
 seekdb_plugin_status_t seekdb_gis_spatial_cellid_operation(
+    seekdb_plugin_instance_handle_t *instance,
+    const seekdb_plugin_execution_context_v1_t *context,
+    const seekdb_plugin_execution_value_v1_t *arguments,
+    uint32_t argument_count);
+
+seekdb_plugin_status_t seekdb_gis_best_srid_operation(
     seekdb_plugin_instance_handle_t *instance,
     const seekdb_plugin_execution_context_v1_t *context,
     const seekdb_plugin_execution_value_v1_t *arguments,

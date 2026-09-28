@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_REWRITE
 #include "sql/rewrite/ob_expr_range_converter.h"
+#include "seekdb/plugin/extension_spi.h"
 #include "sql/rewrite/ob_range_graph_generator.h"
 #include "common/timezone/ob_time_convert.h"
 #include "lib/container/ob_array_serialization.h"
@@ -1977,6 +1978,17 @@ int ObExprRangeConverter::convert_geo_expr(const ObRawExpr *geo_expr,
       // do nothing
     } else {
       op_type = ObPreRangeGraph::get_geo_relation(expr->get_expr_type());
+      if (expr->is_udf_expr()) {
+        switch (static_cast<const ObUDFRawExpr *>(expr)->get_native_spatial_flags()) {
+          case SEEKDB_PLUGIN_EXTENSION_FLAG_SPATIAL_INTERSECTS: op_type = ObDomainOpType::T_GEO_INTERSECTS; break;
+          case SEEKDB_PLUGIN_EXTENSION_FLAG_SPATIAL_COVERS: op_type = ObDomainOpType::T_GEO_COVERS; break;
+          case SEEKDB_PLUGIN_EXTENSION_FLAG_SPATIAL_WITHIN: op_type = ObDomainOpType::T_GEO_COVEREDBY; break;
+          case SEEKDB_PLUGIN_EXTENSION_FLAG_SPATIAL_DWITHIN: op_type = ObDomainOpType::T_GEO_DWITHIN; break;
+          default: op_type = ObDomainOpType::T_INVALID; break;
+        }
+        // Index support supplies candidates, never exact native-function truth.
+        ctx_.cur_is_precise_ = false;
+      }
       if (OB_UNLIKELY(r_expr->has_flag(CNT_COLUMN))) {
         column_item = ObRawExprUtils::get_column_ref_expr_recursively(r_expr);
         const_item = l_expr;
@@ -2009,6 +2021,22 @@ int ObExprRangeConverter::convert_geo_expr(const ObRawExpr *geo_expr,
     }
   }
   return ret;
+}
+
+// Native immutable geometry constructors are range inputs, not PL functions
+// to execute in the generic constant-folding path. Keep them as temp expressions
+// so native codegen/execution still checks the exact binding and invoker ACL.
+static bool native_spatial_range_constant(const ObRawExpr *expr, unsigned depth = 0)
+{
+  if (expr == nullptr || depth > 128 || !expr->is_const_expr()) return false;
+  if (expr->is_udf_expr()) {
+    const uint64_t required = SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE | SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC;
+    if ((static_cast<const ObUDFRawExpr *>(expr)->get_native_function_flags() & required) != required) return false;
+  }
+  for (int64_t i = 0; i < expr->get_param_count(); ++i) {
+    if (!native_spatial_range_constant(expr->get_param_expr(i), depth + 1)) return false;
+  }
+  return true;
 }
 
 int ObExprRangeConverter::get_geo_range_node(const ObColumnRefRawExpr *column_expr,
@@ -2052,6 +2080,15 @@ int ObExprRangeConverter::get_geo_range_node(const ObColumnRefRawExpr *column_ex
       bool can_extract_range = false;
       if (!is_range_key(column_id, key_idx)) {
         // do nothing
+      } else if (wkb_expr->has_flag(CNT_PL_UDF) && native_spatial_range_constant(wkb_expr)) {
+        is_valid = true;
+        if (OB_FAIL(get_final_expr_idx(wkb_expr, nullptr, wkb_val))) {
+        } else if (geo_type == ObDomainOpType::T_GEO_DWITHIN || geo_type == ObDomainOpType::T_GEO_RELATE) {
+          if (OB_ISNULL(distance_expr)) ret = OB_ERR_UNEXPECTED;
+          else if (OB_FAIL(check_calculable_expr_valid(distance_expr, is_valid))) {
+          } else if (is_valid && OB_FAIL(get_final_expr_idx(distance_expr, nullptr, distance_val))) {
+          } else can_extract_range = is_valid;
+        } else can_extract_range = true;
       } else if (OB_FAIL(check_calculable_expr_valid(wkb_expr, is_valid))) {
       } else if (!is_valid) {
         // do nothing

@@ -32,6 +32,7 @@
 #include "sql/resolver/ddl/extension_routine_resolver.h"
 #include "share/schema/routine_catalog_transaction.h"
 #include "sql/session/ob_inner_sql_connection.h"
+#include "share/geo/ob_srs_provider.h"
 
 namespace oceanbase { namespace sql {
 using namespace common;
@@ -310,10 +311,84 @@ PluginSqlContext::PluginSqlContext(ObExecContext &context)
 
 const seekdb_plugin_sql_api_v1_t *PluginSqlContext::sql_api()
 {
-  static const seekdb_plugin_sql_api_v4_t API = {{{{
-      sizeof(API), SEEKDB_PLUGIN_SQL_SPI_MAJOR, SEEKDB_PLUGIN_SQL_CATALOG_MUTATION_MINOR, 0, execute, {0}},
-      poll_query, {0}}, lookup_routine, {0}}, mutate_routine, {0}};
-  return &API.v3.v2.v1;
+  static const seekdb_plugin_sql_api_v5_t API = {{{{{
+      sizeof(API), SEEKDB_PLUGIN_SQL_SPI_MAJOR, SEEKDB_PLUGIN_SQL_SRS_LOOKUP_MINOR, 0, execute, {0}},
+      poll_query, {0}}, lookup_routine, {0}}, mutate_routine, {0}}, lookup_srs, {0}};
+  return &API.v4.v3.v2.v1;
+}
+
+seekdb_plugin_status_t SEEKDB_PLUGIN_CALL PluginSqlContext::lookup_srs(
+    seekdb_plugin_sql_context_handle_t *opaque, const uint32_t *srids, uint32_t count,
+    seekdb_plugin_srs_consume_v1_fn consume, void *consumer, seekdb_plugin_sql_result_v1_t *output)
+{
+  if (opaque == nullptr) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  auto &self = *reinterpret_cast<PluginSqlContext *>(opaque);
+  if (self.thread_ != std::this_thread::get_id()) return SEEKDB_PLUGIN_STATUS_FAILED_PRECONDITION;
+  if (output == nullptr || output->struct_size < sizeof(*output)) {
+    if (self.error_ == OB_SUCCESS) self.error_ = OB_INVALID_ARGUMENT;
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  *output = {}; output->struct_size = sizeof(*output);
+  if (self.executing_ || self.error_ != OB_SUCCESS) {
+    if (self.error_ == OB_SUCCESS) self.error_ = OB_STATE_NOT_MATCH;
+  } else if (srids == nullptr || count == 0 || count > SEEKDB_PLUGIN_SQL_MAX_SRS_LOOKUP || consume == nullptr) {
+    self.error_ = OB_INVALID_ARGUMENT;
+  } else {
+    self.executing_ = true;
+    int ret = OB_SUCCESS;
+    try {
+      ret = self.context_.check_status();
+      auto *session = self.context_.get_my_session();
+      auto *plan = self.context_.get_physical_plan_ctx();
+      auto *provider = self.context_.get_srs_provider();
+      if (ret == OB_SUCCESS && (session == nullptr || session->get_cur_exec_ctx() != &self.context_ || plan == nullptr))
+        ret = OB_STATE_NOT_MATCH;
+      if (ret == OB_SUCCESS && plan->is_exec_timeout()) ret = OB_TIMEOUT;
+      if (ret == OB_SUCCESS && provider == nullptr) ret = OB_NOT_INIT;
+      ObSrsCacheGuard guard;
+      // Validate all IDs before invoking a provider (including lazy refresh).
+      uint32_t ids[SEEKDB_PLUGIN_SQL_MAX_SRS_LOOKUP]{};
+      for (uint32_t i = 0; ret == OB_SUCCESS && i < count; ++i) {
+        std::memcpy(&ids[i], reinterpret_cast<const uint8_t *>(srids) + i * sizeof(uint32_t), sizeof(uint32_t));
+        if (ids[i] == 0 || ids[i] == UINT32_MAX) ret = OB_INVALID_ARGUMENT;
+      }
+      if (ret == OB_SUCCESS && self.error_ == OB_SUCCESS) ret = provider->get_tenant_srs_guard(guard);
+      seekdb_plugin_srs_definition_v1_t records[SEEKDB_PLUGIN_SQL_MAX_SRS_LOOKUP]{};
+      for (uint32_t i = 0; ret == OB_SUCCESS && self.error_ == OB_SUCCESS && i < count; ++i) {
+        const SrsDefinition *raw = nullptr;
+        ret = guard.get_srs_definition(ids[i], raw);
+        if (ret != OB_SUCCESS) break;
+        if (raw == nullptr || raw->srid != ids[i] || raw->definition.length() <= 0 ||
+            raw->definition.length() > SEEKDB_PLUGIN_SRS_MAX_WKT_BYTES || raw->definition.ptr() == nullptr ||
+            raw->proj4text.length() < 0 || raw->proj4text.length() > SEEKDB_PLUGIN_SRS_MAX_PROJ4_BYTES ||
+            (raw->proj4text.length() != 0 && raw->proj4text.ptr() == nullptr) ||
+            std::memchr(raw->definition.ptr(), '\0', raw->definition.length()) ||
+            (raw->proj4text.length() && std::memchr(raw->proj4text.ptr(), '\0', raw->proj4text.length()))) {
+          ret = OB_ERR_UNEXPECTED;
+          break;
+        }
+        auto &r = records[i]; r.struct_size = sizeof(r); r.srid = raw->srid;
+        r.definition = raw->definition.ptr(); r.definition_size = raw->definition.length();
+        r.proj4text = raw->proj4text.ptr(); r.proj4text_size = raw->proj4text.length();
+        r.min_x = raw->min_x; r.min_y = raw->min_y; r.max_x = raw->max_x; r.max_y = raw->max_y;
+      }
+      if (ret == OB_SUCCESS && self.error_ == OB_SUCCESS) ret = self.context_.check_status();
+      if (ret == OB_SUCCESS && self.error_ == OB_SUCCESS && plan->is_exec_timeout()) ret = OB_TIMEOUT;
+      if (ret == OB_SUCCESS && self.error_ == OB_SUCCESS && consume(consumer, records, count) != SEEKDB_PLUGIN_STATUS_OK)
+        ret = OB_CANCELED;
+      if (ret == OB_SUCCESS && self.error_ == OB_SUCCESS) ret = self.context_.check_status();
+      if (ret == OB_SUCCESS && self.error_ == OB_SUCCESS && plan->is_exec_timeout()) ret = OB_TIMEOUT;
+    } catch (const std::bad_alloc &) { ret = OB_ALLOCATE_MEMORY_FAILED;
+    } catch (...) { ret = OB_ERR_UNEXPECTED; }
+    self.executing_ = false;
+    if (self.error_ == OB_SUCCESS) self.error_ = ret;
+  }
+  output->database_error = self.error_;
+  if (self.error_ == OB_SUCCESS) { output->returned_rows = count; return SEEKDB_PLUGIN_STATUS_OK; }
+  if (self.error_ == OB_ALLOCATE_MEMORY_FAILED) return SEEKDB_PLUGIN_STATUS_NO_MEMORY;
+  if (self.error_ == OB_INVALID_ARGUMENT) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  if (self.error_ == OB_TIMEOUT) return SEEKDB_PLUGIN_STATUS_TIMEOUT;
+  return SEEKDB_PLUGIN_STATUS_FAILED_PRECONDITION;
 }
 
 seekdb_plugin_status_t SEEKDB_PLUGIN_CALL PluginSqlContext::mutate_routine(

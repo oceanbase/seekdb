@@ -1563,7 +1563,7 @@ inline void query_control(ObPluginLoader &loader)
     seekdb_plugin_execution_context_v2_t context{};
     context.v1.struct_size = sizeof(context); context.v1.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&sink);
     context.v1.emit_result = Sink::emit; control.attach(context);
-    CHECK(context.sql_api && context.sql_api->struct_size == sizeof(seekdb_plugin_sql_api_v4_t));
+    CHECK(context.sql_api && context.sql_api->struct_size >= sizeof(seekdb_plugin_sql_api_v4_t));
     const auto &api = *reinterpret_cast<const seekdb_plugin_sql_api_v2_t *>(context.sql_api);
     seekdb_plugin_query_status_v1_t output{}; output.struct_size = sizeof(output);
     const int expected = scenario == 2 || scenario == 4 ? OB_TIMEOUT : scenario == 3 ? OB_ERR_QUERY_INTERRUPTED : OB_SUCCESS;

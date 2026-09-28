@@ -19,6 +19,7 @@
 #include "ob_raw_expr.h"
 #include "sql/resolver/expr/plugin_expr_type.h"
 #include "seekdb/plugin/seekdb_plugin_abi.h"
+#include "seekdb/plugin/extension_spi.h"
 #include "query/resolver/ob_raw_expr_traits.h"
 #include "sql/resolver/expr/ob_raw_expr_info_extractor.h"
 #include "sql/resolver/expr/ob_raw_expr_deduce_type.h"
@@ -584,7 +585,8 @@ const ObRawExpr *ObRawExpr::get_same_identify(const ObRawExpr *e,
 bool ObRawExpr::is_spatial_expr() const
 {
   const ObRawExpr *expr = ObRawExprUtils::skip_inner_added_expr(this);
-  return IS_SPATIAL_OP(expr->get_expr_type());
+  return IS_SPATIAL_OP(expr->get_expr_type()) ||
+      (expr->is_udf_expr() && static_cast<const ObUDFRawExpr *>(expr)->get_native_spatial_flags() != 0);
 }
 
 
@@ -4563,6 +4565,11 @@ int ObPlQueryRefRawExpr::inner_deep_copy(ObIRawExprCopier &copier)
   return ret;
 }
 
+uint64_t ObUDFRawExpr::get_native_spatial_flags() const
+{
+  return get_expr_type() == T_FUN_UDF ? get_native_function_flags() & SEEKDB_PLUGIN_EXTENSION_SPATIAL_MASK : 0;
+}
+
 int ObUDFRawExpr::assign(const ObRawExpr &other)
 {
   int ret = OB_SUCCESS;
@@ -4665,6 +4672,7 @@ bool ObUDFRawExpr::inner_same_as(const ObRawExpr &expr,
   } else {
     const ObUDFRawExpr *other = static_cast<const ObUDFRawExpr *>(&expr);
     bool_ret = udf_id_ == other->get_udf_id() &&
+                get_native_function_flags() == other->get_native_function_flags() &&
                 pkg_id_ == other->get_pkg_id() &&
                 type_id_ == other->get_type_id() &&
                 pls_type_ == other->get_pls_type() &&
@@ -4700,6 +4708,7 @@ void ObUDFRawExpr::inner_calc_hash()
 {
   ObSysFunRawExpr::inner_calc_hash();
   expr_hash_ = common::do_hash(udf_id_, expr_hash_);
+  expr_hash_ = common::do_hash(get_native_function_flags(), expr_hash_);
   expr_hash_ = common::do_hash(pkg_id_, expr_hash_);
   expr_hash_ = common::do_hash(type_id_, expr_hash_);
   expr_hash_ = common::do_hash(pls_type_, expr_hash_);

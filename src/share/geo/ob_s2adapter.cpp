@@ -20,140 +20,50 @@
 #include "ob_s2adapter.h"
 #include "share/geo/ob_geo_func_envelope.h"
 #include "share/geo/ob_geo_3d.h"
+#include "seekdb/geo/s2_mbr.hpp"
+#include "seekdb/geo/s2_covering.hpp"
 
 namespace oceanbase {
 namespace common {
 
 int ObSpatialMBR::filter(const ObSpatialMBR &other, ObDomainOpType type, bool &pass_through) const
 {
-  INIT_SUCC(ret);
-  if (is_geog_) {
-    S2LatLngRect this_rect;
-    S2LatLngRect other_rect;
-    if (OB_FAIL(generate_latlng_rect(this_rect))) {
-    } else if (OB_FAIL(other.generate_latlng_rect(other_rect))) {
-    } else {
-      if (is_point_ && other.is_point_ && this_rect.ApproxEquals(other_rect)) {
-        pass_through = false;
-      } else {
-       switch (type) {
-          case ObDomainOpType::T_GEO_COVERS: {
-            pass_through = !other_rect.Contains(this_rect);
-            break;
-          }
-
-          case ObDomainOpType::T_GEO_DWITHIN:
-          case ObDomainOpType::T_GEO_INTERSECTS: {
-            pass_through = !this_rect.Intersects(other_rect);
-            break;
-          }
-
-          case ObDomainOpType::T_GEO_COVEREDBY: {
-            pass_through = !this_rect.Contains(other_rect);
-            break;
-          }
-
-          case ObDomainOpType::T_GEO_DFULLYWITHIN: {
-            ret = OB_NOT_SUPPORTED;
-            break;
-          }
-
-          default: {
-            ret = OB_INVALID_ARGUMENT;
-            break;
-          }
-        }
-      }
-    }
-  } else {
-    ObCartesianBox this_rect;
-    ObCartesianBox other_rect;
-    if (OB_FAIL(generate_box(this_rect))) {
-    } else if (OB_FAIL(other.generate_box(other_rect))) {
-    } else {
-      switch (type) {
-        case ObDomainOpType::T_GEO_COVERS: {
-          pass_through = !other_rect.Contains(this_rect);
-          break;
-        }
-
-        case ObDomainOpType::T_GEO_DWITHIN:
-        case ObDomainOpType::T_GEO_INTERSECTS: {
-          pass_through = !this_rect.Intersects(other_rect);
-          break;
-        }
-
-        case ObDomainOpType::T_GEO_COVEREDBY: {
-          pass_through = !this_rect.Contains(other_rect);
-          break;
-        }
-
-        case ObDomainOpType::T_GEO_DFULLYWITHIN: {
-          ret = OB_NOT_SUPPORTED;
-          break;
-        }
-
-        default: {
-          ret = OB_INVALID_ARGUMENT;
-          break;
-        }
-      }
-    }
+  namespace mbr = seekdb::geo::index_mbr;
+  pass_through = true;
+  if (is_geog_ != other.is_geog_) return OB_INVALID_ARGUMENT;
+  mbr::Relation relation;
+  switch (type) {
+    case ObDomainOpType::T_GEO_COVERS: relation = mbr::Relation::covers; break;
+    case ObDomainOpType::T_GEO_DWITHIN:
+    case ObDomainOpType::T_GEO_INTERSECTS: relation = mbr::Relation::intersects; break;
+    case ObDomainOpType::T_GEO_COVEREDBY: relation = mbr::Relation::covered_by; break;
+    case ObDomainOpType::T_GEO_DFULLYWITHIN: return OB_NOT_SUPPORTED;
+    default: return OB_INVALID_ARGUMENT;
   }
-
-  return ret;
+  return mbr::filter({x_min_, x_max_, y_min_, y_max_},
+                    {other.x_min_, other.x_max_, other.y_min_, other.y_max_},
+                    is_geog_, is_point_, other.is_point_, relation, pass_through)
+      ? OB_SUCCESS : OB_INVALID_ARGUMENT;
 }
 
 int ObSpatialMBR::to_char(char *buf, int64_t &buf_len) const
 {
-  INIT_SUCC(ret);
-  int32_t pos = 0;
-  if (is_point_) {
-    MEMCPY(buf + pos, reinterpret_cast<const char *>(&x_min_), sizeof(x_min_));
-    pos += sizeof(double);
-    MEMCPY(buf + pos, reinterpret_cast<const char *>(&y_min_), sizeof(y_min_));
-    pos += sizeof(double);
-  } else {
-    MEMCPY(buf + pos, reinterpret_cast<const char *>(&y_min_), sizeof(y_min_));
-    pos += sizeof(double);
-    MEMCPY(buf + pos, reinterpret_cast<const char *>(&y_max_), sizeof(y_max_));
-    pos += sizeof(double);
-    MEMCPY(buf + pos, reinterpret_cast<const char *>(&x_min_), sizeof(x_min_));
-    pos += sizeof(double);
-    MEMCPY(buf + pos, reinterpret_cast<const char *>(&x_max_), sizeof(x_max_));
-    pos += sizeof(double);
-  }
-  buf_len = pos;
-  return ret;
+  size_t size = 0;
+  const bool ok = seekdb::geo::index_mbr::encode({x_min_, x_max_, y_min_, y_max_},
+      is_point_, buf, OB_DEFAULT_MBR_SIZE, size);
+  buf_len = size;
+  return ok ? OB_SUCCESS : OB_INVALID_ARGUMENT;
 }
 
-int ObSpatialMBR::from_string(ObString &mbr_str,
-                              ObDomainOpType type,
-                              ObSpatialMBR &spa_mbr,
-                              bool is_point)
+int ObSpatialMBR::from_string(ObString &mbr_str, ObDomainOpType type,
+                              ObSpatialMBR &spa_mbr, bool is_point)
 {
-  INIT_SUCC(ret);
-
-  const char *data = mbr_str.ptr();
-  if (mbr_str.empty()) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (is_point) {
-    double x_min = *reinterpret_cast<const double*>(data); // lng_lo
-    data += sizeof(double);
-    double y_min = *reinterpret_cast<const double*>(data); // lat_lo
-    new (&spa_mbr) ObSpatialMBR(x_min, x_min, y_min, y_min, type);
-  } else {
-    double y_min = *reinterpret_cast<const double*>(data); // lat_lo
-    data += sizeof(double);
-    double y_max = *reinterpret_cast<const double*>(data); // lat_hi
-    data += sizeof(double);
-    double x_min = *reinterpret_cast<const double*>(data); // lng_lo
-    data += sizeof(double);
-    double x_max = *reinterpret_cast<const double*>(data); // lng_hi
-    new (&spa_mbr) ObSpatialMBR(x_min, x_max, y_min, y_max, type);
-  }
-
-  return ret;
+  seekdb::geo::index_mbr::Box box;
+  if (mbr_str.length() < 0 || !seekdb::geo::index_mbr::decode(
+      mbr_str.ptr(), mbr_str.length(), is_point, box)) return OB_INVALID_ARGUMENT;
+  spa_mbr = ObSpatialMBR(box.xmin, box.xmax, box.ymin, box.ymax, type);
+  spa_mbr.is_point_ = is_point;
+  return OB_SUCCESS;
 }
 
 int ObSpatialMBR::generate_latlng_rect(S2LatLngRect &rect) const
@@ -221,11 +131,13 @@ OB_DEF_DESERIALIZE(ObSpatialMBR)
   return ret;
 }
 
-void ObS2Adapter::get_child_of_cellid(uint64_t id, uint64_t &child_start, uint64_t &child_end)
+int64_t ObS2Adapter::get_child_of_cellid(uint64_t id, uint64_t &child_start, uint64_t &child_end)
 {
-  S2CellId parent(id);
-  child_start = parent.range_min().id();
-  child_end = parent.range_max().id();
+  seekdb::geo::s2_index::CellInfo info;
+  if (!seekdb::geo::s2_index::cell_info(id, info)) return OB_INVALID_ARGUMENT;
+  child_start = info.range_min;
+  child_end = info.range_max;
+  return OB_SUCCESS;
 }
 
 int64_t ObS2Adapter::get_cellids(ObS2Cellids &cells, bool is_query)
@@ -255,12 +167,11 @@ int64_t ObS2Adapter::get_inner_cover_cellids(ObS2Cellids &cells)
 int64_t ObS2Adapter::get_ancestors(uint64_t cell, ObS2Cellids &cells)
 {
   INIT_SUCC(ret);
-  S2CellId cellid(cell);
-  int level = cellid.level();
-  while (cellid.is_valid() && OB_SUCC(ret) && (level -= options_.level_mod()) >= options_.min_level()) {
-    S2CellId ancestor_id = cellid.parent(level);
-    if (OB_FAIL(cells.push_back(ancestor_id.id()))) {
-    }
+  static_assert(OB_GEO_S2REGION_OPTION_LEVEL_MOD == 1);
+  seekdb::geo::s2_index::CellInfo info;
+  if (!seekdb::geo::s2_index::cell_info(cell, info)) return OB_INVALID_ARGUMENT;
+  for (uint32_t i = 0; OB_SUCC(ret) && i < info.ancestor_count; ++i) {
+    if (OB_FAIL(cells.push_back(info.ancestors[i]))) {}
   }
   return ret;
 }

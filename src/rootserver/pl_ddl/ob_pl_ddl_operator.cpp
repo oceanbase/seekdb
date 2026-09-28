@@ -288,14 +288,22 @@ int ObPLDDLOperator::create_routine(share::schema::ObRoutineInfo &routine_info,
     if (OB_FAIL(schema_service->get_routine_sql_service().create_routine(routine_info,
                                                                          &trans,
                                                                          ddl_stmt_str))) {
+      LOG_WARN("create routine sql catalog failed", K(ret), K(routine_info.get_routine_name()),
+               K(routine_info.get_routine_id()), K(routine_info.get_schema_version()));
     }
   }
-  OZ (ObDependencyInfo::insert_dependency_infos(trans, dep_infos, routine_info.get_routine_id(),
-                                routine_info.get_schema_version(),
-                                routine_info.get_owner_id()));
+  if (OB_SUCC(ret) && OB_FAIL(ObDependencyInfo::insert_dependency_infos(
+        trans, dep_infos, routine_info.get_routine_id(), routine_info.get_schema_version(),
+        routine_info.get_owner_id()))) {
+    LOG_WARN("create routine dependency catalog failed", K(ret), K(routine_info.get_routine_name()),
+             K(routine_info.get_routine_id()), K(routine_info.get_schema_version()),
+             K(dep_infos.count()));
+  }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(error_info.handle_error_info(trans, &routine_info))) {
+      LOG_WARN("create routine error catalog failed", K(ret), K(routine_info.get_routine_name()),
+               K(routine_info.get_routine_id()), K(routine_info.get_schema_version()));
     }
   }
   return ret;

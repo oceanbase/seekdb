@@ -40,7 +40,7 @@ inline void stage_gis_catalog(const std::string &package_root,
   ExtensionScript script;
   std::string error;
   CHECK(script.load(package_root, "gis", "1.0", params.session_info_->get_sql_mode(), error) == OB_SUCCESS);
-  CHECK(script.statements().count() == 106);
+  CHECK(script.statements().count() == 112);
   ObPackedObjPriv execute = 0;
   CHECK(ObPrivPacker::raw_obj_priv_to_packed_info(NO_OPTION, OBJ_PRIV_ID_EXECUTE, execute) == OB_SUCCESS);
   for (int64_t i = 0; i < script.statements().count(); ++i) {
@@ -81,7 +81,7 @@ inline void verify_gis_declarations(const std::string &package_root,
   std::cout << "GIS declaration source: status=" << loaded << " error=" << error << std::endl;
   CHECK(loaded == OB_SUCCESS);
   CHECK(script.source().native_module_ == "org.seekdb.gis");
-  CHECK(script.statements().count() == 106);
+  CHECK(script.statements().count() == 112);
   std::map<std::string, int> names;
   std::set<std::string> signatures;
   RoutineSchemaOverlay declarations;
@@ -159,5 +159,5 @@ inline void verify_gis_declarations(const std::string &package_root,
   }
   CHECK(session.set_default_database(ObString::make_string("caller_db")) == OB_SUCCESS);
   session.set_database_id(101);
-  std::cout << "PASS: 106 GIS native declarations for 82 SQL names, exact DSO admission, Root slot allocation, wire, owned overload families and schema-manager/guard candidate index; no persistent installation claims" << std::endl;
+  std::cout << "PASS: 112 GIS native declarations for 82 SQL names, exact DSO admission, Root slot allocation, wire, owned overload families and schema-manager/guard candidate index; no persistent installation claims" << std::endl;
 }

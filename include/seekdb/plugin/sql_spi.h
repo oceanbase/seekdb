@@ -18,6 +18,7 @@
 #define SEEKDB_PLUGIN_SQL_SPI_H_
 
 #include "seekdb/plugin/execution_spi.h"
+#include "seekdb/plugin/srs_spi.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -190,6 +191,36 @@ typedef struct seekdb_plugin_sql_api_v4 {
       seekdb_plugin_routine_mutation_result_v1_t *);
   uint64_t reserved[4];
 } seekdb_plugin_sql_api_v4_t;
+
+/* Optional SQL API minor 4: read 1..16 SRS definitions from ONE host catalog
+ * snapshot, in requested order (duplicates allowed). IDs are 1..UINT32_MAX-1.
+ * All records must exist before the consumer is called exactly once. WKT and
+ * proj4 are raw authoritative catalog bytes, NOT parsed by a GIS generation.
+ * No plugin-supplied SQL is executed or catalog-write authority granted.
+ * The caller's injected SRS provider may refresh its fixed system catalog;
+ * metadata visibility is the same as builtin GIS functions.
+ *
+ * Strings/records are borrowed only during consume, under one snapshot guard.
+ * Parse/copy within that callback; no pointer, snapshot token or SRS object may
+ * escape. There is no data-statement snapshot guarantee or persistent epoch.
+ * Missing definitions and consumer errors are sticky invocation failures,
+ * never fallback permission. Non-OK consumer status maps to database cancellation.
+ * Same owner-thread/reentry/cancellation rules as execute; no DDL/commit.
+ * On success result.returned_rows=count and affected_rows=0; on failure both
+ * counts are zero and database_error preserves the first host error.
+ */
+#define SEEKDB_PLUGIN_SQL_SRS_LOOKUP_MINOR 4u
+#define SEEKDB_PLUGIN_SQL_MAX_SRS_LOOKUP 16u
+typedef seekdb_plugin_status_t (SEEKDB_PLUGIN_CALL *seekdb_plugin_srs_consume_v1_fn)(
+    void *consumer, const seekdb_plugin_srs_definition_v1_t *definitions, uint32_t count);
+typedef struct seekdb_plugin_sql_api_v5 {
+  seekdb_plugin_sql_api_v4_t v4;
+  seekdb_plugin_status_t (SEEKDB_PLUGIN_CALL *lookup_srs)(
+      seekdb_plugin_sql_context_handle_t *, const uint32_t *srids, uint32_t count,
+      seekdb_plugin_srs_consume_v1_fn consume, void *consumer,
+      seekdb_plugin_sql_result_v1_t *result);
+  uint64_t reserved[4];
+} seekdb_plugin_sql_api_v5_t;
 
 /* Table service minor 2 opts into this borrowed per-open/next context. It
  * exposes query control only, not SQL execution. The original table prefix

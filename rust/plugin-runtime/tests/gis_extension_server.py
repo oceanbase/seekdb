@@ -39,7 +39,7 @@ def expected_bindings():
         r"CREATE FUNCTION `([^`]+)`\([^\n]*\)\nRETURNS [^\n]+\n"
         r"DETERMINISTIC NO SQL SQL SECURITY INVOKER\n"
         r"AS 'MODULE_PATHNAME', '([^']+)' LANGUAGE C;", sql)
-    require(len(declarations) == 106 and len({name for name, _ in declarations}) == 82,
+    require(len(declarations) == 112 and len({name for name, _ in declarations}) == 82,
             "unrecognized local GIS package inventory")
     return Counter(declarations)
 
@@ -91,14 +91,28 @@ def check_values(connection):
     for sql in (
         "ST_X(POINT(1,2))=1 AND ST_Y(POINT(1,2))=2",
         "ST_Distance(POINT(0,0),POINT(3,4))=5",
-        "ABS(ST_Y(ST_Transform(ST_GeomFromText('POINT(2 49)',4326),3857))-6274861.394006576)<0.000001",
+        "_ST_AsEWKT(POINT(1.2345,-9.8765),2) = 'POINT(1.23 -9.88)'",
+        "_ST_AsEWKT(POINT(1.2345,2),0) = 'POINT(1.2345 2)'",
+        "_ST_AsEWKT(POINT(1.2345,2),-1) = _ST_AsEWKT(POINT(1.2345,2),25)",
+        "_ST_AsEWKT(POINT(0.0000000012345,10000000000000000),2) = 'POINT(1.23e-9 1e16)'",
+        "_ST_AsEWKT(_ST_GeomFromEWKT('SRID=4326;POINT(2 49)')) = 'SRID=4326;POINT(2 49)'",
+        "_ST_AsEWKT(_ST_GeomFromEWKT('POINT Z(1.2345 2.3456 3.4567)'),1) = 'POINT Z (1.2345 2.3456 3.4567)'",
+        "ABS(ST_Y(ST_Transform(ST_GeomFromText('POINT(2 49)',4326,'axis-order=long-lat'),3857))-6274861.394006576)<0.000001",
+        "ST_X(ST_GeomFromText('POINT(49 2)',4326))=2",
+        "ST_AsText(ST_GeomFromText('POINT(49 2)',4326),'axis-order=long-lat')='POINT(2 49)'",
+        "ST_X(ST_GeomFromWKB(ST_AsWKB(ST_GeomFromText('POINT(49 2)',4326)),4326))=2",
+        "ST_GeomFromText('POINT(49 2)',4326,NULL) IS NULL",
+        "ST_SRID(_ST_GeogFromText('POINT(2 49)'))=4326",
+        "ST_Y(_ST_GeogFromText('POINT(190 100)'))=80",
+        "HEX(_ST_AsEWKB(_ST_GeomFromEWKT('SRID=4326;POINT(2 49)')))='0101000020E610000000000000000000400000000000804840'",
+        "ST_X(_ST_GeomFromEWKB(UNHEX('0101000020E610000000000000000000400000000000804840'),NULL))=2",
         "ABS(ST_Y(ST_Transform(ST_GeomFromText('POINT(222638.98158654713 6274861.394006576)',3857),4326))-49)<0.000000001",
         "ST_Area(ST_GeomFromText('POLYGON((0 0,4 0,4 3,0 3,0 0))'))=12",
         "ST_X(ST_GeomFromWKB(ST_AsWKB(POINT(3,4))))=3",
         "ST_Y(ST_MakePoint(3,4))=4 AND ST_Y(ST_MakePoint(3,4,5))=4",
         "ST_Length(LINESTRING(POINT(0,0),POINT(3,4)))=5",
         "ST_AsText(GEOMETRYCOLLECTION(POINT(1,2),POINT(3,4)))="
-        "'GEOMETRYCOLLECTION (POINT(1 2), POINT(3 4))'",
+        "'GEOMETRYCOLLECTION(POINT(1 2),POINT(3 4))'",
         "AREA(ST_GeomFromText('POLYGON((0 0,4 0,4 3,0 3,0 0))'))=12",
         "ST_Distance(NULL,POINT(0,0)) IS NULL",
         "ST_GeomFromText('POINT(3 4)',NULL) IS NULL",

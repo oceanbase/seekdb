@@ -691,7 +691,12 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
     }
     if (OB_SUCC(ret)) {
       stmt::StmtType stmt_type = stmt->get_stmt_type();
-      if (ObStmt::is_ddl_stmt(stmt_type, stmt->has_global_variable()) || ObStmt::is_dcl_stmt(stmt_type)) {
+      // CREATE EXTENSION is a command statement with its own catalog
+      // coordinator; it is intentionally not an ObDDLStmt.  Do not route it
+      // through the ordinary DDL argument backfill below, which would cast
+      // CreateExtensionStmt to ObDDLStmt and corrupt/crash the resolver.
+      if (stmt_type != stmt::T_CREATE_EXTENSION &&
+          (ObStmt::is_ddl_stmt(stmt_type, stmt->has_global_variable()) || ObStmt::is_dcl_stmt(stmt_type))) {
         ObDDLStmt *ddl_stmt = static_cast<ObDDLStmt*>(stmt);
         obcall::ObDDLArg &ddl_arg = ddl_stmt->get_ddl_arg();
 

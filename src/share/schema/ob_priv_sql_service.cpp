@@ -763,10 +763,11 @@ int ObPrivSqlService::change_native_routine_privileges(const ObRoutineInfo &expe
     uint64_t grantor, uint64_t grantee, ObPrivSet rights, NativePrivilegeChange change,
     bool grant_option, int64_t new_schema_version, ObMySQLTransaction &transaction,
     const ObString *ddl_stmt_str, ObPackedObjPriv &before, ObPackedObjPriv &after,
-    RoutinePrivilegeOverlay *private_view)
+    RoutinePrivilegeOverlay *private_view, bool skip_object_lock)
 {
   return mutate_native_routine_privileges(expected, grantor, grantee, rights, change, grant_option,
-      new_schema_version, transaction, ddl_stmt_str, before, after, private_view, nullptr);
+      new_schema_version, transaction, ddl_stmt_str, before, after, private_view, nullptr,
+      skip_object_lock);
 }
 
 int ObPrivSqlService::apply_native_routine_privilege_reduction(const ObRoutineInfo &expected,
@@ -795,7 +796,8 @@ int ObPrivSqlService::mutate_native_routine_privileges(const ObRoutineInfo &expe
     uint64_t grantor, uint64_t grantee, ObPrivSet rights, NativePrivilegeChange change,
     bool grant_option, int64_t new_schema_version, ObMySQLTransaction &transaction,
     const ObString *ddl_stmt_str, ObPackedObjPriv &before, ObPackedObjPriv &after,
-    RoutinePrivilegeOverlay *private_view, const NativeReduction *reduction)
+    RoutinePrivilegeOverlay *private_view, const NativeReduction *reduction,
+    bool skip_object_lock)
 {
   before = after = 0;
   const auto valid_id = [](uint64_t id) { return id > 0 && id <= INT64_MAX; };
@@ -806,7 +808,7 @@ int ObPrivSqlService::mutate_native_routine_privileges(const ObRoutineInfo &expe
        change != NativePrivilegeChange::REVOKE_GRANT_OPTION) ||
       (grant_option && change != NativePrivilegeChange::GRANT)) return OB_INVALID_ARGUMENT;
   if (private_view && private_view->is_retired()) return OB_STATE_NOT_MATCH;
-  int ret = lock_native_routine_for_privileges(expected, transaction);
+  int ret = skip_object_lock ? OB_SUCCESS : lock_native_routine_for_privileges(expected, transaction);
   if (OB_FAIL(ret)) return ret;
   ObSqlString sql;
   const ObObjPrivSortKey key(expected.get_routine_id(), uint64_t(ObObjectType::FUNCTION),

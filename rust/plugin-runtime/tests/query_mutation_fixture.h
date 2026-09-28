@@ -65,8 +65,8 @@ inline void run(ObPluginLoader &loader)
     } sink;
     context.v1.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&sink);
     context.v1.emit_result = Sink::emit; query.attach(context);
-    CHECK(context.sql_api && context.sql_api->struct_size == sizeof(seekdb_plugin_sql_api_v4_t));
-    CHECK(context.sql_api->spi_major == 1 && context.sql_api->spi_minor == SEEKDB_PLUGIN_SQL_CATALOG_MUTATION_MINOR);
+    CHECK(context.sql_api && context.sql_api->struct_size >= sizeof(seekdb_plugin_sql_api_v4_t));
+    CHECK(context.sql_api->spi_major == 1 && context.sql_api->spi_minor >= SEEKDB_PLUGIN_SQL_CATALOG_MUTATION_MINOR);
     const auto &api = *reinterpret_cast<const seekdb_plugin_sql_api_v4_t *>(context.sql_api);
     CHECK(api.v3.lookup_routine && api.v3.v2.poll_query && api.v3.v2.v1.execute && api.mutate_routine);
     const std::string statement = scenario == 3 ? std::string("a\0b", 3) : scenario == 5 ? "SELECT 1;" :

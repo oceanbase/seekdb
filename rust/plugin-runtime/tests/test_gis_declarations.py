@@ -27,7 +27,21 @@ class DeclarationInventory(unittest.TestCase):
         cls.sql = (source / 'plugins/gis/sql/gis--1.0.sql').read_text()
 
     def test_complete(self):
-        self.assertEqual(validate_declaration_inventory(self.descriptors, self.sql), (82, 106))
+        self.assertEqual(validate_declaration_inventory(self.descriptors, self.sql), (82, 112))
+
+    def test_nullable_descriptor_is_in_inventory(self):
+        self.assertIn('GIS_SQL_FUNCTION_NULLABLE("org.seekdb.gis.function.st_asmvtgeom"', self.descriptors)
+        self.assertIn('GIS_SQL_FUNCTION_NULLABLE("org.seekdb.gis.function.st_geohash"', self.descriptors)
+        with self.assertRaisesRegex(ValueError, 'unrecognized GIS descriptor'):
+            validate_declaration_inventory(self.descriptors.replace(
+                '"org.seekdb.gis.function.st_asmvtgeom", 2, 5',
+                '"org.seekdb.gis.function.st_asmvtgeom", invalid, 5'), self.sql)
+
+    def test_geohash_signed_precision(self):
+        self.assertIn('"org.seekdb.gis.function.st_geohash", 1, 2, GIS_BYTES, gi, 0)', self.descriptors)
+        with self.assertRaisesRegex(ValueError, 'element types'):
+            validate_declaration_inventory(self.descriptors, self.sql.replace(
+                '`_st_geohash`(arg1 GEOMETRY, arg2 BIGINT)', '`_st_geohash`(arg1 GEOMETRY, arg2 DOUBLE)'))
 
     def test_missing_arity(self):
         start = self.sql.index('CREATE FUNCTION `st_makepoint`(arg1 DOUBLE, arg2 DOUBLE, arg3 DOUBLE)')

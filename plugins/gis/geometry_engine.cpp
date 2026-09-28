@@ -15,6 +15,26 @@
  */
 
 #include "geometry_engine.h"
+#include "number_format.h"
+#include "projection.h"
+#include "srs_metadata.h"
+#include "seekdb/plugin/sql_spi.h"
+#include "seekdb/plugin/srs_spi.h"
+#include "seekdb/geo/cartesian_algorithms.hpp"
+#include "seekdb/geo/interior_point.hpp"
+#include "seekdb/geo/polygon_repair.hpp"
+#include "seekdb/geo/box_clip.hpp"
+#include "seekdb/geo/tile_grid.hpp"
+#include "seekdb/geo/geohash.hpp"
+#include "seekdb/geo/axis_order.hpp"
+#include "seekdb/geo/pg_coordinate_io.hpp"
+#include "seekdb/geo/geographic_box.hpp"
+#include "seekdb/geo/s2_covering.hpp"
+#include "seekdb/plugin/spatial_index_spi.h"
+#include <s2/s2cell.h>
+#include <s2/s2loop.h>
+#include <s2/s2polygon.h>
+#include <s2/s2polyline.h>
 
 #include <algorithm>
 #include <cctype>
@@ -22,8 +42,13 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <iomanip>
+#include <locale>
+#include <optional>
 #include <sstream>
 #include <string>
+#include <type_traits>
+#include <variant>
 #include <vector>
 
 namespace {
@@ -42,6 +67,8 @@ struct Geometry {
   std::vector<std::vector<Point>> rings;
   std::vector<Geometry> children;
 };
+
+#include "cartesian_adapter.ipp"
 
 struct Box {
   double min_x = std::numeric_limits<double>::infinity();
@@ -68,7 +95,7 @@ public:
 
   bool bytes(size_t count, const uint8_t **out)
   {
-    if (out == nullptr || data_ == nullptr || data_ + count > end_) return false;
+    if (out == nullptr || data_ == nullptr || count > remaining()) return false;
     *out = data_;
     data_ += count;
     return true;
@@ -114,16 +141,20 @@ private:
   bool little_endian_;
 };
 
-static bool read_geometry(Reader &reader, Geometry &geometry, uint32_t srid)
+static bool read_geometry(Reader &reader, Geometry &geometry, uint32_t srid, unsigned depth = 0,
+                          bool allow_ewkb = true, int required_byte_order = -1)
 {
+  if (depth > 64) return false;
   const uint8_t *order = nullptr;
   uint32_t encoded_type = 0;
   if (!reader.bytes(1, &order) || (*order != 0 && *order != 1)) return false;
+  if (required_byte_order != -1 && *order != required_byte_order) return false;
   reader.set_little_endian(*order == 1);
   if (!reader.u32(&encoded_type)) return false;
   const bool ewkb_z = (encoded_type & UINT32_C(0x80000000)) != 0;
   const bool ewkb_m = (encoded_type & UINT32_C(0x40000000)) != 0;
   const bool ewkb_srid = (encoded_type & UINT32_C(0x20000000)) != 0;
+  if (!allow_ewkb && (ewkb_z || ewkb_m || ewkb_srid)) return false;
   if (ewkb_m) return false;
   const uint32_t stripped_type = encoded_type & UINT32_C(0x1fffffff);
   const uint32_t type = base_type(stripped_type);
@@ -140,7 +171,8 @@ static bool read_geometry(Reader &reader, Geometry &geometry, uint32_t srid)
     geometry.points.push_back(point);
   } else if (type == 2) {
     uint32_t count = 0;
-    if (!reader.u32(&count) || count < 2 || count > 1000000) return false;
+    if (!reader.u32(&count) || count < 2 || count > 1000000 ||
+        count > reader.remaining() / (geometry.dimensions * sizeof(double))) return false;
     geometry.points.resize(count);
     for (Point &point : geometry.points) {
       if (!reader.number(&point.x) || !reader.number(&point.y) ||
@@ -148,11 +180,13 @@ static bool read_geometry(Reader &reader, Geometry &geometry, uint32_t srid)
     }
   } else if (type == 3) {
     uint32_t ring_count = 0;
-    if (!reader.u32(&ring_count) || ring_count > 100000) return false;
+    if (!reader.u32(&ring_count) || ring_count > 100000 ||
+        ring_count > reader.remaining() / sizeof(uint32_t)) return false;
     geometry.rings.resize(ring_count);
     for (std::vector<Point> &ring : geometry.rings) {
       uint32_t count = 0;
-      if (!reader.u32(&count) || count < 4 || count > 1000000) return false;
+      if (!reader.u32(&count) || count < 4 || count > 1000000 ||
+          count > reader.remaining() / (geometry.dimensions * sizeof(double))) return false;
       ring.resize(count);
       for (Point &point : ring) {
         if (!reader.number(&point.x) || !reader.number(&point.y) ||
@@ -161,10 +195,12 @@ static bool read_geometry(Reader &reader, Geometry &geometry, uint32_t srid)
     }
   } else {
     uint32_t count = 0;
-    if (!reader.u32(&count) || count > 100000) return false;
+    if (!reader.u32(&count) || count > 100000 || count > reader.remaining() / 5) return false;
     geometry.children.resize(count);
     for (Geometry &child : geometry.children) {
-      if (!read_geometry(reader, child, srid)) return false;
+      if (!read_geometry(reader, child, geometry.srid, depth + 1, allow_ewkb, required_byte_order)) return false;
+      if (child.srid != geometry.srid ||
+          (type != 7 && (child.type != type - 3 || child.dimensions != geometry.dimensions))) return false;
     }
   }
   return true;
@@ -173,7 +209,7 @@ static bool read_geometry(Reader &reader, Geometry &geometry, uint32_t srid)
 static bool decode(const seekdb_plugin_execution_value_v1_t &value, Geometry &geometry)
 {
   if (value.struct_size != sizeof(value) || value.is_null || value.data == nullptr ||
-      value.data_size < 10 || value.type_id == nullptr ||
+      value.data_size < 10 || value.data_size > 16 * 1024 * 1024 || value.type_id == nullptr ||
       std::strcmp(value.type_id, "org.seekdb.gis.geometry") != 0 || value.data[4] != 1) {
     return false;
   }
@@ -243,7 +279,7 @@ static bool encode(const Geometry &geometry, std::vector<uint8_t> &out)
 
 static bool valid_context(const seekdb_plugin_execution_context_v1_t *context)
 {
-  return context != nullptr && context->struct_size == sizeof(*context) &&
+  return context != nullptr && context->struct_size >= sizeof(*context) &&
          context->emit_result != nullptr;
 }
 
@@ -268,6 +304,14 @@ static seekdb_plugin_status_t emit_bool(
   return context->emit_result(context->host, &result);
 }
 
+static seekdb_plugin_status_t emit_null_geometry(const seekdb_plugin_execution_context_v1_t *context)
+{
+  const seekdb_plugin_execution_result_v1_t result = {
+      sizeof(result), "org.seekdb.gis.geometry", nullptr, 0, 1,
+      {0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0}};
+  return context->emit_result(context->host, &result);
+}
+
 static bool scalar_double(const seekdb_plugin_execution_value_v1_t &value, double &out)
 {
   if (value.struct_size != sizeof(value) || value.is_null || value.data == nullptr ||
@@ -282,6 +326,46 @@ static bool scalar_u32(const seekdb_plugin_execution_value_v1_t &value, uint32_t
       value.data_size != sizeof(uint32_t)) return false;
   std::memcpy(&out, value.data, sizeof(out));
   return true;
+}
+
+static bool strategy_value_valid(uint32_t type, double value)
+{
+  if (!std::isfinite(value) || type < 1 || type > 6) return false;
+  if (type == 2 || type == 6) return value == 0;
+  return value > 0 && (type == 4 || value <= 65536);
+}
+
+static void apply_buffer_strategy(const seekdb_plugin_execution_value_v1_t &argument,
+                                  BufferOptions &options)
+{
+  // Same [uint32 strategy_type][double value] payload as the original
+  // ObExprSTBufferStrategy / ObExprSTBuffer::parse_binary_strategy.
+  if (argument.struct_size != sizeof(argument) || argument.is_null || argument.data == nullptr ||
+      argument.data_size != 12 || argument.type_id == nullptr ||
+      (std::strcmp(argument.type_id, "org.seekdb.gis.scalar.bytes") != 0 &&
+       std::strcmp(argument.type_id, "core.type.blob") != 0)) throw CartesianInputError{};
+  Reader reader(argument.data, argument.data_size);
+  uint32_t type = 0;
+  double value = 0;
+  if (!reader.u32(&type) || !reader.number(&value) || !strategy_value_valid(type, value)) {
+    throw CartesianInputError{};
+  }
+  if (type <= 2) {
+    if (options.has_end) throw CartesianInputError{};
+    options.has_end = true;
+    if (type == 2) options.state |= 2;
+    else options.end_count = static_cast<size_t>(value);
+  } else if (type <= 4) {
+    if (options.has_join) throw CartesianInputError{};
+    options.has_join = true;
+    if (type == 4) { options.state |= 4; options.miter_limit = value; }
+    else options.join_count = static_cast<size_t>(value);
+  } else {
+    if (options.has_point) throw CartesianInputError{};
+    options.has_point = true;
+    if (type == 6) options.state |= 1;
+    else options.point_count = static_cast<size_t>(value);
+  }
 }
 
 static void add_point(Box &box, const Point &point)
@@ -326,419 +410,33 @@ static Geometry empty_geometry(uint32_t srid)
   return geometry;
 }
 
-static bool same_point(const Point &left, const Point &right)
-{
-  return left.x == right.x && left.y == right.y && left.z == right.z;
-}
+#include "box_clip_adapter.ipp"
+#include "mvt_adapter.ipp"
+#include "geohash_adapter.ipp"
+#include "best_srid_adapter.ipp"
+#include "s2_adapter.ipp"
 
-static bool point_in_ring(const Point &point, const std::vector<Point> &ring)
+static bool transform_geometry(Geometry &geometry, const seekdb::gis::Projection &projection)
 {
-  bool inside = false;
-  if (ring.size() < 4) return false;
-  for (size_t i = 0, j = ring.size() - 1; i < ring.size(); j = i++) {
-    const Point &a = ring[i];
-    const Point &b = ring[j];
-    const bool crosses = ((a.y > point.y) != (b.y > point.y)) &&
-        (point.x < (b.x - a.x) * (point.y - a.y) / (b.y - a.y) + a.x);
-    if (crosses) inside = !inside;
-  }
-  return inside;
-}
-
-static bool point_in_geometry(const Point &point, const Geometry &geometry)
-{
-  if (geometry.type == 1) return !geometry.points.empty() && same_point(point, geometry.points[0]);
-  if (geometry.type == 3) {
-    if (geometry.rings.empty() || !point_in_ring(point, geometry.rings[0])) return false;
-    for (size_t i = 1; i < geometry.rings.size(); ++i) {
-      if (point_in_ring(point, geometry.rings[i])) return false;
-    }
-    return true;
-  }
-  for (const Geometry &child : geometry.children) {
-    if (point_in_geometry(point, child)) return true;
-  }
-  return false;
-}
-
-static bool boxes_intersect(const Box &left, const Box &right)
-{
-  return left.min_x <= right.max_x && right.min_x <= left.max_x &&
-         left.min_y <= right.max_y && right.min_y <= left.max_y;
-}
-
-static double boxes_distance(const Box &left, const Box &right)
-{
-  const double dx = std::max(std::max(left.min_x - right.max_x, right.min_x - left.max_x), 0.0);
-  const double dy = std::max(std::max(left.min_y - right.max_y, right.min_y - left.max_y), 0.0);
-  return std::sqrt(dx * dx + dy * dy);
-}
-
-static bool is_rectangle(const Geometry &geometry, Box *out)
-{
-  if (geometry.type != 3 || geometry.rings.size() != 1 || geometry.rings[0].size() != 5) return false;
-  Box box;
-  if (!bounds(geometry, box) || geometry.rings[0][0].x != geometry.rings[0][4].x ||
-      geometry.rings[0][0].y != geometry.rings[0][4].y) return false;
-  for (size_t i = 1; i < 4; ++i) {
-    const Point &point = geometry.rings[0][i];
-    if ((point.x != box.min_x && point.x != box.max_x) ||
-        (point.y != box.min_y && point.y != box.max_y)) return false;
-  }
-  if (out != nullptr) *out = box;
-  return true;
-}
-
-static Geometry buffer_geometry(const Geometry &input, double distance)
-{
-  Box box;
-  bounds(input, box);
-  if (input.type == 1 && !input.points.empty()) {
-    Geometry output;
-    output.type = 3;
-    output.srid = input.srid;
-    output.rings.resize(1);
-    const Point center = input.points[0];
-    const double radius = std::max(distance, 0.0);
-    /* 32-sided approximation; constants avoid a libm dependency in the plugin. */
-    double cosine = 1.0;
-    double sine = 0.0;
-    const double step_cosine = 0.9807852804032304;
-    const double step_sine = 0.19509032201612825;
-    for (int i = 0; i < 32; ++i) {
-      output.rings[0].push_back({center.x + radius * cosine,
-                                 center.y + radius * sine, center.z});
-      const double next_cosine = cosine * step_cosine - sine * step_sine;
-      sine = sine * step_cosine + cosine * step_sine;
-      cosine = next_cosine;
-    }
-    output.rings[0].push_back(output.rings[0][0]);
-    return output;
-  }
-  if (!std::isfinite(box.min_x)) return empty_geometry(input.srid);
-  const double delta = std::max(distance, 0.0);
-  return rectangle(input.srid, box.min_x - delta, box.min_y - delta,
-                   box.max_x + delta, box.max_y + delta);
-}
-
-static bool transform_point(Point &point, uint32_t source_srid, uint32_t target_srid)
-{
-  const double earth_radius = 6378137.0;
-  const double degrees_to_radians = 0.017453292519943295;
-  const double radians_to_degrees = 57.29577951308232;
-  if (source_srid == 4326 && target_srid == 3857) {
-    // EPSG:3857 uses spherical Mercator with WGS84's semi-major radius.
-    // asinh(tan(phi)) equals log(tan(pi/4 + phi/2)), but is symmetric
-    // across the equator and avoids cancellation at latitude zero.
-    // The web-tile latitude cutoff is not a coordinate transformation: do
-    // not silently move a valid high-latitude input onto that cutoff.
-    if (point.y <= -90.0 || point.y >= 90.0) return false;
-    const double latitude = point.y * degrees_to_radians;
-    point.x = earth_radius * point.x * degrees_to_radians;
-    point.y = earth_radius * std::asinh(std::tan(latitude));
-  } else if (source_srid == 3857 && target_srid == 4326) {
-    point.x = point.x / earth_radius * radians_to_degrees;
-    const double northing = point.y / earth_radius;
-    // exp receives only non-positive values, including extreme finite
-    // northings. The hemisphere reflection avoids overflow in exp(+y/R).
-    const double latitude = 1.5707963267948966 - 2.0 * std::atan(std::exp(-std::abs(northing)));
-    point.y = std::copysign(latitude * radians_to_degrees, northing);
-  }
-  return std::isfinite(point.x) && std::isfinite(point.y);
-}
-
-static bool transform_geometry(Geometry &geometry, uint32_t source_srid, uint32_t target_srid)
-{
+  const auto point_transform = [&](Point &point) {
+    if (!projection.forward(point.x, point.y, point.z, geometry.dimensions)) return false;
+    return std::isfinite(point.x) && std::isfinite(point.y);
+  };
   for (Point &point : geometry.points)
-    if (!transform_point(point, source_srid, target_srid)) return false;
+    if (!point_transform(point)) return false;
   for (std::vector<Point> &ring : geometry.rings) {
     for (Point &point : ring)
-      if (!transform_point(point, source_srid, target_srid)) return false;
+      if (!point_transform(point)) return false;
   }
   for (Geometry &child : geometry.children)
-    if (!transform_geometry(child, source_srid, target_srid)) return false;
+    if (!transform_geometry(child, projection)) return false;
   return true;
 }
 
-static bool same_point(const Point &left, const Point &right);
 
-static void tile_transform_point(Point &point, const Box &bounds_box, double extent)
-{
-  const double width = bounds_box.max_x - bounds_box.min_x;
-  const double height = bounds_box.max_y - bounds_box.min_y;
-  point.x = (point.x - bounds_box.min_x) * extent / width;
-  /* Vector tiles use a downward pointing Y axis. */
-  point.y = (bounds_box.max_y - point.y) * extent / height;
-}
+#include "catalog_transform.ipp"
 
-static void clamp_tile_point(Point &point, double min_value, double max_value)
-{
-  point.x = std::max(min_value, std::min(max_value, point.x));
-  point.y = std::max(min_value, std::min(max_value, point.y));
-}
-
-static bool tile_transform_geometry(Geometry &geometry, const Box &bounds_box,
-                                     double extent, double buffer, bool clip)
-{
-  for (Point &point : geometry.points) tile_transform_point(point, bounds_box, extent);
-  for (std::vector<Point> &ring : geometry.rings) {
-    for (Point &point : ring) tile_transform_point(point, bounds_box, extent);
-  }
-  for (Geometry &child : geometry.children) {
-    if (!tile_transform_geometry(child, bounds_box, extent, buffer, clip)) return false;
-  }
-  if (!clip) return true;
-
-  const double min_value = -buffer;
-  const double max_value = extent + buffer;
-  if (geometry.type == 1 && !geometry.points.empty()) {
-    return geometry.points[0].x >= min_value && geometry.points[0].x <= max_value &&
-           geometry.points[0].y >= min_value && geometry.points[0].y <= max_value;
-  }
-  for (Point &point : geometry.points) clamp_tile_point(point, min_value, max_value);
-  for (std::vector<Point> &ring : geometry.rings) {
-    for (Point &point : ring) clamp_tile_point(point, min_value, max_value);
-    if (ring.size() >= 2 && !same_point(ring.front(), ring.back())) ring.push_back(ring.front());
-  }
-  return true;
-}
-
-static Geometry combine_rectangles(const Geometry &left, const Geometry &right,
-                                    uint32_t operation)
-{
-  Box a, b;
-  const bool left_rect = is_rectangle(left, &a);
-  const bool right_rect = is_rectangle(right, &b);
-  if (!left_rect || !right_rect) {
-    if (operation == SEEKDB_GIS_OP_DIFFERENCE) return left;
-    Geometry collection;
-    collection.type = 7;
-    collection.srid = left.srid;
-    collection.children.push_back(left);
-    if (operation != SEEKDB_GIS_OP_DIFFERENCE) collection.children.push_back(right);
-    return collection;
-  }
-  const double ix0 = std::max(a.min_x, b.min_x);
-  const double iy0 = std::max(a.min_y, b.min_y);
-  const double ix1 = std::min(a.max_x, b.max_x);
-  const double iy1 = std::min(a.max_y, b.max_y);
-  if (operation == SEEKDB_GIS_OP_UNION) {
-    return rectangle(left.srid, std::min(a.min_x, b.min_x), std::min(a.min_y, b.min_y),
-                     std::max(a.max_x, b.max_x), std::max(a.max_y, b.max_y));
-  }
-  if (operation == SEEKDB_GIS_OP_SYMMETRIC_DIFFERENCE) {
-    Geometry collection;
-    collection.type = 7;
-    collection.srid = left.srid;
-    if (ix0 >= ix1 || iy0 >= iy1) {
-      collection.children.push_back(left);
-      collection.children.push_back(right);
-    } else {
-      collection.children.push_back(combine_rectangles(left, right, SEEKDB_GIS_OP_DIFFERENCE));
-      collection.children.push_back(combine_rectangles(right, left, SEEKDB_GIS_OP_DIFFERENCE));
-    }
-    return collection;
-  }
-  if (ix0 >= ix1 || iy0 >= iy1) return left;
-  if (ix0 <= a.min_x && ix1 >= a.max_x && iy0 <= a.min_y && iy1 >= a.max_y) {
-    return empty_geometry(left.srid);
-  }
-  /* A rectangular difference is represented as up to four disjoint strips. */
-  Geometry collection;
-  collection.type = 6;
-  collection.srid = left.srid;
-  if (a.min_x < ix0) collection.children.push_back(rectangle(left.srid, a.min_x, a.min_y, ix0, a.max_y));
-  if (ix1 < a.max_x) collection.children.push_back(rectangle(left.srid, ix1, a.min_y, a.max_x, a.max_y));
-  if (a.min_y < iy0) collection.children.push_back(rectangle(left.srid, ix0, a.min_y, ix1, iy0));
-  if (iy1 < a.max_y) collection.children.push_back(rectangle(left.srid, ix0, iy1, ix1, a.max_y));
-  return collection;
-}
-
-static bool valid_geometry(const Geometry &geometry)
-{
-  if (geometry.type == 1) return geometry.points.size() == 1;
-  if (geometry.type == 2) return geometry.points.size() >= 2;
-  if (geometry.type == 3) {
-    if (geometry.rings.empty()) return true;
-    for (const std::vector<Point> &ring : geometry.rings) {
-      if (ring.size() < 4 || !same_point(ring.front(), ring.back())) return false;
-    }
-    return true;
-  }
-  for (const Geometry &child : geometry.children) {
-    if (!valid_geometry(child)) return false;
-  }
-  return true;
-}
-
-static bool repair_geometry(Geometry &geometry)
-{
-  if (geometry.type == 3) {
-    for (std::vector<Point> &ring : geometry.rings) {
-      if (ring.size() < 3) return false;
-      if (!same_point(ring.front(), ring.back())) ring.push_back(ring.front());
-      if (ring.size() < 4) return false;
-    }
-  }
-  for (Geometry &child : geometry.children) {
-    if (!repair_geometry(child)) return false;
-  }
-  return valid_geometry(geometry);
-}
-
-class WktParser {
-public:
-  explicit WktParser(const char *data, size_t size) : current_(data), end_(data + size) {}
-
-  bool parse(Geometry &geometry, uint32_t srid)
-  {
-    if (!parse_geometry(geometry, srid)) return false;
-    skip_space();
-    return current_ == end_;
-  }
-
-private:
-  void skip_space()
-  {
-    while (current_ < end_ && std::isspace(static_cast<unsigned char>(*current_))) ++current_;
-  }
-
-  bool consume(char expected)
-  {
-    skip_space();
-    if (current_ >= end_ || *current_ != expected) return false;
-    ++current_;
-    return true;
-  }
-
-  bool word(std::string &out)
-  {
-    skip_space();
-    const char *begin = current_;
-    while (current_ < end_ && std::isalpha(static_cast<unsigned char>(*current_))) ++current_;
-    if (begin == current_) return false;
-    out.assign(begin, current_);
-    std::transform(out.begin(), out.end(), out.begin(), [](unsigned char c) {
-      return static_cast<char>(std::toupper(c));
-    });
-    return true;
-  }
-
-  bool number(double &out)
-  {
-    skip_space();
-    char *end = nullptr;
-    out = std::strtod(current_, &end);
-    if (end == current_ || end > end_ || !std::isfinite(out)) return false;
-    current_ = end;
-    return true;
-  }
-
-  bool parse_point(Point &point, uint32_t dimensions)
-  {
-    if (!number(point.x) || !number(point.y)) return false;
-    if (dimensions == 3 && !number(point.z)) return false;
-    return true;
-  }
-
-  bool point_list(std::vector<Point> &points, uint32_t dimensions)
-  {
-    if (!consume('(')) return false;
-    Point value;
-    if (!parse_point(value, dimensions)) return false;
-    points.push_back(value);
-    while (consume(',')) {
-      if (!parse_point(value, dimensions)) return false;
-      points.push_back(value);
-    }
-    return consume(')');
-  }
-
-  bool parse_geometry(Geometry &geometry, uint32_t srid)
-  {
-    std::string name;
-    if (!word(name)) return false;
-    uint32_t dimensions = 2;
-    skip_space();
-    const char *saved = current_;
-    std::string dimension_word;
-    if (word(dimension_word) && dimension_word == "Z") dimensions = 3;
-    else current_ = saved;
-    geometry.srid = srid;
-    geometry.dimensions = dimensions;
-    if (name == "POINT") {
-      if (!consume('(')) return false;
-      Point point;
-      if (!parse_point(point, dimensions) || !consume(')')) return false;
-      geometry.type = 1;
-      geometry.points.push_back(point);
-      return true;
-    }
-    if (name == "LINESTRING") {
-      geometry.type = 2;
-      return point_list(geometry.points, dimensions);
-    }
-    if (name == "POLYGON") {
-      geometry.type = 3;
-      if (!consume('(')) return false;
-      do {
-        std::vector<Point> ring;
-        if (!point_list(ring, dimensions) || ring.size() < 4) return false;
-        geometry.rings.push_back(std::move(ring));
-      } while (consume(','));
-      return consume(')');
-    }
-    uint32_t type = 0;
-    if (name == "MULTIPOINT") type = 4;
-    else if (name == "MULTILINESTRING") type = 5;
-    else if (name == "MULTIPOLYGON") type = 6;
-    else if (name == "GEOMETRYCOLLECTION") type = 7;
-    else return false;
-    geometry.type = type;
-    if (!consume('(')) return false;
-    do {
-      Geometry child;
-      if (type == 4) {
-        bool nested = false;
-        if (consume('(')) nested = true;
-        Point point;
-        if (!parse_point(point, dimensions)) return false;
-        child.type = 1;
-        child.dimensions = dimensions;
-        child.srid = srid;
-        child.points.push_back(point);
-        if (nested && !consume(')')) return false;
-      } else if (type == 7) {
-        if (!parse_geometry(child, srid)) return false;
-      } else {
-        std::string child_name = type == 5 ? "LINESTRING" : "POLYGON";
-        (void)child_name;
-        if (type == 5) {
-          child.type = 2;
-          child.dimensions = dimensions;
-          child.srid = srid;
-          if (!point_list(child.points, dimensions)) return false;
-        } else {
-          child.type = 3;
-          child.dimensions = dimensions;
-          child.srid = srid;
-          if (!consume('(')) return false;
-          do {
-            std::vector<Point> ring;
-            if (!point_list(ring, dimensions)) return false;
-            child.rings.push_back(std::move(ring));
-          } while (consume(','));
-          if (!consume(')')) return false;
-        }
-      }
-      geometry.children.push_back(std::move(child));
-    } while (consume(','));
-    return consume(')');
-  }
-
-  const char *current_;
-  const char *end_;
-};
+#include "wkt_parser.ipp"
 
 static void append_number_text(std::ostringstream &stream, double value)
 {
@@ -746,65 +444,7 @@ static void append_number_text(std::ostringstream &stream, double value)
   stream << value;
 }
 
-static void geometry_to_wkt(const Geometry &geometry, std::ostringstream &stream)
-{
-  switch (geometry.type) {
-    case 1:
-      stream << "POINT" << (geometry.dimensions == 3 ? " Z" : "") << '(';
-      append_number_text(stream, geometry.points[0].x); stream << ' ';
-      append_number_text(stream, geometry.points[0].y);
-      if (geometry.dimensions == 3) { stream << ' '; append_number_text(stream, geometry.points[0].z); }
-      stream << ')';
-      break;
-    case 2:
-      stream << "LINESTRING (";
-      for (size_t i = 0; i < geometry.points.size(); ++i) {
-        if (i != 0) stream << ", ";
-        append_number_text(stream, geometry.points[i].x); stream << ' '; append_number_text(stream, geometry.points[i].y);
-        if (geometry.dimensions == 3) { stream << ' '; append_number_text(stream, geometry.points[i].z); }
-      }
-      stream << ')';
-      break;
-    case 3:
-      stream << "POLYGON (";
-      for (size_t r = 0; r < geometry.rings.size(); ++r) {
-        if (r != 0) stream << ", "; stream << '(';
-        for (size_t i = 0; i < geometry.rings[r].size(); ++i) {
-          if (i != 0) stream << ", ";
-          append_number_text(stream, geometry.rings[r][i].x); stream << ' ';
-          append_number_text(stream, geometry.rings[r][i].y);
-          if (geometry.dimensions == 3) { stream << ' '; append_number_text(stream, geometry.rings[r][i].z); }
-        }
-        stream << ')';
-      }
-      stream << ')';
-      break;
-    case 4: stream << "MULTIPOINT ("; break;
-    case 5: stream << "MULTILINESTRING ("; break;
-    case 6: stream << "MULTIPOLYGON ("; break;
-    case 7: stream << "GEOMETRYCOLLECTION ("; break;
-    default: return;
-  }
-  if (geometry.type >= 4) {
-    for (size_t i = 0; i < geometry.children.size(); ++i) {
-      if (i != 0) stream << ", ";
-      if (geometry.type == 4) {
-        stream << '('; append_number_text(stream, geometry.children[i].points[0].x); stream << ' ';
-        append_number_text(stream, geometry.children[i].points[0].y); stream << ')';
-      } else {
-        std::ostringstream child;
-        geometry_to_wkt(geometry.children[i], child);
-        std::string value = child.str();
-        const size_t first_space = value.find(' ');
-        // Collections contain complete typed WKT geometries; only homogeneous
-        // multi-geometries omit their children's type names.
-        stream << (geometry.type == 7 || first_space == std::string::npos
-            ? value : value.substr(first_space + 1));
-      }
-    }
-    stream << ')';
-  }
-}
+#include "wkt_adapter.ipp"
 
 static void geometry_to_geojson(const Geometry &geometry, std::ostringstream &stream)
 {
@@ -831,119 +471,11 @@ static void geometry_to_geojson(const Geometry &geometry, std::ostringstream &st
   stream << '}';
 }
 
-static Geometry centroid(const Geometry &geometry)
-{
-  Point result;
-  uint64_t count = 0;
-  if (geometry.type == 3 && !geometry.rings.empty()) {
-    const std::vector<Point> &ring = geometry.rings[0];
-    double signed_area = 0.0;
-    double cx = 0.0;
-    double cy = 0.0;
-    for (size_t i = 1; i < ring.size(); ++i) {
-      const double cross = ring[i - 1].x * ring[i].y - ring[i].x * ring[i - 1].y;
-      signed_area += cross;
-      cx += (ring[i - 1].x + ring[i].x) * cross;
-      cy += (ring[i - 1].y + ring[i].y) * cross;
-    }
-    if (signed_area != 0.0) {
-      result.x = cx / (3.0 * signed_area);
-      result.y = cy / (3.0 * signed_area);
-      result.z = ring.front().z;
-      Geometry output;
-      output.type = 1;
-      output.srid = geometry.srid;
-      output.points.push_back(result);
-      return output;
-    }
-  }
-  auto add = [&](const Point &point) {
-    result.x += point.x;
-    result.y += point.y;
-    result.z += point.z;
-    ++count;
-  };
-  for (const Point &point : geometry.points) add(point);
-  for (const std::vector<Point> &ring : geometry.rings) {
-    for (const Point &point : ring) add(point);
-  }
-  for (const Geometry &child : geometry.children) {
-    Geometry child_centroid = centroid(child);
-    for (const Point &point : child_centroid.points) add(point);
-  }
-  Geometry output;
-  output.type = 1;
-  output.srid = geometry.srid;
-  if (count != 0) {
-    result.x /= static_cast<double>(count);
-    result.y /= static_cast<double>(count);
-    result.z /= static_cast<double>(count);
-  }
-  output.points.push_back(result);
-  return output;
-}
-
-static double ring_area(const std::vector<Point> &ring)
-{
-  double area = 0.0;
-  for (size_t i = 1; i < ring.size(); ++i) {
-    area += ring[i - 1].x * ring[i].y - ring[i].x * ring[i - 1].y;
-  }
-  return area * 0.5;
-}
-
-static double geometry_area(const Geometry &geometry)
-{
-  if (geometry.type == 3) {
-    double area = 0.0;
-    for (const std::vector<Point> &ring : geometry.rings) area += ring_area(ring);
-    return std::abs(area);
-  }
-  double area = 0.0;
-  for (const Geometry &child : geometry.children) area += geometry_area(child);
-  return area;
-}
-
-static double point_distance(const Point &left, const Point &right)
-{
-  const double dx = left.x - right.x;
-  const double dy = left.y - right.y;
-  const double dz = left.z - right.z;
-  return std::sqrt(dx * dx + dy * dy + dz * dz);
-}
-
-static double geometry_length(const Geometry &geometry)
-{
-  double length = 0.0;
-  for (size_t i = 1; i < geometry.points.size(); ++i) {
-    length += point_distance(geometry.points[i - 1], geometry.points[i]);
-  }
-  for (const Geometry &child : geometry.children) length += geometry_length(child);
-  return length;
-}
-
 static void collect_points(const Geometry &geometry, std::vector<Point> &points)
 {
   points.insert(points.end(), geometry.points.begin(), geometry.points.end());
   for (const std::vector<Point> &ring : geometry.rings) points.insert(points.end(), ring.begin(), ring.end());
   for (const Geometry &child : geometry.children) collect_points(child, points);
-}
-
-static double geometry_distance(const Geometry &left, const Geometry &right)
-{
-  std::vector<Point> left_points;
-  std::vector<Point> right_points;
-  collect_points(left, left_points);
-  collect_points(right, right_points);
-  double result = std::numeric_limits<double>::infinity();
-  for (const Point &a : left_points) {
-    for (const Point &b : right_points) result = std::min(result, point_distance(a, b));
-  }
-  Box left_box, right_box;
-  if (std::isinf(result) && bounds(left, left_box) && bounds(right, right_box)) {
-    result = boxes_distance(left_box, right_box);
-  }
-  return std::isfinite(result) ? result : 0.0;
 }
 
 static seekdb_plugin_status_t emit_bytes(
@@ -957,15 +489,32 @@ static seekdb_plugin_status_t emit_bytes(
   return context->emit_result(context->host, &result);
 }
 
-static seekdb_plugin_status_t emit_uint64(
-    const seekdb_plugin_execution_context_v1_t *context, uint64_t value)
+#include "catalog_geometry_io.ipp"
+
+// These SQL names mirror internal index-column placeholders, not S2 algorithms.
+// The index row generator replaces their NULL slots with a *set* of S2 cells
+// and the index MBR. A scalar representative point or envelope is not equivalent.
+static seekdb_plugin_status_t spatial_index_placeholder(
+    seekdb_plugin_instance_handle_t *instance,
+    const seekdb_plugin_execution_context_v1_t *context,
+    const seekdb_plugin_execution_value_v1_t *arguments,
+    uint32_t argument_count, const char *result_type)
+try
 {
+  if (instance == nullptr || !valid_context(context) || arguments == nullptr || argument_count != 1 ||
+      arguments[0].struct_size != sizeof(arguments[0]) || arguments[0].type_id == nullptr ||
+      std::strcmp(arguments[0].type_id, "org.seekdb.gis.geometry") != 0) {
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  // Deliberately do not decode/dereference the geometry payload: the original
+  // expression returns NULL without inspecting its operand.
   const seekdb_plugin_execution_result_v1_t result = {
-      sizeof(result), "org.seekdb.gis.scalar.uint64",
-      reinterpret_cast<const uint8_t *>(&value), sizeof(value), 0,
+      sizeof(result), result_type, nullptr, 0, 1,
       {0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0}};
   return context->emit_result(context->host, &result);
 }
+catch (const std::bad_alloc &) { return SEEKDB_PLUGIN_STATUS_NO_MEMORY; }
+catch (...) { return SEEKDB_PLUGIN_STATUS_INTERNAL; }
 
 static seekdb_plugin_status_t emit_int32(
     const seekdb_plugin_execution_context_v1_t *context, int32_t value, bool is_null)
@@ -978,33 +527,67 @@ static seekdb_plugin_status_t emit_int32(
   return context->emit_result(context->host, &result);
 }
 
-static bool relation_result(uint32_t operation, const Geometry &left, const Geometry &right,
-                            double distance_limit)
-{
-  Box a, b;
-  if (!bounds(left, a) || !bounds(right, b)) return false;
-  const bool intersects = boxes_intersect(a, b);
-  const bool left_contains_right = !right.points.empty() && point_in_geometry(right.points.front(), left);
-  const bool right_contains_left = !left.points.empty() && point_in_geometry(left.points.front(), right);
-  switch (operation) {
-    case SEEKDB_GIS_REL_EQUALS:
-      return left.type == right.type && a.min_x == b.min_x && a.min_y == b.min_y &&
-             a.max_x == b.max_x && a.max_y == b.max_y;
-    case SEEKDB_GIS_REL_INTERSECTS: return intersects;
-    case SEEKDB_GIS_REL_CONTAINS:
-    case SEEKDB_GIS_REL_COVERS: return left_contains_right;
-    case SEEKDB_GIS_REL_WITHIN: return right_contains_left;
-    case SEEKDB_GIS_REL_TOUCHES:
-      return intersects && (a.max_x == b.min_x || b.max_x == a.min_x ||
-                            a.max_y == b.min_y || b.max_y == a.min_y);
-    case SEEKDB_GIS_REL_CROSSES: return intersects && !left_contains_right && !right_contains_left;
-    case SEEKDB_GIS_REL_OVERLAPS: return intersects && !left_contains_right && !right_contains_left;
-    case SEEKDB_GIS_REL_DWITHIN: return boxes_distance(a, b) <= distance_limit;
-    default: return false;
-  }
-}
-
 } // namespace
+
+extern "C" seekdb_plugin_status_t seekdb_gis_spatial_cover(
+    seekdb_plugin_instance_handle_t *instance,
+    const seekdb_plugin_execution_context_v1_t *context,
+    const seekdb_plugin_execution_value_v1_t *arguments, uint32_t argument_count)
+try {
+  if (instance == nullptr || !valid_context(context) || arguments == nullptr || argument_count != 2) {
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  const auto request = spatial_request(arguments[1]);
+  Geometry geometry;
+  if (!decode(arguments[0], geometry)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  const auto bytes = spatial_cover(geometry, request);
+  seekdb_plugin_execution_result_v1_t result = {};
+  result.struct_size = sizeof(result);
+  result.type_id = request.flags & SEEKDB_PLUGIN_SPATIAL_ALL_VIEWS
+      ? SEEKDB_PLUGIN_SPATIAL_COVER_ALL_RESULT_TYPE : SEEKDB_PLUGIN_SPATIAL_COVER_RESULT_TYPE;
+  result.data = bytes.data();
+  result.data_size = bytes.size();
+  return context->emit_result(context->host, &result);
+}
+catch (const CartesianInputError &) { return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT; }
+catch (const std::bad_alloc &) { return SEEKDB_PLUGIN_STATUS_NO_MEMORY; }
+catch (...) { return SEEKDB_PLUGIN_STATUS_INTERNAL; }
+
+extern "C" seekdb_plugin_status_t seekdb_gis_buffer_strategy(
+    seekdb_plugin_instance_handle_t *instance,
+    const seekdb_plugin_execution_context_v1_t *context,
+    const seekdb_plugin_execution_value_v1_t *arguments,
+    uint32_t argument_count)
+try
+{
+  if (instance == nullptr || !valid_context(context) || arguments == nullptr ||
+      (argument_count != 1 && argument_count != 2)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  const auto &name = arguments[0];
+  if (name.struct_size != sizeof(name) || name.is_null || name.data == nullptr ||
+      name.data_size > 12 || name.type_id == nullptr ||
+      (std::strcmp(name.type_id, "org.seekdb.gis.scalar.bytes") != 0 &&
+       std::strcmp(name.type_id, "core.type.blob") != 0)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  std::string normalized(reinterpret_cast<const char *>(name.data), name.data_size);
+  for (auto &c : normalized) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+  const char *names[] = {"", "end_round", "end_flat", "join_round", "join_miter", "point_circle", "point_square"};
+  uint32_t type = 0;
+  for (uint32_t i = 1; i <= 6; ++i) if (normalized == names[i]) type = i;
+  const bool parameterless = type == 2 || type == 6;
+  double value = 0;
+  if (type == 0 || (parameterless ? argument_count != 1 : argument_count != 2) ||
+      (!parameterless && !scalar_double(arguments[1], value)) || !strategy_value_valid(type, value)) {
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  std::vector<uint8_t> bytes;
+  append_u32(bytes, type);
+  append_number(bytes, value);
+  const seekdb_plugin_execution_result_v1_t result = {
+      sizeof(result), "org.seekdb.gis.scalar.bytes", bytes.data(), bytes.size(), 0,
+      {0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0}};
+  return context->emit_result(context->host, &result);
+}
+catch (const std::bad_alloc &) { return SEEKDB_PLUGIN_STATUS_NO_MEMORY; }
+catch (...) { return SEEKDB_PLUGIN_STATUS_INTERNAL; }
 
 extern "C" seekdb_plugin_status_t seekdb_gis_geometry_operation(
     uint32_t operation,
@@ -1012,70 +595,86 @@ extern "C" seekdb_plugin_status_t seekdb_gis_geometry_operation(
     const seekdb_plugin_execution_context_v1_t *context,
     const seekdb_plugin_execution_value_v1_t *arguments,
     uint32_t argument_count)
+try
 {
   if (instance == nullptr || context == nullptr || arguments == nullptr ||
       !valid_context(context) || argument_count == 0 || argument_count > 8) {
     return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
   }
+  if (operation == SEEKDB_GIS_OP_ASMVTGEOM) {
+    if (argument_count < 2 || argument_count > 5) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+    for (uint32_t i = 0; i < argument_count; ++i) {
+      if (arguments[i].struct_size != sizeof(arguments[i])) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+    }
+    double extent = 4096.0, buffer = 256.0, clip_value = 1.0;
+    if ((argument_count >= 3 && !arguments[2].is_null && !scalar_double(arguments[2], extent)) ||
+        (argument_count >= 4 && !arguments[3].is_null && !scalar_double(arguments[3], buffer)) ||
+        (argument_count >= 5 && !arguments[4].is_null && !scalar_double(arguments[4], clip_value))) {
+      return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+    }
+    validate_tile_controls(extent, buffer);
+    if (std::trunc(clip_value) != clip_value || clip_value < INT8_MIN || clip_value > INT8_MAX) {
+      return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+    }
+    // Original process_input_geometry validates controls even for NULL input.
+    if (arguments[0].is_null) return emit_null_geometry(context);
+    Geometry input, tile_bounds;
+    if (!decode(arguments[0], input) || !decode(arguments[1], tile_bounds)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+    const auto result = as_mvt_geometry(input, tile_bounds, extent, buffer, clip_value != 0);
+    return result ? emit_geometry(context, *result) : emit_null_geometry(context);
+  }
   Geometry first;
   if (!decode(arguments[0], first)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
   if (operation == SEEKDB_GIS_OP_TRANSFORM) {
     uint32_t target_srid = 0;
-    if (argument_count < 2 || !scalar_u32(arguments[1], target_srid)) {
+    if (argument_count != 2 || !scalar_u32(arguments[1], target_srid)) {
       return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
     }
-    const uint32_t source_srid = first.srid;
-    if (source_srid != target_srid &&
-        !((source_srid == 4326 && target_srid == 3857) || (source_srid == 3857 && target_srid == 4326))) {
-      // This engine has no arbitrary-CRS registry. Relabeling coordinates
-      // would manufacture a successful result rather than transform them.
-      return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
-    }
-    if (!transform_geometry(first, source_srid, target_srid)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+    const auto status = catalog_transform(context, first, target_srid);
+    if (status != SEEKDB_PLUGIN_STATUS_OK) return status;
     first.srid = target_srid;
     return emit_geometry(context, first);
+  }
+  if (operation == SEEKDB_GIS_OP_INDEX_BUFFER) {
+    double distance = 0.0;
+    if (argument_count != 2 || arguments[1].type_id == nullptr ||
+        std::strcmp(arguments[1].type_id, "core.type.double") != 0 ||
+        !scalar_double(arguments[1], distance)) {
+      return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+    }
+    for (uint32_t i = 0; i < argument_count; ++i) {
+      for (auto r : arguments[i].reserved_bytes) if (r != 0) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+      for (auto r : arguments[i].reserved) if (r != 0) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+    }
+    // The index caller has resolved the SRS and selected its Cartesian path.
+    // Adapt labels only, not coordinates or dimensions, so the existing
+    // Cartesian algorithm also serves arbitrary projected SRIDs. This is not
+    // the public SQL buffer's SRS admission path.
+    const uint32_t srid = first.srid;
+    const auto relabel = [](auto &&self, Geometry &geometry, uint32_t id) -> void {
+      geometry.srid = id;
+      for (auto &child : geometry.children) self(self, child, id);
+    };
+    relabel(relabel, first, 0);
+    BufferOptions options; options.distance = distance;
+    Geometry result = buffer_geometry(first, options);
+    relabel(relabel, result, srid);
+    return emit_geometry(context, result);
   }
   if (operation == SEEKDB_GIS_OP_BUFFER) {
     double distance = 0.0;
     if (argument_count < 2 || !scalar_double(arguments[1], distance)) {
       return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
     }
-    return emit_geometry(context, buffer_geometry(first, distance));
+    if (argument_count > 5) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+    BufferOptions options;
+    options.distance = distance;
+    for (uint32_t i = 2; i < argument_count; ++i) apply_buffer_strategy(arguments[i], options);
+    return emit_geometry(context, buffer_geometry(first, options));
   }
   if (operation == SEEKDB_GIS_OP_MAKE_VALID) {
-    if (!repair_geometry(first)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
-    return emit_geometry(context, first);
-  }
-  if (operation == SEEKDB_GIS_OP_ASMVTGEOM) {
-    if (argument_count < 2 || argument_count > 5) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
-    Geometry tile_bounds;
-    if (!decode(arguments[1], tile_bounds)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
-    Box bounds_box;
-    if (!bounds(tile_bounds, bounds_box) || bounds_box.max_x <= bounds_box.min_x ||
-        bounds_box.max_y <= bounds_box.min_y) {
-      return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
-    }
-    double extent = 4096.0;
-    double buffer = 256.0;
-    double clip_value = 1.0;
-    if (argument_count >= 3 && !scalar_double(arguments[2], extent)) {
-      return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
-    }
-    if (argument_count >= 4 && !scalar_double(arguments[3], buffer)) {
-      return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
-    }
-    if (argument_count >= 5 && !scalar_double(arguments[4], clip_value)) {
-      return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
-    }
-    if (!std::isfinite(extent) || extent <= 0.0 || extent > 1.0e9 ||
-        !std::isfinite(buffer) || buffer < 0.0 || buffer > 1.0e9) {
-      return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
-    }
-    if (!tile_transform_geometry(first, bounds_box, extent, buffer, clip_value != 0.0)) {
-      return emit_geometry(context, empty_geometry(0));
-    }
-    first.srid = 0;
-    return emit_geometry(context, first);
+    if (argument_count != 1) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+    return emit_geometry(context, make_valid_geometry(first));
   }
   if (operation == SEEKDB_GIS_OP_CLIP_BY_BOX || operation == SEEKDB_GIS_OP_UNION ||
       operation == SEEKDB_GIS_OP_DIFFERENCE || operation == SEEKDB_GIS_OP_SYMMETRIC_DIFFERENCE) {
@@ -1083,26 +682,61 @@ extern "C" seekdb_plugin_status_t seekdb_gis_geometry_operation(
     Geometry second;
     if (!decode(arguments[1], second)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
     if (operation == SEEKDB_GIS_OP_CLIP_BY_BOX) {
-      Box input, clip;
-      if (!bounds(first, input) || !bounds(second, clip)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
-      const double min_x = std::max(input.min_x, clip.min_x);
-      const double min_y = std::max(input.min_y, clip.min_y);
-      const double max_x = std::min(input.max_x, clip.max_x);
-      const double max_y = std::min(input.max_y, clip.max_y);
-      if (min_x >= max_x || min_y >= max_y) return emit_geometry(context, empty_geometry(first.srid));
-      if (first.type == 1 && !first.points.empty()) {
-        if (first.points[0].x < clip.min_x || first.points[0].x > clip.max_x ||
-            first.points[0].y < clip.min_y || first.points[0].y > clip.max_y) {
-          return emit_geometry(context, empty_geometry(first.srid));
-        }
-        return emit_geometry(context, first);
+      if (argument_count != 2) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+      const auto clipped = clip_by_box(first, second);
+      if (!clipped) {
+        const seekdb_plugin_execution_result_v1_t result = {
+            sizeof(result), "org.seekdb.gis.geometry", nullptr, 0, 1,
+            {0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0}};
+        return context->emit_result(context->host, &result);
       }
-      return emit_geometry(context, rectangle(first.srid, min_x, min_y, max_x, max_y));
+      return emit_geometry(context, *clipped);
     }
-    return emit_geometry(context, combine_rectangles(first, second, operation));
+    return emit_geometry(context, combine_polygons(first, second, operation));
   }
   return SEEKDB_PLUGIN_STATUS_INTERNAL;
 }
+catch (const CartesianInputError &) { return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT; }
+catch (const seekdb::gis::ProjectionInputError &) { return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT; }
+catch (const std::bad_alloc &) { return SEEKDB_PLUGIN_STATUS_NO_MEMORY; }
+catch (...) { return SEEKDB_PLUGIN_STATUS_INTERNAL; }
+
+
+extern "C" seekdb_plugin_status_t seekdb_gis_srs_transform(
+    seekdb_plugin_instance_handle_t *instance,
+    const seekdb_plugin_execution_context_v1_t *context,
+    const seekdb_plugin_execution_value_v1_t *arguments, uint32_t count)
+try {
+  if (instance == nullptr || !valid_context(context) || arguments == nullptr || count != 4)
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  for (uint32_t i = 0; i < count; ++i) {
+    const auto &a = arguments[i];
+    if (a.struct_size != sizeof(a) || a.is_null || a.type_id == nullptr || a.data == nullptr)
+      return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+    for (auto r : a.reserved_bytes) if (r != 0) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+    for (auto r : a.reserved) if (r != 0) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  for (uint32_t i : {1u, 2u}) {
+    if (std::strcmp(arguments[i].type_id, "core.type.bytes") != 0 || arguments[i].data_size == 0 ||
+        arguments[i].data_size > SEEKDB_PLUGIN_SRS_MAX_PROJ4_BYTES) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  uint32_t target;
+  if (std::strcmp(arguments[0].type_id, "org.seekdb.gis.geometry") != 0 ||
+      std::strcmp(arguments[3].type_id, "core.type.uint32") != 0 || arguments[3].data_size != sizeof(target))
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  std::memcpy(&target, arguments[3].data, sizeof(target));
+  Geometry geometry;
+  if (!decode(arguments[0], geometry)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  const seekdb::gis::Projection projection(
+      std::string(reinterpret_cast<const char *>(arguments[1].data), arguments[1].data_size),
+      std::string(reinterpret_cast<const char *>(arguments[2].data), arguments[2].data_size));
+  if (!transform_geometry(geometry, projection)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  geometry.srid = target;
+  return emit_geometry(context, geometry);
+}
+catch (const seekdb::gis::ProjectionInputError &) { return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT; }
+catch (const std::bad_alloc &) { return SEEKDB_PLUGIN_STATUS_NO_MEMORY; }
+catch (...) { return SEEKDB_PLUGIN_STATUS_INTERNAL; }
 
 extern "C" seekdb_plugin_status_t seekdb_gis_relation_operation(
     uint32_t operation,
@@ -1110,6 +744,7 @@ extern "C" seekdb_plugin_status_t seekdb_gis_relation_operation(
     const seekdb_plugin_execution_context_v1_t *context,
     const seekdb_plugin_execution_value_v1_t *arguments,
     uint32_t argument_count)
+try
 {
   if (instance == nullptr || !valid_context(context) || arguments == nullptr ||
       (operation == SEEKDB_GIS_REL_DWITHIN ? argument_count != 3 : argument_count != 2)) {
@@ -1125,6 +760,10 @@ extern "C" seekdb_plugin_status_t seekdb_gis_relation_operation(
   }
   return emit_bool(context, relation_result(operation, left, right, limit));
 }
+catch (const CartesianInputError &) { return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT; }
+catch (const std::bad_alloc &) { return SEEKDB_PLUGIN_STATUS_NO_MEMORY; }
+catch (...) { return SEEKDB_PLUGIN_STATUS_INTERNAL; }
+
 
 extern "C" seekdb_plugin_status_t seekdb_gis_centroid_operation(
     uint8_t surface_only,
@@ -1132,15 +771,27 @@ extern "C" seekdb_plugin_status_t seekdb_gis_centroid_operation(
     const seekdb_plugin_execution_context_v1_t *context,
     const seekdb_plugin_execution_value_v1_t *arguments,
     uint32_t argument_count)
+try
 {
-  (void)surface_only;
+  if (surface_only > 1) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
   if (instance == nullptr || !valid_context(context) || arguments == nullptr || argument_count != 1) {
     return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
   }
   Geometry input;
   if (!decode(arguments[0], input)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
-  return emit_geometry(context, centroid(input));
+  const auto result_geometry = surface_only ? point_on_surface(input) : centroid(input);
+  if (!surface_only && result_geometry.type == 7) {
+    const seekdb_plugin_execution_result_v1_t result = {
+        sizeof(result), "org.seekdb.gis.geometry", nullptr, 0, 1,
+        {0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0}};
+    return context->emit_result(context->host, &result);
+  }
+  return emit_geometry(context, result_geometry);
 }
+catch (const CartesianInputError &) { return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT; }
+catch (const std::bad_alloc &) { return SEEKDB_PLUGIN_STATUS_NO_MEMORY; }
+catch (...) { return SEEKDB_PLUGIN_STATUS_INTERNAL; }
+
 
 extern "C" seekdb_plugin_status_t seekdb_gis_mbr_operation(
     seekdb_plugin_instance_handle_t *instance,
@@ -1148,17 +799,8 @@ extern "C" seekdb_plugin_status_t seekdb_gis_mbr_operation(
     const seekdb_plugin_execution_value_v1_t *arguments,
     uint32_t argument_count)
 {
-  if (instance == nullptr || !valid_context(context) || arguments == nullptr || argument_count != 1) {
-    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
-  }
-  Geometry input;
-  Box box;
-  if (!decode(arguments[0], input) || !bounds(input, box)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
-  double values[4] = {box.min_x, box.min_y, box.max_x, box.max_y};
-  const seekdb_plugin_execution_result_v1_t result = {
-      sizeof(result), "org.seekdb.gis.scalar.bytes", reinterpret_cast<const uint8_t *>(values),
-      sizeof(values), 0, {0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0}};
-  return context->emit_result(context->host, &result);
+  return spatial_index_placeholder(instance, context, arguments, argument_count,
+                                   "org.seekdb.gis.scalar.bytes");
 }
 
 extern "C" seekdb_plugin_status_t seekdb_gis_valid_operation(
@@ -1166,6 +808,7 @@ extern "C" seekdb_plugin_status_t seekdb_gis_valid_operation(
     const seekdb_plugin_execution_context_v1_t *context,
     const seekdb_plugin_execution_value_v1_t *arguments,
     uint32_t argument_count)
+try
 {
   if (instance == nullptr || !valid_context(context) || arguments == nullptr || argument_count != 1) {
     return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
@@ -1174,6 +817,9 @@ extern "C" seekdb_plugin_status_t seekdb_gis_valid_operation(
   if (!decode(arguments[0], input)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
   return emit_bool(context, valid_geometry(input));
 }
+catch (const CartesianInputError &) { return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT; }
+catch (const std::bad_alloc &) { return SEEKDB_PLUGIN_STATUS_NO_MEMORY; }
+catch (...) { return SEEKDB_PLUGIN_STATUS_INTERNAL; }
 
 extern "C" seekdb_plugin_status_t seekdb_gis_geometrytype_operation(
     seekdb_plugin_instance_handle_t *instance,
@@ -1230,16 +876,22 @@ extern "C" seekdb_plugin_status_t seekdb_gis_interior_rings_operation(
   return emit_int32(context, rings, false);
 }
 
+#include "ewkt_adapter.ipp"
+
 extern "C" seekdb_plugin_status_t seekdb_gis_text_operation(
     uint32_t operation,
     seekdb_plugin_instance_handle_t *instance,
     const seekdb_plugin_execution_context_v1_t *context,
     const seekdb_plugin_execution_value_v1_t *arguments,
     uint32_t argument_count)
-{
+try {
   if (instance == nullptr || !valid_context(context) || arguments == nullptr || argument_count == 0) {
     return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
   }
+  if (operation >= SEEKDB_GIS_TEXT_CATALOG_FROM_TEXT && operation <= SEEKDB_GIS_TEXT_AS_EWKB)
+    return catalog_geometry_io(operation, context, arguments, argument_count);
+  if (operation == SEEKDB_GIS_TEXT_AS_EWKT)
+    return geometry_as_ewkt(context, arguments, argument_count);
   if (operation == SEEKDB_GIS_TEXT_FROM_TEXT) {
     if (argument_count > 2 || arguments[0].struct_size != sizeof(arguments[0]) ||
         arguments[0].is_null || arguments[0].data == nullptr || arguments[0].data_size == 0 ||
@@ -1258,12 +910,18 @@ extern "C" seekdb_plugin_status_t seekdb_gis_text_operation(
   if (argument_count != 1) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
   Geometry geometry;
   if (!decode(arguments[0], geometry)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  if (operation == SEEKDB_GIS_TEXT_AS_TEXT) {
+    std::string text;
+    if (!geometry_to_wkt(geometry, text)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+    return emit_bytes(context, text, "core.type.text");
+  }
   std::ostringstream stream;
-  if (operation == SEEKDB_GIS_TEXT_AS_TEXT) geometry_to_wkt(geometry, stream);
-  else if (operation == SEEKDB_GIS_TEXT_AS_GEOJSON) geometry_to_geojson(geometry, stream);
+  if (operation == SEEKDB_GIS_TEXT_AS_GEOJSON) geometry_to_geojson(geometry, stream);
   else return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
   return emit_bytes(context, stream.str(), "core.type.text");
 }
+catch (const std::bad_alloc &) { return SEEKDB_PLUGIN_STATUS_NO_MEMORY; }
+catch (...) { return SEEKDB_PLUGIN_STATUS_INTERNAL; }
 
 extern "C" seekdb_plugin_status_t seekdb_gis_wkb_from_bytes(
     seekdb_plugin_instance_handle_t *instance,
@@ -1304,47 +962,73 @@ extern "C" seekdb_plugin_status_t seekdb_gis_geohash_operation(
     const seekdb_plugin_execution_context_v1_t *context,
     const seekdb_plugin_execution_value_v1_t *arguments,
     uint32_t argument_count)
+try
 {
   if (instance == nullptr || !valid_context(context) || arguments == nullptr ||
-      (argument_count != 1 && argument_count != 2)) {
+      (argument_count != 1 && argument_count != 2) || arguments[0].struct_size != sizeof(arguments[0])) {
     return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
   }
-  Geometry input;
-  if (!decode(arguments[0], input)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
-  uint32_t precision = 12;
-  if (argument_count == 2 && !scalar_u32(arguments[1], precision)) {
-    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
-  }
-  if (precision < 1 || precision > 32) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
-  Geometry center = centroid(input);
-  if (center.points.empty()) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
-  double longitude = std::max(-180.0, std::min(180.0, center.points[0].x));
-  double latitude = std::max(-90.0, std::min(90.0, center.points[0].y));
-  const char base32[] = "0123456789bcdefghjkmnpqrstuvwxyz";
-  std::string hash;
-  hash.resize(precision);
-  double lon_range[2] = {-180.0, 180.0};
-  double lat_range[2] = {-90.0, 90.0};
-  bool even = true;
-  int bit = 0;
-  int character = 0;
-  for (uint32_t i = 0; i < precision * 5; ++i) {
-    double midpoint = 0.0;
-    if (even) {
-      midpoint = (lon_range[0] + lon_range[1]) * 0.5;
-      if (longitude >= midpoint) { character |= 1 << (4 - bit); lon_range[0] = midpoint; }
-      else lon_range[1] = midpoint;
-    } else {
-      midpoint = (lat_range[0] + lat_range[1]) * 0.5;
-      if (latitude >= midpoint) { character |= 1 << (4 - bit); lat_range[0] = midpoint; }
-      else lat_range[1] = midpoint;
+  std::optional<std::string> hash;
+  if (!arguments[0].is_null) {
+    Geometry input;
+    if (!decode(arguments[0], input)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+    validate_geohash_input(input, input.srid);
+    // Original empty/NULL input short-circuits precision evaluation.
+    if (!tile_empty(input)) {
+      int64_t precision = 0;
+      if (argument_count == 2) {
+        const auto &value = arguments[1];
+        if (value.struct_size != sizeof(value)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+        if (!value.is_null) {
+          if (!value.type_id || std::strcmp(value.type_id, "core.type.int64") != 0 ||
+              !value.data || value.data_size != sizeof(precision)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+          std::memcpy(&precision, value.data, sizeof(precision));
+        }
+      }
+      hash = geometry_geohash(input, precision);
     }
-    even = !even;
-    if (bit == 4) { hash[i / 5] = base32[character]; bit = 0; character = 0; }
-    else ++bit;
   }
-  return emit_bytes(context, hash);
+  if (hash) return emit_bytes(context, *hash);
+  const seekdb_plugin_execution_result_v1_t result = {
+      sizeof(result), "org.seekdb.gis.scalar.bytes", nullptr, 0, 1,
+      {0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0}};
+  return context->emit_result(context->host, &result);
 }
+catch (const CartesianInputError &) { return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT; }
+catch (const std::bad_alloc &) { return SEEKDB_PLUGIN_STATUS_NO_MEMORY; }
+catch (...) { return SEEKDB_PLUGIN_STATUS_INTERNAL; }
+
+extern "C" seekdb_plugin_status_t seekdb_gis_best_srid_operation(
+    seekdb_plugin_instance_handle_t *instance,
+    const seekdb_plugin_execution_context_v1_t *context,
+    const seekdb_plugin_execution_value_v1_t *arguments,
+    uint32_t argument_count)
+try
+{
+  if (instance == nullptr || !valid_context(context) || arguments == nullptr ||
+      (argument_count != 1 && argument_count != 2)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  for (uint32_t i = 0; i < argument_count; ++i) {
+    if (arguments[i].struct_size != sizeof(arguments[i])) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+    if (arguments[i].is_null) {
+      const seekdb_plugin_execution_result_v1_t result = {
+          sizeof(result), "org.seekdb.gis.scalar.int32", nullptr, 0, 1,
+          {0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0}};
+      return context->emit_result(context->host, &result);
+    }
+  }
+  Geometry first, second;
+  if (!decode(arguments[0], first) || (argument_count == 2 && !decode(arguments[1], second))) {
+    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+  }
+  const int32_t srid = geometry_best_srid(first, argument_count == 2 ? &second : nullptr);
+  const seekdb_plugin_execution_result_v1_t result = {
+      sizeof(result), "org.seekdb.gis.scalar.int32", reinterpret_cast<const uint8_t *>(&srid), sizeof(srid), 0,
+      {0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0}};
+  return context->emit_result(context->host, &result);
+}
+catch (const CartesianInputError &) { return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT; }
+catch (const std::bad_alloc &) { return SEEKDB_PLUGIN_STATUS_NO_MEMORY; }
+catch (...) { return SEEKDB_PLUGIN_STATUS_INTERNAL; }
 
 extern "C" seekdb_plugin_status_t seekdb_gis_spatial_cellid_operation(
     seekdb_plugin_instance_handle_t *instance,
@@ -1352,24 +1036,8 @@ extern "C" seekdb_plugin_status_t seekdb_gis_spatial_cellid_operation(
     const seekdb_plugin_execution_value_v1_t *arguments,
     uint32_t argument_count)
 {
-  if (instance == nullptr || !valid_context(context) || arguments == nullptr || argument_count != 1) {
-    return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
-  }
-  Geometry input;
-  if (!decode(arguments[0], input)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
-  Geometry center = centroid(input);
-  if (center.points.empty()) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
-  const double longitude = std::max(-180.0, std::min(180.0, center.points[0].x));
-  const double latitude = std::max(-90.0, std::min(90.0, center.points[0].y));
-  const uint64_t max_coordinate = (UINT64_C(1) << 31) - 1;
-  const uint64_t x = static_cast<uint64_t>((longitude + 180.0) / 360.0 * max_coordinate);
-  const uint64_t y = static_cast<uint64_t>((latitude + 90.0) / 180.0 * max_coordinate);
-  uint64_t cell_id = 0;
-  for (int bit = 30; bit >= 0; --bit) {
-    cell_id = (cell_id << 1) | ((x >> bit) & 1U);
-    cell_id = (cell_id << 1) | ((y >> bit) & 1U);
-  }
-  return emit_uint64(context, cell_id);
+  return spatial_index_placeholder(instance, context, arguments, argument_count,
+                                   "org.seekdb.gis.scalar.uint64");
 }
 
 extern "C" seekdb_plugin_status_t seekdb_gis_set_srid_operation(
@@ -1415,8 +1083,10 @@ extern "C" seekdb_plugin_status_t seekdb_gis_metric_operation(
     const seekdb_plugin_execution_context_v1_t *context,
     const seekdb_plugin_execution_value_v1_t *arguments,
     uint32_t argument_count)
+try
 {
-  if (instance == nullptr || !valid_context(context) || arguments == nullptr ||
+  if (operation < SEEKDB_GIS_METRIC_AREA || operation > SEEKDB_GIS_METRIC_DISTANCE_SPHERE ||
+      instance == nullptr || !valid_context(context) || arguments == nullptr ||
       ((operation == SEEKDB_GIS_METRIC_DISTANCE || operation == SEEKDB_GIS_METRIC_DISTANCE_SPHERE)
           ? argument_count != 2 : argument_count != 1)) {
     return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
@@ -1429,11 +1099,22 @@ extern "C" seekdb_plugin_status_t seekdb_gis_metric_operation(
   else {
     Geometry second;
     if (!decode(arguments[1], second)) return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
-    value = geometry_distance(first, second);
-    if (operation == SEEKDB_GIS_METRIC_DISTANCE_SPHERE) {
-      /* Great-circle distance for point values; non-points use the planar
-       * metric above because their vertices are already in projected SRS. */
-      if (first.type == 1 && second.type == 1 && !first.points.empty() && !second.points.empty()) {
+    if (operation == SEEKDB_GIS_METRIC_DISTANCE) {
+      value = geometry_distance(first, second);
+    } else if (operation == SEEKDB_GIS_METRIC_DISTANCE_SPHERE) {
+      // Do not substitute Cartesian distance for an unsupported spherical call.
+      if (first.srid != second.srid || (first.srid != 0 && first.srid != 4326) ||
+          first.dimensions != 2 || second.dimensions != 2 ||
+          first.type != 1 || second.type != 1 || first.points.empty() || second.points.empty()) {
+        return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+      }
+      {
+        for (const Geometry *geometry : {&first, &second}) {
+          if (geometry->points[0].x < -180.0 || geometry->points[0].x > 180.0 ||
+              geometry->points[0].y < -90.0 || geometry->points[0].y > 90.0) {
+            return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
+          }
+        }
         const double radians = 0.017453292519943295;
         const double lat1 = first.points[0].y * radians;
         const double lat2 = second.points[0].y * radians;
@@ -1444,7 +1125,7 @@ extern "C" seekdb_plugin_status_t seekdb_gis_metric_operation(
                          std::sin(dlon * 0.5) * std::sin(dlon * 0.5);
         value = 6371008.8 * 2.0 * std::atan2(std::sqrt(h), std::sqrt(std::max(0.0, 1.0 - h)));
       }
-    }
+    } else return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT;
   }
   const seekdb_plugin_execution_result_v1_t result = {
       sizeof(result), "org.seekdb.gis.scalar.float64",
@@ -1452,3 +1133,6 @@ extern "C" seekdb_plugin_status_t seekdb_gis_metric_operation(
       {0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0}};
   return context->emit_result(context->host, &result);
 }
+catch (const CartesianInputError &) { return SEEKDB_PLUGIN_STATUS_INVALID_ARGUMENT; }
+catch (const std::bad_alloc &) { return SEEKDB_PLUGIN_STATUS_NO_MEMORY; }
+catch (...) { return SEEKDB_PLUGIN_STATUS_INTERNAL; }

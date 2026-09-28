@@ -24,6 +24,8 @@ if (NOT TARGET seekdb_plugin_sdk)
     "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/catalog_spi.h"
     "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/memory_spi.h"
     "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/execution_spi.h"
+    "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/spatial_index_spi.h"
+    "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/srs_spi.h"
     "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/optimizer_spi.h"
     "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/server_dev.h"
     "${PROJECT_SOURCE_DIR}/include/seekdb/plugin/server_dev_planner.h"
@@ -460,6 +462,12 @@ function(_seekdb_validate_marked_plugin_target target visited)
     get_target_property(_private_links "${_private_target}" "${_link_property}")
     if (_private_links AND NOT _private_links MATCHES "-NOTFOUND$")
       foreach(_dependency IN LISTS _private_links)
+        # These are toolchain/platform libraries, not vendor or core archives.
+        # Only exact Unix names are admitted: no paths, -l flags, expressions,
+        # look-alike names or caller-controlled allow lists.
+        if (UNIX AND NOT TARGET "${_dependency}" AND _dependency MATCHES "^(pthread|dl|m|rt)$")
+          continue()
+        endif()
         if (_dependency STREQUAL "seekdb_plugin_sdk" OR
             _dependency STREQUAL "seekdb::plugin_sdk")
           continue()
@@ -483,8 +491,9 @@ function(_seekdb_validate_marked_plugin_target target visited)
 endfunction()
 
 # Explicitly opt in a plugin-owned or imported vendor helper.  Every target in
-# its transitive link graph must be marked first; raw flags, generator
-# expressions, shared libraries and unknown imported libraries fail closed.
+# its transitive link graph must be marked first, except the exact Unix system
+# library leaves admitted above; raw flags, generator expressions, vendor shared
+# libraries and unknown imported libraries fail closed.
 function(seekdb_mark_plugin_private_library target)
   _seekdb_require_plugin_callsite("${CMAKE_CURRENT_SOURCE_DIR}")
   _seekdb_resolve_plugin_target("${target}" _private_target)
@@ -499,6 +508,9 @@ function(seekdb_mark_plugin_private_library target)
     get_target_property(_private_links "${_private_target}" "${_link_property}")
     if (_private_links AND NOT _private_links MATCHES "-NOTFOUND$")
       foreach(_dependency IN LISTS _private_links)
+        if (UNIX AND NOT TARGET "${_dependency}" AND _dependency MATCHES "^(pthread|dl|m|rt)$")
+          continue()
+        endif()
         if (_dependency STREQUAL "seekdb_plugin_sdk" OR
             _dependency STREQUAL "seekdb::plugin_sdk")
           continue()

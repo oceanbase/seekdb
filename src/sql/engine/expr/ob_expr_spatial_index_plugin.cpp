@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-/* Core-only adapters for plugin-owned spatial cell/Mbr/geohash services. */
+/* Internal spatial index placeholders and the plugin-owned GeoHash adapter. */
 #include "sql/engine/expr/ob_expr_spatial_cellid.h"
 #include "sql/engine/expr/ob_expr_spatial_mbr.h"
 #include "sql/engine/expr/ob_expr_priv_st_geohash.h"
@@ -43,9 +43,13 @@ int ObExprSpatialCellid::calc_result_type1(ObExprResType &type, ObExprResType &t
   return OB_SUCCESS;
 }
 int ObExprSpatialCellid::calc_result1(ObObj &result, const ObObj &obj, ObExprCtx &ctx) const
-{ UNUSED(result); UNUSED(obj); UNUSED(ctx); return OB_NOT_SUPPORTED; }
+{ UNUSED(obj); UNUSED(ctx); result.set_null(); return OB_SUCCESS; }
 int ObExprSpatialCellid::eval_spatial_cellid(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
-{ return execute_plugin_geometry_uint64("spatial_cellid", expr, ctx, res); }
+{
+  // Match the core-GIS placeholder. DAS expands one geometry into index rows
+  // and fills these slots; scalar evaluation must not fabricate a cell ID.
+  UNUSED(expr); UNUSED(ctx); res.set_null(); return OB_SUCCESS;
+}
 int ObExprSpatialCellid::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) const
 { rt_expr.eval_func_ = eval_spatial_cellid; return OB_SUCCESS; }
 
@@ -65,9 +69,9 @@ int ObExprSpatialMbr::calc_result_type1(ObExprResType &type, ObExprResType &type
   return OB_SUCCESS;
 }
 int ObExprSpatialMbr::calc_result1(ObObj &result, const ObObj &obj, ObExprCtx &ctx) const
-{ UNUSED(result); UNUSED(obj); UNUSED(ctx); return OB_NOT_SUPPORTED; }
+{ UNUSED(obj); UNUSED(ctx); result.set_null(); return OB_SUCCESS; }
 int ObExprSpatialMbr::eval_spatial_mbr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
-{ return execute_plugin_geometry_bytes("spatial_mbr", expr, ctx, res, true); }
+{ UNUSED(expr); UNUSED(ctx); res.set_null(); return OB_SUCCESS; }
 int ObExprSpatialMbr::cg_expr(ObExprCGCtx &, const ObRawExpr &, ObExpr &rt_expr) const
 { rt_expr.eval_func_ = eval_spatial_mbr; return OB_SUCCESS; }
 

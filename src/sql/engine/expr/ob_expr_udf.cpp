@@ -649,6 +649,9 @@ int ObExprUDF::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObEx
         fun_sys.get_udf_version() != OB_INVALID_VERSION && expr_cg_ctx.schema_guard_) {
       const share::schema::ObRoutineInfo *routine = nullptr;
       OZ(expr_cg_ctx.schema_guard_->get_routine_info(info->udf_id_, routine));
+      if (OB_SUCC(ret) && fun_sys.get_native_function_flags() != 0 && (!routine || !routine->is_native())) {
+        ret = OB_SCHEMA_EAGAIN;
+      }
       if (OB_SUCC(ret) && routine && routine->is_native()) {
         int64_t parameter_count = 0;
         OZ(share::schema::NativeRoutineSignature::call_count(*routine, fun_sys.get_param_count(), parameter_count));
@@ -674,6 +677,10 @@ int ObExprUDF::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr, ObEx
         seekdb_plugin_sql_binding_v1_t binding{};
         std::vector<std::string> arguments;
         OZ(PluginFunctionExpr::resolve_native_binding(*routine, binding, arguments, fun_sys.get_param_count()));
+        if (OB_SUCC(ret) && fun_sys.get_native_function_flags() != 0 &&
+            fun_sys.get_native_function_flags() != binding.flags) {
+          ret = OB_STATE_NOT_MATCH;
+        }
         if (OB_SUCC(ret)) {
           info->native_ = OB_NEWx(PluginFunctionExtraInfo, (&alloc), alloc, T_FUN_SYS_PLUGIN_FUNCTION);
           if (!info->native_) ret = OB_ALLOCATE_MEMORY_FAILED;

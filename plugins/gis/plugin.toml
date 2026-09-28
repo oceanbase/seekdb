@@ -16,3 +16,27 @@ version = "1.0.0"
 [[provides]]
 service_id = "org.seekdb.gis.extensions"
 version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.gis.index.cover"
+version = "1.1.0"
+
+[[provides]]
+service_id = "org.seekdb.gis.index.filter"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.gis.index.cells"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.gis.index.planar_buffer"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.gis.srs.describe"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.gis.srs.transform"
+version = "1.0.0"

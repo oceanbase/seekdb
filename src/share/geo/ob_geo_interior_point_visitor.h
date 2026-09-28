@@ -129,11 +129,9 @@ private:
   template<typename PointType>
   double calculate_euclidean_distance(ObCartesianPoint &p1, PointType &p2);
   int calculate_interior_y(ObIWkbGeomPolygon *geo, double &interior_y);
-  int inner_calculate_interior_y(const ObWkbGeomLinearRing &ring, double centre_y, double &ymax, double &ymin);
   int calculate_crossing_points(ObIWkbGeomPolygon *geo, double interior_y, ObArray<double> &crossing_points_x);
   int inner_calculate_crossing_points(
       const ObWkbGeomLinearRing &ring, double interior_y, ObArray<double> &crossing_points_x);
-  bool is_crossing_line(double start_y, double end_y, double interior_y);
 
   ObIAllocator *allocator_;
   ObCartesianPoint *interior_point_;

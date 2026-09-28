@@ -244,7 +244,8 @@ bool is_valid_extension_spec(const ObPluginExtensionSpec &spec)
       SEEKDB_PLUGIN_EXTENSION_FLAG_PERSISTENT |
       SEEKDB_PLUGIN_EXTENSION_FLAG_PARALLEL_SAFE |
       SEEKDB_PLUGIN_EXTENSION_FLAG_REQUIRES_CATALOG |
-      SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY;
+      SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY |
+      SEEKDB_PLUGIN_EXTENSION_SPATIAL_MASK;
   const bool implementation_only =
       (spec.flags_ & SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY) != 0;
   bool valid = spec.kind_ >= SEEKDB_PLUGIN_EXTENSION_TYPE &&
@@ -252,6 +253,17 @@ bool is_valid_extension_spec(const ObPluginExtensionSpec &spec)
                is_valid_service_name(spec.object_id_) &&
                0 == (spec.flags_ & ~KNOWN_FLAGS) &&
                (!implementation_only || spec.kind_ == SEEKDB_PLUGIN_EXTENSION_FUNCTION);
+  const uint64_t spatial = spec.flags_ & SEEKDB_PLUGIN_EXTENSION_SPATIAL_MASK;
+  if (spatial != 0) {
+    const uint64_t required = SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY |
+        SEEKDB_PLUGIN_EXTENSION_FLAG_DETERMINISTIC | SEEKDB_PLUGIN_EXTENSION_FLAG_IMMUTABLE |
+        SEEKDB_PLUGIN_EXTENSION_FLAG_NULL_PROPAGATING;
+    const uint32_t arity = spatial == SEEKDB_PLUGIN_EXTENSION_FLAG_SPATIAL_DWITHIN ? 3 : 2;
+    valid = valid && spec.kind_ == SEEKDB_PLUGIN_EXTENSION_FUNCTION &&
+        (spatial & (spatial - 1)) == 0 && (spec.flags_ & required) == required &&
+        spec.minimum_arity_ == arity && spec.maximum_arity_ == arity &&
+        spec.argument_type_ids_.size() == arity && spec.signature_flags_ == 0;
+  }
   switch (spec.kind_) {
     case SEEKDB_PLUGIN_EXTENSION_TYPE:
       valid = valid && is_valid_sql_name(spec.sql_name_) &&

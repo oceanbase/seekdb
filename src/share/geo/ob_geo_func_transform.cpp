@@ -18,7 +18,7 @@
 
 #include "share/geo/ob_geo_dispatcher.h"
 #include "share/geo/ob_geo_func_transform.h"
-#include "boost/geometry/srs/transformation.hpp"
+#include "seekdb/geo/projection.hpp"
 
 using namespace oceanbase::common;
 namespace oceanbase
@@ -45,22 +45,25 @@ private:
     int ret = OB_SUCCESS;
     lib::ObMemAttr last_mem_attr = lib::ObMallocHookAttrGuard::get_tl_mem_attr();
     lib::ObMallocHookAttrGuard boost_cache_guard(lib::ObMemAttr("BoostCache"));
-    boost::geometry::srs::proj4 src_proj4(context.get_val_arg(0)->string_->ptr());
-    boost::geometry::srs::proj4 dest_proj4(context.get_val_arg(1)->string_->ptr());
-    boost::geometry::srs::transformation<> transformer(src_proj4, dest_proj4);
+    seekdb::geo::projection::Definition src_proj4(context.get_val_arg(0)->string_->ptr());
+    seekdb::geo::projection::Definition dest_proj4(context.get_val_arg(1)->string_->ptr());
+    seekdb::geo::projection::Transformer transformer(src_proj4, dest_proj4);
     lib::ObMallocHookAttrGuard malloc_guard(last_mem_attr);
     const PtInType *src_geo = reinterpret_cast<const PtInType *>(g->val());
     PtResType *dest_geo = NULL;
     if (OB_ISNULL(dest_geo = OB_NEWx(PtResType, (context.get_allocator()), g->get_srid(), context.get_allocator()))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
-      transformer.forward(*src_geo, *dest_geo);
-      double x = fabs((reinterpret_cast<ObPoint*>(dest_geo))->x());
-      double y = fabs((reinterpret_cast<ObPoint*>(dest_geo))->y());
-      if (isnan(x) || x == INFINITY || isnan(y) || y == INFINITY) {
+      if (!transformer.forward(*src_geo, *dest_geo)) {
         ret = OB_ERROR_OUT_OF_RANGE;
       } else {
-        result = dest_geo;
+        double x = fabs((reinterpret_cast<ObPoint*>(dest_geo))->x());
+        double y = fabs((reinterpret_cast<ObPoint*>(dest_geo))->y());
+        if (isnan(x) || x == INFINITY || isnan(y) || y == INFINITY) {
+          ret = OB_ERROR_OUT_OF_RANGE;
+        } else {
+          result = dest_geo;
+        }
       }
     }
     return ret;
@@ -79,13 +82,16 @@ private:
     } else {
       lib::ObMemAttr last_mem_attr = lib::ObMallocHookAttrGuard::get_tl_mem_attr();
       lib::ObMallocHookAttrGuard boost_cache_guard(lib::ObMemAttr("BoostCache"));
-      boost::geometry::srs::proj4 src_proj4(context.get_val_arg(0)->string_->ptr());
-      boost::geometry::srs::proj4 dest_proj4(context.get_val_arg(1)->string_->ptr());
-      boost::geometry::srs::transformation<> transformer(src_proj4, dest_proj4);
+      seekdb::geo::projection::Definition src_proj4(context.get_val_arg(0)->string_->ptr());
+      seekdb::geo::projection::Definition dest_proj4(context.get_val_arg(1)->string_->ptr());
+      seekdb::geo::projection::Transformer transformer(src_proj4, dest_proj4);
       lib::ObMallocHookAttrGuard malloc_guard(last_mem_attr);
       const GeometryInType *src_geo = reinterpret_cast<const GeometryInType *>(g->val());
-      transformer.forward(*src_geo, *dest_geo);
-      result = dest_geo;
+      if (!transformer.forward(*src_geo, *dest_geo)) {
+        ret = OB_ERROR_OUT_OF_RANGE;
+      } else {
+        result = dest_geo;
+      }
     }
     return ret;
   }

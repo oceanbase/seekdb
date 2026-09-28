@@ -309,6 +309,15 @@ int main(void) {
   FIELD(SqlApiV4,seekdb_plugin_sql_api_v4_t,v3);
   FIELD(SqlApiV4,seekdb_plugin_sql_api_v4_t,mutate_routine);
   FIELD(SqlApiV4,seekdb_plugin_sql_api_v4_t,reserved);
+  TYPE(SqlApiV5,seekdb_plugin_sql_api_v5_t);
+  FIELD(SqlApiV5,seekdb_plugin_sql_api_v5_t,v4);
+  FIELD(SqlApiV5,seekdb_plugin_sql_api_v5_t,lookup_srs);
+  FIELD(SqlApiV5,seekdb_plugin_sql_api_v5_t,reserved);
+  TYPE(SrsDefinition,seekdb_plugin_srs_definition_v1_t);
+#define S(f) FIELD(SrsDefinition,seekdb_plugin_srs_definition_v1_t,f)
+  S(struct_size); S(srid); S(definition); S(definition_size); S(proj4text); S(proj4text_size);
+  S(min_x); S(min_y); S(max_x); S(max_y); S(reserved);
+#undef S
   TYPE(RoutineMutationResult,seekdb_plugin_routine_mutation_result_v1_t);
 #define M(f) FIELD(RoutineMutationResult,seekdb_plugin_routine_mutation_result_v1_t,f)
   M(struct_size); M(outcome); M(database_error); M(object_id); M(close_error); M(identity_error);
@@ -370,5 +379,11 @@ int main(void) {
 #define TSV2(f) FIELD(TableFunctionServiceV2,seekdb_plugin_table_function_service_v2_t,f)
   TSV2(v1); TSV2(estimate); TSV2(reserved);
   printf("kind.table=%d\nstatus.end=%d\n", SEEKDB_PLUGIN_EXTENSION_TABLE_FUNCTION, SEEKDB_PLUGIN_STATUS_END_OF_STREAM);
+  printf("spatial.intersects=%llu\nspatial.covers=%llu\nspatial.within=%llu\nspatial.dwithin=%llu\nspatial.mask=%llu\n",
+      (unsigned long long)SEEKDB_PLUGIN_EXTENSION_FLAG_SPATIAL_INTERSECTS,
+      (unsigned long long)SEEKDB_PLUGIN_EXTENSION_FLAG_SPATIAL_COVERS,
+      (unsigned long long)SEEKDB_PLUGIN_EXTENSION_FLAG_SPATIAL_WITHIN,
+      (unsigned long long)SEEKDB_PLUGIN_EXTENSION_FLAG_SPATIAL_DWITHIN,
+      (unsigned long long)SEEKDB_PLUGIN_EXTENSION_SPATIAL_MASK);
   return 0;
 }

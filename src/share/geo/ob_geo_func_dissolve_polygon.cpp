@@ -18,6 +18,7 @@
 
 #include "ob_geo_func_dissolve_polygon.h"
 #include "share/geo/ob_geo_func_register.h"
+#include "seekdb/geo/polygon_repair.hpp"
 
 using namespace oceanbase::common;
 namespace oceanbase
@@ -42,41 +43,16 @@ static int eval_dissolve_polygon(
   } else {
     bool is_valid = bg::is_valid(*geo1);
     if (!is_valid) {
-      bool is_self_intersects = bg::intersects(*geo1);
       MPY *res = OB_NEWx(MPY, context.get_allocator(), g1->get_srid(), *context.get_allocator());
       if (OB_ISNULL(res)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-      } else if (is_self_intersects) {
-        ObArenaAllocator tmp_alloc;
-        MPY *left_part =
-            OB_NEWx(MPY, &tmp_alloc, g1->get_srid(), tmp_alloc);
-        MPY *right_part =
-            OB_NEWx(MPY, &tmp_alloc, g1->get_srid(), tmp_alloc);
-        if (OB_ISNULL(left_part) || OB_ISNULL(right_part)) {
-          ret = OB_ALLOCATE_MEMORY_FAILED;
-        } else {
-          GeometryType *g1_rev = OB_NEWx(GeometryType, &tmp_alloc, *geo1);
-          if (OB_ISNULL(g1_rev)) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-          } else {
-            bg::reverse(*g1_rev);
-            bg::sym_difference(*geo1, *g1_rev, *res);
-          }
-        }
       } else {
         ObArenaAllocator tmp_alloc;
-        bg::intersection(*geo1, *geo1, *res);
-        if (res->is_empty() && !geo1->is_empty()) {
-          GeometryType *g1_rev = OB_NEWx(GeometryType, &tmp_alloc, *geo1);
-          if (OB_ISNULL(g1_rev)) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-          } else {
-            bg::reverse(*g1_rev);
-            bg::intersection(*g1_rev, *g1_rev, *res);
-          }
-        }
-        if (OB_SUCC(ret)) {
-          bg::correct(*res);
+        GeometryType *g1_rev = OB_NEWx(GeometryType, &tmp_alloc, *geo1);
+        if (OB_ISNULL(g1_rev)) {
+          ret = OB_ALLOCATE_MEMORY_FAILED;
+        } else {
+          seekdb::geo::cartesian::dissolve_invalid_polygon(*geo1, *g1_rev, *res);
         }
       }
       if (OB_FAIL(ret)) {

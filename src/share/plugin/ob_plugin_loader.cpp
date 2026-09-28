@@ -88,7 +88,8 @@ const seekdb_plugin_extension_flags_t KNOWN_EXTENSION_FLAGS =
     SEEKDB_PLUGIN_EXTENSION_FLAG_PERSISTENT |
     SEEKDB_PLUGIN_EXTENSION_FLAG_PARALLEL_SAFE |
     SEEKDB_PLUGIN_EXTENSION_FLAG_REQUIRES_CATALOG |
-    SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY;
+    SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY |
+    SEEKDB_PLUGIN_EXTENSION_SPATIAL_MASK;
 
 struct StagedService
 {
@@ -1175,6 +1176,7 @@ int validate_extension_common(const uint32_t struct_size,
   if (struct_size < required_size || !valid_identifier(object_id) ||
       (flags & ~KNOWN_EXTENSION_FLAGS) != 0 ||
       (!allow_implementation_only && (flags & SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY)) ||
+      (!allow_implementation_only && (flags & SEEKDB_PLUGIN_EXTENSION_SPATIAL_MASK)) ||
       !all_zero(reserved, reserved_count)) {
     ret = OB_INVALID_DATA;
     error = std::string("invalid ") + kind + " extension descriptor";

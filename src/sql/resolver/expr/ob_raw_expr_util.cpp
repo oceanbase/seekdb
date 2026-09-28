@@ -1062,6 +1062,24 @@ do {                                                                            
     }
   }
   OV (udf_raw_expr->get_params_desc().count() == udf_raw_expr->get_param_count(), OB_ERR_UNEXPECTED, KPC(udf_raw_expr));
+  if (OB_SUCC(ret)) udf_raw_expr->set_native_function_flags(0);
+  if (OB_SUCC(ret) && native) {
+    // Optional planner metadata. A failed lookup cannot invent an index
+    // strategy; ordinary native binding/ACL checks still run during codegen.
+    seekdb_plugin_sql_binding_v1_t binding{};
+    std::vector<std::string> arguments;
+    if (PluginFunctionExpr::resolve_native_binding(*schema_routine, binding, arguments,
+        udf_raw_expr->get_param_count()) == OB_SUCCESS) {
+      uint64_t spatial = binding.flags & SEEKDB_PLUGIN_EXTENSION_SPATIAL_MASK;
+      const int64_t arity = spatial == SEEKDB_PLUGIN_EXTENSION_FLAG_SPATIAL_DWITHIN ? 3 : 2;
+      bool valid = spatial != 0 && (spatial & (spatial - 1)) == 0 && parameter_count == arity;
+      for (int64_t i = 0; valid && i < arity; ++i) {
+        const auto type = udf_raw_expr->get_params_type().at(i).get_type();
+        valid = i < 2 ? ob_is_geometry(type) : type == ObDoubleType;
+      }
+      udf_raw_expr->set_native_function_flags(valid ? binding.flags : binding.flags & ~SEEKDB_PLUGIN_EXTENSION_SPATIAL_MASK);
+    }
+  }
   return ret;
 }
 

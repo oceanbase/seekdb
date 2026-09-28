@@ -16,6 +16,7 @@
 #define USING_LOG_PREFIX LIB
 #include "ob_geo_interior_point_visitor.h"
 #include "share/geo/ob_geo_func_register.h"
+#include "seekdb/geo/interior_point.hpp"
 
 namespace oceanbase
 {
@@ -50,9 +51,7 @@ int ObGeoInteriorPointVisitor::init(ObGeometry *geo)
 template<typename PointType>
 double ObGeoInteriorPointVisitor::calculate_euclidean_distance(ObCartesianPoint &p1, PointType &p2)
 {
-  double x_dist = p1.x() - p2.template get<0>();
-  double y_dist = p1.y() - p2.template get<1>();
-  return sqrt(x_dist * x_dist + y_dist * y_dist);
+  return seekdb::geo::cartesian::surface_distance(p2.template get<0>(), p2.template get<1>(), p1.x(), p1.y());
 }
 
 int ObGeoInteriorPointVisitor::assign_interior_point(double x, double y)
@@ -135,58 +134,31 @@ int ObGeoInteriorPointVisitor::visit(ObIWkbGeomLineString *geo)
     if (OB_FAIL(init(geo))) {
     }
   }
-
   if (OB_SUCC(ret) && !is_geo_empty_) {
     const ObWkbGeomLineString *line = reinterpret_cast<const ObWkbGeomLineString *>(geo->val());
-    ObWkbGeomLineString::const_iterator iter = line->begin();
-    ObWkbGeomLineString::const_iterator iter2 = line->begin();
-    if (exist_centroid_) {
-      if (line->size() <= 2) {
-        if (OB_ISNULL(interior_point_)) {
-          // interior point is first point
-          double dist = calculate_euclidean_distance(*centroid_pt_, *iter);
-          if (dist < min_endpoint_dist_) {
-            min_endpoint_dist_ = dist;
-            if (OB_FAIL(assign_interior_endpoint(iter->get<0>(), iter->get<1>()))) {
-            }
-          }
-        }
-      } else {
-        // skip first and last point
-        iter++;
-        iter2++;
-        iter2++;
-        for (; iter2 != line->end() && OB_SUCC(ret); iter++, iter2++) {
-          double dist = calculate_euclidean_distance(*centroid_pt_, *iter);
-          if (dist < min_dist_) {
-            min_dist_ = dist;
-            if (OB_FAIL(assign_interior_point(iter->get<0>(), iter->get<1>()))) {
-            }
-          }
-        }
-      }
-    } else {
-      // only choose first and last point
-      // centroid_pt_ default POINT(0 0) when centroid not exist
-      double dist = calculate_euclidean_distance(*centroid_pt_, *iter);
+    // No centroid: the visitor's documented fallback origin must not
+    // dereference a null centroid pointer.
+    const double cx = centroid_pt_ == nullptr ? 0 : centroid_pt_->x();
+    const double cy = centroid_pt_ == nullptr ? 0 : centroid_pt_->y();
+    const auto vertex = [&](double x, double y) {
+      const double dist = seekdb::geo::cartesian::surface_distance(x, y, cx, cy);
       if (dist < min_dist_) {
         min_dist_ = dist;
-        if (OB_FAIL(assign_interior_point(iter->get<0>(), iter->get<1>()))) {
+        ret = assign_interior_point(x, y);
+      }
+      return OB_SUCC(ret);
+    };
+    const auto endpoint = [&](double x, double y) {
+      if (OB_ISNULL(interior_point_)) {
+        const double dist = seekdb::geo::cartesian::surface_distance(x, y, cx, cy);
+        if (dist < min_endpoint_dist_) {
+          min_endpoint_dist_ = dist;
+          ret = assign_interior_endpoint(x, y);
         }
       }
-      if (line->size() > 1) {
-        ++iter2;
-        for (; iter2 != line->end() && OB_SUCC(ret); iter++, iter2++) {
-          // find last point
-        }
-        dist = calculate_euclidean_distance(*centroid_pt_, *iter);
-        if (dist < min_dist_) {
-          min_dist_ = dist;
-          if (OB_FAIL(assign_interior_point(iter->get<0>(), iter->get<1>()))) {
-          }
-        }
-      }
-    }
+      return OB_SUCC(ret);
+    };
+    seekdb::geo::cartesian::surface_line_candidates(*line, exist_centroid_, vertex, endpoint);
   }
   return ret;
 }
@@ -202,115 +174,22 @@ int ObGeoInteriorPointVisitor::visit(ObIWkbGeomMultiLineString *geo)
 
   return ret;
 }
-
-int ObGeoInteriorPointVisitor::inner_calculate_interior_y(
-    const ObWkbGeomLinearRing &ring, double centre_y, double &ymax, double &ymin)
-{
-  int ret = OB_SUCCESS;
-  ObWkbGeomLinearRing::iterator iter = ring.begin();
-  for (; iter != ring.end() && OB_SUCC(ret); iter++) {
-    double y = iter->get<1>();
-    if ((y > ymin) && (y <= centre_y)) {
-      ymin = y;
-    } else if ((y > centre_y) && (y < ymax)) {
-      ymax = y;
-    }
-  }
-
-  return ret;
-}
-
 int ObGeoInteriorPointVisitor::calculate_interior_y(ObIWkbGeomPolygon *geo, double &interior_y)
 {
-  int ret = OB_SUCCESS;
-  ObGeoEvalCtx box_ctx(mem_ctx_);
-  ObGeogBox *gbox = nullptr;
   const ObWkbGeomPolygon *polygon = reinterpret_cast<const ObWkbGeomPolygon *>(geo->val());
-  ObWkbGeomLinearRing::iterator iter = polygon->exterior_ring().begin();
-  double ymin = iter->get<1>();
-  double ymax = iter->get<1>();
-  for (iter++; iter != polygon->exterior_ring().end(); iter++) {
-    double y = iter->get<1>();
-    if (y < ymin) {
-      ymin = y;
-    }
-    if (y > ymax) {
-      ymax = y;
-    }
-  }
-  double centre_y = ymin + (ymax - ymin) / 2;
-  if (OB_FAIL(inner_calculate_interior_y(polygon->exterior_ring(), centre_y, ymax, ymin))) {
-  } else {
-    const ObWkbGeomPolygonInnerRings &rings = polygon->inner_rings();
-    ObWkbGeomPolygonInnerRings::const_iterator iter = rings.begin();
-    for (; iter != rings.end() && OB_SUCC(ret); iter++) {
-      if (OB_FAIL(inner_calculate_interior_y(*iter, centre_y, ymax, ymin))) {
-      }
-    }
-  }
-
-  if (OB_SUCC(ret)) {
-    interior_y = ymin + (ymax - ymin) / 2;
-  }
-  return ret;
+  return seekdb::geo::cartesian::surface_scanline_y(
+      polygon->exterior_ring(), polygon->inner_rings(), interior_y) ? OB_SUCCESS : OB_ERR_GIS_INVALID_DATA;
 }
-
-bool ObGeoInteriorPointVisitor::is_crossing_line(double start_y, double end_y, double interior_y)
-{
-  bool bret = true;
-  if (start_y == end_y) {
-    bret = false;  // horizontal line
-  } else if ((start_y > interior_y) && (end_y > interior_y)) {
-    bret = false;  // above line
-  } else if ((start_y < interior_y) && (end_y < interior_y)) {
-    bret = false;  // below line
-  } else if ((start_y == interior_y) && (end_y < interior_y)) {
-    bret = false;  // downward line start at interior_y (below line)
-  } else if ((end_y == interior_y) && (start_y < interior_y)) {
-    bret = false;  // upward line end at interior_y (below line)
-  }
-  return bret;
-}
-
 int ObGeoInteriorPointVisitor::inner_calculate_crossing_points(
     const ObWkbGeomLinearRing &ring, double interior_y, ObArray<double> &crossing_points_x)
 {
   int ret = OB_SUCCESS;
-  ObWkbGeomLinearRing::iterator iter = ring.begin();
-  double ymin = iter->get<1>();
-  double ymax = iter->get<1>();
-  for (iter++; iter < ring.end(); iter++) {
-    if (iter->get<1>() < ymin) {
-      ymin = iter->get<1>();
-    } 
-    if (iter->get<1>() > ymax) {
-      ymax = iter->get<1>();
-    }
-  }
-  if (interior_y >= ymin && interior_y <= ymax) {
-    ObWkbGeomLinearRing::iterator p0_iter = ring.begin();  // segment start point
-    ObWkbGeomLinearRing::iterator p1_iter = ring.begin();  // segment end point
-    p1_iter++;
-    uint32_t sz = ring.size() - 1; // to avoid calculate first segment twice
-    uint32_t i = 0;
-    for (; i < sz && OB_SUCC(ret); p0_iter++, p1_iter++, ++i) {
-      double y0 = p0_iter->get<1>();
-      double y1 = p1_iter->get<1>();
-      if (is_crossing_line(y0, y1, interior_y)) {
-        double x0 = p0_iter->get<0>();
-        double x1 = p1_iter->get<0>();
-        double x = 0.0;
-        if (x1 == x0) {
-          x = x0;
-        } else {
-          // check y1 != y0 in is_crossing_line
-          double percent = (interior_y - y0) / (y1 - y0);
-          x = x0 + percent * (x1 - x0);
-        }
-        if (OB_FAIL(crossing_points_x.push_back(x))) {
-        }
-      }
-    }
+  const auto append = [&](double x) {
+    ret = crossing_points_x.push_back(x);
+    return OB_SUCC(ret);
+  };
+  if (!seekdb::geo::cartesian::surface_ring_crossings(ring, interior_y, append) && OB_SUCC(ret)) {
+    ret = OB_ERR_GIS_INVALID_DATA;
   }
   return ret;
 }
@@ -352,14 +231,9 @@ int ObGeoInteriorPointVisitor::visit(ObIWkbGeomPolygon *geo)
     } else {
       double interior_x = 0;
       lib::ob_sort(crossing_points.begin(), crossing_points.end());
-      for (int64_t i = 0; OB_SUCC(ret) && i < crossing_points.size(); i += 2) {
-        double width = crossing_points[i + 1] - crossing_points[i];
-        if (width != 0 && width > max_width_) {
-          max_width_ = width;
-          interior_x = crossing_points[i] + width / 2;
-          if (OB_FAIL(assign_interior_point(interior_x, interior_y))) {
-          }
-        }
+      if (seekdb::geo::cartesian::surface_widest_interval(
+          crossing_points.begin(), crossing_points.end(), max_width_, interior_x)) {
+        ret = assign_interior_point(interior_x, interior_y);
       }
 
       if (OB_SUCC(ret) && (max_width_ == -1)) {

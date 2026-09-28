@@ -687,6 +687,22 @@ fn layouts_match_public_c_headers() {
     layout!(SqlApiV2, SqlApiV2, v1, poll_query, reserved);
     layout!(SqlApiV3, SqlApiV3, v2, lookup_routine, reserved);
     layout!(SqlApiV4, SqlApiV4, v3, mutate_routine, reserved);
+    layout!(SqlApiV5, SqlApiV5, v4, lookup_srs, reserved);
+    layout!(
+        SrsDefinition,
+        SrsDefinition,
+        struct_size,
+        srid,
+        definition,
+        definition_size,
+        proj4text,
+        proj4text_size,
+        min_x,
+        min_y,
+        max_x,
+        max_y,
+        reserved
+    );
     layout!(
         RoutineMutationResult,
         RoutineMutationResult,
@@ -902,5 +918,10 @@ fn layouts_match_public_c_headers() {
     );
     rust.insert("kind.table".into(), TABLE_FUNCTION as usize);
     rust.insert("status.end".into(), END_OF_STREAM as usize);
+    rust.insert("spatial.intersects".into(), SPATIAL_INTERSECTS as usize);
+    rust.insert("spatial.covers".into(), SPATIAL_COVERS as usize);
+    rust.insert("spatial.within".into(), SPATIAL_WITHIN as usize);
+    rust.insert("spatial.dwithin".into(), SPATIAL_DWITHIN as usize);
+    rust.insert("spatial.mask".into(), SPATIAL_MASK as usize);
     assert_eq!(c, rust);
 }

@@ -35,7 +35,7 @@ def records(base=1000):
 class HelpersTest(unittest.TestCase):
     def test_package_inventory_and_overloads(self):
         expected = suite.expected_bindings()
-        self.assertEqual(sum(expected.values()), 106)
+        self.assertEqual(sum(expected.values()), 112)
         self.assertEqual(len({name for name, _ in expected}), 82)
         suite.check_bindings(records(), expected)
         for index, value in ((0, "wrong"), (1, None), (1, True), (1, -1), (1, 1 << 63),
@@ -84,7 +84,7 @@ class HelpersTest(unittest.TestCase):
             suite.check_values(object())
         with patch.object(suite, "scalar", return_value=1) as calls:
             suite.check_values(object())
-            self.assertEqual(calls.call_count, 13)
+            self.assertEqual(calls.call_count, 27)
 
     def test_removal_checks_live_acl_not_history_or_only_routines(self):
         with patch.object(suite, "installation", return_value=()), patch.object(suite, "routines", return_value=()), \
@@ -94,7 +94,7 @@ class HelpersTest(unittest.TestCase):
             self.assertEqual(scalar.call_args.args[2], tuple(row[1] for row in records()))
             self.assertIn("objtype=9", scalar.call_args.args[1])
             self.assertNotIn("history", scalar.call_args.args[1])
-        for count in (None, 1, 106):
+        for count in (None, 1, 112):
             with patch.object(suite, "installation", return_value=()), patch.object(suite, "routines", return_value=()), \
                     patch.object(suite, "check_members"), patch.object(suite, "check_edges"), \
                     patch.object(suite, "scalar", return_value=count), self.assertRaisesRegex(AssertionError, "live object ACL"):

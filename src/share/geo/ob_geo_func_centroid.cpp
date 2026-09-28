@@ -18,6 +18,7 @@
 
 #include "ob_geo_func_centroid.h"
 #include "share/geo/ob_geo_func_utils.h"
+#include "seekdb/geo/cartesian_algorithms.hpp"
 
 using namespace oceanbase::common;
 namespace oceanbase
@@ -61,13 +62,13 @@ private:
         ret = OB_ERR_GIS_INVALID_DATA;
       } else {
         if (!mpo->empty()) {
-          boost::geometry::centroid(*mpo, *res_geo);
+          seekdb::geo::cartesian::centroid(*mpo, *res_geo);
         } else if (!ml->empty()) {
-          boost::geometry::centroid(*ml, *res_geo);
+          seekdb::geo::cartesian::centroid(*ml, *res_geo);
         } else {
           // return OB_ERR_BOOST_GEOMETRY_CENTROID_EXCEPTION if mpt is empty too
           // need caller function to decide what to do
-          boost::geometry::centroid(*mpt, *res_geo);
+          seekdb::geo::cartesian::centroid(*mpt, *res_geo);
         }
         result = res_geo;
       }
@@ -92,7 +93,7 @@ private:
       if (OB_ISNULL(geo_candidate)) {
         ret = OB_ERR_INVALID_NULL_SDO_GEOMETRY;
       } else {
-        boost::geometry::centroid(*geo_candidate, *res_geo);
+        seekdb::geo::cartesian::centroid(*geo_candidate, *res_geo);
         result = res_geo;
       }
     }

@@ -24,6 +24,9 @@ using namespace oceanbase::common;
 using namespace native_activation_test;
 #include "custom_executor_fixture.h"
 #include "memory_account_fixture.h"
+#include "gis_spatial_fixture.h"
+#include "gis_projection_fixture.h"
+#include "gis_catalog_fixture.h"
 
 struct Sink { int64_t value = 0; int calls = 0; bool is_null = false; };
 struct SqlFixture { int calls = 0; bool fail = false; bool exec_mode = false; bool null_parameter = false; };
@@ -97,6 +100,8 @@ static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL emit_geometry(
   return SEEKDB_PLUGIN_STATUS_OK;
 }
 
+#include "gis_catalog_transform_fixture.h"
+
 static void exercise_gis_transform(ObPluginLoader &loader, const std::vector<uint8_t> &seed)
 {
   const char *types[] = {"org.seekdb.gis.geometry", "org.seekdb.gis.scalar.uint32"};
@@ -122,11 +127,12 @@ static void exercise_gis_transform(ObPluginLoader &loader, const std::vector<uin
     arguments[0].data = bytes.data(); arguments[0].data_size = bytes.size();
     arguments[1].data = reinterpret_cast<const uint8_t *>(&target); arguments[1].data_size = sizeof(target);
     GeometrySink sink;
-    seekdb_plugin_execution_context_v1_t context{};
-    context.struct_size = sizeof(context);
-    context.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&sink);
-    context.emit_result = emit_geometry;
-    CHECK(loader.execute_bound_function(binding, &context, arguments, 2) == expected_status);
+    seekdb_plugin_execution_context_v2_t context{};
+    gis_catalog_test::Transport transport;
+    transport.attach(context);
+    context.v1.host = reinterpret_cast<seekdb_plugin_host_handle_t *>(&sink);
+    context.v1.emit_result = emit_geometry;
+    CHECK(loader.execute_bound_function(binding, &context.v1, arguments, 2) == expected_status);
     if (expected_status != OB_SUCCESS) {
       CHECK(sink.calls == 0 && sink.bytes.empty());
       return;
@@ -158,7 +164,9 @@ static void exercise_gis_transform(ObPluginLoader &loader, const std::vector<uin
     run(4326, 3857, 2, latitude, 0, 0, OB_INVALID_ARGUMENT);
   run(4326, 3857, std::numeric_limits<double>::max(), 45, 0, 0, OB_INVALID_ARGUMENT);
   run(0, 3857, 2, 49, 0, 0, OB_INVALID_ARGUMENT);
-  run(4326, 32631, 2, 49, 0, 0, OB_INVALID_ARGUMENT);
+  run(4326, 32631, 3, 0, 500000, 0);
+  run(32631, 4326, 500000, 0, 3, 0);
+  run(4326, 99999, 2, 49, 0, 0, OB_INVALID_ARGUMENT);
   std::cout << "PASS: GIS Mercator forward/inverse controls, poles, unsupported pairs and PointZ" << std::endl;
 }
 
@@ -219,6 +227,9 @@ static void exercise_gis(ObPluginLoader &loader)
   legacy_value.type_id = geometry.object_id; // New comparison protocol uses the TYPE identity, not the legacy GIS alias.
   CHECK(loader.compare_bound_type(geometry, legacy_value, legacy_value, ordering) == OB_NOT_SUPPORTED && ordering == 0);
   exercise_gis_transform(loader, point);
+  gis_catalog_transform_test::exercise(loader);
+  gis_projection_test::exercise(loader);
+  gis_spatial_test::exercise(loader);
 }
 
 static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL rust_fixture_sql(

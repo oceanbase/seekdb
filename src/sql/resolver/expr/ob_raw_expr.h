@@ -1712,6 +1712,7 @@ struct ObRawExprExtraInfo
   // TODO: add OB_ASSERT for expr_type when access the extra info
   union {
     uint64_t value_;
+    uint64_t native_function_flags_; // T_FUN_UDF: verified implementation metadata, not SQL name.
     uint64_t cast_mode_; // T_FUN_SYS_CAST
                          // T_FUN_COLUMN_CONV
                          // T_FUN_SYS_ALIGN_DATE4CMP
@@ -4208,6 +4209,9 @@ public:
   inline void set_pkg_id(uint64_t pkg_id){ pkg_id_ = pkg_id; }
   inline uint64_t get_pkg_id() const { return pkg_id_; }
   inline uint64_t get_udf_id() const { return udf_id_; }
+  uint64_t get_native_spatial_flags() const;
+  uint64_t get_native_function_flags() const { return extra_.native_function_flags_; }
+  void set_native_function_flags(uint64_t flags) { extra_.native_function_flags_ = flags; expr_hash_ = 0; }
   inline int64_t get_pkg_version() const { return pkg_schema_version_; }
   inline int64_t get_udf_version() const { return udf_schema_version_; }
   inline const ObIArray<int64_t> &get_subprogram_path() const { return subprogram_path_; }

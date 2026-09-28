@@ -3481,17 +3481,15 @@ int ObTableScanOp::inner_get_next_spiv_index_row()
 
 int ObTableScanOp::inner_get_next_spatial_index_row()
 {
-#if !SEEKDB_ENABLE_CORE_GIS
-  return OB_NOT_SUPPORTED;
-#else
   int ret = OB_SUCCESS;
-  bool need_ignore_null = false;
   if (OB_ISNULL(domain_index_.dom_rows_)) {
     if (OB_FAIL(init_spatial_index_rows())) {
     }
   }
   if (OB_SUCC(ret)) {
-    if (domain_index_.domain_row_index_ >= domain_index_.dom_rows_->count()) {
+    // NULL and empty collections produce no index rows. Keep fetching until
+    // there is a covering to emit, rather than returning a stale cell/MBR.
+    while (OB_SUCC(ret) && domain_index_.domain_row_index_ >= domain_index_.dom_rows_->count()) {
       if (OB_FAIL(ObTableScanOp::inner_get_next_row_implement())) {
         if (OB_ITER_END != ret) {
         }
@@ -3503,8 +3501,9 @@ int ObTableScanOp::inner_get_next_spatial_index_row()
         ObDatum *in_datum = NULL;
         ObString geo_wkb;
         if (OB_FAIL(expr->eval(eval_ctx_, in_datum))) {
-        } else if (OB_FALSE_IT(geo_wkb = in_datum->get_string())) {
-        } else if (geo_wkb.length() > 0) {
+        } else if (OB_ISNULL(in_datum)) {
+          ret = OB_ERR_UNEXPECTED;
+        } else if (!in_datum->is_null()) {
           uint32_t srid = UINT32_MAX;
           common::ObSrsCacheGuard srs_guard;
           const ObSrsItem *srs_item = NULL;
@@ -3525,13 +3524,16 @@ int ObTableScanOp::inner_get_next_spatial_index_row()
               OB_FAIL(srs_provider->get_tenant_srs_guard(srs_guard))) {
           } else if (srid != 0 &&
               OB_FAIL(srs_guard.get_srs_item(srid, srs_item))) {
+          } else if (srid != 0 && OB_ISNULL(srs_item)) {
+            ret = OB_ERR_SRS_NOT_FOUND;
           } else if (((srid == 0) || !(srs_item->is_geographical_srs())) &&
                       OB_FAIL(srs_provider->get_srs_bounds(srid, srs_item, srs_bound))) {
           } else if (OB_FAIL(ObGeoTypeUtil::get_cellid_mbr_from_geom(geo_wkb, srs_item, srs_bound,
                                                                      cellids, mbr_val))) {
           } else if (cellids.size() == 0 && mbr_val.empty()) {
             // empty geometry collection
-            need_ignore_null = true;
+          } else if (cellids.size() == 0 || mbr_val.empty()) {
+            ret = OB_ERR_GIS_INVALID_DATA;
           } else if (cellids.size() > SAPTIAL_INDEX_DEFAULT_ROW_COUNT) {
             ret = OB_ERR_UNEXPECTED;
           } else if (OB_ISNULL(domain_index_.rows_)) {
@@ -3546,58 +3548,87 @@ int ObTableScanOp::inner_get_next_spatial_index_row()
               }
             }
           }
-        } else {
-          need_ignore_null = true;
         }
       }
     }
-    if (OB_SUCC(ret) && !need_ignore_null) {
+    if (OB_SUCC(ret)) {
       blocksstable::ObDatumRow *row =
-          (*(domain_index_.dom_rows_))[domain_index_.domain_row_index_++];
+          (*(domain_index_.dom_rows_))[domain_index_.domain_row_index_];
       blocksstable::ObStorageDatum &cellid = row->storage_datums_[0];
       blocksstable::ObStorageDatum &mbr = row->storage_datums_[1];
       if (OB_FAIL(fill_generated_cellid_mbr(cellid, mbr))) {
+      } else {
+        ++domain_index_.domain_row_index_;
       }
     }
   }
+  if (OB_FAIL(ret) && OB_NOT_NULL(domain_index_.dom_rows_)) {
+    // An append or expression failure must not leave a partial covering that
+    // a later read could mistake for successfully generated rows.
+    domain_index_.dom_rows_->reuse();
+    domain_index_.domain_row_index_ = 0;
+  }
   return ret;
-#endif
 }
 
 int ObTableScanOp::init_spatial_index_rows()
 {
   int ret = OB_SUCCESS;
-  void *buf = ctx_.get_allocator().alloc(sizeof(ObDomainIndexRow));
-  void *row_buf = ctx_.get_allocator().alloc(sizeof(blocksstable::ObDatumRow) * SAPTIAL_INDEX_DEFAULT_ROW_COUNT);
-  void *mbr_buffer = ctx_.get_allocator().alloc(OB_DEFAULT_MBR_SIZE);
-  if (OB_ISNULL(buf) || OB_ISNULL(mbr_buffer) || OB_ISNULL(row_buf)) {
+  const ObExprPtrIArray &exprs = MY_SPEC.output_;
+  int64_t geo_idx = -1, cell_idx = -1, mbr_idx = -1;
+  for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
+    const ObExpr *expr = exprs.at(i);
+    int64_t *slot = nullptr;
+    if (OB_ISNULL(expr)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (expr->type_ == T_FUN_SYS_SPATIAL_CELLID) {
+      slot = &cell_idx;
+    } else if (expr->type_ == T_FUN_SYS_SPATIAL_MBR) {
+      slot = &mbr_idx;
+    } else if (expr->datum_meta_.type_ == ObGeometryType) {
+      slot = &geo_idx;
+    }
+    if (OB_NOT_NULL(slot)) {
+      if (*slot != -1) ret = OB_ERR_UNEXPECTED;
+      else *slot = i;
+    }
+  }
+  if (OB_SUCC(ret) && (geo_idx < 0 || cell_idx < 0 || mbr_idx < 0)) ret = OB_ERR_UNEXPECTED;
+  ObIAllocator &allocator = ctx_.get_allocator();
+  ObDomainIndexRow *dom_rows = nullptr;
+  blocksstable::ObDatumRow *rows = nullptr;
+  void *mbr_buffer = nullptr;
+  if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(dom_rows = OB_NEWx(ObDomainIndexRow, &allocator))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+  } else if (OB_ISNULL(rows = static_cast<blocksstable::ObDatumRow *>(
+      allocator.alloc(sizeof(blocksstable::ObDatumRow) * SAPTIAL_INDEX_DEFAULT_ROW_COUNT)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
-    domain_index_.dom_rows_ = new(buf) ObDomainIndexRow();
-    domain_index_.rows_ = new(row_buf) blocksstable::ObDatumRow[SAPTIAL_INDEX_DEFAULT_ROW_COUNT];
-    domain_index_.mbr_buffer_ = mbr_buffer;
-    const ObExprPtrIArray &exprs = MY_SPEC.output_;
-    const uint8_t spatial_expr_cnt = 3;
-    uint8_t cnt = 0;
+    new(rows) blocksstable::ObDatumRow[SAPTIAL_INDEX_DEFAULT_ROW_COUNT];
     for (uint32_t i = 0; OB_SUCC(ret) && i < SAPTIAL_INDEX_DEFAULT_ROW_COUNT; i++) {
-      if (OB_FAIL(domain_index_.rows_[i].init(SAPTIAL_INDEX_DEFAULT_COL_COUNT))) {
+      if (OB_FAIL(rows[i].init(SAPTIAL_INDEX_DEFAULT_COL_COUNT))) {
       }
     }
-    for (uint32_t i = 0; OB_SUCC(ret) && i < exprs.count() && cnt < spatial_expr_cnt; i++) {
-      if (exprs.at(i)->type_ == T_FUN_SYS_SPATIAL_CELLID) {
-        domain_index_.cell_idx_ = i;
-        cnt++;
-      } else if (exprs.at(i)->type_ == T_FUN_SYS_SPATIAL_MBR) {
-        domain_index_.mbr_idx_ = i;
-        cnt++;
-      } else if (exprs.at(i)->datum_meta_.type_ == ObGeometryType) {
-        domain_index_.geo_idx_ = i;
-        cnt++;
-      }
+    if (OB_SUCC(ret) && OB_ISNULL(mbr_buffer = allocator.alloc(OB_DEFAULT_MBR_SIZE))) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
     }
-    if (OB_FAIL(ret) || cnt != spatial_expr_cnt) {
-      ret = OB_ERR_UNEXPECTED;
+  }
+  if (OB_SUCC(ret)) {
+    domain_index_.dom_rows_ = dom_rows;
+    domain_index_.rows_ = rows;
+    domain_index_.mbr_buffer_ = mbr_buffer;
+    domain_index_.geo_idx_ = geo_idx;
+    domain_index_.cell_idx_ = cell_idx;
+    domain_index_.mbr_idx_ = mbr_idx;
+    domain_index_.domain_row_index_ = 0;
+  } else {
+    if (OB_NOT_NULL(rows)) {
+      for (uint32_t i = 0; i < SAPTIAL_INDEX_DEFAULT_ROW_COUNT; ++i) rows[i].~ObDatumRow();
+      allocator.free(rows);
     }
+    if (OB_NOT_NULL(dom_rows)) { dom_rows->~ObDomainIndexRow(); allocator.free(dom_rows); }
+    if (OB_NOT_NULL(mbr_buffer)) allocator.free(mbr_buffer);
   }
   return ret;
 }

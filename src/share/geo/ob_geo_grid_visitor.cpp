@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX LIB
 #include "ob_geo_grid_visitor.h"
+#include "seekdb/geo/tile_grid.hpp"
 
 namespace oceanbase
 {
@@ -33,30 +34,9 @@ bool ObGeoGridVisitor::prepare(ObGeometry *geo)
 
 bool ObGeoGridVisitor::is_duplicate_point(double x, double y)
 {
-  bool bret = false;
-  if (grid_->x_size > 0) {
-    if (!use_floor_) {
-      x = rint((x - grid_->x_ip) / grid_->x_size) * grid_->x_size + grid_->x_ip;
-    } else {
-      x = floor((x - grid_->x_ip) / grid_->x_size) * grid_->x_size + grid_->x_ip;
-    }
-  }
-  if (grid_->y_size > 0) {
-    if (!use_floor_) {
-      y = rint((y - grid_->y_ip) / grid_->y_size) * grid_->y_size + grid_->y_ip;
-    } else {
-      y = floor((y - grid_->y_ip) / grid_->y_size) * grid_->y_size + grid_->y_ip;
-    }
-  }
-  bool x_equals = fabs(x - last_x_) <= 1e-12;
-  bool y_equals = fabs(y - last_y_) <= 1e-12;
-  if ((std::isnan(last_x_) && std::isnan(last_y_)) || !x_equals || !y_equals) {
-    last_x_ = x;
-    last_y_ = y;
-  } else {
-    bret = true;
-  }
-  return bret;
+  x = seekdb::geo::cartesian::snap_coordinate(x, grid_->x_ip, grid_->x_size, use_floor_);
+  y = seekdb::geo::cartesian::snap_coordinate(y, grid_->y_ip, grid_->y_size, use_floor_);
+  return seekdb::geo::cartesian::duplicate_grid_point(x, y, last_x_, last_y_);
 }
 
 void ObGeoGridVisitor::reset_duplicate_point()

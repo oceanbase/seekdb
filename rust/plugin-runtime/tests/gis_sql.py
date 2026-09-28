@@ -24,6 +24,7 @@ PL caller body/dependency analysis, but not durable native creation, PL bytecode
 execution or committed extension installation.
 """
 import argparse
+import contextlib
 import json
 import pathlib
 import re
@@ -42,9 +43,9 @@ def validate_declaration_inventory(descriptors, declarations):
     fixture below performs real parser, CREATE and exact DSO-binding checks.
     """
     rows = re.findall(
-        r'GIS_SQL_FUNCTION\("([^"]+)", "([^"]+)",\s*"[^"]+", '
+        r'GIS_SQL_FUNCTION(?:_NULLABLE|_INTERSECTS|_COVERS|_WITHIN|_DWITHIN)?\("([^"]+)", "([^"]+)",\s*"[^"]+", '
         r'(\d+), (\d+), (?:"[^"]+"|GIS_\w+), (\w+), ([^)]+)\)', descriptors)
-    if not rows or len(rows) != descriptors.count('GIS_SQL_FUNCTION('):
+    if not rows or len(rows) != len(re.findall(r'GIS_SQL_FUNCTION(?:_NULLABLE|_INTERSECTS|_COVERS|_WITHIN|_DWITHIN)?\(', descriptors)):
         raise ValueError("unrecognized GIS descriptor syntax")
     statements = re.findall(
         r'CREATE FUNCTION `([^`]+)`\(([^\n]*)\)\nRETURNS [^\n]+\n'
@@ -69,7 +70,7 @@ def validate_declaration_inventory(descriptors, declarations):
         by_name.setdefault(name, []).append((types, variadic))
     if len(rows) != len({row[1] for row in rows}) or set(by_name) != {row[1] for row in rows}:
         raise ValueError("GIS SQL names differ from the module inventory")
-    mapping = {'g': 'GEOMETRY', 'd': 'DOUBLE', 'u': 'BIGINT', 'b': 'LONGBLOB'}
+    mapping = {'g': 'GEOMETRY', 'd': 'DOUBLE', 'u': 'BIGINT', 'i': 'BIGINT', 'b': 'LONGBLOB'}
     for object_id, name, lo, hi, pattern, flags in rows:
         expected_id = object_id
         if '.alias.' in object_id:
@@ -101,6 +102,8 @@ def validate_declaration_inventory(descriptors, declarations):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build-dir", required=True, type=pathlib.Path)
+    parser.add_argument("--keep-artifacts", action="store_true",
+                        help="retain the isolated fixture binary, DSO and logs for diagnosis")
     args = parser.parse_args()
     source = pathlib.Path(__file__).resolve().parents[3]
     descriptor_source = (source / "plugins/gis/seekdb_gis_plugin.c").read_text()
@@ -116,9 +119,23 @@ def main():
     link_command = shlex.split((build / "src/observer/CMakeFiles/seekdb.dir/link.txt").read_text())
     main_index, = [i for i, arg in enumerate(link_command) if arg.endswith("/ob_main.dir/main.cpp.o")]
     subprocess.run(["cmake", "--build", str(build), "--target", "seekdb_gis_plugin", "-j2"], check=True)
-    with tempfile.TemporaryDirectory(prefix="seekdb-gis-sql-") as directory:
+    workspace = (contextlib.nullcontext(tempfile.mkdtemp(prefix="seekdb-gis-sql-"))
+                 if args.keep_artifacts else tempfile.TemporaryDirectory(prefix="seekdb-gis-sql-"))
+    with workspace as directory:
         stage = pathlib.Path(directory)
+        if args.keep_artifacts:
+            print("Retained GIS fixture artifacts: {}".format(stage), flush=True)
         obj, binary = stage / "gis_sql.o", stage / "gis_sql"
+        # Compile the original option parser under a private name: CORE_GIS=OFF
+        # deliberately does not link this legacy routine. Extract its exact
+        # body rather than maintaining a second handwritten test oracle.
+        legacy = (source / "src/sql/engine/expr/ob_geo_expr_utils.cpp").read_text()
+        begin = legacy.index("int ObGeoExprUtils::parse_axis_order(")
+        end = legacy.index("int ObGeoExprUtils::check_need_reverse(", begin)
+        probe = legacy[begin:end].replace("int ObGeoExprUtils::parse_axis_order(",
+                                          "static int legacy_parse_axis_order(", 1)
+        (stage / "legacy_axis_order_probe.h").write_text(probe)
+        compile_command.extend(["-I", str(stage)])
         compile_command[compile_command.index("-o") + 1] = str(obj)
         compile_command[compile_command.index("-c") + 1] = str(pathlib.Path(__file__).with_suffix(".cpp").resolve())
         subprocess.run(compile_command, cwd=entry["directory"], check=True)

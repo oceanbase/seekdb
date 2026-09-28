@@ -77,8 +77,21 @@ enum seekdb_plugin_extension_flags {
    * Exact owner/object-ID lookup, introspection, leases and durable dependency
    * tracking remain available. This flag is not an authorization boundary.
    * Hosts that do not recognize the flag must reject the descriptor. */
-  SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY = UINT64_C(1) << 6
+  SEEKDB_PLUGIN_EXTENSION_FLAG_IMPLEMENTATION_ONLY = UINT64_C(1) << 6,
+  /* Optional, mutually exclusive spatial index support promises on typed,
+   * fixed-arity implementation-only immutable/strict scalar functions. The
+   * first two SQL arguments are geometry; DWITHIN adds a DOUBLE distance in
+   * the SRS coordinate units (metres for geographic SRS). COVERS/WITHIN refer
+   * to argument 0 relative to argument 1. These are conservative candidate
+   * strategies, NEVER permission to remove the original function predicate.
+   * Unknown hosts reject these flags. No descriptor layout changes. */
+  SEEKDB_PLUGIN_EXTENSION_FLAG_SPATIAL_INTERSECTS = UINT64_C(1) << 7,
+  SEEKDB_PLUGIN_EXTENSION_FLAG_SPATIAL_COVERS = UINT64_C(1) << 8,
+  SEEKDB_PLUGIN_EXTENSION_FLAG_SPATIAL_WITHIN = UINT64_C(1) << 9,
+  SEEKDB_PLUGIN_EXTENSION_FLAG_SPATIAL_DWITHIN = UINT64_C(1) << 10
 };
+
+#define SEEKDB_PLUGIN_EXTENSION_SPATIAL_MASK (UINT64_C(15) << 7)
 
 typedef int32_t seekdb_plugin_cast_context_t;
 enum seekdb_plugin_cast_context {

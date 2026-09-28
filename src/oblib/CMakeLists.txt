@@ -23,6 +23,9 @@ target_include_directories(
   # oblib/core interface instead of a directory-wide include path so plugin
   # targets cannot inherit a core source-tree include by accident.
   ${RUST_INCLUDE_DIR}
+  # Private source-only numerical algorithms shared with the GIS plugin.
+  # This adds no core source-tree path to plugin targets.
+  ${CMAKE_SOURCE_DIR}/include
   # oblib exposes no src-reachable -I -- not even the repo root ${CMAKE_SOURCE_DIR}.
   # So any include of src from oblib lib+unittests at compile time (both share/.. and full src/.. spellings)
   # is file-not-found. oblib itself needs no repo root: 0 src/.. ; 2 deps/.. resolved via same-directory.

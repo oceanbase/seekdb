@@ -8,6 +8,7 @@ ob_add_new_object_target(ob_share ob_share)
 ob_add_new_object_target(ob_share_extra ob_share_extra)
 target_link_libraries(ob_share PUBLIC ob_base)
 target_link_libraries(ob_share_extra PUBLIC ob_base_without_pass)
+target_sources(ob_share PRIVATE geo/srs_metadata_adapter.cpp)
 
 if (SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS)
   target_sources(ob_share PRIVATE
@@ -25,8 +26,12 @@ endif()
 if (NOT SEEKDB_ENABLE_CORE_GIS)
   # The inventory-pruned core still needs the narrow ABI shims used by SQL
   # expression adapters.  Geometry parsing and SRS/codec work is delegated to
-  # plugins; these definitions intentionally return OB_NOT_SUPPORTED.
+  # plugins; remaining unimplemented shims return OB_NOT_SUPPORTED.
   target_sources(ob_share PRIVATE geo/ob_geo_plugin_stubs.cpp)
+  # Storage MBR transport and leased SPI invocation only: no S2/geometry
+  # algorithms are linked into the lightweight core.
+  target_sources(ob_share PRIVATE geo/spatial_index_plugin.cpp)
+  target_sources(ob_share PRIVATE geo/srs_plugin.cpp)
 endif()
 
 add_library(ob_share_static STATIC EXCLUDE_FROM_ALL)

@@ -771,15 +771,31 @@ int RoutineCatalogWriter::create(ObRoutineInfo &routine_info, const ObRoutineInf
   const bool preserve_binding = same_binding && NativeRoutineAdmission::same_signature(*old_routine_info, routine_info);
   uint64_t expected_generation = 0;
   if (routine_info.is_native() || (replace && old_routine_info->is_native())) {
-    if (OB_FAIL(NativeRoutineAdmission::check_catalog(trans))) return ret;
+    if (OB_FAIL(NativeRoutineAdmission::check_catalog(trans))) {
+      LOG_WARN("native routine catalog admission failed", K(ret),
+               K(routine_info.get_routine_name()));
+      return ret;
+    }
   }
   if (routine_info.is_native() && !preserve_binding) {
-    if (share::g_mp == nullptr) return OB_NOT_INIT;
+    if (share::g_mp == nullptr) {
+      LOG_WARN("native routine plugin manager is null", K(routine_info.get_routine_name()));
+      return OB_NOT_INIT;
+    }
     seekdb_plugin_sql_binding_v1_t binding{};
     std::vector<std::string> arguments;
-    if (OB_FAIL(sql::PluginFunctionExpr::resolve_native_binding(routine_info, binding, arguments))) return ret;
+    if (OB_FAIL(sql::PluginFunctionExpr::resolve_native_binding(routine_info, binding, arguments))) {
+      LOG_WARN("extension native routine binding resolution failed",
+               K(ret), K(routine_info.get_native_module_id()),
+               K(routine_info.get_native_implementation_id()),
+               K(routine_info.get_routine_name()), K(routine_info.get_param_count()));
+      return ret;
+    }
     expected_generation = binding.owner_generation;
-    if (expected_generation == 0) return OB_STATE_NOT_MATCH;
+    if (expected_generation == 0) {
+      LOG_WARN("native routine owner generation is zero", K(routine_info.get_routine_name()));
+      return OB_STATE_NOT_MATCH;
+    }
   }
   int64_t reserved_acl_version = OB_INVALID_VERSION;
   if (owner_grant != nullptr) {
@@ -821,9 +837,23 @@ int RoutineCatalogWriter::create(ObRoutineInfo &routine_info, const ObRoutineInf
     // Attribute-only ALTER preserves the existing edge even if the module is
     // stopped. Rebinding admits the new package before removing the old edge;
     // both writes belong to the routine's transaction and must roll back with it.
-    if (!preserve_binding) ret = mutate_native_routine_dependency(trans, routine_info, true, expected_generation);
-    if (OB_SUCC(ret) && replace && !same_binding)
+    if (!preserve_binding) {
+      ret = mutate_native_routine_dependency(trans, routine_info, true, expected_generation);
+      if (OB_FAIL(ret)) {
+        LOG_WARN("native routine dependency mutation failed", K(ret),
+                 K(routine_info.get_routine_name()), K(routine_info.get_native_module_id()),
+                 K(routine_info.get_native_implementation_id()), K(expected_generation));
+      }
+    }
+    if (OB_SUCC(ret) && replace && !same_binding) {
       ret = mutate_native_routine_dependency(trans, *old_routine_info, false);
+      if (OB_FAIL(ret)) {
+        LOG_WARN("old native routine dependency removal failed", K(ret),
+                 K(old_routine_info->get_routine_name()),
+                 K(old_routine_info->get_native_module_id()),
+                 K(old_routine_info->get_native_implementation_id()));
+      }
+    }
   }
   if (OB_SUCC(ret) && !replace && !routine_info.is_native() && version_reservation != nullptr) {
     ret = clear_reserved_routine_privileges(routine_info, schema_guard, pl_operator, trans);
@@ -849,17 +879,32 @@ int RoutineCatalogWriter::create(ObRoutineInfo &routine_info, const ObRoutineInf
         ObSEArray<ObObjPriv, 4> existing;
         auto &privileges = service_.get_schema_service()->get_priv_sql_service();
         if (OB_FAIL(schema_guard.get_user_info(routine_info.get_owner_id(), owner))) {
-        } else if (!owner) ret = OB_USER_NOT_EXIST;
-        else if (OB_FAIL(privileges.read_native_routine_privileges(routine_info, trans, existing))) {
-        } else if (!existing.empty()) ret = OB_STATE_NOT_MATCH;
+          LOG_WARN("native routine owner lookup failed", K(ret), K(routine_info.get_routine_name()));
+        } else if (!owner) {
+          ret = OB_USER_NOT_EXIST;
+          LOG_WARN("native routine owner missing", K(ret), K(routine_info.get_routine_name()));
+        } else if (replace && OB_FAIL(privileges.read_native_routine_privileges(routine_info, trans, existing))) {
+          LOG_WARN("native routine privilege lookup failed", K(ret), K(routine_info.get_routine_name()));
+        } else if (!existing.empty()) {
+          ret = OB_STATE_NOT_MATCH;
+          LOG_WARN("native routine already has privileges", K(ret), K(routine_info.get_routine_name()),
+                   K(existing.count()));
+        }
         else if (grant_priv) {
           int64_t acl_version = reserved_acl_version;
           ObPackedObjPriv before = 0, after = 0;
           if (owner_grant == nullptr && OB_FAIL(service_.gen_new_schema_version(acl_version))) {
-          } else if (acl_version <= routine_info.get_schema_version()) ret = OB_STATE_NOT_MATCH;
+            LOG_WARN("native routine ACL version generation failed", K(ret));
+          } else if (acl_version <= routine_info.get_schema_version()) {
+            ret = OB_STATE_NOT_MATCH;
+            LOG_WARN("native routine ACL version is not newer", K(ret), K(acl_version),
+                     K(routine_info.get_schema_version()));
+          }
           else if (OB_FAIL(privileges.change_native_routine_privileges(routine_info,
               routine_info.get_owner_id(), routine_info.get_owner_id(), OB_PRIV_EXECUTE | OB_PRIV_ALTER_ROUTINE,
-              ObPrivSqlService::NativePrivilegeChange::GRANT, false, acl_version, trans, ddl_stmt_str, before, after))) {
+              ObPrivSqlService::NativePrivilegeChange::GRANT, false, acl_version, trans, ddl_stmt_str,
+              before, after, nullptr, true))) {
+            LOG_WARN("native routine privilege grant failed", K(ret), K(routine_info.get_routine_name()));
           } else if (before != 0) ret = OB_STATE_NOT_MATCH;
         }
       } else if (grant_priv) {
@@ -895,6 +940,10 @@ int RoutineCatalogWriter::create(ObRoutineInfo &routine_info, const ObRoutineInf
         }
       }
     }
+  }
+  if (OB_FAIL(ret) && routine_info.is_native()) {
+    LOG_WARN("native routine writer post-processing failed", K(ret),
+             K(routine_info.get_routine_name()), K(routine_info.get_routine_id()));
   }
   return ret;
 }
@@ -1261,7 +1310,14 @@ std::unique_ptr<share::plugin::IExtensionSchemaInstaller> ObPLDDLService::make_r
       {
         int ret = OB_SUCCESS;
         if (!arg.is_valid()) return OB_INVALID_ARGUMENT;
-        if (OB_FAIL(check_routine(spec, arg, error))) return ret;
+        if (OB_FAIL(check_routine(spec, arg, error))) {
+          if (error.empty()) {
+            error = "extension routine admission failed: " +
+                std::string(arg.routine_info_.get_routine_name().ptr(),
+                            arg.routine_info_.get_routine_name().length());
+          }
+          return ret;
+        }
         auto node = std::make_unique<Node>();
         node->arg_ = &arg;
         if (OB_FAIL(node->routine_.assign(arg.routine_info_))) return ret;
@@ -1289,7 +1345,14 @@ std::unique_ptr<share::plugin::IExtensionSchemaInstaller> ObPLDDLService::make_r
         ObErrorInfo errors = arg.error_info_;
         if (OB_FAIL(ObPLDDLService::create_routine(node->routine_, nullptr, false, errors,
             node->dependencies_, &arg.ddl_stmt_str_, guard_, ddl_, &transaction_,
-            &node->identity_, &node->version_))) return ret;
+            &node->identity_, &node->version_))) {
+          if (error.empty()) {
+            error = "extension routine catalog write failed: " +
+                std::string(node->routine_.get_routine_name().ptr(),
+                            node->routine_.get_routine_name().length());
+          }
+          return ret;
+        }
         nodes_.push_back(std::move(node));
         view_savepoint.release();
         return OB_SUCCESS;
@@ -2395,6 +2458,8 @@ int ObPLDDLService::create_routine(ObRoutineInfo &routine_info,
                                   trans, nullptr != external_trans);
       ret = writer.create(routine_info, old_routine_info, error_info, dep_infos, ddl_stmt_str,
                           reservation, version_reservation, owner_grant);
+      LOG_WARN("extension routine writer returned", K(ret), K(routine_info.get_routine_name()),
+               K(routine_info.get_routine_id()), K(routine_info.get_schema_version()));
     }
     if (nullptr == external_trans && trans.is_started()) {
       int temp_ret = OB_SUCCESS;

@@ -65,7 +65,7 @@ public:
       uint64_t grantor, uint64_t grantee, ObPrivSet rights, NativePrivilegeChange change,
       bool grant_option, int64_t new_schema_version, common::ObMySQLTransaction &transaction,
       const common::ObString *ddl_stmt_str, ObPackedObjPriv &before, ObPackedObjPriv &after,
-      RoutinePrivilegeOverlay *private_view = nullptr);
+      RoutinePrivilegeOverlay *private_view = nullptr, bool skip_object_lock = false);
   // Apply one decrease from a host-authorized whole-object revoke plan. This
   // is NOT authorization: cascade grantors need not be roles of the actor.
   // Locks the exact object/key and compares the entire current mask with
@@ -332,7 +332,8 @@ private:
       uint64_t grantor, uint64_t grantee, ObPrivSet rights, NativePrivilegeChange change,
       bool grant_option, int64_t new_schema_version, common::ObMySQLTransaction &transaction,
       const common::ObString *ddl_stmt_str, ObPackedObjPriv &before, ObPackedObjPriv &after,
-      RoutinePrivilegeOverlay *private_view, const NativeReduction *reduction);
+      RoutinePrivilegeOverlay *private_view, const NativeReduction *reduction,
+      bool skip_object_lock = false);
 };
 
 } //end of namespace schema

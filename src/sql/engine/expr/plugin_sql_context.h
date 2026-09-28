@@ -35,6 +35,9 @@ public:
 
 private:
   static const seekdb_plugin_sql_api_v1_t *sql_api();
+  static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL lookup_srs(
+      seekdb_plugin_sql_context_handle_t *, const uint32_t *, uint32_t,
+      seekdb_plugin_srs_consume_v1_fn, void *, seekdb_plugin_sql_result_v1_t *);
   static seekdb_plugin_status_t SEEKDB_PLUGIN_CALL mutate_routine(
       seekdb_plugin_sql_context_handle_t *, const char *sql, uint64_t sql_size,
       seekdb_plugin_routine_mutation_result_v1_t *);

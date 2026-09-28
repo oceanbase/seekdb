@@ -3194,10 +3194,6 @@ int ObSqlGeoUtils::check_srid_by_srs(
     common::ObISrsProvider &srs_provider,
     uint64_t srid)
 {
-#if !SEEKDB_ENABLE_CORE_GIS
-  UNUSED(srid);
-  return OB_SUCCESS;
-#else
   int ret = OB_SUCCESS;
   common::ObSrsCacheGuard srs_guard;
   const ObSrsItem *srs = NULL;
@@ -3210,10 +3206,11 @@ int ObSqlGeoUtils::check_srid_by_srs(
   } else if (srid != 0 &&
       OB_FAIL(srs_provider.get_tenant_srs_guard(srs_guard))) {
   } else if (OB_FAIL(srs_guard.get_srs_item(srid, srs))) {
+  } else if (OB_ISNULL(srs)) {
+    ret = OB_ERR_SRS_NOT_FOUND;
   }
 
   return ret;
-#endif
 }
 
 int ObSqlGeoUtils::check_srid(
