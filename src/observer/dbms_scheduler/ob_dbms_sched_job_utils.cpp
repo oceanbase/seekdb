@@ -146,18 +146,16 @@ int ObDBMSSchedJobUtils::check_is_valid_max_run_duration(const int64_t max_run_d
 
 
 
-int ObDBMSSchedJobUtils::job_class_check_impl(const ObString &job_class_name)
+int ObDBMSSchedJobUtils::job_class_check_impl(ObISQLClient &sql_client,
+                                             const ObString &job_class_name)
 {
   int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
   ObSqlString sql;
-  ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
   int64_t rows = 0;
   if (OB_FAIL(ObDBMSSchedJobUtils::check_is_valid_name(job_class_name))) {
     ret = OB_ERR_WRONG_IDENT_NAME;
     LOG_MYSQL_USER_ERROR(OB_ERR_WRONG_IDENT_NAME);
   } else {
-    CK (OB_NOT_NULL(sql_proxy));
     OZ (sql.append_fmt("select count(*) rows from %s where job_class_name = \'%.*s\'",
         OB_ALL_SCHEDULER_JOB_CLASS_TNAME,
         job_class_name.length(), job_class_name.ptr()));
@@ -165,7 +163,7 @@ int ObDBMSSchedJobUtils::job_class_check_impl(const ObString &job_class_name)
     if (OB_SUCC(ret)) {
       rows = 0;
       SMART_VAR(ObMySQLProxy::MySQLResult, result) {
-        if (OB_FAIL(sql_proxy->read(result, sql.ptr()))) {
+        if (OB_FAIL(sql_client.read(result, sql.ptr()))) {
         } else if (OB_NOT_NULL(result.get_result())) {
           if (OB_SUCCESS == (ret = result.get_result()->next())) {
             EXTRACT_INT_FIELD_MYSQL_SKIP_RET(*(result.get_result()), "rows", rows, uint64_t);
@@ -556,7 +554,8 @@ int ObDBMSSchedJobUtils::update_dbms_sched_job_info(common::ObISQLClient &sql_cl
     if (OB_FAIL(dml.add_column("comments", job_attribute_value.get_string()))) {
     }
   } else if (0 ==  job_attribute_name.case_compare("job_class")) {
-    if (0 != job_attribute_value.get_string().case_compare("DEFAULT_JOB_CLASS") && OB_FAIL(job_class_check_impl(job_attribute_value.get_string()))) {
+    if (0 != job_attribute_value.get_string().case_compare("DEFAULT_JOB_CLASS")
+        && OB_FAIL(job_class_check_impl(sql_client, job_attribute_value.get_string()))) {
       LOG_WARN("failed to check job_class", K(ret), K(job_info), K(job_attribute_value.get_string()));
     } else if (OB_FAIL(dml.add_column("job_class", job_attribute_value.get_string()))) {
     }

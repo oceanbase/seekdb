@@ -74,7 +74,8 @@ public:
       const ObDBMSSchedJobInfo &job_info);
   static int calc_dbms_sched_repeat_expr(
       const ObDBMSSchedJobInfo &job_info, int64_t &next_run_time);
-  static int job_class_check_impl(const common::ObString &job_class_name);
+  static int job_class_check_impl(common::ObISQLClient &sql_client,
+                                  const common::ObString &job_class_name);
   static int get_max_failures_value(const common::ObString &src_str, int64_t &value);
   static int reserve_user_with_minimun_id(
       common::ObIArray<const share::schema::ObUserInfo *> &user_infos);
