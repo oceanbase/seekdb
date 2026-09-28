@@ -994,5 +994,43 @@ int InstanceNamespaceMetadata::stage_schema_delta(uint64_t id,
   return ret;
 }
 
+int InstanceNamespaceMetadata::reconcile_owned_tablets(uint64_t id,
+    const std::map<uint64_t, uint64_t> &current_tablets,
+    const PhysicalTabletProbe &probe)
+{
+  if (!probe) { return OB_INVALID_ARGUMENT; }
+  InstanceNamespaceRecord record;
+  int ret = get_namespace(id, record, true);
+  if (ret == OB_SUCCESS && record.roots.state != 0) {
+    ret = OB_STATE_NOT_MATCH;
+  }
+  for (const auto &tablet : current_tablets) {
+    if (ret != OB_SUCCESS) { break; }
+    if (!ns::NamespaceObjectKey{id, tablet.first}.is_valid()
+        || tablet.second == 0 || tablet.second >= (1ULL << 32)) {
+      ret = OB_INVALID_ARGUMENT;
+      break;
+    }
+    bool local_exists = false;
+    ret = probe(tablet.first, local_exists);
+    if (ret != OB_SUCCESS) { break; }
+    InstanceExceptionRecord old;
+    ret = get_exception(id, tablet.first, old, true);
+    const bool had_old = ret == OB_SUCCESS;
+    if (ret == OB_ENTRY_NOT_EXIST) { ret = OB_SUCCESS; }
+    if (ret != OB_SUCCESS) { break; }
+    if (local_exists) {
+      if (had_old && old.kind == 1) {
+        ret = OB_STATE_NOT_MATCH;
+      } else if (!had_old || old.table_id != tablet.second) {
+        ret = put_exception({id, tablet.first, tablet.second, 0, 0});
+      }
+    } else if (had_old && old.kind == 0) {
+      ret = OB_EAGAIN;
+    }
+  }
+  return ret;
+}
+
 } // namespace rootserver
 } // namespace oceanbase

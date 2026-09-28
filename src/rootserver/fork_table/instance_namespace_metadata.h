@@ -108,6 +108,14 @@ public:
       const PhysicalTabletProbe &probe,
       std::vector<uint64_t> &removed_owned);
 
+  // Repair a physical creation committed before its owned exception. The map
+  // comes from this namespace's current schema; the probe checks that same
+  // namespace's physical tablet. This does not publish a schema version or
+  // clear a pending DDL marker. Caller rolls back its KV transaction on error.
+  int reconcile_owned_tablets(uint64_t id,
+      const std::map<uint64_t, uint64_t> &current_tablets,
+      const PhysicalTabletProbe &probe);
+
   int initialize_namespace_counter(uint64_t high_watermark);
   int allocate_namespace_id(uint64_t &id);
 
