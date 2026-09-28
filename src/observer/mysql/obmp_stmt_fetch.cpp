@@ -20,6 +20,7 @@
 #include "share/ob_lob_access_utils.h"
 #include "sql/ob_sql.h"
 #include "observer/omt/ob_server_runtime.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "observer/mysql/ob_sync_plan_driver.h"
 #include "rpc/obmysql/packet/ompk_eof.h"
 #include "sql/plan_cache/ob_ps_cache.h"
@@ -186,11 +187,13 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
           LOG_WARN("get sql fail in fetch", K(ret), K(cursor_id_), K(cursor->get_id()));
         }
       }
-      sqlstat_record.move_to_sqlstat_cache(
-          session,
-          get_observer_sql_engine()->get_plan_cache(),
-          get_observer_sql_engine()->get_plan_cache_access_service(),
-          sql);
+      if (auto *plan_cache = namespace_worker_prototype::effective_plan_cache(&session)) {
+        sqlstat_record.move_to_sqlstat_cache(
+            session,
+            *plan_cache,
+            get_observer_sql_engine()->get_plan_cache_access_service(),
+            sql);
+      }
     }
     session.set_show_warnings_buf(ret); // TODO: Move this to a better place, reduce some wb copy
 

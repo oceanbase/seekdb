@@ -23,6 +23,7 @@
 #include "rpc/obmysql/packet/ompk_prepare.h"
 #include "rpc/obmysql/packet/ompk_field.h"
 #include "observer/omt/ob_server_runtime.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "sql/ob_sql.h"
 
 namespace oceanbase
@@ -423,11 +424,14 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
       sqlstat_record.set_rows_processed(result.get_affected_rows() + result.get_return_rows());
       sqlstat_record.set_partition_cnt(result.get_exec_context().get_das_ctx().get_related_tablet_cnt());
       sqlstat_record.set_is_plan_cache_hit(ctx_.plan_cache_hit_);
-      sqlstat_record.move_to_sqlstat_cache(result.get_session(),
-                                                 get_observer_sql_engine()->get_plan_cache(),
-                                                 get_observer_sql_engine()->get_plan_cache_access_service(),
-                                                 ctx_.cur_sql_,
-                                                 result.get_physical_plan());
+      if (auto *plan_cache = namespace_worker_prototype::effective_plan_cache(
+              &result.get_session())) {
+        sqlstat_record.move_to_sqlstat_cache(result.get_session(),
+                                             *plan_cache,
+                                             get_observer_sql_engine()->get_plan_cache_access_service(),
+                                             ctx_.cur_sql_,
+                                             result.get_physical_plan());
+      }
     }
     // Retry needs to meet the following conditions:
     // 1. rs.open execution failed

@@ -31,6 +31,7 @@
 #include "share/ob_time_utility2.h"
 #include "sql/ob_sql.h"
 #include "observer/omt/ob_server_runtime.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "observer/mysql/ob_sync_plan_driver.h"
 #include "observer/mysql/ob_sync_cmd_driver.h"
 #include "observer/mysql/ob_async_cmd_driver.h"
@@ -1585,6 +1586,8 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
                                  bool &async_resp_used)
 {
   int ret = OB_SUCCESS;
+  namespace_worker_prototype::StorageSessionScope storage_scope(&session);
+  if (storage_scope.error() != OB_SUCCESS) { return storage_scope.error(); }
   ObAuditRecordData &audit_record = session.get_raw_audit_record();
   ObExecutingSqlStatRecord sqlstat_record;
   audit_record.try_cnt_++;
@@ -1694,11 +1697,14 @@ int ObMPStmtExecute::do_process(ObSQLSessionInfo &session,
       sqlstat_record.set_partition_cnt(result.get_exec_context().get_das_ctx().get_related_tablet_cnt());
       sqlstat_record.set_is_plan_cache_hit(ctx_.plan_cache_hit_);
       ObString sql_id = ObString::make_string(ctx_.sql_id_);
-      sqlstat_record.move_to_sqlstat_cache(result.get_session(),
-                                                 get_observer_sql_engine()->get_plan_cache(),
-                                                 get_observer_sql_engine()->get_plan_cache_access_service(),
-                                                 ctx_.cur_sql_,
-                                                 result.get_physical_plan());
+      if (auto *plan_cache = namespace_worker_prototype::effective_plan_cache(
+              &result.get_session())) {
+        sqlstat_record.move_to_sqlstat_cache(result.get_session(),
+                                             *plan_cache,
+                                             get_observer_sql_engine()->get_plan_cache_access_service(),
+                                             ctx_.cur_sql_,
+                                             result.get_physical_plan());
+      }
     }
 
     audit_record.status_ =

@@ -930,11 +930,14 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
             sqlstat_record.set_rows_processed(res.result_set().get_affected_rows() + res.result_set().get_return_rows());
             sqlstat_record.set_partition_cnt(res.result_set().get_exec_context().get_das_ctx().get_related_tablet_cnt());
             sqlstat_record.set_is_plan_cache_hit(res.sql_ctx().plan_cache_hit_);
-            sqlstat_record.move_to_sqlstat_cache(get_session(),
-                                                ob_sql_->get_plan_cache(),
-                                                ob_sql_->get_plan_cache_access_service(),
-                                                res.sql_ctx().cur_sql_,
-                                                res.result_set().get_physical_plan());
+            if (auto *plan_cache = namespace_worker_prototype::effective_plan_cache(
+                    &get_session())) {
+              sqlstat_record.move_to_sqlstat_cache(get_session(),
+                                                   *plan_cache,
+                                                   ob_sql_->get_plan_cache_access_service(),
+                                                   res.sql_ctx().cur_sql_,
+                                                   res.result_set().get_physical_plan());
+            }
           }
         }
 
