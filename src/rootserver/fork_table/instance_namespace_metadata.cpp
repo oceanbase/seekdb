@@ -1415,5 +1415,99 @@ int InstanceNamespaceDirectory::finish_drop(uint64_t id, int64_t deadline)
   return finish_directory_transaction(store_, tx, ret);
 }
 
+int InstanceNamespaceDirectory::schema_version(uint64_t id,
+    int64_t deadline, int64_t &version)
+{
+  version = 0;
+  if (id == 0) { return OB_INVALID_ARGUMENT; }
+  storage::InstanceMetaStore::Transaction tx;
+  int ret = store_.begin(tx, deadline, true);
+  int64_t staged = 0;
+  if (ret == OB_SUCCESS) {
+    InstanceNamespaceMetadata metadata(store_, tx);
+    InstanceNamespaceRecord record;
+    ret = metadata.get_namespace(id, record);
+    if (ret == OB_SUCCESS && record.roots.state != 0) {
+      ret = OB_ENTRY_NOT_EXIST;
+    }
+    if (ret == OB_SUCCESS) { staged = record.roots.schema_version; }
+  }
+  ret = finish_directory_transaction(store_, tx, ret);
+  if (ret == OB_SUCCESS) { version = staged; }
+  return ret;
+}
+
+int InstanceNamespaceDirectory::begin_schema_change(uint64_t id, int64_t deadline)
+{
+  storage::InstanceMetaStore::Transaction tx;
+  int ret = store_.begin(tx, deadline);
+  if (ret == OB_SUCCESS) {
+    InstanceNamespaceMetadata metadata(store_, tx);
+    ret = metadata.begin_schema_change(id);
+  }
+  return finish_directory_transaction(store_, tx, ret);
+}
+
+int InstanceNamespaceDirectory::finish_schema_change(uint64_t id,
+    int64_t version, int64_t deadline)
+{
+  storage::InstanceMetaStore::Transaction tx;
+  int ret = store_.begin(tx, deadline);
+  if (ret == OB_SUCCESS) {
+    InstanceNamespaceMetadata metadata(store_, tx);
+    ret = metadata.finish_schema_change(id, version);
+  }
+  return finish_directory_transaction(store_, tx, ret);
+}
+
+int InstanceNamespaceDirectory::begin_schema_recovery(uint64_t id,
+    int64_t deadline, bool &needed)
+{
+  needed = false;
+  storage::InstanceMetaStore::Transaction tx;
+  int ret = store_.begin(tx, deadline);
+  bool staged = false;
+  if (ret == OB_SUCCESS) {
+    InstanceNamespaceMetadata metadata(store_, tx);
+    ret = metadata.begin_schema_recovery(id, staged);
+  }
+  ret = finish_directory_transaction(store_, tx, ret);
+  if (ret == OB_SUCCESS) { needed = staged; }
+  return ret;
+}
+
+int InstanceNamespaceDirectory::finish_schema_recovery(uint64_t id,
+    int64_t version, int64_t deadline)
+{
+  storage::InstanceMetaStore::Transaction tx;
+  int ret = store_.begin(tx, deadline);
+  if (ret == OB_SUCCESS) {
+    InstanceNamespaceMetadata metadata(store_, tx);
+    ret = metadata.finish_schema_recovery(id, version);
+  }
+  return finish_directory_transaction(store_, tx, ret);
+}
+
+int InstanceNamespaceDirectory::publish_schema_delta(uint64_t id,
+    int64_t base_version, int64_t version,
+    const std::map<uint64_t, uint64_t> &previous_tablets,
+    const std::map<uint64_t, uint64_t> &current_tablets,
+    const InstanceNamespaceMetadata::PhysicalTabletProbe &probe,
+    int64_t deadline, std::vector<uint64_t> &removed_owned)
+{
+  removed_owned.clear();
+  storage::InstanceMetaStore::Transaction tx;
+  int ret = store_.begin(tx, deadline);
+  std::vector<uint64_t> staged;
+  if (ret == OB_SUCCESS) {
+    InstanceNamespaceMetadata metadata(store_, tx);
+    ret = metadata.stage_schema_delta(id, base_version, version,
+        previous_tablets, current_tablets, probe, staged);
+  }
+  ret = finish_directory_transaction(store_, tx, ret);
+  if (ret == OB_SUCCESS) { removed_owned.swap(staged); }
+  return ret;
+}
+
 } // namespace rootserver
 } // namespace oceanbase

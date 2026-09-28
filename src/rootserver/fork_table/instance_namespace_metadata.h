@@ -256,6 +256,19 @@ public:
                           std::vector<uint64_t> &local_tablets);
   // Caller commits physical tablet cleanup before this separate KV transaction.
   int finish_drop(uint64_t id, int64_t deadline);
+  int schema_version(uint64_t id, int64_t deadline, int64_t &version);
+  int begin_schema_change(uint64_t id, int64_t deadline);
+  int finish_schema_change(uint64_t id, int64_t version, int64_t deadline);
+  int begin_schema_recovery(uint64_t id, int64_t deadline, bool &needed);
+  int finish_schema_recovery(uint64_t id, int64_t version, int64_t deadline);
+  // The physical probe checks this Namespace's encoded tablet address and
+  // cannot reenter the KV transaction. Removed IDs become actionable only
+  // after the directory transaction commits.
+  int publish_schema_delta(uint64_t id, int64_t base_version, int64_t version,
+      const std::map<uint64_t, uint64_t> &previous_tablets,
+      const std::map<uint64_t, uint64_t> &current_tablets,
+      const InstanceNamespaceMetadata::PhysicalTabletProbe &probe,
+      int64_t deadline, std::vector<uint64_t> &removed_owned);
 private:
   storage::InstanceMetaStore &store_;
 };
