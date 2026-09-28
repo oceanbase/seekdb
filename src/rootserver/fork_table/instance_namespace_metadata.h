@@ -76,6 +76,10 @@ public:
   int erase_namespace(uint64_t id);
   int scan_namespaces(const NamespaceVisitor &visitor);
 
+  // Bootstrap an empty instance directory. The caller owns the KV
+  // transaction and must initialize the snapshot GC watermark in it as well.
+  int insert_root_namespace(const std::string &name, int64_t schema_version);
+
   // Locks the source through snapshot acquisition, then stages the child,
   // name, pin, and lineage in this transaction. Caller commits or rolls back.
   int fork_namespace(const std::string &source_name, const std::string &target_name,

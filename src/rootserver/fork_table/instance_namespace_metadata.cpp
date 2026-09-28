@@ -409,6 +409,21 @@ int InstanceNamespaceMetadata::scan_namespaces(const NamespaceVisitor &visitor)
       });
 }
 
+int InstanceNamespaceMetadata::insert_root_namespace(const std::string &name,
+    int64_t schema_version)
+{
+  if (name.empty() || name.size() > 128 || schema_version <= 0) {
+    return OB_INVALID_ARGUMENT;
+  }
+  InstanceNamespaceRecord root;
+  root.id = 1;
+  root.name = name;
+  root.roots.schema_version = schema_version;
+  int ret = initialize_namespace_counter(root.id);
+  if (ret == OB_SUCCESS) { ret = insert_namespace(root); }
+  return ret;
+}
+
 int InstanceNamespaceMetadata::initialize_namespace_counter(uint64_t high_watermark)
 {
   if (high_watermark < 1 || high_watermark >= ns::NamespaceObjectKey::NAMESPACE_LIMIT) {
