@@ -526,6 +526,8 @@ int ObComplementDataDag::create_first_task()
     task_param.ddl_task_id_         = param_.task_id_;
     task_param.execution_id_        = param_.execution_id_;
     task_param.target_table_id_     = param_.dest_table_id_;
+    task_param.sql_proxy_           = param_.sql_proxy_;
+    task_param.schema_service_      = param_.schema_service_;
     
     if (OB_FAIL(dag_merge_param.init(true /* for major */, false /* for lob*/, false /* for replay*/,
                                      mock_scn /* start_scn*/,
@@ -1270,7 +1272,9 @@ int ObComplementMergeTask::process()
                                                          param_->task_id_,
                                                          column_checksums,
                                                          column_count,
-                                                         param_->data_format_version_))) {
+                                                         param_->data_format_version_,
+                                                         *param_->sql_proxy_,
+                                                         *param_->schema_service_))) {
       } else if (OB_FAIL(data_plane::submit_tablet_update(param_->dest_tablet_id_))) {
       }
     }

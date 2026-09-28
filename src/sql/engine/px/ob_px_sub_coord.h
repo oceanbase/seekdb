@@ -136,6 +136,10 @@ private:
   void ddl_rewrite_ret_code(int &ret_code);
   int sync_table_autoinc_value();
   void bind_current_thread() override;
+  int resolve_ddl_error_context(
+      uint64_t &table_id, uint64_t &tablet_id,
+      share::schema::ObMultiVersionSchemaService *&schema_service,
+      common::ObMySQLProxy *&sql_proxy) override;
 
 private:
   const share::ObGlobalContext &gctx_;

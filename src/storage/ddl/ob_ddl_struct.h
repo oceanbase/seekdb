@@ -27,6 +27,10 @@
 #include "data_plane/ddl/ob_direct_load_type.h"
 namespace oceanbase
 {
+namespace common
+{
+class ObMySQLProxy;
+}
 namespace share
 {
 namespace schema
@@ -254,7 +258,8 @@ struct ObDDLTaskParam
 {
 public:
   ObDDLTaskParam() : data_format_version_(0), snapshot_version_(0), schema_version_(0), ddl_task_id_(0), execution_id_(0),
-    target_table_id_(0), max_batch_size_(0), is_offline_index_rebuild_(false) {}
+    target_table_id_(0), max_batch_size_(0), is_offline_index_rebuild_(false),
+    sql_proxy_(nullptr), schema_service_(nullptr) {}
   void reset()
   {
     data_format_version_ = 0;
@@ -265,6 +270,8 @@ public:
     target_table_id_ = 0;
     max_batch_size_ = 0;
     is_offline_index_rebuild_ = false;
+    sql_proxy_ = nullptr;
+    schema_service_ = nullptr;
   }
   bool is_valid() const { return ddl_task_id_ > 0 && execution_id_ >= 0 && data_format_version_ > 0 && snapshot_version_ >= 0 && target_table_id_ > 0 && schema_version_ > 0; }
   TO_STRING_KV(K_(ddl_task_id), K_(execution_id), K_(data_format_version), K_(snapshot_version), K_(target_table_id), K_(schema_version), K_(max_batch_size), K_(is_offline_index_rebuild));
@@ -280,6 +287,8 @@ public:
   int64_t target_table_id_;
   int64_t max_batch_size_; // for batch rows when load data, from hint named load_batch_size
   bool is_offline_index_rebuild_;
+  common::ObMySQLProxy *sql_proxy_;
+  share::schema::ObMultiVersionSchemaService *schema_service_;
 };
 
 struct ObDDLAutoincParam
@@ -459,12 +468,14 @@ public:
     : tablet_id_(), lob_meta_tablet_id_(), data_format_version_(0), schema_version_(0), slice_idx_(0), slice_count_(0),
       ddl_thread_count_(0), snapshot_version_(0), direct_load_type_(DIRECT_LOAD_INVALID),
       task_id_(0), is_index_table_(false), ddl_table_schema_(), tablet_param_(), lob_meta_tablet_param_(),
-      ddl_dag_(nullptr), tablet_context_(nullptr), max_batch_size_(0), start_sequence_(), row_offset_(0)
+      ddl_dag_(nullptr), tablet_context_(nullptr), max_batch_size_(0), start_sequence_(), row_offset_(0),
+      sql_proxy_(nullptr), schema_service_(nullptr)
   {}
   ~ObWriteMacroParam() = default;
   bool is_valid() const
   {
-    return tablet_id_.is_valid() && data_format_version_ > 0 && schema_version_ > 0
+    return sql_proxy_ != nullptr && schema_service_ != nullptr
+        && tablet_id_.is_valid() && data_format_version_ > 0 && schema_version_ > 0
         && slice_idx_ >= 0 && snapshot_version_ > 0 && is_full_direct_load(direct_load_type_)
         && task_id_ > 0;
   }
@@ -492,6 +503,8 @@ public:
   int64_t max_batch_size_;
   blocksstable::ObMacroDataSeq start_sequence_;
   int64_t row_offset_;
+  common::ObMySQLProxy *sql_proxy_;
+  share::schema::ObMultiVersionSchemaService *schema_service_;
 };
 
 }  // end namespace storage

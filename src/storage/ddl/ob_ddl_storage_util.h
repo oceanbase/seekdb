@@ -19,6 +19,7 @@
 #include "share/ob_ddl_common.h"  // reuses its types(ObMacroDataSeq/ObDatumRow/ObBatchDatumRows/ObStorageSchema/ObWriteMacroParam/ObTableSchema etc.) for forward declarations
 namespace oceanbase
 {
+namespace common { class ObMySQLProxy; }
 namespace blocksstable { class ObDatumRowkey; }
 namespace storage
 {
@@ -47,7 +48,8 @@ public:
       const int64_t execution_id,
       const int64_t ddl_task_id,
       const int64_t data_format_version,
-      const common::ObIArray<share::schema::ObColDesc> &column_descs);
+      const common::ObIArray<share::schema::ObColDesc> &column_descs,
+      common::ObMySQLProxy &sql_proxy);
   static int report_ddl_sstable_checksum(
       const ObTabletID &tablet_id,
       const uint64_t target_table_id,
@@ -56,7 +58,8 @@ public:
       const int64_t data_format_version,
       ObTabletHandle &tablet_handle,
       blocksstable::ObSSTable *first_major_sstable,
-      const common::ObIArray<share::schema::ObColDesc> &column_descs);
+      const common::ObIArray<share::schema::ObColDesc> &column_descs,
+      common::ObMySQLProxy &sql_proxy);
   static int init_macro_block_writer(
       const ObWriteMacroParam &param,
       ObIAllocator &allocator,

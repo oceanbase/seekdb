@@ -173,7 +173,8 @@ int oceanbase::storage::ObDDLStorageUtil::report_ddl_checksum_from_major_sstable
       const int64_t execution_id,
       const int64_t ddl_task_id,
       const int64_t data_format_version,
-      const ObIArray<ObColDesc> &column_descs)
+      const ObIArray<ObColDesc> &column_descs,
+      ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
@@ -198,7 +199,7 @@ int oceanbase::storage::ObDDLStorageUtil::report_ddl_checksum_from_major_sstable
     } else if (OB_FAIL(report_ddl_sstable_checksum(
                    tablet_id, target_table_id, execution_id, ddl_task_id,
                    data_format_version, tablet_handle, first_major_sstable,
-                   column_descs))) {
+                   column_descs, sql_proxy))) {
     }
   }
   return ret;
@@ -212,7 +213,8 @@ int oceanbase::storage::ObDDLStorageUtil::report_ddl_sstable_checksum(
       const int64_t data_format_version,
       ObTabletHandle &tablet_handle,
       ObSSTable *first_major_sstable,
-      const ObIArray<ObColDesc> &column_descs)
+      const ObIArray<ObColDesc> &column_descs,
+      ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
   ObSSTableMetaHandle sst_meta_hdl;
@@ -230,7 +232,7 @@ int oceanbase::storage::ObDDLStorageUtil::report_ddl_sstable_checksum(
         if (OB_FAIL(ObTabletDDLUtil::report_ddl_checksum_with_column_descs(
                        tablet_id, target_table_id, execution_id, ddl_task_id,
                        column_checksums, column_count, data_format_version,
-                       column_descs))) {
+                       column_descs, sql_proxy))) {
         } else {
           break;
         }
@@ -743,6 +745,8 @@ int oceanbase::storage::ObDDLStorageUtil::fill_writer_param(
     param.tablet_param_ = tablet_context->tablet_param_;
     param.lob_meta_tablet_param_ = tablet_context->lob_meta_tablet_param_;
     param.is_index_table_ = dag->get_ddl_table_schema().table_item_.is_index_table_;
+    param.sql_proxy_ = ddl_task_param.sql_proxy_;
+    param.schema_service_ = ddl_task_param.schema_service_;
     param.ddl_dag_ = dag;
     param.tablet_context_ = tablet_context;
     param.max_batch_size_ = max_batch_size;

@@ -258,8 +258,17 @@ public:
       int64_t lob_schema_pos = 0;
       int64_t data_schema_pos = 0;
       int64_t param_schema_pos = 0;
+      uint64_t report_table_id = static_cast<uint64_t>(param.table_id_);
+      uint64_t report_tablet_id = param.participants_.at(0).id();
+      share::schema::ObMultiVersionSchemaService *schema_service = nullptr;
+      common::ObMySQLProxy *sql_proxy = nullptr;
 
-      if (OB_FAIL(table_schema.deserialize(
+      if (OB_FAIL(worker_context.resolve_ddl_error_context(
+              report_table_id, report_tablet_id, schema_service, sql_proxy))) {
+        LOG_WARN("direct insert owner services are unavailable", K(ret), K(param.table_id_));
+      } else if (OB_ISNULL(schema_service) || OB_ISNULL(sql_proxy)) {
+        ret = OB_NOT_INIT;
+      } else if (OB_FAIL(table_schema.deserialize(
               param.table_schema_.ptr(), param.table_schema_.length(),
               schema_pos))) {
         LOG_WARN("failed to deserialize direct insert table schema", K(ret));
@@ -314,6 +323,8 @@ public:
         dag_param.ddl_task_param_.snapshot_version_ = param.snapshot_version_;
         dag_param.ddl_task_param_.target_table_id_ = param.table_id_;
         dag_param.ddl_task_param_.schema_version_ = param.schema_version_;
+        dag_param.ddl_task_param_.sql_proxy_ = sql_proxy;
+        dag_param.ddl_task_param_.schema_service_ = schema_service;
         dag_param.ddl_task_param_.is_offline_index_rebuild_ =
             param.is_offline_index_rebuild_;
         dag_param.table_schema_ = &table_schema;

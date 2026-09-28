@@ -1220,11 +1220,11 @@ int ObTabletDDLUtil::report_ddl_checksum(
     const int64_t ddl_task_id,
     const int64_t *column_checksums,
     const int64_t column_count,
-    const uint64_t data_format_version)
+    const uint64_t data_format_version,
+    ObMySQLProxy &sql_proxy,
+    ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
-  ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
-  ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
   ObSchemaGetterGuard schema_guard;
   const ObTableSchema *table_schema = nullptr;
 
@@ -1232,10 +1232,7 @@ int ObTabletDDLUtil::report_ddl_checksum(
         || !is_valid_id(table_id) || 0 == table_id || execution_id < 0 || nullptr == column_checksums || column_count <= 0 || data_format_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_id), K(table_id), K(execution_id), KP(column_checksums), K(column_count), K(data_format_version));
-  } else if (OB_ISNULL(sql_proxy) || OB_ISNULL(schema_service)) {
-    ret = OB_ERR_SYS;
-    LOG_WARN("ls service or sql proxy is null", K(ret), KP(sql_proxy), KP(schema_service));
-  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
@@ -1248,7 +1245,7 @@ int ObTabletDDLUtil::report_ddl_checksum(
     } else if (OB_FAIL(report_ddl_checksum_with_column_descs(
                    tablet_id, table_id, execution_id, ddl_task_id,
                    column_checksums, column_count, data_format_version,
-                   column_ids))) {
+                   column_ids, sql_proxy))) {
     }
   }
   return ret;
@@ -1262,21 +1259,21 @@ int ObTabletDDLUtil::report_ddl_checksum_with_column_descs(
     const int64_t *column_checksums,
     const int64_t column_count,
     const uint64_t data_format_version,
-    const ObIArray<ObColDesc> &column_descs)
+    const ObIArray<ObColDesc> &column_descs,
+    ObMySQLProxy &sql_proxy)
 {
   int ret = OB_SUCCESS;
-  ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
   ObArray<ObDDLChecksumItem> ddl_checksum_items;
   ObArray<uint64_t> report_column_ids;
   ObArray<int64_t> report_column_checksums;
   if (OB_UNLIKELY(!tablet_id.is_valid() || OB_INVALID_ID == ddl_task_id
       || !is_valid_id(table_id) || 0 == table_id || execution_id < 0
       || nullptr == column_checksums || column_count <= 0
-      || data_format_version < 0 || OB_ISNULL(sql_proxy))) {
+      || data_format_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid explicit DDL checksum facts", K(ret), K(tablet_id),
         K(table_id), K(execution_id), K(ddl_task_id), K(column_count),
-        K(data_format_version), KP(sql_proxy));
+        K(data_format_version));
   } else if (OB_UNLIKELY(column_count > column_descs.count())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpect error, column checksums count larger than column ids count", K(ret),
@@ -1325,7 +1322,7 @@ int ObTabletDDLUtil::report_ddl_checksum_with_column_descs(
           report_column_ids, report_column_checksums);
       if (OB_NOT_SUPPORTED == report_ret) {
         ret = ObDDLChecksumOperator::update_checksum(
-            data_format_version, ddl_checksum_items, *sql_proxy);
+            data_format_version, ddl_checksum_items, sql_proxy);
       } else {
         ret = report_ret;
       }

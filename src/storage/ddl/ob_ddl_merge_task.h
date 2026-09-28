@@ -178,7 +178,9 @@ public:
                                  const int64_t ddl_task_id,
                                  const int64_t *column_checksums,
                                  const int64_t column_count,
-                                 const uint64_t data_format_version);
+                                 const uint64_t data_format_version,
+                                 common::ObMySQLProxy &sql_proxy,
+                                 share::schema::ObMultiVersionSchemaService &schema_service);
   static int report_ddl_checksum_with_column_descs(
       const ObTabletID &tablet_id,
       const uint64_t table_id,
@@ -187,7 +189,8 @@ public:
       const int64_t *column_checksums,
       const int64_t column_count,
       const uint64_t data_format_version,
-      const common::ObIArray<share::schema::ObColDesc> &column_descs);
+      const common::ObIArray<share::schema::ObColDesc> &column_descs,
+      common::ObMySQLProxy &sql_proxy);
 
   static int check_and_get_major_sstable(
       const ObTabletID &tablet_id,

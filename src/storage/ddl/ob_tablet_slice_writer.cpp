@@ -42,12 +42,13 @@ namespace {
 int resolve_unique_index_report_context(
     uint64_t storage_table_id, const ObTabletID &storage_tablet_id,
     uint64_t &table_id, uint64_t &tablet_id,
-    ObMultiVersionSchemaService *&schema_service, ObMySQLProxy *&sql_proxy)
+    ObMultiVersionSchemaService *&schema_service, ObMySQLProxy *&sql_proxy,
+    ObMultiVersionSchemaService &owner_schema_service, ObMySQLProxy &owner_sql_proxy)
 {
   table_id = storage_table_id;
   tablet_id = storage_tablet_id.id();
-  schema_service = &ObMultiVersionSchemaService::get_instance();
-  sql_proxy = GCTX.sql_proxy_;
+  schema_service = &owner_schema_service;
+  sql_proxy = &owner_sql_proxy;
   const int ret = data_plane::resolve_direct_insert_ddl_error_context(
       table_id, tablet_id, schema_service, sql_proxy);
   return ret == OB_NOT_SUPPORTED ? OB_SUCCESS : ret;
@@ -74,6 +75,8 @@ void ObTabletSliceWriter::reset()
   OB_DELETEx(ObDDLMacroBlockWriter, &allocator_, macro_block_writer_);
   row_count_ = 0;
   unique_index_id_ = 0;
+  schema_service_ = nullptr;
+  sql_proxy_ = nullptr;
   allocator_.reset();
 }
 
@@ -82,7 +85,9 @@ int ObTabletSliceWriter::report_unique_key_duplicated(
     const uint64_t table_id,
     const ObDatumRow &datum_row,
     const ObTabletID &tablet_id,
-    int &report_ret_code)
+    int &report_ret_code,
+    ObMultiVersionSchemaService &owner_schema_service,
+    ObMySQLProxy &owner_sql_proxy)
 {
   int ret = OB_SUCCESS;
   report_ret_code = OB_SUCCESS;
@@ -94,7 +99,7 @@ int ObTabletSliceWriter::report_unique_key_duplicated(
   ObMySQLProxy *sql_proxy = nullptr;
   if (OB_FAIL(resolve_unique_index_report_context(
           table_id, tablet_id, logical_table_id, logical_tablet_id,
-          schema_service, sql_proxy))) {
+          schema_service, sql_proxy, owner_schema_service, owner_sql_proxy))) {
   } else if (OB_ISNULL(schema_service) || OB_ISNULL(sql_proxy)) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
@@ -131,7 +136,9 @@ int ObTabletSliceWriter::report_unique_key_duplicated(
     const uint64_t table_id,
     const ObBatchDatumRows &datum_rows,
     const ObTabletID &tablet_id,
-    int &report_ret_code)
+    int &report_ret_code,
+    ObMultiVersionSchemaService &owner_schema_service,
+    ObMySQLProxy &owner_sql_proxy)
 {
   int ret = OB_SUCCESS;
   report_ret_code = OB_SUCCESS;
@@ -143,7 +150,7 @@ int ObTabletSliceWriter::report_unique_key_duplicated(
   ObMySQLProxy *sql_proxy = nullptr;
   if (OB_FAIL(resolve_unique_index_report_context(
           table_id, tablet_id, logical_table_id, logical_tablet_id,
-          schema_service, sql_proxy))) {
+          schema_service, sql_proxy, owner_schema_service, owner_sql_proxy))) {
   } else if (OB_ISNULL(schema_service) || OB_ISNULL(sql_proxy)) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
@@ -245,6 +252,8 @@ int ObTabletSliceWriter::init(const ObWriteMacroParam &param)
     LOG_WARN("invalid argument", K(ret), K(param));
   } else {
     tablet_id_ = param.tablet_id_;
+    schema_service_ = param.schema_service_;
+    sql_proxy_ = param.sql_proxy_;
     slice_idx_ = param.slice_idx_;
     storage_column_count_ = param.ddl_table_schema_.column_items_.count();
     if (is_full_direct_load(param.direct_load_type_) && param.ddl_table_schema_.table_item_.is_unique_index_) {
@@ -274,7 +283,8 @@ int ObTabletSliceWriter::append_row(const blocksstable::ObDatumRow &row)
       if (OB_ERR_PRIMARY_KEY_DUPLICATE == ret && unique_index_id_ > 0) {
         int report_ret_code = OB_SUCCESS;
         LOG_USER_ERROR(OB_ERR_PRIMARY_KEY_DUPLICATE, "", static_cast<int>(sizeof("UNIQUE IDX") - 1), "UNIQUE IDX");
-        (void) report_unique_key_duplicated(ret, unique_index_id_, row, tablet_id_, report_ret_code); // ignore ret
+        (void) report_unique_key_duplicated(ret, unique_index_id_, row, tablet_id_, report_ret_code,
+            *schema_service_, *sql_proxy_); // ignore ret
         if (OB_ERR_DUPLICATED_UNIQUE_KEY == report_ret_code) {
           // Report direct-load unique index conflicts with the dedicated duplicate-key code.
           ret = OB_ERR_DUPLICATED_UNIQUE_KEY;
@@ -304,7 +314,8 @@ int ObTabletSliceWriter::append_batch(const blocksstable::ObBatchDatumRows &batc
       if (OB_ERR_PRIMARY_KEY_DUPLICATE == ret && unique_index_id_ > 0) {
         int report_ret_code = OB_SUCCESS;
         LOG_USER_ERROR(OB_ERR_PRIMARY_KEY_DUPLICATE, "", static_cast<int>(sizeof("UNIQUE IDX") - 1), "UNIQUE IDX");
-        (void) report_unique_key_duplicated(ret, unique_index_id_, batch_rows, tablet_id_, report_ret_code); // ignore ret
+        (void) report_unique_key_duplicated(ret, unique_index_id_, batch_rows, tablet_id_, report_ret_code,
+            *schema_service_, *sql_proxy_); // ignore ret
         if (OB_ERR_DUPLICATED_UNIQUE_KEY == report_ret_code) {
           // Report direct-load unique index conflicts with the dedicated duplicate-key code.
           ret = OB_ERR_DUPLICATED_UNIQUE_KEY;
@@ -1035,7 +1046,8 @@ int ObBatchSliceWriter::check_order(const blocksstable::ObBatchDatumRows &batch_
           const uint64_t unique_index_id = writer_param_.ddl_table_schema_.table_id_;
           int report_ret_code = OB_SUCCESS;
           LOG_USER_ERROR(OB_ERR_PRIMARY_KEY_DUPLICATE, "", static_cast<int>(sizeof("UNIQUE IDX") - 1), "UNIQUE IDX");
-          (void) ObTabletSliceWriter::report_unique_key_duplicated(ret, unique_index_id, batch_rows, tablet_id_, report_ret_code); // ignore ret
+          (void) ObTabletSliceWriter::report_unique_key_duplicated(ret, unique_index_id, batch_rows,
+              tablet_id_, report_ret_code, *writer_param_.schema_service_, *writer_param_.sql_proxy_); // ignore ret
           if (OB_ERR_DUPLICATED_UNIQUE_KEY == report_ret_code) {
             // Report direct-load unique index conflicts with the dedicated duplicate-key code.
             ret = OB_ERR_DUPLICATED_UNIQUE_KEY;

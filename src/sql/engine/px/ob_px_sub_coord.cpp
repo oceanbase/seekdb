@@ -895,6 +895,19 @@ void ObPxSubCoord::bind_current_thread()
   }
 }
 
+int ObPxSubCoord::resolve_ddl_error_context(
+    uint64_t &table_id, uint64_t &tablet_id,
+    share::schema::ObMultiVersionSchemaService *&schema_service,
+    common::ObMySQLProxy *&sql_proxy)
+{
+  UNUSEDx(table_id, tablet_id);
+  ObExecContext *exec_ctx = sqc_arg_.exec_ctx_;
+  ObSQLSessionInfo *session = exec_ctx == nullptr ? nullptr : exec_ctx->get_my_session();
+  schema_service = session == nullptr ? nullptr : session->effective_schema_service();
+  sql_proxy = session == nullptr ? nullptr : session->effective_sql_proxy();
+  return schema_service == nullptr || sql_proxy == nullptr ? OB_NOT_INIT : OB_SUCCESS;
+}
+
 void ObPxSubCoord::ddl_rewrite_ret_code(int &ret_code)
 {
   if (OB_EAGAIN == ret_code) {

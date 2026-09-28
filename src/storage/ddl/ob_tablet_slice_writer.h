@@ -71,13 +71,17 @@ public:
       const uint64_t table_id,
       const blocksstable::ObDatumRow &datum_row,
       const common::ObTabletID &tablet_id,
-      int &report_ret_code);
+      int &report_ret_code,
+      share::schema::ObMultiVersionSchemaService &schema_service,
+      common::ObMySQLProxy &sql_proxy);
   static int report_unique_key_duplicated(
       const int ret_code,
       const uint64_t table_id,
       const blocksstable::ObBatchDatumRows &datum_rows,
       const common::ObTabletID &tablet_id,
-      int &report_ret_code);
+      int &report_ret_code,
+      share::schema::ObMultiVersionSchemaService &schema_service,
+      common::ObMySQLProxy &sql_proxy);
 protected:
   bool is_inited_;
   ObArenaAllocator allocator_;
@@ -87,6 +91,8 @@ protected:
   ObDDLMacroBlockWriter *macro_block_writer_;
   int64_t row_count_;
   uint64_t unique_index_id_; // for report conflict key if need
+  share::schema::ObMultiVersionSchemaService *schema_service_ = nullptr;
+  common::ObMySQLProxy *sql_proxy_ = nullptr;
 };
 
 class ObTabletSliceTempFileWriter : public ObITabletSliceWriter

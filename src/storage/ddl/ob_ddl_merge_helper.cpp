@@ -579,7 +579,8 @@ int ObSNDDLMergeHelperV2::assemble_sstable(ObDDLTabletMergeDagParamV2 &merge_par
              !merge_param.for_replay_ &&
              !merge_param.for_lob_ &&
              (OB_ISNULL(merge_param.get_tablet_ctx())
-              || OB_ISNULL(merge_param.get_tablet_ctx()->column_descs_))) {
+              || OB_ISNULL(merge_param.get_tablet_ctx()->column_descs_)
+              || OB_ISNULL(merge_param.ddl_task_param_.sql_proxy_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("DDL checksum column facts are unavailable", K(ret),
         K(merge_param));
@@ -591,7 +592,8 @@ int ObSNDDLMergeHelperV2::assemble_sstable(ObDDLTabletMergeDagParamV2 &merge_par
                                                                        merge_param.ddl_task_param_.execution_id_,
                                                                        merge_param.ddl_task_param_.ddl_task_id_,
                                                                        merge_param.ddl_task_param_.data_format_version_,
-                                                                       *merge_param.get_tablet_ctx()->column_descs_))) {
+                                                                       *merge_param.get_tablet_ctx()->column_descs_,
+                                                                       *merge_param.ddl_task_param_.sql_proxy_))) {
     LOG_WARN("failed to report ddl checksum", K(ret), K(merge_param));
   }
 
