@@ -3355,8 +3355,7 @@ def_table_schema(
       ('source', 'varchar:OB_MAX_CONFIG_SOURCE_LEN'),
       ('edit_level', 'varchar:OB_MAX_CONFIG_EDIT_LEVEL_LEN'),
       ('default_value', 'varchar:OB_MAX_CONFIG_VALUE_LEN'),
-      ('isdefault', 'int'),
-      ('options', 'varchar:OB_MAX_CONFIG_VALUE_LEN')
+      ('isdefault', 'int')
                    ],
   vtable_route_policy = 'local',
 )
@@ -3663,8 +3662,7 @@ def_table_schema(
       ('source', 'varchar:OB_MAX_CONFIG_SOURCE_LEN'),
       ('edit_level', 'varchar:OB_MAX_CONFIG_EDIT_LEVEL_LEN'),
       ('default_value', 'varchar:OB_MAX_CONFIG_VALUE_LEN'),
-      ('isdefault', 'int'),
-      ('options', 'varchar:OB_MAX_CONFIG_VALUE_LEN')
+      ('isdefault', 'int')
                    ],
   vtable_route_policy = 'local',
 )
@@ -9498,7 +9496,6 @@ def_table_schema(
                       SECTION,
                       EDIT_LEVEL,
                       DEFAULT_VALUE,
-                      OPTIONS,
                       CAST (CASE ISDEFAULT
                             WHEN 1
                             THEN 'YES'
