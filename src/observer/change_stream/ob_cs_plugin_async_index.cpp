@@ -30,6 +30,8 @@
 #include "observer/vector_index/ob_vector_index_util.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "observer/vector_index/ob_plugin_vector_index_utils.h"
+#include "observer/namespace_worker_protocol_prototype.h"
+#include "namespace/namespace.h"
 #include "lib/vector/ob_vector_util.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/memtable/ob_memtable_mutator.h"
@@ -453,15 +455,28 @@ int ObCSAsyncIndexProcessor::resolve_table_id_from_tablet_id_(
     }
   } else if (OB_HASH_NOT_EXIST != ret) {
     LOG_WARN("get cache failed", KR(ret));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
-    ret = common::OB_ERR_UNEXPECTED;
-    LOG_WARN("sql_proxy is null", K(ret));
   } else {
+    const uint64_t namespace_id = ns::NamespaceObjectKey::owner_namespace(tablet_id.id());
+    uint64_t logical_tablet_id = tablet_id.id();
+    schema::ObMultiVersionSchemaService *schema_service = nullptr;
+    schema::ObSchemaRuntimeService *schema_runtime =
+        ::oceanbase::share::server_service<schema::ObSchemaRuntimeService>();
+    common::ObMySQLProxy *sql_proxy = nullptr;
     common::ObSEArray<common::ObTabletID, 1> tablet_ids;
     common::ObSEArray<ObTabletTablePair, 1> infos;
-    if (OB_FAIL(tablet_ids.push_back(tablet_id))) {
+    if (OB_ISNULL(schema_runtime)) {
+      ret = common::OB_NOT_INIT;
+    } else if (OB_FAIL(schema_runtime->resolve_tablet_schema(
+                   tablet_id.id(), schema_service, logical_tablet_id))) {
+    } else if (OB_ISNULL(schema_service)) {
+      ret = common::OB_NOT_INIT;
+    } else if (OB_ISNULL(sql_proxy =
+                   observer::namespace_worker_prototype::namespace_sql_proxy(namespace_id))) {
+      ret = common::OB_NOT_INIT;
+      LOG_WARN("namespace sql proxy is null", K(ret), K(namespace_id));
+    } else if (OB_FAIL(tablet_ids.push_back(common::ObTabletID(logical_tablet_id)))) {
     } else if (OB_FAIL(ObTabletMappingTableOperator::batch_get(
-                   *GCTX.sql_proxy_, tablet_ids, infos))) {
+                   *sql_proxy, tablet_ids, infos))) {
       if (common::OB_ITEM_NOT_MATCH == ret) {
         LOG_WARN("tablet mapping not found", K(ret), K(tablet_id));
         ret = common::OB_TABLET_NOT_EXIST;
