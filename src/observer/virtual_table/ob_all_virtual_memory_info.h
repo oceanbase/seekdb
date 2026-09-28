@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_MEMORY_INFO_H_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_MEMORY_INFO_H_
 
-#include "lib/container/ob_array.h"
 #include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 
 namespace oceanbase
@@ -29,30 +28,30 @@ class ObAllVirtualMemoryInfo : public common::ObVirtualTableScannerIterator
 public:
   ObAllVirtualMemoryInfo();
   virtual ~ObAllVirtualMemoryInfo();
-  virtual int inner_open();
   virtual void reset();
   virtual int inner_get_next_row(common::ObNewRow *&row);
+
 private:
-  enum CACHE_COLUMN
+  enum COLUMN_ID_LIST
   {
-        CTX_ID = common::OB_APP_MIN_COLUMN_ID,
-    LABEL,
-    CTX_NAME,
-    MOD_TYPE,
-    MOD_ID,
-    MOD_NAME,
+    MOD_NAME = common::OB_APP_MIN_COLUMN_ID,
     HOLD,
     USED,
-    COUNT,
-    ALLOC_COUNT,
-    FREE_COUNT,
+    MEM_LIMIT,
   };
-  char ip_buf_[common::OB_IP_STR_BUFF];
+
+  int fill_scanner_();
+  int add_row_(const char *mod_name,
+               const int64_t hold,
+               const int64_t used,
+               const int64_t mem_limit,
+               const bool has_mem_limit = true);
+
   int64_t col_count_;
   bool has_start_;
   DISALLOW_COPY_AND_ASSIGN(ObAllVirtualMemoryInfo);
 };
-}
-}
+} // namespace observer
+} // namespace oceanbase
 
 #endif // OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_MEMORY_INFO_H_

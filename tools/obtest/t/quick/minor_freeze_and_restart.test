@@ -100,7 +100,6 @@ sleep 40;
 
 ob_connect(conn_mysql, ob1.z1.obs0, root@mysql, , test, , USE_MYSQL_CONNECTOR);
 connection conn_mysql;
-ob1.check_until_timeout select count(*) from __all_virtual_memory_info where mod_name like '%OB_MOD_DO_NOT_USE_ME%' and hold != 0, 0, 10;
 select * from t1_no_pk;
 select * from t1_pk;
 select * from t1_part_1;

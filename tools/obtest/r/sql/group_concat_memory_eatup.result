@@ -5,6 +5,4 @@ ob1.mysql drop tenant if exists xy_tenant_1 force;
 ob1.mysql create resource unit if not exists xy_box_1 max_cpu 3, max_memory $memory, max_iops $iops, max_disk_size $disk, max_session_num $session, MIN_CPU= 2, MIN_MEMORY=$min_memory, MIN_IOPS=128;
 ob1.mysql create resource pool if not exists xy_pool_1 unit = 'xy_box_1', unit_num = 1;
 ob1.mysql create tenant if not exists xy_tenant_1 resource_pool_list('xy_pool_1') set ob_tcp_invited_nodes='%';
-mem_less_than_100M
-1
 ERROR HY000: Timeout

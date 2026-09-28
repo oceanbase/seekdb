@@ -80,6 +80,7 @@ public:
   
 
   int64_t get_current_buffer_used() { return aggregate_dfc_.get_used(); }
+  void get_memory_info(int64_t &hold, int64_t &used);
   int64_t get_current_blocked_cnt() { return aggregate_dfc_.get_blocked_cnt(); }
   int64_t get_current_total_blocked_cnt() { return (ATOMIC_LOAD(&blocked_dfc_cnt_)); }
   int64_t get_current_buffer_cnt() { return aggregate_dfc_.get_total_buffer_cnt(); }
