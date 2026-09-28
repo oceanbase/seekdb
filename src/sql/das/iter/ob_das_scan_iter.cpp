@@ -39,9 +39,6 @@ int ObDASScanIter::inner_init(ObDASIterParam &param)
   } else {
     const ObDASScanCtDef *scan_ctdef = (static_cast<ObDASScanIterParam&>(param)).scan_ctdef_;
     output_ = &scan_ctdef->result_output_;
-    common::ObITabletScan *native_scan = is_virtual_table(scan_ctdef->ref_table_id_)
-        ? share::server_service<common::ObIVirtualTableScan>()
-        : share::server_service<common::ObITabletScan>();
     // Session warnings and schema-description virtual tables need the live
     // session or its namespace schema guard in this process.
     const uint64_t table_id = scan_ctdef->ref_table_id_;
@@ -58,7 +55,8 @@ int ObDASScanIter::inner_init(ObDASIterParam &param)
         || table_id == share::OB_ALL_VIRTUAL_CORE_ALL_TABLE_TID
         || table_id == share::OB_ALL_VIRTUAL_CORE_COLUMN_TABLE_TID;
     tsc_service_ = native_virtual
-        ? native_scan
+        ? observer::namespace_worker_prototype::effective_virtual_table_scan(
+              THIS_WORKER.get_session())
         : observer::namespace_worker_prototype::effective_tablet_scan(
               THIS_WORKER.get_session());
     if (OB_ISNULL(tsc_service_)) {

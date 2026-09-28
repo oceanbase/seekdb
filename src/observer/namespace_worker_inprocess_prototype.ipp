@@ -158,6 +158,12 @@ common::ObITabletScan *effective_tablet_scan(sql::ObSQLSessionInfo *session)
   return runtime ? static_cast<common::ObITabletScan *>(
       runtime->service(ns::NamespaceRuntime::TABLET_SCAN)) : nullptr;
 }
+common::ObIVirtualTableScan *effective_virtual_table_scan(sql::ObSQLSessionInfo *session)
+{
+  ns::NamespaceRuntime *runtime = session ? session->ns_runtime() : nullptr;
+  return runtime ? static_cast<common::ObIVirtualTableScan *>(
+      runtime->service(ns::NamespaceRuntime::VIRTUAL_TABLE_SCAN_SERVICE)) : nullptr;
+}
 common::ObILobReadService *effective_lob_read_service(sql::ObSQLSessionInfo *session)
 {
   ns::NamespaceRuntime *runtime = session ? session->ns_runtime() : nullptr;

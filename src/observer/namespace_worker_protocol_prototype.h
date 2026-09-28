@@ -16,6 +16,7 @@ namespace oceanbase { namespace sql { class ObSQLSessionInfo; } }
 namespace oceanbase { namespace sql { class ObBasicSessionInfo; } }
 namespace oceanbase { namespace sql { class ObPlanCache; } }
 namespace oceanbase { namespace common { class ObITabletScan; } }
+namespace oceanbase { namespace common { class ObIVirtualTableScan; } }
 namespace oceanbase { namespace common { class ObMySQLProxy; } }
 namespace oceanbase { namespace common { class ObMySQLTransaction; } }
 namespace oceanbase { namespace common { class ObILobReadService; } }
@@ -271,6 +272,7 @@ share::schema::ObMultiVersionSchemaService *namespace_schema_service(uint64_t na
 common::ObMySQLProxy *namespace_sql_proxy(uint64_t namespace_id);
 rootserver::ObLocalManagementService *namespace_local_management_service(uint64_t namespace_id);
 common::ObITabletScan *effective_tablet_scan(sql::ObSQLSessionInfo *session);
+common::ObIVirtualTableScan *effective_virtual_table_scan(sql::ObSQLSessionInfo *session);
 common::ObILobReadService *effective_lob_read_service(sql::ObSQLSessionInfo *session);
 data_plane::ObIRangeService *effective_range_service(sql::ObSQLSessionInfo *session);
 data_plane::ObIDmlService *effective_dml_service(sql::ObSQLSessionInfo *session);

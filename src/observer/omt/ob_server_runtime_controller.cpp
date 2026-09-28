@@ -1322,8 +1322,6 @@ int ObServer::obs_construct_modules()
         &server_runtime_controller_);
     ::oceanbase::share::bind_server_service<observer::ObVTIterCreator>(
         &vt_data_service_.get_vt_iter_factory().get_vt_iter_creator());
-    ::oceanbase::share::bind_server_service<common::ObIVirtualTableScan>(
-        &vt_data_service_);
     ::oceanbase::share::bind_server_service<observer::ObSrvNetworkFrame>(&net_frame_);
     ::oceanbase::share::bind_server_service<data_plane::ObIDiskReport>(
         &disk_usage_report_task_);
