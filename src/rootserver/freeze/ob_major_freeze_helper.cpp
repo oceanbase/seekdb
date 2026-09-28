@@ -24,6 +24,7 @@
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "rootserver/freeze/ob_major_freeze_service.h"
 #include "storage/compaction/ob_tablet_scheduler.h"
+#include "namespace/namespace.h"
 
 namespace oceanbase
 {
@@ -86,10 +87,17 @@ int ObMajorFreezeHelper::check_runtime_ready(bool &is_restore)
   is_restore = false;
   share::schema::ObSchemaGetterGuard schema_guard;
   const share::schema::ObSimpleServerRuntimeSchema *runtime_schema = nullptr;
-  if (OB_ISNULL(GCTX.schema_service_)) {
+  // The physical merge coordinator uses the root namespace's shared metadata.
+  ns::NamespaceRuntime *root_runtime = nullptr;
+  auto *schema_service = ns::namespace_registry().get(1, root_runtime)
+      && root_runtime != nullptr
+      ? static_cast<share::schema::ObMultiVersionSchemaService *>(
+            root_runtime->service(ns::NamespaceRuntime::SCHEMA_SERVICE))
+      : nullptr;
+  if (OB_ISNULL(schema_service)) {
     ret = OB_NOT_INIT;
-    LOG_WARN("schema service is not initialized", KR(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+    LOG_WARN("root namespace schema service is not initialized", KR(ret));
+  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_server_runtime_info(runtime_schema))) {
   } else if (OB_ISNULL(runtime_schema) || !runtime_schema->is_normal()) {
     ret = OB_INNER_STAT_ERROR;
@@ -197,7 +205,13 @@ int ObMajorFreezeHelper::get_frozen_status(
     const SCN &frozen_scn,
     ObFreezeInfo &frozen_status)
 {
-  return get_frozen_status(frozen_scn, frozen_status, GCTX.sql_proxy_);
+  ns::NamespaceRuntime *root_runtime = nullptr;
+  auto *sql_proxy = ns::namespace_registry().get(1, root_runtime)
+      && root_runtime != nullptr
+      ? static_cast<ObMySQLProxy *>(
+            root_runtime->service(ns::NamespaceRuntime::SQL_PROXY))
+      : nullptr;
+  return get_frozen_status(frozen_scn, frozen_status, sql_proxy);
 }
 
 int ObMajorFreezeHelper::get_frozen_status(

@@ -61,6 +61,7 @@ struct ObDDLTaskContext final
   RecoveryMode recovery_mode_ = RecoveryMode::INVALID;
   common::ObMySQLProxy *sql_proxy_ = nullptr;
   common::ObMySQLProxy *session_sql_proxy_ = nullptr;
+  // Freeze progress belongs to the shared LS and is stored in Namespace 1.
   common::ObMySQLProxy *freeze_info_sql_proxy_ = nullptr;
   common::ObMySQLProxy *ddl_proxy_ = nullptr;
   share::schema::ObMultiVersionSchemaService *schema_service_ = nullptr;

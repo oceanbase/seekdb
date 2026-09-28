@@ -489,7 +489,7 @@ int ObMajorMergeScheduler::try_update_global_merged_scn()
       } else if (OB_FAIL(update_all_tablets_report_scn(global_broadcast_scn_val))) {
       } else if (OB_FAIL(merge_info_mgr_->get_global_merge_mgr().try_update_global_last_merged_scn())) {
       } else if (OB_FAIL(ObGlobalMergeTableOperator::load_global_merge_info(
-            *GCTX.sql_proxy_, global_info, true/*print_sql*/))) {
+            *sql_proxy_, global_info, true/*print_sql*/))) {
       } else if (global_info.is_last_merge_complete() && OB_FAIL(progress_checker_->clear_cached_info())) { // clear only when merge finished
         LOG_WARN("fail to do prepare handle of progress checker", KR(ret));
       } else {
