@@ -20,7 +20,7 @@
 
 #include "rootserver/freeze/ob_major_merge_info_manager.h"
 #include "rootserver/freeze/ob_snapshot_gc_scn_renewer.h"
-#include "rootserver/ob_local_management_service.h"
+#include "rootserver/ob_root_minor_freeze.h"
 #include "rootserver/ob_root_utils.h"
 #include "share/ob_global_merge_table_operator.h"
 #include "share/ob_global_stat_proxy.h"
@@ -38,7 +38,7 @@ ObMajorMergeInfoDetector::ObMajorMergeInfoDetector()
     is_replay_mode_(false),
     is_global_merge_info_adjusted_(false), is_gc_scn_inited_(false), sql_proxy_(nullptr),
     last_run_timestamp_(0),
-    major_merge_info_mgr_(nullptr), snapshot_gc_scn_renewer_(nullptr),
+    major_merge_info_mgr_(nullptr), snapshot_gc_scn_renewer_(nullptr), minor_freeze_(nullptr),
     major_scheduler_idling_(nullptr),
     last_schedule_ts_(0), need_immediate_run_(true),
     timer_()
@@ -54,6 +54,7 @@ int ObMajorMergeInfoDetector::init(
     ObMySQLProxy &sql_proxy,
     ObMajorMergeInfoManager &major_merge_info_mgr,
     ObSnapshotGcScnRenewer &snapshot_gc_scn_renewer,
+    ObRootMinorFreeze &minor_freeze,
     ObThreadIdling &major_scheduler_idling)
 {
   int ret = OB_SUCCESS;
@@ -66,6 +67,7 @@ int ObMajorMergeInfoDetector::init(
     sql_proxy_ = &sql_proxy;
     major_merge_info_mgr_ = &major_merge_info_mgr;
     snapshot_gc_scn_renewer_ = &snapshot_gc_scn_renewer;
+    minor_freeze_ = &minor_freeze;
     major_scheduler_idling_ = &major_scheduler_idling;
     if (OB_FAIL(timer_.init("FrzInfoDetTimer", ObMemAttr("FrzInfoDet")))) {
     } else {
@@ -191,7 +193,10 @@ int ObMajorMergeInfoDetector::try_minor_freeze()
 {
   int ret = OB_SUCCESS;
   obcall::ObMinorFreezeArg arg;
-  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->root_minor_freeze(arg))) {
+  if (OB_ISNULL(minor_freeze_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("minor freeze service is unavailable", KR(ret));
+  } else if (OB_FAIL(minor_freeze_->try_minor_freeze(arg))) {
   } else {
     LOG_INFO("succ to execute root_minor_freeze rpc", KR(ret), K(arg));
   }
@@ -275,6 +280,7 @@ int ObMajorMergeInfoDetector::destroy()
   sql_proxy_ = nullptr;
   major_merge_info_mgr_ = nullptr;
   snapshot_gc_scn_renewer_ = nullptr;
+  minor_freeze_ = nullptr;
   major_scheduler_idling_ = nullptr;
   return ret;
 }

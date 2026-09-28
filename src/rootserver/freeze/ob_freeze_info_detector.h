@@ -29,6 +29,7 @@ class ObMySQLProxy;
 namespace rootserver
 {
 class ObMajorMergeInfoManager;
+class ObRootMinorFreeze;
 class ObSnapshotGcScnRenewer;
 class ObThreadIdling;
 
@@ -41,6 +42,7 @@ public:
            common::ObMySQLProxy &sql_proxy,
            ObMajorMergeInfoManager &major_merge_info_mgr,
            ObSnapshotGcScnRenewer &snapshot_gc_scn_renewer,
+           ObRootMinorFreeze &minor_freeze,
            ObThreadIdling &major_scheduler_idling);
 
   virtual void runTimerTask() override;
@@ -87,6 +89,7 @@ private:
   int64_t last_run_timestamp_;
   ObMajorMergeInfoManager *major_merge_info_mgr_;
   ObSnapshotGcScnRenewer *snapshot_gc_scn_renewer_;
+  ObRootMinorFreeze *minor_freeze_;
   ObThreadIdling *major_scheduler_idling_;
   int64_t last_schedule_ts_;
   bool need_immediate_run_;

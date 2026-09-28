@@ -18,6 +18,8 @@
 
 #include "rootserver/freeze/ob_major_freeze_service.h"
 #include "rootserver/freeze/ob_local_major_freeze.h"
+#include "rootserver/ob_local_management_service.h"
+#include "namespace/namespace.h"
 #include "share/ob_server_struct.h"
 
 namespace oceanbase
@@ -115,6 +117,20 @@ int ObMajorFreezeService::alloc_local_major_freeze(const bool append_mode)
   void *buf = nullptr;
   int64_t len = sizeof(ObLocalMajorFreeze);
   bool is_primary_service = true;
+  ns::NamespaceRuntime *root_runtime = nullptr;
+  const bool root_available = ns::namespace_registry().get(1, root_runtime)
+      && root_runtime != nullptr;
+  auto *root_sql_proxy = root_available
+      ? static_cast<ObMySQLProxy *>(root_runtime->service(ns::NamespaceRuntime::SQL_PROXY))
+      : nullptr;
+  auto *root_schema_service = root_available
+      ? static_cast<share::schema::ObMultiVersionSchemaService *>(
+            root_runtime->service(ns::NamespaceRuntime::SCHEMA_SERVICE))
+      : nullptr;
+  auto *root_commands = root_available
+      ? static_cast<ObLocalManagementService *>(
+            root_runtime->service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE))
+      : nullptr;
   ObMajorFreezeServiceType service_type = get_service_type();
   if ((service_type <= ObMajorFreezeServiceType::SERVICE_TYPE_INVALID)
       || (service_type >= ObMajorFreezeServiceType::SERVICE_TYPE_MAX)) {
@@ -126,6 +142,10 @@ int ObMajorFreezeService::alloc_local_major_freeze(const bool append_mode)
 
   if (FAILEDx(check_inner_stat())) {
     LOG_WARN("fail to check_inner_stat", KR(ret));
+  } else if (root_sql_proxy == nullptr || root_schema_service == nullptr
+             || root_commands == nullptr || GCTX.config_ == nullptr) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("root namespace freeze dependencies are unavailable", KR(ret));
   } else if (OB_NOT_NULL(local_major_freeze_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("local_major_freeze is not null", KR(ret), KP_(local_major_freeze));
@@ -134,8 +154,8 @@ int ObMajorFreezeService::alloc_local_major_freeze(const bool append_mode)
     LOG_WARN("fail to alloc memory", KR(ret), K(len));
   } else if (FALSE_IT(local_major_freeze_ = new(buf) ObLocalMajorFreeze{})) {
     // impossible
-  } else if (OB_FAIL(local_major_freeze_->init(is_primary_service, *GCTX.sql_proxy_,
-             *GCTX.config_, *GCTX.schema_service_))) {
+  } else if (OB_FAIL(local_major_freeze_->init(is_primary_service, *root_sql_proxy,
+             *GCTX.config_, *root_schema_service, root_commands->get_root_minor_freeze()))) {
   } else if (OB_FAIL(local_major_freeze_->start(append_mode))) {
   }
 

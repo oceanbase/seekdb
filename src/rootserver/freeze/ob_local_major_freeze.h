@@ -37,6 +37,7 @@ class ObMultiVersionSchemaService;
 }
 namespace rootserver
 {
+class ObRootMinorFreeze;
 
 // Major freeze for the local database.
 // 1. generate freeze info
@@ -51,7 +52,8 @@ public:
   int init(const bool is_primary_service,
            common::ObMySQLProxy &sql_proxy,
            common::ObServerConfig &config,
-           share::schema::ObMultiVersionSchemaService &schema_service);
+           share::schema::ObMultiVersionSchemaService &schema_service,
+           ObRootMinorFreeze &minor_freeze);
 
   int start(const bool append_mode);
   void stop();

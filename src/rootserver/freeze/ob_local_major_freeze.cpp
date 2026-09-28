@@ -44,7 +44,8 @@ int ObLocalMajorFreeze::init(
     const bool is_primary_service,
     ObMySQLProxy &sql_proxy,
     ObServerConfig &config,
-    share::schema::ObMultiVersionSchemaService &schema_service)
+    share::schema::ObMultiVersionSchemaService &schema_service,
+    ObRootMinorFreeze &minor_freeze)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
@@ -56,7 +57,7 @@ int ObLocalMajorFreeze::init(
   } else if (OB_FAIL(merge_scheduler_.init(is_primary_service, major_merge_info_mgr_,
              schema_service, config, sql_proxy))) {
   }  else if (OB_FAIL(major_merge_info_detector_.init(is_primary_service, sql_proxy,
-              major_merge_info_mgr_, snapshot_gc_scn_renewer_,
+              major_merge_info_mgr_, snapshot_gc_scn_renewer_, minor_freeze,
               merge_scheduler_.get_major_scheduler_idling()))) {
   } else if (is_primary_service) {
     if (OB_FAIL(daily_launcher_.init(config, sql_proxy, major_merge_info_mgr_))) {
