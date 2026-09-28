@@ -1578,7 +1578,10 @@ int ObServer::obs_init_modules()
       mods_plugin_vector_index_service_, mods_lob_manager_))) {
     SERVER_LOG(WARN, "mods_plugin_vector_index_service_ fail", KR(ret));
   }
-  if (OB_SUCC(ret) && OB_FAIL(rootserver::ObDDLServiceLauncher::server_module_init(mods_ddl_service_launcher_))) { SERVER_LOG(WARN, "mods_ddl_service_launcher_ fail", KR(ret)); }
+  if (OB_SUCC(ret) && OB_FAIL(rootserver::ObDDLServiceLauncher::server_module_init(
+          mods_ddl_service_launcher_, *root_schema_service))) {
+    SERVER_LOG(WARN, "mods_ddl_service_launcher_ fail", KR(ret));
+  }
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObSystemPackageLoadService::server_module_init(mods_system_package_load_service_))) { SERVER_LOG(WARN, "mods_system_package_load_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObDDLScheduler::server_module_init(mods_ddl_scheduler_))) { SERVER_LOG(WARN, "mods_ddl_scheduler_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObAiService::server_module_init(mods_ai_service_))) { SERVER_LOG(WARN, "mods_ai_service_ fail", KR(ret)); }

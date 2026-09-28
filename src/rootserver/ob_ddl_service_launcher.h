@@ -25,6 +25,7 @@
 
 namespace oceanbase
 {
+namespace share { namespace schema { class ObMultiVersionSchemaService; } }
 namespace common
 {
 class SpinRWLock;
@@ -39,7 +40,7 @@ public:
   ObDDLServiceLauncher();
   virtual ~ObDDLServiceLauncher() {}
 
-  int init();
+  int init(share::schema::ObMultiVersionSchemaService &root_schema_service);
   void destroy();
 
   bool is_inited() const { return inited_; }
@@ -54,7 +55,8 @@ public:
          int64_t &proposal_id);
 
   // Server module lifecycle entry point.
-  static int server_module_init(ObDDLServiceLauncher *&ddl_service_launcher);
+  static int server_module_init(ObDDLServiceLauncher *&ddl_service_launcher,
+                                share::schema::ObMultiVersionSchemaService &root_schema_service);
 
   // for ObICheckpointSubHandler
   virtual share::SCN get_rec_scn() override { return share::SCN::max_scn(); }
@@ -72,6 +74,7 @@ private:
   int init_sequence_id_(const int64_t proposal_id);
 private:
   bool inited_;
+  share::schema::ObMultiVersionSchemaService *root_schema_service_;
   static bool is_ddl_service_started_;
   common::SpinRWLock rw_lock_; // used for update for is_ddl_service_started_
 private:

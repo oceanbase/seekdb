@@ -21,9 +21,8 @@
 #include "lib/lock/ob_spin_rwlock.h" // for SpinRWLock
 #include "ob_ddl_service_launcher.h"
 #include "share/ob_structured_event_logger.h" // for SERVER_EVENT_ADD
-#include "share/ob_server_struct.h"     // for GCTX
 #include "share/rc/ob_server_runtime.h"    // for SERVER_ID
-#include "rootserver/ob_local_management_service.h" // for ObLocalManagementService
+#include "share/schema/ob_multi_version_schema_service.h"
 #include "query/command/ob_local_command_service.h"
 
 namespace oceanbase
@@ -32,17 +31,18 @@ namespace rootserver
 {
 bool ObDDLServiceLauncher::is_ddl_service_started_ = false;
 ObDDLServiceLauncher::ObDDLServiceLauncher()
-  : inited_(false)
+  : inited_(false), root_schema_service_(nullptr)
 {
 }
 
-int ObDDLServiceLauncher::server_module_init(ObDDLServiceLauncher *&ddl_service_launcher)
+int ObDDLServiceLauncher::server_module_init(ObDDLServiceLauncher *&ddl_service_launcher,
+                                             share::schema::ObMultiVersionSchemaService &root_schema_service)
 {
   int ret = OB_SUCCESS;
   int64_t start_time = ObTimeUtility::current_time();
   FLOG_INFO("[DDL_SERVICE_LAUNCHER] begin server_module_init for ddl_service_launcher");
   if (OB_NOT_NULL(ddl_service_launcher)) {
-    if (OB_FAIL(ddl_service_launcher->init())) {
+    if (OB_FAIL(ddl_service_launcher->init(root_schema_service))) {
       LOG_WARN("failed to init ddl_service_launcher", KR(ret));
     }
   }
@@ -52,7 +52,7 @@ int ObDDLServiceLauncher::server_module_init(ObDDLServiceLauncher *&ddl_service_
   return ret;
 }
 
-int ObDDLServiceLauncher::init()
+int ObDDLServiceLauncher::init(share::schema::ObMultiVersionSchemaService &root_schema_service)
 {
   int ret = OB_SUCCESS;
   int64_t start_time = ObTimeUtility::current_time();
@@ -61,6 +61,7 @@ int ObDDLServiceLauncher::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
   } else {
+    root_schema_service_ = &root_schema_service;
     inited_ = true;
   }
   int64_t duration_time = ObTimeUtility::current_time() - start_time;
@@ -76,6 +77,7 @@ void ObDDLServiceLauncher::destroy()
   FLOG_INFO("[DDL_SERVICE_LAUNCHER] begin destroy for ddl_service_launcher");
   {
     inited_ = false;
+    root_schema_service_ = nullptr;
   }
   int64_t duration_time = ObTimeUtility::current_time() - start_time;
   FLOG_INFO("[DDL_SERVICE_LAUNCHER] finish destroy for ddl_service_launcher", KR(ret),
@@ -122,12 +124,12 @@ int ObDDLServiceLauncher::init_sequence_id_(const int64_t proposal_id)
   if (OB_UNLIKELY(OB_INVALID_ID == proposal_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("proposal id not valid", KR(ret), K(proposal_id));
-  } else if (OB_ISNULL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()));
+  } else if (OB_ISNULL(root_schema_service_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("root namespace schema service is unavailable", KR(ret));
   } else {
-    ObRefreshSchemaInfo schema_info;
-    ObSchemaService *schema_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->get_schema_service().get_schema_service();
+    share::schema::ObRefreshSchemaInfo schema_info;
+    share::schema::ObSchemaService *schema_service = root_schema_service_->get_schema_service();
     if (OB_ISNULL(schema_service)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", KR(ret), KP(schema_service));
@@ -155,7 +157,7 @@ int ObDDLServiceLauncher::inner_start_ddl_service_with_lock_()
   } else if (OB_FAIL(init_sequence_id_(proposal_id))) {
     LOG_WARN("fail to init sequence id", KR(ret), K(proposal_id));
   // Reset the local DDL epoch so the next DDL transaction persists a fresh epoch.
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>()->get_schema_service().get_ddl_epoch_mgr().remove_all_ddl_epoch())) {
+  } else if (OB_FAIL(root_schema_service_->get_ddl_epoch_mgr().remove_all_ddl_epoch())) {
     LOG_WARN("fail to remove ddl epoch", KR(ret));
   } else {
     ATOMIC_SET(&is_ddl_service_started_, true);
