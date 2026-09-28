@@ -22,6 +22,7 @@
 #include <cstring>
 #include <limits>
 #include <utility>
+#include <vector>
 
 namespace oceanbase
 {
@@ -853,6 +854,41 @@ int InstanceNamespaceMetadata::finish_namespace_drop(uint64_t id)
       ret = ns::NamespaceSnapshotLineage::release(snapshot_ref, lineage);
     }
   }
+  return ret;
+}
+
+int InstanceNamespaceMetadata::prune_deleted_namespace(uint64_t id,
+    const NamespacePhysicalProbe &has_physical, bool &pruned)
+{
+  pruned = false;
+  if (id <= 1 || !has_physical) { return OB_INVALID_ARGUMENT; }
+  InstanceNamespaceRecord record;
+  int ret = get_namespace(id, record, true);
+  if (ret == OB_SUCCESS && record.roots.state != 2) { ret = OB_STATE_NOT_MATCH; }
+  bool has_child = false;
+  if (ret == OB_SUCCESS) {
+    ret = scan_namespaces([&](const InstanceNamespaceRecord &other) {
+      if (other.parent_namespace == id) { has_child = true; }
+      return OB_SUCCESS;
+    });
+  }
+  if (ret != OB_SUCCESS || has_child) { return ret; }
+  bool has_owned = false;
+  std::vector<uint64_t> exceptions;
+  ret = scan_exceptions(id, [&](const InstanceExceptionRecord &exception) {
+    if (exception.kind == 0) { has_owned = true; }
+    exceptions.push_back(exception.tablet_id);
+    return OB_SUCCESS;
+  });
+  if (ret != OB_SUCCESS || has_owned) { return ret; }
+  bool physical = false;
+  ret = has_physical(id, physical);
+  if (ret != OB_SUCCESS || physical) { return ret; }
+  for (const uint64_t tablet : exceptions) {
+    if (ret == OB_SUCCESS) { ret = erase_exception(id, tablet); }
+  }
+  if (ret == OB_SUCCESS) { ret = erase_namespace(id); }
+  if (ret == OB_SUCCESS) { pruned = true; }
   return ret;
 }
 

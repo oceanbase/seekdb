@@ -65,6 +65,7 @@ public:
   using PinVisitor = std::function<int(const InstanceNamespacePin &)>;
   using SnapshotAcquirer = std::function<int(int64_t &)>;
   using PhysicalTabletProbe = std::function<int(uint64_t, bool &)>;
+  using NamespacePhysicalProbe = std::function<int(uint64_t, bool &)>;
 
   InstanceNamespaceMetadata(storage::InstanceMetaStore &store, Transaction &transaction)
       : store_(store), transaction_(transaction) {}
@@ -89,6 +90,10 @@ public:
   // removes physical tablets before finishing the drop in a later KV tx.
   int mark_namespace_deleting(uint64_t id, bool &done);
   int finish_namespace_drop(uint64_t id);
+  // Stage final tombstone removal only after all descendants, owned records,
+  // and physical tablets have gone. Caller commits the KV transaction.
+  int prune_deleted_namespace(uint64_t id,
+      const NamespacePhysicalProbe &has_physical, bool &pruned);
 
   // The native schema transaction is separate from this KV transaction. Mark
   // it before native DDL, then publish its version after reconciling the
