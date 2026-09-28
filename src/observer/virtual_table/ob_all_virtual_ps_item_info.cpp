@@ -18,6 +18,7 @@
 #include "share/rc/ob_server_runtime.h"
 
 #include "sql/plan_cache/ob_ps_cache.h"
+#include "sql/session/ob_sql_session_info.h"
 
 #include "observer/ob_server_utils.h"
 
@@ -141,8 +142,10 @@ int ObAllVirtualPsItemInfo::get_next_row(bool &is_end)
   int ret = OB_SUCCESS;
   is_end = false;
   if (OB_INVALID_ID == stmt_id_array_idx_) {
-    ps_cache_ = ::oceanbase::share::server_service<::oceanbase::sql::ObPsCache>();
-    if (false == ps_cache_->is_inited()) {
+    ps_cache_ = session_ == nullptr ? nullptr : session_->effective_ps_cache();
+    if (OB_ISNULL(ps_cache_)) {
+      ret = OB_NOT_INIT;
+    } else if (false == ps_cache_->is_inited()) {
       is_end = true;
       SERVER_LOG(DEBUG, "ps cache is not ready, ignore this", K(ret), K(ps_cache_->is_inited()));
     } else if (OB_FAIL(ps_cache_->get_all_stmt_id(&stmt_id_array_))) {

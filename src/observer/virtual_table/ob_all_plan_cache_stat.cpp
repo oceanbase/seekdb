@@ -19,6 +19,7 @@
 #include "observer/virtual_table/ob_all_plan_cache_stat.h"
 #include "share/rc/ob_server_runtime.h"
 #include "sql/plan_cache/ob_plan_cache.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 
 #include "observer/ob_server_utils.h"
 
@@ -135,9 +136,10 @@ int ObAllPlanCacheStat::get_row()
     ret = OB_ITER_END;
   } else {
     SERVER_MODULE_SCOPE {
-      ObPlanCache *plan_cache =
-          ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
-      if (OB_FAIL(fill_cells(*plan_cache))) {
+      ObPlanCache *plan_cache = namespace_worker_prototype::effective_plan_cache(session_);
+      if (OB_ISNULL(plan_cache)) {
+        ret = OB_NOT_INIT;
+      } else if (OB_FAIL(fill_cells(*plan_cache))) {
       } else {
       }
       iter_end_ = true;

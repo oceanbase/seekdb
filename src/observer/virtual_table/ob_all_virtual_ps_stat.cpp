@@ -19,6 +19,7 @@
 
 #include "observer/ob_server_utils.h"
 #include "sql/plan_cache/ob_ps_cache.h"
+#include "sql/session/ob_sql_session_info.h"
 
 using namespace oceanbase;
 using namespace sql;
@@ -75,16 +76,13 @@ int ObAllVirtualPsStat::inner_get_next_row()
   } else {
     iter_end_ = true;
     SERVER_MODULE_SCOPE {
-      ObPsCache *ps_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPsCache>();
+      ObPsCache *ps_cache = session_ == nullptr ? nullptr : session_->effective_ps_cache();
       if (OB_ISNULL(ps_cache)) {
+        ret = OB_NOT_INIT;
       } else if (false == ps_cache->is_inited()) {
       } else if (OB_FAIL(fill_cells(*ps_cache))) {
       } else {
       }
-    }
-    // ignore error
-    if (ret != OB_SUCCESS) {
-      ret = OB_SUCCESS;
     }
   }
   return ret;
