@@ -16,14 +16,18 @@
 
 #define USING_LOG_PREFIX RS
 
+#include <algorithm>
 #include "lib/stat/ob_diagnostic_info_guard.h"
+#include "lib/time/ob_time_utility.h"
 #include "rootserver/freeze/ob_major_merge_info_manager.h"
+#include "rootserver/fork_table/instance_namespace_metadata.h"
 
 #include "share/ob_global_stat_proxy.h"
 #include "rootserver/ob_ddl_service.h"
-#include "share/ob_global_stat_proxy.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "share/ob_structured_event_logger.h"
+#include "share/rc/ob_server_runtime.h"
+#include "storage/tx_storage/ob_access_service.h"
 
 namespace oceanbase
 {
@@ -35,6 +39,41 @@ using namespace palf;
 
 namespace rootserver
 {
+
+namespace
+{
+// The KV watermark commits before opening the SQL transaction. If the later
+// SQL update fails, KV is ahead and rejects some otherwise valid pins; the
+// reverse order could accept a pin after physical GC has passed it.
+int advance_instance_snapshot_gc_watermark(const SCN &current, const SCN &next)
+{
+  auto *access = share::server_service<storage::ObAccessService>();
+  if (access == nullptr) { return OB_NOT_INIT; }
+  auto &kv = access->instance_meta_store();
+  storage::InstanceMetaStore::Transaction tx;
+  int ret = kv.begin(tx, ObTimeUtility::current_time() + 10 * 1000 * 1000);
+  if (ret == OB_SUCCESS) {
+    InstanceNamespaceMetadata metadata(kv, tx);
+    int64_t watermark = 0;
+    // Initialization uses a plain read and unique insert; advancement locks
+    // the existing row in advance_snapshot_gc_watermark().
+    ret = metadata.get_snapshot_gc_watermark(watermark);
+    if (ret == OB_ENTRY_NOT_EXIST) {
+      ret = metadata.initialize_snapshot_gc_watermark(current.get_val_for_tx());
+      watermark = current.get_val_for_tx();
+    }
+    if (ret == OB_SUCCESS) {
+      ret = metadata.advance_snapshot_gc_watermark(
+          std::max(watermark, next.get_val_for_tx()));
+    }
+  }
+  if (tx.is_active()) {
+    const int end_ret = ret == OB_SUCCESS ? kv.commit(tx) : kv.rollback(tx);
+    if (ret == OB_SUCCESS) { ret = end_ret; }
+  }
+  return ret;
+}
+} // namespace
 
 /****************************** ObMajorMergeInfoManager ******************************/
 int ObMajorMergeInfoManager::init(
@@ -250,19 +289,25 @@ int ObMajorMergeInfoManager::renew_snapshot_gc_scn(SCN &new_snapshot_gc_scn)
   new_snapshot_gc_scn = SCN::min_scn();
 
   if (OB_FAIL(try_reload())) {
-  } else if (OB_FAIL(trans.start(sql_proxy_))) {
-  } else if (OB_FAIL(ObGlobalStatProxy::select_snapshot_gc_scn_for_update(trans,
-      cur_snapshot_gc_scn))) {
   }
   // no need to minus max_stale_time_for_weak_consistency since 4.1, because the collection of
   // multi-version data no longer depends on snapshot_gc_scn since 4.1
   else if (OB_FAIL(get_gts(new_snapshot_gc_scn))) {
   } else if (FALSE_IT(latest_snapshot_gc_scn = freeze_info_mgr_.get_snapshot_gc_scn())) {
+  } else if (OB_FAIL(ObGlobalStatProxy::get_snapshot_gc_scn(
+      *sql_proxy_, cur_snapshot_gc_scn))) {
   } else if ((new_snapshot_gc_scn <= latest_snapshot_gc_scn)
              || (cur_snapshot_gc_scn >= new_snapshot_gc_scn)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid snaptshot gc time", KR(ret), K(cur_snapshot_gc_scn), K(new_snapshot_gc_scn),
       K(latest_snapshot_gc_scn));
+  } else if (OB_FAIL(advance_instance_snapshot_gc_watermark(
+      cur_snapshot_gc_scn, new_snapshot_gc_scn))) {
+  } else if (OB_FAIL(trans.start(sql_proxy_))) {
+  } else if (OB_FAIL(ObGlobalStatProxy::select_snapshot_gc_scn_for_update(
+      trans, cur_snapshot_gc_scn))) {
+  } else if (cur_snapshot_gc_scn >= new_snapshot_gc_scn) {
+    ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObGlobalStatProxy::update_snapshot_gc_scn(trans, new_snapshot_gc_scn,
       affected_rows))) {
   } else if (!is_single_row(affected_rows)) {

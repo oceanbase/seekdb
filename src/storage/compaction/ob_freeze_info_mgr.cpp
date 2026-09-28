@@ -90,6 +90,7 @@ ObFreezeInfoMgr::ObFreezeInfoMgr()
     cur_idx_(0),
     snapshot_gc_scn_renewal_state_(),
     reload_timer_(),
+    instance_pin_loader_(),
     inited_(false)
 {
 }
@@ -500,6 +501,7 @@ int ObFreezeInfoMgr::try_update_info()
   } else if (OB_FAIL(ObFreezeInfoManager::fetch_new_freeze_info(
         share::SCN::base_scn(), *sql_proxy_, freeze_infos, new_snapshot_gc_scn))) {
   } else if (OB_FAIL(snapshot_proxy.get_all_snapshots(*sql_proxy_, snapshots))) {
+  } else if (instance_pin_loader_ && OB_FAIL(instance_pin_loader_(snapshots))) {
   } else if (OB_FAIL(inner_update_info(new_snapshot_gc_scn, freeze_infos, snapshots))) {
   }
   return ret;

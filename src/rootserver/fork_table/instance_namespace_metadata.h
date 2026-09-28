@@ -85,6 +85,7 @@ public:
 
   int initialize_snapshot_gc_watermark(int64_t watermark);
   int get_snapshot_gc_watermark(int64_t &watermark, bool lock = false);
+  // Advances to at least watermark; stale concurrent requests leave it unchanged.
   int advance_snapshot_gc_watermark(int64_t watermark);
 
   int get_pin(uint64_t snapshot_id, InstanceNamespacePin &pin, bool lock = false);

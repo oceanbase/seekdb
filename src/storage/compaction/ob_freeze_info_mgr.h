@@ -17,7 +17,9 @@
 #ifndef OCEANBASE_STORAGE_FREEZE_INFO_MGR_
 #define OCEANBASE_STORAGE_FREEZE_INFO_MGR_
 
+#include <functional>
 #include <stdint.h>
+#include <utility>
 #include "share/rc/ob_server_runtime.h"
 
 #include "lib/allocator/ob_slice_alloc.h"
@@ -81,6 +83,7 @@ struct ObFrozenStatus;
 class ObFreezeInfoMgr
 {
 public:
+  using InstancePinLoader = std::function<int(common::ObIArray<share::ObSnapshotInfo> &)>;
 
   struct NeighbourFreezeInfo {
     share::ObFreezeInfo next;
@@ -101,6 +104,11 @@ public:
                                 common::ObMySQLProxy &sql_proxy);
 
   int init(common::ObMySQLProxy &sql_proxy);
+  // Installed by the composition root before start().
+  void set_instance_pin_loader(InstancePinLoader loader)
+  {
+    instance_pin_loader_ = std::move(loader);
+  }
   void init_for_test() { inited_ = true; }
   // The throwaway fork prototype uses the normal reload protocol before publishing its handle.
   int reload_for_test() { return try_update_info(); }
@@ -196,6 +204,7 @@ private:
   int64_t cur_idx_;
   ObSnapshotGcScnRenewalState snapshot_gc_scn_renewal_state_;
   common::ObTimer reload_timer_;
+  InstancePinLoader instance_pin_loader_;
   bool inited_;
 };
 

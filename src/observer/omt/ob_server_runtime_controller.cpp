@@ -20,6 +20,7 @@
 #include <new>
 
 #include "lib/stat/ob_diagnostic_info_guard.h"
+#include "lib/time/ob_time_utility.h"
 #include "ob_server_runtime_controller.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"
 #include "storage/tx_storage/ob_log_storage_adapter.h"
@@ -29,6 +30,8 @@
 #include "data_plane/report/ob_i_disk_report.h"
 #include "observer/ob_server.h"
 #include "namespace/namespace.h"
+#include "rootserver/fork_table/instance_namespace_metadata.h"
+#include "storage/tx_storage/ob_access_service.h"
 #include "observer/namespace_worker_protocol_prototype.h"
 #include "ob_server_runtime.h"
 #include "rpc/obmysql/ob_sql_nio_server.h"
@@ -1526,6 +1529,34 @@ int ObServer::obs_init_modules()
   }
   if (OB_SUCC(ret) && OB_FAIL(ObTxLoopWorker::server_module_init(mods_tx_loop_worker_))) { SERVER_LOG(WARN, "mods_tx_loop_worker_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObAccessService::server_module_init(mods_access_service_))) { SERVER_LOG(WARN, "mods_access_service_ fail", KR(ret)); }
+  if (OB_SUCC(ret)) {
+    ObAccessService *access = mods_access_service_;
+    mods_freeze_info_mgr_->set_instance_pin_loader(
+        [access](ObIArray<ObSnapshotInfo> &snapshots) -> int {
+          auto &kv = access->instance_meta_store();
+          InstanceMetaStore::Transaction tx;
+          int load_ret = kv.begin(tx, ObTimeUtility::current_time() + 10 * 1000 * 1000, true);
+          if (load_ret == OB_SUCCESS) {
+            rootserver::InstanceNamespaceMetadata metadata(kv, tx);
+            load_ret = metadata.scan_pins([&](const rootserver::InstanceNamespacePin &pin) {
+              ObSnapshotInfo snapshot;
+              snapshot.snapshot_type_ = SNAPSHOT_FOR_MULTI_VERSION;
+              snapshot.tablet_id_ = 0;
+              snapshot.schema_version_ = pin.schema_version;
+              snapshot.comment_ = "instance namespace root";
+              int scan_ret = snapshot.snapshot_scn_.convert_for_tx(
+                  static_cast<int64_t>(pin.snapshot_id));
+              if (scan_ret == OB_SUCCESS) { scan_ret = snapshots.push_back(snapshot); }
+              return scan_ret;
+            });
+          }
+          if (tx.is_active()) {
+            const int end_ret = load_ret == OB_SUCCESS ? kv.commit(tx) : kv.rollback(tx);
+            if (load_ret == OB_SUCCESS) { load_ret = end_ret; }
+          }
+          return load_ret;
+        });
+  }
   if (OB_SUCC(ret) && OB_FAIL(ObMultiVersionGarbageCollector::server_module_init(mods_multi_version_garbage_collector_))) { SERVER_LOG(WARN, "mods_multi_version_garbage_collector_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObEmptyReadBucket::server_module_init(mods_empty_read_bucket_))) { SERVER_LOG(WARN, "mods_empty_read_bucket_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(namespace_worker_prototype::init_namespace_dbms_scheduler(

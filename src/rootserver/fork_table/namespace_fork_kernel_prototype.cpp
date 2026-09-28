@@ -9,10 +9,12 @@
 #include "rootserver/ob_tablet_creator.h"
 #include "rootserver/ob_tablet_drop.h"
 #include "rootserver/ddl_task/ob_ddl_task_util.h"
+#include "rootserver/fork_table/instance_namespace_metadata.h"
 #include "common/mysqlclient/ob_mysql_proxy.h"
 #include "common/mysqlclient/ob_mysql_transaction.h"
 #include "share/ob_server_struct.h"
 #include "share/ob_snapshot_table_proxy.h"
+#include "share/ob_global_stat_proxy.h"
 #include "share/ob_debug_sync.h"
 #include "share/tablet/ob_tablet_mapping_operator.h"
 #include "share/schema/ob_multi_version_schema_service.h"
@@ -24,6 +26,7 @@
 #include "storage/ob_tablet_autoincrement_service.h"
 #include "storage/tablet/ob_tablet_create_delete_helper.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
+#include "storage/tx_storage/ob_access_service.h"
 #include "lib/hash_func/murmur_hash.h"
 #include "lib/time/ob_time_utility.h"
 #include <algorithm>
@@ -536,6 +539,39 @@ int namespace_registry_ready(bool &ready) {
   }
   return ret;
 }
+
+int ensure_instance_snapshot_gc_watermark()
+{
+  auto *proxy = directory_sql_proxy();
+  auto *access = share::server_service<ObAccessService>();
+  if (proxy == nullptr || access == nullptr) { return OB_NOT_INIT; }
+  SCN sql_watermark;
+  int ret = ObGlobalStatProxy::get_snapshot_gc_scn(*proxy, sql_watermark);
+  if (ret != OB_SUCCESS) { return ret; }
+  auto &kv = access->instance_meta_store();
+  for (int attempt = 0; attempt < 2; ++attempt) {
+    InstanceMetaStore::Transaction tx;
+    ret = kv.begin(tx, ObTimeUtility::current_time() + 10 * 1000 * 1000);
+    if (ret == OB_SUCCESS) {
+      rootserver::InstanceNamespaceMetadata metadata(kv, tx);
+      int64_t existing = 0;
+      // A missing key cannot be locked and then inserted in this native DML
+      // path; the unique insert arbitrates concurrent initializers instead.
+      ret = metadata.get_snapshot_gc_watermark(existing);
+      if (ret == OB_ENTRY_NOT_EXIST) {
+        ret = metadata.initialize_snapshot_gc_watermark(sql_watermark.get_val_for_tx());
+      } else if (ret == OB_SUCCESS && existing < sql_watermark.get_val_for_tx()) {
+        ret = metadata.advance_snapshot_gc_watermark(sql_watermark.get_val_for_tx());
+      }
+    }
+    if (tx.is_active()) {
+      const int end_ret = ret == OB_SUCCESS ? kv.commit(tx) : kv.rollback(tx);
+      if (ret == OB_SUCCESS) { ret = end_ret; }
+    }
+    if (ret != OB_ERR_PRIMARY_KEY_DUPLICATE) { break; }
+  }
+  return ret;
+}
 class SqlSnapshotLineageStore final : public ::oceanbase::ns::ISnapshotLineageStore {
 public:
   explicit SqlSnapshotLineageStore(ObISQLClient &trans) : trans_(trans) {}
@@ -817,6 +853,7 @@ int NamespaceForkKernelPrototype::ensure_control_schema() {
     int64_t affected_rows = 0;
     if (OB_FAIL(directory_sql_proxy()->write(statement, affected_rows))) { break; }
   }
+  if (OB_SUCC(ret)) { ret = ensure_instance_snapshot_gc_watermark(); }
   if (OB_SUCC(ret)) {
     ObMySQLProxy::MySQLResult result;
     sqlclient::ObMySQLResult *rows = nullptr;

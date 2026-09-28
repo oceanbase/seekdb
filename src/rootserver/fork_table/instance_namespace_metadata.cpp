@@ -514,7 +514,6 @@ int InstanceNamespaceMetadata::advance_snapshot_gc_watermark(int64_t watermark)
   int64_t current = 0;
   int ret = get_snapshot_gc_watermark(current, true);
   if (ret == OB_ENTRY_NOT_EXIST) { return OB_NOT_INIT; }
-  if (ret == OB_SUCCESS && watermark < current) { ret = OB_STATE_NOT_MATCH; }
   if (ret == OB_SUCCESS && watermark > current) {
     ret = put_value(store_, transaction_, MetaCollection::SNAPSHOT_COORDINATION,
                     id_key(1), encode_gc_watermark(watermark), false);
