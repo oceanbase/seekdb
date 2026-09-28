@@ -25,7 +25,6 @@
 #include "storage/tx/ob_trans_ctx.h"
 #include "storage/tx/ob_tx_log_adapter.h"
 #include "storage/tablelock/ob_lock_table.h"
-#include "storage/tx/ob_keep_alive_ls_handler.h"
 
 namespace oceanbase
 {
