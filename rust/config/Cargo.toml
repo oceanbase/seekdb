@@ -1,12 +1,12 @@
 [package]
-name = "auto-config"
+name = "config"
 version = "0.1.0"
 edition = "2021"
 publish = false
-description = "Durable instance parameter auto-configuration for seekdb"
+description = "Durable instance parameter configuration for seekdb"
 
 [lib]
-name = "auto_config"
+name = "config"
 crate-type = ["staticlib", "rlib"]
 
 [build-dependencies]

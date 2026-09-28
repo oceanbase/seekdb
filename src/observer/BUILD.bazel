@@ -285,7 +285,7 @@ seekdb_semantic_unity_cc_library(
     implementation_deps = [
         ":observer_internal_interface",
         "//rust:config_bridge_headers",
-        "//rust:auto_config_headers",
+        "//rust:config_headers",
     ] + _OBSERVER_NON_OBLIB_NATIVE_DEPS,
     group_implementation_deps = observer_runtime_group_oblib_deps(
         _OBSERVER_RUNTIME_UNITY_GROUPS,
@@ -521,7 +521,7 @@ _SEEKDB_GRPC_ABSL_ARCHIVE_NAMES = [
 
 _SEEKDB_ORDERED_LINK_FILES = [
     "//rust:sql_nio_archive",
-    "//rust:auto_config_archive",
+    "//rust:config_archive",
 ] + select({
     "//bazel:sanity_enabled": [
         "//deps/external:jemalloc_archive",

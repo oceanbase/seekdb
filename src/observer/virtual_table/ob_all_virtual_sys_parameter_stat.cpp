@@ -128,6 +128,10 @@ int ObAllVirtualSysParameterStat::inner_sys_get_next_row(ObNewRow *&row)
             ret = set_string_cell(cells[i], parameter.default_value, *allocator_);
             break;
           }
+        case OPTIONS: {
+            ret = set_string_cell(cells[i], parameter.options, *allocator_);
+            break;
+          }
         case ISDEFAULT: {
             const ObString value(static_cast<int32_t>(parameter.value.size()), parameter.value.data());
             const ObString default_value(static_cast<int32_t>(parameter.default_value.size()), parameter.default_value.data());

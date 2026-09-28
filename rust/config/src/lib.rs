@@ -92,7 +92,7 @@ fn lock_writers() -> Result<std::sync::MutexGuard<'static, ()>, Error> {
     WRITER_LOCK
         .get_or_init(|| Mutex::new(()))
         .lock()
-        .map_err(|_| Error::new(0, None, "auto-config writer lock poisoned"))
+        .map_err(|_| Error::new(0, None, "config writer lock poisoned"))
 }
 
 fn run_checker(check: impl FnOnce() -> Result<(), Error>) -> Result<(), Error> {
@@ -122,7 +122,7 @@ pub fn ensure_supported() -> Result<(), Error> {
         Err(Error::new(
             0,
             None,
-            "durable auto-config replacement is unsupported on this platform",
+            "durable config replacement is unsupported on this platform",
         ))
     }
 }
@@ -132,7 +132,7 @@ pub fn check_storage_directory(path: &Path) -> Result<(), Error> {
     ensure_supported()?;
     let parent = path
         .parent()
-        .ok_or_else(|| Error::new(0, None, "auto-config has no parent"))?;
+        .ok_or_else(|| Error::new(0, None, "config has no parent"))?;
     sync_directory(parent, false)
 }
 
@@ -140,10 +140,10 @@ fn sync_directory(path: &Path, after_replace: bool) -> Result<(), Error> {
     #[cfg(windows)]
     {
         let metadata = fs::metadata(path)
-            .map_err(|error| Error::io("stat auto-config directory", error, after_replace))?;
+            .map_err(|error| Error::io("stat config directory", error, after_replace))?;
         if !metadata.is_dir() {
             return Err(Error::io(
-                "stat auto-config directory",
+                "stat config directory",
                 io::Error::new(io::ErrorKind::InvalidInput, "parent is not a directory"),
                 after_replace,
             ));
@@ -166,7 +166,7 @@ fn sync_directory(path: &Path, after_replace: bool) -> Result<(), Error> {
                 return Ok(());
             }
         }
-        result.map_err(|error| Error::io("sync auto-config directory", error, after_replace))
+        result.map_err(|error| Error::io("sync config directory", error, after_replace))
     }
 }
 
@@ -253,14 +253,14 @@ pub fn load(path: &Path) -> Result<Vec<Entry>, Error> {
     let file = match File::open(path) {
         Ok(file) => file,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(error) => return Err(Error::io("open auto-config file", error, false)),
+        Err(error) => return Err(Error::io("open config file", error, false)),
     };
     let mut bytes = Vec::new();
     file.take(MAX_FILE_BYTES + 1)
         .read_to_end(&mut bytes)
-        .map_err(|error| Error::io("read auto-config file", error, false))?;
+        .map_err(|error| Error::io("read config file", error, false))?;
     if bytes.len() as u64 > MAX_FILE_BYTES {
-        return Err(Error::new(0, None, "auto-config file is too large"));
+        return Err(Error::new(0, None, "config file is too large"));
     }
     let source = String::from_utf8(bytes).map_err(|error| {
         let position = error.utf8_error().valid_up_to();
@@ -269,7 +269,7 @@ pub fn load(path: &Path) -> Result<Vec<Entry>, Error> {
             .filter(|&&byte| byte == b'\n')
             .count()
             + 1;
-        Error::new(line, None, "auto-config file is not UTF-8")
+        Error::new(line, None, "config file is not UTF-8")
     })?;
     parse(&source)
 }
@@ -306,7 +306,7 @@ fn create_private_temp(path: &Path) -> Result<(PathBuf, File), Error> {
         {
             Ok(file) => return Ok((candidate, file)),
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
-            Err(error) => return Err(Error::io("open temporary auto-config file", error, false)),
+            Err(error) => return Err(Error::io("open temporary config file", error, false)),
         }
     }
     Err(Error::new(
@@ -326,7 +326,7 @@ fn create_private_temp(path: &Path) -> Result<(PathBuf, File), Error> {
         match windows_file::create_private(&candidate) {
             Ok(file) => return Ok((candidate, file)),
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
-            Err(error) => return Err(Error::io("open temporary auto-config file", error, false)),
+            Err(error) => return Err(Error::io("open temporary config file", error, false)),
         }
     }
     Err(Error::new(
@@ -346,9 +346,9 @@ fn sync_existing(path: &Path) -> Result<(), Error> {
     match open_for_sync(path) {
         Ok(file) => file
             .sync_all()
-            .map_err(|error| Error::io("sync existing auto-config file", error, false)),
+            .map_err(|error| Error::io("sync existing config file", error, false)),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(Error::io("open existing auto-config file", error, false)),
+        Err(error) => Err(Error::io("open existing config file", error, false)),
     }
 }
 
@@ -391,23 +391,23 @@ fn replace_with_hook(
 ) -> Result<(), Error> {
     let parent = path
         .parent()
-        .ok_or_else(|| Error::new(0, None, "auto-config has no parent"))?;
+        .ok_or_else(|| Error::new(0, None, "config has no parent"))?;
     let (temp_path, mut file) = create_private_temp(path)?;
     let result = (|| {
         file.write_all(serialize(entries).as_bytes())
-            .map_err(|error| Error::io("write temporary auto-config file", error, false))?;
+            .map_err(|error| Error::io("write temporary config file", error, false))?;
         file.sync_all()
-            .map_err(|error| Error::io("sync temporary auto-config file", error, false))?;
+            .map_err(|error| Error::io("sync temporary config file", error, false))?;
         drop(file);
         after_stage(ReplaceStage::TemporaryFileSynced)?;
         sync_existing(path)?;
         after_stage(ReplaceStage::ExistingFileSynced)?;
         replace_file(&temp_path, path)
-            .map_err(|error| Error::io("replace auto-config file", error, false))?;
+            .map_err(|error| Error::io("replace config file", error, false))?;
         after_stage(ReplaceStage::Replaced)?;
         open_for_sync(path)
             .and_then(|file| file.sync_all())
-            .map_err(|error| Error::io("sync replaced auto-config file", error, true))?;
+            .map_err(|error| Error::io("sync replaced config file", error, true))?;
         after_stage(ReplaceStage::NewFileSynced)?;
         sync_directory(parent, true)?;
         after_stage(ReplaceStage::DirectorySynced)?;
@@ -537,13 +537,13 @@ mod tests {
         fn new() -> Self {
             let id = NEXT_TEST_DIR.fetch_add(1, Ordering::Relaxed);
             let path =
-                std::env::temp_dir().join(format!("auto-config-{}-{id}", std::process::id()));
+                std::env::temp_dir().join(format!("config-{}-{id}", std::process::id()));
             fs::create_dir(&path).unwrap();
             Self(path)
         }
 
         fn file(&self) -> PathBuf {
-            self.0.join("seekdb.auto.conf")
+            self.0.join("seekdb.conf")
         }
     }
 
@@ -678,10 +678,10 @@ mod tests {
     #[test]
     #[ignore]
     fn crash_writer_child() {
-        let Ok(path) = std::env::var("AUTO_CONFIG_TEST_PATH") else {
+        let Ok(path) = std::env::var("CONFIG_TEST_PATH") else {
             return;
         };
-        let crash_at = std::env::var("AUTO_CONFIG_TEST_STAGE").unwrap();
+        let crash_at = std::env::var("CONFIG_TEST_STAGE").unwrap();
         update_with_hook(Path::new(&path), "setting", Some("new"), |stage| {
             if format!("{stage:?}") == crash_at {
                 std::process::exit(42);
@@ -700,8 +700,8 @@ mod tests {
             update(&path, "setting", Some("old")).unwrap();
             let output = std::process::Command::new(std::env::current_exe().unwrap())
                 .args(["--ignored", "--exact", "tests::crash_writer_child"])
-                .env("AUTO_CONFIG_TEST_PATH", &path)
-                .env("AUTO_CONFIG_TEST_STAGE", format!("{crash_at:?}"))
+                .env("CONFIG_TEST_PATH", &path)
+                .env("CONFIG_TEST_STAGE", format!("{crash_at:?}"))
                 .output()
                 .unwrap();
             assert_eq!(output.status.code(), Some(42), "{output:?}");
@@ -771,26 +771,35 @@ mod tests {
     fn declared_numeric_ranges_reject_without_publishing() {
         let _config_guard = CONFIG_TEST_LOCK.lock().unwrap();
         reset_active_defaults();
+        let directory = TestDirectory::new();
+        let path = directory.file();
         assert_eq!(crate::config::rpc_port(), 2882);
-        assert!(crate::config::apply("rpc_port", "1024").is_err());
+        assert!(crate::config::update_parameter(&path, "rpc_port", Some("1024")).is_err());
         assert_eq!(crate::config::rpc_port(), 2882);
-        crate::config::apply("rpc_port", "1025").unwrap();
+        crate::config::update_parameter(&path, "rpc_port", Some("1025")).unwrap();
         assert_eq!(crate::config::rpc_port(), 1025);
-        assert!(crate::config::apply("rpc_port", "65536").is_err());
+        assert!(crate::config::update_parameter(&path, "rpc_port", Some("65536")).is_err());
         assert_eq!(crate::config::rpc_port(), 1025);
-        crate::config::apply("rpc_port", "2882").unwrap();
+        crate::config::update_parameter(&path, "rpc_port", Some("2882")).unwrap();
 
-        assert!(crate::config::apply("cpu_quota_concurrency", "0.99").is_err());
+        assert!(
+            crate::config::update_parameter(&path, "cpu_quota_concurrency", Some("0.99")).is_err()
+        );
         assert_eq!(crate::config::cpu_quota_concurrency(), 10.0);
-        assert!(crate::config::apply("datafile_size", "-1M").is_err());
-        assert!(crate::config::apply("datafile_size", "5").is_err());
+        assert!(crate::config::update_parameter(&path, "datafile_size", Some("-1M")).is_err());
+        assert!(crate::config::update_parameter(&path, "datafile_size", Some("5")).is_err());
         assert_eq!(crate::config::datafile_size(), 32 * 1024 * 1024);
-        assert!(crate::config::apply("internal_sql_execute_timeout", "999us").is_err());
+        assert!(crate::config::update_parameter(
+            &path,
+            "internal_sql_execute_timeout",
+            Some("999us")
+        )
+        .is_err());
         assert_eq!(crate::config::internal_sql_execute_timeout(), 30_000_000);
     }
 
     #[test]
-    fn every_declared_default_is_valid_and_special_values_are_checked() {
+    fn every_declared_default_is_valid_and_options_do_not_restrict_values() {
         for parameter in crate::config::CATALOG {
             crate::config::validate(parameter.name, parameter.default)
                 .unwrap_or_else(|error| panic!("{}: {error}", parameter.name));
@@ -800,13 +809,26 @@ mod tests {
         assert!(crate::config::validate("major_freeze_duty_time", "24:00").is_err());
         assert!(crate::config::validate("major_freeze_duty_time", "disable").is_ok());
         assert!(crate::config::validate("_parallel_ddl_control", "CREATE_INDEX:on").is_ok());
-        assert!(crate::config::validate("_parallel_ddl_control", "UNKNOWN:on").is_err());
+        assert!(crate::config::validate("_parallel_ddl_control", "UNKNOWN:on").is_ok());
         assert!(crate::config::validate("default_table_organization", "HEAP").is_ok());
-        assert!(crate::config::validate("default_table_organization", "UNKNOWN").is_err());
+        assert!(crate::config::validate("default_table_organization", "UNKNOWN").is_ok());
+        assert!(crate::config::validate("syslog_level", "share.pt:trace").is_ok());
+        assert_eq!(
+            crate::config::find("syslog_level").unwrap().options,
+            "DEBUG, TRACE, WDIAG, EDIAG, INFO, WARN, ERROR"
+        );
+        let index = crate::config::CATALOG
+            .iter()
+            .position(|parameter| parameter.name == "syslog_level")
+            .unwrap();
+        assert_eq!(
+            crate::config::parameter_row(index).options,
+            "DEBUG, TRACE, WDIAG, EDIAG, INFO, WARN, ERROR"
+        );
     }
 
     #[test]
-    fn declared_special_values_have_typed_readers() {
+    fn declared_moment_value_has_typed_reader() {
         let _config_guard = CONFIG_TEST_LOCK.lock().unwrap();
         reset_active_defaults();
         let moment = crate::config::major_freeze_duty_time_parts();
@@ -815,12 +837,6 @@ mod tests {
         crate::config::apply("major_freeze_duty_time", "disable").unwrap();
         assert!(crate::config::major_freeze_duty_time_parts().disabled);
         crate::config::apply("major_freeze_duty_time", "02:00").unwrap();
-        crate::config::apply("_parallel_ddl_control", "CREATE_INDEX:on,DROP_TABLE:off").unwrap();
-        assert_eq!(
-            crate::config::_parallel_ddl_control_bits(),
-            (2 << 4) | (1 << 8)
-        );
-        crate::config::apply("_parallel_ddl_control", "").unwrap();
     }
 
     #[test]
@@ -953,14 +969,14 @@ mod tests {
         let path_arg = CString::new(path.to_str().unwrap()).unwrap();
         let name_arg = CString::new("server_create_time").unwrap();
         let value_arg = CString::new("124").unwrap();
-        let mut error = ffi::AutoConfigError {
+        let mut error = ffi::ConfigError {
             line: 0,
             after_replace: 0,
             message: [0; 512],
         };
         let parameter_name = CString::new("cpu_count").unwrap();
         assert_eq!(
-            ffi::auto_config_update_internal_state(
+            ffi::config_update_internal_state(
                 path_arg.as_ptr(),
                 parameter_name.as_ptr(),
                 value_arg.as_ptr(),
@@ -969,7 +985,7 @@ mod tests {
             1
         );
         assert_eq!(
-            ffi::auto_config_update_internal_state(
+            ffi::config_update_internal_state(
                 path_arg.as_ptr(),
                 name_arg.as_ptr(),
                 value_arg.as_ptr(),
@@ -1000,25 +1016,20 @@ mod tests {
     }
 
     #[test]
-    fn checked_reload_rejects_before_publishing() {
+    fn file_reload_skips_write_policy_but_requires_storable_values() {
         let _config_guard = CONFIG_TEST_LOCK.lock().unwrap();
         let directory = TestDirectory::new();
         let path = directory.file();
         crate::config::load_active(&path, true).unwrap();
-        fs::write(&path, "cpu_count = '3'\n").unwrap();
-        let error = crate::config::load_active_checked(&path, false, |entry| {
-            assert_eq!(entry.name, "cpu_count");
-            Err(Error::new(
-                entry.line,
-                Some(entry.name.clone()),
-                "checker rejected",
-            ))
-        })
-        .unwrap_err();
-        assert_eq!(error.line, 1);
-        assert_eq!(crate::config::cpu_count(), 0);
-        assert_eq!(fs::read_to_string(&path).unwrap(), "cpu_count = '3'\n");
-        crate::config::load_active_checked(&path, false, |_| Ok(())).unwrap();
-        assert_eq!(crate::config::cpu_count(), 3);
+        assert!(crate::config::validate("cpu_count", "-1").is_err());
+        fs::write(&path, "cpu_count = '-1'\n").unwrap();
+        crate::config::load_active(&path, false).unwrap();
+        assert_eq!(crate::config::cpu_count(), -1);
+        fs::write(&path, "cpu_count = 'invalid'\n").unwrap();
+        assert_eq!(
+            crate::config::load_active(&path, false).unwrap_err().line,
+            1
+        );
+        assert_eq!(crate::config::cpu_count(), -1);
     }
 }

@@ -13,13 +13,13 @@
 # limitations under the License.
 
 # Build the Rust crates with Cargo and expose their static libraries to C++ as
-# the INTERFACE targets `sql_nio` and `auto_config`.
+# the INTERFACE targets `sql_nio` and `config`.
 #
 # Usage from any C++ target:
 #     target_link_libraries(<your_target> PRIVATE sql_nio)
 #     #include "nio.h"
-#     target_link_libraries(<your_target> PRIVATE auto_config)
-#     #include "auto_config.h"
+#     target_link_libraries(<your_target> PRIVATE config)
+#     #include "config_ffi.h"
 #
 # Override the workspace location by setting RUST_WORKSPACE_DIR before include().
 
@@ -28,8 +28,8 @@ if(NOT DEFINED RUST_WORKSPACE_DIR)
 endif()
 set(RUST_CRATE_DIR   "${RUST_WORKSPACE_DIR}/sql-nio")
 set(RUST_INCLUDE_DIR "${RUST_CRATE_DIR}/include")
-set(AUTO_CONFIG_CRATE_DIR "${RUST_WORKSPACE_DIR}/auto-config")
-set(AUTO_CONFIG_INCLUDE_DIR "${AUTO_CONFIG_CRATE_DIR}/include")
+set(CONFIG_CRATE_DIR "${RUST_WORKSPACE_DIR}/config")
+set(CONFIG_INCLUDE_DIR "${CONFIG_CRATE_DIR}/include")
 
 # Locate cargo: explicit -DCARGO=, else PATH, else the rustup default location.
 if(NOT CARGO)
@@ -71,22 +71,22 @@ set(RUST_TARGET_DIR "${CMAKE_BINARY_DIR}/rust-target")
 # Unix/MSYS, sql_nio.lib with the MSVC toolchain.
 if(WIN32)
   set(RUST_STATICLIB "${RUST_TARGET_DIR}/${_cargo_out_subdir}/sql_nio.lib")
-  set(AUTO_CONFIG_STATICLIB "${RUST_TARGET_DIR}/${_cargo_out_subdir}/auto_config.lib")
+  set(CONFIG_STATICLIB "${RUST_TARGET_DIR}/${_cargo_out_subdir}/config.lib")
 else()
   set(RUST_STATICLIB "${RUST_TARGET_DIR}/${_cargo_target_subdir}${_cargo_out_subdir}/libsql_nio.a")
-  set(AUTO_CONFIG_STATICLIB "${RUST_TARGET_DIR}/${_cargo_target_subdir}${_cargo_out_subdir}/libauto_config.a")
+  set(CONFIG_STATICLIB "${RUST_TARGET_DIR}/${_cargo_target_subdir}${_cargo_out_subdir}/libconfig.a")
 endif()
 
 # Sources whose change should retrigger a rebuild of the staticlib.
 file(GLOB_RECURSE _rust_sources CONFIGURE_DEPENDS "${RUST_CRATE_DIR}/src/*.rs")
-file(GLOB_RECURSE _auto_config_sources CONFIGURE_DEPENDS
-  "${AUTO_CONFIG_CRATE_DIR}/src/*.rs")
-list(APPEND _rust_sources ${_auto_config_sources}
-  "${AUTO_CONFIG_CRATE_DIR}/Cargo.toml"
-  "${AUTO_CONFIG_CRATE_DIR}/build.rs"
-  "${AUTO_CONFIG_CRATE_DIR}/cbindgen.toml"
-  "${AUTO_CONFIG_CRATE_DIR}/parameters.yaml"
-  "${AUTO_CONFIG_CRATE_DIR}/internal_state.yaml")
+file(GLOB_RECURSE _config_sources CONFIGURE_DEPENDS
+  "${CONFIG_CRATE_DIR}/src/*.rs")
+list(APPEND _rust_sources ${_config_sources}
+  "${CONFIG_CRATE_DIR}/Cargo.toml"
+  "${CONFIG_CRATE_DIR}/build.rs"
+  "${CONFIG_CRATE_DIR}/cbindgen.toml"
+  "${CONFIG_CRATE_DIR}/parameters.yaml"
+  "${CONFIG_CRATE_DIR}/internal_state.yaml")
 list(APPEND _rust_sources
   "${RUST_WORKSPACE_DIR}/Cargo.toml"
   "${RUST_WORKSPACE_DIR}/rust-toolchain.toml"
@@ -168,18 +168,18 @@ endif()
 
 add_custom_command(
   OUTPUT "${RUST_STATICLIB}"
-  BYPRODUCTS "${AUTO_CONFIG_STATICLIB}"
-             "${RUST_INCLUDE_DIR}/nio.h" "${AUTO_CONFIG_INCLUDE_DIR}/auto_config.h"
+  BYPRODUCTS "${CONFIG_STATICLIB}"
+             "${RUST_INCLUDE_DIR}/nio.h" "${CONFIG_INCLUDE_DIR}/config_ffi.h"
              "${RUST_TARGET_DIR}/include/config_bridge.h"
              "${RUST_TARGET_DIR}/include/config_checkers.h"
   COMMAND "${CMAKE_COMMAND}" -E env ${_rust_build_env}
           "${CARGO}" build ${_cargo_profile_flag} ${_cargo_target_args}
           --manifest-path "${RUST_WORKSPACE_DIR}/Cargo.toml"
-          --package sql-nio --package auto-config
+          --package sql-nio --package config
   COMMAND "${CMAKE_COMMAND}" -E touch "${RUST_STATICLIB}"
   WORKING_DIRECTORY "${RUST_WORKSPACE_DIR}"
   DEPENDS ${_rust_sources}
-  COMMENT "[rust] cargo build sql-nio and auto-config (${_cargo_out_subdir})"
+  COMMENT "[rust] cargo build sql-nio and config (${_cargo_out_subdir})"
   ${_rust_job_server_options}
   VERBATIM)
 
@@ -204,14 +204,14 @@ add_dependencies(sql_nio rust_staticlibs_build)
 target_include_directories(sql_nio INTERFACE "${RUST_INCLUDE_DIR}")
 target_link_libraries(sql_nio INTERFACE "${RUST_STATICLIB}" ${_rust_syslibs})
 
-add_library(auto_config INTERFACE)
-add_dependencies(auto_config rust_staticlibs_build)
-target_include_directories(auto_config INTERFACE
-  "${AUTO_CONFIG_INCLUDE_DIR}" "${RUST_TARGET_DIR}/include")
-target_link_libraries(auto_config INTERFACE "${AUTO_CONFIG_STATICLIB}" ${_rust_syslibs})
+add_library(config INTERFACE)
+add_dependencies(config rust_staticlibs_build)
+target_include_directories(config INTERFACE
+  "${CONFIG_INCLUDE_DIR}" "${RUST_TARGET_DIR}/include")
+target_link_libraries(config INTERFACE "${CONFIG_STATICLIB}" ${_rust_syslibs})
 
 set_property(DIRECTORY APPEND PROPERTY
   ADDITIONAL_CLEAN_FILES "${RUST_TARGET_DIR}")
 
 message(STATUS "[rust] sql_nio target ready -> ${RUST_STATICLIB}")
-message(STATUS "[rust] auto_config target ready -> ${AUTO_CONFIG_STATICLIB}")
+message(STATUS "[rust] config target ready -> ${CONFIG_STATICLIB}")

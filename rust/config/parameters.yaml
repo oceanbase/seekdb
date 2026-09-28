@@ -1,4 +1,5 @@
 # Instance parameter declarations, in display order.
+# "options" is display metadata; only the parameter checker decides whether a value is valid.
 - name: data_dir
   type: STR
   default: "store"
@@ -883,12 +884,12 @@
   description: "recyclebin object expire time, default 0 that means auto purge recyclebin off. Range: [0s, +∞)"
 
 - name: _parallel_ddl_control
-  type: MODE_WITH_PARSER
+  type: MODE
   default: ""
   section: ROOT_SERVICE
   edit_level: DYNAMIC_EFFECTIVE
   description: "switch for parallel capability of parallel DDL"
-  checker: "parser:common::ObParallelDDLControlParser"
+  checker: "common::ObParallelDDLControlChecker"
   options: "TRUNCATE_TABLE, SET_COMMENT, CREATE_INDEX, CREATE_VIEW, DROP_TABLE"
 
 - name: log_disk_size

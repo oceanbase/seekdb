@@ -3,7 +3,7 @@ seekdb_apply_standalone_inventory(ob_server SEEKDB_OBSERVER_STANDALONE)
 seekdb_apply_standalone_inventory(
   ob_server SEEKDB_OBSERVER_RETRIEVAL_COMPOSITION)
 ob_server_add_target(ob_server)
-target_link_libraries(ob_server PUBLIC auto_config)
+target_link_libraries(ob_server PUBLIC config)
 
 add_library(oceanbase_static STATIC EXCLUDE_FROM_ALL
   ${CMAKE_CURRENT_BINARY_DIR}/ob_version.cpp)

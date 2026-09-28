@@ -18,7 +18,7 @@
 
 #include "config_bridge.h"
 #include "config_checkers.h"
-#include "auto_config.h"
+#include "config_ffi.h"
 #ifndef _WIN32
 #include <unistd.h>
 #include "share/rc/ob_server_runtime.h"
@@ -113,13 +113,13 @@ using StandbyModule = standby::StandbyModule;
 int set_bootstrap_parameter(const char *name, const char *value)
 {
   int ret = OB_SUCCESS;
-  AutoConfigError error = {};
+  ConfigError error = {};
   if (nullptr == name || nullptr == value) {
     ret = OB_INVALID_ARGUMENT;
   } else if (!config::check_parameter(name, value)) {
     ret = OB_INVALID_CONFIG;
     LOG_ERROR("invalid startup parameter", K(ret), K(name), K(value));
-  } else if (0 != auto_config_bootstrap_set(name, value, &error)) {
+  } else if (0 != config_bootstrap_set(name, value, &error)) {
     ret = OB_INVALID_CONFIG;
     LOG_ERROR("invalid startup parameter", K(ret), K(name), "detail", error.message);
   }
@@ -649,7 +649,7 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
   scramble_rand_.init(static_cast<uint64_t>(start_time_), static_cast<uint64_t>(start_time_ / 2));
 
   // Config loading can fail before the rest of the server is initialized.
-  // Start the log writer first so the offending auto-config key and line are
+  // Start the log writer first so the offending config key and line are
   // recorded in observer.log.
   if (OB_FAIL(OB_LOGGER.init(log_cfg))) {
     LOG_ERROR("async log init error", KR(ret));

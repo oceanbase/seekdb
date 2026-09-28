@@ -44,9 +44,8 @@ public:
   static constexpr uint8_t MODE_DEFAULT = 0;
   static constexpr uint8_t MODE_OFF = 1;
   static constexpr uint8_t MODE_ON = 2;
-  uint64_t get_value() const { return value_; }
-  void set_encoded_value(const uint64_t value) { value_ = value; }
   int set_parallel_ddl_mode(const ObParallelDDLType type, const uint8_t mode);
+  int parse_config(const common::ObString &value);
   int is_parallel_ddl(const ObParallelDDLType type, bool &is_parallel);
   static int is_parallel_ddl_enable(const ObParallelDDLType ddl_type, bool &is_parallel);
   static int string_to_ddl_type(const common::ObString &ddl_string, ObParallelDDLType &ddl_type);

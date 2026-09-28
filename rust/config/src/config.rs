@@ -238,31 +238,35 @@ fn validate_moment(name: &str, value: &str) -> Result<(), crate::Error> {
     Ok(())
 }
 
-fn validate_mode(name: &str, value: &str, options: &str) -> Result<(), crate::Error> {
-    if value.trim().is_empty() {
-        return Ok(());
-    }
-    for item in value.split(',') {
-        let (operation, state) = item.split_once(':').ok_or_else(|| invalid_value(name))?;
-        if !options
-            .split(',')
-            .any(|candidate| operation.trim().eq_ignore_ascii_case(candidate.trim()))
-            || !["on", "off"]
-                .iter()
-                .any(|candidate| state.trim().eq_ignore_ascii_case(candidate))
-        {
-            return Err(invalid_value(name));
-        }
-    }
-    Ok(())
-}
-
-pub fn validate(name: &str, value: &str) -> Result<&'static ParameterMeta, crate::Error> {
+fn validate_storable(name: &str, value: &str) -> Result<&'static ParameterMeta, crate::Error> {
     let parameter = find(name)
         .ok_or_else(|| crate::Error::new(0, Some(name.to_owned()), "unknown parameter"))?;
     if value.len() >= 64 * 1024 || value.contains(['\n', '\r', '\0']) {
         return Err(invalid_value(name));
     }
+    match parameter.kind {
+        "INT" | "INT_WITH_CHECKER" => {
+            parse_int(name, value)?;
+        }
+        "CAP" | "CAP_WITH_CHECKER" => {
+            parse_capacity(name, value)?;
+        }
+        "TIME" | "TIME_WITH_CHECKER" => {
+            parse_time(name, value)?;
+        }
+        "DBL" => validate_f64_range(name, parse_double(name, value)?, "")?,
+        "BOOL" => {
+            parse_bool(name, value)?;
+        }
+        "MOMENT" => validate_moment(name, value)?,
+        "MODE" | "LOG_LEVEL" | "WORK_AREA_POLICY" | "STR" | "STR_WITH_CHECKER" => {}
+        _ => unreachable!("build script checks every parameter kind"),
+    }
+    Ok(parameter)
+}
+
+pub fn validate(name: &str, value: &str) -> Result<&'static ParameterMeta, crate::Error> {
+    let parameter = validate_storable(name, value)?;
     match parameter.kind {
         "INT" | "INT_WITH_CHECKER" => {
             validate_i64_range(name, parse_int(name, value)?, parameter.range, parse_int)?
@@ -277,23 +281,7 @@ pub fn validate(name: &str, value: &str) -> Result<&'static ParameterMeta, crate
             validate_i64_range(name, parse_time(name, value)?, parameter.range, parse_time)?
         }
         "DBL" => validate_f64_range(name, parse_double(name, value)?, parameter.range)?,
-        "BOOL" => {
-            parse_bool(name, value)?;
-        }
-        "MOMENT" => validate_moment(name, value)?,
-        "MODE_WITH_PARSER" => validate_mode(name, value, parameter.options)?,
-        "LOG_LEVEL" | "WORK_AREA_POLICY" | "STR" => {
-            if !parameter.options.is_empty()
-                && !parameter
-                    .options
-                    .split(',')
-                    .any(|option| option.trim().eq_ignore_ascii_case(value))
-            {
-                return Err(invalid_value(name));
-            }
-        }
-        "STR_WITH_CHECKER" => {}
-        _ => unreachable!("build script checks every parameter kind"),
+        _ => {}
     }
     Ok(parameter)
 }
@@ -307,7 +295,7 @@ pub(crate) fn validate_file_entry(entry: &crate::Entry) -> Result<(), crate::Err
         ));
     }
     let result = if find(&entry.name).is_some() {
-        validate(&entry.name, &entry.value).map(|_| ())
+        validate_storable(&entry.name, &entry.value).map(|_| ())
     } else if INTERNAL_STATE.iter().any(|state| state.name == entry.name) {
         match entry.name.as_str() {
             "server_create_time" => parse_int(&entry.name, &entry.value).and_then(|value| {
@@ -501,21 +489,10 @@ pub fn update_internal_state(path: &Path, name: &str, value: &str) -> Result<(),
 }
 
 pub fn load_active(path: &Path, startup: bool) -> Result<(), crate::Error> {
-    load_active_checked(path, startup, |_| Ok(()))
-}
-
-pub fn load_active_checked(
-    path: &Path,
-    startup: bool,
-    check: impl Fn(&crate::Entry) -> Result<(), crate::Error>,
-) -> Result<(), crate::Error> {
     let _guard = crate::lock_writers()?;
     let entries = crate::load(path)?;
     for entry in &entries {
         validate_file_entry(entry)?;
-    }
-    for entry in &entries {
-        crate::run_checker(|| check(entry))?;
     }
     let create_time = entries
         .iter()
@@ -587,23 +564,4 @@ fn parse_moment_parts(value: &str) -> bridge::MomentTime {
             minute: minute.parse().expect("validated minute"),
         }
     }
-}
-
-fn parse_mode_bits(value: &str, options: &str) -> u64 {
-    let mut bits = 0_u64;
-    for item in value.split(',').filter(|item| !item.trim().is_empty()) {
-        let (operation, state) = item.split_once(':').expect("validated parallel DDL mode");
-        let index = options
-            .split(',')
-            .position(|candidate| operation.trim().eq_ignore_ascii_case(candidate.trim()))
-            .expect("validated mode operation");
-        let mode = if state.trim().eq_ignore_ascii_case("on") {
-            2_u64
-        } else {
-            1_u64
-        };
-        let shift = index * 2;
-        bits = (bits & !(3_u64 << shift)) | (mode << shift);
-    }
-    bits
 }
