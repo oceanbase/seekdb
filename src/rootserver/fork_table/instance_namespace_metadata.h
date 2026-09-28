@@ -85,6 +85,11 @@ public:
   int fork_namespace(const std::string &source_name, const std::string &target_name,
                      const SnapshotAcquirer &acquire_snapshot, uint64_t &child_id);
 
+  // The caller closes new access before marking DELETING, then drains and
+  // removes physical tablets before finishing the drop in a later KV tx.
+  int mark_namespace_deleting(uint64_t id, bool &done);
+  int finish_namespace_drop(uint64_t id);
+
   // The native schema transaction is separate from this KV transaction. Mark
   // it before native DDL, then publish its version after reconciling the
   // directory. Recovery treats an interrupted change as requiring a rescan.

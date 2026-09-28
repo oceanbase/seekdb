@@ -811,6 +811,51 @@ int InstanceNamespaceMetadata::fork_namespace(const std::string &source_name,
   return ret;
 }
 
+int InstanceNamespaceMetadata::mark_namespace_deleting(uint64_t id, bool &done)
+{
+  done = false;
+  if (id == 1) { return OB_OP_NOT_ALLOW; }
+  InstanceNamespaceRecord record;
+  int ret = get_namespace(id, record, true);
+  if (ret == OB_SUCCESS && (record.roots.active_schema_changes != 0
+      || record.roots.pending_schema_version != 0)) {
+    ret = OB_EAGAIN;
+  }
+  if (ret == OB_SUCCESS) {
+    if (record.roots.state == 2) {
+      done = true;
+    } else if (record.roots.state == 0) {
+      record.roots.state = 1;
+      ret = update_namespace(record);
+    } else if (record.roots.state != 1) {
+      ret = OB_STATE_NOT_MATCH;
+    }
+  }
+  return ret;
+}
+
+int InstanceNamespaceMetadata::finish_namespace_drop(uint64_t id)
+{
+  if (id == 1) { return OB_OP_NOT_ALLOW; }
+  InstanceNamespaceRecord record;
+  int ret = get_namespace(id, record, true);
+  if (ret == OB_SUCCESS && record.roots.state != 1) {
+    ret = OB_STATE_NOT_MATCH;
+  }
+  if (ret == OB_SUCCESS) {
+    const uint64_t snapshot_ref = record.roots.snapshot_ref;
+    record.name.clear();
+    record.roots = ns::CatalogRoots();
+    record.roots.state = 2;
+    ret = update_namespace(record);
+    if (ret == OB_SUCCESS && snapshot_ref != 0) {
+      InstanceSnapshotLineageStore lineage(*this);
+      ret = ns::NamespaceSnapshotLineage::release(snapshot_ref, lineage);
+    }
+  }
+  return ret;
+}
+
 int InstanceNamespaceMetadata::begin_schema_change(uint64_t id)
 {
   InstanceNamespaceRecord record;
