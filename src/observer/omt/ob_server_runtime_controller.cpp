@@ -1299,8 +1299,6 @@ int ObServer::obs_construct_modules()
     ::oceanbase::share::bind_server_service<share::ObIMemstoreRuntime>(this);
     ::oceanbase::share::bind_server_service<query::ObILocalCommandService>(
         &ob_service_);
-    ::oceanbase::share::bind_server_service<rootserver::ObLocalManagementService>(
-        &local_management_service_);
     ::oceanbase::share::bind_server_service<observer::ObService>(&ob_service_);
     ::oceanbase::share::bind_server_service<sql::ObSQLSessionMgr>(&session_mgr_);
     ::oceanbase::share::bind_server_service<omt::ObServerRuntimeController>(
@@ -1820,7 +1818,6 @@ void ObServer::obs_destroy_modules()
 #define UNBIND_SERVICE(type) ::oceanbase::share::unbind_server_service<type>()
   UNBIND_SERVICE(share::ObIMemstoreRuntime);
   UNBIND_SERVICE(query::ObILocalCommandService);
-  UNBIND_SERVICE(rootserver::ObLocalManagementService);
   UNBIND_SERVICE(observer::ObService);
   UNBIND_SERVICE(sql::ObSQLSessionMgr);
   UNBIND_SERVICE(omt::ObServerRuntimeController);

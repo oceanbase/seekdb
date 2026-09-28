@@ -750,15 +750,18 @@ int ObService::check_ddl_tablet_merge_status(
 int ObService::bootstrap()
 {
   int ret = OB_SUCCESS;
+  ns::NamespaceRuntime *root_runtime = nullptr;
+  rootserver::ObLocalManagementService *root_service = nullptr;
 
   if (OB_FAIL(ret)) {
   } else if (!inited_) {
     ret = OB_NOT_INIT;
     BOOTSTRAP_LOG(WARN, "not init", K(ret));
-  } else if (OB_ISNULL(
-                 share::server_service<rootserver::ObLocalManagementService>())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("local management service is null", K(ret));
+  } else if (!ns::namespace_registry().get(1, root_runtime) || root_runtime == nullptr
+      || OB_ISNULL(root_service = static_cast<rootserver::ObLocalManagementService *>(
+             root_runtime->service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE)))) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("bootstrap namespace service is unavailable", K(ret));
   } else {
     BOOTSTRAP_LOG(INFO, "begin bootstrap");
     ObPreBootstrap pre_bootstrap(*gctx_.config_);
@@ -773,9 +776,7 @@ int ObService::bootstrap()
       BOOTSTRAP_LOG(ERROR, "failed to prepare boot strap", K(ret));
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(
-                   share::server_service<rootserver::ObLocalManagementService>()
-                       ->execute_bootstrap())) {
+    } else if (OB_FAIL(root_service->execute_bootstrap())) {
       BOOTSTRAP_LOG(ERROR, "failed to execute bootstrap", K(ret));
     } else {
       BOOTSTRAP_LOG(INFO, "succeed to do_boot_strap", K(master_rs));
