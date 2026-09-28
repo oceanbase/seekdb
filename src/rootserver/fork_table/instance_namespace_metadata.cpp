@@ -657,6 +657,51 @@ int InstanceNamespaceMetadata::scan_exceptions(uint64_t ns_id,
       });
 }
 
+int InstanceNamespaceMetadata::resolve_read_tablet(uint64_t namespace_id,
+    uint64_t local_tablet, const StorageTabletProbe &probe,
+    uint64_t &physical_tablet, int64_t &cap_scn)
+{
+  physical_tablet = 0;
+  cap_scn = 0;
+  if (!ns::NamespaceObjectKey{namespace_id, local_tablet}.is_valid() || !probe) {
+    return OB_INVALID_ARGUMENT;
+  }
+  InstanceExceptionRecord exception;
+  int ret = get_exception(namespace_id, local_tablet, exception);
+  if (ret == OB_SUCCESS && exception.kind == 1) { return OB_TABLET_NOT_EXIST; }
+  if (ret != OB_SUCCESS && ret != OB_ENTRY_NOT_EXIST) { return ret; }
+  const bool owned = ret == OB_SUCCESS;
+  const uint64_t local_storage = ns::NamespaceObjectKey{
+      namespace_id, local_tablet}.storage_id();
+  bool exists = false;
+  ret = probe(local_storage, exists);
+  if (ret != OB_SUCCESS) { return ret; }
+  if (exists || owned) {
+    physical_tablet = local_storage;
+    return OB_SUCCESS;
+  }
+  uint64_t current = namespace_id;
+  int64_t cap = 0;
+  for (int depth = 0; depth < 64; ++depth) {
+    InstanceNamespaceRecord record;
+    ret = get_namespace(current, record);
+    if (ret != OB_SUCCESS) { return ret; }
+    if (record.parent_namespace == 0) { return OB_TABLET_NOT_EXIST; }
+    cap = ns::NamespaceCatalogCodec::cap_min(cap, record.fork_cap);
+    current = record.parent_namespace;
+    const uint64_t candidate = ns::NamespaceObjectKey{
+        current, local_tablet}.storage_id();
+    ret = probe(candidate, exists);
+    if (ret != OB_SUCCESS) { return ret; }
+    if (exists) {
+      physical_tablet = candidate;
+      cap_scn = cap;
+      return OB_SUCCESS;
+    }
+  }
+  return OB_SIZE_OVERFLOW;
+}
+
 int InstanceExceptionLoader::load(uint64_t namespace_id, IRowSink &sink)
 {
   return metadata_.scan_exceptions(namespace_id,

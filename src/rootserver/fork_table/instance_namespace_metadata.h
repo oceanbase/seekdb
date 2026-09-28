@@ -65,6 +65,7 @@ public:
   using PinVisitor = std::function<int(const InstanceNamespacePin &)>;
   using SnapshotAcquirer = std::function<int(int64_t &)>;
   using PhysicalTabletProbe = std::function<int(uint64_t, bool &)>;
+  using StorageTabletProbe = std::function<int(uint64_t, bool &)>;
   using NamespacePhysicalProbe = std::function<int(uint64_t, bool &)>;
 
   InstanceNamespaceMetadata(storage::InstanceMetaStore &store, Transaction &transaction)
@@ -153,6 +154,14 @@ public:
   int put_exception(const InstanceExceptionRecord &record);
   int erase_exception(uint64_t ns_id, uint64_t local_tablet);
   int scan_exceptions(uint64_t ns_id, const ExceptionVisitor &visitor);
+
+  // Resolves one namespace-local tablet to the nearest committed physical
+  // copy. StorageTabletProbe receives an encoded physical tablet ID. A local
+  // owned record whose tablet is not yet visible resolves to its local ID so
+  // the caller can wait for tablet-manager visibility. A local tombstone stops lookup.
+  int resolve_read_tablet(uint64_t namespace_id, uint64_t local_tablet,
+      const StorageTabletProbe &probe, uint64_t &physical_tablet,
+      int64_t &cap_scn);
 
   int read_page(uint64_t page_id, std::string &data);
   int save_page(const std::string &data, uint64_t &page_id);
