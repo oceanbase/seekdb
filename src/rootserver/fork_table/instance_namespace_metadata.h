@@ -45,6 +45,12 @@ struct InstanceExceptionRecord
   int64_t drop_scn = 0;
 };
 
+struct InstanceNamespacePin
+{
+  uint64_t snapshot_id = 0;
+  int64_t schema_version = 0;
+};
+
 // Typed access to instance metadata in one store-owned transaction. The
 // caller keeps its Transaction alive through every operation and decides when
 // to commit. Scan callbacks must not reenter that transaction.
@@ -56,6 +62,7 @@ public:
   using SnapshotVisitor = std::function<int(uint64_t, const ns::CatalogRoots &)>;
   using ExceptionVisitor = std::function<int(const InstanceExceptionRecord &)>;
   using PageVisitor = std::function<int(uint64_t)>;
+  using PinVisitor = std::function<int(const InstanceNamespacePin &)>;
 
   InstanceNamespaceMetadata(storage::InstanceMetaStore &store, Transaction &transaction)
       : store_(store), transaction_(transaction) {}
@@ -75,6 +82,16 @@ public:
   int update_snapshot(uint64_t id, const ns::CatalogRoots &roots);
   int erase_snapshot(uint64_t id);
   int scan_snapshots(const SnapshotVisitor &visitor);
+
+  int initialize_snapshot_gc_watermark(int64_t watermark);
+  int get_snapshot_gc_watermark(int64_t &watermark, bool lock = false);
+  int advance_snapshot_gc_watermark(int64_t watermark);
+
+  int get_pin(uint64_t snapshot_id, InstanceNamespacePin &pin, bool lock = false);
+  // Serializes registration with watermark advancement in this KV store.
+  int insert_pin(const InstanceNamespacePin &pin);
+  int erase_pin(uint64_t snapshot_id);
+  int scan_pins(const PinVisitor &visitor);
 
   int get_exception(uint64_t ns_id, uint64_t local_tablet,
                     InstanceExceptionRecord &record, bool lock = false);
@@ -105,6 +122,24 @@ public:
   {
     return metadata_.save_page(data, page);
   }
+private:
+  InstanceNamespaceMetadata &metadata_;
+};
+
+// The lineage algorithm owns ordering and reference decisions; this adapter
+// keeps its snapshot rows, child attachment, and pin removal in one KV transaction.
+class InstanceSnapshotLineageStore final : public ns::ISnapshotLineageStore
+{
+public:
+  explicit InstanceSnapshotLineageStore(InstanceNamespaceMetadata &metadata)
+      : metadata_(metadata) {}
+  int load_for_update(uint64_t snapshot_id, ns::CatalogRoots &roots) override;
+  int increment_ref(uint64_t snapshot_id) override;
+  int decrement_ref(uint64_t snapshot_id) override;
+  int insert_snapshot(const ns::CatalogRoots &roots) override;
+  int attach_child(uint64_t child_id, uint64_t parent_namespace_id,
+                   const ns::CatalogRoots &roots) override;
+  int remove_snapshot(uint64_t snapshot_id, const ns::CatalogRoots &roots) override;
 private:
   InstanceNamespaceMetadata &metadata_;
 };

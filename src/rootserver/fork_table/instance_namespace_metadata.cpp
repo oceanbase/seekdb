@@ -20,6 +20,7 @@
 #include "lib/hash_func/murmur_hash.h"
 #include "lib/allocator/ob_allocator.h"
 #include <cstring>
+#include <limits>
 #include <utility>
 
 namespace oceanbase
@@ -229,6 +230,50 @@ int decode_snapshot(uint64_t id, const std::string &value, ns::CatalogRoots &roo
       || pos != value.size() || !decoded.valid_snapshot(id)) { return OB_CHECKSUM_ERROR; }
   roots = decoded;
   return OB_SUCCESS;
+}
+
+int encode_pin(const InstanceNamespacePin &pin, std::string &value)
+{
+  if (pin.snapshot_id == 0
+      || pin.snapshot_id > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())
+      || pin.schema_version < 0) { return OB_INVALID_ARGUMENT; }
+  value.clear();
+  value.push_back('P');
+  append_meta_i64(value, pin.schema_version);
+  return OB_SUCCESS;
+}
+
+int decode_pin(uint64_t snapshot_id, const std::string &value,
+               InstanceNamespacePin &pin)
+{
+  InstanceNamespacePin decoded;
+  decoded.snapshot_id = snapshot_id;
+  size_t pos = 1;
+  if (value.empty() || value[0] != 'P'
+      || !read_meta_i64(value, pos, decoded.schema_version)
+      || pos != value.size() || decoded.schema_version < 0
+      || snapshot_id == 0
+      || snapshot_id > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+    return OB_CHECKSUM_ERROR;
+  }
+  pin = decoded;
+  return OB_SUCCESS;
+}
+
+int decode_gc_watermark(const std::string &value, int64_t &watermark)
+{
+  size_t pos = 1;
+  if (value.empty() || value[0] != 'W'
+      || !read_meta_i64(value, pos, watermark)
+      || pos != value.size() || watermark < 0) { return OB_CHECKSUM_ERROR; }
+  return OB_SUCCESS;
+}
+
+std::string encode_gc_watermark(int64_t watermark)
+{
+  std::string value(1, 'W');
+  append_meta_i64(value, watermark);
+  return value;
 }
 
 int encode_exception(const InstanceExceptionRecord &record, std::string &value)
@@ -446,6 +491,85 @@ int InstanceNamespaceMetadata::scan_snapshots(const SnapshotVisitor &visitor)
       });
 }
 
+int InstanceNamespaceMetadata::initialize_snapshot_gc_watermark(int64_t watermark)
+{
+  if (watermark < 0) { return OB_INVALID_ARGUMENT; }
+  return put_value(store_, transaction_, MetaCollection::SNAPSHOT_COORDINATION,
+                   id_key(1), encode_gc_watermark(watermark), true);
+}
+
+int InstanceNamespaceMetadata::get_snapshot_gc_watermark(int64_t &watermark,
+    bool lock)
+{
+  watermark = 0;
+  std::string value;
+  const int ret = get_value(store_, transaction_, MetaCollection::SNAPSHOT_COORDINATION,
+                            id_key(1), value, lock);
+  return ret == OB_SUCCESS ? decode_gc_watermark(value, watermark) : ret;
+}
+
+int InstanceNamespaceMetadata::advance_snapshot_gc_watermark(int64_t watermark)
+{
+  if (watermark < 0) { return OB_INVALID_ARGUMENT; }
+  int64_t current = 0;
+  int ret = get_snapshot_gc_watermark(current, true);
+  if (ret == OB_ENTRY_NOT_EXIST) { return OB_NOT_INIT; }
+  if (ret == OB_SUCCESS && watermark < current) { ret = OB_STATE_NOT_MATCH; }
+  if (ret == OB_SUCCESS && watermark > current) {
+    ret = put_value(store_, transaction_, MetaCollection::SNAPSHOT_COORDINATION,
+                    id_key(1), encode_gc_watermark(watermark), false);
+  }
+  return ret;
+}
+
+int InstanceNamespaceMetadata::get_pin(uint64_t snapshot_id,
+    InstanceNamespacePin &pin, bool lock)
+{
+  if (snapshot_id == 0) { return OB_INVALID_ARGUMENT; }
+  std::string value;
+  const int ret = get_value(store_, transaction_, MetaCollection::SNAPSHOT_PINS,
+                            id_key(snapshot_id), value, lock);
+  return ret == OB_SUCCESS ? decode_pin(snapshot_id, value, pin) : ret;
+}
+
+int InstanceNamespaceMetadata::insert_pin(const InstanceNamespacePin &pin)
+{
+  std::string value;
+  int ret = encode_pin(pin, value);
+  int64_t watermark = 0;
+  if (ret == OB_SUCCESS) { ret = get_snapshot_gc_watermark(watermark, true); }
+  if (ret == OB_ENTRY_NOT_EXIST) { return OB_NOT_INIT; }
+  if (ret == OB_SUCCESS && pin.snapshot_id <= static_cast<uint64_t>(watermark)) {
+    ret = OB_SNAPSHOT_DISCARDED;
+  }
+  if (ret == OB_SUCCESS) {
+    ret = put_value(store_, transaction_, MetaCollection::SNAPSHOT_PINS,
+                    id_key(pin.snapshot_id), value, true);
+  }
+  return ret;
+}
+
+int InstanceNamespaceMetadata::erase_pin(uint64_t snapshot_id)
+{
+  if (snapshot_id == 0) { return OB_INVALID_ARGUMENT; }
+  return erase_value(store_, transaction_, MetaCollection::SNAPSHOT_PINS,
+                     id_key(snapshot_id));
+}
+
+int InstanceNamespaceMetadata::scan_pins(const PinVisitor &visitor)
+{
+  if (!visitor) { return OB_INVALID_ARGUMENT; }
+  InstanceMetaStore::KeyRange range;
+  return store_.scan(transaction_, MetaCollection::SNAPSHOT_PINS, range,
+      [&](const ObString &key, const ObString &value, bool &) {
+        uint64_t id = 0;
+        if (!key_id(key, id)) { return OB_CHECKSUM_ERROR; }
+        InstanceNamespacePin pin;
+        const int ret = decode_pin(id, std::string(value.ptr(), value.length()), pin);
+        return ret == OB_SUCCESS ? visitor(pin) : ret;
+      });
+}
+
 int InstanceNamespaceMetadata::get_exception(uint64_t ns_id, uint64_t local_tablet,
     InstanceExceptionRecord &record, bool lock)
 {
@@ -536,6 +660,90 @@ int InstanceNamespaceMetadata::scan_pages(const PageVisitor &visitor)
         uint64_t id = 0;
         return key_id(key, id) ? visitor(id) : OB_CHECKSUM_ERROR;
       });
+}
+
+int InstanceSnapshotLineageStore::load_for_update(uint64_t snapshot_id,
+    ns::CatalogRoots &roots)
+{
+  int ret = metadata_.get_snapshot(snapshot_id, roots, true);
+  InstanceNamespacePin pin;
+  if (ret == OB_SUCCESS) {
+    ret = metadata_.get_pin(snapshot_id, pin);
+    if (ret == OB_ENTRY_NOT_EXIST) { ret = OB_STATE_NOT_MATCH; }
+  }
+  if (ret == OB_SUCCESS && pin.schema_version != roots.schema_version) {
+    ret = OB_STATE_NOT_MATCH;
+  }
+  return ret;
+}
+
+int InstanceSnapshotLineageStore::increment_ref(uint64_t snapshot_id)
+{
+  ns::CatalogRoots roots;
+  int ret = load_for_update(snapshot_id, roots);
+  if (ret == OB_SUCCESS && roots.ref_count == std::numeric_limits<int64_t>::max()) {
+    ret = OB_SIZE_OVERFLOW;
+  }
+  if (ret == OB_SUCCESS) {
+    ++roots.ref_count;
+    ret = metadata_.update_snapshot(snapshot_id, roots);
+  }
+  return ret;
+}
+
+int InstanceSnapshotLineageStore::decrement_ref(uint64_t snapshot_id)
+{
+  ns::CatalogRoots roots;
+  int ret = load_for_update(snapshot_id, roots);
+  if (ret == OB_SUCCESS && roots.ref_count <= 1) { ret = OB_STATE_NOT_MATCH; }
+  if (ret == OB_SUCCESS) {
+    --roots.ref_count;
+    ret = metadata_.update_snapshot(snapshot_id, roots);
+  }
+  return ret;
+}
+
+int InstanceSnapshotLineageStore::insert_snapshot(const ns::CatalogRoots &roots)
+{
+  return roots.snapshot <= 0 ? OB_INVALID_ARGUMENT
+      : metadata_.insert_snapshot(static_cast<uint64_t>(roots.snapshot), roots);
+}
+
+int InstanceSnapshotLineageStore::attach_child(uint64_t child_id,
+    uint64_t parent_namespace_id, const ns::CatalogRoots &roots)
+{
+  if (parent_namespace_id == 0 || parent_namespace_id >= child_id
+      || roots.snapshot <= 0
+      || roots.snapshot_ref != static_cast<uint64_t>(roots.snapshot)) {
+    return OB_INVALID_ARGUMENT;
+  }
+  InstanceNamespaceRecord child;
+  int ret = metadata_.get_namespace(child_id, child, true);
+  if (ret == OB_SUCCESS && (child.roots.state != 0
+      || child.roots.snapshot_ref != 0 || child.parent_namespace != 0)) {
+    ret = OB_STATE_NOT_MATCH;
+  }
+  if (ret == OB_SUCCESS) {
+    child.roots = roots;
+    child.parent_namespace = parent_namespace_id;
+    child.fork_cap = roots.snapshot;
+    ret = metadata_.update_namespace(child);
+  }
+  return ret;
+}
+
+int InstanceSnapshotLineageStore::remove_snapshot(uint64_t snapshot_id,
+    const ns::CatalogRoots &roots)
+{
+  InstanceNamespacePin pin;
+  int ret = metadata_.get_pin(snapshot_id, pin, true);
+  if (ret == OB_SUCCESS && (roots.snapshot != static_cast<int64_t>(snapshot_id)
+      || roots.ref_count != 1 || pin.schema_version != roots.schema_version)) {
+    ret = OB_STATE_NOT_MATCH;
+  }
+  if (ret == OB_SUCCESS) { ret = metadata_.erase_pin(snapshot_id); }
+  if (ret == OB_SUCCESS) { ret = metadata_.erase_snapshot(snapshot_id); }
+  return ret;
 }
 
 } // namespace rootserver
