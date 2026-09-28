@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Build the server's single Rust staticlib (sql-nio and embedding-response-ffi)
-# with Cargo and expose it to C++ as the INTERFACE target `sql_nio`.
+# Build independent Rust static libraries and expose explicit C++ link targets.
 #
 # Usage from any C++ target:
 #     target_link_libraries(<your_target> PRIVATE sql_nio)
@@ -24,8 +23,6 @@
 if(NOT DEFINED RUST_WORKSPACE_DIR)
   set(RUST_WORKSPACE_DIR "${CMAKE_SOURCE_DIR}/rust")
 endif()
-set(RUST_CRATE_DIR   "${RUST_WORKSPACE_DIR}/sql-nio")
-set(RUST_INCLUDE_DIR "${RUST_CRATE_DIR}/include")
 
 # Locate cargo: explicit -DCARGO=, else PATH, else the rustup default location.
 if(NOT CARGO)
@@ -63,29 +60,6 @@ endif()
 
 # Keep all cargo output inside the CMake build tree (isolated per build dir).
 set(RUST_TARGET_DIR "${CMAKE_BINARY_DIR}/rust-target")
-# Cargo's staticlib artifact name is platform-specific: libsql_nio.a on
-# Unix/MSYS, sql_nio.lib with the MSVC toolchain.
-if(WIN32)
-  set(RUST_STATICLIB "${RUST_TARGET_DIR}/${_cargo_out_subdir}/sql_nio.lib")
-else()
-  set(RUST_STATICLIB "${RUST_TARGET_DIR}/${_cargo_target_subdir}${_cargo_out_subdir}/libsql_nio.a")
-endif()
-
-# Sources whose change should retrigger a rebuild of the staticlib.
-file(GLOB_RECURSE _rust_sources CONFIGURE_DEPENDS "${RUST_CRATE_DIR}/src/*.rs")
-file(GLOB_RECURSE _embedding_sources CONFIGURE_DEPENDS
-  "${RUST_WORKSPACE_DIR}/embedding-response/src/*.rs"
-  "${RUST_WORKSPACE_DIR}/embedding-response-ffi/src/*.rs")
-list(APPEND _rust_sources ${_embedding_sources}
-  "${RUST_WORKSPACE_DIR}/embedding-response/Cargo.toml"
-  "${RUST_WORKSPACE_DIR}/embedding-response-ffi/Cargo.toml")
-list(APPEND _rust_sources
-  "${RUST_WORKSPACE_DIR}/Cargo.toml"
-  "${RUST_WORKSPACE_DIR}/rust-toolchain.toml"
-  "${RUST_CRATE_DIR}/Cargo.toml"
-  "${RUST_CRATE_DIR}/build.rs"
-  "${RUST_CRATE_DIR}/cbindgen.toml")
-
 # CC/AR: cargo inherits CMake's PATH but not its compiler variables, and
 # `ring` (rustls's crypto backend) compiles C through the `cc` crate. Pin it
 # to the same toolchain as the rest of the build instead of whatever `cc`
@@ -155,21 +129,6 @@ if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.28")
   list(APPEND _rust_job_server_options JOB_SERVER_AWARE TRUE)
 endif()
 
-add_custom_command(
-  OUTPUT "${RUST_STATICLIB}"
-  BYPRODUCTS "${RUST_INCLUDE_DIR}/nio.h"
-  COMMAND "${CMAKE_COMMAND}" -E env ${_rust_build_env}
-          "${CARGO}" build ${_cargo_profile_flag} ${_cargo_target_args}
-          --manifest-path "${RUST_WORKSPACE_DIR}/Cargo.toml"
-          --package sql-nio
-  WORKING_DIRECTORY "${RUST_WORKSPACE_DIR}"
-  DEPENDS ${_rust_sources}
-  COMMENT "[rust] cargo build sql-nio (${_cargo_out_subdir})"
-  ${_rust_job_server_options}
-  VERBATIM)
-
-add_custom_target(sql_nio_build DEPENDS "${RUST_STATICLIB}")
-
 # System libraries the Rust std staticlib depends on.
 if(WIN32)
   # Win32 libs Rust std's staticlib needs. windows-sys uses raw #[link] that does
@@ -184,14 +143,45 @@ else()
   endif()
 endif()
 
-add_library(sql_nio INTERFACE)
-add_dependencies(sql_nio sql_nio_build)
-target_include_directories(sql_nio INTERFACE "${RUST_INCLUDE_DIR}")
-target_include_directories(sql_nio INTERFACE
-  "${RUST_WORKSPACE_DIR}/embedding-response-ffi/include")
-target_link_libraries(sql_nio INTERFACE "${RUST_STATICLIB}" ${_rust_syslibs})
+# All Rust C ABI libraries share the sql-nio toolchain, header-generation and
+# linking setup. Each package still produces its own explicitly linked archive.
+function(add_rust_ffi_library target package header)
+  set(crate_dir "${RUST_WORKSPACE_DIR}/${package}")
+  if(WIN32)
+    set(archive "${RUST_TARGET_DIR}/${_cargo_out_subdir}/${target}.lib")
+  else()
+    set(archive "${RUST_TARGET_DIR}/${_cargo_target_subdir}${_cargo_out_subdir}/lib${target}.a")
+  endif()
+  file(GLOB_RECURSE sources CONFIGURE_DEPENDS "${crate_dir}/src/*.rs")
+  list(APPEND sources
+    "${RUST_WORKSPACE_DIR}/Cargo.toml"
+    "${RUST_WORKSPACE_DIR}/rust-toolchain.toml"
+    "${RUST_WORKSPACE_DIR}/build-support/ffi.rs"
+    "${crate_dir}/Cargo.toml"
+    "${crate_dir}/build.rs"
+    "${crate_dir}/cbindgen.toml")
+  add_custom_command(
+    OUTPUT "${archive}"
+    BYPRODUCTS "${crate_dir}/include/${header}"
+    COMMAND "${CMAKE_COMMAND}" -E env ${_rust_build_env}
+            "${CARGO}" build ${_cargo_profile_flag} ${_cargo_target_args}
+            --manifest-path "${RUST_WORKSPACE_DIR}/Cargo.toml"
+            --package "${package}"
+    WORKING_DIRECTORY "${RUST_WORKSPACE_DIR}"
+    DEPENDS ${sources}
+    COMMENT "[rust] cargo build ${package} (${_cargo_out_subdir})"
+    ${_rust_job_server_options}
+    VERBATIM)
+  add_custom_target(${target}_build DEPENDS "${archive}")
+  add_library(${target} INTERFACE)
+  add_dependencies(${target} ${target}_build)
+  target_include_directories(${target} INTERFACE "${crate_dir}/include")
+  target_link_libraries(${target} INTERFACE "${archive}" ${_rust_syslibs})
+  message(STATUS "[rust] ${target} target ready -> ${archive}")
+endfunction()
+
+add_rust_ffi_library(sql_nio sql-nio nio.h)
+add_rust_ffi_library(embedding_response embedding-response embedding.h)
 
 set_property(DIRECTORY APPEND PROPERTY
   ADDITIONAL_CLEAN_FILES "${RUST_TARGET_DIR}")
-
-message(STATUS "[rust] sql_nio target ready -> ${RUST_STATICLIB}")

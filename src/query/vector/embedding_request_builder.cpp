@@ -1,6 +1,6 @@
 // Copyright (c) 2026 OceanBase. Licensed under the Apache License, Version 2.0.
 #include "query/vector/embedding_request_builder.h"
-#include "embedding_request.h"
+#include "embedding_error.h"
 #include "lib/alloc/ob_iallocator.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/string/ob_string.h"
@@ -37,7 +37,7 @@ extern "C" int32_t copy_embedding_body(void *opaque, const uint8_t *body, size_t
   return OB_SUCCESS;
 }
 
-SeekdbEmbeddingBytes bytes(const ObString &text)
+EmbeddingBytes bytes(const ObString &text)
 {
   return {reinterpret_cast<const uint8_t *>(text.ptr()), static_cast<size_t>(text.length())};
 }
@@ -51,16 +51,16 @@ int EmbeddingRequestBuilder::build(const ObIArray<ObString> &inputs,
   int ret = OB_SUCCESS;
   body = nullptr;
   length = 0;
-  SeekdbEmbeddingBytes local_texts[16];
-  SeekdbEmbeddingBytes *texts = local_texts;
+  EmbeddingBytes local_texts[16];
+  EmbeddingBytes *texts = local_texts;
   if (start < 0 || end < start || end > inputs.count()) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     const int64_t count = end - start;
-    if (count > std::numeric_limits<int64_t>::max() / sizeof(SeekdbEmbeddingBytes)) {
+    if (count > std::numeric_limits<int64_t>::max() / sizeof(EmbeddingBytes)) {
       ret = OB_SIZE_OVERFLOW;
     } else if (count > 16) {
-      texts = static_cast<SeekdbEmbeddingBytes *>(allocator.alloc(count * sizeof(SeekdbEmbeddingBytes)));
+      texts = static_cast<EmbeddingBytes *>(allocator.alloc(count * sizeof(EmbeddingBytes)));
       if (nullptr == texts) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
       }
@@ -70,10 +70,9 @@ int EmbeddingRequestBuilder::build(const ObIArray<ObString> &inputs,
         texts[i] = bytes(inputs.at(start + i));
       }
       RequestOutputContext context{allocator, body, length};
-      lib::ObMallocHookAttrGuard scratch_guard(lib::ObMemAttr("EmbRustTmp"));
-      ret = seekdb_embedding_request_build(texts, static_cast<size_t>(count),
-          bytes(model), dimension, use_base64_format ? SEEKDB_EMBEDDING_BASE64 : SEEKDB_EMBEDDING_FLOAT,
-          &context, copy_embedding_body);
+      ret = embedding_error_code(embedding_request_build(texts, static_cast<size_t>(count),
+          bytes(model), dimension, use_base64_format ? EMBEDDING_BASE64 : EMBEDDING_FLOAT,
+          &context, copy_embedding_body));
     }
   }
   if (nullptr != texts && texts != local_texts) {

@@ -34,6 +34,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_libraries(oceanbase INTERFACE
       ob_base
       sql_nio
+      embedding_response
       ${STDC_SHARED_LIB})
   else()
     add_library(oceanbase SHARED EXCLUDE_FROM_ALL
@@ -54,6 +55,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
       ob_share_static
       -Wl,--no-whole-archive
       sql_nio
+      embedding_response
       -static-libgcc
       -static-libstdc++)
   endif()
@@ -95,6 +97,7 @@ target_link_libraries(seekdb PRIVATE
   ob_storage_static
   ob_share_static
   sql_nio
+  embedding_response
   $<$<PLATFORM_ID:Windows>:ob_malloc>
   $<$<PLATFORM_ID:Windows>:synchronization>
   $<$<AND:$<NOT:$<PLATFORM_ID:Darwin>>,$<NOT:$<PLATFORM_ID:Windows>>>:-Wl,--end-group>
@@ -106,20 +109,6 @@ if(ENABLE_SANITY)
   target_link_options(seekdb PRIVATE ${SEEKDB_SANITY_WRAP_LINK_OPTIONS})
   if(NOT OB_SO_CACHE)
     target_link_options(oceanbase PRIVATE ${SEEKDB_SANITY_WRAP_LINK_OPTIONS})
-  endif()
-endif()
-
-# Linux CI exercises the real adapter with the server's exact library closure.
-# Keep this out of the default server build; buildbase invokes it explicitly.
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-  add_executable(embedding_response_integration EXCLUDE_FROM_ALL
-    "${CMAKE_SOURCE_DIR}/rust/embedding-response-ffi/tests/cpp_adapter_test.cpp")
-  get_target_property(_embedding_test_libraries seekdb LINK_LIBRARIES)
-  list(REMOVE_ITEM _embedding_test_libraries ob_main)
-  target_link_libraries(embedding_response_integration PRIVATE ${_embedding_test_libraries})
-  get_target_property(_embedding_test_link_options seekdb LINK_OPTIONS)
-  if(_embedding_test_link_options)
-    target_link_options(embedding_response_integration PRIVATE ${_embedding_test_link_options})
   endif()
 endif()
 

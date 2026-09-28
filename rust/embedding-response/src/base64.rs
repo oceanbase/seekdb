@@ -59,8 +59,8 @@ pub(super) fn decode(input: &[u8], dimension: i64) -> Result<Vec<f32>> {
     }
     let mut vector = Vec::new();
     reserve(&mut vector, bytes.len() / 4)?;
-    for chunk in bytes.chunks_exact(4) {
-        vector.push(f32::from_ne_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]));
+    for chunk in bytes.as_chunks::<4>().0 {
+        vector.push(f32::from_ne_bytes(*chunk));
     }
     Ok(vector)
 }

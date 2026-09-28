@@ -188,6 +188,7 @@ cc_library(
     srcs = QUERY_VECTOR_EMBEDDING_SOURCES,
     hdrs = [
         "api/query/vector/embedding_response_parser.h",
+        "vector/embedding_error.h",
         "api/query/vector/embedding_request_builder.h",
         "api/query/vector/ob_vector_embedding_handler.h",
     ],

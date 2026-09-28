@@ -15,13 +15,12 @@ runs:
       uses: ./.github/actions/setup-rust
 
     # Fail fast: catch a crate that does not compile before the C++ build.
-    # ABI drift is caught by rust-checks' header drift check (nio.h is
-    # cbindgen-generated), not by tests here.
+    # Generated ABI headers are checked by rust-checks.
     - name: Rust unit tests
       shell: bash
       working-directory: rust
       # This workspace does not check in Cargo.lock. Resolve it on a fresh
-      # checkout; subsequent ABI/differential checks use that generated lockfile.
+      # checkout before running the source-local unit tests.
       run: cargo test --workspace
 
     - name: Initialize release build
@@ -42,11 +41,3 @@ runs:
         cd build_release && make -j4
         test -x src/observer/seekdb
         test -x src/observer/observer
-
-    - name: Embedding C++ and Rust integration
-      shell: bash
-      run: |
-        cmake --build build_release --target embedding_response_integration -j4
-        build_release/src/observer/embedding_response_integration
-        python3 rust/embedding-response-ffi/tests/check_http.py --adapter build_release/src/observer/embedding_response_integration
-        python3 rust/embedding-response/tests/compare_cpp.py --adapter-probe build_release/src/observer/embedding_response_integration

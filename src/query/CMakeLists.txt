@@ -6,4 +6,5 @@ ob_set_subtarget(ob_query runtime
 )
 ob_server_add_target(ob_query)
 target_include_directories(ob_query PRIVATE
-  "${CMAKE_SOURCE_DIR}/rust/embedding-response-ffi/include")
+  "${CMAKE_SOURCE_DIR}/rust/embedding-response/include")
+add_dependencies(ob_query embedding_response_build)

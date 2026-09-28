@@ -15,7 +15,7 @@
  */
 
 #include "query/vector/embedding_response_parser.h"
-#include "embedding_response.h"
+#include "embedding_error.h"
 #include "lib/alloc/ob_iallocator.h"
 #include "lib/container/ob_iarray.h"
 #include <cstring>
@@ -66,13 +66,10 @@ int EmbeddingResponseParser::parse(const char *response_data,
                                    ObIArray<float *> &output_vectors)
 {
   EmbeddingOutputContext context{allocator, output_vectors};
-  // Rust scratch uses the platform allocator. Attribute malloc-hook allocations
-  // to the same scoped label used for other third-party parsers in this process.
-  lib::ObMallocHookAttrGuard scratch_guard(lib::ObMemAttr("EmbRustTmp"));
-  return seekdb_embedding_response_parse(
+  return embedding_error_code(embedding_response_parse(
       reinterpret_cast<const uint8_t *>(response_data), response_size, dimension,
-      use_base64_format ? SEEKDB_EMBEDDING_BASE64 : SEEKDB_EMBEDDING_FLOAT,
-      &context, append_embedding_vector);
+      use_base64_format ? EMBEDDING_BASE64 : EMBEDDING_FLOAT,
+      &context, append_embedding_vector));
 }
 
 } // namespace share

@@ -2,7 +2,10 @@
 # (OceanBase-lite) C++ server. Add new crates under `members`.
 [workspace]
 resolver = "2"
-members = ["sql-nio", "embedding-response", "embedding-response-ffi"]
+members = ["sql-nio", "embedding-response"]
+
+[workspace.dependencies]
+cbindgen = "=0.29.4"
 
 # The `release` profile is what gets linked into the server build
 # (CMAKE_BUILD_TYPE != Debug maps to `cargo build --release`).

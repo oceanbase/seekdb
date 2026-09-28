@@ -5,10 +5,13 @@
 //!
 //! [`parse_into`] appends complete vectors in response order. A semantic error in
 //! a later item leaves earlier vectors appended; invalid JSON appends nothing.
-//! Returned vectors are owned by the caller and use Rust's allocator. The separate
-//! `embedding-response-ffi` crate contains the C ABI; this core stays safe Rust.
+//! Returned vectors are owned by the caller and use Rust's allocator.
+//! The C ABI lives in `ffi`; parsing and serialization modules stay safe Rust.
 
-#![forbid(unsafe_code)]
+#![deny(unsafe_code)]
+
+#[allow(unsafe_code)]
+pub mod ffi;
 
 mod base64;
 mod json;
@@ -25,7 +28,7 @@ pub enum Encoding {
     Base64,
 }
 
-/// Failure categories retain the error codes of `EmbeddingResponseParser`.
+/// Parser failure categories; the C++ adapter maps these to server errors.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ParseError {
     InvalidArgument,
@@ -36,23 +39,9 @@ pub enum ParseError {
     InvalidJson,
 }
 
-impl ParseError {
-    /// Values from `src/oblib/lib/ob_errno.h`.
-    pub const fn ob_error_code(self) -> i32 {
-        match self {
-            Self::InvalidArgument => -4002,
-            Self::AllocationFailed => -4013,
-            Self::DimensionMismatch => -4016,
-            Self::BufferNotEnough => -4024,
-            Self::MissingField => -4182,
-            Self::InvalidJson => -5411,
-        }
-    }
-}
-
 impl std::fmt::Display for ParseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{self:?} ({})", self.ob_error_code())
+        write!(f, "{self:?}")
     }
 }
 
@@ -138,4 +127,72 @@ pub fn parse_with<E: From<ParseError>>(
         emit(vector)?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn whole_json_validation_and_partial_semantic_results() {
+        let mut vectors = vec![vec![42.0]];
+        assert_eq!(
+            parse_into(
+                br#"{"data":[{"embedding":[1]},{}]}"#,
+                1,
+                Encoding::Float,
+                &mut vectors
+            ),
+            Err(ParseError::MissingField)
+        );
+        assert_eq!(vectors, vec![vec![42.0], vec![1.0]]);
+        assert_eq!(
+            parse_into(
+                br#"{"data":[{"embedding":[2]}]} trailing"#,
+                1,
+                Encoding::Float,
+                &mut vectors
+            ),
+            Err(ParseError::InvalidJson)
+        );
+        assert_eq!(vectors.len(), 2);
+    }
+
+    #[test]
+    fn float_and_base64_keep_vector_bits() {
+        let mut vectors = Vec::new();
+        parse_into(
+            br#"{"data":[{"embedding":[-0.0,1.25,-2.5]}]}"#,
+            3,
+            Encoding::Float,
+            &mut vectors,
+        )
+        .unwrap();
+        assert_eq!(
+            vectors[0].iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
+            vec![
+                (-0.0_f32).to_bits(),
+                1.25_f32.to_bits(),
+                (-2.5_f32).to_bits()
+            ]
+        );
+        vectors.clear();
+        parse_into(
+            br#"{"data":[{"embedding":"AAAAAA=="}]}"#,
+            1,
+            Encoding::Base64,
+            &mut vectors,
+        )
+        .unwrap();
+        assert_eq!(vectors[0][0].to_bits(), 0);
+        assert_eq!(
+            parse_into(
+                br#"{"data":[{"embedding":[1]}]}"#,
+                2,
+                Encoding::Float,
+                &mut vectors
+            ),
+            Err(ParseError::DimensionMismatch)
+        );
+    }
 }

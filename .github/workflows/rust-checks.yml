@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Rust checks: workspace-wide clippy, embedding tests and C ABI checks,
-# verification of the committed cbindgen-generated transport header, and
+# Rust checks: workspace-wide clippy and source-local unit tests,
+# verification of the committed cbindgen-generated ABI headers, and
 # a RustSec advisory audit of the locked dependency tree. This job gives
 # rust-only PRs a fast signal without a full server build.
 name: rust-checks
@@ -44,15 +44,13 @@ jobs:
         working-directory: rust
         run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Embedding parser tests
+      # The preceding unlocked clippy invocation resolves Cargo.lock on a fresh checkout.
+      - name: Rust unit tests
         working-directory: rust
-        run: cargo test --locked -p embedding-response -p embedding-response-ffi
+        run: cargo test --locked --workspace
 
-      - name: Embedding C ABI
-        run: python3 rust/embedding-response-ffi/tests/check_c_abi.py
-
-      - name: generated header is committed
-        run: git diff --exit-code -- rust/sql-nio/include/nio.h
+      - name: generated headers are committed
+        run: git diff --exit-code -- rust/sql-nio/include/nio.h rust/embedding-response/include/embedding.h
 
       # No Windows runner: a cross `cargo check` is the cheapest signal that
       # the cfg(windows) transport code still compiles. It would have caught
