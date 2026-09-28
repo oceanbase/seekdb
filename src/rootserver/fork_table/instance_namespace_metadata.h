@@ -154,6 +154,10 @@ public:
   int save_page(const std::string &data, uint64_t &page_id);
   int erase_page(uint64_t page_id);
   int scan_pages(const PageVisitor &visitor);
+  // Requires a store.begin_directory_gc transaction. Marks current namespace
+  // and retained snapshot roots, then stages at most max_deletes page erases.
+  // The caller commits the transaction or rolls it back on any error.
+  int collect_unreachable_pages(int64_t max_deletes, int64_t &deleted);
 
 private:
   storage::InstanceMetaStore &store_;

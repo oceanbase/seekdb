@@ -58,6 +58,7 @@ public:
     Transaction();
     ~Transaction(); // Rolls back an unfinished transaction.
     bool is_active() const { return descriptor_ != nullptr; }
+    bool is_directory_gc() const { return directory_gc_; }
   private:
     friend class InstanceMetaStore;
     InstanceMetaStore *owner_;
@@ -66,6 +67,8 @@ public:
     int64_t deadline_;
     bool read_only_;
     bool scanning_;
+    bool directory_guard_;
+    bool directory_gc_;
     Transaction *previous_;
     Transaction *next_;
     DISALLOW_COPY_AND_ASSIGN(Transaction);
@@ -95,6 +98,9 @@ public:
                           share::schema::ObTableSchema &schema);
 
   int begin(Transaction &tx, int64_t deadline, bool read_only = false);
+  // Excludes ordinary KV transactions while a directory page collector marks
+  // roots and removes unreachable pages in this transaction.
+  int begin_directory_gc(Transaction &tx, int64_t deadline);
   int commit(Transaction &tx);
   int rollback(Transaction &tx);
   // Compaction must retain every snapshot held by a native KV transaction.
@@ -124,6 +130,9 @@ private:
   int write(Transaction &tx, MetaCollection collection, const common::ObString &key,
             const common::ObString &value, Write operation);
   int end(Transaction &tx, bool commit);
+  int begin_impl(Transaction &tx, int64_t deadline, bool read_only,
+                 bool directory_gc);
+  void release_directory_guard(Transaction &tx);
   ObAccessService &access_;
   transaction::ObTransService &transactions_;
   State *state_;

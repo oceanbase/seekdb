@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "storage/instance_meta/instance_meta_store.h"
+#include <chrono>
+#include <condition_variable>
 #include <new>
 #include <mutex>
 #include "share/schema/ob_table_schema.h"
@@ -43,11 +45,16 @@ struct InstanceMetaStore::State
   ObTabletID tablet;
   std::mutex transactions_mutex;
   Transaction *transactions = nullptr;
+  std::mutex directory_guard_mutex;
+  std::condition_variable directory_guard_changed;
+  int64_t ordinary_transactions = 0;
+  bool directory_gc_active = false;
 };
 
 InstanceMetaStore::Transaction::Transaction()
   : owner_(nullptr), descriptor_(nullptr), snapshot_(), deadline_(0),
-    read_only_(false), scanning_(false), previous_(nullptr), next_(nullptr)
+    read_only_(false), scanning_(false), directory_guard_(false),
+    directory_gc_(false), previous_(nullptr), next_(nullptr)
 {}
 
 InstanceMetaStore::Transaction::~Transaction()
@@ -133,19 +140,57 @@ int InstanceMetaStore::init(const ObTabletID &tablet_id)
 
 int InstanceMetaStore::begin(Transaction &tx, const int64_t deadline, const bool read_only)
 {
+  return begin_impl(tx, deadline, read_only, false);
+}
+
+int InstanceMetaStore::begin_directory_gc(Transaction &tx, const int64_t deadline)
+{
+  return begin_impl(tx, deadline, false, true);
+}
+
+int InstanceMetaStore::begin_impl(Transaction &tx, const int64_t deadline,
+                                  const bool read_only, const bool directory_gc)
+{
   int ret = OB_SUCCESS;
   if (state_ == nullptr) {
     ret = OB_NOT_INIT;
-  } else if (tx.is_active()) {
+  } else if (tx.is_active() || tx.directory_guard_) {
     ret = OB_INIT_TWICE;
   } else if (deadline <= ObTimeUtility::current_time()) {
     ret = OB_TIMEOUT;
   } else {
+    {
+      std::unique_lock<std::mutex> guard(state_->directory_guard_mutex);
+      while ((directory_gc ? state_->directory_gc_active
+                            || state_->ordinary_transactions != 0
+                           : state_->directory_gc_active)
+             && ret == OB_SUCCESS) {
+        const int64_t remain = deadline - ObTimeUtility::current_time();
+        if (remain <= 0) {
+          ret = OB_TIMEOUT;
+        } else {
+          state_->directory_guard_changed.wait_for(
+              guard, std::chrono::microseconds(remain));
+        }
+      }
+      if (ret == OB_SUCCESS && deadline <= ObTimeUtility::current_time()) {
+        ret = OB_TIMEOUT;
+      }
+      if (ret == OB_SUCCESS) {
+        if (directory_gc) { state_->directory_gc_active = true; }
+        else { ++state_->ordinary_transactions; }
+        tx.directory_guard_ = true;
+        tx.directory_gc_ = directory_gc;
+      }
+    }
+  }
+  if (ret == OB_SUCCESS) {
     ObTxParam param;
     param.access_mode_ = read_only ? ObTxAccessMode::RD_ONLY : ObTxAccessMode::RW;
     param.isolation_ = ObTxIsolationLevel::RC;
     param.timeout_us_ = deadline - ObTimeUtility::current_time();
     if (OB_FAIL(transactions_.acquire_tx(tx.descriptor_))) {
+      release_directory_guard(tx);
     } else {
       tx.owner_ = this;
       tx.deadline_ = deadline;
@@ -175,6 +220,20 @@ int InstanceMetaStore::begin(Transaction &tx, const int64_t deadline, const bool
   return ret;
 }
 
+void InstanceMetaStore::release_directory_guard(Transaction &tx)
+{
+  if (tx.directory_guard_) {
+    {
+      std::lock_guard<std::mutex> guard(state_->directory_guard_mutex);
+      if (tx.directory_gc_) { state_->directory_gc_active = false; }
+      else { --state_->ordinary_transactions; }
+      tx.directory_guard_ = false;
+      tx.directory_gc_ = false;
+    }
+    state_->directory_guard_changed.notify_all();
+  }
+}
+
 int InstanceMetaStore::end(Transaction &tx, const bool do_commit)
 {
   int ret = OB_SUCCESS;
@@ -185,14 +244,17 @@ int InstanceMetaStore::end(Transaction &tx, const bool do_commit)
                     : transactions_.rollback_tx(*tx.descriptor_);
     const int release_ret = transactions_.release_tx(*tx.descriptor_);
     if (ret == OB_SUCCESS) { ret = release_ret; }
-    std::lock_guard<std::mutex> guard(state_->transactions_mutex);
-    if (tx.previous_ != nullptr) { tx.previous_->next_ = tx.next_; }
-    else { state_->transactions = tx.next_; }
-    if (tx.next_ != nullptr) { tx.next_->previous_ = tx.previous_; }
-    tx.previous_ = tx.next_ = nullptr;
-    tx.descriptor_ = nullptr;
-    tx.owner_ = nullptr;
-    tx.snapshot_.reset();
+    {
+      std::lock_guard<std::mutex> guard(state_->transactions_mutex);
+      if (tx.previous_ != nullptr) { tx.previous_->next_ = tx.next_; }
+      else { state_->transactions = tx.next_; }
+      if (tx.next_ != nullptr) { tx.next_->previous_ = tx.previous_; }
+      tx.previous_ = tx.next_ = nullptr;
+      tx.descriptor_ = nullptr;
+      tx.owner_ = nullptr;
+      tx.snapshot_.reset();
+    }
+    release_directory_guard(tx);
   }
   return ret;
 }

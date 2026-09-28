@@ -21,6 +21,7 @@
 #include "lib/allocator/ob_allocator.h"
 #include <cstring>
 #include <limits>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -684,6 +685,78 @@ int InstanceNamespaceMetadata::scan_pages(const PageVisitor &visitor)
         uint64_t id = 0;
         return key_id(key, id) ? visitor(id) : OB_CHECKSUM_ERROR;
       });
+}
+
+int InstanceNamespaceMetadata::collect_unreachable_pages(
+    int64_t max_deletes, int64_t &deleted)
+{
+  deleted = 0;
+  if (!transaction_.is_directory_gc() || max_deletes <= 0 || max_deletes > 256) {
+    return OB_INVALID_ARGUMENT;
+  }
+  std::vector<ns::CatalogPageRef> pending;
+  int ret = scan_namespaces([&](const InstanceNamespaceRecord &record) {
+    if (record.roots.catalog.page != 0) { pending.push_back(record.roots.catalog); }
+    if (record.roots.directory.page != 0) { pending.push_back(record.roots.directory); }
+    return OB_SUCCESS;
+  });
+  if (ret == OB_SUCCESS) {
+    ret = scan_snapshots([&](uint64_t, const ns::CatalogRoots &roots) {
+      if (roots.ref_count > 0) {
+        if (roots.catalog.page != 0) { pending.push_back(roots.catalog); }
+        if (roots.directory.page != 0) { pending.push_back(roots.directory); }
+      }
+      return OB_SUCCESS;
+    });
+  }
+  InstanceCatalogPageStore pages(*this);
+  ns::NamespaceCatalogTree tree(pages);
+  std::unordered_set<uint64_t> reachable;
+  while (ret == OB_SUCCESS && !pending.empty()) {
+    const ns::CatalogPageRef ref = pending.back();
+    pending.pop_back();
+    if (!reachable.insert(ref.page).second) { continue; }
+    ns::CatalogNode node;
+    const auto result = tree.read_node(ref, node);
+    if (!result.ok()) {
+      switch (result.error) {
+        case ns::CatalogTreeError::CORRUPT: ret = OB_CHECKSUM_ERROR; break;
+        case ns::CatalogTreeError::TOO_DEEP: ret = OB_SIZE_OVERFLOW; break;
+        case ns::CatalogTreeError::STORE: ret = result.store_error; break;
+        default: ret = OB_ERR_UNEXPECTED; break;
+      }
+    } else if (!node.leaf) {
+      pending.insert(pending.end(), node.children.begin(), node.children.end());
+    } else {
+      for (const auto &value : node.values) {
+        uint64_t object = 0, table = 0, tablet = 0, bound = 0;
+        if (!ns::NamespaceCatalogCodec::decode_entry(
+                value.data, object, table, tablet, bound)) {
+          ret = OB_CHECKSUM_ERROR;
+          break;
+        }
+        if (object != 0 && reachable.insert(object).second) {
+          std::string schema;
+          if (OB_SUCCESS != (ret = read_page(object, schema))) { break; }
+        }
+      }
+    }
+  }
+  std::vector<uint64_t> garbage;
+  if (ret == OB_SUCCESS) {
+    ret = scan_pages([&](uint64_t page) {
+      if (page == 0) { return OB_CHECKSUM_ERROR; }
+      if (garbage.size() < static_cast<size_t>(max_deletes)
+          && reachable.count(page) == 0) { garbage.push_back(page); }
+      return OB_SUCCESS;
+    });
+  }
+  for (const uint64_t page : garbage) {
+    if (ret != OB_SUCCESS) { break; }
+    ret = erase_page(page);
+  }
+  if (ret == OB_SUCCESS) { deleted = garbage.size(); }
+  return ret;
 }
 
 int InstanceSnapshotLineageStore::load_for_update(uint64_t snapshot_id,
