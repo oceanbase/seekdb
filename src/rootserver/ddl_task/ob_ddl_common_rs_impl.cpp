@@ -855,9 +855,6 @@ int ObDDLTaskUtil::write_defensive_and_obtain_snapshot(
     ObLocalManagementService *root_service)
 {
   int ret = OB_SUCCESS;
-  if (root_service == nullptr) {
-    root_service = ::oceanbase::share::server_service<ObLocalManagementService>();
-  }
   if (OB_ISNULL(schema_service)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("there are invalid arg", KP(schema_service));

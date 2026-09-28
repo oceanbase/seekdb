@@ -486,7 +486,7 @@ int ObConstraintTask::init(
     const int64_t snapshot_version)
 {
   int ret = OB_SUCCESS;
-  ObLocalManagementService *local_management_service = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>();
+  ObLocalManagementService *local_management_service = task_root_service();
   
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;

@@ -69,7 +69,7 @@ int ObDropFTSIndexTask::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_id), K(data_table_id),
         K(domain_index), K(schema_version));
-  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
+  } else if (OB_ISNULL(local_management_service_ = task_root_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, local management service is null", K(ret));
   } else if (OB_FAIL(rowkey_doc_.deep_copy_from_other(rowkey_doc, allocator_))) {

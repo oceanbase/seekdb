@@ -95,7 +95,7 @@ int ObForkTableTask::init(
     LOG_WARN("invalid argument", K(ret), K(task_id), K(schema_version),
              K(snapshot_version),
              KP(src_table_schema), KP(dst_table_schema));
-  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
+  } else if (OB_ISNULL(local_management_service_ = task_root_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("local_management_service is null", K(ret), KP(local_management_service_));
   } else {

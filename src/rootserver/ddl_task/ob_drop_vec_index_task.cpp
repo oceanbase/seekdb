@@ -79,7 +79,7 @@ int ObDropVecIndexTask::init(
     ret = OB_VERSION_NOT_MATCH;
     LOG_WARN("drop vector index task requires the current data format",
              K(ret), K(data_format_version), LITERAL_K(DATA_CURRENT_VERSION));
-  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
+  } else if (OB_ISNULL(local_management_service_ = task_root_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, local management service is null", K(ret));
   } else if (OB_FAIL(deep_copy_index_arg(allocator_, drop_index_arg, drop_index_arg_))) {

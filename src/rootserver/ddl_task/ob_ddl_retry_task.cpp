@@ -146,7 +146,7 @@ int ObDDLRetryTask::init(const int64_t task_id,
       ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_id), K(object_id),
       K(schema_version), K(ddl_type), KP(ddl_arg), K(task_status));
-  } else if (OB_ISNULL(local_management_service_ = ::oceanbase::share::server_service<::oceanbase::rootserver::ObLocalManagementService>())) {
+  } else if (OB_ISNULL(local_management_service_ = task_root_service())) {
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, local management service is null", K(ret));
     LOG_WARN("fail to init task table operator", K(ret));

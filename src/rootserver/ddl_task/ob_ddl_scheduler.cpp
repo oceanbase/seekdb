@@ -45,6 +45,26 @@ using namespace common;
 namespace rootserver
 {
 namespace {
+int bind_ddl_task_owner(common::ObISQLClient &proxy, ObDDLTask &task)
+{
+  ns::NamespaceRuntime *runtime = nullptr;
+  const uint64_t namespace_id = proxy.target_namespace();
+  if (!ns::namespace_registry().get(namespace_id, runtime) || runtime == nullptr) {
+    return OB_NOT_INIT;
+  }
+  auto *root_service = static_cast<ObLocalManagementService *>(
+      runtime->service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE));
+  if (root_service == nullptr) {
+    return OB_NOT_INIT;
+  }
+  const ObDDLTaskContext &context = root_service->get_ddl_service().get_task_context();
+  if (!context.is_complete() || context.namespace_id_ != namespace_id) {
+    return OB_NOT_INIT;
+  }
+  task.set_context(context);
+  return OB_SUCCESS;
+}
+
 class NativeDDLChecksumErrorVerifier final : public IDDLChecksumErrorVerifier
 {
 public:
@@ -1782,6 +1802,7 @@ int ObDDLScheduler::create_build_fts_index_task(
                    root_service, snapshot_version))) {
     } else if (OB_FAIL(ObFtsIndexBuilderUtil::check_supportability_for_building_index(data_table_schema, create_index_arg))) {
     } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(task_id))) {
+    } else if (OB_FAIL(bind_ddl_task_owner(proxy, index_task))) {
     } else if (OB_FAIL(index_task.init(task_id,
                                        data_table_schema,
                                        index_schema,
@@ -1826,6 +1847,7 @@ int ObDDLScheduler::create_build_vec_ivf_index_task(
       LOG_WARN("invalid argument", K(ret), KPC(create_index_arg),
           KPC(data_table_schema), KPC(index_schema));
     } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(task_id))) {
+    } else if (OB_FAIL(bind_ddl_task_owner(proxy, index_task))) {
     } else if (OB_FAIL(index_task.init(task_id,
                                        data_table_schema,
                                        index_schema,
@@ -1872,6 +1894,7 @@ int ObDDLScheduler::create_build_vec_index_task(
                    data_table_schema, index_schema, parent_task_id, *create_index_arg,
                    root_service, snapshot_version))) {
     } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(task_id))) {
+    } else if (OB_FAIL(bind_ddl_task_owner(proxy, index_task))) {
     } else if (OB_FAIL(index_task.init(task_id,
                                        data_table_schema,
                                        index_schema,
@@ -1923,6 +1946,7 @@ int ObDDLScheduler::create_build_index_task(
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), KPC(create_index_arg), KPC(data_table_schema), KPC(index_schema), K(data_format_version));
     } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(task_id))) {
+    } else if (OB_FAIL(bind_ddl_task_owner(proxy, index_task))) {
     } else if (OB_FAIL(index_task.init(task_id,
                                       ddl_type,
                                       data_table_schema,
@@ -1968,7 +1992,8 @@ int ObDDLScheduler::create_drop_index_task(
   } else {
     const uint64_t data_table_id = index_schema->get_data_table_id();
     const uint64_t index_table_id = index_schema->get_table_id();
-    if (OB_FAIL(index_task.init(task_id,
+    if (OB_FAIL(bind_ddl_task_owner(proxy, index_task))) {
+    } else if (OB_FAIL(index_task.init(task_id,
                                 ddl_type,
                                 data_table_id,
                                 index_table_id,
@@ -2057,6 +2082,7 @@ int ObDDLScheduler::create_drop_fts_index_task(
     const ObFTSDDLChildTaskInfo doc_rowkey(doc_rowkey_name, doc_rowkey_table_id, 0/*task_id*/);
     const ObDDLType ddl_type = is_fts_index ? DDL_DROP_FTS_INDEX : (is_vec_spiv_index ? DDL_DROP_VEC_SPIV_INDEX : DDL_DROP_MULVALUE_INDEX);
     if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(bind_ddl_task_owner(proxy, index_task))) {
     } else if (OB_FAIL(index_task.init(task_id,
                                 data_table_id,
                                 ddl_type,
@@ -2149,6 +2175,7 @@ int ObDDLScheduler::create_drop_vec_index_task(
     const ObVecIndexDDLChildTaskInfo embedded_vec(hybrid_embedded_vec_name, embedded_vec_table_id, init_task_id);
 
     if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(bind_ddl_task_owner(proxy, index_task))) {
     } else if (OB_FAIL(index_task.init(task_id,
                                 data_table_id,
                                 DDL_DROP_VEC_INDEX,
@@ -2243,6 +2270,7 @@ int ObDDLScheduler::create_drop_vec_ivf_index_task(
     const ObVecIndexDDLChildTaskInfo pq_code(pq_code_index_name, pq_code_table_id, init_task_id);
 
     if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(bind_ddl_task_owner(proxy, index_task))) {
     } else if (OB_FAIL(index_task.init(task_id,
                                       data_table_id,
                                       task_type,
@@ -2280,7 +2308,8 @@ int ObDDLScheduler::create_drop_lob_task(
     LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(task_id))) {
   } else {
-    if (OB_FAIL(task.init(task_id, aux_lob_meta_table_id, param.object_id_, param.schema_version_,
+    if (OB_FAIL(bind_ddl_task_owner(proxy, task))) {
+    } else if (OB_FAIL(task.init(task_id, aux_lob_meta_table_id, param.object_id_, param.schema_version_,
             param.parent_task_id_, *param.ddl_arg_))) {
     } else if (OB_FAIL(task.set_trace_id(*ObCurTraceId::get_trace_id()))) {
     } else if (OB_FAIL(insert_task_record(proxy, task, *param.allocator_, task_record))) {
@@ -2313,6 +2342,7 @@ int ObDDLScheduler::create_constraint_task(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(table_schema), K(constraint_id), K(schema_version), K(arg));
   } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(task_id))) {
+  } else if (OB_FAIL(bind_ddl_task_owner(proxy, constraint_task))) {
   } else if (OB_FAIL(constraint_task.init(task_id, table_schema, constraint_id, ddl_type, schema_version, *arg, sub_task_trace_id, parent_task_id))) {
   } else if (OB_FAIL(constraint_task.set_trace_id(*ObCurTraceId::get_trace_id()))) {
   } else if (OB_FAIL(insert_task_record(proxy, constraint_task, allocator, task_record))) {
@@ -2345,6 +2375,7 @@ int ObDDLScheduler::create_table_redefinition_task(
     } else if (OB_UNLIKELY(0 == task_id || data_format_version <= 0) || OB_ISNULL(alter_table_arg) || OB_ISNULL(src_schema) || OB_ISNULL(dest_schema)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid arguments", K(ret), K(task_id), KP(alter_table_arg), KP(src_schema), KP(dest_schema),  K(data_format_version));
+    } else if (OB_FAIL(bind_ddl_task_owner(proxy, redefinition_task))) {
     } else if (OB_FAIL(redefinition_task.init(src_schema,
                                               dest_schema,
                                               parent_task_id,
@@ -2384,6 +2415,7 @@ int ObDDLScheduler::create_drop_primary_key_task(
   } else if (OB_UNLIKELY(0 == task_id || data_format_version <= 0) || OB_ISNULL(alter_table_arg) || OB_ISNULL(src_schema) || OB_ISNULL(dest_schema)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_id), KP(alter_table_arg), KP(src_schema), KP(dest_schema), K(data_format_version));
+  } else if (OB_FAIL(bind_ddl_task_owner(proxy, drop_pk_task))) {
   } else if (OB_FAIL(drop_pk_task.init(src_schema,
                                        dest_schema,
                                        task_id,
@@ -2422,6 +2454,7 @@ int ObDDLScheduler::create_column_redefinition_task(
     || OB_ISNULL(alter_table_arg) || OB_ISNULL(src_schema) || OB_ISNULL(dest_schema)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_id), KP(alter_table_arg), KP(src_schema), KP(dest_schema), K(data_format_version));
+  } else if (OB_FAIL(bind_ddl_task_owner(proxy, redefinition_task))) {
   } else if (OB_FAIL(redefinition_task.init(task_id,
                                             type,
                                             src_schema->get_table_id(),
@@ -2458,6 +2491,7 @@ int ObDDLScheduler::create_modify_autoinc_task(
                           || schema_version <= 0 || 0 == task_id || nullptr == arg || !arg->is_valid())) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), K(table_id), K(schema_version), K(task_id), K(arg));
+    } else if (OB_FAIL(bind_ddl_task_owner(proxy, modify_autoinc_task))) {
     } else if (OB_FAIL(modify_autoinc_task.init(task_id, table_id, schema_version, sub_task_trace_id, *arg))) {
     } else if (OB_FAIL(modify_autoinc_task.set_trace_id(*ObCurTraceId::get_trace_id()))) {
     } else if (OB_FAIL(insert_task_record(proxy, modify_autoinc_task, allocator, task_record))) {
@@ -2496,6 +2530,7 @@ int ObDDLScheduler::create_fork_table_task(
       LOG_WARN("invalid argument", KR(ret), K(fork_table_arg),
           K(src_table_schema), K(dst_table_schema), K(schema_version), K(snapshot_version));
     } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(task_id))) {
+    } else if (OB_FAIL(bind_ddl_task_owner(proxy, fork_table_task))) {
     } else if (OB_FAIL(fork_table_task.init(task_id,
                                             share::DDL_FORK_TABLE,
                                             src_table_schema,
@@ -2966,7 +3001,8 @@ int ObDDLScheduler::create_rebuild_index_task(
   } else {
     const uint64_t data_table_id = index_schema->get_data_table_id();
     const uint64_t index_table_id = index_schema->get_table_id();
-    if (OB_FAIL(index_task.init(task_id,
+    if (OB_FAIL(bind_ddl_task_owner(proxy, index_task))) {
+    } else if (OB_FAIL(index_task.init(task_id,
                                 ddl_type,
                                 data_table_id,
                                 index_table_id,
