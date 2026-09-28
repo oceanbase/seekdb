@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_DATA_ACCESS_SERVICE_
 #define OCEANBASE_STORAGE_OB_DATA_ACCESS_SERVICE_
 
+#include <memory>
 #include "data_plane/access/ob_tablet_scan.h"
 #include "share/ob_est_row_count_record.h"
 #include "data_plane/ob_i_dml_service.h"
@@ -41,6 +42,7 @@ namespace storage
 {
 struct ObDMLBaseParam;
 class ObLSService;
+class InstanceMetaStore;
 class ObStoreCtx;
 
 class ObStoreCtxGuard
@@ -82,6 +84,7 @@ public:
   static int server_module_init(ObAccessService* &access_service);
 
   void destroy();
+  InstanceMetaStore &instance_meta_store() { return *instance_meta_store_; }
 public:
   // pre_check_lock
   // @param [in] tx_desc, the trans context.
@@ -345,6 +348,7 @@ private:
 private:
   bool is_inited_;
   ObLSService *ls_svr_;
+  std::unique_ptr<InstanceMetaStore> instance_meta_store_;
 };
 
 }

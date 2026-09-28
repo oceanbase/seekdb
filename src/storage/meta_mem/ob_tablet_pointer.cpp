@@ -523,8 +523,8 @@ int ObTabletPointer::release_memtable_and_mds_table_for_ls_offline(const ObTable
   int ret = OB_SUCCESS;
   mds::MdsTableHandle mds_table;
   reset_tablet_status_written();
-  if (tablet_id.is_ls_inner_tablet()) {
-    LOG_INFO("skip inner tablet", K(tablet_id));
+  if (tablet_id.has_internal_memtable()) {
+    LOG_INFO("skip separately owned internal memtable", K(tablet_id));
   } else if (OB_FAIL(protected_memtable_mgr_handle_.reset())) {
   } else if (OB_FAIL(get_mds_table(tablet_id, mds_table, false/*not_exist_create*/))) {
     if (OB_ENTRY_NOT_EXIST == ret) {

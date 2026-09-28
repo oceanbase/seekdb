@@ -97,7 +97,7 @@ int ObProtectedMemtableMgrHandle::release_memtables_and_try_reset_memtable_mgr_h
     STORAGE_LOG(WARN, "failed to release_memtables", KR(ret), K(tablet_id), K(scn));
   } else if (!scn.is_valid() && OB_FAIL(release_memtables())) {
     STORAGE_LOG(WARN, "failed to release_memtables", KR(ret), K(tablet_id));
-  } else if (tablet_id.is_ls_inner_tablet()) {
+  } else if (tablet_id.has_internal_memtable()) {
     // do nothing
   } else if (!need_reset_()) {
   } else if (OB_FAIL(try_reset_memtable_mgr_handle_())) {

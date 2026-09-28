@@ -488,17 +488,12 @@ void ObLSTabletService::report_tablet_to_rs(
 int ObLSTabletService::table_scan(ObTabletHandle &tablet_handle, ObTableScanIterator &iter, ObTableScanParam &param)
 {
   int ret = OB_SUCCESS;
-  ObMultiVersionSchemaService *schema_service = nullptr;
   NG_TRACE(S_table_scan_begin);
 
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret), K_(is_inited));
-  } else if (!param.schema_tablet_id_.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->resolve_tablet_schema(
-                 param.schema_tablet_id_.id(), schema_service))) {
-  } else if (OB_FAIL(prepare_scan_table_param(param, *schema_service))) {
+  } else if (OB_FAIL(prepare_scan_table_param(param))) {
   } else if (OB_FAIL(inner_table_scan(tablet_handle, iter, param))) {
   }
   NG_TRACE(S_table_scan_end);
@@ -509,7 +504,6 @@ int ObLSTabletService::table_scan(ObTabletHandle &tablet_handle, ObTableScanIter
 int ObLSTabletService::table_rescan(ObTabletHandle &tablet_handle, ObTableScanParam &param, ObNewRowIterator *result)
 {
   int ret = OB_SUCCESS;
-  ObMultiVersionSchemaService *schema_service = nullptr;
   NG_TRACE(S_table_rescan_begin);
 
   if (OB_UNLIKELY(!is_inited_)) {
@@ -518,11 +512,7 @@ int ObLSTabletService::table_rescan(ObTabletHandle &tablet_handle, ObTableScanPa
   } else if (OB_ISNULL(result)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
-  } else if (!param.schema_tablet_id_.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->resolve_tablet_schema(
-                 param.schema_tablet_id_.id(), schema_service))) {
-  } else if (OB_FAIL(prepare_scan_table_param(param, *schema_service))) {
+  } else if (OB_FAIL(prepare_scan_table_param(param))) {
   } else {
     ObTableScanIterator *iter = static_cast<ObTableScanIterator*>(result);
     if (OB_FAIL(inner_table_scan(tablet_handle, *iter, param))) {
@@ -4652,9 +4642,7 @@ int ObLSTabletService::delete_lob_tablet_rows(
 }
 // revert end
 
-int ObLSTabletService::prepare_scan_table_param(
-    ObTableScanParam &param,
-    share::schema::ObMultiVersionSchemaService &schema_service)
+int ObLSTabletService::prepare_scan_table_param(ObTableScanParam &param)
 {
   int ret =  OB_SUCCESS;
   if (NULL == param.table_param_ || OB_INVALID_ID == param.table_param_->get_table_id()) {
@@ -4664,7 +4652,12 @@ int ObLSTabletService::prepare_scan_table_param(
     const ObTableSchema *table_schema = NULL;
     
     const bool check_formal = param.index_id_ > OB_MAX_CORE_TABLE_ID;
-    if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
+    ObMultiVersionSchemaService *schema_service = nullptr;
+    if (!param.schema_tablet_id_.is_valid()) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(share::server_service<ObSchemaRuntimeService>()->resolve_tablet_schema(
+                   param.schema_tablet_id_.id(), schema_service))) {
+    } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
     } else if (check_formal && OB_FAIL(schema_guard.check_formal_guard())) {
       LOG_WARN("Fail to check formal schema, ", K(param.index_id_), K(ret));
     } else  if (OB_FAIL(schema_guard.get_table_schema(
@@ -4843,7 +4836,10 @@ int ObLSTabletService::prepare_dml_running_ctx(
   int ret = OB_SUCCESS;
   ObMultiVersionSchemaService *schema_service = nullptr;
 
-  if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->resolve_tablet_schema(
+  // A prepared physical table plan does not need a Namespace schema service.
+  // Resolve one only when this operation explicitly requests version checking.
+  if (run_ctx.dml_param_.check_schema_version_
+      && OB_FAIL(share::server_service<ObSchemaRuntimeService>()->resolve_tablet_schema(
           tablet_handle.get_obj()->get_tablet_meta().tablet_id_.id(), schema_service))) {
   } else if (OB_FAIL(run_ctx.init(
       column_ids,
@@ -5854,18 +5850,13 @@ int ObLSTabletService::scan_block_stat(
     ObBlockStatIterator &iter)
 {
   int ret = OB_SUCCESS;
-  ObMultiVersionSchemaService *schema_service = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret), K_(is_inited));
   } else if (OB_UNLIKELY(!tablet_handle.is_valid() || !scan_param.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(tablet_handle), K(scan_param));
-  } else if (!scan_param.get_scan_param()->schema_tablet_id_.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->resolve_tablet_schema(
-                 scan_param.get_scan_param()->schema_tablet_id_.id(), schema_service))) {
-  } else if (OB_FAIL(prepare_scan_table_param(*scan_param.get_scan_param(), *schema_service))) {
+  } else if (OB_FAIL(prepare_scan_table_param(*scan_param.get_scan_param()))) {
   } else if (OB_UNLIKELY(scan_param.get_scan_param()->fb_snapshot_.is_min())) {
     ret = OB_SNAPSHOT_DISCARDED;
   } else if (OB_FAIL(iter.init(tablet_handle, scan_param))) {

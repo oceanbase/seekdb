@@ -3738,8 +3738,8 @@ int ObTablet::init_shared_params(const common::ObTabletID &tablet_id)
     if (is_external_tablet()) {
       LOG_ERROR("is_external_tablet, and pointer_hdl_ is invalid", K(lbt()));
     }
-  } else if (!tablet_id.is_ls_inner_tablet()) {
-    // tablet_memtable_mgr init in ObProtectedMemtableMgrHandle
+  } else if (!tablet_id.has_internal_memtable()) {
+    // Ordinary row memtables are initialized lazily, including instance metadata.
   } else if (OB_ISNULL(ls = static_cast<ObTabletPointer *>(
                                 pointer_hdl_.get_resource_ptr())->get_ls())) {
     ret = OB_ERR_UNEXPECTED;

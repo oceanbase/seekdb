@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX STORAGE
 #define PRINT_TS_WRAPPER(x) (ObPrintTableStore(*(x.get_member())))
 
+#include "storage/instance_meta/instance_meta_store.h"
+#include "storage/tx_storage/ob_access_service.h"
 #include "ob_partition_merge_policy.h"
 #include "share/rc/ob_server_runtime.h"
 #include "storage/compaction/ob_compaction_progress.h"
@@ -993,7 +995,15 @@ int ObPartitionMergePolicy::get_multi_version_start(
 {
   int ret = OB_SUCCESS;
   snapshot_info.reset();
-  if (tablet.is_ls_inner_tablet()) {
+  if (tablet.get_tablet_meta().tablet_id_.is_ls_instance_meta_tablet()) {
+    share::SCN retained;
+    if (OB_FAIL(share::server_service<ObAccessService>()->instance_meta_store().min_retained_snapshot(retained))) {
+    } else {
+      result_version_range.multi_version_start_ = std::max(
+          result_version_range.multi_version_start_,
+          std::min(result_version_range.snapshot_version_, retained.get_val_for_tx()));
+    }
+  } else if (tablet.is_ls_inner_tablet()) {
     result_version_range.multi_version_start_ = INT64_MAX;
   } else if (OB_FAIL(tablet.get_kept_snapshot_info(ls.get_min_reserved_snapshot(), snapshot_info))) {
     // Minor merge reads the medium list to choose its boundary snapshot and multi-version start.

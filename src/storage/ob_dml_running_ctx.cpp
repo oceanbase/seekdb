@@ -74,7 +74,7 @@ int ObDMLRunningCtx::init(
   } else if (OB_UNLIKELY(!store_ctx_.is_valid())
       || OB_UNLIKELY(!dml_param_.is_valid())
       || OB_ISNULL(dml_param_.table_param_)
-      || OB_ISNULL(schema_service)) {
+      || (dml_param_.check_schema_version_ && OB_ISNULL(schema_service))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(store_ctx_),
         K(dml_param_), KP(schema_service));

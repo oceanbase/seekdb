@@ -729,9 +729,7 @@ private:
       ObTabletHandle &tablet_handle,
       ObDMLRunningCtx &run_ctx,
       blocksstable::ObDatumRow &datum_row);
-  static int prepare_scan_table_param(
-      ObTableScanParam &param,
-      share::schema::ObMultiVersionSchemaService &schema_service);
+  static int prepare_scan_table_param(ObTableScanParam &param);
   static void dump_diag_info_for_old_row_loss(
       ObDMLRunningCtx &run_ctx,
       const blocksstable::ObDatumRow &datum_row);

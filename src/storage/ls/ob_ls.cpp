@@ -23,6 +23,7 @@
 #include "storage/compaction/ob_tablet_scheduler.h"
 #include "storage/compaction/ob_tablet_merge_ctx.h"
 #include "storage/ls/ob_ls.h"
+#include "storage/instance_meta/instance_meta_store.h"
 #include "storage/ls/ob_i_ls_runtime_adapter.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/tx/ob_timestamp_service.h"
@@ -47,6 +48,7 @@ const uint64_t ObLS::INNER_TABLET_ID_LIST[TOTAL_INNER_TABLET_NUM] = {
     common::ObTabletID::LS_TX_CTX_TABLET_ID,
     common::ObTabletID::LS_TX_DATA_TABLET_ID,
     common::ObTabletID::LS_LOCK_TABLET_ID,
+    common::ObTabletID::LS_INSTANCE_META_TABLET_ID,
 };
 
 ObLS::ObLS()
@@ -125,6 +127,16 @@ int ObLS::create_ls_inner_tablet(const SCN &create_scn)
   int tmp_ret = OB_SUCCESS;
   if (OB_FAIL(tx_table_.create_tablet(create_scn))) {
   } else if (OB_FAIL(lock_table_.create_tablet(create_scn))) {
+  } else {
+    common::ObArenaAllocator allocator(common::ObMemAttr("InstanceMeta"));
+    share::schema::ObTableSchema schema;
+    ObCreateTabletSchema physical_schema;
+    const common::ObTabletID tablet(common::ObTabletID::LS_INSTANCE_META_TABLET_ID);
+    if (OB_FAIL(InstanceMetaStore::build_schema(tablet, schema))) {
+    } else if (OB_FAIL(physical_schema.init(allocator, schema, false))) {
+    } else if (OB_FAIL(create_ls_inner_tablet(tablet, LS_INNER_TABLET_FROZEN_SCN,
+                                             physical_schema, create_scn))) {
+    }
   }
   if (OB_FAIL(ret)) {
     do {
@@ -140,6 +152,8 @@ int ObLS::remove_ls_inner_tablet()
   int ret = OB_SUCCESS;
   if (OB_FAIL(tx_table_.remove_tablet())) {
   } else if (OB_FAIL(lock_table_.remove_tablet())) {
+  } else if (OB_FAIL(remove_ls_inner_tablet(
+      common::ObTabletID(common::ObTabletID::LS_INSTANCE_META_TABLET_ID)))) {
   }
   return ret;
 }
@@ -1446,7 +1460,7 @@ int ObLS::tablet_freeze(const ObTabletID &tablet_id,
   if (!is_valid_freeze_source(source)) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "unexpected freeze source", K(source));
-  } else if (tablet_id.is_ls_inner_tablet()) {
+  } else if (tablet_id.has_internal_memtable()) {
     ret = ls_freezer_.ls_inner_tablet_freeze(tablet_id);
   } else {
     ObSEArray<ObTabletID, 1> tablet_ids;

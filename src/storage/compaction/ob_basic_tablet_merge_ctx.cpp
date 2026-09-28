@@ -917,7 +917,7 @@ int ObBasicTabletMergeCtx::build_update_table_store_param(
     param.snapshot_version_ = tablet_handle_.get_obj()->get_snapshot_version();
   } else {
     param.snapshot_version_ = static_param_.version_range_.snapshot_version_;
-    param.multi_version_start_ = get_tablet_id().is_ls_inner_tablet() ? 1 : static_param_.version_range_.multi_version_start_;
+    param.multi_version_start_ = get_tablet_id().has_internal_memtable() ? 1 : static_param_.version_range_.multi_version_start_;
 #ifdef ERRSIM
     if (EN_COMPACTION_REFRESH_MULTI_VERSION_START && is_major_merge_type(merge_type)) {
       param.multi_version_start_ = static_param_.version_range_.snapshot_version_;

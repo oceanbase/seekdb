@@ -945,6 +945,7 @@ STORAGE_UNITY_GROUPS = [
         name = "ob_storage_tx_storage_0",
         language = "c++",
         srcs = [
+            "src/storage/instance_meta/instance_meta_store.cpp",
             "src/storage/tx_storage/ob_access_service.cpp",
             "src/storage/tx_storage/ob_checkpoint_service.cpp",
             "src/storage/tx_storage/ob_ls_freeze_thread.cpp",

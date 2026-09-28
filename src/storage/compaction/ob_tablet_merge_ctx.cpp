@@ -349,11 +349,8 @@ int ObTabletExeMergeCtx::prepare_compaction_filter()
 {
   int ret = OB_SUCCESS;
   void *buf = nullptr;
-  if (!get_tablet_id().is_ls_inner_tablet()) {
-    // init compaction filter for minor merge in TxDataTable
-  } else if (OB_UNLIKELY(!get_tablet_id().is_ls_tx_data_tablet())) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("only tx data tablet can execute minor merge", KR(ret), "param", get_dag_param());
+  if (!get_tablet_id().is_ls_tx_data_tablet()) {
+    // Transaction-status filtering applies only to the transaction data table.
   } else if (!static_param_.scn_range_.start_scn_.is_base_scn()) {
     FLOG_INFO ("Skip filtering because this minor merge does not contain the oldest minor sstable",
       K(static_param_.scn_range_));

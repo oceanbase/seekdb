@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_access_service.h"
+#include "storage/instance_meta/instance_meta_store.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/ob_io_device_helper.h" // LOCAL_DEVICE_INSTANCE
@@ -165,8 +166,19 @@ int ObAccessService::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(ls_service));
   } else {
-    ls_svr_ = ls_service;
-    is_inited_ = true;
+    auto *transactions = share::server_service<transaction::ObTransService>();
+    if (OB_ISNULL(transactions)) {
+      ret = OB_NOT_INIT;
+    } else if (FALSE_IT(instance_meta_store_.reset(
+        new (std::nothrow) InstanceMetaStore(*this, *transactions)))) {
+    } else if (!instance_meta_store_) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else if (OB_FAIL(instance_meta_store_->init(ObTabletID(ObTabletID::LS_INSTANCE_META_TABLET_ID)))) {
+      instance_meta_store_.reset();
+    } else {
+      ls_svr_ = ls_service;
+      is_inited_ = true;
+    }
   }
   return ret;
 }
@@ -174,6 +186,7 @@ int ObAccessService::init(
 void ObAccessService::destroy()
 {
   if (IS_INIT) {
+    instance_meta_store_.reset();
     ls_svr_ = nullptr;
     is_inited_ = false;
   }
