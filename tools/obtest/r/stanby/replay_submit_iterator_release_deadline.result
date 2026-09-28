@@ -1,0 +1,18 @@
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 30;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 30;
+db_s.check_until_timeout select count(*) from replay_submit_iterator_release_deadline where id = 1 and marker = 'warmup', 1, 120;
+db_s.check_until_timeout select count(*) from replay_submit_iterator_release_deadline where id = 2 and marker = 'cutover', 1, 120;
+db_s.mysql alter system set_tp tp_name = EN_REPLAY_SERVICE_SUBMIT_TASK_SLEEP, error_code = 4016, occur = 1;
+db_p.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'STANDBY' and switchover_status = 'PREPARING', 1, 60;
+db_s.z1.obs0.check_log_until_success -c "sleep 1s before read log";
+db_s.z1.obs0.check_log_until_success -c "replay submit iterator release blocked.*state.*RWLOCK_BUSY";
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'STANDBY', 1, 30;
+db_s.mysql alter system set_tp tp_name = EN_REPLAY_SERVICE_SUBMIT_TASK_SLEEP, error_code = 4016, frequency = 0;
+db_s.check_until_timeout select count(*) from oceanbase.__all_virtual_server_stat where role = 'PRIMARY' and pending_role = 'INVALID' and switchover_status = 'NORMAL', 1, 120;
+db_s.z1.obs0.check_log_until_success -c "released replay submit iterator.*state.*RELEASED";
+id	marker
+1	warmup
+2	cutover
+3	controlled_tail
+4	write_gate_open_after_release
+replay submit iterator release deadline test passed
