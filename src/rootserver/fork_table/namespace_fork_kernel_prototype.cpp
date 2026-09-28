@@ -264,30 +264,6 @@ int probe_physical_tablet(uint64_t id, bool &exists) {
   return ret == OB_TABLET_NOT_EXIST || ret == OB_ENTRY_NOT_EXIST || ret == OB_EAGAIN
       ? OB_SUCCESS : ret;
 }
-// Tablet creation and this mapping commit in the same physical transaction.
-// The mapping supplies the raw table ID after a crash without requiring a
-// second metadata commit to recover physical ownership.
-int committed_table_binding(ObISQLClient &sql, const ObTabletID &tablet,
-                            uint64_t &table_id, bool &exists) {
-  table_id = OB_INVALID_ID;
-  exists = false;
-  ObSEArray<ObTabletID, 1> ids;
-  ObSEArray<ObTabletTablePair, 1> pairs;
-  int ret = ids.push_back(tablet);
-  if (ret == OB_SUCCESS) {
-    ret = ObTabletMappingTableOperator::batch_get(sql, ids, pairs);
-  }
-  if (ret == OB_ITEM_NOT_MATCH) { return OB_SUCCESS; }
-  if (ret == OB_SUCCESS && (pairs.count() != 1
-      || pairs.at(0).get_tablet_id() != tablet)) {
-    ret = OB_STATE_NOT_MATCH;
-  }
-  if (ret == OB_SUCCESS) {
-    table_id = pairs.at(0).get_table_id();
-    exists = true;
-  }
-  return ret;
-}
 // Find the nearest ancestor that physically holds this tablet. The cap
 // accumulates the fork snapshot of every crossed hop, so a hit at any depth
 // yields exactly the view the namespace had at its own fork.
@@ -1012,10 +988,8 @@ int NamespaceForkKernelPrototype::check_baseline_access(const ObTabletID &tablet
   if (state != 0) { return OB_ENTRY_NOT_EXIST; }
   ObMySQLProxy *directory = directory_sql_proxy();
   if (directory == nullptr) { return OB_NOT_INIT; }
-  uint64_t table_id = OB_INVALID_ID;
-  bool binding_exists = false;
-  int ret = committed_table_binding(*directory, tablet_id, table_id, binding_exists);
-  if (OB_SUCC(ret) && !binding_exists) {
+  int ret = load_exceptions(*directory, ns);
+  if (OB_SUCC(ret) && !control_state().owned(ns, local_of(tablet_id.id()))) {
     ret = OB_ENTRY_NOT_EXIST;
   }
   return ret;
@@ -1844,12 +1818,13 @@ int NamespaceForkKernelPrototype::is_tablet_owned(
   }
   int ret = local_object_id(namespace_id, tablet_id.id(), local_tablet_id);
   if (OB_FAIL(ret)) { return ret; }
-  const NamespaceObjectKey key{namespace_id, local_tablet_id};
-  if (!key.is_valid()) { return OB_INVALID_ARGUMENT; }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
-  uint64_t table_id = OB_INVALID_ID;
-  ret = committed_table_binding(*directory_sql_proxy(),
-      ObTabletID(key.storage_id()), table_id, owned);
+  // Ownership is exactly the owned exception row: the physical tablet id is a
+  // pure function of (namespace, local tablet), so no binding is recorded.
+  if (OB_FAIL(load_exceptions(*directory_sql_proxy(), namespace_id))) {
+  } else {
+    owned = control_state().owned(namespace_id, local_tablet_id);
+  }
   return ret;
 }
 int NamespaceForkKernelPrototype::owned_storage_tablets(
@@ -1905,10 +1880,16 @@ int NamespaceForkKernelPrototype::table_id_for_tablet(const ObTabletID &tablet, 
     if (it != tablet_table_cache.end()) { table_id = it->second; return OB_SUCCESS; }
   }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
-  bool exists = false;
-  const int ret = committed_table_binding(*directory_sql_proxy(), tablet, table_id, exists);
-  if (ret == OB_SUCCESS && exists) { remember_tablet_table(tablet.id(), table_id); }
-  return ret;
+  // Only owned tablets have a table binding here; inherited tablets resolve
+  // through their ancestor and never appear in this namespace's set.
+  const uint64_t db = database_of(tablet.id());
+  uint64_t local_table = 0;
+  const int ret = load_exceptions(*directory_sql_proxy(), db);
+  if (ret != OB_SUCCESS) { return ret; }
+  if (!control_state().owned(db, local_of(tablet.id()), &local_table)) { return OB_SUCCESS; }
+  table_id = local_table;
+  remember_tablet_table(tablet.id(), table_id);
+  return OB_SUCCESS;
 }
 int NamespaceForkKernelPrototype::check_ddl(const ObSimpleTableSchemaV2 &schema,
     ObMultiVersionSchemaService &schema_service, const ObISQLClient *trans) {
@@ -1949,13 +1930,13 @@ int NamespaceForkKernelPrototype::schedule_baseline(const ObTablet &tablet) {
   int ret = OB_SUCCESS;
   ObArenaAllocator allocator("NsForkBaseline");
   ObStorageSchema *storage_schema = nullptr;
+  const uint64_t db = database_of(meta.tablet_id_.id());
+  const uint64_t local = local_of(meta.tablet_id_.id());
   uint64_t table = OB_INVALID_ID;
-  bool binding_exists = false;
-  // The committed tablet mapping accompanies the physical creation and gives
-  // restart recovery the table identity without a second metadata commit.
-  if (OB_FAIL(committed_table_binding(*directory_sql_proxy(), meta.tablet_id_,
-                                      table, binding_exists))) {
-  } else if (!binding_exists) {
+  // The owned exception row is the proof that this tablet's physical binding
+  // committed. A dropped namespace has no rows left and simply skips.
+  if (OB_FAIL(load_exceptions(*directory_sql_proxy(), db))) {
+  } else if (!control_state().owned(db, local, &table)) {
     ret = OB_ENTRY_NOT_EXIST;
   } else if (OB_FAIL(tablet.load_storage_schema(allocator, storage_schema))) {
   } else if (OB_ISNULL(storage_schema)) {
