@@ -690,7 +690,8 @@ int ObBootstrap::init_global_stat()
     const int64_t snapshot_gc_timestamp = 0;
     const int64_t ddl_epoch = 0;
     ObGlobalStatProxy global_stat_proxy(trans);
-    ObSchemaStatusProxy *schema_status_proxy = GCTX.schema_status_proxy_;
+    ObSchemaStatusProxy *schema_status_proxy =
+        ddl_service_.get_schema_service().get_schema_status_proxy();
     if (OB_FAIL(trans.start(&sql_proxy))) {
     } else if (OB_ISNULL(schema_status_proxy)) {
       ret = OB_ERR_UNEXPECTED;

@@ -745,13 +745,17 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
   int ret = OB_SUCCESS;
   ObServer &server = ObServer::get_instance();
   common::ObMySQLProxy *root_sql_proxy = namespace_sql_proxy(1);
+  auto *root_schema_service = namespace_schema_service(1);
+  auto *root_schema_status_proxy = root_schema_service != nullptr
+      ? root_schema_service->get_schema_status_proxy() : nullptr;
   rootserver::ObLocalManagementService *root_commands =
       namespace_local_management_service(1);
   auto services = std::make_unique<InProcessNamespaceServices>(ns);
   char suffix[32];
   snprintf(suffix, sizeof(suffix), "ns%llu", static_cast<unsigned long long>(ns));
   const char *stage = "alloc";
-  if (OB_ISNULL(root_sql_proxy) || OB_ISNULL(root_commands)) {
+  if (OB_ISNULL(root_sql_proxy) || OB_ISNULL(root_schema_status_proxy)
+      || OB_ISNULL(root_commands)) {
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(services->sql_proxy = OB_NEW(NamespaceRoutingSqlProxy,
           ObModIds::OB_SCHEMA_SERVICE))
@@ -780,7 +784,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
   } else if (OB_FAIL(services->signal->init())) {
   } else if (FALSE_IT(stage = "service_init")) {
   } else if (OB_FAIL(services->schema_service->init(
-      services->sql_proxy, &GCONF, *GCTX.schema_status_proxy_,
+      services->sql_proxy, &GCONF, *root_schema_status_proxy,
       GCTX.status_, GCTX.in_bootstrap_, OB_MAX_VERSION_COUNT, *services->backend,
       *services->scheduler, *services->signal, suffix))) {
   } else if (FALSE_IT(stage = "ddl_sequence")) {
@@ -943,6 +947,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
         &services->autoincrement);
     runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_REGISTRY, &services->direct_insert_registry);
     runtime.set_service(ns::NamespaceRuntime::SQL_PROXY, services->sql_proxy);
+    runtime.set_service(ns::NamespaceRuntime::DDL_SQL_PROXY, services->ddl_proxy);
     runtime.set_service(ns::NamespaceRuntime::VECTOR_TASK_SQL_PROXY,
         namespace_sql_proxy(1));
     runtime.set_service(ns::NamespaceRuntime::SCHEMA_LIFECYCLE,
@@ -1061,6 +1066,15 @@ common::ObMySQLProxy *namespace_sql_proxy(uint64_t ns)
   }
   return static_cast<common::ObMySQLProxy *>(
       runtime->service(ns::NamespaceRuntime::SQL_PROXY));
+}
+common::ObMySQLProxy *namespace_ddl_sql_proxy(uint64_t ns)
+{
+  ns::NamespaceRuntime *runtime = nullptr;
+  if (!ns::namespace_registry().get(ns, runtime) || runtime == nullptr) {
+    return nullptr;
+  }
+  return static_cast<common::ObMySQLProxy *>(
+      runtime->service(ns::NamespaceRuntime::DDL_SQL_PROXY));
 }
 rootserver::ObLocalManagementService *namespace_local_management_service(uint64_t ns)
 {

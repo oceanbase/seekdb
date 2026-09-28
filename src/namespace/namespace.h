@@ -96,6 +96,7 @@ public:
     VECTOR_TASK_SQL_PROXY = 21, // shared vector scheduling metadata
     DBMS_SCHEDULER = 22, // query::ObISchedulerService interface pointer
     TABLE_LOCK_SERVICE = 23,
+    DDL_SQL_PROXY = 24,
     SLOT_COUNT
   };
   explicit NamespaceRuntime(Namespace &ns) : ns_(ns) {}

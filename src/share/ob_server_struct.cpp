@@ -48,7 +48,6 @@ DEF_TO_STRING(ObGlobalContext)
        K_(start_service_time),
        KP_(diag),
        KP_(scramble_rand),
-       KP_(schema_status_proxy),
        K_(ssl_key_expired_time),
        K_(inited),
        K_(in_bootstrap),

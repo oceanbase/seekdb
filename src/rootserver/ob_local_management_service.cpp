@@ -1999,7 +1999,8 @@ int ObLocalManagementService::start_local_services_()
   if (OB_SUCC(ret)) {
     //standby cluster trigger load_refresh_schema_status by heartbeat.
     //due to switchover, primary cluster need to load schema_status too.
-    ObSchemaStatusProxy *schema_status_proxy = GCTX.schema_status_proxy_;
+    ObSchemaStatusProxy *schema_status_proxy =
+        schema_service_ != nullptr ? schema_service_->get_schema_status_proxy() : nullptr;
     if (OB_ISNULL(schema_status_proxy)) {
       ret = OB_ERR_UNEXPECTED;
       FLOG_WARN("schema_status_proxy is null", KR(ret));

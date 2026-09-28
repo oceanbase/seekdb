@@ -56,7 +56,6 @@ namespace share
 class ObTabletTableOperator;
 class ObSQLiteConnectionPool;
 class ObRsMgr;
-class ObSchemaStatusProxy;
 
 struct ObGlobalContext
 {
@@ -74,7 +73,6 @@ struct ObGlobalContext
   obmysql::ObDiag *diag_;
   common::ObMysqlRandom *scramble_rand_;
   bool inited_;
-  share::ObSchemaStatusProxy *schema_status_proxy_;
   int64_t ssl_key_expired_time_;
   bool in_bootstrap_;
   bool sys_package_ready_;

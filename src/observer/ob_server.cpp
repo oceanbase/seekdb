@@ -118,6 +118,9 @@ class SchemaServiceInstance final : public share::schema::ObMultiVersionSchemaSe
 public:
   SchemaServiceInstance() = default;
   ~SchemaServiceInstance() override = default;
+  share::ObSchemaStatusProxy &status_proxy() { return status_proxy_; }
+private:
+  share::ObSchemaStatusProxy status_proxy_;
 };
 
 } // namespace
@@ -164,7 +167,7 @@ public:
     int ret = OB_SUCCESS;
     int64_t schema_version = OB_INVALID_VERSION;
     share::schema::ObRefreshSchemaStatus schema_status;
-    if (OB_FAIL(server_.schema_status_proxy_.get_refresh_schema_status(schema_status))) {
+    if (OB_FAIL(server_.home_schema_status_proxy().get_refresh_schema_status(schema_status))) {
       LOG_WARN("failed to get schema refresh status", KR(ret));
     } else if (OB_FAIL(server_.home_schema_service().get_schema_version_in_inner_table(
         server_.home_sql_proxy(), schema_status, schema_version))) {
@@ -651,9 +654,21 @@ share::schema::ObMultiVersionSchemaService &ObServer::home_schema_service() cons
   return *service;
 }
 
+share::ObSchemaStatusProxy &ObServer::home_schema_status_proxy() const
+{
+  return static_cast<SchemaServiceInstance &>(home_schema_service()).status_proxy();
+}
+
 common::ObMySQLProxy &ObServer::home_sql_proxy() const
 {
   auto *proxy = namespace_worker_prototype::namespace_sql_proxy(1);
+  OB_ASSERT(proxy != nullptr);
+  return *proxy;
+}
+
+common::ObMySQLProxy &ObServer::home_ddl_sql_proxy() const
+{
+  auto *proxy = namespace_worker_prototype::namespace_ddl_sql_proxy(1);
   OB_ASSERT(proxy != nullptr);
   return *proxy;
 }
@@ -692,7 +707,6 @@ ObServer::ObServer()
     sql_mem_task_(),
     ctas_clean_up_task_(),
     refresh_cpu_frequency_task_(),
-    schema_status_proxy_(),
     is_log_dir_empty_(false),
     conn_res_mgr_(),
     disk_usage_report_task_(),
@@ -829,7 +843,7 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
     }
     }
     if (OB_SUCC(ret)) {
-    if (OB_FAIL(schema_status_proxy_.init(home_sql_proxy()))) {
+    if (OB_FAIL(home_schema_status_proxy().init(home_sql_proxy()))) {
       LOG_ERROR("fail to init schema status proxy", KR(ret));
     }
     }
@@ -1127,6 +1141,7 @@ void ObServer::destroy()
       home->clear_service(ns::NamespaceRuntime::SQL_PROXY);
       home->clear_service(ns::NamespaceRuntime::VIRTUAL_TABLE_SCAN_SERVICE);
       home->clear_service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE);
+      home->clear_service(ns::NamespaceRuntime::DDL_SQL_PROXY);
       home->clear_service(ns::NamespaceRuntime::OPT_STAT_MANAGER);
       home->clear_service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE);
     }
@@ -1677,7 +1692,9 @@ int ObServer::stop()
     if (auto *proxy = namespace_worker_prototype::namespace_sql_proxy(1)) {
       proxy->stop();
     }
-    ddl_sql_proxy_.stop();
+    if (auto *proxy = namespace_worker_prototype::namespace_ddl_sql_proxy(1)) {
+      proxy->stop();
+    }
     FLOG_INFO("inner sql proxy stopped");
 
     FLOG_INFO("begin to stop local management service");
@@ -2134,7 +2151,7 @@ int ObServer::init_sql_proxy()
   int ret = OB_SUCCESS;
   if (OB_FAIL(home_sql_proxy().init(false /* is_ddl */))) {
     LOG_ERROR("init sql proxy failed", KR(ret));
-  } else if (OB_FAIL(ddl_sql_proxy_.init(true /* is_ddl */))) {
+  } else if (OB_FAIL(home_ddl_sql_proxy().init(true /* is_ddl */))) {
     LOG_ERROR("init ddl sql proxy failed", KR(ret));
   }
   return ret;
@@ -2337,7 +2354,7 @@ int ObServer::init_schema()
       share::schema::ObSchemaServiceSQLImpl,
       ObModIds::OB_SCHEMA_SERVICE,
       max_id_cache_adapter_,
-      ddl_sql_proxy_,
+      home_ddl_sql_proxy(),
       home_schema_service()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to allocate schema service backend", KR(ret));
@@ -2350,7 +2367,7 @@ int ObServer::init_schema()
   } else if (OB_FAIL(home_schema_service().init(
       &home_sql_proxy(),
       &config_,
-      schema_status_proxy_,
+      home_schema_status_proxy(),
       gctx_.status_,
       gctx_.in_bootstrap_,
       OB_MAX_VERSION_COUNT,
@@ -2495,7 +2512,7 @@ int ObServer::init_local_management_service(const bool need_bootstrap)
     root_commands->set_local_command_service(ob_service_);
     root_commands->set_ddl_local_runtime(
         namespace_worker_prototype::root_namespace_ddl_runtime());
-    root_commands->set_ddl_sql_proxy(&ddl_sql_proxy_);
+    root_commands->set_ddl_sql_proxy(&home_ddl_sql_proxy());
     if (OB_FAIL(root_commands->init(
                  config_, config_mgr_,
                  self_addr_, home_sql_proxy(),
@@ -2585,11 +2602,13 @@ int ObServer::init_global_context()
   gctx_.meta_db_pool_ = &meta_db_pool_;
   std::unique_ptr<common::ObMySQLProxy> sql_proxy(
       new (std::nothrow) common::ObMySQLProxy());
-  if (sql_proxy == nullptr) {
+  std::unique_ptr<common::ObMySQLProxy> ddl_sql_proxy(
+      new (std::nothrow) common::ObMySQLProxy());
+  if (sql_proxy == nullptr || ddl_sql_proxy == nullptr) {
     return OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(sql_proxy->set_target_namespace(1))) {
     return ret;
-  } else if (OB_FAIL(ddl_sql_proxy_.set_target_namespace(1))) {
+  } else if (OB_FAIL(ddl_sql_proxy->set_target_namespace(1))) {
     return ret;
   }
   if (ns::namespace_registry().add(1, "") != 0) {
@@ -2610,6 +2629,8 @@ int ObServer::init_global_context()
       ns::NamespaceRuntime::SCHEMA_SERVICE, std::move(schema_service));
   home->set_owned_service<common::ObMySQLProxy>(
       ns::NamespaceRuntime::SQL_PROXY, std::move(sql_proxy));
+  home->set_owned_service<common::ObMySQLProxy>(
+      ns::NamespaceRuntime::DDL_SQL_PROXY, std::move(ddl_sql_proxy));
   home->set_service(ns::NamespaceRuntime::VECTOR_TASK_SQL_PROXY,
       &home_sql_proxy());
   home->set_service(ns::NamespaceRuntime::DDL_CHECKSUM_ERROR_VERIFIER,
@@ -2647,7 +2668,6 @@ int ObServer::init_global_context()
   gctx_.diag_ = &diag_;
   gctx_.scramble_rand_ = &scramble_rand_;
   gctx_.init();
-  gctx_.schema_status_proxy_ = &schema_status_proxy_;
   gctx_.in_bootstrap_ = false;
   gctx_.inited_ = true;
 

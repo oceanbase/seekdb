@@ -197,7 +197,8 @@ int ObRuntimeDDLService::create_system_runtime(share::schema::ObServerRuntimeSch
       ret = OB_ERR_SYS;
       LOG_ERROR("schema_service must not null", K(ret));
     } else {
-      ObSchemaStatusProxy *schema_status_proxy = GCTX.schema_status_proxy_;
+      ObSchemaStatusProxy *schema_status_proxy =
+          schema_service_->get_schema_status_proxy();
       ObRefreshSchemaStatus runtime_status(OB_INVALID_TIMESTAMP, OB_INVALID_VERSION);
       ObSysVariableSchema sys_variable;
 

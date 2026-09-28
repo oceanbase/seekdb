@@ -372,7 +372,9 @@ private:
   int init_pl();
   int init_global_context();
   share::schema::ObMultiVersionSchemaService &home_schema_service() const;
+  share::ObSchemaStatusProxy &home_schema_status_proxy() const;
   common::ObMySQLProxy &home_sql_proxy() const;
+  common::ObMySQLProxy &home_ddl_sql_proxy() const;
   int parse_role(const ObServerOptions &opts);
   int init_px_target_mgr();
   int init_storage();
@@ -426,7 +428,6 @@ private:
   ObSrvNetworkFrame net_frame_;
 
 
-  common::ObMySQLProxy ddl_sql_proxy_;
 
   // The OceanBase configuration relating to.
   common::ObServerConfig &config_;
@@ -487,7 +488,6 @@ private:
   ObRedefTableHeartBeatTask redef_table_heart_beat_task_;
   ObRefreshCpuFreqTimeTask refresh_cpu_frequency_task_;
   blocksstable::ObStorageEnv storage_env_;
-  share::ObSchemaStatusProxy schema_status_proxy_;
 
   bool is_log_dir_empty_;
   sql::ObConnectResourceMgr conn_res_mgr_;

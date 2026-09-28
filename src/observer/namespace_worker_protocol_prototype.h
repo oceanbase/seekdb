@@ -270,6 +270,7 @@ int resolve_inprocess_tablet_schema(uint64_t physical_tablet_id,
 int inprocess_refresh_schema(uint64_t namespace_id);
 share::schema::ObMultiVersionSchemaService *namespace_schema_service(uint64_t namespace_id);
 common::ObMySQLProxy *namespace_sql_proxy(uint64_t namespace_id);
+common::ObMySQLProxy *namespace_ddl_sql_proxy(uint64_t namespace_id);
 rootserver::ObLocalManagementService *namespace_local_management_service(uint64_t namespace_id);
 common::ObITabletScan *effective_tablet_scan(sql::ObSQLSessionInfo *session);
 common::ObIVirtualTableScan *effective_virtual_table_scan(sql::ObSQLSessionInfo *session);
