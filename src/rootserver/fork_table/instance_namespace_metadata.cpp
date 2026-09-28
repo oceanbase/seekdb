@@ -1214,5 +1214,142 @@ int InstanceNamespaceMetadata::reconcile_owned_tablets(uint64_t id,
   return ret;
 }
 
+namespace
+{
+int finish_directory_transaction(storage::InstanceMetaStore &store,
+    storage::InstanceMetaStore::Transaction &tx, int ret)
+{
+  if (tx.is_active()) {
+    const int end_ret = ret == OB_SUCCESS ? store.commit(tx) : store.rollback(tx);
+    if (ret == OB_SUCCESS) { ret = end_ret; }
+  }
+  return ret;
+}
+} // namespace
+
+int InstanceNamespaceDirectory::ensure_root(const std::string &name,
+    int64_t schema_version, int64_t gc_watermark, int64_t deadline, bool &created)
+{
+  created = false;
+  if (name.empty() || name.size() > 128 || schema_version <= 0
+      || gc_watermark < 0) { return OB_INVALID_ARGUMENT; }
+  storage::InstanceMetaStore::Transaction tx;
+  int ret = store_.begin(tx, deadline);
+  bool staged = false;
+  if (ret == OB_SUCCESS) {
+    InstanceNamespaceMetadata metadata(store_, tx);
+    InstanceNamespaceRecord root;
+    // Missing native rows must be inserted without first taking a row lock:
+    // this DML path cannot turn a lock on absence into a later insert.
+    ret = metadata.get_namespace(1, root);
+    if (ret == OB_ENTRY_NOT_EXIST) {
+      ret = metadata.initialize_snapshot_gc_watermark(gc_watermark);
+      if (ret == OB_SUCCESS) { ret = metadata.insert_root_namespace(name, schema_version); }
+      staged = ret == OB_SUCCESS;
+    } else if (ret == OB_SUCCESS) {
+      ret = metadata.get_namespace(1, root, true);
+    }
+    if (ret == OB_SUCCESS && !staged) {
+      if (root.name != name || root.roots.state != 0
+          || root.parent_namespace != 0 || root.fork_cap != 0
+          || root.roots.schema_version <= 0
+          || root.roots.schema_version > schema_version) {
+        ret = OB_STATE_NOT_MATCH;
+      } else {
+        int64_t stored_watermark = 0;
+        ret = metadata.get_snapshot_gc_watermark(stored_watermark, true);
+        if (ret == OB_ENTRY_NOT_EXIST) { ret = OB_STATE_NOT_MATCH; }
+        if (ret == OB_SUCCESS && stored_watermark < gc_watermark) {
+          ret = metadata.advance_snapshot_gc_watermark(gc_watermark);
+        }
+        if (ret == OB_SUCCESS && root.roots.schema_version < schema_version) {
+          root.roots.schema_version = schema_version;
+          ret = metadata.update_namespace(root);
+        }
+      }
+    }
+  }
+  ret = finish_directory_transaction(store_, tx, ret);
+  if (ret == OB_SUCCESS) { created = staged; }
+  return ret;
+}
+
+int InstanceNamespaceDirectory::fork_namespace(const std::string &source_name,
+    const std::string &target_name,
+    const InstanceNamespaceMetadata::SnapshotAcquirer &acquire_snapshot,
+    int64_t deadline, InstanceNamespaceRecord &child)
+{
+  child = InstanceNamespaceRecord();
+  storage::InstanceMetaStore::Transaction tx;
+  int ret = store_.begin(tx, deadline);
+  InstanceNamespaceRecord staged;
+  if (ret == OB_SUCCESS) {
+    InstanceNamespaceMetadata metadata(store_, tx);
+    uint64_t child_id = 0;
+    ret = metadata.fork_namespace(source_name, target_name, acquire_snapshot, child_id);
+    if (ret == OB_SUCCESS) { ret = metadata.get_namespace(child_id, staged); }
+    if (ret == OB_SUCCESS && (staged.roots.state != 0
+        || staged.parent_namespace == 0 || staged.fork_cap <= 0
+        || staged.name != target_name)) { ret = OB_STATE_NOT_MATCH; }
+  }
+  ret = finish_directory_transaction(store_, tx, ret);
+  if (ret == OB_SUCCESS) { child = std::move(staged); }
+  return ret;
+}
+
+int InstanceNamespaceDirectory::find_live(const std::string &name,
+    int64_t deadline, InstanceNamespaceRecord &record)
+{
+  record = InstanceNamespaceRecord();
+  storage::InstanceMetaStore::Transaction tx;
+  int ret = store_.begin(tx, deadline, true);
+  InstanceNamespaceRecord found;
+  if (ret == OB_SUCCESS) {
+    InstanceNamespaceMetadata metadata(store_, tx);
+    uint64_t id = 0;
+    ret = metadata.find_namespace(name, id);
+    if (ret == OB_SUCCESS) { ret = metadata.get_namespace(id, found); }
+    if (ret == OB_SUCCESS && found.name != name) { ret = OB_STATE_NOT_MATCH; }
+    if (ret == OB_SUCCESS && found.roots.state != 0) { ret = OB_ENTRY_NOT_EXIST; }
+  }
+  ret = finish_directory_transaction(store_, tx, ret);
+  if (ret == OB_SUCCESS) { record = std::move(found); }
+  return ret;
+}
+
+int InstanceNamespaceDirectory::list_live(int64_t deadline,
+    std::vector<InstanceNamespaceRecord> &records)
+{
+  records.clear();
+  storage::InstanceMetaStore::Transaction tx;
+  int ret = store_.begin(tx, deadline, true);
+  std::vector<InstanceNamespaceRecord> staged;
+  if (ret == OB_SUCCESS) {
+    InstanceNamespaceMetadata metadata(store_, tx);
+    ret = metadata.scan_namespaces([&](const InstanceNamespaceRecord &record) {
+      if (record.roots.state == 0) {
+        if (record.name.empty()) { return OB_CHECKSUM_ERROR; }
+        staged.push_back(record);
+      }
+      return OB_SUCCESS;
+    });
+  }
+  ret = finish_directory_transaction(store_, tx, ret);
+  if (ret == OB_SUCCESS) { records.swap(staged); }
+  return ret;
+}
+
+int InstanceNamespaceDirectory::rename_live(uint64_t id,
+    const std::string &expected_name, const std::string &new_name, int64_t deadline)
+{
+  storage::InstanceMetaStore::Transaction tx;
+  int ret = store_.begin(tx, deadline);
+  if (ret == OB_SUCCESS) {
+    InstanceNamespaceMetadata metadata(store_, tx);
+    ret = metadata.rename_namespace(id, expected_name, new_name);
+  }
+  return finish_directory_transaction(store_, tx, ret);
+}
+
 } // namespace rootserver
 } // namespace oceanbase

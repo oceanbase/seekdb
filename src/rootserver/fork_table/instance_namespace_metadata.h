@@ -19,6 +19,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 #include "namespace/catalog.h"
 #include "storage/instance_meta/instance_meta_store.h"
 
@@ -222,6 +223,31 @@ public:
   int remove_snapshot(uint64_t snapshot_id, const ns::CatalogRoots &roots) override;
 private:
   InstanceNamespaceMetadata &metadata_;
+};
+
+// One call owns one native KV transaction. Construct on the management path;
+// this object has no Namespace runtime, SQL proxy, cache, or background thread.
+class InstanceNamespaceDirectory final
+{
+public:
+  explicit InstanceNamespaceDirectory(storage::InstanceMetaStore &store)
+      : store_(store) {}
+
+  // Root, namespace ID counter, and GC watermark first become visible together.
+  // Repeated startup validates the root and advances a stale watermark.
+  int ensure_root(const std::string &name, int64_t schema_version,
+                  int64_t gc_watermark, int64_t deadline, bool &created);
+  // Commits the child, name, snapshot pin and lineage before returning child.
+  int fork_namespace(const std::string &source_name, const std::string &target_name,
+                     const InstanceNamespaceMetadata::SnapshotAcquirer &acquire_snapshot,
+                     int64_t deadline, InstanceNamespaceRecord &child);
+  int find_live(const std::string &name, int64_t deadline,
+                InstanceNamespaceRecord &record);
+  int list_live(int64_t deadline, std::vector<InstanceNamespaceRecord> &records);
+  int rename_live(uint64_t id, const std::string &expected_name,
+                  const std::string &new_name, int64_t deadline);
+private:
+  storage::InstanceMetaStore &store_;
 };
 
 } // namespace rootserver
