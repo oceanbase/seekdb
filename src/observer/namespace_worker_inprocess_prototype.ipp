@@ -43,11 +43,10 @@ public:
   }
   int begin_change() override { return OB_SUCCESS; }
   int finish_change(int64_t) override { return OB_SUCCESS; }
-  int publish(ObMultiVersionSchemaService &, int64_t base_schema_version,
+  int publish(ObMultiVersionSchemaService &schema_service,
               int64_t &published_schema_version) override
   {
-    published_schema_version = base_schema_version;
-    return OB_SUCCESS;
+    return schema_service.get_runtime_refreshed_schema_version(published_schema_version);
   }
 };
 class ForkSchemaLifecycle final : public INamespaceSchemaLifecycle
@@ -69,7 +68,7 @@ public:
         ns_, committed_schema_version);
   }
   int publish(ObMultiVersionSchemaService &schema_service,
-              int64_t base_schema_version, int64_t &published_schema_version) override
+              int64_t &published_schema_version) override
   {
     if (const char *delay_text = std::getenv("SEEKDB_NAMESPACE_DDL_PUBLISH_DELAY_US")) {
       char *end = nullptr;
@@ -78,8 +77,7 @@ public:
         ob_usleep(delay_us);
       }
     }
-    return sync_namespace_schema_delta(
-        ns_, schema_service, base_schema_version, published_schema_version);
+    return sync_namespace_schema_delta(ns_, schema_service, published_schema_version);
   }
 private:
   uint64_t ns_;
@@ -114,11 +112,11 @@ int finish_namespace_schema_change(uint64_t namespace_id,
 }
 int publish_namespace_schema_change(uint64_t namespace_id,
     ObMultiVersionSchemaService &schema_service,
-    int64_t base_schema_version, int64_t &published_schema_version)
+    int64_t &published_schema_version)
 {
   auto *lifecycle = namespace_schema_lifecycle(namespace_id);
   return lifecycle == nullptr ? OB_NOT_INIT
-      : lifecycle->publish(schema_service, base_schema_version, published_schema_version);
+      : lifecycle->publish(schema_service, published_schema_version);
 }
 rootserver::ObIRootserverLocalRuntime *root_namespace_ddl_runtime()
 {
@@ -849,8 +847,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
           recovery_ret = OB_STATE_NOT_MATCH;
         } else if (local_schema_version > directory_schema_version) {
           recovery_ret = sync_namespace_schema_delta(
-              ns, *services->schema_service, directory_schema_version,
-              published_schema_version);
+              ns, *services->schema_service, published_schema_version);
         } else {
           published_schema_version = local_schema_version;
         }

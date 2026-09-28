@@ -1901,7 +1901,9 @@ int NamespaceForkKernelPrototype::publish_schema_delta(
       rootserver::ObTabletDrop tablet_drop(trans, schema_version);
       if (OB_FAIL(tablet_drop.init())) {
       } else if (OB_FAIL(tablet_drop.add_drop_tablets_arg(private_tablets))) {
-      } else if (OB_FAIL(tablet_drop.execute())) {
+      } else {
+        observer::namespace_worker_prototype::PhysicalTabletMdsScope physical_mds(true);
+        ret = tablet_drop.execute();
       }
     }
     if (trans.is_started()) {

@@ -2067,7 +2067,6 @@ public:
                         schema_service_(schema_service),
                         
                         start_operation_schema_version_(OB_INVALID_VERSION),
-                        namespace_base_schema_version_(OB_INVALID_VERSION),
                         namespace_id_(1),
                         need_end_signal_(need_end_signal),
                         enable_ddl_parallel_(enable_ddl_parallel),
@@ -2106,10 +2105,6 @@ private:
   share::schema::ObMultiVersionSchemaService *schema_service_;
   // Filter out only one 1503 DDL transaction to prevent the schema from being invalidly pushed up
   int64_t start_operation_schema_version_;
-  // Schema version visible when this namespace-local DDL transaction began.
-  // It is captured in the transaction object because asynchronous DDL can
-  // commit on a different thread from the client session.
-  int64_t namespace_base_schema_version_;
   uint64_t namespace_id_;
   
   //no need to set end_signal while ddl end transaction

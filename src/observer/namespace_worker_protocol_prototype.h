@@ -47,7 +47,7 @@ public:
   virtual int begin_change() = 0;
   virtual int finish_change(int64_t committed_schema_version) = 0;
   virtual int publish(share::schema::ObMultiVersionSchemaService &schema_service,
-                      int64_t base_schema_version, int64_t &published_schema_version) = 0;
+                      int64_t &published_schema_version) = 0;
 };
 constexpr size_t MAX_FRAME = 256 * 1024;
 constexpr size_t MAX_SQL_MESSAGE = 64 * 1024 * 1024;
@@ -209,7 +209,6 @@ int restore_namespace_registry();
 // shared namespace directory before the SQL command is acknowledged.
 int sync_namespace_schema_delta(uint64_t namespace_id,
                                 share::schema::ObMultiVersionSchemaService &schema_service,
-                                int64_t base_schema_version,
                                 int64_t &published_schema_version);
 int fetch_schema_version(bool published, bool core_version, int64_t &version);
 struct SessionBinding;
@@ -255,7 +254,7 @@ int begin_namespace_schema_change(uint64_t namespace_id);
 int finish_namespace_schema_change(uint64_t namespace_id, int64_t committed_schema_version);
 int publish_namespace_schema_change(uint64_t namespace_id,
     share::schema::ObMultiVersionSchemaService &schema_service,
-    int64_t base_schema_version, int64_t &published_schema_version);
+    int64_t &published_schema_version);
 rootserver::ObIRootserverLocalRuntime *root_namespace_ddl_runtime();
 void register_root_namespace_storage_services(ns::NamespaceRuntime &runtime);
 query::ObIRootCommandService *effective_root_command_service(

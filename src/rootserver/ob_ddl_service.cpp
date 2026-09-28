@@ -25231,7 +25231,6 @@ int ObDDLSQLTransaction::start(ObISQLClient *proxy,
     LOG_WARN("schema service is null", KR(ret),
              KP(schema_service_), KP(schema_service_->get_schema_service()));
   } else {
-    namespace_base_schema_version_ = runtime_refreshed_schema_version;
     namespace_id_ = proxy->target_namespace();
     
     auto *tsi_oper = GET_TSI(share::schema::TSILastOper);
@@ -25387,15 +25386,11 @@ int ObDDLSQLTransaction::end(const bool commit)
   if (namespace_transaction_committed
       && OB_SUCC(ret)
       && committed_schema_version > 0) {
-    const int64_t base_schema_version = namespace_base_schema_version_ > 0
-        ? namespace_base_schema_version_ : start_operation_schema_version_;
     int64_t published_schema_version = OB_INVALID_VERSION;
     if (OB_FAIL(observer::namespace_worker_prototype::publish_namespace_schema_change(
-            namespace_id_, *schema_service_,
-            base_schema_version,
-            published_schema_version))) {
+            namespace_id_, *schema_service_, published_schema_version))) {
       LOG_WARN("failed to publish committed namespace schema transaction",
-          KR(ret), K(base_schema_version), K(committed_schema_version));
+          KR(ret), K(committed_schema_version));
     }
   }
   // Clear runtime_ for success or failure

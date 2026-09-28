@@ -3,18 +3,17 @@
 #include <set>
 namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
 int sync_namespace_schema_delta(uint64_t ns, ObMultiVersionSchemaService &service,
-                                int64_t base_schema_version,
                                 int64_t &published_schema_version) {
   using namespace share::schema;
-  published_schema_version = base_schema_version;
+  int64_t base_schema_version = common::OB_INVALID_VERSION;
+  published_schema_version = common::OB_INVALID_VERSION;
   InProcessServingScope serving(ns);
   if (ns == 0) { return common::OB_INVALID_ARGUMENT; }
   // A successful fork DDL must publish its directory delta before returning.
   ObSchemaService *backend = service.get_schema_service();
   common::ObMySQLProxy *proxy = service.get_sql_proxy();
   ObSchemaStatusProxy *status_proxy = service.get_schema_status_proxy();
-  if (backend == nullptr || proxy == nullptr || status_proxy == nullptr
-      || base_schema_version <= 0) {
+  if (backend == nullptr || proxy == nullptr || status_proxy == nullptr) {
     return common::OB_ERR_UNEXPECTED;
   }
   int ret = common::OB_SUCCESS;
@@ -22,7 +21,11 @@ int sync_namespace_schema_delta(uint64_t ns, ObMultiVersionSchemaService &servic
   int64_t latest_schema_version = common::OB_INVALID_VERSION;
   ObSchemaService::SchemaOperationSetWithAlloc operations;
   ObSchemaGetterGuard old_guard;
-  if (OB_FAIL(status_proxy->get_refresh_schema_status(status))) {
+  if (OB_FAIL(storage::NamespaceForkKernelPrototype::namespace_schema_version(
+          ns, base_schema_version))) {
+  } else if (base_schema_version <= 0) {
+    ret = common::OB_STATE_NOT_MATCH;
+  } else if (OB_FAIL(status_proxy->get_refresh_schema_status(status))) {
   } else if (OB_FAIL(backend->fetch_schema_version(status, *proxy, latest_schema_version))) {
   } else if (latest_schema_version < base_schema_version) {
     return common::OB_SCHEMA_EAGAIN;
