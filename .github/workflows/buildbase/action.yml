@@ -48,4 +48,5 @@ runs:
       run: |
         cmake --build build_release --target embedding_response_integration -j4
         build_release/src/observer/embedding_response_integration
+        python3 rust/embedding-response-ffi/tests/check_http.py --adapter build_release/src/observer/embedding_response_integration
         python3 rust/embedding-response/tests/compare_cpp.py --adapter-probe build_release/src/observer/embedding_response_integration

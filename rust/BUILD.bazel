@@ -92,7 +92,10 @@ filegroup(
 
 cc_library(
     name = "embedding_response_headers",
-    hdrs = ["embedding-response-ffi/include/embedding_response.h"],
+    hdrs = [
+        "embedding-response-ffi/include/embedding_response.h",
+        "embedding-response-ffi/include/embedding_request.h",
+    ],
     includes = ["embedding-response-ffi/include"],
     visibility = ["//src/query:__pkg__"],
 )

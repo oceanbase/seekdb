@@ -1,6 +1,7 @@
 // Copyright (c) 2026 OceanBase. Licensed under the Apache License, Version 2.0.
 
-//! Embedding response parsing, independent of HTTP, task state and C++ allocation.
+//! Embedding request serialization and response parsing, independent of HTTP,
+//! task state and C++ allocation.
 //!
 //! [`parse_into`] appends complete vectors in response order. A semantic error in
 //! a later item leaves earlier vectors appended; invalid JSON appends nothing.
@@ -12,6 +13,9 @@
 mod base64;
 mod json;
 mod number;
+mod request;
+
+pub use request::build_request;
 
 use json::Value;
 

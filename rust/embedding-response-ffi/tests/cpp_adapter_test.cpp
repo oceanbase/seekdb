@@ -2,6 +2,10 @@
 // Links the production adapter and server Rust archive, with actual allocator
 // and array interfaces. Test implementations provide deterministic fault injection.
 #include "query/vector/embedding_response_parser.h"
+#include "query/vector/embedding_request_builder.h"
+#include "query/vector/ob_vector_embedding_handler.h"
+#include <chrono>
+#include <thread>
 #include "lib/alloc/ob_iallocator.h"
 #include "lib/container/ob_iarray.h"
 #include <cstdlib>
@@ -178,8 +182,99 @@ void probe()
   }
 }
 
+void request_tests()
+{
+  using oceanbase::share::EmbeddingRequestBuilder;
+  ObArray<ObString> inputs;
+  CHECK(inputs.push_back(ObString::make_string("skip")) == 0);
+  CHECK(inputs.push_back(ObString::make_string("a\"")) == 0);
+  TestAllocator allocator;
+  char *body = nullptr;
+  int64_t length = 0;
+  CHECK(EmbeddingRequestBuilder::build(inputs, 1, 2, ObString::make_string("m"),
+      2, false, allocator, body, length) == 0);
+  CHECK(std::string(body, length) == R"({"input":["a\""],"model":"m","encoding_format":"float","dimensions":2})");
+  CHECK(allocator.calls == 1);
+  allocator.fail_at = 2;
+  CHECK(EmbeddingRequestBuilder::build(inputs, 0, 2, ObString(), 0,
+      true, allocator, body, length) == OB_ALLOCATE_MEMORY_FAILED);
+  CHECK(body == nullptr && length == 0);
+  CHECK(EmbeddingRequestBuilder::build(inputs, -1, 2, ObString(), 0,
+      true, allocator, body, length) == OB_INVALID_ARGUMENT);
+  CHECK(body == nullptr && length == 0 && allocator.calls == 2);
+  CHECK(EmbeddingRequestBuilder::build(inputs, 0, 3, ObString(), 0,
+      true, allocator, body, length) == OB_INVALID_ARGUMENT);
+  CHECK(EmbeddingRequestBuilder::build(inputs, 2, 1, ObString(), 0,
+      true, allocator, body, length) == OB_INVALID_ARGUMENT);
+  // Larger callers exercise the descriptor allocation path beyond the stack buffer.
+  while (inputs.count() < 20) CHECK(inputs.push_back(ObString::make_string("x")) == 0);
+  for (int fail_at : {-1, 1, 2}) {
+    TestAllocator large_allocator;
+    large_allocator.fail_at = fail_at;
+    const int ret = EmbeddingRequestBuilder::build(inputs, 0, 20, ObString(), 0,
+        true, large_allocator, body, length);
+    CHECK(ret == (fail_at < 0 ? OB_SUCCESS : OB_ALLOCATE_MEMORY_FAILED));
+    CHECK(large_allocator.frees == (fail_at == 1 ? 0 : 1));
+    if (ret == 0) CHECK(body != nullptr && length > 0);
+    else CHECK(body == nullptr && length == 0);
+  }
+  std::cout << "PASS: request adapter allocation, batch selection and error handling\n";
+}
+
+void http_tests(const std::string &base_url)
+{
+  using namespace oceanbase::share;
+  CHECK(curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK);
+  const char *names[] = {"float", "base64", "silicon", "zero", "negative", "empty"};
+  for (const char *name : names) {
+    const std::string scenario(name);
+    const int count = scenario == "empty" ? 0 :
+                      (scenario == "zero" || scenario == "negative" ? 1 : 23);
+    const int dimension = scenario == "zero" ? 0 : (scenario == "negative" ? -1 : 2);
+    std::vector<std::string> texts;
+    for (int i = 0; i < count; ++i) {
+      if (i == 0) texts.emplace_back("");
+      else if (i == 1) {
+        std::string controls;
+        for (int c = 0; c < 32; ++c) controls.push_back(static_cast<char>(c));
+        texts.push_back(controls);
+      } else if (i == 2) texts.emplace_back(4096, '\0');
+      else if (i == 3) texts.emplace_back("中文🙂\"\\/\n");
+      else texts.push_back("chunk-" + std::to_string(i));
+    }
+    ObArray<ObString> inputs;
+    for (const auto &text : texts) {
+      CHECK(inputs.push_back(ObString(static_cast<int32_t>(text.size()), text.data())) == 0);
+    }
+    const std::string model = std::string("model\"\\\n") + std::string(4096, 'x');
+    const std::string url = base_url + "/" + name;
+    const char *provider = scenario == "base64" ? "OPENAI" :
+                           (scenario == "silicon" ? "SILICONFLOW" : "OTHER");
+    ObEmbeddingTask task;
+    CHECK(task.init(ObString::make_string(url.c_str()),
+        ObString(static_cast<int32_t>(model.size()), model.data()),
+        ObString::make_string(provider), ObString::make_string("mock-key"),
+        inputs, dimension, 5000000, 1) == 0);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+    while (!task.is_completed()) {
+      CHECK(std::chrono::steady_clock::now() < deadline);
+      CHECK(task.do_work(static_cast<ObEmbeddingTaskHandler *>(nullptr)) == 0);
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    ObArray<float *> vectors;
+    CHECK(task.get_async_result(vectors) == 0);
+    CHECK(vectors.count() == (dimension > 0 ? count : 0));
+    for (int64_t i = 0; i < vectors.count(); ++i) {
+      CHECK(vectors.at(i)[0] == 1.25f && vectors.at(i)[1] == -2.5f);
+    }
+  }
+  curl_global_cleanup();
+  std::cout << "PASS: production embedding task HTTP and Rust request/response round trip\n";
+}
+
 int main(int argc, char **argv)
 {
   if (argc == 2 && std::strcmp(argv[1], "--probe") == 0) probe();
-  else tests();
+  else if (argc == 3 && std::strcmp(argv[1], "--http") == 0) http_tests(argv[2]);
+  else { tests(); request_tests(); }
 }

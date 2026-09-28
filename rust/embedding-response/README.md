@@ -1,6 +1,6 @@
-# Embedding response parser
+# Embedding request serialization and response parsing
 
-Safe Rust implementation of the parsing responsibility extracted into
+Safe Rust implementation of request serialization and the parsing responsibility extracted into
 `src/query/vector/embedding_response_parser.cpp`. It parses `data[].embedding`
 in float-array or base64 format. HTTP, credentials, retries and task publication
 remain the responsibility of the existing C++ task.
@@ -24,6 +24,23 @@ parse_into(
 assert_eq!(vectors, vec![vec![1.0, -2.5]]);
 # Ok::<(), embedding_response::ParseError>(())
 ```
+
+## Request construction
+
+`ObEmbeddingTask::start_async_work` calls `EmbeddingRequestBuilder::build`, which
+invokes `seekdb_embedding_request_build` in the existing FFI crate. The safe core
+serializes `input`, `model`, `encoding_format` and positive `dimensions`. It counts
+serialized bytes with checked arithmetic before fallibly reserving the output;
+there is no fixed overhead allowance. C++ copies the synchronous Rust result into
+the task allocator and supplies the exact length to curl with
+`CURLOPT_POSTFIELDSIZE_LARGE`. The arena-owned body survives asynchronous sending
+and retries; Rust retains no pointers after returning.
+
+Requests are compact JSON. Quotes, backslashes and all control bytes (including
+embedded NUL) are escaped, fixing the old direct string interpolation. Other text
+bytes are preserved; callers supply UTF-8 text. Empty strings are retained and
+nonpositive dimensions are omitted. Empty tasks complete without sending HTTP.
+HTTP transport, retry policy, provider selection and batching remain in C++.
 
 ## Behavior and ownership
 
@@ -97,13 +114,19 @@ does not exercise the C ABI. For production integration, from the repository roo
 ```sh
 cmake --build build_release --target seekdb embedding_response_integration -j16
 build_release/src/observer/embedding_response_integration
+python3 rust/embedding-response-ffi/tests/check_http.py --adapter build_release/src/observer/embedding_response_integration
 python3 rust/embedding-response/tests/compare_cpp.py --adapter-probe build_release/src/observer/embedding_response_integration
 python3 rust/embedding-response-ffi/tests/check_c_abi.py --archive build_release/rust-target/release/libsql_nio.a
 ```
 
 The integration executable links the production C++ adapter and Rust archive,
 injects allocator/append failures using the real C++ interfaces, and runs the
-same differential corpus through the real callback path. It does not exercise
-HTTP retries or the task scheduler, whose code is unchanged. Rust and isolated
-C ABI checks run in `rust-checks`; the production integration runs in `buildbase`.
+same differential corpus through the real callback path. The HTTP runner starts
+an ephemeral localhost server and drives the production task through request
+construction, curl sending and Rust response parsing. It checks 11 captured
+requests covering multiple batches, both encodings, both base64 providers,
+optional dimensions, long models and escaped/Unicode/empty text, plus an empty
+task that sends no request. It does not exercise the thread-pool scheduler or
+HTTP retry policy. Rust and isolated C ABI checks run in `rust-checks`; the
+production integration and HTTP runner run in `buildbase`.
 Performance remains covered by the existing daily regression process.

@@ -19,9 +19,8 @@
 
 #include "query/vector/ob_vector_embedding_handler.h"
 #include "query/vector/embedding_response_parser.h"
-#include "share/json/ob_json_helper.h"
+#include "query/vector/embedding_request_builder.h"
 #include "lib/utility/ob_print_utils.h"
-#include "lib/json/ob_json.h"
 #include "share/ob_server_struct.h"
 #include "common/mysqlclient/ob_mysql_transaction.h"
 #include "lib/lock/ob_thread_cond.h"
@@ -436,47 +435,17 @@ int ObEmbeddingTask::start_async_work()
     
     int64_t start_idx = current_batch_idx_ * batch_size_;
     int64_t end_idx = OB_MIN(start_idx + batch_size_, input_chunks_.count());
-    uint64_t total_text_length = 0;
     if (OB_FAIL(ret)) {
-    } else if (start_idx >= input_chunks_.count()
-              && OB_FAIL(complete_task(OB_EMBEDDING_TASK_DONE, OB_SUCCESS, true))) {
+    } else if (start_idx >= input_chunks_.count()) {
+      ret = complete_task(OB_EMBEDDING_TASK_DONE, OB_SUCCESS, true);
     } else {
-      // TODO: Depending on the model type, different HTTP requests need to be generated
-      ObJsonBuilder json_builder(allocator_);
-      Value *root = nullptr;
-      Value *input_array = nullptr;
-      if (OB_FAIL(json_builder.create_object(root))) {
-      } else if (OB_FAIL(json_builder.add_array_field(root, INPUT_NAME, input_array))) {
-      } else {
-        for (int64_t i = start_idx; i < end_idx && OB_SUCC(ret); i++) {
-          const ObString &text = input_chunks_.at(i);
-          if (OB_FAIL(json_builder.array_add_string(input_array, text))) {
-          } else {
-            total_text_length += text.length();
-          }
-        }
-        if (OB_FAIL(ret)) {
-        } else if (OB_FAIL(json_builder.add_string_field(root, MODEL_NAME_NAME, model_name_))) {
-        } else if (use_base64_format_ && OB_FAIL(json_builder.add_string_field(root, ENCODING_FORMAT_NAME, BASE64_FORMAT))) {
-        } else if (!use_base64_format_ && OB_FAIL(json_builder.add_string_field(root, ENCODING_FORMAT_NAME, FLOAT_FORMAT))) {
-        } else if (dimension_ > 0 && OB_FAIL(json_builder.add_int_field(root, DIMENSIONS_NAME, dimension_))) {
-        } else {
-          const int64_t json_buf_len = total_text_length + 2048;
-          char *json_buf = (char*)allocator_.alloc(json_buf_len);
-          if (OB_ISNULL(json_buf)) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-          } else {
-            int64_t json_len = 0;
-            if (OB_FAIL(json_builder.to_string(root, json_buf, json_buf_len, json_len))) {
-            } else {
-              if (OB_FAIL(send_http_request_async(json_buf, json_len))) {
-                if (OB_FAIL(complete_task(OB_EMBEDDING_TASK_DONE, ret, true))) {
-                }
-              } else {
-              }
-            }
-          }
-        }
+      char *json_buf = nullptr;
+      int64_t json_len = 0;
+      if (OB_FAIL(EmbeddingRequestBuilder::build(input_chunks_, start_idx, end_idx,
+          model_name_, dimension_, use_base64_format_, allocator_, json_buf, json_len))) {
+      } else if (OB_FAIL(send_http_request_async(json_buf, json_len))) {
+        const int request_ret = ret;
+        (void)complete_task(OB_EMBEDDING_TASK_DONE, request_ret, true);
       }
     }
   }
@@ -616,7 +585,7 @@ int ObEmbeddingTask::init_http_request(const char *json_data, int64_t json_len)
       http_response_data_ = nullptr;
       http_response_data_size_ = 0;
       curl_easy_setopt(curl_easy_handle_, CURLOPT_POSTFIELDS, json_data);
-      curl_easy_setopt(curl_easy_handle_, CURLOPT_POSTFIELDSIZE, json_len);
+      curl_easy_setopt(curl_easy_handle_, CURLOPT_POSTFIELDSIZE_LARGE, static_cast<curl_off_t>(json_len));
     }
   }
   return ret;
