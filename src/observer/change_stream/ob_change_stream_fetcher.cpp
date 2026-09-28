@@ -23,6 +23,7 @@
 #include "lib/utility/serialization.h"
 #include "observer/change_stream/ob_change_stream_fetcher.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "share/ob_global_stat_proxy.h"
 #include "storage/tx/ob_tx_log.h"
 #include "storage/tx/ob_multi_data_source.h"
@@ -103,11 +104,13 @@ int ObCSFetcher::init_consumption_position_()
   int ret = common::OB_SUCCESS;
   int64_t persisted_min_dep_lsn = 0;
   palf::LSN start_lsn;
-  if (OB_ISNULL(GCTX.sql_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("CSFetcher: sql_proxy is null", KR(ret));
+  // The consumption cursor is persisted in Namespace 1's control catalog.
+  common::ObMySQLProxy *control_proxy = observer::namespace_worker_prototype::namespace_sql_proxy(1);
+  if (OB_ISNULL(control_proxy)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("CSFetcher: control proxy is null", KR(ret));
   } else if (OB_FAIL(ObGlobalStatProxy::get_change_stream_min_dep_lsn(
-                 *GCTX.sql_proxy_, false, persisted_min_dep_lsn))) {
+                 *control_proxy, false, persisted_min_dep_lsn))) {
   } else {
     start_lsn = palf::LSN(persisted_min_dep_lsn);
     if (OB_UNLIKELY(!start_lsn.is_valid())) {
@@ -378,9 +381,9 @@ int ObCSFetcher::check_has_async_index_tables_(bool &has_async)
 {
   int ret = OB_SUCCESS;
   has_async = false;
-  if (OB_ISNULL(GCTX.schema_service_) || OB_ISNULL(GCTX.sql_proxy_)) {
+  if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("CSFetcher: schema_service or sql_proxy is null", KR(ret));
+    LOG_WARN("CSFetcher: schema_service is null", KR(ret));
   } else {
     schema::ObSchemaGetterGuard guard;
     if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard_with_version_in_inner_table(guard))) {
@@ -445,8 +448,9 @@ SCN ObCSFetcher::get_current_scn() const
 
 void ObCSFetcher::try_advance_min_dep_lsn_()
 {
+  common::ObMySQLProxy *control_proxy = observer::namespace_worker_prototype::namespace_sql_proxy(1);
   if (!REACH_TIME_INTERVAL(CS_FETCHER_MIN_DEP_LSN_ADVANCE_INTERVAL_US)
-      || OB_ISNULL(GCTX.sql_proxy_)) {
+      || OB_ISNULL(control_proxy)) {
     return;
   }
   int ret = OB_SUCCESS;
@@ -458,7 +462,7 @@ void ObCSFetcher::try_advance_min_dep_lsn_()
   if (min_lsn.is_valid()) {
     int64_t affected = 0;
     if (OB_FAIL(ObGlobalStatProxy::advance_change_stream_min_dep_lsn(
-                    *GCTX.sql_proxy_, static_cast<int64_t>(min_lsn.val_), affected))) {
+                    *control_proxy, static_cast<int64_t>(min_lsn.val_), affected))) {
     } else {
       LOG_INFO("CSFetcher: min_dep_lsn advanced",
                "mode", running_mode_ == ACTIVE ? "ACTIVE" : "IDLE",
@@ -743,7 +747,8 @@ void ObCSFetcher::run1()
 
   // Wait until sql_proxy and schema service are ready.
   while (!has_set_stop()) {
-    if (OB_ISNULL(GCTX.sql_proxy_) || GCTX.in_bootstrap_ || GCTX.start_service_time_ <= 0
+    if (OB_ISNULL(observer::namespace_worker_prototype::namespace_sql_proxy(1))
+        || GCTX.in_bootstrap_ || GCTX.start_service_time_ <= 0
         || OB_ISNULL(GCTX.schema_service_)) {
       usleep(CS_FETCHER_INIT_RETRY_SLEEP_US);
     } else {

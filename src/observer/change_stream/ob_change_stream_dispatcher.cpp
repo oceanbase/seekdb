@@ -25,6 +25,7 @@
 #include "observer/change_stream/ob_change_stream_plugin.h"
 #include "observer/change_stream/ob_change_stream_worker.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "share/schema/ob_schema_runtime_service.h"
 #include "share/ob_server_struct.h"
 #include "share/ob_debug_sync.h"
@@ -91,12 +92,14 @@ int ObCSDispatcher::init_refresh_scn_()
 {
   int ret = common::OB_SUCCESS;
   int64_t schema_version = 0;
+  // The refresh cursor is persisted in Namespace 1's control catalog.
+  common::ObMySQLProxy *control_proxy = observer::namespace_worker_prototype::namespace_sql_proxy(1);
   if (!is_inited_) {
     ret = common::OB_NOT_INIT;
     LOG_WARN("ObCSDispatcher: not inited", K(ret));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("CSDispatcher: GCTX.sql_proxy_ is null", K(ret));
+  } else if (OB_ISNULL(control_proxy)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("CSDispatcher: control proxy is null", K(ret));
   } else if (GCTX.in_bootstrap_ || GCTX.start_service_time_ <= 0) {
     ret = common::OB_NOT_INIT;
     LOG_WARN("ObCSDispatcher: wait bootstrap", K(ret));
@@ -107,7 +110,7 @@ int ObCSDispatcher::init_refresh_scn_()
   } else {
     SCN current_refresh_scn;
     if (OB_FAIL(ObGlobalStatProxy::get_change_stream_refresh_scn(
-            *GCTX.sql_proxy_, false /* for_update */, current_refresh_scn))) {
+            *control_proxy, false /* for_update */, current_refresh_scn))) {
     } else {
       const int64_t loaded_refresh_scn = static_cast<int64_t>(current_refresh_scn.get_val_for_gts());
       // Recovery baseline must follow persisted global_stat exactly.
