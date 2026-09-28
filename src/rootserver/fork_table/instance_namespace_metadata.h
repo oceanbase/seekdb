@@ -80,6 +80,14 @@ public:
   int fork_namespace(const std::string &source_name, const std::string &target_name,
                      const SnapshotAcquirer &acquire_snapshot, uint64_t &child_id);
 
+  // The native schema transaction is separate from this KV transaction. Mark
+  // it before native DDL, then publish its version after reconciling the
+  // directory. Recovery treats an interrupted change as requiring a rescan.
+  int begin_schema_change(uint64_t id);
+  int finish_schema_change(uint64_t id, int64_t schema_version);
+  int begin_schema_recovery(uint64_t id, bool &needed);
+  int finish_schema_recovery(uint64_t id, int64_t schema_version);
+
   int initialize_namespace_counter(uint64_t high_watermark);
   int allocate_namespace_id(uint64_t &id);
 

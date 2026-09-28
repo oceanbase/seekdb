@@ -796,5 +796,77 @@ int InstanceNamespaceMetadata::fork_namespace(const std::string &source_name,
   return ret;
 }
 
+int InstanceNamespaceMetadata::begin_schema_change(uint64_t id)
+{
+  InstanceNamespaceRecord record;
+  int ret = get_namespace(id, record, true);
+  if (ret == OB_SUCCESS && (record.roots.state != 0
+      || record.roots.active_schema_changes == INT64_MAX)) {
+    ret = OB_STATE_NOT_MATCH;
+  }
+  if (ret == OB_SUCCESS) {
+    ++record.roots.active_schema_changes;
+    ret = update_namespace(record);
+  }
+  return ret;
+}
+
+int InstanceNamespaceMetadata::finish_schema_change(uint64_t id,
+    int64_t schema_version)
+{
+  if (schema_version < 0) { return OB_INVALID_ARGUMENT; }
+  InstanceNamespaceRecord record;
+  int ret = get_namespace(id, record, true);
+  if (ret == OB_SUCCESS && (record.roots.state != 0
+      || record.roots.active_schema_changes == 0)) {
+    ret = OB_STATE_NOT_MATCH;
+  }
+  if (ret == OB_SUCCESS) {
+    --record.roots.active_schema_changes;
+    if (schema_version > record.roots.pending_schema_version) {
+      record.roots.pending_schema_version = schema_version;
+    }
+    ret = update_namespace(record);
+  }
+  return ret;
+}
+
+int InstanceNamespaceMetadata::begin_schema_recovery(uint64_t id, bool &needed)
+{
+  needed = false;
+  InstanceNamespaceRecord record;
+  int ret = get_namespace(id, record, true);
+  if (ret == OB_SUCCESS && record.roots.state != 0) { ret = OB_STATE_NOT_MATCH; }
+  if (ret == OB_SUCCESS) {
+    needed = record.roots.active_schema_changes != 0
+        || record.roots.pending_schema_version != 0;
+    if (needed) {
+      record.roots.active_schema_changes = 0;
+      record.roots.pending_schema_version = INT64_MAX;
+      ret = update_namespace(record);
+    }
+  }
+  return ret;
+}
+
+int InstanceNamespaceMetadata::finish_schema_recovery(uint64_t id,
+    int64_t schema_version)
+{
+  if (schema_version <= 0) { return OB_INVALID_ARGUMENT; }
+  InstanceNamespaceRecord record;
+  int ret = get_namespace(id, record, true);
+  if (ret == OB_SUCCESS && (record.roots.state != 0
+      || record.roots.active_schema_changes != 0
+      || record.roots.schema_version > schema_version)) {
+    ret = OB_STATE_NOT_MATCH;
+  }
+  if (ret == OB_SUCCESS) {
+    record.roots.schema_version = schema_version;
+    record.roots.pending_schema_version = 0;
+    ret = update_namespace(record);
+  }
+  return ret;
+}
+
 } // namespace rootserver
 } // namespace oceanbase
