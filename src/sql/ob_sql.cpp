@@ -56,8 +56,6 @@ const int64_t ObSql::SQL_MEM_SIZE_LIMIT = 1024 * 1024 * 64;
 
 int ObSql::init(common::ObITabletScan *vt_partition_service,
                 common::ObAddr &addr,
-                ObPlanCache &plan_cache,
-                ObPsCache &ps_cache,
                 pl::ObPL &pl_engine,
                 query::ObIPlanCacheAccessService &plan_cache_access_service,
                 query::ObIQueryRuntimeEnvironment &query_runtime_environment,
@@ -80,8 +78,6 @@ int ObSql::init(common::ObITabletScan *vt_partition_service,
     } else {
       queue_.bind_root_command_service(root_command_service);
       vt_partition_service_ = vt_partition_service;
-      plan_cache_ = &plan_cache;
-      ps_cache_ = &ps_cache;
       pl_engine_ = &pl_engine;
       plan_cache_access_service_ = &plan_cache_access_service;
       query_runtime_environment_ = &query_runtime_environment;
@@ -103,8 +99,6 @@ int ObSql::init(common::ObITabletScan *vt_partition_service,
 void ObSql::destroy() {
   if (inited_) {
     queue_.destroy();
-    plan_cache_ = NULL;
-    ps_cache_ = NULL;
     pl_engine_ = NULL;
     plan_cache_access_service_ = NULL;
     query_runtime_environment_ = NULL;
@@ -1231,7 +1225,8 @@ int ObSql::handle_sql_execute(const ObString &sql,
   ParamStore *ab_params = NULL;
 
   if (OB_FAIL(ret)) {
-  } else if (OB_ISNULL(session) || OB_ISNULL(plan_cache_)) {
+  } else if (OB_ISNULL(session)
+             || OB_ISNULL(observer::namespace_worker_prototype::effective_plan_cache(session))) {
     ret = OB_INVALID_ARGUMENT;
   } else if ((mode == PC_PS_MODE || mode == PC_PL_MODE) && OB_ISNULL(pctx)) {
     ret = OB_INVALID_ARGUMENT;

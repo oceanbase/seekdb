@@ -105,8 +105,6 @@ public:
   /// init SQL module
   int init(common::ObITabletScan *vt_partition_service,
            common::ObAddr &addr,
-           ObPlanCache &plan_cache,
-           ObPsCache &ps_cache,
            pl::ObPL &pl_engine,
            query::ObIPlanCacheAccessService &plan_cache_access_service,
            query::ObIQueryRuntimeEnvironment &query_runtime_environment,
@@ -224,12 +222,6 @@ public:
                   "ObSql is not initialized with query runtime environment");
     return *query_runtime_environment_;
   }
-  ObPlanCache &get_plan_cache() const
-  {
-    OB_ASSERT_MSG(NULL != plan_cache_, "ObSql is not initialized with plan cache");
-    return *plan_cache_;
-  }
-
   // Bind the process-owned SQL services required by resolver entry points
   // that are created outside ObSql's normal statement-generation path.
   void bind_resolver_runtime_services(ObResolverParams &resolver_ctx);
@@ -272,8 +264,6 @@ public:
   ObSql()
   : inited_(false),
     vt_partition_service_(NULL),
-    plan_cache_(NULL),
-    ps_cache_(NULL),
     pl_engine_(NULL),
     plan_cache_access_service_(NULL),
     query_runtime_environment_(NULL),
@@ -541,8 +531,6 @@ private:
   bool inited_;
   // Process-lifetime collaborators supplied by the Observer composition root.
   common::ObITabletScan *vt_partition_service_;
-  ObPlanCache *plan_cache_;
-  ObPsCache *ps_cache_;
   pl::ObPL *pl_engine_;
   query::ObIPlanCacheAccessService *plan_cache_access_service_;
   query::ObIQueryRuntimeEnvironment *query_runtime_environment_;

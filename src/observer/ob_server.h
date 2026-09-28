@@ -564,8 +564,6 @@ public:
   transaction::ObTimestampAccess * timestamp_access() { return mods_timestamp_access_; }
   transaction::ObTransIDService * trans_id_service() { return mods_trans_id_service_; }
   transaction::ObUniqueIDService * unique_id_service() { return mods_unique_id_service_; }
-  sql::ObPsCache * ps_cache() { return mods_ps_cache_; }
-  sql::ObPlanCache * plan_cache() { return mods_plan_cache_; }
   sql::dtl::ObDfc * dfc_manager() { return mods_dfc_; }
   omt::ObPxPools * px_pools() { return mods_px_pools_; }
   sql::ObSqlMemoryManager * sql_memory_manager() { return mods_sql_memory_manager_; }

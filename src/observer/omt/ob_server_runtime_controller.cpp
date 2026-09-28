@@ -1335,7 +1335,6 @@ int ObServer::obs_construct_modules()
     BIND_SERVICE(vector_index_runtime, storage::ObIVectorIndexRuntime);
     BIND_SERVICE(tablet_scheduler, compaction::ObTabletScheduler);
     BIND_SERVICE(tablet_stat_mgr, storage::ObTabletStatMgr);
-    BIND_SERVICE(plan_cache, sql::ObPlanCache);
     BIND_SERVICE(dtl_interm_result_manager, sql::dtl::ObDTLIntermResultManager);
     BIND_SERVICE(shared_macro_block_mgr, blocksstable::ObSharedMacroBlockMgr);
     BIND_SERVICE(server_runtime_service, storage::ObIServerRuntime);
@@ -1369,7 +1368,6 @@ int ObServer::obs_construct_modules()
     BIND_SERVICE(tablet_autoincrement_service, share::ObITabletAutoincrementService);
     BIND_SERVICE(server_compaction_event_history, compaction::ObServerCompactionEventHistory);
     BIND_SERVICE(resource_limit_calculator, share::ObResourceLimitCalculator);
-    BIND_SERVICE(ps_cache, sql::ObPsCache);
     BIND_SERVICE(multi_version_garbage_collector, concurrency_control::ObMultiVersionGarbageCollector);
     BIND_SERVICE(medium_checker, compaction::ObMediumChecker);
     BIND_SERVICE(ls_runtime_adapter, storage::ObILSRuntimeAdapter);
@@ -1548,8 +1546,6 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(sql_engine_.init(
       &vt_data_service_,
       self_addr_,
-      *mods_plan_cache_,
-      *mods_ps_cache_,
       pl_engine_,
       *this,
       *this,
@@ -1846,7 +1842,6 @@ void ObServer::obs_destroy_modules()
   UNBIND_SERVICE(storage::ObIVectorIndexRuntime);
   UNBIND_SERVICE(compaction::ObTabletScheduler);
   UNBIND_SERVICE(storage::ObTabletStatMgr);
-  UNBIND_SERVICE(sql::ObPlanCache);
   UNBIND_SERVICE(sql::dtl::ObDTLIntermResultManager);
   UNBIND_SERVICE(blocksstable::ObSharedMacroBlockMgr);
   UNBIND_SERVICE(storage::ObIServerRuntime);
@@ -1880,7 +1875,6 @@ void ObServer::obs_destroy_modules()
   UNBIND_SERVICE(share::ObITabletAutoincrementService);
   UNBIND_SERVICE(compaction::ObServerCompactionEventHistory);
   UNBIND_SERVICE(share::ObResourceLimitCalculator);
-  UNBIND_SERVICE(sql::ObPsCache);
   UNBIND_SERVICE(concurrency_control::ObMultiVersionGarbageCollector);
   UNBIND_SERVICE(compaction::ObMediumChecker);
   UNBIND_SERVICE(storage::ObILSRuntimeAdapter);
