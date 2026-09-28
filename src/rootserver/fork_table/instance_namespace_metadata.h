@@ -92,8 +92,8 @@ public:
   int fork_namespace(const std::string &source_name, const std::string &target_name,
                      const SnapshotAcquirer &acquire_snapshot, uint64_t &child_id);
 
-  // The caller closes new access before marking DELETING, then drains and
-  // removes physical tablets before finishing the drop in a later KV tx.
+  // The caller closes new access before marking DELETING, then drains admitted
+  // access before finishing the logical drop in a later KV transaction.
   int mark_namespace_deleting(uint64_t id, bool &done);
   int finish_namespace_drop(uint64_t id);
   // Stage final tombstone removal only after all descendants, owned records,
@@ -246,18 +246,37 @@ public:
                      int64_t deadline, InstanceNamespaceRecord &child);
   int find_live(const std::string &name, int64_t deadline,
                 InstanceNamespaceRecord &record);
+  int find_named(const std::string &name, int64_t deadline,
+                 InstanceNamespaceRecord &record);
+  int get(uint64_t id, int64_t deadline, InstanceNamespaceRecord &record);
+  int resolve_read_tablet(uint64_t namespace_id, uint64_t local_tablet,
+      const InstanceNamespaceMetadata::StorageTabletProbe &probe,
+      int64_t deadline, uint64_t &physical_tablet, int64_t &cap_scn);
+  // One KV snapshot decides which deleted physical tablets still have live
+  // descendants reading through them. Unencoded candidates pass through.
+  int filter_unreferenced_tablets(const std::vector<uint64_t> &candidates,
+      int64_t deadline, std::vector<uint64_t> &unreferenced, bool &need_retry);
   int list_live(int64_t deadline, std::vector<InstanceNamespaceRecord> &records);
+  int list_deleted(int64_t deadline, std::vector<InstanceNamespaceRecord> &records);
   int rename_live(uint64_t id, const std::string &expected_name,
                   const std::string &new_name, int64_t deadline);
-  // Caller closes new access first. Commit DELETING before physical cleanup;
-  // if commit returns an uncertain result, leave access closed and retry.
+  // Caller closes new access first. Commit DELETING before draining admitted
+  // access; if commit returns an uncertain result, leave access closed.
   int mark_deleting(uint64_t id, const std::string &expected_name,
                     int64_t deadline, bool &done);
   // Enumerate owned local tablet IDs only after DELETING has committed.
   // Physical cleanup also scans this Namespace's encoded addresses for orphans.
   int list_deleting_owned(uint64_t id, int64_t deadline,
                           std::vector<uint64_t> &local_tablets);
-  // Caller commits physical tablet cleanup before this separate KV transaction.
+  int list_deleted_owned(uint64_t id, int64_t deadline,
+                         std::vector<uint64_t> &local_tablets);
+  int erase_deleted_owned(uint64_t id, const std::vector<uint64_t> &local_tablets,
+                          int64_t deadline);
+  int prune_deleted(uint64_t id,
+      const InstanceNamespaceMetadata::NamespacePhysicalProbe &has_physical,
+      int64_t deadline, bool &pruned);
+  // Releases lineage and marks DELETED. Shared physical GC subsequently
+  // reclaims unreferenced owned and orphan tablets.
   int finish_drop(uint64_t id, int64_t deadline);
   int schema_version(uint64_t id, int64_t deadline, int64_t &version);
   int begin_schema_change(uint64_t id, int64_t deadline);

@@ -179,14 +179,6 @@ inline StorageSpaceHandle active_worker_storage_space()
       ? StorageSpaceHandle::global_space()
       : StorageSpaceHandle::namespace_space(serving_namespace());
 }
-inline bool is_namespace_control_database(const common::ObString &name)
-{
-  return name.prefix_match("__fork_proto_meta");
-}
-inline bool can_access_namespace_control_database()
-{
-  return has_global_control_authority();
-}
 // True while this thread serves SQL for a forked namespace whose schema it
 // can resolve and ship.
 inline bool serves_namespace_schema()

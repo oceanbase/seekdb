@@ -6,9 +6,7 @@ int worker_storage_space_for_schema(const ObTableSchema &schema,
       || NamespaceForkKernelPrototype::is_encoded_id(schema.get_table_id())) {
     return OB_INVALID_ARGUMENT;
   }
-  // Native all_* tables are the catalog of the namespace worker itself. A
-  // global user table still records its schema in namespace 1's catalog; only
-  // the target table's storage belongs to GLOBAL.
+  // Native all_* tables are the catalog of the namespace worker itself.
   if (is_inner_table(schema.get_table_id())) {
     storage_space = StorageSpaceHandle::namespace_space(serving_namespace());
     return storage_space.is_valid() ? OB_SUCCESS : OB_INVALID_ARGUMENT;
@@ -18,14 +16,8 @@ int worker_storage_space_for_schema(const ObTableSchema &schema,
   if (OB_SUCC(ret) && OB_ISNULL(database)) {
     ret = OB_ERR_UNEXPECTED;
   }
-  const bool control_database = OB_SUCC(ret)
-      && is_namespace_control_database(database->get_database_name_str());
-  if (OB_SUCC(ret) && control_database
-      && !can_access_namespace_control_database()) {
-    ret = OB_TABLE_NOT_EXIST;
-  }
   if (OB_SUCC(ret)) {
-    storage_space = uses_global_storage_scope() || control_database
+    storage_space = uses_global_storage_scope()
         ? StorageSpaceHandle::global_space()
         : StorageSpaceHandle::namespace_space(serving_namespace());
     if (!storage_space.is_valid()) { ret = OB_INVALID_ARGUMENT; }

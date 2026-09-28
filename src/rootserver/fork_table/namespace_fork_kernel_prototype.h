@@ -11,26 +11,14 @@ class ObMultiVersionSchemaService;
 } }
 namespace storage {
 class ObTablet;
-// A capability for one internal DROP transaction, never a current namespace.
-class NamespaceSourceDropGuard final
-{
-public:
-  explicit NamespaceSourceDropGuard(common::ObISQLClient &trans);
-  ~NamespaceSourceDropGuard();
-  bool is_valid() const { return valid_; }
-private:
-  bool valid_;
-  NamespaceSourceDropGuard(const NamespaceSourceDropGuard &) = delete;
-  NamespaceSourceDropGuard &operator=(const NamespaceSourceDropGuard &) = delete;
-};
 class NamespaceForkKernelPrototype final
 {
 public:
   static int ensure_control_schema();
   static int begin_namespace_drop(const common::ObString &name, uint64_t &id, bool &done);
-  static int lock_namespace_drop(common::ObISQLClient &trans, uint64_t id,
+  static int lock_namespace_drop(uint64_t id,
                                  common::ObIArray<common::ObTabletID> &bound);
-  static int finish_namespace_drop(common::ObISQLClient &trans, uint64_t id);
+  static int finish_namespace_drop(uint64_t id);
   static int check_table_access(uint64_t table_id, const common::ObTabletID &tablet_id,
                                 bool read_only, data_plane::ObNamespaceAccessMode access_mode,
                                 bool &held);
@@ -76,8 +64,6 @@ public:
       uint64_t namespace_id,
       const common::ObIArray<common::ObTabletID> &logical_tablets,
       common::ObIArray<common::ObTabletID> &owned_tablets);
-  static int capture(common::ObISQLClient &trans, uint64_t source, uint64_t target,
-                     int64_t snapshot, int64_t schema_version);
   static int table_id_for_tablet(const common::ObTabletID &tablet, int64_t schema_version,
                                  uint64_t &table_id);
   static int check_ddl(const share::schema::ObSimpleTableSchemaV2 &schema,

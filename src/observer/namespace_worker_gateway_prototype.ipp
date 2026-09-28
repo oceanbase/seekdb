@@ -1,9 +1,11 @@
 // Included in the Observer composition unit for in-process namespace storage.
 #include "observer/namespace_worker_protocol_prototype.h"
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
+#include "rootserver/fork_table/instance_namespace_metadata.h"
 #include "rootserver/ddl_task/ob_ddl_task_util.h"
 #include "storage/tablet/ob_tablet_binding_helper.h"
 #include "storage/compaction/ob_freeze_info_mgr.h"
+#include "storage/tx_storage/ob_access_service.h"
 #include <map>
 #include <mutex>
 #include <string>

@@ -3225,30 +3225,6 @@ int ObServerSchemaService::refresh_runtime_full_schema(
       }
       prof("all_fetched");
 
-      // Global namespace-management tables use namespace 1 as their SQL
-      // owner. Their rows can be present in the system-table snapshot used to
-      // bootstrap a child, but their definitions must never enter that
-      // child's SchemaService. This keeps SHOW/resolution and storage routing
-      // consistent without teaching every schema consumer about global scope.
-      if (OB_SUCC(ret)
-          && observer::namespace_worker_prototype::serves_forked_schema()) {
-        uint64_t control_database_id = OB_INVALID_ID;
-        for (int64_t i = simple_databases.count() - 1; OB_SUCC(ret) && i >= 0; --i) {
-          if (observer::namespace_worker_prototype::is_namespace_control_database(
-                  simple_databases.at(i).get_database_name_str())) {
-            control_database_id = simple_databases.at(i).get_database_id();
-            ret = simple_databases.remove(i);
-          }
-        }
-        for (int64_t i = simple_tables.count() - 1;
-             OB_SUCC(ret) && i >= 0 && control_database_id != OB_INVALID_ID; --i) {
-          if (simple_tables.at(i) != nullptr
-              && simple_tables.at(i)->get_database_id() == control_database_id) {
-            ret = simple_tables.remove(i);
-          }
-        }
-      }
-
       const bool refresh_full_schema = true;
       // add simple schema for cache
       if (OB_FAIL(ret)) {
