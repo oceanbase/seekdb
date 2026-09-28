@@ -94,16 +94,21 @@ int ObCSDispatcher::init_refresh_scn_()
   int64_t schema_version = 0;
   // The refresh cursor is persisted in Namespace 1's control catalog.
   common::ObMySQLProxy *control_proxy = observer::namespace_worker_prototype::namespace_sql_proxy(1);
+  schema::ObMultiVersionSchemaService *control_schema =
+      observer::namespace_worker_prototype::namespace_schema_service(1);
   if (!is_inited_) {
     ret = common::OB_NOT_INIT;
     LOG_WARN("ObCSDispatcher: not inited", K(ret));
   } else if (OB_ISNULL(control_proxy)) {
     ret = OB_NOT_INIT;
     LOG_WARN("CSDispatcher: control proxy is null", K(ret));
+  } else if (OB_ISNULL(control_schema)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("CSDispatcher: control schema is null", K(ret));
   } else if (GCTX.in_bootstrap_ || GCTX.start_service_time_ <= 0) {
     ret = common::OB_NOT_INIT;
     LOG_WARN("ObCSDispatcher: wait bootstrap", K(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_refreshed_schema_version(schema_version))) {
+  } else if (OB_FAIL(control_schema->get_runtime_refreshed_schema_version(schema_version))) {
   } else if (schema_version <= 0 || !ObSchemaService::is_formal_version(schema_version)) {
     ret = OB_SCHEMA_EAGAIN;
     LOG_WARN("schema is not formal", KR(ret));
