@@ -224,9 +224,38 @@ class SqlExceptionLoader final : public ns::IExceptionLoader {
 public:
   explicit SqlExceptionLoader(ObISQLClient &sql) : sql_(sql) {}
   int load(uint64_t ns, IRowSink &sink) override {
+    const NamespaceObjectKey first{ns, 1};
+    if (!first.is_valid()) { return OB_INVALID_ARGUMENT; }
+    // Mapping rows commit with physical tablet creation/deletion. Rebuild the
+    // owned cache from them so a crash before post-commit cache publication
+    // cannot lose a materialized tablet's ownership or table binding.
+    uint64_t cursor = first.storage_id() - 1;
+    int ret = OB_SUCCESS;
+    bool end_of_namespace = false;
+    while (OB_SUCC(ret) && !end_of_namespace) {
+      ObArray<ObTabletTablePair> batch;
+      ret = ObTabletMappingTableOperator::range_get_tablet_table_pairs(
+          sql_, ObTabletID(cursor), 256, batch);
+      for (int64_t i = 0; OB_SUCC(ret) && i < batch.count(); ++i) {
+        const uint64_t physical = batch.at(i).get_tablet_id().id();
+        if (!NamespaceObjectKey::is_encoded(physical)
+            || database_of(physical) != ns) {
+          end_of_namespace = true;
+          break;
+        }
+        cursor = physical;
+        ns::NamespaceExceptionRow row;
+        row.tablet = local_of(physical);
+        row.table = batch.at(i).get_table_id();
+        sink.add(row);
+      }
+      if (batch.count() < 256) { end_of_namespace = true; }
+    }
+    if (OB_FAIL(ret)) { return ret; }
     ObSqlString q; ObMySQLProxy::MySQLResult res; sqlclient::ObMySQLResult *r = nullptr;
-    int ret = q.assign_fmt(
-        "SELECT tablet_id,table_id,kind FROM %s WHERE namespace_id=%lu", EXCEPTIONS, ns);
+    ret = q.assign_fmt(
+        "SELECT tablet_id,table_id,kind FROM %s WHERE namespace_id=%lu AND kind=1",
+        EXCEPTIONS, ns);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(sql_.read(res, q.ptr()))) {
     } else if (OB_ISNULL(r = res.get_result())) { ret = OB_ERR_UNEXPECTED;
