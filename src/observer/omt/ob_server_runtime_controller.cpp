@@ -1413,6 +1413,20 @@ int ObServer::obs_construct_modules()
 int ObServer::obs_init_modules()
 {
   int ret = OB_SUCCESS;
+  ns::NamespaceRuntime *root_runtime = nullptr;
+  if (!ns::namespace_registry().get(1, root_runtime) || root_runtime == nullptr) {
+    return OB_NOT_INIT;
+  }
+  auto *root_schema_service = static_cast<ObMultiVersionSchemaService *>(
+      root_runtime->service(ns::NamespaceRuntime::SCHEMA_SERVICE));
+  auto *root_sql_proxy = static_cast<ObMySQLProxy *>(
+      root_runtime->service(ns::NamespaceRuntime::SQL_PROXY));
+  auto *root_stat_manager = static_cast<ObOptStatManager *>(
+      root_runtime->service(ns::NamespaceRuntime::OPT_STAT_MANAGER));
+  if (root_schema_service == nullptr || root_sql_proxy == nullptr
+      || root_stat_manager == nullptr) {
+    return OB_NOT_INIT;
+  }
   if (OB_SUCC(ret) && OB_FAIL(ObSharedTimer::server_module_init(mods_shared_timer_))) { SERVER_LOG(WARN, "mods_shared_timer_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_init_default(mods_shared_macro_block_mgr_))) { SERVER_LOG(WARN, "mods_shared_macro_block_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(server_module_init_default(mods_storage_meta_mem_mgr_))) { SERVER_LOG(WARN, "mods_storage_meta_mem_mgr_ fail", KR(ret)); }
@@ -1466,9 +1480,8 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(ObTimestampAccess::server_module_init(mods_timestamp_access_))) { SERVER_LOG(WARN, "mods_timestamp_access_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObTransIDService::server_module_init(mods_trans_id_service_))) { SERVER_LOG(WARN, "mods_trans_id_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObUniqueIDService::server_module_init(mods_unique_id_service_))) { SERVER_LOG(WARN, "mods_unique_id_service_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_ISNULL(GCTX.schema_service_)) { ret = OB_NOT_INIT; }
   if (OB_SUCC(ret) && OB_FAIL(ObPsCache::server_module_init(
-          mods_ps_cache_, *GCTX.schema_service_))) { SERVER_LOG(WARN, "mods_ps_cache_ fail", KR(ret)); }
+          mods_ps_cache_, *root_schema_service))) { SERVER_LOG(WARN, "mods_ps_cache_ fail", KR(ret)); }
   if (OB_SUCC(ret)) {
     ns::NamespaceRuntime *home = nullptr;
     if (!ns::namespace_registry().get(1, home) || home == nullptr) {
@@ -1479,7 +1492,7 @@ int ObServer::obs_init_modules()
   }
   if (OB_SUCC(ret) &&
       OB_FAIL(ObPlanCache::server_module_init(
-          mods_plan_cache_, OBSERVER, *GCTX.schema_service_))) {
+          mods_plan_cache_, OBSERVER, *root_schema_service))) {
     SERVER_LOG(WARN, "mods_plan_cache_ fail", KR(ret));
   }
   if (OB_SUCC(ret)) {
@@ -1495,7 +1508,7 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(ObSqlMemoryManager::server_module_init(mods_sql_memory_manager_))) { SERVER_LOG(WARN, "mods_sql_memory_manager_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObDTLIntermResultManager::server_module_init(mods_dtl_interm_result_manager_))) { SERVER_LOG(WARN, "mods_dtl_interm_result_manager_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObSchemaRuntimeService::server_module_init(
-      mods_schema_runtime_service_, schema_service_))) {
+      mods_schema_runtime_service_, *root_schema_service))) {
     SERVER_LOG(WARN, "mods_schema_runtime_service_ fail", KR(ret));
   }
   if (OB_SUCC(ret)) {
@@ -1516,9 +1529,8 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(ObEmptyReadBucket::server_module_init(mods_empty_read_bucket_))) { SERVER_LOG(WARN, "mods_empty_read_bucket_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObDBMSSchedService::server_module_init(mods_dbms_sched_service_))) { SERVER_LOG(WARN, "mods_dbms_sched_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObOptStatMonitorManager::server_module_init(
-      mods_opt_stat_monitor_manager_, &sql_proxy_,
-      &ObMultiVersionSchemaService::get_instance(),
-      &ObOptStatManager::get_instance()))) {
+      mods_opt_stat_monitor_manager_, root_sql_proxy,
+      root_schema_service, root_stat_manager))) {
     SERVER_LOG(WARN, "mods_opt_stat_monitor_manager_ fail", KR(ret));
   }
   if (OB_SUCC(ret)) {

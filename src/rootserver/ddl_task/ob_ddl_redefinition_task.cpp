@@ -991,7 +991,7 @@ int ObDDLRedefinitionTask::sync_auto_increment_position()
         // which overflows timeout arithmetic when reading __ALL_AUTO_INCREMENT.
         const int64_t save_timeout_ts = THIS_WORKER.get_timeout_ts();
         THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + max(GCONF.rpc_timeout, static_cast<int64_t>(1000 * 1000 * 20)));
-        ObAutoincrementService &auto_inc_service = ObAutoincrementService::get_instance();
+        ObAutoincrementService *auto_inc_service = context_.autoincrement_service_;
         uint64_t sequence_value = 0;
         AutoincParam param;
 
@@ -1006,7 +1006,10 @@ int ObDDLRedefinitionTask::sync_auto_increment_position()
         param.auto_increment_cache_size_ = 0; // set cache size to 0 to disable prefetch
         param.autoinc_auto_increment_ = dest_table_schema->get_auto_increment();
         param.autoinc_version_ = dest_table_schema->get_truncate_version();
-        if (OB_FAIL(auto_inc_service.get_sequence_value(
+        if (OB_ISNULL(auto_inc_service)) {
+          ret = OB_NOT_INIT;
+          LOG_WARN("DDL task autoincrement service is unavailable", KR(ret), K(context_.namespace_id_));
+        } else if (OB_FAIL(auto_inc_service->get_sequence_value(
               object_id_, cur_column_id,
               data_table_schema->get_truncate_version(), sequence_value))) {
           LOG_WARN("get sequence value failed", KR(ret), K(object_id_), K(cur_column_id));
@@ -1014,7 +1017,7 @@ int ObDDLRedefinitionTask::sync_auto_increment_position()
           // as sequence_value is an avaliable value. sync value will not be avaliable to user
         } else {
           for (int64_t retry_cnt = 100; OB_SUCC(ret) && retry_cnt > 0; retry_cnt--) {
-            if (OB_FAIL(auto_inc_service.sync_insert_value(param))) {
+            if (OB_FAIL(auto_inc_service->sync_insert_value(param))) {
               LOG_WARN("set auto increment position failed", K(ret), K(target_object_id_), K(cur_column_id), K(param));
             } else {
               break;
@@ -1121,7 +1124,7 @@ int ObDDLRedefinitionTask::modify_autoinc(const ObDDLTaskStatus next_task_status
         && (alter_autoinc_column_id = new_table_schema->get_autoinc_column_id()) != 0) {
       const int64_t save_timeout_ts = THIS_WORKER.get_timeout_ts();
       THIS_WORKER.set_timeout_ts(ObTimeUtility::current_time() + max(GCONF.rpc_timeout, static_cast<int64_t>(1000 * 1000 * 20)));
-      ObAutoincrementService &auto_inc_service = ObAutoincrementService::get_instance();
+      ObAutoincrementService *auto_inc_service = context_.autoincrement_service_;
       const uint64_t autoinc_val = alter_table_schema.get_auto_increment();
       AutoincParam param;
 
@@ -1136,7 +1139,10 @@ int ObDDLRedefinitionTask::modify_autoinc(const ObDDLTaskStatus next_task_status
       param.pending_value_to_sync_ = autoinc_val - 1;
       param.auto_increment_cache_size_ = 0; // set cache size to 0 to disable prefetch
       param.autoinc_version_ = new_table_schema->get_truncate_version();
-      if (OB_FAIL(auto_inc_service.sync_insert_value(param))) {
+      if (OB_ISNULL(auto_inc_service)) {
+        ret = OB_NOT_INIT;
+        LOG_WARN("DDL task autoincrement service is unavailable", KR(ret), K(context_.namespace_id_));
+      } else if (OB_FAIL(auto_inc_service->sync_insert_value(param))) {
         LOG_WARN("fail to clear autoinc cache", K(ret), K(param));
       }
       THIS_WORKER.set_timeout_ts(save_timeout_ts);

@@ -72,7 +72,6 @@ struct ObGlobalContext
   share::ObTabletTableOperator *tablet_operator_;
   share::ObSQLiteConnectionPool *meta_db_pool_;
   common::ObMySQLProxy *sql_proxy_;
-  common::ObMySQLProxy *ddl_sql_proxy_;
   common::ObInOutBandwidthThrottle *bandwidth_throttle_;
   int64_t start_time_;
   int64_t *warm_up_start_time_;

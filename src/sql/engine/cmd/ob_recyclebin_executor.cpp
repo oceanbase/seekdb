@@ -34,6 +34,9 @@ int ObPurgeRecycleBinExecutor::execute(ObExecContext &ctx, ObPurgeRecycleBinStmt
   int ret = OB_SUCCESS;
   //use to test purge recyclebin objects
   ObSqlExecutorCtx *task_exec_ctx = NULL;
+  ObSQLSessionInfo *session = GET_MY_SESSION(ctx);
+  ObMultiVersionSchemaService *schema_service =
+      session == nullptr ? nullptr : session->effective_schema_service();
   const obcall::ObPurgeRecycleBinArg &purge_recyclebin_arg = stmt.get_purge_recyclebin_arg();
 
 //  int64_t current_time = ObTimeUtility::current_time();
@@ -48,6 +51,8 @@ int ObPurgeRecycleBinExecutor::execute(ObExecContext &ctx, ObPurgeRecycleBinStmt
   } else if (OB_ISNULL(task_exec_ctx = GET_SQL_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
+  } else if (schema_service == nullptr) {
+    ret = OB_NOT_INIT;
   } else {
     bool is_finished = false;
     int64_t total_purge_count = 0;
@@ -57,7 +62,7 @@ int ObPurgeRecycleBinExecutor::execute(ObExecContext &ctx, ObPurgeRecycleBinStmt
       // Each time return the number of purged rows, only when the purge count is less than affected_rows
       int64_t cal_timeout = 0;
       int64_t start_time = ObTimeUtility::current_time();
-      if (OB_FAIL(GSCHEMASERVICE.cal_purge_need_timeout(purge_recyclebin_arg, cal_timeout))) {
+      if (OB_FAIL(schema_service->cal_purge_need_timeout(purge_recyclebin_arg, cal_timeout))) {
       } else if (0 == cal_timeout) {
         is_finished = true;
       } else if (OB_FAIL(query::serialize_root_service_call([&]{

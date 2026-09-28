@@ -687,20 +687,24 @@ int ObPxMultiPartSSTableInsertOp::sync_table_level_autoinc_value()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("direct insert session is null", K(ret));
   } else {
-    ObAutoincrementService &auto_service = ObAutoincrementService::get_instance();
     ObEvalCtx &eval_ctx = get_eval_ctx();
     ObPhysicalPlanCtx *plan_ctx = eval_ctx.exec_ctx_.get_physical_plan_ctx();
+    ObSQLSessionInfo *session = eval_ctx.exec_ctx_.get_my_session();
+    ObAutoincrementService *auto_service = session == nullptr
+        ? nullptr : session->effective_autoincrement_service();
     if (OB_ISNULL(plan_ctx)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("physical plan context is null", K(ret), K(plan_ctx));
+    } else if (auto_service == nullptr) {
+      ret = OB_NOT_INIT;
     } else {
       ObIArray<AutoincParam> &autoinc_params = plan_ctx->get_autoinc_params();
-      if (OB_FAIL(plan_ctx->sync_last_value_local())) {
+      if (OB_FAIL(plan_ctx->sync_last_value_local(*auto_service))) {
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < autoinc_params.count(); ++i) {
         AutoincParam &autoinc_param = autoinc_params.at(i);
         autoinc_param.auto_increment_cache_size_ = 0; // set cache size to 0 to disable prefetch
-        if (OB_FAIL(auto_service.sync_insert_value(autoinc_param))) {
+        if (OB_FAIL(auto_service->sync_insert_value(autoinc_param))) {
         }
       }
     }

@@ -87,7 +87,7 @@ void ObSystemPackageLoadTask::destroy()
 int ObSystemPackageLoadTask::load_system_package_()
 {
   int ret = OB_SUCCESS;
-  ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
+  ObMySQLProxy *sql_proxy = observer::namespace_worker_prototype::namespace_sql_proxy(1);
   int64_t job_id = OB_INVALID_ID;
   int64_t job_count = 0;
   if (OB_ISNULL(sql_proxy)) {

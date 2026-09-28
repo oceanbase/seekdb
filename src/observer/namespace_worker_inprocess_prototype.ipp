@@ -33,10 +33,11 @@ public:
   int refresh() override { return OB_SUCCESS; }
   int fetch_version(bool published, bool core_version, int64_t &version) override
   {
-    auto &service = ObMultiVersionSchemaService::get_instance();
+    auto *service = namespace_schema_service(1);
+    if (service == nullptr) { return OB_NOT_INIT; }
     return published
-        ? service.get_published_schema_version(version, core_version)
-        : service.get_runtime_refreshed_schema_version(version, core_version);
+        ? service->get_published_schema_version(version, core_version)
+        : service->get_runtime_refreshed_schema_version(version, core_version);
   }
   int begin_change() override { return OB_SUCCESS; }
   int finish_change(int64_t) override { return OB_SUCCESS; }
@@ -578,7 +579,9 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
   } else if (OB_FAIL(([&] {
       // The global launcher initializes only ns1's schema backend. Child DDL
       // also publishes a sequence id, so seed it from the current leader epoch.
-      auto *root_backend = ObMultiVersionSchemaService::get_instance().get_schema_service();
+      auto *root_schema_service = namespace_schema_service(1);
+      auto *root_backend = root_schema_service != nullptr
+          ? root_schema_service->get_schema_service() : nullptr;
       const auto sequence = root_backend != nullptr
           ? root_backend->get_sequence_id() : ObDDLSequenceID();
       return root_backend == nullptr || !sequence.is_valid()
@@ -677,7 +680,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
   } else if (OB_FAIL(services->root_commands->init_sql_worker(
           GCONF, *GCTX.config_mgr_, server.get_self(), *services->sql_proxy,
           server.get_mysql_proxy(),
-          *services->schema_service))) {
+          *services->schema_service, services->autoincrement))) {
   } else if (FALSE_IT(stage = "virtual_table_scan")) {
   } else if (FALSE_IT(services->address = server.get_self())) {
   } else if (OB_ISNULL(services->virtual_table_scan = OB_NEW(
@@ -724,7 +727,8 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
         &services->autoincrement);
     runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_REGISTRY, &services->direct_insert_registry);
     runtime.set_service(ns::NamespaceRuntime::SQL_PROXY, services->sql_proxy);
-    runtime.set_service(ns::NamespaceRuntime::VECTOR_TASK_SQL_PROXY, GCTX.sql_proxy_);
+    runtime.set_service(ns::NamespaceRuntime::VECTOR_TASK_SQL_PROXY,
+        namespace_sql_proxy(1));
     runtime.set_service(ns::NamespaceRuntime::SCHEMA_LIFECYCLE,
         &services->schema_lifecycle);
     runtime.set_service(ns::NamespaceRuntime::TABLE_LOCK_TABLET_ROUTER,
@@ -808,9 +812,10 @@ int inprocess_refresh_schema(uint64_t ns)
     context.local_build_mode_ = rootserver::ObDDLTaskContext::LocalBuildMode::RESTARTABLE_SQL;
     context.recovery_mode_ = rootserver::ObDDLTaskContext::RecoveryMode::RETRY_UNTIL_CONSISTENT;
     context.sql_proxy_ = services.sql_proxy;
-    context.session_sql_proxy_ = GCTX.sql_proxy_;
+    context.session_sql_proxy_ = namespace_sql_proxy(1);
     context.ddl_proxy_ = services.ddl_proxy;
     context.schema_service_ = services.schema_service;
+    context.autoincrement_service_ = &services.autoincrement;
     context.root_service_ = services.root_commands;
     context.local_runtime_ = services.local_runtime;
     int recover_ret = rootserver::ObSysDDLSchedulerUtil::recover_task(context);

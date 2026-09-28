@@ -180,7 +180,6 @@ int ObAllVirtualAllTables::get_sequence_value()
       SERVER_LOG(WARN, "table schema is NULL", K(ret), K(i), K(database_id_));
     } else if (table_schema->get_autoinc_column_id() != 0) {
       key.reset();
-      // Bootstrap always uses the global sequence value.
       key.table_id_  = table_schema->get_table_id();
       key.column_id_ = table_schema->get_autoinc_column_id();
       if (OB_FAIL(autoinc_keys.push_back(key))) {
@@ -188,9 +187,12 @@ int ObAllVirtualAllTables::get_sequence_value()
       }
     }
   }
-  if (OB_SUCC(ret) && OB_FAIL(
-      share::ObAutoincrementService::get_instance().get_sequence_values(
-          autoinc_keys, seq_values_))) {
+  auto *autoinc_service = session_ == nullptr
+      ? nullptr : session_->effective_autoincrement_service();
+  if (OB_SUCC(ret) && autoinc_service == nullptr) {
+    ret = OB_NOT_INIT;
+  } else if (OB_SUCC(ret) && OB_FAIL(
+      autoinc_service->get_sequence_values(autoinc_keys, seq_values_))) {
     SERVER_LOG(WARN, "failed to get sequence value", K(ret));
   }
   return ret;

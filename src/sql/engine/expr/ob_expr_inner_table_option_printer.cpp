@@ -159,6 +159,8 @@ int ObExprInnerTableSequenceGetter::eval_inner_table_sequence_getter(const ObExp
   } else if (OB_ISNULL(session->effective_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get schema_service", K(ret));
+  } else if (OB_ISNULL(session->effective_autoincrement_service())) {
+    ret = OB_NOT_INIT;
   } else if (OB_FAIL(expr.eval_param_value(ctx, table_id, auto_inc_col_id))) {
   } else if (auto_inc_col_id->is_null() || 0 == auto_inc_col_id->get_int()) {
     expr_datum.set_null();
@@ -168,7 +170,7 @@ int ObExprInnerTableSequenceGetter::eval_inner_table_sequence_getter(const ObExp
     expr_datum.set_null();
   } else {
     uint64_t auto_increment = 0;
-    if (OB_FAIL(share::ObAutoincrementService::get_instance().get_sequence_value(
+    if (OB_FAIL(session->effective_autoincrement_service()->get_sequence_value(
           table_schema->get_table_id(),
           table_schema->get_autoinc_column_id(),
           table_schema->get_truncate_version(), auto_increment))) {

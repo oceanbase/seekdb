@@ -289,6 +289,8 @@ int ObTableInsertUpOp::inner_get_next_row()
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
   ObSQLSessionInfo *my_session = GET_MY_SESSION(ctx_);
+  share::ObAutoincrementService *auto_service = my_session == nullptr
+      ? nullptr : my_session->effective_autoincrement_service();
   if (iter_end_) {
     ret = OB_ITER_END;
   } else {
@@ -296,9 +298,11 @@ int ObTableInsertUpOp::inner_get_next_row()
     } else if (OB_ISNULL(my_session)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("session is null", K(ret));
+    } else if (auto_service == nullptr) {
+      ret = OB_NOT_INIT;
     } else if (OB_FAIL(do_insert_up())) {
     } else {
-      if (OB_FAIL(plan_ctx->sync_last_value_local())) {
+      if (OB_FAIL(plan_ctx->sync_last_value_local(*auto_service))) {
       }
       ObUpdRtDef &upd_rtdef = insert_up_rtdefs_.at(0).upd_rtdef_;
       plan_ctx->set_affected_rows(my_session->get_capability().cap_flags_.OB_CLIENT_FOUND_ROWS ?
@@ -308,8 +312,6 @@ int ObTableInsertUpOp::inner_get_next_row()
       plan_ctx->add_row_matched_count(found_rows_);
     }
     int sync_ret = OB_SUCCESS;
-    share::ObAutoincrementService *auto_service = ctx_.get_my_session() == nullptr
-        ? nullptr : ctx_.get_my_session()->effective_autoincrement_service();
     if (OB_ISNULL(auto_service)) {
       sync_ret = OB_NOT_INIT;
       LOG_WARN("autoincrement service is not bound", K(sync_ret));

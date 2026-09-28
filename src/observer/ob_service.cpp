@@ -21,6 +21,7 @@
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/time/ob_time_utility.h"
 #include "ob_service.h"
+#include "namespace/namespace.h"
 #include "storage/ob_storage_rpc_arg.h"
 #include "share/rc/ob_server_runtime.h"
 #include "share/ob_telemetry.h"
@@ -873,20 +874,32 @@ int ObService::load_all_special_system_packages()
   return pl::ObPLPackageManager::load_all_special_sys_package(*gctx_.sql_proxy_);
 }
 
-int ObService::refresh_stat_cache(const obcall::ObUpdateStatCacheArg &arg)
+int ObService::refresh_stat_cache(uint64_t namespace_id,
+    const obcall::ObUpdateStatCacheArg &arg)
 {
-  return ObOptStatManager::get_instance().refresh_stat_cache(arg);
+  ns::NamespaceRuntime *runtime = nullptr;
+  if (!ns::namespace_registry().get(namespace_id, runtime) || runtime == nullptr) {
+    return OB_NOT_INIT;
+  }
+  auto *manager = static_cast<ObOptStatManager *>(
+      runtime->service(ns::NamespaceRuntime::OPT_STAT_MANAGER));
+  return manager == nullptr ? OB_NOT_INIT : manager->refresh_stat_cache(arg);
 }
 
 int ObService::update_opt_stat_monitoring_info(
-    const obcall::ObFlushOptStatArg &arg)
+    uint64_t namespace_id, const obcall::ObFlushOptStatArg &arg)
 {
   int ret = OB_SUCCESS;
   SERVER_MODULE_SCOPE {
-    ObOptStatMonitorManager *manager =
-        ::oceanbase::share::server_service<::oceanbase::common::ObOptStatMonitorManager>();
+    ns::NamespaceRuntime *runtime = nullptr;
+    if (!ns::namespace_registry().get(namespace_id, runtime) || runtime == nullptr) {
+      ret = OB_NOT_INIT;
+    }
+    ObOptStatMonitorManager *manager = runtime == nullptr ? nullptr
+        : static_cast<ObOptStatMonitorManager *>(
+              runtime->service(ns::NamespaceRuntime::OPT_STAT_MONITOR_MANAGER));
     if (OB_ISNULL(manager)) {
-      ret = OB_ERR_UNEXPECTED;
+      ret = OB_NOT_INIT;
       LOG_WARN("optimizer stat monitor manager is null", KR(ret));
     } else if (OB_FAIL(manager->update_opt_stat_monitoring_info(arg))) {
       LOG_WARN("failed to update optimizer stat monitoring info", KR(ret));

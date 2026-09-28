@@ -185,11 +185,15 @@ int ObShowTableStatus::get_sequence_value()
     }
   }
   if (OB_SUCC(ret)) {
+    auto *autoinc_service = session_ == nullptr
+        ? nullptr : session_->effective_autoincrement_service();
     if (autoinc_keys.count() != autoinc_versions.count()) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "autokeys count is not equal to truncate versions count", KR(ret),
           K(autoinc_keys.count()), K(autoinc_versions.count()));
-    } else if (OB_FAIL(share::ObAutoincrementService::get_instance().get_sequence_values(
+    } else if (autoinc_service == nullptr) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(autoinc_service->get_sequence_values(
               autoinc_keys, autoinc_versions, seq_values_))) {
     }
   }

@@ -7,7 +7,8 @@ int find_template_namespace(const char *name, uint64_t &id)
       : "SELECT namespace_id FROM __fork_proto_meta.namespaces WHERE state=0 AND name='__template_build__'";
   ObMySQLProxy::MySQLResult result;
   sqlclient::ObMySQLResult *rows = nullptr;
-  int ret = GCTX.sql_proxy_->read(result, query);
+  ObMySQLProxy *control_proxy = namespace_sql_proxy(1);
+  int ret = control_proxy == nullptr ? OB_NOT_INIT : control_proxy->read(result, query);
   if (OB_SUCC(ret) && OB_ISNULL(rows = result.get_result())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_SUCC(ret)) {
@@ -238,11 +239,14 @@ int ensure_legacy_template_namespace()
     if (OB_SUCC(ret)) {
       ObSqlString query;
       int64_t affected_rows = 0;
+      ObMySQLProxy *control_proxy = namespace_sql_proxy(1);
       if (OB_FAIL(query.assign_fmt(
               "UPDATE __fork_proto_meta.namespaces SET name='__template__' "
               "WHERE namespace_id=%lu AND state=0 AND name='__template_build__'",
               build_id))) {
-      } else if (OB_FAIL(GCTX.sql_proxy_->write(query.ptr(), affected_rows))) {
+      } else if (control_proxy == nullptr) {
+        ret = OB_NOT_INIT;
+      } else if (OB_FAIL(control_proxy->write(query.ptr(), affected_rows))) {
       } else if (affected_rows != 1) {
         ret = OB_ERR_UNEXPECTED;
       } else {
@@ -258,10 +262,11 @@ int ensure_legacy_template_namespace()
   return ret;
 }
 int restore_namespace_registry() {
-  if (!GCTX.sql_proxy_) { return OB_NOT_INIT; }
+  ObMySQLProxy *control_proxy = namespace_sql_proxy(1);
+  if (control_proxy == nullptr) { return OB_NOT_INIT; }
   ObMySQLProxy::MySQLResult result;
   sqlclient::ObMySQLResult *rows = nullptr;
-  int ret = GCTX.sql_proxy_->read(result,
+  int ret = control_proxy->read(result,
       "SELECT namespace_id,name FROM __fork_proto_meta.namespaces "
       "WHERE state=0 AND name NOT IN ('__template__','__template_build__') "
       "ORDER BY namespace_id");

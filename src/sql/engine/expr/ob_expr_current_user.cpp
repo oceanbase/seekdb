@@ -66,7 +66,7 @@ int ObExprCurrentUser::eval_current_user(const ObExpr &expr, ObEvalCtx &ctx,
     share::schema::ObMultiVersionSchemaService *schema_service = session_info->effective_schema_service();
     if (OB_ISNULL(schema_service)) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected NULL GCTX.schema_service_", K(ret));
+      LOG_WARN("session schema service is unavailable", K(ret));
     } else if (OB_FAIL(schema_service->get_runtime_schema_guard(
                    schema_guard))) {
     } else if (OB_FAIL(schema_guard.get_user_info(priv_user_id,

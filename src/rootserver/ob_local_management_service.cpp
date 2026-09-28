@@ -126,6 +126,7 @@ int ObLocalManagementService::init(ObServerConfig &config,
                         ObAddr &self,
                         ObMySQLProxy &sql_proxy,
                         ObMultiVersionSchemaService *schema_service,
+                        ObAutoincrementService &autoincrement_service,
                         const bool need_bootstrap)
 {
   int ret = OB_SUCCESS;
@@ -192,6 +193,7 @@ int ObLocalManagementService::init(ObServerConfig &config,
     context.session_sql_proxy_ = &sql_proxy;
     context.ddl_proxy_ = ddl_sql_proxy_;
     context.schema_service_ = schema_service;
+    context.autoincrement_service_ = &autoincrement_service;
     context.root_service_ = this;
     context.local_runtime_ = ddl_local_runtime_;
     if (!context.is_complete()) {
@@ -215,7 +217,8 @@ int ObLocalManagementService::init_sql_worker(
     const ObAddr &self,
     ObMySQLProxy &sql_proxy,
     ObMySQLProxy &session_sql_proxy,
-    ObMultiVersionSchemaService &schema_service)
+    ObMultiVersionSchemaService &schema_service,
+    ObAutoincrementService &autoincrement_service)
 {
   int ret = OB_SUCCESS;
   if (inited_) {
@@ -254,6 +257,7 @@ int ObLocalManagementService::init_sql_worker(
     context.session_sql_proxy_ = &session_sql_proxy;
     context.ddl_proxy_ = ddl_sql_proxy_;
     context.schema_service_ = &schema_service;
+    context.autoincrement_service_ = &autoincrement_service;
     context.root_service_ = this;
     context.local_runtime_ = ddl_local_runtime_;
     if (!context.is_complete()) {
@@ -2702,7 +2706,8 @@ int ObLocalManagementService::update_stat_cache(const obcall::ObUpdateStatCacheA
     LOG_WARN("not init", K(ret));
   } else {
     if (OB_FAIL(ex_rpc::sync_call(
-            [&]{ return local_command_service_->refresh_stat_cache(arg); }))) {
+            [&]{ return local_command_service_->refresh_stat_cache(
+                sql_proxy_->target_namespace(), arg); }))) {
       LOG_WARN("fail to update table statistic", K(ret));
       // OB_SQL_PC_NOT_EXIST represent evict plan failed
       if (OB_SQL_PC_NOT_EXIST == ret) {
@@ -3019,7 +3024,8 @@ int ObLocalManagementService::flush_opt_stat_monitoring_info(const obcall::ObFlu
     LOG_WARN("not init", K(ret));
   } else {
     if (OB_FAIL(ex_rpc::sync_call([&]{
-          return local_command_service_->update_opt_stat_monitoring_info(arg);
+          return local_command_service_->update_opt_stat_monitoring_info(
+              sql_proxy_->target_namespace(), arg);
         }))) {
     } else { /*do nothing*/}
   }

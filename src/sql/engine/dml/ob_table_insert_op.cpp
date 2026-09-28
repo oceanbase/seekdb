@@ -258,6 +258,8 @@ int ObTableInsertOp::write_rows_post_proc(int last_errno)
   int ret = last_errno;
   if (iter_end_) {
     ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
+    share::ObAutoincrementService *auto_service = ctx_.get_my_session() == nullptr
+        ? nullptr : ctx_.get_my_session()->effective_autoincrement_service();
     if (OB_ERR_PRIMARY_KEY_DUPLICATE == ret) {
       plan_ctx->set_last_insert_id_cur_stmt(0);
     }
@@ -270,12 +272,12 @@ int ObTableInsertOp::write_rows_post_proc(int last_errno)
       plan_ctx->add_row_matched_count(changed_rows);
       plan_ctx->add_affected_rows(changed_rows);
       // sync last user specified value after iter ends(compatible with MySQL)
-      if (OB_FAIL(plan_ctx->sync_last_value_local())) {
+      if (auto_service == nullptr) {
+        ret = OB_NOT_INIT;
+      } else if (OB_FAIL(plan_ctx->sync_last_value_local(*auto_service))) {
       }
     }
     int sync_ret = OB_SUCCESS;
-    share::ObAutoincrementService *auto_service = ctx_.get_my_session() == nullptr
-        ? nullptr : ctx_.get_my_session()->effective_autoincrement_service();
     if (OB_ISNULL(auto_service)) {
       sync_ret = OB_NOT_INIT;
       LOG_WARN("autoincrement service is not bound", K(sync_ret));

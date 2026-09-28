@@ -275,20 +275,22 @@ int ObTableReplaceOp::inner_get_next_row()
 {
   int ret = OB_SUCCESS;
   ObPhysicalPlanCtx *plan_ctx = GET_PHY_PLAN_CTX(ctx_);
+  share::ObAutoincrementService *auto_service = ctx_.get_my_session() == nullptr
+      ? nullptr : ctx_.get_my_session()->effective_autoincrement_service();
   if (iter_end_) {
     ret = OB_ITER_END;
   } else {
     if (OB_FAIL(try_check_status())) {
+    } else if (auto_service == nullptr) {
+      ret = OB_NOT_INIT;
     } else if (OB_FAIL(do_replace_into())) {
-    } else if (OB_FAIL(plan_ctx->sync_last_value_local())) {
+    } else if (OB_FAIL(plan_ctx->sync_last_value_local(*auto_service))) {
     } else {
       plan_ctx->set_row_matched_count(insert_rows_);
       plan_ctx->set_affected_rows(insert_rows_ + delete_rows_);
       plan_ctx->set_row_duplicated_count(delete_rows_);
     }
     int sync_ret = OB_SUCCESS;
-    share::ObAutoincrementService *auto_service = ctx_.get_my_session() == nullptr
-        ? nullptr : ctx_.get_my_session()->effective_autoincrement_service();
     if (OB_ISNULL(auto_service)) {
       sync_ret = OB_NOT_INIT;
       LOG_WARN("autoincrement service is not bound", K(sync_ret));

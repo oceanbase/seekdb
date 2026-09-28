@@ -141,9 +141,10 @@ public:
   int load_leader_cluster_login_info();
   // ObCallSetDebugSyncActionP @RS::admin to set debug sync action
   int set_ds_action(const obcall::ObDebugSyncActionArg &arg) override;
-  int refresh_stat_cache(const obcall::ObUpdateStatCacheArg &arg) override;
+  int refresh_stat_cache(uint64_t namespace_id,
+      const obcall::ObUpdateStatCacheArg &arg) override;
   int update_opt_stat_monitoring_info(
-      const obcall::ObFlushOptStatArg &arg) override;
+      uint64_t namespace_id, const obcall::ObFlushOptStatArg &arg) override;
   int set_tracepoint(const obcall::ObSetTracepointParam &param) override;
   int cancel_sys_task(const share::ObTaskId &task_id) override;
   int refresh_memory_stat() override;

@@ -37,6 +37,7 @@
 
 namespace oceanbase
 {
+namespace share { class ObAutoincrementService; }
 
 namespace query
 {
@@ -114,13 +115,15 @@ public:
   int init(common::ObServerConfig &config, common::ObConfigManager &config_mgr,
            common::ObAddr &self, common::ObMySQLProxy &sql_proxy,
            share::schema::ObMultiVersionSchemaService *schema_mgr_,
+           share::ObAutoincrementService &autoincrement_service,
            const bool need_bootstrap);
   int init_sql_worker(common::ObServerConfig &config,
                       common::ObConfigManager &config_mgr,
                       const common::ObAddr &self,
                       common::ObMySQLProxy &sql_proxy,
                       common::ObMySQLProxy &session_sql_proxy,
-                      share::schema::ObMultiVersionSchemaService &schema_service);
+                      share::schema::ObMultiVersionSchemaService &schema_service,
+                      share::ObAutoincrementService &autoincrement_service);
   void set_ddl_local_runtime(ObIRootserverLocalRuntime *runtime) { ddl_local_runtime_ = runtime; }
   ObIRootserverLocalRuntime *ddl_local_runtime() const { return ddl_local_runtime_; }
   void set_ddl_sql_proxy(common::ObMySQLProxy *proxy) { ddl_sql_proxy_ = proxy; }

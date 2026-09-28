@@ -116,9 +116,7 @@ struct DirectInsertOwner final : ObIDirectInsertWorkerContext {
       item.checksum_ = column_checksums.at(i);
       ret = items.push_back(item);
     }
-    if (OB_SUCC(ret) && OB_ISNULL(GCTX.sql_proxy_)) {
-      ret = OB_NOT_INIT;
-    } else if (OB_SUCC(ret)) {
+    if (OB_SUCC(ret)) {
       TargetSqlProxy target_sql(namespace_id);
       if (OB_SUCC(ret = target_sql.init(false))) {
         ret = share::ObDDLChecksumOperator::update_checksum(

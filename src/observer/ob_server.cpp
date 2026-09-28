@@ -2410,15 +2410,25 @@ int ObServer::init_ob_service(bool need_bootstrap)
 int ObServer::init_local_management_service(const bool need_bootstrap)
 {
   int ret = OB_SUCCESS;
+  ns::NamespaceRuntime *home = nullptr;
 
   local_management_service_.set_local_command_service(ob_service_);
   local_management_service_.set_ddl_local_runtime(
       namespace_worker_prototype::root_namespace_ddl_runtime());
   local_management_service_.set_ddl_sql_proxy(&ddl_sql_proxy_);
-  if (OB_FAIL(local_management_service_.init(
+  if (!ns::namespace_registry().get(1, home) || home == nullptr) {
+    ret = OB_NOT_INIT;
+    LOG_ERROR("root namespace runtime is unavailable", KR(ret));
+  } else if (OB_ISNULL(home->service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE))) {
+    ret = OB_NOT_INIT;
+    LOG_ERROR("root namespace autoincrement service is unavailable", KR(ret));
+  } else if (OB_FAIL(local_management_service_.init(
                  config_, config_mgr_,
                  self_addr_, sql_proxy_,
-                 &schema_service_, need_bootstrap))) {
+                 &schema_service_,
+                 *static_cast<share::ObAutoincrementService *>(
+                     home->service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE)),
+                 need_bootstrap))) {
     LOG_ERROR("init local management service failed", K(ret));
   }
 
@@ -2500,7 +2510,6 @@ int ObServer::init_global_context()
   gctx_.tablet_operator_ = &tablet_operator_;
   gctx_.meta_db_pool_ = &meta_db_pool_;
   gctx_.sql_proxy_ = &sql_proxy_;
-  gctx_.ddl_sql_proxy_ = &ddl_sql_proxy_;
   if (OB_FAIL(sql_proxy_.set_target_namespace(1))) {
     return ret;
   } else if (OB_FAIL(ddl_sql_proxy_.set_target_namespace(1))) {
@@ -2515,8 +2524,7 @@ int ObServer::init_global_context()
   }
   home->grant_global_control_authority();
   home->disable_storage_access_lease();
-  home->set_service(ns::NamespaceRuntime::SCHEMA_SERVICE,
-      &share::schema::ObMultiVersionSchemaService::get_instance());
+  home->set_service(ns::NamespaceRuntime::SCHEMA_SERVICE, &schema_service_);
   home->set_service(ns::NamespaceRuntime::SQL_PROXY, &sql_proxy_);
   home->set_service(ns::NamespaceRuntime::VECTOR_TASK_SQL_PROXY, &sql_proxy_);
   home->set_service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE,

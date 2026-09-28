@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER_OMT
 #include "ob_server_runtime.h"
 #include "observer/ob_server.h"   // T3d
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "share/rc/ob_server_runtime.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/statistic_event/ob_stat_event.h"
@@ -800,8 +801,11 @@ void ObServerRuntime::check_parallel_servers_target()
 {
   int ret = OB_SUCCESS;
   int64_t val = 0;
-  if (OB_FAIL(ObSchemaUtils::get_runtime_int_variable(
-              *GCTX.schema_service_,
+  auto *root_schema_service = observer::namespace_worker_prototype::namespace_schema_service(1);
+  if (root_schema_service == nullptr) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(ObSchemaUtils::get_runtime_int_variable(
+              *root_schema_service,
               SYS_VAR_PARALLEL_SERVERS_TARGET,
               val))) {
   } else {

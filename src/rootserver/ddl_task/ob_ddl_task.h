@@ -33,6 +33,7 @@
 namespace oceanbase
 {
 namespace common { class ObMySQLProxy; }
+namespace share { class ObAutoincrementService; }
 namespace share { namespace schema { class ObMultiVersionSchemaService; } }
 namespace rootserver
 {
@@ -62,6 +63,7 @@ struct ObDDLTaskContext final
   common::ObMySQLProxy *session_sql_proxy_ = nullptr;
   common::ObMySQLProxy *ddl_proxy_ = nullptr;
   share::schema::ObMultiVersionSchemaService *schema_service_ = nullptr;
+  share::ObAutoincrementService *autoincrement_service_ = nullptr;
   ObLocalManagementService *root_service_ = nullptr;
   ObIRootserverLocalRuntime *local_runtime_ = nullptr;
   bool is_complete() const
@@ -71,7 +73,8 @@ struct ObDDLTaskContext final
         && recovery_mode_ != RecoveryMode::INVALID
         && sql_proxy_ != nullptr && session_sql_proxy_ != nullptr
         && ddl_proxy_ != nullptr
-        && schema_service_ != nullptr && root_service_ != nullptr
+        && schema_service_ != nullptr && autoincrement_service_ != nullptr
+        && root_service_ != nullptr
         && local_runtime_ != nullptr;
   }
 };

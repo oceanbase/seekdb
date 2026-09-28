@@ -864,6 +864,7 @@ private:
       VersionHisVal &version_his_val);
 private:
   common::ObMySQLProxy *mysql_proxy_;
+  ObMultiVersionSchemaService &multi_version_schema_service_;
   // record last schema version of log operation while execute ddl
   int64_t last_operation_schema_version_;
   ObDatabaseSqlService database_service_;

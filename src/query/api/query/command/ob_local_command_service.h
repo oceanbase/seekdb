@@ -47,9 +47,10 @@ public:
   virtual int wait_system_package_ready(const common::ObTimeoutCtx &ctx) = 0;
   virtual int get_build_version(char *buf, int64_t buf_len) = 0;
   virtual int set_ds_action(const obcall::ObDebugSyncActionArg &arg) = 0;
-  virtual int refresh_stat_cache(const obcall::ObUpdateStatCacheArg &arg) = 0;
+  virtual int refresh_stat_cache(uint64_t namespace_id,
+      const obcall::ObUpdateStatCacheArg &arg) = 0;
   virtual int update_opt_stat_monitoring_info(
-      const obcall::ObFlushOptStatArg &arg) = 0;
+      uint64_t namespace_id, const obcall::ObFlushOptStatArg &arg) = 0;
 };
 
 } // namespace query

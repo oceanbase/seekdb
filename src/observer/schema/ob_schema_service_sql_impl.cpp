@@ -184,6 +184,7 @@ ObSchemaServiceSQLImpl::ObSchemaServiceSQLImpl(
     ObMySQLProxy &ddl_sql_proxy,
     ObMultiVersionSchemaService &schema_service)
     : mysql_proxy_(NULL),
+      multi_version_schema_service_(schema_service),
       last_operation_schema_version_(OB_INVALID_VERSION),
       database_service_(*this),
       table_service_(*this, schema_service),
@@ -5797,7 +5798,7 @@ int ObSchemaServiceSQLImpl::get_database_id(
   } else if (OB_ISNULL(db_name)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc db_name failed", KR(ret), K(database_name));
-  } else if (OB_FAIL(GSCHEMASERVICE.get_runtime_name_case_mode(name_case_mode))) {
+  } else if (OB_FAIL(multi_version_schema_service_.get_runtime_name_case_mode(name_case_mode))) {
   } else {
     ObSqlString sql;
     const bool case_compare = (0 == database_name.case_compare(OB_SYS_DATABASE_NAME)
@@ -5860,7 +5861,7 @@ int ObSchemaServiceSQLImpl::get_table_id(
   } else if (OB_ISNULL(tb_name)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc tb_name failed", KR(ret), K(table_name));
-  } else if (OB_FAIL(GSCHEMASERVICE.get_runtime_name_case_mode(name_case_mode))) {
+  } else if (OB_FAIL(multi_version_schema_service_.get_runtime_name_case_mode(name_case_mode))) {
   } else if (OB_FAIL(ObSysTableChecker::is_sys_table_name(database_id, table_name, is_system_table))) {
   } else {
     ObSqlString sql;

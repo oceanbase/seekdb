@@ -436,7 +436,8 @@ int ObMySQLProcTable::get_info_from_all_routine(const uint64_t col_id,
                                                 int64_t &routine_time)
 {
   int ret = OB_SUCCESS;
-  common::ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
+  common::ObMySQLProxy *sql_proxy = session_ == nullptr
+      ? nullptr : session_->effective_sql_proxy();
   if (OB_NOT_NULL(routine_info)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       common::sqlclient::ObMySQLResult *result = NULL;
