@@ -22,11 +22,13 @@
 #include "storage/compaction/ob_freeze_info_mgr.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/ddl/ob_tablet_fork_task.h"
+#include "storage/ls/ob_ls.h"
 #include "storage/ob_storage_schema.h"
 #include "storage/ob_tablet_autoincrement_service.h"
 #include "storage/tablet/ob_tablet_create_delete_helper.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 #include "storage/tx_storage/ob_access_service.h"
+#include "storage/tx_storage/ob_ls_service.h"
 #include "lib/hash_func/murmur_hash.h"
 #include "lib/time/ob_time_utility.h"
 #include <algorithm>
@@ -648,6 +650,34 @@ int sql_has_row(ObISQLClient &sql, const ObSqlString &query, bool &has_row) {
   return ret;
 }
 
+int all_physical_tablet_ids(ObIArray<ObTabletID> &ids)
+{
+  auto *service = share::server_service<ObLSService>();
+  ObLS *ls = nullptr;
+  int ret = service == nullptr ? OB_NOT_INIT : service->get_ls(ls);
+  if (ret == OB_SUCCESS && ls == nullptr) { ret = OB_ERR_UNEXPECTED; }
+  if (ret == OB_SUCCESS) {
+    ret = ls->get_tablet_svr()->get_all_tablet_ids(
+        true /* except_ls_inner_tablet */, ids);
+  }
+  return ret;
+}
+
+int namespace_has_physical_tablet(uint64_t namespace_id, bool &has_tablet)
+{
+  has_tablet = false;
+  ObArray<ObTabletID> tablets;
+  int ret = all_physical_tablet_ids(tablets);
+  for (int64_t i = 0; ret == OB_SUCCESS && i < tablets.count(); ++i) {
+    const uint64_t id = tablets.at(i).id();
+    if (NamespaceObjectKey::is_encoded(id) && database_of(id) == namespace_id) {
+      has_tablet = true;
+      break;
+    }
+  }
+  return ret;
+}
+
 // Namespace ids are never reused. A deleted row only needs to survive while a
 // child still points at it or its private tablets await asynchronous GC.
 int prune_dropped_namespace_row(uint64_t &cursor, bool &found) {
@@ -672,7 +702,7 @@ int prune_dropped_namespace_row(uint64_t &cursor, bool &found) {
 
   ObMySQLTransaction trans;
   Roots root;
-  bool has_child = false, has_owned = false;
+  bool has_child = false, has_owned = false, has_physical = false;
   if (OB_FAIL(trans.start(directory_sql_proxy()))) {
   } else if (OB_FAIL(roots(trans, id, root, true, true))) {
   } else if (root.state != 2) {
@@ -685,6 +715,8 @@ int prune_dropped_namespace_row(uint64_t &cursor, bool &found) {
       EXCEPTIONS, id))) {
   } else if (OB_FAIL(sql_has_row(trans, query, has_owned))) {
   } else if (has_owned) {
+  } else if (OB_FAIL(namespace_has_physical_tablet(id, has_physical))) {
+  } else if (has_physical) {
   } else if (OB_FAIL(query.assign_fmt("DELETE FROM %s WHERE namespace_id=%lu", EXCEPTIONS, id))) {
   } else if (OB_FAIL(write_sql(trans, query))) {
   } else if (OB_FAIL(query.assign_fmt("DELETE FROM %s WHERE namespace_id=%lu AND state=2",
@@ -696,7 +728,7 @@ int prune_dropped_namespace_row(uint64_t &cursor, bool &found) {
     const int end = trans.end(OB_SUCC(ret));
     if (OB_SUCC(ret)) { ret = end; }
   }
-  if (OB_SUCC(ret) && !has_child && !has_owned && root.state == 2) {
+  if (OB_SUCC(ret) && !has_child && !has_owned && !has_physical && root.state == 2) {
     invalidate_namespace_state(id);
     control_state().drop_exceptions(id);
     control_state().forget_chain_link(id);
@@ -1157,10 +1189,78 @@ int NamespaceForkKernelPrototype::protect_snapshot_tablets(ObIArray<ObTabletID> 
   if (OB_SUCC(ret)) { ret = candidates.assign(unreferenced); }
   return ret;
 }
+
+int append_dropped_namespace_physical_tablets(
+    ObIArray<ObTabletID> &candidates,
+    const ObIArray<ObTabletID> &stale,
+    uint64_t &cursor)
+{
+  std::unordered_set<uint64_t> deleted_namespaces;
+  ObMySQLProxy::MySQLResult result;
+  sqlclient::ObMySQLResult *rows = nullptr;
+  int ret = directory_sql_proxy()->read(result,
+      "SELECT namespace_id FROM __fork_proto_meta.namespaces WHERE state=2");
+  if (ret == OB_SUCCESS && OB_ISNULL(rows = result.get_result())) {
+    ret = OB_ERR_UNEXPECTED;
+  }
+  while (ret == OB_SUCCESS) {
+    const int next_ret = rows->next();
+    if (next_ret == OB_ITER_END) { break; }
+    uint64_t id = 0;
+    if (next_ret != OB_SUCCESS) { ret = next_ret; }
+    else if (OB_FAIL(rows->get_uint(0L, id))) {
+    } else { deleted_namespaces.insert(id); }
+  }
+  if (ret != OB_SUCCESS || deleted_namespaces.empty()) {
+    if (ret == OB_SUCCESS) { cursor = 0; }
+    return ret;
+  }
+  ObArray<ObTabletID> all_tablets;
+  ret = all_physical_tablet_ids(all_tablets);
+  std::vector<uint64_t> physical;
+  for (int64_t i = 0; ret == OB_SUCCESS && i < all_tablets.count(); ++i) {
+    const uint64_t id = all_tablets.at(i).id();
+    if (NamespaceObjectKey::is_encoded(id)
+        && deleted_namespaces.count(database_of(id)) != 0) {
+      physical.push_back(id);
+    }
+  }
+  if (ret != OB_SUCCESS) { return ret; }
+  std::sort(physical.begin(), physical.end());
+  std::unordered_set<uint64_t> selected;
+  for (int64_t i = 0; i < candidates.count(); ++i) {
+    selected.insert(candidates.at(i).id());
+  }
+  for (int64_t i = 0; i < stale.count(); ++i) {
+    selected.insert(stale.at(i).id());
+  }
+  std::vector<uint64_t> batch;
+  int64_t examined = 0;
+  bool more = false;
+  for (const uint64_t id : physical) {
+    if (id <= cursor) { continue; }
+    if (examined == 64) { more = true; break; }
+    ++examined;
+    cursor = id;
+    if (selected.count(id) != 0) { continue; }
+    batch.push_back(id);
+  }
+  if (!more) { cursor = 0; }
+  if (batch.empty()) { return ret; }
+  for (const uint64_t id : batch) {
+    if (OB_FAIL(ret)) { break; }
+    bool exists = false;
+    if (OB_FAIL(probe_physical_tablet(id, exists))) { break; }
+    if (exists) { ret = candidates.push_back(ObTabletID(id)); }
+  }
+  return ret;
+}
+
 int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets() {
   if (!directory_sql_proxy() || !ATOMIC_LOAD(&GCTX.sys_package_ready_)) { return OB_SUCCESS; }
   static std::mutex scan_mutex;
   static uint64_t cursor_namespace = 0, cursor_tablet = 0;
+  static uint64_t physical_cursor = 0;
   static uint64_t tombstone_cursor = UINT64_MAX;
   std::lock_guard<std::mutex> scan_guard(scan_mutex);
   ObSqlString scan;
@@ -1201,6 +1301,10 @@ int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets() {
     }
   }
   if (OB_SUCC(ret) && !saw_row) { cursor_namespace = cursor_tablet = 0; }
+  if (OB_SUCC(ret)) {
+    ret = append_dropped_namespace_physical_tablets(
+        candidates, stale, physical_cursor);
+  }
   bool deferred = false;
   if (OB_SUCC(ret) && !candidates.empty()) {
     ret = protect_snapshot_tablets(candidates, deferred);
@@ -1231,7 +1335,10 @@ int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets() {
       rootserver::ObTabletDrop drop(trans, schema_version);
       if (OB_FAIL(drop.init())) {
       } else if (OB_FAIL(drop.add_drop_tablets_arg(candidates))) {
-      } else { ret = drop.execute(); }
+      } else {
+        observer::namespace_worker_prototype::PhysicalTabletMdsScope physical_mds(true);
+        ret = drop.execute();
+      }
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < candidates.count() + stale.count(); ++i) {
