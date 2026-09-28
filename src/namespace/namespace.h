@@ -64,9 +64,7 @@ private:
   char name_[MAX_NAME_LEN];
 };
 
-// Per-namespace service group holder (pure compute layer). Phase 1a is a
-// skeleton bound to sessions at login; later phases move the per-ns service
-// instances (schema service, plan cache, session mgr, ...) in here.
+// Per-namespace service holder, bound to sessions at login.
 class NamespaceRuntime final
 {
 public:
@@ -132,16 +130,7 @@ public:
   }
   bool has_request_services() const
   {
-    const ServiceSlot required[] = {
-      SCHEMA_SERVICE, PLAN_CACHE, ROOT_COMMAND_SERVICE, DIRECT_INSERT_SERVICE,
-      DIRECT_INSERT_REGISTRY, SQL_PROXY, TABLET_AUTOINCREMENT_SERVICE,
-      AUTOINCREMENT_SERVICE, SCHEMA_LIFECYCLE, TABLE_LOCK_TABLET_ROUTER,
-      DML_SERVICE, RANGE_SERVICE, DDL_CHECKSUM_ERROR_VERIFIER, PS_CACHE,
-      OPT_STAT_MANAGER, OPT_STAT_MONITOR_MANAGER, TABLET_SCAN,
-      LOB_READ_SERVICE, WRITE_CONTEXT_SERVICE, TRANSACTION_SERVICE,
-      VECTOR_TASK_SQL_PROXY, DBMS_SCHEDULER, TABLE_LOCK_SERVICE
-    };
-    for (const ServiceSlot slot : required) {
+    for (uint8_t slot = 0; slot < SLOT_COUNT; ++slot) {
       if (services_[slot] == nullptr) { return false; }
     }
     return true;
