@@ -220,37 +220,47 @@ int namespace_chain_link(ObISQLClient &sql, uint64_t ns, uint64_t &parent, int64
   }
   return ret;
 }
+template <typename Visitor>
+int scan_committed_table_bindings(ObISQLClient &sql, uint64_t ns, Visitor visitor) {
+  const NamespaceObjectKey first{ns, 1};
+  if (!first.is_valid()) { return OB_INVALID_ARGUMENT; }
+  uint64_t cursor = first.storage_id() - 1;
+  int ret = OB_SUCCESS;
+  bool done = false;
+  while (OB_SUCC(ret) && !done) {
+    ObArray<ObTabletTablePair> batch;
+    ret = ObTabletMappingTableOperator::range_get_tablet_table_pairs(
+        sql, ObTabletID(cursor), 256, batch);
+    for (int64_t i = 0; OB_SUCC(ret) && i < batch.count(); ++i) {
+      const uint64_t physical = batch.at(i).get_tablet_id().id();
+      if (!NamespaceObjectKey::is_encoded(physical)
+          || database_of(physical) != ns) {
+        done = true;
+        break;
+      }
+      cursor = physical;
+      ret = visitor(batch.at(i), done);
+      if (done) { break; }
+    }
+    if (batch.count() < 256) { done = true; }
+  }
+  return ret;
+}
 class SqlExceptionLoader final : public ns::IExceptionLoader {
 public:
   explicit SqlExceptionLoader(ObISQLClient &sql) : sql_(sql) {}
   int load(uint64_t ns, IRowSink &sink) override {
-    const NamespaceObjectKey first{ns, 1};
-    if (!first.is_valid()) { return OB_INVALID_ARGUMENT; }
     // Mapping rows commit with physical tablet creation/deletion. Rebuild the
     // owned cache from them so a crash before post-commit cache publication
     // cannot lose a materialized tablet's ownership or table binding.
-    uint64_t cursor = first.storage_id() - 1;
-    int ret = OB_SUCCESS;
-    bool end_of_namespace = false;
-    while (OB_SUCC(ret) && !end_of_namespace) {
-      ObArray<ObTabletTablePair> batch;
-      ret = ObTabletMappingTableOperator::range_get_tablet_table_pairs(
-          sql_, ObTabletID(cursor), 256, batch);
-      for (int64_t i = 0; OB_SUCC(ret) && i < batch.count(); ++i) {
-        const uint64_t physical = batch.at(i).get_tablet_id().id();
-        if (!NamespaceObjectKey::is_encoded(physical)
-            || database_of(physical) != ns) {
-          end_of_namespace = true;
-          break;
-        }
-        cursor = physical;
-        ns::NamespaceExceptionRow row;
-        row.tablet = local_of(physical);
-        row.table = batch.at(i).get_table_id();
-        sink.add(row);
-      }
-      if (batch.count() < 256) { end_of_namespace = true; }
-    }
+    int ret = scan_committed_table_bindings(sql_, ns,
+        [&](const ObTabletTablePair &binding, bool &) {
+          ns::NamespaceExceptionRow row;
+          row.tablet = local_of(binding.get_tablet_id().id());
+          row.table = binding.get_table_id();
+          sink.add(row);
+          return OB_SUCCESS;
+        });
     if (OB_FAIL(ret)) { return ret; }
     ObSqlString q; ObMySQLProxy::MySQLResult res; sqlclient::ObMySQLResult *r = nullptr;
     ret = q.assign_fmt(
@@ -734,9 +744,12 @@ int prune_dropped_namespace_row(uint64_t &cursor, bool &found) {
       NAMESPACES, id))) {
   } else if (OB_FAIL(sql_has_row(trans, query, has_child))) {
   } else if (has_child) {
-  } else if (OB_FAIL(query.assign_fmt("SELECT 1 FROM %s WHERE namespace_id=%lu AND kind=0 LIMIT 1",
-      EXCEPTIONS, id))) {
-  } else if (OB_FAIL(sql_has_row(trans, query, has_owned))) {
+  } else if (OB_FAIL(scan_committed_table_bindings(trans, id,
+      [&](const ObTabletTablePair &, bool &stop) {
+        has_owned = true;
+        stop = true;
+        return OB_SUCCESS;
+      }))) {
   } else if (has_owned) {
   } else if (OB_FAIL(query.assign_fmt("DELETE FROM %s WHERE namespace_id=%lu", EXCEPTIONS, id))) {
   } else if (OB_FAIL(write_sql(trans, query))) {
@@ -985,23 +998,13 @@ int NamespaceForkKernelPrototype::lock_namespace_drop(ObISQLClient &trans, uint6
   if (ret != OB_SUCCESS) { return ret; }
   if (root.state != 1) { return OB_STATE_NOT_MATCH; }
   if (id == 1) { return OB_SUCCESS; } // Native DROP owns its own enumeration.
-  // The owned exception rows are exactly this namespace's private tablets.
-  ObSqlString q; ObMySQLProxy::MySQLResult res; sqlclient::ObMySQLResult *r = nullptr;
-  if (OB_FAIL(q.assign_fmt(
-      "SELECT tablet_id FROM %s WHERE namespace_id=%lu AND kind=0", EXCEPTIONS, id))) {
-  } else if (OB_FAIL(trans.read(res, q.ptr()))) {
-  } else if (OB_ISNULL(r = res.get_result())) { ret = OB_ERR_UNEXPECTED;
-  } else {
-    while (OB_SUCC(ret = r->next())) {
-      uint64_t tablet = 0;
-      if (OB_FAIL(r->get_uint(0L, tablet))) {
-      } else {
-        ret = bound_tablets.push_back(ObTabletID(encoded(id, tablet)));
-      }
-    }
-    if (ret == OB_ITER_END) { ret = OB_SUCCESS; }
-  }
-  return ret;
+  // Physical mappings are the committed set to remove. They share the
+  // transaction with tablet creation and survive restart without a second
+  // owned-row publication.
+  return scan_committed_table_bindings(trans, id,
+      [&](const ObTabletTablePair &binding, bool &) {
+        return bound_tablets.push_back(binding.get_tablet_id());
+      });
 }
 int NamespaceForkKernelPrototype::finish_namespace_drop(ObISQLClient &trans, uint64_t id) {
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
@@ -1142,37 +1145,24 @@ int NamespaceForkKernelPrototype::protect_snapshot_tablets(ObIArray<ObTabletID> 
   }
   std::unordered_map<uint64_t, std::unordered_set<uint64_t>> owned_by_local;
   std::unordered_map<uint64_t, std::unordered_set<uint64_t>> tombstoned_by_local;
-  if (OB_SUCC(ret)) {
-    ObSqlString q;
-    if (OB_FAIL(q.assign_fmt("SELECT namespace_id,tablet_id,kind FROM %s WHERE tablet_id IN (", EXCEPTIONS))) {
-    } else {
-      std::unordered_set<uint64_t> locals;
-      for (int64_t i = 0; OB_SUCC(ret) && i < candidates.count(); ++i) {
-        if (!is_encoded_id(candidates.at(i).id())) { continue; }
-        const uint64_t local = local_of(candidates.at(i).id());
-        if (locals.insert(local).second) {
-          ret = q.append_fmt("%s%lu", locals.size() == 1 ? "" : ",", local);
-        }
-      }
-      if (OB_SUCC(ret)) { ret = q.append(")"); }
+  std::unordered_set<uint64_t> locals;
+  for (int64_t i = 0; i < candidates.count(); ++i) {
+    if (is_encoded_id(candidates.at(i).id())) {
+      locals.insert(local_of(candidates.at(i).id()));
     }
-    if (OB_SUCC(ret)) {
-      ObMySQLProxy::MySQLResult res; sqlclient::ObMySQLResult *r = nullptr;
-      if (OB_FAIL(directory_sql_proxy()->read(res, q.ptr()))) {
-      } else if (OB_ISNULL(r = res.get_result())) { ret = OB_ERR_UNEXPECTED;
-      } else {
-        while (OB_SUCC(ret = r->next())) {
-          uint64_t ns = 0, tablet = 0; int64_t kind = 0;
-          if (OB_FAIL(r->get_uint(0L, ns)) || OB_FAIL(r->get_uint(1L, tablet))
-              || OB_FAIL(r->get_int(2L, kind))) {
-            break;
-          } else if (kind == 0) {
-            owned_by_local[tablet].insert(ns);
-          } else {
-            tombstoned_by_local[tablet].insert(ns);
-          }
-        }
-        if (ret == OB_ITER_END) { ret = OB_SUCCESS; }
+  }
+  for (const auto &entry : parents) {
+    if (OB_FAIL(ret)) { break; }
+    // A root has no ancestor whose candidate tablet it could shadow.
+    if (entry.second == 0) { continue; }
+    const uint64_t ns = entry.first;
+    if (OB_FAIL(load_exceptions(*directory_sql_proxy(), ns))) { break; }
+    for (const uint64_t local : locals) {
+      if (control_state().owned(ns, local)) {
+        owned_by_local[local].insert(ns);
+      }
+      if (control_state().tombstoned(ns, local)) {
+        tombstoned_by_local[local].insert(ns);
       }
     }
   }
