@@ -21,6 +21,7 @@
 #include "share/ob_global_stat_proxy.h"
 #include "observer/change_stream/ob_change_stream_mgr.h"
 #include "observer/change_stream/ob_change_stream_fetcher.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "share/rc/ob_server_runtime.h"
 #include "lib/oblog/ob_log_module.h"
 
@@ -77,8 +78,12 @@ int ObAllVirtualChangeStreamRefreshStat::inner_get_next_row(ObNewRow *&row)
 
     // Get min_dep_lsn from global_stat
     if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObGlobalStatProxy::get_change_stream_min_dep_lsn(
-              *GCTX.sql_proxy_, false, min_dep_lsn_val))) {
+      // __all_global_stat is part of the Namespace 1 control catalog.
+      ObMySQLProxy *control_proxy = namespace_worker_prototype::namespace_sql_proxy(1);
+      if (OB_ISNULL(control_proxy)) {
+        ret = OB_NOT_INIT;
+      } else if (OB_FAIL(ObGlobalStatProxy::get_change_stream_min_dep_lsn(
+              *control_proxy, false, min_dep_lsn_val))) {
         if (OB_ENTRY_NOT_EXIST == ret) {
           // Change stream not initialized yet, use default value
           ret = OB_SUCCESS;

@@ -314,7 +314,6 @@ public:
     schema_service_(NULL),
     ls_service_(NULL),
     lob_read_service_(NULL),
-    sql_proxy_(NULL),
     memory_context_(NULL),
     all_vsag_use_mem_(NULL),
     vec_async_task_sched_(nullptr),
@@ -461,7 +460,6 @@ private:
   share::schema::ObMultiVersionSchemaService *schema_service_;
   storage::ObLSService *ls_service_;
   common::ObILobReadService *lob_read_service_;
-  common::ObMySQLProxy *sql_proxy_;
   ObFIFOAllocator allocator_;
   // do not use this memory context directly
   // use wrapped memory context in ob_vector_allocator.h and init by this memory context

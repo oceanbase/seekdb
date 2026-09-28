@@ -830,7 +830,6 @@ void ObPluginVectorIndexService::destroy()
     is_ls_or_tablet_changed_ = false;
     schema_service_ = NULL;
     ls_service_ = NULL;
-    sql_proxy_ = NULL;
 
     single_index_mgr_->destroy();
     allocator_.free(single_index_mgr_);
@@ -881,7 +880,6 @@ int ObPluginVectorIndexService::init(schema::ObMultiVersionSchemaService *schema
       schema_service_ = schema_service;
       ls_service_ = ls_service;
       lob_read_service_ = lob_read_service;
-      sql_proxy_ = GCTX.sql_proxy_;
       is_inited_ = true;
       LOG_INFO("plugin vector index service: init", KR(ret));
     }
@@ -945,6 +943,8 @@ int ObPluginVectorIndexService::alloc_vec_async_task_sched()
   void *buf = nullptr;
   int64_t len = sizeof(ObVecAsyncTaskScheduler);
   ObMemAttr attr("VecIdxAsyncTask");
+  // __all_vector_index_task is stored in the Namespace 1 scheduling catalog.
+  ObMySQLProxy *task_proxy = observer::namespace_worker_prototype::namespace_sql_proxy(1);
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -956,7 +956,9 @@ int ObPluginVectorIndexService::alloc_vec_async_task_sched()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc memory", KR(ret), K(len));
   } else if (FALSE_IT(vec_async_task_sched_ = new(buf) ObVecAsyncTaskScheduler())) {
-  } else if (OB_FAIL(vec_async_task_sched_->init(*GCTX.sql_proxy_))) {
+  } else if (OB_ISNULL(task_proxy)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(vec_async_task_sched_->init(*task_proxy))) {
   }
   if (OB_FAIL(ret)) {
     if (OB_NOT_NULL(vec_async_task_sched_)) {

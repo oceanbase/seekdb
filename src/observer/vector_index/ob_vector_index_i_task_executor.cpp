@@ -21,6 +21,7 @@
 #include "data_plane/scheduler/ob_sys_task_stat.h"
 #include "storage/ls/ob_ls.h"
 #include "observer/vector_index/ob_plugin_vector_index_service.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 
 namespace oceanbase 
 {
@@ -31,12 +32,17 @@ int ObVecITaskExecutor::init(storage::ObLS *ls)
 {
   int ret = OB_SUCCESS;
   ObPluginVectorIndexService *vector_index_service = ::oceanbase::share::server_service<::oceanbase::share::ObPluginVectorIndexService>();
-  if (OB_ISNULL(vector_index_service) || OB_ISNULL(ls)) {
+  // __all_vector_index_task belongs to the shared scheduling catalog in Namespace 1.
+  ObMySQLProxy *task_catalog_proxy = observer::namespace_worker_prototype::namespace_sql_proxy(1);
+  if (OB_ISNULL(vector_index_service) || OB_ISNULL(ls)
+      || OB_ISNULL(task_catalog_proxy)) {
     ret = OB_ERR_UNEXPECTED; 
-    LOG_WARN("vector index load task failed", K(ret), KP(vector_index_service), KP(ls));
+    LOG_WARN("vector index load task failed", K(ret), KP(vector_index_service),
+             KP(ls), KP(task_catalog_proxy));
   } else {
     vector_index_service_ = vector_index_service;
     ls_ = ls;
+    task_catalog_proxy_ = task_catalog_proxy;
     is_inited_ = true;
   }
   return ret;
@@ -63,13 +69,16 @@ int ObVecITaskExecutor::resume_task()
     ret = OB_NOT_INIT;
     LOG_WARN("vector index load task not inited", KR(ret));
   } else if (OB_FAIL(get_index_mgr(index_mgr))) {
+  } else if (OB_ISNULL(task_catalog_proxy_)) {
+    ret = OB_NOT_INIT;
   } else {
     const bool for_update = true; // select for update
     ObVecIndexAsyncTaskOption &task_opt = index_mgr->get_async_task_opt();
     ObVecIndexFieldArray filters;
     
     if (OB_FAIL(ObVecIndexAsyncTaskUtil::resume_task_from_inner_table(
-        OB_ALL_VECTOR_INDEX_TASK_TNAME, for_update, filters, ls_,  *GCTX.sql_proxy_, task_opt))) {
+        OB_ALL_VECTOR_INDEX_TASK_TNAME, for_update, filters, ls_,
+        *task_catalog_proxy_, task_opt))) {
     }
   }
   return ret;
@@ -78,7 +87,7 @@ int ObVecITaskExecutor::resume_task()
 int ObVecITaskExecutor::load_task_from_inner_table()
 {
   int ret = OB_SUCCESS;
-  ObMySQLProxy *sql_proxy = GCTX.sql_proxy_;
+  ObMySQLProxy *sql_proxy = task_catalog_proxy_;
   ObPluginVectorIndexMgr *index_mgr = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
@@ -204,7 +213,7 @@ int ObVecITaskExecutor::update_status_and_ret_code(ObVecIndexAsyncTaskCtx *task_
     } else if (OB_FAIL(update_fields.push_back(target_scn))) {
     } else {
       ObMySQLTransaction trans;
-      if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+      if (OB_FAIL(trans.start(task_catalog_proxy_))) {
       } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::update_vec_task(
           OB_ALL_VECTOR_INDEX_TASK_TNAME, trans, key, update_fields))) {
       } else {
@@ -335,7 +344,7 @@ int ObVecITaskExecutor::insert_new_task(ObVecIndexTaskCtxArray &task_ctx_array)
   } else if (task_ctx_array.count() <= 0) {  // skip empty array
   } else {
     ObMySQLTransaction trans;
-    if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+    if (OB_FAIL(trans.start(task_catalog_proxy_))) {
     } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::batch_insert_vec_task(
         OB_ALL_VECTOR_INDEX_TASK_TNAME, trans, task_ctx_array))) {
     }

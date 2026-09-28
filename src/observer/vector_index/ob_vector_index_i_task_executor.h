@@ -33,6 +33,7 @@ public:
     : is_inited_(false),
       vector_index_service_(nullptr),
       ls_(nullptr),
+      task_catalog_proxy_(nullptr),
       async_task_ref_cnt_(0)
   {}
   virtual ~ObVecITaskExecutor() {}
@@ -58,6 +59,7 @@ protected:
   bool is_inited_;
   ObPluginVectorIndexService *vector_index_service_;
   storage::ObLS *ls_;
+  common::ObMySQLProxy *task_catalog_proxy_;
   volatile int64_t async_task_ref_cnt_;
 };
 
