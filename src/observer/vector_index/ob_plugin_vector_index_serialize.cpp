@@ -20,6 +20,7 @@
 #include "share/rc/ob_server_runtime.h"
 #include "observer/vector_index/ob_vector_index_util.h"
 #include "storage/access/ob_table_scan_iterator.h"
+#include "storage/tx_storage/ob_access_service.h"
 #include "query/vector/ob_vector_index_adaptor.h"
 
 namespace oceanbase
@@ -100,20 +101,67 @@ int ObIStreamBuf::init()
 ObIStreamBuf::pos_type ObIStreamBuf::seekoff(off_type off, std::ios_base::seekdir dir, std::ios_base::openmode mode)
 {
   UNUSED(mode);
-  pos_type ret = 0;
+  pos_type ret = pos_type(off_type(-1));
   if (is_success()) {
     if (!is_valid()) {
       last_error_code_ = do_callback();
     }
     if (is_valid() && is_success()) {
+      const off_type block_begin = static_cast<off_type>(stream_pos_);
+      const off_type block_end = block_begin + static_cast<off_type>(egptr() - eback());
+      const off_type current = block_begin + static_cast<off_type>(gptr() - eback());
+      auto seek_absolute = [this, &ret, block_begin, block_end](const off_type target) {
+        if (target >= block_begin && target <= block_end) {
+          synthetic_pos_ = -1;
+          setg(eback(), eback() + (target - block_begin), egptr());
+          ret = pos_type(target);
+        } else if (target >= 0) {
+          char *target_data = nullptr;
+          int64_t target_size = 0;
+          int64_t target_begin = 0;
+          int seek_ret = cb_param_.seek_to(
+              static_cast<int64_t>(target), target_data, target_size, target_begin);
+          if (OB_SUCCESS == seek_ret && target_begin <= target
+              && target <= target_begin + target_size
+              && (target_size == 0 || OB_NOT_NULL(target_data))) {
+            data_ = target_data;
+            stream_pos_ = target_begin;
+            synthetic_pos_ = -1;
+            setg(data_, data_ + (target - target_begin), data_ + target_size);
+            ret = pos_type(target);
+          }
+        }
+      };
       if (std::ios_base::cur == dir) {
-        gbump(static_cast<int>(off));
+        const off_type origin = synthetic_pos_ >= 0
+                                    ? static_cast<off_type>(synthetic_pos_)
+                                    : current;
+        const off_type target = origin + off;
+        if (synthetic_pos_ >= 0 && off == 0) {
+          ret = pos_type(origin);
+        } else {
+          seek_absolute(target);
+        }
       } else if (std::ios_base::end == dir) {
-        setg(eback(), egptr() + off, egptr());
+        // IOStreamReader probes the stream length before deserializing.  The
+        // callback-backed stream has no physical end pointer, so use the
+        // length calculated from the LOB metadata.  Do not report a fake
+        // INT64_MAX end: VSAG would then request a full block after the real
+        // final partial block and turn a valid stream into VSAG 7604.
+        int64_t stream_size = 0;
+        if (OB_SUCC(cb_param_.get_stream_size(stream_size)) && off <= 0
+            && off >= -static_cast<off_type>(stream_size)) {
+          const off_type target = static_cast<off_type>(stream_size) + off;
+          if (off == 0) {
+            synthetic_pos_ = static_cast<int64_t>(target);
+            ret = pos_type(target);
+          } else {
+            seek_absolute(target);
+          }
+        }
       } else if (std::ios_base::beg == dir) {
-        setg(eback(), eback() + off, egptr());
+        seek_absolute(off);
       }
-      ret = gptr() - eback();
     }
   }
   return ret;
@@ -172,9 +220,26 @@ ObIStreamBuf::int_type ObIStreamBuf::underflow()
 int ObIStreamBuf::do_callback()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(cb_(data_, capacity_, capacity_, cb_param_))) {
+  char *read_data = data_;
+  int64_t read_size = 0;
+  if (is_valid()) {
+    // do_callback() is called only after the current get area is consumed.
+    // Advance the logical position before replacing the callback buffer.
+    stream_pos_ += egptr() - eback();
+  }
+  // The input callback may return a LOB block directly instead of filling
+  // data_.  The returned size is therefore the only valid readable range.
+  if (OB_FAIL(cb_(read_data, capacity_, read_size, cb_param_))) {
+  } else if (read_size < 0 || (read_size > 0 && OB_ISNULL(read_data))) {
+    ret = OB_INVALID_DATA;
+    LOG_WARN("invalid read buffer returned by callback", K(ret), K(read_data), K(read_size));
   } else {
-    setg(data_, data_, data_ + capacity_); // fill the read buffer
+    data_ = read_data;
+    if (read_size > 0) {
+      setg(data_, data_, data_ + read_size); // fill only the returned read range
+    } else {
+      setg(data_, data_, data_);
+    }
   }
   return ret;
 }
@@ -213,7 +278,10 @@ int ObVectorIndexSerializer::deserialize(void *&index, ObIStreamBuf::CbParam &cb
   char *data = nullptr;
   ObIStreamBuf streambuf(nullptr, 0, cb_param, cb);
   std::istream in(&streambuf);
-  if (OB_FAIL(streambuf.init())) {
+  int prepare_ret = cb_param.prepare_stream_size();
+  if (prepare_ret != OB_SUCCESS && prepare_ret != OB_NOT_SUPPORTED) {
+    ret = prepare_ret;
+  } else if (OB_FAIL(streambuf.init())) {
     if (ret == OB_ITER_END) {
       LOG_INFO("[vec index deserialize] read table is empty, just return");
       ret = OB_SUCCESS;
@@ -239,100 +307,209 @@ int ObVectorIndexSerializer::deserialize(void *&index, ObIStreamBuf::CbParam &cb
   return ret;
 }
 
+int ObHNSWDeserializeCallback::CbParam::prepare_stream_size()
+{
+  int ret = OB_SUCCESS;
+  if (stream_size_valid_) {
+  } else if (OB_ISNULL(iter_) || OB_ISNULL(allocator_)
+             || OB_ISNULL(lob_read_options_)) {
+    ret = OB_NOT_SUPPORTED;
+  } else {
+    ObTableScanIterator *scan_iter = dynamic_cast<ObTableScanIterator *>(iter_);
+    int64_t total_size = 0;
+    if (OB_ISNULL(scan_iter)) {
+      ret = OB_NOT_SUPPORTED;
+    } else {
+      blocksstable::ObDatumRow *row = nullptr;
+      for (int64_t i = 0; OB_SUCC(ret) && i < snapshot_blocks_.count(); ++i) {
+        const int64_t block_size = snapshot_blocks_.at(i).length();
+        if (block_size < 0 || total_size > std::numeric_limits<int64_t>::max() - block_size) {
+          ret = OB_SIZE_OVERFLOW;
+        } else {
+          total_size += block_size;
+        }
+      }
+      while (OB_SUCC(ret)) {
+        const int next_ret = scan_iter->get_next_row(row);
+        if (next_ret == OB_ITER_END) {
+          break;
+        } else if (next_ret != OB_SUCCESS) {
+          ret = next_ret;
+        } else if (OB_ISNULL(row) || row->get_column_count() < 2) {
+          ret = OB_ERR_UNEXPECTED;
+        } else {
+          const int64_t first_new_block = snapshot_blocks_.count();
+          if (OB_FAIL(stage_snapshot_row(*row, false))) {
+          }
+          for (int64_t i = first_new_block;
+               OB_SUCC(ret) && i < snapshot_blocks_.count(); ++i) {
+            const int64_t block_size = snapshot_blocks_.at(i).length();
+            if (block_size < 0
+                || total_size > std::numeric_limits<int64_t>::max() - block_size) {
+              ret = OB_SIZE_OVERFLOW;
+            } else {
+              total_size += block_size;
+            }
+          }
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      stream_size_ = total_size;
+      stream_size_valid_ = true;
+    }
+  }
+  return ret;
+}
+
+int ObHNSWDeserializeCallback::CbParam::set_first_row(const blocksstable::ObDatumRow &row)
+{
+  int ret = OB_SUCCESS;
+  snapshot_blocks_.reuse();
+  snapshot_data_allocator_.reuse();
+  snapshot_key_.reset();
+  snapshot_block_idx_ = 0;
+  stream_size_ = 0;
+  stream_size_valid_ = false;
+  if (row.get_column_count() < 2) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (OB_FAIL(stage_snapshot_row(row, true))) {
+  }
+  return ret;
+}
+
+int ObHNSWDeserializeCallback::CbParam::seek_to(
+    const int64_t position, char *&data, int64_t &data_size, int64_t &block_begin)
+{
+  int ret = OB_SUCCESS;
+  data = nullptr;
+  data_size = 0;
+  block_begin = 0;
+  if (!stream_size_valid_ || position < 0 || position > stream_size_) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (snapshot_blocks_.count() == 0) {
+    if (position != 0) {
+      ret = OB_INVALID_ARGUMENT;
+    }
+    snapshot_block_idx_ = 0;
+  } else {
+    int64_t cursor = 0;
+    bool found = false;
+    for (int64_t i = 0; !found && i < snapshot_blocks_.count(); ++i) {
+      ObString &block = snapshot_blocks_.at(i);
+      const int64_t block_end = cursor + block.length();
+      if (position < block_end
+          || (position == stream_size_ && i == snapshot_blocks_.count() - 1)) {
+        data = block.ptr();
+        data_size = block.length();
+        block_begin = cursor;
+        snapshot_block_idx_ = i + 1;
+        found = true;
+      } else {
+        cursor = block_end;
+      }
+    }
+    if (!found) {
+      ret = OB_ERR_UNEXPECTED;
+    }
+  }
+  return ret;
+}
+
+int ObHNSWDeserializeCallback::CbParam::stage_snapshot_row(
+    const blocksstable::ObDatumRow &row, const bool save_key)
+{
+  int ret = OB_SUCCESS;
+  if (row.get_column_count() < 2 || OB_ISNULL(allocator_)
+      || OB_ISNULL(lob_read_options_)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (save_key
+             && OB_FAIL(ob_write_string(snapshot_data_allocator_,
+                    row.storage_datums_[0].get_string(), snapshot_key_))) {
+  } else {
+    ObTextStringIter str_iter(
+        ObLongTextType, CS_TYPE_BINARY, row.storage_datums_[1].get_string(), true);
+    ObTextStringIterState state = TEXTSTRING_ITER_INVALID;
+    ObString src_block;
+    if (OB_FAIL(str_iter.init(0, lob_read_options_, allocator_))) {
+    } else {
+      while (OB_SUCC(ret) && (state = str_iter.get_next_block(src_block)) == TEXTSTRING_ITER_NEXT) {
+        ObString stable_block;
+        if (OB_FAIL(ob_write_string(snapshot_data_allocator_, src_block, stable_block))) {
+        } else if (OB_FAIL(snapshot_blocks_.push_back(stable_block))) {
+        }
+      }
+      if (OB_SUCC(ret) && state != TEXTSTRING_ITER_END) {
+        ret = str_iter.get_inner_ret() != OB_SUCCESS
+                  ? str_iter.get_inner_ret()
+                  : OB_INVALID_DATA;
+      }
+    }
+  }
+  // All data returned by ObTextStringIter has been copied to the dedicated
+  // snapshot allocator, so its temporary LOB read buffers can be released.
+  if (OB_NOT_NULL(allocator_)) {
+    allocator_->reuse();
+  }
+  return ret;
+}
+
 int ObHNSWDeserializeCallback::operator()(char*& data, const int64_t data_size, int64_t &read_size, share::ObIStreamBuf::CbParam &cb_param)
 {
   UNUSED(data_size);
   int ret = OB_SUCCESS;
-  blocksstable::ObDatumRow *row = nullptr;
-  ObDatum key_datum;
-  ObDatum data_datum;
   ObHNSWDeserializeCallback::CbParam &param = static_cast<ObHNSWDeserializeCallback::CbParam&>(cb_param);
-  ObTableScanIterator *row_iter = static_cast<ObTableScanIterator *>(param.iter_);
-  ObIAllocator *allocator = param.allocator_;
-  ObTextStringIter *&str_iter = param.str_iter_;
-  ObTextStringIterState state;
-  ObString src_block_data;
   if (!param.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
   } else {
     data = nullptr;
     read_size = 0;
-    do {
-      if (OB_NOT_NULL(str_iter)) {
-        // try to get current next block
-        state = str_iter->get_next_block(src_block_data);
-        if (state == TEXTSTRING_ITER_NEXT) {
-          // get next block success
-          data = src_block_data.ptr();
-          read_size = src_block_data.length();
-        } else if (state == TEXTSTRING_ITER_END) {
-          // current lob is end, need to switch to next lob
-          // release current str iter
-          str_iter->~ObTextStringIter();
-          allocator->free(str_iter);
-          str_iter = nullptr;
-          allocator->reuse();
-        } else {
-          ret = (str_iter->get_inner_ret() != OB_SUCCESS) ? 
-                str_iter->get_inner_ret() : OB_INVALID_DATA;
-          // return error, release current str iter
-          str_iter->~ObTextStringIter();
-          allocator->free(str_iter);
-          str_iter = nullptr;
-          allocator->reuse();      
+    if (index_type_ == VIAT_MAX) {
+      ObPluginVectorIndexAdaptor *adp = static_cast<ObPluginVectorIndexAdaptor*>(adp_);
+      ObCollationType calc_cs_type = CS_TYPE_UTF8MB4_GENERAL_CI;
+      uint32_t idx_ipivf = ObCharset::locate(calc_cs_type,
+          param.snapshot_key_.ptr(), param.snapshot_key_.length(), "ipivf", 5, 1);
+      uint32_t idx_sq = ObCharset::locate(calc_cs_type,
+          param.snapshot_key_.ptr(), param.snapshot_key_.length(), "hnsw_sq", 7, 1);
+      uint32_t idx_bq = ObCharset::locate(calc_cs_type,
+          param.snapshot_key_.ptr(), param.snapshot_key_.length(), "hnsw_bq", 7, 1);
+      uint32_t hgraph_idx = ObCharset::locate(calc_cs_type,
+          param.snapshot_key_.ptr(), param.snapshot_key_.length(), "hgraph", 6, 1);
+      if (OB_ISNULL(adp)) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (idx_ipivf > 0) {
+        index_type_ = VIAT_IPIVF;
+        if (OB_FAIL(adp->try_init_snap_data(VIAT_IPIVF))) {
+        }
+      } else if (idx_sq > 0) {
+        index_type_ = VIAT_HNSW_SQ;
+        if (OB_FAIL(adp->try_init_snap_data(VIAT_HNSW_SQ))) {
+        }
+      } else if (idx_bq > 0) {
+        index_type_ = VIAT_HNSW_BQ;
+        if (OB_FAIL(adp->try_init_snap_data(VIAT_HNSW_BQ))) {
+        }
+      } else if (hgraph_idx > 0) {
+        index_type_ = VIAT_HGRAPH;
+        if (OB_FAIL(adp->try_init_snap_data(VIAT_HGRAPH))) {
+        }
+      } else {
+        index_type_ = VIAT_HNSW;
+        if (OB_FAIL(adp->try_init_snap_data(VIAT_HNSW))) {
         }
       }
-      if (OB_SUCC(ret) && OB_ISNULL(str_iter)) {
-        // we should get next str_iter
-        if (OB_FAIL(row_iter->get_next_row(row))) {
-        } else if (OB_ISNULL(row) || row->get_column_count() < 2) {
-          ret = OB_ERR_UNEXPECTED;
-        } else {
-          key_datum = row->storage_datums_[0];
-          data_datum = row->storage_datums_[1];
-          LOG_INFO("[vec index debug] show key and data for vsag deserialize", K(key_datum), K(data_datum));
-          if (OB_ISNULL(str_iter = OB_NEWx(ObTextStringIter, allocator, ObLongTextType, CS_TYPE_BINARY, data_datum.get_string(), true))) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-          } else if (OB_FAIL(str_iter->init(0, param.lob_read_options_, allocator))) {
-          } else if (index_type_ == VIAT_MAX) {
-            ObPluginVectorIndexAdaptor *adp = static_cast<ObPluginVectorIndexAdaptor*>(adp_);
-            ObCollationType calc_cs_type = CS_TYPE_UTF8MB4_GENERAL_CI;
-            uint32_t idx_ipivf = ObCharset::locate(calc_cs_type, key_datum.get_string().ptr(), key_datum.get_string().length(),
-                                       "ipivf", 5, 1);
-            uint32_t idx_sq = ObCharset::locate(calc_cs_type, key_datum.get_string().ptr(), key_datum.get_string().length(),
-                                       "hnsw_sq", 7, 1);
-            uint32_t idx_bq = ObCharset::locate(calc_cs_type, key_datum.get_string().ptr(), key_datum.get_string().length(),
-                                       "hnsw_bq", 7, 1);
-            uint32_t hgraph_idx = ObCharset::locate(calc_cs_type, key_datum.get_string().ptr(), key_datum.get_string().length(),
-                                       "hgraph", 6, 1);
-            if (OB_ISNULL(adp)) {
-              ret = OB_ERR_UNEXPECTED;
-            } else if (idx_ipivf > 0) {
-              index_type_ = VIAT_IPIVF;
-              if (OB_FAIL(adp->try_init_snap_data(VIAT_IPIVF))) {
-              }
-            } else if (idx_sq > 0) {
-              index_type_ = VIAT_HNSW_SQ;
-              if (OB_FAIL(adp->try_init_snap_data(VIAT_HNSW_SQ))) {
-              }
-            } else if (idx_bq > 0) {
-              index_type_ = VIAT_HNSW_BQ;
-              if (OB_FAIL(adp->try_init_snap_data(VIAT_HNSW_BQ))) {
-              }
-            } else if (hgraph_idx > 0) {
-              index_type_ = VIAT_HGRAPH;
-              if (OB_FAIL(adp->try_init_snap_data(VIAT_HGRAPH))) {
-              }
-            } else {
-              index_type_ = VIAT_HNSW;
-              if (OB_FAIL(adp->try_init_snap_data(VIAT_HNSW))) {
-              }
-            }
-            LOG_INFO("HgraphIndex vector index get key data from snap_index_table", K(ret), K(index_type_), K(key_datum.get_string()));
-          }
-        }
+      LOG_INFO("HgraphIndex vector index get key data from snap_index_table",
+          K(ret), K(index_type_), K(param.snapshot_key_));
+    }
+    if (OB_SUCC(ret)) {
+      if (param.snapshot_block_idx_ >= param.snapshot_blocks_.count()) {
+        ret = OB_ITER_END;
+      } else {
+        ObString &snapshot_block = param.snapshot_blocks_.at(param.snapshot_block_idx_++);
+        data = snapshot_block.ptr();
+        read_size = snapshot_block.length();
       }
-    } while (OB_SUCC(ret) && OB_ISNULL(data));
+    }
 
     if (ret == OB_ITER_END) {
       ret = OB_SUCCESS;
