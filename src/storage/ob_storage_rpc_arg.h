@@ -39,21 +39,22 @@ public:
 
 struct ObDDLLocalBuildArg final
 {
-  OB_UNIS_VERSION(1);
+  OB_UNIS_VERSION(2);
 public:
   ObDDLLocalBuildArg() :
-      source_tablet_id_(), dest_tablet_id_(),
+      namespace_id_(0), source_tablet_id_(), dest_tablet_id_(),
       source_table_id_(OB_INVALID_ID), dest_schema_id_(OB_INVALID_ID),
       schema_version_(0), snapshot_version_(0), ddl_type_(0), task_id_(0), parallelism_(0), execution_id_(-1), tablet_task_id_(0),
       data_format_version_(0), dest_schema_version_(0), lob_col_idxs_()
   {}
   bool is_valid() const;
   int assign(const ObDDLLocalBuildArg &other);
-  TO_STRING_KV(K_(source_tablet_id), K_(dest_tablet_id),
+  TO_STRING_KV(K_(namespace_id), K_(source_tablet_id), K_(dest_tablet_id),
     K_(source_table_id), K_(dest_schema_id), K_(schema_version), K_(snapshot_version), K_(ddl_type),
     K_(task_id), K_(parallelism), K_(execution_id), K_(tablet_task_id), K_(data_format_version),
     K_(dest_schema_version), K_(lob_col_idxs));
 public:
+  uint64_t namespace_id_;
   ObTabletID source_tablet_id_;
   ObTabletID dest_tablet_id_;
   int64_t source_table_id_;

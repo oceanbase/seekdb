@@ -339,6 +339,7 @@ int ObDDLLocalBuildExecutor::construct_request_arg(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(build_ctx));
   } else {
+    arg.namespace_id_ = context_.namespace_id_;
     arg.source_tablet_id_ = build_ctx.src_tablet_id_;
     arg.dest_tablet_id_ = build_ctx.dest_tablet_id_;
     arg.source_table_id_ = build_ctx.src_table_id_;

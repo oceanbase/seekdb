@@ -153,7 +153,7 @@ int ObUniqueIndexChecker::scan_table_with_column_checksum(
         }
       } else if (OB_FAIL(local_scan.init(*param.col_ids_, *param.org_col_ids_, *param.output_projector_,
               *param.data_table_schema_, param.snapshot_version_, *param.index_schema_, 
-              true/*unique_index_checking*/))) {
+              true/*unique_index_checking*/, *param_->schema_service_))) {
       } else if (param.task_id_ >= param_->ranges_.count() || 0 > param.task_id_ ) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("error unexpected, invalid task id", K(ret), K(param.task_id_), K(param_->ranges_.count()));
@@ -527,6 +527,7 @@ ObUniqueCheckingDag::ObUniqueCheckingDag()
 
 int ObUniqueCheckingDag::init(
     ObMySQLProxy &sql_proxy,
+    ObMultiVersionSchemaService &schema_service,
     const ObTabletID &tablet_id,
     const bool is_scan_index,
     const uint64_t index_table_id,
@@ -542,7 +543,7 @@ int ObUniqueCheckingDag::init(
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "ObUniqueCheckingDag has already been inited", K(ret));
-  } else if (OB_FAIL(param_.init(sql_proxy, tablet_id, is_scan_index, index_table_id,
+  } else if (OB_FAIL(param_.init(sql_proxy, schema_service, tablet_id, is_scan_index, index_table_id,
                      schema_version, task_id, execution_id, snapshot_version,
                      user_parallelism, data_table_schema, index_schema))) {
   } else if (OB_UNLIKELY(!param_.is_valid())) {
@@ -992,6 +993,7 @@ int ObLocalUniqueIndexCallback::operator()(
 /* ObUniqueCheckingParam */
 int ObUniqueCheckingParam::init(
   ObMySQLProxy &sql_proxy,
+  ObMultiVersionSchemaService &schema_service,
   const ObTabletID &tablet_id,
   const bool is_scan_index,
   const uint64_t index_table_id,
@@ -1004,7 +1006,6 @@ int ObUniqueCheckingParam::init(
   const ObTableSchema *index_schema)
 {
   int ret = OB_SUCCESS;
-  ObMultiVersionSchemaService *schema_service = nullptr;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "ObUniqueCheckingParam has already been inited", K(ret));
@@ -1038,14 +1039,12 @@ int ObUniqueCheckingParam::init(
       task_id_ = task_id;
       user_parallelism_ = user_parallelism;
       sql_proxy_ = &sql_proxy;
+      schema_service_ = &schema_service;
       is_inited_ = true;
     }
   } else {
     SERVER_MODULE_SCOPE {
-      if (OB_FAIL(::oceanbase::share::server_service<::oceanbase::share::schema::ObSchemaRuntimeService>()->resolve_tablet_schema(
-              tablet_id.id(), schema_service))) {
-        LOG_WARN("resolve tablet schema service failed", K(ret), K(tablet_id));
-      } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard_, schema_version))) {
+      if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard_, schema_version))) {
       } else if (OB_FAIL(schema_guard_.check_formal_guard())) {
       } else if (OB_FAIL(schema_guard_.get_table_schema( index_table_id, index_schema_))) {
       } else if (OB_ISNULL(index_schema_)) {
@@ -1059,7 +1058,7 @@ int ObUniqueCheckingParam::init(
         is_inited_ = true;
         tablet_id_ = tablet_id;
         is_scan_index_ = is_scan_index;
-        schema_service_ = schema_service;
+        schema_service_ = &schema_service;
         execution_id_ = execution_id;
         snapshot_version_ = snapshot_version;
         task_id_ = task_id;

@@ -105,15 +105,10 @@ int ObDDLIndependentDag::init_ddl_table_schema(
     const ObDDLIndependentDagInitParam &init_param)
 {
   int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(init_param.table_schema_)) {
-    if (OB_FAIL(ObDDLTableSchema::fill_ddl_table_schema(
-            *init_param.table_schema_, init_param.lob_meta_table_schema_,
-            init_param.vector_data_table_schema_, init_param.vector_param_table_schema_,
-            arena_, ddl_table_schema_))) {
-    }
-  } else if (OB_FAIL(ObDDLTableSchema::fill_ddl_table_schema(
-                 ddl_task_param_.target_table_id_, arena_,
-                 ddl_table_schema_))) {
+  if (OB_FAIL(ObDDLTableSchema::fill_ddl_table_schema(
+          *init_param.table_schema_, init_param.lob_meta_table_schema_,
+          init_param.vector_data_table_schema_, init_param.vector_param_table_schema_,
+          arena_, ddl_table_schema_))) {
   }
   return ret;
 }

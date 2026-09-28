@@ -54,6 +54,7 @@ public:
     return is_valid_direct_load(direct_load_type_) &&
            ddl_thread_count_ > 0 &&
            ddl_task_param_.is_valid() &&
+           table_schema_ != nullptr &&
            tablet_ids_.count() > 0;
   }
   VIRTUAL_TO_STRING_KV(K(direct_load_type_), K(ddl_thread_count_), K(ddl_task_param_), K(tablet_ids_));

@@ -966,6 +966,7 @@ int ObDDLTaskUtil::check_and_cancel_single_replica_dag(
       const common::ObTabletID &dst_tablet_id = iter->second;
       bool is_tablet_dag_exist = false;
       obcall::ObDDLLocalBuildArg arg;
+        arg.namespace_id_ = task->context().namespace_id_;
         arg.source_tablet_id_ = src_tablet_id;
         arg.dest_tablet_id_ = dst_tablet_id;
         arg.source_table_id_ = table_id;

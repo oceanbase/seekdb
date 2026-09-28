@@ -27,6 +27,13 @@
 #include "data_plane/ddl/ob_direct_load_type.h"
 namespace oceanbase
 {
+namespace share
+{
+namespace schema
+{
+class ObMultiVersionSchemaService;
+}
+}
 namespace storage
 {
 
@@ -381,6 +388,7 @@ struct ObDDLTableSchema
 {
 public:
   static int fill_ddl_table_schema(const uint64_t table_id,
+                                   share::schema::ObMultiVersionSchemaService &schema_service,
                                    common::ObArenaAllocator &allocator,
                                    ObDDLTableSchema &ddl_table_schema);
   static int fill_ddl_table_schema(const ObTableSchema &table_schema,

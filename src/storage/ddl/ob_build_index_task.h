@@ -160,6 +160,7 @@ public:
     {}
   ~ObUniqueCheckingParam() { destroy(); }
   int init(common::ObMySQLProxy &sql_proxy,
+          share::schema::ObMultiVersionSchemaService &schema_service,
           const ObTabletID &tablet_id,
           const bool is_scan_index,
           const uint64_t index_table_id,
@@ -173,7 +174,8 @@ public:
   int prepare_task_ranges();
   bool is_valid() const
   {
-    return sql_proxy_ != nullptr && tablet_id_.is_valid() && snapshot_version_ > 0
+    return sql_proxy_ != nullptr && schema_service_ != nullptr
+    && tablet_id_.is_valid() && snapshot_version_ > 0
     && data_table_schema_ != nullptr && index_schema_ != nullptr
     && execution_id_ >= 0 && task_id_ > 0
     && user_parallelism_ > 0;
@@ -267,6 +269,7 @@ public:
   virtual ~ObUniqueCheckingDag() = default;
   int init(
       common::ObMySQLProxy &sql_proxy,
+      share::schema::ObMultiVersionSchemaService &schema_service,
       const common::ObTabletID &tablet_id,
       const bool is_scan_index,
       const uint64_t index_table_id, const int64_t schema_version,

@@ -375,11 +375,16 @@ int ObService::calc_column_checksum_request(const obcall::ObCalcColumnChecksumRe
         ? static_cast<common::ObMySQLProxy *>(
               namespace_runtime->service(ns::NamespaceRuntime::SQL_PROXY))
         : nullptr;
+    auto *schema_service = namespace_runtime != nullptr
+        ? static_cast<share::schema::ObMultiVersionSchemaService *>(
+              namespace_runtime->service(ns::NamespaceRuntime::SCHEMA_SERVICE))
+        : nullptr;
     int saved_ret = OB_SUCCESS;
     SERVER_MODULE_SCOPE {
       ObGlobalUniqueIndexCallback *callback = NULL;
       ObDagScheduler* dag_scheduler = nullptr;
-      if (OB_ISNULL(sql_proxy) || sql_proxy->target_namespace() != arg.namespace_id_) {
+      if (OB_ISNULL(sql_proxy) || OB_ISNULL(schema_service)
+          || sql_proxy->target_namespace() != arg.namespace_id_) {
         ret = OB_NOT_INIT;
         LOG_WARN("checksum request namespace SQL proxy is unavailable", KR(ret), K(arg.namespace_id_));
       } else if (OB_ISNULL(dag_scheduler = ::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>())) {
@@ -397,7 +402,7 @@ int ObService::calc_column_checksum_request(const obcall::ObCalcColumnChecksumRe
             LOG_WARN("ddl sim failure: calcualte column checksum rpc slow", K(tmp_ret), K(arg.task_id_));
           } else if (OB_TMP_FAIL(dag_scheduler->alloc_dag(dag))) {
             STORAGE_LOG(WARN, "fail to alloc dag", KR(tmp_ret));
-          } else if (OB_TMP_FAIL(dag->init(*sql_proxy, calc_item.tablet_id_,
+          } else if (OB_TMP_FAIL(dag->init(*sql_proxy, *schema_service, calc_item.tablet_id_,
                                            calc_item.calc_table_id_ == arg.target_table_id_,
                                            arg.target_table_id_,
                                            arg.schema_version_,
@@ -1078,14 +1083,40 @@ int ObService::refresh_memory_stat()
   return ObMemoryDump::get_instance().generate_mod_stat_task();
 }
 
+static int resolve_ddl_build_services(
+    uint64_t namespace_id,
+    common::ObMySQLProxy *&sql_proxy,
+    share::schema::ObMultiVersionSchemaService *&schema_service)
+{
+  int ret = OB_SUCCESS;
+  ns::NamespaceRuntime *runtime = nullptr;
+  sql_proxy = nullptr;
+  schema_service = nullptr;
+  if (!ns::namespace_registry().get(namespace_id, runtime) || runtime == nullptr) {
+    ret = OB_NOT_INIT;
+  } else if (OB_ISNULL(sql_proxy = static_cast<common::ObMySQLProxy *>(
+                 runtime->service(ns::NamespaceRuntime::SQL_PROXY)))
+             || OB_ISNULL(schema_service = static_cast<share::schema::ObMultiVersionSchemaService *>(
+                    runtime->service(ns::NamespaceRuntime::SCHEMA_SERVICE)))) {
+    ret = OB_NOT_INIT;
+  } else if (sql_proxy->target_namespace() != namespace_id) {
+    ret = OB_STATE_NOT_MATCH;
+  }
+  return ret;
+}
+
 int ObService::build_ddl_local(const ObDDLLocalBuildArg &arg,
                                ObDDLLocalBuildResult &res)
 {
   int ret = OB_SUCCESS;
   ObDagScheduler *dag_scheduler = nullptr;
+  common::ObMySQLProxy *sql_proxy = nullptr;
+  share::schema::ObMultiVersionSchemaService *schema_service = nullptr;
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(arg));
+  } else if (OB_FAIL(resolve_ddl_build_services(arg.namespace_id_, sql_proxy, schema_service))) {
+    LOG_WARN("DDL build namespace services are unavailable", KR(ret), K(arg.namespace_id_));
   } else if (OB_ISNULL(dag_scheduler = ::oceanbase::share::server_service<::oceanbase::share::ObDagScheduler>())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("dag scheduler is null", K(ret));
@@ -1098,7 +1129,7 @@ int ObService::build_ddl_local(const ObDDLLocalBuildArg &arg,
       } else if (OB_ISNULL(dag)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected error, dag is null", K(ret), KP(dag));
-      } else if (OB_FAIL(dag->init(arg))) {
+      } else if (OB_FAIL(dag->init(arg, *sql_proxy, *schema_service))) {
         LOG_WARN("fail to init complement data dag", K(ret), K(arg));
       } else if (OB_FAIL(dag->create_first_task())) {
         LOG_WARN("create first task failed", K(ret));
@@ -1172,12 +1203,16 @@ int ObService::check_and_cancel_ddl_complement_data_dag(const ObDDLLocalBuildArg
 {
   int ret = OB_SUCCESS;
   is_dag_exist = true;
+  common::ObMySQLProxy *sql_proxy = nullptr;
+  share::schema::ObMultiVersionSchemaService *schema_service = nullptr;
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(arg));
   } else if (OB_UNLIKELY(!is_complement_data_relying_on_dag(ObDDLType(arg.ddl_type_)))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid ddl type", K(ret), K(arg));
+  } else if (OB_FAIL(resolve_ddl_build_services(arg.namespace_id_, sql_proxy, schema_service))) {
+    LOG_WARN("DDL build namespace services are unavailable", KR(ret), K(arg.namespace_id_));
   } else {
     ObDagScheduler *dag_scheduler = nullptr;
     ObComplementDataDag *dag = nullptr;
@@ -1189,7 +1224,7 @@ int ObService::check_and_cancel_ddl_complement_data_dag(const ObDDLLocalBuildArg
     } else if (OB_ISNULL(dag)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected error, dag is null", K(ret), KP(dag));
-    } else if (OB_FAIL(dag->init(arg))) {
+    } else if (OB_FAIL(dag->init(arg, *sql_proxy, *schema_service))) {
       LOG_WARN("fail to init complement data dag", K(ret), K(arg));
     } else if (OB_FAIL(dag_scheduler->check_dag_exist(dag, is_dag_exist))) {
       LOG_WARN("check dag exist failed", K(ret));
@@ -1213,12 +1248,16 @@ int ObService::check_and_cancel_delete_lob_meta_row_dag(const obcall::ObDDLLocal
 {
   int ret = OB_SUCCESS;
   is_dag_exist = true;
+  common::ObMySQLProxy *sql_proxy = nullptr;
+  share::schema::ObMultiVersionSchemaService *schema_service = nullptr;
   if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(arg));
   } else if (OB_UNLIKELY(!is_delete_lob_meta_row_relying_on_dag(ObDDLType(arg.ddl_type_)))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid ddl type", K(ret), K(arg));
+  } else if (OB_FAIL(resolve_ddl_build_services(arg.namespace_id_, sql_proxy, schema_service))) {
+    LOG_WARN("DDL build namespace services are unavailable", KR(ret), K(arg.namespace_id_));
   } else {
     ObDagScheduler *dag_scheduler = nullptr;
     ObComplementDataDag *dag = nullptr;
@@ -1230,7 +1269,7 @@ int ObService::check_and_cancel_delete_lob_meta_row_dag(const obcall::ObDDLLocal
     } else if (OB_ISNULL(dag)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected error, dag is null", K(ret), KP(dag));
-    } else if (OB_FAIL(dag->init(arg))) {
+    } else if (OB_FAIL(dag->init(arg, *sql_proxy, *schema_service))) {
       LOG_WARN("fail to init complement data dag", K(ret), K(arg));
     } else if (OB_FAIL(dag_scheduler->check_dag_exist(dag, is_dag_exist))) {
       LOG_WARN("check dag exist failed", K(ret));

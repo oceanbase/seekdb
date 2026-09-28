@@ -465,6 +465,7 @@ int ObDDLTableSchema::fill_vector_index_schema_item(const ObTableSchema &table_s
 }
 
 int ObDDLTableSchema::fill_ddl_table_schema(const uint64_t table_id,
+    ObMultiVersionSchemaService &schema_service,
     ObArenaAllocator &allocator,
     ObDDLTableSchema &ddl_table_schema)
 {
@@ -476,7 +477,7 @@ int ObDDLTableSchema::fill_ddl_table_schema(const uint64_t table_id,
   if (OB_UNLIKELY(OB_INVALID_ID == table_id)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(table_id));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(schema_guard))) {
+  } else if (OB_FAIL(schema_service.get_runtime_schema_guard(schema_guard))) {
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;

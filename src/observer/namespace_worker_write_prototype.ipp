@@ -648,7 +648,9 @@ int route_rootserver_build_arg(
     obcall::ObDDLLocalBuildArg &routed)
 {
   int ret = routed.assign(arg);
-  if (!ret && OB_FAIL(route_tablet_id(storage_space, routed.source_tablet_id_))) {
+  if (!ret && routed.namespace_id_ != storage_space.namespace_id()) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (!ret && OB_FAIL(route_tablet_id(storage_space, routed.source_tablet_id_))) {
   } else if (!ret && OB_FAIL(route_tablet_id(storage_space, routed.dest_tablet_id_))) {
   }
   return ret;

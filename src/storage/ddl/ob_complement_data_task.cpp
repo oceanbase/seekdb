@@ -103,7 +103,8 @@ int ObComplementDataParam::fill_tablet_param()
   return ret;
 }
 
-int ObComplementDataParam::init(const obcall::ObDDLLocalBuildArg &arg)
+int ObComplementDataParam::init(const obcall::ObDDLLocalBuildArg &arg,
+    ObMySQLProxy &sql_proxy, ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   const ObServerRuntimeSchema *runtime_schema = nullptr;
@@ -126,18 +127,18 @@ int ObComplementDataParam::init(const obcall::ObDDLLocalBuildArg &arg)
   } else {
     SERVER_MODULE_SCOPE {
       if (OB_FAIL(ObDDLUtil::check_schema_version_refreshed(
-              ObMultiVersionSchemaService::get_instance(),
+              schema_service,
               orig_schema_version))) {
         if (OB_SCHEMA_EAGAIN != ret) {
           LOG_WARN("check schema version refreshed failed", K(ret), K(orig_schema_version));
         }
       } else if (OB_FAIL(ObDDLUtil::check_schema_version_refreshed(
-                     ObMultiVersionSchemaService::get_instance(),
+                     schema_service,
                      dest_schema_version))) {
         if (OB_SCHEMA_EAGAIN != ret) {
           LOG_WARN("check schema version refreshed failed", K(ret), K(dest_schema_version));
         }
-      } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
+      } else if (OB_FAIL(schema_service.get_runtime_schema_guard(
                 src_runtime_schema_guard, orig_schema_version))) {
       } else if (OB_FAIL(src_runtime_schema_guard.get_server_runtime_info(runtime_schema))) {
       } else if (OB_ISNULL(runtime_schema)) {
@@ -147,7 +148,7 @@ int ObComplementDataParam::init(const obcall::ObDDLLocalBuildArg &arg)
       } else if (OB_ISNULL(orig_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("table not exist", K(ret), K(orig_table_id), K(orig_schema_version));
-      } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
+      } else if (OB_FAIL(schema_service.get_runtime_schema_guard(
                 dst_runtime_schema_guard, dest_schema_version))) {
       } else if (OB_FAIL(dst_runtime_schema_guard.get_server_runtime_info(runtime_schema))) {
       } else if (OB_ISNULL(runtime_schema)) {
@@ -169,8 +170,8 @@ int ObComplementDataParam::init(const obcall::ObDDLLocalBuildArg &arg)
   }
 
   if (OB_SUCC(ret)) {
-    
-    
+    sql_proxy_ = &sql_proxy;
+    schema_service_ = &schema_service;
     orig_table_id_ = orig_table_id;
     dest_table_id_ = dest_table_id;
     orig_schema_version_ = orig_schema_version;
@@ -183,7 +184,8 @@ int ObComplementDataParam::init(const obcall::ObDDLLocalBuildArg &arg)
     data_format_version_ = arg.data_format_version_;
     user_parallelism_ = arg.parallelism_;
     direct_load_type_ = ObDDLDirectLoadUtil::ddl_get_direct_load_type();
-    if (OB_FAIL(ObDDLTableSchema::fill_ddl_table_schema(dest_table_id_, allocator_, ddl_table_schema_))) {
+    if (OB_FAIL(ObDDLTableSchema::fill_ddl_table_schema(
+            dest_table_id_, schema_service, allocator_, ddl_table_schema_))) {
     } else if (OB_FAIL(fill_tablet_param())) {
     } else {
       is_inited_ = true;
@@ -401,7 +403,8 @@ ObComplementDataDag::~ObComplementDataDag()
 {
 }
 
-int ObComplementDataDag::init(const obcall::ObDDLLocalBuildArg &arg)
+int ObComplementDataDag::init(const obcall::ObDDLLocalBuildArg &arg,
+    ObMySQLProxy &sql_proxy, ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -410,7 +413,7 @@ int ObComplementDataDag::init(const obcall::ObDDLLocalBuildArg &arg)
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(arg));
-  } else if (OB_FAIL(param_.init(arg))) {
+  } else if (OB_FAIL(param_.init(arg, sql_proxy, schema_service))) {
   } else if (OB_UNLIKELY(!param_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("error unexpected", K(ret), K(param_));
@@ -579,7 +582,7 @@ int ObComplementDataDag::prepare_context()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("error unexpected", K(ret), K(param_));
   } else if (OB_FAIL(param_.prepare_task_ranges())) {
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
+  } else if (OB_FAIL(param_.schema_service_->get_runtime_schema_guard(
              schema_guard, param_.dest_schema_version_))) {
   } else if (OB_FAIL(schema_guard.get_table_schema(
              param_.dest_table_id_, hidden_table_schema))) {
@@ -749,7 +752,7 @@ int ObComplementPrepareTask::process()
                                                     param_->orig_table_id_,
                                                     0/*use 0 just to avoid clearing target table chksum*/,
                                                     param_->task_id_,
-                                                    *GCTX.sql_proxy_,
+                                                    *param_->sql_proxy_,
                                                     param_->tablet_task_id_))) {
   } else {
     LOG_INFO("finish the complement prepare task", K(ret), KPC(param_), "ddl_event_info", ObDDLEventInfo(GCTX.self_addr()));
@@ -1026,9 +1029,7 @@ int ObComplementWriteTask::generate_col_param()
     if (OB_UNLIKELY(!is_inited_)) {
       ret = OB_NOT_INIT;
       LOG_WARN("not init", K(ret));
-    } else if (OB_FAIL(
-                   ObMultiVersionSchemaService::get_instance()
-                       .get_runtime_schema_guard(runtime_schema_guard))) {
+    } else if (OB_FAIL(param_->schema_service_->get_runtime_schema_guard(runtime_schema_guard))) {
     } else if (OB_FAIL(runtime_schema_guard.get_table_schema(
               param_->orig_table_id_, data_table_schema))) {
     } else if (OB_ISNULL(data_table_schema)) {
@@ -1166,7 +1167,7 @@ int ObComplementWriteTask::do_local_scan()
                   || param_->orig_schema_version_ != param_->dest_schema_version_)) {
         ret = OB_ERR_SYS;
         LOG_WARN("err sys", K(ret), KPC(param_));
-      } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
+      } else if (OB_FAIL(param_->schema_service_->get_runtime_schema_guard(
                 schema_guard, schema_version))) {
       } else if (OB_FAIL(schema_guard.get_table_schema(
                 param_->orig_table_id_, data_table_schema))) {
@@ -1184,7 +1185,8 @@ int ObComplementWriteTask::do_local_scan()
                                         *data_table_schema,
                                         param_->snapshot_version_,
                                         *hidden_table_schema,
-                                        false/*unique_index_checking*/))) {
+                                        false/*unique_index_checking*/,
+                                        *param_->schema_service_))) {
       } else if (OB_FAIL(scan->table_scan(*data_table_schema,
                                                param_->orig_tablet_id_,
                                                iterator,
@@ -1281,7 +1283,7 @@ int ObComplementMergeTask::process()
           param_->execution_id_,
           param_->orig_tablet_id_.id(),
           param_->data_format_version_,
-          *GCTX.sql_proxy_))) {
+          *param_->sql_proxy_))) {
   }
 
   if (OB_FAIL(ret) && OB_NOT_NULL(context_)) {
@@ -1304,7 +1306,7 @@ int ObComplementMergeTask::process()
  * -----------------------------------ObLocalScan-----------------------------------------
  */
 
-ObLocalScan::ObLocalScan() : is_inited_(false), table_id_(OB_INVALID_ID),
+ObLocalScan::ObLocalScan() : is_inited_(false), schema_service_(nullptr), table_id_(OB_INVALID_ID),
     dest_table_id_(OB_INVALID_ID), schema_version_(0), extended_gc_(),
     default_row_(), write_row_(), row_iter_(nullptr), scan_merge_(nullptr), ctx_(), access_param_(),
     access_ctx_(), get_table_param_(), allocator_("ObLocalScan", OB_MALLOC_NORMAL_BLOCK_SIZE),
@@ -1338,7 +1340,8 @@ int ObLocalScan::init(
     const ObTableSchema &data_table_schema,
     const int64_t snapshot_version,
     const ObTableSchema &hidden_table_schema,
-    const bool unique_index_checking)
+    const bool unique_index_checking,
+    ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
@@ -1350,6 +1353,7 @@ int ObLocalScan::init(
     LOG_WARN("invalid auguments", K(ret), K(data_table_schema), K(hidden_table_schema),
         K(col_ids), K(org_col_ids), K(projector), K(snapshot_version));
   } else {
+    schema_service_ = &schema_service;
     unique_index_checking_ = unique_index_checking;
     snapshot_version_ = snapshot_version;
     ObDatumRow tmp_default_row;
@@ -1631,7 +1635,7 @@ int ObLocalScan::get_origin_table_checksum(
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
+  } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(
              schema_guard, schema_version_))) {
   } else if (OB_FAIL(schema_guard.get_table_schema(
              table_id_, data_table_schema))) {

@@ -25,7 +25,7 @@ OB_SERIALIZE_MEMBER(ObBatchGetTabletBindingRes, binding_datas_);
 OB_DEF_SERIALIZE(ObDDLLocalBuildArg)
 {
   int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_ENCODE, source_tablet_id_, dest_tablet_id_,
+  LST_DO_CODE(OB_UNIS_ENCODE, namespace_id_, source_tablet_id_, dest_tablet_id_,
     source_table_id_, dest_schema_id_, schema_version_, snapshot_version_, ddl_type_, task_id_, execution_id_,
     parallelism_, tablet_task_id_, data_format_version_,
     dest_schema_version_, lob_col_idxs_);
@@ -34,7 +34,7 @@ OB_DEF_SERIALIZE(ObDDLLocalBuildArg)
 OB_DEF_DESERIALIZE(ObDDLLocalBuildArg)
 {
   int ret = OB_SUCCESS;
-  LST_DO_CODE(OB_UNIS_DECODE, source_tablet_id_, dest_tablet_id_,
+  LST_DO_CODE(OB_UNIS_DECODE, namespace_id_, source_tablet_id_, dest_tablet_id_,
       source_table_id_, dest_schema_id_, schema_version_, snapshot_version_, ddl_type_, task_id_, execution_id_,
       parallelism_, tablet_task_id_, data_format_version_,
       dest_schema_version_, lob_col_idxs_);
@@ -43,7 +43,7 @@ OB_DEF_DESERIALIZE(ObDDLLocalBuildArg)
 OB_DEF_SERIALIZE_SIZE(ObDDLLocalBuildArg)
 {
   int64_t len = 0;
-  LST_DO_CODE(OB_UNIS_ADD_LEN, source_tablet_id_, dest_tablet_id_,
+  LST_DO_CODE(OB_UNIS_ADD_LEN, namespace_id_, source_tablet_id_, dest_tablet_id_,
     source_table_id_, dest_schema_id_, schema_version_, snapshot_version_, ddl_type_, task_id_, execution_id_,
     parallelism_, tablet_task_id_, data_format_version_,
     dest_schema_version_, lob_col_idxs_);
@@ -51,7 +51,8 @@ OB_DEF_SERIALIZE_SIZE(ObDDLLocalBuildArg)
 }
 bool ObDDLLocalBuildArg::is_valid() const
 {
-  bool is_valid = source_tablet_id_.is_valid() && dest_tablet_id_.is_valid()
+  bool is_valid = namespace_id_ > 0 && namespace_id_ < (1ULL << 25)
+               && source_tablet_id_.is_valid() && dest_tablet_id_.is_valid()
                && OB_INVALID_ID != source_table_id_ && OB_INVALID_ID != dest_schema_id_
                && schema_version_ > 0 && snapshot_version_ > 0 && task_id_ > 0 && parallelism_ > 0
                && execution_id_ >= 0
@@ -67,6 +68,7 @@ int ObDDLLocalBuildArg::assign(const ObDDLLocalBuildArg &other)
     LOG_WARN("invalid arg", K(ret), K(other));
   } else if (OB_FAIL(lob_col_idxs_.assign(other.lob_col_idxs_))) {
   } else {
+    namespace_id_ = other.namespace_id_;
     source_tablet_id_ = other.source_tablet_id_;
     dest_tablet_id_ = other.dest_tablet_id_;
     source_table_id_ = other.source_table_id_;

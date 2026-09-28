@@ -63,6 +63,7 @@ struct ObComplementDataParam final
 public:
   ObComplementDataParam():
     is_inited_(false), 
+    sql_proxy_(nullptr), schema_service_(nullptr),
     orig_table_id_(common::OB_INVALID_ID),
     dest_table_id_(common::OB_INVALID_ID), orig_tablet_id_(ObTabletID::INVALID_TABLET_ID), dest_tablet_id_(ObTabletID::INVALID_TABLET_ID), 
     row_store_type_(common::ENCODING_ROW_STORE), orig_schema_version_(0), dest_schema_version_(0),
@@ -71,7 +72,9 @@ public:
     dest_lob_meta_tablet_id_(), allocator_("CompleteDataPar", OB_MALLOC_NORMAL_BLOCK_SIZE)
   {}
   ~ObComplementDataParam() { destroy(); }
-  int init(const obcall::ObDDLLocalBuildArg &arg);
+  int init(const obcall::ObDDLLocalBuildArg &arg,
+           common::ObMySQLProxy &sql_proxy,
+           share::schema::ObMultiVersionSchemaService &schema_service);
   int prepare_task_ranges();
   int split_task_ranges(
       const int64_t task_id,
@@ -80,7 +83,8 @@ public:
       const int64_t hint_parallelism);
   bool is_valid() const
   {
-    return common::OB_INVALID_ID != orig_table_id_
+    return sql_proxy_ != nullptr && schema_service_ != nullptr
+           && common::OB_INVALID_ID != orig_table_id_
            && common::OB_INVALID_ID != dest_table_id_ && orig_tablet_id_.is_valid() && dest_tablet_id_.is_valid()
            && snapshot_version_ > 0 && execution_id_ >= 0 && tablet_task_id_ > 0
            && data_format_version_ > 0 && orig_schema_tablet_size_ > 0 && user_parallelism_ > 0;
@@ -93,6 +97,8 @@ public:
   void destroy()
   {
     is_inited_ = false;
+    sql_proxy_ = nullptr;
+    schema_service_ = nullptr;
     orig_table_id_ = common::OB_INVALID_ID;
     dest_table_id_ = common::OB_INVALID_ID;
     orig_tablet_id_.reset();
@@ -132,6 +138,8 @@ private:
   int fill_tablet_param();
 public:
   bool is_inited_;
+  common::ObMySQLProxy *sql_proxy_;
+  share::schema::ObMultiVersionSchemaService *schema_service_;
   uint64_t orig_table_id_;
   uint64_t dest_table_id_;
   ObTabletID orig_tablet_id_;
@@ -207,7 +215,9 @@ class ObComplementDataDag final: public share::ObIDag
 public:
   ObComplementDataDag();
   ~ObComplementDataDag();
-  int init(const obcall::ObDDLLocalBuildArg &arg);
+  int init(const obcall::ObDDLLocalBuildArg &arg,
+           common::ObMySQLProxy &sql_proxy,
+           share::schema::ObMultiVersionSchemaService &schema_service);
   int prepare_context();
   virtual uint64_t hash() const override;
   bool operator ==(const share::ObIDag &other) const;
@@ -373,7 +383,8 @@ public:
            const share::schema::ObTableSchema &data_table_schema,
            const int64_t snapshot_version,
            const share::schema::ObTableSchema &hidden_table_schema,
-           const bool unique_index_checking);
+           const bool unique_index_checking,
+           share::schema::ObMultiVersionSchemaService &schema_service);
   int table_scan(const share::schema::ObTableSchema &data_table_schema,
                  const ObTabletID &tablet_id,
                  ObTabletTableIterator &table_iter,
@@ -405,6 +416,7 @@ private:
       blocksstable::ObDatumRange &range);
 private:
   bool is_inited_;
+  share::schema::ObMultiVersionSchemaService *schema_service_;
   uint64_t table_id_;
   uint64_t dest_table_id_;
   int64_t schema_version_;
