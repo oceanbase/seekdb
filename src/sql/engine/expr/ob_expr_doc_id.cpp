@@ -106,8 +106,7 @@ int ObExprDocID::cg_expr(
       } else {
         ObSQLSessionInfo *session = eval_ctx.exec_ctx_.get_my_session();
         share::ObITabletAutoincrementService *auto_inc = session != nullptr
-            ? session->effective_tablet_autoincrement_service()
-            : ::oceanbase::share::server_service<share::ObITabletAutoincrementService>();
+            ? session->effective_tablet_autoincrement_service() : nullptr;
         if (OB_ISNULL(auto_inc)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("tablet autoincrement service is unavailable", K(ret));
