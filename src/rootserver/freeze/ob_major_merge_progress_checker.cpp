@@ -59,7 +59,7 @@ int ObMajorMergeProgressChecker::init(
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
-  } else if (OB_FAIL(ckm_validator_.init(is_primary_service, sql_proxy))) {
+  } else if (OB_FAIL(ckm_validator_.init(is_primary_service, sql_proxy, schema_service))) {
   } else {
     idx_ckm_validate_array_.set_attr(ObMemAttr("RSCompCkmPair"));
     finish_tablet_ids_.set_attr(ObMemAttr("RSCompTabIds"));

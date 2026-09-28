@@ -33,7 +33,8 @@ using namespace compaction;
 
 int ObChecksumValidator::init(
     const bool is_primary_service,
-    ObMySQLProxy &sql_proxy)
+    ObMySQLProxy &sql_proxy,
+    ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
@@ -44,6 +45,7 @@ int ObChecksumValidator::init(
     is_primary_service_ = is_primary_service;
     cur_tablet_ids_.set_attr(ObMemAttr("RSCompTabs"));
     sql_proxy_ = &sql_proxy;
+    schema_service_ = &schema_service;
     is_inited_ = true;
   }
   return ret;
@@ -70,7 +72,7 @@ int ObChecksumValidator::deal_with_special_table_at_last(bool &finish_validate)
   finish_validate = false;
   ObSchemaGetterGuard schema_guard(ObSchemaMgrItem::MOD_RS_MAJOR_CHECK);
   cur_tablet_ids_.reuse();
-  if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_runtime_schema_guard(
+  if (OB_FAIL(schema_service_->get_runtime_schema_guard(
     schema_guard, OB_INVALID_VERSION,
     ObMultiVersionSchemaService::RefreshSchemaMode::FORCE_LAZY))) {
   } else if (FALSE_IT(schema_guard_ = &schema_guard)) {

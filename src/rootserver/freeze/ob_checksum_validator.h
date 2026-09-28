@@ -27,6 +27,7 @@
 
 namespace oceanbase
 {
+namespace share { namespace schema { class ObMultiVersionSchemaService; } }
 namespace rootserver
 {
 class ObGlobalMergeManager;
@@ -53,6 +54,7 @@ public:
       freeze_info_(),
       statistics_(statistics),
       sql_proxy_(nullptr),
+      schema_service_(nullptr),
       tablet_status_map_(tablet_status_map),
       table_compaction_map_(table_compaction_map),
       idx_ckm_validate_array_(idx_ckm_validate_array),
@@ -68,7 +70,8 @@ public:
   ~ObChecksumValidator() {}
   int init(
     const bool is_primary_service,
-    ObMySQLProxy &sql_proxy);
+    ObMySQLProxy &sql_proxy,
+    share::schema::ObMultiVersionSchemaService &schema_service);
 
   int set_basic_info(
     const share::ObFreezeInfo &freeze_info);
@@ -135,6 +138,7 @@ private:
   share::ObFreezeInfo freeze_info_;
   compaction::ObCkmValidatorStatistics &statistics_;
   common::ObMySQLProxy *sql_proxy_;
+  share::schema::ObMultiVersionSchemaService *schema_service_;
   /* reference to obj in PorgressChecker */
   const compaction::ObTabletStatusMap &tablet_status_map_;
   compaction::ObTableCompactionInfoMap &table_compaction_map_;
