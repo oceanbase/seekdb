@@ -192,6 +192,7 @@ int ObLocalManagementService::init(ObServerConfig &config,
     context.recovery_mode_ = ObDDLTaskContext::RecoveryMode::BEST_EFFORT;
     context.sql_proxy_ = &sql_proxy;
     context.session_sql_proxy_ = &sql_proxy;
+    context.freeze_info_sql_proxy_ = &sql_proxy;
     context.ddl_proxy_ = ddl_sql_proxy_;
     context.schema_service_ = schema_service;
     context.autoincrement_service_ = &autoincrement_service;
@@ -256,6 +257,7 @@ int ObLocalManagementService::init_sql_worker(
     context.recovery_mode_ = ObDDLTaskContext::RecoveryMode::RETRY_UNTIL_CONSISTENT;
     context.sql_proxy_ = &sql_proxy;
     context.session_sql_proxy_ = &session_sql_proxy;
+    context.freeze_info_sql_proxy_ = &session_sql_proxy;
     context.ddl_proxy_ = ddl_sql_proxy_;
     context.schema_service_ = &schema_service;
     context.autoincrement_service_ = &autoincrement_service;

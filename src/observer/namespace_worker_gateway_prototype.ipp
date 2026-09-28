@@ -21,7 +21,9 @@ int acquire_storage_snapshot(int64_t &snapshot) {
   snapshot = 0;
   // Freeze metadata remains SQL/schema state in the namespace worker. The
   // helper obtains only the transaction clock through ObITransactionService.
-  return rootserver::ObDDLTaskUtil::calc_snapshot_with_gts(snapshot);
+  auto *freeze_info_proxy = namespace_sql_proxy(1);
+  return freeze_info_proxy == nullptr ? OB_NOT_INIT
+      : rootserver::ObDDLTaskUtil::calc_snapshot_with_gts(*freeze_info_proxy, snapshot);
 }
 int reload_storage_freeze_info() {
   auto *freeze = share::server_service<storage::ObFreezeInfoMgr>();

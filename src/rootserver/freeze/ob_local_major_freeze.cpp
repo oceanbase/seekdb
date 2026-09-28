@@ -51,7 +51,7 @@ int ObLocalMajorFreeze::init(
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
-  } else if (OB_FAIL(major_merge_info_mgr_.init(sql_proxy))) {
+  } else if (OB_FAIL(major_merge_info_mgr_.init(sql_proxy, schema_service))) {
   } else if (OB_FAIL(snapshot_gc_scn_renewer_.init(
              is_primary_service, major_merge_info_mgr_))) {
   } else if (OB_FAIL(merge_scheduler_.init(is_primary_service, major_merge_info_mgr_,

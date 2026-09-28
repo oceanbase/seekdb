@@ -1565,7 +1565,8 @@ int ObDDLWaitTransEndCtx::get_snapshot(int64_t &snapshot_version)
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObDDLTaskUtil::calc_snapshot_with_gts(
-              snapshot_version, ddl_task_id_, max_snapshot, INDEX_SNAPSHOT_VERSION_DIFF))) {
+              *context_.freeze_info_sql_proxy_, snapshot_version,
+              ddl_task_id_, max_snapshot, INDEX_SNAPSHOT_VERSION_DIFF))) {
       } else if (OB_UNLIKELY(snapshot_version <= 0)) { // defensive check.
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected snapshot", K(ret), K(ddl_task_id_), K(max_snapshot), K(snapshot_version));

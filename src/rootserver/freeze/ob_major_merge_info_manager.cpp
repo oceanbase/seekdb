@@ -38,7 +38,8 @@ namespace rootserver
 
 /****************************** ObMajorMergeInfoManager ******************************/
 int ObMajorMergeInfoManager::init(
-    common::ObMySQLProxy &sql_proxy)
+    common::ObMySQLProxy &sql_proxy,
+    share::schema::ObMultiVersionSchemaService &schema_service)
 {
   int ret = OB_SUCCESS;
   if (IS_INIT) {
@@ -47,7 +48,8 @@ int ObMajorMergeInfoManager::init(
   } else if (OB_FAIL(global_merge_mgr_.init(sql_proxy))) {
   } else if (OB_FAIL(freeze_info_mgr_.init(sql_proxy))) {
   } else {
-    
+    sql_proxy_ = &sql_proxy;
+    schema_service_ = &schema_service;
     is_inited_ = true;
   }
 
@@ -99,10 +101,10 @@ int ObMajorMergeInfoManager::set_freeze_info(const ObMajorFreezeReason freeze_re
     ObFreezeInfoProxy freeze_info_proxy{};
     // freeze get_schema_version need interactive with ddl trans but don't use gen_new_schema_version so no need check_in_rs
     // freeze disable check_newest_schema so not to use schema_guard
-    ObDDLSQLTransaction trans(GCTX.schema_service_, false/*need_end_signal*/, false/*stash*/, false/*parallel*/, false/*check_in_rs*/, false/*check_newest_schema*/);
+    ObDDLSQLTransaction trans(schema_service_, false/*need_end_signal*/, false/*stash*/, false/*parallel*/, false/*check_in_rs*/, false/*check_newest_schema*/);
 
     // In 'ddl_sql_transaction.start()', it implements the semantics of 'lock_all_ddl_operation'.
-    if (OB_FAIL(trans.start(GCTX.sql_proxy_, fake_schema_version))) {
+    if (OB_FAIL(trans.start(sql_proxy_, fake_schema_version))) {
     } else if (OB_FAIL(ObGlobalStatProxy::select_snapshot_gc_scn_for_update(
               trans, remote_snapshot_gc_scn))) {
     } else {
@@ -149,7 +151,7 @@ int ObMajorMergeInfoManager::generate_frozen_scn(
 
   // build index or backup will acquire snapshot,
   // so should make sure frozen_scn will be greater max snapshot_ts.
-  if (OB_FAIL(snapshot_proxy.get_max_snapshot_info(*GCTX.sql_proxy_, snapshot_info))) {
+  if (OB_FAIL(snapshot_proxy.get_max_snapshot_info(*sql_proxy_, snapshot_info))) {
    if (OB_ENTRY_NOT_EXIST == ret) {
      // no acquired snapshot
      ret = OB_SUCCESS;
@@ -163,7 +165,7 @@ int ObMajorMergeInfoManager::generate_frozen_scn(
   SCN local_max_frozen_scn;
   ObFreezeInfo max_frozen_status;
   ObFreezeInfoProxy freeze_info_proxy{};
-  if (FAILEDx(freeze_info_proxy.get_max_freeze_info(*GCTX.sql_proxy_, max_frozen_status))) {
+  if (FAILEDx(freeze_info_proxy.get_max_freeze_info(*sql_proxy_, max_frozen_status))) {
     LOG_WARN("fail to get freeze info with max frozen_scn", KR(ret));
   } else if (OB_FAIL(freeze_info_mgr_.get_latest_freeze_info(latest_frozen_status))) {
   } else if (FALSE_IT(local_max_frozen_scn = latest_frozen_status.frozen_scn_)) {
@@ -202,10 +204,10 @@ int ObMajorMergeInfoManager::get_schema_version(
   int ret = OB_SUCCESS;
   ObSchemaService *server_schema_service = nullptr;
 
-  if (OB_ISNULL(GCTX.schema_service_)) {
+  if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema_service is null", KR(ret));
-  } else if (OB_ISNULL(server_schema_service = GCTX.schema_service_->get_schema_service())) {
+  } else if (OB_ISNULL(server_schema_service = schema_service_->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("server_schema_service is null", KR(ret));
   } else {
@@ -214,7 +216,7 @@ int ObMajorMergeInfoManager::get_schema_version(
     // TODO snapshot_timestamp_ should be SCN
     status.snapshot_timestamp_ = frozen_scn.get_val_for_inner_table_field();
 
-    if (OB_FAIL(server_schema_service->fetch_schema_version(status, *GCTX.sql_proxy_, schema_version))) {
+    if (OB_FAIL(server_schema_service->fetch_schema_version(status, *sql_proxy_, schema_version))) {
     }
   }
 
@@ -248,7 +250,7 @@ int ObMajorMergeInfoManager::renew_snapshot_gc_scn(SCN &new_snapshot_gc_scn)
   new_snapshot_gc_scn = SCN::min_scn();
 
   if (OB_FAIL(try_reload())) {
-  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+  } else if (OB_FAIL(trans.start(sql_proxy_))) {
   } else if (OB_FAIL(ObGlobalStatProxy::select_snapshot_gc_scn_for_update(trans,
       cur_snapshot_gc_scn))) {
   }
@@ -300,7 +302,7 @@ int ObMajorMergeInfoManager::try_gc_freeze_info()
 
   if (FAILEDx(try_reload())) {
     LOG_WARN("fail to try reload", K(ret));
-  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
+  } else if (OB_FAIL(trans.start(sql_proxy_))) {
   } else if (OB_FAIL(ObGlobalStatProxy::select_snapshot_gc_scn_for_update(trans, cur_snapshot_gc_scn))) {
   } else if (OB_FAIL(freeze_info_proxy.get_all_freeze_info(trans, all_freeze_info))) {
   } else {

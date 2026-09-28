@@ -98,6 +98,7 @@ public:
       int64_t &new_fetched_snapshot,
       ObLocalManagementService &root_service);
   static int calc_snapshot_with_gts(
+      common::ObMySQLProxy &freeze_info_sql_proxy,
       int64_t &snapshot,
       const int64_t ddl_task_id = 0,
       const int64_t trans_end_snapshot = 0,

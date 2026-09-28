@@ -61,6 +61,7 @@ struct ObDDLTaskContext final
   RecoveryMode recovery_mode_ = RecoveryMode::INVALID;
   common::ObMySQLProxy *sql_proxy_ = nullptr;
   common::ObMySQLProxy *session_sql_proxy_ = nullptr;
+  common::ObMySQLProxy *freeze_info_sql_proxy_ = nullptr;
   common::ObMySQLProxy *ddl_proxy_ = nullptr;
   share::schema::ObMultiVersionSchemaService *schema_service_ = nullptr;
   share::ObAutoincrementService *autoincrement_service_ = nullptr;
@@ -72,6 +73,7 @@ struct ObDDLTaskContext final
         && local_build_mode_ != LocalBuildMode::INVALID
         && recovery_mode_ != RecoveryMode::INVALID
         && sql_proxy_ != nullptr && session_sql_proxy_ != nullptr
+        && freeze_info_sql_proxy_ != nullptr
         && ddl_proxy_ != nullptr
         && schema_service_ != nullptr && autoincrement_service_ != nullptr
         && root_service_ != nullptr

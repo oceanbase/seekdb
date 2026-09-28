@@ -731,7 +731,9 @@ int ObDDLTaskUtil::obtain_snapshot(
 
   int64_t data_table_id = data_table_schema.get_table_id();
   new_fetched_snapshot = 0;
-  if (OB_FAIL(calc_snapshot_with_gts(new_fetched_snapshot))) {
+  if (OB_FAIL(calc_snapshot_with_gts(
+          *root_service.get_ddl_service().get_task_context().freeze_info_sql_proxy_,
+          new_fetched_snapshot))) {
   } else if (new_fetched_snapshot <= 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("the snapshot is not valid", K(ret), K(new_fetched_snapshot));
@@ -750,6 +752,7 @@ int ObDDLTaskUtil::obtain_snapshot(
 }
 
 int ObDDLTaskUtil::calc_snapshot_with_gts(
+    common::ObMySQLProxy &freeze_info_sql_proxy,
     int64_t &snapshot,
     const int64_t ddl_task_id,
     const int64_t trans_end_snapshot,
@@ -764,9 +767,9 @@ int ObDDLTaskUtil::calc_snapshot_with_gts(
   if (OB_UNLIKELY(ddl_task_id < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(ddl_task_id));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
+  } else if (!freeze_info_sql_proxy.is_inited()) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
+    LOG_WARN("freeze info SQL proxy is unavailable", KR(ret));
   } else {
     {
       data_plane::ObITransactionService *tx_service =
@@ -780,7 +783,7 @@ int ObDDLTaskUtil::calc_snapshot_with_gts(
     if (OB_SUCC(ret)) {
       snapshot = max(trans_end_snapshot, curr_ts.get_val_for_tx() - index_snapshot_version_diff);
       if (OB_FAIL(freeze_info_proxy.get_freeze_info(
-          *GCTX.sql_proxy_, SCN::min_scn(), frozen_status))) {
+          freeze_info_sql_proxy, SCN::min_scn(), frozen_status))) {
       } else if (OB_FAIL(DDL_SIM(ddl_task_id, GET_FREEZE_INFO_FAILED))) {
       } else {
         const int64_t frozen_scn_val = frozen_status.frozen_scn_.get_val_for_tx();

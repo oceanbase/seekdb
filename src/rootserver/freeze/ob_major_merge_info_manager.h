@@ -36,6 +36,7 @@ class ObMySQLProxy;
 namespace share
 {
 class ObFreezeInfoManager;
+namespace schema { class ObMultiVersionSchemaService; }
 }
 namespace rootserver
 {
@@ -48,6 +49,8 @@ class ObMajorMergeInfoManager
 public:
   ObMajorMergeInfoManager()
     : is_inited_(false),
+      sql_proxy_(nullptr),
+      schema_service_(nullptr),
       global_merge_mgr_(),
       freeze_info_mgr_(),
       lock_(common::ObLatchIds::OB_MAJOR_MERGE_INFO_MANAGER_LOCK)
@@ -55,7 +58,8 @@ public:
   virtual ~ObMajorMergeInfoManager() {}
   ObGlobalMergeManager &get_global_merge_mgr() { return global_merge_mgr_; }
   share::ObFreezeInfoManager &get_freeze_info_mgr() { return freeze_info_mgr_; }
-  int init(common::ObMySQLProxy &sql_proxy);
+  int init(common::ObMySQLProxy &sql_proxy,
+           share::schema::ObMultiVersionSchemaService &schema_service);
   int try_reload();
   int reload(const bool force_reload_global_info = false);
   void reset_info()
@@ -89,6 +93,8 @@ private:
 
 private:
   bool is_inited_;
+  common::ObMySQLProxy *sql_proxy_;
+  share::schema::ObMultiVersionSchemaService *schema_service_;
   
   ObGlobalMergeManager global_merge_mgr_;
   share::ObFreezeInfoManager freeze_info_mgr_;

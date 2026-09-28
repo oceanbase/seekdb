@@ -418,7 +418,8 @@ int ObForkTableUtil::obtain_snapshot(
   if (OB_UNLIKELY(data_table_schemas.empty())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("data_table_schemas is empty", K(ret));
-  } else if (OB_FAIL(ObDDLTaskUtil::calc_snapshot_with_gts(new_fetched_snapshot))) {
+  } else if (OB_FAIL(ObDDLTaskUtil::calc_snapshot_with_gts(
+          *ddl_service.get_task_context().freeze_info_sql_proxy_, new_fetched_snapshot))) {
   } else if (new_fetched_snapshot <= 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("the snapshot is not valid", K(ret), K(new_fetched_snapshot));

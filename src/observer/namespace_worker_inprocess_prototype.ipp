@@ -541,11 +541,14 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
 {
   int ret = OB_SUCCESS;
   ObServer &server = ObServer::get_instance();
+  common::ObMySQLProxy *root_sql_proxy = namespace_sql_proxy(1);
   auto services = std::make_unique<InProcessNamespaceServices>(ns);
   char suffix[32];
   snprintf(suffix, sizeof(suffix), "ns%llu", static_cast<unsigned long long>(ns));
   const char *stage = "alloc";
-  if (OB_ISNULL(services->sql_proxy = OB_NEW(NamespaceRoutingSqlProxy,
+  if (OB_ISNULL(root_sql_proxy)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_ISNULL(services->sql_proxy = OB_NEW(NamespaceRoutingSqlProxy,
           ObModIds::OB_SCHEMA_SERVICE))
       || OB_ISNULL(services->ddl_proxy = OB_NEW(NamespaceRoutingSqlProxy,
           ObModIds::OB_SCHEMA_SERVICE))
@@ -679,7 +682,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
           server.get_ob_service()))) {
   } else if (OB_FAIL(services->root_commands->init_sql_worker(
           GCONF, *GCTX.config_mgr_, server.get_self(), *services->sql_proxy,
-          server.get_mysql_proxy(),
+          *root_sql_proxy,
           *services->schema_service, services->autoincrement))) {
   } else if (FALSE_IT(stage = "virtual_table_scan")) {
   } else if (FALSE_IT(services->address = server.get_self())) {
@@ -814,6 +817,7 @@ int inprocess_refresh_schema(uint64_t ns)
     context.recovery_mode_ = rootserver::ObDDLTaskContext::RecoveryMode::RETRY_UNTIL_CONSISTENT;
     context.sql_proxy_ = services.sql_proxy;
     context.session_sql_proxy_ = namespace_sql_proxy(1);
+    context.freeze_info_sql_proxy_ = namespace_sql_proxy(1);
     context.ddl_proxy_ = services.ddl_proxy;
     context.schema_service_ = services.schema_service;
     context.autoincrement_service_ = &services.autoincrement;
