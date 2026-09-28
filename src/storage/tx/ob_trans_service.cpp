@@ -37,7 +37,6 @@ namespace transaction
 ObTransService::ObTransService()
     : is_inited_(false),
       is_running_(false),
-      schema_service_(NULL),
       trans_id_service_(NULL),
       ts_mgr_(NULL),
       input_queue_count_(0),
@@ -56,19 +55,16 @@ int ObTransService::server_module_init(ObTransService *&it)
 {
   int ret = OB_SUCCESS;
   const ObAddr &self = GCTX.self_addr();
-  share::schema::ObMultiVersionSchemaService *schema_service = GCTX.schema_service_;
   if (OB_FAIL(it->init(self,
                               ::oceanbase::share::server_service<::oceanbase::transaction::ObTransIDService>(),
-                              &OB_TS_MGR,
-                              schema_service))) {
+                              &OB_TS_MGR))) {
   }
   return ret;
 }
 
 int ObTransService::init(const ObAddr &self,
                          ObTransIDService *trans_id_service,
-                         ObTsMgr *ts_mgr,
-                         share::schema::ObMultiVersionSchemaService *schema_service)
+                         ObTsMgr *ts_mgr)
 {
   int ret = OB_SUCCESS;
   set_run_wrapper(share::server_runtime());
@@ -91,11 +87,9 @@ int ObTransService::init(const ObAddr &self,
     ret = OB_INIT_TWICE;
   } else if (OB_UNLIKELY(!self.is_valid())
              || OB_ISNULL(trans_id_service)
-             || OB_ISNULL(ts_mgr)
-             || OB_ISNULL(schema_service)) {
+             || OB_ISNULL(ts_mgr)) {
     TRANS_LOG(WARN, "invalid argument", K(self),
-              KP(trans_id_service), KP(ts_mgr),
-              KP(schema_service));
+              KP(trans_id_service), KP(ts_mgr));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(timer_.init("TransTimeWheel"))) {
   } else if (OB_FAIL(ObLinkQueueThreadPool::init(1, msg_task_cnt, "TransService"))) {
@@ -109,7 +103,6 @@ int ObTransService::init(const ObAddr &self,
     self_ = self;
     
     trans_id_service_ = trans_id_service;
-    schema_service_ = schema_service;
     ts_mgr_ = ts_mgr;
     is_inited_ = true;
     TRANS_LOG(INFO, "transaction service inited success", KPC(this), K(memory_budget));

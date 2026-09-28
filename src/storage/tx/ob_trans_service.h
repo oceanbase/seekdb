@@ -23,7 +23,6 @@
 #include "share/ob_errno.h"
 #include "storage/memtable/ob_memtable_interface.h"
 #include "storage/memtable/ob_memtable_context.h"
-#include "share/schema/ob_multi_version_schema_service.h"
 #include "share/ob_light_hashmap.h"
 #include "lib/utility/utility.h"
 #include "ob_trans_define.h"
@@ -34,7 +33,6 @@
 #include "ob_tx_version_mgr.h"
 #include "lib/utility/ob_tracepoint.h"
 #include "lib/container/ob_iarray.h"
-#include "share/ob_server_struct.h"
 #include "common/storage/ob_sequence.h"
 #include "ob_tx_elr_util.h"
 #include "data_plane/transaction/ob_i_transaction_service.h"
@@ -116,8 +114,7 @@ public:
   static int server_module_init(ObTransService* &trans_service);
   int init(const ObAddr &self,
            ObTransIDService *trans_id_service,
-           ObTsMgr *ts_mgr,
-           share::schema::ObMultiVersionSchemaService *schema_service);
+           ObTsMgr *ts_mgr);
   int start();
   void stop();
   void wait() { wait_(); }
@@ -137,11 +134,9 @@ public:
   
   const common::ObAddr &get_server() { return self_; }
   ObTransTimer &get_trans_timer() { return timer_; }
-  common::ObMySQLProxy *get_mysql_proxy() { return GCTX.sql_proxy_; }
   bool is_running() const { return is_running_; }
   ObTsMgr *get_ts_mgr() { return ts_mgr_; }
   ObTxTimestampWaiter &get_tx_timestamp_waiter() { return tx_timestamp_waiter_; }
-  share::schema::ObMultiVersionSchemaService *get_schema_service() { return schema_service_; }
   ObTxVersionMgr &get_tx_version_mgr() { return tx_version_mgr_; }
   int register_mds_into_tx(ObTxDesc &tx_desc,
                            const ObTxDataSourceType &type,
@@ -188,9 +183,6 @@ protected:
   ObTransTimer timer_;
   ObTxTimestampWaiter tx_timestamp_waiter_;
   ObTxVersionMgr tx_version_mgr_;
-protected:
-  // the adapter between transaction and clog
-  share::schema::ObMultiVersionSchemaService *schema_service_;
 private:
   ObTransIDService *trans_id_service_;
   ObTsMgr *ts_mgr_;
