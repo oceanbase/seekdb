@@ -278,7 +278,6 @@ public:
 public:
   ObAutoincrementService();
   ~ObAutoincrementService();
-  static ObAutoincrementService &get_instance();
   int init(common::ObMySQLProxy *mysql_proxy);
   int get_handle(AutoincParam &param, CacheHandle *&handle);
   void release_handle(CacheHandle *&handle);

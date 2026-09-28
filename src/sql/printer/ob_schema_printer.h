@@ -46,6 +46,7 @@ class ObMySQLResult;
 
 namespace share
 {
+class ObAutoincrementService;
 namespace schema
 {
 class ObDatabaseSchema;
@@ -63,7 +64,8 @@ public:
   explicit ObSchemaPrinter(ObSchemaGetterGuard &schema_guard, 
                            bool strict_compat = false,
                            bool sql_quote_show_create = true,
-                           bool ansi_quotes = false);
+                           bool ansi_quotes = false,
+                           share::ObAutoincrementService *autoincrement_service = nullptr);
   virtual ~ObSchemaPrinter() { }
 private:
   ObSchemaPrinter();
@@ -396,6 +398,7 @@ private:
   int get_table_schema_(const uint64_t table_id, const ObTableSchema *&table_schema) const;
 
   ObSchemaGetterGuard &schema_guard_;
+  share::ObAutoincrementService *autoincrement_service_;
   sql::ObSqlSchemaGuard *sql_schema_guard_;
   bool strict_compat_;
   bool sql_quote_show_create_;

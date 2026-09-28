@@ -3100,7 +3100,10 @@ int64_t ObSqlFatalErrExtraInfoGuard::to_string(char *buf, const int64_t buf_len)
       const ObSchemaObjVersion &schema_obj = dep_tables->at(i);
       if (schema_obj.get_schema_type() == TABLE_SCHEMA) {
         ObSchemaGetterGuard schema_guard;
-        ObSchemaPrinter schema_printer(schema_guard);
+        ObSchemaPrinter schema_printer(schema_guard, false, true, false,
+            exec_ctx_ != nullptr && exec_ctx_->get_my_session() != nullptr
+                ? exec_ctx_->get_my_session()->effective_autoincrement_service()
+                : nullptr);
         ObCharsetType charset_type = CHARSET_INVALID;
         if (OB_ISNULL(exec_ctx_) || OB_ISNULL(exec_ctx_->get_my_session())
             || OB_ISNULL(exec_ctx_->get_sql_exec_ctx().schema_service_)) {

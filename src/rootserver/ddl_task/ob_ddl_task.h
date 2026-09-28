@@ -438,11 +438,6 @@ public:
       ObIAllocator &allocator,
       common::ObIArray<blocksstable::ObDatumRange> &store_ranges);
 
-  static int get_or_insert_tablet_schedule_info(const int64_t task_id,
-      const common::ObTabletID &tablet_id,
-      ObIAllocator &allocator,
-      common::ObIArray<blocksstable::ObDatumRange> &store_ranges);
-
   static int delete_record(
       common::ObMySQLProxy &proxy,
       const int64_t task_id);
@@ -563,12 +558,6 @@ public:
   ObDDLWaitTransEndCtx();
   ~ObDDLWaitTransEndCtx();
   void set_context(const ObDDLTaskContext &context) { context_ = context; }
-  int init(
-      const int64_t ddl_task_id,
-      const share::ObDDLTaskStatus ddl_task_status,
-      const uint64_t table_id,
-      const WaitTransType wait_trans_type,
-      const int64_t wait_version);
   int init(
       const int64_t ddl_task_id,
       const share::ObDDLTaskStatus ddl_task_status,
@@ -699,7 +688,7 @@ public:
   void set_longops_stat(rootserver::ObDDLLongopsStat *longops_stat) { longops_stat_ = longops_stat; }
   rootserver::ObDDLLongopsStat *get_longops_stat() const { return longops_stat_; }
   uint64_t get_data_format_version() const { return data_format_version_; }
-  static int fetch_new_task_id(ObMySQLProxy &sql_proxy, int64_t &new_task_id);
+  static int fetch_new_task_id(int64_t &new_task_id);
   virtual int serialize_params_to_message(char *buf, const int64_t buf_size, int64_t &pos) const;
   virtual int deserialize_params_from_message(const char *buf, const int64_t buf_size, int64_t &pos);
   virtual int64_t get_serialize_param_size() const;
@@ -733,11 +722,6 @@ public:
       int64_t execution_id,
       const bool ddl_can_retry,
       int64_t &next_execution_id);
-  static int push_task_execution_id(
-      const int64_t task_id,
-      const share::ObDDLType ddl_type,
-      const bool ddl_can_retry,
-      int64_t &new_execution_id);
   static int push_task_execution_id(
       common::ObMySQLProxy &sql_proxy,
       const int64_t task_id,

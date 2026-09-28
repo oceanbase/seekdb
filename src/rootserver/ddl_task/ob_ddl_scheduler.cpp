@@ -1772,16 +1772,15 @@ int ObDDLScheduler::create_build_fts_index_task(
     } else if (OB_ISNULL(create_index_arg) ||
                OB_ISNULL(data_table_schema) ||
                OB_ISNULL(index_schema) ||
-               data_format_version <= 0 ||
-               OB_ISNULL(GCTX.sql_proxy_)) {
+               data_format_version <= 0) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), KPC(create_index_arg),
-          KPC(data_table_schema), KPC(index_schema), K(data_format_version), KP(GCTX.sql_proxy_));
+          KPC(data_table_schema), KPC(index_schema), K(data_format_version));
     } else if (OB_FAIL(ObDDLTaskUtil::get_domain_index_share_table_snapshot(
                    data_table_schema, index_schema, parent_task_id, *create_index_arg,
                    root_service, snapshot_version))) {
     } else if (OB_FAIL(ObFtsIndexBuilderUtil::check_supportability_for_building_index(data_table_schema, create_index_arg))) {
-    } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
+    } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(task_id))) {
     } else if (OB_FAIL(index_task.init(task_id,
                                        data_table_schema,
                                        index_schema,
@@ -1825,10 +1824,7 @@ int ObDDLScheduler::create_build_vec_ivf_index_task(
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), KPC(create_index_arg),
           KPC(data_table_schema), KPC(index_schema));
-    } else if (OB_ISNULL(GCTX.sql_proxy_)) {
-      ret = OB_INVALID_ARGUMENT;
-      LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
-    } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
+    } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(task_id))) {
     } else if (OB_FAIL(index_task.init(task_id,
                                        data_table_schema,
                                        index_schema,
@@ -1867,15 +1863,14 @@ int ObDDLScheduler::create_build_vec_index_task(
       ret = OB_NOT_INIT;
       LOG_WARN("not init", K(ret));
     } else if (OB_ISNULL(create_index_arg) || OB_ISNULL(data_table_schema)
-              || OB_ISNULL(index_schema) || OB_UNLIKELY(data_format_version <= 0)
-              || OB_ISNULL(GCTX.sql_proxy_)) {
+              || OB_ISNULL(index_schema) || OB_UNLIKELY(data_format_version <= 0)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), KPC(create_index_arg),
           KPC(data_table_schema), KPC(index_schema));
     } else if (OB_FAIL(ObDDLTaskUtil::get_domain_index_share_table_snapshot(
                    data_table_schema, index_schema, parent_task_id, *create_index_arg,
                    root_service, snapshot_version))) {
-    } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
+    } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(task_id))) {
     } else if (OB_FAIL(index_task.init(task_id,
                                        data_table_schema,
                                        index_schema,
@@ -1923,10 +1918,10 @@ int ObDDLScheduler::create_build_index_task(
       ret = OB_NOT_INIT;
       LOG_WARN("not init", K(ret));
     } else if (OB_ISNULL(create_index_arg) || OB_ISNULL(data_table_schema) || OB_ISNULL(index_schema)
-        || OB_UNLIKELY(data_format_version <= 0) || OB_ISNULL(GCTX.sql_proxy_)) {
+        || OB_UNLIKELY(data_format_version <= 0)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), KPC(create_index_arg), KPC(data_table_schema), KPC(index_schema), K(data_format_version));
-    } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
+    } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(task_id))) {
     } else if (OB_FAIL(index_task.init(task_id,
                                       ddl_type,
                                       data_table_schema,
@@ -1965,10 +1960,10 @@ int ObDDLScheduler::create_drop_index_task(
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_ISNULL(index_schema) || OB_ISNULL(drop_index_arg) || OB_ISNULL(GCTX.sql_proxy_)) {
+  } else if (OB_ISNULL(index_schema) || OB_ISNULL(drop_index_arg)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(index_schema), KP(drop_index_arg));
-  } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
+  } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(task_id))) {
   } else {
     const uint64_t data_table_id = index_schema->get_data_table_id();
     const uint64_t index_table_id = index_schema->get_table_id();
@@ -2014,17 +2009,16 @@ int ObDDLScheduler::create_drop_fts_index_task(
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
-  } else if (OB_ISNULL(index_schema) || OB_ISNULL(drop_index_arg) || OB_ISNULL(GCTX.sql_proxy_)) {
+  } else if (OB_ISNULL(index_schema) || OB_ISNULL(drop_index_arg)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(index_schema), KP(drop_index_arg), KP(GCTX.sql_proxy_));
+    LOG_WARN("invalid argument", K(ret), KP(index_schema), KP(drop_index_arg));
   } else if (FALSE_IT(is_fts_index = (index_schema->is_fts_index_aux() || drop_index_arg->is_parent_task_dropping_fts_index_))) {
   } else if (FALSE_IT(is_multivalue_index = (index_schema->is_multivalue_index_aux() || drop_index_arg->is_parent_task_dropping_multivalue_index_))) {
   } else if (FALSE_IT(is_vec_spiv_index = (index_schema->is_vec_spiv_index_aux() || drop_index_arg->is_parent_task_dropping_spiv_index_))) {
   } else if (OB_UNLIKELY(schema_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(index_schema), K(schema_version));
-  } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_,
-          task_id))) {
+  } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(task_id))) {
   } else {
     if (OB_FAIL(ret) || OB_ISNULL(domain_index_schema)) {
     } else if (OB_FAIL(domain_index_schema->get_index_name(domain_index_name))) {
@@ -2112,10 +2106,10 @@ int ObDDLScheduler::create_drop_vec_index_task(
   } else if (OB_ISNULL(index_schema)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(index_schema), KP(drop_index_arg));
-  } else if (OB_UNLIKELY(schema_version <= 0) || OB_ISNULL(GCTX.sql_proxy_)) {
+  } else if (OB_UNLIKELY(schema_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KP(index_schema), K(schema_version), KP(GCTX.sql_proxy_));
-  } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
+    LOG_WARN("invalid argument", K(ret), KP(index_schema), K(schema_version));
+  } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(task_id))) {
   } else {
     if (OB_FAIL(ret) || OB_ISNULL(domain_index_schema)) {
     } else if (OB_FAIL(domain_index_schema->get_index_name(vec_domain_index_name))) {
@@ -2209,10 +2203,7 @@ int ObDDLScheduler::create_drop_vec_ivf_index_task(
   } else if (OB_UNLIKELY(schema_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(index_schema), K(schema_version));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
-  } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
+  } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(task_id))) {
   } else {
     if (OB_FAIL(ret) || OB_ISNULL(centroid_schema)) {
     } else if (OB_FAIL(centroid_schema->get_index_name(centroid_index_name))) {
@@ -2286,10 +2277,7 @@ int ObDDLScheduler::create_drop_lob_task(
   } else if (OB_ISNULL(param.ddl_arg_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
-  } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
+  } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(task_id))) {
   } else {
     if (OB_FAIL(task.init(task_id, aux_lob_meta_table_id, param.object_id_, param.schema_version_,
             param.parent_task_id_, *param.ddl_arg_))) {
@@ -2320,10 +2308,10 @@ int ObDDLScheduler::create_constraint_task(
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_UNLIKELY(nullptr == table_schema || OB_INVALID_ID == constraint_id || schema_version <= 0
-                         || nullptr == arg || !arg->is_valid()) || OB_ISNULL(GCTX.sql_proxy_)) {
+                         || nullptr == arg || !arg->is_valid())) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), KPC(table_schema), K(constraint_id), K(schema_version), K(arg), KP(GCTX.sql_proxy_));
-  } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
+    LOG_WARN("invalid argument", K(ret), KPC(table_schema), K(constraint_id), K(schema_version), K(arg));
+  } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(task_id))) {
   } else if (OB_FAIL(constraint_task.init(task_id, table_schema, constraint_id, ddl_type, schema_version, *arg, sub_task_trace_id, parent_task_id))) {
   } else if (OB_FAIL(constraint_task.set_trace_id(*ObCurTraceId::get_trace_id()))) {
   } else if (OB_FAIL(insert_task_record(proxy, constraint_task, allocator, task_record))) {
@@ -2501,13 +2489,12 @@ int ObDDLScheduler::create_fork_table_task(
     } else if (OB_ISNULL(fork_table_arg)
                || OB_ISNULL(src_table_schema)
                || OB_ISNULL(dst_table_schema)
-               || OB_ISNULL(GCTX.sql_proxy_)
                || schema_version <= 0
                || snapshot_version <= 0) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", KR(ret), K(fork_table_arg),
-          K(src_table_schema), K(dst_table_schema), K(schema_version), K(snapshot_version), KP(GCTX.sql_proxy_));
-    } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
+          K(src_table_schema), K(dst_table_schema), K(schema_version), K(snapshot_version));
+    } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(task_id))) {
     } else if (OB_FAIL(fork_table_task.init(task_id,
                                             share::DDL_FORK_TABLE,
                                             src_table_schema,
@@ -2965,16 +2952,16 @@ int ObDDLScheduler::create_rebuild_index_task(
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
-  } else if (OB_ISNULL(index_schema) || OB_ISNULL(GCTX.sql_proxy_)) {
+  } else if (OB_ISNULL(index_schema)) {
     ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(index_schema), KP(GCTX.sql_proxy_));
+    LOG_WARN("invalid argument", KR(ret), KP(index_schema));
   } else if (!index_schema->is_vec_index()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("only vec index is supported", KR(ret), KPC(index_schema));
   } else if (index_schema->is_vec_index() && index_schema->is_built_in_vec_index()) { // Expecting the rebuild to be initiated by the visibility table (hnsw delta buffer table or ivf centroid table)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected index schema", KR(ret), KPC(index_schema));
-  } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
+  } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(task_id))) {
   } else {
     const uint64_t data_table_id = index_schema->get_data_table_id();
     const uint64_t index_table_id = index_schema->get_table_id();

@@ -2728,10 +2728,10 @@ int ObLocalManagementService::check_weak_read_version_refresh_interval(int64_t r
   ObSchemaGetterGuard sys_schema_guard;
   valid = true;
 
-  if (OB_ISNULL(GCTX.schema_service_)) {
+  if (OB_ISNULL(schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", KR(ret));
-  } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(sys_schema_guard))) {
+  } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(sys_schema_guard))) {
   } else {
     ObSchemaGetterGuard schema_guard;
     const ObSimpleServerRuntimeSchema *runtime_schema = NULL;
@@ -2746,7 +2746,7 @@ int ObLocalManagementService::check_weak_read_version_refresh_interval(int64_t r
       } else if (!runtime_schema->is_normal()) {
         ret = OB_SUCCESS;
         LOG_WARN("runtime schema is not normal, skip validation", KR(ret));
-      } else if (OB_FAIL(GCTX.schema_service_->get_runtime_schema_guard(schema_guard))) {
+      } else if (OB_FAIL(schema_service_->get_runtime_schema_guard(schema_guard))) {
       } else if (OB_FAIL(schema_guard.get_system_variable(OB_SV_MAX_READ_STALE_TIME, var_schema))) {
       } else if (OB_ISNULL(var_schema)) {
         ret = OB_ERR_UNEXPECTED;

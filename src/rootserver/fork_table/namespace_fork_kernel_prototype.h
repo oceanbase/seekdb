@@ -5,7 +5,10 @@
 #include "data_plane/access/ob_namespace_access_mode.h"
 namespace oceanbase {
 namespace common { class ObISQLClient; }
-namespace share { namespace schema { class ObSimpleDatabaseSchema; } }
+namespace share { namespace schema {
+class ObSimpleDatabaseSchema;
+class ObMultiVersionSchemaService;
+} }
 namespace storage {
 class ObTablet;
 // A capability for one internal DROP transaction, never a current namespace.
@@ -77,6 +80,7 @@ public:
   static int table_id_for_tablet(const common::ObTabletID &tablet, int64_t schema_version,
                                  uint64_t &table_id);
   static int check_ddl(const share::schema::ObSimpleTableSchemaV2 &schema,
+                       share::schema::ObMultiVersionSchemaService &schema_service,
                        const common::ObISQLClient *trans = nullptr);
   static int ensure_tablet(const common::ObTabletID &tablet_id);
   // Read-path binding resolution without materialization. An encoded tablet

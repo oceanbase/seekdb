@@ -36,8 +36,11 @@ using namespace common;
 ObSchemaPrinter::ObSchemaPrinter(ObSchemaGetterGuard &schema_guard, 
                                  bool strict_compat,
                                  bool sql_quote_show_create,
-                                 bool ansi_quotes)
+                                 bool ansi_quotes,
+                                 share::ObAutoincrementService *autoincrement_service)
     : schema_guard_(schema_guard), 
+      autoincrement_service_(autoincrement_service),
+      sql_schema_guard_(nullptr),
       strict_compat_(strict_compat),
       sql_quote_show_create_(sql_quote_show_create),
       ansi_quotes_(ansi_quotes)
@@ -1242,7 +1245,10 @@ int ObSchemaPrinter::print_table_definition_table_options(const ObTableSchema &t
     }
     uint64_t auto_increment = 0;
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(share::ObAutoincrementService::get_instance().get_sequence_value(
+    } else if (OB_ISNULL(autoincrement_service_)) {
+      ret = OB_NOT_INIT;
+      SHARE_SCHEMA_LOG(WARN, "schema printer autoincrement service is unavailable", K(ret));
+    } else if (OB_FAIL(autoincrement_service_->get_sequence_value(
           table_schema.get_table_id(),
           table_schema.get_autoinc_column_id(),
           table_schema.get_truncate_version(), auto_increment))) {
@@ -1497,7 +1503,10 @@ int ObSchemaPrinter::print_table_definition_table_options(
     if (OB_ISNULL(sql_proxy)) {
       ret = OB_ERR_UNEXPECTED;
       OB_LOG(WARN, "sql_proxy is null", K(ret));
-    } else if (OB_FAIL(share::ObAutoincrementService::get_instance().get_sequence_value(
+    } else if (OB_ISNULL(autoincrement_service_)) {
+      ret = OB_NOT_INIT;
+      SHARE_SCHEMA_LOG(WARN, "schema printer autoincrement service is unavailable", K(ret));
+    } else if (OB_FAIL(autoincrement_service_->get_sequence_value(
                          table_schema.get_table_id(),
                          table_schema.get_autoinc_column_id(),
                          table_schema.get_truncate_version(),

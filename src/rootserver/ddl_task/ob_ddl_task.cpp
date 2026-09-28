@@ -441,11 +441,10 @@ int ObDDLTask::deep_copy_table_arg(common::ObIAllocator &allocator, const ObDDLA
   return ret;
 }
 
-int ObDDLTask::fetch_new_task_id(ObMySQLProxy &sql_proxy, int64_t &new_task_id)
+int ObDDLTask::fetch_new_task_id(int64_t &new_task_id)
 {
   int ret = OB_SUCCESS;
   ObCommonID tmp_task_id;
-  UNUSED(sql_proxy);
   if (OB_FAIL(ObCommonIDUtils::gen_unique_id(tmp_task_id))) {
   } else {
     new_task_id = tmp_task_id.id();
@@ -991,13 +990,6 @@ int ObDDLTask::calc_next_execution_id(int64_t execution_id, const bool ddl_can_r
   return ret;
 }
 
-int ObDDLTask::push_task_execution_id(const int64_t task_id, const ObDDLType ddl_type, const bool ddl_can_retry, int64_t &new_task_execution_id)
-{
-  return GCTX.sql_proxy_ == nullptr ? OB_NOT_INIT
-      : push_task_execution_id(*GCTX.sql_proxy_, task_id, ddl_type,
-          ddl_can_retry, new_task_execution_id);
-}
-
 int ObDDLTask::push_task_execution_id(ObMySQLProxy &sql_proxy, const int64_t task_id,
     const ObDDLType ddl_type, const bool ddl_can_retry, int64_t &new_task_execution_id)
 {
@@ -1135,17 +1127,6 @@ ObDDLWaitTransEndCtx::ObDDLWaitTransEndCtx()
 ObDDLWaitTransEndCtx::~ObDDLWaitTransEndCtx()
 {
 
-}
-
-int ObDDLWaitTransEndCtx::init(
-    const int64_t ddl_task_id,
-    const share::ObDDLTaskStatus ddl_task_status,
-    const uint64_t table_id,
-    const WaitTransType wait_trans_type,
-    const int64_t wait_version)
-{
-  return init(ddl_task_id, ddl_task_status, table_id, wait_trans_type,
-      wait_version, ObMultiVersionSchemaService::get_instance());
 }
 
 int ObDDLWaitTransEndCtx::init(
@@ -2809,53 +2790,6 @@ int ObDDLTaskRecordOperator::transform_store_ranges(
       if (OB_FAIL(store_ranges.push_back(last_range))) {
       }
     }
-  }
-  return ret;
-}
-
-int ObDDLTaskRecordOperator::get_or_insert_tablet_schedule_info(const int64_t task_id,
-    const common::ObTabletID &tablet_id,
-    ObIAllocator &allocator,
-    common::ObIArray<blocksstable::ObDatumRange> &store_ranges)
-{
-  int ret = OB_SUCCESS;
-  ObArenaAllocator arena(ObMemAttr("cvt_ddl_slice"));
-  ObMySQLTransaction trans;
-  ObDDLSliceInfo persistent_slice_info;
-  bool is_found = false;
-  bool is_idempotent_mode = false;
-  if (OB_UNLIKELY(task_id <= 0 || !tablet_id.is_valid() || store_ranges.empty())) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(task_id), K(tablet_id), K(store_ranges.count()));
-  } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
-  } else if (OB_FAIL(get_schedule_info(trans, task_id, arena, true/*is_for_update*/, persistent_slice_info, is_idempotent_mode))) {
-  } else if (!is_idempotent_mode) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("error unexpected, this function can be called only when using idempotence mode", K(ret), K(task_id));
-  }
-  for (int64_t i = 0; OB_SUCC(ret) && !is_found && i < persistent_slice_info.part_ranges_.count(); ++i) {
-    const sql::ObPxTabletRange &tablet_range_cut = persistent_slice_info.part_ranges_.at(i);
-    if (tablet_range_cut.tablet_id_ == tablet_id.id()) {
-      is_found = true;
-      if (OB_FAIL(transform_store_ranges(tablet_range_cut, allocator, store_ranges))) {
-      }
-    }
-  }
-  if (OB_SUCC(ret) && !is_found) {
-    sql::ObPxTabletRange tablet_range_cut;
-    if (OB_FAIL(transform_tablet_ranges(tablet_id, store_ranges, arena, tablet_range_cut))) {
-    } else if (OB_FAIL(persistent_slice_info.part_ranges_.push_back(tablet_range_cut))) {
-    } else if (OB_FAIL(update_schedule_info(trans, task_id, persistent_slice_info))) {
-    } else if (OB_FAIL(transform_store_ranges(tablet_range_cut, allocator, store_ranges))) {
-    }
-  }
-  // end trans if need
-  if (trans.is_started()) {
-    int tmp_ret = OB_SUCCESS;
-    bool need_commit = OB_SUCC(ret);
-    if (OB_TMP_FAIL(trans.end(need_commit))) {
-    }
-    ret = OB_SUCC(ret) ? tmp_ret : ret;
   }
   return ret;
 }

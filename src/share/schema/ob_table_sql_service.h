@@ -393,7 +393,7 @@ private:
       const uint64_t column_id,
       const uint64_t auto_increment,
       const int64_t truncate_version);
-  static int gen_table_dml(const ObTableSchema &table,
+  int gen_table_dml(const ObTableSchema &table,
                     const bool update_object_status_ignore_version,
                     share::ObDMLSqlSplicer &dml,
                     const bool is_history = false);
@@ -443,7 +443,7 @@ private:
   int gen_foreign_key_column_dml(uint64_t foreign_key_id,
                                  uint64_t child_column_id, uint64_t parent_column_id,
                                  int64_t position, share::ObDMLSqlSplicer &dml);
-  static int check_table_options(const share::schema::ObTableSchema &table_schema);
+  int check_table_options(const share::schema::ObTableSchema &table_schema);
   int add_single_column(common::ObISQLClient &sql_client, const ObColumnSchemaV2 &column,
                         const bool only_history = false);
 
@@ -482,8 +482,8 @@ private:
                                 const ObColumnSchemaV2 &column);
   bool is_user_partition_table(const ObTableSchema &table_schema);
   bool is_user_subpartition_table(const ObTableSchema &table);
-  static int check_ddl_allowed(const ObSimpleTableSchemaV2 &table_schema,
-                               const common::ObISQLClient *trans = nullptr);
+  int check_ddl_allowed(const ObSimpleTableSchemaV2 &table_schema,
+                        const common::ObISQLClient *trans = nullptr) const;
 
 // MockFKParentTable begin
 public:

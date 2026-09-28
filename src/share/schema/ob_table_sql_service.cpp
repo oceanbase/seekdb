@@ -4334,10 +4334,12 @@ int ObTableSqlService::update_table_schema_version(ObISQLClient &sql_client,
   return ret;
 }
 
-int ObTableSqlService::check_ddl_allowed(const ObSimpleTableSchemaV2 &table_schema, const ObISQLClient *trans)
+int ObTableSqlService::check_ddl_allowed(const ObSimpleTableSchemaV2 &table_schema,
+                                          const ObISQLClient *trans) const
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(storage::NamespaceForkKernelPrototype::check_ddl(table_schema, trans))) {
+  if (OB_FAIL(storage::NamespaceForkKernelPrototype::check_ddl(
+          table_schema, multi_version_schema_service_, trans))) {
   } else if (!table_schema.check_can_do_ddl()) {
     ret = OB_OP_NOT_ALLOW;
     LOG_WARN("table_sql_service", K(table_schema.get_table_mode_struct()),

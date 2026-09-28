@@ -331,26 +331,6 @@ int ObDDLTaskUtil::generate_order_by_str(
   return ret;
 }
 
-int ObDDLTaskUtil::generate_build_replica_sql(const int64_t data_table_id,
-    const int64_t dest_table_id,
-    const int64_t schema_version,
-    const int64_t snapshot_version,
-    const int64_t execution_id,
-    const int64_t task_id,
-    const int64_t parallelism,
-    const bool use_heap_table_ddl_plan,
-    const bool use_schema_version_hint_for_src_table,
-    const ObColumnNameMap *col_name_map,
-    const ObString &partition_names,
-    ObSqlString &sql_string)
-{
-  return generate_build_replica_sql(ObMultiVersionSchemaService::get_instance(),
-      data_table_id, dest_table_id, schema_version, snapshot_version,
-      execution_id, task_id, parallelism, use_heap_table_ddl_plan,
-      use_schema_version_hint_for_src_table, col_name_map, partition_names,
-      sql_string);
-}
-
 int ObDDLTaskUtil::generate_build_replica_sql(
     ObMultiVersionSchemaService &schema_service,
     const int64_t data_table_id,

@@ -233,12 +233,6 @@ ObAutoincrementService::~ObAutoincrementService()
 {
 }
 
-ObAutoincrementService &ObAutoincrementService::get_instance()
-{
-  static ObAutoincrementService autoinc_service;
-  return autoinc_service;
-}
-
 int ObAutoincrementService::init(ObMySQLProxy *mysql_proxy)
 {
   int ret = OB_SUCCESS;

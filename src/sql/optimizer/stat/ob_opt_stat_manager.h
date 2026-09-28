@@ -164,11 +164,6 @@ public:
                        const ObIArray<ObTabletID> &all_tablet_ids,
                        int64_t &table_rowcnt);
 
-  static ObOptStatManager &get_instance()
-  {
-    static ObOptStatManager instance_;
-    return instance_;
-  }
   bool is_inited() const { return inited_; }
   void bind_plan_cache(sql::ObPlanCache &plan_cache) { plan_cache_ = &plan_cache; }
   ObOptStatSqlService &get_stat_sql_service()

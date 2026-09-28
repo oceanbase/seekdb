@@ -5320,11 +5320,10 @@ int ObDDLService::create_aux_index_task_(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(data_schema) ||
       OB_ISNULL(idx_schema) ||
-      OB_ISNULL(GCTX.sql_proxy_) ||
       !create_index_arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KPC(data_schema), KPC(idx_schema),
-             KP(GCTX.sql_proxy_), K(create_index_arg));
+             K(create_index_arg));
   } else {
     bool need_partitioned = idx_schema->is_storage_local_index_table() &&
                             idx_schema->is_partitioned_table();
@@ -12893,9 +12892,6 @@ int ObDDLService::do_offline_ddl_in_trans(obcall::ObAlterTableArg &alter_table_a
   if (OB_UNLIKELY(DDL_INVALID == ddl_type || data_format_version <= 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("unexpected ddl type", K(ret), K(ddl_type), K(alter_table_arg), K(data_format_version));
-  } else if (OB_ISNULL(GCTX.sql_proxy_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("variable is not init", K(ret));
   } else if (OB_FAIL(get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
@@ -12931,7 +12927,7 @@ int ObDDLService::do_offline_ddl_in_trans(obcall::ObAlterTableArg &alter_table_a
         LOG_WARN("failed to get schema version", KR(ret));
       } else if (OB_FAIL(trans.start(sql_proxy_, refreshed_schema_version))) {
         LOG_WARN("start transaction failed", KR(ret), K(refreshed_schema_version));
-      } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(*GCTX.sql_proxy_, task_id))) {
+      } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(task_id))) {
         LOG_WARN("fetch new task id failed", K(ret));
       } else if (OB_FAIL(owner_id.convert_from_value(ObLockOwnerType::DEFAULT_OWNER_TYPE,
                                                      task_id))) {

@@ -26,7 +26,9 @@
 #include "lib/container/ob_iarray.h"
 
 #include "sql/optimizer/stat/ob_opt_stat_service.h"
+#include "sql/optimizer/stat/ob_opt_stat_manager.h"
 #include "share/config/ob_config_manager.h"
+#include "share/ob_autoincrement_service.h"
 
 #include "share/tablet/ob_tablet_table_operator.h"
 #include "share/storage/ob_sqlite_connection_pool.h"
@@ -428,6 +430,8 @@ private:
 
   common::ObMySQLProxy sql_proxy_;
   common::ObMySQLProxy ddl_sql_proxy_;
+  share::ObAutoincrementService autoincrement_service_;
+  common::ObOptStatManager opt_stat_manager_;
 
   // The OceanBase configuration relating to.
   common::ObServerConfig &config_;

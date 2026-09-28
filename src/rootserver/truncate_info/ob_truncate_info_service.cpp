@@ -392,7 +392,7 @@ int ObTruncateInfoService::init(ObMySQLProxy &sql_proxy,
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(part_key_info_.init(allocator_, data_table_schema_, schema_service))) {
-  } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(sql_proxy, ddl_task_id_))) {
+  } else if (OB_FAIL(ObDDLTask::fetch_new_task_id(ddl_task_id_))) {
   } else {
     is_inited_ = true;
   }

@@ -199,7 +199,9 @@ int ObShowCreateTable::fill_row_cells_inner(const uint64_t show_table_id,
         }
         case OB_APP_MIN_COLUMN_ID + 2: {
           // create_table
-          ObSchemaPrinter schema_printer(*schema_guard_, strict_mode, sql_quote_show_create, ansi_quotes);
+          ObSchemaPrinter schema_printer(*schema_guard_, strict_mode,
+              sql_quote_show_create, ansi_quotes,
+              session_->effective_autoincrement_service());
           schema_printer.set_sql_schema_guard(&sql_schema_guard_);
           int64_t pos = 0;
           if (table_schema.is_view_table()) {

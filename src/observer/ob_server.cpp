@@ -887,7 +887,7 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init redef heart beat task failed", KR(ret));
     } else if (OB_FAIL(init_refresh_cpu_frequency())) {
       LOG_ERROR("init refresh cpu frequency failed", KR(ret));
-    } else if (OB_FAIL(ObOptStatManager::get_instance().init(
+    } else if (OB_FAIL(opt_stat_manager_.init(
                          &sql_proxy_, &config_, 1))) {
       LOG_ERROR("init opt stat manager failed", KR(ret));
     } else if (OB_FAIL(ObSysTaskStatMgr::get_instance().set_self_addr(self_addr_))) {
@@ -2319,7 +2319,7 @@ int ObServer::init_schema()
 int ObServer::init_autoincrement_service()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObAutoincrementService::get_instance().init(&sql_proxy_))) {
+  if (OB_FAIL(autoincrement_service_.init(&sql_proxy_))) {
     LOG_ERROR("init autoincrement_service_ fail", KR(ret));
   }
   return ret;
@@ -2534,10 +2534,10 @@ int ObServer::init_global_context()
   home->set_service(ns::NamespaceRuntime::DDL_CHECKSUM_ERROR_VERIFIER,
       &rootserver::native_ddl_checksum_error_verifier());
   home->set_service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE,
-      &share::ObAutoincrementService::get_instance());
+      &autoincrement_service_);
   home->set_service(ns::NamespaceRuntime::OPT_STAT_MANAGER,
-      &common::ObOptStatManager::get_instance());
-  common::ObOptStatManager::get_instance().bind_plan_cache(*mods_plan_cache_);
+      &opt_stat_manager_);
+  opt_stat_manager_.bind_plan_cache(*mods_plan_cache_);
   namespace_worker_prototype::register_root_namespace_storage_services(*home);
   gctx_.self_addr_seq_.set_addr(self_addr_);
   gctx_.bandwidth_throttle_ = &bandwidth_throttle_;

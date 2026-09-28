@@ -855,14 +855,8 @@ IndependentStorageScope::~IndependentStorageScope() {
 }
 int fetch_schema_version(bool published, bool core_version, int64_t &version) {
   const uint64_t ns = serving_namespace();
-  if (ns != 0) {
-    auto *lifecycle = namespace_schema_lifecycle(ns);
-    return lifecycle == nullptr ? OB_NOT_INIT
-        : lifecycle->fetch_version(published, core_version, version);
-  }
-  auto &service = ObMultiVersionSchemaService::get_instance();
-  return published
-      ? service.get_published_schema_version(version, core_version)
-      : service.get_runtime_refreshed_schema_version(version, core_version);
+  auto *lifecycle = ns == 0 ? nullptr : namespace_schema_lifecycle(ns);
+  return lifecycle == nullptr ? OB_NOT_INIT
+      : lifecycle->fetch_version(published, core_version, version);
 }
 } } }
