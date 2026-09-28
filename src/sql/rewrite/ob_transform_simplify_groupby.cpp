@@ -671,7 +671,7 @@ int ObTransformSimplifyGroupby::check_can_remove_redundant_aggr(
                                                                ctx_->session_info_,
                                                                ctx_->schema_checker_,
                                                                group_exprs,
-                                                               false,
+                                                               true, // is_strict: NULL keys can repeat within a group.
                                                                can_remove,
                                                                FLAGS_IGNORE_DISTINCT | FLAGS_IGNORE_GROUP))) {
           LOG_WARN("failed to check group by uniqueness", K(ret));
