@@ -63,6 +63,7 @@ public:
   using ExceptionVisitor = std::function<int(const InstanceExceptionRecord &)>;
   using PageVisitor = std::function<int(uint64_t)>;
   using PinVisitor = std::function<int(const InstanceNamespacePin &)>;
+  using SnapshotAcquirer = std::function<int(int64_t &)>;
 
   InstanceNamespaceMetadata(storage::InstanceMetaStore &store, Transaction &transaction)
       : store_(store), transaction_(transaction) {}
@@ -73,6 +74,11 @@ public:
   int update_namespace(const InstanceNamespaceRecord &record);
   int erase_namespace(uint64_t id);
   int scan_namespaces(const NamespaceVisitor &visitor);
+
+  // Locks the source through snapshot acquisition, then stages the child,
+  // name, pin, and lineage in this transaction. Caller commits or rolls back.
+  int fork_namespace(const std::string &source_name, const std::string &target_name,
+                     const SnapshotAcquirer &acquire_snapshot, uint64_t &child_id);
 
   int initialize_namespace_counter(uint64_t high_watermark);
   int allocate_namespace_id(uint64_t &id);

@@ -745,5 +745,56 @@ int InstanceSnapshotLineageStore::remove_snapshot(uint64_t snapshot_id,
   return ret;
 }
 
+int InstanceNamespaceMetadata::fork_namespace(const std::string &source_name,
+    const std::string &target_name, const SnapshotAcquirer &acquire_snapshot,
+    uint64_t &child_id)
+{
+  child_id = 0;
+  if (source_name.empty() || source_name.size() > 128 || target_name.empty()
+      || target_name.size() > 128 || !acquire_snapshot) {
+    return OB_INVALID_ARGUMENT;
+  }
+  uint64_t source_id = 0;
+  int ret = find_namespace(source_name, source_id);
+  InstanceNamespaceRecord source;
+  if (ret == OB_SUCCESS) { ret = get_namespace(source_id, source, true); }
+  if (ret == OB_SUCCESS && (source.name != source_name || source.roots.state != 0)) {
+    ret = OB_STATE_NOT_MATCH;
+  }
+  if (ret == OB_SUCCESS && (source.roots.active_schema_changes != 0
+      || source.roots.pending_schema_version != 0)) {
+    ret = OB_EAGAIN;
+  }
+  ns::CatalogRoots roots = source.roots;
+  if (ret == OB_SUCCESS) { ret = acquire_snapshot(roots.snapshot); }
+  if (ret == OB_SUCCESS && (roots.snapshot <= 0 || roots.schema_version <= 0)) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  uint64_t allocated_id = 0;
+  if (ret == OB_SUCCESS) { ret = allocate_namespace_id(allocated_id); }
+  if (ret == OB_SUCCESS) {
+    InstanceNamespaceRecord child;
+    child.id = allocated_id;
+    child.name = target_name;
+    ret = insert_namespace(child);
+  }
+  if (ret == OB_SUCCESS) {
+    ret = insert_pin({static_cast<uint64_t>(roots.snapshot), roots.schema_version});
+  }
+  if (ret == OB_SUCCESS) {
+    InstanceSnapshotLineageStore lineage(*this);
+    const auto result = ns::NamespaceSnapshotLineage::fork(
+        source_id, allocated_id, roots, lineage);
+    switch (result.error) {
+      case ns::SnapshotForkError::NONE: break;
+      case ns::SnapshotForkError::INVALID: ret = OB_INVALID_ARGUMENT; break;
+      case ns::SnapshotForkError::OVERFLOW: ret = OB_SIZE_OVERFLOW; break;
+      case ns::SnapshotForkError::STORE: ret = result.store_error; break;
+    }
+  }
+  if (ret == OB_SUCCESS) { child_id = allocated_id; }
+  return ret;
+}
+
 } // namespace rootserver
 } // namespace oceanbase
