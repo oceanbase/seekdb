@@ -135,18 +135,14 @@ public:
 
   int load_log_restore_source(
       common::ObIAllocator &allocator,
-      common::ObString &source,
-      int64_t &version) const override
+      common::ObString &source) const override
   {
     int ret = OB_SUCCESS;
     source.reset();
-    version = 0;
     rust::String restore_source = config::log_restore_source();
     const common::ObString current = common::ObString::make_string(restore_source.c_str());
     if (OB_FAIL(common::ob_write_string(allocator, current, source))) {
       LOG_WARN("failed to copy standby log source", KR(ret));
-    } else {
-      version = config::generation();
     }
     return ret;
   }
