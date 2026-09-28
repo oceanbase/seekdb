@@ -364,6 +364,7 @@ private:
   int init_schema();
   int init_inner_table_monitor();
   int init_autoincrement_service();
+  int init_opt_stat_manager();
   int init_tablet_autoincrement_service();
   int init_global_kvcache();
   int init_global_session_info();
@@ -428,8 +429,6 @@ private:
 
   common::ObMySQLProxy sql_proxy_;
   common::ObMySQLProxy ddl_sql_proxy_;
-  share::ObAutoincrementService autoincrement_service_;
-  common::ObOptStatManager opt_stat_manager_;
 
   // The OceanBase configuration relating to.
   common::ObServerConfig &config_;

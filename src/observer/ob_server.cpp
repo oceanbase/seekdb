@@ -882,8 +882,7 @@ int ObServer::init(const ObServerOptions &opts, const ObPLogWriterCfg &log_cfg)
       LOG_ERROR("init redef heart beat task failed", KR(ret));
     } else if (OB_FAIL(init_refresh_cpu_frequency())) {
       LOG_ERROR("init refresh cpu frequency failed", KR(ret));
-    } else if (OB_FAIL(opt_stat_manager_.init(
-                         &sql_proxy_, &config_, 1))) {
+    } else if (OB_FAIL(init_opt_stat_manager())) {
       LOG_ERROR("init opt stat manager failed", KR(ret));
     } else if (OB_FAIL(ObSysTaskStatMgr::get_instance().set_self_addr(self_addr_))) {
       LOG_ERROR("set sys task status self addr failed", KR(ret));
@@ -1094,6 +1093,12 @@ void ObServer::destroy()
     FLOG_INFO("begin to destroy server runtime");
     server_runtime_controller_.destroy();
     FLOG_INFO("server runtime destroyed");
+
+    ns::NamespaceRuntime *home = nullptr;
+    if (ns::namespace_registry().get(1, home) && home != nullptr) {
+      home->clear_service(ns::NamespaceRuntime::OPT_STAT_MANAGER);
+      home->clear_service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE);
+    }
 
     FLOG_INFO("begin to destroy query retry ctrl");
     ObQueryRetryCtrl::destroy();
@@ -2314,8 +2319,31 @@ int ObServer::init_schema()
 int ObServer::init_autoincrement_service()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(autoincrement_service_.init(&sql_proxy_))) {
+  ns::NamespaceRuntime *home = nullptr;
+  share::ObAutoincrementService *service = nullptr;
+  if (!ns::namespace_registry().get(1, home) || home == nullptr
+      || OB_ISNULL(service = static_cast<share::ObAutoincrementService *>(
+          home->service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE)))) {
+    ret = OB_NOT_INIT;
+    LOG_ERROR("root namespace autoincrement service is unavailable", KR(ret));
+  } else if (OB_FAIL(service->init(&sql_proxy_))) {
     LOG_ERROR("init autoincrement_service_ fail", KR(ret));
+  }
+  return ret;
+}
+
+int ObServer::init_opt_stat_manager()
+{
+  int ret = OB_SUCCESS;
+  ns::NamespaceRuntime *home = nullptr;
+  common::ObOptStatManager *manager = nullptr;
+  if (!ns::namespace_registry().get(1, home) || home == nullptr
+      || OB_ISNULL(manager = static_cast<common::ObOptStatManager *>(
+          home->service(ns::NamespaceRuntime::OPT_STAT_MANAGER)))) {
+    ret = OB_NOT_INIT;
+    LOG_ERROR("root namespace stat manager is unavailable", KR(ret));
+  } else if (OB_FAIL(manager->init(&sql_proxy_, &config_, 1))) {
+    LOG_ERROR("init opt stat manager failed", KR(ret));
   }
   return ret;
 }
@@ -2528,10 +2556,17 @@ int ObServer::init_global_context()
       &vt_data_service_);
   home->set_service(ns::NamespaceRuntime::DDL_CHECKSUM_ERROR_VERIFIER,
       &rootserver::native_ddl_checksum_error_verifier());
-  home->set_service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE,
-      &autoincrement_service_);
-  home->set_service(ns::NamespaceRuntime::OPT_STAT_MANAGER,
-      &opt_stat_manager_);
+  std::unique_ptr<share::ObAutoincrementService> autoincrement(
+      new (std::nothrow) share::ObAutoincrementService());
+  std::unique_ptr<common::ObOptStatManager> opt_stat_manager(
+      new (std::nothrow) common::ObOptStatManager());
+  if (autoincrement == nullptr || opt_stat_manager == nullptr) {
+    return OB_ALLOCATE_MEMORY_FAILED;
+  }
+  home->set_owned_service<share::ObAutoincrementService>(
+      ns::NamespaceRuntime::AUTOINCREMENT_SERVICE, std::move(autoincrement));
+  home->set_owned_service<common::ObOptStatManager>(
+      ns::NamespaceRuntime::OPT_STAT_MANAGER, std::move(opt_stat_manager));
   namespace_worker_prototype::register_root_namespace_storage_services(*home);
   gctx_.self_addr_seq_.set_addr(self_addr_);
   gctx_.bandwidth_throttle_ = &bandwidth_throttle_;
