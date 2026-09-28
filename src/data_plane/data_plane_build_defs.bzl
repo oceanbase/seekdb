@@ -44,7 +44,7 @@ DATA_PLANE_API_INTERFACE_HEADERS = [
     "api/data_plane/lob/ob_lob_access_context.h",
     "api/data_plane/lob/ob_lob_read.h",
     "api/data_plane/lob/ob_lob_value.h",
-    "api/data_plane/memtable/ob_btree_iter_cache_api.h",
+    "api/data_plane/ob_iter_cache_api.h",
     "api/data_plane/ob_i_data_validation_service.h",
     "api/data_plane/ob_i_dml_service.h",
     "api/data_plane/ob_i_memory_pressure_service.h",

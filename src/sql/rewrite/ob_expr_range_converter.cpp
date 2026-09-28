@@ -490,9 +490,9 @@ int ObExprRangeConverter::gen_row_column_cmp_node(const ObIArray<const ObColumnR
                    OB_NOT_NULL(r_const_exprs.at(i+1)) &&
                    OB_FAIL(check_decimal_int_range_cmp_valid(r_const_exprs.at(i+1), is_valid_decimal_int_range_cmp))) {
         } else {
-          bool is_lt_with_lob = (cmp_type == T_OP_LT || cmp_type == T_OP_LE) &&  
-                                (ctx_.final_exprs_flag_.at(const_val) 
-                                     & OB_FINAL_EXPR_WITH_LOB_TRUNCATE) 
+          bool is_lt_with_lob = (cmp_type == T_OP_LT || cmp_type == T_OP_LE) &&
+                                (ctx_.final_exprs_flag_.at(const_val)
+                                     & OB_FINAL_EXPR_WITH_LOB_TRUNCATE)
                                      == OB_FINAL_EXPR_WITH_LOB_TRUNCATE;
           last_key_idx = key_idx;
           check_next = !is_lt_with_lob && is_valid_decimal_int_range_cmp;

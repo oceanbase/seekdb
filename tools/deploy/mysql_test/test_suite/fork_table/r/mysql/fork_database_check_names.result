@@ -1,0 +1,30 @@
+DROP DATABASE IF EXISTS db_fork_check_names_dst;
+DROP DATABASE IF EXISTS db_fork_check_names_src;
+CREATE DATABASE db_fork_check_names_src;
+CREATE TABLE db_fork_check_names_src.t (
+id INT PRIMARY KEY,
+value INT,
+CONSTRAINT ck_positive CHECK (value > 0)
+);
+INSERT INTO db_fork_check_names_src.t VALUES (1, 1);
+FORK DATABASE db_fork_check_names_src TO db_fork_check_names_dst;
+SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS
+WHERE TABLE_SCHEMA = 'db_fork_check_names_dst'
+  AND TABLE_NAME = 't' AND CONSTRAINT_TYPE = 'CHECK';
+CONSTRAINT_NAME
+ck_positive
+INSERT INTO db_fork_check_names_dst.t VALUES (2, -1);
+ERROR HY000: check constraint violated
+ALTER TABLE db_fork_check_names_dst.t DROP CHECK ck_positive;
+SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+WHERE TABLE_SCHEMA = 'db_fork_check_names_dst'
+  AND TABLE_NAME = 't' AND CONSTRAINT_TYPE = 'CHECK';
+COUNT(*)
+0
+SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS
+WHERE TABLE_SCHEMA = 'db_fork_check_names_src'
+  AND TABLE_NAME = 't' AND CONSTRAINT_TYPE = 'CHECK';
+CONSTRAINT_NAME
+ck_positive
+DROP DATABASE db_fork_check_names_dst;
+DROP DATABASE db_fork_check_names_src;

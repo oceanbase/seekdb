@@ -296,8 +296,8 @@ int ObStaticEngineExprCG::cg_expr_basic(const ObIArray<ObRawExpr *> &raw_exprs)
         if (precision < 0 || precision > OB_MAX_DECIMAL_POSSIBLE_PRECISION
             || scale < 0 || scale > precision) {
           ret = OB_ERR_UNEXPECTED;
-        } else if (rt_expr->obj_datum_map_ != OBJ_DATUM_DECIMALINT) {
-          ret = OB_ERR_UNEXPECTED;
+        } else {
+          OB_ASSERT(rt_expr->obj_datum_map_ == OBJ_DATUM_DECIMALINT);
         }
       }
     }
@@ -469,6 +469,9 @@ int ObStaticEngineExprCG::cg_expr_by_operator(const ObIArray<ObRawExpr *> &raw_e
         rt_expr->expr_ctx_id_ = total_ctx_cnt;
         total_ctx_cnt += 1;
       }
+      // Built-in arity constraints declared by the operator are checked by
+      // ObSysFunRawExpr::check_param_num before codegen. cg_expr_basic has also
+      // prepared the runtime arguments; stricter, undeclared checks still return errors.
       if (OB_FAIL(op->cg_expr(op_cg_ctx_, *raw_expr, *rt_expr))) {
       } else if (OB_NOT_NULL(rt_expr->extra_info_)
                 && !ObExprExtraInfoFactory::is_registered(rt_expr->type_)) {
@@ -853,7 +856,9 @@ int ObStaticEngineExprCG::arrange_datum_data(ObIArray<ObRawExpr *> &exprs,
         e->res_buf_off_ = 0;
       }
     }
-    CK(data_off == frame.frame_size_);
+    if (OB_SUCC(ret)) {
+      OB_ASSERT(data_off == frame.frame_size_);
+    }
   } else {
     ret = OB_ERR_UNEXPECTED;
     // // FIXME bin.lb: ALIGN_SIZE may affect the performance, set to 1 if no affect
@@ -998,7 +1003,9 @@ int ObStaticEngineExprCG::arrange_datums_data(ObIArray<ObRawExpr *> &exprs,
       LOG_TRACE("expression details during CG", K(e->is_batch_result()), KPC(e),
                 K(expr_data_offset));
     }
-    CK((cur_total_size + expr_data_offset) == frame.frame_size_);
+    if (OB_SUCC(ret)) {
+      OB_ASSERT((cur_total_size + expr_data_offset) == frame.frame_size_);
+    }
   } else {
     ret = OB_ERR_UNEXPECTED;
     // Layout2: Frame is separated by exprs
@@ -1147,8 +1154,8 @@ int ObStaticEngineExprCG::generate_calculable_exprs(
       // %extra_ is the array index of param store
       if (T_QUESTIONMARK == e->type_ && e->extra_ >= param_cnt_) {
         int64_t idx = e->extra_ - param_cnt_;
-        CK(idx < flying_param_cnt_);
         if (OB_SUCC(ret)) {
+          OB_ASSERT(idx < flying_param_cnt_);
           ObExpr **parents = e->parents_;
           uint32_t parent_cnt = e->parent_cnt_;
           *e = *pre_calc_frame.pre_calc_rt_exprs_.at(idx);
@@ -1531,7 +1538,9 @@ int ObStaticEngineExprCG::gen_expr_with_row_desc(const ObRawExpr *expr,
     } // for end
     OZ(temp_expr->idx_col_arr_.assign(idx_col_arr));
     OX(temp_expr->expr_idx_ = get_rt_expr(*expr) - &(temp_expr->rt_exprs_.at(0)));
-    CK(temp_expr->expr_idx_ >=0 && temp_expr->expr_idx_ <= temp_expr->rt_exprs_.count());
+    if (OB_SUCC(ret)) {
+      OB_ASSERT(temp_expr->expr_idx_ >= 0 && temp_expr->expr_idx_ <= temp_expr->rt_exprs_.count());
+    }
   }
 
   return ret;

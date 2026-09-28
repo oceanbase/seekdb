@@ -1,7 +1,7 @@
 [target-default]
 os=android
 arch=arm64
-repo=https://mirrors.aliyun.com/oceanbase/development-kit/android/26/arm64
+repo=https://mirrors.oceanbase.com/oceanbase/development-kit/android/26/arm64
 
 [deps]
 devdeps-abseil-cpp-20211102.0-20260309.tar.gz

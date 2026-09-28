@@ -92,7 +92,7 @@ int ObSqlSockHandler::build_sql_req(ObSqlSockSession& sess,
 
 int ObSqlSockHandler::on_readable(void *udata, char *body, int64_t body_len,
                                   uint64_t wire_bytes, int packet_kind,
-                                  const nio_mysql_command_view *command_view,
+                                  const NioMysqlCommandView *command_view,
                                   uint64_t generation) {
   // Rust supplies an explicit wire packet kind. C++ only builds the legacy
   // ObMySQLRawPacket view and verifies that ObMP's execution phase agrees.

@@ -85,9 +85,8 @@ int ObExprExp::cg_expr(ObExprCGCtx &expr_cg_ctx, const ObRawExpr &raw_expr,
   int ret = OB_SUCCESS;
   UNUSED(expr_cg_ctx);
   UNUSED(raw_expr);
-  if (OB_UNLIKELY(1 != rt_expr.arg_cnt_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
+  {
+    OB_ASSERT(1 == rt_expr.arg_cnt_);
     ObObjType arg_res_type = rt_expr.args_[0]->datum_meta_.type_;
     if (ObDoubleType == arg_res_type) {
       rt_expr.eval_func_ = calc_exp_expr_double;

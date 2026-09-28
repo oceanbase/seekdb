@@ -14,8 +14,7 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_DATA_PLANE_API_MEMTABLE_OB_BTREE_ITER_CACHE_API_H_
-#define OCEANBASE_DATA_PLANE_API_MEMTABLE_OB_BTREE_ITER_CACHE_API_H_
+#pragma once
 
 namespace oceanbase
 {
@@ -26,10 +25,8 @@ class ObIAllocator;
 namespace data_plane
 {
 
-void *create_btree_iter_cache(common::ObIAllocator &allocator);
-void destroy_btree_iter_cache(common::ObIAllocator &allocator, void *&cache);
+void *create_iter_cache(common::ObIAllocator &allocator);
+void destroy_iter_cache(common::ObIAllocator &allocator, void *&cache);
 
 } // namespace data_plane
 } // namespace oceanbase
-
-#endif // OCEANBASE_DATA_PLANE_API_MEMTABLE_OB_BTREE_ITER_CACHE_API_H_

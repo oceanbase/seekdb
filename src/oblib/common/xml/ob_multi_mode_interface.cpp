@@ -504,7 +504,7 @@ int ObIMulModeBase::print_content(ObStringBuffer& x_buf, bool with_encoding, boo
       if (get_standalone() == OB_XML_STANDALONE_NO && OB_FAIL(x_buf.append(" standalone=\"no\""))) {
       } else if (get_standalone() == OB_XML_STANDALONE_YES && OB_FAIL(x_buf.append(" standalone=\"yes\""))) {
       } else if (OB_FAIL(x_buf.append("?>"))) {
-      } else if ((format_flag & ObXmlFormatType::NEWLINE_AND_INDENT) && 
+      } else if ((format_flag & ObXmlFormatType::NEWLINE_AND_INDENT) &&
                   OB_FAIL(ObXmlUtil::append_newline_and_indent(x_buf, 0, param_list.indent))) {
       }
     }

@@ -82,9 +82,23 @@ int check_predicate_implicit_cast_deduce_safe(ObRawExpr *expr, bool &is_safe)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null expr", K(ret));
   } else if (IS_COMPARISON_OP(expr->get_expr_type()) && 2 == expr->get_param_count()) {
-    if (OB_FAIL(check_implicit_cast_deduce_safe(expr->get_param_expr(0),
-                                                expr->get_param_expr(1),
-                                                is_safe))) {
+    ObRawExpr *left_expr = expr->get_param_expr(0);
+    ObRawExpr *right_expr = expr->get_param_expr(1);
+    if (OB_ISNULL(left_expr) || OB_ISNULL(right_expr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null expr", K(ret), K(left_expr), K(right_expr));
+    } else if ((T_OP_IN == expr->get_expr_type() || T_OP_NOT_IN == expr->get_expr_type()) &&
+               T_OP_ROW == right_expr->get_expr_type()) {
+      // The row is an IN-list container, not a scalar comparison operand.
+      // Check the cast against each value rather than the container's null type.
+      for (int64_t i = 0; OB_SUCC(ret) && is_safe && i < right_expr->get_param_count(); ++i) {
+        if (OB_FAIL(check_implicit_cast_deduce_safe(left_expr,
+                                                    right_expr->get_param_expr(i),
+                                                    is_safe))) {
+          LOG_WARN("failed to check IN implicit cast deduce safety", K(ret));
+        }
+      }
+    } else if (OB_FAIL(check_implicit_cast_deduce_safe(left_expr, right_expr, is_safe))) {
       LOG_WARN("failed to check implicit cast deduce safety", K(ret));
     }
   }

@@ -1585,11 +1585,13 @@ public:
   static int extract_const_bool_expr_info(ObTransformerCtx *ctx,
                                           const common::ObIArray<ObRawExpr*> &exprs,
                                           common::ObIArray<int64_t> &true_exprs,
-                                          common::ObIArray<int64_t> &false_exprs);
+                                          common::ObIArray<int64_t> &false_exprs,
+                                          bool skip_warning_expr = false);
   static int extract_const_bool_expr_result(ObTransformerCtx *ctx,
                                             ObRawExpr *expr,
                                             bool &is_true,
-                                            bool &is_false);
+                                            bool &is_false,
+                                            bool skip_warning_expr = false);
   /* extract exprs in all_exprs whoes indexs are in target_idx to target_exprs */
   static int extract_target_exprs_by_idx(const ObIArray<ObRawExpr*> &all_exprs,
                                          const ObIArray<int64_t> &target_idx,
@@ -1597,7 +1599,11 @@ public:
   static int calc_const_expr_result(ObRawExpr * expr,
                                     ObTransformerCtx *ctx,
                                     ObObj &result,
-                                    bool &calc_happend);
+                                    bool &calc_happend,
+                                    bool *has_warning = NULL);
+  static int check_static_expr_has_warning(ObTransformerCtx *ctx,
+                                           ObRawExpr *expr,
+                                           bool &has_warning);
   static int check_integer_result_type(common::ObIArray<ObRawExpr*> &exprs,
                                        bool &is_valid_type);
 

@@ -127,6 +127,10 @@ function do_init
     echo_err "dependency initialization failed with status ${status}"
     return "${status}"
   fi
+  (
+    cd "${TOPDIR}/rust" &&
+      rustup toolchain install --no-self-update
+  ) || return $?
 
   end_time="$(date +%s)"
   elapsed=$((end_time - start_time))

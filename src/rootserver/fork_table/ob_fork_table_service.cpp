@@ -40,7 +40,8 @@ int ObDDLService::fork_single_table_in_trans_(const ObTableSchema &src_table_sch
     ObSchemaGetterGuard &schema_guard, ObDDLSQLTransaction &trans,
     ObIAllocator &allocator, ObDDLTaskRecord &task_record,
     common::hash::ObHashMap<uint64_t, uint64_t> *table_id_map,
-    ObSArray<ObTableSchema> *out_table_schemas) {
+    ObSArray<ObTableSchema> *out_table_schemas,
+    const bool preserve_constraint_names) {
   int ret = OB_SUCCESS;
   ObSchemaService *schema_service = schema_service_->get_schema_service();
   ObArenaAllocator inner_allocator(ObModIds::OB_RS_PARTITION_TABLE_TEMP);
@@ -57,7 +58,8 @@ int ObDDLService::fork_single_table_in_trans_(const ObTableSchema &src_table_sch
             session_id, USER_TABLE, *schema_service, table_schemas,
             inner_allocator,
             OB_INVALID_ID, // define_user_id
-            false /* delete_unused_columns */))) {
+            false /* delete_unused_columns */,
+            preserve_constraint_names))) {
     } else if (OB_FAIL(
                    generate_object_id_for_partition_schemas(table_schemas))) {
     } else if (OB_FAIL(generate_tables_tablet_id(table_schemas))) {

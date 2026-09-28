@@ -2894,10 +2894,13 @@ int ObTransformPredicateMoveAround::check_need_transform_predicates(ObIArray<ObR
   int ret = OB_SUCCESS;
   ObSEArray<int64_t, 4> true_exprs;
   ObSEArray<int64_t, 4> false_exprs;
+  // This only checks whether a rewrite is applicable. Diagnostics belong to
+  // execution, including when the resulting plan is reused from the cache.
   if (OB_FAIL(ObTransformUtils::extract_const_bool_expr_info(ctx_,
                                                              exprs,
                                                              true_exprs,
-                                                             false_exprs))) {
+                                                             false_exprs,
+                                                             true))) {
   } else {
     is_needed = false_exprs.empty();
   }

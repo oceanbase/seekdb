@@ -43,7 +43,7 @@ public:
   int load(void *sess, const uint64_t generation, const char *body,
            const int64_t body_len) {
     int ret = OB_SUCCESS;
-    nio_login_view view = {};
+    NioLoginView view = {};
     if (NULL == sess || NULL == body || body_len < 0) {
       ret = OB_INVALID_ARGUMENT;
     } else if (0 == generation ||
@@ -62,7 +62,7 @@ public:
         ret = OB_INVALID_DATA;
       }
       for (int i = 0; OB_SUCC(ret) && i < view.attr_count; ++i) {
-        const nio_login_attr &attr = view.attrs[i];
+        const NioLoginAttr &attr = view.attrs[i];
         if (!valid_range(attr.key_off, attr.key_len, body_len) ||
             !valid_range(attr.value_off, attr.value_len, body_len)) {
           ret = OB_INVALID_DATA;
@@ -96,7 +96,7 @@ private:
            static_cast<int64_t>(len) <= body_len - static_cast<int64_t>(off);
   }
 
-  int map_field(const nio_login_field &field, const char *body, const int64_t body_len,
+  int map_field(const NioLoginField &field, const char *body, const int64_t body_len,
                 common::ObString &out)
   {
     int ret = OB_SUCCESS;

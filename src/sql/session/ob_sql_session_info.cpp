@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_SESSION
 
 #include <new>
-#include "data_plane/memtable/ob_btree_iter_cache_api.h"
+#include "data_plane/ob_iter_cache_api.h"
 #include "data_plane/transaction/ob_i_read_timestamp_service.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "query/command/ob_root_command_service.h"
@@ -158,7 +158,7 @@ ObSQLSessionInfo::ObSQLSessionInfo() :
       in_bytes_(0),
       out_bytes_(0),
       job_info_(nullptr),
-      btree_iter_cache_(nullptr),
+      iter_cache_(nullptr),
       executing_sql_stat_record_()
 {
 }
@@ -192,9 +192,8 @@ int ObSQLSessionInfo::init(uint32_t sessid,
   } else {
     sess_create_time_ = ObTimeUtility::current_time();
     is_inited_ = true;
-    if (OB_ISNULL(btree_iter_cache_)) {
-      btree_iter_cache_ =
-          data_plane::create_btree_iter_cache(get_session_allocator());
+    if (OB_ISNULL(iter_cache_)) {
+      iter_cache_ = data_plane::create_iter_cache(get_session_allocator());
     }
   }
   if (OB_FAIL(ret)) {
@@ -531,9 +530,8 @@ void ObSQLSessionInfo::destroy(bool skip_sys_var)
     }
     // Non-distributed needs it, distributed also needs it, used for cleaning up the global variable values of package
     reset_all_package_state();
-    if (OB_NOT_NULL(btree_iter_cache_)) {
-      data_plane::destroy_btree_iter_cache(
-          get_session_allocator(), btree_iter_cache_);
+    if (OB_NOT_NULL(iter_cache_)) {
+      data_plane::destroy_iter_cache(get_session_allocator(), iter_cache_);
     }
     reset(skip_sys_var);
     is_inited_ = false;
@@ -1864,9 +1862,9 @@ uint32_t ObSessionAccess::get_server_session_id(
   return nullptr == session ? 0 : session->get_server_sid();
 }
 
-void *ObSessionAccess::get_btree_iter_cache(sql::ObSQLSessionInfo *session)
+void *ObSessionAccess::get_iter_cache(sql::ObSQLSessionInfo *session)
 {
-  return nullptr == session ? nullptr : session->get_btree_iter_cache();
+  return nullptr == session ? nullptr : session->get_iter_cache();
 }
 
 void ObSessionAccess::get_current_sql_id(

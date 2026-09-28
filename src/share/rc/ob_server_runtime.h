@@ -39,8 +39,6 @@ namespace share
 {
 class ObServerModuleInitCtx;
 
-using ObTableScanIteratorObjPool = common::ObServerObjectPool<storage::ObTableScanIterator>;
-
 // Narrow process-memory seam used by LogService.  The implementation remains
 // owned by Observer; the lower module depends only on this Share interface.
 class ObIMemstoreRuntime

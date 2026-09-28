@@ -1235,21 +1235,12 @@ Outputs & filters:
       range_key([t0.__pk_increment]), range(MIN ; MAX)always true
 Warnings:
 Warning	1292	Truncated incorrect INTEGER value: ''
-Warning	1292	Truncated incorrect INTEGER value: ''
-Warning	1292	Truncated incorrect INTEGER value: ''
-Warning	1292	Truncated incorrect INTEGER value: ''
-Warning	1292	Truncated incorrect INTEGER value: ''
 SELECT /*+ USE_HASH_AGGREGATION  */ ALL t0.c0 AS ref0 FROM t0 WHERE (CAST( EXISTS (SELECT 1 from dual wHERE FALSE) AS SIGNED)) IN (( EXISTS (SELECT 1)) XOR ( EXISTS (SELECT 1)), t0.c0, CAST("" AS SIGNED)) UNION ALL SELECT /*+ USE_HASH_AGGREGATION  */ t0.c0 AS ref0 FROM t0 WHERE (NOT ((CAST( EXISTS (SELECT 1 from dual wHERE FALSE) AS SIGNED)) IN (( EXISTS (SELECT 1)) XOR ( EXISTS (SELECT 1)), t0.c0, CAST("" AS SIGNED)))) UNION ALL SELECT /*+ USE_HASH_AGGREGATION  */ ALL t0.c0 AS ref0 FROM t0 WHERE ((CAST( EXISTS (SELECT 1 from dual wHERE FALSE) AS SIGNED)) IN (( EXISTS (SELECT 1)) XOR ( EXISTS (SELECT 1)), t0.c0, CAST("" AS SIGNED))) IS NULL;
 +------+
 | ref0 |
 +------+
 +------+
 Warnings:
-Warning	1292	Truncated incorrect INTEGER value: ''
-Warning	1292	Truncated incorrect INTEGER value: ''
-Warning	1292	Truncated incorrect INTEGER value: ''
-Warning	1292	Truncated incorrect INTEGER value: ''
-Warning	1292	Truncated incorrect INTEGER value: ''
 Warning	1292	Truncated incorrect INTEGER value: ''
 
 DROP TABLE IF EXISTS T1;

@@ -1,0 +1,49 @@
+##description: Fork Database preserves explicitly named CHECK constraints
+##tags: fork_database constraints
+
+--disable_warnings
+DROP DATABASE IF EXISTS db_fork_check_names_dst;
+DROP DATABASE IF EXISTS db_fork_check_names_src;
+--enable_warnings
+
+CREATE DATABASE db_fork_check_names_src;
+CREATE TABLE db_fork_check_names_src.t (
+  id INT PRIMARY KEY,
+  value INT,
+  CONSTRAINT ck_positive CHECK (value > 0)
+);
+INSERT INTO db_fork_check_names_src.t VALUES (1, 1);
+
+FORK DATABASE db_fork_check_names_src TO db_fork_check_names_dst;
+--disable_query_log
+--disable_result_log
+let $wait_counter= 600;
+let $fork_task_count= `SELECT COUNT(*) FROM oceanbase.__all_ddl_task_status WHERE ddl_type = 10009`;
+while ($fork_task_count > 0)
+{
+  real_sleep 0.1;
+  dec $wait_counter;
+  if ($wait_counter == 0)
+  {
+    die Fork Database task did not finish;
+  }
+  let $fork_task_count= `SELECT COUNT(*) FROM oceanbase.__all_ddl_task_status WHERE ddl_type = 10009`;
+}
+--enable_result_log
+--enable_query_log
+
+SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS
+WHERE TABLE_SCHEMA = 'db_fork_check_names_dst'
+  AND TABLE_NAME = 't' AND CONSTRAINT_TYPE = 'CHECK';
+--error 3819
+INSERT INTO db_fork_check_names_dst.t VALUES (2, -1);
+ALTER TABLE db_fork_check_names_dst.t DROP CHECK ck_positive;
+SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS
+WHERE TABLE_SCHEMA = 'db_fork_check_names_dst'
+  AND TABLE_NAME = 't' AND CONSTRAINT_TYPE = 'CHECK';
+SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS
+WHERE TABLE_SCHEMA = 'db_fork_check_names_src'
+  AND TABLE_NAME = 't' AND CONSTRAINT_TYPE = 'CHECK';
+
+DROP DATABASE db_fork_check_names_dst;
+DROP DATABASE db_fork_check_names_src;

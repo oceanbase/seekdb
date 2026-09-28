@@ -38,7 +38,7 @@ public:
   ~ObSqlSockHandler() = default;
   int init(rpc::frame::ObReqDeliver* deliver);
   int on_readable(void *sess, char *body, int64_t body_len, uint64_t wire_bytes,
-                  int packet_kind, const nio_mysql_command_view *command_view,
+                  int packet_kind, const NioMysqlCommandView *command_view,
                   uint64_t generation);
   void on_close(void* sess, int err);
   int on_connect(void* sess, int fd, bool is_unix_socket);

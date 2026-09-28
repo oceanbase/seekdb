@@ -91,7 +91,7 @@ int ObDicLoader::try_load_dictionary_in_trans(ObMySQLTransaction &trans)
       if (OB_FAIL(check_need_load_dic(is_need_load_dic))) {
       } else if (is_need_load_dic) {
         if (OB_FAIL(ObDicLock::lock_dic_tables_in_trans(*this,
-                                                        transaction::tablelock::EXCLUSIVE, 
+                                                        transaction::tablelock::EXCLUSIVE,
                                                         trans))) {
         }
         if (OB_SUCC(ret)) {

@@ -14,8 +14,6 @@
 
 use crate::*;
 
-use crate::ffi_check::{checked_array_len, checked_out_range, ranges_overlap};
-
 pub(crate) fn reserve_response_output(
     out: &mut Vec<u8>,
     additional: usize,
@@ -446,14 +444,6 @@ pub unsafe extern "C" fn nio_response_append_resultset_metadata(
     packet_count: *mut i64,
     framed_len: *mut i64,
 ) -> c_int {
-    let packet_count_range = match checked_out_range(packet_count) {
-        Some(range) => range,
-        None => return -1,
-    };
-    let _framed_len_range = match checked_out_range(framed_len) {
-        Some(range) if !ranges_overlap(packet_count_range, range) => range,
-        _ => return -1,
-    };
     let conn = match unsafe { connection_handle.as_ref() } {
         Some(handle) if !handle.conn.close_notified.load(Ordering::Acquire) => &handle.conn,
         None => return -1,
@@ -477,10 +467,7 @@ pub unsafe extern "C" fn nio_response_append_resultset_metadata(
         1 => true,
         _ => return -1,
     };
-    let field_count = match checked_array_len(fields, field_count) {
-        Some(field_count) => field_count,
-        None => return -1,
-    };
+    let field_count = field_count as usize;
     let result_header_field_count = match u64::try_from(field_count) {
         Ok(field_count) => field_count,
         Err(_) => return -1,

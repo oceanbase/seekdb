@@ -255,11 +255,9 @@ int ObTmpFileIOCtx::wait_read_finish_()
 {
   int ret = OB_SUCCESS;
 
-  if (OB_UNLIKELY(!is_read_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_UNLIKELY(buf_size_ != done_size_ + todo_size_)) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (OB_FAIL(do_read_wait_())) {
+  OB_ASSERT(is_read_);
+  OB_ASSERT(buf_size_ == done_size_ + todo_size_);
+  if (OB_FAIL(do_read_wait_())) {
   }
 
   return ret;

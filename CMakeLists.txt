@@ -12,6 +12,20 @@ project("OceanBase"
   HOMEPAGE_URL "https://www.oceanbase.ai"
   LANGUAGES CXX C ASM)
 
+if(OB_MACOS27)
+  include(CheckCXXSourceCompiles)
+  # An empty main misses LLVM/SDK libc++ incompatibilities.
+  unset(OB_MACOS27_CXX_WORKS CACHE)
+  check_cxx_source_compiles("#include <vector>
+    #include <iostream>
+    int main() { std::vector<int> v{27}; std::cout << v.at(0); }"
+    OB_MACOS27_CXX_WORKS)
+  if(NOT OB_MACOS27_CXX_WORKS)
+    message(FATAL_ERROR "The selected LLVM cannot compile/link against the macOS 27 C++ library. "
+      "Use matching Xcode/Command Line Tools or a newer Homebrew LLVM via OB_MACOS_LLVM_ROOT.")
+  endif()
+endif()
+
 option(OB_ENABLE_STANDBY "Build physical standby support" ON)
 option(ENABLE_SANITY "Build with seekdb memory Sanity instrumentation" OFF)
 

@@ -16,9 +16,8 @@ if [[ "${OS_TYPE}" == "Darwin" ]]; then
   # Use sysctl to detect actual hardware architecture, unaffected by Rosetta
   if sysctl -n hw.optional.arm64 2>/dev/null | grep -q '1'; then
     OS_ARCH="arm64"
-  else
-    OS_ARCH="x86_64"
   fi
+  # Keep uname's result if sysctl is unavailable (for example, in a sandbox).
 fi
 
 # macOS detection
@@ -220,6 +219,8 @@ elif [[ "${OS_RELEASE}x" == "macosx" ]]; then
       not_supported && exit 1
     elif [ $MACOS_VERSION -lt 15 ]; then
       OS_TAG="macos13.$OS_ARCH"
+    elif [ $MACOS_VERSION -ge 27 ]; then
+      OS_TAG="macos27.$OS_ARCH"
     else
       OS_TAG="macos15.$OS_ARCH"
     fi

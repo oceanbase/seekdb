@@ -72,7 +72,13 @@ else()
   target_link_directories(oblib_lib PUBLIC
     ${DEP_DIR}/lib ${DEP_DIR}/lib/vsag_lib)
   if(UNIX)
-    target_compile_options(oblib_lib PUBLIC -fopenmp)
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+      # AppleClang's driver does not expose -fopenmp, but its frontend does.
+      # Keep using the libomp runtime packaged with the arm64 VSAG libraries.
+      target_compile_options(oblib_lib PUBLIC "SHELL:-Xclang -fopenmp")
+    else()
+      target_compile_options(oblib_lib PUBLIC -fopenmp)
+    endif()
   endif()
 
   if(CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")

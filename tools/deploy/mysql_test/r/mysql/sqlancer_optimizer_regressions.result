@@ -10,9 +10,6 @@ d0_where_expr_count
 9
 Warnings:
 Warning	1292	Truncated incorrect DECIMAL value: 'X3'
-Warning	1292	Truncated incorrect DECIMAL value: 'X3'
-Warning	1292	Truncated incorrect DECIMAL value: 'X3'
-Warning	1292	Truncated incorrect DECIMAL value: 'X3'
 create table d3_t1(c0 decimal(45, 9) not null unique, c1 double(17, 0), primary key(c0));
 create table d3_t2 like d3_t1;
 insert into d3_t1(c1, c0) values (61, 0.930735627), (2358, -23);

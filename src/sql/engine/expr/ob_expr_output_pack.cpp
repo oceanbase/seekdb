@@ -405,7 +405,7 @@ int ObExprOutputPack::process_oneline(const ObExpr &expr, ObEvalCtx &ctx, ObSQLS
               ? obmysql::MYSQL_PROTOCOL_TYPE::BINARY : obmysql::MYSQL_PROTOCOL_TYPE::TEXT;
   const int64_t cell_count = expr.arg_cnt_ - 1;
   ObSEArray<obmysql::ObMySQLCellValue, 16> values;
-  ObSEArray<nio_mysql_cell_view, 16> views;
+  ObSEArray<NioMysqlCellView, 16> views;
   expr.cur_str_resvered_buf(ctx, buffer, len);
   if (OB_ISNULL(buffer) || len <= 0 || cell_count <= 0) {
     ret = OB_ERR_UNEXPECTED;
@@ -415,13 +415,13 @@ int ObExprOutputPack::process_oneline(const ObExpr &expr, ObEvalCtx &ctx, ObSQLS
                                       schema_guard, encode_type, values))) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < values.count(); ++i) {
-      nio_mysql_cell_view view = {};
+      NioMysqlCellView view = {};
       if (OB_FAIL(query::build_nio_mysql_cell_view(values.at(i), view))) {
       } else if (OB_FAIL(views.push_back(view))) {
       }
     }
     if (OB_SUCC(ret)) {
-      nio_mysql_row_view row_view = {};
+      NioMysqlRowView row_view = {};
       row_view.cells = &views.at(0);
       row_view.cell_count = views.count();
       if (OB_FAIL(query::get_nio_mysql_row_protocol(encode_type,

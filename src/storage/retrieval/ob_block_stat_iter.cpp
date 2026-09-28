@@ -458,9 +458,8 @@ int ObBlockStatIterator::construct_iters()
   }
 
   if (OB_FAIL(ret)) {
-  } else if (OB_UNLIKELY(scan_tables_.count() != memtable_iters_.count() + sstable_iters_.count())) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
+    OB_ASSERT(scan_tables_.count() == memtable_iters_.count() + sstable_iters_.count());
     // iter startup
     for (int64_t i = 0; OB_SUCC(ret) && i < memtable_iters_.count(); ++i) {
       MemTableIter &iter = memtable_iters_.at(i);

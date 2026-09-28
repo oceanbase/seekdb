@@ -80,12 +80,10 @@ int ObExprToSeconds::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
-  if (rt_expr.arg_cnt_ != 1) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-      rt_expr.eval_func_ = ObExprToSeconds::calc_toseconds;
+  {
+    OB_ASSERT(rt_expr.arg_cnt_ == 1);
+    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
+    rt_expr.eval_func_ = ObExprToSeconds::calc_toseconds;
   }
   return ret;
 }
@@ -159,13 +157,11 @@ int ObExprSecToTime::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
-  if (rt_expr.arg_cnt_ != 1) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-      CK(ObNumberType == rt_expr.args_[0]->datum_meta_.type_);
-      rt_expr.eval_func_ = ObExprSecToTime::calc_sectotime;
+  {
+    OB_ASSERT(rt_expr.arg_cnt_ == 1);
+    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
+    CK(ObNumberType == rt_expr.args_[0]->datum_meta_.type_);
+    rt_expr.eval_func_ = ObExprSecToTime::calc_sectotime;
   }
   return ret;
 }
@@ -243,13 +239,11 @@ int ObExprTimeToSec::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
-  if (rt_expr.arg_cnt_ != 1) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else {
-      CK(ObTimeType == rt_expr.args_[0]->datum_meta_.type_);
-      rt_expr.eval_func_ = ObExprTimeToSec::calc_timetosec;
+  {
+    OB_ASSERT(rt_expr.arg_cnt_ == 1);
+    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr);
+    CK(ObTimeType == rt_expr.args_[0]->datum_meta_.type_);
+    rt_expr.eval_func_ = ObExprTimeToSec::calc_timetosec;
   }
   return ret;
 }
@@ -447,10 +441,8 @@ int ObExprSubAddtime::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 2) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])
-             || OB_ISNULL(rt_expr.args_[1])) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
+    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
     const ObObjType result_type = rt_expr.datum_meta_.type_;
     const ObObjType param1_type = rt_expr.args_[0]->datum_meta_.type_;
     const ObObjType param2_type = rt_expr.args_[1]->datum_meta_.type_;

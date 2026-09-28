@@ -27,6 +27,90 @@ using namespace oceanbase;
 using namespace sql;
 using namespace oceanbase::common;
 
+namespace
+{
+bool has_query_ref_expr(const ObRawExpr *expr)
+{
+  bool bret = false;
+  if (OB_ISNULL(expr)) {
+    // do nothing
+  } else if (expr->is_query_ref_expr()) {
+    bret = true;
+  } else {
+    for (int64_t i = 0; !bret && i < expr->get_param_count(); ++i) {
+      bret = has_query_ref_expr(expr->get_param_expr(i));
+    }
+  }
+  return bret;
+}
+
+bool is_row_subquery_cmp_expr(const ObRawExpr *expr)
+{
+  bool bret = false;
+  if (OB_NOT_NULL(expr)
+      && IS_COMMON_COMPARISON_OP(expr->get_expr_type())
+      && 2 == expr->get_param_count()
+      && OB_NOT_NULL(expr->get_param_expr(0))
+      && OB_NOT_NULL(expr->get_param_expr(1))) {
+    const ObRawExpr *left_expr = expr->get_param_expr(0);
+    const ObRawExpr *right_expr = expr->get_param_expr(1);
+    bret = (T_OP_ROW == left_expr->get_expr_type() && has_query_ref_expr(right_expr))
+           || (T_OP_ROW == right_expr->get_expr_type() && has_query_ref_expr(left_expr));
+  }
+  return bret;
+}
+
+int has_row_subquery_cmp_expr(const ObRawExpr *expr, bool &has)
+{
+  int ret = OB_SUCCESS;
+  if (has) {
+    // do nothing
+  } else if (OB_ISNULL(expr)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected null", K(ret), K(expr));
+  } else if (is_row_subquery_cmp_expr(expr)) {
+    has = true;
+  } else {
+    for (int64_t i = 0; OB_SUCC(ret) && !has && i < expr->get_param_count(); ++i) {
+      if (OB_FAIL(has_row_subquery_cmp_expr(expr->get_param_expr(i), has))) {
+        LOG_WARN("failed to check row subquery comparison expr", K(ret), KPC(expr));
+      }
+    }
+  }
+  return ret;
+}
+
+int has_row_subquery_cmp_stmt(const ObDMLStmt &stmt, bool &has)
+{
+  int ret = OB_SUCCESS;
+  ObSEArray<ObRawExpr *, 16> relation_exprs;
+  ObSEArray<ObSelectStmt *, 8> child_stmts;
+  has = false;
+  if (OB_FAIL(stmt.get_relation_exprs(relation_exprs))) {
+    LOG_WARN("failed to get relation exprs", K(ret));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && !has && i < relation_exprs.count(); ++i) {
+    if (OB_FAIL(has_row_subquery_cmp_expr(relation_exprs.at(i), has))) {
+      LOG_WARN("failed to check relation expr", K(ret), KPC(relation_exprs.at(i)));
+    }
+  }
+  if (OB_SUCC(ret) && !has) {
+    if (OB_FAIL(stmt.get_child_stmts(child_stmts))) {
+      LOG_WARN("failed to get child stmts", K(ret));
+    }
+    for (int64_t i = 0; OB_SUCC(ret) && !has && i < child_stmts.count(); ++i) {
+      if (OB_ISNULL(child_stmts.at(i))) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("get unexpected null", K(ret), K(child_stmts.at(i)));
+      } else if (OB_FAIL(SMART_CALL(has_row_subquery_cmp_stmt(*child_stmts.at(i), has)))) {
+        LOG_WARN("failed to check child stmt", K(ret), KPC(child_stmts.at(i)));
+      }
+    }
+  }
+  return ret;
+}
+}
+
 int ObOptimizer::optimize(ObDMLStmt &stmt, ObLogPlan *&logical_plan)
 {
   ACTIVE_SESSION_FLAG_SETTER_GUARD(in_sql_optimize);
@@ -743,6 +827,7 @@ int ObOptimizer::init_parallel_policy(ObDMLStmt &stmt, const ObSQLSessionInfo &s
   int64_t session_force_parallel_dop = ObGlobalHint::UNSET_PARALLEL;
   bool session_enable_auto_dop = false;
   bool session_enable_manual_dop = false;
+  bool has_row_subquery_cmp = false;
   if (OB_ISNULL(ctx_.get_query_ctx()) || OB_ISNULL(ctx_.get_exec_ctx())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (ctx_.get_exec_ctx()->is_force_gen_local_plan()) {
@@ -750,6 +835,12 @@ int ObOptimizer::init_parallel_policy(ObDMLStmt &stmt, const ObSQLSessionInfo &s
   } else if (ctx_.has_pl_udf()) {
     //following above rule, but if stmt contain pl_udf, force das, parallel should be 1
     ctx_.set_parallel_rule(PXParallelRule::PL_UDF_DAS_FORCE_SERIALIZE);
+  } else if (OB_FAIL(has_row_subquery_cmp_stmt(stmt, has_row_subquery_cmp))) {
+    LOG_WARN("failed to check row subquery comparison", K(ret));
+  } else if (has_row_subquery_cmp) {
+    // Row-valued subquery comparisons currently are not stable under forced PX DOP.
+    ctx_.set_parallel_rule(PXParallelRule::MANUAL_HINT);
+    ctx_.set_parallel(ObGlobalHint::DEFAULT_PARALLEL);
   } else if (ctx_.get_global_hint().has_parallel_degree()) {
     ctx_.set_parallel_rule(PXParallelRule::MANUAL_HINT);
     ctx_.set_parallel(ctx_.get_global_hint().get_parallel_degree());

@@ -253,6 +253,9 @@ int ObSQLUtils::calc_const_or_calculable_expr(
   if (OB_ISNULL(raw_expr) || OB_ISNULL(exec_ctx) || OB_ISNULL(exec_ctx->get_physical_plan_ctx())) {
     ret = OB_INVALID_ARGUMENT;
     SQL_LOG(WARN, "Input arguments error", K(raw_expr), K(exec_ctx), K(ret));
+  } else if (raw_expr->has_flag(CNT_PL_UDF)) {
+    // A deterministic PL UDF can still contain DML side effects. Constant folding,
+    // selectivity estimation, and EXPLAIN generation must not execute it while planning.
   } else if (FALSE_IT(params = &exec_ctx->get_physical_plan_ctx()->get_param_store())) {
   } else if (raw_expr->is_const_raw_expr()) {
     bool need_check = false;

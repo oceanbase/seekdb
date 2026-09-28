@@ -15,7 +15,7 @@
 use std::collections::TryReserveError;
 use std::io::Read;
 
-pub const COMPRESS_HEADER_SIZE: usize = 7;
+pub(crate) const COMPRESS_HEADER_SIZE: usize = 7;
 
 const MIN_COMPRESS_LEN: usize = 50;
 

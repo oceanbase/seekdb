@@ -176,7 +176,7 @@ int ObMPStmtPrepare::process()
       need_disconnect = false;
       need_response_error = false;
       if (OB_FAIL(multiple_query_check(session, sql_, force_sync_resp, need_response_error))) {
-        need_disconnect = OB_NOT_SUPPORTED == ret ? false : true; 
+        need_disconnect = OB_NOT_SUPPORTED == ret ? false : true;
       } else {
         ret = process_prepare_stmt(ObMultiStmtItem(false, 0, sql_), session, has_more, force_sync_resp, async_resp_used);
       }
