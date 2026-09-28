@@ -240,9 +240,7 @@ ObDDLHelper::ObDDLHelper(
     lock_object_id_map_(),
     allocator_(),
     parallel_ddl_type_(parallel_ddl_type),
-    schema_guard_wrapper_(schema_service,
-        !enable_ddl_parallel
-        || schema_service != &share::schema::ObMultiVersionSchemaService::get_instance()),
+    schema_guard_wrapper_(schema_service, !enable_ddl_parallel),
     enable_ddl_parallel_(enable_ddl_parallel),
     trans_(schema_service_,
            false, /*need_end_signal*/
