@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_virtual_sql_plan_statistics.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "share/rc/ob_server_runtime.h"
 #include "observer/ob_server_utils.h"
 #include "sql/engine/ob_physical_plan.h"
@@ -92,9 +93,11 @@ int ObVirtualSqlPlanStatistics::get_next_operator_stat_row(bool &is_end)
   is_end = false;
   sql::ObPlanCache *plan_cache = NULL;
   if (OB_INVALID_ID == static_cast<uint64_t>(operator_stat_array_idx_)) {
-    plan_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
+    plan_cache = namespace_worker_prototype::effective_plan_cache(session_);
     ObGetAllOperatorStatOp operator_stat_op(&operator_stat_array_);
-    if (OB_FAIL(plan_cache->foreach_cache_obj(operator_stat_op))) {
+    if (OB_ISNULL(plan_cache)) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(plan_cache->foreach_cache_obj(operator_stat_op))) {
     } else {
       operator_stat_array_idx_ = 0;
     }

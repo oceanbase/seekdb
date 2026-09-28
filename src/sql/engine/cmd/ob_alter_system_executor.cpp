@@ -157,7 +157,8 @@ int ObFlushCacheExecutor::execute(ObExecContext &ctx, ObFlushCacheStmt &stmt)
       }
       case CACHE_TYPE_PS_OBJ: {
         SERVER_MODULE_SCOPE {
-          ObPsCache *ps_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPsCache>();
+          ObPsCache *ps_cache = OB_ISNULL(ctx.get_my_session())
+              ? nullptr : ctx.get_my_session()->effective_ps_cache();
           if (OB_ISNULL(ps_cache)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("ps cache is null", K(ret));

@@ -111,7 +111,7 @@ class ObCacheObjIterator
 
     int operator()(common::hash::HashMapPair<sql::ObCacheObjID, sql::ObILibCacheObject *> &entry);
 
-    int next(sql::ObCacheObjGuard &guard);
+    int next(sql::ObPlanCache &plan_cache, sql::ObCacheObjGuard &guard);
 
     bool loaded_;
     common::ObSEArray<uint64_t, 16> plan_id_array_;

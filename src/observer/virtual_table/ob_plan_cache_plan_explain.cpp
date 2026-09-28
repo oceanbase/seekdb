@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "ob_plan_cache_plan_explain.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "share/rc/ob_server_runtime.h"
 #include "observer/ob_server_utils.h"
 #include "sql/ob_sql.h"
@@ -259,7 +260,7 @@ int ObCacheObjIterator::operator()(common::hash::HashMapPair<ObCacheObjID, ObILi
   return ret;
 }
 
-int ObCacheObjIterator::next(ObCacheObjGuard &guard)
+int ObCacheObjIterator::next(ObPlanCache &plan_cache, ObCacheObjGuard &guard)
 {
   int ret = OB_SUCCESS;
   bool find = false;
@@ -269,13 +270,9 @@ int ObCacheObjIterator::next(ObCacheObjGuard &guard)
       if (!share::g_server_modules_ready) {
         ret = OB_ITER_END;
       } else {
-        ObPlanCache* plan_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
-        if (OB_ISNULL(plan_cache)) {
-          ret = OB_ERR_UNEXPECTED;
-          SERVER_LOG(WARN, "plan_cache is NULL", K(ret));
-        } else if (!plan_cache->is_inited()) {
+        if (!plan_cache.is_inited()) {
           SERVER_LOG(INFO, "plan cache is not inited", K(ret));
-        } else if (OB_FAIL(plan_cache->foreach_cache_obj(*this))) {
+        } else if (OB_FAIL(plan_cache.foreach_cache_obj(*this))) {
         }
       }
     }
@@ -287,12 +284,8 @@ int ObCacheObjIterator::next(ObCacheObjGuard &guard)
         if (!share::g_server_modules_ready) {
           ret = OB_ITER_END;
         } else {
-          ObPlanCache* plan_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
-          if (OB_ISNULL(plan_cache)) {
-            ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "plan_cache is NULL", K(ret));
-          } else if (OB_FAIL(plan_id_array_.pop_back(plan_id))) {
-          } else if (OB_FAIL(plan_cache->ref_cache_obj(plan_id, guard))) {
+          if (OB_FAIL(plan_id_array_.pop_back(plan_id))) {
+          } else if (OB_FAIL(plan_cache.ref_cache_obj(plan_id, guard))) {
             if (ret == OB_HASH_NOT_EXIST) {
               ret = OB_SUCCESS;
             } else {
@@ -348,7 +341,7 @@ int ObPlanCachePlanExplain::inner_open()
     ObCacheObjGuard guard;
     int tmp_ret = OB_SUCCESS;
     if (share::g_server_modules_ready) {
-        plan_cache = ::oceanbase::share::server_service<::oceanbase::sql::ObPlanCache>();
+        plan_cache = namespace_worker_prototype::effective_plan_cache(session_);
         if (OB_ISNULL(plan_cache)) {
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(WARN, "plan_cache is NULL", K(ret));
@@ -390,7 +383,10 @@ int ObPlanCachePlanExplain::inner_get_next_row(common::ObNewRow *&row)
             ret = OB_SUCCESS;
             ObReqTimeGuard req_timeinfo_guard;
             ObCacheObjGuard guard;
-            if (OB_FAIL(cache_obj_iterator_.next(guard))) {
+            ObPlanCache *plan_cache = namespace_worker_prototype::effective_plan_cache(session_);
+            if (OB_ISNULL(plan_cache)) {
+              ret = OB_NOT_INIT;
+            } else if (OB_FAIL(cache_obj_iterator_.next(*plan_cache, guard))) {
               if (OB_ITER_END == ret) {
                 iter_end_ = true;
               } else {
