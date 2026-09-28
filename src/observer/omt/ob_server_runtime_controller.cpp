@@ -1557,13 +1557,18 @@ int ObServer::obs_init_modules()
           mods_srs_service_, *root_sql_proxy))) {
     SERVER_LOG(WARN, "mods_srs_service_ fail", KR(ret));
   }
+  auto *root_commands = namespace_worker_prototype::namespace_local_management_service(1);
+  if (OB_SUCC(ret) && OB_ISNULL(root_commands)) {
+    ret = OB_NOT_INIT;
+    SERVER_LOG(WARN, "root namespace command service is unavailable", KR(ret));
+  }
   if (OB_SUCC(ret) && OB_FAIL(sql_engine_.init(
       &vt_data_service_,
       self_addr_,
       pl_engine_,
       *this,
       *this,
-      local_management_service_,
+      *root_commands,
       ob_service_,
       *this,
       *this,

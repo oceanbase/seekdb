@@ -739,11 +739,13 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
   int ret = OB_SUCCESS;
   ObServer &server = ObServer::get_instance();
   common::ObMySQLProxy *root_sql_proxy = namespace_sql_proxy(1);
+  rootserver::ObLocalManagementService *root_commands =
+      namespace_local_management_service(1);
   auto services = std::make_unique<InProcessNamespaceServices>(ns);
   char suffix[32];
   snprintf(suffix, sizeof(suffix), "ns%llu", static_cast<unsigned long long>(ns));
   const char *stage = "alloc";
-  if (OB_ISNULL(root_sql_proxy)) {
+  if (OB_ISNULL(root_sql_proxy) || OB_ISNULL(root_commands)) {
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(services->sql_proxy = OB_NEW(NamespaceRoutingSqlProxy,
           ObModIds::OB_SCHEMA_SERVICE))
@@ -752,7 +754,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
       || OB_ISNULL(services->signal = OB_NEW(share::schema::ObSchemaPublishSignal,
           ObModIds::OB_SCHEMA_SERVICE))
       || OB_ISNULL(services->max_id = OB_NEW(rootserver::ObMaxIdCacheAdapter,
-          ObModIds::OB_SCHEMA_SERVICE, server.get_local_management_service()))
+          ObModIds::OB_SCHEMA_SERVICE, *root_commands))
       || OB_ISNULL(services->schema_service = OB_NEW(InProcessSchemaService,
           ObModIds::OB_SCHEMA_SERVICE))
       || OB_ISNULL(services->backend = OB_NEW(share::schema::ObSchemaServiceSQLImpl,
@@ -885,7 +887,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
   } else if (FALSE_IT(services->address = server.get_self())) {
   } else if (OB_ISNULL(services->virtual_table_scan = OB_NEW(
           ObVirtualDataAccessService, ObModIds::OB_SCHEMA_SERVICE,
-          *services->root_commands, services->address, &GCONF))) {
+          services->address, &GCONF))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (FALSE_IT(stage = "opt_stat_monitor")) {
   } else if (OB_FAIL(services->opt_stat_monitor_manager.init(
@@ -1053,5 +1055,14 @@ common::ObMySQLProxy *namespace_sql_proxy(uint64_t ns)
   }
   return static_cast<common::ObMySQLProxy *>(
       runtime->service(ns::NamespaceRuntime::SQL_PROXY));
+}
+rootserver::ObLocalManagementService *namespace_local_management_service(uint64_t ns)
+{
+  ns::NamespaceRuntime *runtime = nullptr;
+  if (!ns::namespace_registry().get(ns, runtime) || runtime == nullptr) {
+    return nullptr;
+  }
+  return static_cast<rootserver::ObLocalManagementService *>(
+      runtime->service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE));
 }
 } } }

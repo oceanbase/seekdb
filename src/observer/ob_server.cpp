@@ -146,7 +146,10 @@ public:
 
   void reset_max_id_cache() override
   {
-    server_.local_management_service_.get_max_id_cache_mgr().reset();
+    auto *service = namespace_worker_prototype::namespace_local_management_service(1);
+    if (service != nullptr) {
+      service->get_max_id_cache_mgr().reset();
+    }
   }
 
   int refresh_schema() override
@@ -658,7 +661,7 @@ ObServer::ObServer()
     standby_module_(nullptr),
     ob_service_(gctx_, *this),
     debug_sync_broadcaster_(ob_service_),
-    server_runtime_controller_(), vt_data_service_(local_management_service_, self_addr_, &config_),
+    server_runtime_controller_(), vt_data_service_(self_addr_, &config_),
     start_time_(ObTimeUtility::current_time()),
     warm_up_start_time_(0),
     diag_(),
@@ -1014,7 +1017,9 @@ void ObServer::destroy()
     FLOG_INFO("ctas clean up timer destroyed");
 
     FLOG_INFO("begin to destroy local management service");
-    local_management_service_.destroy();
+    if (auto *service = namespace_worker_prototype::namespace_local_management_service(1)) {
+      service->destroy();
+    }
     FLOG_INFO("local management service destroyed");
 
     FLOG_INFO("begin to destroy ob service");
@@ -1096,6 +1101,7 @@ void ObServer::destroy()
 
     ns::NamespaceRuntime *home = nullptr;
     if (ns::namespace_registry().get(1, home) && home != nullptr) {
+      home->clear_service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE);
       home->clear_service(ns::NamespaceRuntime::OPT_STAT_MANAGER);
       home->clear_service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE);
     }
@@ -1163,6 +1169,7 @@ void ObServer::destroy()
 int ObServer::start()
 {
   int ret = OB_SUCCESS;
+  auto *root_commands = namespace_worker_prototype::namespace_local_management_service(1);
   gctx_.status_ = SS_STARTING;
   // begin to start a observer
   FLOG_INFO("[OBSERVER_NOTICE] start observer begin");
@@ -1254,7 +1261,10 @@ int ObServer::start()
     } else {
       FLOG_INFO("success to initialize server runtime");
     }
-    if (FAILEDx(local_management_service_.start_service())) {
+    if (OB_ISNULL(root_commands)) {
+      ret = OB_NOT_INIT;
+      LOG_ERROR("root namespace command service is unavailable", KR(ret));
+    } else if (FAILEDx(root_commands->start_service())) {
       LOG_ERROR("fail to start local management services", KR(ret));
     } else {
       FLOG_INFO("success to start local management services");
@@ -1343,7 +1353,10 @@ int ObServer::start()
     } else {
       FLOG_INFO("server runtime is ready");
     }
-    if (FAILEDx(local_management_service_.start_runtime_dependent_services())) {
+    if (OB_ISNULL(root_commands)) {
+      ret = OB_NOT_INIT;
+      LOG_ERROR("root namespace command service is unavailable", KR(ret));
+    } else if (FAILEDx(root_commands->start_runtime_dependent_services())) {
       LOG_ERROR("fail to start runtime dependent local services", KR(ret));
     } else {
       FLOG_INFO("success to start runtime dependent local services");
@@ -1639,7 +1652,8 @@ int ObServer::stop()
     FLOG_INFO("inner sql proxy stopped");
 
     FLOG_INFO("begin to stop local management service");
-    if (OB_FAIL(local_management_service_.stop())) {
+    auto *root_commands = namespace_worker_prototype::namespace_local_management_service(1);
+    if (root_commands != nullptr && OB_FAIL(root_commands->stop())) {
       FLOG_WARN("fail to stop local management service", KR(ret));
       fail_ret = OB_SUCCESS == fail_ret ? ret : fail_ret;
     } else {
@@ -2272,18 +2286,22 @@ int ObServer::init_server_runtime()
 int ObServer::init_schema()
 {
   int ret = OB_SUCCESS;
+  auto *root_commands = namespace_worker_prototype::namespace_local_management_service(1);
   if (OB_NOT_NULL(schema_service_sql_impl_)
       || schema_publish_signal_.is_inited()
       || OB_NOT_NULL(schema_refresh_scheduler_)
       || OB_NOT_NULL(max_id_cache_adapter_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("schema composition is initialized twice", KR(ret));
+  } else if (OB_ISNULL(root_commands)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("root namespace command service is unavailable", KR(ret));
   } else if (OB_FAIL(schema_publish_signal_.init())) {
     LOG_WARN("failed to initialize schema publish signal", KR(ret));
   } else if (OB_ISNULL(max_id_cache_adapter_ = OB_NEW(
       rootserver::ObMaxIdCacheAdapter,
       ObModIds::OB_SCHEMA_SERVICE,
-      local_management_service_))) {
+      *root_commands))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to allocate max id cache adapter", KR(ret));
   } else if (OB_ISNULL(schema_service_sql_impl_ = OB_NEW(
@@ -2434,25 +2452,30 @@ int ObServer::init_local_management_service(const bool need_bootstrap)
 {
   int ret = OB_SUCCESS;
   ns::NamespaceRuntime *home = nullptr;
-
-  local_management_service_.set_local_command_service(ob_service_);
-  local_management_service_.set_ddl_local_runtime(
-      namespace_worker_prototype::root_namespace_ddl_runtime());
-  local_management_service_.set_ddl_sql_proxy(&ddl_sql_proxy_);
+  auto *root_commands = namespace_worker_prototype::namespace_local_management_service(1);
   if (!ns::namespace_registry().get(1, home) || home == nullptr) {
     ret = OB_NOT_INIT;
     LOG_ERROR("root namespace runtime is unavailable", KR(ret));
+  } else if (OB_ISNULL(root_commands)) {
+    ret = OB_NOT_INIT;
+    LOG_ERROR("root namespace command service is unavailable", KR(ret));
   } else if (OB_ISNULL(home->service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE))) {
     ret = OB_NOT_INIT;
     LOG_ERROR("root namespace autoincrement service is unavailable", KR(ret));
-  } else if (OB_FAIL(local_management_service_.init(
+  } else {
+    root_commands->set_local_command_service(ob_service_);
+    root_commands->set_ddl_local_runtime(
+        namespace_worker_prototype::root_namespace_ddl_runtime());
+    root_commands->set_ddl_sql_proxy(&ddl_sql_proxy_);
+    if (OB_FAIL(root_commands->init(
                  config_, config_mgr_,
                  self_addr_, sql_proxy_,
                  &schema_service_,
                  *static_cast<share::ObAutoincrementService *>(
                      home->service(ns::NamespaceRuntime::AUTOINCREMENT_SERVICE)),
                  need_bootstrap))) {
-    LOG_ERROR("init local management service failed", K(ret));
+      LOG_ERROR("init local management service failed", K(ret));
+    }
   }
 
   return ret;
@@ -2550,8 +2573,6 @@ int ObServer::init_global_context()
   home->set_service(ns::NamespaceRuntime::SCHEMA_SERVICE, &schema_service_);
   home->set_service(ns::NamespaceRuntime::SQL_PROXY, &sql_proxy_);
   home->set_service(ns::NamespaceRuntime::VECTOR_TASK_SQL_PROXY, &sql_proxy_);
-  home->set_service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE,
-      &local_management_service_);
   home->set_service(ns::NamespaceRuntime::VIRTUAL_TABLE_SCAN_SERVICE,
       &vt_data_service_);
   home->set_service(ns::NamespaceRuntime::DDL_CHECKSUM_ERROR_VERIFIER,
@@ -2560,9 +2581,14 @@ int ObServer::init_global_context()
       new (std::nothrow) share::ObAutoincrementService());
   std::unique_ptr<common::ObOptStatManager> opt_stat_manager(
       new (std::nothrow) common::ObOptStatManager());
-  if (autoincrement == nullptr || opt_stat_manager == nullptr) {
+  std::unique_ptr<rootserver::ObLocalManagementService> root_commands(
+      new (std::nothrow) rootserver::ObLocalManagementService());
+  if (autoincrement == nullptr || opt_stat_manager == nullptr
+      || root_commands == nullptr) {
     return OB_ALLOCATE_MEMORY_FAILED;
   }
+  home->set_owned_service<rootserver::ObLocalManagementService>(
+      ns::NamespaceRuntime::ROOT_COMMAND_SERVICE, std::move(root_commands));
   home->set_owned_service<share::ObAutoincrementService>(
       ns::NamespaceRuntime::AUTOINCREMENT_SERVICE, std::move(autoincrement));
   home->set_owned_service<common::ObOptStatManager>(

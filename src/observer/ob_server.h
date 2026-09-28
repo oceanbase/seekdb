@@ -335,7 +335,6 @@ public:
   bool is_log_dir_empty() const { return is_log_dir_empty_; }
   sql::ObSQLSessionMgr &get_sql_session_mgr() { return session_mgr_; }
   sql::ObSql &get_sql_engine() { return sql_engine_; }
-  rootserver::ObLocalManagementService &get_local_management_service() { return local_management_service_; }
   ObService &get_ob_service() { return ob_service_; }
   common::ObMySQLProxy &get_mysql_proxy() { return sql_proxy_; }
   int64_t get_start_time() const { return start_time_; }
@@ -464,8 +463,6 @@ private:
   // sql session_mgr
   sql::ObSQLSessionMgr session_mgr_;
 
-  // Process-local schema, DDL, job, freeze and recycle-bin management.
-  rootserver::ObLocalManagementService local_management_service_;
   StandbyHostAdapter *standby_host_;
   standby::StandbyModule *standby_module_;
   // All operations and processing logic relating to ob server is

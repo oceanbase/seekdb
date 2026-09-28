@@ -222,11 +222,10 @@ ObVirtualTableIteratorFactory::ObVirtualTableIteratorFactory(ObVTIterCreator &vt
 {
 }
 
-ObVirtualTableIteratorFactory::ObVirtualTableIteratorFactory(ObLocalManagementService &local_management_service,
-                                                             common::ObAddr &addr,
+ObVirtualTableIteratorFactory::ObVirtualTableIteratorFactory(common::ObAddr &addr,
                                                              common::ObServerConfig *config) :
     ObIVirtualTableIteratorFactory(),
-    vt_iter_creator_(local_management_service, addr, config)
+    vt_iter_creator_(addr, config)
 {
 }
 
