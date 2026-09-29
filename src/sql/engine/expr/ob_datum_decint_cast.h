@@ -210,6 +210,48 @@ OB_NOINLINE void batch_implicit_scale(ObDatumVector &arg_dv, ObDatumVector &resu
   }
 }
 
+template <typename int_type>
+OB_NOINLINE int batch_implicit_integer_scale(const ObExpr &expr, ObDatumVector &arg_dv,
+                                             ObDatumVector &result_dv, const ObScale in_scale,
+                                             const ObPrecision in_prec, const ObScale out_scale,
+                                             const ObPrecision out_prec, const int64_t batch_size,
+                                             const ObBitVector &skip, ObBitVector &eval_flags)
+{
+  int ret = OB_SUCCESS;
+  const int32_t out_width = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(out_prec);
+  for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
+    if (skip.at(i) || eval_flags.at(i)) {
+      continue;
+    } else if (arg_dv.at(i)->is_null()) {
+      result_dv.at(i)->set_null();
+    } else {
+      const int_type in_val = *reinterpret_cast<const int_type *>(
+          arg_dv.at(i)->get_decimal_int());
+      ObDecimalIntBuilder in_builder;
+      ObDecimalIntBuilder res_builder;
+      ObDecimalInt *decint = nullptr;
+      int32_t int_bytes = 0;
+      ObPrecision value_prec = in_prec;
+      const int_type decint64_max = get_scale_factor<int_type>(MAX_PRECISION_DECIMAL_INT_64);
+      if (value_prec > MAX_PRECISION_DECIMAL_INT_64 && in_val < decint64_max) {
+        value_prec = MAX_PRECISION_DECIMAL_INT_64;
+      }
+      if (OB_FAIL(wide::from_integer(in_val, in_builder, decint, int_bytes, value_prec))) {
+      } else if (OB_FAIL(ObDatumCast::common_scale_decimalint(
+                   decint, int_bytes, in_scale, out_scale, out_prec, expr.extra_, res_builder))) {
+      } else {
+        OB_ASSERT(res_builder.get_int_bytes() == out_width);
+        result_dv.at(i)->set_decimal_int(res_builder.get_decimal_int(),
+                                         res_builder.get_int_bytes());
+      }
+    }
+    if (OB_SUCC(ret)) {
+      eval_flags.set(i);
+    }
+  }
+  return ret;
+}
+
 template <typename in_type, typename out_type>
 OB_NOINLINE void batch_explicit_scale(ObDatumVector &arg_dv, ObDatumVector &result_dv,
                                       unsigned scale, const bool is_scale_up,
@@ -753,8 +795,12 @@ DEF_BATCH_CAST_FUNC(ObIntTC, ObDecimalIntTC)
           DISPATCH_INOUT_WIDTH_TASK(in_width, out_width, DO_CONST_CAST);
         } else if (CM_IS_EXPLICIT_CAST(expr.extra_) || CM_IS_COLUMN_CONVERT(expr.extra_)) {
           DISPATCH_INOUT_WIDTH_TASK(in_width, out_width, DO_EXPLICIT_CAST);
+        } else if (out_width < in_width) {
+          OZ(batch_implicit_integer_scale<int64_t>(expr, arg_dv, result_dv, in_scale, in_prec,
+                                                    out_scale, out_prec, batch_size, skip,
+                                                    eval_flags));
         } else {
-          OB_ASSERT(out_width >= in_width || (in_prec > 0 && in_prec <= out_prec));
+          OB_ASSERT(out_width >= in_width);
           DISPATCH_INOUT_WIDTH_TASK(in_width, out_width, DO_IMPLICIT_CAST);
         }
       } else {
@@ -807,8 +853,12 @@ DEF_BATCH_CAST_FUNC(ObUIntTC, ObDecimalIntTC)
           DISPATCH_WIDTH_TASK(out_width, CONST_CAST_UINT);
         } else if (CM_IS_EXPLICIT_CAST(expr.extra_) || CM_IS_COLUMN_CONVERT(expr.extra_)) {
           DISPATCH_WIDTH_TASK(out_width, EXPLICIT_CAST_UINT);
+        } else if (out_width < in_width) {
+          OZ(batch_implicit_integer_scale<uint64_t>(expr, arg_dv, result_dv, in_scale, in_prec,
+                                                     out_scale, out_prec, batch_size, skip,
+                                                     eval_flags));
         } else {
-          OB_ASSERT(out_width >= in_width || (in_prec > 0 && in_prec <= out_prec));
+          OB_ASSERT(out_width >= in_width);
           DISPATCH_WIDTH_TASK(out_width, IMPLICIT_CAST_UINT);
         }
       } else {
