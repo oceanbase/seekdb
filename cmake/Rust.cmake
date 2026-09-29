@@ -26,8 +26,8 @@
 if(NOT DEFINED RUST_WORKSPACE_DIR)
   set(RUST_WORKSPACE_DIR "${CMAKE_SOURCE_DIR}/rust")
 endif()
-set(RUST_CRATE_DIR   "${RUST_WORKSPACE_DIR}/sql-nio")
-set(RUST_INCLUDE_DIR "${RUST_CRATE_DIR}/include")
+set(SQL_NIO_CRATE_DIR   "${RUST_WORKSPACE_DIR}/sql-nio")
+set(SQL_NIO_INCLUDE_DIR "${SQL_NIO_CRATE_DIR}/include")
 set(CONFIG_CRATE_DIR "${RUST_WORKSPACE_DIR}/config")
 set(CONFIG_INCLUDE_DIR "${CONFIG_CRATE_DIR}/include")
 
@@ -70,29 +70,32 @@ set(RUST_TARGET_DIR "${CMAKE_BINARY_DIR}/rust-target")
 # Cargo's staticlib artifact name is platform-specific: libsql_nio.a on
 # Unix/MSYS, sql_nio.lib with the MSVC toolchain.
 if(WIN32)
-  set(RUST_STATICLIB "${RUST_TARGET_DIR}/${_cargo_out_subdir}/sql_nio.lib")
+  set(SQL_NIO_STATICLIB "${RUST_TARGET_DIR}/${_cargo_out_subdir}/sql_nio.lib")
   set(CONFIG_STATICLIB "${RUST_TARGET_DIR}/${_cargo_out_subdir}/config.lib")
 else()
-  set(RUST_STATICLIB "${RUST_TARGET_DIR}/${_cargo_target_subdir}${_cargo_out_subdir}/libsql_nio.a")
+  set(SQL_NIO_STATICLIB "${RUST_TARGET_DIR}/${_cargo_target_subdir}${_cargo_out_subdir}/libsql_nio.a")
   set(CONFIG_STATICLIB "${RUST_TARGET_DIR}/${_cargo_target_subdir}${_cargo_out_subdir}/libconfig.a")
 endif()
 
-# Sources whose change should retrigger a rebuild of the staticlib.
-file(GLOB_RECURSE _rust_sources CONFIGURE_DEPENDS "${RUST_CRATE_DIR}/src/*.rs")
-file(GLOB_RECURSE _config_sources CONFIGURE_DEPENDS
-  "${CONFIG_CRATE_DIR}/src/*.rs")
-list(APPEND _rust_sources ${_config_sources}
-  "${CONFIG_CRATE_DIR}/Cargo.toml"
-  "${CONFIG_CRATE_DIR}/build.rs"
-  "${CONFIG_CRATE_DIR}/cbindgen.toml"
-  "${CONFIG_CRATE_DIR}/parameters.yaml"
-  "${CONFIG_CRATE_DIR}/internal_state.yaml")
-list(APPEND _rust_sources
-  "${RUST_WORKSPACE_DIR}/Cargo.toml"
-  "${RUST_WORKSPACE_DIR}/rust-toolchain.toml"
-  "${RUST_CRATE_DIR}/Cargo.toml"
-  "${RUST_CRATE_DIR}/build.rs"
-  "${RUST_CRATE_DIR}/cbindgen.toml")
+# Reinvoke Cargo when any workspace crate's source or build input changes.
+# Discover crates through their manifests so rust/target is never scanned.
+file(GLOB _rust_inputs CONFIGURE_DEPENDS
+  "${RUST_WORKSPACE_DIR}/*.toml"
+  "${RUST_WORKSPACE_DIR}/*.lock")
+file(GLOB _rust_crate_manifests CONFIGURE_DEPENDS
+  "${RUST_WORKSPACE_DIR}/*/Cargo.toml")
+foreach(_rust_manifest IN LISTS _rust_crate_manifests)
+  get_filename_component(_rust_crate_dir "${_rust_manifest}" DIRECTORY)
+  file(GLOB_RECURSE _rust_crate_sources CONFIGURE_DEPENDS
+    "${_rust_crate_dir}/src/*.rs")
+  file(GLOB _rust_crate_build_inputs CONFIGURE_DEPENDS
+    "${_rust_crate_dir}/*.toml"
+    "${_rust_crate_dir}/*.rs"
+    "${_rust_crate_dir}/*.yaml"
+    "${_rust_crate_dir}/*.yml"
+    "${_rust_crate_dir}/*.json")
+  list(APPEND _rust_inputs ${_rust_crate_sources} ${_rust_crate_build_inputs})
+endforeach()
 
 # CC/AR: cargo inherits CMake's PATH but not its compiler variables, and
 # `ring` (rustls's crypto backend) compiles C through the `cc` crate. Pin it
@@ -167,23 +170,23 @@ if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.28")
 endif()
 
 add_custom_command(
-  OUTPUT "${RUST_STATICLIB}"
+  OUTPUT "${SQL_NIO_STATICLIB}"
   BYPRODUCTS "${CONFIG_STATICLIB}"
-             "${RUST_INCLUDE_DIR}/nio.h" "${CONFIG_INCLUDE_DIR}/config.h"
+             "${SQL_NIO_INCLUDE_DIR}/nio.h" "${CONFIG_INCLUDE_DIR}/config.h"
              "${RUST_TARGET_DIR}/include/config_bridge.h"
              "${RUST_TARGET_DIR}/include/config_checkers.h"
   COMMAND "${CMAKE_COMMAND}" -E env ${_rust_build_env}
           "${CARGO}" build ${_cargo_profile_flag} ${_cargo_target_args}
           --manifest-path "${RUST_WORKSPACE_DIR}/Cargo.toml"
           --package sql-nio --package config
-  COMMAND "${CMAKE_COMMAND}" -E touch "${RUST_STATICLIB}"
+  COMMAND "${CMAKE_COMMAND}" -E touch "${SQL_NIO_STATICLIB}"
   WORKING_DIRECTORY "${RUST_WORKSPACE_DIR}"
-  DEPENDS ${_rust_sources}
+  DEPENDS ${_rust_inputs}
   COMMENT "[rust] cargo build sql-nio and config (${_cargo_out_subdir})"
   ${_rust_job_server_options}
   VERBATIM)
 
-add_custom_target(rust_staticlibs_build DEPENDS "${RUST_STATICLIB}")
+add_custom_target(rust_staticlibs_build DEPENDS "${SQL_NIO_STATICLIB}")
 
 # System libraries the Rust std staticlib depends on.
 if(WIN32)
@@ -201,8 +204,8 @@ endif()
 
 add_library(sql_nio INTERFACE)
 add_dependencies(sql_nio rust_staticlibs_build)
-target_include_directories(sql_nio INTERFACE "${RUST_INCLUDE_DIR}")
-target_link_libraries(sql_nio INTERFACE "${RUST_STATICLIB}" ${_rust_syslibs})
+target_include_directories(sql_nio INTERFACE "${SQL_NIO_INCLUDE_DIR}")
+target_link_libraries(sql_nio INTERFACE "${SQL_NIO_STATICLIB}" ${_rust_syslibs})
 
 add_library(config INTERFACE)
 add_dependencies(config rust_staticlibs_build)
@@ -213,5 +216,5 @@ target_link_libraries(config INTERFACE "${CONFIG_STATICLIB}" ${_rust_syslibs})
 set_property(DIRECTORY APPEND PROPERTY
   ADDITIONAL_CLEAN_FILES "${RUST_TARGET_DIR}")
 
-message(STATUS "[rust] sql_nio target ready -> ${RUST_STATICLIB}")
+message(STATUS "[rust] sql_nio target ready -> ${SQL_NIO_STATICLIB}")
 message(STATUS "[rust] config target ready -> ${CONFIG_STATICLIB}")
