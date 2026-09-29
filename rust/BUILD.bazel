@@ -26,18 +26,13 @@ config_setting(
     constraint_values = ["@platforms//os:windows"],
 )
 
-_RUST_INPUTS = [
-    "Cargo.toml",
-    "rust-toolchain.toml",
-    "sql-nio/Cargo.toml",
-    "sql-nio/cbindgen.toml",
-    "sql-nio/build.rs",
-    "config/Cargo.toml",
-    "config/cbindgen.toml",
-    "config/build.rs",
-    "config/parameters.yaml",
-    "config/internal_state.yaml",
-] + glob(["sql-nio/src/*.rs", "config/src/*.rs"])
+# Track sources and build inputs for every crate in the workspace. Cargo only
+# runs when Bazel sees one of these inputs change.
+_RUST_INPUTS = glob(
+    ["**/*.rs", "**/*.toml", "**/*.yaml", "**/*.yml", "**/*.json", "*.lock"],
+    exclude = ["target/**"],
+    allow_empty = True,
+)
 
 # Cargo remains the authoritative Rust dependency resolver used by the
 # upstream CMake build.  Keep the action local and outside the sandbox until
