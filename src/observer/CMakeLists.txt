@@ -34,6 +34,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_libraries(oceanbase INTERFACE
       ob_base
       sql_nio
+      embedding_response
       ${STDC_SHARED_LIB})
   else()
     add_library(oceanbase SHARED EXCLUDE_FROM_ALL
@@ -54,6 +55,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
       ob_share_static
       -Wl,--no-whole-archive
       sql_nio
+      embedding_response
       -static-libgcc
       -static-libstdc++)
   endif()
@@ -95,6 +97,7 @@ target_link_libraries(seekdb PRIVATE
   ob_storage_static
   ob_share_static
   sql_nio
+  embedding_response
   $<$<PLATFORM_ID:Windows>:ob_malloc>
   $<$<PLATFORM_ID:Windows>:synchronization>
   $<$<AND:$<NOT:$<PLATFORM_ID:Darwin>>,$<NOT:$<PLATFORM_ID:Windows>>>:-Wl,--end-group>

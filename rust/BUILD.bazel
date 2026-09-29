@@ -13,6 +13,7 @@
 # limitations under the License.
 
 load("//bazel:defs.bzl", cc_library = "seekdb_cc_library")
+load(":ffi_build.bzl", "rust_ffi_archive")
 
 package(default_visibility = ["//visibility:private"])
 
@@ -26,62 +27,42 @@ config_setting(
     constraint_values = ["@platforms//os:windows"],
 )
 
-_SQL_NIO_INPUTS = [
+# Workspace resolution reads both manifests even when building one package.
+_WORKSPACE_INPUTS = [
     "Cargo.toml",
     "rust-toolchain.toml",
+    "build-support/ffi.rs",
     "sql-nio/Cargo.toml",
-] + glob(["sql-nio/src/*.rs"])
+    "embedding-response/Cargo.toml",
+]
+_SQL_NIO_INPUTS = _WORKSPACE_INPUTS + [
+    "sql-nio/build.rs",
+    "sql-nio/cbindgen.toml",
+] + glob(["sql-nio/src/**/*.rs"])
+_EMBEDDING_INPUTS = _WORKSPACE_INPUTS + [
+    "embedding-response/build.rs",
+    "embedding-response/cbindgen.toml",
+] + glob(["embedding-response/src/**/*.rs"])
 
-# Cargo remains the authoritative Rust dependency resolver used by the
-# upstream CMake build.  Keep the action local and outside the sandbox until
-# Cargo dependencies are vendored: cargo currently updates the registry under
-# ~/.cargo, which Bazel's sandbox deliberately mounts read-only.
-genrule(
-    name = "_sql_nio_static_unix",
+rust_ffi_archive(
+    name = "sql_nio",
+    package = "sql-nio",
     srcs = _SQL_NIO_INPUTS,
-    outs = ["libsql_nio.a"],
-    cmd = """
-set -eu
-export CARGO_TARGET_DIR="$(@D)/sql_nio-cargo-target"
-cargo build --release --manifest-path "$(location Cargo.toml)" --package sql-nio
-cp "$$CARGO_TARGET_DIR/release/libsql_nio.a" "$@"
-""",
-    tags = [
-        "no-remote",
-        "no-sandbox",
-    ],
-    target_compatible_with = select({
-        ":windows": ["@platforms//:incompatible"],
-        "//conditions:default": [],
-    }),
 )
 
-genrule(
-    name = "_sql_nio_static_windows",
-    srcs = _SQL_NIO_INPUTS,
-    outs = ["sql_nio.lib"],
-    cmd_bat = """
-set CARGO_TARGET_DIR=$(@D)\\sql_nio-cargo-target
-cargo build --release --manifest-path "$(location Cargo.toml)" --package sql-nio
-copy /Y "%CARGO_TARGET_DIR%\\release\\sql_nio.lib" "$@"
-""",
-    tags = [
-        "no-remote",
-        "no-sandbox",
-    ],
-    target_compatible_with = select({
-        ":windows": [],
-        "//conditions:default": ["@platforms//:incompatible"],
-    }),
+rust_ffi_archive(
+    name = "embedding_response",
+    package = "embedding-response",
+    srcs = _EMBEDDING_INPUTS,
 )
 
-filegroup(
-    name = "sql_nio_archive",
-    srcs = select({
-        ":windows": [":_sql_nio_static_windows"],
-        "//conditions:default": [":_sql_nio_static_unix"],
-    }),
-    visibility = ["//src/observer:__pkg__"],
+cc_library(
+    name = "embedding_response_headers",
+    hdrs = [
+        "embedding-response/include/embedding.h",
+    ],
+    includes = ["embedding-response/include"],
+    visibility = ["//src/query:__pkg__"],
 )
 
 cc_library(

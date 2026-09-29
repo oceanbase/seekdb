@@ -15,12 +15,13 @@ runs:
       uses: ./.github/actions/setup-rust
 
     # Fail fast: catch a crate that does not compile before the C++ build.
-    # ABI drift is caught by rust-checks' header drift check (nio.h is
-    # cbindgen-generated), not by tests here.
+    # Generated ABI headers are checked by rust-checks.
     - name: Rust unit tests
       shell: bash
       working-directory: rust
-      run: cargo test --locked -p sql-nio
+      # This workspace does not check in Cargo.lock. Resolve it on a fresh
+      # checkout before running the source-local unit tests.
+      run: cargo test --workspace
 
     - name: Initialize release build
       shell: bash

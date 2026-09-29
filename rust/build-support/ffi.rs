@@ -12,9 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[path = "../build-support/ffi.rs"]
-mod ffi;
+use std::{env, path::PathBuf};
 
-fn main() {
-    ffi::generate_header("nio.h");
+pub fn generate_header(header: &str) {
+    let crate_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    let out = crate_dir.join("include").join(header);
+    std::fs::create_dir_all(out.parent().unwrap()).unwrap();
+
+    cbindgen::generate(&crate_dir)
+        .expect("cbindgen failed")
+        .write_to_file(&out);
+
+    println!("cargo:rerun-if-changed=../build-support/ffi.rs");
+    println!("cargo:rerun-if-changed=src");
+    println!("cargo:rerun-if-changed=cbindgen.toml");
 }

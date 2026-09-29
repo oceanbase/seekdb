@@ -16,5 +16,5 @@
 mod ffi;
 
 fn main() {
-    ffi::generate_header("nio.h");
+    ffi::generate_header("embedding.h");
 }
