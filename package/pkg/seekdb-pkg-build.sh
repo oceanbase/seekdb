@@ -267,10 +267,6 @@ done
 install -d "$STAGING/opt/seekdb/etc/seekdb"
 install -m 644 "$MACPKG_DIR/launchd/profile/seekdb.cnf" "$STAGING/opt/seekdb/etc/seekdb/"
 install -m 644 "$TOPDIR/package/config/default_parameter.json" "$STAGING/opt/seekdb/etc/seekdb/"
-if [[ -f "$TOPDIR/src/share/system_variable/default_system_variable.json" ]]; then
-  install -m 644 "$TOPDIR/src/share/system_variable/default_system_variable.json" \
-    "$STAGING/opt/seekdb/etc/seekdb/"
-fi
 # ob_system_variable_init.json (generated at build time)
 if [[ -f "$SEEKDB_BUILD/src/share/ob_system_variable_init.json" ]]; then
   install -m 644 "$SEEKDB_BUILD/src/share/ob_system_variable_init.json" "$STAGING/opt/seekdb/etc/seekdb/"

@@ -1,5 +1,5 @@
 language = "C"
-include_guard = "CONFIG_FFI_H_"
+include_guard = "CONFIG_H_"
 cpp_compat = true
 documentation = false
 style = "both"

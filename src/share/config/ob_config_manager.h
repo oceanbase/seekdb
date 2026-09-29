@@ -19,7 +19,7 @@
 
 #include "share/config/ob_server_config.h"
 #include "share/config/ob_reload_config.h"
-#include "config_ffi.h"
+#include "config.h"
 
 namespace oceanbase
 {

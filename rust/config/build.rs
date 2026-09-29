@@ -409,7 +409,7 @@ fn main() {
         .with_config(config)
         .generate()
         .expect("config cbindgen failed")
-        .write_to_file(crate_dir.join("include").join("config_ffi.h"));
+        .write_to_file(crate_dir.join("include").join("config.h"));
 
     println!("cargo:rerun-if-changed=src/ffi.rs");
     println!("cargo:rerun-if-changed=cbindgen.toml");

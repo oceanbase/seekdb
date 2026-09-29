@@ -22,7 +22,7 @@
 #include "share/config/ob_config_rpc_types.h"
 #include "config_bridge.h"
 #include "config_checkers.h"
-#include "config_ffi.h"
+#include "config.h"
 
 namespace oceanbase
 {
