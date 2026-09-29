@@ -132,6 +132,7 @@ OBSERVER_PRIVATE_HEADERS = [
     "virtual_table/ob_all_virtual_engine_table.h",
     "virtual_table/ob_all_virtual_files_table.h",
     "virtual_table/ob_all_virtual_id_service.h",
+    "virtual_table/ob_all_virtual_instance_metadata.h",
     "virtual_table/ob_all_virtual_io_stat.h",
     "virtual_table/ob_all_virtual_io_status.h",
     "virtual_table/ob_all_virtual_kvcache_store_memblock.h",

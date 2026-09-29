@@ -19,6 +19,10 @@
 #include "namespace/namespace.h"
 #include "lib/hash_func/murmur_hash.h"
 #include "lib/allocator/ob_allocator.h"
+#include "common/json_type/ob_json_base.h"
+#include "common/json_type/ob_json_tree.h"
+#include "share/instance_meta/instance_meta_key_codec.h"
+#include "share/instance_meta/instance_meta_value_codec.h"
 #include <cstring>
 #include <limits>
 #include <unordered_map>
@@ -35,64 +39,130 @@ namespace
 using namespace common;
 using storage::MetaCollection;
 using storage::InstanceMetaStore;
+using share::instance_meta::InstanceMetaKeyCodec;
+using share::instance_meta::InstanceMetaValueCodec;
+using share::instance_meta::ValueFormat;
 
-void append_meta_u64(std::string &out, uint64_t value)
+void append_json_string(const std::string &value, std::string &out)
 {
-  for (int i = 0; i < 8; ++i) { out.push_back(static_cast<char>(value >> (56 - i * 8))); }
-}
-
-bool read_meta_u64(const std::string &data, size_t &offset, uint64_t &value)
-{
-  if (offset > data.size() || data.size() - offset < 8) { return false; }
-  value = 0;
-  for (int i = 0; i < 8; ++i) {
-    value = (value << 8) | static_cast<unsigned char>(data[offset++]);
+  static const char hex[] = "0123456789abcdef";
+  out += '"';
+  for (unsigned char c : value) {
+    if (c == '"' || c == '\\') {
+      out += '\\';
+      out += static_cast<char>(c);
+    } else if (c < 0x20) {
+      out += "\\u00";
+      out += hex[c >> 4];
+      out += hex[c & 0xf];
+    } else {
+      out += static_cast<char>(c);
+    }
   }
-  return true;
+  out += '"';
 }
 
-void append_meta_i64(std::string &out, int64_t value)
+void append_json_field_name(std::string &out, const char *name)
 {
-  append_meta_u64(out, static_cast<uint64_t>(value));
+  if (out.size() > 1) { out += ','; }
+  out += '"';
+  out += name;
+  out += "\":";
 }
 
-bool read_meta_i64(const std::string &data, size_t &offset, int64_t &value)
+void append_json_u64(std::string &out, const char *name, uint64_t value)
 {
-  uint64_t bits = 0;
-  if (!read_meta_u64(data, offset, bits)) { return false; }
-  static_assert(sizeof(bits) == sizeof(value), "metadata integer widths differ");
-  std::memcpy(&value, &bits, sizeof(value));
-  return true;
+  append_json_field_name(out, name);
+  out += std::to_string(value);
 }
 
-void append_meta_bytes(std::string &out, const std::string &value)
+void append_json_i64(std::string &out, const char *name, int64_t value)
 {
-  append_meta_u64(out, value.size());
-  out.append(value);
+  append_json_field_name(out, name);
+  out += std::to_string(value);
 }
 
-bool read_meta_bytes(const std::string &data, size_t &offset, std::string &value,
-                     size_t max_size)
+void append_json_text(std::string &out, const char *name, const std::string &value)
 {
-  uint64_t size = 0;
-  if (!read_meta_u64(data, offset, size) || size > max_size
-      || offset > data.size() || size > data.size() - offset) { return false; }
-  value.assign(data, offset, size);
-  offset += size;
-  return true;
+  append_json_field_name(out, name);
+  append_json_string(value, out);
 }
 
-std::string id_key(uint64_t id)
+int parse_json_object(const std::string &value, ObArenaAllocator &allocator,
+                      ObJsonObject *&object)
+{
+  ObIJsonBase *base = nullptr;
+  const ObString text(value.size(), value.data());
+  int ret = ObJsonBaseFactory::get_json_base(
+      &allocator, text, ObJsonInType::JSON_TREE, ObJsonInType::JSON_TREE, base);
+  if (ret == OB_SUCCESS) {
+    if (base == nullptr || base->json_type() != ObJsonNodeType::J_OBJECT) {
+      ret = OB_CHECKSUM_ERROR;
+    } else {
+      object = static_cast<ObJsonObject *>(base);
+    }
+  }
+  return ret;
+}
+
+int json_u64(const ObJsonObject &object, const char *name, uint64_t &value)
+{
+  const ObJsonNode *node = object.get_value(name);
+  if (node == nullptr) { return OB_CHECKSUM_ERROR; }
+  if (node->json_type() == ObJsonNodeType::J_UINT) {
+    value = node->get_uint();
+  } else if (node->json_type() == ObJsonNodeType::J_INT && node->get_int() >= 0) {
+    value = static_cast<uint64_t>(node->get_int());
+  } else {
+    return OB_CHECKSUM_ERROR;
+  }
+  return OB_SUCCESS;
+}
+
+int json_i64(const ObJsonObject &object, const char *name, int64_t &value)
+{
+  const ObJsonNode *node = object.get_value(name);
+  if (node == nullptr) { return OB_CHECKSUM_ERROR; }
+  if (node->json_type() == ObJsonNodeType::J_INT) {
+    value = node->get_int();
+  } else if (node->json_type() == ObJsonNodeType::J_UINT
+             && node->get_uint() <= static_cast<uint64_t>(INT64_MAX)) {
+    value = static_cast<int64_t>(node->get_uint());
+  } else {
+    return OB_CHECKSUM_ERROR;
+  }
+  return OB_SUCCESS;
+}
+
+int json_text(const ObJsonObject &object, const char *name, std::string &value)
+{
+  const ObJsonNode *node = object.get_value(name);
+  if (node == nullptr || node->json_type() != ObJsonNodeType::J_STRING) {
+    return OB_CHECKSUM_ERROR;
+  }
+  const ObString text = static_cast<const ObJsonString *>(node)->get_str();
+  value.assign(text.ptr(), text.length());
+  return OB_SUCCESS;
+}
+
+std::string id_key(MetaCollection collection, uint64_t id)
 {
   std::string key;
-  append_meta_u64(key, id);
+  (void)InstanceMetaKeyCodec::encode_u64(collection, id, key);
   return key;
 }
 
 std::string exception_key(uint64_t ns_id, uint64_t local_tablet)
 {
-  std::string key = id_key(ns_id);
-  append_meta_u64(key, local_tablet);
+  std::string key;
+  (void)InstanceMetaKeyCodec::encode_pair(MetaCollection::EXCEPTIONS, ns_id, local_tablet, key);
+  return key;
+}
+
+std::string name_key(const std::string &name)
+{
+  std::string key;
+  (void)InstanceMetaKeyCodec::encode_name(MetaCollection::NAMESPACE_NAMES, name, key);
   return key;
 }
 
@@ -103,25 +173,44 @@ ObString meta_bytes(const std::string &value)
 
 int get_value(InstanceMetaStore &store, InstanceMetaStore::Transaction &tx,
               MetaCollection collection, const std::string &key,
-              std::string &value, bool lock)
+              std::string &value, bool lock, ValueFormat expected = ValueFormat::JSON)
 {
   ObArenaAllocator allocator(ObMemAttr("InstanceMetaGet"));
   ObString result;
   const int ret = lock ? store.get_for_update(tx, collection, meta_bytes(key), allocator, result)
                        : store.get(tx, collection, meta_bytes(key), allocator, result);
   if (ret == OB_SUCCESS) {
-    if (result.empty()) { value.clear(); }
-    else { value.assign(result.ptr(), result.length()); }
+    ValueFormat actual;
+    ObString payload;
+    const int decode_ret = InstanceMetaValueCodec::decode(result, actual, payload);
+    if (decode_ret != OB_SUCCESS || actual != expected) { return OB_CHECKSUM_ERROR; }
+    value.assign(payload.ptr(), payload.length());
   }
   return ret;
 }
 
 int put_value(InstanceMetaStore &store, InstanceMetaStore::Transaction &tx,
               MetaCollection collection, const std::string &key,
-              const std::string &value, bool insert)
+              const std::string &value, bool insert,
+              ValueFormat format = ValueFormat::JSON)
 {
-  return insert ? store.insert(tx, collection, meta_bytes(key), meta_bytes(value))
-                : store.put(tx, collection, meta_bytes(key), meta_bytes(value));
+  std::string encoded;
+  int ret = InstanceMetaValueCodec::encode(format, value, encoded);
+  if (ret == OB_SUCCESS) {
+    ret = insert ? store.insert(tx, collection, meta_bytes(key), meta_bytes(encoded))
+                 : store.put(tx, collection, meta_bytes(key), meta_bytes(encoded));
+  }
+  return ret;
+}
+
+int scan_value(const ObString &encoded, ValueFormat expected, std::string &value)
+{
+  ValueFormat actual;
+  ObString payload;
+  const int ret = InstanceMetaValueCodec::decode(encoded, actual, payload);
+  if (ret != OB_SUCCESS || actual != expected) { return OB_CHECKSUM_ERROR; }
+  value.assign(payload.ptr(), payload.length());
+  return OB_SUCCESS;
 }
 
 int erase_value(InstanceMetaStore &store, InstanceMetaStore::Transaction &tx,
@@ -132,38 +221,39 @@ int erase_value(InstanceMetaStore &store, InstanceMetaStore::Transaction &tx,
   return ret == OB_SUCCESS && !existed ? OB_ENTRY_NOT_EXIST : ret;
 }
 
-void append_roots(std::string &out, const ns::CatalogRoots &roots)
+void append_roots_json(std::string &out, const ns::CatalogRoots &roots)
 {
-  append_meta_u64(out, roots.source);
-  append_meta_u64(out, roots.catalog.page);
-  append_meta_i64(out, roots.catalog.cap);
-  append_meta_u64(out, roots.directory.page);
-  append_meta_i64(out, roots.directory.cap);
-  append_meta_i64(out, roots.snapshot);
-  append_meta_i64(out, roots.schema_version);
-  append_meta_u64(out, roots.snapshot_ref);
-  append_meta_u64(out, roots.parent_ref);
-  append_meta_i64(out, roots.ref_count);
-  append_meta_i64(out, roots.state);
-  append_meta_i64(out, roots.active_schema_changes);
-  append_meta_i64(out, roots.pending_schema_version);
+  append_json_u64(out, "source", roots.source);
+  append_json_u64(out, "catalog_page", roots.catalog.page);
+  append_json_i64(out, "catalog_cap", roots.catalog.cap);
+  append_json_u64(out, "directory_page", roots.directory.page);
+  append_json_i64(out, "directory_cap", roots.directory.cap);
+  append_json_i64(out, "snapshot", roots.snapshot);
+  append_json_i64(out, "schema_version", roots.schema_version);
+  append_json_u64(out, "snapshot_ref", roots.snapshot_ref);
+  append_json_u64(out, "parent_ref", roots.parent_ref);
+  append_json_i64(out, "ref_count", roots.ref_count);
+  append_json_i64(out, "state", roots.state);
+  append_json_i64(out, "active_schema_changes", roots.active_schema_changes);
+  append_json_i64(out, "pending_schema_version", roots.pending_schema_version);
 }
 
-bool read_roots(const std::string &data, size_t &offset, ns::CatalogRoots &roots)
+int read_roots_json(const ObJsonObject &object, ns::CatalogRoots &roots)
 {
-  return read_meta_u64(data, offset, roots.source)
-      && read_meta_u64(data, offset, roots.catalog.page)
-      && read_meta_i64(data, offset, roots.catalog.cap)
-      && read_meta_u64(data, offset, roots.directory.page)
-      && read_meta_i64(data, offset, roots.directory.cap)
-      && read_meta_i64(data, offset, roots.snapshot)
-      && read_meta_i64(data, offset, roots.schema_version)
-      && read_meta_u64(data, offset, roots.snapshot_ref)
-      && read_meta_u64(data, offset, roots.parent_ref)
-      && read_meta_i64(data, offset, roots.ref_count)
-      && read_meta_i64(data, offset, roots.state)
-      && read_meta_i64(data, offset, roots.active_schema_changes)
-      && read_meta_i64(data, offset, roots.pending_schema_version);
+  int ret = json_u64(object, "source", roots.source);
+  if (ret == OB_SUCCESS) { ret = json_u64(object, "catalog_page", roots.catalog.page); }
+  if (ret == OB_SUCCESS) { ret = json_i64(object, "catalog_cap", roots.catalog.cap); }
+  if (ret == OB_SUCCESS) { ret = json_u64(object, "directory_page", roots.directory.page); }
+  if (ret == OB_SUCCESS) { ret = json_i64(object, "directory_cap", roots.directory.cap); }
+  if (ret == OB_SUCCESS) { ret = json_i64(object, "snapshot", roots.snapshot); }
+  if (ret == OB_SUCCESS) { ret = json_i64(object, "schema_version", roots.schema_version); }
+  if (ret == OB_SUCCESS) { ret = json_u64(object, "snapshot_ref", roots.snapshot_ref); }
+  if (ret == OB_SUCCESS) { ret = json_u64(object, "parent_ref", roots.parent_ref); }
+  if (ret == OB_SUCCESS) { ret = json_i64(object, "ref_count", roots.ref_count); }
+  if (ret == OB_SUCCESS) { ret = json_i64(object, "state", roots.state); }
+  if (ret == OB_SUCCESS) { ret = json_i64(object, "active_schema_changes", roots.active_schema_changes); }
+  if (ret == OB_SUCCESS) { ret = json_i64(object, "pending_schema_version", roots.pending_schema_version); }
+  return ret;
 }
 
 int encode_namespace(const InstanceNamespaceRecord &record, std::string &value)
@@ -176,12 +266,12 @@ int encode_namespace(const InstanceNamespaceRecord &record, std::string &value)
       || record.roots.pending_schema_version < 0
       || record.parent_namespace >= record.id
       || record.fork_cap < 0) { return OB_INVALID_ARGUMENT; }
-  value.clear();
-  value.push_back('N');
-  append_meta_bytes(value, record.name);
-  append_roots(value, record.roots);
-  append_meta_u64(value, record.parent_namespace);
-  append_meta_i64(value, record.fork_cap);
+  value = "{";
+  append_json_text(value, "name", record.name);
+  append_roots_json(value, record.roots);
+  append_json_u64(value, "parent_namespace", record.parent_namespace);
+  append_json_i64(value, "fork_cap", record.fork_cap);
+  value += '}';
   return OB_SUCCESS;
 }
 
@@ -189,15 +279,17 @@ int decode_namespace(uint64_t id, const std::string &value, InstanceNamespaceRec
 {
   InstanceNamespaceRecord decoded;
   decoded.id = id;
-  size_t pos = 1;
-  if (value.empty() || value[0] != 'N'
-      || !read_meta_bytes(value, pos, decoded.name, 128)
-      || !read_roots(value, pos, decoded.roots)
-      || !read_meta_u64(value, pos, decoded.parent_namespace)
-      || !read_meta_i64(value, pos, decoded.fork_cap)
-      || pos != value.size()
+  ObArenaAllocator allocator(ObMemAttr("InstMetaJson"));
+  ObJsonObject *object = nullptr;
+  int ret = parse_json_object(value, allocator, object);
+  if (ret == OB_SUCCESS) { ret = json_text(*object, "name", decoded.name); }
+  if (ret == OB_SUCCESS) { ret = read_roots_json(*object, decoded.roots); }
+  if (ret == OB_SUCCESS) { ret = json_u64(*object, "parent_namespace", decoded.parent_namespace); }
+  if (ret == OB_SUCCESS) { ret = json_i64(*object, "fork_cap", decoded.fork_cap); }
+  if (ret != OB_SUCCESS
       || !ns::NamespaceObjectKey{id, 1}.is_valid()
       || (decoded.name.empty() && decoded.roots.state != 2)
+      || decoded.name.size() > 128
       || decoded.roots.state < 0 || decoded.roots.state > 2
       || decoded.roots.active_schema_changes < 0
       || decoded.roots.pending_schema_version < 0
@@ -218,19 +310,20 @@ int encode_snapshot(uint64_t id, const ns::CatalogRoots &roots,
   }
   canonical.snapshot_ref = id;
   if (!canonical.valid_snapshot(id)) { return OB_INVALID_ARGUMENT; }
-  value.clear();
-  value.push_back('S');
-  append_roots(value, canonical);
+  value = "{";
+  append_roots_json(value, canonical);
+  value += '}';
   return OB_SUCCESS;
 }
 
 int decode_snapshot(uint64_t id, const std::string &value, ns::CatalogRoots &roots)
 {
   ns::CatalogRoots decoded;
-  size_t pos = 1;
-  if (value.empty() || value[0] != 'S'
-      || !read_roots(value, pos, decoded)
-      || pos != value.size() || !decoded.valid_snapshot(id)) { return OB_CHECKSUM_ERROR; }
+  ObArenaAllocator allocator(ObMemAttr("InstMetaJson"));
+  ObJsonObject *object = nullptr;
+  int ret = parse_json_object(value, allocator, object);
+  if (ret == OB_SUCCESS) { ret = read_roots_json(*object, decoded); }
+  if (ret != OB_SUCCESS || !decoded.valid_snapshot(id)) { return OB_CHECKSUM_ERROR; }
   roots = decoded;
   return OB_SUCCESS;
 }
@@ -240,9 +333,9 @@ int encode_pin(const InstanceNamespacePin &pin, std::string &value)
   if (pin.snapshot_id == 0
       || pin.snapshot_id > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())
       || pin.schema_version < 0) { return OB_INVALID_ARGUMENT; }
-  value.clear();
-  value.push_back('P');
-  append_meta_i64(value, pin.schema_version);
+  value = "{";
+  append_json_i64(value, "schema_version", pin.schema_version);
+  value += '}';
   return OB_SUCCESS;
 }
 
@@ -251,10 +344,11 @@ int decode_pin(uint64_t snapshot_id, const std::string &value,
 {
   InstanceNamespacePin decoded;
   decoded.snapshot_id = snapshot_id;
-  size_t pos = 1;
-  if (value.empty() || value[0] != 'P'
-      || !read_meta_i64(value, pos, decoded.schema_version)
-      || pos != value.size() || decoded.schema_version < 0
+  ObArenaAllocator allocator(ObMemAttr("InstMetaJson"));
+  ObJsonObject *object = nullptr;
+  int ret = parse_json_object(value, allocator, object);
+  if (ret == OB_SUCCESS) { ret = json_i64(*object, "schema_version", decoded.schema_version); }
+  if (ret != OB_SUCCESS || decoded.schema_version < 0
       || snapshot_id == 0
       || snapshot_id > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
     return OB_CHECKSUM_ERROR;
@@ -265,17 +359,19 @@ int decode_pin(uint64_t snapshot_id, const std::string &value,
 
 int decode_gc_watermark(const std::string &value, int64_t &watermark)
 {
-  size_t pos = 1;
-  if (value.empty() || value[0] != 'W'
-      || !read_meta_i64(value, pos, watermark)
-      || pos != value.size() || watermark < 0) { return OB_CHECKSUM_ERROR; }
+  ObArenaAllocator allocator(ObMemAttr("InstMetaJson"));
+  ObJsonObject *object = nullptr;
+  int ret = parse_json_object(value, allocator, object);
+  if (ret == OB_SUCCESS) { ret = json_i64(*object, "watermark", watermark); }
+  if (ret != OB_SUCCESS || watermark < 0) { return OB_CHECKSUM_ERROR; }
   return OB_SUCCESS;
 }
 
 std::string encode_gc_watermark(int64_t watermark)
 {
-  std::string value(1, 'W');
-  append_meta_i64(value, watermark);
+  std::string value = "{";
+  append_json_i64(value, "watermark", watermark);
+  value += '}';
   return value;
 }
 
@@ -283,11 +379,11 @@ int encode_exception(const InstanceExceptionRecord &record, std::string &value)
 {
   if (!ns::NamespaceObjectKey{record.namespace_id, record.tablet_id}.is_valid()
       || record.kind < 0 || record.kind > 1 || record.drop_scn < 0) { return OB_INVALID_ARGUMENT; }
-  value.clear();
-  value.push_back('E');
-  append_meta_u64(value, record.table_id);
-  append_meta_i64(value, record.kind);
-  append_meta_i64(value, record.drop_scn);
+  value = "{";
+  append_json_u64(value, "table_id", record.table_id);
+  append_json_i64(value, "kind", record.kind);
+  append_json_i64(value, "drop_scn", record.drop_scn);
+  value += '}';
   return OB_SUCCESS;
 }
 
@@ -297,23 +393,21 @@ int decode_exception(uint64_t ns_id, uint64_t tablet_id,
   InstanceExceptionRecord decoded;
   decoded.namespace_id = ns_id;
   decoded.tablet_id = tablet_id;
-  size_t pos = 1;
-  if (value.empty() || value[0] != 'E'
-      || !read_meta_u64(value, pos, decoded.table_id)
-      || !read_meta_i64(value, pos, decoded.kind)
-      || !read_meta_i64(value, pos, decoded.drop_scn)
-      || pos != value.size() || decoded.kind < 0 || decoded.kind > 1
+  ObArenaAllocator allocator(ObMemAttr("InstMetaJson"));
+  ObJsonObject *object = nullptr;
+  int ret = parse_json_object(value, allocator, object);
+  if (ret == OB_SUCCESS) { ret = json_u64(*object, "table_id", decoded.table_id); }
+  if (ret == OB_SUCCESS) { ret = json_i64(*object, "kind", decoded.kind); }
+  if (ret == OB_SUCCESS) { ret = json_i64(*object, "drop_scn", decoded.drop_scn); }
+  if (ret != OB_SUCCESS || decoded.kind < 0 || decoded.kind > 1
       || decoded.drop_scn < 0) { return OB_CHECKSUM_ERROR; }
   record = decoded;
   return OB_SUCCESS;
 }
 
-bool key_id(const ObString &key, uint64_t &id)
+bool key_id(MetaCollection collection, const ObString &key, uint64_t &id)
 {
-  if (key.length() != 8) { return false; }
-  const std::string copy(key.ptr(), key.length());
-  size_t offset = 0;
-  return read_meta_u64(copy, offset, id);
+  return OB_SUCCESS == InstanceMetaKeyCodec::decode_u64(collection, key, id);
 }
 
 } // namespace
@@ -323,7 +417,7 @@ int InstanceNamespaceMetadata::get_namespace(uint64_t id,
 {
   std::string value;
   const int ret = get_value(store_, transaction_, MetaCollection::NAMESPACES,
-                            id_key(id), value, lock);
+                            id_key(MetaCollection::NAMESPACES, id), value, lock);
   return ret == OB_SUCCESS ? decode_namespace(id, value, record) : ret;
 }
 
@@ -333,11 +427,13 @@ int InstanceNamespaceMetadata::find_namespace(const std::string &name, uint64_t 
   if (name.empty() || name.size() > 128) { return OB_INVALID_ARGUMENT; }
   std::string value;
   const int ret = get_value(store_, transaction_, MetaCollection::NAMESPACE_NAMES,
-                            name, value, false);
+                            name_key(name), value, false);
   if (ret != OB_SUCCESS) { return ret; }
-  size_t offset = 0;
-  return read_meta_u64(value, offset, id) && offset == value.size()
-      ? OB_SUCCESS : OB_CHECKSUM_ERROR;
+  ObArenaAllocator allocator(ObMemAttr("InstMetaJson"));
+  ObJsonObject *object = nullptr;
+  int decode_ret = parse_json_object(value, allocator, object);
+  if (decode_ret == OB_SUCCESS) { decode_ret = json_u64(*object, "namespace_id", id); }
+  return decode_ret == OB_SUCCESS ? OB_SUCCESS : OB_CHECKSUM_ERROR;
 }
 
 int InstanceNamespaceMetadata::insert_namespace(const InstanceNamespaceRecord &record)
@@ -346,13 +442,15 @@ int InstanceNamespaceMetadata::insert_namespace(const InstanceNamespaceRecord &r
   std::string value, id;
   int ret = encode_namespace(record, value);
   if (ret == OB_SUCCESS) {
-    append_meta_u64(id, record.id);
+    id = "{";
+    append_json_u64(id, "namespace_id", record.id);
+    id += '}';
     ret = put_value(store_, transaction_, MetaCollection::NAMESPACE_NAMES,
-                    record.name, id, true);
+                    name_key(record.name), id, true);
   }
   if (ret == OB_SUCCESS) {
     ret = put_value(store_, transaction_, MetaCollection::NAMESPACES,
-                    id_key(record.id), value, true);
+                    id_key(MetaCollection::NAMESPACES, record.id), value, true);
   }
   return ret;
 }
@@ -369,17 +467,19 @@ int InstanceNamespaceMetadata::update_namespace(const InstanceNamespaceRecord &r
   if (ret == OB_SUCCESS && record.name != previous.name) {
     if (!previous.name.empty()) {
       ret = erase_value(store_, transaction_, MetaCollection::NAMESPACE_NAMES,
-                        previous.name);
+                        name_key(previous.name));
     }
     if (ret == OB_SUCCESS && !record.name.empty()) {
-      append_meta_u64(id, record.id);
+      id = "{";
+      append_json_u64(id, "namespace_id", record.id);
+      id += '}';
       ret = put_value(store_, transaction_, MetaCollection::NAMESPACE_NAMES,
-                      record.name, id, true);
+                      name_key(record.name), id, true);
     }
   }
   if (ret == OB_SUCCESS) {
     ret = put_value(store_, transaction_, MetaCollection::NAMESPACES,
-                    id_key(record.id), value, false);
+                    id_key(MetaCollection::NAMESPACES, record.id), value, false);
   }
   return ret;
 }
@@ -406,10 +506,10 @@ int InstanceNamespaceMetadata::erase_namespace(uint64_t id)
   int ret = get_namespace(id, previous, true);
   if (ret == OB_SUCCESS && !previous.name.empty()) {
     ret = erase_value(store_, transaction_, MetaCollection::NAMESPACE_NAMES,
-                      previous.name);
+                      name_key(previous.name));
   }
   if (ret == OB_SUCCESS) {
-    ret = erase_value(store_, transaction_, MetaCollection::NAMESPACES, id_key(id));
+    ret = erase_value(store_, transaction_, MetaCollection::NAMESPACES, id_key(MetaCollection::NAMESPACES, id));
   }
   return ret;
 }
@@ -421,9 +521,11 @@ int InstanceNamespaceMetadata::scan_namespaces(const NamespaceVisitor &visitor)
   return store_.scan(transaction_, MetaCollection::NAMESPACES, range,
       [&](const ObString &key, const ObString &value, bool &) {
         uint64_t id = 0;
-        if (!key_id(key, id)) { return OB_CHECKSUM_ERROR; }
+        if (!key_id(MetaCollection::NAMESPACES, key, id)) { return OB_CHECKSUM_ERROR; }
         InstanceNamespaceRecord record;
-        const int ret = decode_namespace(id, std::string(value.ptr(), value.length()), record);
+        std::string payload;
+        int ret = scan_value(value, ValueFormat::JSON, payload);
+        if (ret == OB_SUCCESS) { ret = decode_namespace(id, payload, record); }
         return ret == OB_SUCCESS ? visitor(record) : ret;
       });
 }
@@ -448,10 +550,11 @@ int InstanceNamespaceMetadata::initialize_namespace_counter(uint64_t high_waterm
   if (high_watermark < 1 || high_watermark >= ns::NamespaceObjectKey::NAMESPACE_LIMIT) {
     return OB_INVALID_ARGUMENT;
   }
-  std::string value;
-  append_meta_u64(value, high_watermark);
+  std::string value = "{";
+  append_json_u64(value, "high_watermark", high_watermark);
+  value += '}';
   return put_value(store_, transaction_, MetaCollection::COUNTERS,
-                   id_key(1), value, true);
+                   id_key(MetaCollection::COUNTERS, 1), value, true);
 }
 
 int InstanceNamespaceMetadata::allocate_namespace_id(uint64_t &id)
@@ -459,18 +562,22 @@ int InstanceNamespaceMetadata::allocate_namespace_id(uint64_t &id)
   id = 0;
   std::string value;
   int ret = get_value(store_, transaction_, MetaCollection::COUNTERS,
-                      id_key(1), value, true);
-  size_t offset = 0;
+                      id_key(MetaCollection::COUNTERS, 1), value, true);
   uint64_t high = 0;
   if (ret == OB_ENTRY_NOT_EXIST) { return OB_NOT_INIT; }
   if (ret != OB_SUCCESS) { return ret; }
-  if (!read_meta_u64(value, offset, high) || offset != value.size()) { return OB_CHECKSUM_ERROR; }
+  ObArenaAllocator allocator(ObMemAttr("InstMetaJson"));
+  ObJsonObject *object = nullptr;
+  ret = parse_json_object(value, allocator, object);
+  if (ret == OB_SUCCESS) { ret = json_u64(*object, "high_watermark", high); }
+  if (ret != OB_SUCCESS) { return OB_CHECKSUM_ERROR; }
   if (high >= ns::NamespaceObjectKey::NAMESPACE_LIMIT - 1) { return OB_SIZE_OVERFLOW; }
   id = high + 1;
-  value.clear();
-  append_meta_u64(value, id);
+  value = "{";
+  append_json_u64(value, "high_watermark", id);
+  value += '}';
   return put_value(store_, transaction_, MetaCollection::COUNTERS,
-                   id_key(1), value, false);
+                   id_key(MetaCollection::COUNTERS, 1), value, false);
 }
 
 int InstanceNamespaceMetadata::get_snapshot(uint64_t id,
@@ -478,7 +585,7 @@ int InstanceNamespaceMetadata::get_snapshot(uint64_t id,
 {
   std::string value;
   const int ret = get_value(store_, transaction_, MetaCollection::SNAPSHOTS,
-                            id_key(id), value, lock);
+                            id_key(MetaCollection::SNAPSHOTS, id), value, lock);
   return ret == OB_SUCCESS ? decode_snapshot(id, value, roots) : ret;
 }
 
@@ -488,7 +595,7 @@ int InstanceNamespaceMetadata::insert_snapshot(uint64_t id,
   std::string value;
   const int ret = encode_snapshot(id, roots, value, true);
   return ret == OB_SUCCESS
-      ? put_value(store_, transaction_, MetaCollection::SNAPSHOTS, id_key(id), value, true)
+      ? put_value(store_, transaction_, MetaCollection::SNAPSHOTS, id_key(MetaCollection::SNAPSHOTS, id), value, true)
       : ret;
 }
 
@@ -499,16 +606,16 @@ int InstanceNamespaceMetadata::update_snapshot(uint64_t id,
   int ret = encode_snapshot(id, roots, value, false);
   if (ret == OB_SUCCESS) {
     ret = get_value(store_, transaction_, MetaCollection::SNAPSHOTS,
-                    id_key(id), old, true);
+                    id_key(MetaCollection::SNAPSHOTS, id), old, true);
   }
   return ret == OB_SUCCESS
-      ? put_value(store_, transaction_, MetaCollection::SNAPSHOTS, id_key(id), value, false)
+      ? put_value(store_, transaction_, MetaCollection::SNAPSHOTS, id_key(MetaCollection::SNAPSHOTS, id), value, false)
       : ret;
 }
 
 int InstanceNamespaceMetadata::erase_snapshot(uint64_t id)
 {
-  return erase_value(store_, transaction_, MetaCollection::SNAPSHOTS, id_key(id));
+  return erase_value(store_, transaction_, MetaCollection::SNAPSHOTS, id_key(MetaCollection::SNAPSHOTS, id));
 }
 
 int InstanceNamespaceMetadata::scan_snapshots(const SnapshotVisitor &visitor)
@@ -518,9 +625,11 @@ int InstanceNamespaceMetadata::scan_snapshots(const SnapshotVisitor &visitor)
   return store_.scan(transaction_, MetaCollection::SNAPSHOTS, range,
       [&](const ObString &key, const ObString &value, bool &) {
         uint64_t id = 0;
-        if (!key_id(key, id)) { return OB_CHECKSUM_ERROR; }
+        if (!key_id(MetaCollection::SNAPSHOTS, key, id)) { return OB_CHECKSUM_ERROR; }
         ns::CatalogRoots roots;
-        const int ret = decode_snapshot(id, std::string(value.ptr(), value.length()), roots);
+        std::string payload;
+        int ret = scan_value(value, ValueFormat::JSON, payload);
+        if (ret == OB_SUCCESS) { ret = decode_snapshot(id, payload, roots); }
         return ret == OB_SUCCESS ? visitor(id, roots) : ret;
       });
 }
@@ -529,7 +638,7 @@ int InstanceNamespaceMetadata::initialize_snapshot_gc_watermark(int64_t watermar
 {
   if (watermark < 0) { return OB_INVALID_ARGUMENT; }
   return put_value(store_, transaction_, MetaCollection::SNAPSHOT_COORDINATION,
-                   id_key(1), encode_gc_watermark(watermark), true);
+                   id_key(MetaCollection::SNAPSHOT_COORDINATION, 1), encode_gc_watermark(watermark), true);
 }
 
 int InstanceNamespaceMetadata::get_snapshot_gc_watermark(int64_t &watermark,
@@ -538,7 +647,7 @@ int InstanceNamespaceMetadata::get_snapshot_gc_watermark(int64_t &watermark,
   watermark = 0;
   std::string value;
   const int ret = get_value(store_, transaction_, MetaCollection::SNAPSHOT_COORDINATION,
-                            id_key(1), value, lock);
+                            id_key(MetaCollection::SNAPSHOT_COORDINATION, 1), value, lock);
   return ret == OB_SUCCESS ? decode_gc_watermark(value, watermark) : ret;
 }
 
@@ -550,7 +659,7 @@ int InstanceNamespaceMetadata::advance_snapshot_gc_watermark(int64_t watermark)
   if (ret == OB_ENTRY_NOT_EXIST) { return OB_NOT_INIT; }
   if (ret == OB_SUCCESS && watermark > current) {
     ret = put_value(store_, transaction_, MetaCollection::SNAPSHOT_COORDINATION,
-                    id_key(1), encode_gc_watermark(watermark), false);
+                    id_key(MetaCollection::SNAPSHOT_COORDINATION, 1), encode_gc_watermark(watermark), false);
   }
   return ret;
 }
@@ -561,7 +670,7 @@ int InstanceNamespaceMetadata::get_pin(uint64_t snapshot_id,
   if (snapshot_id == 0) { return OB_INVALID_ARGUMENT; }
   std::string value;
   const int ret = get_value(store_, transaction_, MetaCollection::SNAPSHOT_PINS,
-                            id_key(snapshot_id), value, lock);
+                            id_key(MetaCollection::SNAPSHOT_PINS, snapshot_id), value, lock);
   return ret == OB_SUCCESS ? decode_pin(snapshot_id, value, pin) : ret;
 }
 
@@ -577,7 +686,7 @@ int InstanceNamespaceMetadata::insert_pin(const InstanceNamespacePin &pin)
   }
   if (ret == OB_SUCCESS) {
     ret = put_value(store_, transaction_, MetaCollection::SNAPSHOT_PINS,
-                    id_key(pin.snapshot_id), value, true);
+                    id_key(MetaCollection::SNAPSHOT_PINS, pin.snapshot_id), value, true);
   }
   return ret;
 }
@@ -586,7 +695,7 @@ int InstanceNamespaceMetadata::erase_pin(uint64_t snapshot_id)
 {
   if (snapshot_id == 0) { return OB_INVALID_ARGUMENT; }
   return erase_value(store_, transaction_, MetaCollection::SNAPSHOT_PINS,
-                     id_key(snapshot_id));
+                     id_key(MetaCollection::SNAPSHOT_PINS, snapshot_id));
 }
 
 int InstanceNamespaceMetadata::scan_pins(const PinVisitor &visitor)
@@ -596,9 +705,11 @@ int InstanceNamespaceMetadata::scan_pins(const PinVisitor &visitor)
   return store_.scan(transaction_, MetaCollection::SNAPSHOT_PINS, range,
       [&](const ObString &key, const ObString &value, bool &) {
         uint64_t id = 0;
-        if (!key_id(key, id)) { return OB_CHECKSUM_ERROR; }
+        if (!key_id(MetaCollection::SNAPSHOT_PINS, key, id)) { return OB_CHECKSUM_ERROR; }
         InstanceNamespacePin pin;
-        const int ret = decode_pin(id, std::string(value.ptr(), value.length()), pin);
+        std::string payload;
+        int ret = scan_value(value, ValueFormat::JSON, payload);
+        if (ret == OB_SUCCESS) { ret = decode_pin(id, payload, pin); }
         return ret == OB_SUCCESS ? visitor(pin) : ret;
       });
 }
@@ -635,8 +746,9 @@ int InstanceNamespaceMetadata::scan_exceptions(uint64_t ns_id,
     const ExceptionVisitor &visitor)
 {
   if (!ns::NamespaceObjectKey{ns_id, 1}.is_valid() || !visitor) { return OB_INVALID_ARGUMENT; }
-  const std::string first = id_key(ns_id);
-  const std::string end = id_key(ns_id + 1);
+  std::string first, end;
+  (void)InstanceMetaKeyCodec::encode_first_u64(MetaCollection::EXCEPTIONS, ns_id, first);
+  (void)InstanceMetaKeyCodec::encode_first_u64(MetaCollection::EXCEPTIONS, ns_id + 1, end);
   InstanceMetaStore::KeyRange range;
   range.has_lower = range.has_upper = range.include_lower = true;
   range.include_upper = false;
@@ -644,16 +756,14 @@ int InstanceNamespaceMetadata::scan_exceptions(uint64_t ns_id,
   range.upper = meta_bytes(end);
   return store_.scan(transaction_, MetaCollection::EXCEPTIONS, range,
       [&](const ObString &key, const ObString &value, bool &) {
-        if (key.length() != 16) { return OB_CHECKSUM_ERROR; }
-        const std::string copy(key.ptr(), key.length());
-        size_t offset = 0;
         uint64_t row_ns = 0, tablet = 0;
-        if (!read_meta_u64(copy, offset, row_ns)
-            || !read_meta_u64(copy, offset, tablet)
+        if (OB_SUCCESS != InstanceMetaKeyCodec::decode_pair(
+                MetaCollection::EXCEPTIONS, key, row_ns, tablet)
             || row_ns != ns_id) { return OB_CHECKSUM_ERROR; }
         InstanceExceptionRecord record;
-        const int ret = decode_exception(row_ns, tablet,
-            std::string(value.ptr(), value.length()), record);
+        std::string payload;
+        int ret = scan_value(value, ValueFormat::JSON, payload);
+        if (ret == OB_SUCCESS) { ret = decode_exception(row_ns, tablet, payload, record); }
         return ret == OB_SUCCESS ? visitor(record) : ret;
       });
 }
@@ -719,7 +829,8 @@ int InstanceExceptionLoader::load(uint64_t namespace_id, IRowSink &sink)
 int InstanceNamespaceMetadata::read_page(uint64_t page_id, std::string &data)
 {
   const int ret = get_value(store_, transaction_, MetaCollection::PAGES,
-                            id_key(page_id), data, false);
+                            id_key(MetaCollection::PAGES, page_id), data, false,
+                            ValueFormat::BYTES);
   return ret != OB_SUCCESS ? ret
       : murmurhash(data.data(), static_cast<int32_t>(data.size()), 0) == page_id
           ? OB_SUCCESS : OB_CHECKSUM_ERROR;
@@ -734,12 +845,13 @@ int InstanceNamespaceMetadata::save_page(const std::string &data, uint64_t &page
   if (ret == OB_SUCCESS) { return existing == data ? OB_SUCCESS : OB_CHECKSUM_ERROR; }
   return ret == OB_ENTRY_NOT_EXIST
       ? put_value(store_, transaction_, MetaCollection::PAGES,
-                  id_key(page_id), data, true) : ret;
+                  id_key(MetaCollection::PAGES, page_id), data, true,
+                  ValueFormat::BYTES) : ret;
 }
 
 int InstanceNamespaceMetadata::erase_page(uint64_t page_id)
 {
-  return erase_value(store_, transaction_, MetaCollection::PAGES, id_key(page_id));
+  return erase_value(store_, transaction_, MetaCollection::PAGES, id_key(MetaCollection::PAGES, page_id));
 }
 
 int InstanceNamespaceMetadata::scan_pages(const PageVisitor &visitor)
@@ -749,7 +861,7 @@ int InstanceNamespaceMetadata::scan_pages(const PageVisitor &visitor)
   return store_.scan(transaction_, MetaCollection::PAGES, range,
       [&](const ObString &key, const ObString &, bool &) {
         uint64_t id = 0;
-        return key_id(key, id) ? visitor(id) : OB_CHECKSUM_ERROR;
+        return key_id(MetaCollection::PAGES, key, id) ? visitor(id) : OB_CHECKSUM_ERROR;
       });
 }
 

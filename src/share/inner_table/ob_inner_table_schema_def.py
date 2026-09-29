@@ -6438,6 +6438,28 @@ def_table_schema(
   ],
 )
 
+# 12565: one read-only view of the instance metadata KV collections.
+def_table_schema(
+  owner = 'nijia.nj',
+  table_name = '__all_virtual_instance_metadata',
+  table_id = '12565',
+  table_type = 'VIRTUAL_TABLE',
+  gm_columns = [],
+  rowkey_columns = [],
+  enable_column_def_enum = True,
+  normal_columns = [
+    ('collection_id', 'uint'),
+    ('collection_name', 'varchar:64'),
+    ('key_json', 'longtext'),
+    ('key_hex', 'longtext'),
+    ('value_format', 'varchar:8'),
+    ('value_json', 'longtext'),
+    ('value_size', 'int'),
+    ('value_base64', 'longtext'),
+  ],
+  vtable_route_policy = 'local'
+)
+
 # Reserved position (placeholder before this line)
 # Placeholder suggestion for this section: Use actual table names for placeholders
 ################################################################################

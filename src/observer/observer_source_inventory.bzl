@@ -126,6 +126,7 @@ OBSERVER_UNITY_GROUPS = [
         name = "ob_server_net_0",
         language = "c++",
         srcs = [
+            "src/observer/virtual_table/ob_all_virtual_instance_metadata.cpp",
             "src/observer/virtual_table/ob_all_virtual_schema_slot.cpp",
         ],
         generated_srcs = [],

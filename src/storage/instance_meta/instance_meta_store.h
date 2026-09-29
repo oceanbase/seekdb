@@ -21,6 +21,7 @@
 #include "common/ob_tablet_id.h"
 #include "data_plane/transaction/ob_tx_read_snapshot.h"
 #include "lib/string/ob_string.h"
+#include "share/instance_meta/instance_meta_collection.h"
 
 namespace oceanbase
 {
@@ -31,19 +32,7 @@ namespace storage
 {
 class ObAccessService;
 
-// Instance-owned records share one physical schema and transaction domain.
-// Collection numbers are persistent identities, not SQL schema object IDs.
-enum class MetaCollection : uint64_t
-{
-  NAMESPACES = 1,
-  NAMESPACE_NAMES = 2,
-  SNAPSHOTS = 3,
-  EXCEPTIONS = 4,
-  PAGES = 5,
-  COUNTERS = 6,
-  SNAPSHOT_COORDINATION = 7,
-  SNAPSHOT_PINS = 8,
-};
+using share::instance_meta::MetaCollection;
 
 class InstanceMetaStore final
 {

@@ -139,6 +139,8 @@
 #include "observer/virtual_table/ob_all_virtual_kvcache_store_memblock.h"
 #include "observer/virtual_table/ob_all_virtual_schema_memory.h"
 #include "observer/virtual_table/ob_all_virtual_schema_slot.h"
+#include "observer/virtual_table/ob_all_virtual_instance_metadata.h"
+#include "storage/tx_storage/ob_access_service.h"
 #include "observer/virtual_table/ob_virtual_show_trace.h"
 #include "observer/virtual_table/ob_all_virtual_sql_plan.h"
 #include "observer/virtual_table/ob_all_virtual_mds_node_stat.h"
@@ -1289,6 +1291,20 @@ int ObVTIterCreator::create_vt_iter(ObVTableScanParam &params,
                                           schema_slot, schema_service))) {
             } else {
               vt_iter = static_cast<ObVirtualTableIterator *>(schema_slot);
+            }
+            break;
+          }
+          case OB_ALL_VIRTUAL_INSTANCE_METADATA_TID: {
+            storage::ObAccessService *access = share::server_service<storage::ObAccessService>();
+            if (access == nullptr) {
+              ret = OB_NOT_INIT;
+            } else {
+              InstanceMetadataTable *metadata = nullptr;
+              if (OB_FAIL(NEW_VIRTUAL_TABLE(InstanceMetadataTable, metadata,
+                                             access->instance_meta_store()))) {
+              } else {
+                vt_iter = static_cast<ObVirtualTableIterator *>(metadata);
+              }
             }
             break;
           }
