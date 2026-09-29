@@ -1789,14 +1789,26 @@ int ObStaticEngineExprCG::generate_extra_questionmarks(ObRawExprUniqueSet &flatt
                                                        ObRawExprFactory &expr_factory)
 {
   int ret = OB_SUCCESS;
+  const ObIArray<ObRawExpr *> &all_exprs = flattened_raw_exprs.get_expr_array();
+  bool has_dynamic_eval_qm = false;
+  for (int64_t i = 0; OB_SUCC(ret) && param_cnt_ > 0 &&
+                      !has_dynamic_eval_qm && i < all_exprs.count(); i++) {
+    if (OB_ISNULL(all_exprs.at(i))) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      has_dynamic_eval_qm = is_dynamic_eval_qm(*all_exprs.at(i));
+    }
+  }
   if (OB_UNLIKELY(param_cnt_ <= 0)) {
     // do nothing
+  } else if (OB_FAIL(ret) || !has_dynamic_eval_qm) {
+    // Range estimation generates small temporary expressions repeatedly. Only
+    // initialize the statement-wide parameter array when one needs an extra QM.
   } else if (OB_FAIL(gen_questionmarks_.prepare_allocate(param_cnt_))) {
   } else {
     for (int i = 0; i < param_cnt_; i++) {
       gen_questionmarks_.at(i) = nullptr;
     }
-    const ObIArray<ObRawExpr *> &all_exprs = flattened_raw_exprs.get_expr_array();
     for (int i = 0; OB_SUCC(ret) && i < all_exprs.count(); i++) {
       if (OB_ISNULL(all_exprs.at(i))) {
         ret = OB_ERR_UNEXPECTED;
