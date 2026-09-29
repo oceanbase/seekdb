@@ -4376,6 +4376,25 @@ int ObHashJoinOp::read_hashrow_batch()
     }
   }
 
+  if (OB_SUCC(ret) && is_right_naaj()) {
+    // A NULL probe key cannot match an equality condition. In particular, it
+    // can hash to the same bucket as empty strings and needlessly scan every
+    // duplicate. Leave these rows unmatched; the NAAJ output path still decides
+    // whether to return them according to whether the build side is empty.
+    int64_t selector_cnt = 0;
+    batch_info_guard.set_batch_size(right_brs_->size_);
+    for (int64_t i = 0; OB_SUCC(ret) && i < right_selector_cnt_; ++i) {
+      batch_info_guard.set_batch_idx(right_selector_[i]);
+      ObDatum *key_datum = nullptr;
+      if (OB_FAIL(right_join_keys_.at(0)->eval(eval_ctx_, key_datum))) {
+      } else if (!key_datum->is_null()) {
+        cur_tuples_[selector_cnt] = cur_tuples_[i];
+        right_selector_[selector_cnt++] = right_selector_[i];
+      }
+    }
+    right_selector_cnt_ = selector_cnt;
+  }
+
   // prefetch store row
   // FIXME bin.lb:
   // 1. Try pipeline prefetch and emit less prefetchs
