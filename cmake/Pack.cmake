@@ -134,7 +134,6 @@ message(STATUS "Bundled ${_bundled} runtime DLLs into bin/")
 
   install(FILES
     package/config/default_parameter.json
-    src/share/system_variable/default_system_variable.json
     ${CMAKE_BINARY_DIR}/src/share/ob_system_variable_init.json
     ${INSTALL_EXTRA_FILES}
     DESTINATION etc
@@ -243,7 +242,6 @@ else()
   # Install configuration files to /etc/seekdb
   install(FILES
     package/config/default_parameter.json
-    src/share/system_variable/default_system_variable.json
     ${CMAKE_BINARY_DIR}/src/share/ob_system_variable_init.json
     ${INSTALL_EXTRA_FILES}
     tools/systemd/profile/seekdb.cnf

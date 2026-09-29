@@ -19,7 +19,7 @@
 #     target_link_libraries(<your_target> PRIVATE sql_nio)
 #     #include "nio.h"
 #     target_link_libraries(<your_target> PRIVATE config)
-#     #include "config_ffi.h"
+#     #include "config.h"
 #
 # Override the workspace location by setting RUST_WORKSPACE_DIR before include().
 
@@ -169,7 +169,7 @@ endif()
 add_custom_command(
   OUTPUT "${RUST_STATICLIB}"
   BYPRODUCTS "${CONFIG_STATICLIB}"
-             "${RUST_INCLUDE_DIR}/nio.h" "${CONFIG_INCLUDE_DIR}/config_ffi.h"
+             "${RUST_INCLUDE_DIR}/nio.h" "${CONFIG_INCLUDE_DIR}/config.h"
              "${RUST_TARGET_DIR}/include/config_bridge.h"
              "${RUST_TARGET_DIR}/include/config_checkers.h"
   COMMAND "${CMAKE_COMMAND}" -E env ${_rust_build_env}

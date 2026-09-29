@@ -18,7 +18,7 @@
 
 #include "config_bridge.h"
 #include "config_checkers.h"
-#include "config_ffi.h"
+#include "config.h"
 #ifndef _WIN32
 #include <unistd.h>
 #include "share/rc/ob_server_runtime.h"
