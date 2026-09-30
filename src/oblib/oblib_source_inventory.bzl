@@ -616,7 +616,6 @@ OBLIB_UNITY_GROUPS = {
             srcs = [
                 "src/oblib/rpc/obmysql/ob_mysql_packet.cpp",
                 "src/oblib/rpc/obmysql/ob_mysql_util.cpp",
-                "src/oblib/rpc/obmysql/ob_nio_abi_check.cpp",
                 "src/oblib/rpc/obmysql/ob_sql_nio_server.cpp",
                 "src/oblib/rpc/obmysql/ob_sql_sock_handler.cpp",
                 "src/oblib/rpc/obmysql/ob_sql_sock_session.cpp",

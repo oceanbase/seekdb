@@ -81,7 +81,9 @@ list(APPEND _rust_sources
   "${RUST_WORKSPACE_DIR}/rust-toolchain.toml"
   "${RUST_CRATE_DIR}/Cargo.toml"
   "${RUST_WORKSPACE_DIR}/plugin-runtime/Cargo.toml"
-  "${RUST_WORKSPACE_DIR}/seekdb-host/Cargo.toml")
+  "${RUST_WORKSPACE_DIR}/seekdb-host/Cargo.toml"
+  "${RUST_CRATE_DIR}/build.rs"
+  "${RUST_CRATE_DIR}/cbindgen.toml")
 
 set(_rust_host_features)
 if(SEEKDB_ENABLE_EXPERIMENTAL_PLUGINS)
@@ -134,6 +136,9 @@ if(WIN32)
   endif()
 endif()
 if(APPLE)
+  if(OB_MACOS27)
+    list(APPEND _rust_build_env "DEVELOPER_DIR=${OB_MACOS_DEVELOPER_DIR}")
+  endif()
   # CMake injects -isysroot into its own compile rules on Apple; the cc crate
   # gets no such implicit flag, so the vendored devtools clang cannot find the
   # macOS SDK headers (TargetConditionals.h). SDKROOT is the env var the clang
@@ -160,6 +165,7 @@ endif()
 
 add_custom_command(
   OUTPUT "${RUST_STATICLIB}"
+  BYPRODUCTS "${RUST_INCLUDE_DIR}/nio.h"
   COMMAND "${CMAKE_COMMAND}" -E env ${_rust_build_env}
           "${CARGO}" build ${_cargo_profile_flag} ${_cargo_target_args}
           --manifest-path "${RUST_WORKSPACE_DIR}/Cargo.toml"

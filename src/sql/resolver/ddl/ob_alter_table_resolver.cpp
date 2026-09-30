@@ -2449,7 +2449,7 @@ int ObAlterTableResolver::resolve_rename_index(const ParseNode &node)
           SQL_RESV_LOG(ERROR, "failed to allocate memory", K(ret));
         } else {
           rename_index_arg = new (tmp_ptr)ObRenameIndexArg();
-          
+
           rename_index_arg->origin_index_name_ = ori_index_name;
           rename_index_arg->new_index_name_= new_index_name;
         }

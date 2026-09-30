@@ -2377,7 +2377,7 @@ int ObDmlCgService::convert_normal_triggers(ObLogDelUpd &log_op,
 
       if (OB_FAIL(ret)) {
       } else {
-        OV (i == table_schema->get_column_count() && cs_iter == cs_iter_end, OB_ERR_UNEXPECTED, i, table_schema->get_column_count());
+        OB_ASSERT(i == table_schema->get_column_count() && cs_iter == cs_iter_end);
       }
       LOG_DEBUG("debug trigger", K(trig_ctdef.new_row_exprs_.count()),
         K(trig_ctdef.old_row_exprs_.count()));

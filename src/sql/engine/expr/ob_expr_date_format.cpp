@@ -42,16 +42,15 @@ int ObExprDateFormat::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
-  if (rt_expr.arg_cnt_ != 2) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])
-             || OB_ISNULL(rt_expr.args_[1])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (ObStringTC != ob_obj_type_class(rt_expr.args_[1]->datum_meta_.type_)
-             && ObNullType != rt_expr.args_[1]->datum_meta_.type_) {
-    rt_expr.eval_func_ = ObExprDateFormat::calc_date_format_invalid;
-  } else {
-    rt_expr.eval_func_ = ObExprDateFormat::calc_date_format;
+  {
+    OB_ASSERT(rt_expr.arg_cnt_ == 2);
+    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
+    if (ObStringTC != ob_obj_type_class(rt_expr.args_[1]->datum_meta_.type_) &&
+        ObNullType != rt_expr.args_[1]->datum_meta_.type_) {
+      rt_expr.eval_func_ = ObExprDateFormat::calc_date_format_invalid;
+    } else {
+      rt_expr.eval_func_ = ObExprDateFormat::calc_date_format;
+    }
   }
   return ret;
 }
@@ -224,17 +223,15 @@ int ObExprGetFormat::cg_expr(ObExprCGCtx &op_cg_ctx,
   UNUSED(op_cg_ctx);
   UNUSED(raw_expr);
   int ret = OB_SUCCESS;
-  if (rt_expr.arg_cnt_ != 2) {
-    ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(rt_expr.args_) || OB_ISNULL(rt_expr.args_[0])
-             || OB_ISNULL(rt_expr.args_[1])) {
-    ret = OB_ERR_UNEXPECTED;
-  } else if (ObIntType != rt_expr.args_[0]->datum_meta_.type_
-            || (ObVarcharType != rt_expr.args_[1]->datum_meta_.type_
-                && ObNullType != rt_expr.args_[1]->datum_meta_.type_)) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    rt_expr.eval_func_ = ObExprGetFormat::calc_get_format;
+  {
+    OB_ASSERT(rt_expr.arg_cnt_ == 2);
+    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr);
+    if (ObIntType != rt_expr.args_[0]->datum_meta_.type_ ||
+        (ObVarcharType != rt_expr.args_[1]->datum_meta_.type_ && ObNullType != rt_expr.args_[1]->datum_meta_.type_)) {
+      ret = OB_INVALID_ARGUMENT;
+    } else {
+      rt_expr.eval_func_ = ObExprGetFormat::calc_get_format;
+    }
   }
   return ret;
 }

@@ -329,11 +329,11 @@ int ObInListResolver::check_inlist_rewrite_enable(const ParseNode &in_list,
     } else if (OB_FAIL(session_info->get_collation_connection(connect_collation))) {
     } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session_info, enable_decimal_int))) {
     } else {
-      ObInListsResolverHelper helper(alloc, 
-                                     param_store, 
+      ObInListsResolverHelper helper(alloc,
+                                     param_store,
                                      connect_collation,
-                                     nchar_collation, 
-                                     static_cast<ObCollationType>(server_collation), 
+                                     nchar_collation,
+                                     static_cast<ObCollationType>(server_collation),
                                      enable_decimal_int,
                                      is_prepare_stmt);
       InListRewriteInfo rewrite_info;
@@ -781,11 +781,11 @@ int ObInListResolver::try_merge_inlists(ObExprResolveContext &resolve_ctx,
   } else if (OB_FAIL(session_info->get_collation_connection(connect_collation))) {
   } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session_info, enable_decimal_int))) {
   } else {
-    ObInListsResolverHelper helper(alloc, 
-                                   resolve_ctx.param_list_, 
+    ObInListsResolverHelper helper(alloc,
+                                   resolve_ctx.param_list_,
                                    connect_collation,
-                                   nchar_collation, 
-                                   static_cast<ObCollationType>(server_collation), 
+                                   nchar_collation,
+                                   static_cast<ObCollationType>(server_collation),
                                    enable_decimal_int,
                                    is_prepare_stmt);
     if (OB_FAIL(do_merge_inlists(alloc, helper, root_node, ret_node))) {

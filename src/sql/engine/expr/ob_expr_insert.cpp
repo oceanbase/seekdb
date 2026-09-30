@@ -212,13 +212,9 @@ int ObExprInsert::cg_expr(ObExprCGCtx &op_cg_ctx,
   int ret = OB_SUCCESS;
   if (rt_expr.arg_cnt_ != 4) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (OB_ISNULL(rt_expr.args_)
-             || OB_ISNULL(rt_expr.args_[0])
-             || OB_ISNULL(rt_expr.args_[1])
-             || OB_ISNULL(rt_expr.args_[2])
-             || OB_ISNULL(rt_expr.args_[3])) {
-    ret = OB_ERR_UNEXPECTED;
   } else {
+    OB_ASSERT(rt_expr.args_ != nullptr && rt_expr.args_[0] != nullptr && rt_expr.args_[1] != nullptr &&
+                     rt_expr.args_[2] != nullptr && rt_expr.args_[3] != nullptr);
     CK(ObVarcharType == rt_expr.args_[0]->datum_meta_.type_);
     CK(ObIntType == rt_expr.args_[1]->datum_meta_.type_);
     CK(ObIntType == rt_expr.args_[2]->datum_meta_.type_);

@@ -973,19 +973,19 @@ int ObMPStmtExecute::request_standard_params(ObSQLSessionInfo *session,
   handled = false;
   const int64_t param_count = ps_session_info.get_param_count();
   const int64_t tail_len = analysis_checker_.remain_len();
-  nio_mysql_execute_param_meta *cached = NULL;
-  nio_mysql_execute_param *parsed = NULL;
+  NioMysqlExecuteParamMeta *cached = NULL;
+  NioMysqlExecuteParam *parsed = NULL;
   uint8_t *long_data = NULL;
-  nio_mysql_execute_parse_result parse_result = {};
+  NioMysqlExecuteParseResult parse_result = {};
   const ParamTypeArray &cached_types = ps_session_info.get_param_types();
   const ParamTypeFlagArray &cached_flags =
       ps_session_info.get_param_type_flags();
 
-  static_assert(sizeof(nio_mysql_execute_param_meta) == 4,
+  static_assert(sizeof(NioMysqlExecuteParamMeta) == 4,
                 "execute parameter meta ABI mismatch");
-  static_assert(sizeof(nio_mysql_execute_param) == 40,
+  static_assert(sizeof(NioMysqlExecuteParam) == 40,
                 "execute parameter descriptor ABI mismatch");
-  static_assert(sizeof(nio_mysql_execute_parse_result) == 8,
+  static_assert(sizeof(NioMysqlExecuteParseResult) == 8,
                 "execute parse result ABI mismatch");
 
   if (OB_ISNULL(session) || param_count < 0 || tail_len < 0 ||
@@ -994,9 +994,9 @@ int ObMPStmtExecute::request_standard_params(ObSQLSessionInfo *session,
   } else if (param_count > INT64_MAX / static_cast<int64_t>(sizeof(*parsed))) {
     ret = OB_SIZE_OVERFLOW;
   } else if (param_count > 0 &&
-             (OB_ISNULL(parsed = static_cast<nio_mysql_execute_param *>(
+             (OB_ISNULL(parsed = static_cast<NioMysqlExecuteParam *>(
                             alloc.alloc(param_count * sizeof(*parsed)))) ||
-              OB_ISNULL(cached = static_cast<nio_mysql_execute_param_meta *>(
+              OB_ISNULL(cached = static_cast<NioMysqlExecuteParamMeta *>(
                             alloc.alloc(param_count * sizeof(*cached)))) ||
               OB_ISNULL(long_data = static_cast<uint8_t *>(
                             alloc.alloc(param_count))))) {
@@ -1058,7 +1058,7 @@ int ObMPStmtExecute::request_standard_params(ObSQLSessionInfo *session,
   ParamTypeArray new_types;
   ParamTypeFlagArray new_flags;
   for (int64_t i = 0; OB_SUCC(ret) && handled && i < param_count; ++i) {
-    const nio_mysql_execute_param &desc = parsed[i];
+    const NioMysqlExecuteParam &desc = parsed[i];
     const EMySQLFieldType mysql_type =
         static_cast<EMySQLFieldType>(desc.mysql_type);
     const bool is_unsigned =

@@ -31,6 +31,17 @@ if(WIN32)
   find_program(LLVM_LIB_PROGRAM llvm-lib)
   if(LLVM_LIB_PROGRAM)
     set(CMAKE_AR "${LLVM_LIB_PROGRAM}" CACHE FILEPATH "Archiver" FORCE)
+if(OB_MACOS27)
+  include(CheckCXXSourceCompiles)
+  # An empty main misses LLVM/SDK libc++ incompatibilities.
+  unset(OB_MACOS27_CXX_WORKS CACHE)
+  check_cxx_source_compiles("#include <vector>
+    #include <iostream>
+    int main() { std::vector<int> v{27}; std::cout << v.at(0); }"
+    OB_MACOS27_CXX_WORKS)
+  if(NOT OB_MACOS27_CXX_WORKS)
+    message(FATAL_ERROR "The selected LLVM cannot compile/link against the macOS 27 C++ library. "
+      "Use matching Xcode/Command Line Tools or a newer Homebrew LLVM via OB_MACOS_LLVM_ROOT.")
   endif()
 endif()
 

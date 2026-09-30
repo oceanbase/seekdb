@@ -90,7 +90,7 @@ public:
   virtual int inner_close() override;
   virtual int inner_get_next_row() override;
   // Materialize all rows to be replace into to replace_row_store_
-  int load_all_replace_row(bool &is_iter_end);
+  int load_all_replace_row(bool &is_iter_end, transaction::ObTxSEQ &savepoint_no);
   int get_next_row_from_child();
   // Execute all attempted insert das tasks, fetch primary key of the main table for conflicting rows
   int fetch_conflict_rowkey(int64_t replace_row_cnt);
@@ -150,6 +150,8 @@ protected:
   virtual ObDasParallelType check_das_parallel_type() override;
 private:
   int check_replace_ctdefs_valid() const;
+
+  int eval_replace_input();
 
   const ObIArray<ObExpr *> &get_all_saved_exprs();
 

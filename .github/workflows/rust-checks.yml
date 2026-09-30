@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Static analysis for the Rust transport crate: clippy as a hard gate and a
-# RustSec advisory audit of the locked dependency tree. Unit tests run in
-# buildbase alongside the C++ build; this job exists to give rust-only PRs a
-# fast signal without a full server build.
+# Static analysis for the Rust transport crate: clippy as a hard gate, a
+# check that the committed cbindgen-generated header matches the Rust ABI
+# items, and a RustSec advisory audit of the locked dependency tree. Unit
+# tests run in buildbase alongside the C++ build; this job exists to give
+# rust-only PRs a fast signal without a full server build.
 name: rust-checks
 
 on:
@@ -43,6 +44,9 @@ jobs:
       - name: clippy (deny warnings)
         working-directory: rust
         run: cargo clippy -p sql-nio --all-targets -- -D warnings
+
+      - name: generated header is committed
+        run: git diff --exit-code -- rust/sql-nio/include/nio.h
 
       # No Windows runner: a cross `cargo check` is the cheapest signal that
       # the cfg(windows) transport code still compiles. It would have caught
