@@ -27,7 +27,7 @@ import ast
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Sequence, Tuple
+from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 
 # Python 3.14 removed these deprecated AST compatibility node classes.  Keep
@@ -153,6 +153,8 @@ SOURCE_SPECS: Sequence[Tuple[str, str, str]] = (
     ("SEEKDB_SHARE_DATUM_STANDALONE", "src/share/share_source_inventory.bzl", "SHARE_DATUM_STANDALONE_SOURCES"),
     ("SEEKDB_SQL_STANDALONE", "src/sql/sql_source_inventory.bzl", "SQL_STANDALONE_SOURCES"),
     ("SEEKDB_SQL_EXTRA", "src/sql/sql_source_inventory.bzl", "SQL_EXTRA_SOURCES"),
+    ("SEEKDB_SQL_GIS_PLUGIN_ADAPTER_SOURCES", "src/sql/sql_source_inventory.bzl", "SQL_GIS_PLUGIN_ADAPTER_SOURCES"),
+    ("SEEKDB_SQL_EXTENSION_RUNTIME_SOURCES", "src/sql/sql_source_inventory.bzl", "SQL_EXTENSION_RUNTIME_SOURCES"),
     ("SEEKDB_STORAGE_STANDALONE", "src/storage/storage_source_inventory.bzl", "STORAGE_STANDALONE_SOURCES"),
     ("SEEKDB_STORAGE_EXTRA", "src/storage/storage_source_inventory.bzl", "STORAGE_EXTRA_SOURCES"),
     ("SEEKDB_PL_STANDALONE", "src/pl/pl_source_inventory.bzl", "PL_STANDALONE_SOURCES"),
@@ -285,7 +287,37 @@ def _emit_set(lines: List[str], name: str, values: Iterable[str]) -> None:
     lines.append("")
 
 
-def emit(repo: Path, output: Path) -> None:
+def validate_generated_schema_sources(owned: Mapping[str, str], generated_root: Path) -> None:
+    """Reject schema shards generated but not compiled (and missing shards).
+
+    The generator can introduce a new numeric range when a system table is
+    added. Merely regenerating headers makes compilation succeed but leaves
+    schema-creator references unresolved at final link. Check the exact set on
+    every configure, including a digest-cache hit in the schema generator.
+    """
+    prefix = "src/share/inner_table/"
+    directory = generated_root / "share" / "inner_table"
+    if not directory.is_dir():
+        raise InventoryError("generated inner-table directory is missing: %s" % directory)
+    expected = {
+        path[len(prefix):]
+        for path in owned
+        if path.startswith(prefix + "ob_inner_table_schema.") and path.endswith(".cpp")
+    }
+    actual = {
+        path.name for path in directory.glob("ob_inner_table_schema.*.cpp") if path.is_file()
+    }
+    if expected != actual:
+        raise InventoryError(
+            "generated inner-table schema sources do not match the build inventory; "
+            "update src/share/share_source_inventory.bzl or regenerate missing outputs. "
+            "Uncompiled outputs: %s; missing outputs: %s"
+            % (", ".join(sorted(actual - expected)) or "none",
+               ", ".join(sorted(expected - actual)) or "none")
+        )
+
+
+def emit(repo: Path, output: Path, generated_root: Optional[Path] = None) -> None:
     cache: Dict[Path, Dict[str, Any]] = {}
 
     def assignments(relative: str) -> Dict[str, Any]:
@@ -367,6 +399,21 @@ def emit(repo: Path, output: Path) -> None:
             owned[path] = "%s:%s" % (relative, variable)
         _emit_set(lines, name, paths)
 
+    # GIS replacements refer to baseline sources, rather than introducing a
+    # second owner. Reject stale references before emitting a new configuration.
+    references = assignments("src/sql/sql_source_inventory.bzl").get("SQL_CORE_GIS_REPLACED_SOURCES")
+    if not isinstance(references, list):
+        raise InventoryError("SQL_CORE_GIS_REPLACED_SOURCES is not a list")
+    paths = [_source_path(record, "SQL_CORE_GIS_REPLACED_SOURCES") for record in references]
+    baseline_owners = ("src/sql/sql_source_inventory.bzl:SQL_UNITY_GROUPS[",
+                       "src/sql/sql_source_inventory.bzl:SQL_SIMD_UNITY_GROUPS[",
+                       "src/sql/sql_source_inventory.bzl:SQL_STANDALONE_SOURCES",
+                       "src/sql/sql_source_inventory.bzl:SQL_EXTRA_SOURCES")
+    if len(paths) != 16 or len(set(paths)) != len(paths) or any(
+            not owned.get(path, "").startswith(baseline_owners) for path in paths):
+        raise InventoryError("SQL GIS replacements must reference 16 distinct baseline SQL owners")
+    _emit_set(lines, "SEEKDB_SQL_CORE_GIS_REPLACED_SOURCES", paths)
+
     for name, relative, variable, package in RELATIVE_SOURCE_SPECS:
         data = assignments(relative)
         records = data.get(variable)
@@ -408,6 +455,9 @@ def emit(repo: Path, output: Path) -> None:
         lines.append("set(%s_SHARD_COUNT %d)" % (prefix, spec["shard_count"]))
         _emit_set(lines, "%s_UNITY_EXCEPTIONS" % prefix, exception_paths)
 
+    if generated_root is not None:
+        validate_generated_schema_sources(owned, generated_root)
+
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix(output.suffix + ".tmp")
     temporary.write_text("\n".join(lines), encoding="utf-8")
@@ -418,9 +468,12 @@ def main(argv: Sequence[str]) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--generated-root", type=Path,
+                        help="Validate generated inner-table C++ shards before emitting")
     args = parser.parse_args(argv)
     try:
-        emit(args.repo.resolve(), args.output.resolve())
+        emit(args.repo.resolve(), args.output.resolve(),
+             args.generated_root.resolve() if args.generated_root is not None else None)
     except InventoryError as exc:
         print("source inventory error: %s" % exc, file=sys.stderr)
         return 1

@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX RS
+#include "sql/resolver/ob_resolver_utils.h"
 
 #include "ob_ddl_operator.h"
 #include "share/ob_autoincrement_service.h"
@@ -37,6 +38,7 @@
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
 #include "share/schema/ob_dependency_info.h"  // relocated-definition owner
 #include "share/schema/ob_multi_version_schema_service.h"  // relocated-definition owner
+#include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
 {
@@ -208,6 +210,9 @@ int ObDDLOperator::drop_database(const ObDatabaseSchema &db_schema,
     ret = OB_ERR_SYS;
     LOG_ERROR("schama service_impl and schema manage must not null",
         "schema_service_impl", OB_P(schema_service_impl), K(ret));
+  } else if (OB_FAIL(schema_service_impl->get_database_sql_service()
+      .delete_extensions_before_database_drop(database_id, trans))) {
+    LOG_WARN("failed to prepare extension ownership for database teardown", KR(ret), K(database_id));
   }
   //drop tables in recyclebin
   if (OB_SUCC(ret)) {
@@ -311,6 +316,20 @@ int ObDDLOperator::drop_database(const ObDatabaseSchema &db_schema,
         } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
         } else if (OB_FAIL(schema_service_impl->get_routine_sql_service().drop_routine(
                            *routine_info, new_schema_version, trans))) {
+        } else if (routine_info->is_native()) {
+          // DROP DATABASE bypasses RoutineCatalogWriter. Remove the same
+          // logical edge here on its transaction, after extension instances
+          // and memberships have been locked/removed above. Never load code
+          // during teardown; a missing/corrupt edge fails the whole DDL.
+          if (!routine_info->is_native_binding_valid()) {
+            ret = OB_INVALID_ARGUMENT;
+          } else if (share::g_mp == nullptr) {
+            ret = OB_NOT_INIT;
+          } else {
+            ret = share::g_mp->mutate_native_routine_dependency(trans,
+                routine_info->get_native_module_id(), routine_info->get_native_implementation_id(),
+                routine_info->get_routine_id(), false);
+          }
         }
       }
     }
@@ -4543,7 +4562,8 @@ int ObDDLOperator::grant_routine(
     const uint64_t option,
     const bool gen_ddl_stmt,
     const common::ObString &grantor,
-    const common::ObString &grantor_host)
+    const common::ObString &grantor_host,
+    const bool read_transaction_privileges)
 {
   int ret = OB_SUCCESS;
   ObRawObjPrivArray new_obj_priv_array;
@@ -4560,7 +4580,10 @@ int ObDDLOperator::grant_routine(
   } else {
     ObPrivSet new_priv = priv_set;
     ObPrivSet routine_priv_set = OB_PRIV_SET_EMPTY;
-    if (OB_FAIL(schema_guard.get_routine_priv_set(routine_priv_key, routine_priv_set))) {
+    ret = read_transaction_privileges
+        ? ObPrivSqlService::get_routine_priv_in_transaction(routine_priv_key, trans, routine_priv_set)
+        : schema_guard.get_routine_priv_set(routine_priv_key, routine_priv_set);
+    if (OB_FAIL(ret)) {
     } else {
       bool need_flush = true;
       new_priv |= routine_priv_set;
@@ -5024,7 +5047,8 @@ int ObDDLOperator::revoke_routine(
     bool report_error,
     const bool gen_ddl_stmt,
     const common::ObString &grantor,
-    const common::ObString &grantor_host)
+    const common::ObString &grantor_host,
+    const bool read_transaction_privileges)
 {
   int ret = OB_SUCCESS;
 
@@ -5040,7 +5064,10 @@ int ObDDLOperator::revoke_routine(
   } else if (OB_FAIL(schema_service_.get_runtime_schema_guard(schema_guard))) {
   } else {
     ObPrivSet routine_priv_set = OB_PRIV_SET_EMPTY;
-    if (OB_FAIL(schema_guard.get_routine_priv_set(routine_priv_key, routine_priv_set))) {
+    ret = read_transaction_privileges
+        ? ObPrivSqlService::get_routine_priv_in_transaction(routine_priv_key, trans, routine_priv_set)
+        : schema_guard.get_routine_priv_set(routine_priv_key, routine_priv_set);
+    if (OB_FAIL(ret)) {
     } else if (OB_PRIV_SET_EMPTY == routine_priv_set) {
       if (report_error) {
         ret = OB_ERR_CANNOT_REVOKE_PRIVILEGES_YOU_DID_NOT_GRANT;

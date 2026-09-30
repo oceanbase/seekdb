@@ -23,6 +23,7 @@
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "share/ob_errno.h"
 #include <algorithm>
+#include <functional>
 
 namespace oceanbase
 {
@@ -52,7 +53,8 @@ public:
   int init(const ObIArray<ObSortFieldCollation> *sort_collations,
       const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
       const common::ObIArray<const ObChunkDatumStore::StoredRow*> &rows,
-      const common::ObDatumAccessContext *datum_access_ctx);
+      const common::ObDatumAccessContext *datum_access_ctx,
+      const common::ObIArray<ObExpr *> *expressions = nullptr, ObEvalCtx *context = nullptr);
 
   // compare function for quick sort.
   bool operator()(int64_t row_idx1, int64_t row_idx2);
@@ -69,6 +71,8 @@ public:
   const ObIArray<ObSortCmpFunc> *sort_cmp_funs_;
   const common::ObIArray<const ObChunkDatumStore::StoredRow*> *rows_;
   const common::ObDatumAccessContext *datum_access_ctx_;
+  const common::ObIArray<ObExpr *> *expressions_;
+  ObEvalCtx *context_;
 };
 
 class ObMaxDatumRowCompare
@@ -78,7 +82,8 @@ public:
   int init(const ObIArray<ObSortFieldCollation> *sort_collations,
       const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
       const common::ObIArray<const ObChunkDatumStore::LastStoredRow*> &rows,
-      const common::ObDatumAccessContext *datum_access_ctx);
+      const common::ObDatumAccessContext *datum_access_ctx,
+      const common::ObIArray<ObExpr *> *expressions = nullptr, ObEvalCtx *context = nullptr);
 
   // compare function for quick sort.
   bool operator()(int64_t row_idx1, int64_t row_idx2);
@@ -95,6 +100,8 @@ public:
   const ObIArray<ObSortCmpFunc> *sort_cmp_funs_;
   const common::ObIArray<const ObChunkDatumStore::LastStoredRow*> *rows_;
   const common::ObDatumAccessContext *datum_access_ctx_;
+  const common::ObIArray<ObExpr *> *expressions_;
+  ObEvalCtx *context_;
 };
 
 /*
@@ -111,7 +118,8 @@ public:
   /* Initialization method (1) */
   int init(int64_t capacity, const ObIArray<ObSortFieldCollation> *sort_collations,
       const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
-      const common::ObDatumAccessContext *datum_access_ctx = nullptr);
+      const common::ObDatumAccessContext *datum_access_ctx = nullptr,
+      const common::ObIArray<ObExpr *> *expressions = nullptr, ObEvalCtx *context = nullptr);
 
   /* Initialization method (2) */
   /* For ObPxMergeSort, the two parameters of the above init function cannot be obtained at the same time, so it is split into two functions for init */
@@ -184,7 +192,8 @@ template <class COMPARE, class ROW>
 int ObRowHeap<COMPARE, ROW>::init(int64_t capacity,
   const ObIArray<ObSortFieldCollation> *sort_collations,
   const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
-  const common::ObDatumAccessContext *datum_access_ctx)
+  const common::ObDatumAccessContext *datum_access_ctx,
+  const common::ObIArray<ObExpr *> *expressions, ObEvalCtx *context)
 {
   int ret = common::OB_SUCCESS;
   if (capacity <= 0) {
@@ -193,7 +202,7 @@ int ObRowHeap<COMPARE, ROW>::init(int64_t capacity,
   } else if (OB_FAIL(row_idx_.reserve(capacity))) {
   } else if (OB_FAIL(row_arr_.prepare_allocate(capacity))) {
   } else if (OB_FAIL(indexed_row_comparer_.init(
-                 sort_collations, sort_cmp_funs, row_arr_, datum_access_ctx))) {
+                 sort_collations, sort_cmp_funs, row_arr_, datum_access_ctx, expressions, context))) {
   } else {
     writable_ch_idx_ = 0;
     capacity_ = capacity;
@@ -247,7 +256,7 @@ int ObRowHeap<COMPARE, ROW>::push(const ROW *row)
     row_arr_.at(writable_ch_idx_++) = row;
     std::push_heap(&row_idx_.at(0),
                    (&row_idx_.at(0)) + row_idx_.count(),
-                   indexed_row_comparer_);
+                   std::ref(indexed_row_comparer_));
     if (OB_FAIL(indexed_row_comparer_.get_ret())) {
     }
   }
@@ -266,7 +275,7 @@ int ObRowHeap<COMPARE, ROW>::pop(const ROW *&row)
     SQL_ENG_LOG(WARN, "can not pop any element before the heap is full", K(ret));
   } else if (FALSE_IT(std::pop_heap(&row_idx_.at(0),
                                     (&row_idx_.at(0)) + row_idx_.count(),
-                                    indexed_row_comparer_))) {
+                                    std::ref(indexed_row_comparer_)))) {
   } else if (OB_FAIL(indexed_row_comparer_.get_ret())) {
   } else if (OB_FAIL(row_idx_.pop_back(writable_ch_idx_))) {
   } else if (OB_UNLIKELY(NULL == row_arr_.at(writable_ch_idx_))) {

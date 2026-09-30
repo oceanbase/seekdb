@@ -29,6 +29,8 @@
 #include "share/geo/ob_geo_reverse_coordinate_visitor.h"
 #include "share/object/ob_obj_cast_util.h"
 #include "share/geo/ob_geo_cache.h"
+#include "seekdb/geo/polygon_repair.hpp"
+#include "seekdb/geo/geographic_box.hpp"
 
 using namespace oceanbase::common;
 namespace oceanbase
@@ -473,59 +475,19 @@ int ObGeoExprUtils::get_box_bestsrid(ObGeogBox *geo_box1,
                                      ObGeogBox *geo_box2,
                                      int32 &bestsrid)
 {
-  int ret = OB_SUCCESS;
-  double width = 0.0;
-  double height = 0.0;
-  ObPoint2d center;
-  ObGeogBox geo_box;
-
-  if (OB_ISNULL(geo_box1)) {
-    ret = OB_ERR_NULL_VALUE;
-  } else {
-    geo_box = *geo_box1;
-    if (geo_box2 != NULL) {
-      ObGeoBoxUtil::box_union(*geo_box2, geo_box);
-    }
-    ObGeoBoxUtil::get_box_center(geo_box, center);
-    width = 180.0 * ObGeoBoxUtil::caculate_box_angular_width(geo_box) / M_PI;
-    height = 180.0 * ObGeoBoxUtil::caculate_box_angular_height(geo_box) / M_PI;
-  }
-
-  const double UTM_ZONE_GAP = 6.0;
-  const uint8_t UTM_ZONE_NUM = 60;
+  static_assert(SRID_WORLD_MERCATOR_PG == seekdb::geo::spherical::world_mercator &&
+      SRID_NORTH_UTM_START_PG == seekdb::geo::spherical::north_utm &&
+      SRID_SOUTH_UTM_START_PG == seekdb::geo::spherical::south_utm &&
+      SRID_NORTH_LAMBERT_PG == seekdb::geo::spherical::north_lambert &&
+      SRID_SOUTH_LAMBERT_PG == seekdb::geo::spherical::south_lambert &&
+      SRID_LAEA_START_PG == seekdb::geo::spherical::laea_start, "shared PG SRID space drift");
   bestsrid = SRID_WORLD_MERCATOR_PG;
-  if (OB_FAIL(ret)) {
-    // do nothing
-  } else if (height < 45.0 && center.y > 70.0) {
-    bestsrid = SRID_NORTH_LAMBERT_PG;
-  } else if (height < 45.0 && center.y <= -70.0) {
-    bestsrid = SRID_SOUTH_LAMBERT_PG;
-  } else if (width < UTM_ZONE_GAP) {
-    uint32_t utm_zone = floor((center.x + 180.0) / UTM_ZONE_GAP);
-    if (utm_zone >= UTM_ZONE_NUM) {
-      utm_zone = UTM_ZONE_NUM - 1;
-    }
-    if (center.y < 0.0) {
-      bestsrid = SRID_SOUTH_UTM_START_PG + utm_zone;
-    } else {
-      bestsrid = SRID_NORTH_UTM_START_PG + utm_zone;
-    }
-  } else if (height < 25.0) {
-    int32_t x_zone = -1;
-    int32_t y_zone = floor(center.y / 30.0) + 3;
-    if (width < 30.0 && (y_zone == 2 || y_zone == 3)) {
-      x_zone = floor(center.x / 30.0) + 6;
-    } else if (width < 45.0 && (y_zone == 1 || y_zone == 4)) {
-      x_zone = floor(center.x / 45.0) + 4;
-    } else if (width < 90.0 && (y_zone == 0 || y_zone == 5)) {
-      x_zone = floor(center.x / 90.0) + 2;
-    }
-    if (x_zone != -1) {
-      bestsrid = SRID_LAEA_START_PG + 20 * y_zone + x_zone;
-    }
-  }
-
-  return ret;
+  // Preserve the helper's required primary-box contract for buffer callers.
+  if (geo_box1 == nullptr) return OB_ERR_NULL_VALUE;
+  ObGeogBox box = *geo_box1;
+  if (geo_box2 != nullptr) ObGeoBoxUtil::box_union(*geo_box2, box);
+  bestsrid = seekdb::geo::spherical::best_srid(box);
+  return OB_SUCCESS;
 }
 
 int ObGeoExprUtils::normalize_wkb(const ObSrsItem *srs,
@@ -901,67 +863,63 @@ int ObGeoExprUtils::make_valid_polygon_inner(
   int ret = OB_SUCCESS;
   ObArenaAllocator &allocator = mem_ctx->get_arena_allocator();
   if (!poly.empty() && poly.inner_ring_size() != 0) {
-    ObCartesianPolygon tmp_ext_poly;
-    tmp_ext_poly.exterior_ring() = poly.exterior_ring();
-    ObGeometry *holes_union = nullptr;
-    ObGeometry *shells_union = nullptr;
-    for (uint32_t i = 0; OB_SUCC(ret) && i < poly.inner_ring_size(); ++i) {
-      ObCartesianPolygon tmp_poly;
-      tmp_poly.exterior_ring() = poly.inner_ring(i);
-      bool is_intersects = false;
+    // All handles outlive the helper and this function; no stack shell may
+    // escape through valid_poly when the algorithm selects the original shell.
+    ObCartesianPolygon *shell = OB_NEWx(ObCartesianPolygon, &allocator, 0, allocator);
+    if (OB_ISNULL(shell)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      shell->exterior_ring() = poly.exterior_ring();
+    }
+    const auto hole_at = [&](unsigned long i, ObGeometry *&hole) {
+      int ret = OB_SUCCESS;
+      ObCartesianPolygon *part = OB_NEWx(ObCartesianPolygon, &allocator, 0, allocator);
+      if (OB_ISNULL(part)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+      } else {
+        part->exterior_ring() = poly.inner_ring(i);
+        ObGeoEvalCtx correct_ctx(mem_ctx);
+        int unused = 0;
+        if (OB_FAIL(correct_ctx.append_geo_arg(part))) {
+        } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Correct>::geo_func::eval(correct_ctx, unused))) {
+        } else {
+          hole = part;
+        }
+      }
+      return ret;
+    };
+    const auto intersects = [&](ObGeometry *hole, ObGeometry *exterior, bool &value) {
+      int ret = OB_SUCCESS;
       ObGeoEvalCtx intersects_ctx(mem_ctx);
-      int res_unused;
-      if (OB_FAIL(intersects_ctx.append_geo_arg(&tmp_poly))) {
-      } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Correct>::geo_func::eval(intersects_ctx, res_unused))) {
-      } else if (OB_FAIL(intersects_ctx.append_geo_arg(&tmp_ext_poly))) {
-      } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Intersects>::geo_func::eval(
-                    intersects_ctx, is_intersects))) {
-      } else if (is_intersects) {
-        // holes
-        if (OB_ISNULL(holes_union)) {
-          ObCartesianPolygon *holes = OB_NEWx(ObCartesianPolygon, &allocator, tmp_poly);
-          if (OB_ISNULL(holes)) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-          } else {
-            holes_union = holes;
-          }
-        } else if (OB_FAIL(union_polygons(mem_ctx, *&tmp_poly, holes_union))) {
-        }
-      } else {
-        // shells
-        if (OB_ISNULL(shells_union)) {
-          ObCartesianPolygon *shells = OB_NEWx(ObCartesianPolygon, &allocator, tmp_poly);
-          if (OB_ISNULL(shells)) {
-            ret = OB_ALLOCATE_MEMORY_FAILED;
-          } else {
-            shells_union = shells;
-          }
-        } else if (OB_FAIL(union_polygons(mem_ctx, *&tmp_poly, shells_union))) {
-        }
+      if (OB_FAIL(intersects_ctx.append_geo_arg(hole))) {
+      } else if (OB_FAIL(intersects_ctx.append_geo_arg(exterior))) {
+      } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Intersects>::geo_func::eval(intersects_ctx, value))) {
       }
-    }
-    if (OB_FAIL(ret)) {
-    } else if (OB_ISNULL(holes_union)) {
-      holes_union = &tmp_ext_poly;
-    } else {
+      return ret;
+    };
+    const auto merge = [&](ObGeometry *part, ObGeometry *&group) {
+      return union_polygons(mem_ctx, *part, group);
+    };
+    const auto sym_difference = [&](ObGeometry *exterior, ObGeometry *holes, ObGeometry *&output) {
+      int ret = OB_SUCCESS;
       ObGeoEvalCtx diff_ctx(mem_ctx);
-      ObGeometry *diff_holes = nullptr;
-      if (OB_FAIL(diff_ctx.append_geo_arg(&tmp_ext_poly))) {
-      } else if (OB_FAIL(diff_ctx.append_geo_arg(holes_union))) {
-      } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::SymDifference>::geo_func::eval(diff_ctx, diff_holes))) {
-      } else {
-        holes_union = diff_holes;
+      if (OB_FAIL(diff_ctx.append_geo_arg(exterior))) {
+      } else if (OB_FAIL(diff_ctx.append_geo_arg(holes))) {
+      } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::SymDifference>::geo_func::eval(diff_ctx, output))) {
       }
-    }
+      return ret;
+    };
+    ObGeometry *shell_handle = shell;
+    ObGeometry *repaired = nullptr;
     if (OB_FAIL(ret)) {
-    } else if (OB_NOT_NULL(shells_union)
-              && OB_FAIL(union_polygons(mem_ctx, *shells_union, holes_union))) {
+    } else if (OB_FAIL(seekdb::geo::cartesian::repair_polygon_holes(shell_handle,
+                   poly.inner_ring_size(), hole_at, intersects, merge, sym_difference, repaired))) {
     } else {
-      if (holes_union->type() == ObGeoType::MULTIPOLYGON
-         && static_cast<ObCartesianMultipolygon*>(holes_union)->size() == 1) {
-        valid_poly = &static_cast<ObCartesianMultipolygon*>(holes_union)->front();
+      if (repaired->type() == ObGeoType::MULTIPOLYGON
+         && static_cast<ObCartesianMultipolygon*>(repaired)->size() == 1) {
+        valid_poly = &static_cast<ObCartesianMultipolygon*>(repaired)->front();
       } else {
-        valid_poly = holes_union;
+        valid_poly = repaired;
       }
     }
   } else if (!poly.empty() && poly.inner_ring_size() == 0) {

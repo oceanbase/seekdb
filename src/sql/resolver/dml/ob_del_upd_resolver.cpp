@@ -150,6 +150,7 @@ int ObDelUpdResolver::resolve_assignments(const ParseNode &parse_node,
           } else {
             // 1. set geo sub type to cast mode to column covert expr when update
             // 2. check geo type while doing column covert.
+#if SEEKDB_ENABLE_CORE_GIS
             if (column->is_geo_ && T_FUN_COLUMN_CONV == expr->get_expr_type()) {
               ObColumnRefRawExpr *raw_expr = column->get_expr();
               if (OB_ISNULL(raw_expr)) {
@@ -163,6 +164,7 @@ int ObDelUpdResolver::resolve_assignments(const ParseNode &parse_node,
                 }
               }
             }
+#endif
             if (OB_SUCC(ret)) {
               assignment.expr_ = expr;
               if (OB_FAIL(add_assignment(table_assigns, table, column, assignment))) {
@@ -578,6 +580,7 @@ int ObDelUpdResolver::resolve_additional_assignments(ObIArray<ObTableAssignment>
             } else {
               // 1. set geo sub type to cast mode to column covert expr when update
               // 2. check geo type while doing column covert.
+#if SEEKDB_ENABLE_CORE_GIS
               if (col_item->is_geo_ && T_FUN_COLUMN_CONV == assignment.expr_->get_expr_type()) {
                 ObColumnRefRawExpr *raw_expr = col_item->get_expr();
                 if (OB_ISNULL(raw_expr)) {
@@ -591,6 +594,7 @@ int ObDelUpdResolver::resolve_additional_assignments(ObIArray<ObTableAssignment>
                   }
                 }
               }
+#endif
               if (OB_SUCC(ret)) {
                 if (OB_FAIL(add_assignment(assigns, table_item, col_item, assignment))) {
                 }

@@ -44,21 +44,20 @@ public:
 class ObDASSpatialScanIter : public ObDASScanIter
 {
 public:
-  ObDASSpatialScanIter(ObIAllocator &allocator)
+  ObDASSpatialScanIter(ObIAllocator &)
     : ObDASScanIter(),
       scan_ctdef_(nullptr),
       scan_rtdef_(nullptr),
       mbr_filters_(nullptr),
-      mbr_filter_cnt_(0),
-      max_rowkey_cnt_(-1),
-      allocator_(&allocator),
-      obj_ptr_(nullptr) {}
+      is_whole_range_(false),
+      mbr_filter_cnt_(0) {}
 
   void set_scan_param(storage::ObTableScanParam &scan_param);
 
 protected:
   virtual int inner_init(ObDASIterParam &param) override;
   virtual int inner_get_next_row() override;
+  virtual int inner_get_next_rows(int64_t &count, int64_t capacity) override;
   
 private:
   int filter_by_mbr(bool &got_row);
@@ -71,10 +70,6 @@ private:
   bool is_whole_range_;
 
   int64_t mbr_filter_cnt_;
-  int64_t max_rowkey_cnt_;
-
-  ObIAllocator* allocator_;
-  ObObj *obj_ptr_;
 };
 
 

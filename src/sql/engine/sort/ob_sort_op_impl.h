@@ -270,7 +270,8 @@ public:
       const ExprFixedArray *exprs = nullptr,
       const int64_t est_rows = 0,
       const bool use_compact_format = false,
-      const ObPushDownTopNFilterInfo *pd_topn_filter_info = nullptr);
+      const ObPushDownTopNFilterInfo *pd_topn_filter_info = nullptr,
+      const common::ObIArray<ObExpr *> *comparison_exprs = nullptr);
 
   virtual int64_t get_prefix_pos() const { return 0;  }
   // keep initialized, can sort same rows (same cell type, cell count, projector) after reuse.
@@ -431,7 +432,9 @@ public:
     int init(const ObIArray<ObSortFieldCollation> *sort_collations,
         const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
         ObExecContext *exec_ctx,
-        bool enable_encode_sortkey);
+        bool enable_encode_sortkey,
+        const common::ObIArray<ObExpr *> *comparison_exprs = nullptr,
+        ObEvalCtx *eval_ctx = nullptr);
 
     // compare function for quick sort.
     bool operator()(const ObChunkDatumStore::StoredRow *l, const ObChunkDatumStore::StoredRow *r);
@@ -476,6 +479,8 @@ public:
     const ObIArray<ObSortCmpFunc> *sort_cmp_funs_;
     ObExecContext *exec_ctx_;
     const common::ObDatumAccessContext *access_ctx_;
+    const common::ObIArray<ObExpr *> *comparison_exprs_;
+    ObEvalCtx *eval_ctx_;
     bool enable_encode_sortkey_;
     int64_t cmp_count_;
     int64_t cmp_start_;
@@ -879,6 +884,7 @@ protected:
   ObTempBlockStore::BlockHolder compact_blk_holder_;
   ObChunkDatumStore::IteratedBlockHolder default_blk_holder_;
   const ExprFixedArray *sort_exprs_;
+  const common::ObIArray<ObExpr *> *comparison_exprs_;
   common::ObCompressorType compress_type_;
   bool use_compact_format_;
   ObPushDownTopNFilter pd_topn_filter_;

@@ -761,6 +761,11 @@ public:
 
   int set_role_id_array(ObPLFunction &routine, share::schema::ObSchemaGetterGuard &guard);
   void reset_role_id_array(int &ret);
+  // Native callbacks join the caller's SQL/SPI transaction. Reuse routine
+  // environment/security restoration without opening a PL implicit transaction.
+  int enter_native(sql::ObSQLSessionInfo &, sql::ObExecContext &,
+                   const share::schema::ObRoutineInfo &, share::schema::ObSchemaGetterGuard &);
+  void leave_native(int &ret);
 
   ObIArray<ObPLExecState *> &get_exec_stack() { return exec_stack_; }
 
@@ -807,6 +812,8 @@ private:
   void set_my_exec_ctx(sql::ObExecContext *my_exec_ctx) { my_exec_ctx_ = my_exec_ctx; }
 private:
   ObPLCursorInfo cursor_info_;
+  int set_role_id_array(bool invoker_right, const ObString &priv_user,
+                        share::schema::ObSchemaGetterGuard &guard);
   ObPLSqlCodeInfo sqlcode_info_;
   ObPLExecRecursionCtx recursion_ctx_;
   bool inc_recursion_depth_;

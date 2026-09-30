@@ -144,7 +144,10 @@ int ObExprPrivSTBestsrid::eval_st_bestsrid(const ObExpr &expr, ObEvalCtx &ctx, O
 
   if (OB_SUCC(ret) && !is_null_res) {
     int32_t bestsrid = SRID_WORLD_MERCATOR_PG;
-    if (!is_geo_empty && OB_FAIL(ObGeoExprUtils::get_box_bestsrid(geo_box1, geo_box2, bestsrid))) {
+    // Empty input contributes no box, independent of argument position.
+    ObGeogBox *primary = geo_box1 != nullptr ? geo_box1 : geo_box2;
+    ObGeogBox *secondary = geo_box1 != nullptr ? geo_box2 : nullptr;
+    if (primary != nullptr && OB_FAIL(ObGeoExprUtils::get_box_bestsrid(primary, secondary, bestsrid))) {
     } else {
       res.set_int(bestsrid);
     }

@@ -1,0 +1,20 @@
+manifest_schema_version = 1
+plugin_id = "org.seekdb.reference.registration-conflict"
+package_version = "1.0.0"
+build_id = "reference-registration-conflict-abi-v1"
+abi_major = 1
+abi_minor = 0
+catalog_schema_version = 0
+data_format_version = 0
+entrypoint = "seekdb_reference_registration_conflict.so"
+capabilities = []
+
+[[provides]]
+service_id = "org.seekdb.reference.registration-conflict.shared"
+version = "1.0.0"
+
+[[provides]]
+service_id = "org.seekdb.reference.registration-conflict.after-abort"
+version = "1.0.0"
+
+requires = []

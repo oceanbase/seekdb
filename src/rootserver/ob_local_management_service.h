@@ -34,6 +34,7 @@
 #include "rootserver/ob_snapshot_info_manager.h"
 #include "rootserver/ob_objpriv_mysql_ddl_service.h"
 #include "query/command/ob_root_command_service.h"
+#include <memory>
 
 namespace oceanbase
 {
@@ -57,6 +58,11 @@ class ObTabletID;
 
 namespace share
 {
+namespace plugin {
+class IExtensionCatalogInstaller;
+class IExtensionCatalogDropper;
+class IExtensionCatalogUpdater;
+}
 
 class ObAutoincrementService;
 namespace schema
@@ -136,6 +142,20 @@ public:
   void set_local_command_service(query::ObILocalCommandService &service)
   {
     local_command_service_ = &service;
+  }
+  // Observer composition: only before admission or after request draining.
+  // The provider is the same catalog owned by the optional runtime.
+  void set_extension_catalog_installer(std::shared_ptr<share::plugin::IExtensionCatalogInstaller> installer)
+  {
+    std::atomic_store(&extension_catalog_installer_, std::move(installer));
+  }
+  void set_extension_catalog_dropper(std::shared_ptr<share::plugin::IExtensionCatalogDropper> dropper)
+  {
+    std::atomic_store(&extension_catalog_dropper_, std::move(dropper));
+  }
+  void set_extension_catalog_updater(std::shared_ptr<share::plugin::IExtensionCatalogUpdater> updater)
+  {
+    std::atomic_store(&extension_catalog_updater_, std::move(updater));
   }
 
   int execute_bootstrap();
@@ -238,6 +258,24 @@ public:
 
   //----Functions for managing routines----
   int create_routine(const obcall::ObCreateRoutineArg &arg);
+  int install_extension_routines(
+      const share::plugin::ExtensionInstallSpec &spec,
+      const common::ObIArray<const obcall::ObCreateRoutineArg *> &args,
+      sql::ObSQLSessionInfo &session,
+      uint64_t &extension_id, int &publication_status, std::string &error,
+      share::plugin::IExtensionRoutineScript *script = nullptr) override;
+  int drop_extension_routines(
+      const share::plugin::ExtensionDropRequest &request, sql::ObSQLSessionInfo &session,
+      uint64_t &extension_id, int &publication_status, std::string &error) override;
+  int update_extension_routines(
+      const share::plugin::ExtensionUpdateRequest &request,
+      const common::ObIArray<share::plugin::ExtensionRoutineUpdateOperation> &operations,
+      sql::ObSQLSessionInfo &session, uint64_t &extension_id, bool &changed,
+      int &publication_status, std::string &error,
+      share::plugin::IExtensionRoutineScript *script = nullptr) override;
+  int read_extension_update_source(uint64_t tenant_id, uint64_t database_id,
+      const std::string &name, sql::ObSQLSessionInfo &session,
+      share::plugin::ExtensionVersionSnapshot &snapshot, std::string &error) override;
   int drop_routine(const obcall::ObDropRoutineArg &arg);
   int alter_routine(const obcall::ObCreateRoutineArg &arg);
   //----End of functions for managing routines----
@@ -345,6 +383,9 @@ private:
   common::ObMySQLProxy sql_proxy_;
   share::schema::ObMultiVersionSchemaService *schema_service_;
   query::ObILocalCommandService *local_command_service_;
+  std::shared_ptr<share::plugin::IExtensionCatalogInstaller> extension_catalog_installer_;
+  std::shared_ptr<share::plugin::IExtensionCatalogDropper> extension_catalog_dropper_;
+  std::shared_ptr<share::plugin::IExtensionCatalogUpdater> extension_catalog_updater_;
 
   // minor freeze
   ObRootMinorFreeze root_minor_freeze_;

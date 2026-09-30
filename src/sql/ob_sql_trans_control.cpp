@@ -17,6 +17,8 @@
 #define USING_LOG_PREFIX SQL_EXE
 
 #include "ob_sql_trans_control.h"
+#include "sql/engine/ob_exec_context.h"
+#include "sql/engine/ob_physical_plan.h"
 #include "data_plane/tablelock/ob_table_lock.h"
 #include "data_plane/transaction/ob_deadlock.h"
 #include "data_plane/transaction/ob_lock_wait_stat.h"
@@ -427,6 +429,7 @@ int ObSqlTransControl::do_end_trans_(ObSQLSessionInfo *session,
   int ret = OB_SUCCESS;
   ObTxDesc *&tx_ptr = session->get_tx_desc();
   const ObTransID tx_id = data_plane::tx_desc_id(tx_ptr);
+  const int64_t tx_seq_base = data_plane::tx_desc_seq_base(tx_ptr);
   const int64_t lcl_op_interval = GCONF._lcl_op_interval;
   if (lcl_op_interval > 0) {
     data_plane::finish_transaction_deadlock(data_plane::tx_desc_id(tx_ptr));
@@ -444,11 +447,25 @@ int ObSqlTransControl::do_end_trans_(ObSQLSessionInfo *session,
     data_plane::ObITransactionService *txs = NULL;
     
     if (OB_FAIL(get_tx_service(session, txs))) {
+    } else if (!is_rollback && OB_FAIL(session->prepare_plugin_catalog_commit(expire_ts))) {
+      // Do not submit a poisoned/mismatched private catalog participant. The
+      // data transaction still belongs to this caller and must be terminated.
+      const int primary = ret;
+      // Preparation executes nested SQL. Never dereference a reset descriptor
+      // or roll back a different transaction if that SQL changed session state.
+      const int rollback_ret = tx_ptr != nullptr && data_plane::tx_desc_id(tx_ptr) == tx_id &&
+          data_plane::tx_desc_seq_base(tx_ptr) == tx_seq_base
+          ? txs->rollback_tx(*tx_ptr, expire_ts) : OB_TRANS_INVALID_STATE;
+      (void)session->complete_plugin_catalog_transaction(tx_id.get_id(), rollback_ret, true);
+      ret = primary;
     } else if (is_rollback) {
       ret = txs->rollback_tx(*tx_ptr, expire_ts);
+      const int catalog_ret = session->complete_plugin_catalog_transaction(tx_id.get_id(), ret, true);
+      if (ret == OB_SUCCESS) ret = catalog_ret;
     } else if (callback) {
       if (OB_FAIL(inc_session_ref(session))) {
       } else {
+        callback->set_transaction_id(tx_id.get_id());
         callback->handout();
         if(OB_FAIL(txs->submit_commit_tx(*tx_ptr, expire_ts, *callback))) {
           LOG_WARN("submit commit tx fail", K(ret), KP(callback), K(expire_ts),
@@ -460,6 +477,8 @@ int ObSqlTransControl::do_end_trans_(ObSQLSessionInfo *session,
     } else {
       if (OB_FAIL(txs->commit_tx(*tx_ptr, expire_ts))) {
       }
+      const int catalog_ret = session->complete_plugin_catalog_transaction(tx_id.get_id(), ret, false);
+      if (ret == OB_SUCCESS) ret = catalog_ret;
     }
   }
 
@@ -807,6 +826,58 @@ int ObSqlTransControl::stmt_setup_savepoint_(ObSQLSessionInfo *session,
   return ret;
 }
 
+int ObSqlTransControl::prepare_plugin_sql(ObExecContext &caller)
+{
+  int ret = OB_SUCCESS;
+  ObSQLSessionInfo *session = caller.get_my_session();
+  data_plane::ObITransactionService *txs = nullptr;
+  ObSEArray<ObExecContext *, 8> owners;
+  if (caller.get_physical_plan_ctx() == nullptr
+      || caller.get_physical_plan_ctx()->get_phy_plan() == nullptr) {
+    return OB_STATE_NOT_MATCH; // no SQL during constant folding or command init
+  }
+  // Validate the complete chain before opening a transaction. A command/PL
+  // frame can sit between SQL frames and already has its own transaction
+  // owner; only physical SELECT result sets need the additional savepoint.
+  for (ObExecContext *ctx = &caller; OB_SUCC(ret) && ctx != nullptr;
+       ctx = ctx->get_parent_ctx()) {
+    if (ctx->get_my_session() != session || owners.count() >= 64) {
+      ret = OB_STATE_NOT_MATCH;
+    } else if (ctx->has_plugin_sql_savepoint()
+        && (session == nullptr || session->get_tx_id().get_id() != ctx->get_plugin_sql_tx_id())) {
+      ret = OB_TRANS_INVALID_STATE;
+    } else {
+      ret = owners.push_back(ctx);
+    }
+  }
+  if (OB_SUCC(ret) && OB_ISNULL(session)) ret = OB_INVALID_ARGUMENT;
+  if (OB_SUCC(ret)) ret = get_tx_service(session, txs);
+  if (OB_SUCC(ret)) ret = acquire_tx_if_need_(txs, *session);
+  for (int64_t i = owners.count() - 1; OB_SUCC(ret) && i >= 0; --i) {
+    ObExecContext &ctx = *owners.at(i);
+    ObPhysicalPlanCtx *plan_ctx = ctx.get_physical_plan_ctx();
+    const ObPhysicalPlan *plan = plan_ctx == nullptr ? nullptr : plan_ctx->get_phy_plan();
+    if (plan != nullptr && plan->is_plain_select() && !ctx.has_plugin_sql_savepoint()) {
+      // A SELECT without table access may not have executed start_stmt().
+      // Use the exact same transaction setup as ordinary DML, without
+      // replacing its read snapshot or overwriting an existing DML savepoint.
+      if (OB_FAIL(stmt_setup_savepoint_(session, ctx.get_das_ctx(), plan_ctx,
+                                       txs, ctx.get_nested_level()))) {
+      } else {
+        ctx.set_plugin_sql_savepoint(true);
+        ctx.set_plugin_sql_tx_id(session->get_tx_id().get_id());
+        // A table-free SELECT skipped start_stmt() altogether. Register its
+        // session statement before entering nested catalog/SQL execution;
+        // result-set close already owns the matching end_stmt via this flag.
+        // Do this only after savepoint success, so a failed setup cannot leave
+        // a started session with no result-set owner to clean it up.
+        if (!session->has_start_stmt()) ret = session->set_start_stmt();
+      }
+    }
+  }
+  return ret;
+}
+
 int ObSqlTransControl::create_savepoint(ObExecContext &exec_ctx,
                                         const ObString &sp_name,
                                         const bool user_create)
@@ -840,7 +911,16 @@ int ObSqlTransControl::rollback_savepoint(ObExecContext &exec_ctx,
   OZ (acquire_tx_if_need_(txs, *session));
   OX (stmt_expire_ts = get_stmt_expire_ts(plan_ctx, *session));
 
-  OZ (txs->rollback_to_explicit_savepoint(*session->get_tx_desc(), sp_name, stmt_expire_ts), sp_name);
+  if (OB_SUCC(ret)) {
+    const int64_t tx_id = data_plane::tx_desc_id(session->get_tx_desc()).get_id();
+    if (session->has_plugin_catalog_transaction()) {
+      ObTxSEQ resolved;
+      OZ(txs->rollback_to_explicit_savepoint(*session->get_tx_desc(), sp_name, stmt_expire_ts, resolved), sp_name);
+      OZ(session->rollback_plugin_catalog_view(tx_id, resolved));
+    } else {
+      OZ(txs->rollback_to_explicit_savepoint(*session->get_tx_desc(), sp_name, stmt_expire_ts), sp_name);
+    }
+  }
   if (0 == session->get_raw_audit_record().seq_num_) {
     OX (session->get_raw_audit_record().seq_num_ = ObSequence::get_max_seq_no());
   }
@@ -900,7 +980,13 @@ int ObSqlTransControl::end_stmt(ObExecContext &exec_ctx, const bool rollback, co
   CK (OB_NOT_NULL(plan = plan_ctx->get_phy_plan()));
   OX (tx_desc = session->get_tx_desc());
   OX (stmt_type = plan->get_stmt_type());
-  OX (is_plain_select = plan->is_plain_select());
+  OX (is_plain_select = plan->is_plain_select() && !exec_ctx.has_plugin_sql_savepoint());
+  if (OB_SUCC(ret) && exec_ctx.has_plugin_sql_savepoint()
+      && session->get_tx_id().get_id() != exec_ctx.get_plugin_sql_tx_id()) {
+    // A cursor may survive COMMIT/ROLLBACK. Never apply its old savepoint to
+    // a new transaction which happens to reuse the same session/descriptor.
+    return OB_TRANS_INVALID_STATE;
+  }
   OZ (get_tx_service(session, txs), *session);
 
   if (!is_plain_select) {
@@ -933,8 +1019,9 @@ int ObSqlTransControl::end_stmt(ObExecContext &exec_ctx, const bool rollback, co
       if (!rollback) {
         LOG_ERROR("trans result incomplete, but rollback not issued");
       }
-      (void) data_plane::abort_transaction(
+      const int abort_ret = data_plane::abort_transaction(
           *tx_desc, data_plane::ObTxAbortReason::INCOMPLETE_RESULT);
+      if (abort_ret == OB_SUCCESS) session->discard_plugin_catalog_transaction();
       // overwrite ret
       ret = OB_TRANS_NEED_ROLLBACK;
       LOG_WARN("trans result incomplete, trans aborted", K(ret));
@@ -956,6 +1043,7 @@ int ObSqlTransControl::end_stmt(ObExecContext &exec_ctx, const bool rollback, co
 	                                                touched_storage,
 	                                                policy),
 	            savepoint, stmt_expire_ts, touched_storage, policy);
+        OZ(session->rollback_plugin_catalog_view(tx_id_before_rollback.get_id(), savepoint));
 	        // prioritize returning session error code
         if (session->is_terminate(ret)) {
           LOG_INFO("trans has terminated when end stmt", K(ret), K(tx_id_before_rollback));
@@ -970,6 +1058,7 @@ int ObSqlTransControl::end_stmt(ObExecContext &exec_ctx, const bool rollback, co
     if (OB_NOT_NULL(tx_desc)
         && data_plane::tx_desc_id(tx_desc) != tx_id_before_rollback) {
       data_plane::rollback_statement_deadlock(tx_id_before_rollback);
+      session->discard_plugin_catalog_transaction();
     }
   }
   if (!ObSQLUtils::is_nested_sql(&exec_ctx) && OB_NOT_NULL(session)) {
@@ -1071,7 +1160,9 @@ int ObSqlTransControl::rollback_savepoint(ObExecContext &exec_ctx, const ObTxSEQ
   OZ (get_tx_service(session, txs));
   CK (OB_NOT_NULL(session->get_tx_desc()));
   OX (expire_ts = get_stmt_expire_ts(plan_ctx, *session));
+  const int64_t tx_id = session ? data_plane::tx_desc_id(session->get_tx_desc()).get_id() : 0;
   OZ (txs->rollback_to_implicit_savepoint(*session->get_tx_desc(), savepoint, expire_ts, false));
+  OZ (session->rollback_plugin_catalog_view(tx_id, savepoint));
   return ret;
 }
 /*

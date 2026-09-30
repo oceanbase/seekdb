@@ -17,6 +17,7 @@
 #ifndef OB_OCEANBASE_SCHEMA_OB_SCHEMA_GETTER_GUARD_H_
 #define OB_OCEANBASE_SCHEMA_OB_SCHEMA_GETTER_GUARD_H_
 #include <stdint.h>
+#include <memory>
 #include "share/ob_define.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/utility/ob_mod_define.h"
@@ -68,12 +69,20 @@ class ObTableSchema;
 class ObServerRuntimeSchema;
 class ObTriggerInfo;
 class ObUserInfo;
+class RoutineSchemaOverlay;
 class SchemaName;
 struct ObNeedPriv;
 struct ObSessionPrivInfo;
 struct ObStmtNeedPrivs;
 struct ObUserLoginInfo;
 
+// A proposed source per privilege, not an authorization token. The writer must
+// recheck each source in its transaction and reserve a version per grantor.
+struct NativeRoutineGrantors
+{
+  uint64_t execute_ = common::OB_INVALID_ID;
+  uint64_t alter_ = common::OB_INVALID_ID;
+};
 
 class ObSchemaMgrInfo
 {
@@ -141,6 +150,19 @@ public:
   explicit ObSchemaGetterGuard(const ObSchemaMgrItem::Mod mod);
 	virtual ~ObSchemaGetterGuard();
   int reset();
+
+  // Host-only provisional point lookup view. Attach once to a dedicated guard;
+  // reset releases it along with all other borrowed schema pointers. No global
+  // cache publication, permission bypass, or runtime enumeration overlay.
+  // Compilers using this view must isolate their provisional PL/plan caches;
+  // attachment alone does not implement that cache policy or reserve IDs.
+  int attach_routine_overlay(std::shared_ptr<const RoutineSchemaOverlay> overlay);
+  // The child keeps its own base guard and shares only the owned provisional
+  // view. This does not copy permissions, schema locks, or the parent's snapshot.
+  int inherit_routine_overlay(const ObSchemaGetterGuard &parent);
+  int capture_routine_overlay(std::shared_ptr<const RoutineSchemaOverlay> &overlay) const;
+  bool has_routine_overlay() const { return routine_overlay_ != nullptr; }
+  bool has_retired_routine_overlay() const;
 	OB_INLINE bool is_inited() const { return is_inited_; }
 
 	int get_schema_version(int64_t &schema_version) const;
@@ -535,6 +557,8 @@ public:
     return get_routine_info( database_id, common::OB_INVALID_ID, function_name,
                             0, ROUTINE_FUNCTION_TYPE, function_info);
   }
+  int get_standalone_function_infos(uint64_t database_id, const common::ObString &function_name,
+      common::ObIArray<const ObRoutineInfo *> &function_infos);
   //routine
   int get_routine_info(
                        uint64_t routine_id,
@@ -614,6 +638,22 @@ public:
   int check_routine_priv(const ObSessionPrivInfo &session_priv,
                          const common::ObIArray<uint64_t> &enable_role_id_array,
                          const ObNeedPriv &routine_need_priv);
+  // Exact native object ACL. Never falls back to a same-name routine grant.
+  // Callers supply the schema used for resolution; stale identities fail closed.
+  // transaction_acl, if present, is a complete locking-read snapshot, not a
+  // delta. grantor restricts delegation to the actor or a currently enabled,
+  // reachable role; its own rights must cover every requested grant option.
+  int check_native_routine_priv(const ObSessionPrivInfo &session_priv,
+                               const common::ObIArray<uint64_t> &enabled_roles,
+                               const ObRoutineInfo &expected, ObPrivSet required,
+                               const common::ObIArray<ObObjPriv> *transaction_acl = nullptr,
+                               uint64_t grantor = common::OB_INVALID_ID);
+
+  int select_native_routine_grantors(const ObSessionPrivInfo &actor,
+                                    const common::ObIArray<uint64_t> &enabled_roles,
+                                    const ObRoutineInfo &expected, ObPrivSet rights,
+                                    const common::ObIArray<ObObjPriv> &transaction_acl,
+                                    NativeRoutineGrantors &sources);
 
   int check_routine_definer_existed(const ObString &user_name, bool &existed);
   int get_obj_mysql_priv_with_obj_name(const ObString &obj_name,
@@ -630,6 +670,11 @@ public:
                           const ObString &ai_model_name,
                           const ObAiModelSchema *&ai_model_schema);
 private:
+  int check_native_routine_priv_impl(const ObSessionPrivInfo &actor,
+                                    const common::ObIArray<uint64_t> &enabled_roles,
+                                    const ObRoutineInfo &expected, ObPrivSet required,
+                                    const common::ObIArray<ObObjPriv> *transaction_acl,
+                                    uint64_t grantor, NativeRoutineGrantors *sources);
   int check_ssl_access(const ObUserInfo &user_info,
                        const common::ObSqlTlsInfo *tls_info);
   int check_ssl_invited_cn(const common::ObSqlTlsInfo *tls_info);
@@ -680,6 +725,7 @@ private:
 
   // TODO: add this to all member functions
   bool check_inner_stat() const;
+  int get_routine_priv_override(const ObRoutinePrivSortKey &key, bool &handled, ObPrivSet &priv_set);
 
   // SERVER_RUNTIME_SCHEMA and SYS_VARIABLE_SCHEMA use the server runtime key.
   // specified_version should be invalid for lazy mode.
@@ -746,6 +792,7 @@ private:
   SchemaGuardType schema_guard_type_;
   bool is_inited_;
   int64_t pin_cache_size_;
+  std::shared_ptr<const RoutineSchemaOverlay> routine_overlay_;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObSchemaGetterGuard);
 };

@@ -21,6 +21,11 @@
 #include "share/ob_sys_time_zone_util.h"
 
 #include "ob_ddl_service.h"
+#include "share/rc/ob_module_provider.h"
+#include "rootserver/catalog_commit_preparation.h"
+#include "rootserver/pl_ddl/native_routine_grant_writer.h"
+#include "rootserver/pl_ddl/native_routine_revoke_writer.h"
+#include "rootserver/pl_ddl/native_routine_privilege_transaction.h"
 #include "rootserver/ob_runtime_ddl_service.h"
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "share/ob_ddl_common.h"
@@ -19911,6 +19916,83 @@ int ObDDLService::exists_role_grant_cycle(
 }
 
 
+int ObDDLService::grant_native_routine(const ObGrantArg &arg)
+{
+  int ret = check_inner_stat();
+  if (OB_FAIL(ret)) return ret;
+  const ObPrivSet rights = arg.priv_set_ & ~OB_PRIV_GRANT;
+  if (!arg.is_valid() || !arg.native_target_.resolved_ ||
+      arg.native_target_.actor_id_ == OB_INVALID_ID || !rights ||
+      (rights & ~(OB_PRIV_EXECUTE | OB_PRIV_ALTER_ROUTINE)) ||
+      arg.hosts_.empty() || arg.hosts_.count() > 16384 ||
+      arg.users_passwd_.count() != arg.hosts_.count() * 2 ||
+      !arg.remain_roles_.empty() || !arg.sys_priv_array_.empty() || !arg.obj_priv_array_.empty() ||
+      !arg.column_names_priv_.empty() || !arg.ins_col_ids_.empty() || !arg.upd_col_ids_.empty() ||
+      !arg.ref_col_ids_.empty() || !arg.sel_col_ids_.empty() || arg.option_ > GRANT_OPTION)
+    return OB_INVALID_ARGUMENT;
+  ObSchemaGetterGuard guard;
+  ObSEArray<uint64_t, 4> grantees;
+  int64_t version = 0;
+  if (OB_FAIL(get_runtime_schema_guard_with_version_in_inner_table(guard))) {
+  } else if (OB_FAIL(check_parallel_ddl_conflict(guard, arg))) {
+  } else if (OB_FAIL(arg.native_target_.revalidate(guard, arg.db_, arg.table_, arg.object_id_))) {
+  } else {
+    // Native object GRANT follows PG's separate principal lifecycle: never
+    // create a user or change a password as a side effect of granting access.
+    for (int64_t i = 0; OB_SUCC(ret) && i < arg.hosts_.count(); ++i) {
+      const ObUserInfo *user = nullptr;
+      if (!arg.users_passwd_.at(i * 2 + 1).empty()) ret = OB_NOT_SUPPORTED;
+      else if (OB_FAIL(guard.get_user_info(arg.users_passwd_.at(i * 2), arg.hosts_.at(i), user))) {
+      } else if (!user) ret = OB_USER_NOT_EXIST;
+      else ret = grantees.push_back(user->get_user_id());
+    }
+  }
+  // This exclusive DDL transaction locks the schema operation stream and
+  // verifies the guard's version after locking, including current user/roles.
+  // All recipients and all dependent ACL keys are written before a single end.
+  ObDDLSQLTransaction trans(schema_service_);
+  if (OB_SUCC(ret)) ret = guard.get_schema_version(version);
+  if (OB_SUCC(ret)) {
+    ret = execute_native_routine_privilege_transaction(trans, *sql_proxy_, version,
+        [&](int64_t &changed_version) {
+          NativeRoutineGrantWriter writer(*schema_service_, guard, trans);
+          return writer.grant(arg.native_target_, grantees, rights,
+              (arg.priv_set_ & OB_PRIV_GRANT) || arg.option_ == GRANT_OPTION,
+              &arg.ddl_stmt_str_, changed_version);
+        }, [&] { return publish_schema(); });
+  }
+  return ret;
+}
+
+int ObDDLService::revoke_native_routine(const ObRevokeRoutineArg &arg)
+{
+  int ret = check_inner_stat();
+  if (OB_FAIL(ret)) return ret;
+  if (!arg.is_valid() || !arg.native_target_.resolved_ ||
+      arg.native_target_.actor_id_ == OB_INVALID_ID || arg.native_grantees_.empty() ||
+      !arg.priv_set_ || (arg.priv_set_ & ~(OB_PRIV_EXECUTE | OB_PRIV_ALTER_ROUTINE)) ||
+      !arg.obj_priv_array_.empty() || arg.revoke_all_ora_) return OB_INVALID_ARGUMENT;
+  ObSchemaGetterGuard guard;
+  int64_t version = 0;
+  if (OB_FAIL(get_runtime_schema_guard_with_version_in_inner_table(guard))) {
+  } else if (OB_FAIL(check_parallel_ddl_conflict(guard, arg))) {
+  } else if (OB_FAIL(arg.native_target_.revalidate(guard, arg.db_, arg.routine_, arg.obj_id_))) {
+  } else if (OB_FAIL(guard.get_schema_version(version))) {
+  }
+  ObDDLSQLTransaction trans(schema_service_);
+  if (OB_SUCC(ret)) {
+    ret = execute_native_routine_privilege_transaction(trans, *sql_proxy_, version,
+        [&](int64_t &changed_version) {
+          NativeRoutineRevokeWriter writer(*schema_service_, guard, trans);
+          return writer.revoke(arg.native_target_, arg.native_grantees_, arg.priv_set_, arg.grant_option_only_,
+              arg.revoke_behavior_ == ObRevokeRoutineArg::REVOKE_CASCADE
+                  ? NativeRoutineRevokePlan::Behavior::CASCADE : NativeRoutineRevokePlan::Behavior::RESTRICT,
+              &arg.ddl_stmt_str_, changed_version);
+        }, [&] { return publish_schema(); });
+  }
+  return ret;
+}
+
 int ObDDLService::grant(const ObGrantArg &arg)
 {
   int ret = OB_SUCCESS;
@@ -19920,8 +20002,13 @@ int ObDDLService::grant(const ObGrantArg &arg)
   if (OB_FAIL(check_inner_stat())) {
   } else if (OB_UNLIKELY(!arg.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
+  } else if (arg.native_target_.resolved_) {
+    ret = grant_native_routine(arg);
   } else if (OB_FAIL(get_runtime_schema_guard_with_version_in_inner_table(schema_guard))) {
   } else if (OB_FAIL(check_parallel_ddl_conflict(schema_guard, arg))) {
+  } else if (arg.priv_level_ == OB_PRIV_ROUTINE_LEVEL && arg.object_type_ == ObObjectType::FUNCTION &&
+      OB_FAIL(arg.native_target_.admit(schema_guard, arg.db_, arg.table_, arg.object_id_))) {
+    // Admission precedes auto-creation of users and every privilege write.
   } else {
     const ObIArray<ObString> &roles = arg.roles_;
     // The user_name and host_name of the first user are stored in role[0] and role[1] respectively
@@ -21920,6 +22007,9 @@ int ObDDLSQLTransaction::start(ObISQLClient *proxy,
                                bool with_snapshot /*= false*/)
 {
   int ret = OB_SUCCESS;
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  if (!is_started()) routine_invalidations_.reset();
+#endif
   if (OB_ISNULL(proxy)
       || OB_UNLIKELY(OB_INVALID_VERSION == runtime_refreshed_schema_version)) {
     ret = OB_INVALID_ARGUMENT;
@@ -21981,6 +22071,25 @@ int ObDDLSQLTransaction::lock_ddl_epoch_(common::ObMySQLTransaction &trans)
   return ret;
 }
 
+int ObDDLSQLTransaction::record_routine_invalidation(uint64_t routine_id, uint64_t database_id)
+{
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  if (!is_started() || !need_end_signal_ || enable_ddl_parallel_ || trans_start_ddl_epoch_ <= 0)
+    return OB_STATE_NOT_MATCH;
+  auto *operation = GET_TSI(share::schema::TSILastOper);
+  if (!operation) return OB_ERR_UNEXPECTED;
+  try {
+    if (!routine_invalidations_) routine_invalidations_ = std::make_unique<RoutineDdlInvalidation>();
+    return routine_invalidations_->record(database_id, routine_id,
+        operation->last_operation_schema_version_, trans_start_ddl_epoch_);
+  } catch (const std::bad_alloc &) { return OB_ALLOCATE_MEMORY_FAILED; }
+  catch (...) { return OB_ERR_UNEXPECTED; }
+#else
+  UNUSEDx(routine_id, database_id);
+  return OB_NOT_SUPPORTED;
+#endif
+}
+
 int ObDDLSQLTransaction::end(const bool commit)
 {
   int ret = OB_SUCCESS;
@@ -21994,56 +22103,41 @@ int ObDDLSQLTransaction::end(const bool commit)
     ret = OB_INVALID_ARGUMENT;
   } else if (commit && enable_check_ddl_epoch_ && OB_FAIL(lock_ddl_epoch_(*this))) {
     // compare ddl_epoch promise execute on master
-  } else if (commit && need_end_signal_) {
-    share::schema::ObSchemaService *schema_service_impl = schema_service_->get_schema_service();
-    if (OB_ISNULL(schema_service_impl)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else if (start_operation_schema_version_ == tsi_oper->last_operation_schema_version_
-               && 1UL == 1UL) {
-      LOG_INFO("ddl operation is same, just skip", K(ret),
-               K_(start_operation_schema_version));
-    } else {
-      int64_t new_schema_version = OB_INVALID_VERSION;
-      obcall::ObDDLNopOpreatorArg arg;
-      arg.schema_operation_.op_type_ = OB_DDL_END_SIGN;
-      share::schema::ObDDLSqlService ddl_sql_service(*schema_service_impl);
-      
-      if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
-      } else if (OB_FAIL(ddl_sql_service.log_nop_operation(arg.schema_operation_,
-                                                           new_schema_version,
-                                                           arg.ddl_stmt_str_,
-                                                           *this))) {
-      }
+    LOG_WARN("lock_ddl_epoch fail", K(ret));
+  } else if (commit) {
+    CatalogCommitPreparation preparation(*schema_service_, *this);
+    int64_t prepared_version = 0;
+    const int64_t last_operation_version = tsi_oper->last_operation_schema_version_;
+    if (OB_FAIL(preparation.prepare(last_operation_version,
+        start_operation_schema_version_ != tsi_oper->last_operation_schema_version_,
+        need_end_signal_, prepared_version))) {
+      LOG_WARN("failed to prepare schema transaction commit", KR(ret));
     }
-  }
-
-  if (OB_SUCC(ret) && commit) {
-    if (FAILEDx(register_ddl_trans_signal())) {
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+    if (OB_SUCC(ret) && routine_invalidations_) {
+      ret = routine_invalidations_->prepare(last_operation_version, prepared_version,
+          [](share::schema::RoutineCatalogTransaction &journal, uint64_t scope) {
+            return share::g_mp ? share::g_mp->reserve_routine_invalidations(journal, scope) : OB_NOT_INIT;
+          });
     }
-  }
-
-  // Set the normal schema watermark only after all schema operations have
-  // finished and, for parallel DDL, wait_task_ready() has granted this
-  // transaction permission to commit. Updating the shared core-table row in
-  // log_operation() lets a later DDL task hold the row lock while it waits for
-  // an earlier task, forming a lock-order cycle. Keeping the update in this
-  // transaction preserves atomic visibility with the schema records. The
-  // incremental set only moves the watermark forward.
-  if (OB_SUCC(ret)
-      && commit
-      && start_operation_schema_version_ != tsi_oper->last_operation_schema_version_) {
-    const int64_t final_schema_version = tsi_oper->last_operation_schema_version_;
-    if (OB_UNLIKELY(final_schema_version <= 0)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      ObGlobalStatProxy proxy(*this);
-      if (OB_FAIL(proxy.set_normal_schema_version(final_schema_version))) {
-      }
-    }
+#endif
   }
 
   if (OB_SUCCESS != (tmp_ret = common::ObMySQLTransaction::end(commit && OB_SUCC(ret)))) {
   }
+
+#if defined(SEEKDB_WITH_EXPERIMENTAL_PLUGINS)
+  if (routine_invalidations_) {
+    // Never interpret a transport failure as a known rollback. Destruction
+    // hands uncertain requests to the existing conservative, version-gated
+    // queue; successful rollback cancels and successful commit publishes.
+    if (tmp_ret == OB_SUCCESS) {
+      const int cache_ret = routine_invalidations_->finish(commit && OB_SUCC(ret));
+      if (cache_ret != OB_SUCCESS) LOG_WARN("failed to notify routine cache outcome", K(cache_ret));
+    }
+    routine_invalidations_.reset();
+  }
+#endif
 
   ret = OB_SUCC(ret) ? tmp_ret : ret;
   // Clear runtime_ for success or failure
@@ -22053,17 +22147,134 @@ int ObDDLSQLTransaction::end(const bool commit)
 
 int ObDDLSQLTransaction::register_ddl_trans_signal()
 {
-  int ret = OB_SUCCESS;
-  if (OB_UNLIKELY(!is_started())) {
-    ret = OB_INVALID_ARGUMENT;
-  } else {
-    const char signal = '\0';
-    if (OB_FAIL(register_tx_data(transaction::ObTxDataSourceType::DDL_TRANS,
-                                &signal,
-                                sizeof(signal)))) {
+  return CatalogCommitPreparation::register_transaction_signal(*this);
+}
+
+CatalogDDLAdmission::CatalogDDLAdmission(ObMultiVersionSchemaService &schema_service,
+    ObMySQLTransaction &transaction, ObISQLClient &fresh_reader)
+    : schema_service_(schema_service), transaction_(transaction), fresh_reader_(fresh_reader)
+{}
+
+int CatalogDDLAdmission::acquire(int64_t refreshed_schema_version, int64_t absolute_deadline, int64_t &epoch)
+{
+  epoch = 0;
+  if (attempted_) return OB_INIT_TWICE;
+  attempted_ = true;
+  if (refreshed_schema_version <= 0 || absolute_deadline <= 0 || &fresh_reader_ == &transaction_)
+    return OB_INVALID_ARGUMENT;
+  try {
+    if (!transaction_.is_started()) return OB_STATE_NOT_MATCH;
+    ObTimeoutCtx timeout;
+    const int64_t deadline = std::min(absolute_deadline, timeout.get_abs_timeout(absolute_deadline));
+    int ret = timeout.set_abs_timeout(deadline);
+    int64_t captured = 0, current = 0;
+    if (OB_SUCC(ret) && timeout.is_timeouted()) ret = OB_TIMEOUT;
+    if (OB_SUCC(ret)) ret = capture_epoch(captured);
+    if (OB_SUCC(ret) && captured <= 0) ret = OB_ERR_UNEXPECTED;
+    if (OB_SUCC(ret) && timeout.is_timeouted()) ret = OB_TIMEOUT;
+    if (OB_SUCC(ret)) ret = lock(timeout.get_timeout());
+    // Compare against a fresh committed version AFTER holding the same global
+    // DDL lock as Root. Using the caller's RR snapshot could accept stale schema.
+    // Do not lock the core-table watermark here; epoch is rechecked at commit.
+    if (OB_SUCC(ret)) ret = read_version(current);
+    if (OB_SUCC(ret) && current != refreshed_schema_version) ret = OB_EAGAIN;
+    if (OB_SUCC(ret) && (!transaction_.is_started() || timeout.is_timeouted()))
+      ret = timeout.is_timeouted() ? OB_TIMEOUT : OB_STATE_NOT_MATCH;
+    if (OB_SUCC(ret)) epoch = captured;
+    return ret;
+  } catch (const std::bad_alloc &) { return OB_ALLOCATE_MEMORY_FAILED; }
+  catch (...) { return OB_ERR_UNEXPECTED; }
+}
+
+int CatalogDDLAdmission::capture_epoch(int64_t &epoch)
+{ return schema_service_.get_ddl_epoch_mgr().get_ddl_epoch(epoch); }
+
+int CatalogDDLAdmission::lock(int64_t timeout_us)
+{ return lock_transaction(transaction_, false, timeout_us); }
+
+int CatalogDDLAdmission::read_version(int64_t &version)
+{
+  ObRefreshSchemaStatus status;
+  return schema_service_.get_schema_version_in_inner_table(fresh_reader_, status, version);
+}
+
+int CatalogDDLAdmission::lock_transaction(ObMySQLTransaction &transaction, bool parallel, int64_t timeout_us)
+{
+  if (timeout_us <= 0) return OB_TIMEOUT;
+  auto *connection = transaction.get_connection();
+  if (connection == nullptr) return OB_ERR_UNEXPECTED;
+  ObLockObjRequest request;
+  request.obj_type_ = ObLockOBJType::OBJ_TYPE_RUNTIME;
+  request.obj_id_ = 1UL;
+  request.owner_id_.set_default();
+  request.lock_mode_ = parallel ? SHARE : EXCLUSIVE;
+  request.op_type_ = ObTableLockOpType::IN_TRANS_COMMON_LOCK;
+  request.timeout_us_ = timeout_us;
+  return query::ObInnerSQLConnectionAccess::lock_obj(request, connection);
+}
+
+CatalogCommitPreparation::CatalogCommitPreparation(ObMultiVersionSchemaService &schema_service,
+    common::ObMySQLTransaction &transaction)
+    : schema_service_(schema_service), transaction_(transaction)
+{}
+
+int CatalogCommitPreparation::prepare(int64_t last_schema_version, bool schema_changed,
+    bool need_end_signal, int64_t &prepared_schema_version)
+{
+  prepared_schema_version = 0;
+  if (attempted_) return OB_INIT_TWICE;
+  attempted_ = true;
+  try {
+    int ret = OB_SUCCESS;
+    int64_t final_version = schema_changed ? last_schema_version : 0;
+    auto *schema_impl = schema_service_.get_schema_service();
+    if (!transaction_.is_started()) {
+      ret = OB_STATE_NOT_MATCH;
+    } else if (schema_changed && (last_schema_version < 0 || (!need_end_signal && last_schema_version == 0))) {
+      ret = OB_INVALID_ARGUMENT;
+    } else if (need_end_signal && schema_impl == nullptr) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (schema_changed && need_end_signal) {
+      int64_t end_version = OB_INVALID_VERSION;
+      ObSchemaOperation end;
+      end.op_type_ = OB_DDL_END_SIGN;
+      ObDDLSqlService sql(*schema_impl);
+      if (OB_FAIL(schema_service_.gen_new_schema_version(end_version))) {
+      } else if (end_version <= last_schema_version) {
+        ret = OB_ERR_UNEXPECTED;
+      } else if (OB_FAIL(sql.log_nop_operation(end, end_version, ObString(), transaction_))) {
+      } else {
+        final_version = end_version;
+      }
     }
-  }
-  return ret;
+    if (OB_SUCC(ret)) ret = register_signal();
+    // Only after all operations and the caller's parallel-DDL ordering barrier:
+    // taking the core-table watermark lock earlier can deadlock later DDL tasks
+    // against predecessors. The write is atomic with this transaction's schemas.
+    if (OB_SUCC(ret) && schema_changed) ret = write_watermark(final_version);
+    if (OB_SUCC(ret)) prepared_schema_version = final_version;
+    return ret;
+  } catch (const std::bad_alloc &) { return OB_ALLOCATE_MEMORY_FAILED; }
+  catch (...) { return OB_ERR_UNEXPECTED; }
+}
+
+int CatalogCommitPreparation::register_transaction_signal(common::ObMySQLTransaction &sql_transaction)
+{
+  if (!sql_transaction.is_started()) return OB_INVALID_ARGUMENT;
+  auto *connection = sql_transaction.get_connection();
+  if (connection == nullptr) return OB_ERR_UNEXPECTED;
+  const char signal = '\0';
+  return query::ObInnerSQLConnectionAccess::register_multi_data_source(
+      connection, transaction::ObTxDataSourceType::DDL_TRANS, &signal, sizeof(signal));
+}
+
+int CatalogCommitPreparation::register_signal()
+{ return register_transaction_signal(transaction_); }
+
+int CatalogCommitPreparation::write_watermark(int64_t version)
+{
+  ObGlobalStatProxy proxy(transaction_);
+  return proxy.set_normal_schema_version(version);
 }
 
 int ObDDLService::do_schema_revise(const obcall::ObSchemaReviseArg &arg)
@@ -22169,22 +22380,7 @@ int ObDDLSQLTransaction::lock_all_ddl_operation(
    */
 
   if (OB_SUCC(ret)) {
-    bool enable_ddl_trans_new_lock = false;
-    common::sqlclient::ObISQLConnection *conn = trans.get_connection();
-    if (OB_ISNULL(conn)) {
-      ret = OB_ERR_UNEXPECTED;
-    } else {
-      ObLockObjRequest lock_arg;
-      lock_arg.obj_type_ = ObLockOBJType::OBJ_TYPE_RUNTIME;
-      lock_arg.obj_id_ = 1UL;
-      lock_arg.owner_id_.set_default();
-      lock_arg.lock_mode_ = !enable_parallel ? EXCLUSIVE : SHARE;
-      lock_arg.op_type_ = ObTableLockOpType::IN_TRANS_COMMON_LOCK;
-      lock_arg.timeout_us_ = ctx.get_timeout();
-      if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(lock_arg,
-                                                      conn))) {
-      }
-    }
+    ret = CatalogDDLAdmission::lock_transaction(trans, enable_parallel, ctx.get_timeout());
   }
   return ret;
 }

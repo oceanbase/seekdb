@@ -19,6 +19,8 @@
 #include "share/datum/ob_datum_util.h"
 
 #include "ob_operator_factory.h"
+#include "sql/optimizer/log_plugin_custom.h"
+#include "sql/engine/basic/plugin_custom_op.h"
 #include "sql/optimizer/ob_log_group_by.h"
 #include "sql/optimizer/ob_log_sort.h"
 #include "sql/optimizer/ob_log_limit.h"

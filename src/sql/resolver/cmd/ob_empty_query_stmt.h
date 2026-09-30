@@ -26,7 +26,11 @@ namespace sql
 class ObEmptyQueryStmt : public ObCMDStmt
 {
 public:
-  ObEmptyQueryStmt() : ObCMDStmt(stmt::T_EMPTY_QUERY)
+  enum PluginOperation { PLUGIN_INSTALL = 0, PLUGIN_UNINSTALL = 1 };
+
+  ObEmptyQueryStmt()
+      : ObCMDStmt(stmt::T_EMPTY_QUERY),
+        plugin_operation_(PLUGIN_INSTALL), plugin_name_(), soname_()
   {
   }
 
@@ -34,7 +38,20 @@ public:
   {
   }
 
+  PluginOperation get_plugin_operation() const { return plugin_operation_; }
+  const common::ObString &get_plugin_name() const { return plugin_name_; }
+  const common::ObString &get_plugin_soname() const { return soname_; }
+  void set_plugin_operation(const PluginOperation operation)
+  {
+    plugin_operation_ = operation;
+  }
+  void set_plugin_name(const common::ObString &value) { plugin_name_ = value; }
+  void set_plugin_soname(const common::ObString &value) { soname_ = value; }
+
 private:
+  PluginOperation plugin_operation_;
+  common::ObString plugin_name_;
+  common::ObString soname_;
   DISALLOW_COPY_AND_ASSIGN(ObEmptyQueryStmt);
 };
 

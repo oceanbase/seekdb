@@ -52,6 +52,7 @@ public:
     alloc_.reset();
   }
   int deduce(ObRawExpr &expr);
+  bool skip_child(ObRawExpr &expr) override;
   /// interface of ObRawExprVisitor
   virtual int visit(ObConstRawExpr &expr);
   virtual int visit(ObVarRawExpr &expr);
@@ -101,6 +102,7 @@ private:
     ObExprResType &result_type,
     int32_t row_dimension);
   int check_expr_param(ObOpRawExpr &expr);
+  int prepare_nested_plugin_rows(ObOpRawExpr &expr);
   int check_row_param(ObOpRawExpr &expr);
   int check_param_expr_op_row(ObRawExpr *param_expr, int64_t column_count);
   int visit_left_param(ObRawExpr &expr);

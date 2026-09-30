@@ -10,6 +10,9 @@ load(
     ":sql_build_defs.bzl",
     "SQL_COMPOSITION_HEADERS",
     "SQL_EXTRA_SOURCES",
+    "SQL_GIS_PLUGIN_ADAPTER_SOURCES",
+    "SQL_EXTENSION_RUNTIME_SOURCES",
+    "SQL_CORE_GIS_REPLACED_SOURCES",
     "SQL_INTERFACE_CLOSURE_HEADERS",
     "SQL_OPTIMIZER_GROUP_NAMES",
     "SQL_PARSER_SOURCES",
@@ -159,6 +162,9 @@ sql_validate_source_inventory(
     SQL_EXTRA_SOURCES,
     SQL_PARSER_SOURCES,
     _SQL_SEPARATELY_OWNED_SOURCES,
+    SQL_GIS_PLUGIN_ADAPTER_SOURCES,
+    SQL_EXTENSION_RUNTIME_SOURCES,
+    SQL_CORE_GIS_REPLACED_SOURCES,
 )
 
 # C++ sources include these table files textually. Their non-header extension

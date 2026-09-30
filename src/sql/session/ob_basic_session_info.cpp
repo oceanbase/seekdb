@@ -4541,7 +4541,6 @@ int ObBasicSessionInfo::base_save_session(BaseSavedValue &saved_value, bool skip
 {
   int ret = OB_SUCCESS;
   saved_value.cur_phy_plan_ = cur_phy_plan_;
-  cur_phy_plan_ = NULL;
 
   int64_t truncated_len = MIN(MAX_QUERY_STRING_LEN - 1,
                                    thread_data_.cur_query_len_);
@@ -4561,15 +4560,22 @@ int ObBasicSessionInfo::base_save_session(BaseSavedValue &saved_value, bool skip
   if (OB_SUCC(ret)) {
     if (thread_data_.cur_query_ != nullptr) {
       OX (MEMCPY(saved_value.cur_query_, thread_data_.cur_query_, truncated_len));
-      OX (thread_data_.cur_query_[0] = 0);
     }
     OX (saved_value.cur_query_len_ = truncated_len);
-    OX (thread_data_.cur_query_len_ = 0);
     OZ (saved_value.total_stmt_tables_.assign(total_stmt_tables_));
+    OZ (saved_value.cur_stmt_tables_.assign(cur_stmt_tables_));
+    // Prepare all storage before changing the caller's statement state. The
+    // subsequent no-duplicate merge can append at most cur_stmt_tables_.count()
+    // entries, so its push_back operations cannot allocate after this reserve.
+    if (!skip_cur_stmt_tables) {
+      OZ (total_stmt_tables_.reserve(total_stmt_tables_.count() + cur_stmt_tables_.count()));
+    }
     if (!skip_cur_stmt_tables) {
       OZ (merge_stmt_tables(), total_stmt_tables_, cur_stmt_tables_);
     }
-    OZ (saved_value.cur_stmt_tables_.assign(cur_stmt_tables_));
+    OX (cur_phy_plan_ = NULL);
+    if (OB_SUCC(ret) && thread_data_.cur_query_ != nullptr) thread_data_.cur_query_[0] = 0;
+    OX (thread_data_.cur_query_len_ = 0);
     OX (cur_stmt_tables_.reset());
     OX (sys_vars_cache_.get_autocommit_info(saved_value.inc_autocommit_));
     OX (sys_vars_cache_.set_autocommit_info(false));
@@ -4580,8 +4586,10 @@ int ObBasicSessionInfo::base_save_session(BaseSavedValue &saved_value, bool skip
 int ObBasicSessionInfo::stmt_save_session(StmtSavedValue &saved_value, bool skip_cur_stmt_tables)
 {
   int ret = OB_SUCCESS;
-  OZ (base_save_session(saved_value, skip_cur_stmt_tables));
+  // Copying the transaction result can allocate too; do it before base_save
+  // consumes any caller state. Failure leaves only an unused private snapshot.
   OZ (saved_value.tx_result_.assign(tx_result_));
+  OZ (base_save_session(saved_value, skip_cur_stmt_tables));
   OX (tx_result_.reset());
   OX (saved_value.cur_query_start_time_ = thread_data_.cur_query_start_time_);
   OX (thread_data_.cur_query_start_time_ = 0);

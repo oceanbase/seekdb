@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX LIB
 #include "ob_geo_to_s2_visitor.h"
-#include "lib/hash/ob_hashset.h"
+#include "seekdb/geo/s2_covering.hpp"
 #include "share/geo/ob_geo_dispatcher.h"
 
 namespace oceanbase {
@@ -70,32 +70,14 @@ int ObWkbToS2Visitor::MakeS2Point(T_IBIN *geo, S2Cell *&res)
 
 double ObWkbToS2Visitor::stToUV(double s)
 {
-  double u = 0.0;
-  if (s >= 0.5) {
-    u = (1.0 / 3.0) * (4.0 * s * s - 1.0);
-  } else {
-    u = (1.0 / 3.0) * (1.0 - 4.0 * (1.0 - s) * (1.0 - s));
-  }
-  return u;
+  return seekdb::geo::s2_index::st_to_uv(s);
 }
 
 bool ObWkbToS2Visitor::exceedsBounds(double x, double y)
 {
-  double is_exceed = false;
-  if (OB_ISNULL(bound_)) {
-    is_exceed = true;
-  } else {
-    double deltaX = OB_GEO_BOUNDS_DELTA * (bound_->maxX_ - bound_->minX_);
-    double deltaY = OB_GEO_BOUNDS_DELTA * (bound_->maxY_ - bound_->minY_);
-    if (x < bound_->minX_ + deltaX ||
-        x > bound_->maxX_ - deltaX) {
-      is_exceed = true;
-    } else if (y < bound_->minY_ + deltaY ||
-               y > bound_->maxY_ - deltaY) {
-      is_exceed = true;
-    }
-  }
-  return is_exceed;
+  static_assert(OB_GEO_BOUNDS_DELTA == seekdb::geo::s2_index::bounds_margin);
+  return bound_ == nullptr || seekdb::geo::s2_index::outside_bounds(
+      {bound_->minX_, bound_->maxX_, bound_->minY_, bound_->maxY_}, x, y);
 }
 
 S2Point ObWkbToS2Visitor::MakeS2PointFromXy(double x, double y)
@@ -410,194 +392,78 @@ int ObWkbToS2Visitor::visit(ObIWkbGeomPolygon *geo)
   return ret;
 }
 
-int64_t ObWkbToS2Visitor::get_cellids(ObS2Cellids &cells, bool is_query, bool need_buffer,
-                                      S1Angle distance)
+int64_t ObWkbToS2Visitor::get_cellids(ObS2Cellids &cells, bool is_query,
+                                      bool need_buffer, S1Angle distance)
 {
-  INIT_SUCC(ret);
-  if (invalid_) {
-    if (OB_FAIL(cells.push_back(exceedsBoundsCellID))) {
+  int ret = OB_SUCCESS;
+  try {
+    const auto result = seekdb::geo::s2_index::cell_ids(cell_union_, options_,
+        s2v_.size() > 1, invalid_, has_reset_, is_query, need_buffer, distance);
+    for (const auto cell : result) {
+      if (OB_FAIL(cells.push_back(cell))) break;
     }
-  } else {
-    uint32_t s2v_size = s2v_.size();
-    if (need_buffer) {
-      const int max_level_diff = 2;
-      cell_union_.Expand(distance, max_level_diff);
-    }
-    if (s2v_size > 1) {
-      cell_union_.Normalize();
-    }
-    S2CellId prev_id = S2CellId::None();
-    for (int i = 0; OB_SUCC(ret) && i < cell_union_.size(); i++) {
-      if (OB_FAIL(cells.push_back(cell_union_[i].id()))) {
-      }
-      if (OB_SUCC(ret) && is_query) {
-        int level = cell_union_[i].level();
-        while (OB_SUCC(ret) && (level -= options_.level_mod()) >= options_.min_level()) {
-          S2CellId ancestor_id = cell_union_[i].parent(level);
-          if (prev_id != S2CellId::None() && prev_id.level() > level &&
-              prev_id.parent(level) == ancestor_id) {
-            break;
-          }
-          if (OB_FAIL(cells.push_back(ancestor_id.id()))) {
-          }
-        }
-      }
-      prev_id = cell_union_[i];
-    }
-    if (OB_SUCC(ret) && has_reset_ && OB_FAIL(cells.push_back(exceedsBoundsCellID))) {
-    }
+  } catch (...) {
+    ret = ob_boost_geometry_exception_handle();
   }
   return ret;
 }
 
 bool ObWkbToS2Visitor::is_full_range_cell_union(S2CellUnion &cellids)
 {
-  bool b_ret = false;
-  if (is_geog_) {
-    const uint8_t cell_faces = 6;
-    if (cellids.size() != cell_faces) {
-      // do nothing
-    } else {
-      uint8_t curr_faces = 0;
-      for (uint32_t i = 0; i < cellids.size(); i++) {
-        if (cellids[i].level() == 0) {
-          curr_faces++;
-          LOG_INFO("cell id", K(static_cast<uint64_t>(cellids[i].id())));
-        }
-      }
-      if (curr_faces == cell_faces) {
-        b_ret = true;
-      }
-    }
-  } else {
-    for (uint32_t i = 0; i < cellids.size() && !b_ret; i++) {
-        if (cellids[i].face() != 0) {
-          b_ret = true;
-          LOG_INFO("cell id", K(static_cast<uint64_t>(cellids[i].id())));
-        }
-      }
-  }
-  return b_ret;
+  return seekdb::geo::s2_index::full_range(cellids, is_geog_);
 }
 
 int ObWkbToS2Visitor::get_s2_cell_union()
 {
   int ret = OB_SUCCESS;
-  if (!invalid_) {
-    S2RegionCoverer coverer(options_);
-    uint32_t s2v_size = s2v_.size();
-    for (int i = 0; i < s2v_size; i++) {
-      S2CellUnion tmp = coverer.GetCovering(*s2v_[i]);
-      cell_union_ = cell_union_.Union(tmp);
+  try {
+    if (!invalid_) {
+      seekdb::geo::s2_index::cover_regions(s2v_, options_, is_geog_,
+          bounder_, cell_union_, mbr_, S2cells_);
     }
-    if (is_full_range_cell_union(cell_union_)) {
-      S2LatLng margin = S2LatLng::FromDegrees(0.00001, 0.00001);
-      S2LatLngRect rect = bounder_.GetBound().Expanded(margin);
-      cell_union_ = coverer.GetCovering(rect);
-      mbr_ = rect;
-      LOG_INFO("generate new mbr: ", K(rect.lo().ToStringInDegrees().c_str()), K(rect.hi().ToStringInDegrees().c_str()));
-      S2cells_.clear();
-      for (uint8_t i = 0; i < 4 && OB_SUCC(ret); i++) {
-        if (OB_FAIL(add_cell_from_point(rect.GetVertex(i)))) {
-        }
-      }
-    }
+  } catch (...) {
+    ret = ob_boost_geometry_exception_handle();
   }
   return ret;
 }
 
-int64_t ObWkbToS2Visitor::get_cellids_and_unrepeated_ancestors(ObS2Cellids &cells, 
-                                                               ObS2Cellids &ancestors, 
-                                                               bool need_buffer, 
-                                                               S1Angle distance)
+int64_t ObWkbToS2Visitor::get_cellids_and_unrepeated_ancestors(
+    ObS2Cellids &cells, ObS2Cellids &ancestors, bool need_buffer, S1Angle distance)
 {
-  INIT_SUCC(ret);
-  if (invalid_) {
-    if (OB_FAIL(cells.push_back(exceedsBoundsCellID))) {
+  int ret = OB_SUCCESS;
+  try {
+    const auto result = seekdb::geo::s2_index::cells_and_ancestors(
+        cell_union_, options_, s2v_.size() > 1, invalid_, has_reset_, need_buffer, distance);
+    for (const auto cell : result.cells) {
+      if (OB_FAIL(cells.push_back(cell))) break;
     }
-  } else {
-    uint32_t s2v_size = s2v_.size();
-    hash::ObHashSet<uint64_t> cellid_set;
-    if (OB_FAIL(cellid_set.create(128, "CellidSet", "HashNode"))) {
-    } else if (!cellid_set.created()) {
-      ret = OB_NOT_INIT;
-    } else {
-      if (need_buffer) {
-        const int max_level_diff = 2;
-        cell_union_.Expand(distance, max_level_diff);
-      }
-      if (s2v_size > 1) {
-        cell_union_.Normalize();
-      }
-      S2CellId prev_id = S2CellId::None();
-      for (int i = 0; OB_SUCC(ret) && i < cell_union_.size(); i++) {
-        int hash_ret = cellid_set.exist_refactored(cell_union_[i].id());
-        if (OB_HASH_NOT_EXIST == hash_ret) {
-          if (OB_FAIL(cellid_set.set_refactored(cell_union_[i].id()))) {
-          } else if (OB_FAIL(cells.push_back(cell_union_[i].id()))) {
-          }
-          if (OB_SUCC(ret)) {
-            int level = cell_union_[i].level();
-            while (OB_SUCC(ret) && (level -= options_.level_mod()) >= options_.min_level()) {
-              S2CellId ancestor_id = cell_union_[i].parent(level);
-              if (prev_id != S2CellId::None() && prev_id.level() > level &&
-                  prev_id.parent(level) == ancestor_id) {
-                break;
-              }
-              int ancestor_hash_ret = cellid_set.exist_refactored(ancestor_id.id());
-              if (OB_HASH_NOT_EXIST == ancestor_hash_ret) {
-                if (OB_FAIL(cellid_set.set_refactored(ancestor_id.id()))) {
-                } else if (OB_FAIL(ancestors.push_back(ancestor_id.id()))) {
-                }
-              } else if (OB_HASH_EXIST != ancestor_hash_ret) {
-                ret = ancestor_hash_ret;
-              }
-            }
-          }
-        } else if (OB_HASH_EXIST != hash_ret) {
-          ret = hash_ret;
-        }
-        prev_id = cell_union_[i];
-      }
-      if (OB_SUCC(ret) && has_reset_ && OB_FAIL(cells.push_back(exceedsBoundsCellID))) {
-      }
+    for (size_t i = 0; OB_SUCC(ret) && i < result.ancestors.size(); ++i) {
+      if (OB_FAIL(ancestors.push_back(result.ancestors[i]))) {}
     }
+  } catch (...) {
+    ret = ob_boost_geometry_exception_handle();
   }
   return ret;
 }
 
 int64_t ObWkbToS2Visitor::get_inner_cover_cellids(ObS2Cellids &cells)
 {
-  INIT_SUCC(ret);
-  if (invalid_) {
-    if (OB_FAIL(cells.push_back(exceedsBoundsCellID))) {
+  int ret = OB_SUCCESS;
+  try {
+    const auto result = seekdb::geo::s2_index::vertex_cell_ids(S2cells_, invalid_);
+    for (const auto cell : result) {
+      if (OB_FAIL(cells.push_back(cell))) break;
     }
-  } else {
-    S2CellUnion cellids(S2cells_);
-    cellids.Normalize();
-    for (int i = 0; OB_SUCC(ret) && i < cellids.size(); i++) {
-      if (OB_FAIL(cells.push_back(cellids[i].id()))) {
-      }
-    }
+  } catch (...) {
+    ret = ob_boost_geometry_exception_handle();
   }
   return ret;
 }
 
 int64_t ObWkbToS2Visitor::get_mbr(S2LatLngRect &mbr, bool need_buffer, S1Angle distance)
 {
-  INIT_SUCC(ret);
-  if (invalid_ || has_reset_) {
-    mbr = S2LatLngRect::Full();
-  } else if (mbr_.is_empty()) {
-    // it's empty collection, do nothing
-  } else {
-    if (need_buffer) {
-      mbr_ = mbr_.ExpandedByDistance(distance);
-    }
-    // avoid rounding errors in mbr_ calculation
-    mbr = mbr_.ExpandedByDistance(S1Angle::Degrees(DBL_EPSILON));
-  }
-  return ret;
+  mbr = seekdb::geo::s2_index::geographic_mbr(mbr_, invalid_, has_reset_, need_buffer, distance);
+  return OB_SUCCESS;
 }
 
 void ObWkbToS2Visitor::reset()
@@ -608,8 +474,10 @@ void ObWkbToS2Visitor::reset()
   invalid_ = false;
   has_reset_ = true;
   cell_union_.Clear();
-  // reset to empty rectangle
+  // Reinitialize the edge bounder; ending its lifetime without reconstruction
+  // made the out-of-bounds retry visit an already destroyed object.
   bounder_.~S2LatLngRectBounder();
+  new (&bounder_) S2LatLngRectBounder();
 }
 
 template <typename ElementType>

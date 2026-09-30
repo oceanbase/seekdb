@@ -96,6 +96,7 @@ public:
       alloc_(allocator),
       slice_indexes_(NULL),
       tablet_ids_(nullptr),
+      published_tablet_batch_size_(0),
       is_first_row_(true),
       null_row_dist_method_(null_row_dist_method)
   {}
@@ -115,6 +116,10 @@ public:
   // This interface is currently only used for ObRepartSliceIdxCalc and ObAffinitizedRepartSliceIdxCalc
   // The calculated tablet_id is used to tell the target operator which partition the current row belongs to
   virtual int get_previous_row_tablet_id(ObObj &tablet_id);
+  // Batch IDs belong to the last successful get_slice_idx_batch call and are
+  // borrowed only until the next routing call, reinitialization or destruction.
+  virtual bool support_vectorized_tablet_ids() const { return false; }
+  int get_previous_batch_tablet_ids(int64_t batch_size, const int64_t *&tablet_ids) const;
 
   // support vectorized slice indexes calculation.
   bool support_vectorized_calc() const { return support_vectorized_calc_; }
@@ -142,6 +147,7 @@ protected:
   common::ObIAllocator &alloc_;
   int64_t *slice_indexes_;
   int64_t *tablet_ids_;
+  int64_t published_tablet_batch_size_;
   // used by null aware hash join
   bool is_first_row_;
   ObNullDistributeMethod::Type null_row_dist_method_;
@@ -244,6 +250,7 @@ public:
   int get_tablet_ids(ObEvalCtx &eval_ctx, ObBitVector &skip,
                                 const int64_t batch_size, int64_t *&tablet_ids);
   virtual int get_previous_row_tablet_id(ObObj &tablet_id) override;
+  virtual bool support_vectorized_tablet_ids() const override { return true; }
 
   int init_partition_cache_map();
 
@@ -251,8 +258,15 @@ public:
 
   virtual int destroy() {
     int ret = OB_SUCCESS;
+    published_tablet_batch_size_ = 0;
     if (px_repart_ch_map_.created()) {
       ret = px_repart_ch_map_.destroy();
+    }
+    if (part2tablet_id_map_.created()) {
+      const int map_ret = part2tablet_id_map_.destroy();
+      if (OB_SUCCESS == ret) {
+        ret = map_ret;
+      }
     }
     return ret;
   }
@@ -612,11 +626,12 @@ class ObRangeSliceIdCalc : public ObSliceIdxCalc
   public:
      explicit Compare(const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
                       const ObIArray<ObSortFieldCollation> *sort_collations,
-                      const common::ObDatumAccessContext *access_ctx)
+                      const common::ObDatumAccessContext *access_ctx,
+                      const ObIArray<ObExpr *> *expressions, ObEvalCtx *context)
        : ret_(common::OB_SUCCESS),
          sort_cmp_funs_(sort_cmp_funs),
          sort_collations_(sort_collations),
-         access_ctx_(access_ctx)
+         access_ctx_(access_ctx), expressions_(expressions), context_(context)
     {}
      bool operator()(const ObPxTabletRange::DatumKey &l,
                     const ObPxTabletRange::DatumKey &r);
@@ -625,6 +640,8 @@ class ObRangeSliceIdCalc : public ObSliceIdxCalc
      const ObIArray<ObSortCmpFunc> *sort_cmp_funs_;
      const ObIArray<ObSortFieldCollation> *sort_collations_;
      const common::ObDatumAccessContext *access_ctx_;
+     const ObIArray<ObExpr *> *expressions_;
+     ObEvalCtx *context_;
   };
 public:
   ObRangeSliceIdCalc(ObIAllocator &alloc,
@@ -862,14 +879,16 @@ public:
                                     repart_type),
         is_inited_(false),
         sort_exprs_(sort_exprs),
-        sort_cmp_(sort_cmp_funs, sort_collations),
+        sort_cmp_(sort_cmp_funs, sort_collations, &sort_exprs),
         ddl_slice_id_expr_(ddl_slice_id_expr)
-  {}
+  { support_vectorized_calc_ = true; }
   virtual ~ObSlaveMapPkeyRangeIdxCalc();
   virtual int init() override;
   virtual int destroy() override;
   int get_slice_indexes_inner(const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx,
                               SliceIdxArray &slice_idx_array, ObBitVector *skip = NULL);
+  int get_slice_idx_batch_inner(const ObIArray<ObExpr*> &exprs, ObEvalCtx &eval_ctx,
+      ObBitVector &skip, const int64_t batch_size, int64_t *&indexes);
 private:
   struct PartitionRangeChannelInfo
   {
@@ -884,15 +903,18 @@ private:
   {
   public:
     Compare(const ObIArray<ObSortCmpFunc> *sort_cmp_funs,
-                     const ObIArray<ObSortFieldCollation> *sort_collations)
+            const ObIArray<ObSortFieldCollation> *sort_collations,
+            const ObIArray<ObExpr *> *expressions)
       : ret_(common::OB_SUCCESS),
         sort_cmp_funs_(sort_cmp_funs),
         sort_collations_(sort_collations),
-        access_ctx_(nullptr)
+        access_ctx_(nullptr), expressions_(expressions), context_(nullptr)
     {}
-    void set_access_ctx(const common::ObDatumAccessContext *access_ctx)
+    void reset(const common::ObDatumAccessContext *access_ctx, ObEvalCtx &context)
     {
+      ret_ = common::OB_SUCCESS;
       access_ctx_ = access_ctx;
+      context_ = &context;
     }
     bool operator()(const ObPxTabletRange::DatumKey &l,
                     const ObPxTabletRange::DatumKey &r);
@@ -901,6 +923,8 @@ private:
     const ObIArray<ObSortCmpFunc> *sort_cmp_funs_;
     const ObIArray<ObSortFieldCollation> *sort_collations_;
     const common::ObDatumAccessContext *access_ctx_;
+    const ObIArray<ObExpr *> *expressions_;
+    ObEvalCtx *context_;
   };
   int build_partition_range_channel_map(
       common::hash::ObHashMap<int64_t, PartitionRangeChannelInfo *> &part_range_channel_map);
@@ -909,7 +933,7 @@ private:
       const int64_t tablet_id,
       const ObPxTabletRange::DatumKey &sort_key,
       ObEvalCtx &eval_ctx,
-      int64_t &task_idx);
+      int64_t &task_idx, int64_t &ddl_slice_id);
 private:
   static const int64_t DEFAULT_PARTITION_COUNT = 256;
 private:

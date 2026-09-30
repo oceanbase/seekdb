@@ -4,8 +4,15 @@ seekdb_apply_standalone_inventory(ob_sql_extra SEEKDB_SQL_EXTRA)
 
 ob_add_new_object_target(ob_sql ob_sql)
 ob_add_new_object_target(ob_sql_extra ob_sql_extra)
+seekdb_apply_sql_plugin_profile(ob_sql)
 target_link_libraries(ob_sql PUBLIC ob_base)
 target_link_libraries(ob_sql_extra PUBLIC ob_base_without_pass)
+target_compile_definitions(ob_sql PRIVATE
+  SEEKDB_ENABLE_CORE_GIS=$<BOOL:${SEEKDB_ENABLE_CORE_GIS}>)
+target_compile_definitions(ob_sql_extra PRIVATE
+  SEEKDB_ENABLE_CORE_GIS=$<BOOL:${SEEKDB_ENABLE_CORE_GIS}>)
+target_include_directories(ob_sql PRIVATE ${PROJECT_SOURCE_DIR}/include)
+target_include_directories(ob_sql_extra PRIVATE ${PROJECT_SOURCE_DIR}/include)
 
 seekdb_apply_unity_inventory(ob_sql_simd SEEKDB_SQL_SIMD_UNITY)
 ob_server_add_target(ob_sql_simd)

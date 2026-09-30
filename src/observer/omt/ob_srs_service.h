@@ -50,12 +50,14 @@ public:
   static const uint32_t SRS_ITEM_BUCKET_NUM = 6144;
   explicit ObSrsCacheSnapShot()
     : allocator_("SrsSnapShot", OB_MALLOC_NORMAL_BLOCK_SIZE), ref_count_(0) {}
-  virtual ~ObSrsCacheSnapShot() { srs_item_map_.destroy(); }
-  int init() { return srs_item_map_.create(SRS_ITEM_BUCKET_NUM, "SrsSnapShot", "SrsSnapShot"); }
+  virtual ~ObSrsCacheSnapShot() { definitions_.destroy(); srs_item_map_.destroy(); }
+  int init();
   int add_srs_item(uint64_t srid, const common::ObSrsItem* srs_item) { return srs_item_map_.set_refactored(srid, srs_item); }
   int get_srs_item(
       uint64_t srid,
       const common::ObSrsItem *&srs_item) override;
+  int get_srs_definition(uint64_t srid, const common::SrsDefinition *&definition) override;
+  int add_srs_definition(const common::SrsDefinition &definition);
   void retain() override { ATOMIC_INC(&ref_count_); }
   void release() override { ATOMIC_DEC(&ref_count_); }
   int64_t get_ref_count() { return ATOMIC_LOAD64(&ref_count_); }
@@ -67,6 +69,7 @@ private:
   common::ObArenaAllocator allocator_;
   volatile int64_t ref_count_;
   common::hash::ObHashMap<uint64_t, const common::ObSrsItem*> srs_item_map_;
+  common::hash::ObHashMap<uint64_t, const common::SrsDefinition *> definitions_;
 
   int extract_bounds_numberic(common::sqlclient::ObMySQLResult *result, const char *field_name, double &value);
 
@@ -86,14 +89,16 @@ public:
       last_sys_snapshot_(nullptr),
       srs_old_snapshots_(&mode_arena_, common::ObModIds::OB_MODULE_PAGE_ALLOCATOR),
       srs_stale_(true), infinite_plane_() {}
-  virtual ~ObSrsService() {};
+  virtual ~ObSrsService() { destroy(); }
   int init();
+  int init(common::ObMySQLProxy &sql_proxy);
   int get_tenant_srs_guard(common::ObSrsCacheGuard &srs_guard) override;
   int get_srs_bounds(
       uint64_t srid,
       const common::ObSrsItem *srs_item,
       const common::ObSrsBoundsItem *&bounds_item) override;
   static int server_module_init(ObSrsService* &srs_service);
+  // Server teardown must drain callers/guards before destroying this provider.
   void destroy();
   void mark_stale() { ATOMIC_STORE(&srs_stale_, true); }
 

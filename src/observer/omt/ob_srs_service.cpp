@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER_OMT
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_srs_service.h"
+#include "srs_snapshot_lifecycle.h"
 #include "lib/string/ob_sql_string.h"
 #include "share/ob_sql_client_decorator.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
@@ -42,6 +43,7 @@ int ObSrsService::server_module_init(ObSrsService* &srs_service)
 
 void ObSrsService::destroy()
 {
+  lib::ObMutexGuard guard(srs_load_lock_);
   if (OB_LIKELY(inited_)) {
     recycle_old_snapshots();
     if (OB_NOT_NULL(last_sys_snapshot_)) {
@@ -49,19 +51,31 @@ void ObSrsService::destroy()
       allocator_.free(last_sys_snapshot_);
       last_sys_snapshot_ = NULL;
     }
-    allocator_.~ObFIFOAllocator();
+    srs_old_snapshots_.clear();
+    mode_arena_.free();
+    allocator_.reset();
+    alloc_.reset();
+    sql_proxy_ = nullptr;
+    inited_ = false;
+    ATOMIC_STORE(&srs_stale_, true);
   }
 }
 
 int ObSrsService::init()
 {
+  return GCTX.sql_proxy_ == nullptr ? OB_NOT_INIT : init(*GCTX.sql_proxy_);
+}
+
+int ObSrsService::init(ObMySQLProxy &sql_proxy)
+{
   int ret = OB_SUCCESS;
-  sql_proxy_ = GCTX.sql_proxy_;
+  lib::ObMutexGuard guard(srs_load_lock_);
   lib::ObMemAttr mem_attr("SrsService");
   if (inited_) {
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(allocator_.init(&alloc_, OB_MALLOC_MIDDLE_BLOCK_SIZE, mem_attr))) {
   } else {
+    sql_proxy_ = &sql_proxy;
     page_allocator_.set_allocator(&allocator_);
     page_allocator_.set_attr(mem_attr);
     mode_arena_.init(DEFAULT_PAGE_SIZE, page_allocator_);
@@ -83,14 +97,19 @@ int ObSrsService::get_tenant_srs_guard(common::ObSrsCacheGuard &srs_guard)
     return ret;
   }
   lib::ObMutexGuard guard(srs_load_lock_);
-  if (!ATOMIC_LOAD(&srs_stale_) && OB_NOT_NULL(last_sys_snapshot_)) {
+  if (!inited_) return OB_NOT_INIT;
+  // Claim only invalidations preceding this refresh. A concurrent mark_stale
+  // during the load must remain set for the next reader.
+  const bool stale = ATOMIC_TAS(&srs_stale_, false);
+  if (!stale && OB_NOT_NULL(last_sys_snapshot_)) {
     srs_guard.bind(*last_sys_snapshot_);
   } else if (OB_FAIL(refresh_sys_srs())) {
-    ATOMIC_STORE(&srs_stale_, false);
-    ret = OB_ERR_SRS_EMPTY;
-    LOG_USER_ERROR(OB_ERR_SRS_EMPTY);
+    ATOMIC_STORE(&srs_stale_, true);
+    if (ret == OB_ERR_EMPTY_QUERY) {
+      ret = OB_ERR_SRS_EMPTY;
+      LOG_USER_ERROR(OB_ERR_SRS_EMPTY);
+    }
   } else {
-    ATOMIC_STORE(&srs_stale_, false);
     srs_guard.bind(*last_sys_snapshot_);
   }
   return ret;
@@ -118,41 +137,20 @@ int ObSrsService::get_srs_bounds(uint64_t srid, const ObSrsItem *srs_item, const
 
 int ObSrsService::refresh_sys_srs()
 {
-  int ret = OB_SUCCESS;
   ObSrsCacheSnapShot *srs = NULL;
-
-  if (OB_FAIL(fetch_all_srs(srs))) {
-    if (ret == OB_ERR_EMPTY_QUERY) {
-    } else {
-    }
-  } else {
-    if (last_sys_snapshot_ != NULL) {
-      if (last_sys_snapshot_->get_ref_count() > 0) {
-        if (OB_FAIL(srs_old_snapshots_.push_back(last_sys_snapshot_))) {
-        }
-      }
-      if (OB_SUCC(ret)) {
-        // ref_count > 0: already pushed to old queue; == 0: safe to free
-        if (last_sys_snapshot_->get_ref_count() <= 0) {
-          last_sys_snapshot_->~ObSrsCacheSnapShot();
-          allocator_.free(last_sys_snapshot_);
-        }
-      }
-    }
-    if (OB_SUCC(ret)) {
-      last_sys_snapshot_ = srs;
-      for (int64_t i = srs_old_snapshots_.size() - 1; i >= 0; i--) {
-        ObSrsCacheSnapShot *snap = srs_old_snapshots_[i];
-        if (OB_NOT_NULL(snap) && snap->get_ref_count() <= 0) {
-          srs_old_snapshots_.remove(i);
-          snap->~ObSrsCacheSnapShot();
-          allocator_.free(snap);
-        }
-      }
-      LOG_INFO("[SRS] refresh succeeded", K(srs->get_srs_count()),
-               K(srs_old_snapshots_.size()));
-    }
+  const auto dispose = [&](ObSrsCacheSnapShot *snapshot) {
+    snapshot->~ObSrsCacheSnapShot();
+    allocator_.free(snapshot);
+  };
+  int ret = fetch_all_srs(srs);
+  if (ret == OB_SUCCESS) {
+    ret = publish_srs_snapshot(last_sys_snapshot_, srs, srs_old_snapshots_, dispose);
   }
+  if (ret == OB_SUCCESS) {
+    LOG_INFO("[SRS] refresh succeeded", K(last_sys_snapshot_->get_srs_count()),
+             K(srs_old_snapshots_.size()));
+  }
+  collect_srs_snapshots(srs_old_snapshots_, dispose);
   return ret;
 }
 
@@ -166,6 +164,36 @@ void ObSrsService::recycle_old_snapshots()
       allocator_.free(snap);
     }
   }
+}
+
+int ObSrsCacheSnapShot::init()
+{
+  int ret = srs_item_map_.create(SRS_ITEM_BUCKET_NUM, "SrsSnapShot", "SrsSnapShot");
+  if (ret == OB_SUCCESS) {
+    ret = definitions_.create(SRS_ITEM_BUCKET_NUM, "SrsDefinition", "SrsDefinition");
+    if (ret != OB_SUCCESS) srs_item_map_.destroy();
+  }
+  return ret;
+}
+
+int ObSrsCacheSnapShot::add_srs_definition(const SrsDefinition &definition)
+{
+  if (definition.srid == 0 || definition.srid == UINT32_MAX || definition.definition.empty()) return OB_INVALID_ARGUMENT;
+  auto *copy = OB_NEWx(SrsDefinition, &allocator_);
+  if (copy == nullptr) return OB_ALLOCATE_MEMORY_FAILED;
+  *copy = definition;
+  int ret = ob_write_string(allocator_, definition.definition, copy->definition);
+  if (ret == OB_SUCCESS) ret = ob_write_string(allocator_, definition.proj4text, copy->proj4text);
+  if (ret == OB_SUCCESS) ret = definitions_.set_refactored(definition.srid, copy);
+  return ret;
+}
+
+int ObSrsCacheSnapShot::get_srs_definition(uint64_t srid, const SrsDefinition *&definition)
+{
+  definition = nullptr;
+  if (srid >= UINT32_MAX) return OB_ERR_WARN_DATA_OUT_OF_RANGE;
+  const int ret = definitions_.get_refactored(srid, definition);
+  return ret == OB_HASH_NOT_EXIST ? OB_ERR_SRS_NOT_FOUND : ret;
 }
 
 int ObSrsCacheSnapShot::get_srs_item(uint64_t srid, const ObSrsItem *&srs_item)
@@ -206,7 +234,7 @@ int ObSrsService::fetch_all_srs(ObSrsCacheSnapShot *&srs_snapshot)
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       ObASHSetInnerSqlWaitGuard ash_inner_sql_guard(ObInnerSqlWaitTypeId::OMT_FETCH_ALL_SRS);
       ObMySQLResult *result = NULL;
-      if (OB_FAIL(sql.append_fmt("SELECT * FROM %s WHERE (SRS_ID < %d AND SRS_ID != 0) OR SRS_ID > %d",
+      if (OB_FAIL(sql.append_fmt("SELECT * FROM oceanbase.%s WHERE (SRS_ID < %d AND SRS_ID != 0) OR SRS_ID > %d",
           OB_ALL_SPATIAL_REFERENCE_SYSTEMS_TNAME, USER_SRID_MIN, USER_SRID_MAX))) {
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
@@ -289,7 +317,7 @@ int ObSrsCacheSnapShot::extract_bounds_numberic(ObMySQLResult *result, const cha
 {
   int ret = OB_SUCCESS;
   number::ObNumber nmb;
-  if (OB_SUCC(result->get_number(field_name, nmb))) {
+  if (OB_SUCC(ret = result->get_number(field_name, nmb))) {
     const char *nmb_buf = nmb.format();
     if (OB_ISNULL(nmb_buf)) {
       ret = OB_ERR_UNEXPECTED;
@@ -299,13 +327,13 @@ int ObSrsCacheSnapShot::extract_bounds_numberic(ObMySQLResult *result, const cha
       int err = 0;
       ObString num_str(strlen(nmb_buf), nmb_buf);
       val = ObCharset::strntodv2(num_str.ptr(), num_str.length(), &endptr, &err);
-      if (EOVERFLOW == err && (-DBL_MAX == value || DBL_MAX == value)) {
+      if (EOVERFLOW == err && (-DBL_MAX == val || DBL_MAX == val)) {
         ret = OB_DATA_OUT_OF_RANGE;
       } else {
         value = val;
       }
     }
-  } else if (OB_ERR_NULL_VALUE) {
+  } else if (ret == OB_ERR_NULL_VALUE) {
     ret = OB_SUCCESS;
   } else {
   }
@@ -333,7 +361,8 @@ int ObSrsCacheSnapShot::parse_srs_item(ObMySQLResult *result, const ObSrsItem *&
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(*result, "description", description);
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(*result, "proj4text", proj4text);
 
-  if (OB_FAIL(extract_bounds_numberic(result, "minX", min_x))) {
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(extract_bounds_numberic(result, "minX", min_x))) {
   } else if (OB_FAIL(extract_bounds_numberic(result, "minY", min_y))) {
   } else if (OB_FAIL(extract_bounds_numberic(result, "maxX", max_x))) {
   } else if (OB_FAIL(extract_bounds_numberic(result, "maxY", max_y))) {
@@ -348,7 +377,10 @@ int ObSrsCacheSnapShot::parse_srs_item(ObMySQLResult *result, const ObSrsItem *&
       }
     }
     if (OB_SUCC(ret)) {
-      srs_item = new_srs_item;
+      SrsDefinition raw;
+      raw.srid = srs_id; raw.definition = definition; raw.proj4text = proj4text;
+      raw.min_x = min_x; raw.min_y = min_y; raw.max_x = max_x; raw.max_y = max_y;
+      if (OB_SUCC(ret = add_srs_definition(raw))) srs_item = new_srs_item;
     }
   }
   return ret;
@@ -370,6 +402,9 @@ int ObSrsCacheSnapShot::add_pg_reserved_srs_item(const ObString &pg_wkt, const u
     } else if (OB_FAIL(add_srs_item(new_srs_item->get_srid(), new_srs_item))) {
     } else {
       srs_info->set_proj4text(proj4text);
+      SrsDefinition raw;
+      raw.srid = srs_id; raw.definition = pg_wkt; raw.proj4text = proj4text;
+      ret = add_srs_definition(raw);
     }
   }
   return ret;

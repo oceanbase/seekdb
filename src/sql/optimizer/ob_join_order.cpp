@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_JO
 #include "ob_join_order.h"
+#include "sql/optimizer/plugin_path.h"
 #include "sql/optimizer/ob_skyline_prunning.h"
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "sql/rewrite/ob_transform_utils.h"
@@ -27,6 +28,7 @@
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/px/ob_px_util.h"
 #include "sql/das/iter/ob_das_text_retrieval_eval_node.h"
+#include "sql/engine/expr/plugin_function_expr.h"
 using namespace oceanbase;
 using namespace sql;
 using namespace oceanbase::common;
@@ -5432,13 +5434,100 @@ int ObJoinOrder::add_path(Path* path)
   return ret;
 }
 
+int ObJoinOrder::add_plugin_path(ObLogicalOperator &root, Path *&published)
+{
+  published = nullptr;
+  if (!allocator_ || !get_plan()) return OB_ERR_UNEXPECTED;
+  if (root.get_plan() != get_plan()) return OB_INVALID_ARGUMENT;
+  void *memory = allocator_->alloc(sizeof(PluginPath));
+  if (!memory) return OB_ALLOCATE_MEMORY_FAILED;
+  auto *path = new (memory) PluginPath(*this);
+  int ret = path->initialize(root);
+  if (OB_SUCC(ret)) ret = add_path(path);
+  if (OB_FAIL(ret)) {
+    path->~PluginPath();
+    allocator_->free(memory);
+  } else {
+    for (int64_t i = 0; i < interesting_paths_.count(); ++i)
+      if (interesting_paths_.at(i) == path) published = path;
+    // A dominated path has no graph handles or independent resources to keep.
+    if (!published) { path->~PluginPath(); allocator_->free(memory); }
+  }
+  return ret;
+}
+
+int ObJoinOrder::contribute_plugin_join_paths()
+{
+  if (!get_plan() || !allocator_) return OB_ERR_UNEXPECTED;
+  if (!get_plan()->plugin_join_paths_enabled()) return OB_SUCCESS;
+  int ret = OB_SUCCESS;
+  ObSEArray<Path *, 8> inputs;
+  ObSEArray<CandidatePlan, 8> candidates, result;
+  ObSEArray<PluginPath *, 8> staged;
+  // Snapshot only new native implementations. Plugins in the same chain see
+  // each other's additions, but an addition cannot trigger itself recursively.
+  for (int64_t i = 0; OB_SUCC(ret) && i < interesting_paths_.count(); ++i) {
+    Path *path = interesting_paths_.at(i);
+    if (!path) return OB_ERR_UNEXPECTED;
+    if (!path->is_join_path() || path->parallel_ != 1 ||
+        (!path->is_local() && !path->is_match_all())) continue;
+    bool seen = false;
+    for (int64_t j = 0; !seen && j < plugin_seen_paths_.count(); ++j)
+      seen = plugin_seen_paths_.at(j) == path;
+    if (!seen) ret = inputs.push_back(path);
+  }
+  if (OB_FAIL(ret) || inputs.empty()) return ret;
+  for (int64_t i = 0; OB_SUCC(ret) && i < inputs.count(); ++i) {
+    ObLogicalOperator *root = nullptr;
+    if (OB_FAIL(get_plan()->create_plan_tree_from_path(inputs.at(i), root))) {
+    } else if (OB_ISNULL(root)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else {
+      ret = candidates.push_back(CandidatePlan(root));
+    }
+  }
+  CandidatePlan unused;
+  if (OB_SUCC(ret)) ret = get_plan()->run_plugin_candidate_phase(candidates, unused, &result, SEEKDB_PLUGIN_PHASE_JOIN);
+  if (OB_SUCC(ret) && result.count() < candidates.count()) ret = OB_ERR_UNEXPECTED;
+  // Validate/allocate the entire contribution before publishing any path. Do
+  // not prune original alternatives while an allocation can still fail.
+  for (int64_t i = candidates.count(); OB_SUCC(ret) && i < result.count(); ++i) {
+    ObLogicalOperator *root = result.at(i).plan_tree_;
+    if (!root) { ret = OB_ERR_UNEXPECTED; break; }
+    void *memory = allocator_->alloc(sizeof(PluginPath));
+    if (!memory) { ret = OB_ALLOCATE_MEMORY_FAILED; break; }
+    auto *path = new (memory) PluginPath(*this);
+    ret = path->initialize(*root);
+    if (OB_SUCC(ret)) ret = staged.push_back(path);
+    if (OB_FAIL(ret)) { path->~PluginPath(); allocator_->free(memory); }
+  }
+  const int64_t old_paths = interesting_paths_.count();
+  const int64_t old_seen = plugin_seen_paths_.count();
+  if (OB_SUCC(ret)) ret = interesting_paths_.reserve(old_paths + staged.count());
+  if (OB_SUCC(ret)) ret = plugin_seen_paths_.reserve(old_seen + inputs.count());
+  for (int64_t i = 0; OB_SUCC(ret) && i < staged.count(); ++i)
+    ret = interesting_paths_.push_back(staged.at(i));
+  for (int64_t i = 0; OB_SUCC(ret) && i < inputs.count(); ++i)
+    ret = plugin_seen_paths_.push_back(inputs.at(i));
+  if (OB_FAIL(ret)) {
+    while (interesting_paths_.count() > old_paths) interesting_paths_.pop_back();
+    while (plugin_seen_paths_.count() > old_seen) plugin_seen_paths_.pop_back();
+    for (int64_t i = 0; i < staged.count(); ++i) {
+      staged.at(i)->~PluginPath(); allocator_->free(staged.at(i));
+    }
+  }
+  return ret;
+}
+
 int ObJoinOrder::add_recycled_paths(Path* path)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(path) || OB_ISNULL(get_plan())) {
     ret = OB_INVALID_ARGUMENT;
-  } else if (!path->is_join_path()) {
-    // do nothing
+    LOG_WARN("get unexpected null", K(path), K(ret));
+  } else if (!path->is_join_path() || path->log_op_) {
+    // A logical JOIN keeps a raw JoinPath pointer. Early materialized paths
+    // remain plan-arena-owned even if later alternatives dominate them.
   } else {
     static_cast<JoinPath*>(path)->reuse();
     if (OB_FAIL(get_plan()->get_recycled_join_paths().push_back(static_cast<JoinPath*>(path)))) {
@@ -5509,6 +5598,12 @@ int ObJoinOrder::compute_path_relationship(const Path &first_path,
   relation = DominateRelation::OBJ_EQUAL;
   if (OB_ISNULL(get_plan()) || OB_ISNULL(stmt = get_plan()->get_stmt())) {
     ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("get unexpected null", K(first_path), K(second_path), K(stmt), K(ret));
+  } else if (first_path.is_plugin_path() != second_path.is_plugin_path()) {
+    // Retain native alternatives for inner-path predicate pushdown, whose
+    // clone/rebinding protocol is not yet implemented for plugin trees.
+    // Enclosing JOINs still compare complete costs of the available paths.
+    relation = DominateRelation::OBJ_UNCOMPARABLE;
   } else if (first_path.is_access_path() && second_path.is_access_path()
             && use_vec_index_cost_compare_strategy(static_cast<const AccessPath&>(first_path), static_cast<const AccessPath&>(second_path))) {
     if (OB_FAIL(compute_vec_idx_path_relationship(static_cast<const AccessPath&>(first_path), static_cast<const AccessPath&>(second_path), relation))) {
@@ -5949,42 +6044,42 @@ int oceanbase::sql::Path::assign(const Path &other, common::ObIAllocator *alloca
 
 bool oceanbase::sql::Path::is_cte_path() const
 {
-  return NULL != parent_ && parent_->get_type() == FAKE_CTE_TABLE_ACCESS;
+  return !is_plugin_path() && NULL != parent_ && parent_->get_type() == FAKE_CTE_TABLE_ACCESS;
 }
 
 bool oceanbase::sql::Path::is_function_table_path() const
 {
-  return NULL != parent_ && parent_->get_type() == FUNCTION_TABLE_ACCESS;
+  return !is_plugin_path() && NULL != parent_ && parent_->get_type() == FUNCTION_TABLE_ACCESS;
 }
 
 bool oceanbase::sql::Path::is_json_table_path() const
 {
-  return NULL != parent_ && parent_->get_type() == JSON_TABLE_ACCESS;
+  return !is_plugin_path() && NULL != parent_ && parent_->get_type() == JSON_TABLE_ACCESS;
 }
 
 bool oceanbase::sql::Path::is_temp_table_path() const
 {
-  return NULL != parent_ && parent_->get_type() == TEMP_TABLE_ACCESS;
+  return !is_plugin_path() && NULL != parent_ && parent_->get_type() == TEMP_TABLE_ACCESS;
 }
 
 bool oceanbase::sql::Path::is_access_path() const
 {
-  return NULL != parent_ && parent_->get_type() == ACCESS;
+  return !is_plugin_path() && NULL != parent_ && parent_->get_type() == ACCESS;
 }
 
 bool oceanbase::sql::Path::is_values_table_path() const
 {
-  return NULL != parent_ && parent_->get_type() == VALUES_TABLE_ACCESS;
+  return !is_plugin_path() && NULL != parent_ && parent_->get_type() == VALUES_TABLE_ACCESS;
 }
 
 bool oceanbase::sql::Path::is_join_path() const
 {
-  return NULL != parent_ && parent_->get_type() == JOIN;
+  return !is_plugin_path() && NULL != parent_ && parent_->get_type() == JOIN;
 }
 
 bool oceanbase::sql::Path::is_subquery_path() const
 {
-  return NULL != parent_ && parent_->get_type() == SUBQUERY;
+  return !is_plugin_path() && NULL != parent_ && parent_->get_type() == SUBQUERY;
 }
 
 int oceanbase::sql::Path::check_is_base_table(bool &is_base_table)
@@ -6749,6 +6844,19 @@ int FunctionTablePath::estimate_cost()
   int ret = OB_SUCCESS;
   op_cost_ = 1.0;
   cost_ = 1.0;
+  if (value_expr_ && value_expr_->get_expr_type() == T_FUN_SYS_PLUGIN_TABLE_FUNCTION) {
+    seekdb_plugin_sql_binding_v1_t binding = {};
+    seekdb_plugin_table_estimate_v1_t estimate = {};
+    if (!parent_ || !share::g_mp) {
+      ret = OB_NOT_INIT;
+    } else if (OB_FAIL(PluginTableFunctionExpr::resolve_binding(*value_expr_, binding))) {
+    } else if (OB_FAIL(share::g_mp->estimate_bound_plugin_table_function(binding, estimate))) {
+    } else {
+      parent_->set_output_rows(estimate.rows);
+      parent_->set_output_row_size(estimate.row_width);
+      op_cost_ = cost_ = estimate.total_cost;
+    }
+  }
   return  ret;
 }
 
@@ -9373,6 +9481,7 @@ int ObJoinOrder::generate_join_paths(const ObJoinOrder &left_tree,
       OPT_TRACE("succeed to generate join paths by ignoring hint");
     }
   }
+  if (OB_SUCC(ret)) ret = contribute_plugin_join_paths();
   return ret;
 }
 
@@ -15109,7 +15218,17 @@ int ObJoinOrder::check_filter_is_redundant(ObJoinOrder &left_tree,
     if (left_tree.interesting_paths_.empty()) {
       ret = OB_ERR_UNEXPECTED;
     } else {
-      JoinPath *join_path = static_cast<JoinPath*>(left_tree.interesting_paths_.at(0));
+      JoinPath *join_path = nullptr;
+      for (int64_t i = 0; !join_path && i < left_tree.interesting_paths_.count(); ++i) {
+        Path *path = left_tree.interesting_paths_.at(i);
+        if (path && path->is_join_path()) join_path = static_cast<JoinPath *>(path);
+      }
+      if (!join_path) {
+        // A plugin implementation does not expose a native join predicate
+        // tree. Keep the filter rather than claiming it redundant.
+        is_redunant = false;
+        return OB_SUCCESS;
+      }
       if (OB_ISNULL(join_path) ||
           OB_ISNULL(join_path->left_path_) ||
           OB_ISNULL(join_path->left_path_->parent_) ||
@@ -15319,6 +15438,10 @@ int ObJoinOrder::generate_force_inner_path(const ObIArray<ObRawExpr *> &join_con
     Path *inner_path = NULL;
     if (OB_ISNULL(right_path)) {
       ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("unexpected null path", K(ret));
+    } else if (right_path->is_plugin_path()) {
+      // Do not drop log_op_ and reinterpret its parent relation as a native
+      // path. Native alternatives remain available for this transformation.
     } else if (OB_FAIL(copy_path(*right_path, inner_path))) {
     } else if (OB_ISNULL(inner_path)) {
       ret = OB_ERR_UNEXPECTED;

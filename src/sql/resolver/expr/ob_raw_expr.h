@@ -1712,6 +1712,7 @@ struct ObRawExprExtraInfo
   // TODO: add OB_ASSERT for expr_type when access the extra info
   union {
     uint64_t value_;
+    uint64_t native_function_flags_; // T_FUN_UDF: verified implementation metadata, not SQL name.
     uint64_t cast_mode_; // T_FUN_SYS_CAST
                          // T_FUN_COLUMN_CONV
                          // T_FUN_SYS_ALIGN_DATE4CMP
@@ -1757,6 +1758,8 @@ struct ObRawExprExtraInfo
   };
 };
 static_assert(8 == sizeof(ObRawExprExtraInfo), "sizeof extra info must be 8 bytes");
+
+struct PluginExprType;
 
 class ObRawExpr
 {
@@ -1834,6 +1837,11 @@ public:
     set_data_type(common::ObMaxType);
   }
   virtual ~ObRawExpr();
+
+  const PluginExprType *get_plugin_type() const { return plugin_type_; }
+  int set_plugin_type(const PluginExprType &type);
+  int copy_plugin_type_from(const ObRawExpr &source);
+  void clear_plugin_type() { plugin_type_ = nullptr; expr_hash_ = 0; }
 
   inline void set_expr_class(ExprClass expr_class) { expr_class_ = expr_class; }
   inline ExprClass get_expr_class() const { return expr_class_; }
@@ -2246,6 +2254,7 @@ protected:
     };
   };
   uint64_t expr_hash_;
+  const PluginExprType *plugin_type_ = nullptr;
 private:
   DISALLOW_COPY_AND_ASSIGN(ObRawExpr);
 };
@@ -4200,6 +4209,9 @@ public:
   inline void set_pkg_id(uint64_t pkg_id){ pkg_id_ = pkg_id; }
   inline uint64_t get_pkg_id() const { return pkg_id_; }
   inline uint64_t get_udf_id() const { return udf_id_; }
+  uint64_t get_native_spatial_flags() const;
+  uint64_t get_native_function_flags() const { return extra_.native_function_flags_; }
+  void set_native_function_flags(uint64_t flags) { extra_.native_function_flags_ = flags; expr_hash_ = 0; }
   inline int64_t get_pkg_version() const { return pkg_schema_version_; }
   inline int64_t get_udf_version() const { return udf_schema_version_; }
   inline const ObIArray<int64_t> &get_subprogram_path() const { return subprogram_path_; }

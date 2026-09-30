@@ -83,6 +83,9 @@
 #include "sql/resolver/cmd/ob_set_names_resolver.h"
 #include "sql/resolver/cmd/ob_set_transaction_resolver.h"
 #include "sql/resolver/cmd/ob_empty_query_resolver.h"
+#include "sql/resolver/cmd/create_extension_resolver.h"
+#include "sql/resolver/cmd/alter_extension_resolver.h"
+#include "sql/resolver/cmd/drop_extension_resolver.h"
 #include "sql/resolver/cmd/ob_anonymous_block_resolver.h"
 #include "sql/resolver/cmd/ob_call_procedure_resolver.h"
 #include "sql/resolver/cmd/ob_load_data_resolver.h"
@@ -434,6 +437,10 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(Show);
         break;
       }
+      case T_SHOW_PLUGINS: {
+        REGISTER_STMT_RESOLVER(Show);
+        break;
+      }
       case T_CREATE_USER: {
         REGISTER_STMT_RESOLVER(CreateUser);
         break;
@@ -504,6 +511,23 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       }
       case T_FLUSH_PRIVILEGES: {
         REGISTER_STMT_RESOLVER(EmptyQuery);
+        break;
+      }
+      case T_INSTALL_PLUGIN:
+      case T_UNINSTALL_PLUGIN: {
+        REGISTER_STMT_RESOLVER(EmptyQuery);
+        break;
+      }
+      case T_CREATE_EXTENSION: {
+        ret = stmt_resolver_func<CreateExtensionResolver>(params_, *real_parse_tree, stmt);
+        break;
+      }
+      case T_ALTER_EXTENSION: {
+        ret = stmt_resolver_func<AlterExtensionResolver>(params_, *real_parse_tree, stmt);
+        break;
+      }
+      case T_DROP_EXTENSION: {
+        ret = stmt_resolver_func<DropExtensionResolver>(params_, *real_parse_tree, stmt);
         break;
       }
       case T_LOCK_TABLE: {
@@ -667,7 +691,12 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
     }
     if (OB_SUCC(ret)) {
       stmt::StmtType stmt_type = stmt->get_stmt_type();
-      if (ObStmt::is_ddl_stmt(stmt_type, stmt->has_global_variable()) || ObStmt::is_dcl_stmt(stmt_type)) {
+      // CREATE EXTENSION is a command statement with its own catalog
+      // coordinator; it is intentionally not an ObDDLStmt.  Do not route it
+      // through the ordinary DDL argument backfill below, which would cast
+      // CreateExtensionStmt to ObDDLStmt and corrupt/crash the resolver.
+      if (stmt_type != stmt::T_CREATE_EXTENSION &&
+          (ObStmt::is_ddl_stmt(stmt_type, stmt->has_global_variable()) || ObStmt::is_dcl_stmt(stmt_type))) {
         ObDDLStmt *ddl_stmt = static_cast<ObDDLStmt*>(stmt);
         obcall::ObDDLArg &ddl_arg = ddl_stmt->get_ddl_arg();
 

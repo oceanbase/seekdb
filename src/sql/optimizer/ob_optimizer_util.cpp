@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_OPT
 #include "ob_optimizer_util.h"
 #include "sql/engine/expr/ob_expr_version.h"
+#include "sql/engine/expr/plugin_function_expr.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/ob_log_table_scan.h"
 #include "data_plane/ob_order_perserving_encoder.h"
@@ -5122,9 +5123,16 @@ int ObOptimizerUtil::gen_set_target_list(ObIAllocator *allocator,
   UNUSED(allocator);
   ObSelectStmt *child_stmt = NULL;
   ObSEArray<ObExprResType, 8> res_types;
+  std::vector<PluginBranchType::Result> plugin_types;
   if (OB_ISNULL(session_info) || OB_ISNULL(expr_factory) || OB_ISNULL(select_stmt)
       || OB_UNLIKELY(select_stmt->get_set_query().empty())) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get unexpected error", K(ret));
+  } else if (OB_FAIL(PluginBranchType::prepare_set(expr_factory, session_info,
+                 select_stmt->get_set_query(), select_stmt->is_set_distinct() ||
+                 select_stmt->get_set_op() != ObSelectStmt::UNION, plugin_types,
+                 select_stmt->is_recursive_union()))) {
+    LOG_WARN("failed to normalize plugin set branches", K(ret));
   } else if (OB_FAIL(get_set_res_types(allocator, session_info, select_stmt->get_set_query(),
                                        res_types))) {
   } else if (OB_ISNULL(child_stmt = select_stmt->get_set_query(0))) {
@@ -5137,6 +5145,9 @@ int ObOptimizerUtil::gen_set_target_list(ObIAllocator *allocator,
     for (int64_t i = 0; OB_SUCC(ret) && i < num; ++i) {
       if (OB_FAIL(add_cast_to_set_list(session_info, expr_factory, select_stmt->get_set_query(),
                                        res_types.at(i), i))) {
+      } else if (!plugin_types.empty() && OB_FAIL(PluginBranchType::finish_set(
+                     select_stmt->get_set_query(), i, plugin_types[i]))) {
+        LOG_WARN("failed to bind plugin set projections", K(ret));
       } else {
         SelectItem &select_item = child_stmt->get_select_item(i);
         new_select_item.alias_name_ = select_item.alias_name_;
@@ -5152,6 +5163,9 @@ int ObOptimizerUtil::gen_set_target_list(ObIAllocator *allocator,
         if (OB_FAIL(ObRawExprUtils::make_set_op_expr(*expr_factory, i, set_op_type,
                                                      res_types.at(i), session_info,
                                                      new_select_item.expr_))) {
+        } else if (!plugin_types.empty() && OB_FAIL(PluginBranchType::finish(*new_select_item.expr_,
+                       plugin_types[i].type_id_, plugin_types[i].epoch_))) {
+          LOG_WARN("failed to bind plugin set result", K(ret), K(i));
         } else if (OB_FAIL(select_stmt->add_select_item(new_select_item))) {
         } else if (OB_ISNULL(new_select_item.expr_) ||
                    OB_UNLIKELY(!new_select_item.expr_->is_set_op_expr())) {
@@ -5280,11 +5294,20 @@ int ObOptimizerUtil::try_add_cast_to_set_child_list(ObIAllocator *allocator,
   int ret = OB_SUCCESS;
   ObSEArray<ObExprResType, 8> left_types;
   ObSEArray<ObExprResType, 8> right_types;
+  ObSEArray<ObSelectStmt *, 8> plugin_branches;
+  std::vector<PluginBranchType::Result> plugin_types;
   ObCollationType coll_type = CS_TYPE_INVALID;
   if (OB_ISNULL(allocator) || OB_ISNULL(session_info) || OB_ISNULL(expr_factory)) {
     ret = OB_NOT_INIT;
   } else if (left_stmts.empty() || right_stmts.empty()) {
     ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("empty left/right stmts", K(ret), K(left_stmts), K(right_stmts));
+  } else if (OB_FAIL(append(plugin_branches, left_stmts)) ||
+             OB_FAIL(append(plugin_branches, right_stmts))) {
+    LOG_WARN("failed to gather set branches", K(ret));
+  } else if (OB_FAIL(PluginBranchType::prepare_set(expr_factory, session_info, plugin_branches,
+                 is_distinct, plugin_types, is_mysql_recursive_union))) {
+    LOG_WARN("failed to normalize plugin set branches", K(ret));
   } else if (OB_FAIL(get_set_res_types(allocator, session_info, left_stmts, left_types)) ||
              OB_FAIL(get_set_res_types(allocator, session_info, right_stmts, right_types))) {
   } else if (OB_UNLIKELY(left_types.count() != right_types.count())) {
@@ -5331,6 +5354,11 @@ int ObOptimizerUtil::try_add_cast_to_set_child_list(ObIAllocator *allocator,
         }
       } else {
         res_type = left_type;
+      }
+      if (OB_SUCC(ret) && !plugin_types.empty()) {
+        // Native coercion turns unknown NULL into a physical carrier. Record
+        // the selected identity before a later set group sees that carrier.
+        ret = PluginBranchType::finish_set(plugin_branches, i, plugin_types[i]);
       }
     }
   }
@@ -5429,6 +5457,7 @@ int ObOptimizerUtil::add_cast_to_set_select_expr(ObSQLSessionInfo *session_info,
     } else if (OB_FAIL(ObRawExprUtils::try_add_cast_expr_above(&expr_factory, session_info,
                                                                *to_str_expr, res_type, new_expr))) {
     } else if (OB_FAIL(new_expr->add_flag(IS_INNER_ADDED_EXPR))) {
+    } else if (OB_FAIL(PluginBranchType::preserve_native_cast(*src_expr, *new_expr))) {
     } else {
       src_expr = new_expr;
     }
@@ -5437,6 +5466,7 @@ int ObOptimizerUtil::add_cast_to_set_select_expr(ObSQLSessionInfo *session_info,
   } else if (src_expr == new_expr) {
     /*do nothing*/
   } else if (OB_FAIL(new_expr->add_flag(IS_INNER_ADDED_EXPR))) {
+  } else if (OB_FAIL(PluginBranchType::preserve_native_cast(*src_expr, *new_expr))) {
   } else {
     src_expr = new_expr;
   }
@@ -6989,6 +7019,15 @@ int ObOptimizerUtil::check_can_encode_sortkey(const common::ObIArray<OrderItem> 
     tmp_ret = OB_E(EventTable::EN_ENABLE_NEWSORT_FORCE) OB_SUCCESS;
     if (OB_SUCCESS != tmp_ret) {
       can_sort_opt = old_can_opt;
+    }
+  }
+  // The native encoder orders carrier bytes, not a plugin's logical values.
+  // This correctness restriction also applies to explicit hints/tracepoints.
+  for (int64_t i = 0; OB_SUCC(ret) && can_sort_opt && i < order_keys.count(); ++i) {
+    if (OB_ISNULL(order_keys.at(i).expr_)) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (nullptr != order_keys.at(i).expr_->get_plugin_type()) {
+      can_sort_opt = false;
     }
   }
   return ret;

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "ob_drop_routine_resolver.h"
 #include "ob_drop_routine_stmt.h"
+#include "sql/resolver/ddl/native_routine_ddl.h"
 
 namespace oceanbase
 {
@@ -66,7 +67,7 @@ int ObDropFunctionResolver::resolve(const ParseNode &parse_tree)
   ObDropRoutineStmt *routine_stmt = NULL;
   if (parse_tree.type_ != T_SF_DROP
       || OB_ISNULL(parse_tree.children_)
-      || OB_UNLIKELY(parse_tree.num_child_ != 1)
+      || OB_UNLIKELY(parse_tree.num_child_ != 1 && parse_tree.num_child_ != 2)
       || OB_ISNULL(name_node = parse_tree.children_[0])) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parse tree is invalid", "type", get_type_name(parse_tree.type_),
@@ -92,6 +93,35 @@ int ObDropFunctionResolver::resolve(const ParseNode &parse_tree)
         routine_arg.routine_name_ = sp_name;
         routine_arg.routine_type_ = share::schema::ROUTINE_FUNCTION_TYPE;
         routine_arg.if_exist_ = parse_tree.value_;
+        const bool typed = parse_tree.num_child_ == 2;
+        if (typed || !db_name.empty()) {
+          uint64_t database_id = OB_INVALID_ID;
+          std::string signature;
+          const share::schema::ObRoutineInfo *target = nullptr;
+          CK (schema_checker_ != nullptr && allocator_ != nullptr);
+          OZ (schema_checker_->get_database_id(db_name, database_id));
+          if (typed) {
+            CK (parse_tree.children_[1] != nullptr);
+            OZ (NativeRoutineDdl::resolve_signature(*parse_tree.children_[1], *allocator_, *session_info_, signature));
+          }
+          CK (schema_checker_->get_schema_guard() != nullptr);
+          OZ (NativeRoutineDdl::find(*schema_checker_->get_schema_guard(), database_id, sp_name,
+              typed ? &signature : nullptr, target));
+          if (ret == OB_ERR_FUNC_DUP) LOG_USER_ERROR(OB_ERR_FUNC_DUP, sp_name.length(), sp_name.ptr());
+          if (OB_SUCC(ret) && (typed || (target && target->is_native()))) {
+            routine_arg.native_target_resolved_ = true;
+            if (target) {
+              OZ (routine_arg.native_target_.assign(*target));
+              OX (routine_arg.routine_name_ = routine_arg.native_target_.get_routine_name());
+              OZ (ob_add_ddl_dependency(target->get_routine_id(), share::schema::ROUTINE_SCHEMA,
+                  target->get_schema_version(), routine_arg));
+            } else if (!routine_arg.if_exist_) {
+              ret = OB_ERR_SP_DOES_NOT_EXIST;
+              LOG_USER_ERROR(OB_ERR_SP_DOES_NOT_EXIST, "FUNCTION", db_name.length(), db_name.ptr(),
+                  sp_name.length(), sp_name.ptr());
+            }
+          }
+        }
       }
     }
   }
@@ -100,4 +130,3 @@ int ObDropFunctionResolver::resolve(const ParseNode &parse_tree)
 }
 }
 }
-

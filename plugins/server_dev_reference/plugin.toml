@@ -1,0 +1,13 @@
+manifest_schema_version = 1
+plugin_id = "org.seekdb.server_dev_reference"
+package_version = "1.0.0"
+build_id = "server-dev-reference-v1"
+abi_major = 1
+abi_minor = 0
+catalog_schema_version = 1
+data_format_version = 0
+entrypoint = "seekdb_server_dev_reference.so"
+capabilities = []
+api_profile = "server-dev"
+server_headers = ["sql/optimizer/ob_optimizer.h"]
+exports = ["seekdb_server_dev_numbering_probe"]

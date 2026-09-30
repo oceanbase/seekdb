@@ -18,6 +18,7 @@
 #include "sql/engine/expr/ob_expr_priv_st_geohash.h"
 #include "share/geo/ob_geo_func_register.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
+#include "seekdb/geo/geohash.hpp"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;
@@ -76,113 +77,24 @@ int ObExprPrivSTGeoHash::calc_result_typeN(
 
 int ObExprPrivSTGeoHash::calc_geohash(ObGeogBox *&gbox, int precision, ObStringBuffer &geohash_buf)
 {
-  int ret = OB_SUCCESS;
-  const char base32[] = "0123456789bcdefghjkmnpqrstuvwxyz";
-  char bits_mask[] = {16,8,4,2,1};
-  int bit = 0;
-  uint8 ch_index = 0;
-  double lon = gbox->xmin + (gbox->xmax - gbox->xmin) / 2;
-  double lat = gbox->ymin + (gbox->ymax - gbox->ymin) / 2;
-  double lon_range[2], lat_range[2], mid;
-  lon_range[0] = -180.0;
-  lon_range[1] = 180.0;
-  lat_range[0] = -90.0;
-  lat_range[1] = 90.0;
-
-  for (int i = 0; OB_SUCC(ret) && i < precision * 5; i++) {
-    if (!(i & 1)) {
-      // process longitude
-      mid = (lon_range[0] + lon_range[1]) / 2;
-      if (lon >= mid) {
-        // for compatibility，not using "ObGeoBoxUtil::is_float_gteq" here
-        ch_index |=  bits_mask[bit];
-        lon_range[0] = mid;
-      } else {
-        lon_range[1] = mid;
-      }
-    } else {
-      // process latitute
-      mid = (lat_range[0] + lat_range[1]) / 2;
-      if (lat >= mid) {
-        // for compatibility，not using "ObGeoBoxUtil::is_float_gteq" here
-        ch_index |=  bits_mask[bit];
-        lat_range[0] = mid;
-      } else {
-        lat_range[1] = mid;
-      }
-    }
-    if (bit < 4) {
-      bit++;
-    } else if (OB_FAIL(geohash_buf.append(&base32[ch_index], 1))) {
-    } else {
-      bit = 0;
-      ch_index = 0;
-    }
-  }
-  return ret;
+  const seekdb::geo::geohash::Bounds box{gbox->xmin, gbox->ymin, gbox->xmax, gbox->ymax};
+  return seekdb::geo::geohash::encode(box, precision, [&](char value) {
+    return geohash_buf.append(&value, 1);
+  });
 }
 
 int ObExprPrivSTGeoHash::calc_precision(ObGeogBox *&gbox, ObGeogBox *&bounds, int &precision)
 {
-  int ret = OB_SUCCESS;
-  bool finish_calc = false;
-  double minx, miny, maxx, maxy;
-  double latmax, latmin, lonmax, lonmin;
-  double lonwidth, latwidth;
-  double latmaxadjust, lonmaxadjust, latminadjust, lonminadjust;
-  minx = gbox->xmin;
-  maxx = gbox->xmax;
-  miny = gbox->ymin;
-  maxy = gbox->ymax;
-
-  if (ObGeoBoxUtil::is_float_equal(minx, maxx) && ObGeoBoxUtil::is_float_equal(miny, maxy)) {
-    // it's a point
-    precision = 20;
-  } else {
-    lonmin = -180.0;
-    lonmax = 180.0;
-    latmin = -90.0;
-    latmax = 90.0;
-    int prec_calc = 0;
-    while(!finish_calc) {
-      lonwidth = lonmax - lonmin;
-      latwidth = latmax - latmin;
-      latmaxadjust = lonmaxadjust = latminadjust = lonminadjust = 0.0;
-      if (ObGeoBoxUtil::is_float_gt(minx, lonmin + lonwidth / 2.0)) {
-        lonminadjust = lonwidth / 2.0;
-      } else if (ObGeoBoxUtil::is_float_lt(maxx, lonmax - lonwidth / 2.0)) {
-        lonmaxadjust = -1 * lonwidth / 2.0;
-      }
-      if (lonminadjust || lonmaxadjust) {
-        lonmin += lonminadjust;
-        lonmax += lonmaxadjust;
-        prec_calc++;
-      } else {
-        finish_calc = true;
-      }
-      if (!finish_calc) {
-        if (ObGeoBoxUtil::is_float_gt(miny, latmin + latwidth / 2.0)) {
-          latminadjust = latwidth / 2.0;
-        } else if (ObGeoBoxUtil::is_float_lt(maxy, latmax - latwidth / 2.0)) {
-          latmaxadjust = -1 * latwidth / 2.0;
-        }
-        if (latminadjust || latmaxadjust) {
-          latmin += latminadjust;
-          latmax += latmaxadjust;
-          prec_calc++;
-        } else {
-          finish_calc = true;
-        }
-      }
-    }
-    // record bounds for future use
-    bounds->xmin = lonmin;
-    bounds->xmax = lonmax;
-    bounds->ymin = latmin;
-    bounds->ymax = latmax;
-    precision = prec_calc / 5;
+  const seekdb::geo::geohash::Bounds box{gbox->xmin, gbox->ymin, gbox->xmax, gbox->ymax};
+  seekdb::geo::geohash::Bounds cell{};
+  precision = seekdb::geo::geohash::automatic_precision(box, cell);
+  // The original point fast path does not write bounds.
+  if (!ObGeoBoxUtil::is_float_equal(gbox->xmin, gbox->xmax) ||
+      !ObGeoBoxUtil::is_float_equal(gbox->ymin, gbox->ymax)) {
+    bounds->xmin = cell.xmin; bounds->ymin = cell.ymin;
+    bounds->xmax = cell.xmax; bounds->ymax = cell.ymax;
   }
-  return ret;
+  return OB_SUCCESS;
 }
 
 int ObExprPrivSTGeoHash::get_gbox(lib::MemoryContext &mem_ctx, ObGeometry *&geo, ObGeogBox *&gbox)
