@@ -160,7 +160,10 @@ impl<'host> HostAllocator<'host> {
     /// outlive this wrapper and move between threads, but do not pin plugin code.
     pub fn owned_zeroed(&self, length: usize, alignment: u32) -> Result<OwnedHostBuffer> {
         let buffer = self.allocate_owned(length, alignment)?;
-        unsafe { buffer.raw.data.write_bytes(0, length) };
+        if length != 0 {
+            let data = NonNull::new(buffer.raw.data).ok_or(sys::INVALID)?;
+            unsafe { data.as_ptr().write_bytes(0, length) };
+        }
         Ok(buffer)
     }
 

@@ -226,16 +226,14 @@ pub unsafe extern "C" fn seekdb_runtime_input_state_begin(
     input: u32,
     out: *mut Effect,
 ) -> i32 {
-    if !aligned(out) {
+    let Some(out) = (unsafe { out.as_mut() }) else {
         return INVALID;
-    }
-    unsafe {
-        *out = Effect::default();
-    }
-    if !aligned(state) {
+    };
+    *out = Effect::default();
+    let Some(state) = (unsafe { state.as_mut() }) else {
         return INVALID;
-    }
-    unsafe { (&mut *state).begin(operation, input, &mut *out) }
+    };
+    state.begin(operation, input, out)
 }
 /// # Safety
 /// Same ownership/output contract as begin. ERROR reports failed host work;
@@ -247,16 +245,14 @@ pub unsafe extern "C" fn seekdb_runtime_input_state_finish(
     outcome: u32,
     out: *mut Effect,
 ) -> i32 {
-    if !aligned(out) {
+    let Some(out) = (unsafe { out.as_mut() }) else {
         return INVALID;
-    }
-    unsafe {
-        *out = Effect::default();
-    }
-    if !aligned(state) {
+    };
+    *out = Effect::default();
+    let Some(state) = (unsafe { state.as_mut() }) else {
         return INVALID;
-    }
-    unsafe { (&mut *state).finish(ticket, outcome, &mut *out) }
+    };
+    state.finish(ticket, outcome, out)
 }
 /// # Safety
 /// Exclusive live handle, no operation in flight. reusable=1 only after a
@@ -268,18 +264,17 @@ pub unsafe extern "C" fn seekdb_runtime_input_state_reset(
     reusable: u32,
     out: *mut Effect,
 ) -> i32 {
-    if !aligned(out) {
+    let Some(out) = (unsafe { out.as_mut() }) else {
+        return INVALID;
+    };
+    *out = Effect::default();
+    let Some(state) = (unsafe { state.as_mut() }) else {
+        return INVALID;
+    };
+    if reusable > 1 {
         return INVALID;
     }
-    unsafe {
-        *out = Effect::default();
-    }
-    if !aligned(state) || reusable > 1 {
-        return INVALID;
-    }
-    unsafe {
-        *out = (&mut *state).reset(reusable == 1);
-    }
+    *out = state.reset(reusable == 1);
     OK
 }
 

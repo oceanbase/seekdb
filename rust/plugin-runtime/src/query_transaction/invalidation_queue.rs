@@ -384,7 +384,7 @@ mod tests {
                 seekdb_runtime_query_transaction_finish(tx, 77, 1, &mut error),
                 OK
             );
-            assert_eq!((*tx).invalidation_count, 0);
+            assert_eq!(tx.as_ref().unwrap().invalidation_count, 0);
             seekdb_runtime_query_transaction_destroy(tx);
         }
     }
@@ -436,7 +436,7 @@ mod tests {
                 seekdb_runtime_query_transaction_reserve_invalidations(queue, third, 77),
                 LIMIT
             );
-            assert!((*third).delivery.is_none());
+            assert!(third.as_ref().unwrap().delivery.is_none());
             commit(first);
             commit(second);
             let (a, request) = peek(queue);
@@ -487,7 +487,7 @@ mod tests {
                 OK
             );
             assert_eq!(peek(queue).0, 0);
-            assert_eq!(lock(&(*queue).0).requests, 0);
+            assert_eq!(lock(&queue.as_ref().unwrap().0).requests, 0);
             seekdb_runtime_invalidation_queue_destroy(queue);
         }
     }
@@ -552,7 +552,7 @@ mod tests {
                 seekdb_runtime_query_transaction_reserve_invalidations(queue, late, 77),
                 OK
             );
-            let weak = Arc::downgrade(&(*queue).0);
+            let weak = Arc::downgrade(&queue.as_ref().unwrap().0);
             seekdb_runtime_invalidation_queue_destroy(queue); // Cache itself has gone away.
             assert!(weak.upgrade().is_some());
             commit(late); // No stale queue handle dereference or allocation.
@@ -588,12 +588,12 @@ mod tests {
                 OK
             );
             seekdb_runtime_query_transaction_destroy(first);
-            lock(&(*queue).0).next_token = u64::MAX;
+            lock(&queue.as_ref().unwrap().0).next_token = u64::MAX;
             assert_eq!(
                 seekdb_runtime_query_transaction_reserve_invalidations(queue, second, 77),
                 LIMIT
             );
-            assert!((*second).delivery.is_none());
+            assert!(second.as_ref().unwrap().delivery.is_none());
             seekdb_runtime_query_transaction_destroy(second);
             seekdb_runtime_invalidation_queue_destroy(queue);
         }
@@ -603,7 +603,7 @@ mod tests {
     fn concurrent_producers_publish_distinct_batches_for_one_serialized_consumer() {
         unsafe {
             let queue = seekdb_runtime_invalidation_queue_create(32, 32);
-            let shared = &*queue;
+            let shared = queue.as_ref().unwrap();
             std::thread::scope(|scope| {
                 for routine in 1..=32 {
                     scope.spawn(move || {
@@ -653,7 +653,7 @@ mod tests {
                 seekdb_runtime_invalidation_queue_complete(queue, token, request.ticket, 1),
                 OK
             );
-            assert_eq!(lock(&(*queue).0).requests, 2);
+            assert_eq!(lock(&queue.as_ref().unwrap().0).requests, 2);
             assert_eq!(
                 seekdb_runtime_query_transaction_reserve_invalidations(queue, second, 77),
                 LIMIT
@@ -664,7 +664,7 @@ mod tests {
                 seekdb_runtime_invalidation_queue_complete(queue, token, request.ticket, 1),
                 OK
             );
-            assert_eq!(lock(&(*queue).0).requests, 0);
+            assert_eq!(lock(&queue.as_ref().unwrap().0).requests, 0);
             assert_eq!(
                 seekdb_runtime_query_transaction_reserve_invalidations(queue, second, 77),
                 OK

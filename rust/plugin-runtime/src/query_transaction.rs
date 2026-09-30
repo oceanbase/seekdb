@@ -135,26 +135,26 @@ mod invalidation_tests {
                 seekdb_runtime_query_transaction_record_schema_version(tx, 77, 10, 500),
                 OK
             );
-            (*tx).invalidation_ticket = u64::MAX - 1;
+            tx.as_mut().unwrap().invalidation_ticket = u64::MAX - 1;
             assert_eq!(
                 seekdb_runtime_query_transaction_record_invalidation(tx, 77, 10, 100, 900),
                 OK
             );
-            assert_eq!((*tx).invalidation_ticket, u64::MAX);
+            assert_eq!(tx.as_ref().unwrap().invalidation_ticket, u64::MAX);
             assert_eq!(
                 seekdb_runtime_query_transaction_record_invalidation(tx, 77, 10, 100, 901),
                 LIMIT
             );
-            assert_eq!((*tx).records.len(), 2);
-            assert_eq!((*tx).invalidation_count, 1);
+            assert_eq!(tx.as_ref().unwrap().records.len(), 2);
+            assert_eq!(tx.as_ref().unwrap().invalidation_count, 1);
             let mut error = 0;
             assert_eq!(
                 seekdb_runtime_query_transaction_rollback(tx, 77, 10, &mut error),
                 OK
             );
-            assert_eq!((*tx).schema_sequence, 0);
-            assert_eq!((*tx).invalidation_count, 0);
-            assert_eq!((*tx).invalidation_ticket, u64::MAX);
+            assert_eq!(tx.as_ref().unwrap().schema_sequence, 0);
+            assert_eq!(tx.as_ref().unwrap().invalidation_count, 0);
+            assert_eq!(tx.as_ref().unwrap().invalidation_ticket, u64::MAX);
             assert_eq!(
                 seekdb_runtime_query_transaction_admit_ddl(tx, 77, 20, 8),
                 OK
@@ -186,10 +186,10 @@ mod invalidation_tests {
             unsafe {
                 let tx = seekdb_runtime_query_transaction_create(77);
                 assert!(!tx.is_null());
-                (*tx).phase = phase;
+                tx.as_mut().unwrap().phase = phase;
                 assert_eq!(seekdb_runtime_query_transaction_fail(tx, 77, -4012), OK);
                 assert_eq!(seekdb_runtime_query_transaction_fail(tx, 77, -4002), OK);
-                assert_eq!((*tx).first_error, -4012);
+                assert_eq!(tx.as_ref().unwrap().first_error, -4012);
                 let mut error = 0;
                 let (mut version, mut operations) = (9, 9);
                 assert_eq!(
@@ -244,8 +244,8 @@ mod invalidation_tests {
                 STATE_MISMATCH
             );
             assert_eq!(seekdb_runtime_query_transaction_fail(tx, 77, 0), INVALID);
-            assert_eq!((*tx).first_error, 0);
-            assert!((*tx).phase == Phase::Open);
+            assert_eq!(tx.as_ref().unwrap().first_error, 0);
+            assert!(tx.as_ref().unwrap().phase == Phase::Open);
             let mut error = 0;
             assert_eq!(
                 seekdb_runtime_query_transaction_prepare_commit(tx, 77, &mut error),
@@ -259,7 +259,7 @@ mod invalidation_tests {
                 seekdb_runtime_query_transaction_fail(tx, 77, -1),
                 STATE_MISMATCH
             );
-            assert_eq!((*tx).first_error, 0);
+            assert_eq!(tx.as_ref().unwrap().first_error, 0);
             seekdb_runtime_query_transaction_destroy(tx);
         }
     }
@@ -805,8 +805,10 @@ pub unsafe extern "C" fn seekdb_runtime_query_transaction_begin_prepare(
     if status != OK {
         return status;
     }
-    // SAFETY: schema_state validated pointers; its borrow has ended.
-    let transaction = unsafe { &mut *transaction };
+    // SAFETY: The host exclusively owns the live handle for this call.
+    let Some(transaction) = (unsafe { transaction.as_mut() }) else {
+        return INVALID;
+    };
     if transaction.phase != Phase::Open
         || (transaction.schema_operations != 0 && transaction.ddl_epoch == 0)
     {

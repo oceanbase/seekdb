@@ -144,11 +144,10 @@ impl MemoryAccount {
 // Intrusive ownership preserves fallible allocation without requiring unstable
 // Arc::try_new. Only heap accounts from memory_create enter this protocol.
 unsafe fn release_account(account: *const MemoryAccount) {
-    if unsafe { &*account }
-        .references
-        .fetch_sub(1, Ordering::Release)
-        == 1
-    {
+    let Some(account_ref) = (unsafe { account.as_ref() }) else {
+        return;
+    };
+    if account_ref.references.fetch_sub(1, Ordering::Release) == 1 {
         fence(Ordering::Acquire);
         drop(unsafe { Box::from_raw(account.cast_mut()) });
     }
@@ -166,7 +165,9 @@ unsafe impl Send for MemoryBuffer {}
 unsafe impl Sync for MemoryBuffer {}
 impl Drop for MemoryBuffer {
     fn drop(&mut self) {
-        let account = unsafe { &*self.account };
+        let Some(account) = (unsafe { self.account.as_ref() }) else {
+            std::process::abort();
+        };
         if account.release_kind(self.memory, self.bytes, self.alignment, true) != OK {
             std::process::abort(); // Owned token and allocation ledger must agree.
         }
@@ -349,6 +350,7 @@ pub unsafe extern "C" fn seekdb_runtime_memory_destroy(account: *mut MemoryAccou
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ptr::NonNull;
     use std::sync::{Arc, Barrier};
 
     #[test]
@@ -356,29 +358,53 @@ mod tests {
         unsafe {
             let account = seekdb_runtime_memory_create(8, 2);
             let dropped = Arc::new(std::sync::atomic::AtomicBool::new(false));
-            (*account).dropped = Some(dropped.clone());
+            account.as_mut().unwrap().dropped = Some(dropped.clone());
             let first = seekdb_runtime_memory_buffer_create(account, 4, 16);
             let second = seekdb_runtime_memory_buffer_create(account, 4, 32);
             assert!(!first.is_null() && !second.is_null());
-            let data = seekdb_runtime_memory_buffer_data(first);
-            data.cast::<u32>().write(17);
+            let data = NonNull::new(seekdb_runtime_memory_buffer_data(first)).unwrap();
+            data.cast::<u32>().as_ptr().write(17);
             // Mixing raw free with an owned token must not steal its allocation.
-            assert_eq!(seekdb_runtime_memory_free(account, data, 4, 16), INVALID);
+            assert_eq!(
+                seekdb_runtime_memory_free(account, data.as_ptr(), 4, 16),
+                INVALID
+            );
             assert!(seekdb_runtime_memory_buffer_create(account, 1, 1).is_null());
-            assert_eq!((*account).references.load(Ordering::Relaxed), 3);
+            assert_eq!(
+                account.as_ref().unwrap().references.load(Ordering::Relaxed),
+                3
+            );
             seekdb_runtime_memory_close(account);
             assert!(seekdb_runtime_memory_buffer_create(account, 1, 1).is_null());
             seekdb_runtime_memory_destroy(account);
             assert!(!dropped.load(Ordering::Acquire));
             let owned = Box::from_raw(first);
             std::thread::spawn(move || {
-                assert_eq!(owned.memory.cast::<u32>().read(), 17);
+                assert_eq!(
+                    NonNull::new(owned.memory)
+                        .unwrap()
+                        .cast::<u32>()
+                        .as_ptr()
+                        .read(),
+                    17
+                );
                 drop(owned);
             })
             .join()
             .unwrap();
             assert!(!dropped.load(Ordering::Acquire));
-            assert_eq!((*(*second).account).lock().usage.bytes, 4);
+            assert_eq!(
+                second
+                    .as_ref()
+                    .unwrap()
+                    .account
+                    .as_ref()
+                    .unwrap()
+                    .lock()
+                    .usage
+                    .bytes,
+                4
+            );
             seekdb_runtime_memory_buffer_destroy(second);
             assert!(dropped.load(Ordering::Acquire));
         }
@@ -393,14 +419,17 @@ mod tests {
             let account = seekdb_runtime_memory_create(8, 2);
             for (size, alignment) in [(0, 1), (1, 0), (1, 3), (u64::MAX, 1)] {
                 assert!(seekdb_runtime_memory_buffer_create(account, size, alignment).is_null());
-                assert_eq!((*account).references.load(Ordering::Relaxed), 1);
+                assert_eq!(
+                    account.as_ref().unwrap().references.load(Ordering::Relaxed),
+                    1
+                );
             }
             let raw = seekdb_runtime_memory_alloc(account, 3, 1);
             let token = seekdb_runtime_memory_buffer_create(account, 5, 1);
             assert!(!raw.is_null() && !token.is_null());
             assert!(seekdb_runtime_memory_alloc(account, 1, 1).is_null());
             seekdb_runtime_memory_buffer_destroy(token);
-            assert_eq!((*account).lock().usage.bytes, 3);
+            assert_eq!(account.as_ref().unwrap().lock().usage.bytes, 3);
             assert_eq!(seekdb_runtime_memory_free(account, raw, 3, 1), OK);
             seekdb_runtime_memory_destroy(account);
         }
@@ -411,7 +440,7 @@ mod tests {
         unsafe {
             let account = seekdb_runtime_memory_create(512, 8);
             let dropped = Arc::new(std::sync::atomic::AtomicBool::new(false));
-            (*account).dropped = Some(dropped.clone());
+            account.as_mut().unwrap().dropped = Some(dropped.clone());
             let mut tokens = Vec::new();
             for _ in 0..8 {
                 let token = seekdb_runtime_memory_buffer_create(account, 64, 64);
@@ -487,11 +516,20 @@ mod tests {
         let other = MemoryAccount::new(100, 2);
         let memory = account.allocate(8, 8);
         assert!(!memory.is_null());
-        unsafe { memory.cast::<u64>().write(0x1234) };
+        unsafe {
+            NonNull::new(memory)
+                .unwrap()
+                .cast::<u64>()
+                .as_ptr()
+                .write(0x1234)
+        };
         assert_eq!(other.release(memory, 8, 8), INVALID);
         assert_eq!(account.release(memory, 7, 8), INVALID);
         assert_eq!(account.release(memory, 8, 4), INVALID);
-        assert_eq!(unsafe { memory.cast::<u64>().read() }, 0x1234);
+        assert_eq!(
+            unsafe { NonNull::new(memory).unwrap().cast::<u64>().as_ptr().read() },
+            0x1234
+        );
         assert_eq!(account.lock().usage.bytes, 8);
         assert_eq!(account.release(memory, 8, 8), OK);
         assert_eq!(account.release(memory, 8, 8), INVALID);
@@ -507,11 +545,18 @@ mod tests {
             assert!(!account.is_null());
             let memory = seekdb_runtime_memory_alloc(account, 16, 16);
             assert!(!memory.is_null());
-            memory.cast::<u64>().write(7);
+            NonNull::new(memory)
+                .unwrap()
+                .cast::<u64>()
+                .as_ptr()
+                .write(7);
             seekdb_runtime_memory_close(account);
             seekdb_runtime_memory_close(account);
             assert!(seekdb_runtime_memory_alloc(account, 1, 1).is_null());
-            assert_eq!(memory.cast::<u64>().read(), 7);
+            assert_eq!(
+                NonNull::new(memory).unwrap().cast::<u64>().as_ptr().read(),
+                7
+            );
             let mut usage = MemoryUsage::default();
             assert_eq!(seekdb_runtime_memory_usage(account, &mut usage), OK);
             assert_eq!(usage.bytes, 16);
