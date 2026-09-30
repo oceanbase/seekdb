@@ -477,6 +477,10 @@ int ObFTRangeDict::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer
   case ObFTDictType::DICT_IK_STOP: {
     table_name = ObString(share::OB_FT_STOPWORD_IK_UTF8_TNAME);
   } break;
+  case ObFTDictType::DICT_IK_CUSTOM: {
+    // custom dict table from user, name_ is "db.table"
+    table_name = desc.name_;
+  } break;
   default:
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("Not supported dict type.", K(ret));
@@ -503,6 +507,9 @@ int ObFTRangeDict::try_load_cache(const ObFTDictDesc &desc,
 {
   int ret = OB_SUCCESS;
   uint64_t name = static_cast<uint64_t>(desc.type_);
+  if (ObFTDictType::DICT_IK_CUSTOM == desc.type_) {
+    name = common::murmurhash(desc.name_.ptr(), desc.name_.length(), 0);
+  }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < range_count; ++i) {
     ObDictCacheKey key(name, desc.type_, i);

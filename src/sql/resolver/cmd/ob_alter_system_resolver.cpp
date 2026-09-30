@@ -1145,6 +1145,65 @@ int ObRefreshMemStatResolver::resolve(const ParseNode &parse_tree)
   return ret;
 }
 
+int ObRefreshFulltextDictResolver::resolve(const ParseNode &parse_tree)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(T_REFRESH_FULLTEXT_DICT != parse_tree.type_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("type is not T_REFRESH_FULLTEXT_DICT", "type", get_type_name(parse_tree.type_));
+  } else if (OB_ISNULL(parse_tree.children_) || OB_ISNULL(parse_tree.children_[0])) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("children should not be null");
+  } else {
+    ObRefreshFulltextDictStmt *stmt = create_stmt<ObRefreshFulltextDictStmt>();
+    if (NULL == stmt) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_ERROR("create ObRefreshFulltextDictStmt failed");
+    } else {
+      stmt_ = stmt;
+      const ParseNode *rel_node = parse_tree.children_[0];
+      if (OB_UNLIKELY(T_RELATION_FACTOR != rel_node->type_) || OB_ISNULL(rel_node->children_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("invalid relation factor node", K(rel_node->type_));
+      } else {
+        const ParseNode *db_node = rel_node->children_[0];
+        const ParseNode *tb_node = rel_node->children_[1];
+        ObString db_name;
+        ObString table_name;
+        if (OB_ISNULL(tb_node) || OB_ISNULL(tb_node->str_value_)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("table name is null");
+        } else {
+          table_name = ObString(static_cast<int32_t>(tb_node->str_len_), tb_node->str_value_);
+          if (NULL != db_node && OB_NOT_NULL(db_node->str_value_)) {
+            db_name = ObString(static_cast<int32_t>(db_node->str_len_), db_node->str_value_);
+          } else if (OB_ISNULL(params_.session_info_)) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("session info is null");
+          } else {
+            db_name = params_.session_info_->get_database_name();
+          }
+          if (OB_SUCC(ret)) {
+            int64_t buf_len = db_name.length() + table_name.length() + 2;
+            char *buf = nullptr;
+            if (OB_ISNULL(buf = static_cast<char *>(params_.allocator_->alloc(buf_len)))) {
+              ret = OB_ALLOCATE_MEMORY_FAILED;
+              LOG_WARN("failed to alloc memory", K(ret));
+            } else {
+              MEMCPY(buf, db_name.ptr(), db_name.length());
+              buf[db_name.length()] = '.';
+              MEMCPY(buf + db_name.length() + 1, table_name.ptr(), table_name.length());
+              buf[buf_len - 1] = '\0';
+              stmt->set_dict_table(ObString(static_cast<int32_t>(buf_len - 1), buf));
+            }
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObWashMemFragmentationResolver::resolve(const ParseNode &parse_tree)
 {
   int ret = OB_SUCCESS;

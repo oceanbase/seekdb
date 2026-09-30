@@ -283,6 +283,12 @@ int ObIKFTParser::init_dict(const plugin::ObFTParserParam &param)
                               ObCharsetType::CHARSET_UTF8MB4,
                               ObCollationType::CS_TYPE_UTF8MB4_BIN);
 
+  if (param.ik_param_.main_dict_.length() > 0) {
+    // custom dict table (db.table) replaces built-in main dict
+    main_dict_desc.name_ = param.ik_param_.main_dict_;
+    main_dict_desc.type_ = ObFTDictType::DICT_IK_CUSTOM;
+  }
+
   ObFTDictDesc quan_dict_desc("quan_dict",
                               ObFTDictType::DICT_IK_QUAN,
                               ObCharsetType::CHARSET_UTF8MB4,
