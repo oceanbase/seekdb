@@ -31,6 +31,9 @@ if(WIN32)
   find_program(LLVM_LIB_PROGRAM llvm-lib)
   if(LLVM_LIB_PROGRAM)
     set(CMAKE_AR "${LLVM_LIB_PROGRAM}" CACHE FILEPATH "Archiver" FORCE)
+  endif()
+endif()
+
 if(OB_MACOS27)
   include(CheckCXXSourceCompiles)
   # An empty main misses LLVM/SDK libc++ incompatibilities.
