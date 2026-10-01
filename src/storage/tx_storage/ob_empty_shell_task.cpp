@@ -69,12 +69,13 @@ void ObEmptyShellTask::runTimerTask()
           STORAGE_LOG(WARN, "[emptytablet] tablet_empty_shell_handler get empty shell tablet ids failed", K(ret));
         } else if (empty_shell_tablet_ids.empty()) {
           // do nothing
-        } else if (OB_FAIL(NamespaceForkKernelPrototype::protect_snapshot_tablets(empty_shell_tablet_ids, need_retry))) {
+        } else if (OB_FAIL(NamespaceForkKernelPrototype::reclaim_unreferenced_tablets(
+            empty_shell_tablet_ids, need_retry,
+            [&](const common::ObIArray<common::ObTabletID> &tablets) {
+              return tablet_empty_shell_handler->update_tablets_to_empty_shell(ls, tablets);
+            }))) {
           need_retry = true;
           STORAGE_LOG(WARN, "prototype snapshot protection unavailable; defer GC", KR(ret));
-        } else if (OB_FAIL(tablet_empty_shell_handler->update_tablets_to_empty_shell(ls, empty_shell_tablet_ids))) {
-          need_retry = true;
-          STORAGE_LOG(WARN, "update tablet to empty shell failed", KR(ret));
         }
         if (need_retry) {
           STORAGE_LOG(INFO, "[emptytablet] tablet become empty shell error, need retry", KR(ret), KPC(ls), K(empty_shell_tablet_ids));

@@ -378,11 +378,16 @@ std::string encode_gc_watermark(int64_t watermark)
 int encode_exception(const InstanceExceptionRecord &record, std::string &value)
 {
   if (!ns::NamespaceObjectKey{record.namespace_id, record.tablet_id}.is_valid()
-      || record.kind < 0 || record.kind > 1 || record.drop_scn < 0) { return OB_INVALID_ARGUMENT; }
+      || record.kind < 0 || record.kind > 1 || record.drop_scn < 0
+      || record.create_scn < 0
+      || (record.kind == 1 && (record.drop_scn == 0
+          || (record.was_owned && record.create_scn == 0)))) { return OB_INVALID_ARGUMENT; }
   value = "{";
   append_json_u64(value, "table_id", record.table_id);
   append_json_i64(value, "kind", record.kind);
   append_json_i64(value, "drop_scn", record.drop_scn);
+  append_json_i64(value, "was_owned", record.was_owned ? 1 : 0);
+  append_json_i64(value, "create_scn", record.create_scn);
   value += '}';
   return OB_SUCCESS;
 }
@@ -399,8 +404,15 @@ int decode_exception(uint64_t ns_id, uint64_t tablet_id,
   if (ret == OB_SUCCESS) { ret = json_u64(*object, "table_id", decoded.table_id); }
   if (ret == OB_SUCCESS) { ret = json_i64(*object, "kind", decoded.kind); }
   if (ret == OB_SUCCESS) { ret = json_i64(*object, "drop_scn", decoded.drop_scn); }
+  int64_t was_owned = 0;
+  if (ret == OB_SUCCESS) { ret = json_i64(*object, "was_owned", was_owned); }
+  if (ret == OB_SUCCESS) { ret = json_i64(*object, "create_scn", decoded.create_scn); }
   if (ret != OB_SUCCESS || decoded.kind < 0 || decoded.kind > 1
-      || decoded.drop_scn < 0) { return OB_CHECKSUM_ERROR; }
+      || decoded.drop_scn < 0 || was_owned < 0 || was_owned > 1
+      || decoded.create_scn < 0
+      || (decoded.kind == 1 && (decoded.drop_scn == 0
+          || (was_owned == 1 && decoded.create_scn == 0)))) { return OB_CHECKSUM_ERROR; }
+  decoded.was_owned = was_owned == 1;
   record = decoded;
   return OB_SUCCESS;
 }
@@ -784,10 +796,10 @@ int InstanceNamespaceMetadata::resolve_read_tablet(uint64_t namespace_id,
   const bool owned = ret == OB_SUCCESS;
   const uint64_t local_storage = ns::NamespaceObjectKey{
       namespace_id, local_tablet}.storage_id();
-  bool exists = false;
-  ret = probe(local_storage, exists);
+  TabletVisibility visibility = TabletVisibility::ABSENT;
+  ret = probe(local_storage, 0, visibility);
   if (ret != OB_SUCCESS) { return ret; }
-  if (exists || owned) {
+  if (visibility == TabletVisibility::READABLE || owned) {
     physical_tablet = local_storage;
     return OB_SUCCESS;
   }
@@ -804,11 +816,17 @@ int InstanceNamespaceMetadata::resolve_read_tablet(uint64_t namespace_id,
         current, local_tablet}.storage_id();
     InstanceExceptionRecord inherited;
     int lookup = get_exception(current, local_tablet, inherited);
-    if (lookup == OB_SUCCESS && inherited.kind == 1) { return OB_TABLET_NOT_EXIST; }
+    if (lookup == OB_SUCCESS && inherited.kind == 1
+        && inherited.drop_scn <= cap) { return OB_TABLET_NOT_EXIST; }
     if (lookup != OB_SUCCESS && lookup != OB_ENTRY_NOT_EXIST) { return lookup; }
-    ret = probe(candidate, exists);
+    if (lookup == OB_SUCCESS && inherited.was_owned && cap < inherited.create_scn) {
+      continue; // This copy did not exist in the inherited view.
+    }
+    ret = probe(candidate, cap, visibility);
     if (ret != OB_SUCCESS) { return ret; }
-    if (exists || (lookup == OB_SUCCESS && inherited.kind == 0)) {
+    if (visibility == TabletVisibility::ABSENT && lookup == OB_SUCCESS
+        && (inherited.kind == 0 || inherited.was_owned)) { return OB_SNAPSHOT_DISCARDED; }
+    if (visibility == TabletVisibility::READABLE) {
       physical_tablet = candidate;
       cap_scn = cap;
       return OB_SUCCESS;
@@ -1225,14 +1243,16 @@ int InstanceNamespaceMetadata::finish_schema_recovery(uint64_t id,
 }
 
 int InstanceNamespaceMetadata::stage_schema_delta(uint64_t id,
-    int64_t base_schema_version, int64_t schema_version,
+    int64_t base_schema_version, int64_t schema_version, int64_t drop_scn,
     const std::map<uint64_t, uint64_t> &previous_tablets,
     const std::map<uint64_t, uint64_t> &current_tablets,
     const PhysicalTabletProbe &probe,
+    const PhysicalTabletBirthProbe &birth_probe,
     std::vector<uint64_t> &removed_owned)
 {
   removed_owned.clear();
-  if (base_schema_version <= 0 || schema_version < base_schema_version || !probe) {
+  if (base_schema_version <= 0 || schema_version < base_schema_version
+      || drop_scn <= 0 || !probe || !birth_probe) {
     return OB_INVALID_ARGUMENT;
   }
   InstanceNamespaceRecord record;
@@ -1258,10 +1278,21 @@ int InstanceNamespaceMetadata::stage_schema_delta(uint64_t id,
     if (ret == OB_ENTRY_NOT_EXIST) { ret = OB_SUCCESS; }
     if (ret != OB_SUCCESS) { break; }
     if (action.kind == ns::ExceptionDeltaKind::TOMBSTONE) {
-      if (had_old && old.kind == 0) {
+      bool local_exists = false;
+      ret = probe(action.tablet_id, local_exists);
+      if (ret != OB_SUCCESS) { break; }
+      const bool was_owned = local_exists || (had_old && (old.kind == 0 || old.was_owned));
+      int64_t create_scn = had_old ? old.create_scn : 0;
+      if (was_owned && create_scn == 0) {
+        ret = birth_probe(action.tablet_id, create_scn);
+        if (ret != OB_SUCCESS) { break; }
+        if (create_scn <= 0) { ret = OB_STATE_NOT_MATCH; break; }
+      }
+      if (local_exists || (had_old && old.kind == 0)) {
         pending_removal.push_back(action.tablet_id);
       }
-      ret = put_exception({id, action.tablet_id, action.table_id, 1, 0});
+      ret = put_exception({id, action.tablet_id, action.table_id, 1,
+          had_old && old.kind == 1 ? old.drop_scn : drop_scn, was_owned, create_scn});
     } else {
       bool local_exists = false;
       ret = probe(action.tablet_id, local_exists);
@@ -1367,7 +1398,15 @@ int InstanceNamespaceDirectory::ensure_root(const std::string &name,
     // this DML path cannot turn a lock on absence into a later insert.
     ret = metadata.get_namespace(1, root);
     if (ret == OB_ENTRY_NOT_EXIST) {
-      ret = metadata.initialize_snapshot_gc_watermark(gc_watermark);
+      // The freeze detector can initialize coordination before the Namespace
+      // directory. Preserve that record and its monotonic watermark.
+      int64_t stored_watermark = 0;
+      ret = metadata.get_snapshot_gc_watermark(stored_watermark);
+      if (ret == OB_ENTRY_NOT_EXIST) {
+        ret = metadata.initialize_snapshot_gc_watermark(gc_watermark);
+      } else if (ret == OB_SUCCESS && stored_watermark < gc_watermark) {
+        ret = metadata.advance_snapshot_gc_watermark(gc_watermark);
+      }
       if (ret == OB_SUCCESS) { ret = metadata.insert_root_namespace(name, schema_version); }
       staged = ret == OB_SUCCESS;
     } else if (ret == OB_SUCCESS) {
@@ -1386,10 +1425,8 @@ int InstanceNamespaceDirectory::ensure_root(const std::string &name,
         if (ret == OB_SUCCESS && stored_watermark < gc_watermark) {
           ret = metadata.advance_snapshot_gc_watermark(gc_watermark);
         }
-        if (ret == OB_SUCCESS && root.roots.schema_version < schema_version) {
-          root.roots.schema_version = schema_version;
-          ret = metadata.update_namespace(root);
-        }
+        // Startup must reconcile any committed SQL DDL from this published
+        // base; advancing here would discard its missing exception delta.
       }
     }
   }
@@ -1493,80 +1530,67 @@ int InstanceNamespaceDirectory::resolve_read_tablet(uint64_t namespace_id,
 }
 
 int InstanceNamespaceDirectory::filter_unreferenced_tablets(
-    const std::vector<uint64_t> &candidates, int64_t deadline,
+    const std::vector<uint64_t> &candidates,
+    const InstanceNamespaceMetadata::StorageTabletProbe &probe,
+    const std::map<uint64_t, uint64_t> &sources, int64_t deadline,
     std::vector<uint64_t> &unreferenced, bool &need_retry)
 {
   unreferenced.clear();
   need_retry = false;
+  if (!probe) { return OB_INVALID_ARGUMENT; }
   storage::InstanceMetaStore::Transaction tx;
   int ret = store_.begin(tx, deadline, true);
-  std::unordered_map<uint64_t, InstanceNamespaceRecord> records;
   std::vector<uint64_t> live;
+  std::unordered_set<uint64_t> locals;
+  std::unordered_set<uint64_t> referenced;
   std::vector<uint64_t> staged;
-  bool staged_retry = false;
   if (ret == OB_SUCCESS) {
     InstanceNamespaceMetadata metadata(store_, tx);
     ret = metadata.scan_namespaces([&](const InstanceNamespaceRecord &record) {
-      if (record.roots.state == 0) { live.push_back(record.id); }
-      records.emplace(record.id, record);
+      // DELETING still has admitted users until its access drain completes.
+      if (record.roots.state != 2) { live.push_back(record.id); }
       return OB_SUCCESS;
     });
     for (uint64_t candidate : candidates) {
-      if (ret != OB_SUCCESS) { break; }
-      if (!ns::NamespaceObjectKey::is_encoded(candidate)) {
-        staged.push_back(candidate);
-        continue;
+      if (ns::NamespaceObjectKey::is_encoded(candidate)) {
+        locals.insert(ns::NamespaceObjectKey::local_part(candidate));
       }
-      const uint64_t owner = ns::NamespaceObjectKey::encoded_namespace(candidate);
-      const uint64_t local = ns::NamespaceObjectKey::local_part(candidate);
-      std::unordered_map<uint64_t, int64_t> exceptions;
-      bool retained = false;
-      for (uint64_t reader : live) {
-        if (ret != OB_SUCCESS || retained) { break; }
-        if (reader == owner) { continue; }
-        uint64_t current = reader;
+    }
+    // An incomplete copy can refer to a source with a different local ID.
+    // Resolve its own logical identity before following physical source edges.
+    for (const auto &source : sources) {
+      if (ns::NamespaceObjectKey::is_encoded(source.first)) {
+        locals.insert(ns::NamespaceObjectKey::local_part(source.first));
+      }
+    }
+    for (uint64_t reader : live) {
+      for (uint64_t local : locals) {
+        if (ret != OB_SUCCESS) { break; }
+        uint64_t physical = 0;
+        int64_t cap = 0;
+        ret = metadata.resolve_read_tablet(reader, local, probe, physical, cap);
+        if (ret == OB_TABLET_NOT_EXIST) { ret = OB_SUCCESS; continue; }
+        if (ret != OB_SUCCESS) { break; }
         bool terminated = false;
-        for (int depth = 0; depth < 64 && !terminated; ++depth) {
-          if (current == owner) {
-            retained = true;
-            terminated = true;
-          } else {
-            auto kind = exceptions.find(current);
-            if (kind == exceptions.end()) {
-              InstanceExceptionRecord exception;
-              int lookup = metadata.get_exception(current, local, exception);
-              if (lookup == OB_ENTRY_NOT_EXIST) {
-                kind = exceptions.emplace(current, -1).first;
-              } else if (lookup == OB_SUCCESS) {
-                kind = exceptions.emplace(current, exception.kind).first;
-              } else {
-                ret = lookup;
-                break;
-              }
-            }
-            if (kind->second == 0 || kind->second == 1) {
-              terminated = true;
-            } else {
-              const auto parent = records.find(current);
-              if (parent == records.end() || parent->second.parent_namespace == 0) {
-                terminated = true;
-              } else {
-                current = parent->second.parent_namespace;
-              }
-            }
-          }
+        for (int depth = 0; depth < 64; ++depth) {
+          referenced.insert(physical);
+          const auto source = sources.find(physical);
+          if (source == sources.end()) { terminated = true; break; }
+          physical = source->second;
         }
-        if (!terminated && ret == OB_SUCCESS) { ret = OB_SIZE_OVERFLOW; }
+        if (!terminated) { ret = OB_SIZE_OVERFLOW; }
       }
-      if (ret == OB_SUCCESS && retained) { staged_retry = true; }
-      else if (ret == OB_SUCCESS) { staged.push_back(candidate); }
+      if (ret != OB_SUCCESS) { break; }
+    }
+    if (ret == OB_SUCCESS) {
+      for (uint64_t candidate : candidates) {
+        if (referenced.count(candidate) == 0) { staged.push_back(candidate); }
+        else { need_retry = true; }
+      }
     }
   }
   ret = finish_directory_transaction(store_, tx, ret);
-  if (ret == OB_SUCCESS) {
-    unreferenced.swap(staged);
-    need_retry = staged_retry;
-  }
+  if (ret == OB_SUCCESS) { unreferenced.swap(staged); }
   return ret;
 }
 
@@ -1826,10 +1850,11 @@ int InstanceNamespaceDirectory::finish_schema_recovery(uint64_t id,
 }
 
 int InstanceNamespaceDirectory::publish_schema_delta(uint64_t id,
-    int64_t base_version, int64_t version,
+    int64_t base_version, int64_t version, int64_t drop_scn,
     const std::map<uint64_t, uint64_t> &previous_tablets,
     const std::map<uint64_t, uint64_t> &current_tablets,
     const InstanceNamespaceMetadata::PhysicalTabletProbe &probe,
+    const InstanceNamespaceMetadata::PhysicalTabletBirthProbe &birth_probe,
     int64_t deadline, std::vector<uint64_t> &removed_owned)
 {
   removed_owned.clear();
@@ -1838,8 +1863,8 @@ int InstanceNamespaceDirectory::publish_schema_delta(uint64_t id,
   std::vector<uint64_t> staged;
   if (ret == OB_SUCCESS) {
     InstanceNamespaceMetadata metadata(store_, tx);
-    ret = metadata.stage_schema_delta(id, base_version, version,
-        previous_tablets, current_tablets, probe, staged);
+    ret = metadata.stage_schema_delta(id, base_version, version, drop_scn,
+        previous_tablets, current_tablets, probe, birth_probe, staged);
   }
   ret = finish_directory_transaction(store_, tx, ret);
   if (ret == OB_SUCCESS) { removed_owned.swap(staged); }

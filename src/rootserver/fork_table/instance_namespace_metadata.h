@@ -44,12 +44,21 @@ struct InstanceExceptionRecord
   uint64_t table_id = 0;  // Raw schema table identity.
   int64_t kind = 0;       // 0 owned, 1 tombstone.
   int64_t drop_scn = 0;
+  bool was_owned = false; // A tombstone must not hide a lost historical copy.
+  int64_t create_scn = 0; // Logical birth of that copy, retained after physical GC.
 };
 
 struct InstanceNamespacePin
 {
   uint64_t snapshot_id = 0;
   int64_t schema_version = 0;
+};
+
+enum class TabletVisibility
+{
+  ABSENT,
+  READABLE,
+  OUTSIDE_SNAPSHOT
 };
 
 // Typed access to instance metadata in one store-owned transaction. The
@@ -66,7 +75,8 @@ public:
   using PinVisitor = std::function<int(const InstanceNamespacePin &)>;
   using SnapshotAcquirer = std::function<int(int64_t &)>;
   using PhysicalTabletProbe = std::function<int(uint64_t, bool &)>;
-  using StorageTabletProbe = std::function<int(uint64_t, bool &)>;
+  using PhysicalTabletBirthProbe = std::function<int(uint64_t, int64_t &)>;
+  using StorageTabletProbe = std::function<int(uint64_t, int64_t, TabletVisibility &)>;
   using NamespacePhysicalProbe = std::function<int(uint64_t, bool &)>;
 
   InstanceNamespaceMetadata(storage::InstanceMetaStore &store, Transaction &transaction)
@@ -116,10 +126,11 @@ public:
   // Roll back the caller's transaction on error. The physical probe must not
   // reenter this transaction.
   int stage_schema_delta(uint64_t id, int64_t base_schema_version,
-      int64_t schema_version,
+      int64_t schema_version, int64_t drop_scn,
       const std::map<uint64_t, uint64_t> &previous_tablets,
       const std::map<uint64_t, uint64_t> &current_tablets,
       const PhysicalTabletProbe &probe,
+      const PhysicalTabletBirthProbe &birth_probe,
       std::vector<uint64_t> &removed_owned);
 
   // Repair a physical creation committed before its owned exception. The map
@@ -159,8 +170,9 @@ public:
   int erase_exception(uint64_t ns_id, uint64_t local_tablet);
   int scan_exceptions(uint64_t ns_id, const ExceptionVisitor &visitor);
 
-  // Resolves one namespace-local tablet to the nearest committed physical
-  // copy. StorageTabletProbe receives an encoded physical tablet ID. A local
+  // Resolves one namespace-local tablet to the nearest historical physical
+  // copy. StorageTabletProbe receives a physical ID and the effective SCN
+  // (zero means current). Errors must not be treated as absence. A local
   // owned record whose tablet is not yet visible resolves to its local ID so
   // the caller can wait for tablet-manager visibility. A local tombstone stops lookup.
   int resolve_read_tablet(uint64_t namespace_id, uint64_t local_tablet,
@@ -252,9 +264,12 @@ public:
   int resolve_read_tablet(uint64_t namespace_id, uint64_t local_tablet,
       const InstanceNamespaceMetadata::StorageTabletProbe &probe,
       int64_t deadline, uint64_t &physical_tablet, int64_t &cap_scn);
-  // One KV snapshot decides which deleted physical tablets still have live
-  // descendants reading through them. Unencoded candidates pass through.
+  // Use the same historical source resolution as reads in one KV snapshot.
+  // sources maps incomplete physical copies to their baseline sources. The
+  // caller fences new dependencies through the actual physical reclamation.
   int filter_unreferenced_tablets(const std::vector<uint64_t> &candidates,
+      const InstanceNamespaceMetadata::StorageTabletProbe &probe,
+      const std::map<uint64_t, uint64_t> &sources,
       int64_t deadline, std::vector<uint64_t> &unreferenced, bool &need_retry);
   int list_live(int64_t deadline, std::vector<InstanceNamespaceRecord> &records);
   int list_deleted(int64_t deadline, std::vector<InstanceNamespaceRecord> &records);
@@ -286,10 +301,11 @@ public:
   // The physical probe checks this Namespace's encoded tablet address and
   // cannot reenter the KV transaction. Removed IDs become actionable only
   // after the directory transaction commits.
-  int publish_schema_delta(uint64_t id, int64_t base_version, int64_t version,
+  int publish_schema_delta(uint64_t id, int64_t base_version, int64_t version, int64_t drop_scn,
       const std::map<uint64_t, uint64_t> &previous_tablets,
       const std::map<uint64_t, uint64_t> &current_tablets,
       const InstanceNamespaceMetadata::PhysicalTabletProbe &probe,
+      const InstanceNamespaceMetadata::PhysicalTabletBirthProbe &birth_probe,
       int64_t deadline, std::vector<uint64_t> &removed_owned);
   // Repairs physical creations committed before their owned rows. The caller
   // supplies tablet->table relations from this Namespace's current schema.

@@ -1419,8 +1419,7 @@ int ObTabletForkUtil::check_satisfy_fork_condition(
       }
     }
     
-    if (OB_SUCC(ret) && need_freeze
-        && !NamespaceForkKernelPrototype::is_encoded_id(param.dest_tablet_id_.id())) {
+    if (OB_SUCC(ret) && need_freeze) {
       if (OB_FAIL(ObTabletForkUtil::freeze_tablet(param.source_tablet_id_))) {
       }
       ob_usleep(100 * 1000L); // 100ms

@@ -3,6 +3,7 @@
 #define OCEANBASE_NAMESPACE_FORK_KERNEL_PROTOTYPE_H_
 #include "share/schema/ob_table_schema.h"
 #include "data_plane/access/ob_namespace_access_mode.h"
+#include <functional>
 namespace oceanbase {
 namespace common { class ObISQLClient; }
 namespace share { namespace schema {
@@ -26,6 +27,10 @@ public:
   static void release_access(bool &held);
   static int drain_access();
   static int protect_snapshot_tablets(common::ObIArray<common::ObTabletID> &candidates, bool &need_retry);
+  // Keeps the dependency decision valid through physical reclamation.
+  static int reclaim_unreferenced_tablets(common::ObIArray<common::ObTabletID> &candidates,
+      bool &need_retry,
+      const std::function<int(const common::ObIArray<common::ObTabletID> &)> &reclaim);
   static int collect_dropped_namespace_tablets();
   static int control_namespace(const common::ObString &source, const common::ObString &target,
                                 uint64_t &namespace_id);
@@ -83,6 +88,7 @@ public:
       const common::ObIArray<const share::schema::ObTableSchema *> &binding_schemas);
   static int schedule_baseline(const ObTablet &tablet);
 private:
+  static int schedule_baseline_impl(const ObTablet &tablet, int depth);
   static int ensure_tablet_impl(
       const common::ObTabletID &tablet_id,
       const share::schema::ObTableSchema *requested_schema,

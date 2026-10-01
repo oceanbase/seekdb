@@ -249,6 +249,9 @@ int publish_namespace_schema_change(uint64_t namespace_id,
     int64_t &published_schema_version);
 rootserver::ObIRootserverLocalRuntime *root_namespace_ddl_runtime();
 void register_root_namespace_storage_services(ns::NamespaceRuntime &runtime);
+// Finish bootstrap and publish/recover the initial Namespace's directory
+// before opening normal requests. All Namespaces then fence DDL and fork.
+int complete_namespace_schema_bootstrap(share::schema::ObMultiVersionSchemaService &service);
 query::ObIRootCommandService *effective_root_command_service(
     sql::ObSQLSessionInfo *session);
 transaction::tablelock::ObIInnerConnectionLockRuntime *inprocess_lock_runtime(

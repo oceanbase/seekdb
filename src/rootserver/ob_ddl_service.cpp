@@ -25267,10 +25267,12 @@ int ObDDLSQLTransaction::start(ObISQLClient *proxy,
                  K(runtime_refreshed_schema_version), K(version_in_inner_table));
       }
     }
-    if (OB_SUCC(ret)
-        && OB_FAIL(observer::namespace_worker_prototype::begin_namespace_schema_change(
-            namespace_id_))) {
-      LOG_WARN("fail to begin namespace schema changes", KR(ret));
+    if (OB_SUCC(ret)) {
+      if (OB_FAIL(observer::namespace_worker_prototype::begin_namespace_schema_change(namespace_id_))) {
+        LOG_WARN("fail to begin namespace schema changes", KR(ret));
+      } else {
+        namespace_schema_change_started_ = true;
+      }
     }
   }
   return ret;
@@ -25379,18 +25381,24 @@ int ObDDLSQLTransaction::end(const bool commit)
   }
   ret = OB_SUCC(ret) ? tmp_ret : ret;
   const bool namespace_transaction_committed = commit && OB_SUCC(ret);
-  const int finish_schema_ret = observer::namespace_worker_prototype::finish_namespace_schema_change(
-      namespace_id_, namespace_transaction_committed && committed_schema_version > 0
-          ? committed_schema_version : 0);
-  if (OB_SUCC(ret)) { ret = finish_schema_ret; }
-  if (namespace_transaction_committed
-      && OB_SUCC(ret)
-      && committed_schema_version > 0) {
-    int64_t published_schema_version = OB_INVALID_VERSION;
-    if (OB_FAIL(observer::namespace_worker_prototype::publish_namespace_schema_change(
-            namespace_id_, *schema_service_, published_schema_version))) {
-      LOG_WARN("failed to publish committed namespace schema transaction",
-          KR(ret), K(committed_schema_version));
+  // A native SQL transaction can start but fail its schema-version check or
+  // Namespace registration. Such a transaction must not release another
+  // DDL's registration during explicit rollback or destructor cleanup.
+  if (namespace_schema_change_started_) {
+    namespace_schema_change_started_ = false;
+    const int finish_schema_ret = observer::namespace_worker_prototype::finish_namespace_schema_change(
+        namespace_id_, namespace_transaction_committed && committed_schema_version > 0
+            ? committed_schema_version : 0);
+    if (OB_SUCC(ret)) { ret = finish_schema_ret; }
+    if (namespace_transaction_committed
+        && OB_SUCC(ret)
+        && committed_schema_version > 0) {
+      int64_t published_schema_version = OB_INVALID_VERSION;
+      if (OB_FAIL(observer::namespace_worker_prototype::publish_namespace_schema_change(
+              namespace_id_, *schema_service_, published_schema_version))) {
+        LOG_WARN("failed to publish committed namespace schema transaction",
+            KR(ret), K(committed_schema_version));
+      }
     }
   }
   // Clear runtime_ for success or failure

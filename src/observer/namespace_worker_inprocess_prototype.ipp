@@ -29,47 +29,43 @@
 #include <shared_mutex>
 #include <thread>
 namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
-class RootSchemaLifecycle final : public INamespaceSchemaLifecycle
+class NamespaceSchemaLifecycle final : public INamespaceSchemaLifecycle
 {
 public:
-  int refresh() override { return OB_SUCCESS; }
+  explicit NamespaceSchemaLifecycle(uint64_t ns, bool load_on_access = true,
+                                    bool bootstrap = false)
+      : ns_(ns), load_on_access_(load_on_access), bootstrap_(bootstrap) {}
+  void complete_bootstrap() { bootstrap_.store(false, std::memory_order_release); }
+  int refresh() override
+  {
+    return load_on_access_ ? inprocess_refresh_schema(ns_) : OB_SUCCESS;
+  }
   int fetch_version(bool published, bool core_version, int64_t &version) override
   {
-    auto *service = namespace_schema_service(1);
-    if (service == nullptr) { return OB_NOT_INIT; }
-    return published
-        ? service->get_published_schema_version(version, core_version)
-        : service->get_runtime_refreshed_schema_version(version, core_version);
-  }
-  int begin_change() override { return OB_SUCCESS; }
-  int finish_change(int64_t) override { return OB_SUCCESS; }
-  int publish(ObMultiVersionSchemaService &schema_service,
-              int64_t &published_schema_version) override
-  {
-    return schema_service.get_runtime_refreshed_schema_version(published_schema_version);
-  }
-};
-class ForkSchemaLifecycle final : public INamespaceSchemaLifecycle
-{
-public:
-  explicit ForkSchemaLifecycle(uint64_t ns) : ns_(ns) {}
-  int refresh() override { return inprocess_refresh_schema(ns_); }
-  int fetch_version(bool, bool, int64_t &version) override
-  {
+    if (bootstrap_.load(std::memory_order_acquire)) {
+      auto *service = namespace_schema_service(ns_);
+      if (service == nullptr) { return OB_NOT_INIT; }
+      return published ? service->get_published_schema_version(version, core_version)
+          : service->get_runtime_refreshed_schema_version(version, core_version);
+    }
     return storage::NamespaceForkKernelPrototype::namespace_schema_version(ns_, version);
   }
   int begin_change() override
   {
-    return storage::NamespaceForkKernelPrototype::begin_schema_change(ns_);
+    return bootstrap_.load(std::memory_order_acquire) ? OB_SUCCESS
+        : storage::NamespaceForkKernelPrototype::begin_schema_change(ns_);
   }
   int finish_change(int64_t committed_schema_version) override
   {
-    return storage::NamespaceForkKernelPrototype::finish_schema_change(
-        ns_, committed_schema_version);
+    return bootstrap_.load(std::memory_order_acquire) ? OB_SUCCESS
+        : storage::NamespaceForkKernelPrototype::finish_schema_change(ns_, committed_schema_version);
   }
   int publish(ObMultiVersionSchemaService &schema_service,
               int64_t &published_schema_version) override
   {
+    if (bootstrap_.load(std::memory_order_acquire)) {
+      return schema_service.get_runtime_refreshed_schema_version(published_schema_version);
+    }
     if (const char *delay_text = std::getenv("SEEKDB_NAMESPACE_DDL_PUBLISH_DELAY_US")) {
       char *end = nullptr;
       const int64_t delay_us = std::strtoll(delay_text, &end, 10);
@@ -81,7 +77,28 @@ public:
   }
 private:
   uint64_t ns_;
+  bool load_on_access_;
+  std::atomic<bool> bootstrap_;
 };
+NamespaceSchemaLifecycle &bootstrap_schema_lifecycle()
+{
+  // Installed explicitly by instance bootstrap; normal namespaces use the
+  // same lifecycle without a bootstrap phase.
+  static NamespaceSchemaLifecycle lifecycle(1, false, true);
+  return lifecycle;
+}
+int complete_namespace_schema_bootstrap(ObMultiVersionSchemaService &service)
+{
+  bootstrap_schema_lifecycle().complete_bootstrap();
+  bool needed = false;
+  int ret = storage::NamespaceForkKernelPrototype::begin_schema_recovery(1, needed);
+  int64_t version = OB_INVALID_VERSION;
+  if (OB_SUCC(ret)) { ret = sync_namespace_schema_delta(1, service, version); }
+  if (OB_SUCC(ret) && needed) {
+    ret = storage::NamespaceForkKernelPrototype::finish_schema_recovery(1, version);
+  }
+  return ret;
+}
 INamespaceSchemaLifecycle *namespace_schema_lifecycle(uint64_t namespace_id)
 {
   ns::NamespaceRuntime *runtime = nullptr;
@@ -297,7 +314,7 @@ void register_root_namespace_storage_services(ns::NamespaceRuntime &runtime)
   static InProcessDirectInsertService direct_insert;
   static DirectInsertRegistry direct_insert_registry;
   static InProcessTabletAutoincrementService tablet_autoincrement(1);
-  static RootSchemaLifecycle schema_lifecycle;
+  auto &schema_lifecycle = bootstrap_schema_lifecycle();
   static RootTableLockTabletRouter table_lock_tablet_router;
   runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_SERVICE, &direct_insert);
   runtime.set_service(ns::NamespaceRuntime::DML_SERVICE, &native_inprocess_dml);
@@ -482,7 +499,7 @@ struct InProcessNamespaceServices {
   InProcessRootserverLocalRuntime *local_runtime = nullptr;
   InProcessDirectInsertService direct_insert;
   InProcessTabletAutoincrementService tablet_autoincrement;
-  ForkSchemaLifecycle schema_lifecycle;
+  NamespaceSchemaLifecycle schema_lifecycle;
   ForkTableLockTabletRouter table_lock_tablet_router;
   share::ObAutoincrementService autoincrement;
   DirectInsertRegistry direct_insert_registry;
@@ -800,7 +817,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
                 sequence.get_sys_leader_epoch());
     })())) {
   } else if (FALSE_IT(stage = "baseline")) {
-  } else if (FALSE_IT([&] {
+  } else if (OB_FAIL(([&] {
       // Static system-table definitions are identical in every namespace;
       // seed them locally exactly like the worker bootstrap does.
       ObArenaAllocator allocator("NsInProcBase");
@@ -818,48 +835,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
             system_schemas, system_schema_version);
       }
       return seed_ret;
-    }())) {
-  } else if (FALSE_IT(stage = "recovery")) {
-  } else if (FALSE_IT([&] {
-      // A previous serving instance may have committed native all_* rows
-      // after it marked the namespace dirty. Reconcile before publishing,
-      // mirroring the worker bootstrap recovery block.
-      InProcessServingScope serving(ns);
-      IndependentStorageScope storage_scope;
-      int recovery_ret = storage_scope.error();
-      int64_t directory_schema_version = OB_INVALID_VERSION;
-      int64_t local_schema_version = OB_INVALID_VERSION;
-      int64_t published_schema_version = OB_INVALID_VERSION;
-      bool recovery_needed = false;
-      if (!recovery_ret) {
-        recovery_ret = storage::NamespaceForkKernelPrototype::begin_schema_recovery(
-            ns, recovery_needed);
-      }
-      if (!recovery_ret && recovery_needed) {
-        if (OB_SUCCESS != (recovery_ret = fetch_schema_version(
-                false, false, directory_schema_version))) {
-        } else if (OB_SUCCESS != (recovery_ret =
-                services->schema_service->refresh_runtime_schema_from_static_system())) {
-        } else if (OB_SUCCESS != (recovery_ret =
-                services->schema_service->get_runtime_refreshed_schema_version(
-                local_schema_version))) {
-        } else if (local_schema_version < directory_schema_version) {
-          recovery_ret = OB_STATE_NOT_MATCH;
-        } else if (local_schema_version > directory_schema_version) {
-          recovery_ret = sync_namespace_schema_delta(
-              ns, *services->schema_service, published_schema_version);
-        } else {
-          published_schema_version = local_schema_version;
-        }
-        if (!recovery_ret) {
-          recovery_ret = storage::NamespaceForkKernelPrototype::finish_schema_recovery(
-              ns, published_schema_version);
-        }
-        services->schema_loaded.store(recovery_ret == OB_SUCCESS,
-            std::memory_order_release);
-      }
-      return recovery_ret;
-    }())) {
+    })())) {
   } else if (FALSE_IT(stage = "plan_cache")) {
   } else if (OB_ISNULL(services->plan_cache = OB_NEW(sql::ObPlanCache,
           ObModIds::OB_SQL_PLAN_CACHE))) {
@@ -1015,7 +991,40 @@ int inprocess_refresh_schema(uint64_t ns)
     if (!services.schema_loaded.load(std::memory_order_acquire)) {
       services.schema_loading_thread = std::this_thread::get_id();
       load_guard.unlock();
-      ret = services.schema_service->refresh_runtime_schema_from_static_system();
+      // All runtime services are installed before this load. Recovery uses
+      // inner SQL, which needs the same fully bound runtime as normal reads.
+      // Keep schema_loaded false until both schema and directory are current.
+      bool recovery_needed = false;
+      int64_t directory_schema_version = OB_INVALID_VERSION;
+      int64_t local_schema_version = OB_INVALID_VERSION;
+      int64_t published_schema_version = OB_INVALID_VERSION;
+      if (OB_SUCC(ret)) {
+        ret = storage::NamespaceForkKernelPrototype::begin_schema_recovery(
+            ns, recovery_needed);
+      }
+      if (OB_SUCC(ret) && recovery_needed) {
+        ret = services.schema_lifecycle.fetch_version(
+            false, false, directory_schema_version);
+      }
+      if (OB_SUCC(ret)) {
+        ret = services.schema_service->refresh_runtime_schema_from_static_system();
+      }
+      if (OB_SUCC(ret) && recovery_needed) {
+        if (OB_FAIL(services.schema_service->get_runtime_refreshed_schema_version(
+                local_schema_version))) {
+        } else if (local_schema_version < directory_schema_version) {
+          ret = OB_STATE_NOT_MATCH;
+        } else if (local_schema_version > directory_schema_version) {
+          ret = sync_namespace_schema_delta(
+              ns, *services.schema_service, published_schema_version);
+        } else {
+          published_schema_version = local_schema_version;
+        }
+        if (OB_SUCC(ret)) {
+          ret = storage::NamespaceForkKernelPrototype::finish_schema_recovery(
+              ns, published_schema_version);
+        }
+      }
       load_guard.lock();
       services.schema_loaded.store(ret == OB_SUCCESS, std::memory_order_release);
       services.schema_loading_thread = std::thread::id();
