@@ -9062,7 +9062,11 @@ int ObDMLResolver::resolve_function_table_column_item(const TableItem &table_ite
   CK (OB_LIKELY(table_item.is_function_table()));
   CK (OB_NOT_NULL(table_item.function_table_expr_));
   if (OB_SUCC(ret)) {
-    if (table_item.function_table_expr_->get_result_type().is_ext()) {
+    if (T_FUN_SYS_AI_SPLIT_DOCUMENT == table_item.function_table_expr_->get_expr_type()) {
+      // AI_SPLIT_DOCUMENT 表函数固定输出 4 列，走 sys_func 分支（内部按列名注册），
+      // 不能按 result_type.is_ext() 路由，否则会误入 UDF 路径导致列不可见。
+      ret = resolve_function_table_column_item_sys_func(table_item, col_items);
+    } else if (table_item.function_table_expr_->get_result_type().is_ext()) {
       ret = resolve_function_table_column_item_udf(table_item, col_items);
     } else {
       ret = resolve_function_table_column_item_sys_func(table_item, col_items);
@@ -9227,6 +9231,7 @@ int ObDMLResolver::resolve_function_table_column_item_sys_func(const TableItem &
   ColumnItem *col_item = NULL;
   ObDMLStmt *stmt = get_stmt();
   const ObUserDefinedType *user_type = NULL;
+  bool is_ai_split = false;
 
   CK (OB_NOT_NULL(stmt));
   CK (OB_LIKELY(table_item.is_function_table()));
@@ -9236,6 +9241,37 @@ int ObDMLResolver::resolve_function_table_column_item_sys_func(const TableItem &
   } else if (!ObResolverUtils::is_expr_can_be_used_in_table_function(*table_expr)) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "access rows from a non-nested table item");
+  } else if (T_FUN_SYS_AI_SPLIT_DOCUMENT == table_expr->get_expr_type()) {
+    // AI_SPLIT_DOCUMENT 表函数输出固定 4 列：
+    // chunk_id(int), chunk_offset(int), chunk_length(int), chunk_text(varchar)
+    is_ai_split = true;
+    const int64_t AI_SPLIT_COL_CNT = 4;
+    const char *ai_split_col_names[AI_SPLIT_COL_CNT] = {"chunk_id", "chunk_offset", "chunk_length", "chunk_text"};
+    for (int64_t i = 0; OB_SUCC(ret) && i < AI_SPLIT_COL_CNT; ++i) {
+      ColumnItem *tmp_col_item = NULL;
+      ObString col_name(ai_split_col_names[i]);
+      if (NULL != (tmp_col_item = stmt->get_column_item(table_item.table_id_, col_name))) {
+        //exist, ignore resolve...
+      } else {
+        common::ObObjMeta meta_type;
+        common::ObAccuracy accuracy;
+        if (3 == i) {
+          meta_type.set_varchar();
+          meta_type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+          meta_type.set_collation_level(CS_LEVEL_COERCIBLE);
+        } else {
+          meta_type.set_int();
+        }
+        OZ (resolve_function_table_column_item(table_item,
+                                               meta_type,
+                                               accuracy,
+                                               col_name,
+                                               OB_APP_MIN_COLUMN_ID + i,
+                                               tmp_col_item));
+      }
+      CK (OB_NOT_NULL(tmp_col_item));
+      OZ (col_items.push_back(*tmp_col_item));
+    }
   } else if (NULL != (col_item = stmt->get_column_item(table_item.table_id_, ObString("COLUMN_VALUE")))) {
     //exist, ignore resolve...
   } else {
@@ -9246,8 +9282,10 @@ int ObDMLResolver::resolve_function_table_column_item_sys_func(const TableItem &
                                            OB_APP_MIN_COLUMN_ID,
                                            col_item));
   }
-  CK (OB_NOT_NULL(col_item));
-  OZ (col_items.push_back(*col_item));
+  if (OB_SUCC(ret) && !is_ai_split) {
+    CK (OB_NOT_NULL(col_item));
+    OZ (col_items.push_back(*col_item));
+  }
   return ret;
 }
 

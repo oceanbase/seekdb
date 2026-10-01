@@ -30,6 +30,33 @@ namespace sql
 {
 
 
+// Reusable per-doc state for fulltext word rows generation (scheme C: cross-doc
+// memory reuse during FTS index build). The word map keeps its bucket array and
+// node freelist across docs; the row pool keeps initialized ObDatumRow buffers.
+struct ObFTWordRowsReuseCtx
+{
+  ObFTWordMap word_map;
+  common::ObArenaAllocator row_alloc;
+  blocksstable::ObDatumRow *row_pool;
+  int64_t row_pool_cnt;
+  ObFTWordRowsReuseCtx()
+    : word_map(),
+      row_alloc("FTWordRowPool", OB_MALLOC_NORMAL_BLOCK_SIZE),
+      row_pool(nullptr),
+      row_pool_cnt(0)
+  {
+  }
+  void reset()
+  {
+    row_pool = nullptr;
+    row_pool_cnt = 0;
+    row_alloc.reset();
+    if (word_map.created()) {
+      word_map.destroy();
+    }
+  }
+};
+
 class ObFTIndexRowCache final
 {
 public:
@@ -56,6 +83,7 @@ private:
   bool is_fts_index_aux_;
   storage::ObFTParseHelper helper_;
   bool is_inited_;
+  ObFTWordRowsReuseCtx reuse_ctx_;
 
   DISALLOW_COPY_AND_ASSIGN(ObFTIndexRowCache);
 };
@@ -182,7 +210,8 @@ public:
                                          const ObDatum &doc_id_datum,
                                          const ObString &fulltext,
                                          const bool is_fts_index_aux,
-                                         ObDomainIndexRow &word_rows);
+                                         ObDomainIndexRow &word_rows,
+                                         ObFTWordRowsReuseCtx *reuse_ctx = nullptr);
   static int generate_multivalue_index_rows(
       ObIAllocator &allocator,
       const ObDASDMLBaseCtDef &das_ctdef,

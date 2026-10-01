@@ -169,6 +169,7 @@ public:
   common::ObString quantifier_table_;
   int64_t min_ngram_token_size_;
   int64_t max_ngram_token_size_;
+  common::ObArenaAllocator allocator_;
 };
 
 } // end namespace storage

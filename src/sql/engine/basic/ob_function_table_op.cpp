@@ -19,6 +19,7 @@
 #include "sql/engine/basic/ob_function_table_op.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
+#include "sql/engine/expr/ob_expr_ai/ob_expr_ai_split_document.h"
 
 
 namespace oceanbase
@@ -232,6 +233,10 @@ int ObFunctionTableOp::inner_get_next_row_sys_func()
   ObPhysicalPlanCtx *plan_ctx = nullptr;
   ObDatum *value = nullptr;
   clear_evaluated_flag();
+  if (OB_NOT_NULL(MY_SPEC.value_expr_)) {
+    MY_SPEC.value_expr_->clear_evaluated_flag(eval_ctx_);
+  }
+  LOG_WARN("[FT_DBG] sys_func enter", K(col_count_), K(MY_SPEC.column_exprs_.count()));
   if (OB_ISNULL(plan_ctx = ctx_.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get plan ctx", K(ret), K(plan_ctx));
@@ -241,10 +246,35 @@ int ObFunctionTableOp::inner_get_next_row_sys_func()
     if (OB_ITER_END != ret) {
       LOG_WARN("failed to eval value expr", K(ret));
     }
+  } else if (T_FUN_SYS_AI_SPLIT_DOCUMENT == MY_SPEC.value_expr_->type_) {
+    // AI_SPLIT_DOCUMENT: eval 已把当前行 4 列填入 ObExprAISplitDocumentCtx，执行器逐列拷贝
+    ObExprAISplitDocumentCtx *split_ctx = NULL;
+    if (OB_ISNULL(split_ctx = static_cast<ObExprAISplitDocumentCtx *>(
+                    ctx_.get_expr_op_ctx(MY_SPEC.value_expr_->expr_ctx_id_)))) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("ai split ctx not found", K(ret));
+    } else {
+      const int64_t col_cnt = MY_SPEC.column_exprs_.count();
+      for (int64_t i = 0; OB_SUCC(ret) && i < col_cnt; ++i) {
+        ObDatum &datum = MY_SPEC.column_exprs_.at(i)->locate_datum_for_write(eval_ctx_);
+        if (0 == i) {
+          datum.set_int(split_ctx->cur_id_);
+        } else if (1 == i) {
+          datum.set_int(split_ctx->cur_offset_);
+        } else if (2 == i) {
+          datum.set_int(split_ctx->cur_length_);
+        } else {
+          datum.set_string(split_ctx->cur_text_);
+        }
+        MY_SPEC.column_exprs_.at(i)->set_evaluated_projected(eval_ctx_);
+      }
+      LOG_WARN("[FT_DBG] sys_func row filled", K(col_cnt), K(ret));
+    }
   } else {
     MY_SPEC.column_exprs_.at(0)->locate_datum_for_write(eval_ctx_).set_datum(*value);
     MY_SPEC.column_exprs_.at(0)->set_evaluated_projected(eval_ctx_);
   }
+  LOG_WARN("[FT_DBG] sys_func exit", K(ret));
   return ret;
 }
 

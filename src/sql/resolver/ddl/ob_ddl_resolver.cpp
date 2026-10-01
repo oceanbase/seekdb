@@ -1197,6 +1197,16 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
         }
         break;
       }
+      case T_FULLTEXT_DICT: {
+        // FULLTEXT_DICT 选项：标记该表可作为自定义 IK 分词词典表（值为 'Y'/'N'）。
+        // 词典内容在 ALTER SYSTEM REFRESH FULLTEXT DICT 时按 db.table 读取。
+        if (OB_ISNULL(option_node->children_) || OB_ISNULL(option_node->children_[0])
+            || OB_ISNULL(option_node->children_[0]->str_value_)) {
+          ret = OB_ERR_UNEXPECTED;
+          SQL_RESV_LOG(WARN, "fulltext dict option child is null", K(ret));
+        }
+        break;
+      }
       case T_REPLICA_NUM: {
         if (!is_index_option) {
           if (OB_ISNULL(option_node->children_[0])) {

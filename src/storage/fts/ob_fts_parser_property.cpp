@@ -1158,12 +1158,44 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
     LOG_WARN("fail to parse from json str", K(ret), K(json_str));
   } else {
     if (parser.is_ik()) {
-      // set dict tables and copy dict name
-      dict_table_ = ObString(ObFTSLiteral::CONFIG_NAME_DICT_TABLE);
-      stopword_table_ = ObString(ObFTSLiteral::CONFIG_NAME_STOPWORD_TABLE);
-      quantifier_table_ = ObString(ObFTSLiteral::CONFIG_NAME_QUANTIFIER_TABLE);
-      ObString ik_smart;
-      if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
+      // read custom dict tables from parser properties, deep copy into property allocator
+      ObString dict_table;
+      ObString stopword_table;
+      ObString quantifier_table;
+      if (OB_FAIL(props.config_get_dict_table(dict_table))) {
+        if (OB_SEARCH_NOT_FOUND == ret) {
+          ret = OB_SUCCESS;  // no custom dict table, keep built-in main dict
+        } else {
+          LOG_WARN("fail to get dict_table", K(ret));
+        }
+      } else if (OB_FAIL(ob_write_string(allocator_, dict_table, dict_table_))) {
+        LOG_WARN("fail to copy dict_table", K(ret), K(dict_table));
+      }
+      if (OB_SUCC(ret)) {
+        if (OB_FAIL(props.config_get_stopword_table(stopword_table))) {
+          if (OB_SEARCH_NOT_FOUND == ret) {
+            ret = OB_SUCCESS;
+          } else {
+            LOG_WARN("fail to get stopword_table", K(ret));
+          }
+        } else if (OB_FAIL(ob_write_string(allocator_, stopword_table, stopword_table_))) {
+          LOG_WARN("fail to copy stopword_table", K(ret), K(stopword_table));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        if (OB_FAIL(props.config_get_quantifier_table(quantifier_table))) {
+          if (OB_SEARCH_NOT_FOUND == ret) {
+            ret = OB_SUCCESS;
+          } else {
+            LOG_WARN("fail to get quantifier_table", K(ret));
+          }
+        } else if (OB_FAIL(ob_write_string(allocator_, quantifier_table, quantifier_table_))) {
+          LOG_WARN("fail to copy quantifier_table", K(ret), K(quantifier_table));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        ObString ik_smart;
+        if (OB_FAIL(props.config_get_ik_mode(ik_smart))) {
         if (OB_SEARCH_NOT_FOUND == ret) {
           // from old version, ik_mode is not set, so use default value
           ik_mode_smart_ = true;
@@ -1181,7 +1213,8 @@ int ObFTParserProperty::parse_for_parser_helper(const ObFTParser &parser, const 
           LOG_WARN("invalid ik_smart", K(ret), K(ik_smart));
         }
       }
-    } else if (parser.is_space()) {
+    }
+  } else if (parser.is_space()) {
       if (json_str.empty()) {
         min_token_size_ = ObFTSLiteral::FT_DEFAULT_MIN_TOKEN_SIZE;
         max_token_size_ = ObFTSLiteral::FT_DEFAULT_MAX_TOKEN_SIZE;
@@ -1228,7 +1261,8 @@ ObFTParserProperty::ObFTParserProperty()
       dict_table_(),
       quantifier_table_(),
       min_ngram_token_size_(ObFTSLiteral::FT_DEFAULT_MIN_NGRAM_SIZE),
-      max_ngram_token_size_(ObFTSLiteral::FT_DEFAULT_MAX_NGRAM_SIZE)
+      max_ngram_token_size_(ObFTSLiteral::FT_DEFAULT_MAX_NGRAM_SIZE),
+      allocator_("FTParserProp")
 {
 }
 

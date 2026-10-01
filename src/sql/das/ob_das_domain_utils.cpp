@@ -96,7 +96,8 @@ int ObFTIndexRowCache::segment(const common::ObObjMeta &ft_obj_meta,
                                                                    doc_id_datum,
                                                                    fulltext,
                                                                    is_fts_index_aux_,
-                                                                   rows_))) {
+                                                                   rows_,
+                                                                   &reuse_ctx_))) {
     LOG_WARN("fail to generate fulltext word rows", K(ret), K(helper_), K(is_fts_index_aux_));
   } else {
     row_idx_ = 0;
@@ -127,6 +128,7 @@ void ObFTIndexRowCache::reset()
   row_idx_ = 0;
   is_fts_index_aux_ = true;
   helper_.reset();
+  reuse_ctx_.reset();
   if (OB_NOT_NULL(merge_memctx_)) {
     DESTROY_CONTEXT(merge_memctx_);
     merge_memctx_ = nullptr;
@@ -305,20 +307,67 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
   return ret;
 }
 
+namespace
+{
+int ensure_ft_word_map_ready(ObFTWordMap &word_map, const int64_t bkt_cnt)
+{
+  int ret = OB_SUCCESS;
+  const int64_t need_bucket_cnt = common::hash::cal_next_prime(bkt_cnt);
+  if (!word_map.created()) {
+    ret = word_map.create(bkt_cnt, common::ObMemAttr("FTWordMap"));
+  } else if (word_map.bucket_count() != need_bucket_cnt) {
+    // keep bucket count identical with the per-doc create path so that the hash
+    // iteration order (and thus the emitted word row order) stays identical
+    if (OB_FAIL(word_map.destroy())) {
+      LOG_WARN("fail to destroy reused ft word map", K(ret));
+    } else if (OB_FAIL(word_map.create(bkt_cnt, common::ObMemAttr("FTWordMap")))) {
+      LOG_WARN("fail to recreate ft word map", K(ret), K(bkt_cnt));
+    }
+  }
+  return ret;
+}
+
+int ensure_ft_word_row_pool(ObFTWordRowsReuseCtx &ctx, const int64_t need_rows, const int64_t col_cnt)
+{
+  int ret = OB_SUCCESS;
+  if (need_rows > ctx.row_pool_cnt) {
+    void *pool_buf = ctx.row_alloc.alloc(need_rows * sizeof(blocksstable::ObDatumRow));
+    if (OB_ISNULL(pool_buf)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("fail to alloc ft word row pool", K(ret), K(need_rows));
+    } else {
+      blocksstable::ObDatumRow *new_pool = new (pool_buf) blocksstable::ObDatumRow[need_rows];
+      for (int64_t i = 0; OB_SUCC(ret) && i < need_rows; ++i) {
+        if (OB_FAIL(new_pool[i].init(ctx.row_alloc, col_cnt))) {
+          LOG_WARN("fail to init pooled datum row", K(ret), K(i), K(col_cnt));
+        }
+      }
+      if (OB_SUCC(ret)) {
+        ctx.row_pool = new_pool;
+        ctx.row_pool_cnt = need_rows;
+      }
+    }
+  }
+  return ret;
+}
+} // unnamed namespace
+
 /*static*/ int ObDASDomainUtils::generate_fulltext_word_rows(common::ObIAllocator &allocator,
                                                              storage::ObFTParseHelper *helper,
                                                              const common::ObObjMeta &ft_obj_meta,
                                                              const ObDatum &doc_id_datum,
                                                              const ObString &fulltext,
                                                              const bool is_fts_index_aux,
-                                                             ObDomainIndexRow &word_rows)
+                                                             ObDomainIndexRow &word_rows,
+                                                             ObFTWordRowsReuseCtx *reuse_ctx)
 {
   int ret = OB_SUCCESS;
   static int64_t FT_WORD_DOC_COL_CNT = 4;
   static constexpr int64_t FT_MAX_WORD_BUCKET = 997;
   const int64_t ft_word_bkt_cnt = MIN(MAX(fulltext.length() / 10, 2), FT_MAX_WORD_BUCKET);
   int64_t doc_length = 0;
-  ObFTWordMap ft_word_map;
+  ObFTWordMap local_ft_word_map;
+  ObFTWordMap &ft_word_map = (nullptr != reuse_ctx) ? reuse_ctx->word_map : local_ft_word_map;
   void *rows_buf = nullptr;
   blocksstable::ObDatumRow *rows = nullptr;
   if (OB_ISNULL(helper) || OB_UNLIKELY(!ft_obj_meta.is_valid())) {
@@ -326,8 +375,8 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
     LOG_WARN("invalid arguments", K(ret), KPC(helper), K(ft_obj_meta), K(doc_id_datum));
   } else if (0 == fulltext.length()) {
     ret = OB_ITER_END;
-  } else if (OB_FAIL(ft_word_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
-    LOG_WARN("fail to create ft word map", K(ret), K(ft_word_bkt_cnt));
+  } else if (OB_FAIL(ensure_ft_word_map_ready(ft_word_map, ft_word_bkt_cnt))) {
+    LOG_WARN("fail to prepare ft word map", K(ret), K(ft_word_bkt_cnt), KP(reuse_ctx));
   } else if (OB_FAIL(segment_and_calc_word_count(allocator,
                                                  helper,
                                                  ft_obj_meta,
@@ -338,17 +387,25 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
         K(ft_obj_meta.get_collation_type()), K(fulltext));
   } else if (0 == ft_word_map.size()) {
     ret = OB_ITER_END;
+  } else if (nullptr != reuse_ctx) {
+    if (OB_FAIL(ensure_ft_word_row_pool(*reuse_ctx, ft_word_map.size(), FT_WORD_DOC_COL_CNT))) {
+      LOG_WARN("fail to ensure ft word row pool", K(ret), K(ft_word_map.size()), K(FT_WORD_DOC_COL_CNT));
+    } else {
+      rows = reuse_ctx->row_pool;
+    }
   } else if (OB_ISNULL(rows_buf = reinterpret_cast<char *>(
                            allocator.alloc(ft_word_map.size() * sizeof(blocksstable::ObDatumRow))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to alloc memory for full text index rows buffer", K(ret));
   } else {
-    int64_t i = 0;
     rows = new (rows_buf) blocksstable::ObDatumRow[ft_word_map.size()];
+  }
+  if (OB_SUCC(ret)) {
+    int64_t i = 0;
     for (ObFTWordMap::const_iterator iter = ft_word_map.begin();
          OB_SUCC(ret) && iter != ft_word_map.end();
          ++iter) {
-      if (OB_FAIL(rows[i].init(allocator, FT_WORD_DOC_COL_CNT))) {
+      if (!rows[i].is_valid() && OB_FAIL(rows[i].init(allocator, FT_WORD_DOC_COL_CNT))) {
         LOG_WARN("init datum row failed", K(ret), K(FT_WORD_DOC_COL_CNT));
       } else {
         const ObFTWord &ft_word = iter->first;

@@ -28,6 +28,17 @@ namespace oceanbase
 {
 namespace storage
 {
+namespace
+{
+uint64_t get_dict_name_hash(const ObFTDictDesc &desc)
+{
+  if (ObFTDictType::DICT_IK_CUSTOM == desc.type_ && desc.name_.length() > 0) {
+    return common::murmurhash(desc.name_.ptr(), desc.name_.length(), 0);
+  }
+  return 0;
+}
+} // namespace
+
 int ObFTDictHub::init()
 {
   static constexpr int K_MAX_DICT_BUCKET = 128; // for now, only built-in dicts.
@@ -51,7 +62,7 @@ int ObFTDictHub::destroy()
 int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &container)
 {
   int ret = OB_SUCCESS;
-  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
+  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_), get_dict_name_hash(desc));
   ObFTDictInfo info;
   container.reset();
 
@@ -78,11 +89,20 @@ int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &
 
     if (OB_FAIL(ret)) {
       if (OB_ENTRY_NOT_EXIST == ret) {
-        if (OB_FAIL(ObFTRangeDict::build_cache_from_ik_dict(desc, container))) {
+        if (ObFTDictType::DICT_IK_CUSTOM == desc.type_) {
+          // custom dict from user table, table name is desc.name_ (db.table)
+          if (OB_FAIL(ObFTRangeDict::build_cache(desc, container))) {
+            LOG_WARN("Failed to build cache from user table", K(ret));
+          }
+        } else if (OB_FAIL(ObFTRangeDict::build_cache_from_ik_dict(desc, container))) {
           LOG_WARN("Failed to build cache", K(ret));
-        } else if (FALSE_IT(info.range_count_ = container.get_handles().size())) {
-        } else if (OB_FAIL(put_dict_info(key, info))) {
-          LOG_WARN("Failed to put dict info", K(ret));
+        }
+        if (OB_SUCC(ret)) {
+          if (FALSE_IT(info.range_count_ = container.get_handles().size())) {
+            // do nothing
+          } else if (OB_FAIL(put_dict_info(key, info))) {
+            LOG_WARN("Failed to put dict info", K(ret));
+          }
         }
       }
     }
@@ -95,7 +115,7 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
   int ret = OB_SUCCESS;
   ObFTDictInfo info;
   container.reset();
-  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_));
+  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_), get_dict_name_hash(desc));
   if (!is_inited_) {
     ret = OB_NOT_INIT;
     LOG_WARN("dict hub not init", K(ret));
@@ -124,6 +144,27 @@ int ObFTDictHub::load_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &c
   return ret;
 }
 
+
+int ObFTDictHub::erase_cache(const ObFTDictDesc &desc)
+{
+  int ret = OB_SUCCESS;
+  ObFTDictInfoKey key(static_cast<uint64_t>(desc.type_), get_dict_name_hash(desc));
+  if (!is_inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("dict hub not init", K(ret));
+  } else {
+    ObBucketHashWLockGuard guard(rw_dict_lock_, key.hash());
+    if (OB_FAIL(dict_map_.erase_refactored(key))) {
+      if (OB_HASH_NOT_EXIST == ret) {
+        // dict not exist, treat as success
+        ret = OB_SUCCESS;
+      } else {
+        LOG_WARN("Failed to erase dict info", K(ret));
+      }
+    }
+  }
+  return ret;
+}
 
 int ObFTDictHub::get_dict_info(const ObFTDictInfoKey &key, ObFTDictInfo &info)
 {

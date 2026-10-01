@@ -36,6 +36,10 @@
 #include "sql/engine/cmd/ob_srs_importer.h"
 #include "share/ob_internal_table_change_notifier.h"
 
+#include "storage/fts/ob_fts_plugin_helper.h"
+#include "storage/fts/dict/ob_ft_dict_hub.h"
+#include "storage/fts/dict/ob_ft_dict_def.h"
+
 namespace oceanbase
 {
 using namespace common;
@@ -471,6 +475,37 @@ int ObRefreshMemStatExecutor::execute(ObExecContext &ctx, ObRefreshMemStatStmt &
   } else if (OB_FAIL(GCTX.root_service_->admin_refresh_memory_stat(
                          stmt.get_rpc_arg()))) {
     LOG_WARN("refresh memory stat failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
+  }
+  return ret;
+}
+
+int ObRefreshFulltextDictExecutor::execute(ObExecContext &ctx, ObRefreshFulltextDictStmt &stmt)
+{
+  int ret = OB_SUCCESS;
+  const ObString &dict_table = stmt.get_dict_table();
+  const char *dot = dict_table.find('.');
+  const char *tbl_start = dict_table.ptr();
+  const char *tbl_end = dict_table.ptr() + dict_table.length();
+  if (OB_ISNULL(dot) || dot == tbl_start || dot >= tbl_end - 1) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid dict table", K(ret), K(dict_table));
+  } else {
+    ObFTDictHub *hub = nullptr;
+    if (OB_FAIL(ObFTParsePluginData::instance().get_dict_hub(hub))) {
+      LOG_WARN("Failed to get dict hub", K(ret));
+    } else if (OB_ISNULL(hub)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("dict hub is null", K(ret));
+    } else {
+      ObFTDictDesc custom_desc("custom_dict",
+                               ObFTDictType::DICT_IK_CUSTOM,
+                               ObCharsetType::CHARSET_UTF8MB4,
+                               ObCollationType::CS_TYPE_UTF8MB4_BIN);
+      custom_desc.name_ = dict_table;
+      if (OB_FAIL(hub->erase_cache(custom_desc))) {
+        LOG_WARN("Failed to erase dict cache", K(ret), K(dict_table));
+      }
+    }
   }
   return ret;
 }
