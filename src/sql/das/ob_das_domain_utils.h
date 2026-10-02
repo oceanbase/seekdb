@@ -23,6 +23,7 @@
 #include "sql/das/ob_das_dml_ctx_define.h"
 #include "data_plane/fts/ob_fts_parser_helper.h"
 #include "data_plane/fts/ob_fts_doc_word_scan.h"
+#include "rootserver/fork_table/namespace_tablet_access.h"
 #include "data_plane/fts/ob_fts_parser_helper.h"
 #include "share/geo/ob_srs_provider.h"
 
@@ -81,6 +82,7 @@ public:
       doc_word_tablet_id_(),
       snapshot_(),
       doc_word_schema_version_(),
+      namespace_id_(0),
       namespace_access_mode_(data_plane::ObNamespaceAccessMode::UNBOUND),
       doc_word_found_(false)
   {}
@@ -93,6 +95,7 @@ public:
     doc_word_table_id_ = src.doc_word_table_id_;
     doc_word_tablet_id_ = src.doc_word_tablet_id_;
     doc_word_schema_version_ = src.doc_word_schema_version_;
+    namespace_id_ = src.namespace_id_;
     namespace_access_mode_ = src.namespace_access_mode_;
     doc_word_found_ = src.doc_word_found_;
 
@@ -113,6 +116,7 @@ public:
   common::ObTabletID doc_word_tablet_id_;
   transaction::ObTxReadSnapshot snapshot_;
   int64_t doc_word_schema_version_;
+  uint64_t namespace_id_;
   data_plane::ObNamespaceAccessMode namespace_access_mode_;
   bool doc_word_found_;
 
@@ -398,6 +402,8 @@ protected:
   int build_ft_word_row(blocksstable::ObDatumRow *src_row, blocksstable::ObDatumRow *&dest_row);
 
 private:
+  int init_doc_word_iterator();
+  ns::TabletAccess doc_word_access_;
   const ObFTDocWordInfo *doc_word_info_;
   data_plane::ObFTDocWordIterator *ft_doc_word_iter_;
   common::ObArenaAllocator ft_doc_word_allocator_;

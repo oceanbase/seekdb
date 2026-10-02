@@ -57,7 +57,6 @@ ObTableAccessContext::ObTableAccessContext()
     timeout_(0),
     query_flag_(),
     sql_mode_(0),
-    namespace_access_mode_(data_plane::ObNamespaceAccessMode::UNBOUND),
     micro_block_handle_mgr_(),
     store_ctx_(NULL),
     limit_param_(NULL),
@@ -197,7 +196,6 @@ int ObTableAccessContext::init(ObTableScanParam &scan_param,
     schema_tablet_id_ = scan_param.schema_tablet_id_;
     query_flag_ = scan_param.scan_flag_;
     sql_mode_ = scan_param.sql_mode_;
-    namespace_access_mode_ = scan_param.namespace_access_mode_;
     timeout_ = scan_param.timeout_;
     store_ctx_ = &ctx;
     table_scan_stat_ = &scan_param.main_table_scan_stat_;
@@ -346,7 +344,6 @@ int ObTableAccessContext::init_for_fork(ObTableAccessContext &other,
   // disable row cache for fork
   query_flag_.set_not_use_row_cache();
   sql_mode_ = other.sql_mode_;
-  namespace_access_mode_ = other.namespace_access_mode_;
   timeout_ = other.timeout_;
   store_ctx_ = store_ctx;
   table_scan_stat_ = other.table_scan_stat_;
@@ -445,7 +442,6 @@ void ObTableAccessContext::reset()
   schema_tablet_id_.reset();
   query_flag_.reset();
   sql_mode_ = 0;
-  namespace_access_mode_ = data_plane::ObNamespaceAccessMode::UNBOUND;
   if (NULL != store_ctx_) {
     store_ctx_->clear_mds_filter();
     store_ctx_ = NULL;

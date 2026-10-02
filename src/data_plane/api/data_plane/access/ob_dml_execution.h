@@ -18,7 +18,6 @@
 #define OCEANBASE_DATA_PLANE_ACCESS_OB_DML_EXECUTION_H_
 
 #include <stdint.h>
-#include "data_plane/access/ob_namespace_access_mode.h"
 
 namespace oceanbase
 {
@@ -45,8 +44,7 @@ struct ObDmlWriteSpec
       is_batch_stmt_(false),
       is_main_table_in_fts_ddl_(false),
       check_schema_version_(true),
-      access_vector_id_as_master_table_(false),
-      namespace_access_mode_(ObNamespaceAccessMode::UNBOUND)
+      access_vector_id_as_master_table_(false)
   {}
 
   int64_t timeout_;
@@ -61,7 +59,6 @@ struct ObDmlWriteSpec
   bool is_main_table_in_fts_ddl_;
   bool check_schema_version_;
   bool access_vector_id_as_master_table_;
-  ObNamespaceAccessMode namespace_access_mode_;
 };
 
 // Narrow protocol implemented by the data plane.  destroy() is separate from

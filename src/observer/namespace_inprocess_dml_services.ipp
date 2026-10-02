@@ -236,36 +236,8 @@ private:
 int compare_in_process_lobs(ObLobLocatorV2 &left, ObLobLocatorV2 &right,
                             int64_t timeout, ObTxDesc &tx, bool &equal);
 
-class IWriteMaterializationPolicy
-{
-public:
-  virtual ~IWriteMaterializationPolicy() = default;
-  virtual int collect(const ObTableSchema &requested, ObSchemaGetterGuard &guard,
-                      ObIArray<const ObTableSchema *> &schemas) = 0;
-};
-class NativeWriteMaterialization final : public IWriteMaterializationPolicy
-{
-public:
-  int collect(const ObTableSchema &, ObSchemaGetterGuard &,
-              ObIArray<const ObTableSchema *> &schemas) override
-  {
-    schemas.reset();
-    return OB_SUCCESS;
-  }
-};
-class ForkWriteMaterialization final : public IWriteMaterializationPolicy
-{
-public:
-  int collect(const ObTableSchema &requested, ObSchemaGetterGuard &guard,
-              ObIArray<const ObTableSchema *> &schemas) override
-  {
-    return worker_materialization_schemas(requested, guard, schemas);
-  }
-};
 class InProcessDmlService final : public ObIDmlService {
 public:
-  explicit InProcessDmlService(IWriteMaterializationPolicy &materialization)
-      : materialization_(materialization) {}
   int lob_binary_equal(
       ObLobLocatorV2 &left,
       ObLobLocatorV2 &right,
@@ -322,11 +294,6 @@ public:
           : service->get_runtime_schema_guard(schema_guard, write_spec.schema_version_);
       if (!ret) { ret = schema_guard.get_table_schema(table_id, logical_schema); }
     }
-    ObArray<const ObTableSchema *> materialization_schemas;
-    if (!ret && send_logical_schema && storage_space.is_namespace()) {
-      ret = materialization_.collect(
-          *logical_schema, schema_guard, materialization_schemas);
-    }
     if (ret) { return ret; }
     if (columns.empty() && logical_schema != nullptr) {
         for (int64_t i = 0; i < logical_schema->get_column_count(); ++i) {
@@ -362,7 +329,7 @@ public:
     execution.reset();
     if (!send_logical_schema || logical_schema == nullptr) { return OB_NOT_SUPPORTED; }
     const WritePrepareRequest request{storage_space, table_id, write_spec, *logical_schema,
-        materialization_schemas, snapshot, write_flag, prepared->columns};
+        schema_guard, snapshot, write_flag, prepared->columns};
     ret = prepare_in_process_write(request, tx, prepared->handle);
     if (!ret) {
       if (!prepared->handle) { ret = OB_INVALID_ARGUMENT; }
@@ -494,6 +461,4 @@ public:
       blocksstable::ObDatumRowIterator *row_iter,
       int64_t &affected_rows) override {
     return write_rows('L', tablet_id, tx_desc, execution, nullptr, nullptr, row_iter, affected_rows, abs_lock_timeout, lock_mode); }
-private:
-  IWriteMaterializationPolicy &materialization_;
 };

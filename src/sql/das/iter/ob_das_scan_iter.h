@@ -17,6 +17,7 @@
 #ifndef OBDEV_SRC_SQL_DAS_ITER_OB_DAS_SCAN_ITER_H_
 #define OBDEV_SRC_SQL_DAS_ITER_OB_DAS_SCAN_ITER_H_
 
+#include "rootserver/fork_table/namespace_tablet_access.h"
 #include "sql/das/iter/ob_das_iter.h"
 #include "sql/das/ob_das_scan_op.h"
 namespace oceanbase
@@ -58,7 +59,7 @@ public:
       result_(nullptr),
       scan_param_(nullptr)
   {}
-  virtual ~ObDASScanIter() {}
+  virtual ~ObDASScanIter() { inner_release(); }
   common::ObNewRowIterator *&get_output_result_iter() { return result_; }
 
   void set_scan_param(storage::ObTableScanParam &scan_param) { scan_param_ = &scan_param; }
@@ -85,6 +86,9 @@ protected:
   virtual int inner_get_next_rows(int64_t &count, int64_t capacity) override;
 
 private:
+  ns::TabletAccess tablet_access_;
+  share::SCN requested_snapshot_;
+  uint64_t namespace_id_ = 0;
   common::ObITabletScan *tsc_service_;
   common::ObNewRowIterator *result_;
   // must ensure the lifecycle of scan param is longer than scan iter.

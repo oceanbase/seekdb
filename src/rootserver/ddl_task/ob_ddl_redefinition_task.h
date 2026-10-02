@@ -98,6 +98,8 @@ private:
 private:
   bool is_inited_;
   bool is_synced_;
+  uint64_t namespace_id_ = 0;
+  uint64_t src_table_id_ = OB_INVALID_ID;
   ObSEArray<ObTabletID, 1> orig_src_tablet_ids_;
   ObSEArray<ObTabletID, 1> src_tablet_ids_;
   ObSEArray<ObTabletID, 1> dest_tablet_ids_;

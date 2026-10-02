@@ -19,7 +19,7 @@
 #include "data_plane/ob_i_storage_estimator.h"
 #include "data_plane/transaction/ob_i_read_timestamp_service.h"
 #include "observer/namespace_worker_protocol_prototype.h"
-#include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
+#include "rootserver/fork_table/namespace_tablet_access.h"
 #include "share/rc/ob_server_runtime.h"
 #include <algorithm>
 
@@ -58,20 +58,19 @@ int ObStorageEstimator::estimate_row_count(const obcall::ObEstPartArg &arg,
     param.scan_flag_ = source.scan_flag_;
     param.tablet_id_ = source.tablet_id_;
     param.tx_id_ = source.tx_id_;
+    ns::TabletAccess access;
     bool inherited_with_cap = false;
     if (namespace_id != 0) {
-      uint64_t encoded_tablet_id = OB_INVALID_ID;
-      common::ObTabletID physical_tablet;
-      int64_t fork_cap = 0;
-      if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
-              namespace_id, param.tablet_id_.id(), encoded_tablet_id))) {
-      } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::resolve_read_tablet(
-                     common::ObTabletID(encoded_tablet_id), physical_tablet, fork_cap))) {
+      data_plane::ObNamespaceAccessMode mode;
+      using namespace observer::namespace_worker_prototype;
+      if (OB_FAIL(storage_access_mode(StorageSpaceHandle::namespace_space(namespace_id), mode))) {
+      } else if (OB_FAIL(access.prepare_read(
+          namespace_id, source.index_id_, source.tablet_id_, mode))) {
       } else {
-        inherited_with_cap = fork_cap > 0 && physical_tablet.id() != encoded_tablet_id;
-        param.tablet_id_ = physical_tablet;
-        if (fork_cap > 0) {
-          param.frozen_version_ = std::min(param.frozen_version_, fork_cap);
+        inherited_with_cap = access.cap_scn() > 0;
+        param.tablet_id_ = access.tablet();
+        if (access.cap_scn() > 0) {
+          param.frozen_version_ = std::min(param.frozen_version_, access.cap_scn());
         }
       }
     }
@@ -106,16 +105,15 @@ int ObStorageEstimator::estimate_block_count_and_row_count(const obcall::ObEstBl
   for (int64_t i = 0; OB_SUCC(ret) && i < arg.tablet_params_arg_.count(); ++i) {
     obcall::ObEstBlockResElement est_res;
     auto routed = arg.tablet_params_arg_.at(i);
+    ns::TabletAccess access;
     if (namespace_id != 0) {
-      uint64_t encoded_tablet_id = OB_INVALID_ID;
-      common::ObTabletID physical_tablet;
-      int64_t fork_cap = 0;
-      if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
-              namespace_id, routed.tablet_id_.id(), encoded_tablet_id))) {
-      } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::resolve_read_tablet(
-                     common::ObTabletID(encoded_tablet_id), physical_tablet, fork_cap))) {
+      data_plane::ObNamespaceAccessMode mode;
+      using namespace observer::namespace_worker_prototype;
+      if (OB_FAIL(storage_access_mode(StorageSpaceHandle::namespace_space(namespace_id), mode))) {
+      } else if (OB_FAIL(access.prepare_read(
+          namespace_id, OB_INVALID_ID, routed.tablet_id_, mode))) {
       } else {
-        routed.tablet_id_ = physical_tablet;
+        routed.tablet_id_ = access.tablet();
       }
     }
     if (OB_FAIL(ret)) {

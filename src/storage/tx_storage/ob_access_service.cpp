@@ -32,7 +32,6 @@
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tx_storage/ob_memstore_freezer.h"
 #include "storage/ob_table_dml_param.h"
-#include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 namespace oceanbase
 {
 using namespace common;
@@ -120,7 +119,6 @@ void ObStoreCtxGuard::reset()
     ctx_.reset();
     is_inited_ = false;
   }
-  NamespaceForkKernelPrototype::release_access(prototype_access_);
 }
 
 int ObStoreCtxGuard::init(ObLS *ls)
@@ -369,7 +367,6 @@ int ObAccessService::table_scan(
   const common::ObTabletID data_tablet_id = vparam.tablet_id_;
   ObTableScanIterator *iter = nullptr;
   ObTabletHandle tablet_handle;
-  ObTabletID read_tablet_id;
   ObTableScanParam &param = static_cast<ObTableScanParam &>(vparam);
   ObStoreAccessType access_type = param.scan_flag_.is_read_latest() ?
     ObStoreAccessType::READ_LATEST : ObStoreAccessType::READ;
@@ -394,21 +391,18 @@ int ObAccessService::table_scan(
     LOG_WARN("alloc table scan iterator fail", K(ret));
   } else if (FALSE_IT(result = iter)) {
     // upper layer responsible for releasing iter object
-  } else if (FALSE_IT(read_tablet_id = data_tablet_id)) {
   } else if (OB_FAIL(check_read_allowed_(data_tablet_id,
                                          access_type,
                                          param,
                                          tablet_handle,
                                          iter->get_ctx_guard(),
-                                         user_specified_snapshot_scn,
-                                         &read_tablet_id))) {
+                                         user_specified_snapshot_scn))) {
     if (OB_TABLET_NOT_EXIST != ret) {
       LOG_WARN("fail to check query allowed", K(ret), K(data_tablet_id));
     }
     // skip inner table, one key reason is to let tablet merge going
   } else if (FALSE_IT(param.schema_tablet_id_ = param.schema_tablet_id_.is_valid()
                     ? param.schema_tablet_id_ : data_tablet_id)) {
-  } else if (FALSE_IT(param.tablet_id_ = read_tablet_id)) {
   } else if (OB_FAIL(iter->get_ctx_guard().get_ls()->get_tablet_svr()->table_scan(
                          tablet_handle, *iter, param))) {
     if (OB_TABLET_NOT_EXIST != ret) {
@@ -450,21 +444,18 @@ int ObAccessService::table_rescan(
       user_specified_snapshot_scn = param.fb_snapshot_;
     }
     NG_TRACE(storage_table_scan_begin);
-    ObTabletID read_tablet_id = data_tablet_id;
     if (OB_FAIL(check_read_allowed_(data_tablet_id,
                                     access_type,
                                     param, /*scan_param*/
                                     tablet_handle,
                                     iter->get_ctx_guard(),
-                                    user_specified_snapshot_scn,
-                                    &read_tablet_id))) {
+                                    user_specified_snapshot_scn))) {
       if (OB_TABLET_NOT_EXIST != ret) {
         LOG_WARN("fail to check query allowed", K(ret), K(result), K(data_tablet_id));
       }
     // skip inner table, one key reason is to let tablet merge going
     } else if (FALSE_IT(param.schema_tablet_id_ = param.schema_tablet_id_.is_valid()
                       ? param.schema_tablet_id_ : data_tablet_id)) {
-    } else if (FALSE_IT(param.tablet_id_ = read_tablet_id)) {
     } else if (OB_FAIL(iter->get_ctx_guard().get_ls()->get_tablet_svr()->table_rescan(
                            tablet_handle, param, result))) {
       if (OB_TABLET_NOT_EXIST != ret) {
@@ -602,34 +593,17 @@ int ObAccessService::check_read_allowed_(
     const ObTableScanParam &scan_param,
     ObTabletHandle &tablet_handle,
     ObStoreCtxGuard &ctx_guard,
-    SCN user_specified_snapshot,
-    common::ObTabletID *resolved_tablet_id)
+    SCN user_specified_snapshot)
 {
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
-  ObTabletID read_tablet_id = tablet_id;
-  int64_t redirect_cap = 0;
-
-  if (OB_FAIL(NamespaceForkKernelPrototype::check_table_access(
-          scan_param.index_id_, tablet_id, true,
-          scan_param.namespace_access_mode_, ctx_guard.prototype_access()))) {
-  } else if (OB_FAIL(NamespaceForkKernelPrototype::resolve_read_tablet(tablet_id, read_tablet_id, redirect_cap))) {
-  } else if (OB_FAIL(ls_svr_->get_ls(ls))) {
+  if (OB_FAIL(ls_svr_->get_ls(ls))) {
   } else if (OB_FAIL(ctx_guard.init(ls))) {
   } else {
     ObStoreCtx &ctx = ctx_guard.get_store_ctx();
     ctx.ls_ = ls;
     ctx.timeout_ = scan_param.timeout_;
-    ctx.tablet_id_ = read_tablet_id;
-    if (redirect_cap > 0) {
-      // An inherited tablet only contains data up to the fork snapshot; clamp
-      // the read so later writes on the source namespace stay invisible.
-      SCN cap_scn;
-      if (OB_FAIL(cap_scn.convert_for_tx(redirect_cap))) {
-      } else if (!user_specified_snapshot.is_valid() || cap_scn < user_specified_snapshot) {
-        user_specified_snapshot = cap_scn;
-      }
-    }
+    ctx.tablet_id_ = tablet_id;
     if (OB_FAIL(ret)) {
     } else if (user_specified_snapshot.is_valid()) {
       if (OB_FAIL(ls->get_read_store_ctx(user_specified_snapshot,
@@ -638,20 +612,11 @@ int ObAccessService::check_read_allowed_(
       }
     } else {
       bool read_latest = access_type == ObStoreAccessType::READ_LATEST;
-      if (user_specified_snapshot.is_valid()) {
-        transaction::ObTxReadSnapshot spec_snapshot;
-        if (OB_FAIL(spec_snapshot.assign(scan_param.snapshot_))) {
-        } else if (FALSE_IT(spec_snapshot.specify_snapshot_scn(user_specified_snapshot))) {
-        } else if (OB_FAIL(ls->get_read_store_ctx(spec_snapshot,
-                                                  read_latest,
-                                                  scan_param.tx_lock_timeout_,
-                                                  ctx))) {
-        }
-      } else if (OB_FAIL(ls->get_read_store_ctx(scan_param.snapshot_,
-                                                read_latest,
-                                                scan_param.tx_lock_timeout_,
-                                                ctx,
-                                                scan_param.trans_desc_))) {
+      if (OB_FAIL(ls->get_read_store_ctx(scan_param.snapshot_,
+                                        read_latest,
+                                        scan_param.tx_lock_timeout_,
+                                        ctx,
+                                        scan_param.trans_desc_))) {
       }
       if (OB_FAIL(ret)) {
       } else if (read_latest) {
@@ -683,7 +648,7 @@ int ObAccessService::check_read_allowed_(
       }
     }
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(construct_store_ctx_other_variables_(*ls, read_tablet_id, scan_param.timeout_,
+    } else if (OB_FAIL(construct_store_ctx_other_variables_(*ls, tablet_id, scan_param.timeout_,
          ctx.mvcc_acc_ctx_.get_snapshot_version(), tablet_handle, ctx_guard))) {
       if (OB_SNAPSHOT_DISCARDED == ret && scan_param.fb_snapshot_.is_valid()) {
         ret = OB_TABLE_DEFINITION_CHANGED;
@@ -691,17 +656,6 @@ int ObAccessService::check_read_allowed_(
         LOG_WARN("failed to check replica allow to read", K(ret), K(tablet_id), "timeout", scan_param.timeout_);
       }
     }
-  }
-  if (OB_SUCC(ret)
-      && NamespaceForkKernelPrototype::is_encoded_id(tablet_id.id())) {
-    // Existing sync point: admitted scan has not fetched its inherited inputs yet.
-    DEBUG_SYNC(AFTER_TABLE_SCAN);
-  }
-  if (OB_SUCC(ret) && resolved_tablet_id != nullptr) {
-    // The iterator stack below keys memstore/sstable access on
-    // scan_param.tablet_id_; hand it the same physical tablet the store ctx
-    // was built on, or a redirected read breaks at fetch time.
-    *resolved_tablet_id = read_tablet_id;
   }
   return ret;
 }
@@ -739,11 +693,7 @@ int ObAccessService::check_write_allowed_(
     enable_table_lock = false;
     ret = OB_SUCCESS;
   }
-  if (OB_FAIL(NamespaceForkKernelPrototype::check_table_access(dml_param.table_param_
-      ? dml_param.table_param_->get_data_table().get_table_id() : OB_INVALID_ID,
-      tablet_id, false, dml_param.namespace_access_mode_, ctx_guard.prototype_access()))) {
-  } else if (OB_FAIL(NamespaceForkKernelPrototype::ensure_tablet(tablet_id))) {
-  } else if (OB_FAIL(check_memstore_limit_(is_out_of_mem))) {
+  if (OB_FAIL(check_memstore_limit_(is_out_of_mem))) {
   } else if (is_out_of_mem && !tablet_id.is_inner_tablet()) {
     ret = OB_SERVER_RUNTIME_OUT_OF_MEM;
     LOG_WARN("server runtime is already out of memstore memory", K(ret));
@@ -844,7 +794,6 @@ int ObAccessService::prepare_execution(
     dml_param.dml_allocator_ = &allocator;
     dml_param.is_main_table_in_fts_ddl_ = write_spec.is_main_table_in_fts_ddl_;
     dml_param.check_schema_version_ = write_spec.check_schema_version_;
-    dml_param.namespace_access_mode_ = write_spec.namespace_access_mode_;
     dml_param.has_async_index_ =
         legacy_table_plan->get_data_table().has_async_index()
         || inherited_has_async_index;
@@ -1600,7 +1549,6 @@ int ObAccessService::do_table_scan_(
   int ret = OB_SUCCESS;
   ObTableScanIterator *iter = nullptr;
   ObTabletHandle tablet_handle;
-  ObTabletID read_tablet_id;
   ObStoreAccessType access_type = param.scan_flag_.is_read_latest() ?
     ObStoreAccessType::READ_LATEST : ObStoreAccessType::READ;
   SCN user_specified_snapshot_scn;
@@ -1623,21 +1571,18 @@ int ObAccessService::do_table_scan_(
     LOG_WARN("alloc table scan iterator fail", K(ret));
   } else if (FALSE_IT(result = iter)) {
     // upper layer responsible for releasing iter object
-  } else if (FALSE_IT(read_tablet_id = data_tablet_id)) {
   } else if (OB_FAIL(check_read_allowed_(data_tablet_id,
                                          access_type,
                                          param,
                                          tablet_handle,
                                          iter->get_ctx_guard(),
-                                         user_specified_snapshot_scn,
-                                         &read_tablet_id))) {
+                                         user_specified_snapshot_scn))) {
     if (OB_TABLET_NOT_EXIST != ret) {
       LOG_WARN("fail to check query allowed", K(ret), K(data_tablet_id));
     }
     // skip inner table, one key reason is to let tablet merge going
   } else if (FALSE_IT(param.schema_tablet_id_ = param.schema_tablet_id_.is_valid()
                     ? param.schema_tablet_id_ : data_tablet_id)) {
-  } else if (FALSE_IT(param.tablet_id_ = read_tablet_id)) {
   } else if (OB_FAIL(iter->get_ctx_guard().get_ls()->get_tablet_svr()->table_scan(
                          tablet_handle, *iter, param))) {
     if (OB_TABLET_NOT_EXIST != ret) {
@@ -1669,21 +1614,18 @@ int ObAccessService::scan_block_stat(ObBlockStatScanParam &scan_param, ObBlockSt
     if (ObAccessTypeCheck::is_read_access_type(access_type) && table_scan_param.fb_snapshot_.is_valid()) {
       user_specified_snapshot_scn = table_scan_param.fb_snapshot_;
     }
-    ObTabletID read_tablet_id = tablet_id;
     if (OB_FAIL(check_read_allowed_(
         tablet_id,
         access_type,
         table_scan_param,
         tablet_handle,
         ctx_guard,
-        user_specified_snapshot_scn,
-        &read_tablet_id))) {
+        user_specified_snapshot_scn))) {
       if (OB_UNLIKELY(OB_TABLET_NOT_EXIST != ret)) {
         LOG_WARN("fail to check read allowed", K(ret), K(tablet_id), K(access_type));
       }
     } else if (FALSE_IT(table_scan_param.schema_tablet_id_ = table_scan_param.schema_tablet_id_.is_valid()
                       ? table_scan_param.schema_tablet_id_ : tablet_id)) {
-    } else if (FALSE_IT(table_scan_param.tablet_id_ = read_tablet_id)) {
     } else if (OB_FAIL(ctx_guard.get_ls()->get_tablet_svr()->scan_block_stat(
                            tablet_handle, scan_param, iter))) {
       if (OB_UNLIKELY(OB_TABLET_NOT_EXIST != ret)) {

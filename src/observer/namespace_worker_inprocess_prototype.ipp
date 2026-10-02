@@ -151,10 +151,7 @@ rootserver::ObIRootserverLocalRuntime *root_namespace_ddl_runtime()
 // ---------------------------------------------------------------------------
 InProcessTabletScan inprocess_scan;
 InProcessLobReadService inprocess_lob_read;
-NativeWriteMaterialization native_write_materialization;
-ForkWriteMaterialization fork_write_materialization;
-InProcessDmlService native_inprocess_dml(native_write_materialization);
-InProcessDmlService fork_inprocess_dml(fork_write_materialization);
+InProcessDmlService inprocess_dml;
 InProcessWriteContext inprocess_write_context;
 InProcessTransactionService inprocess_transactions;
 InProcessInnerConnectionLockRuntime inprocess_inner_locks;
@@ -317,7 +314,7 @@ void register_root_namespace_storage_services(ns::NamespaceRuntime &runtime)
   auto &schema_lifecycle = bootstrap_schema_lifecycle();
   static RootTableLockTabletRouter table_lock_tablet_router;
   runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_SERVICE, &direct_insert);
-  runtime.set_service(ns::NamespaceRuntime::DML_SERVICE, &native_inprocess_dml);
+  runtime.set_service(ns::NamespaceRuntime::DML_SERVICE, &inprocess_dml);
   runtime.set_service(ns::NamespaceRuntime::RANGE_SERVICE, &native_inprocess_ranges);
   runtime.set_service(ns::NamespaceRuntime::TABLET_SCAN, &inprocess_scan);
   runtime.set_service(ns::NamespaceRuntime::LOB_READ_SERVICE, &inprocess_lob_read);
@@ -409,13 +406,19 @@ private:
         ret = worker_storage_space_for_schema(*logical_schema, guard, storage_space);
       }
     }
-    common::ObTabletID storage_tablet = logical_tablet;
-    if (OB_SUCC(ret) && storage_space.is_namespace()) {
-      if (has_logical_schema) {
-        ret = route_tablet_id(storage_space, storage_tablet);
-      } else if (!is_inner_table(logical_table_id)) {
-        ret = OB_INVALID_ARGUMENT;
-      }
+    common::ObTabletID storage_tablet;
+    ns::TabletAccess access;
+    if (OB_SUCC(ret) && storage_space.is_namespace()
+        && !has_logical_schema && !is_inner_table(logical_table_id)) {
+      ret = OB_INVALID_ARGUMENT;
+    }
+    data_plane::ObNamespaceAccessMode mode;
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(storage_access_mode(storage_space, mode))) {
+    } else if (OB_FAIL(access.prepare_read(storage_space.tablet_namespace_id(),
+        logical_table_id, logical_tablet, mode))) {
+    } else {
+      storage_tablet = access.tablet();
     }
     common::ObSEArray<common::ObStoreRange, 4> storage_ranges;
     for (int64_t i = 0; OB_SUCC(ret) && i < ranges.count(); ++i) {
@@ -425,14 +428,6 @@ private:
         common::ObStoreRange range = ranges.at(i);
         ret = storage_ranges.push_back(range);
       }
-    }
-    if (OB_SUCC(ret)
-        && storage::NamespaceForkKernelPrototype::is_encoded_id(storage_tablet.id())) {
-      common::ObTabletID physical;
-      int64_t redirect_cap = 0;
-      ret = storage::NamespaceForkKernelPrototype::resolve_read_tablet(
-          storage_tablet, physical, redirect_cap);
-      if (OB_SUCC(ret)) { storage_tablet = physical; }
     }
     const int64_t now = ObTimeUtility::current_time();
     const int64_t deadline = timeout > INT64_MAX - now ? INT64_MAX : now + timeout;
@@ -906,7 +901,7 @@ int activate_in_process_namespace(uint64_t ns, ns::NamespaceRuntime &runtime)
         services->virtual_table_scan);
     runtime.set_service(ns::NamespaceRuntime::ROOT_COMMAND_SERVICE, services->root_commands);
     runtime.set_service(ns::NamespaceRuntime::DIRECT_INSERT_SERVICE, &services->direct_insert);
-    runtime.set_service(ns::NamespaceRuntime::DML_SERVICE, &fork_inprocess_dml);
+    runtime.set_service(ns::NamespaceRuntime::DML_SERVICE, &inprocess_dml);
     runtime.set_service(ns::NamespaceRuntime::RANGE_SERVICE, &fork_inprocess_ranges);
     runtime.set_service(ns::NamespaceRuntime::TABLET_SCAN, &inprocess_scan);
     runtime.set_service(ns::NamespaceRuntime::LOB_READ_SERVICE, &inprocess_lob_read);

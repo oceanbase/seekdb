@@ -48,7 +48,7 @@ class ObStoreCtx;
 class ObStoreCtxGuard
 {
 public:
-  ObStoreCtxGuard() : is_inited_(false), ls_(nullptr), init_ts_(0), prototype_access_(false)
+  ObStoreCtxGuard() : is_inited_(false), ls_(nullptr), init_ts_(0)
   {
   }
   ~ObStoreCtxGuard()
@@ -59,13 +59,11 @@ public:
   void reset();
   ObStoreCtx &get_store_ctx() { return ctx_; }
   ObLS *get_ls() const { return ls_; }
-  bool &prototype_access() { return prototype_access_; }
 private:
   bool is_inited_;
   ObStoreCtx ctx_;
   ObLS *ls_;
   int64_t init_ts_;
-  bool prototype_access_; // V7: held for the complete storage iterator/operation lifetime.
 
   DISALLOW_COPY_AND_ASSIGN(ObStoreCtxGuard);
 };
@@ -317,8 +315,7 @@ protected:
       const ObTableScanParam &scan_param,
       ObTabletHandle &tablet_handle,
       ObStoreCtxGuard &ctx_guard,
-      share::SCN user_specified_snapshot,
-      common::ObTabletID *resolved_tablet_id = nullptr);
+      share::SCN user_specified_snapshot);
   int check_write_allowed_(
       const common::ObTabletID &tablet_id,
       const ObStoreAccessType access_type,

@@ -218,8 +218,11 @@ public:
       obcall::ObDDLLocalBuildResult &result) override {
     return call_in_process_rootserver_runtime(namespace_id_,
         [&](rootserver::ObIRootserverLocalRuntime &runtime, StorageSpaceHandle space) {
+          ns::TabletAccess access;
           obcall::ObDDLLocalBuildArg routed;
-          const int ret = route_rootserver_build_arg(space, arg, routed);
+          int ret = prepare_metadata_tablet(space, arg.source_tablet_id_,
+              arg.source_table_id_, arg.schema_version_, access);
+          if (OB_SUCC(ret)) { ret = route_rootserver_build_arg(space, arg, routed); }
           return ret ? ret : runtime.build_ddl_local(routed, result);
         });
   }

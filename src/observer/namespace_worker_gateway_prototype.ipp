@@ -1,6 +1,7 @@
 // Included in the Observer composition unit for in-process namespace storage.
 #include "observer/namespace_worker_protocol_prototype.h"
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
+#include "rootserver/fork_table/namespace_tablet_access.h"
 #include "rootserver/fork_table/instance_namespace_metadata.h"
 #include "rootserver/ddl_task/ob_ddl_task_util.h"
 #include "storage/tablet/ob_tablet_binding_helper.h"
@@ -126,7 +127,9 @@ int read_in_process_lob(ObLobLocatorV2 &locator, int64_t timeout,
     return OB_INVALID_ARGUMENT;
   }
   int64_t length = 0;
-  int ret = locator.get_lob_data_byte_len(length);
+  ns::TabletAccess access;
+  int ret = access.prepare_lob_read(locator, storage->access_mode(space));
+  if (!ret) { ret = locator.get_lob_data_byte_len(length); }
   if (!ret && (length < 0 || length > static_cast<int64_t>(MAX_SQL_MESSAGE - 64))) {
     ret = OB_SIZE_OVERFLOW;
   } else if (!ret && length > 0) {
@@ -139,8 +142,7 @@ int read_in_process_lob(ObLobLocatorV2 &locator, int64_t timeout,
     const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
     THIS_WORKER.set_session(&storage->session);
     ret = data_plane::read_lob_to_buffer(allocator, locator,
-        std::min(timeout, old_timeout), storage->writes->tx, output,
-        storage->access_mode(space));
+        std::min(timeout, old_timeout), storage->writes->tx, output);
     THIS_WORKER.set_session(old_session);
     THIS_WORKER.set_timeout_ts(old_timeout);
   }
@@ -162,9 +164,13 @@ int compare_in_process_lobs(ObLobLocatorV2 &left, ObLobLocatorV2 &right,
   auto *old_session = THIS_WORKER.get_session();
   const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
   THIS_WORKER.set_session(&storage->session);
-  const int ret = data_plane::lob_binary_equal(
-      left, right, std::min(timeout, old_timeout), storage_tx, equal,
-      storage->access_mode(space));
+  ns::TabletAccess access;
+  int ret = access.prepare_lob_read(left, storage->access_mode(space));
+  if (!ret) { ret = access.prepare_lob_read(right, storage->access_mode(space)); }
+  if (!ret) {
+    ret = data_plane::lob_binary_equal(
+        left, right, std::min(timeout, old_timeout), storage_tx, equal);
+  }
   THIS_WORKER.set_session(old_session);
   THIS_WORKER.set_timeout_ts(old_timeout);
   return ret;
@@ -575,7 +581,8 @@ int call_in_process_tx_register_mds(ObTxDesc &view,
   const ObString input(static_cast<int32_t>(buffer_size), buffer);
   std::vector<char> storage_buffer;
   bool skip_mds = false;
-  int ret = route_tablet_mds(space, type, input, storage_buffer, skip_mds);
+  ns::TabletAccess access;
+  int ret = route_tablet_mds(space, type, input, storage_buffer, skip_mds, access);
   if (ret) {
     fprintf(stderr,
         "PROTOTYPE_NAMESPACE_MDS_ROUTE ns=%llu global=%d type=%lld input=%d ret=%d\n",

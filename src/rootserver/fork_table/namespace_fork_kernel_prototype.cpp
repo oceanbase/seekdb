@@ -280,7 +280,7 @@ int probe_historical_tablet(uint64_t id, int64_t cap, rootserver::TabletVisibili
     visibility = rootserver::TabletVisibility::OUTSIDE_SNAPSHOT;
     return OB_SUCCESS;
   }
-  if (ret == OB_SNAPSHOT_DISCARDED) {
+  if (ret == OB_SNAPSHOT_DISCARDED || ret == OB_EAGAIN) {
     ObTabletCreateDeleteMdsUserData data;
     mds::MdsWriter writer;
     mds::TwoPhaseCommitState state;
@@ -288,8 +288,32 @@ int probe_historical_tablet(uint64_t id, int64_t cap, rootserver::TabletVisibili
     const int status_ret = handle.get_obj()->get_latest(data, writer, state, version);
     if (status_ret != OB_SUCCESS) { return status_ret; }
     if (state != mds::TwoPhaseCommitState::ON_COMMIT
-        && data.create_commit_version_ == transaction::ObTransVersion::INVALID_TRANS_VERSION) {
-      return OB_EAGAIN;
+        && (data.data_type_ == ObTabletMdsUserDataType::CREATE_TABLET
+            || data.data_type_ == ObTabletMdsUserDataType::PROTOTYPE_MATERIALIZE_TABLET)) {
+      // An allocated copy is not part of any committed read view yet. Its
+      // logical birth may already be the fork SCN, so birth alone cannot
+      // establish physical visibility. Continue to the inherited source;
+      // an owned row from the committing transaction still selects this copy
+      // and lets the native read wait for its commit callbacks.
+      visibility = rootserver::TabletVisibility::OUTSIDE_SNAPSHOT;
+      return OB_SUCCESS;
+    }
+    if (ret == OB_EAGAIN && state == mds::TwoPhaseCommitState::ON_COMMIT) {
+      // The commit may have published since the first status observation.
+      // Validate this committed value instead of returning the stale EAGAIN.
+      ret = data.tablet_status_ == ObTabletStatus::NORMAL
+          ? ObTabletCreateDeleteHelper::check_read_snapshot_for_normal(
+                *handle.get_obj(), snapshot, data, writer, state, version)
+          : ObTabletCreateDeleteHelper::check_read_snapshot_for_deleted(
+                *handle.get_obj(), snapshot, data, writer, state, version);
+      if (ret == OB_SUCCESS) {
+        visibility = rootserver::TabletVisibility::READABLE;
+        return OB_SUCCESS;
+      }
+      if (ret == OB_TABLET_NOT_EXIST) {
+        visibility = rootserver::TabletVisibility::OUTSIDE_SNAPSHOT;
+        return OB_SUCCESS;
+      }
     }
     if (data.create_commit_version_ != transaction::ObTransVersion::INVALID_TRANS_VERSION
         && snapshot < data.create_commit_version_) {
@@ -1306,9 +1330,6 @@ int NamespaceForkKernelPrototype::schedule_baseline_impl(const ObTablet &tablet,
   // mark retries here; the existing table-store update persists the completed baseline.
   return (ret == OB_ITER_END || ret == OB_ENTRY_NOT_EXIST) ? OB_SUCCESS : ret;
 }
-int NamespaceForkKernelPrototype::ensure_tablet(const ObTabletID &tablet_id) {
-  return ensure_tablet_impl(tablet_id, nullptr, nullptr);
-}
 int NamespaceForkKernelPrototype::resolve_read_tablet(
     const ObTabletID &tablet_id, ObTabletID &physical_tablet_id, int64_t &cap_scn) {
   physical_tablet_id = tablet_id;
@@ -1326,14 +1347,9 @@ int NamespaceForkKernelPrototype::resolve_read_tablet(
 }
 int NamespaceForkKernelPrototype::ensure_tablet(
     const ObTabletID &tablet_id,
-    const ObTableSchema &requested_schema,
+    const ObTableSchema &supplied_schema,
     const ObIArray<const ObTableSchema *> &binding_schemas) {
-  return ensure_tablet_impl(tablet_id, &requested_schema, &binding_schemas);
-}
-int NamespaceForkKernelPrototype::ensure_tablet_impl(
-    const ObTabletID &tablet_id,
-    const ObTableSchema *supplied_schema,
-    const ObIArray<const ObTableSchema *> *binding_schemas) {
+
   if (!is_encoded_id(tablet_id.id())) { return OB_SUCCESS; }
   int ret = OB_SUCCESS;
   const uint64_t db = database_of(tablet_id.id()), local = local_of(tablet_id.id());
@@ -1344,11 +1360,13 @@ int NamespaceForkKernelPrototype::ensure_tablet_impl(
     ret = probe_physical_tablet(tablet_id.id(), exists);
     if (OB_FAIL(ret)) { return ret; }
     if (exists) {
-      if (supplied_schema == nullptr || binding_schemas == nullptr) {
-        return OB_SUCCESS;
-      }
       if (OB_FAIL(load_kv_exceptions(db))) { return ret; }
-      if (control_state().owned(db, local)) { return OB_SUCCESS; }
+      if (control_state().tombstoned(db, local)) { return OB_TABLET_NOT_EXIST; }
+      // Committed physical presence needs no materialization. Bootstrap and
+      // DDL create their own tablets before publishing directory entries;
+      // requiring owned here would turn an existing object into a request to
+      // inherit it. Their publication remains responsible for registration.
+      return OB_SUCCESS;
     }
   } // Do not pin an uncommitted tablet while waiting for its creator's row lock.
   LOG_INFO("PROTOTYPE_V4_DIRECTORY_SLOW_PATH", K(tablet_id));
@@ -1416,18 +1434,11 @@ int NamespaceForkKernelPrototype::ensure_tablet_impl(
       }
       if (OB_SUCC(ret) && !already) {
         failure_stage = "schema";
-        const bool supplied = supplied_schema != nullptr && binding_schemas != nullptr;
-        const ObTableSchema *requested_schema = supplied_schema;
-        if (!supplied) {
-          // The namespace worker is the schema authority and always supplies the
-          // binding schemas on this path; physical creation without one is not
-          // representable here.
-          ret = OB_NOT_SUPPORTED;
-        }
+        const ObTableSchema *requested_schema = &supplied_schema;
         auto supplied_by_table = [&](uint64_t table_id) -> const ObTableSchema * {
           const uint64_t local_table_id = local_of(table_id);
-          for (int64_t i = 0; binding_schemas && i < binding_schemas->count(); ++i) {
-            const ObTableSchema *schema = binding_schemas->at(i);
+          for (int64_t i = 0; i < binding_schemas.count(); ++i) {
+            const ObTableSchema *schema = binding_schemas.at(i);
             if (schema != nullptr && local_of(schema->get_table_id()) == local_table_id) {
               return schema;
             }
@@ -1586,7 +1597,7 @@ int NamespaceForkKernelPrototype::ensure_tablet_impl(
       ret = THIS_WORKER.check_status();
       LOG_INFO("PROTOTYPE_V2_STORAGE_MATERIALIZE", K(tablet_id), "tablet_count", items.size(),
           "input_snapshot", items.front().cap, "namespace_snapshot", root.snapshot,
-          "entry_layer", "ObAccessService", K(ret));
+          "entry_layer", "TabletAccess", K(ret));
     }
   }
   if (OB_SUCC(ret) && !already) {

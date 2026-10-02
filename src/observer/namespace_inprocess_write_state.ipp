@@ -1,12 +1,10 @@
 // Included inside oceanbase::observer::namespace_worker_prototype.
 struct EngineWrite {
   ObArenaAllocator allocator{ObMemAttr("NsRemoteWrite")};
-  ObSchemaGetterGuard guard;
-  ObTableSchema logical_schema{&allocator};
-  ObTableSchema routed_schema{&allocator};
-  std::vector<std::unique_ptr<ObTableSchema>> logical_materialization_schemas;
-  std::vector<std::unique_ptr<ObTableSchema>> routed_materialization_schemas;
-  ObArray<const ObTableSchema *> materialization_schemas;
+  ns::TabletBinding binding{allocator};
+  ns::TabletAccess access;
+  uint64_t logical_table_id = OB_INVALID_ID;
+  data_plane::ObNamespaceAccessMode access_mode_ = data_plane::ObNamespaceAccessMode::UNBOUND;
   ObDmlTablePlan plan{allocator};
   ObTimeZoneInfo timezone;
   ObDmlWriteSpec spec;
@@ -32,35 +30,17 @@ struct EngineWrite {
       return OB_SUCCESS;
     };
     int ret = add_bytes(request.logical_schema.get_serialize_size());
-    for (int64_t i = 0; !ret && i < request.materialization_schemas.count(); ++i) {
-      const ObTableSchema *schema = request.materialization_schemas.at(i);
-      ret = schema ? add_bytes(schema->get_serialize_size()) : OB_INVALID_ARGUMENT;
-    }
     if (ret || OB_FAIL(add_bytes(request.spec.tz_info_->get_serialize_size()))
         || OB_FAIL(add_bytes(request.snapshot.get_serialize_size()))
         || OB_FAIL(add_bytes(request.write_flag.get_serialize_size()))
         || OB_FAIL(add_bytes(request.columns.size() * 8))) { return ret; }
     storage_space = request.storage_space;
     spec = request.spec;
-    spec.namespace_access_mode_ = request.storage_space.is_global()
+    access_mode_ = request.storage_space.is_global()
         ? data_plane::ObNamespaceAccessMode::UNFENCED : access_mode;
-    ret = logical_schema.assign(request.logical_schema);
-    if (OB_FAIL(ret)) { return ret; }
-    const uint64_t ns = storage_space.tablet_namespace_id();
-    const int64_t materialization_schema_count = request.materialization_schemas.count();
-    if (materialization_schema_count > 3) {
-      return OB_INVALID_ARGUMENT;
-    }
-    for (int64_t i = 0; i < materialization_schema_count; ++i) {
-      auto logical = std::make_unique<ObTableSchema>(&allocator);
-      if (OB_FAIL(logical->assign(*request.materialization_schemas.at(i)))) { return ret; }
-      auto routed = std::make_unique<ObTableSchema>(&allocator);
-      int schema_ret = NamespaceForkKernelPrototype::make_storage_schema(ns, *logical, *routed);
-      if (schema_ret != OB_SUCCESS) { return schema_ret; }
-      if (OB_FAIL(materialization_schemas.push_back(routed.get()))) { return ret; }
-      logical_materialization_schemas.push_back(std::move(logical));
-      routed_materialization_schemas.push_back(std::move(routed));
-    }
+    logical_table_id = table;
+    const auto &logical_schema = request.logical_schema;
+    const uint64_t namespace_id = storage_space.tablet_namespace_id();
     spec.timeout_ = std::min<int64_t>(spec.timeout_, THIS_WORKER.get_timeout_ts());
     if (OB_FAIL(timezone.assign(*request.spec.tz_info_))) { return ret; }
     spec.tz_info_ = &timezone;
@@ -69,7 +49,7 @@ struct EngineWrite {
     const int64_t count = request.columns.size();
     if (count == 0 || count > OB_MAX_COLUMN_NUMBER) {
       fprintf(stderr, "PROTOTYPE_V17_WRITE_PREPARE ns=%llu table=%llu columns=%llu stage=validate ret=%d\n",
-          (unsigned long long)ns, (unsigned long long)table, (unsigned long long)count,
+          (unsigned long long)namespace_id, (unsigned long long)table, (unsigned long long)count,
           ret);
       return OB_NOT_SUPPORTED;
     }
@@ -80,8 +60,8 @@ struct EngineWrite {
                 && logical_schema.get_schema_version() != spec.schema_version_)) {
       ret = OB_INVALID_ARGUMENT;
     } else {
-      ret = NamespaceForkKernelPrototype::make_storage_schema(ns, logical_schema, routed_schema);
-      if (!ret) { schema = &routed_schema; }
+      ret = binding.init(namespace_id, logical_schema, request.schema_guard);
+      if (!ret) { schema = &binding.schema(); }
     }
     if (!ret) {
       // The request carries the exact schema pinned by the worker's SchemaGuard.
@@ -91,12 +71,12 @@ struct EngineWrite {
     }
     if (ret) {
       fprintf(stderr, "PROTOTYPE_V17_WRITE_PREPARE ns=%llu table=%llu stage=schema ret=%d\n",
-          (unsigned long long)ns, (unsigned long long)table, ret);
+          (unsigned long long)namespace_id, (unsigned long long)table, ret);
       return ret;
     }
     if (!schema || schema->get_schema_version() != spec.schema_version_) {
       fprintf(stderr, "PROTOTYPE_V17_WRITE_PREPARE ns=%llu table=%llu stage=version requested=%lld actual=%lld ret=%d\n",
-          (unsigned long long)ns, (unsigned long long)table, (long long)spec.schema_version_,
+          (unsigned long long)namespace_id, (unsigned long long)table, (long long)spec.schema_version_,
           (long long)(schema ? schema->get_schema_version() : OB_INVALID_VERSION), OB_SCHEMA_EAGAIN);
       return OB_SCHEMA_EAGAIN;
     }
@@ -109,7 +89,7 @@ struct EngineWrite {
       uint64_t logical_tablet_id = schema_tablets.at(i).id();
       if (NamespaceForkKernelPrototype::is_encoded_id(logical_tablet_id)) {
         ret = NamespaceForkKernelPrototype::local_object_id(
-            ns, logical_tablet_id, logical_tablet_id);
+            namespace_id, logical_tablet_id, logical_tablet_id);
       }
       if (OB_SUCC(ret)) { logical_tablets.push_back(logical_tablet_id); }
     }
@@ -122,14 +102,14 @@ struct EngineWrite {
     }
     if (ret) {
       fprintf(stderr, "PROTOTYPE_V17_WRITE_PREPARE ns=%llu table=%llu stage=columns ret=%d\n",
-          (unsigned long long)ns, (unsigned long long)table, ret);
+          (unsigned long long)namespace_id, (unsigned long long)table, ret);
       return ret;
     }
     if (!ret) { ret = plan.build(schema, spec.schema_version_, columns); }
     if (!ret) { ret = acquire(tx); }
     if (ret) {
       fprintf(stderr, "PROTOTYPE_V17_WRITE_PREPARE ns=%llu table=%llu tablet=%llu stage=native ret=%d\n",
-          (unsigned long long)ns, (unsigned long long)table,
+          (unsigned long long)namespace_id, (unsigned long long)table,
           (unsigned long long)(logical_tablets.empty() ? 0 : logical_tablets.front()), ret);
     }
     return ret;
@@ -151,12 +131,13 @@ struct EngineWrite {
   void release_context() {
     execution.reset();
     context.reset();
+    access.reset();
   }
 
   int batch(const WriteBatch &request, ObTxDesc &tx,
             int64_t &affected, WriteResult &returned) {
     const char operation = request.operation;
-    const uint64_t ns = storage_space.namespace_id();
+    const uint64_t namespace_id = storage_space.tablet_namespace_id();
     const uint64_t tablet_id = request.tablet_id, count = request.rows;
     const bool update = operation == 'U';
     if (std::find(logical_tablets.begin(), logical_tablets.end(), tablet_id)
@@ -165,13 +146,9 @@ struct EngineWrite {
         || count > (update ? 64 : 32) || (update && count % 2)
         || request.cells.size() != count * columns.count()
         || request.lob_headers.size() != request.cells.size()) { return OB_INVALID_ARGUMENT; }
-    ObTabletID tablet(tablet_id);
-    int ret = OB_SUCCESS;
-    ret = route_tablet_id(storage_space, tablet);
-    if (OB_SUCC(ret) && !materialization_schemas.empty()) {
-      ret = NamespaceForkKernelPrototype::ensure_tablet(
-          tablet, *schema, materialization_schemas);
-    }
+    int ret = access.prepare_write(namespace_id, logical_table_id,
+        ObTabletID(tablet_id), access_mode_, binding);
+    const ObTabletID tablet = access.tablet();
     if (OB_FAIL(ret)) { return ret; }
     if (OB_SUCC(ret)) { ret = acquire(tx); }
     if (OB_FAIL(ret)) { return ret; }

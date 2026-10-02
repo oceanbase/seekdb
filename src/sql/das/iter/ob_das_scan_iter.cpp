@@ -21,7 +21,6 @@
 #include "data_plane/access/ob_tablet_scan.h"
 #include "src/sql/engine/ob_exec_context.h"
 #include "observer/namespace_worker_protocol_prototype.h"
-#include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 
 namespace oceanbase
@@ -91,6 +90,8 @@ int ObDASScanIter::inner_release()
     }
     result_ = nullptr;
   }
+  tablet_access_.reset();
+  namespace_id_ = 0;
   return ret;
 }
 
@@ -110,16 +111,14 @@ int ObDASScanIter::do_table_scan()
                   && scan_param_->table_param_->is_fts_index()))
              && observer::namespace_worker_prototype::in_process_session_ns(
                     THIS_WORKER.get_session()) > 0) {
-    const uint64_t ns = observer::namespace_worker_prototype::in_process_session_ns(
+    namespace_id_ = observer::namespace_worker_prototype::in_process_session_ns(
         THIS_WORKER.get_session());
-    uint64_t physical_tablet = OB_INVALID_ID;
+    requested_snapshot_ = scan_param_->fb_snapshot_;
+    data_plane::ObNamespaceAccessMode mode;
     if (OB_FAIL(observer::namespace_worker_prototype::storage_access_mode(
-            observer::namespace_worker_prototype::StorageSpaceHandle::namespace_space(ns),
-            scan_param_->namespace_access_mode_))) {
-    } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
-            ns, scan_param_->tablet_id_.id(), physical_tablet))) {
+            observer::namespace_worker_prototype::StorageSpaceHandle::namespace_space(namespace_id_), mode))) {
+    } else if (OB_FAIL(tablet_access_.prepare_scan(namespace_id_, mode, *scan_param_))) {
     } else {
-      scan_param_->tablet_id_ = ObTabletID(physical_tablet);
       tsc_service_ = share::server_service<common::ObITabletScan>();
       ret = OB_ISNULL(tsc_service_) ? OB_NOT_INIT
           : tsc_service_->table_scan(*scan_param_, result_);
@@ -141,6 +140,21 @@ int ObDASScanIter::rescan()
   if (OB_ISNULL(scan_param_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr scan param", K(ret));
+  } else {
+    if (namespace_id_ != 0 && scan_param_->need_switch_param_) {
+      if (scan_param_->tablet_id_ == tablet_access_.tablet()) {
+        scan_param_->tablet_id_ = tablet_access_.schema_tablet();
+      }
+      scan_param_->fb_snapshot_ = requested_snapshot_;
+      data_plane::ObNamespaceAccessMode mode;
+      if (OB_FAIL(observer::namespace_worker_prototype::storage_access_mode(
+              observer::namespace_worker_prototype::StorageSpaceHandle::namespace_space(namespace_id_), mode))) {
+      } else {
+        ret = tablet_access_.prepare_scan(namespace_id_, mode, *scan_param_);
+      }
+    }
+  }
+  if (OB_FAIL(ret)) {
   } else if (OB_FAIL(tsc_service_->table_rescan(*scan_param_, result_))) {
       if (OB_SNAPSHOT_DISCARDED == ret && scan_param_->fb_snapshot_.is_valid()) {
         ret = OB_INVALID_QUERY_TIMESTAMP;

@@ -62,37 +62,6 @@ int worker_local_table_schema(uint64_t table_id, int64_t schema_version,
   if (ret == OB_TABLE_NOT_EXIST) { schema = nullptr; }
   return ret;
 }
-int worker_materialization_schemas(
-    const ObTableSchema &requested,
-    ObSchemaGetterGuard &guard,
-    ObIArray<const ObTableSchema *> &schemas) {
-  schemas.reset();
-  const ObTableSchema *main = &requested;
-  int ret = OB_SUCCESS;
-  if (requested.is_aux_lob_table()) {
-    ret = guard.get_table_schema(requested.get_data_table_id(), main);
-    if (!ret && (main == nullptr || main->is_aux_lob_table())) {
-      ret = OB_SCHEMA_EAGAIN;
-    }
-  }
-  if (!ret) { ret = schemas.push_back(main); }
-  const uint64_t auxiliary_ids[] = {
-      !ret ? main->get_aux_lob_meta_tid() : OB_INVALID_ID,
-      !ret ? main->get_aux_lob_piece_tid() : OB_INVALID_ID};
-  for (uint64_t id : auxiliary_ids) {
-    if (!ret && id != OB_INVALID_ID) {
-      const ObTableSchema *auxiliary = nullptr;
-      if (OB_FAIL(guard.get_table_schema(id, auxiliary))) {
-      } else if (auxiliary == nullptr || !auxiliary->is_aux_lob_table()
-          || auxiliary->get_data_table_id() != main->get_table_id()) {
-        ret = OB_SCHEMA_EAGAIN;
-      } else {
-        ret = schemas.push_back(auxiliary);
-      }
-    }
-  }
-  return ret;
-}
 struct ScanSchema {
   ObArenaAllocator alloc{ObMemAttr("NsScanSchema")};
   ObTableSchema *logical = nullptr;

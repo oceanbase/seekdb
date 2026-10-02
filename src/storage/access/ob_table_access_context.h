@@ -23,7 +23,6 @@
 #include "storage/tx/ob_defensive_check_mgr.h"
 #include "share/scn.h"
 #include "storage/access/ob_micro_block_handle_mgr.h"
-#include "data_plane/access/ob_namespace_access_mode.h"
 #include "share/ob_fork_table_info.h"
 
 namespace oceanbase
@@ -340,7 +339,6 @@ public:
   common::ObTabletID schema_tablet_id_;
   common::ObQueryFlag query_flag_;
   ObSQLMode sql_mode_;
-  data_plane::ObNamespaceAccessMode namespace_access_mode_;
   ObMicroBlockHandleMgr micro_block_handle_mgr_;
   ObStoreCtx *store_ctx_;
   common::ObLimitParam *limit_param_;

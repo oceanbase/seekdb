@@ -19,7 +19,7 @@
 #include "observer/vector_index/ob_vector_index_ivf_cache_util.h"
 #include "observer/namespace_worker_protocol_prototype.h"
 #include "namespace/namespace.h"
-#include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
+#include "rootserver/fork_table/namespace_tablet_access.h"
 #include "storage/ls/ob_ls.h"
 #include <unordered_set>
 
@@ -34,6 +34,7 @@ int ObIvfAsyncTaskExector::LoadTaskCallback::is_cache_mgr_deprecated(ObIvfCacheM
   int ret = OB_SUCCESS;
   is_deprecated = false;
   const ObTableSchema *table_schema = nullptr;
+  ns::TabletAccess access;
   ObTabletHandle tablet_handle;
   const ObTabletID tablet_id = cache_mgr.get_cache_mgr_key();
   if (!ns::NamespaceObjectKey::is_encoded(tablet_id.id())) {
@@ -50,17 +51,18 @@ int ObIvfAsyncTaskExector::LoadTaskCallback::is_cache_mgr_deprecated(ObIvfCacheM
   } else if (OB_ISNULL(table_schema) || table_schema->is_in_recyclebin()) {
     is_deprecated = true;
   } else {
-    ObTabletID physical_tablet_id = tablet_id;
-    int64_t cap_scn = 0;
-    if (OB_FAIL(storage::NamespaceForkKernelPrototype::resolve_read_tablet(
-            tablet_id, physical_tablet_id, cap_scn))) {
-    } else if (OB_FAIL(ls_->get_tablet_svr()->get_tablet(physical_tablet_id, tablet_handle))) {
-      if (OB_TABLET_NOT_EXIST != ret) {
-        LOG_WARN("fail to get tablet", K(ret), K(cache_mgr));
-      } else {
-        ret = OB_SUCCESS;  // not found, moved from this ls
-        is_deprecated = true;
-      }
+    data_plane::ObNamespaceAccessMode mode;
+    if (OB_FAIL(observer::namespace_worker_prototype::storage_access_mode(
+            observer::namespace_worker_prototype::StorageSpaceHandle::namespace_space(namespace_id), mode))) {
+    } else if (OB_FAIL(access.prepare_read(namespace_id, cache_mgr.get_table_id(), tablet_id, mode))) {
+    } else {
+      ret = ls_->get_tablet_svr()->get_tablet(access.tablet(), tablet_handle);
+    }
+    if (ret == OB_TABLET_NOT_EXIST) {
+      ret = OB_SUCCESS;
+      is_deprecated = true;
+    } else if (OB_FAIL(ret)) {
+      LOG_WARN("fail to get tablet", K(ret), K(cache_mgr));
     }
   }
   return ret;
@@ -266,24 +268,20 @@ int ObIvfAsyncTaskExector::get_tablet_ids_by_ls(uint64_t namespace_id,
     LOG_WARN("invalid null ls", K(ret));
   } else if (OB_FAIL(index_table_schema.get_tablet_ids(tmp_tablet_id_array))) {
   } else {
-    ObTabletHandle tablet_handle;
     // check tablet if exist in self ls
-    for (int64_t i = 0; i < tmp_tablet_id_array.count(); ++i) {
-      uint64_t storage_id = OB_INVALID_ID;
-      if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
-              namespace_id, tmp_tablet_id_array.at(i).id(), storage_id))) {
-        break;
-      }
-      ObTabletID storage_tablet_id(storage_id);
-      ObTabletID physical_tablet_id = storage_tablet_id;
-      int64_t cap_scn = 0;
-      ret = storage::NamespaceForkKernelPrototype::resolve_read_tablet(
-          storage_tablet_id, physical_tablet_id, cap_scn);
+    data_plane::ObNamespaceAccessMode mode;
+    ret = observer::namespace_worker_prototype::storage_access_mode(
+        observer::namespace_worker_prototype::StorageSpaceHandle::namespace_space(namespace_id), mode);
+    for (int64_t i = 0; OB_SUCC(ret) && i < tmp_tablet_id_array.count(); ++i) {
+      ns::TabletAccess access;
+      ObTabletHandle tablet_handle;
+      ret = access.prepare_read(namespace_id, index_table_schema.get_table_id(),
+          tmp_tablet_id_array.at(i), mode);
       if (OB_SUCC(ret)) {
-        ret = ls_->get_tablet_svr()->get_tablet(physical_tablet_id, tablet_handle);
+        ret = ls_->get_tablet_svr()->get_tablet(access.tablet(), tablet_handle);
       }
       if (OB_SUCC(ret)) {
-        if (OB_FAIL(tablet_id_array.push_back(storage_tablet_id))) {
+        if (OB_FAIL(tablet_id_array.push_back(access.schema_tablet()))) {
         }
       } else if (ret == OB_TABLET_NOT_EXIST) {
         // do nothing

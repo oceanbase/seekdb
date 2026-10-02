@@ -36,11 +36,10 @@ public:
   ~ObFTDocWordScanIterator();
 
   int init(
-      const uint64_t table_id,
+      const share::schema::ObTableSchema &schema,
       const common::ObTabletID &tablet_id,
-      const transaction::ObTxReadSnapshot *snapshot,
-      const int64_t schema_version,
-      data_plane::ObNamespaceAccessMode access_mode);
+      const common::ObTabletID &schema_tablet_id,
+      const transaction::ObTxReadSnapshot *snapshot);
   int do_scan(const uint64_t table_id, const ObDatum &row_mapping_id);
   int get_next_row(blocksstable::ObDatumRow *&datum_row);
 
@@ -49,14 +48,12 @@ public:
   TO_STRING_KV(KP(doc_word_iter_), K(scan_param_), K(table_param_));
 private:
   int init_scan_param(
-      const uint64_t table_id,
+      const share::schema::ObTableSchema &schema,
       const common::ObTabletID &tablet_id,
-      const transaction::ObTxReadSnapshot *snapshot,
-      const int64_t schema_version,
-      data_plane::ObNamespaceAccessMode access_mode);
+      const common::ObTabletID &schema_tablet_id,
+      const transaction::ObTxReadSnapshot *snapshot);
   int build_table_param(
-      const uint64_t table_id,
-      const common::ObTabletID &tablet_id,
+      const share::schema::ObTableSchema &schema,
       share::schema::ObTableParam &table_param,
       common::ObIArray<uint64_t> &column_ids);
   int build_key_range(const uint64_t table_id,

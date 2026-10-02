@@ -11,10 +11,13 @@
 #include "observer/ob_inner_sql_connection.h"
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "rootserver/ob_rootserver_local_runtime.h"
+#include "rootserver/fork_table/namespace_tablet_access.h"
 #include "share/lob/ob_lob_text_iter_context.h"
+#include "share/tablet/ob_tablet_mapping_operator.h"
 #include "share/ob_lob_access_utils.h"
 #include "share/autoincrement/ob_i_tablet_autoincrement_service.h"
 #include "lib/charset/ob_charset.h"
+#include <unordered_set>
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 #include "storage/tablelock/ob_lock_utils.h"
 #include "storage/tablelock/ob_table_lock_service.h"
@@ -35,7 +38,7 @@ struct WritePrepareRequest {
   uint64_t table_id;
   const ObDmlWriteSpec &spec;
   const ObTableSchema &logical_schema;
-  const ObIArray<const ObTableSchema *> &materialization_schemas;
+  ObSchemaGetterGuard &schema_guard;
   const ObTxReadSnapshot &snapshot;
   const concurrent_control::ObWriteFlag &write_flag;
   const std::vector<uint64_t> &columns;
@@ -145,6 +148,48 @@ int route_existing_namespace_tablets(
   return ret;
 }
 
+// Prepare an existing logical tablet for a metadata mutation. The upper
+// Namespace runtime supplies the schema; the physical MDS implementation only
+// sees the resulting local tablet. New tablets in the same CREATE batch do not
+// enter here. Mapping lookup is a snapshot read; it adds no row lock to the
+// caller's DDL transaction. Materialization writes shared physical mapping keys,
+// separate from the logical mappings updated by that DDL.
+int prepare_metadata_tablet(StorageSpaceHandle space, const ObTabletID &tablet,
+    uint64_t table_id, int64_t schema_version, ns::TabletAccess &access)
+{
+  const uint64_t namespace_id = space.tablet_namespace_id();
+  auto *schemas = namespace_schema_service(namespace_id);
+  if (schemas == nullptr) { return OB_NOT_INIT; }
+  int ret = OB_SUCCESS;
+  if (table_id == OB_INVALID_ID) {
+    auto *proxy = namespace_ddl_sql_proxy(namespace_id);
+    ObSEArray<ObTabletID, 1> tablets;
+    ObSEArray<share::ObTabletTablePair, 1> mappings;
+    uint64_t logical_id = OB_INVALID_ID;
+    if (proxy == nullptr) { ret = OB_NOT_INIT; }
+    else if (OB_FAIL(NamespaceForkKernelPrototype::local_object_id(namespace_id, tablet.id(), logical_id))) {
+    } else if (OB_FAIL(tablets.push_back(ObTabletID(logical_id)))) {
+    } else if (OB_FAIL(share::ObTabletMappingTableOperator::batch_get(*proxy, tablets, mappings))) {
+    } else if (mappings.count() != 1) { ret = OB_TABLET_NOT_EXIST; }
+    else { table_id = mappings.at(0).get_table_id(); }
+  }
+  ObSchemaGetterGuard guard;
+  const ObTableSchema *schema = nullptr;
+  ObArenaAllocator allocator("NsMetadataWrite");
+  ns::TabletBinding binding(allocator);
+  data_plane::ObNamespaceAccessMode mode;
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(schemas->get_runtime_schema_guard(guard, schema_version))) {
+  } else if (OB_FAIL(guard.get_table_schema(table_id, schema))) {
+  } else if (schema == nullptr) { ret = OB_SCHEMA_EAGAIN; }
+  else if (OB_FAIL(binding.init(namespace_id, *schema, guard))) {
+  } else if (OB_FAIL(storage_access_mode(space, mode))) {
+  } else {
+    ret = access.prepare_write(namespace_id, table_id, tablet, mode, binding);
+  }
+  return ret;
+}
+
 // Tablet MDS is produced by the namespace-local DDL engine with logical ids.
 // Translate it exactly once at the storage boundary so every native MDS helper,
 // replay path and tablet service below this point remains namespace-oblivious.
@@ -152,7 +197,8 @@ int route_tablet_mds(StorageSpaceHandle storage_space,
                      transaction::ObTxDataSourceType type,
                      const common::ObString &input,
                      std::vector<char> &storage_buffer,
-                     bool &skip_mds)
+                     bool &skip_mds,
+                     ns::TabletAccess &access)
 {
   skip_mds = false;
   if (!storage_space.is_valid()) {
@@ -170,35 +216,38 @@ int route_tablet_mds(StorageSpaceHandle storage_space,
     } else if (pos != input.length() || !arg.is_valid()) {
       ret = OB_INVALID_ARGUMENT;
     }
+    // A main tablet and its auxiliaries may occupy different CREATE groups.
+    // Collect the whole logical batch before any IDs are translated in place.
+    std::unordered_set<uint64_t> new_tablets;
+    for (int64_t i = 0; OB_SUCC(ret) && i < arg.tablets_.count(); ++i) {
+      const auto &ids = arg.tablets_.at(i).tablet_ids_;
+      for (int64_t j = 0; j < ids.count(); ++j) { new_tablets.insert(ids.at(j).id()); }
+    }
     for (int64_t i = 0; OB_SUCC(ret) && i < arg.tablets_.count(); ++i) {
       obcall::ObCreateTabletInfo &info = arg.tablets_.at(i);
-      if (OB_FAIL(route_tablet_id(ns, info.data_tablet_id_))) {
+      // Binding a hidden/LOB tablet mutates the existing main tablet. Prepare
+      // its local binding before registering any of this batch's new MDS.
+      if (new_tablets.count(info.data_tablet_id_.id()) == 0) {
+        ret = prepare_metadata_tablet(storage_space, info.data_tablet_id_,
+            OB_INVALID_ID, OB_INVALID_VERSION, access);
+      }
+      if (OB_SUCC(ret) && OB_FAIL(route_tablet_id(ns, info.data_tablet_id_))) {
       }
       for (int64_t j = 0; OB_SUCC(ret) && j < info.tablet_ids_.count(); ++j) {
         ret = route_tablet_id(ns, info.tablet_ids_.at(j));
       }
       for (int64_t j = 0; OB_SUCC(ret) && j < info.fork_tablet_infos_.count(); ++j) {
         share::ObForkTabletInfo &fork = info.fork_tablet_infos_.at(j);
-        ObTabletID logical = fork.get_fork_src_tablet_id();
+        data_plane::ObNamespaceAccessMode mode;
         if (!fork.is_valid()) {
           ret = OB_INVALID_ARGUMENT;
-        } else if (!storage::NamespaceForkKernelPrototype::is_encoded_id(logical.id())) {
-          uint64_t storage_id = OB_INVALID_ID;
-          if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
-                  ns, logical.id(), storage_id))) {
-          } else { logical = ObTabletID(storage_id); }
-        }
-        if (OB_SUCC(ret) && storage::NamespaceForkKernelPrototype::is_encoded_id(logical.id())
-            && ::oceanbase::ns::NamespaceObjectKey::encoded_namespace(logical.id()) == ns) {
-          ObTabletID physical;
-          int64_t inherited_cap = 0;
-          if (OB_FAIL(storage::NamespaceForkKernelPrototype::resolve_read_tablet(
-                  logical, physical, inherited_cap))) {
-          } else {
-            fork.set_fork_src_tablet_id(physical);
-            if (inherited_cap > 0 && inherited_cap < fork.get_fork_snapshot_version()) {
-              fork.set_fork_snapshot_version(inherited_cap);
-            }
+        } else if (OB_FAIL(storage_access_mode(storage_space, mode))) {
+        } else if (OB_FAIL(access.prepare_read(ns, OB_INVALID_ID,
+            fork.get_fork_src_tablet_id(), mode))) {
+        } else {
+          fork.set_fork_src_tablet_id(access.tablet());
+          if (access.cap_scn() > 0 && access.cap_scn() < fork.get_fork_snapshot_version()) {
+            fork.set_fork_snapshot_version(access.cap_scn());
           }
         }
       }
@@ -264,6 +313,8 @@ int route_tablet_mds(StorageSpaceHandle storage_space,
     if (OB_FAIL(arg.deserialize(allocator, input.ptr(), input.length(), pos))) {
     } else if (pos != input.length() || !arg.is_valid()) {
       ret = OB_INVALID_ARGUMENT;
+    } else if (OB_FAIL(prepare_metadata_tablet(storage_space, arg.index_tablet_id_,
+                   OB_INVALID_ID, OB_INVALID_VERSION, access))) {
     } else if (OB_FAIL(route_tablet_id(ns, arg.index_tablet_id_))) {
     } else {
       storage_buffer.resize(arg.get_serialize_size());

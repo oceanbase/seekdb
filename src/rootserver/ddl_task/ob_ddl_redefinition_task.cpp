@@ -20,6 +20,8 @@
 #include "ob_ddl_redefinition_task.h"
 #include "rootserver/ddl_task/ob_ddl_task_util.h"
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
+#include "rootserver/fork_table/namespace_tablet_access.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "rootserver/ob_local_ddl_serial_call.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher
@@ -2103,25 +2105,19 @@ int ObSyncTabletAutoincSeqCtx::init(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("source and destination tablet count differs", K(ret), K(src_tablet_ids_), K(dest_tablet_ids_));
   } else {
-    // The counter is a high-water mark; an inherited source may read its
-    // ancestor's newer value without reusing any key from the fork snapshot.
-    for (int64_t i = 0; OB_SUCC(ret) && i < src_tablet_ids_.count(); ++i) {
-      uint64_t encoded_source = OB_INVALID_ID;
+    // Keep logical sources until the operation runs; their physical backing
+    // may change between task initialization and a retry.
+    for (int64_t i = 0; OB_SUCC(ret) && i < dest_tablet_ids_.count(); ++i) {
       uint64_t encoded_dest = OB_INVALID_ID;
-      ObTabletID physical_source;
-      int64_t inherited_cap = 0;
       if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
-              namespace_id, src_tablet_ids_.at(i).id(), encoded_source))) {
-      } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
               namespace_id, dest_tablet_ids_.at(i).id(), encoded_dest))) {
-      } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::resolve_read_tablet(
-              ObTabletID(encoded_source), physical_source, inherited_cap))) {
       } else {
-        src_tablet_ids_.at(i) = physical_source;
         dest_tablet_ids_.at(i) = ObTabletID(encoded_dest);
       }
     }
     if (OB_SUCC(ret)) {
+      namespace_id_ = namespace_id;
+      src_table_id_ = src_table_id;
       is_synced_ = false;
       is_inited_ = true;
     }
@@ -2157,15 +2153,26 @@ int ObSyncTabletAutoincSeqCtx::call_and_process_all_tablet_autoinc_seqs(const bo
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObTabletAutoincSeqCopyParam, 1> request_params;
+  ObSEArray<ObTabletID, 1> requested_sources;
+  ns::TabletAccess access;
+  data_plane::ObNamespaceAccessMode mode;
 
   if (is_get) {
+    ret = observer::namespace_worker_prototype::storage_access_mode(
+        observer::namespace_worker_prototype::StorageSpaceHandle::namespace_space(namespace_id_), mode);
+    if (OB_SUCC(ret)) { ret = requested_sources.assign(src_tablet_ids_); }
     if (OB_UNLIKELY(src_tablet_ids_.count() != dest_tablet_ids_.count())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid tablet ids count", K(ret), K(src_tablet_ids_), K(dest_tablet_ids_));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < src_tablet_ids_.count(); i++) {
       ObTabletAutoincSeqCopyParam autoinc_param;
-      autoinc_param.src_tablet_id_ = src_tablet_ids_.at(i);
+      // Sequence values are high-water marks, so reading the ancestor's
+      // current value is safe. Keep its access protection through the call.
+      if (OB_FAIL(access.prepare_read(namespace_id_, src_table_id_, src_tablet_ids_.at(i), mode))) {
+        break;
+      }
+      autoinc_param.src_tablet_id_ = access.tablet();
       autoinc_param.dest_tablet_id_ = dest_tablet_ids_.at(i);
       if (OB_FAIL(request_params.push_back(autoinc_param))) {
         LOG_WARN("failed to push back", K(ret), K(autoinc_param));
@@ -2243,7 +2250,7 @@ int ObSyncTabletAutoincSeqCtx::call_and_process_all_tablet_autoinc_seqs(const bo
             }
           } else {
             if (is_get) {
-              if (OB_FAIL(src_tablet_ids_.push_back(autoinc_param.src_tablet_id_))) {
+              if (OB_FAIL(src_tablet_ids_.push_back(requested_sources.at(i)))) {
                 LOG_WARN("failed to push src tablet id", K(ret), K(autoinc_param));
               } else if (OB_FAIL(dest_tablet_ids_.push_back(autoinc_param.dest_tablet_id_))) {
                 LOG_WARN("failed to push dest tablet id", K(ret), K(autoinc_param));

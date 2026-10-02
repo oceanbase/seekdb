@@ -1311,10 +1311,15 @@ int ObLSTabletService::get_tablet_with_timeout(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(tablet_id), K(mode));
   } else if (OB_FAIL(ObTabletCreateDeleteHelper::check_and_get_tablet(key, handle, timeout_step_us, mode, snapshot_version))) {
-    while (OB_ALLOCATE_MEMORY_FAILED == ret && ObClockGenerator::getClock() < retry_timeout_us) {
+    // A committed transaction can expose its rows before all CREATE MDS
+    // callbacks finish. Honor this operation's deadline while the physical
+    // tablet becomes readable; zero-timeout probes remain nonblocking.
+    while ((OB_ALLOCATE_MEMORY_FAILED == ret || OB_EAGAIN == ret)
+        && ObClockGenerator::getClock() < retry_timeout_us) {
+      ob_usleep(100);
       ret = ObTabletCreateDeleteHelper::check_and_get_tablet(key, handle, timeout_step_us, mode, snapshot_version);
     }
-    if (OB_ALLOCATE_MEMORY_FAILED == ret) {
+    if (OB_ALLOCATE_MEMORY_FAILED == ret || OB_EAGAIN == ret) {
       ret = OB_TIMEOUT;
       LOG_WARN("get tablet timeout", K(ret), K(retry_timeout_us), K(ObTimeUtil::current_time()), K(mode));
     }

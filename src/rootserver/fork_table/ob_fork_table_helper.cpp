@@ -22,7 +22,8 @@
 #include "share/rc/ob_server_runtime.h"
 #include "rootserver/ob_ddl_operator.h"
 #include "rootserver/ob_ddl_autoincrement_service.h"
-#include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
+#include "rootserver/fork_table/namespace_tablet_access.h"
+#include "observer/namespace_worker_protocol_prototype.h"
 #include "rootserver/truncate_info/ob_truncate_info_service.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_autoincrement_service.h"
@@ -279,24 +280,22 @@ int ObForkTableHelper::copy_tablet_autoinc_seq_info_()
       allocator.reuse();
       const ObTabletID &src_tablet_id = src_tablet_ids_.at(i);
       const ObTabletID &dst_tablet_id = dst_tablet_ids_.at(i);
+      ns::TabletAccess access;
       ObTabletHandle tablet_handle;
-      ObTabletID physical_source;
-      int64_t inherited_cap = 0;
       ObTabletAutoincSeq autoinc_seq;
       share::ObTabletAutoincSeqCopyParam param;
       param.dest_tablet_id_ = dst_tablet_id;
       param.ret_code_ = OB_SUCCESS;
 
-      if (OB_FAIL(get_tablet_handle_(src_tablet_id, tablet_handle,
-                                    physical_source, inherited_cap))) {
+      if (OB_FAIL(get_tablet_handle_(src_tablet_id, access, tablet_handle))) {
       } else if (OB_ISNULL(tablet_handle.get_obj())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("tablet handle is null", K(ret), K(src_tablet_id));
-      } else if (FALSE_IT(param.src_tablet_id_ = physical_source)) {
+      } else if (FALSE_IT(param.src_tablet_id_ = access.tablet())) {
       } else if (OB_FAIL([&]() -> int {
           share::SCN snapshot;
-          const int64_t version = inherited_cap > 0
-              ? std::min(inherited_cap, fork_table_info_.get_fork_snapshot_version())
+          const int64_t version = access.cap_scn() > 0
+              ? std::min(access.cap_scn(), fork_table_info_.get_fork_snapshot_version())
               : fork_table_info_.get_fork_snapshot_version();
           int read_ret = snapshot.convert_for_tx(version);
           if (read_ret == OB_SUCCESS) {
@@ -351,19 +350,17 @@ int ObForkTableHelper::copy_tablet_truncate_info_()
       allocator.reuse();
       const ObTabletID &src_tablet_id = src_tablet_ids_.at(i);
       const ObTabletID &dst_tablet_id = dst_tablet_ids_.at(i);
+      ns::TabletAccess access;
       ObTabletHandle src_tablet_handle;
-      ObTabletID physical_source;
-      int64_t inherited_cap = 0;
 
-      if (OB_FAIL(get_tablet_handle_(src_tablet_id, src_tablet_handle,
-                                    physical_source, inherited_cap))) {
+      if (OB_FAIL(get_tablet_handle_(src_tablet_id, access, src_tablet_handle))) {
       } else if (OB_ISNULL(src_tablet_handle.get_obj())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("tablet handle is null", K(ret), K(src_tablet_id));
       } else if (OB_FAIL([&]() -> int {
           int64_t end = std::min(max_readable_scn.get_val_for_tx(),
                                  fork_table_info_.get_fork_snapshot_version());
-          if (inherited_cap > 0) { end = std::min(end, inherited_cap); }
+          if (access.cap_scn() > 0) { end = std::min(end, access.cap_scn()); }
           const int64_t start = std::min(
               src_tablet_handle.get_obj()->get_last_major_snapshot_version(), end);
           return src_tablet_handle.get_obj()->read_truncate_info_array(
@@ -591,24 +588,19 @@ const char *ObForkTableHelper::get_table_schema_(const char *table_name)
 
 int ObForkTableHelper::get_tablet_handle_(
     const common::ObTabletID &tablet_id,
-    storage::ObTabletHandle &tablet_handle,
-    common::ObTabletID &physical_tablet_id,
-    int64_t &inherited_cap) const
+    ns::TabletAccess &access,
+    storage::ObTabletHandle &tablet_handle) const
 {
   int ret = OB_SUCCESS;
   storage::ObLS *ls = nullptr;
   storage::ObLSService *ls_service = nullptr;
-  physical_tablet_id = tablet_id;
-  inherited_cap = 0;
-
   const uint64_t namespace_id = sql_proxy_.target_namespace();
-  uint64_t storage_id = OB_INVALID_ID;
-  if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
-          namespace_id, tablet_id.id(), storage_id))) {
+  data_plane::ObNamespaceAccessMode mode;
+  if (OB_FAIL(observer::namespace_worker_prototype::storage_access_mode(
+          observer::namespace_worker_prototype::StorageSpaceHandle::namespace_space(namespace_id), mode))) {
     return ret;
   }
-  if (OB_FAIL(storage::NamespaceForkKernelPrototype::resolve_read_tablet(
-          ObTabletID(storage_id), physical_tablet_id, inherited_cap))) {
+  if (OB_FAIL(access.prepare_read(namespace_id, src_table_id_, tablet_id, mode))) {
     return ret;
   }
 
@@ -620,7 +612,7 @@ int ObForkTableHelper::get_tablet_handle_(
     } else if (OB_ISNULL(ls)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ls is null", K(ret), K(SYS_LS));
-    } else if (OB_FAIL(ls->get_tablet(physical_tablet_id, tablet_handle))) {
+    } else if (OB_FAIL(ls->get_tablet(access.tablet(), tablet_handle))) {
     }
   }
 

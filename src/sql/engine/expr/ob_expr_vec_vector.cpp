@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "sql/engine/expr/ob_expr_vec_vector.h"
-#include "data_plane/lob/ob_lob_read.h"
+#include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/ob_exec_context.h"
 
@@ -110,24 +110,16 @@ int ObExprVecVector::cg_expr(
     } else {
       ObEvalCtx::TempAllocGuard tmp_alloc_g(eval_ctx);
       common::ObArenaAllocator &ctx_allocator = tmp_alloc_g.get_allocator();
-      int64_t timeout = 0;
-      int64_t query_st = eval_ctx.exec_ctx_.get_my_session()->get_query_start_time();
-      if (OB_FAIL(eval_ctx.exec_ctx_.get_my_session()->get_query_timeout(timeout))) {
+      char *vec_buff_ptr = nullptr;
+      int64_t buff_len = 0;
+      ObTextStringDatumResult text_result(ObLongTextType, &raw_ctx, &eval_ctx, &expr_datum);
+      if (OB_FAIL(ObTextStringHelper::read_real_string_data(eval_ctx.exec_ctx_,
+          &ctx_allocator, ObLongTextType, CS_TYPE_BINARY, lob.has_lob_header(), vector))) {
+      } else if (OB_FAIL(text_result.init(vector.length(), nullptr))) {
+      } else if (OB_FAIL(text_result.get_reserved_buffer(vec_buff_ptr, buff_len))) {
       } else {
-        timeout += query_st;
-        int64_t lob_len = 0;
-        ObString vector_buff;
-        char *vec_buff_ptr = nullptr;
-        int64_t buff_len = 0;
-        ObTextStringDatumResult text_result(ObLongTextType, &raw_ctx, &eval_ctx, &expr_datum);
-        if (OB_FAIL(lob.get_lob_data_byte_len(lob_len))) {
-        } else if (OB_FAIL(text_result.init(lob_len, nullptr))) {
-        } else if (OB_FAIL(text_result.get_reserved_buffer(vec_buff_ptr, buff_len))) {
-        } else if (FALSE_IT(vector_buff.assign_buffer(vec_buff_ptr, buff_len))) {
-        } else if (OB_FAIL(data_plane::read_lob_to_buffer(
-                       ctx_allocator, lob, timeout,
-                       eval_ctx.exec_ctx_.get_my_session()->get_tx_desc(), vector_buff))) {
-        } else if (OB_FAIL(text_result.lseek(vector_buff.length(), 0))) {
+        MEMCPY(vec_buff_ptr, vector.ptr(), vector.length());
+        if (OB_FAIL(text_result.lseek(vector.length(), 0))) {
         } else {
           ObString res_str;
           text_result.get_result_buffer(res_str);

@@ -17,8 +17,6 @@
 #ifndef OCEANBASE_DATA_PLANE_API_FTS_OB_FTS_DOC_WORD_SCAN_H_
 #define OCEANBASE_DATA_PLANE_API_FTS_OB_FTS_DOC_WORD_SCAN_H_
 
-#include "data_plane/access/ob_namespace_access_mode.h"
-
 #include <cstdint>
 
 namespace oceanbase
@@ -37,6 +35,7 @@ namespace transaction
 {
 class ObTxReadSnapshot;
 }
+namespace share { namespace schema { class ObTableSchema; } }
 namespace data_plane
 {
 
@@ -47,11 +46,10 @@ int create_ft_doc_word_iterator(common::ObIAllocator &allocator,
 void destroy_ft_doc_word_iterator(ObFTDocWordIterator *&iterator);
 void reset_ft_doc_word_iterator(ObFTDocWordIterator *iterator);
 int init_ft_doc_word_iterator(ObFTDocWordIterator *iterator,
-                              uint64_t table_id,
+                              const share::schema::ObTableSchema &schema,
                               const common::ObTabletID &tablet_id,
-                              const transaction::ObTxReadSnapshot *snapshot,
-                              int64_t schema_version,
-                              ObNamespaceAccessMode access_mode);
+                              const common::ObTabletID &schema_tablet_id,
+                              const transaction::ObTxReadSnapshot *snapshot);
 int scan_ft_doc_words(ObFTDocWordIterator *iterator,
                       uint64_t table_id,
                       const common::ObDatum &row_mapping_id);

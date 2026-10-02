@@ -19,7 +19,6 @@
 #include "storage/fts/ob_fts_doc_word_iterator.h"
 #include "data_plane/fts/ob_fts_doc_word_scan.h"
 #include "share/rc/ob_server_runtime.h"
-#include "share/schema/ob_schema_runtime_service.h"
 
 #include "storage/access/ob_table_scan_iterator.h"
 #include "storage/tx_storage/ob_access_service.h"
@@ -46,18 +45,16 @@ ObFTDocWordScanIterator::~ObFTDocWordScanIterator()
 }
 
 int ObFTDocWordScanIterator::init(
-    const uint64_t table_id,
+    const share::schema::ObTableSchema &schema,
     const common::ObTabletID &tablet_id,
-    const transaction::ObTxReadSnapshot *snapshot,
-    const int64_t schema_version,
-    data_plane::ObNamespaceAccessMode access_mode)
+    const common::ObTabletID &schema_tablet_id,
+    const transaction::ObTxReadSnapshot *snapshot)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(is_inited_)) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init fulltext doc word scan iterator twice", K(ret), K(is_inited_));
-  } else if (OB_FAIL(init_scan_param(table_id, tablet_id, snapshot, schema_version,
-                                     access_mode))) {
+  } else if (OB_FAIL(init_scan_param(schema, tablet_id, schema_tablet_id, snapshot))) {
   } else {
     is_inited_ = true;
   }
@@ -155,13 +152,14 @@ int ObFTDocWordScanIterator::get_next_row(blocksstable::ObDatumRow *&datum_row)
 }
 
 int ObFTDocWordScanIterator::init_scan_param(
-    const uint64_t table_id,
+    const share::schema::ObTableSchema &schema,
     const common::ObTabletID &tablet_id,
-    const transaction::ObTxReadSnapshot *snapshot,
-    const int64_t schema_version,
-    data_plane::ObNamespaceAccessMode access_mode)
+    const common::ObTabletID &schema_tablet_id,
+    const transaction::ObTxReadSnapshot *snapshot)
 {
   int ret = OB_SUCCESS;
+  const uint64_t table_id = schema.get_table_id();
+  const int64_t schema_version = schema.get_schema_version();
   ObQueryFlag query_flag(ObQueryFlag::Forward, // scan_order
                          false, // daily_merge
                          false, // optimize
@@ -177,10 +175,10 @@ int ObFTDocWordScanIterator::init_scan_param(
               || schema_version < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(table_id), K(tablet_id), KPC(snapshot), K(schema_version));
-  } else if (OB_FAIL(build_table_param(table_id, tablet_id, table_param_, scan_param_.column_ids_))) {
+  } else if (OB_FAIL(build_table_param(schema, table_param_, scan_param_.column_ids_))) {
   } else {
     scan_param_.tablet_id_ = tablet_id;
-    scan_param_.namespace_access_mode_ = access_mode;
+    scan_param_.schema_tablet_id_ = schema_tablet_id;
     scan_param_.schema_version_ = schema_version;
     scan_param_.is_get_ = false;
     scan_param_.scan_flag_.flag_ = query_flag.flag_;
@@ -213,44 +211,25 @@ int ObFTDocWordScanIterator::init_scan_param(
 }
 
 int ObFTDocWordScanIterator::build_table_param(
-    const uint64_t table_id,
-    const common::ObTabletID &tablet_id,
+    const share::schema::ObTableSchema &schema,
     share::schema::ObTableParam &table_param,
     common::ObIArray<uint64_t> &column_ids)
 {
   int ret = OB_SUCCESS;
-  
-  share::schema::ObSchemaGetterGuard schema_guard;
-  const share::schema::ObTableSchema *table_schema = nullptr;
-  share::schema::ObMultiVersionSchemaService *schema_service = nullptr;
   uint64_t generated_doc_id_col = OB_INVALID_ID;
   column_ids.reset();
-  if (OB_UNLIKELY(OB_INVALID_ID == table_id)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arguments", K(ret), K(table_id));
-  } else if (OB_FAIL(share::server_service<share::schema::ObSchemaRuntimeService>()->resolve_tablet_schema(
-                 tablet_id.id(), schema_service))) {
-  } else if (OB_FAIL(schema_service->get_runtime_schema_guard(schema_guard))) {
-  } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
-  } else if (OB_ISNULL(table_schema)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, table scheam is nullptr", K(ret), K(table_id));
-  } else if (OB_FAIL(table_schema->get_column_ids(column_ids))) {
+  if (OB_FAIL(schema.get_column_ids(column_ids))) {
   } else if (OB_UNLIKELY(4 != column_ids.count())) {
     ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected error, column count isn't 4 for fts doc word", K(ret), K(column_ids));
-  } else if (OB_FAIL(table_param.convert(*table_schema, column_ids, sql::ObStoragePushdownFlag()))) {
-  } else {
-    if (OB_FAIL(table_schema->get_docid_col_id(generated_doc_id_col))) {
-      if (ret == OB_ERR_INDEX_KEY_NOT_FOUND) {
-        ret = OB_SUCCESS;
-        docid_type_ = ObDocIDType::HIDDEN_INC_PK;
-      } else {
-        LOG_WARN("Failed to get generated doc id col id", K(ret));
-      }
-    } else {
-      docid_type_ = ObDocIDType::TABLET_SEQUENCE;
+    LOG_WARN("unexpected column count for fts doc word", K(ret), K(column_ids));
+  } else if (OB_FAIL(table_param.convert(schema, column_ids, sql::ObStoragePushdownFlag()))) {
+  } else if (OB_FAIL(schema.get_docid_col_id(generated_doc_id_col))) {
+    if (ret == OB_ERR_INDEX_KEY_NOT_FOUND) {
+      ret = OB_SUCCESS;
+      docid_type_ = ObDocIDType::HIDDEN_INC_PK;
     }
+  } else {
+    docid_type_ = ObDocIDType::TABLET_SEQUENCE;
   }
   return ret;
 }
@@ -351,16 +330,15 @@ void reset_ft_doc_word_iterator(ObFTDocWordIterator *iterator)
 }
 
 int init_ft_doc_word_iterator(ObFTDocWordIterator *iterator,
-                              uint64_t table_id,
+                              const share::schema::ObTableSchema &schema,
                               const common::ObTabletID &tablet_id,
-                              const transaction::ObTxReadSnapshot *snapshot,
-                              int64_t schema_version,
-                              ObNamespaceAccessMode access_mode)
+                              const common::ObTabletID &schema_tablet_id,
+                              const transaction::ObTxReadSnapshot *snapshot)
 {
   return OB_ISNULL(iterator)
       ? OB_INVALID_ARGUMENT
       : as_storage_iterator(iterator)->init(
-            table_id, tablet_id, snapshot, schema_version, access_mode);
+            schema, tablet_id, schema_tablet_id, snapshot);
 }
 
 int scan_ft_doc_words(ObFTDocWordIterator *iterator,

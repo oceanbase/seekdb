@@ -20,6 +20,7 @@
 #define USING_LOG_PREFIX SQL_DAS
 
 #include "ob_das_domain_utils.h"
+#include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 #include "data_plane/blocksstable/ob_datum_row.h"
 #include "data_plane/access/ob_datum_reshape.h"
 #include "share/geo/ob_geo_utils.h"
@@ -247,6 +248,8 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
   for (int64_t i = 0; OB_SUCC(ret) && i < related_ctdefs.count(); ++i) {
     ObFTDocWordInfo doc_word_info;
     doc_word_info.namespace_access_mode_ = access_mode;
+    doc_word_info.namespace_id_ = observer::namespace_worker_prototype::
+        active_worker_storage_space().tablet_namespace_id();
     const ObDASDMLBaseCtDef *related_ctdef = static_cast<const ObDASDMLBaseCtDef *>(related_ctdefs.at(i));
     if (OB_ISNULL(related_ctdef)) {
       ret = OB_ERR_UNEXPECTED;
@@ -895,10 +898,50 @@ int ObSpatialDMLIterator::get_geo_wkb_for_update(
   return ret;
 }
 
+int ObFTDMLIterator::init_doc_word_iterator()
+{
+  int ret = OB_SUCCESS;
+  const auto &info = *doc_word_info_;
+  auto *service = observer::namespace_worker_prototype::namespace_schema_service(info.namespace_id_);
+  share::schema::ObSchemaGetterGuard guard;
+  const share::schema::ObTableSchema *logical = nullptr;
+  auto physical = std::make_unique<share::schema::ObTableSchema>(&ft_doc_word_allocator_);
+  transaction::ObTxReadSnapshot snapshot;
+  // A previous iterator is reset before replacing its protected source.
+  data_plane::reset_ft_doc_word_iterator(ft_doc_word_iter_);
+  doc_word_access_.reset();
+  if (service == nullptr) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(service->get_runtime_schema_guard(guard, info.doc_word_schema_version_))) {
+  } else if (OB_FAIL(guard.get_table_schema(info.doc_word_table_id_, logical))) {
+  } else if (logical == nullptr || logical->get_schema_version() != info.doc_word_schema_version_) {
+    ret = OB_SCHEMA_EAGAIN;
+  } else if (OB_FAIL(doc_word_access_.prepare_read(info.namespace_id_,
+      info.doc_word_table_id_, info.doc_word_tablet_id_, info.namespace_access_mode_))) {
+  } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::make_storage_schema(
+      info.namespace_id_, *logical, *physical))) {
+  } else if (OB_FAIL(snapshot.assign(info.snapshot_))) {
+  } else {
+    if (doc_word_access_.cap_scn() > 0) {
+      share::SCN cap;
+      if (OB_FAIL(cap.convert_for_tx(doc_word_access_.cap_scn()))) {
+      } else if (cap < snapshot.core_.version_) {
+        snapshot.specify_snapshot_scn(cap);
+      }
+    }
+    if (OB_SUCC(ret)) {
+      ret = data_plane::init_ft_doc_word_iterator(ft_doc_word_iter_, *physical,
+          doc_word_access_.tablet(), doc_word_access_.schema_tablet(), &snapshot);
+    }
+  }
+  return ret;
+}
+
 void ObFTDMLIterator::reset()
 {
   is_inited_ = false;
   data_plane::reset_ft_doc_word_iterator(ft_doc_word_iter_);
+  doc_word_access_.reset();
   ft_parse_helper_.reset();
   ObDomainDMLIterator::reset();
 }
@@ -937,13 +980,7 @@ int ObFTDMLIterator::rewind()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected error, doc word info is nullptr", K(ret), KPC(doc_word_info_));
       } else if (FALSE_IT(data_plane::reset_ft_doc_word_iterator(ft_doc_word_iter_))) {
-      } else if (OB_FAIL(data_plane::init_ft_doc_word_iterator(
-                             ft_doc_word_iter_,
-                             doc_word_info_->doc_word_table_id_,
-                             doc_word_info_->doc_word_tablet_id_,
-                             &doc_word_info_->snapshot_,
-                             doc_word_info_->doc_word_schema_version_,
-                             doc_word_info_->namespace_access_mode_))) {
+      } else if (OB_FAIL(init_doc_word_iterator())) {
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -980,13 +1017,7 @@ int ObFTDMLIterator::init(
         } else if (OB_ISNULL(doc_word_info_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected error, doc word info is nullptr", K(ret), KPC(doc_word_info_));
-        } else if (OB_FAIL(data_plane::init_ft_doc_word_iterator(
-                               ft_doc_word_iter_,
-                               doc_word_info_->doc_word_table_id_,
-                               doc_word_info_->doc_word_tablet_id_,
-                               &doc_word_info_->snapshot_,
-                               doc_word_info_->doc_word_schema_version_,
-                               doc_word_info_->namespace_access_mode_))) {
+        } else if (OB_FAIL(init_doc_word_iterator())) {
         }
         break;
       }
@@ -1041,13 +1072,7 @@ int ObFTDMLIterator::change_domain_dml_mode(const ObDomainDMLMode &mode)
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected error, doc word info is nullptr", K(ret), KPC(doc_word_info_));
         } else if (FALSE_IT(data_plane::reset_ft_doc_word_iterator(ft_doc_word_iter_))) {
-        } else if (OB_FAIL(data_plane::init_ft_doc_word_iterator(
-                               ft_doc_word_iter_,
-                               doc_word_info_->doc_word_table_id_,
-                               doc_word_info_->doc_word_tablet_id_,
-                               &doc_word_info_->snapshot_,
-                               doc_word_info_->doc_word_schema_version_,
-                               doc_word_info_->namespace_access_mode_))) {
+        } else if (OB_FAIL(init_doc_word_iterator())) {
         }
         break;
       }

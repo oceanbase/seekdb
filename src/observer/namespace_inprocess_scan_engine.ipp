@@ -15,6 +15,7 @@ struct EngineScan {
   ObArenaAllocator iter_allocator{ObMemAttr("NsRemoteScanIt")};
   ObSchemaGetterGuard guard;
   std::unique_ptr<ScanSchema> scan_schema;
+  ns::TabletAccess access;
   ObTableParam table{allocator};
   ObTableScanParam param;
   std::vector<ObObj> keys;
@@ -172,6 +173,7 @@ struct EngineScan {
     param.for_update_ = request.for_update_;
     param.is_for_foreign_check_ = request.is_for_foreign_check_;
     param.sample_info_ = scan.sample_info_;
+    param.fb_snapshot_ = scan.fb_snapshot_;
     if (!tx || static_cast<uint64_t>(data_plane::tx_desc_id(tx).get_id()) != txid) {
       return OB_INVALID_ARGUMENT;
     }
@@ -180,7 +182,6 @@ struct EngineScan {
     param.tx_seq_base_ = scan.tx_seq_base_;
     param.tx_id_ = data_plane::tx_desc_id(tx);
     param.trans_desc_ = tx; // Native pointer from this request, never from IPC.
-    param.namespace_access_mode_ = access_mode;
     if (!param.snapshot_.is_valid() || param.snapshot_.is_weak_read()
         || (param.snapshot_.core_.tx_id_.is_valid() && param.snapshot_.core_.tx_id_ != param.tx_id_)
         || (!txid && read_latest)) {
@@ -197,11 +198,13 @@ struct EngineScan {
     // Match the native SQL scan path: every LOB storage column needs a V2
     // locator, including __all_* columns.
     table.get_enable_lob_locator_v2() = true;
-    // Reads never materialize: an inherited tablet is served through
-    // resolve_read_tablet redirection inside the storage layer instead.
+    // Resolve the Namespace view before entering physical storage. The lease
+    // lives with this scan, including rescans, and outlives its iterator.
+    ret = access.prepare_scan(ns, access_mode, param);
     if (!ret) { ret = table.convert(*schema, param.column_ids_, sql::ObStoragePushdownFlag()); }
     if (!ret) {
       param.table_param_ = &table;
+      DEBUG_SYNC(AFTER_TABLE_SCAN);
       ret = share::server_service<ObITabletScan>()->table_scan(param, iter);
     }
     fprintf(stderr, "PROTOTYPE_V10_SCAN_OPEN ns=%llu table=%llu ret=%d\n",

@@ -74,7 +74,6 @@ public:
   static int check_ddl(const share::schema::ObSimpleTableSchemaV2 &schema,
                        share::schema::ObMultiVersionSchemaService &schema_service,
                        const common::ObISQLClient *trans = nullptr);
-  static int ensure_tablet(const common::ObTabletID &tablet_id);
   // Read-path binding resolution without materialization. An encoded tablet
   // that exists locally resolves to itself; an unmaterialized inherited tablet
   // redirects to its bound source physical tablet, and cap_scn is the fork
@@ -89,10 +88,6 @@ public:
   static int schedule_baseline(const ObTablet &tablet);
 private:
   static int schedule_baseline_impl(const ObTablet &tablet, int depth);
-  static int ensure_tablet_impl(
-      const common::ObTabletID &tablet_id,
-      const share::schema::ObTableSchema *requested_schema,
-      const common::ObIArray<const share::schema::ObTableSchema *> *binding_schemas);
 };
 }
 }
