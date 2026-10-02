@@ -153,8 +153,8 @@ public:
 
 // One namespace's immutable lineage links and committed tablet exceptions.
 // Registry owns this state so there is still only one process-wide namespace
-// authority. Loading holds the same lock as post-commit updates: a load cannot
-// publish a snapshot that misses a committed exception row.
+// authority. Loading, post-commit insertions and invalidation share a lock,
+// so an older load cannot republish a snapshot after its invalidation.
 class NamespaceControlState final {
 public:
   bool chain_link(uint64_t namespace_id, uint64_t &parent, int64_t &fork_cap) const;

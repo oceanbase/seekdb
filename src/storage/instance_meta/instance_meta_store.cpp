@@ -54,14 +54,14 @@ struct InstanceMetaStore::State
 InstanceMetaStore::Transaction::Transaction()
   : owner_(nullptr), descriptor_(nullptr), snapshot_(), deadline_(0),
     read_only_(false), scanning_(false), directory_guard_(false),
-    directory_gc_(false), previous_(nullptr), next_(nullptr)
+    directory_gc_(false), borrowed_(false), previous_(nullptr), next_(nullptr)
 {}
 
 InstanceMetaStore::Transaction::~Transaction()
 {
   if (descriptor_ != nullptr) {
-    const int ret = owner_->rollback(*this);
-    if (OB_SUCCESS != ret) { LOG_WARN("instance metadata rollback failed", K(ret)); }
+    const int ret = borrowed_ ? owner_->detach(*this) : owner_->rollback(*this);
+    if (OB_SUCCESS != ret) { LOG_WARN("instance metadata transaction cleanup failed", K(ret)); }
   }
 }
 
@@ -148,8 +148,17 @@ int InstanceMetaStore::begin_directory_gc(Transaction &tx, const int64_t deadlin
   return begin_impl(tx, deadline, false, true);
 }
 
+int InstanceMetaStore::attach(Transaction &tx, ObTxDesc &descriptor, const int64_t deadline)
+{
+  if (!descriptor.is_in_tx() || descriptor.is_shadow()
+      || !descriptor.is_RC_isolevel()) {
+    return OB_INVALID_ARGUMENT;
+  }
+  return begin_impl(tx, deadline, descriptor.is_rdonly(), false, &descriptor);
+}
+
 int InstanceMetaStore::begin_impl(Transaction &tx, const int64_t deadline,
-                                  const bool read_only, const bool directory_gc)
+    const bool read_only, const bool directory_gc, ObTxDesc *borrowed)
 {
   int ret = OB_SUCCESS;
   if (state_ == nullptr) {
@@ -189,9 +198,11 @@ int InstanceMetaStore::begin_impl(Transaction &tx, const int64_t deadline,
     param.access_mode_ = read_only ? ObTxAccessMode::RD_ONLY : ObTxAccessMode::RW;
     param.isolation_ = ObTxIsolationLevel::RC;
     param.timeout_us_ = deadline - ObTimeUtility::current_time();
-    if (OB_FAIL(transactions_.acquire_tx(tx.descriptor_))) {
+    tx.descriptor_ = borrowed;
+    if (borrowed == nullptr && OB_FAIL(transactions_.acquire_tx(tx.descriptor_))) {
       release_directory_guard(tx);
     } else {
+      tx.borrowed_ = borrowed != nullptr;
       tx.owner_ = this;
       tx.deadline_ = deadline;
       tx.read_only_ = read_only;
@@ -204,7 +215,7 @@ int InstanceMetaStore::begin_impl(Transaction &tx, const int64_t deadline,
         state_->transactions = &tx;
       }
       ObTxReadSnapshot snapshot;
-      if (OB_FAIL(transactions_.start_tx(*tx.descriptor_, param))) {
+      if (!tx.borrowed_ && OB_FAIL(transactions_.start_tx(*tx.descriptor_, param))) {
       } else if (OB_FAIL(transactions_.get_read_snapshot(*tx.descriptor_, param.isolation_,
                                                         deadline, snapshot))) {
       } else {
@@ -212,7 +223,7 @@ int InstanceMetaStore::begin_impl(Transaction &tx, const int64_t deadline,
         ret = tx.snapshot_.assign(snapshot);
       }
       if (OB_FAIL(ret)) {
-        const int cleanup_ret = rollback(tx);
+        const int cleanup_ret = tx.borrowed_ ? detach(tx) : rollback(tx);
         if (cleanup_ret != OB_SUCCESS) { LOG_WARN("failed to close metadata transaction", K(cleanup_ret)); }
       }
     }
@@ -237,26 +248,43 @@ void InstanceMetaStore::release_directory_guard(Transaction &tx)
 int InstanceMetaStore::end(Transaction &tx, const bool do_commit)
 {
   int ret = OB_SUCCESS;
-  if (tx.owner_ != this || !tx.is_active() || tx.scanning_) {
+  if (tx.owner_ != this || !tx.is_active() || tx.scanning_ || tx.borrowed_) {
     ret = OB_INVALID_ARGUMENT;
   } else {
     ret = do_commit ? transactions_.commit_tx(*tx.descriptor_, tx.deadline_)
                     : transactions_.rollback_tx(*tx.descriptor_);
     const int release_ret = transactions_.release_tx(*tx.descriptor_);
     if (ret == OB_SUCCESS) { ret = release_ret; }
-    {
-      std::lock_guard<std::mutex> guard(state_->transactions_mutex);
-      if (tx.previous_ != nullptr) { tx.previous_->next_ = tx.next_; }
-      else { state_->transactions = tx.next_; }
-      if (tx.next_ != nullptr) { tx.next_->previous_ = tx.previous_; }
-      tx.previous_ = tx.next_ = nullptr;
-      tx.descriptor_ = nullptr;
-      tx.owner_ = nullptr;
-      tx.snapshot_.reset();
-    }
-    release_directory_guard(tx);
+    reset_transaction(tx);
   }
   return ret;
+}
+
+int InstanceMetaStore::detach(Transaction &tx)
+{
+  if (tx.owner_ != this || !tx.is_active() || tx.scanning_ || !tx.borrowed_) {
+    return OB_INVALID_ARGUMENT;
+  }
+  reset_transaction(tx);
+  return OB_SUCCESS;
+}
+
+void InstanceMetaStore::reset_transaction(Transaction &tx)
+{
+  // The owner may already have released the native descriptor. Cleanup only
+  // touches our reader registration and never dereferences that descriptor.
+  {
+    std::lock_guard<std::mutex> guard(state_->transactions_mutex);
+    if (tx.previous_ != nullptr) { tx.previous_->next_ = tx.next_; }
+    else { state_->transactions = tx.next_; }
+    if (tx.next_ != nullptr) { tx.next_->previous_ = tx.previous_; }
+    tx.previous_ = tx.next_ = nullptr;
+    tx.descriptor_ = nullptr;
+    tx.owner_ = nullptr;
+    tx.borrowed_ = false;
+    tx.snapshot_.reset();
+  }
+  release_directory_guard(tx);
 }
 
 int InstanceMetaStore::commit(Transaction &tx) { return end(tx, true); }

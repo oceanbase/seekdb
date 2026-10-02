@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 namespace oceanbase { namespace sql { class ObSQLSessionInfo; } }
+namespace oceanbase { namespace transaction { class ObTxDesc; } }
 namespace oceanbase { namespace sql { class ObBasicSessionInfo; } }
 namespace oceanbase { namespace sql { class ObPlanCache; } }
 namespace oceanbase { namespace common { class ObITabletScan; } }
@@ -38,6 +39,8 @@ namespace oceanbase { namespace share { namespace schema { class ObPrivMgr; } } 
 namespace oceanbase { namespace share { namespace schema { class ObMultiVersionSchemaService; } } }
 namespace oceanbase { namespace share { namespace schema { class ObTableSchema; } } }
 namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
+int with_native_transaction(sql::ObSQLSessionInfo &session,
+    const std::function<int(transaction::ObTxDesc &)> &operation);
 class INamespaceSchemaLifecycle
 {
 public:

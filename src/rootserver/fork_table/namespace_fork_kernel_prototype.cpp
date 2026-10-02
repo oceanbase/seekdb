@@ -1376,258 +1376,250 @@ int NamespaceForkKernelPrototype::ensure_tablet_impl(
     failure_stage = stage;
     return step_ret;
   };
-  ObMySQLTransaction trans;
   InstanceMetaStore::Transaction directory_tx;
+  ObMySQLTransaction trans;
   rootserver::InstanceNamespaceMetadata metadata(*directory_kv_store(), directory_tx);
   bool already = false;
-  bool physical_already = false;
-  bool repaired_owned = false;
-  // The directory row lock joins concurrent creators. The physical transaction
-  // commits first; a later retry can repair an owned row after a crash.
-  if (OB_FAIL(materialize_step("directory_transaction",
-      directory_kv_store()->begin(directory_tx, directory_deadline())))) {
+  const int64_t deadline = directory_deadline();
+  // CREATE MDS, mappings and owned rows share the connection's native
+  // transaction. Its namespace row lock serializes the entire binding unit.
+  if (OB_FAIL(materialize_step("transaction", trans.start(directory_sql_proxy())))) {
   } else {
-    rootserver::InstanceNamespaceRecord record;
-    if (OB_FAIL(materialize_step("roots", metadata.get_namespace(db, record, true)))) {
-    } else if (record.roots.state != 0) {
-      ret = OB_OP_NOT_ALLOW;
-    } else {
-      root = record.roots;
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(materialize_step("recheck", [&]() -> int {
-      // A concurrent materializer may have committed while this request waited
-      // on the namespace row lock; re-check inside it before creating anything.
-      bool exists = false;
-      int result = probe_physical_tablet(tablet_id.id(), exists);
-      if (result == OB_SUCCESS) {
-        physical_already = exists;
-        already = exists || control_state().owned(db, local);
-      }
-      return result;
-  }()))) {
-  }
-  if (OB_SUCC(ret) && physical_already && !control_state().owned(db, local)
-      && supplied_schema != nullptr && binding_schemas != nullptr) {
-    failure_stage = "repair_owned";
-    ObArray<ObTabletID> schema_tablets;
-    bool matches = false;
-    if (OB_FAIL(schema_tablet_ids(*supplied_schema, schema_tablets))) {
-    } else {
-      for (int64_t i = 0; i < schema_tablets.count(); ++i) {
-        if (schema_tablets.at(i).id() == tablet_id.id()) { matches = true; }
-      }
-      if (!matches) { ret = OB_INVALID_ARGUMENT; }
-    }
-    rootserver::InstanceExceptionRecord old;
-    if (OB_SUCC(ret)) { ret = metadata.get_exception(db, local, old, true); }
-    if (ret == OB_ENTRY_NOT_EXIST) {
-      ret = metadata.put_exception({db, local,
-          local_of(supplied_schema->get_table_id()), 0, 0});
-      repaired_owned = ret == OB_SUCCESS;
-    } else if (OB_SUCC(ret) && old.kind != 0) {
-      ret = OB_STATE_NOT_MATCH;
-    }
-  }
-  if (OB_SUCC(ret) && !already) {
-    failure_stage = "schema";
-    const bool supplied = supplied_schema != nullptr && binding_schemas != nullptr;
-    const ObTableSchema *requested_schema = supplied_schema;
-    if (!supplied) {
-      // The namespace worker is the schema authority and always supplies the
-      // binding schemas on this path; physical creation without one is not
-      // representable here.
-      ret = OB_NOT_SUPPORTED;
-    }
-    auto supplied_by_table = [&](uint64_t table_id) -> const ObTableSchema * {
-      const uint64_t local_table_id = local_of(table_id);
-      for (int64_t i = 0; binding_schemas && i < binding_schemas->count(); ++i) {
-        const ObTableSchema *schema = binding_schemas->at(i);
-        if (schema != nullptr && local_of(schema->get_table_id()) == local_table_id) {
-          return schema;
-        }
-      }
-      return nullptr;
-    };
-    uint64_t requested_local_tablet = local;
-    if (OB_SUCC(ret)) {
-      ObArray<ObTabletID> requested_tablets;
-      bool contains_requested_tablet = false;
-      if (schema_tablet_ids(*requested_schema, requested_tablets) != OB_SUCCESS) {
-        ret = OB_INVALID_ARGUMENT;
-      }
-      for (int64_t i = 0; OB_SUCC(ret) && i < requested_tablets.count(); ++i) {
-        const uint64_t id = requested_tablets.at(i).id();
-        if (!is_encoded_id(id) || database_of(id) != db) {
-          ret = OB_INVALID_ARGUMENT;
-        } else if (local_of(id) == local) {
-          contains_requested_tablet = true;
-        }
-      }
-      if (OB_SUCC(ret) && !contains_requested_tablet) { ret = OB_INVALID_ARGUMENT; }
-    }
-    const ObTableSchema *accessed_schema = requested_schema;
-    if (OB_SUCC(ret) && requested_schema->is_aux_lob_table()) {
-      // An LOB main tablet and both auxiliaries are one storage binding unit.
-      // Canonicalize an auxiliary first access to the main schema so no partial
-      // materialization can make that unit impossible to bind later.
-      const uint64_t main_table = local_of(requested_schema->get_data_table_id());
-      requested_schema = supplied_by_table(main_table);
-      if (requested_schema == nullptr || requested_schema->is_aux_lob_table()) {
-        ret = OB_INVALID_ARGUMENT;
+    ret = query::ObInnerSQLConnectionAccess::with_native_transaction(
+        trans.get_connection(), [&](transaction::ObTxDesc &native) -> int {
+      if (OB_FAIL(materialize_step("directory_transaction",
+          directory_kv_store()->attach(directory_tx, native, deadline)))) {
       } else {
-        uint64_t main_tablet = OB_INVALID_ID;
-        if (OB_FAIL(corresponding_tablet_id(
-                *accessed_schema, local, *requested_schema, main_tablet))) {
+        rootserver::InstanceNamespaceRecord record;
+        if (OB_FAIL(materialize_step("roots", metadata.get_namespace(db, record, true)))) {
+        } else if (record.roots.state != 0) {
+          ret = OB_OP_NOT_ALLOW;
         } else {
-          requested_local_tablet = local_of(main_tablet);
+          root = record.roots;
         }
       }
-    }
-    auto append_item = [&](const ObTableSchema *schema, uint64_t item_local) -> int {
-      MaterializeItem item;
-      item.schema = schema;
-      item.local_tablet = item_local;
-      const int resolve_ret = metadata.resolve_read_tablet(
-          db, item_local, probe_historical_tablet,
-          item.source_tablet, item.cap);
-      if (resolve_ret != OB_SUCCESS) { return resolve_ret; }
-      if (item.source_tablet == encoded(db, item_local)) { return OB_EAGAIN; }
-      // The cap of every hop is a fork snapshot of this namespace's chain, so
-      // it can never exceed this namespace's own fork snapshot.
-      if (item.cap <= 0 || item.cap > root.snapshot) { return OB_STATE_NOT_MATCH; }
-      items.push_back(item);
-      return OB_SUCCESS;
-    };
-    if (OB_SUCC(ret)) {
-      failure_stage = "append";
-      ret = append_item(requested_schema, requested_local_tablet);
-    }
-    const uint64_t auxiliary_tables[] = {
-      OB_SUCC(ret) ? requested_schema->get_aux_lob_meta_tid() : OB_INVALID_ID,
-      OB_SUCC(ret) ? requested_schema->get_aux_lob_piece_tid() : OB_INVALID_ID
-    };
-    for (uint64_t auxiliary_table : auxiliary_tables) {
-      if (OB_SUCC(ret) && auxiliary_table != OB_INVALID_ID) {
-        const ObTableSchema *auxiliary_schema = supplied_by_table(auxiliary_table);
-        if (auxiliary_schema == nullptr) {
-          ret = OB_INVALID_ARGUMENT;
-        } else if (!auxiliary_schema->is_aux_lob_table()) {
-          ret = OB_STATE_NOT_MATCH;
-        } else {
-          uint64_t auxiliary_tablet = OB_INVALID_ID;
-          if (OB_FAIL(corresponding_tablet_id(
-                  *requested_schema, requested_local_tablet,
-                  *auxiliary_schema, auxiliary_tablet))) {
+      if (OB_SUCC(ret)) {
+        failure_stage = "recheck";
+        // A creator may have committed while we waited on the namespace row.
+        // Locked reads acquire a fresh snapshot; neither the cache nor the
+        // snapshot pinned at attach may describe that creator's commit.
+        rootserver::InstanceExceptionRecord owned;
+        ret = metadata.get_exception(db, local, owned, true);
+        if (ret == OB_ENTRY_NOT_EXIST) {
+          ret = probe_physical_tablet(tablet_id.id(), already);
+          // Other DDL can create tablets before its schema delta publishes.
+          // That publication owns their directory registration, not this path.
+        } else if (OB_SUCC(ret)) {
+          if (owned.kind != 0) { ret = OB_TABLET_NOT_EXIST; }
+          else { already = true; }
+        }
+      }
+      if (OB_SUCC(ret) && !already) {
+        failure_stage = "schema";
+        const bool supplied = supplied_schema != nullptr && binding_schemas != nullptr;
+        const ObTableSchema *requested_schema = supplied_schema;
+        if (!supplied) {
+          // The namespace worker is the schema authority and always supplies the
+          // binding schemas on this path; physical creation without one is not
+          // representable here.
+          ret = OB_NOT_SUPPORTED;
+        }
+        auto supplied_by_table = [&](uint64_t table_id) -> const ObTableSchema * {
+          const uint64_t local_table_id = local_of(table_id);
+          for (int64_t i = 0; binding_schemas && i < binding_schemas->count(); ++i) {
+            const ObTableSchema *schema = binding_schemas->at(i);
+            if (schema != nullptr && local_of(schema->get_table_id()) == local_table_id) {
+              return schema;
+            }
+          }
+          return nullptr;
+        };
+        uint64_t requested_local_tablet = local;
+        if (OB_SUCC(ret)) {
+          ObArray<ObTabletID> requested_tablets;
+          bool contains_requested_tablet = false;
+          if (schema_tablet_ids(*requested_schema, requested_tablets) != OB_SUCCESS) {
+            ret = OB_INVALID_ARGUMENT;
+          }
+          for (int64_t i = 0; OB_SUCC(ret) && i < requested_tablets.count(); ++i) {
+            const uint64_t id = requested_tablets.at(i).id();
+            if (!is_encoded_id(id) || database_of(id) != db) {
+              ret = OB_INVALID_ARGUMENT;
+            } else if (local_of(id) == local) {
+              contains_requested_tablet = true;
+            }
+          }
+          if (OB_SUCC(ret) && !contains_requested_tablet) { ret = OB_INVALID_ARGUMENT; }
+        }
+        const ObTableSchema *accessed_schema = requested_schema;
+        if (OB_SUCC(ret) && requested_schema->is_aux_lob_table()) {
+          // An LOB main tablet and both auxiliaries are one storage binding unit.
+          // Canonicalize an auxiliary first access to the main schema so no partial
+          // materialization can make that unit impossible to bind later.
+          const uint64_t main_table = local_of(requested_schema->get_data_table_id());
+          requested_schema = supplied_by_table(main_table);
+          if (requested_schema == nullptr || requested_schema->is_aux_lob_table()) {
+            ret = OB_INVALID_ARGUMENT;
           } else {
-            ret = append_item(auxiliary_schema, local_of(auxiliary_tablet));
+            uint64_t main_tablet = OB_INVALID_ID;
+            if (OB_FAIL(corresponding_tablet_id(
+                    *accessed_schema, local, *requested_schema, main_tablet))) {
+            } else {
+              requested_local_tablet = local_of(main_tablet);
+            }
+          }
+        }
+        auto append_item = [&](const ObTableSchema *schema, uint64_t item_local) -> int {
+          MaterializeItem item;
+          item.schema = schema;
+          item.local_tablet = item_local;
+          const int resolve_ret = metadata.resolve_read_tablet(
+              db, item_local, probe_historical_tablet,
+              item.source_tablet, item.cap);
+          if (resolve_ret != OB_SUCCESS) { return resolve_ret; }
+          if (item.source_tablet == encoded(db, item_local)) { return OB_EAGAIN; }
+          // The cap of every hop is a fork snapshot of this namespace's chain, so
+          // it can never exceed this namespace's own fork snapshot.
+          if (item.cap <= 0 || item.cap > root.snapshot) { return OB_STATE_NOT_MATCH; }
+          items.push_back(item);
+          return OB_SUCCESS;
+        };
+        if (OB_SUCC(ret)) {
+          failure_stage = "append";
+          ret = append_item(requested_schema, requested_local_tablet);
+        }
+        const uint64_t auxiliary_tables[] = {
+          OB_SUCC(ret) ? requested_schema->get_aux_lob_meta_tid() : OB_INVALID_ID,
+          OB_SUCC(ret) ? requested_schema->get_aux_lob_piece_tid() : OB_INVALID_ID
+        };
+        for (uint64_t auxiliary_table : auxiliary_tables) {
+          if (OB_SUCC(ret) && auxiliary_table != OB_INVALID_ID) {
+            const ObTableSchema *auxiliary_schema = supplied_by_table(auxiliary_table);
+            if (auxiliary_schema == nullptr) {
+              ret = OB_INVALID_ARGUMENT;
+            } else if (!auxiliary_schema->is_aux_lob_table()) {
+              ret = OB_STATE_NOT_MATCH;
+            } else {
+              uint64_t auxiliary_tablet = OB_INVALID_ID;
+              if (OB_FAIL(corresponding_tablet_id(
+                      *requested_schema, requested_local_tablet,
+                      *auxiliary_schema, auxiliary_tablet))) {
+              } else {
+                ret = append_item(auxiliary_schema, local_of(auxiliary_tablet));
+              }
+            }
+          }
+        }
+        auto *freeze = share::server_service<ObFreezeInfoMgr>();
+        if (OB_SUCC(ret) && !freeze) {
+          ret = OB_STATE_NOT_MATCH;
+        }
+        for (const auto &item : items) {
+          if (OB_FAIL(ret)) { break; }
+          failure_stage = "snapshot_pin";
+          // The resolved cap is exactly the fork snapshot id of the chain hop
+          // below the source, so its snapshot row is a point query away.
+          Roots inherited;
+          rootserver::InstanceNamespacePin pin;
+          if (OB_FAIL(metadata.get_snapshot(uint64_t(item.cap), inherited))) {
+          } else if (OB_FAIL(metadata.get_pin(uint64_t(item.cap), pin))) {
+          } else {
+            ObStorageSnapshotInfo reserved;
+            if (pin.schema_version != inherited.schema_version) {
+              ret = OB_STATE_NOT_MATCH;
+            } else if (OB_FAIL(freeze->get_min_reserved_snapshot(
+                           ObTabletID(item.source_tablet), item.cap, reserved))) {
+            } else if (reserved.snapshot_ > item.cap) {
+              ret = OB_SNAPSHOT_DISCARDED;
+            }
           }
         }
       }
-    }
-    auto *freeze = share::server_service<ObFreezeInfoMgr>();
-    if (OB_SUCC(ret) && !freeze) {
-      ret = OB_STATE_NOT_MATCH;
-    }
+      return ret;
+    });
+  }
+  if (OB_SUCC(ret) && !already) {
+    failure_stage = "tablet_create";
+    rootserver::ObTabletCreator creator(SCN::min_scn(), trans);
+    rootserver::ObTabletCreatorArg arg;
+    ObArray<ObTabletID> ids;
+    ObArray<const ObTableSchema *> definitions;
+    ObArray<bool> empty_major;
+    ObArray<int64_t> logical_birth;
+    ObArray<ObForkTabletInfo> fork_infos;
+    ObArray<ObTabletTablePair> mappings;
+    ObArray<ObTabletID> source_ids;
+    ObArray<int64_t> source_snapshot_versions;
     for (const auto &item : items) {
-      if (OB_FAIL(ret)) { break; }
-      failure_stage = "snapshot_pin";
-      // The resolved cap is exactly the fork snapshot id of the chain hop
-      // below the source, so its snapshot row is a point query away.
-      Roots inherited;
-      rootserver::InstanceNamespacePin pin;
-      if (OB_FAIL(metadata.get_snapshot(uint64_t(item.cap), inherited))) {
-      } else if (OB_FAIL(metadata.get_pin(uint64_t(item.cap), pin))) {
-      } else {
-        ObStorageSnapshotInfo reserved;
-        if (pin.schema_version != inherited.schema_version) {
-          ret = OB_STATE_NOT_MATCH;
-        } else if (OB_FAIL(freeze->get_min_reserved_snapshot(
-                       ObTabletID(item.source_tablet), item.cap, reserved))) {
-        } else if (reserved.snapshot_ > item.cap) {
-          ret = OB_SNAPSHOT_DISCARDED;
-        }
+      ObForkTabletInfo fork;
+      fork.set_fork_snapshot_version(item.cap);
+      fork.set_fork_src_tablet_id(ObTabletID(item.source_tablet));
+      const ObTabletID destination(encoded(db, item.local_tablet));
+      if (OB_FAIL(ids.push_back(destination)) || OB_FAIL(definitions.push_back(item.schema))
+          || OB_FAIL(empty_major.push_back(false)) || OB_FAIL(logical_birth.push_back(item.cap))
+          || OB_FAIL(fork_infos.push_back(fork))
+          || OB_FAIL(source_ids.push_back(ObTabletID(item.source_tablet)))
+          || OB_FAIL(source_snapshot_versions.push_back(item.cap))
+          || OB_FAIL(mappings.push_back(ObTabletTablePair(destination, item.schema->get_table_id())))) {
+        break;
       }
     }
-    if (OB_SUCC(ret)) {
-      failure_stage = "tablet_create";
-      if (OB_FAIL(trans.start(directory_sql_proxy()))) {
-      }
-    }
-    if (OB_SUCC(ret)) {
-      rootserver::ObTabletCreator creator(SCN::min_scn(), trans);
-      rootserver::ObTabletCreatorArg arg;
-      ObArray<ObTabletID> ids;
-      ObArray<const ObTableSchema *> definitions;
-      ObArray<bool> empty_major;
-      ObArray<int64_t> logical_birth;
-      ObArray<ObForkTabletInfo> fork_infos;
-      ObArray<ObTabletTablePair> mappings;
-      ObArray<ObTabletID> source_ids;
-      ObArray<int64_t> source_snapshot_versions;
-      for (const auto &item : items) {
-        ObForkTabletInfo fork;
-        fork.set_fork_snapshot_version(item.cap);
-        fork.set_fork_src_tablet_id(ObTabletID(item.source_tablet));
-        const ObTabletID destination(encoded(db, item.local_tablet));
-        if (OB_FAIL(ids.push_back(destination)) || OB_FAIL(definitions.push_back(item.schema))
-            || OB_FAIL(empty_major.push_back(false)) || OB_FAIL(logical_birth.push_back(item.cap))
-            || OB_FAIL(fork_infos.push_back(fork))
-            || OB_FAIL(source_ids.push_back(ObTabletID(item.source_tablet)))
-            || OB_FAIL(source_snapshot_versions.push_back(item.cap))
-            || OB_FAIL(mappings.push_back(ObTabletTablePair(destination, item.schema->get_table_id())))) {
-          break;
-        }
-      }
-      const ObTabletID data_tablet(encoded(db, items.front().local_tablet));
-      auto copy_physical_sequences = [&]() {
-        observer::namespace_worker_prototype::PhysicalTabletMdsScope physical_mds(true);
-        return ObTabletAutoincrementService::get_instance().copy_sequences_for_fork(
-            source_ids, ids, source_snapshot_versions, trans);
-      };
-      if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(arg.init(ids, data_tablet, definitions, false, DATA_CURRENT_VERSION,
-                                 empty_major, logical_birth, fork_infos))) {
-      } else if (OB_FAIL(creator.init(false))) {
-      } else if (OB_FAIL(creator.add_create_tablet_arg(arg))) {
-      } else if (FALSE_IT(creator.set_materialization_for_prototype())) {
-      } else if (OB_FAIL(creator.execute())) {
-      } else if (OB_FAIL(copy_physical_sequences())) {
-      } else if (OB_FAIL(ObTabletMappingTableOperator::batch_update(trans, mappings))) {
-      } else {
-        // The physical binding unit is staged in this transaction. Its commit
-        // precedes the separate KV owned-record commit below.
-        DEBUG_SYNC(AFTER_UPDATE_TABLET_TO_LS);
-        ret = THIS_WORKER.check_status();
-        LOG_INFO("PROTOTYPE_V2_STORAGE_MATERIALIZE", K(tablet_id), "tablet_count", items.size(),
-            "input_snapshot", items.front().cap, "namespace_snapshot", root.snapshot,
-            "entry_layer", "ObAccessService", K(ret));
-      }
+    const ObTabletID data_tablet(encoded(db, items.front().local_tablet));
+    auto copy_physical_sequences = [&]() {
+      observer::namespace_worker_prototype::PhysicalTabletMdsScope physical_mds(true);
+      return ObTabletAutoincrementService::get_instance().copy_sequences_for_fork(
+          source_ids, ids, source_snapshot_versions, trans);
+    };
+    if (OB_FAIL(ret)) {
+    } else if (OB_FAIL(arg.init(ids, data_tablet, definitions, false, DATA_CURRENT_VERSION,
+                               empty_major, logical_birth, fork_infos))) {
+    } else if (OB_FAIL(creator.init(false))) {
+    } else if (OB_FAIL(creator.add_create_tablet_arg(arg))) {
+    } else if (FALSE_IT(creator.set_materialization_for_prototype())) {
+    } else if (OB_FAIL(creator.execute())) {
+    } else if (OB_FAIL(copy_physical_sequences())) {
+    } else if (OB_FAIL(ObTabletMappingTableOperator::batch_update(trans, mappings))) {
+    } else {
+      // The physical binding unit is staged; owned rows join this same
+      // transaction before it can commit.
+      DEBUG_SYNC(AFTER_UPDATE_TABLET_TO_LS);
+      ret = THIS_WORKER.check_status();
+      LOG_INFO("PROTOTYPE_V2_STORAGE_MATERIALIZE", K(tablet_id), "tablet_count", items.size(),
+          "input_snapshot", items.front().cap, "namespace_snapshot", root.snapshot,
+          "entry_layer", "ObAccessService", K(ret));
     }
   }
-  if (trans.is_started()) { int end = trans.end(ret == OB_SUCCESS); if (ret == OB_SUCCESS) { ret = end; } }
   if (OB_SUCC(ret) && !already) {
     failure_stage = "exceptions";
-    for (const auto &item : items) {
-      if (OB_FAIL(ret)) { break; }
-      ret = metadata.put_exception({db, item.local_tablet,
-          local_of(item.schema->get_table_id()), 0, 0});
-    }
+    ret = query::ObInnerSQLConnectionAccess::with_native_transaction(
+        trans.get_connection(), [&](transaction::ObTxDesc &) -> int {
+      for (const auto &item : items) {
+        if (OB_FAIL(ret)) { break; }
+        ret = metadata.put_exception({db, item.local_tablet,
+            local_of(item.schema->get_table_id()), 0, 0});
+      }
+      return ret;
+    });
+  }
+  // End explicitly even for KV failures: the SQL wrapper's destructor cannot
+  // infer those errors. Keep KV reader/GC protection until the owner finishes.
+  if (trans.is_started()) {
+    if (OB_SUCC(ret)) { failure_stage = "commit"; }
+    const int end = trans.end(ret == OB_SUCCESS);
+    if (ret == OB_SUCCESS) { ret = end; }
   }
   if (directory_tx.is_active()) {
-    const int end = ret == OB_SUCCESS
-        ? directory_kv_store()->commit(directory_tx)
-        : directory_kv_store()->rollback(directory_tx);
-    if (ret == OB_SUCCESS) { ret = end; }
+    const int detach_ret = directory_kv_store()->detach(directory_tx);
+    if (ret == OB_SUCCESS) { ret = detach_ret; }
   }
   if (ret == OB_SUCCESS && !already) {
     for (const auto &item : items) {
       control_state().apply_owned(db, item.local_tablet, local_of(item.schema->get_table_id()));
     }
-  }
-  if (ret == OB_SUCCESS && repaired_owned) {
-    control_state().apply_owned(db, local, local_of(supplied_schema->get_table_id()));
+  } else {
+    // Commit may have succeeded even when its response was lost. A later
+    // access must reload authoritative rows instead of repairing absence.
+    control_state().drop_exceptions(db);
   }
   if (ret != OB_SUCCESS) {
     const MaterializeItem *item = items.empty() ? nullptr : &items.front();

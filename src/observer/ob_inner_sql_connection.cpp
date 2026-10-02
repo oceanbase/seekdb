@@ -1628,6 +1628,18 @@ sql::ObSQLSessionInfo *ObInnerSQLConnectionAccess::get_session(
                                       : &native_connection->get_session();
 }
 
+int ObInnerSQLConnectionAccess::with_native_transaction(
+    common::sqlclient::ObISQLConnection *connection,
+    const std::function<int(transaction::ObTxDesc &)> &operation)
+{
+  auto *native = static_cast<observer::ObInnerSQLConnection *>(connection);
+  if (native == nullptr || !native->is_in_trans() || !operation) {
+    return common::OB_INVALID_ARGUMENT;
+  }
+  return observer::namespace_worker_prototype::with_native_transaction(
+      native->get_session(), operation);
+}
+
 int ObInnerSQLConnectionAccess::lock_obj(
     const transaction::tablelock::ObLockObjRequest &request,
     common::sqlclient::ObISQLConnection *connection)

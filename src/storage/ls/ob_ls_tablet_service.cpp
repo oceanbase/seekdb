@@ -740,7 +740,8 @@ int ObLSTabletService::update_tablet_table_store(
   return ret;
 }
 
-int ObLSTabletService::update_tablet_to_empty_shell(const common::ObTabletID &tablet_id)
+int ObLSTabletService::update_tablet_to_empty_shell(
+    const common::ObTabletID &tablet_id, const ObTabletHandle &expected)
 {
   int ret = OB_SUCCESS;
   const ObTabletMapKey key(tablet_id);
@@ -759,6 +760,9 @@ int ObLSTabletService::update_tablet_to_empty_shell(const common::ObTabletID &ta
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(tablet_id));
   } else if (OB_FAIL(direct_get_tablet(tablet_id, old_tablet_handle))) {
+  } else if (expected.is_valid() && expected.get_obj() != old_tablet_handle.get_obj()) {
+    // A candidate collected before GC/recreation must not modify the new object.
+    ret = OB_EAGAIN;
   } else if (old_tablet_handle.get_obj()->is_empty_shell()) {
     LOG_INFO("old tablet is empty shell tablet, should skip this operation", K(ret), "old_tablet", old_tablet_handle.get_obj());
   } else if (FALSE_IT(time_guard.click("GetOld"))) {

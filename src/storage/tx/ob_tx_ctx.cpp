@@ -5472,6 +5472,41 @@ int ObTxCtx::submit_rollback_to_log_(const ObTxSEQ from_scn,
   return ret;
 }
 
+int ObTxCtx::abort_after_replay(bool &finished)
+{
+  int ret = OB_SUCCESS;
+  CtxLockGuard guard(lock_);
+  finished = false;
+  if (IS_NOT_INIT) {
+    ret = OB_NOT_INIT;
+  } else if (is_exiting_) {
+    finished = true;
+  } else if (!is_for_replay() && part_trans_action_ != ObPartTransAction::ABORT) {
+    // A local transaction is not part of crash recovery.
+    finished = true;
+  } else if (is_decided()) {
+    ret = OB_STATE_NOT_MATCH;
+    TRANS_LOG(WARN, "decided replay transaction has not exited", K(ret), KPC(this));
+  } else {
+    if (is_for_replay()) {
+      // The durable local log has no final decision for this transaction.
+      // There is no surviving owner. Use the normal durable abort path so
+      // both row callbacks and MDS callbacks finish before admitting traffic.
+      if (OB_FAIL(mt_ctx_.replay_to_commit(false /*is_resume*/))) {
+      } else {
+        for_replay_ = false;
+        part_trans_action_ = ObPartTransAction::ABORT;
+        trans_expired_time_ = ObClockGenerator::getClock();
+      }
+    }
+    if (OB_SUCC(ret)) {
+      ret = abort_(ObTxAbortCause::IMPLICIT_ROLLBACK);
+      finished = is_exiting_;
+    }
+  }
+  return ret;
+}
+
 int ObTxCtx::abort(const int reason)
 {
   UNUSED(reason);

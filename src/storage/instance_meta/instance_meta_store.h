@@ -45,7 +45,7 @@ public:
   {
   public:
     Transaction();
-    ~Transaction(); // Rolls back an unfinished transaction.
+    ~Transaction(); // Rolls back an owned transaction, or detaches a borrowed one.
     bool is_active() const { return descriptor_ != nullptr; }
     bool is_directory_gc() const { return directory_gc_; }
   private:
@@ -58,6 +58,7 @@ public:
     bool scanning_;
     bool directory_guard_;
     bool directory_gc_;
+    bool borrowed_;
     Transaction *previous_;
     Transaction *next_;
     DISALLOW_COPY_AND_ASSIGN(Transaction);
@@ -90,6 +91,11 @@ public:
   // Excludes ordinary KV transactions while a directory page collector marks
   // roots and removes unreachable pages in this transaction.
   int begin_directory_gc(Transaction &tx, int64_t deadline);
+  // Borrow an active native RC transaction. Its owner must end it before
+  // detaching, so snapshot retention and directory GC protection span commit.
+  // Only the owner may commit/rollback/release the native descriptor.
+  int attach(Transaction &tx, transaction::ObTxDesc &descriptor, int64_t deadline);
+  int detach(Transaction &tx);
   int commit(Transaction &tx);
   int rollback(Transaction &tx);
   // Compaction must retain every snapshot held by a native KV transaction.
@@ -120,7 +126,8 @@ private:
             const common::ObString &value, Write operation);
   int end(Transaction &tx, bool commit);
   int begin_impl(Transaction &tx, int64_t deadline, bool read_only,
-                 bool directory_gc);
+                 bool directory_gc, transaction::ObTxDesc *borrowed = nullptr);
+  void reset_transaction(Transaction &tx);
   void release_directory_guard(Transaction &tx);
   ObAccessService &access_;
   transaction::ObTransService &transactions_;

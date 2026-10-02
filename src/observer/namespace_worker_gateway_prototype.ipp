@@ -352,6 +352,30 @@ int call_in_process_tx_state(char operation, transaction::ObTxDesc &view,
   THIS_WORKER.set_timeout_ts(old_timeout);
   return ret;
 }
+int with_native_transaction(sql::ObSQLSessionInfo &session,
+    const std::function<int(ObTxDesc &)> &operation)
+{
+  StorageSessionScope scope(&session, false);
+  InProcessStorage *ctx = in_process_storage;
+  ObTxDesc *view = session.get_tx_desc();
+  if (scope.error() != OB_SUCCESS) { return scope.error(); }
+  if (!operation || ctx == nullptr || !ctx->initialized || ctx->sql_session != &session
+      || !ctx->writes || !ctx->writes->tx || !ctx->writes->writes.empty()
+      || view == nullptr || ctx->writes->tx->get_tx_id() != view->get_tx_id()) {
+    return OB_INVALID_ARGUMENT;
+  }
+  const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
+  auto *old_session = THIS_WORKER.get_session();
+  THIS_WORKER.set_session(&ctx->session);
+  const int ret = operation(*ctx->writes->tx);
+  // Even a failed operation can change write/abort state. SQL must observe
+  // that state when it subsequently rolls back or commits this transaction.
+  const int sync_ret = view->sync_serialized_state_from(*ctx->writes->tx);
+  THIS_WORKER.set_session(old_session);
+  THIS_WORKER.set_timeout_ts(old_timeout);
+  return ret == OB_SUCCESS ? sync_ret : ret;
+}
+
 int call_in_process_tx_read_snapshot(ObTxDesc &view,
     ObTxIsolationLevel isolation, int64_t deadline, ObTxReadSnapshot &snapshot)
 {

@@ -145,6 +145,8 @@ public:
              const int64_t &expire_ts,
              const int64_t &request_id);
   int abort(const int reason);
+  // Called only after local replay has drained and append is enabled.
+  int abort_after_replay(bool &finished);
   int one_phase_commit_();
   int get_prepare_version_if_prepared(bool &is_prepared, share::SCN &prepare_version);
   const share::SCN get_commit_version() const { return ctx_tx_data_.get_commit_version(); }

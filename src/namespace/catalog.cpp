@@ -462,9 +462,11 @@ void NamespaceControlState::apply_owned(uint64_t namespace_id,
 {
   std::lock_guard<std::mutex> lock(exceptions_mutex_);
   const auto it = exception_sets_.find(namespace_id);
-  if (it != exception_sets_.end() && it->second.loaded) {
+  // Physical IDs are not reused after a committed DROP. A delayed creator's
+  // cache publication must not revive a tombstone loaded after that DROP.
+  if (it != exception_sets_.end() && it->second.loaded
+      && it->second.tombstoned.count(local_tablet) == 0) {
     it->second.owned[local_tablet] = table;
-    it->second.tombstoned.erase(local_tablet);
   }
 }
 

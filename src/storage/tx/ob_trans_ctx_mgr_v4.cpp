@@ -581,6 +581,21 @@ int ObLSTxCtxMgr::block_normal(bool &is_all_tx_cleaned_up)
   return ret;
 }
 
+int ObLSTxCtxMgr::abort_replayed_transactions(bool &finished)
+{
+  int ret = OB_SUCCESS;
+  RLockGuard guard(rwlock_);
+  finished = true;
+  auto abort_replayed = [&](ObTransCtx *base) {
+    bool tx_finished = false;
+    ret = static_cast<ObTxCtx *>(base)->abort_after_replay(tx_finished);
+    finished = finished && tx_finished;
+    return OB_SUCCESS == ret;
+  };
+  const int iter_ret = ls_tx_ctx_map_.for_each(abort_replayed);
+  return OB_SUCCESS == ret ? iter_ret : ret;
+}
+
 int ObLSTxCtxMgr::online()
 {
   int ret = OB_SUCCESS;

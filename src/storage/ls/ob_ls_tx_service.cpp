@@ -446,8 +446,24 @@ int ObLSTxService::activate()
   if (OB_ISNULL(mgr_)) {
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", K(ret));
-  } else if (OB_FAIL(mgr_->online())) {
-    TRANS_LOG(WARN, "failed to admit local transactions", K(ret));
+  } else {
+    // Activation follows complete replay and enables local append. Replayed
+    // transactions without a durable decision must be aborted, including MDS;
+    // ordinary transaction GC deliberately skips replay contexts.
+    bool finished = false;
+    const int64_t deadline = ObTimeUtility::current_time() + 30 * 1000 * 1000;
+    while (OB_SUCC(ret) && !finished) {
+      if (OB_FAIL(mgr_->abort_replayed_transactions(finished))) {
+        TRANS_LOG(WARN, "failed to abort unfinished replay transactions", K(ret));
+      } else if (!finished && ObTimeUtility::current_time() >= deadline) {
+        ret = OB_TIMEOUT;
+      } else if (!finished) {
+        ob_usleep(1000);
+      }
+    }
+    if (OB_SUCC(ret) && OB_FAIL(mgr_->online())) {
+      TRANS_LOG(WARN, "failed to admit local transactions", K(ret));
+    }
   }
   return ret;
 }

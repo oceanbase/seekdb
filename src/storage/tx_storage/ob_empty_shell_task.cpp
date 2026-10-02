@@ -64,9 +64,16 @@ void ObEmptyShellTask::runTimerTask()
         obsys::ObRLockGuard lock(tablet_empty_shell_handler->wait_lock_);
         bool need_retry = false;
         common::ObTabletIDArray empty_shell_tablet_ids;
-        if (OB_FAIL(tablet_empty_shell_handler->get_empty_shell_tablet_ids(empty_shell_tablet_ids, need_retry))) {
+        common::ObSEArray<ObTabletHandle, 16> aborted_tablets;
+        if (OB_FAIL(tablet_empty_shell_handler->get_empty_shell_tablet_ids(
+            empty_shell_tablet_ids, aborted_tablets, need_retry))) {
           need_retry = true;
           STORAGE_LOG(WARN, "[emptytablet] tablet_empty_shell_handler get empty shell tablet ids failed", K(ret));
+        } else if (OB_FAIL(tablet_empty_shell_handler->update_aborted_tablets_to_empty_shell(
+            ls, aborted_tablets))) {
+          // An aborted CREATE was never readable or inheritable. Its cleanup
+          // must not wait for readers retrying creation of the same physical ID.
+          need_retry = true;
         } else if (empty_shell_tablet_ids.empty()) {
           // do nothing
         } else if (OB_FAIL(NamespaceForkKernelPrototype::reclaim_unreferenced_tablets(
@@ -135,7 +142,9 @@ int ObTabletEmptyShellHandler::init(ObLS *ls)
   return ret;
 }
 
-int ObTabletEmptyShellHandler::get_empty_shell_tablet_ids(common::ObTabletIDArray &empty_shell_tablet_ids, bool &need_retry)
+int ObTabletEmptyShellHandler::get_empty_shell_tablet_ids(
+    common::ObTabletIDArray &empty_shell_tablet_ids,
+    common::ObIArray<ObTabletHandle> &aborted_tablets, bool &need_retry)
 {
   int ret = OB_SUCCESS;
   ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
@@ -152,6 +161,7 @@ int ObTabletEmptyShellHandler::get_empty_shell_tablet_ids(common::ObTabletIDArra
     ObTabletHandle tablet_handle;
     ObTablet *tablet = NULL;
     bool can_become_shell = false;
+    bool aborted_create = false;
     bool is_locked = false;
     while (OB_SUCC(ret)) {
       if (check_stop()) {
@@ -176,14 +186,28 @@ int ObTabletEmptyShellHandler::get_empty_shell_tablet_ids(common::ObTabletIDArra
       } else if (is_locked) {
         STORAGE_LOG(INFO, "tablet_status is changing", KR(ret), KPC(tablet));
         need_retry = true;
-      } else if (OB_FAIL(check_candidate_tablet_(*tablet, can_become_shell, need_retry))) {
+      } else if (OB_FAIL(check_candidate_tablet_(*tablet, can_become_shell, aborted_create))) {
       } else if (!can_become_shell) {
         STORAGE_LOG(INFO, "tablet can not become shell", KR(ret), "tablet_meta", tablet->get_tablet_meta());
+      } else if (aborted_create) {
+        ret = aborted_tablets.push_back(tablet_handle);
       } else if (OB_FAIL(empty_shell_tablet_ids.push_back(tablet->get_tablet_meta().tablet_id_))) {
       }
     }
   }
 
+  return ret;
+}
+
+int ObTabletEmptyShellHandler::update_aborted_tablets_to_empty_shell(
+    ObLS *ls, const common::ObIArray<ObTabletHandle> &tablets)
+{
+  int ret = OB_SUCCESS;
+  for (int64_t i = 0; OB_SUCC(ret) && i < tablets.count(); ++i) {
+    const auto &handle = tablets.at(i);
+    ret = ls->get_tablet_svr()->update_tablet_to_empty_shell(
+        handle.get_obj()->get_tablet_meta().tablet_id_, handle);
+  }
   return ret;
 }
 
@@ -203,12 +227,14 @@ int ObTabletEmptyShellHandler::update_tablets_to_empty_shell(ObLS *ls, const com
   return ret;
 }
 
-int ObTabletEmptyShellHandler::check_candidate_tablet_(const ObTablet &tablet, bool &can_become_shell, bool &need_retry)
+int ObTabletEmptyShellHandler::check_candidate_tablet_(
+    const ObTablet &tablet, bool &can_become_shell, bool &aborted_create)
 {
   int ret = OB_SUCCESS;
   
   const common::ObTabletID &tablet_id = tablet.get_tablet_meta().tablet_id_;
   can_become_shell = false;
+  aborted_create = false;
   bool is_written = false;
 
   if (tablet.is_empty_shell()) {
@@ -229,8 +255,14 @@ int ObTabletEmptyShellHandler::check_candidate_tablet_(const ObTablet &tablet, b
         if (!is_written) {
           // mds table has not been written, do nothing
         } else {
-          can_become_shell = true;
-          STORAGE_LOG(INFO, "inner tablet can become shell", KR(ret), K(tablet_id));
+          TabletGCStatus status = NOT_NEED_GC;
+          if (OB_FAIL(ObTabletGCHandler::check_tablet_from_aborted_tx(tablet, status))) {
+          } else {
+            // Without redo the tablet can be removed directly by native GC;
+            // with redo it first needs a durable shell for replay/checkpoint.
+            can_become_shell = status != NEED_GC_IMMEDIATELY;
+            aborted_create = true;
+          }
         }
       } else {
         STORAGE_LOG(WARN, "failed to get latest tablet status", K(ret), K(tablet_id));

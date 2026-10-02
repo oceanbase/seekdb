@@ -20,6 +20,7 @@
 #include "storage/tablet/ob_batch_create_tablet_pretty_arg.h"
 #include "storage/tablet/ob_tablet_create_replay_executor.h"
 #include "storage/tx_storage/ob_ls_service.h"
+#include "storage/tx_storage/ob_tablet_gc_service.h"
 
 #define USING_LOG_PREFIX MDS
 #define PRETTY_ARG(arg) (ObBatchCreateTabletPrettyArg(arg))
@@ -393,19 +394,67 @@ bool ObTabletCreateMdsHelper::is_bind_hidden_tablets(const obcall::ObCreateTable
   return tablet_ids.count() >= 1 && !is_contain(tablet_ids, data_tablet_id) && info.is_create_bind_hidden_tablets_;
 }
 
+int ObTabletCreateMdsHelper::check_new_tablet_existence(
+    const ObTabletID &tablet_id, bool &exists)
+{
+  int ret = OB_SUCCESS;
+  auto *t3m = share::server_service<ObStorageMetaMemMgr>();
+  const ObTabletMapKey key(tablet_id);
+  ObTabletHandle handle;
+  if (OB_FAIL(t3m->has_tablet(key, exists)) || !exists) {
+  } else if (OB_FAIL(ObTabletCreateDeleteHelper::get_tablet(key, handle))) {
+    if (ret == OB_TABLET_NOT_EXIST) { ret = OB_SUCCESS; exists = false; }
+  } else if (handle.get_obj()->is_empty_shell()) {
+    // GC removes the shell after the LS checkpoint covers its lifecycle.
+    ret = OB_EAGAIN;
+  } else {
+    bool status_written = false;
+    ObTabletCreateDeleteMdsUserData data;
+    mds::MdsWriter writer;
+    mds::TwoPhaseCommitState state;
+    SCN version;
+    if (OB_FAIL(handle.get_obj()->check_tablet_status_written(status_written))) {
+    } else if (!status_written) {
+      // Another creator has allocated the object but not yet registered MDS.
+    } else if (OB_FAIL(handle.get_obj()->get_latest(data, writer, state, version))) {
+      if (ret == OB_EMPTY_RESULT) {
+        // An aborted CREATE leaves an allocated object until GC. Retrying the
+        // same physical ID must use GC's eligibility and identity checks,
+        // rather than treating that object as a committed duplicate.
+        checkpoint::TabletGCStatus status = checkpoint::NOT_NEED_GC;
+        ObLS *ls = nullptr;
+        ObSEArray<ObTabletHandle, 1> aborted;
+        ret = checkpoint::ObTabletGCHandler::check_tablet_from_aborted_tx(
+            *handle.get_obj(), status);
+        if (OB_FAIL(ret)) {
+        } else if (status != checkpoint::NEED_GC_IMMEDIATELY) {
+          // Redo has been written: checkpoint/GC must finish its durable
+          // cleanup before a new incarnation can reuse this physical ID.
+          ret = OB_EAGAIN;
+        } else if (OB_FAIL(get_ls(ls))) {
+        } else if (OB_FAIL(aborted.push_back(handle))) {
+        } else if (OB_FAIL(ls->get_tablet_gc_handler()->gc_tablets(aborted))) {
+        } else {
+          ret = t3m->has_tablet(key, exists);
+        }
+      }
+    }
+  }
+  return ret;
+}
+
 int ObTabletCreateMdsHelper::check_pure_data_or_mixed_tablets_info(
     const obcall::ObCreateTabletInfo &info,
     bool &valid)
 {
   int ret = OB_SUCCESS;
   bool exist = false;
-  ObStorageMetaMemMgr *t3m = ::oceanbase::share::server_service<::oceanbase::storage::ObStorageMetaMemMgr>();
   ObTabletMapKey key;
 
   for (int64_t i = 0; OB_SUCC(ret) && !exist && i < info.tablet_ids_.count(); ++i) {
     const ObTabletID &tablet_id = info.tablet_ids_[i];
     key.tablet_id_ = tablet_id;
-    if (OB_FAIL(t3m->has_tablet(key, exist))) {
+    if (OB_FAIL(check_new_tablet_existence(tablet_id, exist))) {
     } else if (OB_UNLIKELY(exist)) {
       LOG_WARN("unexpected tablet existence", K(ret), K(key), K(exist));
     }
@@ -431,7 +480,7 @@ int ObTabletCreateMdsHelper::check_pure_aux_tablets_info(
   for (int64_t i = 0; OB_SUCC(ret) && !exist && i < info.tablet_ids_.count(); ++i) {
     const ObTabletID &tablet_id = info.tablet_ids_[i];
     key.tablet_id_ = tablet_id;
-    if (OB_FAIL(t3m->has_tablet(key, exist))) {
+    if (OB_FAIL(check_new_tablet_existence(key.tablet_id_, exist))) {
     } else if (OB_UNLIKELY(exist)) {
       LOG_WARN("unexpected tablet existence", K(ret), K(key), K(exist));
     }
@@ -467,7 +516,7 @@ int ObTabletCreateMdsHelper::check_hidden_tablets_info(
   for (int64_t i = 0; OB_SUCC(ret) && !exist && i < hidden_info.tablet_ids_.count(); ++i) {
     const ObTabletID &tablet_id = hidden_info.tablet_ids_[i];
     key.tablet_id_ = tablet_id;
-    if (OB_FAIL(t3m->has_tablet(key, exist))) {
+    if (OB_FAIL(check_new_tablet_existence(key.tablet_id_, exist))) {
     } else if (OB_UNLIKELY(exist)) {
       LOG_WARN("unexpected tablet existence", K(ret), K(key), K(exist));
     }
@@ -493,7 +542,7 @@ int ObTabletCreateMdsHelper::check_hidden_tablets_info(
     exist = false;
     for (int64_t i = 0; OB_SUCC(ret) && !exist && i < aux_info->tablet_ids_.count(); ++i) {
       key.tablet_id_ = aux_info->tablet_ids_[i];
-      if (OB_FAIL(t3m->has_tablet(key, exist))) {
+      if (OB_FAIL(check_new_tablet_existence(key.tablet_id_, exist))) {
       } else if (OB_UNLIKELY(exist)) {
         LOG_WARN("unexpected tablet existence", K(ret), K(key), K(exist));
       }

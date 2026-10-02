@@ -223,7 +223,8 @@ public:
       const ObTabletMapKey &key,
       common::ObArenaAllocator &allocator,
       ObTabletHandle &handle);
-  int update_tablet_to_empty_shell(const common::ObTabletID &tablet_id);
+  int update_tablet_to_empty_shell(const common::ObTabletID &tablet_id,
+      const ObTabletHandle &expected = ObTabletHandle());
   int replay_create_tablet(
       const ObMetaDiskAddr &disk_addr,
       const char *buf,

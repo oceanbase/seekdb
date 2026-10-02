@@ -99,6 +99,7 @@ private:
   static int check_create_arg(
       const obcall::ObBatchCreateTabletArg &arg,
       bool &valid);
+  static int check_new_tablet_existence(const common::ObTabletID &tablet_id, bool &exists);
   static int create_tablets(
     const obcall::ObBatchCreateTabletArg &arg,
     const bool for_replay,

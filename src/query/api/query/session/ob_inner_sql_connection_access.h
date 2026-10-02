@@ -18,6 +18,7 @@
 #define OCEANBASE_QUERY_API_SESSION_OB_INNER_SQL_CONNECTION_ACCESS_H_
 
 #include <stdint.h>
+#include <functional>
 #include "common/mysqlclient/ob_isql_connection.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 
@@ -36,6 +37,7 @@ class ObSQLSessionInfo;
 }
 namespace transaction
 {
+class ObTxDesc;
 enum class ObTxDataSourceType : int64_t;
 struct ObRegisterMdsFlag;
 namespace tablelock
@@ -62,6 +64,13 @@ public:
 
   static sql::ObSQLSessionInfo *get_session(
       common::sqlclient::ObISQLConnection *connection);
+
+  // Execute sequential native operations in this connection's transaction.
+  // The callback must not end/release/reuse the transaction. Restores the
+  // storage session and synchronizes the SQL transaction view before return.
+  static int with_native_transaction(
+      common::sqlclient::ObISQLConnection *connection,
+      const std::function<int(transaction::ObTxDesc &)> &operation);
 
   static int lock_obj(
       const transaction::tablelock::ObLockObjRequest &request,
