@@ -45,6 +45,22 @@ public:
   virtual int build_ddl_local(
       const obcall::ObDDLLocalBuildArg &arg,
       obcall::ObDDLLocalBuildResult &res) = 0;
+  // A scheduling round owns its preparation state until all requests have
+  // been dispatched. Per-tablet failures remain separate from batch failures.
+  virtual int build_ddl_local_batch(
+      const common::ObIArray<obcall::ObDDLLocalBuildArg> &args,
+      common::ObIArray<obcall::ObDDLLocalBuildResult> &results,
+      common::ObIArray<int> &statuses)
+  {
+    int ret = common::OB_SUCCESS;
+    for (int64_t i = 0; ret == common::OB_SUCCESS && i < args.count(); ++i) {
+      obcall::ObDDLLocalBuildResult result;
+      const int status = build_ddl_local(args.at(i), result);
+      ret = results.push_back(result);
+      if (ret == common::OB_SUCCESS) { ret = statuses.push_back(status); }
+    }
+    return ret;
+  }
   virtual int check_and_cancel_ddl_complement_data_dag(
       const obcall::ObDDLLocalBuildArg &arg,
       bool &is_dag_exist) = 0;

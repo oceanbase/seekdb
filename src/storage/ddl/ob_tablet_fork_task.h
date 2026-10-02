@@ -35,11 +35,13 @@
 #include "storage/ddl/ob_tablet_copy_util.h"
 #include "common/ob_tablet_id.h"
 #include "storage/tablet/ob_tablet_table_store_iterator.h"
+#include <memory>
 
 namespace oceanbase
 {
 namespace storage
 {
+class TabletAccessProtection;
 class ObLS;
 class ObTableForkInfo;
 
@@ -171,7 +173,7 @@ public:
   ObTablesHandleArray created_sstable_handles_;
   lib::ObMutex created_sstable_handles_lock_;  // Protect concurrent access to created_sstable_handles_
   int64_t row_inserted_;
-  bool prototype_access_; // Protect the snapshot through asynchronous baseline completion.
+  std::unique_ptr<TabletAccessProtection> prototype_access_; // Protect the snapshot through asynchronous baseline completion.
   DISALLOW_COPY_AND_ASSIGN(ObTabletForkCtx);
 };
 

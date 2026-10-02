@@ -1795,6 +1795,7 @@ int ObDMLService::write_row_to_das_op(const ObDASDMLBaseCtDef &ctdef,
     } else {
       dml_op->set_das_ctdef(static_cast<const CtDefType*>(&ctdef));
       dml_op->set_das_rtdef(static_cast<RtDefType*>(&rtdef));
+      dml_op->set_namespace_runtime(dml_rtctx.get_exec_ctx().get_my_session()->ns_runtime());
     }
     bool has_domain_index = ctdef.table_param_.get_data_table().is_domain_index();
     if (!has_domain_index && OB_NOT_NULL(rtdef.related_ctdefs_)) {

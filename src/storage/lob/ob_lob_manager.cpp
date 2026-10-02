@@ -2090,7 +2090,7 @@ int ObLobManager::get_outrow_lob_full_data(common::ObLobTextIterCtx &ctx,
                                            common::ObCollationType cs_type,
                                            bool has_lob_header,
                                            bool is_outrow,
-                                           common::ObIAllocator *tmp_alloc)
+                                           common::ObIAllocator *tmp_alloc, common::ObString *destination)
 {
   int ret = OB_SUCCESS;
   if (!has_lob_header || !is_outrow || OB_ISNULL(ctx.alloc_)) {
@@ -2098,7 +2098,7 @@ int ObLobManager::get_outrow_lob_full_data(common::ObLobTextIterCtx &ctx,
     COMMON_LOG(WARN, "Lob: error condition", K(ret), K(has_lob_header), K(is_outrow), K(ctx.timeout_ts_));
   } else { // outrow persist lob
     storage::ObLobAccessParam param;
-    if (OB_SUCC(init_lob_access_param(*this, param, &ctx, cs_type, tmp_alloc))) {
+    if (OB_SUCC(ret = init_lob_access_param(*this, param, &ctx, cs_type, tmp_alloc))) {
       param.len_ = (ctx.total_access_len_ == 0 ? param.byte_size_ : ctx.total_access_len_);
 
       if (!param.tablet_id_.is_valid()) {
@@ -2115,8 +2115,15 @@ int ObLobManager::get_outrow_lob_full_data(common::ObLobTextIterCtx &ctx,
         COMMON_LOG(WARN,"Lob: unable to read full data over 512M lob.", K(ret), K(param));
       } else {
         ctx.total_byte_len_ = param.byte_size_;
-        ctx.buff_byte_len_ = static_cast<uint32_t>(param.byte_size_);//TODO(gehao.wh): check convert from 64 to 32
-        ctx.buff_ = static_cast<char *>(ctx.alloc_->alloc(ctx.buff_byte_len_));
+        ctx.buff_byte_len_ = static_cast<uint32_t>(param.byte_size_);
+        if (destination != nullptr) {
+          if (destination->size() < param.byte_size_ || destination->ptr() == nullptr) {
+            return OB_BUF_NOT_ENOUGH;
+          }
+          ctx.buff_ = destination->ptr();
+        } else {
+          ctx.buff_ = static_cast<char *>(ctx.alloc_->alloc(ctx.buff_byte_len_));
+        }
         ObString output_data;
 
         if (OB_ISNULL(ctx.buff_)) {

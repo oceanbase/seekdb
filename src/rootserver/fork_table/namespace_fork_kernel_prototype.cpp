@@ -75,39 +75,28 @@ int64_t directory_deadline()
       ? THIS_WORKER.get_timeout_ts()
       : ObTimeUtility::current_time() + 120 * 1000 * 1000;
 }
-// ponytail: one global count, so DROP can wait for unrelated long scans/DAGs.
-// No per-namespace registry/cache; use worker-local draining for production isolation.
-std::atomic<int64_t> active_accesses{0};
-std::atomic<bool> physical_reclamation{false};
+// Entries exist only while an operation holds them. Logical admission and
+// actual physical dependencies have distinct lifetimes: deleting a namespace
+// drains its own work, while GC excludes any tablet still used by any reader.
+std::mutex access_mutex;
+std::unordered_map<uint64_t, int64_t> namespace_accesses;
+std::unordered_map<uint64_t, int64_t> tablet_accesses;
 std::mutex physical_reclamation_mutex;
-int acquire_access(bool &held)
+int exclude_active_tablets(ObIArray<ObTabletID> &candidates, bool &need_retry)
 {
-  if (held) { return OB_SUCCESS; }
-  for (;;) {
-    if (physical_reclamation.load()) {
-      const int ret = THIS_WORKER.check_status();
-      if (ret != OB_SUCCESS) { return ret; }
-      // A SQL operation can open another store context after publishing its
-      // physical copy. Waiting preserves that admitted operation; returning
-      // EAGAIN here would turn a GC scheduling window into a failed write.
-      // The collector bounds its admission drain, so an operation retaining
-      // an earlier context cannot form an unbounded wait cycle.
-      ob_usleep(1000);
-      continue;
-    }
-    active_accesses.fetch_add(1);
-    if (physical_reclamation.load()) {
-      active_accesses.fetch_sub(1);
-      continue;
-    }
-    held = true;
-    return OB_SUCCESS;
+  ObArray<ObTabletID> idle;
+  int ret = OB_SUCCESS;
+  std::lock_guard<std::mutex> lock(access_mutex);
+  for (int64_t i = 0; OB_SUCC(ret) && i < candidates.count(); ++i) {
+    if (tablet_accesses.count(candidates.at(i).id()) != 0) { need_retry = true; }
+    else { ret = idle.push_back(candidates.at(i)); }
   }
+  return ret ? ret : candidates.assign(idle);
 }
 // check_table_access runs on every storage scan/DML open; a roots() SQL per
 // open dominated branch-worker cold schema refresh. The namespace registry is
 // only mutated by begin/finish_namespace_drop in this process, so a LIVE entry
-// stays valid until locally invalidated. Readers still register active_accesses
+// stays valid until locally invalidated. Readers still register their namespace
 // before consulting the cache, so drain_access keeps covering the close window.
 std::shared_mutex namespace_state_mutex;
 std::unordered_map<uint64_t, int64_t> namespace_state_cache;
@@ -158,39 +147,28 @@ private:
   MetadataReadGuard(const MetadataReadGuard &) = delete;
   MetadataReadGuard &operator=(const MetadataReadGuard &) = delete;
 };
-// Close admission before draining, then exclude publication. Acquiring the
-// metadata lock first would deadlock an admitted writer materializing a copy.
+// Serialize the short resolve/register and dependency-publication windows with
+// GC. Long-lived readers hold resource counts, not this mutex. Busy candidates
+// are skipped; unrelated readers never stall this collector.
 class PhysicalReclamationGuard final
 {
 public:
   PhysicalReclamationGuard()
-      : serial_(physical_reclamation_mutex, std::try_to_lock), held_(false),
-        closed_(false), ret_(OB_EAGAIN)
+      : serial_(physical_reclamation_mutex, std::try_to_lock), held_(false), ret_(OB_EAGAIN)
   {
     if (!serial_.owns_lock()) { return; }
-    physical_reclamation.store(true);
-    closed_ = true;
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
-    while (active_accesses.load() != 0) {
-      if (std::chrono::steady_clock::now() >= deadline) { return; }
-      ob_usleep(1000);
-    }
     while (!metadata_mutex.try_lock_for(std::chrono::milliseconds(1))) {
       if (std::chrono::steady_clock::now() >= deadline) { return; }
     }
     held_ = true;
     ret_ = OB_SUCCESS;
   }
-  ~PhysicalReclamationGuard()
-  {
-    if (held_) { metadata_mutex.unlock(); }
-    if (closed_) { physical_reclamation.store(false); }
-  }
+  ~PhysicalReclamationGuard() { if (held_) { metadata_mutex.unlock(); } }
   int error() const { return ret_; }
 private:
   std::unique_lock<std::mutex> serial_;
   bool held_;
-  bool closed_;
   int ret_;
 };
 uint64_t encoded(uint64_t db, uint64_t local) {
@@ -345,39 +323,6 @@ int schema_tablet_ids(const ObTableSchema &schema,
   int ret = schema.get_tablet_ids(tablet_ids);
   if (OB_SUCC(ret) && schema.get_hidden_partition_num() > 0) {
     ret = schema.get_first_level_hidden_tablet_ids(tablet_ids);
-  }
-  return ret;
-}
-
-int corresponding_tablet_id(const ObTableSchema &source_schema,
-                            uint64_t source_local_tablet_id,
-                            const ObTableSchema &target_schema,
-                            uint64_t &target_tablet_id)
-{
-  ObArray<ObTabletID> source_tablets;
-  ObArray<ObTabletID> target_tablets;
-  int ret = schema_tablet_ids(source_schema, source_tablets);
-  if (OB_SUCC(ret)) {
-    ret = schema_tablet_ids(target_schema, target_tablets);
-  }
-  if (OB_SUCC(ret) && (source_tablets.empty()
-      || source_tablets.count() != target_tablets.count())) {
-    ret = OB_STATE_NOT_MATCH;
-  }
-  int64_t tablet_index = OB_INVALID_INDEX;
-  for (int64_t i = 0; OB_SUCC(ret) && i < source_tablets.count(); ++i) {
-    if (local_of(source_tablets.at(i).id()) == source_local_tablet_id) {
-      if (tablet_index != OB_INVALID_INDEX) {
-        ret = OB_STATE_NOT_MATCH;
-      } else {
-        tablet_index = i;
-      }
-    }
-  }
-  if (OB_SUCC(ret) && tablet_index == OB_INVALID_INDEX) {
-    ret = OB_ENTRY_NOT_EXIST;
-  } else if (OB_SUCC(ret)) {
-    target_tablet_id = target_tablets.at(tablet_index).id();
   }
   return ret;
 }
@@ -608,12 +553,14 @@ int NamespaceForkKernelPrototype::finish_namespace_drop(uint64_t id) {
   if (OB_SUCC(ret)) { control_state().drop_exceptions(id); }
   return ret;
 }
-int NamespaceForkKernelPrototype::check_baseline_access(const ObTabletID &tablet_id, bool &held) {
-  const int access_ret = acquire_access(held);
-  if (access_ret != OB_SUCCESS) { return access_ret; }
+int NamespaceForkKernelPrototype::check_baseline_access(
+    const ObTabletID &tablet_id, TabletAccessProtection &protection) {
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   if (!is_encoded_id(tablet_id.id())) { return OB_SUCCESS; }
   const uint64_t ns = database_of(tablet_id.id());
+  int ret = acquire_namespace(ns, protection);
+  if (OB_SUCC(ret)) { ret = protect_tablet_sources(tablet_id, protection); }
+  if (OB_FAIL(ret)) { return ret; }
   // A baseline DAG is only valid on a tablet its namespace still owns. DROP
   // drains active accesses before deleting the owned rows, so an admitted DAG
   // always finishes against a valid binding.
@@ -624,7 +571,7 @@ int NamespaceForkKernelPrototype::check_baseline_access(const ObTabletID &tablet
     if (state_ret != OB_SUCCESS) { return state_ret; }
     remember_namespace_state(ns, state);
   }
-  int ret = load_kv_exceptions(ns);
+  ret = load_kv_exceptions(ns);
   if (OB_SUCC(ret) && (state != 0 || !control_state().owned(ns, local_of(tablet_id.id())))) {
     // A retired intermediate copy may still supply descendants. Completing
     // its baseline lets those descendants eventually release the whole chain.
@@ -636,24 +583,100 @@ int NamespaceForkKernelPrototype::check_baseline_access(const ObTabletID &tablet
   }
   return ret;
 }
-void NamespaceForkKernelPrototype::release_access(bool &held) {
-  if (held) { held = false; active_accesses.fetch_sub(1); }
+TabletAccessProtection::~TabletAccessProtection() { reset(); }
+void TabletAccessProtection::reset() { NamespaceForkKernelPrototype::release_access(*this); }
+
+int NamespaceForkKernelPrototype::acquire_namespace(uint64_t id,
+    TabletAccessProtection &protection)
+{
+  if (protection.namespaces_.insert(id).second) {
+    std::lock_guard<std::mutex> lock(access_mutex);
+    ++namespace_accesses[id];
+  }
+  return OB_SUCCESS;
 }
-int NamespaceForkKernelPrototype::drain_access() {
+
+int NamespaceForkKernelPrototype::protect_tablet_sources(const ObTabletID &tablet,
+    TabletAccessProtection &protection)
+{
+  ObTabletID current = tablet;
+  ObSEArray<uint64_t, 8> chain;
   int ret = OB_SUCCESS;
-  // Called after durable close, BEFORE taking the directory or DDL locks. Otherwise
-  // an admitted cold-table materializer could wait on DROP while DROP waited on it.
-  while (active_accesses.load() != 0 && OB_SUCC(ret = THIS_WORKER.check_status())) {
-    if (REACH_TIME_INTERVAL(1000 * 1000)) {
-      LOG_INFO("PROTOTYPE_V7_DRAIN_ACCESS", "active", active_accesses.load());
+  while (OB_SUCC(ret) && current.is_valid()) {
+    if (has_exist_in_array(chain, current.id())) { return OB_STATE_NOT_MATCH; }
+    if (chain.count() >= 64) { return OB_SIZE_OVERFLOW; }
+    if (OB_FAIL(chain.push_back(current.id()))) { break; }
+    if (protection.tablets_.insert(current.id()).second) {
+      std::lock_guard<std::mutex> lock(access_mutex);
+      ++tablet_accesses[current.id()];
     }
+    ObTabletHandle handle;
+    ret = ObTabletCreateDeleteHelper::check_and_get_tablet(ObTabletMapKey(current),
+        handle, 0, ObMDSGetTabletMode::READ_WITHOUT_CHECK,
+        transaction::ObTransVersion::MAX_TRANS_VERSION);
+    if (ret == OB_TABLET_NOT_EXIST || ret == OB_ENTRY_NOT_EXIST) { return OB_SUCCESS; }
+    if (OB_FAIL(ret) || handle.get_obj()->is_empty_shell()) { break; }
+    const auto &fork = handle.get_obj()->get_tablet_meta().fork_info_;
+    if (!fork.is_valid() || fork.is_complete()) { break; }
+    current = fork.get_fork_src_tablet_id();
+  }
+  return ret;
+}
+
+void NamespaceForkKernelPrototype::release_access(TabletAccessProtection &protection)
+{
+  if (protection.namespaces_.empty() && protection.tablets_.empty()) { return; }
+  std::lock_guard<std::mutex> lock(access_mutex);
+  for (uint64_t id : protection.namespaces_) {
+    auto found = namespace_accesses.find(id);
+    OB_ASSERT(found != namespace_accesses.end() && found->second > 0);
+    if (--found->second == 0) { namespace_accesses.erase(found); }
+  }
+  for (uint64_t id : protection.tablets_) {
+    auto found = tablet_accesses.find(id);
+    OB_ASSERT(found != tablet_accesses.end() && found->second > 0);
+    if (--found->second == 0) { tablet_accesses.erase(found); }
+  }
+  protection.namespaces_.clear();
+  protection.tablets_.clear();
+}
+
+int NamespaceForkKernelPrototype::drain_access(uint64_t namespace_id)
+{
+  for (;;) {
+    {
+      std::lock_guard<std::mutex> lock(access_mutex);
+      if (namespace_accesses.count(namespace_id) == 0) { return OB_SUCCESS; }
+    }
+    const int ret = THIS_WORKER.check_status();
+    if (ret != OB_SUCCESS) { return ret; }
     ob_usleep(10 * 1000);
   }
+}
+
+int NamespaceForkKernelPrototype::prepare_access(uint64_t namespace_id, uint64_t table_id,
+    ObTabletID &tablet, bool read_only, data_plane::ObNamespaceAccessMode mode,
+    TabletAccessProtection &protection, const std::function<int(ObTabletID &)> &prepare)
+{
+  // The collector's explicit internal SQL context must be able to access its
+  // own metadata while holding the publication lock exclusively.
+  if (!is_encoded_id(tablet.id())
+      || (mode == data_plane::ObNamespaceAccessMode::UNFENCED && is_inner_table(table_id))) {
+    return prepare(tablet);
+  }
+  MetadataReadGuard access;
+  int ret = access.error();
+  if (OB_SUCC(ret)) { ret = acquire_namespace(namespace_id, protection); }
+  if (OB_SUCC(ret)) { ret = check_table_access(table_id, tablet, read_only, mode); }
+  if (OB_SUCC(ret)) { ret = prepare(tablet); }
+  // Resolution and registration are under the same short publication guard.
+  // Reusing a context adds dependencies without dropping its earlier ones.
+  if (OB_SUCC(ret)) { ret = protect_tablet_sources(tablet, protection); }
   return ret;
 }
 int NamespaceForkKernelPrototype::check_table_access(
     uint64_t table_id, const ObTabletID &tablet_id, bool read_only,
-    data_plane::ObNamespaceAccessMode access_mode, bool &held) {
+    data_plane::ObNamespaceAccessMode access_mode) {
   if (!is_encoded_id(tablet_id.id())) {
     return OB_SUCCESS;
   }
@@ -661,7 +684,7 @@ int NamespaceForkKernelPrototype::check_table_access(
     // Internal SQL metadata remains unfenced so physical GC can run its own
     // control transaction. User data still participates in the read drain,
     // including the initial Namespace's explicitly unfenced SQL context.
-    return is_inner_table(table_id) ? OB_SUCCESS : acquire_access(held);
+    return OB_SUCCESS;
   }
   if (access_mode != data_plane::ObNamespaceAccessMode::LEASED) {
     const int ret = OB_INVALID_ARGUMENT;
@@ -671,9 +694,6 @@ int NamespaceForkKernelPrototype::check_table_access(
   }
   const uint64_t id = database_of(tablet_id.id());
   int ret = OB_SUCCESS;
-  // Register BEFORE reading LIVE; release only after iterators/store contexts or
-  // a baseline DAG have released their inputs. New work after close cannot enter.
-  if (OB_FAIL(acquire_access(held))) { return ret; }
   int64_t state = 0;
   if (cached_namespace_state(id, state)) {
   } else {
@@ -747,6 +767,7 @@ int NamespaceForkKernelPrototype::reclaim_unreferenced_tablets(
   PhysicalReclamationGuard fence;
   int ret = fence.error();
   if (OB_SUCC(ret)) { ret = protect_snapshot_tablets(candidates, need_retry); }
+  if (OB_SUCC(ret)) { ret = exclude_active_tablets(candidates, need_retry); }
   if (OB_SUCC(ret) && !candidates.empty()) { ret = reclaim(candidates); }
   return ret;
 }
@@ -796,6 +817,7 @@ int NamespaceForkKernelPrototype::collect_dropped_namespace_tablets() {
   bool deferred = false;
   if (!candidates.empty()
       && OB_FAIL(protect_snapshot_tablets(candidates, deferred))) { return ret; }
+  if (OB_FAIL(exclude_active_tablets(candidates, deferred))) { return ret; }
 
   if (!candidates.empty()) {
     int64_t schema_version = 0;
@@ -1271,11 +1293,8 @@ int NamespaceForkKernelPrototype::schedule_baseline_impl(const ObTablet &tablet,
   if (directory_kv_store() == nullptr) { return OB_NOT_INIT; }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
   int ret = OB_SUCCESS;
-  struct BaselineAccess {
-    bool held = false;
-    ~BaselineAccess() { NamespaceForkKernelPrototype::release_access(held); }
-  } admission;
-  ret = check_baseline_access(meta.tablet_id_, admission.held);
+  TabletAccessProtection admission;
+  ret = check_baseline_access(meta.tablet_id_, admission);
   if (ret == OB_ENTRY_NOT_EXIST) { return OB_SUCCESS; }
   if (ret != OB_SUCCESS) { return ret; }
   ObArenaAllocator allocator("NsForkBaseline");
@@ -1347,8 +1366,8 @@ int NamespaceForkKernelPrototype::resolve_read_tablet(
 }
 int NamespaceForkKernelPrototype::ensure_tablet(
     const ObTabletID &tablet_id,
-    const ObTableSchema &supplied_schema,
-    const ObIArray<const ObTableSchema *> &binding_schemas) {
+    const std::function<int(ObIArray<const ObTableSchema *> &,
+                            ObIArray<ObTabletID> &)> &prepare) {
 
   if (!is_encoded_id(tablet_id.id())) { return OB_SUCCESS; }
   int ret = OB_SUCCESS;
@@ -1434,93 +1453,31 @@ int NamespaceForkKernelPrototype::ensure_tablet(
       }
       if (OB_SUCC(ret) && !already) {
         failure_stage = "schema";
-        const ObTableSchema *requested_schema = &supplied_schema;
-        auto supplied_by_table = [&](uint64_t table_id) -> const ObTableSchema * {
-          const uint64_t local_table_id = local_of(table_id);
-          for (int64_t i = 0; i < binding_schemas.count(); ++i) {
-            const ObTableSchema *schema = binding_schemas.at(i);
-            if (schema != nullptr && local_of(schema->get_table_id()) == local_table_id) {
-              return schema;
-            }
-          }
-          return nullptr;
-        };
-        uint64_t requested_local_tablet = local;
-        if (OB_SUCC(ret)) {
-          ObArray<ObTabletID> requested_tablets;
-          bool contains_requested_tablet = false;
-          if (schema_tablet_ids(*requested_schema, requested_tablets) != OB_SUCCESS) {
-            ret = OB_INVALID_ARGUMENT;
-          }
-          for (int64_t i = 0; OB_SUCC(ret) && i < requested_tablets.count(); ++i) {
-            const uint64_t id = requested_tablets.at(i).id();
-            if (!is_encoded_id(id) || database_of(id) != db) {
-              ret = OB_INVALID_ARGUMENT;
-            } else if (local_of(id) == local) {
-              contains_requested_tablet = true;
-            }
-          }
-          if (OB_SUCC(ret) && !contains_requested_tablet) { ret = OB_INVALID_ARGUMENT; }
+        ObSEArray<const ObTableSchema *, 3> schemas;
+        ObSEArray<ObTabletID, 3> logical_tablets;
+        if (OB_FAIL(prepare(schemas, logical_tablets))) {
+        } else if (schemas.empty() || schemas.count() != logical_tablets.count()) {
+          ret = OB_INVALID_ARGUMENT;
         }
-        const ObTableSchema *accessed_schema = requested_schema;
-        if (OB_SUCC(ret) && requested_schema->is_aux_lob_table()) {
-          // An LOB main tablet and both auxiliaries are one storage binding unit.
-          // Canonicalize an auxiliary first access to the main schema so no partial
-          // materialization can make that unit impossible to bind later.
-          const uint64_t main_table = local_of(requested_schema->get_data_table_id());
-          requested_schema = supplied_by_table(main_table);
-          if (requested_schema == nullptr || requested_schema->is_aux_lob_table()) {
-            ret = OB_INVALID_ARGUMENT;
-          } else {
-            uint64_t main_tablet = OB_INVALID_ID;
-            if (OB_FAIL(corresponding_tablet_id(
-                    *accessed_schema, local, *requested_schema, main_tablet))) {
-            } else {
-              requested_local_tablet = local_of(main_tablet);
-            }
-          }
-        }
-        auto append_item = [&](const ObTableSchema *schema, uint64_t item_local) -> int {
+        bool requested_found = false;
+        for (int64_t i = 0; OB_SUCC(ret) && i < schemas.count(); ++i) {
           MaterializeItem item;
-          item.schema = schema;
-          item.local_tablet = item_local;
-          const int resolve_ret = metadata.resolve_read_tablet(
-              db, item_local, probe_historical_tablet,
-              item.source_tablet, item.cap);
-          if (resolve_ret != OB_SUCCESS) { return resolve_ret; }
-          if (item.source_tablet == encoded(db, item_local)) { return OB_EAGAIN; }
-          // The cap of every hop is a fork snapshot of this namespace's chain, so
-          // it can never exceed this namespace's own fork snapshot.
-          if (item.cap <= 0 || item.cap > root.snapshot) { return OB_STATE_NOT_MATCH; }
-          items.push_back(item);
-          return OB_SUCCESS;
-        };
-        if (OB_SUCC(ret)) {
-          failure_stage = "append";
-          ret = append_item(requested_schema, requested_local_tablet);
+          item.schema = schemas.at(i);
+          item.local_tablet = logical_tablets.at(i).id();
+          requested_found |= item.local_tablet == local;
+          if (item.schema == nullptr || !logical_tablets.at(i).is_valid()
+              || is_encoded_id(item.local_tablet)) {
+            ret = OB_INVALID_ARGUMENT;
+          } else if (OB_FAIL(metadata.resolve_read_tablet(
+                         db, item.local_tablet, probe_historical_tablet,
+                         item.source_tablet, item.cap))) {
+          } else if (item.source_tablet == encoded(db, item.local_tablet)) {
+            ret = OB_EAGAIN;
+          } else if (item.cap <= 0 || item.cap > root.snapshot) {
+            ret = OB_STATE_NOT_MATCH;
+          } else { items.push_back(item); }
         }
-        const uint64_t auxiliary_tables[] = {
-          OB_SUCC(ret) ? requested_schema->get_aux_lob_meta_tid() : OB_INVALID_ID,
-          OB_SUCC(ret) ? requested_schema->get_aux_lob_piece_tid() : OB_INVALID_ID
-        };
-        for (uint64_t auxiliary_table : auxiliary_tables) {
-          if (OB_SUCC(ret) && auxiliary_table != OB_INVALID_ID) {
-            const ObTableSchema *auxiliary_schema = supplied_by_table(auxiliary_table);
-            if (auxiliary_schema == nullptr) {
-              ret = OB_INVALID_ARGUMENT;
-            } else if (!auxiliary_schema->is_aux_lob_table()) {
-              ret = OB_STATE_NOT_MATCH;
-            } else {
-              uint64_t auxiliary_tablet = OB_INVALID_ID;
-              if (OB_FAIL(corresponding_tablet_id(
-                      *requested_schema, requested_local_tablet,
-                      *auxiliary_schema, auxiliary_tablet))) {
-              } else {
-                ret = append_item(auxiliary_schema, local_of(auxiliary_tablet));
-              }
-            }
-          }
-        }
+        if (OB_SUCC(ret) && !requested_found) { ret = OB_INVALID_ARGUMENT; }
         auto *freeze = share::server_service<ObFreezeInfoMgr>();
         if (OB_SUCC(ret) && !freeze) {
           ret = OB_STATE_NOT_MATCH;

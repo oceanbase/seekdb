@@ -216,14 +216,38 @@ public:
   int build_ddl_local(
       const obcall::ObDDLLocalBuildArg &arg,
       obcall::ObDDLLocalBuildResult &result) override {
+    ObSEArray<obcall::ObDDLLocalBuildArg, 1> args;
+    ObSEArray<obcall::ObDDLLocalBuildResult, 1> results;
+    ObSEArray<int, 1> statuses;
+    int ret = args.push_back(arg);
+    if (OB_SUCC(ret)) { ret = build_ddl_local_batch(args, results, statuses); }
+    if (OB_SUCC(ret)) { result = results.at(0); ret = statuses.at(0); }
+    return ret;
+  }
+  int build_ddl_local_batch(
+      const ObIArray<obcall::ObDDLLocalBuildArg> &args,
+      ObIArray<obcall::ObDDLLocalBuildResult> &results,
+      ObIArray<int> &statuses) override {
     return call_in_process_rootserver_runtime(namespace_id_,
         [&](rootserver::ObIRootserverLocalRuntime &runtime, StorageSpaceHandle space) {
-          ns::TabletAccess access;
-          obcall::ObDDLLocalBuildArg routed;
-          int ret = prepare_metadata_tablet(space, arg.source_tablet_id_,
-              arg.source_table_id_, arg.schema_version_, access);
-          if (OB_SUCC(ret)) { ret = route_rootserver_build_arg(space, arg, routed); }
-          return ret ? ret : runtime.build_ddl_local(routed, result);
+          std::unordered_map<int64_t, std::unique_ptr<MetadataTabletPreparation>> preparations;
+          int ret = OB_SUCCESS;
+          for (int64_t i = 0; OB_SUCC(ret) && i < args.count(); ++i) {
+            const auto &arg = args.at(i);
+            auto &preparation = preparations[arg.schema_version_];
+            if (!preparation) {
+              preparation = std::make_unique<MetadataTabletPreparation>(space, arg.schema_version_);
+            }
+            ns::TabletAccess access;
+            obcall::ObDDLLocalBuildArg routed;
+            obcall::ObDDLLocalBuildResult result;
+            int status = preparation->prepare(arg.source_tablet_id_, arg.source_table_id_, access);
+            if (status == OB_SUCCESS) { status = route_rootserver_build_arg(space, arg, routed); }
+            if (status == OB_SUCCESS) { status = runtime.build_ddl_local(routed, result); }
+            if (OB_FAIL(results.push_back(result))) {
+            } else { ret = statuses.push_back(status); }
+          }
+          return ret;
         });
   }
   int check_and_cancel_ddl_complement_data_dag(

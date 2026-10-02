@@ -372,7 +372,7 @@ ObTabletForkCtx::ObTabletForkCtx()
     created_sstable_handles_(),
     created_sstable_handles_lock_(),
     row_inserted_(0),
-    prototype_access_(false)
+    prototype_access_(std::make_unique<TabletAccessProtection>())
 {
 }
 
@@ -390,7 +390,7 @@ ObTabletForkCtx::~ObTabletForkCtx()
   created_sstable_handles_.reset();
   range_allocator_.reset();
   allocator_.reset();
-  NamespaceForkKernelPrototype::release_access(prototype_access_);
+  prototype_access_->reset();
 }
 
 bool ObTabletForkCtx::is_valid() const
@@ -436,7 +436,7 @@ int ObTabletForkCtx::init(const ObTabletForkParam &param)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(param));
   } else if (NamespaceForkKernelPrototype::is_encoded_id(param.dest_tablet_id_.id())
-      && OB_FAIL(NamespaceForkKernelPrototype::check_baseline_access(param.dest_tablet_id_, prototype_access_))) {
+      && OB_FAIL(NamespaceForkKernelPrototype::check_baseline_access(param.dest_tablet_id_, *prototype_access_))) {
   } else if (FALSE_IT([&] {
       if (NamespaceForkKernelPrototype::is_encoded_id(param.dest_tablet_id_.id())) {
         DEBUG_SYNC(FORK_TABLE_BUILD_DATA);

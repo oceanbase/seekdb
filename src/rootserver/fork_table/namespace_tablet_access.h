@@ -13,9 +13,11 @@
 #ifndef OCEANBASE_NAMESPACE_TABLET_ACCESS_H_
 #define OCEANBASE_NAMESPACE_TABLET_ACCESS_H_
 
-#include "share/schema/ob_table_schema.h"
+#include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 #include "data_plane/access/ob_namespace_access_mode.h"
+#include <functional>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 namespace oceanbase {
@@ -23,23 +25,25 @@ namespace share { namespace schema { class ObSchemaGetterGuard; } }
 namespace storage { class ObTableScanParam; }
 namespace ns {
 
-// Owns one physical schema per member of the main/LOB binding. All definitions
-// come from the caller's pinned guard, including when the requested object is
-// an auxiliary. Physical storage never looks up a Namespace SchemaService.
+// Borrows immutable definitions from the caller's pinned guard. Creation-only
+// LOB definitions and tablet correspondences are prepared on first materialization
+// and reused for this operation. No full table schema is copied or rewritten.
 class TabletBinding final
 {
 public:
-  explicit TabletBinding(common::ObIAllocator &allocator) : allocator_(allocator) {}
-  int init(uint64_t namespace_id, const share::schema::ObTableSchema &requested,
-           share::schema::ObSchemaGetterGuard &guard);
+  TabletBinding(const share::schema::ObTableSchema &requested,
+                share::schema::ObSchemaGetterGuard &guard) : guard_(guard), requested_(&requested) {}
   const share::schema::ObTableSchema &schema() const { return *requested_; }
+  int resolve(const common::ObTabletID &logical_tablet,
+              common::ObIArray<const share::schema::ObTableSchema *> &schemas,
+              common::ObIArray<common::ObTabletID> &tablets);
 private:
-  friend class TabletAccess;
-  int ensure(const common::ObTabletID &storage_tablet) const;
-  common::ObIAllocator &allocator_;
-  std::vector<std::unique_ptr<share::schema::ObTableSchema>> definitions_;
+  int prepare();
+  share::schema::ObSchemaGetterGuard &guard_;
   common::ObSEArray<const share::schema::ObTableSchema *, 3> schemas_;
-  const share::schema::ObTableSchema *requested_ = nullptr;
+  common::ObSEArray<common::ObArray<common::ObTabletID>, 3> tablets_;
+  std::unordered_map<uint64_t, int64_t> positions_;
+  const share::schema::ObTableSchema *requested_;
   DISALLOW_COPY_AND_ASSIGN(TabletBinding);
 };
 
@@ -49,11 +53,14 @@ private:
 class TabletAccess final
 {
 public:
+  using PrepareBinding = std::function<int(
+      common::ObIArray<const share::schema::ObTableSchema *> &,
+      common::ObIArray<common::ObTabletID> &)>;
   TabletAccess() = default;
   ~TabletAccess() { reset(); }
   void reset();
   // Persistent locators already carry a resolved physical source and snapshot.
-  int prepare_lob_read(const common::ObLobLocatorV2 &locator,
+  int prepare_lob_read(uint64_t namespace_id, const common::ObLobLocatorV2 &locator,
                        data_plane::ObNamespaceAccessMode mode);
   int prepare_read(uint64_t namespace_id, uint64_t table_id,
                    const common::ObTabletID &logical_tablet,
@@ -63,15 +70,13 @@ public:
   int prepare_write(uint64_t namespace_id, uint64_t table_id,
                     const common::ObTabletID &logical_tablet,
                     data_plane::ObNamespaceAccessMode mode,
-                    const TabletBinding &binding);
+                    const PrepareBinding &prepare);
   const common::ObTabletID &tablet() const { return tablet_; }
   const common::ObTabletID &schema_tablet() const { return schema_tablet_; }
   int64_t cap_scn() const { return cap_scn_; }
 private:
-  int admit(uint64_t namespace_id, uint64_t table_id,
-            const common::ObTabletID &logical_tablet, bool read_only,
-            data_plane::ObNamespaceAccessMode mode);
-  bool held_ = false;
+  int route(uint64_t namespace_id, const common::ObTabletID &logical_tablet);
+  storage::TabletAccessProtection protection_;
   common::ObTabletID tablet_;
   common::ObTabletID schema_tablet_;
   int64_t cap_scn_ = 0;

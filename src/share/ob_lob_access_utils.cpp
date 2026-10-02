@@ -98,7 +98,7 @@ int ObTextStringIter::init(uint32_t buffer_len,
 
 
 
-int ObTextStringIter::get_full_data(ObString &data_str)
+int ObTextStringIter::get_full_data(ObString &data_str, ObString *destination)
 {
   int ret = OB_SUCCESS;
   ObLobLocatorV2 loc(datum_str_, has_lob_header_);
@@ -117,14 +117,23 @@ int ObTextStringIter::get_full_data(ObString &data_str)
     }
   } else {
     // outrow lob, read full data into a inrow local tmp lob currently
-    if (OB_FAIL(get_outrow_lob_full_data())) {
+    if (OB_FAIL(get_outrow_lob_full_data(nullptr, destination))) {
     } else {
       data_str.assign_ptr(ctx_->buff_, ctx_->content_byte_len_);
     }
   }
-  if (OB_SUCC(ret)) {
-    state_ = TEXTSTRING_ITER_NEXT;
+  if (OB_SUCC(ret) && destination != nullptr) {
+    if (destination->size() < data_str.length()
+        || (data_str.length() > 0 && destination->ptr() == nullptr)) {
+      ret = OB_BUF_NOT_ENOUGH;
+    } else {
+      if (data_str.length() > 0 && data_str.ptr() != destination->ptr()) {
+        MEMMOVE(destination->ptr(), data_str.ptr(), data_str.length());
+      }
+      data_str.assign_ptr(destination->ptr(), data_str.length());
+    }
   }
+  if (OB_SUCC(ret)) { state_ = TEXTSTRING_ITER_NEXT; }
   COMMON_LOG(DEBUG, "Lob: get_full_data", K(ret), K(data_str), KP(data_str.ptr()), K(data_str.length()));
   return ret;
 }
@@ -859,7 +868,8 @@ ObTextStringIter::~ObTextStringIter()
   }
 }
 
-int ObTextStringIter::get_outrow_lob_full_data(ObIAllocator *allocator /*nullptr*/)
+int ObTextStringIter::get_outrow_lob_full_data(ObIAllocator *allocator /*nullptr*/,
+                                            ObString *destination)
 {
   UNUSED(allocator);
   int ret = OB_SUCCESS;
@@ -867,7 +877,7 @@ int ObTextStringIter::get_outrow_lob_full_data(ObIAllocator *allocator /*nullptr
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "Lob: error condition", K(ret), K(has_lob_header_), K(is_outrow_), KP(ctx_));
   } else if (OB_FAIL(ctx_->read_service_.get_outrow_lob_full_data(
-                 *ctx_, cs_type_, has_lob_header_, is_outrow_, tmp_alloc_))) {
+                 *ctx_, cs_type_, has_lob_header_, is_outrow_, tmp_alloc_, destination))) {
   }
   return ret;
 }

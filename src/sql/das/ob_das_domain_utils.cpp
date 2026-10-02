@@ -228,6 +228,7 @@ int ObDASDomainUtils::generate_spatial_index_rows(
 }
 
 int ObDASDomainUtils::build_ft_doc_word_infos(
+    const ns::NamespaceRuntime *namespace_runtime,
     const transaction::ObTxDesc *trans_desc,
     const transaction::ObTxReadSnapshot *snapshot,
     const common::ObIArray<const ObDASBaseCtDef *> &related_ctdefs,
@@ -240,16 +241,16 @@ int ObDASDomainUtils::build_ft_doc_word_infos(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KPC(snapshot));
   }
-  data_plane::ObNamespaceAccessMode access_mode;
-  if (OB_SUCC(ret)) {
-    ret = observer::namespace_worker_prototype::storage_access_mode(
-        observer::namespace_worker_prototype::active_worker_storage_space(), access_mode);
+  if (OB_SUCC(ret) && !related_ctdefs.empty() && namespace_runtime == nullptr) {
+    ret = OB_NOT_INIT;
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < related_ctdefs.count(); ++i) {
     ObFTDocWordInfo doc_word_info;
-    doc_word_info.namespace_access_mode_ = access_mode;
-    doc_word_info.namespace_id_ = observer::namespace_worker_prototype::
-        active_worker_storage_space().tablet_namespace_id();
+    // DAS may execute on a PX thread outside a storage-session scope. Its
+    // owning execution context supplies the runtime; do not infer it from TLS.
+    doc_word_info.namespace_access_mode_ = namespace_runtime->storage_access_lease_required()
+        ? data_plane::ObNamespaceAccessMode::LEASED : data_plane::ObNamespaceAccessMode::UNFENCED;
+    doc_word_info.namespace_id_ = namespace_runtime->ns().id();
     const ObDASDMLBaseCtDef *related_ctdef = static_cast<const ObDASDMLBaseCtDef *>(related_ctdefs.at(i));
     if (OB_ISNULL(related_ctdef)) {
       ret = OB_ERR_UNEXPECTED;
@@ -905,7 +906,6 @@ int ObFTDMLIterator::init_doc_word_iterator()
   auto *service = observer::namespace_worker_prototype::namespace_schema_service(info.namespace_id_);
   share::schema::ObSchemaGetterGuard guard;
   const share::schema::ObTableSchema *logical = nullptr;
-  auto physical = std::make_unique<share::schema::ObTableSchema>(&ft_doc_word_allocator_);
   transaction::ObTxReadSnapshot snapshot;
   // A previous iterator is reset before replacing its protected source.
   data_plane::reset_ft_doc_word_iterator(ft_doc_word_iter_);
@@ -918,8 +918,6 @@ int ObFTDMLIterator::init_doc_word_iterator()
     ret = OB_SCHEMA_EAGAIN;
   } else if (OB_FAIL(doc_word_access_.prepare_read(info.namespace_id_,
       info.doc_word_table_id_, info.doc_word_tablet_id_, info.namespace_access_mode_))) {
-  } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::make_storage_schema(
-      info.namespace_id_, *logical, *physical))) {
   } else if (OB_FAIL(snapshot.assign(info.snapshot_))) {
   } else {
     if (doc_word_access_.cap_scn() > 0) {
@@ -930,7 +928,7 @@ int ObFTDMLIterator::init_doc_word_iterator()
       }
     }
     if (OB_SUCC(ret)) {
-      ret = data_plane::init_ft_doc_word_iterator(ft_doc_word_iter_, *physical,
+      ret = data_plane::init_ft_doc_word_iterator(ft_doc_word_iter_, *logical,
           doc_word_access_.tablet(), doc_word_access_.schema_tablet(), &snapshot);
     }
   }

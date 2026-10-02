@@ -36,7 +36,7 @@ int drain_storage_namespace_access(uint64_t namespace_id) {
   if (namespace_id <= 1 || namespace_id >= ns::NamespaceObjectKey::NAMESPACE_LIMIT) {
     return OB_INVALID_ARGUMENT;
   }
-  return storage::NamespaceForkKernelPrototype::drain_access();
+  return storage::NamespaceForkKernelPrototype::drain_access(namespace_id);
 }
 struct SessionBinding {
   InProcessStorage *in_process = nullptr;
@@ -114,7 +114,7 @@ int call_in_process_rootserver_runtime(
   return ret;
 }
 int read_in_process_lob(ObLobLocatorV2 &locator, int64_t timeout,
-                        ObIAllocator &allocator, ObString &output)
+                        ObIAllocator &allocator, ObString &output, ObString *destination)
 {
   output.reset();
   InProcessStorage *storage = in_process_storage;
@@ -128,14 +128,20 @@ int read_in_process_lob(ObLobLocatorV2 &locator, int64_t timeout,
   }
   int64_t length = 0;
   ns::TabletAccess access;
-  int ret = access.prepare_lob_read(locator, storage->access_mode(space));
+  int ret = access.prepare_lob_read(space.tablet_namespace_id(), locator, storage->access_mode(space));
   if (!ret) { ret = locator.get_lob_data_byte_len(length); }
   if (!ret && (length < 0 || length > static_cast<int64_t>(MAX_SQL_MESSAGE - 64))) {
     ret = OB_SIZE_OVERFLOW;
   } else if (!ret && length > 0) {
-    char *buffer = static_cast<char *>(allocator.alloc(length));
-    if (buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
-    else { output.assign_buffer(buffer, static_cast<int32_t>(length)); }
+    if (destination != nullptr) {
+      if (destination->size() < length || destination->ptr() == nullptr) {
+        ret = OB_BUF_NOT_ENOUGH;
+      } else { output.assign_buffer(destination->ptr(), destination->size()); }
+    } else {
+      char *buffer = static_cast<char *>(allocator.alloc(length));
+      if (buffer == nullptr) { ret = OB_ALLOCATE_MEMORY_FAILED; }
+      else { output.assign_buffer(buffer, static_cast<int32_t>(length)); }
+    }
   }
   if (!ret) {
     auto *old_session = THIS_WORKER.get_session();
@@ -165,8 +171,8 @@ int compare_in_process_lobs(ObLobLocatorV2 &left, ObLobLocatorV2 &right,
   const int64_t old_timeout = THIS_WORKER.get_timeout_ts();
   THIS_WORKER.set_session(&storage->session);
   ns::TabletAccess access;
-  int ret = access.prepare_lob_read(left, storage->access_mode(space));
-  if (!ret) { ret = access.prepare_lob_read(right, storage->access_mode(space)); }
+  int ret = access.prepare_lob_read(space.tablet_namespace_id(), left, storage->access_mode(space));
+  if (!ret) { ret = access.prepare_lob_read(space.tablet_namespace_id(), right, storage->access_mode(space)); }
   if (!ret) {
     ret = data_plane::lob_binary_equal(
         left, right, std::min(timeout, old_timeout), storage_tx, equal);

@@ -28,6 +28,7 @@
 #include "share/geo/ob_srs_provider.h"
 
 namespace oceanbase { namespace share { namespace schema { class ObMultiVersionSchemaService; } } }
+namespace oceanbase { namespace ns { class NamespaceRuntime; } }
 
 namespace oceanbase
 {
@@ -179,6 +180,7 @@ public:
   ~ObDASDomainUtils() = default;
 
   static int build_ft_doc_word_infos(
+      const ns::NamespaceRuntime *namespace_runtime,
       const transaction::ObTxDesc *trans_desc,
       const transaction::ObTxReadSnapshot *snapshot,
       const common::ObIArray<const ObDASBaseCtDef *> &related_ctdef,

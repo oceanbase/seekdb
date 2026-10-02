@@ -112,13 +112,19 @@ int ObExprVecVector::cg_expr(
       common::ObArenaAllocator &ctx_allocator = tmp_alloc_g.get_allocator();
       char *vec_buff_ptr = nullptr;
       int64_t buff_len = 0;
+      int64_t lob_len = 0;
+      const common::ObLobReadOptions *options = nullptr;
+      ObString destination;
+      ObTextStringIter reader(ObLongTextType, CS_TYPE_BINARY, vector, lob.has_lob_header());
       ObTextStringDatumResult text_result(ObLongTextType, &raw_ctx, &eval_ctx, &expr_datum);
-      if (OB_FAIL(ObTextStringHelper::read_real_string_data(eval_ctx.exec_ctx_,
-          &ctx_allocator, ObLongTextType, CS_TYPE_BINARY, lob.has_lob_header(), vector))) {
-      } else if (OB_FAIL(text_result.init(vector.length(), nullptr))) {
+      if (OB_FAIL(eval_ctx.exec_ctx_.get_lob_read_options(options))) {
+      } else if (OB_FAIL(lob.get_lob_data_byte_len(lob_len))) {
+      } else if (OB_FAIL(text_result.init(lob_len, nullptr))) {
       } else if (OB_FAIL(text_result.get_reserved_buffer(vec_buff_ptr, buff_len))) {
+      } else if (FALSE_IT(destination.assign_buffer(vec_buff_ptr, buff_len))) {
+      } else if (OB_FAIL(reader.init(0, options, &ctx_allocator, &ctx_allocator))) {
+      } else if (OB_FAIL(reader.get_full_data(vector, &destination))) {
       } else {
-        MEMCPY(vec_buff_ptr, vector.ptr(), vector.length());
         if (OB_FAIL(text_result.lseek(vector.length(), 0))) {
         } else {
           ObString res_str;

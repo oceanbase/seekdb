@@ -162,35 +162,27 @@ int ObBatchCreateTabletHelper::add_arg_to_batch_arg(
 }
 
 int ObBatchCreateTabletHelper::add_table_schema_(
-    const share::schema::ObTableSchema &const_table_schema,
+    const share::schema::ObTableSchema &table_schema,
     const uint64_t data_format_version,
     const bool need_create_empty_major,
     int64_t &index)
 {
   int ret = OB_SUCCESS;
-  HEAP_VAR(ObTableSchema, table_schema) {
-  if (OB_FAIL(table_schema.assign(const_table_schema))) {
-  }
-
-  if (OB_FAIL(ret)) {
-  } else {
-    index = batch_arg_.create_tablet_schemas_.count();
-    ObCreateTabletSchema *create_tablet_schema = NULL;
-    void *create_tablet_schema_ptr = batch_arg_.allocator_.alloc(sizeof(ObCreateTabletSchema));
-    obcall::ObCreateTabletExtraInfo create_tablet_extr_info;
-    if (OB_ISNULL(create_tablet_schema_ptr)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("failed to allocate storage schema", KR(ret), K(table_schema));
-    } else if (FALSE_IT(create_tablet_schema = new (create_tablet_schema_ptr)ObCreateTabletSchema())) {
-    } else if (OB_FAIL(create_tablet_schema->init(batch_arg_.allocator_, table_schema,
-                                                  false /*skip_column_info*/))) {
-    } else if (OB_FAIL(batch_arg_.create_tablet_schemas_.push_back(create_tablet_schema))) {
-    } else if (OB_FAIL(create_tablet_extr_info.init(data_format_version,
-                                                    need_create_empty_major,
-                                                    table_schema.get_micro_index_clustered()))) {
-    } else if (OB_FAIL(batch_arg_.tablet_extra_infos_.push_back(create_tablet_extr_info))) {
-    }
-  }
+  index = batch_arg_.create_tablet_schemas_.count();
+  ObCreateTabletSchema *create_tablet_schema = NULL;
+  void *create_tablet_schema_ptr = batch_arg_.allocator_.alloc(sizeof(ObCreateTabletSchema));
+  obcall::ObCreateTabletExtraInfo create_tablet_extr_info;
+  if (OB_ISNULL(create_tablet_schema_ptr)) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("failed to allocate storage schema", KR(ret), K(table_schema));
+  } else if (FALSE_IT(create_tablet_schema = new (create_tablet_schema_ptr)ObCreateTabletSchema())) {
+  } else if (OB_FAIL(create_tablet_schema->init(batch_arg_.allocator_, table_schema,
+                                                false /*skip_column_info*/))) {
+  } else if (OB_FAIL(batch_arg_.create_tablet_schemas_.push_back(create_tablet_schema))) {
+  } else if (OB_FAIL(create_tablet_extr_info.init(data_format_version,
+                                                  need_create_empty_major,
+                                                  table_schema.get_micro_index_clustered()))) {
+  } else if (OB_FAIL(batch_arg_.tablet_extra_infos_.push_back(create_tablet_extr_info))) {
   }
   return ret;
 }

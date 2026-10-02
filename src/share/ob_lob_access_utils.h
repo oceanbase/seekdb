@@ -97,7 +97,8 @@ public:
   ObTextStringIterState get_next_block(ObString &str);
 
 
-  int get_full_data(ObString &data_str);
+  // destination, when supplied, owns the result buffer and must fit the full value.
+  int get_full_data(ObString &data_str, ObString *destination = nullptr);
 
   int get_inrow_or_outrow_prefix_data(ObString &data_str,
                                       uint32_t prefix_char_len = DEAFULT_LOB_PREFIX_CHAR_LEN);
@@ -127,7 +128,7 @@ public:
                                                  bool need_deep_copy = false);
 
 private:
-  int get_outrow_lob_full_data(ObIAllocator *allocator = nullptr);
+  int get_outrow_lob_full_data(ObIAllocator *allocator = nullptr, ObString *destination = nullptr);
   int get_delta_lob_full_data(ObLobLocatorV2& lob_locator, ObIAllocator *allocator, ObString &data);
   int get_first_block(ObString &str);
   int get_next_block_inner(ObString &str);

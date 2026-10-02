@@ -63,7 +63,8 @@ public:
 };
 
 int read_in_process_lob(common::ObLobLocatorV2 &locator, int64_t timeout,
-                        common::ObIAllocator &allocator, common::ObString &output);
+                        common::ObIAllocator &allocator, common::ObString &output,
+                        common::ObString *destination = nullptr);
 
 class InProcessLobReadService final : public common::ObILobReadService {
 public:
@@ -74,11 +75,11 @@ public:
       common::ObCollationType cs_type,
       bool has_lob_header,
       bool is_outrow,
-      common::ObIAllocator *tmp_alloc) override {
+      common::ObIAllocator *tmp_alloc, common::ObString *destination) override {
     return use_remote(ctx.locator_)
-        ? (!has_lob_header || !is_outrow ? OB_INVALID_ARGUMENT : materialize(ctx, ctx.locator_))
+        ? (!has_lob_header || !is_outrow ? OB_INVALID_ARGUMENT : materialize(ctx, ctx.locator_, destination))
         : local_ ? local_->get_outrow_lob_full_data(
-              ctx, cs_type, has_lob_header, is_outrow, tmp_alloc) : OB_NOT_INIT;
+              ctx, cs_type, has_lob_header, is_outrow, tmp_alloc, destination) : OB_NOT_INIT;
   }
 
   int get_delta_lob_full_data(
@@ -212,14 +213,15 @@ private:
     return locator.has_lob_header() && locator.is_persist_lob();
   }
 
-  int materialize(common::ObLobTextIterCtx &ctx, common::ObLobLocatorV2 &locator) {
+  int materialize(common::ObLobTextIterCtx &ctx, common::ObLobLocatorV2 &locator,
+                  common::ObString *destination = nullptr) {
     if (!ctx.alloc_ || !locator.has_lob_header()) { return OB_INVALID_ARGUMENT; }
     auto *session = THIS_WORKER.get_session();
     StorageSessionScope scope(session);
     if (scope.error()) { return scope.error(); }
     const int64_t timeout = ctx.timeout_ts_ > 0 ? ctx.timeout_ts_ : THIS_WORKER.get_timeout_ts();
     ObString data;
-    int ret = read_in_process_lob(locator, timeout, *ctx.alloc_, data);
+    int ret = read_in_process_lob(locator, timeout, *ctx.alloc_, data, destination);
     if (!ret && data.length() > UINT32_MAX) { ret = OB_INVALID_ARGUMENT; }
     if (!ret) {
       ctx.buff_ = data.empty() ? nullptr : data.ptr();
@@ -258,11 +260,14 @@ public:
       const ObWriteContext &write_context,
       const concurrent_control::ObWriteFlag &write_flag,
       ObDmlExecution &execution) override {
+    auto *session = THIS_WORKER.get_session();
+    StorageSessionScope scope(session);
+    if (scope.error()) { return scope.error(); }
     const auto view = table_plan.get_data_table();
     const auto &columns = table_plan.get_col_descs();
     const uint64_t table_id = view.is_valid() ? view.get_table_id() : write_spec.table_id_;
     ObSEArray<uint64_t, 16> effective_columns;
-    ObSchemaGetterGuard schema_guard;
+    auto schema_guard = std::make_shared<ObSchemaGetterGuard>();
     const ObTableSchema *logical_schema = nullptr;
     // Inner tables carry their schema even for namespace 1, matching the scan
     // path: the shared side must not re-resolve them through its own
@@ -274,7 +279,7 @@ public:
     int ret = OB_SUCCESS;
     if (send_logical_schema) {
       ret = worker_local_table_schema(
-          table_id, write_spec.schema_version_, schema_guard, logical_schema,
+          table_id, write_spec.schema_version_, *schema_guard, logical_schema,
           storage_space);
       if (ret) {
         fprintf(stderr,
@@ -291,8 +296,8 @@ public:
     } else if (columns.empty() && table_id != 0) {
       ObMultiVersionSchemaService *service = namespace_schema_service(serving_namespace());
       ret = service == nullptr ? OB_NOT_INIT
-          : service->get_runtime_schema_guard(schema_guard, write_spec.schema_version_);
-      if (!ret) { ret = schema_guard.get_table_schema(table_id, logical_schema); }
+          : service->get_runtime_schema_guard(*schema_guard, write_spec.schema_version_);
+      if (!ret) { ret = schema_guard->get_table_schema(table_id, logical_schema); }
     }
     if (ret) { return ret; }
     if (columns.empty() && logical_schema != nullptr) {
@@ -311,9 +316,7 @@ public:
       return OB_NOT_SUPPORTED;
     }
     auto prepared = std::make_unique<InProcessExecution>();
-    prepared->session = THIS_WORKER.get_session();
-    StorageSessionScope scope(prepared->session);
-    if (scope.error()) { return scope.error(); }
+    prepared->session = session;
     auto &tx = *static_cast<ObTxDesc *>(write_context.native_handle());
     prepared->tx = &tx;
     prepared->txid = tx.get_tx_id().get_id(); prepared->deadline = write_spec.timeout_;

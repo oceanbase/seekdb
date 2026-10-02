@@ -156,7 +156,7 @@ public:
                                        common::ObCollationType cs_type,
                                        bool has_lob_header,
                                        bool is_outrow,
-                                       common::ObIAllocator *tmp_alloc) override;
+                                       common::ObIAllocator *tmp_alloc, common::ObString *destination = nullptr) override;
   virtual int get_delta_lob_full_data(common::ObLobTextIterCtx &ctx,
                                       common::ObObjType type,
                                       common::ObCollationType cs_type,

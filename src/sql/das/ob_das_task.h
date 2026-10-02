@@ -26,6 +26,7 @@
 #include "lib/list/ob_obj_store.h"
 namespace oceanbase
 {
+namespace ns { class NamespaceRuntime; }
 namespace common
 {
 class ObNewRowIterator;
@@ -130,6 +131,7 @@ public:
       plan_line_id_(0),
       srs_provider_(nullptr),
       lob_read_options_(nullptr),
+      namespace_runtime_(nullptr),
       das_task_start_timestamp_(0)
   {
     das_task_node_.get_data() = this;
@@ -167,6 +169,7 @@ public:
   {
     srs_provider_ = srs_provider;
   }
+  void set_namespace_runtime(const ns::NamespaceRuntime *runtime) { namespace_runtime_ = runtime; }
   void set_lob_read_options(
       const common::ObLobReadOptions *lob_read_options)
   {
@@ -291,6 +294,7 @@ protected:
   int64_t plan_line_id_; //plan operator id
   common::ObISrsProvider *srs_provider_; // injected by SQL session context
   const common::ObLobReadOptions *lob_read_options_;
+  const ns::NamespaceRuntime *namespace_runtime_; // borrowed from the owning execution context
 public:
   int64_t das_task_start_timestamp_;
 

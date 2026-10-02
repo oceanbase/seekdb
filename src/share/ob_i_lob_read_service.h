@@ -65,7 +65,7 @@ public:
                                        ObCollationType cs_type,
                                        bool has_lob_header,
                                        bool is_outrow,
-                                       ObIAllocator *tmp_alloc) = 0;
+                                       ObIAllocator *tmp_alloc, common::ObString *destination = nullptr) = 0;
 
   // read the full json-delta out-of-row lob data(including partial-data merging), writes the result to ctx and data_str。
   virtual int get_delta_lob_full_data(ObLobTextIterCtx &ctx,

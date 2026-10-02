@@ -133,7 +133,7 @@ int ObDASDeleteOp::open_op()
   del_adaptor.use_snapshot_opt_ = das_snapshot_opt_info_.use_specify_snapshot_;
   del_adaptor.das_allocator_ = &op_alloc_;
   del_adaptor.ft_doc_word_infos_ = &doc_word_infos;
-  if (OB_FAIL(ObDASDomainUtils::build_ft_doc_word_infos(trans_desc_, snapshot_, related_ctdefs_, related_tablet_ids_,
+  if (OB_FAIL(ObDASDomainUtils::build_ft_doc_word_infos(namespace_runtime_, trans_desc_, snapshot_, related_ctdefs_, related_tablet_ids_,
           del_ctdef_->is_main_table_in_fts_ddl_, doc_word_infos))) {
   } else if (OB_FAIL(del_adaptor.write_tablet(dml_iter, affected_rows))) {
     if (OB_TRY_LOCK_ROW_CONFLICT != ret) {

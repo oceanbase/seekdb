@@ -172,9 +172,17 @@ int ObDDLLocalBuildExecutor::schedule_task()
         }
       }
     }
+    ObArray<obcall::ObDDLLocalBuildResult> results;
+    ObArray<int> statuses;
+    if (OB_SUCC(ret)) {
+      ret = context_.local_runtime_->build_ddl_local_batch(args, results, statuses);
+    }
+    if (OB_SUCC(ret) && (results.count() != args.count() || statuses.count() != args.count())) {
+      ret = OB_ERR_UNEXPECTED;
+    }
     for (int64_t i = 0; OB_SUCC(ret) && i < args.count(); ++i) {
-      obcall::ObDDLLocalBuildResult result;
-      const int call_ret = context_.local_runtime_->build_ddl_local(args.at(i), result);
+      const auto &result = results.at(i);
+      const int call_ret = statuses.at(i);
       ObSpinLockGuard guard(lock_);
       bool is_found = false;
       ObDDLBuildCtx *build_ctx = nullptr;
