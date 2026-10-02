@@ -27,6 +27,7 @@
 #include <thread>
 #include "observer/ob_server.h"
 #include "observer/namespace_worker_protocol_prototype.h"
+#include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 #include "namespace/namespace.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "data_plane/ddl/ob_direct_insert.h"
@@ -156,24 +157,36 @@ public:
 
   void reset_max_id_cache() override
   {
-    auto *service = namespace_worker_prototype::namespace_local_management_service(1);
-    if (service != nullptr) {
-      service->get_max_id_cache_mgr().reset();
+    storage::NamespaceForkKernelPrototype::invalidate_replayed_metadata();
+    std::vector<uint64_t> ids;
+    ns::namespace_registry().list_ids(ids);
+    for (uint64_t id : ids) {
+      auto *service = namespace_worker_prototype::namespace_local_management_service(id);
+      if (service != nullptr) { service->get_max_id_cache_mgr().reset(); }
     }
   }
 
   int refresh_schema() override
   {
     int ret = OB_SUCCESS;
-    int64_t schema_version = OB_INVALID_VERSION;
-    share::schema::ObRefreshSchemaStatus schema_status;
-    if (OB_FAIL(server_.home_schema_status_proxy().get_refresh_schema_status(schema_status))) {
-      LOG_WARN("failed to get schema refresh status", KR(ret));
-    } else if (OB_FAIL(server_.home_schema_service().get_schema_version_in_inner_table(
-        server_.home_sql_proxy(), schema_status, schema_version))) {
-      LOG_WARN("failed to get latest schema version", KR(ret));
-    } else if (OB_FAIL(server_.ob_service_.submit_async_refresh_schema_task(schema_version))) {
-      LOG_WARN("failed to submit schema refresh", KR(ret), K(schema_version));
+    if (!ATOMIC_LOAD(&GCTX.sys_package_ready_) && !ns::namespace_registry().is_ready()) {
+      return OB_SUCCESS; // Startup loads the initial view before admission.
+    } else if (OB_FAIL(namespace_worker_prototype::load_namespace_registry())) {
+      LOG_WARN("failed to refresh namespace registry", KR(ret));
+    } else {
+      std::vector<uint64_t> ids;
+      ns::namespace_registry().list_ids(ids);
+      for (uint64_t id : ids) {
+        ns::NamespaceRuntime *runtime = nullptr;
+        if (ns::namespace_registry().get(id, runtime) && runtime != nullptr
+            && runtime->service(ns::NamespaceRuntime::SCHEMA_SERVICE) != nullptr) {
+          const int refresh_ret = namespace_worker_prototype::prepare_namespace_login(*runtime);
+          if (refresh_ret != OB_SUCCESS && refresh_ret != OB_SCHEMA_EAGAIN) {
+            LOG_WARN("failed to refresh namespace schema", KR(refresh_ret), K(id));
+            if (OB_SUCC(ret)) { ret = refresh_ret; }
+          }
+        }
+      }
     }
     return ret;
   }
@@ -202,6 +215,17 @@ public:
   int start_timezone_manager() override
   {
     return server_.timezone_mgr_.start();
+  }
+
+  int wait_standby_metadata_ready() override
+  {
+    int ret = namespace_worker_prototype::load_namespace_registry();
+    if (OB_SUCC(ret)) {
+      ret = namespace_worker_prototype::complete_namespace_schema_bootstrap(
+          server_.home_schema_service());
+    }
+    if (OB_SUCC(ret)) { ns::namespace_registry().mark_ready(); }
+    return ret;
   }
 
 private:

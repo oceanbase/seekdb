@@ -165,6 +165,10 @@ public:
   bool begin_drop(uint64_t id);
   void cancel_drop(uint64_t id);
   void remove(uint64_t id);
+  // Published after restored names and SQL metadata can serve connections.
+  // This does not claim the node has run its local package installation job.
+  void mark_ready();
+  bool is_ready() const;
   // Catalog caches are owned by the same process-wide namespace authority.
   NamespaceControlState &control_state();
 private:

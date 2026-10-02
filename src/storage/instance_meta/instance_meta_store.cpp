@@ -353,10 +353,10 @@ int InstanceMetaStore::scan_rows(Transaction &tx, MetaCollection collection, con
     param.tx_lock_timeout_ = tx.deadline_;
     param.trans_desc_ = tx.descriptor_;
     param.tx_id_ = tx.descriptor_->get_tx_id();
-    // KV operations are sequential within a transaction and scans prohibit
-    // reentrant writes. Always include its latest own writes; the snapshot
-    // still bounds visibility of other transactions.
-    param.scan_flag_.read_latest_ = true;
+    // Include preceding writes only for a transaction with an assigned ID.
+    // Recovery readers have no write state and no append-backed transaction
+    // ID; their ordinary snapshot already bounds all visible data.
+    param.scan_flag_.read_latest_ = param.tx_id_.is_valid();
     param.scan_flag_.scan_order_ = ObQueryFlag::Forward;
     param.allocator_ = &allocator;
     param.scan_allocator_ = &allocator;

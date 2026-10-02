@@ -182,7 +182,7 @@ struct EngineScan {
     param.tx_seq_base_ = scan.tx_seq_base_;
     param.tx_id_ = data_plane::tx_desc_id(tx);
     param.trans_desc_ = tx; // Native pointer from this request, never from IPC.
-    if (!param.snapshot_.is_valid() || param.snapshot_.is_weak_read()
+    if (!param.snapshot_.is_valid()
         || (param.snapshot_.core_.tx_id_.is_valid() && param.snapshot_.core_.tx_id_ != param.tx_id_)
         || (!txid && read_latest)) {
       return OB_INVALID_ARGUMENT;

@@ -900,8 +900,7 @@ int ObMajorMergeProgressChecker::loop_index_ckm_validate_array()
       finish_index_cnt = 0;
       data_table_ckm.clear();
       prev_data_table_id = data_table_id;
-      if (OB_FAIL(data_table_ckm.build(data_table_id, get_compaction_scn(),
-                                       schema_guard))) {
+      if (OB_FAIL(ckm_validator_.build_table_checksum(data_table_id, schema_guard, data_table_ckm))) {
       } else {
         ++validator_statistics_.query_ckm_sql_cnt_;
       }
@@ -940,8 +939,7 @@ int ObMajorMergeProgressChecker::get_idx_ckm_and_validate(
 #endif
   // only for case : check special index table first
   if (should_handle_index_table) {
-    if (OB_FAIL(index_table_ckm.build(index_table_id, get_compaction_scn(),
-                                      schema_guard))) {
+    if (OB_FAIL(ckm_validator_.build_table_checksum(index_table_id, schema_guard, index_table_ckm))) {
     } else if (OB_UNLIKELY(index_table_ckm.get_table_schema()->should_not_validate_data_index_ckm())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("should not validate spatial index and data table", KR(ret), K(index_table_id), K(index_table_ckm));

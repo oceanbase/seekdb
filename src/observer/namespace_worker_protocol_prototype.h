@@ -198,7 +198,9 @@ int build_tablet_write_defensive(const share::schema::ObTableSchema &schema,
                                  common::ObMySQLTransaction &trans);
 // Namespace DROP drains access leases before reclaiming physical tablets.
 int drain_storage_namespace_access(uint64_t namespace_id);
-// Restore committed namespace names after the system package load completes.
+// Load committed names without installing packages or creating a template.
+int load_namespace_registry();
+// Restore names and initialize the primary's namespace template.
 int restore_namespace_registry();
 // Publish the table-schema delta committed by a namespace-local DDL into the
 // shared namespace directory before the SQL command is acknowledged.

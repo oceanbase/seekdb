@@ -32,6 +32,8 @@ class NamespaceForkKernelPrototype final
 {
 public:
   static int ensure_control_schema();
+  // Called after replay is sealed, before publishing primary write admission.
+  static void invalidate_replayed_metadata();
   static int begin_namespace_drop(const common::ObString &name, uint64_t &id, bool &done);
   static int lock_namespace_drop(uint64_t id,
                                  common::ObIArray<common::ObTabletID> &bound);

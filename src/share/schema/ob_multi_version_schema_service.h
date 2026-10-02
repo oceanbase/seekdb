@@ -280,6 +280,8 @@ public:
       const common::ObIArray<share::schema::ObTableSchema> &table_schemas,
       int64_t schema_version = OB_CORE_SCHEMA_VERSION + 1);
   int refresh_runtime_schema_from_static_system();
+  int refresh_runtime_schema_from_static_system(
+      const ObRefreshSchemaStatus &read_status, int64_t schema_version);
 
   // new schema refresh interface
   int refresh_and_add_schema(bool check_bootstrap = false,

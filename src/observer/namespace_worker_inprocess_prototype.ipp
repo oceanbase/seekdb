@@ -29,6 +29,88 @@
 #include <shared_mutex>
 #include <thread>
 namespace oceanbase { namespace observer { namespace namespace_worker_prototype {
+std::vector<uint64_t> &namespace_schema_load_stack()
+{
+  static thread_local std::vector<uint64_t> stack;
+  return stack;
+}
+bool namespace_schema_loading(uint64_t id)
+{
+  const auto &stack = namespace_schema_load_stack();
+  return std::find(stack.begin(), stack.end(), id) != stack.end();
+}
+class NamespaceSchemaLoadScope final
+{
+public:
+  explicit NamespaceSchemaLoadScope(uint64_t id) { namespace_schema_load_stack().push_back(id); }
+  ~NamespaceSchemaLoadScope() { namespace_schema_load_stack().pop_back(); }
+};
+// Read the published directory and SQL schema at one retained MVCC boundary.
+// Following replicas must never repair an in-progress primary publication.
+int load_committed_namespace_schema(uint64_t namespace_id,
+                                   ObMultiVersionSchemaService &schema)
+{
+  // Schema loading issues inner SQL in this same namespace. Its nested
+  // sessions use the installed static schemas while the outer load finishes.
+  if (namespace_schema_loading(namespace_id)) { return OB_SUCCESS; }
+  NamespaceSchemaLoadScope scope(namespace_id);
+  InProcessServingScope serving(namespace_id);
+  auto *access = share::server_service<storage::ObAccessService>();
+  if (access == nullptr) { return OB_NOT_INIT; }
+  auto &store = access->instance_meta_store();
+  storage::InstanceMetaStore::Transaction tx;
+  int ret = store.begin(tx, ObTimeUtility::current_time() + 30 * 1000 * 1000, true);
+  if (OB_SUCC(ret)) {
+    rootserver::InstanceNamespaceMetadata metadata(store, tx);
+    rootserver::InstanceNamespaceRecord record;
+    if (OB_FAIL(metadata.get_namespace(namespace_id, record))) {
+    } else if (record.roots.state != 0) {
+      ret = OB_ENTRY_NOT_EXIST;
+    } else if (record.roots.active_schema_changes != 0
+               || record.roots.pending_schema_version != 0) {
+      // Keep an already installed publication usable during the next DDL.
+      // In particular progress/management reads must keep serving while a
+      // table changes. A cold runtime still waits for a complete publication.
+      int64_t installed = OB_INVALID_VERSION;
+      ret = schema.get_runtime_refreshed_schema_version(installed);
+      if (OB_SUCC(ret) && (!schema.is_runtime_schema_ready()
+                          || installed < record.roots.schema_version)) {
+        ret = OB_SCHEMA_EAGAIN;
+      }
+    } else {
+      ObRefreshSchemaStatus status;
+      status.snapshot_timestamp_ = tx.snapshot_version().get_val_for_tx();
+      status.readable_schema_version_ = record.roots.schema_version;
+      ret = schema.refresh_runtime_schema_from_static_system(
+          status, record.roots.schema_version);
+    }
+    const int cleanup = store.rollback(tx);
+    if (OB_SUCC(ret)) { ret = cleanup; }
+  }
+  return ret;
+}
+int recover_namespace_schema_publication(uint64_t namespace_id,
+                                        ObMultiVersionSchemaService &schema)
+{
+  bool needed = false;
+  int ret = storage::NamespaceForkKernelPrototype::begin_schema_recovery(namespace_id, needed);
+  int64_t published = OB_INVALID_VERSION;
+  int64_t installed = OB_INVALID_VERSION;
+  if (OB_SUCC(ret) && needed) {
+    if (OB_FAIL(storage::NamespaceForkKernelPrototype::namespace_schema_version(namespace_id, published))) {
+    } else if (OB_FAIL(schema.refresh_runtime_schema_from_static_system())) {
+    } else if (OB_FAIL(schema.get_runtime_refreshed_schema_version(installed))) {
+    } else if (installed < published) {
+      ret = OB_STATE_NOT_MATCH;
+    } else if (installed > published) {
+      ret = sync_namespace_schema_delta(namespace_id, schema, installed);
+    }
+    if (OB_SUCC(ret)) {
+      ret = storage::NamespaceForkKernelPrototype::finish_schema_recovery(namespace_id, installed);
+    }
+  }
+  return ret;
+}
 class NamespaceSchemaLifecycle final : public INamespaceSchemaLifecycle
 {
 public:
@@ -38,6 +120,25 @@ public:
   void complete_bootstrap() { bootstrap_.store(false, std::memory_order_release); }
   int refresh() override
   {
+    if (bootstrap_.load(std::memory_order_acquire)) { return OB_SUCCESS; }
+    if (namespace_schema_loading(ns_)) { return OB_SUCCESS; }
+    if (share::server_is_recovery_mode()) {
+      primary_recovery_pending_.store(true, std::memory_order_release);
+      auto *schema = namespace_schema_service(ns_);
+      return schema == nullptr ? OB_NOT_INIT : load_committed_namespace_schema(ns_, *schema);
+    }
+    if (primary_recovery_pending_.load(std::memory_order_acquire)) {
+      std::lock_guard<std::mutex> guard(recovery_mutex_);
+      if (primary_recovery_pending_.load(std::memory_order_acquire)) {
+        NamespaceSchemaLoadScope scope(ns_);
+        auto *schema = namespace_schema_service(ns_);
+        const int ret = schema == nullptr ? OB_NOT_INIT
+            : load_on_access_ ? inprocess_refresh_schema(ns_)
+                              : recover_namespace_schema_publication(ns_, *schema);
+        if (ret != OB_SUCCESS) { return ret; }
+        primary_recovery_pending_.store(false, std::memory_order_release);
+      }
+    }
     return load_on_access_ ? inprocess_refresh_schema(ns_) : OB_SUCCESS;
   }
   int fetch_version(bool published, bool core_version, int64_t &version) override
@@ -79,6 +180,8 @@ private:
   uint64_t ns_;
   bool load_on_access_;
   std::atomic<bool> bootstrap_;
+  std::atomic<bool> primary_recovery_pending_{false};
+  std::mutex recovery_mutex_;
 };
 NamespaceSchemaLifecycle &bootstrap_schema_lifecycle()
 {
@@ -90,6 +193,9 @@ NamespaceSchemaLifecycle &bootstrap_schema_lifecycle()
 int complete_namespace_schema_bootstrap(ObMultiVersionSchemaService &service)
 {
   bootstrap_schema_lifecycle().complete_bootstrap();
+  // A replica loads the publication already committed by its primary.
+  // Persistent recovery is only permitted after local writes are admitted.
+  if (!share::server_is_write_enabled()) { return OB_SUCCESS; }
   bool needed = false;
   int ret = storage::NamespaceForkKernelPrototype::begin_schema_recovery(1, needed);
   int64_t version = OB_INVALID_VERSION;
@@ -973,6 +1079,9 @@ int inprocess_refresh_schema(uint64_t ns)
   // Service entries are retained for the lifetime of the process. Release the
   // map lock before refresh, which can re-enter this path through storage.
   guard.unlock();
+  if (share::server_is_recovery_mode()) {
+    return load_committed_namespace_schema(ns, *services.schema_service);
+  }
   int ret = OB_SUCCESS;
   if (!services.schema_loaded.load(std::memory_order_acquire)) {
     std::unique_lock<std::mutex> load_guard(services.schema_load_mutex);
@@ -1028,7 +1137,8 @@ int inprocess_refresh_schema(uint64_t ns)
     }
   }
   bool expected = false;
-  if (!ret && services.recovery_loaded.compare_exchange_strong(expected, true)) {
+  if (!ret && share::server_is_write_enabled()
+      && services.recovery_loaded.compare_exchange_strong(expected, true)) {
     rootserver::ObDDLTaskContext context;
     context.namespace_id_ = ns;
     context.local_build_mode_ = rootserver::ObDDLTaskContext::LocalBuildMode::RESTARTABLE_SQL;

@@ -92,6 +92,9 @@ public:
     const uint64_t table_id,
     const common::ObIArray<common::ObTabletID> &tablet_ids);
   int batch_update_report_scn();
+  int build_table_checksum(uint64_t table_id,
+      share::schema::ObSchemaGetterGuard &schema_guard,
+      compaction::ObTableCkmItems &items);
   int handle_fts_checksum(
     share::schema::ObSchemaGetterGuard &schema_guard,
     const ObFTSGroupArray &fts_group_array);
@@ -104,6 +107,8 @@ private:
   int get_table_compaction_info(const uint64_t table_id, compaction::ObTableCompactionInfo &table_compaction_info);
   int set_need_validate();
   int get_tablet_ids(const share::schema::ObSimpleTableSchemaV2 &simple_schema);
+  int get_physical_tablet_ids(const share::schema::ObSimpleTableSchemaV2 &simple_schema,
+      common::ObIArray<common::ObTabletID> &tablet_ids);
   int get_local_ckm(const bool include_larger_than = false);
   /* Local Tablet Checksum Section */
   int validate_local_tablet_checksum();

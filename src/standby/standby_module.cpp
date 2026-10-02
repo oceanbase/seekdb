@@ -461,7 +461,9 @@ int StandbyModule::Impl::wait_metadata_ready()
   if (!is_inited_) {
     ret = OB_NOT_INIT;
   } else if (standby_profile_) {
-    if (OB_FAIL(host_->start_timezone_manager())) {
+    if (OB_FAIL(host_->wait_standby_metadata_ready())) {
+      LOG_WARN("failed to load standby metadata", KR(ret));
+    } else if (OB_FAIL(host_->start_timezone_manager())) {
       LOG_WARN("failed to start standby timezone manager", KR(ret));
     }
   } else if (OB_FAIL(host_->wait_primary_metadata_ready())) {

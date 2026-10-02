@@ -410,11 +410,12 @@ void NamespaceControlState::forget_chain_link(uint64_t namespace_id)
 }
 
 int NamespaceControlState::load_exceptions(uint64_t namespace_id,
-    IExceptionLoader &loader)
+    IExceptionLoader &loader, bool reload)
 {
   std::lock_guard<std::mutex> lock(exceptions_mutex_);
   ExceptionSet &set = exception_sets_[namespace_id];
-  if (set.loaded) { return 0; }
+  if (set.loaded && !reload) { return 0; }
+  ExceptionSet refreshed;
   struct RowSink final : IExceptionLoader::IRowSink {
     explicit RowSink(ExceptionSet &set) : set_(set) {}
     void add(const NamespaceExceptionRow &row) override {
@@ -426,14 +427,21 @@ int NamespaceControlState::load_exceptions(uint64_t namespace_id,
       }
     }
     ExceptionSet &set_;
-  } sink(set);
+  } sink(refreshed);
   const int error = loader.load(namespace_id, sink);
   if (error != 0) {
     exception_sets_.erase(namespace_id);
   } else {
-    set.loaded = true;
+    refreshed.loaded = true;
+    set = std::move(refreshed);
   }
   return error;
+}
+
+void NamespaceControlState::clear_exceptions()
+{
+  std::lock_guard<std::mutex> lock(exceptions_mutex_);
+  exception_sets_.clear();
 }
 
 bool NamespaceControlState::owned(uint64_t namespace_id,

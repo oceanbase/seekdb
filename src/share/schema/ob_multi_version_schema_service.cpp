@@ -1263,16 +1263,30 @@ int ObMultiVersionSchemaService::broadcast_runtime_schema(
 int ObMultiVersionSchemaService::refresh_runtime_schema_from_static_system()
 {
   int ret = OB_SUCCESS;
-  lib::ObMutexGuard guard(schema_refresh_mutex_);
-  ObSchemaMgr *schema_mgr = ATOMIC_LOAD(&schema_mgr_for_cache_);
   ObRefreshSchemaStatus status;
   status.snapshot_timestamp_ = OB_INVALID_TIMESTAMP;
   status.readable_schema_version_ = OB_INVALID_VERSION;
   int64_t schema_version = OB_INVALID_VERSION;
-  if (!check_inner_stat() || OB_ISNULL(sql_proxy_) || OB_ISNULL(schema_mgr)) {
+  if (!check_inner_stat() || OB_ISNULL(sql_proxy_)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(get_schema_version_in_inner_table(
                  *sql_proxy_, status, schema_version))) {
+  } else {
+    ret = refresh_runtime_schema_from_static_system(status, schema_version);
+  }
+  return ret;
+}
+
+int ObMultiVersionSchemaService::refresh_runtime_schema_from_static_system(
+    const ObRefreshSchemaStatus &status, const int64_t schema_version)
+{
+  int ret = OB_SUCCESS;
+  lib::ObMutexGuard guard(schema_refresh_mutex_);
+  ObSchemaMgr *schema_mgr = ATOMIC_LOAD(&schema_mgr_for_cache_);
+  if (!check_inner_stat() || OB_ISNULL(sql_proxy_) || OB_ISNULL(schema_mgr)) {
+    ret = OB_ERR_UNEXPECTED;
+  } else if (schema_version < 0) {
+    ret = OB_INVALID_ARGUMENT;
   } else if (schema_mgr->get_schema_version() >= schema_version) {
   } else if (OB_FAIL(refresh_runtime_full_schema(
                  *sql_proxy_, status, schema_version, nullptr, true))) {

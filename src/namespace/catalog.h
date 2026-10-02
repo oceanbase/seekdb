@@ -160,7 +160,8 @@ public:
   bool chain_link(uint64_t namespace_id, uint64_t &parent, int64_t &fork_cap) const;
   void remember_chain_link(uint64_t namespace_id, uint64_t parent, int64_t fork_cap);
   void forget_chain_link(uint64_t namespace_id);
-  int load_exceptions(uint64_t namespace_id, IExceptionLoader &loader);
+  int load_exceptions(uint64_t namespace_id, IExceptionLoader &loader, bool reload = false);
+  void clear_exceptions();
   bool owned(uint64_t namespace_id, uint64_t local_tablet,
              uint64_t *table = nullptr) const;
   bool tombstoned(uint64_t namespace_id, uint64_t local_tablet) const;

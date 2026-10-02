@@ -2,6 +2,7 @@
 #include "namespace/catalog.h"
 
 #include <cstring>
+#include <atomic>
 #include <mutex>
 #include <new>
 #include <unordered_map>
@@ -41,6 +42,7 @@ struct NamespaceRegistry::Impl
   std::mutex mutex;
   std::unordered_map<uint64_t, Entry *> entries;
   NamespaceControlState control_state;
+  std::atomic<bool> ready{false};
 };
 
 NamespaceRegistry::NamespaceRegistry() : impl_(new (std::nothrow) Impl()) {}
@@ -177,6 +179,16 @@ void NamespaceRegistry::remove(uint64_t id)
 NamespaceControlState &NamespaceRegistry::control_state()
 {
   return impl_->control_state;
+}
+
+void NamespaceRegistry::mark_ready()
+{
+  if (impl_ != nullptr) { impl_->ready.store(true, std::memory_order_release); }
+}
+
+bool NamespaceRegistry::is_ready() const
+{
+  return impl_ != nullptr && impl_->ready.load(std::memory_order_acquire);
 }
 
 NamespaceRegistry &namespace_registry()

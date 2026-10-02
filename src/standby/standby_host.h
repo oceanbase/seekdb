@@ -99,6 +99,7 @@ public:
   virtual int bootstrap_primary() = 0;
   virtual int report_bootstrap_telemetry() = 0;
   virtual int wait_primary_metadata_ready() = 0;
+  virtual int wait_standby_metadata_ready() = 0;
   virtual int start_timezone_manager() = 0;
 };
 

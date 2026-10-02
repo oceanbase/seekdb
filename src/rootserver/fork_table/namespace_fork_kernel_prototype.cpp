@@ -101,6 +101,8 @@ int exclude_active_tablets(ObIArray<ObTabletID> &candidates, bool &need_retry)
 std::shared_mutex namespace_state_mutex;
 std::unordered_map<uint64_t, int64_t> namespace_state_cache;
 bool cached_namespace_state(uint64_t id, int64_t &state) {
+  // Replay does not run the primary's post-commit invalidation callbacks.
+  if (share::server_is_recovery_mode()) { return false; }
   std::shared_lock<std::shared_mutex> lock(namespace_state_mutex);
   const auto it = namespace_state_cache.find(id);
   if (it == namespace_state_cache.end()) { return false; }
@@ -108,6 +110,7 @@ bool cached_namespace_state(uint64_t id, int64_t &state) {
   return true;
 }
 void remember_namespace_state(uint64_t id, int64_t state) {
+  if (share::server_is_recovery_mode()) { return; }
   std::unique_lock<std::shared_mutex> lock(namespace_state_mutex);
   namespace_state_cache[id] = state;
 }
@@ -213,7 +216,8 @@ int load_kv_exceptions(uint64_t namespace_id)
   auto *store = directory_kv_store();
   if (store == nullptr) { return OB_NOT_INIT; }
   KVExceptionLoader loader(*store);
-  return control_state().load_exceptions(namespace_id, loader);
+  return control_state().load_exceptions(namespace_id, loader,
+      share::server_is_recovery_mode());
 }
 int load_kv_namespace_state(uint64_t namespace_id, int64_t &state)
 {
@@ -223,6 +227,40 @@ int load_kv_namespace_state(uint64_t namespace_id, int64_t &state)
   rootserver::InstanceNamespaceRecord record;
   const int ret = directory.get(namespace_id, directory_deadline(), record);
   if (ret == OB_SUCCESS) { state = record.roots.state; }
+  return ret;
+}
+// Following replicas cannot rely on locally invalidated ownership caches.
+// A single-tablet lookup must stay a point read, even for partitioned tables.
+int load_kv_tablet_ownership(uint64_t namespace_id, uint64_t local_tablet,
+    bool &owned, uint64_t &table_id, int64_t *namespace_state = nullptr)
+{
+  owned = false;
+  table_id = OB_INVALID_ID;
+  auto *store = directory_kv_store();
+  if (store == nullptr) { return OB_NOT_INIT; }
+  InstanceMetaStore::Transaction tx;
+  int ret = store->begin(tx, directory_deadline(), true);
+  if (OB_SUCC(ret)) {
+    rootserver::InstanceNamespaceMetadata metadata(*store, tx);
+    if (namespace_state != nullptr) {
+      rootserver::InstanceNamespaceRecord record;
+      if (OB_FAIL(metadata.get_namespace(namespace_id, record))) {
+      } else {
+        *namespace_state = record.roots.state;
+      }
+    }
+    rootserver::InstanceExceptionRecord exception;
+    if (OB_SUCC(ret)) {
+      ret = metadata.get_exception(namespace_id, local_tablet, exception);
+      if (ret == OB_ENTRY_NOT_EXIST) { ret = OB_SUCCESS; }
+      else if (OB_SUCC(ret) && exception.kind == 0) {
+        owned = true;
+        table_id = exception.table_id;
+      }
+    }
+    const int cleanup = store->rollback(tx);
+    if (OB_SUCC(ret)) { ret = cleanup; }
+  }
   return ret;
 }
 // Committed physical presence in the tablet manager. Uncommitted creations do
@@ -494,6 +532,18 @@ int NamespaceForkKernelPrototype::ensure_control_schema() {
   LOG_INFO("PROTOTYPE_NAMESPACE_CONTROL_SCHEMA", K(ret));
   return ret;
 }
+void NamespaceForkKernelPrototype::invalidate_replayed_metadata()
+{
+  {
+    std::unique_lock<std::shared_mutex> lock(namespace_state_mutex);
+    namespace_state_cache.clear();
+  }
+  {
+    std::unique_lock<std::shared_mutex> lock(tablet_table_mutex);
+    tablet_table_cache.clear();
+  }
+  control_state().clear_exceptions();
+}
 int NamespaceForkKernelPrototype::begin_namespace_drop(const ObString &name, uint64_t &id, bool &done) {
   done = false; id = 0;
   auto *store = directory_kv_store();
@@ -565,14 +615,19 @@ int NamespaceForkKernelPrototype::check_baseline_access(
   // drains active accesses before deleting the owned rows, so an admitted DAG
   // always finishes against a valid binding.
   int64_t state = 0;
-  if (cached_namespace_state(ns, state)) {
+  bool owned = false;
+  if (share::server_is_recovery_mode()) {
+    uint64_t table = OB_INVALID_ID;
+    ret = load_kv_tablet_ownership(ns, local_of(tablet_id.id()), owned, table, &state);
   } else {
-    const int state_ret = load_kv_namespace_state(ns, state);
-    if (state_ret != OB_SUCCESS) { return state_ret; }
-    remember_namespace_state(ns, state);
+    if (!cached_namespace_state(ns, state)) {
+      if (OB_FAIL(load_kv_namespace_state(ns, state))) { return ret; }
+      remember_namespace_state(ns, state);
+    }
+    ret = load_kv_exceptions(ns);
+    owned = control_state().owned(ns, local_of(tablet_id.id()));
   }
-  ret = load_kv_exceptions(ns);
-  if (OB_SUCC(ret) && (state != 0 || !control_state().owned(ns, local_of(tablet_id.id())))) {
+  if (OB_SUCC(ret) && (state != 0 || !owned)) {
     // A retired intermediate copy may still supply descendants. Completing
     // its baseline lets those descendants eventually release the whole chain.
     ObArray<ObTabletID> candidate;
@@ -1214,6 +1269,10 @@ int NamespaceForkKernelPrototype::is_tablet_owned(
   int ret = local_object_id(namespace_id, tablet_id.id(), local_tablet_id);
   if (OB_FAIL(ret)) { return ret; }
   MetadataReadGuard access; if (access.error() != OB_SUCCESS) { return access.error(); }
+  if (share::server_is_recovery_mode()) {
+    uint64_t table = OB_INVALID_ID;
+    return load_kv_tablet_ownership(namespace_id, local_tablet_id, owned, table);
+  }
   // Ownership is exactly the owned exception row: the physical tablet id is a
   // pure function of (namespace, local tablet), so no binding is recorded.
   if (OB_FAIL(load_kv_exceptions(namespace_id))) {
@@ -1258,6 +1317,14 @@ int NamespaceForkKernelPrototype::table_id_for_tablet(const ObTabletID &tablet, 
   if (!is_encoded_id(tablet.id()) || directory_kv_store() == nullptr) {
     return OB_INVALID_ARGUMENT;
   }
+  // System schemas retain their logical tablet/table identity in every
+  // namespace. Physical encoding must not send them through user-table
+  // ownership mappings, which contain no bootstrap system-table entries.
+  const uint64_t logical_tablet = local_of(tablet.id());
+  if (ObTabletID(logical_tablet).is_inner_tablet()) {
+    table_id = logical_tablet;
+    return OB_SUCCESS;
+  }
   {
     std::shared_lock<std::shared_mutex> lock(tablet_table_mutex);
     const auto it = tablet_table_cache.find(tablet.id());
@@ -1268,6 +1335,15 @@ int NamespaceForkKernelPrototype::table_id_for_tablet(const ObTabletID &tablet, 
   // through their ancestor and never appear in this namespace's set.
   const uint64_t db = database_of(tablet.id());
   uint64_t local_table = 0;
+  if (share::server_is_recovery_mode()) {
+    bool owned = false;
+    const int ret = load_kv_tablet_ownership(db, local_of(tablet.id()), owned, local_table);
+    if (ret == OB_SUCCESS && owned) {
+      table_id = local_table;
+      remember_tablet_table(tablet.id(), table_id);
+    }
+    return ret;
+  }
   const int ret = load_kv_exceptions(db);
   if (ret != OB_SUCCESS) { return ret; }
   if (!control_state().owned(db, local_of(tablet.id()), &local_table)) { return OB_SUCCESS; }

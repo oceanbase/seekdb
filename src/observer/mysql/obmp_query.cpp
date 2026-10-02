@@ -90,6 +90,9 @@ int ObMPQuery::process()
         namespace_worker_prototype::in_process_session_ns(sess));
     if (OB_SUCC(ret) && OB_FAIL(namespace_worker_prototype::refresh_session_schema(sess))) {
       LOG_WARN("failed to refresh namespace schema", K(ret));
+      // An in-progress replicated DDL publication is retryable. The bound
+      // session remains valid, so return the error without closing its socket.
+      if (ret == OB_SCHEMA_EAGAIN) { need_disconnect = false; }
     }
     if (OB_SUCC(ret)) {
       int64_t database_schema_version = 0;

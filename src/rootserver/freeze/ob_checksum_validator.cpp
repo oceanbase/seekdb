@@ -18,6 +18,7 @@
 
 #include "ob_checksum_validator.h"
 #include "rootserver/freeze/ob_major_merge_progress_checker.h"
+#include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "share/ob_structured_event_logger.h"
 
@@ -83,7 +84,7 @@ int ObChecksumValidator::deal_with_special_table_at_last(bool &finish_validate)
   } else if (OB_ISNULL(simple_schema_)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table schema is null", KR(ret), K_(table_id));
-  } else if (OB_FAIL(simple_schema_->get_tablet_ids(cur_tablet_ids_))) {
+  } else if (OB_FAIL(get_tablet_ids(*simple_schema_))) {
   } else if (OB_UNLIKELY(cur_tablet_ids_.empty())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get tablet ids of current table schema", KR(ret), K_(table_id),
@@ -170,7 +171,7 @@ int ObChecksumValidator::get_tablet_ids(
     if (OB_UNLIKELY(!simple_schema.has_tablet())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tablet schema should have tablet", K(ret), K(simple_schema));
-    } else if (OB_FAIL(simple_schema.get_tablet_ids(tablet_ids))) {
+    } else if (OB_FAIL(get_physical_tablet_ids(simple_schema, tablet_ids))) {
     } else if (OB_UNLIKELY(tablet_ids.empty())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to get tablet_ids of current table schema", KR(ret), K(simple_schema));
@@ -193,6 +194,48 @@ int ObChecksumValidator::get_tablet_ids(
         }
 #endif
     }
+  }
+  return ret;
+}
+
+int ObChecksumValidator::get_physical_tablet_ids(
+    const ObSimpleTableSchemaV2 &simple_schema, ObIArray<ObTabletID> &tablet_ids)
+{
+  int ret = OB_SUCCESS;
+  if (OB_ISNULL(sql_proxy_)) {
+    ret = OB_NOT_INIT;
+  } else if (OB_FAIL(simple_schema.get_tablet_ids(tablet_ids))) {
+  } else {
+    // Storage checksum/report readers receive physical addresses. Keep the
+    // Namespace translation at their explicitly bound rootserver boundary.
+    for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
+      uint64_t physical_id = OB_INVALID_ID;
+      if (OB_FAIL(storage::NamespaceForkKernelPrototype::storage_object_id(
+              sql_proxy_->target_namespace(), tablet_ids.at(i).id(), physical_id))) {
+      } else {
+        tablet_ids.at(i) = ObTabletID(physical_id);
+      }
+    }
+  }
+  return ret;
+}
+
+int ObChecksumValidator::build_table_checksum(uint64_t table_id,
+    ObSchemaGetterGuard &schema_guard, ObTableCkmItems &items)
+{
+  int ret = OB_SUCCESS;
+  const ObSimpleTableSchemaV2 *simple_schema = nullptr;
+  ObSEArray<ObTabletID, 64> tablets;
+  ObLocalTabletChecksumArray checksums(false /* need_map */);
+  if (OB_FAIL(schema_guard.get_simple_table_schema(table_id, simple_schema))) {
+  } else if (OB_ISNULL(simple_schema)) {
+    ret = OB_TABLE_NOT_EXIST;
+  } else if (OB_FAIL(get_physical_tablet_ids(*simple_schema, tablets))) {
+  } else if (OB_FAIL(checksums.init(tablets.count()))) {
+  } else if (OB_FAIL(ObTabletLocalChecksumOperator::get_local_tablet_checksum_items(
+          get_compaction_scn(), tablets, checksums))) {
+  } else {
+    ret = items.build(schema_guard, *simple_schema, tablets, checksums);
   }
   return ret;
 }
@@ -564,8 +607,7 @@ int ObChecksumValidator::verify_table_index(
     }
     if (nullptr != data_table_ckm_ptr || OB_FAIL(ret)) {
     } else if (FALSE_IT(data_table_ckm_ptr = &data_table_ckm)) {
-    } else if (OB_FAIL(data_table_ckm.build(data_table_id, get_compaction_scn(),
-                                     *schema_guard_))) {
+    } else if (OB_FAIL(build_table_checksum(data_table_id, *schema_guard_, data_table_ckm))) {
     } else {
       ++statistics_.query_ckm_sql_cnt_;
     }
@@ -616,8 +658,7 @@ int ObChecksumValidator::build_ckm_item_for_fts(const int64_t table_id,
   } else if (OB_UNLIKELY(!table_compaction_info.is_compacted())) {
     LOG_WARN("exist special status table", KR(ret), K(table_compaction_info));
     skip_verify = true;
-  } else if (OB_FAIL(ckm_item.build(table_id, get_compaction_scn(),
-                                    *schema_guard_))) {
+  } else if (OB_FAIL(build_table_checksum(table_id, *schema_guard_, ckm_item))) {
     if (OB_TABLE_NOT_EXIST == ret || OB_STATE_NOT_MATCH == ret || OB_ITEM_NOT_MATCH == ret) {
       skip_verify = true;
       ret = OB_SUCCESS;

@@ -48,6 +48,7 @@ public:
     ~Transaction(); // Rolls back an owned transaction, or detaches a borrowed one.
     bool is_active() const { return descriptor_ != nullptr; }
     bool is_directory_gc() const { return directory_gc_; }
+    const share::SCN &snapshot_version() const { return snapshot_.core_.version_; }
   private:
     friend class InstanceMetaStore;
     InstanceMetaStore *owner_;

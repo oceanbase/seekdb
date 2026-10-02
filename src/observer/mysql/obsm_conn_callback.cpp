@@ -85,7 +85,8 @@ int ObSMConnectionCallback::init(ObSqlSockSession& sess, ObSMConnection& conn)
             root_runtime->service(ns::NamespaceRuntime::SCHEMA_SERVICE))
       : nullptr;
   if (!sess.client_addr_.using_unix()
-      && !ATOMIC_LOAD(&GCTX.sys_package_ready_)) {
+      && !ATOMIC_LOAD(&GCTX.sys_package_ready_)
+      && !ns::namespace_registry().is_ready()) {
     ret = OB_SERVER_IS_INIT;
   } else if (OB_ISNULL(schema_service)) {
     ret = OB_NOT_INIT;
