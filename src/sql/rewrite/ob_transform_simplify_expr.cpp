@@ -1686,7 +1686,8 @@ int ObTransformSimplifyExpr::try_remove_subquery_in_expr(ObDMLStmt* stmt, ObRawE
     }
   }
   if (OB_SUCC(ret) && trans_happened) {
-    if (OB_FAIL(expr->formalize(ctx_->session_info_))) {
+    if (OB_FAIL(ObRawExprUtils::erase_operand_implicit_cast(expr, expr))) {
+    } else if (OB_FAIL(expr->formalize(ctx_->session_info_))) {
     }
   }
   return ret;
@@ -1701,7 +1702,7 @@ int ObTransformSimplifyExpr::adjust_subquery_comparison_expr(ObRawExpr*& expr,
   int ret = OB_SUCCESS;
   bool b_value = false;
   bool build_bool_expr = true;
-  ObRawExpr *bool_expr = NULL;
+  ObConstRawExpr *int_expr = NULL;
   if (OB_ISNULL(expr) 
       || OB_ISNULL(ctx_) 
       || OB_ISNULL(ctx_->expr_factory_) 
@@ -1731,11 +1732,12 @@ int ObTransformSimplifyExpr::adjust_subquery_comparison_expr(ObRawExpr*& expr,
   }
   if (OB_FAIL(ret)) {
   } else if (build_bool_expr) {
-    if (OB_FAIL(ObRawExprUtils::build_const_bool_expr(ctx_->expr_factory_, 
-                                                      bool_expr, 
-                                                      b_value))) {
+    if (OB_FAIL(ObRawExprUtils::build_const_int_expr(*ctx_->expr_factory_,
+                                                     ObIntType,
+                                                     b_value ? 1 : 0,
+                                                     int_expr))) {
     } else {
-      expr = bool_expr;
+      expr = int_expr;
     }
   } else {
     ObOpRawExpr *new_expr = NULL;
