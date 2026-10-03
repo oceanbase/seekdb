@@ -353,19 +353,15 @@ int InstanceMetaStore::scan_rows(Transaction &tx, MetaCollection collection, con
     param.tx_lock_timeout_ = tx.deadline_;
     param.trans_desc_ = tx.descriptor_;
     param.tx_id_ = tx.descriptor_->get_tx_id();
-    // Include preceding writes only for a transaction with an assigned ID.
-    // Recovery readers have no write state and no append-backed transaction
-    // ID; their ordinary snapshot already bounds all visible data.
-    param.scan_flag_.read_latest_ = param.tx_id_.is_valid();
     param.scan_flag_.scan_order_ = ObQueryFlag::Forward;
     param.allocator_ = &allocator;
     param.scan_allocator_ = &allocator;
     param.reserved_cell_count_ = 3;
     param.limit_param_.limit_ = -1;
     param.limit_param_.offset_ = 0;
-    // Refresh the transaction's write sequence, so reads see preceding KV
-    // writes. A locked read needs a timestamp acquired AFTER obtaining the
-    // row lock; read_latest alone only controls the own-transaction state.
+    // The current transaction sequence includes preceding KV writes. Ordinary
+    // reads retain the pinned commit snapshot; locked reads use the snapshot
+    // acquired after obtaining the row lock.
     if (OB_FAIL(transactions_.get_read_snapshot(*tx.descriptor_, ObTxIsolationLevel::RC,
                                                tx.deadline_, param.snapshot_))) {
     }
