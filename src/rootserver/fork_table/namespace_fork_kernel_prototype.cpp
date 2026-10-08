@@ -435,14 +435,46 @@ int collect_metadata() {
   return ret;
 }
 
+
+int scan_namespace_sources(uint64_t id, const std::string &position, int64_t deadline,
+    std::vector<std::pair<std::string, ns::CatalogValue>> &entries)
+{
+  auto *store = directory_kv_store();
+  if (store == nullptr) { return OB_NOT_INIT; }
+  InstanceMetaStore::Transaction tx;
+  int ret = store->begin(tx, deadline, true);
+  rootserver::InstanceNamespaceMetadata metadata(*store, tx);
+  rootserver::InstanceNamespaceRecord record;
+  if (OB_SUCC(ret)) { ret = metadata.get_namespace(id, record); }
+  if (OB_SUCC(ret) && record.roots.state != 0) { ret = OB_OP_NOT_ALLOW; }
+  if (OB_SUCC(ret)) {
+    rootserver::InstanceCatalogPageStore pages(metadata);
+    ns::NamespaceCatalogTree tree(pages);
+    const auto result = tree.scan(record.roots.directory, position, 64, entries);
+    if (!result.ok()) {
+      ret = result.error == ns::CatalogTreeError::STORE ? result.store_error : OB_CHECKSUM_ERROR;
+    }
+  }
+  if (tx.is_active()) {
+    const int end = store->rollback(tx);
+    if (OB_SUCC(ret)) { ret = end; }
+  }
+  return ret;
 }
 
-int NamespaceForkKernelPrototype::ensure_control_schema() {
+}
+
+int NamespaceForkKernelPrototype::ensure_control_schema(bool initial_install) {
   auto *access = share::server_service<ObAccessService>();
   auto *schema_service = directory_schema_service();
   auto *proxy = directory_sql_proxy();
   if (access == nullptr || schema_service == nullptr || proxy == nullptr) {
     return OB_NOT_INIT;
+  }
+  // A completed installation already owns its directory and template. Startup
+  // restores that state; it must not manufacture missing installation objects.
+  if (!initial_install) {
+    return observer::namespace_worker_prototype::complete_namespace_schema_bootstrap(*schema_service);
   }
   ObSchemaGetterGuard guard;
   int64_t schema_version = 0;
@@ -466,7 +498,19 @@ int NamespaceForkKernelPrototype::ensure_control_schema() {
   if (OB_SUCC(ret) && created) {
     uint64_t template_id = 0;
     ret = control_namespace(ObString::make_string("ns1"),
-        ObString::make_string("__template__"), template_id);
+        ObString::make_string("__template__"), template_id, false);
+    if (OB_SUCC(ret)) { ret = complete_initial_baseline(template_id, directory_deadline()); }
+  } else if (OB_SUCC(ret)) {
+    // A promoted replica has a new local package job but already owns the
+    // installed template from physical restore. Validate it without repairing
+    // a missing or partially built template from an unsuccessful installation.
+    rootserver::InstanceNamespaceDirectory directory(access->instance_meta_store());
+    rootserver::InstanceNamespaceRecord record;
+    bool complete = false;
+    ret = directory.find_live("__template__", directory_deadline(), record);
+    if (OB_SUCC(ret) && record.allow_login) { ret = OB_STATE_NOT_MATCH; }
+    if (OB_SUCC(ret)) { ret = check_initial_baseline(record.id, directory_deadline(), complete); }
+    if (OB_SUCC(ret) && !complete) { ret = OB_INIT_FAIL; }
   }
   LOG_INFO("PROTOTYPE_NAMESPACE_CONTROL_SCHEMA", K(ret));
   return ret;
@@ -906,6 +950,103 @@ int NamespaceForkKernelPrototype::reclaim_unreferenced_tablets(
   return ret;
 }
 
+int NamespaceForkKernelPrototype::materialize_source(
+    uint64_t namespace_id, uint64_t table_id, uint64_t data_tablet_id)
+{
+  ObTabletID tablet(encoded(namespace_id, data_tablet_id));
+  TabletAccessProtection protection;
+  // The same admission and root lock as a user write recheck the latest binding.
+  return prepare_access(namespace_id, table_id, tablet, false,
+      data_plane::ObNamespaceAccessMode::LEASED, protection,
+      [&](ObTabletID &physical) { return ensure_tablet(physical); });
+}
+
+int NamespaceForkKernelPrototype::check_initial_baseline(uint64_t id, int64_t deadline, bool &complete)
+{
+  complete = false;
+  std::string position;
+  bool end = false;
+  int ret = OB_SUCCESS;
+  while (OB_SUCC(ret) && !end) {
+    std::vector<std::pair<std::string, ns::CatalogValue>> entries;
+    ret = scan_namespace_sources(id, position, deadline, entries);
+    for (const auto &entry : entries) {
+      if (OB_FAIL(ret)) { break; }
+      position = entry.first;
+      ns::CatalogTabletSource source;
+      if (!ns::NamespaceCatalogCodec::decode_source(entry.second.data, source)) {
+        ret = OB_CHECKSUM_ERROR;
+      } else if (database_of(source.physical_tablet_id) != id || entry.second.cap != 0) {
+        return OB_SUCCESS;
+      } else {
+        ObTabletHandle tablet;
+        ret = ObTabletCreateDeleteHelper::check_and_get_tablet(
+            ObTabletMapKey(ObTabletID(source.physical_tablet_id)), tablet, 0,
+            ObMDSGetTabletMode::READ_WITHOUT_CHECK, transaction::ObTransVersion::MAX_TRANS_VERSION);
+        if (OB_SUCC(ret) && (tablet.get_obj()->is_empty_shell()
+            || !tablet.get_obj()->get_tablet_meta().fork_info_.is_complete())) { return OB_SUCCESS; }
+      }
+    }
+    end = entries.size() < 64;
+  }
+  complete = OB_SUCC(ret);
+  return ret;
+}
+
+int NamespaceForkKernelPrototype::complete_initial_baseline(uint64_t id, int64_t deadline)
+{
+  const int64_t previous_timeout = THIS_WORKER.get_timeout_ts();
+  deadline = std::min(deadline, ObTimeUtility::current_time() + 120 * 1000 * 1000L);
+  THIS_WORKER.set_timeout_ts(deadline);
+  int ret = OB_SUCCESS;
+  bool pending = true;
+  // No SQL Runtime, new scheduler or task journal. Native fork completion is
+  // persisted with the table store; poll it before completing the install job.
+  while (OB_SUCC(ret) && pending) {
+    pending = false;
+    std::string position;
+    bool end = false;
+    while (OB_SUCC(ret) && !end) {
+      if (ObTimeUtility::current_time() >= deadline) { ret = OB_TIMEOUT; break; }
+      std::vector<std::pair<std::string, ns::CatalogValue>> entries;
+      ret = scan_namespace_sources(id, position, deadline, entries);
+      for (const auto &entry : entries) {
+        if (OB_FAIL(ret)) { break; }
+        position = entry.first;
+        ns::CatalogTabletSource source;
+        if (!ns::NamespaceCatalogCodec::decode_source(entry.second.data, source)) {
+          ret = OB_CHECKSUM_ERROR;
+          break;
+        }
+        if (entry.first != ns::NamespaceCatalogCodec::object_key(source.data_tablet_id)) { continue; }
+        if (source.physical_tablet_id != encoded(id, source.data_tablet_id)) {
+          ret = materialize_source(id, source.table_id, source.data_tablet_id);
+        }
+        const uint64_t binding[] = {source.data_tablet_id,
+            source.lob_meta_tablet_id, source.lob_piece_tablet_id};
+        for (uint64_t local : binding) {
+          if (OB_FAIL(ret)) { break; }
+          if (local == 0) { continue; }
+          ObTabletHandle tablet;
+          ret = ObTabletCreateDeleteHelper::check_and_get_tablet(
+              ObTabletMapKey(ObTabletID(encoded(id, local))), tablet, 0,
+              ObMDSGetTabletMode::READ_WITHOUT_CHECK, transaction::ObTransVersion::MAX_TRANS_VERSION);
+          if (OB_SUCC(ret) && tablet.get_obj()->is_empty_shell()) { ret = OB_STATE_NOT_MATCH; }
+          if (OB_SUCC(ret) && !tablet.get_obj()->get_tablet_meta().fork_info_.is_complete()) {
+            pending = true;
+            ret = schedule_baseline(*tablet.get_obj());
+          }
+        }
+      }
+      end = entries.size() < 64;
+    }
+    if (OB_SUCC(ret) && pending) { ob_usleep(100000); }
+  }
+  THIS_WORKER.set_timeout_ts(previous_timeout);
+  LOG_INFO("namespace initial baseline completed", K(ret), K(id));
+  return ret;
+}
+
 int NamespaceForkKernelPrototype::materialize_inherited_tablets()
 {
   auto *store = directory_kv_store();
@@ -947,24 +1088,7 @@ int NamespaceForkKernelPrototype::materialize_inherited_tablets()
     last_namespace = selected;
     auto &position = positions[selected];
     std::vector<std::pair<std::string, ns::CatalogValue>> entries;
-    InstanceMetaStore::Transaction tx;
-    ret = store->begin(tx, deadline, true);
-    rootserver::InstanceNamespaceMetadata metadata(*store, tx);
-    rootserver::InstanceNamespaceRecord record;
-    if (OB_SUCC(ret)) { ret = metadata.get_namespace(selected, record); }
-    if (OB_SUCC(ret) && record.roots.state != 0) { ret = OB_OP_NOT_ALLOW; }
-    if (OB_SUCC(ret)) {
-      rootserver::InstanceCatalogPageStore pages(metadata);
-      ns::NamespaceCatalogTree tree(pages);
-      const auto result = tree.scan(record.roots.directory, position, 64, entries);
-      if (!result.ok()) {
-        ret = result.error == ns::CatalogTreeError::STORE ? result.store_error : OB_CHECKSUM_ERROR;
-      }
-    }
-    if (tx.is_active()) {
-      const int end = store->rollback(tx);
-      if (OB_SUCC(ret)) { ret = end; }
-    }
+    ret = scan_namespace_sources(selected, position, deadline, entries);
     if (OB_SUCC(ret)) {
       size_t consumed = 0;
       for (const auto &entry : entries) {
@@ -980,13 +1104,7 @@ int NamespaceForkKernelPrototype::materialize_inherited_tablets()
         // Visiting the main entry suffices; indexes have their own binding unit.
         if (entry.first != ns::NamespaceCatalogCodec::object_key(source.data_tablet_id)
             || source.physical_tablet_id == encoded(selected, source.data_tablet_id)) { continue; }
-        ObTabletID tablet(encoded(selected, source.data_tablet_id));
-        TabletAccessProtection protection;
-        // Recheck the latest binding under the same admission and root lock
-        // as a user write. A concurrent DROP/DDL cannot resurrect a scanned entry.
-        const int rc = prepare_access(selected, source.table_id, tablet, false,
-            data_plane::ObNamespaceAccessMode::LEASED, protection,
-            [&](ObTabletID &physical) { return ensure_tablet(physical); });
+        const int rc = materialize_source(selected, source.table_id, source.data_tablet_id);
         ++materialized;
         if (rc != OB_SUCCESS && rc != OB_TABLET_NOT_EXIST
             && rc != OB_ENTRY_NOT_EXIST && rc != OB_OP_NOT_ALLOW) {
@@ -1168,7 +1286,8 @@ int NamespaceForkKernelPrototype::observe_database(ObISQLClient &trans, const Ob
 int NamespaceForkKernelPrototype::check_database_ddl(const ObDatabaseSchema &schema, const ObISQLClient *trans) {
   return OB_SUCCESS;
 }
-int NamespaceForkKernelPrototype::control_namespace(const ObString &source, const ObString &target, uint64_t &id) {
+int NamespaceForkKernelPrototype::control_namespace(const ObString &source, const ObString &target,
+    uint64_t &id, bool allow_login) {
   id = 0;
   if (source.empty() || target.empty() || target.length() > 128) {
     return OB_INVALID_ARGUMENT;
@@ -1189,22 +1308,21 @@ int NamespaceForkKernelPrototype::control_namespace(const ObString &source, cons
   int ret = directory.fork_namespace(source_name, target_name,
       [&](int64_t &snapshot) {
         return observer::namespace_worker_prototype::acquire_storage_snapshot(snapshot);
-      }, begin_us + 120 * 1000 * 1000, child);
+      }, begin_us + 120 * 1000 * 1000, child, allow_login);
   if (OB_SUCC(ret) && !NamespaceObjectKey{child.id, 1}.is_valid()) {
     ret = OB_SIZE_OVERFLOW;
   }
   if (OB_SUCC(ret)) {
     id = child.id;
   }
-  if (OB_SUCC(ret) && target_name != "__template__"
-      && target_name != "__template_build__") {
+  if (OB_SUCC(ret)) {
     char register_name[ns::Namespace::MAX_NAME_LEN];
     if (target.length() >= sizeof(register_name)) {
       ret = OB_SIZE_OVERFLOW;
     } else {
       MEMCPY(register_name, target.ptr(), target.length());
       register_name[target.length()] = '\0';
-      if (ns::namespace_registry().add(id, register_name) != 0) {
+      if (ns::namespace_registry().add(id, register_name, child.allow_login) != 0) {
         ret = OB_ERR_UNEXPECTED;
       }
     }

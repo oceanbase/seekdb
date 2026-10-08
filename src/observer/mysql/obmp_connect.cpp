@@ -708,6 +708,9 @@ int ObMPConnect::bind_session_namespace(ObSQLSessionInfo &session)
       }
     }
   }
+  if (OB_SUCC(ret) && runtime != nullptr && !runtime->ns().allows_login()) {
+    ret = OB_OP_NOT_ALLOW;
+  }
   if (OB_SUCC(ret) && runtime != nullptr) {
     ret = namespace_worker_prototype::prepare_namespace_login(*runtime);
     if (ret != OB_SUCCESS) {

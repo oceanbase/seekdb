@@ -55,13 +55,15 @@ class Namespace final
 {
 public:
   static constexpr int64_t MAX_NAME_LEN = 128;
-  Namespace(uint64_t id, const char *name);
+  Namespace(uint64_t id, const char *name, bool allow_login = true);
   uint64_t id() const { return id_; }
   const char *name() const { return name_; }
+  bool allows_login() const { return allow_login_; }
   bool bind_name_if_empty(const char *name);
 private:
   uint64_t id_;
   char name_[MAX_NAME_LEN];
+  bool allow_login_;
 };
 
 // Per-namespace service holder, bound to sessions at login.
@@ -152,7 +154,7 @@ public:
   NamespaceRegistry();
   ~NamespaceRegistry();
   // 0 on success (also for the same id/name), -1 conflicting/invalid, -2 allocation failure.
-  int add(uint64_t id, const char *name);
+  int add(uint64_t id, const char *name, bool allow_login = true);
   // Returns true when found. Entries with an empty name never match find().
   bool get(uint64_t id, NamespaceRuntime *&runtime);
   bool find(const char *name, NamespaceRuntime *&runtime);

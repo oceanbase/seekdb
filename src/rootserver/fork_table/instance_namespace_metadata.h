@@ -35,6 +35,7 @@ struct InstanceNamespaceRecord
   ns::CatalogRoots roots;
   uint64_t parent_namespace = 0;
   int64_t fork_cap = 0;
+  bool allow_login = true;
 };
 
 enum class TabletVisibility
@@ -78,7 +79,8 @@ public:
   // name and capped roots in this transaction. The coordination row lock
   // fences this publication against watermark advancement until commit.
   int fork_namespace(const std::string &source_name, const std::string &target_name,
-                     const SnapshotAcquirer &acquire_snapshot, uint64_t &child_id);
+                     const SnapshotAcquirer &acquire_snapshot, uint64_t &child_id,
+                     bool allow_login = true);
 
   // The caller closes new access before marking DELETING, then drains admitted
   // access before finishing the logical drop in a later KV transaction.
@@ -159,7 +161,7 @@ public:
   // Commits the child, name and shared capped roots before returning child.
   int fork_namespace(const std::string &source_name, const std::string &target_name,
                      const InstanceNamespaceMetadata::SnapshotAcquirer &acquire_snapshot,
-                     int64_t deadline, InstanceNamespaceRecord &child);
+                     int64_t deadline, InstanceNamespaceRecord &child, bool allow_login = true);
   int find_live(const std::string &name, int64_t deadline,
                 InstanceNamespaceRecord &record);
   int find_named(const std::string &name, int64_t deadline,

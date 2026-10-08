@@ -253,6 +253,7 @@ int encode_namespace(const InstanceNamespaceRecord &record, std::string &value)
   append_roots_json(value, record.roots);
   append_json_u64(value, "parent_namespace", record.parent_namespace);
   append_json_i64(value, "fork_cap", record.fork_cap);
+  append_json_i64(value, "allow_login", record.allow_login ? 1 : 0);
   value += '}';
   return OB_SUCCESS;
 }
@@ -261,6 +262,7 @@ int decode_namespace(uint64_t id, const std::string &value, InstanceNamespaceRec
 {
   InstanceNamespaceRecord decoded;
   decoded.id = id;
+  int64_t allow_login = 0;
   ObArenaAllocator allocator(ObMemAttr("InstMetaJson"));
   ObJsonObject *object = nullptr;
   int ret = parse_json_object(value, allocator, object);
@@ -268,14 +270,17 @@ int decode_namespace(uint64_t id, const std::string &value, InstanceNamespaceRec
   if (ret == OB_SUCCESS) { ret = read_roots_json(*object, decoded.roots); }
   if (ret == OB_SUCCESS) { ret = json_u64(*object, "parent_namespace", decoded.parent_namespace); }
   if (ret == OB_SUCCESS) { ret = json_i64(*object, "fork_cap", decoded.fork_cap); }
+  if (ret == OB_SUCCESS) { ret = json_i64(*object, "allow_login", allow_login); }
   if (ret != OB_SUCCESS
       || !ns::NamespaceObjectKey{id, 1}.is_valid()
       || (decoded.name.empty() && decoded.roots.state != 2)
       || decoded.name.size() > 128
       || decoded.roots.state < 0 || decoded.roots.state > 2
-      || decoded.parent_namespace >= id || decoded.fork_cap < 0) {
+      || decoded.parent_namespace >= id || decoded.fork_cap < 0
+      || (allow_login != 0 && allow_login != 1)) {
     return OB_CHECKSUM_ERROR;
   }
+  decoded.allow_login = allow_login != 0;
   record = std::move(decoded);
   return OB_SUCCESS;
 }
@@ -748,7 +753,7 @@ int InstanceNamespaceMetadata::collect_unreachable_pages(
 
 int InstanceNamespaceMetadata::fork_namespace(const std::string &source_name,
     const std::string &target_name, const SnapshotAcquirer &acquire_snapshot,
-    uint64_t &child_id)
+    uint64_t &child_id, bool allow_login)
 {
   child_id = 0;
   if (source_name.empty() || source_name.size() > 128 || target_name.empty()
@@ -788,6 +793,7 @@ int InstanceNamespaceMetadata::fork_namespace(const std::string &source_name,
     child.roots = roots;
     child.parent_namespace = source_id;
     child.fork_cap = roots.snapshot;
+    child.allow_login = allow_login;
     ret = insert_namespace(child);
   }
   if (ret == OB_SUCCESS) { child_id = allocated_id; }
@@ -923,7 +929,7 @@ int InstanceNamespaceDirectory::ensure_root(const std::string &name,
 int InstanceNamespaceDirectory::fork_namespace(const std::string &source_name,
     const std::string &target_name,
     const InstanceNamespaceMetadata::SnapshotAcquirer &acquire_snapshot,
-    int64_t deadline, InstanceNamespaceRecord &child)
+    int64_t deadline, InstanceNamespaceRecord &child, bool allow_login)
 {
   child = InstanceNamespaceRecord();
   storage::InstanceMetaStore::Transaction tx;
@@ -932,7 +938,7 @@ int InstanceNamespaceDirectory::fork_namespace(const std::string &source_name,
   if (ret == OB_SUCCESS) {
     InstanceNamespaceMetadata metadata(store_, tx);
     uint64_t child_id = 0;
-    ret = metadata.fork_namespace(source_name, target_name, acquire_snapshot, child_id);
+    ret = metadata.fork_namespace(source_name, target_name, acquire_snapshot, child_id, allow_login);
     if (ret == OB_SUCCESS) { ret = metadata.get_namespace(child_id, staged); }
     if (ret == OB_SUCCESS && (staged.roots.state != 0
         || staged.parent_namespace == 0 || staged.fork_cap <= 0

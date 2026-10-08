@@ -12,7 +12,8 @@ namespace oceanbase
 namespace ns
 {
 
-Namespace::Namespace(uint64_t id, const char *name) : id_(id), name_()
+Namespace::Namespace(uint64_t id, const char *name, bool allow_login)
+    : id_(id), name_(), allow_login_(allow_login)
 {
   if (name != nullptr) {
     std::strncpy(name_, name, MAX_NAME_LEN - 1);
@@ -32,7 +33,8 @@ struct NamespaceRegistry::Impl
 {
   struct Entry
   {
-    Entry(uint64_t id, const char *name) : ns(id, name), runtime(ns) {}
+    Entry(uint64_t id, const char *name, bool allow_login)
+        : ns(id, name, allow_login), runtime(ns) {}
     Namespace ns;
     NamespaceRuntime runtime;
     uint64_t connections = 0;
@@ -55,15 +57,16 @@ NamespaceRegistry::~NamespaceRegistry()
   }
 }
 
-int NamespaceRegistry::add(uint64_t id, const char *name)
+int NamespaceRegistry::add(uint64_t id, const char *name, bool allow_login)
 {
   if (impl_ == nullptr || id == 0 || id >= NamespaceObjectKey::NAMESPACE_LIMIT) { return -1; }
-  Impl::Entry *entry = new (std::nothrow) Impl::Entry(id, name);
+  Impl::Entry *entry = new (std::nothrow) Impl::Entry(id, name, allow_login);
   if (entry == nullptr) { return -2; }
   std::lock_guard<std::mutex> guard(impl_->mutex);
   const auto existing = impl_->entries.find(id);
   if (existing != impl_->entries.end()) {
-    if (!existing->second->registered) { delete entry; return -1; }
+    if (!existing->second->registered
+        || existing->second->ns.allows_login() != allow_login) { delete entry; return -1; }
     const bool same_name = name != nullptr
         && std::strcmp(existing->second->ns.name(), name) == 0;
     const bool bound = existing->second->ns.bind_name_if_empty(name);
@@ -131,7 +134,7 @@ bool NamespaceRegistry::acquire_session(uint64_t id)
   std::lock_guard<std::mutex> guard(impl_->mutex);
   const auto it = impl_->entries.find(id);
   if (it == impl_->entries.end() || !it->second->registered
-      || it->second->closing) { return false; }
+      || it->second->closing || !it->second->ns.allows_login()) { return false; }
   ++it->second->connections;
   return true;
 }

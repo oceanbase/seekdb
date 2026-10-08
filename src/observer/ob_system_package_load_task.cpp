@@ -114,9 +114,9 @@ int ObSystemPackageLoadTask::load_system_package_()
   } else if (OB_FAIL(pl::ObPLPackageManager::load_all_common_sys_package(
                          *sql_proxy, *schema_service,
                          false/*from_file*/))) {
-  } else if (OB_FAIL(ADMIN_JOB_COMPLETE(job_id, 0/*result_code*/))) {
-  } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::ensure_control_schema())) {
+  } else if (OB_FAIL(storage::NamespaceForkKernelPrototype::ensure_control_schema(true))) {
   } else if (OB_FAIL(observer::namespace_worker_prototype::restore_namespace_registry())) {
+  } else if (OB_FAIL(ADMIN_JOB_COMPLETE(job_id, 0/*result_code*/))) {
   } else {
     ATOMIC_STORE(&GCTX.sys_package_ready_, true);
   }

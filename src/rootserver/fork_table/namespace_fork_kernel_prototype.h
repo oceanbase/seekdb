@@ -32,7 +32,7 @@ private:
 class NamespaceForkKernelPrototype final
 {
 public:
-  static int ensure_control_schema();
+  static int ensure_control_schema(bool initial_install = false);
   // Called after replay is sealed, before publishing primary write admission.
   static void invalidate_replayed_metadata();
   static int begin_namespace_drop(const common::ObString &name, uint64_t &id, bool &done);
@@ -53,7 +53,7 @@ public:
   // tree/native traversal. Failure leaves the caller's previous plan intact.
   static int load_physical_retention(PhysicalSnapshotRetention &plan);
   static int control_namespace(const common::ObString &source, const common::ObString &target,
-                                uint64_t &namespace_id);
+                                uint64_t &namespace_id, bool allow_login = true);
   static int observe_database(common::ObISQLClient &trans, const share::schema::ObDatabaseSchema &schema);
   static int check_database_ddl(const share::schema::ObDatabaseSchema &schema,
                                 const common::ObISQLClient *trans = nullptr);
@@ -92,6 +92,9 @@ public:
                        const common::ObISQLClient *trans = nullptr);
   static int schedule_baseline(const ObTablet &tablet);
 private:
+  static int complete_initial_baseline(uint64_t namespace_id, int64_t deadline);
+  static int check_initial_baseline(uint64_t namespace_id, int64_t deadline, bool &complete);
+  static int materialize_source(uint64_t namespace_id, uint64_t table_id, uint64_t data_tablet_id);
   friend class ns::TabletAccess;
   friend class TabletAccessProtection;
   static int acquire_namespace(uint64_t id, TabletAccessProtection &protection);

@@ -326,7 +326,7 @@ void ObTabletForkParam::reset()
 bool ObTabletForkParam::is_valid() const
 {
   return OB_INVALID_ID != table_id_
-      && schema_version_ > 0
+      && schema_version_ >= 0 // Matches ObStorageSchema, including bootstrap schemas.
       && task_id_ > 0
       && source_tablet_id_.is_valid()
       && dest_tablet_id_.is_valid()
