@@ -333,7 +333,8 @@ OB_DEF_SERIALIZE(ObJsonTableSpec)
   }
   if (OB_FAIL(ret)) {
   } else if (table_type_ == MulModeTableType::OB_RB_ITERATE_TABLE_TYPE
-             || table_type_ == MulModeTableType::OB_UNNEST_TABLE_TYPE) {
+             || table_type_ == MulModeTableType::OB_UNNEST_TABLE_TYPE
+             || table_type_ == MulModeTableType::OB_AI_SPLIT_TABLE_TYPE) {
     OB_UNIS_ENCODE(table_type_);
     int32_t value_exprs_count = value_exprs_.count() - 1;
     OB_UNIS_ENCODE(value_exprs_count);
@@ -362,7 +363,8 @@ OB_DEF_SERIALIZE_SIZE(ObJsonTableSpec)
     OB_UNIS_ADD_LEN(info);
   }
   if (table_type_ == MulModeTableType::OB_RB_ITERATE_TABLE_TYPE
-      || table_type_ == MulModeTableType::OB_UNNEST_TABLE_TYPE) {
+      || table_type_ == MulModeTableType::OB_UNNEST_TABLE_TYPE
+      || table_type_ == MulModeTableType::OB_AI_SPLIT_TABLE_TYPE) {
     OB_UNIS_ADD_LEN(table_type_);
     int32_t value_exprs_count = value_exprs_.count() - 1;
     OB_UNIS_ADD_LEN(value_exprs_count);
@@ -407,6 +409,8 @@ OB_DEF_DESERIALIZE(ObJsonTableSpec)
       } else if (col_info->col_type_ == COL_TYPE_RB_ITERATE) {
         table_type_flag = OB_RB_ITERATE_TABLE;
       } else if (col_info->col_type_ == COL_TYPE_UNNEST) {
+        table_type_flag = OB_UNNEST_TABLE;
+      } else if (col_info->col_type_ == COL_TYPE_AI_SPLIT) {
         table_type_flag = OB_UNNEST_TABLE;
       }
     }
@@ -734,6 +738,15 @@ int ObJsonTableOp::init()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to new unnest node", K(ret));
       }
+    } else if (jt_ctx_.is_ai_split_table_func()) {
+      table_func_buf = jt_ctx_.op_exec_alloc_->alloc(sizeof(AiSplitTableFunc));
+      if (OB_ISNULL(table_func_buf)) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_WARN("failed to allocate table func buf", K(ret));
+      } else if (OB_ISNULL(jt_ctx_.table_func_ = new (table_func_buf) AiSplitTableFunc())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("failed to new ai split node", K(ret));
+      }
     }
   }
   jt_ctx_.is_cover_error_ = false;
@@ -774,10 +787,13 @@ void ObJsonTableOp::reset_columns()
 void ScanNode::reset_reg_columns(JtScanCtx* ctx)
 {
   for (size_t i = 0; i < reg_column_count(); ++i) {
-    ObExpr* col_expr = ctx->spec_ptr_->column_exprs_.at(reg_col_node(i)->col_info_.output_column_idx_);
-    col_expr->locate_datum_for_write(*ctx->eval_ctx_).reset();
-    col_expr->locate_datum_for_write(*ctx->eval_ctx_).set_null();
-    col_expr->get_eval_info(*ctx->eval_ctx_).evaluated_ = true;
+    int64_t out_idx = reg_col_node(i)->col_info_.output_column_idx_;
+    if (out_idx >= 0 && out_idx < ctx->spec_ptr_->column_exprs_.count()) {
+      ObExpr* col_expr = ctx->spec_ptr_->column_exprs_.at(out_idx);
+      col_expr->locate_datum_for_write(*ctx->eval_ctx_).reset();
+      col_expr->locate_datum_for_write(*ctx->eval_ctx_).set_null();
+      col_expr->get_eval_info(*ctx->eval_ctx_).evaluated_ = true;
+    }
   }
 }
 
@@ -1360,6 +1376,11 @@ int ObRegCol::eval_regular_col(void *in, JtScanCtx* ctx, bool& is_null_value)
   JtColType col_type = type();
   is_null_value = false;
   bool is_null_res = false;
+  if (OB_UNLIKELY(col_info_.output_column_idx_ < 0
+                  || col_info_.output_column_idx_ >= ctx->spec_ptr_->column_exprs_.count())) {
+    // column is not referenced by the query, nothing to project
+    return ret;
+  }
   ObExpr* col_expr = ctx->spec_ptr_->column_exprs_.at(col_info_.output_column_idx_);
   ctx->res_obj_ = &col_expr->locate_datum_for_write(*ctx->eval_ctx_);
   bool need_cast_res = true;
@@ -1382,6 +1403,10 @@ int ObRegCol::eval_regular_col(void *in, JtScanCtx* ctx, bool& is_null_value)
   } else if (col_type == COL_TYPE_UNNEST) {
     if (OB_FAIL(RegularCol::eval_unnest_col(*this, in, ctx, col_expr))) {
       LOG_WARN("fail to eval unnest col", K(ret), K(col_type), K(cur_pos_), K(col_info_.output_column_idx_));
+    }
+  } else if (col_type == COL_TYPE_AI_SPLIT) {
+    if (OB_FAIL(RegularCol::eval_ai_split_col(*this, in, ctx, col_expr))) {
+      LOG_WARN("fail to eval ai split col", K(ret), K(col_type), K(cur_pos_), K(col_info_.output_column_idx_));
     }
   } else if (col_type == COL_TYPE_ORDINALITY) {
     if (OB_ISNULL(in)) {
@@ -1713,7 +1738,8 @@ int ObJsonTableOp::inner_get_next_row()
   bool is_root_null = false;
   if (!(jt_ctx_.is_json_table_func()
         || jt_ctx_.is_rb_iterate_table_func()
-        || jt_ctx_.is_unnest_table_func())) {
+        || jt_ctx_.is_unnest_table_func()
+        || jt_ctx_.is_ai_split_table_func())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unsupport table function", K(ret));
   } else if (is_evaled_) {

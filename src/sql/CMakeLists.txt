@@ -376,6 +376,7 @@ ob_set_subtarget(ob_sql engine_basic
   engine/basic/ob_group_join_buffer.cpp
   engine/basic/ob_hash_partitioning_infrastructure_op.cpp
   engine/basic/ob_json_table_op.cpp
+  engine/basic/ob_ai_doc_split.cpp
   engine/basic/ob_limit_op.cpp
   engine/basic/ob_limit_vec_op.cpp
   engine/basic/ob_material_op_impl.cpp

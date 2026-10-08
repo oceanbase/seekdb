@@ -274,7 +274,7 @@ END_P SET_VAR DELIMITER
 //-----------------------------reserved keyword end-------------------------------------------------
 %token <non_reserved_keyword>
 //-----------------------------non_reserved keyword begin-------------------------------------------
-        ACCESS ACCESS_INFO ACCESSID ACCESSKEY ACCESSTYPE ACCOUNT ACTION ACTIVE ADDDATE AFTER AGAINST AGGREGATE AI ALGORITHM ALL_META ALL_USER ALWAYS ALLOW ANALYSE ANY
+        ACCESS ACCESS_INFO ACCESSID ACCESSKEY ACCESSTYPE ACCOUNT ACTION ACTIVE ADDDATE AFTER AGAINST AGGREGATE AI ALGORITHM ALL_META ALL_USER ALWAYS ALLOW ANALYSE ANY AI_SPLIT_DOCUMENT
         APPID APPROX_COUNT_DISTINCT APPROX_COUNT_DISTINCT_SYNOPSIS APPROX_COUNT_DISTINCT_SYNOPSIS_MERGE
         ARRAY ASCII ASIS AT ATTRIBUTE AUTHORS AUTO AUTOEXTEND_SIZE AUTO_INCREMENT AUTO_INCREMENT_MODE AUTO_INCREMENT_CACHE_SIZE
         AVG AVG_ROW_LENGTH ACTIVATE AVAILABILITY ARCHIVELOG ASYNCHRONOUS AUDIT ADMIN AUTO_REFRESH API_MODE APPROX APPROXIMATE ARRAY_AGG ARRAY_FILTER ARRAY_FIRST ARRAY_MAP ARRAY_SORTBY 
@@ -559,6 +559,7 @@ END_P SET_VAR DELIMITER
 %type <node> es_sql_opt
 %type <node> operator_list
 %type <node> hybrid_search_expr hybrid_search_param
+%type <node> ai_split_document_expr
 %type <node> create_location_stmt alter_location_stmt drop_location_stmt location_name location_url credential_option_list credential_option opt_credential
 
 %type <node> vector_similarity_expr vector_similarity_metric
@@ -12987,6 +12988,10 @@ tbl_name
 {
   $$ = $1;
 }
+| ai_split_document_expr
+{
+  $$ = $1;
+}
 | hybrid_search_expr
 {
   $$ = $1;
@@ -21841,6 +21846,21 @@ UNNEST '(' simple_expr_list ')'
 | UNNEST '(' simple_expr_list ')' AS relation_name '(' relation_name_list ')'
 {
   malloc_non_terminal_node($$, result->malloc_pool_, T_UNNEST_EXPRESSION, 3, $3, $6, $8);
+}
+;
+
+ai_split_document_expr:
+AI_SPLIT_DOCUMENT '(' simple_expr_list ')'
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_EXPRESSION, 2, $3, NULL);
+}
+| AI_SPLIT_DOCUMENT '(' simple_expr_list ')' relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_EXPRESSION, 2, $3, $5);
+}
+| AI_SPLIT_DOCUMENT '(' simple_expr_list ')' AS relation_name
+{
+  malloc_non_terminal_node($$, result->malloc_pool_, T_AI_SPLIT_EXPRESSION, 2, $3, $6);
 }
 ;
 

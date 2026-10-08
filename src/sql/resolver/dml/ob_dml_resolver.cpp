@@ -3251,6 +3251,15 @@ int ObDMLResolver::resolve_table(const ParseNode &parse_tree,
         }
         break;
       }
+      case T_AI_SPLIT_EXPRESSION: {
+        if (OB_ISNULL(session_info_)) {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid argument", K(ret));
+        } else if (OB_FAIL(resolve_ai_split_item(*table_node, table_item))) {
+          LOG_WARN("failed to resolve ai split item", K(ret));
+        }
+        break;
+      }
       case T_HYBRID_SEARCH_EXPRESSION: {
         if (OB_ISNULL(session_info_)) {
           ret = OB_INVALID_ARGUMENT;
@@ -4301,6 +4310,83 @@ int ObDMLResolver::resolve_unnest_item(const ParseNode &parse_tree, TableItem *&
   return ret;
 }
 
+int ObDMLResolver::resolve_ai_split_item(const ParseNode &parse_tree, TableItem *&tbl_item)
+{
+  int ret = OB_SUCCESS;
+  TableItem *item = NULL;
+  ParseNode *expr_node = NULL;
+  ParseNode *table_name_node = NULL;
+  ObString table_name;
+
+  if (T_AI_SPLIT_EXPRESSION != parse_tree.type_ || 2 != parse_tree.num_child_) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("table type not support or param num mismatch", K(parse_tree.type_), K(parse_tree.num_child_));
+  } else if (OB_ISNULL(expr_node = parse_tree.children_[0]) || expr_node->type_ != T_EXPR_LIST) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("expr node is not expected", K(ret), K(parse_tree.children_[0]));
+  } else if (expr_node->num_child_ < 1 || expr_node->num_child_ > 2) {
+    ret = OB_ERR_PARAM_SIZE;
+    LOG_WARN("ai_split_document expects 1 or 2 arguments", K(ret), K(expr_node->num_child_));
+  } else {
+    table_name_node = parse_tree.children_[1];
+  }
+
+  // resolve table_name node
+  if (OB_FAIL(ret)) {
+  } else if (OB_ISNULL(table_name_node)) {
+    table_name = ObString("ai_split_document");
+  } else {
+    table_name.assign_ptr(table_name_node->str_value_, table_name_node->str_len_);
+  }
+
+  // resolve argument exprs: children_[0] = content, children_[1] (optional) = params json
+  for (int64_t i = 0; OB_SUCC(ret) && i < expr_node->num_child_; ++i) {
+    ObRawExpr *expr = NULL;
+    if (OB_FAIL(resolve_sql_expr(*(expr_node->children_[i]), expr))) {
+      LOG_WARN("fail to resolve sql expr", K(ret));
+    } else if (OB_ISNULL(expr)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("arg expr is null", K(ret));
+    } else {
+      OZ (expr->deduce_type(session_info_));
+    }
+    if (OB_FAIL(ret)) {
+    } else if (OB_ISNULL(item) && OB_FAIL(create_unnest_table_item(item, parse_tree.type_, table_name))) {
+      LOG_WARN("failed to create ai split table item", K(ret));
+    } else if (OB_FAIL(item->json_table_def_->doc_exprs_.push_back(expr))) {
+      LOG_WARN("failed to push back arg expr", K(ret));
+    }
+  } // end for
+
+  // add 4 fixed output columns: chunk_id/chunk_offset/chunk_length int, chunk_text varchar
+  if (OB_SUCC(ret)) {
+    static const char *AI_SPLIT_COL_NAMES[4] = {"chunk_id", "chunk_offset", "chunk_length", "chunk_text"};
+    for (int64_t i = 0; OB_SUCC(ret) && i < 4; ++i) {
+      ColumnItem *col_item = NULL;
+      common::ObDataType data_type;
+      data_type.set_collation_level(CS_LEVEL_IMPLICIT);
+      if (i < 3) {
+        data_type.set_int();
+        data_type.set_accuracy(ObAccuracy::DDL_DEFAULT_ACCURACY[ObInt32Type]);
+      } else {
+        data_type.set_obj_type(ObVarcharType);
+        data_type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
+        data_type.set_accuracy(ObAccuracy(OB_MAX_MYSQL_VARCHAR_LENGTH));
+      }
+      ObString col_name(AI_SPLIT_COL_NAMES[i]);
+      if (OB_FAIL(ai_split_table_add_column(item, col_item, col_name, data_type))) {
+        LOG_WARN("failed to add ai split table column", K(ret), K(i));
+      }
+    }
+  }
+
+  if (OB_SUCC(ret)) {
+    tbl_item = item;
+  }
+
+  return ret;
+}
+
 int ObDMLResolver::create_rb_iterate_table_item(TableItem *&table_item, ObString alias_name)
 {
   INIT_SUCC(ret);
@@ -4405,6 +4491,8 @@ int ObDMLResolver::create_unnest_table_item(TableItem *&table_item, ObItemType i
       table_def->table_type_ = MulModeTableType::OB_RB_ITERATE_TABLE_TYPE;
     } else if (item_type == T_UNNEST_EXPRESSION) {
       table_def->table_type_ = MulModeTableType::OB_UNNEST_TABLE_TYPE;
+    } else if (item_type == T_AI_SPLIT_EXPRESSION) {
+      table_def->table_type_ = MulModeTableType::OB_AI_SPLIT_TABLE_TYPE;
     } else {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected item_type", K(ret), K(item_type));
@@ -4597,6 +4685,44 @@ int ObDMLResolver::unnest_table_add_column(TableItem *&table_item, ColumnItem *&
 
   return ret;
 }
+
+int ObDMLResolver::ai_split_table_add_column(TableItem *&table_item, ColumnItem *&col_item,
+                                             const ObString &col_name, const common::ObDataType &data_type)
+{
+  INIT_SUCC(ret);
+  ObDmlJtColDef *col_def = NULL;
+  if (OB_ISNULL(table_item) || OB_ISNULL(table_item->json_table_def_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("table item is null", K(ret));
+  } else if (OB_ISNULL(col_def = static_cast<ObDmlJtColDef*>(allocator_->alloc(sizeof(ObDmlJtColDef))))) {
+    ret = OB_ALLOCATE_MEMORY_FAILED;
+    LOG_WARN("allocate memory failed", K(ret));
+  } else {
+    int64_t col_id = table_item->json_table_def_->all_cols_.count();
+    col_def = new (col_def) ObDmlJtColDef();
+    col_def->col_base_info_.col_name_.assign_ptr(col_name.ptr(), col_name.length());
+    col_def->col_base_info_.col_type_ = COL_TYPE_AI_SPLIT;
+    col_def->col_base_info_.parent_id_ = 0;
+    col_def->col_base_info_.id_ = col_id;
+    col_def->col_base_info_.output_column_idx_ = col_id;
+    col_def->col_base_info_.data_type_ = data_type;
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(generate_json_table_output_column_item(table_item,
+                                                            data_type,
+                                                            col_def->col_base_info_.col_name_,
+                                                            col_def->col_base_info_.id_,
+                                                            col_item))) {
+    LOG_WARN("failed to generate json column.", K(ret));
+  } else if (OB_FALSE_IT(col_item->col_idx_ = table_item->json_table_def_->all_cols_.count())) {
+  } else if (OB_FAIL(table_item->json_table_def_->all_cols_.push_back(&col_def->col_base_info_))) {
+    LOG_WARN("failed to push_back col_base_info_ to all_cols_", K(ret));
+  }
+
+  return ret;
+}
+
 int ObDMLResolver::resolve_hybrid_search_item(const ParseNode &parse_tree, TableItem *&table_item)
 {
   INIT_SUCC(ret);
