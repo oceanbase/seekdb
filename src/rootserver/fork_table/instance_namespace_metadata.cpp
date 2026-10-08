@@ -1023,6 +1023,14 @@ int InstanceNamespaceMetadata::collect_unreachable_pages(
       return OB_SUCCESS;
     });
   }
+  if (ret == OB_SUCCESS) {
+    std::vector<ns::NamespaceCatalogViews::Entry> views;
+    ns::namespace_registry().catalog_views().list(views);
+    for (const auto &view : views) {
+      if (view.roots.catalog.page != 0) { pending.push_back({view.roots.catalog, true}); }
+      if (view.roots.directory.page != 0) { pending.push_back({view.roots.directory, false}); }
+    }
+  }
   InstanceCatalogPageStore pages(*this);
   ns::NamespaceCatalogTree tree(pages);
   std::unordered_set<uint64_t> reachable;
@@ -1644,6 +1652,30 @@ int InstanceNamespaceDirectory::get(uint64_t id,
   return ret;
 }
 
+int InstanceNamespaceDirectory::acquire_read_view(uint64_t namespace_id,
+    int64_t deadline, const storage::InstanceMetaStore::SnapshotAcquirer &acquire,
+    ns::NamespaceCatalogViews::Handle &view)
+{
+  if (namespace_id == 0 || view || !acquire) { return OB_INVALID_ARGUMENT; }
+  storage::InstanceMetaStore::Transaction tx;
+  int ret = store_.begin_read(tx, deadline, acquire);
+  ns::NamespaceCatalogViews::Handle held;
+  if (ret == OB_SUCCESS) {
+    InstanceNamespaceMetadata metadata(store_, tx);
+    InstanceNamespaceRecord record;
+    ret = metadata.get_namespace(namespace_id, record);
+    if (ret == OB_SUCCESS && record.roots.state != 0) { ret = OB_OP_NOT_ALLOW; }
+    if (ret == OB_SUCCESS) {
+      held = ns::namespace_registry().catalog_views().hold(
+          namespace_id, tx.snapshot_version().get_val_for_tx(), record.roots);
+      if (!held) { ret = OB_STATE_NOT_MATCH; }
+    }
+  }
+  ret = finish_directory_transaction(store_, tx, ret);
+  if (ret == OB_SUCCESS) { view = std::move(held); }
+  return ret;
+}
+
 int InstanceNamespaceDirectory::resolve_read_tablet(uint64_t namespace_id,
     uint64_t local_tablet,
     const InstanceNamespaceMetadata::StorageTabletProbe &probe,
@@ -1702,6 +1734,32 @@ int InstanceNamespaceDirectory::filter_unreferenced_tablets(
         locals.insert(ns::NamespaceObjectKey::local_part(source.first));
       }
     }
+    auto mark_source = [&](uint64_t physical) {
+      bool terminated = false;
+      for (int depth = 0; depth < 64; ++depth) {
+        referenced.insert(physical);
+        const auto source = sources.find(physical);
+        if (source == sources.end()) { terminated = true; break; }
+        physical = source->second;
+      }
+      return terminated ? OB_SUCCESS : OB_SIZE_OVERFLOW;
+    };
+    // A transaction may have acquired its view before DROP, without opening
+    // this tablet yet. Its immutable root is a dependency even without a native
+    // tablet handle. Include incomplete physical fork edges as for live roots.
+    std::vector<ns::NamespaceCatalogViews::Entry> views;
+    ns::namespace_registry().catalog_views().list(views);
+    for (const auto &view : views) {
+      for (uint64_t local : locals) {
+        if (ret != OB_SUCCESS) { break; }
+        ns::CatalogTabletSource source;
+        int64_t cap = 0;
+        ret = metadata.find_tablet_source(view.roots.directory, local, source, cap);
+        if (ret == OB_ENTRY_NOT_EXIST) { ret = OB_SUCCESS; continue; }
+        if (ret == OB_SUCCESS) { ret = mark_source(source.physical_tablet_id); }
+      }
+      if (ret != OB_SUCCESS) { break; }
+    }
     for (uint64_t reader : live) {
       for (uint64_t local : locals) {
         if (ret != OB_SUCCESS) { break; }
@@ -1710,14 +1768,7 @@ int InstanceNamespaceDirectory::filter_unreferenced_tablets(
         ret = metadata.resolve_read_tablet(reader, local, probe, physical, cap);
         if (ret == OB_TABLET_NOT_EXIST) { ret = OB_SUCCESS; continue; }
         if (ret != OB_SUCCESS) { break; }
-        bool terminated = false;
-        for (int depth = 0; depth < 64; ++depth) {
-          referenced.insert(physical);
-          const auto source = sources.find(physical);
-          if (source == sources.end()) { terminated = true; break; }
-          physical = source->second;
-        }
-        if (!terminated) { ret = OB_SIZE_OVERFLOW; }
+        ret = mark_source(physical);
       }
       if (ret != OB_SUCCESS) { break; }
     }

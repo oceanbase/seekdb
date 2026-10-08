@@ -56,6 +56,39 @@ struct CatalogRoots {
   bool valid_snapshot(uint64_t expected_id) const;
 };
 
+// Live read roots are independent of KV transaction lifetimes. A holder must
+// be registered while its root-selection transaction still excludes page GC.
+// Copying a holder extends protection; releasing the last copy removes it.
+class NamespaceCatalogViews final {
+  struct State;
+public:
+  struct Entry {
+    uint64_t namespace_id;
+    int64_t snapshot;
+    CatalogRoots roots;
+  };
+  class View final {
+  public:
+    ~View();
+    const Entry &entry() const { return entry_; }
+  private:
+    friend class NamespaceCatalogViews;
+    View(std::shared_ptr<State> state, const Entry &entry);
+    const std::shared_ptr<State> state_;
+    const Entry entry_;
+    View(const View &) = delete;
+    View &operator=(const View &) = delete;
+  };
+  using Handle = std::shared_ptr<const View>;
+  NamespaceCatalogViews();
+  Handle hold(uint64_t namespace_id, int64_t snapshot, const CatalogRoots &roots);
+  void list(std::vector<Entry> &entries) const;
+private:
+  std::shared_ptr<State> state_;
+  NamespaceCatalogViews(const NamespaceCatalogViews &) = delete;
+  NamespaceCatalogViews &operator=(const NamespaceCatalogViews &) = delete;
+};
+
 // The caller owns one transaction for the whole release. Each load locks a
 // snapshot row, and removing a row also removes its persistent snapshot pin.
 class ISnapshotLineageStore {

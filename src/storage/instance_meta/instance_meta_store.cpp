@@ -148,6 +148,13 @@ int InstanceMetaStore::begin_directory_gc(Transaction &tx, const int64_t deadlin
   return begin_impl(tx, deadline, false, true);
 }
 
+int InstanceMetaStore::begin_read(Transaction &tx, int64_t deadline,
+    const SnapshotAcquirer &acquire)
+{
+  return acquire ? begin_impl(tx, deadline, true, false, nullptr, &acquire)
+                 : OB_INVALID_ARGUMENT;
+}
+
 int InstanceMetaStore::attach(Transaction &tx, ObTxDesc &descriptor, const int64_t deadline)
 {
   if (!descriptor.is_in_tx() || descriptor.is_shadow()
@@ -158,7 +165,8 @@ int InstanceMetaStore::attach(Transaction &tx, ObTxDesc &descriptor, const int64
 }
 
 int InstanceMetaStore::begin_impl(Transaction &tx, const int64_t deadline,
-    const bool read_only, const bool directory_gc, ObTxDesc *borrowed)
+    const bool read_only, const bool directory_gc, ObTxDesc *borrowed,
+    const SnapshotAcquirer *acquire)
 {
   int ret = OB_SUCCESS;
   if (state_ == nullptr) {
@@ -218,7 +226,16 @@ int InstanceMetaStore::begin_impl(Transaction &tx, const int64_t deadline,
       if (!tx.borrowed_ && OB_FAIL(transactions_.start_tx(*tx.descriptor_, param))) {
       } else if (OB_FAIL(transactions_.get_read_snapshot(*tx.descriptor_, param.isolation_,
                                                         deadline, snapshot))) {
-      } else {
+      } else if (acquire != nullptr) {
+        share::SCN selected;
+        if (OB_FAIL((*acquire)(selected))) {
+        } else if (!selected.is_valid() || selected.is_min() || selected.is_max()) {
+          ret = OB_INVALID_ARGUMENT;
+        } else {
+          snapshot.core_.version_ = selected;
+        }
+      }
+      if (OB_SUCC(ret)) {
         std::lock_guard<std::mutex> guard(state_->transactions_mutex);
         ret = tx.snapshot_.assign(snapshot);
       }

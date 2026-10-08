@@ -277,6 +277,13 @@ public:
   int find_named(const std::string &name, int64_t deadline,
                  InstanceNamespaceRecord &record);
   int get(uint64_t id, int64_t deadline, InstanceNamespaceRecord &record);
+  // Select the root at the acquired SQL read snapshot and register it before
+  // releasing the short KV transaction. The caller also holds the physical
+  // publication fence until this method returns. No KV transaction stays open
+  // for the returned view's lifetime.
+  int acquire_read_view(uint64_t namespace_id, int64_t deadline,
+      const storage::InstanceMetaStore::SnapshotAcquirer &acquire,
+      ns::NamespaceCatalogViews::Handle &view);
   int resolve_read_tablet(uint64_t namespace_id, uint64_t local_tablet,
       const InstanceNamespaceMetadata::StorageTabletProbe &probe,
       int64_t deadline, uint64_t &physical_tablet, int64_t &cap_scn);

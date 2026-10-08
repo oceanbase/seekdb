@@ -26,6 +26,7 @@ namespace ns
 {
 
 class NamespaceControlState;
+class NamespaceCatalogViews;
 
 // Bounded translation from a namespace-local storage resource id to the
 // engine's 64-bit physical key. Tablet ids use this encoding; schema ids do not.
@@ -171,6 +172,7 @@ public:
   bool is_ready() const;
   // Catalog caches are owned by the same process-wide namespace authority.
   NamespaceControlState &control_state();
+  NamespaceCatalogViews &catalog_views();
 private:
   struct Impl;
   Impl *impl_;

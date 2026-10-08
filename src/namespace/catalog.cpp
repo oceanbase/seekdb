@@ -7,6 +7,41 @@
 
 namespace oceanbase {
 namespace ns {
+struct NamespaceCatalogViews::State {
+  std::mutex mutex;
+  std::unordered_map<const View *, Entry> views;
+};
+
+NamespaceCatalogViews::NamespaceCatalogViews() : state_(std::make_shared<State>()) {}
+
+NamespaceCatalogViews::View::View(std::shared_ptr<State> state, const Entry &entry)
+    : state_(std::move(state)), entry_(entry)
+{
+  std::lock_guard<std::mutex> lock(state_->mutex);
+  state_->views.emplace(this, entry_);
+}
+
+NamespaceCatalogViews::View::~View()
+{
+  std::lock_guard<std::mutex> lock(state_->mutex);
+  state_->views.erase(this);
+}
+
+NamespaceCatalogViews::Handle NamespaceCatalogViews::hold(
+    uint64_t namespace_id, int64_t snapshot, const CatalogRoots &roots)
+{
+  if (namespace_id == 0 || snapshot <= 0 || roots.schema_version <= 0) { return {}; }
+  return Handle(new View(state_, {namespace_id, snapshot, roots}));
+}
+
+void NamespaceCatalogViews::list(std::vector<Entry> &entries) const
+{
+  entries.clear();
+  std::lock_guard<std::mutex> lock(state_->mutex);
+  entries.reserve(state_->views.size());
+  for (const auto &view : state_->views) { entries.push_back(view.second); }
+}
+
 namespace {
 void number(std::string &data, uint64_t value)
 {

@@ -1438,6 +1438,17 @@ int NamespaceForkKernelPrototype::schedule_baseline_impl(const ObTablet &tablet,
   // mark retries here; the existing table-store update persists the completed baseline.
   return (ret == OB_ITER_END || ret == OB_ENTRY_NOT_EXIST) ? OB_SUCCESS : ret;
 }
+int NamespaceForkKernelPrototype::acquire_read_view(uint64_t namespace_id,
+    const std::function<int(SCN &)> &acquire, ns::NamespaceCatalogViews::Handle &view)
+{
+  MetadataReadGuard publication;
+  if (publication.error() != OB_SUCCESS) { return publication.error(); }
+  auto *store = directory_kv_store();
+  if (store == nullptr) { return OB_NOT_INIT; }
+  rootserver::InstanceNamespaceDirectory directory(*store);
+  return directory.acquire_read_view(namespace_id, directory_deadline(), acquire, view);
+}
+
 int NamespaceForkKernelPrototype::resolve_read_tablet(
     const ObTabletID &tablet_id, ObTabletID &physical_tablet_id, int64_t &cap_scn) {
   physical_tablet_id = tablet_id;

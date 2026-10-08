@@ -89,6 +89,13 @@ public:
                           share::schema::ObTableSchema &schema);
 
   int begin(Transaction &tx, int64_t deadline, bool read_only = false);
+  // Acquire an external read timestamp while page GC is excluded and MVCC
+  // retention is registered. acquire must obtain a new timestamp, or one
+  // already protected by its owner; an unprotected arbitrary old SCN is invalid.
+  // The transaction is owned and read-only, even when the timestamp comes from
+  // a user's native transaction. It never observes that user's uncommitted rows.
+  using SnapshotAcquirer = std::function<int(share::SCN &)>;
+  int begin_read(Transaction &tx, int64_t deadline, const SnapshotAcquirer &acquire);
   // Excludes ordinary KV transactions while a directory page collector marks
   // roots and removes unreachable pages in this transaction.
   int begin_directory_gc(Transaction &tx, int64_t deadline);
@@ -127,7 +134,8 @@ private:
             const common::ObString &value, Write operation);
   int end(Transaction &tx, bool commit);
   int begin_impl(Transaction &tx, int64_t deadline, bool read_only,
-                 bool directory_gc, transaction::ObTxDesc *borrowed = nullptr);
+                 bool directory_gc, transaction::ObTxDesc *borrowed = nullptr,
+                 const SnapshotAcquirer *acquire = nullptr);
   void reset_transaction(Transaction &tx);
   void release_directory_guard(Transaction &tx);
   ObAccessService &access_;

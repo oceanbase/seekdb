@@ -3,12 +3,13 @@
 #define OCEANBASE_NAMESPACE_FORK_KERNEL_PROTOTYPE_H_
 #include "share/schema/ob_table_schema.h"
 #include "data_plane/access/ob_namespace_access_mode.h"
+#include "namespace/catalog.h"
 #include <functional>
 #include <unordered_set>
 namespace oceanbase {
 namespace common { class ObISQLClient; }
 namespace ns { class TabletAccess; }
-namespace share { namespace schema {
+namespace share { class SCN; namespace schema {
 class ObSimpleDatabaseSchema;
 class ObMultiVersionSchemaService;
 } }
@@ -66,6 +67,12 @@ public:
                                  const share::schema::ObTableSchema &logical_schema,
                                  share::schema::ObTableSchema &storage_schema);
   static int namespace_schema_version(uint64_t namespace_id, int64_t &schema_version);
+  // Capture before exposing a newly acquired read snapshot to its caller.
+  // The handle protects both immutable directory pages and physical sources;
+  // retain it until every operation using this view has finished.
+  static int acquire_read_view(uint64_t namespace_id,
+      const std::function<int(share::SCN &)> &acquire,
+      ns::NamespaceCatalogViews::Handle &view);
   // Persistent lifecycle fence between namespace-local DDL and namespace fork.
   static int begin_schema_change(uint64_t namespace_id);
   static int finish_schema_change(uint64_t namespace_id, int64_t schema_version);
