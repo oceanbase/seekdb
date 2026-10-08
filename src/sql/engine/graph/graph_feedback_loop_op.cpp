@@ -110,6 +110,17 @@ bool GraphFeedbackRowDesc::supports_basic_native_output(
       && payload_expr_count_ == 0;
 }
 
+namespace
+{
+
+int64_t saturated_stat_add(int64_t left, int64_t right)
+{
+  return left < 0 || right < 0 || left > INT64_MAX - right
+      ? INT64_MAX : left + right;
+}
+
+} // namespace
+
 // Owns the native graph components as one allocation so their reference
 // dependencies are constructed and destroyed in a fixed order. It remains
 // query-local; no state is shared by rescans or concurrent executions.
@@ -190,6 +201,10 @@ public:
   {
     return has_output_frontier(spec) ? frontier_.get_frontier_count() : 0;
   }
+
+  const GraphExpandStats &get_cumulative_stats() const
+  { return cumulative_stats_; }
+  int64_t get_expanded_hop_count() const { return expanded_hop_count_; }
 
   int get_output_state(const GraphFeedbackLoopSpec &spec,
                        int64_t index,
@@ -308,10 +323,13 @@ public:
         LOG_WARN("failed to advance graph feedback frontier", K(ret),
                  K(current_hop));
       }
-    } else if (frontier_.empty()) {
-      ret = OB_ITER_END;
     } else {
-      next_output_index_ = 0;
+      accumulate_last_hop_stats();
+      if (frontier_.empty()) {
+        ret = OB_ITER_END;
+      } else {
+        next_output_index_ = 0;
+      }
     }
     if (OB_SUCCESS != ret && OB_ITER_END != ret) {
       reset();
@@ -325,6 +343,8 @@ public:
     binding_store_.reset();
     next_output_index_ = 0;
     seeds_loaded_ = false;
+    // Operator monitor counters are cumulative across rescans, just like its
+    // output-row and rescan counters, so retain cumulative_stats_ here.
   }
 
 private:
@@ -487,6 +507,30 @@ private:
         ? OB_EXCEED_QUERY_MEM_LIMIT : error;
   }
 
+  void accumulate_last_hop_stats()
+  {
+    const GraphExpandStats &hop_stats = frontier_.get_last_hop_stats();
+    cumulative_stats_.input_states_ = saturated_stat_add(
+        cumulative_stats_.input_states_, hop_stats.input_states_);
+    cumulative_stats_.distinct_sources_ = saturated_stat_add(
+        cumulative_stats_.distinct_sources_, hop_stats.distinct_sources_);
+    cumulative_stats_.distinct_sources_exact_ =
+        cumulative_stats_.distinct_sources_exact_
+        && hop_stats.distinct_sources_exact_;
+    cumulative_stats_.scanned_edges_ = saturated_stat_add(
+        cumulative_stats_.scanned_edges_, hop_stats.scanned_edges_);
+    cumulative_stats_.looked_up_vertices_ = saturated_stat_add(
+        cumulative_stats_.looked_up_vertices_,
+        hop_stats.looked_up_vertices_);
+    cumulative_stats_.orphan_edges_ = saturated_stat_add(
+        cumulative_stats_.orphan_edges_, hop_stats.orphan_edges_);
+    cumulative_stats_.output_states_ = saturated_stat_add(
+        cumulative_stats_.output_states_, hop_stats.output_states_);
+    cumulative_stats_.peak_path_memory_ = std::max(
+        cumulative_stats_.peak_path_memory_, hop_stats.peak_path_memory_);
+    expanded_hop_count_ = saturated_stat_add(expanded_hop_count_, 1);
+  }
+
 private:
   // Declared first because GraphExpand and GraphFeedbackFrontier allocate
   // through the same hard-capped work-area allocator owned by this store.
@@ -497,6 +541,8 @@ private:
   GraphFeedbackFrontier frontier_;
   int64_t memory_limit_{0};
   int64_t next_output_index_{0};
+  GraphExpandStats cumulative_stats_{};
+  int64_t expanded_hop_count_{0};
   bool seeds_loaded_{false};
 
   DISALLOW_COPY_AND_ASSIGN(GraphFeedbackRuntime);
@@ -528,12 +574,6 @@ bool identity_has_double_key(const GraphElementIdentity &identity)
         == ObDoubleTC;
   }
   return has_double;
-}
-
-int64_t saturated_stat_add(int64_t left, int64_t right)
-{
-  return left < 0 || right < 0 || left > INT64_MAX - right
-      ? INT64_MAX : left + right;
 }
 
 } // namespace
@@ -1027,11 +1067,15 @@ int GraphFeedbackLoopOp::inner_open()
              && OB_FAIL(RecursivePumpOp::inner_open())) {
     LOG_WARN("failed to initialize recursive graph feedback runtime", K(ret));
   }
+  if (OB_SUCC(ret) && use_native_runtime_) {
+    init_native_monitor_info();
+  }
   return ret;
 }
 
 int GraphFeedbackLoopOp::inner_close()
 {
+  update_native_monitor_info();
   reset_native_runtime();
   return use_native_runtime_ ? OB_SUCCESS : RecursivePumpOp::inner_close();
 }
@@ -1048,9 +1092,11 @@ int GraphFeedbackLoopOp::get_next_native_row()
     LOG_WARN("native graph feedback runtime is incomplete", K(ret),
              K_(native_runtime), K(left_));
   } else if (OB_FAIL(try_check_status())) {
-  } else if (OB_FAIL(native_runtime_->get_next_basic_output_row(
-                 *left_, get_graph_spec()))) {
-    if (ret != OB_ITER_END) {
+  } else {
+    ret = native_runtime_->get_next_basic_output_row(*left_,
+                                                     get_graph_spec());
+    update_native_monitor_info();
+    if (OB_SUCCESS != ret && ret != OB_ITER_END) {
       LOG_WARN("failed to produce native graph feedback row", K(ret));
     }
   }
@@ -1091,6 +1137,7 @@ int GraphFeedbackLoopOp::inner_get_next_batch(int64_t max_row_cnt)
 
 int GraphFeedbackLoopOp::inner_rescan()
 {
+  update_native_monitor_info();
   reset_native_runtime();
   return use_native_runtime_
       ? ObOperator::inner_rescan()
@@ -1123,6 +1170,59 @@ int GraphFeedbackLoopOp::init_native_runtime()
     destroy_native_runtime();
   }
   return ret;
+}
+
+void GraphFeedbackLoopOp::init_native_monitor_info()
+{
+  op_monitor_info_.otherstat_1_id_ =
+      ObSqlMonitorStatIds::GRAPH_EXPANDED_HOP_COUNT;
+  op_monitor_info_.otherstat_2_id_ =
+      ObSqlMonitorStatIds::GRAPH_INPUT_STATE_COUNT;
+  op_monitor_info_.otherstat_3_id_ =
+      ObSqlMonitorStatIds::GRAPH_DISTINCT_SOURCE_COUNT;
+  op_monitor_info_.otherstat_4_id_ =
+      ObSqlMonitorStatIds::GRAPH_DISTINCT_SOURCE_EXACT;
+  op_monitor_info_.otherstat_5_id_ =
+      ObSqlMonitorStatIds::GRAPH_SCANNED_EDGE_COUNT;
+  op_monitor_info_.otherstat_6_id_ =
+      ObSqlMonitorStatIds::GRAPH_LOOKED_UP_VERTEX_COUNT;
+  op_monitor_info_.otherstat_7_id_ =
+      ObSqlMonitorStatIds::GRAPH_ORPHAN_EDGE_COUNT;
+  op_monitor_info_.otherstat_8_id_ =
+      ObSqlMonitorStatIds::GRAPH_OUTPUT_PATH_COUNT;
+  op_monitor_info_.otherstat_9_id_ =
+      ObSqlMonitorStatIds::GRAPH_PEAK_PATH_MEMORY;
+  op_monitor_info_.otherstat_1_value_ = 0;
+  op_monitor_info_.otherstat_2_value_ = 0;
+  op_monitor_info_.otherstat_3_value_ = 0;
+  op_monitor_info_.otherstat_4_value_ = 1;
+  op_monitor_info_.otherstat_5_value_ = 0;
+  op_monitor_info_.otherstat_6_value_ = 0;
+  op_monitor_info_.otherstat_7_value_ = 0;
+  op_monitor_info_.otherstat_8_value_ = 0;
+  op_monitor_info_.otherstat_9_value_ = 0;
+}
+
+void GraphFeedbackLoopOp::update_native_monitor_info()
+{
+  if (use_native_runtime_ && native_runtime_ != nullptr) {
+    const GraphExpandStats &stats = native_runtime_->get_cumulative_stats();
+    const int64_t expanded_hops = native_runtime_->get_expanded_hop_count();
+    // A level may return many paths, but cumulative access statistics change
+    // only when the feedback loop completes another hop.
+    if (expanded_hops != op_monitor_info_.otherstat_1_value_) {
+      op_monitor_info_.otherstat_1_value_ = expanded_hops;
+      op_monitor_info_.otherstat_2_value_ = stats.input_states_;
+      op_monitor_info_.otherstat_3_value_ = stats.distinct_sources_;
+      op_monitor_info_.otherstat_4_value_ =
+          stats.distinct_sources_exact_ ? 1 : 0;
+      op_monitor_info_.otherstat_5_value_ = stats.scanned_edges_;
+      op_monitor_info_.otherstat_6_value_ = stats.looked_up_vertices_;
+      op_monitor_info_.otherstat_7_value_ = stats.orphan_edges_;
+      op_monitor_info_.otherstat_8_value_ = stats.output_states_;
+      op_monitor_info_.otherstat_9_value_ = stats.peak_path_memory_;
+    }
+  }
 }
 
 void GraphFeedbackLoopOp::reset_native_runtime()

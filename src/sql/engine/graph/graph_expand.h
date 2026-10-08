@@ -152,12 +152,15 @@ public:
       const common::ObIArray<GraphElementIdentity> &requested,
       common::ObIArray<GraphElementIdentity> &existing) = 0;
 
+  // scanned_edges is the number of rows delivered by DAS during this call,
+  // before graph SQL filters and full-scan frontier matching.
   virtual int scan_edges(
       const common::ObIArray<GraphElementIdentity> &sources,
       GraphPathDirection direction,
       const GraphElementIdentity *after_edge,
       int64_t limit,
       common::ObIArray<GraphExpandEdge> &edges,
+      int64_t &scanned_edges,
       bool &end) = 0;
 };
 

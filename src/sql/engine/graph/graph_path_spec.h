@@ -223,6 +223,7 @@ struct GraphExpandStats
   // DOUBLE keys. In that case distinct_sources_ is the sum of per-batch source
   // groups (the actual access work), not an exact hop-wide NDV.
   bool distinct_sources_exact_ = true;
+  // Edge rows delivered by DAS before graph filters/frontier matching.
   int64_t scanned_edges_ = 0;
   int64_t looked_up_vertices_ = 0;
   int64_t orphan_edges_ = 0;

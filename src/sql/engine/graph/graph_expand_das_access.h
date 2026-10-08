@@ -64,6 +64,7 @@ public:
       const GraphElementIdentity *after_edge,
       int64_t limit,
       common::ObIArray<GraphExpandEdge> &edges,
+      int64_t &scanned_edges,
       bool &end) override;
 
   bool is_initialized() const { return initialized_; }
@@ -172,6 +173,7 @@ private:
       const common::ObIArray<GraphElementIdentity> &sources,
       int64_t limit,
       common::ObIArray<GraphExpandEdge> &edges,
+      int64_t &scanned_edges,
       bool &end);
   int reset_edge_scan(int ret);
   int build_edge_source_index(

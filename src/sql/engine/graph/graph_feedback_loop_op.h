@@ -235,6 +235,8 @@ public:
 private:
   int init_native_runtime();
   int get_next_native_row();
+  void init_native_monitor_info();
+  void update_native_monitor_info();
   void reset_native_runtime();
   void destroy_native_runtime();
   const GraphFeedbackLoopSpec &get_graph_spec() const

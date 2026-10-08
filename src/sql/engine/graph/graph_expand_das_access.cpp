@@ -1495,6 +1495,7 @@ int GraphExpandDasAccess::get_edge_page(
     const ObIArray<GraphElementIdentity> &sources,
     int64_t limit,
     ObIArray<GraphExpandEdge> &edges,
+    int64_t &scanned_edges,
     bool &end)
 {
   int ret = OB_SUCCESS;
@@ -1517,6 +1518,12 @@ int GraphExpandDasAccess::get_edge_page(
         }
       }
     } else if (OB_SUCC(ret)) {
+      // Count every row delivered by DAS before graph SQL filters and the
+      // full-scan frontier hash can discard it. This makes the statistic show
+      // the actual edge-access work rather than only returned extensions.
+      if (scanned_edges < INT64_MAX) {
+        ++scanned_edges;
+      }
       bool filtered = false;
       bool matches = false;
       bool source_found = false;
@@ -1556,12 +1563,14 @@ int GraphExpandDasAccess::scan_edges(
     const GraphElementIdentity *after_edge,
     int64_t limit,
     ObIArray<GraphExpandEdge> &edges,
+    int64_t &scanned_edges,
     bool &end)
 {
   int ret = OB_SUCCESS;
   bool empty = false;
   vertex_lookup_memory_bytes_ = 0;
   edges.reset();
+  scanned_edges = 0;
   end = false;
   if (OB_UNLIKELY(!initialized_)) {
     ret = OB_NOT_INIT;
@@ -1601,7 +1610,7 @@ int GraphExpandDasAccess::scan_edges(
     }
   }
   if (OB_SUCC(ret) && !end
-      && OB_FAIL(get_edge_page(sources, limit, edges, end))) {
+      && OB_FAIL(get_edge_page(sources, limit, edges, scanned_edges, end))) {
     LOG_WARN("failed to read graph edge page", K(ret));
   }
   if (OB_SUCCESS != ret) {

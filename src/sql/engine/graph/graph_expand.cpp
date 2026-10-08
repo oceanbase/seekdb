@@ -49,6 +49,12 @@ bool valid_graph_key_count(int64_t count)
   return count > 0 && count <= OB_USER_MAX_ROWKEY_COLUMN_NUMBER;
 }
 
+int64_t saturated_nonnegative_add(int64_t left, int64_t right)
+{
+  return left < 0 || right < 0 || left > INT64_MAX - right
+      ? INT64_MAX : left + right;
+}
+
 bool valid_graph_columns(const uint64_t *columns, int64_t count)
 {
   bool valid = columns != nullptr && valid_graph_key_count(count);
@@ -1065,6 +1071,7 @@ int GraphExpand::load_next_page()
 {
   int ret = OB_SUCCESS;
   bool page_end = false;
+  int64_t scanned_edges = 0;
   edge_page_.reuse();
   target_identities_.reuse();
   existing_targets_.reuse();
@@ -1074,7 +1081,8 @@ int GraphExpand::load_next_page()
   if (OB_FAIL(access_.check_status())) {
   } else if (OB_FAIL(access_.scan_edges(existing_sources_, direction_,
                                         has_after_edge_ ? &after_edge_ : nullptr,
-                                        page_size_, edge_page_, page_end))) {
+                                        page_size_, edge_page_, scanned_edges,
+                                        page_end))) {
   } else if (OB_FAIL(access_.check_status())) {
   } else if (edge_page_.count() > page_size_
              || (edge_page_.empty() && !page_end)) {
@@ -1110,8 +1118,11 @@ int GraphExpand::load_next_page()
     if (OB_SUCC(ret) && OB_FAIL(push_unique(target_identities_, edge.target_identity_))) {
     }
   }
+  if (OB_SUCC(ret)) {
+    stats_.scanned_edges_ = saturated_nonnegative_add(
+        stats_.scanned_edges_, scanned_edges);
+  }
   if (OB_SUCC(ret) && !edge_page_.empty()) {
-    stats_.scanned_edges_ += edge_page_.count();
     stats_.looked_up_vertices_ += target_identities_.count();
     if (OB_FAIL(access_.lookup_vertices(target_identities_, existing_targets_))) {
     } else if (OB_FAIL(access_.check_status())) {
