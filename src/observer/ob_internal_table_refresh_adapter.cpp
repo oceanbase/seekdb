@@ -19,6 +19,7 @@
 #include "observer/ob_internal_table_refresh_adapter.h"
 
 #include "observer/omt/ob_srs_service.h"
+#include "share/ob_internal_table_change_notifier.h"
 #include "share/ob_timezone_mgr.h"
 
 namespace oceanbase
@@ -52,6 +53,7 @@ int ObInternalTableRefreshAdapter::activate()
   if (OB_ISNULL(timezone_mgr_) || OB_ISNULL(srs_service_)) {
     ret = OB_NOT_INIT;
   } else {
+    share::ObInternalTableChangeNotifier::get_instance().mark_all_tables_changed();
     srs_service_->mark_stale();
     if (OB_FAIL(timezone_mgr_->schedule_retry())) {
     }

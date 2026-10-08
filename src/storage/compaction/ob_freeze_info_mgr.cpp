@@ -19,6 +19,8 @@
 #include "share/rc/ob_server_runtime.h"
 #include "share/ob_merge_info.h"
 #include "share/ob_global_merge_table_operator.h"
+#include "share/ob_internal_table_change_notifier.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "storage/compaction/ob_compaction_schedule_util.h"
 #include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -120,6 +122,15 @@ int ObFreezeInfoMgr::init(ObISQLClient &sql_proxy)
   } else if (OB_FAIL(freeze_info_mgr_.init(*GCTX.sql_proxy_))) {
   } else if (OB_FAIL(reload_task_.init())) {
   } else if (OB_FAIL(reload_timer_.init("FreInfoReload", ObMemAttr("FreInfoReload")))) {
+  } else if (OB_FAIL(ObInternalTableChangeNotifier::get_instance().register_table(
+                 OB_ALL_CORE_TABLE_TID))) {
+    STORAGE_LOG(WARN, "fail to register core table change tracking", K(ret));
+  } else if (OB_FAIL(ObInternalTableChangeNotifier::get_instance().register_table(
+                 OB_ALL_FREEZE_INFO_TID))) {
+    STORAGE_LOG(WARN, "fail to register freeze info change tracking", K(ret));
+  } else if (OB_FAIL(ObInternalTableChangeNotifier::get_instance().register_table(
+                 OB_ALL_ACQUIRED_SNAPSHOT_TID))) {
+    STORAGE_LOG(WARN, "fail to register acquired snapshot change tracking", K(ret));
   } else {
     inited_ = true;
   }
@@ -425,7 +436,10 @@ share::SCN ObFreezeInfoMgr::get_snapshot_gc_scn()
 ObFreezeInfoMgr::ReloadTask::ReloadTask(ObFreezeInfoMgr &mgr)
   : inited_(false),
     check_runtime_status_(),
-    mgr_(mgr)
+    mgr_(mgr),
+    core_table_change_seq_(0),
+    freeze_info_change_seq_(0),
+    acquired_snapshot_change_seq_(0)
 {
 }
 
@@ -535,11 +549,32 @@ void ObFreezeInfoMgr::ReloadTask::runTimerTask()
       LOG_WARN_RET(tmp_ret, "slog replay hasn't finished, this task can't start");
     }
   } else {
+    ObInternalTableChangeNotifier &notifier =
+        ObInternalTableChangeNotifier::get_instance();
+    uint64_t target_core_seq = 0;
+    uint64_t target_freeze_seq = 0;
+    uint64_t target_snapshot_seq = 0;
+    int seq_ret = notifier.get_change_seq(OB_ALL_CORE_TABLE_TID, target_core_seq);
+    if (OB_SUCCESS == seq_ret) {
+      seq_ret = notifier.get_change_seq(OB_ALL_FREEZE_INFO_TID, target_freeze_seq);
+    }
+    if (OB_SUCCESS == seq_ret) {
+      seq_ret = notifier.get_change_seq(OB_ALL_ACQUIRED_SNAPSHOT_TID, target_snapshot_seq);
+    }
+    const bool changed = OB_SUCCESS != seq_ret
+        || target_core_seq != core_table_change_seq_
+        || target_freeze_seq != freeze_info_change_seq_
+        || target_snapshot_seq != acquired_snapshot_change_seq_;
+    // Merge state is backed by SQLite and remains periodically refreshed.
     if (OB_TMP_FAIL(refresh_merge_info())) {
       LOG_WARN_RET(tmp_ret, "fail to refresh merge info", KR(tmp_ret));
     }
-    if (OB_TMP_FAIL(mgr_.try_update_info())) {
+    if (changed && OB_TMP_FAIL(mgr_.try_update_info())) {
       LOG_WARN_RET(tmp_ret, "fail to try update info", KR(tmp_ret));
+    } else if (changed && OB_SUCCESS == seq_ret) {
+      core_table_change_seq_ = target_core_seq;
+      freeze_info_change_seq_ = target_freeze_seq;
+      acquired_snapshot_change_seq_ = target_snapshot_seq;
     }
   }
 }
