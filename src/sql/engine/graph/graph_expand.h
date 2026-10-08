@@ -202,6 +202,7 @@ private:
   int load_next_page();
   int validate_and_account(const common::ObIArray<GraphExpandInput> &inputs);
   int build_source_input_groups();
+  int build_existing_source_index();
   int start_edge_input_group(const GraphExpandEdge &edge);
   bool contains(const common::ObIArray<GraphElementIdentity> &identities,
                 const GraphElementIdentity &identity) const;
@@ -229,6 +230,10 @@ private:
   // Maps one distinct typed source identity to its input group. Group links
   // retain every binding/path-state occurrence in original input order.
   GraphIdentityIndex source_input_index_;
+  // Validates source lookup results and gives each returned edge constant-time
+  // source-existence checks. DOUBLE batches retain linear comparison because
+  // fixed-scale tolerant equality is not transitive.
+  GraphIdentityIndex existing_source_index_;
   int64_t page_size_;
   int64_t memory_limit_;
   int64_t fixed_memory_bytes_;

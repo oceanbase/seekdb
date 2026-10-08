@@ -502,6 +502,7 @@ GraphExpand::GraphExpand(ObIAllocator &allocator,
   : access_(access),
     identity_allocator_(allocator),
     source_input_index_(allocator),
+    existing_source_index_(allocator),
     page_size_(page_size),
     memory_limit_(memory_limit),
     fixed_memory_bytes_(0),
@@ -732,6 +733,42 @@ int GraphExpand::start_edge_input_group(const GraphExpandEdge &edge)
   return ret;
 }
 
+int GraphExpand::build_existing_source_index()
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!source_input_groups_enabled_)) {
+    ret = OB_INVALID_ARGUMENT;
+  } else if (OB_FAIL(existing_source_index_.init(existing_sources_.count()))) {
+    LOG_WARN("failed to initialize existing graph source index", K(ret),
+             "source_count", existing_sources_.count());
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < existing_sources_.count(); ++i) {
+    int64_t request_index = -1;
+    int64_t existing_index = -1;
+    bool requested = false;
+    bool inserted = false;
+    const GraphElementIdentity &identity = existing_sources_.at(i);
+    if (OB_UNLIKELY(!identity.is_valid())) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (OB_FAIL(source_input_index_.find(
+                   identity, request_index, requested))) {
+      LOG_WARN("failed to find requested graph source", K(ret), K(identity));
+    } else if (OB_UNLIKELY(!requested)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("graph source lookup returned an unexpected row", K(ret),
+               K(identity));
+    } else if (OB_FAIL(existing_source_index_.get_or_insert(
+                   identity, existing_index, inserted))) {
+      LOG_WARN("failed to index existing graph source", K(ret), K(identity));
+    } else if (OB_UNLIKELY(!inserted)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("graph source lookup returned a duplicate row", K(ret),
+               K(identity), K(existing_index));
+    }
+  }
+  return ret;
+}
+
 int GraphExpand::stabilize_identities(ObIArray<GraphElementIdentity> &identities)
 {
   int ret = OB_SUCCESS;
@@ -786,6 +823,7 @@ int64_t GraphExpand::used_memory() const
       input_key_slots_.get_data_size(),
       source_identities_.get_data_size(),
       source_input_index_.used_memory(),
+      existing_source_index_.used_memory(),
       source_input_groups_.get_data_size(),
       next_input_indices_.get_data_size(),
       existing_sources_.get_data_size(),
@@ -878,10 +916,13 @@ int GraphExpand::validate_and_account(const ObIArray<GraphExpandInput> &inputs)
     const int64_t source_index_entry_bytes =
         sizeof(GraphElementIdentity) + sizeof(int64_t);
     const int64_t source_index_bucket_bytes = sizeof(int64_t);
+    const int64_t existing_source_index_bytes =
+        source_index_entry_bytes + source_index_bucket_bytes;
     const int64_t source_input_group_bytes =
         sizeof(SourceInputGroup) + sizeof(int64_t);
     const int64_t per_input = sizeof(GraphExpandInput) + sizeof(GraphElementIdentity)
         + source_index_entry_bytes + source_index_bucket_bytes
+        + existing_source_index_bytes
         + source_input_group_bytes
         + GRAPH_EXPAND_INPUT_MEMORY_RESERVE_BYTES;
     const int64_t per_edge = sizeof(GraphExpandEdge) + 2 * sizeof(GraphElementIdentity)
@@ -943,9 +984,14 @@ int GraphExpand::open(const ObIArray<GraphExpandInput> &inputs,
     } else if (OB_FAIL(access_.check_status())) {
     } else if (OB_FAIL(stabilize_identities(existing_sources_))) {
     } else if (OB_FAIL(check_memory_limit())) {
-    } else if (OB_FAIL(validate_lookup_result(source_identities_, existing_sources_))) {
     } else if (existing_sources_.empty()) {
       end_ = true;
+    } else if (source_input_groups_enabled_
+               && OB_FAIL(build_existing_source_index())) {
+    } else if (!source_input_groups_enabled_
+               && OB_FAIL(validate_lookup_result(
+                   source_identities_, existing_sources_))) {
+    } else if (OB_FAIL(check_memory_limit())) {
     }
   }
   if (OB_SUCC(ret)) {
@@ -979,10 +1025,22 @@ int GraphExpand::load_next_page()
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < edge_page_.count(); ++i) {
     const GraphExpandEdge &edge = edge_page_.at(i);
+    bool source_exists = false;
     if (!edge.source_identity_.is_valid() || !edge.edge_identity_.is_valid()
-        || !edge.target_identity_.is_valid()
-        || !contains(existing_sources_, edge.source_identity_)
-        || (has_after_edge_ && edge.edge_identity_ == after_edge_)) {
+        || !edge.target_identity_.is_valid()) {
+      ret = OB_ERR_UNEXPECTED;
+    } else if (source_input_groups_enabled_) {
+      int64_t source_index = -1;
+      if (OB_FAIL(existing_source_index_.find(
+              edge.source_identity_, source_index, source_exists))) {
+        LOG_WARN("failed to find existing graph edge source", K(ret), K(edge));
+      }
+    } else {
+      source_exists = contains(existing_sources_, edge.source_identity_);
+    }
+    if (OB_SUCC(ret)
+        && (!source_exists
+            || (has_after_edge_ && edge.edge_identity_ == after_edge_))) {
       ret = OB_ERR_UNEXPECTED;
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < i; ++j) {
@@ -1118,6 +1176,7 @@ void GraphExpand::release()
   inputs_.reset();
   input_key_slots_.reset();
   source_input_index_.reset();
+  existing_source_index_.reset();
   source_identities_.reset();
   source_input_groups_.reset();
   next_input_indices_.reset();
