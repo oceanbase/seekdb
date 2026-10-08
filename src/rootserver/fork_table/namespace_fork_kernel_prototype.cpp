@@ -1,5 +1,4 @@
-// PROTOTYPE: real immutable B+ tree pages stored in engine tables, one-engine transactions.
-// Fixed two-integer-column schemas; mode 6 adds explicit metadata page reclamation.
+// Namespace fork management and physical tablet materialization.
 #define USING_LOG_PREFIX STORAGE
 #include "query/session/ob_inner_sql_connection_access.h"
 #include "rootserver/fork_table/namespace_fork_kernel_prototype.h"
@@ -7,6 +6,7 @@
 #include "namespace/namespace.h"
 #include "observer/namespace_worker_protocol_prototype.h"
 #include "rootserver/ob_tablet_creator.h"
+#include "rootserver/fork_table/table_creation_descriptor.h"
 #include "rootserver/ob_tablet_drop.h"
 #include "rootserver/ddl_task/ob_ddl_task_util.h"
 #include "rootserver/fork_table/instance_namespace_metadata.h"
@@ -1585,27 +1585,31 @@ int NamespaceForkKernelPrototype::ensure_tablet(
   if (OB_SUCC(ret) && !already) {
     failure_stage = "tablet_create";
     rootserver::ObTabletCreator creator(SCN::min_scn(), trans);
-    rootserver::ObTabletCreatorArg arg;
+    obcall::ObBatchCreateTabletArg batch;
+    ret = batch.init_create_tablet(SCN::min_scn(), false);
     ObArray<ObTabletID> ids;
-    ObArray<const ObTableSchema *> definitions;
-    ObArray<bool> empty_major;
+    ObArray<int64_t> schema_indexes;
     ObArray<int64_t> logical_birth;
     ObArray<ObForkTabletInfo> fork_infos;
     ObArray<ObTabletTablePair> mappings;
     ObArray<ObTabletID> source_ids;
     ObArray<int64_t> source_snapshot_versions;
     for (const auto &item : items) {
+      if (OB_FAIL(ret)) { break; }
       ObForkTabletInfo fork;
       fork.set_fork_snapshot_version(item.cap);
       fork.set_fork_src_tablet_id(ObTabletID(item.source_tablet));
       const ObTabletID destination(encoded(db, item.local_tablet));
-      if (OB_FAIL(ids.push_back(destination)) || OB_FAIL(definitions.push_back(item.schema))
-          || OB_FAIL(empty_major.push_back(false)) || OB_FAIL(logical_birth.push_back(item.cap))
+      rootserver::TableCreationDescriptor definition;
+      int64_t schema_index = -1;
+      if (OB_FAIL(definition.init(*item.schema, DATA_CURRENT_VERSION))) {
+      } else if (OB_FAIL(definition.append_to(batch, schema_index))) {
+      } else if (OB_FAIL(ids.push_back(destination)) || OB_FAIL(schema_indexes.push_back(schema_index))
+          || OB_FAIL(logical_birth.push_back(item.cap))
           || OB_FAIL(fork_infos.push_back(fork))
           || OB_FAIL(source_ids.push_back(ObTabletID(item.source_tablet)))
           || OB_FAIL(source_snapshot_versions.push_back(item.cap))
           || OB_FAIL(mappings.push_back(ObTabletTablePair(destination, item.schema->get_table_id())))) {
-        break;
       }
     }
     const ObTabletID data_tablet(encoded(db, items.front().local_tablet));
@@ -1614,11 +1618,13 @@ int NamespaceForkKernelPrototype::ensure_tablet(
       return ObTabletAutoincrementService::get_instance().copy_sequences_for_fork(
           source_ids, ids, source_snapshot_versions, trans);
     };
+    obcall::ObCreateTabletInfo info;
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(arg.init(ids, data_tablet, definitions, false, DATA_CURRENT_VERSION,
-                               empty_major, logical_birth, fork_infos))) {
+    } else if (OB_FAIL(info.init(ids, data_tablet, schema_indexes, false, logical_birth, fork_infos))) {
+    } else if (OB_FAIL(batch.tablets_.push_back(info))) {
     } else if (OB_FAIL(creator.init(false))) {
-    } else if (OB_FAIL(creator.add_create_tablet_arg(arg))) {
+    } else if (OB_FAIL(creator.add_create_tablet_batch(batch))) {
+    } else if (FALSE_IT(batch.reset())) {
     } else if (FALSE_IT(creator.set_materialization_for_prototype())) {
     } else if (OB_FAIL(creator.execute())) {
     } else if (OB_FAIL(copy_physical_sequences())) {
@@ -1632,6 +1638,7 @@ int NamespaceForkKernelPrototype::ensure_tablet(
           "input_snapshot", items.front().cap, "namespace_snapshot", root.snapshot,
           "entry_layer", "TabletAccess", K(ret));
     }
+    batch.reset();
   }
   if (OB_SUCC(ret) && !already) {
     failure_stage = "exceptions";

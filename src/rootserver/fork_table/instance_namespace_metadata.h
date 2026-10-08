@@ -183,6 +183,11 @@ public:
   int save_page(const std::string &data, uint64_t &page_id);
   int erase_page(uint64_t page_id);
   int scan_pages(const PageVisitor &visitor);
+  // Immutable creation descriptions may exceed one KV value. A manifest owns
+  // fixed-size chunks in PAGES; catalog values reference the manifest. All rows
+  // are written in this transaction and reclaimed with their catalog roots.
+  int save_object(const std::string &data, uint64_t &object);
+  int read_object(uint64_t object, std::string &data);
   // Locks the Namespace root, checks the caller's schema base, and stages both
   // COW trees and their schema version in this transaction. Equal versions are
   // permitted for physical materialization. The caller must roll back on any

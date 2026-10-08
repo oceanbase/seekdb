@@ -233,6 +233,7 @@ void ObTabletCreator::reset()
   while (OB_NOT_NULL(batch_arg)) {
     ObBatchCreateTabletHelper *tmp = batch_arg;
     batch_arg = batch_arg->next_;
+    tmp->reset();
     tmp->~ObBatchCreateTabletHelper();
   }
   single_batch_arg_ = NULL;
@@ -296,6 +297,53 @@ int ObTabletCreator::add_create_tablet_arg(const ObTabletCreatorArg &arg)
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(batch_arg->add_arg_to_batch_arg(arg))) {
+  }
+  return ret;
+}
+
+int ObTabletCreator::add_create_tablet_batch(const obcall::ObBatchCreateTabletArg &arg)
+{
+  int ret = OB_SUCCESS;
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+  } else if (!arg.is_valid() || !arg.table_schemas_.empty()
+      || arg.create_tablet_schemas_.count() != arg.tablet_extra_infos_.count()
+      || arg.need_check_tablet_cnt_ != need_check_tablet_cnt_) {
+    ret = OB_INVALID_ARGUMENT;
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < arg.create_tablet_schemas_.count(); ++i) {
+    if (arg.create_tablet_schemas_.at(i) == nullptr
+        || !arg.create_tablet_schemas_.at(i)->is_valid()
+        || arg.tablet_extra_infos_.at(i).data_format_version_ == 0) {
+      ret = OB_INVALID_ARGUMENT;
+    }
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < arg.tablets_.count(); ++i) {
+    const auto &info = arg.tablets_.at(i);
+    if (!info.fork_tablet_infos_.empty()
+        && info.fork_tablet_infos_.count() != info.tablet_ids_.count()) {
+      ret = OB_INVALID_ARGUMENT;
+    }
+  }
+  if (OB_SUCC(ret)) {
+    void *memory = allocator_.alloc(sizeof(ObBatchCreateTabletHelper));
+    if (memory == nullptr) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+    } else {
+      auto *batch = new (memory) ObBatchCreateTabletHelper();
+      if (OB_FAIL(batch->init(major_frozen_scn_, need_check_tablet_cnt_))) {
+      } else if (arg.major_frozen_scn_ != batch->batch_arg_.major_frozen_scn_) {
+        ret = OB_INVALID_ARGUMENT;
+      } else if (OB_FAIL(batch->batch_arg_.assign(arg))) {
+      }
+      if (OB_FAIL(ret)) {
+        batch->reset();
+        batch->~ObBatchCreateTabletHelper();
+      } else {
+        batch->next_ = single_batch_arg_;
+        single_batch_arg_ = batch;
+      }
+    }
   }
   return ret;
 }

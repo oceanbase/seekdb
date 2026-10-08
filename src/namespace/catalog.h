@@ -73,6 +73,8 @@ class NamespaceCatalogCodec final {
 public:
   static constexpr size_t PAGE_BYTES = 16 * 1024;
   static constexpr size_t MAX_KEY_BYTES = 512;
+  static constexpr size_t OBJECT_CHUNK_BYTES = 60000;
+  static constexpr size_t MAX_OBJECT_CHUNKS = (OBJECT_CHUNK_BYTES - 24) / 8;
   static int64_t cap_min(int64_t a, int64_t b);
   static std::string object_key(uint64_t id);
   static std::string encode_entry(uint64_t schema_object, uint64_t local_table,
@@ -82,6 +84,9 @@ public:
                            uint64_t &bound_tablet);
   static std::string encode_node(const CatalogNode &node);
   static bool decode_node(const std::string &data, int64_t cap, CatalogNode &node);
+  static std::string encode_object(uint64_t size, const std::vector<uint64_t> &chunks);
+  static bool decode_object(const std::string &data, uint64_t &size,
+                             std::vector<uint64_t> &chunks);
 };
 
 // Page persistence belongs to the caller; the tree owns ordering, splits,

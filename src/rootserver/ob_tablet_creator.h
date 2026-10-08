@@ -132,6 +132,10 @@ const static int64_t BATCH_ARG_SIZE = 1024 * 1024;  // 1M
   int init(const bool need_check_tablet_cnt);
   int execute();
   int add_create_tablet_arg(const ObTabletCreatorArg &arg);
+  // Takes a private copy of storage-only creation descriptors and bindings.
+  // Callers may release the input immediately; execute() registers them in the
+  // same native transaction as the ordinary schema-based creation path.
+  int add_create_tablet_batch(const obcall::ObBatchCreateTabletArg &arg);
   void set_materialization_for_prototype();
   void reset();
 private:

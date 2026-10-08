@@ -23,6 +23,7 @@
 #include "common/json_type/ob_json_tree.h"
 #include "share/instance_meta/instance_meta_key_codec.h"
 #include "share/instance_meta/instance_meta_value_codec.h"
+#include <algorithm>
 #include <cstring>
 #include <limits>
 #include <unordered_map>
@@ -883,6 +884,49 @@ int InstanceNamespaceMetadata::scan_pages(const PageVisitor &visitor)
       });
 }
 
+int InstanceNamespaceMetadata::save_object(const std::string &data, uint64_t &object)
+{
+  using Codec = ns::NamespaceCatalogCodec;
+  if (data.size() > Codec::MAX_OBJECT_CHUNKS * Codec::OBJECT_CHUNK_BYTES) {
+    return OB_SIZE_OVERFLOW;
+  }
+  std::vector<uint64_t> chunks;
+  int ret = OB_SUCCESS;
+  for (size_t pos = 0; ret == OB_SUCCESS && pos < data.size(); pos += Codec::OBJECT_CHUNK_BYTES) {
+    uint64_t chunk = 0;
+    ret = save_page(data.substr(pos, Codec::OBJECT_CHUNK_BYTES), chunk);
+    if (ret == OB_SUCCESS) { chunks.push_back(chunk); }
+  }
+  uint64_t staged = 0;
+  if (ret == OB_SUCCESS) { ret = save_page(Codec::encode_object(data.size(), chunks), staged); }
+  if (ret == OB_SUCCESS) { object = staged; }
+  return ret;
+}
+
+int InstanceNamespaceMetadata::read_object(uint64_t object, std::string &data)
+{
+  using Codec = ns::NamespaceCatalogCodec;
+  std::string manifest, decoded;
+  uint64_t size = 0;
+  std::vector<uint64_t> chunks;
+  int ret = read_page(object, manifest);
+  if (ret == OB_SUCCESS && !Codec::decode_object(manifest, size, chunks)) {
+    ret = OB_CHECKSUM_ERROR;
+  }
+  for (uint64_t chunk : chunks) {
+    if (ret != OB_SUCCESS) { break; }
+    std::string bytes;
+    ret = read_page(chunk, bytes);
+    if (ret == OB_SUCCESS && bytes.size()
+        != std::min<uint64_t>(Codec::OBJECT_CHUNK_BYTES, size - decoded.size())) {
+      ret = OB_CHECKSUM_ERROR;
+    }
+    if (ret == OB_SUCCESS) { decoded += bytes; }
+  }
+  if (ret == OB_SUCCESS) { data.swap(decoded); }
+  return ret;
+}
+
 int InstanceNamespaceMetadata::stage_catalog_delta(uint64_t namespace_id,
     int64_t base_schema_version, int64_t schema_version,
     const ns::CatalogChanges &definitions, const ns::CatalogChanges &sources)
@@ -944,10 +988,13 @@ int InstanceNamespaceMetadata::collect_unreachable_pages(
   InstanceCatalogPageStore pages(*this);
   ns::NamespaceCatalogTree tree(pages);
   std::unordered_set<uint64_t> reachable;
+  std::unordered_set<uint64_t> visited_nodes;
+  std::unordered_set<uint64_t> visited_objects;
   while (ret == OB_SUCCESS && !pending.empty()) {
     const ns::CatalogPageRef ref = pending.back();
     pending.pop_back();
-    if (!reachable.insert(ref.page).second) { continue; }
+    if (!visited_nodes.insert(ref.page).second) { continue; }
+    reachable.insert(ref.page);
     ns::CatalogNode node;
     const auto result = tree.read_node(ref, node);
     if (!result.ok()) {
@@ -967,9 +1014,26 @@ int InstanceNamespaceMetadata::collect_unreachable_pages(
           ret = OB_CHECKSUM_ERROR;
           break;
         }
-        if (object != 0 && reachable.insert(object).second) {
-          std::string schema;
-          if (OB_SUCCESS != (ret = read_page(object, schema))) { break; }
+        if (object != 0 && visited_objects.insert(object).second) {
+          reachable.insert(object);
+          std::string manifest;
+          uint64_t size = 0;
+          std::vector<uint64_t> chunks;
+          if (OB_SUCCESS != (ret = read_page(object, manifest))) { break; }
+          if (!ns::NamespaceCatalogCodec::decode_object(manifest, size, chunks)) {
+            ret = OB_CHECKSUM_ERROR;
+            break;
+          }
+          for (uint64_t chunk : chunks) {
+            std::string bytes;
+            if (OB_SUCCESS != (ret = read_page(chunk, bytes))) { break; }
+            const uint64_t expected = std::min<uint64_t>(
+                ns::NamespaceCatalogCodec::OBJECT_CHUNK_BYTES, size);
+            if (bytes.size() != expected) { ret = OB_CHECKSUM_ERROR; break; }
+            size -= expected;
+            reachable.insert(chunk);
+          }
+          if (ret != OB_SUCCESS) { break; }
         }
       }
     }

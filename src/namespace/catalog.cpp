@@ -185,6 +185,39 @@ bool NamespaceCatalogCodec::decode_node(const std::string &data, int64_t cap,
   return pos == data.size();
 }
 
+std::string NamespaceCatalogCodec::encode_object(uint64_t size,
+    const std::vector<uint64_t> &chunks)
+{
+  std::string data;
+  number(data, 0x4e534f424a454354ULL); // NSOBJECT; distinct from tree node version.
+  number(data, size);
+  number(data, chunks.size());
+  for (uint64_t chunk : chunks) { number(data, chunk); }
+  return data;
+}
+
+bool NamespaceCatalogCodec::decode_object(const std::string &data,
+    uint64_t &size, std::vector<uint64_t> &chunks)
+{
+  size_t pos = 0;
+  uint64_t magic = 0, count = 0, length = 0;
+  if (!number(data, pos, magic) || magic != 0x4e534f424a454354ULL
+      || !number(data, pos, length) || !number(data, pos, count)
+      || count > MAX_OBJECT_CHUNKS || data.size() - pos != count * 8
+      || length > count * OBJECT_CHUNK_BYTES
+      || (count > 0 && length <= (count - 1) * OBJECT_CHUNK_BYTES)) { return false; }
+  std::vector<uint64_t> decoded;
+  decoded.reserve(count);
+  for (uint64_t i = 0; i < count; ++i) {
+    uint64_t chunk = 0;
+    if (!number(data, pos, chunk) || chunk == 0) { return false; }
+    decoded.push_back(chunk);
+  }
+  size = length;
+  chunks.swap(decoded);
+  return true;
+}
+
 CatalogTreeResult NamespaceCatalogTree::read_node(CatalogPageRef ref, CatalogNode &node)
 {
   if (!ref.page) { node = CatalogNode(); return {}; }

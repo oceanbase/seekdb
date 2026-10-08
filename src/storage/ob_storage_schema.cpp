@@ -249,7 +249,7 @@ int ObStorageSchema::init(
     if (OB_FAIL(ret)) {
     } else if (stored_column_count > 0 && OB_FAIL(truncate_column_array(stored_column_count))) {
       STORAGE_LOG(WARN, "failed to truncate column array", K(ret), K(old_schema), K(stored_column_count));
-    } else if (OB_UNLIKELY(!is_valid())) {
+    } else if (OB_UNLIKELY(!ObStorageSchema::is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(ERROR, "storage schema is invalid", K(ret));
     } else {
