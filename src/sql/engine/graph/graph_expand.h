@@ -185,8 +185,17 @@ public:
   bool is_open() const { return is_open_; }
 
 private:
+  struct SourceInputGroup
+  {
+    int64_t first_input_{-1};
+    int64_t last_input_{-1};
+    TO_STRING_KV(K_(first_input), K_(last_input));
+  };
+
   int load_next_page();
   int validate_and_account(const common::ObIArray<GraphExpandInput> &inputs);
+  int build_source_input_groups();
+  int start_edge_input_group(const GraphExpandEdge &edge);
   bool contains(const common::ObIArray<GraphElementIdentity> &identities,
                 const GraphElementIdentity &identity) const;
   int validate_lookup_result(
@@ -208,12 +217,17 @@ private:
   // for every identity copied across scanner/lookup calls so page turnover can
   // never invalidate path state.
   common::ObArenaAllocator identity_allocator_;
+  // Maps one distinct typed source identity to its input group. Group links
+  // retain every binding/path-state occurrence in original input order.
+  GraphIdentityIndex source_input_index_;
   int64_t page_size_;
   int64_t memory_limit_;
   int64_t fixed_memory_bytes_;
   GraphPathDirection direction_;
   common::ObArray<GraphExpandInput> inputs_;
   common::ObArray<GraphElementIdentity> source_identities_;
+  common::ObArray<SourceInputGroup> source_input_groups_;
+  common::ObArray<int64_t> next_input_indices_;
   common::ObArray<GraphElementIdentity> existing_sources_;
   common::ObArray<GraphExpandEdge> edge_page_;
   common::ObArray<GraphElementIdentity> target_identities_;
@@ -224,6 +238,8 @@ private:
   bool has_after_edge_;
   bool end_;
   bool is_open_;
+  bool source_input_groups_enabled_{true};
+  bool input_group_started_{false};
   GraphExpandStats stats_;
 };
 
