@@ -12,10 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Static analysis for the Rust transport crate: clippy as a hard gate, a
-# check that the committed cbindgen-generated header matches the Rust ABI
-# items, and a RustSec advisory audit of the locked dependency tree. Unit
-# tests run in buildbase alongside the C++ build; this job exists to give
+# Rust checks: workspace-wide clippy and source-local unit tests,
+# verification of the committed cbindgen-generated ABI headers, and
+# a RustSec advisory audit of the locked dependency tree. This job gives
 # rust-only PRs a fast signal without a full server build.
 name: rust-checks
 
@@ -43,10 +42,15 @@ jobs:
 
       - name: clippy (deny warnings)
         working-directory: rust
-        run: cargo clippy -p sql-nio --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: generated header is committed
-        run: git diff --exit-code -- rust/sql-nio/include/nio.h
+      # The preceding unlocked clippy invocation resolves Cargo.lock on a fresh checkout.
+      - name: Rust unit tests
+        working-directory: rust
+        run: cargo test --locked --workspace
+
+      - name: generated headers are committed
+        run: git diff --exit-code -- rust/sql-nio/include/nio.h rust/embedding-response/include/embedding.h
 
       # No Windows runner: a cross `cargo check` is the cheapest signal that
       # the cfg(windows) transport code still compiles. It would have caught
@@ -58,7 +62,7 @@ jobs:
         working-directory: rust
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq gcc-mingw-w64-x86-64
-          cargo check -p sql-nio --target x86_64-pc-windows-gnu
+          cargo check --workspace --target x86_64-pc-windows-gnu
 
       - name: cargo audit
         working-directory: rust
