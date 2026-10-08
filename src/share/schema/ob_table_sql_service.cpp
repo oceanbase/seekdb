@@ -768,7 +768,10 @@ int ObTableSqlService::drop_table(const ObTableSchema &table_schema,
         }
       } else if (table_schema.is_index_table()
           || table_schema.is_aux_lob_table()) {
-        if (OB_FAIL(update_data_table_schema_version(sql_client,
+        if (NULL != drop_table_set
+            && OB_HASH_EXIST == drop_table_set->exist_refactored(table_schema.get_data_table_id())) {
+          // The data table is dropped in this transaction, so its version need not be updated.
+        } else if (OB_FAIL(update_data_table_schema_version(sql_client,
             table_schema.get_data_table_id(), table_schema.get_in_offline_ddl_white_list()))) {
         }
       } else if (table_schema.get_foreign_key_real_count() > 0) {
@@ -1803,7 +1806,8 @@ int ObTableSqlService::update_table_options(ObISQLClient &sql_client,
                                             const ObTableSchema &table_schema,
                                             ObTableSchema &new_table_schema,
                                             share::schema::ObSchemaOperationType operation_type,
-                                            const common::ObString *ddl_stmt_str)
+                                            const common::ObString *ddl_stmt_str,
+                                            const bool need_update_data_table_schema_version)
 {
   int ret = OB_SUCCESS;
   uint64_t table_id = table_schema.get_table_id();
@@ -1875,8 +1879,8 @@ int ObTableSqlService::update_table_options(ObISQLClient &sql_client,
   if (OB_SUCC(ret)) {
     LOG_DEBUG("alter table", "table type", table_schema.get_table_type(),
               "index type", table_schema.get_index_type());
-    if (new_table_schema.is_index_table()
-        || new_table_schema.is_aux_lob_table()) {
+    if (need_update_data_table_schema_version
+        && (new_table_schema.is_index_table() || new_table_schema.is_aux_lob_table())) {
       // use new_table_schema.get_in_offline_ddl_white_list() here for drop index when offline ddl failed, there is no foreign key on index table.
       if (OB_FAIL(update_data_table_schema_version(sql_client,
                   new_table_schema.get_data_table_id(), new_table_schema.get_in_offline_ddl_white_list()))) {
