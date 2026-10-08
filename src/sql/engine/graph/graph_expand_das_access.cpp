@@ -69,6 +69,37 @@ uint64_t identity_array_hash(const ObIArray<GraphElementIdentity> &identities)
   return hash;
 }
 
+bool has_tolerance_compared_key(
+    const ObIArray<GraphElementIdentity> &identities)
+{
+  bool found = false;
+  for (int64_t i = 0; !found && i < identities.count(); ++i) {
+    const ObRowkey &rowkey = identities.at(i).rowkey_;
+    for (int64_t key = 0; !found && key < rowkey.get_obj_cnt(); ++key) {
+      found = rowkey.get_obj_ptr()[key].get_type_class() == ObDoubleTC;
+    }
+  }
+  return found;
+}
+
+int64_t find_identity(const ObIArray<GraphElementIdentity> &identities,
+                      const GraphElementIdentity &identity)
+{
+  int64_t index = -1;
+  for (int64_t i = 0; index < 0 && i < identities.count(); ++i) {
+    if (identities.at(i) == identity) {
+      index = i;
+    }
+  }
+  return index;
+}
+
+bool contains_identity(const ObIArray<GraphElementIdentity> &identities,
+                       const GraphElementIdentity &identity)
+{
+  return find_identity(identities, identity) >= 0;
+}
+
 int evaluate_filters(ObEvalCtx &eval_ctx,
                      const ObIArray<ObExpr *> &filters,
                      bool &filtered)
@@ -722,17 +753,50 @@ int GraphExpandDasAccess::lookup_vertices(
   ObArray<ObNewRange> ranges(
       OB_MALLOC_NORMAL_BLOCK_SIZE,
       ModulePageAllocator(das_ref.get_das_alloc(), "GraphVtxRange"));
+  GraphIdentityIndex requested_index(das_ref.get_das_alloc());
+  GraphIdentityIndex existing_index(das_ref.get_das_alloc());
+  ObArray<int64_t> requested_positions(
+      OB_MALLOC_NORMAL_BLOCK_SIZE,
+      ModulePageAllocator(das_ref.get_das_alloc(), "GraphVtxLookup"));
+  const bool use_identity_index = !has_tolerance_compared_key(requested);
   das_ref.set_mem_attr(ObMemAttr("GraphVtxLookup"));
   if (OB_FAIL(init_scan_rtdef(*binding.scan_desc_, *binding.scan_ctdef_,
                               binding.loc_meta_, false,
                               das_ref.get_das_alloc(), scan_rtdef))) {
+  } else if (use_identity_index
+             && OB_FAIL(requested_index.init(requested.count()))) {
+    LOG_WARN("failed to initialize graph vertex request index", K(ret),
+             "request_count", requested.count());
+  } else if (use_identity_index
+             && OB_FAIL(existing_index.init(requested.count()))) {
+    LOG_WARN("failed to initialize graph vertex result index", K(ret),
+             "request_count", requested.count());
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < requested.count(); ++i) {
-    bool duplicate = false;
-    for (int64_t j = 0; !duplicate && j < i; ++j) {
-      duplicate = requested.at(i) == requested.at(j);
+    int64_t entry_index = -1;
+    bool inserted = false;
+    bool append_range = !use_identity_index;
+    if (use_identity_index
+        && OB_FAIL(requested_index.get_or_insert(
+               requested.at(i), entry_index, inserted))) {
+      LOG_WARN("failed to index graph vertex request", K(ret), K(i));
+    } else if (use_identity_index && inserted
+               && OB_UNLIKELY(entry_index != requested_positions.count())) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("graph vertex request index is inconsistent", K(ret), K(i),
+               K(entry_index), "position_count", requested_positions.count());
+    } else if (use_identity_index && inserted
+               && OB_FAIL(requested_positions.push_back(i))) {
+      LOG_WARN("failed to append graph vertex request position", K(ret), K(i));
+    } else if (use_identity_index) {
+      append_range = inserted;
+    } else {
+      for (int64_t previous = 0;
+           append_range && previous < i; ++previous) {
+        append_range = !(requested.at(i) == requested.at(previous));
+      }
     }
-    if (!duplicate) {
+    if (OB_SUCC(ret) && append_range) {
       ObObj *keys = static_cast<ObObj *>(
           das_ref.get_das_alloc().alloc(sizeof(ObObj) * binding.key_count_));
       ObNewRange range;
@@ -809,12 +873,46 @@ int GraphExpandDasAccess::lookup_vertices(
         GraphElementIdentity identity;
         if (OB_FAIL(materialize_identity(binding, identity))) {
         } else {
-          const int64_t requested_index = find_requested(requested, identity);
-          if (requested_index < 0 || contains(existing, identity)) {
+          int64_t request_entry = -1;
+          int64_t result_entry = -1;
+          bool found = false;
+          bool inserted = false;
+          int64_t requested_position = -1;
+          if (use_identity_index
+              && OB_FAIL(requested_index.find(
+                     identity, request_entry, found))) {
+            LOG_WARN("failed to find graph vertex request", K(ret), K(identity));
+          } else if (use_identity_index
+                     && (!found || request_entry < 0
+                         || request_entry >= requested_positions.count())) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("graph vertex lookup returned an unexpected row", K(ret),
                      K(identity), K(requested));
-          } else if (OB_FAIL(existing.push_back(requested.at(requested_index)))) {
+          } else {
+            requested_position = use_identity_index
+                ? requested_positions.at(request_entry)
+                : find_identity(requested, identity);
+          }
+          if (OB_SUCC(ret) && requested_position < 0) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("graph vertex lookup returned an unexpected row", K(ret),
+                     K(identity), K(requested));
+          } else if (OB_SUCC(ret)) {
+            const GraphElementIdentity &stable_identity =
+                requested.at(requested_position);
+            if (use_identity_index
+                && OB_FAIL(existing_index.get_or_insert(
+                       stable_identity, result_entry, inserted))) {
+              LOG_WARN("failed to index graph vertex result", K(ret),
+                       K(stable_identity));
+            } else if ((use_identity_index && !inserted)
+                       || (!use_identity_index
+                           && contains_identity(existing, identity))) {
+              ret = OB_ERR_UNEXPECTED;
+              LOG_WARN("graph vertex lookup returned a duplicate row", K(ret),
+                       K(identity), K(result_entry));
+            } else if (OB_FAIL(existing.push_back(stable_identity))) {
+            }
           }
         }
       }
@@ -948,30 +1046,6 @@ int GraphExpandDasAccess::materialize_edge(GraphExpandEdge &edge,
     matches = true;
   }
   return ret;
-}
-
-int64_t GraphExpandDasAccess::find_requested(
-    const ObIArray<GraphElementIdentity> &requested,
-    const GraphElementIdentity &identity) const
-{
-  int64_t index = -1;
-  for (int64_t i = 0; index < 0 && i < requested.count(); ++i) {
-    if (requested.at(i) == identity) {
-      index = i;
-    }
-  }
-  return index;
-}
-
-bool GraphExpandDasAccess::contains(
-    const ObIArray<GraphElementIdentity> &identities,
-    const GraphElementIdentity &identity) const
-{
-  bool found = false;
-  for (int64_t i = 0; !found && i < identities.count(); ++i) {
-    found = identities.at(i) == identity;
-  }
-  return found;
 }
 
 int GraphExpandDasAccess::validate_edge_scan_request(

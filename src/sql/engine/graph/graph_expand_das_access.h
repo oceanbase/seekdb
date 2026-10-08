@@ -172,11 +172,6 @@ private:
   int reset_edge_scan(int ret);
   int build_edge_source_index(
       const common::ObIArray<GraphElementIdentity> &sources);
-  int64_t find_requested(
-      const common::ObIArray<GraphElementIdentity> &requested,
-      const GraphElementIdentity &identity) const;
-  bool contains(const common::ObIArray<GraphElementIdentity> &identities,
-                const GraphElementIdentity &identity) const;
 
 private:
   ObExecContext &exec_ctx_;
